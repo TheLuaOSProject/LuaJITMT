@@ -62,6 +62,13 @@ static void gc_mark_arena(global_State *g, GCobj *o)
     la_bit_test_and_set64(&a->mark[cell >> 6], cell & 63);  /* 05 §5.6.1. */
 }
 
+static void gc_arena_alloc_black(global_State *g, int on)
+{
+  TGState *tg = G2TG(g);
+  if (tg && (tg->tg_flags & TGF_ARENA_INTERNAL))
+    tg->alloc.alloc_black = (uint8_t)on;
+}
+
 /* Mark a TValue (if needed). */
 #define gc_marktv(g, tv) \
   { lj_assertG(!tvisgcv(tv) || (~itype(tv) == gcval(tv)->gch.gct), \
@@ -125,6 +132,7 @@ static void gc_mark_gcroot(global_State *g)
 /* Start a GC cycle and mark the root set. */
 static void gc_mark_start(global_State *g)
 {
+  gc_arena_alloc_black(g, 1);
   setgcrefnull(g->gc.gray);
   setgcrefnull(g->gc.grayagain);
   setgcrefnull(g->gc.weak);
@@ -719,6 +727,7 @@ static size_t gc_onestep(lua_State *L)
 	g->gc.state = GCSfinalize;
       } else {  /* Otherwise skip this phase to help the JIT. */
 	g->gc.state = GCSpause;  /* End of GC cycle. */
+	gc_arena_alloc_black(g, 0);
 	g->gc.debt = 0;
       }
     }
@@ -737,6 +746,7 @@ static size_t gc_onestep(lua_State *L)
       return GCFINALIZECOST;
     }
     g->gc.state = GCSpause;  /* End of GC cycle. */
+    gc_arena_alloc_black(g, 0);
     g->gc.debt = 0;
     return 0;
   default:
