@@ -105,6 +105,45 @@ static void test_c_table_rescan_barrier(lua_State *L, global_State *g,
   lua_pop(L, 2);
 }
 
+static void test_vm_upvalue_barrier(lua_State *L, global_State *g, TGState *tg)
+{
+  GCfunc *fn;
+  GCupval *uv;
+  GCtab *old, *child;
+
+  assert(luaL_dostring(L,
+    "local x = {}\n"
+    "return function(v) x = v end, x\n") == LUA_OK);
+  fn = funcV(L->top - 2);
+  old = tabV(L->top - 1);
+  assert(isluafunc(fn));
+  assert(fn->l.nupvalues == 1);
+  uv = gco2uv(gcref(fn->l.uvptr[0]));
+  assert(uv->closed);
+  assert(uvval(uv) == &uv->tv);
+  assert(tabV(uvval(uv)) == old);
+
+  lua_newtable(L);
+  child = tabV(L->top - 1);
+
+  lj_gc2_legacy_mark_begin(g);
+  assert(lj_gc2_markobj(g, obj2gco(uv)) == 1);
+  flush_and_drain(g, tg);
+  assert(lj_gc2_ismarked(g, obj2gco(uv)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(old)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 0);
+
+  lua_pushvalue(L, -3);
+  lua_pushvalue(L, -2);
+  lua_call(L, 1, 0);
+  assert(tabV(uvval(uv)) == child);
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
+  assert(!lj_gc2_ssb_empty(g));
+  flush_and_drain(g, tg);
+  lj_gc2_legacy_cycle_end(g);
+  lua_pop(L, 3);
+}
+
 static void make_weak_table(lua_State *L, const char *mode,
 			    GCtab **weak, GCtab **key, GCtab **val)
 {
@@ -247,6 +286,7 @@ int main(void)
   test_strong_table(L, g, tg);
   test_c_value_barrier(L, g, tg);
   test_c_table_rescan_barrier(L, g, tg);
+  test_vm_upvalue_barrier(L, g, tg);
   test_weak_tables(L, g, tg);
   test_closure(L, g, tg);
   test_thread(L, g, tg);

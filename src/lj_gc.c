@@ -1116,10 +1116,13 @@ void LJ_FASTCALL lj_gc_barrieruv(global_State *g, TValue *tv)
 {
 #define TV2MARKED(x) \
   (*((uint8_t *)(x) - offsetof(GCupval, tv) + offsetof(GCupval, marked)))
-  if (g->gc.state == GCSpropagate || g->gc.state == GCSatomic)
-    gc_mark(g, gcV(tv));
-  else
-    TV2MARKED(tv) = (TV2MARKED(tv) & (uint8_t)~LJ_GC_COLORS) | curwhite(g);
+  lj_gc2_barrier_uv(g, tv);
+  if ((TV2MARKED(tv) & LJ_GC_BLACK) && tviswhite(tv)) {
+    if (g->gc.state == GCSpropagate || g->gc.state == GCSatomic)
+      gc_mark(g, gcV(tv));
+    else
+      TV2MARKED(tv) = (TV2MARKED(tv) & (uint8_t)~LJ_GC_COLORS) | curwhite(g);
+  }
 #undef TV2MARKED
 }
 

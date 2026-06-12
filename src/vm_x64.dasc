@@ -319,6 +319,7 @@
 |.define PC_RD, word [PC-2]
 |
 |.define TGPOLL, dword [DISPATCH+DISPATCH_TG(poll)]
+|.define TGMARK, dword [DISPATCH+DISPATCH_TG(mark_active)]
 |
 |.macro branchPC, reg
 |  lea PC, [PC+reg*4-BCBIAS_J*4]
@@ -3598,20 +3599,22 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov [RB], RA
     |  jz >1
     |  // Check barrier for closed upvalue.
-    |  test byte [RB+TV2MARKOFS], LJ_GC_BLACK		// isblack(uv)
-    |  jnz >2
-    |1:
-    |  ins_next
-    |
-    |2:  // Upvalue is black. Check if new value is collectable and white.
     |  mov RD, RA
     |  sar RD, 47
     |  sub RDd, LJ_TISGCV
     |  cmp RDd, LJ_TNUMX - LJ_TISGCV			// tvisgcv(v)
-    |  jbe <1
+    |  jbe >1
+    |  cmp TGMARK, 0
+    |  jnz >2
     |  cleartp GCOBJ:RA
+    |  test byte [RB+TV2MARKOFS], LJ_GC_BLACK		// isblack(uv)
+    |  jz >1
     |  test byte GCOBJ:RA->gch.marked, LJ_GC_WHITES	// iswhite(v)
-    |  jz <1
+    |  jz >1
+    |1:
+    |  ins_next
+    |
+    |2:
     |  // Crossed a write barrier. Move the barrier forward.
     |.if not X64WIN
     |  mov CARG2, RB
@@ -3634,16 +3637,18 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov RD, UPVAL:RB->v
     |  settp STR:ITYPE, STR:RA, LJ_TSTR
     |  mov [RD], STR:ITYPE
-    |  test byte UPVAL:RB->marked, LJ_GC_BLACK		// isblack(uv)
+    |  cmp byte UPVAL:RB->closed, 0
+    |  jz >1
+    |  cmp TGMARK, 0
     |  jnz >2
+    |  test byte UPVAL:RB->marked, LJ_GC_BLACK		// isblack(uv)
+    |  jz >1
+    |  test byte GCOBJ:RA->gch.marked, LJ_GC_WHITES	// iswhite(str)
+    |  jz >1
     |1:
     |  ins_next
     |
-    |2:  // Check if string is white and ensure upvalue is closed.
-    |  test byte GCOBJ:RA->gch.marked, LJ_GC_WHITES	// iswhite(str)
-    |  jz <1
-    |  cmp byte UPVAL:RB->closed, 0
-    |  jz <1
+    |2:
     |  // Crossed a write barrier. Move the barrier forward.
     |  mov RB, BASE			// Save BASE (CARG2 == BASE).
     |  mov CARG2, RD

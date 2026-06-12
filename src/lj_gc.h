@@ -86,6 +86,7 @@ LJ_FUNC void lj_gc_closeuv(global_State *g, GCupval *uv);
 LJ_FUNC void lj_gc_barriertrace(global_State *g, uint32_t traceno);
 #endif
 LJ_FUNC void lj_gc2_barrier_tv(lua_State *L, cTValue *tv);
+LJ_FUNC void lj_gc2_barrier_uv(global_State *g, cTValue *tv);
 LJ_FUNC void lj_gc2_barrier_obj(lua_State *L, GCobj *o);
 LJ_FUNC void lj_gc2_barrier_tab(lua_State *L, GCtab *t);
 

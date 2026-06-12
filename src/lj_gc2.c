@@ -388,17 +388,26 @@ int lj_gc2_ssb_empty(global_State *g)
   return 1;
 }
 
+static int gc2_barrier_active_g(global_State *g)
+{
+  TGState *tg;
+  if (!g)
+    return 0;
+  tg = G2TG(g);
+  if (!tg || !tg->mark_active)
+    return 0;
+  if (g->gc2.phase != LJ_GC2_MARK && g->gc2.phase != LJ_GC2_WEAK)
+    return 0;
+  return 1;
+}
+
 static int gc2_barrier_active(lua_State *L, global_State **pg)
 {
   global_State *g;
-  TGState *tg;
   if (!L)
     return 0;
   g = G(L);
-  tg = L2TG(L);
-  if (!g || !tg || !tg->mark_active)
-    return 0;
-  if (g->gc2.phase != LJ_GC2_MARK && g->gc2.phase != LJ_GC2_WEAK)
+  if (!gc2_barrier_active_g(g))
     return 0;
   *pg = g;
   return 1;
@@ -408,6 +417,12 @@ void lj_gc2_barrier_tv(lua_State *L, cTValue *tv)
 {
   global_State *g;
   if (tv && tvisgcv(tv) && gc2_barrier_active(L, &g))
+    lj_gc2_markobj(g, gcV(tv));
+}
+
+void lj_gc2_barrier_uv(global_State *g, cTValue *tv)
+{
+  if (tv && tvisgcv(tv) && gc2_barrier_active_g(g))
     lj_gc2_markobj(g, gcV(tv));
 }
 
