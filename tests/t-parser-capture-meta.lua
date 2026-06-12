@@ -41,6 +41,21 @@ do
 end
 
 do
+  local function compute(a, b)
+    return a + b
+  end
+  local fs = {}
+  for i = 1, 3 do
+    eq(type(compute), "function")
+    eq(compute(i, 10), i + 10)
+    fs[i] = function(a, b)
+      return compute(a, b)
+    end
+    eq(fs[i](i, 20), i + 20)
+  end
+end
+
+do
   local x = 0
   if false then
     local function f()

@@ -208,10 +208,12 @@ at `fs_finish` time or eagerly:
 - Child FNEW upvalue descriptors: the proto uv table entry for a
   local-capture (today flagged PROTO_UV_LOCAL with slot index — see
   lj_parse var_add/uv handling and lj_func.c:func_finduv use) now means
-  "copy the GCupval ref out of parent slot N". `lj_func_newL_*` (lj_func.c)
-  reads the slot, asserts itype==LJ_TUPVAL, stores the GCRef into
-  fn->l.uvptr[i] with wbarrier. Upper-level captures (parent's upvalue)
-  unchanged: copy parent's uvptr entry.
+  "use a closed cell for parent slot N". Mutable captures promote a raw
+  parent slot to an LJ_TUPVAL cell in place, or inherit an existing cell.
+  Immutable captures may snapshot a raw parent slot into a closed cell without
+  replacing the owner slot; this preserves earlier owner-frame bytecode emitted
+  before the parser later discovers the capture. Upper-level captures
+  (parent's upvalue) unchanged: copy parent's uvptr entry.
 - UCLO: v4 source no longer emits closing UCLO with `A != 0`; UCLO 0 remains
   as a return/jump carrier pending a later cleanup. `fscope_end`/goto
   resolution keep ordinary JMPs for scope exits.

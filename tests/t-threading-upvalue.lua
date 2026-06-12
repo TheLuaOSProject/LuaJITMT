@@ -75,4 +75,30 @@ do
   assert(upper_level_capture() == 4)
 end
 
+do
+  local function immutable_function_capture_spawn()
+    local function compute(a, b)
+      return a + b
+    end
+    local workers = {}
+    for i = 1, 3 do
+      assert(type(compute) == "function")
+      assert(compute(i, 10) == i + 10)
+      workers[i] = th.spawn(function(worker)
+	return worker, compute(worker, 20)
+      end, i)
+    end
+    for i = 1, 3 do
+      local ok, worker, result = workers[i]:join()
+      assert(ok == true)
+      assert(worker == i)
+      assert(result == i + 20)
+    end
+    assert(type(compute) == "function")
+    return true
+  end
+
+  assert(immutable_function_capture_spawn())
+end
+
 print("t-threading-upvalue OK")

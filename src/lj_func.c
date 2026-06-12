@@ -123,7 +123,8 @@ static GCupval *func_celluv(lua_State *L, TValue *slot, uint32_t v,
 	       "bad local cell upvalue");
   } else {
     uv = func_snapshotuv(L, slot);
-    setgcV(L, slot, obj2gco(uv), LJ_TUPVAL);
+    if (!(v & PROTO_UV_IMMUTABLE))
+      setgcV(L, slot, obj2gco(uv), LJ_TUPVAL);
   }
   func_uvmeta(uv, parent, v);
   return uv;
