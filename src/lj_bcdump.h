@@ -35,7 +35,8 @@
 
 /* Bytecode dump format versions accepted by the lockless loader. */
 #define BCDUMP_VERSION_LEGACY	2
-#define BCDUMP_VERSION_LOCKLESS	3
+#define BCDUMP_VERSION_TRANS	3
+#define BCDUMP_VERSION_LOCKLESS	4
 #define BCDUMP_VERSION		BCDUMP_VERSION_LOCKLESS
 
 /* Compatibility flags. */

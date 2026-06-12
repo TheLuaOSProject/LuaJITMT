@@ -17,11 +17,15 @@ make -C "$ROOT/src" -j"$JOBS" >/dev/null
 
 for needle in \
   'BCDUMP_VERSION_LEGACY' \
+  'BCDUMP_VERSION_TRANS' \
   'BCDUMP_VERSION_LOCKLESS' \
   'PROTO2_LEGACYUV' \
+  'PROTO2_CELLUV' \
   'proto_setlegacyuv' \
+  'proto_setcelluv' \
   'bcread_verify_bytecode' \
-  'op >= BC_CNEW' \
+  'bcread_uv_haslocal' \
+  'bcread_version(ls) != BCDUMP_VERSION_LOCKLESS && op >= BC_CNEW' \
   'bcwrite_has_legacyuv'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_bcdump.h" "$ROOT/src/lj_obj.h" \

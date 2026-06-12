@@ -121,6 +121,8 @@ typedef uint16_t VarIndex;
 #define VSTACK_VAR_CAPTURED	0x08	/* Local is captured by a child. */
 #define var_mark_captured(fs, reg) \
   (var_get((fs)->ls, (fs), (reg)).info |= VSTACK_VAR_CAPTURED)
+#define var_is_captured(fs, e) \
+  (((fs)->ls->vstack[(e)->u.s.aux].info & VSTACK_VAR_CAPTURED) != 0)
 
 /* Per-function state. */
 typedef struct FuncState {
@@ -466,11 +468,17 @@ static void expr_discharge(FuncState *fs, ExpDesc *e)
     e->k = VNONRELOC;
     return;
   } else if (e->k == VLOCAL) {
+    if (var_is_captured(fs, e)) {
+      fs->flags |= PROTO_NOJIT;
+      ins = BCINS_AD(BC_CGET, 0, e->u.s.info);
+      goto emit;
+    }
     e->k = VNONRELOC;
     return;
   } else {
     return;
   }
+emit:
   e->u.s.info = bcemit_INS(fs, ins);
   e->k = VRELOCABLE;
 }
@@ -621,12 +629,39 @@ static void expr_toval(FuncState *fs, ExpDesc *e)
     expr_discharge(fs, e);
 }
 
+static int bcreg_iscaptured(FuncState *fs, BCReg reg)
+{
+  return reg < fs->nactvar &&
+    (fs->ls->vstack[fs->varmap[reg]].info & VSTACK_VAR_CAPTURED);
+}
+
+static BCReg bcreg_captured_toreg(FuncState *fs, BCReg reg, int *tmp)
+{
+  if (bcreg_iscaptured(fs, reg)) {
+    BCReg dst = fs->freereg;
+    fs->flags |= PROTO_NOJIT;
+    bcreg_reserve(fs, 1);
+    bcemit_AD(fs, BC_CGET, dst, reg);
+    *tmp = 1;
+    return dst;
+  }
+  *tmp = 0;
+  return reg;
+}
+
 /* Emit store for LHS expression. */
 static void bcemit_store(FuncState *fs, ExpDesc *var, ExpDesc *e)
 {
   BCIns ins;
   if (var->k == VLOCAL) {
     fs->ls->vstack[var->u.s.aux].info |= VSTACK_VAR_RW;
+    if (var_is_captured(fs, var)) {
+      BCReg ra = expr_toanyreg(fs, e);
+      fs->flags |= PROTO_NOJIT;
+      bcemit_AD(fs, BC_CSET, var->u.s.info, ra);
+      expr_free(fs, e);
+      return;
+    }
     expr_free(fs, e);
     expr_toreg(fs, e, var->u.s.info);
     return;
@@ -645,14 +680,16 @@ static void bcemit_store(FuncState *fs, ExpDesc *var, ExpDesc *e)
     BCReg ra = expr_toanyreg(fs, e);
     ins = BCINS_AD(BC_GSET, ra, const_str(fs, var));
   } else {
-    BCReg ra, rc;
+    BCReg ra, rb, rc;
+    int rbtmp = 0, rctmp = 0;
     lj_assertFS(var->k == VINDEXED, "bad expr type %d", var->k);
     ra = expr_toanyreg(fs, e);
+    rb = bcreg_captured_toreg(fs, var->u.s.info, &rbtmp);
     rc = var->u.s.aux;
     if ((int32_t)rc < 0) {
-      ins = BCINS_ABC(BC_TSETS, ra, var->u.s.info, ~rc);
+      ins = BCINS_ABC(BC_TSETS, ra, rb, ~rc);
     } else if (rc > BCMAX_C) {
-      ins = BCINS_ABC(BC_TSETB, ra, var->u.s.info, rc-(BCMAX_C+1));
+      ins = BCINS_ABC(BC_TSETB, ra, rb, rc-(BCMAX_C+1));
     } else {
 #ifdef LUA_USE_ASSERT
       /* Free late alloced key reg to avoid assert on free of value reg. */
@@ -660,8 +697,14 @@ static void bcemit_store(FuncState *fs, ExpDesc *var, ExpDesc *e)
       if (e->k == VNONRELOC && ra >= fs->nactvar && rc >= ra)
 	bcreg_free(fs, rc);
 #endif
-      ins = BCINS_ABC(BC_TSETV, ra, var->u.s.info, rc);
+      rc = bcreg_captured_toreg(fs, rc, &rctmp);
+      ins = BCINS_ABC(BC_TSETV, ra, rb, rc);
     }
+    bcemit_INS(fs, ins);
+    if (rctmp) bcreg_free(fs, rc);
+    if (rbtmp) bcreg_free(fs, rb);
+    expr_free(fs, e);
+    return;
   }
   bcemit_INS(fs, ins);
   expr_free(fs, e);
@@ -1194,24 +1237,6 @@ static void gola_patch(LexState *ls, VarInfo *vg, VarInfo *vl)
   jmp_patch(fs, pc, vl->startpc);
 }
 
-/* Patch goto to close upvalues. */
-static void gola_close(LexState *ls, VarInfo *vg)
-{
-  FuncState *fs = ls->fs;
-  BCPos pc = vg->startpc;
-  BCIns *ip = &fs->bcbase[pc].ins;
-  lj_assertFS(gola_isgoto(vg), "expected goto");
-  lj_assertFS(bc_op(*ip) == BC_JMP || bc_op(*ip) == BC_UCLO,
-	      "bad bytecode op %d", bc_op(*ip));
-  setbc_a(ip, vg->slot);
-  if (bc_op(*ip) == BC_JMP) {
-    BCPos next = jmp_next(fs, pc);
-    if (next != NO_JMP) jmp_patch(fs, next, pc);  /* Jump to UCLO. */
-    setbc_op(ip, BC_UCLO);  /* Turn into UCLO. */
-    setbc_j(ip, NO_JMP);
-  }
-}
-
 /* Resolve pending forward gotos for label. */
 static void gola_resolve(LexState *ls, FuncScope *bl, MSize idx)
 {
@@ -1244,16 +1269,12 @@ static void gola_fixup(LexState *ls, FuncScope *bl)
 	setgcrefnull(v->name);  /* Invalidate label that goes out of scope. */
 	for (vg = v+1; vg < ve; vg++)  /* Resolve pending backward gotos. */
 	  if (strref(vg->name) == name && gola_isgoto(vg)) {
-	    if ((bl->flags&FSCOPE_UPVAL) && vg->slot > v->slot)
-	      gola_close(ls, vg);
 	    gola_patch(ls, vg, v);
 	  }
       } else if (gola_isgoto(v)) {
 	if (bl->prev) {  /* Propagate goto or break to outer scope. */
 	  bl->prev->flags |= name == NAME_BREAK ? FSCOPE_BREAK : FSCOPE_GOLA;
 	  v->slot = bl->nactvar;
-	  if ((bl->flags & FSCOPE_UPVAL))
-	    gola_close(ls, v);
 	} else {  /* No outer scope: undefined goto label or no loop. */
 	  ls->linenumber = ls->fs->bcbase[v->startpc].line;
 	  if (name == NAME_BREAK)
@@ -1299,8 +1320,7 @@ static void fscope_end(FuncState *fs)
   var_remove(ls, bl->nactvar);
   fs->freereg = fs->nactvar;
   lj_assertFS(bl->nactvar == fs->nactvar, "bad regalloc");
-  if ((bl->flags & (FSCOPE_UPVAL|FSCOPE_NOCLOSE)) == FSCOPE_UPVAL)
-    bcemit_AJ(fs, BC_UCLO, bl->nactvar, 0);
+  /* Source local upvalues are closed cells, so block exits need no close. */
   if ((bl->flags & FSCOPE_BREAK)) {
     if ((bl->flags & FSCOPE_LOOP)) {
       MSize idx = gola_new(ls, NAME_BREAK, VSTACK_LABEL, fs->pc);
@@ -1424,6 +1444,16 @@ static void fs_fixup_uv1(FuncState *fs, GCproto *pt, uint16_t *uv)
   setmref(pt->uv, uv);
   pt->sizeuv = fs->nuv;
   memcpy(uv, fs->uvtmp, fs->nuv*sizeof(VarIndex));
+}
+
+/* Check whether this source prototype captures a local from its parent. */
+static int fs_has_celluv(FuncState *fs)
+{
+  MSize i, n = fs->nuv;
+  for (i = 0; i < n; i++)
+    if (fs->uvtmp[i] < LJ_MAX_VSTACK)
+      return 1;
+  return 0;
 }
 
 #ifndef LUAJIT_DISABLE_DEBUGINFO
@@ -1593,6 +1623,10 @@ static GCproto *fs_finish(LexState *ls, BCLine line)
   pt->trace = 0;
   pt->flags = (uint8_t)(fs->flags & ~(PROTO_HAS_RETURN|PROTO_FIXUP_RETURN));
   proto_initflags2(pt);
+  if (fs_has_celluv(fs)) {
+    proto_setcelluv(pt);
+    pt->flags |= PROTO_NOJIT;
+  }
   pt->numparams = fs->numparams;
   pt->framesize = fs->framesize;
   setgcref(pt->chunkname, obj2gco(ls->chunkname));
@@ -2268,8 +2302,20 @@ static void parse_local(LexState *ls)
     var_add(ls, 1);
     parse_body(ls, &b, 0, ls->linenumber);
     /* bcemit_store(fs, &v, &b) without setting VSTACK_VAR_RW. */
-    expr_free(fs, &b);
-    expr_toreg(fs, &b, v.u.s.info);
+    if (var_is_captured(fs, &v)) {
+      BCIns fnew = fs->bcbase[b.u.s.info].ins;
+      lj_assertFS(b.k == VRELOCABLE && b.u.s.info == fs->pc-1 &&
+		  bc_op(fnew) == BC_FNEW, "bad local function cellization");
+      fs->flags |= PROTO_NOJIT;
+      fs->bcbase[b.u.s.info].ins = BCINS_AD(BC_CNEW, v.u.s.info, 0);
+      b.u.s.info = bcemit_INS(fs, fnew);
+      expr_tonextreg(fs, &b);
+      bcemit_AD(fs, BC_CSET, v.u.s.info, b.u.s.info);
+      expr_free(fs, &b);
+    } else {
+      expr_free(fs, &b);
+      expr_toreg(fs, &b, v.u.s.info);
+    }
     /* The upvalue is in scope, but the local is only valid after the store. */
     var_get(ls, fs, fs->nactvar - 1).startpc = fs->pc;
   } else {  /* Local variable declaration. */

@@ -106,6 +106,29 @@ static GCupval *func_snapshotuv(lua_State *L, const TValue *slot)
   return uv;
 }
 
+static void func_uvmeta(GCupval *uv, GCfuncL *parent, uint32_t v)
+{
+  uv->immutable = ((v / PROTO_UV_IMMUTABLE) & 1);
+  uv->dhash = (uint32_t)(uintptr_t)mref(parent->pc, char) ^ (v << 24);
+}
+
+/* Promote a source local slot to a closed upvalue cell, or inherit one. */
+static GCupval *func_celluv(lua_State *L, TValue *slot, uint32_t v,
+			    GCfuncL *parent)
+{
+  GCupval *uv;
+  if (itype(slot) == LJ_TUPVAL) {
+    uv = gco2uv(gcV(slot));
+    lj_assertL(uv->closed && uvval(uv) == &uv->tv,
+	       "bad local cell upvalue");
+  } else {
+    uv = func_snapshotuv(L, slot);
+    setgcV(L, slot, obj2gco(uv), LJ_TUPVAL);
+  }
+  func_uvmeta(uv, parent, v);
+  return uv;
+}
+
 /* Close all open upvalues pointing to some stack level or above. */
 void LJ_FASTCALL lj_func_closeuv(lua_State *L, TValue *level)
 {
@@ -198,15 +221,12 @@ GCfunc *lj_func_newL_gc(lua_State *L, GCproto *pt, GCfuncL *parent)
     GCupval *uv;
     if ((v & PROTO_UV_LOCAL)) {
       TValue *slot = base + (v & 0xff);
-      if (itype(slot) == LJ_TUPVAL) {
-	uv = gco2uv(gcV(slot));
-	lj_assertL(uv->closed && uvval(uv) == &uv->tv,
-		   "bad local cell upvalue");
+      if (proto_celluv(pt)) {
+	uv = func_celluv(L, slot, v, parent);
       } else {
 	uv = proto_legacyuv(pt) && la_load32_acq(&G(L)->mt_active) ?
 	     func_snapshotuv(L, slot) : func_finduv(L, slot);
-	uv->immutable = ((v / PROTO_UV_IMMUTABLE) & 1);
-	uv->dhash = (uint32_t)(uintptr_t)mref(parent->pc, char) ^ (v << 24);
+	func_uvmeta(uv, parent, v);
       }
     } else {
       uv = &gcref(puv[v])->uv;

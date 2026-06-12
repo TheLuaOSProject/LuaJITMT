@@ -3661,19 +3661,28 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ins_next
     break;
   case BC_CGET:
-    |  ins_AD	// RA = dst, RD = local cell
-    |  mov UPVAL:RB, [BASE+RD*8]
+    |  ins_AD	// RA = dst, RD = local cell/raw slot
+    |  mov RB, [BASE+RD*8]
+    |  mov ITYPE, RB
+    |  sar ITYPE, 47
+    |  cmp ITYPEd, LJ_TUPVAL
+    |  jne >1
     |  cleartp UPVAL:RB
     |  mov RB, UPVAL:RB->v
-    |  mov RD, [RB]
-    |  mov [BASE+RA*8], RD
+    |  mov RB, [RB]
+    |1:
+    |  mov [BASE+RA*8], RB
     |  ins_next
     break;
   case BC_CSET:
 #define TV2MARKOFS \
  ((int32_t)offsetof(GCupval, marked)-(int32_t)offsetof(GCupval, tv))
-    |  ins_AD	// RA = local cell, RD = src
-    |  mov UPVAL:RB, [BASE+RA*8]
+    |  ins_AD	// RA = local cell/raw slot, RD = src
+    |  mov RB, [BASE+RA*8]
+    |  mov ITYPE, RB
+    |  sar ITYPE, 47
+    |  cmp ITYPEd, LJ_TUPVAL
+    |  jne >3
     |  cleartp UPVAL:RB
     |  mov RB, UPVAL:RB->v
     |  mov RA, [BASE+RD*8]
@@ -3706,6 +3715,11 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  call extern lj_gc_pubuv	// (global_State *g, TValue *tv)
     |  mov BASE, RB			// Restore BASE.
     |  jmp <1
+    |
+    |3:
+    |  mov RB, [BASE+RD*8]
+    |  mov [BASE+RA*8], RB
+    |  ins_next
     break;
 #undef TV2MARKOFS
   case BC_USETV:

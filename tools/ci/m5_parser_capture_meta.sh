@@ -13,18 +13,15 @@ make -C "$ROOT/src" -j"$JOBS" XCFLAGS="-DLUA_USE_ASSERT" >/dev/null
 for needle in \
   'VSTACK_VAR_CAPTURED' \
   'var_mark_captured(fs, reg)' \
-  'unmarked captured local'
+  'unmarked captured local' \
+  'BC_CGET' \
+  'BC_CSET'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_parse.c"; then
     echo "guardrail: missing parser capture metadata marker: $needle" >&2
     exit 1
   fi
 done
-
-if rg -n 'BC_CNEW|BC_CGET|BC_CSET' "$ROOT/src/lj_parse.c"; then
-  echo "guardrail: parser capture metadata slice must not emit cell bytecode" >&2
-  exit 1
-fi
 
 if rg -n '#if[[:space:]]+LJ_MT|#ifdef[[:space:]]+LJ_MT|LUAJIT_THREADSAFE' \
   "$ROOT/src/lj_parse.c"

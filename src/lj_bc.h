@@ -196,7 +196,7 @@
   _(FUNCC,	rbase,	___,	___,	___) \
   _(FUNCCW,	rbase,	___,	___,	___) \
   \
-  /* Dormant local cell ops. */ \
+  /* Local cell ops. */ \
   _(CNEW,	dst,	___,	___,	___) \
   _(CGET,	dst,	___,	var,	___) \
   _(CSET,	var,	___,	var,	___)

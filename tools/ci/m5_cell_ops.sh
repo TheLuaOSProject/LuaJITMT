@@ -1,5 +1,5 @@
 #!/bin/sh
-# Build and guard the dormant x64 local-cell bytecode substrate.
+# Build and guard the x64 local-cell bytecode substrate.
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
@@ -46,6 +46,8 @@ fi
 
 for needle in \
   'lj_func_newuvcell' \
+  'func_celluv' \
+  'proto_celluv(pt)' \
   'itype(slot) == LJ_TUPVAL' \
   'gco2uv(gcV(slot))'
 do
@@ -66,10 +68,17 @@ do
   fi
 done
 
-if rg -n 'BC_CNEW|BC_CGET|BC_CSET' "$ROOT/src/lj_parse.c"; then
-  echo "guardrail: parser must not emit dormant local-cell bytecode yet" >&2
-  exit 1
-fi
+for needle in \
+  'BC_CNEW' \
+  'BC_CGET' \
+  'BC_CSET' \
+  'PROTO_NOJIT'
+do
+  if ! rg -F -q "$needle" "$ROOT/src/lj_parse.c"; then
+    echo "guardrail: missing parser local-cell marker: $needle" >&2
+    exit 1
+  fi
+done
 
 LUA_PATH=$LUA_PATH_GUARD "$ROOT/src/luajit" -bl -e '
 local x = 0
@@ -77,6 +86,7 @@ local function f()
   x = x + 1
   return x
 end
+x = 7
 local function g()
   local y = 1
   return function()
@@ -84,11 +94,23 @@ local function g()
     return y
   end
 end
-return f, g
+return f, g, x
 ' >"$OUT"
 
-if rg -n 'CNEW|CGET|CSET' "$OUT"; then
-  echo "guardrail: normal parser output must not contain dormant local-cell ops" >&2
+if ! rg -q 'CGET|CSET' "$OUT"; then
+  echo "guardrail: captured local parser output must contain CGET/CSET" >&2
+  exit 1
+fi
+
+LUA_PATH=$LUA_PATH_GUARD "$ROOT/src/luajit" -bl -e '
+local function f()
+  return f
+end
+return f
+' >"$OUT"
+
+if ! rg -q 'CNEW' "$OUT" || ! rg -q 'CSET' "$OUT"; then
+  echo "guardrail: self-captured local function must use CNEW/CSET" >&2
   exit 1
 fi
 

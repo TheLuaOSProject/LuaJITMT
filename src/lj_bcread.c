@@ -305,7 +305,7 @@ static void bcread_bytecode(LexState *ls, GCproto *pt, MSize sizebc)
 }
 
 /* Verify bytecode instructions after endian normalization. */
-static void bcread_verify_bytecode(LexState *ls, GCproto *pt)
+static int bcread_verify_bytecode(LexState *ls, GCproto *pt)
 {
   BCIns *bc = proto_bc(pt);
   MSize i;
@@ -316,7 +316,7 @@ static void bcread_verify_bytecode(LexState *ls, GCproto *pt)
     BCOp op = bc_op(ins);
     if (op >= BC__MAX)
       bcread_error(ls, LJ_ERR_BCBAD);
-    if (bcread_version(ls) == BCDUMP_VERSION_LEGACY && op >= BC_CNEW)
+    if (bcread_version(ls) != BCDUMP_VERSION_LOCKLESS && op >= BC_CNEW)
       bcread_error(ls, LJ_ERR_BCBAD);
     switch (op) {
     case BC_CNEW:
@@ -328,6 +328,8 @@ static void bcread_verify_bytecode(LexState *ls, GCproto *pt)
     case BC_CSET:
       has_cellops = 1;
       if (bc_a(ins) >= pt->framesize || bc_d(ins) >= pt->framesize)
+	bcread_error(ls, LJ_ERR_BCBAD);
+      if (bc_a(ins) == bc_d(ins))
 	bcread_error(ls, LJ_ERR_BCBAD);
       break;
     default:
@@ -342,6 +344,7 @@ static void bcread_verify_bytecode(LexState *ls, GCproto *pt)
 	bcread_error(ls, LJ_ERR_BCBAD);
     }
   }
+  return has_cellops;
 }
 
 /* Read upvalue refs. */
@@ -359,6 +362,16 @@ static void bcread_uv(LexState *ls, GCproto *pt, MSize sizeuv)
   }
 }
 
+static int bcread_uv_haslocal(GCproto *pt)
+{
+  MSize i, sizeuv = pt->sizeuv;
+  uint16_t *uv = proto_uv(pt);
+  for (i = 0; i < sizeuv; i++)
+    if (uv[i] & PROTO_UV_LOCAL)
+      return 1;
+  return 0;
+}
+
 /* Read a prototype. */
 GCproto *lj_bcread_proto(LexState *ls)
 {
@@ -366,6 +379,7 @@ GCproto *lj_bcread_proto(LexState *ls)
   MSize framesize, numparams, flags, sizeuv, sizekgc, sizekn, sizebc, sizept;
   MSize ofsk, ofsuv, ofsdbg;
   MSize sizedbg = 0;
+  int has_cellops;
   BCLine firstline = 0, numline = 0;
 
   /* Read prototype header. */
@@ -419,8 +433,14 @@ GCproto *lj_bcread_proto(LexState *ls)
 
   /* Read bytecode instructions and upvalue refs. */
   bcread_bytecode(ls, pt, sizebc);
-  bcread_verify_bytecode(ls, pt);
+  has_cellops = bcread_verify_bytecode(ls, pt);
+  if (has_cellops)
+    proto_setcelluv(pt);
   bcread_uv(ls, pt, sizeuv);
+  if (bcread_version(ls) == BCDUMP_VERSION_LOCKLESS && bcread_uv_haslocal(pt))
+    proto_setcelluv(pt);
+  if (has_cellops || proto_celluv(pt))
+    pt->flags |= PROTO_NOJIT;
 
   /* Read constants. */
   bcread_kgc(ls, pt, sizekgc);
@@ -452,7 +472,9 @@ static int bcread_header(LexState *ls)
   if (bcread_byte(ls) != BCDUMP_HEAD2 ||
       bcread_byte(ls) != BCDUMP_HEAD3) return 0;
   version = bcread_byte(ls);
-  if (version != BCDUMP_VERSION_LEGACY && version != BCDUMP_VERSION)
+  if (version != BCDUMP_VERSION_LEGACY &&
+      version != BCDUMP_VERSION_TRANS &&
+      version != BCDUMP_VERSION)
     return 0;
   flags = bcread_uleb128(ls);
   if ((flags & ~(BCDUMP_F_KNOWN)) != 0) return 0;

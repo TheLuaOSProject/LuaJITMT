@@ -184,8 +184,15 @@ int main(void)
   compile_to_dump(L, "return 42", &base);
   assert((uint8_t)base.p[3] == BCDUMP_VERSION_LOCKLESS);
 
-  assert_lua_ok(L, load_dump(L, &base), "load v3 dump");
-  assert_lua_ok(L, lua_pcall(L, 0, 1, 0), "pcall v3 dump");
+  assert_lua_ok(L, load_dump(L, &base), "load v4 dump");
+  assert_lua_ok(L, lua_pcall(L, 0, 1, 0), "pcall v4 dump");
+  assert(lua_tointeger(L, -1) == 42);
+  lua_pop(L, 1);
+
+  dump_copy(&mod, &base);
+  mod.p[3] = BCDUMP_VERSION_TRANS;
+  assert_lua_ok(L, load_dump(L, &mod), "load patched v3 dump");
+  assert_lua_ok(L, lua_pcall(L, 0, 1, 0), "pcall patched v3 dump");
   assert(lua_tointeger(L, -1) == 42);
   lua_pop(L, 1);
 
@@ -216,18 +223,27 @@ int main(void)
   assert_load_fails(L, &mod, "v2 dump with lockless cell opcode");
 
   dump_copy(&mod, &base);
+  mod.p[3] = BCDUMP_VERSION_TRANS;
+  patch_ins(&mod, bcpos, BCINS_AD(BC_CNEW, 0, 0));
+  assert_load_fails(L, &mod, "v3 dump with lockless cell opcode");
+
+  dump_copy(&mod, &base);
   patch_ins(&mod, bcpos, BCINS_AD(BC_CGET, 0, framesize));
-  assert_load_fails(L, &mod, "v3 dump with out-of-frame CGET");
+  assert_load_fails(L, &mod, "v4 dump with out-of-frame CGET");
+
+  dump_copy(&mod, &base);
+  patch_ins(&mod, bcpos, BCINS_AD(BC_CGET, 0, 0));
+  assert_load_fails(L, &mod, "v4 dump with self-overwriting CGET");
 
   dump_copy(&mod, &base);
   patch_ins(&mod, bcpos, BCINS_AD(BC_CNEW, 0, 0));
   patch_ins(&mod, bcpos + sizeof(BCIns), BCINS_AD(BC_UCLO, 1, 0));
-  assert_load_fails(L, &mod, "v3 cell dump with closing UCLO");
+  assert_load_fails(L, &mod, "v4 cell dump with closing UCLO");
 
   dump_free(&redump);
   dump_free(&mod);
   dump_free(&base);
   lua_close(L);
-  printf("t-bcdump-compat OK: v2/v3 bytecode compatibility guarded\n");
+  printf("t-bcdump-compat OK: v2/v3/v4 bytecode compatibility guarded\n");
   return 0;
 }
