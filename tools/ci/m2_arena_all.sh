@@ -1,0 +1,11 @@
+#!/bin/sh
+# Run all focused M2 arena scaffold tests.
+set -eu
+
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+
+"$ROOT/tools/ci/m2_arena_bitmap.sh"
+"$ROOT/tools/ci/m2_arena_map.sh"
+"$ROOT/tools/ci/m2_arena_alloc.sh"
+
+echo "M2 arena focused tests passed"
