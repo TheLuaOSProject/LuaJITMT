@@ -25,7 +25,7 @@ static void safepoint_apply_actions(global_State *g, TGState *tg,
   if (actions & LJ_GC2_HS_ALLOC_WHITE)
     tg->alloc.alloc_black = 0;
   if (actions & LJ_GC2_HS_SCAN_ROOTS) {
-    lua_State *L = la_load8_acq(&tg->in_native) ? NULL : tg->cur_L;
+    lua_State *L = tg->cur_L;
     lj_gc2_scan_roots(g, L);  /* 05 section 5.7.1/5.7.2. */
   }
   if (actions & LJ_GC2_HS_FLUSH_SSB)

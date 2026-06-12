@@ -25,7 +25,9 @@
 #include "lj_strfmt.h"
 #include "lj_ff.h"
 #include "lj_lib.h"
+#include "lj_safepoint.h"
 #include "lj_strscan.h"
+#include "lj_tg.h"
 
 /* Userdata payload for I/O file. */
 typedef struct IOFileUD {
@@ -42,6 +44,112 @@ typedef struct IOFileUD {
 
 #define IOSTDF_UD(L, id)	(&gcref(G(L)->gcroot[(id)])->ud)
 #define IOSTDF_IOF(L, id)	((IOFileUD *)uddata(IOSTDF_UD(L, (id))))
+
+/* -- Native-state wrappers ---------------------------------------------- */
+
+static FILE *io_native_fopen(lua_State *L, const char *fname,
+			     const char *mode)
+{
+  FILE *fp;
+  lj_native_enter(L2TG(L));
+  fp = fopen(fname, mode);
+  (void)lj_native_leave(L);
+  return fp;
+}
+
+static int io_native_fclose(lua_State *L, FILE *fp)
+{
+  int ok;
+  lj_native_enter(L2TG(L));
+  ok = fclose(fp);
+  (void)lj_native_leave(L);
+  return ok;
+}
+
+static int io_native_fflush(lua_State *L, FILE *fp)
+{
+  int ok;
+  lj_native_enter(L2TG(L));
+  ok = fflush(fp);
+  (void)lj_native_leave(L);
+  return ok;
+}
+
+static int io_native_fscanf_num(lua_State *L, FILE *fp, lua_Number *dp)
+{
+  int ok;
+  lj_native_enter(L2TG(L));
+  ok = fscanf(fp, LUA_NUMBER_SCAN, dp);
+  (void)lj_native_leave(L);
+  return ok;
+}
+
+static char *io_native_fgets(lua_State *L, char *buf, int size, FILE *fp)
+{
+  char *p;
+  lj_native_enter(L2TG(L));
+  p = fgets(buf, size, fp);
+  (void)lj_native_leave(L);
+  return p;
+}
+
+static size_t io_native_fread(lua_State *L, void *buf, size_t size,
+			      size_t n, FILE *fp)
+{
+  size_t nr;
+  lj_native_enter(L2TG(L));
+  nr = fread(buf, size, n, fp);
+  (void)lj_native_leave(L);
+  return nr;
+}
+
+static int io_native_getc(lua_State *L, FILE *fp)
+{
+  int c;
+  lj_native_enter(L2TG(L));
+  c = getc(fp);
+  (void)lj_native_leave(L);
+  return c;
+}
+
+static size_t io_native_fwrite(lua_State *L, const void *buf, size_t size,
+			       size_t n, FILE *fp)
+{
+  size_t nw;
+  lj_native_enter(L2TG(L));
+  nw = fwrite(buf, size, n, fp);
+  (void)lj_native_leave(L);
+  return nw;
+}
+
+#if LJ_TARGET_POSIX || (LJ_TARGET_WINDOWS && !LJ_TARGET_XBOXONE && !LJ_TARGET_UWP)
+static FILE *io_native_popen(lua_State *L, const char *fname,
+			     const char *mode)
+{
+  FILE *fp;
+  lj_native_enter(L2TG(L));
+#if LJ_TARGET_POSIX
+  fp = popen(fname, mode);
+#else
+  fp = _popen(fname, mode);
+#endif
+  (void)lj_native_leave(L);
+  return fp;
+}
+
+static int io_native_pclose(lua_State *L, FILE *fp)
+{
+  int stat;
+  lj_native_enter(L2TG(L));
+#if LJ_TARGET_POSIX
+  stat = pclose(fp);
+#else
+  stat = _pclose(fp);
+#endif
+  (void)lj_native_leave(L);
+  return stat;
+}
+#endif
 
 /* -- Open/close helpers -------------------------------------------------- */
 
@@ -85,7 +193,7 @@ static IOFileUD *io_file_open(lua_State *L, const char *mode)
 {
   const char *fname = strdata(lj_lib_checkstr(L, 1));
   IOFileUD *iof = io_file_new(L);
-  iof->fp = fopen(fname, mode);
+  iof->fp = io_native_fopen(L, fname, mode);
   if (iof->fp == NULL)
     luaL_argerror(L, 1, lj_strfmt_pushf(L, "%s: %s", fname, strerror(errno)));
   return iof;
@@ -95,13 +203,11 @@ static int io_file_close(lua_State *L, IOFileUD *iof)
 {
   int ok;
   if ((iof->type & IOFILE_TYPE_MASK) == IOFILE_TYPE_FILE) {
-    ok = (fclose(iof->fp) == 0);
+    ok = (io_native_fclose(L, iof->fp) == 0);
   } else if ((iof->type & IOFILE_TYPE_MASK) == IOFILE_TYPE_PIPE) {
     int stat = -1;
-#if LJ_TARGET_POSIX
-    stat = pclose(iof->fp);
-#elif LJ_TARGET_WINDOWS && !LJ_TARGET_XBOXONE && !LJ_TARGET_UWP
-    stat = _pclose(iof->fp);
+#if LJ_TARGET_POSIX || (LJ_TARGET_WINDOWS && !LJ_TARGET_XBOXONE && !LJ_TARGET_UWP)
+    stat = io_native_pclose(L, iof->fp);
 #endif
 #if LJ_52
     iof->fp = NULL;
@@ -125,7 +231,7 @@ static int io_file_close(lua_State *L, IOFileUD *iof)
 static int io_file_readnum(lua_State *L, FILE *fp)
 {
   lua_Number d;
-  if (fscanf(fp, LUA_NUMBER_SCAN, &d) == 1) {
+  if (io_native_fscanf_num(L, fp, &d) == 1) {
     if (LJ_DUALNUM) {
       int64_t i64;
       int32_t i;
@@ -148,7 +254,7 @@ static int io_file_readline(lua_State *L, FILE *fp, MSize chop)
   char *buf;
   for (;;) {
     buf = lj_buf_tmp(L, m);
-    if (fgets(buf+n, m-n, fp) == NULL) break;
+    if (io_native_fgets(L, buf+n, (int)(m-n), fp) == NULL) break;
     n += (MSize)strlen(buf+n);
     ok |= n;
     if (n && buf[n-1] == '\n') { n -= chop; break; }
@@ -164,7 +270,7 @@ static void io_file_readall(lua_State *L, FILE *fp)
   MSize m, n;
   for (m = LUAL_BUFFERSIZE, n = 0; ; m += m) {
     char *buf = lj_buf_tmp(L, m);
-    n += (MSize)fread(buf+n, 1, m-n, fp);
+    n += (MSize)io_native_fread(L, buf+n, 1, m-n, fp);
     if (n != m) {
       setstrV(L, L->top++, lj_str_new(L, buf, (size_t)n));
       lj_gc_check(L);
@@ -177,12 +283,12 @@ static int io_file_readlen(lua_State *L, FILE *fp, MSize m)
 {
   if (m) {
     char *buf = lj_buf_tmp(L, m);
-    MSize n = (MSize)fread(buf, 1, m, fp);
+    MSize n = (MSize)io_native_fread(L, buf, 1, m, fp);
     setstrV(L, L->top++, lj_str_new(L, buf, (size_t)n));
     lj_gc_check(L);
     return n > 0;
   } else {
-    int c = getc(fp);
+    int c = io_native_getc(L, fp);
     ungetc(c, fp);
     setstrV(L, L->top++, &G(L)->strempty);
     return (c != EOF);
@@ -237,7 +343,7 @@ static int io_file_write(lua_State *L, IOFileUD *iof, int start)
     const char *p = lj_strfmt_wstrnum(L, tv, &len);
     if (!p)
       lj_err_argt(L, (int)(tv - L->base) + 1, LUA_TSTRING);
-    status = status && (fwrite(p, 1, len, fp) == len);
+    status = status && (io_native_fwrite(L, p, 1, len, fp) == len);
   }
   if (LJ_52 && status) {
     L->top = L->base+1;
@@ -309,7 +415,7 @@ LJLIB_CF(io_method_write)		LJLIB_REC(io_write 0)
 
 LJLIB_CF(io_method_flush)		LJLIB_REC(io_flush 0)
 {
-  return luaL_fileresult(L, fflush(io_tofile(L)->fp) == 0, NULL);
+  return luaL_fileresult(L, io_native_fflush(L, io_tofile(L)->fp) == 0, NULL);
 }
 
 #if LJ_32 && defined(__ANDROID__) && __ANDROID_API__ < 24
@@ -341,24 +447,40 @@ LJLIB_CF(io_method_seek)
       lj_err_argt(L, 3, LUA_TNUMBER);
   }
 #if LJ_TARGET_POSIX
+  lj_native_enter(L2TG(L));
   res = fseeko(fp, ofs, opt);
+  (void)lj_native_leave(L);
 #elif _MSC_VER >= 1400
+  lj_native_enter(L2TG(L));
   res = _fseeki64(fp, ofs, opt);
+  (void)lj_native_leave(L);
 #elif defined(__MINGW32__)
+  lj_native_enter(L2TG(L));
   res = fseeko64(fp, ofs, opt);
+  (void)lj_native_leave(L);
 #else
+  lj_native_enter(L2TG(L));
   res = fseek(fp, (long)ofs, opt);
+  (void)lj_native_leave(L);
 #endif
   if (res)
     return luaL_fileresult(L, 0, NULL);
 #if LJ_TARGET_POSIX
+  lj_native_enter(L2TG(L));
   ofs = ftello(fp);
+  (void)lj_native_leave(L);
 #elif _MSC_VER >= 1400
+  lj_native_enter(L2TG(L));
   ofs = _ftelli64(fp);
+  (void)lj_native_leave(L);
 #elif defined(__MINGW32__)
+  lj_native_enter(L2TG(L));
   ofs = ftello64(fp);
+  (void)lj_native_leave(L);
 #else
+  lj_native_enter(L2TG(L));
   ofs = (int64_t)ftell(fp);
+  (void)lj_native_leave(L);
 #endif
   setint64V(L->top-1, ofs);
   return 1;
@@ -415,7 +537,7 @@ LJLIB_CF(io_open)
   GCstr *s = lj_lib_optstr(L, 2);
   const char *mode = s ? strdata(s) : "r";
   IOFileUD *iof = io_file_new(L);
-  iof->fp = fopen(fname, mode);
+  iof->fp = io_native_fopen(L, fname, mode);
   return iof->fp != NULL ? 1 : luaL_fileresult(L, 0, fname);
 }
 
@@ -428,10 +550,10 @@ LJLIB_CF(io_popen)
   IOFileUD *iof = io_file_new(L);
   iof->type = IOFILE_TYPE_PIPE;
 #if LJ_TARGET_POSIX
-  fflush(NULL);
-  iof->fp = popen(fname, mode);
+  (void)io_native_fflush(L, NULL);
+  iof->fp = io_native_popen(L, fname, mode);
 #else
-  iof->fp = _popen(fname, mode);
+  iof->fp = io_native_popen(L, fname, mode);
 #endif
   return iof->fp != NULL ? 1 : luaL_fileresult(L, 0, fname);
 #else
@@ -445,7 +567,9 @@ LJLIB_CF(io_tmpfile)
 #if LJ_TARGET_PS3 || LJ_TARGET_PS4 || LJ_TARGET_PS5 || LJ_TARGET_PSVITA || LJ_TARGET_NX
   iof->fp = NULL; errno = ENOSYS;
 #else
+  lj_native_enter(L2TG(L));
   iof->fp = tmpfile();
+  (void)lj_native_leave(L);
 #endif
   return iof->fp != NULL ? 1 : luaL_fileresult(L, 0, NULL);
 }
@@ -467,7 +591,8 @@ LJLIB_CF(io_write)		LJLIB_REC(io_write GCROOT_IO_OUTPUT)
 
 LJLIB_CF(io_flush)		LJLIB_REC(io_flush GCROOT_IO_OUTPUT)
 {
-  return luaL_fileresult(L, fflush(io_stdfile(L, GCROOT_IO_OUTPUT)->fp) == 0, NULL);
+  return luaL_fileresult(L,
+    io_native_fflush(L, io_stdfile(L, GCROOT_IO_OUTPUT)->fp) == 0, NULL);
 }
 
 static int io_std_getset(lua_State *L, ptrdiff_t id, const char *mode)
@@ -551,4 +676,3 @@ LUALIB_API int luaopen_io(lua_State *L)
   io_std_new(L, stderr, "stderr");
   return 1;
 }
-
