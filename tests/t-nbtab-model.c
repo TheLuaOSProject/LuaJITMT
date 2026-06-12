@@ -282,7 +282,8 @@ static void migrate_help(Tab *t, Gen *g)
   /* stragglers finish their claimed indices; operation-level lock-free
   ** (someone always completes); model spins briefly until done. */
   while (!ld32(&g->done, A_ACQ))
-    for (volatile int s = 0; s < 64; s++) ;
+    for (int s = 0; s < 64; s++)
+      (void)ld32(&g->done, A_RLX);
   help_publish(t);
 }
 
