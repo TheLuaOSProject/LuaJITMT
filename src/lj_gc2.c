@@ -73,18 +73,23 @@ void lj_gc2_legacy_sweep_begin(global_State *g)
   g->gc2.phase = LJ_GC2_SWEEP;
   lj_gc2_handshake(g, LJ_GC2_HS_DISABLE_BARRIER|LJ_GC2_HS_RESET_ALLOC|
 		   LJ_GC2_HS_FLUSH_SSB);
+  (void)lj_gc2_drain_ssb(g);  /* Temporary worker-consume stand-in. */
 }
 
 void lj_gc2_legacy_preserve_abort(global_State *g)
 {
   g->gc2.phase = LJ_GC2_IDLE;
-  lj_gc2_handshake(g, LJ_GC2_HS_DISABLE_BARRIER|LJ_GC2_HS_ALLOC_WHITE);
+  lj_gc2_handshake(g, LJ_GC2_HS_DISABLE_BARRIER|LJ_GC2_HS_ALLOC_WHITE|
+		   LJ_GC2_HS_FLUSH_SSB);
+  (void)lj_gc2_drain_ssb(g);
 }
 
 void lj_gc2_legacy_cycle_end(global_State *g)
 {
   g->gc2.phase = LJ_GC2_IDLE;
-  lj_gc2_handshake(g, LJ_GC2_HS_DISABLE_BARRIER|LJ_GC2_HS_ALLOC_WHITE);
+  lj_gc2_handshake(g, LJ_GC2_HS_DISABLE_BARRIER|LJ_GC2_HS_ALLOC_WHITE|
+		   LJ_GC2_HS_FLUSH_SSB);
+  (void)lj_gc2_drain_ssb(g);
 }
 
 uint32_t lj_gc2_handshake(global_State *g, uint32_t actions)
@@ -200,6 +205,8 @@ void lj_gc2_scan_roots(global_State *g, lua_State *L)
   gc2_scan_thread_roots(g, L);
 }
 
+static void *gc2_mark_base(GCobj *o);
+
 static void gc2_ssb_activate(TGState *tg, GC2SSBNode *node)
 {
   node->next = NULL;
@@ -229,8 +236,12 @@ uint32_t lj_gc2_flush_ssb(global_State *g, TGState *tg)
   if (n == 0)
     return 0;
   fresh = tg->ssb_free;
-  if (!fresh)
-    return 0;  /* Workers will recycle published nodes in the full design. */
+  if (!fresh) {
+    (void)lj_gc2_drain_ssb(g);  /* Temporary scaffold until workers recycle. */
+    fresh = tg->ssb_free;
+    if (!fresh)
+      return 0;
+  }
   tg->ssb_free = fresh->next;
   node = tg->ssb_active;
   node->n = n;
@@ -269,8 +280,11 @@ uint32_t lj_gc2_drain_ssb(global_State *g)
     GC2SSBNode *next = node->next;
     TGState *owner = node->owner;
     uint32_t i;
-    for (i = 0; i < node->n; i++)
-      lj_gc2_markobj(g, gcref(node->slot[i]));
+    for (i = 0; i < node->n; i++) {
+      GCobj *o = gcref(node->slot[i]);
+      if (o)
+	(void)lj_gc2_markmem(g, gc2_mark_base(o));
+    }
     nitems += node->n;
     nnodes++;
     node->n = 0;
@@ -303,6 +317,23 @@ int lj_gc2_ssb_empty(global_State *g)
       return 0;
   }
   return 1;
+}
+
+static int gc2_mark_base_traversable(global_State *g, void *p)
+{
+  TGState *tg = G2TG(g);
+  GCArena *a;
+  if (!p || !tg || !(tg->tg_flags & TGF_ARENA_INTERNAL))
+    return 0;
+  a = lj_arena_of(p);
+  if (lj_arena_ishuge(a)) {
+    LJHugeInfo hi;
+    if (!(tg->tg_flags & TGF_HUGETAB) ||
+	lj_arena_hugetab_lookup(&tg->huge, p, &hi) != 1)
+      return 0;
+    return (hi.flags & LJ_HUGEF_TRAVERSABLE) != 0;
+  }
+  return (a->hdr.flags & LJ_AF_TRAVERSABLE) != 0;
 }
 
 static void *gc2_mark_base(GCobj *o)
@@ -347,7 +378,19 @@ int lj_gc2_markmem(global_State *g, void *p)
 
 int lj_gc2_markobj(global_State *g, GCobj *o)
 {
-  return o ? lj_gc2_markmem(g, gc2_mark_base(o)) : 0;
+  void *base;
+  int marked;
+  if (!o)
+    return 0;
+  base = gc2_mark_base(o);
+  marked = lj_gc2_markmem(g, base);
+  if (marked && (g->gc2.phase == LJ_GC2_MARK || g->gc2.phase == LJ_GC2_WEAK) &&
+      gc2_mark_base_traversable(g, base)) {
+    int pushed = lj_gc2_ssb_push(g, o);  /* 05 section 5.6.1. */
+    lj_assertG(pushed, "gc2 SSB push failed for marked traversable object");
+    UNUSED(pushed);
+  }
+  return marked;
 }
 
 int lj_gc2_ismarkedmem(global_State *g, void *p)

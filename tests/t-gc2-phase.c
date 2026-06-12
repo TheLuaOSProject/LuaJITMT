@@ -53,7 +53,7 @@ int main(void)
   TGState *tg;
   GCtab *phase_tab;
   uint32_t cycle0;
-  uint32_t ssb_published0;
+  uint32_t ssb_published0, ssb_drained0;
   void *phase_plain, *phase_trav;
   GCArena *phase_plain_a, *phase_trav_a;
   int i, done = 0, saw_mark = 0, saw_sweep = 0;
@@ -77,8 +77,11 @@ int main(void)
   assert(tg->mark_active == 1);
   assert(tg->alloc.alloc_black == 1);
   assert(lj_gc2_ismarked(g, obj2gco(phase_tab)) == 0);
-  assert(lj_gc2_ssb_push(g, obj2gco(phase_tab)) == 1);
+  assert(lj_gc2_markobj(g, obj2gco(phase_tab)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(phase_tab)) == 1);
+  assert(!lj_gc2_ssb_empty(g));
   ssb_published0 = g->gc2.ssb_published;
+  ssb_drained0 = g->gc2.ssb_drained;
   phase_plain = lj_arena_alloc(&tg->alloc, &tg->prng, 64, 0);
   phase_trav = lj_arena_alloc(&tg->alloc, &tg->prng, 64,
 			      LJ_AF_TRAVERSABLE);
@@ -92,7 +95,8 @@ int main(void)
   assert(tg->alloc.alloc_black == 1);
   assert(g->gc2.ssb_published == ssb_published0 + 1u);
   assert(tg->ssb_next == tg->ssb_base);
-  assert(lj_gc2_drain_ssb(g) == 1);
+  assert(g->gc2.ssb_drained == ssb_drained0 + 1u);
+  assert(lj_gc2_ssb_empty(g));
   assert(lj_gc2_ismarked(g, obj2gco(phase_tab)) == 1);
   assert(tg->alloc.bump[LJ_ARENAK_PLAIN].a == NULL);
   assert(tg->alloc.bump[LJ_ARENAK_TRAVERSABLE].a == NULL);
