@@ -124,19 +124,101 @@ static LJ_NOINLINE StrHash hash_dense(uint64_t seed, StrHash h,
 /* -- String interning ---------------------------------------------------- */
 
 #define LJ_STR_MAXCOLL		32
+#define LJ_STRTAB_RESIZE	((MSize)0x80000000u)
+#define LJ_STRTAB_ACTIVE_MASK	(~LJ_STRTAB_RESIZE)
+
+static LJ_AINLINE uintptr_t strref_load_acq(const GCRef *r)
+{
+#if LJ_GC64
+  return (uintptr_t)la_load64_acq(&r->gcptr64);
+#else
+  return (uintptr_t)la_load32_acq(&r->gcptr32);
+#endif
+}
+
+static LJ_AINLINE void strref_store_rel(GCRef *r, uintptr_t u)
+{
+#if LJ_GC64
+  la_store64_rel(&r->gcptr64, (uint64_t)u);
+#else
+  la_store32_rel(&r->gcptr32, (uint32_t)u);
+#endif
+}
+
+static LJ_AINLINE int strref_cas_rel(GCRef *r, uintptr_t *expect, uintptr_t want)
+{
+#if LJ_GC64
+  uint64_t exp = (uint64_t)*expect;
+  int ok = la_cas64(&r->gcptr64, &exp, (uint64_t)want, LA_REL, LA_ACQ);
+  *expect = (uintptr_t)exp;
+  return ok;
+#else
+  uint32_t exp = (uint32_t)*expect;
+  int ok = la_cas32(&r->gcptr32, &exp, (uint32_t)want, LA_REL, LA_ACQ);
+  *expect = (uintptr_t)exp;
+  return ok;
+#endif
+}
+
+static LJ_AINLINE GCobj *strref_hashhead(uintptr_t u)
+{
+  return (GCobj *)(void *)(u & ~(uintptr_t)LJ_STRHASH_LINKMASK);
+}
+
+static LJ_AINLINE void strtab_leave(StrTabHdr *hdr)
+{
+  MSize old = la_sub32_acqrel(&hdr->resize, 1);
+  lj_assertX((old & LJ_STRTAB_RESIZE) == 0 &&
+	     (old & LJ_STRTAB_ACTIVE_MASK) != 0,
+	     "bad string table active count");
+  UNUSED(old);
+}
+
+static StrTabHdr *strtab_enter(global_State *g)
+{
+  for (;;) {
+    StrTabHdr *hdr = (StrTabHdr *)la_loadptr_acq((void *const *)&g->str.tabh);
+    MSize state, expect;
+    if (hdr == NULL)
+      return NULL;
+    state = la_load32_acq(&hdr->resize);  /* 06 section 6.5 RCU header pin. */
+    if (state & LJ_STRTAB_RESIZE) {
+      la_cpu_pause();
+      continue;
+    }
+    if (state == LJ_STRTAB_ACTIVE_MASK) {
+      la_cpu_pause();
+      continue;
+    }
+    expect = state;
+    if (la_cas32(&hdr->resize, &expect, state + 1u, LA_ACQ_REL, LA_ACQ)) {
+      if (LJ_LIKELY((StrTabHdr *)la_loadptr_acq((void *const *)&g->str.tabh) == hdr))
+	return hdr;
+      strtab_leave(hdr);
+    }
+  }
+}
 
 /* Resize the string interning hash table (grow and shrink). */
 void lj_str_resize(lua_State *L, MSize newmask)
 {
   global_State *g = G(L);
   StrTabHdr *newhdr;
-  GCRef *newtab, *oldtab = g->str.tabh ? lj_str_buckets(g) : NULL;
+  StrTabHdr *oldhdr = (StrTabHdr *)la_loadptr_acq((void *const *)&g->str.tabh);
+  GCRef *newtab, *oldtab = oldhdr ? oldhdr->bucket : NULL;
   GCSize newsize;
-  MSize i;
+  MSize i, oldmask = oldhdr ? oldhdr->mask : ~(MSize)0;
 
   /* No resizing during GC traversal or if already too big. */
   if (g->gc.state == GCSsweepstring || newmask >= LJ_MAX_STRTAB-1)
     return;
+
+  if (oldhdr) {
+    MSize expect = 0;
+    if (!la_cas32(&oldhdr->resize, &expect, LJ_STRTAB_RESIZE,
+		  LA_ACQ_REL, LA_ACQ))
+      return;  /* Active interners keep the current table for this round. */
+  }
 
   newsize = lj_str_tabsize(newmask);
   newhdr = (StrTabHdr *)lj_mem_new(L, newsize);
@@ -149,7 +231,7 @@ void lj_str_resize(lua_State *L, MSize newmask)
   if (g->str.second) {
     int newsecond = 0;
     /* Compute primary chain lengths. */
-    for (i = g->str.mask; i != ~(MSize)0; i--) {
+    for (i = oldmask; i != ~(MSize)0; i--) {
       GCobj *o = lj_str_hashhead(oldtab[i]);
       while (o) {
 	GCstr *s = gco2str(o);
@@ -172,7 +254,7 @@ void lj_str_resize(lua_State *L, MSize newmask)
 #endif
 
   /* Reinsert all strings from the old table into the new table. */
-  for (i = g->str.mask; i != ~(MSize)0; i--) {
+  for (i = oldmask; i != ~(MSize)0; i--) {
     GCobj *o = lj_str_hashhead(oldtab[i]);
     while (o) {
       GCobj *next = gcnext(o);
@@ -215,9 +297,10 @@ void lj_str_resize(lua_State *L, MSize newmask)
   }
 
   /* Free old table and replace with new table. */
-  lj_str_freetab(g);
-  g->str.tabh = newhdr;
   g->str.mask = newmask;
+  la_storeptr_rel((void **)&g->str.tabh, newhdr);  /* 06 section 6.5 RCU publish. */
+  if (oldhdr)
+    lj_mem_free(g, oldhdr, lj_str_tabbytes(oldhdr));
 }
 
 #if LUAJIT_SECURITY_STRHASH
@@ -277,14 +360,12 @@ static LJ_NOINLINE GCstr *lj_str_rehash_chain(lua_State *L, StrHash hashc,
 #define STRID_RESEED_INTERVAL	0
 #endif
 
-/* Allocate a new string and add to string interning table. */
+/* Allocate a new, unpublished string object. */
 static GCstr *lj_str_alloc(lua_State *L, const char *str, MSize len,
 			   StrHash hash, int hashalg)
 {
   GCstr *s = lj_mem_newt(L, lj_str_size(len), GCstr);
   global_State *g = G(L);
-  GCRef *strtab = lj_str_buckets(g);
-  uintptr_t u;
   newwhite(g, s);
   s->gct = ~LJ_TSTR;
   s->len = len;
@@ -306,15 +387,7 @@ static GCstr *lj_str_alloc(lua_State *L, const char *str, MSize len,
   /* Clear last 4 bytes of allocated memory. Implies zero-termination, too. */
   *(uint32_t *)(strdatawr(s)+(len & ~(MSize)3)) = 0;
   memcpy(strdatawr(s), str, len);
-  /* Add to string hash table. */
-  hash &= g->str.mask;
-  u = gcrefu(strtab[hash]);
-  setgcrefp(*lj_obj_gcwref(obj2gco(s)), (u & ~(uintptr_t)LJ_STRHASH_LINKMASK));
-  /* NOBARRIER: The string table is a GC root. */
-  setgcrefp(strtab[hash], ((uintptr_t)s | (u & LJ_STRHASH_SECONDARY)));
-  if (g->str.num++ > g->str.mask)  /* Allow a 100% load factor. */
-    lj_str_resize(L, (g->str.mask<<1)+1);  /* Grow string table. */
-  return s;  /* Return newly interned string. */
+  return s;
 }
 
 /* Intern a string and return string object. */
@@ -324,41 +397,103 @@ GCstr *lj_str_new(lua_State *L, const char *str, size_t lenx)
   if (lenx-1 < LJ_MAX_STR-1) {
     MSize len = (MSize)lenx;
     StrHash hash = hash_sparse(g->str.seed, str, len);
-    GCRef *strtab = lj_str_buckets(g);
-    MSize coll = 0;
+    GCstr *news = NULL;
     int hashalg = 0;
-    /* Check if the string has already been interned. */
-    GCobj *o = lj_str_hashhead(strtab[hash & g->str.mask]);
+    for (;;) {
+      StrTabHdr *hdr = strtab_enter(g);
+      GCRef *strtab;
+      GCobj *o;
+      MSize mask, coll = 0;
+      uintptr_t u;
+      int grow = 0;
+      if (LJ_UNLIKELY(hdr == NULL)) {
+	if (news)
+	  lj_mem_free(g, news, lj_str_size(news->len));
+	return lj_str_alloc(L, str, len, hash, 0);
+      }
+
+      mask = hdr->mask;
+      strtab = hdr->bucket;
+      hashalg = 0;
+      hash = hash_sparse(g->str.seed, str, len);
+      u = strref_load_acq(&strtab[hash & mask]);
+      o = strref_hashhead(u);
 #if LUAJIT_SECURITY_STRHASH
-    if (LJ_UNLIKELY(lj_str_hashsecondary(strtab[hash & g->str.mask]))) {
-      hashalg = 1;
-      hash = hash_dense(g->str.seed, hash, str, len);
-      o = lj_str_hashhead(strtab[hash & g->str.mask]);
-    }
+      if (LJ_UNLIKELY(u & LJ_STRHASH_SECONDARY)) {
+	hashalg = 1;
+	hash = hash_dense(g->str.seed, hash, str, len);
+	u = strref_load_acq(&strtab[hash & mask]);
+	o = strref_hashhead(u);
+      }
 #endif
-    while (o != NULL) {
-      GCstr *sx = gco2str(o);
-      if (sx->hash == hash && sx->len == len) {
-	if (memcmp(str, strdata(sx), len) == 0) {
-	  if (isdead(g, o)) {  /* Resurrect if dead. */
-	    flipwhite(o);
-	    lj_gc_arena_markobj(g, o);
+      while (o != NULL) {
+	GCstr *sx = gco2str(o);
+	if (sx->hash == hash && sx->len == len) {
+	  if (memcmp(str, strdata(sx), len) == 0) {
+	    if (isdead(g, o)) {  /* Resurrect if dead. */
+	      flipwhite(o);
+	      lj_gc_arena_markobj(g, o);
+	    }
+	    strtab_leave(hdr);
+	    if (news)
+	      lj_mem_free(g, news, lj_str_size(news->len));
+	    return sx;  /* Return existing string. */
 	  }
-	  return sx;  /* Return existing string. */
+	  coll++;
 	}
 	coll++;
+	o = gcnext(o);
       }
-      coll++;
-      o = gcnext(o);
-    }
 #if LUAJIT_SECURITY_STRHASH
-    /* Rehash chain if there are too many collisions. */
-    if (LJ_UNLIKELY(coll > LJ_STR_MAXCOLL) && !hashalg) {
-      return lj_str_rehash_chain(L, hash, str, len);
-    }
+      /* Rehash chain if there are too many collisions. */
+      if (LJ_UNLIKELY(coll > LJ_STR_MAXCOLL) && !hashalg) {
+	strtab_leave(hdr);
+	if (news)
+	  lj_mem_free(g, news, lj_str_size(news->len));
+	return lj_str_rehash_chain(L, hash, str, len);
+      }
 #endif
-    /* Otherwise allocate a new string. */
-    return lj_str_alloc(L, str, len, hash, hashalg);
+      if (news == NULL) {
+	strtab_leave(hdr);
+	news = lj_str_alloc(L, str, len, hash, hashalg);
+	continue;
+      }
+
+      news->hash = hash;
+      news->hashalg = (uint8_t)hashalg;
+      for (;;) {
+	GCRef *head = &strtab[hash & mask];
+	uintptr_t want;
+	u = strref_load_acq(head);  /* 06 section 6.5 bucket snapshot. */
+	o = strref_hashhead(u);
+	while (o != NULL) {
+	  GCstr *sx = gco2str(o);
+	  if (sx->hash == hash && sx->len == len &&
+	      memcmp(str, strdata(sx), len) == 0) {
+	    if (isdead(g, o)) {
+	      flipwhite(o);
+	      lj_gc_arena_markobj(g, o);
+	    }
+	    strtab_leave(hdr);
+	    lj_mem_free(g, news, lj_str_size(news->len));
+	    return sx;
+	  }
+	  o = gcnext(o);
+	}
+	setgcrefp(*lj_obj_gcwref(obj2gco(news)),
+		  (void *)(u & ~(uintptr_t)LJ_STRHASH_LINKMASK));
+	want = (uintptr_t)news | (u & LJ_STRHASH_SECONDARY);
+	if (strref_cas_rel(head, &u, want)) {  /* 06 section 6.5 intern linearization. */
+	  MSize n = la_add32_rlx(&g->str.num, 1) + 1u;
+	  grow = n > mask;
+	  break;
+	}
+      }
+      strtab_leave(hdr);
+      if (grow)
+	lj_str_resize(L, (mask << 1) + 1u);  /* Grow string table. */
+      return news;  /* Return newly interned string. */
+    }
   } else {
     if (lenx)
       lj_err_msg(L, LJ_ERR_STROV);
