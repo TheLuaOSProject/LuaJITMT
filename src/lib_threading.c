@@ -378,7 +378,7 @@ static void threading_push_recv(lua_State *L, int rc, TValue *out)
     lua_pushliteral(L, "timeout");
   } else {
     setnilV(L->top++);
-    lua_pushliteral(L, "empty");
+    setboolV(L->top++, 0);
   }
 }
 
