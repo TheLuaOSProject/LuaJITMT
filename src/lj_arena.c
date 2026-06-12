@@ -480,6 +480,57 @@ static LJArenaFreeRun **arena_find_run(TGAlloc *alloc, uint32_t k,
   return NULL;
 }
 
+static void arena_clear_bins(TGAlloc *alloc, uint32_t k)
+{
+  memset(alloc->bins[k], 0, sizeof(alloc->bins[k]));
+}
+
+static void arena_unmap_list(GCArena *a)
+{
+  while (a) {
+    GCArena *next = a->hdr.next;
+    lj_arena_unmap(a);
+    a = next;
+  }
+}
+
+static uint32_t arena_count_live_cells(const GCArena *a)
+{
+  uint32_t i, n = 0;
+  for (i = LJ_AFIRST_CELL; i < LJ_ARENA_CELLS; i++)
+    n += lj_arena_bm_get(a->block, i);
+  return n;
+}
+
+typedef struct ArenaLargestRun {
+  uint32_t start;
+  uint32_t len;
+} ArenaLargestRun;
+
+static void arena_find_largest_run(uint32_t start, uint32_t len, void *ud)
+{
+  ArenaLargestRun *lr = (ArenaLargestRun *)ud;
+  if (len > lr->len) {
+    lr->start = start;
+    lr->len = len;
+  }
+}
+
+typedef struct ArenaRebuildRuns {
+  TGAlloc *alloc;
+  GCArena *a;
+  ArenaLargestRun bump;
+} ArenaRebuildRuns;
+
+static void arena_rebuild_run(uint32_t start, uint32_t len, void *ud)
+{
+  ArenaRebuildRuns *rr = (ArenaRebuildRuns *)ud;
+  if (rr->bump.len >= LJ_BUMP_MIN &&
+      start == rr->bump.start && len == rr->bump.len)
+    return;
+  arena_insert_run(rr->alloc, rr->a, start, len);
+}
+
 void lj_arena_alloc_init(TGAlloc *alloc)
 {
   memset(alloc, 0, sizeof(*alloc));
@@ -489,14 +540,62 @@ void lj_arena_alloc_fini(TGAlloc *alloc)
 {
   uint32_t k;
   for (k = 0; k < LJ_ARENA_NKINDS; k++) {
+    arena_unmap_list(alloc->owned[k]);
+    arena_unmap_list(alloc->needsweep[k]);
+  }
+  lj_arena_alloc_init(alloc);
+}
+
+void lj_arena_alloc_prepare_sweep(TGAlloc *alloc)
+{
+  uint32_t k;
+  for (k = 0; k < LJ_ARENA_NKINDS; k++) {
     GCArena *a = alloc->owned[k];
+    alloc->owned[k] = NULL;
+    alloc->bump[k].a = NULL;
+    alloc->bump[k].cell = 0;
+    alloc->bump[k].end = 0;
+    arena_clear_bins(alloc, k);
     while (a) {
       GCArena *next = a->hdr.next;
-      lj_arena_unmap(a);
+      a->hdr.flags |= LJ_AF_NEEDSWEEP;
+      a->hdr.next = alloc->needsweep[k];
+      alloc->needsweep[k] = a;
       a = next;
     }
   }
-  lj_arena_alloc_init(alloc);
+}
+
+GCArena *lj_arena_sweep_one(TGAlloc *alloc, uint32_t kind, uint32_t epoch,
+			    int minor)
+{
+  GCArena *a;
+  ArenaLargestRun lr = { 0, 0 };
+  ArenaRebuildRuns rr;
+  if (kind >= LJ_ARENA_NKINDS)
+    return NULL;
+  a = alloc->needsweep[kind];
+  if (!a)
+    return NULL;
+  alloc->needsweep[kind] = a->hdr.next;
+  a->hdr.next = NULL;
+  lj_arena_sweep_words(a, minor);
+  lj_arena_scan_free_runs(a, arena_find_largest_run, &lr);
+  rr.alloc = alloc;
+  rr.a = a;
+  rr.bump = lr;
+  lj_arena_scan_free_runs(a, arena_rebuild_run, &rr);
+  if (lr.len >= LJ_BUMP_MIN) {
+    alloc->bump[kind].a = a;
+    alloc->bump[kind].cell = lr.start;
+    alloc->bump[kind].end = lr.start + lr.len;
+  }
+  a->hdr.live_cells = arena_count_live_cells(a);
+  a->hdr.sweep_epoch = epoch;
+  a->hdr.flags &= ~LJ_AF_NEEDSWEEP;
+  a->hdr.next = alloc->owned[kind];
+  alloc->owned[kind] = a;
+  return a;
 }
 
 static GCArena *arena_alloc_fresh(TGAlloc *alloc, PRNGState *rs,
