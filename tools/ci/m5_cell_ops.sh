@@ -80,6 +80,16 @@ do
   fi
 done
 
+for needle in \
+  'IRT(IR_UREFC, IRT_PGC), slotref' \
+  'irt_isp32(IR(ir->op1)->t)'
+do
+  if ! rg -F -q "$needle" "$ROOT/src/lj_record.c" "$ROOT/src/lj_asm_x86.h"; then
+    echo "guardrail: missing owner-cell JIT marker: $needle" >&2
+    exit 1
+  fi
+done
+
 LUA_PATH=$LUA_PATH_GUARD "$ROOT/src/luajit" -bl -e '
 local x = 0
 local function f()
@@ -125,6 +135,35 @@ end)
 local outer = assert(loadstring(dumped))
 local inner = outer()
 assert(inner() == 1 and inner() == 2)
+'
+
+LUA_PATH=$LUA_PATH_GUARD "$ROOT/src/luajit" -e '
+jit.flush()
+jit.opt.start("hotloop=1")
+local function run(n)
+  local x = 0
+  local function touch() return x end
+  for i = 1, n do x = x + 1 end
+  return x, touch
+end
+local v, f = run(200)
+assert(v == 200 and f() == 200)
+local v2, f2 = run(20)
+assert(v2 == 20 and f2() == 20)
+'
+
+LUA_PATH=$LUA_PATH_GUARD "$ROOT/src/luajit" -e '
+jit.flush()
+jit.opt.start("hotloop=1")
+local function run(n)
+  local x = {0}
+  local function get() return x end
+  for i = 1, n do x = {i} end
+  return get()[1]
+end
+assert(run(200) == 200)
+collectgarbage()
+assert(run(20) == 20)
 '
 
 cd "$ROOT/tests/stock/test"

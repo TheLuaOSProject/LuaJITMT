@@ -220,8 +220,9 @@ static void asm_fuseahuref(ASMState *as, IRRef ref, RegSet allow)
       break;
     case IR_UREFC:
       if (irref_isk(ir->op1)) {
-	GCfunc *fn = ir_kfunc(IR(ir->op1));
-	GCupval *uv = &gcref(fn->l.uvptr[(ir->op2 >> 8)])->uv;
+	GCupval *uv = IR(ir->op1)->o == IR_KPTR ?
+		      (GCupval *)ir_kptr(IR(ir->op1)) :
+		      &gcref(ir_kfunc(IR(ir->op1))->l.uvptr[(ir->op2 >> 8)])->uv;
 #if LJ_GC64
 	int64_t ofs = dispofs(as, &uv->tv);
 	if (checki32(ofs) && checki32(ofs+4)) {
@@ -1399,7 +1400,14 @@ static void asm_uref(ASMState *as, IRIns *ir)
 {
   Reg dest = ra_dest(as, ir, RSET_GPR);
   int guarded = (irt_t(ir->t) & (IRT_GUARD|IRT_TYPE)) == (IRT_GUARD|IRT_PGC);
-  if (irref_isk(ir->op1) && !guarded) {
+  if (irref_isk(ir->op1) && IR(ir->op1)->o == IR_KPTR && !guarded) {
+    GCupval *uv = (GCupval *)ir_kptr(IR(ir->op1));
+    emit_loada(as, dest, ir->o == IR_UREFC ? (void *)&uv->tv :
+					    (void *)mref(uv->v, TValue));
+  } else if (ir->o == IR_UREFC && irt_isp32(IR(ir->op1)->t)) {
+    Reg uv = ra_alloc1(as, ir->op1, rset_exclude(RSET_GPR, dest));
+    emit_rmro(as, XO_LEA, dest|REX_GC64, uv, offsetof(GCupval, tv));
+  } else if (irref_isk(ir->op1) && !guarded) {
     GCfunc *fn = ir_kfunc(IR(ir->op1));
     MRef *v = &gcref(fn->l.uvptr[(ir->op2 >> 8)])->uv.v;
     emit_rma(as, XO_MOV, dest|REX_GC64, v);
@@ -1414,7 +1422,10 @@ static void asm_uref(ASMState *as, IRIns *ir)
       emit_i8(as, 0);
       emit_rmro(as, XO_ARITHib, XOg_CMP, uv, offsetof(GCupval, closed));
     }
-    if (irref_isk(ir->op1)) {
+    if (irref_isk(ir->op1) && IR(ir->op1)->o == IR_KPTR) {
+      GCupval *uvp = (GCupval *)ir_kptr(IR(ir->op1));
+      emit_loada(as, uv, uvp);
+    } else if (irref_isk(ir->op1)) {
       GCfunc *fn = ir_kfunc(IR(ir->op1));
       GCobj *o = gcref(fn->l.uvptr[(ir->op2 >> 8)]);
       emit_loada(as, uv, o);

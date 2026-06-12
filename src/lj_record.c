@@ -1864,6 +1864,43 @@ noconstify:
   }
 }
 
+/* Record local cell load/store. */
+static TRef rec_celluv(jit_State *J, cTValue *slot, TRef slotref, TRef val,
+		       BCReg slotno)
+{
+  GCupval *uvp;
+  IRRef uref;
+  uint32_t uh;
+  if (itype(slot) != LJ_TUPVAL) {
+    if (val == 0)
+      return slotref;
+    J->base[slotno] = val;
+    if (slotno >= J->maxslot) J->maxslot = (BCReg)(slotno+1);
+    return 0;
+  }
+  uvp = gco2uv(gcV(slot));
+  lj_assertJ(uvp->closed && uvval(uvp) == &uvp->tv,
+	     "bad local cell upvalue");
+  if (val == 0 && tvisgcv(uvval(uvp)))
+    lj_trace_err(J, LJ_TRERR_NYIBC);
+  uh = hashrot(uvp->dhash, uvp->dhash + HASH_BIAS) & 0xff;
+  uref = tref_ref(emitir(IRT(IR_UREFC, IRT_PGC), slotref, uh));
+  if (val == 0) {
+    IRType t = itype2irt(uvval(uvp));
+    TRef res = emitir(IRTG(IR_ULOAD, t), uref, 0);
+    if (irtype_ispri(t)) res = TREF_PRI(t);
+    return res;
+  } else {
+    if (!LJ_DUALNUM && tref_isinteger(val))
+      val = emitir(IRTN(IR_CONV), val, IRCONV_NUM_INT);
+    emitir(IRT(IR_USTORE, tref_type(val)), uref, val);
+    if (tref_isgcv(val))
+      emitir(IRT(IR_OBAR, IRT_NIL), uref, val);
+    J->needsnap = 1;
+    return 0;
+  }
+}
+
 /* -- Record calls to Lua functions --------------------------------------- */
 
 /* Check unroll limits for calls. */
@@ -2551,6 +2588,12 @@ void lj_record_ins(jit_State *J)
     break;
   case BC_USETV: case BC_USETS: case BC_USETN: case BC_USETP:
     rec_upvalue(J, ra, rc);
+    break;
+  case BC_CGET:
+    rc = rec_celluv(J, rcv, rc, 0, bc_c(ins));
+    break;
+  case BC_CSET:
+    rec_celluv(J, rav, ra, rc, bc_a(ins));
     break;
 
   /* -- Table ops --------------------------------------------------------- */
