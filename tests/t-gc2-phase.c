@@ -65,6 +65,12 @@ int main(void)
   assert(tg->alloc.alloc_black == 1);
   lj_gc2_legacy_cycle_end(g);
   assert_idle(g, tg);
+  lj_gc2_legacy_mark_begin(g);
+  assert(g->gc2.phase == LJ_GC2_MARK);
+  assert(tg->mark_active == 1);
+  assert(tg->alloc.alloc_black == 1);
+  lj_gc2_legacy_preserve_abort(g);
+  assert_idle(g, tg);
 
   assert(luaL_dostring(L,
     "hold = {}\n"

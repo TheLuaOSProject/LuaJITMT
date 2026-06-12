@@ -57,6 +57,7 @@ int main(void)
 
   lj_gc2_legacy_mark_begin(g);
   assert(g->gc2.marks_this_round == 0);
+  assert(lj_gc2_markobj(g, NULL) == 0);
 
   assert(lj_gc2_markmem(g, trav) == 1);
   assert(ptr_state(trav) == 3);

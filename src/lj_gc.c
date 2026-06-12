@@ -9,6 +9,11 @@
 #define lj_gc_c
 #define LUA_CORE
 
+#if LJ_GC2_PARANOIA
+#include <stdio.h>
+#include <stdlib.h>
+#endif
+
 #include "lj_obj.h"
 #include "lj_atomic.h"
 #include "lj_gc.h"
@@ -110,6 +115,163 @@ static void gc_arena_verify_sweep_boundary(global_State *g)
 #define gc_arena_verify_sweep_boundary(g)	((void)0)
 #endif
 
+#if LJ_GC2_PARANOIA
+static void gc2_paranoia_fail(const char *what, const void *p)
+{
+  fprintf(stderr, "LuaJIT GC2 PARANOIA: missing mark for %s at %p\n",
+	  what, p);
+  abort();
+}
+
+static int gc2_paranoia_liveobj(GCobj *o)
+{
+  uint8_t flags = lj_obj_gcflags(o);
+  return !iswhite(o) || (flags & (LJ_GC_FIXED|LJ_GC_SFIXED));
+}
+
+static void gc2_paranoia_checkmem(global_State *g, void *p, const char *what)
+{
+  int marked = lj_gc2_ismarkedmem(g, p);
+  if (marked == 0)
+    gc2_paranoia_fail(what, p);
+}
+
+static void gc2_paranoia_checkobj(global_State *g, GCobj *o, const char *what)
+{
+  int marked;
+  if (!o || !gc2_paranoia_liveobj(o))
+    return;
+  marked = lj_gc2_ismarked(g, o);
+  if (marked == 0)
+    gc2_paranoia_fail(what, o);
+}
+
+static void gc2_paranoia_checktab(global_State *g, GCtab *t)
+{
+  if (!gc2_paranoia_liveobj(obj2gco(t)))
+    return;
+  gc2_paranoia_checkobj(g, obj2gco(t), "table");
+  if (t->asize > 0)
+    gc2_paranoia_checkmem(g, tvref(t->array), "table array");
+  if (t->hmask > 0)
+    gc2_paranoia_checkmem(g, noderef(t->node), "table node");
+}
+
+static void gc2_paranoia_checkthread(global_State *g, lua_State *th)
+{
+  GCobj *uv;
+  if (!gc2_paranoia_liveobj(obj2gco(th)))
+    return;
+  gc2_paranoia_checkobj(g, obj2gco(th), "thread");
+  gc2_paranoia_checkmem(g, tvref(th->stack), "thread stack");
+  for (uv = gcref(th->openupval); uv != NULL; uv = gcnext(uv))
+    gc2_paranoia_checkobj(g, uv, "open upvalue");
+}
+
+static void gc2_paranoia_check_udata(global_State *g, GCudata *ud)
+{
+  if (!gc2_paranoia_liveobj(obj2gco(ud)))
+    return;
+  gc2_paranoia_checkobj(g, obj2gco(ud), "userdata");
+  if (LJ_HASBUFFER && ud->udtype == UDTYPE_BUFFER) {
+    SBufExt *sbx = (SBufExt *)uddata(ud);
+    if (!sbufiscoworborrow(sbx))
+      gc2_paranoia_checkmem(g, sbx->b, "buffer userdata data");
+  }
+}
+
+static void gc2_paranoia_checkone(global_State *g, GCobj *o)
+{
+  if (!gc2_paranoia_liveobj(o))
+    return;
+  switch (~o->gch.gct) {
+  case LJ_TTAB:
+    gc2_paranoia_checktab(g, gco2tab(o));
+    break;
+  case LJ_TTHREAD:
+    gc2_paranoia_checkthread(g, gco2th(o));
+    break;
+  case LJ_TUDATA:
+    gc2_paranoia_check_udata(g, gco2ud(o));
+    break;
+  default:
+    gc2_paranoia_checkobj(g, o, "object");
+    break;
+  }
+}
+
+static void gc2_paranoia_check_strtab(global_State *g)
+{
+  MSize i;
+  if (!g->str.tab || g->str.mask == ~(MSize)0)
+    return;
+  for (i = 0; i <= g->str.mask; i++) {
+    GCobj *o;
+    for (o = gcref(g->str.tab[i]); o != NULL; o = gcnext(o))
+      gc2_paranoia_checkobj(g, o, "string");
+  }
+}
+
+static void gc2_paranoia_check_roots(global_State *g)
+{
+  GCobj *o;
+  for (o = gcref(g->gc.root); o != NULL; o = gcnext(o))
+    gc2_paranoia_checkone(g, o);
+  o = gcref(g->gc.mmudata);
+  if (o) {
+    GCobj *root = o;
+    do {
+      o = gcnext(o);
+      gc2_paranoia_checkone(g, o);
+    } while (o != root);
+  }
+}
+
+static void gc2_paranoia_check_rawroots(global_State *g)
+{
+  gc2_paranoia_checkmem(g, g->str.tab, "string table");
+#if LJ_64
+  gc2_paranoia_checkmem(g, mref(g->gc.lightudseg, uint32_t),
+			"lightuserdata segments");
+#endif
+  gc2_paranoia_checkmem(g, g->tmpbuf.b, "global tmpbuf");
+  {
+    TGState *tg = G2TG(g);
+    if (tg)
+      gc2_paranoia_checkmem(g, tg->tmpbuf.b, "thread tmpbuf");
+  }
+#if LJ_HASFFI
+  {
+    CTState *cts = ctype_ctsG(g);
+    if (cts) {
+      gc2_paranoia_checkmem(g, cts, "ctype state");
+      gc2_paranoia_checkmem(g, cts->tab, "ctype table");
+      gc2_paranoia_checkmem(g, cts->cb.cbid, "callback ids");
+    }
+  }
+#endif
+#if LJ_HASJIT
+  {
+    jit_State *J = G2J(g);
+    gc2_paranoia_checkmem(g, J->trace, "trace table");
+    gc2_paranoia_checkmem(g, J->irbuf ? J->irbuf + J->irbotlim : NULL,
+			  "IR buffer");
+    gc2_paranoia_checkmem(g, J->snapbuf, "snapshot buffer");
+    gc2_paranoia_checkmem(g, J->snapmapbuf, "snapshot map buffer");
+  }
+#endif
+}
+
+static void gc2_paranoia_check_fixpoint(global_State *g)
+{
+  gc2_paranoia_check_roots(g);
+  gc2_paranoia_check_strtab(g);
+  gc2_paranoia_check_rawroots(g);
+}
+#else
+#define gc2_paranoia_check_fixpoint(g)	((void)0)
+#endif
+
 /* Mark a TValue (if needed). */
 #define gc_marktv(g, tv) \
   { lj_assertG(!tvisgcv(tv) || (~itype(tv) == gcval(tv)->gch.gct), \
@@ -164,12 +326,26 @@ static void gc_mark(global_State *g, GCobj *o)
 }
 
 /* Mark GC roots. */
+static void gc_mark_fixedstr(global_State *g)
+{
+  MSize i;
+  if (!g->str.tab || g->str.mask == ~(MSize)0)
+    return;
+  for (i = 0; i <= g->str.mask; i++) {
+    GCobj *o;
+    for (o = gcref(g->str.tab[i]); o != NULL; o = gcnext(o))
+      if (lj_obj_gcflags(o) & (LJ_GC_FIXED|LJ_GC_SFIXED))
+	lj_gc_arena_markobj(g, o);
+  }
+}
+
 static void gc_mark_gcroot(global_State *g)
 {
   ptrdiff_t i;
   for (i = 0; i < GCROOT_MAX; i++)
     if (gcref(g->gcroot[i]) != NULL)
       gc_markobj(g, gcref(g->gcroot[i]));
+  gc_mark_fixedstr(g);
   lj_gc_arena_markmem(g, g->str.tab);
 #if LJ_64
   lj_gc_arena_markmem(g, mref(g->gc.lightudseg, uint32_t));
@@ -752,6 +928,7 @@ static void atomic(global_State *g, lua_State *L)
   udsize = lj_gc_separateudata(g, 0);  /* Separate userdata to be finalized. */
   gc_mark_mmudata(g);  /* Mark them. */
   udsize += gc_propagate_gray(g);  /* And propagate the marks. */
+  gc2_paranoia_check_fixpoint(g);
 
   /* All marking done, clear weak tables. */
   gc_clearweak(g, gcref(g->gc.weak));
@@ -898,6 +1075,7 @@ void lj_gc_fullgc(lua_State *L)
   int32_t ostate = g->vmstate;
   setvmstate(g, GC);
   if (g->gc.state <= GCSatomic) {  /* Caught somewhere in the middle. */
+    lj_gc2_legacy_preserve_abort(g);
     setmref(g->gc.sweep, &g->gc.root);  /* Sweep everything (preserving it). */
     setgcrefnull(g->gc.gray);  /* Reset lists from partial propagation. */
     setgcrefnull(g->gc.grayagain);

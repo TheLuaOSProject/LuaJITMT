@@ -8,6 +8,10 @@
 
 #include "lj_obj.h"
 
+#ifndef LJ_GC2_PARANOIA
+#define LJ_GC2_PARANOIA		0
+#endif
+
 enum {
   LJ_GC2_IDLE,
   LJ_GC2_MARK,
@@ -18,9 +22,14 @@ enum {
 LJ_FUNC void lj_gc2_init(global_State *g);
 LJ_FUNC void lj_gc2_legacy_mark_begin(global_State *g);
 LJ_FUNC void lj_gc2_legacy_sweep_begin(global_State *g);
+LJ_FUNC void lj_gc2_legacy_preserve_abort(global_State *g);
 LJ_FUNC void lj_gc2_legacy_cycle_end(global_State *g);
 LJ_FUNC int lj_gc2_markobj(global_State *g, GCobj *o);
 LJ_FUNC int lj_gc2_markmem(global_State *g, void *p);
+LJ_FUNC int lj_gc2_ismarkedmem(global_State *g, void *p);
 LJ_FUNC int lj_gc2_ismarked(global_State *g, GCobj *o);
+#if LJ_GC2_PARANOIA
+LJ_FUNC uint32_t lj_gc2_paranoia_legacy_diff(global_State *g);
+#endif
 
 #endif
