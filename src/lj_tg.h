@@ -84,8 +84,8 @@ LJ_STATIC_ASSERT(sizeof(((GC2SSBNode *)0)->slot) == TG_GC2_SSB_BYTES);
 
 static LJ_AINLINE lua_State *lj_tg_cur_L(global_State *g)
 {
-  TGState *tg = G2TG(g);
-  if (tg && tg->cur_L)
+  TGState *tg = lj_thr_get_tg();
+  if (tg)
     return tg->cur_L;
   return gcref(g->cur_L) ? gco2th(gcref(g->cur_L)) : NULL;
 }
@@ -108,8 +108,8 @@ static LJ_AINLINE void lj_tg_clearcur_L(global_State *g)
 
 static LJ_AINLINE TValue *lj_tg_jit_base(global_State *g)
 {
-  TGState *tg = G2TG(g);
-  if (tg && tg->jit_base)
+  TGState *tg = lj_thr_get_tg();
+  if (tg)
     return tg->jit_base;
   return tvref(g->jit_base);  /* Transitional mirror for VM asm writes. */
 }

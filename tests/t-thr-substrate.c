@@ -69,6 +69,14 @@ static void *worker_main(void *arg)
   lj_thr_set_tg(&ctx->tg);
   assert(lj_thr_get_tg() == &ctx->tg);
   assert(G2TG(ctx->g) == &ctx->tg);
+  setgcref(ctx->g->cur_L, obj2gco(mainthread(ctx->g)));
+  setmref(ctx->g->jit_base, ctx->L->base);
+  ctx->tg.cur_L = NULL;
+  ctx->tg.jit_base = NULL;
+  assert(lj_tg_cur_L(ctx->g) == NULL);
+  assert(lj_tg_jit_base(ctx->g) == NULL);
+  ctx->tg.cur_L = ctx->L;
+  setmref(ctx->g->jit_base, NULL);
   lj_native_enter(&ctx->tg);
   lj_tg_attach(ctx->g, &ctx->tg);
   la_store32_rel(&ctx->attached, 1);
