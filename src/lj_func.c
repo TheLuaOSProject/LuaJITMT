@@ -203,7 +203,7 @@ GCfunc *lj_func_newL_gc(lua_State *L, GCproto *pt, GCfuncL *parent)
 	lj_assertL(uv->closed && uvval(uv) == &uv->tv,
 		   "bad local cell upvalue");
       } else {
-	uv = la_load32_acq(&G(L)->mt_active) ?
+	uv = proto_legacyuv(pt) && la_load32_acq(&G(L)->mt_active) ?
 	     func_snapshotuv(L, slot) : func_finduv(L, slot);
 	uv->immutable = ((v / PROTO_UV_IMMUTABLE) & 1);
 	uv->dhash = (uint32_t)(uintptr_t)mref(parent->pc, char) ^ (v << 24);
