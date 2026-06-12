@@ -7,6 +7,7 @@ CC=${CC:-cc}
 CFLAGS=${CFLAGS:-"-std=gnu99 -O2 -Wall -Wextra -Werror -mcx16"}
 JOBS=${JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)}
 OUT=${TMPDIR:-/tmp}/lj_t-strtab-cas
+OUT_REHASH=${TMPDIR:-/tmp}/lj_t-strtab-rehash
 
 make -C "$ROOT/src" clean >/dev/null
 make -C "$ROOT/src" -j"$JOBS" >/dev/null
@@ -14,11 +15,16 @@ make -C "$ROOT/src" -j"$JOBS" >/dev/null
 "$CC" $CFLAGS -I"$ROOT/src" "$ROOT/tests/t-strtab-cas.c" \
   "$ROOT/src/libluajit.a" -lm -ldl -pthread -o "$OUT"
 timeout 20s "$OUT"
+"$CC" $CFLAGS -I"$ROOT/src" "$ROOT/tests/t-strtab-rehash.c" \
+  "$ROOT/src/libluajit.a" -lm -ldl -pthread -o "$OUT_REHASH"
+timeout 20s "$OUT_REHASH"
 
 for needle in \
   'LJ_STRTAB_RESIZE' \
   'strtab_enter' \
   'strtab_leave' \
+  'strtab_claim' \
+  'strtab_release' \
   'strtab_retire' \
   'retired_next' \
   'retire_epoch' \
@@ -31,7 +37,9 @@ for needle in \
   'gc2_mark_strtab_mem' \
   'LJ_STRTAB_ACTIVE_MASK' \
   'state | LJ_STRTAB_RESIZE' \
-  'while (la_load32_acq(&oldhdr->resize) & LJ_STRTAB_ACTIVE_MASK)' \
+  'while (la_load32_acq(&hdr->resize) & LJ_STRTAB_ACTIVE_MASK)' \
+  'strtab_claim(hdr)' \
+  'strtab_release(hdr)' \
   'strref_cas_rel' \
   'la_storeptr_rel((void **)&g->str.tabh' \
   'la_add32_rlx(&g->str.num'

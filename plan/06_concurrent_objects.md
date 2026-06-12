@@ -256,8 +256,9 @@ Chain links live in each GCstr's `gcw` (was nextgc; 04 §4.7). Bucket head
 and links carry a **Harris mark**: low bit set = string logically dead
 (sweep-claimed). The secondary-hash scheme (LUAJIT_SECURITY_STRHASH,
 lj_str.c chain bit) is preserved: the *second-lowest* bit of the bucket
-head encodes "secondary chain" (lj_str.c:11–16 uses bit0 today — move to
-bit1; update lj_str_rehash_chain accordingly).
+head encodes "secondary chain" (the original report used bit0; the current
+implementation moved it to bit1 and reserves bit0 for the future Harris
+dead-link mark).
 ### 6.5.2 Intern (lj_str_new)
 ```
 h = hash(...); walk bucket (acq loads), skipping Harris-marked nodes:
@@ -297,7 +298,10 @@ active interners are present, then drains the active count before copying and
 publishing the replacement header; new entrants spin on the claimed bit. The
 old header is retained on a raw retired-header list and freed after a later
 completed safepoint handshake epoch, avoiding immediate RCU use-after-free for
-threads that loaded the old header before pinning it. The original full helping
+threads that loaded the old header before pinning it. Secondary-chain rehash
+now reuses the same claim/drain bit on the current header, verifies the header
+is still current after the claim, rechains in place while new entrants spin, and
+releases the bit before retrying the pending insert. The original full helping
 protocol above is still the target; bounded helper copy, cross-table resize
 participation, generic deferred-free buckets for all raw gens, and Harris
 dead-link sweep remain follow-up work.

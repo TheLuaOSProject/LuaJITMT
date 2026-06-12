@@ -180,6 +180,27 @@ static void strtab_retire(global_State *g, StrTabHdr *hdr)
   strtab_retired_push(g, hdr);
 }
 
+static int strtab_claim(StrTabHdr *hdr)
+{
+  for (;;) {
+    MSize state = la_load32_acq(&hdr->resize);
+    MSize expect = state;
+    if (state & LJ_STRTAB_RESIZE)
+      return 0;
+    if (la_cas32(&hdr->resize, &expect, state | LJ_STRTAB_RESIZE,
+		 LA_ACQ_REL, LA_ACQ))
+      break;
+  }
+  while (la_load32_acq(&hdr->resize) & LJ_STRTAB_ACTIVE_MASK)
+    la_cpu_pause();
+  return 1;
+}
+
+static void strtab_release(StrTabHdr *hdr)
+{
+  la_store32_rel(&hdr->resize, 0);
+}
+
 static LJ_AINLINE void strtab_leave(StrTabHdr *hdr)
 {
   MSize old = la_sub32_acqrel(&hdr->resize, 1);
@@ -228,17 +249,8 @@ void lj_str_resize(lua_State *L, MSize newmask)
     return;
 
   if (oldhdr) {
-    for (;;) {
-      MSize state = la_load32_acq(&oldhdr->resize);
-      MSize expect = state;
-      if (state & LJ_STRTAB_RESIZE)
-	return;
-      if (la_cas32(&oldhdr->resize, &expect, state | LJ_STRTAB_RESIZE,
-		   LA_ACQ_REL, LA_ACQ))
-	break;
-    }
-    while (la_load32_acq(&oldhdr->resize) & LJ_STRTAB_ACTIVE_MASK)
-      la_cpu_pause();
+    if (!strtab_claim(oldhdr))
+      return;
   }
 
   newsize = lj_str_tabsize(newmask);
@@ -331,9 +343,19 @@ static LJ_NOINLINE GCstr *lj_str_rehash_chain(lua_State *L, StrHash hashc,
 {
   global_State *g = G(L);
   int ow = g->gc.state == GCSsweepstring ? otherwhite(g) : 0;  /* Sweeping? */
-  GCRef *strtab = lj_str_buckets(g);
-  MSize strmask = g->str.mask;
-  GCobj *o = lj_str_hashhead(strtab[hashc & strmask]);
+  StrTabHdr *hdr = (StrTabHdr *)la_loadptr_acq((void *const *)&g->str.tabh);
+  GCRef *strtab;
+  MSize strmask;
+  GCobj *o;
+  if (!hdr || !strtab_claim(hdr))
+    return lj_str_new(L, str, len);
+  if ((StrTabHdr *)la_loadptr_acq((void *const *)&g->str.tabh) != hdr) {
+    strtab_release(hdr);
+    return lj_str_new(L, str, len);
+  }
+  strtab = hdr->bucket;
+  strmask = hdr->mask;
+  o = lj_str_hashhead(strtab[hashc & strmask]);
   setgcrefp(strtab[hashc & strmask], (void *)LJ_STRHASH_SECONDARY);
   g->str.second = 1;
   while (o) {
@@ -367,6 +389,7 @@ static LJ_NOINLINE GCstr *lj_str_rehash_chain(lua_State *L, StrHash hashc,
     setgcrefp(strtab[hash], ((uintptr_t)o | (u & LJ_STRHASH_SECONDARY)));
     o = next;
   }
+  strtab_release(hdr);
   /* Try to insert the pending string again. */
   return lj_str_new(L, str, len);
 }
