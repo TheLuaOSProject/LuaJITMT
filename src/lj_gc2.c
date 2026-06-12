@@ -66,7 +66,8 @@ void lj_gc2_legacy_mark_begin(global_State *g)
 void lj_gc2_legacy_sweep_begin(global_State *g)
 {
   g->gc2.phase = LJ_GC2_SWEEP;
-  lj_gc2_handshake(g, LJ_GC2_HS_DISABLE_BARRIER);
+  lj_gc2_handshake(g, LJ_GC2_HS_DISABLE_BARRIER|LJ_GC2_HS_RESET_ALLOC|
+		   LJ_GC2_HS_FLUSH_SSB);
 }
 
 void lj_gc2_legacy_preserve_abort(global_State *g)

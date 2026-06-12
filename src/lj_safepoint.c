@@ -8,6 +8,7 @@
 
 #include "lj_obj.h"
 #include "lj_atomic.h"
+#include "lj_arena.h"
 #include "lj_gc2.h"
 #include "lj_safepoint.h"
 #include "lj_tg.h"
@@ -27,6 +28,9 @@ static void safepoint_apply_actions(global_State *g, TGState *tg,
     lua_State *L = la_load8_acq(&tg->in_native) ? NULL : tg->cur_L;
     lj_gc2_scan_roots(g, L);  /* 05 section 5.7.1/5.7.2. */
   }
+  if ((actions & LJ_GC2_HS_RESET_ALLOC) &&
+      (tg->tg_flags & TGF_ARENA_INTERNAL))
+    lj_arena_alloc_prepare_sweep(&tg->alloc);  /* 04 section 4.6. */
   /* Other 05 section 5.4.2 action bits are reserved until their owners land. */
 }
 

@@ -197,6 +197,13 @@ int main(void)
     assert(kind.bump[LJ_ARENAK_PLAIN].a == plaina);
     assert(kind.owned[LJ_ARENAK_TRAVERSABLE] == NULL);
     assert(kind.needsweep[LJ_ARENAK_TRAVERSABLE] == trava);
+    lj_arena_alloc_restore_sweep_kind(&kind, LJ_ARENAK_TRAVERSABLE);
+    assert(kind.owned[LJ_ARENAK_PLAIN] == plaina);
+    assert(kind.needsweep[LJ_ARENAK_PLAIN] == NULL);
+    assert(kind.owned[LJ_ARENAK_TRAVERSABLE] == trava);
+    assert(kind.needsweep[LJ_ARENAK_TRAVERSABLE] == NULL);
+    assert((trava->hdr.flags & LJ_AF_NEEDSWEEP) == 0);
+    lj_arena_alloc_prepare_sweep_kind(&kind, LJ_ARENAK_TRAVERSABLE);
     lj_arena_alloc_sweep_kind(&kind, LJ_ARENAK_TRAVERSABLE, 12, 0);
     assert(kind.owned[LJ_ARENAK_TRAVERSABLE] == trava);
     assert(kind.needsweep[LJ_ARENAK_TRAVERSABLE] == NULL);

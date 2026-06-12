@@ -134,6 +134,7 @@ LJ_FUNC void lj_arena_alloc_rebuild_free_kind(TGAlloc *alloc, uint32_t kind);
 LJ_FUNC void lj_arena_alloc_rebuild_free(TGAlloc *alloc);
 LJ_FUNC void lj_arena_alloc_prepare_sweep_kind(TGAlloc *alloc, uint32_t kind);
 LJ_FUNC void lj_arena_alloc_prepare_sweep(TGAlloc *alloc);
+LJ_FUNC void lj_arena_alloc_restore_sweep_kind(TGAlloc *alloc, uint32_t kind);
 LJ_FUNC void lj_arena_alloc_sweep_kind(TGAlloc *alloc, uint32_t kind,
 				       uint32_t epoch, int minor);
 LJ_FUNC GCArena *lj_arena_sweep_one(TGAlloc *alloc, uint32_t kind,

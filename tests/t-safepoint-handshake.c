@@ -10,6 +10,7 @@
 
 #include "lj_obj.h"
 #include "lj_atomic.h"
+#include "lj_arena.h"
 #include "lj_gc2.h"
 #include "lj_safepoint.h"
 #include "lj_tg.h"
@@ -24,12 +25,24 @@ static void publish_manual(global_State *g, TGState *tg, uint32_t actions)
   la_store32_rel(&tg->poll, 1);  /* 05 section 5.4.2 signal word. */
 }
 
+static int arena_list_contains(GCArena *a, GCArena *needle)
+{
+  while (a) {
+    if (a == needle)
+      return 1;
+    a = a->hdr.next;
+  }
+  return 0;
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
   global_State *g;
   TGState *tg;
   GCtab *root_tab;
+  void *plain_reset, *trav_reset;
+  GCArena *plain_reset_a, *trav_reset_a;
   uint64_t epoch0;
   uint32_t actions;
 
@@ -107,6 +120,37 @@ int main(void)
   assert(tg->alloc.alloc_black == 1);
 
   assert(lj_gc2_handshake(g, 0) == 0);
+
+  plain_reset = lj_arena_alloc(&tg->alloc, &tg->prng, 64, 0);
+  trav_reset = lj_arena_alloc(&tg->alloc, &tg->prng, 64,
+			      LJ_AF_TRAVERSABLE);
+  assert(plain_reset != NULL);
+  assert(trav_reset != NULL);
+  plain_reset_a = lj_arena_of(plain_reset);
+  trav_reset_a = lj_arena_of(trav_reset);
+  actions = LJ_GC2_HS_RESET_ALLOC;
+  epoch0 = g->gc2.hs_epoch;
+  assert(lj_gc2_handshake(g, actions) == 1);
+  assert(g->gc2.hs_epoch == epoch0 + 1u);
+  assert(g->gc2.hs_pending == 0);
+  assert(g->gc2.hs_actions == actions);
+  assert(tg->alloc.bump[LJ_ARENAK_PLAIN].a == NULL);
+  assert(tg->alloc.bump[LJ_ARENAK_TRAVERSABLE].a == NULL);
+  assert(tg->alloc.owned[LJ_ARENAK_PLAIN] == NULL);
+  assert(tg->alloc.owned[LJ_ARENAK_TRAVERSABLE] == NULL);
+  assert(arena_list_contains(tg->alloc.needsweep[LJ_ARENAK_PLAIN],
+			     plain_reset_a));
+  assert(arena_list_contains(tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE],
+			     trav_reset_a));
+  assert((plain_reset_a->hdr.flags & LJ_AF_NEEDSWEEP) != 0);
+  assert((trav_reset_a->hdr.flags & LJ_AF_NEEDSWEEP) != 0);
+  lj_arena_alloc_restore_sweep_kind(&tg->alloc, LJ_ARENAK_TRAVERSABLE);
+  lj_arena_alloc_restore_sweep_kind(&tg->alloc, LJ_ARENAK_PLAIN);
+  assert(tg->alloc.needsweep[LJ_ARENAK_PLAIN] == NULL);
+  assert(tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE] == NULL);
+  lj_arena_free(&tg->alloc, plain_reset, 64);
+  lj_arena_free(&tg->alloc, trav_reset, 64);
+
   lua_close(L);
 
   printf("t-safepoint-handshake OK: C soft handshakes verified\n");

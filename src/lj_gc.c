@@ -75,7 +75,7 @@ static void gc_arena_finish_sweep_boundary(global_State *g)
     uint32_t epoch = ++tg->alloc.sweep_epoch;
     lj_arena_alloc_prepare_sweep_kind(&tg->alloc, LJ_ARENAK_TRAVERSABLE);
     lj_arena_alloc_sweep_kind(&tg->alloc, LJ_ARENAK_TRAVERSABLE, epoch, 0);
-    lj_arena_alloc_rebuild_free_kind(&tg->alloc, LJ_ARENAK_PLAIN);
+    lj_arena_alloc_restore_sweep_kind(&tg->alloc, LJ_ARENAK_PLAIN);
   } else {
     gc_arena_rebuild_free(g);
   }

@@ -10,9 +10,20 @@
 #include "lualib.h"
 
 #include "lj_obj.h"
+#include "lj_arena.h"
 #include "lj_gc.h"
 #include "lj_gc2.h"
 #include "lj_tg.h"
+
+static int arena_list_contains(GCArena *a, GCArena *needle)
+{
+  while (a) {
+    if (a == needle)
+      return 1;
+    a = a->hdr.next;
+  }
+  return 0;
+}
 
 static void assert_idle(global_State *g, TGState *tg)
 {
@@ -41,6 +52,8 @@ int main(void)
   global_State *g;
   TGState *tg;
   uint32_t cycle0;
+  void *phase_plain, *phase_trav;
+  GCArena *phase_plain_a, *phase_trav_a;
   int i, done = 0, saw_mark = 0, saw_sweep = 0;
 
   assert(L != NULL);
@@ -59,12 +72,33 @@ int main(void)
   assert(g->gc2.marks_this_round == 0);
   assert(tg->mark_active == 1);
   assert(tg->alloc.alloc_black == 1);
+  phase_plain = lj_arena_alloc(&tg->alloc, &tg->prng, 64, 0);
+  phase_trav = lj_arena_alloc(&tg->alloc, &tg->prng, 64,
+			      LJ_AF_TRAVERSABLE);
+  assert(phase_plain != NULL);
+  assert(phase_trav != NULL);
+  phase_plain_a = lj_arena_of(phase_plain);
+  phase_trav_a = lj_arena_of(phase_trav);
   lj_gc2_legacy_sweep_begin(g);
   assert(g->gc2.phase == LJ_GC2_SWEEP);
   assert(tg->mark_active == 0);
   assert(tg->alloc.alloc_black == 1);
+  assert(tg->alloc.bump[LJ_ARENAK_PLAIN].a == NULL);
+  assert(tg->alloc.bump[LJ_ARENAK_TRAVERSABLE].a == NULL);
+  assert(arena_list_contains(tg->alloc.needsweep[LJ_ARENAK_PLAIN],
+			     phase_plain_a));
+  assert(arena_list_contains(tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE],
+			     phase_trav_a));
+  assert((phase_plain_a->hdr.flags & LJ_AF_NEEDSWEEP) != 0);
+  assert((phase_trav_a->hdr.flags & LJ_AF_NEEDSWEEP) != 0);
+  lj_arena_alloc_restore_sweep_kind(&tg->alloc, LJ_ARENAK_TRAVERSABLE);
+  lj_arena_alloc_restore_sweep_kind(&tg->alloc, LJ_ARENAK_PLAIN);
+  assert(tg->alloc.needsweep[LJ_ARENAK_PLAIN] == NULL);
+  assert(tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE] == NULL);
   lj_gc2_legacy_cycle_end(g);
   assert_idle(g, tg);
+  lj_arena_free(&tg->alloc, phase_plain, 64);
+  lj_arena_free(&tg->alloc, phase_trav, 64);
   lj_gc2_legacy_mark_begin(g);
   assert(g->gc2.phase == LJ_GC2_MARK);
   assert(tg->mark_active == 1);

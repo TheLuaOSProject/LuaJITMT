@@ -649,6 +649,23 @@ void lj_arena_alloc_prepare_sweep(TGAlloc *alloc)
     lj_arena_alloc_prepare_sweep_kind(alloc, k);
 }
 
+void lj_arena_alloc_restore_sweep_kind(TGAlloc *alloc, uint32_t k)
+{
+  GCArena *a;
+  if (k >= LJ_ARENA_NKINDS)
+    return;
+  a = alloc->needsweep[k];
+  alloc->needsweep[k] = NULL;
+  while (a) {
+    GCArena *next = a->hdr.next;
+    a->hdr.flags &= ~LJ_AF_NEEDSWEEP;
+    a->hdr.next = alloc->owned[k];
+    alloc->owned[k] = a;
+    a = next;
+  }
+  lj_arena_alloc_rebuild_free_kind(alloc, k);
+}
+
 void lj_arena_alloc_sweep_kind(TGAlloc *alloc, uint32_t kind,
 			       uint32_t epoch, int minor)
 {
