@@ -20,7 +20,6 @@
 #include "lj_atomic.h"
 #include "lj_chan.h"
 #include "lj_err.h"
-#include "lj_func.h"
 #include "lj_gc.h"
 #include "lj_lib.h"
 #include "lj_safepoint.h"
@@ -247,8 +246,7 @@ static void threading_gc_enter(lua_State *L)
 {
   global_State *g = G(L);
   uint32_t expect = 0;
-  if (la_cas32(&g->mt_active, &expect, 1, LA_ACQ_REL, LA_ACQ))
-    lj_func_closeuv(L, tvref(L->stack));
+  (void)la_cas32(&g->mt_active, &expect, 1, LA_ACQ_REL, LA_ACQ);
   if (la_add32_rlx(&g->mt_live, 1) == 0) {
     g->mt_gc_threshold = g->gc.threshold;
     g->gc.threshold = LJ_MAX_MEM;  /* M4: no automatic GC while children run. */

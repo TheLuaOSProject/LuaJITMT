@@ -31,7 +31,7 @@ do
 end
 
 do
-  local function first_spawn_closes_open_uv()
+  local function first_spawn_preserves_source_v3_uv()
     local x = 5
     local function get()
       return x
@@ -44,8 +44,8 @@ do
     return get(), x
   end
 
-  local closed, parent = first_spawn_closes_open_uv()
-  assert(closed == 5 and parent == 9)
+  local shared, parent = first_spawn_preserves_source_v3_uv()
+  assert(shared == 9 and parent == 9)
 end
 
 do
