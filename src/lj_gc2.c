@@ -388,6 +388,54 @@ int lj_gc2_ssb_empty(global_State *g)
   return 1;
 }
 
+static int gc2_barrier_active(lua_State *L, global_State **pg)
+{
+  global_State *g;
+  TGState *tg;
+  if (!L)
+    return 0;
+  g = G(L);
+  tg = L2TG(L);
+  if (!g || !tg || !tg->mark_active)
+    return 0;
+  if (g->gc2.phase != LJ_GC2_MARK && g->gc2.phase != LJ_GC2_WEAK)
+    return 0;
+  *pg = g;
+  return 1;
+}
+
+void lj_gc2_barrier_tv(lua_State *L, cTValue *tv)
+{
+  global_State *g;
+  if (tv && tvisgcv(tv) && gc2_barrier_active(L, &g))
+    lj_gc2_markobj(g, gcV(tv));
+}
+
+void lj_gc2_barrier_obj(lua_State *L, GCobj *o)
+{
+  global_State *g;
+  if (o && gc2_barrier_active(L, &g))
+    lj_gc2_markobj(g, o);
+}
+
+void lj_gc2_barrier_tab(lua_State *L, GCtab *t)
+{
+  global_State *g;
+  GCobj *o;
+  int marked;
+  if (!t || !gc2_barrier_active(L, &g))
+    return;
+  o = obj2gco(t);
+  marked = lj_gc2_ismarked(g, o);
+  if (marked > 0) {
+    int pushed = lj_gc2_ssb_push(g, o);
+    lj_assertG(pushed, "gc2 table barrier SSB push failed");
+    UNUSED(pushed);
+  } else if (marked == 0) {
+    (void)lj_gc2_markobj(g, o);
+  }
+}
+
 static int gc2_mark_base_traversable(global_State *g, void *p)
 {
   TGState *tg = G2TG(g);

@@ -9,6 +9,7 @@
 #include "lauxlib.h"
 
 #include "lj_obj.h"
+#include "lj_gc.h"
 #include "lj_gc2.h"
 #include "lj_tab.h"
 #include "lj_tg.h"
@@ -49,6 +50,57 @@ static void test_strong_table(lua_State *L, global_State *g, TGState *tg)
   assert(lj_gc2_ismarkedmem(g, noderef(parent->node)) == 1);
   assert(g->gc2.grey_pushed == grey_pushed0 + 2u);
   assert(g->gc2.grey_drained == grey_drained0 + 2u);
+  lj_gc2_legacy_cycle_end(g);
+  lua_pop(L, 2);
+}
+
+static void test_c_value_barrier(lua_State *L, global_State *g, TGState *tg)
+{
+  GCtab *parent, *child;
+
+  lua_createtable(L, 1, 0);
+  parent = tabV(L->top - 1);
+  lua_newtable(L);
+  child = tabV(L->top - 1);
+
+  lj_gc2_legacy_mark_begin(g);
+  assert(lj_gc2_markobj(g, obj2gco(parent)) == 1);
+  flush_and_drain(g, tg);
+  assert(lj_gc2_ismarked(g, obj2gco(parent)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 0);
+
+  lua_pushvalue(L, -1);
+  lua_rawseti(L, -3, 1);
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
+  assert(!lj_gc2_ssb_empty(g));
+  flush_and_drain(g, tg);
+  lj_gc2_legacy_cycle_end(g);
+  lua_pop(L, 2);
+}
+
+static void test_c_table_rescan_barrier(lua_State *L, global_State *g,
+					TGState *tg)
+{
+  GCtab *parent, *child;
+
+  lua_createtable(L, 1, 0);
+  parent = tabV(L->top - 1);
+  lua_newtable(L);
+  child = tabV(L->top - 1);
+
+  lj_gc2_legacy_mark_begin(g);
+  assert(lj_gc2_markobj(g, obj2gco(parent)) == 1);
+  flush_and_drain(g, tg);
+  assert(lj_gc2_ismarked(g, obj2gco(parent)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 0);
+
+  assert(parent->asize > 0);
+  settabV(L, arrayslot(parent, 0), child);
+  lj_gc_anybarriert(L, parent);
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 0);
+  assert(!lj_gc2_ssb_empty(g));
+  flush_and_drain(g, tg);
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
   lj_gc2_legacy_cycle_end(g);
   lua_pop(L, 2);
 }
@@ -193,6 +245,8 @@ int main(void)
   assert(tg != NULL);
 
   test_strong_table(L, g, tg);
+  test_c_value_barrier(L, g, tg);
+  test_c_table_rescan_barrier(L, g, tg);
   test_weak_tables(L, g, tg);
   test_closure(L, g, tg);
   test_thread(L, g, tg);
