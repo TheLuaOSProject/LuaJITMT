@@ -57,6 +57,25 @@ end
 
 do
   local x = 0
+  local saved = {}
+  for i = 1, 3 do
+    eq(type(x), "number")
+    eq(x, i - 1)
+    local y = x + 1
+    saved[i] = function()
+      x = x + 1
+      return x
+    end
+    eq(saved[i](), i)
+    eq(y, i)
+  end
+  eq(saved[1](), 4)
+  eq(saved[2](), 5)
+  eq(saved[3](), 6)
+end
+
+do
+  local x = 0
   if false then
     local function f()
       return x

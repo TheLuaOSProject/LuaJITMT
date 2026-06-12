@@ -1,5 +1,5 @@
 #!/bin/sh
-# Build and guard parser captured-local metadata without enabling cell emission.
+# Build and guard parser captured-local metadata and source cell emission.
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
@@ -15,7 +15,9 @@ for needle in \
   'var_mark_captured(fs, reg)' \
   'unmarked captured local' \
   'BC_CGET' \
-  'BC_CSET'
+  'BC_CSET' \
+  'One-pass capture discovery can happen after earlier loop bytecode' \
+  'CSET stores raw slots unchanged and updates cells after FNEW promotion'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_parse.c"; then
     echo "guardrail: missing parser capture metadata marker: $needle" >&2

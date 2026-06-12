@@ -468,12 +468,9 @@ static void expr_discharge(FuncState *fs, ExpDesc *e)
     e->k = VNONRELOC;
     return;
   } else if (e->k == VLOCAL) {
-    if (var_is_captured(fs, e)) {
-      ins = BCINS_AD(BC_CGET, 0, e->u.s.info);
-      goto emit;
-    }
-    e->k = VNONRELOC;
-    return;
+    /* One-pass capture discovery can happen after earlier loop bytecode. */
+    ins = BCINS_AD(BC_CGET, 0, e->u.s.info);
+    goto emit;
   } else {
     return;
   }
@@ -628,15 +625,14 @@ static void expr_toval(FuncState *fs, ExpDesc *e)
     expr_discharge(fs, e);
 }
 
-static int bcreg_iscaptured(FuncState *fs, BCReg reg)
+static int bcreg_needscget(FuncState *fs, BCReg reg)
 {
-  return reg < fs->nactvar &&
-    (fs->ls->vstack[fs->varmap[reg]].info & VSTACK_VAR_CAPTURED);
+  return reg < fs->nactvar;
 }
 
-static BCReg bcreg_captured_toreg(FuncState *fs, BCReg reg, int *tmp)
+static BCReg bcreg_cell_toreg(FuncState *fs, BCReg reg, int *tmp)
 {
-  if (bcreg_iscaptured(fs, reg)) {
+  if (bcreg_needscget(fs, reg)) {
     BCReg dst = fs->freereg;
     bcreg_reserve(fs, 1);
     bcemit_AD(fs, BC_CGET, dst, reg);
@@ -652,15 +648,12 @@ static void bcemit_store(FuncState *fs, ExpDesc *var, ExpDesc *e)
 {
   BCIns ins;
   if (var->k == VLOCAL) {
+    BCReg ra;
     fs->ls->vstack[var->u.s.aux].info |= VSTACK_VAR_RW;
-    if (var_is_captured(fs, var)) {
-      BCReg ra = expr_toanyreg(fs, e);
-      bcemit_AD(fs, BC_CSET, var->u.s.info, ra);
-      expr_free(fs, e);
-      return;
-    }
+    ra = expr_toanyreg(fs, e);
+    /* CSET stores raw slots unchanged and updates cells after FNEW promotion. */
+    bcemit_AD(fs, BC_CSET, var->u.s.info, ra);
     expr_free(fs, e);
-    expr_toreg(fs, e, var->u.s.info);
     return;
   } else if (var->k == VUPVAL) {
     fs->ls->vstack[var->u.s.aux].info |= VSTACK_VAR_RW;
@@ -681,7 +674,7 @@ static void bcemit_store(FuncState *fs, ExpDesc *var, ExpDesc *e)
     int rbtmp = 0, rctmp = 0;
     lj_assertFS(var->k == VINDEXED, "bad expr type %d", var->k);
     ra = expr_toanyreg(fs, e);
-    rb = bcreg_captured_toreg(fs, var->u.s.info, &rbtmp);
+    rb = bcreg_cell_toreg(fs, var->u.s.info, &rbtmp);
     rc = var->u.s.aux;
     if ((int32_t)rc < 0) {
       ins = BCINS_ABC(BC_TSETS, ra, rb, ~rc);
@@ -694,7 +687,7 @@ static void bcemit_store(FuncState *fs, ExpDesc *var, ExpDesc *e)
       if (e->k == VNONRELOC && ra >= fs->nactvar && rc >= ra)
 	bcreg_free(fs, rc);
 #endif
-      rc = bcreg_captured_toreg(fs, rc, &rctmp);
+      rc = bcreg_cell_toreg(fs, rc, &rctmp);
       ins = BCINS_ABC(BC_TSETV, ra, rb, rc);
     }
     bcemit_INS(fs, ins);

@@ -201,15 +201,19 @@ The parser already computes, per function, which locals are captured
 at `fs_finish` time or eagerly:
 - A local that is captured anywhere becomes a **cell-capable local**:
   source/v4 FNEW promotes the raw parent slot to a closed GCupval cell when a
-  closure is actually created. Owner-frame accesses discovered after capture
-  use `CGET dst, slot` and `CSET slot, src`; those opcodes tolerate raw slots
-  before promotion, which keeps conditional closure creation and loop-variable
-  updates correct.
+  closure is actually created. Original target: owner-frame accesses discovered
+  after capture use `CGET dst, slot` and `CSET slot, src`; those opcodes tolerate
+  raw slots before promotion, which keeps conditional closure creation and
+  loop-variable updates correct. Current implementation is deliberately more
+  conservative: source owner-frame local reads/writes are emitted as raw-tolerant
+  `CGET`/`CSET` from the start, because one-pass capture discovery can happen
+  after earlier bytecode that later re-executes after `FNEW` promotion.
 - Child FNEW upvalue descriptors: the proto uv table entry for a
   local-capture (today flagged PROTO_UV_LOCAL with slot index — see
   lj_parse var_add/uv handling and lj_func.c:func_finduv use) now means
   "use a closed cell for parent slot N". Mutable captures promote a raw
-  parent slot to an LJ_TUPVAL cell in place, or inherit an existing cell.
+  parent slot to an LJ_TUPVAL cell in place, or inherit an existing cell; owner
+  bytecode observes that cell through `CGET`/`CSET` rather than raw slot ops.
   Immutable captures may snapshot a raw parent slot into a closed cell without
   replacing the owner slot; this preserves earlier owner-frame bytecode emitted
   before the parser later discovers the capture. Upper-level captures

@@ -101,4 +101,25 @@ do
   assert(immutable_function_capture_spawn())
 end
 
+do
+  local function mutable_pre_capture_spawn()
+    local x = 0
+    for i = 1, 3 do
+      assert(type(x) == "number")
+      assert(x == i - 1)
+      local t = th.spawn(function()
+	x = x + 1
+	return x
+      end)
+      local ok, v = t:join()
+      assert(ok == true)
+      assert(v == i)
+      assert(x == i)
+    end
+    return x
+  end
+
+  assert(mutable_pre_capture_spawn() == 3)
+end
+
 print("t-threading-upvalue OK")
