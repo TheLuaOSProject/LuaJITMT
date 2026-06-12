@@ -4295,6 +4295,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |2:
     |  movzx RDd, PC_RD			// Get target from ITERL.
     |  branchPC RD
+    |  cmp TGPOLL, 0
+    |  jnz ->vm_safepoint
     |3:
     |  ins_next
     |
@@ -4526,6 +4528,13 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     vk = (op == BC_IFORL || op == BC_JFORL);
     |  ins_AJ	// RA = base, RD = target (after end of loop or start of loop)
     |  lea RA, [BASE+RA*8]
+    if (op == BC_JFORI || op == BC_JFORL) {
+      |  cmp TGPOLL, 0
+      |  jz >4
+      |  sub PC, 4
+      |  jmp ->vm_safepoint
+      |4:
+    }
     if (LJ_DUALNUM) {
       |  mov RB, FOR_IDX
       |  checkint RB, >9
@@ -4674,6 +4683,13 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
   case BC_IITERL:
     |  ins_AJ	// RA = base, RD = target
     |  lea RA, [BASE+RA*8]
+    if (op == BC_JITERL) {
+      |  cmp TGPOLL, 0
+      |  jz >2
+      |  sub PC, 4
+      |  jmp ->vm_safepoint
+      |2:
+    }
     |  mov RB, [RA]
     |  cmp RB, LJ_TNIL; je >1		// Stop if iterator returned nil.
     if (op == BC_JITERL) {
@@ -4682,6 +4698,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     } else {
       |  branchPC RD			// Otherwise save control var + branch.
       |  mov [RA-8], RB
+      |  cmp TGPOLL, 0
+      |  jnz ->vm_safepoint
     }
     |1:
     |  ins_next
@@ -4706,6 +4724,13 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 
   case BC_JLOOP:
     |.if JIT
+    |  cmp OP, BC_JLOOP
+    |  jne >1
+    |  cmp TGPOLL, 0
+    |  jz >1
+    |  sub PC, 4
+    |  jmp ->vm_safepoint
+    |1:
     |  ins_AD	// RA = base (ignored), RD = traceno
     |  mov RA, [DISPATCH+DISPATCH_J(trace)]
     |  mov TRACE:RD, [RA+RD*8]
@@ -4771,6 +4796,13 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 #endif
   case BC_IFUNCF:
     |  ins_AD  // BASE = new base, RA = framesize, RD = nargs+1
+    if (op == BC_JFUNCF) {
+      |  cmp TGPOLL, 0
+      |  jz >1
+      |  sub PC, 4
+      |  jmp ->vm_safepoint
+      |1:
+    }
     |  mov KBASE, [PC-4+PC2PROTO(k)]
     |  mov L:RB, SAVE_L
     |  lea RA, [BASE+RA*8]		// Top of frame.
@@ -4806,6 +4838,13 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 
   case BC_IFUNCV:
     |  ins_AD  // BASE = new base, RA = framesize, RD = nargs+1
+    if (op == BC_JFUNCV) {
+      |  cmp TGPOLL, 0
+      |  jz >1
+      |  sub PC, 4
+      |  jmp ->vm_safepoint
+      |1:
+    }
     |  lea RBd, [NARGS:RD*8+FRAME_VARG+8]
     |  lea RD, [BASE+NARGS:RD*8+8]
     |  mov LFUNC:KBASE, [BASE-16]

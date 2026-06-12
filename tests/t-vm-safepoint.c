@@ -7,11 +7,16 @@
 
 #include "lua.h"
 #include "lauxlib.h"
+#include "lualib.h"
 
 #include "lj_obj.h"
 #include "lj_atomic.h"
 #include "lj_gc2.h"
 #include "lj_tg.h"
+#if LJ_HASJIT
+#include "lj_dispatch.h"
+#include "lj_jit.h"
+#endif
 
 static void publish_manual(global_State *g, TGState *tg, uint32_t actions)
 {
@@ -60,6 +65,25 @@ static void load_return_after_publish(lua_State *L)
   }
 }
 
+static void load_iter_after_publish(lua_State *L)
+{
+  int status = luaL_loadstring(L,
+    "local t = {1, 2, 3}\n"
+    "publish_poll()\n"
+    "assert_pending()\n"
+    "local n = 0\n"
+    "for _ in pairs(t) do\n"
+    "  n = n + 1\n"
+    "  if n == 2 then assert_acked_now() end\n"
+    "end\n"
+    "return n\n");
+  if (status != LUA_OK) {
+    fprintf(stderr, "load_iter_after_publish failed: %s\n",
+	    lua_tostring(L, -1));
+    assert(status == LUA_OK);
+  }
+}
+
 static void load_error_after_publish(lua_State *L)
 {
   int status = luaL_loadstring(L, "publish_error()\n");
@@ -69,6 +93,29 @@ static void load_error_after_publish(lua_State *L)
     assert(status == LUA_OK);
   }
 }
+
+#if LJ_HASJIT
+static void load_jloop_flush_after_publish(lua_State *L)
+{
+  int status = luaL_loadstring(L,
+    "jit.flush()\n"
+    "jit.opt.start('hotloop=1', 'hotexit=1')\n"
+    "local function f(n, flush)\n"
+    "  if flush then publish_flushj(); assert_pending_flushj() end\n"
+    "  local s = 0\n"
+    "  for i = 1, n do s = s + i end\n"
+    "  return s\n"
+    "end\n"
+    "f(100, false)\n"
+    "jit.opt.start('hotloop=1000000', 'hotexit=1000000')\n"
+    "return f\n");
+  if (status != LUA_OK) {
+    fprintf(stderr, "load_jloop_flush_after_publish failed: %s\n",
+	    lua_tostring(L, -1));
+    assert(status == LUA_OK);
+  }
+}
+#endif
 
 static void call_expect(lua_State *L, int expected, const char *name)
 {
@@ -127,8 +174,20 @@ static int assert_pending_c(lua_State *L)
   assert(tg != NULL);
   assert_pending(g, tg, g->gc2.hs_epoch - 1u,
 		 LJ_GC2_HS_ENABLE_BARRIER|LJ_GC2_HS_ALLOC_BLACK);
-  assert(tg->mark_active == 0);
-  assert(tg->alloc.alloc_black == 0);
+  return 0;
+}
+
+static int assert_acked_now_c(lua_State *L)
+{
+  global_State *g = G(L);
+  TGState *tg = G2TG(g);
+  assert(tg != NULL);
+  assert(g->gc2.hs_pending == 0);
+  assert(tg->poll == 0);
+  assert(tg->reqmask == 0);
+  assert(tg->hs_epoch_ack == g->gc2.hs_epoch);
+  assert(tg->mark_active == 1);
+  assert(tg->alloc.alloc_black == 1);
   return 0;
 }
 
@@ -140,6 +199,26 @@ static int publish_error_c(lua_State *L)
   publish_manual(g, tg, LJ_GC2_HS_DISABLE_BARRIER|LJ_GC2_HS_ALLOC_WHITE);
   return luaL_error(L, "published error");
 }
+
+#if LJ_HASJIT
+static int publish_flushj_c(lua_State *L)
+{
+  global_State *g = G(L);
+  TGState *tg = G2TG(g);
+  assert(tg != NULL);
+  publish_manual(g, tg, LJ_GC2_HS_FLUSHJ);
+  return 0;
+}
+
+static int assert_pending_flushj_c(lua_State *L)
+{
+  global_State *g = G(L);
+  TGState *tg = G2TG(g);
+  assert(tg != NULL);
+  assert_pending(g, tg, g->gc2.hs_epoch - 1u, LJ_GC2_HS_FLUSHJ);
+  return 0;
+}
+#endif
 
 int main(void)
 {
@@ -158,18 +237,34 @@ int main(void)
   assert(tg->reqmask == 0);
 
   lua_gc(L, LUA_GCSTOP, 0);
+  luaL_openlibs(L);
   lua_pushcfunction(L, publish_poll_c);
   lua_setglobal(L, "publish_poll");
   lua_pushcfunction(L, assert_pending_c);
   lua_setglobal(L, "assert_pending");
+  lua_pushcfunction(L, assert_acked_now_c);
+  lua_setglobal(L, "assert_acked_now");
   lua_pushcfunction(L, publish_error_c);
   lua_setglobal(L, "publish_error");
+#if LJ_HASJIT
+  lua_pushcfunction(L, publish_flushj_c);
+  lua_setglobal(L, "publish_flushj");
+  lua_pushcfunction(L, assert_pending_flushj_c);
+  lua_setglobal(L, "assert_pending_flushj");
+#endif
 
   load_loop(L);
   epoch0 = g->gc2.hs_epoch;
   actions = LJ_GC2_HS_ENABLE_BARRIER|LJ_GC2_HS_ALLOC_BLACK;
   publish_manual(g, tg, actions);
   call_expect(L, 64, "call_loop");
+  assert_acked(g, tg, epoch0);
+  assert(tg->mark_active == 1);
+  assert(tg->alloc.alloc_black == 1);
+
+  load_iter_after_publish(L);
+  epoch0 = g->gc2.hs_epoch;
+  call_expect(L, 3, "call_iter_after_publish");
   assert_acked(g, tg, epoch0);
   assert(tg->mark_active == 1);
   assert(tg->alloc.alloc_black == 1);
@@ -197,8 +292,24 @@ int main(void)
   assert(tg->mark_active == 0);
   assert(tg->alloc.alloc_black == 0);
 
+#if LJ_HASJIT
+  load_jloop_flush_after_publish(L);
+  assert(lua_pcall(L, 0, 1, 0) == LUA_OK);
+  assert(lua_isfunction(L, -1));
+  assert(traceref(G2J(g), 1) != NULL || G2J(g)->freetrace > 0);
+  epoch0 = g->gc2.hs_epoch;
+  lua_pushinteger(L, 20);
+  lua_pushboolean(L, 1);
+  assert(lua_pcall(L, 2, 1, 0) == LUA_OK);
+  assert(lua_tointeger(L, -1) == 210);
+  lua_pop(L, 1);
+  assert_acked(g, tg, epoch0);
+  assert(G2J(g)->cur.traceno == 0);
+  assert(G2J(g)->freetrace == 0);
+#endif
+
   lua_close(L);
 
-  printf("t-vm-safepoint OK: x64 branch, function-entry, return, unwind polls acked\n");
+  printf("t-vm-safepoint OK: x64 loop, trace-entry, return, unwind polls acked\n");
   return 0;
 }
