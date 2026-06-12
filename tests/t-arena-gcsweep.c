@@ -36,12 +36,16 @@ int main(void)
   TValue *tv;
   GCtab *keep, *arrtab;
   GCfunc *fn, *deadchunk, *deadfn, *livefn, *deadcf, *finchunk, *finfn;
+  GCfunc *bcfn, *hugefn;
   GCproto *deadpt, *deadfnpt;
-  GCproto *finpt;
+  GCproto *bcpt, *hugept, *finpt;
   GCSize before_fn, deadfn_size, before_drop, deadpt_size, deadchunk_size;
   GCSize before_raw, before_cf, deadcf_size;
+  GCSize before_bc, bcfn_size, bcpt_size, before_huge, hugefn_size;
+  GCSize hugept_size;
   GCSize before_fin, finpt_size, finchunk_size, finfn_size;
   void *raw;
+  LJHugeInfo hugehi;
   GCArena *fna, *arra;
 
   assert(L != NULL);
@@ -177,6 +181,67 @@ int main(void)
   assert(g->gc.total <= before_cf - deadcf_size);
   assert((ptr_state(deadcf) & 2u) == 0);
   assert(ptr_state(arrtab) == 2);
+
+  assert(luaL_dostring(L,
+    "do\n"
+    "  local f = assert(loadstring('return function(y) return y * 9 end'))()\n"
+    "  keep.bcblob = string.dump(f)\n"
+    "  keep.bcdead = assert(loadstring(keep.bcblob))\n"
+    "end\n"
+    "collectgarbage('collect')\n") == LUA_OK);
+  lua_getfield(L, -1, "bcdead");
+  tv = L->top - 1;
+  assert(tvisfunc(tv));
+  bcfn = funcV(tv);
+  assert(isluafunc(bcfn));
+  bcfn_size = sizeLfunc((MSize)bcfn->l.nupvalues);
+  bcpt = funcproto(bcfn);
+  bcpt_size = bcpt->sizept;
+  assert((lj_arena_of(bcpt)->hdr.flags & LJ_AF_TRAVERSABLE) != 0);
+  assert(ptr_state(bcfn) == 2);
+  assert(ptr_state(bcpt) == 2);
+  L->top--;
+
+  before_bc = g->gc.total;
+  lua_pushnil(L);
+  lua_setfield(L, -2, "bcdead");
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  assert(g->gc.total <= before_bc - bcpt_size - bcfn_size);
+  assert((ptr_state(bcfn) & 2u) == 0);
+  assert((ptr_state(bcpt) & 2u) == 0);
+
+  assert(luaL_dostring(L,
+    "do\n"
+    "  local t = {'return function() local x = 0\\n'}\n"
+    "  for i = 1, 6000 do t[#t+1] = 'x = x + 1\\n' end\n"
+    "  t[#t+1] = 'return x end'\n"
+    "  keep.huge = assert(loadstring(table.concat(t)))()\n"
+    "end\n"
+    "collectgarbage('collect')\n") == LUA_OK);
+  lua_getfield(L, -1, "huge");
+  tv = L->top - 1;
+  assert(tvisfunc(tv));
+  hugefn = funcV(tv);
+  assert(isluafunc(hugefn));
+  hugefn_size = sizeLfunc((MSize)hugefn->l.nupvalues);
+  hugept = funcproto(hugefn);
+  hugept_size = hugept->sizept;
+  assert(hugept_size > LJ_HUGE_THRESHOLD);
+  assert(lj_arena_ishuge(lj_arena_of(hugept)));
+  assert(lj_arena_hugetab_lookup(&tg->huge, hugept, &hugehi) == 1);
+  assert(hugehi.size == hugept_size);
+  assert((hugehi.flags & LJ_HUGEF_TRAVERSABLE) != 0);
+  assert((hugehi.flags & LJ_HUGEF_MARK) != 0);
+  assert(ptr_state(hugefn) == 2);
+  L->top--;
+
+  before_huge = g->gc.total;
+  lua_pushnil(L);
+  lua_setfield(L, -2, "huge");
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  assert(g->gc.total <= before_huge - hugept_size - hugefn_size);
+  assert((ptr_state(hugefn) & 2u) == 0);
+  assert(lj_arena_hugetab_lookup(&tg->huge, hugept, NULL) == 0);
 
   assert(luaL_dostring(L,
     "keep.deadfin = loadstring('return 43')\n"
