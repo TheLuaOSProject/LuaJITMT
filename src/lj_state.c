@@ -423,6 +423,7 @@ lua_State *lj_state_new(lua_State *L)
   L1->scan_epoch = 0;
   /* NOBARRIER: The lua_State is new (marked white). */
   setgcrefnull(L1->openupval);
+  setgcrefnull(L1->mt_thread);
   setmrefr(L1->glref, L->glref);
   setgcrefr(L1->env, L->env);
   stack_init(L1, L);  /* init stack */

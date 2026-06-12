@@ -828,6 +828,8 @@ static void gc2_traverse_thread(global_State *g, lua_State *th)
     gc2_mark_tv_worker(g, o);
   if (tabref(th->env))
     gc2_markobj_worker(g, obj2gco(tabref(th->env)));
+  if (gcref(th->mt_thread) != NULL)
+    gc2_markobj_worker(g, gcref(th->mt_thread));
   for (uv = gcref(th->openupval); uv != NULL; uv = gcnext(uv)) {
     gc2_markobj_worker(g, uv);
     if (uv->gch.gct == ~LJ_TUPVAL)

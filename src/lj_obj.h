@@ -592,6 +592,7 @@ typedef enum {
   GCROOT_FFI_FIN,	/* FFI finalizer table. */
 #endif
   GCROOT_THREADING,	/* threading.* live thread table. */
+  GCROOT_THREADING_ENV,	/* threading.* private function environment. */
   GCROOT_MAX
 } GCRootID;
 
@@ -745,6 +746,7 @@ struct lua_State {
   MRef stack;		/* Stack base. */
   GCRef openupval;	/* List of open upvalues in the stack. */
   GCRef env;		/* Thread environment (table of globals). */
+  GCRef mt_thread;	/* threading.thread userdata for this state. */
   void *cframe;		/* End of C stack frame chain. */
   MSize stacksize;	/* True stack size (incl. LJ_STACK_EXTRA). */
   TGState *tg_hint;	/* Owning/running TG block, if attached. */
