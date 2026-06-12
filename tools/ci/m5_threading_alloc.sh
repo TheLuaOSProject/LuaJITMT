@@ -11,12 +11,26 @@ make -C "$ROOT/src" -j"$JOBS" >/dev/null
 for needle in \
   'gc_arena_allocd_for_new' \
   'gc_arena_allocd_for_ptr' \
+  'lj_tg_find_owner' \
   'lj_arena_allocd_alloc(gc_arena_allocd_for_new(L)' \
   'p ? gc_arena_allocd_for_ptr(g, p)' \
   'owner_tid'
 do
-  if ! rg -F -q "$needle" "$ROOT/src/lj_gc.c" "$ROOT/src/lj_arena.c" "$ROOT/src/lj_arena.h"; then
+  if ! rg -F -q "$needle" "$ROOT/src/lj_gc.c" "$ROOT/src/lj_arena.c" \
+    "$ROOT/src/lj_arena.h" "$ROOT/src/lj_tg.c" "$ROOT/src/lj_tg.h"
+  then
     echo "guardrail: missing per-TG allocator routing marker: $needle" >&2
+    exit 1
+  fi
+done
+
+for needle in \
+  'gc2_tg_for_mem' \
+  'gc2_clear_marks_all' \
+  'lj_tg_find_owner(g, owner_tid)'
+do
+  if ! rg -F -q "$needle" "$ROOT/src/lj_gc2.c"; then
+    echo "guardrail: missing GC2 owner-aware marker: $needle" >&2
     exit 1
   fi
 done

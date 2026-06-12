@@ -67,13 +67,33 @@ void lj_gc2_fini(global_State *g)
   }
 }
 
-static void gc2_clear_marks(global_State *g, TGState *tg)
+static TGState *gc2_tg_for_mem(global_State *g, const void *p)
+{
+  if (p) {
+    uint32_t owner_tid = lj_arena_of(p)->hdr.owner_tid;
+    TGState *owner = lj_tg_find_owner(g, owner_tid);
+    if (owner)
+      return owner;
+  }
+  return G2TG(g);
+}
+
+static void gc2_clear_marks(TGState *tg)
 {
   if (tg && (tg->tg_flags & TGF_ARENA_INTERNAL)) {
     lj_arena_alloc_clear_marks(&tg->alloc);
     if (tg->tg_flags & TGF_HUGETAB)
       lj_arena_hugetab_clear_marks(&tg->huge);
   }
+}
+
+static void gc2_clear_marks_all(global_State *g)
+{
+  TGState *tg;
+  for (tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
+       tg != NULL;
+       tg = (TGState *)la_loadptr_acq((void *const *)&tg->next_tg))
+    gc2_clear_marks(tg);
 }
 
 void lj_gc2_legacy_mark_begin(global_State *g)
@@ -91,7 +111,7 @@ void lj_gc2_legacy_mark_begin(global_State *g)
   la_store64_rlx(&g->gc2.grey_bottom, 0);
   if (g->gc2.grey_capacity == 0)
     (void)gc2_grey_grow(g);
-  gc2_clear_marks(g, tg);
+  gc2_clear_marks_all(g);
   lj_gc2_handshake(g, LJ_GC2_HS_ENABLE_BARRIER|LJ_GC2_HS_ALLOC_BLACK);
 }
 
@@ -204,8 +224,10 @@ static void gc2_scan_global_roots(global_State *g)
 #endif
   lj_gc2_markmem(g, g->tmpbuf.b);
   {
-    TGState *tg = G2TG(g);
-    if (tg)
+    TGState *tg;
+    for (tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
+	 tg != NULL;
+	 tg = (TGState *)la_loadptr_acq((void *const *)&tg->next_tg))
       lj_gc2_markmem(g, tg->tmpbuf.b);
   }
 #if LJ_HASFFI
@@ -556,7 +578,7 @@ void lj_gc2_barrier_tab(lua_State *L, GCtab *t)
 
 static int gc2_mark_base_traversable(global_State *g, void *p)
 {
-  TGState *tg = G2TG(g);
+  TGState *tg = gc2_tg_for_mem(g, p);
   GCArena *a;
   if (!p || !tg || !(tg->tg_flags & TGF_ARENA_INTERNAL))
     return 0;
@@ -585,7 +607,7 @@ static void *gc2_mark_base(GCobj *o)
 
 int lj_gc2_markmem(global_State *g, void *p)
 {
-  TGState *tg = G2TG(g);
+  TGState *tg = gc2_tg_for_mem(g, p);
   GCArena *a;
   uint32_t cell;
   int marked;
@@ -887,7 +909,7 @@ static uint32_t gc2_drain_grey(global_State *g)
 
 int lj_gc2_ismarkedmem(global_State *g, void *p)
 {
-  TGState *tg = G2TG(g);
+  TGState *tg = gc2_tg_for_mem(g, p);
   GCArena *a;
   uint32_t cell;
   if (!p || !tg || !(tg->tg_flags & TGF_ARENA_INTERNAL))

@@ -26,6 +26,17 @@ for id = 1, nthread do
   assert(total > niter)
 end
 
+do
+  local t = th.spawn(function()
+    return string.rep("h", 20000)
+  end)
+  local ok, s = t:join()
+  assert(ok == true)
+  assert(#s == 20000)
+  collectgarbage("collect")
+  assert(#s == 20000)
+end
+
 collectgarbage("collect")
 collectgarbage("collect")
 

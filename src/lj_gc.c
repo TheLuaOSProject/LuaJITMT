@@ -1202,26 +1202,11 @@ static LJArenaAllocD *gc_arena_allocd_for_new(lua_State *L)
   return gc_arena_allocd_for_tg(G(L), L2TG(L));
 }
 
-static TGState *gc_arena_find_owner(global_State *g, uint32_t owner_tid)
-{
-  TGState *tg;
-  if (owner_tid == 0)
-    return NULL;
-  for (tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
-       tg != NULL;
-       tg = (TGState *)la_loadptr_acq((void *const *)&tg->next_tg)) {
-    if (la_load32_acq(&tg->tid) == owner_tid)
-      return tg;
-  }
-  return g->main_tg && la_load32_acq(&g->main_tg->tid) == owner_tid ?
-	 g->main_tg : NULL;
-}
-
 static LJArenaAllocD *gc_arena_allocd_for_ptr(global_State *g, const void *p)
 {
   if (p) {
     uint32_t owner_tid = lj_arena_of(p)->hdr.owner_tid;
-    TGState *tg = gc_arena_find_owner(g, owner_tid);
+    TGState *tg = lj_tg_find_owner(g, owner_tid);
     if (tg)
       return gc_arena_allocd_for_tg(g, tg);
   }

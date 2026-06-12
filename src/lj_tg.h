@@ -135,6 +135,7 @@ LJ_FUNC void lj_tg_fini_thread(global_State *g, TGState *tg);
 LJ_FUNC void lj_tg_attach(global_State *g, TGState *tg);
 LJ_FUNC void lj_tg_detach(global_State *g, TGState *tg);
 LJ_FUNC uint32_t lj_tg_reclaim_dead(global_State *g);
+LJ_FUNC TGState *lj_tg_find_owner(global_State *g, uint32_t owner_tid);
 LJ_FUNC void lj_tg_sync_dispatch_tg(global_State *g, TGState *tg);
 LJ_FUNC void lj_tg_sync_dispatch(global_State *g);
 

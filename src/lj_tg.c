@@ -194,6 +194,21 @@ restart:
   return reclaimed;
 }
 
+TGState *lj_tg_find_owner(global_State *g, uint32_t owner_tid)
+{
+  TGState *tg;
+  if (!g || owner_tid == 0)
+    return NULL;
+  for (tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
+       tg != NULL;
+       tg = (TGState *)la_loadptr_acq((void *const *)&tg->next_tg)) {
+    if (la_load32_acq(&tg->tid) == owner_tid)
+      return tg;
+  }
+  return g->main_tg && la_load32_acq(&g->main_tg->tid) == owner_tid ?
+	 g->main_tg : NULL;
+}
+
 void lj_tg_sync_dispatch_tg(global_State *g, TGState *tg)
 {
   if (g && tg)

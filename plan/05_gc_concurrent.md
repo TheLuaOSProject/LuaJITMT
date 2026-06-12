@@ -135,7 +135,9 @@ does exactly this).
 ```c
 static LJ_AINLINE void gc2_mark(TGState *tg, GCobj *o) {
   GCArena *a = arena_of(o);
-  if (LJ_UNLIKELY(a->hdr.flags & LJ_HUGE_MAGIC)) { huge_mark(o); return; }
+  if (LJ_UNLIKELY(a->hdr.flags & LJ_HUGE_MAGIC)) {
+    huge_mark(owner_tg(a->hdr.owner_tid), o); return;
+  }
   uint32_t c = cell_of(o);
   if (la_bit_test_and_set64(&a->mark[c>>6], c&63)) return; /* already */
   if (!(a->hdr.flags & AF_TRAVERSABLE)) return;  /* strings etc: done  */
@@ -144,6 +146,10 @@ static LJ_AINLINE void gc2_mark(TGState *tg, GCobj *o) {
 ```
 Non-traversable arenas make string marking bitmap-only (no push, no object
 touch) — directly Pall's segregation payoff.
+Current bridge note: arena mark/ismarked helpers resolve `GCAhdr.owner_tid`
+for huge allocations before consulting a huge table, and mark-begin clears
+arena/huge marks across the TG list. This preserves the original owner-table
+design while the full worker sweep protocol is still staged.
 
 ### 5.6.2 Mutator side: the SSB
 `grey_push` from a mutator appends to `TG.ssb` (array of GCRef, 1 KB).
