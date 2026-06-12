@@ -87,6 +87,7 @@ struct LJHugeInfo {
 struct LJArenaAllocD {
   TGAlloc *alloc;
   PRNGState *prng;
+  HugeTab *huge;
   uint32_t flags;
 };
 
@@ -131,6 +132,7 @@ LJ_FUNC void *lj_arena_realloc(TGAlloc *alloc, PRNGState *rs, void *p,
 			       size_t osize, size_t nsize, uint32_t flags);
 LJ_FUNC void lj_arena_allocd_init(LJArenaAllocD *ad, TGAlloc *alloc,
 				  PRNGState *rs, uint32_t flags);
+LJ_FUNC void lj_arena_allocd_sethugetab(LJArenaAllocD *ad, HugeTab *ht);
 LJ_FUNC void *lj_arena_allocf(void *ud, void *ptr, size_t osize,
 			      size_t nsize);
 

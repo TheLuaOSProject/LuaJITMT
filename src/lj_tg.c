@@ -27,6 +27,10 @@ void lj_tg_init(GG_State *GG, int alloc_ready)
   else
     tg->tg_flags |= TGF_ARENA_INTERNAL;
   lj_arena_allocd_init(&tg->allocd, &tg->alloc, &tg->prng, 0);
+  if (alloc_ready && lj_arena_hugetab_init(&tg->huge, TG_HUGETAB_BITS)) {
+    tg->tg_flags |= TGF_HUGETAB;
+    lj_arena_allocd_sethugetab(&tg->allocd, &tg->huge);
+  }
   lj_buf_init(NULL, &tg->tmpbuf);
 #if LJ_HASJIT
   memcpy(tg->hotcount, GG->hotcount, sizeof(tg->hotcount));
@@ -38,6 +42,8 @@ void lj_tg_fini(global_State *g)
 {
   if (g->main_tg) {
     lj_buf_free(g, &g->main_tg->tmpbuf);
+    if (g->main_tg->tg_flags & TGF_HUGETAB)
+      lj_arena_hugetab_fini(&g->main_tg->huge);
     lj_arena_alloc_fini(&g->main_tg->alloc);
   }
 }

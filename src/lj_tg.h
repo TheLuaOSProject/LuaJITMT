@@ -30,6 +30,8 @@ typedef uint16_t HotCount;
 #define GG_LEN_DISP	(GG_LEN_DDISP + GG_LEN_SDISP)
 
 #define TGF_ARENA_INTERNAL	0x01u
+#define TGF_HUGETAB		0x02u
+#define TG_HUGETAB_BITS		16u
 
 typedef struct GG_State GG_State;
 typedef struct ExitTrampolines ExitTrampolines;
@@ -50,6 +52,7 @@ struct TGState {
   uint64_t hs_epoch_ack;
   TGAlloc alloc;
   LJArenaAllocD allocd;
+  HugeTab huge;
   GCRef *ssb_next, *ssb_end, *ssb_base;
   SBuf tmpbuf;
   TValue tmptv, tmptv2;

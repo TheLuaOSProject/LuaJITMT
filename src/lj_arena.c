@@ -620,7 +620,49 @@ void lj_arena_allocd_init(LJArenaAllocD *ad, TGAlloc *alloc, PRNGState *rs,
 {
   ad->alloc = alloc;
   ad->prng = rs;
+  ad->huge = NULL;
   ad->flags = flags;
+}
+
+void lj_arena_allocd_sethugetab(LJArenaAllocD *ad, HugeTab *ht)
+{
+  ad->huge = ht;
+}
+
+static uint32_t arena_allocf_hflags(LJArenaAllocD *ad)
+{
+  uint32_t hflags = 0;
+  if (ad->flags & LJ_AF_TRAVERSABLE)
+    hflags |= LJ_HUGEF_TRAVERSABLE;
+  if (ad->alloc->alloc_black)
+    hflags |= LJ_HUGEF_MARK;
+  return hflags;
+}
+
+static void *arena_allocf_new(LJArenaAllocD *ad, size_t size)
+{
+  void *p;
+  if (!ad->huge || size <= LJ_HUGE_THRESHOLD)
+    return lj_arena_alloc(ad->alloc, ad->prng, size, ad->flags);
+  p = lj_arena_huge_map(ad->prng, size, ad->flags);
+  if (p && lj_arena_hugetab_insert(ad->huge, p, size,
+				   arena_allocf_hflags(ad)) != 1) {
+    lj_arena_huge_unmap(p, size);
+    return NULL;
+  }
+  return p;
+}
+
+static void arena_allocf_free(LJArenaAllocD *ad, void *ptr, size_t osize)
+{
+  if (ad->huge && ptr && lj_arena_ishuge(lj_arena_of(ptr))) {
+    LJHugeInfo hi;
+    if (lj_arena_hugetab_delete(ad->huge, ptr, &hi) == 1) {
+      lj_arena_huge_unmap(ptr, hi.size);
+      return;
+    }
+  }
+  lj_arena_free(ad->alloc, ptr, osize);
 }
 
 void *lj_arena_allocf(void *ud, void *ptr, size_t osize, size_t nsize)
@@ -629,12 +671,28 @@ void *lj_arena_allocf(void *ud, void *ptr, size_t osize, size_t nsize)
   if (!ad || !ad->alloc || !ad->prng)
     return NULL;
   if (!ptr)
-    return lj_arena_alloc(ad->alloc, ad->prng, nsize, ad->flags);
+    return arena_allocf_new(ad, nsize);
   if (nsize == 0) {
-    lj_arena_free(ad->alloc, ptr, osize);
+    arena_allocf_free(ad, ptr, osize);
     return NULL;
   }
   if (osize == 0)
     return NULL;
+  if (ad->huge && (lj_arena_ishuge(lj_arena_of(ptr)) ||
+		   nsize > LJ_HUGE_THRESHOLD)) {
+    LJHugeInfo hi;
+    size_t csize;
+    void *np;
+    if (lj_arena_ishuge(lj_arena_of(ptr)) &&
+	lj_arena_hugetab_lookup(ad->huge, ptr, &hi) == 1)
+      osize = hi.size;
+    csize = osize < nsize ? osize : nsize;
+    np = arena_allocf_new(ad, nsize);
+    if (!np)
+      return NULL;
+    memcpy(np, ptr, csize);
+    arena_allocf_free(ad, ptr, osize);
+    return np;
+  }
   return lj_arena_realloc(ad->alloc, ad->prng, ptr, osize, nsize, ad->flags);
 }

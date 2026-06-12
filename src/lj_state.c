@@ -250,6 +250,8 @@ static void close_state(lua_State *L)
       alloc = g->main_tg->alloc;
     else
       lj_arena_alloc_init(&alloc);
+    if (g->main_tg && (g->main_tg->tg_flags & TGF_HUGETAB))
+      lj_arena_hugetab_fini(&g->main_tg->huge);
     lj_arena_alloc_fini(&alloc);
     if (gghuge)
       lj_arena_huge_unmap(GG, sizeof(GG_State));
