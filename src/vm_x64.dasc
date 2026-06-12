@@ -402,6 +402,26 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov BASE, L:RB->base
   |  ins_next
   |
+  |->vm_gc2_barriertab:
+  |.if not X64WIN
+  |  mov CARG2, TAB:RB
+  |  mov RB, BASE			// Save BASE.
+  |.else
+  |  xchg CARG2, RB			// Save BASE (CARG2 == BASE).
+  |.endif
+  |  lea GL:CARG1, [DISPATCH+TG_DISP2G]
+  |  call extern lj_gc2_barrier_tab_g	// (global_State *g, GCtab *t)
+  |  mov BASE, RB			// Restore BASE.
+  |  ins_next
+  |
+  |->vm_gc2_barriertv:
+  |  mov RB, BASE			// Save BASE.
+  |  mov CARG2, RC
+  |  lea GL:CARG1, [DISPATCH+TG_DISP2G]
+  |  call extern lj_gc2_barrier_tv_g	// (global_State *g, cTValue *tv)
+  |  mov BASE, RB			// Restore BASE.
+  |  ins_next
+  |
   |//-----------------------------------------------------------------------
   |//-- Return handling ----------------------------------------------------
   |//-----------------------------------------------------------------------
@@ -894,6 +914,8 @@ static void build_subroutines(BuildCtx *ctx)
   |  movzx RAd, PC_RA
   |  mov RB, [BASE+RA*8]
   |  mov [RC], RB
+  |  cmp TGMARK, 0
+  |  jnz ->vm_gc2_barriertv
   |->cont_nop:				// BASE = base, (RC = result)
   |  endbr
   |  ins_next
@@ -931,6 +953,9 @@ static void build_subroutines(BuildCtx *ctx)
   |  // TValue * returned in eax (RC).
   |  movzx RAd, PC_RA
   |  mov BASE, RB			// Restore BASE.
+  |  movzx RBd, PC_RB
+  |  mov TAB:RB, [BASE+RB*8]
+  |  cleartp TAB:RB
   |  jmp ->BC_TSETR_Z
   |
   |//-- Comparison metamethods ---------------------------------------------
@@ -3944,8 +3969,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  test byte TAB:RB->marked, LJ_GC_BLACK	// isblack(table)
     |  jnz >7
     |2:  // Set array slot.
-    |  mov RB, [BASE+RA*8]
-    |  mov [RC], RB
+    |  mov ITYPE, [BASE+RA*8]
+    |  mov [RC], ITYPE
+    |  cmp TGMARK, 0
+    |  jnz ->vm_gc2_barriertab
     |  ins_next
     |
     |3:  // Check for __newindex if previous value is nil.
@@ -3990,6 +4017,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |3:  // Set node value.
     |  mov ITYPE, [BASE+RA*8]
     |  mov [TMPR], ITYPE
+    |  cmp TGMARK, 0
+    |  jnz ->vm_gc2_barriertab
     |  ins_next
     |
     |4:  // Check for __newindex if previous value is nil.
@@ -4047,6 +4076,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |2:	 // Set array slot.
     |  mov ITYPE, [BASE+RA*8]
     |  mov [RC], ITYPE
+    |  cmp TGMARK, 0
+    |  jnz ->vm_gc2_barriertab
     |  ins_next
     |
     |3:  // Check for __newindex if previous value is nil.
@@ -4081,6 +4112,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |->BC_TSETR_Z:
     |  mov ITYPE, [BASE+RA*8]
     |  mov [RC], ITYPE
+    |  cmp TGMARK, 0
+    |  jnz ->vm_gc2_barriertab
     |  ins_next
     |
     |7:  // Possible table write barrier for the value. Skip valiswhite check.
@@ -4108,12 +4141,14 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  shl TMPRd, 3
     |  add TMPR, TAB:RB->array
     |3:  // Copy result slots to table.
-    |  mov RB, [RA]
+    |  mov ITYPE, [RA]
     |  add RA, 8
-    |  mov [TMPR], RB
+    |  mov [TMPR], ITYPE
     |  add TMPR, 8
     |  sub RDd, 1
     |  jnz <3
+    |  cmp TGMARK, 0
+    |  jnz ->vm_gc2_barriertab
     |4:
     |  ins_next
     |

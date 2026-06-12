@@ -420,10 +420,15 @@ void lj_gc2_barrier_tv(lua_State *L, cTValue *tv)
     lj_gc2_markobj(g, gcV(tv));
 }
 
-void lj_gc2_barrier_uv(global_State *g, cTValue *tv)
+void lj_gc2_barrier_tv_g(global_State *g, cTValue *tv)
 {
   if (tv && tvisgcv(tv) && gc2_barrier_active_g(g))
     lj_gc2_markobj(g, gcV(tv));
+}
+
+void lj_gc2_barrier_uv(global_State *g, cTValue *tv)
+{
+  lj_gc2_barrier_tv_g(g, tv);
 }
 
 void lj_gc2_barrier_obj(lua_State *L, GCobj *o)
@@ -433,13 +438,10 @@ void lj_gc2_barrier_obj(lua_State *L, GCobj *o)
     lj_gc2_markobj(g, o);
 }
 
-void lj_gc2_barrier_tab(lua_State *L, GCtab *t)
+static void gc2_barrier_tab_mark(global_State *g, GCtab *t)
 {
-  global_State *g;
   GCobj *o;
   int marked;
-  if (!t || !gc2_barrier_active(L, &g))
-    return;
   o = obj2gco(t);
   marked = lj_gc2_ismarked(g, o);
   if (marked > 0) {
@@ -449,6 +451,19 @@ void lj_gc2_barrier_tab(lua_State *L, GCtab *t)
   } else if (marked == 0) {
     (void)lj_gc2_markobj(g, o);
   }
+}
+
+void lj_gc2_barrier_tab_g(global_State *g, GCtab *t)
+{
+  if (t && gc2_barrier_active_g(g))
+    gc2_barrier_tab_mark(g, t);
+}
+
+void lj_gc2_barrier_tab(lua_State *L, GCtab *t)
+{
+  global_State *g;
+  if (t && gc2_barrier_active(L, &g))
+    gc2_barrier_tab_mark(g, t);
 }
 
 static int gc2_mark_base_traversable(global_State *g, void *p)

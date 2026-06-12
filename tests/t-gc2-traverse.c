@@ -144,6 +144,69 @@ static void test_vm_upvalue_barrier(lua_State *L, global_State *g, TGState *tg)
   lua_pop(L, 3);
 }
 
+static void test_vm_table_barrier(lua_State *L, global_State *g, TGState *tg)
+{
+  GCtab *parent, *child;
+
+  assert(luaL_dostring(L,
+    "return function(t, v) t[1] = v end\n") == LUA_OK);
+  lua_createtable(L, 1, 0);
+  parent = tabV(L->top - 1);
+  lua_newtable(L);
+  child = tabV(L->top - 1);
+
+  lj_gc2_legacy_mark_begin(g);
+  assert(lj_gc2_markobj(g, obj2gco(parent)) == 1);
+  flush_and_drain(g, tg);
+  assert(lj_gc2_ismarked(g, obj2gco(parent)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 0);
+
+  lua_pushvalue(L, -3);
+  lua_pushvalue(L, -3);
+  lua_pushvalue(L, -3);
+  lua_call(L, 2, 0);
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 0);
+  assert(!lj_gc2_ssb_empty(g));
+  flush_and_drain(g, tg);
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
+  lj_gc2_legacy_cycle_end(g);
+  lua_pop(L, 3);
+}
+
+static void test_vm_meta_tset_barrier(lua_State *L, global_State *g,
+				      TGState *tg)
+{
+  GCtab *parent, *key, *child;
+
+  assert(luaL_dostring(L,
+    "return function(t, k, v) t[k] = v end\n") == LUA_OK);
+  lua_newtable(L);
+  parent = tabV(L->top - 1);
+  lua_newtable(L);
+  key = tabV(L->top - 1);
+  lua_newtable(L);
+  child = tabV(L->top - 1);
+
+  lj_gc2_legacy_mark_begin(g);
+  assert(lj_gc2_markobj(g, obj2gco(parent)) == 1);
+  flush_and_drain(g, tg);
+  assert(lj_gc2_ismarked(g, obj2gco(parent)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(key)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 0);
+
+  lua_pushvalue(L, -4);
+  lua_pushvalue(L, -4);
+  lua_pushvalue(L, -4);
+  lua_pushvalue(L, -4);
+  lua_call(L, 3, 0);
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
+  assert(!lj_gc2_ssb_empty(g));
+  flush_and_drain(g, tg);
+  assert(lj_gc2_ismarked(g, obj2gco(key)) == 1);
+  lj_gc2_legacy_cycle_end(g);
+  lua_pop(L, 4);
+}
+
 static void make_weak_table(lua_State *L, const char *mode,
 			    GCtab **weak, GCtab **key, GCtab **val)
 {
@@ -287,6 +350,8 @@ int main(void)
   test_c_value_barrier(L, g, tg);
   test_c_table_rescan_barrier(L, g, tg);
   test_vm_upvalue_barrier(L, g, tg);
+  test_vm_table_barrier(L, g, tg);
+  test_vm_meta_tset_barrier(L, g, tg);
   test_weak_tables(L, g, tg);
   test_closure(L, g, tg);
   test_thread(L, g, tg);
