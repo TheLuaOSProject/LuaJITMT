@@ -1136,8 +1136,8 @@ void lj_gc_barrierf(global_State *g, GCobj *o, GCobj *v)
     makewhite(g, o);  /* Make it white to avoid the following barrier. */
 }
 
-/* Specialized barrier for closed upvalue. Pass &uv->tv. */
-void LJ_FASTCALL lj_gc_barrieruv(global_State *g, TValue *tv)
+/* Publication wrapper for closed-upvalue TValue stores. Pass &uv->tv. */
+void LJ_FASTCALL lj_gc_pubuv(global_State *g, TValue *tv)
 {
 #define TV2MARKED(x) \
   (*((uint8_t *)(x) - offsetof(GCupval, tv) + offsetof(GCupval, marked)))

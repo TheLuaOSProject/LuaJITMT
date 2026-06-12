@@ -81,7 +81,6 @@ LJ_FUNC void lj_gc_fullgc(lua_State *L);
 /* Write barriers. */
 LJ_FUNC void lj_gc_barrierroot(lua_State *L, cTValue *tv);
 LJ_FUNC void lj_gc_barrierf(global_State *g, GCobj *o, GCobj *v);
-LJ_FUNCA void LJ_FASTCALL lj_gc_barrieruv(global_State *g, TValue *tv);
 LJ_FUNC void lj_gc_closeuv(global_State *g, GCupval *uv);
 #if LJ_HASJIT
 LJ_FUNC void lj_gc_barriertrace(global_State *g, uint32_t traceno);
@@ -153,6 +152,7 @@ static LJ_AINLINE void lj_gc_barrierback(global_State *g, GCtab *t)
   { lj_gc2_barrier_obj((L), obj2gco(o)); \
     if (iswhite(obj2gco(o)) && isblack(obj2gco(p))) \
       lj_gc_barrierf(G(L), obj2gco(p), obj2gco(o)); }
+LJ_FUNCA void LJ_FASTCALL lj_gc_pubuv(global_State *g, TValue *tv);
 
 /* Allocator. */
 LJ_FUNC void *lj_mem_realloc(lua_State *L, void *p, GCSize osz, GCSize nsz);

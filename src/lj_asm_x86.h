@@ -1954,7 +1954,7 @@ static void asm_tbar(ASMState *as, IRIns *ir)
 
 static void asm_obar(ASMState *as, IRIns *ir)
 {
-  const CCallInfo *ci = &lj_ir_callinfo[IRCALL_lj_gc_barrieruv];
+  const CCallInfo *ci = &lj_ir_callinfo[IRCALL_lj_gc_pubuv];
   IRRef args[2];
   /* No need for other object barriers (yet). */
   lj_assertA(IR(ir->op1)->o == IR_UREFC, "bad OBAR type");
