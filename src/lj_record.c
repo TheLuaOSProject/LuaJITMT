@@ -1764,7 +1764,8 @@ static int rec_upvalue_constify(jit_State *J, GCupval *uvp)
 #if LJ_HASFFI
     if (tviscdata(o)) {
       GCcdata *cd = cdataV(o);
-      if (!cdataisv(cd) && !(cd->marked & LJ_GC_CDATA_FIN)) {
+      if (!cdataisv(cd) &&
+	  !(lj_obj_gcflags(obj2gco(cd)) & LJ_GC_CDATA_FIN)) {
 	CType *ct = ctype_raw(ctype_ctsG(J2G(J)), cd->ctypeid);
 	if (!ctype_hassize(ct->info) || ct->size <= 16)
 	  return 1;
