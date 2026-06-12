@@ -4,12 +4,17 @@ set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 CC=${CC:-cc}
-CFLAGS=${CFLAGS:-"-std=gnu99 -O1 -g -Wall -Wextra -mcx16 -fsanitize=thread"}
+CFLAGS=${CFLAGS:-"-std=gnu99 -O1 -g -Wall -Wextra -Wno-tsan -mcx16 -fsanitize=thread -fno-omit-frame-pointer"}
+TARGET_TSAN_CFLAGS=${TARGET_TSAN_CFLAGS:-"-O1 -g -Wno-tsan -fsanitize=thread -fno-omit-frame-pointer"}
+TARGET_TSAN_LDFLAGS=${TARGET_TSAN_LDFLAGS:-"-fsanitize=thread"}
 JOBS=${JOBS:-$(getconf _NPROCESSORS_ONLN)}
 TMP=${TMPDIR:-/tmp}
 
 make -C "$ROOT/src" clean >/dev/null
-make -C "$ROOT/src" -j"$JOBS" >/dev/null
+make -C "$ROOT/src" -j"$JOBS" \
+  TARGET_CFLAGS="$TARGET_TSAN_CFLAGS" \
+  TARGET_LDFLAGS="$TARGET_TSAN_LDFLAGS" \
+  TARGET_SHLDFLAGS="$TARGET_TSAN_LDFLAGS" >/dev/null
 
 TSAN_OPTIONS=${TSAN_OPTIONS:-"halt_on_error=1 second_deadlock_stack=1"}
 export TSAN_OPTIONS
