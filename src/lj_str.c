@@ -332,7 +332,10 @@ GCstr *lj_str_new(lua_State *L, const char *str, size_t lenx)
       GCstr *sx = gco2str(o);
       if (sx->hash == hash && sx->len == len) {
 	if (memcmp(str, strdata(sx), len) == 0) {
-	  if (isdead(g, o)) flipwhite(o);  /* Resurrect if dead. */
+	  if (isdead(g, o)) {  /* Resurrect if dead. */
+	    flipwhite(o);
+	    lj_gc_arena_markobj(g, o);
+	  }
 	  return sx;  /* Return existing string. */
 	}
 	coll++;

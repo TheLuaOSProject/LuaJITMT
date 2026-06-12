@@ -65,6 +65,7 @@ void LJ_FASTCALL lj_cdata_free(global_State *g, GCcdata *cd)
     GCobj *root;
     makewhite(g, obj2gco(cd));
     markfinalized(obj2gco(cd));
+    lj_gc_arena_markobj(g, obj2gco(cd));
     if ((root = gcref(g->gc.mmudata)) != NULL) {
       lj_obj_setgcwr(obj2gco(cd), *lj_obj_gcwref(root));
       setgcref(*lj_obj_gcwref(root), obj2gco(cd));

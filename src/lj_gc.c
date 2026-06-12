@@ -55,7 +55,7 @@ static void *gc_arena_mark_base(GCobj *o)
   return o;
 }
 
-static void gc_mark_arena(global_State *g, GCobj *o)
+void lj_gc_arena_markobj(global_State *g, GCobj *o)
 {
   TGState *tg = G2TG(g);
   GCArena *a;
@@ -150,7 +150,7 @@ static void gc_arena_verify_sweep_boundary(global_State *g)
 
 /* Mark a string object. */
 #define gc_mark_str(g, s) \
-  (gc_mark_arena((g), obj2gco(s)), \
+  (lj_gc_arena_markobj((g), obj2gco(s)), \
    lj_obj_cleargcflags(obj2gco(s), LJ_GC_WHITES))
 
 /* Mark a white GCobj. */
@@ -159,7 +159,7 @@ static void gc_mark(global_State *g, GCobj *o)
   int gct = o->gch.gct;
   lj_assertG(iswhite(o), "mark of non-white object");
   lj_assertG(!isdead(g, o), "mark of dead object");
-  gc_mark_arena(g, o);
+  lj_gc_arena_markobj(g, o);
   white2gray(o);
   if (LJ_UNLIKELY(gct == ~LJ_TUDATA)) {
     GCtab *mt = tabref(gco2ud(o)->metatable);
@@ -348,7 +348,7 @@ static void gc_marktrace(global_State *g, TraceNo traceno)
   GCobj *o = obj2gco(traceref(G2J(g), traceno));
   lj_assertG(traceno != G2J(g)->cur.traceno, "active trace escaped");
   if (iswhite(o)) {
-    gc_mark_arena(g, o);
+    lj_gc_arena_markobj(g, o);
     white2gray(o);
     setgcrefr(o->gch.gclist, g->gc.gray);
     setgcref(g->gc.gray, o);
@@ -656,6 +656,7 @@ static void gc_finalize(lua_State *L)
     lj_obj_setgcwr(o, g->gc.root);
     setgcref(g->gc.root, o);
     makewhite(g, o);
+    lj_gc_arena_markobj(g, o);
     lj_obj_cleargcflags(o, LJ_GC_CDATA_FIN);
     /* Resolve finalizer. */
     setcdataV(L, &tmp, gco2cd(o));
@@ -672,6 +673,7 @@ static void gc_finalize(lua_State *L)
   lj_obj_setgcwr(o, *lj_obj_gcwref(obj2gco(mainthread(g))));
   setgcref(*lj_obj_gcwref(obj2gco(mainthread(g))), o);
   makewhite(g, o);
+  lj_gc_arena_markobj(g, o);
   /* Resolve the __gc metamethod. */
   mo = lj_meta_fastg(g, tabref(gco2ud(o)->metatable), MM_gc);
   if (mo)
