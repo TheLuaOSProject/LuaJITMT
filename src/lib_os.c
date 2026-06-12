@@ -22,6 +22,8 @@
 #include "lj_buf.h"
 #include "lj_str.h"
 #include "lj_lib.h"
+#include "lj_safepoint.h"
+#include "lj_tg.h"
 
 #if LJ_TARGET_POSIX
 #include <unistd.h>
@@ -49,7 +51,11 @@ LJLIB_CF(os_execute)
 #endif
 #else
   const char *cmd = luaL_optstring(L, 1, NULL);
-  int stat = system(cmd);
+  TGState *tg = L2TG(L);
+  int stat;
+  lj_native_enter(tg);
+  stat = system(cmd);
+  (void)lj_native_leave(L);
 #if LJ_52
   if (cmd)
     return luaL_execresult(L, stat);
