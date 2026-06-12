@@ -11,6 +11,7 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 "$ROOT/tools/ci/m5_metatable_publish.sh"
 "$ROOT/tools/ci/m5_registry_root.sh"
 "$ROOT/tools/ci/m5_nomm_cache.sh"
+"$ROOT/tools/ci/m5_os_reentrant.sh"
 "$ROOT/tools/ci/m0_guardrails.sh"
 
 echo "M5 concurrent-object scaffold tests passed"
