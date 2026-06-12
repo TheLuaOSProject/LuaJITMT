@@ -1399,8 +1399,8 @@ static void fs_fixup_k(FuncState *fs, GCproto *pt, void *kptr)
 	}
       } else {
 	GCobj *o = gcV(&n->key);
-	setgcref(((GCRef *)kptr)[~kidx], o);
-	lj_gc_objbarrier(fs->L, pt, o);
+	setgcrefrel(((GCRef *)kptr)[~kidx], o);
+	lj_gc_pubobjobj(fs->L, pt, o);
 	if (tvisproto(&n->key))
 	  fs_fixup_uv2(fs, gco2pt(o));
       }
@@ -1755,13 +1755,21 @@ static void expr_table(LexState *ls, ExpDesc *e)
       vcall = 0;
       expr_kvalue(fs, &k, &key);
       v = lj_tab_set(fs->L, t, &k);
-      lj_gc_anybarriert(fs->L, t);
       if (expr_isk_nojump(&val)) {  /* Add const key/value to template table. */
-	expr_kvalue(fs, v, &val);
+	TValue tv;
+	expr_kvalue(fs, &tv, &val);
+	copyTVrel(fs->L, v, &tv);
 	/* Mark nil value with table value itself to preserve the key. */
-	if (key.k == VKSTR && tvisnil(v)) settabV(fs->L, v, t);
+	if (key.k == VKSTR && tvisnil(v)) {
+	  settabV(fs->L, &tv, t);
+	  copyTVrel(fs->L, v, &tv);
+	}
+	lj_gc_pubtab(fs->L, t);
       } else {  /* Preserve the key for the following non-const store.  */
-	settabV(fs->L, v, t);
+	TValue tv;
+	settabV(fs->L, &tv, t);
+	copyTVrel(fs->L, v, &tv);
+	lj_gc_pubtab(fs->L, t);
 	goto nonconst;
       }
     } else {
@@ -2732,4 +2740,3 @@ GCproto *lj_parse(LexState *ls)
   lj_assertL(pt->sizeuv == 0, "toplevel proto has upvalues");
   return pt;
 }
-

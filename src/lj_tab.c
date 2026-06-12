@@ -500,10 +500,10 @@ TValue *lj_tab_newkey(lua_State *L, GCtab *t, cTValue *key)
       n = freenode;
     }
   }
-  n->key.u64 = key->u64;
+  copyTVrel(L, &n->key, key);
   if (LJ_UNLIKELY(tvismzero(&n->key)))
     n->key.u64 = 0;
-  lj_gc_anybarriert(L, t);
+  lj_gc_pubtab(L, t);
   lj_assertL(tvisnil(&n->val), "new hash slot is not empty");
   return &n->val;
 }
