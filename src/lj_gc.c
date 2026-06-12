@@ -893,6 +893,7 @@ static size_t gc_onestep(lua_State *L)
 	g->gc.estimate -= GCFINALIZECOST;
       return GCFINALIZECOST;
     }
+    gc_arena_finish_sweep_boundary(g);
     g->gc.state = GCSpause;  /* End of GC cycle. */
     gc_arena_alloc_black(g, 0);
     gc_arena_mark_phase(g, 0);

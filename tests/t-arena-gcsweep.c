@@ -22,6 +22,12 @@ static uint32_t ptr_state(void *p)
   return lj_arena_state(a, cell);
 }
 
+static int noop_finalizer(lua_State *L)
+{
+  (void)L;
+  return 0;
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -31,7 +37,8 @@ int main(void)
   GCtab *keep, *arrtab;
   GCfunc *fn;
   GCproto *deadpt;
-  GCSize before_drop, deadpt_size, before_raw;
+  GCproto *finpt;
+  GCSize before_drop, deadpt_size, before_raw, before_fin, finpt_size;
   void *raw;
   GCArena *fna, *arra;
 
@@ -108,6 +115,34 @@ int main(void)
   assert(g->gc.total <= before_drop - deadpt_size);
   assert((ptr_state(deadpt) & 2u) == 0);
   assert(ptr_state(raw) == 1);
+
+  assert(luaL_dostring(L, "keep.deadfin = loadstring('return 43')\n") ==
+	 LUA_OK);
+  lua_getfield(L, -1, "deadfin");
+  tv = L->top - 1;
+  assert(tvisfunc(tv));
+  fn = funcV(tv);
+  assert(isluafunc(fn));
+  finpt = funcproto(fn);
+  finpt_size = finpt->sizept;
+  assert(ptr_state(finpt) == 2);
+  L->top--;
+
+  lua_newuserdata(L, 1);
+  lua_newtable(L);
+  lua_pushcfunction(L, noop_finalizer);
+  lua_setfield(L, -2, "__gc");
+  lua_setmetatable(L, -2);
+  lua_setfield(L, -2, "ud");
+
+  before_fin = g->gc.total;
+  lua_pushnil(L);
+  lua_setfield(L, -2, "deadfin");
+  lua_pushnil(L);
+  lua_setfield(L, -2, "ud");
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  assert(g->gc.total <= before_fin - finpt_size);
+  assert((ptr_state(finpt) & 2u) == 0);
 
   lua_close(L);
   printf("t-arena-gcsweep OK: traversable runtime sweep bridge verified\n");

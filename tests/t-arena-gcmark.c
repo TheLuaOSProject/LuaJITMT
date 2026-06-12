@@ -41,6 +41,24 @@ static int arena_mem_marked(global_State *g, void *p)
   return lj_arena_bm_get(a->mark, cell) != 0;
 }
 
+static void assert_arena_white(global_State *g, void *p)
+{
+  TGState *tg = G2TG(g);
+  GCArena *a;
+  uint32_t cell;
+  assert(tg != NULL);
+  assert((tg->tg_flags & TGF_ARENA_INTERNAL) != 0);
+  assert(tg->alloc.sweep_epoch != 0);
+  assert(p != NULL);
+  a = lj_arena_of(p);
+  assert(!lj_arena_ishuge(a));
+  assert((a->hdr.flags & LJ_AF_TRAVERSABLE) != 0);
+  assert(a->hdr.sweep_epoch == tg->alloc.sweep_epoch);
+  cell = lj_arena_cellof(p);
+  assert(cell >= LJ_AFIRST_CELL && cell < LJ_ARENA_CELLS);
+  assert(lj_arena_state(a, cell) == 2);
+}
+
 static int arena_marked(global_State *g, GCobj *o)
 {
   void *p = (void *)o;
@@ -118,13 +136,14 @@ int main(void)
   g = G(L);
   tg = G2TG(g);
   assert(tg != NULL);
+  assert(tg->mark_active == 0);
 
   lua_getglobal(L, "keep");
   tv = L->top - 1;
   assert(tvistab(tv));
   tab = tabV(tv);
   assert((lj_arena_of(tab)->hdr.flags & LJ_AF_TRAVERSABLE) != 0);
-  assert(arena_marked(g, obj2gco(tab)));
+  assert_arena_white(g, tab);
   assert(arena_mem_marked(g, g->str.tab));
 
   lua_getfield(L, -1, "arr");
@@ -194,14 +213,14 @@ int main(void)
   uv = gco2uv(gcref(fn->l.uvptr[0]));
   assert(!uv->closed);
   assert((lj_arena_of(uv)->hdr.flags & LJ_AF_TRAVERSABLE) != 0);
-  assert(arena_marked(g, obj2gco(uv)));
+  assert_arena_white(g, uv);
   L->top--;
 
 #if LJ_HASJIT
   trace = find_trace(g);
   assert(trace != NULL);
   assert((lj_arena_of(trace)->hdr.flags & LJ_AF_TRAVERSABLE) != 0);
-  assert(arena_marked(g, obj2gco(trace)));
+  assert_arena_white(g, trace);
 #endif
 
   lua_close(L);
