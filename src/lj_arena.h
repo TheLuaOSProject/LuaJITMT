@@ -84,6 +84,9 @@ LJ_FUNC void lj_arena_scan_free_runs(const GCArena *a, LJArenaRunCB cb, void *ud
 LJ_FUNC uint32_t lj_arena_count_free_runs(const GCArena *a);
 LJ_FUNC GCArena *lj_arena_map(PRNGState *rs, uint32_t flags);
 LJ_FUNC void lj_arena_unmap(GCArena *a);
+LJ_FUNC size_t lj_arena_huge_mapsize(size_t size);
+LJ_FUNC void *lj_arena_huge_map(PRNGState *rs, size_t size, uint32_t flags);
+LJ_FUNC void lj_arena_huge_unmap(void *p, size_t size);
 LJ_FUNC void lj_arena_alloc_init(TGAlloc *alloc);
 LJ_FUNC void lj_arena_alloc_fini(TGAlloc *alloc);
 LJ_FUNC void *lj_arena_alloc(TGAlloc *alloc, PRNGState *rs, size_t size,
@@ -125,6 +128,11 @@ static LJ_AINLINE void lj_arena_bm_clear(uint64_t *bm, uint32_t i)
 static LJ_AINLINE uint32_t lj_arena_state(const GCArena *a, uint32_t i)
 {
   return (lj_arena_bm_get(a->block, i) << 1) | lj_arena_bm_get(a->mark, i);
+}
+
+static LJ_AINLINE int lj_arena_ishuge(const GCArena *a)
+{
+  return (a->hdr.flags & LJ_AF_HUGE_MAGIC) == LJ_AF_HUGE_MAGIC;
 }
 
 static LJ_AINLINE uint32_t lj_arena_ncells(size_t size)

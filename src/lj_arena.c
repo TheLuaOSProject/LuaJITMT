@@ -25,7 +25,6 @@
 #define LJ_ARENA_MMAP_PROBE_MAX		30
 #define LJ_ARENA_MMAP_PROBE_LINEAR	5
 #define LJ_ARENA_MMAP_LOWER		((uintptr_t)0x4000)
-#define LJ_ARENA_MAP_SPAN		((size_t)LJ_ARENA_SIZE * 2u)
 #define LJ_ARENA_ADDR_LIMIT		((uintptr_t)1 << 47)
 
 /* Apply the 04_allocator.md sweep identities over the arena bitmaps. */
@@ -85,16 +84,17 @@ uint32_t lj_arena_count_free_runs(const GCArena *a)
 
 static int arena_addr_ok(uintptr_t addr, size_t size)
 {
+  if (size > LJ_ARENA_ADDR_LIMIT - LJ_ARENA_MMAP_LOWER)
+    return 0;
   return addr >= LJ_ARENA_MMAP_LOWER &&
 	 addr <= LJ_ARENA_ADDR_LIMIT - size &&
 	 checkptrGC((void *)addr) &&
 	 checkptrGC((void *)(addr + size - 1u));
 }
 
-static uintptr_t arena_random_hint(PRNGState *rs)
+static uintptr_t arena_random_hint(PRNGState *rs, size_t span)
 {
-  uintptr_t slots = (LJ_ARENA_ADDR_LIMIT - LJ_ARENA_MAP_SPAN) >>
-		    LJ_ARENA_SHIFT;
+  uintptr_t slots = (LJ_ARENA_ADDR_LIMIT - span) >> LJ_ARENA_SHIFT;
   uintptr_t hint;
   if (!rs)
     return 0;
@@ -104,43 +104,44 @@ static uintptr_t arena_random_hint(PRNGState *rs)
   return hint;
 }
 
-static GCArena *arena_trim(void *base)
+static void *arena_trim(void *base, size_t span, size_t keep)
 {
   uintptr_t addr = (uintptr_t)base;
   uintptr_t aligned = (addr + LJ_ARENA_MASK) & ~(uintptr_t)LJ_ARENA_MASK;
   size_t lead = (size_t)(aligned - addr);
-  size_t trail = LJ_ARENA_MAP_SPAN - lead - LJ_ARENA_SIZE;
+  size_t trail = span - lead - keep;
   if (lead && munmap(base, lead) != 0) {
-    munmap(base, LJ_ARENA_MAP_SPAN);
+    munmap(base, span);
     return NULL;
   }
-  if (trail && munmap((void *)(aligned + LJ_ARENA_SIZE), trail) != 0) {
-    munmap((void *)aligned, LJ_ARENA_SIZE + trail);
+  if (trail && munmap((void *)(aligned + keep), trail) != 0) {
+    munmap((void *)aligned, keep + trail);
     return NULL;
   }
-  return (GCArena *)aligned;
+  return (void *)aligned;
 }
 
-GCArena *lj_arena_map(PRNGState *rs, uint32_t flags)
+static void *arena_map_aligned(PRNGState *rs, size_t keep)
 {
   int olderr = errno;
+  size_t span = keep + LJ_ARENA_SIZE;
   uintptr_t hint = 0;
   int retry;
+  if (span < keep || !arena_addr_ok(LJ_ARENA_MMAP_LOWER, span))
+    return NULL;
   for (retry = 0; retry < LJ_ARENA_MMAP_PROBE_MAX; retry++) {
-    void *p = mmap(hint ? (void *)hint : NULL, LJ_ARENA_MAP_SPAN,
+    void *p = mmap(hint ? (void *)hint : NULL, span,
 		   PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
     uintptr_t addr = (uintptr_t)p;
     if (p != MAP_FAILED) {
-      if (arena_addr_ok(addr, LJ_ARENA_MAP_SPAN)) {
-	GCArena *a = arena_trim(p);
-	if (a) {
-	  memset(a, 0, sizeof(*a));
-	  a->hdr.flags = flags;
+      if (arena_addr_ok(addr, span)) {
+	void *m = arena_trim(p, span, keep);
+	if (m) {
 	  errno = olderr;
-	  return a;
+	  return m;
 	}
       } else {
-	munmap(p, LJ_ARENA_MAP_SPAN);
+	munmap(p, span);
       }
     } else if (errno == ENOMEM) {
       errno = olderr;
@@ -148,14 +149,24 @@ GCArena *lj_arena_map(PRNGState *rs, uint32_t flags)
     }
     if (hint && retry < LJ_ARENA_MMAP_PROBE_LINEAR) {
       hint += 0x1000000u;
-      if (!arena_addr_ok(hint, LJ_ARENA_MAP_SPAN))
+      if (!arena_addr_ok(hint, span))
 	hint = 0;
       continue;
     }
-    hint = arena_random_hint(rs);
+    hint = arena_random_hint(rs, span);
   }
   errno = olderr;
   return NULL;
+}
+
+GCArena *lj_arena_map(PRNGState *rs, uint32_t flags)
+{
+  GCArena *a = (GCArena *)arena_map_aligned(rs, LJ_ARENA_SIZE);
+  if (a) {
+    memset(a, 0, sizeof(*a));
+    a->hdr.flags = flags;
+  }
+  return a;
 }
 
 void lj_arena_unmap(GCArena *a)
@@ -163,6 +174,39 @@ void lj_arena_unmap(GCArena *a)
   int olderr = errno;
   if (a)
     munmap((void *)a, LJ_ARENA_SIZE);
+  errno = olderr;
+}
+
+size_t lj_arena_huge_mapsize(size_t size)
+{
+  size_t need = size + sizeof(GCAhdr);
+  if (size <= LJ_HUGE_THRESHOLD ||
+      need < size || need > ~(size_t)LJ_ARENA_MASK)
+    return 0;
+  return (need + LJ_ARENA_MASK) & ~(size_t)LJ_ARENA_MASK;
+}
+
+void *lj_arena_huge_map(PRNGState *rs, size_t size, uint32_t flags)
+{
+  size_t mapsize = lj_arena_huge_mapsize(size);
+  GCArena *a;
+  if (!mapsize)
+    return NULL;
+  a = (GCArena *)arena_map_aligned(rs, mapsize);
+  if (!a)
+    return NULL;
+  memset(&a->hdr, 0, sizeof(a->hdr));
+  a->hdr.flags = LJ_AF_HUGE_MAGIC | flags;
+  a->hdr.live_cells = (uint32_t)(mapsize >> LJ_CELL_SHIFT);
+  return (void *)((char *)a + sizeof(GCAhdr));
+}
+
+void lj_arena_huge_unmap(void *p, size_t size)
+{
+  int olderr = errno;
+  size_t mapsize = lj_arena_huge_mapsize(size);
+  if (p && mapsize)
+    munmap((void *)lj_arena_of(p), mapsize);
   errno = olderr;
 }
 
