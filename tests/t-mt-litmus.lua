@@ -33,19 +33,19 @@ for _ = 1, reps do
 
   do
     local f = {a = 0, b = 0}
-    local ra, rb
     local t1 = th.spawn(function()
       f.a = 1
       th.fence()
-      ra = f.b
+      return f.b
     end)
     local t2 = th.spawn(function()
       f.b = 1
       th.fence()
-      rb = f.a
+      return f.a
     end)
-    assert(({ t1:join() })[1] == true)
-    assert(({ t2:join() })[1] == true)
+    local ok1, ra = t1:join()
+    local ok2, rb = t2:join()
+    assert(ok1 == true and ok2 == true)
     assert(not (ra == 0 and rb == 0))
   end
 
@@ -116,18 +116,20 @@ for _ = 1, reps do
 
   do
     local m = th.mutex()
-    local x = 0
+    local ch = th.channel(1)
     m:lock()
-    local t = th.spawn(function(mu)
+    local t = th.spawn(function(mu, q)
       mu:lock()
-      x = x + 1
+      q:send(true)
       mu:unlock()
-    end, m)
+    end, m, ch)
     th.sleep(0.001)
-    assert(x == 0)
+    local v, ok = ch:peek()
+    assert(v == nil and ok == false)
     m:unlock()
+    v, ok = ch:recv()
+    assert(v == true and ok == true)
     assert(({ t:join() })[1] == true)
-    assert(x == 1)
   end
 end
 

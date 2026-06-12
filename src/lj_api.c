@@ -1245,24 +1245,24 @@ LUA_API int lua_resume(lua_State *L, int nargs)
 LUA_API int lua_gc(lua_State *L, int what, int data)
 {
   global_State *g = G(L);
-  int mt_active = la_load32_acq(&g->mt_active) != 0;
+  int mt_live = la_load32_acq(&g->mt_live) != 0;
   int res = 0;
   switch (what) {
   case LUA_GCSTOP:
-    if (mt_active)
+    if (mt_live)
       g->mt_gc_threshold = LJ_MAX_MEM;
     else
       g->gc.threshold = LJ_MAX_MEM;
     break;
   case LUA_GCRESTART:
-    if (mt_active)
+    if (mt_live)
       g->mt_gc_threshold = data == -1 ?
 	(g->gc.total/100)*g->gc.pause : g->gc.total;
     else
       g->gc.threshold = data == -1 ? (g->gc.total/100)*g->gc.pause : g->gc.total;
     break;
   case LUA_GCCOLLECT:
-    if (!mt_active)
+    if (!mt_live)
       lj_gc_fullgc(L);
     break;
   case LUA_GCCOUNT:
@@ -1273,7 +1273,7 @@ LUA_API int lua_gc(lua_State *L, int what, int data)
     break;
   case LUA_GCSTEP: {
     GCSize a = (GCSize)data << 10;
-    if (mt_active)
+    if (mt_live)
       break;  /* M4: explicit steps wait for the real concurrent GC. */
     g->gc.threshold = (a <= g->gc.total) ? (g->gc.total - a) : 0;
     while (g->gc.total >= g->gc.threshold)
@@ -1292,7 +1292,7 @@ LUA_API int lua_gc(lua_State *L, int what, int data)
     g->gc.stepmul = (MSize)data;
     break;
   case LUA_GCISRUNNING:
-    res = ((mt_active ? g->mt_gc_threshold : g->gc.threshold) != LJ_MAX_MEM);
+    res = ((mt_live ? g->mt_gc_threshold : g->gc.threshold) != LJ_MAX_MEM);
     break;
   default:
     res = -1;  /* Invalid option. */

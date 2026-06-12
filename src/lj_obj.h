@@ -703,7 +703,8 @@ typedef struct global_State {
 #endif
   TGState *main_tg;	/* Main per-OS-thread state block. */
   GC2State gc2;		/* Concurrent GC scaffold state. */
-  uint32_t mt_active;	/* Active secondary Lua threads. */
+  uint32_t mt_active;	/* One-way latch: secondary Lua threads existed. */
+  uint32_t mt_live;	/* Active secondary Lua threads. */
   GCSize mt_gc_threshold;  /* Saved automatic-GC threshold. */
 } global_State;
 

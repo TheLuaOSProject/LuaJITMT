@@ -10,6 +10,7 @@
 #define LUA_CORE
 
 #include "lj_obj.h"
+#include "lj_atomic.h"
 #include "lj_arena.h"
 #include "lj_gc.h"
 #include "lj_func.h"
@@ -80,6 +81,17 @@ static GCupval *func_emptyuv(lua_State *L)
   uv->gct = ~LJ_TUPVAL;
   uv->closed = 1;
   setnilV(&uv->tv);
+  setmref(uv->v, &uv->tv);
+  return uv;
+}
+
+/* Create a closed upvalue initialized from a stack slot. */
+static GCupval *func_snapshotuv(lua_State *L, const TValue *slot)
+{
+  GCupval *uv = (GCupval *)lj_mem_newgco(L, sizeof(GCupval));
+  uv->gct = ~LJ_TUPVAL;
+  uv->closed = 1;
+  copyTV(L, &uv->tv, slot);
   setmref(uv->v, &uv->tv);
   return uv;
 }
@@ -175,7 +187,9 @@ GCfunc *lj_func_newL_gc(lua_State *L, GCproto *pt, GCfuncL *parent)
     uint32_t v = proto_uv(pt)[i];
     GCupval *uv;
     if ((v & PROTO_UV_LOCAL)) {
-      uv = func_finduv(L, base + (v & 0xff));
+      TValue *slot = base + (v & 0xff);
+      uv = la_load32_acq(&G(L)->mt_active) ?
+	   func_snapshotuv(L, slot) : func_finduv(L, slot);
       uv->immutable = ((v / PROTO_UV_IMMUTABLE) & 1);
       uv->dhash = (uint32_t)(uintptr_t)mref(parent->pc, char) ^ (v << 24);
     } else {

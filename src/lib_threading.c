@@ -19,6 +19,7 @@
 #include "lj_atomic.h"
 #include "lj_chan.h"
 #include "lj_err.h"
+#include "lj_func.h"
 #include "lj_gc.h"
 #include "lj_lib.h"
 #include "lj_safepoint.h"
@@ -153,7 +154,7 @@ void lj_threading_shutdown(lua_State *L)
   lj_assertG(cur == NULL || cur == g->main_tg,
 	     "lua_close called from non-main OS thread");
   UNUSED(cur);
-  if (la_load32_acq(&g->mt_active) != 0)
+  if (la_load32_acq(&g->mt_live) != 0)
     (void)lj_safepoint_handshake(g, LJ_GC2_HS_STOPREQ);
   while ((th = threading_live_next(g, &ud)) != NULL) {
     while (la_load32_acq(&th->state) != LJ_THREAD_DONE) {
@@ -169,9 +170,13 @@ void lj_threading_shutdown(lua_State *L)
   }
 }
 
-static void threading_gc_enter(global_State *g)
+static void threading_gc_enter(lua_State *L)
 {
-  if (la_add32_rlx(&g->mt_active, 1) == 0) {
+  global_State *g = G(L);
+  uint32_t expect = 0;
+  if (la_cas32(&g->mt_active, &expect, 1, LA_ACQ_REL, LA_ACQ))
+    lj_func_closeuv(L, tvref(L->stack));
+  if (la_add32_rlx(&g->mt_live, 1) == 0) {
     g->mt_gc_threshold = g->gc.threshold;
     g->gc.threshold = LJ_MAX_MEM;  /* M4: no automatic GC while children run. */
   }
@@ -179,7 +184,7 @@ static void threading_gc_enter(global_State *g)
 
 static void threading_gc_leave(global_State *g)
 {
-  if (la_sub32_acqrel(&g->mt_active, 1) == 1)
+  if (la_sub32_acqrel(&g->mt_live, 1) == 1)
     g->gc.threshold = g->mt_gc_threshold;
 }
 
@@ -534,7 +539,7 @@ LJLIB_CF(threading_spawn)
   tg->thread_ud = ud;
   threading_live_set(L, env, ud, L1);
 
-  threading_gc_enter(G(L));
+  threading_gc_enter(L);
   rc = lj_thr_create(&th->thr, threading_worker, th);
   if (rc != 0) {
     threading_gc_leave(G(L));
