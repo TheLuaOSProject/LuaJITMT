@@ -289,6 +289,22 @@ uint32_t lj_gc2_drain_ssb(global_State *g)
   return nitems;
 }
 
+int lj_gc2_ssb_empty(global_State *g)
+{
+  TGState *tg;
+  if (!g)
+    return 1;
+  if (la_loadptr_acq((void *const *)&g->gc2.ssb_head) != NULL)
+    return 0;  /* 05 section 5.7.1 SSB-empty fixpoint predicate. */
+  for (tg = g->gc2.tg_list; tg != NULL; tg = tg->next_tg) {
+    if (tg->tg_flags & TGF_DEAD)
+      continue;
+    if (tg->ssb_next != tg->ssb_base)
+      return 0;
+  }
+  return 1;
+}
+
 static void *gc2_mark_base(GCobj *o)
 {
 #if LJ_HASFFI

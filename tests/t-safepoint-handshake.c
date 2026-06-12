@@ -58,6 +58,7 @@ int main(void)
   assert(g->gc2.ssb_head == NULL);
   assert(g->gc2.ssb_published == 0);
   assert(g->gc2.ssb_items_published == 0);
+  assert(lj_gc2_ssb_empty(g));
   assert(tg->poll == 0);
   assert(tg->reqmask == 0);
   assert(tg->hs_epoch_ack == 0);
@@ -97,6 +98,7 @@ int main(void)
   assert(g->gc2.marks_this_round > 0);
   assert(lj_gc2_ssb_push(g, obj2gco(root_tab)) == 1);
   assert(lj_gc2_ssb_push(g, obj2gco(root_tab)) == 1);
+  assert(!lj_gc2_ssb_empty(g));
   assert(tg->ssb_next == tg->ssb_base + 2);
   epoch0 = g->gc2.hs_epoch;
   assert(lj_gc2_handshake(g, LJ_GC2_HS_FLUSH_SSB) == 1);
@@ -104,10 +106,12 @@ int main(void)
   assert(g->gc2.hs_pending == 0);
   assert(tg->ssb_next == tg->ssb_base);
   assert(g->gc2.ssb_head != NULL);
+  assert(!lj_gc2_ssb_empty(g));
   assert(g->gc2.ssb_published == 1);
   assert(g->gc2.ssb_items_published == 2);
   assert(lj_gc2_drain_ssb(g) == 2);
   assert(g->gc2.ssb_head == NULL);
+  assert(lj_gc2_ssb_empty(g));
   assert(g->gc2.ssb_drained == 1);
   assert(g->gc2.ssb_items_drained == 2);
   for (i = 0; i < TG_GC2_SSB_SLOTS; i++)
@@ -123,7 +127,9 @@ int main(void)
   assert(g->gc2.ssb_items_drained == 2 + TG_GC2_SSB_SLOTS);
   assert(lj_gc2_flush_ssb(g, tg) == 1);
   assert(tg->ssb_next == tg->ssb_base);
+  assert(!lj_gc2_ssb_empty(g));
   assert(lj_gc2_drain_ssb(g) == 1);
+  assert(lj_gc2_ssb_empty(g));
   assert(g->gc2.ssb_drained == 3);
   assert(g->gc2.ssb_items_drained == 3 + TG_GC2_SSB_SLOTS);
   lua_pop(L, 1);
