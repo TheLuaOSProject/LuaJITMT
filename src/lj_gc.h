@@ -62,6 +62,7 @@ LJ_FUNC void lj_gc_finalize_cdata(lua_State *L);
 #endif
 LJ_FUNC void lj_gc_freeall(global_State *g);
 LJ_FUNC void lj_gc_arena_markobj(global_State *g, GCobj *o);
+LJ_FUNC void lj_gc_arena_markmem(global_State *g, void *p);
 LJ_FUNCA int LJ_FASTCALL lj_gc_step(lua_State *L);
 LJ_FUNCA void LJ_FASTCALL lj_gc_step_fixtop(lua_State *L);
 #if LJ_HASJIT

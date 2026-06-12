@@ -57,13 +57,16 @@ static void *gc_arena_mark_base(GCobj *o)
 
 void lj_gc_arena_markobj(global_State *g, GCobj *o)
 {
+  lj_gc_arena_markmem(g, gc_arena_mark_base(o));
+}
+
+void lj_gc_arena_markmem(global_State *g, void *p)
+{
   TGState *tg = G2TG(g);
   GCArena *a;
-  void *p;
   uint32_t cell;
-  if (!tg || !(tg->tg_flags & TGF_ARENA_INTERNAL))
+  if (!p || !tg || !(tg->tg_flags & TGF_ARENA_INTERNAL))
     return;
-  p = gc_arena_mark_base(o);
   a = lj_arena_of(p);
   if (lj_arena_ishuge(a)) {
     if (tg->tg_flags & TGF_HUGETAB)
@@ -185,6 +188,8 @@ static void gc_mark(global_State *g, GCobj *o)
     gc_markobj(g, tabref(gco2ud(o)->env));
     if (LJ_HASBUFFER && gco2ud(o)->udtype == UDTYPE_BUFFER) {
       SBufExt *sbx = (SBufExt *)uddata(gco2ud(o));
+      if (!sbufiscoworborrow(sbx))
+	lj_gc_arena_markmem(g, sbx->b);
       if (sbufiscow(sbx) && gcref(sbx->cowref))
 	gc_markobj(g, gcref(sbx->cowref));
       if (gcref(sbx->dict_str))
@@ -213,6 +218,35 @@ static void gc_mark_gcroot(global_State *g)
   for (i = 0; i < GCROOT_MAX; i++)
     if (gcref(g->gcroot[i]) != NULL)
       gc_markobj(g, gcref(g->gcroot[i]));
+  lj_gc_arena_markmem(g, g->str.tab);
+#if LJ_64
+  lj_gc_arena_markmem(g, mref(g->gc.lightudseg, uint32_t));
+#endif
+  lj_gc_arena_markmem(g, g->tmpbuf.b);
+  {
+    TGState *tg = G2TG(g);
+    if (tg)
+      lj_gc_arena_markmem(g, tg->tmpbuf.b);
+  }
+#if LJ_HASFFI
+  {
+    CTState *cts = ctype_ctsG(g);
+    if (cts) {
+      lj_gc_arena_markmem(g, cts);
+      lj_gc_arena_markmem(g, cts->tab);
+      lj_gc_arena_markmem(g, cts->cb.cbid);
+    }
+  }
+#endif
+#if LJ_HASJIT
+  {
+    jit_State *J = G2J(g);
+    lj_gc_arena_markmem(g, J->trace);
+    lj_gc_arena_markmem(g, J->irbuf ? J->irbuf + J->irbotlim : NULL);
+    lj_gc_arena_markmem(g, J->snapbuf);
+    lj_gc_arena_markmem(g, J->snapmapbuf);
+  }
+#endif
 }
 
 /* Start a GC cycle and mark the root set. */
@@ -296,6 +330,10 @@ static int gc_traverse_tab(global_State *g, GCtab *t)
   int weak = 0;
   cTValue *mode;
   GCtab *mt = tabref(t->metatable);
+  if (t->asize > 0)
+    lj_gc_arena_markmem(g, tvref(t->array));
+  if (t->hmask > 0)
+    lj_gc_arena_markmem(g, noderef(t->node));
   if (mt)
     gc_markobj(g, mt);
   mode = lj_meta_fastg(g, mt, MM_mode);
@@ -430,6 +468,7 @@ static MSize gc_traverse_frames(global_State *g, lua_State *th)
 static void gc_traverse_thread(global_State *g, lua_State *th)
 {
   TValue *o, *top = th->top;
+  lj_gc_arena_markmem(g, tvref(th->stack));
   for (o = tvref(th->stack)+1+LJ_FR2; o < top; o++)
     gc_marktv(g, o);
   if (g->gc.state == GCSatomic) {

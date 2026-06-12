@@ -464,17 +464,22 @@ static void arena_set_extent(GCArena *a, uint32_t cell)
   lj_arena_bm_clear(a->mark, cell);
 }
 
+static void arena_set_free_run(GCArena *a, uint32_t start, uint32_t len)
+{
+  uint32_t i;
+  lj_arena_bm_clear(a->block, start);
+  lj_arena_bm_set(a->mark, start);
+  for (i = 1; i < len; i++)
+    arena_set_extent(a, start + i);
+}
+
 static void arena_insert_run(TGAlloc *alloc, GCArena *a, uint32_t start,
 			     uint32_t len)
 {
   uint32_t k = arena_kind(a->hdr.flags);
   uint32_t b = arena_bin(len);
   LJArenaFreeRun *run = (LJArenaFreeRun *)lj_arena_cellptr(a, start);
-  uint32_t i;
-  lj_arena_bm_clear(a->block, start);
-  lj_arena_bm_set(a->mark, start);
-  for (i = 1; i < len; i++)
-    arena_set_extent(a, start + i);
+  arena_set_free_run(a, start, len);
   run->start = start;
   run->len = len;
   run->next = alloc->bins[k][b];
@@ -643,6 +648,8 @@ GCArena *lj_arena_sweep_one(TGAlloc *alloc, uint32_t kind, uint32_t epoch,
   a->hdr.next = NULL;
   lj_arena_sweep_words(a, minor);
   lj_arena_scan_free_runs(a, arena_find_largest_run, &lr);
+  if (lr.len >= LJ_BUMP_MIN)
+    arena_set_free_run(a, lr.start, lr.len);
   rr.alloc = alloc;
   rr.a = a;
   rr.bump = lr;

@@ -12,26 +12,22 @@
 #include "lj_obj.h"
 #include "lj_arena.h"
 #include "lj_tg.h"
+#if LJ_HASFFI
+#include "lj_ctype.h"
+#endif
 #if LJ_HASJIT
 #include "lj_dispatch.h"
 #include "lj_jit.h"
 #endif
 
-static int arena_marked(global_State *g, GCobj *o)
+static int arena_mem_marked(global_State *g, void *p)
 {
   TGState *tg = G2TG(g);
   GCArena *a;
-  void *p = (void *)o;
   uint32_t cell;
   assert(tg != NULL);
   assert((tg->tg_flags & TGF_ARENA_INTERNAL) != 0);
-#if LJ_HASFFI
-  if (o->gch.gct == ~LJ_TCDATA) {
-    GCcdata *cd = gco2cd(o);
-    if (cdataisv(cd))
-      p = memcdatav(cd);
-  }
-#endif
+  assert(p != NULL);
   a = lj_arena_of(p);
   if (lj_arena_ishuge(a)) {
     LJHugeInfo hi;
@@ -43,6 +39,19 @@ static int arena_marked(global_State *g, GCobj *o)
   assert(cell >= LJ_AFIRST_CELL && cell < LJ_ARENA_CELLS);
   assert(lj_arena_bm_get(a->block, cell));
   return lj_arena_bm_get(a->mark, cell) != 0;
+}
+
+static int arena_marked(global_State *g, GCobj *o)
+{
+  void *p = (void *)o;
+#if LJ_HASFFI
+  if (o->gch.gct == ~LJ_TCDATA) {
+    GCcdata *cd = gco2cd(o);
+    if (cdataisv(cd))
+      p = memcdatav(cd);
+  }
+#endif
+  return arena_mem_marked(g, p);
 }
 
 #if LJ_HASJIT
@@ -64,11 +73,14 @@ int main(void)
   TGState *tg;
   TValue *tv;
   GCtab *tab;
+  GCtab *arrtab, *hashtab;
   GCstr *str;
   GCfunc *fn;
   GCupval *uv;
+  lua_State *co;
 #if LJ_HASFFI
   GCcdata *cd;
+  CTState *cts;
 #endif
   LJHugeInfo hi;
 #if LJ_HASJIT
@@ -79,6 +91,10 @@ int main(void)
   luaL_openlibs(L);
   assert(luaL_dostring(L,
     "keep = { t = { 1, 2, 3 }, s = string.rep('m', 22000) }\n"
+    "keep.arr = {}\n"
+    "for i = 1, 300 do keep.arr[i] = i end\n"
+    "keep.hash = {}\n"
+    "for i = 1, 300 do keep.hash['k'..i] = i end\n"
 #if LJ_HASFFI
     "local ffi = require('ffi')\n"
     "keep.vcd = ffi.new('char[?]', 64)\n"
@@ -109,6 +125,24 @@ int main(void)
   tab = tabV(tv);
   assert((lj_arena_of(tab)->hdr.flags & LJ_AF_TRAVERSABLE) != 0);
   assert(arena_marked(g, obj2gco(tab)));
+  assert(arena_mem_marked(g, g->str.tab));
+
+  lua_getfield(L, -1, "arr");
+  tv = L->top - 1;
+  assert(tvistab(tv));
+  arrtab = tabV(tv);
+  assert(arrtab->asize > 0);
+  assert(arrtab->colo <= 0);
+  assert(arena_mem_marked(g, tvref(arrtab->array)));
+  L->top--;
+
+  lua_getfield(L, -1, "hash");
+  tv = L->top - 1;
+  assert(tvistab(tv));
+  hashtab = tabV(tv);
+  assert(hashtab->hmask > 0);
+  assert(arena_mem_marked(g, noderef(hashtab->node)));
+  L->top--;
 
   lua_getfield(L, -1, "s");
   tv = L->top - 1;
@@ -137,7 +171,19 @@ int main(void)
   assert(cdataisv(cd));
   assert(arena_marked(g, obj2gco(cd)));
   L->top--;
+
+  cts = ctype_ctsG(g);
+  assert(cts != NULL);
+  assert(arena_mem_marked(g, cts));
+  assert(arena_mem_marked(g, cts->tab));
 #endif
+
+  lua_getfield(L, -1, "co");
+  tv = L->top - 1;
+  assert(tvisthread(tv));
+  co = threadV(tv);
+  assert(arena_mem_marked(g, tvref(co->stack)));
+  L->top--;
 
   lua_getfield(L, -1, "f");
   tv = L->top - 1;

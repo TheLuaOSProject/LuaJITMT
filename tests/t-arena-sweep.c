@@ -179,6 +179,40 @@ int main(void)
     lj_arena_alloc_fini(&clear);
   }
 
+  {
+    TGAlloc bump;
+    void *d1, *d2, *live, *wide;
+    GCArena *a;
+    uint32_t cd1, cd2, clive;
+    lj_arena_alloc_init(&bump);
+    bump.alloc_black = 0;
+    d1 = lj_arena_alloc(&bump, &rs, 512, 0);
+    d2 = lj_arena_alloc(&bump, &rs, 512, 0);
+    bump.alloc_black = 1;
+    live = lj_arena_alloc(&bump, &rs, 16, 0);
+    assert(d1 != NULL && d2 != NULL && live != NULL);
+    a = lj_arena_of(d1);
+    assert(lj_arena_of(d2) == a);
+    assert(lj_arena_of(live) == a);
+    cd1 = lj_arena_cellof(d1);
+    cd2 = lj_arena_cellof(d2);
+    clive = lj_arena_cellof(live);
+    lj_arena_alloc_prepare_sweep(&bump);
+    swept = lj_arena_sweep_one(&bump, LJ_ARENAK_PLAIN, 11, 0);
+    assert(swept == a);
+    assert(lj_arena_state(a, cd1) == 1);
+    assert(lj_arena_state(a, cd2) == 0);
+    assert(lj_arena_state(a, clive) == 2);
+    assert(bump.bump[LJ_ARENAK_PLAIN].a == a);
+    assert(bump.bump[LJ_ARENAK_PLAIN].cell == cd1);
+    bump.alloc_black = 0;
+    wide = lj_arena_alloc(&bump, &rs, 1024, 0);
+    assert(wide == d1);
+    assert(lj_arena_state(a, cd1) == 2);
+    assert(lj_arena_state(a, cd2) == 0);
+    lj_arena_alloc_fini(&bump);
+  }
+
   printf("t-arena-sweep OK: owner-local sweep rebuild verified\n");
   return 0;
 }
