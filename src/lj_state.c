@@ -341,6 +341,7 @@ LUA_API lua_State *lua_newstate(lua_Alloc allocf, void *allocd)
   setgcref(g->uvhead.prev, obj2gco(&g->uvhead));
   setgcref(g->uvhead.next, obj2gco(&g->uvhead));
   g->str.tabh = NULL;
+  g->str.retired = NULL;
   g->str.mask = ~(MSize)0;
   setnilV(registry(L));
   setnilV(&g->nilnode.val);

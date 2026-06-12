@@ -62,6 +62,18 @@ void lj_gc_arena_markmem(global_State *g, void *p)
   (void)lj_gc2_markmem(g, p);
 }
 
+static void gc_mark_strtab_mem(global_State *g)
+{
+  StrTabHdr *hdr;
+  hdr = (StrTabHdr *)la_loadptr_acq((void *const *)&g->str.tabh);
+  if (hdr)
+    lj_gc_arena_markmem(g, hdr);
+  for (hdr = (StrTabHdr *)la_loadptr_acq((void *const *)&g->str.retired);
+       hdr != NULL;
+       hdr = (StrTabHdr *)la_loadptr_acq((void *const *)&hdr->retired_next))
+    lj_gc_arena_markmem(g, hdr);
+}
+
 static void gc_arena_rebuild_free(global_State *g)
 {
   TGState *tg = G2TG(g);
@@ -206,11 +218,13 @@ static void gc2_paranoia_checkone(global_State *g, GCobj *o)
 static void gc2_paranoia_check_strtab(global_State *g)
 {
   MSize i;
+  StrTabHdr *hdr;
   GCRef *strtab;
-  if (!g->str.tabh || g->str.mask == ~(MSize)0)
+  hdr = (StrTabHdr *)la_loadptr_acq((void *const *)&g->str.tabh);
+  if (!hdr)
     return;
-  strtab = lj_str_buckets(g);
-  for (i = 0; i <= g->str.mask; i++) {
+  strtab = hdr->bucket;
+  for (i = 0; i <= hdr->mask; i++) {
     GCobj *o;
     for (o = lj_str_hashhead(strtab[i]); o != NULL; o = gcnext(o))
       gc2_paranoia_checkobj(g, o, "string");
@@ -234,7 +248,14 @@ static void gc2_paranoia_check_roots(global_State *g)
 
 static void gc2_paranoia_check_rawroots(global_State *g)
 {
-  gc2_paranoia_checkmem(g, g->str.tabh, "string table");
+  StrTabHdr *hdr;
+  hdr = (StrTabHdr *)la_loadptr_acq((void *const *)&g->str.tabh);
+  if (hdr)
+    gc2_paranoia_checkmem(g, hdr, "string table");
+  for (hdr = (StrTabHdr *)la_loadptr_acq((void *const *)&g->str.retired);
+       hdr != NULL;
+       hdr = (StrTabHdr *)la_loadptr_acq((void *const *)&hdr->retired_next))
+    gc2_paranoia_checkmem(g, hdr, "retired string table");
 #if LJ_64
   gc2_paranoia_checkmem(g, mref(g->gc.lightudseg, uint32_t),
 			"lightuserdata segments");
@@ -345,11 +366,13 @@ static void gc_mark(global_State *g, GCobj *o)
 static void gc_mark_fixedstr(global_State *g)
 {
   MSize i;
+  StrTabHdr *hdr;
   GCRef *strtab;
-  if (!g->str.tabh || g->str.mask == ~(MSize)0)
+  hdr = (StrTabHdr *)la_loadptr_acq((void *const *)&g->str.tabh);
+  if (!hdr)
     return;
-  strtab = lj_str_buckets(g);
-  for (i = 0; i <= g->str.mask; i++) {
+  strtab = hdr->bucket;
+  for (i = 0; i <= hdr->mask; i++) {
     GCobj *o;
     for (o = lj_str_hashhead(strtab[i]); o != NULL; o = gcnext(o))
       if (lj_obj_gcflags(o) & (LJ_GC_FIXED|LJ_GC_SFIXED))
@@ -364,7 +387,7 @@ static void gc_mark_gcroot(global_State *g)
     if (gcref(g->gcroot[i]) != NULL)
       gc_markobj(g, gcref(g->gcroot[i]));
   gc_mark_fixedstr(g);
-  lj_gc_arena_markmem(g, g->str.tabh);
+  gc_mark_strtab_mem(g);
 #if LJ_64
   lj_gc_arena_markmem(g, mref(g->gc.lightudseg, uint32_t));
 #endif
@@ -916,11 +939,14 @@ void lj_gc_finalize_cdata(lua_State *L)
 void lj_gc_freeall(global_State *g)
 {
   MSize i;
+  StrTabHdr *hdr;
   /* Free everything, except super-fixed objects (the main thread). */
   g->gc.currentwhite = LJ_GC_WHITES | LJ_GC_SFIXED;
   gc_fullsweep(g, &g->gc.root);
-  for (i = g->str.mask; i != ~(MSize)0; i--)  /* Free all string hash chains. */
-    gc_sweepstr(g, &lj_str_buckets(g)[i]);
+  hdr = (StrTabHdr *)la_loadptr_acq((void *const *)&g->str.tabh);
+  if (hdr)
+    for (i = hdr->mask; i != ~(MSize)0; i--)  /* Free all string hash chains. */
+      gc_sweepstr(g, &hdr->bucket[i]);
 }
 
 /* -- Collector ----------------------------------------------------------- */
@@ -985,8 +1011,10 @@ static size_t gc_onestep(lua_State *L)
     return 0;
   case GCSsweepstring: {
     GCSize old = g->gc.total;
-    gc_sweepstr(g, &lj_str_buckets(g)[g->gc.sweepstr++]);  /* Sweep one chain. */
-    if (g->gc.sweepstr > g->str.mask)
+    StrTabHdr *hdr = (StrTabHdr *)la_loadptr_acq((void *const *)&g->str.tabh);
+    if (hdr)
+      gc_sweepstr(g, &hdr->bucket[g->gc.sweepstr++]);  /* Sweep one chain. */
+    if (!hdr || g->gc.sweepstr > hdr->mask)
       g->gc.state = GCSsweep;  /* All string hash chains sweeped. */
     lj_assertG(old >= g->gc.total, "sweep increased memory");
     g->gc.estimate -= old - g->gc.total;
@@ -998,8 +1026,10 @@ static size_t gc_onestep(lua_State *L)
     lj_assertG(old >= g->gc.total, "sweep increased memory");
     g->gc.estimate -= old - g->gc.total;
     if (gcref(*mref(g->gc.sweep, GCRef)) == NULL) {
-      if (g->str.num <= (g->str.mask >> 2) && g->str.mask > LJ_MIN_STRTAB*2-1)
-	lj_str_resize(L, g->str.mask >> 1);  /* Shrink string table. */
+      StrTabHdr *hdr = (StrTabHdr *)la_loadptr_acq((void *const *)&g->str.tabh);
+      MSize mask = hdr ? hdr->mask : ~(MSize)0;
+      if (g->str.num <= (mask >> 2) && mask > LJ_MIN_STRTAB*2-1)
+	lj_str_resize(L, mask >> 1);  /* Shrink string table. */
       gc_arena_verify_sweep_boundary(g);
       gc_arena_finish_sweep_boundary(g);
       if (gcref(g->gc.mmudata)) {  /* Need any finalizations? */

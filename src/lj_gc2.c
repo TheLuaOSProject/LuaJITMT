@@ -96,6 +96,18 @@ static void gc2_clear_marks_all(global_State *g)
     gc2_clear_marks(tg);
 }
 
+static void gc2_mark_strtab_mem(global_State *g)
+{
+  StrTabHdr *hdr;
+  hdr = (StrTabHdr *)la_loadptr_acq((void *const *)&g->str.tabh);
+  if (hdr)
+    lj_gc2_markmem(g, hdr);
+  for (hdr = (StrTabHdr *)la_loadptr_acq((void *const *)&g->str.retired);
+       hdr != NULL;
+       hdr = (StrTabHdr *)la_loadptr_acq((void *const *)&hdr->retired_next))
+    lj_gc2_markmem(g, hdr);
+}
+
 void lj_gc2_legacy_mark_begin(global_State *g)
 {
   TGState *tg = G2TG(g);
@@ -156,11 +168,13 @@ static void gc2_mark_tv(global_State *g, cTValue *tv)
 static void gc2_mark_fixedstr(global_State *g)
 {
   MSize i;
+  StrTabHdr *hdr;
   GCRef *strtab;
-  if (!g->str.tabh || g->str.mask == ~(MSize)0)
+  hdr = (StrTabHdr *)la_loadptr_acq((void *const *)&g->str.tabh);
+  if (!hdr)
     return;
-  strtab = lj_str_buckets(g);
-  for (i = 0; i <= g->str.mask; i++) {
+  strtab = hdr->bucket;
+  for (i = 0; i <= hdr->mask; i++) {
     GCobj *o;
     for (o = lj_str_hashhead(strtab[i]); o != NULL; o = gcnext(o))
       if (lj_obj_gcflags(o) & (LJ_GC_FIXED|LJ_GC_SFIXED))
@@ -218,7 +232,7 @@ static void gc2_scan_global_roots(global_State *g)
     if (gcref(g->gcroot[i]) != NULL)
       lj_gc2_markobj(g, gcref(g->gcroot[i]));
   gc2_mark_fixedstr(g);
-  lj_gc2_markmem(g, g->str.tabh);
+  gc2_mark_strtab_mem(g);
 #if LJ_64
   lj_gc2_markmem(g, mref(g->gc.lightudseg, uint32_t));
 #endif

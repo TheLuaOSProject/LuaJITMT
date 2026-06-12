@@ -312,7 +312,7 @@ typedef struct StrTabHdr {
   MSize mask;		/* String hash mask (size of hash table - 1). */
   MSize resize;		/* Reserved resize claim for M5 lock-free interning. */
   MSize copy_cursor;	/* Reserved resize copy cursor. */
-  uint64_t pad;		/* Keep bucket[] naturally aligned after the header. */
+  struct StrTabHdr *retired_next;  /* Retired string table headers. */
   GCRef bucket[1];	/* String hash table anchors. */
 } StrTabHdr;
 
@@ -657,6 +657,7 @@ typedef struct GCState {
 /* String interning state. */
 typedef struct StrInternState {
   StrTabHdr *tabh;	/* String hash table header and anchors. */
+  StrTabHdr *retired;	/* Retired table headers kept until state close. */
   MSize mask;		/* Mirror of tabh->mask for existing fast paths. */
   MSize num;		/* Number of strings in hash table. */
   StrID id;		/* Next string ID. */

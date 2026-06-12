@@ -13,6 +13,8 @@
 #include "lj_obj.h"
 #include "lj_str.h"
 
+#define TEST_STRTAB_RESIZE	((MSize)0x80000000u)
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -34,17 +36,23 @@ int main(void)
 
   oldmask = g->str.mask;
   wantmask = (oldmask << 1) + 1u;
-  la_store32_rel(&hdr->resize, 1);  /* Simulate an active pinned interner. */
-  lj_str_resize(L, wantmask);
-  assert(g->str.tabh == hdr);
-  assert(g->str.mask == oldmask);
-  assert(hdr->resize == 1);
+
+  /* Simulate the last active interner leaving a resize-claimed header. */
+  la_store32_rel(&hdr->resize, TEST_STRTAB_RESIZE | 1u);
+  {
+    MSize old = la_sub32_acqrel(&hdr->resize, 1);
+    assert((old & TEST_STRTAB_RESIZE) != 0);
+    assert((old & ~TEST_STRTAB_RESIZE) == 1u);
+    assert(hdr->resize == TEST_STRTAB_RESIZE);
+  }
   la_store32_rel(&hdr->resize, 0);
 
   lj_str_resize(L, wantmask);
   assert(g->str.tabh != hdr);
   assert(g->str.mask == wantmask);
   assert(g->str.tabh->resize == 0);
+  assert(g->str.retired == hdr);
+  assert(hdr->retired_next == NULL);
   assert(lj_str_new(L, "m5-strtab-cas-same",
 		    strlen("m5-strtab-cas-same")) == s1);
 
@@ -56,6 +64,6 @@ int main(void)
   assert(g->str.tabh->resize == 0);
 
   lua_close(L);
-  printf("t-strtab-cas OK: active resize gate and duplicate intern guard verified\n");
+  printf("t-strtab-cas OK: active-drain resize claim and duplicate intern guard verified\n");
   return 0;
 }

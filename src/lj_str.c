@@ -165,11 +165,19 @@ static LJ_AINLINE GCobj *strref_hashhead(uintptr_t u)
   return (GCobj *)(void *)(u & ~(uintptr_t)LJ_STRHASH_LINKMASK);
 }
 
+static void strtab_retire(global_State *g, StrTabHdr *hdr)
+{
+  void *head = la_loadptr_acq((void *const *)&g->str.retired);
+  do {
+    hdr->retired_next = (StrTabHdr *)head;
+  } while (!la_casptr((void **)&g->str.retired, &head, hdr,
+		      LA_ACQ_REL, LA_ACQ));  /* 06 section 6.5 RCU retire. */
+}
+
 static LJ_AINLINE void strtab_leave(StrTabHdr *hdr)
 {
   MSize old = la_sub32_acqrel(&hdr->resize, 1);
-  lj_assertX((old & LJ_STRTAB_RESIZE) == 0 &&
-	     (old & LJ_STRTAB_ACTIVE_MASK) != 0,
+  lj_assertX((old & LJ_STRTAB_ACTIVE_MASK) != 0,
 	     "bad string table active count");
   UNUSED(old);
 }
@@ -214,10 +222,17 @@ void lj_str_resize(lua_State *L, MSize newmask)
     return;
 
   if (oldhdr) {
-    MSize expect = 0;
-    if (!la_cas32(&oldhdr->resize, &expect, LJ_STRTAB_RESIZE,
-		  LA_ACQ_REL, LA_ACQ))
-      return;  /* Active interners keep the current table for this round. */
+    for (;;) {
+      MSize state = la_load32_acq(&oldhdr->resize);
+      MSize expect = state;
+      if (state & LJ_STRTAB_RESIZE)
+	return;
+      if (la_cas32(&oldhdr->resize, &expect, state | LJ_STRTAB_RESIZE,
+		   LA_ACQ_REL, LA_ACQ))
+	break;
+    }
+    while (la_load32_acq(&oldhdr->resize) & LJ_STRTAB_ACTIVE_MASK)
+      la_cpu_pause();
   }
 
   newsize = lj_str_tabsize(newmask);
@@ -296,11 +311,11 @@ void lj_str_resize(lua_State *L, MSize newmask)
     }
   }
 
-  /* Free old table and replace with new table. */
+  /* Retire old table and replace with new table. */
   g->str.mask = newmask;
   la_storeptr_rel((void **)&g->str.tabh, newhdr);  /* 06 section 6.5 RCU publish. */
   if (oldhdr)
-    lj_mem_free(g, oldhdr, lj_str_tabbytes(oldhdr));
+    strtab_retire(g, oldhdr);
 }
 
 #if LUAJIT_SECURITY_STRHASH
@@ -512,4 +527,20 @@ void LJ_FASTCALL lj_str_init(lua_State *L)
   global_State *g = G(L);
   g->str.seed = lj_prng_u64(&g->prng);
   lj_str_resize(L, LJ_MIN_STRTAB-1);
+}
+
+void lj_str_freetab(global_State *g)
+{
+  StrTabHdr *hdr = g->str.tabh;
+  if (hdr) {
+    g->str.tabh = NULL;
+    lj_mem_free(g, hdr, lj_str_tabbytes(hdr));
+  }
+  hdr = (StrTabHdr *)la_loadptr_acq((void *const *)&g->str.retired);
+  g->str.retired = NULL;
+  while (hdr) {
+    StrTabHdr *next = hdr->retired_next;
+    lj_mem_free(g, hdr, lj_str_tabbytes(hdr));
+    hdr = next;
+  }
 }
