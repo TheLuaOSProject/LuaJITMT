@@ -1289,14 +1289,22 @@ LUA_API int lua_yield(lua_State *L, int nresults)
 
 LUA_API int lua_resume(lua_State *L, int nargs)
 {
-  if (L->cframe == NULL && L->status <= LUA_YIELD)
-    return lj_vm_resume(L,
+  LJStateClaim claim;
+  int status;
+  if (!lj_state_tryclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(api_errstate(L), "thread busy");
+  if (L->cframe == NULL && L->status <= LUA_YIELD) {
+    status = lj_vm_resume(L,
       L->status == LUA_OK ? api_call_base(L, nargs) : L->top - nargs,
       0, 0);
-  L->top = L->base;
-  setstrV(L, L->top, lj_err_str(L, LJ_ERR_COSUSP));
-  incr_top(L);
-  return LUA_ERRRUN;
+  } else {
+    L->top = L->base;
+    setstrV(L, L->top, lj_err_str(L, LJ_ERR_COSUSP));
+    incr_top(L);
+    status = LUA_ERRRUN;
+  }
+  lj_state_dropclaim(&claim);
+  return status;
 }
 
 /* -- GC and memory management -------------------------------------------- */

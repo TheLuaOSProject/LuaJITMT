@@ -95,6 +95,32 @@ static void check_thread_env_unowned(lua_State *L)
   lua_pop(L, 2);
 }
 
+static int resume_return(lua_State *L)
+{
+  lua_pushinteger(L, 91);
+  return 1;
+}
+
+static void check_resume_unowned(lua_State *L)
+{
+  uint32_t tid = lj_thr_current_id(G(L));
+  lua_State *co;
+  lua_settop(L, 0);
+  co = lua_newthread(L);
+  assert(co->thr_owner == 0);
+  assert(lj_state_claim(co, tid));
+  lua_pushcfunction(co, resume_return);
+  lj_state_release(co, tid);
+  assert(co->thr_owner == 0);
+  assert(lua_resume(co, 0) == LUA_OK);
+  assert(co->thr_owner == 0);
+  assert(lj_state_claim(co, tid));
+  assert(lua_tointeger(co, -1) == 91);
+  lua_pop(co, 1);
+  lj_state_release(co, tid);
+  lua_pop(L, 1);
+}
+
 static int busy_xmove_target(lua_State *L)
 {
   lua_State *co = lua_newthread(L);
@@ -141,6 +167,14 @@ static int busy_setfenv_thread(lua_State *L)
   return 0;
 }
 
+static int busy_lua_resume(lua_State *L)
+{
+  lua_State *co = lua_newthread(L);
+  co->thr_owner = foreign_tid(L);
+  (void)lua_resume(co, 0);
+  return 0;
+}
+
 static int busy_coroutine_status(lua_State *L)
 {
   lua_State *co = lua_newthread(L);
@@ -160,11 +194,13 @@ int main(void)
   check_xmove_unowned_target(L);
   check_xmove_unowned_source(L);
   check_thread_env_unowned(L);
+  check_resume_unowned(L);
   expect_thread_busy(L, busy_xmove_target, "busy target xmove");
   expect_thread_busy(L, busy_xmove_source, "busy source xmove");
   expect_thread_busy(L, busy_lua_status, "busy lua_status");
   expect_thread_busy(L, busy_getfenv_thread, "busy thread getfenv");
   expect_thread_busy(L, busy_setfenv_thread, "busy thread setfenv");
+  expect_thread_busy(L, busy_lua_resume, "busy lua_resume");
   expect_thread_busy(L, busy_coroutine_status, "busy coroutine.status");
   check_lua_ok(L, luaL_dostring(L,
     "local co = coroutine.create(function() coroutine.yield(1) end)\n"

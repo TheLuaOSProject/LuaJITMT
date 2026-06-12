@@ -56,6 +56,18 @@ if ! awk '
 fi
 
 if ! awk '
+  /LUA_API int lua_resume/ { infn = 1; next }
+  infn && /lj_state_tryclaim\(L/ { claim = 1 }
+  infn && /lj_vm_resume/ { resume = 1 }
+  infn && /lj_state_dropclaim\(&claim\)/ { drop = 1 }
+  infn && /^}/ { exit(claim && resume && drop ? 0 : 1) }
+  END { if (!claim || !resume || !drop) exit 1 }
+' "$ROOT/src/lj_api.c"; then
+  echo "guardrail: lua_resume must claim the resumed state" >&2
+  exit 1
+fi
+
+if ! awk '
   /LJLIB_CF\(coroutine_status\)/ { infn = 1; next }
   infn && /lj_state_tryclaim\(co/ { claim = 1 }
   infn && /lj_state_dropclaim\(&claim\)/ { drop = 1 }
