@@ -15,6 +15,7 @@
 #include <sys/mman.h>
 
 #include "lj_obj.h"
+#include "lj_atomic.h"
 #include "lj_arena.h"
 #include "lj_prng.h"
 
@@ -26,6 +27,27 @@
 #define LJ_ARENA_MMAP_PROBE_LINEAR	5
 #define LJ_ARENA_MMAP_LOWER		((uintptr_t)0x4000)
 #define LJ_ARENA_ADDR_LIMIT		((uintptr_t)1 << 47)
+#define LJ_HUGETAB_MAX_BITS		26
+#define LJ_HUGETAB_META_SHIFT		4
+#define LJ_HUGETAB_META_MASK \
+  (((uint64_t)1 << LJ_HUGETAB_META_SHIFT) - 1u)
+#define LJ_HUGETAB_EMPTY		((uint64_t)0)
+#define LJ_HUGETAB_TOMBSTONE		((uint64_t)1)
+
+typedef struct LJHugeEnt {
+  la_u128 slot;
+} LJHugeEnt;
+
+struct LJHugeTabHdr {
+  uint32_t hbits;
+  uint32_t mask;
+  size_t mapsize;
+  LJHugeEnt ent[1];
+};
+
+LJ_STATIC_ASSERT(sizeof(LJHugeEnt) == 16u);
+LJ_STATIC_ASSERT(offsetof(LJHugeTabHdr, ent) == 16u);
+LJ_STATIC_ASSERT((offsetof(LJHugeTabHdr, ent) & 15u) == 0);
 
 /* Apply the 04_allocator.md sweep identities over the arena bitmaps. */
 void lj_arena_sweep_words(GCArena *a, int minor)
@@ -208,6 +230,196 @@ void lj_arena_huge_unmap(void *p, size_t size)
   if (p && mapsize)
     munmap((void *)lj_arena_of(p), mapsize);
   errno = olderr;
+}
+
+static size_t hugetab_mapsize(uint32_t hbits)
+{
+  size_t cap, hdr = offsetof(LJHugeTabHdr, ent);
+  if (hbits > LJ_HUGETAB_MAX_BITS)
+    return 0;
+  cap = (size_t)1 << hbits;
+  if (cap > (~(size_t)0 - hdr) / sizeof(LJHugeEnt))
+    return 0;
+  return hdr + cap * sizeof(LJHugeEnt);
+}
+
+static uint32_t hugetab_hash(uint64_t addr, uint32_t mask)
+{
+  uint64_t x = addr >> LJ_CELL_SHIFT;
+  x ^= x >> 33;
+  x *= U64x(ff51afd7,ed558ccd);
+  x ^= x >> 33;
+  x *= U64x(c4ceb9fe,1a85ec53);
+  x ^= x >> 33;
+  return (uint32_t)x & mask;
+}
+
+static int hugetab_pack(void *p, size_t size, uint32_t hflags,
+			uint64_t *addr, uint64_t *meta)
+{
+  uintptr_t u = (uintptr_t)p;
+  if (!p || u <= LJ_HUGETAB_TOMBSTONE || !lj_arena_huge_mapsize(size) ||
+      (hflags & ~LJ_HUGEF_MASK) != 0 ||
+      size > (~(uint64_t)0 >> LJ_HUGETAB_META_SHIFT))
+    return 0;
+  *addr = (uint64_t)u;
+  *meta = ((uint64_t)size << LJ_HUGETAB_META_SHIFT) | (uint64_t)hflags;
+  return 1;
+}
+
+static void hugetab_decode(uint64_t meta, LJHugeInfo *hi)
+{
+  if (hi) {
+    hi->size = (size_t)(meta >> LJ_HUGETAB_META_SHIFT);
+    hi->flags = (uint32_t)(meta & LJ_HUGETAB_META_MASK);
+  }
+}
+
+static int hugetab_search(LJHugeTabHdr *h, uint64_t addr,
+			  LJHugeEnt **ep, uint64_t *metap)
+{
+  uint32_t cap = h->mask + 1u;
+  uint32_t i = hugetab_hash(addr, h->mask);
+  uint32_t n;
+  for (n = 0; n < cap; n++, i = (i + 1u) & h->mask) {
+    LJHugeEnt *e = &h->ent[i];
+    uint64_t ea = la_load64_acq(&e->slot.lo);  /* 04 §4.5.1 publish edge. */
+    if (ea == LJ_HUGETAB_EMPTY)
+      return 0;
+    if (ea == addr) {
+      uint64_t meta = la_load64_acq(&e->slot.hi);  /* 04 §4.5.1 metadata. */
+      if (la_load64_acq(&e->slot.lo) == addr) {  /* Stable found snapshot. */
+	if (ep)
+	  *ep = e;
+	if (metap)
+	  *metap = meta;
+	return 1;
+      }
+    }
+  }
+  return 0;
+}
+
+int lj_arena_hugetab_init(HugeTab *ht, uint32_t hbits)
+{
+  int olderr = errno;
+  size_t mapsize = hugetab_mapsize(hbits);
+  LJHugeTabHdr *h;
+  if (!ht || ht->h || !mapsize)
+    return 0;
+  h = (LJHugeTabHdr *)mmap(NULL, mapsize, PROT_READ|PROT_WRITE,
+			   MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
+  if (h == MAP_FAILED)
+    return 0;
+  h->hbits = hbits;
+  h->mask = (1u << hbits) - 1u;
+  h->mapsize = mapsize;
+  ht->h = h;
+  errno = olderr;
+  return 1;
+}
+
+void lj_arena_hugetab_fini(HugeTab *ht)
+{
+  int olderr = errno;
+  if (ht && ht->h) {
+    LJHugeTabHdr *h = ht->h;
+    size_t mapsize = h->mapsize;
+    ht->h = NULL;
+    munmap((void *)h, mapsize);
+  }
+  errno = olderr;
+}
+
+int lj_arena_hugetab_insert(HugeTab *ht, void *p, size_t size,
+			    uint32_t hflags)
+{
+  LJHugeTabHdr *h = ht ? ht->h : NULL;
+  uint64_t addr, meta;
+  if (!h || !hugetab_pack(p, size, hflags, &addr, &meta))
+    return -1;
+  for (;;) {
+    uint32_t cap = h->mask + 1u;
+    uint32_t i = hugetab_hash(addr, h->mask);
+    uint32_t n;
+    LJHugeEnt *freeent = NULL;
+    la_u128 freeval, des;
+    for (n = 0; n < cap; n++, i = (i + 1u) & h->mask) {
+      LJHugeEnt *e = &h->ent[i];
+      uint64_t ea = la_load64_acq(&e->slot.lo);  /* 04 §4.5.1 slot state. */
+      if (ea == addr)
+	return 0;
+      if (ea == LJ_HUGETAB_EMPTY || ea == LJ_HUGETAB_TOMBSTONE) {
+	uint64_t emeta = la_load64_acq(&e->slot.hi);  /* 04 §4.5.1 CAS pair. */
+	if (!freeent) {
+	  freeent = e;
+	  freeval.lo = ea;
+	  freeval.hi = emeta;
+	}
+	if (ea == LJ_HUGETAB_EMPTY)
+	  break;
+      }
+    }
+    if (!freeent)
+      return -1;
+    des.lo = addr;
+    des.hi = meta;
+    if (la_cas128(&freeent->slot, &freeval, des))  /* 04 §4.5.1 publish. */
+      return 1;
+  }
+}
+
+int lj_arena_hugetab_lookup(HugeTab *ht, const void *p, LJHugeInfo *hi)
+{
+  LJHugeTabHdr *h = ht ? ht->h : NULL;
+  uint64_t addr, meta;
+  if (!h || !p)
+    return 0;
+  addr = (uint64_t)(uintptr_t)p;
+  if (hugetab_search(h, addr, NULL, &meta)) {
+    hugetab_decode(meta, hi);
+    return 1;
+  }
+  return 0;
+}
+
+int lj_arena_hugetab_mark(HugeTab *ht, const void *p, LJHugeInfo *hi)
+{
+  LJHugeTabHdr *h = ht ? ht->h : NULL;
+  uint64_t addr, oldmeta;
+  LJHugeEnt *e;
+  if (!h || !p)
+    return -1;
+  addr = (uint64_t)(uintptr_t)p;
+  if (!hugetab_search(h, addr, &e, NULL))
+    return -1;
+  oldmeta = la_or64_rlx(&e->slot.hi, LJ_HUGEF_MARK);  /* 04 §4.5.1 mark. */
+  hugetab_decode(oldmeta | LJ_HUGEF_MARK, hi);
+  return (oldmeta & LJ_HUGEF_MARK) ? 0 : 1;
+}
+
+int lj_arena_hugetab_delete(HugeTab *ht, const void *p, LJHugeInfo *hi)
+{
+  LJHugeTabHdr *h = ht ? ht->h : NULL;
+  uint64_t addr;
+  if (!h || !p)
+    return 0;
+  addr = (uint64_t)(uintptr_t)p;
+  for (;;) {
+    LJHugeEnt *e;
+    uint64_t meta;
+    la_u128 exp, des;
+    if (!hugetab_search(h, addr, &e, &meta))
+      return 0;
+    exp.lo = addr;
+    exp.hi = meta;
+    des.lo = LJ_HUGETAB_TOMBSTONE;
+    des.hi = 0;
+    if (la_cas128(&e->slot, &exp, des)) {  /* 04 §4.5.1 delete publish. */
+      hugetab_decode(meta, hi);
+      return 1;
+    }
+  }
 }
 
 static uint32_t arena_kind(uint32_t flags)

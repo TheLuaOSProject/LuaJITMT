@@ -33,6 +33,9 @@ typedef struct GCArena GCArena;
 typedef struct GreyStack GreyStack;
 typedef struct LJArenaFreeRun LJArenaFreeRun;
 typedef struct LJArenaBump LJArenaBump;
+typedef struct LJHugeTabHdr LJHugeTabHdr;
+typedef struct HugeTab HugeTab;
+typedef struct LJHugeInfo LJHugeInfo;
 typedef struct TGAlloc TGAlloc;
 
 typedef struct GCAhdr {
@@ -71,6 +74,21 @@ struct TGAlloc {
   uint8_t alloc_black;
 };
 
+struct HugeTab {
+  LJHugeTabHdr *h;
+};
+
+struct LJHugeInfo {
+  size_t size;
+  uint32_t flags;
+};
+
+#define LJ_HUGEF_MARK		0x01u
+#define LJ_HUGEF_TRAVERSABLE	0x02u
+#define LJ_HUGEF_FINALIZER	0x04u
+#define LJ_HUGEF_MASK \
+  (LJ_HUGEF_MARK|LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_FINALIZER)
+
 /* The header plus full block/mark bitmaps occupy 72 cells. The arena body
 ** starts after both bitmaps so the model keeps complete 4096-cell coverage. */
 #define LJ_ARENA_META_BYTES	((uint32_t)sizeof(GCArena))
@@ -87,6 +105,16 @@ LJ_FUNC void lj_arena_unmap(GCArena *a);
 LJ_FUNC size_t lj_arena_huge_mapsize(size_t size);
 LJ_FUNC void *lj_arena_huge_map(PRNGState *rs, size_t size, uint32_t flags);
 LJ_FUNC void lj_arena_huge_unmap(void *p, size_t size);
+LJ_FUNC int lj_arena_hugetab_init(HugeTab *ht, uint32_t hbits);
+LJ_FUNC void lj_arena_hugetab_fini(HugeTab *ht);
+LJ_FUNC int lj_arena_hugetab_insert(HugeTab *ht, void *p, size_t size,
+				    uint32_t hflags);
+LJ_FUNC int lj_arena_hugetab_lookup(HugeTab *ht, const void *p,
+				    LJHugeInfo *hi);
+LJ_FUNC int lj_arena_hugetab_mark(HugeTab *ht, const void *p,
+				  LJHugeInfo *hi);
+LJ_FUNC int lj_arena_hugetab_delete(HugeTab *ht, const void *p,
+				    LJHugeInfo *hi);
 LJ_FUNC void lj_arena_alloc_init(TGAlloc *alloc);
 LJ_FUNC void lj_arena_alloc_fini(TGAlloc *alloc);
 LJ_FUNC void *lj_arena_alloc(TGAlloc *alloc, PRNGState *rs, size_t size,
