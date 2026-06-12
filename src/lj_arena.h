@@ -27,7 +27,9 @@
 #define LJ_AF_TRAVERSABLE	0x00000001u
 #define LJ_AF_NEEDSWEEP		0x00000002u
 #define LJ_AF_FULL		0x00000004u
-#define LJ_AF_HUGE_MAGIC	0x4c4a4855u
+#define LJ_AF_FLAG_MASK \
+  (LJ_AF_TRAVERSABLE|LJ_AF_NEEDSWEEP|LJ_AF_FULL)
+#define LJ_AF_HUGE_MAGIC	0x4c4a4800u
 
 typedef struct GCArena GCArena;
 typedef struct GreyStack GreyStack;

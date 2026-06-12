@@ -48,6 +48,7 @@ struct LJHugeTabHdr {
 LJ_STATIC_ASSERT(sizeof(LJHugeEnt) == 16u);
 LJ_STATIC_ASSERT(offsetof(LJHugeTabHdr, ent) == 16u);
 LJ_STATIC_ASSERT((offsetof(LJHugeTabHdr, ent) & 15u) == 0);
+LJ_STATIC_ASSERT((LJ_AF_HUGE_MAGIC & LJ_AF_FLAG_MASK) == 0);
 
 /* Apply the 04_allocator.md sweep identities over the arena bitmaps. */
 void lj_arena_sweep_words(GCArena *a, int minor)

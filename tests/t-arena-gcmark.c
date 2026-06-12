@@ -37,9 +37,11 @@ int main(void)
 {
   lua_State *L = luaL_newstate();
   global_State *g;
+  TGState *tg;
   TValue *tv;
   GCtab *tab;
   GCstr *str;
+  LJHugeInfo hi;
 
   assert(L != NULL);
   luaL_openlibs(L);
@@ -47,6 +49,8 @@ int main(void)
     "keep = { t = { 1, 2, 3 }, s = string.rep('m', 22000) }\n"
     "collectgarbage('collect')\n") == LUA_OK);
   g = G(L);
+  tg = G2TG(g);
+  assert(tg != NULL);
 
   lua_getglobal(L, "keep");
   tv = L->top - 1;
@@ -60,7 +64,9 @@ int main(void)
   assert(tvisstr(tv));
   str = strV(tv);
   assert(lj_arena_ishuge(lj_arena_of(str)));
-  assert((lj_arena_of(str)->hdr.flags & LJ_AF_TRAVERSABLE) != 0);
+  assert((tg->tg_flags & TGF_HUGETAB) != 0);
+  assert(lj_arena_hugetab_lookup(&tg->huge, str, &hi) == 1);
+  assert((hi.flags & LJ_HUGEF_TRAVERSABLE) == 0);
   assert(arena_marked(g, obj2gco(str)));
 
   lua_close(L);

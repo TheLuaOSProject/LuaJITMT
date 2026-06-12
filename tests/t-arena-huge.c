@@ -41,6 +41,7 @@ int main(void)
     assert(checkptrGC((char *)a + mapsize - 1u));
     assert(lj_arena_ishuge(a));
     assert((a->hdr.flags & flags) == flags);
+    assert((a->hdr.flags & LJ_AF_TRAVERSABLE) == flags);
     assert(a->hdr.live_cells == (uint32_t)(mapsize >> LJ_CELL_SHIFT));
     memset(p, 0x31 + (int)i, size);
     assert(((uint8_t *)p)[0] == (uint8_t)(0x31 + i));
