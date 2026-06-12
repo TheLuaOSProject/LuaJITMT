@@ -46,6 +46,16 @@ static void load_return(lua_State *L)
   }
 }
 
+static void load_return_after_publish(lua_State *L)
+{
+  int status = luaL_loadstring(L, "publish_poll(); return 19\n");
+  if (status != LUA_OK) {
+    fprintf(stderr, "load_return_after_publish failed: %s\n",
+	    lua_tostring(L, -1));
+    assert(status == LUA_OK);
+  }
+}
+
 static void call_expect(lua_State *L, int expected, const char *name)
 {
   int status = lua_pcall(L, 0, 1, 0);
@@ -66,6 +76,15 @@ static void assert_acked(global_State *g, TGState *tg, uint64_t epoch0)
   assert(tg->reqmask == 0);
 }
 
+static int publish_poll_c(lua_State *L)
+{
+  global_State *g = G(L);
+  TGState *tg = G2TG(g);
+  assert(tg != NULL);
+  publish_manual(g, tg, LJ_GC2_HS_ENABLE_BARRIER|LJ_GC2_HS_ALLOC_BLACK);
+  return 0;
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -83,6 +102,8 @@ int main(void)
   assert(tg->reqmask == 0);
 
   lua_gc(L, LUA_GCSTOP, 0);
+  lua_pushcfunction(L, publish_poll_c);
+  lua_setglobal(L, "publish_poll");
 
   load_loop(L);
   epoch0 = g->gc2.hs_epoch;
@@ -102,8 +123,15 @@ int main(void)
   assert(tg->mark_active == 0);
   assert(tg->alloc.alloc_black == 0);
 
+  load_return_after_publish(L);
+  epoch0 = g->gc2.hs_epoch;
+  call_expect(L, 19, "call_return_after_publish");
+  assert_acked(g, tg, epoch0);
+  assert(tg->mark_active == 1);
+  assert(tg->alloc.alloc_black == 1);
+
   lua_close(L);
 
-  printf("t-vm-safepoint OK: x64 branch and function-entry polls acked\n");
+  printf("t-vm-safepoint OK: x64 branch, function-entry, return polls acked\n");
   return 0;
 }

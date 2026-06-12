@@ -459,6 +459,12 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov L:RB->top, BASE
   |
   |->vm_leave_cp:
+  |  cmp TGPOLL, 0
+  |  jz >9
+  |  mov SAVE_PC, L:RB			// Outside bytecode while returning to C.
+  |  mov CARG1, L:RB
+  |  call extern lj_safepoint_ack
+  |9:
   |  mov RA, SAVE_CFRAME		// Restore previous C frame.
   |  mov L:RB->cframe, RA
   |  xor eax, eax			// Ok return status for vm_pcall.
