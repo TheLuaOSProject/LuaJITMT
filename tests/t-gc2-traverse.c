@@ -3,6 +3,7 @@
 */
 
 #include <assert.h>
+#include <pthread.h>
 #include <stdio.h>
 
 #include "lua.h"
@@ -12,6 +13,7 @@
 #include "lj_obj.h"
 #include "lj_gc.h"
 #include "lj_gc2.h"
+#include "lj_str.h"
 #include "lj_tab.h"
 #include "lj_tg.h"
 #if LJ_HASJIT
@@ -88,6 +90,103 @@ static void test_grey_deque_growth(lua_State *L, global_State *g, TGState *tg)
   assert(g->gc2.grey_drained == grey_drained0 + GC2_DEQUE_GROW_N + 1u);
   lj_gc2_legacy_cycle_end(g);
   lua_pop(L, 1);
+}
+
+typedef struct GreyRaceCtx {
+  global_State *g;
+  pthread_barrier_t barrier;
+  GCobj *stolen;
+} GreyRaceCtx;
+
+static void grey_wait(pthread_barrier_t *barrier)
+{
+  int rc = pthread_barrier_wait(barrier);
+  assert(rc == 0 || rc == PTHREAD_BARRIER_SERIAL_THREAD);
+}
+
+static void *grey_owner_thread(void *arg)
+{
+  GreyRaceCtx *ctx = (GreyRaceCtx *)arg;
+  grey_wait(&ctx->barrier);
+  (void)lj_gc2_drain_ssb(ctx->g);
+  return NULL;
+}
+
+static void *grey_thief_thread(void *arg)
+{
+  GreyRaceCtx *ctx = (GreyRaceCtx *)arg;
+  grey_wait(&ctx->barrier);
+  ctx->stolen = lj_gc2_grey_steal(ctx->g);
+  return NULL;
+}
+
+static void grey_publish_test_item(global_State *g, GCobj *o)
+{
+  uint64_t top = la_load64_acq(&g->gc2.grey_top);
+  uint64_t bottom = la_load64_acq(&g->gc2.grey_bottom);
+  MSize cap = g->gc2.grey_capacity;
+  assert(top == bottom);
+  assert(cap > 0);
+  setgcref(g->gc2.grey_stack[(MSize)(bottom % cap)], o);
+  la_fence_rel();  /* 05 section 5.6.3: publish slot before bottom. */
+  la_store64_rel(&g->gc2.grey_bottom, bottom + 1);
+}
+
+static void test_grey_deque_steal_race(lua_State *L, global_State *g,
+				       TGState *tg)
+{
+  enum { GC2_STEAL_RACE_N = 256 };
+  int i;
+  UNUSED(tg);
+
+  lj_gc2_legacy_mark_begin(g);
+  assert(g->gc2.grey_stack != NULL);
+  assert(g->gc2.grey_capacity > 0);
+
+  lua_pushliteral(L, "gc2 direct steal");
+  grey_publish_test_item(g, obj2gco(strV(L->top - 1)));
+  assert(lj_gc2_grey_steal(g) == obj2gco(strV(L->top - 1)));
+  assert(lj_gc2_grey_steal(g) == NULL);
+  assert(lj_gc2_ssb_empty(g));
+  lua_pop(L, 1);
+
+  lua_pushliteral(L, "gc2 owner pop");
+  grey_publish_test_item(g, obj2gco(strV(L->top - 1)));
+  assert(lj_gc2_drain_ssb(g) == 0);
+  assert(lj_gc2_grey_steal(g) == NULL);
+  assert(lj_gc2_ssb_empty(g));
+  lua_pop(L, 1);
+
+  for (i = 0; i < GC2_STEAL_RACE_N; i++) {
+    GreyRaceCtx ctx;
+    pthread_t owner, thief;
+    uint64_t drained0, drained1;
+    GCobj *o;
+    int owner_won, thief_won;
+
+    lua_pushfstring(L, "gc2 steal race %d", i);
+    o = obj2gco(strV(L->top - 1));
+    grey_publish_test_item(g, o);
+    drained0 = la_load64_acq(&g->gc2.grey_drained);
+    ctx.g = g;
+    ctx.stolen = NULL;
+    assert(pthread_barrier_init(&ctx.barrier, NULL, 2) == 0);
+    assert(pthread_create(&owner, NULL, grey_owner_thread, &ctx) == 0);
+    assert(pthread_create(&thief, NULL, grey_thief_thread, &ctx) == 0);
+    assert(pthread_join(owner, NULL) == 0);
+    assert(pthread_join(thief, NULL) == 0);
+    assert(pthread_barrier_destroy(&ctx.barrier) == 0);
+
+    drained1 = la_load64_acq(&g->gc2.grey_drained);
+    owner_won = drained1 == drained0 + 1u;
+    thief_won = ctx.stolen == o;
+    assert(owner_won || thief_won);
+    assert(!(owner_won && thief_won));
+    assert(lj_gc2_ssb_empty(g));
+    lua_pop(L, 1);
+  }
+
+  lj_gc2_legacy_cycle_end(g);
 }
 
 static void test_c_value_barrier(lua_State *L, global_State *g, TGState *tg)
@@ -502,6 +601,7 @@ int main(void)
 
   test_strong_table(L, g, tg);
   test_grey_deque_growth(L, g, tg);
+  test_grey_deque_steal_race(L, g, tg);
   test_c_value_barrier(L, g, tg);
   test_c_table_rescan_barrier(L, g, tg);
   test_vm_upvalue_barrier(L, g, tg);

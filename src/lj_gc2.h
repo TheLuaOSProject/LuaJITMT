@@ -42,6 +42,7 @@ LJ_FUNC void lj_gc2_scan_roots(global_State *g, lua_State *L);
 LJ_FUNC int lj_gc2_ssb_push(global_State *g, GCobj *o);
 LJ_FUNC uint32_t lj_gc2_flush_ssb(global_State *g, TGState *tg);
 LJ_FUNC uint32_t lj_gc2_drain_ssb(global_State *g);
+LJ_FUNC GCobj *lj_gc2_grey_steal(global_State *g);
 LJ_FUNC int lj_gc2_ssb_empty(global_State *g);
 LJ_FUNC void lj_gc2_barrier_tv(lua_State *L, cTValue *tv);
 LJ_FUNCA void lj_gc2_barrier_tv_g(global_State *g, cTValue *tv);

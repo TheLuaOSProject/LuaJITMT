@@ -14,7 +14,7 @@ make -C "$ROOT/src" XCFLAGS="-DLUA_USE_ASSERT -DLJ_GC2_PARANOIA=1" \
 for name in t-gc2-paranoia t-gc2-phase t-gc2-markbits t-gc2-traverse; do
   out="$TMP/lj_${name}_paranoia"
   "$CC" $CFLAGS -DLUA_USE_ASSERT -DLJ_GC2_PARANOIA=1 -I"$ROOT/src" \
-    "$ROOT/tests/$name.c" "$ROOT/src/libluajit.a" -lm -ldl -o "$out"
+    "$ROOT/tests/$name.c" "$ROOT/src/libluajit.a" -lm -ldl -pthread -o "$out"
   "$out"
 done
 "$ROOT/tools/ci/run_stock_tests.sh" "$ROOT/src/luajit" --quiet

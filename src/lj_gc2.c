@@ -309,14 +309,39 @@ static GCobj *gc2_grey_pop(global_State *g)
     cap = g->gc2.grey_capacity;
     o = gcref(g->gc2.grey_stack[(MSize)(bottom % cap)]);
     if (top == bottom) {
-      /* M3 has only the owner worker; steal CAS arrives with worker stealing. */
-      la_store64_rel(&g->gc2.grey_top, top + 1);
+      uint64_t expect = top;
+      if (!la_cas64(&g->gc2.grey_top, &expect, top + 1,
+		    LA_SEQ, LA_ACQ)) {  /* 05 section 5.6.3 single item. */
+	o = NULL;
+      }
       la_store64_rel(&g->gc2.grey_bottom, top + 1);
     }
     return o;
   }
   la_store64_rel(&g->gc2.grey_bottom, top);
   return NULL;
+}
+
+GCobj *lj_gc2_grey_steal(global_State *g)
+{
+  uint64_t top, bottom, expect;
+  GCobj *o;
+  MSize cap;
+  if (!g || !g->gc2.grey_stack || g->gc2.grey_capacity == 0)
+    return NULL;
+  /* 05 section 5.6.3: non-owner steal; deque growth is owner-quiesced. */
+  top = la_load64_acq(&g->gc2.grey_top);
+  la_fence_seq();  /* 05 section 5.6.3: order top before bottom snapshot. */
+  bottom = la_load64_acq(&g->gc2.grey_bottom);
+  if (top >= bottom)
+    return NULL;
+  cap = g->gc2.grey_capacity;
+  o = gcref(g->gc2.grey_stack[(MSize)(top % cap)]);
+  expect = top;
+  if (!la_cas64(&g->gc2.grey_top, &expect, top + 1,
+		LA_SEQ, LA_ACQ))  /* 05 section 5.6.3 steal claim. */
+    return NULL;
+  return o;
 }
 
 static void gc2_ssb_activate(TGState *tg, GC2SSBNode *node)

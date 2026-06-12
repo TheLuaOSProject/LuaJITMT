@@ -14,7 +14,7 @@ make -C "$ROOT/src" -j"$JOBS" >/dev/null
 for name in t-gc2-phase t-gc2-markbits t-gc2-traverse; do
   out="$TMP/lj_${name}"
   "$CC" $CFLAGS -I"$ROOT/src" "$ROOT/tests/$name.c" \
-    "$ROOT/src/libluajit.a" -lm -ldl -o "$out"
+    "$ROOT/src/libluajit.a" -lm -ldl -pthread -o "$out"
   "$out"
 done
 
