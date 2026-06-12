@@ -88,9 +88,13 @@ void lj_dispatch_init_hotcount(global_State *g)
   int32_t hotloop = G2J(g)->param[JIT_P_hotloop];
   HotCount start = (HotCount)(hotloop*HOTCOUNT_LOOP - 1);
   HotCount *hotcount = G2GG(g)->hotcount;
+  TGState *tg = G2TG(g);
   uint32_t i;
-  for (i = 0; i < HOTCOUNT_SIZE; i++)
+  for (i = 0; i < HOTCOUNT_SIZE; i++) {
     hotcount[i] = start;
+    if (tg)
+      tg->hotcount[i] = start;
+  }
 }
 #endif
 
@@ -206,10 +210,11 @@ void LJ_FASTCALL lj_dispatch_update(global_State *g, int nolock)
     }
 
 #if LJ_HASJIT
-    /* Reset hotcounts for JIT off to on transition. */
-    if ((mode & DISPMODE_JIT) && !(oldmode & DISPMODE_JIT))
-      lj_dispatch_init_hotcount(g);
+	/* Reset hotcounts for JIT off to on transition. */
+	if ((mode & DISPMODE_JIT) && !(oldmode & DISPMODE_JIT))
+	  lj_dispatch_init_hotcount(g);
 #endif
+	lj_tg_sync_dispatch(g);
   }
 #if LJ_HASPROFILE && !LJ_PROFILE_SIGPROF
   if (profile_locked) lj_profile_unlock();

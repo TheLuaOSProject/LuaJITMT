@@ -105,11 +105,24 @@ typedef struct GG_State {
 #define GG_DISP2J	(GG_OFS(J) - GG_OFS(dispatch))
 #define GG_DISP2HOT	(GG_OFS(hotcount) - GG_OFS(dispatch))
 #define GG_DISP2STATIC	(GG_LEN_DDISP*(int)sizeof(ASMFunction))
+#if LJ_HASJIT
+LJ_STATIC_ASSERT(GG_DISP2HOT == TG_DISP2HOT);
+#endif
 
 #define hotcount_get(gg, pc) \
   (gg)->hotcount[(u32ptr(pc)>>2) & (HOTCOUNT_SIZE-1)]
 #define hotcount_set(gg, pc, val) \
   (hotcount_get((gg), (pc)) = (HotCount)(val))
+#if LJ_HASJIT
+static LJ_AINLINE void hotcount_setg(global_State *g, const BCIns *pc, HotCount val)
+{
+  HotCount v = (HotCount)val;
+  uint32_t i = (u32ptr(pc)>>2) & (HOTCOUNT_SIZE-1);
+  G2GG(g)->hotcount[i] = v;  /* Transitional mirror until VM uses TG dispatch. */
+  if (G2TG(g))
+    G2TG(g)->hotcount[i] = v;
+}
+#endif
 
 /* Dispatch table management. */
 LJ_FUNC void lj_dispatch_init(GG_State *GG);

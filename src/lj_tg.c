@@ -34,3 +34,10 @@ void lj_tg_fini(global_State *g)
   if (g->main_tg)
     lj_buf_free(g, &g->main_tg->tmpbuf);
 }
+
+void lj_tg_sync_dispatch(global_State *g)
+{
+  TGState *tg = G2TG(g);
+  if (tg)
+    memcpy(tg->dispatch, G2GG(g)->dispatch, sizeof(tg->dispatch));
+}
