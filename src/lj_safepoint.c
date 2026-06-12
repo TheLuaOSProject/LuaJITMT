@@ -12,7 +12,8 @@
 #include "lj_safepoint.h"
 #include "lj_tg.h"
 
-static void safepoint_apply_actions(TGState *tg, uint32_t actions)
+static void safepoint_apply_actions(global_State *g, TGState *tg,
+				    uint32_t actions)
 {
   if (actions & LJ_GC2_HS_ENABLE_BARRIER)
     tg->mark_active = 1;
@@ -22,6 +23,10 @@ static void safepoint_apply_actions(TGState *tg, uint32_t actions)
     tg->alloc.alloc_black = 1;
   if (actions & LJ_GC2_HS_ALLOC_WHITE)
     tg->alloc.alloc_black = 0;
+  if (actions & LJ_GC2_HS_SCAN_ROOTS) {
+    lua_State *L = la_load8_acq(&tg->in_native) ? NULL : tg->cur_L;
+    lj_gc2_scan_roots(g, L);  /* 05 section 5.7.1/5.7.2. */
+  }
   /* Other 05 section 5.4.2 action bits are reserved until their owners land. */
 }
 
@@ -44,7 +49,7 @@ static uint32_t safepoint_ack_tg(global_State *g, TGState *tg)
   }
   if (oldepoch == epoch)
     return 0;
-  safepoint_apply_actions(tg, actions);
+  safepoint_apply_actions(g, tg, actions);
   la_store32_rlx(&tg->poll, 0);
   oldpending = la_sub32_acqrel(&g->gc2.hs_pending, 1);  /* 05 section 5.4.2. */
   if (oldpending == 1)

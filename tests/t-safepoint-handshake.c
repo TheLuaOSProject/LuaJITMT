@@ -29,6 +29,7 @@ int main(void)
   lua_State *L = luaL_newstate();
   global_State *g;
   TGState *tg;
+  GCtab *root_tab;
   uint64_t epoch0;
   uint32_t actions;
 
@@ -59,6 +60,21 @@ int main(void)
   actions = LJ_GC2_HS_DISABLE_BARRIER|LJ_GC2_HS_ALLOC_WHITE;
   assert(lj_gc2_handshake(g, actions) == 1);
   assert(g->gc2.hs_pending == 0);
+  assert(tg->mark_active == 0);
+  assert(tg->alloc.alloc_black == 0);
+
+  lua_newtable(L);
+  root_tab = tabV(L->top - 1);
+  lj_gc2_legacy_mark_begin(g);
+  assert(lj_gc2_ismarked(g, obj2gco(root_tab)) == 0);
+  epoch0 = g->gc2.hs_epoch;
+  assert(lj_gc2_handshake(g, LJ_GC2_HS_SCAN_ROOTS) == 1);
+  assert(g->gc2.hs_epoch == epoch0 + 1u);
+  assert(g->gc2.hs_pending == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(root_tab)) == 1);
+  assert(g->gc2.marks_this_round > 0);
+  lua_pop(L, 1);
+  lj_gc2_legacy_cycle_end(g);
   assert(tg->mark_active == 0);
   assert(tg->alloc.alloc_black == 0);
 

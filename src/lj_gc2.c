@@ -12,6 +12,11 @@
 #include "lj_safepoint.h"
 #include "lj_arena.h"
 #include "lj_tg.h"
+#include "lj_frame.h"
+#if LJ_HASFFI
+#include "lj_ctype.h"
+#endif
+#include "lj_dispatch.h"
 
 static void gc2_attach_main(global_State *g)
 {
@@ -79,6 +84,114 @@ void lj_gc2_legacy_cycle_end(global_State *g)
 uint32_t lj_gc2_handshake(global_State *g, uint32_t actions)
 {
   return lj_safepoint_handshake(g, actions);
+}
+
+static void gc2_mark_tv(global_State *g, cTValue *tv)
+{
+  if (tvisgcv(tv))
+    lj_gc2_markobj(g, gcV(tv));
+}
+
+static void gc2_mark_fixedstr(global_State *g)
+{
+  MSize i;
+  if (!g->str.tab || g->str.mask == ~(MSize)0)
+    return;
+  for (i = 0; i <= g->str.mask; i++) {
+    GCobj *o;
+    for (o = gcref(g->str.tab[i]); o != NULL; o = gcnext(o))
+      if (lj_obj_gcflags(o) & (LJ_GC_FIXED|LJ_GC_SFIXED))
+	lj_gc2_markobj(g, o);
+  }
+}
+
+static TValue *gc2_stack_scan_top(global_State *g, lua_State *L)
+{
+  TValue *frame, *top = L->top - 1, *bot = tvref(L->stack);
+  for (frame = L->base - 1; frame > bot + LJ_FR2; frame = frame_prev(frame)) {
+    GCfunc *fn = frame_func(frame);
+    TValue *ftop = frame;
+    if (isluafunc(fn))
+      ftop += funcproto(fn)->framesize;
+    if (ftop > top)
+      top = ftop;
+    if (!LJ_FR2)
+      lj_gc2_markobj(g, obj2gco(fn));
+  }
+  top++;
+  if (top > tvref(L->maxstack))
+    top = tvref(L->maxstack);
+  return top;
+}
+
+static void gc2_scan_thread_roots(global_State *g, lua_State *L)
+{
+  GCobj *uv;
+  TValue *o, *top;
+  if (!L || tvref(L->stack) == NULL)
+    return;
+  lj_gc2_markobj(g, obj2gco(L));
+  lj_gc2_markmem(g, tvref(L->stack));
+  top = gc2_stack_scan_top(g, L);
+  for (o = tvref(L->stack) + 1 + LJ_FR2; o < top; o++)
+    gc2_mark_tv(g, o);
+  if (tabref(L->env))
+    lj_gc2_markobj(g, obj2gco(tabref(L->env)));
+  for (uv = gcref(L->openupval); uv != NULL; uv = gcnext(uv)) {
+    lj_gc2_markobj(g, uv);
+    if (uv->gch.gct == ~LJ_TUPVAL)
+      gc2_mark_tv(g, uvval(gco2uv(uv)));
+  }
+}
+
+static void gc2_scan_global_roots(global_State *g)
+{
+  ptrdiff_t i;
+  lj_gc2_markobj(g, obj2gco(mainthread(g)));
+  lj_gc2_markobj(g, obj2gco(tabref(mainthread(g)->env)));
+  lj_gc2_markobj(g, obj2gco(vmthread(g)));
+  gc2_mark_tv(g, &g->registrytv);
+  for (i = 0; i < GCROOT_MAX; i++)
+    if (gcref(g->gcroot[i]) != NULL)
+      lj_gc2_markobj(g, gcref(g->gcroot[i]));
+  gc2_mark_fixedstr(g);
+  lj_gc2_markmem(g, g->str.tab);
+#if LJ_64
+  lj_gc2_markmem(g, mref(g->gc.lightudseg, uint32_t));
+#endif
+  lj_gc2_markmem(g, g->tmpbuf.b);
+  {
+    TGState *tg = G2TG(g);
+    if (tg)
+      lj_gc2_markmem(g, tg->tmpbuf.b);
+  }
+#if LJ_HASFFI
+  {
+    CTState *cts = ctype_ctsG(g);
+    if (cts) {
+      lj_gc2_markmem(g, cts);
+      lj_gc2_markmem(g, cts->tab);
+      lj_gc2_markmem(g, cts->cb.cbid);
+    }
+  }
+#endif
+#if LJ_HASJIT
+  {
+    jit_State *J = G2J(g);
+    lj_gc2_markmem(g, J->trace);
+    lj_gc2_markmem(g, J->irbuf ? J->irbuf + J->irbotlim : NULL);
+    lj_gc2_markmem(g, J->snapbuf);
+    lj_gc2_markmem(g, J->snapmapbuf);
+  }
+#endif
+}
+
+void lj_gc2_scan_roots(global_State *g, lua_State *L)
+{
+  if (!g)
+    return;
+  gc2_scan_global_roots(g);
+  gc2_scan_thread_roots(g, L);
 }
 
 static void *gc2_mark_base(GCobj *o)

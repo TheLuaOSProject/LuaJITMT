@@ -37,6 +37,7 @@ LJ_FUNC void lj_gc2_legacy_sweep_begin(global_State *g);
 LJ_FUNC void lj_gc2_legacy_preserve_abort(global_State *g);
 LJ_FUNC void lj_gc2_legacy_cycle_end(global_State *g);
 LJ_FUNC uint32_t lj_gc2_handshake(global_State *g, uint32_t actions);
+LJ_FUNC void lj_gc2_scan_roots(global_State *g, lua_State *L);
 LJ_FUNC int lj_gc2_markobj(global_State *g, GCobj *o);
 LJ_FUNC int lj_gc2_markmem(global_State *g, void *p);
 LJ_FUNC int lj_gc2_ismarkedmem(global_State *g, void *p);
