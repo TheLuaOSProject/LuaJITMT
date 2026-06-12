@@ -17,6 +17,7 @@
 #include "lj_str.h"
 #include "lj_tab.h"
 #include "lj_state.h"
+#include "lj_thr.h"
 #include "lj_bc.h"
 #if LJ_HASFFI
 #include "lj_ctype.h"
@@ -541,6 +542,7 @@ LJLIB_CF(jit_opt_start)
 static void jit_profile_callback(lua_State *L2, lua_State *L, int samples,
 				 int vmstate)
 {
+  LJStateClaim claim;
   TValue key;
   cTValue *tv;
   key.u64 = KEY_PROFILE_FUNC;
@@ -548,6 +550,8 @@ static void jit_profile_callback(lua_State *L2, lua_State *L, int samples,
   if (tvisfunc(tv)) {
     char vmst = (char)vmstate;
     int status;
+    if (!lj_state_tryclaim(L2, lj_thr_current_id(G(L)), &claim))
+      exit(EXIT_FAILURE);
     setfuncV(L2, L2->top++, funcV(tv));
     setthreadV(L2, L2->top++, L);
     setintV(L2->top++, samples);
@@ -557,6 +561,7 @@ static void jit_profile_callback(lua_State *L2, lua_State *L, int samples,
       if (G(L2)->panic) G(L2)->panic(L2);
       exit(EXIT_FAILURE);
     }
+    lj_state_dropclaim(&claim);
     lj_trace_abort(G(L2));
   }
 }

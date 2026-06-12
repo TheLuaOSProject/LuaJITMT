@@ -10,10 +10,13 @@
 
 #if LJ_HASPROFILE
 
+#include "lj_err.h"
 #include "lj_buf.h"
 #include "lj_frame.h"
 #include "lj_debug.h"
 #include "lj_dispatch.h"
+#include "lj_thr.h"
+#include "lj_tg.h"
 #if LJ_HASJIT
 #include "lj_jit.h"
 #include "lj_trace.h"
@@ -21,6 +24,12 @@
 #include "lj_profile.h"
 
 #include "luajit.h"
+
+static lua_State *profile_errstate(lua_State *L)
+{
+  lua_State *cur = lj_tg_cur_L(G(L));
+  return cur && G(cur) == G(L) ? cur : L;
+}
 
 #if LJ_PROFILE_SIGPROF
 
@@ -376,12 +385,16 @@ LUA_API void luaJIT_profile_stop(lua_State *L)
 LUA_API const char *luaJIT_profile_dumpstack(lua_State *L, const char *fmt,
 					     int depth, size_t *len)
 {
+  LJStateClaim claim;
   ProfileState *ps = &profile_state;
   SBuf *sb = &ps->sb;
+  if (!lj_state_tryclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(profile_errstate(L), "thread busy");
   setsbufL(sb, L);
   lj_buf_reset(sb);
   lj_debug_dumpstack(L, sb, fmt, depth);
   *len = (size_t)sbuflen(sb);
+  lj_state_dropclaim(&claim);
   return sb->b;
 }
 

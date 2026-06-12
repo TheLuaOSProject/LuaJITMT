@@ -180,4 +180,28 @@ if ! awk '
   exit 1
 fi
 
+if ! awk '
+  /LUA_API const char \*luaJIT_profile_dumpstack/ { infn = 1; next }
+  infn && /lj_state_tryclaim\(L/ { claim = 1 }
+  infn && /lj_debug_dumpstack\(L/ { dump = 1 }
+  infn && /lj_state_dropclaim\(&claim\)/ { drop = 1 }
+  infn && /^}/ { exit(claim && dump && drop ? 0 : 1) }
+  END { if (!claim || !dump || !drop) exit 1 }
+' "$ROOT/src/lj_profile.c"; then
+  echo "guardrail: luaJIT_profile_dumpstack must claim inspected lua_State" >&2
+  exit 1
+fi
+
+if ! awk '
+  /static void jit_profile_callback/ { infn = 1; next }
+  infn && /lj_state_tryclaim\(L2/ { claim = 1 }
+  infn && /lua_pcall\(L2/ { pcall = 1 }
+  infn && /lj_state_dropclaim\(&claim\)/ { drop = 1 }
+  infn && /^}/ { exit(claim && pcall && drop ? 0 : 1) }
+  END { if (!claim || !pcall || !drop) exit 1 }
+' "$ROOT/src/lib_jit.c"; then
+  echo "guardrail: jit.profile callback must claim callback coroutine" >&2
+  exit 1
+fi
+
 echo "M5 lua_State owner tests passed"

@@ -10,6 +10,7 @@
 #include "lua.h"
 #include "lauxlib.h"
 #include "lualib.h"
+#include "luajit.h"
 
 #include "lj_obj.h"
 #include "lj_thr.h"
@@ -347,6 +348,32 @@ static int busy_luaL_traceback(lua_State *L)
   return 0;
 }
 
+#if LJ_HASPROFILE
+static int busy_luaJIT_profile_dumpstack(lua_State *L)
+{
+  lua_State *co = lua_newthread(L);
+  size_t len = 0;
+  co->thr_owner = foreign_tid(L);
+  (void)luaJIT_profile_dumpstack(co, "l", 1, &len);
+  return 0;
+}
+
+static int busy_jit_profile_dumpstack(lua_State *L)
+{
+  lua_State *co = lua_newthread(L);
+  co->thr_owner = foreign_tid(L);
+  lua_getglobal(L, "require");
+  lua_pushliteral(L, "jit.profile");
+  lua_call(L, 1, 1);
+  lua_getfield(L, -1, "dumpstack");
+  lua_pushvalue(L, -3);
+  lua_pushliteral(L, "l");
+  lua_pushinteger(L, 1);
+  lua_call(L, 3, LUA_MULTRET);
+  return 0;
+}
+#endif
+
 static int busy_coroutine_status(lua_State *L)
 {
   lua_State *co = lua_newthread(L);
@@ -411,6 +438,12 @@ int main(void)
   expect_thread_busy(L, busy_debug_setlocal, "busy debug.setlocal");
   expect_thread_busy(L, busy_debug_traceback, "busy debug.traceback");
   expect_thread_busy(L, busy_luaL_traceback, "busy luaL_traceback");
+#if LJ_HASPROFILE
+  expect_thread_busy(L, busy_luaJIT_profile_dumpstack,
+		     "busy luaJIT_profile_dumpstack");
+  expect_thread_busy(L, busy_jit_profile_dumpstack,
+		     "busy jit.profile.dumpstack");
+#endif
   expect_thread_busy(L, busy_coroutine_status, "busy coroutine.status");
   check_lua_ok(L, luaL_dostring(L,
     "local co = coroutine.create(function() coroutine.yield(1) end)\n"
