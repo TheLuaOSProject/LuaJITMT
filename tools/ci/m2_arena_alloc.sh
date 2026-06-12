@@ -8,5 +8,10 @@ OUT=${TMPDIR:-/tmp}/lj_t_arena_alloc
 
 "$CC" -std=gnu99 -O2 -Wall -Wextra -Werror -I"$ROOT/src" \
   "$ROOT/tests/t-arena-alloc.c" "$ROOT/src/lj_arena.c" \
-  "$ROOT/src/lj_prng.c" -o "$OUT"
-"$OUT"
+  "$ROOT/src/lj_prng.c" -o "$OUT.alloc"
+"$OUT.alloc"
+
+"$CC" -std=gnu99 -O2 -Wall -Wextra -Werror -I"$ROOT/src" \
+  "$ROOT/tests/t-arena-realloc.c" "$ROOT/src/lj_arena.c" \
+  "$ROOT/src/lj_prng.c" -o "$OUT.realloc"
+"$OUT.realloc"

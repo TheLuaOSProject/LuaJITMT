@@ -88,6 +88,9 @@ LJ_FUNC void lj_arena_alloc_init(TGAlloc *alloc);
 LJ_FUNC void lj_arena_alloc_fini(TGAlloc *alloc);
 LJ_FUNC void *lj_arena_alloc(TGAlloc *alloc, PRNGState *rs, size_t size,
 			     uint32_t flags);
+LJ_FUNC void lj_arena_free(TGAlloc *alloc, void *p, size_t size);
+LJ_FUNC void *lj_arena_realloc(TGAlloc *alloc, PRNGState *rs, void *p,
+			       size_t osize, size_t nsize, uint32_t flags);
 
 static LJ_AINLINE GCArena *lj_arena_of(const void *p)
 {
@@ -114,9 +117,19 @@ static LJ_AINLINE void lj_arena_bm_set(uint64_t *bm, uint32_t i)
   bm[i >> 6] |= (uint64_t)1 << (i & 63);
 }
 
+static LJ_AINLINE void lj_arena_bm_clear(uint64_t *bm, uint32_t i)
+{
+  bm[i >> 6] &= ~((uint64_t)1 << (i & 63));
+}
+
 static LJ_AINLINE uint32_t lj_arena_state(const GCArena *a, uint32_t i)
 {
   return (lj_arena_bm_get(a->block, i) << 1) | lj_arena_bm_get(a->mark, i);
+}
+
+static LJ_AINLINE uint32_t lj_arena_ncells(size_t size)
+{
+  return (uint32_t)((size + LJ_CELL_SIZE-1u) >> LJ_CELL_SHIFT);
 }
 
 LJ_STATIC_ASSERT(LJ_ARENA_SIZE == 65536u);

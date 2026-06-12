@@ -172,6 +172,58 @@ static uint32_t arena_kind(uint32_t flags)
 				       LJ_ARENAK_PLAIN;
 }
 
+static uint32_t arena_bin(uint32_t ncells)
+{
+  return ncells < LJ_ALLOC_NBINS ? ncells - 1u : LJ_ALLOC_NBINS - 1u;
+}
+
+static void arena_set_alloc(GCArena *a, uint32_t cell, int black)
+{
+  lj_arena_bm_set(a->block, cell);
+  if (black)
+    lj_arena_bm_set(a->mark, cell);
+  else
+    lj_arena_bm_clear(a->mark, cell);
+}
+
+static void arena_set_extent(GCArena *a, uint32_t cell)
+{
+  lj_arena_bm_clear(a->block, cell);
+  lj_arena_bm_clear(a->mark, cell);
+}
+
+static void arena_insert_run(TGAlloc *alloc, GCArena *a, uint32_t start,
+			     uint32_t len)
+{
+  uint32_t k = arena_kind(a->hdr.flags);
+  uint32_t b = arena_bin(len);
+  LJArenaFreeRun *run = (LJArenaFreeRun *)lj_arena_cellptr(a, start);
+  uint32_t i;
+  lj_arena_bm_clear(a->block, start);
+  lj_arena_bm_set(a->mark, start);
+  for (i = 1; i < len; i++)
+    arena_set_extent(a, start + i);
+  run->start = start;
+  run->len = len;
+  run->next = alloc->bins[k][b];
+  alloc->bins[k][b] = run;
+}
+
+static LJArenaFreeRun **arena_find_run(TGAlloc *alloc, uint32_t k,
+				       uint32_t ncells)
+{
+  uint32_t b;
+  for (b = arena_bin(ncells); b < LJ_ALLOC_NBINS; b++) {
+    LJArenaFreeRun **pp = &alloc->bins[k][b];
+    while (*pp) {
+      if ((*pp)->len >= ncells)
+	return pp;
+      pp = &(*pp)->next;
+    }
+  }
+  return NULL;
+}
+
 void lj_arena_alloc_init(TGAlloc *alloc)
 {
   memset(alloc, 0, sizeof(*alloc));
@@ -214,17 +266,71 @@ void *lj_arena_alloc(TGAlloc *alloc, PRNGState *rs, size_t size,
   uint32_t ncells, cell;
   if (size == 0 || size > LJ_HUGE_THRESHOLD)
     return NULL;
-  ncells = (uint32_t)((size + LJ_CELL_SIZE-1u) >> LJ_CELL_SHIFT);
+  ncells = lj_arena_ncells(size);
   if (ncells > LJ_ARENA_CELLS - LJ_AFIRST_CELL)
     return NULL;
+  {
+    LJArenaFreeRun **pp = arena_find_run(alloc, k, ncells);
+    if (pp) {
+      LJArenaFreeRun *run = *pp;
+      GCArena *a = lj_arena_of(run);
+      uint32_t start = run->start;
+      uint32_t len = run->len;
+      *pp = run->next;
+      if (len > ncells)
+	arena_insert_run(alloc, a, start + ncells, len - ncells);
+      arena_set_alloc(a, start, alloc->alloc_black);
+      return lj_arena_cellptr(a, start);
+    }
+  }
   if (!b->a || b->cell + ncells > b->end) {
     if (!arena_alloc_fresh(alloc, rs, flags))
       return NULL;
   }
   cell = b->cell;
   b->cell += ncells;
-  lj_arena_bm_set(b->a->block, cell);
-  if (alloc->alloc_black)
-    lj_arena_bm_set(b->a->mark, cell);
+  arena_set_alloc(b->a, cell, alloc->alloc_black);
   return lj_arena_cellptr(b->a, cell);
+}
+
+void lj_arena_free(TGAlloc *alloc, void *p, size_t size)
+{
+  GCArena *a;
+  uint32_t start, ncells;
+  if (!p || size == 0 || size > LJ_HUGE_THRESHOLD)
+    return;
+  a = lj_arena_of(p);
+  start = lj_arena_cellof(p);
+  ncells = lj_arena_ncells(size);
+  if (start < LJ_AFIRST_CELL || start + ncells > LJ_ARENA_CELLS)
+    return;
+  arena_insert_run(alloc, a, start, ncells);
+}
+
+void *lj_arena_realloc(TGAlloc *alloc, PRNGState *rs, void *p,
+		       size_t osize, size_t nsize, uint32_t flags)
+{
+  void *np;
+  if (!p)
+    return lj_arena_alloc(alloc, rs, nsize, flags);
+  if (nsize == 0) {
+    lj_arena_free(alloc, p, osize);
+    return NULL;
+  }
+  if (nsize <= osize) {
+    uint32_t ocells = lj_arena_ncells(osize);
+    uint32_t ncells = lj_arena_ncells(nsize);
+    if (ncells < ocells) {
+      GCArena *a = lj_arena_of(p);
+      arena_insert_run(alloc, a, lj_arena_cellof(p) + ncells,
+		       ocells - ncells);
+    }
+    return p;
+  }
+  np = lj_arena_alloc(alloc, rs, nsize, flags);
+  if (!np)
+    return NULL;
+  memcpy(np, p, osize);
+  lj_arena_free(alloc, p, osize);
+  return np;
 }
