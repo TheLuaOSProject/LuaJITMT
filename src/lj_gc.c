@@ -12,6 +12,7 @@
 #include "lj_obj.h"
 #include "lj_atomic.h"
 #include "lj_gc.h"
+#include "lj_gc2.h"
 #include "lj_err.h"
 #include "lj_buf.h"
 #include "lj_str.h"
@@ -43,64 +44,14 @@
 
 /* -- Mark phase ---------------------------------------------------------- */
 
-static void *gc_arena_mark_base(GCobj *o)
-{
-#if LJ_HASFFI
-  if (o->gch.gct == ~LJ_TCDATA) {
-    GCcdata *cd = gco2cd(o);
-    if (cdataisv(cd))
-      return memcdatav(cd);
-  }
-#endif
-  return o;
-}
-
 void lj_gc_arena_markobj(global_State *g, GCobj *o)
 {
-  lj_gc_arena_markmem(g, gc_arena_mark_base(o));
+  lj_gc2_markobj(g, o);
 }
 
 void lj_gc_arena_markmem(global_State *g, void *p)
 {
-  TGState *tg = G2TG(g);
-  GCArena *a;
-  uint32_t cell;
-  if (!p || !tg || !(tg->tg_flags & TGF_ARENA_INTERNAL))
-    return;
-  a = lj_arena_of(p);
-  if (lj_arena_ishuge(a)) {
-    if (tg->tg_flags & TGF_HUGETAB)
-      lj_arena_hugetab_mark(&tg->huge, p, NULL);
-    return;
-  }
-  cell = lj_arena_cellof(p);
-  if (cell >= LJ_AFIRST_CELL && cell < LJ_ARENA_CELLS &&
-      lj_arena_bm_get(a->block, cell))
-    la_bit_test_and_set64(&a->mark[cell >> 6], cell & 63);  /* 05 §5.6.1. */
-}
-
-static void gc_arena_alloc_black(global_State *g, int on)
-{
-  TGState *tg = G2TG(g);
-  if (tg && (tg->tg_flags & TGF_ARENA_INTERNAL))
-    tg->alloc.alloc_black = (uint8_t)on;
-}
-
-static void gc_arena_mark_phase(global_State *g, uint32_t phase)
-{
-  TGState *tg = G2TG(g);
-  if (tg && (tg->tg_flags & TGF_ARENA_INTERNAL))
-    tg->mark_active = phase;
-}
-
-static void gc_arena_clear_marks(global_State *g)
-{
-  TGState *tg = G2TG(g);
-  if (tg && (tg->tg_flags & TGF_ARENA_INTERNAL)) {
-    lj_arena_alloc_clear_marks(&tg->alloc);
-    if (tg->tg_flags & TGF_HUGETAB)
-      lj_arena_hugetab_clear_marks(&tg->huge);
-  }
+  (void)lj_gc2_markmem(g, p);
 }
 
 static void gc_arena_rebuild_free(global_State *g)
@@ -115,7 +66,7 @@ static void gc_arena_finish_sweep_boundary(global_State *g)
   TGState *tg = G2TG(g);
   if (!tg || !(tg->tg_flags & TGF_ARENA_INTERNAL))
     return;
-  if (tg->mark_active == 2 && gcref(g->gc.mmudata) == NULL) {
+  if (g->gc2.phase == LJ_GC2_SWEEP && gcref(g->gc.mmudata) == NULL) {
     uint32_t epoch = ++tg->alloc.sweep_epoch;
     lj_arena_alloc_prepare_sweep_kind(&tg->alloc, LJ_ARENAK_TRAVERSABLE);
     lj_arena_alloc_sweep_kind(&tg->alloc, LJ_ARENAK_TRAVERSABLE, epoch, 0);
@@ -129,35 +80,21 @@ static void gc_arena_finish_sweep_boundary(global_State *g)
 static void gc_arena_verify_marked(global_State *g, GCobj *o)
 {
   TGState *tg = G2TG(g);
-  GCArena *a;
-  void *p;
-  uint32_t cell;
+  int marked;
   if (!tg || !(tg->tg_flags & TGF_ARENA_INTERNAL))
     return;
-  p = gc_arena_mark_base(o);
-  a = lj_arena_of(p);
-  if (lj_arena_ishuge(a)) {
-    LJHugeInfo hi;
-    if (!(tg->tg_flags & TGF_HUGETAB) ||
-	lj_arena_hugetab_lookup(&tg->huge, p, &hi) != 1)
-      return;
-    lj_assertG((hi.flags & LJ_HUGEF_MARK) != 0,
-	       "unmarked huge object at arena verify boundary");
-    return;
-  }
-  cell = lj_arena_cellof(p);
-  if (cell < LJ_AFIRST_CELL || cell >= LJ_ARENA_CELLS ||
-      !lj_arena_bm_get(a->block, cell))
+  marked = lj_gc2_ismarked(g, o);
+  if (marked < 0)
     return;  /* Custom aligned objects need allocation-base marking first. */
-  lj_assertG(lj_arena_bm_get(a->mark, cell) != 0,
-	     "unmarked arena object at verify boundary");
+  lj_assertG(marked != 0, "unmarked arena object at verify boundary");
 }
 
 static void gc_arena_verify_sweep_boundary(global_State *g)
 {
   TGState *tg = G2TG(g);
   GCobj *o;
-  if (!tg || !(tg->tg_flags & TGF_ARENA_INTERNAL) || tg->mark_active != 2 ||
+  if (!tg || !(tg->tg_flags & TGF_ARENA_INTERNAL) ||
+      g->gc2.phase != LJ_GC2_SWEEP ||
       gcref(g->gc.mmudata) != NULL)
     return;
   for (o = gcref(g->gc.root); o != NULL; o = gcnext(o)) {
@@ -267,9 +204,7 @@ static void gc_mark_gcroot(global_State *g)
 /* Start a GC cycle and mark the root set. */
 static void gc_mark_start(global_State *g)
 {
-  gc_arena_clear_marks(g);
-  gc_arena_alloc_black(g, 1);
-  gc_arena_mark_phase(g, 1);
+  lj_gc2_legacy_mark_begin(g);
   setgcrefnull(g->gc.gray);
   setgcrefnull(g->gc.grayagain);
   setgcrefnull(g->gc.weak);
@@ -820,7 +755,7 @@ static void atomic(global_State *g, lua_State *L)
 
   /* All marking done, clear weak tables. */
   gc_clearweak(g, gcref(g->gc.weak));
-  gc_arena_mark_phase(g, 2);
+  lj_gc2_legacy_sweep_begin(g);
 
   lj_buf_shrink(L, &G2TG(g)->tmpbuf);  /* Shrink temp buffer. */
 
@@ -874,8 +809,7 @@ static size_t gc_onestep(lua_State *L)
 	g->gc.state = GCSfinalize;
       } else {  /* Otherwise skip this phase to help the JIT. */
 	g->gc.state = GCSpause;  /* End of GC cycle. */
-	gc_arena_alloc_black(g, 0);
-	gc_arena_mark_phase(g, 0);
+	lj_gc2_legacy_cycle_end(g);
 	g->gc.debt = 0;
       }
     }
@@ -895,8 +829,7 @@ static size_t gc_onestep(lua_State *L)
     }
     gc_arena_finish_sweep_boundary(g);
     g->gc.state = GCSpause;  /* End of GC cycle. */
-    gc_arena_alloc_black(g, 0);
-    gc_arena_mark_phase(g, 0);
+    lj_gc2_legacy_cycle_end(g);
     g->gc.debt = 0;
     return 0;
   default:

@@ -637,6 +637,13 @@ typedef struct StrInternState {
 } StrInternState;
 
 typedef struct TGState TGState;
+typedef struct GC2State {
+  uint32_t phase;	/* LJ_GC2_*; authoritative scaffold phase. */
+  uint32_t cycle;	/* Monotonically increasing legacy cycle id. */
+  uint64_t marks_this_round;  /* New arena/HugeTab marks this round. */
+  TGState *tg_list;	/* Registered per-thread state blocks. */
+  uint32_t n_threads;	/* Number of registered TG blocks. */
+} GC2State;
 #if LJ_HASJIT
 typedef struct jit_State jit_State;
 #endif
@@ -676,6 +683,7 @@ typedef struct global_State {
   jit_State *jitp;	/* Pointer to the universe-global JIT state. */
 #endif
   TGState *main_tg;	/* Main per-OS-thread state block. */
+  GC2State gc2;		/* Concurrent GC scaffold state. */
 } global_State;
 
 #define mainthread(g)	(&gcref(g->mainthref)->th)

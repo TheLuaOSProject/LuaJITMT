@@ -11,6 +11,7 @@
 
 #include "lj_obj.h"
 #include "lj_gc.h"
+#include "lj_gc2.h"
 #include "lj_err.h"
 #include "lj_buf.h"
 #include "lj_str.h"
@@ -351,6 +352,7 @@ LUA_API lua_State *lua_newstate(lua_Alloc allocf, void *allocd)
   g->gc.stepmul = LUAI_GCMUL;
   lj_dispatch_init((GG_State *)L);
   lj_tg_init((GG_State *)L, arena_internal);
+  lj_gc2_init(g);
   L->status = LUA_ERRERR+1;  /* Avoid touching the stack upon memory error. */
   if (lj_vm_cpcall(L, NULL, NULL, cpluaopen) != 0) {
     /* Memory allocation error: free partial state. */
