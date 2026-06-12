@@ -7,6 +7,7 @@
 
 #include "lua.h"
 #include "lauxlib.h"
+#include "lualib.h"
 
 #include "lj_obj.h"
 #include "lj_atomic.h"
@@ -51,6 +52,7 @@ int main(void)
   ASMFunction saved_dispatch;
 
   assert(L != NULL);
+  luaL_openlibs(L);
   g = G(L);
   tg = G2TG(g);
   assert(tg != NULL);
@@ -111,6 +113,35 @@ int main(void)
   assert(g->gc2.hs_actions == actions);
   assert((tg->tg_flags & TGF_STOPREQ) != 0);
   tg->tg_flags &= (uint8_t)~TGF_STOPREQ;
+
+#if LJ_HASJIT
+  assert(luaL_dostring(L,
+    "jit.opt.start('hotloop=1', 'hotexit=1')\n"
+    "local s = 0\n"
+    "for i = 1, 200 do s = s + i end\n"
+    "return s\n") == LUA_OK);
+  lua_pop(L, 1);
+  assert(traceref(G2J(g), 1) != NULL || G2J(g)->freetrace > 0);
+  epoch0 = g->gc2.hs_epoch;
+  actions = LJ_GC2_HS_FLUSHJ;
+  assert(lj_gc2_handshake(g, actions) == 1);
+  assert(g->gc2.hs_epoch == epoch0 + 1u);
+  assert(g->gc2.hs_pending == 0);
+  assert(g->gc2.hs_actions == actions);
+  assert(G2J(g)->cur.traceno == 0);
+  assert(G2J(g)->freetrace == 0);
+
+  assert(G2J(g)->state == LJ_TRACE_IDLE);
+  G2J(g)->state = LJ_TRACE_RECORD;
+  epoch0 = g->gc2.hs_epoch;
+  actions = LJ_GC2_HS_EXIT_TRACES;
+  assert(lj_gc2_handshake(g, actions) == 1);
+  assert(g->gc2.hs_epoch == epoch0 + 1u);
+  assert(g->gc2.hs_pending == 0);
+  assert(g->gc2.hs_actions == actions);
+  assert((G2J(g)->state & LJ_TRACE_ACTIVE) == 0);
+  G2J(g)->state = LJ_TRACE_IDLE;
+#endif
 
   lua_newtable(L);
   root_tab = tabV(L->top - 1);

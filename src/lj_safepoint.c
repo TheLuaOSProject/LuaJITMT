@@ -12,6 +12,7 @@
 #include "lj_gc2.h"
 #include "lj_safepoint.h"
 #include "lj_tg.h"
+#include "lj_trace.h"
 
 static void safepoint_apply_actions(global_State *g, TGState *tg,
 				    uint32_t actions)
@@ -35,9 +36,14 @@ static void safepoint_apply_actions(global_State *g, TGState *tg,
     lj_arena_alloc_prepare_sweep(&tg->alloc);  /* 04 section 4.6. */
   if (actions & LJ_GC2_HS_REDISPATCH)
     lj_tg_sync_dispatch_tg(g, tg);  /* 03 section 3.6, 07 section 7.3. */
+  if (actions & LJ_GC2_HS_EXIT_TRACES)
+    lj_trace_abort(g);  /* 08 section 8.7: no active recorder past ack. */
+  if (actions & LJ_GC2_HS_FLUSHJ) {
+    lua_State *L = tg->cur_L ? tg->cur_L : mainthread(g);
+    (void)lj_trace_flushall(L);  /* Temporary single-mutator flush action. */
+  }
   if (actions & LJ_GC2_HS_STOPREQ)
     tg->tg_flags |= TGF_STOPREQ;  /* 09 section 9.6 shutdown request. */
-  /* EXIT_TRACES and FLUSHJ are reserved until their owners land. */
 }
 
 static uint32_t safepoint_ack_tg(global_State *g, TGState *tg)
