@@ -10,6 +10,7 @@
 
 #if LJ_HASJIT
 
+#include "lj_arena.h"
 #include "lj_gc.h"
 #include "lj_err.h"
 #include "lj_debug.h"
@@ -127,7 +128,8 @@ GCtrace * LJ_FASTCALL lj_trace_alloc(lua_State *L, GCtrace *T)
   size_t sz = sztr + szins +
 	      T->nsnap*sizeof(SnapShot) +
 	      T->nsnapmap*sizeof(SnapEntry);
-  GCtrace *T2 = lj_mem_newt(L, (MSize)sz, GCtrace);
+  GCtrace *T2 = (GCtrace *)lj_mem_newgco_raw(L, (MSize)sz,
+					     LJ_AF_TRAVERSABLE);
   char *p = (char *)T2 + sztr;
   T2->gct = ~LJ_TTRACE;
   lj_obj_setgcflags(obj2gco(T2), 0);

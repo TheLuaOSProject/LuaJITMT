@@ -911,14 +911,14 @@ void *lj_mem_realloc(lua_State *L, void *p, GCSize osz, GCSize nsz)
   return p;
 }
 
-/* Allocate new GC object and link it to the root set. */
-void * LJ_FASTCALL lj_mem_newgco(lua_State *L, GCSize size)
+/* Allocate raw storage for a GC object without linking it. */
+void *lj_mem_newgco_raw(lua_State *L, GCSize size, uint32_t flags)
 {
   global_State *g = G(L);
   GCobj *o;
   if (g->allocf == lj_arena_allocf)
     o = (GCobj *)lj_arena_allocd_alloc((LJArenaAllocD *)g->allocd, size,
-				       LJ_AF_TRAVERSABLE);
+				       flags);
   else
     o = (GCobj *)g->allocf(g->allocd, NULL, 0, size);
   if (o == NULL)
@@ -926,6 +926,14 @@ void * LJ_FASTCALL lj_mem_newgco(lua_State *L, GCSize size)
   lj_assertG(checkptrGC(o),
 	     "allocated memory address %p outside required range", o);
   g->gc.total += size;
+  return o;
+}
+
+/* Allocate new GC object and link it to the root set. */
+void * LJ_FASTCALL lj_mem_newgco(lua_State *L, GCSize size)
+{
+  global_State *g = G(L);
+  GCobj *o = (GCobj *)lj_mem_newgco_raw(L, size, LJ_AF_TRAVERSABLE);
   lj_obj_setgcwr(o, g->gc.root);
   setgcref(g->gc.root, o);
   newwhite(g, o);

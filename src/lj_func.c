@@ -10,6 +10,7 @@
 #define LUA_CORE
 
 #include "lj_obj.h"
+#include "lj_arena.h"
 #include "lj_gc.h"
 #include "lj_func.h"
 #include "lj_trace.h"
@@ -51,7 +52,8 @@ static GCupval *func_finduv(lua_State *L, TValue *slot)
     pp = lj_obj_gcwref(obj2gco(p));
   }
   /* No matching upvalue found. Create a new one. */
-  uv = lj_mem_newt(L, sizeof(GCupval), GCupval);
+  uv = (GCupval *)lj_mem_newgco_raw(L, sizeof(GCupval),
+				    LJ_AF_TRAVERSABLE);
   newwhite(g, uv);
   uv->gct = ~LJ_TUPVAL;
   uv->closed = 0;  /* Still open. */

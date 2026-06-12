@@ -12,6 +12,10 @@
 #include "lj_obj.h"
 #include "lj_arena.h"
 #include "lj_tg.h"
+#if LJ_HASJIT
+#include "lj_dispatch.h"
+#include "lj_jit.h"
+#endif
 
 static int arena_marked(global_State *g, GCobj *o)
 {
@@ -33,6 +37,18 @@ static int arena_marked(global_State *g, GCobj *o)
   return lj_arena_bm_get(a->mark, cell) != 0;
 }
 
+#if LJ_HASJIT
+static GCtrace *find_trace(global_State *g)
+{
+  jit_State *J = G2J(g);
+  MSize i;
+  for (i = 1; i < J->sizetrace; i++)
+    if (gcref(J->trace[i]) != NULL)
+      return (GCtrace *)gcref(J->trace[i]);
+  return NULL;
+}
+#endif
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -41,12 +57,29 @@ int main(void)
   TValue *tv;
   GCtab *tab;
   GCstr *str;
+  GCfunc *fn;
+  GCupval *uv;
   LJHugeInfo hi;
+#if LJ_HASJIT
+  GCtrace *trace;
+#endif
 
   assert(L != NULL);
   luaL_openlibs(L);
   assert(luaL_dostring(L,
     "keep = { t = { 1, 2, 3 }, s = string.rep('m', 22000) }\n"
+    "keep.co = coroutine.create(function()\n"
+    "  local x = { 4, 5, 6 }\n"
+    "  keep.f = function() return x end\n"
+    "  coroutine.yield()\n"
+    "end)\n"
+    "assert(coroutine.resume(keep.co))\n"
+#if LJ_HASJIT
+    "if jit and jit.opt then jit.opt.start('hotloop=1') end\n"
+    "local n = 0\n"
+    "for r = 1, 4 do for i = 1, 100 do n = n + i end end\n"
+    "keep.n = n\n"
+#endif
     "collectgarbage('collect')\n") == LUA_OK);
   g = G(L);
   tg = G2TG(g);
@@ -68,6 +101,26 @@ int main(void)
   assert(lj_arena_hugetab_lookup(&tg->huge, str, &hi) == 1);
   assert((hi.flags & LJ_HUGEF_TRAVERSABLE) == 0);
   assert(arena_marked(g, obj2gco(str)));
+  L->top--;
+
+  lua_getfield(L, -1, "f");
+  tv = L->top - 1;
+  assert(tvisfunc(tv));
+  fn = funcV(tv);
+  assert(isluafunc(fn));
+  assert(fn->l.nupvalues == 1);
+  uv = gco2uv(gcref(fn->l.uvptr[0]));
+  assert(!uv->closed);
+  assert((lj_arena_of(uv)->hdr.flags & LJ_AF_TRAVERSABLE) != 0);
+  assert(arena_marked(g, obj2gco(uv)));
+  L->top--;
+
+#if LJ_HASJIT
+  trace = find_trace(g);
+  assert(trace != NULL);
+  assert((lj_arena_of(trace)->hdr.flags & LJ_AF_TRAVERSABLE) != 0);
+  assert(arena_marked(g, obj2gco(trace)));
+#endif
 
   lua_close(L);
   printf("t-arena-gcmark OK: legacy marks mirrored into arena metadata\n");
