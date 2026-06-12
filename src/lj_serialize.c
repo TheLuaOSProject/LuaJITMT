@@ -487,7 +487,7 @@ GCstr * LJ_FASTCALL lj_serialize_encode(lua_State *L, cTValue *o)
   SBufExt sbx;
   char *w;
   memset(&sbx, 0, sizeof(SBufExt));
-  lj_bufx_set_borrow(L, &sbx, &G(L)->tmpbuf);
+  lj_bufx_set_borrow(L, &sbx, &L2TG(L)->tmpbuf);
   sbx.depth = LJ_SERIALIZE_DEPTH;
   w = serialize_put(sbx.w, &sbx, o);
   return lj_str_new(L, sbx.b, (size_t)(w - sbx.b));

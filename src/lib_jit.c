@@ -724,14 +724,14 @@ static void jit_init(lua_State *L)
   J->flags = jit_cpudetect() | JIT_F_ON | JIT_F_OPT_DEFAULT;
   memcpy(J->param, jit_param_default, sizeof(J->param));
 #if LJ_TARGET_UNALIGNED
-  G(L)->tmptv.u64 = U64x(0000504d,4d500000);
+  L2TG(L)->tmptv.u64 = U64x(0000504d,4d500000);
 #endif
   lj_dispatch_update(G(L), 0);
 #if LJ_TARGET_UNALIGNED
   /* If you get a crash below then your toolchain indicates unaligned
   ** accesses are OK, but your kernel disagrees. I.e. fix your toolchain.
   */
-  if (*(uint32_t *)((char *)&G(L)->tmptv + 2) != 0x504d4d50u) L->top = NULL;
+  if (*(uint32_t *)((char *)&L2TG(L)->tmptv + 2) != 0x504d4d50u) L->top = NULL;
 #endif
 }
 #endif
@@ -759,4 +759,3 @@ LUALIB_API int luaopen_jit(lua_State *L)
   L->top -= 2;
   return 1;
 }
-

@@ -382,7 +382,7 @@ static void callhook(lua_State *L, int event, BCLine line)
 #endif
     hookf(L, &ar);
     lj_assertG(hook_active(g), "active hook flag removed");
-    setgcref(g->cur_L, obj2gco(L));
+    lj_tg_setcur_L(g, L);
 #if LJ_HASPROFILE && !LJ_PROFILE_SIGPROF
     lj_profile_hook_leave(g);
 #else
@@ -561,9 +561,8 @@ void LJ_FASTCALL lj_dispatch_profile(lua_State *L, const BCIns *pc)
   lj_profile_interpreter(L);
   setcframe_pc(cf, oldpc);
   g = G(L);
-  setgcref(g->cur_L, obj2gco(L));
+  lj_tg_setcur_L(g, L);
   setvmstate(g, INTERP);
   ERRNO_RESTORE
 }
 #endif
-

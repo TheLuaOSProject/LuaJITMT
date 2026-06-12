@@ -198,7 +198,7 @@ static void LJ_FASTCALL recff_nyi(jit_State *J, RecordFFData *rd)
 static TRef recff_bufhdr(jit_State *J)
 {
   return emitir(IRT(IR_BUFHDR, IRT_PGC),
-		lj_ir_kptr(J, &J2G(J)->tmpbuf), IRBUFHDR_RESET);
+		lj_ir_kptr(J, &J2TG(J)->tmpbuf), IRBUFHDR_RESET);
 }
 
 /* Emit TMPREF. */

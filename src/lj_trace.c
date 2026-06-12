@@ -396,7 +396,7 @@ static void penalty_pc(jit_State *J, GCproto *pt, BCIns *pc, TraceError e)
     if (mref(J->penalty[i].pc, const BCIns) == pc) {  /* Cache slot found? */
       /* First try to bump its hotcount several times. */
       val = ((uint32_t)J->penalty[i].val << 1) +
-	    (lj_prng_u64(&J2G(J)->prng) & ((1u<<PENALTY_RNDBITS)-1));
+	    (lj_prng_u64(&J2TG(J)->prng) & ((1u<<PENALTY_RNDBITS)-1));
       if (val > PENALTY_MAX) {
 	blacklist_pc(pt, pc);  /* Blacklist it, if that didn't help. */
 	return;
@@ -468,8 +468,8 @@ static void trace_start(jit_State *J)
   setgcref(J->cur.startpt, obj2gco(J->pt));
 
   lj_vmevent_send_(J2G(J), TRACE,
-    TValue savetv = J2G(J)->tmptv;
-    TValue savetv2 = J2G(J)->tmptv2;
+    TValue savetv = J2TG(J)->tmptv;
+    TValue savetv2 = J2TG(J)->tmptv2;
     TraceNo parent = J->parent;
     ExitNo exitno = J->exitno;
     setstrV(V, V->top++, lj_str_newlit(V, "start"));
@@ -487,8 +487,8 @@ static void trace_start(jit_State *J)
       }
     }
   ,
-    J2G(J)->tmptv = savetv;
-    J2G(J)->tmptv2 = savetv2;
+    J2TG(J)->tmptv = savetv;
+    J2TG(J)->tmptv2 = savetv2;
     J->parent = parent;
     J->exitno = exitno;
   );
@@ -700,8 +700,8 @@ static TValue *trace_state(lua_State *L, lua_CFunction dummy, void *ud)
       setvmstate(J2G(J), RECORD);
       lj_vmevent_send_(J2G(J), RECORD,
 	/* Save/restore state for trace recorder. */
-	TValue savetv = J2G(J)->tmptv;
-	TValue savetv2 = J2G(J)->tmptv2;
+	TValue savetv = J2TG(J)->tmptv;
+	TValue savetv2 = J2TG(J)->tmptv2;
 	TraceNo parent = J->parent;
 	ExitNo exitno = J->exitno;
 	setintV(V->top++, J->cur.traceno);
@@ -709,8 +709,8 @@ static TValue *trace_state(lua_State *L, lua_CFunction dummy, void *ud)
 	setintV(V->top++, J->pt ? (int32_t)proto_bcpos(J->pt, J->pc) : -1);
 	setintV(V->top++, J->framedepth);
       ,
-	J2G(J)->tmptv = savetv;
-	J2G(J)->tmptv2 = savetv2;
+	J2TG(J)->tmptv = savetv;
+	J2TG(J)->tmptv2 = savetv2;
 	J->parent = parent;
 	J->exitno = exitno;
       );

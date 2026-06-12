@@ -520,7 +520,7 @@ static void gc_call_finalizer(global_State *g, lua_State *L,
   setgcV(VL, top, o, ~o->gch.gct);
   VL->top = top+1;
   errcode = lj_vm_pcall(VL, top, 1+0, -1);  /* Stack: |mo|o| -> | */
-  setgcref(g->cur_L, obj2gco(L));
+  lj_tg_setcur_L(g, L);
   hook_restore(g, oldh);
   if (LJ_HASPROFILE && (oldh & HOOK_PROFILE)) lj_dispatch_update(g, 0);
   g->gc.threshold = oldt;  /* Restore GC threshold. */
@@ -540,7 +540,7 @@ static void gc_finalize(lua_State *L)
   global_State *g = G(L);
   GCobj *o = gcnext(gcref(g->gc.mmudata));
   cTValue *mo;
-  lj_assertG(tvref(g->jit_base) == NULL, "finalizer called on trace");
+  lj_assertG(lj_tg_jit_base(g) == NULL, "finalizer called on trace");
   /* Unchain from list of userdata to be finalized. */
   if (o == gcref(g->gc.mmudata))
     setgcrefnull(g->gc.mmudata);
@@ -644,7 +644,7 @@ static void atomic(global_State *g, lua_State *L)
   /* All marking done, clear weak tables. */
   gc_clearweak(g, gcref(g->gc.weak));
 
-  lj_buf_shrink(L, &g->tmpbuf);  /* Shrink temp buffer. */
+  lj_buf_shrink(L, &G2TG(g)->tmpbuf);  /* Shrink temp buffer. */
 
   /* Prepare for sweep phase. */
   g->gc.currentwhite = (uint8_t)otherwhite(g);  /* Flip current white. */
@@ -667,7 +667,7 @@ static size_t gc_onestep(lua_State *L)
     g->gc.state = GCSatomic;  /* End of mark phase. */
     return 0;
   case GCSatomic:
-    if (tvref(g->jit_base))  /* Don't run atomic phase on trace. */
+    if (lj_tg_jit_base(g))  /* Don't run atomic phase on trace. */
       return LJ_MAX_MEM;
     atomic(g, L);
     g->gc.state = GCSsweepstring;  /* Start of sweep phase. */
@@ -702,7 +702,7 @@ static size_t gc_onestep(lua_State *L)
   case GCSfinalize:
     if (gcref(g->gc.mmudata) != NULL) {
       GCSize old = g->gc.total;
-      if (tvref(g->jit_base))  /* Don't call finalizers on trace. */
+      if (lj_tg_jit_base(g))  /* Don't call finalizers on trace. */
 	return LJ_MAX_MEM;
       gc_finalize(L);  /* Finalize one userdata object. */
       if (old >= g->gc.total && g->gc.estimate > old - g->gc.total)
@@ -763,8 +763,8 @@ void LJ_FASTCALL lj_gc_step_fixtop(lua_State *L)
 /* Perform multiple GC steps. Called from JIT-compiled code. */
 int LJ_FASTCALL lj_gc_step_jit(global_State *g, MSize steps)
 {
-  lua_State *L = gco2th(gcref(g->cur_L));
-  L->base = tvref(G(L)->jit_base);
+  lua_State *L = lj_tg_cur_L(g);
+  L->base = lj_tg_jit_base(g);
   L->top = curr_topL(L);
   while (steps-- > 0 && lj_gc_step(L) == 0)
     ;
@@ -904,4 +904,3 @@ void *lj_mem_grow(lua_State *L, void *p, MSize *szp, MSize lim, MSize esz)
   *szp = sz;
   return p;
 }
-

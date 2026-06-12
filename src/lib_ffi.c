@@ -31,6 +31,7 @@
 #include "lj_clib.h"
 #include "lj_strfmt.h"
 #include "lj_ff.h"
+#include "lj_tg.h"
 #include "lj_lib.h"
 
 /* -- C type checks ------------------------------------------------------- */
@@ -608,7 +609,7 @@ LJLIB_CF(ffi_istype)	LJLIB_REC(.)
     }
   }
   setboolV(L->top-1, b);
-  setboolV(&G(L)->tmptv2, b);  /* Remember for trace recorder. */
+  setboolV(&L2TG(L)->tmptv2, b);  /* Remember for trace recorder. */
   return 1;
 }
 
@@ -764,7 +765,7 @@ LJLIB_CF(ffi_abi)	LJLIB_REC(.)
 #endif
   ) >= 0;
   setboolV(L->top-1, b);
-  setboolV(&G(L)->tmptv2, b);  /* Remember for trace recorder. */
+  setboolV(&L2TG(L)->tmptv2, b);  /* Remember for trace recorder. */
   return 1;
 }
 

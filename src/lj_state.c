@@ -61,6 +61,8 @@ static void resizestack(lua_State *L, MSize n)
   ptrdiff_t delta;
   MSize oldsize = L->stacksize;
   MSize realsize = n + 1 + LJ_STACK_EXTRA;
+  TValue *jbase;
+  uintptr_t jaddr, oldaddr;
   GCobj *up;
   lj_assertL((MSize)(tvref(L->maxstack)-oldst) == L->stacksize-LJ_STACK_EXTRA-1,
 	     "inconsistent stack size");
@@ -73,8 +75,11 @@ static void resizestack(lua_State *L, MSize n)
   while (oldsize < realsize)  /* Clear new slots. */
     setnilV(st + oldsize++);
   L->stacksize = realsize;
-  if ((size_t)(mref(G(L)->jit_base, char) - (char *)oldst) < (size_t)oldsize * sizeof(TValue))
-    setmref(G(L)->jit_base, mref(G(L)->jit_base, char) + delta);
+  jbase = lj_tg_jit_base(G(L));
+  jaddr = (uintptr_t)jbase;
+  oldaddr = (uintptr_t)oldst;
+  if (jaddr - oldaddr < (uintptr_t)oldsize * sizeof(TValue))
+    lj_tg_setjit_base(G(L), (TValue *)((char *)jbase + delta));
   L->base = (TValue *)((char *)L->base + delta);
   L->top = (TValue *)((char *)L->top + delta);
   for (up = gcref(L->openupval); up != NULL; up = gcnext(up))
@@ -96,7 +101,7 @@ void lj_state_shrinkstack(lua_State *L, MSize used)
   if (4*used < L->stacksize &&
       2*(LJ_STACK_START+LJ_STACK_EXTRA) < L->stacksize &&
       /* Don't shrink stack of live trace. */
-      (tvref(G(L)->jit_base) == NULL || obj2gco(L) != gcref(G(L)->cur_L)))
+      (lj_tg_jit_base(G(L)) == NULL || L != lj_tg_cur_L(G(L))))
     resizestack(L, L->stacksize >> 1);
 }
 
@@ -113,7 +118,7 @@ void LJ_FASTCALL lj_state_growstack(lua_State *L, MSize need)
     resizestack(L, n);
   } else {  /* Request would overflow. Raise a stack overflow error. */
     if (LJ_HASJIT) {
-      TValue *base = tvref(G(L)->jit_base);
+      TValue *base = lj_tg_jit_base(G(L));
       if (base) L->base = base;
     }
     if (curr_funcisL(L)) {
@@ -337,7 +342,7 @@ LUA_API void lua_close(lua_State *L)
 #if LJ_HASPROFILE
   luaJIT_profile_stop(L);
 #endif
-  setgcrefnull(g->cur_L);
+  lj_tg_clearcur_L(g);
   lj_func_closeuv(L, tvref(L->stack));
   lj_gc_separateudata(g, 1);  /* Separate udata which have GC metamethods. */
 #if LJ_HASJIT
@@ -382,8 +387,8 @@ lua_State *lj_state_new(lua_State *L)
 void LJ_FASTCALL lj_state_free(global_State *g, lua_State *L)
 {
   lj_assertG(L != mainthread(g), "free of main thread");
-  if (obj2gco(L) == gcref(g->cur_L))
-    setgcrefnull(g->cur_L);
+  if (L == lj_tg_cur_L(g))
+    lj_tg_clearcur_L(g);
 #if LJ_HASFFI
   if (ctype_ctsG(g) && ctype_ctsG(g)->L == L)  /* Avoid dangling cts->L. */
     ctype_ctsG(g)->L = mainthread(g);

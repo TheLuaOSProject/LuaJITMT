@@ -19,6 +19,7 @@
 #include "lj_target.h"
 #include "lj_mcode.h"
 #include "lj_trace.h"
+#include "lj_tg.h"
 #include "lj_vm.h"
 
 /* -- Target-specific handling of callback slots -------------------------- */
@@ -718,7 +719,7 @@ lua_State * LJ_FASTCALL lj_ccallback_enter(CTState *cts, void *cf)
   lua_State *L = cts->L;
   global_State *g = cts->g;
   lj_assertG(L != NULL, "uninitialized cts->L in callback");
-  if (tvref(g->jit_base)) {
+  if (lj_tg_jit_base(g)) {
     setstrV(L, L->top++, lj_err_str(L, LJ_ERR_FFI_BADCBACK));
     if (g->panic) g->panic(L);
     exit(EXIT_FAILURE);

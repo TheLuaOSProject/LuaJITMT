@@ -61,6 +61,46 @@ struct TGState {
   ExitTrampolines *exittr;
 };
 
+static LJ_AINLINE lua_State *lj_tg_cur_L(global_State *g)
+{
+  TGState *tg = G2TG(g);
+  if (tg && tg->cur_L)
+    return tg->cur_L;
+  return gcref(g->cur_L) ? gco2th(gcref(g->cur_L)) : NULL;
+}
+
+static LJ_AINLINE void lj_tg_setcur_L(global_State *g, lua_State *L)
+{
+  TGState *tg = G2TG(g);
+  if (tg)
+    tg->cur_L = L;
+  setgcref(g->cur_L, obj2gco(L));  /* Transitional mirror for VM asm. */
+}
+
+static LJ_AINLINE void lj_tg_clearcur_L(global_State *g)
+{
+  TGState *tg = G2TG(g);
+  if (tg)
+    tg->cur_L = NULL;
+  setgcrefnull(g->cur_L);  /* Transitional mirror for VM asm. */
+}
+
+static LJ_AINLINE TValue *lj_tg_jit_base(global_State *g)
+{
+  TGState *tg = G2TG(g);
+  if (tg && tg->jit_base)
+    return tg->jit_base;
+  return tvref(g->jit_base);  /* Transitional mirror for VM asm writes. */
+}
+
+static LJ_AINLINE void lj_tg_setjit_base(global_State *g, TValue *base)
+{
+  TGState *tg = G2TG(g);
+  if (tg)
+    tg->jit_base = base;
+  setmref(g->jit_base, base);  /* Transitional mirror for VM asm. */
+}
+
 #define TG_DISP2HOT	(-(int)(HOTCOUNT_SIZE*sizeof(HotCount)))
 #define TG_OFS(f) \
   ((int)(offsetof(TGState, f) - offsetof(TGState, dispatch)))

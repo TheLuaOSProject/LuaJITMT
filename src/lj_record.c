@@ -1892,7 +1892,7 @@ static void check_call_unroll(jit_State *J, TraceNo lnk)
       if (lnk) {  /* Possible tail- or up-recursion. */
 	lj_trace_flush(J, lnk);  /* Flush trace that only returns. */
 	/* Set a small, pseudo-random hotcount for a quick retry of JFUNC*. */
-	hotcount_set(J2GG(J), J->pc+1, lj_prng_u64(&J2G(J)->prng) & 15u);
+	hotcount_set(J2GG(J), J->pc+1, lj_prng_u64(&J2TG(J)->prng) & 15u);
       }
       lj_trace_err(J, LJ_TRERR_CUNROLL);
     }
@@ -2137,7 +2137,7 @@ static TValue *rec_mm_concat_cp(lua_State *L, lua_CFunction dummy, void *ud)
     }
     xbase = ++trp;
     tr = hdr = emitir(IRT(IR_BUFHDR, IRT_PGC),
-		      lj_ir_kptr(J, &J2G(J)->tmpbuf), IRBUFHDR_RESET);
+			      lj_ir_kptr(J, &J2TG(J)->tmpbuf), IRBUFHDR_RESET);
     do {
       tr = emitir(IRTG(IR_BUFPUT, IRT_PGC), tr, *trp++);
     } while (trp <= top);
@@ -2236,12 +2236,12 @@ void lj_record_ins(jit_State *J)
   if (LJ_UNLIKELY(J->postproc != LJ_POST_NONE)) {
     switch (J->postproc) {
     case LJ_POST_FIXCOMP:  /* Fixup comparison. */
-      pc = (const BCIns *)(uintptr_t)J2G(J)->tmptv.u64;
-      rec_comp_fixup(J, pc, (!tvistruecond(&J2G(J)->tmptv2) ^ (bc_op(*pc)&1)));
+      pc = (const BCIns *)(uintptr_t)J2TG(J)->tmptv.u64;
+      rec_comp_fixup(J, pc, (!tvistruecond(&J2TG(J)->tmptv2) ^ (bc_op(*pc)&1)));
       /* fallthrough */
     case LJ_POST_FIXGUARD:  /* Fixup and emit pending guard. */
     case LJ_POST_FIXGUARDSNAP:  /* Fixup and emit pending guard and snapshot. */
-      if (!tvistruecond(&J2G(J)->tmptv2)) {
+      if (!tvistruecond(&J2TG(J)->tmptv2)) {
 	J->fold.ins.o ^= 1;  /* Flip guard to opposite. */
 	if (J->postproc == LJ_POST_FIXGUARDSNAP) {
 	  SnapShot *snap = &J->cur.snap[J->cur.nsnap-1];
@@ -2251,7 +2251,7 @@ void lj_record_ins(jit_State *J)
       lj_opt_fold(J);  /* Emit pending guard. */
       /* fallthrough */
     case LJ_POST_FIXBOOL:
-      if (!tvistruecond(&J2G(J)->tmptv2)) {
+      if (!tvistruecond(&J2TG(J)->tmptv2)) {
 	BCReg s;
 	TValue *tv = J->L->base;
 	for (s = 0; s < J->maxslot; s++)  /* Fixup stack slot (if any). */

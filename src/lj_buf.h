@@ -9,6 +9,7 @@
 #include "lj_obj.h"
 #include "lj_gc.h"
 #include "lj_str.h"
+#include "lj_tg.h"
 
 /* Resizable string buffers. */
 
@@ -84,7 +85,7 @@ static LJ_AINLINE void lj_buf_reset(SBuf *sb)
 
 static LJ_AINLINE SBuf *lj_buf_tmp_(lua_State *L)
 {
-  SBuf *sb = &G(L)->tmpbuf;
+  SBuf *sb = &L2TG(L)->tmpbuf;
   setsbufL(sb, L);
   lj_buf_reset(sb);
   return sb;

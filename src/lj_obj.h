@@ -721,6 +721,8 @@ struct lua_State {
 };
 
 #define G(L)			(mref(L->glref, global_State))
+#define G2TG(gl)		((gl)->main_tg)
+#define L2TG(L)			((L)->tg_hint ? (L)->tg_hint : G2TG(G(L)))
 #define registry(L)		(&G(L)->registrytv)
 
 /* Macros to access the currently executing (Lua) function. */

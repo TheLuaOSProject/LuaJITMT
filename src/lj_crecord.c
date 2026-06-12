@@ -1618,7 +1618,7 @@ void LJ_FASTCALL recff_cdata_arith(jit_State *J, RecordFFData *rd)
 	!irt_isguard(J->guardemit)) {
       const BCIns *pc = frame_contpc(J->L->base-1) - 1;
       if (bc_op(*pc) <= BC_ISNEP) {
-	J2G(J)->tmptv.u64 = (uint64_t)(uintptr_t)pc;
+	J2TG(J)->tmptv.u64 = (uint64_t)(uintptr_t)pc;
 	J->postproc = LJ_POST_FIXCOMP;
       }
     }

@@ -101,7 +101,7 @@ void LJ_FASTCALL lj_buf_shrink(lua_State *L, SBuf *sb)
 
 char * LJ_FASTCALL lj_buf_tmp(lua_State *L, MSize sz)
 {
-  SBuf *sb = &G(L)->tmpbuf;
+  SBuf *sb = &L2TG(L)->tmpbuf;
   setsbufL(sb, L);
   return lj_buf_need(sb, sz);
 }
@@ -300,4 +300,3 @@ uint32_t LJ_FASTCALL lj_buf_ruleb128(const char **pp)
   *pp = (const char *)w;
   return v;
 }
-

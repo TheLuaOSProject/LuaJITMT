@@ -22,6 +22,7 @@
 #include "lj_bc.h"
 #include "lj_frame.h"
 #include "lj_trace.h"
+#include "lj_tg.h"
 #include "lj_vm.h"
 #include "lj_strscan.h"
 #include "lj_strfmt.h"
@@ -41,7 +42,7 @@ static TValue *index2adr(lua_State *L, int idx)
 		"bad stack slot %d", idx);
     return L->top + idx;
   } else if (idx == LUA_GLOBALSINDEX) {
-    TValue *o = &G(L)->tmptv;
+    TValue *o = &L2TG(L)->tmptv;
     settabV(L, o, tabref(L->env));
     return o;
   } else if (idx == LUA_REGISTRYINDEX) {
@@ -51,7 +52,7 @@ static TValue *index2adr(lua_State *L, int idx)
     lj_checkapi(fn->c.gct == ~LJ_TFUNC && !isluafunc(fn),
 		"calling frame is not a C function");
     if (idx == LUA_ENVIRONINDEX) {
-      TValue *o = &G(L)->tmptv;
+      TValue *o = &L2TG(L)->tmptv;
       settabV(L, o, tabref(fn->c.env));
       return o;
     } else {
@@ -1300,4 +1301,3 @@ LUA_API void lua_setallocf(lua_State *L, lua_Alloc f, void *ud)
   g->allocd = ud;
   g->allocf = f;
 }
-

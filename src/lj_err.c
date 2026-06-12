@@ -15,6 +15,7 @@
 #include "lj_frame.h"
 #include "lj_ff.h"
 #include "lj_trace.h"
+#include "lj_tg.h"
 #include "lj_vm.h"
 #include "lj_strfmt.h"
 
@@ -180,7 +181,7 @@ static void *err_unwind(lua_State *L, void *stopcf, int errcode)
 	  break;
 	}
 	g = G(L);
-	setgcref(g->cur_L, obj2gco(L));
+	lj_tg_setcur_L(g, L);
 	if (frame_typep(frame) == FRAME_PCALL)
 	  hook_leave(g);
 	L->base = frame_prevd(frame) + 1;
@@ -377,13 +378,13 @@ static void err_unwind_win_jit(global_State *g, int errcode)
 static void err_raise_ext(global_State *g, int errcode)
 {
 #if LJ_UNWIND_JIT
-  if (tvref(g->jit_base)) {
+  if (lj_tg_jit_base(g)) {
     err_unwind_win_jit(g, errcode);
     return;  /* Unwinding failed. */
   }
 #elif LJ_HASJIT
   /* Cannot catch on-trace errors for Windows/x86 SEH. Unwind to interpreter. */
-  setmref(g->jit_base, NULL);
+  lj_tg_setjit_base(g, NULL);
 #endif
   UNUSED(g);
   RaiseException(LJ_EXCODE_MAKE(errcode), 1 /* EH_NONCONTINUABLE */, 0, NULL);
@@ -530,7 +531,7 @@ static int err_unwind_jit(int version, int actions,
     ExitNo exitno;
     uintptr_t addr = _Unwind_GetIP(ctx);  /* Return address _after_ call. */
     uintptr_t stub = lj_trace_unwind(G2J(g), addr - sizeof(MCode), &exitno);
-    lj_assertG(tvref(g->jit_base), "unexpected throw across mcode frame");
+    lj_assertG(lj_tg_jit_base(g), "unexpected throw across mcode frame");
     if (stub) {  /* Jump to side exit to unwind the trace. */
       G2J(g)->exitcode = LJ_UEXCLASS_ERRCODE(uexclass);
 #ifdef LJ_TARGET_MIPS
@@ -784,7 +785,7 @@ LJ_NOINLINE void LJ_FASTCALL lj_err_throw(lua_State *L, int errcode)
     G(L)->panic(L);
 #else
 #if LJ_HASJIT
-  setmref(g->jit_base, NULL);
+  lj_tg_setjit_base(g, NULL);
 #endif
   {
     void *cf = err_unwind(L, NULL, errcode);
@@ -817,7 +818,7 @@ LJ_NOINLINE void lj_err_mem(lua_State *L)
   if (L->status == LUA_ERRERR+1)  /* Don't touch the stack during lua_open. */
     lj_vm_unwind_c(L->cframe, LUA_ERRMEM);
   if (LJ_HASJIT) {
-    TValue *base = tvref(G(L)->jit_base);
+    TValue *base = lj_tg_jit_base(G(L));
     if (base) L->base = base;
   }
   if (curr_funcisL(L)) {
@@ -886,7 +887,7 @@ static ptrdiff_t finderrfunc(lua_State *L)
 /* Runtime error. */
 LJ_NOINLINE void LJ_FASTCALL lj_err_run(lua_State *L)
 {
-  ptrdiff_t ef = (LJ_HASJIT && tvref(G(L)->jit_base)) ? 0 : finderrfunc(L);
+  ptrdiff_t ef = (LJ_HASJIT && lj_tg_jit_base(G(L))) ? 0 : finderrfunc(L);
   if (ef) {
     TValue *errfunc, *top;
     lj_state_checkstack(L, LUA_MINSTACK * 2);  /* Might raise new error. */
@@ -934,7 +935,7 @@ LJ_NORET LJ_NOINLINE static void err_msgv(lua_State *L, ErrMsg em, ...)
   va_list argp;
   va_start(argp, em);
   if (LJ_HASJIT) {
-    TValue *base = tvref(G(L)->jit_base);
+    TValue *base = lj_tg_jit_base(G(L));
     if (base) L->base = base;
   }
   if (curr_funcisL(L)) L->top = curr_topL(L);
@@ -1012,7 +1013,7 @@ LJ_NOINLINE void lj_err_optype_call(lua_State *L, TValue *o)
 LJ_NOINLINE void lj_err_callermsg(lua_State *L, const char *msg)
 {
   TValue *frame = NULL, *pframe = NULL;
-  if (!(LJ_HASJIT && tvref(G(L)->jit_base))) {
+  if (!(LJ_HASJIT && lj_tg_jit_base(G(L)))) {
     frame = L->base-1;
     if (frame_islua(frame)) {
       pframe = frame_prevl(frame);
@@ -1161,4 +1162,3 @@ LUALIB_API int luaL_error(lua_State *L, const char *fmt, ...)
   lj_err_callermsg(L, msg);
   return 0;  /* unreachable */
 }
-

@@ -205,7 +205,7 @@ LJLIB_CF(os_date)
     setfield(L, "yday", stm->tm_yday+1);
     setboolfield(L, "isdst", stm->tm_isdst);
   } else if (*s) {
-    SBuf *sb = &G(L)->tmpbuf;
+    SBuf *sb = &L2TG(L)->tmpbuf;
     MSize sz = 0, retry = 4;
     const char *q;
     for (q = s; *q; q++)
@@ -291,4 +291,3 @@ LUALIB_API int luaopen_os(lua_State *L)
   LJ_LIB_REG(L, LUA_OSLIBNAME, os);
   return 1;
 }
-

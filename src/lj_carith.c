@@ -12,6 +12,7 @@
 #include "lj_tab.h"
 #include "lj_meta.h"
 #include "lj_ir.h"
+#include "lj_tg.h"
 #include "lj_ctype.h"
 #include "lj_cconv.h"
 #include "lj_cdata.h"
@@ -244,7 +245,7 @@ static int lj_carith_meta(lua_State *L, CTState *cts, CDArith *ca, MMS mm)
     if (mm == MM_eq) {  /* Equality checks never raise an error. */
       int eq = ca->p[0] == ca->p[1];
       setboolV(L->top-1, eq);
-      setboolV(&G(L)->tmptv2, eq);  /* Remember for trace recorder. */
+      setboolV(&L2TG(L)->tmptv2, eq);  /* Remember for trace recorder. */
       return 1;
     }
     for (i = 0; i < 2; i++) {
@@ -273,7 +274,7 @@ int lj_carith_op(lua_State *L, MMS mm)
   CDArith ca;
   if (carith_checkarg(L, cts, &ca) && mm != MM_len && mm != MM_concat) {
     if (carith_int64(L, cts, &ca, mm) || carith_ptr(L, cts, &ca, mm)) {
-      copyTV(L, &G(L)->tmptv2, L->top-1);  /* Remember for trace recorder. */
+      copyTV(L, &L2TG(L)->tmptv2, L->top-1);  /* Remember for trace recorder. */
       return 1;
     }
   }

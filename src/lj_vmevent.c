@@ -38,7 +38,7 @@ ptrdiff_t lj_vmevent_prepare(lua_State *L, VMEvent ev)
 void lj_vmevent_call(lua_State *L, ptrdiff_t argbase)
 {
   global_State *g = G(L);
-  lua_State *oldL = gco2th(gcref(g->cur_L));
+  lua_State *oldL = lj_tg_cur_L(g);
   uint8_t oldmask = g->vmevmask;
   uint8_t oldh = hook_save(g);
   int status;
@@ -52,7 +52,7 @@ void lj_vmevent_call(lua_State *L, ptrdiff_t argbase)
     fputs(tvisstr(L->top) ? strVdata(L->top) : "?", stderr);
     fputc('\n', stderr);
   }
-  setgcref(g->cur_L, obj2gco(oldL));
+  lj_tg_setcur_L(g, oldL);
 #if LJ_HASJIT
   G2J(g)->L = oldL;
 #endif
@@ -60,4 +60,3 @@ void lj_vmevent_call(lua_State *L, ptrdiff_t argbase)
   if (g->vmevmask != VMEVENT_NOCACHE)
     g->vmevmask = oldmask;  /* Restore event mask, but not if not modified. */
 }
-

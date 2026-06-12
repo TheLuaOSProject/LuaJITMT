@@ -399,7 +399,7 @@ int lj_cconv_tv_ct(CTState *cts, CType *s, CTypeID sid,
     } else {
       uint32_t b = s->size == 1 ? (*sp != 0) : (*(int *)sp != 0);
       setboolV(o, b);
-      setboolV(&cts->g->tmptv2, b);  /* Remember for trace recorder. */
+      setboolV(&L2TG(cts->L)->tmptv2, b);  /* Remember for trace recorder. */
     }
     return 0;
   } else if (ctype_isrefarray(sinfo) || ctype_isstruct(sinfo)) {
@@ -459,7 +459,7 @@ int lj_cconv_tv_bf(CTState *cts, CType *s, TValue *o, uint8_t *sp)
     uint32_t b = (val >> pos) & 1;
     lj_assertCTS(bsz == 1, "bad bool bitfield size");
     setboolV(o, b);
-    setboolV(&cts->g->tmptv2, b);  /* Remember for trace recorder. */
+    setboolV(&L2TG(cts->L)->tmptv2, b);  /* Remember for trace recorder. */
   }
   return 0;  /* No GC step needed. */
 }
