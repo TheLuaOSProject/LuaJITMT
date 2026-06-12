@@ -637,6 +637,7 @@ typedef struct StrInternState {
 } StrInternState;
 
 typedef struct TGState TGState;
+typedef struct GC2SSBNode GC2SSBNode;
 typedef struct GC2State {
   uint32_t phase;	/* LJ_GC2_*; authoritative scaffold phase. */
   uint32_t cycle;	/* Monotonically increasing legacy cycle id. */
@@ -644,6 +645,11 @@ typedef struct GC2State {
   uint32_t hs_pending;	/* Outstanding handshake acknowledgements. */
   uint32_t hs_actions;	/* Current LJ_GC2_HS_* action bits. */
   uint64_t marks_this_round;  /* New arena/HugeTab marks this round. */
+  GC2SSBNode *ssb_head;	/* Published mutator SSB buffers. */
+  uint32_t ssb_published;  /* Published SSB node count. */
+  uint32_t ssb_drained;	/* Drained/recycled SSB node count. */
+  uint64_t ssb_items_published;  /* Published SSB entries. */
+  uint64_t ssb_items_drained;  /* Drained/recycled SSB entries. */
   TGState *tg_list;	/* Registered per-thread state blocks. */
   uint32_t n_threads;	/* Number of registered TG blocks. */
 } GC2State;

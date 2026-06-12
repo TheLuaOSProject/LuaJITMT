@@ -11,6 +11,21 @@
 #include "lj_dispatch.h"
 #include "lj_tg.h"
 
+static void tg_init_ssb(TGState *tg)
+{
+  tg->ssb_node[0].owner = tg;
+  tg->ssb_node[0].next = NULL;
+  tg->ssb_node[0].n = 0;
+  tg->ssb_node[1].owner = tg;
+  tg->ssb_node[1].next = NULL;
+  tg->ssb_node[1].n = 0;
+  tg->ssb_active = &tg->ssb_node[0];
+  tg->ssb_free = &tg->ssb_node[1];
+  tg->ssb_base = tg->ssb_node[0].slot;
+  tg->ssb_next = tg->ssb_base;
+  tg->ssb_end = tg->ssb_base + TG_GC2_SSB_SLOTS;
+}
+
 void lj_tg_init(GG_State *GG, int alloc_ready)
 {
   TGState *tg = &GG->main_tg;
@@ -31,6 +46,7 @@ void lj_tg_init(GG_State *GG, int alloc_ready)
     tg->tg_flags |= TGF_HUGETAB;
     lj_arena_allocd_sethugetab(&tg->allocd, &tg->huge);
   }
+  tg_init_ssb(tg);
   lj_buf_init(NULL, &tg->tmpbuf);
 #if LJ_HASJIT
   memcpy(tg->hotcount, GG->hotcount, sizeof(tg->hotcount));

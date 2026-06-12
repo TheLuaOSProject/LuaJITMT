@@ -39,6 +39,11 @@ void lj_gc2_init(global_State *g)
   g->gc2.hs_pending = 0;
   g->gc2.hs_actions = 0;
   g->gc2.marks_this_round = 0;
+  g->gc2.ssb_head = NULL;
+  g->gc2.ssb_published = 0;
+  g->gc2.ssb_drained = 0;
+  g->gc2.ssb_items_published = 0;
+  g->gc2.ssb_items_drained = 0;
   gc2_attach_main(g);
 }
 
@@ -193,6 +198,95 @@ void lj_gc2_scan_roots(global_State *g, lua_State *L)
     return;
   gc2_scan_global_roots(g);
   gc2_scan_thread_roots(g, L);
+}
+
+static void gc2_ssb_activate(TGState *tg, GC2SSBNode *node)
+{
+  node->next = NULL;
+  node->n = 0;
+  tg->ssb_active = node;
+  tg->ssb_base = node->slot;
+  tg->ssb_next = tg->ssb_base;
+  tg->ssb_end = tg->ssb_base + TG_GC2_SSB_SLOTS;
+}
+
+static void gc2_ssb_publish(global_State *g, GC2SSBNode *node)
+{
+  void *head = la_loadptr_acq((void *const *)&g->gc2.ssb_head);
+  do {
+    node->next = (GC2SSBNode *)head;
+  } while (!la_casptr((void **)&g->gc2.ssb_head, &head, node,
+		      LA_ACQ_REL, LA_ACQ));  /* 05 section 5.6.2 MPSC stack. */
+}
+
+uint32_t lj_gc2_flush_ssb(global_State *g, TGState *tg)
+{
+  GC2SSBNode *node, *fresh;
+  uint32_t n;
+  if (!g || !tg || !tg->ssb_active || !tg->ssb_base || !tg->ssb_next)
+    return 0;
+  n = (uint32_t)(tg->ssb_next - tg->ssb_base);
+  if (n == 0)
+    return 0;
+  fresh = tg->ssb_free;
+  if (!fresh)
+    return 0;  /* Workers will recycle published nodes in the full design. */
+  tg->ssb_free = fresh->next;
+  node = tg->ssb_active;
+  node->n = n;
+  gc2_ssb_publish(g, node);
+  la_add32_rlx(&g->gc2.ssb_published, 1);
+  la_add64_rlx(&g->gc2.ssb_items_published, n);
+  gc2_ssb_activate(tg, fresh);
+  return n;
+}
+
+int lj_gc2_ssb_push(global_State *g, GCobj *o)
+{
+  TGState *tg;
+  if (!g || !o)
+    return 0;
+  tg = G2TG(g);
+  if (!tg || !tg->ssb_next || !tg->ssb_end)
+    return 0;
+  if (tg->ssb_next == tg->ssb_end &&
+      lj_gc2_flush_ssb(g, tg) == 0 &&
+      tg->ssb_next == tg->ssb_end)
+    return 0;
+  setgcref(*tg->ssb_next, o);
+  tg->ssb_next++;
+  return 1;
+}
+
+uint32_t lj_gc2_drain_ssb(global_State *g)
+{
+  GC2SSBNode *node;
+  uint32_t nitems = 0, nnodes = 0;
+  if (!g)
+    return 0;
+  node = (GC2SSBNode *)la_xchgptr_acqrel((void **)&g->gc2.ssb_head, NULL);
+  while (node) {
+    GC2SSBNode *next = node->next;
+    TGState *owner = node->owner;
+    uint32_t i;
+    for (i = 0; i < node->n; i++)
+      lj_gc2_markobj(g, gcref(node->slot[i]));
+    nitems += node->n;
+    nnodes++;
+    node->n = 0;
+    if (owner) {
+      node->next = owner->ssb_free;
+      owner->ssb_free = node;
+    } else {
+      node->next = NULL;
+    }
+    node = next;
+  }
+  if (nnodes) {
+    la_add32_rlx(&g->gc2.ssb_drained, nnodes);
+    la_add64_rlx(&g->gc2.ssb_items_drained, nitems);
+  }
+  return nitems;
 }
 
 static void *gc2_mark_base(GCobj *o)

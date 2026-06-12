@@ -43,6 +43,7 @@ int main(void)
   GCtab *root_tab;
   void *plain_reset, *trav_reset;
   GCArena *plain_reset_a, *trav_reset_a;
+  uint32_t i, ssb_published0;
   uint64_t epoch0;
   uint32_t actions;
 
@@ -54,9 +55,17 @@ int main(void)
   assert(g->gc2.n_threads == 1);
   assert(g->gc2.hs_epoch == 0);
   assert(g->gc2.hs_pending == 0);
+  assert(g->gc2.ssb_head == NULL);
+  assert(g->gc2.ssb_published == 0);
+  assert(g->gc2.ssb_items_published == 0);
   assert(tg->poll == 0);
   assert(tg->reqmask == 0);
   assert(tg->hs_epoch_ack == 0);
+  assert(tg->ssb_active == &tg->ssb_node[0]);
+  assert(tg->ssb_free == &tg->ssb_node[1]);
+  assert(tg->ssb_base == tg->ssb_node[0].slot);
+  assert(tg->ssb_next == tg->ssb_base);
+  assert(tg->ssb_end == tg->ssb_base + TG_GC2_SSB_SLOTS);
 
   epoch0 = g->gc2.hs_epoch;
   actions = LJ_GC2_HS_ENABLE_BARRIER|LJ_GC2_HS_ALLOC_BLACK;
@@ -86,6 +95,37 @@ int main(void)
   assert(g->gc2.hs_pending == 0);
   assert(lj_gc2_ismarked(g, obj2gco(root_tab)) == 1);
   assert(g->gc2.marks_this_round > 0);
+  assert(lj_gc2_ssb_push(g, obj2gco(root_tab)) == 1);
+  assert(lj_gc2_ssb_push(g, obj2gco(root_tab)) == 1);
+  assert(tg->ssb_next == tg->ssb_base + 2);
+  epoch0 = g->gc2.hs_epoch;
+  assert(lj_gc2_handshake(g, LJ_GC2_HS_FLUSH_SSB) == 1);
+  assert(g->gc2.hs_epoch == epoch0 + 1u);
+  assert(g->gc2.hs_pending == 0);
+  assert(tg->ssb_next == tg->ssb_base);
+  assert(g->gc2.ssb_head != NULL);
+  assert(g->gc2.ssb_published == 1);
+  assert(g->gc2.ssb_items_published == 2);
+  assert(lj_gc2_drain_ssb(g) == 2);
+  assert(g->gc2.ssb_head == NULL);
+  assert(g->gc2.ssb_drained == 1);
+  assert(g->gc2.ssb_items_drained == 2);
+  for (i = 0; i < TG_GC2_SSB_SLOTS; i++)
+    assert(lj_gc2_ssb_push(g, obj2gco(root_tab)) == 1);
+  assert(tg->ssb_next == tg->ssb_end);
+  ssb_published0 = g->gc2.ssb_published;
+  assert(lj_gc2_ssb_push(g, obj2gco(root_tab)) == 1);
+  assert(g->gc2.ssb_published == ssb_published0 + 1u);
+  assert(tg->ssb_next == tg->ssb_base + 1);
+  assert(lj_gc2_drain_ssb(g) == TG_GC2_SSB_SLOTS);
+  assert(g->gc2.ssb_head == NULL);
+  assert(g->gc2.ssb_drained == 2);
+  assert(g->gc2.ssb_items_drained == 2 + TG_GC2_SSB_SLOTS);
+  assert(lj_gc2_flush_ssb(g, tg) == 1);
+  assert(tg->ssb_next == tg->ssb_base);
+  assert(lj_gc2_drain_ssb(g) == 1);
+  assert(g->gc2.ssb_drained == 3);
+  assert(g->gc2.ssb_items_drained == 3 + TG_GC2_SSB_SLOTS);
   lua_pop(L, 1);
   lj_gc2_legacy_cycle_end(g);
   assert(tg->mark_active == 0);

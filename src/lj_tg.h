@@ -33,9 +33,19 @@ typedef uint16_t HotCount;
 #define TGF_HUGETAB		0x02u
 #define TGF_DEAD		0x04u
 #define TG_HUGETAB_BITS		16u
+#define TG_GC2_SSB_BYTES	1024u
+#define TG_GC2_SSB_SLOTS	(TG_GC2_SSB_BYTES / sizeof(GCRef))
 
 typedef struct GG_State GG_State;
 typedef struct ExitTrampolines ExitTrampolines;
+
+struct GC2SSBNode {
+  GC2SSBNode *next;
+  TGState *owner;
+  uint32_t n;
+  uint32_t pad;
+  GCRef slot[TG_GC2_SSB_SLOTS];
+};
 
 struct TGState {
   HotCount hotcount[HOTCOUNT_SIZE];
@@ -54,6 +64,8 @@ struct TGState {
   TGAlloc alloc;
   LJArenaAllocD allocd;
   HugeTab huge;
+  GC2SSBNode ssb_node[2];
+  GC2SSBNode *ssb_active, *ssb_free;
   GCRef *ssb_next, *ssb_end, *ssb_base;
   SBuf tmpbuf;
   TValue tmptv, tmptv2;
@@ -64,6 +76,8 @@ struct TGState {
   uint64_t stack_dirty_epoch;
   ExitTrampolines *exittr;
 };
+
+LJ_STATIC_ASSERT(sizeof(((GC2SSBNode *)0)->slot) == TG_GC2_SSB_BYTES);
 
 static LJ_AINLINE lua_State *lj_tg_cur_L(global_State *g)
 {

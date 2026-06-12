@@ -28,6 +28,8 @@ static void safepoint_apply_actions(global_State *g, TGState *tg,
     lua_State *L = la_load8_acq(&tg->in_native) ? NULL : tg->cur_L;
     lj_gc2_scan_roots(g, L);  /* 05 section 5.7.1/5.7.2. */
   }
+  if (actions & LJ_GC2_HS_FLUSH_SSB)
+    lj_gc2_flush_ssb(g, tg);  /* 05 section 5.6.2. */
   if ((actions & LJ_GC2_HS_RESET_ALLOC) &&
       (tg->tg_flags & TGF_ARENA_INTERNAL))
     lj_arena_alloc_prepare_sweep(&tg->alloc);  /* 04 section 4.6. */
