@@ -29,9 +29,11 @@ int main(void)
 {
   PRNGState rs;
   TGAlloc alloc;
-  void *p1, *p2, *p3, *p4, *p5, *p6;
+  void *p1, *p2, *p3, *p4, *p5, *p6, *hp, *hp2, *hp3;
   GCArena *a;
   uint32_t c1, c3, c4, c5;
+  size_t hsize = LJ_HUGE_THRESHOLD + 100u;
+  size_t hsize2 = (size_t)LJ_ARENA_SIZE * 2u + 257u;
 
   lj_prng_seed_fixed(&rs);
   lj_arena_alloc_init(&alloc);
@@ -80,7 +82,23 @@ int main(void)
   p6 = lj_arena_alloc(&alloc, &rs, 16, 0);
   assert(p6 != NULL);
   assert(lj_arena_realloc(&alloc, &rs, p6, 16, 0, 0) == NULL);
-  assert(lj_arena_alloc(&alloc, &rs, LJ_HUGE_THRESHOLD + 1u, 0) == NULL);
+
+  hp = lj_arena_alloc(&alloc, &rs, hsize, LJ_AF_TRAVERSABLE);
+  assert(hp != NULL);
+  assert(lj_arena_ishuge(lj_arena_of(hp)));
+  assert((lj_arena_of(hp)->hdr.flags & LJ_AF_TRAVERSABLE) != 0);
+  fill_seq((uint8_t *)hp, 128, 0x11);
+
+  hp2 = lj_arena_realloc(&alloc, &rs, hp, hsize, hsize2, LJ_AF_TRAVERSABLE);
+  assert(hp2 != NULL);
+  assert(lj_arena_ishuge(lj_arena_of(hp2)));
+  check_seq((uint8_t *)hp2, 128, 0x11);
+
+  hp3 = lj_arena_realloc(&alloc, &rs, hp2, hsize2, 128, 0);
+  assert(hp3 != NULL);
+  assert(!lj_arena_ishuge(lj_arena_of(hp3)));
+  check_seq((uint8_t *)hp3, 128, 0x11);
+  lj_arena_free(&alloc, hp3, 128);
 
   lj_arena_alloc_fini(&alloc);
   printf("t-arena-realloc OK: free-run reuse and realloc verified\n");

@@ -308,8 +308,10 @@ void *lj_arena_alloc(TGAlloc *alloc, PRNGState *rs, size_t size,
   uint32_t k = arena_kind(flags);
   LJArenaBump *b = &alloc->bump[k];
   uint32_t ncells, cell;
-  if (size == 0 || size > LJ_HUGE_THRESHOLD)
+  if (size == 0)
     return NULL;
+  if (size > LJ_HUGE_THRESHOLD)
+    return lj_arena_huge_map(rs, size, flags);
   ncells = lj_arena_ncells(size);
   if (ncells > LJ_ARENA_CELLS - LJ_AFIRST_CELL)
     return NULL;
@@ -341,9 +343,15 @@ void lj_arena_free(TGAlloc *alloc, void *p, size_t size)
 {
   GCArena *a;
   uint32_t start, ncells;
-  if (!p || size == 0 || size > LJ_HUGE_THRESHOLD)
+  if (!p || size == 0)
     return;
   a = lj_arena_of(p);
+  if (lj_arena_ishuge(a)) {
+    lj_arena_huge_unmap(p, size);
+    return;
+  }
+  if (size > LJ_HUGE_THRESHOLD)
+    return;
   start = lj_arena_cellof(p);
   ncells = lj_arena_ncells(size);
   if (start < LJ_AFIRST_CELL || start + ncells > LJ_ARENA_CELLS)
@@ -355,11 +363,27 @@ void *lj_arena_realloc(TGAlloc *alloc, PRNGState *rs, void *p,
 		       size_t osize, size_t nsize, uint32_t flags)
 {
   void *np;
+  GCArena *a;
+  int oldhuge;
   if (!p)
     return lj_arena_alloc(alloc, rs, nsize, flags);
   if (nsize == 0) {
     lj_arena_free(alloc, p, osize);
     return NULL;
+  }
+  a = lj_arena_of(p);
+  oldhuge = lj_arena_ishuge(a);
+  if (oldhuge && nsize > LJ_HUGE_THRESHOLD &&
+      lj_arena_huge_mapsize(osize) == lj_arena_huge_mapsize(nsize))
+    return p;
+  if (oldhuge || nsize > LJ_HUGE_THRESHOLD) {
+    size_t csize = osize < nsize ? osize : nsize;
+    np = lj_arena_alloc(alloc, rs, nsize, flags);
+    if (!np)
+      return NULL;
+    memcpy(np, p, csize);
+    lj_arena_free(alloc, p, osize);
+    return np;
   }
   if (nsize <= osize) {
     uint32_t ocells = lj_arena_ncells(osize);

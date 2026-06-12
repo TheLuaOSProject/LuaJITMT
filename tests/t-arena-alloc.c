@@ -72,7 +72,12 @@ int main(void)
   assert(count_owned(&alloc, LJ_ARENAK_TRAVERSABLE) > 1);
   assert(count_owned(&alloc, LJ_ARENAK_PLAIN) > 1);
   assert(lj_arena_alloc(&alloc, &rs, 0, 0) == NULL);
-  assert(lj_arena_alloc(&alloc, &rs, LJ_HUGE_THRESHOLD + 1u, 0) == NULL);
+  {
+    void *huge = lj_arena_alloc(&alloc, &rs, LJ_HUGE_THRESHOLD + 1u, 0);
+    assert(huge != NULL);
+    assert(lj_arena_ishuge(lj_arena_of(huge)));
+    lj_arena_free(&alloc, huge, LJ_HUGE_THRESHOLD + 1u);
+  }
 
   lj_arena_alloc_fini(&alloc);
   assert(alloc.owned[LJ_ARENAK_TRAVERSABLE] == NULL);
