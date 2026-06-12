@@ -11,6 +11,7 @@
 #include "lj_buf.h"
 #include "lj_dispatch.h"
 #include "lj_gc2.h"
+#include "lj_safepoint.h"
 #include "lj_tg.h"
 #include "lj_thr.h"
 
@@ -111,6 +112,20 @@ static void tg_adopt_gc2_phase(global_State *g, TGState *tg)
   }
 }
 
+static void tg_attach_catchup(global_State *g, TGState *tg)
+{
+  uint64_t epoch = la_load64_acq(&g->gc2.hs_epoch);
+  uint32_t pending = la_load32_acq(&g->gc2.hs_pending);
+  uint32_t actions = pending ? la_load32_acq(&g->gc2.hs_actions) : 0;
+  tg->hs_epoch_ack = epoch;
+  if (actions) {
+    lj_safepoint_apply_tg(g, tg, actions);
+    la_store32_rel(&tg->reqmask, 0);
+    la_store32_rel(&tg->poll, 0);
+    la_store64_rel(&tg->hs_epoch_ack, epoch);  /* 09 section 9.3 self-ack. */
+  }
+}
+
 void lj_tg_attach(global_State *g, TGState *tg)
 {
   void *head;
@@ -118,8 +133,8 @@ void lj_tg_attach(global_State *g, TGState *tg)
     return;
   tg->poll = 0;
   tg->reqmask = 0;
-  tg->hs_epoch_ack = la_load64_acq(&g->gc2.hs_epoch);
   tg_adopt_gc2_phase(g, tg);  /* 09 section 9.3 attach catch-up scaffold. */
+  tg_attach_catchup(g, tg);
   tg->tg_flags &= (uint8_t)~TGF_DEAD;
   do {
     head = la_loadptr_acq((void *const *)&g->gc2.tg_list);  /* 05 section 5.4.1. */

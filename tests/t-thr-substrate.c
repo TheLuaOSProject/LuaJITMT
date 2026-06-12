@@ -25,6 +25,12 @@ typedef struct ThrCtx {
   uint32_t detached;
 } ThrCtx;
 
+typedef struct HandshakeCtx {
+  global_State *g;
+  uint32_t actions;
+  uint32_t signaled;
+} HandshakeCtx;
+
 static void publish_manual(global_State *g, TGState *tg, uint32_t actions)
 {
   uint64_t epoch = la_load64_rlx(&g->gc2.hs_epoch) + 1u;
@@ -55,6 +61,13 @@ static void *worker_main(void *arg)
   return (void *)(uintptr_t)0x4a;
 }
 
+static void *handshake_main(void *arg)
+{
+  HandshakeCtx *ctx = (HandshakeCtx *)arg;
+  ctx->signaled = lj_gc2_handshake(ctx->g, ctx->actions);
+  return NULL;
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -62,6 +75,9 @@ int main(void)
   TGState *tg;
   LJThr thr;
   ThrCtx ctx = {0};
+  ThrCtx catch = {0};
+  HandshakeCtx hs = {0};
+  pthread_t hs_thread;
   void *ret = NULL;
   uint64_t epoch0;
 
@@ -100,6 +116,40 @@ int main(void)
   assert(la_load32_acq(&ctx.detached) == 1u);
   assert(la_load32_acq(&g->gc2.n_threads) == 1u);
   assert(ctx.tg.tg_flags & TGF_DEAD);
+
+  hs.g = g;
+  hs.actions = LJ_GC2_HS_ALLOC_BLACK|LJ_GC2_HS_STOPREQ;
+  tg->cur_L = NULL;  /* Hold the leader handshake open on the main TG. */
+  epoch0 = la_load64_acq(&g->gc2.hs_epoch);
+  assert(pthread_create(&hs_thread, NULL, handshake_main, &hs) == 0);
+  while (la_load64_acq(&g->gc2.hs_epoch) == epoch0)
+    la_cpu_pause();
+  while (la_load32_acq(&g->gc2.hs_pending) == 0)
+    la_cpu_pause();
+
+  catch.g = g;
+  catch.L = lua_newthread(L);
+  assert(catch.L != NULL);
+  assert(lj_thr_create(&thr, worker_main, &catch) == 0);
+  while (la_load32_acq(&catch.attached) == 0)
+    la_cpu_pause();
+  assert(catch.tg.hs_epoch_ack == g->gc2.hs_epoch);
+  assert(catch.tg.alloc.alloc_black == 1);
+  assert(catch.tg.tg_flags & TGF_STOPREQ);
+
+  tg->cur_L = L;
+  assert(lj_safepoint_ack(L) == hs.actions);
+  assert(pthread_join(hs_thread, NULL) == 0);
+  assert(hs.signaled == 1u);
+  assert(g->gc2.hs_pending == 0);
+  assert(catch.tg.hs_epoch_ack == g->gc2.hs_epoch);
+
+  la_store32_rel(&catch.release, 1);
+  assert(lj_thr_join(&thr, &ret) == 0);
+  assert(ret == (void *)(uintptr_t)0x4a);
+  assert(la_load32_acq(&catch.detached) == 1u);
+  assert(la_load32_acq(&g->gc2.n_threads) == 1u);
+  lua_pop(L, 1);
 
   lj_thr_set_tg(NULL);
   lua_pop(L, 1);

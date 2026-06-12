@@ -14,8 +14,7 @@
 #include "lj_tg.h"
 #include "lj_trace.h"
 
-static void safepoint_apply_actions(global_State *g, TGState *tg,
-				    uint32_t actions)
+void lj_safepoint_apply_tg(global_State *g, TGState *tg, uint32_t actions)
 {
   if (actions & LJ_GC2_HS_ENABLE_BARRIER)
     tg->mark_active = 1;
@@ -65,7 +64,7 @@ static uint32_t safepoint_ack_tg(global_State *g, TGState *tg)
   }
   if (oldepoch == epoch)
     return 0;
-  safepoint_apply_actions(g, tg, actions);
+  lj_safepoint_apply_tg(g, tg, actions);
   la_store32_rlx(&tg->poll, 0);
   oldpending = la_sub32_acqrel(&g->gc2.hs_pending, 1);  /* 05 section 5.4.2. */
   if (oldpending == 1)
@@ -107,34 +106,25 @@ uint32_t lj_native_leave(lua_State *L)
   return lj_safepoint_poll(L);
 }
 
-static uint32_t safepoint_count_live(global_State *g)
-{
-  TGState *tg;
-  uint32_t n = 0;
-  for (tg = g->gc2.tg_list; tg != NULL; tg = tg->next_tg)
-    if (!(la_load8_acq(&tg->tg_flags) & TGF_DEAD))  /* 05 section 5.4.1. */
-      n++;
-  return n;
-}
-
 uint32_t lj_safepoint_handshake(global_State *g, uint32_t actions)
 {
   TGState *tg;
   uint64_t epoch;
-  uint32_t live;
+  uint32_t signaled = 0, oldpending;
   if (!g || actions == 0)
     return 0;
-  live = safepoint_count_live(g);
-  if (live == 0)
-    return 0;
   la_store32_rel(&g->gc2.hs_actions, actions);  /* 05 section 5.4.2. */
-  la_store32_rel(&g->gc2.hs_pending, live);  /* 05 section 5.4.2. */
+  la_store32_rel(&g->gc2.hs_pending, 1);  /* 09 section 9.3 leader sentinel. */
   epoch = la_load64_rlx(&g->gc2.hs_epoch) + 1u;
   la_store64_rel(&g->gc2.hs_epoch, epoch);  /* 05 section 5.4.2. */
 
   for (tg = g->gc2.tg_list; tg != NULL; tg = tg->next_tg) {
     if (la_load8_acq(&tg->tg_flags) & TGF_DEAD)  /* 05 section 5.4.1. */
       continue;
+    if (la_load64_acq(&tg->hs_epoch_ack) == epoch)
+      continue;  /* 09 section 9.3: attach self-caught this epoch. */
+    (void)la_add32_rlx(&g->gc2.hs_pending, 1);
+    signaled++;
     la_store32_rel(&tg->reqmask, actions);  /* 05 section 5.4.2. */
     la_store32_rel(&tg->poll, 1);  /* 05 section 5.4.2 signal word. */
   }
@@ -148,8 +138,11 @@ uint32_t lj_safepoint_handshake(global_State *g, uint32_t actions)
       lj_safepoint_ack(tg->cur_L);  /* Deterministic single-mutator scaffold. */
   }
 
+  oldpending = la_sub32_acqrel(&g->gc2.hs_pending, 1);  /* Drop sentinel. */
+  if (oldpending == 1)
+    la_futex_wake(&g->gc2.hs_pending, 1);
   while (la_load32_acq(&g->gc2.hs_pending) != 0)
     la_futex_wait(&g->gc2.hs_pending, la_load32_rlx(&g->gc2.hs_pending),
 		  1000000);
-  return live;
+  return signaled;
 }

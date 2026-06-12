@@ -12,6 +12,8 @@
 LJ_FUNCA uint32_t lj_safepoint_ack(lua_State *L);
 LJ_FUNCA uint32_t lj_safepoint_poll(lua_State *L);
 LJ_FUNC uint32_t lj_safepoint_handshake(global_State *g, uint32_t actions);
+LJ_FUNC void lj_safepoint_apply_tg(global_State *g, TGState *tg,
+				   uint32_t actions);
 LJ_FUNC void lj_native_enter(TGState *tg);
 LJ_FUNC uint32_t lj_native_leave(lua_State *L);
 
