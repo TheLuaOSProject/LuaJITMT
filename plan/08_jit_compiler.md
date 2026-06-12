@@ -226,12 +226,14 @@ trace's PCs/parents, run by the leader between cycles with token.
    is a TRef of type upval-object; emit `UREFC` on it then ULOAD/USTORE.
    The x64 groundwork can lower a direct cell `UREFC` from a slot TRef and
    handles raw-slot CGET/CSET fallback during pre-promotion execution.
-   Owner-frame source CGET/CSET can trace on x64 after separating local-cell
-   opcodes from function-header/fast-function dispatch ranges. Source child
-   protos with parent-cell upvalues can trace through normal closed-upvalue
-   UGET/USET recording after FNEW promotion. Self-captured local-function
-   CNEW/CSET protos and loaded v4 cell protos remain `PROTO_NOJIT` until
-   CNEW snapshot behavior and loaded-chunk cell invariants are audited.
+   Owner-frame source and loaded v4 CGET/CSET can trace on x64 after
+   separating local-cell opcodes from function-header/fast-function dispatch
+   ranges. Source and loaded v4 child protos with parent-cell upvalues can
+   trace through normal closed-upvalue UGET/USET recording after FNEW
+   promotion. Original plan/WIP wording kept all loaded v4 cell protos
+   `PROTO_NOJIT`; after audit, only self-captured local-function CNEW/CSET
+   source protos and loaded v4 protos containing `BC_CNEW` stay `PROTO_NOJIT`
+   until CNEW snapshot/FNEW recording behavior is implemented.
 5. **Barrier IR**: extend the store lowerings: after computing the value
    ref, if `irt_isgcv(t)` emit `XBAR ref` (new IR, lowered to the §8.6
    guarded call/inline mark). Skip when value is a constant that the

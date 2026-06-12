@@ -201,6 +201,24 @@ LUA_PATH=$LUA_PATH_GUARD "$ROOT/src/luajit" -e '
 jit.flush()
 jit.opt.start("hotloop=1")
 local util = require"jit.util"
+local src = function(n)
+  local x = 0
+  local function touch() return x end
+  for i = 1, n do x = x + 1 end
+  return x, touch
+end
+local run = assert(loadstring(string.dump(src)))
+local v, f = run(200)
+assert(v == 200 and f() == 200)
+assert(util.traceinfo(1), "expected loaded owner CGET/CSET trace")
+local v2, f2 = run(20)
+assert(v2 == 20 and f2() == 20)
+'
+
+LUA_PATH=$LUA_PATH_GUARD "$ROOT/src/luajit" -e '
+jit.flush()
+jit.opt.start("hotloop=1")
+local util = require"jit.util"
 local function make(seed)
   local x = seed
   return function()
@@ -246,6 +264,47 @@ collectgarbage()
 local v2, f2 = run(1000, 30)
 assert(v2 == 1030 and f2() == 1031)
 assert(f() == 202)
+'
+
+LUA_PATH=$LUA_PATH_GUARD "$ROOT/src/luajit" -e '
+jit.flush()
+jit.opt.start("hotloop=1")
+local util = require"jit.util"
+local src = function(seed, n)
+  local x = seed
+  local function bump()
+    x = x + 1
+    return x
+  end
+  local last
+  for i = 1, n do last = bump() end
+  return last, bump
+end
+local run = assert(loadstring(string.dump(src)))
+local v, f = run(0, 200)
+assert(v == 200 and f() == 201)
+assert(util.traceinfo(1), "expected loaded child upvalue trace")
+local v2, f2 = run(1000, 30)
+assert(v2 == 1030 and f2() == 1031)
+assert(f() == 202)
+'
+
+LUA_PATH=$LUA_PATH_GUARD "$ROOT/src/luajit" -e '
+jit.flush()
+jit.opt.start("hotloop=1")
+local util = require"jit.util"
+local src = function(n)
+  local keep
+  for i = 1, n do
+    local function f() return f end
+    keep = f
+  end
+  return keep
+end
+local run = assert(loadstring(string.dump(src)))
+local f = run(30)
+assert(f() == f)
+assert(not util.traceinfo(1), "expected loaded CNEW creation proto to stay nojit")
 '
 
 cd "$ROOT/tests/stock/test"

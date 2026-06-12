@@ -240,6 +240,19 @@ int main(void)
   patch_ins(&mod, bcpos + sizeof(BCIns), BCINS_AD(BC_UCLO, 1, 0));
   assert_load_fails(L, &mod, "v4 cell dump with closing UCLO");
 
+  compile_to_dump(L, "local x=0; local function g() return x end; "
+		   "x=x+1; return x,g", &base);
+  assert_lua_ok(L, load_dump(L, &base), "load v4 CGET/CSET dump");
+  assert((top_proto(L)->flags & PROTO_NOJIT) == 0);
+  lua_pop(L, 1);
+
+  compile_to_dump(L, "local keep; for i=1,2 do "
+		   "local function f() return f end; keep=f end; return keep",
+		   &base);
+  assert_lua_ok(L, load_dump(L, &base), "load v4 CNEW dump");
+  assert((top_proto(L)->flags & PROTO_NOJIT) != 0);
+  lua_pop(L, 1);
+
   dump_free(&redump);
   dump_free(&mod);
   dump_free(&base);

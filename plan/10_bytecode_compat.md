@@ -47,8 +47,13 @@ Self-captured `local function f() ... f ... end` emits CNEW/FNEW/CSET so the
 function value is stored through the cell instead of overwriting it. Indexed
 stores parsed before capture discovery materialize captured table/key locals
 with CGET before TSET*. Closing UCLO with A != 0 is no longer emitted for
-source cells; UCLO 0 remains as a return/jump carrier for now. Cell-mode protos
-are marked PROTO_NOJIT until the recorder/snapshot work is audited.
+source cells; UCLO 0 remains as a return/jump carrier for now. Original
+implementation-plan wording marked loaded v4 cell protos `PROTO_NOJIT` until
+the recorder/snapshot work was audited; the current audited boundary is that
+source owner CGET/CSET, source child-cell upvalues, loaded v4 CGET/CSET, and
+loaded v4 child-cell upvalues can trace on x64, while source self-captured
+local-function CNEW/CSET protos and loaded v4 protos containing `BC_CNEW`
+remain `PROTO_NOJIT`.
 
 ## 10.4 Legacy v2 chunks (the compatibility deviation, DECIDED)
 

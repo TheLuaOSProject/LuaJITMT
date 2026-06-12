@@ -305,11 +305,16 @@ static void bcread_bytecode(LexState *ls, GCproto *pt, MSize sizebc)
 }
 
 /* Verify bytecode instructions after endian normalization. */
+enum {
+  BCREAD_CELL_ACCESS = 0x01,
+  BCREAD_CELL_CNEW = 0x02
+};
+
 static int bcread_verify_bytecode(LexState *ls, GCproto *pt)
 {
   BCIns *bc = proto_bc(pt);
   MSize i;
-  int has_cellops = 0;
+  int cellops = 0;
 
   for (i = 1; i < pt->sizebc; i++) {
     BCIns ins = bc[i];
@@ -320,13 +325,13 @@ static int bcread_verify_bytecode(LexState *ls, GCproto *pt)
       bcread_error(ls, LJ_ERR_BCBAD);
     switch (op) {
     case BC_CNEW:
-      has_cellops = 1;
+      cellops |= BCREAD_CELL_CNEW;
       if (bc_a(ins) >= pt->framesize)
 	bcread_error(ls, LJ_ERR_BCBAD);
       break;
     case BC_CGET:
     case BC_CSET:
-      has_cellops = 1;
+      cellops |= BCREAD_CELL_ACCESS;
       if (bc_a(ins) >= pt->framesize || bc_d(ins) >= pt->framesize)
 	bcread_error(ls, LJ_ERR_BCBAD);
       if (bc_a(ins) == bc_d(ins))
@@ -337,14 +342,14 @@ static int bcread_verify_bytecode(LexState *ls, GCproto *pt)
     }
   }
 
-  if (has_cellops) {
+  if (cellops) {
     for (i = 1; i < pt->sizebc; i++) {
       BCIns ins = bc[i];
       if (bc_op(ins) == BC_UCLO && bc_a(ins) != 0)
 	bcread_error(ls, LJ_ERR_BCBAD);
     }
   }
-  return has_cellops;
+  return cellops;
 }
 
 /* Read upvalue refs. */
@@ -379,7 +384,7 @@ GCproto *lj_bcread_proto(LexState *ls)
   MSize framesize, numparams, flags, sizeuv, sizekgc, sizekn, sizebc, sizept;
   MSize ofsk, ofsuv, ofsdbg;
   MSize sizedbg = 0;
-  int has_cellops;
+  int cellops;
   BCLine firstline = 0, numline = 0;
 
   /* Read prototype header. */
@@ -433,13 +438,13 @@ GCproto *lj_bcread_proto(LexState *ls)
 
   /* Read bytecode instructions and upvalue refs. */
   bcread_bytecode(ls, pt, sizebc);
-  has_cellops = bcread_verify_bytecode(ls, pt);
-  if (has_cellops)
+  cellops = bcread_verify_bytecode(ls, pt);
+  if (cellops)
     proto_setcelluv(pt);
   bcread_uv(ls, pt, sizeuv);
   if (bcread_version(ls) == BCDUMP_VERSION_LOCKLESS && bcread_uv_haslocal(pt))
     proto_setcelluv(pt);
-  if (has_cellops || proto_celluv(pt))
+  if (cellops & BCREAD_CELL_CNEW)
     pt->flags |= PROTO_NOJIT;
 
   /* Read constants. */

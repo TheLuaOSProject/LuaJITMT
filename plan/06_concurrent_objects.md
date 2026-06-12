@@ -229,10 +229,13 @@ deref uv->tv; CSET = load slot, wbarrier, store uv->tv). JIT: 08 §8.8.4
 allocation sinking at M9). Current implementation has x64 direct-cell
 recorder/lowering support for owner-frame CGET/CSET, including raw-slot
 fallback before promotion and dispatch-table fixes for recording/hook
-redispatch. Source child protos with parent-cell upvalues can trace through
-normal closed-upvalue UGET/USET recording after FNEW promotion. Self-captured
-local-function CNEW/CSET protos and loaded v4 cell protos remain PROTO_NOJIT
-until CNEW snapshot behavior and loaded-chunk cell invariants are audited.
+redispatch. Source child protos and loaded v4 child protos with parent-cell
+upvalues can trace through normal closed-upvalue UGET/USET recording after
+FNEW promotion; loaded v4 owner CGET/CSET protos can trace on the same x64
+owner-cell path. Original plan/WIP wording kept all loaded v4 cell protos
+`PROTO_NOJIT`; the audited boundary is narrower: self-captured local-function
+CNEW/CSET source protos and loaded v4 protos containing `BC_CNEW` remain
+`PROTO_NOJIT` until CNEW snapshot/FNEW recording behavior is implemented.
 ### 6.4.4 Legacy chunks: see 10 §10.4 (capture-at-FNEW under MT).
 
 ## 6.5 String interning (lj_str.c rewrite)

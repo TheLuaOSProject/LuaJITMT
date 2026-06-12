@@ -25,7 +25,9 @@ for needle in \
   'proto_setcelluv' \
   'bcread_verify_bytecode' \
   'bcread_uv_haslocal' \
+  'BCREAD_CELL_CNEW' \
   'bcread_version(ls) != BCDUMP_VERSION_LOCKLESS && op >= BC_CNEW' \
+  'cellops & BCREAD_CELL_CNEW' \
   'bcwrite_has_legacyuv'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_bcdump.h" "$ROOT/src/lj_obj.h" \
