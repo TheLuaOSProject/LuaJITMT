@@ -165,3 +165,66 @@ void lj_arena_unmap(GCArena *a)
     munmap((void *)a, LJ_ARENA_SIZE);
   errno = olderr;
 }
+
+static uint32_t arena_kind(uint32_t flags)
+{
+  return (flags & LJ_AF_TRAVERSABLE) ? LJ_ARENAK_TRAVERSABLE :
+				       LJ_ARENAK_PLAIN;
+}
+
+void lj_arena_alloc_init(TGAlloc *alloc)
+{
+  memset(alloc, 0, sizeof(*alloc));
+}
+
+void lj_arena_alloc_fini(TGAlloc *alloc)
+{
+  uint32_t k;
+  for (k = 0; k < LJ_ARENA_NKINDS; k++) {
+    GCArena *a = alloc->owned[k];
+    while (a) {
+      GCArena *next = a->hdr.next;
+      lj_arena_unmap(a);
+      a = next;
+    }
+  }
+  lj_arena_alloc_init(alloc);
+}
+
+static GCArena *arena_alloc_fresh(TGAlloc *alloc, PRNGState *rs,
+				  uint32_t flags)
+{
+  uint32_t k = arena_kind(flags);
+  GCArena *a = lj_arena_map(rs, flags);
+  if (!a)
+    return NULL;
+  a->hdr.next = alloc->owned[k];
+  alloc->owned[k] = a;
+  alloc->bump[k].a = a;
+  alloc->bump[k].cell = LJ_AFIRST_CELL;
+  alloc->bump[k].end = LJ_ARENA_CELLS;
+  return a;
+}
+
+void *lj_arena_alloc(TGAlloc *alloc, PRNGState *rs, size_t size,
+		     uint32_t flags)
+{
+  uint32_t k = arena_kind(flags);
+  LJArenaBump *b = &alloc->bump[k];
+  uint32_t ncells, cell;
+  if (size == 0 || size > LJ_HUGE_THRESHOLD)
+    return NULL;
+  ncells = (uint32_t)((size + LJ_CELL_SIZE-1u) >> LJ_CELL_SHIFT);
+  if (ncells > LJ_ARENA_CELLS - LJ_AFIRST_CELL)
+    return NULL;
+  if (!b->a || b->cell + ncells > b->end) {
+    if (!arena_alloc_fresh(alloc, rs, flags))
+      return NULL;
+  }
+  cell = b->cell;
+  b->cell += ncells;
+  lj_arena_bm_set(b->a->block, cell);
+  if (alloc->alloc_black)
+    lj_arena_bm_set(b->a->mark, cell);
+  return lj_arena_cellptr(b->a, cell);
+}

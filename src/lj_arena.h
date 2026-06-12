@@ -17,6 +17,12 @@
 #define LJ_ARENA_WORDS		(LJ_ARENA_CELLS >> 6)
 
 #define LJ_HUGE_THRESHOLD	(LJ_ARENA_SIZE >> 2)
+#define LJ_ALLOC_NBINS		32
+#define LJ_BUMP_MIN		64
+
+#define LJ_ARENAK_TRAVERSABLE	0
+#define LJ_ARENAK_PLAIN		1
+#define LJ_ARENA_NKINDS		2
 
 #define LJ_AF_TRAVERSABLE	0x00000001u
 #define LJ_AF_NEEDSWEEP		0x00000002u
@@ -25,6 +31,9 @@
 
 typedef struct GCArena GCArena;
 typedef struct GreyStack GreyStack;
+typedef struct LJArenaFreeRun LJArenaFreeRun;
+typedef struct LJArenaBump LJArenaBump;
+typedef struct TGAlloc TGAlloc;
 
 typedef struct GCAhdr {
   uint32_t flags;
@@ -42,6 +51,26 @@ struct GCArena {
   uint64_t mark[LJ_ARENA_WORDS];
 };
 
+struct LJArenaFreeRun {
+  LJArenaFreeRun *next;
+  uint32_t start;
+  uint32_t len;
+};
+
+struct LJArenaBump {
+  GCArena *a;
+  uint32_t cell;
+  uint32_t end;
+};
+
+struct TGAlloc {
+  LJArenaBump bump[LJ_ARENA_NKINDS];
+  LJArenaFreeRun *bins[LJ_ARENA_NKINDS][LJ_ALLOC_NBINS];
+  GCArena *owned[LJ_ARENA_NKINDS];
+  GCArena *needsweep[LJ_ARENA_NKINDS];
+  uint8_t alloc_black;
+};
+
 /* The header plus full block/mark bitmaps occupy 72 cells. The arena body
 ** starts after both bitmaps so the model keeps complete 4096-cell coverage. */
 #define LJ_ARENA_META_BYTES	((uint32_t)sizeof(GCArena))
@@ -55,6 +84,10 @@ LJ_FUNC void lj_arena_scan_free_runs(const GCArena *a, LJArenaRunCB cb, void *ud
 LJ_FUNC uint32_t lj_arena_count_free_runs(const GCArena *a);
 LJ_FUNC GCArena *lj_arena_map(PRNGState *rs, uint32_t flags);
 LJ_FUNC void lj_arena_unmap(GCArena *a);
+LJ_FUNC void lj_arena_alloc_init(TGAlloc *alloc);
+LJ_FUNC void lj_arena_alloc_fini(TGAlloc *alloc);
+LJ_FUNC void *lj_arena_alloc(TGAlloc *alloc, PRNGState *rs, size_t size,
+			     uint32_t flags);
 
 static LJ_AINLINE GCArena *lj_arena_of(const void *p)
 {
@@ -95,5 +128,6 @@ LJ_STATIC_ASSERT(offsetof(GCArena, block) == 128u);
 LJ_STATIC_ASSERT(sizeof(((GCArena *)0)->block) == 512u);
 LJ_STATIC_ASSERT(sizeof(((GCArena *)0)->mark) == 512u);
 LJ_STATIC_ASSERT(LJ_AFIRST_CELL == 72u);
+LJ_STATIC_ASSERT(sizeof(LJArenaFreeRun) == LJ_CELL_SIZE);
 
 #endif

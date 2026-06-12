@@ -8,6 +8,7 @@
 
 #include "lj_obj.h"
 #include "lj_bc.h"
+#include "lj_arena.h"
 
 /* Type of hot counter. Must match the code in the assembler VM. */
 /* 16 bits are sufficient. Only 0.0015% overhead with maximum slot penalty. */
@@ -30,10 +31,6 @@ typedef uint16_t HotCount;
 
 typedef struct GG_State GG_State;
 typedef struct ExitTrampolines ExitTrampolines;
-
-typedef struct TGAlloc {
-  void *reserved;
-} TGAlloc;
 
 struct TGState {
   HotCount hotcount[HOTCOUNT_SIZE];
