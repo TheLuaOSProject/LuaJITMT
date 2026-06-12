@@ -82,6 +82,9 @@ int main(void)
 #if LJ_HASFFI
     "local ffi = require('ffi')\n"
     "keep.vcd = ffi.new('char[?]', 64)\n"
+    "do\n"
+    "  local cd = ffi.gc(ffi.new('char[?]', 96), function(x) keep.fin = x end)\n"
+    "end\n"
 #endif
     "keep.co = coroutine.create(function()\n"
     "  local x = { 4, 5, 6 }\n"
@@ -120,6 +123,14 @@ int main(void)
 
 #if LJ_HASFFI
   lua_getfield(L, -1, "vcd");
+  tv = L->top - 1;
+  assert(tviscdata(tv));
+  cd = cdataV(tv);
+  assert(cdataisv(cd));
+  assert(arena_marked(g, obj2gco(cd)));
+  L->top--;
+
+  lua_getfield(L, -1, "fin");
   tv = L->top - 1;
   assert(tviscdata(tv));
   cd = cdataV(tv);
