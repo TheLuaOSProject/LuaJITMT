@@ -318,6 +318,8 @@
 |.define PC_RC, byte [PC-2]
 |.define PC_RD, word [PC-2]
 |
+|.define TGPOLL, dword [DISPATCH+DISPATCH_TG(poll)]
+|
 |.macro branchPC, reg
 |  lea PC, [PC+reg*4-BCBIAS_J*4]
 |.endmacro
@@ -389,6 +391,15 @@
 static void build_subroutines(BuildCtx *ctx)
 {
   |.code_sub
+  |
+  |->vm_safepoint:
+  |  mov L:RB, SAVE_L
+  |  mov L:RB->base, BASE
+  |  mov SAVE_PC, PC
+  |  mov CARG1, L:RB
+  |  call extern lj_safepoint_ack
+  |  mov BASE, L:RB->base
+  |  ins_next
   |
   |//-----------------------------------------------------------------------
   |//-- Return handling ----------------------------------------------------
@@ -4620,6 +4631,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 
   case BC_ILOOP:
     |  ins_A	// RA = base, RD = target (loop extent)
+    |  cmp TGPOLL, 0
+    |  jnz ->vm_safepoint
     |  ins_next
     break;
 
@@ -4662,6 +4675,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
   case BC_JMP:
     |  ins_AJ	// RA = unused, RD = target
     |  branchPC RD
+    |  cmp TGPOLL, 0
+    |  jnz ->vm_safepoint
     |  ins_next
     break;
 
@@ -4701,6 +4716,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
       |  movzx RDd, PC_RD
       |  jmp =>BC_JLOOP
     } else {
+      |  cmp TGPOLL, 0
+      |  jnz ->vm_safepoint
       |  ins_next
     }
     |
@@ -4752,6 +4769,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
       |  jmp =>BC_JLOOP
     } else {
       |  mov KBASE, [PC-4+PC2PROTO(k)]
+      |  cmp TGPOLL, 0
+      |  jnz ->vm_safepoint
       |  ins_next
     }
     |

@@ -19,6 +19,7 @@ for name in t-gc2-phase t-gc2-markbits; do
 done
 
 "$ROOT/tools/ci/m3_safepoint_handshake.sh"
+"$ROOT/tools/ci/m3_vm_safepoint.sh"
 "$ROOT/tools/ci/m3_gc2_paranoia.sh"
 "$ROOT/tools/ci/m2_arena_all.sh"
 "$ROOT/tools/ci/m2_gc_header_accessors.sh"
