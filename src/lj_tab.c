@@ -435,10 +435,16 @@ cTValue *lj_tab_get(lua_State *L, GCtab *t, cTValue *key)
 /* Insert new key. Use Brent's variation to optimize the chain length. */
 TValue *lj_tab_newkey(lua_State *L, GCtab *t, cTValue *key)
 {
-  Node *n = hashkey(t, key);
-  if (!tvisnil(&n->val) || t->hmask == 0) {
+  Node *n;
+  if (t->hmask == 0) {
+    rehashtab(L, t, key);
+    return lj_tab_set(L, t, key);
+  }
+  n = hashkey(t, key);
+  if (!tvisnil(&n->val)) {
     Node *nodebase = noderef(t->node);
     Node *collide, *freenode = getfreetop(t, nodebase);
+    lj_assertL(nodebase != &G(L)->nilnode, "insert into fallback hash");
     lj_assertL(freenode >= nodebase && freenode <= nodebase+t->hmask+1,
 	       "bad freenode");
     do {

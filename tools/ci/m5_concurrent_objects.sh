@@ -5,6 +5,7 @@ set -eu
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 
 "$ROOT/tools/ci/m5_nbtab_model.sh"
+"$ROOT/tools/ci/m5_tab_emptyhash.sh"
 "$ROOT/tools/ci/m5_itype_nan.sh"
 "$ROOT/tools/ci/m5_math_random_tg.sh"
 "$ROOT/tools/ci/m5_gcroot_publish.sh"
