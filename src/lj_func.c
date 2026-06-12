@@ -20,7 +20,8 @@
 
 void LJ_FASTCALL lj_func_freeproto(global_State *g, GCproto *pt)
 {
-  lj_mem_free(g, pt, pt->sizept);
+  if (!lj_mem_freegco_defer(g, pt, pt->sizept))
+    lj_mem_free(g, pt, pt->sizept);
 }
 
 /* -- Upvalues ------------------------------------------------------------ */

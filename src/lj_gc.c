@@ -1101,3 +1101,23 @@ void *lj_mem_grow(lua_State *L, void *p, MSize *szp, MSize lim, MSize esz)
   *szp = sz;
   return p;
 }
+
+/* Account a dead traversable GC object body for later arena bitmap reclaim. */
+int lj_mem_freegco_defer(global_State *g, void *p, GCSize osize)
+{
+  TGState *tg = G2TG(g);
+  GCArena *a;
+  uint32_t cell;
+  if (!p || !tg || !(tg->tg_flags & TGF_ARENA_INTERNAL) ||
+      g->allocf != lj_arena_allocf)
+    return 0;
+  a = lj_arena_of(p);
+  if (lj_arena_ishuge(a) || !(a->hdr.flags & LJ_AF_TRAVERSABLE))
+    return 0;
+  cell = lj_arena_cellof(p);
+  if (cell < LJ_AFIRST_CELL || cell >= LJ_ARENA_CELLS ||
+      !lj_arena_bm_get(a->block, cell))
+    return 0;
+  g->gc.total -= osize;
+  return 1;
+}

@@ -123,6 +123,7 @@ LJ_FUNC void *lj_mem_newgco_raw(lua_State *L, GCSize size, uint32_t flags);
 LJ_FUNC void * LJ_FASTCALL lj_mem_newgco(lua_State *L, GCSize size);
 LJ_FUNC void *lj_mem_grow(lua_State *L, void *p,
 			  MSize *szp, MSize lim, MSize esz);
+LJ_FUNC int lj_mem_freegco_defer(global_State *g, void *p, GCSize osize);
 
 #define lj_mem_new(L, s)	lj_mem_realloc(L, NULL, 0, (s))
 
