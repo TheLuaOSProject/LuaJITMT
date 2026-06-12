@@ -249,6 +249,104 @@ static int busy_coroutine_wrap(lua_State *L)
   return 0;
 }
 
+static int busy_lua_getstack(lua_State *L)
+{
+  lua_State *co = lua_newthread(L);
+  lua_Debug ar;
+  memset(&ar, 0, sizeof(ar));
+  co->thr_owner = foreign_tid(L);
+  (void)lua_getstack(co, 0, &ar);
+  return 0;
+}
+
+static int busy_lua_getinfo(lua_State *L)
+{
+  lua_State *co = lua_newthread(L);
+  lua_Debug ar;
+  memset(&ar, 0, sizeof(ar));
+  co->thr_owner = foreign_tid(L);
+  (void)lua_getinfo(co, "S", &ar);
+  return 0;
+}
+
+static int busy_lua_getlocal(lua_State *L)
+{
+  lua_State *co = lua_newthread(L);
+  lua_Debug ar;
+  memset(&ar, 0, sizeof(ar));
+  co->thr_owner = foreign_tid(L);
+  (void)lua_getlocal(co, &ar, 1);
+  return 0;
+}
+
+static int busy_lua_setlocal(lua_State *L)
+{
+  lua_State *co = lua_newthread(L);
+  lua_Debug ar;
+  memset(&ar, 0, sizeof(ar));
+  co->thr_owner = foreign_tid(L);
+  (void)lua_setlocal(co, &ar, 1);
+  return 0;
+}
+
+static int busy_debug_getinfo(lua_State *L)
+{
+  lua_State *co = lua_newthread(L);
+  co->thr_owner = foreign_tid(L);
+  lua_getglobal(L, "debug");
+  lua_getfield(L, -1, "getinfo");
+  lua_pushvalue(L, -3);
+  lua_pushinteger(L, 0);
+  lua_call(L, 2, LUA_MULTRET);
+  return 0;
+}
+
+static int busy_debug_getlocal(lua_State *L)
+{
+  lua_State *co = lua_newthread(L);
+  co->thr_owner = foreign_tid(L);
+  lua_getglobal(L, "debug");
+  lua_getfield(L, -1, "getlocal");
+  lua_pushvalue(L, -3);
+  lua_pushinteger(L, 0);
+  lua_pushinteger(L, 1);
+  lua_call(L, 3, LUA_MULTRET);
+  return 0;
+}
+
+static int busy_debug_setlocal(lua_State *L)
+{
+  lua_State *co = lua_newthread(L);
+  co->thr_owner = foreign_tid(L);
+  lua_getglobal(L, "debug");
+  lua_getfield(L, -1, "setlocal");
+  lua_pushvalue(L, -3);
+  lua_pushinteger(L, 0);
+  lua_pushinteger(L, 1);
+  lua_pushinteger(L, 99);
+  lua_call(L, 4, LUA_MULTRET);
+  return 0;
+}
+
+static int busy_debug_traceback(lua_State *L)
+{
+  lua_State *co = lua_newthread(L);
+  co->thr_owner = foreign_tid(L);
+  lua_getglobal(L, "debug");
+  lua_getfield(L, -1, "traceback");
+  lua_pushvalue(L, -3);
+  lua_call(L, 1, LUA_MULTRET);
+  return 0;
+}
+
+static int busy_luaL_traceback(lua_State *L)
+{
+  lua_State *co = lua_newthread(L);
+  co->thr_owner = foreign_tid(L);
+  luaL_traceback(L, co, "msg", 0);
+  return 0;
+}
+
 static int busy_coroutine_status(lua_State *L)
 {
   lua_State *co = lua_newthread(L);
@@ -278,6 +376,24 @@ int main(void)
     "local f = coroutine.wrap(function() return 93 end)\n"
     "assert(f() == 93)\n"),
     "Lua-created coroutine resume/wrap smoke");
+  check_lua_ok(L, luaL_dostring(L,
+    "local co = coroutine.create(function()\n"
+    "  local x = 41\n"
+    "  coroutine.yield('pause')\n"
+    "  return x\n"
+    "end)\n"
+    "assert(coroutine.resume(co))\n"
+    "local info = debug.getinfo(co, 1, 'flnSu')\n"
+    "assert(type(info) == 'table' and type(info.func) == 'function')\n"
+    "local name, value = debug.getlocal(co, 1, 1)\n"
+    "assert(name == 'x' and value == 41)\n"
+    "assert(debug.setlocal(co, 1, 1, 42) == 'x')\n"
+    "local _, changed = debug.getlocal(co, 1, 1)\n"
+    "assert(changed == 42)\n"
+    "assert(type(debug.traceback(co, 'msg')) == 'string')\n"
+    "local ok, result = coroutine.resume(co)\n"
+    "assert(ok and result == 42)\n"),
+    "debug coroutine smoke");
   expect_thread_busy(L, busy_xmove_target, "busy target xmove");
   expect_thread_busy(L, busy_xmove_source, "busy source xmove");
   expect_thread_busy(L, busy_lua_status, "busy lua_status");
@@ -286,6 +402,15 @@ int main(void)
   expect_thread_busy(L, busy_lua_resume, "busy lua_resume");
   expect_thread_busy(L, busy_coroutine_resume, "busy coroutine.resume");
   expect_thread_busy(L, busy_coroutine_wrap, "busy coroutine.wrap");
+  expect_thread_busy(L, busy_lua_getstack, "busy lua_getstack");
+  expect_thread_busy(L, busy_lua_getinfo, "busy lua_getinfo");
+  expect_thread_busy(L, busy_lua_getlocal, "busy lua_getlocal");
+  expect_thread_busy(L, busy_lua_setlocal, "busy lua_setlocal");
+  expect_thread_busy(L, busy_debug_getinfo, "busy debug.getinfo");
+  expect_thread_busy(L, busy_debug_getlocal, "busy debug.getlocal");
+  expect_thread_busy(L, busy_debug_setlocal, "busy debug.setlocal");
+  expect_thread_busy(L, busy_debug_traceback, "busy debug.traceback");
+  expect_thread_busy(L, busy_luaL_traceback, "busy luaL_traceback");
   expect_thread_busy(L, busy_coroutine_status, "busy coroutine.status");
   check_lua_ok(L, luaL_dostring(L,
     "local co = coroutine.create(function() coroutine.yield(1) end)\n"

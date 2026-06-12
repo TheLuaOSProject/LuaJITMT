@@ -12,6 +12,8 @@
 #include "lj_buf.h"
 #include "lj_tab.h"
 #include "lj_state.h"
+#include "lj_thr.h"
+#include "lj_tg.h"
 #include "lj_frame.h"
 #include "lj_bc.h"
 #include "lj_strfmt.h"
@@ -406,9 +408,18 @@ void lj_debug_pushloc(lua_State *L, GCproto *pt, BCPos pc)
 
 /* lua_getupvalue() and lua_setupvalue() are in lj_api.c. */
 
+static lua_State *debug_errstate(lua_State *L)
+{
+  lua_State *cur = lj_tg_cur_L(G(L));
+  return cur && G(cur) == G(L) ? cur : L;
+}
+
 LUA_API const char *lua_getlocal(lua_State *L, const lua_Debug *ar, int n)
 {
+  LJStateClaim claim;
   const char *name = NULL;
+  if (!lj_state_tryclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(debug_errstate(L), "thread busy");
   if (ar) {
     TValue *o = debug_localname(L, ar, &name, (BCReg)n);
     if (name) {
@@ -418,16 +429,22 @@ LUA_API const char *lua_getlocal(lua_State *L, const lua_Debug *ar, int n)
   } else if (tvisfunc(L->top-1) && isluafunc(funcV(L->top-1))) {
     name = debug_varname(funcproto(funcV(L->top-1)), 0, (BCReg)n-1);
   }
+  lj_state_dropclaim(&claim);
   return name;
 }
 
 LUA_API const char *lua_setlocal(lua_State *L, const lua_Debug *ar, int n)
 {
+  LJStateClaim claim;
   const char *name = NULL;
-  TValue *o = debug_localname(L, ar, &name, (BCReg)n);
+  TValue *o;
+  if (!lj_state_tryclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(debug_errstate(L), "thread busy");
+  o = debug_localname(L, ar, &name, (BCReg)n);
   if (name)
     copyTV(L, o, L->top-1);
   L->top--;
+  lj_state_dropclaim(&claim);
   return name;
 }
 
@@ -536,18 +553,30 @@ int lj_debug_getinfo(lua_State *L, const char *what, lj_Debug *ar, int ext)
 
 LUA_API int lua_getinfo(lua_State *L, const char *what, lua_Debug *ar)
 {
-  return lj_debug_getinfo(L, what, (lj_Debug *)ar, 0);
+  LJStateClaim claim;
+  int ok;
+  if (!lj_state_tryclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(debug_errstate(L), "thread busy");
+  ok = lj_debug_getinfo(L, what, (lj_Debug *)ar, 0);
+  lj_state_dropclaim(&claim);
+  return ok;
 }
 
 LUA_API int lua_getstack(lua_State *L, int level, lua_Debug *ar)
 {
+  LJStateClaim claim;
   int size;
-  cTValue *frame = lj_debug_frame(L, level, &size);
+  cTValue *frame;
+  if (!lj_state_tryclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(debug_errstate(L), "thread busy");
+  frame = lj_debug_frame(L, level, &size);
   if (frame) {
     ar->i_ci = (size << 16) + (int)(frame - tvref(L->stack));
+    lj_state_dropclaim(&claim);
     return 1;
   } else {
     ar->i_ci = level - size;
+    lj_state_dropclaim(&claim);
     return 0;
   }
 }
@@ -669,21 +698,35 @@ LUALIB_API void luaL_traceback (lua_State *L, lua_State *L1, const char *msg,
   lua_Debug ar;
   if (msg) lua_pushfstring(L, "%s\n", msg);
   lua_pushliteral(L, "stack traceback:");
-  while (lua_getstack(L1, level++, &ar)) {
+  for (;;) {
+    LJStateClaim claim;
     GCfunc *fn;
+    if (L != L1 && !lj_state_tryclaim(L1, lj_thr_current_id(G(L)), &claim))
+      lj_err_callermsg(L, "thread busy");
+    if (!lua_getstack(L1, level++, &ar)) {
+      if (L != L1) lj_state_dropclaim(&claim);
+      break;
+    }
     if (level > lim) {
-      if (!lua_getstack(L1, level + TRACEBACK_LEVELS2, &ar)) {
+      int has_tail;
+      has_tail = lua_getstack(L1, level + TRACEBACK_LEVELS2, &ar);
+      if (!has_tail) {
 	level--;
+	if (L != L1) lj_state_dropclaim(&claim);
       } else {
-	lua_pushliteral(L, "\n\t...");
+	int tail_ci;
 	lua_getstack(L1, -10, &ar);
-	level = ar.i_ci - TRACEBACK_LEVELS2;
+	tail_ci = ar.i_ci;
+	if (L != L1) lj_state_dropclaim(&claim);
+	lua_pushliteral(L, "\n\t...");
+	level = tail_ci - TRACEBACK_LEVELS2;
       }
       lim = 2147483647;
       continue;
     }
     lua_getinfo(L1, "Snlf", &ar);
     fn = funcV(L1->top-1); L1->top--;
+    if (L != L1) lj_state_dropclaim(&claim);
     if (isffunc(fn) && !*ar.namewhat)
       lua_pushfstring(L, "\n\t[builtin#%d]:", fn->c.ffid);
     else
@@ -707,4 +750,3 @@ LUALIB_API void luaL_traceback (lua_State *L, lua_State *L1, const char *msg,
   }
   lua_concat(L, (int)(L->top - L->base) - top);
 }
-

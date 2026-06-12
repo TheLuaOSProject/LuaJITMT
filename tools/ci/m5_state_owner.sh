@@ -126,4 +126,58 @@ if ! awk '
   exit 1
 fi
 
+if ! awk '
+  /static void debug_claimthread/ { infn = 1; next }
+  infn && /lj_state_tryclaim\(L1/ { claim = 1 }
+  infn && /thread busy/ { busy = 1 }
+  infn && /^}/ { exit(claim && busy ? 0 : 1) }
+  END { if (!claim || !busy) exit 1 }
+' "$ROOT/src/lib_debug.c"; then
+  echo "guardrail: debug library must claim foreign coroutine states" >&2
+  exit 1
+fi
+
+for fn in debug_getinfo debug_getlocal debug_setlocal; do
+  if ! awk -v fn="$fn" '
+    $0 ~ "LJLIB_CF\\(" fn "\\)" { infn = 1; start = NR; next }
+    infn && NR > start && /^LJLIB_CF\(/ {
+      exit(claim && drop ? 0 : 1)
+    }
+    infn && /debug_claimthread\(L, L1/ { claim = 1 }
+    infn && /lj_state_dropclaim\(&claim\)/ { drop = 1 }
+    END { if (!claim || !drop) exit 1 }
+  ' "$ROOT/src/lib_debug.c"; then
+    echo "guardrail: $fn must claim and drop foreign coroutine state" >&2
+    exit 1
+  fi
+done
+
+for fn in lua_getlocal lua_setlocal lua_getinfo lua_getstack; do
+  if ! awk -v fn="$fn" '
+    /LUA_API/ && $0 ~ fn "\\(" { infn = 1; start = NR; next }
+    infn && NR > start && /^LUA_API / {
+      exit(claim && drop ? 0 : 1)
+    }
+    infn && /lj_state_tryclaim\(L/ { claim = 1 }
+    infn && /lj_state_dropclaim\(&claim\)/ { drop = 1 }
+    END { if (!claim || !drop) exit 1 }
+  ' "$ROOT/src/lj_debug.c"; then
+    echo "guardrail: $fn must claim and drop inspected lua_State" >&2
+    exit 1
+  fi
+done
+
+if ! awk '
+  /LUALIB_API void luaL_traceback/ { infn = 1; start = NR; next }
+  infn && NR > start && /^}/ {
+    exit(claim && drop ? 0 : 1)
+  }
+  infn && /lj_state_tryclaim\(L1/ { claim = 1 }
+  infn && /lj_state_dropclaim\(&claim\)/ { drop = 1 }
+  END { if (!claim || !drop) exit 1 }
+' "$ROOT/src/lj_debug.c"; then
+  echo "guardrail: luaL_traceback must claim and drop inspected lua_State" >&2
+  exit 1
+fi
+
 echo "M5 lua_State owner tests passed"

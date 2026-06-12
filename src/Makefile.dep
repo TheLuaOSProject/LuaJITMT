@@ -5,7 +5,7 @@ lib_aux.o: lib_aux.c lua.h luaconf.h lauxlib.h lj_obj.h lj_def.h \
 lib_base.o: lib_base.c lua.h luaconf.h lauxlib.h lualib.h lj_obj.h \
  lj_def.h lj_arch.h lj_atomic.h lj_gc.h lj_err.h lj_errmsg.h lj_debug.h \
  lj_buf.h lj_str.h lj_tg.h lj_bc.h lj_arena.h lj_tab.h lj_meta.h \
- lj_state.h lj_frame.h lj_ctype.h lj_cconv.h lj_ff.h lj_ffdef.h \
+ lj_state.h lj_frame.h lj_thr.h lj_ctype.h lj_cconv.h lj_ff.h lj_ffdef.h \
  lj_dispatch.h lj_jit.h lj_ir.h lj_char.h lj_strscan.h lj_strfmt.h \
  lj_lib.h lj_libdef.h
 lib_bit.o: lib_bit.c lua.h luaconf.h lauxlib.h lualib.h lj_obj.h lj_def.h \
@@ -20,7 +20,7 @@ lib_buffer.o: lib_buffer.c lua.h luaconf.h lauxlib.h lualib.h lj_obj.h \
  lj_libdef.h
 lib_debug.o: lib_debug.c lua.h luaconf.h lauxlib.h lualib.h lj_obj.h \
  lj_def.h lj_arch.h lj_atomic.h lj_gc.h lj_err.h lj_errmsg.h lj_debug.h \
- lj_lib.h lj_libdef.h
+ lj_thr.h lj_lib.h lj_libdef.h
 lib_ffi.o: lib_ffi.c lua.h luaconf.h lauxlib.h lualib.h lj_obj.h lj_def.h \
  lj_arch.h lj_atomic.h lj_gc.h lj_err.h lj_errmsg.h lj_str.h lj_tab.h \
  lj_meta.h lj_ctype.h lj_cparse.h lj_cdata.h lj_cconv.h lj_carith.h \
@@ -63,8 +63,8 @@ lj_alloc.o: lj_alloc.c lj_def.h lua.h luaconf.h lj_arch.h lj_alloc.h \
 lj_api.o: lj_api.c lj_obj.h lua.h luaconf.h lj_def.h lj_arch.h \
  lj_atomic.h lj_gc.h lj_err.h lj_errmsg.h lj_debug.h lj_str.h lj_tab.h \
  lj_func.h lj_udata.h lj_meta.h lj_state.h lj_bc.h lj_frame.h lj_trace.h \
- lj_jit.h lj_ir.h lj_dispatch.h lj_tg.h lj_arena.h lj_traceerr.h lj_vm.h \
- lj_strscan.h lj_strfmt.h
+ lj_jit.h lj_ir.h lj_dispatch.h lj_tg.h lj_arena.h lj_traceerr.h lj_thr.h \
+ lj_vm.h lj_strscan.h lj_strfmt.h
 lj_arena.o: lj_arena.c lj_obj.h lua.h luaconf.h lj_def.h lj_arch.h \
  lj_atomic.h lj_arena.h lj_prng.h
 lj_asm.o: lj_asm.c lj_obj.h lua.h luaconf.h lj_def.h lj_arch.h \
@@ -128,8 +128,8 @@ lj_ctype.o: lj_ctype.c lj_obj.h lua.h luaconf.h lj_def.h lj_arch.h \
  lj_ctype.h lj_ccallback.h lj_buf.h lj_tg.h lj_bc.h lj_arena.h
 lj_debug.o: lj_debug.c lj_obj.h lua.h luaconf.h lj_def.h lj_arch.h \
  lj_atomic.h lj_err.h lj_errmsg.h lj_debug.h lj_buf.h lj_gc.h lj_str.h \
- lj_tg.h lj_bc.h lj_arena.h lj_tab.h lj_state.h lj_frame.h lj_strfmt.h \
- lj_jit.h lj_ir.h
+ lj_tg.h lj_bc.h lj_arena.h lj_tab.h lj_state.h lj_thr.h lj_frame.h \
+ lj_strfmt.h lj_jit.h lj_ir.h
 lj_dispatch.o: lj_dispatch.c lj_obj.h lua.h luaconf.h lj_def.h lj_arch.h \
  lj_atomic.h lj_err.h lj_errmsg.h lj_buf.h lj_gc.h lj_str.h lj_tg.h \
  lj_bc.h lj_arena.h lj_func.h lj_tab.h lj_meta.h lj_debug.h lj_state.h \

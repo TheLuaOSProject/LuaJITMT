@@ -17,6 +17,7 @@
 #include "lj_gc.h"
 #include "lj_err.h"
 #include "lj_debug.h"
+#include "lj_thr.h"
 #include "lj_lib.h"
 
 /* ------------------------------------------------------------------------ */
@@ -96,6 +97,15 @@ static lua_State *getthread(lua_State *L, int *arg)
   }
 }
 
+static void debug_claimthread(lua_State *L, lua_State *L1, LJStateClaim *claim)
+{
+  claim->L = NULL;
+  claim->tid = 0;
+  claim->release = 0;
+  if (L != L1 && !lj_state_tryclaim(L1, lj_thr_current_id(G(L)), claim))
+    lj_err_callermsg(L, "thread busy");
+}
+
 static void treatstackoption(lua_State *L, lua_State *L1, const char *fname)
 {
   if (L == L1) {
@@ -109,23 +119,42 @@ static void treatstackoption(lua_State *L, lua_State *L1, const char *fname)
 
 LJLIB_CF(debug_getinfo)
 {
+  LJStateClaim claim;
   lj_Debug ar;
   int arg, opt_f = 0, opt_L = 0;
+  int nres;
   lua_State *L1 = getthread(L, &arg);
   const char *options = luaL_optstring(L, arg+2, "flnSu");
+  const char *p;
+  claim.L = NULL;
+  claim.tid = 0;
+  claim.release = 0;
   if (lua_isnumber(L, arg+1)) {
+    debug_claimthread(L, L1, &claim);
     if (!lua_getstack(L1, (int)lua_tointeger(L, arg+1), (lua_Debug *)&ar)) {
+      lj_state_dropclaim(&claim);
       setnilV(L->top-1);
       return 1;
     }
   } else if (L->base+arg < L->top && tvisfunc(L->base+arg)) {
     options = lua_pushfstring(L, ">%s", options);
+    debug_claimthread(L, L1, &claim);
     setfuncV(L1, L1->top++, funcV(L->base+arg));
   } else {
     lj_err_arg(L, arg+1, LJ_ERR_NOFUNCL);
   }
-  if (!lj_debug_getinfo(L1, options, &ar, 1))
+  for (p = options + (*options == '>'); *p; p++) {
+    opt_f |= *p == 'f';
+    opt_L |= *p == 'L';
+  }
+  if (!lj_debug_getinfo(L1, options, &ar, 1)) {
+    lj_state_dropclaim(&claim);
     lj_err_arg(L, arg+2, LJ_ERR_INVOPT);
+  }
+  nres = opt_f + opt_L;
+  if (L != L1 && nres)
+    lua_xmove(L1, L, nres);
+  lj_state_dropclaim(&claim);
   lua_createtable(L, 0, 16);  /* Create result table. */
   for (; *options; options++) {
     switch (*options) {
@@ -148,37 +177,45 @@ LJLIB_CF(debug_getinfo)
       settabss(L, "name", ar.name);
       settabss(L, "namewhat", ar.namewhat);
       break;
-    case 'f': opt_f = 1; break;
-    case 'L': opt_L = 1; break;
+    case 'f': break;
+    case 'L': break;
     default: break;
     }
   }
-  if (opt_L) treatstackoption(L, L1, "activelines");
-  if (opt_f) treatstackoption(L, L1, "func");
+  if (opt_L) treatstackoption(L, L != L1 ? L : L1, "activelines");
+  if (opt_f) treatstackoption(L, L != L1 ? L : L1, "func");
   return 1;  /* Return result table. */
 }
 
 LJLIB_CF(debug_getlocal)
 {
+  LJStateClaim claim;
   int arg;
   lua_State *L1 = getthread(L, &arg);
   lua_Debug ar;
   const char *name;
   int slot = lj_lib_checkint(L, arg+2);
+  int level;
   if (tvisfunc(L->base+arg)) {
     L->top = L->base+arg+1;
     lua_pushstring(L, lua_getlocal(L, NULL, slot));
     return 1;
   }
-  if (!lua_getstack(L1, lj_lib_checkint(L, arg+1), &ar))
+  level = lj_lib_checkint(L, arg+1);
+  debug_claimthread(L, L1, &claim);
+  if (!lua_getstack(L1, level, &ar)) {
+    lj_state_dropclaim(&claim);
     lj_err_arg(L, arg+1, LJ_ERR_LVLRNG);
+  }
   name = lua_getlocal(L1, &ar, slot);
   if (name) {
     lua_xmove(L1, L, 1);
+    lj_state_dropclaim(&claim);
     lua_pushstring(L, name);
     lua_pushvalue(L, -2);
     return 2;
   } else {
+    lj_state_dropclaim(&claim);
     setnilV(L->top-1);
     return 1;
   }
@@ -186,15 +223,24 @@ LJLIB_CF(debug_getlocal)
 
 LJLIB_CF(debug_setlocal)
 {
+  LJStateClaim claim;
   int arg;
   lua_State *L1 = getthread(L, &arg);
   lua_Debug ar;
   TValue *tv;
-  if (!lua_getstack(L1, lj_lib_checkint(L, arg+1), &ar))
-    lj_err_arg(L, arg+1, LJ_ERR_LVLRNG);
+  const char *name;
+  int level = lj_lib_checkint(L, arg+1);
+  int slot = lj_lib_checkint(L, arg+2);
   tv = lj_lib_checkany(L, arg+3);
+  debug_claimthread(L, L1, &claim);
+  if (!lua_getstack(L1, level, &ar)) {
+    lj_state_dropclaim(&claim);
+    lj_err_arg(L, arg+1, LJ_ERR_LVLRNG);
+  }
   copyTV(L1, L1->top++, tv);
-  lua_pushstring(L, lua_setlocal(L1, &ar, lj_lib_checkint(L, arg+2)));
+  name = lua_setlocal(L1, &ar, slot);
+  lj_state_dropclaim(&claim);
+  lua_pushstring(L, name);
   return 1;
 }
 
@@ -387,10 +433,11 @@ LJLIB_CF(debug_traceback)
   int arg;
   lua_State *L1 = getthread(L, &arg);
   const char *msg = lua_tostring(L, arg+1);
+  int level = lj_lib_optint(L, arg+2, (L == L1));
   if (msg == NULL && L->top > L->base+arg)
     L->top = L->base+arg+1;
   else
-    luaL_traceback(L, L1, msg, lj_lib_optint(L, arg+2, (L == L1)));
+    luaL_traceback(L, L1, msg, level);
   return 1;
 }
 
@@ -403,4 +450,3 @@ LUALIB_API int luaopen_debug(lua_State *L)
   LJ_LIB_REG(L, LUA_DBLIBNAME, debug);
   return 1;
 }
-
