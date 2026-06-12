@@ -2523,6 +2523,17 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov L:RB->base, BASE
   |  mov qword [DISPATCH+DISPATCH_TG(jit_base)], 0
   |  set_vmstate INTERP
+  |  cmp TGPOLL, 0
+  |  jz >7
+  |  mov SAVE_ERRF, RDd
+  |  mov SAVE_PC, PC
+  |  mov CARG1, L:RB
+  |  call extern lj_safepoint_ack
+  |  mov L:RB, SAVE_L
+  |  mov BASE, L:RB->base
+  |  mov RDd, SAVE_ERRF
+  |  mov MULTRES, RDd
+  |7:
   |  // Modified copy of ins_next which handles function header dispatch, too.
   |  mov RCd, [PC]
   |  movzx RAd, RCH
