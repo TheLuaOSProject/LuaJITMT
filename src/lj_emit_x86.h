@@ -304,7 +304,7 @@ static void emit_loadi(ASMState *as, Reg r, int32_t i)
 
 #if LJ_GC64
 #define dispofs(as, k) \
-  ((intptr_t)((uintptr_t)(k) - (uintptr_t)J2GG(as->J)->dispatch))
+  ((intptr_t)((uintptr_t)(k) - (uintptr_t)J2TG(as->J)->dispatch))
 #define mcpofs(as, k) \
   ((intptr_t)((uintptr_t)(k) - (uintptr_t)as->mcp))
 #define mctopofs(as, k) \
@@ -360,7 +360,7 @@ static void emit_rma(ASMState *as, x86Op xo, Reg rr, const void *addr)
     Reg ra = (rr & 15);
     if (xo != XO_MOV) {
       /* We can't allocate a register here. Use and restore DISPATCH. Ugly. */
-      uint64_t dispaddr = (uintptr_t)J2GG(as->J)->dispatch;
+      uint64_t dispaddr = (uintptr_t)J2TG(as->J)->dispatch;
       uint8_t i8 = xo == XO_GROUP3b ? *as->mcp++ : 0;
       ra = RID_DISPATCH;
       if (checku32(dispaddr)) {

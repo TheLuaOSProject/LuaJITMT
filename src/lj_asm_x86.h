@@ -264,7 +264,7 @@ static void asm_fusefref(ASMState *as, IRIns *ir, RegSet allow)
   as->mrm.idx = RID_NONE;
   if (ir->op1 == REF_NIL) {  /* FLOAD from GG_State with offset. */
 #if LJ_GC64
-    as->mrm.ofs = (int32_t)(ir->op2 << 2) - GG_OFS(dispatch);
+    as->mrm.ofs = (int32_t)(ir->op2 << 2) - GG_OFS_TGDISP;
     as->mrm.base = RID_DISPATCH;
 #else
     as->mrm.ofs = (int32_t)(ir->op2 << 2) + ptr2addr(J2GG(as->J));
@@ -277,7 +277,7 @@ static void asm_fusefref(ASMState *as, IRIns *ir, RegSet allow)
     IRIns *op1 = IR(ir->op1);
 #if LJ_GC64
     if (ir->op1 == REF_NIL) {
-      as->mrm.ofs -= GG_OFS(dispatch);
+      as->mrm.ofs -= GG_OFS_TGDISP;
       as->mrm.base = RID_DISPATCH;
       return;
     } else if (op1->o == IR_KPTR || op1->o == IR_KKPTR) {
@@ -2832,7 +2832,7 @@ static void asm_gc_check(ASMState *as)
   asm_gencall(as, ci, args);
   tmp = ra_releasetmp(as, ASMREF_TMP1);
 #if LJ_GC64
-  emit_rmro(as, XO_LEA, tmp|REX_64, RID_DISPATCH, GG_DISP2G);
+  emit_rmro(as, XO_LEA, tmp|REX_64, RID_DISPATCH, TG_DISP2G);
 #else
   emit_loada(as, tmp, J2G(as->J));
 #endif
@@ -3133,7 +3133,7 @@ void lj_asm_patchexit(jit_State *J, GCtrace *T, ExitNo exitno, MCode *target)
   MCode *pe = p+len-6;
   MCode *pgc = NULL;
 #if LJ_GC64
-  uint32_t statei = (uint32_t)(GG_OFS(g.vmstate) - GG_OFS(dispatch));
+  uint32_t statei = (uint32_t)(GG_OFS(g.vmstate) - GG_OFS_TGDISP);
 #else
   uint32_t statei = u32ptr(&J2G(J)->vmstate);
 #endif
