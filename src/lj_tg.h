@@ -31,6 +31,7 @@ typedef uint16_t HotCount;
 
 #define TGF_ARENA_INTERNAL	0x01u
 #define TGF_HUGETAB		0x02u
+#define TGF_DEAD		0x04u
 #define TG_HUGETAB_BITS		16u
 
 typedef struct GG_State GG_State;

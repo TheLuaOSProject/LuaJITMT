@@ -640,6 +640,9 @@ typedef struct TGState TGState;
 typedef struct GC2State {
   uint32_t phase;	/* LJ_GC2_*; authoritative scaffold phase. */
   uint32_t cycle;	/* Monotonically increasing legacy cycle id. */
+  uint64_t hs_epoch;	/* Soft-handshake generation. */
+  uint32_t hs_pending;	/* Outstanding handshake acknowledgements. */
+  uint32_t hs_actions;	/* Current LJ_GC2_HS_* action bits. */
   uint64_t marks_this_round;  /* New arena/HugeTab marks this round. */
   TGState *tg_list;	/* Registered per-thread state blocks. */
   uint32_t n_threads;	/* Number of registered TG blocks. */

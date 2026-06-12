@@ -9,6 +9,7 @@
 #include "lj_obj.h"
 #include "lj_gc2.h"
 #include "lj_gc.h"
+#include "lj_safepoint.h"
 #include "lj_arena.h"
 #include "lj_tg.h"
 
@@ -17,14 +18,21 @@ static void gc2_attach_main(global_State *g)
   TGState *tg = G2TG(g);
   g->gc2.tg_list = tg;
   g->gc2.n_threads = tg ? 1u : 0u;
-  if (tg)
+  if (tg) {
+    tg->poll = 0;
+    tg->reqmask = 0;
+    tg->hs_epoch_ack = g->gc2.hs_epoch;
     tg->next_tg = NULL;
+  }
 }
 
 void lj_gc2_init(global_State *g)
 {
   g->gc2.phase = LJ_GC2_IDLE;
   g->gc2.cycle = 0;
+  g->gc2.hs_epoch = 0;
+  g->gc2.hs_pending = 0;
+  g->gc2.hs_actions = 0;
   g->gc2.marks_this_round = 0;
   gc2_attach_main(g);
 }
@@ -47,38 +55,30 @@ void lj_gc2_legacy_mark_begin(global_State *g)
   g->gc2.cycle++;
   g->gc2.marks_this_round = 0;
   gc2_clear_marks(g, tg);
-  if (tg && (tg->tg_flags & TGF_ARENA_INTERNAL)) {
-    tg->alloc.alloc_black = 1;
-    tg->mark_active = 1;  /* 05 section 5.3: per-TG boolean mirror. */
-  }
+  lj_gc2_handshake(g, LJ_GC2_HS_ENABLE_BARRIER|LJ_GC2_HS_ALLOC_BLACK);
 }
 
 void lj_gc2_legacy_sweep_begin(global_State *g)
 {
-  TGState *tg = G2TG(g);
   g->gc2.phase = LJ_GC2_SWEEP;
-  if (tg && (tg->tg_flags & TGF_ARENA_INTERNAL))
-    tg->mark_active = 0;  /* 05 section 5.3: sweep uses g->gc2.phase. */
+  lj_gc2_handshake(g, LJ_GC2_HS_DISABLE_BARRIER);
 }
 
 void lj_gc2_legacy_preserve_abort(global_State *g)
 {
-  TGState *tg = G2TG(g);
   g->gc2.phase = LJ_GC2_IDLE;
-  if (tg && (tg->tg_flags & TGF_ARENA_INTERNAL)) {
-    tg->alloc.alloc_black = 0;
-    tg->mark_active = 0;
-  }
+  lj_gc2_handshake(g, LJ_GC2_HS_DISABLE_BARRIER|LJ_GC2_HS_ALLOC_WHITE);
 }
 
 void lj_gc2_legacy_cycle_end(global_State *g)
 {
-  TGState *tg = G2TG(g);
   g->gc2.phase = LJ_GC2_IDLE;
-  if (tg && (tg->tg_flags & TGF_ARENA_INTERNAL)) {
-    tg->alloc.alloc_black = 0;
-    tg->mark_active = 0;
-  }
+  lj_gc2_handshake(g, LJ_GC2_HS_DISABLE_BARRIER|LJ_GC2_HS_ALLOC_WHITE);
+}
+
+uint32_t lj_gc2_handshake(global_State *g, uint32_t actions)
+{
+  return lj_safepoint_handshake(g, actions);
 }
 
 static void *gc2_mark_base(GCobj *o)
