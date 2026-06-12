@@ -231,20 +231,32 @@ static void *threading_worker(void *arg)
   return NULL;
 }
 
+static int threading_is_current_thread(lua_State *L, LJThread *th)
+{
+  TGState *tg = L2TG(L);
+  return tg != NULL && tg->thread_ud == th->ud;
+}
+
 #define LJLIB_MODULE_threading_thread
 
 LJLIB_CF(threading_thread_join)
 {
   LJThread *th = threading_tothread(L);
   int64_t ns;
+  int has_timeout;
   uint32_t state;
-  if (th->L == L) {
-    setboolV(L->top++, 1);
-    return 1;
+  has_timeout = L->base + 1 < L->top;
+  ns = threading_timeout_ns(L, 2, 1, -1);
+  if (threading_is_current_thread(L, th)) {
+    if (has_timeout) {
+      setnilV(L->top++);
+      lua_pushliteral(L, "timeout");
+      return 2;
+    }
+    lj_err_callermsg(L, "self-join would deadlock");
   }
   if (th->main_thread)
     lj_err_callermsg(L, "cannot join main thread");
-  ns = threading_timeout_ns(L, 2, 1, -1);
   for (;;) {
     state = la_load32_acq(&th->state);
     if (state == LJ_THREAD_DONE)
