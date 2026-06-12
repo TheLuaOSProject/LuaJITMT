@@ -7,12 +7,17 @@
 
 #include "lua.h"
 #include "lauxlib.h"
+#include "lualib.h"
 
 #include "lj_obj.h"
 #include "lj_gc.h"
 #include "lj_gc2.h"
 #include "lj_tab.h"
 #include "lj_tg.h"
+#if LJ_HASJIT
+#include "lj_dispatch.h"
+#include "lj_jit.h"
+#endif
 
 static void flush_and_drain(global_State *g, TGState *tg)
 {
@@ -207,6 +212,120 @@ static void test_vm_meta_tset_barrier(lua_State *L, global_State *g,
   lua_pop(L, 4);
 }
 
+#if LJ_HASJIT
+static GCtrace *find_trace(global_State *g)
+{
+  jit_State *J = G2J(g);
+  MSize i;
+  for (i = 1; i < J->sizetrace; i++)
+    if (gcref(J->trace[i]) != NULL)
+      return (GCtrace *)gcref(J->trace[i]);
+  return NULL;
+}
+
+static void test_jit_table_barrier(lua_State *L, global_State *g, TGState *tg)
+{
+  GCtab *parent, *child;
+
+  assert(luaL_dostring(L,
+    "jit.flush()\n"
+    "jit.opt.start('hotloop=1', 'hotexit=1')\n"
+    "return function(t, v, n)\n"
+    "  for i = 1, n do\n"
+    "    if i > 1 then t[1] = v end\n"
+    "  end\n"
+    "end\n") == LUA_OK);
+  lua_createtable(L, 1, 0);
+  lua_newtable(L);
+  lua_pushvalue(L, -3);
+  lua_pushvalue(L, -3);
+  lua_pushvalue(L, -3);
+  lua_pushinteger(L, 100);
+  lua_call(L, 3, 0);
+  assert(find_trace(g) != NULL);
+  lua_pop(L, 2);
+
+  lua_createtable(L, 1, 0);
+  parent = tabV(L->top - 1);
+  lua_newtable(L);
+  child = tabV(L->top - 1);
+
+  lj_gc2_legacy_mark_begin(g);
+  assert(lj_gc2_markobj(g, obj2gco(parent)) == 1);
+  flush_and_drain(g, tg);
+  assert(lj_gc2_ismarked(g, obj2gco(parent)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 0);
+
+  lua_pushvalue(L, -3);
+  lua_pushvalue(L, -3);
+  lua_pushvalue(L, -3);
+  lua_pushinteger(L, 20);
+  lua_call(L, 3, 0);
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 0);
+  assert(!lj_gc2_ssb_empty(g));
+  flush_and_drain(g, tg);
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
+  lj_gc2_legacy_cycle_end(g);
+  lua_pop(L, 3);
+}
+
+static void test_jit_upvalue_barrier(lua_State *L, global_State *g,
+				     TGState *tg)
+{
+  GCfunc *fn;
+  GCupval *uv;
+  GCtab *old, *child;
+
+  assert(luaL_dostring(L,
+    "jit.flush()\n"
+    "jit.opt.start('hotloop=1', 'hotexit=1')\n"
+    "local x = {}\n"
+    "local function setuv(v, n)\n"
+    "  for i = 1, n do\n"
+    "    if i > 1 then x = v end\n"
+    "  end\n"
+    "end\n"
+    "return setuv, x\n") == LUA_OK);
+  fn = funcV(L->top - 2);
+  old = tabV(L->top - 1);
+  assert(isluafunc(fn));
+  assert(fn->l.nupvalues == 1);
+  uv = gco2uv(gcref(fn->l.uvptr[0]));
+  assert(uv->closed);
+  assert(tabV(uvval(uv)) == old);
+
+  lua_newtable(L);
+  lua_pushvalue(L, -3);
+  lua_pushvalue(L, -2);
+  lua_pushinteger(L, 100);
+  lua_call(L, 2, 0);
+  assert(find_trace(g) != NULL);
+  old = tabV(uvval(uv));
+  lua_pop(L, 1);
+
+  lua_newtable(L);
+  child = tabV(L->top - 1);
+
+  lj_gc2_legacy_mark_begin(g);
+  assert(lj_gc2_markobj(g, obj2gco(uv)) == 1);
+  flush_and_drain(g, tg);
+  assert(lj_gc2_ismarked(g, obj2gco(uv)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(old)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 0);
+
+  lua_pushvalue(L, -3);
+  lua_pushvalue(L, -2);
+  lua_pushinteger(L, 20);
+  lua_call(L, 2, 0);
+  assert(tabV(uvval(uv)) == child);
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
+  assert(!lj_gc2_ssb_empty(g));
+  flush_and_drain(g, tg);
+  lj_gc2_legacy_cycle_end(g);
+  lua_pop(L, 3);
+}
+#endif
+
 static void make_weak_table(lua_State *L, const char *mode,
 			    GCtab **weak, GCtab **key, GCtab **val)
 {
@@ -342,6 +461,9 @@ int main(void)
   TGState *tg;
 
   assert(L != NULL);
+#if LJ_HASJIT
+  luaL_openlibs(L);
+#endif
   g = G(L);
   tg = G2TG(g);
   assert(tg != NULL);
@@ -352,6 +474,10 @@ int main(void)
   test_vm_upvalue_barrier(L, g, tg);
   test_vm_table_barrier(L, g, tg);
   test_vm_meta_tset_barrier(L, g, tg);
+#if LJ_HASJIT
+  test_jit_table_barrier(L, g, tg);
+  test_jit_upvalue_barrier(L, g, tg);
+#endif
   test_weak_tables(L, g, tg);
   test_closure(L, g, tg);
   test_thread(L, g, tg);

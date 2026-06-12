@@ -1930,9 +1930,18 @@ static void asm_cnew(ASMState *as, IRIns *ir)
 
 static void asm_tbar(ASMState *as, IRIns *ir)
 {
-  Reg tab = ra_alloc1(as, ir->op1, RSET_GPR);
-  Reg tmp = ra_scratch(as, rset_exclude(RSET_GPR, tab));
-  MCLabel l_end = emit_label(as);
+  const CCallInfo *ci = &lj_ir_callinfo[IRCALL_lj_gc2_barrier_tab_g];
+  IRRef args[2];
+  Reg tab, tmp;
+  MCLabel l_end;
+  ra_evictset(as, RSET_SCRATCH);
+  args[0] = ASMREF_TMP1;  /* global_State *g */
+  args[1] = ir->op1;      /* GCtab *t       */
+  asm_gencall(as, ci, args);
+  emit_loada(as, ra_releasetmp(as, ASMREF_TMP1), J2G(as->J));
+  tab = ra_alloc1(as, ir->op1, RSET_GPR);
+  tmp = ra_scratch(as, rset_exclude(RSET_GPR, tab));
+  l_end = emit_label(as);
   emit_movtomro(as, tmp|REX_GC64, tab, offsetof(GCtab, gclist));
   emit_setgl(as, tab, gc.grayagain);
   emit_getgl(as, tmp, gc.grayagain);
@@ -1947,30 +1956,13 @@ static void asm_obar(ASMState *as, IRIns *ir)
 {
   const CCallInfo *ci = &lj_ir_callinfo[IRCALL_lj_gc_barrieruv];
   IRRef args[2];
-  MCLabel l_end;
-  Reg obj;
   /* No need for other object barriers (yet). */
   lj_assertA(IR(ir->op1)->o == IR_UREFC, "bad OBAR type");
   ra_evictset(as, RSET_SCRATCH);
-  l_end = emit_label(as);
   args[0] = ASMREF_TMP1;  /* global_State *g */
   args[1] = ir->op1;      /* TValue *tv      */
   asm_gencall(as, ci, args);
   emit_loada(as, ra_releasetmp(as, ASMREF_TMP1), J2G(as->J));
-  obj = IR(ir->op1)->r;
-  emit_sjcc(as, CC_Z, l_end);
-  emit_i8(as, LJ_GC_WHITES);
-  if (irref_isk(ir->op2)) {
-    GCobj *vp = ir_kgc(IR(ir->op2));
-    emit_rma(as, XO_GROUP3b, XOg_TEST, &vp->gch.marked);
-  } else {
-    Reg val = ra_alloc1(as, ir->op2, rset_exclude(RSET_SCRATCH&RSET_GPR, obj));
-    emit_rmro(as, XO_GROUP3b, XOg_TEST, val, (int32_t)offsetof(GChead, marked));
-  }
-  emit_sjcc(as, CC_Z, l_end);
-  emit_i8(as, LJ_GC_BLACK);
-  emit_rmro(as, XO_GROUP3b, XOg_TEST, obj,
-	    (int32_t)offsetof(GCupval, marked)-(int32_t)offsetof(GCupval, tv));
 }
 
 /* -- FP/int arithmetic and logic operations ------------------------------ */

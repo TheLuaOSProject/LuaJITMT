@@ -2358,7 +2358,7 @@ static void asm_setup_regsp(ASMState *as)
       if (inloop)
 	as->modset = RSET_SCRATCH;
       continue;
-    case IR_STRTO: case IR_OBAR:
+    case IR_STRTO: case IR_TBAR: case IR_OBAR:
       if (inloop)
 	as->modset = RSET_SCRATCH;
       break;
