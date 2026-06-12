@@ -399,6 +399,21 @@ int lj_arena_hugetab_mark(HugeTab *ht, const void *p, LJHugeInfo *hi)
   return (oldmeta & LJ_HUGEF_MARK) ? 0 : 1;
 }
 
+void lj_arena_hugetab_clear_marks(HugeTab *ht)
+{
+  LJHugeTabHdr *h = ht ? ht->h : NULL;
+  uint32_t i, cap;
+  if (!h)
+    return;
+  cap = h->mask + 1u;
+  for (i = 0; i < cap; i++) {
+    LJHugeEnt *e = &h->ent[i];
+    uint64_t addr = la_load64_acq(&e->slot.lo);
+    if (addr > LJ_HUGETAB_TOMBSTONE)
+      la_and64_rlx(&e->slot.hi, ~(uint64_t)LJ_HUGEF_MARK);
+  }
+}
+
 int lj_arena_hugetab_delete(HugeTab *ht, const void *p, LJHugeInfo *hi)
 {
   LJHugeTabHdr *h = ht ? ht->h : NULL;
@@ -561,6 +576,19 @@ void lj_arena_alloc_fini(TGAlloc *alloc)
     arena_unmap_list(alloc->needsweep[k]);
   }
   lj_arena_alloc_init(alloc);
+}
+
+void lj_arena_alloc_clear_marks(TGAlloc *alloc)
+{
+  uint32_t k;
+  for (k = 0; k < LJ_ARENA_NKINDS; k++) {
+    GCArena *a;
+    for (a = alloc->owned[k]; a != NULL; a = a->hdr.next) {
+      uint32_t w;
+      for (w = 0; w < LJ_ARENA_WORDS; w++)
+	a->mark[w] &= ~a->block[w];
+    }
+  }
 }
 
 void lj_arena_alloc_rebuild_free(TGAlloc *alloc)

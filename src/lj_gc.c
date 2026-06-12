@@ -90,6 +90,16 @@ static void gc_arena_mark_phase(global_State *g, uint32_t phase)
     tg->mark_active = phase;
 }
 
+static void gc_arena_clear_marks(global_State *g)
+{
+  TGState *tg = G2TG(g);
+  if (tg && (tg->tg_flags & TGF_ARENA_INTERNAL)) {
+    lj_arena_alloc_clear_marks(&tg->alloc);
+    if (tg->tg_flags & TGF_HUGETAB)
+      lj_arena_hugetab_clear_marks(&tg->huge);
+  }
+}
+
 static void gc_arena_rebuild_free(global_State *g)
 {
   TGState *tg = G2TG(g);
@@ -208,6 +218,7 @@ static void gc_mark_gcroot(global_State *g)
 /* Start a GC cycle and mark the root set. */
 static void gc_mark_start(global_State *g)
 {
+  gc_arena_clear_marks(g);
   gc_arena_alloc_black(g, 1);
   gc_arena_mark_phase(g, 1);
   setgcrefnull(g->gc.gray);

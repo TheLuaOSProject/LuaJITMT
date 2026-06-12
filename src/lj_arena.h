@@ -123,10 +123,12 @@ LJ_FUNC int lj_arena_hugetab_lookup(HugeTab *ht, const void *p,
 				    LJHugeInfo *hi);
 LJ_FUNC int lj_arena_hugetab_mark(HugeTab *ht, const void *p,
 				  LJHugeInfo *hi);
+LJ_FUNC void lj_arena_hugetab_clear_marks(HugeTab *ht);
 LJ_FUNC int lj_arena_hugetab_delete(HugeTab *ht, const void *p,
 				    LJHugeInfo *hi);
 LJ_FUNC void lj_arena_alloc_init(TGAlloc *alloc);
 LJ_FUNC void lj_arena_alloc_fini(TGAlloc *alloc);
+LJ_FUNC void lj_arena_alloc_clear_marks(TGAlloc *alloc);
 LJ_FUNC void lj_arena_alloc_rebuild_free(TGAlloc *alloc);
 LJ_FUNC void lj_arena_alloc_prepare_sweep(TGAlloc *alloc);
 LJ_FUNC GCArena *lj_arena_sweep_one(TGAlloc *alloc, uint32_t kind,

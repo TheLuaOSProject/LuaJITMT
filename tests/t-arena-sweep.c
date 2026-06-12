@@ -155,6 +155,30 @@ int main(void)
     lj_arena_alloc_fini(&rebuild);
   }
 
+  {
+    TGAlloc clear;
+    void *black, *freep;
+    GCArena *a;
+    uint32_t cblack, cfree;
+    lj_arena_alloc_init(&clear);
+    clear.alloc_black = 1;
+    black = lj_arena_alloc(&clear, &rs, 32, 0);
+    clear.alloc_black = 0;
+    freep = lj_arena_alloc(&clear, &rs, 32, 0);
+    assert(black != NULL && freep != NULL);
+    a = lj_arena_of(black);
+    assert(lj_arena_of(freep) == a);
+    cblack = lj_arena_cellof(black);
+    cfree = lj_arena_cellof(freep);
+    lj_arena_free(&clear, freep, 32);
+    assert(lj_arena_state(a, cblack) == 3);
+    assert(lj_arena_state(a, cfree) == 1);
+    lj_arena_alloc_clear_marks(&clear);
+    assert(lj_arena_state(a, cblack) == 2);
+    assert(lj_arena_state(a, cfree) == 1);
+    lj_arena_alloc_fini(&clear);
+  }
+
   printf("t-arena-sweep OK: owner-local sweep rebuild verified\n");
   return 0;
 }

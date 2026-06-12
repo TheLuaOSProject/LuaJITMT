@@ -67,6 +67,9 @@ int main(void)
   check_info(&hi, sizes[1], LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_MARK);
   assert(lj_arena_hugetab_lookup(&ht, ptrs[1], &hi) == 1);
   check_info(&hi, sizes[1], LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_MARK);
+  lj_arena_hugetab_clear_marks(&ht);
+  assert(lj_arena_hugetab_lookup(&ht, ptrs[1], &hi) == 1);
+  check_info(&hi, sizes[1], LJ_HUGEF_TRAVERSABLE);
 
   for (i = 0; i < (uint32_t)(sizeof(ptrs)/sizeof(ptrs[0])); i++)
     delete_unmap(&ht, ptrs[i]);
