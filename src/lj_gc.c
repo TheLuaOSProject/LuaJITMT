@@ -20,6 +20,7 @@
 #include "lj_gc2.h"
 #include "lj_chan.h"
 #include "lj_err.h"
+#include "lj_thr.h"
 #include "lj_buf.h"
 #include "lj_str.h"
 #include "lj_tab.h"
@@ -317,6 +318,11 @@ static void gc_mark(global_State *g, GCobj *o)
       uint32_t i;
       for (i = 0; i < ch->cap; i++)
 	gc_marktv(g, &ch->slot[i].tv);  /* 09 section 9.5 channel slots. */
+    }
+    if (gco2ud(o)->udtype == UDTYPE_THREAD) {
+      LJThread *th = (LJThread *)uddata(gco2ud(o));
+      if (th->L)
+	gc_markobj(g, obj2gco(th->L));  /* 09 section 9.2 child stack. */
     }
   } else if (LJ_UNLIKELY(gct == ~LJ_TUPVAL)) {
     GCupval *uv = gco2uv(o);

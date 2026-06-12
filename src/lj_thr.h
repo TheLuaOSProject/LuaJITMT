@@ -18,6 +18,23 @@ typedef struct LJThr {
   uint32_t tid;
 } LJThr;
 
+#define LJ_THREAD_RUNNING	1u
+#define LJ_THREAD_DONE		2u
+
+typedef struct LJThread {
+  LJThr thr;
+  lua_State *L;
+  GCudata *ud;
+  TGState *tg;
+  uint32_t state;
+  uint32_t joined;
+  uint32_t futex;
+  uint32_t status;
+  uint32_t nargs;
+  uint32_t nresults;
+  uint32_t main_thread;
+} LJThread;
+
 LJ_FUNC int lj_thr_create(LJThr *thr, LJThrFunc func, void *arg);
 LJ_FUNC int lj_thr_join(LJThr *thr, void **ret);
 LJ_FUNC uint32_t lj_thr_id(const LJThr *thr);

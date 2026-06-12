@@ -10,6 +10,7 @@
 #include "lj_chan.h"
 #include "lj_gc2.h"
 #include "lj_gc.h"
+#include "lj_thr.h"
 #include "lj_buf.h"
 #include "lj_tab.h"
 #include "lj_meta.h"
@@ -733,6 +734,11 @@ static void gc2_traverse_udata(global_State *g, GCudata *ud)
     uint32_t i;
     for (i = 0; i < ch->cap; i++)
       gc2_mark_tv_worker(g, &ch->slot[i].tv);  /* 09 section 9.5. */
+  }
+  if (ud->udtype == UDTYPE_THREAD) {
+    LJThread *th = (LJThread *)uddata(ud);
+    if (th->L)
+      gc2_markobj_worker(g, obj2gco(th->L));  /* 09 section 9.2. */
   }
 }
 
