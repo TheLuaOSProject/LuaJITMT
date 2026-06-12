@@ -22,6 +22,7 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 "$ROOT/tools/ci/m5_upvalue_publish.sh"
 "$ROOT/tools/ci/m5_table_parser_publish.sh"
 "$ROOT/tools/ci/m5_x64_uv_publish.sh"
+"$ROOT/tools/ci/m5_bcdump_compat.sh"
 "$ROOT/tools/ci/m5_cell_ops.sh"
 "$ROOT/tools/ci/m0_guardrails.sh"
 

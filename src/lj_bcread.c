@@ -25,8 +25,16 @@
 
 /* Reuse some lexer fields for our own purposes. */
 #define bcread_flags(ls)	ls->level
+#define BCREAD_VERSION_SHIFT	24
+#define BCREAD_FLAG_MASK	((1u << BCREAD_VERSION_SHIFT)-1u)
+#define bcread_dumpflags(ls)	(bcread_flags(ls) & BCREAD_FLAG_MASK)
+#define bcread_version(ls) \
+  ((bcread_flags(ls) >> BCREAD_VERSION_SHIFT) ? \
+   (bcread_flags(ls) >> BCREAD_VERSION_SHIFT) : BCDUMP_VERSION)
+#define bcread_saveflags(ls, flags, version) \
+  (bcread_flags(ls) = (flags) | ((uint32_t)(version) << BCREAD_VERSION_SHIFT))
 #define bcread_swap(ls) \
-  ((bcread_flags(ls) & BCDUMP_F_BE) != LJ_BE*BCDUMP_F_BE)
+  ((bcread_dumpflags(ls) & BCDUMP_F_BE) != LJ_BE*BCDUMP_F_BE)
 #define bcread_oldtop(L, ls)	restorestack(L, ls->lastline)
 #define bcread_savetop(L, ls, top) \
   ls->lastline = (BCLine)savestack(L, (top))
@@ -296,6 +304,46 @@ static void bcread_bytecode(LexState *ls, GCproto *pt, MSize sizebc)
   }
 }
 
+/* Verify bytecode instructions after endian normalization. */
+static void bcread_verify_bytecode(LexState *ls, GCproto *pt)
+{
+  BCIns *bc = proto_bc(pt);
+  MSize i;
+  int has_cellops = 0;
+
+  for (i = 1; i < pt->sizebc; i++) {
+    BCIns ins = bc[i];
+    BCOp op = bc_op(ins);
+    if (op >= BC__MAX)
+      bcread_error(ls, LJ_ERR_BCBAD);
+    if (bcread_version(ls) == BCDUMP_VERSION_LEGACY && op >= BC_CNEW)
+      bcread_error(ls, LJ_ERR_BCBAD);
+    switch (op) {
+    case BC_CNEW:
+      has_cellops = 1;
+      if (bc_a(ins) >= pt->framesize)
+	bcread_error(ls, LJ_ERR_BCBAD);
+      break;
+    case BC_CGET:
+    case BC_CSET:
+      has_cellops = 1;
+      if (bc_a(ins) >= pt->framesize || bc_d(ins) >= pt->framesize)
+	bcread_error(ls, LJ_ERR_BCBAD);
+      break;
+    default:
+      break;
+    }
+  }
+
+  if (has_cellops) {
+    for (i = 1; i < pt->sizebc; i++) {
+      BCIns ins = bc[i];
+      if (bc_op(ins) == BC_UCLO && bc_a(ins) != 0)
+	bcread_error(ls, LJ_ERR_BCBAD);
+    }
+  }
+}
+
 /* Read upvalue refs. */
 static void bcread_uv(LexState *ls, GCproto *pt, MSize sizeuv)
 {
@@ -322,6 +370,8 @@ GCproto *lj_bcread_proto(LexState *ls)
 
   /* Read prototype header. */
   flags = bcread_byte(ls);
+  if ((flags & ~(PROTO_CHILD|PROTO_VARARG|PROTO_FFI)) != 0)
+    bcread_error(ls, LJ_ERR_BCBAD);
   numparams = bcread_byte(ls);
   framesize = bcread_byte(ls);
   sizeuv = bcread_byte(ls);
@@ -358,6 +408,9 @@ GCproto *lj_bcread_proto(LexState *ls)
   pt->sizept = sizept;
   pt->sizeuv = (uint8_t)sizeuv;
   pt->flags = (uint8_t)flags;
+  proto_initflags2(pt);
+  if (bcread_version(ls) == BCDUMP_VERSION_LEGACY)
+    proto_setlegacyuv(pt);
   pt->trace = 0;
   setgcref(pt->chunkname, obj2gco(ls->chunkname));
 
@@ -366,6 +419,7 @@ GCproto *lj_bcread_proto(LexState *ls)
 
   /* Read bytecode instructions and upvalue refs. */
   bcread_bytecode(ls, pt, sizebc);
+  bcread_verify_bytecode(ls, pt);
   bcread_uv(ls, pt, sizeuv);
 
   /* Read constants. */
@@ -393,13 +447,16 @@ GCproto *lj_bcread_proto(LexState *ls)
 /* Read and check header of bytecode dump. */
 static int bcread_header(LexState *ls)
 {
-  uint32_t flags;
+  uint32_t flags, version;
   bcread_want(ls, 3+5+5);
   if (bcread_byte(ls) != BCDUMP_HEAD2 ||
-      bcread_byte(ls) != BCDUMP_HEAD3 ||
-      bcread_byte(ls) != BCDUMP_VERSION) return 0;
-  bcread_flags(ls) = flags = bcread_uleb128(ls);
+      bcread_byte(ls) != BCDUMP_HEAD3) return 0;
+  version = bcread_byte(ls);
+  if (version != BCDUMP_VERSION_LEGACY && version != BCDUMP_VERSION)
+    return 0;
+  flags = bcread_uleb128(ls);
   if ((flags & ~(BCDUMP_F_KNOWN)) != 0) return 0;
+  bcread_saveflags(ls, flags, version);
   if ((flags & BCDUMP_F_FR2) != (uint32_t)ls->fr2*BCDUMP_F_FR2) return 0;
   if ((flags & BCDUMP_F_FFI)) {
 #if LJ_HASFFI
@@ -455,4 +512,3 @@ GCproto *lj_bcread(LexState *ls)
   L->top--;
   return protoV(L->top);
 }
-

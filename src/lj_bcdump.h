@@ -33,10 +33,10 @@
 #define BCDUMP_HEAD2		0x4c
 #define BCDUMP_HEAD3		0x4a
 
-/* If you perform *any* kind of private modifications to the bytecode itself
-** or to the dump format, you *must* set BCDUMP_VERSION to 0x80 or higher.
-*/
-#define BCDUMP_VERSION		2
+/* Bytecode dump format versions accepted by the lockless loader. */
+#define BCDUMP_VERSION_LEGACY	2
+#define BCDUMP_VERSION_LOCKLESS	3
+#define BCDUMP_VERSION		BCDUMP_VERSION_LOCKLESS
 
 /* Compatibility flags. */
 #define BCDUMP_F_BE		0x01

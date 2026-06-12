@@ -392,7 +392,7 @@ typedef struct GCproto {
   uint8_t framesize;	/* Fixed frame size. */
   MSize sizebc;		/* Number of bytecode instructions. */
 #if LJ_GC64
-  uint32_t unused_gc64;
+  uint32_t flags2;	/* Extended prototype flags. */
 #endif
   GCRef gclist;
   MRef k;		/* Split constant array (points to the middle). */
@@ -425,6 +425,19 @@ typedef struct GCproto {
 #define PROTO_CLCOUNT		0x20	/* Base of saturating 3 bit counter. */
 #define PROTO_CLC_BITS		3
 #define PROTO_CLC_POLY		(3*PROTO_CLCOUNT)  /* Polymorphic threshold. */
+
+/* Extended prototype flags. */
+#define PROTO2_LEGACYUV		0x00000001u  /* Loaded from v2 bytecode. */
+
+#if LJ_GC64
+#define proto_initflags2(pt)	((pt)->flags2 = 0)
+#define proto_legacyuv(pt)	(((pt)->flags2 & PROTO2_LEGACYUV) != 0)
+#define proto_setlegacyuv(pt)	((pt)->flags2 |= PROTO2_LEGACYUV)
+#else
+#define proto_initflags2(pt)	((void)0)
+#define proto_legacyuv(pt)	0
+#define proto_setlegacyuv(pt)	((void)0)
+#endif
 
 #define PROTO_UV_LOCAL		0x8000	/* Upvalue for local slot. */
 #define PROTO_UV_IMMUTABLE	0x4000	/* Immutable upvalue. */
