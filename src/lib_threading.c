@@ -239,6 +239,7 @@ void lj_threading_shutdown(lua_State *L)
 	(void)lj_thr_join(&th->thr, NULL);
     }
     threading_live_remove(L, ud);
+    (void)lj_tg_reclaim_dead(g);
   }
 }
 
@@ -372,6 +373,7 @@ static int threading_join_core(lua_State *L, LJThread *th, int has_timeout,
       (void)lj_thr_join(&th->thr, NULL);
       (void)lj_native_leave(L);
       threading_live_remove(L, th->ud);
+      (void)lj_tg_reclaim_dead(G(L));
     }
   }
 
@@ -842,6 +844,7 @@ LUA_API void luaMT_detach(lua_State *L)
   lj_state_release(L, tid);
   threading_gc_leave(g);
   lj_thr_set_tg(NULL);
+  (void)lj_tg_reclaim_dead(g);
 }
 
 #include "lj_libdef.h"

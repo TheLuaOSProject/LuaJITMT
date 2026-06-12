@@ -161,6 +161,38 @@ void lj_tg_detach(global_State *g, TGState *tg)
   la_store8_rlx(&tg->in_native, 0);
 }
 
+uint32_t lj_tg_reclaim_dead(global_State *g)
+{
+  TGState *prev, *tg;
+  uint32_t reclaimed = 0;
+  if (!g || la_load32_acq(&g->gc2.n_threads) != 1 ||
+      la_load32_acq(&g->gc2.hs_pending) != 0)
+    return 0;
+restart:
+  prev = NULL;
+  tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
+  while (tg != NULL) {
+    TGState *next = (TGState *)la_loadptr_acq((void *const *)&tg->next_tg);
+    if (la_load8_acq(&tg->tg_flags) & TGF_DEAD) {
+      if (prev) {
+	la_storeptr_rel((void **)&prev->next_tg, next);
+      } else {
+	void *expect = tg;
+	if (!la_casptr((void **)&g->gc2.tg_list, &expect, next,
+		       LA_ACQ_REL, LA_ACQ))
+	  goto restart;
+      }
+      la_storeptr_rel((void **)&tg->next_tg, NULL);
+      reclaimed++;
+      tg = next;
+      continue;
+    }
+    prev = tg;
+    tg = next;
+  }
+  return reclaimed;
+}
+
 void lj_tg_sync_dispatch_tg(global_State *g, TGState *tg)
 {
   if (g && tg)

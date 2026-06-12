@@ -56,6 +56,7 @@ void lj_gc2_init(global_State *g)
 
 void lj_gc2_fini(global_State *g)
 {
+  (void)lj_tg_reclaim_dead(g);
   if (g && g->gc2.grey_stack) {
     lj_mem_freevec(g, g->gc2.grey_stack, g->gc2.grey_capacity, GCRef);
     g->gc2.grey_stack = NULL;
@@ -83,6 +84,7 @@ void lj_gc2_legacy_mark_begin(global_State *g)
   g->gc2.cycle++;
   g->gc2.marks_this_round = 0;
   (void)lj_gc2_drain_ssb(g);  /* Finish prior-cycle scaffold work. */
+  (void)lj_tg_reclaim_dead(g);
   lj_assertG(gc2_grey_empty(g), "gc2 grey deque not empty at mark begin");
   la_store64_rlx(&g->gc2.grey_top, 0);
   la_store64_rlx(&g->gc2.grey_bottom, 0);
@@ -98,6 +100,7 @@ void lj_gc2_legacy_sweep_begin(global_State *g)
   lj_gc2_handshake(g, LJ_GC2_HS_DISABLE_BARRIER|LJ_GC2_HS_RESET_ALLOC|
 		   LJ_GC2_HS_FLUSH_SSB);
   (void)lj_gc2_drain_ssb(g);  /* Temporary worker-consume stand-in. */
+  (void)lj_tg_reclaim_dead(g);
 }
 
 void lj_gc2_legacy_preserve_abort(global_State *g)
@@ -106,6 +109,7 @@ void lj_gc2_legacy_preserve_abort(global_State *g)
   lj_gc2_handshake(g, LJ_GC2_HS_DISABLE_BARRIER|LJ_GC2_HS_ALLOC_WHITE|
 		   LJ_GC2_HS_FLUSH_SSB);
   (void)lj_gc2_drain_ssb(g);
+  (void)lj_tg_reclaim_dead(g);
 }
 
 void lj_gc2_legacy_cycle_end(global_State *g)
@@ -114,6 +118,7 @@ void lj_gc2_legacy_cycle_end(global_State *g)
   lj_gc2_handshake(g, LJ_GC2_HS_DISABLE_BARRIER|LJ_GC2_HS_ALLOC_WHITE|
 		   LJ_GC2_HS_FLUSH_SSB);
   (void)lj_gc2_drain_ssb(g);
+  (void)lj_tg_reclaim_dead(g);
 }
 
 uint32_t lj_gc2_handshake(global_State *g, uint32_t actions)

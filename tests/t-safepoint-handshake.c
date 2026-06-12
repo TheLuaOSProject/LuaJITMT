@@ -413,6 +413,8 @@ int main(void)
   assert(g->gc2.hs_epoch == epoch0 + 1u);
   assert(g->gc2.hs_pending == 0);
   assert(extra_tg.hs_epoch_ack == epoch0);
+  assert(lj_tg_reclaim_dead(g) == 1u);
+  assert(!tg_list_contains(g->gc2.tg_list, &extra_tg));
   lj_tg_fini_thread(g, &extra_tg);
 
   lua_close(L);

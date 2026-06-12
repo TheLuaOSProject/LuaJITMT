@@ -52,6 +52,16 @@ static void attach_without_catchup(global_State *g, TGState *tg)
   la_add32_rlx(&g->gc2.n_threads, 1);
 }
 
+static int tg_list_contains(TGState *tg, TGState *needle)
+{
+  while (tg) {
+    if (tg == needle)
+      return 1;
+    tg = tg->next_tg;
+  }
+  return 0;
+}
+
 static void *worker_main(void *arg)
 {
   ThrCtx *ctx = (ThrCtx *)arg;
@@ -144,6 +154,8 @@ int main(void)
   assert(la_load32_acq(&ctx.detached) == 1u);
   assert(la_load32_acq(&g->gc2.n_threads) == 1u);
   assert(ctx.tg.tg_flags & TGF_DEAD);
+  assert(lj_tg_reclaim_dead(g) == 1u);
+  assert(!tg_list_contains(g->gc2.tg_list, &ctx.tg));
 
   hs.g = g;
   hs.actions = LJ_GC2_HS_ALLOC_BLACK|LJ_GC2_HS_STOPREQ;
@@ -188,6 +200,7 @@ int main(void)
   assert(la_load64_acq(&late_tg.hs_epoch_ack) == g->gc2.hs_epoch);
 
   lj_tg_detach(g, &late_tg);
+  assert(lj_tg_reclaim_dead(g) == 0u);
   lj_tg_fini_thread(g, &late_tg);
   lua_pop(L, 1);
 
@@ -196,6 +209,9 @@ int main(void)
   assert(ret == (void *)(uintptr_t)0x4a);
   assert(la_load32_acq(&catch.detached) == 1u);
   assert(la_load32_acq(&g->gc2.n_threads) == 1u);
+  assert(lj_tg_reclaim_dead(g) == 2u);
+  assert(!tg_list_contains(g->gc2.tg_list, &catch.tg));
+  assert(!tg_list_contains(g->gc2.tg_list, &late_tg));
   lua_pop(L, 1);
 
   lj_thr_set_tg(NULL);
