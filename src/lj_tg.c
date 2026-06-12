@@ -11,7 +11,7 @@
 #include "lj_dispatch.h"
 #include "lj_tg.h"
 
-void lj_tg_init(GG_State *GG)
+void lj_tg_init(GG_State *GG, int alloc_ready)
 {
   TGState *tg = &GG->main_tg;
   global_State *g = &GG->g;
@@ -22,7 +22,11 @@ void lj_tg_init(GG_State *GG)
   tg->cur_L = L;
   tg->thread_L = L;
   tg->prng = g->prng;
-  lj_arena_alloc_init(&tg->alloc);
+  if (!alloc_ready)
+    lj_arena_alloc_init(&tg->alloc);
+  else
+    tg->tg_flags |= TGF_ARENA_INTERNAL;
+  lj_arena_allocd_init(&tg->allocd, &tg->alloc, &tg->prng, 0);
   lj_buf_init(NULL, &tg->tmpbuf);
 #if LJ_HASJIT
   memcpy(tg->hotcount, GG->hotcount, sizeof(tg->hotcount));
@@ -33,8 +37,8 @@ void lj_tg_init(GG_State *GG)
 void lj_tg_fini(global_State *g)
 {
   if (g->main_tg) {
-    lj_arena_alloc_fini(&g->main_tg->alloc);
     lj_buf_free(g, &g->main_tg->tmpbuf);
+    lj_arena_alloc_fini(&g->main_tg->alloc);
   }
 }
 

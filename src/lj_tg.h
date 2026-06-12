@@ -29,6 +29,8 @@ typedef uint16_t HotCount;
 #define GG_LEN_SDISP	BC_FUNCF
 #define GG_LEN_DISP	(GG_LEN_DDISP + GG_LEN_SDISP)
 
+#define TGF_ARENA_INTERNAL	0x01u
+
 typedef struct GG_State GG_State;
 typedef struct ExitTrampolines ExitTrampolines;
 
@@ -47,6 +49,7 @@ struct TGState {
   uint32_t reqmask;
   uint64_t hs_epoch_ack;
   TGAlloc alloc;
+  LJArenaAllocD allocd;
   GCRef *ssb_next, *ssb_end, *ssb_base;
   SBuf tmpbuf;
   TValue tmptv, tmptv2;
@@ -103,7 +106,7 @@ static LJ_AINLINE void lj_tg_setjit_base(global_State *g, TValue *base)
   ((int)(offsetof(TGState, f) - offsetof(TGState, dispatch)))
 #define DISPATCH_TG(f)	TG_OFS(f)
 
-LJ_FUNC void lj_tg_init(GG_State *GG);
+LJ_FUNC void lj_tg_init(GG_State *GG, int alloc_ready);
 LJ_FUNC void lj_tg_fini(global_State *g);
 LJ_FUNC void lj_tg_sync_dispatch(global_State *g);
 

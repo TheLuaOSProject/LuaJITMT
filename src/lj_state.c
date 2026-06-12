@@ -215,6 +215,8 @@ static TValue *cpluaopen(lua_State *L, lua_CFunction dummy, void *ud)
 static void close_state(lua_State *L)
 {
   global_State *g = G(L);
+  int arena_alloc = g->main_tg &&
+		    (g->main_tg->tg_flags & TGF_ARENA_INTERNAL);
   lj_func_closeuv(L, tvref(L->stack));
   lj_gc_freeall(g);
   lj_assertG(gcref(g->gc.root) == obj2gco(L),
@@ -225,7 +227,10 @@ static void close_state(lua_State *L)
   lj_ctype_freestate(g);
 #endif
   lj_str_freetab(g);
-  lj_tg_fini(g);
+  if (arena_alloc && g->main_tg)
+    lj_buf_free(g, &g->main_tg->tmpbuf);
+  else
+    lj_tg_fini(g);
   lj_buf_free(g, &g->tmpbuf);
   lj_mem_freevec(g, tvref(L->stack), L->stacksize, TValue);
 #if LJ_64
@@ -237,6 +242,19 @@ static void close_state(lua_State *L)
   lj_assertG(g->gc.total == sizeof(GG_State),
 	     "memory leak of %lld bytes",
 	     (long long)(g->gc.total - sizeof(GG_State)));
+  if (arena_alloc) {
+    GG_State *GG = G2GG(g);
+    int gghuge = lj_arena_ishuge(lj_arena_of(GG));
+    TGAlloc alloc;
+    if (g->main_tg)
+      alloc = g->main_tg->alloc;
+    else
+      lj_arena_alloc_init(&alloc);
+    lj_arena_alloc_fini(&alloc);
+    if (gghuge)
+      lj_arena_huge_unmap(GG, sizeof(GG_State));
+    return;
+  }
 #ifndef LUAJIT_USE_SYSMALLOC
   if (g->allocf == lj_alloc_f)
     lj_alloc_destroy(g->allocd);
@@ -252,29 +270,46 @@ LUA_API lua_State *lua_newstate(lua_Alloc allocf, void *allocd)
 #endif
 {
   PRNGState prng;
+  TGAlloc boot_alloc;
+  LJArenaAllocD boot_ad;
   GG_State *GG;
   lua_State *L;
   global_State *g;
+  int arena_internal = 0;
   /* We need the PRNG for the memory allocator, so initialize this first. */
   if (!lj_prng_seed_secure(&prng)) {
     lj_assertX(0, "secure PRNG seeding failed");
     /* Can only return NULL here, so this errors with "not enough memory". */
     return NULL;
   }
-#ifndef LUAJIT_USE_SYSMALLOC
   if (allocf == LJ_ALLOCF_INTERNAL) {
-    allocd = lj_alloc_create(&prng);
-    if (!allocd) return NULL;
-    allocf = lj_alloc_f;
+    lj_arena_alloc_init(&boot_alloc);
+    lj_arena_allocd_init(&boot_ad, &boot_alloc, &prng, 0);
+    allocf = lj_arena_allocf;
+    allocd = &boot_ad;
+    arena_internal = 1;
   }
-#endif
   GG = (GG_State *)allocf(allocd, NULL, 0, sizeof(GG_State));
-  if (GG == NULL) return NULL;
+  if (GG == NULL) {
+    if (arena_internal)
+      lj_arena_alloc_fini(&boot_alloc);
+    return NULL;
+  }
   if (!checkptrGC(GG)) {
     allocf(allocd, GG, sizeof(GG_State), 0);
+    if (arena_internal)
+      lj_arena_alloc_fini(&boot_alloc);
     return NULL;
   }
   memset(GG, 0, sizeof(GG_State));
+  if (arena_internal) {
+    GG->main_tg.alloc = boot_alloc;
+    GG->main_tg.prng = prng;
+    lj_arena_allocd_init(&GG->main_tg.allocd, &GG->main_tg.alloc,
+			 &GG->main_tg.prng, 0);
+    allocd = &GG->main_tg.allocd;
+    lj_arena_alloc_init(&boot_alloc);
+  }
   L = &GG->L;
   g = &GG->g;
   L->gct = ~LJ_TTHREAD;
@@ -313,7 +348,7 @@ LUA_API lua_State *lua_newstate(lua_Alloc allocf, void *allocd)
   g->gc.pause = LUAI_GCPAUSE;
   g->gc.stepmul = LUAI_GCMUL;
   lj_dispatch_init((GG_State *)L);
-  lj_tg_init((GG_State *)L);
+  lj_tg_init((GG_State *)L, arena_internal);
   L->status = LUA_ERRERR+1;  /* Avoid touching the stack upon memory error. */
   if (lj_vm_cpcall(L, NULL, NULL, cpluaopen) != 0) {
     /* Memory allocation error: free partial state. */

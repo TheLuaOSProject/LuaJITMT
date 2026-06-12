@@ -81,7 +81,14 @@
 #include "lj_asm.c"
 #include "lj_trace.c"
 #include "lj_gdbjit.c"
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-function"
+#endif
 #include "lj_alloc.c"
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
 
 #include "lib_aux.c"
 #include "lib_base.c"
