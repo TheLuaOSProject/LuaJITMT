@@ -32,6 +32,7 @@ typedef uint16_t HotCount;
 #define TGF_ARENA_INTERNAL	0x01u
 #define TGF_HUGETAB		0x02u
 #define TGF_DEAD		0x04u
+#define TGF_STOPREQ		0x08u
 #define TG_HUGETAB_BITS		16u
 #define TG_GC2_SSB_BYTES	1024u
 #define TG_GC2_SSB_SLOTS	(TG_GC2_SSB_BYTES / sizeof(GCRef))

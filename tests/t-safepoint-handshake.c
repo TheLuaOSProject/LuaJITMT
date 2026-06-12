@@ -102,6 +102,16 @@ int main(void)
   assert(tg->dispatch[BC_RET] == saved_dispatch);
   assert(tg->dispatch[BC_RET] == G2GG(g)->dispatch[BC_RET]);
 
+  assert((tg->tg_flags & TGF_STOPREQ) == 0);
+  actions = LJ_GC2_HS_STOPREQ;
+  epoch0 = g->gc2.hs_epoch;
+  assert(lj_gc2_handshake(g, actions) == 1);
+  assert(g->gc2.hs_epoch == epoch0 + 1u);
+  assert(g->gc2.hs_pending == 0);
+  assert(g->gc2.hs_actions == actions);
+  assert((tg->tg_flags & TGF_STOPREQ) != 0);
+  tg->tg_flags &= (uint8_t)~TGF_STOPREQ;
+
   lua_newtable(L);
   root_tab = tabV(L->top - 1);
   lj_gc2_legacy_mark_begin(g);
