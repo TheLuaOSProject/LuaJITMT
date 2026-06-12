@@ -321,6 +321,8 @@ LUA_API lua_State *lua_newstate(lua_Alloc allocf, void *allocd)
   lj_obj_setgcflags(obj2gco(L), LJ_GC_WHITE0 | LJ_GC_FIXED | LJ_GC_SFIXED);
   L->dummy_ffid = FF_C;
   setmref(L->glref, g);
+  L->thr_owner = 0;
+  L->scan_epoch = 0;
   g->gc.currentwhite = LJ_GC_WHITE0 | LJ_GC_FIXED;
   g->strempty.marked = LJ_GC_WHITE0;
   g->strempty.gct = ~LJ_TSTR;
@@ -417,6 +419,8 @@ lua_State *lj_state_new(lua_State *L)
   setmref(L1->stack, NULL);
   L1->cframe = NULL;
   L1->tg_hint = L2TG(L);
+  L1->thr_owner = 0;
+  L1->scan_epoch = 0;
   /* NOBARRIER: The lua_State is new (marked white). */
   setgcrefnull(L1->openupval);
   setmrefr(L1->glref, L->glref);

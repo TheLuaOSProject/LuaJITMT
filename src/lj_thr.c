@@ -19,7 +19,7 @@
 static __thread TGState *lj_tls_tg;
 static uint32_t lj_thr_next_tid;
 
-static uint32_t thr_next_tid(void)
+uint32_t lj_thr_newid(void)
 {
   uint32_t tid = la_add32_rlx(&lj_thr_next_tid, 1) + 1u;  /* 09 section 9.2. */
   if (tid == 0)
@@ -32,7 +32,8 @@ int lj_thr_create(LJThr *thr, LJThrFunc func, void *arg)
   int rc;
   if (!thr || !func)
     return EINVAL;
-  thr->tid = thr_next_tid();
+  if (thr->tid == 0)
+    thr->tid = lj_thr_newid();
   rc = pthread_create(&thr->handle, NULL, func, arg);  /* 09 section 9.3. */
   if (rc != 0)
     thr->tid = 0;
@@ -51,6 +52,12 @@ uint32_t lj_thr_id(const LJThr *thr)
   return thr ? thr->tid : 0;
 }
 
+uint32_t lj_thr_current_id(global_State *g)
+{
+  TGState *tg = lj_thr_get_tg_fallback(g);
+  return tg ? tg->tid : 0;
+}
+
 void lj_thr_set_tg(TGState *tg)
 {
   lj_tls_tg = tg;  /* 03 section 3.2: one TLS TG pointer per OS thread. */
@@ -65,6 +72,39 @@ TGState *lj_thr_get_tg_fallback(global_State *g)
 {
   TGState *tg = lj_tls_tg;
   return tg ? tg : (g ? g->main_tg : NULL);
+}
+
+int lj_state_claim(lua_State *L, uint32_t tid)
+{
+  uint32_t owner;
+  if (!L || tid == 0 || tid == LJ_THREAD_GCSCAN)
+    return 0;
+  for (;;) {
+    owner = la_load32_acq(&L->thr_owner);
+    if (owner == tid)
+      return 1;
+    if (owner == 0) {
+      uint32_t expect = 0;
+      if (la_cas32(&L->thr_owner, &expect, tid, LA_ACQ_REL, LA_ACQ))
+	return 1;
+      continue;
+    }
+    if (owner == LJ_THREAD_GCSCAN) {
+      la_cpu_pause();
+      continue;
+    }
+    return 0;
+  }
+}
+
+void lj_state_release(lua_State *L, uint32_t tid)
+{
+  if (L && tid != 0) {
+    uint32_t owner = la_load32_acq(&L->thr_owner);
+    lj_assertX(owner == tid, "lua_State owner mismatch");
+    UNUSED(owner);
+    la_store32_rel(&L->thr_owner, 0);
+  }
 }
 
 uint32_t lj_thr_cpucount(void)

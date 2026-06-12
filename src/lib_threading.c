@@ -189,10 +189,21 @@ static void *threading_worker(void *arg)
   lua_State *L = th->L;
   TGState *tg = th->tg;
   global_State *g = G(L);
+  uint32_t tid = lj_thr_id(&th->thr);
   int status;
 
   lj_thr_set_tg(tg);
+  tg->tid = tid;
   L->tg_hint = tg;
+  if (!lj_state_claim(L, tid)) {
+    th->status = LUA_ERRRUN;
+    th->nresults = 0;
+    lj_thr_set_tg(NULL);
+    threading_gc_leave(g);
+    la_store32_rel(&th->state, LJ_THREAD_DONE);
+    threading_wake_thread(th);
+    return NULL;
+  }
   tg->cur_L = L;
   tg->thread_L = L;
   tg->thread_ud = th->ud;
@@ -202,6 +213,7 @@ static void *threading_worker(void *arg)
   th->status = (uint32_t)status;
   th->nresults = (uint32_t)(L->top - L->base);
 
+  lj_state_release(L, tid);
   lj_tg_detach(g, tg);
   tg->cur_L = NULL;
   tg->thread_L = NULL;
@@ -262,9 +274,13 @@ LJLIB_CF(threading_thread_join)
   lj_state_checkstack(L, th->nresults + 1u);
   setboolV(L->top++, th->status == LUA_OK);
   {
+    uint32_t tid = lj_thr_current_id(G(L));
     uint32_t i;
+    while (!lj_state_claim(th->L, tid))
+      la_cpu_pause();
     for (i = 0; i < th->nresults; i++)
       copyTV(L, L->top++, th->L->base + i);
+    lj_state_release(th->L, tid);
   }
   return (int)th->nresults + 1;
 }
@@ -487,6 +503,7 @@ LJLIB_CF(threading_spawn)
   LJThread *th;
   TGState *tg;
   lua_State *L1;
+  uint32_t tid = lj_thr_current_id(G(L));
   ptrdiff_t nargs, i;
   int rc;
 
@@ -497,9 +514,12 @@ LJLIB_CF(threading_spawn)
 
   lj_state_checkstack(L, 2);
   L1 = lua_newthread(L);
+  if (!lj_state_claim(L1, tid))
+    lj_err_callermsg(L, "thread busy");
   lj_state_checkstack(L1, (MSize)(nargs + 1));
   for (i = 0; i <= nargs; i++)
     copyTV(L1, L1->top++, L->base + i);
+  lj_state_release(L1, tid);
 
   ud = threading_new_thread_ud(L, env);
   th = (LJThread *)uddata(ud);
@@ -509,6 +529,8 @@ LJLIB_CF(threading_spawn)
   th->state = LJ_THREAD_RUNNING;
   th->nargs = (uint32_t)nargs;
   lj_tg_init_thread(G(L), tg, L1, 0);
+  th->thr.tid = lj_thr_newid();
+  tg->tid = th->thr.tid;
   tg->thread_ud = ud;
   threading_live_set(L, env, ud, L1);
 
@@ -547,6 +569,7 @@ LJLIB_CF(threading_current)
       th->tg = tg;
       th->state = LJ_THREAD_RUNNING;
       th->main_thread = 1;
+      th->thr.tid = tg ? tg->tid : 0;
       if (tg)
 	tg->thread_ud = ud;
       setudataV(L, lj_tab_setstr(L, env, key), ud);

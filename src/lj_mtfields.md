@@ -19,6 +19,6 @@ whenever a shared field is introduced or migrated.
 | J->trace[i] | publish-once per id | store rel after mcode sync; load acq |
 | BCIns at patch sites | code word | single 32-bit store rel (`bc_publish`) |
 | GCtrace.exittab[i] | retarget word | store rel; loaded by indirect branch in mcode |
-| L->thr_owner (new) | claim word | CAS acq_rel |
+| L->thr_owner | claim word | CAS acq_rel |
 | g->str.tab vector ptr (becomes StrTabHdr*) | RCU pointer | acq / rel |
 | cts->tab / cts->top | RCU vector + ticket | see 11 §11.2 |

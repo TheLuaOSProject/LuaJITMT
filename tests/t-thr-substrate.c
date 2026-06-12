@@ -87,10 +87,25 @@ int main(void)
   assert(tg != NULL);
 
   lj_thr_set_tg(tg);
+  assert(tg->tid != 0);
+  assert(L->thr_owner == tg->tid);
   assert(lj_thr_get_tg() == tg);
   assert(G2TG(g) == tg);
   assert(lj_thr_cpucount() >= 1u);
   lj_thr_fence();
+
+  {
+    lua_State *Lclaim = lua_newthread(L);
+    uint32_t owner = lj_thr_current_id(g);
+    assert(owner == tg->tid);
+    assert(Lclaim->thr_owner == 0);
+    assert(lj_state_claim(Lclaim, owner) == 1);
+    assert(Lclaim->thr_owner == owner);
+    assert(lj_state_claim(Lclaim, owner + 1u) == 0);
+    lj_state_release(Lclaim, owner);
+    assert(Lclaim->thr_owner == 0);
+    lua_pop(L, 1);
+  }
 
   tg->alloc.alloc_black = 1;
   epoch0 = g->gc2.hs_epoch;

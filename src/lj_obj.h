@@ -747,6 +747,8 @@ struct lua_State {
   void *cframe;		/* End of C stack frame chain. */
   MSize stacksize;	/* True stack size (incl. LJ_STACK_EXTRA). */
   TGState *tg_hint;	/* Owning/running TG block, if attached. */
+  uint32_t thr_owner;	/* OS-thread owner tid or claim sentinel. */
+  uint64_t scan_epoch;	/* Last stack scan epoch for GC workers. */
 };
 
 #define G(L)			(mref(L->glref, global_State))

@@ -73,6 +73,7 @@ struct TGState {
   PRNGState prng;
   lua_State *thread_L;
   GCudata *thread_ud;
+  uint32_t tid;
   TGState *next_tg;
   uint64_t local_total;
   uint64_t stack_dirty_epoch;

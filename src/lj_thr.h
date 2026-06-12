@@ -20,6 +20,7 @@ typedef struct LJThr {
 
 #define LJ_THREAD_RUNNING	1u
 #define LJ_THREAD_DONE		2u
+#define LJ_THREAD_GCSCAN	0xffffffffu
 
 typedef struct LJThread {
   LJThr thr;
@@ -37,10 +38,14 @@ typedef struct LJThread {
 
 LJ_FUNC int lj_thr_create(LJThr *thr, LJThrFunc func, void *arg);
 LJ_FUNC int lj_thr_join(LJThr *thr, void **ret);
+LJ_FUNC uint32_t lj_thr_newid(void);
 LJ_FUNC uint32_t lj_thr_id(const LJThr *thr);
+LJ_FUNC uint32_t lj_thr_current_id(global_State *g);
 LJ_FUNC void lj_thr_set_tg(TGState *tg);
 LJ_FUNC TGState *lj_thr_get_tg(void);
 LJ_FUNC TGState *lj_thr_get_tg_fallback(global_State *g);
+LJ_FUNC int lj_state_claim(lua_State *L, uint32_t tid);
+LJ_FUNC void lj_state_release(lua_State *L, uint32_t tid);
 LJ_FUNC uint32_t lj_thr_cpucount(void);
 LJ_FUNC void lj_thr_fence(void);
 LJ_FUNC uint32_t lj_thr_sleep_ns(lua_State *L, int64_t ns);

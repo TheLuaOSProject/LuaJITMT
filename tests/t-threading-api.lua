@@ -83,6 +83,7 @@ assert(made == false and tostring(rangeerr):match("out of range"))
 local me = th.current()
 assert(type(me) == "userdata")
 assert(type(me:id()) == "number")
+assert(me:id() > 0)
 assert(me:running() == true)
 
 local worker = th.spawn(function(a, b) return a + b, nil, "x" end, 40, 2)
