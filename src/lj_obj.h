@@ -12,6 +12,7 @@
 #include "lua.h"
 #include "lj_def.h"
 #include "lj_arch.h"
+#include "lj_atomic.h"
 
 /* -- Memory references --------------------------------------------------- */
 
@@ -215,6 +216,11 @@ typedef LJ_ALIGN(8) union TValue {
 typedef const TValue cTValue;
 
 #define tvref(r)	(mref(r, TValue))
+
+#define tv_rawload(o)		la_load64_rlx(&(o)->u64)
+#define tv_rawload_acq(o)	la_load64_acq(&(o)->u64)
+#define tv_rawstore(o, u)	la_store64_rlx(&(o)->u64, (u))
+#define tv_rawstore_rel(o, u)	la_store64_rel(&(o)->u64, (u))
 
 /* More external and GCobj tags for internal objects. */
 #define LAST_TT		LUA_TTHREAD
@@ -630,6 +636,11 @@ typedef struct StrInternState {
   LJ_ALIGN(8) uint64_t seed;	/* Random string seed. */
 } StrInternState;
 
+typedef struct TGState TGState;
+#if LJ_HASJIT
+typedef struct jit_State jit_State;
+#endif
+
 /* Global state, shared by all threads of a Lua universe. */
 typedef struct global_State {
   lua_Alloc allocf;	/* Memory allocator. */
@@ -661,6 +672,10 @@ typedef struct global_State {
   MRef ctype_state;	/* Pointer to C type state. */
   PRNGState prng;	/* Global PRNG state. */
   GCRef gcroot[GCROOT_MAX];  /* GC roots. */
+#if LJ_HASJIT
+  jit_State *jitp;	/* Pointer to the universe-global JIT state. */
+#endif
+  TGState *main_tg;	/* Main per-OS-thread state block. */
 } global_State;
 
 #define mainthread(g)	(&gcref(g->mainthref)->th)
@@ -702,6 +717,7 @@ struct lua_State {
   GCRef env;		/* Thread environment (table of globals). */
   void *cframe;		/* End of C stack frame chain. */
   MSize stacksize;	/* True stack size (incl. LJ_STACK_EXTRA). */
+  TGState *tg_hint;	/* Owning/running TG block, if attached. */
 };
 
 #define G(L)			(mref(L->glref, global_State))
@@ -871,9 +887,11 @@ static LJ_AINLINE void *lightudV(global_State *g, cTValue *o)
 /* Macros to set tagged values. */
 #if LJ_GC64
 #define setitype(o, i)		((o)->it = ((i) << 15))
-#define setnilV(o)		((o)->it64 = -1)
-#define setpriV(o, x)		((o)->it64 = (int64_t)~((uint64_t)~(x)<<47))
-#define setboolV(o, x)		((o)->it64 = (int64_t)~((uint64_t)((x)+1)<<47))
+#define setnilV(o)		tv_rawstore((o), ~(uint64_t)0)
+#define setpriV(o, x) \
+  tv_rawstore((o), (uint64_t)(int64_t)~((uint64_t)~(x)<<47))
+#define setboolV(o, x) \
+  tv_rawstore((o), (uint64_t)(int64_t)~((uint64_t)((x)+1)<<47))
 #else
 #define setitype(o, i)		((o)->it = (i))
 #define setnilV(o)		((o)->it = LJ_TNIL)
@@ -884,7 +902,9 @@ static LJ_AINLINE void *lightudV(global_State *g, cTValue *o)
 static LJ_AINLINE void setrawlightudV(TValue *o, void *p)
 {
 #if LJ_GC64
-  o->u64 = (uint64_t)p | (((uint64_t)LJ_TLIGHTUD) << 47);
+  TValue tv;
+  tv.u64 = (uint64_t)p | (((uint64_t)LJ_TLIGHTUD) << 47);
+  tv_rawstore(o, tv.u64);
 #elif LJ_64
   o->u64 = (uint64_t)p | (((uint64_t)0xffff) << 48);
 #else
@@ -919,7 +939,9 @@ static LJ_AINLINE void checklivetv(lua_State *L, TValue *o, const char *msg)
 static LJ_AINLINE void setgcVraw(TValue *o, GCobj *v, uint32_t itype)
 {
 #if LJ_GC64
-  setgcreft(o->gcr, v, itype);
+  TValue tv;
+  setgcreft(tv.gcr, v, itype);
+  tv_rawstore(o, tv.u64);
 #else
   setgcref(o->gcr, v); setitype(o, itype);
 #endif
@@ -944,17 +966,24 @@ define_setV(setcdataV, GCcdata, LJ_TCDATA)
 define_setV(settabV, GCtab, LJ_TTAB)
 define_setV(setudataV, GCudata, LJ_TUDATA)
 
-#define setnumV(o, x)		((o)->n = (x))
-#define setnanV(o)		((o)->u64 = U64x(fff80000,00000000))
-#define setpinfV(o)		((o)->u64 = U64x(7ff00000,00000000))
-#define setminfV(o)		((o)->u64 = U64x(fff00000,00000000))
+static LJ_AINLINE void setnumV(TValue *o, lua_Number x)
+{
+  TValue tv;
+  tv.n = x;
+  tv_rawstore(o, tv.u64);
+}
+#define setnanV(o)		tv_rawstore((o), U64x(fff80000,00000000))
+#define setpinfV(o)		tv_rawstore((o), U64x(7ff00000,00000000))
+#define setminfV(o)		tv_rawstore((o), U64x(fff00000,00000000))
 
 static LJ_AINLINE void setintV(TValue *o, int32_t i)
 {
 #if LJ_DUALNUM
-  o->i = (uint32_t)i; setitype(o, LJ_TISNUM);
+  TValue tv;
+  tv.i = (uint32_t)i; setitype(&tv, LJ_TISNUM);
+  tv_rawstore(o, tv.u64);
 #else
-  o->n = (lua_Number)i;
+  setnumV(o, (lua_Number)i);
 #endif
 }
 
@@ -975,7 +1004,7 @@ static LJ_AINLINE void setint64V(TValue *o, int64_t i)
 /* Copy tagged values. */
 static LJ_AINLINE void copyTV(lua_State *L, TValue *o1, const TValue *o2)
 {
-  *o1 = *o2;
+  tv_rawstore(o1, tv_rawload(o2));
   checklivetv(L, o1, "copy of dead GC object");
 }
 

@@ -11,6 +11,7 @@
 #if LJ_HASJIT
 #include "lj_jit.h"
 #endif
+#include "lj_tg.h"
 
 #if LJ_TARGET_MIPS
 /* Need our own global offset table for the dreaded MIPS calling conventions. */
@@ -66,25 +67,6 @@ GOTDEF(GOTENUM)
 };
 #endif
 
-/* Type of hot counter. Must match the code in the assembler VM. */
-/* 16 bits are sufficient. Only 0.0015% overhead with maximum slot penalty. */
-typedef uint16_t HotCount;
-
-/* Number of hot counter hash table entries (must be a power of two). */
-#define HOTCOUNT_SIZE		64
-#define HOTCOUNT_PCMASK		((HOTCOUNT_SIZE-1)*sizeof(HotCount))
-
-/* Hotcount decrements. */
-#define HOTCOUNT_LOOP		2
-#define HOTCOUNT_CALL		1
-
-/* This solves a circular dependency problem -- bump as needed. Sigh. */
-#define GG_NUM_ASMFF	57
-
-#define GG_LEN_DDISP	(BC__MAX + GG_NUM_ASMFF)
-#define GG_LEN_SDISP	BC_FUNCF
-#define GG_LEN_DISP	(GG_LEN_DDISP + GG_LEN_SDISP)
-
 /* Global state, main thread and extra fields are allocated together. */
 typedef struct GG_State {
   lua_State L;				/* Main thread. */
@@ -106,6 +88,7 @@ typedef struct GG_State {
 #endif
   ASMFunction dispatch[GG_LEN_DISP];	/* Instruction dispatch tables. */
   BCIns bcff[GG_NUM_ASMFF];		/* Bytecode for ASM fast functions. */
+  TGState main_tg;			/* Main per-OS-thread state. */
 } GG_State;
 
 #define GG_OFS(field)	((int)offsetof(GG_State, field))
@@ -113,8 +96,11 @@ typedef struct GG_State {
 #define J2GG(j)		((GG_State *)((char *)(j) - GG_OFS(J)))
 #define L2GG(L)		(G2GG(G(L)))
 #define J2G(J)		(&J2GG(J)->g)
-#define G2J(gl)		(&G2GG(gl)->J)
-#define L2J(L)		(&L2GG(L)->J)
+#define G2J(gl)		((gl)->jitp)
+#define L2J(L)		(G(L)->jitp)
+#define G2TG(gl)	((gl)->main_tg)
+#define L2TG(L)		((L)->tg_hint ? (L)->tg_hint : G2TG(G(L)))
+#define J2TG(J)		G2TG(J2G(J))
 #define GG_G2J		(GG_OFS(J) - GG_OFS(g))
 #define GG_G2DISP	(GG_OFS(dispatch) - GG_OFS(g))
 #define GG_DISP2G	(GG_OFS(g) - GG_OFS(dispatch))

@@ -34,6 +34,7 @@
 #include "lj_prng.c"
 #include "lj_state.c"
 #include "lj_dispatch.c"
+#include "lj_tg.c"
 #include "lj_vmevent.c"
 #include "lj_vmmath.c"
 #include "lj_strscan.c"
@@ -88,4 +89,3 @@
 #include "lib_ffi.c"
 #include "lib_buffer.c"
 #include "lib_init.c"
-

@@ -600,15 +600,11 @@
 #define LJ_GC64			0
 #endif
 
-/* Lockless multithreaded runtime build flag. */
-#ifdef LUAJIT_THREADSAFE
+/* Lockless multithreaded runtime is the primary build path. */
 #define LJ_MT			1
-#else
-#define LJ_MT			0
-#endif
 
-#if LJ_MT && (!LJ_GC64 || !(LJ_TARGET_X64 || LJ_TARGET_ARM64) || !LJ_TARGET_LINUX)
-#error "LUAJIT_THREADSAFE requires GC64 on x86-64 or ARM64 Linux"
+#if !LJ_GC64 || !LJ_TARGET_X64 || !LJ_TARGET_LINUX
+#error "lockless runtime requires GC64 on x86-64 Linux"
 #endif
 
 /* 2-slot frame info. */

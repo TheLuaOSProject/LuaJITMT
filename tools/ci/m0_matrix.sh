@@ -1,6 +1,6 @@
 #!/bin/sh
 # Build and test the M0 matrix:
-#   LJ_MT off/on x JIT on/off.
+#   default lockless runtime x JIT on/off.
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
@@ -20,9 +20,7 @@ run_combo() {
 
 "$ROOT/tools/ci/m0_guardrails.sh"
 
-run_combo "LJ_MT=0 JIT=1" "" ""
-run_combo "LJ_MT=0 JIT=0" "-DLUAJIT_DISABLE_JIT" "-jit"
-run_combo "LJ_MT=1 JIT=1" "-DLUAJIT_THREADSAFE" ""
-run_combo "LJ_MT=1 JIT=0" "-DLUAJIT_THREADSAFE -DLUAJIT_DISABLE_JIT" "-jit"
+run_combo "lockless JIT=1" "" ""
+run_combo "lockless JIT=0" "-DLUAJIT_DISABLE_JIT" "-jit"
 
 echo "M0 matrix passed"

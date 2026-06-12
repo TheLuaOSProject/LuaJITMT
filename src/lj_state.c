@@ -24,6 +24,7 @@
 #endif
 #include "lj_trace.h"
 #include "lj_dispatch.h"
+#include "lj_tg.h"
 #include "lj_vm.h"
 #include "lj_prng.h"
 #include "lj_lex.h"
@@ -219,6 +220,7 @@ static void close_state(lua_State *L)
   lj_ctype_freestate(g);
 #endif
   lj_str_freetab(g);
+  lj_tg_fini(g);
   lj_buf_free(g, &g->tmpbuf);
   lj_mem_freevec(g, tvref(L->stack), L->stacksize, TValue);
 #if LJ_64
@@ -280,6 +282,9 @@ LUA_API lua_State *lua_newstate(lua_Alloc allocf, void *allocd)
   g->allocf = allocf;
   g->allocd = allocd;
   g->prng = prng;
+#if LJ_HASJIT
+  g->jitp = &GG->J;
+#endif
 #ifndef LUAJIT_USE_SYSMALLOC
   if (allocf == lj_alloc_f) {
     lj_alloc_setprng(allocd, &g->prng);
@@ -303,6 +308,7 @@ LUA_API lua_State *lua_newstate(lua_Alloc allocf, void *allocd)
   g->gc.pause = LUAI_GCPAUSE;
   g->gc.stepmul = LUAI_GCMUL;
   lj_dispatch_init((GG_State *)L);
+  lj_tg_init((GG_State *)L);
   L->status = LUA_ERRERR+1;  /* Avoid touching the stack upon memory error. */
   if (lj_vm_cpcall(L, NULL, NULL, cpluaopen) != 0) {
     /* Memory allocation error: free partial state. */
@@ -363,6 +369,7 @@ lua_State *lj_state_new(lua_State *L)
   L1->stacksize = 0;
   setmref(L1->stack, NULL);
   L1->cframe = NULL;
+  L1->tg_hint = L2TG(L);
   /* NOBARRIER: The lua_State is new (marked white). */
   setgcrefnull(L1->openupval);
   setmrefr(L1->glref, L->glref);
@@ -389,4 +396,3 @@ void LJ_FASTCALL lj_state_free(global_State *g, lua_State *L)
   lj_mem_freevec(g, tvref(L->stack), L->stacksize, TValue);
   lj_mem_freet(g, L);
 }
-
