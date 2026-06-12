@@ -118,6 +118,9 @@ typedef uint16_t VarIndex;
 #define VSTACK_VAR_RW		0x01	/* R/W variable. */
 #define VSTACK_GOTO		0x02	/* Pending goto. */
 #define VSTACK_LABEL		0x04	/* Label. */
+#define VSTACK_VAR_CAPTURED	0x08	/* Local is captured by a child. */
+#define var_mark_captured(fs, reg) \
+  (var_get((fs)->ls, (fs), (reg)).info |= VSTACK_VAR_CAPTURED)
 
 /* Per-function state. */
 typedef struct FuncState {
@@ -1130,8 +1133,10 @@ static MSize var_lookup_(FuncState *fs, GCstr *name, ExpDesc *e, int first)
     BCReg reg = var_lookup_local(fs, name);
     if ((int32_t)reg >= 0) {  /* Local in this function? */
       expr_init(e, VLOCAL, reg);
-      if (!first)
+      if (!first) {
+	var_mark_captured(fs, reg);
 	fscope_uvmark(fs, reg);  /* Scope now has an upvalue. */
+      }
       return (MSize)(e->u.s.aux = (uint32_t)fs->varmap[reg]);
     } else {
       MSize vidx = var_lookup_(fs->prev, name, e, 0);  /* Var in outer func? */
@@ -1348,10 +1353,15 @@ static void fs_fixup_uv2(FuncState *fs, GCproto *pt)
     VarIndex vidx = uv[i];
     if (vidx >= LJ_MAX_VSTACK)
       uv[i] = vidx - LJ_MAX_VSTACK;
-    else if ((vstack[vidx].info & VSTACK_VAR_RW))
+    else if ((vstack[vidx].info & VSTACK_VAR_RW)) {
+      lj_assertFS((vstack[vidx].info & VSTACK_VAR_CAPTURED),
+		  "unmarked captured local");
       uv[i] = vstack[vidx].slot | PROTO_UV_LOCAL;
-    else
+    } else {
+      lj_assertFS((vstack[vidx].info & VSTACK_VAR_CAPTURED),
+		  "unmarked captured local");
       uv[i] = vstack[vidx].slot | PROTO_UV_LOCAL | PROTO_UV_IMMUTABLE;
+    }
   }
 }
 
