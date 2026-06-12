@@ -744,7 +744,8 @@ struct lua_State {
 };
 
 #define G(L)			(mref(L->glref, global_State))
-#define G2TG(gl)		((gl)->main_tg)
+LJ_FUNC TGState *lj_thr_get_tg_fallback(global_State *g);
+#define G2TG(gl)		(lj_thr_get_tg_fallback((gl)))
 #define L2TG(L)			((L)->tg_hint ? (L)->tg_hint : G2TG(G(L)))
 #define registry(L)		(&G(L)->registrytv)
 

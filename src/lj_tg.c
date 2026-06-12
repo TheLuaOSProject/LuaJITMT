@@ -12,6 +12,7 @@
 #include "lj_dispatch.h"
 #include "lj_gc2.h"
 #include "lj_tg.h"
+#include "lj_thr.h"
 
 static void tg_init_ssb(TGState *tg)
 {
@@ -49,6 +50,7 @@ void lj_tg_init(GG_State *GG, int alloc_ready)
   lua_State *L = &GG->L;
   g->main_tg = tg;
   L->tg_hint = tg;
+  lj_thr_set_tg(tg);  /* 03 section 3.2: bootstrap main OS-thread TLS. */
   if (!alloc_ready)
     lj_arena_alloc_init(&tg->alloc);
   else

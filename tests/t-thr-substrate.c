@@ -41,6 +41,7 @@ static void *worker_main(void *arg)
   lj_tg_init_thread(ctx->g, &ctx->tg, ctx->L, 0);
   lj_thr_set_tg(&ctx->tg);
   assert(lj_thr_get_tg() == &ctx->tg);
+  assert(G2TG(ctx->g) == &ctx->tg);
   lj_native_enter(&ctx->tg);
   lj_tg_attach(ctx->g, &ctx->tg);
   la_store32_rel(&ctx->attached, 1);
@@ -71,6 +72,7 @@ int main(void)
 
   lj_thr_set_tg(tg);
   assert(lj_thr_get_tg() == tg);
+  assert(G2TG(g) == tg);
   assert(lj_thr_cpucount() >= 1u);
   lj_thr_fence();
 

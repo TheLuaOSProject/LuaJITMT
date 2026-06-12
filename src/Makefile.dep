@@ -251,7 +251,7 @@ lj_tab.o: lj_tab.c lj_obj.h lua.h luaconf.h lj_def.h lj_arch.h \
  lj_atomic.h lj_gc.h lj_err.h lj_errmsg.h lj_tab.h
 lj_tg.o: lj_tg.c lj_obj.h lua.h luaconf.h lj_def.h lj_arch.h lj_atomic.h \
  lj_buf.h lj_gc.h lj_str.h lj_tg.h lj_bc.h lj_arena.h lj_dispatch.h \
- lj_jit.h lj_ir.h
+ lj_jit.h lj_ir.h lj_thr.h
 lj_thr.o: lj_thr.c lj_obj.h lua.h luaconf.h lj_def.h lj_arch.h \
  lj_atomic.h lj_safepoint.h lj_gc2.h lj_thr.h lj_tg.h lj_bc.h \
  lj_arena.h

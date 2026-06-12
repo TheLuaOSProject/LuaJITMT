@@ -61,6 +61,12 @@ TGState *lj_thr_get_tg(void)
   return lj_tls_tg;
 }
 
+TGState *lj_thr_get_tg_fallback(global_State *g)
+{
+  TGState *tg = lj_tls_tg;
+  return tg ? tg : (g ? g->main_tg : NULL);
+}
+
 uint32_t lj_thr_cpucount(void)
 {
   long n = sysconf(_SC_NPROCESSORS_ONLN);
