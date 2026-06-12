@@ -36,21 +36,21 @@ LJ_STATIC_ASSERT(LJ_GC_FINALIZED == LJ_GC_WEAKKEY);
 LJ_STATIC_ASSERT(LJ_GC_CDATA_FIN == LJ_GC_WEAKVAL);
 
 /* Macros to test and set GCobj colors. */
-#define iswhite(x)	((x)->gch.marked & LJ_GC_WHITES)
-#define isblack(x)	((x)->gch.marked & LJ_GC_BLACK)
-#define isgray(x)	(!((x)->gch.marked & (LJ_GC_BLACK|LJ_GC_WHITES)))
+#define iswhite(x)	(lj_obj_gcflags((x)) & LJ_GC_WHITES)
+#define isblack(x)	(lj_obj_gcflags((x)) & LJ_GC_BLACK)
+#define isgray(x)	(!(lj_obj_gcflags((x)) & (LJ_GC_BLACK|LJ_GC_WHITES)))
 #define tviswhite(x)	(tvisgcv(x) && iswhite(gcV(x)))
 #define otherwhite(g)	(g->gc.currentwhite ^ LJ_GC_WHITES)
-#define isdead(g, v)	((v)->gch.marked & otherwhite(g) & LJ_GC_WHITES)
+#define isdead(g, v)	(lj_obj_gcflags((v)) & otherwhite(g) & LJ_GC_WHITES)
 
 #define curwhite(g)	((g)->gc.currentwhite & LJ_GC_WHITES)
-#define newwhite(g, x)	(obj2gco(x)->gch.marked = (uint8_t)curwhite(g))
+#define newwhite(g, x)	(lj_obj_setgcflags(obj2gco(x), (uint8_t)curwhite(g)))
 #define makewhite(g, x) \
-  ((x)->gch.marked = ((x)->gch.marked & (uint8_t)~LJ_GC_COLORS) | curwhite(g))
-#define flipwhite(x)	((x)->gch.marked ^= LJ_GC_WHITES)
-#define black2gray(x)	((x)->gch.marked &= (uint8_t)~LJ_GC_BLACK)
-#define fixstring(s)	((s)->marked |= LJ_GC_FIXED)
-#define markfinalized(x)	((x)->gch.marked |= LJ_GC_FINALIZED)
+  (lj_obj_masksetgcflags((x), LJ_GC_COLORS, (uint8_t)curwhite(g)))
+#define flipwhite(x)	(lj_obj_xorgcflags((x), LJ_GC_WHITES))
+#define black2gray(x)	(lj_obj_cleargcflags((x), LJ_GC_BLACK))
+#define fixstring(s)	(lj_obj_addgcflags(obj2gco(s), LJ_GC_FIXED))
+#define markfinalized(x)	(lj_obj_addgcflags((x), LJ_GC_FINALIZED))
 
 /* Collector. */
 LJ_FUNC size_t lj_gc_separateudata(global_State *g, int all);

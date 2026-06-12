@@ -826,6 +826,17 @@ static LJ_AINLINE void lj_obj_cleargcflags(GCobj *o, uint8_t flags)
   o->gch.marked &= (uint8_t)~flags;
 }
 
+static LJ_AINLINE void lj_obj_xorgcflags(GCobj *o, uint8_t flags)
+{
+  o->gch.marked ^= flags;
+}
+
+static LJ_AINLINE void lj_obj_masksetgcflags(GCobj *o, uint8_t clear,
+					     uint8_t set)
+{
+  o->gch.marked = (uint8_t)((o->gch.marked & (uint8_t)~clear) | set);
+}
+
 LJ_STATIC_ASSERT(sizeof(GCRef) == 8u);
 LJ_STATIC_ASSERT(offsetof(GChead, nextgc) == 0u);
 LJ_STATIC_ASSERT(offsetof(GChead, marked) == sizeof(GCRef));

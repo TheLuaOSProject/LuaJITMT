@@ -35,9 +35,9 @@
 #define GCFINALIZECOST	100
 
 /* Macros to set GCobj colors and flags. */
-#define white2gray(x)		((x)->gch.marked &= (uint8_t)~LJ_GC_WHITES)
-#define gray2black(x)		((x)->gch.marked |= LJ_GC_BLACK)
-#define isfinalized(u)		((u)->marked & LJ_GC_FINALIZED)
+#define white2gray(x)		(lj_obj_cleargcflags((x), LJ_GC_WHITES))
+#define gray2black(x)		(lj_obj_addgcflags((x), LJ_GC_BLACK))
+#define isfinalized(u)		(lj_obj_gcflags(obj2gco(u)) & LJ_GC_FINALIZED)
 
 /* -- Mark phase ---------------------------------------------------------- */
 
@@ -52,7 +52,7 @@
   { if (iswhite(obj2gco(o))) gc_mark(g, obj2gco(o)); }
 
 /* Mark a string object. */
-#define gc_mark_str(s)		((s)->marked &= (uint8_t)~LJ_GC_WHITES)
+#define gc_mark_str(s)		(lj_obj_cleargcflags(obj2gco(s), LJ_GC_WHITES))
 
 /* Mark a white GCobj. */
 static void gc_mark(global_State *g, GCobj *o)
@@ -411,16 +411,16 @@ static GCRef *gc_sweep(global_State *g, GCRef *p, uint32_t lim)
     if (o->gch.gct == ~LJ_TTHREAD)  /* Need to sweep open upvalues, too. */
       gc_fullsweep(g, &gco2th(o)->openupval);
     if (((o->gch.marked ^ LJ_GC_WHITES) & ow)) {  /* Black or current white? */
-      lj_assertG(!isdead(g, o) || (o->gch.marked & LJ_GC_FIXED),
+      lj_assertG(!isdead(g, o) || (lj_obj_gcflags(o) & LJ_GC_FIXED),
 		 "sweep of undead object");
       makewhite(g, o);  /* Value is alive, change to the current white. */
-      p = &o->gch.nextgc;
+      p = lj_obj_gcwref(o);
     } else {  /* Otherwise value is dead, free it. */
       lj_assertG(isdead(g, o) || ow == LJ_GC_SFIXED,
 		 "sweep of unlive object");
-      setgcrefr(*p, o->gch.nextgc);
+      setgcrefr(*p, *lj_obj_gcwref(o));
       if (o == gcref(g->gc.root))
-	setgcrefr(g->gc.root, o->gch.nextgc);  /* Adjust list anchor. */
+	setgcrefr(g->gc.root, *lj_obj_gcwref(o));  /* Adjust list anchor. */
       gc_freefunc[o->gch.gct - ~LJ_TSTR](g, o);
     }
   }
@@ -835,7 +835,7 @@ void lj_gc_closeuv(global_State *g, GCupval *uv)
   copyTV(mainthread(g), &uv->tv, uvval(uv));
   setmref(uv->v, &uv->tv);
   uv->closed = 1;
-  setgcrefr(o->gch.nextgc, g->gc.root);
+  lj_obj_setgcwr(o, g->gc.root);
   setgcref(g->gc.root, o);
   if (isgray(o)) {  /* A closed upvalue is never gray, so fix this. */
     if (g->gc.state == GCSpropagate || g->gc.state == GCSatomic) {
@@ -886,7 +886,7 @@ void * LJ_FASTCALL lj_mem_newgco(lua_State *L, GCSize size)
   lj_assertG(checkptrGC(o),
 	     "allocated memory address %p outside required range", o);
   g->gc.total += size;
-  setgcrefr(o->gch.nextgc, g->gc.root);
+  lj_obj_setgcwr(o, g->gc.root);
   setgcref(g->gc.root, o);
   newwhite(g, o);
   return o;
