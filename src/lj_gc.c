@@ -10,6 +10,7 @@
 #define LUA_CORE
 
 #include "lj_obj.h"
+#include "lj_atomic.h"
 #include "lj_gc.h"
 #include "lj_err.h"
 #include "lj_buf.h"
@@ -26,6 +27,7 @@
 #endif
 #include "lj_trace.h"
 #include "lj_dispatch.h"
+#include "lj_arena.h"
 #include "lj_vm.h"
 #include "lj_vmevent.h"
 
@@ -41,6 +43,25 @@
 
 /* -- Mark phase ---------------------------------------------------------- */
 
+static void gc_mark_arena(global_State *g, GCobj *o)
+{
+  TGState *tg = G2TG(g);
+  GCArena *a;
+  uint32_t cell;
+  if (!tg || !(tg->tg_flags & TGF_ARENA_INTERNAL))
+    return;
+  a = lj_arena_of(o);
+  if (lj_arena_ishuge(a)) {
+    if (tg->tg_flags & TGF_HUGETAB)
+      lj_arena_hugetab_mark(&tg->huge, o, NULL);
+    return;
+  }
+  cell = lj_arena_cellof(o);
+  if (cell >= LJ_AFIRST_CELL && cell < LJ_ARENA_CELLS &&
+      lj_arena_bm_get(a->block, cell))
+    la_bit_test_and_set64(&a->mark[cell >> 6], cell & 63);  /* 05 §5.6.1. */
+}
+
 /* Mark a TValue (if needed). */
 #define gc_marktv(g, tv) \
   { lj_assertG(!tvisgcv(tv) || (~itype(tv) == gcval(tv)->gch.gct), \
@@ -52,7 +73,9 @@
   { if (iswhite(obj2gco(o))) gc_mark(g, obj2gco(o)); }
 
 /* Mark a string object. */
-#define gc_mark_str(s)		(lj_obj_cleargcflags(obj2gco(s), LJ_GC_WHITES))
+#define gc_mark_str(g, s) \
+  (gc_mark_arena((g), obj2gco(s)), \
+   lj_obj_cleargcflags(obj2gco(s), LJ_GC_WHITES))
 
 /* Mark a white GCobj. */
 static void gc_mark(global_State *g, GCobj *o)
@@ -60,6 +83,7 @@ static void gc_mark(global_State *g, GCobj *o)
   int gct = o->gch.gct;
   lj_assertG(iswhite(o), "mark of non-white object");
   lj_assertG(!isdead(g, o), "mark of dead object");
+  gc_mark_arena(g, o);
   white2gray(o);
   if (LJ_UNLIKELY(gct == ~LJ_TUDATA)) {
     GCtab *mt = tabref(gco2ud(o)->metatable);
@@ -246,6 +270,7 @@ static void gc_marktrace(global_State *g, TraceNo traceno)
   GCobj *o = obj2gco(traceref(G2J(g), traceno));
   lj_assertG(traceno != G2J(g)->cur.traceno, "active trace escaped");
   if (iswhite(o)) {
+    gc_mark_arena(g, o);
     white2gray(o);
     setgcrefr(o->gch.gclist, g->gc.gray);
     setgcref(g->gc.gray, o);
@@ -280,7 +305,7 @@ static void gc_traverse_trace(global_State *g, GCtrace *T)
 static void gc_traverse_proto(global_State *g, GCproto *pt)
 {
   ptrdiff_t i;
-  gc_mark_str(proto_chunkname(pt));
+  gc_mark_str(g, proto_chunkname(pt));
   for (i = -(ptrdiff_t)pt->sizekgc; i < 0; i++)  /* Mark collectable consts. */
     gc_markobj(g, proto_kgc(pt, i));
 #if LJ_HASJIT
@@ -454,11 +479,11 @@ static void gc_sweepstr(global_State *g, GCRef *chain)
 }
 
 /* Check whether we can clear a key or a value slot from a table. */
-static int gc_mayclear(cTValue *o, int val)
+static int gc_mayclear(global_State *g, cTValue *o, int val)
 {
   if (tvisgcv(o)) {  /* Only collectable objects can be weak references. */
     if (tvisstr(o)) {  /* But strings cannot be used as weak references. */
-      gc_mark_str(strV(o));  /* And need to be marked. */
+      gc_mark_str(g, strV(o));  /* And need to be marked. */
       return 0;
     }
     if (iswhite(gcV(o)))
@@ -472,7 +497,6 @@ static int gc_mayclear(cTValue *o, int val)
 /* Clear collected entries from weak tables. */
 static void gc_clearweak(global_State *g, GCobj *o)
 {
-  UNUSED(g);
   while (o) {
     GCtab *t = gco2tab(o);
     lj_assertG((lj_obj_gcflags(obj2gco(t)) & LJ_GC_WEAK),
@@ -482,7 +506,7 @@ static void gc_clearweak(global_State *g, GCobj *o)
       for (i = 0; i < asize; i++) {
 	/* Clear array slot when value is about to be collected. */
 	TValue *tv = arrayslot(t, i);
-	if (gc_mayclear(tv, 1))
+	if (gc_mayclear(g, tv, 1))
 	  setnilV(tv);
       }
     }
@@ -492,8 +516,8 @@ static void gc_clearweak(global_State *g, GCobj *o)
       for (i = 0; i <= hmask; i++) {
 	Node *n = &node[i];
 	/* Clear hash slot when key or value is about to be collected. */
-	if (!tvisnil(&n->val) && (gc_mayclear(&n->key, 0) ||
-				  gc_mayclear(&n->val, 1)))
+	if (!tvisnil(&n->val) && (gc_mayclear(g, &n->key, 0) ||
+				  gc_mayclear(g, &n->val, 1)))
 	  setnilV(&n->val);
       }
     }
