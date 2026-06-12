@@ -297,8 +297,11 @@ LJLIB_CF(debug_upvaluejoin)
       lj_err_arg(L, 2*i+2, LJ_ERR_IDXRNG);
     p[i] = &fn[i]->l.uvptr[n];
   }
-  setgcrefr(*p[0], *p[1]);
-  lj_gc_objbarrier(L, fn[0], gcref(*p[1]));
+  {
+    GCobj *uv = gcref(*p[1]);
+    setgcrefrel(*p[0], uv);
+    lj_gc_pubobjobj(L, fn[0], uv);
+  }
   return 0;
 }
 

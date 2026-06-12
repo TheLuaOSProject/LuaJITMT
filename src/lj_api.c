@@ -235,11 +235,12 @@ static void copy_slot(lua_State *L, TValue *f, int idx)
     if (idx == LUA_REGISTRYINDEX) {
       lj_gc_barrierroot(L, f);
       copyTVrel(L, o, f);
+    } else if (idx < LUA_GLOBALSINDEX) {
+      copyTVrel(L, o, f);
+      lj_gc_pubobjtv(L, curr_func(L), f);
     } else {
       copyTV(L, o, f);
     }
-    if (idx < LUA_GLOBALSINDEX)  /* Need a barrier for upvalues. */
-      lj_gc_barrier(L, curr_func(L), f);
   }
 }
 
@@ -976,8 +977,11 @@ LUA_API void lua_upvaluejoin(lua_State *L, int idx1, int n1, int idx2, int n2)
   lj_checkapi(isluafunc(fn2), "stack slot %d is not a Lua function", idx2);
   lj_checkapi((uint32_t)n1 < fn1->l.nupvalues, "bad upvalue %d", n1+1);
   lj_checkapi((uint32_t)n2 < fn2->l.nupvalues, "bad upvalue %d", n2+1);
-  setgcrefr(fn1->l.uvptr[n1], fn2->l.uvptr[n2]);
-  lj_gc_objbarrier(L, fn1, gcref(fn1->l.uvptr[n1]));
+  {
+    GCobj *uv = gcref(fn2->l.uvptr[n2]);
+    setgcrefrel(fn1->l.uvptr[n1], uv);
+    lj_gc_pubobjobj(L, fn1, uv);
+  }
 }
 
 LUALIB_API void *luaL_testudata(lua_State *L, int idx, const char *tname)
@@ -1151,8 +1155,8 @@ LUA_API const char *lua_setupvalue(lua_State *L, int idx, int n)
   name = lj_debug_uvnamev(f, (uint32_t)(n-1), &val, &o);
   if (name) {
     L->top--;
-    copyTV(L, val, L->top);
-    lj_gc_barrier(L, o, L->top);
+    copyTVrel(L, val, L->top);
+    lj_gc_pubobjtv(L, o, L->top);
   }
   return name;
 }
