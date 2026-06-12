@@ -25,6 +25,7 @@
 #include "lj_meta.h"
 #include "lj_state.h"
 #include "lj_frame.h"
+#include "lj_thr.h"
 #if LJ_HASFFI
 #include "lj_ctype.h"
 #include "lj_cconv.h"
@@ -568,17 +569,24 @@ LJLIB_SET(_VERSION)
 
 LJLIB_CF(coroutine_status)
 {
+  LJStateClaim claim;
   const char *s;
   lua_State *co;
   if (!(L->top > L->base && tvisthread(L->base)))
     lj_err_arg(L, 1, LJ_ERR_NOCORO);
   co = threadV(L->base);
   if (co == L) s = "running";
-  else if (co->status == LUA_YIELD) s = "suspended";
-  else if (co->status != LUA_OK) s = "dead";
-  else if (co->base > tvref(co->stack)+1+LJ_FR2) s = "normal";
-  else if (co->top == co->base) s = "dead";
-  else s = "suspended";
+  else {
+    uint32_t tid = lj_thr_current_id(G(L));
+    if (!lj_state_tryclaim(co, tid, &claim))
+      lj_err_callermsg(L, "thread busy");
+    if (co->status == LUA_YIELD) s = "suspended";
+    else if (co->status != LUA_OK) s = "dead";
+    else if (co->base > tvref(co->stack)+1+LJ_FR2) s = "normal";
+    else if (co->top == co->base) s = "dead";
+    else s = "suspended";
+    lj_state_dropclaim(&claim);
+  }
   lua_pushstring(L, s);
   return 1;
 }
@@ -708,4 +716,3 @@ LUALIB_API int luaopen_base(lua_State *L)
   LJ_LIB_REG(L, LUA_COLIBNAME, coroutine);
   return 2;
 }
-

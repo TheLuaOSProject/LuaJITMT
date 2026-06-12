@@ -18,6 +18,12 @@ typedef struct LJThr {
   uint32_t tid;
 } LJThr;
 
+typedef struct LJStateClaim {
+  lua_State *L;
+  uint32_t tid;
+  uint8_t release;
+} LJStateClaim;
+
 #define LJ_THREAD_RUNNING	1u
 #define LJ_THREAD_DONE		2u
 #define LJ_THREAD_GCSCAN	0xffffffffu
@@ -45,6 +51,8 @@ LJ_FUNC void lj_thr_set_tg(TGState *tg);
 LJ_FUNC TGState *lj_thr_get_tg(void);
 LJ_FUNC TGState *lj_thr_get_tg_fallback(global_State *g);
 LJ_FUNC int lj_state_claim(lua_State *L, uint32_t tid);
+LJ_FUNC int lj_state_tryclaim(lua_State *L, uint32_t tid, LJStateClaim *claim);
+LJ_FUNC void lj_state_dropclaim(LJStateClaim *claim);
 LJ_FUNC void lj_state_release(lua_State *L, uint32_t tid);
 LJ_FUNC uint32_t lj_thr_cpucount(void);
 LJ_FUNC void lj_thr_fence(void);

@@ -97,6 +97,53 @@ int lj_state_claim(lua_State *L, uint32_t tid)
   }
 }
 
+int lj_state_tryclaim(lua_State *L, uint32_t tid, LJStateClaim *claim)
+{
+  uint32_t owner;
+  if (claim) {
+    claim->L = NULL;
+    claim->tid = 0;
+    claim->release = 0;
+  }
+  if (!L || tid == 0 || tid == LJ_THREAD_GCSCAN)
+    return 0;
+  for (;;) {
+    owner = la_load32_acq(&L->thr_owner);
+    if (owner == tid) {
+      if (claim) {
+	claim->L = L;
+	claim->tid = tid;
+      }
+      return 1;
+    }
+    if (owner == 0) {
+      uint32_t expect = 0;
+      if (la_cas32(&L->thr_owner, &expect, tid, LA_ACQ_REL, LA_ACQ)) {
+	if (claim) {
+	  claim->L = L;
+	  claim->tid = tid;
+	  claim->release = 1;
+	}
+	return 1;
+      }
+      continue;
+    }
+    if (owner == LJ_THREAD_GCSCAN) {
+      la_cpu_pause();
+      continue;
+    }
+    return 0;
+  }
+}
+
+void lj_state_dropclaim(LJStateClaim *claim)
+{
+  if (claim && claim->release) {
+    lj_state_release(claim->L, claim->tid);
+    claim->release = 0;
+  }
+}
+
 void lj_state_release(lua_State *L, uint32_t tid)
 {
   if (L && tid != 0) {

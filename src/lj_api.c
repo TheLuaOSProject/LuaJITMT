@@ -24,6 +24,7 @@
 #include "lj_frame.h"
 #include "lj_trace.h"
 #include "lj_tg.h"
+#include "lj_thr.h"
 #include "lj_vm.h"
 #include "lj_strscan.h"
 #include "lj_strfmt.h"
@@ -94,6 +95,12 @@ static GCtab *getcurrenv(lua_State *L)
   return fn->c.gct == ~LJ_TFUNC ? tabref(fn->c.env) : tabref(L->env);
 }
 
+static lua_State *api_errstate(lua_State *L)
+{
+  lua_State *cur = lj_tg_cur_L(G(L));
+  return cur && G(cur) == G(L) ? cur : L;
+}
+
 /* -- Miscellaneous API functions ----------------------------------------- */
 
 LUA_API int lua_status(lua_State *L)
@@ -124,15 +131,38 @@ LUALIB_API void luaL_checkstack(lua_State *L, int size, const char *msg)
 
 LUA_API void lua_xmove(lua_State *L, lua_State *to, int n)
 {
+  LJStateClaim fromclaim, toclaim;
   TValue *f, *t;
+  uint32_t tid;
+  lua_State *errL;
   if (L == to) return;
-  lj_checkapi_slot(n);
   lj_checkapi(G(L) == G(to), "move across global states");
-  lj_state_checkstack(to, (MSize)n);
+  tid = lj_thr_current_id(G(L));
+  errL = api_errstate(L);
+  if (!lj_state_tryclaim(to, tid, &toclaim))
+    lj_err_callermsg(errL, "thread busy");
+  if (!lj_state_tryclaim(L, tid, &fromclaim)) {
+    lj_state_dropclaim(&toclaim);
+    lj_err_callermsg(errL, "thread busy");
+  }
+  lj_checkapi_slot(n);
+  if ((mref(to->maxstack, char) - (char *)to->top) <=
+      (ptrdiff_t)n*(ptrdiff_t)sizeof(TValue)) {
+    int status = lj_state_cpgrowstack(to, (MSize)n);
+    if (status != LUA_OK) {
+      if (to->top > to->base) to->top--;
+      lj_state_dropclaim(&fromclaim);
+      lj_state_dropclaim(&toclaim);
+      lj_err_callermsg(errL, status == LUA_ERRMEM ?
+			     "not enough memory" : "stack overflow");
+    }
+  }
   f = L->top;
   t = to->top = to->top + n;
   while (--n >= 0) copyTV(to, --t, --f);
   L->top = f;
+  lj_state_dropclaim(&fromclaim);
+  lj_state_dropclaim(&toclaim);
 }
 
 LUA_API const lua_Number *lua_version(lua_State *L)
