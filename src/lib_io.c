@@ -605,7 +605,7 @@ static int io_std_getset(lua_State *L, ptrdiff_t id, const char *mode)
       io_file_open(L, mode);
     }
     /* NOBARRIER: The standard I/O handles are GC roots. */
-    setgcref(G(L)->gcroot[id], gcV(L->top-1));
+    setgcrefroot(G(L)->gcroot[id], gcV(L->top-1));
   } else {
     setudataV(L, L->top++, IOSTDF_UD(L, id));
   }
@@ -671,8 +671,8 @@ LUALIB_API int luaopen_io(lua_State *L)
   copyTV(L, L->top, L->top-1); L->top++;
   lua_setfield(L, LUA_REGISTRYINDEX, LUA_FILEHANDLE);
   LJ_LIB_REG(L, LUA_IOLIBNAME, io);
-  setgcref(G(L)->gcroot[GCROOT_IO_INPUT], io_std_new(L, stdin, "stdin"));
-  setgcref(G(L)->gcroot[GCROOT_IO_OUTPUT], io_std_new(L, stdout, "stdout"));
+  setgcrefroot(G(L)->gcroot[GCROOT_IO_INPUT], io_std_new(L, stdin, "stdin"));
+  setgcrefroot(G(L)->gcroot[GCROOT_IO_OUTPUT], io_std_new(L, stdout, "stdout"));
   io_std_new(L, stderr, "stderr");
   return 1;
 }

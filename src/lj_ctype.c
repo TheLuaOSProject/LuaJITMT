@@ -655,7 +655,7 @@ void lj_ctype_initfin(lua_State *L)
   setstrV(L, lj_tab_setstr(L, t, lj_str_newlit(L, "__mode")),
 	  lj_str_newlit(L, "k"));
   t->nomm = (uint8_t)(~(1u<<MM_mode));
-  setgcref(G(L)->gcroot[GCROOT_FFI_FIN], obj2gco(t));
+  setgcrefroot(G(L)->gcroot[GCROOT_FFI_FIN], obj2gco(t));
 }
 
 /* Free C type table and state. */

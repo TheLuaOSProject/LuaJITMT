@@ -679,7 +679,7 @@ LUALIB_API int luaopen_string(lua_State *L)
   mt = lj_tab_new(L, 0, 1);
   /* NOBARRIER: basemt is a GC root. */
   g = G(L);
-  setgcref(basemt_it(g, LJ_TSTR), obj2gco(mt));
+  setgcrefroot(basemt_it(g, LJ_TSTR), obj2gco(mt));
   settabV(L, lj_tab_setstr(L, mt, mmname_str(g, MM_index)), tabV(L->top-1));
   mt->nomm = (uint8_t)(~(1u<<MM_index));
 #if LJ_HASBUFFER

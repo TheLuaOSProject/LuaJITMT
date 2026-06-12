@@ -63,13 +63,13 @@ static GCtab *threading_live_table(lua_State *L, GCtab *env)
     return live;
   }
   if (tv && tvistab(tv)) {
-    setgcref(G(L)->gcroot[GCROOT_THREADING], obj2gco(tabV(tv)));
+    setgcrefroot(G(L)->gcroot[GCROOT_THREADING], obj2gco(tabV(tv)));
     return tabV(tv);
   }
   {
     GCtab *t = lj_tab_new(L, 0, 0);
     settabV(L, lj_tab_setstr(L, env, key), t);
-    setgcref(G(L)->gcroot[GCROOT_THREADING], obj2gco(t));
+    setgcrefroot(G(L)->gcroot[GCROOT_THREADING], obj2gco(t));
     lj_gc_anybarriert(L, env);
     return t;
   }
@@ -115,7 +115,7 @@ static GCtab *threading_ensure_env(lua_State *L)
     }
     if (!env)
       lj_err_callermsg(L, "threading library unavailable");
-    setgcref(g->gcroot[GCROOT_THREADING_ENV], obj2gco(env));
+    setgcrefroot(g->gcroot[GCROOT_THREADING_ENV], obj2gco(env));
   }
   (void)threading_live_table(L, env);
   return env;
@@ -860,6 +860,6 @@ LUALIB_API int luaopen_threading(lua_State *L)
   LJ_LIB_REG(L, LUA_THREADINGLIBNAME, threading);
   env = threading_env_from_module(L, tabV(L->top-1));
   if (env)
-    setgcref(G(L)->gcroot[GCROOT_THREADING_ENV], obj2gco(env));
+    setgcrefroot(G(L)->gcroot[GCROOT_THREADING_ENV], obj2gco(env));
   return 1;
 }

@@ -1041,11 +1041,11 @@ LUA_API int lua_setmetatable(lua_State *L, int idx)
     o = index2adr(L, idx);  /* Stack may have been reallocated. */
     if (tvisbool(o)) {
       /* NOBARRIER: basemt is a GC root. */
-      setgcref(basemt_it(g, LJ_TTRUE), obj2gco(mt));
-      setgcref(basemt_it(g, LJ_TFALSE), obj2gco(mt));
+      setgcrefroot(basemt_it(g, LJ_TTRUE), obj2gco(mt));
+      setgcrefroot(basemt_it(g, LJ_TFALSE), obj2gco(mt));
     } else {
       /* NOBARRIER: basemt is a GC root. */
-      setgcref(basemt_obj(g, o), obj2gco(mt));
+      setgcrefroot(basemt_obj(g, o), obj2gco(mt));
     }
   }
   L->top--;

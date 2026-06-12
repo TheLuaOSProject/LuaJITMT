@@ -844,7 +844,7 @@ LUALIB_API int luaopen_ffi(lua_State *L)
   settabV(L, L->top++, (cts->miscmap = lj_tab_new(L, 0, 1)));
   LJ_LIB_REG(L, NULL, ffi_meta);
   /* NOBARRIER: basemt is a GC root. */
-  setgcref(basemt_it(G(L), LJ_TCDATA), obj2gco(tabV(L->top-1)));
+  setgcrefroot(basemt_it(G(L), LJ_TCDATA), obj2gco(tabV(L->top-1)));
   LJ_LIB_REG(L, NULL, ffi_clib);
   LJ_LIB_REG(L, NULL, ffi_callback);
   /* NOBARRIER: the key is new and lj_tab_newkey() handles the barrier. */

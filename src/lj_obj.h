@@ -896,6 +896,19 @@ LJ_STATIC_ASSERT(((int)offsetof(GCupval, marked) -
 /* Macro to convert any collectable object into a GCobj pointer. */
 #define obj2gco(v)	((GCobj *)(v))
 
+#if LJ_GC64
+static LJ_AINLINE void setgcrefroot_(GCRef *r, const GCobj *gc)
+{
+  la_store64_rel(&r->gcptr64, (uint64_t)(uintptr_t)gc);
+}
+#else
+static LJ_AINLINE void setgcrefroot_(GCRef *r, const GCobj *gc)
+{
+  la_store32_rel(&r->gcptr32, (uint32_t)(uintptr_t)gc);
+}
+#endif
+#define setgcrefroot(r, gc)	setgcrefroot_(&(r), (gc))
+
 /* -- TValue getters/setters ---------------------------------------------- */
 
 /* Macros to test types. */

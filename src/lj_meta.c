@@ -39,7 +39,7 @@ void lj_meta_init(lua_State *L)
     for (q = p+2; *q && *q != '_'; q++) ;
     s = lj_str_new(L, p, (size_t)(q-p));
     /* NOBARRIER: g->gcroot[] is a GC root. */
-    setgcref(g->gcroot[GCROOT_MMNAME+mm], obj2gco(s));
+    setgcrefroot(g->gcroot[GCROOT_MMNAME+mm], obj2gco(s));
   }
 }
 
