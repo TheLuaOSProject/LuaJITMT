@@ -92,6 +92,7 @@ typedef struct TGAlloc {
   FreeRun *bins[2][LJ_ALLOC_NBINS];      /* plain singly-linked, no atomics */
   GCArena *owned[2];        /* all arenas this thread owns (next links)   */
   GCArena *needsweep[2];    /* owned arenas awaiting lazy sweep           */
+  uint32_t owner_tid;       /* copied into GCAhdr.owner_tid on adoption   */
   uint8_t  alloc_black;     /* current allocation color (05 §5.5)         */
 } TGAlloc;
 ```
@@ -121,10 +122,16 @@ alloc_slow:
   2. else lazy-sweep one arena from needsweep[] (§4.6), refill bins, retry
   3. else pop a partially-free arena from the global reuse stack (§4.5),
      adopt (CAS owner_tid 0→tid), sweep it, retry
-  4. else mmap fresh arena, adopt, point bump at cell LJ_AFIRST_CELL
+  4. else mmap fresh arena, adopt (`owner_tid = tg->tid`), point bump at
+     cell LJ_AFIRST_CELL
   5. on step 3/4 also: pacing check — maybe trigger GC / mark-assist (05 §5.11)
   Steps 1–2 are owner-local (no atomics). 3–4 use the lock-free stacks below.
 ```
+Current implementation note: the first per-TG routing slice tags freshly
+adopted normal/huge arenas with `TGAlloc.owner_tid`. New `lj_mem_*`
+allocations select `L2TG(L)->allocd`; existing-pointer realloc/free resolves
+`GCAhdr.owner_tid` back to a TG before touching owner-local free lists. The
+original step-3 global reuse-stack adoption remains future work.
 Bump reset: when an owned arena is swept, its largest free run becomes the
 new bump window if ≥ LJ_BUMP_MIN (64 cells), else all runs go to bins —
 this is the Pall bump↔fit adaptivity with the simplest possible policy;

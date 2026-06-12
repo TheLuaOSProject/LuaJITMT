@@ -21,6 +21,7 @@
 #include "lj_chan.h"
 #include "lj_err.h"
 #include "lj_thr.h"
+#include "lj_tg.h"
 #include "lj_buf.h"
 #include "lj_str.h"
 #include "lj_tab.h"
@@ -1189,12 +1190,56 @@ void lj_gc_barriertrace(global_State *g, uint32_t traceno)
 
 /* -- Allocator ----------------------------------------------------------- */
 
+static LJArenaAllocD *gc_arena_allocd_for_tg(global_State *g, TGState *tg)
+{
+  if (tg && (tg->tg_flags & TGF_ARENA_INTERNAL))
+    return &tg->allocd;
+  return (LJArenaAllocD *)g->allocd;
+}
+
+static LJArenaAllocD *gc_arena_allocd_for_new(lua_State *L)
+{
+  return gc_arena_allocd_for_tg(G(L), L2TG(L));
+}
+
+static TGState *gc_arena_find_owner(global_State *g, uint32_t owner_tid)
+{
+  TGState *tg;
+  if (owner_tid == 0)
+    return NULL;
+  for (tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
+       tg != NULL;
+       tg = (TGState *)la_loadptr_acq((void *const *)&tg->next_tg)) {
+    if (la_load32_acq(&tg->tid) == owner_tid)
+      return tg;
+  }
+  return g->main_tg && la_load32_acq(&g->main_tg->tid) == owner_tid ?
+	 g->main_tg : NULL;
+}
+
+static LJArenaAllocD *gc_arena_allocd_for_ptr(global_State *g, const void *p)
+{
+  if (p) {
+    uint32_t owner_tid = lj_arena_of(p)->hdr.owner_tid;
+    TGState *tg = gc_arena_find_owner(g, owner_tid);
+    if (tg)
+      return gc_arena_allocd_for_tg(g, tg);
+  }
+  return (LJArenaAllocD *)g->allocd;
+}
+
 /* Call pluggable memory allocator to allocate or resize a fragment. */
 void *lj_mem_realloc(lua_State *L, void *p, GCSize osz, GCSize nsz)
 {
   global_State *g = G(L);
   lj_assertG((osz == 0) == (p == NULL), "realloc API violation");
-  p = g->allocf(g->allocd, p, osz, nsz);
+  if (g->allocf == lj_arena_allocf) {
+    LJArenaAllocD *ad = p ? gc_arena_allocd_for_ptr(g, p) :
+			    gc_arena_allocd_for_new(L);
+    p = lj_arena_allocf(ad, p, osz, nsz);
+  } else {
+    p = g->allocf(g->allocd, p, osz, nsz);
+  }
   if (p == NULL && nsz > 0)
     lj_err_mem(L);
   lj_assertG((nsz == 0) == (p == NULL), "allocf API violation");
@@ -1210,7 +1255,7 @@ void *lj_mem_newgco_raw(lua_State *L, GCSize size, uint32_t flags)
   global_State *g = G(L);
   GCobj *o;
   if (g->allocf == lj_arena_allocf)
-    o = (GCobj *)lj_arena_allocd_alloc((LJArenaAllocD *)g->allocd, size,
+    o = (GCobj *)lj_arena_allocd_alloc(gc_arena_allocd_for_new(L), size,
 				       flags);
   else
     o = (GCobj *)g->allocf(g->allocd, NULL, 0, size);
@@ -1231,6 +1276,17 @@ void * LJ_FASTCALL lj_mem_newgco(lua_State *L, GCSize size)
   setgcref(g->gc.root, o);
   newwhite(g, o);
   return o;
+}
+
+void lj_mem_free(global_State *g, void *p, size_t osize)
+{
+  g->gc.total -= (GCSize)osize;
+  if (g->allocf == lj_arena_allocf) {
+    LJArenaAllocD *ad = gc_arena_allocd_for_ptr(g, p);
+    (void)lj_arena_allocf(ad, p, osize, 0);
+  } else {
+    g->allocf(g->allocd, p, osize, 0);
+  }
 }
 
 /* Resize growable vector. */

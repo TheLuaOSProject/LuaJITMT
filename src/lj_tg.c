@@ -51,6 +51,7 @@ void lj_tg_init(GG_State *GG, int alloc_ready)
   lua_State *L = &GG->L;
   g->main_tg = tg;
   tg->tid = lj_thr_newid();
+  tg->alloc.owner_tid = tg->tid;
   L->tg_hint = tg;
   L->thr_owner = tg->tid;
   lj_thr_set_tg(tg);  /* 03 section 3.2: bootstrap main OS-thread TLS. */

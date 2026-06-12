@@ -33,6 +33,12 @@
 #define THREADING_THREADS_KEY	"__threads"
 #define THREADING_MAIN_KEY	"__main"
 
+static int threading_arena_internal(global_State *g)
+{
+  return g->allocf == lj_arena_allocf && g->main_tg &&
+	 (g->main_tg->tg_flags & TGF_ARENA_INTERNAL);
+}
+
 /* -- Thread methods ------------------------------------------------------ */
 
 static LJThread *threading_tothread(lua_State *L)
@@ -270,6 +276,7 @@ static void *threading_worker(void *arg)
 
   lj_thr_set_tg(tg);
   tg->tid = tid;
+  tg->alloc.owner_tid = tid;
   L->tg_hint = tg;
   if (!lj_state_claim(L, tid)) {
     th->status = LUA_ERRRUN;
@@ -642,9 +649,10 @@ static lua_State *threading_spawn_core(lua_State *L, GCtab *env, TValue *base,
   th->tg = tg;
   th->state = LJ_THREAD_RUNNING;
   th->nargs = (uint32_t)nargs;
-  lj_tg_init_thread(G(L), tg, L1, 0);
+  lj_tg_init_thread(G(L), tg, L1, threading_arena_internal(G(L)));
   th->thr.tid = lj_thr_newid();
   tg->tid = th->thr.tid;
+  tg->alloc.owner_tid = th->thr.tid;
   tg->thread_ud = ud;
   threading_live_set(L, env, ud, L1);
 
@@ -808,8 +816,9 @@ LUA_API int luaMT_attach(lua_State *L)
     lj_state_release(L, tid);
     return 0;
   }
-  lj_tg_init_thread(g, tg, L, 0);
+  lj_tg_init_thread(g, tg, L, threading_arena_internal(g));
   tg->tid = tid;
+  tg->alloc.owner_tid = tid;
   L->tg_hint = tg;
   lj_thr_set_tg(tg);
   tg->cur_L = L;

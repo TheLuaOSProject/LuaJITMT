@@ -211,7 +211,8 @@ int main(void)
   assert(isluafunc(fn));
   assert(fn->l.nupvalues == 1);
   uv = gco2uv(gcref(fn->l.uvptr[0]));
-  assert(!uv->closed);
+  assert(uv->closed);
+  assert(uvval(uv) == &uv->tv);
   assert((lj_arena_of(uv)->hdr.flags & LJ_AF_TRAVERSABLE) != 0);
   assert_arena_white(g, uv);
   L->top--;
