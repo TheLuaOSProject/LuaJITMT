@@ -58,7 +58,7 @@ static GCtab *threading_live_table(lua_State *L, GCtab *env)
   if (live) {
     if (!tv || !tvistab(tv) || tabV(tv) != live) {
       settabV(L, lj_tab_setstr(L, env, key), live);
-      lj_gc_anybarriert(L, env);
+      lj_gc_pubtab(L, env);
     }
     return live;
   }
@@ -70,7 +70,7 @@ static GCtab *threading_live_table(lua_State *L, GCtab *env)
     GCtab *t = lj_tab_new(L, 0, 0);
     settabV(L, lj_tab_setstr(L, env, key), t);
     setgcrefroot(G(L)->gcroot[GCROOT_THREADING], obj2gco(t));
-    lj_gc_anybarriert(L, env);
+    lj_gc_pubtab(L, env);
     return t;
   }
 }
@@ -123,8 +123,8 @@ static GCtab *threading_ensure_env(lua_State *L)
 
 static void threading_state_set_ud(lua_State *L, lua_State *L1, GCudata *ud)
 {
-  setgcref(L1->mt_thread, obj2gco(ud));
-  lj_gc_objbarrier(L, L1, ud);
+  setgcrefrel(L1->mt_thread, obj2gco(ud));
+  lj_gc_pubobjobj(L, L1, ud);
 }
 
 static void threading_live_set(lua_State *L, GCtab *env, GCudata *ud,
@@ -137,7 +137,7 @@ static void threading_live_set(lua_State *L, GCtab *env, GCudata *ud,
     setthreadV(L, lj_tab_set(L, live, &key), L1);
   else
     setnilV(lj_tab_set(L, live, &key));
-  lj_gc_anybarriert(L, live);
+  lj_gc_pubtab(L, live);
 }
 
 static void threading_live_remove(lua_State *L, GCudata *ud)
@@ -526,7 +526,7 @@ LJLIB_CF(threading_channel_send)
   int64_t ns = threading_timeout_ns(L, 3, 1, -1);
   int rc;
   ud = udataV(L->base);
-  lj_gc_barrier(L, ud, tv);  /* 09 section 9.5: publish Lua refs to channel. */
+  lj_gc_pubobjtv(L, ud, tv);  /* 09 section 9.5: publish Lua refs to channel. */
   rc = lj_chan_send_timeout(L, ch, tv, ns);
   if (rc == LJ_CHAN_CLOSED)
     lj_err_callermsg(L, "closed channel");
@@ -700,7 +700,7 @@ LJLIB_CF(threading_current)
       if (tg)
 	tg->thread_ud = ud;
       setudataV(L, lj_tab_setstr(L, env, key), ud);
-      lj_gc_anybarriert(L, env);
+      lj_gc_pubtab(L, env);
       return 1;
     }
     if (tg)

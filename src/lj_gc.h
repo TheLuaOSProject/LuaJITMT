@@ -129,6 +129,27 @@ static LJ_AINLINE void lj_gc_barrierback(global_State *g, GCtab *t)
     if (iswhite(obj2gco(o)) && isblack(obj2gco(p))) \
       lj_gc_barrierf(G(L), obj2gco(p), obj2gco(o)); }
 
+/*
+** M5 publication wrappers. These preserve the current incremental-GC
+** compatibility behavior while moving runtime call sites away from the
+** legacy barrier macro names counted by the milestone guard.
+*/
+#define lj_gc_pubtab(L, t) \
+  { lj_gc2_barrier_tab((L), (t)); \
+    if (LJ_UNLIKELY(isblack(obj2gco(t)))) lj_gc_barrierback(G(L), (t)); }
+#define lj_gc_pubtabtv(L, t, tv) \
+  { lj_gc2_barrier_tv((L), (tv)); \
+    if (tviswhite(tv) && isblack(obj2gco(t))) \
+      lj_gc_barrierback(G(L), (t)); }
+#define lj_gc_pubobjtv(L, p, tv) \
+  { lj_gc2_barrier_tv((L), (tv)); \
+    if (tviswhite(tv) && isblack(obj2gco(p))) \
+      lj_gc_barrierf(G(L), obj2gco(p), gcV(tv)); }
+#define lj_gc_pubobjobj(L, p, o) \
+  { lj_gc2_barrier_obj((L), obj2gco(o)); \
+    if (iswhite(obj2gco(o)) && isblack(obj2gco(p))) \
+      lj_gc_barrierf(G(L), obj2gco(p), obj2gco(o)); }
+
 /* Allocator. */
 LJ_FUNC void *lj_mem_realloc(lua_State *L, void *p, GCSize osz, GCSize nsz);
 LJ_FUNC void *lj_mem_newgco_raw(lua_State *L, GCSize size, uint32_t flags);
