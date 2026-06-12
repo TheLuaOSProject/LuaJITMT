@@ -105,7 +105,14 @@ static lua_State *api_errstate(lua_State *L)
 
 LUA_API int lua_status(lua_State *L)
 {
-  return L->status;
+  LJStateClaim claim;
+  uint32_t tid = lj_thr_current_id(G(L));
+  int status;
+  if (!lj_state_tryclaim(L, tid, &claim))
+    lj_err_callermsg(api_errstate(L), "thread busy");
+  status = L->status;
+  lj_state_dropclaim(&claim);
+  return status;
 }
 
 LUA_API int lua_checkstack(lua_State *L, int size)
@@ -907,7 +914,14 @@ LUA_API void lua_getfenv(lua_State *L, int idx)
   } else if (tvisudata(o)) {
     settabV(L, L->top, tabref(udataV(o)->env));
   } else if (tvisthread(o)) {
-    settabV(L, L->top, tabref(threadV(o)->env));
+    LJStateClaim claim;
+    lua_State *L1 = threadV(o);
+    GCtab *env;
+    if (!lj_state_tryclaim(L1, lj_thr_current_id(G(L)), &claim))
+      lj_err_callermsg(api_errstate(L), "thread busy");
+    env = tabref(L1->env);
+    lj_state_dropclaim(&claim);
+    settabV(L, L->top, env);
   } else {
     setnilV(L->top);
   }
@@ -1098,7 +1112,9 @@ LUALIB_API void luaL_setmetatable(lua_State *L, const char *tname)
 LUA_API int lua_setfenv(lua_State *L, int idx)
 {
   cTValue *o = index2adr_check(L, idx);
+  LJStateClaim claim;
   GCtab *t;
+  int claimed = 0;
   lj_checkapi_slot(1);
   lj_checkapi(tvistab(L->top-1), "top stack slot is not a table");
   t = tabV(L->top-1);
@@ -1107,12 +1123,18 @@ LUA_API int lua_setfenv(lua_State *L, int idx)
   } else if (tvisudata(o)) {
     setgcref(udataV(o)->env, obj2gco(t));
   } else if (tvisthread(o)) {
-    setgcref(threadV(o)->env, obj2gco(t));
+    lua_State *L1 = threadV(o);
+    if (!lj_state_tryclaim(L1, lj_thr_current_id(G(L)), &claim))
+      lj_err_callermsg(api_errstate(L), "thread busy");
+    setgcref(L1->env, obj2gco(t));
+    claimed = 1;
   } else {
     L->top--;
     return 0;
   }
   lj_gc_objbarrier(L, gcV(o), t);
+  if (claimed)
+    lj_state_dropclaim(&claim);
   L->top--;
   return 1;
 }

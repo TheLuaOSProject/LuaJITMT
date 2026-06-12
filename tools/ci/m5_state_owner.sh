@@ -21,6 +21,41 @@ if [ "$(rg -n "lj_state_tryclaim\\(" "$ROOT/src/lj_api.c" | wc -l)" -lt 2 ]; the
 fi
 
 if ! awk '
+  /LUA_API int lua_status/ { infn = 1; next }
+  infn && /lj_state_tryclaim\(L/ { claim = 1 }
+  infn && /lj_state_dropclaim\(&claim\)/ { drop = 1 }
+  infn && /^}/ { exit(claim && drop ? 0 : 1) }
+  END { if (!claim || !drop) exit 1 }
+' "$ROOT/src/lj_api.c"; then
+  echo "guardrail: lua_status must claim the inspected state" >&2
+  exit 1
+fi
+
+if ! awk '
+  /LUA_API void lua_getfenv/ { infn = 1; next }
+  infn && /tvisthread\(o\)/ { inthread = 1 }
+  infn && inthread && /lj_state_tryclaim\(L1/ { claim = 1 }
+  infn && inthread && /lj_state_dropclaim\(&claim\)/ { drop = 1 }
+  infn && /^}/ { exit(claim && drop ? 0 : 1) }
+  END { if (!claim || !drop) exit 1 }
+' "$ROOT/src/lj_api.c"; then
+  echo "guardrail: lua_getfenv must claim thread objects" >&2
+  exit 1
+fi
+
+if ! awk '
+  /LUA_API int lua_setfenv/ { infn = 1; next }
+  infn && /tvisthread\(o\)/ { inthread = 1 }
+  infn && inthread && /lj_state_tryclaim\(L1/ { claim = 1 }
+  infn && inthread && /lj_state_dropclaim\(&claim\)/ { drop = 1 }
+  infn && /^}/ { exit(claim && drop ? 0 : 1) }
+  END { if (!claim || !drop) exit 1 }
+' "$ROOT/src/lj_api.c"; then
+  echo "guardrail: lua_setfenv must claim thread objects" >&2
+  exit 1
+fi
+
+if ! awk '
   /LJLIB_CF\(coroutine_status\)/ { infn = 1; next }
   infn && /lj_state_tryclaim\(co/ { claim = 1 }
   infn && /lj_state_dropclaim\(&claim\)/ { drop = 1 }

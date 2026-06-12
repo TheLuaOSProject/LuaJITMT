@@ -78,6 +78,23 @@ static void check_xmove_unowned_source(lua_State *L)
   lua_pop(L, 2);
 }
 
+static void check_thread_env_unowned(lua_State *L)
+{
+  lua_State *co;
+  GCtab *env;
+  lua_settop(L, 0);
+  co = lua_newthread(L);
+  assert(co->thr_owner == 0);
+  lua_newtable(L);
+  env = tabV(L->top-1);
+  assert(lua_setfenv(L, -2) == 1);
+  assert(co->thr_owner == 0);
+  lua_getfenv(L, -1);
+  assert(tabV(L->top-1) == env);
+  assert(co->thr_owner == 0);
+  lua_pop(L, 2);
+}
+
 static int busy_xmove_target(lua_State *L)
 {
   lua_State *co = lua_newthread(L);
@@ -99,6 +116,31 @@ static int busy_xmove_source(lua_State *L)
   return 0;
 }
 
+static int busy_lua_status(lua_State *L)
+{
+  lua_State *co = lua_newthread(L);
+  co->thr_owner = foreign_tid(L);
+  (void)lua_status(co);
+  return 0;
+}
+
+static int busy_getfenv_thread(lua_State *L)
+{
+  lua_State *co = lua_newthread(L);
+  co->thr_owner = foreign_tid(L);
+  lua_getfenv(L, -1);
+  return 0;
+}
+
+static int busy_setfenv_thread(lua_State *L)
+{
+  lua_State *co = lua_newthread(L);
+  co->thr_owner = foreign_tid(L);
+  lua_newtable(L);
+  (void)lua_setfenv(L, -2);
+  return 0;
+}
+
 static int busy_coroutine_status(lua_State *L)
 {
   lua_State *co = lua_newthread(L);
@@ -117,8 +159,12 @@ int main(void)
   luaL_openlibs(L);
   check_xmove_unowned_target(L);
   check_xmove_unowned_source(L);
+  check_thread_env_unowned(L);
   expect_thread_busy(L, busy_xmove_target, "busy target xmove");
   expect_thread_busy(L, busy_xmove_source, "busy source xmove");
+  expect_thread_busy(L, busy_lua_status, "busy lua_status");
+  expect_thread_busy(L, busy_getfenv_thread, "busy thread getfenv");
+  expect_thread_busy(L, busy_setfenv_thread, "busy thread setfenv");
   expect_thread_busy(L, busy_coroutine_status, "busy coroutine.status");
   check_lua_ok(L, luaL_dostring(L,
     "local co = coroutine.create(function() coroutine.yield(1) end)\n"
