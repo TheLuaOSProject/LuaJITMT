@@ -107,8 +107,8 @@ LJLIB_CF(buffer_method_set)		LJLIB_REC(.)
   lj_bufx_free(L, sbx);
   lj_bufx_set_cow(L, sbx, p, len);
   ref = gcV(L->base+1);
-  setgcref(sbx->cowref, ref);
-  lj_gc_objbarrier(L, buffer_toudata(sbx), ref);
+  setgcrefrel(sbx->cowref, ref);
+  lj_gc_pubobjobj(L, buffer_toudata(sbx), ref);
   L->top = L->base+1;  /* Chain buffer object. */
   return 1;
 }

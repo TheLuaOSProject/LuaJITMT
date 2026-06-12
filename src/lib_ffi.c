@@ -441,8 +441,10 @@ static int ffi_callback_set(lua_State *L, GCfunc *fn)
       GCtab *t = cts->miscmap;
       TValue *tv = lj_tab_setint(L, t, (int32_t)slot);
       if (fn) {
-	setfuncV(L, tv, fn);
-	lj_gc_anybarriert(L, t);
+	TValue tmp;
+	setfuncV(L, &tmp, fn);
+	copyTVrel(L, tv, &tmp);
+	lj_gc_pubtab(L, t);
       } else {
 	setnilV(tv);
 	cts->cb.cbid[slot] = 0;
@@ -517,8 +519,8 @@ LJLIB_CF(ffi_new)	LJLIB_REC(.)
       GCtab *t = tabref(G(L)->gcroot[GCROOT_FFI_FIN]);
       if (gcref(t->metatable)) {
 	/* Add to finalizer table, if still enabled. */
-	copyTV(L, lj_tab_set(L, t, o-1), tv);
-	lj_gc_anybarriert(L, t);
+	copyTVrel(L, lj_tab_set(L, t, o-1), tv);
+	lj_gc_pubtab(L, t);
 	lj_obj_addgcflags(obj2gco(cd), LJ_GC_CDATA_FIN);
       }
     }
@@ -779,6 +781,7 @@ LJLIB_CF(ffi_metatype)
   GCtab *t = cts->miscmap;
   CType *ct = ctype_raw(cts, id);
   TValue *tv;
+  TValue tmp;
   GCcdata *cd;
   if (!(ctype_isstruct(ct->info) || ctype_iscomplex(ct->info) ||
 	ctype_isvector(ct->info)))
@@ -786,8 +789,9 @@ LJLIB_CF(ffi_metatype)
   tv = lj_tab_setinth(L, t, -(int32_t)ctype_typeid(cts, ct));
   if (!tvisnil(tv))
     lj_err_caller(L, LJ_ERR_PROTMT);
-  settabV(L, tv, mt);
-  lj_gc_anybarriert(L, t);
+  settabV(L, &tmp, mt);
+  copyTVrel(L, tv, &tmp);
+  lj_gc_pubtab(L, t);
   cd = lj_cdata_new(cts, CTID_CTYPEID, 4);
   *(CTypeID *)cdataptr(cd) = id;
   setcdataV(L, L->top-1, cd);
@@ -833,8 +837,9 @@ static void ffi_register_module(lua_State *L)
   cTValue *tmp = lj_tab_getstr(tabV(registry(L)), lj_str_newlit(L, "_LOADED"));
   if (tmp && tvistab(tmp)) {
     GCtab *t = tabV(tmp);
-    copyTV(L, lj_tab_setstr(L, t, lj_str_newlit(L, LUA_FFILIBNAME)), L->top-1);
-    lj_gc_anybarriert(L, t);
+    copyTVrel(L, lj_tab_setstr(L, t, lj_str_newlit(L, LUA_FFILIBNAME)),
+	      L->top-1);
+    lj_gc_pubtab(L, t);
   }
 }
 

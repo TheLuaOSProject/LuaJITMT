@@ -138,7 +138,7 @@ LJLIB_ASM(setmetatable)		LJLIB_REC(.)
   if (mt)
     mt->nomm = 0;  /* Do not trust stale metamethod miss caches. */
   setgcrefmt(t->metatable, obj2gco(mt));
-  if (mt) { lj_gc_objbarriert(L, t, mt); }
+  if (mt) { lj_gc_pubtabobj(L, t, mt); }
   settabV(L, L->base-1-LJ_FR2, t);
   return FFH_RES(1);
 }
@@ -183,8 +183,8 @@ LJLIB_CF(setfenv)
   fn = &gcval(o)->fn;
   if (!isluafunc(fn))
     lj_err_caller(L, LJ_ERR_SETFENV);
-  setgcref(fn->l.env, obj2gco(t));
-  lj_gc_objbarrier(L, obj2gco(fn), t);
+  setgcrefrel(fn->l.env, obj2gco(t));
+  lj_gc_pubobjobj(L, obj2gco(fn), t);
   setfuncV(L, L->top++, fn);
   return 1;
 }
@@ -376,8 +376,8 @@ static int load_aux(lua_State *L, int status, int envarg)
     if (tvistab(L->base+envarg-1) && tvisfunc(L->top-1)) {
       GCfunc *fn = funcV(L->top-1);
       GCtab *t = tabV(L->base+envarg-1);
-      setgcref(fn->c.env, obj2gco(t));
-      lj_gc_objbarrier(L, fn, t);
+      setgcrefrel(fn->c.env, obj2gco(t));
+      lj_gc_pubobjobj(L, fn, t);
     }
     return 1;
   } else {

@@ -83,7 +83,7 @@ void lj_lib_register(lua_State *L, const char *libname,
   ptrdiff_t tpos = L->top - L->base;
 
   /* Avoid barriers further down. */
-  lj_gc_anybarriert(L, tab);
+  lj_gc_pubtab(L, tab);
   tab->nomm = 0;
 
   for (;;) {
@@ -177,8 +177,10 @@ int lj_lib_postreg(lua_State *L, lua_CFunction cf, int id, const char *name)
 {
   GCfunc *fn = lj_lib_pushcf(L, cf, id);
   GCtab *t = tabref(curr_func(L)->c.env);  /* Reference to parent table. */
-  setfuncV(L, lj_tab_setstr(L, t, lj_str_newz(L, name)), fn);
-  lj_gc_anybarriert(L, t);
+  TValue tv;
+  setfuncV(L, &tv, fn);
+  copyTVrel(L, lj_tab_setstr(L, t, lj_str_newz(L, name)), &tv);
+  lj_gc_pubtab(L, t);
   setfuncV(L, L->top++, fn);
   return 1;
 }
@@ -374,4 +376,3 @@ badtype:
   return 0;  /* unreachable */
 }
 #endif
-

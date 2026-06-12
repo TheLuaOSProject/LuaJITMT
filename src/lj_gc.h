@@ -141,6 +141,10 @@ static LJ_AINLINE void lj_gc_barrierback(global_State *g, GCtab *t)
   { lj_gc2_barrier_tv((L), (tv)); \
     if (tviswhite(tv) && isblack(obj2gco(t))) \
       lj_gc_barrierback(G(L), (t)); }
+#define lj_gc_pubtabobj(L, t, o) \
+  { lj_gc2_barrier_obj((L), obj2gco(o)); \
+    if (iswhite(obj2gco(o)) && isblack(obj2gco(t))) \
+      lj_gc_barrierback(G(L), (t)); }
 #define lj_gc_pubobjtv(L, p, tv) \
   { lj_gc2_barrier_tv((L), (tv)); \
     if (tviswhite(tv) && isblack(obj2gco(p))) \

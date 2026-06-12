@@ -168,11 +168,11 @@ TValue *lj_meta_tset(lua_State *L, cTValue *o, cTValue *k)
       cTValue *tv = lj_tab_get(L, t, k);
       if (LJ_LIKELY(!tvisnil(tv))) {
 	t->nomm = 0;  /* Invalidate negative metamethod cache. */
-	lj_gc_anybarriert(L, t);
+	lj_gc_pubtab(L, t);
 	return (TValue *)tv;
       } else if (!(mo = lj_meta_fast(L, tabref(t->metatable), MM_newindex))) {
 	t->nomm = 0;  /* Invalidate negative metamethod cache. */
-	lj_gc_anybarriert(L, t);
+	lj_gc_pubtab(L, t);
 	if (tv != niltv(L))
 	  return (TValue *)tv;
 	if (tvisnil(k)) lj_err_msg(L, LJ_ERR_NILIDX);
@@ -477,4 +477,3 @@ void LJ_FASTCALL lj_meta_for(lua_State *L, TValue *o)
     }
   }
 }
-

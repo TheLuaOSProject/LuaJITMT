@@ -90,17 +90,19 @@ void lj_cdata_setfin(lua_State *L, GCcdata *cd, GCobj *obj, uint32_t it)
   GCtab *t = tabref(G(L)->gcroot[GCROOT_FFI_FIN]);
   if (gcref(t->metatable)) {
     /* Add cdata to finalizer table, if still enabled. */
-    TValue *tv, tmp;
-    setcdataV(L, &tmp, cd);
-    lj_gc_anybarriert(L, t);
-    tv = lj_tab_set(L, t, &tmp);
+    TValue *tv, key, val;
+    setcdataV(L, &key, cd);
+    tv = lj_tab_set(L, t, &key);
     if (it == LJ_TNIL) {
-      setnilV(tv);
+      setnilV(&val);
+      copyTVrel(L, tv, &val);
       lj_obj_cleargcflags(obj2gco(cd), LJ_GC_CDATA_FIN);
     } else {
-      setgcV(L, tv, obj, it);
+      setgcV(L, &val, obj, it);
+      copyTVrel(L, tv, &val);
       lj_obj_addgcflags(obj2gco(cd), LJ_GC_CDATA_FIN);
     }
+    lj_gc_pubtab(L, t);
   }
 }
 

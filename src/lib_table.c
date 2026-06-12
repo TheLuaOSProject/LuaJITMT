@@ -99,8 +99,8 @@ LJLIB_CF(table_insert)		LJLIB_REC(.)
   }
   {
     TValue *dst = lj_tab_setint(L, t, i);
-    copyTV(L, dst, L->top-1);  /* Set new value. */
-    lj_gc_barriert(L, t, dst);
+    copyTVrel(L, dst, L->top-1);  /* Set new value. */
+    lj_gc_pubtabtv(L, t, dst);
   }
   return 0;
 }
@@ -324,4 +324,3 @@ LUALIB_API int luaopen_table(lua_State *L)
   lj_lib_prereg(L, LUA_TABLIBNAME ".clear", luaopen_table_clear, tabV(L->top-1));
   return 1;
 }
-

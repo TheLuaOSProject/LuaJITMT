@@ -112,8 +112,8 @@ void lj_bufx_set(SBufExt *sbx, const char *p, MSize len, GCobj *ref)
   lua_State *L = sbufL(sbx);
   lj_bufx_free(L, sbx);
   lj_bufx_set_cow(L, sbx, p, len);
-  setgcref(sbx->cowref, ref);
-  lj_gc_objbarrier(L, (GCudata *)sbx - 1, ref);
+  setgcrefrel(sbx->cowref, ref);
+  lj_gc_pubobjobj(L, (GCudata *)sbx - 1, ref);
 }
 
 #if LJ_HASFFI

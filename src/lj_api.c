@@ -228,8 +228,8 @@ static void copy_slot(lua_State *L, TValue *f, int idx)
     if (fn->c.gct != ~LJ_TFUNC)
       lj_err_msg(L, LJ_ERR_NOENV);
     lj_checkapi(tvistab(f), "stack slot %d is not a table", idx);
-    setgcref(fn->c.env, obj2gco(tabV(f)));
-    lj_gc_barrier(L, fn, f);
+    setgcrefrel(fn->c.env, obj2gco(tabV(f)));
+    lj_gc_pubobjtv(L, fn, f);
   } else {
     TValue *o = index2adr_check(L, idx);
     if (idx == LUA_REGISTRYINDEX) {
@@ -762,9 +762,11 @@ LUALIB_API int luaL_newmetatable(lua_State *L, const char *tname)
   TValue *tv = lj_tab_setstr(L, regt, lj_str_newz(L, tname));
   if (tvisnil(tv)) {
     GCtab *mt = lj_tab_new(L, 0, 1);
-    settabV(L, tv, mt);
+    TValue tmp;
+    settabV(L, &tmp, mt);
+    copyTVrel(L, tv, &tmp);
     settabV(L, L->top++, mt);
-    lj_gc_anybarriert(L, regt);
+    lj_gc_pubtab(L, regt);
     return 1;
   } else {
     copyTV(L, L->top++, tv);
@@ -1045,8 +1047,8 @@ LUA_API void lua_rawset(lua_State *L, int idx)
   lj_checkapi_slot(2);
   key = L->top-2;
   dst = lj_tab_set(L, t, key);
-  copyTV(L, dst, key+1);
-  lj_gc_anybarriert(L, t);
+  copyTVrel(L, dst, key+1);
+  lj_gc_pubtab(L, t);
   L->top = key;
 }
 
@@ -1057,8 +1059,8 @@ LUA_API void lua_rawseti(lua_State *L, int idx, int n)
   lj_checkapi_slot(1);
   dst = lj_tab_setint(L, t, n);
   src = L->top-1;
-  copyTV(L, dst, src);
-  lj_gc_barriert(L, t, dst);
+  copyTVrel(L, dst, src);
+  lj_gc_pubtabtv(L, t, dst);
   L->top = src;
 }
 
@@ -1080,11 +1082,11 @@ LUA_API int lua_setmetatable(lua_State *L, int idx)
   if (tvistab(o)) {
     setgcrefmt(tabV(o)->metatable, obj2gco(mt));
     if (mt)
-      lj_gc_objbarriert(L, tabV(o), mt);
+      lj_gc_pubtabobj(L, tabV(o), mt);
   } else if (tvisudata(o)) {
     setgcrefmt(udataV(o)->metatable, obj2gco(mt));
     if (mt)
-      lj_gc_objbarrier(L, udataV(o), mt);
+      lj_gc_pubobjobj(L, udataV(o), mt);
   } else {
     /* Flush cache, since traces specialize to basemt. But not during __gc. */
     if (lj_trace_flushall(L))
@@ -1119,20 +1121,20 @@ LUA_API int lua_setfenv(lua_State *L, int idx)
   lj_checkapi(tvistab(L->top-1), "top stack slot is not a table");
   t = tabV(L->top-1);
   if (tvisfunc(o)) {
-    setgcref(funcV(o)->c.env, obj2gco(t));
+    setgcrefrel(funcV(o)->c.env, obj2gco(t));
   } else if (tvisudata(o)) {
-    setgcref(udataV(o)->env, obj2gco(t));
+    setgcrefrel(udataV(o)->env, obj2gco(t));
   } else if (tvisthread(o)) {
     lua_State *L1 = threadV(o);
     if (!lj_state_tryclaim(L1, lj_thr_current_id(G(L)), &claim))
       lj_err_callermsg(api_errstate(L), "thread busy");
-    setgcref(L1->env, obj2gco(t));
+    setgcrefrel(L1->env, obj2gco(t));
     claimed = 1;
   } else {
     L->top--;
     return 0;
   }
-  lj_gc_objbarrier(L, gcV(o), t);
+  lj_gc_pubobjobj(L, gcV(o), t);
   if (claimed)
     lj_state_dropclaim(&claim);
   L->top--;
