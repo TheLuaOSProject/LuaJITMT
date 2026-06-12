@@ -142,4 +142,5 @@
 #include "lib_jit.c"
 #include "lib_ffi.c"
 #include "lib_buffer.c"
+#include "lib_threading.c"
 #include "lib_init.c"

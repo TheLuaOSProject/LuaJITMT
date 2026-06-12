@@ -30,6 +30,7 @@ static const luaL_Reg lj_lib_load[] = {
 };
 
 static const luaL_Reg lj_lib_preload[] = {
+  { LUA_THREADINGLIBNAME, luaopen_threading },
 #if LJ_HASFFI
   { LUA_FFILIBNAME,	luaopen_ffi },
 #endif
@@ -52,4 +53,3 @@ LUALIB_API void luaL_openlibs(lua_State *L)
   }
   lua_pop(L, 1);
 }
-
