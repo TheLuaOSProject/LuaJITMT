@@ -78,4 +78,52 @@ if ! awk '
   exit 1
 fi
 
+if ! awk '
+  /static int ffh_resume\(lua_State \*L, lua_State \*co, int wrap\)/ { infn = 1; next }
+  infn && /lj_state_tryclaim\(co/ { claim = 1 }
+  infn && /thread busy/ { busy = 1 }
+  infn && /lj_state_dropclaim\(&claim\)/ { drop = 1 }
+  infn && /^}/ { exit(claim && busy && drop ? 0 : 1) }
+  END { if (!claim || !busy || !drop) exit 1 }
+' "$ROOT/src/lib_base.c"; then
+  echo "guardrail: coroutine resume fallback must claim foreign coroutine state" >&2
+  exit 1
+fi
+
+if ! awk '
+  /lua_State \*LJ_FASTCALL lj_ffh_coroutine_claim/ { infn = 1; next }
+  infn && /lj_state_tryclaim\(co/ { claim = 1 }
+  infn && /return NULL/ { busy = 1 }
+  infn && /claim.release/ { tag = 1 }
+  infn && /^}/ { exit(claim && busy && tag ? 0 : 1) }
+  END { if (!claim || !busy || !tag) exit 1 }
+' "$ROOT/src/lib_base.c"; then
+  echo "guardrail: coroutine fast path must tag claimed coroutine state" >&2
+  exit 1
+fi
+
+if ! awk '
+  /\.macro coroutine_resume_wrap/ { inmacro = 1; next }
+  inmacro && /mov TMP1d, NARGS:RDd/ { nargs_save = 1 }
+  inmacro && /call extern lj_ffh_coroutine_claim/ { claim = 1 }
+  inmacro && /mov NARGS:RDd, TMP1d/ { nargs_restore = 1 }
+  inmacro && /mov CARG1, TMP1/ { vmarg = 1 }
+  inmacro && /and CARG1, -2/ { strip = 1 }
+  inmacro && /mov CARG2, TMP1/ { wraparg = 1 }
+  inmacro && /call extern lj_ffh_coroutine_wrap_err/ { wraperr = 1 }
+  inmacro && /->thr_owner, 0/ { release = 1 }
+  inmacro && /\.endmacro/ {
+    exit(nargs_save && claim && nargs_restore && vmarg && strip &&
+	 wraparg && wraperr && release ? 0 : 1)
+  }
+  END {
+    if (!nargs_save || !claim || !nargs_restore || !vmarg || !strip ||
+	!wraparg || !wraperr || !release)
+      exit 1
+  }
+' "$ROOT/src/vm_x64.dasc"; then
+  echo "guardrail: x64 coroutine fast path must claim and release coroutine state" >&2
+  exit 1
+fi
+
 echo "M5 lua_State owner tests passed"

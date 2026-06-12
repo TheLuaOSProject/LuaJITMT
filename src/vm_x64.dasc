@@ -1586,16 +1586,29 @@ static void build_subroutines(BuildCtx *ctx)
   |.endif
   |  mov PC, [BASE-8]
   |  mov SAVE_PC, PC
-  |  mov TMP1, L:RB
   |.if resume
   |  checktptp [BASE], LJ_TTHREAD, ->fff_fallback
   |.endif
-  |  cmp aword L:RB->cframe, 0; jne ->fff_fallback
-  |  cmp byte L:RB->status, LUA_YIELD;  ja ->fff_fallback
+  |  mov TMP1d, NARGS:RDd
+  |  mov PC, BASE
+  |  mov CARG2, L:RB
+  |  mov CARG1, SAVE_L
+  |  call extern lj_ffh_coroutine_claim	// (lua_State *L, lua_State *co)
+  |  mov BASE, PC
+  |  mov PC, RC
+  |  mov NARGS:RDd, TMP1d
+  |  test PC, PC
+  |  jz ->coro_claim_busy_ .. resume
+  |  mov TMP1, PC
+  |  mov L:RB, TMP1
+  |  and RB, -2
+  |->coro_claim_done_ .. resume:
+  |  cmp aword L:RB->cframe, 0; jne ->coro_claim_fallback_ .. resume
+  |  cmp byte L:RB->status, LUA_YIELD;  ja ->coro_claim_fallback_ .. resume
   |  mov RA, L:RB->top
   |  je >1				// Status != LUA_YIELD (i.e. 0)?
   |  cmp RA, L:RB->base			// Check for presence of initial func.
-  |  je ->fff_fallback
+  |  je ->coro_claim_fallback_ .. resume
   |  mov PC, [RA-8]			// Move initial function up.
   |  mov [RA], PC
   |  add RA, 8
@@ -1605,7 +1618,7 @@ static void build_subroutines(BuildCtx *ctx)
   |.else
   |  lea PC, [RA+NARGS:RD*8-8]		// Check stack space (-1).
   |.endif
-  |  cmp PC, L:RB->maxstack; ja ->fff_fallback
+  |  cmp PC, L:RB->maxstack; ja ->coro_claim_fallback_ .. resume
   |  mov L:RB->top, PC
   |
   |  mov L:RB, SAVE_L
@@ -1632,10 +1645,12 @@ static void build_subroutines(BuildCtx *ctx)
   |3:
   |  mov CARG2, RA
   |  mov CARG1, TMP1
+  |  and CARG1, -2
   |  call ->vm_resume			// (lua_State *L, TValue *base, 0, 0)
   |
   |  mov L:RB, SAVE_L
   |  mov L:PC, TMP1
+  |  and PC, -2
   |  mov BASE, L:RB->base
   |  mov [DISPATCH+DISPATCH_TG(cur_L)], L:RB
   |  set_vmstate INTERP
@@ -1670,6 +1685,12 @@ static void build_subroutines(BuildCtx *ctx)
   |.else
   |  lea RDd, [PCd+1]			// nresults+1 = 1 + results.
   |.endif
+  |->coro_release_return_ .. resume:
+  |  test TMP1, 1
+  |  jz >7
+  |  mov L:TMPR, TMP1
+  |  and TMPR, -2
+  |  mov dword L:TMPR->thr_owner, 0
   |7:
   |  mov PC, SAVE_PC
   |  mov MULTRES, RDd
@@ -1693,9 +1714,9 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov RD, [RA]
   |  mov [BASE], RD
   |  mov RDd, 1+2			// nresults+1 = 1 + false + error.
-  |  jmp <7
+  |  jmp ->coro_release_return_ .. resume
   |.else
-  |  mov CARG2, L:PC
+  |  mov CARG2, TMP1
   |  mov CARG1, L:RB
   |  call extern lj_ffh_coroutine_wrap_err  // (lua_State *L, lua_State *co)
   |  // Error function does not return.
@@ -1703,13 +1724,26 @@ static void build_subroutines(BuildCtx *ctx)
   |
   |9:  // Handle stack expansion on return from yield.
   |  mov L:RA, TMP1
+  |  and RA, -2
   |  mov L:RA->top, KBASE		// Undo coroutine stack clearing.
   |  mov CARG2, PC
   |  mov CARG1, L:RB
   |  call extern lj_state_growstack	// (lua_State *L, int n)
   |  mov L:PC, TMP1
+  |  and PC, -2
   |  mov BASE, L:RB->base
   |  jmp <4				// Retry the stack move.
+  |
+  |->coro_claim_fallback_ .. resume:
+  |  test TMP1, 1
+  |  jz ->coro_claim_fallback_done_ .. resume
+  |  mov L:TMPR, TMP1
+  |  and TMPR, -2
+  |  mov dword L:TMPR->thr_owner, 0
+  |->coro_claim_fallback_done_ .. resume:
+  |  jmp ->fff_fallback
+  |->coro_claim_busy_ .. resume:
+  |  jmp ->fff_fallback
   |.endmacro
   |
   |  coroutine_resume_wrap 1		// coroutine.resume
