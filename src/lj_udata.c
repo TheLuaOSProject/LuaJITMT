@@ -23,8 +23,8 @@ GCudata *lj_udata_new(lua_State *L, MSize sz, GCtab *env)
   setgcrefnull(ud->metatable);
   setgcref(ud->env, obj2gco(env));
   /* Chain to userdata list (after main thread). */
-  setgcrefr(ud->nextgc, mainthread(g)->nextgc);
-  setgcref(mainthread(g)->nextgc, obj2gco(ud));
+  lj_obj_setgcwr(obj2gco(ud), *lj_obj_gcwref(obj2gco(mainthread(g))));
+  setgcref(*lj_obj_gcwref(obj2gco(mainthread(g))), obj2gco(ud));
   return ud;
 }
 
@@ -59,4 +59,3 @@ void *lj_lightud_intern(lua_State *L, void *p)
   return (void *)(((uint64_t)segnum << LJ_LIGHTUD_BITS_LO) | lightudlo(u));
 }
 #endif
-

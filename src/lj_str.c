@@ -196,12 +196,12 @@ void lj_str_resize(lua_State *L, MSize newmask)
 	}
       }
       /* NOBARRIER: The string table is a GC root. */
-      setgcrefp(o->gch.nextgc, (u & ~(uintptr_t)1));
+      setgcrefp(*lj_obj_gcwref(o), (u & ~(uintptr_t)1));
       setgcrefp(newtab[hash], ((uintptr_t)o | (u & 1)));
 #else
       hash &= newmask;
       /* NOBARRIER: The string table is a GC root. */
-      setgcrefr(o->gch.nextgc, newtab[hash]);
+      setgcrefr(*lj_obj_gcwref(o), newtab[hash]);
       setgcref(newtab[hash], o);
 #endif
       o = next;
@@ -232,8 +232,8 @@ static LJ_NOINLINE GCstr *lj_str_rehash_chain(lua_State *L, StrHash hashc,
     GCstr *s = gco2str(o);
     StrHash hash;
     if (ow) {  /* Must sweep while rechaining. */
-      if (((o->gch.marked ^ LJ_GC_WHITES) & ow)) {  /* String alive? */
-	lj_assertG(!isdead(g, o) || (o->gch.marked & LJ_GC_FIXED),
+      if (((lj_obj_gcflags(o) ^ LJ_GC_WHITES) & ow)) {  /* String alive? */
+	lj_assertG(!isdead(g, o) || (lj_obj_gcflags(o) & LJ_GC_FIXED),
 		   "sweep of undead string");
 	makewhite(g, o);
       } else {  /* Free dead string. */
@@ -253,7 +253,7 @@ static LJ_NOINLINE GCstr *lj_str_rehash_chain(lua_State *L, StrHash hashc,
     /* Rechain. */
     hash &= strmask;
     u = gcrefu(strtab[hash]);
-    setgcrefp(o->gch.nextgc, (u & ~(uintptr_t)1));
+    setgcrefp(*lj_obj_gcwref(o), (u & ~(uintptr_t)1));
     setgcrefp(strtab[hash], ((uintptr_t)o | (u & 1)));
     o = next;
   }
@@ -302,7 +302,7 @@ static GCstr *lj_str_alloc(lua_State *L, const char *str, MSize len,
   /* Add to string hash table. */
   hash &= g->str.mask;
   u = gcrefu(g->str.tab[hash]);
-  setgcrefp(s->nextgc, (u & ~(uintptr_t)1));
+  setgcrefp(*lj_obj_gcwref(obj2gco(s)), (u & ~(uintptr_t)1));
   /* NOBARRIER: The string table is a GC root. */
   setgcrefp(g->str.tab[hash], ((uintptr_t)s | (u & 1)));
   if (g->str.num++ > g->str.mask)  /* Allow a 100% load factor. */
@@ -367,4 +367,3 @@ void LJ_FASTCALL lj_str_init(lua_State *L)
   g->str.seed = lj_prng_u64(&g->prng);
   lj_str_resize(L, LJ_MIN_STRTAB-1);
 }
-

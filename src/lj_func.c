@@ -48,7 +48,7 @@ static GCupval *func_finduv(lua_State *L, TValue *slot)
 	flipwhite(obj2gco(p));
       return p;
     }
-    pp = &p->nextgc;
+    pp = lj_obj_gcwref(obj2gco(p));
   }
   /* No matching upvalue found. Create a new one. */
   uv = lj_mem_newt(L, sizeof(GCupval), GCupval);
@@ -57,7 +57,7 @@ static GCupval *func_finduv(lua_State *L, TValue *slot)
   uv->closed = 0;  /* Still open. */
   setmref(uv->v, slot);  /* Pointing to the stack slot. */
   /* NOBARRIER: The GCupval is new (marked white) and open. */
-  setgcrefr(uv->nextgc, *pp);  /* Insert into sorted list of open upvalues. */
+  lj_obj_setgcwr(obj2gco(uv), *pp);  /* Insert into sorted open-upvalue list. */
   setgcref(*pp, obj2gco(uv));
   setgcref(uv->prev, obj2gco(&g->uvhead));  /* Insert into GC list, too. */
   setgcrefr(uv->next, g->uvhead.next);
@@ -89,7 +89,7 @@ void LJ_FASTCALL lj_func_closeuv(lua_State *L, TValue *level)
     GCobj *o = obj2gco(uv);
     lj_assertG(!isblack(o), "bad black upvalue");
     lj_assertG(!uv->closed && uvval(uv) != &uv->tv, "closed upvalue in chain");
-    setgcrefr(L->openupval, uv->nextgc);  /* No longer in open list. */
+    setgcrefr(L->openupval, *lj_obj_gcwref(o));  /* No longer open. */
     if (isdead(g, o)) {
       lj_func_freeuv(g, uv);
     } else {
@@ -188,4 +188,3 @@ void LJ_FASTCALL lj_func_free(global_State *g, GCfunc *fn)
 			       sizeCfunc((MSize)fn->c.nupvalues);
   lj_mem_free(g, fn, size);
 }
-

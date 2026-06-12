@@ -130,7 +130,7 @@ GCtrace * LJ_FASTCALL lj_trace_alloc(lua_State *L, GCtrace *T)
   GCtrace *T2 = lj_mem_newt(L, (MSize)sz, GCtrace);
   char *p = (char *)T2 + sztr;
   T2->gct = ~LJ_TTRACE;
-  T2->marked = 0;
+  lj_obj_setgcflags(obj2gco(T2), 0);
   T2->traceno = 0;
   T2->ir = (IRIns *)p - T->nk;
   T2->nins = T->nins;
@@ -148,7 +148,7 @@ static void trace_save(jit_State *J, GCtrace *T)
   size_t szins = (J->cur.nins-J->cur.nk)*sizeof(IRIns);
   char *p = (char *)T + sztr;
   memcpy(T, &J->cur, sizeof(GCtrace));
-  setgcrefr(T->nextgc, J2G(J)->gc.root);
+  lj_obj_setgcwr(obj2gco(T), J2G(J)->gc.root);
   setgcrefp(J2G(J)->gc.root, T);
   newwhite(J2G(J), T);
   T->gct = ~LJ_TTRACE;
