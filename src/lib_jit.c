@@ -573,13 +573,15 @@ LJLIB_CF(jit_profile_start)
   GCstr *mode = lj_lib_optstr(L, 1);
   GCfunc *func = lj_lib_checkfunc(L, 2);
   lua_State *L2 = lua_newthread(L);  /* Thread that runs profiler callback. */
-  TValue key;
+  TValue key, tv;
   /* Anchor thread and function in registry. */
   key.u64 = KEY_PROFILE_THREAD;
-  setthreadV(L, lj_tab_set(L, registry, &key), L2);
+  setthreadV(L, &tv, L2);
+  copyTVrel(L, lj_tab_set(L, registry, &key), &tv);
   key.u64 = KEY_PROFILE_FUNC;
-  setfuncV(L, lj_tab_set(L, registry, &key), func);
-  lj_gc_anybarriert(L, registry);
+  setfuncV(L, &tv, func);
+  copyTVrel(L, lj_tab_set(L, registry, &key), &tv);
+  lj_gc_pubtab(L, registry);
   luaJIT_profile_start(L, mode ? strdata(mode) : "",
 		       (luaJIT_profile_callback)jit_profile_callback, L2);
   return 0;
@@ -596,7 +598,7 @@ LJLIB_CF(jit_profile_stop)
   setnilV(lj_tab_set(L, registry, &key));
   key.u64 = KEY_PROFILE_FUNC;
   setnilV(lj_tab_set(L, registry, &key));
-  lj_gc_anybarriert(L, registry);
+  lj_gc_pubtab(L, registry);
   return 0;
 }
 
