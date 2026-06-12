@@ -781,6 +781,61 @@ typedef union GCobj {
   GCudata ud;
 } GCobj;
 
+static LJ_AINLINE GCRef *lj_obj_gcwref(GCobj *o)
+{
+  return &o->gch.nextgc;
+}
+
+static LJ_AINLINE GCobj *lj_obj_gcw(GCobj *o)
+{
+  return gcref(o->gch.nextgc);
+}
+
+static LJ_AINLINE void lj_obj_setgcw(GCobj *o, GCobj *next)
+{
+  setgcref(o->gch.nextgc, next);
+}
+
+static LJ_AINLINE void lj_obj_setgcwr(GCobj *o, GCRef next)
+{
+  setgcrefr(o->gch.nextgc, next);
+}
+
+static LJ_AINLINE void lj_obj_setgcwnull(GCobj *o)
+{
+  setgcrefnull(o->gch.nextgc);
+}
+
+static LJ_AINLINE uint8_t lj_obj_gcflags(const GCobj *o)
+{
+  return o->gch.marked;
+}
+
+static LJ_AINLINE void lj_obj_setgcflags(GCobj *o, uint8_t flags)
+{
+  o->gch.marked = flags;
+}
+
+static LJ_AINLINE void lj_obj_addgcflags(GCobj *o, uint8_t flags)
+{
+  o->gch.marked |= flags;
+}
+
+static LJ_AINLINE void lj_obj_cleargcflags(GCobj *o, uint8_t flags)
+{
+  o->gch.marked &= (uint8_t)~flags;
+}
+
+LJ_STATIC_ASSERT(sizeof(GCRef) == 8u);
+LJ_STATIC_ASSERT(offsetof(GChead, nextgc) == 0u);
+LJ_STATIC_ASSERT(offsetof(GChead, marked) == sizeof(GCRef));
+LJ_STATIC_ASSERT(offsetof(GChead, gct) == sizeof(GCRef) + 1u);
+LJ_STATIC_ASSERT(offsetof(GChead, marked) == offsetof(GCstr, marked));
+LJ_STATIC_ASSERT(offsetof(GChead, marked) == offsetof(GCtab, marked));
+LJ_STATIC_ASSERT(offsetof(GChead, marked) == offsetof(GCupval, marked));
+LJ_STATIC_ASSERT(((int)offsetof(GCupval, marked) -
+		  (int)offsetof(GCupval, tv)) == -8);
+
 /* Macros to convert a GCobj pointer into a specific value. */
 #define gco2str(o)	check_exp((o)->gch.gct == ~LJ_TSTR, &(o)->str)
 #define gco2uv(o)	check_exp((o)->gch.gct == ~LJ_TUPVAL, &(o)->uv)
