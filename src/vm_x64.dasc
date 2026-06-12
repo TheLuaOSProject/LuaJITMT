@@ -515,6 +515,17 @@ static void build_subroutines(BuildCtx *ctx)
   |->vm_unwind_c_eh:			// Landing pad for external unwinder.
   |  endbr
   |  mov L:RB, SAVE_L
+  |  mov DISPATCH, L:RB->glref
+  |  add DISPATCH, GG_G2TGDISP
+  |  cmp TGPOLL, 0
+  |  jz >9
+  |  mov SAVE_ERRF, eax
+  |  mov SAVE_PC, L:RB			// Outside bytecode while unwinding to C.
+  |  mov CARG1, L:RB
+  |  call extern lj_safepoint_ack
+  |  mov eax, SAVE_ERRF
+  |  mov L:RB, SAVE_L
+  |9:
   |  mov GL:RB, L:RB->glref
   |  mov dword GL:RB->vmstate, ~LJ_VMST_C
   |  jmp ->vm_leave_unw
