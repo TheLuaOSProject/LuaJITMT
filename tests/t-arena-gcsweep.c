@@ -35,10 +35,12 @@ int main(void)
   TGState *tg;
   TValue *tv;
   GCtab *keep, *arrtab;
-  GCfunc *fn;
-  GCproto *deadpt;
+  GCfunc *fn, *deadchunk, *deadfn, *livefn, *deadcf, *finchunk, *finfn;
+  GCproto *deadpt, *deadfnpt;
   GCproto *finpt;
-  GCSize before_drop, deadpt_size, before_raw, before_fin, finpt_size;
+  GCSize before_fn, deadfn_size, before_drop, deadpt_size, deadchunk_size;
+  GCSize before_raw, before_cf, deadcf_size;
+  GCSize before_fin, finpt_size, finchunk_size, finfn_size;
   void *raw;
   GCArena *fna, *arra;
 
@@ -48,6 +50,9 @@ int main(void)
     "keep = {}\n"
     "keep.f = function(x) return x + 1 end\n"
     "keep.dead = loadstring('return 42')\n"
+    "keep.parent = loadstring('return function(x) return x + 7 end')\n"
+    "keep.deadfn = keep.parent()\n"
+    "keep.livefn = keep.parent()\n"
     "keep.arr = {}\n"
     "for i = 1, 300 do keep.arr[i] = i end\n"
     "collectgarbage('collect')\n") == LUA_OK);
@@ -83,9 +88,32 @@ int main(void)
   assert(tvisfunc(tv));
   fn = funcV(tv);
   assert(isluafunc(fn));
+  deadchunk = fn;
+  deadchunk_size = sizeLfunc((MSize)deadchunk->l.nupvalues);
   deadpt = funcproto(fn);
   deadpt_size = deadpt->sizept;
+  assert(ptr_state(deadchunk) == 2);
   assert(ptr_state(deadpt) == 2);
+  L->top--;
+
+  lua_getfield(L, -1, "deadfn");
+  tv = L->top - 1;
+  assert(tvisfunc(tv));
+  deadfn = funcV(tv);
+  assert(isluafunc(deadfn));
+  deadfn_size = sizeLfunc((MSize)deadfn->l.nupvalues);
+  deadfnpt = funcproto(deadfn);
+  assert(ptr_state(deadfn) == 2);
+  assert(ptr_state(deadfnpt) == 2);
+  L->top--;
+
+  lua_getfield(L, -1, "livefn");
+  tv = L->top - 1;
+  assert(tvisfunc(tv));
+  livefn = funcV(tv);
+  assert(isluafunc(livefn));
+  assert(funcproto(livefn) == deadfnpt);
+  assert(ptr_state(livefn) == 2);
   L->top--;
 
   lua_getfield(L, -1, "arr");
@@ -100,6 +128,15 @@ int main(void)
   assert(ptr_state(tvref(arrtab->array)) == 3);
   L->top--;
 
+  before_fn = g->gc.total;
+  lua_pushnil(L);
+  lua_setfield(L, -2, "deadfn");
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  assert(g->gc.total <= before_fn - deadfn_size);
+  assert((ptr_state(deadfn) & 2u) == 0);
+  assert(ptr_state(deadfnpt) == 2);
+  assert(ptr_state(livefn) == 2);
+
   before_raw = g->gc.total;
   raw = lj_mem_newgco_raw(L, 64, LJ_AF_TRAVERSABLE);
   assert(g->gc.total == before_raw + 64);
@@ -112,20 +149,60 @@ int main(void)
   lua_pushnil(L);
   lua_setfield(L, -2, "dead");
   lua_gc(L, LUA_GCCOLLECT, 0);
-  assert(g->gc.total <= before_drop - deadpt_size);
+  assert(g->gc.total <= before_drop - deadpt_size - deadchunk_size);
+  assert((ptr_state(deadchunk) & 2u) == 0);
   assert((ptr_state(deadpt) & 2u) == 0);
   assert(ptr_state(raw) == 1);
 
-  assert(luaL_dostring(L, "keep.deadfin = loadstring('return 43')\n") ==
+  lua_getfield(L, -1, "arr");
+  lua_pushcclosure(L, noop_finalizer, 1);
+  tv = L->top - 1;
+  assert(tvisfunc(tv));
+  deadcf = funcV(tv);
+  assert(!isluafunc(deadcf));
+  assert(deadcf->c.nupvalues == 1);
+  deadcf_size = sizeCfunc((MSize)deadcf->c.nupvalues);
+  assert(tvistab(&deadcf->c.upvalue[0]));
+  assert(tabV(&deadcf->c.upvalue[0]) == arrtab);
+  assert((lj_arena_of(deadcf)->hdr.flags & LJ_AF_TRAVERSABLE) != 0);
+  assert(ptr_state(deadcf) == 2);
+  lua_setfield(L, -2, "deadcf");
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  assert(ptr_state(deadcf) == 2);
+
+  before_cf = g->gc.total;
+  lua_pushnil(L);
+  lua_setfield(L, -2, "deadcf");
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  assert(g->gc.total <= before_cf - deadcf_size);
+  assert((ptr_state(deadcf) & 2u) == 0);
+  assert(ptr_state(arrtab) == 2);
+
+  assert(luaL_dostring(L,
+    "keep.deadfin = loadstring('return 43')\n"
+    "keep.deadfinfn = keep.parent()\n") ==
 	 LUA_OK);
   lua_getfield(L, -1, "deadfin");
   tv = L->top - 1;
   assert(tvisfunc(tv));
   fn = funcV(tv);
   assert(isluafunc(fn));
+  finchunk = fn;
+  finchunk_size = sizeLfunc((MSize)finchunk->l.nupvalues);
   finpt = funcproto(fn);
   finpt_size = finpt->sizept;
+  assert(ptr_state(finchunk) == 2);
   assert(ptr_state(finpt) == 2);
+  L->top--;
+
+  lua_getfield(L, -1, "deadfinfn");
+  tv = L->top - 1;
+  assert(tvisfunc(tv));
+  finfn = funcV(tv);
+  assert(isluafunc(finfn));
+  finfn_size = sizeLfunc((MSize)finfn->l.nupvalues);
+  assert(funcproto(finfn) == deadfnpt);
+  assert(ptr_state(finfn) == 2);
   L->top--;
 
   lua_newuserdata(L, 1);
@@ -139,9 +216,13 @@ int main(void)
   lua_pushnil(L);
   lua_setfield(L, -2, "deadfin");
   lua_pushnil(L);
+  lua_setfield(L, -2, "deadfinfn");
+  lua_pushnil(L);
   lua_setfield(L, -2, "ud");
   lua_gc(L, LUA_GCCOLLECT, 0);
-  assert(g->gc.total <= before_fin - finpt_size);
+  assert(g->gc.total <= before_fin - finpt_size - finchunk_size - finfn_size);
+  assert((ptr_state(finchunk) & 2u) == 0);
+  assert((ptr_state(finfn) & 2u) == 0);
   assert((ptr_state(finpt) & 2u) == 0);
 
   lua_close(L);
