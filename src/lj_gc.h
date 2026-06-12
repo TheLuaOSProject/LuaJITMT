@@ -79,6 +79,7 @@ LJ_FUNC void lj_gc_fullgc(lua_State *L);
       lj_gc_step_fixtop(L); }
 
 /* Write barriers. */
+LJ_FUNC void lj_gc_barrierroot(lua_State *L, cTValue *tv);
 LJ_FUNC void lj_gc_barrierf(global_State *g, GCobj *o, GCobj *v);
 LJ_FUNCA void LJ_FASTCALL lj_gc_barrieruv(global_State *g, TValue *tv);
 LJ_FUNC void lj_gc_closeuv(global_State *g, GCupval *uv);

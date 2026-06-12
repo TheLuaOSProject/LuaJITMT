@@ -1127,6 +1127,12 @@ static LJ_AINLINE void copyTV(lua_State *L, TValue *o1, const TValue *o2)
   checklivetv(L, o1, "copy of dead GC object");
 }
 
+static LJ_AINLINE void copyTVrel(lua_State *L, TValue *o1, const TValue *o2)
+{
+  tv_rawstore_rel(o1, tv_rawload(o2));
+  checklivetv(L, o1, "copy of dead GC object");
+}
+
 /* -- Number to integer conversion ---------------------------------------- */
 
 /*

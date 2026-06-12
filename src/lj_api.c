@@ -195,7 +195,12 @@ static void copy_slot(lua_State *L, TValue *f, int idx)
     lj_gc_barrier(L, fn, f);
   } else {
     TValue *o = index2adr_check(L, idx);
-    copyTV(L, o, f);
+    if (idx == LUA_REGISTRYINDEX) {
+      lj_gc_barrierroot(L, f);
+      copyTVrel(L, o, f);
+    } else {
+      copyTV(L, o, f);
+    }
     if (idx < LUA_GLOBALSINDEX)  /* Need a barrier for upvalues. */
       lj_gc_barrier(L, curr_func(L), f);
   }
