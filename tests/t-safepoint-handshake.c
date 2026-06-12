@@ -68,11 +68,22 @@ static int arena_list_contains(GCArena *a, GCArena *needle)
   return 0;
 }
 
+static int tg_list_contains(TGState *tg, TGState *needle)
+{
+  while (tg) {
+    if (tg == needle)
+      return 1;
+    tg = tg->next_tg;
+  }
+  return 0;
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
   global_State *g;
   TGState *tg;
+  TGState extra_tg;
   GCtab *root_tab, *native_tab;
   void *plain_reset, *trav_reset;
   GCArena *plain_reset_a, *trav_reset_a;
@@ -369,6 +380,40 @@ int main(void)
   assert(tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE] == NULL);
   lj_arena_free(&tg->alloc, plain_reset, 64);
   lj_arena_free(&tg->alloc, trav_reset, 64);
+
+  lj_tg_init_thread(g, &extra_tg, NULL, 0);
+  extra_tg.cur_L = L;
+  lj_native_enter(&extra_tg);
+  lj_tg_attach(g, &extra_tg);
+  assert(g->gc2.n_threads == 2);
+  assert(tg_list_contains(g->gc2.tg_list, tg));
+  assert(tg_list_contains(g->gc2.tg_list, &extra_tg));
+  assert(!(extra_tg.tg_flags & TGF_DEAD));
+  assert(extra_tg.hs_epoch_ack == g->gc2.hs_epoch);
+
+  epoch0 = g->gc2.hs_epoch;
+  actions = LJ_GC2_HS_ENABLE_BARRIER|LJ_GC2_HS_ALLOC_BLACK;
+  assert(lj_gc2_handshake(g, actions) == 2);
+  assert(g->gc2.hs_epoch == epoch0 + 1u);
+  assert(g->gc2.hs_pending == 0);
+  assert(extra_tg.poll == 0);
+  assert(extra_tg.reqmask == 0);
+  assert(extra_tg.hs_epoch_ack == g->gc2.hs_epoch);
+  assert(extra_tg.mark_active == 1);
+  assert(extra_tg.alloc.alloc_black == 1);
+  assert(extra_tg.in_native == 1);
+
+  lj_tg_detach(g, &extra_tg);
+  assert(g->gc2.n_threads == 1);
+  assert(extra_tg.tg_flags & TGF_DEAD);
+  assert(extra_tg.in_native == 0);
+  epoch0 = g->gc2.hs_epoch;
+  actions = LJ_GC2_HS_DISABLE_BARRIER|LJ_GC2_HS_ALLOC_WHITE;
+  assert(lj_gc2_handshake(g, actions) == 1);
+  assert(g->gc2.hs_epoch == epoch0 + 1u);
+  assert(g->gc2.hs_pending == 0);
+  assert(extra_tg.hs_epoch_ack == epoch0);
+  lj_tg_fini_thread(g, &extra_tg);
 
   lua_close(L);
 

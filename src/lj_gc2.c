@@ -28,19 +28,6 @@
 static int gc2_grey_grow(global_State *g);
 static int gc2_grey_empty(global_State *g);
 
-static void gc2_attach_main(global_State *g)
-{
-  TGState *tg = G2TG(g);
-  g->gc2.tg_list = tg;
-  g->gc2.n_threads = tg ? 1u : 0u;
-  if (tg) {
-    tg->poll = 0;
-    tg->reqmask = 0;
-    tg->hs_epoch_ack = g->gc2.hs_epoch;
-    tg->next_tg = NULL;
-  }
-}
-
 void lj_gc2_init(global_State *g)
 {
   g->gc2.phase = LJ_GC2_IDLE;
@@ -60,7 +47,9 @@ void lj_gc2_init(global_State *g)
   g->gc2.grey_bottom = 0;
   g->gc2.grey_pushed = 0;
   g->gc2.grey_drained = 0;
-  gc2_attach_main(g);
+  g->gc2.tg_list = NULL;
+  g->gc2.n_threads = 0;
+  lj_tg_attach(g, G2TG(g));  /* 05 section 5.4.1 main TG registration. */
 }
 
 void lj_gc2_fini(global_State *g)
@@ -87,7 +76,7 @@ void lj_gc2_legacy_mark_begin(global_State *g)
 {
   TGState *tg = G2TG(g);
   if (g->gc2.tg_list == NULL && tg != NULL)
-    gc2_attach_main(g);
+    lj_tg_attach(g, tg);
   g->gc2.phase = LJ_GC2_MARK;
   g->gc2.cycle++;
   g->gc2.marks_this_round = 0;

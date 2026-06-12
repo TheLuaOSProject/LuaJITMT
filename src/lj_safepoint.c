@@ -112,7 +112,7 @@ static uint32_t safepoint_count_live(global_State *g)
   TGState *tg;
   uint32_t n = 0;
   for (tg = g->gc2.tg_list; tg != NULL; tg = tg->next_tg)
-    if (!(tg->tg_flags & TGF_DEAD))
+    if (!(la_load8_acq(&tg->tg_flags) & TGF_DEAD))  /* 05 section 5.4.1. */
       n++;
   return n;
 }
@@ -133,14 +133,14 @@ uint32_t lj_safepoint_handshake(global_State *g, uint32_t actions)
   la_store64_rel(&g->gc2.hs_epoch, epoch);  /* 05 section 5.4.2. */
 
   for (tg = g->gc2.tg_list; tg != NULL; tg = tg->next_tg) {
-    if (tg->tg_flags & TGF_DEAD)
+    if (la_load8_acq(&tg->tg_flags) & TGF_DEAD)  /* 05 section 5.4.1. */
       continue;
     la_store32_rel(&tg->reqmask, actions);  /* 05 section 5.4.2. */
     la_store32_rel(&tg->poll, 1);  /* 05 section 5.4.2 signal word. */
   }
 
   for (tg = g->gc2.tg_list; tg != NULL; tg = tg->next_tg) {
-    if (tg->tg_flags & TGF_DEAD)
+    if (la_load8_acq(&tg->tg_flags) & TGF_DEAD)  /* 05 section 5.4.1. */
       continue;
     if (la_load8_acq(&tg->in_native) && tg->cur_L)
       safepoint_ack_tg(g, tg);  /* 05 section 5.4.3 remote native ack. */
