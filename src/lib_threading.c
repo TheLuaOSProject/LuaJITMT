@@ -103,6 +103,20 @@ static void threading_wake_thread(LJThread *th)
   la_futex_wake(&th->futex, INT_MAX);
 }
 
+static void threading_gc_enter(global_State *g)
+{
+  if (la_add32_rlx(&g->mt_active, 1) == 0) {
+    g->mt_gc_threshold = g->gc.threshold;
+    g->gc.threshold = LJ_MAX_MEM;  /* M4: no automatic GC while children run. */
+  }
+}
+
+static void threading_gc_leave(global_State *g)
+{
+  if (la_sub32_acqrel(&g->mt_active, 1) == 1)
+    g->gc.threshold = g->mt_gc_threshold;
+}
+
 static void *threading_worker(void *arg)
 {
   LJThread *th = (LJThread *)arg;
@@ -127,6 +141,7 @@ static void *threading_worker(void *arg)
   tg->thread_L = NULL;
   tg->thread_ud = NULL;
   lj_thr_set_tg(NULL);
+  threading_gc_leave(g);
 
   la_store32_rel(&th->state, LJ_THREAD_DONE);
   threading_wake_thread(th);
@@ -201,12 +216,6 @@ LJLIB_CF(threading_thread_running)
   return 1;
 }
 
-LJLIB_CF(threading_thread___gc)
-{
-  (void)threading_tothread(L);
-  return 0;
-}
-
 LJLIB_CF(threading_thread___tostring)
 {
   (void)threading_tothread(L);
@@ -221,7 +230,6 @@ LJLIB_PUSH(top-1) LJLIB_SET(__index)
 
 #define LJ_MUTEX_UNLOCKED	0u
 #define LJ_MUTEX_LOCKED		1u
-#define LJ_MUTEX_WAITING	2u
 
 typedef struct LJMutex {
   uint32_t state;
@@ -240,25 +248,12 @@ static LJMutex *threading_tomutex(lua_State *L)
 LJLIB_CF(threading_mutex_lock)
 {
   LJMutex *m = threading_tomutex(L);
-  uint32_t expect = LJ_MUTEX_UNLOCKED;
-  if (la_cas32(&m->state, &expect, LJ_MUTEX_LOCKED, LA_ACQ_REL, LA_ACQ))
-    return 0;
   for (;;) {
-    uint32_t state = la_load32_acq(&m->state);
-    if (state == LJ_MUTEX_UNLOCKED) {
-      expect = LJ_MUTEX_UNLOCKED;
-      if (la_cas32(&m->state, &expect, LJ_MUTEX_WAITING,
-		   LA_ACQ_REL, LA_ACQ))
-	return 0;
-      continue;
-    }
-    if (state == LJ_MUTEX_LOCKED) {
-      expect = LJ_MUTEX_LOCKED;
-      (void)la_cas32(&m->state, &expect, LJ_MUTEX_WAITING,
-		     LA_ACQ_REL, LA_ACQ);
-    }
+    uint32_t expect = LJ_MUTEX_UNLOCKED;
+    if (la_cas32(&m->state, &expect, LJ_MUTEX_LOCKED, LA_ACQ_REL, LA_ACQ))
+      return 0;
     lj_native_enter(L2TG(L));
-    (void)la_futex_wait(&m->state, LJ_MUTEX_WAITING, -1);
+    (void)la_futex_wait(&m->state, LJ_MUTEX_LOCKED, -1);
     (void)lj_native_leave(L);
   }
 }
@@ -278,8 +273,7 @@ LJLIB_CF(threading_mutex_unlock)
   uint32_t old = la_xchg32_acqrel(&m->state, LJ_MUTEX_UNLOCKED);
   if (old == LJ_MUTEX_UNLOCKED)
     lj_err_callermsg(L, "unlock of unlocked mutex");
-  if (old == LJ_MUTEX_WAITING)
-    la_futex_wake(&m->state, 1);
+  la_futex_wake(&m->state, INT_MAX);
   return 0;
 }
 
@@ -438,8 +432,10 @@ LJLIB_CF(threading_spawn)
   tg->thread_ud = ud;
   threading_live_set(L, env, ud, L1);
 
+  threading_gc_enter(G(L));
   rc = lj_thr_create(&th->thr, threading_worker, th);
   if (rc != 0) {
+    threading_gc_leave(G(L));
     threading_live_set(L, env, ud, NULL);
     lj_tg_fini_thread(G(L), tg);
     lj_mem_freet(G(L), tg);
