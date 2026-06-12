@@ -18,13 +18,13 @@
 void lj_safepoint_apply_tg(global_State *g, TGState *tg, uint32_t actions)
 {
   if (actions & LJ_GC2_HS_ENABLE_BARRIER)
-    tg->mark_active = 1;
+    la_store32_rel(&tg->mark_active, 1);
   if (actions & LJ_GC2_HS_DISABLE_BARRIER)
-    tg->mark_active = 0;
+    la_store32_rel(&tg->mark_active, 0);
   if (actions & LJ_GC2_HS_ALLOC_BLACK)
-    tg->alloc.alloc_black = 1;
+    la_store8_rel(&tg->alloc.alloc_black, 1);
   if (actions & LJ_GC2_HS_ALLOC_WHITE)
-    tg->alloc.alloc_black = 0;
+    la_store8_rel(&tg->alloc.alloc_black, 0);
   if (actions & LJ_GC2_HS_SCAN_ROOTS) {
     lua_State *L = tg->cur_L;
     lj_gc2_scan_roots(g, L);  /* 05 section 5.7.1/5.7.2. */
@@ -43,7 +43,7 @@ void lj_safepoint_apply_tg(global_State *g, TGState *tg, uint32_t actions)
     (void)lj_trace_flushall(L);  /* Temporary single-mutator flush action. */
   }
   if (actions & LJ_GC2_HS_STOPREQ)
-    tg->tg_flags |= TGF_STOPREQ;  /* 09 section 9.6 shutdown request. */
+    la_or8_rlx(&tg->tg_flags, TGF_STOPREQ);  /* 09 section 9.6 shutdown. */
 }
 
 static uint32_t safepoint_ack_tg(global_State *g, TGState *tg)
@@ -118,11 +118,49 @@ uint32_t lj_native_leave(lua_State *L)
   return lj_safepoint_poll(L);
 }
 
-uint32_t lj_safepoint_handshake(global_State *g, uint32_t actions)
+static uint32_t safepoint_signal_late(global_State *g, uint32_t actions,
+				      uint64_t epoch)
 {
   TGState *tg;
+  uint32_t signaled = 0;
+  for (tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
+       tg != NULL;
+       tg = (TGState *)la_loadptr_acq((void *const *)&tg->next_tg)) {
+    if (la_load8_acq(&tg->tg_flags) & TGF_DEAD)  /* 05 section 5.4.1. */
+      continue;
+    if (la_load64_acq(&tg->hs_epoch_ack) == epoch)
+      continue;  /* 09 section 9.3: attach self-caught this epoch. */
+    if (la_load32_acq(&tg->reqmask) != 0 || la_load32_acq(&tg->poll) != 0)
+      continue;  /* Already counted by this handshake. */
+    (void)la_add32_rlx(&g->gc2.hs_pending, 1);
+    signaled++;
+    la_store32_rel(&tg->reqmask, actions);  /* 05 section 5.4.2. */
+    la_store32_rel(&tg->poll, 1);  /* 05 section 5.4.2 signal word. */
+  }
+  return signaled;
+}
+
+static void safepoint_ack_native(global_State *g)
+{
+  TGState *tg;
+  for (tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
+       tg != NULL;
+       tg = (TGState *)la_loadptr_acq((void *const *)&tg->next_tg)) {
+    lua_State *L;
+    if (la_load8_acq(&tg->tg_flags) & TGF_DEAD)  /* 05 section 5.4.1. */
+      continue;
+    L = (lua_State *)la_loadptr_acq((void *const *)&tg->cur_L);
+    if (la_load8_acq(&tg->in_native) && L)
+      safepoint_ack_tg(g, tg);  /* 05 section 5.4.3 remote native ack. */
+    else if (L)
+      lj_safepoint_ack(L);  /* Deterministic single-mutator scaffold. */
+  }
+}
+
+uint32_t lj_safepoint_handshake(global_State *g, uint32_t actions)
+{
   uint64_t epoch;
-  uint32_t signaled = 0, oldpending;
+  uint32_t signaled, oldpending;
   if (!g || actions == 0)
     return 0;
   la_store32_rel(&g->gc2.hs_actions, actions);  /* 05 section 5.4.2. */
@@ -130,31 +168,26 @@ uint32_t lj_safepoint_handshake(global_State *g, uint32_t actions)
   epoch = la_load64_rlx(&g->gc2.hs_epoch) + 1u;
   la_store64_rel(&g->gc2.hs_epoch, epoch);  /* 05 section 5.4.2. */
 
-  for (tg = g->gc2.tg_list; tg != NULL; tg = tg->next_tg) {
-    if (la_load8_acq(&tg->tg_flags) & TGF_DEAD)  /* 05 section 5.4.1. */
-      continue;
-    if (la_load64_acq(&tg->hs_epoch_ack) == epoch)
-      continue;  /* 09 section 9.3: attach self-caught this epoch. */
-    (void)la_add32_rlx(&g->gc2.hs_pending, 1);
-    signaled++;
-    la_store32_rel(&tg->reqmask, actions);  /* 05 section 5.4.2. */
-    la_store32_rel(&tg->poll, 1);  /* 05 section 5.4.2 signal word. */
-  }
-
-  for (tg = g->gc2.tg_list; tg != NULL; tg = tg->next_tg) {
-    if (la_load8_acq(&tg->tg_flags) & TGF_DEAD)  /* 05 section 5.4.1. */
-      continue;
-    if (la_load8_acq(&tg->in_native) && tg->cur_L)
-      safepoint_ack_tg(g, tg);  /* 05 section 5.4.3 remote native ack. */
-    else if (tg->cur_L)
-      lj_safepoint_ack(tg->cur_L);  /* Deterministic single-mutator scaffold. */
+  signaled = safepoint_signal_late(g, actions, epoch);
+  for (;;) {
+    uint32_t late;
+    safepoint_ack_native(g);
+    late = safepoint_signal_late(g, actions, epoch);
+    if (late == 0)
+      break;
+    signaled += late;
   }
 
   oldpending = la_sub32_acqrel(&g->gc2.hs_pending, 1);  /* Drop sentinel. */
   if (oldpending == 1)
     la_futex_wake(&g->gc2.hs_pending, 1);
-  while (la_load32_acq(&g->gc2.hs_pending) != 0)
+  while (la_load32_acq(&g->gc2.hs_pending) != 0) {
+    signaled += safepoint_signal_late(g, actions, epoch);
+    safepoint_ack_native(g);
+    if (la_load32_acq(&g->gc2.hs_pending) == 0)
+      break;
     la_futex_wait(&g->gc2.hs_pending, la_load32_rlx(&g->gc2.hs_pending),
 		  1000000);
+  }
   return signaled;
 }
