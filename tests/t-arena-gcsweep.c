@@ -34,17 +34,20 @@ int main(void)
   global_State *g;
   TGState *tg;
   TValue *tv;
-  GCtab *keep, *arrtab;
+  GCtab *keep, *arrtab, *deadtab, *deadcolo, *deadsplit;
   GCfunc *fn, *deadchunk, *deadfn, *livefn, *deadcf, *finchunk, *finfn;
   GCfunc *bcfn, *hugefn;
   GCproto *deadpt, *deadfnpt;
   GCproto *bcpt, *hugept, *finpt;
+  GCSize before_tab, deadtab_size, deadarr_size, deadnode_size;
+  GCSize before_colo, deadcolo_size;
+  GCSize before_split, deadsplit_size, splitarr_size, splitnode_size;
   GCSize before_fn, deadfn_size, before_drop, deadpt_size, deadchunk_size;
   GCSize before_raw, before_cf, deadcf_size;
   GCSize before_bc, bcfn_size, bcpt_size, before_huge, hugefn_size;
   GCSize hugept_size;
   GCSize before_fin, finpt_size, finchunk_size, finfn_size;
-  void *raw;
+  void *raw, *deadarr, *deadnode, *splitarr, *splitnode;
   LJHugeInfo hugehi;
   GCArena *fna, *arra;
 
@@ -59,6 +62,12 @@ int main(void)
     "keep.livefn = keep.parent()\n"
     "keep.arr = {}\n"
     "for i = 1, 300 do keep.arr[i] = i end\n"
+    "keep.deadtab = {}\n"
+    "for i = 1, 300 do keep.deadtab[i] = i end\n"
+    "for i = 1, 80 do keep.deadtab['k'..i] = i end\n"
+    "keep.deadcolo = {10, 20, 30}\n"
+    "keep.deadsplit = {1, 2, 3}\n"
+    "for i = 4, 80 do keep.deadsplit[i] = i end\n"
     "collectgarbage('collect')\n") == LUA_OK);
 
   g = G(L);
@@ -131,6 +140,89 @@ int main(void)
   assert(arra->hdr.sweep_epoch == 0);
   assert(ptr_state(tvref(arrtab->array)) == 3);
   L->top--;
+
+  lua_getfield(L, -1, "deadtab");
+  tv = L->top - 1;
+  assert(tvistab(tv));
+  deadtab = tabV(tv);
+  assert(deadtab->asize > 0);
+  assert(deadtab->hmask > 0);
+  assert(deadtab->colo <= 0);
+  deadtab_size = sizeof(GCtab);
+  deadarr = tvref(deadtab->array);
+  deadarr_size = (GCSize)deadtab->asize * sizeof(TValue);
+  deadnode = noderef(deadtab->node);
+  deadnode_size = (GCSize)(deadtab->hmask + 1) * sizeof(Node);
+  assert((lj_arena_of(deadtab)->hdr.flags & LJ_AF_TRAVERSABLE) != 0);
+  assert((lj_arena_of(deadarr)->hdr.flags & LJ_AF_TRAVERSABLE) == 0);
+  assert((lj_arena_of(deadnode)->hdr.flags & LJ_AF_TRAVERSABLE) == 0);
+  assert(ptr_state(deadtab) == 2);
+  assert(ptr_state(deadarr) == 3);
+  assert(ptr_state(deadnode) == 3);
+  L->top--;
+
+  before_tab = g->gc.total;
+  lua_pushnil(L);
+  lua_setfield(L, -2, "deadtab");
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  assert(g->gc.total <=
+	 before_tab - deadtab_size - deadarr_size - deadnode_size);
+  assert((ptr_state(deadtab) & 2u) == 0);
+  assert((ptr_state(deadarr) & 2u) == 0);
+  assert((ptr_state(deadnode) & 2u) == 0);
+
+  lua_getfield(L, -1, "deadcolo");
+  tv = L->top - 1;
+  assert(tvistab(tv));
+  deadcolo = tabV(tv);
+  assert(deadcolo->asize > 0);
+  assert(deadcolo->hmask == 0);
+  assert(deadcolo->colo > 0);
+  deadcolo_size = sizetabcolo((uint32_t)deadcolo->colo & 0x7f);
+  assert((lj_arena_of(deadcolo)->hdr.flags & LJ_AF_TRAVERSABLE) != 0);
+  assert(ptr_state(deadcolo) == 2);
+  L->top--;
+
+  before_colo = g->gc.total;
+  lua_pushnil(L);
+  lua_setfield(L, -2, "deadcolo");
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  assert(g->gc.total <= before_colo - deadcolo_size);
+  assert((ptr_state(deadcolo) & 2u) == 0);
+
+  lua_getfield(L, -1, "deadsplit");
+  tv = L->top - 1;
+  assert(tvistab(tv));
+  deadsplit = tabV(tv);
+  assert(deadsplit->asize > 0);
+  assert(deadsplit->colo < 0);
+  assert(deadsplit->asize > ((uint32_t)deadsplit->colo & 0x7f));
+  deadsplit_size = sizetabcolo((uint32_t)deadsplit->colo & 0x7f);
+  splitarr = tvref(deadsplit->array);
+  splitarr_size = (GCSize)deadsplit->asize * sizeof(TValue);
+  splitnode_size = deadsplit->hmask > 0 ?
+		   (GCSize)(deadsplit->hmask + 1) * sizeof(Node) : 0;
+  splitnode = deadsplit->hmask > 0 ? (void *)noderef(deadsplit->node) : NULL;
+  assert((lj_arena_of(deadsplit)->hdr.flags & LJ_AF_TRAVERSABLE) != 0);
+  assert((lj_arena_of(splitarr)->hdr.flags & LJ_AF_TRAVERSABLE) == 0);
+  assert(ptr_state(deadsplit) == 2);
+  assert(ptr_state(splitarr) == 3);
+  if (splitnode) {
+    assert((lj_arena_of(splitnode)->hdr.flags & LJ_AF_TRAVERSABLE) == 0);
+    assert(ptr_state(splitnode) == 3);
+  }
+  L->top--;
+
+  before_split = g->gc.total;
+  lua_pushnil(L);
+  lua_setfield(L, -2, "deadsplit");
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  assert(g->gc.total <=
+	 before_split - deadsplit_size - splitarr_size - splitnode_size);
+  assert((ptr_state(deadsplit) & 2u) == 0);
+  assert((ptr_state(splitarr) & 2u) == 0);
+  if (splitnode)
+    assert((ptr_state(splitnode) & 2u) == 0);
 
   before_fn = g->gc.total;
   lua_pushnil(L);
