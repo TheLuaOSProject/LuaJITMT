@@ -523,6 +523,12 @@ typedef struct ArenaRebuildRuns {
   ArenaLargestRun bump;
 } ArenaRebuildRuns;
 
+typedef struct ArenaRebuildFree {
+  TGAlloc *alloc;
+  GCArena *a;
+  uint32_t limit;
+} ArenaRebuildFree;
+
 static void arena_rebuild_run(uint32_t start, uint32_t len, void *ud)
 {
   ArenaRebuildRuns *rr = (ArenaRebuildRuns *)ud;
@@ -530,6 +536,16 @@ static void arena_rebuild_run(uint32_t start, uint32_t len, void *ud)
       start == rr->bump.start && len == rr->bump.len)
     return;
   arena_insert_run(rr->alloc, rr->a, start, len);
+}
+
+static void arena_rebuild_free_run(uint32_t start, uint32_t len, void *ud)
+{
+  ArenaRebuildFree *rf = (ArenaRebuildFree *)ud;
+  if (start >= rf->limit)
+    return;
+  if (len > rf->limit - start)
+    len = rf->limit - start;
+  arena_insert_run(rf->alloc, rf->a, start, len);
 }
 
 void lj_arena_alloc_init(TGAlloc *alloc)
@@ -545,6 +561,23 @@ void lj_arena_alloc_fini(TGAlloc *alloc)
     arena_unmap_list(alloc->needsweep[k]);
   }
   lj_arena_alloc_init(alloc);
+}
+
+void lj_arena_alloc_rebuild_free(TGAlloc *alloc)
+{
+  uint32_t k;
+  for (k = 0; k < LJ_ARENA_NKINDS; k++) {
+    GCArena *a;
+    arena_clear_bins(alloc, k);
+    for (a = alloc->owned[k]; a != NULL; a = a->hdr.next) {
+      ArenaRebuildFree rf;
+      rf.alloc = alloc;
+      rf.a = a;
+      rf.limit = alloc->bump[k].a == a ? alloc->bump[k].cell :
+					 LJ_ARENA_CELLS;
+      lj_arena_scan_free_runs(a, arena_rebuild_free_run, &rf);
+    }
+  }
 }
 
 void lj_arena_alloc_prepare_sweep(TGAlloc *alloc)

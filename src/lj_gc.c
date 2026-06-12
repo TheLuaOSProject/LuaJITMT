@@ -90,6 +90,13 @@ static void gc_arena_mark_phase(global_State *g, uint32_t phase)
     tg->mark_active = phase;
 }
 
+static void gc_arena_rebuild_free(global_State *g)
+{
+  TGState *tg = G2TG(g);
+  if (tg && (tg->tg_flags & TGF_ARENA_INTERNAL))
+    lj_arena_alloc_rebuild_free(&tg->alloc);
+}
+
 #ifdef LUA_USE_ASSERT
 static void gc_arena_verify_marked(global_State *g, GCobj *o)
 {
@@ -797,6 +804,7 @@ static size_t gc_onestep(lua_State *L)
       if (g->str.num <= (g->str.mask >> 2) && g->str.mask > LJ_MIN_STRTAB*2-1)
 	lj_str_resize(L, g->str.mask >> 1);  /* Shrink string table. */
       gc_arena_verify_sweep_boundary(g);
+      gc_arena_rebuild_free(g);
       if (gcref(g->gc.mmudata)) {  /* Need any finalizations? */
 	g->gc.state = GCSfinalize;
       } else {  /* Otherwise skip this phase to help the JIT. */

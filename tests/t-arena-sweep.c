@@ -133,6 +133,28 @@ int main(void)
   assert(alloc.owned[LJ_ARENAK_TRAVERSABLE] == NULL);
   assert(alloc.needsweep[LJ_ARENAK_TRAVERSABLE] == NULL);
 
+  {
+    TGAlloc rebuild;
+    void *r1, *r2, *r3, *big, *tail;
+    lj_arena_alloc_init(&rebuild);
+    r1 = lj_arena_alloc(&rebuild, &rs, 32, 0);
+    r2 = lj_arena_alloc(&rebuild, &rs, 64, 0);
+    r3 = lj_arena_alloc(&rebuild, &rs, 16, 0);
+    assert(r1 != NULL && r2 != NULL && r3 != NULL);
+    lj_arena_free(&rebuild, r1, 32);
+    lj_arena_free(&rebuild, r2, 64);
+    assert(bin_count(&rebuild, LJ_ARENAK_PLAIN) == 2);
+    lj_arena_alloc_rebuild_free(&rebuild);
+    assert(bin_count(&rebuild, LJ_ARENAK_PLAIN) == 1);
+    big = lj_arena_alloc(&rebuild, &rs, 96, 0);
+    assert(big == r1);
+    lj_arena_free(&rebuild, r3, 16);
+    lj_arena_alloc_rebuild_free(&rebuild);
+    tail = lj_arena_alloc(&rebuild, &rs, 64, 0);
+    assert(tail != r3);
+    lj_arena_alloc_fini(&rebuild);
+  }
+
   printf("t-arena-sweep OK: owner-local sweep rebuild verified\n");
   return 0;
 }
