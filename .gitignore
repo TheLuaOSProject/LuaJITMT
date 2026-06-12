@@ -10,5 +10,4 @@
 *.dmp
 *.swp
 .tags
-notes/
 luajit-mt-report.zip
