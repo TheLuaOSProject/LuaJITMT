@@ -12,6 +12,7 @@
 #include "lj_atomic.h"
 #include "lj_arena.h"
 #include "lj_gc2.h"
+#include "lj_dispatch.h"
 #include "lj_safepoint.h"
 #include "lj_tg.h"
 
@@ -47,6 +48,7 @@ int main(void)
   uint64_t ssb_items_published0, ssb_items_drained0;
   uint64_t epoch0;
   uint32_t actions;
+  ASMFunction saved_dispatch;
 
   assert(L != NULL);
   g = G(L);
@@ -86,6 +88,19 @@ int main(void)
   assert(g->gc2.hs_pending == 0);
   assert(tg->mark_active == 0);
   assert(tg->alloc.alloc_black == 0);
+
+  saved_dispatch = tg->dispatch[BC_RET];
+  assert(saved_dispatch == G2GG(g)->dispatch[BC_RET]);
+  tg->dispatch[BC_RET] = NULL;
+  assert(tg->dispatch[BC_RET] != G2GG(g)->dispatch[BC_RET]);
+  actions = LJ_GC2_HS_REDISPATCH;
+  epoch0 = g->gc2.hs_epoch;
+  assert(lj_gc2_handshake(g, actions) == 1);
+  assert(g->gc2.hs_epoch == epoch0 + 1u);
+  assert(g->gc2.hs_pending == 0);
+  assert(g->gc2.hs_actions == actions);
+  assert(tg->dispatch[BC_RET] == saved_dispatch);
+  assert(tg->dispatch[BC_RET] == G2GG(g)->dispatch[BC_RET]);
 
   lua_newtable(L);
   root_tab = tabV(L->top - 1);

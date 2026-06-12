@@ -64,9 +64,13 @@ void lj_tg_fini(global_State *g)
   }
 }
 
+void lj_tg_sync_dispatch_tg(global_State *g, TGState *tg)
+{
+  if (g && tg)
+    memcpy(tg->dispatch, G2GG(g)->dispatch, sizeof(tg->dispatch));
+}
+
 void lj_tg_sync_dispatch(global_State *g)
 {
-  TGState *tg = G2TG(g);
-  if (tg)
-    memcpy(tg->dispatch, G2GG(g)->dispatch, sizeof(tg->dispatch));
+  lj_tg_sync_dispatch_tg(g, G2TG(g));
 }

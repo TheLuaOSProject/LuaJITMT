@@ -126,6 +126,7 @@ static LJ_AINLINE void lj_tg_setjit_base(global_State *g, TValue *base)
 
 LJ_FUNC void lj_tg_init(GG_State *GG, int alloc_ready);
 LJ_FUNC void lj_tg_fini(global_State *g);
+LJ_FUNC void lj_tg_sync_dispatch_tg(global_State *g, TGState *tg);
 LJ_FUNC void lj_tg_sync_dispatch(global_State *g);
 
 #endif
