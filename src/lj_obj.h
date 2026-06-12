@@ -650,6 +650,11 @@ typedef struct GC2State {
   uint32_t ssb_drained;	/* Drained/recycled SSB node count. */
   uint64_t ssb_items_published;  /* Published SSB entries. */
   uint64_t ssb_items_drained;  /* Drained/recycled SSB entries. */
+  GCRef *grey_stack;	/* Single-worker grey work stack scaffold. */
+  MSize grey_capacity;	/* Allocated grey stack slots. */
+  MSize grey_top;	/* Number of pending grey entries. */
+  uint64_t grey_pushed;	/* Grey entries scheduled from SSB/traversal. */
+  uint64_t grey_drained;  /* Grey entries popped for traversal. */
   TGState *tg_list;	/* Registered per-thread state blocks. */
   uint32_t n_threads;	/* Number of registered TG blocks. */
 } GC2State;

@@ -9,6 +9,9 @@
 #include "lj_obj.h"
 #include "lj_gc2.h"
 #include "lj_gc.h"
+#include "lj_buf.h"
+#include "lj_tab.h"
+#include "lj_meta.h"
 #include "lj_safepoint.h"
 #include "lj_arena.h"
 #include "lj_tg.h"
@@ -16,7 +19,13 @@
 #if LJ_HASFFI
 #include "lj_ctype.h"
 #endif
+#include "lj_trace.h"
 #include "lj_dispatch.h"
+
+#define GC2_GREY_INIT	256u
+#define GC2_GREY_LIMIT	((MSize)(LJ_MAX_MEM32 / sizeof(GCRef)))
+
+static int gc2_grey_grow(global_State *g);
 
 static void gc2_attach_main(global_State *g)
 {
@@ -44,7 +53,22 @@ void lj_gc2_init(global_State *g)
   g->gc2.ssb_drained = 0;
   g->gc2.ssb_items_published = 0;
   g->gc2.ssb_items_drained = 0;
+  g->gc2.grey_stack = NULL;
+  g->gc2.grey_capacity = 0;
+  g->gc2.grey_top = 0;
+  g->gc2.grey_pushed = 0;
+  g->gc2.grey_drained = 0;
   gc2_attach_main(g);
+}
+
+void lj_gc2_fini(global_State *g)
+{
+  if (g && g->gc2.grey_stack) {
+    lj_mem_freevec(g, g->gc2.grey_stack, g->gc2.grey_capacity, GCRef);
+    g->gc2.grey_stack = NULL;
+    g->gc2.grey_capacity = 0;
+    g->gc2.grey_top = 0;
+  }
 }
 
 static void gc2_clear_marks(global_State *g, TGState *tg)
@@ -64,6 +88,9 @@ void lj_gc2_legacy_mark_begin(global_State *g)
   g->gc2.phase = LJ_GC2_MARK;
   g->gc2.cycle++;
   g->gc2.marks_this_round = 0;
+  lj_assertG(g->gc2.grey_top == 0, "gc2 grey stack not empty at mark begin");
+  if (g->gc2.grey_capacity == 0)
+    (void)gc2_grey_grow(g);
   gc2_clear_marks(g, tg);
   lj_gc2_handshake(g, LJ_GC2_HS_ENABLE_BARRIER|LJ_GC2_HS_ALLOC_BLACK);
 }
@@ -206,6 +233,38 @@ void lj_gc2_scan_roots(global_State *g, lua_State *L)
 }
 
 static void *gc2_mark_base(GCobj *o);
+static int gc2_mark_base_traversable(global_State *g, void *p);
+static int gc2_grey_push(global_State *g, GCobj *o);
+static uint32_t gc2_drain_grey(global_State *g);
+static void gc2_traverse_udata(global_State *g, GCudata *ud);
+
+static int gc2_grey_grow(global_State *g)
+{
+  MSize oldcap = g->gc2.grey_capacity;
+  MSize newcap = oldcap ? oldcap << 1 : GC2_GREY_INIT;
+  lua_State *L = lj_tg_cur_L(g);
+  if (!L && gcref(g->mainthref))
+    L = mainthread(g);
+  if (!L || oldcap >= GC2_GREY_LIMIT)
+    return 0;
+  if (newcap < oldcap || newcap > GC2_GREY_LIMIT)
+    newcap = GC2_GREY_LIMIT;
+  lj_mem_reallocvec(L, g->gc2.grey_stack, oldcap, newcap, GCRef);
+  g->gc2.grey_capacity = newcap;
+  return 1;
+}
+
+static int gc2_grey_push(global_State *g, GCobj *o)
+{
+  if (!g || !o)
+    return 0;
+  if (g->gc2.grey_top == g->gc2.grey_capacity && !gc2_grey_grow(g))
+    return 0;
+  setgcref(g->gc2.grey_stack[g->gc2.grey_top], o);
+  g->gc2.grey_top++;
+  la_add64_rlx(&g->gc2.grey_pushed, 1);
+  return 1;
+}
 
 static void gc2_ssb_activate(TGState *tg, GC2SSBNode *node)
 {
@@ -282,8 +341,15 @@ uint32_t lj_gc2_drain_ssb(global_State *g)
     uint32_t i;
     for (i = 0; i < node->n; i++) {
       GCobj *o = gcref(node->slot[i]);
-      if (o)
-	(void)lj_gc2_markmem(g, gc2_mark_base(o));
+      if (o) {
+	void *base = gc2_mark_base(o);
+	(void)lj_gc2_markmem(g, base);
+	if (gc2_mark_base_traversable(g, base)) {
+	  int pushed = gc2_grey_push(g, o);
+	  lj_assertG(pushed, "gc2 grey push failed for SSB object");
+	  UNUSED(pushed);
+	}
+      }
     }
     nitems += node->n;
     nnodes++;
@@ -300,6 +366,7 @@ uint32_t lj_gc2_drain_ssb(global_State *g)
     la_add32_rlx(&g->gc2.ssb_drained, nnodes);
     la_add64_rlx(&g->gc2.ssb_items_drained, nitems);
   }
+  (void)gc2_drain_grey(g);  /* Temporary single-worker drain scaffold. */
   return nitems;
 }
 
@@ -310,6 +377,8 @@ int lj_gc2_ssb_empty(global_State *g)
     return 1;
   if (la_loadptr_acq((void *const *)&g->gc2.ssb_head) != NULL)
     return 0;  /* 05 section 5.7.1 SSB-empty fixpoint predicate. */
+  if (g->gc2.grey_top != 0)
+    return 0;
   for (tg = g->gc2.tg_list; tg != NULL; tg = tg->next_tg) {
     if (tg->tg_flags & TGF_DEAD)
       continue;
@@ -380,17 +449,261 @@ int lj_gc2_markobj(global_State *g, GCobj *o)
 {
   void *base;
   int marked;
+  int traversable;
   if (!o)
     return 0;
   base = gc2_mark_base(o);
   marked = lj_gc2_markmem(g, base);
+  traversable = gc2_mark_base_traversable(g, base);
   if (marked && (g->gc2.phase == LJ_GC2_MARK || g->gc2.phase == LJ_GC2_WEAK) &&
-      gc2_mark_base_traversable(g, base)) {
-    int pushed = lj_gc2_ssb_push(g, o);  /* 05 section 5.6.1. */
-    lj_assertG(pushed, "gc2 SSB push failed for marked traversable object");
-    UNUSED(pushed);
+      (traversable || o->gch.gct == ~LJ_TUDATA)) {
+    if (traversable) {
+      int pushed = lj_gc2_ssb_push(g, o);  /* 05 section 5.6.1. */
+      lj_assertG(pushed, "gc2 SSB push failed for marked traversable object");
+      UNUSED(pushed);
+    } else {
+      gc2_traverse_udata(g, gco2ud(o));
+    }
   }
   return marked;
+}
+
+static int gc2_markobj_worker(global_State *g, GCobj *o)
+{
+  void *base;
+  int marked;
+  int traversable;
+  if (!o)
+    return 0;
+  base = gc2_mark_base(o);
+  marked = lj_gc2_markmem(g, base);
+  traversable = gc2_mark_base_traversable(g, base);
+  if (marked && (traversable || o->gch.gct == ~LJ_TUDATA)) {
+    if (traversable) {
+      int pushed = gc2_grey_push(g, o);  /* 05 section 5.6.3. */
+      lj_assertG(pushed, "gc2 worker grey push failed for marked object");
+      UNUSED(pushed);
+    } else {
+      gc2_traverse_udata(g, gco2ud(o));
+    }
+  }
+  return marked;
+}
+
+static void gc2_mark_tv_worker(global_State *g, cTValue *tv)
+{
+  lj_assertG(!tvisgcv(tv) || (~itype(tv) == gcval(tv)->gch.gct),
+	     "TValue and GC type mismatch");
+  if (tvisgcv(tv))
+    gc2_markobj_worker(g, gcV(tv));
+}
+
+#if LJ_HASJIT
+static void gc2_marktrace_worker(global_State *g, TraceNo traceno)
+{
+  if (traceno)
+    gc2_markobj_worker(g, obj2gco(traceref(G2J(g), traceno)));
+}
+#endif
+
+static int gc2_traverse_tab(global_State *g, GCtab *t)
+{
+  int weak = 0;
+  cTValue *mode;
+  GCtab *mt = tabref(t->metatable);
+  if (t->asize > 0)
+    lj_gc2_markmem(g, tvref(t->array));
+  if (t->hmask > 0)
+    lj_gc2_markmem(g, noderef(t->node));
+  if (mt)
+    gc2_markobj_worker(g, obj2gco(mt));
+  mode = lj_meta_fastg(g, mt, MM_mode);
+  if (mode && tvisstr(mode)) {
+    const char *modestr = strVdata(mode);
+    int c;
+    while ((c = *modestr++)) {
+      if (c == 'k') weak |= LJ_GC_WEAKKEY;
+      else if (c == 'v') weak |= LJ_GC_WEAKVAL;
+    }
+#if LJ_HASFFI
+    if (weak && gcref(g->gcroot[GCROOT_FFI_FIN]) == obj2gco(t))
+      weak = (int)(~0u & ~LJ_GC_WEAKVAL);
+#endif
+  }
+  if (weak == LJ_GC_WEAK)
+    return weak;
+  if (!(weak & LJ_GC_WEAKVAL)) {
+    MSize i, asize = t->asize;
+    for (i = 0; i < asize; i++)
+      gc2_mark_tv_worker(g, arrayslot(t, i));
+  }
+  if (t->hmask > 0) {
+    Node *node = noderef(t->node);
+    MSize i, hmask = t->hmask;
+    for (i = 0; i <= hmask; i++) {
+      Node *n = &node[i];
+      if (!tvisnil(&n->val)) {
+	lj_assertG(!tvisnil(&n->key), "mark of nil key in non-empty slot");
+	if (!(weak & LJ_GC_WEAKKEY)) gc2_mark_tv_worker(g, &n->key);
+	if (!(weak & LJ_GC_WEAKVAL)) gc2_mark_tv_worker(g, &n->val);
+      }
+    }
+  }
+  return weak;
+}
+
+static void gc2_traverse_udata(global_State *g, GCudata *ud)
+{
+  GCtab *mt = tabref(ud->metatable);
+  GCtab *env = tabref(ud->env);
+  if (mt)
+    gc2_markobj_worker(g, obj2gco(mt));
+  if (env)
+    gc2_markobj_worker(g, obj2gco(env));
+  if (LJ_HASBUFFER && ud->udtype == UDTYPE_BUFFER) {
+    SBufExt *sbx = (SBufExt *)uddata(ud);
+    if (!sbufiscoworborrow(sbx))
+      lj_gc2_markmem(g, sbx->b);
+    if (sbufiscow(sbx) && gcref(sbx->cowref))
+      gc2_markobj_worker(g, gcref(sbx->cowref));
+    if (gcref(sbx->dict_str))
+      gc2_markobj_worker(g, gcref(sbx->dict_str));
+    if (gcref(sbx->dict_mt))
+      gc2_markobj_worker(g, gcref(sbx->dict_mt));
+  }
+}
+
+static void gc2_traverse_upval(global_State *g, GCupval *uv)
+{
+  gc2_mark_tv_worker(g, uvval(uv));
+}
+
+static void gc2_traverse_func(global_State *g, GCfunc *fn)
+{
+  GCtab *env = tabref(fn->c.env);
+  if (env)
+    gc2_markobj_worker(g, obj2gco(env));
+  if (isluafunc(fn)) {
+    uint32_t i;
+    lj_assertG(fn->l.nupvalues <= funcproto(fn)->sizeuv,
+	       "function upvalues out of range");
+    gc2_markobj_worker(g, obj2gco(funcproto(fn)));
+    for (i = 0; i < fn->l.nupvalues; i++)
+      gc2_markobj_worker(g, obj2gco(&gcref(fn->l.uvptr[i])->uv));
+  } else {
+    uint32_t i;
+    for (i = 0; i < fn->c.nupvalues; i++)
+      gc2_mark_tv_worker(g, &fn->c.upvalue[i]);
+  }
+}
+
+#if LJ_HASJIT
+static void gc2_traverse_trace(global_State *g, GCtrace *T)
+{
+  IRRef ref;
+  if (T->traceno == 0)
+    return;
+  for (ref = T->nk; ref < REF_TRUE; ref++) {
+    IRIns *ir = &T->ir[ref];
+    if (ir->o == IR_KGC)
+      gc2_markobj_worker(g, ir_kgc(ir));
+    if (irt_is64(ir->t) && ir->o != IR_KNULL)
+      ref++;
+  }
+  gc2_marktrace_worker(g, T->link);
+  gc2_marktrace_worker(g, T->nextroot);
+  gc2_marktrace_worker(g, T->nextside);
+  gc2_markobj_worker(g, gcref(T->startpt));
+}
+#endif
+
+static void gc2_traverse_proto(global_State *g, GCproto *pt)
+{
+  ptrdiff_t i;
+  gc2_markobj_worker(g, obj2gco(proto_chunkname(pt)));
+  for (i = -(ptrdiff_t)pt->sizekgc; i < 0; i++)
+    gc2_markobj_worker(g, proto_kgc(pt, i));
+#if LJ_HASJIT
+  gc2_marktrace_worker(g, pt->trace);
+#endif
+}
+
+static TValue *gc2_stack_scan_top_worker(global_State *g, lua_State *L)
+{
+  TValue *frame, *top = L->top - 1, *bot = tvref(L->stack);
+  for (frame = L->base - 1; frame > bot + LJ_FR2; frame = frame_prev(frame)) {
+    GCfunc *fn = frame_func(frame);
+    TValue *ftop = frame;
+    if (isluafunc(fn))
+      ftop += funcproto(fn)->framesize;
+    if (ftop > top)
+      top = ftop;
+    if (!LJ_FR2)
+      gc2_markobj_worker(g, obj2gco(fn));
+  }
+  top++;
+  if (top > tvref(L->maxstack))
+    top = tvref(L->maxstack);
+  return top;
+}
+
+static void gc2_traverse_thread(global_State *g, lua_State *th)
+{
+  GCobj *uv;
+  TValue *o, *top;
+  if (!th || tvref(th->stack) == NULL)
+    return;
+  lj_gc2_markmem(g, tvref(th->stack));
+  top = gc2_stack_scan_top_worker(g, th);
+  for (o = tvref(th->stack) + 1 + LJ_FR2; o < top; o++)
+    gc2_mark_tv_worker(g, o);
+  if (tabref(th->env))
+    gc2_markobj_worker(g, obj2gco(tabref(th->env)));
+  for (uv = gcref(th->openupval); uv != NULL; uv = gcnext(uv)) {
+    gc2_markobj_worker(g, uv);
+    if (uv->gch.gct == ~LJ_TUPVAL)
+      gc2_mark_tv_worker(g, uvval(gco2uv(uv)));
+  }
+}
+
+static void gc2_traverse_obj(global_State *g, GCobj *o)
+{
+  int gct = o->gch.gct;
+  if (LJ_LIKELY(gct == ~LJ_TTAB)) {
+    (void)gc2_traverse_tab(g, gco2tab(o));
+  } else if (LJ_LIKELY(gct == ~LJ_TFUNC)) {
+    gc2_traverse_func(g, gco2func(o));
+  } else if (LJ_LIKELY(gct == ~LJ_TPROTO)) {
+    gc2_traverse_proto(g, gco2pt(o));
+  } else if (LJ_LIKELY(gct == ~LJ_TTHREAD)) {
+    gc2_traverse_thread(g, gco2th(o));
+  } else if (gct == ~LJ_TUPVAL) {
+    gc2_traverse_upval(g, gco2uv(o));
+  } else if (gct == ~LJ_TUDATA) {
+    gc2_traverse_udata(g, gco2ud(o));
+#if LJ_HASJIT
+  } else if (gct == ~LJ_TTRACE) {
+    gc2_traverse_trace(g, gco2trace(o));
+#endif
+  } else {
+    lj_assertG(gct == ~LJ_TSTR || gct == ~LJ_TCDATA,
+	       "bad GC type %d", gct);
+  }
+}
+
+static uint32_t gc2_drain_grey(global_State *g)
+{
+  uint32_t n = 0;
+  while (g && g->gc2.grey_top != 0) {
+    GCobj *o = gcref(g->gc2.grey_stack[--g->gc2.grey_top]);
+    if (o) {
+      gc2_traverse_obj(g, o);
+      n++;
+    }
+  }
+  if (n)
+    la_add64_rlx(&g->gc2.grey_drained, n);
+  return n;
 }
 
 int lj_gc2_ismarkedmem(global_State *g, void *p)

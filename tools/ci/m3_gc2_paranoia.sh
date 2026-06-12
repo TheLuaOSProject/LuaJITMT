@@ -11,7 +11,7 @@ TMP=${TMPDIR:-/tmp}
 make -C "$ROOT/src" clean >/dev/null
 make -C "$ROOT/src" XCFLAGS="-DLUA_USE_ASSERT -DLJ_GC2_PARANOIA=1" \
   -j"$JOBS" >/dev/null
-for name in t-gc2-paranoia t-gc2-phase t-gc2-markbits; do
+for name in t-gc2-paranoia t-gc2-phase t-gc2-markbits t-gc2-traverse; do
   out="$TMP/lj_${name}_paranoia"
   "$CC" $CFLAGS -DLUA_USE_ASSERT -DLJ_GC2_PARANOIA=1 -I"$ROOT/src" \
     "$ROOT/tests/$name.c" "$ROOT/src/libluajit.a" -lm -ldl -o "$out"

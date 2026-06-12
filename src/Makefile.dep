@@ -149,8 +149,9 @@ lj_gc.o: lj_gc.c lj_obj.h lua.h luaconf.h lj_def.h lj_arch.h lj_atomic.h \
  lj_ctype.h lj_cdata.h lj_trace.h lj_jit.h lj_ir.h lj_dispatch.h \
  lj_traceerr.h lj_vm.h lj_vmevent.h
 lj_gc2.o: lj_gc2.c lj_obj.h lua.h luaconf.h lj_def.h lj_arch.h \
- lj_atomic.h lj_gc2.h lj_gc.h lj_safepoint.h lj_arena.h lj_tg.h lj_bc.h \
- lj_frame.h lj_ctype.h lj_dispatch.h lj_jit.h lj_ir.h
+ lj_atomic.h lj_gc2.h lj_gc.h lj_buf.h lj_str.h lj_tg.h lj_bc.h \
+ lj_arena.h lj_tab.h lj_meta.h lj_safepoint.h lj_frame.h lj_ctype.h \
+ lj_trace.h lj_jit.h lj_ir.h lj_dispatch.h lj_traceerr.h
 lj_safepoint.o: lj_safepoint.c lj_obj.h lua.h luaconf.h lj_def.h \
  lj_arch.h lj_atomic.h lj_gc2.h lj_safepoint.h lj_tg.h lj_bc.h \
  lj_arena.h

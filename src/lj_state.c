@@ -228,6 +228,7 @@ static void close_state(lua_State *L)
   lj_ctype_freestate(g);
 #endif
   lj_str_freetab(g);
+  lj_gc2_fini(g);
   if (arena_alloc && g->main_tg)
     lj_buf_free(g, &g->main_tg->tmpbuf);
   else

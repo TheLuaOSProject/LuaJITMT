@@ -51,9 +51,10 @@ int main(void)
   lua_State *L = luaL_newstate();
   global_State *g;
   TGState *tg;
-  GCtab *phase_tab;
+  GCtab *phase_tab, *phase_child;
   uint32_t cycle0;
   uint32_t ssb_published0, ssb_drained0;
+  uint64_t grey_pushed0, grey_drained0;
   void *phase_plain, *phase_trav;
   GCArena *phase_plain_a, *phase_trav_a;
   int i, done = 0, saw_mark = 0, saw_sweep = 0;
@@ -69,6 +70,10 @@ int main(void)
 
   lua_newtable(L);
   phase_tab = tabV(L->top - 1);
+  lua_newtable(L);
+  phase_child = tabV(L->top - 1);
+  lua_pushvalue(L, -1);
+  lua_setfield(L, -3, "child");
   cycle0 = g->gc2.cycle;
   lj_gc2_legacy_mark_begin(g);
   assert(g->gc2.phase == LJ_GC2_MARK);
@@ -77,11 +82,14 @@ int main(void)
   assert(tg->mark_active == 1);
   assert(tg->alloc.alloc_black == 1);
   assert(lj_gc2_ismarked(g, obj2gco(phase_tab)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(phase_child)) == 0);
   assert(lj_gc2_markobj(g, obj2gco(phase_tab)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(phase_tab)) == 1);
   assert(!lj_gc2_ssb_empty(g));
   ssb_published0 = g->gc2.ssb_published;
   ssb_drained0 = g->gc2.ssb_drained;
+  grey_pushed0 = g->gc2.grey_pushed;
+  grey_drained0 = g->gc2.grey_drained;
   phase_plain = lj_arena_alloc(&tg->alloc, &tg->prng, 64, 0);
   phase_trav = lj_arena_alloc(&tg->alloc, &tg->prng, 64,
 			      LJ_AF_TRAVERSABLE);
@@ -98,6 +106,9 @@ int main(void)
   assert(g->gc2.ssb_drained == ssb_drained0 + 1u);
   assert(lj_gc2_ssb_empty(g));
   assert(lj_gc2_ismarked(g, obj2gco(phase_tab)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(phase_child)) == 1);
+  assert(g->gc2.grey_pushed == grey_pushed0 + 2u);
+  assert(g->gc2.grey_drained == grey_drained0 + 2u);
   assert(tg->alloc.bump[LJ_ARENAK_PLAIN].a == NULL);
   assert(tg->alloc.bump[LJ_ARENAK_TRAVERSABLE].a == NULL);
   assert(arena_list_contains(tg->alloc.needsweep[LJ_ARENAK_PLAIN],
@@ -112,7 +123,7 @@ int main(void)
   assert(tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE] == NULL);
   lj_gc2_legacy_cycle_end(g);
   assert_idle(g, tg);
-  lua_pop(L, 1);
+  lua_pop(L, 2);
   lj_arena_free(&tg->alloc, phase_plain, 64);
   lj_arena_free(&tg->alloc, phase_trav, 64);
   lj_gc2_legacy_mark_begin(g);

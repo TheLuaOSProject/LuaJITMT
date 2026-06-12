@@ -32,6 +32,7 @@ enum {
 #define LJ_GC2_HS_STOPREQ		0x00000400u
 
 LJ_FUNC void lj_gc2_init(global_State *g);
+LJ_FUNC void lj_gc2_fini(global_State *g);
 LJ_FUNC void lj_gc2_legacy_mark_begin(global_State *g);
 LJ_FUNC void lj_gc2_legacy_sweep_begin(global_State *g);
 LJ_FUNC void lj_gc2_legacy_preserve_abort(global_State *g);
