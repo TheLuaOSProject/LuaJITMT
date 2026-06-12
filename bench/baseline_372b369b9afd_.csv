@@ -1,0 +1,13 @@
+benchmark,jit_total_s,jit_ns_per_op,interp_total_s,interp_ns_per_op
+arith_loop,0.0189,0.38,0.1328,2.66
+fib30,0.0052,5225000.00,0.0233,23262000.00
+tab_hash_write,0.0371,18.53,0.0642,32.10
+tab_hash_read,0.3545,17.72,0.6606,33.03
+tab_array,0.0455,1.52,0.2277,7.59
+alloc_tables,0.0019,0.38,0.1463,29.26
+string_intern,0.1113,55.66,0.1513,75.64
+closures_upval,0.1933,38.65,0.2170,43.41
+upval_hot,0.0189,0.38,0.2839,5.68
+ffi_struct,0.0113,0.38,1.5689,52.30
+coroutine_switch,0.0784,26.12,0.0405,13.50
+sbuf_format,0.1166,58.31,0.1610,80.51

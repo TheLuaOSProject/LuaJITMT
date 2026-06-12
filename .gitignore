@@ -10,3 +10,5 @@
 *.dmp
 *.swp
 .tags
+plan/
+notes/
