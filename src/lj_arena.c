@@ -596,10 +596,9 @@ void lj_arena_alloc_clear_marks(TGAlloc *alloc)
   }
 }
 
-void lj_arena_alloc_rebuild_free(TGAlloc *alloc)
+void lj_arena_alloc_rebuild_free_kind(TGAlloc *alloc, uint32_t k)
 {
-  uint32_t k;
-  for (k = 0; k < LJ_ARENA_NKINDS; k++) {
+  if (k < LJ_ARENA_NKINDS) {
     GCArena *a;
     arena_clear_bins(alloc, k);
     for (a = alloc->owned[k]; a != NULL; a = a->hdr.next) {
@@ -613,24 +612,48 @@ void lj_arena_alloc_rebuild_free(TGAlloc *alloc)
   }
 }
 
+void lj_arena_alloc_rebuild_free(TGAlloc *alloc)
+{
+  uint32_t k;
+  for (k = 0; k < LJ_ARENA_NKINDS; k++)
+    lj_arena_alloc_rebuild_free_kind(alloc, k);
+}
+
+void lj_arena_alloc_prepare_sweep_kind(TGAlloc *alloc, uint32_t k)
+{
+  GCArena *a;
+  if (k >= LJ_ARENA_NKINDS)
+    return;
+  a = alloc->owned[k];
+  if (alloc->bump[k].a && alloc->bump[k].cell < alloc->bump[k].end)
+    arena_set_free_run(alloc->bump[k].a, alloc->bump[k].cell,
+		       alloc->bump[k].end - alloc->bump[k].cell);
+  alloc->owned[k] = NULL;
+  alloc->bump[k].a = NULL;
+  alloc->bump[k].cell = 0;
+  alloc->bump[k].end = 0;
+  arena_clear_bins(alloc, k);
+  while (a) {
+    GCArena *next = a->hdr.next;
+    a->hdr.flags |= LJ_AF_NEEDSWEEP;
+    a->hdr.next = alloc->needsweep[k];
+    alloc->needsweep[k] = a;
+    a = next;
+  }
+}
+
 void lj_arena_alloc_prepare_sweep(TGAlloc *alloc)
 {
   uint32_t k;
-  for (k = 0; k < LJ_ARENA_NKINDS; k++) {
-    GCArena *a = alloc->owned[k];
-    alloc->owned[k] = NULL;
-    alloc->bump[k].a = NULL;
-    alloc->bump[k].cell = 0;
-    alloc->bump[k].end = 0;
-    arena_clear_bins(alloc, k);
-    while (a) {
-      GCArena *next = a->hdr.next;
-      a->hdr.flags |= LJ_AF_NEEDSWEEP;
-      a->hdr.next = alloc->needsweep[k];
-      alloc->needsweep[k] = a;
-      a = next;
-    }
-  }
+  for (k = 0; k < LJ_ARENA_NKINDS; k++)
+    lj_arena_alloc_prepare_sweep_kind(alloc, k);
+}
+
+void lj_arena_alloc_sweep_kind(TGAlloc *alloc, uint32_t kind,
+			       uint32_t epoch, int minor)
+{
+  while (lj_arena_sweep_one(alloc, kind, epoch, minor) != NULL)
+    ;
 }
 
 GCArena *lj_arena_sweep_one(TGAlloc *alloc, uint32_t kind, uint32_t epoch,

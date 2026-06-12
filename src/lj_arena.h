@@ -74,6 +74,7 @@ struct TGAlloc {
   LJArenaFreeRun *bins[LJ_ARENA_NKINDS][LJ_ALLOC_NBINS];
   GCArena *owned[LJ_ARENA_NKINDS];
   GCArena *needsweep[LJ_ARENA_NKINDS];
+  uint32_t sweep_epoch;
   uint8_t alloc_black;
 };
 
@@ -129,8 +130,12 @@ LJ_FUNC int lj_arena_hugetab_delete(HugeTab *ht, const void *p,
 LJ_FUNC void lj_arena_alloc_init(TGAlloc *alloc);
 LJ_FUNC void lj_arena_alloc_fini(TGAlloc *alloc);
 LJ_FUNC void lj_arena_alloc_clear_marks(TGAlloc *alloc);
+LJ_FUNC void lj_arena_alloc_rebuild_free_kind(TGAlloc *alloc, uint32_t kind);
 LJ_FUNC void lj_arena_alloc_rebuild_free(TGAlloc *alloc);
+LJ_FUNC void lj_arena_alloc_prepare_sweep_kind(TGAlloc *alloc, uint32_t kind);
 LJ_FUNC void lj_arena_alloc_prepare_sweep(TGAlloc *alloc);
+LJ_FUNC void lj_arena_alloc_sweep_kind(TGAlloc *alloc, uint32_t kind,
+				       uint32_t epoch, int minor);
 LJ_FUNC GCArena *lj_arena_sweep_one(TGAlloc *alloc, uint32_t kind,
 				    uint32_t epoch, int minor);
 LJ_FUNC void *lj_arena_alloc(TGAlloc *alloc, PRNGState *rs, size_t size,

@@ -110,6 +110,21 @@ static void gc_arena_rebuild_free(global_State *g)
     lj_arena_alloc_rebuild_free(&tg->alloc);
 }
 
+static void gc_arena_finish_sweep_boundary(global_State *g)
+{
+  TGState *tg = G2TG(g);
+  if (!tg || !(tg->tg_flags & TGF_ARENA_INTERNAL))
+    return;
+  if (tg->mark_active == 2 && gcref(g->gc.mmudata) == NULL) {
+    uint32_t epoch = ++tg->alloc.sweep_epoch;
+    lj_arena_alloc_prepare_sweep_kind(&tg->alloc, LJ_ARENAK_TRAVERSABLE);
+    lj_arena_alloc_sweep_kind(&tg->alloc, LJ_ARENAK_TRAVERSABLE, epoch, 0);
+    lj_arena_alloc_rebuild_free_kind(&tg->alloc, LJ_ARENAK_PLAIN);
+  } else {
+    gc_arena_rebuild_free(g);
+  }
+}
+
 #ifdef LUA_USE_ASSERT
 static void gc_arena_verify_marked(global_State *g, GCobj *o)
 {
@@ -854,7 +869,7 @@ static size_t gc_onestep(lua_State *L)
       if (g->str.num <= (g->str.mask >> 2) && g->str.mask > LJ_MIN_STRTAB*2-1)
 	lj_str_resize(L, g->str.mask >> 1);  /* Shrink string table. */
       gc_arena_verify_sweep_boundary(g);
-      gc_arena_rebuild_free(g);
+      gc_arena_finish_sweep_boundary(g);
       if (gcref(g->gc.mmudata)) {  /* Need any finalizations? */
 	g->gc.state = GCSfinalize;
       } else {  /* Otherwise skip this phase to help the JIT. */
