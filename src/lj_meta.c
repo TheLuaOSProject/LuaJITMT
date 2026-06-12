@@ -49,7 +49,6 @@ cTValue *lj_meta_cache(GCtab *mt, MMS mm, GCstr *name)
   cTValue *mo = lj_tab_getstr(mt, name);
   lj_assertX(mm <= MM_FAST, "bad metamethod %d", mm);
   if (!mo || tvisnil(mo)) {  /* No metamethod? */
-    mt->nomm |= (uint8_t)(1u<<mm);  /* Set negative cache flag. */
     return NULL;
   }
   return mo;
@@ -316,9 +315,7 @@ TValue * LJ_FASTCALL lj_meta_len(lua_State *L, cTValue *o)
 {
   cTValue *mo = lj_meta_lookup(L, o, MM_len);
   if (tvisnil(mo)) {
-    if (LJ_52 && tvistab(o))
-      tabref(tabV(o)->metatable)->nomm |= (uint8_t)(1u<<MM_len);
-    else
+    if (!(LJ_52 && tvistab(o)))
       lj_err_optype(L, o, LJ_ERR_OPLEN);
     return NULL;
   }

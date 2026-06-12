@@ -8,7 +8,7 @@ whenever a shared field is introduced or migrated.
 | TValue in table array/hash, upvalue cell, registry, gcroot | shared slot | rlx (store: rlx; structural publish: rel) |
 | GCtab.arrayhdr / nodehdr (new MRefs, 06) | RCU pointer | load acq / store rel |
 | GCtab.metatable, GCudata.metatable | shared ptr | rlx; publish rel |
-| GCtab.nomm | advisory byte | rlx (monotone-ish cache; safe to be stale) |
+| GCtab.nomm | advisory byte | rlx; construction masks and explicit clears only |
 | GCobj.gch.gct | immutable after publish | plain read; written pre-publish |
 | arena bitmaps (block/mark) | atomic bitset | fetch_or rlx; sweep owns exclusive |
 | g->gc2.phase | phase word | load rlx in fast paths; transitions rel + handshake |

@@ -257,6 +257,10 @@ static void LJ_FASTCALL recff_setmetatable(jit_State *J, RecordFFData *rd)
     lj_record_mm_lookup(J, &ix, MM_metatable); /* Guard for no __metatable. */
     fref = emitir(IRT(IR_FREF, IRT_PGC), tr, IRFL_TAB_META);
     mtref = tref_isnil(mt) ? lj_ir_knull(J, IRT_TAB) : mt;
+    if (!tref_isnil(mt)) {
+      TRef nfref = emitir(IRT(IR_FREF, IRT_PGC), mt, IRFL_TAB_NOMM);
+      emitir(IRT(IR_FSTORE, IRT_U8), nfref, lj_ir_kint(J, 0));
+    }
     emitir(IRT(IR_FSTORE, IRT_TAB), fref, mtref);
     if (!tref_isnil(mt))
       emitir(IRT(IR_TBAR, IRT_NIL), tr, 0);

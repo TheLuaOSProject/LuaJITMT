@@ -1031,6 +1031,8 @@ LUA_API int lua_setmetatable(lua_State *L, int idx)
     mt = tabV(L->top-1);
   }
   g = G(L);
+  if (mt)
+    mt->nomm = 0;  /* Do not trust stale metamethod miss caches. */
   if (tvistab(o)) {
     setgcrefmt(tabV(o)->metatable, obj2gco(mt));
     if (mt)

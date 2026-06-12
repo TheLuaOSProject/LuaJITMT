@@ -1335,6 +1335,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  cmp aword TAB:RB->metatable, 0; jne ->fff_fallback
   |  mov TAB:RA, [BASE+8]
   |  checktab TAB:RA, ->fff_fallback
+  |  mov byte TAB:RA->nomm, 0		// Clear metamethod miss cache.
   |  // Release store on x86-64 TSO.
   |  mov TAB:RB->metatable, TAB:RA
   |  mov PC, [BASE-8]
