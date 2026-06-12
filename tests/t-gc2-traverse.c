@@ -59,6 +59,37 @@ static void test_strong_table(lua_State *L, global_State *g, TGState *tg)
   lua_pop(L, 2);
 }
 
+static void test_grey_deque_growth(lua_State *L, global_State *g, TGState *tg)
+{
+  enum { GC2_DEQUE_GROW_N = 300 };
+  GCtab *parent, *child[GC2_DEQUE_GROW_N];
+  uint64_t grey_pushed0, grey_drained0;
+  int i;
+
+  lua_createtable(L, GC2_DEQUE_GROW_N, 0);
+  parent = tabV(L->top - 1);
+  for (i = 0; i < GC2_DEQUE_GROW_N; i++) {
+    lua_newtable(L);
+    child[i] = tabV(L->top - 1);
+    lua_rawseti(L, -2, i + 1);
+  }
+
+  lj_gc2_legacy_mark_begin(g);
+  assert(lj_gc2_ismarked(g, obj2gco(parent)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(child[0])) == 0);
+  grey_pushed0 = g->gc2.grey_pushed;
+  grey_drained0 = g->gc2.grey_drained;
+  assert(lj_gc2_markobj(g, obj2gco(parent)) == 1);
+  flush_and_drain(g, tg);
+  assert(lj_gc2_ismarked(g, obj2gco(parent)) == 1);
+  for (i = 0; i < GC2_DEQUE_GROW_N; i++)
+    assert(lj_gc2_ismarked(g, obj2gco(child[i])) == 1);
+  assert(g->gc2.grey_pushed == grey_pushed0 + GC2_DEQUE_GROW_N + 1u);
+  assert(g->gc2.grey_drained == grey_drained0 + GC2_DEQUE_GROW_N + 1u);
+  lj_gc2_legacy_cycle_end(g);
+  lua_pop(L, 1);
+}
+
 static void test_c_value_barrier(lua_State *L, global_State *g, TGState *tg)
 {
   GCtab *parent, *child;
@@ -461,6 +492,7 @@ int main(void)
   TGState *tg;
 
   assert(L != NULL);
+  lua_gc(L, LUA_GCSTOP, 0);
 #if LJ_HASJIT
   luaL_openlibs(L);
 #endif
@@ -469,6 +501,7 @@ int main(void)
   assert(tg != NULL);
 
   test_strong_table(L, g, tg);
+  test_grey_deque_growth(L, g, tg);
   test_c_value_barrier(L, g, tg);
   test_c_table_rescan_barrier(L, g, tg);
   test_vm_upvalue_barrier(L, g, tg);

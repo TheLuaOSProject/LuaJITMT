@@ -583,16 +583,21 @@ void lj_arena_alloc_fini(TGAlloc *alloc)
   lj_arena_alloc_init(alloc);
 }
 
+static void arena_clear_marks_list(GCArena *a)
+{
+  for (; a != NULL; a = a->hdr.next) {
+    uint32_t w;
+    for (w = 0; w < LJ_ARENA_WORDS; w++)
+      a->mark[w] &= ~a->block[w];
+  }
+}
+
 void lj_arena_alloc_clear_marks(TGAlloc *alloc)
 {
   uint32_t k;
   for (k = 0; k < LJ_ARENA_NKINDS; k++) {
-    GCArena *a;
-    for (a = alloc->owned[k]; a != NULL; a = a->hdr.next) {
-      uint32_t w;
-      for (w = 0; w < LJ_ARENA_WORDS; w++)
-	a->mark[w] &= ~a->block[w];
-    }
+    arena_clear_marks_list(alloc->owned[k]);
+    arena_clear_marks_list(alloc->needsweep[k]);
   }
 }
 

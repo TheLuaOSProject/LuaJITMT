@@ -26,6 +26,7 @@
 #define GC2_GREY_LIMIT	((MSize)(LJ_MAX_MEM32 / sizeof(GCRef)))
 
 static int gc2_grey_grow(global_State *g);
+static int gc2_grey_empty(global_State *g);
 
 static void gc2_attach_main(global_State *g)
 {
@@ -56,6 +57,7 @@ void lj_gc2_init(global_State *g)
   g->gc2.grey_stack = NULL;
   g->gc2.grey_capacity = 0;
   g->gc2.grey_top = 0;
+  g->gc2.grey_bottom = 0;
   g->gc2.grey_pushed = 0;
   g->gc2.grey_drained = 0;
   gc2_attach_main(g);
@@ -68,6 +70,7 @@ void lj_gc2_fini(global_State *g)
     g->gc2.grey_stack = NULL;
     g->gc2.grey_capacity = 0;
     g->gc2.grey_top = 0;
+    g->gc2.grey_bottom = 0;
   }
 }
 
@@ -88,7 +91,10 @@ void lj_gc2_legacy_mark_begin(global_State *g)
   g->gc2.phase = LJ_GC2_MARK;
   g->gc2.cycle++;
   g->gc2.marks_this_round = 0;
-  lj_assertG(g->gc2.grey_top == 0, "gc2 grey stack not empty at mark begin");
+  (void)lj_gc2_drain_ssb(g);  /* Finish prior-cycle scaffold work. */
+  lj_assertG(gc2_grey_empty(g), "gc2 grey deque not empty at mark begin");
+  la_store64_rlx(&g->gc2.grey_top, 0);
+  la_store64_rlx(&g->gc2.grey_bottom, 0);
   if (g->gc2.grey_capacity == 0)
     (void)gc2_grey_grow(g);
   gc2_clear_marks(g, tg);
@@ -240,8 +246,12 @@ static void gc2_traverse_udata(global_State *g, GCudata *ud);
 
 static int gc2_grey_grow(global_State *g)
 {
+  GCRef *oldstack = g->gc2.grey_stack;
   MSize oldcap = g->gc2.grey_capacity;
   MSize newcap = oldcap ? oldcap << 1 : GC2_GREY_INIT;
+  uint64_t top = la_load64_acq(&g->gc2.grey_top);
+  uint64_t bottom = la_load64_rlx(&g->gc2.grey_bottom);
+  MSize count = bottom > top ? (MSize)(bottom - top) : 0;
   lua_State *L = lj_tg_cur_L(g);
   if (!L && gcref(g->mainthref))
     L = mainthread(g);
@@ -249,21 +259,75 @@ static int gc2_grey_grow(global_State *g)
     return 0;
   if (newcap < oldcap || newcap > GC2_GREY_LIMIT)
     newcap = GC2_GREY_LIMIT;
-  lj_mem_reallocvec(L, g->gc2.grey_stack, oldcap, newcap, GCRef);
+  if (newcap <= oldcap || count > newcap)
+    return 0;
+  g->gc2.grey_stack = lj_mem_newvec(L, newcap, GCRef);
+  if (oldstack && oldcap) {
+    MSize i;
+    for (i = 0; i < count; i++)
+      g->gc2.grey_stack[i] = oldstack[(MSize)((top + i) % oldcap)];
+    lj_mem_freevec(g, oldstack, oldcap, GCRef);
+  }
   g->gc2.grey_capacity = newcap;
+  la_store64_rlx(&g->gc2.grey_top, 0);
+  la_store64_rlx(&g->gc2.grey_bottom, count);
   return 1;
 }
 
 static int gc2_grey_push(global_State *g, GCobj *o)
 {
+  uint64_t top, bottom;
+  MSize cap;
   if (!g || !o)
     return 0;
-  if (g->gc2.grey_top == g->gc2.grey_capacity && !gc2_grey_grow(g))
+  bottom = la_load64_rlx(&g->gc2.grey_bottom);
+  top = la_load64_acq(&g->gc2.grey_top);
+  cap = g->gc2.grey_capacity;
+  if ((cap == 0 || bottom - top >= cap) && !gc2_grey_grow(g))
     return 0;
-  setgcref(g->gc2.grey_stack[g->gc2.grey_top], o);
-  g->gc2.grey_top++;
+  bottom = la_load64_rlx(&g->gc2.grey_bottom);
+  cap = g->gc2.grey_capacity;
+  setgcref(g->gc2.grey_stack[(MSize)(bottom % cap)], o);
+  la_fence_rel();  /* 05 section 5.6.3: publish slot before bottom. */
+  la_store64_rel(&g->gc2.grey_bottom, bottom + 1);
   la_add64_rlx(&g->gc2.grey_pushed, 1);
   return 1;
+}
+
+static int gc2_grey_empty(global_State *g)
+{
+  if (!g)
+    return 1;
+  return la_load64_acq(&g->gc2.grey_top) ==
+	 la_load64_acq(&g->gc2.grey_bottom);
+}
+
+static GCobj *gc2_grey_pop(global_State *g)
+{
+  uint64_t top, bottom;
+  GCobj *o;
+  MSize cap;
+  if (!g || !g->gc2.grey_stack || g->gc2.grey_capacity == 0)
+    return NULL;
+  bottom = la_load64_rlx(&g->gc2.grey_bottom);
+  if (bottom == 0)
+    return NULL;
+  bottom--;
+  la_store64_rlx(&g->gc2.grey_bottom, bottom);
+  la_fence_seq();  /* Chase-Lev owner pop: order bottom before top load. */
+  top = la_load64_acq(&g->gc2.grey_top);
+  if (top <= bottom) {
+    cap = g->gc2.grey_capacity;
+    o = gcref(g->gc2.grey_stack[(MSize)(bottom % cap)]);
+    if (top == bottom) {
+      /* M3 has only the owner worker; steal CAS arrives with worker stealing. */
+      la_store64_rel(&g->gc2.grey_top, top + 1);
+      la_store64_rel(&g->gc2.grey_bottom, top + 1);
+    }
+    return o;
+  }
+  la_store64_rel(&g->gc2.grey_bottom, top);
+  return NULL;
 }
 
 static void gc2_ssb_activate(TGState *tg, GC2SSBNode *node)
@@ -377,7 +441,7 @@ int lj_gc2_ssb_empty(global_State *g)
     return 1;
   if (la_loadptr_acq((void *const *)&g->gc2.ssb_head) != NULL)
     return 0;  /* 05 section 5.7.1 SSB-empty fixpoint predicate. */
-  if (g->gc2.grey_top != 0)
+  if (!gc2_grey_empty(g))
     return 0;
   for (tg = g->gc2.tg_list; tg != NULL; tg = tg->next_tg) {
     if (tg->tg_flags & TGF_DEAD)
@@ -772,8 +836,8 @@ static void gc2_traverse_obj(global_State *g, GCobj *o)
 static uint32_t gc2_drain_grey(global_State *g)
 {
   uint32_t n = 0;
-  while (g && g->gc2.grey_top != 0) {
-    GCobj *o = gcref(g->gc2.grey_stack[--g->gc2.grey_top]);
+  while (g && !gc2_grey_empty(g)) {
+    GCobj *o = gc2_grey_pop(g);
     if (o) {
       gc2_traverse_obj(g, o);
       n++;
