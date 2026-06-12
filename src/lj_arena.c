@@ -614,3 +614,27 @@ void *lj_arena_realloc(TGAlloc *alloc, PRNGState *rs, void *p,
   lj_arena_free(alloc, p, osize);
   return np;
 }
+
+void lj_arena_allocd_init(LJArenaAllocD *ad, TGAlloc *alloc, PRNGState *rs,
+			  uint32_t flags)
+{
+  ad->alloc = alloc;
+  ad->prng = rs;
+  ad->flags = flags;
+}
+
+void *lj_arena_allocf(void *ud, void *ptr, size_t osize, size_t nsize)
+{
+  LJArenaAllocD *ad = (LJArenaAllocD *)ud;
+  if (!ad || !ad->alloc || !ad->prng)
+    return NULL;
+  if (!ptr)
+    return lj_arena_alloc(ad->alloc, ad->prng, nsize, ad->flags);
+  if (nsize == 0) {
+    lj_arena_free(ad->alloc, ptr, osize);
+    return NULL;
+  }
+  if (osize == 0)
+    return NULL;
+  return lj_arena_realloc(ad->alloc, ad->prng, ptr, osize, nsize, ad->flags);
+}

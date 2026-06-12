@@ -33,6 +33,7 @@ typedef struct GCArena GCArena;
 typedef struct GreyStack GreyStack;
 typedef struct LJArenaFreeRun LJArenaFreeRun;
 typedef struct LJArenaBump LJArenaBump;
+typedef struct LJArenaAllocD LJArenaAllocD;
 typedef struct LJHugeTabHdr LJHugeTabHdr;
 typedef struct HugeTab HugeTab;
 typedef struct LJHugeInfo LJHugeInfo;
@@ -83,6 +84,12 @@ struct LJHugeInfo {
   uint32_t flags;
 };
 
+struct LJArenaAllocD {
+  TGAlloc *alloc;
+  PRNGState *prng;
+  uint32_t flags;
+};
+
 #define LJ_HUGEF_MARK		0x01u
 #define LJ_HUGEF_TRAVERSABLE	0x02u
 #define LJ_HUGEF_FINALIZER	0x04u
@@ -122,6 +129,10 @@ LJ_FUNC void *lj_arena_alloc(TGAlloc *alloc, PRNGState *rs, size_t size,
 LJ_FUNC void lj_arena_free(TGAlloc *alloc, void *p, size_t size);
 LJ_FUNC void *lj_arena_realloc(TGAlloc *alloc, PRNGState *rs, void *p,
 			       size_t osize, size_t nsize, uint32_t flags);
+LJ_FUNC void lj_arena_allocd_init(LJArenaAllocD *ad, TGAlloc *alloc,
+				  PRNGState *rs, uint32_t flags);
+LJ_FUNC void *lj_arena_allocf(void *ud, void *ptr, size_t osize,
+			      size_t nsize);
 
 static LJ_AINLINE GCArena *lj_arena_of(const void *p)
 {

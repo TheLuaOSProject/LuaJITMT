@@ -16,3 +16,8 @@ OUT=${TMPDIR:-/tmp}/lj_t_arena_alloc
   "$ROOT/tests/t-arena-realloc.c" "$ROOT/src/lj_arena.c" \
   "$ROOT/src/lj_prng.c" -o "$OUT.realloc"
 "$OUT.realloc"
+
+"$CC" $CFLAGS -I"$ROOT/src" \
+  "$ROOT/tests/t-arena-allocf.c" "$ROOT/src/lj_arena.c" \
+  "$ROOT/src/lj_prng.c" -o "$OUT.allocf"
+"$OUT.allocf"
