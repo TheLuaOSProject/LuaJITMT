@@ -10,6 +10,7 @@
 #define LUA_CORE
 
 #include "lj_obj.h"
+#include "lj_atomic.h"
 #include "lj_gc.h"
 #include "lj_err.h"
 #include "lj_debug.h"
@@ -1244,16 +1245,25 @@ LUA_API int lua_resume(lua_State *L, int nargs)
 LUA_API int lua_gc(lua_State *L, int what, int data)
 {
   global_State *g = G(L);
+  int mt_active = la_load32_acq(&g->mt_active) != 0;
   int res = 0;
   switch (what) {
   case LUA_GCSTOP:
-    g->gc.threshold = LJ_MAX_MEM;
+    if (mt_active)
+      g->mt_gc_threshold = LJ_MAX_MEM;
+    else
+      g->gc.threshold = LJ_MAX_MEM;
     break;
   case LUA_GCRESTART:
-    g->gc.threshold = data == -1 ? (g->gc.total/100)*g->gc.pause : g->gc.total;
+    if (mt_active)
+      g->mt_gc_threshold = data == -1 ?
+	(g->gc.total/100)*g->gc.pause : g->gc.total;
+    else
+      g->gc.threshold = data == -1 ? (g->gc.total/100)*g->gc.pause : g->gc.total;
     break;
   case LUA_GCCOLLECT:
-    lj_gc_fullgc(L);
+    if (!mt_active)
+      lj_gc_fullgc(L);
     break;
   case LUA_GCCOUNT:
     res = (int)(g->gc.total >> 10);
@@ -1263,6 +1273,8 @@ LUA_API int lua_gc(lua_State *L, int what, int data)
     break;
   case LUA_GCSTEP: {
     GCSize a = (GCSize)data << 10;
+    if (mt_active)
+      break;  /* M4: explicit steps wait for the real concurrent GC. */
     g->gc.threshold = (a <= g->gc.total) ? (g->gc.total - a) : 0;
     while (g->gc.total >= g->gc.threshold)
       if (lj_gc_step(L) > 0) {
@@ -1280,7 +1292,7 @@ LUA_API int lua_gc(lua_State *L, int what, int data)
     g->gc.stepmul = (MSize)data;
     break;
   case LUA_GCISRUNNING:
-    res = (g->gc.threshold != LJ_MAX_MEM);
+    res = ((mt_active ? g->mt_gc_threshold : g->gc.threshold) != LJ_MAX_MEM);
     break;
   default:
     res = -1;  /* Invalid option. */

@@ -28,6 +28,19 @@ for _ = 1, reps do
   end
 
   do
+    local ch = th.channel(1)
+    local t = th.spawn(function(q)
+      q:recv()
+    end, ch)
+    assert(collectgarbage("isrunning") == true)
+    collectgarbage("collect")
+    collectgarbage("step")
+    assert(collectgarbage("isrunning") == true)
+    ch:send(true)
+    assert(({ t:join() })[1] == true)
+  end
+
+  do
     local n = 64
     local ch = th.channel(8)
     local t = th.spawn(function(q, count)
