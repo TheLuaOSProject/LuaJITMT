@@ -14,6 +14,7 @@
 #include "lj_cconv.h"
 #include "lj_cdata.h"
 #include "lj_ccall.h"
+#include "lj_safepoint.h"
 #include "lj_trace.h"
 
 /* Target-specific handling of register arguments. */
@@ -1238,7 +1239,9 @@ int lj_ccall_func(lua_State *L, GCcdata *cd)
     cc.func = (void (*)(void))cdata_getptr(cdataptr(cd), sz);
     gcsteps = ccall_set_args(L, cts, ct, &cc);
     cts->cb.slot = ~0u;
+    lj_native_enter(L2TG(L));
     lj_vm_ffi_call(&cc);
+    (void)lj_native_leave(L);
     if (cts->cb.slot != ~0u) {  /* Blacklist function that called a callback. */
       TValue tv;
       tv.u64 = ((uintptr_t)(void *)cc.func >> 2) | U64x(800000000, 00000000);

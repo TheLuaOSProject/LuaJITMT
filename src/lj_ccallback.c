@@ -16,6 +16,7 @@
 #include "lj_cconv.h"
 #include "lj_ccall.h"
 #include "lj_ccallback.h"
+#include "lj_safepoint.h"
 #include "lj_target.h"
 #include "lj_mcode.h"
 #include "lj_trace.h"
@@ -718,7 +719,9 @@ lua_State * LJ_FASTCALL lj_ccallback_enter(CTState *cts, void *cf)
 {
   lua_State *L = cts->L;
   global_State *g = cts->g;
+  TGState *tg;
   lj_assertG(L != NULL, "uninitialized cts->L in callback");
+  tg = L2TG(L);
   if (lj_tg_jit_base(g)) {
     setstrV(L, L->top++, lj_err_str(L, LJ_ERR_FFI_BADCBACK));
     if (g->panic) g->panic(L);
@@ -732,6 +735,9 @@ lua_State * LJ_FASTCALL lj_ccallback_enter(CTState *cts, void *cf)
   cframe_nres(cf) = 0;
   L->cframe = cf;
   callback_conv_args(cts, L);
+  cts->cb.was_native = (uint8_t)(tg != NULL && tg->in_native != 0);
+  if (cts->cb.was_native)
+    (void)lj_native_leave(L);
   return L;  /* Now call the function on this stack. */
 }
 
@@ -756,6 +762,10 @@ void LJ_FASTCALL lj_ccallback_leave(CTState *cts, TValue *o)
   L->base = obase;
   L->cframe = cframe_prev(L->cframe);
   cts->cb.slot = 0;  /* Blacklist C function that called the callback. */
+  if (cts->cb.was_native) {
+    lj_native_enter(L2TG(L));
+    cts->cb.was_native = 0;
+  }
 }
 
 /* -- C callback management ----------------------------------------------- */

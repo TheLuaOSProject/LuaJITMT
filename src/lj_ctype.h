@@ -168,6 +168,7 @@ typedef LJ_ALIGN(8) struct CCallback {
   MSize sizeid;			/* Size of callback type table. */
   MSize topid;			/* Highest unused callback type table slot. */
   MSize slot;			/* Current callback slot. */
+  uint8_t was_native;		/* Callback entered from a native region. */
 } CCallback;
 
 /* C type state. */
