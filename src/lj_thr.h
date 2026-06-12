@@ -44,5 +44,6 @@ LJ_FUNC TGState *lj_thr_get_tg_fallback(global_State *g);
 LJ_FUNC uint32_t lj_thr_cpucount(void);
 LJ_FUNC void lj_thr_fence(void);
 LJ_FUNC uint32_t lj_thr_sleep_ns(lua_State *L, int64_t ns);
+LJ_FUNC void lj_threading_shutdown(lua_State *L);
 
 #endif

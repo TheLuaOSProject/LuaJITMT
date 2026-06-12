@@ -591,6 +591,7 @@ typedef enum {
 #if LJ_HASFFI
   GCROOT_FFI_FIN,	/* FFI finalizer table. */
 #endif
+  GCROOT_THREADING,	/* threading.* live thread table. */
   GCROOT_MAX
 } GCRootID;
 

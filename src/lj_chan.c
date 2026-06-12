@@ -65,13 +65,15 @@ static void chan_wait(lua_State *L, LJChan *ch)
 {
   uint32_t f = la_load32_acq(&ch->futex);
   TGState *tg = L ? L2TG(L) : NULL;
+  uint32_t actions = 0;
   if (tg)
     lj_native_enter(tg);  /* 09 section 9.5: channel park is native. */
   (void)la_futex_wait(&ch->futex, f, 1000000);
   if (L)
-    (void)lj_native_leave(L);
+    actions = lj_native_leave(L);
   else if (tg)
     la_store8_rlx(&tg->in_native, 0);
+  lj_safepoint_checkstop(L, actions);
 }
 
 static int64_t chan_now_ns(void)
@@ -111,7 +113,7 @@ static int chan_wait_timeout(lua_State *L, LJChan *ch, int64_t ns)
     lj_native_enter(tg);  /* 09 section 9.5: timed channel park. */
   rc = la_futex_wait(&ch->futex, f, ns);
   if (L)
-    (void)lj_native_leave(L);
+    lj_safepoint_checkstop(L, lj_native_leave(L));
   else if (tg)
     la_store8_rlx(&tg->in_native, 0);
   return rc != 0 && errno == ETIMEDOUT;

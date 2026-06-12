@@ -9,6 +9,7 @@
 #include "lj_obj.h"
 #include "lj_atomic.h"
 #include "lj_arena.h"
+#include "lj_err.h"
 #include "lj_gc2.h"
 #include "lj_safepoint.h"
 #include "lj_tg.h"
@@ -86,6 +87,17 @@ uint32_t lj_safepoint_poll(lua_State *L)
   if (!tg || la_load32_acq(&tg->poll) == 0)  /* 05 section 5.4.2 poll. */
     return 0;
   return lj_safepoint_ack(L);
+}
+
+void lj_safepoint_checkstop(lua_State *L, uint32_t actions)
+{
+  TGState *tg;
+  if (!L)
+    return;
+  tg = L2TG(L);
+  if ((actions & LJ_GC2_HS_STOPREQ) ||
+      (tg && (la_load8_acq(&tg->tg_flags) & TGF_STOPREQ)))
+    lj_err_callermsg(L, "thread interrupted: VM shutdown");
 }
 
 void lj_native_enter(TGState *tg)

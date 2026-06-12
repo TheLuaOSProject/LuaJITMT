@@ -46,14 +46,23 @@ static GCtab *threading_live_table(lua_State *L, GCtab *env)
 {
   GCstr *key = lj_str_newlit(L, THREADING_THREADS_KEY);
   cTValue *tv = lj_tab_getstr(env, key);
-  if (tv && tvistab(tv))
+  if (tv && tvistab(tv)) {
+    setgcref(G(L)->gcroot[GCROOT_THREADING], obj2gco(tabV(tv)));
     return tabV(tv);
+  }
   {
     GCtab *t = lj_tab_new(L, 0, 0);
     settabV(L, lj_tab_setstr(L, env, key), t);
+    setgcref(G(L)->gcroot[GCROOT_THREADING], obj2gco(t));
     lj_gc_anybarriert(L, env);
     return t;
   }
+}
+
+static GCtab *threading_live_root(global_State *g)
+{
+  GCobj *o = gcref(g->gcroot[GCROOT_THREADING]);
+  return o && o->gch.gct == ~LJ_TTAB ? gco2tab(o) : NULL;
 }
 
 static void threading_live_set(lua_State *L, GCtab *env, GCudata *ud,
@@ -67,6 +76,36 @@ static void threading_live_set(lua_State *L, GCtab *env, GCudata *ud,
   else
     setnilV(lj_tab_set(L, live, &key));
   lj_gc_anybarriert(L, live);
+}
+
+static void threading_live_remove(lua_State *L, GCudata *ud)
+{
+  GCtab *live = threading_live_root(G(L));
+  TValue key;
+  if (!live || !ud)
+    return;
+  setudataV(L, &key, ud);
+  setnilV(lj_tab_set(L, live, &key));
+}
+
+static LJThread *threading_live_next(global_State *g, GCudata **pud)
+{
+  GCtab *live = threading_live_root(g);
+  TValue key, kv[2];
+  if (!live)
+    return NULL;
+  setnilV(&key);
+  while (lj_tab_next(live, &key, kv) > 0) {
+    key = kv[0];
+    if (tvisudata(&kv[0]) && udataV(&kv[0])->udtype == UDTYPE_THREAD) {
+      LJThread *th = (LJThread *)uddata(udataV(&kv[0]));
+      if (!th->main_thread && th->L != NULL) {
+	*pud = udataV(&kv[0]);
+	return th;
+      }
+    }
+  }
+  return NULL;
 }
 
 static GCudata *threading_new_thread_ud(lua_State *L, GCtab *env)
@@ -101,6 +140,33 @@ static void threading_wake_thread(LJThread *th)
 {
   la_add32_rlx(&th->futex, 1);
   la_futex_wake(&th->futex, INT_MAX);
+}
+
+void lj_threading_shutdown(lua_State *L)
+{
+  global_State *g = G(L);
+  TGState *cur = lj_thr_get_tg();
+  GCudata *ud;
+  LJThread *th;
+  if (!threading_live_root(g))
+    return;
+  lj_assertG(cur == NULL || cur == g->main_tg,
+	     "lua_close called from non-main OS thread");
+  UNUSED(cur);
+  if (la_load32_acq(&g->mt_active) != 0)
+    (void)lj_safepoint_handshake(g, LJ_GC2_HS_STOPREQ);
+  while ((th = threading_live_next(g, &ud)) != NULL) {
+    while (la_load32_acq(&th->state) != LJ_THREAD_DONE) {
+      uint32_t futex = la_load32_acq(&th->futex);
+      (void)la_futex_wait(&th->futex, futex, 1000000);
+    }
+    if (la_load32_acq(&th->joined) == 0) {
+      uint32_t expect = 0;
+      if (la_cas32(&th->joined, &expect, 1, LA_ACQ_REL, LA_ACQ))
+	(void)lj_thr_join(&th->thr, NULL);
+    }
+    threading_live_remove(L, ud);
+  }
 }
 
 static void threading_gc_enter(global_State *g)
@@ -169,9 +235,11 @@ LJLIB_CF(threading_thread_join)
     }
     {
       uint32_t futex = la_load32_acq(&th->futex);
+      uint32_t actions;
       lj_native_enter(L2TG(L));
       (void)la_futex_wait(&th->futex, futex, ns);
-      (void)lj_native_leave(L);
+      actions = lj_native_leave(L);
+      lj_safepoint_checkstop(L, actions);
     }
     if (ns > 0 && la_load32_acq(&th->state) != LJ_THREAD_DONE) {
       setnilV(L->top++);
@@ -254,7 +322,7 @@ LJLIB_CF(threading_mutex_lock)
       return 0;
     lj_native_enter(L2TG(L));
     (void)la_futex_wait(&m->state, LJ_MUTEX_LOCKED, -1);
-    (void)lj_native_leave(L);
+    lj_safepoint_checkstop(L, lj_native_leave(L));
   }
 }
 
@@ -408,7 +476,7 @@ LJLIB_CF(threading_sleep)
     lua_Number nsec = sec * 1000000000.0;
     ns = nsec > (lua_Number)INT64_MAX ? INT64_MAX : (int64_t)nsec;
   }
-  (void)lj_thr_sleep_ns(L, ns);
+  lj_safepoint_checkstop(L, lj_thr_sleep_ns(L, ns));
   return 0;
 }
 
