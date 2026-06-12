@@ -305,6 +305,9 @@ static void threading_push_recv(lua_State *L, int rc, TValue *out)
   } else if (rc == LJ_CHAN_CLOSED) {
     setnilV(L->top++);
     setboolV(L->top++, 0);
+  } else if (rc == LJ_CHAN_TIMEOUT) {
+    setnilV(L->top++);
+    lua_pushliteral(L, "timeout");
   } else {
     setnilV(L->top++);
     lua_pushliteral(L, "empty");
@@ -318,10 +321,18 @@ LJLIB_CF(threading_channel_send)
   GCudata *ud;
   LJChan *ch = threading_tochan(L);
   cTValue *tv = lj_lib_checkany(L, 2);
+  int64_t ns = threading_timeout_ns(L, 3, 1, -1);
+  int rc;
   ud = udataV(L->base);
   lj_gc_barrier(L, ud, tv);  /* 09 section 9.5: publish Lua refs to channel. */
-  if (lj_chan_send(L, ch, tv) == LJ_CHAN_CLOSED)
+  rc = lj_chan_send_timeout(L, ch, tv, ns);
+  if (rc == LJ_CHAN_CLOSED)
     lj_err_callermsg(L, "closed channel");
+  if (rc == LJ_CHAN_TIMEOUT) {
+    setnilV(L->top++);
+    lua_pushliteral(L, "timeout");
+    return 2;
+  }
   setboolV(L->top++, 1);
   return 1;
 }
@@ -331,8 +342,9 @@ LJLIB_CF(threading_channel_recv)
   TValue out;
   LJChan *ch = threading_tochan(L);
   int rc;
+  int64_t ns = threading_timeout_ns(L, 2, 1, -1);
   setnilV(&out);
-  rc = lj_chan_recv(L, ch, &out);
+  rc = lj_chan_recv_timeout(L, ch, &out, ns);
   threading_push_recv(L, rc, &out);
   return 2;
 }

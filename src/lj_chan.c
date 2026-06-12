@@ -12,7 +12,9 @@
 #include "lj_safepoint.h"
 #include "lj_tg.h"
 
+#include <errno.h>
 #include <limits.h>
+#include <time.h>
 
 #define LJ_CHAN_SPINS	64
 
@@ -72,6 +74,55 @@ static void chan_wait(lua_State *L, LJChan *ch)
     la_store8_rlx(&tg->in_native, 0);
 }
 
+static int64_t chan_now_ns(void)
+{
+  struct timespec ts;
+  if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0)
+    return 0;
+  return (int64_t)ts.tv_sec * 1000000000ll + (int64_t)ts.tv_nsec;
+}
+
+static int64_t chan_deadline_ns(int64_t ns)
+{
+  int64_t now = chan_now_ns();
+  if (ns > INT64_MAX - now)
+    return INT64_MAX;
+  return now + ns;
+}
+
+static int64_t chan_remaining_ns(int64_t deadline)
+{
+  int64_t now = chan_now_ns();
+  return deadline > now ? deadline - now : 0;
+}
+
+static int chan_wait_timeout(lua_State *L, LJChan *ch, int64_t ns)
+{
+  uint32_t f;
+  TGState *tg;
+  int rc;
+  if (ns <= 0)
+    return 1;
+  if (ns > 1000000)
+    ns = 1000000;
+  f = la_load32_acq(&ch->futex);
+  tg = L ? L2TG(L) : NULL;
+  if (tg)
+    lj_native_enter(tg);  /* 09 section 9.5: timed channel park. */
+  rc = la_futex_wait(&ch->futex, f, ns);
+  if (L)
+    (void)lj_native_leave(L);
+  else if (tg)
+    la_store8_rlx(&tg->in_native, 0);
+  return rc != 0 && errno == ETIMEDOUT;
+}
+
+static int chan_full_at(LJChan *ch, uint64_t pos)
+{
+  uint64_t deq = la_load64_acq(&ch->deq);
+  return (int64_t)(pos - deq) >= (int64_t)ch->cap;
+}
+
 static int chan_try_send_pos(LJChan *ch, cTValue *tv, uint64_t *ppos)
 {
   uint64_t pos;
@@ -84,6 +135,8 @@ static int chan_try_send_pos(LJChan *ch, cTValue *tv, uint64_t *ppos)
     LJChanSlot *slot = &ch->slot[(MSize)(pos & ch->mask)];
     uint64_t seq = la_load64_acq(&slot->seq);
     int64_t dif = (int64_t)(seq - pos);
+    if (chan_full_at(ch, pos))
+      return LJ_CHAN_FULL;
     if (dif == 0) {
       uint64_t expect = pos;
       if (la_load32_acq(&ch->closed))
@@ -103,6 +156,39 @@ static int chan_try_send_pos(LJChan *ch, cTValue *tv, uint64_t *ppos)
     } else {
       pos = la_load64_acq(&ch->enq);
     }
+  }
+}
+
+static int chan_cancel_rendezvous_send(LJChan *ch, uint64_t pos)
+{
+  uint64_t expect = pos;
+  if (la_cas64(&ch->deq, &expect, pos + 1u, LA_ACQ_REL, LA_ACQ)) {
+    LJChanSlot *slot = &ch->slot[(MSize)(pos & ch->mask)];
+    setnilV(&slot->tv);
+    la_store64_rel(&slot->seq, pos + ch->cap);
+    chan_wake(ch);
+    return 1;
+  }
+  return 0;
+}
+
+static int chan_wait_rendezvous_send(lua_State *L, LJChan *ch, uint64_t pos,
+				     int64_t deadline)
+{
+  uint32_t spins = 0;
+  for (;;) {
+    int64_t waitns;
+    if (la_load64_acq(&ch->deq) > pos || la_load32_acq(&ch->closed))
+      return LJ_CHAN_OK;
+    if (spins++ < LJ_CHAN_SPINS) {
+      la_cpu_pause();
+      continue;
+    }
+    waitns = chan_remaining_ns(deadline);
+    if (waitns == 0)
+      return chan_cancel_rendezvous_send(ch, pos) ? LJ_CHAN_TIMEOUT :
+						    LJ_CHAN_OK;
+    (void)chan_wait_timeout(L, ch, waitns);
   }
 }
 
@@ -175,6 +261,59 @@ int lj_chan_recv(lua_State *L, LJChan *ch, TValue *out)
       la_cpu_pause();
     else
       chan_wait(L, ch);
+  }
+}
+
+int lj_chan_send_timeout(lua_State *L, LJChan *ch, cTValue *tv, int64_t ns)
+{
+  uint32_t spins = 0;
+  int64_t deadline;
+  if (ns < 0)
+    return lj_chan_send(L, ch, tv);
+  deadline = chan_deadline_ns(ns);
+  for (;;) {
+    uint64_t pos = 0;
+    int64_t waitns;
+    int rc;
+    rc = chan_try_send_pos(ch, tv, &pos);
+    if (rc == LJ_CHAN_OK) {
+      if (ch->rendezvous)
+	return chan_wait_rendezvous_send(L, ch, pos, deadline);
+      return LJ_CHAN_OK;
+    }
+    if (rc == LJ_CHAN_CLOSED)
+      return rc;
+    if (spins++ < LJ_CHAN_SPINS) {
+      la_cpu_pause();
+      continue;
+    }
+    waitns = chan_remaining_ns(deadline);
+    if (waitns == 0)
+      return LJ_CHAN_TIMEOUT;
+    (void)chan_wait_timeout(L, ch, waitns);
+  }
+}
+
+int lj_chan_recv_timeout(lua_State *L, LJChan *ch, TValue *out, int64_t ns)
+{
+  uint32_t spins = 0;
+  int64_t deadline;
+  if (ns < 0)
+    return lj_chan_recv(L, ch, out);
+  deadline = chan_deadline_ns(ns);
+  for (;;) {
+    int64_t waitns;
+    int rc = lj_chan_try_recv(ch, out);
+    if (rc == LJ_CHAN_OK || rc == LJ_CHAN_CLOSED)
+      return rc;
+    if (spins++ < LJ_CHAN_SPINS) {
+      la_cpu_pause();
+      continue;
+    }
+    waitns = chan_remaining_ns(deadline);
+    if (waitns == 0)
+      return LJ_CHAN_TIMEOUT;
+    (void)chan_wait_timeout(L, ch, waitns);
   }
 }
 

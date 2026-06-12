@@ -12,6 +12,7 @@
 #define LJ_CHAN_CLOSED		1
 #define LJ_CHAN_FULL		2
 #define LJ_CHAN_EMPTY		3
+#define LJ_CHAN_TIMEOUT		4
 
 typedef struct LJChanSlot {
   LJ_ALIGN(16) uint64_t seq;
@@ -37,6 +38,10 @@ LJ_FUNC int lj_chan_try_send(LJChan *ch, cTValue *tv);
 LJ_FUNC int lj_chan_try_recv(LJChan *ch, TValue *out);
 LJ_FUNC int lj_chan_send(lua_State *L, LJChan *ch, cTValue *tv);
 LJ_FUNC int lj_chan_recv(lua_State *L, LJChan *ch, TValue *out);
+LJ_FUNC int lj_chan_send_timeout(lua_State *L, LJChan *ch, cTValue *tv,
+				 int64_t ns);
+LJ_FUNC int lj_chan_recv_timeout(lua_State *L, LJChan *ch, TValue *out,
+				 int64_t ns);
 LJ_FUNC int lj_chan_peek(LJChan *ch, TValue *out);
 LJ_FUNC void lj_chan_close(LJChan *ch);
 LJ_FUNC int lj_chan_closed(LJChan *ch);

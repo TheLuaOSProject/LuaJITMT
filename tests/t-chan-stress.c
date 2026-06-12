@@ -95,12 +95,44 @@ static void test_basic(void)
   setintV(&in, 42);
   assert(lj_chan_try_recv(ch, &out) == LJ_CHAN_EMPTY);
   assert(lj_chan_try_send(ch, &in) == LJ_CHAN_OK);
+  setintV(&in, 43);
+  assert(lj_chan_try_send(ch, &in) == LJ_CHAN_OK);
+  setintV(&in, 44);
+  assert(lj_chan_try_send(ch, &in) == LJ_CHAN_OK);
+  setintV(&in, 45);
+  assert(lj_chan_try_send(ch, &in) == LJ_CHAN_OK);
+  assert(lj_chan_send_timeout(NULL, ch, &in, 0) == LJ_CHAN_TIMEOUT);
   assert(lj_chan_try_recv(ch, &out) == LJ_CHAN_OK);
   assert(tv_to_int(&out) == 42);
+  assert(lj_chan_try_recv(ch, &out) == LJ_CHAN_OK);
+  assert(lj_chan_try_recv(ch, &out) == LJ_CHAN_OK);
+  assert(lj_chan_try_recv(ch, &out) == LJ_CHAN_OK);
+  assert(lj_chan_recv_timeout(NULL, ch, &out, 0) == LJ_CHAN_TIMEOUT);
   lj_chan_close(ch);
   assert(lj_chan_closed(ch));
   assert(lj_chan_try_send(ch, &in) == LJ_CHAN_CLOSED);
   assert(lj_chan_try_recv(ch, &out) == LJ_CHAN_CLOSED);
+  assert(lj_chan_recv_timeout(NULL, ch, &out, 0) == LJ_CHAN_CLOSED);
+  free(ch);
+}
+
+static void test_capacity_one(void)
+{
+  LJChan *ch = (LJChan *)malloc(lj_chan_memsize(1));
+  TValue in, out;
+  assert(ch != NULL);
+  lj_chan_init(ch, 1);
+  assert(ch->cap == 1);
+  setintV(&in, 1);
+  assert(lj_chan_send_timeout(NULL, ch, &in, -1) == LJ_CHAN_OK);
+  setintV(&in, 2);
+  assert(lj_chan_send_timeout(NULL, ch, &in, 0) == LJ_CHAN_TIMEOUT);
+  assert(lj_chan_recv_timeout(NULL, ch, &out, 0) == LJ_CHAN_OK);
+  assert(tv_to_int(&out) == 1);
+  assert(lj_chan_send_timeout(NULL, ch, &in, 0) == LJ_CHAN_OK);
+  assert(lj_chan_recv_timeout(NULL, ch, &out, 0) == LJ_CHAN_OK);
+  assert(tv_to_int(&out) == 2);
+  assert(lj_chan_recv_timeout(NULL, ch, &out, 0) == LJ_CHAN_TIMEOUT);
   free(ch);
 }
 
@@ -114,6 +146,9 @@ static void test_rendezvous(void)
   lj_chan_init(ch, 0);
   assert(ch->cap == 1);
   assert(ch->rendezvous == 1);
+  setintV(&out, 99);
+  assert(lj_chan_send_timeout(NULL, ch, &out, 0) == LJ_CHAN_TIMEOUT);
+  assert(lj_chan_recv_timeout(NULL, ch, &out, 0) == LJ_CHAN_TIMEOUT);
   ctx.ch = ch;
   ctx.sent = 0;
   assert(pthread_create(&sender, NULL, rendezvous_sender, &ctx) == 0);
@@ -165,6 +200,7 @@ static void test_stress(void)
 int main(void)
 {
   test_basic();
+  test_capacity_one();
   test_rendezvous();
   test_stress();
   printf("t-chan-stress OK: bounded MPMC channel substrate verified\n");
