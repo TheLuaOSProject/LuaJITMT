@@ -194,7 +194,12 @@
   _(IFUNCV,	rbase,	___,	___,	___) \
   _(JFUNCV,	rbase,	___,	lit,	___) \
   _(FUNCC,	rbase,	___,	___,	___) \
-  _(FUNCCW,	rbase,	___,	___,	___)
+  _(FUNCCW,	rbase,	___,	___,	___) \
+  \
+  /* Dormant local cell ops. */ \
+  _(CNEW,	dst,	___,	___,	___) \
+  _(CGET,	dst,	___,	var,	___) \
+  _(CSET,	var,	___,	var,	___)
 
 /* Bytecode opcode numbers. */
 typedef enum {

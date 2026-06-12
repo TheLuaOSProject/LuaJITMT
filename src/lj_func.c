@@ -75,14 +75,22 @@ static GCupval *func_finduv(lua_State *L, TValue *slot)
 }
 
 /* Create an empty and closed upvalue. */
-static GCupval *func_emptyuv(lua_State *L)
+static GCupval *func_newuvclosed(lua_State *L)
 {
   GCupval *uv = (GCupval *)lj_mem_newgco(L, sizeof(GCupval));
   uv->gct = ~LJ_TUPVAL;
   uv->closed = 1;
   setnilV(&uv->tv);
   setmref(uv->v, &uv->tv);
+  uv->immutable = 0;
+  uv->dhash = 0;
   return uv;
+}
+
+GCupval *LJ_FASTCALL lj_func_newuvcell(lua_State *L)
+{
+  lj_gc_check_fixtop(L);
+  return func_newuvclosed(L);
 }
 
 /* Create a closed upvalue initialized from a stack slot. */
@@ -93,6 +101,8 @@ static GCupval *func_snapshotuv(lua_State *L, const TValue *slot)
   uv->closed = 1;
   copyTV(L, &uv->tv, slot);
   setmref(uv->v, &uv->tv);
+  uv->immutable = 0;
+  uv->dhash = 0;
   return uv;
 }
 
@@ -160,7 +170,7 @@ GCfunc *lj_func_newL_empty(lua_State *L, GCproto *pt, GCtab *env)
   MSize i, nuv = pt->sizeuv;
   /* NOBARRIER: The GCfunc is new (marked white). */
   for (i = 0; i < nuv; i++) {
-    GCupval *uv = func_emptyuv(L);
+    GCupval *uv = func_newuvclosed(L);
     int32_t v = proto_uv(pt)[i];
     uv->immutable = ((v / PROTO_UV_IMMUTABLE) & 1);
     uv->dhash = (uint32_t)(uintptr_t)pt ^ (v << 24);
@@ -188,10 +198,16 @@ GCfunc *lj_func_newL_gc(lua_State *L, GCproto *pt, GCfuncL *parent)
     GCupval *uv;
     if ((v & PROTO_UV_LOCAL)) {
       TValue *slot = base + (v & 0xff);
-      uv = la_load32_acq(&G(L)->mt_active) ?
-	   func_snapshotuv(L, slot) : func_finduv(L, slot);
-      uv->immutable = ((v / PROTO_UV_IMMUTABLE) & 1);
-      uv->dhash = (uint32_t)(uintptr_t)mref(parent->pc, char) ^ (v << 24);
+      if (itype(slot) == LJ_TUPVAL) {
+	uv = gco2uv(gcV(slot));
+	lj_assertL(uv->closed && uvval(uv) == &uv->tv,
+		   "bad local cell upvalue");
+      } else {
+	uv = la_load32_acq(&G(L)->mt_active) ?
+	     func_snapshotuv(L, slot) : func_finduv(L, slot);
+	uv->immutable = ((v / PROTO_UV_IMMUTABLE) & 1);
+	uv->dhash = (uint32_t)(uintptr_t)mref(parent->pc, char) ^ (v << 24);
+      }
     } else {
       uv = &gcref(puv[v])->uv;
     }

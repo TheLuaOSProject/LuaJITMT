@@ -3647,6 +3647,67 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov [BASE+RA*8], RD
     |  ins_next
     break;
+  case BC_CNEW:
+    |  ins_AD	// RA = dst
+    |  mov L:RB, SAVE_L
+    |  mov L:RB->base, BASE
+    |  mov L:CARG1, L:RB
+    |  mov SAVE_PC, PC
+    |  call extern lj_func_newuvcell	// (lua_State *L)
+    |  mov BASE, L:RB->base
+    |  movzx RAd, PC_RA
+    |  settp UPVAL:RC, LJ_TUPVAL
+    |  mov [BASE+RA*8], UPVAL:RC
+    |  ins_next
+    break;
+  case BC_CGET:
+    |  ins_AD	// RA = dst, RD = local cell
+    |  mov UPVAL:RB, [BASE+RD*8]
+    |  cleartp UPVAL:RB
+    |  mov RB, UPVAL:RB->v
+    |  mov RD, [RB]
+    |  mov [BASE+RA*8], RD
+    |  ins_next
+    break;
+  case BC_CSET:
+#define TV2MARKOFS \
+ ((int32_t)offsetof(GCupval, marked)-(int32_t)offsetof(GCupval, tv))
+    |  ins_AD	// RA = local cell, RD = src
+    |  mov UPVAL:RB, [BASE+RA*8]
+    |  cleartp UPVAL:RB
+    |  mov RB, UPVAL:RB->v
+    |  mov RA, [BASE+RD*8]
+    |  mov [RB], RA
+    |  // Check barrier for closed upvalue cell.
+    |  mov RD, RA
+    |  sar RD, 47
+    |  sub RDd, LJ_TISGCV
+    |  cmp RDd, LJ_TNUMX - LJ_TISGCV			// tvisgcv(v)
+    |  jbe >1
+    |  cmp TGMARK, 0
+    |  jnz >2
+    |  cleartp GCOBJ:RA
+    |  test byte [RB+TV2MARKOFS], LJ_GC_BLACK		// isblack(uv)
+    |  jz >1
+    |  test byte GCOBJ:RA->gch.marked, LJ_GC_WHITES	// iswhite(v)
+    |  jz >1
+    |1:
+    |  ins_next
+    |
+    |2:
+    |  // Crossed a write barrier. Move the barrier forward.
+    |.if not X64WIN
+    |  mov CARG2, RB
+    |  mov RB, BASE			// Save BASE.
+    |.else
+    |  xchg CARG2, RB			// Save BASE (CARG2 == BASE).
+    |.endif
+    |  lea GL:CARG1, [DISPATCH+TG_DISP2G]
+    |  call extern lj_gc_pubuv	// (global_State *g, TValue *tv)
+    |  mov BASE, RB			// Restore BASE.
+    |  jmp <1
+    break;
+#undef TV2MARKOFS
   case BC_USETV:
 #define TV2MARKOFS \
  ((int32_t)offsetof(GCupval, marked)-(int32_t)offsetof(GCupval, tv))

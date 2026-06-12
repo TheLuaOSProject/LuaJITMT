@@ -14,6 +14,7 @@
 #include "lj_state.h"
 #include "lj_thr.h"
 #include "lj_tg.h"
+#include "lj_gc.h"
 #include "lj_frame.h"
 #include "lj_bc.h"
 #include "lj_strfmt.h"
@@ -271,6 +272,7 @@ restart:
     } else if (bcmode_a(op) == BCMdst && ra == slot) {
       switch (bc_op(ins)) {
       case BC_MOV:
+      case BC_CGET:
 	if (ra == slot) { slot = bc_d(ins); goto restart; }
 	break;
       case BC_GGET:
@@ -414,6 +416,18 @@ static lua_State *debug_errstate(lua_State *L)
   return cur && G(cur) == G(L) ? cur : L;
 }
 
+static TValue *debug_localcell(TValue *o, GCupval **uvp)
+{
+  if (itype(o) == LJ_TUPVAL) {
+    GCupval *uv = gco2uv(gcV(o));
+    lj_assertX(uv->closed && uvval(uv) == &uv->tv, "bad local cell upvalue");
+    *uvp = uv;
+    return uvval(uv);
+  }
+  *uvp = NULL;
+  return o;
+}
+
 LUA_API const char *lua_getlocal(lua_State *L, const lua_Debug *ar, int n)
 {
   LJStateClaim claim;
@@ -423,6 +437,9 @@ LUA_API const char *lua_getlocal(lua_State *L, const lua_Debug *ar, int n)
   if (ar) {
     TValue *o = debug_localname(L, ar, &name, (BCReg)n);
     if (name) {
+      GCupval *uv;
+      o = debug_localcell(o, &uv);
+      UNUSED(uv);
       copyTV(L, L->top, o);
       incr_top(L);
     }
@@ -441,8 +458,16 @@ LUA_API const char *lua_setlocal(lua_State *L, const lua_Debug *ar, int n)
   if (!lj_state_tryclaim(L, lj_thr_current_id(G(L)), &claim))
     lj_err_callermsg(debug_errstate(L), "thread busy");
   o = debug_localname(L, ar, &name, (BCReg)n);
-  if (name)
-    copyTV(L, o, L->top-1);
+  if (name) {
+    GCupval *uv;
+    o = debug_localcell(o, &uv);
+    if (uv) {
+      copyTVrel(L, o, L->top-1);
+      lj_gc_pubuv(G(L), o);
+    } else {
+      copyTV(L, o, L->top-1);
+    }
+  }
   L->top--;
   lj_state_dropclaim(&claim);
   return name;
