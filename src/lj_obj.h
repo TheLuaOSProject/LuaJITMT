@@ -312,6 +312,7 @@ typedef struct StrTabHdr {
   MSize mask;		/* String hash mask (size of hash table - 1). */
   MSize resize;		/* Reserved resize claim for M5 lock-free interning. */
   MSize copy_cursor;	/* Reserved resize copy cursor. */
+  uint64_t retire_epoch;  /* Safepoint epoch when retired. */
   struct StrTabHdr *retired_next;  /* Retired string table headers. */
   GCRef bucket[1];	/* String hash table anchors. */
 } StrTabHdr;

@@ -295,12 +295,12 @@ Current implementation status: bucket publication now uses release CAS under
 an active-user pin on `StrTabHdr.resize`. Resize claims the high bit even when
 active interners are present, then drains the active count before copying and
 publishing the replacement header; new entrants spin on the claimed bit. The
-old header is retained on a raw retired-header list and freed only at state
-close, avoiding immediate RCU use-after-free until the real grace-period
-retirement machinery from 05 §5.9 exists. The original full helping protocol
-above is still the target; bounded helper copy, cross-table resize
-participation, grace-period retirement, and Harris dead-link sweep remain
-follow-up work.
+old header is retained on a raw retired-header list and freed after a later
+completed safepoint handshake epoch, avoiding immediate RCU use-after-free for
+threads that loaded the old header before pinning it. The original full helping
+protocol above is still the target; bounded helper copy, cross-table resize
+participation, generic deferred-free buckets for all raw gens, and Harris
+dead-link sweep remain follow-up work.
 ### 6.5.3 sid / idreseed: StrID wraps are handled as today at full-resize
 points (lj_str.c:129+ logic) under the resize claim.
 ### 6.5.4 Sweep

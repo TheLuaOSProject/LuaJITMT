@@ -175,6 +175,11 @@ restart:
   while (tg != NULL) {
     TGState *next = (TGState *)la_loadptr_acq((void *const *)&tg->next_tg);
     if (la_load8_acq(&tg->tg_flags) & TGF_DEAD) {
+      if (tg->tg_flags & TGF_ARENA_INTERNAL) {
+	prev = tg;  /* Keep owner lookup live until allocator transfer exists. */
+	tg = next;
+	continue;
+      }
       if (prev) {
 	la_storeptr_rel((void **)&prev->next_tg, next);
       } else {

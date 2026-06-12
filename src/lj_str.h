@@ -37,6 +37,8 @@ LJ_FUNC void lj_str_resize(lua_State *L, MSize newmask);
 LJ_FUNCA GCstr *lj_str_new(lua_State *L, const char *str, size_t len);
 LJ_FUNC void LJ_FASTCALL lj_str_free(global_State *g, GCstr *s);
 LJ_FUNC void LJ_FASTCALL lj_str_init(lua_State *L);
+LJ_FUNC uint32_t lj_str_reclaim_retired(global_State *g,
+					uint64_t completed_epoch);
 LJ_FUNC void lj_str_freetab(global_State *g);
 
 #define lj_str_newz(L, s)	(lj_str_new(L, s, strlen(s)))

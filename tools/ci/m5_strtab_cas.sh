@@ -21,7 +21,12 @@ for needle in \
   'strtab_leave' \
   'strtab_retire' \
   'retired_next' \
+  'retire_epoch' \
   'g->str.retired' \
+  'lj_str_reclaim_retired' \
+  'la_xchgptr_acqrel((void **)&g->str.retired' \
+  'la_load64_acq(&hdr->retire_epoch) < completed_epoch' \
+  'lj_str_reclaim_retired(g, epoch)' \
   'gc_mark_strtab_mem' \
   'gc2_mark_strtab_mem' \
   'LJ_STRTAB_ACTIVE_MASK' \
@@ -39,6 +44,11 @@ done
 
 if rg -F -q 'lj_mem_free(g, oldhdr' "$ROOT/src/lj_str.c"; then
   echo "guardrail: string table resize must retire old headers, not free them immediately" >&2
+  exit 1
+fi
+
+if [ "$(rg -F 'lj_mem_free(g, hdr, lj_str_tabbytes(hdr))' "$ROOT/src/lj_str.c" | wc -l)" -ne 3 ]; then
+  echo "guardrail: retired string table headers should only be freed by reclaim and state close" >&2
   exit 1
 fi
 

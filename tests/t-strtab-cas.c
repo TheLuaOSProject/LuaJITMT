@@ -10,6 +10,7 @@
 #include "lauxlib.h"
 
 #include "lj_atomic.h"
+#include "lj_gc2.h"
 #include "lj_obj.h"
 #include "lj_str.h"
 
@@ -21,6 +22,7 @@ int main(void)
   global_State *g;
   StrTabHdr *hdr;
   MSize oldmask, wantmask;
+  uint64_t retire_epoch;
   GCstr *s1, *s2;
   int i;
 
@@ -53,6 +55,10 @@ int main(void)
   assert(g->str.tabh->resize == 0);
   assert(g->str.retired == hdr);
   assert(hdr->retired_next == NULL);
+  retire_epoch = g->gc2.hs_epoch;
+  assert(hdr->retire_epoch == retire_epoch);
+  assert(lj_str_reclaim_retired(g, retire_epoch) == 0);
+  assert(g->str.retired == hdr);
   assert(lj_str_new(L, "m5-strtab-cas-same",
 		    strlen("m5-strtab-cas-same")) == s1);
 
@@ -62,8 +68,11 @@ int main(void)
     assert(lj_str_new(L, buf, strlen(buf)) != NULL);
   }
   assert(g->str.tabh->resize == 0);
+  (void)lj_gc2_handshake(g, LJ_GC2_HS_FLUSH_SSB);
+  assert(g->gc2.hs_epoch > retire_epoch);
+  assert(g->str.retired == NULL);
 
   lua_close(L);
-  printf("t-strtab-cas OK: active-drain resize claim and duplicate intern guard verified\n");
+  printf("t-strtab-cas OK: active-drain resize claim, epoch retire, and duplicate intern guard verified\n");
   return 0;
 }

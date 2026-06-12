@@ -12,6 +12,7 @@
 #include "lj_err.h"
 #include "lj_gc2.h"
 #include "lj_safepoint.h"
+#include "lj_str.h"
 #include "lj_tg.h"
 #include "lj_trace.h"
 
@@ -143,6 +144,7 @@ static uint32_t safepoint_signal_late(global_State *g, uint32_t actions,
 static void safepoint_ack_native(global_State *g)
 {
   TGState *tg;
+  TGState *self = lj_thr_get_tg();
   for (tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
        tg != NULL;
        tg = (TGState *)la_loadptr_acq((void *const *)&tg->next_tg)) {
@@ -150,10 +152,10 @@ static void safepoint_ack_native(global_State *g)
     if (la_load8_acq(&tg->tg_flags) & TGF_DEAD)  /* 05 section 5.4.1. */
       continue;
     L = (lua_State *)la_loadptr_acq((void *const *)&tg->cur_L);
-    if (la_load8_acq(&tg->in_native) && L)
+    if (tg == self)
+      safepoint_ack_tg(g, tg);  /* Leader self-ack is a real poll. */
+    else if (la_load8_acq(&tg->in_native) && L)
       safepoint_ack_tg(g, tg);  /* 05 section 5.4.3 remote native ack. */
-    else if (L)
-      lj_safepoint_ack(L);  /* Deterministic single-mutator scaffold. */
   }
 }
 
@@ -189,5 +191,6 @@ uint32_t lj_safepoint_handshake(global_State *g, uint32_t actions)
     la_futex_wait(&g->gc2.hs_pending, la_load32_rlx(&g->gc2.hs_pending),
 		  1000000);
   }
+  (void)lj_str_reclaim_retired(g, epoch);  /* 05 section 5.9 SMR drain. */
   return signaled;
 }

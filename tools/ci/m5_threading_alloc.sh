@@ -25,6 +25,16 @@ do
 done
 
 for needle in \
+  'tg->tg_flags & TGF_ARENA_INTERNAL' \
+  'Keep owner lookup live until allocator transfer exists'
+do
+  if ! rg -F -q "$needle" "$ROOT/src/lj_tg.c"; then
+    echo "guardrail: dead arena-internal TGs must stay findable for owner-routed frees: $needle" >&2
+    exit 1
+  fi
+done
+
+for needle in \
   'gc2_tg_for_mem' \
   'gc2_clear_marks_all' \
   'lj_tg_find_owner(g, owner_tid)'
