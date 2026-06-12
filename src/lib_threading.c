@@ -217,6 +217,82 @@ LJLIB_CF(threading_thread___tostring)
 LJLIB_PUSH("threading.thread") LJLIB_SET(__metatable)
 LJLIB_PUSH(top-1) LJLIB_SET(__index)
 
+/* -- Mutex methods ------------------------------------------------------- */
+
+#define LJ_MUTEX_UNLOCKED	0u
+#define LJ_MUTEX_LOCKED		1u
+#define LJ_MUTEX_WAITING	2u
+
+typedef struct LJMutex {
+  uint32_t state;
+} LJMutex;
+
+static LJMutex *threading_tomutex(lua_State *L)
+{
+  if (!(L->base < L->top && tvisudata(L->base) &&
+	udataV(L->base)->udtype == UDTYPE_MUTEX))
+    lj_err_argtype(L, 1, "threading.mutex");
+  return (LJMutex *)uddata(udataV(L->base));
+}
+
+#define LJLIB_MODULE_threading_mutex
+
+LJLIB_CF(threading_mutex_lock)
+{
+  LJMutex *m = threading_tomutex(L);
+  uint32_t expect = LJ_MUTEX_UNLOCKED;
+  if (la_cas32(&m->state, &expect, LJ_MUTEX_LOCKED, LA_ACQ_REL, LA_ACQ))
+    return 0;
+  for (;;) {
+    uint32_t state = la_load32_acq(&m->state);
+    if (state == LJ_MUTEX_UNLOCKED) {
+      expect = LJ_MUTEX_UNLOCKED;
+      if (la_cas32(&m->state, &expect, LJ_MUTEX_WAITING,
+		   LA_ACQ_REL, LA_ACQ))
+	return 0;
+      continue;
+    }
+    if (state == LJ_MUTEX_LOCKED) {
+      expect = LJ_MUTEX_LOCKED;
+      (void)la_cas32(&m->state, &expect, LJ_MUTEX_WAITING,
+		     LA_ACQ_REL, LA_ACQ);
+    }
+    lj_native_enter(L2TG(L));
+    (void)la_futex_wait(&m->state, LJ_MUTEX_WAITING, -1);
+    (void)lj_native_leave(L);
+  }
+}
+
+LJLIB_CF(threading_mutex_trylock)
+{
+  LJMutex *m = threading_tomutex(L);
+  uint32_t expect = LJ_MUTEX_UNLOCKED;
+  setboolV(L->top++, la_cas32(&m->state, &expect, LJ_MUTEX_LOCKED,
+			      LA_ACQ_REL, LA_ACQ));
+  return 1;
+}
+
+LJLIB_CF(threading_mutex_unlock)
+{
+  LJMutex *m = threading_tomutex(L);
+  uint32_t old = la_xchg32_acqrel(&m->state, LJ_MUTEX_UNLOCKED);
+  if (old == LJ_MUTEX_UNLOCKED)
+    lj_err_callermsg(L, "unlock of unlocked mutex");
+  if (old == LJ_MUTEX_WAITING)
+    la_futex_wake(&m->state, 1);
+  return 0;
+}
+
+LJLIB_CF(threading_mutex___tostring)
+{
+  (void)threading_tomutex(L);
+  lua_pushliteral(L, "threading.mutex");
+  return 1;
+}
+
+LJLIB_PUSH("threading.mutex") LJLIB_SET(__metatable)
+LJLIB_PUSH(top-1) LJLIB_SET(__index)
+
 /* -- Channel methods ----------------------------------------------------- */
 
 static LJChan *threading_tochan(lua_State *L)
@@ -304,7 +380,7 @@ LJLIB_PUSH(top-1) LJLIB_SET(__index)
 
 #define LJLIB_MODULE_threading
 
-LJLIB_PUSH(top-3) LJLIB_SET(!)  /* Set environment to thread methods. */
+LJLIB_PUSH(top-4) LJLIB_SET(!)  /* Set environment to thread methods. */
 
 LJLIB_CF(threading_cpucount)
 {
@@ -408,6 +484,22 @@ LJLIB_CF(threading_current)
   return 1;
 }
 
+LJLIB_PUSH(top-3) LJLIB_SET(!)  /* Set environment to mutex methods. */
+
+LJLIB_CF(threading_mutex)
+{
+  GCtab *env = tabref(curr_func(L)->c.env);
+  GCudata *ud = lj_udata_new(L, sizeof(LJMutex), env);
+  LJMutex *m = (LJMutex *)uddata(ud);
+  ud->udtype = UDTYPE_MUTEX;
+  /* NOBARRIER: The GCudata is new (marked white). */
+  setgcref(ud->metatable, obj2gco(env));
+  m->state = LJ_MUTEX_UNLOCKED;
+  setudataV(L, L->top++, ud);
+  lj_gc_check(L);
+  return 1;
+}
+
 LJLIB_PUSH(top-2) LJLIB_SET(!)  /* Set environment to channel methods. */
 
 LJLIB_CF(threading_channel)
@@ -443,6 +535,7 @@ LUALIB_API int luaopen_threading(lua_State *L)
   LJ_LIB_REG(L, NULL, threading_thread);
   lua_createtable(L, 0, 0);
   lua_setfield(L, -2, THREADING_THREADS_KEY);
+  LJ_LIB_REG(L, NULL, threading_mutex);
   LJ_LIB_REG(L, NULL, threading_channel);
   LJ_LIB_REG(L, LUA_THREADINGLIBNAME, threading);
   return 1;

@@ -344,6 +344,7 @@ enum {
   UDTYPE_BUFFER,	/* String buffer. */
   UDTYPE_CHANNEL,	/* threading.channel object. */
   UDTYPE_THREAD,	/* threading.thread object. */
+  UDTYPE_MUTEX,		/* threading.mutex object. */
   UDTYPE__MAX
 };
 
