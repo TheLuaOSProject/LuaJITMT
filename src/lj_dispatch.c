@@ -106,6 +106,38 @@ void lj_dispatch_init_hotcount(global_State *g)
 #define DISPMODE_REC	0x20	/* Recording active. */
 #define DISPMODE_PROF	0x40	/* Profiling active. */
 
+static void dispatch_setins_cells(ASMFunction *disp, ASMFunction f)
+{
+  uint32_t i;
+  for (i = BC_CNEW; i <= BC_CSET; i++)
+    disp[i] = f;
+}
+
+static void dispatch_copyins_cells(ASMFunction *disp)
+{
+  uint32_t i;
+  for (i = BC_CNEW; i <= BC_CSET; i++)
+    disp[i] = disp[GG_LEN_DDISP+i];
+}
+
+static void dispatch_setcall(ASMFunction *disp, ASMFunction f)
+{
+  uint32_t i;
+  for (i = BC_FUNCF; i <= BC_FUNCCW; i++)
+    disp[i] = f;
+  for (i = BC__MAX; i < GG_LEN_DDISP; i++)
+    disp[i] = f;
+}
+
+static void dispatch_copycall(ASMFunction *disp)
+{
+  uint32_t i;
+  for (i = BC_FUNCF; i <= BC_FUNCCW; i++)
+    disp[i] = makeasmfunc(lj_bc_ofs[i]);
+  for (i = BC__MAX; i < GG_LEN_DDISP; i++)
+    disp[i] = makeasmfunc(lj_bc_ofs[i]);
+}
+
 /* Update dispatch table depending on various flags. */
 void LJ_FASTCALL lj_dispatch_update(global_State *g, int nolock)
 {
@@ -157,7 +189,8 @@ void LJ_FASTCALL lj_dispatch_update(global_State *g, int nolock)
       /* Need to update the whole table. */
       if (!(mode & DISPMODE_INS)) {  /* No ins dispatch? */
 	/* Copy static dispatch table to dynamic dispatch table. */
-	memcpy(&disp[0], &disp[GG_LEN_DDISP], GG_LEN_SDISP*sizeof(ASMFunction));
+	memcpy(&disp[0], &disp[GG_LEN_DDISP], BC_FUNCF*sizeof(ASMFunction));
+	dispatch_copyins_cells(disp);
 	/* Overwrite with dynamic return dispatch. */
 	if ((mode & DISPMODE_RET)) {
 	  disp[BC_RETM] = lj_vm_rethook;
@@ -170,8 +203,9 @@ void LJ_FASTCALL lj_dispatch_update(global_State *g, int nolock)
 	ASMFunction f = (mode & DISPMODE_PROF) ? lj_vm_profhook :
 			(mode & DISPMODE_REC) ? lj_vm_record : lj_vm_inshook;
 	uint32_t i;
-	for (i = 0; i < GG_LEN_SDISP; i++)
+	for (i = 0; i < BC_FUNCF; i++)
 	  disp[i] = f;
+	dispatch_setins_cells(disp, f);
       }
     } else if (!(mode & DISPMODE_INS)) {
       /* Otherwise set dynamic counting ins. */
@@ -195,13 +229,10 @@ void LJ_FASTCALL lj_dispatch_update(global_State *g, int nolock)
 
     /* Set dynamic call dispatch. */
     if ((oldmode ^ mode) & DISPMODE_CALL) {  /* Update the whole table? */
-      uint32_t i;
       if ((mode & DISPMODE_CALL) == 0) {  /* No call hooks? */
-	for (i = GG_LEN_SDISP; i < GG_LEN_DDISP; i++)
-	  disp[i] = makeasmfunc(lj_bc_ofs[i]);
+	dispatch_copycall(disp);
       } else {
-	for (i = GG_LEN_SDISP; i < GG_LEN_DDISP; i++)
-	  disp[i] = lj_vm_callhook;
+	dispatch_setcall(disp, lj_vm_callhook);
       }
     }
     if (!(mode & DISPMODE_CALL)) {  /* Overwrite dynamic counting ins. */

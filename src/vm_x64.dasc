@@ -2606,8 +2606,10 @@ static void build_subroutines(BuildCtx *ctx)
   |  je >5
   |  cmp OP, BC_FUNCF			// Function header?
   |  jb >3
-  |  cmp OP, BC_FUNCC+2			// Fast function?
+  |  cmp OP, BC__MAX			// Fast function?
   |  jae >4
+  |  cmp OP, BC_FUNCCW
+  |  ja >3				// Local cell ops are ordinary bytecode.
   |2:
   |  mov RCd, MULTRES			// RC/RD holds nres+1.
   |3:

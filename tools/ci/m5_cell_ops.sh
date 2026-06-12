@@ -4,7 +4,7 @@ set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 JOBS=${JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)}
-LUA_PATH_GUARD="$ROOT/src/?.lua;;"
+LUA_PATH_GUARD="$ROOT/src/?.lua;$ROOT/src/jit/?.lua;;"
 OUT=${TMPDIR:-/tmp}/lj_m5_cell_ops_bc.$$
 trap 'rm -f "$OUT"' EXIT HUP INT TERM
 
@@ -26,7 +26,10 @@ for needle in \
   'case BC_CNEW:' \
   'call extern lj_func_newuvcell' \
   'case BC_CGET:' \
-  'case BC_CSET:'
+  'case BC_CSET:' \
+  'cmp OP, BC__MAX' \
+  'cmp OP, BC_FUNCCW' \
+  'Local cell ops are ordinary bytecode.'
 do
   if ! rg -F -q "$needle" "$ROOT/src/vm_x64.dasc"; then
     echo "guardrail: missing x64 local-cell VM marker: $needle" >&2
@@ -81,8 +84,23 @@ do
 done
 
 for needle in \
+  '#define GG_LEN_SDISP	BC__MAX' \
+  'dispatch_setins_cells' \
+  'dispatch_copyins_cells' \
+  'dispatch_setcall' \
+  'for (i = BC_FUNCF; i <= BC_FUNCCW; i++)' \
+  'for (i = BC__MAX; i < GG_LEN_DDISP; i++)'
+do
+  if ! rg -F -q "$needle" "$ROOT/src/lj_tg.h" "$ROOT/src/lj_dispatch.c"; then
+    echo "guardrail: missing local-cell dispatch marker: $needle" >&2
+    exit 1
+  fi
+done
+
+for needle in \
   'IRT(IR_UREFC, IRT_PGC), slotref' \
-  'irt_isp32(IR(ir->op1)->t)'
+  'irt_isp32(IR(ir->op1)->t)' \
+  'bc_isfunc_or_ff'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_record.c" "$ROOT/src/lj_asm_x86.h"; then
     echo "guardrail: missing owner-cell JIT marker: $needle" >&2
@@ -140,6 +158,7 @@ assert(inner() == 1 and inner() == 2)
 LUA_PATH=$LUA_PATH_GUARD "$ROOT/src/luajit" -e '
 jit.flush()
 jit.opt.start("hotloop=1")
+local util = require"jit.util"
 local function run(n)
   local x = 0
   local function touch() return x end
@@ -148,6 +167,7 @@ local function run(n)
 end
 local v, f = run(200)
 assert(v == 200 and f() == 200)
+assert(util.traceinfo(1), "expected traced CGET/CSET owner loop")
 local v2, f2 = run(20)
 assert(v2 == 20 and f2() == 20)
 '
@@ -155,6 +175,7 @@ assert(v2 == 20 and f2() == 20)
 LUA_PATH=$LUA_PATH_GUARD "$ROOT/src/luajit" -e '
 jit.flush()
 jit.opt.start("hotloop=1")
+local util = require"jit.util"
 local function run(n)
   local x = {0}
   local function get() return x end
@@ -162,6 +183,7 @@ local function run(n)
   return get()[1]
 end
 assert(run(200) == 200)
+assert(util.traceinfo(1), "expected traced GC-valued CSET owner loop")
 collectgarbage()
 assert(run(20) == 20)
 '

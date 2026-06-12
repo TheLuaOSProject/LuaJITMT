@@ -469,7 +469,6 @@ static void expr_discharge(FuncState *fs, ExpDesc *e)
     return;
   } else if (e->k == VLOCAL) {
     if (var_is_captured(fs, e)) {
-      fs->flags |= PROTO_NOJIT;
       ins = BCINS_AD(BC_CGET, 0, e->u.s.info);
       goto emit;
     }
@@ -639,7 +638,6 @@ static BCReg bcreg_captured_toreg(FuncState *fs, BCReg reg, int *tmp)
 {
   if (bcreg_iscaptured(fs, reg)) {
     BCReg dst = fs->freereg;
-    fs->flags |= PROTO_NOJIT;
     bcreg_reserve(fs, 1);
     bcemit_AD(fs, BC_CGET, dst, reg);
     *tmp = 1;
@@ -657,7 +655,6 @@ static void bcemit_store(FuncState *fs, ExpDesc *var, ExpDesc *e)
     fs->ls->vstack[var->u.s.aux].info |= VSTACK_VAR_RW;
     if (var_is_captured(fs, var)) {
       BCReg ra = expr_toanyreg(fs, e);
-      fs->flags |= PROTO_NOJIT;
       bcemit_AD(fs, BC_CSET, var->u.s.info, ra);
       expr_free(fs, e);
       return;

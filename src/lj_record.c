@@ -1881,8 +1881,6 @@ static TRef rec_celluv(jit_State *J, cTValue *slot, TRef slotref, TRef val,
   uvp = gco2uv(gcV(slot));
   lj_assertJ(uvp->closed && uvval(uvp) == &uvp->tv,
 	     "bad local cell upvalue");
-  if (val == 0 && tvisgcv(uvval(uvp)))
-    lj_trace_err(J, LJ_TRERR_NYIBC);
   uh = hashrot(uvp->dhash, uvp->dhash + HASH_BIAS) & 0xff;
   uref = tref_ref(emitir(IRT(IR_UREFC, IRT_PGC), slotref, uh));
   if (val == 0) {
@@ -2320,7 +2318,7 @@ void lj_record_ins(jit_State *J)
   /* Need snapshot before recording next bytecode (e.g. after a store). */
   if (J->needsnap) {
     J->needsnap = 0;
-    if (J->pt && bc_op(*J->pc) < BC_FUNCF) lj_snap_purge(J);
+    if (J->pt && !bc_isfunc_or_ff(bc_op(*J->pc))) lj_snap_purge(J);
     lj_snap_add(J);
     J->mergesnap = 1;
   }

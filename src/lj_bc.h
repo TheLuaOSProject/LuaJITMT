@@ -231,6 +231,9 @@ LJ_STATIC_ASSERT((int)BC_FUNCF + 1 == (int)BC_IFUNCF);
 LJ_STATIC_ASSERT((int)BC_FUNCF + 2 == (int)BC_JFUNCF);
 LJ_STATIC_ASSERT((int)BC_FUNCV + 1 == (int)BC_IFUNCV);
 LJ_STATIC_ASSERT((int)BC_FUNCV + 2 == (int)BC_JFUNCV);
+LJ_STATIC_ASSERT((int)BC_FUNCC + 1 == (int)BC_FUNCCW);
+LJ_STATIC_ASSERT((int)BC_FUNCCW + 1 == (int)BC_CNEW);
+LJ_STATIC_ASSERT((int)BC_CNEW + 2 == (int)BC_CSET);
 
 /* This solves a circular dependency problem, change as needed. */
 #define FF_next_N	4
@@ -267,6 +270,16 @@ static LJ_AINLINE int bc_isret(BCOp op)
 static LJ_AINLINE int bc_isret_or_tail(BCOp op)
 {
   return (op == BC_CALLMT || op == BC_CALLT || bc_isret(op));
+}
+
+static LJ_AINLINE int bc_isfunc(BCOp op)
+{
+  return op >= BC_FUNCF && op <= BC_FUNCCW;
+}
+
+static LJ_AINLINE int bc_isfunc_or_ff(BCOp op)
+{
+  return bc_isfunc(op) || op >= BC__MAX;
 }
 
 LJ_DATA const uint16_t lj_bc_mode[];

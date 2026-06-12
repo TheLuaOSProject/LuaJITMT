@@ -26,7 +26,7 @@ typedef uint16_t HotCount;
 #define GG_NUM_ASMFF	57
 
 #define GG_LEN_DDISP	(BC__MAX + GG_NUM_ASMFF)
-#define GG_LEN_SDISP	BC_FUNCF
+#define GG_LEN_SDISP	BC__MAX
 #define GG_LEN_DISP	(GG_LEN_DDISP + GG_LEN_SDISP)
 
 #define TGF_ARENA_INTERNAL	0x01u

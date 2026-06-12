@@ -1016,7 +1016,7 @@ const BCIns *lj_snap_restore(jit_State *J, void *exptr)
   /* Compute current stack top. */
   switch (bc_op(*pc)) {
   default:
-    if (bc_op(*pc) < BC_FUNCF) {
+    if (!bc_isfunc_or_ff(bc_op(*pc))) {
       L->top = curr_topL(L);
       break;
     }

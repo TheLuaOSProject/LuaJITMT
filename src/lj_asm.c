@@ -2160,7 +2160,7 @@ static void asm_tail_link(ASMState *as)
       mres -= (int32_t)(1 + LJ_FR2 + bc_a(*pc) + bc_c(*pc)); break;
     case BC_RETM: mres -= (int32_t)(bc_a(*pc) + bc_d(*pc)); break;
     case BC_TSETM: mres -= (int32_t)bc_a(*pc); break;
-    default: if (bc_op(*pc) < BC_FUNCF) mres = 0; break;
+    default: if (!bc_isfunc_or_ff(bc_op(*pc))) mres = 0; break;
     }
     ra_allockreg(as, mres, RID_RET);  /* Return MULTRES or 0. */
   } else if (baseslot) {

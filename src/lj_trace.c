@@ -969,7 +969,7 @@ int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr)
     }
     return 0;
   default:
-    if (bc_op(*pc) >= BC_FUNCF)
+    if (bc_isfunc_or_ff(bc_op(*pc)))
       return (int)((BCReg)(L->top - L->base) + 1);
     return 0;
   }
