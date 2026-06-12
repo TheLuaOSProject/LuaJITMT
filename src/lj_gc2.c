@@ -7,6 +7,7 @@
 #define LUA_CORE
 
 #include "lj_obj.h"
+#include "lj_chan.h"
 #include "lj_gc2.h"
 #include "lj_gc.h"
 #include "lj_buf.h"
@@ -726,6 +727,12 @@ static void gc2_traverse_udata(global_State *g, GCudata *ud)
       gc2_markobj_worker(g, gcref(sbx->dict_str));
     if (gcref(sbx->dict_mt))
       gc2_markobj_worker(g, gcref(sbx->dict_mt));
+  }
+  if (ud->udtype == UDTYPE_CHANNEL) {
+    LJChan *ch = (LJChan *)uddata(ud);
+    uint32_t i;
+    for (i = 0; i < ch->cap; i++)
+      gc2_mark_tv_worker(g, &ch->slot[i].tv);  /* 09 section 9.5. */
   }
 }
 

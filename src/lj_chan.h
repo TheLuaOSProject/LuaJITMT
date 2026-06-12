@@ -37,6 +37,7 @@ LJ_FUNC int lj_chan_try_send(LJChan *ch, cTValue *tv);
 LJ_FUNC int lj_chan_try_recv(LJChan *ch, TValue *out);
 LJ_FUNC int lj_chan_send(lua_State *L, LJChan *ch, cTValue *tv);
 LJ_FUNC int lj_chan_recv(lua_State *L, LJChan *ch, TValue *out);
+LJ_FUNC int lj_chan_peek(LJChan *ch, TValue *out);
 LJ_FUNC void lj_chan_close(LJChan *ch);
 LJ_FUNC int lj_chan_closed(LJChan *ch);
 

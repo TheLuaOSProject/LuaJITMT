@@ -18,6 +18,7 @@
 #include "lj_atomic.h"
 #include "lj_gc.h"
 #include "lj_gc2.h"
+#include "lj_chan.h"
 #include "lj_err.h"
 #include "lj_buf.h"
 #include "lj_str.h"
@@ -310,6 +311,12 @@ static void gc_mark(global_State *g, GCobj *o)
 	gc_markobj(g, gcref(sbx->dict_str));
       if (gcref(sbx->dict_mt))
 	gc_markobj(g, gcref(sbx->dict_mt));
+    }
+    if (gco2ud(o)->udtype == UDTYPE_CHANNEL) {
+      LJChan *ch = (LJChan *)uddata(gco2ud(o));
+      uint32_t i;
+      for (i = 0; i < ch->cap; i++)
+	gc_marktv(g, &ch->slot[i].tv);  /* 09 section 9.5 channel slots. */
     }
   } else if (LJ_UNLIKELY(gct == ~LJ_TUPVAL)) {
     GCupval *uv = gco2uv(o);

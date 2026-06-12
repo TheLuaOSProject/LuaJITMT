@@ -178,6 +178,29 @@ int lj_chan_recv(lua_State *L, LJChan *ch, TValue *out)
   }
 }
 
+int lj_chan_peek(LJChan *ch, TValue *out)
+{
+  uint64_t pos;
+  if (!ch || !out)
+    return LJ_CHAN_CLOSED;
+  pos = la_load64_acq(&ch->deq);
+  for (;;) {
+    LJChanSlot *slot = &ch->slot[(MSize)(pos & ch->mask)];
+    uint64_t seq = la_load64_acq(&slot->seq);
+    int64_t dif = (int64_t)(seq - (pos + 1u));
+    if (dif == 0) {
+      *out = slot->tv;  /* 09 section 9.5: acquire seq publishes value. */
+      return LJ_CHAN_OK;
+    } else if (dif < 0) {
+      if (la_load32_acq(&ch->closed) && la_load64_acq(&ch->enq) <= pos)
+	return LJ_CHAN_CLOSED;
+      return LJ_CHAN_EMPTY;
+    } else {
+      pos = la_load64_acq(&ch->deq);
+    }
+  }
+}
+
 void lj_chan_close(LJChan *ch)
 {
   if (ch) {

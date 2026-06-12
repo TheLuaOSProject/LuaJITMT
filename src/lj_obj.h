@@ -342,6 +342,7 @@ enum {
   UDTYPE_IO_FILE,	/* I/O library FILE. */
   UDTYPE_FFI_CLIB,	/* FFI C library namespace. */
   UDTYPE_BUFFER,	/* String buffer. */
+  UDTYPE_CHANNEL,	/* threading.channel object. */
   UDTYPE__MAX
 };
 
