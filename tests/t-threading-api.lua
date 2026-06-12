@@ -116,6 +116,8 @@ assert(type(me) == "userdata")
 assert(type(me:id()) == "number")
 assert(me:id() > 0)
 assert(me:running() == true)
+local main_self_join = { me:join() }
+assert(main_self_join[1] == true and main_self_join[2] == nil)
 
 local worker = th.spawn(function(a, b) return a + b, nil, "x" end, 40, 2)
 assert(type(worker) == "userdata")
@@ -146,6 +148,13 @@ assert(slowres[1] == true and slowres[2] == "done")
 local self = th.spawn(function() return th.current():id() end)
 local sok, cid = self:join()
 assert(sok == true and cid == self:id() and cid ~= me:id())
+
+local self_joiner = th.spawn(function()
+  local ok, extra = th.current():join()
+  return ok, extra == nil
+end)
+local sjok, sjself, sjextra = self_joiner:join()
+assert(sjok == true and sjself == true and sjextra == true)
 
 local target = th.spawn(function()
   th.sleep(0.05)

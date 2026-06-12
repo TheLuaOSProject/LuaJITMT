@@ -238,8 +238,12 @@ LJLIB_CF(threading_thread_join)
   LJThread *th = threading_tothread(L);
   int64_t ns;
   uint32_t state;
-  if (th->main_thread || th->L == L)
-    lj_err_callermsg(L, "cannot join current thread");
+  if (th->L == L) {
+    setboolV(L->top++, 1);
+    return 1;
+  }
+  if (th->main_thread)
+    lj_err_callermsg(L, "cannot join main thread");
   ns = threading_timeout_ns(L, 2, 1, -1);
   for (;;) {
     state = la_load32_acq(&th->state);
