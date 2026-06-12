@@ -58,7 +58,7 @@ lj_api.o: lj_api.c lj_obj.h lua.h luaconf.h lj_def.h lj_arch.h \
  lj_jit.h lj_ir.h lj_dispatch.h lj_tg.h lj_traceerr.h lj_vm.h \
  lj_strscan.h lj_strfmt.h
 lj_arena.o: lj_arena.c lj_obj.h lua.h luaconf.h lj_def.h lj_arch.h \
- lj_atomic.h lj_arena.h
+ lj_atomic.h lj_arena.h lj_prng.h
 lj_asm.o: lj_asm.c lj_obj.h lua.h luaconf.h lj_def.h lj_arch.h \
  lj_atomic.h lj_gc.h lj_buf.h lj_str.h lj_tg.h lj_bc.h lj_tab.h \
  lj_frame.h lj_ctype.h lj_ir.h lj_jit.h lj_ircall.h lj_iropt.h lj_mcode.h \

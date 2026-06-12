@@ -53,6 +53,8 @@ typedef void (*LJArenaRunCB)(uint32_t start, uint32_t len, void *ud);
 LJ_FUNC void lj_arena_sweep_words(GCArena *a, int minor);
 LJ_FUNC void lj_arena_scan_free_runs(const GCArena *a, LJArenaRunCB cb, void *ud);
 LJ_FUNC uint32_t lj_arena_count_free_runs(const GCArena *a);
+LJ_FUNC GCArena *lj_arena_map(PRNGState *rs, uint32_t flags);
+LJ_FUNC void lj_arena_unmap(GCArena *a);
 
 static LJ_AINLINE GCArena *lj_arena_of(const void *p)
 {
