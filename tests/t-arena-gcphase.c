@@ -25,6 +25,8 @@ int main(void)
 
   assert(L != NULL);
   luaL_openlibs(L);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  lua_gc(L, LUA_GCSTOP, 0);
   assert(luaL_dostring(L,
     "hold = {}\n"
     "for i=1,30000 do hold[i] = { i, tostring(i), i % 17 } end\n") == LUA_OK);
@@ -34,6 +36,7 @@ int main(void)
   assert((tg->tg_flags & TGF_ARENA_INTERNAL) != 0);
   assert(tg->alloc.alloc_black == 0);
 
+  lua_gc(L, LUA_GCRESTART, 0);
   g->gc.stepmul = 1;
   g->gc.threshold = 0;
   for (i = 0; i < 1000 && g->gc.state == GCSpause; i++)
