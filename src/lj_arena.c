@@ -728,24 +728,24 @@ void lj_arena_allocd_sethugetab(LJArenaAllocD *ad, HugeTab *ht)
   ad->huge = ht;
 }
 
-static uint32_t arena_allocf_hflags(LJArenaAllocD *ad)
+static uint32_t arena_allocf_hflags(LJArenaAllocD *ad, uint32_t flags)
 {
   uint32_t hflags = 0;
-  if (ad->flags & LJ_AF_TRAVERSABLE)
+  if (flags & LJ_AF_TRAVERSABLE)
     hflags |= LJ_HUGEF_TRAVERSABLE;
   if (ad->alloc->alloc_black)
     hflags |= LJ_HUGEF_MARK;
   return hflags;
 }
 
-static void *arena_allocf_new(LJArenaAllocD *ad, size_t size)
+static void *arena_allocf_new(LJArenaAllocD *ad, size_t size, uint32_t flags)
 {
   void *p;
   if (!ad->huge || size <= LJ_HUGE_THRESHOLD)
-    return lj_arena_alloc(ad->alloc, ad->prng, size, ad->flags);
-  p = lj_arena_huge_map(ad->prng, size, ad->flags);
+    return lj_arena_alloc(ad->alloc, ad->prng, size, flags);
+  p = lj_arena_huge_map(ad->prng, size, flags);
   if (p && lj_arena_hugetab_insert(ad->huge, p, size,
-				   arena_allocf_hflags(ad)) != 1) {
+				   arena_allocf_hflags(ad, flags)) != 1) {
     lj_arena_huge_unmap(p, size);
     return NULL;
   }
@@ -764,13 +764,20 @@ static void arena_allocf_free(LJArenaAllocD *ad, void *ptr, size_t osize)
   lj_arena_free(ad->alloc, ptr, osize);
 }
 
+void *lj_arena_allocd_alloc(LJArenaAllocD *ad, size_t size, uint32_t flags)
+{
+  if (!ad || !ad->alloc || !ad->prng)
+    return NULL;
+  return arena_allocf_new(ad, size, flags);
+}
+
 void *lj_arena_allocf(void *ud, void *ptr, size_t osize, size_t nsize)
 {
   LJArenaAllocD *ad = (LJArenaAllocD *)ud;
   if (!ad || !ad->alloc || !ad->prng)
     return NULL;
   if (!ptr)
-    return arena_allocf_new(ad, nsize);
+    return arena_allocf_new(ad, nsize, ad->flags);
   if (nsize == 0) {
     arena_allocf_free(ad, ptr, osize);
     return NULL;
@@ -786,7 +793,7 @@ void *lj_arena_allocf(void *ud, void *ptr, size_t osize, size_t nsize)
 	lj_arena_hugetab_lookup(ad->huge, ptr, &hi) == 1)
       osize = hi.size;
     csize = osize < nsize ? osize : nsize;
-    np = arena_allocf_new(ad, nsize);
+    np = arena_allocf_new(ad, nsize, ad->flags);
     if (!np)
       return NULL;
     memcpy(np, ptr, csize);

@@ -36,7 +36,7 @@ int main(void)
     LJArenaAllocD ad;
     HugeTab ht = { NULL };
     LJHugeInfo hi;
-    void *p, *q, *huge, *huge2, *small;
+    void *p, *q, *typed, *huge, *huge2, *small;
     size_t hsize = LJ_HUGE_THRESHOLD + 100u + round;
     size_t hsize2 = LJ_ARENA_SIZE + 700u + round;
 
@@ -46,6 +46,11 @@ int main(void)
     lj_arena_allocd_sethugetab(&ad, &ht);
 
     assert(lj_arena_allocf(&ad, NULL, 0, 0) == NULL);
+    typed = lj_arena_allocd_alloc(&ad, 48, LJ_AF_TRAVERSABLE);
+    assert(typed != NULL);
+    assert((lj_arena_of(typed)->hdr.flags & LJ_AF_TRAVERSABLE) != 0);
+    lj_arena_free(&alloc, typed, 48);
+
     p = lj_arena_allocf(&ad, NULL, 0, 64);
     assert(p != NULL);
     assert(!lj_arena_ishuge(lj_arena_of(p)));

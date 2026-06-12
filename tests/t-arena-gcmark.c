@@ -52,6 +52,7 @@ int main(void)
   tv = L->top - 1;
   assert(tvistab(tv));
   tab = tabV(tv);
+  assert((lj_arena_of(tab)->hdr.flags & LJ_AF_TRAVERSABLE) != 0);
   assert(arena_marked(g, obj2gco(tab)));
 
   lua_getfield(L, -1, "s");
@@ -59,6 +60,7 @@ int main(void)
   assert(tvisstr(tv));
   str = strV(tv);
   assert(lj_arena_ishuge(lj_arena_of(str)));
+  assert((lj_arena_of(str)->hdr.flags & LJ_AF_TRAVERSABLE) != 0);
   assert(arena_marked(g, obj2gco(str)));
 
   lua_close(L);

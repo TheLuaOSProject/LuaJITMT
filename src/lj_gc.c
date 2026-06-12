@@ -915,7 +915,12 @@ void *lj_mem_realloc(lua_State *L, void *p, GCSize osz, GCSize nsz)
 void * LJ_FASTCALL lj_mem_newgco(lua_State *L, GCSize size)
 {
   global_State *g = G(L);
-  GCobj *o = (GCobj *)g->allocf(g->allocd, NULL, 0, size);
+  GCobj *o;
+  if (g->allocf == lj_arena_allocf)
+    o = (GCobj *)lj_arena_allocd_alloc((LJArenaAllocD *)g->allocd, size,
+				       LJ_AF_TRAVERSABLE);
+  else
+    o = (GCobj *)g->allocf(g->allocd, NULL, 0, size);
   if (o == NULL)
     lj_err_mem(L);
   lj_assertG(checkptrGC(o),
