@@ -414,6 +414,38 @@ void lj_arena_hugetab_clear_marks(HugeTab *ht)
   }
 }
 
+int lj_arena_hugetab_transfer(HugeTab *dst, HugeTab *src, uint32_t owner_tid)
+{
+  LJHugeTabHdr *h = src ? src->h : NULL;
+  uint32_t i, cap;
+  if (!h)
+    return 1;
+  if (dst == src)
+    return 1;
+  if (!dst || !dst->h)
+    return 0;
+  cap = h->mask + 1u;
+  for (i = 0; i < cap; i++) {
+    LJHugeEnt *e = &h->ent[i];
+    uint64_t addr = la_load64_acq(&e->slot.lo);
+    if (addr > LJ_HUGETAB_TOMBSTONE) {
+      uint64_t meta = la_load64_acq(&e->slot.hi);
+      if (la_load64_acq(&e->slot.lo) == addr) {
+	void *p = (void *)(uintptr_t)addr;
+	size_t size = (size_t)(meta >> LJ_HUGETAB_META_SHIFT);
+	uint32_t hflags = (uint32_t)(meta & LJ_HUGETAB_META_MASK);
+	int inserted = lj_arena_hugetab_insert(dst, p, size, hflags);
+	if (inserted < 0)
+	  return 0;
+	lj_arena_of(p)->hdr.owner_tid = owner_tid;
+	if (inserted >= 0)
+	  (void)lj_arena_hugetab_delete(src, p, NULL);
+      }
+    }
+  }
+  return 1;
+}
+
 int lj_arena_hugetab_delete(HugeTab *ht, const void *p, LJHugeInfo *hi)
 {
   LJHugeTabHdr *h = ht ? ht->h : NULL;
@@ -710,6 +742,47 @@ GCArena *lj_arena_sweep_one(TGAlloc *alloc, uint32_t kind, uint32_t epoch,
   a->hdr.next = alloc->owned[kind];
   alloc->owned[kind] = a;
   return a;
+}
+
+static uint32_t arena_transfer_list(GCArena **dstp, GCArena *a,
+				    uint32_t owner_tid)
+{
+  uint32_t n = 0;
+  while (a) {
+    GCArena *next = a->hdr.next;
+    a->hdr.owner_tid = owner_tid;
+    a->hdr.next = *dstp;
+    *dstp = a;
+    a = next;
+    n++;
+  }
+  return n;
+}
+
+uint32_t lj_arena_alloc_transfer(TGAlloc *dst, TGAlloc *src)
+{
+  uint32_t k, n = 0;
+  if (!dst || !src || dst == src)
+    return 0;
+  for (k = 0; k < LJ_ARENA_NKINDS; k++) {
+    LJArenaBump *b = &src->bump[k];
+    if (b->a && b->cell < b->end)
+      arena_set_free_run(b->a, b->cell, b->end - b->cell);
+    src->bump[k].a = NULL;
+    src->bump[k].cell = 0;
+    src->bump[k].end = 0;
+    arena_clear_bins(src, k);
+    n += arena_transfer_list(&dst->owned[k], src->owned[k],
+			     dst->owner_tid);
+    src->owned[k] = NULL;
+    n += arena_transfer_list(&dst->needsweep[k], src->needsweep[k],
+			     dst->owner_tid);
+    src->needsweep[k] = NULL;
+    lj_arena_alloc_rebuild_free_kind(dst, k);
+  }
+  src->owner_tid = 0;
+  src->alloc_black = 0;
+  return n;
 }
 
 static GCArena *arena_alloc_fresh(TGAlloc *alloc, PRNGState *rs,

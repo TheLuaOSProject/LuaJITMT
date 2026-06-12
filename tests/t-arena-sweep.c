@@ -252,6 +252,54 @@ int main(void)
     lj_arena_alloc_fini(&bump);
   }
 
+  {
+    TGAlloc dst, src;
+    void *freep, *livep, *travp;
+    GCArena *plaina, *trava;
+    uint32_t n;
+    lj_arena_alloc_init(&dst);
+    lj_arena_alloc_init(&src);
+    dst.owner_tid = 0x1001u;
+    src.owner_tid = 0x2002u;
+    freep = lj_arena_alloc(&src, &rs, 64, 0);
+    livep = lj_arena_alloc(&src, &rs, 64, 0);
+    travp = lj_arena_alloc(&src, &rs, 64, LJ_AF_TRAVERSABLE);
+    assert(freep != NULL && livep != NULL && travp != NULL);
+    plaina = lj_arena_of(freep);
+    trava = lj_arena_of(travp);
+    assert(plaina->hdr.owner_tid == src.owner_tid);
+    assert(trava->hdr.owner_tid == src.owner_tid);
+    lj_arena_free(&src, freep, 64);
+    assert(bin_count(&src, LJ_ARENAK_PLAIN) == 1);
+    lj_arena_alloc_prepare_sweep_kind(&src, LJ_ARENAK_TRAVERSABLE);
+    assert(src.needsweep[LJ_ARENAK_TRAVERSABLE] == trava);
+    n = lj_arena_alloc_transfer(&dst, &src);
+    assert(n == 2);
+    assert(src.owned[LJ_ARENAK_PLAIN] == NULL);
+    assert(src.needsweep[LJ_ARENAK_PLAIN] == NULL);
+    assert(src.owned[LJ_ARENAK_TRAVERSABLE] == NULL);
+    assert(src.needsweep[LJ_ARENAK_TRAVERSABLE] == NULL);
+    assert(src.bump[LJ_ARENAK_PLAIN].a == NULL);
+    assert(src.bump[LJ_ARENAK_TRAVERSABLE].a == NULL);
+    assert_no_bins(&src, LJ_ARENAK_PLAIN);
+    assert_no_bins(&src, LJ_ARENAK_TRAVERSABLE);
+    assert(plaina->hdr.owner_tid == dst.owner_tid);
+    assert(trava->hdr.owner_tid == dst.owner_tid);
+    assert(dst.owned[LJ_ARENAK_PLAIN] == plaina);
+    assert(dst.needsweep[LJ_ARENAK_TRAVERSABLE] == trava);
+    assert((trava->hdr.flags & LJ_AF_NEEDSWEEP) != 0);
+    assert(bin_count(&dst, LJ_ARENAK_PLAIN) >= 1);
+    assert(lj_arena_alloc(&dst, &rs, 64, 0) == freep);
+    lj_arena_alloc_sweep_kind(&dst, LJ_ARENAK_TRAVERSABLE, 13, 0);
+    assert(dst.owned[LJ_ARENAK_TRAVERSABLE] == trava);
+    assert(dst.needsweep[LJ_ARENAK_TRAVERSABLE] == NULL);
+    assert((trava->hdr.flags & LJ_AF_NEEDSWEEP) == 0);
+    assert(trava->hdr.sweep_epoch == 13);
+    lj_arena_free(&dst, livep, 64);
+    lj_arena_alloc_fini(&src);
+    lj_arena_alloc_fini(&dst);
+  }
+
   printf("t-arena-sweep OK: owner-local sweep rebuild verified\n");
   return 0;
 }

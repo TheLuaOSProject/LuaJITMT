@@ -84,9 +84,13 @@ int main(void)
   global_State *g;
   TGState *tg;
   TGState extra_tg;
+  TGState arena_tg;
   GCtab *root_tab, *native_tab;
   void *plain_reset, *trav_reset;
+  void *transfer_small, *transfer_huge;
+  size_t transfer_huge_size = LJ_HUGE_THRESHOLD + 8192u;
   GCArena *plain_reset_a, *trav_reset_a;
+  LJHugeInfo hi;
   uint32_t i, ssb_published0, ssb_drained0;
   uint64_t ssb_items_published0, ssb_items_drained0;
   uint64_t epoch0;
@@ -416,6 +420,38 @@ int main(void)
   assert(lj_tg_reclaim_dead(g) == 1u);
   assert(!tg_list_contains(g->gc2.tg_list, &extra_tg));
   lj_tg_fini_thread(g, &extra_tg);
+
+  lj_tg_init_thread(g, &arena_tg, NULL, 1);
+  arena_tg.tid = tg->tid + 1000u;
+  arena_tg.alloc.owner_tid = arena_tg.tid;
+  transfer_small = lj_arena_allocf(&arena_tg.allocd, NULL, 0, 64);
+  transfer_huge = lj_arena_allocf(&arena_tg.allocd, NULL, 0,
+				  transfer_huge_size);
+  assert(transfer_small != NULL);
+  assert(transfer_huge != NULL);
+  assert(lj_arena_of(transfer_small)->hdr.owner_tid == arena_tg.tid);
+  assert(lj_arena_of(transfer_huge)->hdr.owner_tid == arena_tg.tid);
+  assert(lj_arena_hugetab_lookup(&arena_tg.huge, transfer_huge, &hi) == 1);
+  assert(hi.size == transfer_huge_size);
+  lj_tg_attach(g, &arena_tg);
+  assert(g->gc2.n_threads == 2);
+  assert(tg_list_contains(g->gc2.tg_list, &arena_tg));
+  lj_tg_detach(g, &arena_tg);
+  assert(g->gc2.n_threads == 1);
+  assert(arena_tg.tg_flags & TGF_DEAD);
+  assert(lj_tg_reclaim_dead(g) == 1u);
+  assert(!tg_list_contains(g->gc2.tg_list, &arena_tg));
+  assert((arena_tg.tg_flags & TGF_ARENA_INTERNAL) == 0);
+  assert((arena_tg.tg_flags & TGF_HUGETAB) == 0);
+  assert(arena_tg.huge.h == NULL);
+  assert(lj_arena_of(transfer_small)->hdr.owner_tid == tg->alloc.owner_tid);
+  assert(lj_arena_of(transfer_huge)->hdr.owner_tid == tg->alloc.owner_tid);
+  assert(lj_arena_hugetab_lookup(&tg->huge, transfer_huge, &hi) == 1);
+  assert(hi.size == transfer_huge_size);
+  assert(lj_arena_allocf(&tg->allocd, transfer_small, 64, 0) == NULL);
+  assert(lj_arena_allocf(&tg->allocd, transfer_huge, transfer_huge_size, 0) ==
+	 NULL);
+  lj_tg_fini_thread(g, &arena_tg);
 
   lua_close(L);
 

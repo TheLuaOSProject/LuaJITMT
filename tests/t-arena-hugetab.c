@@ -36,6 +36,8 @@ int main(void)
   PRNGState rs;
   HugeTab ht = { NULL };
   HugeTab tiny = { NULL };
+  HugeTab src = { NULL };
+  HugeTab dst = { NULL };
   void *ptrs[sizeof(sizes)/sizeof(sizes[0])];
   LJHugeInfo hi;
   uint32_t i;
@@ -99,6 +101,26 @@ int main(void)
   lj_arena_huge_unmap(ptrs[2], LJ_HUGE_THRESHOLD + 33u);
   lj_arena_hugetab_fini(&tiny);
   assert(tiny.h == NULL);
+
+  assert(lj_arena_hugetab_init(&src, 4) == 1);
+  assert(lj_arena_hugetab_init(&dst, 4) == 1);
+  ptrs[0] = lj_arena_huge_map(&rs, LJ_HUGE_THRESHOLD + 4096u,
+			      LJ_AF_TRAVERSABLE);
+  assert(ptrs[0] != NULL);
+  lj_arena_of(ptrs[0])->hdr.owner_tid = 0x1234u;
+  assert(lj_arena_hugetab_insert(&src, ptrs[0],
+				 LJ_HUGE_THRESHOLD + 4096u,
+				 LJ_HUGEF_TRAVERSABLE) == 1);
+  assert(lj_arena_hugetab_transfer(&dst, &src, 0x5678u) == 1);
+  assert(lj_arena_of(ptrs[0])->hdr.owner_tid == 0x5678u);
+  assert(lj_arena_hugetab_lookup(&src, ptrs[0], NULL) == 0);
+  assert(lj_arena_hugetab_lookup(&dst, ptrs[0], &hi) == 1);
+  check_info(&hi, LJ_HUGE_THRESHOLD + 4096u, LJ_HUGEF_TRAVERSABLE);
+  delete_unmap(&dst, ptrs[0]);
+  lj_arena_hugetab_fini(&src);
+  lj_arena_hugetab_fini(&dst);
+  assert(src.h == NULL);
+  assert(dst.h == NULL);
 
   printf("t-arena-hugetab OK: insert lookup mark delete tombstone full\n");
   return 0;

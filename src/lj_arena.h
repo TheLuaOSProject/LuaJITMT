@@ -126,6 +126,8 @@ LJ_FUNC int lj_arena_hugetab_lookup(HugeTab *ht, const void *p,
 LJ_FUNC int lj_arena_hugetab_mark(HugeTab *ht, const void *p,
 				  LJHugeInfo *hi);
 LJ_FUNC void lj_arena_hugetab_clear_marks(HugeTab *ht);
+LJ_FUNC int lj_arena_hugetab_transfer(HugeTab *dst, HugeTab *src,
+				      uint32_t owner_tid);
 LJ_FUNC int lj_arena_hugetab_delete(HugeTab *ht, const void *p,
 				    LJHugeInfo *hi);
 LJ_FUNC void lj_arena_alloc_init(TGAlloc *alloc);
@@ -140,6 +142,7 @@ LJ_FUNC void lj_arena_alloc_sweep_kind(TGAlloc *alloc, uint32_t kind,
 				       uint32_t epoch, int minor);
 LJ_FUNC GCArena *lj_arena_sweep_one(TGAlloc *alloc, uint32_t kind,
 				    uint32_t epoch, int minor);
+LJ_FUNC uint32_t lj_arena_alloc_transfer(TGAlloc *dst, TGAlloc *src);
 LJ_FUNC void *lj_arena_alloc(TGAlloc *alloc, PRNGState *rs, size_t size,
 			     uint32_t flags);
 LJ_FUNC void lj_arena_free(TGAlloc *alloc, void *p, size_t size);

@@ -130,8 +130,11 @@ alloc_slow:
 Current implementation note: the first per-TG routing slice tags freshly
 adopted normal/huge arenas with `TGAlloc.owner_tid`. New `lj_mem_*`
 allocations select `L2TG(L)->allocd`; existing-pointer realloc/free resolves
-`GCAhdr.owner_tid` back to a TG before touching owner-local free lists. The
-original step-3 global reuse-stack adoption remains future work.
+`GCAhdr.owner_tid` back to a TG before touching owner-local free lists. Dead
+arena-internal TGs now transfer normal arena lists and HugeTab entries to the
+main TG before physical `gc2.tg_list` unlink, retagging `owner_tid` so delayed
+frees remain owner-routed after the OS thread exits. The original step-3
+global reuse-stack adoption and global HugeTab remain future work.
 Bump reset: when an owned arena is swept, its largest free run becomes the
 new bump window if ≥ LJ_BUMP_MIN (64 cells), else all runs go to bins —
 this is the Pall bump↔fit adaptivity with the simplest possible policy;

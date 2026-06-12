@@ -26,10 +26,22 @@ done
 
 for needle in \
   'tg->tg_flags & TGF_ARENA_INTERNAL' \
-  'Keep owner lookup live until allocator transfer exists'
+  'tg_transfer_dead_alloc' \
+  'lj_arena_alloc_transfer' \
+  'lj_arena_hugetab_transfer'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_tg.c"; then
-    echo "guardrail: dead arena-internal TGs must stay findable for owner-routed frees: $needle" >&2
+    echo "guardrail: dead arena-internal TG allocator ownership must transfer before unlink: $needle" >&2
+    exit 1
+  fi
+done
+
+for needle in \
+  'lj_arena_alloc_transfer' \
+  'lj_arena_hugetab_transfer'
+do
+  if ! rg -F -q "$needle" "$ROOT/src/lj_arena.c" "$ROOT/src/lj_arena.h"; then
+    echo "guardrail: missing arena transfer helper: $needle" >&2
     exit 1
   fi
 done

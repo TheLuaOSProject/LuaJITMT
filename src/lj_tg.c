@@ -162,6 +162,30 @@ void lj_tg_detach(global_State *g, TGState *tg)
   la_store8_rlx(&tg->in_native, 0);
 }
 
+static int tg_transfer_dead_alloc(global_State *g, TGState *tg)
+{
+  TGState *main_tg = g ? g->main_tg : NULL;
+  if (!(tg->tg_flags & TGF_ARENA_INTERNAL))
+    return 1;
+  if (!main_tg || !(main_tg->tg_flags & TGF_ARENA_INTERNAL))
+    return 0;
+  lj_buf_free(g, &tg->tmpbuf);  /* Route through the still-findable owner. */
+  lj_buf_init(NULL, &tg->tmpbuf);
+  if (tg->tg_flags & TGF_HUGETAB) {
+    if (!(main_tg->tg_flags & TGF_HUGETAB) ||
+	!lj_arena_hugetab_transfer(&main_tg->huge, &tg->huge,
+				   main_tg->alloc.owner_tid))
+      return 0;
+    lj_arena_hugetab_fini(&tg->huge);
+    tg->tg_flags &= (uint8_t)~TGF_HUGETAB;
+    lj_arena_allocd_sethugetab(&tg->allocd, NULL);
+  }
+  (void)lj_arena_alloc_transfer(&main_tg->alloc, &tg->alloc);
+  lj_arena_allocd_init(&tg->allocd, &tg->alloc, &tg->prng, 0);
+  tg->tg_flags &= (uint8_t)~TGF_ARENA_INTERNAL;
+  return 1;
+}
+
 uint32_t lj_tg_reclaim_dead(global_State *g)
 {
   TGState *prev, *tg;
@@ -175,8 +199,8 @@ restart:
   while (tg != NULL) {
     TGState *next = (TGState *)la_loadptr_acq((void *const *)&tg->next_tg);
     if (la_load8_acq(&tg->tg_flags) & TGF_DEAD) {
-      if (tg->tg_flags & TGF_ARENA_INTERNAL) {
-	prev = tg;  /* Keep owner lookup live until allocator transfer exists. */
+      if (!tg_transfer_dead_alloc(g, tg)) {
+	prev = tg;  /* Keep owner lookup live until allocator transfer succeeds. */
 	tg = next;
 	continue;
       }
