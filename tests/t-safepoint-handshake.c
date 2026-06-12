@@ -27,6 +27,28 @@ static void publish_manual(global_State *g, TGState *tg, uint32_t actions)
   la_store32_rel(&tg->poll, 1);  /* 05 section 5.4.2 signal word. */
 }
 
+static int publish_alloc_white_c(lua_State *L)
+{
+  global_State *g = G(L);
+  TGState *tg = G2TG(g);
+  assert(tg != NULL);
+  publish_manual(g, tg, LJ_GC2_HS_ALLOC_WHITE);
+  return 0;
+}
+
+static int assert_acked_alloc_white_c(lua_State *L)
+{
+  global_State *g = G(L);
+  TGState *tg = G2TG(g);
+  assert(tg != NULL);
+  assert(g->gc2.hs_pending == 0);
+  assert(tg->poll == 0);
+  assert(tg->reqmask == 0);
+  assert(tg->hs_epoch_ack == g->gc2.hs_epoch);
+  assert(tg->alloc.alloc_black == 0);
+  return 0;
+}
+
 static int arena_list_contains(GCArena *a, GCArena *needle)
 {
   while (a) {
@@ -53,6 +75,10 @@ int main(void)
 
   assert(L != NULL);
   luaL_openlibs(L);
+  lua_pushcfunction(L, publish_alloc_white_c);
+  lua_setglobal(L, "publish_alloc_white");
+  lua_pushcfunction(L, assert_acked_alloc_white_c);
+  lua_setglobal(L, "assert_acked_alloc_white");
   g = G(L);
   tg = G2TG(g);
   assert(tg != NULL);
@@ -258,6 +284,23 @@ int main(void)
   assert(tg->alloc.alloc_black == 1);
 
   assert(lj_gc2_handshake(g, 0) == 0);
+
+  assert(luaL_dostring(L,
+    "local p = os.tmpname()\n"
+    "local q = p .. '.renamed'\n"
+    "local f = assert(io.open(p, 'w'))\n"
+    "f:write('x')\n"
+    "f:close()\n"
+    "publish_alloc_white()\n"
+    "assert(os.rename(p, q))\n"
+    "assert_acked_alloc_white()\n"
+    "publish_alloc_white()\n"
+    "assert(os.remove(q))\n"
+    "assert_acked_alloc_white()\n"
+    "publish_alloc_white()\n"
+    "local r = os.tmpname()\n"
+    "assert_acked_alloc_white()\n"
+    "os.remove(r)\n") == LUA_OK);
 
   plain_reset = lj_arena_alloc(&tg->alloc, &tg->prng, 64, 0);
   trav_reset = lj_arena_alloc(&tg->alloc, &tg->prng, 64,

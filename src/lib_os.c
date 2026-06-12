@@ -7,6 +7,7 @@
 */
 
 #include <errno.h>
+#include <stdio.h>
 #include <time.h>
 
 #define lib_os_c
@@ -27,8 +28,6 @@
 
 #if LJ_TARGET_POSIX
 #include <unistd.h>
-#else
-#include <stdio.h>
 #endif
 
 #if !LJ_TARGET_PSVITA
@@ -38,6 +37,51 @@
 /* ------------------------------------------------------------------------ */
 
 #define LJLIB_MODULE_os
+
+/* -- Native-state wrappers ---------------------------------------------- */
+
+static int os_native_remove(lua_State *L, const char *filename)
+{
+  int ok;
+  lj_native_enter(L2TG(L));
+  ok = remove(filename);
+  (void)lj_native_leave(L);
+  return ok;
+}
+
+static int os_native_rename(lua_State *L, const char *fromname,
+			    const char *toname)
+{
+  int ok;
+  lj_native_enter(L2TG(L));
+  ok = rename(fromname, toname);
+  (void)lj_native_leave(L);
+  return ok;
+}
+
+#if !(LJ_TARGET_PS3 || LJ_TARGET_PS4 || LJ_TARGET_PS5 || LJ_TARGET_PSVITA || LJ_TARGET_NX)
+#if LJ_TARGET_POSIX
+static int os_native_mkstemp(lua_State *L, char *buf)
+{
+  int fd;
+  lj_native_enter(L2TG(L));
+  fd = mkstemp(buf);
+  if (fd != -1)
+    close(fd);
+  (void)lj_native_leave(L);
+  return fd;
+}
+#else
+static char *os_native_tmpnam(lua_State *L, char *buf)
+{
+  char *p;
+  lj_native_enter(L2TG(L));
+  p = tmpnam(buf);
+  (void)lj_native_leave(L);
+  return p;
+}
+#endif
+#endif
 
 LJLIB_CF(os_execute)
 {
@@ -70,14 +114,15 @@ LJLIB_CF(os_execute)
 LJLIB_CF(os_remove)
 {
   const char *filename = luaL_checkstring(L, 1);
-  return luaL_fileresult(L, remove(filename) == 0, filename);
+  return luaL_fileresult(L, os_native_remove(L, filename) == 0, filename);
 }
 
 LJLIB_CF(os_rename)
 {
   const char *fromname = luaL_checkstring(L, 1);
   const char *toname = luaL_checkstring(L, 2);
-  return luaL_fileresult(L, rename(fromname, toname) == 0, fromname);
+  return luaL_fileresult(L, os_native_rename(L, fromname, toname) == 0,
+			 fromname);
 }
 
 LJLIB_CF(os_tmpname)
@@ -90,14 +135,12 @@ LJLIB_CF(os_tmpname)
   char buf[15+1];
   int fp;
   strcpy(buf, "/tmp/lua_XXXXXX");
-  fp = mkstemp(buf);
-  if (fp != -1)
-    close(fp);
-  else
+  fp = os_native_mkstemp(L, buf);
+  if (fp == -1)
     lj_err_caller(L, LJ_ERR_OSUNIQF);
 #else
   char buf[L_tmpnam];
-  if (tmpnam(buf) == NULL)
+  if (os_native_tmpnam(L, buf) == NULL)
     lj_err_caller(L, LJ_ERR_OSUNIQF);
 #endif
   lua_pushstring(L, buf);
