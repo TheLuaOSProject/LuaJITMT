@@ -239,11 +239,11 @@ static void asm_fuseahuref(ASMState *as, IRRef ref, RegSet allow)
       break;
     case IR_TMPREF:
 #if LJ_GC64
-      as->mrm.ofs = (int32_t)dispofs(as, &J2G(as->J)->tmptv);
+      as->mrm.ofs = (int32_t)dispofs(as, &J2TG(as->J)->tmptv);
       as->mrm.base = RID_DISPATCH;
       as->mrm.idx = RID_NONE;
 #else
-      as->mrm.ofs = igcptr(&J2G(as->J)->tmptv);
+      as->mrm.ofs = igcptr(&J2TG(as->J)->tmptv);
       as->mrm.base = as->mrm.idx = RID_NONE;
 #endif
       return;
@@ -460,10 +460,10 @@ static Reg asm_fuseload(ASMState *as, IRRef ref, RegSet allow)
     if (!(avail & (avail-1))) {  /* Fuse if less than two regs available. */
       if (ref == REF_BASE) {
 #if LJ_GC64
-	as->mrm.ofs = (int32_t)dispofs(as, &J2G(as->J)->jit_base);
+	as->mrm.ofs = (int32_t)dispofs(as, &J2TG(as->J)->jit_base);
 	as->mrm.base = RID_DISPATCH;
 #else
-	as->mrm.ofs = ptr2addr(&J2G(as->J)->jit_base);
+	as->mrm.ofs = ptr2addr(&J2TG(as->J)->jit_base);
 	as->mrm.base = RID_NONE;
 #endif
 	as->mrm.idx = RID_NONE;
@@ -798,7 +798,7 @@ static void asm_retf(ASMState *as, IRIns *ir)
   as->topslot -= (BCReg)delta;
   if ((int32_t)as->topslot < 0) as->topslot = 0;
   irt_setmark(IR(REF_BASE)->t);  /* Children must not coalesce with BASE reg. */
-  emit_setgl(as, base, jit_base);
+  emit_settg(as, base, jit_base);
   emit_addptr(as, base, -8*delta);
   asm_guardcc(as, CC_NE);
 #if LJ_FR2
@@ -818,7 +818,7 @@ static void asm_bufhdr_write(ASMState *as, Reg sb)
   IRIns irgc;
   irgc.ot = IRT(0, IRT_PGC);  /* GC type. */
   emit_storeofs(as, &irgc, tmp, sb, offsetof(SBuf, L));
-  emit_opgl(as, XO_ARITH(XOg_OR), tmp|REX_GC64, cur_L);
+  emit_optg(as, XO_ARITH(XOg_OR), tmp|REX_GC64, cur_L);
   emit_gri(as, XG_ARITHi(XOg_AND), tmp, SBUF_MASK_FLAG);
   emit_loadofs(as, &irgc, tmp, sb, offsetof(SBuf, L));
 }
@@ -1139,7 +1139,7 @@ static void asm_tvptr(ASMState *as, Reg dest, IRRef ref, MSize mode)
 #endif
     }
   }
-  emit_loada(as, dest, &J2G(as->J)->tmptv); /* g->tmptv holds the TValue(s). */
+  emit_loada(as, dest, &J2TG(as->J)->tmptv); /* tg->tmptv holds the TValue(s). */
 }
 
 static void asm_aref(ASMState *as, IRIns *ir)
@@ -2721,13 +2721,13 @@ static void asm_stack_check(ASMState *as, BCReg topslot,
   else
 #if LJ_GC64
     emit_rmro(as, XO_ARITH(XOg_SUB), r|REX_64, RID_DISPATCH,
-	      (int32_t)dispofs(as, &J2G(as->J)->jit_base));
+	      (int32_t)dispofs(as, &J2TG(as->J)->jit_base));
 #else
     emit_rmro(as, XO_ARITH(XOg_SUB), r, RID_NONE,
-	      ptr2addr(&J2G(as->J)->jit_base));
+	      ptr2addr(&J2TG(as->J)->jit_base));
 #endif
   emit_rmro(as, XO_MOV, r|REX_GC64, r, offsetof(lua_State, maxstack));
-  emit_getgl(as, r, cur_L);
+  emit_gettg(as, r, cur_L);
   if (allow == RSET_EMPTY)  /* Spill temp. register. */
     emit_rmro(as, XO_MOVto, r|REX_64, RID_ESP, 0);
 }
@@ -2930,7 +2930,7 @@ static Reg asm_head_side_base(ASMState *as, IRIns *irp)
       emit_rr(as, XO_MOV, r|REX_GC64, irp->r);
       return irp->r;
     } else {
-      emit_getgl(as, r, jit_base);  /* Otherwise reload BASE. */
+      emit_gettg(as, r, jit_base);  /* Otherwise reload BASE. */
     }
   }
   return RID_NONE;
@@ -3162,4 +3162,3 @@ void lj_asm_patchexit(jit_State *J, GCtrace *T, ExitNo exitno, MCode *target)
   lj_mcode_sync(T->mcode, T->mcode + T->szmcode);
   lj_mcode_patch(J, mcarea, 1);
 }
-

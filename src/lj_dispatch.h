@@ -104,6 +104,8 @@ typedef struct GG_State {
 #define GG_DISP2G	(GG_OFS(g) - GG_OFS(dispatch))
 #define GG_DISP2J	(GG_OFS(J) - GG_OFS(dispatch))
 #define GG_DISP2HOT	(GG_OFS(hotcount) - GG_OFS(dispatch))
+#define GG_DISP2TG(field) \
+  (GG_OFS(main_tg) + (int)offsetof(TGState, field) - GG_OFS(dispatch))
 #define GG_DISP2STATIC	(GG_LEN_DDISP*(int)sizeof(ASMFunction))
 #if LJ_HASJIT
 LJ_STATIC_ASSERT(GG_DISP2HOT == TG_DISP2HOT);

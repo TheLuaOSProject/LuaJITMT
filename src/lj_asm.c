@@ -401,11 +401,11 @@ static Reg ra_rematk(ASMState *as, IRRef ref)
 #endif
   if (emit_canremat(REF_BASE) && ir->o == IR_BASE) {
     ra_sethint(ir->r, RID_BASE);  /* Restore BASE register hint. */
-    emit_getgl(as, r, jit_base);
+    emit_gettg(as, r, jit_base);
   } else if (emit_canremat(ASMREF_L) && ir->o == IR_KPRI) {
     /* REF_NIL stores ASMREF_L register. */
     lj_assertA(irt_isnil(ir->t), "rematk of bad ASMREF_L");
-    emit_getgl(as, r, cur_L);
+    emit_gettg(as, r, cur_L);
 #if LJ_64
   } else if (ir->o == IR_KINT64) {
     emit_loadu64(as, r, ir_kint64(ir)->u64);
@@ -2165,7 +2165,7 @@ static void asm_tail_link(ASMState *as)
     ra_allockreg(as, mres, RID_RET);  /* Return MULTRES or 0. */
   } else if (baseslot) {
     /* Save modified BASE for linking to trace with higher start frame. */
-    emit_setgl(as, RID_BASE, jit_base);
+    emit_settg(as, RID_BASE, jit_base);
   }
   emit_addptr(as, RID_BASE, 8*(int32_t)baseslot);
 
