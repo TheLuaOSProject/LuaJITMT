@@ -142,25 +142,25 @@ static void gc_mark_mmudata(global_State *g)
 size_t lj_gc_separateudata(global_State *g, int all)
 {
   size_t m = 0;
-  GCRef *p = &mainthread(g)->nextgc;
+  GCRef *p = lj_obj_gcwref(obj2gco(mainthread(g)));
   GCobj *o;
   while ((o = gcref(*p)) != NULL) {
     if (!(iswhite(o) || all) || isfinalized(gco2ud(o))) {
-      p = &o->gch.nextgc;  /* Nothing to do. */
+      p = lj_obj_gcwref(o);  /* Nothing to do. */
     } else if (!lj_meta_fastg(g, tabref(gco2ud(o)->metatable), MM_gc)) {
       markfinalized(o);  /* Done, as there's no __gc metamethod. */
-      p = &o->gch.nextgc;
+      p = lj_obj_gcwref(o);
     } else {  /* Otherwise move userdata to be finalized to mmudata list. */
       m += sizeudata(gco2ud(o));
       markfinalized(o);
-      *p = o->gch.nextgc;
+      *p = *lj_obj_gcwref(o);
       if (gcref(g->gc.mmudata)) {  /* Link to end of mmudata list. */
 	GCobj *root = gcref(g->gc.mmudata);
-	setgcrefr(o->gch.nextgc, root->gch.nextgc);
-	setgcref(root->gch.nextgc, o);
+	lj_obj_setgcwr(o, *lj_obj_gcwref(root));
+	setgcref(*lj_obj_gcwref(root), o);
 	setgcref(g->gc.mmudata, o);
       } else {  /* Create circular list. */
-	setgcref(o->gch.nextgc, o);
+	lj_obj_setgcw(o, o);
 	setgcref(g->gc.mmudata, o);
       }
     }
@@ -193,7 +193,7 @@ static int gc_traverse_tab(global_State *g, GCtab *t)
       } else
 #endif
       {
-	t->marked = (uint8_t)((t->marked & ~LJ_GC_WEAK) | weak);
+	lj_obj_masksetgcflags(obj2gco(t), LJ_GC_WEAK, weak);
 	setgcrefr(t->gclist, g->gc.weak);
 	setgcref(g->gc.weak, obj2gco(t));
       }
@@ -410,7 +410,7 @@ static GCRef *gc_sweep(global_State *g, GCRef *p, uint32_t lim)
   while ((o = gcref(*p)) != NULL && lim-- > 0) {
     if (o->gch.gct == ~LJ_TTHREAD)  /* Need to sweep open upvalues, too. */
       gc_fullsweep(g, &gco2th(o)->openupval);
-    if (((o->gch.marked ^ LJ_GC_WHITES) & ow)) {  /* Black or current white? */
+    if (((lj_obj_gcflags(o) ^ LJ_GC_WHITES) & ow)) {  /* Black or current white? */
       lj_assertG(!isdead(g, o) || (lj_obj_gcflags(o) & LJ_GC_FIXED),
 		 "sweep of undead object");
       makewhite(g, o);  /* Value is alive, change to the current white. */
@@ -438,15 +438,15 @@ static void gc_sweepstr(global_State *g, GCRef *chain)
   GCobj *o;
   setgcrefp(q, (u & ~(uintptr_t)1));
   while ((o = gcref(*p)) != NULL) {
-    if (((o->gch.marked ^ LJ_GC_WHITES) & ow)) {  /* Black or current white? */
-      lj_assertG(!isdead(g, o) || (o->gch.marked & LJ_GC_FIXED),
+    if (((lj_obj_gcflags(o) ^ LJ_GC_WHITES) & ow)) {  /* Black or current white? */
+      lj_assertG(!isdead(g, o) || (lj_obj_gcflags(o) & LJ_GC_FIXED),
 		 "sweep of undead string");
       makewhite(g, o);  /* String is alive, change to the current white. */
-      p = &o->gch.nextgc;
+      p = lj_obj_gcwref(o);
     } else {  /* Otherwise string is dead, free it. */
       lj_assertG(isdead(g, o) || ow == LJ_GC_SFIXED,
 		 "sweep of unlive string");
-      setgcrefr(*p, o->gch.nextgc);
+      setgcrefr(*p, *lj_obj_gcwref(o));
       lj_str_free(g, gco2str(o));
     }
   }
@@ -475,8 +475,9 @@ static void gc_clearweak(global_State *g, GCobj *o)
   UNUSED(g);
   while (o) {
     GCtab *t = gco2tab(o);
-    lj_assertG((t->marked & LJ_GC_WEAK), "clear of non-weak table");
-    if ((t->marked & LJ_GC_WEAKVAL)) {
+    lj_assertG((lj_obj_gcflags(obj2gco(t)) & LJ_GC_WEAK),
+	       "clear of non-weak table");
+    if ((lj_obj_gcflags(obj2gco(t)) & LJ_GC_WEAKVAL)) {
       MSize i, asize = t->asize;
       for (i = 0; i < asize; i++) {
 	/* Clear array slot when value is about to be collected. */
@@ -545,15 +546,15 @@ static void gc_finalize(lua_State *L)
   if (o == gcref(g->gc.mmudata))
     setgcrefnull(g->gc.mmudata);
   else
-    setgcrefr(gcref(g->gc.mmudata)->gch.nextgc, o->gch.nextgc);
+    setgcrefr(*lj_obj_gcwref(gcref(g->gc.mmudata)), *lj_obj_gcwref(o));
 #if LJ_HASFFI
   if (o->gch.gct == ~LJ_TCDATA) {
     TValue tmp, *tv;
     /* Add cdata back to the GC list and make it white. */
-    setgcrefr(o->gch.nextgc, g->gc.root);
+    lj_obj_setgcwr(o, g->gc.root);
     setgcref(g->gc.root, o);
     makewhite(g, o);
-    o->gch.marked &= (uint8_t)~LJ_GC_CDATA_FIN;
+    lj_obj_cleargcflags(o, LJ_GC_CDATA_FIN);
     /* Resolve finalizer. */
     setcdataV(L, &tmp, gco2cd(o));
     tv = lj_tab_set(L, tabref(g->gcroot[GCROOT_FFI_FIN]), &tmp);
@@ -566,8 +567,8 @@ static void gc_finalize(lua_State *L)
   }
 #endif
   /* Add userdata back to the main userdata list and make it white. */
-  setgcrefr(o->gch.nextgc, mainthread(g)->nextgc);
-  setgcref(mainthread(g)->nextgc, o);
+  lj_obj_setgcwr(o, *lj_obj_gcwref(obj2gco(mainthread(g))));
+  setgcref(*lj_obj_gcwref(obj2gco(mainthread(g))), o);
   makewhite(g, o);
   /* Resolve the __gc metamethod. */
   mo = lj_meta_fastg(g, tabref(gco2ud(o)->metatable), MM_gc);
@@ -596,7 +597,7 @@ void lj_gc_finalize_cdata(lua_State *L)
       GCobj *o = gcV(&node[i].key);
       TValue tmp;
       makewhite(g, o);
-      o->gch.marked &= (uint8_t)~LJ_GC_CDATA_FIN;
+      lj_obj_cleargcflags(o, LJ_GC_CDATA_FIN);
       copyTV(L, &tmp, &node[i].val);
       setnilV(&node[i].val);
       gc_call_finalizer(g, L, &tmp, o);
