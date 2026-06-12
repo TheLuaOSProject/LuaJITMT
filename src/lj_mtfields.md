@@ -15,10 +15,10 @@ whenever a shared field is introduced or migrated.
 | TG.poll / TG.reqmask | signal word | store rel by GC; load rlx by owner; ack CAS acq_rel |
 | Node.key | write-once | CAS rlx claim; read rlx and re-check |
 | Node.next | chain link | CAS rel insert; load acq walk |
-| strtab bucket head | chain link | CAS rel insert; load acq walk; low bit = Harris mark |
+| strtab bucket head | chain link | CAS rel insert; load acq walk; bit0 = Harris mark, bit1 = secondary hash |
 | J->trace[i] | publish-once per id | store rel after mcode sync; load acq |
 | BCIns at patch sites | code word | single 32-bit store rel (`bc_publish`) |
 | GCtrace.exittab[i] | retarget word | store rel; loaded by indirect branch in mcode |
 | L->thr_owner | claim word | CAS acq_rel |
-| g->str.tab vector ptr (becomes StrTabHdr*) | RCU pointer | acq / rel |
+| g->str.tabh | RCU pointer | acq / rel |
 | cts->tab / cts->top | RCU vector + ticket | see 11 §11.2 |

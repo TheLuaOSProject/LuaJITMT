@@ -12,6 +12,7 @@
 #include "lj_gc.h"
 #include "lj_thr.h"
 #include "lj_buf.h"
+#include "lj_str.h"
 #include "lj_tab.h"
 #include "lj_meta.h"
 #include "lj_safepoint.h"
@@ -135,11 +136,13 @@ static void gc2_mark_tv(global_State *g, cTValue *tv)
 static void gc2_mark_fixedstr(global_State *g)
 {
   MSize i;
-  if (!g->str.tab || g->str.mask == ~(MSize)0)
+  GCRef *strtab;
+  if (!g->str.tabh || g->str.mask == ~(MSize)0)
     return;
+  strtab = lj_str_buckets(g);
   for (i = 0; i <= g->str.mask; i++) {
     GCobj *o;
-    for (o = gcref(g->str.tab[i]); o != NULL; o = gcnext(o))
+    for (o = lj_str_hashhead(strtab[i]); o != NULL; o = gcnext(o))
       if (lj_obj_gcflags(o) & (LJ_GC_FIXED|LJ_GC_SFIXED))
 	lj_gc2_markobj(g, o);
   }
@@ -195,7 +198,7 @@ static void gc2_scan_global_roots(global_State *g)
     if (gcref(g->gcroot[i]) != NULL)
       lj_gc2_markobj(g, gcref(g->gcroot[i]));
   gc2_mark_fixedstr(g);
-  lj_gc2_markmem(g, g->str.tab);
+  lj_gc2_markmem(g, g->str.tabh);
 #if LJ_64
   lj_gc2_markmem(g, mref(g->gc.lightudseg, uint32_t));
 #endif

@@ -129,15 +129,20 @@ static LJ_NOINLINE StrHash hash_dense(uint64_t seed, StrHash h,
 void lj_str_resize(lua_State *L, MSize newmask)
 {
   global_State *g = G(L);
-  GCRef *newtab, *oldtab = g->str.tab;
+  StrTabHdr *newhdr;
+  GCRef *newtab, *oldtab = g->str.tabh ? lj_str_buckets(g) : NULL;
+  GCSize newsize;
   MSize i;
 
   /* No resizing during GC traversal or if already too big. */
   if (g->gc.state == GCSsweepstring || newmask >= LJ_MAX_STRTAB-1)
     return;
 
-  newtab = lj_mem_newvec(L, newmask+1, GCRef);
-  memset(newtab, 0, (newmask+1)*sizeof(GCRef));
+  newsize = lj_str_tabsize(newmask);
+  newhdr = (StrTabHdr *)lj_mem_new(L, newsize);
+  memset(newhdr, 0, newsize);
+  newhdr->mask = newmask;
+  newtab = newhdr->bucket;
 
 #if LUAJIT_SECURITY_STRHASH
   /* Check which chains need secondary hashes. */
@@ -145,7 +150,7 @@ void lj_str_resize(lua_State *L, MSize newmask)
     int newsecond = 0;
     /* Compute primary chain lengths. */
     for (i = g->str.mask; i != ~(MSize)0; i--) {
-      GCobj *o = (GCobj *)(gcrefu(oldtab[i]) & ~(uintptr_t)1);
+      GCobj *o = lj_str_hashhead(oldtab[i]);
       while (o) {
 	GCstr *s = gco2str(o);
 	MSize hash = s->hashalg ? hash_sparse(g->str.seed, strdata(s), s->len) :
@@ -159,7 +164,8 @@ void lj_str_resize(lua_State *L, MSize newmask)
     for (i = newmask; i != ~(MSize)0; i--) {
       int secondary = gcrefu(newtab[i]) > LJ_STR_MAXCOLL;
       newsecond |= secondary;
-      setgcrefp(newtab[i], secondary);
+      setgcrefp(newtab[i],
+		(void *)(secondary ? LJ_STRHASH_SECONDARY : (uintptr_t)0));
     }
     g->str.second = newsecond;
   }
@@ -167,7 +173,7 @@ void lj_str_resize(lua_State *L, MSize newmask)
 
   /* Reinsert all strings from the old table into the new table. */
   for (i = g->str.mask; i != ~(MSize)0; i--) {
-    GCobj *o = (GCobj *)(gcrefu(oldtab[i]) & ~(uintptr_t)1);
+    GCobj *o = lj_str_hashhead(oldtab[i]);
     while (o) {
       GCobj *next = gcnext(o);
       GCstr *s = gco2str(o);
@@ -177,7 +183,7 @@ void lj_str_resize(lua_State *L, MSize newmask)
       if (LJ_LIKELY(!s->hashalg)) {  /* String hashed with primary hash. */
 	hash &= newmask;
 	u = gcrefu(newtab[hash]);
-	if (LJ_UNLIKELY(u & 1)) {  /* Switch string to secondary hash. */
+	if (LJ_UNLIKELY(u & LJ_STRHASH_SECONDARY)) {  /* Switch string to secondary hash. */
 	  s->hash = hash = hash_dense(g->str.seed, s->hash, strdata(s), s->len);
 	  s->hashalg = 1;
 	  hash &= newmask;
@@ -186,7 +192,7 @@ void lj_str_resize(lua_State *L, MSize newmask)
       } else {  /* String hashed with secondary hash. */
 	MSize shash = hash_sparse(g->str.seed, strdata(s), s->len);
 	u = gcrefu(newtab[shash & newmask]);
-	if (u & 1) {
+	if (u & LJ_STRHASH_SECONDARY) {
 	  hash &= newmask;
 	  u = gcrefu(newtab[hash]);
 	} else {  /* Revert string back to primary hash. */
@@ -196,8 +202,8 @@ void lj_str_resize(lua_State *L, MSize newmask)
 	}
       }
       /* NOBARRIER: The string table is a GC root. */
-      setgcrefp(*lj_obj_gcwref(o), (u & ~(uintptr_t)1));
-      setgcrefp(newtab[hash], ((uintptr_t)o | (u & 1)));
+      setgcrefp(*lj_obj_gcwref(o), (u & ~(uintptr_t)LJ_STRHASH_LINKMASK));
+      setgcrefp(newtab[hash], ((uintptr_t)o | (u & LJ_STRHASH_SECONDARY)));
 #else
       hash &= newmask;
       /* NOBARRIER: The string table is a GC root. */
@@ -210,7 +216,7 @@ void lj_str_resize(lua_State *L, MSize newmask)
 
   /* Free old table and replace with new table. */
   lj_str_freetab(g);
-  g->str.tab = newtab;
+  g->str.tabh = newhdr;
   g->str.mask = newmask;
 }
 
@@ -221,10 +227,10 @@ static LJ_NOINLINE GCstr *lj_str_rehash_chain(lua_State *L, StrHash hashc,
 {
   global_State *g = G(L);
   int ow = g->gc.state == GCSsweepstring ? otherwhite(g) : 0;  /* Sweeping? */
-  GCRef *strtab = g->str.tab;
+  GCRef *strtab = lj_str_buckets(g);
   MSize strmask = g->str.mask;
-  GCobj *o = gcref(strtab[hashc & strmask]);
-  setgcrefp(strtab[hashc & strmask], (void *)((uintptr_t)1));
+  GCobj *o = lj_str_hashhead(strtab[hashc & strmask]);
+  setgcrefp(strtab[hashc & strmask], (void *)LJ_STRHASH_SECONDARY);
   g->str.second = 1;
   while (o) {
     uintptr_t u;
@@ -253,8 +259,8 @@ static LJ_NOINLINE GCstr *lj_str_rehash_chain(lua_State *L, StrHash hashc,
     /* Rechain. */
     hash &= strmask;
     u = gcrefu(strtab[hash]);
-    setgcrefp(*lj_obj_gcwref(o), (u & ~(uintptr_t)1));
-    setgcrefp(strtab[hash], ((uintptr_t)o | (u & 1)));
+    setgcrefp(*lj_obj_gcwref(o), (u & ~(uintptr_t)LJ_STRHASH_LINKMASK));
+    setgcrefp(strtab[hash], ((uintptr_t)o | (u & LJ_STRHASH_SECONDARY)));
     o = next;
   }
   /* Try to insert the pending string again. */
@@ -277,6 +283,7 @@ static GCstr *lj_str_alloc(lua_State *L, const char *str, MSize len,
 {
   GCstr *s = lj_mem_newt(L, lj_str_size(len), GCstr);
   global_State *g = G(L);
+  GCRef *strtab = lj_str_buckets(g);
   uintptr_t u;
   newwhite(g, s);
   s->gct = ~LJ_TSTR;
@@ -301,10 +308,10 @@ static GCstr *lj_str_alloc(lua_State *L, const char *str, MSize len,
   memcpy(strdatawr(s), str, len);
   /* Add to string hash table. */
   hash &= g->str.mask;
-  u = gcrefu(g->str.tab[hash]);
-  setgcrefp(*lj_obj_gcwref(obj2gco(s)), (u & ~(uintptr_t)1));
+  u = gcrefu(strtab[hash]);
+  setgcrefp(*lj_obj_gcwref(obj2gco(s)), (u & ~(uintptr_t)LJ_STRHASH_LINKMASK));
   /* NOBARRIER: The string table is a GC root. */
-  setgcrefp(g->str.tab[hash], ((uintptr_t)s | (u & 1)));
+  setgcrefp(strtab[hash], ((uintptr_t)s | (u & LJ_STRHASH_SECONDARY)));
   if (g->str.num++ > g->str.mask)  /* Allow a 100% load factor. */
     lj_str_resize(L, (g->str.mask<<1)+1);  /* Grow string table. */
   return s;  /* Return newly interned string. */
@@ -317,15 +324,16 @@ GCstr *lj_str_new(lua_State *L, const char *str, size_t lenx)
   if (lenx-1 < LJ_MAX_STR-1) {
     MSize len = (MSize)lenx;
     StrHash hash = hash_sparse(g->str.seed, str, len);
+    GCRef *strtab = lj_str_buckets(g);
     MSize coll = 0;
     int hashalg = 0;
     /* Check if the string has already been interned. */
-    GCobj *o = gcref(g->str.tab[hash & g->str.mask]);
+    GCobj *o = lj_str_hashhead(strtab[hash & g->str.mask]);
 #if LUAJIT_SECURITY_STRHASH
-    if (LJ_UNLIKELY((uintptr_t)o & 1)) {  /* Secondary hash for this chain? */
+    if (LJ_UNLIKELY(lj_str_hashsecondary(strtab[hash & g->str.mask]))) {
       hashalg = 1;
       hash = hash_dense(g->str.seed, hash, str, len);
-      o = (GCobj *)(gcrefu(g->str.tab[hash & g->str.mask]) & ~(uintptr_t)1);
+      o = lj_str_hashhead(strtab[hash & g->str.mask]);
     }
 #endif
     while (o != NULL) {

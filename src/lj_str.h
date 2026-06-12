@@ -10,6 +10,22 @@
 
 #include "lj_obj.h"
 
+#define LJ_STRHASH_DEAD		((uintptr_t)1)
+#define LJ_STRHASH_SECONDARY	((uintptr_t)2)
+#define LJ_STRHASH_LINKMASK	(LJ_STRHASH_DEAD|LJ_STRHASH_SECONDARY)
+
+#define lj_str_hashhead(r) \
+  ((GCobj *)(void *)(gcrefu((r)) & ~(uintptr_t)LJ_STRHASH_LINKMASK))
+#define lj_str_hashflags(r)	(gcrefu((r)) & LJ_STRHASH_LINKMASK)
+#define lj_str_hashsecondary(r)	(gcrefu((r)) & LJ_STRHASH_SECONDARY)
+#define lj_str_buckets(g)	((g)->str.tabh->bucket)
+#define lj_str_tabsize(mask) \
+  ((mask) == ~(MSize)0 ? (GCSize)0 : \
+   (GCSize)offsetof(StrTabHdr, bucket) + \
+   (((GCSize)(mask) + 1u) * (GCSize)sizeof(GCRef)))
+#define lj_str_tabbytes(tabh) \
+  ((tabh) ? lj_str_tabsize((tabh)->mask) : (GCSize)0)
+
 /* String helpers. */
 LJ_FUNC int32_t LJ_FASTCALL lj_str_cmp(GCstr *a, GCstr *b);
 LJ_FUNC const char *lj_str_find(const char *s, const char *f,
@@ -22,7 +38,7 @@ LJ_FUNCA GCstr *lj_str_new(lua_State *L, const char *str, size_t len);
 LJ_FUNC void LJ_FASTCALL lj_str_free(global_State *g, GCstr *s);
 LJ_FUNC void LJ_FASTCALL lj_str_init(lua_State *L);
 #define lj_str_freetab(g) \
-  (lj_mem_freevec(g, g->str.tab, g->str.mask+1, GCRef))
+  (lj_mem_free((g), (g)->str.tabh, lj_str_tabbytes((g)->str.tabh)))
 
 #define lj_str_newz(L, s)	(lj_str_new(L, s, strlen(s)))
 #define lj_str_newlit(L, s)	(lj_str_new(L, "" s, sizeof(s)-1))

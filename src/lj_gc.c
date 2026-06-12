@@ -205,11 +205,13 @@ static void gc2_paranoia_checkone(global_State *g, GCobj *o)
 static void gc2_paranoia_check_strtab(global_State *g)
 {
   MSize i;
-  if (!g->str.tab || g->str.mask == ~(MSize)0)
+  GCRef *strtab;
+  if (!g->str.tabh || g->str.mask == ~(MSize)0)
     return;
+  strtab = lj_str_buckets(g);
   for (i = 0; i <= g->str.mask; i++) {
     GCobj *o;
-    for (o = gcref(g->str.tab[i]); o != NULL; o = gcnext(o))
+    for (o = lj_str_hashhead(strtab[i]); o != NULL; o = gcnext(o))
       gc2_paranoia_checkobj(g, o, "string");
   }
 }
@@ -231,7 +233,7 @@ static void gc2_paranoia_check_roots(global_State *g)
 
 static void gc2_paranoia_check_rawroots(global_State *g)
 {
-  gc2_paranoia_checkmem(g, g->str.tab, "string table");
+  gc2_paranoia_checkmem(g, g->str.tabh, "string table");
 #if LJ_64
   gc2_paranoia_checkmem(g, mref(g->gc.lightudseg, uint32_t),
 			"lightuserdata segments");
@@ -342,11 +344,13 @@ static void gc_mark(global_State *g, GCobj *o)
 static void gc_mark_fixedstr(global_State *g)
 {
   MSize i;
-  if (!g->str.tab || g->str.mask == ~(MSize)0)
+  GCRef *strtab;
+  if (!g->str.tabh || g->str.mask == ~(MSize)0)
     return;
+  strtab = lj_str_buckets(g);
   for (i = 0; i <= g->str.mask; i++) {
     GCobj *o;
-    for (o = gcref(g->str.tab[i]); o != NULL; o = gcnext(o))
+    for (o = lj_str_hashhead(strtab[i]); o != NULL; o = gcnext(o))
       if (lj_obj_gcflags(o) & (LJ_GC_FIXED|LJ_GC_SFIXED))
 	lj_gc_arena_markobj(g, o);
   }
@@ -359,7 +363,7 @@ static void gc_mark_gcroot(global_State *g)
     if (gcref(g->gcroot[i]) != NULL)
       gc_markobj(g, gcref(g->gcroot[i]));
   gc_mark_fixedstr(g);
-  lj_gc_arena_markmem(g, g->str.tab);
+  lj_gc_arena_markmem(g, g->str.tabh);
 #if LJ_64
   lj_gc_arena_markmem(g, mref(g->gc.lightudseg, uint32_t));
 #endif
@@ -737,7 +741,7 @@ static void gc_sweepstr(global_State *g, GCRef *chain)
   GCRef q;
   GCRef *p = &q;
   GCobj *o;
-  setgcrefp(q, (u & ~(uintptr_t)1));
+  setgcrefp(q, (u & ~(uintptr_t)LJ_STRHASH_LINKMASK));
   while ((o = gcref(*p)) != NULL) {
     if (((lj_obj_gcflags(o) ^ LJ_GC_WHITES) & ow)) {  /* Black or current white? */
       lj_assertG(!isdead(g, o) || (lj_obj_gcflags(o) & LJ_GC_FIXED),
@@ -751,7 +755,7 @@ static void gc_sweepstr(global_State *g, GCRef *chain)
       lj_str_free(g, gco2str(o));
     }
   }
-  setgcrefp(*chain, (gcrefu(q) | (u & 1)));
+  setgcrefp(*chain, (gcrefu(q) | (u & LJ_STRHASH_SECONDARY)));
 }
 
 /* Check whether we can clear a key or a value slot from a table. */
@@ -915,7 +919,7 @@ void lj_gc_freeall(global_State *g)
   g->gc.currentwhite = LJ_GC_WHITES | LJ_GC_SFIXED;
   gc_fullsweep(g, &g->gc.root);
   for (i = g->str.mask; i != ~(MSize)0; i--)  /* Free all string hash chains. */
-    gc_sweepstr(g, &g->str.tab[i]);
+    gc_sweepstr(g, &lj_str_buckets(g)[i]);
 }
 
 /* -- Collector ----------------------------------------------------------- */
@@ -980,7 +984,7 @@ static size_t gc_onestep(lua_State *L)
     return 0;
   case GCSsweepstring: {
     GCSize old = g->gc.total;
-    gc_sweepstr(g, &g->str.tab[g->gc.sweepstr++]);  /* Sweep one chain. */
+    gc_sweepstr(g, &lj_str_buckets(g)[g->gc.sweepstr++]);  /* Sweep one chain. */
     if (g->gc.sweepstr > g->str.mask)
       g->gc.state = GCSsweep;  /* All string hash chains sweeped. */
     lj_assertG(old >= g->gc.total, "sweep increased memory");

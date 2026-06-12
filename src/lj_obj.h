@@ -308,6 +308,14 @@ typedef const TValue cTValue;
 typedef uint32_t StrHash;	/* String hash value. */
 typedef uint32_t StrID;		/* String ID. */
 
+typedef struct StrTabHdr {
+  MSize mask;		/* String hash mask (size of hash table - 1). */
+  MSize resize;		/* Reserved resize claim for M5 lock-free interning. */
+  MSize copy_cursor;	/* Reserved resize copy cursor. */
+  uint64_t pad;		/* Keep bucket[] naturally aligned after the header. */
+  GCRef bucket[1];	/* String hash table anchors. */
+} StrTabHdr;
+
 /* String object header. String payload follows. */
 typedef struct GCstr {
   GCHeader;
@@ -630,8 +638,8 @@ typedef struct GCState {
 
 /* String interning state. */
 typedef struct StrInternState {
-  GCRef *tab;		/* String hash table anchors. */
-  MSize mask;		/* String hash mask (size of hash table - 1). */
+  StrTabHdr *tabh;	/* String hash table header and anchors. */
+  MSize mask;		/* Mirror of tabh->mask for existing fast paths. */
   MSize num;		/* Number of strings in hash table. */
   StrID id;		/* Next string ID. */
   uint8_t idreseed;	/* String ID reseed counter. */
