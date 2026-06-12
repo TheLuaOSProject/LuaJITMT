@@ -1027,11 +1027,11 @@ LUA_API int lua_setmetatable(lua_State *L, int idx)
   }
   g = G(L);
   if (tvistab(o)) {
-    setgcref(tabV(o)->metatable, obj2gco(mt));
+    setgcrefmt(tabV(o)->metatable, obj2gco(mt));
     if (mt)
       lj_gc_objbarriert(L, tabV(o), mt);
   } else if (tvisudata(o)) {
-    setgcref(udataV(o)->metatable, obj2gco(mt));
+    setgcrefmt(udataV(o)->metatable, obj2gco(mt));
     if (mt)
       lj_gc_objbarrier(L, udataV(o), mt);
   } else {
