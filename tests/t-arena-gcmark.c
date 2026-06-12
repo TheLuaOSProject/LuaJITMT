@@ -21,17 +21,25 @@ static int arena_marked(global_State *g, GCobj *o)
 {
   TGState *tg = G2TG(g);
   GCArena *a;
+  void *p = (void *)o;
   uint32_t cell;
   assert(tg != NULL);
   assert((tg->tg_flags & TGF_ARENA_INTERNAL) != 0);
-  a = lj_arena_of(o);
+#if LJ_HASFFI
+  if (o->gch.gct == ~LJ_TCDATA) {
+    GCcdata *cd = gco2cd(o);
+    if (cdataisv(cd))
+      p = memcdatav(cd);
+  }
+#endif
+  a = lj_arena_of(p);
   if (lj_arena_ishuge(a)) {
     LJHugeInfo hi;
     assert((tg->tg_flags & TGF_HUGETAB) != 0);
-    assert(lj_arena_hugetab_lookup(&tg->huge, o, &hi) == 1);
+    assert(lj_arena_hugetab_lookup(&tg->huge, p, &hi) == 1);
     return (hi.flags & LJ_HUGEF_MARK) != 0;
   }
-  cell = lj_arena_cellof(o);
+  cell = lj_arena_cellof(p);
   assert(cell >= LJ_AFIRST_CELL && cell < LJ_ARENA_CELLS);
   assert(lj_arena_bm_get(a->block, cell));
   return lj_arena_bm_get(a->mark, cell) != 0;
@@ -59,6 +67,9 @@ int main(void)
   GCstr *str;
   GCfunc *fn;
   GCupval *uv;
+#if LJ_HASFFI
+  GCcdata *cd;
+#endif
   LJHugeInfo hi;
 #if LJ_HASJIT
   GCtrace *trace;
@@ -68,6 +79,10 @@ int main(void)
   luaL_openlibs(L);
   assert(luaL_dostring(L,
     "keep = { t = { 1, 2, 3 }, s = string.rep('m', 22000) }\n"
+#if LJ_HASFFI
+    "local ffi = require('ffi')\n"
+    "keep.vcd = ffi.new('char[?]', 64)\n"
+#endif
     "keep.co = coroutine.create(function()\n"
     "  local x = { 4, 5, 6 }\n"
     "  keep.f = function() return x end\n"
@@ -102,6 +117,16 @@ int main(void)
   assert((hi.flags & LJ_HUGEF_TRAVERSABLE) == 0);
   assert(arena_marked(g, obj2gco(str)));
   L->top--;
+
+#if LJ_HASFFI
+  lua_getfield(L, -1, "vcd");
+  tv = L->top - 1;
+  assert(tviscdata(tv));
+  cd = cdataV(tv);
+  assert(cdataisv(cd));
+  assert(arena_marked(g, obj2gco(cd)));
+  L->top--;
+#endif
 
   lua_getfield(L, -1, "f");
   tv = L->top - 1;

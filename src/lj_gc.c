@@ -43,20 +43,34 @@
 
 /* -- Mark phase ---------------------------------------------------------- */
 
+static void *gc_arena_mark_base(GCobj *o)
+{
+#if LJ_HASFFI
+  if (o->gch.gct == ~LJ_TCDATA) {
+    GCcdata *cd = gco2cd(o);
+    if (cdataisv(cd))
+      return memcdatav(cd);
+  }
+#endif
+  return o;
+}
+
 static void gc_mark_arena(global_State *g, GCobj *o)
 {
   TGState *tg = G2TG(g);
   GCArena *a;
+  void *p;
   uint32_t cell;
   if (!tg || !(tg->tg_flags & TGF_ARENA_INTERNAL))
     return;
-  a = lj_arena_of(o);
+  p = gc_arena_mark_base(o);
+  a = lj_arena_of(p);
   if (lj_arena_ishuge(a)) {
     if (tg->tg_flags & TGF_HUGETAB)
-      lj_arena_hugetab_mark(&tg->huge, o, NULL);
+      lj_arena_hugetab_mark(&tg->huge, p, NULL);
     return;
   }
-  cell = lj_arena_cellof(o);
+  cell = lj_arena_cellof(p);
   if (cell >= LJ_AFIRST_CELL && cell < LJ_ARENA_CELLS &&
       lj_arena_bm_get(a->block, cell))
     la_bit_test_and_set64(&a->mark[cell >> 6], cell & 63);  /* 05 §5.6.1. */
@@ -81,20 +95,22 @@ static void gc_arena_verify_marked(global_State *g, GCobj *o)
 {
   TGState *tg = G2TG(g);
   GCArena *a;
+  void *p;
   uint32_t cell;
   if (!tg || !(tg->tg_flags & TGF_ARENA_INTERNAL))
     return;
-  a = lj_arena_of(o);
+  p = gc_arena_mark_base(o);
+  a = lj_arena_of(p);
   if (lj_arena_ishuge(a)) {
     LJHugeInfo hi;
     if (!(tg->tg_flags & TGF_HUGETAB) ||
-	lj_arena_hugetab_lookup(&tg->huge, o, &hi) != 1)
+	lj_arena_hugetab_lookup(&tg->huge, p, &hi) != 1)
       return;
     lj_assertG((hi.flags & LJ_HUGEF_MARK) != 0,
 	       "unmarked huge object at arena verify boundary");
     return;
   }
-  cell = lj_arena_cellof(o);
+  cell = lj_arena_cellof(p);
   if (cell < LJ_AFIRST_CELL || cell >= LJ_ARENA_CELLS ||
       !lj_arena_bm_get(a->block, cell))
     return;  /* Custom aligned objects need allocation-base marking first. */
