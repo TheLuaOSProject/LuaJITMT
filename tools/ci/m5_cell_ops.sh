@@ -74,14 +74,23 @@ done
 for needle in \
   'BC_CNEW' \
   'BC_CGET' \
-  'BC_CSET' \
-  'PROTO_NOJIT'
+  'BC_CSET'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_parse.c"; then
     echo "guardrail: missing parser local-cell marker: $needle" >&2
     exit 1
   fi
 done
+
+if ! awk '
+  /if \(fs_has_celluv\(fs\)\)/ { incelluv = 1 }
+  incelluv && /PROTO_NOJIT/ { exit 1 }
+  incelluv && /pt->numparams/ { exit 0 }
+  END { if (incelluv) exit 0; exit 1 }
+' "$ROOT/src/lj_parse.c"; then
+  echo "guardrail: source child cell-upvalue protos must not be marked NOJIT" >&2
+  exit 1
+fi
 
 for needle in \
   '#define GG_LEN_SDISP	BC__MAX' \
@@ -186,6 +195,57 @@ assert(run(200) == 200)
 assert(util.traceinfo(1), "expected traced GC-valued CSET owner loop")
 collectgarbage()
 assert(run(20) == 20)
+'
+
+LUA_PATH=$LUA_PATH_GUARD "$ROOT/src/luajit" -e '
+jit.flush()
+jit.opt.start("hotloop=1")
+local util = require"jit.util"
+local function make(seed)
+  local x = seed
+  return function()
+    x = x + 1
+    return x
+  end
+end
+local function run(seed, n)
+  local f = make(seed)
+  local last
+  for i = 1, n do last = f() end
+  return last, f
+end
+local v, f = run(0, 200)
+assert(v == 200 and f() == 201)
+assert(util.traceinfo(1), "expected traced child numeric upvalue loop")
+local v2, f2 = run(1000, 30)
+assert(v2 == 1030 and f2() == 1031)
+assert(f() == 202)
+'
+
+LUA_PATH=$LUA_PATH_GUARD "$ROOT/src/luajit" -e '
+jit.flush()
+jit.opt.start("hotloop=1")
+local util = require"jit.util"
+local function make(seed)
+  local x = {seed}
+  return function()
+    x = {x[1] + 1}
+    return x[1]
+  end
+end
+local function run(seed, n)
+  local f = make(seed)
+  local last
+  for i = 1, n do last = f() end
+  return last, f
+end
+local v, f = run(0, 200)
+assert(v == 200 and f() == 201)
+assert(util.traceinfo(1), "expected traced child GC upvalue loop")
+collectgarbage()
+local v2, f2 = run(1000, 30)
+assert(v2 == 1030 and f2() == 1031)
+assert(f() == 202)
 '
 
 cd "$ROOT/tests/stock/test"

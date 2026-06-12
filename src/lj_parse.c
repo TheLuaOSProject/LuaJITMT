@@ -1622,7 +1622,6 @@ static GCproto *fs_finish(LexState *ls, BCLine line)
   proto_initflags2(pt);
   if (fs_has_celluv(fs)) {
     proto_setcelluv(pt);
-    pt->flags |= PROTO_NOJIT;
   }
   pt->numparams = fs->numparams;
   pt->framesize = fs->framesize;
