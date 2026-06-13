@@ -93,6 +93,8 @@ for needle in \
   'lj_gc2_worker_drain_progress(g, LJ_GC2_WEAK_DRAIN_BATCH)' \
   'lj_gc2_worker_drain_progress(g, LJ_GC2_WORKER_DRAIN_BATCH)' \
   '05 section 5.6.3 bounded worker step bridge' \
+  'lj_gc2_fixpoint_round(g, L, LJ_GC2_WORKER_DRAIN_BATCH)' \
+  '05 section 5.7.1 bounded propagation fixpoint bridge' \
   '05 section 5.8 worker-owned weak-drain bridge' \
   'lj_gc2_worker_drain(g' \
   'lj_gc2_worker_drain_progress(global_State *g, uint32_t limit)' \

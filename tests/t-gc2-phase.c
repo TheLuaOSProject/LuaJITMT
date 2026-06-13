@@ -97,6 +97,61 @@ static void test_incremental_worker_step(lua_State *L, global_State *g,
   lua_pop(L, 3);
 }
 
+static void test_incremental_fixpoint_round(lua_State *L, global_State *g)
+{
+  GCtab *parent, *child, *grandchild;
+  uint64_t rounds0, hits0, worker_runs0, worker_grey0, worker_ssb0;
+  uint32_t old_stepmul = g->gc.stepmul;
+
+  lua_settop(L, 0);
+  lua_newtable(L);
+  parent = tabV(L->top - 1);
+  lua_newtable(L);
+  child = tabV(L->top - 1);
+  lua_newtable(L);
+  grandchild = tabV(L->top - 1);
+  lua_pushvalue(L, -1);
+  lua_rawseti(L, -3, 1);  /* child[1] = grandchild. */
+  lua_pushvalue(L, -2);
+  lua_rawseti(L, -4, 1);  /* parent[1] = child. */
+  lua_pop(L, 2);  /* Keep only parent as the stack root. */
+
+  lj_gc2_legacy_mark_begin(g);
+  setgcrefnull(g->gc.gray);
+  setgcrefnull(g->gc.grayagain);
+  setgcrefnull(g->gc.weak);
+  g->gc.state = GCSpropagate;
+  assert(lj_gc2_ismarked(g, obj2gco(parent)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(grandchild)) == 0);
+  assert(lj_gc2_ssb_empty(g));
+
+  rounds0 = la_load64_acq(&g->gc2.fixpoint_rounds);
+  hits0 = la_load64_acq(&g->gc2.fixpoint_hits);
+  worker_runs0 = la_load64_acq(&g->gc2.worker_runs);
+  worker_grey0 = la_load64_acq(&g->gc2.worker_grey_drained);
+  worker_ssb0 = la_load64_acq(&g->gc2.worker_ssb_converted);
+  g->gc.stepmul = 1;
+  g->gc.debt = 0;
+  lj_gc_threshold_store(g, g->gc.total);
+  assert(lj_gc_step(L) <= 0);
+  assert(g->gc2.phase == LJ_GC2_MARK);
+  assert(g->gc.state == GCSpropagate);
+  assert(la_load64_acq(&g->gc2.fixpoint_rounds) == rounds0 + 1u);
+  assert(la_load64_acq(&g->gc2.fixpoint_hits) == hits0);
+  assert(lj_gc2_ismarked(g, obj2gco(parent)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(grandchild)) == 1);
+  assert(la_load64_acq(&g->gc2.worker_runs) > worker_runs0);
+  assert(la_load64_acq(&g->gc2.worker_grey_drained) > worker_grey0);
+  assert(la_load64_acq(&g->gc2.worker_ssb_converted) > worker_ssb0);
+
+  g->gc.stepmul = old_stepmul;
+  g->gc.state = GCSpause;
+  lj_gc2_legacy_cycle_end(g);
+  lua_pop(L, 1);
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -122,6 +177,7 @@ int main(void)
   assert_idle(g, tg);
 
   test_incremental_worker_step(L, g, tg);
+  test_incremental_fixpoint_round(L, g);
 
   lua_newtable(L);
   phase_tab = tabV(L->top - 1);
