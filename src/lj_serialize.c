@@ -375,23 +375,31 @@ static char *serialize_get(char *r, SBufExt *sbx, TValue *o)
   uint32_t tp;
   r = serialize_ru124(r, w, &tp); if (LJ_UNLIKELY(!r)) goto eob;
   if (LJ_LIKELY(tp >= SER_TAG_STR)) {
+    TValue tv;
     uint32_t len = tp - SER_TAG_STR;
     if (LJ_UNLIKELY(len > (uint32_t)(w - r))) goto eob;
-    setstrV(sbufL(sbx), o, lj_str_new(sbufL(sbx), r, len));
+    setstrV(sbufL(sbx), &tv, lj_str_new(sbufL(sbx), r, len));
+    copyTVrel(sbufL(sbx), o, &tv);
     r += len;
   } else if (tp == SER_TAG_INT) {
+    TValue tv;
     if (LJ_UNLIKELY(r + 4 > w)) goto eob;
-    setintV(o, (int32_t)(LJ_BE ? lj_bswap(lj_getu32(r)) : lj_getu32(r)));
+    setintV(&tv, (int32_t)(LJ_BE ? lj_bswap(lj_getu32(r)) : lj_getu32(r)));
+    copyTVrel(sbufL(sbx), o, &tv);
     r += 4;
   } else if (tp == SER_TAG_NUM) {
+    TValue tv;
     if (LJ_UNLIKELY(r + 8 > w)) goto eob;
-    memcpy(o, r, 8); r += 8;
+    memcpy(&tv, r, 8); r += 8;
 #if LJ_BE
-    o->u64 = lj_bswap64(o->u64);
+    tv.u64 = lj_bswap64(tv.u64);
 #endif
-    if (!tvisnum(o)) setnanV(o);  /* Fix non-canonical NaNs. */
+    if (!tvisnum(&tv)) setnanV(&tv);  /* Fix non-canonical NaNs. */
+    copyTVrel(sbufL(sbx), o, &tv);
   } else if (tp <= SER_TAG_TRUE) {
-    setpriV(o, ~tp);
+    TValue tv;
+    setpriV(&tv, ~tp);
+    copyTVrel(sbufL(sbx), o, &tv);
   } else if (tp == SER_TAG_DICT_STR) {
     GCtab *dict_str;
     uint32_t idx;
@@ -402,7 +410,7 @@ static char *serialize_get(char *r, SBufExt *sbx, TValue *o)
       TValue tv;
       lj_tv_load_acq(&tv, &lj_tab_array_acq(dict_str)[idx]);
       if (tvisstr(&tv)) {
-	copyTV(sbufL(sbx), o, &tv);
+	copyTVrel(sbufL(sbx), o, &tv);
       } else {
 	lj_err_callerv(sbufL(sbx), LJ_ERR_BUFFER_BADDICTX, idx);
       }
@@ -443,7 +451,11 @@ static char *serialize_get(char *r, SBufExt *sbx, TValue *o)
     t = lj_tab_new(sbufL(sbx), narray, hsize2hbits(nhash));
     /* NOBARRIER: The table is new (marked white). */
     setgcref(t->metatable, obj2gco(mt));
-    settabV(sbufL(sbx), o, t);
+    {
+      TValue tv;
+      settabV(sbufL(sbx), &tv, t);
+      copyTVrel(sbufL(sbx), o, &tv);
+    }
     if (narray) {
       TValue *oa = lj_tab_array_acq(t) + (tp >= SER_TAG_TAB+4);
       TValue *oe = lj_tab_array_acq(t) + narray;
@@ -481,9 +493,14 @@ static char *serialize_get(char *r, SBufExt *sbx, TValue *o)
       if (!tvisnum(&cdo[0])) setnanV(&cdo[0]);
       if (!tvisnum(&cdo[1])) setnanV(&cdo[1]);
     }
-    setcdataV(sbufL(sbx), o, cd);
+    {
+      TValue tv;
+      setcdataV(sbufL(sbx), &tv, cd);
+      copyTVrel(sbufL(sbx), o, &tv);
+    }
 #endif
   } else if (tp <= (LJ_64 ? SER_TAG_LIGHTUD64 : SER_TAG_LIGHTUD32)) {
+    TValue tv;
     uintptr_t ud = 0;
     if (tp == SER_TAG_LIGHTUD32) {
       if (LJ_UNLIKELY(r + 4 > w)) goto eob;
@@ -498,10 +515,11 @@ static char *serialize_get(char *r, SBufExt *sbx, TValue *o)
       ud = lj_bswap64(ud);
 #endif
     }
-    setrawlightudV(o, lj_lightud_intern(sbufL(sbx), (void *)ud));
+    setrawlightudV(&tv, lj_lightud_intern(sbufL(sbx), (void *)ud));
 #else
-    setrawlightudV(o, (void *)ud);
+    setrawlightudV(&tv, (void *)ud);
 #endif
+    copyTVrel(sbufL(sbx), o, &tv);
   } else {
 badtag:
     lj_err_callerv(sbufL(sbx), LJ_ERR_BUFFER_BADDEC, tp);

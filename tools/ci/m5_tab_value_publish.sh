@@ -56,6 +56,8 @@ for needle in \
   'lj_tab_storebool(L, tv, 1)' \
   'lj_tab_storetv(ls->L, o, &tv)' \
   'lj_tab_storetv(ls->L, lj_tab_set(ls->L, t, &key), &tv)' \
+  'copyTVrel(sbufL(sbx), o, &tv)' \
+  'settabV(sbufL(sbx), &tv, t)' \
   'lj_tab_storeint(L, lj_tab_newkey(L, dict, &tv), (int32_t)(i-1))'
 do
   if ! rg -F -q "$needle" "$ROOT/src"; then
@@ -102,6 +104,12 @@ fi
 if rg -n 'bcread_ktabk\(ls, o, NULL\)|bcread_ktabk\(ls, lj_tab_set\(ls->L, t, &key\), t\)' \
     "$ROOT/src/lj_bcread.c"; then
   echo "guardrail: bytecode template table slots must release-publish" >&2
+  exit 1
+fi
+
+if rg -n 'copyTV\(sbufL\(sbx\), o, &tv\)|settabV\(sbufL\(sbx\), o, t\)|setstrV\(sbufL\(sbx\), o,|setintV\(o,|setpriV\(o,|setcdataV\(sbufL\(sbx\), o,|setrawlightudV\(o,' \
+    "$ROOT/src/lj_serialize.c"; then
+  echo "guardrail: serializer decode outputs must release-publish" >&2
   exit 1
 fi
 
