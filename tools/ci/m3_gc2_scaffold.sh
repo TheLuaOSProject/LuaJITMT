@@ -84,6 +84,7 @@ for needle in \
   '05 section 5.8 bounded weak-drain bridge' \
   'lj_gc2_worker_drain(g' \
   'lj_gc2_worker_drain_progress(global_State *g, uint32_t limit)' \
+  'weak = lj_gc2_weak_drain(g, limit - work)' \
   'lj_gc2_ssb_empty(g)' \
   'la_loadptr_acq((void *const *)&tg->ssb_next)' \
   'la_storeptr_rel((void **)&tg->ssb_next' \

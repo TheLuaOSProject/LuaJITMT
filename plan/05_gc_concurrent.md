@@ -177,7 +177,9 @@ pool, grow-safe per-worker deque ownership, idle declaration, and scheduling
 remain the original target above. `lj_gc2_worker_drain_progress()` exposes the
 same bounded drain surface but returns total progress, including leaf-only SSB
 conversions that do not traverse a grey object, so future idle/fixpoint loops
-do not need to infer progress from telemetry counters.
+do not need to infer progress from telemetry counters. During `P_WEAK`, any
+remaining worker budget can also advance `lj_gc2_weak_drain()` through the
+published weak snapshot; the full scheduler-owned weak drain remains staged.
 
 ### 5.6.4 gc2_traverse — per-type tracing
 Port the existing traversal logic, replacing color plumbing:

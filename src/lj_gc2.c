@@ -1670,7 +1670,7 @@ static uint32_t gc2_drain_grey(global_State *g, uint32_t limit)
 static uint32_t gc2_worker_drain_inner(global_State *g, uint32_t limit,
 				       uint32_t *progress)
 {
-  uint32_t phase, n = 0, converted = 0;
+  uint32_t phase, n = 0, converted = 0, weak = 0;
   if (progress)
     *progress = 0;
   if (!g || limit == 0)
@@ -1694,7 +1694,12 @@ static uint32_t gc2_worker_drain_inner(global_State *g, uint32_t limit,
       converted += moved;
     }
   }
-  if (n || converted)
+  if (phase == LJ_GC2_WEAK) {
+    uint32_t work = n + converted;
+    if (work < limit)
+      weak = lj_gc2_weak_drain(g, limit - work);  /* 05 section 5.8. */
+  }
+  if (n || converted || weak)
     la_add64_rlx(&g->gc2.worker_runs, 1);
   if (n) {
     la_add64_rlx(&g->gc2.grey_drained, n);
@@ -1703,10 +1708,11 @@ static uint32_t gc2_worker_drain_inner(global_State *g, uint32_t limit,
   if (converted)
     la_add64_rlx(&g->gc2.worker_ssb_converted, converted);
   if (progress) {
-    if (converted > ~(uint32_t)0 - n)
+    if (converted > ~(uint32_t)0 - n ||
+	weak > ~(uint32_t)0 - n - converted)
       *progress = ~(uint32_t)0;
     else
-      *progress = n + converted;
+      *progress = n + converted + weak;
   }
   return n;
 }
