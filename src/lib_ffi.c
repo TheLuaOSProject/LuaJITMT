@@ -134,7 +134,7 @@ static int ffi_index_meta(lua_State *L, CTState *cts, CType *ct, MMS mm)
     } else {
       TValue *o = lj_meta_tset(L, tv, base+1);
       if (o) {
-	copyTV(L, o, base+2);
+	copyTVrel(L, o, base+2);
 	return 0;
       }
     }
@@ -441,12 +441,10 @@ static int ffi_callback_set(lua_State *L, GCfunc *fn)
       GCtab *t = cts->miscmap;
       TValue *tv = lj_tab_setint(L, t, (int32_t)slot);
       if (fn) {
-	TValue tmp;
-	setfuncV(L, &tmp, fn);
-	copyTVrel(L, tv, &tmp);
+	lj_tab_storefunc(L, tv, fn);
 	lj_gc_pubtab(L, t);
       } else {
-	setnilV(tv);
+	lj_tab_storenil(L, tv);
 	cts->cb.cbid[slot] = 0;
 	cts->cb.topid = slot < cts->cb.topid ? slot : cts->cb.topid;
       }

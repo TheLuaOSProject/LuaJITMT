@@ -1376,11 +1376,11 @@ static void rec_idx_bump(jit_State *J, RecordIndex *ix)
 	  lj_tv_load_acq(&key, &node[i].key);
 	  lj_tv_load_acq(&val, &node[i].val);
 	  if (!tvisnil(&key) && tvisnil(&val))
-	    settabV(J->L, &node[i].val, tpl);
+	    lj_tab_storetab(J->L, &node[i].val, tpl);
 	}
 	if (!tvisnil(&ix->keyv) && tref_isk(ix->key)) {
 	  TValue *o = lj_tab_set(J->L, tpl, &ix->keyv);
-	  if (tvisnil(o)) settabV(J->L, o, tpl);
+	  if (tvisnil(o)) lj_tab_storetab(J->L, o, tpl);
 	}
 	lj_tab_resize(J->L, tpl, tb_asize, nhbits);
 	node = lj_tab_node_acq(tpl);
@@ -1390,7 +1390,7 @@ static void rec_idx_bump(jit_State *J, RecordIndex *ix)
 	  lj_tv_load_acq(&val, &node[i].val);
 	  /* This is safe, since template tables only hold immutable values. */
 	  if (tvistab(&val))
-	    setnilV(&node[i].val);
+	    lj_tab_storenil(J->L, &node[i].val);
 	}
 	/* The shape of the table may have changed. Clean up array part, too. */
 	asize = lj_tab_asize_acq(tpl);
@@ -1399,7 +1399,7 @@ static void rec_idx_bump(jit_State *J, RecordIndex *ix)
 	  TValue val;
 	  lj_tv_load_acq(&val, &array[i]);
 	  if (tvistab(&val))
-	    setnilV(&array[i]);
+	    lj_tab_storenil(J->L, &array[i]);
 	}
 	J->retryrec = 1;  /* Abort the trace at the end of recording. */
       }

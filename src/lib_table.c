@@ -104,9 +104,9 @@ LJLIB_CF(table_insert)		LJLIB_REC(.)
       if (src) {
 	TValue val;
 	lj_tv_load_acq(&val, src);
-	copyTV(L, dst, &val);
+	lj_tab_storetv(L, dst, &val);
       } else {
-	setnilV(dst);
+	lj_tab_storenil(L, dst);
       }
     }
     i = n;
@@ -295,7 +295,7 @@ LJLIB_CF(table_pack)
   lj_tab_storeint(L, lj_tab_setstr(L, t, strV(lj_lib_upvalue(L, 1))),
 		  (int32_t)n);
   for (array = lj_tab_array_acq(t) + 1, i = 0; i < n; i++)
-    copyTV(L, &array[i], &base[i]);
+    lj_tab_storetv(L, &array[i], &base[i]);
   settabV(L, base, t);
   L->top = base+1;
   lj_gc_check(L);

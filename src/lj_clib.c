@@ -352,10 +352,13 @@ TValue *lj_clib_index(lua_State *L, CLibrary *cl, GCstr *name)
       CType *ctt = ctype_child(cts, ct);
       lj_assertCTS(ctype_isinteger(ctt->info) && ctt->size <= 4,
 		   "only 32 bit const supported");  /* NYI */
-      if ((ctt->info & CTF_UNSIGNED) && (int32_t)ct->size < 0)
-	setnumV(tv, (lua_Number)(uint32_t)ct->size);
-      else
-	setintV(tv, (int32_t)ct->size);
+      if ((ctt->info & CTF_UNSIGNED) && (int32_t)ct->size < 0) {
+	TValue tmp;
+	setnumV(&tmp, (lua_Number)(uint32_t)ct->size);
+	lj_tab_storetv(L, tv, &tmp);
+      } else {
+	lj_tab_storeint(L, tv, (int32_t)ct->size);
+      }
     } else {
       const char *sym = clib_extsym(cts, ct, name);
 #if LJ_TARGET_WINDOWS

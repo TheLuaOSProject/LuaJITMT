@@ -32,6 +32,20 @@ for needle in \
   'lj_tab_storefunc' \
   'lj_tab_storeudata' \
   'copyTVrel(L, dst, src)' \
+  'copyTVrel(L, o, L->top+1)' \
+  'copyTVrel(L, o, --L->top)' \
+  'lj_tab_storetv(L, dst, &val)' \
+  'lj_tab_storenil(L, dst)' \
+  'lj_tab_storetv(L, &array[i], &base[i])' \
+  'lj_tab_storetab(J->L, &node[i].val, tpl)' \
+  'lj_tab_storetab(J->L, o, tpl)' \
+  'lj_tab_storenil(J->L, &node[i].val)' \
+  'lj_tab_storenil(J->L, &array[i])' \
+  'copyTVrel(L, o, base+2)' \
+  'lj_tab_storefunc(L, tv, fn)' \
+  'lj_tab_storenil(L, tv)' \
+  'lj_tab_storetv(L, tv, &tmp)' \
+  'lj_tab_storeint(L, tv, (int32_t)ct->size)' \
   'lj_tab_storeint(L, lj_tab_newkey(L, dict, &tv), (int32_t)(i-1))'
 do
   if ! rg -F -q "$needle" "$ROOT/src"; then
@@ -43,6 +57,24 @@ done
 if rg -n 'set[a-zA-Z0-9_]*V\([^;]*lj_tab_set|lj_tab_set[^;]*\)->u64|lj_tab_newkey\([^;]*\)->u64|copyTV\([^;]*lj_tab_set' \
     "$ROOT/src" --glob '!host/*'; then
   echo "guardrail: raw table slot stores must use lj_tab_store* or copyTVrel" >&2
+  exit 1
+fi
+
+if rg -n 'copyTV\(L, o, L->top\+1\)|copyTV\(L, o, --L->top\)|copyTV\(L, dst, &val\)|setnilV\(dst\)|copyTV\(L, &array\[i\], &base\[i\]\)' \
+    "$ROOT/src/lj_api.c" "$ROOT/src/lib_table.c"; then
+  echo "guardrail: API/table library direct table slot stores must release-publish" >&2
+  exit 1
+fi
+
+if rg -n 'settabV\(J->L, &(node\[i\]\.val|array\[i\]), tpl\)|settabV\(J->L, o, tpl\)|setnilV\(&(node\[i\]\.val|array\[i\])\)' \
+    "$ROOT/src/lj_record.c"; then
+  echo "guardrail: recorder template table markers must release-publish" >&2
+  exit 1
+fi
+
+if rg -n 'copyTV\(L, o, base\+2\)|setnilV\(tv\)|setnumV\(tv,|setintV\(tv,' \
+    "$ROOT/src/lib_ffi.c" "$ROOT/src/lj_clib.c"; then
+  echo "guardrail: FFI/clib table aliases must release-publish" >&2
   exit 1
 fi
 

@@ -1018,7 +1018,7 @@ LUA_API void lua_settable(lua_State *L, int idx)
   if (o) {
     /* NOBARRIER: lj_meta_tset ensures the table is not black. */
     L->top -= 2;
-    copyTV(L, o, L->top+1);
+    copyTVrel(L, o, L->top+1);
   } else {
     TValue *base = L->top;
     copyTV(L, base+2, base-3-2*LJ_FR2);
@@ -1038,7 +1038,7 @@ LUA_API void lua_setfield(lua_State *L, int idx, const char *k)
   o = lj_meta_tset(L, t, &key);
   if (o) {
     /* NOBARRIER: lj_meta_tset ensures the table is not black. */
-    copyTV(L, o, --L->top);
+    copyTVrel(L, o, --L->top);
   } else {
     TValue *base = L->top;
     copyTV(L, base+2, base-3-2*LJ_FR2);
