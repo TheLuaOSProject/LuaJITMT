@@ -64,6 +64,9 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.mark_complete_runs, 0);
   la_store64_rlx(&g->gc2.mark_complete_hits, 0);
   la_store64_rlx(&g->gc2.mark_to_weak, 0);
+  la_store64_rlx(&g->gc2.weak_complete_runs, 0);
+  la_store64_rlx(&g->gc2.weak_complete_progress, 0);
+  la_store64_rlx(&g->gc2.weak_to_sweep, 0);
   g->gc2.alloc_since_trigger = 0;
   g->gc2.trigger_bytes = 0;
   g->gc2.hard_bytes = 0;
@@ -451,7 +454,17 @@ void lj_gc2_mark_to_weak(global_State *g)
 
 void lj_gc2_legacy_sweep_begin(global_State *g)
 {
-  g->gc2.phase = LJ_GC2_SWEEP;
+  lj_gc2_weak_to_sweep(g);
+}
+
+void lj_gc2_weak_to_sweep(global_State *g)
+{
+  uint32_t phase;
+  if (!g)
+    return;
+  phase = la_xchg32_acqrel(&g->gc2.phase, LJ_GC2_SWEEP);
+  if (phase == LJ_GC2_WEAK)
+    la_add64_rlx(&g->gc2.weak_to_sweep, 1);
   lj_gc2_handshake(g, LJ_GC2_HS_DISABLE_BARRIER|LJ_GC2_HS_RESET_ALLOC|
 		   LJ_GC2_HS_FLUSH_SSB);
   (void)lj_gc2_drain_ssb(g);  /* Temporary worker-consume stand-in. */
@@ -1073,6 +1086,33 @@ void lj_gc2_weak_legacy_result(global_State *g, int skipped)
     la_add64_rlx(&g->gc2.weak_legacy_skipped, 1);
   else
     la_add64_rlx(&g->gc2.weak_legacy_fallbacks, 1);
+}
+
+int lj_gc2_weak_complete(global_State *g, GCobj *legacy, uint32_t drain_limit)
+{
+  uint32_t weakdrain;
+  uint64_t progress = 0;
+  if (!g || drain_limit == 0 || la_load32_acq(&g->gc2.phase) != LJ_GC2_WEAK)
+    return 0;
+  la_add64_rlx(&g->gc2.weak_complete_runs, 1);
+  for (;;) {
+    weakdrain = lj_gc2_worker_drain_progress(g, drain_limit);
+    if (weakdrain) {
+      progress += (uint64_t)weakdrain;
+      continue;
+    }
+    if (la_load32_acq(&g->gc2.worker_active) == 0)
+      break;
+    la_cpu_pause();  /* 05 section 5.8: peer drain must finish before fallback. */
+  }
+  if (progress)
+    la_add64_rlx(&g->gc2.weak_complete_progress, progress);
+  if (lj_gc2_weak_snapshot_covers_legacy(g, legacy)) {
+    lj_gc2_weak_legacy_result(g, 1);
+    return 1;  /* 05 section 5.8 scheduler-owned weak completion bridge. */
+  }
+  lj_gc2_weak_legacy_result(g, 0);
+  return 0;  /* 05 section 5.8 conditional legacy weak fallback. */
 }
 
 void lj_gc2_finreg_cdata_set(global_State *g, GCobj *o, int enabled)

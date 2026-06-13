@@ -851,6 +851,9 @@ typedef struct GC2State {
   uint64_t mark_complete_runs;  /* Final mark completion attempts. */
   uint64_t mark_complete_hits;  /* Final mark completion reached fixpoint. */
   uint64_t mark_to_weak;  /* MARK-to-WEAK phase publications. */
+  uint64_t weak_complete_runs;  /* P_WEAK completion attempts. */
+  uint64_t weak_complete_progress;  /* Worker progress during P_WEAK finish. */
+  uint64_t weak_to_sweep;  /* WEAK-to-SWEEP phase publications. */
   uint64_t alloc_since_trigger;  /* Flushed mutator allocation bytes. */
   uint64_t trigger_bytes;  /* Allocation bytes before next GC2 trigger. */
   uint64_t hard_bytes;	/* Allocation bytes before mutator assists. */

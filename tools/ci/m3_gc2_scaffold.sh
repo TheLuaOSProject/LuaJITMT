@@ -17,6 +17,9 @@ for needle in \
   'uint64_t mark_complete_runs' \
   'uint64_t mark_complete_hits' \
   'uint64_t mark_to_weak' \
+  'uint64_t weak_complete_runs' \
+  'uint64_t weak_complete_progress' \
+  'uint64_t weak_to_sweep' \
   'GCRef *weak_stack' \
   'uint8_t *weak_ready' \
   'uint64_t weak_count' \
@@ -119,18 +122,23 @@ for needle in \
   'lj_gc2_fixpoint_run(global_State *g, lua_State *L' \
   'lj_gc2_mark_complete(global_State *g, lua_State *L' \
   'lj_gc2_mark_to_weak(global_State *g)' \
+  'lj_gc2_weak_complete(global_State *g, GCobj *legacy' \
+  'lj_gc2_weak_to_sweep(global_State *g)' \
   'la_xchg64_acqrel(&g->gc2.marks_this_round, 0)' \
   '05 section 5.7.1 scheduler-owned mark completion bridge' \
   'la_add64_rlx(&g->gc2.mark_to_weak' \
+  '05 section 5.8 scheduler-owned weak completion bridge' \
+  'la_add64_rlx(&g->gc2.weak_to_sweep' \
   'LJ_GC2_HS_SCAN_ROOTS|LJ_GC2_HS_FLUSH_SSB' \
   'gc2_traverse_trace(g, &J->cur)' \
   '05 section 5.7.4 current trace root' \
-  'lj_gc2_worker_drain_progress(g, LJ_GC2_WEAK_DRAIN_BATCH)' \
+  'weakdrain = lj_gc2_worker_drain_progress(g, drain_limit)' \
+  'la_load32_acq(&g->gc2.worker_active) == 0' \
+  '05 section 5.8: peer drain must finish before fallback' \
   'lj_gc2_worker_drain_progress(g, LJ_GC2_WORKER_DRAIN_BATCH)' \
   '05 section 5.6.3 bounded worker step bridge' \
   'lj_gc2_fixpoint_round(g, L, LJ_GC2_WORKER_DRAIN_BATCH)' \
   '05 section 5.7.1 bounded propagation fixpoint bridge' \
-  '05 section 5.8 worker-owned weak-drain bridge' \
   '05 section 5.6.3 temporary single-worker bridge' \
   'la_cas32(&g->gc2.worker_active' \
   'la_store32_rel(&g->gc2.worker_active, 0)' \
@@ -176,7 +184,7 @@ for needle in \
   'la_loadptr_acq((void *const *)&tg->ssb_next)' \
   'la_storeptr_rel((void **)&tg->ssb_next' \
   'lj_gc2_mark_complete(g, L, 64, ~(uint32_t)0)' \
-  'if (lj_gc2_weak_snapshot_covers_legacy(g, gcref(g->gc.weak)))' \
+  'lj_gc2_weak_complete(g, gcref(g->gc.weak), LJ_GC2_WEAK_DRAIN_BATCH)' \
   'gc_clearweak(g, gcref(g->gc.weak))' \
   '05 section 5.8 conditional legacy weak fallback'
 do

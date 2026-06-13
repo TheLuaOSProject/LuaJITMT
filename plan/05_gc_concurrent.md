@@ -338,12 +338,16 @@ P_WEAK (leader+workers, barrier still ON, mutators running):
   clear FINREG (run-once, like markfinalized today). Finalizer thread runs
   entries after P_SWEEP begins (ordering: reverse registration like today’s
   mmudata list — preserve by pushing in registry order and reversing).
-Current bridge note: `lj_gc2_legacy_weak_begin()` now makes `P_WEAK` visible
-after the fixpoint/paranoia bridge and before legacy `gc_clearweak()`. This
-preserves the original `MARK -> WEAK -> SWEEP` phase shape for follow-up work,
-but legacy weak clearing remains authoritative; the weak-table worklist and
-full concurrent weak clearing above are not implemented yet. GC2 traversal now
-stores weak-table discoveries in a bounded GC2-owned side vector
+Current bridge note: `lj_gc2_mark_to_weak()` now makes `P_WEAK` visible after
+the fixpoint/paranoia bridge, and `lj_gc2_legacy_weak_begin()` aliases that
+helper for current callers. `lj_gc2_weak_complete()` owns the current bounded
+weak-drain loop and legacy fallback decision, while `lj_gc2_weak_to_sweep()`
+publishes the staged `P_SWEEP` transition and runs the existing sweep-entry
+handshake. This preserves the original `MARK -> WEAK -> SWEEP` phase shape for
+follow-up work, but legacy atomic still supplies the stop-the-world oracle; the
+independent weak-table worklist and full concurrent weak/sweep phase ownership
+above are not implemented yet. GC2 traversal now stores weak-table discoveries
+in a bounded GC2-owned side vector
 (`weak_stack`/`weak_count`) with per-slot ready publication, and counts them by
 mode (`weak_tables_seen`, `weak_tables_weakkey`, `weak_tables_weakval`,
 `weak_tables_allweak`, `weak_tables_queued`, `weak_tables_overflow`) without
@@ -356,16 +360,16 @@ clear predicate, advances through the published ready prefix with
 applies the same predicate with release nil stores, advances through the
 published ready prefix with `weak_clear_cursor` without moving past
 reserved-but-unpublished slots, and now runs before the legacy weak-clearing
-fallback. `lj_gc2_weak_drain()` is the phase-gated bounded driver used by the
-legacy atomic bridge in `LJ_GC2_WEAK_DRAIN_BATCH` chunks while the full
+fallback. `lj_gc2_weak_drain()` is the phase-gated bounded driver used by
+`lj_gc2_weak_complete()` in `LJ_GC2_WEAK_DRAIN_BATCH` chunks while the full
 worker-owned weak drain is staged. The current bridge uses the legacy color
 bits as a stop-the-world weak-clear oracle while `g->gc.state == GCSatomic`,
 so GC2 weak-key/all-weak clearing matches the legacy `gc_mayclear()` predicate
-even though GC2 stack rescans are intentionally more conservative. It skips
-legacy `gc_clearweak()` after `lj_gc2_weak_snapshot_covers_legacy()` proves the
-current-cycle snapshot was fully published, fully clear-drained, and covers
-every table in the final legacy `g->gc.weak` list; otherwise the legacy pass
-remains the authoritative fallback for tables not yet covered by GC2.
+even though GC2 stack rescans are intentionally more conservative. The helper
+skips legacy `gc_clearweak()` after `lj_gc2_weak_snapshot_covers_legacy()`
+proves the current-cycle snapshot was fully published, fully clear-drained, and
+covers every table in the final legacy `g->gc.weak` list; otherwise the legacy
+pass remains the authoritative fallback for tables not yet covered by GC2.
 String-bearing weak hash slots now follow legacy `gc_mayclear()` semantics in
 the GC2 clear driver: strings are marked but are not themselves weak-cleared,
 while a collectable key/value on the other side can still clear the entry. The
