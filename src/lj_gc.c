@@ -1276,6 +1276,7 @@ int LJ_FASTCALL lj_gc_step_jit(global_State *g, MSize steps)
   lua_State *L = lj_tg_cur_L(g);
   L->base = lj_tg_jit_base(g);
   L->top = curr_topL(L);
+  lj_gc2_assist(g, L2TG(L));  /* 05 section 5.11 trace-side assist bridge. */
   while (steps-- > 0 && lj_gc_step(L) == 0)
     ;
   /* Return 1 to force a trace exit. */

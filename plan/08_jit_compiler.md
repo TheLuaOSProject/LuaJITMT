@@ -254,10 +254,11 @@ handler — sized LJ_MAX_EXITSTUBGR-compatible; see lj_vmstruct notes.
   inline alloc IR; route them to the TG bump (mirror of 07 §7.5) — the IR
   for inline alloc (lj_asm.c asm_snew/asm_tnew via lj_ir_call → actually
   allocations on trace call lj_tab_new etc. through IRCALL) stays C calls
-  in v1 (DECIDED — inline-alloc IR is an M9 optimization); the C allocator
-  polls/assists, satisfying pacing. Remove `lj_gc_step_jit` (lj_gc.c:764)
-  and the `IR_GCSTEP`-ish machinery / `J->ircall` gc check emission —
-  grep `gc_step_jit|GCSTEP` and excise with the legacy GC step path.
+  in v1 (DECIDED — inline-alloc IR is an M9 optimization). Original report
+  target retained: the C allocator polls/assists, satisfying pacing, then
+  remove `lj_gc_step_jit` (lj_gc.c) and the `IR_GCSTEP`-ish machinery /
+  `J->ircall` gc check emission — grep `gc_step_jit|GCSTEP` and excise with
+  the legacy GC step path once replacement trace pacing is complete.
   Current M6 bridge: allocation calls still update legacy `g->gc.total` and
   now also accumulate positive allocation growth into `TG.local_total`, which
   flushes into `GC2State.alloc_since_trigger` at 32 KiB boundaries, safepoint
@@ -274,7 +275,10 @@ handler — sized LJ_MAX_EXITSTUBGR-compatible; see lj_vmstruct notes.
   conversion, and at most `1 << assist_shift` grey-object traversals. Keep
   `lj_gc_step_jit`/`IR_GCSTEP` guarded until independent concurrent cycle
   leadership, worker ownership, and trace allocation checks fully replace
-  legacy pacing.
+  legacy pacing. Current staged deviation from the original removal target:
+  `lj_gc_step_jit` now runs the same bounded GC2 assist bridge before legacy
+  stepping, so trace-side GC checks can contribute GC2 mark work while the
+  legacy `IR_GCSTEP` machinery remains present.
 - **Barriers on trace** (§8.8.5 details): stores to heap (HSTORE/ASTORE/
   USTORE/FSTORE-with-gc-value/XSTORE-to-gcobj? XSTORE is cdata: exempt)
   emit the phase-gated mark sequence. The TGMARK load may be CSE'd *within
