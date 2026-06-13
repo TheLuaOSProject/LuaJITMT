@@ -233,9 +233,12 @@ handler — sized LJ_MAX_EXITSTUBGR-compatible; see lj_vmstruct notes.
   Current M6 bridge: x86-64 emits guarded `IR_XPOLL` after `IR_LOOP` and at
   inlined Lua function entries once framedepth reaches 8, lowering both with
   `RID_DISPATCH` addressing the current TG-local dispatch table. This covers
-  the LOOP-backedge and FUNCF-depth parts of the original requirement; the
-  XBAR/TGMARK invalidation model remains the follow-up target rather than
-  being silently deleted.
+  the LOOP-backedge and FUNCF-depth parts of the original requirement. The
+  first TGMARK invalidation slice keeps `TBAR`/`OBAR` CSE inside poll-free
+  regions and gates their x64 GC2 helper calls on the current TG's
+  `mark_active` mirror, so a trace poll can enable the GC2 barrier before
+  later heap stores. The broader XBAR/TGMARK alias model remains the follow-up
+  target rather than being silently deleted.
 - **Allocation on trace**: TNEW/TDUP/CNEW/SNEW already call into C or use
   inline alloc IR; route them to the TG bump (mirror of 07 §7.5) — the IR
   for inline alloc (lj_asm.c asm_snew/asm_tnew via lj_ir_call → actually
@@ -322,9 +325,11 @@ to finish the original scoped-flush target.
    falls back to regular `HREF` if the shape changes while recording. Legacy
    table-slot stores are not recorded for now: the recorder raises the normal
    NYI-bytecode trace error before emitting `HSTORE` or `ASTORE` for indexed
-   stores. The original plan kept traced array stores for barrier coverage, but
-   the current M5 bridge demotes them until the final generation-aware trace
-   write/barrier protocol can replace raw generated stores.
+   stores, and the M5 guardrail asserts both array and hash table-store loops
+   stay untraced. The original plan kept traced array stores for barrier
+   coverage, but the current M5 bridge demotes them until the final
+   generation-aware trace write/barrier protocol can replace raw generated
+   stores.
 2. **TDUP/TNEW colo**: colo removed (06 §6.2) — recorder paths that
    special-case colocated arrays (`lj_record_tnew`, table.new fast func)
    simplify.

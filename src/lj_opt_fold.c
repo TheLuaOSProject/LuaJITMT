@@ -156,9 +156,10 @@ typedef IRRef (LJ_FASTCALL *FoldFunc)(jit_State *J);
 /* Barrier to prevent using operands across PHIs. */
 #define PHIBARRIER(ir)	if (irt_isphi((ir)->t)) return NEXTFOLD
 
-/* Barrier to prevent folding across a GC step.
+/* Barrier to prevent folding across a GC step or trace safepoint poll.
 ** GC steps can only happen at the head of a trace and at LOOP.
 ** And the GC is only driven forward if there's at least one allocation.
+** Trace polls can enable GC2 mark-active at safepoints.
 */
 #define gcstep_barrier(J, ref) \
   ((ref) < J->chain[IR_LOOP] && \
@@ -166,6 +167,10 @@ typedef IRRef (LJ_FASTCALL *FoldFunc)(jit_State *J);
     J->chain[IR_TNEW] || J->chain[IR_TDUP] || \
     J->chain[IR_CNEW] || J->chain[IR_CNEWI] || \
     J->chain[IR_BUFSTR] || J->chain[IR_TOSTR] || J->chain[IR_CALLA]))
+#define xpoll_barrier(J, ref) \
+  ((ref) < J->chain[IR_XPOLL])
+#define trace_barrier(J, ref) \
+  (gcstep_barrier((J), (ref)) || xpoll_barrier((J), (ref)))
 
 /* -- Constant folding for FP numbers ------------------------------------- */
 
@@ -2442,7 +2447,7 @@ LJFOLD(OBAR any any)
 LJFOLDF(barrier_tab)
 {
   TRef tr = lj_opt_cse(J);
-  if (gcstep_barrier(J, tref_ref(tr)))  /* CSE across GC step? */
+  if (trace_barrier(J, tref_ref(tr)))  /* CSE across GC step/poll? */
     return EMITFOLD;  /* Raw emit. Assumes fins is left intact by CSE. */
   return tr;
 }
@@ -2452,7 +2457,7 @@ LJFOLD(TBAR TDUP)
 LJFOLDF(barrier_tnew_tdup)
 {
   /* New tables are always white and never need a barrier. */
-  if (fins->op1 < J->chain[IR_LOOP])  /* Except across a GC step. */
+  if (fins->op1 < J->chain[IR_LOOP] || fins->op1 < J->chain[IR_XPOLL])
     return NEXTFOLD;
   return DROPFOLD;
 }
