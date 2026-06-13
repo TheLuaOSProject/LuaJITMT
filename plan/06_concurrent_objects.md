@@ -53,11 +53,13 @@ the same instant the gen pointer is republished and may lag — every guard
 that uses them is backed by a re-check through the real header on the slow
 path, so staleness only costs a trace exit, never correctness.
 
-Empty hash part: today t->node points at the shared `g->nilnode` and
-freetop abuses it (lj_tab.c:99,114,265, lj_obj.h:648). Under MT a *write*
-must never target shared nilnode; keep nilnode for reads (lookup miss path
-unchanged) but `lj_tab_newkey` on hmask_c==0 goes straight to "install
-first NHdr" (a resize from nothing) — delete the freetop-in-nilnode trick.
+Empty hash part: the original report target is still that `lj_tab_newkey`
+on hmask_c==0 goes straight to "install first NHdr" (a resize from nothing)
+and deletes the freetop-in-nilnode trick. Current implementation is an
+intermediate: empty tables still point `t->node` at the shared `g->nilnode`,
+but `global_State.nilnodehdr` is embedded immediately before it, so every
+published table node pointer has a valid header and writes must still rehash
+before targeting shared nilnode.
 
 ## 6.3 Tables: operations
 
@@ -161,21 +163,27 @@ G). Memory: at most 2 gens live per table transiently.
 
 Current implementation status: runtime tables still use the legacy `GCtab`
 layout and freetop scan while the tracked `nbtab_model` remains the reference
-for the final header-generation/helper-copy port. The landed intermediate
-slices keep the shared nilnode read-only for first hash inserts and now retire
-old hash `Node[]` vectors plus separated legacy array vectors from
-`lj_tab_resize()` behind the completed safepoint epoch before freeing them.
-This removes the immediate resize free hazard for future acquire-load readers.
-Hash-chain walks in the C runtime and serialization paths now use acquire
-loads, and collision inserts initialize a stable free node before
-release-publishing it through the anchor's `next` link; legacy Brent node
-relocation has been removed. The legacy `GCtab.node` pointer itself is now
-release-published after vector initialization and acquire-loaded by C-side
-table, GC, serialization, bytecode-writer, parser, and recorder readers.
-Legacy `GCtab.array` C readers use acquire-loaded pointer/size helpers and
-snapshot slot values before nil/type/copy decisions; array growth initializes
-slots before release-publishing the pointer and then `asize`, while shrink keeps
-the current allocation capacity until the final `AHdr` port. On x86-64,
+for the final header-generation/helper-copy port. As an NHdr-lite bridge,
+hash vectors are now allocated with a small `TabNodeHdr` immediately before
+`Node[0]`; `GCtab.node` still points at `Node[0]`, and `GCtab.hmask` remains a
+compatibility mirror, but C-side hash-vector readers derive the real mask from
+the acquired node header. The shared nilnode has a matching embedded header.
+The landed intermediate slices keep the shared nilnode read-only for first hash
+inserts and retire old headered hash vectors plus separated legacy array
+vectors from `lj_tab_resize()` behind the completed safepoint epoch before
+freeing them. This removes the immediate resize free hazard for future
+acquire-load readers and prevents C readers from indexing one node generation
+with another generation's mask. Hash-chain walks in the C runtime and
+serialization paths now use acquire loads, and collision inserts initialize a
+stable free node before release-publishing it through the anchor's `next` link;
+legacy Brent node relocation has been removed. The legacy `GCtab.node` pointer
+itself is now release-published after vector initialization and acquire-loaded
+by C-side table, GC, serialization, bytecode-writer, parser, and recorder
+readers. Legacy `GCtab.array` C readers use acquire-loaded pointer/size helpers
+and snapshot slot values before nil/type/copy decisions; array growth
+initializes slots before release-publishing the pointer and then `asize`, while
+shrink keeps the current allocation capacity until the final `AHdr` port. On
+x86-64,
 `lj_vm_next` hash traversal, the `BC_ITERN` array/hash iterator path, and
 `ipairs_aux` array iteration now load candidate values into registers before nil
 decisions and copy those same snapshots to their results; `BC_TGETS`/`BC_TSETS`

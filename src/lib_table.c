@@ -72,7 +72,7 @@ LJLIB_CF(table_maxn)
     }
   }
   node = lj_tab_node_acq(t);
-  hmask = t->hmask;
+  hmask = lj_tab_node_hmask_acq(node);
   for (i = (ptrdiff_t)hmask; i >= 0; i--) {
     TValue key, val;
     lj_tv_load_acq(&val, &node[i].val);

@@ -20,8 +20,10 @@ assert(sum == 800 * 17)
 
 for needle in \
   'Node *hrefk_node = lj_tab_node_acq(t);' \
-  'uint32_t hrefk_hmask = t->hmask;' \
-  'hrefk_node == lj_tab_node_acq(t) && hrefk_hmask == t->hmask' \
+  'uint32_t hrefk_hmask = lj_tab_node_hmask_acq(hrefk_node);' \
+  'Node *cur_node = lj_tab_node_acq(t);' \
+  'hrefk_node == cur_node &&' \
+  'hrefk_hmask == lj_tab_node_hmask_acq(cur_node)' \
   'uintptr_t oldvaddr = (uintptr_t)(const void *)ix->oldv;' \
   'uintptr_t nodeaddr = (uintptr_t)(const void *)&hrefk_node[0].val' \
   'lj_ir_kint(J, (int32_t)hrefk_hmask)'
@@ -34,6 +36,7 @@ done
 
 for reject in \
   '(char *)&lj_tab_node_acq(t)[0].val' \
+  'hrefk_hmask == t->hmask' \
   'lj_ir_kint(J, (int32_t)t->hmask)'
 do
   if rg -F -n "$reject" "$ROOT/src/lj_record.c"; then

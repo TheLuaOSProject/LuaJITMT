@@ -217,6 +217,10 @@ trace's PCs/parents, run by the leader between cycles with token.
    recorded AH pointer, never on asize_c inside the trace — asize_c is
    only for the pre-trace shape test. Then stale pairs are impossible.)
    IMPLEMENT the latter.
+   Current implementation note: `GCtab.hmask` is only a compatibility mirror
+   after the landed `TabNodeHdr` slice, while C readers use the node header.
+   The original JIT target above remains pending for runtime HREF/HREFK/HSTORE
+   codegen; do not treat the mirror as the final correctness source.
    Current implementation status: before the full `AHdr`/`NHdr` reshape, the
    legacy `GCtab` table-field `FLOAD`s for array/node/asize/hmask are emitted
    as fresh loads instead of being CSE'd under the old "no corresponding

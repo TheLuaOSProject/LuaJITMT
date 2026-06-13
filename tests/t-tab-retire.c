@@ -61,10 +61,12 @@ int main(void)
   for (i = 0; i < 4; i++)
     set_pair(L, i);
 
-  oldnode = noderef(t->node);
-  oldhmask = t->hmask;
+  oldnode = lj_tab_node_acq(t);
+  oldhmask = lj_tab_node_hmask_acq(oldnode);
+  assert(oldhmask == t->hmask);
   lj_tab_resize(L, t, t->asize, lj_fls(t->hmask) + 2u);
-  assert(noderef(t->node) != oldnode);
+  assert(lj_tab_node_acq(t) != oldnode);
+  assert(lj_tab_node_hmask_acq(oldnode) == oldhmask);
   ret = find_retired(g, oldnode);
   assert(ret != NULL);
   assert(ret->hmask == oldhmask);
@@ -77,7 +79,7 @@ int main(void)
   for (i = 0; i < 4; i++)
     check_pair(L, i);
 
-  oldnode = noderef(t->node);
+  oldnode = lj_tab_node_acq(t);
   lj_tab_resize(L, t, t->asize, lj_fls(t->hmask) + 2u);
   assert(find_retired(g, oldnode) != NULL);
 

@@ -32,18 +32,46 @@ static Node *hashkey(const GCtab *t, cTValue *key)
   /* Only hash 32 bits of lightuserdata on a 64 bit CPU. Good enough? */
 }
 
+static Node *hashkey_node(Node *node, MSize hmask, cTValue *key)
+{
+  lj_assertX(!tvisint(key), "attempt to hash integer");
+  if (tvisstr(key))
+    return hashstr_node(node, hmask, strV(key));
+  else if (tvisnum(key))
+    return hashnum_node(node, hmask, key);
+  else if (tvisbool(key))
+    return hashmask_node(node, hmask, boolV(key));
+  else
+    return hashgcref_node(node, hmask, key->gcr);
+}
+
 /* -- Table creation and destruction -------------------------------------- */
+
+static LJ_AINLINE Node *tab_node_new(lua_State *L, MSize hmask)
+{
+  TabNodeHdr *hdr = (TabNodeHdr *)lj_mem_new(L, lj_tab_node_bytes(hmask));
+  Node *node = (Node *)(void *)((char *)(void *)hdr + sizeof(TabNodeHdr));
+  hdr->hmask = hmask;
+  hdr->unused = 0;
+  return node;
+}
+
+static LJ_AINLINE void tab_node_free(global_State *g, Node *node, MSize hmask)
+{
+  lj_mem_free(g, lj_tab_node_hdrw(node), lj_tab_node_bytes(hmask));
+}
 
 /* Create new hash part for table. */
 static LJ_AINLINE void newhpart(lua_State *L, GCtab *t, uint32_t hbits)
 {
-  uint32_t i, hsize;
+  uint32_t i, hsize, hmask;
   Node *node;
   lj_assertL(hbits != 0, "zero hash size");
   if (hbits > LJ_MAX_HBITS)
     lj_err_msg(L, LJ_ERR_TABOV);
   hsize = 1u << hbits;
-  node = lj_mem_newvec(L, hsize, Node);
+  hmask = hsize - 1u;
+  node = tab_node_new(L, hmask);
   for (i = 0; i < hsize; i++) {
     Node *n = &node[i];
     lj_tab_nextnode_set(n, NULL);
@@ -51,8 +79,8 @@ static LJ_AINLINE void newhpart(lua_State *L, GCtab *t, uint32_t hbits)
     setnilV(&n->val);
   }
   setfreetop(t, node, &node[hsize]);
-  t->hmask = hsize-1;
   lj_tab_node_rel(t, node);
+  lj_tab_hmask_rel(t, hmask);
 }
 
 static void tab_retired_push(global_State *g, TabNodeRetire *ret)
@@ -126,8 +154,8 @@ static void tab_array_retire_arm(global_State *g, TabArrayRetire *ret)
 static LJ_AINLINE void clearhpart(GCtab *t)
 {
   Node *node = lj_tab_node_acq(t);
-  uint32_t i, hmask = t->hmask;
-  lj_assertX(t->hmask != 0, "empty hash part");
+  uint32_t i, hmask = lj_tab_node_hmask_acq(node);
+  lj_assertX(hmask != 0, "empty hash part");
   for (i = 0; i <= hmask; i++) {
     Node *n = &node[i];
     lj_tab_nextnode_set(n, NULL);
@@ -234,10 +262,12 @@ GCtab * LJ_FASTCALL lj_tab_dup(lua_State *L, const GCtab *kt)
 {
   GCtab *t;
   uint32_t asize, hmask;
+  Node *knode = lj_tab_node_acq(kt);
+  hmask = lj_tab_node_hmask_acq(knode);
   t = newtab(L, lj_tab_asize_acq(kt),
-	     kt->hmask > 0 ? lj_fls(kt->hmask)+1 : 0);
+	     hmask > 0 ? lj_fls(hmask)+1 : 0);
   lj_assertL(lj_tab_asize_acq(kt) == lj_tab_asize_acq(t) &&
-	     kt->hmask == t->hmask,
+	     hmask == lj_tab_node_hmask_acq(lj_tab_node_acq(t)),
 	     "mismatched size of table and template");
   t->nomm = 0;  /* Keys with metamethod names may be present. */
   asize = lj_tab_asize_acq(kt);
@@ -248,11 +278,9 @@ GCtab * LJ_FASTCALL lj_tab_dup(lua_State *L, const GCtab *kt)
     for (i = 0; i < asize; i++)
       lj_tv_load_acq(&array[i], &karray[i]);
   }
-  hmask = kt->hmask;
   if (hmask > 0) {
     uint32_t i;
     Node *node = lj_tab_node_acq(t);
-    Node *knode = lj_tab_node_acq(kt);
     ptrdiff_t d = (char *)node - (char *)knode;
     setfreetop(t, node, (Node *)((char *)getfreetop(kt, knode) + d));
     for (i = 0; i <= hmask; i++) {
@@ -274,10 +302,13 @@ GCtab * LJ_FASTCALL lj_tab_dup(lua_State *L, const GCtab *kt)
 /* Clear a table. */
 void LJ_FASTCALL lj_tab_clear(GCtab *t)
 {
+  Node *node;
+  MSize hmask;
   clearapart(t);
-  if (t->hmask > 0) {
-    Node *node = lj_tab_node_acq(t);
-    setfreetop(t, node, &node[t->hmask+1]);
+  node = lj_tab_node_acq(t);
+  hmask = lj_tab_node_hmask_acq(node);
+  if (hmask > 0) {
+    setfreetop(t, node, &node[hmask+1]);
     clearhpart(t);
   }
 }
@@ -287,8 +318,10 @@ void LJ_FASTCALL lj_tab_free(global_State *g, GCtab *t)
 {
   MSize size = LJ_MAX_COLOSIZE != 0 && t->colo ?
 	       sizetabcolo((uint32_t)t->colo & 0x7f) : sizeof(GCtab);
-  if (t->hmask > 0)
-    lj_mem_freevec(g, lj_tab_node_acq(t), t->hmask+1, Node);
+  Node *node = lj_tab_node_acq(t);
+  MSize hmask = lj_tab_node_hmask_acq(node);
+  if (hmask > 0)
+    tab_node_free(g, node, hmask);
   if (t->acap > 0 && tab_array_separated(t))
     lj_mem_freevec(g, lj_tab_array_acq(t), t->acap, TValue);
   if (!lj_mem_freegco_defer(g, t, size))
@@ -304,7 +337,7 @@ void lj_tab_resize(lua_State *L, GCtab *t, uint32_t asize, uint32_t hbits)
   TValue *oldarray = lj_tab_array_acq(t);
   uint32_t oldasize = lj_tab_asize_acq(t);
   uint32_t oldacap = t->acap;
-  uint32_t oldhmask = t->hmask;
+  uint32_t oldhmask = lj_tab_node_hmask_acq(oldnode);
   TabNodeRetire *oldret = oldhmask > 0 ?
     tab_retire_reserve(L, oldnode, oldhmask) : NULL;
   TabArrayRetire *oldaret = NULL;
@@ -339,7 +372,7 @@ void lj_tab_resize(lua_State *L, GCtab *t, uint32_t asize, uint32_t hbits)
     }
   } else {
     global_State *g = G(L);
-    t->hmask = 0;
+    lj_tab_hmask_rel(t, 0);
 #if LJ_GC64
     setmref(t->freetop, &g->nilnode);
 #endif
@@ -390,7 +423,7 @@ uint32_t lj_tab_reclaim_retired(global_State *g, uint64_t completed_epoch)
     if (!la_load32_acq(&ret->armed)) {
       tab_retired_push(g, ret);
     } else if (la_load64_acq(&ret->retire_epoch) < completed_epoch) {
-      lj_mem_freevec(g, ret->node, ret->hmask+1, Node);
+      tab_node_free(g, ret->node, ret->hmask);
       lj_mem_freet(g, ret);
       reclaimed++;
     } else {
@@ -428,7 +461,7 @@ void lj_tab_freeretired(global_State *g)
   while (ret) {
     TabNodeRetire *next = ret->next;
     if (la_load32_acq(&ret->armed))
-      lj_mem_freevec(g, ret->node, ret->hmask+1, Node);
+      tab_node_free(g, ret->node, ret->hmask);
     lj_mem_freet(g, ret);
     ret = next;
   }
@@ -485,7 +518,7 @@ static uint32_t countarray(const GCtab *t, uint32_t *bins)
 static uint32_t counthash(const GCtab *t, uint32_t *bins, uint32_t *narray)
 {
   Node *node = lj_tab_node_acq(t);
-  uint32_t total, na, i, hmask = t->hmask;
+  uint32_t total, na, i, hmask = lj_tab_node_hmask_acq(node);
   for (total = na = 0, i = 0; i <= hmask; i++) {
     Node *n = &node[i];
     TValue key, val;
@@ -528,7 +561,9 @@ static void rehashtab(lua_State *L, GCtab *t, cTValue *ek)
 
 void lj_tab_reasize(lua_State *L, GCtab *t, uint32_t nasize)
 {
-  lj_tab_resize(L, t, nasize+1, t->hmask > 0 ? lj_fls(t->hmask)+1 : 0);
+  Node *node = lj_tab_node_acq(t);
+  MSize hmask = lj_tab_node_hmask_acq(node);
+  lj_tab_resize(L, t, nasize+1, hmask > 0 ? lj_fls(hmask)+1 : 0);
 }
 
 /* -- Table getters ------------------------------------------------------- */
@@ -599,17 +634,18 @@ cTValue *lj_tab_get(lua_State *L, GCtab *t, cTValue *key)
 /* Insert new key. Nodes are never moved within a hash generation. */
 TValue *lj_tab_newkey(lua_State *L, GCtab *t, cTValue *key)
 {
+  Node *nodebase = lj_tab_node_acq(t);
+  MSize hmask = lj_tab_node_hmask_acq(nodebase);
   Node *n;
-  if (t->hmask == 0) {
+  if (hmask == 0) {
     rehashtab(L, t, key);
     return lj_tab_set(L, t, key);
   }
-  n = hashkey(t, key);
+  n = hashkey_node(nodebase, hmask, key);
   if (!lj_tv_isnil_acq(&n->val)) {
-    Node *nodebase = lj_tab_node_acq(t);
     Node *freenode = getfreetop(t, nodebase);
     lj_assertL(nodebase != &G(L)->nilnode, "insert into fallback hash");
-    lj_assertL(freenode >= nodebase && freenode <= nodebase+t->hmask+1,
+    lj_assertL(freenode >= nodebase && freenode <= nodebase+hmask+1,
 	       "bad freenode");
     do {
       if (freenode == nodebase) {  /* No free node found? */
@@ -722,12 +758,14 @@ uint32_t LJ_FASTCALL lj_tab_keyindex(GCtab *t, cTValue *key)
       return (uint32_t)k + 1;
   }
   if (!tvisnil(key)) {
-    Node *n = hashkey(t, key);
+    Node *node = lj_tab_node_acq(t);
+    MSize hmask = lj_tab_node_hmask_acq(node);
+    Node *n = hashkey_node(node, hmask, key);
     do {
       TValue nk;
       lj_tv_load_acq(&nk, &n->key);
       if (lj_obj_equal(&nk, key))
-	return asize + (uint32_t)((n+1) - lj_tab_node_acq(t));
+	return asize + (uint32_t)((n+1) - node);
     } while ((n = lj_tab_nextnode_acq(n)));
     if (key->u32.hi == LJ_KEYINDEX)  /* Despecialized ITERN while running. */
       return key->u32.lo;
@@ -756,7 +794,7 @@ int lj_tab_next(GCtab *t, cTValue *key, TValue *o)
   /* Then traverse the hash part. */
   {
     Node *node = lj_tab_node_acq(t);
-    uint32_t hmask = t->hmask;
+    uint32_t hmask = lj_tab_node_hmask_acq(node);
     for (; idx <= hmask; idx++) {
       Node *n = &node[idx];
       TValue key, val;
@@ -817,7 +855,8 @@ MSize LJ_FASTCALL lj_tab_len(GCtab *t)
     return (MSize)lo;
   }
   /* Without a hash part, there's an implicit nil after the last element. */
-  return t->hmask ? tab_len_slow(t, hi) : (MSize)hi;
+  return lj_tab_node_hmask_acq(lj_tab_node_acq(t)) ? tab_len_slow(t, hi) :
+						     (MSize)hi;
 }
 
 #if LJ_HASJIT
@@ -832,7 +871,8 @@ MSize LJ_FASTCALL lj_tab_len_hint(GCtab *t, size_t hint)
     lj_tv_load_acq(&tvnext, &array[hint+1]);
     if (LJ_LIKELY(!tvisnil(&tv) && tvisnil(&tvnext)))
       return (MSize)hint;
-  } else if (hint+1 <= asize && LJ_LIKELY(t->hmask == 0)) {
+  } else if (hint+1 <= asize &&
+	     LJ_LIKELY(lj_tab_node_hmask_acq(lj_tab_node_acq(t)) == 0)) {
     TValue tv;
     lj_tv_load_acq(&tv, &array[hint]);
     if (!tvisnil(&tv))

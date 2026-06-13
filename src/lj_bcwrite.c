@@ -189,10 +189,10 @@ static void bcwrite_ktab(BCWriteCtx *ctx, char *p, const GCtab *t)
     }
     narray = (MSize)(i+1);
   }
-  if (t->hmask > 0) {  /* Count number of used hash slots. */
+  hashnode = lj_tab_node_acq(t);
+  hmask = lj_tab_node_hmask_acq(hashnode);
+  if (hmask > 0) {  /* Count number of used hash slots. */
     MSize i;
-    hashnode = lj_tab_node_acq(t);
-    hmask = t->hmask;
     for (i = 0; i <= hmask; i++)
       nhash += !lj_tv_isnil_acq(&hashnode[i].val);
   }

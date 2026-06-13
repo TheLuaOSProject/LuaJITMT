@@ -6,6 +6,7 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 
 "$ROOT/tools/ci/m5_nbtab_model.sh"
 "$ROOT/tools/ci/m5_tab_emptyhash.sh"
+"$ROOT/tools/ci/m5_tab_nodehdr.sh"
 "$ROOT/tools/ci/m5_tab_retire.sh"
 "$ROOT/tools/ci/m5_tab_chain_order.sh"
 "$ROOT/tools/ci/m5_tab_node_publish.sh"

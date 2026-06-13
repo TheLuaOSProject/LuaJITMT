@@ -17,6 +17,7 @@
 static void assert_nilnode_clean(lua_State *L)
 {
   Node *nilnode = &G(L)->nilnode;
+  assert(lj_tab_node_hmask_acq(nilnode) == 0);
   assert(tvisnil(&nilnode->key));
   assert(tvisnil(&nilnode->val));
   assert(nextnode(nilnode) == NULL);
@@ -29,6 +30,7 @@ static GCtab *new_empty_table(lua_State *L)
   t = tabV(L->top-1);
   assert(t->hmask == 0);
   assert(noderef(t->node) == &G(L)->nilnode);
+  assert(lj_tab_node_hmask_acq(lj_tab_node_acq(t)) == 0);
 #if LJ_GC64
   assert(getfreetop(t, noderef(t->node)) == &G(L)->nilnode);
 #endif

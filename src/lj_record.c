@@ -1450,7 +1450,7 @@ static TRef rec_idx_key(jit_State *J, RecordIndex *ix, IRRef *rbref,
   TRef key;
   GCtab *t = tabV(&ix->tabv);
   Node *hrefk_node = lj_tab_node_acq(t);
-  uint32_t hrefk_hmask = t->hmask;
+  uint32_t hrefk_hmask = lj_tab_node_hmask_acq(hrefk_node);
   ix->oldv = lj_tab_get(J->L, t, &ix->keyv);  /* Lookup previous value. */
   *rbref = 0;
   rbguard->irt = 0;
@@ -1495,7 +1495,7 @@ static TRef rec_idx_key(jit_State *J, RecordIndex *ix, IRRef *rbref,
   }
 
   /* Otherwise the key is located in the hash part. */
-  if (t->hmask == 0) {  /* Shortcut for empty hash part. */
+  if (hrefk_hmask == 0) {  /* Shortcut for empty hash part. */
     /* Guard that the hash part stays empty. */
     TRef tmp = emitir(IRTI(IR_FLOAD), ix->tab, IRFL_TAB_HMASK);
     emitir(IRTGI(IR_EQ), tmp, lj_ir_kint(J, 0));
@@ -1505,7 +1505,9 @@ static TRef rec_idx_key(jit_State *J, RecordIndex *ix, IRRef *rbref,
     key = emitir(IRTN(IR_CONV), key, IRCONV_NUM_INT);
   if (tref_isk(key)) {
     /* Optimize lookup of constant hash keys. */
-    if (hrefk_node == lj_tab_node_acq(t) && hrefk_hmask == t->hmask) {
+    Node *cur_node = lj_tab_node_acq(t);
+    if (hrefk_node == cur_node &&
+	hrefk_hmask == lj_tab_node_hmask_acq(cur_node)) {
       uintptr_t oldvaddr = (uintptr_t)(const void *)ix->oldv;
       uintptr_t nodeaddr = (uintptr_t)(const void *)&hrefk_node[0].val;
       GCSize hslot = oldvaddr >= nodeaddr ? (GCSize)(oldvaddr-nodeaddr) :
@@ -1719,7 +1721,7 @@ static IRType rec_next_types(GCtab *t, uint32_t idx)
   idx -= asize;
   {
     Node *node = lj_tab_node_acq(t);
-    uint32_t hmask = t->hmask;
+    uint32_t hmask = lj_tab_node_hmask_acq(node);
     for (; idx <= hmask; idx++) {
       Node *n = &node[idx];
       TValue key, val;

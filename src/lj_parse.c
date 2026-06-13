@@ -1401,7 +1401,7 @@ static void fs_fixup_k(FuncState *fs, GCproto *pt, void *kptr)
     }
   }
   node = lj_tab_node_acq(kt);
-  hmask = kt->hmask;
+  hmask = lj_tab_node_hmask_acq(node);
   for (i = 0; i <= hmask; i++) {
     Node *n = &node[i];
     TValue key, val;

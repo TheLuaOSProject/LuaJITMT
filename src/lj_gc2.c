@@ -117,7 +117,7 @@ static void gc2_mark_tab_retired_mem(global_State *g)
        ret = (TabNodeRetire *)la_loadptr_acq((void *const *)&ret->next)) {
     lj_gc2_markmem(g, ret);
     if (la_load32_acq(&ret->armed))
-      lj_gc2_markmem(g, ret->node);
+      lj_gc2_markmem(g, lj_tab_node_hdrw(ret->node));
   }
 }
 
@@ -729,8 +729,11 @@ static int gc2_traverse_tab(global_State *g, GCtab *t)
   GCtab *mt = tabref(t->metatable);
   if (t->acap > 0)
     lj_gc2_markmem(g, lj_tab_array_acq(t));
-  if (t->hmask > 0)
-    lj_gc2_markmem(g, lj_tab_node_acq(t));
+  {
+    Node *node = lj_tab_node_acq(t);
+    if (lj_tab_node_hmask_acq(node) > 0)
+      lj_gc2_markmem(g, lj_tab_node_hdrw(node));
+  }
   if (mt)
     gc2_markobj_worker(g, obj2gco(mt));
   mode = lj_meta_fastg(g, mt, MM_mode);
@@ -757,18 +760,20 @@ static int gc2_traverse_tab(global_State *g, GCtab *t)
       gc2_mark_tv_worker(g, &val);
     }
   }
-  if (t->hmask > 0) {
+  {
     Node *node = lj_tab_node_acq(t);
-    MSize i, hmask = t->hmask;
-    for (i = 0; i <= hmask; i++) {
-      Node *n = &node[i];
-      TValue key, val;
-      lj_tv_load_acq(&val, &n->val);
-      if (!tvisnil(&val)) {
-	lj_tv_load_acq(&key, &n->key);
-	lj_assertG(!tvisnil(&key), "mark of nil key in non-empty slot");
-	if (!(weak & LJ_GC_WEAKKEY)) gc2_mark_tv_worker(g, &key);
-	if (!(weak & LJ_GC_WEAKVAL)) gc2_mark_tv_worker(g, &val);
+    MSize i, hmask = lj_tab_node_hmask_acq(node);
+    if (hmask > 0) {
+      for (i = 0; i <= hmask; i++) {
+	Node *n = &node[i];
+	TValue key, val;
+	lj_tv_load_acq(&val, &n->val);
+	if (!tvisnil(&val)) {
+	  lj_tv_load_acq(&key, &n->key);
+	  lj_assertG(!tvisnil(&key), "mark of nil key in non-empty slot");
+	  if (!(weak & LJ_GC_WEAKKEY)) gc2_mark_tv_worker(g, &key);
+	  if (!(weak & LJ_GC_WEAKVAL)) gc2_mark_tv_worker(g, &val);
+	}
       }
     }
   }

@@ -55,13 +55,17 @@ int main(void)
   assert(t->hmask == 7);
   node = lj_tab_node_acq(t);
   assert(node == noderef(t->node));
-  assert_clear_hash(node, t->hmask);
+  assert(lj_tab_node_hmask_acq(node) == 7);
+  assert_clear_hash(node, lj_tab_node_hmask_acq(node));
 
   for (i = 0; i < 6; i++)
     set_pair(L, i);
   oldnode = lj_tab_node_acq(t);
+  assert(lj_tab_node_hmask_acq(oldnode) == t->hmask);
   lj_tab_resize(L, t, t->asize, lj_fls(t->hmask) + 2u);
   assert(lj_tab_node_acq(t) != oldnode);
+  assert(lj_tab_node_hmask_acq(oldnode) == 7);
+  assert(lj_tab_node_hmask_acq(lj_tab_node_acq(t)) == t->hmask);
   for (i = 0; i < 6; i++)
     check_pair(L, i);
 
@@ -73,6 +77,7 @@ int main(void)
   lj_tab_resize(L, t, t->asize, 0);
   assert(t->hmask == 0);
   assert(lj_tab_node_acq(t) == &G(L)->nilnode);
+  assert(lj_tab_node_hmask_acq(lj_tab_node_acq(t)) == 0);
 
   lua_close(L);
   printf("t-tab-node-publish OK: table node vectors publish with acquire/release helpers\n");

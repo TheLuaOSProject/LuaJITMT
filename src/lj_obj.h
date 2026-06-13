@@ -531,6 +531,13 @@ typedef struct Node {
 
 LJ_STATIC_ASSERT(offsetof(Node, val) == 0);
 
+typedef struct TabNodeHdr {
+  MSize hmask;		/* Hash mask paired with the following Node vector. */
+  MSize unused;
+} TabNodeHdr;
+
+LJ_STATIC_ASSERT(sizeof(TabNodeHdr) == 8);
+
 typedef struct TabNodeRetire {
   Node *node;		/* Retired hash vector, owned only when armed. */
   MSize hmask;		/* Original hash mask for vector free. */
@@ -622,6 +629,43 @@ static LJ_AINLINE void lj_tab_node_rel(GCtab *t, const Node *node)
 #else
   la_store32_rel(&t->node.ptr32, (uint32_t)(uintptr_t)(const void *)node);
 #endif
+}
+
+static LJ_AINLINE const TabNodeHdr *lj_tab_node_hdr(const Node *node)
+{
+  return (const TabNodeHdr *)(const void *)
+    ((const char *)(const void *)node - sizeof(TabNodeHdr));
+}
+
+static LJ_AINLINE TabNodeHdr *lj_tab_node_hdrw(Node *node)
+{
+  return (TabNodeHdr *)(void *)((char *)(void *)node - sizeof(TabNodeHdr));
+}
+
+static LJ_AINLINE GCSize lj_tab_node_bytes(MSize hmask)
+{
+  return (GCSize)sizeof(TabNodeHdr) +
+	 (GCSize)(hmask + 1u) * (GCSize)sizeof(Node);
+}
+
+static LJ_AINLINE MSize lj_tab_node_hmask_acq(const Node *node)
+{
+  return (MSize)la_load32_acq(&lj_tab_node_hdr(node)->hmask);
+}
+
+static LJ_AINLINE void lj_tab_node_hmask_set(Node *node, MSize hmask)
+{
+  lj_tab_node_hdrw(node)->hmask = hmask;
+}
+
+static LJ_AINLINE MSize lj_tab_hmask_acq(const GCtab *t)
+{
+  return (MSize)la_load32_acq(&t->hmask);
+}
+
+static LJ_AINLINE void lj_tab_hmask_rel(GCtab *t, MSize hmask)
+{
+  la_store32_rel(&t->hmask, (uint32_t)hmask);
 }
 
 static LJ_AINLINE Node *lj_tab_nextnode_acq(const Node *n)
@@ -813,6 +857,7 @@ typedef struct global_State {
   GCRef mainthref;	/* Link to main thread. */
   SBuf tmpbuf;		/* Temporary string buffer. */
   TValue tmptv, tmptv2;	/* Temporary TValues. */
+  TabNodeHdr nilnodehdr;  /* Header for nilnode's empty hash vector. */
   Node nilnode;		/* Fallback 1-element hash part (nil key and value). */
   TValue registrytv;	/* Anchor for registry. */
   GCRef vmthref;	/* Link to VM thread. */
@@ -838,6 +883,9 @@ typedef struct global_State {
   uint32_t mt_live;	/* Active secondary Lua threads. */
   GCSize mt_gc_threshold;  /* Saved automatic-GC threshold. */
 } global_State;
+
+LJ_STATIC_ASSERT(offsetof(global_State, nilnode) ==
+		 offsetof(global_State, nilnodehdr) + sizeof(TabNodeHdr));
 
 #define mainthread(g)	(&gcref(g->mainthref)->th)
 #define vmthread(g)	(&gcref(g->vmthref)->th)

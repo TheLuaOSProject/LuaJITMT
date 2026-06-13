@@ -32,21 +32,36 @@ static LJ_AINLINE uint32_t hashrot(uint32_t lo, uint32_t hi)
 }
 
 /* Hash values are masked with the table hash mask and used as an index. */
+static LJ_AINLINE Node *hashmask_node(Node *n, MSize hmask, uint32_t hash)
+{
+  return &n[hash & hmask];
+}
+
 static LJ_AINLINE Node *hashmask(const GCtab *t, uint32_t hash)
 {
   Node *n = lj_tab_node_acq(t);
-  return &n[hash & t->hmask];
+  return hashmask_node(n, lj_tab_node_hmask_acq(n), hash);
 }
 
 /* String IDs are generated when a string is interned. */
+#define hashstr_node(n, hmask, s)	hashmask_node((n), (hmask), (s)->sid)
 #define hashstr(t, s)		hashmask(t, (s)->sid)
 
+#define hashlohi_node(n, hmask, lo, hi) \
+  hashmask_node((n), (hmask), hashrot((lo), (hi)))
 #define hashlohi(t, lo, hi)	hashmask((t), hashrot((lo), (hi)))
+#define hashnum_node(n, hmask, o) \
+  hashlohi_node((n), (hmask), (o)->u32.lo, ((o)->u32.hi << 1))
 #define hashnum(t, o)		hashlohi((t), (o)->u32.lo, ((o)->u32.hi << 1))
 #if LJ_GC64
+#define hashgcref_node(n, hmask, r) \
+  hashlohi_node((n), (hmask), (uint32_t)gcrefu(r), \
+		(uint32_t)(gcrefu(r) >> 32))
 #define hashgcref(t, r) \
   hashlohi((t), (uint32_t)gcrefu(r), (uint32_t)(gcrefu(r) >> 32))
 #else
+#define hashgcref_node(n, hmask, r) \
+  hashlohi_node((n), (hmask), gcrefu(r), gcrefu(r) + HASH_BIAS)
 #define hashgcref(t, r)		hashlohi((t), gcrefu(r), gcrefu(r) + HASH_BIAS)
 #endif
 
