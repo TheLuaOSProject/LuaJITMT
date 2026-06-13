@@ -41,10 +41,6 @@ void lj_safepoint_apply_tg(global_State *g, TGState *tg, uint32_t actions)
     lj_tg_sync_dispatch_tg(g, tg);  /* 03 section 3.6, 07 section 7.3. */
   if (actions & LJ_GC2_HS_EXIT_TRACES)
     lj_trace_abort(g);  /* 08 section 8.7: no active recorder past ack. */
-  if (actions & LJ_GC2_HS_FLUSHJ) {
-    lua_State *L = tg->cur_L ? tg->cur_L : mainthread(g);
-    (void)lj_trace_flushall(L);  /* Temporary single-mutator flush action. */
-  }
   if (actions & LJ_GC2_HS_STOPREQ)
     la_or8_rlx(&tg->tg_flags, TGF_STOPREQ);  /* 09 section 9.6 shutdown. */
 }
@@ -200,6 +196,8 @@ uint32_t lj_safepoint_handshake(global_State *g, uint32_t actions)
     la_futex_wait(&g->gc2.hs_pending, la_load32_rlx(&g->gc2.hs_pending),
 		  1000000);
   }
+  if (actions & LJ_GC2_HS_FLUSHJ)
+    (void)lj_trace_flushall(mainthread(g));  /* 08 section 8.7 leader action. */
   (void)lj_str_reclaim_retired(g, epoch);  /* 05 section 5.9 SMR drain. */
   (void)lj_tab_reclaim_retired(g, epoch);  /* 06 section 6.3.5 SMR drain. */
   (void)lj_mcode_reclaim_retired(g, epoch);  /* 08 section 8.7 SMR drain. */

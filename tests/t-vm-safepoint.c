@@ -305,6 +305,9 @@ int main(void)
   lua_pop(L, 1);
   assert_acked(g, tg, epoch0);
   assert(G2J(g)->cur.traceno == 0);
+  epoch0 = g->gc2.hs_epoch;
+  assert(lj_gc2_handshake(g, LJ_GC2_HS_FLUSHJ) == 1);
+  assert(g->gc2.hs_epoch == epoch0 + 1u);
   assert(G2J(g)->freetrace == 0);
 #endif
 
