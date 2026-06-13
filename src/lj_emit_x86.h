@@ -274,8 +274,17 @@ static void emit_movmroi(ASMState *as, Reg base, int32_t ofs, int32_t i)
   emit_rma(as, (xo), (r), (void *)&J2G(as->J)->field)
 #define emit_getgl(as, r, field) emit_opgl(as, XO_MOV, (r)|REX_GC64, field)
 #define emit_setgl(as, r, field) emit_opgl(as, XO_MOVto, (r)|REX_GC64, field)
+#if LJ_GC64
+#define emit_optg(as, xo, r, field) \
+  emit_rmro((as), (xo), (r), RID_DISPATCH, DISPATCH_TG(field))
+#define emit_leatg(as, r, field) \
+  emit_rmro((as), XO_LEA, (r)|REX_64, RID_DISPATCH, DISPATCH_TG(field))
+#else
 #define emit_optg(as, xo, r, field) \
   emit_rma(as, (xo), (r), (void *)&J2TG(as->J)->field)
+#define emit_leatg(as, r, field) \
+  emit_loada((as), (r), &J2TG((as)->J)->field)
+#endif
 #define emit_gettg(as, r, field) emit_optg(as, XO_MOV, (r)|REX_GC64, field)
 #define emit_settg(as, r, field) emit_optg(as, XO_MOVto, (r)|REX_GC64, field)
 

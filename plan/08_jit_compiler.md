@@ -71,11 +71,14 @@ current TG's `poll` word. x64 VM slow paths load `global_State *` through
 `RID_DISPATCH` addressing, so secondary TGs currently neither enter `BC_JLOOP`
 mcode nor acquire the recorder token to produce new x64 traces. This is a
 temporary x64/POSIX safety guard, not the original end-state. The remaining
-original target is to migrate emitter `RID_DISPATCH` addressing to explicit TG
-fields or non-dispatch globals, and then remove the secondary-TG recorder/entry
-guard once emitter dispatch addressing is local. Record dispatch itself is now
-localized to the token holder's TG table instead of being exposed through the
-global dispatch template.
+original target is to finish migrating emitter `RID_DISPATCH` addressing to
+explicit TG fields or non-dispatch globals, and then remove the secondary-TG
+recorder/entry guard once emitter dispatch addressing is local. Fixed TG fields
+in the x64 emitter now use symbolic `DISPATCH_TG(...)` offsets for `jit_base`,
+`cur_L`, `tmptv`, and `gl`; generic `dispofs()` still covers arbitrary
+constants, globals, and object pointers. Record dispatch itself is now localized
+to the token holder's TG table instead of being exposed through the global
+dispatch template.
 
 ## 8.3 Trace registry & publication
 

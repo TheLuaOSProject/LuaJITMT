@@ -15,6 +15,9 @@ M6 x64 dispatch localization inventory:
 - Recording dispatch is TG-local. The global dispatch template no longer has a
   recording mode; `lj_dispatch_update()` overlays record/call hooks only onto
   the current TG when that TG holds the recorder token.
+- Emitter prerequisite in progress: fixed TG fields now use symbolic
+  `DISPATCH_TG(...)` offsets (`jit_base`, `cur_L`, `tmptv`, `gl`) instead of
+  recorder-TG pointer subtraction.
 - The JIT emitter also assumes `RID_DISPATCH` can address arbitrary constants
   relative to the recorder TG. Before trace execution is safe on secondary TGs,
   arbitrary `dispofs()` addressing must stop using `RID_DISPATCH`; only fixed

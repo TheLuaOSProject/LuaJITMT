@@ -279,7 +279,7 @@ static void asm_fuseahuref(ASMState *as, IRRef ref, RegSet allow)
       break;
     case IR_TMPREF:
 #if LJ_GC64
-      as->mrm.ofs = (int32_t)dispofs(as, &J2TG(as->J)->tmptv);
+      as->mrm.ofs = DISPATCH_TG(tmptv);
       as->mrm.base = RID_DISPATCH;
       as->mrm.idx = RID_NONE;
 #else
@@ -500,7 +500,7 @@ static Reg asm_fuseload(ASMState *as, IRRef ref, RegSet allow)
     if (!(avail & (avail-1))) {  /* Fuse if less than two regs available. */
       if (ref == REF_BASE) {
 #if LJ_GC64
-	as->mrm.ofs = (int32_t)dispofs(as, &J2TG(as->J)->jit_base);
+	as->mrm.ofs = DISPATCH_TG(jit_base);
 	as->mrm.base = RID_DISPATCH;
 #else
 	as->mrm.ofs = ptr2addr(&J2TG(as->J)->jit_base);
@@ -1179,7 +1179,7 @@ static void asm_tvptr(ASMState *as, Reg dest, IRRef ref, MSize mode)
 #endif
     }
   }
-  emit_loada(as, dest, &J2TG(as->J)->tmptv); /* tg->tmptv holds the TValue(s). */
+  emit_leatg(as, dest, tmptv);  /* tg->tmptv holds the TValue(s). */
 }
 
 static void asm_aref(ASMState *as, IRIns *ir)
@@ -2774,7 +2774,7 @@ static void asm_stack_check(ASMState *as, BCReg topslot,
   else
 #if LJ_GC64
     emit_rmro(as, XO_ARITH(XOg_SUB), r|REX_64, RID_DISPATCH,
-	      (int32_t)dispofs(as, &J2TG(as->J)->jit_base));
+	      DISPATCH_TG(jit_base));
 #else
     emit_rmro(as, XO_ARITH(XOg_SUB), r, RID_NONE,
 	      ptr2addr(&J2TG(as->J)->jit_base));
@@ -2885,7 +2885,7 @@ static void asm_gc_check(ASMState *as)
   asm_gencall(as, ci, args);
   tmp = ra_releasetmp(as, ASMREF_TMP1);
 #if LJ_GC64
-  emit_rmro(as, XO_LEA, tmp|REX_64, RID_DISPATCH, TG_DISP2G);
+  emit_gettg(as, tmp, gl);
 #else
   emit_loada(as, tmp, J2G(as->J));
 #endif

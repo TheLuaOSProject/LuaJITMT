@@ -14,6 +14,9 @@ for needle in \
   'lj_jit_token_try(jit_State *J)' \
   'tg != g->main_tg' \
   'Temporary until x64 RID_DISPATCH addressing is localized' \
+  'emit_leatg(as, dest, tmptv)' \
+  'DISPATCH_TG(jit_base)' \
+  'emit_gettg(as, tmp, gl)' \
   'la_cas32(&g->jit_token, &expect, tg->tid, LA_ACQ_REL, LA_ACQ)' \
   'void LJ_FASTCALL lj_trace_hot(jit_State *J, const BCIns *pc, lua_State *L)' \
   'lj_snap_restore_exit(jit_State *J, void *exptr, lua_State *L,' \
@@ -29,7 +32,8 @@ do
   if ! rg -F -q "$needle" "$ROOT/src/lj_obj.h" "$ROOT/src/lj_trace.h" \
       "$ROOT/src/lj_trace.c" "$ROOT/src/lj_dispatch.c" \
       "$ROOT/src/lj_snap.h" "$ROOT/src/lj_snap.c" "$ROOT/src/lj_tg.h" \
-      "$ROOT/src/lj_err.c" "$ROOT/src/vm_x64.dasc"; then
+      "$ROOT/src/lj_err.c" "$ROOT/src/vm_x64.dasc" \
+      "$ROOT/src/lj_emit_x86.h" "$ROOT/src/lj_asm_x86.h"; then
     echo "guardrail: missing recorder token marker: $needle" >&2
     exit 1
   fi
@@ -38,6 +42,12 @@ done
 if rg -n 'while .*jit_token|la_futex_wait\(&g->jit_token|la_futex_wait\([^)]*jit_token' \
     "$ROOT/src"; then
   echo "guardrail: recorder token must never block or spin-wait" >&2
+  exit 1
+fi
+
+if rg -n 'dispofs\(as, &J2TG\(as->J\)->(jit_base|tmptv|cur_L|gl)' \
+    "$ROOT/src/lj_asm_x86.h" "$ROOT/src/lj_emit_x86.h"; then
+  echo "guardrail: fixed TG fields must use DISPATCH_TG symbolic offsets" >&2
   exit 1
 fi
 
