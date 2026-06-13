@@ -171,8 +171,10 @@ stable free node before release-publishing it through the anchor's `next` link;
 legacy Brent node relocation has been removed. The legacy `GCtab.node` pointer
 itself is now release-published after vector initialization and acquire-loaded
 by C-side table, GC, serialization, bytecode-writer, parser, and recorder
-readers. These steps do not replace the legacy resize algorithm with the
-planned lock-free `NHdr` generation protocol yet.
+readers. Core C table lookup, resize, rehash counting, collision checks, and
+`next()` now make key/value decisions from acquired `TValue` snapshots instead
+of direct shared node-field reads. These steps do not replace the legacy resize
+algorithm with the planned lock-free `NHdr` generation protocol yet.
 ### 6.3.6 next/pairs (lj_tab_next)
 Iterate the *gen snapshot* captured at first call: store the NH pointer in
 the iterator control slot? Lua's `next(t,k)` is stateless — DECIDED:
