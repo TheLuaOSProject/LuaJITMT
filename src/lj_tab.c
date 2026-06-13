@@ -75,8 +75,8 @@ static LJ_AINLINE Node *newhpart_alloc(lua_State *L, uint32_t hbits,
   for (i = 0; i < hsize; i++) {
     Node *n = &node[i];
     lj_tab_nextnode_set(n, NULL);
-    setnilV(&n->key);
-    setnilV(&n->val);
+    lj_tab_storenilraw(&n->key);
+    lj_tab_storenilraw(&n->val);
   }
   *hmaskp = hmask;
   return node;
@@ -257,9 +257,9 @@ static LJ_AINLINE void clearhpart(GCtab *t)
   lj_assertX(hmask != 0, "empty hash part");
   for (i = 0; i <= hmask; i++) {
     Node *n = &node[i];
-    lj_tab_nextnode_set(n, NULL);
-    setnilV(&n->key);
-    setnilV(&n->val);
+    lj_tab_nextnode_rel(n, NULL);
+    lj_tab_storenilraw(&n->val);
+    lj_tab_storenilraw(&n->key);
   }
 }
 
@@ -269,7 +269,7 @@ static LJ_AINLINE void clearapart(GCtab *t)
   uint32_t i, asize = lj_tab_asize_acq(t);
   TValue *array = lj_tab_array_acq(t);
   for (i = 0; i < asize; i++)
-    setnilV(&array[i]);
+    lj_tab_storenilraw(&array[i]);
 }
 
 /* Create a new table. Note: the slots are not initialized (yet). */
@@ -391,7 +391,8 @@ GCtab * LJ_FASTCALL lj_tab_dup(lua_State *L, const GCtab *kt)
       lj_tv_load_acq(&val, &kn->val);
       lj_tv_load_acq(&key, &kn->key);
       n->val = val; n->key = key;
-      if (tvistab(&n->val)) setnilV(&n->val); /* Replace nil value marker. */
+      if (tvistab(&n->val))  /* Replace nil value marker. */
+	lj_tab_storenilraw(&n->val);
       lj_tab_nextnode_set(n, next == NULL ? next : (Node *)((char *)next + d));
     }
   }
@@ -466,7 +467,7 @@ void lj_tab_resize(lua_State *L, GCtab *t, uint32_t asize, uint32_t hbits)
       t->acap = asize;
     }
     for (i = oldasize; i < asize; i++)  /* Clear newly allocated slots. */
-      setnilV(&array[i]);
+      lj_tab_storenilraw(&array[i]);
   }
   if (hbits) {
     newnode = newhpart_alloc(L, hbits, &newhmask);
@@ -864,11 +865,18 @@ LJ_FUNCA TValue *lj_tab_storetv(lua_State *L, TValue *dst, cTValue *src)
   return dst;
 }
 
-TValue *lj_tab_storenil(lua_State *L, TValue *dst)
+TValue *lj_tab_storenilraw(TValue *dst)
 {
   TValue tv;
   setnilV(&tv);
-  return lj_tab_storetv(L, dst, &tv);
+  tv_rawstore_rel(dst, tv_rawload(&tv));
+  return dst;
+}
+
+TValue *lj_tab_storenil(lua_State *L, TValue *dst)
+{
+  UNUSED(L);
+  return lj_tab_storenilraw(dst);
 }
 
 TValue *lj_tab_storebool(lua_State *L, TValue *dst, int b)

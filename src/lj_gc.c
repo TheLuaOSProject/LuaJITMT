@@ -875,7 +875,7 @@ static void gc_clearweak(global_State *g, GCobj *o)
 	TValue val;
 	lj_tv_load_acq(&val, &array[i]);
 	if (gc_mayclear(g, &val, 1))
-	  setnilV(&array[i]);
+	  lj_tab_storenilraw(&array[i]);
       }
     }
     {
@@ -890,7 +890,7 @@ static void gc_clearweak(global_State *g, GCobj *o)
 	  if (!tvisnil(&val)) {
 	    lj_tv_load_acq(&key, &n->key);
 	    if (gc_mayclear(g, &key, 0) || gc_mayclear(g, &val, 1))
-	      setnilV(&n->val);
+	      lj_tab_storenilraw(&n->val);
 	  }
 	}
       }
@@ -959,7 +959,7 @@ static void gc_finalize(lua_State *L)
     tv = lj_tab_set(L, tabref(g->gcroot[GCROOT_FFI_FIN]), &tmp);
     if (!tvisnil(tv)) {
       copyTV(L, &tmp, tv);
-      setnilV(tv);  /* Clear entry in finalizer table. */
+      lj_tab_storenilraw(tv);  /* Clear entry in finalizer table. */
       gc_call_finalizer(g, L, &tmp, o);
     }
     return;
@@ -1004,7 +1004,7 @@ void lj_gc_finalize_cdata(lua_State *L)
 	makewhite(g, o);
 	lj_obj_cleargcflags(o, LJ_GC_CDATA_FIN);
 	copyTV(L, &tmp, &val);
-	setnilV(&node[i].val);
+	lj_tab_storenilraw(&node[i].val);
 	gc_call_finalizer(g, L, &tmp, o);
       }
     }

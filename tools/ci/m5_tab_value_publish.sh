@@ -31,6 +31,7 @@ for needle in \
   'lj_tab_storeproto' \
   'lj_tab_storefunc' \
   'lj_tab_storeudata' \
+  'lj_tab_storenilraw' \
   'copyTVrel(L, dst, src)' \
   'copyTVrel(L, o, L->top+1)' \
   'copyTVrel(L, o, --L->top)' \
@@ -46,6 +47,10 @@ for needle in \
   'lj_tab_storenil(L, tv)' \
   'lj_tab_storetv(L, tv, &tmp)' \
   'lj_tab_storeint(L, tv, (int32_t)ct->size)' \
+  'lj_tab_storenilraw(&array[i])' \
+  'lj_tab_storenilraw(&n->val)' \
+  'lj_tab_storenilraw(tv)' \
+  'lj_tab_storenilraw(&node[i].val)' \
   'lj_tab_storeint(L, lj_tab_newkey(L, dict, &tv), (int32_t)(i-1))'
 do
   if ! rg -F -q "$needle" "$ROOT/src"; then
@@ -75,6 +80,12 @@ fi
 if rg -n 'copyTV\(L, o, base\+2\)|setnilV\(tv\)|setnumV\(tv,|setintV\(tv,' \
     "$ROOT/src/lib_ffi.c" "$ROOT/src/lj_clib.c"; then
   echo "guardrail: FFI/clib table aliases must release-publish" >&2
+  exit 1
+fi
+
+if rg -n 'setnilV\(&array\[i\]\)|setnilV\(&n->val\)|setnilV\(tv\)|setnilV\(&node\[i\]\.val\)' \
+    "$ROOT/src/lj_tab.c" "$ROOT/src/lj_gc.c"; then
+  echo "guardrail: shared table clearing must release-publish nil" >&2
   exit 1
 fi
 
