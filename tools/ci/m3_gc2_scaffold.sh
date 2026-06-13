@@ -51,6 +51,8 @@ for needle in \
   'uint64_t worker_wakes' \
   'uint64_t worker_parks' \
   'uint64_t worker_async_progress' \
+  'uint64_t thread_scan_claims' \
+  'uint64_t thread_scan_busy' \
   'uint64_t sweep_owner_runs' \
   'uint64_t sweep_owner_arenas' \
   'uint64_t sweep_owner_live_cells' \
@@ -135,6 +137,12 @@ for needle in \
   'la_futex_wait(&g->gc2.worker_wake, wake, -1)' \
   'la_futex_wake(&g->gc2.worker_wake, 1)' \
   '05 section 5.6.3 parked worker scheduler' \
+  'lj_state_gcscan_claim(lua_State *L, LJStateClaim *claim)' \
+  'lj_state_gcscan_claim(th, &claim)' \
+  '05 section 5.7.2: running owner will scan at safepoint' \
+  'mt = gcref_acq(L->mt_thread)' \
+  'la_add64_rlx(&g->gc2.thread_scan_claims' \
+  'la_add64_rlx(&g->gc2.thread_scan_busy' \
   '05 section 5.6.3 total worker progress contract' \
   'return lj_gc2_worker_drain(g, limit)' \
   'phase != LJ_GC2_MARK && phase != LJ_GC2_WEAK &&' \
@@ -165,8 +173,9 @@ do
   if ! rg -F -q "$needle" "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc.h" \
       "$ROOT/src/lj_gc2.c" "$ROOT/src/lj_gc2.h" "$ROOT/src/lj_obj.h" \
       "$ROOT/src/lj_safepoint.c" "$ROOT/src/lj_trace.c" \
+      "$ROOT/src/lj_thr.c" "$ROOT/src/lj_thr.h" \
       "$ROOT/src/lj_tab.c" "$ROOT/src/lj_cdata.c" "$ROOT/src/lib_ffi.c" \
-      "$ROOT/src/lj_api.c"; then
+      "$ROOT/src/lj_api.c" "$ROOT/tests/t-gc2-traverse.c"; then
     echo "guardrail: missing GC2 fixpoint-round marker: $needle" >&2
     exit 1
   fi

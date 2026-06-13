@@ -136,6 +136,39 @@ int lj_state_tryclaim(lua_State *L, uint32_t tid, LJStateClaim *claim)
   }
 }
 
+int lj_state_gcscan_claim(lua_State *L, LJStateClaim *claim)
+{
+  uint32_t owner;
+  if (claim) {
+    claim->L = NULL;
+    claim->tid = 0;
+    claim->release = 0;
+  }
+  if (!L)
+    return 0;
+  for (;;) {
+    owner = la_load32_acq(&L->thr_owner);
+    if (owner == 0) {
+      uint32_t expect = 0;
+      if (la_cas32(&L->thr_owner, &expect, LJ_THREAD_GCSCAN,
+		   LA_ACQ_REL, LA_ACQ)) {
+	if (claim) {
+	  claim->L = L;
+	  claim->tid = LJ_THREAD_GCSCAN;
+	  claim->release = 1;
+	}
+	return 1;
+      }
+      continue;
+    }
+    if (owner == LJ_THREAD_GCSCAN) {
+      la_cpu_pause();  /* 05 section 5.7.2: scan claim is short-lived. */
+      continue;
+    }
+    return 0;
+  }
+}
+
 void lj_state_dropclaim(LJStateClaim *claim)
 {
   if (claim && claim->release) {

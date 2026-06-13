@@ -58,6 +58,7 @@ LJ_FUNC TGState *lj_thr_get_tg(void);
 LJ_FUNC TGState *lj_thr_get_tg_fallback(global_State *g);
 LJ_FUNC int lj_state_claim(lua_State *L, uint32_t tid);
 LJ_FUNC int lj_state_tryclaim(lua_State *L, uint32_t tid, LJStateClaim *claim);
+LJ_FUNC int lj_state_gcscan_claim(lua_State *L, LJStateClaim *claim);
 LJ_FUNC void lj_state_dropclaim(LJStateClaim *claim);
 LJ_FUNC void lj_state_release(lua_State *L, uint32_t tid);
 LJ_FUNC uint32_t lj_thr_cpucount(void);

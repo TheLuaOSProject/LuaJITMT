@@ -269,8 +269,11 @@ like gc_traverse_frames lj_gc.c:292): mark every TValue in
 `stack..top`+frame extras, mark L itself, its env, legacy openupval list
 values. This is precise and fast (linear TValue scan; ~1 GB/s ⇒ a 1 MB
 stack costs ~1 ms, typical stacks ≪ that). Current bridge implementation
-loads each stack slot into a local snapshot before marking; the original
-ownership/claim protocol below remains the target for suspended coroutines.
+loads each running stack slot into a local snapshot before marking. GC2 worker
+traversal now claims unowned suspended coroutine stacks with
+`lj_state_gcscan_claim()` before scanning and records busy deferrals when a
+running owner holds `thr_owner`; the owner-side `GCF_NEEDSCAN` handoff and
+`stack_dirty_epoch` skip optimization below remain staged.
 Suspended coroutines: workers traverse them as ordinary heap objects, but
 must hold the claim: `CAS th->thr_owner 0→GCSCAN`; on failure (running),
 set `th->gcflags|=GCF_NEEDSCAN` — the owner's next HS_SCAN_ROOTS scans any

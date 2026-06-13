@@ -17,6 +17,7 @@
 #include "lj_gc2.h"
 #include "lj_str.h"
 #include "lj_tab.h"
+#include "lj_thr.h"
 #include "lj_tg.h"
 #if LJ_HASJIT
 #include "lj_dispatch.h"
@@ -1322,8 +1323,12 @@ static void test_closure(lua_State *L, global_State *g, TGState *tg)
 
 static void test_thread(lua_State *L, global_State *g, TGState *tg)
 {
-  lua_State *th;
-  GCtab *stack_tab;
+  lua_State *th, *busy;
+  GCtab *stack_tab, *busy_tab;
+  uint64_t claims0, busy0;
+  uint32_t busy_owner = tg->tid + 5000u;
+  if (busy_owner == 0 || busy_owner == LJ_THREAD_GCSCAN)
+    busy_owner = 123u;
 
   th = lua_newthread(L);
   assert(th != NULL);
@@ -1332,11 +1337,33 @@ static void test_thread(lua_State *L, global_State *g, TGState *tg)
 
   lj_gc2_legacy_mark_begin(g);
   assert(lj_gc2_ismarked(g, obj2gco(stack_tab)) == 0);
+  assert(lj_state_claim(th, LJ_THREAD_GCSCAN) == 0);
+  assert(th->thr_owner == 0);
+  claims0 = la_load64_acq(&g->gc2.thread_scan_claims);
   assert(lj_gc2_markobj(g, obj2gco(th)) == 1);
   flush_and_drain(g, tg);
   assert(lj_gc2_ismarkedmem(g, tvref(th->stack)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(stack_tab)) == 1);
+  assert(la_load64_acq(&g->gc2.thread_scan_claims) == claims0 + 1u);
+  assert(th->thr_owner == 0);
   lj_gc2_legacy_cycle_end(g);
+
+  busy = lua_newthread(L);
+  assert(busy != NULL);
+  lua_newtable(busy);
+  busy_tab = tabV(busy->top - 1);
+  busy->thr_owner = busy_owner;
+  busy0 = la_load64_acq(&g->gc2.thread_scan_busy);
+  lj_gc2_legacy_mark_begin(g);
+  assert(lj_gc2_ismarked(g, obj2gco(busy_tab)) == 0);
+  assert(lj_gc2_markobj(g, obj2gco(busy)) == 1);
+  flush_and_drain(g, tg);
+  assert(la_load64_acq(&g->gc2.thread_scan_busy) == busy0 + 1u);
+  assert(busy->thr_owner == busy_owner);
+  assert(lj_gc2_ismarked(g, obj2gco(busy_tab)) == 0);
+  busy->thr_owner = 0;
+  lj_gc2_legacy_cycle_end(g);
+  lua_pop(L, 1);
   lua_pop(L, 1);
 }
 

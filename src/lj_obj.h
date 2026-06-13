@@ -882,6 +882,8 @@ typedef struct GC2State {
   uint64_t worker_wakes;  /* Parked worker wake publications. */
   uint64_t worker_parks;  /* Parked worker sleeps after no progress. */
   uint64_t worker_async_progress;  /* Work completed by parked workers. */
+  uint64_t thread_scan_claims;  /* Suspended thread stacks claimed by GC2. */
+  uint64_t thread_scan_busy;  /* Thread stacks deferred to running owners. */
   uint64_t sweep_owner_runs;  /* Owner traversable arena sweep batches. */
   uint64_t sweep_owner_arenas;  /* Traversable arenas swept by owner. */
   uint64_t sweep_owner_live_cells;  /* Post-sweep live cells observed. */

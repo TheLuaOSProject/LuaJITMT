@@ -93,6 +93,8 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.worker_wakes, 0);
   la_store64_rlx(&g->gc2.worker_parks, 0);
   la_store64_rlx(&g->gc2.worker_async_progress, 0);
+  la_store64_rlx(&g->gc2.thread_scan_claims, 0);
+  la_store64_rlx(&g->gc2.thread_scan_busy, 0);
   la_store64_rlx(&g->gc2.sweep_owner_runs, 0);
   la_store64_rlx(&g->gc2.sweep_owner_arenas, 0);
   la_store64_rlx(&g->gc2.sweep_owner_live_cells, 0);
@@ -558,7 +560,7 @@ static TValue *gc2_stack_scan_top(global_State *g, lua_State *L)
 
 static void gc2_scan_thread_roots(global_State *g, lua_State *L)
 {
-  GCobj *uv;
+  GCobj *mt, *uv;
   TValue *o, *top;
   TValue tv;
   if (!L || tvref(L->stack) == NULL)
@@ -575,6 +577,9 @@ static void gc2_scan_thread_roots(global_State *g, lua_State *L)
     if (env)
       lj_gc2_markobj(g, obj2gco(env));
   }
+  mt = gcref_acq(L->mt_thread);
+  if (mt != NULL)
+    lj_gc2_markobj(g, mt);
   for (uv = gcref(L->openupval); uv != NULL; uv = gcnext(uv)) {
     lj_gc2_markobj(g, uv);
     if (uv->gch.gct == ~LJ_TUPVAL) {
@@ -1882,11 +1887,17 @@ static TValue *gc2_stack_scan_top_worker(global_State *g, lua_State *L)
 
 static void gc2_traverse_thread(global_State *g, lua_State *th)
 {
+  LJStateClaim claim;
   GCobj *mt, *uv;
   TValue *o, *top;
   TValue tv;
   if (!th || tvref(th->stack) == NULL)
     return;
+  if (!lj_state_gcscan_claim(th, &claim)) {
+    la_add64_rlx(&g->gc2.thread_scan_busy, 1);
+    return;  /* 05 section 5.7.2: running owner will scan at safepoint. */
+  }
+  la_add64_rlx(&g->gc2.thread_scan_claims, 1);
   lj_gc2_markmem(g, tvref(th->stack));
   top = gc2_stack_scan_top_worker(g, th);
   for (o = tvref(th->stack) + 1 + LJ_FR2; o < top; o++) {
@@ -1909,6 +1920,7 @@ static void gc2_traverse_thread(global_State *g, lua_State *th)
       gc2_mark_tv_worker(g, &tv);
     }
   }
+  lj_state_dropclaim(&claim);
 }
 
 static void gc2_traverse_obj(global_State *g, GCobj *o)
