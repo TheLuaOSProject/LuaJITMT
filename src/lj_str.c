@@ -547,7 +547,7 @@ GCstr *lj_str_new(lua_State *L, const char *str, size_t lenx)
 
 void LJ_FASTCALL lj_str_free(global_State *g, GCstr *s)
 {
-  g->str.num--;
+  (void)la_sub32_acqrel(&g->str.num, 1);
   lj_mem_free(g, s, lj_str_size(s->len));
 }
 

@@ -1105,7 +1105,8 @@ static size_t gc_onestep(lua_State *L)
     if (gcref(*mref(g->gc.sweep, GCRef)) == NULL) {
       StrTabHdr *hdr = (StrTabHdr *)la_loadptr_acq((void *const *)&g->str.tabh);
       MSize mask = hdr ? hdr->mask : ~(MSize)0;
-      if (g->str.num <= (mask >> 2) && mask > LJ_MIN_STRTAB*2-1)
+      if (la_load32_acq(&g->str.num) <= (mask >> 2) &&
+	  mask > LJ_MIN_STRTAB*2-1)
 	lj_str_resize(L, mask >> 1);  /* Shrink string table. */
       gc_arena_verify_sweep_boundary(g);
       gc_arena_finish_sweep_boundary(g);

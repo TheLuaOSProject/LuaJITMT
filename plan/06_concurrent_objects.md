@@ -368,11 +368,14 @@ active interners are present, then drains the active count before copying and
 publishing the replacement header; new entrants spin on the claimed bit. The
 old header is retained on a raw retired-header list and freed after a later
 completed safepoint handshake epoch, avoiding immediate RCU use-after-free for
-threads that loaded the old header before pinning it. Secondary-chain rehash
-now reuses the same claim/drain bit on the current header, verifies the header
-is still current after the claim, rechains in place while new entrants spin, and
-releases the bit before retrying the pending insert. The original full helping
-protocol above is still the target; bounded helper copy, cross-table resize
+threads that loaded the old header before pinning it. The string count is
+updated and read with atomic helpers (`la_add32_rlx`, `la_sub32_acqrel`,
+`la_load32_acq`) so sweep-side frees and shrink checks do not race plain
+accesses against concurrent interns. Secondary-chain rehash now reuses the same
+claim/drain bit on the current header, verifies the header is still current
+after the claim, rechains in place while new entrants spin, and releases the
+bit before retrying the pending insert. The original full helping protocol
+above is still the target; bounded helper copy, cross-table resize
 participation, generic deferred-free buckets for all raw gens, and Harris
 dead-link sweep remain follow-up work.
 ### 6.5.3 sid / idreseed: StrID wraps are handled as today at full-resize
