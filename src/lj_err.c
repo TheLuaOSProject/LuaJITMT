@@ -361,7 +361,11 @@ static void err_unwind_win_jit(global_State *g, int errcode)
       uintptr_t stub = lj_trace_unwind(G2J(g), (uintptr_t)(addr - sizeof(MCode)), &exitno);
       if (stub) {  /* Jump to side exit to unwind the trace. */
 	ctx.CONTEXT_REG_PC = stub;
+#if LJ_TARGET_X64 && !LJ_ABI_WIN
+	G2TG(g)->jit_exitcode = errcode;
+#else
 	G2J(g)->exitcode = errcode;
+#endif
 	RtlRestoreContext(&ctx, NULL);  /* Does not return. */
       }
       break;
@@ -533,7 +537,11 @@ static int err_unwind_jit(int version, int actions,
     uintptr_t stub = lj_trace_unwind(G2J(g), addr - sizeof(MCode), &exitno);
     lj_assertG(lj_tg_jit_base(g), "unexpected throw across mcode frame");
     if (stub) {  /* Jump to side exit to unwind the trace. */
+#if LJ_TARGET_X64 && !LJ_ABI_WIN
+      G2TG(g)->jit_exitcode = LJ_UEXCLASS_ERRCODE(uexclass);
+#else
       G2J(g)->exitcode = LJ_UEXCLASS_ERRCODE(uexclass);
+#endif
 #ifdef LJ_TARGET_MIPS
       _Unwind_SetGR(ctx, 4, stub);
       _Unwind_SetGR(ctx, 5, exitno);

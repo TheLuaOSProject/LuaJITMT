@@ -1259,10 +1259,17 @@ int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr)
   lua_State *L = J->L;
   TraceNo parent = J->parent;
   ExitNo exitno = J->exitno;
+#else
+  TGState *tg = J2TG(J);
 #endif
   ExitState *ex = (ExitState *)exptr;
   ExitDataCP exd;
-  int errcode, exitcode = J->exitcode;
+  int errcode;
+#if LJ_TARGET_X64 && !LJ_ABI_WIN
+  int exitcode = tg->jit_exitcode;
+#else
+  int exitcode = J->exitcode;
+#endif
   TValue exiterr;
   const BCIns *pc, *retpc;
   void *cf;
@@ -1270,7 +1277,11 @@ int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr)
 
   setnilV(&exiterr);
   if (exitcode) {  /* Trace unwound with error code. */
+#if LJ_TARGET_X64 && !LJ_ABI_WIN
+    tg->jit_exitcode = 0;
+#else
     J->exitcode = 0;
+#endif
     copyTV(L, &exiterr, L->top-1);
   }
 

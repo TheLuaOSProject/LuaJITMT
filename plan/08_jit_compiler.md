@@ -58,12 +58,12 @@ number for stitching) into C so `J->L`/stitch `J->exitno` are only written after
 token acquisition. The x64/POSIX trace-exit path passes `L`/parent/exitno into
 C and carries them as call-local snapshot-restore inputs; it publishes them to
 shared `J` only after hot side exits acquire the recorder token. The trace
-state machine releases the token whenever it returns to
-`LJ_TRACE_IDLE`, and token-busy hot side exits do not advance the retry budget
-into `SNAPCOUNT_DONE`. The remaining original target is to localize record
-dispatch to the token holder's TG table instead of temporarily exposing record
-hooks through the global dispatch template. The unwound-trace `J->exitcode`
-path remains separate shared-state follow-up work.
+state machine releases the token whenever it returns to `LJ_TRACE_IDLE`, the
+x64/POSIX unwound-trace error code is stored in the current TG instead of
+shared `J->exitcode`, and token-busy hot side exits do not advance the retry
+budget into `SNAPCOUNT_DONE`. The remaining original target is to localize
+record dispatch to the token holder's TG table instead of temporarily exposing
+record hooks through the global dispatch template.
 
 ## 8.3 Trace registry & publication
 

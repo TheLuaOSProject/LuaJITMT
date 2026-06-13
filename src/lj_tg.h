@@ -56,6 +56,7 @@ struct TGState {
   global_State *gl;
   lua_State *cur_L;
   TValue *jit_base;
+  int jit_exitcode;
   uint8_t in_native;
   uint8_t gc_assist;
   uint8_t hookmask_th;

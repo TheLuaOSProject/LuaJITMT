@@ -16,13 +16,17 @@ for needle in \
   'void LJ_FASTCALL lj_trace_hot(jit_State *J, const BCIns *pc, lua_State *L)' \
   'lj_snap_restore_exit(jit_State *J, void *exptr, lua_State *L,' \
   'int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr, lua_State *L,' \
+  'int jit_exitcode' \
+  'G2TG(g)->jit_exitcode' \
+  'tg->jit_exitcode' \
   'J->L = L;' \
   'lj_jit_token_held(J)' \
   'lj_jit_token_release(J)'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_obj.h" "$ROOT/src/lj_trace.h" \
       "$ROOT/src/lj_trace.c" "$ROOT/src/lj_dispatch.c" \
-      "$ROOT/src/lj_snap.h" "$ROOT/src/lj_snap.c" "$ROOT/src/lj_tg.h"; then
+      "$ROOT/src/lj_snap.h" "$ROOT/src/lj_snap.c" "$ROOT/src/lj_tg.h" \
+      "$ROOT/src/lj_err.c"; then
     echo "guardrail: missing recorder token marker: $needle" >&2
     exit 1
   fi
