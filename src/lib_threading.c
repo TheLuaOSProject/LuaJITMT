@@ -727,6 +727,8 @@ LJLIB_CF(threading_current)
   if (!ud) {
     GCstr *key = lj_str_newlit(L, THREADING_MAIN_KEY);
     cTValue *tv = lj_tab_getstr(env, key);
+    if (L != mainthread(G(L)))
+      lj_err_callermsg(L, "attached thread is not joinable");
     if (tv && tvisudata(tv) && udataV(tv)->udtype == UDTYPE_THREAD) {
       ud = udataV(tv);
     } else {

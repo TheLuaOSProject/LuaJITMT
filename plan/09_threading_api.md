@@ -176,6 +176,10 @@ prevented because the producer's wbarrier already marked it during P_MARK).
 - A crashed thread (error escaped f): error object stored, state DONE;
   nothing else dies (Go-style panics-are-isolated DECIDED; an
   `threading.onerror(fn)` hook is v2).
+- `threading.current()` returns the cached `__main` handle only for
+  `mainthread(g)`. External `luaMT_attach()` states that were not created by
+  `threading.spawn()` have no joinable thread userdata and error from
+  `current()` until a dedicated non-joinable handle model is added.
 - Deadlock (all threads parked, no GC work): not detected in v1; document.
 
 ## 9.7 mutex (and why it exists)

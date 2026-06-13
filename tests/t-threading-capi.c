@@ -223,6 +223,27 @@ static void *attach_worker(void *arg)
   }
   ctx->result = (int)lua_tointeger(L, -1);
   lua_pop(L, 1);
+  if (luaL_loadstring(L,
+	"local ok, err = pcall(function()\n"
+	"  return require'threading'.current()\n"
+	"end)\n"
+	"return ok, tostring(err)\n") != LUA_OK) {
+    ctx->status = 4;
+    luaMT_detach(L);
+    return NULL;
+  }
+  if (lua_pcall(L, 0, 2, 0) != LUA_OK) {
+    ctx->status = 5;
+    luaMT_detach(L);
+    return NULL;
+  }
+  if (lua_toboolean(L, -2) ||
+      strstr(lua_tostring(L, -1), "attached thread is not joinable") == NULL) {
+    ctx->status = 6;
+    luaMT_detach(L);
+    return NULL;
+  }
+  lua_pop(L, 2);
   luaMT_detach(L);
   ctx->status = 0;
   return NULL;
