@@ -299,7 +299,11 @@ Current bridge note: `lj_gc2_legacy_weak_begin()` now makes `P_WEAK` visible
 after the fixpoint/paranoia bridge and before legacy `gc_clearweak()`. This
 preserves the original `MARK -> WEAK -> SWEEP` phase shape for follow-up work,
 but legacy weak clearing remains authoritative; the weak-table worklist and
-full concurrent weak clearing above are not implemented yet. The first
+full concurrent weak clearing above are not implemented yet. GC2 traversal now
+counts weak-table discoveries by mode (`weak_tables_seen`,
+`weak_tables_weakkey`, `weak_tables_weakval`, `weak_tables_allweak`) without
+linking through `GCtab.gclist`, because the legacy bridge still owns that link
+for `g->gc.weak`. The first
 weak-write bridge is present for new weak keys: `lj_tab_newkey()` calls
 `lj_gc2_barrier_weak_key()` during `P_WEAK`, marking a collectable inserted key
 immediately. C API table setters that bypass normal legacy barriers also call

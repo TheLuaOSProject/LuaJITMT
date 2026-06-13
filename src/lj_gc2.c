@@ -70,6 +70,10 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.worker_runs, 0);
   la_store64_rlx(&g->gc2.worker_grey_drained, 0);
   la_store64_rlx(&g->gc2.worker_ssb_converted, 0);
+  la_store64_rlx(&g->gc2.weak_tables_seen, 0);
+  la_store64_rlx(&g->gc2.weak_tables_weakkey, 0);
+  la_store64_rlx(&g->gc2.weak_tables_weakval, 0);
+  la_store64_rlx(&g->gc2.weak_tables_allweak, 0);
   la_store64_rlx(&g->gc2.weak_keys_marked, 0);
   la_store64_rlx(&g->gc2.weak_values_marked, 0);
   g->gc2.tg_list = NULL;
@@ -1050,6 +1054,19 @@ static void gc2_mark_tv_worker(global_State *g, cTValue *tv)
     gc2_markobj_worker(g, gcV(tv));
 }
 
+static void gc2_note_weak_table(global_State *g, int weak)
+{
+  if (!weak)
+    return;
+  la_add64_rlx(&g->gc2.weak_tables_seen, 1);
+  if (weak & LJ_GC_WEAKKEY)
+    la_add64_rlx(&g->gc2.weak_tables_weakkey, 1);
+  if (weak & LJ_GC_WEAKVAL)
+    la_add64_rlx(&g->gc2.weak_tables_weakval, 1);
+  if (weak == LJ_GC_WEAK)
+    la_add64_rlx(&g->gc2.weak_tables_allweak, 1);
+}
+
 #if LJ_HASJIT
 static void gc2_marktrace_worker(global_State *g, TraceNo traceno)
 {
@@ -1065,6 +1082,7 @@ static int gc2_traverse_tab(global_State *g, GCtab *t)
 {
   GCtab *mt = tabref_acq(t->metatable);
   int weak = gc2_tab_weak_mode(g, t, mt);
+  gc2_note_weak_table(g, weak);  /* 05 section 5.8 discovery scaffold. */
   if (t->acap > 0)
     lj_gc2_markmem(g, lj_tab_array_acq(t));
   {
