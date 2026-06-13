@@ -25,7 +25,9 @@ int main(void)
   uint64_t epoch0;
   uint64_t cycle_requests0, cycle_starts0;
   uint64_t assist_runs0, assist_grey0, assist_ssb0;
+  uint64_t weak_clear_tables0, weak_clear_cleared0;
   GCtab *parent, *child, *grandchild;
+  GCtab *weak, *key, *val;
 
   assert(L != NULL);
   g = G(L);
@@ -197,6 +199,49 @@ int main(void)
   assert(!lj_gc2_ssb_empty(g));
   (void)lj_gc2_drain_ssb(g);
   assert(lj_gc2_ismarked(g, obj2gco(grandchild)) == 1);
+  lj_gc2_legacy_cycle_end(g);
+
+  lua_settop(L, 0);
+  lua_newtable(L);
+  weak = tabV(L->top - 1);
+  lua_newtable(L);
+  lua_pushliteral(L, "__mode");
+  lua_pushliteral(L, "v");
+  lua_settable(L, -3);
+  lua_setmetatable(L, -2);
+  lua_newtable(L);
+  key = tabV(L->top - 1);
+  lua_newtable(L);
+  val = tabV(L->top - 1);
+  lua_pushvalue(L, 2);
+  lua_pushvalue(L, 3);
+  lua_settable(L, 1);
+
+  lj_gc2_legacy_mark_begin(g);
+  assert(lj_gc2_markobj(g, obj2gco(weak)) == 1);
+  assert(lj_gc2_flush_ssb(g, tg) == 1);
+  (void)lj_gc2_drain_ssb(g);
+  assert(lj_gc2_weak_snapshot_count(g) == 1u);
+  assert(lj_gc2_ismarked(g, obj2gco(key)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(val)) == 0);
+  lj_gc2_legacy_weak_begin(g);
+  la_store64_rel(&g->gc2.hard_bytes, 1);
+  la_store32_rel(&g->gc2.assist_shift, 0);
+  (void)la_xchg64_acqrel(&g->gc2.alloc_since_trigger, 0);
+  assist_runs0 = la_load64_acq(&g->gc2.assist_runs);
+  weak_clear_tables0 = la_load64_acq(&g->gc2.weak_clear_tables);
+  weak_clear_cleared0 = la_load64_acq(&g->gc2.weak_clear_cleared);
+  lj_gc2_account_alloc(g, tg, LJ_GC2_ACCT_FLUSH);
+  assert(tg->gc_assist == 0);
+  assert(la_load32_acq(&g->gc2.assist_active) == 0);
+  assert(la_load64_acq(&g->gc2.assist_runs) == assist_runs0 + 1u);
+  assert(la_load64_acq(&g->gc2.weak_clear_tables) == weak_clear_tables0 + 1u);
+  assert(la_load64_acq(&g->gc2.weak_clear_cleared) ==
+	 weak_clear_cleared0 + 1u);
+  lua_pushvalue(L, 2);
+  lua_gettable(L, 1);
+  assert(lua_isnil(L, -1));
+  lua_pop(L, 1);
   lj_gc2_legacy_cycle_end(g);
 
   lua_close(L);

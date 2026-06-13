@@ -50,6 +50,8 @@ for needle in \
   'gc2_drain_active_ssb_to_grey(global_State *g, TGState *tg' \
   'gc2_drain_published_ssb_to_grey(global_State *g' \
   'gc2_drain_grey(g, left)' \
+  'lj_gc2_weak_drain(g, limit - work)' \
+  '05 section 5.11' \
   'static void gc2_reset_alloc_trigger(global_State *g)' \
   'la_add64_rlx(&tg->local_total' \
   'la_add64_rlx(&g->gc2.alloc_since_trigger' \

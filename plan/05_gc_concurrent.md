@@ -390,8 +390,11 @@ live_estimate * gcpause_pct/100 (default 100% ⇒ 2x heap growth, Lua-like).
 Hard limit `hard_bytes = trigger*2`: an allocating thread past it runs a
 bounded **mark assist** in alloc_slow: pop ≤2^assist_shift objects from the
 SSB-stack/steal and trace them (mutator tracing reuses worker code with
-tg-local scratch). This bounds heap growth under worker starvation without
-ever blocking. Leader spawns workers `min(ncpu-1, max(1, live/64MB))`,
+tg-local scratch). Current bridge extension: once a cycle is in `P_WEAK`,
+the same hard-limit assist token spends any remaining bounded work budget on
+`lj_gc2_weak_drain()`, advancing the weak clear cursor without adding locks.
+This bounds heap growth under worker starvation without ever blocking. Leader
+spawns workers `min(ncpu-1, max(1, live/64MB))`,
 parked on futex between cycles.
 
 ## 5.12 Generational mode

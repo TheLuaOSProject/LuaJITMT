@@ -1077,7 +1077,7 @@ uint32_t lj_gc2_drain_ssb(global_State *g)
 
 uint32_t lj_gc2_assist(global_State *g, TGState *tg)
 {
-  uint32_t phase, shift, limit, expect = 0, n = 0, converted = 0;
+  uint32_t phase, shift, limit, expect = 0, n = 0, converted = 0, weak = 0;
   if (!g || !tg || tg->gc_assist)
     return 0;
   phase = la_load32_acq(&g->gc2.phase);
@@ -1109,13 +1109,18 @@ uint32_t lj_gc2_assist(global_State *g, TGState *tg)
       break;
     converted++;
   }
+  if (phase == LJ_GC2_WEAK) {
+    uint32_t work = n + converted;
+    if (work < limit)
+      weak = lj_gc2_weak_drain(g, limit - work);  /* 05 section 5.11. */
+  }
   if (n)
     la_add64_rlx(&g->gc2.assist_grey_drained, n);
   if (converted)
     la_add64_rlx(&g->gc2.assist_ssb_converted, converted);
   tg->gc_assist = 0;
   la_store32_rel(&g->gc2.assist_active, 0);
-  return n;
+  return n + weak;
 }
 
 int lj_gc2_ssb_empty(global_State *g)
