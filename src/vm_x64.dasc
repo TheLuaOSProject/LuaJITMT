@@ -4853,10 +4853,13 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  jmp ->vm_safepoint
     |1:
     |  ins_AD	// RA = base (ignored), RD = traceno
+    |  mov L:RB, SAVE_L
+    |  mov RA, L:RB->tg_hint
+    |  cmp RA, [DISPATCH+DISPATCH_GL(main_tg)]
+    |  jne >5				// Secondary TGs interpret until DISPATCH is local.
     |  mov RA, [DISPATCH+DISPATCH_J(trace)]
     |  mov TRACE:RD, [RA+RD*8]
     |  mov RD, TRACE:RD->mcode
-    |  mov L:RB, SAVE_L
     |  mov [DISPATCH+DISPATCH_TG(jit_base)], BASE
     |  mov [DISPATCH+DISPATCH_TG(tmpbuf.L)], L:RB
     |  // Save additional callee-save registers only used in compiled code.
@@ -4883,6 +4886,15 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov [rsp+8], r13
     |.endif
     |  jmp RD
+    |
+    |5:  // Dispatch to static entry of original ins replaced by BC_JLOOP.
+    |  mov RA, [DISPATCH+DISPATCH_J(trace)]
+    |  mov TRACE:RD, [RA+RD*8]
+    |  mov RCd, TRACE:RD->startins
+    |  movzx RAd, RCH
+    |  movzx OP, RCL
+    |  shr RCd, 16
+    |  jmp aword [DISPATCH+OP*8+GG_DISP2STATIC]
     |.endif
     break;
 

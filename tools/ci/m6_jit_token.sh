@@ -19,6 +19,7 @@ for needle in \
   'int jit_exitcode' \
   'G2TG(g)->jit_exitcode' \
   'tg->jit_exitcode' \
+  'Secondary TGs interpret until DISPATCH is local' \
   'J->L = L;' \
   'lj_jit_token_held(J)' \
   'lj_jit_token_release(J)'
@@ -26,7 +27,7 @@ do
   if ! rg -F -q "$needle" "$ROOT/src/lj_obj.h" "$ROOT/src/lj_trace.h" \
       "$ROOT/src/lj_trace.c" "$ROOT/src/lj_dispatch.c" \
       "$ROOT/src/lj_snap.h" "$ROOT/src/lj_snap.c" "$ROOT/src/lj_tg.h" \
-      "$ROOT/src/lj_err.c"; then
+      "$ROOT/src/lj_err.c" "$ROOT/src/vm_x64.dasc"; then
     echo "guardrail: missing recorder token marker: $needle" >&2
     exit 1
   fi

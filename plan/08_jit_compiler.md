@@ -63,10 +63,12 @@ x64/POSIX unwound-trace error code is stored in the current TG instead of
 shared `J->exitcode`, and token-busy hot side exits do not advance the retry
 budget into `SNAPCOUNT_DONE`. Dispatch mode transitions now request
 `HS_REDISPATCH` for already-attached TGs, so TG dispatch copies refresh through
-their own safepoint ack. The remaining original target is to make x64 `DISPATCH`
-load the running TG's dispatch table and then localize record dispatch to the
-token holder's TG table instead of temporarily exposing record hooks through
-the global dispatch template.
+their own safepoint ack. Existing x64 traces still assume recorder-TG-relative
+`RID_DISPATCH` addressing, so secondary TGs interpret `BC_JLOOP` instead of
+entering mcode until the emitter migration is complete. The remaining original
+target is to make x64 `DISPATCH` load the running TG's dispatch table and then
+localize record dispatch to the token holder's TG table instead of temporarily
+exposing record hooks through the global dispatch template.
 
 ## 8.3 Trace registry & publication
 
