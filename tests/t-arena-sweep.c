@@ -97,7 +97,7 @@ int main(void)
   assert(alloc.owned[LJ_ARENAK_PLAIN] == plain);
   assert((plain->hdr.flags & LJ_AF_NEEDSWEEP) == 0);
   assert(plain->hdr.sweep_epoch == 7);
-  assert(plain->hdr.live_cells == 2);
+  assert(plain->hdr.live_cells == 3);
   assert(lj_arena_state(plain, cdead1) == 1);
   assert(lj_arena_state(plain, clive1) == 2);
   assert(lj_arena_state(plain, coldfree) == 1);
@@ -118,7 +118,7 @@ int main(void)
   assert(alloc.owned[LJ_ARENAK_TRAVERSABLE] == trav);
   assert((trav->hdr.flags & LJ_AF_NEEDSWEEP) == 0);
   assert(trav->hdr.sweep_epoch == 9);
-  assert(trav->hdr.live_cells == 1);
+  assert(trav->hdr.live_cells == 2);
   assert(lj_arena_state(trav, ctdead) == 1);
   assert(lj_arena_state(trav, ctlive) == 3);
   assert(bin_count(&alloc, LJ_ARENAK_TRAVERSABLE) == 1);
@@ -242,6 +242,7 @@ int main(void)
     assert(lj_arena_state(a, cd1) == 1);
     assert(lj_arena_state(a, cd2) == 0);
     assert(lj_arena_state(a, clive) == 2);
+    assert(a->hdr.live_cells == 2001);
     assert(bump.bump[LJ_ARENAK_PLAIN].a == a);
     assert(bump.bump[LJ_ARENAK_PLAIN].cell == cd1);
     bump.alloc_black = 0;

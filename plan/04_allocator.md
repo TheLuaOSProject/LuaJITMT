@@ -37,7 +37,7 @@ typedef struct GCArena {
     struct GCArena *next;    /* intrusive links for owner / global lists */
     GreyStack *grey;         /* per-arena grey stack ptr (05 §5.6.3 opt) */
     uint32_t sweep_epoch;    /* last GC cycle this arena was swept in    */
-    uint32_t live_cells;     /* filled by sweep; pacing input            */
+    uint32_t live_cells;     /* swept live extent cells; pacing input    */
   } hdr;                     /* padded to 128 bytes                      */
   uint64_t block[LJ_ARENA_CELLS/64];   /* 512 B */
   uint64_t mark [LJ_ARENA_CELLS/64];   /* 512 B */
@@ -174,8 +174,9 @@ At the P_SWEEP handshake every thread moves `owned[*]` → `needsweep[*]` and
 resets bump/bins (the swept-state of the old windows is unknown). Sweeping
 one arena = apply the §4.1.1 word identities over 64 words, build FreeRun
 list from free-run boundaries (word-scan with ctz/clz; model file has the
-exact loop), update live_cells, la_add64 into g live accumulator, set
-sweep_epoch. GC workers concurrently sweep *unowned* arenas from the global
+exact loop), update `live_cells` by summing each live start cell through the
+next start boundary, la_add64 into g live accumulator, set sweep_epoch. GC
+workers concurrently sweep *unowned* arenas from the global
 lists and arenas of dead threads. An arena is "swept for cycle E" exactly
 once: claim via CAS sweep_epoch old→E (idempotence guard for the
 worker/owner race on orphans).

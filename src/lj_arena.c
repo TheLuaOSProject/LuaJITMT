@@ -578,9 +578,20 @@ static void arena_unmap_list(GCArena *a)
 
 static uint32_t arena_count_live_cells(const GCArena *a)
 {
-  uint32_t i, n = 0;
-  for (i = LJ_AFIRST_CELL; i < LJ_ARENA_CELLS; i++)
-    n += lj_arena_bm_get(a->block, i);
+  uint32_t i = LJ_AFIRST_CELL, n = 0;
+  while (i < LJ_ARENA_CELLS) {
+    uint32_t st = lj_arena_state(a, i);
+    uint32_t j = i + 1u;
+    if (st == 0) {
+      i++;
+      continue;
+    }
+    while (j < LJ_ARENA_CELLS && lj_arena_state(a, j) == 0)
+      j++;
+    if (st & 2u)
+      n += j - i;
+    i = j;
+  }
   return n;
 }
 
