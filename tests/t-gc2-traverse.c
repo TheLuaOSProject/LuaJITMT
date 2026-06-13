@@ -734,8 +734,11 @@ static void test_weak_tables(lua_State *L, global_State *g, TGState *tg)
   assert(weak_snapshot_has(g, weakv));
   assert(weak_snapshot_has(g, weakk));
   assert(weak_snapshot_has(g, weakkv));
-  assert(lj_gc2_weak_snapshot_scan(g, 3) == 3u);
-  assert(la_load64_acq(&g->gc2.weak_scan_runs) == scan_runs0 + 1u);
+  assert(lj_gc2_weak_snapshot_scan(g, 1) == 1u);
+  assert(lj_gc2_weak_snapshot_scan(g, 1) == 1u);
+  assert(lj_gc2_weak_snapshot_scan(g, 1) == 1u);
+  assert(lj_gc2_weak_snapshot_scan(g, 1) == 0);
+  assert(la_load64_acq(&g->gc2.weak_scan_runs) == scan_runs0 + 3u);
   assert(la_load64_acq(&g->gc2.weak_scan_tables) == scan_tables0 + 3u);
   assert(la_load64_acq(&g->gc2.weak_scan_slots) == scan_slots0 + 3u);
   assert(la_load64_acq(&g->gc2.weak_scan_clearable) ==

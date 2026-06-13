@@ -84,6 +84,7 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.weak_tables_allweak, 0);
   la_store64_rlx(&g->gc2.weak_tables_queued, 0);
   la_store64_rlx(&g->gc2.weak_tables_overflow, 0);
+  la_store64_rlx(&g->gc2.weak_scan_cursor, 0);
   la_store64_rlx(&g->gc2.weak_scan_runs, 0);
   la_store64_rlx(&g->gc2.weak_scan_tables, 0);
   la_store64_rlx(&g->gc2.weak_scan_slots, 0);
@@ -579,6 +580,7 @@ static void gc2_weak_reset(global_State *g)
   for (i = 0; i < g->gc2.weak_capacity; i++)
     la_store8_rlx(&g->gc2.weak_ready[i], 0);
   la_store64_rlx(&g->gc2.weak_count, 0);  /* 05 section 5.8 side vector. */
+  la_store64_rlx(&g->gc2.weak_scan_cursor, 0);
   la_store64_rlx(&g->gc2.weak_clear_cursor, 0);
 }
 
@@ -702,12 +704,22 @@ static void gc2_weak_process_tab(global_State *g, GCtab *t, int clear,
 
 uint32_t lj_gc2_weak_snapshot_scan(global_State *g, uint32_t limit)
 {
+  uint64_t start, end;
   uint32_t i, n, scanned = 0;
   uint64_t slots = 0, clearable = 0;
   if (!g || limit == 0)
     return 0;
   n = lj_gc2_weak_snapshot_count(g);
-  for (i = 0; i < n && scanned < limit; i++) {
+  do {
+    start = la_load64_acq(&g->gc2.weak_scan_cursor);
+    if (start >= (uint64_t)n)
+      return 0;
+    end = start + limit;
+    if (end < start || end > (uint64_t)n)
+      end = (uint64_t)n;
+  } while (!la_cas64(&g->gc2.weak_scan_cursor, &start, end,
+		     LA_ACQ_REL, LA_ACQ));  /* 05 section 5.8 bounded scan cursor. */
+  for (i = (uint32_t)start; (uint64_t)i < end; i++) {
     GCtab *t = lj_gc2_weak_snapshot_tab(g, i);
     if (!t)
       continue;

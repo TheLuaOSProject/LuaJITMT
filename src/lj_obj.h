@@ -875,6 +875,7 @@ typedef struct GC2State {
   uint64_t weak_tables_allweak;  /* Weak key+value table traversals. */
   uint64_t weak_tables_queued;  /* Weak tables stored in GC2 vector. */
   uint64_t weak_tables_overflow;  /* Weak discoveries beyond vector capacity. */
+  uint64_t weak_scan_cursor;  /* Next weak snapshot table to scan. */
   uint64_t weak_scan_runs;  /* Weak snapshot scan attempts with work. */
   uint64_t weak_scan_tables;  /* Weak snapshot tables scanned. */
   uint64_t weak_scan_slots;  /* Weak snapshot entries inspected. */

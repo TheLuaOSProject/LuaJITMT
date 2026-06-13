@@ -316,7 +316,8 @@ linking through `GCtab.gclist`, because the legacy bridge still owns that link
 for `g->gc.weak`. Snapshot readers expose only the contiguous ready prefix, so
 reserved-but-unpublished MPSC slots are not scanned. `lj_gc2_weak_snapshot_scan()`
 is a bounded, read-only oracle over that vector that mirrors the legacy weak
-clear predicate and publishes scan telemetry. `lj_gc2_weak_snapshot_clear()`
+clear predicate, advances through the published ready prefix with
+`weak_scan_cursor`, and publishes scan telemetry. `lj_gc2_weak_snapshot_clear()`
 applies the same predicate with release nil stores, advances through the
 snapshot with `weak_clear_cursor`, and now runs before legacy `gc_clearweak()`;
 the legacy pass remains the
