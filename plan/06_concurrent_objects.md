@@ -180,7 +180,8 @@ the current allocation capacity until the final `AHdr` port. On x86-64,
 `ipairs_aux` array iteration now load candidate values into registers before nil
 decisions and copy those same snapshots to their results; `BC_TGETS`/`BC_TSETS`
 string-key hash fast paths load the legacy node base before hmask/index
-calculation. Core C table lookup, resize, rehash counting, collision checks,
+calculation, as does the x64 `getmetatable` fast-function probe for
+`__metatable`. Core C table lookup, resize, rehash counting, collision checks,
 and `next()` now make key/value decisions from acquired `TValue` snapshots
 instead of direct shared node-field reads; GC/GC2 table traversal, weak
 clearing, finalizer-table scans, serialization, bytecode writing, parser
