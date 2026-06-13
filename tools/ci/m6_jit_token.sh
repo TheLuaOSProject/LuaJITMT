@@ -17,6 +17,8 @@ for needle in \
   'emit_leatg(as, dest, tmptv)' \
   'DISPATCH_TG(jit_base)' \
   'emit_gettg(as, tmp, gl)' \
+  'static void emit_pushx' \
+  'static void emit_popx' \
   'la_cas32(&g->jit_token, &expect, tg->tid, LA_ACQ_REL, LA_ACQ)' \
   'void LJ_FASTCALL lj_trace_hot(jit_State *J, const BCIns *pc, lua_State *L)' \
   'lj_snap_restore_exit(jit_State *J, void *exptr, lua_State *L,' \
@@ -48,6 +50,12 @@ fi
 if rg -n 'dispofs\(as, &J2TG\(as->J\)->(jit_base|tmptv|cur_L|gl)' \
     "$ROOT/src/lj_asm_x86.h" "$ROOT/src/lj_emit_x86.h"; then
   echo "guardrail: fixed TG fields must use DISPATCH_TG symbolic offsets" >&2
+  exit 1
+fi
+
+if rg -n 'dispofs\(|J2TG\(as->J\)->dispatch|uint64_t dispaddr' \
+    "$ROOT/src/lj_asm_x86.h" "$ROOT/src/lj_emit_x86.h"; then
+  echo "guardrail: generic x64 emitter must not use recorder-TG dispatch offsets" >&2
   exit 1
 fi
 

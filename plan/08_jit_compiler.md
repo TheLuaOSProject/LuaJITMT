@@ -75,10 +75,12 @@ original target is to finish migrating emitter `RID_DISPATCH` addressing to
 explicit TG fields or non-dispatch globals, and then remove the secondary-TG
 recorder/entry guard once emitter dispatch addressing is local. Fixed TG fields
 in the x64 emitter now use symbolic `DISPATCH_TG(...)` offsets for `jit_base`,
-`cur_L`, `tmptv`, and `gl`; generic `dispofs()` still covers arbitrary
-constants, globals, and object pointers. Record dispatch itself is now localized
-to the token holder's TG table instead of being exposed through the global
-dispatch template.
+`cur_L`, `tmptv`, and `gl`; generic `dispofs()` has been removed, with far
+non-MOV operands saving a scratch register instead of clobbering
+`RID_DISPATCH`. The remaining non-TG `RID_DISPATCH` emitter blocker is the
+`REF_NIL` GG-state fused load path. Record dispatch itself is now localized to
+the token holder's TG table instead of being exposed through the global dispatch
+template.
 
 ## 8.3 Trace registry & publication
 

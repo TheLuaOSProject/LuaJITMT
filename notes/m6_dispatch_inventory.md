@@ -17,11 +17,12 @@ M6 x64 dispatch localization inventory:
   the current TG when that TG holds the recorder token.
 - Emitter prerequisite in progress: fixed TG fields now use symbolic
   `DISPATCH_TG(...)` offsets (`jit_base`, `cur_L`, `tmptv`, `gl`) instead of
-  recorder-TG pointer subtraction.
-- The JIT emitter also assumes `RID_DISPATCH` can address arbitrary constants
-  relative to the recorder TG. Before trace execution is safe on secondary TGs,
-  arbitrary `dispofs()` addressing must stop using `RID_DISPATCH`; only fixed
-  `DISPATCH_TG(field)` offsets are valid for per-TG fields.
+  recorder-TG pointer subtraction. Generic `dispofs()` addressing has been
+  removed; arbitrary constants and object pointers now use absolute/RIP forms
+  or a saved scratch fallback instead of `RID_DISPATCH`.
+- Remaining emitter blocker: the `REF_NIL` GG-state fused load path still uses
+  a `GG_OFS_TGDISP` dispatch-relative operand. Before trace execution is safe
+  on secondary TGs, that path must move to a non-dispatch global address form.
 - Transitional x64/POSIX safety guard now keeps secondary TGs from acquiring
   the recorder token as well as from entering `BC_JLOOP` mcode. This preserves
   interpreter progress while preventing secondary TGs from producing traces

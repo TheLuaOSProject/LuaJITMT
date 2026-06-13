@@ -312,8 +312,6 @@ static void emit_loadi(ASMState *as, Reg r, int32_t i)
 }
 
 #if LJ_GC64
-#define dispofs(as, k) \
-  ((intptr_t)((uintptr_t)(k) - (uintptr_t)J2TG(as->J)->dispatch))
 #define mcpofs(as, k) \
   ((intptr_t)((uintptr_t)(k) - (uintptr_t)as->mcp))
 #define mctopofs(as, k) \
@@ -328,6 +326,24 @@ static void emit_loadi(ASMState *as, Reg r, int32_t i)
 #endif
 
 #if LJ_64
+static void emit_pushx(ASMState *as, Reg r)
+{
+  MCode *p = as->mcp;
+  p[-1] = (MCode)(XI_PUSH + (r & 7));
+  p -= 1;
+  REXRB(p, 0, r);
+  as->mcp = p;
+}
+
+static void emit_popx(ASMState *as, Reg r)
+{
+  MCode *p = as->mcp;
+  p[-1] = (MCode)(XI_POP + (r & 7));
+  p -= 1;
+  REXRB(p, 0, r);
+  as->mcp = p;
+}
+
 /* mov r, imm64 or shorter 32 bit extended load. */
 static void emit_loadu64(ASMState *as, Reg r, uint64_t u64)
 {
@@ -338,8 +354,6 @@ static void emit_loadu64(ASMState *as, Reg r, uint64_t u64)
     *(int32_t *)(p-4) = (int32_t)u64;
     as->mcp = emit_opm(XO_MOVmi, XM_REG, REX_64, r, p, -4);
 #if LJ_GC64
-  } else if (checki32(dispofs(as, u64))) {
-    emit_rmro(as, XO_LEA, r|REX_64, RID_DISPATCH, (int32_t)dispofs(as, u64));
   } else if (checki32(mcpofs(as, u64)) && checki32(mctopofs(as, u64))) {
     /* Since as->realign assumes the code size doesn't change, check
     ** RIP-relative addressing reachability for both as->mcp and as->mctop.
@@ -361,31 +375,26 @@ static void emit_loadu64(ASMState *as, Reg r, uint64_t u64)
 static void emit_rma(ASMState *as, x86Op xo, Reg rr, const void *addr)
 {
 #if LJ_GC64
-  if (checki32(dispofs(as, addr))) {
-    emit_rmro(as, xo, rr, RID_DISPATCH, (int32_t)dispofs(as, addr));
-  } else if (checki32(mcpofs(as, addr)) && checki32(mctopofs(as, addr))) {
+  if (checki32(mcpofs(as, addr)) && checki32(mctopofs(as, addr))) {
     emit_rmro(as, xo, rr, RID_RIP, (int32_t)mcpofs(as, addr));
   } else if (!checki32((intptr_t)addr)) {
-    Reg ra = (rr & 15);
+    Reg ra = (xo == XO_MOV) ? (rr & 15) :
+	     ((rr & 15) == RID_EAX ? RID_ECX : RID_EAX);
     if (xo != XO_MOV) {
-      /* We can't allocate a register here. Use and restore DISPATCH. Ugly. */
-      uint64_t dispaddr = (uintptr_t)J2TG(as->J)->dispatch;
+      uint32_t i32 = 0;
       uint8_t i8 = xo == XO_GROUP3b ? *as->mcp++ : 0;
-      ra = RID_DISPATCH;
-      if (checku32(dispaddr)) {
-	emit_loadi(as, ra, (int32_t)dispaddr);
-      } else {  /* Full-size 64 bit load. */
-	MCode *p = as->mcp;
-	*(uint64_t *)(p-8) = dispaddr;
-	p[-9] = (MCode)(XI_MOVri+(ra&7));
-	p[-10] = 0x48 + ((ra>>3)&1);
-	p -= 10;
-	as->mcp = p;
+      if (xo == XO_MOVmi) {
+	i32 = *(uint32_t *)as->mcp;
+	as->mcp += 4;
       }
+      emit_popx(as, ra);
+      if (xo == XO_MOVmi) emit_i32(as, (int32_t)i32);
       if (xo == XO_GROUP3b) emit_i8(as, i8);
     }
     emit_rmro(as, xo, rr, ra, 0);
     emit_loadu64(as, ra, (uintptr_t)addr);
+    if (xo != XO_MOV)
+      emit_pushx(as, ra);
   } else
 #endif
   {
@@ -416,7 +425,7 @@ static void emit_loadk64(ASMState *as, Reg r, IRIns *ir)
   if (*k == 0) {
     emit_rr(as, rset_test(RSET_FPR, r) ? XO_XORPS : XO_ARITH(XOg_XOR), r, r);
 #if LJ_GC64
-  } else if (checki32((intptr_t)k) || checki32(dispofs(as, k)) ||
+  } else if (checki32((intptr_t)k) ||
 	     (checki32(mcpofs(as, k)) && checki32(mctopofs(as, k)))) {
     emit_rma(as, xo, r64, k);
   } else {

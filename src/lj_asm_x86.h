@@ -263,10 +263,15 @@ static void asm_fuseahuref(ASMState *as, IRRef ref, RegSet allow)
 		      (GCupval *)ir_kptr(IR(ir->op1)) :
 		      &gcref(ir_kfunc(IR(ir->op1))->l.uvptr[(ir->op2 >> 8)])->uv;
 #if LJ_GC64
-	int64_t ofs = dispofs(as, &uv->tv);
-	if (checki32(ofs) && checki32(ofs+4)) {
-	  as->mrm.ofs = (int32_t)ofs;
-	  as->mrm.base = RID_DISPATCH;
+	const void *tv = &uv->tv;
+	if (checki32((intptr_t)tv)) {
+	  as->mrm.ofs = ptr2addr(tv);
+	  as->mrm.base = RID_NONE;
+	  as->mrm.idx = RID_NONE;
+	  return;
+	} else if (checki32(mcpofs(as, tv)) && checki32(mctopofs(as, tv))) {
+	  as->mrm.ofs = (int32_t)mcpofs(as, tv);
+	  as->mrm.base = RID_RIP;
 	  as->mrm.idx = RID_NONE;
 	  return;
 	}
@@ -316,15 +321,15 @@ static void asm_fusefref(ASMState *as, IRIns *ir, RegSet allow)
   if (irref_isk(ir->op1)) {
     IRIns *op1 = IR(ir->op1);
 #if LJ_GC64
-    if (ir->op1 == REF_NIL) {
-      as->mrm.ofs -= GG_OFS_TGDISP;
-      as->mrm.base = RID_DISPATCH;
-      return;
-    } else if (op1->o == IR_KPTR || op1->o == IR_KKPTR) {
-      intptr_t ofs = dispofs(as, ir_kptr(op1));
-      if (checki32(as->mrm.ofs + ofs)) {
-	as->mrm.ofs += (int32_t)ofs;
-	as->mrm.base = RID_DISPATCH;
+    if (op1->o == IR_KPTR || op1->o == IR_KKPTR) {
+      const char *p = (const char *)ir_kptr(op1) + as->mrm.ofs;
+      if (checki32((intptr_t)p)) {
+	as->mrm.ofs = ptr2addr(p);
+	as->mrm.base = RID_NONE;
+	return;
+      } else if (checki32(mcpofs(as, p)) && checki32(mctopofs(as, p))) {
+	as->mrm.ofs = (int32_t)mcpofs(as, p);
+	as->mrm.base = RID_RIP;
 	return;
       }
     }
@@ -378,13 +383,19 @@ static void asm_fusexref(ASMState *as, IRRef ref, RegSet allow)
   as->mrm.idx = RID_NONE;
   if (ir->o == IR_KPTR || ir->o == IR_KKPTR) {
 #if LJ_GC64
-    intptr_t ofs = dispofs(as, ir_kptr(ir));
-    if (checki32(ofs)) {
-      as->mrm.ofs = (int32_t)ofs;
-      as->mrm.base = RID_DISPATCH;
+    const void *p = ir_kptr(ir);
+    if (checki32((intptr_t)p)) {
+      as->mrm.ofs = ptr2addr(p);
+      as->mrm.base = RID_NONE;
+      return;
+    } else if (checki32(mcpofs(as, p)) && checki32(mctopofs(as, p))) {
+      as->mrm.ofs = (int32_t)mcpofs(as, p);
+      as->mrm.base = RID_RIP;
       return;
     }
-  } if (0) {
+    as->mrm.ofs = 0;
+    as->mrm.base = (uint8_t)ra_alloc1(as, ref, allow);
+  } else if (0) {
 #else
     as->mrm.ofs = ir->i;
     as->mrm.base = RID_NONE;
@@ -441,9 +452,6 @@ static Reg asm_fuseloadk64(ASMState *as, IRIns *ir)
     as->mrm.ofs = ptr2addr(k);
     as->mrm.base = RID_NONE;
 #if LJ_GC64
-  } else if (checki32(dispofs(as, k))) {
-    as->mrm.ofs = (int32_t)dispofs(as, k);
-    as->mrm.base = RID_DISPATCH;
   } else if (checki32(mcpofs(as, k)) && checki32(mcpofs(as, k+1)) &&
 	     checki32(mctopofs(as, k)) && checki32(mctopofs(as, k+1))) {
     as->mrm.ofs = (int32_t)mcpofs(as, k);
