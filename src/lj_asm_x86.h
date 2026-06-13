@@ -2049,10 +2049,12 @@ static void asm_tbar(ASMState *as, IRIns *ir)
   args[1] = ir->op1;      /* GCtab *t       */
   l_end = emit_label(as);
   asm_gencall(as, ci, args);
+  checkmclim(as);  /* M6: split long TBAR sequence for assert red zone. */
   emit_loada(as, ra_releasetmp(as, ASMREF_TMP1), J2G(as->J));
   emit_sjcc(as, CC_Z, l_end);
   emit_gmroi(as, XG_ARITHi(XOg_CMP), RID_DISPATCH,
 	     DISPATCH_TG(mark_active), 0);
+  checkmclim(as);  /* M6: split long TBAR sequence for assert red zone. */
   l_gate = emit_label(as);
   tab = ra_alloc1(as, ir->op1, RSET_GPR);
   tmp = ra_scratch(as, rset_exclude(RSET_GPR, tab));
@@ -2079,11 +2081,13 @@ static void asm_obar(ASMState *as, IRIns *ir)
   args[1] = ir->op1;      /* TValue *tv      */
   l_end = emit_label(as);
   asm_gencall(as, ci, args);
+  checkmclim(as);  /* M6: split long OBAR sequence for assert red zone. */
   emit_loada(as, ra_releasetmp(as, ASMREF_TMP1), J2G(as->J));
   l_call = emit_label(as);
   emit_sjcc(as, CC_Z, l_end);
   emit_gmroi(as, XG_ARITHi(XOg_CMP), RID_DISPATCH,
 	     DISPATCH_TG(mark_active), 0);
+  checkmclim(as);  /* M6: split long OBAR sequence for assert red zone. */
   l_gate = emit_label(as);
   tv = ra_alloc1(as, ir->op1, RSET_GPR);
   val = ra_alloc1(as, ir->op2, rset_exclude(RSET_GPR, tv));

@@ -17,7 +17,9 @@ for needle in \
   'IRCALL_lj_gc2_barrier_tab_g' \
   'IRCALL_lj_gc_pubuv' \
   'LJ_GC_BLACK' \
-  'LJ_GC_WHITES'
+  'LJ_GC_WHITES' \
+  'M6: split long TBAR sequence for assert red zone' \
+  'M6: split long OBAR sequence for assert red zone'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_opt_fold.c" \
       "$ROOT/src/lj_asm_x86.h"; then
