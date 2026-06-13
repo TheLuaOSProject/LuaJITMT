@@ -24,6 +24,9 @@ for needle in \
   'lj_gc2_update_pacing(global_State *g)' \
   'lj_gc2_assist_shift_from_stepmul(uint32_t stepmul)' \
   'lj_gc2_assist(global_State *g, TGState *tg)' \
+  'static void gc2_maybe_trigger_cycle(global_State *g)' \
+  'lj_gc_threshold_load(g) == LJ_MAX_MEM' \
+  'lj_gc_threshold_store(g, g->gc.total)' \
   'la_store64_rel(&g->gc2.trigger_bytes' \
   'la_store64_rel(&g->gc2.hard_bytes' \
   'la_cas32(&g->gc2.assist_active' \

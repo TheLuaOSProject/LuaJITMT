@@ -87,6 +87,18 @@ uint64_t lj_gc2_flush_alloc(global_State *g, TGState *tg)
   return bytes;
 }
 
+static void gc2_maybe_trigger_cycle(global_State *g)
+{
+  if (la_load32_acq(&g->gc2.phase) != LJ_GC2_IDLE)
+    return;
+  if (la_load64_acq(&g->gc2.alloc_since_trigger) <=
+      la_load64_acq(&g->gc2.trigger_bytes))  /* 05 section 5.11 trigger. */
+    return;
+  if (lj_gc_threshold_load(g) == LJ_MAX_MEM)
+    return;  /* Honor collectgarbage("stop"). */
+  lj_gc_threshold_store(g, g->gc.total);  /* Legacy cycle-driver bridge. */
+}
+
 void lj_gc2_account_alloc(global_State *g, TGState *tg, GCSize bytes)
 {
   uint64_t old;
@@ -95,6 +107,7 @@ void lj_gc2_account_alloc(global_State *g, TGState *tg, GCSize bytes)
   old = la_add64_rlx(&tg->local_total, (uint64_t)bytes);  /* 04 section 4.8. */
   if (old + (uint64_t)bytes < old || old + (uint64_t)bytes >= LJ_GC2_ACCT_FLUSH)
     (void)lj_gc2_flush_alloc(g, tg);
+  gc2_maybe_trigger_cycle(g);
   if (la_load64_acq(&g->gc2.alloc_since_trigger) >
       la_load64_acq(&g->gc2.hard_bytes))  /* 05 section 5.11 hard limit. */
     (void)lj_gc2_assist(g, tg);

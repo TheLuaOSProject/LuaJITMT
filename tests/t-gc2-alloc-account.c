@@ -80,6 +80,21 @@ int main(void)
   assert(la_load64_acq(&tg->local_total) == 0);
   assert(la_load64_acq(&g->gc2.alloc_since_trigger) == total + 7);
 
+  lj_gc_threshold_store(g, g->gc.total + 4u * LJ_GC2_ACCT_FLUSH);
+  la_store64_rel(&g->gc2.trigger_bytes, 1);
+  (void)la_xchg64_acqrel(&g->gc2.alloc_since_trigger, 0);
+  lj_gc2_account_alloc(g, tg, LJ_GC2_ACCT_FLUSH);
+  assert(la_load64_acq(&tg->local_total) == 0);
+  assert(lj_gc_threshold_load(g) == g->gc.total);
+
+  lj_gc_threshold_store(g, LJ_MAX_MEM);
+  (void)la_xchg64_acqrel(&g->gc2.alloc_since_trigger, 0);
+  lj_gc2_account_alloc(g, tg, LJ_GC2_ACCT_FLUSH);
+  assert(la_load64_acq(&tg->local_total) == 0);
+  assert(lj_gc_threshold_load(g) == LJ_MAX_MEM);
+  lj_gc_threshold_store(g, g->gc.total + 4u * LJ_GC2_ACCT_FLUSH);
+  lj_gc2_update_pacing(g);
+
   lj_gc2_account_alloc(g, tg, 99);
   assert(la_load64_acq(&tg->local_total) == 99);
   lj_gc2_legacy_mark_begin(g);
