@@ -111,9 +111,11 @@ static void gc_arena_finish_sweep_boundary(global_State *g)
   if (!tg || !(tg->tg_flags & TGF_ARENA_INTERNAL))
     return;
   if (g->gc2.phase == LJ_GC2_SWEEP && gcref(g->gc.mmudata) == NULL) {
-    uint32_t epoch = ++tg->alloc.sweep_epoch;
+    uint32_t swept;
     lj_arena_alloc_prepare_sweep_kind(&tg->alloc, LJ_ARENAK_TRAVERSABLE);
-    lj_arena_alloc_sweep_kind(&tg->alloc, LJ_ARENAK_TRAVERSABLE, epoch, 0);
+    do {
+      swept = lj_gc2_sweep_owner_progress(g, tg, LJ_GC2_SWEEP_BATCH);
+    } while (swept != 0);  /* 05 section 5.8 bounded traversable sweep bridge. */
     lj_arena_alloc_restore_sweep_kind(&tg->alloc, LJ_ARENAK_PLAIN);
   } else {
     gc_arena_rebuild_free(g);

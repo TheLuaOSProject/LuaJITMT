@@ -34,7 +34,11 @@ for needle in \
   'uint64_t weak_clear_slots' \
   'uint64_t weak_clear_cleared' \
   'uint64_t worker_weak_drained' \
+  'uint64_t sweep_owner_runs' \
+  'uint64_t sweep_owner_arenas' \
+  'uint64_t sweep_owner_live_cells' \
   'LJ_GC2_WEAK_DRAIN_BATCH' \
+  'LJ_GC2_SWEEP_BATCH' \
   'uint64_t finreg_cdata_sets' \
   'uint64_t finreg_cdata_clears' \
   'uint64_t finreg_cdata_queued' \
@@ -89,6 +93,9 @@ for needle in \
   'lj_gc2_worker_drain_progress(global_State *g, uint32_t limit)' \
   'weak = lj_gc2_weak_drain(g, limit - work)' \
   'la_add64_rlx(&g->gc2.worker_weak_drained' \
+  'lj_gc2_sweep_owner_progress(global_State *g, TGState *tg' \
+  'la_add64_rlx(&g->gc2.sweep_owner_arenas' \
+  '05 section 5.8 bounded traversable sweep bridge' \
   'lj_gc2_ssb_empty(g)' \
   'la_loadptr_acq((void *const *)&tg->ssb_next)' \
   'la_storeptr_rel((void **)&tg->ssb_next' \

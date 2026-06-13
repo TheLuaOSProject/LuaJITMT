@@ -33,6 +33,7 @@ enum {
 
 #define LJ_GC2_ACCT_FLUSH		32768u
 #define LJ_GC2_WEAK_DRAIN_BATCH		64u
+#define LJ_GC2_SWEEP_BATCH		64u
 
 LJ_FUNC void lj_gc2_init(global_State *g);
 LJ_FUNC void lj_gc2_fini(global_State *g);
@@ -55,6 +56,8 @@ LJ_FUNC GCobj *lj_gc2_grey_steal(global_State *g);
 LJ_FUNC uint32_t lj_gc2_worker_drain(global_State *g, uint32_t limit);
 LJ_FUNC uint32_t lj_gc2_worker_drain_progress(global_State *g,
 					      uint32_t limit);
+LJ_FUNC uint32_t lj_gc2_sweep_owner_progress(global_State *g, TGState *tg,
+					     uint32_t limit);
 LJ_FUNC uint32_t lj_gc2_fixpoint_round(global_State *g, lua_State *L,
 				       uint32_t limit);
 LJ_FUNC uint32_t lj_gc2_fixpoint_run(global_State *g, lua_State *L,

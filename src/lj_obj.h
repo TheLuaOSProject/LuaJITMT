@@ -867,6 +867,9 @@ typedef struct GC2State {
   uint64_t worker_grey_drained;  /* Grey objects traced by workers. */
   uint64_t worker_ssb_converted;  /* SSB entries converted by workers. */
   uint64_t worker_weak_drained;  /* Weak tables clear-scanned by workers. */
+  uint64_t sweep_owner_runs;  /* Owner traversable arena sweep batches. */
+  uint64_t sweep_owner_arenas;  /* Traversable arenas swept by owner. */
+  uint64_t sweep_owner_live_cells;  /* Post-sweep live cells observed. */
   GCRef *weak_stack;	/* GC2-owned weak-table discovery vector. */
   uint8_t *weak_ready;	/* Published weak discovery slots. */
   MSize weak_capacity;	/* Allocated weak discovery slots. */

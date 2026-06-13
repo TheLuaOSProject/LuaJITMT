@@ -10,6 +10,7 @@
 #include "lualib.h"
 
 #include "lj_obj.h"
+#include "lj_atomic.h"
 #include "lj_arena.h"
 #include "lj_gc.h"
 #include "lj_tg.h"
@@ -47,6 +48,8 @@ int main(void)
   GCSize before_bc, bcfn_size, bcpt_size, before_huge, hugefn_size;
   GCSize hugept_size;
   GCSize before_fin, finpt_size, finchunk_size, finfn_size;
+  uint64_t sweep_owner_runs0, sweep_owner_arenas0, sweep_owner_live0;
+  uint32_t sweep_epoch0;
   void *raw, *deadarr, *deadnode, *splitarr, *splitnode;
   LJHugeInfo hugehi;
   GCArena *fna, *arra;
@@ -161,10 +164,18 @@ int main(void)
   assert(ptr_state(deadnode) == 3);
   L->top--;
 
+  sweep_owner_runs0 = la_load64_acq(&g->gc2.sweep_owner_runs);
+  sweep_owner_arenas0 = la_load64_acq(&g->gc2.sweep_owner_arenas);
+  sweep_owner_live0 = la_load64_acq(&g->gc2.sweep_owner_live_cells);
+  sweep_epoch0 = tg->alloc.sweep_epoch;
   before_tab = g->gc.total;
   lua_pushnil(L);
   lua_setfield(L, -2, "deadtab");
   lua_gc(L, LUA_GCCOLLECT, 0);
+  assert(la_load64_acq(&g->gc2.sweep_owner_runs) > sweep_owner_runs0);
+  assert(la_load64_acq(&g->gc2.sweep_owner_arenas) > sweep_owner_arenas0);
+  assert(la_load64_acq(&g->gc2.sweep_owner_live_cells) >= sweep_owner_live0);
+  assert(tg->alloc.sweep_epoch > sweep_epoch0);
   assert(g->gc.total <=
 	 before_tab - deadtab_size - deadarr_size - deadnode_size);
   assert((ptr_state(deadtab) & 2u) == 0);

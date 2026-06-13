@@ -77,6 +77,9 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.worker_grey_drained, 0);
   la_store64_rlx(&g->gc2.worker_ssb_converted, 0);
   la_store64_rlx(&g->gc2.worker_weak_drained, 0);
+  la_store64_rlx(&g->gc2.sweep_owner_runs, 0);
+  la_store64_rlx(&g->gc2.sweep_owner_arenas, 0);
+  la_store64_rlx(&g->gc2.sweep_owner_live_cells, 0);
   g->gc2.weak_stack = NULL;
   g->gc2.weak_ready = NULL;
   g->gc2.weak_capacity = 0;
@@ -321,6 +324,33 @@ void lj_gc2_legacy_sweep_begin(global_State *g)
 		   LJ_GC2_HS_FLUSH_SSB);
   (void)lj_gc2_drain_ssb(g);  /* Temporary worker-consume stand-in. */
   (void)lj_tg_reclaim_dead(g);
+}
+
+uint32_t lj_gc2_sweep_owner_progress(global_State *g, TGState *tg,
+				      uint32_t limit)
+{
+  uint32_t n = 0, epoch;
+  uint64_t live = 0;
+  if (!g || !tg || limit == 0 || !(tg->tg_flags & TGF_ARENA_INTERNAL))
+    return 0;
+  if (la_load32_acq(&g->gc2.phase) != LJ_GC2_SWEEP)
+    return 0;
+  epoch = g->gc2.cycle;
+  tg->alloc.sweep_epoch = epoch;
+  while (n < limit) {
+    GCArena *a = lj_arena_sweep_one(&tg->alloc, LJ_ARENAK_TRAVERSABLE,
+				    epoch, 0);
+    if (!a)
+      break;
+    live += a->hdr.live_cells;
+    n++;
+  }
+  if (n) {
+    la_add64_rlx(&g->gc2.sweep_owner_runs, 1);
+    la_add64_rlx(&g->gc2.sweep_owner_arenas, n);
+    la_add64_rlx(&g->gc2.sweep_owner_live_cells, live);
+  }
+  return n;
 }
 
 void lj_gc2_legacy_preserve_abort(global_State *g)
