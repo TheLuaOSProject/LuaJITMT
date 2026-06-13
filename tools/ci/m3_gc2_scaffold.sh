@@ -49,6 +49,7 @@ for needle in \
   'lj_gc2_finreg_cdata_set(global_State *g, GCobj *o, int enabled)' \
   'lj_gc2_finreg_cdata_set(G(L), obj2gco(cd), 1)' \
   'lj_gc2_finreg_cdata_set(G(L), obj2gco(cd), 0)' \
+  'lj_gc2_finreg_cdata_set(g, o, 0)' \
   'lj_gc2_finreg_udata_set(global_State *g, GCobj *o, int enabled)' \
   'lj_gc2_finreg_udata_queue(global_State *g, GCobj *o)' \
   'lj_gc2_finreg_udata_set(g, obj2gco(ud), 1)' \

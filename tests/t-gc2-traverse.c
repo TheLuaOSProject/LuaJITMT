@@ -1083,6 +1083,7 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
 {
   uint64_t sets0 = la_load64_acq(&g->gc2.finreg_cdata_sets);
   uint64_t clears0 = la_load64_acq(&g->gc2.finreg_cdata_clears);
+  uint64_t sets1, clears1;
 
   lua_settop(L, 0);
   assert(luaL_dostring(L,
@@ -1093,6 +1094,19 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   assert(la_load64_acq(&g->gc2.finreg_cdata_sets) == sets0 + 1u);
   assert(la_load64_acq(&g->gc2.finreg_cdata_clears) == clears0 + 1u);
   lua_pop(L, 1);
+
+  sets1 = la_load64_acq(&g->gc2.finreg_cdata_sets);
+  clears1 = la_load64_acq(&g->gc2.finreg_cdata_clears);
+  lua_settop(L, 0);
+  assert(luaL_dostring(L,
+    "local ffi = require('ffi')\n"
+    "do local cd = ffi.gc(ffi.new('char[?]', 8), function() end) end\n") ==
+    LUA_OK);
+  assert(la_load64_acq(&g->gc2.finreg_cdata_sets) == sets1 + 1u);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  lua_gc(L, LUA_GCSTOP, 0);
+  assert(la_load64_acq(&g->gc2.finreg_cdata_clears) >= clears1 + 1u);
 }
 #endif
 

@@ -1039,6 +1039,7 @@ static void gc_finalize(lua_State *L)
     makewhite(g, o);
     lj_gc_arena_markobj(g, o);
     lj_obj_cleargcflags(o, LJ_GC_CDATA_FIN);
+    lj_gc2_finreg_cdata_set(g, o, 0);
     /* Resolve finalizer. */
     setcdataV(L, &tmp, gco2cd(o));
     tv = lj_tab_set(L, gco2tab(gcref_acq(g->gcroot[GCROOT_FFI_FIN])), &tmp);
@@ -1088,6 +1089,7 @@ void lj_gc_finalize_cdata(lua_State *L)
 	TValue tmp;
 	makewhite(g, o);
 	lj_obj_cleargcflags(o, LJ_GC_CDATA_FIN);
+	lj_gc2_finreg_cdata_set(g, o, 0);
 	copyTV(L, &tmp, &val);
 	lj_tab_storenilraw(&node[i].val);
 	gc_call_finalizer(g, L, &tmp, o);
