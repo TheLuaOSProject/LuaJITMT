@@ -893,6 +893,7 @@ typedef struct GC2State {
   uint64_t thread_scan_claims;  /* Suspended thread stacks claimed by GC2. */
   uint64_t thread_scan_busy;  /* Thread stacks deferred to running owners. */
   uint64_t thread_scan_requeues;  /* Busy suspended threads kept grey. */
+  uint64_t thread_scan_owner_scans;  /* Busy current stacks covered by owner. */
   uint64_t sweep_owner_runs;  /* Owner traversable arena sweep batches. */
   uint64_t sweep_owner_arenas;  /* Traversable arenas swept by owner. */
   uint64_t sweep_owner_live_cells;  /* Post-sweep live cells observed. */

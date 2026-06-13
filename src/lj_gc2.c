@@ -104,6 +104,7 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.thread_scan_claims, 0);
   la_store64_rlx(&g->gc2.thread_scan_busy, 0);
   la_store64_rlx(&g->gc2.thread_scan_requeues, 0);
+  la_store64_rlx(&g->gc2.thread_scan_owner_scans, 0);
   la_store64_rlx(&g->gc2.sweep_owner_runs, 0);
   la_store64_rlx(&g->gc2.sweep_owner_arenas, 0);
   la_store64_rlx(&g->gc2.sweep_owner_live_cells, 0);
@@ -621,6 +622,7 @@ static void gc2_scan_thread_roots(global_State *g, lua_State *L)
       gc2_mark_tv(g, &tv);
     }
   }
+  la_store64_rel(&L->scan_epoch, g->gc2.cycle);
 }
 
 static void gc2_scan_global_roots(global_State *g)
@@ -1957,7 +1959,9 @@ static int gc2_thread_owner_scans(global_State *g, lua_State *th)
   tg = lj_tg_find_owner(g, owner);
   if (!tg || (la_load8_acq(&tg->tg_flags) & TGF_DEAD))
     return 0;
-  return (lua_State *)la_loadptr_acq((void *const *)&tg->cur_L) == th;
+  if ((lua_State *)la_loadptr_acq((void *const *)&tg->cur_L) != th)
+    return 0;
+  return la_load64_acq(&th->scan_epoch) == g->gc2.cycle;
 }
 
 static void gc2_traverse_thread(global_State *g, lua_State *th)
@@ -1970,7 +1974,9 @@ static void gc2_traverse_thread(global_State *g, lua_State *th)
     return;
   if (!lj_state_gcscan_claim(th, &claim)) {
     la_add64_rlx(&g->gc2.thread_scan_busy, 1);
-    if (!gc2_thread_owner_scans(g, th)) {
+    if (gc2_thread_owner_scans(g, th)) {
+      la_add64_rlx(&g->gc2.thread_scan_owner_scans, 1);
+    } else {
       int pushed = gc2_grey_push(g, obj2gco(th));
       lj_assertG(pushed, "gc2 busy thread requeue failed");
       UNUSED(pushed);
