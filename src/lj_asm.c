@@ -2593,6 +2593,7 @@ void lj_asm_trace(jit_State *J, GCtrace *T)
     if (as->gcsteps > 0) {
       as->curins = as->T->snap[0].ref;
       asm_snap_prep(as);  /* The GC check is a guard. */
+      checkmclim(as);  /* M6: split trace-head GC check after snapshot prep. */
       asm_gc_check(as);
       as->curins = as->stopins;
     }

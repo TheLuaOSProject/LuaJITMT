@@ -13,9 +13,16 @@ for needle in \
   'lj_gc_threshold_store(g, g->gc.total)' \
   'lj_gc2_assist(global_State *g, TGState *tg)' \
   'lj_gc2_assist(g, L2TG(L));  /* 05 section 5.11 trace-side assist bridge. */' \
+  'legacy_step = g->gc.total >= lj_gc_threshold_load(g)' \
   'la_cas32(&g->gc2.assist_active' \
   'gc2_drain_active_ssb_to_grey(global_State *g, TGState *tg' \
   'gc2_drain_published_ssb_to_grey(global_State *g' \
+  'emit_getgl(as, tmp, gc2.alloc_since_trigger)' \
+  'emit_opgl(as, XO_ARITH(XOg_CMP), tmp|REX_GC64, gc2.hard_bytes)' \
+  'checkmclim(as);  /* M6: split trace-head GC check after snapshot prep. */' \
+  'checkmclim(as);  /* M6: start long GC check sequence on a fresh red zone. */' \
+  'checkmclim(as);  /* M6: split long GC check sequence for assert red zone. */' \
+  'checkmclim(as);  /* M6: split GC2-hard and legacy GC threshold tests. */' \
   'lj_gc_step_jit' \
   'IR_GCSTEP' \
   'asm_gc_check'

@@ -2945,9 +2945,10 @@ static void asm_gc_check(ASMState *as)
 {
   const CCallInfo *ci = &lj_ir_callinfo[IRCALL_lj_gc_step_jit];
   IRRef args[2];
-  MCLabel l_end;
+  MCLabel l_call, l_end;
   Reg tmp;
   ra_evictset(as, RSET_SCRATCH);
+  checkmclim(as);  /* M6: start long GC check sequence on a fresh red zone. */
   l_end = emit_label(as);
   /* Exit trace if in GCSatomic or GCSfinalize. Avoids syncing GC objects. */
   asm_guardcc(as, CC_NE);  /* Assumes asm_snap_prep() already done. */
@@ -2957,6 +2958,7 @@ static void asm_gc_check(ASMState *as)
   /* Insert nop to simplify GC exit recognition in lj_asm_patchexit. */
   if (!jmprel_ok(as->mcp, (MCode *)(void *)ci->func)) *--as->mcp = XI_NOP;
   asm_gencall(as, ci, args);
+  checkmclim(as);  /* M6: split long GC check sequence for assert red zone. */
   tmp = ra_releasetmp(as, ASMREF_TMP1);
 #if LJ_GC64
   emit_gettg(as, tmp, gl);
@@ -2964,8 +2966,13 @@ static void asm_gc_check(ASMState *as)
   emit_loada(as, tmp, J2G(as->J));
 #endif
   emit_loadi(as, ra_releasetmp(as, ASMREF_TMP2), as->gcsteps);
-  /* Jump around GC step if GC total < GC threshold. */
-  emit_sjcc(as, CC_B, l_end);
+  l_call = emit_label(as);
+  /* Jump around GC step if neither legacy nor GC2 hard threshold is reached. */
+  emit_sjcc(as, CC_BE, l_end);
+  emit_opgl(as, XO_ARITH(XOg_CMP), tmp|REX_GC64, gc2.hard_bytes);
+  emit_getgl(as, tmp, gc2.alloc_since_trigger);
+  emit_sjcc(as, CC_AE, l_call);
+  checkmclim(as);  /* M6: split GC2-hard and legacy GC threshold tests. */
   emit_opgl(as, XO_ARITH(XOg_CMP), tmp|REX_GC64, gc.threshold);
   emit_getgl(as, tmp, gc.total);
   as->gcsteps = 0;

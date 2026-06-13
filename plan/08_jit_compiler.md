@@ -278,7 +278,11 @@ handler — sized LJ_MAX_EXITSTUBGR-compatible; see lj_vmstruct notes.
   legacy pacing. Current staged deviation from the original removal target:
   `lj_gc_step_jit` now runs the same bounded GC2 assist bridge before legacy
   stepping, so trace-side GC checks can contribute GC2 mark work while the
-  legacy `IR_GCSTEP` machinery remains present.
+  legacy `IR_GCSTEP` machinery remains present. x86-64 `asm_gc_check` now
+  enters that helper when either the legacy GC threshold is reached or
+  `GC2State.alloc_since_trigger > hard_bytes`; the helper gates legacy
+  `lj_gc_step()` calls on the legacy threshold so GC2 hard-limit assists do
+  not add extra legacy GC work.
 - **Barriers on trace** (§8.8.5 details): stores to heap (HSTORE/ASTORE/
   USTORE/FSTORE-with-gc-value/XSTORE-to-gcobj? XSTORE is cdata: exempt)
   emit the phase-gated mark sequence. The TGMARK load may be CSE'd *within

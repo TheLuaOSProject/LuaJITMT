@@ -1274,11 +1274,15 @@ void LJ_FASTCALL lj_gc_step_fixtop(lua_State *L)
 int LJ_FASTCALL lj_gc_step_jit(global_State *g, MSize steps)
 {
   lua_State *L = lj_tg_cur_L(g);
+  int legacy_step;
   L->base = lj_tg_jit_base(g);
   L->top = curr_topL(L);
+  legacy_step = g->gc.total >= lj_gc_threshold_load(g);
   lj_gc2_assist(g, L2TG(L));  /* 05 section 5.11 trace-side assist bridge. */
-  while (steps-- > 0 && lj_gc_step(L) == 0)
-    ;
+  if (legacy_step) {
+    while (steps-- > 0 && lj_gc_step(L) == 0)
+      ;
+  }
   /* Return 1 to force a trace exit. */
   return (G(L)->gc.state == GCSatomic || G(L)->gc.state == GCSfinalize);
 }
