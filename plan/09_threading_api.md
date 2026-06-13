@@ -123,8 +123,11 @@ dequeue tickets, but keeps the same per-slot sequence protocol. Channel slot
 payloads now use `chan_storetv_rel()`, `chan_loadtv_acq()`, and
 `chan_cleartv_rel()` so the shared `TValue` word is never copied with plain C
 struct assignment; the sequence counter release/acquire still provides the
-channel happens-before edge. Legacy GC and GC2 traversal also acquire-snapshot
-channel slots into local `TValue`s before marking.
+channel happens-before edge. Lua-facing receives use `lj_chan_recv_timeout_gc()`
+to apply a root barrier before clearing the channel slot, so the previous
+channel root is not lost before the result is copied onto the Lua stack. Legacy
+GC and GC2 traversal also acquire-snapshot channel slots into local `TValue`s
+before marking.
 
 The channel userdata is shared freely; all ops are method calls
 (lib_threading.c → lj_chan.c). GC: channels live in non-traversable? NO —

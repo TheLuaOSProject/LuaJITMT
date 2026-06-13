@@ -36,12 +36,16 @@ LJ_FUNC MSize lj_chan_memsize(uint32_t capacity);
 LJ_FUNC void lj_chan_init(LJChan *ch, uint32_t capacity);
 LJ_FUNC int lj_chan_try_send(LJChan *ch, cTValue *tv);
 LJ_FUNC int lj_chan_try_recv(LJChan *ch, TValue *out);
+LJ_FUNC int lj_chan_try_recv_gc(lua_State *L, LJChan *ch, TValue *out);
 LJ_FUNC int lj_chan_send(lua_State *L, LJChan *ch, cTValue *tv);
 LJ_FUNC int lj_chan_recv(lua_State *L, LJChan *ch, TValue *out);
+LJ_FUNC int lj_chan_recv_gc(lua_State *L, LJChan *ch, TValue *out);
 LJ_FUNC int lj_chan_send_timeout(lua_State *L, LJChan *ch, cTValue *tv,
 				 int64_t ns);
 LJ_FUNC int lj_chan_recv_timeout(lua_State *L, LJChan *ch, TValue *out,
 				 int64_t ns);
+LJ_FUNC int lj_chan_recv_timeout_gc(lua_State *L, LJChan *ch, TValue *out,
+				    int64_t ns);
 LJ_FUNC int lj_chan_peek(LJChan *ch, TValue *out);
 LJ_FUNC void lj_chan_close(LJChan *ch);
 LJ_FUNC int lj_chan_closed(LJChan *ch);

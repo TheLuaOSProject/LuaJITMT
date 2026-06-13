@@ -9,6 +9,7 @@
 #include "lj_obj.h"
 #include "lj_atomic.h"
 #include "lj_chan.h"
+#include "lj_gc.h"
 #include "lj_safepoint.h"
 #include "lj_tg.h"
 
@@ -25,7 +26,7 @@ static LJ_AINLINE void chan_storetv_rel(LJChanSlot *slot, cTValue *tv)
 
 static LJ_AINLINE void chan_loadtv_acq(TValue *out, LJChanSlot *slot)
 {
-  out->u64 = tv_rawload_acq(&slot->tv);
+  tv_rawstore_rel(out, tv_rawload_acq(&slot->tv));
 }
 
 static LJ_AINLINE void chan_cleartv_rel(LJChanSlot *slot)
@@ -214,7 +215,7 @@ int lj_chan_try_send(LJChan *ch, cTValue *tv)
   return chan_try_send_pos(ch, tv, NULL);
 }
 
-int lj_chan_try_recv(LJChan *ch, TValue *out)
+static int chan_try_recv_pub(lua_State *L, LJChan *ch, TValue *out)
 {
   uint64_t pos;
   if (!ch || !out)
@@ -229,6 +230,8 @@ int lj_chan_try_recv(LJChan *ch, TValue *out)
       if (la_cas64(&ch->deq, &expect, pos + 1u,
 		   LA_ACQ_REL, LA_ACQ)) {  /* 09 section 9.5 dequeue ticket. */
 	chan_loadtv_acq(out, slot);
+	if (L)
+	  lj_gc_barrierroot(L, out);
 	chan_cleartv_rel(slot);
 	la_store64_rel(&slot->seq, pos + ch->cap);
 	chan_wake(ch);
@@ -243,6 +246,16 @@ int lj_chan_try_recv(LJChan *ch, TValue *out)
       pos = la_load64_acq(&ch->deq);
     }
   }
+}
+
+int lj_chan_try_recv(LJChan *ch, TValue *out)
+{
+  return chan_try_recv_pub(NULL, ch, out);
+}
+
+int lj_chan_try_recv_gc(lua_State *L, LJChan *ch, TValue *out)
+{
+  return chan_try_recv_pub(L, ch, out);
 }
 
 int lj_chan_send(lua_State *L, LJChan *ch, cTValue *tv)
@@ -271,7 +284,21 @@ int lj_chan_recv(lua_State *L, LJChan *ch, TValue *out)
 {
   uint32_t spins = 0;
   for (;;) {
-    int rc = lj_chan_try_recv(ch, out);
+    int rc = chan_try_recv_pub(NULL, ch, out);
+    if (rc != LJ_CHAN_EMPTY)
+      return rc;
+    if (spins++ < LJ_CHAN_SPINS)
+      la_cpu_pause();
+    else
+      chan_wait(L, ch);
+  }
+}
+
+int lj_chan_recv_gc(lua_State *L, LJChan *ch, TValue *out)
+{
+  uint32_t spins = 0;
+  for (;;) {
+    int rc = chan_try_recv_pub(L, ch, out);
     if (rc != LJ_CHAN_EMPTY)
       return rc;
     if (spins++ < LJ_CHAN_SPINS)
@@ -320,7 +347,30 @@ int lj_chan_recv_timeout(lua_State *L, LJChan *ch, TValue *out, int64_t ns)
   deadline = chan_deadline_ns(ns);
   for (;;) {
     int64_t waitns;
-    int rc = lj_chan_try_recv(ch, out);
+    int rc = chan_try_recv_pub(NULL, ch, out);
+    if (rc == LJ_CHAN_OK || rc == LJ_CHAN_CLOSED)
+      return rc;
+    if (spins++ < LJ_CHAN_SPINS) {
+      la_cpu_pause();
+      continue;
+    }
+    waitns = chan_remaining_ns(deadline);
+    if (waitns == 0)
+      return LJ_CHAN_TIMEOUT;
+    (void)chan_wait_timeout(L, ch, waitns);
+  }
+}
+
+int lj_chan_recv_timeout_gc(lua_State *L, LJChan *ch, TValue *out, int64_t ns)
+{
+  uint32_t spins = 0;
+  int64_t deadline;
+  if (ns < 0)
+    return lj_chan_recv_gc(L, ch, out);
+  deadline = chan_deadline_ns(ns);
+  for (;;) {
+    int64_t waitns;
+    int rc = chan_try_recv_pub(L, ch, out);
     if (rc == LJ_CHAN_OK || rc == LJ_CHAN_CLOSED)
       return rc;
     if (spins++ < LJ_CHAN_SPINS) {

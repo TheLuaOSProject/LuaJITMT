@@ -34,10 +34,26 @@ if ! awk '
   exit 1
 fi
 
+if ! awk '
+  /LJLIB_CF\(threading_channel_recv\)/ { infn = 1; next }
+  infn && /setnilV\(&out\)/ { init = 1 }
+  infn && /lj_chan_recv_timeout_gc\(L, ch, &out, ns\)/ { recv = 1 }
+  infn && /threading_push_recv\(L, rc, &out\)/ { finish = 1 }
+  infn && /lj_chan_recv_timeout\(L, ch, &out/ { bad = 1 }
+  infn && /^}/ { exit(init && recv && finish && !bad ? 0 : 1) }
+  END { if (!init || !recv || !finish || bad) exit 1 }
+' "$ROOT/src/lib_threading.c"; then
+  echo "guardrail: channel recv must use GC-aware receive" >&2
+  exit 1
+fi
+
 for needle in \
   'chan_storetv_rel(slot, tv)' \
   'chan_loadtv_acq(out, slot)' \
-  'chan_cleartv_rel(slot)'
+  'chan_cleartv_rel(slot)' \
+  'tv_rawstore_rel(out, tv_rawload_acq(&slot->tv))' \
+  'lj_gc_barrierroot(L, out)' \
+  'lj_chan_recv_timeout_gc'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_chan.c"; then
     echo "guardrail: missing channel payload atomic marker: $needle" >&2
@@ -48,6 +64,12 @@ done
 if rg -n 'slot->tv = \*tv|\*out = slot->tv|setnilV\(&slot->tv\)' \
     "$ROOT/src/lj_chan.c"; then
   echo "guardrail: channel payload slots must use atomic TValue helpers" >&2
+  exit 1
+fi
+
+if rg -n 'out->u64 = tv_rawload_acq|lj_chan_recv_timeout\(L, ch, &out' \
+    "$ROOT/src/lj_chan.c" "$ROOT/src/lib_threading.c"; then
+  echo "guardrail: channel recv must use GC-aware atomic receive helpers" >&2
   exit 1
 fi
 

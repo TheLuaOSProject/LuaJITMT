@@ -551,7 +551,7 @@ LJLIB_CF(threading_channel_recv)
   int rc;
   int64_t ns = threading_timeout_ns(L, 2, 1, -1);
   setnilV(&out);
-  rc = lj_chan_recv_timeout(L, ch, &out, ns);
+  rc = lj_chan_recv_timeout_gc(L, ch, &out, ns);
   threading_push_recv(L, rc, &out);
   return 2;
 }
