@@ -247,6 +247,9 @@ handler — sized LJ_MAX_EXITSTUBGR-compatible; see lj_vmstruct notes.
   polls/assists, satisfying pacing. Remove `lj_gc_step_jit` (lj_gc.c:764)
   and the `IR_GCSTEP`-ish machinery / `J->ircall` gc check emission —
   grep `gc_step_jit|GCSTEP` and excise with the legacy GC step path.
+  Current M6 bridge: allocation calls still update only legacy `g->gc.total`;
+  allocator-side assist accounting is not implemented yet. Keep
+  `lj_gc_step_jit`/`IR_GCSTEP` guarded until that prerequisite lands.
 - **Barriers on trace** (§8.8.5 details): stores to heap (HSTORE/ASTORE/
   USTORE/FSTORE-with-gc-value/XSTORE-to-gcobj? XSTORE is cdata: exempt)
   emit the phase-gated mark sequence. The TGMARK load may be CSE'd *within
