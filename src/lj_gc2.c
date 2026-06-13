@@ -736,6 +736,8 @@ static int gc2_weak_mayclear(global_State *g, cTValue *o, int val,
 	(void)lj_gc2_markobj(g, gcV(o));
       return 0;  /* 05 section 5.8: strings are not weak-cleared. */
     }
+    if (g->gc.state == GCSatomic && iswhite(gcV(o)))
+      return 1;  /* 05 section 5.8: legacy-color weak oracle bridge. */
     if (lj_gc2_ismarked(g, gcV(o)) == 0)
       return 1;
     if (tvisudata(o) && val &&
@@ -915,7 +917,7 @@ int lj_gc2_weak_snapshot_covers_legacy(global_State *g, GCobj *legacy)
       return 0;
     t = gco2tab(legacy);
     flags = lj_obj_gcflags(obj2gco(t));
-    if ((flags & LJ_GC_WEAK) != LJ_GC_WEAKVAL)
+    if ((flags & LJ_GC_WEAK) == 0)
       return 0;
     if (legacy_count >= (uint64_t)n)
       return 0;  /* Conservative guard against duplicates/corruption. */

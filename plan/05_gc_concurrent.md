@@ -329,13 +329,14 @@ published ready prefix with `weak_clear_cursor` without moving past
 reserved-but-unpublished slots, and now runs before the legacy weak-clearing
 fallback. `lj_gc2_weak_drain()` is the phase-gated bounded driver used by the
 legacy atomic bridge in `LJ_GC2_WEAK_DRAIN_BATCH` chunks while the full
-worker-owned weak drain is staged. The current bridge skips legacy
-`gc_clearweak()` only for weak-value-only legacy lists after
-`lj_gc2_weak_snapshot_covers_legacy()` proves the current-cycle snapshot was
-fully published, fully clear-drained, and covers every table in the final
-legacy `g->gc.weak` list; otherwise, including weak-key/all-weak tables, the
-legacy pass remains the authoritative fallback for tables not yet covered
-semantics-equivalently by GC2.
+worker-owned weak drain is staged. The current bridge uses the legacy color
+bits as a stop-the-world weak-clear oracle while `g->gc.state == GCSatomic`,
+so GC2 weak-key/all-weak clearing matches the legacy `gc_mayclear()` predicate
+even though GC2 stack rescans are intentionally more conservative. It skips
+legacy `gc_clearweak()` after `lj_gc2_weak_snapshot_covers_legacy()` proves the
+current-cycle snapshot was fully published, fully clear-drained, and covers
+every table in the final legacy `g->gc.weak` list; otherwise the legacy pass
+remains the authoritative fallback for tables not yet covered by GC2.
 String-bearing weak hash slots now follow legacy `gc_mayclear()` semantics in
 the GC2 clear driver: strings are marked but are not themselves weak-cleared,
 while a collectable key/value on the other side can still clear the entry. The

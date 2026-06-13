@@ -89,6 +89,8 @@ for needle in \
   'lj_gc2_finreg_udata_queue(g, o)' \
   'gc2_weak_mayclear(global_State *g, cTValue *o, int val,' \
   'int markstr)' \
+  'g->gc.state == GCSatomic && iswhite(gcV(o))' \
+  '05 section 5.8: legacy-color weak oracle bridge' \
   'gc2_tab_is_ffi_fin(global_State *g, GCtab *t)' \
   'FFI finalizer registry is owned by FINREG' \
   'lj_gc2_markobj(g, gcV(o))' \

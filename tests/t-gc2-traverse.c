@@ -873,9 +873,9 @@ static void test_weak_snapshot_legacy_coverage(lua_State *L, global_State *g,
   lj_obj_masksetgcflags(obj2gco(weak), LJ_GC_WEAK, LJ_GC_WEAKVAL);
   assert(lj_gc2_weak_snapshot_covers_legacy(g, gcref(g->gc.weak)));
   lj_obj_masksetgcflags(obj2gco(weak), LJ_GC_WEAK, LJ_GC_WEAKKEY);
-  assert(!lj_gc2_weak_snapshot_covers_legacy(g, gcref(g->gc.weak)));
+  assert(lj_gc2_weak_snapshot_covers_legacy(g, gcref(g->gc.weak)));
   lj_obj_masksetgcflags(obj2gco(weak), LJ_GC_WEAK, LJ_GC_WEAK);
-  assert(!lj_gc2_weak_snapshot_covers_legacy(g, gcref(g->gc.weak)));
+  assert(lj_gc2_weak_snapshot_covers_legacy(g, gcref(g->gc.weak)));
   lj_obj_masksetgcflags(obj2gco(weak), LJ_GC_WEAK, LJ_GC_WEAKVAL);
 
   count = la_load64_acq(&g->gc2.weak_count);

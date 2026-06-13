@@ -152,7 +152,7 @@ static void test_incremental_fixpoint_round(lua_State *L, global_State *g)
   lua_pop(L, 1);
 }
 
-static void test_isolated_weak_value_skip(void)
+static void test_isolated_weak_skip_case(const char *mode)
 {
   lua_State *L = luaL_newstate();
   global_State *g;
@@ -168,7 +168,7 @@ static void test_isolated_weak_value_skip(void)
   lua_newtable(L);
   lua_newtable(L);
   lua_pushliteral(L, "__mode");
-  lua_pushliteral(L, "v");
+  lua_pushstring(L, mode);
   lua_settable(L, -3);
   lua_setmetatable(L, -2);
   lua_newtable(L);
@@ -176,7 +176,7 @@ static void test_isolated_weak_value_skip(void)
   lua_pushvalue(L, -2);
   lua_pushvalue(L, -2);
   lua_settable(L, 1);
-  lua_pop(L, 2);  /* Keep only the weak-value table as a stack root. */
+  lua_pop(L, 2);  /* Keep only the weak table as a stack root. */
 
   skipped0 = la_load64_acq(&g->gc2.weak_legacy_skipped);
   fallbacks0 = la_load64_acq(&g->gc2.weak_legacy_fallbacks);
@@ -209,7 +209,9 @@ int main(void)
   GCArena *phase_plain_a, *phase_trav_a;
   int i, done = 0, saw_mark = 0, saw_sweep = 0;
 
-  test_isolated_weak_value_skip();
+  test_isolated_weak_skip_case("v");
+  test_isolated_weak_skip_case("k");
+  test_isolated_weak_skip_case("kv");
 
   L = luaL_newstate();
   assert(L != NULL);
