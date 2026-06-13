@@ -144,7 +144,10 @@ The temporary M4 active-child GC pause treats `g->gc.threshold` and the saved
 `g->mt_gc_threshold` as shared handoff words. C-side checks and updates go
 through `lj_gc_threshold_*()` / `lj_gc_mt_threshold_*()` helpers, and
 `lua_gc(stop/restart)` replays its saved logical threshold to the real
-threshold if `mt_live` reaches zero during the update.
+threshold if `mt_live` reaches zero during the update. Explicit legacy
+`collect` / `step` claim `mt_gc_exclusive` only after observing `mt_live == 0`
+and rechecking it after the claim; secondary `spawn` / `luaMT_attach()` entry
+waits out that slow-path word before incrementing `mt_live`.
 
 The channel userdata is shared freely; all ops are method calls
 (lib_threading.c → lj_chan.c). GC: channels live in non-traversable? NO —

@@ -57,9 +57,18 @@ for needle in \
   'lj_gc_threshold_store(g, lj_gc_mt_threshold_load(g))' \
   'api_gc_setlogical(global_State *g, GCSize threshold)' \
   'if (la_load32_acq(&g->mt_live) == 0)' \
-  'lj_gc_threshold_store(g, threshold)'
+  'lj_gc_threshold_store(g, threshold)' \
+  'uint32_t mt_gc_exclusive' \
+  'api_gc_enterexclusive(global_State *g)' \
+  'la_cas32(&g->mt_gc_exclusive' \
+  'la_store32_rel(&g->mt_gc_exclusive, 0)' \
+  'la_futex_wake(&g->mt_gc_exclusive, INT_MAX)' \
+  'while ((exclusive = la_load32_acq(&g->mt_gc_exclusive)) != 0)' \
+  'la_futex_wait(&g->mt_gc_exclusive, exclusive' \
+  'if (la_load32_acq(&g->mt_gc_exclusive) == 0)'
 do
-  if ! rg -F -q "$needle" "$ROOT/src/lj_gc.h" "$ROOT/src/lib_threading.c" "$ROOT/src/lj_api.c"; then
+  if ! rg -F -q "$needle" "$ROOT/src/lj_gc.h" "$ROOT/src/lj_obj.h" \
+      "$ROOT/src/lib_threading.c" "$ROOT/src/lj_api.c"; then
     echo "guardrail: GC threshold handoff must use atomic helpers: $needle" >&2
     exit 1
   fi

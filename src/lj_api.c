@@ -9,6 +9,8 @@
 #define lj_api_c
 #define LUA_CORE
 
+#include <limits.h>
+
 #include "lj_obj.h"
 #include "lj_atomic.h"
 #include "lj_gc.h"
@@ -1330,10 +1332,29 @@ static void api_gc_setlogical(global_State *g, GCSize threshold)
   }
 }
 
+static int api_gc_enterexclusive(global_State *g)
+{
+  uint32_t expect = 0;
+  if (la_load32_acq(&g->mt_live) != 0)
+    return 0;
+  if (!la_cas32(&g->mt_gc_exclusive, &expect, 1, LA_ACQ_REL, LA_ACQ))
+    return 0;
+  if (la_load32_acq(&g->mt_live) != 0) {
+    la_store32_rel(&g->mt_gc_exclusive, 0);
+    return 0;
+  }
+  return 1;
+}
+
+static void api_gc_leaveexclusive(global_State *g)
+{
+  la_store32_rel(&g->mt_gc_exclusive, 0);
+  la_futex_wake(&g->mt_gc_exclusive, INT_MAX);
+}
+
 LUA_API int lua_gc(lua_State *L, int what, int data)
 {
   global_State *g = G(L);
-  int mt_live = la_load32_acq(&g->mt_live) != 0;
   int res = 0;
   switch (what) {
   case LUA_GCSTOP:
@@ -1344,8 +1365,10 @@ LUA_API int lua_gc(lua_State *L, int what, int data)
       (g->gc.total/100)*g->gc.pause : g->gc.total);
     break;
   case LUA_GCCOLLECT:
-    if (!mt_live)
+    if (api_gc_enterexclusive(g)) {
       lj_gc_fullgc(L);
+      api_gc_leaveexclusive(g);
+    }
     break;
   case LUA_GCCOUNT:
     res = (int)(g->gc.total >> 10);
@@ -1355,7 +1378,7 @@ LUA_API int lua_gc(lua_State *L, int what, int data)
     break;
   case LUA_GCSTEP: {
     GCSize a = (GCSize)data << 10;
-    if (mt_live)
+    if (!api_gc_enterexclusive(g))
       break;  /* M4: explicit steps wait for the real concurrent GC. */
     lj_gc_threshold_store(g, (a <= g->gc.total) ? (g->gc.total - a) : 0);
     while (g->gc.total >= lj_gc_threshold_load(g))
@@ -1363,6 +1386,7 @@ LUA_API int lua_gc(lua_State *L, int what, int data)
 	res = 1;
 	break;
       }
+    api_gc_leaveexclusive(g);
     break;
   }
   case LUA_GCSETPAUSE:
@@ -1374,7 +1398,7 @@ LUA_API int lua_gc(lua_State *L, int what, int data)
     g->gc.stepmul = (MSize)data;
     break;
   case LUA_GCISRUNNING:
-    res = ((mt_live ? lj_gc_mt_threshold_load(g) :
+    res = ((la_load32_acq(&g->mt_live) != 0 ? lj_gc_mt_threshold_load(g) :
 	    lj_gc_threshold_load(g)) != LJ_MAX_MEM);
     break;
   default:

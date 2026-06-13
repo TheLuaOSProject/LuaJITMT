@@ -261,20 +261,32 @@ static void threading_gc_leave(global_State *g);
 static int threading_gc_enter(lua_State *L)
 {
   global_State *g = G(L);
-  uint32_t expect = 0;
-  if (la_load32_acq(&g->mt_shutdown) != 0)
-    return 0;
-  (void)la_cas32(&g->mt_active, &expect, 1, LA_ACQ_REL, LA_ACQ);
-  if (la_add32_rlx(&g->mt_live, 1) == 0) {
-    lj_gc_mt_threshold_store(g, lj_gc_threshold_load(g));
-    /* M4: no automatic GC while children run. */
-    lj_gc_threshold_store(g, LJ_MAX_MEM);
-  }
-  if (la_load32_acq(&g->mt_shutdown) != 0) {
+  for (;;) {
+    uint32_t expect;
+    uint32_t exclusive;
+    while ((exclusive = la_load32_acq(&g->mt_gc_exclusive)) != 0) {
+      if (la_load32_acq(&g->mt_shutdown) != 0)
+	return 0;
+      (void)la_futex_wait(&g->mt_gc_exclusive, exclusive, 1000000);
+    }
+    if (la_load32_acq(&g->mt_shutdown) != 0)
+      return 0;
+    expect = 0;
+    (void)la_cas32(&g->mt_active, &expect, 1, LA_ACQ_REL, LA_ACQ);
+    if (la_add32_rlx(&g->mt_live, 1) == 0) {
+      lj_gc_mt_threshold_store(g, lj_gc_threshold_load(g));
+      /* M4: no automatic GC while children run. */
+      lj_gc_threshold_store(g, LJ_MAX_MEM);
+    }
+    if (la_load32_acq(&g->mt_gc_exclusive) == 0) {
+      if (la_load32_acq(&g->mt_shutdown) != 0) {
+	threading_gc_leave(g);
+	return 0;
+      }
+      return 1;
+    }
     threading_gc_leave(g);
-    return 0;
   }
-  return 1;
 }
 
 static void threading_gc_leave(global_State *g)
