@@ -384,8 +384,11 @@ static void gc_mark(global_State *g, GCobj *o)
     if (gco2ud(o)->udtype == UDTYPE_CHANNEL) {
       LJChan *ch = (LJChan *)uddata(gco2ud(o));
       uint32_t i;
-      for (i = 0; i < ch->cap; i++)
-	gc_marktv(g, &ch->slot[i].tv);  /* 09 section 9.5 channel slots. */
+      for (i = 0; i < ch->cap; i++) {
+	TValue tv;
+	lj_tv_load_acq(&tv, &ch->slot[i].tv);
+	gc_marktv(g, &tv);  /* 09 section 9.5 channel slots. */
+      }
     }
     if (gco2ud(o)->udtype == UDTYPE_THREAD) {
       LJThread *th = (LJThread *)uddata(gco2ud(o));

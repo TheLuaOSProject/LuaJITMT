@@ -51,4 +51,17 @@ if rg -n 'slot->tv = \*tv|\*out = slot->tv|setnilV\(&slot->tv\)' \
   exit 1
 fi
 
+for file in "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc2.c"; do
+  if ! rg -F -q 'lj_tv_load_acq(&tv, &ch->slot[i].tv)' "$file"; then
+    echo "guardrail: GC channel traversal must snapshot slot payloads: $file" >&2
+    exit 1
+  fi
+done
+
+if rg -n 'gc_marktv\(g, &ch->slot\[i\]\.tv\)|gc2_mark_tv_worker\(g, &ch->slot\[i\]\.tv\)' \
+    "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc2.c"; then
+  echo "guardrail: GC channel traversal must not mark shared slots directly" >&2
+  exit 1
+fi
+
 echo "M5 threading publication guard passed"
