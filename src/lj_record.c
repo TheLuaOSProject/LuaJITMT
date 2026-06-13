@@ -1449,6 +1449,8 @@ static TRef rec_idx_key(jit_State *J, RecordIndex *ix, IRRef *rbref,
 {
   TRef key;
   GCtab *t = tabV(&ix->tabv);
+  Node *hrefk_node = lj_tab_node_acq(t);
+  uint32_t hrefk_hmask = t->hmask;
   ix->oldv = lj_tab_get(J->L, t, &ix->keyv);  /* Lookup previous value. */
   *rbref = 0;
   rbguard->irt = 0;
@@ -1503,18 +1505,22 @@ static TRef rec_idx_key(jit_State *J, RecordIndex *ix, IRRef *rbref,
     key = emitir(IRTN(IR_CONV), key, IRCONV_NUM_INT);
   if (tref_isk(key)) {
     /* Optimize lookup of constant hash keys. */
-    GCSize hslot = (GCSize)((char *)ix->oldv -
-			    (char *)&lj_tab_node_acq(t)[0].val);
-    if (hslot <= t->hmask*(GCSize)sizeof(Node) &&
-	hslot <= 65535*(GCSize)sizeof(Node)) {
-      TRef node, kslot, hm;
-      *rbref = J->cur.nins;  /* Mark possible rollback point. */
-      *rbguard = J->guardemit;
-      hm = emitir(IRTI(IR_FLOAD), ix->tab, IRFL_TAB_HMASK);
-      emitir(IRTGI(IR_EQ), hm, lj_ir_kint(J, (int32_t)t->hmask));
-      node = emitir(IRT(IR_FLOAD, IRT_PGC), ix->tab, IRFL_TAB_NODE);
-      kslot = lj_ir_kslot(J, key, (IRRef)(hslot / sizeof(Node)));
-      return emitir(IRTG(IR_HREFK, IRT_PGC), node, kslot);
+    if (hrefk_node == lj_tab_node_acq(t) && hrefk_hmask == t->hmask) {
+      uintptr_t oldvaddr = (uintptr_t)(const void *)ix->oldv;
+      uintptr_t nodeaddr = (uintptr_t)(const void *)&hrefk_node[0].val;
+      GCSize hslot = oldvaddr >= nodeaddr ? (GCSize)(oldvaddr-nodeaddr) :
+		     ~(GCSize)0;
+      if (hslot <= hrefk_hmask*(GCSize)sizeof(Node) &&
+	  hslot <= 65535*(GCSize)sizeof(Node)) {
+	TRef node, kslot, hm;
+	*rbref = J->cur.nins;  /* Mark possible rollback point. */
+	*rbguard = J->guardemit;
+	hm = emitir(IRTI(IR_FLOAD), ix->tab, IRFL_TAB_HMASK);
+	emitir(IRTGI(IR_EQ), hm, lj_ir_kint(J, (int32_t)hrefk_hmask));
+	node = emitir(IRT(IR_FLOAD, IRT_PGC), ix->tab, IRFL_TAB_NODE);
+	kslot = lj_ir_kslot(J, key, (IRRef)(hslot / sizeof(Node)));
+	return emitir(IRTG(IR_HREFK, IRT_PGC), node, kslot);
+      }
     }
   }
   /* Fall back to a regular hash lookup. */

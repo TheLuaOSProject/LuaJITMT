@@ -225,7 +225,9 @@ trace's PCs/parents, run by the leader between cycles with token.
    FLOAD-indirection target above. x64 regular `IR_HREF` lowering also loads
    the legacy node base before pairing it with a separately computed hmask
    index, so trace hash lookups do not combine a fresh hmask with an older node
-   pointer during the current publish/retire phase.
+   pointer during the current publish/retire phase. Constant-key `HREFK`
+   recording snapshots the legacy node/hmask shape around `lj_tab_get()` and
+   falls back to regular `HREF` if the shape changes while recording.
 2. **TDUP/TNEW colo**: colo removed (06 §6.2) — recorder paths that
    special-case colocated arrays (`lj_record_tnew`, table.new fast func)
    simplify.
