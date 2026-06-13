@@ -57,6 +57,7 @@ int main(void)
   uint32_t ssb_published0, ssb_drained0;
   uint64_t grey_pushed0, grey_drained0;
   uint64_t fixpoint_rounds0, fixpoint_hits0;
+  uint64_t worker_weak0, weak_clear_tables0, weak_clear_cleared0;
   void *phase_plain, *phase_trav;
   GCArena *phase_plain_a, *phase_trav_a;
   int i, done = 0, saw_mark = 0, saw_sweep = 0;
@@ -152,6 +153,23 @@ int main(void)
   assert(la_load64_acq(&g->gc2.fixpoint_rounds) > fixpoint_rounds0);
   assert(la_load64_acq(&g->gc2.fixpoint_hits) > fixpoint_hits0);
   assert_idle(g, tg);
+
+  assert(luaL_dostring(L,
+    "weakcase = setmetatable({}, {__mode = 'v'})\n"
+    "do\n"
+    "  local k = {}\n"
+    "  weakcase[k] = {}\n"
+    "end\n") == LUA_OK);
+  worker_weak0 = la_load64_acq(&g->gc2.worker_weak_drained);
+  weak_clear_tables0 = la_load64_acq(&g->gc2.weak_clear_tables);
+  weak_clear_cleared0 = la_load64_acq(&g->gc2.weak_clear_cleared);
+  lj_gc_fullgc(L);
+  assert(la_load64_acq(&g->gc2.worker_weak_drained) > worker_weak0);
+  assert(la_load64_acq(&g->gc2.weak_clear_tables) > weak_clear_tables0);
+  assert(la_load64_acq(&g->gc2.weak_clear_cleared) > weak_clear_cleared0);
+  assert_idle(g, tg);
+  lua_pushnil(L);
+  lua_setglobal(L, "weakcase");
 
   g->gc.stepmul = 1;
   g->gc.threshold = 0;
