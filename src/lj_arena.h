@@ -126,6 +126,8 @@ LJ_FUNC int lj_arena_hugetab_lookup(HugeTab *ht, const void *p,
 LJ_FUNC int lj_arena_hugetab_mark(HugeTab *ht, const void *p,
 				  LJHugeInfo *hi);
 LJ_FUNC void lj_arena_hugetab_clear_marks(HugeTab *ht);
+LJ_FUNC uint64_t lj_arena_hugetab_live_bytes(HugeTab *ht,
+					     uint32_t required_flags);
 LJ_FUNC int lj_arena_hugetab_transfer(HugeTab *dst, HugeTab *src,
 				      uint32_t owner_tid);
 LJ_FUNC int lj_arena_hugetab_delete(HugeTab *ht, const void *p,

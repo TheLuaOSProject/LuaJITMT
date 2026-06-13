@@ -115,6 +115,7 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.sweep_owner_arenas, 0);
   la_store64_rlx(&g->gc2.sweep_owner_live_cells, 0);
   la_store64_rlx(&g->gc2.sweep_live_updates, 0);
+  la_store64_rlx(&g->gc2.sweep_live_huge_bytes, 0);
   la_store64_rlx(&g->gc2.live_estimate, 0);
   g->gc2.weak_stack = NULL;
   g->gc2.weak_ready = NULL;
@@ -532,10 +533,15 @@ static uint64_t gc2_sweep_live_cells(GCArena *a, uint32_t epoch)
   return cells;
 }
 
+static uint64_t gc2_saturating_add64(uint64_t a, uint64_t b)
+{
+  return a > ~(uint64_t)0 - b ? ~(uint64_t)0 : a + b;
+}
+
 uint64_t lj_gc2_sweep_live_aggregate(global_State *g)
 {
   TGState *tg;
-  uint64_t cells = 0, bytes;
+  uint64_t cells = 0, huge_bytes = 0, bytes;
   uint32_t epoch;
   if (!g)
     return 0;
@@ -548,9 +554,15 @@ uint64_t lj_gc2_sweep_live_aggregate(global_State *g)
       continue;
     cells += gc2_sweep_live_cells(tg->alloc.owned[LJ_ARENAK_TRAVERSABLE],
 				  epoch);
+    if (flags & TGF_HUGETAB)
+      huge_bytes = gc2_saturating_add64(huge_bytes,
+	lj_arena_hugetab_live_bytes(&tg->huge,
+	  LJ_HUGEF_MARK|LJ_HUGEF_TRAVERSABLE));
   }
   bytes = cells > (~(uint64_t)0 >> LJ_CELL_SHIFT) ?
 	  ~(uint64_t)0 : cells << LJ_CELL_SHIFT;
+  bytes = gc2_saturating_add64(bytes, huge_bytes);
+  la_store64_rel(&g->gc2.sweep_live_huge_bytes, huge_bytes);
   la_store64_rel(&g->gc2.live_estimate, bytes);
   la_add64_rlx(&g->gc2.sweep_live_updates, 1);
   return bytes;

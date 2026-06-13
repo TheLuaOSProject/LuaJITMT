@@ -288,6 +288,7 @@ int main(void)
   GCSize hugept_size;
   GCSize before_fin, finpt_size, finchunk_size, finfn_size;
   uint64_t sweep_owner_runs0, sweep_owner_arenas0, sweep_owner_live0;
+  uint64_t huge_live_bytes;
   uint32_t sweep_epoch0;
   void *raw, *deadarr, *deadnode, *splitarr, *splitnode;
   LJHugeInfo hugehi;
@@ -574,6 +575,9 @@ int main(void)
   assert(hugehi.size == hugept_size);
   assert((hugehi.flags & LJ_HUGEF_TRAVERSABLE) != 0);
   assert((hugehi.flags & LJ_HUGEF_MARK) != 0);
+  huge_live_bytes = la_load64_acq(&g->gc2.sweep_live_huge_bytes);
+  assert(huge_live_bytes >= hugept_size);
+  assert(la_load64_acq(&g->gc2.live_estimate) >= huge_live_bytes);
   assert(ptr_state(hugefn) == 2);
   L->top--;
 

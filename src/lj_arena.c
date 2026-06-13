@@ -414,6 +414,35 @@ void lj_arena_hugetab_clear_marks(HugeTab *ht)
   }
 }
 
+uint64_t lj_arena_hugetab_live_bytes(HugeTab *ht, uint32_t required_flags)
+{
+  LJHugeTabHdr *h = ht ? ht->h : NULL;
+  uint64_t bytes = 0;
+  uint32_t i, cap;
+  if (!h)
+    return 0;
+  required_flags &= LJ_HUGEF_MASK;
+  cap = h->mask + 1u;
+  for (i = 0; i < cap; i++) {
+    LJHugeEnt *e = &h->ent[i];
+    uint64_t addr = la_load64_acq(&e->slot.lo);  /* 04 §4.5.1 slot state. */
+    if (addr > LJ_HUGETAB_TOMBSTONE) {
+      uint64_t meta = la_load64_acq(&e->slot.hi);  /* 04 §4.5.1 metadata. */
+      if (la_load64_acq(&e->slot.lo) == addr) {  /* Stable snapshot. */
+	uint32_t hflags = (uint32_t)(meta & LJ_HUGETAB_META_MASK);
+	if ((hflags & required_flags) == required_flags) {
+	  size_t size = (size_t)(meta >> LJ_HUGETAB_META_SHIFT);
+	  if (bytes > ~(uint64_t)0 - (uint64_t)size)
+	    bytes = ~(uint64_t)0;
+	  else
+	    bytes += (uint64_t)size;
+	}
+      }
+    }
+  }
+  return bytes;
+}
+
 int lj_arena_hugetab_transfer(HugeTab *dst, HugeTab *src, uint32_t owner_tid)
 {
   LJHugeTabHdr *h = src ? src->h : NULL;

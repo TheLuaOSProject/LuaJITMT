@@ -65,6 +65,11 @@ int main(void)
 
   assert(lj_arena_hugetab_mark(&ht, ptrs[1], &hi) == 1);
   check_info(&hi, sizes[1], LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_MARK);
+  assert(lj_arena_huge_mapsize(sizes[1]) != sizes[1]);
+  assert(lj_arena_hugetab_live_bytes(&ht, LJ_HUGEF_TRAVERSABLE) ==
+	 sizes[1] + sizes[3]);
+  assert(lj_arena_hugetab_live_bytes(&ht,
+    LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_MARK) == sizes[1]);
   assert(lj_arena_hugetab_mark(&ht, ptrs[1], &hi) == 0);
   check_info(&hi, sizes[1], LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_MARK);
   assert(lj_arena_hugetab_lookup(&ht, ptrs[1], &hi) == 1);
@@ -72,6 +77,8 @@ int main(void)
   lj_arena_hugetab_clear_marks(&ht);
   assert(lj_arena_hugetab_lookup(&ht, ptrs[1], &hi) == 1);
   check_info(&hi, sizes[1], LJ_HUGEF_TRAVERSABLE);
+  assert(lj_arena_hugetab_live_bytes(&ht,
+    LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_MARK) == 0);
 
   for (i = 0; i < (uint32_t)(sizeof(ptrs)/sizeof(ptrs[0])); i++)
     delete_unmap(&ht, ptrs[i]);
@@ -122,6 +129,6 @@ int main(void)
   assert(src.h == NULL);
   assert(dst.h == NULL);
 
-  printf("t-arena-hugetab OK: insert lookup mark delete tombstone full\n");
+  printf("t-arena-hugetab OK: insert lookup mark live delete tombstone full\n");
   return 0;
 }

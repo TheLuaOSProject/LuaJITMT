@@ -425,12 +425,13 @@ boundary now records real `SWEEP -> IDLE` publications with `sweep_to_idle`.
 The partial-cycle full-GC fast-forward path still calls
 `lj_gc2_legacy_preserve_abort()` instead of entering `P_SWEEP`; that path now
 records real active-phase aborts with `preserve_abort_to_idle`. Sweep-to-idle
-closure now also aggregates swept traversable arena live cells across the TG
-list into `gc2.live_estimate` and records `sweep_live_updates`; pacing uses the
-larger of that GC2 estimate and the legacy `g->gc.estimate` until raw/plain
-arena and huge-object aggregation are independently owned by GC2. Full
-scheduler-owned sweep completion and final `P_IDLE` ownership remain follow-up
-work.
+closure now also aggregates swept traversable arena live cells and marked
+traversable HugeTab entries across the TG list into `gc2.live_estimate`, records
+`sweep_live_updates`, and exposes the huge contribution through
+`sweep_live_huge_bytes`; pacing uses the larger of that GC2 estimate and the
+legacy `g->gc.estimate` until raw/plain arena aggregation is independently owned
+by GC2. Full scheduler-owned sweep completion and final `P_IDLE` ownership
+remain follow-up work.
 
 ## 5.9 Deferred reclamation (grace periods) — the GC as universal SMR
 
