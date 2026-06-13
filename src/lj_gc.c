@@ -1135,6 +1135,8 @@ static void atomic(global_State *g, lua_State *L)
   udsize = lj_gc_separateudata(g, 0);  /* Separate userdata to be finalized. */
   gc_mark_mmudata(g);  /* Mark them. */
   udsize += gc_propagate_gray(g);  /* And propagate the marks. */
+  /* 05 section 5.7.1 legacy atomic fixpoint-round bridge. */
+  (void)lj_gc2_fixpoint_run(g, L, 64, ~(uint32_t)0);
   gc2_paranoia_check_fixpoint(g);
 
   /* All marking done, clear weak tables. */

@@ -1322,6 +1322,18 @@ uint32_t lj_gc2_fixpoint_round(global_State *g, lua_State *L, uint32_t limit)
   return fixpoint;
 }
 
+uint32_t lj_gc2_fixpoint_run(global_State *g, lua_State *L,
+			     uint32_t max_rounds, uint32_t limit)
+{
+  uint32_t i;
+  if (!g || max_rounds == 0 || limit == 0)
+    return 0;
+  for (i = 0; i < max_rounds; i++)
+    if (lj_gc2_fixpoint_round(g, L, limit))
+      return 1;
+  return 0;
+}
+
 int lj_gc2_ismarkedmem(global_State *g, void *p)
 {
   TGState *tg = gc2_tg_for_mem(g, p);

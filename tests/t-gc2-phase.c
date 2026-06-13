@@ -56,6 +56,7 @@ int main(void)
   uint32_t cycle0;
   uint32_t ssb_published0, ssb_drained0;
   uint64_t grey_pushed0, grey_drained0;
+  uint64_t fixpoint_rounds0, fixpoint_hits0;
   void *phase_plain, *phase_trav;
   GCArena *phase_plain_a, *phase_trav_a;
   int i, done = 0, saw_mark = 0, saw_sweep = 0;
@@ -141,7 +142,11 @@ int main(void)
     "  for j = 1, 18 do t[j] = i + j end\n"
     "  hold[i] = t\n"
     "end\n") == LUA_OK);
+  fixpoint_rounds0 = la_load64_acq(&g->gc2.fixpoint_rounds);
+  fixpoint_hits0 = la_load64_acq(&g->gc2.fixpoint_hits);
   lj_gc_fullgc(L);
+  assert(la_load64_acq(&g->gc2.fixpoint_rounds) > fixpoint_rounds0);
+  assert(la_load64_acq(&g->gc2.fixpoint_hits) > fixpoint_hits0);
   assert_idle(g, tg);
 
   g->gc.stepmul = 1;
