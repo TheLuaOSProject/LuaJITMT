@@ -314,7 +314,7 @@ LJLIB_CF(buffer_new)
       lj_serialize_dict_prep_mt(L, dict_mt);
     }
   }
-  env = tabref(curr_func(L)->c.env);
+  env = tabref_acq(curr_func(L)->c.env);
   ud = lj_udata_new(L, sizeof(SBufExt), env);
   ud->udtype = UDTYPE_BUFFER;
   /* NOBARRIER: The GCudata is new (marked white). */

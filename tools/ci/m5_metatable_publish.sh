@@ -48,13 +48,26 @@ do
   fi
 done
 
-reader_hits=$(rg -n '\btabref\((tabV\([^)]*\)->metatable|udataV\([^)]*\)->metatable|basemt_obj|t->metatable|gco2ud\(o\)->metatable|gco2ud\(o\)->env|mainthread\(g\)->env|L->env|th->env|ud->metatable|ud->env|fn->c.env|curr_func\(L\)->c.env|sbx->dict)|\bgcref\((sbx->cowref|sbx->dict_str|sbx->dict_mt|t->metatable)' \
+reader_hits=$(rg -n '\btabref\((tabV\([^)]*\)->metatable|udataV\([^)]*\)->metatable|basemt_obj|t->metatable|gco2ud\(o\)->metatable|gco2ud\(o\)->env|mainthread\(g\)->env|L->env|L1->env|th->env|ud->metatable|ud->env|fn->[cl]\.env|funcV\(o\)->c\.env|udataV\(o\)->env|curr_func\(L\)->c\.env|parent->env|J->fn->l\.env|sbx->dict)|\bgcref\((sbx->cowref|sbx->dict_str|sbx->dict_mt|t->metatable)' \
   "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc2.c" "$ROOT/src/lj_meta.c" \
   "$ROOT/src/lj_serialize.c" "$ROOT/src/lib_ffi.c" \
-  "$ROOT/src/lj_cdata.c" "$ROOT/src/lib_threading.c" || true)
+  "$ROOT/src/lj_cdata.c" "$ROOT/src/lib_threading.c" \
+  "$ROOT/src/lj_api.c" "$ROOT/src/lib_base.c" \
+  "$ROOT/src/lib_debug.c" "$ROOT/src/lib_buffer.c" \
+  "$ROOT/src/lib_jit.c" "$ROOT/src/lj_lib.c" \
+  "$ROOT/src/lj_load.c" "$ROOT/src/lj_func.c" \
+  "$ROOT/src/lj_record.c" "$ROOT/src/lj_ffrecord.c" || true)
 if [ -n "$reader_hits" ]; then
   echo "guardrail: shared metatable/env readers must use acquire helpers:" >&2
   echo "$reader_hits" >&2
+  exit 1
+fi
+
+env_store_hits=$(rg -n '\bsetgcref\(L->env' \
+  "$ROOT/src/lj_api.c" "$ROOT/src/lib_base.c" || true)
+if [ -n "$env_store_hits" ]; then
+  echo "guardrail: current-thread env replacement must use release stores:" >&2
+  echo "$env_store_hits" >&2
   exit 1
 fi
 

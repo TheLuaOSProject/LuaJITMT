@@ -212,7 +212,7 @@ GCfunc *lj_func_newL_gc(lua_State *L, GCproto *pt, GCfuncL *parent)
   MSize i, nuv;
   TValue *base;
   lj_gc_check_fixtop(L);
-  fn = func_newL(L, pt, tabref(parent->env));
+  fn = func_newL(L, pt, tabref_acq(parent->env));
   /* NOBARRIER: The GCfunc is new (marked white). */
   puv = parent->uvptr;
   nuv = pt->sizeuv;

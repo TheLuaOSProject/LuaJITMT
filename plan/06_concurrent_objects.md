@@ -252,8 +252,9 @@ next ⇒ hop to new gen at same logical position.)
 metatable: original report target was rel store + wbarrier with relaxed readers
 (mm dispatch tolerates stale); the current bridge acquire-loads
 release-published metatable/env refs in GC, GC2, metamethod, finalizer,
-serialization, and threading-environment C readers so the release/read contract
-is explicit before the full generation-table protocol lands.
+serialization, threading-environment, public API/library, loader, closure
+inheritance, and recorder C readers so the release/read contract is explicit
+before the full generation-table protocol lands.
 nomm: advisory negative cache; in concurrent table access it may go stale when a metatable
 gains a method ⇒ setmetatable and rawset-into-metatable clear nomm of —
 impossible to find all referrers; instead: nomm is only trusted when

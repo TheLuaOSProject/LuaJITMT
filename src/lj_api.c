@@ -47,7 +47,7 @@ static TValue *index2adr(lua_State *L, int idx)
     return L->top + idx;
   } else if (idx == LUA_GLOBALSINDEX) {
     TValue *o = &L2TG(L)->tmptv;
-    settabV(L, o, tabref(L->env));
+    settabV(L, o, tabref_acq(L->env));
     return o;
   } else if (idx == LUA_REGISTRYINDEX) {
     return registry(L);
@@ -57,7 +57,7 @@ static TValue *index2adr(lua_State *L, int idx)
 		"calling frame is not a C function");
     if (idx == LUA_ENVIRONINDEX) {
       TValue *o = &L2TG(L)->tmptv;
-      settabV(L, o, tabref(fn->c.env));
+      settabV(L, o, tabref_acq(fn->c.env));
       return o;
     } else {
       idx = LUA_GLOBALSINDEX - idx;
@@ -94,7 +94,8 @@ static TValue *index2adr_stack(lua_State *L, int idx)
 static GCtab *getcurrenv(lua_State *L)
 {
   GCfunc *fn = curr_func(L);
-  return fn->c.gct == ~LJ_TFUNC ? tabref(fn->c.env) : tabref(L->env);
+  return fn->c.gct == ~LJ_TFUNC ? tabref_acq(fn->c.env) :
+				  tabref_acq(L->env);
 }
 
 static lua_State *api_errstate(lua_State *L)
@@ -224,7 +225,7 @@ static void copy_slot(lua_State *L, TValue *f, int idx)
   if (idx == LUA_GLOBALSINDEX) {
     lj_checkapi(tvistab(f), "stack slot %d is not a table", idx);
     /* NOBARRIER: A thread (i.e. L) is never black. */
-    setgcref(L->env, obj2gco(tabV(f)));
+    setgcrefrel(L->env, obj2gco(tabV(f)));
   } else if (idx == LUA_ENVIRONINDEX) {
     GCfunc *fn = curr_func(L);
     if (fn->c.gct != ~LJ_TFUNC)
@@ -890,11 +891,11 @@ LUA_API int lua_getmetatable(lua_State *L, int idx)
   cTValue *o = index2adr(L, idx);
   GCtab *mt = NULL;
   if (tvistab(o))
-    mt = tabref(tabV(o)->metatable);
+    mt = tabref_acq(tabV(o)->metatable);
   else if (tvisudata(o))
-    mt = tabref(udataV(o)->metatable);
+    mt = tabref_acq(udataV(o)->metatable);
   else
-    mt = tabref(basemt_obj(G(L), o));
+    mt = tabref_acq(basemt_obj(G(L), o));
   if (mt == NULL)
     return 0;
   settabV(L, L->top, mt);
@@ -919,16 +920,16 @@ LUA_API void lua_getfenv(lua_State *L, int idx)
 {
   cTValue *o = index2adr_check(L, idx);
   if (tvisfunc(o)) {
-    settabV(L, L->top, tabref(funcV(o)->c.env));
+    settabV(L, L->top, tabref_acq(funcV(o)->c.env));
   } else if (tvisudata(o)) {
-    settabV(L, L->top, tabref(udataV(o)->env));
+    settabV(L, L->top, tabref_acq(udataV(o)->env));
   } else if (tvisthread(o)) {
     LJStateClaim claim;
     lua_State *L1 = threadV(o);
     GCtab *env;
     if (!lj_state_tryclaim(L1, lj_thr_current_id(G(L)), &claim))
       lj_err_callermsg(api_errstate(L), "thread busy");
-    env = tabref(L1->env);
+    env = tabref_acq(L1->env);
     lj_state_dropclaim(&claim);
     settabV(L, L->top, env);
   } else {
@@ -996,7 +997,7 @@ LUALIB_API void *luaL_testudata(lua_State *L, int idx, const char *tname)
   if (tvisudata(o)) {
     GCudata *ud = udataV(o);
     cTValue *tv = lj_tab_getstr(tabV(registry(L)), lj_str_newz(L, tname));
-    if (tv && tvistab(tv) && tabV(tv) == tabref(ud->metatable))
+    if (tv && tvistab(tv) && tabV(tv) == tabref_acq(ud->metatable))
       return uddata(ud);
   }
   return NULL;  /* value is not a userdata with a metatable */

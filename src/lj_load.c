@@ -49,7 +49,7 @@ static TValue *cpparser(lua_State *L, lua_CFunction dummy, void *ud)
   }
   pt = bc ? lj_bcread(ls) : lj_parse(ls);
   if (ls->fr2 == LJ_FR2) {
-    fn = lj_func_newL_empty(L, pt, tabref(L->env));
+    fn = lj_func_newL_empty(L, pt, tabref_acq(L->env));
     /* Don't combine above/below into one statement. */
     setfuncV(L, L->top++, fn);
   } else {
@@ -182,4 +182,3 @@ LUA_API int lua_dump(lua_State *L, lua_Writer writer, void *data)
   else
     return 1;
 }
-

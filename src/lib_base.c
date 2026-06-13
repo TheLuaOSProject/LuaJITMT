@@ -159,7 +159,8 @@ LJLIB_CF(getfenv)		LJLIB_REC(.)
     if (LJ_FR2) o--;
   }
   fn = &gcval(o)->fn;
-  settabV(L, L->top++, isluafunc(fn) ? tabref(fn->l.env) : tabref(L->env));
+  settabV(L, L->top++, isluafunc(fn) ? tabref_acq(fn->l.env) :
+				       tabref_acq(L->env));
   return 1;
 }
 
@@ -172,7 +173,7 @@ LJLIB_CF(setfenv)
     int level = lj_lib_checkint(L, 1);
     if (level == 0) {
       /* NOBARRIER: A thread (i.e. L) is never black. */
-      setgcref(L->env, obj2gco(t));
+      setgcrefrel(L->env, obj2gco(t));
       return 0;
     }
     if (level < 0)
@@ -527,7 +528,8 @@ LJLIB_PUSH("tostring")
 LJLIB_CF(print)
 {
   ptrdiff_t i, nargs = L->top - L->base;
-  cTValue *tv = lj_tab_getstr(tabref(L->env), strV(lj_lib_upvalue(L, 1)));
+  cTValue *tv = lj_tab_getstr(tabref_acq(L->env),
+			      strV(lj_lib_upvalue(L, 1)));
   int shortcut;
   if (tv && !tvisnil(tv)) {
     copyTV(L, L->top++, tv);
@@ -737,7 +739,7 @@ static void newproxy_weaktable(lua_State *L)
 LUALIB_API int luaopen_base(lua_State *L)
 {
   /* NOBARRIER: Table and value are the same. */
-  GCtab *env = tabref(L->env);
+  GCtab *env = tabref_acq(L->env);
   lj_tab_storetab(L, lj_tab_setstr(L, env, lj_str_newlit(L, "_G")), env);
   lua_pushliteral(L, LUA_VERSION);  /* top-3. */
   newproxy_weaktable(L);  /* top-2. */
