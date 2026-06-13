@@ -193,25 +193,13 @@ void lj_trace_reenableproto(GCproto *pt)
     BCPos i, sizebc = pt->sizebc;
     pt->flags &= ~PROTO_ILOOP;
     if (bc_op(bc[0]) == BC_IFUNCF)
-      setbc_op(&bc[0], BC_FUNCF);
+      bc_publish_op(&bc[0], BC_FUNCF);
     for (i = 1; i < sizebc; i++) {
       BCOp op = bc_op(bc[i]);
       if (op == BC_IFORL || op == BC_IITERL || op == BC_ILOOP)
-	setbc_op(&bc[i], (int)op+(int)BC_LOOP-(int)BC_ILOOP);
+	bc_publish_op(&bc[i], (int)op+(int)BC_LOOP-(int)BC_ILOOP);
     }
   }
-}
-
-static LJ_AINLINE void bc_publish(BCIns *pc, BCIns ins)
-{
-  la_store32_rel((uint32_t *)pc, (uint32_t)ins);
-}
-
-static LJ_AINLINE void bc_publish_op(BCIns *pc, BCOp op)
-{
-  BCIns ins = *pc;
-  setbc_op(&ins, op);
-  bc_publish(pc, ins);
 }
 
 /* Unpatch the bytecode modified by a root trace. */
@@ -225,20 +213,20 @@ static void trace_unpatch(jit_State *J, GCtrace *T)
   switch (bc_op(*pc)) {
   case BC_JFORL:
     lj_assertJ(traceref(J, bc_d(*pc)) == T, "JFORL references other trace");
-    *pc = T->startins;
+    bc_publish(pc, T->startins);
     pc += bc_j(T->startins);
     lj_assertJ(bc_op(*pc) == BC_JFORI, "FORL does not point to JFORI");
-    setbc_op(pc, BC_FORI);
+    bc_publish_op(pc, BC_FORI);
     break;
   case BC_JITERL:
   case BC_JLOOP:
     lj_assertJ(op == BC_ITERL || op == BC_ITERN || op == BC_LOOP ||
 	       bc_isret(op), "bad original bytecode %d", op);
-    *pc = T->startins;
+    bc_publish(pc, T->startins);
     break;
   case BC_JFUNCF:
     lj_assertJ(op == BC_FUNCF, "bad original bytecode %d", op);
-    *pc = T->startins;
+    bc_publish(pc, T->startins);
     break;
   default:  /* Already unpatched. */
     break;
@@ -406,10 +394,10 @@ void lj_trace_freestate(global_State *g)
 static void blacklist_pc(GCproto *pt, BCIns *pc)
 {
   if (bc_op(*pc) == BC_ITERN) {
-    setbc_op(pc, BC_ITERC);
-    setbc_op(pc+1+bc_j(pc[1]), BC_JMP);
+    bc_publish_op(pc, BC_ITERC);
+    bc_publish_op(pc+1+bc_j(pc[1]), BC_JMP);
   } else {
-    setbc_op(pc, (int)bc_op(*pc)+(int)BC_ILOOP-(int)BC_LOOP);
+    bc_publish_op(pc, (int)bc_op(*pc)+(int)BC_ILOOP-(int)BC_LOOP);
     pt->flags |= PROTO_ILOOP;
   }
 }
@@ -452,7 +440,7 @@ static void trace_start(jit_State *J)
       lj_assertJ(bc_op(*J->pc) == BC_FORL || bc_op(*J->pc) == BC_ITERL ||
 		 bc_op(*J->pc) == BC_LOOP || bc_op(*J->pc) == BC_FUNCF,
 		 "bad hot bytecode %d", bc_op(*J->pc));
-      setbc_op(J->pc, (int)bc_op(*J->pc)+(int)BC_ILOOP-(int)BC_LOOP);
+      bc_publish_op(J->pc, (int)bc_op(*J->pc)+(int)BC_ILOOP-(int)BC_LOOP);
       J->pt->flags |= PROTO_ILOOP;
     }
     J->state = LJ_TRACE_IDLE;  /* Silently ignored. */
@@ -725,7 +713,7 @@ static LJ_AINLINE void trace_pendpatch(jit_State *J, int force)
 {
   if (LJ_UNLIKELY(J->patchpc)) {
     if (force || J->bcskip == 0) {
-      *J->patchpc = J->patchins;
+      bc_publish(J->patchpc, J->patchins);
       J->patchpc = NULL;
     } else {
       J->bcskip = 0;
@@ -1019,7 +1007,7 @@ int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr)
       /* Unpatch bytecode when recording. */
       J->patchins = *pc;
       J->patchpc = (BCIns *)pc;
-      *J->patchpc = *retpc;
+      bc_publish(J->patchpc, *retpc);
       J->bcskip = 1;
     }
     return 0;

@@ -8,6 +8,7 @@
 
 #include "lj_def.h"
 #include "lj_arch.h"
+#include "lj_atomic.h"
 
 /* Bytecode instruction format, 32 bit wide, fields of 8 or 16 bit:
 **
@@ -234,6 +235,26 @@ LJ_STATIC_ASSERT((int)BC_FUNCV + 2 == (int)BC_JFUNCV);
 LJ_STATIC_ASSERT((int)BC_FUNCC + 1 == (int)BC_FUNCCW);
 LJ_STATIC_ASSERT((int)BC_FUNCCW + 1 == (int)BC_CNEW);
 LJ_STATIC_ASSERT((int)BC_CNEW + 2 == (int)BC_CSET);
+
+/* Full-word publication for bytecode instructions visible to other threads. */
+static LJ_AINLINE void bc_publish(const uint32_t *pc, uint32_t ins)
+{
+  la_store32_rel((uint32_t *)pc, ins);
+}
+
+static LJ_AINLINE void bc_publish_op(const uint32_t *pc, BCOp op)
+{
+  uint32_t ins = *pc;
+  setbc_op(&ins, op);
+  bc_publish(pc, ins);
+}
+
+static LJ_AINLINE void bc_publish_d(const uint32_t *pc, uint32_t d)
+{
+  uint32_t ins = *pc;
+  setbc_d(&ins, d);
+  bc_publish(pc, ins);
+}
 
 /* This solves a circular dependency problem, change as needed. */
 #define FF_next_N	4

@@ -1365,7 +1365,7 @@ static void rec_idx_bump(jit_State *J, RecordIndex *ix)
       }
       if ((asize | (hbits<<11)) != ah) {  /* Has the size changed? */
 	/* Patch bytecode, but continue recording (for more patching). */
-	setbc_d(pc, (asize | (hbits<<11)));
+	bc_publish_d(pc, (BCReg)(asize | (hbits<<11)));
 	/* Patching TNEW operands is only safe if the trace is aborted. */
 	ir->op1 = asize; ir->op2 = hbits;
 	J->retryrec = 1;  /* Abort the trace at the end of recording. */
@@ -2048,7 +2048,7 @@ static void rec_func_jit(jit_State *J, TraceNo lnk)
     /* Temporarily unpatch JFUNC* to continue recording across function. */
     J->patchins = *J->pc;
     J->patchpc = (BCIns *)J->pc;
-    *J->patchpc = T->startins;
+    bc_publish(J->patchpc, T->startins);
     return;
   }
   J->instunroll = 0;  /* Cannot continue across a compiled function. */

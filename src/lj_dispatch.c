@@ -351,9 +351,9 @@ int luaJIT_setmode(lua_State *L, int idx, int mode)
       } else {
 	return 0;  /* Failed. */
       }
-      setbc_op(&g->bc_cfunc_ext, BC_FUNCCW);
+      bc_publish_op(&g->bc_cfunc_ext, BC_FUNCCW);
     } else {
-      setbc_op(&g->bc_cfunc_ext, BC_FUNCC);
+      bc_publish_op(&g->bc_cfunc_ext, BC_FUNCC);
     }
     break;
   default:

@@ -92,6 +92,17 @@ A racing thread executes either the complete old or complete new
 instruction — both valid (JLOOP with a published trace, or the original
 loop op). The ICACHE question doesn't arise: bytecode is data.
 
+Current M5 bridge: `bc_publish()`, `bc_publish_op()`, and `bc_publish_d()` live
+in `lj_bc.h` and release-store complete 32-bit bytecode instructions. The
+audited runtime patch sites in `lj_trace.c`, `lj_record.c`, and
+`lj_dispatch.c` now use those helpers: trace stop, proto re-enable, unpatch,
+blacklist/lazy-NOJIT ILOOP swaps, pending patch restore/unpatch, recorder TNEW
+operand retuning, recorder JFUNC temporary unpatching, and `bc_cfunc_ext`
+wrapping. Parser-local `setbc_*` fixups remain plain because they run before the
+proto is published. The original target above remains broader: any newly found
+runtime bytecode patch site must join this helper path, and side exits still
+need the §8.4.2 exittab design to remove machine-code patching.
+
 ### 8.4.2 Exit tables replace lj_asm_patchexit
 Today attaching a side trace rewrites the parent's machine code
 (`lj_asm_patchexit`, called from trace_stop lj_trace.c:531) and flips

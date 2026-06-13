@@ -24,6 +24,18 @@ do
   fi
 done
 
+for needle in \
+  'bc_publish(const uint32_t *pc, uint32_t ins)' \
+  'la_store32_rel((uint32_t *)pc, ins)' \
+  'bc_publish_op(const uint32_t *pc, BCOp op)' \
+  'bc_publish_d(const uint32_t *pc, uint32_t d)'
+do
+  if ! rg -F -q "$needle" "$ROOT/src/lj_bc.h"; then
+    echo "guardrail: missing bytecode publication helper: $needle" >&2
+    exit 1
+  fi
+done
+
 hits=$(rg -n -- 'setgcrefp\(J->trace|setgcrefnull\(J->trace|gcref\(J->trace' \
   "$ROOT/src/lj_trace.c" "$ROOT/src/lj_jit.h" || true)
 if [ -n "$hits" ]; then
@@ -37,6 +49,14 @@ hits=$(rg -n -- 'pt->trace\b|->link\b|->nextroot\b|->nextside\b' \
   "$ROOT/src/lib_jit.c" "$ROOT/src/lj_bcwrite.c" || true)
 if [ -n "$hits" ]; then
   echo "guardrail: shared trace-number fields must use acquire/release helpers:" >&2
+  echo "$hits" >&2
+  exit 1
+fi
+
+hits=$(rg -n -- 'setbc_op\(|setbc_d\(|setbc_j\(|\*J->patchpc[[:space:]]*=|\*pc[[:space:]]*=[[:space:]]*T->startins' \
+  "$ROOT/src/lj_trace.c" "$ROOT/src/lj_record.c" "$ROOT/src/lj_dispatch.c" || true)
+if [ -n "$hits" ]; then
+  echo "guardrail: live bytecode patches must use full-word release publication:" >&2
   echo "$hits" >&2
   exit 1
 fi
