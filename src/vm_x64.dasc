@@ -3979,10 +3979,11 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov STR:RC, [KBASE+RC*8]
     |  checktab TAB:RB, ->vmeta_tgets
     |->BC_TGETS_Z:	// RB = GCtab *, RC = GCstr *
+    |  mov r8, TAB:RB->node
     |  mov TMPRd, TAB:RB->hmask
     |  and TMPRd, STR:RC->sid
     |  imul TMPRd, #NODE
-    |  add NODE:TMPR, TAB:RB->node
+    |  add NODE:TMPR, r8
     |  settp ITYPE, STR:RC, LJ_TSTR
     |1:
     |  cmp NODE:TMPR->key, ITYPE
@@ -4113,11 +4114,12 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov STR:RC, [KBASE+RC*8]
     |  checktab TAB:RB, ->vmeta_tsets
     |->BC_TSETS_Z:	// RB = GCtab *, RC = GCstr *
+    |  mov r8, TAB:RB->node
     |  mov TMPRd, TAB:RB->hmask
     |  and TMPRd, STR:RC->sid
     |  imul TMPRd, #NODE
     |  mov byte TAB:RB->nomm, 0		// Clear metamethod cache.
-    |  add NODE:TMPR, TAB:RB->node
+    |  add NODE:TMPR, r8
     |  settp ITYPE, STR:RC, LJ_TSTR
     |1:
     |  cmp NODE:TMPR->key, ITYPE
