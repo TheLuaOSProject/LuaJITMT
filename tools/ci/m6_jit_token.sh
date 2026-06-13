@@ -78,6 +78,11 @@ if rg -n 'dispofs\(|J2TG\(as->J\)->dispatch|uint64_t dispaddr|GG_OFS_TGDISP' \
   exit 1
 fi
 
+if ! rg -F -q 'm6_jit_token.sh' "$ROOT/tools/ci/m6_jit.sh"; then
+  echo "guardrail: m6_jit_token.sh is not wired into the M6 aggregate" >&2
+  exit 1
+fi
+
 if rg -n '\+\+snap->count' "$ROOT/src/lj_trace.c"; then
   echo "guardrail: side-exit counters must not advance before token acquisition" >&2
   exit 1

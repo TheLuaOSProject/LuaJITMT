@@ -26,6 +26,11 @@ do
   fi
 done
 
+if ! rg -F -q 'm6_jit_barrier_xpoll.sh' "$ROOT/tools/ci/m6_jit.sh"; then
+  echo "guardrail: m6_jit_barrier_xpoll.sh is not wired into the M6 aggregate" >&2
+  exit 1
+fi
+
 LUA_PATH="$ROOT/src/?.lua;$ROOT/src/jit/?.lua;;" \
   timeout 20s "$ROOT/src/luajit" -jdump=im -e \
   'jit.opt.start("hotloop=1","hotexit=1"); local t={}; local mts={}; for i=1,80 do mts[i]={} end; for i=1,64 do setmetatable(t, mts[i]) end' \
