@@ -63,20 +63,19 @@ x64/POSIX unwound-trace error code is stored in the current TG instead of
 shared `J->exitcode`, and token-busy hot side exits do not advance the retry
 budget into `SNAPCOUNT_DONE`. Dispatch mode transitions now request
 `HS_REDISPATCH` for already-attached TGs, so TG dispatch copies refresh through
-their own safepoint ack. x64 VM slow paths now load `global_State *` through
+their own safepoint ack. x64 VM entry paths now load `DISPATCH` from the
+running `L->tg_hint` plus `offsetof(TGState, dispatch)`, and `TGPOLL` reads the
+current TG's `poll` word. x64 VM slow paths load `global_State *` through
 `TGState.gl` and `jit_State *` through `g->jitp` instead of fixed offsets from
-`DISPATCH`; the remaining transitional VM exception is `TGPOLL`, which still
-uses `g->gc2.hs_pending` until the local-dispatch entry switch can pair it with
-`TGState.poll`. Existing x64 traces still assume recorder-TG-relative
+`DISPATCH`. Existing x64 traces still assume recorder-TG-relative
 `RID_DISPATCH` addressing, so secondary TGs currently neither enter `BC_JLOOP`
 mcode nor acquire the recorder token to produce new x64 traces. This is a
 temporary x64/POSIX safety guard, not the original end-state. The remaining
-original target is to make x64 `DISPATCH` load the running TG's dispatch table,
-localize record dispatch to the token holder's TG table instead of temporarily
-exposing record hooks through the global dispatch template, migrate emitter
-`RID_DISPATCH` addressing to explicit TG fields or non-dispatch globals, and
-then remove the secondary-TG recorder/entry guard once emitter dispatch
-addressing is local.
+original target is to localize record dispatch to the token holder's TG table
+instead of temporarily exposing record hooks through the global dispatch
+template, migrate emitter `RID_DISPATCH` addressing to explicit TG fields or
+non-dispatch globals, and then remove the secondary-TG recorder/entry guard once
+emitter dispatch addressing is local.
 
 ## 8.3 Trace registry & publication
 

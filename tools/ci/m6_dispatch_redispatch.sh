@@ -32,6 +32,9 @@ for needle in \
   'load_G TMPR' \
   'mov dword GL:TMPR->vmstate' \
   'load_J CARG1' \
+  'load_DISPATCH RB' \
+  'TG_OFS_DISPATCH' \
+  'TGPOLL, dword [DISPATCH+DISPATCH_TG(poll)]' \
   'Secondary TGs interpret until RID_DISPATCH is local'
 do
   if ! rg -F -q "$needle" "$ROOT/src/vm_x64.dasc"; then
@@ -40,20 +43,19 @@ do
   fi
 done
 
-if rg -n 'DISPATCH_J\(' "$ROOT/src/vm_x64.dasc" | rg -v '#define DISPATCH_J'; then
-  echo "guardrail: x64 VM must load jit_State through tg->gl->jitp" >&2
+if rg -n 'DISPATCH_[GJ]\(' "$ROOT/src/vm_x64.dasc"; then
+  echo "guardrail: x64 VM must not derive g/J from fixed DISPATCH offsets" >&2
   exit 1
 fi
 
-if rg -n 'TG_DISP2[JG]' "$ROOT/src/vm_x64.dasc" |
-    rg -v '#define DISPATCH_[GJ]|TGPOLL'; then
+if rg -n 'TG_DISP2[JG]' "$ROOT/src/vm_x64.dasc"; then
   echo "guardrail: x64 VM must not derive g/J from fixed TG dispatch offsets" >&2
   exit 1
 fi
 
-if rg -n 'DISPATCH_GL\(' "$ROOT/src/vm_x64.dasc" |
-    rg -v '#define DISPATCH_GL|TGPOLL'; then
-  echo "guardrail: x64 VM DISPATCH_GL use is limited to transitional TGPOLL" >&2
+if rg -n 'GG_G2TGDISP|L:RB->glref.*dispatch|add DISPATCH, GG_G2TGDISP' \
+    "$ROOT/src/vm_x64.dasc"; then
+  echo "guardrail: x64 VM entry must use the running TG dispatch table" >&2
   exit 1
 fi
 

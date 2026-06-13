@@ -322,10 +322,13 @@
 |// Assumes DISPATCH is relative to TGState.dispatch.
 #define GL_OFS(field)		((int)offsetof(global_State, field))
 #define J_OFS(field)		((int)offsetof(jit_State, field))
-#define DISPATCH_GL(field)	(TG_DISP2G + (int)offsetof(global_State, field))
-#define DISPATCH_J(field)	(TG_DISP2J + (int)offsetof(jit_State, field))
-|.define TGPOLL, dword [DISPATCH+DISPATCH_GL(gc2.hs_pending)]
+#define TG_OFS_DISPATCH		((int)offsetof(TGState, dispatch))
+|.define TGPOLL, dword [DISPATCH+DISPATCH_TG(poll)]
 |.define TGMARK, dword [DISPATCH+DISPATCH_TG(mark_active)]
+|.macro load_DISPATCH, lreg
+|  mov DISPATCH, L:lreg->tg_hint
+|  add DISPATCH, TG_OFS_DISPATCH
+|.endmacro
 |.macro load_G, reg
 |  mov GL:reg, [DISPATCH+DISPATCH_TG(gl)]
 |.endmacro
@@ -547,8 +550,7 @@ static void build_subroutines(BuildCtx *ctx)
   |->vm_unwind_c_eh:			// Landing pad for external unwinder.
   |  endbr
   |  mov L:RB, SAVE_L
-  |  mov DISPATCH, L:RB->glref
-  |  add DISPATCH, GG_G2TGDISP
+  |  load_DISPATCH RB
   |  cmp TGPOLL, 0
   |  jz >9
   |  mov SAVE_ERRF, eax
@@ -581,8 +583,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov L:RB, SAVE_L
   |  mov RDd, 1+1			// Really 1+2 results, incr. later.
   |  mov BASE, L:RB->base
-  |  mov DISPATCH, L:RB->glref		// Setup pointer to dispatch table.
-  |  add DISPATCH, GG_G2TGDISP
+  |  load_DISPATCH RB			// Setup pointer to TG dispatch table.
   |  mov PC, [BASE-8]			// Fetch PC of previous frame.
   |  mov_false RA
   |  mov RB, [BASE]
@@ -641,8 +642,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov PCd, FRAME_CP
   |  xor RDd, RDd
   |  lea KBASE, [esp+CFRAME_RESUME]
-  |  mov DISPATCH, L:RB->glref		// Setup pointer to dispatch table.
-  |  add DISPATCH, GG_G2TGDISP
+  |  load_DISPATCH RB			// Setup pointer to TG dispatch table.
   |  mov SAVE_PC, RD			// Any value outside of bytecode is ok.
   |  mov SAVE_CFRAME, RD
   |  mov SAVE_NRES, RDd
@@ -685,11 +685,10 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov SAVE_L, CARG1
   |  mov RA, CARG2
   |
-  |  mov DISPATCH, L:RB->glref		// Setup pointer to dispatch table.
+  |  load_DISPATCH RB			// Setup pointer to TG dispatch table.
   |  mov KBASE, L:RB->cframe		// Add our C frame to cframe chain.
   |  mov SAVE_CFRAME, KBASE
   |  mov SAVE_PC, L:RB			// Any value outside of bytecode is ok.
-  |  add DISPATCH, GG_G2TGDISP
   |  mov L:RB->cframe, rsp
   |
   |2:  // Entry point for vm_resume/vm_cpcall (RA = base, RB = L, PC = ftype).
@@ -722,10 +721,9 @@ static void build_subroutines(BuildCtx *ctx)
   |
   |  mov KBASE, L:RB->stack		// Compute -savestack(L, L->top).
   |  sub KBASE, L:RB->top
-  |   mov DISPATCH, L:RB->glref		// Setup pointer to dispatch table.
+  |   load_DISPATCH RB			// Setup pointer to TG dispatch table.
   |  mov SAVE_ERRF, 0			// No error function.
   |  mov SAVE_NRES, KBASEd		// Neg. delta means cframe w/o frame.
-  |   add DISPATCH, GG_G2TGDISP
   |  // Handler may change cframe_nres(L->cframe) or cframe_errfunc(L->cframe).
   |
   |  mov KBASE, L:RB->cframe		// Add our C frame to cframe chain.
@@ -2917,7 +2915,6 @@ static void build_subroutines(BuildCtx *ctx)
   |.if FFI
   |.type CTSTATE, CTState, PC
   |  saveregs_	// ebp/rbp already saved. ebp now holds global_State *.
-  |  lea DISPATCH, [ebp+GG_G2TGDISP]
   |  mov CTSTATE, GL:ebp->ctype_state
   |  movzx eax, ax
   |  mov CTSTATE->cb.slot, eax
@@ -2946,6 +2943,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov CARG1, CTSTATE
   |  call extern lj_ccallback_enter	// (CTState *cts, void *cf)
   |  // lua_State * returned in eax (RD).
+  |  load_DISPATCH RD			// Setup pointer to TG dispatch table.
   |  set_vmstate INTERP
   |  mov BASE, L:RD->base
   |  mov RD, L:RD->top

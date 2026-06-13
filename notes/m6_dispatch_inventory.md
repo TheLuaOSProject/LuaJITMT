@@ -1,19 +1,17 @@
 M6 x64 dispatch localization inventory:
-- `DISPATCH` still starts from `GG.main_tg.dispatch` at x64 VM entry points.
-  Switching it to the running `L->tg_hint->dispatch` is the remaining major
-  §8.2 localization step.
+- `DISPATCH` now starts from the running `L->tg_hint` plus
+  `offsetof(TGState, dispatch)` at x64 VM entry points. `TGPOLL` reads the
+  current TG's `poll` word, so interpreter safepoint checks are TG-local.
 - `GG_DISP2STATIC` is table-layout local and should remain valid once every TG
   dispatch table is synchronized from the template.
 - Original hazard: `DISPATCH_GL`, `DISPATCH_J`, `TG_DISP2G`, and `TG_DISP2J`
   were main-TG-relative. Before `DISPATCH` points at arbitrary TGs, global/JIT
   slow paths must load through `tg->gl` and `g->jitp` instead of using fixed
   offsets.
-- Completed prerequisite in this slice: x64 VM slow paths now load
+- Completed prerequisite: x64 VM slow paths now load
   `global_State *` from `TGState.gl` and `jit_State *` from `g->jitp` instead
-  of deriving them from fixed `DISPATCH` offsets. The only remaining
-  `DISPATCH_GL` use in `vm_x64.dasc` is the transitional `TGPOLL` check of
-  `g->gc2.hs_pending`, which must switch to `TGState.poll` together with the
-  actual local-`DISPATCH` entry change.
+  of deriving them from fixed `DISPATCH` offsets. `vm_x64.dasc` no longer has
+  `DISPATCH_GL`, `DISPATCH_J`, `TG_DISP2G`, or `TG_DISP2J` uses.
 - The JIT emitter also assumes `RID_DISPATCH` can address arbitrary constants
   relative to the recorder TG. Before trace execution is safe on secondary TGs,
   arbitrary `dispofs()` addressing must stop using `RID_DISPATCH`; only fixed
