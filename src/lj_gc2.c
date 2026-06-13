@@ -218,13 +218,16 @@ static void gc2_scan_thread_roots(global_State *g, lua_State *L)
 {
   GCobj *uv;
   TValue *o, *top;
+  TValue tv;
   if (!L || tvref(L->stack) == NULL)
     return;
   lj_gc2_markobj(g, obj2gco(L));
   lj_gc2_markmem(g, tvref(L->stack));
   top = gc2_stack_scan_top(g, L);
-  for (o = tvref(L->stack) + 1 + LJ_FR2; o < top; o++)
-    gc2_mark_tv(g, o);
+  for (o = tvref(L->stack) + 1 + LJ_FR2; o < top; o++) {
+    lj_tv_load_acq(&tv, o);
+    gc2_mark_tv(g, &tv);
+  }
   if (tabref(L->env))
     lj_gc2_markobj(g, obj2gco(tabref(L->env)));
   for (uv = gcref(L->openupval); uv != NULL; uv = gcnext(uv)) {
@@ -901,12 +904,15 @@ static void gc2_traverse_thread(global_State *g, lua_State *th)
 {
   GCobj *mt, *uv;
   TValue *o, *top;
+  TValue tv;
   if (!th || tvref(th->stack) == NULL)
     return;
   lj_gc2_markmem(g, tvref(th->stack));
   top = gc2_stack_scan_top_worker(g, th);
-  for (o = tvref(th->stack) + 1 + LJ_FR2; o < top; o++)
-    gc2_mark_tv_worker(g, o);
+  for (o = tvref(th->stack) + 1 + LJ_FR2; o < top; o++) {
+    lj_tv_load_acq(&tv, o);
+    gc2_mark_tv_worker(g, &tv);
+  }
   if (tabref(th->env))
     gc2_markobj_worker(g, obj2gco(tabref(th->env)));
   mt = gcref_acq(th->mt_thread);

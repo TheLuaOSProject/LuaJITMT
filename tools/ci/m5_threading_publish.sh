@@ -137,4 +137,30 @@ if rg -n 'gc_marktv\(g, &ch->slot\[i\]\.tv\)|gc2_mark_tv_worker\(g, &ch->slot\[i
   exit 1
 fi
 
+if ! awk '
+  /static void gc_traverse_thread/ { infn = 1; seen = 1; next }
+  infn && /lj_tv_load_acq\(&tv, o\)/ { load = 1 }
+  infn && /gc_marktv\(g, &tv\)/ { mark = 1 }
+  infn && /gc_marktv\(g, o\)/ { bad = 1 }
+  infn && /^}/ { exit(seen && load && mark && !bad ? 0 : 1) }
+  END { if (!seen || !load || !mark || bad) exit 1 }
+' "$ROOT/src/lj_gc.c"; then
+  echo "guardrail: legacy GC thread stack scan must snapshot stack slots" >&2
+  exit 1
+fi
+
+for fn in gc2_scan_thread_roots gc2_traverse_thread; do
+  if ! awk -v fn="$fn" '
+    $0 ~ "static void " fn { infn = 1; seen = 1; next }
+    infn && /lj_tv_load_acq\(&tv, o\)/ { load = 1 }
+    infn && /gc2_mark_tv(_worker)?\(g, &tv\)/ { mark = 1 }
+    infn && /gc2_mark_tv(_worker)?\(g, o\)/ { bad = 1 }
+    infn && /^}/ { exit(seen && load && mark && !bad ? 0 : 1) }
+    END { if (!seen || !load || !mark || bad) exit 1 }
+  ' "$ROOT/src/lj_gc2.c"; then
+    echo "guardrail: GC2 thread stack scan must snapshot stack slots: $fn" >&2
+    exit 1
+  fi
+done
+
 echo "M5 threading publication guard passed"

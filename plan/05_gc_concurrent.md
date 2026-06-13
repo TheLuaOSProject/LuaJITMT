@@ -220,7 +220,9 @@ parents if inside coroutine.resume — walk `L->cframe`/frame links exactly
 like gc_traverse_frames lj_gc.c:292): mark every TValue in
 `stack..top`+frame extras, mark L itself, its env, legacy openupval list
 values. This is precise and fast (linear TValue scan; ~1 GB/s ⇒ a 1 MB
-stack costs ~1 ms, typical stacks ≪ that).
+stack costs ~1 ms, typical stacks ≪ that). Current bridge implementation
+loads each stack slot into a local snapshot before marking; the original
+ownership/claim protocol below remains the target for suspended coroutines.
 Suspended coroutines: workers traverse them as ordinary heap objects, but
 must hold the claim: `CAS th->thr_owner 0→GCSCAN`; on failure (running),
 set `th->gcflags|=GCF_NEEDSCAN` — the owner's next HS_SCAN_ROOTS scans any

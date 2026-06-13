@@ -704,9 +704,12 @@ static void gc_traverse_thread(global_State *g, lua_State *th)
 {
   GCobj *mt;
   TValue *o, *top = th->top;
+  TValue tv;
   lj_gc_arena_markmem(g, tvref(th->stack));
-  for (o = tvref(th->stack)+1+LJ_FR2; o < top; o++)
-    gc_marktv(g, o);
+  for (o = tvref(th->stack)+1+LJ_FR2; o < top; o++) {
+    lj_tv_load_acq(&tv, o);
+    gc_marktv(g, &tv);
+  }
   if (g->gc.state == GCSatomic) {
     top = tvref(th->stack) + th->stacksize;
     for (; o < top; o++)  /* Clear unmarked slots. */
