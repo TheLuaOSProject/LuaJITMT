@@ -34,7 +34,7 @@ static LJ_AINLINE uint32_t hashrot(uint32_t lo, uint32_t hi)
 /* Hash values are masked with the table hash mask and used as an index. */
 static LJ_AINLINE Node *hashmask(const GCtab *t, uint32_t hash)
 {
-  Node *n = noderef(t->node);
+  Node *n = lj_tab_node_acq(t);
   return &n[hash & t->hmask];
 }
 

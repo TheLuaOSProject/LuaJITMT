@@ -187,7 +187,8 @@ static char *serialize_put(char *w, SBufExt *sbx, cTValue *o)
     *w++ = (char)(SER_TAG_NIL + ~itype(o));
   } else if (tvistab(o)) {
     const GCtab *t = tabV(o);
-    uint32_t narray = 0, nhash = 0, one = 2;
+    const Node *hashnode = NULL;
+    uint32_t narray = 0, nhash = 0, one = 2, hmask = 0;
     if (sbx->depth <= 0) lj_err_caller(sbufL(sbx), LJ_ERR_BUFFER_DEPTH);
     sbx->depth--;
     if (t->asize > 0) {  /* Determine max. length of array part. */
@@ -200,10 +201,11 @@ static char *serialize_put(char *w, SBufExt *sbx, cTValue *o)
       if (narray && tvisnil(&array[0])) one = 4;
     }
     if (t->hmask > 0) {  /* Count number of used hash slots. */
-      uint32_t i, hmask = t->hmask;
-      Node *node = noderef(t->node);
+      uint32_t i;
+      hashnode = lj_tab_node_acq(t);
+      hmask = t->hmask;
       for (i = 0; i <= hmask; i++)
-	nhash += !tvisnil(&node[i].val);
+	nhash += !tvisnil(&hashnode[i].val);
     }
     /* Write metatable index. */
     if (LJ_UNLIKELY(tabref(sbx->dict_mt)) && tabref(t->metatable)) {
@@ -232,7 +234,7 @@ static char *serialize_put(char *w, SBufExt *sbx, cTValue *o)
       while (oa < oe) w = serialize_put(w, sbx, oa++);
     }
     if (nhash) {  /* Write hash entries. */
-      const Node *node = noderef(t->node) + t->hmask;
+      const Node *node = hashnode + hmask;
       GCtab *dict_str = tabref(sbx->dict_str);
       if (LJ_UNLIKELY(dict_str)) {
 	for (;; node--)

@@ -153,6 +153,8 @@ static void bcwrite_ktab_sorted_hash(BCWriteCtx *ctx, Node *node, MSize nhash)
 static void bcwrite_ktab(BCWriteCtx *ctx, char *p, const GCtab *t)
 {
   MSize narray = 0, nhash = 0;
+  Node *hashnode = NULL;
+  MSize hmask = 0;
   if (t->asize > 0) {  /* Determine max. length of array part. */
     ptrdiff_t i;
     TValue *array = tvref(t->array);
@@ -162,10 +164,11 @@ static void bcwrite_ktab(BCWriteCtx *ctx, char *p, const GCtab *t)
     narray = (MSize)(i+1);
   }
   if (t->hmask > 0) {  /* Count number of used hash slots. */
-    MSize i, hmask = t->hmask;
-    Node *node = noderef(t->node);
+    MSize i;
+    hashnode = lj_tab_node_acq(t);
+    hmask = t->hmask;
     for (i = 0; i <= hmask; i++)
-      nhash += !tvisnil(&node[i].val);
+      nhash += !tvisnil(&hashnode[i].val);
   }
   /* Write number of array slots and hash slots. */
   p = lj_strfmt_wuleb128(p, narray);
@@ -178,10 +181,10 @@ static void bcwrite_ktab(BCWriteCtx *ctx, char *p, const GCtab *t)
       bcwrite_ktabk(ctx, o, 1);
   }
   if (nhash) {  /* Write hash entries. */
-    Node *node = noderef(t->node) + t->hmask;
+    Node *node = hashnode + hmask;
     if ((ctx->flags & BCDUMP_F_DETERMINISTIC) && nhash > 1) {
       if (ctx->heapsz < nhash)
-	bcwrite_heap_resize(ctx, t->hmask + 1);
+	bcwrite_heap_resize(ctx, hmask + 1);
       bcwrite_ktab_sorted_hash(ctx, node, nhash);
     } else {
       MSize i = nhash;

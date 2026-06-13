@@ -559,6 +559,29 @@ typedef struct GCtab {
 #define noderef(r)	(mref((r), Node))
 #define nextnode(n)	(mref((n)->next, Node))
 
+static LJ_AINLINE Node *lj_tab_node_acq(const GCtab *t)
+{
+#if LJ_GC64
+  return (Node *)(void *)(uintptr_t)la_load64_acq(&t->node.ptr64);
+#else
+  return (Node *)(void *)(uintptr_t)la_load32_acq(&t->node.ptr32);
+#endif
+}
+
+static LJ_AINLINE void lj_tab_node_set(GCtab *t, const Node *node)
+{
+  setmref(t->node, node);
+}
+
+static LJ_AINLINE void lj_tab_node_rel(GCtab *t, const Node *node)
+{
+#if LJ_GC64
+  la_store64_rel(&t->node.ptr64, (uint64_t)(uintptr_t)(const void *)node);
+#else
+  la_store32_rel(&t->node.ptr32, (uint32_t)(uintptr_t)(const void *)node);
+#endif
+}
+
 static LJ_AINLINE Node *lj_tab_nextnode_acq(const Node *n)
 {
 #if LJ_GC64

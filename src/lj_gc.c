@@ -182,7 +182,7 @@ static void gc2_paranoia_checktab(global_State *g, GCtab *t)
   if (t->asize > 0)
     gc2_paranoia_checkmem(g, tvref(t->array), "table array");
   if (t->hmask > 0)
-    gc2_paranoia_checkmem(g, noderef(t->node), "table node");
+    gc2_paranoia_checkmem(g, lj_tab_node_acq(t), "table node");
 }
 
 static void gc2_paranoia_checkthread(global_State *g, lua_State *th)
@@ -523,7 +523,7 @@ static int gc_traverse_tab(global_State *g, GCtab *t)
   if (t->asize > 0)
     lj_gc_arena_markmem(g, tvref(t->array));
   if (t->hmask > 0)
-    lj_gc_arena_markmem(g, noderef(t->node));
+    lj_gc_arena_markmem(g, lj_tab_node_acq(t));
   if (mt)
     gc_markobj(g, mt);
   mode = lj_meta_fastg(g, mt, MM_mode);
@@ -555,7 +555,7 @@ static int gc_traverse_tab(global_State *g, GCtab *t)
       gc_marktv(g, arrayslot(t, i));
   }
   if (t->hmask > 0) {  /* Mark hash part. */
-    Node *node = noderef(t->node);
+    Node *node = lj_tab_node_acq(t);
     MSize i, hmask = t->hmask;
     for (i = 0; i <= hmask; i++) {
       Node *n = &node[i];
@@ -838,7 +838,7 @@ static void gc_clearweak(global_State *g, GCobj *o)
       }
     }
     if (t->hmask > 0) {
-      Node *node = noderef(t->node);
+      Node *node = lj_tab_node_acq(t);
       MSize i, hmask = t->hmask;
       for (i = 0; i <= hmask; i++) {
 	Node *n = &node[i];
@@ -942,10 +942,11 @@ void lj_gc_finalize_cdata(lua_State *L)
 {
   global_State *g = G(L);
   GCtab *t = tabref(g->gcroot[GCROOT_FFI_FIN]);
-  Node *node = noderef(t->node);
+  Node *node = lj_tab_node_acq(t);
+  MSize hmask = t->hmask;
   ptrdiff_t i;
   setgcrefnull(t->metatable);  /* Mark finalizer table as disabled. */
-  for (i = (ptrdiff_t)t->hmask; i >= 0; i--)
+  for (i = (ptrdiff_t)hmask; i >= 0; i--)
     if (!tvisnil(&node[i].val) && tviscdata(&node[i].key)) {
       GCobj *o = gcV(&node[i].key);
       TValue tmp;

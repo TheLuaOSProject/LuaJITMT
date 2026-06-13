@@ -168,9 +168,11 @@ safepoint epoch before freeing them. This removes the immediate resize free
 hazard for future acquire-load readers. Hash-chain walks in the C runtime and
 serialization paths now use acquire loads, and collision inserts initialize a
 stable free node before release-publishing it through the anchor's `next` link;
-legacy Brent node relocation has been removed. These steps do not replace the
-legacy resize algorithm with the planned lock-free `NHdr` generation protocol
-yet.
+legacy Brent node relocation has been removed. The legacy `GCtab.node` pointer
+itself is now release-published after vector initialization and acquire-loaded
+by C-side table, GC, serialization, bytecode-writer, parser, and recorder
+readers. These steps do not replace the legacy resize algorithm with the
+planned lock-free `NHdr` generation protocol yet.
 ### 6.3.6 next/pairs (lj_tab_next)
 Iterate the *gen snapshot* captured at first call: store the NH pointer in
 the iterator control slot? Lua's `next(t,k)` is stateless — DECIDED:

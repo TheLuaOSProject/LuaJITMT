@@ -59,6 +59,7 @@ LJLIB_CF(table_maxn)
   GCtab *t = lj_lib_checktab(L, 1);
   TValue *array = tvref(t->array);
   Node *node;
+  MSize hmask;
   lua_Number m = 0;
   ptrdiff_t i;
   for (i = (ptrdiff_t)t->asize - 1; i >= 0; i--)
@@ -66,8 +67,9 @@ LJLIB_CF(table_maxn)
       m = (lua_Number)(int32_t)i;
       break;
     }
-  node = noderef(t->node);
-  for (i = (ptrdiff_t)t->hmask; i >= 0; i--)
+  node = lj_tab_node_acq(t);
+  hmask = t->hmask;
+  for (i = (ptrdiff_t)hmask; i >= 0; i--)
     if (!tvisnil(&node[i].val) && tvisnumber(&node[i].key)) {
       lua_Number n = numberVnum(&node[i].key);
       if (n > m) m = n;

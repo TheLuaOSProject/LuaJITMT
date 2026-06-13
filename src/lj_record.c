@@ -1360,7 +1360,7 @@ static void rec_idx_bump(jit_State *J, RecordIndex *ix)
       /* Grow template table, but preserve keys with nil values. */
       if ((tb->asize > tpl->asize && (1u << nhbits)-1 == tpl->hmask) ||
 	  (tb->asize == tpl->asize && (1u << nhbits)-1 > tpl->hmask)) {
-	Node *node = noderef(tpl->node);
+	Node *node = lj_tab_node_acq(tpl);
 	uint32_t i, hmask = tpl->hmask, asize;
 	TValue *array;
 	for (i = 0; i <= hmask; i++) {
@@ -1372,7 +1372,7 @@ static void rec_idx_bump(jit_State *J, RecordIndex *ix)
 	  if (tvisnil(o)) settabV(J->L, o, tpl);
 	}
 	lj_tab_resize(J->L, tpl, tb->asize, nhbits);
-	node = noderef(tpl->node);
+	node = lj_tab_node_acq(tpl);
 	hmask = tpl->hmask;
 	for (i = 0; i <= hmask; i++) {
 	  /* This is safe, since template tables only hold immutable values. */
@@ -1492,7 +1492,8 @@ static TRef rec_idx_key(jit_State *J, RecordIndex *ix, IRRef *rbref,
     key = emitir(IRTN(IR_CONV), key, IRCONV_NUM_INT);
   if (tref_isk(key)) {
     /* Optimize lookup of constant hash keys. */
-    GCSize hslot = (GCSize)((char *)ix->oldv-(char *)&noderef(t->node)[0].val);
+    GCSize hslot = (GCSize)((char *)ix->oldv -
+			    (char *)&lj_tab_node_acq(t)[0].val);
     if (hslot <= t->hmask*(GCSize)sizeof(Node) &&
 	hslot <= 65535*(GCSize)sizeof(Node)) {
       TRef node, kslot, hm;
@@ -1696,10 +1697,14 @@ static IRType rec_next_types(GCtab *t, uint32_t idx)
       return (LJ_DUALNUM ? IRT_INT : IRT_NUM) + (itype2irt(a) << 8);
   }
   idx -= t->asize;
-  for (; idx <= t->hmask; idx++) {
-    Node *n = &noderef(t->node)[idx];
-    if (!tvisnil(&n->val))
-      return itype2irt(&n->key) + (itype2irt(&n->val) << 8);
+  {
+    Node *node = lj_tab_node_acq(t);
+    uint32_t hmask = t->hmask;
+    for (; idx <= hmask; idx++) {
+      Node *n = &node[idx];
+      if (!tvisnil(&n->val))
+	return itype2irt(&n->key) + (itype2irt(&n->val) << 8);
+    }
   }
   return IRT_NIL + (IRT_NIL << 8);
 }

@@ -730,7 +730,7 @@ static int gc2_traverse_tab(global_State *g, GCtab *t)
   if (t->asize > 0)
     lj_gc2_markmem(g, tvref(t->array));
   if (t->hmask > 0)
-    lj_gc2_markmem(g, noderef(t->node));
+    lj_gc2_markmem(g, lj_tab_node_acq(t));
   if (mt)
     gc2_markobj_worker(g, obj2gco(mt));
   mode = lj_meta_fastg(g, mt, MM_mode);
@@ -754,7 +754,7 @@ static int gc2_traverse_tab(global_State *g, GCtab *t)
       gc2_mark_tv_worker(g, arrayslot(t, i));
   }
   if (t->hmask > 0) {
-    Node *node = noderef(t->node);
+    Node *node = lj_tab_node_acq(t);
     MSize i, hmask = t->hmask;
     for (i = 0; i <= hmask; i++) {
       Node *n = &node[i];
