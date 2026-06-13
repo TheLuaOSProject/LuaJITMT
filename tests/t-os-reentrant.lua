@@ -23,14 +23,20 @@ local function check_tmpname()
   assert(ok, err)
 end
 
+local workers = {}
+
 for id = 1, nthreads do
-  local worker = th.spawn(function(worker_id, n)
+  workers[id] = th.spawn(function(worker_id, n)
     for i = 1, n do
       check_date(worker_id, i)
       check_tmpname()
     end
     return worker_id, n
   end, id, iters)
+end
+
+for id = 1, nthreads do
+  local worker = workers[id]
   local ok, worker_id, n = worker:join()
   assert(ok == true)
   assert(worker_id == id)

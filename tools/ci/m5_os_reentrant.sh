@@ -29,6 +29,8 @@ if ! awk '
   exit 1
 fi
 
-"$ROOT/src/luajit" -joff "$ROOT/tests/t-os-reentrant.lua"
+LJ_M5_OS_THREADS="${LJ_M5_OS_THREADS:-8}" \
+LJ_M5_OS_ITERS="${LJ_M5_OS_ITERS:-200}" \
+  "$ROOT/src/luajit" -joff "$ROOT/tests/t-os-reentrant.lua"
 
 echo "M5 OS reentrant tests passed"
