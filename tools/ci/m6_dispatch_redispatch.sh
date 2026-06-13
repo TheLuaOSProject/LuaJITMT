@@ -28,4 +28,33 @@ do
   fi
 done
 
+for needle in \
+  'load_G TMPR' \
+  'mov dword GL:TMPR->vmstate' \
+  'load_J CARG1' \
+  'Secondary TGs interpret until RID_DISPATCH is local'
+do
+  if ! rg -F -q "$needle" "$ROOT/src/vm_x64.dasc"; then
+    echo "guardrail: missing x64 dispatch-localization marker: $needle" >&2
+    exit 1
+  fi
+done
+
+if rg -n 'DISPATCH_J\(' "$ROOT/src/vm_x64.dasc" | rg -v '#define DISPATCH_J'; then
+  echo "guardrail: x64 VM must load jit_State through tg->gl->jitp" >&2
+  exit 1
+fi
+
+if rg -n 'TG_DISP2[JG]' "$ROOT/src/vm_x64.dasc" |
+    rg -v '#define DISPATCH_[GJ]|TGPOLL'; then
+  echo "guardrail: x64 VM must not derive g/J from fixed TG dispatch offsets" >&2
+  exit 1
+fi
+
+if rg -n 'DISPATCH_GL\(' "$ROOT/src/vm_x64.dasc" |
+    rg -v '#define DISPATCH_GL|TGPOLL'; then
+  echo "guardrail: x64 VM DISPATCH_GL use is limited to transitional TGPOLL" >&2
+  exit 1
+fi
+
 echo "M6 dispatch redispatch guard passed"

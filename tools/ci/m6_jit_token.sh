@@ -21,7 +21,7 @@ for needle in \
   'int jit_exitcode' \
   'G2TG(g)->jit_exitcode' \
   'tg->jit_exitcode' \
-  'Secondary TGs interpret until DISPATCH is local' \
+  'Secondary TGs interpret until RID_DISPATCH is local' \
   'J->L = L;' \
   'lj_jit_token_held(J)' \
   'lj_jit_token_release(J)'

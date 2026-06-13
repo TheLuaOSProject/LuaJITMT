@@ -92,6 +92,7 @@
 |.type PROTO,		GCproto
 |.type UPVAL,		GCupval
 |.type NODE,		Node
+|.type TG,		TGState
 |.type NARGS,		int
 |.type TRACE,		GCtrace
 |.type SBUF,		SBuf
@@ -319,10 +320,19 @@
 |.define PC_RD, word [PC-2]
 |
 |// Assumes DISPATCH is relative to TGState.dispatch.
+#define GL_OFS(field)		((int)offsetof(global_State, field))
+#define J_OFS(field)		((int)offsetof(jit_State, field))
 #define DISPATCH_GL(field)	(TG_DISP2G + (int)offsetof(global_State, field))
 #define DISPATCH_J(field)	(TG_DISP2J + (int)offsetof(jit_State, field))
 |.define TGPOLL, dword [DISPATCH+DISPATCH_GL(gc2.hs_pending)]
 |.define TGMARK, dword [DISPATCH+DISPATCH_TG(mark_active)]
+|.macro load_G, reg
+|  mov GL:reg, [DISPATCH+DISPATCH_TG(gl)]
+|.endmacro
+|.macro load_J, reg
+|  load_G reg
+|  mov reg, [reg+GL_OFS(jitp)]
+|.endmacro
 |
 |.macro branchPC, reg
 |  lea PC, [PC+reg*4-BCBIAS_J*4]
@@ -349,7 +359,8 @@
 |
 |// Set current VM state.
 |.macro set_vmstate, st
-|  mov dword [DISPATCH+DISPATCH_GL(vmstate)], ~LJ_VMST_..st
+|  load_G TMPR
+|  mov dword GL:TMPR->vmstate, ~LJ_VMST_..st
 |.endmacro
 |
 |.macro fpop1; fstp st1; .endmacro
@@ -379,8 +390,9 @@
 |// Move table write barrier back. Overwrites reg.
 |.macro barrierback, tab, reg
 |  and byte tab->marked, (uint8_t)~LJ_GC_BLACK	// black2gray(tab)
-|  mov reg, [DISPATCH+DISPATCH_GL(gc.grayagain)]
-|  mov [DISPATCH+DISPATCH_GL(gc.grayagain)], tab
+|  load_G ITYPE
+|  mov reg, GL:ITYPE->gc.grayagain
+|  mov GL:ITYPE->gc.grayagain, tab
 |  mov tab->gclist, reg
 |.endmacro
 |
@@ -408,7 +420,7 @@ static void build_subroutines(BuildCtx *ctx)
   |.else
   |  xchg CARG2, RB			// Save BASE (CARG2 == BASE).
   |.endif
-  |  lea GL:CARG1, [DISPATCH+TG_DISP2G]
+  |  load_G CARG1
   |  call extern lj_gc2_barrier_tab_g	// (global_State *g, GCtab *t)
   |  mov BASE, RB			// Restore BASE.
   |  ins_next
@@ -416,7 +428,7 @@ static void build_subroutines(BuildCtx *ctx)
   |->vm_gc2_barriertv:
   |  mov RB, BASE			// Save BASE.
   |  mov CARG2, RC
-  |  lea GL:CARG1, [DISPATCH+TG_DISP2G]
+  |  load_G CARG1
   |  call extern lj_gc2_barrier_tv_g	// (global_State *g, cTValue *tv)
   |  mov BASE, RB			// Restore BASE.
   |  ins_next
@@ -1242,8 +1254,9 @@ static void build_subroutines(BuildCtx *ctx)
   |
   |// Inlined GC threshold check. Caveat: uses label 1.
   |.macro ffgccheck
-  |  mov RB, [DISPATCH+DISPATCH_GL(gc.total)]
-  |  cmp RB, [DISPATCH+DISPATCH_GL(gc.threshold)]
+  |  load_G ITYPE
+  |  mov RB, GL:ITYPE->gc.total
+  |  cmp RB, GL:ITYPE->gc.threshold
   |  jb >1
   |  call ->fff_gcstep
   |1:
@@ -1303,7 +1316,8 @@ static void build_subroutines(BuildCtx *ctx)
   |  jz ->fff_res1
   |  settp TAB:RC, TAB:RB, LJ_TTAB
   |  mov [BASE-16], TAB:RC		// Store metatable as default result.
-  |  mov STR:RC, [DISPATCH+DISPATCH_GL(gcroot)+8*(GCROOT_MMNAME+MM_metatable)]
+  |  load_G TMPR
+  |  mov STR:RC, [TMPR+GL_OFS(gcroot)+8*(GCROOT_MMNAME+MM_metatable)]
   |  mov r8, TAB:RB->node
   |  mov RAd, dword [r8-8]
   |  and RAd, STR:RC->sid
@@ -1330,7 +1344,8 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov ITYPEd, LJ_TISNUM
   |7:
   |  not ITYPEd
-  |  mov TAB:RB, [DISPATCH+ITYPE*8+DISPATCH_GL(gcroot[GCROOT_BASEMT])]
+  |  load_G TMPR
+  |  mov TAB:RB, [TMPR+ITYPE*8+GL_OFS(gcroot[GCROOT_BASEMT])]
   |  jmp <2
   |
   |.ffunc_2 setmetatable
@@ -1399,7 +1414,8 @@ static void build_subroutines(BuildCtx *ctx)
   |  jmp ->fff_res1
   |3:  // Handle numbers inline, unless a number base metatable is present.
   |  cmp ITYPEd, LJ_TISNUM;  ja ->fff_fallback_1
-  |  cmp aword [DISPATCH+DISPATCH_GL(gcroot[GCROOT_BASEMT_NUM])], 0
+  |  load_G TMPR
+  |  cmp aword [TMPR+GL_OFS(gcroot[GCROOT_BASEMT_NUM])], 0
   |  jne ->fff_fallback
   |  ffgccheck				// Caveat: uses label 1.
   |  mov L:RB, SAVE_L
@@ -1550,7 +1566,8 @@ static void build_subroutines(BuildCtx *ctx)
   |  sub NARGS:RDd, 1
   |  mov PCd, 16+FRAME_PCALL
   |1:
-  |  movzx RBd, byte [DISPATCH+DISPATCH_GL(hookmask)]
+  |  load_G RB
+  |  movzx RBd, byte GL:RB->hookmask
   |  shr RB, HOOK_ACTIVE_SHIFT
   |  and RB, 1
   |  add PC, RB				// Remember active hook before pcall.
@@ -2322,7 +2339,8 @@ static void build_subroutines(BuildCtx *ctx)
   |->vm_record:				// Dispatch target for recording phase.
   |.if JIT
   |  endbr
-  |  movzx RDd, byte [DISPATCH+DISPATCH_GL(hookmask)]
+  |  load_G RD
+  |  movzx RDd, byte GL:RD->hookmask
   |  test RDL, HOOK_VMEVENT		// No recording while in vmevent.
   |  jnz >5
   |  // Decrement the hookcount for consistency, but always do the call.
@@ -2330,26 +2348,30 @@ static void build_subroutines(BuildCtx *ctx)
   |  jnz >1
   |  test RDL, LUA_MASKLINE|LUA_MASKCOUNT
   |  jz >1
-  |  dec dword [DISPATCH+DISPATCH_GL(hookcount)]
+  |  load_G ITYPE
+  |  dec dword GL:ITYPE->hookcount
   |  jmp >1
   |.endif
   |
   |->vm_rethook:			// Dispatch target for return hooks.
   |  endbr
-  |  movzx RDd, byte [DISPATCH+DISPATCH_GL(hookmask)]
+  |  load_G RD
+  |  movzx RDd, byte GL:RD->hookmask
   |  test RDL, HOOK_ACTIVE		// Hook already active?
   |  jnz >5
   |  jmp >1
   |
   |->vm_inshook:			// Dispatch target for instr/line hooks.
   |  endbr
-  |  movzx RDd, byte [DISPATCH+DISPATCH_GL(hookmask)]
+  |  load_G RD
+  |  movzx RDd, byte GL:RD->hookmask
   |  test RDL, HOOK_ACTIVE		// Hook already active?
   |  jnz >5
   |
   |  test RDL, LUA_MASKLINE|LUA_MASKCOUNT
   |  jz >5
-  |  dec dword [DISPATCH+DISPATCH_GL(hookcount)]
+  |  load_G ITYPE
+  |  dec dword GL:ITYPE->hookcount
   |  jz >1
   |  test RDL, LUA_MASKLINE
   |  jz >5
@@ -2388,7 +2410,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov L:RB->top, RD
   |  mov CARG2, PC
   |  mov CARG3, L:RB
-  |  lea CARG1, [DISPATCH+TG_DISP2J]
+  |  load_J CARG1
   |  mov SAVE_PC, PC
   |  call extern lj_trace_hot		// (jit_State *J, const BCIns *pc, lua_State *L)
   |  jmp <3
@@ -2471,7 +2493,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov L:RB->base, BASE
   |  mov CARG2, PC
   |  mov CARG3, L:RB
-  |  lea CARG1, [DISPATCH+TG_DISP2J]
+  |  load_J CARG1
   |  call extern lj_dispatch_stitch	// (jit_State *J, const BCIns *pc, lua_State *L, TraceNo traceno)
   |  mov BASE, L:RB->base
   |  jmp ->cont_nop
@@ -2513,11 +2535,13 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov RCH, byte [rbp-16]
   |  mov [rbp-8], r15; mov [rbp-16], r14
   |  // DISPATCH is preserved on-trace in LJ_GC64 mode.
-  |  mov RAd, [DISPATCH+DISPATCH_GL(vmstate)]	// Get trace number.
+  |  load_G TMPR
+  |  mov RAd, dword GL:TMPR->vmstate	// Get trace number.
   |  set_vmstate EXIT
   |.if X64WIN
-  |  mov [DISPATCH+DISPATCH_J(exitno)], RCd
-  |  mov [DISPATCH+DISPATCH_J(parent)], RAd
+  |  load_J TMPR
+  |  mov dword [TMPR+J_OFS(exitno)], RCd
+  |  mov dword [TMPR+J_OFS(parent)], RAd
   |.endif
   |.if X64WIN
   |  sub rsp, 16*8+4*8			// Room for SSE regs + save area.
@@ -2537,7 +2561,8 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov L:RB, [DISPATCH+DISPATCH_TG(cur_L)]
   |  mov BASE, [DISPATCH+DISPATCH_TG(jit_base)]
   |.if X64WIN
-  |  mov aword [DISPATCH+DISPATCH_J(L)], L:RB
+  |  load_J TMPR
+  |  mov aword [TMPR+J_OFS(L)], L:RB
   |.endif
   |  mov L:RB->base, BASE
   |.if X64WIN
@@ -2546,14 +2571,14 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov CARG2, rsp
   |.endif
   |.if X64WIN
-  |  lea CARG1, [DISPATCH+TG_DISP2J]
+  |  load_J CARG1
   |  mov qword [DISPATCH+DISPATCH_TG(jit_base)], 0
   |  call extern lj_trace_exit		// (jit_State *J, ExitState *ex)
   |.else
   |  mov CARG3, L:RB
   |  mov CARG5d, RCd
   |  mov CARG4d, RAd
-  |  lea CARG1, [DISPATCH+TG_DISP2J]
+  |  load_J CARG1
   |  mov qword [DISPATCH+DISPATCH_TG(jit_base)], 0
   |  call extern lj_trace_exit		// (jit_State *J, ExitState *ex, lua_State *L, TraceNo parent, ExitNo exitno)
   |.endif
@@ -2649,7 +2674,8 @@ static void build_subroutines(BuildCtx *ctx)
   |  jmp <2
   |
   |5:  // Dispatch to static entry of original ins replaced by BC_JLOOP.
-  |  mov RA, [DISPATCH+DISPATCH_J(trace)]
+  |  load_J RA
+  |  mov RA, [RA+J_OFS(trace)]
   |  mov TRACE:RA, [RA+RD*8]
   |  mov RCd, TRACE:RA->startins
   |  movzx RAd, RCH
@@ -2934,7 +2960,8 @@ static void build_subroutines(BuildCtx *ctx)
   |->cont_ffi_callback:			// Return from FFI callback.
   |.if FFI
   |  mov L:RA, SAVE_L
-  |  mov CTSTATE, [DISPATCH+DISPATCH_GL(ctype_state)]
+  |  load_G TMPR
+  |  mov CTSTATE, GL:TMPR->ctype_state
   |  mov aword CTSTATE->L, L:RA
   |  mov L:RA->base, BASE
   |  mov L:RA->top, RB
@@ -3736,7 +3763,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |.else
     |  xchg CARG2, RB			// Save BASE (CARG2 == BASE).
     |.endif
-    |  lea GL:CARG1, [DISPATCH+TG_DISP2G]
+    |  load_G CARG1
     |  call extern lj_gc_pubuv	// (global_State *g, TValue *tv)
     |  mov BASE, RB			// Restore BASE.
     |  jmp <1
@@ -3783,7 +3810,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |.else
     |  xchg CARG2, RB			// Save BASE (CARG2 == BASE).
     |.endif
-    |  lea GL:CARG1, [DISPATCH+TG_DISP2G]
+    |  load_G CARG1
     |  call extern lj_gc_pubuv	// (global_State *g, TValue *tv)
     |  mov BASE, RB			// Restore BASE.
     |  jmp <1
@@ -3813,7 +3840,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  // Crossed a write barrier. Move the barrier forward.
     |  mov RB, BASE			// Save BASE (CARG2 == BASE).
     |  mov CARG2, RD
-    |  lea GL:CARG1, [DISPATCH+TG_DISP2G]
+    |  load_G CARG1
     |  call extern lj_gc_pubuv	// (global_State *g, TValue *tv)
     |  mov BASE, RB			// Restore BASE.
     |  jmp <1
@@ -3879,8 +3906,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ins_AD	// RA = dst, RD = hbits|asize
     |  mov L:RB, SAVE_L
     |  mov L:RB->base, BASE
-    |  mov RA, [DISPATCH+DISPATCH_GL(gc.total)]
-    |  cmp RA, [DISPATCH+DISPATCH_GL(gc.threshold)]
+    |  load_G ITYPE
+    |  mov RA, GL:ITYPE->gc.total
+    |  cmp RA, GL:ITYPE->gc.threshold
     |  mov SAVE_PC, PC
     |  jae >5
     |1:
@@ -3911,9 +3939,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
   case BC_TDUP:
     |  ins_AND	// RA = dst, RD = table const (~) (holding template table)
     |  mov L:RB, SAVE_L
-    |  mov RA, [DISPATCH+DISPATCH_GL(gc.total)]
+    |  load_G ITYPE
+    |  mov RA, GL:ITYPE->gc.total
     |  mov SAVE_PC, PC
-    |  cmp RA, [DISPATCH+DISPATCH_GL(gc.threshold)]
+    |  cmp RA, GL:ITYPE->gc.threshold
     |  mov L:RB->base, BASE
     |  jae >3
     |2:
@@ -4469,7 +4498,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  jmp <1
     |.if JIT
     |6:  // Unpatch JLOOP.
-    |  mov RA, [DISPATCH+DISPATCH_J(trace)]
+    |  load_J RA
+    |  mov RA, [RA+J_OFS(trace)]
     |  movzx RCd, word [PC+2]
     |  mov TRACE:RA, [RA+RC*8]
     |  mov eax, TRACE:RA->startins
@@ -4855,9 +4885,11 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ins_AD	// RA = base (ignored), RD = traceno
     |  mov L:RB, SAVE_L
     |  mov RA, L:RB->tg_hint
-    |  cmp RA, [DISPATCH+DISPATCH_GL(main_tg)]
-    |  jne >5				// Secondary TGs interpret until DISPATCH is local.
-    |  mov RA, [DISPATCH+DISPATCH_J(trace)]
+    |  load_G TMPR
+    |  cmp RA, GL:TMPR->main_tg
+    |  jne >5				// Secondary TGs interpret until RID_DISPATCH is local.
+    |  load_J RA
+    |  mov RA, [RA+J_OFS(trace)]
     |  mov TRACE:RD, [RA+RD*8]
     |  mov RD, TRACE:RD->mcode
     |  mov [DISPATCH+DISPATCH_TG(jit_base)], BASE
@@ -4888,7 +4920,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  jmp RD
     |
     |5:  // Dispatch to static entry of original ins replaced by BC_JLOOP.
-    |  mov RA, [DISPATCH+DISPATCH_J(trace)]
+    |  load_J RA
+    |  mov RA, [RA+J_OFS(trace)]
     |  mov TRACE:RD, [RA+RD*8]
     |  mov RCd, TRACE:RD->startins
     |  movzx RAd, RCH
@@ -5046,7 +5079,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
       |  call KBASE			// (lua_State *L)
     } else {
       |  // (lua_State *L, lua_CFunction f)
-      |  call aword [DISPATCH+DISPATCH_GL(wrapf)]
+      |  load_G TMPR
+      |  call aword GL:TMPR->wrapf
     }
     |  // nresults returned in eax (RD).
     |  mov BASE, L:RB->base
