@@ -1098,6 +1098,7 @@ static void gc_finalize(lua_State *L)
   setgcref(*lj_obj_gcwref(obj2gco(mainthread(g))), o);
   makewhite(g, o);
   lj_gc_arena_markobj(g, o);
+  lj_gc2_finreg_udata_set(g, o, 0);
   /* Resolve the __gc metamethod. */
   mo = lj_meta_fasttv(g, tabref_acq(gco2ud(o)->metatable), MM_gc, &motv);
   if (mo)

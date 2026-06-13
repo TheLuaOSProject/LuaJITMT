@@ -397,8 +397,10 @@ queued finalizable objects when reached during a GC2 MARK/WEAK phase, but
 legacy still owns finalizer table membership, finalizer execution, and drain
 ordering. Userdata
 FINREG telemetry also mirrors C/API `__gc` metatable assignment/clear events
-and counts the legacy `mmudata` queue point in `lj_gc_separateudata()`, while
-the linked queue itself remains legacy-owned.
+and counts the legacy `mmudata` queue point in `lj_gc_separateudata()`. The
+original bridge left userdata finalizer membership and execution on the legacy
+path; it now also mirrors the legacy userdata finalizer run-once clear at
+`gc_finalize()`, while the linked queue itself remains legacy-owned.
 The first
 weak-write bridge is present for new weak keys: `lj_tab_newkey()` calls
 `lj_gc2_barrier_weak_key()` during `P_WEAK`, marking a collectable inserted key

@@ -1654,6 +1654,7 @@ static void test_finreg_userdata_telemetry(lua_State *L, global_State *g)
   lua_gc(L, LUA_GCCOLLECT, 0);
   lua_gc(L, LUA_GCSTOP, 0);
   assert(la_load64_acq(&g->gc2.finreg_udata_queued) == queued0 + 1u);
+  assert(la_load64_acq(&g->gc2.finreg_udata_clears) == clears0 + 2u);
 }
 
 static void test_finreg_userdata_queue_mark(lua_State *L, global_State *g,
