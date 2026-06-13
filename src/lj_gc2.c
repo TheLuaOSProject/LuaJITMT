@@ -54,6 +54,7 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.assist_runs, 0);
   la_store64_rlx(&g->gc2.assist_grey_drained, 0);
   la_store64_rlx(&g->gc2.assist_ssb_converted, 0);
+  la_store64_rlx(&g->gc2.jit_hard_checks, 0);
   g->gc2.assist_active = 0;
   g->gc2.grey_stack = NULL;
   g->gc2.grey_capacity = 0;

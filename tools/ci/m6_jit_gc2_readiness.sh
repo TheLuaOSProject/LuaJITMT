@@ -4,16 +4,21 @@ set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 DUMP=${TMPDIR:-/tmp}/lj_t-jit-gc2-readiness.dump
+CC=${CC:-cc}
+CFLAGS=${CFLAGS:-"-std=gnu99 -O2 -Wall -Wextra -Werror -mcx16"}
+OUT=${TMPDIR:-/tmp}/lj_t-gc2-jit-hard-check
 
 make -C "$ROOT/src" >/dev/null
 
 for needle in \
+  'uint64_t jit_hard_checks' \
   'static void gc2_maybe_trigger_cycle(global_State *g)' \
   'lj_gc_threshold_load(g) == LJ_MAX_MEM' \
   'lj_gc_threshold_store(g, g->gc.total)' \
   'lj_gc2_assist(global_State *g, TGState *tg)' \
   'lj_gc2_assist(g, L2TG(L));  /* 05 section 5.11 trace-side assist bridge. */' \
   'legacy_step = g->gc.total >= lj_gc_threshold_load(g)' \
+  'la_add64_rlx(&g->gc2.jit_hard_checks' \
   'la_cas32(&g->gc2.assist_active' \
   'gc2_drain_active_ssb_to_grey(global_State *g, TGState *tg' \
   'gc2_drain_published_ssb_to_grey(global_State *g' \
@@ -28,13 +33,18 @@ for needle in \
   'asm_gc_check'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_gc2.c" "$ROOT/src/lj_gc2.h" \
-      "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc.h" "$ROOT/src/lj_ir.h" \
+      "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc.h" "$ROOT/src/lj_obj.h" \
+      "$ROOT/src/lj_ir.h" \
       "$ROOT/src/lj_ircall.h" "$ROOT/src/lj_snap.c" \
       "$ROOT/src/lj_asm.c" "$ROOT/src/lj_asm_x86.h"; then
     echo "guardrail: missing GC2/JIT pacing readiness marker: $needle" >&2
     exit 1
   fi
 done
+
+"$CC" $CFLAGS -I"$ROOT/src" "$ROOT/tests/t-gc2-jit-hard-check.c" \
+  "$ROOT/src/libluajit.a" -lm -ldl -pthread -o "$OUT"
+timeout 20s "$OUT"
 
 LUA_PATH="$ROOT/src/?.lua;$ROOT/src/jit/?.lua;;" \
   timeout 20s "$ROOT/src/luajit" -jdump=ir -e \

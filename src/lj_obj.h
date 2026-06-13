@@ -847,6 +847,7 @@ typedef struct GC2State {
   uint64_t assist_runs;  /* Mutator assist attempts past hard limit. */
   uint64_t assist_grey_drained;  /* Grey objects traced by assists. */
   uint64_t assist_ssb_converted;  /* SSB entries converted by assists. */
+  uint64_t jit_hard_checks;  /* Trace GC checks entered past hard limit. */
   uint32_t gcpause_pct;	/* GC2 pacing percentage. */
   uint32_t assist_shift;  /* Bounded assist work is 1 << shift. */
   uint32_t assist_active;  /* Nonblocking owner token for mark assists. */

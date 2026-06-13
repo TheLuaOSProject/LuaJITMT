@@ -40,6 +40,7 @@ int main(void)
   assert(la_load64_acq(&g->gc2.assist_runs) == 0);
   assert(la_load64_acq(&g->gc2.assist_grey_drained) == 0);
   assert(la_load64_acq(&g->gc2.assist_ssb_converted) == 0);
+  assert(la_load64_acq(&g->gc2.jit_hard_checks) == 0);
   assert(la_load32_acq(&g->gc2.assist_active) == 0);
 
   (void)lua_gc(L, LUA_GCSETPAUSE, 150);

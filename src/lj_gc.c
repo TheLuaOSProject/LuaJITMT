@@ -1274,10 +1274,14 @@ void LJ_FASTCALL lj_gc_step_fixtop(lua_State *L)
 int LJ_FASTCALL lj_gc_step_jit(global_State *g, MSize steps)
 {
   lua_State *L = lj_tg_cur_L(g);
-  int legacy_step;
+  int legacy_step, hard_step;
   L->base = lj_tg_jit_base(g);
   L->top = curr_topL(L);
   legacy_step = g->gc.total >= lj_gc_threshold_load(g);
+  hard_step = la_load64_acq(&g->gc2.alloc_since_trigger) >
+	      la_load64_acq(&g->gc2.hard_bytes);
+  if (hard_step)
+    la_add64_rlx(&g->gc2.jit_hard_checks, 1);
   lj_gc2_assist(g, L2TG(L));  /* 05 section 5.11 trace-side assist bridge. */
   if (legacy_step) {
     while (steps-- > 0 && lj_gc_step(L) == 0)
