@@ -219,7 +219,7 @@ static char *serialize_put(char *w, SBufExt *sbx, cTValue *o)
 	  w = serialize_wu124(w, idx);
 	  break;
 	}
-      } while ((n = nextnode(n)));
+      } while ((n = lj_tab_nextnode_acq(n)));
     }
     /* Write number of array slots and hash slots. */
     w = serialize_more(w, sbx, 1+2*5);
@@ -249,7 +249,7 @@ static char *serialize_put(char *w, SBufExt *sbx, cTValue *o)
 		  w = serialize_wu124(w, idx);
 		  break;
 		}
-		n = nextnode(n);
+		n = lj_tab_nextnode_acq(n);
 		if (!n) {
 		  MSize len = str->len;
 		  w = serialize_more(w, sbx, 5+len);

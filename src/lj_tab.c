@@ -91,7 +91,7 @@ static LJ_AINLINE void clearhpart(GCtab *t)
   lj_assertX(t->hmask != 0, "empty hash part");
   for (i = 0; i <= hmask; i++) {
     Node *n = &node[i];
-    setmref(n->next, NULL);
+    lj_tab_nextnode_set(n, NULL);
     setnilV(&n->key);
     setnilV(&n->val);
   }
@@ -220,11 +220,11 @@ GCtab * LJ_FASTCALL lj_tab_dup(lua_State *L, const GCtab *kt)
     for (i = 0; i <= hmask; i++) {
       Node *kn = &knode[i];
       Node *n = &node[i];
-      Node *next = nextnode(kn);
+      Node *next = lj_tab_nextnode_acq(kn);
       /* Don't use copyTV here, since it asserts on a copy of a dead key. */
       n->val = kn->val; n->key = kn->key;
       if (tvistab(&n->val)) setnilV(&n->val); /* Replace nil value marker. */
-      setmref(n->next, next == NULL? next : (Node *)((char *)next + d));
+      lj_tab_nextnode_set(n, next == NULL ? next : (Node *)((char *)next + d));
     }
   }
   return t;
@@ -461,7 +461,7 @@ cTValue * LJ_FASTCALL lj_tab_getinth(GCtab *t, int32_t key)
   do {
     if (tvisnum(&n->key) && n->key.n == k.n)
       return &n->val;
-  } while ((n = nextnode(n)));
+  } while ((n = lj_tab_nextnode_acq(n)));
   return NULL;
 }
 
@@ -471,7 +471,7 @@ cTValue *lj_tab_getstr(GCtab *t, const GCstr *key)
   do {
     if (tvisstr(&n->key) && strV(&n->key) == key)
       return &n->val;
-  } while ((n = nextnode(n)));
+  } while ((n = lj_tab_nextnode_acq(n)));
   return NULL;
 }
 
@@ -502,7 +502,7 @@ cTValue *lj_tab_get(lua_State *L, GCtab *t, cTValue *key)
     do {
       if (lj_obj_equal(&n->key, key))
 	return &n->val;
-    } while ((n = nextnode(n)));
+    } while ((n = lj_tab_nextnode_acq(n)));
   }
   return niltv(L);
 }
@@ -534,22 +534,22 @@ TValue *lj_tab_newkey(lua_State *L, GCtab *t, cTValue *key)
     lj_assertL(freenode != &G(L)->nilnode, "store to fallback hash");
     collide = hashkey(t, &n->key);
     if (collide != n) {  /* Colliding node not the main node? */
-      while (noderef(collide->next) != n)  /* Find predecessor. */
-	collide = nextnode(collide);
-      setmref(collide->next, freenode);  /* Relink chain. */
+      while (lj_tab_nextnode_acq(collide) != n)  /* Find predecessor. */
+	collide = lj_tab_nextnode_acq(collide);
       /* Copy colliding node into free node and free main node. */
       freenode->val = n->val;
       freenode->key = n->key;
-      freenode->next = n->next;
-      setmref(n->next, NULL);
+      lj_tab_nextnode_set(freenode, lj_tab_nextnode_acq(n));
+      lj_tab_nextnode_rel(collide, freenode);  /* Relink chain. */
+      lj_tab_nextnode_rel(n, NULL);
       setnilV(&n->val);
       /* Rechain pseudo-resurrected string keys with colliding hashes. */
-      while (nextnode(freenode)) {
-	Node *nn = nextnode(freenode);
+      while (lj_tab_nextnode_acq(freenode)) {
+	Node *nn = lj_tab_nextnode_acq(freenode);
 	if (!tvisnil(&nn->val) && hashkey(t, &nn->key) == n) {
-	  freenode->next = nn->next;
-	  nn->next = n->next;
-	  setmref(n->next, nn);
+	  lj_tab_nextnode_rel(freenode, lj_tab_nextnode_acq(nn));
+	  lj_tab_nextnode_set(nn, lj_tab_nextnode_acq(n));
+	  lj_tab_nextnode_rel(n, nn);
 	  /*
 	  ** Rechaining a resurrected string key creates a new dilemma:
 	  ** Another string key may have originally been resurrected via
@@ -558,13 +558,13 @@ TValue *lj_tab_newkey(lua_State *L, GCtab *t, cTValue *key)
 	  ** It's not feasible to check for all previous nodes, so rechain
 	  ** any string key that's currently in a non-main positions.
 	  */
-	  while ((nn = nextnode(freenode))) {
+	  while ((nn = lj_tab_nextnode_acq(freenode))) {
 	    if (!tvisnil(&nn->val)) {
 	      Node *mn = hashkey(t, &nn->key);
 	      if (mn != freenode && mn != nn) {
-		freenode->next = nn->next;
-		nn->next = mn->next;
-		setmref(mn->next, nn);
+		lj_tab_nextnode_rel(freenode, lj_tab_nextnode_acq(nn));
+		lj_tab_nextnode_set(nn, lj_tab_nextnode_acq(mn));
+		lj_tab_nextnode_rel(mn, nn);
 	      } else {
 		freenode = nn;
 	      }
@@ -578,9 +578,15 @@ TValue *lj_tab_newkey(lua_State *L, GCtab *t, cTValue *key)
 	}
       }
     } else {  /* Otherwise use free node. */
-      setmrefr(freenode->next, n->next);  /* Insert into chain. */
-      setmref(n->next, freenode);
-      n = freenode;
+      /* Insert into chain. */
+      lj_tab_nextnode_set(freenode, lj_tab_nextnode_acq(n));
+      copyTVrel(L, &freenode->key, key);
+      if (LJ_UNLIKELY(tvismzero(&freenode->key)))
+	freenode->key.u64 = 0;
+      lj_gc_pubtab(L, t);
+      lj_assertL(tvisnil(&freenode->val), "new hash slot is not empty");
+      lj_tab_nextnode_rel(n, freenode);
+      return &freenode->val;
     }
   }
   copyTVrel(L, &n->key, key);
@@ -600,7 +606,7 @@ TValue *lj_tab_setinth(lua_State *L, GCtab *t, int32_t key)
   do {
     if (tvisnum(&n->key) && n->key.n == k.n)
       return &n->val;
-  } while ((n = nextnode(n)));
+  } while ((n = lj_tab_nextnode_acq(n)));
   return lj_tab_newkey(L, t, &k);
 }
 
@@ -611,7 +617,7 @@ TValue *lj_tab_setstr(lua_State *L, GCtab *t, const GCstr *key)
   do {
     if (tvisstr(&n->key) && strV(&n->key) == key)
       return &n->val;
-  } while ((n = nextnode(n)));
+  } while ((n = lj_tab_nextnode_acq(n)));
   setstrV(L, &k, key);
   return lj_tab_newkey(L, t, &k);
 }
@@ -639,7 +645,7 @@ TValue *lj_tab_set(lua_State *L, GCtab *t, cTValue *key)
   do {
     if (lj_obj_equal(&n->key, key))
       return &n->val;
-  } while ((n = nextnode(n)));
+  } while ((n = lj_tab_nextnode_acq(n)));
   return lj_tab_newkey(L, t, key);
 }
 
@@ -673,7 +679,7 @@ uint32_t LJ_FASTCALL lj_tab_keyindex(GCtab *t, cTValue *key)
     do {
       if (lj_obj_equal(&n->key, key))
 	return t->asize + (uint32_t)((n+1) - noderef(t->node));
-    } while ((n = nextnode(n)));
+    } while ((n = lj_tab_nextnode_acq(n)));
     if (key->u32.hi == LJ_KEYINDEX)  /* Despecialized ITERN while running. */
       return key->u32.lo;
     return ~0u;  /* Invalid key to next. */

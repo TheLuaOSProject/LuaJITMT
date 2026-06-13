@@ -558,6 +558,29 @@ typedef struct GCtab {
 #define tabref(r)	((GCtab *)gcref((r)))
 #define noderef(r)	(mref((r), Node))
 #define nextnode(n)	(mref((n)->next, Node))
+
+static LJ_AINLINE Node *lj_tab_nextnode_acq(const Node *n)
+{
+#if LJ_GC64
+  return (Node *)(void *)(uintptr_t)la_load64_acq(&n->next.ptr64);
+#else
+  return (Node *)(void *)(uintptr_t)la_load32_acq(&n->next.ptr32);
+#endif
+}
+
+static LJ_AINLINE void lj_tab_nextnode_set(Node *n, const Node *next)
+{
+  setmref(n->next, next);
+}
+
+static LJ_AINLINE void lj_tab_nextnode_rel(Node *n, const Node *next)
+{
+#if LJ_GC64
+  la_store64_rel(&n->next.ptr64, (uint64_t)(uintptr_t)(const void *)next);
+#else
+  la_store32_rel(&n->next.ptr32, (uint32_t)(uintptr_t)(const void *)next);
+#endif
+}
 #if LJ_GC64
 #define getfreetop(t, n)	(noderef((t)->freetop))
 #define setfreetop(t, n, v)	(setmref((t)->freetop, (v)))
