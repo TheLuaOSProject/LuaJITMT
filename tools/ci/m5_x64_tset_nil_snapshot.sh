@@ -40,6 +40,7 @@ for needle in \
   'jmp ->vmeta_tsets		// M5: no legacy x64 hash-slot store.' \
   'call extern lj_tab_storetv' \
   'call extern lj_tab_storetvn' \
+  'jmp ->vm_gc2_barriertv' \
   'jmp ->vm_gc2_barriertab'
 do
   if ! rg -F -q "$needle" "$ROOT/src/vm_x64.dasc"; then

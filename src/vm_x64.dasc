@@ -4147,7 +4147,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  movzx RBd, PC_RB
     |  mov TAB:RB, [BASE+RB*8]
     |  cleartp TAB:RB
-    |  jmp ->vm_gc2_barriertab
+    |  jmp ->vm_gc2_barriertv
     |8:
     |  ins_next
     |
@@ -4205,7 +4205,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  movzx RBd, PC_RB
     |  mov TAB:RB, [BASE+RB*8]
     |  cleartp TAB:RB
-    |  jmp ->vm_gc2_barriertab
+    |  jmp ->vm_gc2_barriertv
     |8:
     |  ins_next
     |
@@ -4252,7 +4252,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  movzx RBd, PC_RB
     |  mov TAB:RB, [BASE+RB*8]
     |  cleartp TAB:RB
-    |  jmp ->vm_gc2_barriertab
+    |  jmp ->vm_gc2_barriertv
     |8:
     |  ins_next
     |
