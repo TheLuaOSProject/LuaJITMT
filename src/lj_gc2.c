@@ -44,10 +44,10 @@ void lj_gc2_init(global_State *g)
   g->gc2.hs_actions = 0;
   la_store64_rlx(&g->gc2.marks_this_round, 0);
   g->gc2.ssb_head = NULL;
-  g->gc2.ssb_published = 0;
-  g->gc2.ssb_drained = 0;
-  g->gc2.ssb_items_published = 0;
-  g->gc2.ssb_items_drained = 0;
+  la_store32_rlx(&g->gc2.ssb_published, 0);
+  la_store32_rlx(&g->gc2.ssb_drained, 0);
+  la_store64_rlx(&g->gc2.ssb_items_published, 0);
+  la_store64_rlx(&g->gc2.ssb_items_drained, 0);
   g->gc2.alloc_since_trigger = 0;
   g->gc2.trigger_bytes = 0;
   g->gc2.hard_bytes = 0;
@@ -56,8 +56,8 @@ void lj_gc2_init(global_State *g)
   g->gc2.grey_capacity = 0;
   g->gc2.grey_top = 0;
   g->gc2.grey_bottom = 0;
-  g->gc2.grey_pushed = 0;
-  g->gc2.grey_drained = 0;
+  la_store64_rlx(&g->gc2.grey_pushed, 0);
+  la_store64_rlx(&g->gc2.grey_drained, 0);
   g->gc2.tg_list = NULL;
   g->gc2.n_threads = 0;
   lj_gc2_update_pacing(g);

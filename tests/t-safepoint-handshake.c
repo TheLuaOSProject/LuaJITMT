@@ -113,8 +113,8 @@ int main(void)
   assert(g->gc2.hs_epoch == 0);
   assert(g->gc2.hs_pending == 0);
   assert(g->gc2.ssb_head == NULL);
-  assert(g->gc2.ssb_published == 0);
-  assert(g->gc2.ssb_items_published == 0);
+  assert(la_load32_acq(&g->gc2.ssb_published) == 0);
+  assert(la_load64_acq(&g->gc2.ssb_items_published) == 0);
   assert(lj_gc2_ssb_empty(g));
   assert(tg->poll == 0);
   assert(tg->reqmask == 0);
@@ -209,10 +209,10 @@ int main(void)
   assert(lj_gc2_flush_ssb(g, tg) > 0);
   assert(lj_gc2_drain_ssb(g) > 0);
   assert(lj_gc2_ssb_empty(g));
-  ssb_published0 = g->gc2.ssb_published;
-  ssb_drained0 = g->gc2.ssb_drained;
-  ssb_items_published0 = g->gc2.ssb_items_published;
-  ssb_items_drained0 = g->gc2.ssb_items_drained;
+  ssb_published0 = la_load32_acq(&g->gc2.ssb_published);
+  ssb_drained0 = la_load32_acq(&g->gc2.ssb_drained);
+  ssb_items_published0 = la_load64_acq(&g->gc2.ssb_items_published);
+  ssb_items_drained0 = la_load64_acq(&g->gc2.ssb_items_drained);
   assert(lj_gc2_ssb_push(g, obj2gco(root_tab)) == 1);
   assert(lj_gc2_ssb_push(g, obj2gco(root_tab)) == 1);
   assert(!lj_gc2_ssb_empty(g));
@@ -224,36 +224,39 @@ int main(void)
   assert(tg->ssb_next == tg->ssb_base);
   assert(g->gc2.ssb_head != NULL);
   assert(!lj_gc2_ssb_empty(g));
-  assert(g->gc2.ssb_published == ssb_published0 + 1u);
-  assert(g->gc2.ssb_items_published == ssb_items_published0 + 2u);
+  assert(la_load32_acq(&g->gc2.ssb_published) == ssb_published0 + 1u);
+  assert(la_load64_acq(&g->gc2.ssb_items_published) ==
+	 ssb_items_published0 + 2u);
   assert(lj_gc2_drain_ssb(g) == 2);
   assert(g->gc2.ssb_head == NULL);
   assert(lj_gc2_ssb_empty(g));
-  assert(g->gc2.ssb_drained == ssb_drained0 + 1u);
-  assert(g->gc2.ssb_items_drained == ssb_items_drained0 + 2u);
-  ssb_drained0 = g->gc2.ssb_drained;
-  ssb_items_drained0 = g->gc2.ssb_items_drained;
+  assert(la_load32_acq(&g->gc2.ssb_drained) == ssb_drained0 + 1u);
+  assert(la_load64_acq(&g->gc2.ssb_items_drained) ==
+	 ssb_items_drained0 + 2u);
+  ssb_drained0 = la_load32_acq(&g->gc2.ssb_drained);
+  ssb_items_drained0 = la_load64_acq(&g->gc2.ssb_items_drained);
   for (i = 0; i < TG_GC2_SSB_SLOTS; i++)
     assert(lj_gc2_ssb_push(g, obj2gco(root_tab)) == 1);
   assert(tg->ssb_next == tg->ssb_end);
-  ssb_published0 = g->gc2.ssb_published;
+  ssb_published0 = la_load32_acq(&g->gc2.ssb_published);
   assert(lj_gc2_ssb_push(g, obj2gco(root_tab)) == 1);
-  assert(g->gc2.ssb_published == ssb_published0 + 1u);
+  assert(la_load32_acq(&g->gc2.ssb_published) == ssb_published0 + 1u);
   assert(tg->ssb_next == tg->ssb_base + 1);
   assert(lj_gc2_drain_ssb(g) == TG_GC2_SSB_SLOTS);
   assert(g->gc2.ssb_head == NULL);
-  assert(g->gc2.ssb_drained == ssb_drained0 + 1u);
-  assert(g->gc2.ssb_items_drained ==
+  assert(la_load32_acq(&g->gc2.ssb_drained) == ssb_drained0 + 1u);
+  assert(la_load64_acq(&g->gc2.ssb_items_drained) ==
 	 ssb_items_drained0 + TG_GC2_SSB_SLOTS);
-  ssb_drained0 = g->gc2.ssb_drained;
-  ssb_items_drained0 = g->gc2.ssb_items_drained;
+  ssb_drained0 = la_load32_acq(&g->gc2.ssb_drained);
+  ssb_items_drained0 = la_load64_acq(&g->gc2.ssb_items_drained);
   assert(lj_gc2_flush_ssb(g, tg) == 1);
   assert(tg->ssb_next == tg->ssb_base);
   assert(!lj_gc2_ssb_empty(g));
   assert(lj_gc2_drain_ssb(g) == 1);
   assert(lj_gc2_ssb_empty(g));
-  assert(g->gc2.ssb_drained == ssb_drained0 + 1u);
-  assert(g->gc2.ssb_items_drained == ssb_items_drained0 + 1u);
+  assert(la_load32_acq(&g->gc2.ssb_drained) == ssb_drained0 + 1u);
+  assert(la_load64_acq(&g->gc2.ssb_items_drained) ==
+	 ssb_items_drained0 + 1u);
   lua_pop(L, 1);
   lj_gc2_legacy_cycle_end(g);
   assert(tg->mark_active == 0);

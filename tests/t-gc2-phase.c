@@ -87,10 +87,10 @@ int main(void)
   assert(lj_gc2_markobj(g, obj2gco(phase_tab)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(phase_tab)) == 1);
   assert(!lj_gc2_ssb_empty(g));
-  ssb_published0 = g->gc2.ssb_published;
-  ssb_drained0 = g->gc2.ssb_drained;
-  grey_pushed0 = g->gc2.grey_pushed;
-  grey_drained0 = g->gc2.grey_drained;
+  ssb_published0 = la_load32_acq(&g->gc2.ssb_published);
+  ssb_drained0 = la_load32_acq(&g->gc2.ssb_drained);
+  grey_pushed0 = la_load64_acq(&g->gc2.grey_pushed);
+  grey_drained0 = la_load64_acq(&g->gc2.grey_drained);
   phase_plain = lj_arena_alloc(&tg->alloc, &tg->prng, 64, 0);
   phase_trav = lj_arena_alloc(&tg->alloc, &tg->prng, 64,
 			      LJ_AF_TRAVERSABLE);
@@ -102,14 +102,14 @@ int main(void)
   assert(g->gc2.phase == LJ_GC2_SWEEP);
   assert(tg->mark_active == 0);
   assert(tg->alloc.alloc_black == 1);
-  assert(g->gc2.ssb_published == ssb_published0 + 1u);
+  assert(la_load32_acq(&g->gc2.ssb_published) == ssb_published0 + 1u);
   assert(tg->ssb_next == tg->ssb_base);
-  assert(g->gc2.ssb_drained == ssb_drained0 + 1u);
+  assert(la_load32_acq(&g->gc2.ssb_drained) == ssb_drained0 + 1u);
   assert(lj_gc2_ssb_empty(g));
   assert(lj_gc2_ismarked(g, obj2gco(phase_tab)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(phase_child)) == 1);
-  assert(g->gc2.grey_pushed == grey_pushed0 + 2u);
-  assert(g->gc2.grey_drained == grey_drained0 + 2u);
+  assert(la_load64_acq(&g->gc2.grey_pushed) == grey_pushed0 + 2u);
+  assert(la_load64_acq(&g->gc2.grey_drained) == grey_drained0 + 2u);
   assert(tg->alloc.bump[LJ_ARENAK_PLAIN].a == NULL);
   assert(tg->alloc.bump[LJ_ARENAK_TRAVERSABLE].a == NULL);
   assert(arena_list_contains(tg->alloc.needsweep[LJ_ARENAK_PLAIN],

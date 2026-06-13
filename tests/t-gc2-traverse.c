@@ -11,6 +11,7 @@
 #include "lualib.h"
 
 #include "lj_obj.h"
+#include "lj_atomic.h"
 #include "lj_gc.h"
 #include "lj_gc2.h"
 #include "lj_str.h"
@@ -45,8 +46,8 @@ static void test_strong_table(lua_State *L, global_State *g, TGState *tg)
   lj_gc2_legacy_mark_begin(g);
   assert(lj_gc2_ismarked(g, obj2gco(parent)) == 0);
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 0);
-  grey_pushed0 = g->gc2.grey_pushed;
-  grey_drained0 = g->gc2.grey_drained;
+  grey_pushed0 = la_load64_acq(&g->gc2.grey_pushed);
+  grey_drained0 = la_load64_acq(&g->gc2.grey_drained);
   assert(lj_gc2_markobj(g, obj2gco(parent)) == 1);
   flush_and_drain(g, tg);
   assert(lj_gc2_ismarked(g, obj2gco(parent)) == 1);
@@ -55,8 +56,8 @@ static void test_strong_table(lua_State *L, global_State *g, TGState *tg)
   assert(parent->hmask > 0);
   assert(lj_gc2_ismarkedmem(g, tvref(parent->array)) == 1);
   assert(lj_gc2_ismarkedmem(g, noderef(parent->node)) == 1);
-  assert(g->gc2.grey_pushed == grey_pushed0 + 2u);
-  assert(g->gc2.grey_drained == grey_drained0 + 2u);
+  assert(la_load64_acq(&g->gc2.grey_pushed) == grey_pushed0 + 2u);
+  assert(la_load64_acq(&g->gc2.grey_drained) == grey_drained0 + 2u);
   lj_gc2_legacy_cycle_end(g);
   lua_pop(L, 2);
 }
@@ -79,15 +80,17 @@ static void test_grey_deque_growth(lua_State *L, global_State *g, TGState *tg)
   lj_gc2_legacy_mark_begin(g);
   assert(lj_gc2_ismarked(g, obj2gco(parent)) == 0);
   assert(lj_gc2_ismarked(g, obj2gco(child[0])) == 0);
-  grey_pushed0 = g->gc2.grey_pushed;
-  grey_drained0 = g->gc2.grey_drained;
+  grey_pushed0 = la_load64_acq(&g->gc2.grey_pushed);
+  grey_drained0 = la_load64_acq(&g->gc2.grey_drained);
   assert(lj_gc2_markobj(g, obj2gco(parent)) == 1);
   flush_and_drain(g, tg);
   assert(lj_gc2_ismarked(g, obj2gco(parent)) == 1);
   for (i = 0; i < GC2_DEQUE_GROW_N; i++)
     assert(lj_gc2_ismarked(g, obj2gco(child[i])) == 1);
-  assert(g->gc2.grey_pushed == grey_pushed0 + GC2_DEQUE_GROW_N + 1u);
-  assert(g->gc2.grey_drained == grey_drained0 + GC2_DEQUE_GROW_N + 1u);
+  assert(la_load64_acq(&g->gc2.grey_pushed) ==
+	 grey_pushed0 + GC2_DEQUE_GROW_N + 1u);
+  assert(la_load64_acq(&g->gc2.grey_drained) ==
+	 grey_drained0 + GC2_DEQUE_GROW_N + 1u);
   lj_gc2_legacy_cycle_end(g);
   lua_pop(L, 1);
 }
