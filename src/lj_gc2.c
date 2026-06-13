@@ -1572,9 +1572,12 @@ static uint32_t gc2_drain_grey(global_State *g, uint32_t limit)
   return n;
 }
 
-uint32_t lj_gc2_worker_drain(global_State *g, uint32_t limit)
+static uint32_t gc2_worker_drain_inner(global_State *g, uint32_t limit,
+				       uint32_t *progress)
 {
   uint32_t phase, n = 0, converted = 0;
+  if (progress)
+    *progress = 0;
   if (!g || limit == 0)
     return 0;
   phase = la_load32_acq(&g->gc2.phase);
@@ -1604,22 +1607,32 @@ uint32_t lj_gc2_worker_drain(global_State *g, uint32_t limit)
   }
   if (converted)
     la_add64_rlx(&g->gc2.worker_ssb_converted, converted);
+  if (progress) {
+    if (converted > ~(uint32_t)0 - n)
+      *progress = ~(uint32_t)0;
+    else
+      *progress = n + converted;
+  }
   return n;
+}
+
+uint32_t lj_gc2_worker_drain(global_State *g, uint32_t limit)
+{
+  return gc2_worker_drain_inner(g, limit, NULL);
+}
+
+uint32_t lj_gc2_worker_drain_progress(global_State *g, uint32_t limit)
+{
+  uint32_t progress;
+  (void)gc2_worker_drain_inner(g, limit, &progress);
+  return progress;
 }
 
 static uint32_t gc2_worker_drain_budget(global_State *g, uint32_t limit)
 {
   uint32_t n = 0;
   while (n < limit && !lj_gc2_ssb_empty(g)) {
-    uint64_t converted0 = la_load64_acq(&g->gc2.worker_ssb_converted);
-    uint64_t converted;
-    uint32_t step, drained = lj_gc2_worker_drain(g, limit - n);
-    converted = la_load64_acq(&g->gc2.worker_ssb_converted) - converted0;
-    step = drained;
-    if (converted > (uint64_t)(~(uint32_t)0) - step)
-      step = ~(uint32_t)0;
-    else
-      step += (uint32_t)converted;
+    uint32_t step = lj_gc2_worker_drain_progress(g, limit - n);
     if (step == 0)
       break;
     if (step > limit - n)

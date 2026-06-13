@@ -258,11 +258,13 @@ static void test_worker_drain(lua_State *L, global_State *g, TGState *tg)
 
 static void test_worker_leaf_ssb(lua_State *L, global_State *g, TGState *tg)
 {
-  GCstr *s;
+  GCstr *s, *s2;
   uint64_t worker_runs0, worker_ssb0, worker_grey0;
 
   lua_pushliteral(L, "gc2 worker leaf ssb");
   s = strV(L->top - 1);
+  lua_pushliteral(L, "gc2 worker leaf progress");
+  s2 = strV(L->top - 1);
 
   lj_gc2_legacy_mark_begin(g);
   assert(lj_gc2_ssb_push(g, obj2gco(s)) == 1);
@@ -280,8 +282,21 @@ static void test_worker_leaf_ssb(lua_State *L, global_State *g, TGState *tg)
   assert(la_load64_acq(&g->gc2.worker_ssb_converted) == worker_ssb0 + 1u);
   assert(la_load64_acq(&g->gc2.worker_grey_drained) == worker_grey0);
 
+  assert(lj_gc2_ssb_push(g, obj2gco(s2)) == 1);
+  assert(lj_gc2_flush_ssb(g, tg) == 1);
+  assert(!lj_gc2_ssb_empty(g));
+  worker_runs0 = la_load64_acq(&g->gc2.worker_runs);
+  worker_ssb0 = la_load64_acq(&g->gc2.worker_ssb_converted);
+  worker_grey0 = la_load64_acq(&g->gc2.worker_grey_drained);
+  assert(lj_gc2_worker_drain_progress(g, 1) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(s2)) == 1);
+  assert(lj_gc2_ssb_empty(g));
+  assert(la_load64_acq(&g->gc2.worker_runs) == worker_runs0 + 1u);
+  assert(la_load64_acq(&g->gc2.worker_ssb_converted) == worker_ssb0 + 1u);
+  assert(la_load64_acq(&g->gc2.worker_grey_drained) == worker_grey0);
+
   lj_gc2_legacy_cycle_end(g);
-  lua_pop(L, 1);
+  lua_pop(L, 2);
 }
 
 static void test_fixpoint_round(lua_State *L, global_State *g, TGState *tg)

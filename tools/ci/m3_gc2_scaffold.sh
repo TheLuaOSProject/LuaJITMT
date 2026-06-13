@@ -68,6 +68,7 @@ for needle in \
   'lj_gc2_weak_snapshot_clear(g, ~(uint32_t)0)' \
   'weak_clear_cursor, limit' \
   'lj_gc2_worker_drain(g' \
+  'lj_gc2_worker_drain_progress(global_State *g, uint32_t limit)' \
   'lj_gc2_ssb_empty(g)' \
   'la_loadptr_acq((void *const *)&tg->ssb_next)' \
   'lj_gc2_fixpoint_run(g, L, 64, ~(uint32_t)0)'
