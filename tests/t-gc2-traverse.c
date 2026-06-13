@@ -1332,6 +1332,52 @@ static void test_closure(lua_State *L, global_State *g, TGState *tg)
   lua_pop(L, 2);
 }
 
+static void test_tg_thread_roots(lua_State *L, global_State *g, TGState *tg)
+{
+  TGState extra_tg;
+  lua_State *thread_L, *cur_L;
+  uint64_t thread_roots0, cur_roots0;
+
+  thread_L = lua_newthread(L);
+  assert(thread_L != NULL);
+  cur_L = lua_newthread(L);
+  assert(cur_L != NULL);
+
+  lj_tg_init_thread(g, &extra_tg, thread_L, 1);
+  extra_tg.tid = tg->tid + 6000u;
+  if (extra_tg.tid == 0 || extra_tg.tid == LJ_THREAD_GCSCAN)
+    extra_tg.tid = 6000u;
+  extra_tg.alloc.owner_tid = extra_tg.tid;
+  extra_tg.cur_L = cur_L;
+  cur_L->tg_hint = &extra_tg;
+  thread_L->thr_owner = extra_tg.tid;
+  cur_L->thr_owner = extra_tg.tid;
+
+  thread_roots0 = la_load64_acq(&g->gc2.tg_thread_roots);
+  cur_roots0 = la_load64_acq(&g->gc2.tg_cur_roots);
+  lj_gc2_legacy_mark_begin(g);
+  assert(lj_gc2_ismarked(g, obj2gco(thread_L)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(cur_L)) == 0);
+  lj_tg_attach(g, &extra_tg);
+  assert(g->gc2.n_threads == 2);
+  lj_gc2_scan_roots(g, NULL);
+  assert(lj_gc2_ismarked(g, obj2gco(thread_L)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(cur_L)) == 1);
+  assert(la_load64_acq(&g->gc2.tg_thread_roots) > thread_roots0);
+  assert(la_load64_acq(&g->gc2.tg_cur_roots) == cur_roots0 + 1u);
+
+  thread_L->thr_owner = 0;
+  cur_L->thr_owner = 0;
+  thread_L->tg_hint = tg;
+  cur_L->tg_hint = tg;
+  lj_tg_detach(g, &extra_tg);
+  assert(g->gc2.n_threads == 1);
+  assert(lj_tg_reclaim_dead(g) == 1u);
+  lj_tg_fini_thread(g, &extra_tg);
+  lj_gc2_legacy_cycle_end(g);
+  lua_pop(L, 2);
+}
+
 static void test_thread(lua_State *L, global_State *g, TGState *tg)
 {
   lua_State *th, *busy, *oldcur;
@@ -1632,6 +1678,7 @@ int main(void)
   test_vm_weak_value_array_barrier(L, g, tg);
   test_vm_tsetm_range_barrier(L, g, tg);
   test_closure(L, g, tg);
+  test_tg_thread_roots(L, g, tg);
   test_thread(L, g, tg);
   test_userdata(L, g);
   test_finreg_userdata_queue_mark(L, g, tg);

@@ -101,6 +101,8 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.worker_wakes, 0);
   la_store64_rlx(&g->gc2.worker_parks, 0);
   la_store64_rlx(&g->gc2.worker_async_progress, 0);
+  la_store64_rlx(&g->gc2.tg_thread_roots, 0);
+  la_store64_rlx(&g->gc2.tg_cur_roots, 0);
   la_store64_rlx(&g->gc2.thread_scan_claims, 0);
   la_store64_rlx(&g->gc2.thread_scan_busy, 0);
   la_store64_rlx(&g->gc2.thread_scan_requeues, 0);
@@ -665,8 +667,23 @@ static void gc2_scan_global_roots(global_State *g)
     TGState *tg;
     for (tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
 	 tg != NULL;
-	 tg = (TGState *)la_loadptr_acq((void *const *)&tg->next_tg))
+	 tg = (TGState *)la_loadptr_acq((void *const *)&tg->next_tg)) {
+      lua_State *thread_L, *cur_L;
       lj_gc2_markmem(g, tg->tmpbuf.b);
+      if (la_load8_acq(&tg->tg_flags) & TGF_DEAD)
+	continue;
+      thread_L = (lua_State *)
+	la_loadptr_acq((void *const *)&tg->thread_L);
+      cur_L = (lua_State *)la_loadptr_acq((void *const *)&tg->cur_L);
+      if (thread_L) {
+	lj_gc2_markobj(g, obj2gco(thread_L));  /* 05 section 5.7.4 TG root. */
+	la_add64_rlx(&g->gc2.tg_thread_roots, 1);
+      }
+      if (cur_L && cur_L != thread_L) {
+	lj_gc2_markobj(g, obj2gco(cur_L));  /* 05 section 5.7.4 TG root. */
+	la_add64_rlx(&g->gc2.tg_cur_roots, 1);
+      }
+    }
   }
 #if LJ_HASFFI
   {

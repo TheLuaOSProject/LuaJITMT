@@ -890,6 +890,8 @@ typedef struct GC2State {
   uint64_t worker_wakes;  /* Parked worker wake publications. */
   uint64_t worker_parks;  /* Parked worker sleeps after no progress. */
   uint64_t worker_async_progress;  /* Work completed by parked workers. */
+  uint64_t tg_thread_roots;  /* Live TG thread_L roots marked by GC2. */
+  uint64_t tg_cur_roots;  /* Live TG cur_L roots marked by GC2. */
   uint64_t thread_scan_claims;  /* Suspended thread stacks claimed by GC2. */
   uint64_t thread_scan_busy;  /* Thread stacks deferred to running owners. */
   uint64_t thread_scan_requeues;  /* Busy suspended threads kept grey. */

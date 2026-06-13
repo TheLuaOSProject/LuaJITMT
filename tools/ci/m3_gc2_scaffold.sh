@@ -59,6 +59,8 @@ for needle in \
   'uint64_t worker_wakes' \
   'uint64_t worker_parks' \
   'uint64_t worker_async_progress' \
+  'uint64_t tg_thread_roots' \
+  'uint64_t tg_cur_roots' \
   'uint64_t thread_scan_claims' \
   'uint64_t thread_scan_busy' \
   'uint64_t thread_scan_requeues' \
@@ -164,6 +166,10 @@ for needle in \
   '05 section 5.7.2: owner scan or retry preserves work' \
   'la_store64_rel(&L->scan_epoch, g->gc2.cycle)' \
   'la_load64_acq(&th->scan_epoch) == g->gc2.cycle' \
+  'la_loadptr_acq((void *const *)&tg->thread_L)' \
+  'la_loadptr_acq((void *const *)&tg->cur_L)' \
+  'la_add64_rlx(&g->gc2.tg_thread_roots' \
+  'la_add64_rlx(&g->gc2.tg_cur_roots' \
   'mt = gcref_acq(L->mt_thread)' \
   'la_add64_rlx(&g->gc2.thread_scan_claims' \
   'la_add64_rlx(&g->gc2.thread_scan_busy' \
