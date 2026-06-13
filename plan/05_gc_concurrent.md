@@ -313,7 +313,10 @@ now runs before legacy `gc_clearweak()`; the legacy pass remains the
 authoritative fallback for weak tables not yet discovered by GC2 and for
 string-bearing hash slots that legacy must mark before clearing. The FFI
 finalizer table is explicitly excluded from the weak snapshot because it is
-owned by the FINREG/finalizer path, not weak-table clearing.
+owned by the FINREG/finalizer path, not weak-table clearing. GC2 now mirrors
+cdata FINREG mutation telemetry from `ffi.gc(cd, fn)`, explicit
+`ffi.gc(cd, nil)` clears, and ctype `__gc` registrations, but legacy still owns
+finalizer table membership, finalizer execution, and drain ordering.
 The first
 weak-write bridge is present for new weak keys: `lj_tab_newkey()` calls
 `lj_gc2_barrier_weak_key()` during `P_WEAK`, marking a collectable inserted key

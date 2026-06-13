@@ -31,6 +31,8 @@ for needle in \
   'uint64_t weak_clear_tables' \
   'uint64_t weak_clear_slots' \
   'uint64_t weak_clear_cleared' \
+  'uint64_t finreg_cdata_sets' \
+  'uint64_t finreg_cdata_clears' \
   'uint64_t weak_keys_marked' \
   'uint64_t weak_values_marked' \
   'gc2_weak_record(global_State *g, GCtab *t)' \
@@ -38,6 +40,9 @@ for needle in \
   'lj_gc2_weak_snapshot_tab(global_State *g' \
   'lj_gc2_weak_snapshot_scan(global_State *g, uint32_t limit)' \
   'lj_gc2_weak_snapshot_clear(global_State *g, uint32_t limit)' \
+  'lj_gc2_finreg_cdata_set(global_State *g, GCobj *o, int enabled)' \
+  'lj_gc2_finreg_cdata_set(G(L), obj2gco(cd), 1)' \
+  'lj_gc2_finreg_cdata_set(G(L), obj2gco(cd), 0)' \
   'gc2_weak_mayclear(global_State *g, cTValue *o, int val)' \
   'gc2_tab_is_ffi_fin(global_State *g, GCtab *t)' \
   'FFI finalizer registry is owned by FINREG' \
@@ -60,7 +65,7 @@ for needle in \
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc.h" \
       "$ROOT/src/lj_gc2.c" "$ROOT/src/lj_gc2.h" "$ROOT/src/lj_obj.h" \
-      "$ROOT/src/lj_tab.c"; then
+      "$ROOT/src/lj_tab.c" "$ROOT/src/lj_cdata.c" "$ROOT/src/lib_ffi.c"; then
     echo "guardrail: missing GC2 fixpoint-round marker: $needle" >&2
     exit 1
   fi

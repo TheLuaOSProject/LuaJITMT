@@ -92,6 +92,8 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.weak_clear_tables, 0);
   la_store64_rlx(&g->gc2.weak_clear_slots, 0);
   la_store64_rlx(&g->gc2.weak_clear_cleared, 0);
+  la_store64_rlx(&g->gc2.finreg_cdata_sets, 0);
+  la_store64_rlx(&g->gc2.finreg_cdata_clears, 0);
   la_store64_rlx(&g->gc2.weak_keys_marked, 0);
   la_store64_rlx(&g->gc2.weak_values_marked, 0);
   g->gc2.tg_list = NULL;
@@ -728,6 +730,20 @@ uint32_t lj_gc2_weak_snapshot_clear(global_State *g, uint32_t limit)
     la_add64_rlx(&g->gc2.weak_clear_cleared, cleared);
   }
   return scanned;
+}
+
+void lj_gc2_finreg_cdata_set(global_State *g, GCobj *o, int enabled)
+{
+#if LJ_HASFFI
+  if (!g || !o || o->gch.gct != ~LJ_TCDATA)
+    return;
+  if (enabled)
+    la_add64_rlx(&g->gc2.finreg_cdata_sets, 1);
+  else
+    la_add64_rlx(&g->gc2.finreg_cdata_clears, 1);
+#else
+  UNUSED(g); UNUSED(o); UNUSED(enabled);
+#endif
 }
 
 static GCobj *gc2_grey_pop(global_State *g)

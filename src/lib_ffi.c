@@ -17,6 +17,7 @@
 #if LJ_HASFFI
 
 #include "lj_gc.h"
+#include "lj_gc2.h"
 #include "lj_err.h"
 #include "lj_str.h"
 #include "lj_tab.h"
@@ -528,6 +529,7 @@ LJLIB_CF(ffi_new)	LJLIB_REC(.)
 	copyTVrel(L, lj_tab_set(L, t, o-1), tv);
 	lj_gc_pubtab(L, t);
 	lj_obj_addgcflags(obj2gco(cd), LJ_GC_CDATA_FIN);
+	lj_gc2_finreg_cdata_set(G(L), obj2gco(cd), 1);
       }
     }
   }

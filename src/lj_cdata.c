@@ -8,6 +8,7 @@
 #if LJ_HASFFI
 
 #include "lj_gc.h"
+#include "lj_gc2.h"
 #include "lj_err.h"
 #include "lj_tab.h"
 #include "lj_ctype.h"
@@ -97,10 +98,12 @@ void lj_cdata_setfin(lua_State *L, GCcdata *cd, GCobj *obj, uint32_t it)
       setnilV(&val);
       copyTVrel(L, tv, &val);
       lj_obj_cleargcflags(obj2gco(cd), LJ_GC_CDATA_FIN);
+      lj_gc2_finreg_cdata_set(G(L), obj2gco(cd), 0);
     } else {
       setgcV(L, &val, obj, it);
       copyTVrel(L, tv, &val);
       lj_obj_addgcflags(obj2gco(cd), LJ_GC_CDATA_FIN);
+      lj_gc2_finreg_cdata_set(G(L), obj2gco(cd), 1);
     }
     lj_gc_pubtab(L, t);
   }

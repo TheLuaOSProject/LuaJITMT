@@ -1003,6 +1003,24 @@ static void test_userdata(lua_State *L, global_State *g)
   lua_pop(L, 2);
 }
 
+#if LJ_HASFFI
+static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
+{
+  uint64_t sets0 = la_load64_acq(&g->gc2.finreg_cdata_sets);
+  uint64_t clears0 = la_load64_acq(&g->gc2.finreg_cdata_clears);
+
+  lua_settop(L, 0);
+  assert(luaL_dostring(L,
+    "local ffi = require('ffi')\n"
+    "local cd = ffi.gc(ffi.new('char[?]', 8), function() end)\n"
+    "ffi.gc(cd, nil)\n"
+    "return cd\n") == LUA_OK);
+  assert(la_load64_acq(&g->gc2.finreg_cdata_sets) == sets0 + 1u);
+  assert(la_load64_acq(&g->gc2.finreg_cdata_clears) == clears0 + 1u);
+  lua_pop(L, 1);
+}
+#endif
+
 static void test_leaf_ssb(lua_State *L, global_State *g, TGState *tg)
 {
   GCstr *s;
@@ -1025,7 +1043,7 @@ int main(void)
 
   assert(L != NULL);
   lua_gc(L, LUA_GCSTOP, 0);
-#if LJ_HASJIT
+#if LJ_HASJIT || LJ_HASFFI
   luaL_openlibs(L);
 #endif
   g = G(L);
@@ -1056,6 +1074,9 @@ int main(void)
   test_closure(L, g, tg);
   test_thread(L, g, tg);
   test_userdata(L, g);
+#if LJ_HASFFI
+  test_finreg_cdata_telemetry(L, g);
+#endif
   test_leaf_ssb(L, g, tg);
 
   lua_close(L);

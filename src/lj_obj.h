@@ -883,6 +883,8 @@ typedef struct GC2State {
   uint64_t weak_clear_tables;  /* Weak snapshot tables clear-scanned. */
   uint64_t weak_clear_slots;  /* Weak snapshot clear entries inspected. */
   uint64_t weak_clear_cleared;  /* Weak entries cleared by GC2. */
+  uint64_t finreg_cdata_sets;  /* Cdata finalizer registrations mirrored. */
+  uint64_t finreg_cdata_clears;  /* Cdata finalizer clears mirrored. */
   uint64_t weak_keys_marked;  /* P_WEAK write barriers marking keys. */
   uint64_t weak_values_marked;  /* P_WEAK write barriers marking values. */
   TGState *tg_list;	/* Registered per-thread state blocks. */
