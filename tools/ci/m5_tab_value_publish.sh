@@ -33,8 +33,12 @@ for needle in \
   'lj_tab_storeudata' \
   'lj_tab_storetvn' \
   'lj_tab_storenilraw' \
+  'tab_storekeyrel' \
   'copyTVrel(L, dst, src)' \
   'copyTVrel(L, &dst[i], &src[i])' \
+  'copyTVrel(L, dst, &k)' \
+  'copyTVrel(L, slot, &val)' \
+  'copyTVrel(L, tab_rehash_insert(L, newnode, newhmask, &newfreetop, &key),' \
   'copyTVrel(L, o, L->top+1)' \
   'copyTVrel(L, o, --L->top)' \
   'lj_tab_storetv(L, dst, &val)' \
@@ -73,6 +77,12 @@ done
 if rg -n 'set[a-zA-Z0-9_]*V\([^;]*lj_tab_set|lj_tab_set[^;]*\)->u64|lj_tab_newkey\([^;]*\)->u64|copyTV\([^;]*lj_tab_set' \
     "$ROOT/src" --glob '!host/*'; then
   echo "guardrail: raw table slot stores must use lj_tab_store* or copyTVrel" >&2
+  exit 1
+fi
+
+if rg -n 'copyTV\(L, (slot|tab_rehash_insert|&freenode->key|&n->key)|[fn][a-z]*node->key\.u64 = 0|n->key\.u64 = 0' \
+    "$ROOT/src/lj_tab.c"; then
+  echo "guardrail: table rehash/new-key publication must use release key/value stores" >&2
   exit 1
 fi
 

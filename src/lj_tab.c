@@ -98,9 +98,20 @@ static LJ_AINLINE void newhpart(lua_State *L, GCtab *t, uint32_t hbits)
   newhpart_publish(t, node, hmask, &node[hmask+1]);
 }
 
+static LJ_AINLINE void tab_storekeyrel(lua_State *L, TValue *dst,
+				       cTValue *key)
+{
+  TValue k;
+  copyTV(L, &k, key);
+  if (LJ_UNLIKELY(tvismzero(&k)))
+    k.u64 = 0;
+  copyTVrel(L, dst, &k);
+}
+
 static TValue *tab_rehash_insert(lua_State *L, Node *nodebase, MSize hmask,
 				 Node **freetopp, cTValue *key)
 {
+  /* Destination belongs to an unpublished replacement hash vector. */
   Node *n = hashkey_node(nodebase, hmask, key);
   if (!lj_tv_isnil_acq(&n->val)) {
     Node *freenode = *freetopp;
@@ -109,15 +120,11 @@ static TValue *tab_rehash_insert(lua_State *L, Node *nodebase, MSize hmask,
     } while (!lj_tv_isnil_acq(&(--freenode)->key));
     *freetopp = freenode;
     lj_tab_nextnode_set(freenode, lj_tab_nextnode_acq(n));
-    copyTV(L, &freenode->key, key);
-    if (LJ_UNLIKELY(tvismzero(key)))
-      freenode->key.u64 = 0;
+    tab_storekeyrel(L, &freenode->key, key);
     lj_tab_nextnode_set(n, freenode);
     return &freenode->val;
   }
-  copyTV(L, &n->key, key);
-  if (LJ_UNLIKELY(tvismzero(key)))
-    n->key.u64 = 0;
+  tab_storekeyrel(L, &n->key, key);
   return &n->val;
 }
 
@@ -390,6 +397,7 @@ GCtab * LJ_FASTCALL lj_tab_dup(lua_State *L, const GCtab *kt)
       /* Don't use copyTV here, since it asserts on a copy of a dead key. */
       lj_tv_load_acq(&val, &kn->val);
       lj_tv_load_acq(&key, &kn->key);
+      /* Private duplicate table construction; not shared publication. */
       n->val = val; n->key = key;
       if (tvistab(&n->val))  /* Replace nil value marker. */
 	lj_tab_storenilraw(&n->val);
@@ -489,7 +497,7 @@ void lj_tab_resize(lua_State *L, GCtab *t, uint32_t asize, uint32_t hbits)
 	  slot = tab_rehash_arrayslot(array, asize, &key);
 	  lj_assertL(slot != NULL, "missing hash part during rehash");
 	}
-	copyTV(L, slot, &val);
+	copyTVrel(L, slot, &val);
       }
     }
   }
@@ -500,8 +508,8 @@ void lj_tab_resize(lua_State *L, GCtab *t, uint32_t asize, uint32_t hbits)
       lj_tv_load_acq(&val, &oldarray[i]);
       if (!tvisnil(&val)) {
 	setnumV(&key, (lua_Number)i);
-	copyTV(L, tab_rehash_insert(L, newnode, newhmask, &newfreetop, &key),
-	       &val);
+	copyTVrel(L, tab_rehash_insert(L, newnode, newhmask, &newfreetop, &key),
+		  &val);
       }
     }
   }
@@ -784,18 +792,14 @@ TValue *lj_tab_newkey(lua_State *L, GCtab *t, cTValue *key)
     setfreetop(t, nodebase, freenode);
     lj_assertL(freenode != &G(L)->nilnode, "store to fallback hash");
     lj_tab_nextnode_set(freenode, lj_tab_nextnode_acq(n));
-    copyTVrel(L, &freenode->key, key);
-    if (LJ_UNLIKELY(tvismzero(key)))
-      freenode->key.u64 = 0;
+    tab_storekeyrel(L, &freenode->key, key);
     lj_gc_pubtab(L, t);
     lj_assertL(lj_tv_isnil_acq(&freenode->val),
 	       "new hash slot is not empty");
     lj_tab_nextnode_rel(n, freenode);
     return &freenode->val;
   }
-  copyTVrel(L, &n->key, key);
-  if (LJ_UNLIKELY(tvismzero(key)))
-    n->key.u64 = 0;
+  tab_storekeyrel(L, &n->key, key);
   lj_gc_pubtab(L, t);
   lj_assertL(lj_tv_isnil_acq(&n->val), "new hash slot is not empty");
   return &n->val;

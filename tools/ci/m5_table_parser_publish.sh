@@ -15,7 +15,8 @@ for file in "$ROOT/src/lj_tab.c" "$ROOT/src/lj_parse.c"; do
 done
 
 for needle in \
-  'copyTVrel(L, &n->key, key)' \
+  'tab_storekeyrel(L, &n->key, key)' \
+  'copyTVrel(L, dst, &k)' \
   'lj_gc_pubtab(L, t)' \
   'setgcrefrel(((GCRef *)kptr)[~kidx], o)' \
   'lj_gc_pubobjobj(fs->L, pt, o)' \

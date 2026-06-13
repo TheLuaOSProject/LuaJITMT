@@ -215,9 +215,11 @@ batch-publishes copied result slots through `lj_tab_storetvn()` instead of the
 old raw `mov [array], TValue` loop. C-side runtime/library/parser/serializer
 table-slot writers converted so far publish values through `lj_tab_store*()`
 helpers or `copyTVrel()` instead of raw `lj_tab_set*()` destination stores;
-this records a scoped release-store bridge without changing the original
-write-protocol target above. Core C table lookup, resize, rehash counting,
-collision checks, and `next()` now make key/value
+rehash/new-key insertion also release-publishes hash keys through
+`tab_storekeyrel()` and moved values through `copyTVrel()` during legacy resize
+rebuilds. This records a scoped release-store bridge without changing the
+original write-protocol target above. Core C table lookup, resize, rehash
+counting, collision checks, and `next()` now make key/value
 decisions from acquired `TValue` snapshots instead of direct shared node-field
 reads; GC/GC2 table traversal, weak clearing, finalizer-table scans,
 serialization, bytecode writing, parser template-table fixup, recorder

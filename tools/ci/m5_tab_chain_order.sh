@@ -22,7 +22,7 @@ for needle in \
   'la_store64_rel(&n->next.ptr64' \
   'Nodes are never moved within a hash generation' \
   'lj_tab_nextnode_rel(n, freenode)' \
-  'copyTVrel(L, &freenode->key, key)' \
+  'tab_storekeyrel(L, &freenode->key, key)' \
   'return &freenode->val' \
   'lj_tab_nextnode_acq(n)'
 do
