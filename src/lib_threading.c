@@ -361,6 +361,7 @@ static LJThread *threading_thread_from_state(lua_State *L, lua_State *child)
 static int threading_join_core(lua_State *L, LJThread *th, int has_timeout,
 			       int64_t ns)
 {
+  int remove_live = 0;
   uint32_t state;
   if (threading_is_current_thread(L, th)) {
     if (has_timeout) {
@@ -402,8 +403,7 @@ static int threading_join_core(lua_State *L, LJThread *th, int has_timeout,
       lj_native_enter(L2TG(L));
       (void)lj_thr_join(&th->thr, NULL);
       (void)lj_native_leave(L);
-      threading_live_remove(L, th->ud);
-      (void)lj_tg_reclaim_dead(G(L));
+      remove_live = 1;
     }
   }
 
@@ -417,6 +417,10 @@ static int threading_join_core(lua_State *L, LJThread *th, int has_timeout,
     for (i = 0; i < th->nresults; i++)
       copyTV(L, L->top++, th->L->base + i);
     lj_state_release(th->L, tid);
+  }
+  if (remove_live) {
+    threading_live_remove(L, th->ud);
+    (void)lj_tg_reclaim_dead(G(L));
   }
   return (int)th->nresults + 1;
 }

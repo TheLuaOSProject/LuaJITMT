@@ -76,6 +76,9 @@ thread:join(timeout):
     DONE: CAS state DONE→JOINED (winner pulls results; others see JOINED:
           return the cached results too — results table is immutable after
           DONE; idempotent join DECIDED)
+          remove live-table root only after caller stack growth and result
+          copy, so a C API joiner holding only lua_State* does not drop the
+          child root before an allocating stack check
     else: lj_native_enter(tg); la_futex_wait(&join_futex, s, ns);
           lj_native_leave → poll. timeout → nil,"timeout".
   happens-before: child's everything ≺ join return (acquire on state).
