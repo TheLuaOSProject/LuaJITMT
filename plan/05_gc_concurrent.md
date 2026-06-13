@@ -308,10 +308,11 @@ stores weak-table discoveries in a bounded GC2-owned side vector
 `g->gc.weak`. `lj_gc2_weak_snapshot_scan()` is a bounded, read-only oracle over
 that vector that mirrors the legacy weak clear predicate and publishes scan
 telemetry. `lj_gc2_weak_snapshot_clear()` applies the same predicate with
-release nil stores and now runs before legacy `gc_clearweak()`; the legacy pass
-remains the authoritative fallback for weak tables not yet discovered by GC2
-and for string-bearing hash slots that legacy must mark before clearing. The
-FFI finalizer table is explicitly excluded from the weak snapshot because it is
+release nil stores, advances through the snapshot with `weak_clear_cursor`, and
+now runs before legacy `gc_clearweak()`; the legacy pass remains the
+authoritative fallback for weak tables not yet discovered by GC2 and for
+string-bearing hash slots that legacy must mark before clearing. The FFI
+finalizer table is explicitly excluded from the weak snapshot because it is
 owned by the FINREG/finalizer path, not weak-table clearing.
 The first
 weak-write bridge is present for new weak keys: `lj_tab_newkey()` calls

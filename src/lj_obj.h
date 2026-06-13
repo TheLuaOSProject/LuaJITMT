@@ -878,6 +878,7 @@ typedef struct GC2State {
   uint64_t weak_scan_tables;  /* Weak snapshot tables scanned. */
   uint64_t weak_scan_slots;  /* Weak snapshot entries inspected. */
   uint64_t weak_scan_clearable;  /* Entries that match weak clear rules. */
+  uint64_t weak_clear_cursor;  /* Next weak snapshot table to clear. */
   uint64_t weak_clear_runs;  /* Weak snapshot clear attempts with work. */
   uint64_t weak_clear_tables;  /* Weak snapshot tables clear-scanned. */
   uint64_t weak_clear_slots;  /* Weak snapshot clear entries inspected. */

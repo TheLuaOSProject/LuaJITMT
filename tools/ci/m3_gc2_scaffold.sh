@@ -26,6 +26,7 @@ for needle in \
   'uint64_t weak_scan_tables' \
   'uint64_t weak_scan_slots' \
   'uint64_t weak_scan_clearable' \
+  'uint64_t weak_clear_cursor' \
   'uint64_t weak_clear_runs' \
   'uint64_t weak_clear_tables' \
   'uint64_t weak_clear_slots' \
@@ -52,6 +53,7 @@ for needle in \
   'la_xchg64_acqrel(&g->gc2.marks_this_round, 0)' \
   'LJ_GC2_HS_SCAN_ROOTS|LJ_GC2_HS_FLUSH_SSB' \
   'lj_gc2_weak_snapshot_clear(g, ~(uint32_t)0)' \
+  'weak_clear_cursor, limit' \
   'lj_gc2_worker_drain(g' \
   'lj_gc2_ssb_empty(g)' \
   'lj_gc2_fixpoint_run(g, L, 64, ~(uint32_t)0)'
