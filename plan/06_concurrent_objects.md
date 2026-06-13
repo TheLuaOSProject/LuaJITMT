@@ -270,7 +270,9 @@ close-time payloads into `uv->tv`, and has legacy GC/GC2 acquire-snapshot
 `GCupval` and C-closure upvalue `TValue` payloads before marking.
 `lj_gc_pubuv()` and close-time gray repair likewise run barrier decisions from
 an acquired snapshot of the closed-cell payload rather than inspecting the
-shared cell directly.
+shared cell directly. C helpers that copy C-closure upvalues out to a stack
+snapshot each shared `TValue` individually; the `io.lines()` iterator option
+copy is the current guarded instance.
 ### 6.4.2 Compiler (lj_parse.c) — DECIDED scheme
 The parser already computes, per function, which locals are captured
 (`var_lookup`/`fscope_uvmark` machinery marking VSTACK entries). Add a pass

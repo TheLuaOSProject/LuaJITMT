@@ -359,12 +359,14 @@ static int io_file_iter(lua_State *L)
   GCfunc *fn = curr_func(L);
   IOFileUD *iof = uddata(udataV(&fn->c.upvalue[0]));
   int n = fn->c.nupvalues - 1;
+  int i;
   if (iof->fp == NULL)
     lj_err_caller(L, LJ_ERR_IOCLFL);
   L->top = L->base;
   if (n) {  /* Copy upvalues with options to stack. */
     lj_state_checkstack(L, (MSize)n);
-    memcpy(L->top, &fn->c.upvalue[1], n*sizeof(TValue));
+    for (i = 0; i < n; i++)
+      lj_tv_load_acq(L->top+i, &fn->c.upvalue[1+i]);
     L->top += n;
   }
   n = io_file_read(L, iof, 0);

@@ -99,6 +99,17 @@ if ! awk '
   exit 1
 fi
 
+if ! awk '
+  /static int io_file_iter/ { infn = 1; seen = 1; next }
+  infn && /memcpy\(L->top, &fn->c\.upvalue\[1\]/ { bad = 1 }
+  infn && /lj_tv_load_acq\(L->top\+i, &fn->c\.upvalue\[1\+i\]\)/ { load = 1 }
+  infn && /^}/ { exit(seen && load && !bad ? 0 : 1) }
+  END { if (!seen || !load || bad) exit 1 }
+' "$ROOT/src/lib_io.c"; then
+  echo "guardrail: io.lines iterator options must snapshot C-closure upvalues" >&2
+  exit 1
+fi
+
 for file in "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc2.c"; do
   if ! rg -F -q 'lj_tv_load_acq(&tv, uvval' "$file"; then
     echo "guardrail: GC upvalue traversal must snapshot uv payloads: $file" >&2
