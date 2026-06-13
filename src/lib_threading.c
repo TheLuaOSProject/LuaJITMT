@@ -51,7 +51,7 @@ static LJThread *threading_tothread(lua_State *L)
 
 static GCtab *threading_live_root(global_State *g)
 {
-  GCobj *o = gcref(g->gcroot[GCROOT_THREADING]);
+  GCobj *o = gcref_acq(g->gcroot[GCROOT_THREADING]);
   return o && o->gch.gct == ~LJ_TTAB ? gco2tab(o) : NULL;
 }
 
@@ -106,7 +106,7 @@ static GCtab *threading_loaded_env(lua_State *L)
 static GCtab *threading_ensure_env(lua_State *L)
 {
   global_State *g = G(L);
-  GCobj *o = gcref(g->gcroot[GCROOT_THREADING_ENV]);
+  GCobj *o = gcref_acq(g->gcroot[GCROOT_THREADING_ENV]);
   GCtab *env = o && o->gch.gct == ~LJ_TTAB ? gco2tab(o) : NULL;
   if (!env) {
     TValue *top = L->top;

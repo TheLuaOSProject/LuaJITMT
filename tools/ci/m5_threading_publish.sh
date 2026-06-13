@@ -26,7 +26,9 @@ fi
 for needle in \
   'gcref_acq(child->mt_thread)' \
   'gcref_acq(L->mt_thread)' \
-  'mt = gcref_acq(th->mt_thread)'
+  'mt = gcref_acq(th->mt_thread)' \
+  'gcref_acq(g->gcroot[GCROOT_THREADING])' \
+  'gcref_acq(g->gcroot[GCROOT_THREADING_ENV])'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lib_threading.c" "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc2.c"; then
     echo "guardrail: mt_thread readers must acquire-load publication: $needle" >&2
@@ -37,6 +39,12 @@ done
 if rg -n '\bgcref\([^)]*mt_thread' \
     "$ROOT/src/lib_threading.c" "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc2.c"; then
   echo "guardrail: mt_thread readers must use gcref_acq" >&2
+  exit 1
+fi
+
+if rg -n '\bgcref\(g->gcroot\[GCROOT_THREADING(_ENV)?\]\)' \
+    "$ROOT/src/lib_threading.c"; then
+  echo "guardrail: threading root readers must use gcref_acq" >&2
   exit 1
 fi
 

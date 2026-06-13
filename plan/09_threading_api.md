@@ -133,6 +133,9 @@ Thread userdata links are published through `lua_State.mt_thread` with
 `setgcrefrel()` in `threading_state_set_ud()` and read back with
 `gcref_acq()` in join/attach lookup plus legacy GC/GC2 thread traversal. This
 keeps the child-state backlink visible without adding an `LJ_MT` lock gate.
+The threading live-table and private-environment GC roots are likewise
+release-published through `setgcrefroot()` and acquire-loaded in
+lib_threading readers.
 
 The temporary M4 active-child GC pause treats `g->gc.threshold` and the saved
 `g->mt_gc_threshold` as shared handoff words. C-side checks and updates go
