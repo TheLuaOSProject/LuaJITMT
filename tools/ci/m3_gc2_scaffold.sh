@@ -35,7 +35,13 @@ for needle in \
   'uint64_t weak_clear_cleared' \
   'uint64_t weak_legacy_skipped' \
   'uint64_t weak_legacy_fallbacks' \
+  'uint32_t worker_active' \
+  'uint64_t worker_runs' \
+  'uint64_t worker_grey_drained' \
+  'uint64_t worker_ssb_converted' \
   'uint64_t worker_weak_drained' \
+  'uint64_t worker_idle_declares' \
+  'uint64_t worker_busy_retries' \
   'uint64_t sweep_owner_runs' \
   'uint64_t sweep_owner_arenas' \
   'uint64_t sweep_owner_live_cells' \
@@ -102,6 +108,11 @@ for needle in \
   'lj_gc2_fixpoint_round(g, L, LJ_GC2_WORKER_DRAIN_BATCH)' \
   '05 section 5.7.1 bounded propagation fixpoint bridge' \
   '05 section 5.8 worker-owned weak-drain bridge' \
+  '05 section 5.6.3 temporary single-worker bridge' \
+  'la_cas32(&g->gc2.worker_active' \
+  'la_store32_rel(&g->gc2.worker_active, 0)' \
+  'la_add64_rlx(&g->gc2.worker_idle_declares' \
+  'la_add64_rlx(&g->gc2.worker_busy_retries' \
   'lj_gc2_worker_drain(g' \
   'lj_gc2_worker_drain_progress(global_State *g, uint32_t limit)' \
   'weak = lj_gc2_weak_drain(g, limit - work)' \

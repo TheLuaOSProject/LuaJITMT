@@ -174,13 +174,16 @@ Current bridge note: `lj_gc2_worker_drain()` now provides a bounded non-owner
 worker entrypoint that converts published SSB entries to grey work, steals
 from the Chase-Lev top side, and traverses stolen objects. The full worker
 pool, grow-safe per-worker deque ownership, idle declaration, and scheduling
-remain the original target above. `lj_gc2_worker_drain_progress()` exposes the
-same bounded drain surface but returns total progress, including leaf-only SSB
-conversions that do not traverse a grey object, so future idle/fixpoint loops
-do not need to infer progress from telemetry counters. During `P_WEAK`, any
-remaining worker budget can also advance `lj_gc2_weak_drain()` through the
-published weak snapshot, with `worker_weak_drained` attributing that bounded
-work; the full scheduler-owned weak drain remains staged.
+remain the original target above. The current global grey deque has a temporary
+single-worker ownership token (`worker_active`) around this drain surface, plus
+busy/idle telemetry, so overlapping helper calls do not both act as the staged
+worker owner. `lj_gc2_worker_drain_progress()` exposes the same bounded drain
+surface but returns total progress, including leaf-only SSB conversions that do
+not traverse a grey object, so future idle/fixpoint loops do not need to infer
+progress from telemetry counters. During `P_WEAK`, any remaining worker budget
+can also advance `lj_gc2_weak_drain()` through the published weak snapshot, with
+`worker_weak_drained` attributing that bounded work; the full scheduler-owned
+weak drain remains staged.
 
 ### 5.6.4 gc2_traverse — per-type tracing
 Port the existing traversal logic, replacing color plumbing:

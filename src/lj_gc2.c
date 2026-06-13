@@ -75,10 +75,13 @@ void lj_gc2_init(global_State *g)
   g->gc2.grey_bottom = 0;
   la_store64_rlx(&g->gc2.grey_pushed, 0);
   la_store64_rlx(&g->gc2.grey_drained, 0);
+  la_store32_rlx(&g->gc2.worker_active, 0);
   la_store64_rlx(&g->gc2.worker_runs, 0);
   la_store64_rlx(&g->gc2.worker_grey_drained, 0);
   la_store64_rlx(&g->gc2.worker_ssb_converted, 0);
   la_store64_rlx(&g->gc2.worker_weak_drained, 0);
+  la_store64_rlx(&g->gc2.worker_idle_declares, 0);
+  la_store64_rlx(&g->gc2.worker_busy_retries, 0);
   la_store64_rlx(&g->gc2.sweep_owner_runs, 0);
   la_store64_rlx(&g->gc2.sweep_owner_arenas, 0);
   la_store64_rlx(&g->gc2.sweep_owner_live_cells, 0);
@@ -1835,7 +1838,7 @@ static uint32_t gc2_drain_grey(global_State *g, uint32_t limit)
 static uint32_t gc2_worker_drain_inner(global_State *g, uint32_t limit,
 				       uint32_t *progress)
 {
-  uint32_t phase, n = 0, converted = 0, weak = 0;
+  uint32_t phase, expect = 0, n = 0, converted = 0, weak = 0;
   if (progress)
     *progress = 0;
   if (!g || limit == 0)
@@ -1843,6 +1846,10 @@ static uint32_t gc2_worker_drain_inner(global_State *g, uint32_t limit,
   phase = la_load32_acq(&g->gc2.phase);
   if (phase != LJ_GC2_MARK && phase != LJ_GC2_WEAK)
     return 0;
+  if (!la_cas32(&g->gc2.worker_active, &expect, 1, LA_ACQ_REL, LA_ACQ)) {
+    la_add64_rlx(&g->gc2.worker_busy_retries, 1);
+    return 0;  /* 05 section 5.6.3 temporary single-worker bridge. */
+  }
   while (n < limit) {
     GCobj *o = lj_gc2_grey_steal(g);
     if (o) {
@@ -1874,6 +1881,8 @@ static uint32_t gc2_worker_drain_inner(global_State *g, uint32_t limit,
     la_add64_rlx(&g->gc2.worker_ssb_converted, converted);
   if (weak)
     la_add64_rlx(&g->gc2.worker_weak_drained, weak);
+  if (!(n || converted || weak))
+    la_add64_rlx(&g->gc2.worker_idle_declares, 1);
   if (progress) {
     if (converted > ~(uint32_t)0 - n ||
 	weak > ~(uint32_t)0 - n - converted)
@@ -1881,6 +1890,7 @@ static uint32_t gc2_worker_drain_inner(global_State *g, uint32_t limit,
     else
       *progress = n + converted + weak;
   }
+  la_store32_rel(&g->gc2.worker_active, 0);
   return n;
 }
 
