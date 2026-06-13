@@ -305,7 +305,9 @@ stores weak-table discoveries in a bounded GC2-owned side vector
 `weak_tables_weakkey`, `weak_tables_weakval`, `weak_tables_allweak`,
 `weak_tables_queued`, `weak_tables_overflow`) without linking through
 `GCtab.gclist`, because the legacy bridge still owns that link for
-`g->gc.weak`. The first
+`g->gc.weak`. `lj_gc2_weak_snapshot_scan()` is a bounded, read-only oracle over
+that vector that mirrors the legacy weak clear predicate and publishes scan
+telemetry; it does not clear slots yet. The first
 weak-write bridge is present for new weak keys: `lj_tab_newkey()` calls
 `lj_gc2_barrier_weak_key()` during `P_WEAK`, marking a collectable inserted key
 immediately. C API table setters that bypass normal legacy barriers also call

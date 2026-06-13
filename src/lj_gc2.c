@@ -35,6 +35,7 @@
 static int gc2_grey_grow(global_State *g);
 static int gc2_grey_empty(global_State *g);
 static void gc2_weak_reset(global_State *g);
+static int gc2_tab_weak_mode(global_State *g, GCtab *t, GCtab *mt);
 
 void lj_gc2_init(global_State *g)
 {
@@ -82,6 +83,10 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.weak_tables_allweak, 0);
   la_store64_rlx(&g->gc2.weak_tables_queued, 0);
   la_store64_rlx(&g->gc2.weak_tables_overflow, 0);
+  la_store64_rlx(&g->gc2.weak_scan_runs, 0);
+  la_store64_rlx(&g->gc2.weak_scan_tables, 0);
+  la_store64_rlx(&g->gc2.weak_scan_slots, 0);
+  la_store64_rlx(&g->gc2.weak_scan_clearable, 0);
   la_store64_rlx(&g->gc2.weak_keys_marked, 0);
   la_store64_rlx(&g->gc2.weak_values_marked, 0);
   g->gc2.tg_list = NULL;
@@ -591,6 +596,83 @@ GCtab *lj_gc2_weak_snapshot_tab(global_State *g, uint32_t idx)
     return NULL;
   o = gcref(g->gc2.weak_stack[idx]);
   return (o && o->gch.gct == ~LJ_TTAB) ? gco2tab(o) : NULL;
+}
+
+static int gc2_weak_mayclear(global_State *g, cTValue *o, int val)
+{
+  if (tvisgcv(o)) {
+    if (tvisstr(o))
+      return 0;  /* 05 section 5.8: strings are not weak-cleared. */
+    if (lj_gc2_ismarked(g, gcV(o)) == 0)
+      return 1;
+    if (tvisudata(o) && val &&
+	(lj_obj_gcflags(obj2gco(udataV(o))) & LJ_GC_FINALIZED))
+      return 1;
+  }
+  return 0;
+}
+
+static void gc2_weak_scan_tab(global_State *g, GCtab *t,
+			      uint64_t *slots, uint64_t *clearable)
+{
+  GCtab *mt = tabref_acq(t->metatable);
+  int weak = gc2_tab_weak_mode(g, t, mt);
+  if (!weak)
+    return;
+  if (weak & LJ_GC_WEAKVAL) {
+    MSize i, asize = lj_tab_asize_acq(t);
+    TValue *array = lj_tab_array_acq(t);
+    for (i = 0; i < asize; i++) {
+      TValue val;
+      lj_tv_load_acq(&val, &array[i]);
+      if (!tvisnil(&val)) {
+	(*slots)++;
+	if (gc2_weak_mayclear(g, &val, 1))
+	  (*clearable)++;
+      }
+    }
+  }
+  {
+    Node *node = lj_tab_node_acq(t);
+    MSize i, hmask = lj_tab_node_hmask_acq(node);
+    if (hmask > 0) {
+      for (i = 0; i <= hmask; i++) {
+	Node *n = &node[i];
+	TValue key, val;
+	lj_tv_load_acq(&val, &n->val);
+	if (!tvisnil(&val)) {
+	  lj_tv_load_acq(&key, &n->key);
+	  (*slots)++;
+	  if (gc2_weak_mayclear(g, &key, 0) ||
+	      gc2_weak_mayclear(g, &val, 1))
+	    (*clearable)++;
+	}
+      }
+    }
+  }
+}
+
+uint32_t lj_gc2_weak_snapshot_scan(global_State *g, uint32_t limit)
+{
+  uint32_t i, n, scanned = 0;
+  uint64_t slots = 0, clearable = 0;
+  if (!g || limit == 0)
+    return 0;
+  n = lj_gc2_weak_snapshot_count(g);
+  for (i = 0; i < n && scanned < limit; i++) {
+    GCtab *t = lj_gc2_weak_snapshot_tab(g, i);
+    if (!t)
+      continue;
+    gc2_weak_scan_tab(g, t, &slots, &clearable);
+    scanned++;
+  }
+  if (scanned) {
+    la_add64_rlx(&g->gc2.weak_scan_runs, 1);
+    la_add64_rlx(&g->gc2.weak_scan_tables, scanned);
+    la_add64_rlx(&g->gc2.weak_scan_slots, slots);
+    la_add64_rlx(&g->gc2.weak_scan_clearable, clearable);
+  }
+  return scanned;
 }
 
 static GCobj *gc2_grey_pop(global_State *g)
