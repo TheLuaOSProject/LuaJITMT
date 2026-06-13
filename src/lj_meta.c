@@ -303,7 +303,7 @@ TValue *lj_meta_cat(lua_State *L, TValue *top, int left)
       setstrV(L, top, lj_buf_str(L, sb));
     }
   } while (left >= 1);
-  if (LJ_UNLIKELY(G(L)->gc.total >= G(L)->gc.threshold)) {
+  if (LJ_UNLIKELY(G(L)->gc.total >= lj_gc_threshold_load(G(L)))) {
     if (!fromc) L->top = curr_topL(L);
     lj_gc_step(L);
   }

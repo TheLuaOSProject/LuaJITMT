@@ -204,7 +204,7 @@ static TValue *cpluaopen(lua_State *L, lua_CFunction dummy, void *ud)
   lj_lex_init(L);
   fixstring(lj_err_str(L, LJ_ERR_ERRMEM));  /* Preallocate memory error msg. */
   fixstring(lj_err_str(L, LJ_ERR_ERRERR));  /* Preallocate err in err msg. */
-  g->gc.threshold = 4*g->gc.total;
+  lj_gc_threshold_store(g, 4*g->gc.total);
 #if LJ_HASFFI
   lj_ctype_initfin(L);
 #endif

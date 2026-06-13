@@ -134,6 +134,12 @@ Thread userdata links are published through `lua_State.mt_thread` with
 `gcref_acq()` in join/attach lookup plus legacy GC/GC2 thread traversal. This
 keeps the child-state backlink visible without adding an `LJ_MT` lock gate.
 
+The temporary M4 active-child GC pause treats `g->gc.threshold` and the saved
+`g->mt_gc_threshold` as shared handoff words. C-side checks and updates go
+through `lj_gc_threshold_*()` / `lj_gc_mt_threshold_*()` helpers, and
+`lua_gc(stop/restart)` replays its saved logical threshold to the real
+threshold if `mt_live` reaches zero during the update.
+
 The channel userdata is shared freely; all ops are method calls
 (lib_threading.c → lj_chan.c). GC: channels live in non-traversable? NO —
 traversable arenas; traverse = mark in-flight slot values (bounded scan of

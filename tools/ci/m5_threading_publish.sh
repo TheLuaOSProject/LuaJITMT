@@ -40,6 +40,32 @@ if rg -n '\bgcref\([^)]*mt_thread' \
   exit 1
 fi
 
+for needle in \
+  'lj_gc_threshold_load(global_State *g)' \
+  'lj_gc_threshold_store(global_State *g, GCSize threshold)' \
+  'lj_gc_mt_threshold_load(global_State *g)' \
+  'lj_gc_mt_threshold_store(global_State *g,' \
+  'lj_gc_mt_threshold_store(g, lj_gc_threshold_load(g))' \
+  'lj_gc_threshold_store(g, lj_gc_mt_threshold_load(g))' \
+  'api_gc_setlogical(global_State *g, GCSize threshold)' \
+  'if (la_load32_acq(&g->mt_live) == 0)' \
+  'lj_gc_threshold_store(g, threshold)'
+do
+  if ! rg -F -q "$needle" "$ROOT/src/lj_gc.h" "$ROOT/src/lib_threading.c" "$ROOT/src/lj_api.c"; then
+    echo "guardrail: GC threshold handoff must use atomic helpers: $needle" >&2
+    exit 1
+  fi
+done
+
+threshold_hits=$(rg -n 'gc\.threshold|mt_gc_threshold' \
+  "$ROOT/src" -g '*.c' -g '*.h' -g '!**/host/*' |
+  rg -v 'src/lj_gc\.h|src/lj_obj\.h|src/lj_asm_.*\.h|offsetof\(global_State, gc\.threshold\)' || true)
+if [ -n "$threshold_hits" ]; then
+  echo "guardrail: C-side GC threshold access must use atomic helpers" >&2
+  echo "$threshold_hits" >&2
+  exit 1
+fi
+
 if ! awk '
   /LJLIB_CF\(threading_channel_send\)/ { infn = 1; next }
   infn && /lj_gc_pubobjtv\(L, ud, tv\)/ { pub = 1 }

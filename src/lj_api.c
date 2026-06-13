@@ -1319,6 +1319,17 @@ LUA_API int lua_resume(lua_State *L, int nargs)
 
 /* -- GC and memory management -------------------------------------------- */
 
+static void api_gc_setlogical(global_State *g, GCSize threshold)
+{
+  if (la_load32_acq(&g->mt_live) != 0) {
+    lj_gc_mt_threshold_store(g, threshold);
+    if (la_load32_acq(&g->mt_live) == 0)
+      lj_gc_threshold_store(g, threshold);
+  } else {
+    lj_gc_threshold_store(g, threshold);
+  }
+}
+
 LUA_API int lua_gc(lua_State *L, int what, int data)
 {
   global_State *g = G(L);
@@ -1326,17 +1337,11 @@ LUA_API int lua_gc(lua_State *L, int what, int data)
   int res = 0;
   switch (what) {
   case LUA_GCSTOP:
-    if (mt_live)
-      g->mt_gc_threshold = LJ_MAX_MEM;
-    else
-      g->gc.threshold = LJ_MAX_MEM;
+    api_gc_setlogical(g, LJ_MAX_MEM);
     break;
   case LUA_GCRESTART:
-    if (mt_live)
-      g->mt_gc_threshold = data == -1 ?
-	(g->gc.total/100)*g->gc.pause : g->gc.total;
-    else
-      g->gc.threshold = data == -1 ? (g->gc.total/100)*g->gc.pause : g->gc.total;
+    api_gc_setlogical(g, data == -1 ?
+      (g->gc.total/100)*g->gc.pause : g->gc.total);
     break;
   case LUA_GCCOLLECT:
     if (!mt_live)
@@ -1352,8 +1357,8 @@ LUA_API int lua_gc(lua_State *L, int what, int data)
     GCSize a = (GCSize)data << 10;
     if (mt_live)
       break;  /* M4: explicit steps wait for the real concurrent GC. */
-    g->gc.threshold = (a <= g->gc.total) ? (g->gc.total - a) : 0;
-    while (g->gc.total >= g->gc.threshold)
+    lj_gc_threshold_store(g, (a <= g->gc.total) ? (g->gc.total - a) : 0);
+    while (g->gc.total >= lj_gc_threshold_load(g))
       if (lj_gc_step(L) > 0) {
 	res = 1;
 	break;
@@ -1369,7 +1374,8 @@ LUA_API int lua_gc(lua_State *L, int what, int data)
     g->gc.stepmul = (MSize)data;
     break;
   case LUA_GCISRUNNING:
-    res = ((mt_live ? g->mt_gc_threshold : g->gc.threshold) != LJ_MAX_MEM);
+    res = ((mt_live ? lj_gc_mt_threshold_load(g) :
+	    lj_gc_threshold_load(g)) != LJ_MAX_MEM);
     break;
   default:
     res = -1;  /* Invalid option. */

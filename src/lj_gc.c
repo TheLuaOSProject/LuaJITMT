@@ -918,14 +918,14 @@ static void gc_call_finalizer(global_State *g, lua_State *L,
 {
   /* Save and restore lots of state around the __gc callback. */
   uint8_t oldh = hook_save(g);
-  GCSize oldt = g->gc.threshold;
+  GCSize oldt = lj_gc_threshold_load(g);
   int errcode;
   lua_State *VL = vmthread(g);
   TValue *top;
   lj_trace_abort(g);
   hook_entergc(g);  /* Disable hooks and new traces during __gc. */
   if (LJ_HASPROFILE && (oldh & HOOK_PROFILE)) lj_dispatch_update(g, 0);
-  g->gc.threshold = LJ_MAX_MEM;  /* Prevent GC steps. */
+  lj_gc_threshold_store(g, LJ_MAX_MEM);  /* Prevent GC steps. */
   top = VL->top;
   copyTV(VL, top++, mo);
   if (LJ_FR2) setnilV(top++);
@@ -935,7 +935,7 @@ static void gc_call_finalizer(global_State *g, lua_State *L,
   lj_tg_setcur_L(g, L);
   hook_restore(g, oldh);
   if (LJ_HASPROFILE && (oldh & HOOK_PROFILE)) lj_dispatch_update(g, 0);
-  g->gc.threshold = oldt;  /* Restore GC threshold. */
+  lj_gc_threshold_store(g, oldt);  /* Restore GC threshold. */
   if (errcode) {
     TValue tmp;
     copyTV(VL, &tmp, VL->top-1);
@@ -1166,23 +1166,26 @@ int LJ_FASTCALL lj_gc_step(lua_State *L)
   lim = (GCSTEPSIZE/100) * g->gc.stepmul;
   if (lim == 0)
     lim = LJ_MAX_MEM;
-  if (g->gc.total > g->gc.threshold)
-    g->gc.debt += g->gc.total - g->gc.threshold;
+  {
+    GCSize threshold = lj_gc_threshold_load(g);
+    if (g->gc.total > threshold)
+      g->gc.debt += g->gc.total - threshold;
+  }
   do {
     lim -= (GCSize)gc_onestep(L);
     if (g->gc.state == GCSpause) {
-      g->gc.threshold = (g->gc.estimate/100) * g->gc.pause;
+      lj_gc_threshold_store(g, (g->gc.estimate/100) * g->gc.pause);
       g->vmstate = ostate;
       return 1;  /* Finished a GC cycle. */
     }
   } while (sizeof(lim) == 8 ? ((int64_t)lim > 0) : ((int32_t)lim > 0));
   if (g->gc.debt < GCSTEPSIZE) {
-    g->gc.threshold = g->gc.total + GCSTEPSIZE;
+    lj_gc_threshold_store(g, g->gc.total + GCSTEPSIZE);
     g->vmstate = ostate;
     return -1;
   } else {
     g->gc.debt -= GCSTEPSIZE;
-    g->gc.threshold = g->gc.total;
+    lj_gc_threshold_store(g, g->gc.total);
     g->vmstate = ostate;
     return 0;
   }
@@ -1231,7 +1234,7 @@ void lj_gc_fullgc(lua_State *L)
   /* Now perform a full GC. */
   g->gc.state = GCSpause;
   do { gc_onestep(L); } while (g->gc.state != GCSpause);
-  g->gc.threshold = (g->gc.estimate/100) * g->gc.pause;
+  lj_gc_threshold_store(g, (g->gc.estimate/100) * g->gc.pause);
   g->vmstate = ostate;
 }
 

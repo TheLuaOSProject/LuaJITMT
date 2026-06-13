@@ -70,12 +70,51 @@ LJ_FUNC int LJ_FASTCALL lj_gc_step_jit(global_State *g, MSize steps);
 #endif
 LJ_FUNC void lj_gc_fullgc(lua_State *L);
 
+static LJ_AINLINE GCSize lj_gcsize_load_acq(const GCSize *p)
+{
+#if LJ_GC64
+  return (GCSize)la_load64_acq(p);
+#else
+  return (GCSize)la_load32_acq(p);
+#endif
+}
+
+static LJ_AINLINE void lj_gcsize_store_rel(GCSize *p, GCSize v)
+{
+#if LJ_GC64
+  la_store64_rel(p, (uint64_t)v);
+#else
+  la_store32_rel(p, (uint32_t)v);
+#endif
+}
+
+static LJ_AINLINE GCSize lj_gc_threshold_load(global_State *g)
+{
+  return lj_gcsize_load_acq(&g->gc.threshold);
+}
+
+static LJ_AINLINE void lj_gc_threshold_store(global_State *g, GCSize threshold)
+{
+  lj_gcsize_store_rel(&g->gc.threshold, threshold);
+}
+
+static LJ_AINLINE GCSize lj_gc_mt_threshold_load(global_State *g)
+{
+  return lj_gcsize_load_acq(&g->mt_gc_threshold);
+}
+
+static LJ_AINLINE void lj_gc_mt_threshold_store(global_State *g,
+						GCSize threshold)
+{
+  lj_gcsize_store_rel(&g->mt_gc_threshold, threshold);
+}
+
 /* GC check: drive collector forward if the GC threshold has been reached. */
 #define lj_gc_check(L) \
-  { if (LJ_UNLIKELY(G(L)->gc.total >= G(L)->gc.threshold)) \
+  { if (LJ_UNLIKELY(G(L)->gc.total >= lj_gc_threshold_load(G(L)))) \
       lj_gc_step(L); }
 #define lj_gc_check_fixtop(L) \
-  { if (LJ_UNLIKELY(G(L)->gc.total >= G(L)->gc.threshold)) \
+  { if (LJ_UNLIKELY(G(L)->gc.total >= lj_gc_threshold_load(G(L)))) \
       lj_gc_step_fixtop(L); }
 
 /* Write barriers. */
