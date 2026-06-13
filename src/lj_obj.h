@@ -832,9 +832,12 @@ typedef struct GC2SSBNode GC2SSBNode;
 typedef struct GC2State {
   uint32_t phase;	/* LJ_GC2_*; authoritative scaffold phase. */
   uint32_t cycle;	/* Monotonically increasing legacy cycle id. */
+  uint32_t cycle_leader;  /* Nonblocking token for requested cycle leader. */
   uint64_t hs_epoch;	/* Soft-handshake generation. */
   uint32_t hs_pending;	/* Outstanding handshake acknowledgements. */
   uint32_t hs_actions;	/* Current LJ_GC2_HS_* action bits. */
+  uint64_t cycle_requests;  /* Allocation-triggered cycle requests. */
+  uint64_t cycle_starts;  /* Requested cycles consumed at mark begin. */
   uint64_t marks_this_round;  /* New arena/HugeTab marks this round. */
   GC2SSBNode *ssb_head;	/* Published mutator SSB buffers. */
   uint32_t ssb_published;  /* Published SSB node count. */

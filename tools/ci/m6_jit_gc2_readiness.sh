@@ -11,8 +11,15 @@ OUT=${TMPDIR:-/tmp}/lj_t-gc2-jit-hard-check
 make -C "$ROOT/src" >/dev/null
 
 for needle in \
+  'uint32_t cycle_leader' \
+  'uint64_t cycle_requests' \
+  'uint64_t cycle_starts' \
   'uint64_t jit_hard_checks' \
-  'static void gc2_maybe_trigger_cycle(global_State *g)' \
+  'static int gc2_request_cycle(global_State *g, TGState *tg)' \
+  'static void gc2_maybe_trigger_cycle(global_State *g, TGState *tg)' \
+  'la_cas32(&g->gc2.cycle_leader' \
+  'la_add64_rlx(&g->gc2.cycle_requests' \
+  'la_add64_rlx(&g->gc2.cycle_starts' \
   'lj_gc_threshold_load(g) == LJ_MAX_MEM' \
   'lj_gc_threshold_store(g, g->gc.total)' \
   'lj_gc2_assist(global_State *g, TGState *tg)' \

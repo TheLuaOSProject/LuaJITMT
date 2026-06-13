@@ -23,6 +23,7 @@ int main(void)
   void *p;
   uint64_t total;
   uint64_t epoch0;
+  uint64_t cycle_requests0, cycle_starts0;
   uint64_t assist_runs0, assist_grey0, assist_ssb0;
   GCtab *parent, *child, *grandchild;
 
@@ -32,6 +33,9 @@ int main(void)
   assert(g != NULL);
   assert(tg != NULL);
   assert(la_load32_acq(&g->gc2.gcpause_pct) == 100);
+  assert(la_load32_acq(&g->gc2.cycle_leader) == 0);
+  assert(la_load64_acq(&g->gc2.cycle_requests) == 0);
+  assert(la_load64_acq(&g->gc2.cycle_starts) == 0);
   assert(la_load32_acq(&g->gc2.assist_shift) ==
 	 lj_gc2_assist_shift_from_stepmul(g->gc.stepmul));
   assert(la_load64_acq(&g->gc2.trigger_bytes) >= LJ_GC2_ACCT_FLUSH);
@@ -88,15 +92,29 @@ int main(void)
   lj_gc_threshold_store(g, g->gc.total + 4u * LJ_GC2_ACCT_FLUSH);
   la_store64_rel(&g->gc2.trigger_bytes, 1);
   (void)la_xchg64_acqrel(&g->gc2.alloc_since_trigger, 0);
+  cycle_requests0 = la_load64_acq(&g->gc2.cycle_requests);
+  cycle_starts0 = la_load64_acq(&g->gc2.cycle_starts);
   lj_gc2_account_alloc(g, tg, LJ_GC2_ACCT_FLUSH);
   assert(la_load64_acq(&tg->local_total) == 0);
   assert(lj_gc_threshold_load(g) == g->gc.total);
+  assert(la_load32_acq(&g->gc2.cycle_leader) == tg->tid);
+  assert(la_load64_acq(&g->gc2.cycle_requests) == cycle_requests0 + 1u);
+  assert(la_load64_acq(&g->gc2.cycle_starts) == cycle_starts0);
+  lj_gc2_account_alloc(g, tg, LJ_GC2_ACCT_FLUSH);
+  assert(la_load64_acq(&g->gc2.cycle_requests) == cycle_requests0 + 1u);
+  lj_gc2_legacy_mark_begin(g);
+  assert(la_load32_acq(&g->gc2.cycle_leader) == 0);
+  assert(la_load64_acq(&g->gc2.cycle_starts) == cycle_starts0 + 1u);
+  lj_gc2_legacy_cycle_end(g);
 
   lj_gc_threshold_store(g, LJ_MAX_MEM);
   (void)la_xchg64_acqrel(&g->gc2.alloc_since_trigger, 0);
+  cycle_requests0 = la_load64_acq(&g->gc2.cycle_requests);
   lj_gc2_account_alloc(g, tg, LJ_GC2_ACCT_FLUSH);
   assert(la_load64_acq(&tg->local_total) == 0);
   assert(lj_gc_threshold_load(g) == LJ_MAX_MEM);
+  assert(la_load32_acq(&g->gc2.cycle_leader) == 0);
+  assert(la_load64_acq(&g->gc2.cycle_requests) == cycle_requests0);
   lj_gc_threshold_store(g, g->gc.total + 4u * LJ_GC2_ACCT_FLUSH);
   lj_gc2_update_pacing(g);
 

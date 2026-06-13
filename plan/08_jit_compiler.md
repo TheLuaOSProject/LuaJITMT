@@ -267,7 +267,10 @@ handler — sized LJ_MAX_EXITSTUBGR-compatible; see lj_vmstruct notes.
   `hard_bytes`, `gcpause_pct`, and `assist_shift` are initialized and updated
   from `lua_gc` pause/stepmul controls. When flushed bytes pass
   `trigger_bytes` while GC2 is idle, the bridge requests a cycle by lowering
-  the legacy `gc.threshold`, while still honoring `collectgarbage("stop")`.
+  the legacy `gc.threshold`, while still honoring `collectgarbage("stop")`;
+  the request now also claims a nonblocking `GC2State.cycle_leader` token and
+  records request/start telemetry so the eventual independent GC2 leader path
+  has an owned request surface before the legacy threshold bridge is removed.
   The first bounded-assist bridge now has `lj_gc2_account_alloc()` call
   `lj_gc2_assist()` past `hard_bytes` during GC2 MARK/WEAK. Assists use
   `TGState.gc_assist` to prevent reentry, a nonblocking assist-owner token for

@@ -39,9 +39,12 @@ void lj_gc2_init(global_State *g)
   g->gc2.assist_shift = lj_gc2_assist_shift_from_stepmul(g->gc.stepmul);
   g->gc2.phase = LJ_GC2_IDLE;
   g->gc2.cycle = 0;
+  la_store32_rlx(&g->gc2.cycle_leader, 0);
   g->gc2.hs_epoch = 0;
   g->gc2.hs_pending = 0;
   g->gc2.hs_actions = 0;
+  la_store64_rlx(&g->gc2.cycle_requests, 0);
+  la_store64_rlx(&g->gc2.cycle_starts, 0);
   la_store64_rlx(&g->gc2.marks_this_round, 0);
   g->gc2.ssb_head = NULL;
   la_store32_rlx(&g->gc2.ssb_published, 0);
@@ -91,16 +94,31 @@ uint64_t lj_gc2_flush_alloc(global_State *g, TGState *tg)
   return bytes;
 }
 
-static void gc2_maybe_trigger_cycle(global_State *g)
+static int gc2_request_cycle(global_State *g, TGState *tg)
+{
+  uint32_t expect = 0;
+  uint32_t tid = tg ? la_load32_acq(&tg->tid) : 0;
+  if (tid == 0)
+    return 0;
+  if (la_load32_acq(&g->gc2.phase) != LJ_GC2_IDLE)
+    return 0;
+  if (lj_gc_threshold_load(g) == LJ_MAX_MEM)
+    return 0;  /* Honor collectgarbage("stop"). */
+  if (!la_cas32(&g->gc2.cycle_leader, &expect, tid, LA_ACQ_REL, LA_ACQ))
+    return 0;  /* 05 section 5.11 nonblocking cycle-request token. */
+  la_add64_rlx(&g->gc2.cycle_requests, 1);  /* 05 section 5.11 telemetry. */
+  lj_gc_threshold_store(g, g->gc.total);  /* Legacy cycle-driver bridge. */
+  return 1;
+}
+
+static void gc2_maybe_trigger_cycle(global_State *g, TGState *tg)
 {
   if (la_load32_acq(&g->gc2.phase) != LJ_GC2_IDLE)
     return;
   if (la_load64_acq(&g->gc2.alloc_since_trigger) <=
       la_load64_acq(&g->gc2.trigger_bytes))  /* 05 section 5.11 trigger. */
     return;
-  if (lj_gc_threshold_load(g) == LJ_MAX_MEM)
-    return;  /* Honor collectgarbage("stop"). */
-  lj_gc_threshold_store(g, g->gc.total);  /* Legacy cycle-driver bridge. */
+  (void)gc2_request_cycle(g, tg);
 }
 
 void lj_gc2_account_alloc(global_State *g, TGState *tg, GCSize bytes)
@@ -111,7 +129,7 @@ void lj_gc2_account_alloc(global_State *g, TGState *tg, GCSize bytes)
   old = la_add64_rlx(&tg->local_total, (uint64_t)bytes);  /* 04 section 4.8. */
   if (old + (uint64_t)bytes < old || old + (uint64_t)bytes >= LJ_GC2_ACCT_FLUSH)
     (void)lj_gc2_flush_alloc(g, tg);
-  gc2_maybe_trigger_cycle(g);
+  gc2_maybe_trigger_cycle(g, tg);
   if (la_load64_acq(&g->gc2.alloc_since_trigger) >
       la_load64_acq(&g->gc2.hard_bytes))  /* 05 section 5.11 hard limit. */
     (void)lj_gc2_assist(g, tg);
@@ -216,10 +234,15 @@ static void gc2_mark_tab_retired_mem(global_State *g)
 void lj_gc2_legacy_mark_begin(global_State *g)
 {
   TGState *tg = G2TG(g);
+  uint32_t leader;
+  /* Publish MARK before clearing the request token, so late allocators stop. */
+  g->gc2.phase = LJ_GC2_MARK;
+  leader = la_xchg32_acqrel(&g->gc2.cycle_leader, 0);
   if (g->gc2.tg_list == NULL && tg != NULL)
     lj_tg_attach(g, tg);
-  g->gc2.phase = LJ_GC2_MARK;
   g->gc2.cycle++;
+  if (leader)
+    la_add64_rlx(&g->gc2.cycle_starts, 1);
   la_store64_rlx(&g->gc2.marks_this_round, 0);
   (void)lj_gc2_drain_ssb(g);  /* Finish prior-cycle scaffold work. */
   (void)lj_tg_reclaim_dead(g);
@@ -244,6 +267,7 @@ void lj_gc2_legacy_sweep_begin(global_State *g)
 
 void lj_gc2_legacy_preserve_abort(global_State *g)
 {
+  la_store32_rel(&g->gc2.cycle_leader, 0);
   g->gc2.phase = LJ_GC2_IDLE;
   lj_gc2_handshake(g, LJ_GC2_HS_DISABLE_BARRIER|LJ_GC2_HS_ALLOC_WHITE|
 		   LJ_GC2_HS_FLUSH_SSB);
@@ -253,6 +277,7 @@ void lj_gc2_legacy_preserve_abort(global_State *g)
 
 void lj_gc2_legacy_cycle_end(global_State *g)
 {
+  la_store32_rel(&g->gc2.cycle_leader, 0);
   g->gc2.phase = LJ_GC2_IDLE;
   lj_gc2_handshake(g, LJ_GC2_HS_DISABLE_BARRIER|LJ_GC2_HS_ALLOC_WHITE|
 		   LJ_GC2_HS_FLUSH_SSB);

@@ -13,6 +13,9 @@ for needle in \
   'uint64_t alloc_since_trigger' \
   'uint64_t trigger_bytes' \
   'uint64_t hard_bytes' \
+  'uint32_t cycle_leader' \
+  'uint64_t cycle_requests' \
+  'uint64_t cycle_starts' \
   'uint64_t assist_runs' \
   'uint64_t assist_grey_drained' \
   'uint64_t assist_ssb_converted' \
@@ -28,7 +31,11 @@ for needle in \
   'lj_gc2_update_pacing(global_State *g)' \
   'lj_gc2_assist_shift_from_stepmul(uint32_t stepmul)' \
   'lj_gc2_assist(global_State *g, TGState *tg)' \
-  'static void gc2_maybe_trigger_cycle(global_State *g)' \
+  'static int gc2_request_cycle(global_State *g, TGState *tg)' \
+  'static void gc2_maybe_trigger_cycle(global_State *g, TGState *tg)' \
+  'la_cas32(&g->gc2.cycle_leader' \
+  'la_add64_rlx(&g->gc2.cycle_requests' \
+  'la_add64_rlx(&g->gc2.cycle_starts' \
   'lj_gc_threshold_load(g) == LJ_MAX_MEM' \
   'lj_gc_threshold_store(g, g->gc.total)' \
   'la_store64_rel(&g->gc2.trigger_bytes' \
@@ -39,6 +46,7 @@ for needle in \
   'la_add64_rlx(&g->gc2.assist_grey_drained' \
   'la_add64_rlx(&g->gc2.assist_ssb_converted' \
   'la_store64_rlx(&g->gc2.jit_hard_checks, 0)' \
+  'la_xchg32_acqrel(&g->gc2.cycle_leader, 0)' \
   'gc2_drain_active_ssb_to_grey(global_State *g, TGState *tg' \
   'gc2_drain_published_ssb_to_grey(global_State *g' \
   'gc2_drain_grey(g, left)' \
