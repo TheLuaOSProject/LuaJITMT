@@ -19,6 +19,7 @@
 #include "lj_bc.h"
 #include "lj_ff.h"
 #include "lj_strfmt.h"
+#include "lj_atomic.h"
 #include "lj_gc2.h"
 #if LJ_HASJIT
 #include "lj_jit.h"
@@ -145,6 +146,7 @@ void LJ_FASTCALL lj_dispatch_update(global_State *g, int nolock)
 #if LJ_HASPROFILE && !LJ_PROFILE_SIGPROF
   int profile_locked = nolock ? 0 : lj_profile_lock();
 #endif
+  uint32_t redispatch = 0;
   uint8_t oldmode = g->dispatchmode;
   uint8_t mode = 0;
 #if LJ_HASJIT
@@ -247,12 +249,16 @@ void LJ_FASTCALL lj_dispatch_update(global_State *g, int nolock)
 	  lj_dispatch_init_hotcount(g);
 #endif
 	lj_tg_sync_dispatch(g);
+	if (la_load32_acq(&g->gc2.n_threads) > 1)
+	  redispatch = 1;
   }
 #if LJ_HASPROFILE && !LJ_PROFILE_SIGPROF
   if (profile_locked) lj_profile_unlock();
 #else
   UNUSED(nolock);
 #endif
+  if (redispatch)
+    (void)lj_gc2_handshake(g, LJ_GC2_HS_REDISPATCH);
 }
 
 /* -- JIT mode setting ---------------------------------------------------- */

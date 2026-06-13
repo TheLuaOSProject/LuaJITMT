@@ -61,9 +61,12 @@ shared `J` only after hot side exits acquire the recorder token. The trace
 state machine releases the token whenever it returns to `LJ_TRACE_IDLE`, the
 x64/POSIX unwound-trace error code is stored in the current TG instead of
 shared `J->exitcode`, and token-busy hot side exits do not advance the retry
-budget into `SNAPCOUNT_DONE`. The remaining original target is to localize
-record dispatch to the token holder's TG table instead of temporarily exposing
-record hooks through the global dispatch template.
+budget into `SNAPCOUNT_DONE`. Dispatch mode transitions now request
+`HS_REDISPATCH` for already-attached TGs, so TG dispatch copies refresh through
+their own safepoint ack. The remaining original target is to make x64 `DISPATCH`
+load the running TG's dispatch table and then localize record dispatch to the
+token holder's TG table instead of temporarily exposing record hooks through
+the global dispatch template.
 
 ## 8.3 Trace registry & publication
 
