@@ -852,6 +852,7 @@ typedef struct GC2State {
   uint64_t assist_runs;  /* Mutator assist attempts past hard limit. */
   uint64_t assist_grey_drained;  /* Grey objects traced by assists. */
   uint64_t assist_ssb_converted;  /* SSB entries converted by assists. */
+  uint64_t assist_weak_drained;  /* Weak tables clear-scanned by assists. */
   uint64_t jit_hard_checks;  /* Trace GC checks entered past hard limit. */
   uint32_t gcpause_pct;	/* GC2 pacing percentage. */
   uint32_t assist_shift;  /* Bounded assist work is 1 << shift. */
@@ -865,6 +866,7 @@ typedef struct GC2State {
   uint64_t worker_runs;  /* Non-owner worker drain attempts with work. */
   uint64_t worker_grey_drained;  /* Grey objects traced by workers. */
   uint64_t worker_ssb_converted;  /* SSB entries converted by workers. */
+  uint64_t worker_weak_drained;  /* Weak tables clear-scanned by workers. */
   GCRef *weak_stack;	/* GC2-owned weak-table discovery vector. */
   uint8_t *weak_ready;	/* Published weak discovery slots. */
   MSize weak_capacity;	/* Allocated weak discovery slots. */

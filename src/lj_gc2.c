@@ -63,6 +63,7 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.assist_runs, 0);
   la_store64_rlx(&g->gc2.assist_grey_drained, 0);
   la_store64_rlx(&g->gc2.assist_ssb_converted, 0);
+  la_store64_rlx(&g->gc2.assist_weak_drained, 0);
   la_store64_rlx(&g->gc2.jit_hard_checks, 0);
   g->gc2.assist_active = 0;
   g->gc2.grey_stack = NULL;
@@ -74,6 +75,7 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.worker_runs, 0);
   la_store64_rlx(&g->gc2.worker_grey_drained, 0);
   la_store64_rlx(&g->gc2.worker_ssb_converted, 0);
+  la_store64_rlx(&g->gc2.worker_weak_drained, 0);
   g->gc2.weak_stack = NULL;
   g->gc2.weak_ready = NULL;
   g->gc2.weak_capacity = 0;
@@ -1118,6 +1120,8 @@ uint32_t lj_gc2_assist(global_State *g, TGState *tg)
     la_add64_rlx(&g->gc2.assist_grey_drained, n);
   if (converted)
     la_add64_rlx(&g->gc2.assist_ssb_converted, converted);
+  if (weak)
+    la_add64_rlx(&g->gc2.assist_weak_drained, weak);
   tg->gc_assist = 0;
   la_store32_rel(&g->gc2.assist_active, 0);
   return n + weak;
@@ -1707,6 +1711,8 @@ static uint32_t gc2_worker_drain_inner(global_State *g, uint32_t limit,
   }
   if (converted)
     la_add64_rlx(&g->gc2.worker_ssb_converted, converted);
+  if (weak)
+    la_add64_rlx(&g->gc2.worker_weak_drained, weak);
   if (progress) {
     if (converted > ~(uint32_t)0 - n ||
 	weak > ~(uint32_t)0 - n - converted)

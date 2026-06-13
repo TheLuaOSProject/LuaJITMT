@@ -767,7 +767,7 @@ static void test_weak_tables(lua_State *L, global_State *g, TGState *tg)
 static void test_worker_weak_drain(lua_State *L, global_State *g, TGState *tg)
 {
   GCtab *weak, *key, *val;
-  uint64_t worker_runs0, clear_tables0, clear_cleared0;
+  uint64_t worker_runs0, worker_weak0, clear_tables0, clear_cleared0;
 
   make_weak_table(L, "v", &weak, &key, &val);
 
@@ -780,10 +780,12 @@ static void test_worker_weak_drain(lua_State *L, global_State *g, TGState *tg)
 
   lj_gc2_legacy_weak_begin(g);
   worker_runs0 = la_load64_acq(&g->gc2.worker_runs);
+  worker_weak0 = la_load64_acq(&g->gc2.worker_weak_drained);
   clear_tables0 = la_load64_acq(&g->gc2.weak_clear_tables);
   clear_cleared0 = la_load64_acq(&g->gc2.weak_clear_cleared);
   assert(lj_gc2_worker_drain_progress(g, 1) == 1u);
   assert(la_load64_acq(&g->gc2.worker_runs) == worker_runs0 + 1u);
+  assert(la_load64_acq(&g->gc2.worker_weak_drained) == worker_weak0 + 1u);
   assert(la_load64_acq(&g->gc2.weak_clear_tables) == clear_tables0 + 1u);
   assert(la_load64_acq(&g->gc2.weak_clear_cleared) == clear_cleared0 + 1u);
   assert(weak_entry_is_nil(L, weak, key));

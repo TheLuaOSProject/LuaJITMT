@@ -33,6 +33,7 @@ for needle in \
   'uint64_t weak_clear_tables' \
   'uint64_t weak_clear_slots' \
   'uint64_t weak_clear_cleared' \
+  'uint64_t worker_weak_drained' \
   'LJ_GC2_WEAK_DRAIN_BATCH' \
   'uint64_t finreg_cdata_sets' \
   'uint64_t finreg_cdata_clears' \
@@ -85,6 +86,7 @@ for needle in \
   'lj_gc2_worker_drain(g' \
   'lj_gc2_worker_drain_progress(global_State *g, uint32_t limit)' \
   'weak = lj_gc2_weak_drain(g, limit - work)' \
+  'la_add64_rlx(&g->gc2.worker_weak_drained' \
   'lj_gc2_ssb_empty(g)' \
   'la_loadptr_acq((void *const *)&tg->ssb_next)' \
   'la_storeptr_rel((void **)&tg->ssb_next' \

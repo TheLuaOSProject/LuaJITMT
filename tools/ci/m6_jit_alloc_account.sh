@@ -19,6 +19,7 @@ for needle in \
   'uint64_t assist_runs' \
   'uint64_t assist_grey_drained' \
   'uint64_t assist_ssb_converted' \
+  'uint64_t assist_weak_drained' \
   'uint64_t jit_hard_checks' \
   'uint32_t gcpause_pct' \
   'uint32_t assist_shift' \
@@ -45,6 +46,7 @@ for needle in \
   'la_add64_rlx(&g->gc2.assist_runs' \
   'la_add64_rlx(&g->gc2.assist_grey_drained' \
   'la_add64_rlx(&g->gc2.assist_ssb_converted' \
+  'la_add64_rlx(&g->gc2.assist_weak_drained' \
   'la_store64_rlx(&g->gc2.jit_hard_checks, 0)' \
   'la_xchg32_acqrel(&g->gc2.cycle_leader, 0)' \
   'gc2_drain_active_ssb_to_grey(global_State *g, TGState *tg' \

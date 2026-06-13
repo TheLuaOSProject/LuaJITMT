@@ -25,6 +25,7 @@ int main(void)
   uint64_t epoch0;
   uint64_t cycle_requests0, cycle_starts0;
   uint64_t assist_runs0, assist_grey0, assist_ssb0;
+  uint64_t assist_weak0;
   uint64_t weak_clear_tables0, weak_clear_cleared0;
   GCtab *parent, *child, *grandchild;
   GCtab *weak, *key, *val;
@@ -46,6 +47,7 @@ int main(void)
   assert(la_load64_acq(&g->gc2.assist_runs) == 0);
   assert(la_load64_acq(&g->gc2.assist_grey_drained) == 0);
   assert(la_load64_acq(&g->gc2.assist_ssb_converted) == 0);
+  assert(la_load64_acq(&g->gc2.assist_weak_drained) == 0);
   assert(la_load64_acq(&g->gc2.jit_hard_checks) == 0);
   assert(la_load32_acq(&g->gc2.assist_active) == 0);
 
@@ -229,12 +231,14 @@ int main(void)
   la_store32_rel(&g->gc2.assist_shift, 0);
   (void)la_xchg64_acqrel(&g->gc2.alloc_since_trigger, 0);
   assist_runs0 = la_load64_acq(&g->gc2.assist_runs);
+  assist_weak0 = la_load64_acq(&g->gc2.assist_weak_drained);
   weak_clear_tables0 = la_load64_acq(&g->gc2.weak_clear_tables);
   weak_clear_cleared0 = la_load64_acq(&g->gc2.weak_clear_cleared);
   lj_gc2_account_alloc(g, tg, LJ_GC2_ACCT_FLUSH);
   assert(tg->gc_assist == 0);
   assert(la_load32_acq(&g->gc2.assist_active) == 0);
   assert(la_load64_acq(&g->gc2.assist_runs) == assist_runs0 + 1u);
+  assert(la_load64_acq(&g->gc2.assist_weak_drained) == assist_weak0 + 1u);
   assert(la_load64_acq(&g->gc2.weak_clear_tables) == weak_clear_tables0 + 1u);
   assert(la_load64_acq(&g->gc2.weak_clear_cleared) ==
 	 weak_clear_cleared0 + 1u);
