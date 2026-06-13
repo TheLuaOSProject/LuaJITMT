@@ -184,20 +184,23 @@ and snapshot slot values before nil/type/copy decisions; array growth
 initializes slots before release-publishing the pointer and then `asize`, while
 shrink keeps the current allocation capacity until the final `AHdr` port. On
 x86-64,
-`lj_vm_next` hash traversal, the `BC_ITERN` array/hash iterator path, and
-`ipairs_aux` array iteration now load candidate values into registers before nil
-decisions and copy those same snapshots to their results; `BC_TGETS`/`BC_TSETS`
-string-key hash fast paths load the legacy node base before hmask/index
-calculation, as does the x64 `getmetatable` fast-function probe for
-`__metatable`; `BC_TSETV`/`BC_TSETS`/`BC_TSETB` load previous slot values into
-registers before nil/metamethod decisions. Core C table lookup, resize, rehash
-counting, collision checks, and `next()` now make key/value decisions from
-acquired `TValue` snapshots instead of direct shared node-field reads; GC/GC2
-table traversal, weak clearing, finalizer-table scans, serialization, bytecode
-writing, parser template-table fixup, recorder traversal typing, and
-`table.maxn` use the same snapshot helpers. These steps do not replace the
-legacy resize algorithm with the planned lock-free `AHdr`/`NHdr` generation
-protocol yet.
+`getmetatable`'s `__metatable` probe, `ipairs_aux` empty-hash fallback,
+`lj_vm_next` hash traversal, `BC_TGETS_Z`, and `BC_ITERN` hash traversal now
+load the mask from the acquired node header instead of the legacy
+`GCtab.hmask` mirror. `BC_TSETS_Z` uses the same node-header mask for coherent
+string-key slot addressing, but still needs the original RETIRING/FORWARD/CAS
+write protocol for migration correctness. `lj_vm_next` hash traversal, the
+`BC_ITERN` array/hash iterator path, and `ipairs_aux` array iteration load
+candidate values into registers before nil decisions and copy those same
+snapshots to their results; `BC_TSETV`/`BC_TSETS`/`BC_TSETB` load previous slot
+values into registers before nil/metamethod decisions. Core C table lookup,
+resize, rehash counting, collision checks, and `next()` now make key/value
+decisions from acquired `TValue` snapshots instead of direct shared node-field
+reads; GC/GC2 table traversal, weak clearing, finalizer-table scans,
+serialization, bytecode writing, parser template-table fixup, recorder
+traversal typing, and `table.maxn` use the same snapshot helpers. These steps
+do not replace the legacy resize algorithm with the planned lock-free
+`AHdr`/`NHdr` generation protocol yet.
 ### 6.3.6 next/pairs (lj_tab_next)
 Iterate the *gen snapshot* captured at first call: store the NH pointer in
 the iterator control slot? Lua's `next(t,k)` is stateless — DECIDED:

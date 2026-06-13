@@ -24,6 +24,8 @@ for needle in \
   'mov r8, [ITYPE+RC*8]' \
   'cmp r8, LJ_TNIL; je >4' \
   'mov [BASE+RA*8+8], r8' \
+  'mov r8, TAB:RB->node' \
+  'mov r9d, dword [r8-8]' \
   'mov r8, NODE:ITYPE->val' \
   'cmp r8, LJ_TNIL; je >7' \
   'mov r9, NODE:ITYPE->key' \
@@ -39,12 +41,14 @@ for reject in \
   'cmp aword [ITYPE+RC*8], LJ_TNIL' \
   'cmp aword NODE:ITYPE->val, LJ_TNIL' \
   'mov RB, [ITYPE+RC*8]' \
-  'mov RC, NODE:ITYPE->val'
+  'mov RC, NODE:ITYPE->val' \
+  'cmp RCd, TAB:RB->hmask' \
+  'add NODE:ITYPE, TAB:RB->node'
 do
   if rg -F -n "$reject" "$ROOT/src/vm_x64.dasc"; then
-    echo "guardrail: x64 BC_ITERN must not double-read iterator slots: $reject" >&2
+    echo "guardrail: x64 BC_ITERN must use header snapshots and single slot reads: $reject" >&2
     exit 1
   fi
 done
 
-echo "M5 x64 BC_ITERN snapshot guard passed"
+echo "M5 x64 BC_ITERN node-header snapshot guard passed"

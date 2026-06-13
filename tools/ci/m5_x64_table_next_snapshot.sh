@@ -23,6 +23,8 @@ assert(n == 5)
 '
 
 for needle in \
+  'mov r8, NEXT_TAB->node' \
+  'mov r9d, dword [r8-8]' \
   'mov NEXT_TMP, NODE:NEXT_PTR->val' \
   'cmp NEXT_TMP, LJ_TNIL; je >7'
 do
@@ -38,4 +40,14 @@ if rg -n 'cmp qword NODE:NEXT_PTR->val, LJ_TNIL' \
   exit 1
 fi
 
-echo "M5 x64 table next snapshot guard passed"
+for reject in \
+  'cmp NEXT_IDX, NEXT_TAB->hmask' \
+  'add NODE:NEXT_PTR, NEXT_TAB->node'
+do
+  if rg -F -n "$reject" "$ROOT/src/vm_x64.dasc"; then
+    echo "guardrail: x64 lj_vm_next must use one node/header hmask pair: $reject" >&2
+    exit 1
+  fi
+done
+
+echo "M5 x64 table next node-header snapshot guard passed"

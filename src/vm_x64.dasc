@@ -1300,7 +1300,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov [BASE-16], TAB:RC		// Store metatable as default result.
   |  mov STR:RC, [DISPATCH+DISPATCH_GL(gcroot)+8*(GCROOT_MMNAME+MM_metatable)]
   |  mov r8, TAB:RB->node
-  |  mov RAd, TAB:RB->hmask
+  |  mov RAd, dword [r8-8]
   |  and RAd, STR:RC->sid
   |  settp STR:RC, LJ_TSTR
   |  imul RAd, #NODE
@@ -1491,7 +1491,8 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov RDd, 1+2
   |  jmp ->fff_res
   |2:  // Check for empty hash part first. Otherwise call C function.
-  |  cmp dword TAB:RB->hmask, 0; je ->fff_res0
+  |  mov r8, TAB:RB->node
+  |  cmp dword [r8-8], 0; je ->fff_res0
   |.if X64WIN
   |  mov TMPR, BASE
   |  mov CARG2d, RAd
@@ -2833,9 +2834,11 @@ static void build_subroutines(BuildCtx *ctx)
   |5:  // Traverse hash part.
   |  sub NEXT_IDX, NEXT_ASIZE
   |6:
-  |  cmp NEXT_IDX, NEXT_TAB->hmask; ja >9
+  |  mov r8, NEXT_TAB->node
+  |  mov r9d, dword [r8-8]
+  |  cmp NEXT_IDX, r9d; ja >9
   |  imul NEXT_PTRd, NEXT_IDX, #NODE
-  |  add NODE:NEXT_PTR, NEXT_TAB->node
+  |  add NODE:NEXT_PTR, r8
   |  mov NEXT_TMP, NODE:NEXT_PTR->val
   |  cmp NEXT_TMP, LJ_TNIL; je >7
   |  NEXT_RES_IDXL NEXT_ASIZE+1
@@ -3981,7 +3984,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  checktab TAB:RB, ->vmeta_tgets
     |->BC_TGETS_Z:	// RB = GCtab *, RC = GCstr *
     |  mov r8, TAB:RB->node
-    |  mov TMPRd, TAB:RB->hmask
+    |  mov TMPRd, dword [r8-8]
     |  and TMPRd, STR:RC->sid
     |  imul TMPRd, #NODE
     |  add NODE:TMPR, r8
@@ -4117,7 +4120,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  checktab TAB:RB, ->vmeta_tsets
     |->BC_TSETS_Z:	// RB = GCtab *, RC = GCstr *
     |  mov r8, TAB:RB->node
-    |  mov TMPRd, TAB:RB->hmask
+    |  mov TMPRd, dword [r8-8]
     |  and TMPRd, STR:RC->sid
     |  imul TMPRd, #NODE
     |  mov byte TAB:RB->nomm, 0		// Clear metamethod cache.
@@ -4427,9 +4430,11 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |5:  // Traverse hash part.
     |  sub RCd, TMPRd
     |6:
-    |  cmp RCd, TAB:RB->hmask; ja <3	// End of iteration? Branch to ITERL+1.
+    |  mov r8, TAB:RB->node
+    |  mov r9d, dword [r8-8]
+    |  cmp RCd, r9d; ja <3	// End of iteration? Branch to ITERL+1.
     |  imul ITYPEd, RCd, #NODE
-    |  add NODE:ITYPE, TAB:RB->node
+    |  add NODE:ITYPE, r8
     |  mov r8, NODE:ITYPE->val
     |  cmp r8, LJ_TNIL; je >7
     |  lea TMPRd, [RCd+TMPRd+1]
