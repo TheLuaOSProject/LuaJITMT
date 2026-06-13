@@ -32,6 +32,7 @@ enum {
 #define LJ_GC2_HS_STOPREQ		0x00000400u
 
 #define LJ_GC2_ACCT_FLUSH		32768u
+#define LJ_GC2_WEAK_DRAIN_BATCH		64u
 
 LJ_FUNC void lj_gc2_init(global_State *g);
 LJ_FUNC void lj_gc2_fini(global_State *g);

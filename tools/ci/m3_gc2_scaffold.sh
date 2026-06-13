@@ -33,6 +33,7 @@ for needle in \
   'uint64_t weak_clear_tables' \
   'uint64_t weak_clear_slots' \
   'uint64_t weak_clear_cleared' \
+  'LJ_GC2_WEAK_DRAIN_BATCH' \
   'uint64_t finreg_cdata_sets' \
   'uint64_t finreg_cdata_clears' \
   'uint64_t finreg_cdata_queued' \
@@ -79,7 +80,8 @@ for needle in \
   'lj_gc2_fixpoint_run(global_State *g, lua_State *L' \
   'la_xchg64_acqrel(&g->gc2.marks_this_round, 0)' \
   'LJ_GC2_HS_SCAN_ROOTS|LJ_GC2_HS_FLUSH_SSB' \
-  'lj_gc2_weak_drain(g, ~(uint32_t)0)' \
+  'lj_gc2_weak_drain(g, LJ_GC2_WEAK_DRAIN_BATCH)' \
+  '05 section 5.8 bounded weak-drain bridge' \
   'lj_gc2_worker_drain(g' \
   'lj_gc2_worker_drain_progress(global_State *g, uint32_t limit)' \
   'lj_gc2_ssb_empty(g)' \

@@ -1119,6 +1119,7 @@ void lj_gc_freeall(global_State *g)
 static void atomic(global_State *g, lua_State *L)
 {
   size_t udsize;
+  uint32_t weakdrain;
 
   gc_mark_uv(g);  /* Need to remark open upvalues (the thread may be dead). */
   gc_propagate_gray(g);  /* Propagate any left-overs. */
@@ -1144,7 +1145,9 @@ static void atomic(global_State *g, lua_State *L)
 
   /* All marking done, clear weak tables. */
   lj_gc2_legacy_weak_begin(g);
-  (void)lj_gc2_weak_drain(g, ~(uint32_t)0);
+  do {
+    weakdrain = lj_gc2_weak_drain(g, LJ_GC2_WEAK_DRAIN_BATCH);
+  } while (weakdrain != 0);  /* 05 section 5.8 bounded weak-drain bridge. */
   gc_clearweak(g, gcref(g->gc.weak));
   lj_gc2_legacy_sweep_begin(g);
 

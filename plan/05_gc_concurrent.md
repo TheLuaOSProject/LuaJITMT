@@ -322,8 +322,9 @@ applies the same predicate with release nil stores, advances through the
 published ready prefix with `weak_clear_cursor` without moving past
 reserved-but-unpublished slots, and now runs before legacy `gc_clearweak()`;
 `lj_gc2_weak_drain()` is the phase-gated bounded driver used by the legacy
-atomic bridge while the full worker-owned weak drain is staged. The legacy pass
-remains the authoritative fallback for weak tables not yet discovered by GC2.
+atomic bridge in `LJ_GC2_WEAK_DRAIN_BATCH` chunks while the full worker-owned
+weak drain is staged. The legacy pass remains the authoritative fallback for
+weak tables not yet discovered by GC2.
 String-bearing weak hash slots now follow legacy `gc_mayclear()` semantics in
 the GC2 clear driver: strings are marked but are not themselves weak-cleared,
 while a collectable key/value on the other side can still clear the entry. The
