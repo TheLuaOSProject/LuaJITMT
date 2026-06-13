@@ -938,12 +938,18 @@ static void test_tvalue_range_barrier(lua_State *L, global_State *g,
 static void test_vm_tsetm_range_barrier(lua_State *L, global_State *g,
 					TGState *tg)
 {
-  GCtab *child1, *child2, *parent;
+  enum { TSETM_BIG_N = 96 };
+  GCtab *child1, *child2, *parent, *src, *last;
+  int i;
 
   lua_settop(L, 0);
   assert(luaL_dostring(L,
     "return function(a, b)\n"
     "  local function many() return a, b end\n"
+    "  return { many() }\n"
+    "end,\n"
+    "function(src, n)\n"
+    "  local function many() return unpack(src, 1, n) end\n"
     "  return { many() }\n"
     "end\n") == LUA_OK);
   lua_newtable(L);
@@ -958,8 +964,8 @@ static void test_vm_tsetm_range_barrier(lua_State *L, global_State *g,
   assert(lj_gc2_ismarked(g, obj2gco(child2)) == 0);
 
   lua_pushvalue(L, 1);
-  lua_pushvalue(L, 2);
   lua_pushvalue(L, 3);
+  lua_pushvalue(L, 4);
   lua_call(L, 2, 1);
   parent = tabV(L->top - 1);
   assert(lj_tab_asize_acq(parent) >= 2);
@@ -970,7 +976,35 @@ static void test_vm_tsetm_range_barrier(lua_State *L, global_State *g,
   assert(!lj_gc2_ssb_empty(g));
   flush_and_drain(g, tg);
   lj_gc2_legacy_cycle_end(g);
-  lua_pop(L, 4);
+  lua_pop(L, 1);
+
+  lua_createtable(L, TSETM_BIG_N, 0);
+  src = tabV(L->top - 1);
+  last = NULL;
+  for (i = 1; i <= TSETM_BIG_N; i++) {
+    lua_newtable(L);
+    if (i == TSETM_BIG_N)
+      last = tabV(L->top - 1);
+    lua_rawseti(L, -2, i);
+  }
+
+  lj_gc2_legacy_mark_begin(g);
+  assert(lj_gc2_ismarked(g, obj2gco(src)) == 0);
+  assert(last != NULL);
+  assert(lj_gc2_ismarked(g, obj2gco(last)) == 0);
+
+  lua_pushvalue(L, 2);
+  lua_pushvalue(L, 5);
+  lua_pushinteger(L, TSETM_BIG_N);
+  lua_call(L, 2, 1);
+  parent = tabV(L->top - 1);
+  assert(lj_tab_asize_acq(parent) >= TSETM_BIG_N);
+  assert(tabV(lj_tab_getint(parent, TSETM_BIG_N)) == last);
+  assert(lj_gc2_ismarked(g, obj2gco(last)) == 1);
+  assert(!lj_gc2_ssb_empty(g));
+  flush_and_drain(g, tg);
+  lj_gc2_legacy_cycle_end(g);
+  lua_pop(L, 6);
 }
 
 static void test_closure(lua_State *L, global_State *g, TGState *tg)
