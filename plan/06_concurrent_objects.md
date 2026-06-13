@@ -175,14 +175,15 @@ table, GC, serialization, bytecode-writer, parser, and recorder readers.
 Legacy `GCtab.array` C readers use acquire-loaded pointer/size helpers and
 snapshot slot values before nil/type/copy decisions; array growth initializes
 slots before release-publishing the pointer and then `asize`, while shrink keeps
-the current allocation capacity until the final `AHdr` port. Core C table
-lookup, resize, rehash counting, collision checks, and `next()` now make
-key/value decisions from acquired `TValue` snapshots instead of direct shared
-node-field reads; GC/GC2 table traversal, weak clearing, finalizer-table scans,
-serialization, bytecode writing, parser template-table fixup, recorder
-traversal typing, and `table.maxn` use the same snapshot helpers. These steps
-do not replace the legacy resize algorithm with the planned lock-free
-`AHdr`/`NHdr` generation protocol yet.
+the current allocation capacity until the final `AHdr` port. On x86-64,
+`lj_vm_next` hash traversal now loads the hash-slot value into a register before
+the nil decision. Core C table lookup, resize, rehash counting, collision
+checks, and `next()` now make key/value decisions from acquired `TValue`
+snapshots instead of direct shared node-field reads; GC/GC2 table traversal,
+weak clearing, finalizer-table scans, serialization, bytecode writing, parser
+template-table fixup, recorder traversal typing, and `table.maxn` use the same
+snapshot helpers. These steps do not replace the legacy resize algorithm with
+the planned lock-free `AHdr`/`NHdr` generation protocol yet.
 ### 6.3.6 next/pairs (lj_tab_next)
 Iterate the *gen snapshot* captured at first call: store the NH pointer in
 the iterator control slot? Lua's `next(t,k)` is stateless — DECIDED:

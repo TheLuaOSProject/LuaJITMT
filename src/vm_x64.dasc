@@ -2835,7 +2835,8 @@ static void build_subroutines(BuildCtx *ctx)
   |  cmp NEXT_IDX, NEXT_TAB->hmask; ja >9
   |  imul NEXT_PTRd, NEXT_IDX, #NODE
   |  add NODE:NEXT_PTR, NEXT_TAB->node
-  |  cmp qword NODE:NEXT_PTR->val, LJ_TNIL; je >7
+  |  mov NEXT_TMP, NODE:NEXT_PTR->val
+  |  cmp NEXT_TMP, LJ_TNIL; je >7
   |  NEXT_RES_IDXL NEXT_ASIZE+1
   |  ret
   |7:  // Skip holes in hash part.
