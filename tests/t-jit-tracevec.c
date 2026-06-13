@@ -97,7 +97,7 @@ int main(void)
   assert(epoch == g->gc2.hs_epoch);
   assert(lj_trace_reclaim_retired(g, epoch) == 0);
   assert(retired_has(J, oldtv));
-  assert(lj_trace_reclaim_retired(g, epoch + 1u) == 1);
+  assert(lj_trace_reclaim_retired(g, epoch + 1u) >= 1);
   assert(J->retiredtracev == NULL);
 
   lua_close(L);

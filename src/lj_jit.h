@@ -183,6 +183,8 @@ typedef struct MCodeRetire {
   struct MCodeRetire *next;  /* Retired area records. */
 } MCodeRetire;
 
+#define LJ_FLUSH_EPOCHS		2u
+
 /* Stack snapshot header. */
 typedef struct SnapShot {
   uint32_t mapofs;	/* Offset into snapshot map. */
@@ -298,6 +300,8 @@ typedef struct GCtrace {
   uint8_t topslot;	/* Top stack slot already checked to be allocated. */
   uint8_t linktype;	/* Type of link. */
   uint8_t unused1;
+  uint64_t retire_epoch;  /* Safepoint epoch when retired. */
+  struct GCtrace *retired_next;  /* Retired trace bodies. */
 #ifdef LUAJIT_USE_GDBJIT
   void *gdbjit_entry;	/* GDB JIT entry. */
 #endif
@@ -523,6 +527,7 @@ typedef struct jit_State {
 
   TraceVec *tracev;	/* RCU-published trace vector. */
   TraceVec *retiredtracev;  /* Retired trace vectors awaiting SMR. */
+  GCtrace *retiredtraces;  /* Retired trace bodies awaiting SMR. */
   GCRef *trace;		/* Token-held trace slot mirror. */
   TraceNo freetrace;	/* Start of scan for next free trace. */
   MSize sizetrace;	/* Token-held trace vector size mirror. */

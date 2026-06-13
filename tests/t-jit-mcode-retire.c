@@ -79,7 +79,9 @@ int main(void)
   ret = retired_find(J, oldmc);
   assert(ret != NULL);
   assert(J->szallmcarea == szall);
-  assert(lj_mcode_reclaim_retired(g, epoch + 1u) >= 1);
+  assert(lj_mcode_reclaim_retired(g, epoch + 1u) == 0);
+  assert(retired_find(J, oldmc) != NULL);
+  assert(lj_mcode_reclaim_retired(g, epoch + LJ_FLUSH_EPOCHS) >= 1);
   assert(J->retiredmcode == NULL);
   assert(J->szallmcarea == 0);
 

@@ -8,6 +8,7 @@ CFLAGS=${CFLAGS:-"-std=gnu99 -O2 -Wall -Wextra -Werror -mcx16"}
 JOBS=${JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)}
 OUT_TRACEVEC=${TMPDIR:-/tmp}/lj_t-jit-tracevec
 OUT_MCODE=${TMPDIR:-/tmp}/lj_t-jit-mcode-retire
+OUT_TRACERET=${TMPDIR:-/tmp}/lj_t-jit-trace-retire
 
 for needle in \
   'LJ_TRACE_PENDING' \
@@ -38,12 +39,20 @@ for needle in \
   'tracevec_new(lua_State *L, MSize sizetrace)' \
   'tracevec_publish(J, newtv)' \
   'tracevec_retire(J, oldtv)' \
+  'GCtrace *retiredtraces' \
+  'uint64_t retire_epoch' \
+  'struct GCtrace *retired_next' \
+  'trace_retire(global_State *g, GCtrace *T)' \
+  'lj_gc_arena_markmem(g, T)' \
+  'trace_freebody(global_State *g, GCtrace *T)' \
+  'trace_markbody(global_State *g, GCtrace *T, int gc2)' \
   'lj_trace_reclaim_retired(global_State *g, uint64_t completed_epoch)' \
   'lj_trace_reclaim_retired(g, epoch)' \
   'lj_trace_markvecs(g, 1)' \
   'lj_trace_markvecs(g, 0)'
 do
-  if ! rg -F -q "$needle" "$ROOT/src/lj_trace.c" "$ROOT/src/lj_safepoint.c" "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc2.c"; then
+  if ! rg -F -q "$needle" "$ROOT/src/lj_jit.h" "$ROOT/src/lj_trace.c" \
+    "$ROOT/src/lj_safepoint.c" "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc2.c"; then
     echo "guardrail: missing trace-vector RCU/SMR bridge: $needle" >&2
     exit 1
   fi
@@ -187,6 +196,10 @@ timeout 20s "$OUT_TRACEVEC"
 "$CC" $CFLAGS -I"$ROOT/src" "$ROOT/tests/t-jit-mcode-retire.c" \
   "$ROOT/src/libluajit.a" -lm -ldl -pthread -o "$OUT_MCODE"
 timeout 20s "$OUT_MCODE"
+
+"$CC" $CFLAGS -I"$ROOT/src" "$ROOT/tests/t-jit-trace-retire.c" \
+  "$ROOT/src/libluajit.a" -lm -ldl -pthread -o "$OUT_TRACERET"
+timeout 20s "$OUT_TRACERET"
 
 "$ROOT/src/luajit" -e '
 local util = require"jit.util"

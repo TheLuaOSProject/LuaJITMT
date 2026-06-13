@@ -396,6 +396,14 @@ static void mcode_freearea(global_State *g, MCodeRetire *ret)
   lj_mem_freet(g, ret);
 }
 
+static LJ_AINLINE int mcode_retire_ready(MCodeRetire *ret,
+					  uint64_t completed_epoch)
+{
+  uint64_t retire_epoch = la_load64_acq(&ret->retire_epoch);
+  return completed_epoch >= retire_epoch &&
+	 completed_epoch - retire_epoch >= LJ_FLUSH_EPOCHS;
+}
+
 /* Retire all active MCode areas. */
 void lj_mcode_free(jit_State *J)
 {
@@ -434,7 +442,7 @@ uint32_t lj_mcode_reclaim_retired(global_State *g, uint64_t completed_epoch)
   while (ret) {
     MCodeRetire *next = ret->next;
     ret->next = NULL;
-    if (la_load64_acq(&ret->retire_epoch) < completed_epoch) {
+    if (mcode_retire_ready(ret, completed_epoch)) {
       mcode_freearea(g, ret);
       reclaimed++;
     } else {

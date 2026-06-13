@@ -98,13 +98,87 @@ static void tracevec_retire(jit_State *J, TraceVec *tv)
   }
 }
 
-uint32_t lj_trace_reclaim_retired(global_State *g, uint64_t completed_epoch)
+static void trace_exittab_free(global_State *g, GCtrace *T);
+
+static GCSize trace_size(GCtrace *T)
+{
+  return (GCSize)(((sizeof(GCtrace)+7)&~7) +
+    (T->nins-T->nk)*sizeof(IRIns) +
+    T->nsnap*sizeof(SnapShot) + T->nsnapmap*sizeof(SnapEntry));
+}
+
+static void trace_retired_push(jit_State *J, GCtrace *T)
+{
+  void *head = la_loadptr_acq((void *const *)&J->retiredtraces);
+  do {
+    T->retired_next = (GCtrace *)head;
+  } while (!la_casptr((void **)&J->retiredtraces, &head, T,
+		      LA_ACQ_REL, LA_ACQ));  /* 08 section 8.7 trace SMR. */
+}
+
+static void trace_retire(global_State *g, GCtrace *T)
 {
   jit_State *J = G2J(g);
+  T->retire_epoch = la_load64_acq(&g->gc2.hs_epoch);
+  T->retired_next = NULL;
+  lj_gc_arena_markmem(g, T);
+  if (T->exittab)
+    lj_gc_arena_markmem(g, T->exittab);
+  trace_retired_push(J, T);
+}
+
+static void trace_freebody(global_State *g, GCtrace *T)
+{
+  trace_exittab_free(g, T);
+  lj_mem_free(g, T, trace_size(T));
+}
+
+static void trace_free_immediate(global_State *g, GCtrace *T)
+{
+  trace_exittab_free(g, T);
+  lj_mem_free(g, T, trace_size(T));
+}
+
+static LJ_AINLINE int trace_body_retire_ready(GCtrace *T,
+					       uint64_t completed_epoch)
+{
+  uint64_t retire_epoch = la_load64_acq(&T->retire_epoch);
+  return completed_epoch >= retire_epoch &&
+	 completed_epoch - retire_epoch >= LJ_FLUSH_EPOCHS;
+}
+
+static void trace_markbody(global_State *g, GCtrace *T, int gc2)
+{
+  IRRef ref;
+  if (gc2) lj_gc2_markmem(g, T); else lj_gc_arena_markmem(g, T);
+  if (T->exittab) {
+    if (gc2) lj_gc2_markmem(g, T->exittab);
+    else lj_gc_arena_markmem(g, T->exittab);
+  }
+  for (ref = T->nk; ref < REF_TRUE; ref++) {
+    IRIns *ir = &T->ir[ref];
+    if (ir->o == IR_KGC) {
+      if (gc2) lj_gc2_markobj(g, ir_kgc(ir));
+      else lj_gc_arena_markobj(g, ir_kgc(ir));
+    }
+    if (irt_is64(ir->t) && ir->o != IR_KNULL)
+      ref++;
+  }
+  if (gcref(T->startpt)) {
+    if (gc2) lj_gc2_markobj(g, gcref(T->startpt));
+    else lj_gc_arena_markobj(g, gcref(T->startpt));
+  }
+}
+
+uint32_t lj_trace_reclaim_retired(global_State *g, uint64_t completed_epoch)
+{
+  jit_State *J;
   TraceVec *tv;
+  GCtrace *rt;
   uint32_t reclaimed = 0;
   if (!g || completed_epoch == 0)
     return 0;
+  J = G2J(g);
   tv = (TraceVec *)la_xchgptr_acqrel((void **)&J->retiredtracev, NULL);
   while (tv) {
     TraceVec *next = tv->retired_next;
@@ -117,6 +191,18 @@ uint32_t lj_trace_reclaim_retired(global_State *g, uint64_t completed_epoch)
     }
     tv = next;
   }
+  rt = (GCtrace *)la_xchgptr_acqrel((void **)&J->retiredtraces, NULL);
+  while (rt) {
+    GCtrace *next = rt->retired_next;
+    rt->retired_next = NULL;
+    if (trace_body_retire_ready(rt, completed_epoch)) {
+      trace_freebody(g, rt);
+      reclaimed++;
+    } else {
+      trace_retired_push(J, rt);
+    }
+    rt = next;
+  }
   return reclaimed;
 }
 
@@ -125,10 +211,17 @@ void lj_trace_freeretired(global_State *g)
   jit_State *J = G2J(g);
   TraceVec *tv = (TraceVec *)la_xchgptr_acqrel((void **)&J->retiredtracev,
 					       NULL);
+  GCtrace *rt;
   while (tv) {
     TraceVec *next = tv->retired_next;
     tracevec_free(g, tv);
     tv = next;
+  }
+  rt = (GCtrace *)la_xchgptr_acqrel((void **)&J->retiredtraces, NULL);
+  while (rt) {
+    GCtrace *next = rt->retired_next;
+    trace_freebody(g, rt);
+    rt = next;
   }
 }
 
@@ -136,6 +229,7 @@ void lj_trace_markvecs(global_State *g, int gc2)
 {
   jit_State *J = G2J(g);
   TraceVec *tv = tracevec_acq(J);
+  GCtrace *rt;
   if (tv) {
     if (gc2) lj_gc2_markmem(g, tv); else lj_gc_arena_markmem(g, tv);
   }
@@ -144,6 +238,10 @@ void lj_trace_markvecs(global_State *g, int gc2)
        tv = (TraceVec *)la_loadptr_acq((void *const *)&tv->retired_next)) {
     if (gc2) lj_gc2_markmem(g, tv); else lj_gc_arena_markmem(g, tv);
   }
+  for (rt = (GCtrace *)la_loadptr_acq((void *const *)&J->retiredtraces);
+       rt != NULL;
+       rt = (GCtrace *)la_loadptr_acq((void *const *)&rt->retired_next))
+    trace_markbody(g, rt, gc2);
 }
 
 /* Find a free trace number. */
@@ -233,6 +331,8 @@ GCtrace * LJ_FASTCALL lj_trace_alloc(lua_State *L, GCtrace *T)
   T2->nsnapmap = T->nsnapmap;
   T2->exittab = NULL;
   T2->exitstub = NULL;
+  T2->retire_epoch = 0;
+  T2->retired_next = NULL;
   memcpy(p, T->ir + T->nk, szins);
   return T2;
 }
@@ -308,10 +408,11 @@ void LJ_FASTCALL lj_trace_free(global_State *g, GCtrace *T)
       J->freetrace = T->traceno;
     traceslot_clear(J, T->traceno);
   }
-  trace_exittab_free(g, T);
-  lj_mem_free(g, T,
-    ((sizeof(GCtrace)+7)&~7) + (T->nins-T->nk)*sizeof(IRIns) +
-    T->nsnap*sizeof(SnapShot) + T->nsnapmap*sizeof(SnapEntry));
+  if (g->gc.currentwhite & LJ_GC_SFIXED) {
+    trace_free_immediate(g, T);
+    return;
+  }
+  trace_retire(g, T);
 }
 
 /* Re-enable compiling a prototype by unpatching any modified bytecode. */
@@ -769,7 +870,7 @@ static int trace_abort(jit_State *J)
   J->postproc = LJ_POST_NONE;
   lj_mcode_abort(J);
   if (J->curfinal) {
-    lj_trace_free(J2G(J), J->curfinal);
+    trace_free_immediate(J2G(J), J->curfinal);
     J->curfinal = NULL;
   }
   if (tvisnumber(L->top-1))
