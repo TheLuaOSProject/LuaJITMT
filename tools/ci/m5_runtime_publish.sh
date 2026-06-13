@@ -10,6 +10,32 @@ if ! rg -q 'lj_gc_pubtabobj' "$ROOT/src/lj_gc.h"; then
   exit 1
 fi
 
+for needle in \
+  'static LJ_AINLINE void lj_gc_barriertv_' \
+  'static LJ_AINLINE void lj_gc_barrierobjtv_' \
+  'lj_tv_load_acq(&snap, tv)' \
+  'lj_gc2_barrier_tv(L, &snap)' \
+  'tviswhite(&snap)' \
+  'gcV(&snap)'
+do
+  if ! rg -F -q "$needle" "$ROOT/src/lj_gc.h"; then
+    echo "guardrail: publication TValue barriers must snapshot inputs: $needle" >&2
+    exit 1
+  fi
+done
+
+if awk '
+  /#define lj_gc_(barriert|barrier|pubtabtv|pubobjtv)\(/ { infn = 1; next }
+  infn && /lj_gc2_barrier_tv\(\(L\), \(tv\)\)|tviswhite\(tv\)|gcV\(tv\)/ {
+    print FILENAME ":" FNR ":" $0; bad = 1
+  }
+  infn && /^#define/ { infn = 0 }
+  END { exit bad ? 0 : 1 }
+' "$ROOT/src/lj_gc.h"; then
+  echo "guardrail: publication wrappers must not inspect caller TValue slots directly" >&2
+  exit 1
+fi
+
 for file in \
   "$ROOT/src/lib_base.c" \
   "$ROOT/src/lib_buffer.c" \

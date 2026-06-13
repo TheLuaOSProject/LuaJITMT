@@ -144,14 +144,35 @@ static LJ_AINLINE void lj_gc_barrierback(global_State *g, GCtab *t)
   setgcref(g->gc.grayagain, o);
 }
 
+static LJ_AINLINE void lj_gc_barriertv_(lua_State *L, GCtab *t, cTValue *tv)
+{
+  TValue snap;
+  if (!tv)
+    return;
+  lj_tv_load_acq(&snap, tv);
+  lj_gc2_barrier_tv(L, &snap);
+  if (tviswhite(&snap) && isblack(obj2gco(t)))
+    lj_gc_barrierback(G(L), t);
+}
+
+static LJ_AINLINE void lj_gc_barrierobjtv_(lua_State *L, GCobj *p,
+					   cTValue *tv)
+{
+  TValue snap;
+  if (!tv)
+    return;
+  lj_tv_load_acq(&snap, tv);
+  lj_gc2_barrier_tv(L, &snap);
+  if (tviswhite(&snap) && isblack(p))
+    lj_gc_barrierf(G(L), p, gcV(&snap));
+}
+
 /* Barrier for stores to table objects. TValue and GCobj variant. */
 #define lj_gc_anybarriert(L, t)  \
   { lj_gc2_barrier_tab((L), (t)); \
     if (LJ_UNLIKELY(isblack(obj2gco(t)))) lj_gc_barrierback(G(L), (t)); }
 #define lj_gc_barriert(L, t, tv) \
-  { lj_gc2_barrier_tv((L), (tv)); \
-    if (tviswhite(tv) && isblack(obj2gco(t))) \
-      lj_gc_barrierback(G(L), (t)); }
+  lj_gc_barriertv_((L), (t), (tv))
 #define lj_gc_objbarriert(L, t, o)  \
   { lj_gc2_barrier_obj((L), obj2gco(o)); \
     if (iswhite(obj2gco(o)) && isblack(obj2gco(t))) \
@@ -159,9 +180,7 @@ static LJ_AINLINE void lj_gc_barrierback(global_State *g, GCtab *t)
 
 /* Barrier for stores to any other object. TValue and GCobj variant. */
 #define lj_gc_barrier(L, p, tv) \
-  { lj_gc2_barrier_tv((L), (tv)); \
-    if (tviswhite(tv) && isblack(obj2gco(p))) \
-      lj_gc_barrierf(G(L), obj2gco(p), gcV(tv)); }
+  lj_gc_barrierobjtv_((L), obj2gco(p), (tv))
 #define lj_gc_objbarrier(L, p, o) \
   { lj_gc2_barrier_obj((L), obj2gco(o)); \
     if (iswhite(obj2gco(o)) && isblack(obj2gco(p))) \
@@ -176,17 +195,13 @@ static LJ_AINLINE void lj_gc_barrierback(global_State *g, GCtab *t)
   { lj_gc2_barrier_tab((L), (t)); \
     if (LJ_UNLIKELY(isblack(obj2gco(t)))) lj_gc_barrierback(G(L), (t)); }
 #define lj_gc_pubtabtv(L, t, tv) \
-  { lj_gc2_barrier_tv((L), (tv)); \
-    if (tviswhite(tv) && isblack(obj2gco(t))) \
-      lj_gc_barrierback(G(L), (t)); }
+  lj_gc_barriertv_((L), (t), (tv))
 #define lj_gc_pubtabobj(L, t, o) \
   { lj_gc2_barrier_obj((L), obj2gco(o)); \
     if (iswhite(obj2gco(o)) && isblack(obj2gco(t))) \
       lj_gc_barrierback(G(L), (t)); }
 #define lj_gc_pubobjtv(L, p, tv) \
-  { lj_gc2_barrier_tv((L), (tv)); \
-    if (tviswhite(tv) && isblack(obj2gco(p))) \
-      lj_gc_barrierf(G(L), obj2gco(p), gcV(tv)); }
+  lj_gc_barrierobjtv_((L), obj2gco(p), (tv))
 #define lj_gc_pubobjobj(L, p, o) \
   { lj_gc2_barrier_obj((L), obj2gco(o)); \
     if (iswhite(obj2gco(o)) && isblack(obj2gco(p))) \

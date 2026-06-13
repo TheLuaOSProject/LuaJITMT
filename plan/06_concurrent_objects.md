@@ -228,6 +228,9 @@ the same snapshot helpers. These steps do not replace the legacy resize
 algorithm with the planned lock-free `AHdr`/`NHdr` generation protocol yet;
 the original RETIRING/FORWARD/CAS helper-copy design above remains the target,
 and resize copying is still a non-cooperative legacy-`GCtab` operation.
+Publication barriers that receive a `TValue *` snapshot the value before GC2
+marking and legacy `tviswhite()` / `gcV()` checks, so the current release-store
+bridge does not reread a shared destination slot after publication.
 ### 6.3.6 next/pairs (lj_tab_next)
 Iterate the *gen snapshot* captured at first call: store the NH pointer in
 the iterator control slot? Lua's `next(t,k)` is stateless — DECIDED:

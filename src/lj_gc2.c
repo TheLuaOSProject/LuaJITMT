@@ -560,14 +560,22 @@ static int gc2_barrier_active(lua_State *L, global_State **pg)
 void lj_gc2_barrier_tv(lua_State *L, cTValue *tv)
 {
   global_State *g;
-  if (tv && tvisgcv(tv) && gc2_barrier_active(L, &g))
-    lj_gc2_markobj(g, gcV(tv));
+  TValue snap;
+  if (tv) {
+    lj_tv_load_acq(&snap, tv);
+    if (tvisgcv(&snap) && gc2_barrier_active(L, &g))
+      lj_gc2_markobj(g, gcV(&snap));
+  }
 }
 
 void lj_gc2_barrier_tv_g(global_State *g, cTValue *tv)
 {
-  if (tv && tvisgcv(tv) && gc2_barrier_active_g(g))
-    lj_gc2_markobj(g, gcV(tv));
+  TValue snap;
+  if (tv) {
+    lj_tv_load_acq(&snap, tv);
+    if (tvisgcv(&snap) && gc2_barrier_active_g(g))
+      lj_gc2_markobj(g, gcV(&snap));
+  }
 }
 
 void lj_gc2_barrier_uv(global_State *g, cTValue *tv)
