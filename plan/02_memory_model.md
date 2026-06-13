@@ -86,10 +86,10 @@ Notes:
   MOVs (vm_x64.dasc throughout); on x86-64 that *is* a relaxed atomic
   access, so no dasc change is needed for I-1.
 - Reads of a slot you might dereference as a pointer must be at least
-  consume-ordered; on both targets a dependent load through the loaded
-  pointer is naturally ordered, and we additionally use acquire loads at the
-  few places that read a *structure header then its interior* without an
-  address dependency (table gen header, string table vector — flagged
+  consume-ordered; on the supported x86-64 target a dependent load through
+  the loaded pointer is naturally ordered, and we additionally use acquire
+  loads at the few places that read a *structure header then its interior*
+  without an address dependency (table gen header, string table vector — flagged
   individually in 04/05/06 as `la_*_acq`).
 - Frame slots, `L->base..L->top`, and any TValue provably local to the
   owning thread (parser buffers, recorder slots, snapshot restore) keep
@@ -136,7 +136,7 @@ CAS (strong, value-returning):  la_cas32(p, &exp, des, succ_mo, fail_mo)
 fetch ops: la_add32_rlx, la_add64_rlx, la_or8_rlx, la_or64_rlx,
            la_and64_rlx, la_xchg32_acqrel, la_xchgptr_acqrel
 fences:    la_fence_acq(), la_fence_rel(), la_fence_seq()
-pause:     la_cpu_pause()            (PAUSE / ISB-free YIELD)
+pause:     la_cpu_pause()            (PAUSE on x86-64)
 futex:     la_futex_wait(u32*p, u32 val, ns) / la_futex_wake(p, n)
 process:   la_membarrier_synccore()  (wraps membarrier(2); 08 §8.5)
 bit utils: la_bit_test_and_set64(p, idx) -> previous bit (fetch_or based)

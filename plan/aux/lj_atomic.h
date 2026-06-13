@@ -58,7 +58,7 @@ LA_INLINE int la_casptr(void **p,void **exp,void *des,int mo_s,int mo_f)
 #define LA_SEQ __ATOMIC_SEQ_CST
 
 /* 128-bit CAS for tagged pointers (Treiber stacks, 04 §4.5).
-** x86-64: cmpxchg16b (compile with -mcx16). ARM64: LSE casp or LL/SC pair.
+** x86-64: cmpxchg16b (compile with -mcx16).
 ** Represented as a 16-byte aligned struct to avoid __int128 strict-alias
 ** pitfalls in user code; internally uses __int128 builtin. */
 typedef struct la_u128 { uint64_t lo, hi; } __attribute__((aligned(16))) la_u128;
@@ -114,8 +114,6 @@ LA_INLINE void la_cpu_pause(void)
 {
 #if defined(__x86_64__) || defined(__i386__)
   __builtin_ia32_pause();
-#elif defined(__aarch64__)
-  __asm__ __volatile__("yield" ::: "memory");
 #else
   __asm__ __volatile__("" ::: "memory");
 #endif
@@ -147,7 +145,7 @@ LA_INLINE int la_futex_wake(uint32_t *p, int n)
 #define MEMBARRIER_CMD_REGISTER_PRIVATE_EXPEDITED_SYNC_CORE (1<<6)
 #endif
 #ifndef SYS_membarrier
-#define SYS_membarrier 324  /* x86-64; aarch64=283 — guarded below */
+#define SYS_membarrier 324  /* x86-64 Linux. */
 #endif
 LA_INLINE int la_membarrier_register_synccore(void)
 {

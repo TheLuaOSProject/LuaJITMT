@@ -152,8 +152,8 @@ struct GCHeapGlobal {
   uint64_t  gc_trigger;       /* pacing (05 §5.11) */
 };
 ```
-TaggedPtr = {ptr, uint64 aba} CAS'd as 16-byte (`la_cas128` — both targets
-have it: cmpxchg16b / LSE `casp`; add to lj_atomic). Arenas are never freed
+TaggedPtr = {ptr, uint64 aba} CAS'd as 16-byte (`la_cas128` via x86-64
+`cmpxchg16b`; add to lj_atomic). Arenas are never freed
 to the OS while any thread might hold a stale pointer obtained from a
 GC-object address — they are only unmapped from `arena_empty` after a
 handshake epoch passes with the arena unlinked (same grace rule I-4).
