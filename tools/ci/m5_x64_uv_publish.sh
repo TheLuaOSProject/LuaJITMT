@@ -19,11 +19,12 @@ done
 
 if ! awk '
   /void LJ_FASTCALL lj_gc_pubuv/ { infn = 1; seen = 1 }
-  infn && /lj_gc2_barrier_uv\(g, tv\)/ { gc2 = 1 }
-  infn && /gc_mark\(g, gcV\(tv\)\)/ { legacy = 1 }
+  infn && /lj_tv_load_acq\(&snap, tv\)/ { snap = 1 }
+  infn && /lj_gc2_barrier_uv\(g, &snap\)/ { gc2 = 1 }
+  infn && /gc_mark\(g, gcV\(&snap\)\)/ { legacy = 1 }
   infn && /TV2MARKED\(tv\).*curwhite\(g\)/ { white = 1 }
-  infn && /^}/ { exit(seen && gc2 && legacy && white ? 0 : 1) }
-  END { if (!seen || !gc2 || !legacy || !white) exit 1 }
+  infn && /^}/ { exit(seen && snap && gc2 && legacy && white ? 0 : 1) }
+  END { if (!seen || !snap || !gc2 || !legacy || !white) exit 1 }
 ' "$ROOT/src/lj_gc.c"; then
   echo "guardrail: lj_gc_pubuv must preserve GC2 and legacy upvalue publication behavior" >&2
   exit 1

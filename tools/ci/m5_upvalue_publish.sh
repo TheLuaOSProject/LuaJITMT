@@ -64,6 +64,41 @@ if ! rg -F -q 'copyTVrel(mainthread(g), &uv->tv, uvval(uv))' \
   exit 1
 fi
 
+for needle in \
+  'lj_tv_load_acq(&snap, tv)' \
+  'lj_gc2_barrier_uv(g, &snap)' \
+  'tviswhite(&snap)' \
+  'gcV(&snap)' \
+  'lj_tv_load_acq(&tv, &uv->tv)'
+do
+  if ! rg -F -q "$needle" "$ROOT/src/lj_gc.c"; then
+    echo "guardrail: upvalue publication barriers must use acquired snapshots: $needle" >&2
+    exit 1
+  fi
+done
+
+if ! awk '
+  /void LJ_FASTCALL lj_gc_pubuv/ { infn = 1; next }
+  infn && /lj_gc2_barrier_uv\(g, tv\)|tviswhite\(tv\)|gcV\(tv\)/ {
+    print FILENAME ":" FNR ":" $0; bad = 1
+  }
+  infn && /^}/ { exit bad ? 1 : 0 }
+' "$ROOT/src/lj_gc.c"; then
+  echo "guardrail: upvalue publication barriers must not inspect shared cells directly" >&2
+  exit 1
+fi
+
+if ! awk '
+  /void lj_gc_closeuv/ { infn = 1; next }
+  infn && /tviswhite\(&uv->tv\)|gcV\(&uv->tv\)/ {
+    print FILENAME ":" FNR ":" $0; bad = 1
+  }
+  infn && /^}/ { exit bad ? 1 : 0 }
+' "$ROOT/src/lj_gc.c"; then
+  echo "guardrail: upvalue publication barriers must not inspect shared cells directly" >&2
+  exit 1
+fi
+
 for file in "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc2.c"; do
   if ! rg -F -q 'lj_tv_load_acq(&tv, uvval' "$file"; then
     echo "guardrail: GC upvalue traversal must snapshot uv payloads: $file" >&2

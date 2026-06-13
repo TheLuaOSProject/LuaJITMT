@@ -1270,10 +1270,12 @@ void LJ_FASTCALL lj_gc_pubuv(global_State *g, TValue *tv)
 {
 #define TV2MARKED(x) \
   (*((uint8_t *)(x) - offsetof(GCupval, tv) + offsetof(GCupval, marked)))
-  lj_gc2_barrier_uv(g, tv);
-  if ((TV2MARKED(tv) & LJ_GC_BLACK) && tviswhite(tv)) {
+  TValue snap;
+  lj_tv_load_acq(&snap, tv);
+  lj_gc2_barrier_uv(g, &snap);
+  if ((TV2MARKED(tv) & LJ_GC_BLACK) && tviswhite(&snap)) {
     if (g->gc.state == GCSpropagate || g->gc.state == GCSatomic)
-      gc_mark(g, gcV(tv));
+      gc_mark(g, gcV(&snap));
     else
       TV2MARKED(tv) = (TV2MARKED(tv) & (uint8_t)~LJ_GC_COLORS) | curwhite(g);
   }
@@ -1292,9 +1294,11 @@ void lj_gc_closeuv(global_State *g, GCupval *uv)
   setgcref(g->gc.root, o);
   if (isgray(o)) {  /* A closed upvalue is never gray, so fix this. */
     if (g->gc.state == GCSpropagate || g->gc.state == GCSatomic) {
+      TValue tv;
       gray2black(o);  /* Make it black and preserve invariant. */
-      if (tviswhite(&uv->tv))
-	lj_gc_barrierf(g, o, gcV(&uv->tv));
+      lj_tv_load_acq(&tv, &uv->tv);
+      if (tviswhite(&tv))
+	lj_gc_barrierf(g, o, gcV(&tv));
     } else {
       makewhite(g, o);  /* Make it white, i.e. sweep the upvalue. */
       lj_assertG(g->gc.state != GCSfinalize && g->gc.state != GCSpause,
