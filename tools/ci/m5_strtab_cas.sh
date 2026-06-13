@@ -44,7 +44,8 @@ for needle in \
   'la_storeptr_rel((void **)&g->str.tabh' \
   'la_add32_rlx(&g->str.num' \
   'la_sub32_acqrel(&g->str.num' \
-  'la_load32_acq(&g->str.num)'
+  'la_load32_acq(&g->str.num)' \
+  'la_add32_rlx(&g->str.id'
 do
   if ! rg -F -q "$needle" "$ROOT/src"; then
     echo "guardrail: missing string table CAS marker: $needle" >&2
@@ -65,6 +66,12 @@ fi
 if rg -n 'g->str\.num--|\+\+g->str\.num|if \(g->str\.num|g->str\.num <=|g->str\.num \+=' \
     "$ROOT/src/lj_str.c" "$ROOT/src/lj_gc.c"; then
   echo "guardrail: string count must use atomic add/sub/load helpers" >&2
+  exit 1
+fi
+
+if rg -n 'g->str\.id\+\+|\+\+g->str\.id|g->str\.id =|g->str\.idreseed|idreseed--' \
+    "$ROOT/src/lj_str.c"; then
+  echo "guardrail: string IDs must not mutate global id/reseed state in allocation" >&2
   exit 1
 fi
 

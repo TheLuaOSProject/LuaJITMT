@@ -371,7 +371,10 @@ completed safepoint handshake epoch, avoiding immediate RCU use-after-free for
 threads that loaded the old header before pinning it. The string count is
 updated and read with atomic helpers (`la_add32_rlx`, `la_sub32_acqrel`,
 `la_load32_acq`) so sweep-side frees and shrink checks do not race plain
-accesses against concurrent interns. Secondary-chain rehash now reuses the same
+accesses against concurrent interns. `GCstr.sid` allocation uses
+`la_add32_rlx(&g->str.id, 1)`; the old allocation-time `idreseed`/global-PRNG
+mutation is deferred until it can be reintroduced without racing allocation
+outside the active table pin. Secondary-chain rehash now reuses the same
 claim/drain bit on the current header, verifies the header is still current
 after the claim, rechains in place while new entrants spin, and releases the
 bit before retrying the pending insert. The original full helping protocol
