@@ -58,6 +58,29 @@ do
   fi
 done
 
+if ! rg -F -q 'copyTVrel(mainthread(g), &uv->tv, uvval(uv))' \
+    "$ROOT/src/lj_gc.c"; then
+  echo "guardrail: lj_gc_closeuv must release-copy into uv->tv" >&2
+  exit 1
+fi
+
+for file in "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc2.c"; do
+  if ! rg -F -q 'lj_tv_load_acq(&tv, uvval' "$file"; then
+    echo "guardrail: GC upvalue traversal must snapshot uv payloads: $file" >&2
+    exit 1
+  fi
+  if ! rg -F -q 'lj_tv_load_acq(&tv, &fn->c.upvalue[i])' "$file"; then
+    echo "guardrail: GC C-closure upvalue traversal must snapshot payloads: $file" >&2
+    exit 1
+  fi
+done
+
+if rg -n 'gc_marktv\(g, uvval|gc2_mark_tv(_worker)?\(g, uvval|gc_marktv\(g, &fn->c\.upvalue\[i\]\)|gc2_mark_tv_worker\(g, &fn->c\.upvalue\[i\]\)|copyTV\(mainthread\(g\), &uv->tv, uvval\(uv\)\)' \
+    "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc2.c"; then
+  echo "guardrail: upvalue payloads must use release stores and GC snapshots" >&2
+  exit 1
+fi
+
 legacy_all=$(rg -n "$LEGACY\\b" "$ROOT/src"/*.c | grep -v "$ROOT/src/lj_gc.c" || true)
 legacy_count=$(printf '%s\n' "$legacy_all" | sed '/^$/d' | wc -l | tr -d ' ')
 if [ "$legacy_count" -gt 3 ]; then

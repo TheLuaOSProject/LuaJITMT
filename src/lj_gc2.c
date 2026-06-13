@@ -229,8 +229,11 @@ static void gc2_scan_thread_roots(global_State *g, lua_State *L)
     lj_gc2_markobj(g, obj2gco(tabref(L->env)));
   for (uv = gcref(L->openupval); uv != NULL; uv = gcnext(uv)) {
     lj_gc2_markobj(g, uv);
-    if (uv->gch.gct == ~LJ_TUPVAL)
-      gc2_mark_tv(g, uvval(gco2uv(uv)));
+    if (uv->gch.gct == ~LJ_TUPVAL) {
+      TValue tv;
+      lj_tv_load_acq(&tv, uvval(gco2uv(uv)));
+      gc2_mark_tv(g, &tv);
+    }
   }
 }
 
@@ -817,7 +820,9 @@ static void gc2_traverse_udata(global_State *g, GCudata *ud)
 
 static void gc2_traverse_upval(global_State *g, GCupval *uv)
 {
-  gc2_mark_tv_worker(g, uvval(uv));
+  TValue tv;
+  lj_tv_load_acq(&tv, uvval(uv));
+  gc2_mark_tv_worker(g, &tv);
 }
 
 static void gc2_traverse_func(global_State *g, GCfunc *fn)
@@ -834,8 +839,11 @@ static void gc2_traverse_func(global_State *g, GCfunc *fn)
       gc2_markobj_worker(g, obj2gco(&gcref(fn->l.uvptr[i])->uv));
   } else {
     uint32_t i;
-    for (i = 0; i < fn->c.nupvalues; i++)
-      gc2_mark_tv_worker(g, &fn->c.upvalue[i]);
+    for (i = 0; i < fn->c.nupvalues; i++) {
+      TValue tv;
+      lj_tv_load_acq(&tv, &fn->c.upvalue[i]);
+      gc2_mark_tv_worker(g, &tv);
+    }
   }
 }
 
@@ -905,8 +913,11 @@ static void gc2_traverse_thread(global_State *g, lua_State *th)
     gc2_markobj_worker(g, gcref(th->mt_thread));
   for (uv = gcref(th->openupval); uv != NULL; uv = gcnext(uv)) {
     gc2_markobj_worker(g, uv);
-    if (uv->gch.gct == ~LJ_TUPVAL)
-      gc2_mark_tv_worker(g, uvval(gco2uv(uv)));
+    if (uv->gch.gct == ~LJ_TUPVAL) {
+      TValue tv;
+      lj_tv_load_acq(&tv, uvval(gco2uv(uv)));
+      gc2_mark_tv_worker(g, &tv);
+    }
   }
 }
 

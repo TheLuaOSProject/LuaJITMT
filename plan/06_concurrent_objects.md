@@ -265,6 +265,9 @@ GCupval (lj_obj.h:432–445) in the lockless runtime: `closed` is always 1, prev
 collapse: keep struct layout but assert closed; `uvval(uv) == &uv->tv`
 becomes compile-time. Mutation: `tv_rawstore` + wbarrier
 (replaces lj_gc_barrieruv, lj_gc.c:819). dhash retained (JIT aliasing).
+Current implementation keeps the transitional struct/list shape, release-copies
+close-time payloads into `uv->tv`, and has legacy GC/GC2 acquire-snapshot
+`GCupval` and C-closure upvalue `TValue` payloads before marking.
 ### 6.4.2 Compiler (lj_parse.c) — DECIDED scheme
 The parser already computes, per function, which locals are captured
 (`var_lookup`/`fscope_uvmark` machinery marking VSTACK entries). Add a pass

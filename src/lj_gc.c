@@ -397,7 +397,9 @@ static void gc_mark(global_State *g, GCobj *o)
     }
   } else if (LJ_UNLIKELY(gct == ~LJ_TUPVAL)) {
     GCupval *uv = gco2uv(o);
-    gc_marktv(g, uvval(uv));
+    TValue tv;
+    lj_tv_load_acq(&tv, uvval(uv));
+    gc_marktv(g, &tv);
     if (uv->closed)
       gray2black(o);  /* Closed upvalues are never gray. */
   } else if (gct != ~LJ_TSTR && gct != ~LJ_TCDATA) {
@@ -488,8 +490,11 @@ static void gc_mark_uv(global_State *g)
   for (uv = uvnext(&g->uvhead); uv != &g->uvhead; uv = uvnext(uv)) {
     lj_assertG(uvprev(uvnext(uv)) == uv && uvnext(uvprev(uv)) == uv,
 	       "broken upvalue chain");
-    if (isgray(obj2gco(uv)))
-      gc_marktv(g, uvval(uv));
+    if (isgray(obj2gco(uv))) {
+      TValue tv;
+      lj_tv_load_acq(&tv, uvval(uv));
+      gc_marktv(g, &tv);
+    }
   }
 }
 
@@ -619,8 +624,11 @@ static void gc_traverse_func(global_State *g, GCfunc *fn)
       gc_markobj(g, &gcref(fn->l.uvptr[i])->uv);
   } else {
     uint32_t i;
-    for (i = 0; i < fn->c.nupvalues; i++)  /* Mark C function upvalues. */
-      gc_marktv(g, &fn->c.upvalue[i]);
+    for (i = 0; i < fn->c.nupvalues; i++) {  /* Mark C function upvalues. */
+      TValue tv;
+      lj_tv_load_acq(&tv, &fn->c.upvalue[i]);
+      gc_marktv(g, &tv);
+    }
   }
 }
 
@@ -1272,7 +1280,7 @@ void lj_gc_closeuv(global_State *g, GCupval *uv)
 {
   GCobj *o = obj2gco(uv);
   /* Copy stack slot to upvalue itself and point to the copy. */
-  copyTV(mainthread(g), &uv->tv, uvval(uv));
+  copyTVrel(mainthread(g), &uv->tv, uvval(uv));
   setmref(uv->v, &uv->tv);
   uv->closed = 1;
   lj_obj_setgcwr(o, g->gc.root);
