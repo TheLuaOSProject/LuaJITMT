@@ -114,6 +114,8 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.sweep_owner_runs, 0);
   la_store64_rlx(&g->gc2.sweep_owner_arenas, 0);
   la_store64_rlx(&g->gc2.sweep_owner_live_cells, 0);
+  la_store64_rlx(&g->gc2.sweep_live_updates, 0);
+  la_store64_rlx(&g->gc2.live_estimate, 0);
   g->gc2.weak_stack = NULL;
   g->gc2.weak_ready = NULL;
   g->gc2.weak_capacity = 0;
@@ -333,11 +335,13 @@ uint32_t lj_gc2_assist_shift_from_stepmul(uint32_t stepmul)
 
 void lj_gc2_update_pacing(global_State *g)
 {
-  uint64_t live, trigger, hard;
+  uint64_t live, legacy_live, gc2_live, trigger, hard;
   uint32_t pct;
   if (!g)
     return;
-  live = g->gc.estimate ? g->gc.estimate : g->gc.total;
+  legacy_live = g->gc.estimate ? g->gc.estimate : g->gc.total;
+  gc2_live = la_load64_acq(&g->gc2.live_estimate);
+  live = gc2_live > legacy_live ? gc2_live : legacy_live;
   if (live < LJ_GC2_ACCT_FLUSH)
     live = LJ_GC2_ACCT_FLUSH;
   pct = la_load32_acq(&g->gc2.gcpause_pct);
@@ -519,9 +523,44 @@ uint32_t lj_gc2_sweep_owner_progress(global_State *g, TGState *tg,
   return n;
 }
 
+static uint64_t gc2_sweep_live_cells(GCArena *a, uint32_t epoch)
+{
+  uint64_t cells = 0;
+  for (; a != NULL; a = a->hdr.next)
+    if (a->hdr.sweep_epoch == epoch)
+      cells += a->hdr.live_cells;
+  return cells;
+}
+
+uint64_t lj_gc2_sweep_live_aggregate(global_State *g)
+{
+  TGState *tg;
+  uint64_t cells = 0, bytes;
+  uint32_t epoch;
+  if (!g)
+    return 0;
+  epoch = g->gc2.cycle;
+  for (tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
+       tg != NULL;
+       tg = (TGState *)la_loadptr_acq((void *const *)&tg->next_tg)) {
+    uint8_t flags = la_load8_acq(&tg->tg_flags);
+    if ((flags & (TGF_DEAD|TGF_ARENA_INTERNAL)) != TGF_ARENA_INTERNAL)
+      continue;
+    cells += gc2_sweep_live_cells(tg->alloc.owned[LJ_ARENAK_TRAVERSABLE],
+				  epoch);
+  }
+  bytes = cells > (~(uint64_t)0 >> LJ_CELL_SHIFT) ?
+	  ~(uint64_t)0 : cells << LJ_CELL_SHIFT;
+  la_store64_rel(&g->gc2.live_estimate, bytes);
+  la_add64_rlx(&g->gc2.sweep_live_updates, 1);
+  return bytes;
+}
+
 void lj_gc2_legacy_preserve_abort(global_State *g)
 {
   uint32_t phase;
+  if (!g)
+    return;
   la_store32_rel(&g->gc2.cycle_leader, 0);
   phase = la_xchg32_acqrel(&g->gc2.phase, LJ_GC2_IDLE);
   if (phase != LJ_GC2_IDLE)
@@ -535,10 +574,14 @@ void lj_gc2_legacy_preserve_abort(global_State *g)
 void lj_gc2_legacy_cycle_end(global_State *g)
 {
   uint32_t phase;
+  if (!g)
+    return;
   la_store32_rel(&g->gc2.cycle_leader, 0);
   phase = la_xchg32_acqrel(&g->gc2.phase, LJ_GC2_IDLE);
-  if (phase == LJ_GC2_SWEEP)
+  if (phase == LJ_GC2_SWEEP) {
     la_add64_rlx(&g->gc2.sweep_to_idle, 1);
+    (void)lj_gc2_sweep_live_aggregate(g);
+  }
   lj_gc2_handshake(g, LJ_GC2_HS_DISABLE_BARRIER|LJ_GC2_HS_ALLOC_WHITE|
 		   LJ_GC2_HS_FLUSH_SSB);
   (void)lj_gc2_drain_ssb(g);

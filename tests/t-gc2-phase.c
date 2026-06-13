@@ -205,6 +205,7 @@ int main(void)
   uint64_t mark_complete_runs0, mark_complete_hits0, mark_to_weak0;
   uint64_t weak_complete_runs0, weak_complete_progress0, weak_to_sweep0;
   uint64_t sweep_to_idle0, preserve_abort_to_idle0;
+  uint64_t sweep_live_updates0, live_estimate;
   uint64_t worker_weak0, weak_clear_tables0, weak_clear_cleared0;
   uint64_t weak_legacy_fallbacks0;
   MSize weak_n;
@@ -283,8 +284,11 @@ int main(void)
   assert(tg->alloc.needsweep[LJ_ARENAK_PLAIN] == NULL);
   assert(tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE] == NULL);
   sweep_to_idle0 = la_load64_acq(&g->gc2.sweep_to_idle);
+  sweep_live_updates0 = la_load64_acq(&g->gc2.sweep_live_updates);
   lj_gc2_legacy_cycle_end(g);
   assert(la_load64_acq(&g->gc2.sweep_to_idle) == sweep_to_idle0 + 1u);
+  assert(la_load64_acq(&g->gc2.sweep_live_updates) ==
+	 sweep_live_updates0 + 1u);
   assert_idle(g, tg);
   lua_pop(L, 2);
   lj_arena_free(&tg->alloc, phase_plain, 64);
@@ -317,6 +321,7 @@ int main(void)
   mark_to_weak0 = la_load64_acq(&g->gc2.mark_to_weak);
   weak_complete_runs0 = la_load64_acq(&g->gc2.weak_complete_runs);
   weak_to_sweep0 = la_load64_acq(&g->gc2.weak_to_sweep);
+  sweep_live_updates0 = la_load64_acq(&g->gc2.sweep_live_updates);
   lj_gc_fullgc(L);
   assert(la_load64_acq(&g->gc2.fixpoint_rounds) > fixpoint_rounds0);
   assert(la_load64_acq(&g->gc2.fixpoint_hits) > fixpoint_hits0);
@@ -325,6 +330,11 @@ int main(void)
   assert(la_load64_acq(&g->gc2.mark_to_weak) > mark_to_weak0);
   assert(la_load64_acq(&g->gc2.weak_complete_runs) > weak_complete_runs0);
   assert(la_load64_acq(&g->gc2.weak_to_sweep) > weak_to_sweep0);
+  assert(la_load64_acq(&g->gc2.sweep_live_updates) > sweep_live_updates0);
+  live_estimate = la_load64_acq(&g->gc2.live_estimate);
+  assert(live_estimate > 0);
+  assert(la_load64_acq(&g->gc2.trigger_bytes) >= LJ_GC2_ACCT_FLUSH);
+  assert(la_load64_acq(&g->gc2.trigger_bytes) >= live_estimate);
   assert_idle(g, tg);
 
   assert(luaL_dostring(L,

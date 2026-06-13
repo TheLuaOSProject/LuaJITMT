@@ -903,6 +903,8 @@ typedef struct GC2State {
   uint64_t sweep_owner_runs;  /* Owner traversable arena sweep batches. */
   uint64_t sweep_owner_arenas;  /* Traversable arenas swept by owner. */
   uint64_t sweep_owner_live_cells;  /* Post-sweep live cells observed. */
+  uint64_t sweep_live_updates;  /* Sweep-closure live estimate refreshes. */
+  uint64_t live_estimate;  /* GC2 live bytes from swept traversable arenas. */
   GCRef *weak_stack;	/* GC2-owned weak-table discovery vector. */
   uint8_t *weak_ready;	/* Published weak discovery slots. */
   MSize weak_capacity;	/* Allocated weak discovery slots. */

@@ -72,6 +72,8 @@ for needle in \
   'uint64_t sweep_owner_runs' \
   'uint64_t sweep_owner_arenas' \
   'uint64_t sweep_owner_live_cells' \
+  'uint64_t sweep_live_updates' \
+  'uint64_t live_estimate' \
   'uint64_t smr_reclaim_runs' \
   'uint64_t smr_reclaimed' \
   'LJ_GC2_WEAK_DRAIN_BATCH' \
@@ -212,6 +214,10 @@ for needle in \
   'la_loadptr_acq((void *const *)&g->gc2.tg_list)' \
   'lj_gc2_sweep_owner_progress(global_State *g, TGState *tg' \
   'la_add64_rlx(&g->gc2.sweep_owner_arenas' \
+  'lj_gc2_sweep_live_aggregate(global_State *g)' \
+  'la_store64_rel(&g->gc2.live_estimate' \
+  'la_add64_rlx(&g->gc2.sweep_live_updates' \
+  'gc2_live = la_load64_acq(&g->gc2.live_estimate)' \
   '05 section 5.8 boundary-lazy traversable sweep bridge' \
   'lj_gc2_reclaim_retired(global_State *g, uint64_t epoch)' \
   'la_add64_rlx(&g->gc2.smr_reclaimed' \

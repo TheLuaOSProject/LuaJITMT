@@ -48,6 +48,7 @@ LJ_FUNC void lj_gc2_legacy_weak_begin(global_State *g);
 LJ_FUNC void lj_gc2_legacy_sweep_begin(global_State *g);
 LJ_FUNC void lj_gc2_legacy_preserve_abort(global_State *g);
 LJ_FUNC void lj_gc2_legacy_cycle_end(global_State *g);
+LJ_FUNC uint64_t lj_gc2_sweep_live_aggregate(global_State *g);
 LJ_FUNC uint32_t lj_gc2_handshake(global_State *g, uint32_t actions);
 LJ_FUNC uint32_t lj_gc2_reclaim_retired(global_State *g, uint64_t epoch);
 LJ_FUNC void lj_gc2_scan_roots(global_State *g, lua_State *L);
