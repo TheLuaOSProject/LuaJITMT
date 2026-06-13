@@ -160,16 +160,17 @@ advance cursor; publication is idempotent via CAS on t->nodehdr expected
 G). Memory: at most 2 gens live per table transiently.
 
 Current implementation status: runtime tables still use the legacy `GCtab`
-layout and Brent hash insertion while the tracked `nbtab_model` remains the
-reference for the final header-generation/helper-copy port. The landed
-intermediate slices keep the shared nilnode read-only for first hash inserts
-and now retire old hash `Node[]` vectors from `lj_tab_resize()` behind the
-completed safepoint epoch before freeing them. This removes the immediate
-resize free hazard for future acquire-load readers. Hash-chain walks in the C
-runtime and serialization paths now use acquire loads, and legacy Brent relinks
-release-publish `next` pointers after initializing the moved/free node. These
-steps do not replace the legacy insertion/resize algorithm with the planned
-lock-free `NHdr` generation protocol yet.
+layout and freetop scan while the tracked `nbtab_model` remains the reference
+for the final header-generation/helper-copy port. The landed intermediate
+slices keep the shared nilnode read-only for first hash inserts and now retire
+old hash `Node[]` vectors from `lj_tab_resize()` behind the completed
+safepoint epoch before freeing them. This removes the immediate resize free
+hazard for future acquire-load readers. Hash-chain walks in the C runtime and
+serialization paths now use acquire loads, and collision inserts initialize a
+stable free node before release-publishing it through the anchor's `next` link;
+legacy Brent node relocation has been removed. These steps do not replace the
+legacy resize algorithm with the planned lock-free `NHdr` generation protocol
+yet.
 ### 6.3.6 next/pairs (lj_tab_next)
 Iterate the *gen snapshot* captured at first call: store the NH pointer in
 the iterator control slot? Lua's `next(t,k)` is stateless — DECIDED:

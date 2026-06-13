@@ -1,5 +1,5 @@
 /*
-** Focused guard for M5 table hash-chain acquire/release publication.
+** Focused guard for M5 stable table nodes and hash-chain publication.
 */
 
 #include <assert.h>
@@ -46,7 +46,7 @@ int main(void)
   GCtab *t;
   GCstr *anchor0, *displaced, *anchor7;
   Node *node;
-  Node *moved;
+  Node *main7next;
   uint32_t seq = 0;
 
   assert(L != NULL);
@@ -67,15 +67,16 @@ int main(void)
 
   setstrint(L, t, anchor7, 77);
   node = noderef(t->node);
-  moved = lj_tab_nextnode_acq(&node[0]);
-  assert(moved != NULL);
-  assert(strV(&node[7].key) == anchor7);
-  assert(strV(&moved->key) == displaced);
+  assert(lj_tab_nextnode_acq(&node[0]) == &node[7]);
+  assert(strV(&node[7].key) == displaced);
+  main7next = lj_tab_nextnode_acq(&node[7]);
+  assert(main7next != NULL);
+  assert(strV(&main7next->key) == anchor7);
   assert_tabnum(t, anchor0, 11);
   assert_tabnum(t, displaced, 22);
   assert_tabnum(t, anchor7, 77);
 
   lua_close(L);
-  printf("t-tab-chain-order OK: acquire walks observe release-published links\n");
+  printf("t-tab-chain-order OK: stable nodes and release-published links\n");
   return 0;
 }

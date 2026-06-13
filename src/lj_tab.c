@@ -509,7 +509,7 @@ cTValue *lj_tab_get(lua_State *L, GCtab *t, cTValue *key)
 
 /* -- Table setters ------------------------------------------------------- */
 
-/* Insert new key. Use Brent's variation to optimize the chain length. */
+/* Insert new key. Nodes are never moved within a hash generation. */
 TValue *lj_tab_newkey(lua_State *L, GCtab *t, cTValue *key)
 {
   Node *n;
@@ -520,7 +520,7 @@ TValue *lj_tab_newkey(lua_State *L, GCtab *t, cTValue *key)
   n = hashkey(t, key);
   if (!tvisnil(&n->val)) {
     Node *nodebase = noderef(t->node);
-    Node *collide, *freenode = getfreetop(t, nodebase);
+    Node *freenode = getfreetop(t, nodebase);
     lj_assertL(nodebase != &G(L)->nilnode, "insert into fallback hash");
     lj_assertL(freenode >= nodebase && freenode <= nodebase+t->hmask+1,
 	       "bad freenode");
@@ -532,62 +532,14 @@ TValue *lj_tab_newkey(lua_State *L, GCtab *t, cTValue *key)
     } while (!tvisnil(&(--freenode)->key));
     setfreetop(t, nodebase, freenode);
     lj_assertL(freenode != &G(L)->nilnode, "store to fallback hash");
-    collide = hashkey(t, &n->key);
-    if (collide != n) {  /* Colliding node not the main node? */
-      while (lj_tab_nextnode_acq(collide) != n)  /* Find predecessor. */
-	collide = lj_tab_nextnode_acq(collide);
-      /* Copy colliding node into free node and free main node. */
-      freenode->val = n->val;
-      freenode->key = n->key;
-      lj_tab_nextnode_set(freenode, lj_tab_nextnode_acq(n));
-      lj_tab_nextnode_rel(collide, freenode);  /* Relink chain. */
-      lj_tab_nextnode_rel(n, NULL);
-      setnilV(&n->val);
-      /* Rechain pseudo-resurrected string keys with colliding hashes. */
-      while (lj_tab_nextnode_acq(freenode)) {
-	Node *nn = lj_tab_nextnode_acq(freenode);
-	if (!tvisnil(&nn->val) && hashkey(t, &nn->key) == n) {
-	  lj_tab_nextnode_rel(freenode, lj_tab_nextnode_acq(nn));
-	  lj_tab_nextnode_set(nn, lj_tab_nextnode_acq(n));
-	  lj_tab_nextnode_rel(n, nn);
-	  /*
-	  ** Rechaining a resurrected string key creates a new dilemma:
-	  ** Another string key may have originally been resurrected via
-	  ** _any_ of the previous nodes as a chain anchor. Including
-	  ** a node that had to be moved, which makes them unreachable.
-	  ** It's not feasible to check for all previous nodes, so rechain
-	  ** any string key that's currently in a non-main positions.
-	  */
-	  while ((nn = lj_tab_nextnode_acq(freenode))) {
-	    if (!tvisnil(&nn->val)) {
-	      Node *mn = hashkey(t, &nn->key);
-	      if (mn != freenode && mn != nn) {
-		lj_tab_nextnode_rel(freenode, lj_tab_nextnode_acq(nn));
-		lj_tab_nextnode_set(nn, lj_tab_nextnode_acq(mn));
-		lj_tab_nextnode_rel(mn, nn);
-	      } else {
-		freenode = nn;
-	      }
-	    } else {
-	      freenode = nn;
-	    }
-	  }
-	  break;
-	} else {
-	  freenode = nn;
-	}
-      }
-    } else {  /* Otherwise use free node. */
-      /* Insert into chain. */
-      lj_tab_nextnode_set(freenode, lj_tab_nextnode_acq(n));
-      copyTVrel(L, &freenode->key, key);
-      if (LJ_UNLIKELY(tvismzero(&freenode->key)))
-	freenode->key.u64 = 0;
-      lj_gc_pubtab(L, t);
-      lj_assertL(tvisnil(&freenode->val), "new hash slot is not empty");
-      lj_tab_nextnode_rel(n, freenode);
-      return &freenode->val;
-    }
+    lj_tab_nextnode_set(freenode, lj_tab_nextnode_acq(n));
+    copyTVrel(L, &freenode->key, key);
+    if (LJ_UNLIKELY(tvismzero(&freenode->key)))
+      freenode->key.u64 = 0;
+    lj_gc_pubtab(L, t);
+    lj_assertL(tvisnil(&freenode->val), "new hash slot is not empty");
+    lj_tab_nextnode_rel(n, freenode);
+    return &freenode->val;
   }
   copyTVrel(L, &n->key, key);
   if (LJ_UNLIKELY(tvismzero(&n->key)))

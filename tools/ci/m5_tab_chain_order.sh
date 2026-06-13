@@ -1,5 +1,5 @@
 #!/bin/sh
-# Build and run M5 table hash-chain memory-ordering guard.
+# Build and run M5 stable table-node/hash-chain ordering guard.
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
@@ -20,7 +20,7 @@ for needle in \
   'lj_tab_nextnode_rel' \
   'la_load64_acq(&n->next.ptr64)' \
   'la_store64_rel(&n->next.ptr64' \
-  'lj_tab_nextnode_rel(collide, freenode)' \
+  'Nodes are never moved within a hash generation' \
   'lj_tab_nextnode_rel(n, freenode)' \
   'copyTVrel(L, &freenode->key, key)' \
   'return &freenode->val' \
@@ -38,4 +38,10 @@ if rg -n 'nextnode\(|setmref\([^,]+->next|setmrefr\([^,]+->next|noderef\([^[:cnt
   exit 1
 fi
 
-echo "M5 table hash-chain ordering tests passed"
+if rg -n 'freenode->val = n->val|freenode->key = n->key|Colliding node not the main node|Use Brent' \
+    "$ROOT/src/lj_tab.c"; then
+  echo "guardrail: table insertion must not move existing hash nodes" >&2
+  exit 1
+fi
+
+echo "M5 stable table-node/hash-chain ordering tests passed"
