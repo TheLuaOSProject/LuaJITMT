@@ -126,6 +126,7 @@ LJ_FUNC void lj_gc_barriertrace(global_State *g, uint32_t traceno);
 #endif
 LJ_FUNC void lj_gc2_barrier_tv(lua_State *L, cTValue *tv);
 LJ_FUNCA void lj_gc2_barrier_tv_g(global_State *g, cTValue *tv);
+LJ_FUNCA void lj_gc2_barrier_tvn_g(global_State *g, cTValue *tv, uint32_t n);
 LJ_FUNC void lj_gc2_barrier_uv(global_State *g, cTValue *tv);
 LJ_FUNC void lj_gc2_barrier_obj(lua_State *L, GCobj *o);
 LJ_FUNCA void lj_gc2_barrier_tab_g(global_State *g, GCtab *t);

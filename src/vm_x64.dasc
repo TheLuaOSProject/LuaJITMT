@@ -436,6 +436,21 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov BASE, RB			// Restore BASE.
   |  ins_next
   |
+  |->vm_gc2_barriertvn:
+  |  mov RB, BASE			// Save BASE.
+  |  mov TMPR, RC			// RC = dst returned by lj_tab_storetvn.
+  |  mov ITYPEd, MULTRES
+  |  sub ITYPEd, 1
+  |  mov CARG2, TMPR
+  |  mov CARG3d, ITYPEd
+  |  load_G CARG1
+  |  call extern lj_gc2_barrier_tvn_g	// (global_State *g, cTValue *tv, uint32_t n)
+  |  mov BASE, RB			// Restore BASE.
+  |  movzx RAd, PC_RA
+  |  mov TAB:RB, [BASE+RA*8-8]
+  |  cleartp TAB:RB
+  |  jmp ->vm_gc2_barriertab
+  |
   |//-----------------------------------------------------------------------
   |//-- Return handling ----------------------------------------------------
   |//-----------------------------------------------------------------------
@@ -4291,10 +4306,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov BASE, L:RB->base
     |  cmp TGMARK, 0
     |  jz >4
-    |  movzx RAd, PC_RA
-    |  mov TAB:RB, [BASE+RA*8-8]
-    |  cleartp TAB:RB
-    |  jmp ->vm_gc2_barriertab
+    |  jmp ->vm_gc2_barriertvn
     |4:
     |  ins_next
     |

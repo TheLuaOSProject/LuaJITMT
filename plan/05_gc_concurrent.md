@@ -306,8 +306,12 @@ immediately. C API table setters that bypass normal legacy barriers also call
 `lj_gc2_barrier_weak_write()` to mark collectable inserted keys and values.
 `weak_keys_marked` and `weak_values_marked` expose first-time marks from these
 bridges for follow-up tests. x64 VM single-value array table stores now route
-their GC2 barrier to the stored TValue directly, so weak-value arrays mark the
-new value even though weak-value table traversal skips values.
+their GC2 barrier to the stored TValue directly, and `BC_TSETM` routes the
+post-copy destination range through `lj_gc2_barrier_tvn_g()` before the
+existing table-rescan bridge. This keeps constructor batch stores from
+depending on a whole-table rescan for weak-value marking after
+`lj_tab_storetvn()` publishes the slots, while still preserving table/backing
+memory coverage for resized arrays.
 P_SWEEP entry handshake: {DISABLE_BARRIER, RESET_ALLOC, FLUSH_SSB(last)}.
   After it: workers sweep global/orphan arenas + huge table (free unmarked
   huge via munmap, deferred one epoch); owners lazy-sweep per 04 §4.6.

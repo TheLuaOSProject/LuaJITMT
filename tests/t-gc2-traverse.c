@@ -781,6 +781,64 @@ static void test_vm_weak_value_array_barrier(lua_State *L, global_State *g,
   lua_pop(L, 3);
 }
 
+static void test_tvalue_range_barrier(lua_State *L, global_State *g,
+				      TGState *tg, GCtab *child1,
+				      GCtab *child2)
+{
+  TValue vals[2];
+
+  settabV(L, &vals[0], child1);
+  settabV(L, &vals[1], child2);
+
+  lj_gc2_legacy_mark_begin(g);
+  assert(lj_gc2_ismarked(g, obj2gco(child1)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(child2)) == 0);
+  lj_gc2_barrier_tvn_g(g, vals, 2);
+  assert(lj_gc2_ismarked(g, obj2gco(child1)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(child2)) == 1);
+  assert(!lj_gc2_ssb_empty(g));
+  flush_and_drain(g, tg);
+  lj_gc2_legacy_cycle_end(g);
+}
+
+static void test_vm_tsetm_range_barrier(lua_State *L, global_State *g,
+					TGState *tg)
+{
+  GCtab *child1, *child2, *parent;
+
+  lua_settop(L, 0);
+  assert(luaL_dostring(L,
+    "return function(a, b)\n"
+    "  local function many() return a, b end\n"
+    "  return { many() }\n"
+    "end\n") == LUA_OK);
+  lua_newtable(L);
+  child1 = tabV(L->top - 1);
+  lua_newtable(L);
+  child2 = tabV(L->top - 1);
+
+  test_tvalue_range_barrier(L, g, tg, child1, child2);
+
+  lj_gc2_legacy_mark_begin(g);
+  assert(lj_gc2_ismarked(g, obj2gco(child1)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(child2)) == 0);
+
+  lua_pushvalue(L, 1);
+  lua_pushvalue(L, 2);
+  lua_pushvalue(L, 3);
+  lua_call(L, 2, 1);
+  parent = tabV(L->top - 1);
+  assert(lj_tab_asize_acq(parent) >= 2);
+  assert(tabV(lj_tab_getint(parent, 1)) == child1);
+  assert(tabV(lj_tab_getint(parent, 2)) == child2);
+  assert(lj_gc2_ismarked(g, obj2gco(child1)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(child2)) == 1);
+  assert(!lj_gc2_ssb_empty(g));
+  flush_and_drain(g, tg);
+  lj_gc2_legacy_cycle_end(g);
+  lua_pop(L, 4);
+}
+
 static void test_closure(lua_State *L, global_State *g, TGState *tg)
 {
   GCfunc *fn;
@@ -898,6 +956,7 @@ int main(void)
   test_weak_key_write_barrier(L, g, tg);
   test_vm_weak_key_write_barrier(L, g, tg);
   test_vm_weak_value_array_barrier(L, g, tg);
+  test_vm_tsetm_range_barrier(L, g, tg);
   test_closure(L, g, tg);
   test_thread(L, g, tg);
   test_userdata(L, g);

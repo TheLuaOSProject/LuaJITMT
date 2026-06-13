@@ -41,7 +41,9 @@ for needle in \
   'call extern lj_tab_storetv' \
   'call extern lj_tab_storetvn' \
   'jmp ->vm_gc2_barriertv' \
-  'jmp ->vm_gc2_barriertab'
+  'jmp ->vm_gc2_barriertvn' \
+  'jmp ->vm_gc2_barriertab' \
+  'call extern lj_gc2_barrier_tvn_g'
 do
   if ! rg -F -q "$needle" "$ROOT/src/vm_x64.dasc"; then
     echo "guardrail: missing x64 TSET nil snapshot marker: $needle" >&2
@@ -74,12 +76,14 @@ else
 fi
 
 if awk '
-  /case BC_TSETM:/ { in_setm = 1; saw_storetvn = 0; next }
+  /case BC_TSETM:/ { in_setm = 1; saw_storetvn = 0; saw_tvn = 0; next }
   in_setm && /call extern lj_tab_storetvn/ { saw_storetvn = 1 }
+  in_setm && /jmp ->vm_gc2_barriertvn/ { saw_tvn = 1 }
+  in_setm && /jmp ->vm_gc2_barriertab/ { bad = 1 }
   in_setm && /mov \[TMPR\], ITYPE/ { bad = 1 }
   in_setm && /break;/ {
     checked = 1
-    if (!saw_storetvn)
+    if (!saw_storetvn || !saw_tvn)
       bad = 1
     in_setm = 0
   }
@@ -87,7 +91,7 @@ if awk '
 ' "$ROOT/src/vm_x64.dasc"; then
   :
 else
-  echo "guardrail: x64 TSETM must release-publish batch array slots" >&2
+  echo "guardrail: x64 TSETM must publish, range-barrier, and table-barrier batch array slots" >&2
   exit 1
 fi
 

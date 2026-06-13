@@ -857,6 +857,15 @@ void lj_gc2_barrier_tv_g(global_State *g, cTValue *tv)
   }
 }
 
+void lj_gc2_barrier_tvn_g(global_State *g, cTValue *tv, uint32_t n)
+{
+  uint32_t i;
+  if (!tv || !gc2_barrier_active_g(g))
+    return;
+  for (i = 0; i < n; i++)
+    lj_gc2_barrier_tv_g(g, &tv[i]);
+}
+
 void lj_gc2_barrier_uv(global_State *g, cTValue *tv)
 {
   lj_gc2_barrier_tv_g(g, tv);
