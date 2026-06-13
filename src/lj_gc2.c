@@ -35,6 +35,8 @@ static int gc2_grey_empty(global_State *g);
 
 void lj_gc2_init(global_State *g)
 {
+  g->gc2.gcpause_pct = 100;
+  g->gc2.assist_shift = lj_gc2_assist_shift_from_stepmul(g->gc.stepmul);
   g->gc2.phase = LJ_GC2_IDLE;
   g->gc2.cycle = 0;
   g->gc2.hs_epoch = 0;
@@ -47,6 +49,8 @@ void lj_gc2_init(global_State *g)
   g->gc2.ssb_items_published = 0;
   g->gc2.ssb_items_drained = 0;
   g->gc2.alloc_since_trigger = 0;
+  g->gc2.trigger_bytes = 0;
+  g->gc2.hard_bytes = 0;
   g->gc2.grey_stack = NULL;
   g->gc2.grey_capacity = 0;
   g->gc2.grey_top = 0;
@@ -55,6 +59,7 @@ void lj_gc2_init(global_State *g)
   g->gc2.grey_drained = 0;
   g->gc2.tg_list = NULL;
   g->gc2.n_threads = 0;
+  lj_gc2_update_pacing(g);
   lj_tg_attach(g, G2TG(g));  /* 05 section 5.4.1 main TG registration. */
 }
 
@@ -89,6 +94,38 @@ void lj_gc2_account_alloc(global_State *g, TGState *tg, GCSize bytes)
   old = la_add64_rlx(&tg->local_total, (uint64_t)bytes);  /* 04 section 4.8. */
   if (old + (uint64_t)bytes >= LJ_GC2_ACCT_FLUSH)
     (void)lj_gc2_flush_alloc(g, tg);
+}
+
+uint32_t lj_gc2_assist_shift_from_stepmul(uint32_t stepmul)
+{
+  uint32_t shift = 0;
+  uint32_t work = stepmul < 100 ? 1u : stepmul / 100u;
+  while (work > 1u && shift < 8u) {
+    work = (work + 1u) >> 1;
+    shift++;
+  }
+  return shift;
+}
+
+void lj_gc2_update_pacing(global_State *g)
+{
+  uint64_t live, trigger, hard;
+  uint32_t pct;
+  if (!g)
+    return;
+  live = g->gc.estimate ? g->gc.estimate : g->gc.total;
+  if (live < LJ_GC2_ACCT_FLUSH)
+    live = LJ_GC2_ACCT_FLUSH;
+  pct = la_load32_acq(&g->gc2.gcpause_pct);
+  if (pct == 0)
+    pct = 100;
+  trigger = (live / 100u) * (uint64_t)pct +
+	    ((live % 100u) * (uint64_t)pct) / 100u;
+  if (trigger < LJ_GC2_ACCT_FLUSH)
+    trigger = LJ_GC2_ACCT_FLUSH;
+  hard = trigger > ~(uint64_t)0 / 2u ? ~(uint64_t)0 : trigger * 2u;
+  la_store64_rel(&g->gc2.trigger_bytes, trigger);  /* 05 section 5.11. */
+  la_store64_rel(&g->gc2.hard_bytes, hard);  /* 05 section 5.11. */
 }
 
 static void gc2_reset_alloc_trigger(global_State *g)
@@ -200,6 +237,7 @@ void lj_gc2_legacy_cycle_end(global_State *g)
 		   LJ_GC2_HS_FLUSH_SSB);
   (void)lj_gc2_drain_ssb(g);
   (void)lj_tg_reclaim_dead(g);
+  lj_gc2_update_pacing(g);
 }
 
 uint32_t lj_gc2_handshake(global_State *g, uint32_t actions)

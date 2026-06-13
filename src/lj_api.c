@@ -14,6 +14,7 @@
 #include "lj_obj.h"
 #include "lj_atomic.h"
 #include "lj_gc.h"
+#include "lj_gc2.h"
 #include "lj_err.h"
 #include "lj_debug.h"
 #include "lj_str.h"
@@ -1393,10 +1394,14 @@ LUA_API int lua_gc(lua_State *L, int what, int data)
   case LUA_GCSETPAUSE:
     res = (int)(g->gc.pause);
     g->gc.pause = (MSize)data;
+    la_store32_rel(&g->gc2.gcpause_pct, data > 0 ? (uint32_t)data : 1u);
+    lj_gc2_update_pacing(g);
     break;
   case LUA_GCSETSTEPMUL:
     res = (int)(g->gc.stepmul);
     g->gc.stepmul = (MSize)data;
+    la_store32_rel(&g->gc2.assist_shift,
+		   lj_gc2_assist_shift_from_stepmul((uint32_t)data));
     break;
   case LUA_GCISRUNNING:
     res = ((la_load32_acq(&g->mt_live) != 0 ? lj_gc_mt_threshold_load(g) :

@@ -29,6 +29,21 @@ int main(void)
   tg = L2TG(L);
   assert(g != NULL);
   assert(tg != NULL);
+  assert(la_load32_acq(&g->gc2.gcpause_pct) == 100);
+  assert(la_load32_acq(&g->gc2.assist_shift) ==
+	 lj_gc2_assist_shift_from_stepmul(g->gc.stepmul));
+  assert(la_load64_acq(&g->gc2.trigger_bytes) >= LJ_GC2_ACCT_FLUSH);
+  assert(la_load64_acq(&g->gc2.hard_bytes) ==
+	 2u * la_load64_acq(&g->gc2.trigger_bytes));
+
+  (void)lua_gc(L, LUA_GCSETPAUSE, 150);
+  assert(la_load32_acq(&g->gc2.gcpause_pct) == 150);
+  assert(la_load64_acq(&g->gc2.trigger_bytes) >= LJ_GC2_ACCT_FLUSH);
+  assert(la_load64_acq(&g->gc2.hard_bytes) ==
+	 2u * la_load64_acq(&g->gc2.trigger_bytes));
+  (void)lua_gc(L, LUA_GCSETSTEPMUL, 400);
+  assert(la_load32_acq(&g->gc2.assist_shift) ==
+	 lj_gc2_assist_shift_from_stepmul(400));
 
   (void)lj_gc2_flush_alloc(g, tg);
   (void)la_xchg64_acqrel(&g->gc2.alloc_since_trigger, 0);

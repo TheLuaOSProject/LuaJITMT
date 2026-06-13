@@ -842,6 +842,10 @@ typedef struct GC2State {
   uint64_t ssb_items_published;  /* Published SSB entries. */
   uint64_t ssb_items_drained;  /* Drained/recycled SSB entries. */
   uint64_t alloc_since_trigger;  /* Flushed mutator allocation bytes. */
+  uint64_t trigger_bytes;  /* Allocation bytes before next GC2 trigger. */
+  uint64_t hard_bytes;	/* Allocation bytes before mutator assists. */
+  uint32_t gcpause_pct;	/* GC2 pacing percentage. */
+  uint32_t assist_shift;  /* Bounded assist work is 1 << shift. */
   GCRef *grey_stack;	/* GC2 grey work deque ring. */
   MSize grey_capacity;	/* Allocated grey deque slots. */
   uint64_t grey_top;	/* Chase-Lev steal-side index. */
