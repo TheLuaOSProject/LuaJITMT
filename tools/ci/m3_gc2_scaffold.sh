@@ -104,6 +104,8 @@ for needle in \
   'lj_gc2_fixpoint_run(global_State *g, lua_State *L' \
   'la_xchg64_acqrel(&g->gc2.marks_this_round, 0)' \
   'LJ_GC2_HS_SCAN_ROOTS|LJ_GC2_HS_FLUSH_SSB' \
+  'gc2_traverse_trace(g, &J->cur)' \
+  '05 section 5.7.4 current trace root' \
   'lj_gc2_worker_drain_progress(g, LJ_GC2_WEAK_DRAIN_BATCH)' \
   'lj_gc2_worker_drain_progress(g, LJ_GC2_WORKER_DRAIN_BATCH)' \
   '05 section 5.6.3 bounded worker step bridge' \
@@ -144,7 +146,7 @@ for needle in \
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc.h" \
       "$ROOT/src/lj_gc2.c" "$ROOT/src/lj_gc2.h" "$ROOT/src/lj_obj.h" \
-      "$ROOT/src/lj_safepoint.c" \
+      "$ROOT/src/lj_safepoint.c" "$ROOT/src/lj_trace.c" \
       "$ROOT/src/lj_tab.c" "$ROOT/src/lj_cdata.c" "$ROOT/src/lib_ffi.c" \
       "$ROOT/src/lj_api.c"; then
     echo "guardrail: missing GC2 fixpoint-round marker: $needle" >&2

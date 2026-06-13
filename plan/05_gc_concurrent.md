@@ -289,6 +289,10 @@ roots: each TG publishes `tg->vmstate` = current traceno while in mcode
 (already the vmstate convention) — workers mark `J->trace[vmstate]` when
 vmstate>0. (Cheap, conservative: keeps a trace alive while any thread runs
 it. Freeing traces additionally requires the flush handshake, 08 §8.7.)
+Current bridge note: GC2 global root scanning now also traverses the
+recorder's in-progress `J->cur` trace, matching the legacy
+`gc_traverse_curtrace()` root for not-yet-published traces while the broader
+per-TG executing-trace root publication remains staged.
 
 ## 5.8 P_WEAK and P_SWEEP transitions
 

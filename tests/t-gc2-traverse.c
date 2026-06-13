@@ -5,6 +5,7 @@
 #include <assert.h>
 #include <pthread.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "lua.h"
 #include "lauxlib.h"
@@ -707,6 +708,35 @@ static void test_jit_upvalue_barrier(lua_State *L, global_State *g,
   flush_and_drain(g, tg);
   lj_gc2_legacy_cycle_end(g);
   lua_pop(L, 3);
+}
+
+static void test_jit_current_trace_root(lua_State *L, global_State *g,
+					TGState *tg)
+{
+  jit_State *J = G2J(g);
+  GCtrace saved;
+  GCfunc *fn;
+  GCproto *pt;
+  UNUSED(tg);
+
+  assert(luaL_dostring(L, "return function() return 42 end\n") == LUA_OK);
+  fn = funcV(L->top - 1);
+  assert(isluafunc(fn));
+  pt = funcproto(fn);
+  lua_pop(L, 1);
+
+  lj_gc2_legacy_mark_begin(g);
+  assert(lj_gc2_ismarked(g, obj2gco(pt)) == 0);
+  saved = J->cur;
+  memset(&J->cur, 0, sizeof(J->cur));
+  J->cur.traceno = 1;
+  J->cur.nk = REF_TRUE;
+  J->cur.nins = REF_TRUE;
+  setgcref(J->cur.startpt, obj2gco(pt));
+  lj_gc2_scan_roots(g, L);
+  assert(lj_gc2_ismarked(g, obj2gco(pt)) == 1);
+  J->cur = saved;
+  lj_gc2_legacy_cycle_end(g);
 }
 #endif
 
@@ -1487,6 +1517,7 @@ int main(void)
 #if LJ_HASJIT
   test_jit_table_store_nyi_barrier(L, g, tg);
   test_jit_upvalue_barrier(L, g, tg);
+  test_jit_current_trace_root(L, g, tg);
 #endif
   test_weak_tables(L, g, tg);
   test_weak_snapshot_growth(L, g, tg);

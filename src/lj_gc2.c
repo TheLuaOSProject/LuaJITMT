@@ -294,6 +294,10 @@ static void gc2_mark_tab_retired_mem(global_State *g)
   }
 }
 
+#if LJ_HASJIT
+static void gc2_traverse_trace(global_State *g, GCtrace *T);
+#endif
+
 void lj_gc2_legacy_mark_begin(global_State *g)
 {
   TGState *tg = G2TG(g);
@@ -531,6 +535,7 @@ static void gc2_scan_global_roots(global_State *g)
   {
     jit_State *J = G2J(g);
     lj_trace_markvecs(g, 1);
+    gc2_traverse_trace(g, &J->cur);  /* 05 section 5.7.4 current trace root. */
     lj_mcode_markretired(g, 1);
     lj_gc2_markmem(g, J->irbuf ? J->irbuf + J->irbotlim : NULL);
     lj_gc2_markmem(g, J->snapbuf);
