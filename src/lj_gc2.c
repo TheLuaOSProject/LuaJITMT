@@ -791,11 +791,22 @@ void lj_gc2_finreg_cdata_set(global_State *g, GCobj *o, int enabled)
 #endif
 }
 
+static void gc2_finreg_queue_mark(global_State *g, GCobj *o)
+{
+  uint32_t phase;
+  if (!g || !o)
+    return;
+  phase = la_load32_acq(&g->gc2.phase);
+  if (phase == LJ_GC2_MARK || phase == LJ_GC2_WEAK)
+    (void)lj_gc2_markobj(g, o);  /* 05 section 5.8 FINREG resurrection. */
+}
+
 void lj_gc2_finreg_cdata_queue(global_State *g, GCobj *o)
 {
 #if LJ_HASFFI
   if (!g || !o || o->gch.gct != ~LJ_TCDATA)
     return;
+  gc2_finreg_queue_mark(g, o);
   la_add64_rlx(&g->gc2.finreg_cdata_queued, 1);
 #else
   UNUSED(g); UNUSED(o);
@@ -816,6 +827,7 @@ void lj_gc2_finreg_udata_queue(global_State *g, GCobj *o)
 {
   if (!g || !o || o->gch.gct != ~LJ_TUDATA)
     return;
+  gc2_finreg_queue_mark(g, o);
   la_add64_rlx(&g->gc2.finreg_udata_queued, 1);
 }
 

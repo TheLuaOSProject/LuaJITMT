@@ -1130,6 +1130,41 @@ static void test_finreg_userdata_telemetry(lua_State *L, global_State *g)
   assert(la_load64_acq(&g->gc2.finreg_udata_queued) == queued0 + 1u);
 }
 
+static void test_finreg_userdata_queue_mark(lua_State *L, global_State *g,
+					    TGState *tg)
+{
+  GCtab *env, *mt;
+  GCudata *ud;
+  uint64_t queued0;
+
+  lua_settop(L, 0);
+  lua_newtable(L);
+  env = tabV(L->top - 1);
+  lua_newuserdata(L, 1);
+  ud = udataV(L->top - 1);
+  lua_pushvalue(L, 1);
+  lua_setfenv(L, -2);
+  push_udata_finalizer_mt(L);
+  mt = tabV(L->top - 1);
+  lua_setmetatable(L, -2);
+  queued0 = la_load64_acq(&g->gc2.finreg_udata_queued);
+  lua_settop(L, 0);
+
+  lj_gc2_legacy_mark_begin(g);
+  assert(lj_gc2_ismarked(g, obj2gco(ud)) == 0);
+  lj_gc2_finreg_udata_queue(g, obj2gco(ud));
+  assert(la_load64_acq(&g->gc2.finreg_udata_queued) == queued0 + 1u);
+  assert(lj_gc2_ismarked(g, obj2gco(ud)) == 1);
+  flush_and_drain(g, tg);
+  assert(lj_gc2_ismarked(g, obj2gco(env)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(mt)) == 1);
+  lj_gc2_legacy_cycle_end(g);
+  setudataV(L, L->top++, ud);
+  lua_pushnil(L);
+  lua_setmetatable(L, -2);
+  lua_pop(L, 1);
+}
+
 #if LJ_HASFFI
 static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
 {
@@ -1218,6 +1253,7 @@ int main(void)
   test_closure(L, g, tg);
   test_thread(L, g, tg);
   test_userdata(L, g);
+  test_finreg_userdata_queue_mark(L, g, tg);
   test_finreg_userdata_telemetry(L, g);
 #if LJ_HASFFI
   test_finreg_cdata_telemetry(L, g);
