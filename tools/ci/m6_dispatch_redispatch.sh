@@ -72,4 +72,9 @@ if rg -n 'DISPMODE_REC' "$ROOT/src/lj_dispatch.c"; then
   exit 1
 fi
 
+if ! rg -F -q 'm6_dispatch_redispatch.sh' "$ROOT/tools/ci/m6_jit.sh"; then
+  echo "guardrail: m6_dispatch_redispatch.sh is not wired into the M6 aggregate" >&2
+  exit 1
+fi
+
 echo "M6 dispatch redispatch guard passed"
