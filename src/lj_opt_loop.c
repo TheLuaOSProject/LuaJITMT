@@ -284,6 +284,9 @@ static void loop_unroll(LoopState *lps)
 
   /* LOOP separates the pre-roll from the loop body. */
   emitir_raw(IRTG(IR_LOOP, IRT_NIL), 0, 0);
+#if LJ_TARGET_X64 && LJ_GC64
+  emitir_raw(IRTG(IR_XPOLL, IRT_NIL), 0, 0);
+#endif
 
   /* Grow snapshot buffer and map for copy-substituted snapshots.
   ** Need up to twice the number of snapshots minus #0 and loop snapshot.

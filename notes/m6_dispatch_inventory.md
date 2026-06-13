@@ -29,6 +29,7 @@ M6 x64 dispatch localization inventory:
 - Completed prerequisite in this slice: `lj_dispatch_update()` now requests
   `HS_REDISPATCH` when more than one TG is live, so attached TG dispatch tables
   refresh through their own safepoint acknowledgement instead of remote copying.
-- x64 trace loop code now polls `DISPATCH_TG(poll)` at the loop branch target.
-  This uses the already-localized `RID_DISPATCH` base, so trace safepoints are
-  TG-local in the same way as interpreter `TGPOLL` sites.
+- x64 trace loop code now emits `IR_XPOLL`, lowered to a
+  `DISPATCH_TG(poll)` check at the loop branch target. This uses the
+  already-localized `RID_DISPATCH` base, so trace safepoints are TG-local in
+  the same way as interpreter `TGPOLL` sites.

@@ -2950,7 +2950,7 @@ static void asm_gc_check(ASMState *as)
 /* -- Loop handling ------------------------------------------------------- */
 
 /* Poll the current TG at the loop backedge and exit through the LOOP snap. */
-static void asm_loop_poll(ASMState *as)
+static void asm_xpoll(ASMState *as)
 {
   asm_guardcc(as, CC_NE);  /* Assumes asm_snap_prep() already done. */
   emit_gmroi(as, XG_ARITHi(XOg_CMP), RID_DISPATCH, DISPATCH_TG(poll), 0);

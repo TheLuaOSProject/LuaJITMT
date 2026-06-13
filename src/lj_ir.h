@@ -37,6 +37,7 @@
   _(GCSTEP,	S , ___, ___) \
   _(HIOP,	S , ref, ref) \
   _(LOOP,	S , ___, ___) \
+  _(XPOLL,	S , ___, ___) \
   _(USE,	S , ref, ___) \
   _(PHI,	S , ref, ref) \
   _(RENAME,	S , ref, lit) \

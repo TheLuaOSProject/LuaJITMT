@@ -76,9 +76,10 @@ resulting vmstate store patterns instead of scanning for `GG_OFS_TGDISP`.
 Secondary TGs may now acquire the recorder token and enter `BC_JLOOP` mcode
 through their own TG-local dispatch table. Record dispatch itself is localized
 to the token holder's TG table instead of being exposed through the global
-dispatch template. x64 LOOP-backedge mcode now polls the current TG's
-`poll` word and exits through the normal trace-exit/VM safepoint path when a
-handshake is pending; hot-side recording is skipped while that poll is pending.
+dispatch template. x64 LOOP-backedge traces now emit guarded `IR_XPOLL`,
+lowered to a current-TG `poll` check that exits through the normal
+trace-exit/VM safepoint path when a handshake is pending; hot-side recording is
+skipped while that poll is pending.
 
 ## 8.3 Trace registry & publication
 
@@ -229,11 +230,10 @@ handler — sized LJ_MAX_EXITSTUBGR-compatible; see lj_vmstruct notes.
   nearest snapshot (force a snapshot at backedge — already the case).
   Loads of TG.poll must NOT be CSE'd/hoisted: mark XPOLL as having load
   effects (IRM ref to a new memory class) — fold rules: none.
-  Current M6 bridge: x86-64 emits the LOOP-backedge poll directly from
-  `asm_loop()` instead of materializing a new IR op yet. It uses the same guard
-  semantics and LOOP snapshot described above, with `RID_DISPATCH` addressing
-  the current TG-local dispatch table. The original explicit `XPOLL` IR,
-  inlined-FUNCF-depth insertion, and XBAR/TGMARK invalidation model remain the
+  Current M6 bridge: x86-64 emits guarded `IR_XPOLL` after `IR_LOOP` and
+  lowers it with `RID_DISPATCH` addressing the current TG-local dispatch table.
+  This covers the LOOP-backedge part of the original requirement; inlined
+  FUNCF-depth insertion and the XBAR/TGMARK invalidation model remain the
   follow-up target rather than being silently deleted.
 - **Allocation on trace**: TNEW/TDUP/CNEW/SNEW already call into C or use
   inline alloc IR; route them to the TG bump (mirror of 07 §7.5) — the IR

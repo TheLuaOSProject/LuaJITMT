@@ -15,7 +15,10 @@ for needle in \
   'emit_leatg(as, dest, tmptv)' \
   'DISPATCH_TG(jit_base)' \
   'emit_gettg(as, tmp, gl)' \
-  'static void asm_loop_poll(ASMState *as)' \
+  'XPOLL' \
+  'emitir_raw(IRTG(IR_XPOLL, IRT_NIL), 0, 0)' \
+  'case IR_XPOLL: asm_xpoll(as); break;' \
+  'static void asm_xpoll(ASMState *as)' \
   'emit_gmroi(as, XG_ARITHi(XOg_CMP), RID_DISPATCH, DISPATCH_TG(poll), 0)' \
   'static int trace_poll_pending(lua_State *L)' \
   '!trace_poll_pending(L)' \
@@ -38,7 +41,9 @@ do
       "$ROOT/src/lj_trace.c" "$ROOT/src/lj_dispatch.c" \
       "$ROOT/src/lj_snap.h" "$ROOT/src/lj_snap.c" "$ROOT/src/lj_tg.h" \
       "$ROOT/src/lj_err.c" "$ROOT/src/vm_x64.dasc" \
-      "$ROOT/src/lj_emit_x86.h" "$ROOT/src/lj_asm_x86.h"; then
+      "$ROOT/src/lj_ir.h" "$ROOT/src/lj_opt_loop.c" \
+      "$ROOT/src/lj_asm.c" "$ROOT/src/lj_emit_x86.h" \
+      "$ROOT/src/lj_asm_x86.h"; then
     echo "guardrail: missing recorder token marker: $needle" >&2
     exit 1
   fi
