@@ -44,6 +44,8 @@ for needle in \
   'uint64_t weak_keys_marked' \
   'uint64_t weak_values_marked' \
   'gc2_weak_record(global_State *g, GCtab *t)' \
+  'gc2_weak_next_capacity(MSize cap, uint64_t need)' \
+  '05 section 5.8 adaptive weak snapshot' \
   'lj_gc2_weak_snapshot_count(global_State *g)' \
   'lj_gc2_weak_snapshot_tab(global_State *g' \
   'lj_gc2_weak_snapshot_scan(global_State *g, uint32_t limit)' \

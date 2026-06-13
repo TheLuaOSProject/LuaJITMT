@@ -34,6 +34,7 @@
 
 static int gc2_grey_grow(global_State *g);
 static int gc2_grey_empty(global_State *g);
+static int gc2_weak_resize(global_State *g, MSize cap);
 static void gc2_weak_reset(global_State *g);
 static int gc2_tab_weak_mode(global_State *g, GCtab *t, GCtab *mt);
 
@@ -558,28 +559,69 @@ static int gc2_grey_empty(global_State *g)
 
 static int gc2_weak_ensure(global_State *g)
 {
-  lua_State *L;
   if (!g)
     return 0;
   if (g->gc2.weak_stack && g->gc2.weak_ready && g->gc2.weak_capacity > 0)
     return 1;
+  return gc2_weak_resize(g, GC2_WEAK_INIT);
+}
+
+static MSize gc2_weak_next_capacity(MSize cap, uint64_t need)
+{
+  MSize n = cap ? cap : GC2_WEAK_INIT;
+  if (n < GC2_WEAK_INIT)
+    n = GC2_WEAK_INIT;
+  if (need > (uint64_t)GC2_WEAK_LIMIT)
+    need = (uint64_t)GC2_WEAK_LIMIT;
+  while ((uint64_t)n < need && n < GC2_WEAK_LIMIT) {
+    if (n > (GC2_WEAK_LIMIT >> 1)) {
+      n = GC2_WEAK_LIMIT;
+      break;
+    }
+    n <<= 1;
+  }
+  return n;
+}
+
+static int gc2_weak_resize(global_State *g, MSize cap)
+{
+  lua_State *L;
+  GCRef *oldstack, *newstack;
+  uint8_t *oldready, *newready;
+  MSize oldcap;
+  if (!g || cap == 0)
+    return 0;
   L = mainthread(g);
   if (!L)
     return 0;
-  if (!g->gc2.weak_stack)
-    g->gc2.weak_stack = lj_mem_newvec(L, GC2_WEAK_INIT, GCRef);
-  if (!g->gc2.weak_ready)
-    g->gc2.weak_ready = lj_mem_newvec(L, GC2_WEAK_INIT, uint8_t);
-  g->gc2.weak_capacity = GC2_WEAK_INIT;
+  oldstack = g->gc2.weak_stack;
+  oldready = g->gc2.weak_ready;
+  oldcap = g->gc2.weak_capacity;
+  newstack = lj_mem_newvec(L, cap, GCRef);
+  newready = lj_mem_newvec(L, cap, uint8_t);
+  g->gc2.weak_stack = newstack;
+  g->gc2.weak_ready = newready;
+  g->gc2.weak_capacity = cap;
+  if (oldstack)
+    lj_mem_freevec(g, oldstack, oldcap, GCRef);
+  if (oldready)
+    lj_mem_freevec(g, oldready, oldcap, uint8_t);
   return 1;
 }
 
 static void gc2_weak_reset(global_State *g)
 {
   MSize i;
+  uint64_t prior_count;
   if (!g)
     return;
+  prior_count = la_load64_acq(&g->gc2.weak_count);
   (void)gc2_weak_ensure(g);
+  if (prior_count > (uint64_t)g->gc2.weak_capacity) {
+    MSize cap = gc2_weak_next_capacity(g->gc2.weak_capacity, prior_count);
+    if (cap > g->gc2.weak_capacity)
+      (void)gc2_weak_resize(g, cap);  /* 05 section 5.8 adaptive weak snapshot. */
+  }
   for (i = 0; i < g->gc2.weak_capacity; i++)
     la_store8_rlx(&g->gc2.weak_ready[i], 0);
   la_store64_rlx(&g->gc2.weak_count, 0);  /* 05 section 5.8 side vector. */

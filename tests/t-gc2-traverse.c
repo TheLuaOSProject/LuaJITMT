@@ -660,6 +660,70 @@ static int weak_entry_is_nil(lua_State *L, GCtab *weak, GCtab *key)
   return tvisnil(lj_tab_get(L, weak, &k));
 }
 
+static void make_weak_table_batch(lua_State *L, MSize n)
+{
+  MSize i;
+  GCtab *weak, *key, *val;
+  assert(lua_checkstack(L, (int)(n * 3u + 8u)));
+  for (i = 0; i < n; i++)
+    make_weak_table(L, "v", &weak, &key, &val);
+}
+
+static void mark_weak_table_batch(lua_State *L, global_State *g, MSize n)
+{
+  MSize i;
+  for (i = 0; i < n; i++) {
+    TValue *tv;
+    lua_pushvalue(L, (int)(i * 3u + 1u));
+    tv = L->top - 1;
+    assert(tvistab(tv));
+    assert(lj_gc2_markobj(g, obj2gco(tabV(tv))) == 1);
+    lua_pop(L, 1);
+  }
+}
+
+static void test_weak_snapshot_growth(lua_State *L, global_State *g, TGState *tg)
+{
+  MSize cap0, cap1, n;
+  uint64_t overflow0, overflow1;
+
+  lua_settop(L, 0);
+  if (g->gc2.weak_capacity == 0) {
+    lj_gc2_legacy_mark_begin(g);
+    lj_gc2_legacy_cycle_end(g);
+  }
+  cap0 = g->gc2.weak_capacity;
+  assert(cap0 > 0);
+  n = cap0 + 1u;
+  assert(n > cap0);
+
+  make_weak_table_batch(L, n);
+  overflow0 = la_load64_acq(&g->gc2.weak_tables_overflow);
+  lj_gc2_legacy_mark_begin(g);
+  mark_weak_table_batch(L, g, n);
+  flush_and_drain(g, tg);
+  assert(g->gc2.weak_capacity == cap0);
+  assert(la_load64_acq(&g->gc2.weak_count) == n);
+  assert(lj_gc2_weak_snapshot_count(g) == cap0);
+  assert(la_load64_acq(&g->gc2.weak_tables_overflow) == overflow0 + 1u);
+  lj_gc2_legacy_cycle_end(g);
+  lua_settop(L, 0);
+
+  make_weak_table_batch(L, n);
+  overflow1 = la_load64_acq(&g->gc2.weak_tables_overflow);
+  lj_gc2_legacy_mark_begin(g);
+  cap1 = g->gc2.weak_capacity;
+  assert(cap1 > cap0);
+  assert(cap1 >= n);
+  mark_weak_table_batch(L, g, n);
+  flush_and_drain(g, tg);
+  assert(la_load64_acq(&g->gc2.weak_count) == n);
+  assert(lj_gc2_weak_snapshot_count(g) == n);
+  assert(la_load64_acq(&g->gc2.weak_tables_overflow) == overflow1);
+  lj_gc2_legacy_cycle_end(g);
+  lua_settop(L, 0);
+}
+
 static void test_weak_snapshot_ready_publication(lua_State *L, global_State *g)
 {
   GCtab *t;
@@ -1273,6 +1337,7 @@ int main(void)
   test_jit_upvalue_barrier(L, g, tg);
 #endif
   test_weak_tables(L, g, tg);
+  test_weak_snapshot_growth(L, g, tg);
   test_worker_weak_drain(L, g, tg);
   test_weak_snapshot_ready_publication(L, g);
   test_weak_clear_marks_string_slots(L, g, tg);
