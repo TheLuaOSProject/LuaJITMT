@@ -183,6 +183,41 @@ static void load_scoped_flush_root(lua_State *L)
     assert(status == LUA_OK);
   }
 }
+
+static void load_scoped_flush_side(lua_State *L)
+{
+  int status = luaL_loadstring(L,
+    "jit.flush()\n"
+    "jit.opt.start('hotloop=1', 'hotexit=1')\n"
+    "local function f(n, flag)\n"
+    "  local s = 0\n"
+    "  for i = 1, n do\n"
+    "    if flag and i == 10 then s = s + 1000 else s = s + i end\n"
+    "  end\n"
+    "  return s\n"
+    "end\n"
+    "for _ = 1, 20 do assert(f(80, false) == 3240) end\n"
+    "for _ = 1, 80 do assert(f(80, true) == 4230) end\n"
+    "jit.opt.start('hotloop=1000000', 'hotexit=1000000')\n"
+    "return f\n");
+  if (status != LUA_OK) {
+    fprintf(stderr, "load_scoped_flush_side failed: %s\n",
+	    lua_tostring(L, -1));
+    assert(status == LUA_OK);
+  }
+}
+
+static uint32_t count_traces_with_root(jit_State *J, TraceNo root)
+{
+  TraceNo i;
+  uint32_t n = 0;
+  for (i = 1; i < J->sizetrace; i++) {
+    GCtrace *T = traceref(J, i);
+    if (T && T->root == root)
+      n++;
+  }
+  return n;
+}
 #endif
 
 static void call_expect(lua_State *L, int expected, const char *name)
@@ -294,6 +329,7 @@ int main(void)
   global_State *g;
   TGState *tg;
   uint64_t epoch0;
+  uint64_t scoped_slots0;
   uint32_t actions;
 
   assert(L != NULL);
@@ -399,13 +435,33 @@ int main(void)
   assert(lua_isfunction(L, -1));
   assert(traceref(G2J(g), 1) != NULL);
   epoch0 = g->gc2.hs_epoch;
+  scoped_slots0 = la_load64_acq(&g->gc2.jit_scoped_slots_retired);
   assert(luaL_dostring(L, "jit.flush(1)") == LUA_OK);
   assert(g->gc2.hs_epoch == epoch0 + 1u);
   assert(tg->hs_epoch_ack == g->gc2.hs_epoch);
+  assert(traceref(G2J(g), 1) == NULL);
+  assert(la_load64_acq(&g->gc2.jit_scoped_slots_retired) > scoped_slots0);
   epoch0 = g->gc2.hs_epoch;
+  scoped_slots0 = la_load64_acq(&g->gc2.jit_scoped_slots_retired);
+  assert(luaL_dostring(L, "jit.flush(1)") == LUA_OK);
+  assert(g->gc2.hs_epoch == epoch0);
+  assert(tg->hs_epoch_ack == g->gc2.hs_epoch);
+  assert(la_load64_acq(&g->gc2.jit_scoped_slots_retired) == scoped_slots0);
+  lua_pop(L, 1);
+
+  load_scoped_flush_side(L);
+  assert(lua_pcall(L, 0, 1, 0) == LUA_OK);
+  assert(lua_isfunction(L, -1));
+  assert(traceref(G2J(g), 1) != NULL);
+  assert(count_traces_with_root(G2J(g), 1) > 0);
+  epoch0 = g->gc2.hs_epoch;
+  scoped_slots0 = la_load64_acq(&g->gc2.jit_scoped_slots_retired);
   assert(luaL_dostring(L, "jit.flush(1)") == LUA_OK);
   assert(g->gc2.hs_epoch == epoch0 + 1u);
-  assert(tg->hs_epoch_ack == g->gc2.hs_epoch);
+  assert(traceref(G2J(g), 1) == NULL);
+  assert(count_traces_with_root(G2J(g), 1) == 0);
+  assert(la_load64_acq(&g->gc2.jit_scoped_slots_retired) >
+	 scoped_slots0 + 1u);
   lua_pop(L, 1);
 
   load_trace_stopreq_loop(L);

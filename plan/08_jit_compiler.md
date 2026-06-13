@@ -332,8 +332,15 @@ trace object and did not disable a proto. Current scoped bridge:
 `trace_flushroot()`, `lj_trace_flush()`, and `lj_trace_flushproto()` now report
 scoped trace-exit publication work, and `jit.off(func)`/proto disabling counts
 as boundary work even without existing traces. Public scoped flushes publish one
-`HS_EXIT_TRACES` boundary only when that work count is nonzero. They still need
-per-root retirement/token structure to finish the original scoped-flush target.
+`HS_EXIT_TRACES` boundary only when that work count is nonzero. Current scoped
+slot-retirement bridge: roots touched by scoped flush are tagged before the
+handshake, and after the `HS_EXIT_TRACES` grace boundary side-trace slots rooted
+at those tags are cleared first, then the root slots are cleared with
+`T->traceno = 0`. This makes trace numbers reusable without leaving stale sides
+pointing at a reusable root number or letting the later GC sweep clear a reused
+slot. The physical `GCtrace` body/exittab still reaches `J->retiredtraces`
+through the existing sweep path; full token ownership and per-root body
+retirement remain to finish the original scoped-flush target.
 
 ## 8.8 Recorder/IR changes inventory
 

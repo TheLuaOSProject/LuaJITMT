@@ -42,6 +42,8 @@ for needle in \
   'GCtrace *retiredtraces' \
   'uint64_t retire_epoch' \
   'struct GCtrace *retired_next' \
+  'uint64_t jit_scoped_slots_retired' \
+  'la_store64_rlx(&g->gc2.jit_scoped_slots_retired, 0)' \
   'trace_retire(global_State *g, GCtrace *T)' \
   'lj_gc_arena_markmem(g, T)' \
   'trace_freebody(global_State *g, GCtrace *T)' \
@@ -52,7 +54,8 @@ for needle in \
   'lj_trace_markvecs(g, 1)' \
   'lj_trace_markvecs(g, 0)'
 do
-  if ! rg -F -q "$needle" "$ROOT/src/lj_jit.h" "$ROOT/src/lj_trace.c" \
+  if ! rg -F -q "$needle" "$ROOT/src/lj_obj.h" "$ROOT/src/lj_jit.h" \
+    "$ROOT/src/lj_trace.c" \
     "$ROOT/src/lj_safepoint.c" "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc2.c"; then
     echo "guardrail: missing trace-vector RCU/SMR bridge: $needle" >&2
     exit 1
@@ -130,11 +133,18 @@ do
 done
 
 for needle in \
-  'static uint32_t trace_flushroot(jit_State *J, GCtrace *T)' \
+  'LJ_TRACE_SCOPE_FLUSHING' \
+  'static uint32_t trace_flushroot(jit_State *J, GCtrace *T, int scoped)' \
   'uint32_t lj_trace_flush(jit_State *J, TraceNo traceno)' \
   'uint32_t lj_trace_flushproto(global_State *g, GCproto *pt)' \
+  'la_store64_rel(&T->retire_epoch, LJ_TRACE_SCOPE_FLUSHING)' \
+  'trace_scope_clear_slot(J, i, T, epoch);' \
+  'lj_trace_flushscope_retire(global_State *g, uint64_t epoch)' \
+  'root && root->traceno == T->root' \
+  'T->traceno = 0;  /* Scoped slot retired after HS_EXIT_TRACES grace. */' \
+  'la_add64_rlx(&g->gc2.jit_scoped_slots_retired, retired)' \
   'return (mode & LUAJIT_MODE_FLUSH) ? flushed : flushed + 1u;' \
-  'return trace_flushroot(J, T);' \
+  'return trace_flushroot(J, T, 1);' \
   'flushed += setptmode(g, pt, mode);' \
   'lj_trace_flushscope_hs(g, flushed);' \
   'lj_trace_flushscope_hs(g, lj_trace_flush(G2J(g), idx));'
@@ -308,11 +318,16 @@ for _ = 1, 120 do
   assert(side(90, true) == expect(90, true))
 end
 assert(tracecount() > before, "no side trace was published")
+local after_side = tracecount()
 for _ = 1, 120 do
   assert(side(90, true) == expect(90, true))
 end
+assert(util.traceinfo(1), "missing root trace 1")
+jit.flush(1)
+assert(not util.traceinfo(1), "scoped root flush did not clear root slot")
+assert(tracecount() < after_side, "scoped root flush did not retire any slots")
 jit.flush()
-assert(tracecount() == 0, "side traces were not flushed")
+assert(tracecount() == 0, "full flush after scoped root flush left traces")
 for _ = 1, 20 do
   assert(side(90, true) == expect(90, true))
 end

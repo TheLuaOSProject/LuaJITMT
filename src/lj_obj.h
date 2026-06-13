@@ -856,6 +856,7 @@ typedef struct GC2State {
   uint64_t assist_ssb_converted;  /* SSB entries converted by assists. */
   uint64_t assist_weak_drained;  /* Weak tables clear-scanned by assists. */
   uint64_t jit_hard_checks;  /* Trace GC checks entered past hard limit. */
+  uint64_t jit_scoped_slots_retired;  /* Scoped flush trace slots retired. */
   uint32_t gcpause_pct;	/* GC2 pacing percentage. */
   uint32_t assist_shift;  /* Bounded assist work is 1 << shift. */
   uint32_t assist_active;  /* Nonblocking owner token for mark assists. */
