@@ -10,6 +10,7 @@
 
 #if LJ_HASJIT
 
+#include "lj_atomic.h"
 #include "lj_arena.h"
 #include "lj_gc.h"
 #include "lj_gc2.h"
@@ -35,6 +36,31 @@
 #include "lj_prng.h"
 
 /* -- Error handling ------------------------------------------------------ */
+
+int lj_jit_token_try(jit_State *J)
+{
+  global_State *g = J2G(J);
+  TGState *tg = J2TG(J);
+  uint32_t expect = 0;
+  if (!tg || tg->tid == 0)
+    return 0;
+  return la_cas32(&g->jit_token, &expect, tg->tid, LA_ACQ_REL, LA_ACQ);
+}
+
+int lj_jit_token_held(jit_State *J)
+{
+  global_State *g = J2G(J);
+  TGState *tg = J2TG(J);
+  return tg && tg->tid != 0 && la_load32_acq(&g->jit_token) == tg->tid;
+}
+
+void lj_jit_token_release(jit_State *J)
+{
+  global_State *g = J2G(J);
+  TGState *tg = J2TG(J);
+  if (tg && tg->tid != 0 && la_load32_acq(&g->jit_token) == tg->tid)
+    la_store32_rel(&g->jit_token, 0);
+}
 
 /* Synchronous abort with error message. */
 void lj_trace_err(jit_State *J, TraceError e)
@@ -1038,6 +1064,7 @@ static TValue *trace_state(lua_State *L, lua_CFunction dummy, void *ud)
       setvmstate(J2G(J), INTERP);
       J->state = LJ_TRACE_IDLE;
       lj_dispatch_update(J2G(J), 0);
+      lj_jit_token_release(J);
       return NULL;
 
     default:  /* Trace aborted asynchronously. */
@@ -1050,9 +1077,12 @@ static TValue *trace_state(lua_State *L, lua_CFunction dummy, void *ud)
       setvmstate(J2G(J), INTERP);
       J->state = LJ_TRACE_IDLE;
       lj_dispatch_update(J2G(J), 0);
+      lj_jit_token_release(J);
       return NULL;
     }
   } while (J->state > LJ_TRACE_RECORD);
+  if (J->state == LJ_TRACE_IDLE)
+    lj_jit_token_release(J);
   return NULL;
 }
 
@@ -1070,7 +1100,11 @@ void lj_trace_ins(jit_State *J, const BCIns *pc)
 }
 
 /* A hotcount triggered. Start recording a root trace. */
+#if LJ_TARGET_X64
+void LJ_FASTCALL lj_trace_hot(jit_State *J, const BCIns *pc, lua_State *L)
+#else
 void LJ_FASTCALL lj_trace_hot(jit_State *J, const BCIns *pc)
+#endif
 {
   /* Note: pc is the interpreter bytecode PC here. It's offset by 1. */
   ERRNO_SAVE
@@ -1078,7 +1112,11 @@ void LJ_FASTCALL lj_trace_hot(jit_State *J, const BCIns *pc)
   hotcount_setg(J2G(J), pc, J->param[JIT_P_hotloop]*HOTCOUNT_LOOP);
   /* Only start a new trace if not recording or inside __gc call or vmevent. */
   if (J->state == LJ_TRACE_IDLE &&
-      !(J2G(J)->hookmask & (HOOK_GC|HOOK_VMEVENT))) {
+      !(J2G(J)->hookmask & (HOOK_GC|HOOK_VMEVENT)) &&
+      lj_jit_token_try(J)) {
+#if LJ_TARGET_X64
+    J->L = L;
+#endif
     J->parent = 0;  /* Root trace. */
     J->exitno = 0;
     J->state = LJ_TRACE_START;
@@ -1091,11 +1129,22 @@ void LJ_FASTCALL lj_trace_hot(jit_State *J, const BCIns *pc)
 static void trace_hotside(jit_State *J, const BCIns *pc)
 {
   SnapShot *snap = &traceref(J, J->parent)->snap[J->exitno];
+  uint32_t hotexit = J->param[JIT_P_hotexit];
+  uint8_t count;
   if (!(J2G(J)->hookmask & (HOOK_GC|HOOK_VMEVENT)) &&
-      isluafunc(curr_func(J->L)) &&
-      snap->count != SNAPCOUNT_DONE &&
-      ++snap->count >= J->param[JIT_P_hotexit]) {
+      isluafunc(curr_func(J->L))) {
+    count = snap->count;
+    if (count == SNAPCOUNT_DONE)
+      return;
+    if ((uint32_t)count + 1u < hotexit) {
+      snap->count = (uint8_t)(count + 1u);
+      return;
+    }
     lj_assertJ(J->state == LJ_TRACE_IDLE, "hot side exit while recording");
+    if (!lj_jit_token_try(J))
+      return;
+    if (count < SNAPCOUNT_DONE-1)
+      snap->count = (uint8_t)(count + 1u);
     /* J->parent is non-zero for a side trace. */
     J->state = LJ_TRACE_START;
     lj_trace_ins(J, pc);
@@ -1103,13 +1152,24 @@ static void trace_hotside(jit_State *J, const BCIns *pc)
 }
 
 /* Stitch a new trace to the previous trace. */
+#if LJ_TARGET_X64
+void LJ_FASTCALL lj_trace_stitch(jit_State *J, const BCIns *pc, lua_State *L,
+				 TraceNo traceno)
+#else
 void LJ_FASTCALL lj_trace_stitch(jit_State *J, const BCIns *pc)
+#endif
 {
   /* Only start a new trace if not recording or inside __gc call or vmevent. */
   if (J->state == LJ_TRACE_IDLE &&
-      !(J2G(J)->hookmask & (HOOK_GC|HOOK_VMEVENT))) {
+      !(J2G(J)->hookmask & (HOOK_GC|HOOK_VMEVENT)) &&
+      lj_jit_token_try(J)) {
+#if LJ_TARGET_X64
+    J->L = L;
+#endif
     J->parent = 0;  /* Have to treat it like a root trace. */
-    /* J->exitno is set to the invoking trace. */
+#if LJ_TARGET_X64
+    J->exitno = traceno;  /* Invoking trace for stitching. */
+#endif
     J->state = LJ_TRACE_START;
     lj_trace_ins(J, pc);
   }

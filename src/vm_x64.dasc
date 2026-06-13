@@ -2387,10 +2387,10 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov L:RB->base, BASE
   |  mov L:RB->top, RD
   |  mov CARG2, PC
+  |  mov CARG3, L:RB
   |  lea CARG1, [DISPATCH+TG_DISP2J]
-  |  mov aword [DISPATCH+DISPATCH_J(L)], L:RB
   |  mov SAVE_PC, PC
-  |  call extern lj_trace_hot		// (jit_State *J, const BCIns *pc)
+  |  call extern lj_trace_hot		// (jit_State *J, const BCIns *pc, lua_State *L)
   |  jmp <3
   |.endif
   |
@@ -2466,13 +2466,13 @@ static void build_subroutines(BuildCtx *ctx)
   |  jne =>BC_JLOOP			// Jump to stitched trace.
   |
   |  // Stitch a new trace to the previous trace.
-  |  mov [DISPATCH+DISPATCH_J(exitno)], RB
+  |  mov CARG4d, RBd
   |  mov L:RB, SAVE_L
   |  mov L:RB->base, BASE
   |  mov CARG2, PC
+  |  mov CARG3, L:RB
   |  lea CARG1, [DISPATCH+TG_DISP2J]
-  |  mov aword [DISPATCH+DISPATCH_J(L)], L:RB
-  |  call extern lj_dispatch_stitch	// (jit_State *J, const BCIns *pc)
+  |  call extern lj_dispatch_stitch	// (jit_State *J, const BCIns *pc, lua_State *L, TraceNo traceno)
   |  mov BASE, L:RB->base
   |  jmp ->cont_nop
   |

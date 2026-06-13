@@ -889,6 +889,7 @@ typedef struct global_State {
   GCRef gcroot[GCROOT_MAX];  /* GC roots. */
 #if LJ_HASJIT
   jit_State *jitp;	/* Pointer to the universe-global JIT state. */
+  uint32_t jit_token;	/* Recorder token owner tid, 0 if idle. */
 #endif
   TGState *main_tg;	/* Main per-OS-thread state block. */
   LJThreadLive *threading_live;  /* Lockless threading.thread root list. */

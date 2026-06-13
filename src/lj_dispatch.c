@@ -463,7 +463,7 @@ void LJ_FASTCALL lj_dispatch_ins(lua_State *L, const BCIns *pc)
 #if LJ_HASJIT
   {
     jit_State *J = G2J(g);
-    if (J->state != LJ_TRACE_IDLE) {
+    if (J->state != LJ_TRACE_IDLE && lj_jit_token_held(J)) {
 #ifdef LUA_USE_ASSERT
       ptrdiff_t delta = L->top - L->base;
 #endif
@@ -523,22 +523,27 @@ ASMFunction LJ_FASTCALL lj_dispatch_call(lua_State *L, const BCIns *pc)
 #endif
   int missing = call_init(L, fn);
 #if LJ_HASJIT
-  J->L = L;
   if ((uintptr_t)pc & 1) {  /* Marker for hot call. */
 #ifdef LUA_USE_ASSERT
     ptrdiff_t delta = L->top - L->base;
 #endif
     pc = (const BCIns *)((uintptr_t)pc & ~(uintptr_t)1);
+#if LJ_TARGET_X64
+    lj_trace_hot(J, pc, L);
+#else
+    J->L = L;
     lj_trace_hot(J, pc);
+#endif
     lj_assertG(L->top - L->base == delta,
 	       "unbalanced stack after hot call");
     goto out;
-  } else if (J->state != LJ_TRACE_IDLE &&
+  } else if (J->state != LJ_TRACE_IDLE && lj_jit_token_held(J) &&
 	     !(g->hookmask & (HOOK_GC|HOOK_VMEVENT))) {
 #ifdef LUA_USE_ASSERT
     ptrdiff_t delta = L->top - L->base;
 #endif
     /* Record the FUNC* bytecodes, too. */
+    J->L = L;
     lj_trace_ins(J, pc-1);  /* The interpreter bytecode PC is offset by 1. */
     lj_assertG(L->top - L->base == delta,
 	       "unbalanced stack after hot instruction");
@@ -569,17 +574,28 @@ out:
 
 #if LJ_HASJIT
 /* Stitch a new trace. */
+#if LJ_TARGET_X64
+void LJ_FASTCALL lj_dispatch_stitch(jit_State *J, const BCIns *pc, lua_State *L,
+				    TraceNo traceno)
+#else
 void LJ_FASTCALL lj_dispatch_stitch(jit_State *J, const BCIns *pc)
+#endif
 {
   if (!(J2G(J)->hookmask & HOOK_VMEVENT)) {
     ERRNO_SAVE
+#if !LJ_TARGET_X64
     lua_State *L = J->L;
+#endif
     void *cf = cframe_raw(L->cframe);
     const BCIns *oldpc = cframe_pc(cf);
     setcframe_pc(cf, pc);
     /* Before dispatch, have to bias PC by 1. */
     L->top = L->base + cur_topslot(curr_proto(L), pc+1, cframe_multres_n(cf));
+#if LJ_TARGET_X64
+    lj_trace_stitch(J, pc-1, L, traceno);  /* Point to the CALL instruction. */
+#else
     lj_trace_stitch(J, pc-1);  /* Point to the CALL instruction. */
+#endif
     setcframe_pc(cf, oldpc);
     ERRNO_RESTORE
   }

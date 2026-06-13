@@ -141,7 +141,12 @@ LJ_FUNC void LJ_FASTCALL lj_dispatch_update(global_State *g, int nolock);
 LJ_FUNCA void LJ_FASTCALL lj_dispatch_ins(lua_State *L, const BCIns *pc);
 LJ_FUNCA ASMFunction LJ_FASTCALL lj_dispatch_call(lua_State *L, const BCIns*pc);
 #if LJ_HASJIT
+#if LJ_TARGET_X64
+LJ_FUNCA void LJ_FASTCALL lj_dispatch_stitch(jit_State *J, const BCIns *pc,
+					     lua_State *L, TraceNo traceno);
+#else
 LJ_FUNCA void LJ_FASTCALL lj_dispatch_stitch(jit_State *J, const BCIns *pc);
+#endif
 #endif
 #if LJ_HASPROFILE
 LJ_FUNCA void LJ_FASTCALL lj_dispatch_profile(lua_State *L, const BCIns *pc);

@@ -50,6 +50,19 @@ the second simply fails the token try and resets its counter — natural
 backoff. Penalty slots stay in J (token-held writes; racy *reads* from the
 hotcount path are advisory only — acceptable staleness).
 
+Current M6 bridge: `global_State.jit_token` is a non-blocking recorder token
+acquired with the current TG tid by hot root traces, hot side traces, and stitch
+attempts. Record-mode dispatch callbacks only mutate `J` for the token holder,
+and the x64 hot-loop/stitch paths pass `lua_State *` (plus the invoking trace
+number for stitching) into C so `J->L`/stitch `J->exitno` are only written after
+token acquisition. The trace state machine releases the token whenever it
+returns to `LJ_TRACE_IDLE`, and token-busy hot side exits do not advance the
+retry budget into `SNAPCOUNT_DONE`. The remaining original targets are to localize
+record dispatch to the token holder's TG table instead of temporarily exposing
+record hooks through the global dispatch template, and to move trace-exit
+restore state (`J->L`, `J->parent`, `J->exitno`) into per-TG storage before
+side-trace token acquisition.
+
 ## 8.3 Trace registry & publication
 
 `J->trace` is `GCRef *trace; MSize sizetrace` (lj_jit.h:473–475).

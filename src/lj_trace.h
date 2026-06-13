@@ -30,6 +30,9 @@ LJ_FUNC void lj_trace_flushproto(global_State *g, GCproto *pt);
 LJ_FUNC void lj_trace_flush(jit_State *J, TraceNo traceno);
 LJ_FUNC int lj_trace_flushall(lua_State *L);
 LJ_FUNC int lj_trace_flushall_hs(lua_State *L);
+LJ_FUNC int lj_jit_token_try(jit_State *J);
+LJ_FUNC int lj_jit_token_held(jit_State *J);
+LJ_FUNC void lj_jit_token_release(jit_State *J);
 LJ_FUNC void lj_trace_initstate(global_State *g);
 LJ_FUNC void lj_trace_freestate(global_State *g);
 LJ_FUNC uint32_t lj_trace_reclaim_retired(global_State *g,
@@ -39,8 +42,15 @@ LJ_FUNC void lj_trace_markvecs(global_State *g, int gc2);
 
 /* Event handling. */
 LJ_FUNC void lj_trace_ins(jit_State *J, const BCIns *pc);
+#if LJ_TARGET_X64
+LJ_FUNCA void LJ_FASTCALL lj_trace_hot(jit_State *J, const BCIns *pc,
+				       lua_State *L);
+LJ_FUNCA void LJ_FASTCALL lj_trace_stitch(jit_State *J, const BCIns *pc,
+					  lua_State *L, TraceNo traceno);
+#else
 LJ_FUNCA void LJ_FASTCALL lj_trace_hot(jit_State *J, const BCIns *pc);
 LJ_FUNCA void LJ_FASTCALL lj_trace_stitch(jit_State *J, const BCIns *pc);
+#endif
 LJ_FUNCA int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr);
 #if LJ_UNWIND_EXT
 LJ_FUNC uintptr_t LJ_FASTCALL lj_trace_unwind(jit_State *J, uintptr_t addr, ExitNo *ep);
@@ -54,6 +64,9 @@ LJ_FUNC uintptr_t LJ_FASTCALL lj_trace_unwind(jit_State *J, uintptr_t addr, Exit
 
 #define lj_trace_flushall(L)	(UNUSED(L), 0)
 #define lj_trace_flushall_hs(L)	(UNUSED(L), 0)
+#define lj_jit_token_try(J)	(UNUSED(J), 0)
+#define lj_jit_token_held(J)	(UNUSED(J), 0)
+#define lj_jit_token_release(J)	UNUSED(J)
 #define lj_trace_initstate(g)	UNUSED(g)
 #define lj_trace_freestate(g)	UNUSED(g)
 #define lj_trace_reclaim_retired(g, e)	(UNUSED(g), UNUSED(e), 0)
