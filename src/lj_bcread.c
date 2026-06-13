@@ -216,16 +216,20 @@ static GCtab *bcread_ktab(LexState *ls)
   if (narray) {  /* Read array entries. */
     MSize i;
     TValue *o = lj_tab_array_acq(t);
-    for (i = 0; i < narray; i++, o++)
-      bcread_ktabk(ls, o, NULL);
+    for (i = 0; i < narray; i++, o++) {
+      TValue tv;
+      bcread_ktabk(ls, &tv, NULL);
+      lj_tab_storetv(ls->L, o, &tv);
+    }
   }
   if (nhash) {  /* Read hash entries. */
     MSize i;
     for (i = 0; i < nhash; i++) {
-      TValue key;
+      TValue key, tv;
       bcread_ktabk(ls, &key, NULL);
       lj_assertLS(!tvisnil(&key), "nil key");
-      bcread_ktabk(ls, lj_tab_set(ls->L, t, &key), t);
+      bcread_ktabk(ls, &tv, t);
+      lj_tab_storetv(ls->L, lj_tab_set(ls->L, t, &key), &tv);
     }
   }
   return t;

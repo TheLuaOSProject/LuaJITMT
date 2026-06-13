@@ -54,6 +54,8 @@ for needle in \
   'const_slot_store(o, fs->nkn)' \
   'const_slot_store(o, fs->nkgc)' \
   'lj_tab_storebool(L, tv, 1)' \
+  'lj_tab_storetv(ls->L, o, &tv)' \
+  'lj_tab_storetv(ls->L, lj_tab_set(ls->L, t, &key), &tv)' \
   'lj_tab_storeint(L, lj_tab_newkey(L, dict, &tv), (int32_t)(i-1))'
 do
   if ! rg -F -q "$needle" "$ROOT/src"; then
@@ -94,6 +96,12 @@ fi
 
 if rg -n 'o->u64 = fs->nk|setboolV\(tv, 1\)' "$ROOT/src/lj_parse.c"; then
   echo "guardrail: parser constant table slot markers must release-publish" >&2
+  exit 1
+fi
+
+if rg -n 'bcread_ktabk\(ls, o, NULL\)|bcread_ktabk\(ls, lj_tab_set\(ls->L, t, &key\), t\)' \
+    "$ROOT/src/lj_bcread.c"; then
+  echo "guardrail: bytecode template table slots must release-publish" >&2
   exit 1
 fi
 
