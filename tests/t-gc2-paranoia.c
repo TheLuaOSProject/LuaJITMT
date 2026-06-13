@@ -13,6 +13,7 @@
 #include "lj_arena.h"
 #include "lj_gc.h"
 #include "lj_gc2.h"
+#include "lj_safepoint.h"
 #include "lj_tg.h"
 
 #if !LJ_GC2_PARANOIA
@@ -42,8 +43,8 @@ int main(void)
 {
   lua_State *L = luaL_newstate();
   global_State *g;
-  TGState *tg;
-  void *stray;
+  TGState *tg, extra_tg;
+  void *stray, *extra_stray;
 
   assert(L != NULL);
   luaL_openlibs(L);
@@ -99,6 +100,28 @@ int main(void)
   assert(lj_gc2_paranoia_legacy_diff(g) == 0);
 
   lj_gc2_legacy_cycle_end(g);
+
+  lj_tg_init_thread(g, &extra_tg, NULL, 1);
+  extra_tg.tid = tg->tid + 3000u;
+  extra_tg.alloc.owner_tid = extra_tg.tid;
+  extra_tg.cur_L = L;
+  lj_native_enter(&extra_tg);
+  lj_tg_attach(g, &extra_tg);
+  assert(g->gc2.n_threads == 2);
+
+  lj_gc2_legacy_mark_begin(g);
+  extra_stray = lj_arena_alloc(&extra_tg.alloc, &extra_tg.prng, 64,
+			       LJ_AF_TRAVERSABLE);
+  assert(extra_stray != NULL);
+  assert(lj_gc2_paranoia_legacy_diff(g) == 1);
+  lj_arena_free(&extra_tg.alloc, extra_stray, 64);
+  assert(lj_gc2_paranoia_legacy_diff(g) == 0);
+  lj_gc2_legacy_cycle_end(g);
+
+  lj_tg_detach(g, &extra_tg);
+  assert(g->gc2.n_threads == 1);
+  assert(lj_tg_reclaim_dead(g) == 1u);
+  lj_tg_fini_thread(g, &extra_tg);
   lua_close(L);
 
   printf("t-gc2-paranoia OK: fixpoint oracle and stale-mark diff verified\n");

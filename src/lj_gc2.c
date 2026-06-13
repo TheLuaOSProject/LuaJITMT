@@ -1945,16 +1945,24 @@ static uint32_t gc2_paranoia_scan_arena(global_State *g, GCArena *a)
 
 uint32_t lj_gc2_paranoia_legacy_diff(global_State *g)
 {
-  TGState *tg = G2TG(g);
+  TGState *tg;
   GCArena *a;
   uint32_t bad = 0;
-  if (!tg || !(tg->tg_flags & TGF_ARENA_INTERNAL))
+  if (!g)
     return 0;
-  for (a = tg->alloc.owned[LJ_ARENAK_TRAVERSABLE]; a != NULL; a = a->hdr.next)
-    bad += gc2_paranoia_scan_arena(g, a);
-  for (a = tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE]; a != NULL;
-       a = a->hdr.next)
-    bad += gc2_paranoia_scan_arena(g, a);
+  for (tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
+       tg != NULL;
+       tg = (TGState *)la_loadptr_acq((void *const *)&tg->next_tg)) {
+    uint8_t flags = la_load8_acq(&tg->tg_flags);
+    if ((flags & (TGF_DEAD|TGF_ARENA_INTERNAL)) != TGF_ARENA_INTERNAL)
+      continue;
+    for (a = tg->alloc.owned[LJ_ARENAK_TRAVERSABLE];
+	 a != NULL; a = a->hdr.next)
+      bad += gc2_paranoia_scan_arena(g, a);
+    for (a = tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE]; a != NULL;
+	 a = a->hdr.next)
+      bad += gc2_paranoia_scan_arena(g, a);
+  }
   return bad;
 }
 

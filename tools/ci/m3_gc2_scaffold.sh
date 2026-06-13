@@ -107,6 +107,7 @@ for needle in \
   'lj_gc2_reclaim_retired(global_State *g, uint64_t epoch)' \
   'la_add64_rlx(&g->gc2.smr_reclaimed' \
   'lj_gc2_reclaim_retired(g, epoch)' \
+  'lj_gc2_paranoia_legacy_diff(global_State *g)' \
   'lj_gc2_ssb_empty(g)' \
   'la_loadptr_acq((void *const *)&tg->ssb_next)' \
   'la_storeptr_rel((void **)&tg->ssb_next' \
