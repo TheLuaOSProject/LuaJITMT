@@ -230,11 +230,12 @@ handler — sized LJ_MAX_EXITSTUBGR-compatible; see lj_vmstruct notes.
   nearest snapshot (force a snapshot at backedge — already the case).
   Loads of TG.poll must NOT be CSE'd/hoisted: mark XPOLL as having load
   effects (IRM ref to a new memory class) — fold rules: none.
-  Current M6 bridge: x86-64 emits guarded `IR_XPOLL` after `IR_LOOP` and
-  lowers it with `RID_DISPATCH` addressing the current TG-local dispatch table.
-  This covers the LOOP-backedge part of the original requirement; inlined
-  FUNCF-depth insertion and the XBAR/TGMARK invalidation model remain the
-  follow-up target rather than being silently deleted.
+  Current M6 bridge: x86-64 emits guarded `IR_XPOLL` after `IR_LOOP` and at
+  inlined Lua function entries once framedepth reaches 8, lowering both with
+  `RID_DISPATCH` addressing the current TG-local dispatch table. This covers
+  the LOOP-backedge and FUNCF-depth parts of the original requirement; the
+  XBAR/TGMARK invalidation model remains the follow-up target rather than
+  being silently deleted.
 - **Allocation on trace**: TNEW/TDUP/CNEW/SNEW already call into C or use
   inline alloc IR; route them to the TG bump (mirror of 07 §7.5) — the IR
   for inline alloc (lj_asm.c asm_snew/asm_tnew via lj_ir_call → actually

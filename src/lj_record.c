@@ -2006,6 +2006,20 @@ static void rec_func_setup(jit_State *J)
   J->maxslot = numparams;
 }
 
+#if LJ_TARGET_X64 && LJ_GC64
+#define LJ_TRACE_FUNCF_XPOLL_DEPTH	8
+
+static void rec_func_xpoll(jit_State *J)
+{
+  if (J->framedepth >= LJ_TRACE_FUNCF_XPOLL_DEPTH) {
+    emitir_raw(IRTG(IR_XPOLL, IRT_NIL), 0, 0);
+    lj_snap_add(J);
+  }
+}
+#else
+#define rec_func_xpoll(J)		UNUSED(J)
+#endif
+
 /* Record Lua vararg function setup. */
 static void rec_func_vararg(jit_State *J)
 {
@@ -2034,6 +2048,7 @@ static void rec_func_vararg(jit_State *J)
 static void rec_func_lua(jit_State *J)
 {
   rec_func_setup(J);
+  rec_func_xpoll(J);
   check_call_unroll(J, 0);
 }
 
@@ -2044,6 +2059,7 @@ static void rec_func_jit(jit_State *J, TraceNo lnk)
   rec_func_setup(J);
   T = traceref(J, lnk);
   if (T->linktype == LJ_TRLINK_RETURN) {  /* Trace returns to interpreter? */
+    rec_func_xpoll(J);
     check_call_unroll(J, lnk);
     /* Temporarily unpatch JFUNC* to continue recording across function. */
     J->patchins = *J->pc;

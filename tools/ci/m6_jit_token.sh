@@ -7,6 +7,7 @@ CC=${CC:-cc}
 CFLAGS=${CFLAGS:-"-std=gnu99 -O2 -Wall -Wextra -Werror -mcx16"}
 OUT=${TMPDIR:-/tmp}/lj_t-jit-token
 DUMP=${TMPDIR:-/tmp}/lj_t-jit-xpoll.dump
+FUNCF_DUMP=${TMPDIR:-/tmp}/lj_t-jit-xpoll-funcf.dump
 
 make -C "$ROOT/src" >/dev/null
 
@@ -18,6 +19,9 @@ for needle in \
   'emit_gettg(as, tmp, gl)' \
   'XPOLL' \
   'emitir_raw(IRTG(IR_XPOLL, IRT_NIL), 0, 0)' \
+  'LJ_TRACE_FUNCF_XPOLL_DEPTH' \
+  'static void rec_func_xpoll(jit_State *J)' \
+  'rec_func_xpoll(J)' \
   'case IR_XPOLL: asm_xpoll(as); break;' \
   'static void asm_xpoll(ASMState *as)' \
   'emit_gmroi(as, XG_ARITHi(XOg_CMP), RID_DISPATCH, DISPATCH_TG(poll), 0)' \
@@ -44,7 +48,7 @@ do
       "$ROOT/src/lj_err.c" "$ROOT/src/vm_x64.dasc" \
       "$ROOT/src/lj_ir.h" "$ROOT/src/lj_opt_loop.c" \
       "$ROOT/src/lj_asm.c" "$ROOT/src/lj_emit_x86.h" \
-      "$ROOT/src/lj_asm_x86.h"; then
+      "$ROOT/src/lj_asm_x86.h" "$ROOT/src/lj_record.c"; then
     echo "guardrail: missing recorder token marker: $needle" >&2
     exit 1
   fi
@@ -130,6 +134,23 @@ fi
 if ! rg -q -- '->LOOP:' "$DUMP" ||
    ! rg -q 'cmp dword \[r14\+0x[0-9a-f]+\], \+0x00' "$DUMP"; then
   echo "guardrail: x64 IR_XPOLL must lower to a TG poll at the loop label" >&2
+  exit 1
+fi
+
+LUA_PATH="$ROOT/src/?.lua;$ROOT/src/jit/?.lua;;" \
+  timeout 20s "$ROOT/src/luajit" -jdump=im -e \
+  'jit.opt.start("hotloop=1","hotexit=1","callunroll=32","recunroll=32"); local function f10(x) return x+1 end; local function f9(x) return f10(x)+1 end; local function f8(x) return f9(x)+1 end; local function f7(x) return f8(x)+1 end; local function f6(x) return f7(x)+1 end; local function f5(x) return f6(x)+1 end; local function f4(x) return f5(x)+1 end; local function f3(x) return f4(x)+1 end; local function f2(x) return f3(x)+1 end; local function f1(x) return f2(x)+1 end; local s=0; for i=1,64 do s=s+f1(i) end; assert(s==2720)' \
+  >"$FUNCF_DUMP"
+funcf_xpolls=$(rg -c 'XPOLL' "$FUNCF_DUMP" || true)
+funcf_xpolls=${funcf_xpolls:-0}
+if [ "$funcf_xpolls" -lt 4 ]; then
+  echo "guardrail: deep inlined FUNCF traces must materialize depth XPOLL" >&2
+  exit 1
+fi
+funcf_polls=$(rg -c 'cmp dword \[r14\+0x[0-9a-f]+\], \+0x00' "$FUNCF_DUMP" || true)
+funcf_polls=${funcf_polls:-0}
+if [ "$funcf_polls" -lt 4 ]; then
+  echo "guardrail: FUNCF-depth IR_XPOLL must lower to TG poll checks" >&2
   exit 1
 fi
 

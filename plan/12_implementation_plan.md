@@ -109,8 +109,8 @@ CGET/CSET (§8.6, §8.8); FLOAD hdr-indirection (§8.8.1); flush protocol
 (§8.7).
 Current implementation note: the original report's M6 task above remains the
 canonical target. The current x86-64 bridge has implemented guarded `IR_XPOLL`
-for LOOP-backedge trace safepoint polls; FUNCF-depth polls and XBAR
-invalidation work remain pending.
+for LOOP-backedge trace safepoint polls and inlined FUNCF-depth entries; XBAR
+invalidation work remains pending.
 Tests: stock with -jon; t-jit-01..06 (trace same loop from 2 threads;
 side-trace attach while parent runs on another thread; flush storm;
 exit-handler stress; recording-thread killed mid-trace (error in
