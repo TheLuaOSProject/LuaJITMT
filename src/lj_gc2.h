@@ -64,6 +64,7 @@ LJ_FUNC GCtab *lj_gc2_weak_snapshot_tab(global_State *g, uint32_t idx);
 LJ_FUNC uint32_t lj_gc2_weak_snapshot_scan(global_State *g, uint32_t limit);
 LJ_FUNC uint32_t lj_gc2_weak_snapshot_clear(global_State *g, uint32_t limit);
 LJ_FUNC void lj_gc2_finreg_cdata_set(global_State *g, GCobj *o, int enabled);
+LJ_FUNC void lj_gc2_finreg_cdata_queue(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc2_finreg_udata_set(global_State *g, GCobj *o, int enabled);
 LJ_FUNC void lj_gc2_finreg_udata_queue(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc2_barrier_tv(lua_State *L, cTValue *tv);

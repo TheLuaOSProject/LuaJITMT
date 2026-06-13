@@ -887,6 +887,7 @@ typedef struct GC2State {
   uint64_t weak_clear_cleared;  /* Weak entries cleared by GC2. */
   uint64_t finreg_cdata_sets;  /* Cdata finalizer registrations mirrored. */
   uint64_t finreg_cdata_clears;  /* Cdata finalizer clears mirrored. */
+  uint64_t finreg_cdata_queued;  /* Cdata finalizers queued by legacy. */
   uint64_t finreg_udata_sets;  /* Userdata finalizer registrations mirrored. */
   uint64_t finreg_udata_clears;  /* Userdata finalizer clears mirrored. */
   uint64_t finreg_udata_queued;  /* Userdata finalizers queued by legacy. */

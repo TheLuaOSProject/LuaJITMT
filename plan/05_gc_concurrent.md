@@ -327,8 +327,8 @@ finalizer table is explicitly excluded from the weak snapshot because it is
 owned by the FINREG/finalizer path, not weak-table clearing. GC2 now mirrors
 cdata FINREG mutation telemetry from `ffi.gc(cd, fn)`, explicit
 `ffi.gc(cd, nil)` clears, ctype `__gc` registrations, and legacy
-finalizer-driven cdata clears, but legacy still owns finalizer table
-membership, finalizer execution, and drain ordering. Userdata
+`mmudata` queue/finalizer-driven cdata clears, but legacy still owns finalizer
+table membership, finalizer execution, and drain ordering. Userdata
 FINREG telemetry also mirrors C/API `__gc` metatable assignment/clear events
 and counts the legacy `mmudata` queue point in `lj_gc_separateudata()`, while
 the linked queue itself remains legacy-owned.

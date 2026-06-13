@@ -35,6 +35,7 @@ for needle in \
   'uint64_t weak_clear_cleared' \
   'uint64_t finreg_cdata_sets' \
   'uint64_t finreg_cdata_clears' \
+  'uint64_t finreg_cdata_queued' \
   'uint64_t finreg_udata_sets' \
   'uint64_t finreg_udata_clears' \
   'uint64_t finreg_udata_queued' \
@@ -49,9 +50,11 @@ for needle in \
   'la_load8_acq(&g->gc2.weak_ready' \
   'la_cas64(&g->gc2.weak_scan_cursor' \
   'lj_gc2_finreg_cdata_set(global_State *g, GCobj *o, int enabled)' \
+  'lj_gc2_finreg_cdata_queue(global_State *g, GCobj *o)' \
   'lj_gc2_finreg_cdata_set(G(L), obj2gco(cd), 1)' \
   'lj_gc2_finreg_cdata_set(G(L), obj2gco(cd), 0)' \
   'lj_gc2_finreg_cdata_set(g, o, 0)' \
+  'lj_gc2_finreg_cdata_queue(g, obj2gco(cd))' \
   'lj_gc2_finreg_udata_set(global_State *g, GCobj *o, int enabled)' \
   'lj_gc2_finreg_udata_queue(global_State *g, GCobj *o)' \
   'lj_gc2_finreg_udata_set(g, obj2gco(ud), 1)' \

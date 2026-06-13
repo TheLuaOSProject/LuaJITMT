@@ -96,6 +96,7 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.weak_clear_cleared, 0);
   la_store64_rlx(&g->gc2.finreg_cdata_sets, 0);
   la_store64_rlx(&g->gc2.finreg_cdata_clears, 0);
+  la_store64_rlx(&g->gc2.finreg_cdata_queued, 0);
   la_store64_rlx(&g->gc2.finreg_udata_sets, 0);
   la_store64_rlx(&g->gc2.finreg_udata_clears, 0);
   la_store64_rlx(&g->gc2.finreg_udata_queued, 0);
@@ -776,6 +777,17 @@ void lj_gc2_finreg_cdata_set(global_State *g, GCobj *o, int enabled)
     la_add64_rlx(&g->gc2.finreg_cdata_clears, 1);
 #else
   UNUSED(g); UNUSED(o); UNUSED(enabled);
+#endif
+}
+
+void lj_gc2_finreg_cdata_queue(global_State *g, GCobj *o)
+{
+#if LJ_HASFFI
+  if (!g || !o || o->gch.gct != ~LJ_TCDATA)
+    return;
+  la_add64_rlx(&g->gc2.finreg_cdata_queued, 1);
+#else
+  UNUSED(g); UNUSED(o);
 #endif
 }
 
