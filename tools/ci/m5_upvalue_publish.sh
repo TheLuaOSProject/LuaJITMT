@@ -129,8 +129,8 @@ fi
 
 legacy_all=$(rg -n "$LEGACY\\b" "$ROOT/src"/*.c | grep -v "$ROOT/src/lj_gc.c" || true)
 legacy_count=$(printf '%s\n' "$legacy_all" | sed '/^$/d' | wc -l | tr -d ' ')
-if [ "$legacy_count" -gt 3 ]; then
-  echo "guardrail: legacy barrier count regressed above 3:" >&2
+if [ "$legacy_count" -ne 0 ]; then
+  echo "guardrail: legacy barrier call sites regressed outside lj_gc.c:" >&2
   echo "$legacy_all" >&2
   exit 1
 fi
