@@ -34,4 +34,21 @@ if ! awk '
   exit 1
 fi
 
+for needle in \
+  'chan_storetv_rel(slot, tv)' \
+  'chan_loadtv_acq(out, slot)' \
+  'chan_cleartv_rel(slot)'
+do
+  if ! rg -F -q "$needle" "$ROOT/src/lj_chan.c"; then
+    echo "guardrail: missing channel payload atomic marker: $needle" >&2
+    exit 1
+  fi
+done
+
+if rg -n 'slot->tv = \*tv|\*out = slot->tv|setnilV\(&slot->tv\)' \
+    "$ROOT/src/lj_chan.c"; then
+  echo "guardrail: channel payload slots must use atomic TValue helpers" >&2
+  exit 1
+fi
+
 echo "M5 threading publication guard passed"

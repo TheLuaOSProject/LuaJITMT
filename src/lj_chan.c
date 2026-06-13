@@ -18,6 +18,21 @@
 
 #define LJ_CHAN_SPINS	64
 
+static LJ_AINLINE void chan_storetv_rel(LJChanSlot *slot, cTValue *tv)
+{
+  tv_rawstore_rel(&slot->tv, tv_rawload(tv));
+}
+
+static LJ_AINLINE void chan_loadtv_acq(TValue *out, LJChanSlot *slot)
+{
+  out->u64 = tv_rawload_acq(&slot->tv);
+}
+
+static LJ_AINLINE void chan_cleartv_rel(LJChanSlot *slot)
+{
+  tv_rawstore_rel(&slot->tv, ~(uint64_t)0);
+}
+
 uint32_t lj_chan_round_capacity(uint32_t capacity)
 {
   uint32_t cap = capacity ? capacity : 1u;
@@ -51,7 +66,7 @@ void lj_chan_init(LJChan *ch, uint32_t capacity)
   ch->pad = 0;
   for (i = 0; i < cap; i++) {
     ch->slot[i].seq = i;
-    setnilV(&ch->slot[i].tv);
+    chan_cleartv_rel(&ch->slot[i]);
   }
 }
 
@@ -145,7 +160,7 @@ static int chan_try_send_pos(LJChan *ch, cTValue *tv, uint64_t *ppos)
 	return LJ_CHAN_CLOSED;
       if (la_cas64(&ch->enq, &expect, pos + 1u,
 		   LA_ACQ_REL, LA_ACQ)) {  /* 09 section 9.5 enqueue ticket. */
-	slot->tv = *tv;
+	chan_storetv_rel(slot, tv);
 	la_store64_rel(&slot->seq, pos + 1u);
 	if (ppos)
 	  *ppos = pos;
@@ -166,7 +181,7 @@ static int chan_cancel_rendezvous_send(LJChan *ch, uint64_t pos)
   uint64_t expect = pos;
   if (la_cas64(&ch->deq, &expect, pos + 1u, LA_ACQ_REL, LA_ACQ)) {
     LJChanSlot *slot = &ch->slot[(MSize)(pos & ch->mask)];
-    setnilV(&slot->tv);
+    chan_cleartv_rel(slot);
     la_store64_rel(&slot->seq, pos + ch->cap);
     chan_wake(ch);
     return 1;
@@ -213,8 +228,8 @@ int lj_chan_try_recv(LJChan *ch, TValue *out)
       uint64_t expect = pos;
       if (la_cas64(&ch->deq, &expect, pos + 1u,
 		   LA_ACQ_REL, LA_ACQ)) {  /* 09 section 9.5 dequeue ticket. */
-	*out = slot->tv;
-	setnilV(&slot->tv);
+	chan_loadtv_acq(out, slot);
+	chan_cleartv_rel(slot);
 	la_store64_rel(&slot->seq, pos + ch->cap);
 	chan_wake(ch);
 	return LJ_CHAN_OK;
@@ -330,7 +345,7 @@ int lj_chan_peek(LJChan *ch, TValue *out)
     uint64_t seq = la_load64_acq(&slot->seq);
     int64_t dif = (int64_t)(seq - (pos + 1u));
     if (dif == 0) {
-      *out = slot->tv;  /* 09 section 9.5: acquire seq publishes value. */
+      chan_loadtv_acq(out, slot);  /* 09 section 9.5: acquire seq publishes value. */
       return LJ_CHAN_OK;
     } else if (dif < 0) {
       if (la_load32_acq(&ch->closed) && la_load64_acq(&ch->enq) <= pos)

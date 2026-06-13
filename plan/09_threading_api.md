@@ -118,6 +118,13 @@ timeout: futex timed wait; on timeout the ticket must be *cancelled*:
       port it from the model the agent writes first as a C unit test
       (13 §13.6.2 chan_stress.c) before wiring to Lua.
 ```
+Current implementation note: `lj_chan.c` uses CAS loops to claim enqueue and
+dequeue tickets, but keeps the same per-slot sequence protocol. Channel slot
+payloads now use `chan_storetv_rel()`, `chan_loadtv_acq()`, and
+`chan_cleartv_rel()` so the shared `TValue` word is never copied with plain C
+struct assignment; the sequence counter release/acquire still provides the
+channel happens-before edge.
+
 The channel userdata is shared freely; all ops are method calls
 (lib_threading.c → lj_chan.c). GC: channels live in non-traversable? NO —
 traversable arenas; traverse = mark in-flight slot values (bounded scan of
