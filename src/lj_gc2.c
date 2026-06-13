@@ -110,6 +110,7 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.thread_scan_owner_scans, 0);
   la_store64_rlx(&g->gc2.thread_scan_needscan, 0);
   la_store64_rlx(&g->gc2.thread_scan_owner_needscans, 0);
+  la_store64_rlx(&g->gc2.thread_scan_dirty_misses, 0);
   la_store64_rlx(&g->gc2.sweep_owner_runs, 0);
   la_store64_rlx(&g->gc2.sweep_owner_arenas, 0);
   la_store64_rlx(&g->gc2.sweep_owner_live_cells, 0);
@@ -630,11 +631,32 @@ static int gc2_thread_needscan(lua_State *L)
   return (la_load8_acq(gc2_thread_flagp(L)) & LJ_GC_NEEDSCAN) != 0;
 }
 
+static uint64_t gc2_thread_owner_dirty(global_State *g, lua_State *L,
+				       TGState **ptg)
+{
+  uint32_t owner;
+  TGState *tg;
+  if (ptg)
+    *ptg = NULL;
+  if (!g || !L)
+    return 0;
+  owner = la_load32_acq(&L->thr_owner);
+  if (owner == 0 || owner == LJ_THREAD_GCSCAN)
+    return 0;
+  tg = lj_tg_find_owner(g, owner);
+  if (!tg || (la_load8_acq(&tg->tg_flags) & TGF_DEAD))
+    return 0;
+  if (ptg)
+    *ptg = tg;
+  return la_load64_acq(&tg->stack_dirty_epoch);
+}
+
 static void gc2_scan_thread_stack(global_State *g, lua_State *L)
 {
   GCobj *mt, *uv;
   TValue *o, *top;
   TValue tv;
+  uint64_t dirty_epoch;
   if (!L || tvref(L->stack) == NULL)
     return;
   lj_gc2_markobj(g, obj2gco(L));
@@ -660,6 +682,8 @@ static void gc2_scan_thread_stack(global_State *g, lua_State *L)
       gc2_mark_tv(g, &tv);
     }
   }
+  dirty_epoch = gc2_thread_owner_dirty(g, L, NULL);
+  la_store64_rel(&L->scan_dirty_epoch, dirty_epoch);
   la_store64_rel(&L->scan_epoch, g->gc2.cycle);
   gc2_thread_clear_needscan(L);
 }
@@ -2045,17 +2069,22 @@ static TValue *gc2_stack_scan_top_worker(global_State *g, lua_State *L)
 
 static int gc2_thread_owner_scans(global_State *g, lua_State *th)
 {
-  uint32_t owner;
   TGState *tg;
+  uint64_t scan_epoch, scanned_dirty, owner_dirty;
   if (!g || !th)
     return 0;
-  owner = la_load32_acq(&th->thr_owner);
-  if (owner == 0 || owner == LJ_THREAD_GCSCAN)
+  owner_dirty = gc2_thread_owner_dirty(g, th, &tg);
+  if (!tg)
     return 0;
-  tg = lj_tg_find_owner(g, owner);
-  if (!tg || (la_load8_acq(&tg->tg_flags) & TGF_DEAD))
+  scan_epoch = la_load64_acq(&th->scan_epoch);
+  if (scan_epoch != g->gc2.cycle)
     return 0;
-  return la_load64_acq(&th->scan_epoch) == g->gc2.cycle;
+  scanned_dirty = la_load64_acq(&th->scan_dirty_epoch);
+  if (scanned_dirty != owner_dirty) {
+    la_add64_rlx(&g->gc2.thread_scan_dirty_misses, 1);
+    return 0;
+  }
+  return 1;
 }
 
 static int gc2_thread_has_live_owner(global_State *g, lua_State *th)
@@ -2117,6 +2146,9 @@ static void gc2_traverse_thread(global_State *g, lua_State *th)
       gc2_mark_tv_worker(g, &tv);
     }
   }
+  la_store64_rel(&th->scan_dirty_epoch, 0);
+  la_store64_rel(&th->scan_epoch, g->gc2.cycle);
+  gc2_thread_clear_needscan(th);
   lj_state_dropclaim(&claim);
 }
 

@@ -128,13 +128,16 @@ int main(void)
   {
     lua_State *Lclaim = lua_newthread(L);
     uint32_t owner = lj_thr_current_id(g);
+    uint64_t dirty0;
     assert(owner == tg->tid);
     assert(Lclaim->thr_owner == 0);
     assert(lj_state_claim(Lclaim, owner) == 1);
     assert(Lclaim->thr_owner == owner);
     assert(lj_state_claim(Lclaim, owner + 1u) == 0);
+    dirty0 = la_load64_acq(&tg->stack_dirty_epoch);
     lj_state_release(Lclaim, owner);
     assert(Lclaim->thr_owner == 0);
+    assert(la_load64_acq(&tg->stack_dirty_epoch) == dirty0 + 1u);
     lua_pop(L, 1);
   }
 

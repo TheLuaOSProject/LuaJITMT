@@ -282,7 +282,16 @@ predicate does not silently go empty. Busy stacks with a known live owner now
 also set `LJ_GC_NEEDSCAN`; the owning TG's next root scan walks owned pending
 coroutine stacks, publishes their `scan_epoch`, and lets requeued worker items
 observe same-cycle owner coverage instead of requeueing forever. The
-`stack_dirty_epoch` skip optimization below remains staged.
+owner-coverage predicate now also records the owning TG's
+`stack_dirty_epoch` in `lua_State.scan_dirty_epoch` at scan time. Worker
+traversal only accepts a same-cycle owner scan when that dirty stamp still
+matches the owner, so a resume/yield/state handoff after the root scan forces
+a fresh `LJ_GC_NEEDSCAN` owner pass instead of silently skipping a changed
+stack. C-side `lj_state_release()` and the x64 coroutine fast release path
+advance the owner dirty stamp; successful worker claims publish a scan stamp
+and clear pending owner-scan state. The broader original target remains to
+expand dirty maintenance across every future foreign-state operation as those
+APIs land.
 Suspended coroutines: workers traverse them as ordinary heap objects, but
 must hold the claim: `CAS th->thr_owner 0→GCSCAN`; on failure (running),
 set `th->gcflags|=GCF_NEEDSCAN` — the owner's next HS_SCAN_ROOTS scans any

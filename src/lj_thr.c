@@ -169,6 +169,16 @@ int lj_state_gcscan_claim(lua_State *L, LJStateClaim *claim)
   }
 }
 
+static void state_stack_dirty(lua_State *L, uint32_t tid)
+{
+  TGState *tg;
+  if (!L || tid == 0 || tid == LJ_THREAD_GCSCAN)
+    return;
+  tg = lj_tg_find_owner(G(L), tid);
+  if (tg)
+    la_add64_rlx(&tg->stack_dirty_epoch, 1);
+}
+
 void lj_state_dropclaim(LJStateClaim *claim)
 {
   if (claim && claim->release) {
@@ -183,6 +193,7 @@ void lj_state_release(lua_State *L, uint32_t tid)
     uint32_t owner = la_load32_acq(&L->thr_owner);
     lj_assertX(owner == tid, "lua_State owner mismatch");
     UNUSED(owner);
+    state_stack_dirty(L, tid);
     la_store32_rel(&L->thr_owner, 0);
   }
 }

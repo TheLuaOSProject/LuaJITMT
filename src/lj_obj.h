@@ -899,6 +899,7 @@ typedef struct GC2State {
   uint64_t thread_scan_owner_scans;  /* Busy stacks covered by owner scans. */
   uint64_t thread_scan_needscan;  /* Busy stacks handed to owning TG scan. */
   uint64_t thread_scan_owner_needscans;  /* Pending owned stacks scanned. */
+  uint64_t thread_scan_dirty_misses;  /* Same-cycle scans rejected as stale. */
   uint64_t sweep_owner_runs;  /* Owner traversable arena sweep batches. */
   uint64_t sweep_owner_arenas;  /* Traversable arenas swept by owner. */
   uint64_t sweep_owner_live_cells;  /* Post-sweep live cells observed. */
@@ -1033,6 +1034,7 @@ struct lua_State {
   TGState *tg_hint;	/* Owning/running TG block, if attached. */
   uint32_t thr_owner;	/* OS-thread owner tid or claim sentinel. */
   uint64_t scan_epoch;	/* Last stack scan epoch for GC workers. */
+  uint64_t scan_dirty_epoch;  /* Owner stack-dirty stamp at last scan. */
 };
 
 #define G(L)			(mref(L->glref, global_State))

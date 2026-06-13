@@ -68,6 +68,7 @@ for needle in \
   'uint64_t thread_scan_owner_scans' \
   'uint64_t thread_scan_needscan' \
   'uint64_t thread_scan_owner_needscans' \
+  'uint64_t thread_scan_dirty_misses' \
   'uint64_t sweep_owner_runs' \
   'uint64_t sweep_owner_arenas' \
   'uint64_t sweep_owner_live_cells' \
@@ -172,7 +173,13 @@ for needle in \
   'la_and8_rlx' \
   '05 section 5.7.2: owner scan or retry preserves work' \
   'la_store64_rel(&L->scan_epoch, g->gc2.cycle)' \
-  'la_load64_acq(&th->scan_epoch) == g->gc2.cycle' \
+  'scan_epoch != g->gc2.cycle' \
+  'uint64_t scan_dirty_epoch' \
+  'la_store64_rel(&L->scan_dirty_epoch' \
+  'la_load64_acq(&th->scan_dirty_epoch)' \
+  'la_add64_rlx(&g->gc2.thread_scan_dirty_misses' \
+  'DISPATCH_TG(stack_dirty_epoch)' \
+  'la_add64_rlx(&tg->stack_dirty_epoch' \
   'la_add64_rlx(&g->gc2.thread_scan_needscan' \
   'la_add64_rlx(&g->gc2.thread_scan_owner_needscans' \
   'la_loadptr_acq((void *const *)&tg->thread_L)' \

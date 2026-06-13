@@ -111,14 +111,15 @@ if ! awk '
   inmacro && /and CARG1, -2/ { strip = 1 }
   inmacro && /mov CARG2, TMP1/ { wraparg = 1 }
   inmacro && /call extern lj_ffh_coroutine_wrap_err/ { wraperr = 1 }
+  inmacro && /DISPATCH_TG\(stack_dirty_epoch\)/ { dirty = 1 }
   inmacro && /->thr_owner, 0/ { release = 1 }
   inmacro && /\.endmacro/ {
     exit(nargs_save && claim && nargs_restore && vmarg && strip &&
-	 wraparg && wraperr && release ? 0 : 1)
+	 wraparg && wraperr && dirty && release ? 0 : 1)
   }
   END {
     if (!nargs_save || !claim || !nargs_restore || !vmarg || !strip ||
-	!wraparg || !wraperr || !release)
+	!wraparg || !wraperr || !dirty || !release)
       exit 1
   }
 ' "$ROOT/src/vm_x64.dasc"; then
