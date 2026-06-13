@@ -1021,8 +1021,11 @@ LUA_API void lua_settable(lua_State *L, int idx)
   o = lj_meta_tset(L, t, L->top-2);
   if (o) {
     /* NOBARRIER: lj_meta_tset ensures the table is not black. */
-    L->top -= 2;
-    copyTVrel(L, o, L->top+1);
+    TValue *key = L->top-2, *val = L->top-1;
+    copyTVrel(L, o, val);
+    if (tvistab(t))
+      lj_gc2_barrier_weak_write(L, tabV(t), key, val);
+    L->top = key;
   } else {
     TValue *base = L->top;
     copyTV(L, base+2, base-3-2*LJ_FR2);
@@ -1042,7 +1045,11 @@ LUA_API void lua_setfield(lua_State *L, int idx, const char *k)
   o = lj_meta_tset(L, t, &key);
   if (o) {
     /* NOBARRIER: lj_meta_tset ensures the table is not black. */
-    copyTVrel(L, o, --L->top);
+    TValue *val = L->top-1;
+    copyTVrel(L, o, val);
+    if (tvistab(t))
+      lj_gc2_barrier_weak_write(L, tabV(t), &key, val);
+    L->top = val;
   } else {
     TValue *base = L->top;
     copyTV(L, base+2, base-3-2*LJ_FR2);
@@ -1060,6 +1067,7 @@ LUA_API void lua_rawset(lua_State *L, int idx)
   key = L->top-2;
   dst = lj_tab_set(L, t, key);
   copyTVrel(L, dst, key+1);
+  lj_gc2_barrier_weak_write(L, t, key, key+1);
   lj_gc_pubtab(L, t);
   L->top = key;
 }
@@ -1068,10 +1076,13 @@ LUA_API void lua_rawseti(lua_State *L, int idx, int n)
 {
   GCtab *t = tabV(index2adr(L, idx));
   TValue *dst, *src;
+  TValue key;
   lj_checkapi_slot(1);
   dst = lj_tab_setint(L, t, n);
   src = L->top-1;
   copyTVrel(L, dst, src);
+  setintV(&key, n);
+  lj_gc2_barrier_weak_write(L, t, &key, src);
   lj_gc_pubtabtv(L, t, dst);
   L->top = src;
 }

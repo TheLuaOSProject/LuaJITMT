@@ -130,6 +130,9 @@ LJ_FUNC void lj_gc2_barrier_uv(global_State *g, cTValue *tv);
 LJ_FUNC void lj_gc2_barrier_obj(lua_State *L, GCobj *o);
 LJ_FUNCA void lj_gc2_barrier_tab_g(global_State *g, GCtab *t);
 LJ_FUNC void lj_gc2_barrier_tab(lua_State *L, GCtab *t);
+LJ_FUNC void lj_gc2_barrier_weak_key(lua_State *L, GCtab *t, cTValue *key);
+LJ_FUNC void lj_gc2_barrier_weak_write(lua_State *L, GCtab *t, cTValue *key,
+				       cTValue *val);
 
 /* Move the GC propagation frontier back for tables (make it gray again). */
 static LJ_AINLINE void lj_gc_barrierback(global_State *g, GCtab *t)

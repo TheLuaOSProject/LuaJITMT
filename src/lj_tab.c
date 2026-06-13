@@ -793,6 +793,7 @@ TValue *lj_tab_newkey(lua_State *L, GCtab *t, cTValue *key)
     lj_assertL(freenode != &G(L)->nilnode, "store to fallback hash");
     lj_tab_nextnode_set(freenode, lj_tab_nextnode_acq(n));
     tab_storekeyrel(L, &freenode->key, key);
+    lj_gc2_barrier_weak_key(L, t, key);
     lj_gc_pubtab(L, t);
     lj_assertL(lj_tv_isnil_acq(&freenode->val),
 	       "new hash slot is not empty");
@@ -800,6 +801,7 @@ TValue *lj_tab_newkey(lua_State *L, GCtab *t, cTValue *key)
     return &freenode->val;
   }
   tab_storekeyrel(L, &n->key, key);
+  lj_gc2_barrier_weak_key(L, t, key);
   lj_gc_pubtab(L, t);
   lj_assertL(lj_tv_isnil_acq(&n->val), "new hash slot is not empty");
   return &n->val;

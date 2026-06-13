@@ -814,6 +814,26 @@ static int gc2_barrier_active(lua_State *L, global_State **pg)
   return 1;
 }
 
+static int gc2_tab_weak_mode(global_State *g, GCtab *t, GCtab *mt)
+{
+  int weak = 0;
+  TValue modev;
+  cTValue *mode = lj_meta_fasttv(g, mt, MM_mode, &modev);
+  if (mode && tvisstr(mode)) {
+    const char *modestr = strVdata(mode);
+    int c;
+    while ((c = *modestr++)) {
+      if (c == 'k') weak |= LJ_GC_WEAKKEY;
+      else if (c == 'v') weak |= LJ_GC_WEAKVAL;
+    }
+  #if LJ_HASFFI
+    if (weak && gcref_acq(g->gcroot[GCROOT_FFI_FIN]) == obj2gco(t))
+      weak = (int)(~0u & ~LJ_GC_WEAKVAL);
+  #endif
+  }
+  return weak;
+}
+
 void lj_gc2_barrier_tv(lua_State *L, cTValue *tv)
 {
   global_State *g;
@@ -873,6 +893,39 @@ void lj_gc2_barrier_tab(lua_State *L, GCtab *t)
   global_State *g;
   if (t && gc2_barrier_active(L, &g))
     gc2_barrier_tab_mark(g, t);
+}
+
+void lj_gc2_barrier_weak_key(lua_State *L, GCtab *t, cTValue *key)
+{
+  global_State *g;
+  GCtab *mt;
+  if (!L || !t || !key || !tvisgcv(key))
+    return;
+  g = G(L);
+  if (la_load32_acq(&g->gc2.phase) != LJ_GC2_WEAK)
+    return;
+  mt = tabref_acq(t->metatable);
+  if (gc2_tab_weak_mode(g, t, mt) & LJ_GC_WEAKKEY)
+    (void)lj_gc2_markobj(g, gcV(key));  /* 05 section 5.8 weak-key write. */
+}
+
+void lj_gc2_barrier_weak_write(lua_State *L, GCtab *t, cTValue *key,
+			       cTValue *val)
+{
+  global_State *g;
+  GCtab *mt;
+  if (!L || !t)
+    return;
+  g = G(L);
+  if (la_load32_acq(&g->gc2.phase) != LJ_GC2_WEAK)
+    return;
+  mt = tabref_acq(t->metatable);
+  if (gc2_tab_weak_mode(g, t, mt) == 0)
+    return;
+  if (key && tvisgcv(key))
+    (void)lj_gc2_markobj(g, gcV(key));
+  if (val && tvisgcv(val))
+    (void)lj_gc2_markobj(g, gcV(val));
 }
 
 static int gc2_mark_base_traversable(global_State *g, void *p)
@@ -998,10 +1051,8 @@ static void gc2_marktrace_worker(global_State *g, TraceNo traceno)
 
 static int gc2_traverse_tab(global_State *g, GCtab *t)
 {
-  int weak = 0;
-  TValue modev;
-  cTValue *mode;
   GCtab *mt = tabref_acq(t->metatable);
+  int weak = gc2_tab_weak_mode(g, t, mt);
   if (t->acap > 0)
     lj_gc2_markmem(g, lj_tab_array_acq(t));
   {
@@ -1011,19 +1062,6 @@ static int gc2_traverse_tab(global_State *g, GCtab *t)
   }
   if (mt)
     gc2_markobj_worker(g, obj2gco(mt));
-  mode = lj_meta_fasttv(g, mt, MM_mode, &modev);
-  if (mode && tvisstr(mode)) {
-    const char *modestr = strVdata(mode);
-    int c;
-    while ((c = *modestr++)) {
-      if (c == 'k') weak |= LJ_GC_WEAKKEY;
-      else if (c == 'v') weak |= LJ_GC_WEAKVAL;
-    }
-#if LJ_HASFFI
-    if (weak && gcref_acq(g->gcroot[GCROOT_FFI_FIN]) == obj2gco(t))
-      weak = (int)(~0u & ~LJ_GC_WEAKVAL);
-#endif
-  }
   if (weak == LJ_GC_WEAK)
     return weak;
   if (!(weak & LJ_GC_WEAKVAL)) {

@@ -655,6 +655,43 @@ static void test_weak_tables(lua_State *L, global_State *g, TGState *tg)
   lua_pop(L, 9);
 }
 
+static void test_weak_key_write_barrier(lua_State *L, global_State *g,
+					TGState *tg)
+{
+  GCtab *weak, *key, *val;
+
+  lua_settop(L, 0);
+  lua_newtable(L);
+  weak = tabV(L->top - 1);
+  lua_newtable(L);
+  lua_pushliteral(L, "__mode");
+  lua_pushliteral(L, "k");
+  lua_settable(L, -3);
+  lua_setmetatable(L, -2);
+  lua_newtable(L);
+  key = tabV(L->top - 1);
+  lua_newtable(L);
+  val = tabV(L->top - 1);
+
+  lj_gc2_legacy_mark_begin(g);
+  assert(lj_gc2_markobj(g, obj2gco(weak)) == 1);
+  flush_and_drain(g, tg);
+  assert(lj_gc2_ismarked(g, obj2gco(weak)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(key)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(val)) == 0);
+
+  lj_gc2_legacy_weak_begin(g);
+  lua_pushvalue(L, 2);
+  lua_pushvalue(L, 3);
+  lua_settable(L, 1);
+  assert(lj_gc2_ismarked(g, obj2gco(key)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(val)) == 1);
+  assert(!lj_gc2_ssb_empty(g));
+  flush_and_drain(g, tg);
+  lj_gc2_legacy_cycle_end(g);
+  lua_pop(L, 3);
+}
+
 static void test_closure(lua_State *L, global_State *g, TGState *tg)
 {
   GCfunc *fn;
@@ -769,6 +806,7 @@ int main(void)
   test_jit_upvalue_barrier(L, g, tg);
 #endif
   test_weak_tables(L, g, tg);
+  test_weak_key_write_barrier(L, g, tg);
   test_closure(L, g, tg);
   test_thread(L, g, tg);
   test_userdata(L, g);

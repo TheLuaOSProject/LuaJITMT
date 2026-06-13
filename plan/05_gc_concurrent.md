@@ -299,7 +299,11 @@ Current bridge note: `lj_gc2_legacy_weak_begin()` now makes `P_WEAK` visible
 after the fixpoint/paranoia bridge and before legacy `gc_clearweak()`. This
 preserves the original `MARK -> WEAK -> SWEEP` phase shape for follow-up work,
 but legacy weak clearing remains authoritative; the weak-table worklist and
-concurrent weak-write resurrection barrier above are not implemented yet.
+full concurrent weak clearing above are not implemented yet. The first
+weak-write bridge is present for new weak keys: `lj_tab_newkey()` calls
+`lj_gc2_barrier_weak_key()` during `P_WEAK`, marking a collectable inserted key
+immediately. C API table setters that bypass normal legacy barriers also call
+`lj_gc2_barrier_weak_write()` to mark collectable inserted keys and values.
 P_SWEEP entry handshake: {DISABLE_BARRIER, RESET_ALLOC, FLUSH_SSB(last)}.
   After it: workers sweep global/orphan arenas + huge table (free unmarked
   huge via munmap, deferred one epoch); owners lazy-sweep per 04 §4.6.
