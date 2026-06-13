@@ -189,11 +189,14 @@ x86-64,
 load the mask from the acquired node header instead of the legacy
 `GCtab.hmask` mirror. `BC_TSETS_Z` uses the same node-header mask for coherent
 string-key slot addressing, but still needs the original RETIRING/FORWARD/CAS
-write protocol for migration correctness. `lj_vm_next` hash traversal, the
-`BC_ITERN` array/hash iterator path, and `ipairs_aux` array iteration load
-candidate values into registers before nil decisions and copy those same
-snapshots to their results; `BC_TSETV`/`BC_TSETS`/`BC_TSETB` load previous slot
-values into registers before nil/metamethod decisions. Core C table lookup,
+write protocol for migration correctness. Regular x64 dynamic `IR_HREF`
+lowering also uses the node-header mask instead of `GCtab.hmask`; constant-slot
+HREFK guards and hash stores remain on the original 08/06 plan. `lj_vm_next`
+hash traversal, the `BC_ITERN` array/hash iterator path, and `ipairs_aux` array
+iteration load candidate values into registers before nil decisions and copy
+those same snapshots to their results; `BC_TSETV`/`BC_TSETS`/`BC_TSETB` load
+previous slot values into registers before nil/metamethod decisions. Core C
+table lookup,
 resize, rehash counting, collision checks, and `next()` now make key/value
 decisions from acquired `TValue` snapshots instead of direct shared node-field
 reads; GC/GC2 table traversal, weak clearing, finalizer-table scans,

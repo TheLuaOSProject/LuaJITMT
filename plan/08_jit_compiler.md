@@ -218,8 +218,9 @@ trace's PCs/parents, run by the leader between cycles with token.
    only for the pre-trace shape test. Then stale pairs are impossible.)
    IMPLEMENT the latter.
    Current implementation note: `GCtab.hmask` is only a compatibility mirror
-   after the landed `TabNodeHdr` slice, while C readers use the node header.
-   The original JIT target above remains pending for runtime HREF/HREFK/HSTORE
+   after the landed `TabNodeHdr` slice, while C readers and regular x64
+   dynamic `IR_HREF` lowering use the node header. The original JIT target
+   above remains pending for constant-slot HREFK guards and HSTORE/write
    codegen; do not treat the mirror as the final correctness source.
    Current implementation status: before the full `AHdr`/`NHdr` reshape, the
    legacy `GCtab` table-field `FLOAD`s for array/node/asize/hmask are emitted

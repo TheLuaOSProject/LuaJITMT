@@ -28,6 +28,8 @@ for needle in \
   'Reg idx;' \
   'idx = ra_scratch(as, iallow);' \
   'emit_rr(as, XO_ARITH(XOg_ADD), dest|REX_GC64, idx);' \
+  'emit_rmro(as, XO_MOV, idx, dest, -(int32_t)sizeof(TabNodeHdr));' \
+  'emit_rmro(as, XO_ARITH(XOg_AND), idx, dest,' \
   'emit_rmro(as, XO_MOV, dest|REX_GC64, tab, offsetof(GCtab, node));'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_asm_x86.h"; then
@@ -39,13 +41,14 @@ done
 for reject in \
   'emit_rmro(as, XO_ARITH(XOg_ADD), dest|REX_GC64, tab, offsetof(GCtab,node))' \
   'emit_rmro(as, XO_MOV, dest, tab, offsetof(GCtab, hmask))' \
+  'offsetof(GCtab, hmask)' \
   'emit_rmro(as, XO_ARITH(XOg_AND), dest, tab, offsetof(GCtab, hmask))' \
   'emit_rmro(as, XO_ARITH(XOg_AND), dest, key, offsetof(GCstr, sid))'
 do
   if rg -F -n "$reject" "$ROOT/src/lj_asm_x86.h"; then
-    echo "guardrail: x64 JIT HREF must not combine hmask with node through dest: $reject" >&2
+    echo "guardrail: x64 JIT HREF must use the node-header hmask: $reject" >&2
     exit 1
   fi
 done
 
-echo "M5 JIT HREF node-order guard passed"
+echo "M5 JIT HREF node-header hmask guard passed"

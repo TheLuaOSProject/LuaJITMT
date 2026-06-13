@@ -1281,12 +1281,13 @@ static void asm_href(ASMState *as, IRIns *ir, IROp merge)
     emit_rmrxo(as, XO_LEA, idx, idx, idx, XM_SCALE2, 0);
     if (isk) {
       emit_gri(as, XG_ARITHi(XOg_AND), idx, (int32_t)khash);
-      emit_rmro(as, XO_MOV, idx, tab, offsetof(GCtab, hmask));
+      emit_rmro(as, XO_MOV, idx, dest, -(int32_t)sizeof(TabNodeHdr));
     } else if (irt_isstr(kt)) {
       emit_rmro(as, XO_ARITH(XOg_AND), idx, key, offsetof(GCstr, sid));
-      emit_rmro(as, XO_MOV, idx, tab, offsetof(GCtab, hmask));
+      emit_rmro(as, XO_MOV, idx, dest, -(int32_t)sizeof(TabNodeHdr));
     } else {  /* Must match with hashrot() in lj_tab.c. */
-      emit_rmro(as, XO_ARITH(XOg_AND), idx, tab, offsetof(GCtab, hmask));
+      emit_rmro(as, XO_ARITH(XOg_AND), idx, dest,
+		-(int32_t)sizeof(TabNodeHdr));
       emit_rr(as, XO_ARITH(XOg_SUB), idx, tmp);
       emit_shifti(as, XOg_ROL, tmp, HASH_ROT3);
       emit_rr(as, XO_ARITH(XOg_XOR), idx, tmp);
