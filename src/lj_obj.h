@@ -883,6 +883,7 @@ typedef struct global_State {
   GC2State gc2;		/* Concurrent GC scaffold state. */
   uint32_t mt_active;	/* One-way latch: secondary Lua threads existed. */
   uint32_t mt_live;	/* Active secondary Lua threads. */
+  uint32_t mt_shutdown;	/* VM teardown is rejecting new secondary threads. */
   GCSize mt_gc_threshold;  /* Saved automatic-GC threshold. */
 } global_State;
 

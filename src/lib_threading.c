@@ -226,13 +226,21 @@ void lj_threading_shutdown(lua_State *L)
   TGState *cur = lj_thr_get_tg();
   GCudata *ud;
   LJThread *th;
-  if (!threading_live_root(g))
+  la_store32_rel(&g->mt_shutdown, 1);
+  if (!threading_live_root(g) && la_load32_acq(&g->mt_live) == 0)
     return;
   lj_assertG(cur == NULL || cur == g->main_tg,
 	     "lua_close called from non-main OS thread");
   UNUSED(cur);
-  if (la_load32_acq(&g->mt_live) != 0)
+  if (la_load32_acq(&g->mt_live) != 0) {
     (void)lj_safepoint_handshake(g, LJ_GC2_HS_STOPREQ);
+    while (la_load32_acq(&g->mt_live) != 0) {
+      uint32_t live = la_load32_acq(&g->mt_live);
+      if (live == 0)
+	break;
+      (void)la_futex_wait(&g->mt_live, live, 1000000);
+    }
+  }
   while ((th = threading_live_next(g, &ud)) != NULL) {
     while (la_load32_acq(&th->state) != LJ_THREAD_DONE) {
       uint32_t futex = la_load32_acq(&th->futex);
@@ -248,22 +256,33 @@ void lj_threading_shutdown(lua_State *L)
   }
 }
 
-static void threading_gc_enter(lua_State *L)
+static void threading_gc_leave(global_State *g);
+
+static int threading_gc_enter(lua_State *L)
 {
   global_State *g = G(L);
   uint32_t expect = 0;
+  if (la_load32_acq(&g->mt_shutdown) != 0)
+    return 0;
   (void)la_cas32(&g->mt_active, &expect, 1, LA_ACQ_REL, LA_ACQ);
   if (la_add32_rlx(&g->mt_live, 1) == 0) {
     lj_gc_mt_threshold_store(g, lj_gc_threshold_load(g));
     /* M4: no automatic GC while children run. */
     lj_gc_threshold_store(g, LJ_MAX_MEM);
   }
+  if (la_load32_acq(&g->mt_shutdown) != 0) {
+    threading_gc_leave(g);
+    return 0;
+  }
+  return 1;
 }
 
 static void threading_gc_leave(global_State *g)
 {
-  if (la_sub32_acqrel(&g->mt_live, 1) == 1)
+  if (la_sub32_acqrel(&g->mt_live, 1) == 1) {
     lj_gc_threshold_store(g, lj_gc_mt_threshold_load(g));
+    la_futex_wake(&g->mt_live, INT_MAX);
+  }
 }
 
 static void *threading_worker(void *arg)
@@ -293,9 +312,14 @@ static void *threading_worker(void *arg)
   tg->thread_ud = th->ud;
   lj_tg_attach(g, tg);
 
-  status = lua_pcall(L, (int)th->nargs, LUA_MULTRET, 0);
-  th->status = (uint32_t)status;
-  th->nresults = (uint32_t)(L->top - L->base);
+  if (la_load32_acq(&g->mt_shutdown) != 0) {
+    th->status = LUA_ERRRUN;
+    th->nresults = 0;
+  } else {
+    status = lua_pcall(L, (int)th->nargs, LUA_MULTRET, 0);
+    th->status = (uint32_t)status;
+    th->nresults = (uint32_t)(L->top - L->base);
+  }
 
   lj_state_release(L, tid);
   lj_tg_detach(g, tg);
@@ -657,7 +681,14 @@ static lua_State *threading_spawn_core(lua_State *L, GCtab *env, TValue *base,
   tg->thread_ud = ud;
   threading_live_set(L, env, ud, L1);
 
-  threading_gc_enter(L);
+  if (!threading_gc_enter(L)) {
+    threading_live_set(L, env, ud, NULL);
+    lj_tg_fini_thread(G(L), tg);
+    lj_mem_freet(G(L), tg);
+    th->tg = NULL;
+    th->state = LJ_THREAD_DONE;
+    lj_err_callermsg(L, "VM shutdown in progress");
+  }
   rc = lj_thr_create(&th->thr, threading_worker, th);
   if (rc != 0) {
     threading_gc_leave(G(L));
@@ -827,8 +858,19 @@ LUA_API int luaMT_attach(lua_State *L)
   o = gcref_acq(L->mt_thread);
   if (o && o->gch.gct == ~LJ_TUDATA && gco2ud(o)->udtype == UDTYPE_THREAD)
     tg->thread_ud = gco2ud(o);
-  threading_gc_enter(L);
+  if (!threading_gc_enter(L)) {
+    L->tg_hint = NULL;
+    lj_thr_set_tg(NULL);
+    lj_state_release(L, tid);
+    lj_tg_fini_thread(g, tg);
+    free(tg);
+    return 0;
+  }
   lj_tg_attach(g, tg);
+  if (la_load32_acq(&g->mt_shutdown) != 0) {
+    luaMT_detach(L);
+    return 0;
+  }
   return 1;
 }
 

@@ -164,6 +164,12 @@ prevented because the producer's wbarrier already marked it during P_MARK).
   embedded main `GG_State` layout. Native waits keep using
   `lj_safepoint_checkstop()` after wake/leave.
 - lua_close from C: same, plus asserts caller is the main thread.
+  Shutdown stores `mt_shutdown`, rejects racing spawn/attach entrants, and
+  waits for `mt_live` to reach zero with a futex wait/wake so external
+  `luaMT_attach()` users are gone before state teardown even if they have no
+  joinable `threading.thread` handle. A TG that detaches with a pending
+  handshake request self-acks before clearing its signal words, preserving
+  `gc2.hs_pending` accounting.
 - A crashed thread (error escaped f): error object stored, state DONE;
   nothing else dies (Go-style panics-are-isolated DECIDED; an
   `threading.onerror(fn)` hook is v2).

@@ -63,6 +63,23 @@ typedef struct AttachCtx {
   int result;
 } AttachCtx;
 
+typedef struct AttachCloseCtx {
+  lua_State *L;
+  int attached;
+  int detached;
+  int status;
+} AttachCloseCtx;
+
+static void store_flag(int *p, int v)
+{
+  __atomic_store_n(p, v, __ATOMIC_RELEASE);
+}
+
+static int load_flag(const int *p)
+{
+  return __atomic_load_n(p, __ATOMIC_ACQUIRE);
+}
+
 static void load_lua_function(lua_State *L, const char *chunk)
 {
   check_lua(L, luaL_loadstring(L, chunk), "luaL_loadstring");
@@ -230,6 +247,48 @@ static void test_attach_detach(lua_State *L)
   lua_settop(L, base);
 }
 
+static void *attach_close_worker(void *arg)
+{
+  AttachCloseCtx *ctx = (AttachCloseCtx *)arg;
+  if (!luaMT_attach(ctx->L)) {
+    store_flag(&ctx->status, 1);
+    return NULL;
+  }
+  store_flag(&ctx->attached, 1);
+  sleep_ms(100);
+  luaMT_detach(ctx->L);
+  store_flag(&ctx->detached, 1);
+  store_flag(&ctx->status, 0);
+  return NULL;
+}
+
+static void test_close_waits_for_attach(void)
+{
+  lua_State *L = luaL_newstate();
+  lua_State *child;
+  pthread_t thread;
+  AttachCloseCtx ctx;
+  int waited = 0;
+
+  check(L != NULL, "luaL_newstate attach-close failed");
+  luaL_openlibs(L);
+  child = lua_newthread(L);
+  memset(&ctx, 0, sizeof(ctx));
+  ctx.L = child;
+  if (pthread_create(&thread, NULL, attach_close_worker, &ctx) != 0)
+    failf("pthread_create attach-close failed");
+  while (!load_flag(&ctx.attached)) {
+    sleep_ms(1);
+    if (++waited > 1000)
+      failf("attached thread did not attach");
+  }
+  lua_close(L);
+  check(load_flag(&ctx.detached), "lua_close returned before attached thread detached");
+  if (pthread_join(thread, NULL) != 0)
+    failf("pthread_join attach-close failed");
+  check(load_flag(&ctx.status) == 0, "attach-close worker failed");
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -245,6 +304,7 @@ int main(void)
   luaMT_fence();
 
   lua_close(L);
+  test_close_waits_for_attach();
   puts("t-threading-capi OK: public luaMT spawn/join/fence/attach verified");
   return 0;
 }
