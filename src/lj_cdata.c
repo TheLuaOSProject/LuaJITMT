@@ -88,7 +88,7 @@ void LJ_FASTCALL lj_cdata_free(global_State *g, GCcdata *cd)
 void lj_cdata_setfin(lua_State *L, GCcdata *cd, GCobj *obj, uint32_t it)
 {
   GCtab *t = gco2tab(gcref_acq(G(L)->gcroot[GCROOT_FFI_FIN]));
-  if (gcref(t->metatable)) {
+  if (gcref_acq(t->metatable)) {
     /* Add cdata to finalizer table, if still enabled. */
     TValue *tv, key, val;
     setcdataV(L, &key, cd);

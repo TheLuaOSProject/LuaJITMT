@@ -38,4 +38,24 @@ if [ -n "$hits" ]; then
   exit 1
 fi
 
+for needle in \
+  '#define tabref_acq(r)' \
+  'gcref_acq((r))'
+do
+  if ! rg -F -q "$needle" "$ROOT/src/lj_obj.h"; then
+    echo "guardrail: shared metatable/env readers must acquire-load: $needle" >&2
+    exit 1
+  fi
+done
+
+reader_hits=$(rg -n '\btabref\((tabV\([^)]*\)->metatable|udataV\([^)]*\)->metatable|basemt_obj|t->metatable|gco2ud\(o\)->metatable|gco2ud\(o\)->env|mainthread\(g\)->env|L->env|th->env|ud->metatable|ud->env|fn->c.env|curr_func\(L\)->c.env|sbx->dict)|\bgcref\((sbx->cowref|sbx->dict_str|sbx->dict_mt|t->metatable)' \
+  "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc2.c" "$ROOT/src/lj_meta.c" \
+  "$ROOT/src/lj_serialize.c" "$ROOT/src/lib_ffi.c" \
+  "$ROOT/src/lj_cdata.c" "$ROOT/src/lib_threading.c" || true)
+if [ -n "$reader_hits" ]; then
+  echo "guardrail: shared metatable/env readers must use acquire helpers:" >&2
+  echo "$reader_hits" >&2
+  exit 1
+fi
+
 echo "M5 metatable publication guard passed"

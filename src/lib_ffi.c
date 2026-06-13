@@ -521,7 +521,7 @@ LJLIB_CF(ffi_new)	LJLIB_REC(.)
     cTValue *tv = lj_ctype_metatv(cts, &gctv, id, MM_gc);
     if (tv) {
       GCtab *t = gco2tab(gcref_acq(G(L)->gcroot[GCROOT_FFI_FIN]));
-      if (gcref(t->metatable)) {
+      if (gcref_acq(t->metatable)) {
 	/* Add to finalizer table, if still enabled. */
 	copyTVrel(L, lj_tab_set(L, t, o-1), tv);
 	lj_gc_pubtab(L, t);
@@ -826,7 +826,7 @@ LJLIB_CF(ffi_load)
 {
   GCstr *name = lj_lib_checkstr(L, 1);
   int global = (L->base+1 < L->top && tvistruecond(L->base+1));
-  lj_clib_load(L, tabref(curr_func(L)->c.env), name, global);
+  lj_clib_load(L, tabref_acq(curr_func(L)->c.env), name, global);
   return 1;
 }
 

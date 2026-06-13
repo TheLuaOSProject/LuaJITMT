@@ -366,20 +366,25 @@ static void gc_mark(global_State *g, GCobj *o)
   lj_gc_arena_markobj(g, o);
   white2gray(o);
   if (LJ_UNLIKELY(gct == ~LJ_TUDATA)) {
-    GCtab *mt = tabref(gco2ud(o)->metatable);
+    GCtab *mt = tabref_acq(gco2ud(o)->metatable);
+    GCtab *env = tabref_acq(gco2ud(o)->env);
     gray2black(o);  /* Userdata are never gray. */
     if (mt) gc_markobj(g, mt);
-    gc_markobj(g, tabref(gco2ud(o)->env));
+    if (env) gc_markobj(g, env);
     if (LJ_HASBUFFER && gco2ud(o)->udtype == UDTYPE_BUFFER) {
       SBufExt *sbx = (SBufExt *)uddata(gco2ud(o));
+      GCobj *ref;
       if (!sbufiscoworborrow(sbx))
 	lj_gc_arena_markmem(g, sbx->b);
-      if (sbufiscow(sbx) && gcref(sbx->cowref))
-	gc_markobj(g, gcref(sbx->cowref));
-      if (gcref(sbx->dict_str))
-	gc_markobj(g, gcref(sbx->dict_str));
-      if (gcref(sbx->dict_mt))
-	gc_markobj(g, gcref(sbx->dict_mt));
+      ref = gcref_acq(sbx->cowref);
+      if (sbufiscow(sbx) && ref)
+	gc_markobj(g, ref);
+      ref = gcref_acq(sbx->dict_str);
+      if (ref)
+	gc_markobj(g, ref);
+      ref = gcref_acq(sbx->dict_mt);
+      if (ref)
+	gc_markobj(g, ref);
     }
     if (gco2ud(o)->udtype == UDTYPE_CHANNEL) {
       LJChan *ch = (LJChan *)uddata(gco2ud(o));
@@ -492,7 +497,11 @@ static void gc_mark_start(global_State *g)
   setgcrefnull(g->gc.grayagain);
   setgcrefnull(g->gc.weak);
   gc_markobj(g, mainthread(g));
-  gc_markobj(g, tabref(mainthread(g)->env));
+  {
+    GCtab *env = tabref_acq(mainthread(g)->env);
+    if (env)
+      gc_markobj(g, env);
+  }
   gc_markobj(g, vmthread(g));
   gc_marktv(g, &g->registrytv);
   gc_mark_gcroot(g);
@@ -538,7 +547,7 @@ size_t lj_gc_separateudata(global_State *g, int all)
   while ((o = gcref(*p)) != NULL) {
     if (!(iswhite(o) || all) || isfinalized(gco2ud(o))) {
       p = lj_obj_gcwref(o);  /* Nothing to do. */
-    } else if (!lj_meta_fasttv(g, tabref(gco2ud(o)->metatable),
+    } else if (!lj_meta_fasttv(g, tabref_acq(gco2ud(o)->metatable),
 			       MM_gc, &mmv)) {
       markfinalized(o);  /* Done, as there's no __gc metamethod. */
       p = lj_obj_gcwref(o);
@@ -568,7 +577,7 @@ static int gc_traverse_tab(global_State *g, GCtab *t)
   int weak = 0;
   TValue modev;
   cTValue *mode;
-  GCtab *mt = tabref(t->metatable);
+  GCtab *mt = tabref_acq(t->metatable);
   if (t->acap > 0)
     lj_gc_arena_markmem(g, lj_tab_array_acq(t));
   {
@@ -633,7 +642,11 @@ static int gc_traverse_tab(global_State *g, GCtab *t)
 /* Traverse a function. */
 static void gc_traverse_func(global_State *g, GCfunc *fn)
 {
-  gc_markobj(g, tabref(fn->c.env));
+  {
+    GCtab *env = tabref_acq(fn->c.env);
+    if (env)
+      gc_markobj(g, env);
+  }
   if (isluafunc(fn)) {
     uint32_t i;
     lj_assertG(fn->l.nupvalues <= funcproto(fn)->sizeuv,
@@ -734,7 +747,11 @@ static void gc_traverse_thread(global_State *g, lua_State *th)
     for (; o < top; o++)  /* Clear unmarked slots. */
       setnilV(o);
   }
-  gc_markobj(g, tabref(th->env));
+  {
+    GCtab *env = tabref_acq(th->env);
+    if (env)
+      gc_markobj(g, env);
+  }
   mt = gcref_acq(th->mt_thread);
   if (mt != NULL)
     gc_markobj(g, mt);
@@ -1007,7 +1024,7 @@ static void gc_finalize(lua_State *L)
   makewhite(g, o);
   lj_gc_arena_markobj(g, o);
   /* Resolve the __gc metamethod. */
-  mo = lj_meta_fasttv(g, tabref(gco2ud(o)->metatable), MM_gc, &motv);
+  mo = lj_meta_fasttv(g, tabref_acq(gco2ud(o)->metatable), MM_gc, &motv);
   if (mo)
     gc_call_finalizer(g, L, mo, o);
 }

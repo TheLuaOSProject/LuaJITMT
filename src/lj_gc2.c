@@ -228,8 +228,11 @@ static void gc2_scan_thread_roots(global_State *g, lua_State *L)
     lj_tv_load_acq(&tv, o);
     gc2_mark_tv(g, &tv);
   }
-  if (tabref(L->env))
-    lj_gc2_markobj(g, obj2gco(tabref(L->env)));
+  {
+    GCtab *env = tabref_acq(L->env);
+    if (env)
+      lj_gc2_markobj(g, obj2gco(env));
+  }
   for (uv = gcref(L->openupval); uv != NULL; uv = gcnext(uv)) {
     lj_gc2_markobj(g, uv);
     if (uv->gch.gct == ~LJ_TUPVAL) {
@@ -244,7 +247,11 @@ static void gc2_scan_global_roots(global_State *g)
 {
   ptrdiff_t i;
   lj_gc2_markobj(g, obj2gco(mainthread(g)));
-  lj_gc2_markobj(g, obj2gco(tabref(mainthread(g)->env)));
+  {
+    GCtab *env = tabref_acq(mainthread(g)->env);
+    if (env)
+      lj_gc2_markobj(g, obj2gco(env));
+  }
   lj_gc2_markobj(g, obj2gco(vmthread(g)));
   gc2_mark_tv(g, &g->registrytv);
   for (i = 0; i < GCROOT_MAX; i++) {
@@ -756,7 +763,7 @@ static int gc2_traverse_tab(global_State *g, GCtab *t)
   int weak = 0;
   TValue modev;
   cTValue *mode;
-  GCtab *mt = tabref(t->metatable);
+  GCtab *mt = tabref_acq(t->metatable);
   if (t->acap > 0)
     lj_gc2_markmem(g, lj_tab_array_acq(t));
   {
@@ -812,22 +819,26 @@ static int gc2_traverse_tab(global_State *g, GCtab *t)
 
 static void gc2_traverse_udata(global_State *g, GCudata *ud)
 {
-  GCtab *mt = tabref(ud->metatable);
-  GCtab *env = tabref(ud->env);
+  GCtab *mt = tabref_acq(ud->metatable);
+  GCtab *env = tabref_acq(ud->env);
   if (mt)
     gc2_markobj_worker(g, obj2gco(mt));
   if (env)
     gc2_markobj_worker(g, obj2gco(env));
   if (LJ_HASBUFFER && ud->udtype == UDTYPE_BUFFER) {
     SBufExt *sbx = (SBufExt *)uddata(ud);
+    GCobj *ref;
     if (!sbufiscoworborrow(sbx))
       lj_gc2_markmem(g, sbx->b);
-    if (sbufiscow(sbx) && gcref(sbx->cowref))
-      gc2_markobj_worker(g, gcref(sbx->cowref));
-    if (gcref(sbx->dict_str))
-      gc2_markobj_worker(g, gcref(sbx->dict_str));
-    if (gcref(sbx->dict_mt))
-      gc2_markobj_worker(g, gcref(sbx->dict_mt));
+    ref = gcref_acq(sbx->cowref);
+    if (sbufiscow(sbx) && ref)
+      gc2_markobj_worker(g, ref);
+    ref = gcref_acq(sbx->dict_str);
+    if (ref)
+      gc2_markobj_worker(g, ref);
+    ref = gcref_acq(sbx->dict_mt);
+    if (ref)
+      gc2_markobj_worker(g, ref);
   }
   if (ud->udtype == UDTYPE_CHANNEL) {
     LJChan *ch = (LJChan *)uddata(ud);
@@ -854,7 +865,7 @@ static void gc2_traverse_upval(global_State *g, GCupval *uv)
 
 static void gc2_traverse_func(global_State *g, GCfunc *fn)
 {
-  GCtab *env = tabref(fn->c.env);
+  GCtab *env = tabref_acq(fn->c.env);
   if (env)
     gc2_markobj_worker(g, obj2gco(env));
   if (isluafunc(fn)) {
@@ -937,8 +948,11 @@ static void gc2_traverse_thread(global_State *g, lua_State *th)
     lj_tv_load_acq(&tv, o);
     gc2_mark_tv_worker(g, &tv);
   }
-  if (tabref(th->env))
-    gc2_markobj_worker(g, obj2gco(tabref(th->env)));
+  {
+    GCtab *env = tabref_acq(th->env);
+    if (env)
+      gc2_markobj_worker(g, obj2gco(env));
+  }
   mt = gcref_acq(th->mt_thread);
   if (mt != NULL)
     gc2_markobj_worker(g, mt);

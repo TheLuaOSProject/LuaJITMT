@@ -223,23 +223,27 @@ static char *serialize_put(char *w, SBufExt *sbx, cTValue *o)
 	nhash += !lj_tv_isnil_acq(&hashnode[i].val);
     }
     /* Write metatable index. */
-    if (LJ_UNLIKELY(tabref(sbx->dict_mt)) && tabref(t->metatable)) {
-      TValue mto;
-      Node *n;
-      settabV(sbufL(sbx), &mto, tabref(t->metatable));
-      n = hashgcref(tabref(sbx->dict_mt), mto.gcr);
-      do {
-	TValue nk, nv;
-	lj_tv_load_acq(&nk, &n->key);
-	if (nk.u64 == mto.u64) {
-	  lj_tv_load_acq(&nv, &n->val);
-	  uint32_t idx = nv.u32.lo;
-	  w = serialize_more(w, sbx, 1+5);
-	  *w++ = SER_TAG_DICT_MT;
-	  w = serialize_wu124(w, idx);
-	  break;
-	}
-      } while ((n = lj_tab_nextnode_acq(n)));
+    {
+      GCtab *dict_mt = tabref_acq(sbx->dict_mt);
+      GCtab *mt = tabref_acq(t->metatable);
+      if (LJ_UNLIKELY(dict_mt) && mt) {
+	TValue mto;
+	Node *n;
+	settabV(sbufL(sbx), &mto, mt);
+	n = hashgcref(dict_mt, mto.gcr);
+	do {
+	  TValue nk, nv;
+	  lj_tv_load_acq(&nk, &n->key);
+	  if (nk.u64 == mto.u64) {
+	    lj_tv_load_acq(&nv, &n->val);
+	    uint32_t idx = nv.u32.lo;
+	    w = serialize_more(w, sbx, 1+5);
+	    *w++ = SER_TAG_DICT_MT;
+	    w = serialize_wu124(w, idx);
+	    break;
+	  }
+	} while ((n = lj_tab_nextnode_acq(n)));
+      }
     }
     /* Write number of array slots and hash slots. */
     w = serialize_more(w, sbx, 1+2*5);
@@ -256,7 +260,7 @@ static char *serialize_put(char *w, SBufExt *sbx, cTValue *o)
     }
     if (nhash) {  /* Write hash entries. */
       const Node *node = hashnode + hmask;
-      GCtab *dict_str = tabref(sbx->dict_str);
+      GCtab *dict_str = tabref_acq(sbx->dict_str);
       if (LJ_UNLIKELY(dict_str)) {
 	for (;; node--) {
 	  TValue key, val;
@@ -405,7 +409,7 @@ static char *serialize_get(char *r, SBufExt *sbx, TValue *o)
     uint32_t idx;
     r = serialize_ru124(r, w, &idx); if (LJ_UNLIKELY(!r)) goto eob;
     idx++;
-    dict_str = tabref(sbx->dict_str);
+    dict_str = tabref_acq(sbx->dict_str);
     if (dict_str && idx < lj_tab_asize_acq(dict_str)) {
       TValue tv;
       lj_tv_load_acq(&tv, &lj_tab_array_acq(dict_str)[idx]);
@@ -427,7 +431,7 @@ static char *serialize_get(char *r, SBufExt *sbx, TValue *o)
       uint32_t idx;
       r = serialize_ru124(r, w, &idx); if (LJ_UNLIKELY(!r)) goto eob;
       idx++;
-      dict_mt = tabref(sbx->dict_mt);
+      dict_mt = tabref_acq(sbx->dict_mt);
       if (dict_mt && idx < lj_tab_asize_acq(dict_mt)) {
 	TValue tv;
 	lj_tv_load_acq(&tv, &lj_tab_array_acq(dict_mt)[idx]);

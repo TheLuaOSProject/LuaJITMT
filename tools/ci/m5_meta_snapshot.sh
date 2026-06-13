@@ -53,7 +53,7 @@ for file in "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc2.c"; do
   fi
 done
 
-if ! rg -F -q 'mo = lj_meta_fasttv(g, tabref(gco2ud(o)->metatable), MM_gc, &motv)' \
+if ! rg -F -q 'mo = lj_meta_fasttv(g, tabref_acq(gco2ud(o)->metatable), MM_gc, &motv)' \
     "$ROOT/src/lj_gc.c"; then
   echo "guardrail: userdata __gc finalizer lookup must snapshot" >&2
   exit 1

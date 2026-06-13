@@ -249,7 +249,11 @@ keep crash-freedom via the normal read protocol. (FORWARD encountered by
 next ⇒ hop to new gen at same logical position.)
 ### 6.3.7 lj_tab_len (#), metatable, nomm
 `#`: today's array binsearch over AH snapshot — returns a border (M-4).
-metatable: rel store + wbarrier; readers rlx (mm dispatch tolerates stale).
+metatable: original report target was rel store + wbarrier with relaxed readers
+(mm dispatch tolerates stale); the current bridge acquire-loads
+release-published metatable/env refs in GC, GC2, metamethod, finalizer,
+serialization, and threading-environment C readers so the release/read contract
+is explicit before the full generation-table protocol lands.
 nomm: advisory negative cache; in concurrent table access it may go stale when a metatable
 gains a method ⇒ setmetatable and rawset-into-metatable clear nomm of —
 impossible to find all referrers; instead: nomm is only trusted when

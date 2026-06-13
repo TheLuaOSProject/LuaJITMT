@@ -69,11 +69,11 @@ cTValue *lj_meta_lookup(lua_State *L, cTValue *o, MMS mm)
 {
   GCtab *mt;
   if (tvistab(o))
-    mt = tabref(tabV(o)->metatable);
+    mt = tabref_acq(tabV(o)->metatable);
   else if (tvisudata(o))
-    mt = tabref(udataV(o)->metatable);
+    mt = tabref_acq(udataV(o)->metatable);
   else
-    mt = tabref(basemt_obj(G(L), o));
+    mt = tabref_acq(basemt_obj(G(L), o));
   if (mt) {
     cTValue *mo = lj_tab_getstr(mt, mmname_str(G(L), mm));
     if (mo)
@@ -86,11 +86,11 @@ cTValue *lj_meta_lookuptv(lua_State *L, TValue *out, cTValue *o, MMS mm)
 {
   GCtab *mt;
   if (tvistab(o))
-    mt = tabref(tabV(o)->metatable);
+    mt = tabref_acq(tabV(o)->metatable);
   else if (tvisudata(o))
-    mt = tabref(udataV(o)->metatable);
+    mt = tabref_acq(udataV(o)->metatable);
   else
-    mt = tabref(basemt_obj(G(L), o));
+    mt = tabref_acq(basemt_obj(G(L), o));
   if (mt) {
     cTValue *mo = lj_tab_getstr(mt, mmname_str(G(L), mm));
     if (mo) {
@@ -171,7 +171,8 @@ cTValue *lj_meta_tget(lua_State *L, cTValue *o, cTValue *k)
       GCtab *t = tabV(o);
       cTValue *tv = lj_tab_get(L, t, k);
       if (!tvisnil(tv) ||
-	  !(mo = lj_meta_fasttv(G(L), tabref(t->metatable), MM_index, &motv)))
+	  !(mo = lj_meta_fasttv(G(L), tabref_acq(t->metatable),
+				MM_index, &motv)))
 	return tv;
     } else if (tvisnil(mo = lj_meta_lookuptv(L, &motv, o, MM_index))) {
       lj_err_optype(L, o, LJ_ERR_OPINDEX);
@@ -201,7 +202,7 @@ TValue *lj_meta_tset(lua_State *L, cTValue *o, cTValue *k)
 	t->nomm = 0;  /* Invalidate negative metamethod cache. */
 	lj_gc_pubtab(L, t);
 	return (TValue *)tv;
-      } else if (!(mo = lj_meta_fasttv(G(L), tabref(t->metatable),
+      } else if (!(mo = lj_meta_fasttv(G(L), tabref_acq(t->metatable),
 				       MM_newindex, &motv))) {
 	t->nomm = 0;  /* Invalidate negative metamethod cache. */
 	lj_gc_pubtab(L, t);
@@ -361,13 +362,14 @@ TValue *lj_meta_equal(lua_State *L, GCobj *o1, GCobj *o2, int ne)
 {
   /* Field metatable must be at same offset for GCtab and GCudata! */
   TValue motv, motv2;
-  cTValue *mo = lj_meta_fasttv(G(L), tabref(o1->gch.metatable), MM_eq, &motv);
+  GCtab *mt1 = tabref_acq(o1->gch.metatable);
+  GCtab *mt2 = tabref_acq(o2->gch.metatable);
+  cTValue *mo = lj_meta_fasttv(G(L), mt1, MM_eq, &motv);
   if (mo) {
     TValue *top;
     uint32_t it;
-    if (tabref(o1->gch.metatable) != tabref(o2->gch.metatable)) {
-      cTValue *mo2 = lj_meta_fasttv(G(L), tabref(o2->gch.metatable),
-				    MM_eq, &motv2);
+    if (mt1 != mt2) {
+      cTValue *mo2 = lj_meta_fasttv(G(L), mt2, MM_eq, &motv2);
       if (mo2 == NULL || !lj_obj_equal(mo, mo2))
 	return (TValue *)(intptr_t)ne;
     }

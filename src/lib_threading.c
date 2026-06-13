@@ -121,8 +121,11 @@ static GCtab *threading_env_from_module(lua_State *L, GCtab *mod)
   cTValue *tv = lj_tab_getstr(mod, lj_str_newlit(L, "spawn"));
   if (tv && tvisfunc(tv)) {
     GCfunc *fn = funcV(tv);
-    if (!isluafunc(fn) && tabref(fn->c.env))
-      return tabref(fn->c.env);
+    if (!isluafunc(fn)) {
+      GCtab *env = tabref_acq(fn->c.env);
+      if (env)
+	return env;
+    }
   }
   return NULL;
 }
@@ -727,7 +730,8 @@ LJLIB_CF(threading_spawn)
   if (!(L->base < L->top && tvisfunc(L->base)))
     lj_err_argt(L, 1, LUA_TFUNCTION);
   nargs = L->top - L->base - 1;
-  (void)threading_spawn_core(L, tabref(curr_func(L)->c.env), L->base, nargs);
+  (void)threading_spawn_core(L, tabref_acq(curr_func(L)->c.env), L->base,
+			     nargs);
   copyTV(L, L->base, L->top-1);
   L->top = L->base + 1;
   return 1;
@@ -735,7 +739,7 @@ LJLIB_CF(threading_spawn)
 
 LJLIB_CF(threading_current)
 {
-  GCtab *env = tabref(curr_func(L)->c.env);
+  GCtab *env = tabref_acq(curr_func(L)->c.env);
   TGState *tg = L2TG(L);
   GCudata *ud = tg ? tg->thread_ud : NULL;
   if (!ud) {
@@ -773,7 +777,7 @@ LJLIB_PUSH(top-3) LJLIB_SET(!)  /* Set environment to mutex methods. */
 
 LJLIB_CF(threading_mutex)
 {
-  GCtab *env = tabref(curr_func(L)->c.env);
+  GCtab *env = tabref_acq(curr_func(L)->c.env);
   GCudata *ud = lj_udata_new(L, sizeof(LJMutex), env);
   LJMutex *m = (LJMutex *)uddata(ud);
   ud->udtype = UDTYPE_MUTEX;
@@ -802,7 +806,7 @@ LJLIB_CF(threading_channel)
   bytes = sizeof(LJChan) + ((uint64_t)rcap - 1u) * sizeof(LJChanSlot);
   if (bytes > LJ_MAX_UDATA)
     lj_err_arg(L, 1, LJ_ERR_NUMRNG);
-  env = tabref(curr_func(L)->c.env);
+  env = tabref_acq(curr_func(L)->c.env);
   ud = lj_udata_new(L, lj_chan_memsize(cap), env);
   ud->udtype = UDTYPE_CHANNEL;
   /* NOBARRIER: The GCudata is new (marked white). */

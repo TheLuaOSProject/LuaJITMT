@@ -574,6 +574,7 @@ typedef struct GCtab {
 
 #define sizetabcolo(n)	((n)*sizeof(TValue) + sizeof(GCtab))
 #define tabref(r)	((GCtab *)gcref((r)))
+#define tabref_acq(r)	((GCtab *)gcref_acq((r)))
 #define noderef(r)	(mref((r), Node))
 #define nextnode(n)	(mref((n)->next, Node))
 
