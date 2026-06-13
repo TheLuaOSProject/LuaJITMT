@@ -67,6 +67,9 @@ LJ_FUNC uint32_t lj_gc2_fixpoint_round(global_State *g, lua_State *L,
 				       uint32_t limit);
 LJ_FUNC uint32_t lj_gc2_fixpoint_run(global_State *g, lua_State *L,
 				     uint32_t max_rounds, uint32_t limit);
+LJ_FUNC uint32_t lj_gc2_mark_complete(global_State *g, lua_State *L,
+				      uint32_t max_rounds, uint32_t limit);
+LJ_FUNC void lj_gc2_mark_to_weak(global_State *g);
 LJ_FUNC int lj_gc2_ssb_empty(global_State *g);
 LJ_FUNC uint32_t lj_gc2_weak_snapshot_count(global_State *g);
 LJ_FUNC GCtab *lj_gc2_weak_snapshot_tab(global_State *g, uint32_t idx);

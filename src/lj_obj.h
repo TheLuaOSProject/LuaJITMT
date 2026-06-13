@@ -848,6 +848,9 @@ typedef struct GC2State {
   uint64_t ssb_items_drained;  /* Drained/recycled SSB entries. */
   uint64_t fixpoint_rounds;  /* Bounded mark fixpoint round attempts. */
   uint64_t fixpoint_hits;  /* Rounds ending at zero-mark empty work. */
+  uint64_t mark_complete_runs;  /* Final mark completion attempts. */
+  uint64_t mark_complete_hits;  /* Final mark completion reached fixpoint. */
+  uint64_t mark_to_weak;  /* MARK-to-WEAK phase publications. */
   uint64_t alloc_since_trigger;  /* Flushed mutator allocation bytes. */
   uint64_t trigger_bytes;  /* Allocation bytes before next GC2 trigger. */
   uint64_t hard_bytes;	/* Allocation bytes before mutator assists. */

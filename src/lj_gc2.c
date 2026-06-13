@@ -61,6 +61,9 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.ssb_items_drained, 0);
   la_store64_rlx(&g->gc2.fixpoint_rounds, 0);
   la_store64_rlx(&g->gc2.fixpoint_hits, 0);
+  la_store64_rlx(&g->gc2.mark_complete_runs, 0);
+  la_store64_rlx(&g->gc2.mark_complete_hits, 0);
+  la_store64_rlx(&g->gc2.mark_to_weak, 0);
   g->gc2.alloc_since_trigger = 0;
   g->gc2.trigger_bytes = 0;
   g->gc2.hard_bytes = 0;
@@ -434,7 +437,15 @@ void lj_gc2_legacy_mark_begin(global_State *g)
 
 void lj_gc2_legacy_weak_begin(global_State *g)
 {
-  g->gc2.phase = LJ_GC2_WEAK;  /* 05 section 5.8 legacy weak-phase bridge. */
+  lj_gc2_mark_to_weak(g);
+}
+
+void lj_gc2_mark_to_weak(global_State *g)
+{
+  uint32_t phase;
+  phase = la_xchg32_acqrel(&g->gc2.phase, LJ_GC2_WEAK);
+  if (phase == LJ_GC2_MARK)
+    la_add64_rlx(&g->gc2.mark_to_weak, 1);
   lj_gc2_worker_wake(g);  /* 05 section 5.6.3 parked worker scheduler. */
 }
 
@@ -2129,6 +2140,19 @@ uint32_t lj_gc2_fixpoint_run(global_State *g, lua_State *L,
     if (lj_gc2_fixpoint_round(g, L, limit))
       return 1;
   return 0;
+}
+
+uint32_t lj_gc2_mark_complete(global_State *g, lua_State *L,
+			      uint32_t max_rounds, uint32_t limit)
+{
+  uint32_t hit;
+  if (!g || la_load32_acq(&g->gc2.phase) != LJ_GC2_MARK)
+    return 0;
+  la_add64_rlx(&g->gc2.mark_complete_runs, 1);
+  hit = lj_gc2_fixpoint_run(g, L, max_rounds, limit);
+  if (hit)
+    la_add64_rlx(&g->gc2.mark_complete_hits, 1);
+  return hit;  /* 05 section 5.7.1 scheduler-owned mark completion bridge. */
 }
 
 int lj_gc2_ismarkedmem(global_State *g, void *p)

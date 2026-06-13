@@ -253,9 +253,11 @@ through the worker-drain surface while counting leaf-only SSB conversion as
 progress, handshakes `{SCAN_ROOTS, FLUSH_SSB}`, drains again, and reports the
 zero-mark/empty-work predicate. `lj_gc2_fixpoint_run()` repeats that bounded
 round and the legacy atomic bridge now calls it before paranoia/weak clearing,
-so current cycles exercise the detector. The original full loop above remains
-the target: a scheduler-owned pool, per-worker idle declaration, and leader
-ownership of the `P_WEAK` transition are still follow-up work. The current
+so current cycles exercise the detector. Final legacy atomic mark completion
+now routes through `lj_gc2_mark_complete()`, and `lj_gc2_mark_to_weak()` owns
+the `MARK -> WEAK` publication telemetry. The original full loop above remains
+the target: a scheduler-owned pool, per-worker idle declaration, and independent
+leader ownership of the `P_WEAK` transition are still follow-up work. The current
 empty-work predicate includes the global grey deque, published SSB stack, and
 each live TG's active SSB cursor, read through acquire loads while walking the
 shared TG list. Active SSB producers publish cursor advances with release

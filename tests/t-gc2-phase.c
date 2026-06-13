@@ -202,6 +202,7 @@ int main(void)
   uint32_t ssb_published0, ssb_drained0;
   uint64_t grey_pushed0, grey_drained0;
   uint64_t fixpoint_rounds0, fixpoint_hits0;
+  uint64_t mark_complete_runs0, mark_complete_hits0, mark_to_weak0;
   uint64_t worker_weak0, weak_clear_tables0, weak_clear_cleared0;
   uint64_t weak_legacy_fallbacks0;
   MSize weak_n;
@@ -304,9 +305,15 @@ int main(void)
     "end\n") == LUA_OK);
   fixpoint_rounds0 = la_load64_acq(&g->gc2.fixpoint_rounds);
   fixpoint_hits0 = la_load64_acq(&g->gc2.fixpoint_hits);
+  mark_complete_runs0 = la_load64_acq(&g->gc2.mark_complete_runs);
+  mark_complete_hits0 = la_load64_acq(&g->gc2.mark_complete_hits);
+  mark_to_weak0 = la_load64_acq(&g->gc2.mark_to_weak);
   lj_gc_fullgc(L);
   assert(la_load64_acq(&g->gc2.fixpoint_rounds) > fixpoint_rounds0);
   assert(la_load64_acq(&g->gc2.fixpoint_hits) > fixpoint_hits0);
+  assert(la_load64_acq(&g->gc2.mark_complete_runs) > mark_complete_runs0);
+  assert(la_load64_acq(&g->gc2.mark_complete_hits) > mark_complete_hits0);
+  assert(la_load64_acq(&g->gc2.mark_to_weak) > mark_to_weak0);
   assert_idle(g, tg);
 
   assert(luaL_dostring(L,

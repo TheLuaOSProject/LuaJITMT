@@ -14,6 +14,9 @@ make -C "$ROOT/src" >/dev/null
 for needle in \
   'uint64_t fixpoint_rounds' \
   'uint64_t fixpoint_hits' \
+  'uint64_t mark_complete_runs' \
+  'uint64_t mark_complete_hits' \
+  'uint64_t mark_to_weak' \
   'GCRef *weak_stack' \
   'uint8_t *weak_ready' \
   'uint64_t weak_count' \
@@ -114,7 +117,11 @@ for needle in \
   'gc2_tab_weak_mode(global_State *g, GCtab *t' \
   'lj_gc2_fixpoint_round(global_State *g, lua_State *L' \
   'lj_gc2_fixpoint_run(global_State *g, lua_State *L' \
+  'lj_gc2_mark_complete(global_State *g, lua_State *L' \
+  'lj_gc2_mark_to_weak(global_State *g)' \
   'la_xchg64_acqrel(&g->gc2.marks_this_round, 0)' \
+  '05 section 5.7.1 scheduler-owned mark completion bridge' \
+  'la_add64_rlx(&g->gc2.mark_to_weak' \
   'LJ_GC2_HS_SCAN_ROOTS|LJ_GC2_HS_FLUSH_SSB' \
   'gc2_traverse_trace(g, &J->cur)' \
   '05 section 5.7.4 current trace root' \
@@ -168,7 +175,7 @@ for needle in \
   'lj_gc2_ssb_empty(g)' \
   'la_loadptr_acq((void *const *)&tg->ssb_next)' \
   'la_storeptr_rel((void **)&tg->ssb_next' \
-  'lj_gc2_fixpoint_run(g, L, 64, ~(uint32_t)0)' \
+  'lj_gc2_mark_complete(g, L, 64, ~(uint32_t)0)' \
   'if (lj_gc2_weak_snapshot_covers_legacy(g, gcref(g->gc.weak)))' \
   'gc_clearweak(g, gcref(g->gc.weak))' \
   '05 section 5.8 conditional legacy weak fallback'
