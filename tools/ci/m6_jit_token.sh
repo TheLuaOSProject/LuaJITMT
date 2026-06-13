@@ -6,6 +6,7 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 CC=${CC:-cc}
 CFLAGS=${CFLAGS:-"-std=gnu99 -O2 -Wall -Wextra -Werror -mcx16"}
 OUT=${TMPDIR:-/tmp}/lj_t-jit-token
+DUMP=${TMPDIR:-/tmp}/lj_t-jit-xpoll.dump
 
 make -C "$ROOT/src" >/dev/null
 
@@ -117,5 +118,19 @@ fi
   "$ROOT/src/libluajit.a" -lm -ldl -pthread -o "$OUT"
 timeout 20s "$OUT"
 timeout 20s "$ROOT/src/luajit" "$ROOT/tests/t-jit-secondary.lua"
+
+LUA_PATH="$ROOT/src/?.lua;$ROOT/src/jit/?.lua;;" \
+  timeout 20s "$ROOT/src/luajit" -jdump=im -e \
+  'jit.opt.start("hotloop=1","hotexit=1"); local s=0.0; for i=1,64 do s=s+i end; assert(s==2080.0)' \
+  >"$DUMP"
+if ! rg -q 'XPOLL' "$DUMP"; then
+  echo "guardrail: x64 loop traces must materialize IR_XPOLL" >&2
+  exit 1
+fi
+if ! rg -q -- '->LOOP:' "$DUMP" ||
+   ! rg -q 'cmp dword \[r14\+0x[0-9a-f]+\], \+0x00' "$DUMP"; then
+  echo "guardrail: x64 IR_XPOLL must lower to a TG poll at the loop label" >&2
+  exit 1
+fi
 
 echo "M6 JIT recorder token guard passed"
