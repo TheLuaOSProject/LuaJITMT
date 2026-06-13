@@ -1,5 +1,5 @@
 #!/bin/sh
-# Guard M5 JIT trace-slot publication and pending sentinels.
+# Guard M5 JIT trace-slot and trace-link publication.
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
@@ -11,7 +11,12 @@ for needle in \
   'gcref_acq(tracevec_acq(J)[(n)])' \
   'traceslot_pending(J, n)' \
   'traceslot_publish(J, n, T)' \
-  'traceslot_clear(J, n)'
+  'traceslot_clear(J, n)' \
+  'traceno16_acq(const uint16_t *p)' \
+  'trace_link_acq(T)' \
+  'trace_nextroot_acq(T)' \
+  'trace_nextside_acq(T)' \
+  'proto_trace_acq(pt)'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_jit.h"; then
     echo "guardrail: missing trace publication helper: $needle" >&2
@@ -27,13 +32,22 @@ if [ -n "$hits" ]; then
   exit 1
 fi
 
+hits=$(rg -n -- 'pt->trace\b|->link\b|->nextroot\b|->nextside\b' \
+  "$ROOT/src/lj_trace.c" "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc2.c" \
+  "$ROOT/src/lib_jit.c" "$ROOT/src/lj_bcwrite.c" || true)
+if [ -n "$hits" ]; then
+  echo "guardrail: shared trace-number fields must use acquire/release helpers:" >&2
+  echo "$hits" >&2
+  exit 1
+fi
+
 if ! awk '
   /static void trace_stop\(jit_State \*J\)/ { infn = 1 }
   infn && /lj_mcode_commit\(J, J->cur.mcode\)/ { commit = NR }
   infn && /trace_save\(J, T\)/ { save = NR }
   infn && /bc_publish\(patchpc, patchins\)/ { bc = NR }
   infn && /lj_asm_patchexit\(J, parent, J->exitno, T->mcode\)/ { side = NR }
-  infn && /la_store16_rel\(&parent->link, \(TraceNo1\)traceno\)/ { stitch = NR }
+  infn && /trace_link_rel\(parent, traceno\)/ { stitch = NR }
   END { exit(commit && save && bc && side && stitch &&
 	     commit < save && save < bc && save < side && save < stitch ? 0 : 1) }
 ' "$ROOT/src/lj_trace.c"; then

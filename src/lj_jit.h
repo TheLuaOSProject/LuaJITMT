@@ -302,6 +302,24 @@ static LJ_AINLINE GCtrace *traceref_fromgco(GCobj *o)
   setgcrefrel((J)->trace[(n)], obj2gco((T)))
 #define traceslot_clear(J, n) \
   setgcrefrel((J)->trace[(n)], NULL)
+static LJ_AINLINE TraceNo traceno16_acq(const uint16_t *p)
+{
+  return (TraceNo)la_load16_acq(p);
+}
+
+static LJ_AINLINE void traceno16_rel(uint16_t *p, TraceNo traceno)
+{
+  la_store16_rel(p, (uint16_t)traceno);
+}
+
+#define proto_trace_acq(pt)	traceno16_acq(&(pt)->trace)
+#define proto_trace_rel(pt, tr)	traceno16_rel(&(pt)->trace, (tr))
+#define trace_link_acq(T)	traceno16_acq(&(T)->link)
+#define trace_link_rel(T, tr)	traceno16_rel(&(T)->link, (tr))
+#define trace_nextroot_acq(T)	traceno16_acq(&(T)->nextroot)
+#define trace_nextroot_rel(T, tr)	traceno16_rel(&(T)->nextroot, (tr))
+#define trace_nextside_acq(T)	traceno16_acq(&(T)->nextside)
+#define trace_nextside_rel(T, tr)	traceno16_rel(&(T)->nextside, (tr))
 
 LJ_STATIC_ASSERT(offsetof(GChead, gclist) == offsetof(GCtrace, gclist));
 

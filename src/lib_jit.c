@@ -288,7 +288,7 @@ LJLIB_CF(jit_util_traceinfo)
     t = tabV(L->top-1);
     setintfield(L, t, "nins", (int32_t)T->nins - REF_BIAS - 1);
     setintfield(L, t, "nk", REF_BIAS - (int32_t)T->nk);
-    setintfield(L, t, "link", T->link);
+    setintfield(L, t, "link", (int32_t)trace_link_acq(T));
     setintfield(L, t, "nexit", T->nsnap);
     setstrV(L, L->top++, lj_str_newz(L, jit_trlinkname[T->linktype]));
     lua_setfield(L, -2, "linktype");

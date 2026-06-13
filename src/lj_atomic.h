@@ -28,6 +28,7 @@ LA_INLINE uint8_t  la_load8_rlx (const uint8_t  *p){return __atomic_load_n(p,__A
 LA_INLINE uint32_t la_load32_rlx(const uint32_t *p){return __atomic_load_n(p,__ATOMIC_RELAXED);}
 LA_INLINE uint64_t la_load64_rlx(const uint64_t *p){return __atomic_load_n(p,__ATOMIC_RELAXED);}
 LA_INLINE uint8_t  la_load8_acq (const uint8_t  *p){return __atomic_load_n(p,__ATOMIC_ACQUIRE);}
+LA_INLINE uint16_t la_load16_acq(const uint16_t *p){return __atomic_load_n(p,__ATOMIC_ACQUIRE);}
 LA_INLINE uint32_t la_load32_acq(const uint32_t *p){return __atomic_load_n(p,__ATOMIC_ACQUIRE);}
 LA_INLINE uint64_t la_load64_acq(const uint64_t *p){return __atomic_load_n(p,__ATOMIC_ACQUIRE);}
 LA_INLINE void    *la_loadptr_rlx(void *const *p) {return __atomic_load_n((void *const *)p,__ATOMIC_RELAXED);}

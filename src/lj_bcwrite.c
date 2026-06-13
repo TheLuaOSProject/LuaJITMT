@@ -334,7 +334,7 @@ static char *bcwrite_bytecode(BCWriteCtx *ctx, char *p, GCproto *pt)
   UNUSED(ctx);
 #if LJ_HASJIT
   /* Unpatch modified bytecode containing ILOOP/JLOOP etc. */
-  if ((pt->flags & PROTO_ILOOP) || pt->trace) {
+  if ((pt->flags & PROTO_ILOOP) || proto_trace_acq(pt)) {
     jit_State *J = L2J(sbufL(&ctx->sb));
     MSize i;
     for (i = 0; i < nbc; i++, q += sizeof(BCIns)) {
@@ -344,7 +344,9 @@ static char *bcwrite_bytecode(BCWriteCtx *ctx, char *p, GCproto *pt)
 	q[LJ_ENDIAN_SELECT(0, 3)] = (uint8_t)(op-BC_IFORL+BC_FORL);
       } else if (op == BC_JFORL || op == BC_JITERL || op == BC_JLOOP) {
 	BCReg rd = q[LJ_ENDIAN_SELECT(2, 1)] + (q[LJ_ENDIAN_SELECT(3, 0)] << 8);
-	memcpy(q, &traceref(J, rd)->startins, 4);
+	GCtrace *T = traceref(J, rd);
+	if (T)
+	  memcpy(q, &T->startins, 4);
       }
     }
   }

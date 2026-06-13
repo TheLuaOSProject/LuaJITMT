@@ -753,8 +753,11 @@ static void gc2_mark_tv_worker(global_State *g, cTValue *tv)
 #if LJ_HASJIT
 static void gc2_marktrace_worker(global_State *g, TraceNo traceno)
 {
-  if (traceno)
-    gc2_markobj_worker(g, obj2gco(traceref(G2J(g), traceno)));
+  if (traceno) {
+    GCtrace *T = traceref(G2J(g), traceno);
+    if (T)
+      gc2_markobj_worker(g, obj2gco(T));
+  }
 }
 #endif
 
@@ -899,9 +902,9 @@ static void gc2_traverse_trace(global_State *g, GCtrace *T)
     if (irt_is64(ir->t) && ir->o != IR_KNULL)
       ref++;
   }
-  gc2_marktrace_worker(g, T->link);
-  gc2_marktrace_worker(g, T->nextroot);
-  gc2_marktrace_worker(g, T->nextside);
+  gc2_marktrace_worker(g, trace_link_acq(T));
+  gc2_marktrace_worker(g, trace_nextroot_acq(T));
+  gc2_marktrace_worker(g, trace_nextside_acq(T));
   gc2_markobj_worker(g, gcref(T->startpt));
 }
 #endif
@@ -913,7 +916,7 @@ static void gc2_traverse_proto(global_State *g, GCproto *pt)
   for (i = -(ptrdiff_t)pt->sizekgc; i < 0; i++)
     gc2_markobj_worker(g, proto_kgc(pt, i));
 #if LJ_HASJIT
-  gc2_marktrace_worker(g, pt->trace);
+  gc2_marktrace_worker(g, proto_trace_acq(pt));
 #endif
 }
 

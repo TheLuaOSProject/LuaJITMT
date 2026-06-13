@@ -131,6 +131,10 @@ concurrent executors. New design:
   TraceNo1 indices, single 16-bit words — make them la_store16_rel; GC
   tolerates staleness because executing-trace roots come from TG.vmstate).
 
+Current M5 bridge: shared trace-number links now use helper-wrapped 16-bit
+release stores and acquire snapshots in GC/GC2, flush, bytecode writer, and
+reflection paths. Current-trace assembler-private link reads remain plain.
+
 ### 8.4.3 ExitNoReg / trampoline scratch
 Per-arch: x64 uses the existing exit-stub register conventions
 (group stubs push exitno today — keep the same register/stack slot so

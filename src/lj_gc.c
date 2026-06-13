@@ -672,7 +672,11 @@ static void gc_traverse_func(global_State *g, GCfunc *fn)
 /* Mark a trace. */
 static void gc_marktrace(global_State *g, TraceNo traceno)
 {
-  GCobj *o = obj2gco(traceref(G2J(g), traceno));
+  GCtrace *T = traceref(G2J(g), traceno);
+  GCobj *o;
+  if (!T)
+    return;
+  o = obj2gco(T);
   lj_assertG(traceno != G2J(g)->cur.traceno, "active trace escaped");
   if (iswhite(o)) {
     lj_gc_arena_markobj(g, o);
@@ -694,9 +698,14 @@ static void gc_traverse_trace(global_State *g, GCtrace *T)
     if (irt_is64(ir->t) && ir->o != IR_KNULL)
       ref++;
   }
-  if (T->link) gc_marktrace(g, T->link);
-  if (T->nextroot) gc_marktrace(g, T->nextroot);
-  if (T->nextside) gc_marktrace(g, T->nextside);
+  {
+    TraceNo link = trace_link_acq(T);
+    TraceNo nextroot = trace_nextroot_acq(T);
+    TraceNo nextside = trace_nextside_acq(T);
+    if (link) gc_marktrace(g, link);
+    if (nextroot) gc_marktrace(g, nextroot);
+    if (nextside) gc_marktrace(g, nextside);
+  }
   gc_markobj(g, gcref(T->startpt));
 }
 
@@ -714,7 +723,10 @@ static void gc_traverse_proto(global_State *g, GCproto *pt)
   for (i = -(ptrdiff_t)pt->sizekgc; i < 0; i++)  /* Mark collectable consts. */
     gc_markobj(g, proto_kgc(pt, i));
 #if LJ_HASJIT
-  if (pt->trace) gc_marktrace(g, pt->trace);
+  {
+    TraceNo trace = proto_trace_acq(pt);
+    if (trace) gc_marktrace(g, trace);
+  }
 #endif
 }
 

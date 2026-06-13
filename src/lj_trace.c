@@ -249,22 +249,28 @@ static void trace_unpatch(jit_State *J, GCtrace *T)
 static void trace_flushroot(jit_State *J, GCtrace *T)
 {
   GCproto *pt = &gcref(T->startpt)->pt;
+  TraceNo head = proto_trace_acq(pt);
+  TraceNo nextroot = trace_nextroot_acq(T);
   lj_assertJ(T->root == 0, "not a root trace");
   lj_assertJ(pt != NULL, "trace has no prototype");
   /* Unlink root trace from chain anchored in prototype. */
-  if (pt->trace == T->traceno) {  /* Trace is first in chain. Easy. */
-    pt->trace = T->nextroot;
+  if (head == T->traceno) {  /* Trace is first in chain. Easy. */
+    proto_trace_rel(pt, nextroot);
 unpatch:
     /* Unpatch modified bytecode only if the trace has not been flushed. */
     trace_unpatch(J, T);
-  } else if (pt->trace) {  /* Otherwise search in chain of root traces. */
-    GCtrace *T2 = traceref(J, pt->trace);
+  } else if (head) {  /* Otherwise search in chain of root traces. */
+    GCtrace *T2 = traceref(J, head);
     if (T2) {
-      for (; T2->nextroot; T2 = traceref(J, T2->nextroot))
-	if (T2->nextroot == T->traceno) {
-	  T2->nextroot = T->nextroot;  /* Unlink from chain. */
+      TraceNo next;
+      for (next = trace_nextroot_acq(T2); next;
+	   next = T2 ? trace_nextroot_acq(T2) : 0) {
+	if (next == T->traceno) {
+	  trace_nextroot_rel(T2, nextroot);  /* Unlink from chain. */
 	  goto unpatch;
 	}
+	T2 = traceref(J, next);
+      }
     }
   }
 }
@@ -282,8 +288,13 @@ void lj_trace_flush(jit_State *J, TraceNo traceno)
 /* Flush all traces associated with a prototype. */
 void lj_trace_flushproto(global_State *g, GCproto *pt)
 {
-  while (pt->trace != 0)
-    trace_flushroot(G2J(g), traceref(G2J(g), pt->trace));
+  TraceNo trace;
+  while ((trace = proto_trace_acq(pt)) != 0) {
+    GCtrace *T = traceref(G2J(g), trace);
+    if (!T)
+      break;
+    trace_flushroot(G2J(g), T);
+  }
 }
 
 /* Flush all traces. */
@@ -299,7 +310,8 @@ int lj_trace_flushall(lua_State *L)
       if (T->root == 0)
 	trace_flushroot(J, T);
       lj_gdbjit_deltrace(J, T);
-      T->traceno = T->link = 0;  /* Blacklist the link for cont_stitch. */
+      T->traceno = 0;  /* Blacklist the link for cont_stitch. */
+      trace_link_rel(T, 0);
       traceslot_clear(J, i);
     }
   }
@@ -535,7 +547,7 @@ static void trace_stop(jit_State *J)
     patchins = BCINS_AD((int)op+(int)BC_JLOOP-(int)BC_LOOP,
 			bc_a(J->cur.startins), traceno);
   addroot:
-    J->cur.nextroot = pt->trace;
+    J->cur.nextroot = (TraceNo1)proto_trace_acq(pt);
     addroot = 1;
     break;
   case BC_ITERN:
@@ -552,7 +564,7 @@ static void trace_stop(jit_State *J)
     lj_assertJ(parent != NULL && root != NULL, "missing parent/root trace");
     /* Avoid compiling a side trace twice (stack resizing uses parent exit). */
     snap = &parent->snap[J->exitno];
-    J->cur.nextside = root->nextside;
+    J->cur.nextside = (TraceNo1)trace_nextside_acq(root);
     break;
   case BC_CALLM:
   case BC_CALL:
@@ -582,7 +594,7 @@ static void trace_stop(jit_State *J)
   case BC_RET0:
   case BC_RET1:
     if (addroot)
-      la_store16_rel(&pt->trace, (TraceNo1)traceno);
+      proto_trace_rel(pt, traceno);
     if (patchpc)
       bc_publish(patchpc, patchins);
     break;
@@ -591,12 +603,12 @@ static void trace_stop(jit_State *J)
     snap->count = SNAPCOUNT_DONE;
     if (T->topslot > snap->topslot) snap->topslot = T->topslot;
     root->nchild++;
-    la_store16_rel(&root->nextside, (TraceNo1)traceno);
+    trace_nextside_rel(root, traceno);
     break;
   case BC_CALLM:
   case BC_CALL:
   case BC_ITERC:
-    la_store16_rel(&parent->link, (TraceNo1)traceno);
+    trace_link_rel(parent, traceno);
     break;
   default:
     break;
@@ -653,7 +665,9 @@ static int trace_abort(jit_State *J)
       else
 	penalty_pc(J, &gcref(J->cur.startpt)->pt, startpc, e);
     } else {
-      traceref(J, J->exitno)->link = J->exitno;  /* Self-link is blacklisted. */
+      GCtrace *T = traceref(J, J->exitno);
+      if (T)
+	trace_link_rel(T, J->exitno);  /* Self-link is blacklisted. */
     }
   }
 
