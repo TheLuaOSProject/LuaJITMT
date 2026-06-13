@@ -1482,10 +1482,10 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov RD, TAB:RB->array
   |  lea RD, [RD+RA*8]
   |1:
-  |  cmp aword [RD], LJ_TNIL;  je ->fff_res0
+  |  mov r8, [RD]
+  |  cmp r8, LJ_TNIL;  je ->fff_res0
   |  // Copy array slot.
-  |  mov RB, [RD]
-  |  mov [BASE-8], RB
+  |  mov [BASE-8], r8
   |->fff_res2:
   |  mov RDd, 1+2
   |  jmp ->fff_res
