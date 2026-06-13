@@ -376,6 +376,34 @@ cTValue *lj_ctype_meta(CTState *cts, CTypeID id, MMS mm)
   return NULL;
 }
 
+cTValue *lj_ctype_metatv(CTState *cts, TValue *out, CTypeID id, MMS mm)
+{
+  CType *ct = ctype_get(cts, id);
+  cTValue *tv;
+  TValue tabv;
+  while (ctype_isattrib(ct->info) || ctype_isref(ct->info)) {
+    id = ctype_cid(ct->info);
+    ct = ctype_get(cts, id);
+  }
+  if (ctype_isptr(ct->info) &&
+      ctype_isfunc(ctype_get(cts, ctype_cid(ct->info))->info))
+    tv = lj_tab_getstr(cts->miscmap, &cts->g->strempty);
+  else
+    tv = lj_tab_getinth(cts->miscmap, -(int32_t)id);
+  if (tv) {
+    lj_tv_load_acq(&tabv, tv);
+    if (tvistab(&tabv)) {
+      tv = lj_tab_getstr(tabV(&tabv), mmname_str(cts->g, mm));
+      if (tv) {
+	lj_tv_load_acq(out, tv);
+	return tvisnil(out) ? NULL : out;
+      }
+    }
+  }
+  setnilV(out);
+  return NULL;
+}
+
 /* -- C type representation ----------------------------------------------- */
 
 /* Fixed max. length of a C type representation. */

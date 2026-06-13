@@ -747,7 +747,9 @@ static void crec_index_meta(jit_State *J, CTState *cts, CType *ct,
 			    RecordFFData *rd)
 {
   CTypeID id = ctype_typeid(cts, ct);
-  cTValue *tv = lj_ctype_meta(cts, id, rd->data ? MM_newindex : MM_index);
+  TValue metatv;
+  cTValue *tv = lj_ctype_metatv(cts, &metatv, id,
+				rd->data ? MM_newindex : MM_index);
   if (!tv)
     lj_trace_err(J, LJ_TRERR_BADTYPE);
   if (tvisfunc(tv)) {
@@ -978,6 +980,7 @@ static void crec_alloc(jit_State *J, RecordFFData *rd, CTypeID id)
   CType *d = ctype_raw(cts, id);
   TRef trcd, trid = lj_ir_kint(J, id);
   cTValue *fin;
+  TValue fintv;
   /* Use special instruction to box pointer or 32/64 bit integer. */
   if (ctype_isptr(info) || (ctype_isinteger(info) && (sz == 4 || sz == 8))) {
     TRef sp = J->base[1] ? crec_ct_tv(J, d, 0, J->base[1], &rd->argv[1]) :
@@ -1110,7 +1113,7 @@ static void crec_alloc(jit_State *J, RecordFFData *rd, CTypeID id)
   }
   J->base[0] = trcd;
   /* Handle __gc metamethod. */
-  fin = lj_ctype_meta(cts, id, MM_gc);
+  fin = lj_ctype_metatv(cts, &fintv, id, MM_gc);
   if (fin)
     crec_finalizer(J, trcd, 0, fin);
 }
@@ -1339,6 +1342,7 @@ void LJ_FASTCALL recff_cdata_call(jit_State *J, RecordFFData *rd)
   GCcdata *cd = argv2cdata(J, J->base[0], &rd->argv[0]);
   CTypeID id = cd->ctypeid;
   CType *ct;
+  TValue metatv;
   cTValue *tv;
   MMS mm = MM_call;
   if (id == CTID_CTYPEID) {
@@ -1349,7 +1353,8 @@ void LJ_FASTCALL recff_cdata_call(jit_State *J, RecordFFData *rd)
   }
   /* Record ctype __call/__new metamethod. */
   ct = ctype_raw(cts, id);
-  tv = lj_ctype_meta(cts, ctype_isptr(ct->info) ? ctype_cid(ct->info) : id, mm);
+  tv = lj_ctype_metatv(cts, &metatv,
+		       ctype_isptr(ct->info) ? ctype_cid(ct->info) : id, mm);
   if (tv) {
     if (tvisfunc(tv)) {
       crec_tailcall(J, rd, tv);
@@ -1484,19 +1489,20 @@ static TRef crec_arith_ptr(jit_State *J, TRef *sp, CType **s, MMS mm)
 static TRef crec_arith_meta(jit_State *J, TRef *sp, CType **s, CTState *cts,
 			    RecordFFData *rd)
 {
+  TValue metatv;
   cTValue *tv = NULL;
   if (J->base[0]) {
     if (tviscdata(&rd->argv[0])) {
       CTypeID id = argv2cdata(J, J->base[0], &rd->argv[0])->ctypeid;
       CType *ct = ctype_raw(cts, id);
       if (ctype_isptr(ct->info)) id = ctype_cid(ct->info);
-      tv = lj_ctype_meta(cts, id, (MMS)rd->data);
+      tv = lj_ctype_metatv(cts, &metatv, id, (MMS)rd->data);
     }
     if (!tv && J->base[1] && tviscdata(&rd->argv[1])) {
       CTypeID id = argv2cdata(J, J->base[1], &rd->argv[1])->ctypeid;
       CType *ct = ctype_raw(cts, id);
       if (ctype_isptr(ct->info)) id = ctype_cid(ct->info);
-      tv = lj_ctype_meta(cts, id, (MMS)rd->data);
+      tv = lj_ctype_metatv(cts, &metatv, id, (MMS)rd->data);
     }
   }
   if (tv) {

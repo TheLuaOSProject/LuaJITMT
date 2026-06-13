@@ -1,5 +1,5 @@
 #!/bin/sh
-# Guard Lua metamethod lookup snapshots.
+# Guard Lua and ctype metamethod lookup snapshots.
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
@@ -8,9 +8,12 @@ for needle in \
   'cTValue *lj_meta_cachetv(GCtab *mt, MMS mm, GCstr *name,' \
   'lj_tv_load_acq(out, mo)' \
   'cTValue *lj_meta_lookuptv(lua_State *L, TValue *out,' \
-  'lj_meta_fasttv(g, mt, mm, out)'
+  'lj_meta_fasttv(g, mt, mm, out)' \
+  'cTValue *lj_ctype_metatv(CTState *cts, TValue *out,' \
+  'lj_tv_load_acq(&tabv, tv)'
 do
-  if ! rg -F -q "$needle" "$ROOT/src/lj_meta.c" "$ROOT/src/lj_meta.h"; then
+  if ! rg -F -q "$needle" "$ROOT/src/lj_meta.c" "$ROOT/src/lj_meta.h" \
+      "$ROOT/src/lj_ctype.c" "$ROOT/src/lj_ctype.h"; then
     echo "guardrail: missing metamethod snapshot marker: $needle" >&2
     exit 1
   fi
@@ -34,6 +37,15 @@ if [ -n "$fast_hits" ]; then
   exit 1
 fi
 
+ctype_hits=$(rg -n 'lj_ctype_meta\(' "$ROOT/src" -g '*.c' -g '*.h' |
+  grep -v "$ROOT/src/lj_ctype.c:.*cTValue \\*lj_ctype_meta" |
+  grep -v "$ROOT/src/lj_ctype.h:.*lj_ctype_meta" || true)
+if [ -n "$ctype_hits" ]; then
+  echo "guardrail: ctype metamethod users must use lj_ctype_metatv:" >&2
+  echo "$ctype_hits" >&2
+  exit 1
+fi
+
 for file in "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc2.c"; do
   if ! rg -F -q 'mode = lj_meta_fasttv(g, mt, MM_mode, &modev)' "$file"; then
     echo "guardrail: weak-table __mode lookup must snapshot: $file" >&2
@@ -47,4 +59,4 @@ if ! rg -F -q 'mo = lj_meta_fasttv(g, tabref(gco2ud(o)->metatable), MM_gc, &motv
   exit 1
 fi
 
-echo "M5 Lua metamethod snapshot guard passed"
+echo "M5 metamethod snapshot guard passed"

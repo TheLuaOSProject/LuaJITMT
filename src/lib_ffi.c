@@ -108,7 +108,8 @@ static int32_t ffi_checkint(lua_State *L, int narg)
 static int ffi_index_meta(lua_State *L, CTState *cts, CType *ct, MMS mm)
 {
   CTypeID id = ctype_typeid(cts, ct);
-  cTValue *tv = lj_ctype_meta(cts, id, mm);
+  TValue metatv;
+  cTValue *tv = lj_ctype_metatv(cts, &metatv, id, mm);
   TValue *base = L->base;
   if (!tv) {
     const char *s;
@@ -222,6 +223,7 @@ LJLIB_CF(ffi_meta___call)	LJLIB_REC(cdata_call)
   GCcdata *cd = ffi_checkcdata(L, 1);
   CTypeID id = cd->ctypeid;
   CType *ct;
+  TValue metatv;
   cTValue *tv;
   MMS mm = MM_call;
   if (cd->ctypeid == CTID_CTYPEID) {
@@ -235,7 +237,7 @@ LJLIB_CF(ffi_meta___call)	LJLIB_REC(cdata_call)
   /* Handle ctype __call/__new metamethod. */
   ct = ctype_raw(cts, id);
   if (ctype_isptr(ct->info)) id = ctype_cid(ct->info);
-  tv = lj_ctype_meta(cts, id, mm);
+  tv = lj_ctype_metatv(cts, &metatv, id, mm);
   if (tv)
     return lj_meta_tailcall(L, tv);
   else if (mm == MM_call)
@@ -314,7 +316,9 @@ LJLIB_CF(ffi_meta___tostring)
       }
       if (ctype_isstruct(ct->info) || ctype_isvector(ct->info)) {
 	/* Handle ctype __tostring metamethod. */
-	cTValue *tv = lj_ctype_meta(cts, ctype_typeid(cts, ct), MM_tostring);
+	TValue metatv;
+	cTValue *tv = lj_ctype_metatv(cts, &metatv,
+				      ctype_typeid(cts, ct), MM_tostring);
 	if (tv)
 	  return lj_meta_tailcall(L, tv);
       }
@@ -331,9 +335,10 @@ static int ffi_pairs(lua_State *L, MMS mm)
   CTState *cts = ctype_cts(L);
   CTypeID id = ffi_checkcdata(L, 1)->ctypeid;
   CType *ct = ctype_raw(cts, id);
+  TValue metatv;
   cTValue *tv;
   if (ctype_isptr(ct->info)) id = ctype_cid(ct->info);
-  tv = lj_ctype_meta(cts, id, mm);
+  tv = lj_ctype_metatv(cts, &metatv, id, mm);
   if (!tv)
     lj_err_callerv(L, LJ_ERR_FFI_BADMM, strdata(lj_ctype_repr(L, id, NULL)),
 		   strdata(mmname_str(G(L), mm)));
@@ -512,11 +517,9 @@ LJLIB_CF(ffi_new)	LJLIB_REC(.)
 		   o, (MSize)(L->top - o));  /* Initialize cdata. */
   if (ctype_isstruct(ct->info)) {
     /* Handle ctype __gc metamethod. Use the fast lookup here. */
-    cTValue *tv = lj_tab_getinth(cts->miscmap, -(int32_t)id);
-    TValue mtv, gctv;
-    if (tv) lj_tv_load_acq(&mtv, tv);
-    if (tv && tvistab(&mtv) &&
-	(tv = lj_meta_fasttv(G(L), tabV(&mtv), MM_gc, &gctv))) {
+    TValue gctv;
+    cTValue *tv = lj_ctype_metatv(cts, &gctv, id, MM_gc);
+    if (tv) {
       GCtab *t = tabref(G(L)->gcroot[GCROOT_FFI_FIN]);
       if (gcref(t->metatable)) {
 	/* Add to finalizer table, if still enabled. */
