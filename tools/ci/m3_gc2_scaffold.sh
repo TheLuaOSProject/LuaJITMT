@@ -117,6 +117,11 @@ for needle in \
   'la_add64_rlx(&g->gc2.worker_busy_retries' \
   'lj_gc2_worker_drain(g' \
   'lj_gc2_worker_drain_progress(global_State *g, uint32_t limit)' \
+  'phase != LJ_GC2_MARK && phase != LJ_GC2_WEAK &&' \
+  'gc2_worker_sweep_progress(global_State *g, uint32_t limit)' \
+  'sweep = gc2_worker_sweep_progress(g, limit)' \
+  'lj_gc2_worker_drain_progress(g, LJ_GC2_SWEEP_BATCH)' \
+  '05 section 5.6.3 worker-owned sweep bridge' \
   'weak = lj_gc2_weak_drain(g, limit - work)' \
   'la_add64_rlx(&g->gc2.worker_weak_drained' \
   'gc_arena_sweep_tg_ready(TGState *tg)' \

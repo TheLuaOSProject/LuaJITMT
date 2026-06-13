@@ -54,6 +54,75 @@ static void seed_traversable_needsweep(TGState *tg, uint32_t n)
   }
 }
 
+static void test_worker_owned_sweep_direct(void)
+{
+  lua_State *L = luaL_newstate();
+  global_State *g;
+  TGState *tg, extra_tg;
+  uint64_t worker_runs0, arenas0;
+  uint32_t sweep_cycle;
+  void *extra_plain, *extra_trav;
+  GCArena *extra_plain_a, *extra_trav_a, *swept_a;
+
+  assert(L != NULL);
+  g = G(L);
+  tg = G2TG(g);
+  assert(tg != NULL);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+
+  lj_tg_init_thread(g, &extra_tg, NULL, 1);
+  extra_tg.tid = tg->tid + 3000u;
+  extra_tg.alloc.owner_tid = extra_tg.tid;
+  extra_tg.cur_L = L;
+  lj_native_enter(&extra_tg);
+  lj_tg_attach(g, &extra_tg);
+  assert(g->gc2.n_threads == 2);
+
+  extra_plain = lj_arena_alloc(&extra_tg.alloc, &extra_tg.prng, 64, 0);
+  extra_trav = lj_arena_alloc(&extra_tg.alloc, &extra_tg.prng, 64,
+			      LJ_AF_TRAVERSABLE);
+  assert(extra_plain != NULL);
+  assert(extra_trav != NULL);
+  extra_plain_a = lj_arena_of(extra_plain);
+  extra_trav_a = lj_arena_of(extra_trav);
+
+  g->gc2.cycle++;
+  sweep_cycle = g->gc2.cycle;
+  g->gc2.phase = LJ_GC2_SWEEP;
+  lj_arena_alloc_prepare_sweep_kind(&extra_tg.alloc, LJ_ARENAK_PLAIN);
+  lj_arena_alloc_prepare_sweep_kind(&extra_tg.alloc, LJ_ARENAK_TRAVERSABLE);
+  lj_arena_alloc_restore_sweep_kind(&extra_tg.alloc, LJ_ARENAK_PLAIN);
+  assert(extra_tg.alloc.needsweep[LJ_ARENAK_PLAIN] == NULL);
+  assert(arena_list_contains(extra_tg.alloc.owned[LJ_ARENAK_PLAIN],
+			     extra_plain_a));
+  assert(arena_list_contains(extra_tg.alloc.needsweep[LJ_ARENAK_TRAVERSABLE],
+			     extra_trav_a));
+  swept_a = extra_tg.alloc.needsweep[LJ_ARENAK_TRAVERSABLE];
+  assert(swept_a != NULL);
+
+  worker_runs0 = la_load64_acq(&g->gc2.worker_runs);
+  arenas0 = la_load64_acq(&g->gc2.sweep_owner_arenas);
+  assert(lj_gc2_worker_drain_progress(g, 1) == 1u);
+  assert(la_load64_acq(&g->gc2.worker_runs) == worker_runs0 + 1u);
+  assert(la_load64_acq(&g->gc2.sweep_owner_arenas) == arenas0 + 1u);
+  assert(la_load32_acq(&g->gc2.worker_active) == 0);
+  assert(!arena_list_contains(extra_tg.alloc.needsweep[LJ_ARENAK_TRAVERSABLE],
+			      swept_a));
+  assert(arena_list_contains(extra_tg.alloc.owned[LJ_ARENAK_TRAVERSABLE],
+			     swept_a));
+  assert((extra_plain_a->hdr.flags & LJ_AF_NEEDSWEEP) == 0);
+  assert((swept_a->hdr.flags & LJ_AF_NEEDSWEEP) == 0);
+  assert(swept_a->hdr.sweep_epoch == sweep_cycle);
+
+  lj_arena_alloc_restore_sweep_kind(&extra_tg.alloc, LJ_ARENAK_TRAVERSABLE);
+  lj_gc2_legacy_cycle_end(g);
+  lj_tg_detach(g, &extra_tg);
+  assert(g->gc2.n_threads == 1);
+  assert(lj_tg_reclaim_dead(g) == 1u);
+  lj_tg_fini_thread(g, &extra_tg);
+  lua_close(L);
+}
+
 static void test_boundary_lazy_sweep(void)
 {
   lua_State *L = luaL_newstate();
@@ -560,6 +629,7 @@ int main(void)
   assert((ptr_state(finpt) & 2u) == 0);
 
   lua_close(L);
+  test_worker_owned_sweep_direct();
   test_boundary_lazy_sweep();
   test_boundary_lazy_sweep_extra_tg();
   printf("t-arena-gcsweep OK: traversable runtime sweep bridge verified\n");

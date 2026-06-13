@@ -157,27 +157,20 @@ static uint32_t gc_arena_finish_sweep_boundary(global_State *g, int drain)
   for (tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
        tg != NULL;
        tg = (TGState *)la_loadptr_acq((void *const *)&tg->next_tg)) {
+    /* 05 section 5.8 boundary-lazy traversable sweep bridge. */
     if (gc_arena_sweep_tg_ready(tg) &&
 	tg->alloc.sweep_epoch != g->gc2.cycle) {
       lj_arena_alloc_prepare_sweep_kind(&tg->alloc, LJ_ARENAK_TRAVERSABLE);
       lj_arena_alloc_restore_sweep_kind(&tg->alloc, LJ_ARENAK_PLAIN);
     }
   }
-  do {  /* 05 section 5.8 boundary-lazy traversable sweep bridge. */
-    uint32_t round = 0;
-    for (tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
-	 tg != NULL;
-	 tg = (TGState *)la_loadptr_acq((void *const *)&tg->next_tg)) {
-      uint32_t swept;
-      if (!gc_arena_sweep_tg_ready(tg))
-	continue;
-      swept = lj_gc2_sweep_owner_progress(g, tg, LJ_GC2_SWEEP_BATCH);
-      round += swept;
+  do {  /* 05 section 5.6.3 worker-owned sweep bridge. */
+    uint32_t swept = lj_gc2_worker_drain_progress(g, LJ_GC2_SWEEP_BATCH);
+    if (swept > ~(uint32_t)0 - total)
+      total = ~(uint32_t)0;
+    else
       total += swept;
-      if (!drain && swept != 0)
-	return total;
-    }
-    if (!drain || round == 0)
+    if (!drain || swept == 0)
       break;
   } while (1);
   return total;

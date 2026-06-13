@@ -183,7 +183,11 @@ not traverse a grey object, so future idle/fixpoint loops do not need to infer
 progress from telemetry counters. During `P_WEAK`, any remaining worker budget
 can also advance `lj_gc2_weak_drain()` through the published weak snapshot, with
 `worker_weak_drained` attributing that bounded work; the full scheduler-owned
-weak drain remains staged.
+weak drain remains staged. During `P_SWEEP`, the same temporary worker owner
+can spend its budget on bounded traversable arena sweep batches through
+`lj_gc2_sweep_owner_progress()`, after the legacy sweep boundary prepares the
+arena lists and restores plain arenas. This keeps the previous
+boundary-lazy sweep bridge but removes its direct sweep loop from `lj_gc.c`.
 
 ### 5.6.4 gc2_traverse — per-type tracing
 Port the existing traversal logic, replacing color plumbing:
