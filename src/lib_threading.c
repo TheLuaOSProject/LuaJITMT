@@ -320,7 +320,7 @@ static LJThread *threading_thread_from_state(lua_State *L, lua_State *child)
   GCobj *o;
   if (!child || G(child) != G(L))
     lj_err_callermsg(L, "bad child thread");
-  o = gcref(child->mt_thread);
+  o = gcref_acq(child->mt_thread);
   if (o && o->gch.gct == ~LJ_TUDATA) {
     GCudata *ud = gco2ud(o);
     if (ud->udtype == UDTYPE_THREAD) {
@@ -823,7 +823,7 @@ LUA_API int luaMT_attach(lua_State *L)
   lj_thr_set_tg(tg);
   tg->cur_L = L;
   tg->thread_L = L;
-  o = gcref(L->mt_thread);
+  o = gcref_acq(L->mt_thread);
   if (o && o->gch.gct == ~LJ_TUDATA && gco2ud(o)->udtype == UDTYPE_THREAD)
     tg->thread_ud = gco2ud(o);
   threading_gc_enter(L);

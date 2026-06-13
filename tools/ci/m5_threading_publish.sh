@@ -23,6 +23,23 @@ if ! awk '
   exit 1
 fi
 
+for needle in \
+  'gcref_acq(child->mt_thread)' \
+  'gcref_acq(L->mt_thread)' \
+  'mt = gcref_acq(th->mt_thread)'
+do
+  if ! rg -F -q "$needle" "$ROOT/src/lib_threading.c" "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc2.c"; then
+    echo "guardrail: mt_thread readers must acquire-load publication: $needle" >&2
+    exit 1
+  fi
+done
+
+if rg -n '\bgcref\([^)]*mt_thread' \
+    "$ROOT/src/lib_threading.c" "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc2.c"; then
+  echo "guardrail: mt_thread readers must use gcref_acq" >&2
+  exit 1
+fi
+
 if ! awk '
   /LJLIB_CF\(threading_channel_send\)/ { infn = 1; next }
   infn && /lj_gc_pubobjtv\(L, ud, tv\)/ { pub = 1 }

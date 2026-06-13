@@ -702,6 +702,7 @@ static MSize gc_traverse_frames(global_State *g, lua_State *th)
 /* Traverse a thread object. */
 static void gc_traverse_thread(global_State *g, lua_State *th)
 {
+  GCobj *mt;
   TValue *o, *top = th->top;
   lj_gc_arena_markmem(g, tvref(th->stack));
   for (o = tvref(th->stack)+1+LJ_FR2; o < top; o++)
@@ -712,8 +713,9 @@ static void gc_traverse_thread(global_State *g, lua_State *th)
       setnilV(o);
   }
   gc_markobj(g, tabref(th->env));
-  if (gcref(th->mt_thread) != NULL)
-    gc_markobj(g, gcref(th->mt_thread));
+  mt = gcref_acq(th->mt_thread);
+  if (mt != NULL)
+    gc_markobj(g, mt);
   lj_state_shrinkstack(th, gc_traverse_frames(g, th));
 }
 

@@ -66,6 +66,7 @@ typedef struct GCRef {
 
 #if LJ_GC64
 #define gcref(r)	((GCobj *)(r).gcptr64)
+#define gcref_acq(r)	((GCobj *)(uintptr_t)la_load64_acq(&(r).gcptr64))
 #define gcrefp(r, t)	((t *)(void *)(r).gcptr64)
 #define gcrefu(r)	((r).gcptr64)
 #define gcrefeq(r1, r2)	((r1).gcptr64 == (r2).gcptr64)
@@ -78,6 +79,7 @@ typedef struct GCRef {
 #define setgcrefr(r, v)	((r).gcptr64 = (v).gcptr64)
 #else
 #define gcref(r)	((GCobj *)(uintptr_t)(r).gcptr32)
+#define gcref_acq(r)	((GCobj *)(uintptr_t)la_load32_acq(&(r).gcptr32))
 #define gcrefp(r, t)	((t *)(void *)(uintptr_t)(r).gcptr32)
 #define gcrefu(r)	((r).gcptr32)
 #define gcrefeq(r1, r2)	((r1).gcptr32 == (r2).gcptr32)

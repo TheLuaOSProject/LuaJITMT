@@ -129,6 +129,11 @@ channel root is not lost before the result is copied onto the Lua stack. Legacy
 GC and GC2 traversal also acquire-snapshot channel slots into local `TValue`s
 before marking.
 
+Thread userdata links are published through `lua_State.mt_thread` with
+`setgcrefrel()` in `threading_state_set_ud()` and read back with
+`gcref_acq()` in join/attach lookup plus legacy GC/GC2 thread traversal. This
+keeps the child-state backlink visible without adding an `LJ_MT` lock gate.
+
 The channel userdata is shared freely; all ops are method calls
 (lib_threading.c → lj_chan.c). GC: channels live in non-traversable? NO —
 traversable arenas; traverse = mark in-flight slot values (bounded scan of
