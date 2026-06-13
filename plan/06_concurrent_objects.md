@@ -173,17 +173,25 @@ inserts and retire old headered hash vectors plus separated legacy array
 vectors from `lj_tab_resize()` behind the completed safepoint epoch before
 freeing them. This removes the immediate resize free hazard for future
 acquire-load readers and prevents C readers from indexing one node generation
-with another generation's mask. Hash-chain walks in the C runtime and
-serialization paths now use acquire loads, and collision inserts initialize a
-stable free node before release-publishing it through the anchor's `next` link;
-legacy Brent node relocation has been removed. The legacy `GCtab.node` pointer
-itself is now release-published after vector initialization and acquire-loaded
-by C-side table, GC, serialization, bytecode-writer, parser, and recorder
-readers. Legacy `GCtab.array` C readers use acquire-loaded pointer/size helpers
-and snapshot slot values before nil/type/copy decisions; array growth
-initializes slots before release-publishing the pointer and then `asize`, while
-shrink keeps the current allocation capacity until the final `AHdr` port. On
-x86-64,
+with another generation's mask. Replacement hash vectors for non-empty resizes
+are now rebuilt off-table before `GCtab.node` is release-published; old hash
+entries are routed through the final array size first, so integer-like keys that
+belong in the resized array still move there before remaining pairs are copied
+into the unpublished replacement hash. Array-tail values that leave the array
+during shrink are inserted into the unpublished replacement hash before the
+smaller `asize` is published, and explicit undersized hash requests are raised
+to the counted live hash payload after final array routing. Retirement of the
+old hash vector is armed only after that rebuilt vector is published. Hash-chain
+walks in the C runtime and serialization paths now use acquire loads, and
+collision inserts initialize a stable free node before release-publishing it
+through the anchor's `next` link; legacy Brent node relocation has been removed.
+The legacy `GCtab.node` pointer itself is now release-published after vector
+initialization and acquire-loaded by C-side table, GC, serialization,
+bytecode-writer, parser, and recorder readers. Legacy `GCtab.array` C readers
+use acquire-loaded pointer/size helpers and snapshot slot values before
+nil/type/copy decisions; array growth initializes slots before release-storing
+the pointer and then `asize`, while shrink keeps the current
+allocation capacity until the final `AHdr` port. On x86-64,
 `getmetatable`'s `__metatable` probe, `ipairs_aux` empty-hash fallback,
 `lj_vm_next` hash traversal, `BC_TGETS_Z`, and `BC_ITERN` hash traversal now
 load the mask from the acquired node header instead of the legacy
@@ -204,7 +212,9 @@ reads; GC/GC2 table traversal, weak clearing, finalizer-table scans,
 serialization, bytecode writing, parser template-table fixup, recorder
 traversal typing, recorder template-table growth scans, and `table.maxn` use
 the same snapshot helpers. These steps do not replace the legacy resize
-algorithm with the planned lock-free `AHdr`/`NHdr` generation protocol yet.
+algorithm with the planned lock-free `AHdr`/`NHdr` generation protocol yet;
+the original RETIRING/FORWARD/CAS helper-copy design above remains the target,
+and resize copying is still a non-cooperative legacy-`GCtab` operation.
 ### 6.3.6 next/pairs (lj_tab_next)
 Iterate the *gen snapshot* captured at first call: store the NH pointer in
 the iterator control slot? Lua's `next(t,k)` is stateless — DECIDED:

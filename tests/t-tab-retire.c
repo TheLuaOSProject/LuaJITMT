@@ -40,6 +40,27 @@ static void check_pair(lua_State *L, int i)
   lua_pop(L, 1);
 }
 
+static void set_int_pair(lua_State *L, int key, int val)
+{
+  lua_pushinteger(L, key);
+  lua_pushinteger(L, val);
+  lua_rawset(L, -3);
+}
+
+static void check_int_value(lua_State *L, int key, int val)
+{
+  lua_rawgeti(L, -1, key);
+  assert(lua_tointeger(L, -1) == val);
+  lua_pop(L, 1);
+}
+
+static void check_int_array(lua_State *L, GCtab *t, int key, int val)
+{
+  assert((MSize)key < lj_tab_asize_acq(t));
+  assert(!lj_tv_isnil_acq(&lj_tab_array_acq(t)[key]));
+  check_int_value(L, key, val);
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -60,11 +81,12 @@ int main(void)
   assert(t->hmask > 0);
   for (i = 0; i < 4; i++)
     set_pair(L, i);
+  set_int_pair(L, 3, 777);
 
   oldnode = lj_tab_node_acq(t);
   oldhmask = lj_tab_node_hmask_acq(oldnode);
   assert(oldhmask == t->hmask);
-  lj_tab_resize(L, t, t->asize, lj_fls(t->hmask) + 2u);
+  lj_tab_resize(L, t, 8, lj_fls(t->hmask) + 2u);
   assert(lj_tab_node_acq(t) != oldnode);
   assert(lj_tab_node_hmask_acq(oldnode) == oldhmask);
   ret = find_retired(g, oldnode);
@@ -78,12 +100,21 @@ int main(void)
   assert(find_retired(g, oldnode) == NULL);
   for (i = 0; i < 4; i++)
     check_pair(L, i);
+  check_int_array(L, t, 3, 777);
+  set_int_pair(L, 6, 888);
+  check_int_array(L, t, 6, 888);
 
   oldnode = lj_tab_node_acq(t);
-  lj_tab_resize(L, t, t->asize, lj_fls(t->hmask) + 2u);
+  lj_tab_resize(L, t, 2, 1);
+  assert(lj_tab_asize_acq(t) == 2);
+  assert(lj_tab_node_acq(t) != oldnode);
   assert(find_retired(g, oldnode) != NULL);
+  for (i = 0; i < 4; i++)
+    check_pair(L, i);
+  check_int_value(L, 3, 777);
+  check_int_value(L, 6, 888);
 
   lua_close(L);
-  printf("t-tab-retire OK: hash vectors retire by epoch and close cleanly\n");
+  printf("t-tab-retire OK: hash vectors rebuild, route and retire cleanly\n");
   return 0;
 }

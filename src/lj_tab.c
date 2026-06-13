@@ -61,8 +61,8 @@ static LJ_AINLINE void tab_node_free(global_State *g, Node *node, MSize hmask)
   lj_mem_free(g, lj_tab_node_hdrw(node), lj_tab_node_bytes(hmask));
 }
 
-/* Create new hash part for table. */
-static LJ_AINLINE void newhpart(lua_State *L, GCtab *t, uint32_t hbits)
+static LJ_AINLINE Node *newhpart_alloc(lua_State *L, uint32_t hbits,
+				       MSize *hmaskp)
 {
   uint32_t i, hsize, hmask;
   Node *node;
@@ -78,9 +78,108 @@ static LJ_AINLINE void newhpart(lua_State *L, GCtab *t, uint32_t hbits)
     setnilV(&n->key);
     setnilV(&n->val);
   }
-  setfreetop(t, node, &node[hsize]);
+  *hmaskp = hmask;
+  return node;
+}
+
+static LJ_AINLINE void newhpart_publish(GCtab *t, Node *node, MSize hmask,
+					Node *freetop)
+{
+  setfreetop(t, node, freetop);
   lj_tab_node_rel(t, node);
   lj_tab_hmask_rel(t, hmask);
+}
+
+/* Create new hash part for table. */
+static LJ_AINLINE void newhpart(lua_State *L, GCtab *t, uint32_t hbits)
+{
+  MSize hmask;
+  Node *node = newhpart_alloc(L, hbits, &hmask);
+  newhpart_publish(t, node, hmask, &node[hmask+1]);
+}
+
+static TValue *tab_rehash_insert(lua_State *L, Node *nodebase, MSize hmask,
+				 Node **freetopp, cTValue *key)
+{
+  Node *n = hashkey_node(nodebase, hmask, key);
+  if (!lj_tv_isnil_acq(&n->val)) {
+    Node *freenode = *freetopp;
+    do {
+      lj_assertL(freenode > nodebase, "no free node during rehash");
+    } while (!lj_tv_isnil_acq(&(--freenode)->key));
+    *freetopp = freenode;
+    lj_tab_nextnode_set(freenode, lj_tab_nextnode_acq(n));
+    copyTV(L, &freenode->key, key);
+    if (LJ_UNLIKELY(tvismzero(key)))
+      freenode->key.u64 = 0;
+    lj_tab_nextnode_set(n, freenode);
+    return &freenode->val;
+  }
+  copyTV(L, &n->key, key);
+  if (LJ_UNLIKELY(tvismzero(key)))
+    n->key.u64 = 0;
+  return &n->val;
+}
+
+static int tab_rehash_arrayindex(uint32_t asize, cTValue *key, uint32_t *idxp)
+{
+  int64_t i64;
+  int32_t k;
+  if (tvisint(key)) {
+    k = intV(key);
+  } else if (tvisnum(key) && lj_num2int_check(numV(key), i64, k)) {
+    /* Numeric key converted below. */
+  } else {
+    return 0;
+  }
+  if ((MSize)k < asize) {
+    *idxp = (uint32_t)k;
+    return 1;
+  }
+  return 0;
+}
+
+static TValue *tab_rehash_arrayslot(TValue *array, uint32_t asize,
+				    cTValue *key)
+{
+  uint32_t idx;
+  return tab_rehash_arrayindex(asize, key, &idx) ? &array[idx] : NULL;
+}
+
+static TValue *tab_rehash_slot(lua_State *L, TValue *array, uint32_t asize,
+			       Node *nodebase, MSize hmask, Node **freetopp,
+			       cTValue *key)
+{
+  TValue *slot = tab_rehash_arrayslot(array, asize, key);
+  return slot ? slot : tab_rehash_insert(L, nodebase, hmask, freetopp, key);
+}
+
+static uint32_t tab_rehash_hashcount(Node *oldnode, MSize oldhmask,
+				     TValue *oldarray, uint32_t oldasize,
+				     uint32_t asize)
+{
+  uint32_t count = 0;
+  if (oldhmask > 0) {
+    uint32_t i;
+    for (i = 0; i <= oldhmask; i++) {
+      Node *n = &oldnode[i];
+      TValue key, val;
+      lj_tv_load_acq(&val, &n->val);
+      if (!tvisnil(&val)) {
+	uint32_t idx;
+	lj_tv_load_acq(&key, &n->key);
+	if (!tab_rehash_arrayindex(asize, &key, &idx))
+	  count++;
+      }
+    }
+  }
+  if (asize < oldasize) {
+    uint32_t i;
+    for (i = asize; i < oldasize; i++)
+      if (!lj_tv_isnil_acq(&oldarray[i]))
+	count++;
+  }
+  return count;
 }
 
 static void tab_retired_push(global_State *g, TabNodeRetire *ret)
@@ -338,11 +437,21 @@ void lj_tab_resize(lua_State *L, GCtab *t, uint32_t asize, uint32_t hbits)
   uint32_t oldasize = lj_tab_asize_acq(t);
   uint32_t oldacap = t->acap;
   uint32_t oldhmask = lj_tab_node_hmask_acq(oldnode);
+  TValue *array = oldarray;
+  MSize newhmask = 0;
+  Node *newnode = NULL;
+  Node *newfreetop = NULL;
+  uint32_t hashcount = tab_rehash_hashcount(oldnode, oldhmask, oldarray,
+					    oldasize, asize);
   TabNodeRetire *oldret = oldhmask > 0 ?
     tab_retire_reserve(L, oldnode, oldhmask) : NULL;
   TabArrayRetire *oldaret = NULL;
+  if (hashcount) {
+    uint32_t needhbits = hsize2hbits(hashcount);
+    if (hbits < needhbits)
+      hbits = needhbits;
+  }
   if (asize > oldasize) {  /* Array part grows? */
-    TValue *array = oldarray;
     uint32_t i;
     if (asize > LJ_MAX_ASIZE)
       lj_err_msg(L, LJ_ERR_TABOV);
@@ -358,18 +467,55 @@ void lj_tab_resize(lua_State *L, GCtab *t, uint32_t asize, uint32_t hbits)
     }
     for (i = oldasize; i < asize; i++)  /* Clear newly allocated slots. */
       setnilV(&array[i]);
+  }
+  if (hbits) {
+    newnode = newhpart_alloc(L, hbits, &newhmask);
+    newfreetop = &newnode[newhmask+1];
+  }
+  if (oldhmask > 0) {  /* Reinsert pairs from old hash part. */
+    uint32_t i;
+    for (i = 0; i <= oldhmask; i++) {
+      Node *n = &oldnode[i];
+      TValue key, val;
+      lj_tv_load_acq(&val, &n->val);
+      if (!tvisnil(&val)) {
+	TValue *slot;
+	lj_tv_load_acq(&key, &n->key);
+	if (hbits) {
+	  slot = tab_rehash_slot(L, array, asize, newnode, newhmask,
+				 &newfreetop, &key);
+	} else {
+	  slot = tab_rehash_arrayslot(array, asize, &key);
+	  lj_assertL(slot != NULL, "missing hash part during rehash");
+	}
+	copyTV(L, slot, &val);
+      }
+    }
+  }
+  if (hbits && asize < oldasize) {  /* Reinsert old array tail off-table. */
+    uint32_t i;
+    for (i = asize; i < oldasize; i++) {
+      TValue key, val;
+      lj_tv_load_acq(&val, &oldarray[i]);
+      if (!tvisnil(&val)) {
+	setnumV(&key, (lua_Number)i);
+	copyTV(L, tab_rehash_insert(L, newnode, newhmask, &newfreetop, &key),
+	       &val);
+      }
+    }
+  }
+  if (asize > oldasize) {
     if (array != oldarray)
       lj_tab_array_rel(t, array);
     lj_tab_asize_rel(t, asize);
     if (oldaret)
       tab_array_retire_arm(G(L), oldaret);
   }
-  /* Create new (empty) hash part. */
+  /* Publish the rebuilt hash part. */
   if (hbits) {
-    newhpart(L, t, hbits);
-    if (oldret) {
+    newhpart_publish(t, newnode, newhmask, newfreetop);
+    if (oldret)
       tab_retire_arm(G(L), oldret);
-    }
   } else {
     global_State *g = G(L);
     lj_tab_hmask_rel(t, 0);
@@ -382,30 +528,11 @@ void lj_tab_resize(lua_State *L, GCtab *t, uint32_t asize, uint32_t hbits)
     }
   }
   if (asize < oldasize) {  /* Array part shrinks? */
-    TValue *array = lj_tab_array_acq(t);
-    uint32_t i;
     lj_tab_asize_rel(t, asize);  /* This 'shrinks' even colocated arrays. */
-    for (i = asize; i < oldasize; i++)  /* Reinsert old array values. */
-      if (!lj_tv_isnil_acq(&array[i])) {
-	TValue val;
-	lj_tv_load_acq(&val, &array[i]);
-	copyTV(L, lj_tab_setinth(L, t, (int32_t)i), &val);
-      }
   }
-  if (oldhmask > 0) {  /* Reinsert pairs from old hash part. */
-    uint32_t i;
-    for (i = 0; i <= oldhmask; i++) {
-      Node *n = &oldnode[i];
-      TValue key, val;
-      lj_tv_load_acq(&val, &n->val);
-      if (!tvisnil(&val)) {
-	lj_tv_load_acq(&key, &n->key);
-	copyTV(L, lj_tab_set(L, t, &key), &val);
-      }
-    }
+  if (oldhmask > 0)
     lj_assertL(oldret && la_load32_acq(&oldret->armed),
 	       "retired table nodes not armed");
-  }
 }
 
 uint32_t lj_tab_reclaim_retired(global_State *g, uint64_t completed_epoch)

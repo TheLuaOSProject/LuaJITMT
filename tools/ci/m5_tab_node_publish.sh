@@ -23,7 +23,13 @@ for needle in \
   'hashmask(const GCtab *t, uint32_t hash)' \
   'Node *n = lj_tab_node_acq(t)' \
   'lj_tab_node_rel(t, node)' \
-  'lj_tab_node_rel(t, &g->nilnode)'
+  'lj_tab_node_rel(t, &g->nilnode)' \
+  'newhpart_alloc' \
+  'newhpart_publish' \
+  'tab_rehash_hashcount' \
+  'tab_rehash_arrayslot' \
+  'tab_rehash_slot' \
+  'tab_rehash_insert'
 do
   if ! rg -F -q "$needle" "$ROOT/src"; then
     echo "guardrail: missing table node publication marker: $needle" >&2
@@ -39,15 +45,28 @@ fi
 
 if awk '
   /void lj_tab_resize/ { in_resize = 1 }
-  in_resize && /^}/ { in_resize = 0; after_newhpart = 0 }
-  in_resize && /newhpart\(L, t, hbits\)/ { after_newhpart = 1; next }
-  in_resize && after_newhpart && /clearhpart\(t\)/ { bad = 1 }
-  in_resize && after_newhpart && /if \(oldret\)/ { after_newhpart = 0 }
-  END { exit bad ? 1 : 0 }
+  in_resize && /^}/ { in_resize = 0 }
+  in_resize && /newhpart\(L, t, hbits\)/ { bad_legacy = 1 }
+  in_resize && /lj_tab_set(inth)?\(L, t,/ { bad_legacy = 1 }
+  in_resize && /tab_rehash_hashcount\(oldnode, oldhmask, oldarray,/ {
+    count = NR
+  }
+  in_resize && /tab_rehash_slot\(L, array, asize, newnode, newhmask,/ {
+    route = NR
+  }
+  in_resize && /newhpart_publish\(t, newnode, newhmask, newfreetop\)/ {
+    publish = NR
+  }
+  in_resize && /tab_retire_arm\(G\(L\), oldret\)/ { arm = NR }
+  END {
+    if (bad_legacy || !count || !route || !publish || route > publish || !arm || arm < publish)
+      exit 1
+    exit 0
+  }
 ' "$ROOT/src/lj_tab.c"; then
   :
 else
-  echo "guardrail: resize must not clear a new hash vector after publication" >&2
+  echo "guardrail: resize must rebuild hash vectors before publication" >&2
   exit 1
 fi
 
