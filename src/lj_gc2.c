@@ -250,6 +250,19 @@ static void gc2_scan_global_roots(global_State *g)
   for (i = 0; i < GCROOT_MAX; i++)
     if (gcref(g->gcroot[i]) != NULL)
       lj_gc2_markobj(g, gcref(g->gcroot[i]));
+  {
+    LJThreadLive *node;
+    for (node = (LJThreadLive *)
+	   la_loadptr_acq((void *const *)&g->threading_live);
+	 node != NULL;
+	 node = (LJThreadLive *)
+	   la_loadptr_acq((void *const *)&node->next)) {
+      GCobj *o = gcref_acq(node->ud);
+      if (o && o->gch.gct == ~LJ_TUDATA &&
+	  gco2ud(o)->udtype == UDTYPE_THREAD)
+	lj_gc2_markobj(g, o);
+    }
+  }
   gc2_mark_fixedstr(g);
   gc2_mark_strtab_mem(g);
   gc2_mark_tab_retired_mem(g);

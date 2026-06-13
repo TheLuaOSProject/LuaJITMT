@@ -35,11 +35,12 @@ plus a happens-before edge, never a copy.
 A `thread` is a userdata wrapping `{ lua_State *L; TGState *tg; pthread_t;
 uint32 tid; uint32 state (SPAWNED/RUNNING/DONE/JOINED); TValue results
 anchor (a table); GCRef errobj; uint32 join_futex; }`. The lua_State is a
-normal GC thread object (gct LJ_TTHREAD) anchored by the userdata; the
-userdata is anchored in `g->gcroot`-adjacent live-threads table until DONE
-so an unreferenced running thread is never collected (detach semantics:
-dropping the handle is legal; the thread runs to completion; its results
-are dropped).
+normal GC thread object (gct LJ_TTHREAD) anchored by the userdata. The
+original report used a `g->gcroot`-adjacent live-threads table; the current
+implementation uses a native lockless `global_State.threading_live` root list
+until join/shutdown drops the entry, so an unreferenced running thread is never
+collected (detach semantics: dropping the handle is legal; the thread runs to
+completion; its results are dropped).
 
 ## 9.3 spawn
 
@@ -76,7 +77,7 @@ thread:join(timeout):
     DONE: CAS state DONE→JOINED (winner pulls results; others see JOINED:
           return the cached results too — results table is immutable after
           DONE; idempotent join DECIDED)
-          remove live-table root only after caller stack growth and result
+          remove live-root node only after caller stack growth and result
           copy, so a C API joiner holding only lua_State* does not drop the
           child root before an allocating stack check
     else: lj_native_enter(tg); la_futex_wait(&join_futex, s, ns);
@@ -135,10 +136,11 @@ before marking.
 Thread userdata links are published through `lua_State.mt_thread` with
 `setgcrefrel()` in `threading_state_set_ud()` and read back with
 `gcref_acq()` in join/attach lookup plus legacy GC/GC2 thread traversal. This
-keeps the child-state backlink visible without adding an `LJ_MT` lock gate.
-The threading live-table and private-environment GC roots are likewise
-release-published through `setgcrefroot()` and acquire-loaded in
-lib_threading readers.
+keeps the child-state backlink visible without adding an `LJ_MT` lock gate. The
+private-environment GC root is release-published through `setgcrefroot()` and
+acquire-loaded in lib_threading readers. The old live-table root from the
+original report has been replaced by CAS-published `LJThreadLive` nodes whose
+`GCRef ud` is release-published and acquire-scanned by legacy GC and GC2.
 
 The temporary M4 active-child GC pause treats `g->gc.threshold` and the saved
 `g->mt_gc_threshold` as shared handoff words. C-side checks and updates go

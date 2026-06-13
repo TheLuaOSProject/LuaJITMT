@@ -144,6 +144,33 @@ static void test_spawn_join_before_require(lua_State *L)
   check(lua_toboolean(L, -2) == 1, "luaMT_join did not return true");
   check(lua_tointeger(L, -1) == 42, "luaMT_join result mismatch");
   lua_settop(L, base);
+
+  load_lua_function(L,
+    "return function()\n"
+    "  local t = {}\n"
+    "  for i = 1, 64 do t[i] = 'root-' .. i end\n"
+    "  return 'rooted', t, 12345\n"
+    "end");
+  child = luaMT_spawn(L, 0);
+  check(child != NULL, "luaMT_spawn rooted worker returned NULL");
+  check_spawn_stack(L, base, child, "rooted worker");
+  lua_settop(L, base);
+  sleep_ms(100);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+
+  nres = luaMT_join(L, child, -1.0);
+  check(nres == 4, "luaMT_join rooted result count mismatch");
+  check(lua_gettop(L) == base + nres,
+	"luaMT_join rooted stack height mismatch");
+  check(lua_toboolean(L, -4) == 1, "luaMT_join rooted did not return true");
+  check(is_string(L, -3, "rooted"), "luaMT_join rooted tag mismatch");
+  check(lua_istable(L, -2), "luaMT_join rooted table result missing");
+  lua_rawgeti(L, -2, 64);
+  check(is_string(L, -1, "root-64"), "luaMT_join rooted table was not preserved");
+  lua_pop(L, 1);
+  check(lua_tointeger(L, -1) == 12345, "luaMT_join rooted number mismatch");
+  lua_settop(L, base);
 }
 
 static void test_timeout_then_success(lua_State *L)

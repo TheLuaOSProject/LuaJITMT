@@ -9,7 +9,7 @@ if ! awk '
   /static int threading_join_core/ { infn = 1; seen = 1; next }
   infn && /lj_state_checkstack\(L, th->nresults \+ 1u\)/ { checked = 1 }
   infn && /copyTV\(L, L->top\+\+, th->L->base \+ i\)/ { copied = 1 }
-  infn && /threading_live_remove\(L, th->ud\)/ {
+  infn && /threading_live_remove\(th\)/ {
     if (!checked || !copied) bad = 1
     removed = 1
   }

@@ -14,7 +14,8 @@ for needle in \
   'la_futex_wake(&g->mt_live' \
   'lj_safepoint_ack(tg->thread_L)' \
   'attached thread is not joinable' \
-  'lua_close returned before attached thread detached'
+  'lua_close returned before attached thread detached' \
+  'luaMT_join rooted table was not preserved'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lib_threading.c" "$ROOT/src/lj_obj.h" "$ROOT/src/lj_tg.c" "$ROOT/tests/t-threading-capi.c"; then
     echo "guardrail: C attach shutdown wait missing marker: $needle" >&2

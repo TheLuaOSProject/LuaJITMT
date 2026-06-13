@@ -760,7 +760,6 @@ typedef enum {
 #if LJ_HASFFI
   GCROOT_FFI_FIN,	/* FFI finalizer table. */
 #endif
-  GCROOT_THREADING,	/* threading.* live thread table. */
   GCROOT_THREADING_ENV,	/* threading.* private function environment. */
   GCROOT_MAX
 } GCRootID;
@@ -817,6 +816,7 @@ typedef struct TabState {
 } TabState;
 
 typedef struct TGState TGState;
+typedef struct LJThreadLive LJThreadLive;
 typedef struct GC2SSBNode GC2SSBNode;
 typedef struct GC2State {
   uint32_t phase;	/* LJ_GC2_*; authoritative scaffold phase. */
@@ -880,6 +880,7 @@ typedef struct global_State {
   jit_State *jitp;	/* Pointer to the universe-global JIT state. */
 #endif
   TGState *main_tg;	/* Main per-OS-thread state block. */
+  LJThreadLive *threading_live;  /* Lockless threading.thread root list. */
   GC2State gc2;		/* Concurrent GC scaffold state. */
   uint32_t mt_active;	/* One-way latch: secondary Lua threads existed. */
   uint32_t mt_live;	/* Active secondary Lua threads. */

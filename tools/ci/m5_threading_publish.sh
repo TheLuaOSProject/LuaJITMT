@@ -27,7 +27,6 @@ for needle in \
   'gcref_acq(child->mt_thread)' \
   'gcref_acq(L->mt_thread)' \
   'mt = gcref_acq(th->mt_thread)' \
-  'gcref_acq(g->gcroot[GCROOT_THREADING])' \
   'gcref_acq(g->gcroot[GCROOT_THREADING_ENV])'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lib_threading.c" "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc2.c"; then
@@ -42,11 +41,48 @@ if rg -n '\bgcref\([^)]*mt_thread' \
   exit 1
 fi
 
-if rg -n '\bgcref\(g->gcroot\[GCROOT_THREADING(_ENV)?\]\)' \
+if rg -n '\bgcref\(g->gcroot\[GCROOT_THREADING_ENV\]\)' \
     "$ROOT/src/lib_threading.c"; then
   echo "guardrail: threading root readers must use gcref_acq" >&2
   exit 1
 fi
+
+live_table_hits=$(rg -n 'THREADING_THREADS_KEY|threading_live_table|threading_live_root|lj_tab_next\(live|lj_tab_set\(L, live|lj_tab_storethread\(L, lj_tab_set\(L, live|GCROOT_THREADING\b' \
+  "$ROOT/src/lib_threading.c" "$ROOT/src/lj_obj.h" "$ROOT/src/lj_thr.h" || true)
+if [ -n "$live_table_hits" ]; then
+  echo "guardrail: live thread registry must not use the old shared GCtab root:" >&2
+  echo "$live_table_hits" >&2
+  exit 1
+fi
+
+for needle in \
+  'LJThreadLive *threading_live' \
+  'struct LJThreadLive' \
+  'LJThreadLive *live_node' \
+  'threading_live_new(lua_State *L, GCudata *ud)' \
+  'threading_live_publish(global_State *g, LJThread *th,' \
+  'la_casptr((void **)&g->threading_live' \
+  'la_xchgptr_acqrel((void **)&g->threading_live' \
+  'la_storeptr_rel((void **)&th->live_node, NULL)' \
+  'setgcrefrel(node->ud, obj2gco(ud))' \
+  'setgcrefrel(node->ud, NULL)' \
+  'lj_gc_barrierroot(L, &tv)'
+do
+  if ! rg -F -q "$needle" "$ROOT/src/lib_threading.c" \
+      "$ROOT/src/lj_obj.h" "$ROOT/src/lj_thr.h"; then
+    echo "guardrail: live thread registry must use native lockless roots: $needle" >&2
+    exit 1
+  fi
+done
+
+for file in "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc2.c"; do
+  for needle in 'g->threading_live' 'gcref_acq(node->ud)'; do
+    if ! rg -F -q "$needle" "$file"; then
+      echo "guardrail: GC must scan native live thread roots: $file: $needle" >&2
+      exit 1
+    fi
+  done
+done
 
 for needle in \
   'lj_gc_threshold_load(global_State *g)' \

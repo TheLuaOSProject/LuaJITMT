@@ -28,11 +28,17 @@ typedef struct LJStateClaim {
 #define LJ_THREAD_DONE		2u
 #define LJ_THREAD_GCSCAN	0xffffffffu
 
+struct LJThreadLive {
+  struct LJThreadLive *next;
+  GCRef ud;
+};
+
 typedef struct LJThread {
   LJThr thr;
   lua_State *L;
   GCudata *ud;
   TGState *tg;
+  LJThreadLive *live_node;
   uint32_t state;
   uint32_t joined;
   uint32_t futex;

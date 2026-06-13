@@ -429,12 +429,26 @@ static void gc_mark_fixedstr(global_State *g)
   }
 }
 
+static void gc_mark_threading_live(global_State *g)
+{
+  LJThreadLive *node;
+  for (node = (LJThreadLive *)la_loadptr_acq((void *const *)&g->threading_live);
+       node != NULL;
+       node = (LJThreadLive *)la_loadptr_acq((void *const *)&node->next)) {
+    GCobj *o = gcref_acq(node->ud);
+    if (o && o->gch.gct == ~LJ_TUDATA &&
+	gco2ud(o)->udtype == UDTYPE_THREAD)
+      gc_markobj(g, o);
+  }
+}
+
 static void gc_mark_gcroot(global_State *g)
 {
   ptrdiff_t i;
   for (i = 0; i < GCROOT_MAX; i++)
     if (gcref(g->gcroot[i]) != NULL)
       gc_markobj(g, gcref(g->gcroot[i]));
+  gc_mark_threading_live(g);
   gc_mark_fixedstr(g);
   gc_mark_strtab_mem(g);
   gc_mark_tab_retired_mem(g);
