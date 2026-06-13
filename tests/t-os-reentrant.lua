@@ -23,10 +23,17 @@ local function check_tmpname()
   assert(ok, err)
 end
 
+local function check_setlocale_blocked()
+  local ok, err = pcall(os.setlocale, "C", "all")
+  assert(ok == false)
+  assert(tostring(err):find("os.setlocale mutation disabled", 1, true))
+end
+
 local workers = {}
 
 for id = 1, nthreads do
   workers[id] = th.spawn(function(worker_id, n)
+    check_setlocale_blocked()
     for i = 1, n do
       check_date(worker_id, i)
       check_tmpname()
@@ -42,6 +49,10 @@ for id = 1, nthreads do
   assert(worker_id == id)
   assert(n == iters)
 end
+
+local current_locale = os.setlocale(nil, "all")
+assert(current_locale == nil or type(current_locale) == "string")
+check_setlocale_blocked()
 
 print(("t-os-reentrant OK: %d child TGs x %d os.date/tmpname ops"):format(
   nthreads, iters))

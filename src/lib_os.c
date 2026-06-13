@@ -18,6 +18,7 @@
 #include "lualib.h"
 
 #include "lj_obj.h"
+#include "lj_atomic.h"
 #include "lj_gc.h"
 #include "lj_err.h"
 #include "lj_buf.h"
@@ -325,6 +326,8 @@ LJLIB_CF(os_setlocale)
   else if (opt == 3) opt = LC_COLLATE;
   else if (opt == 4) opt = LC_MONETARY;
   else if (opt == 6) opt = LC_ALL;
+  if (str && la_load32_acq(&G(L)->mt_active) != 0)
+    lj_err_callermsg(L, "os.setlocale mutation disabled after threading activation");
   lua_pushstring(L, setlocale(opt, str));
 #endif
   return 1;

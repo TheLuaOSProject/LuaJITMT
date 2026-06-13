@@ -29,6 +29,18 @@ if ! awk '
   exit 1
 fi
 
+if ! awk '
+  /LJLIB_CF\(os_setlocale\)/ { inloc = 1 }
+  inloc && /la_load32_acq\(&G\(L\)->mt_active\)/ { active = 1 }
+  inloc && /os\.setlocale mutation disabled after threading activation/ { err = 1 }
+  inloc && /setlocale\(opt, str\)/ { call = 1 }
+  /#include "lj_libdef.h"/ { inloc = 0 }
+  END { exit(active && err && call ? 0 : 1) }
+' "$ROOT/src/lib_os.c"; then
+  echo "guardrail: os.setlocale mutation must be blocked after threading activation" >&2
+  exit 1
+fi
+
 LJ_M5_OS_THREADS="${LJ_M5_OS_THREADS:-8}" \
 LJ_M5_OS_ITERS="${LJ_M5_OS_ITERS:-200}" \
   "$ROOT/src/luajit" -joff "$ROOT/tests/t-os-reentrant.lua"
