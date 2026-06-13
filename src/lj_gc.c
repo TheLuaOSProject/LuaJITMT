@@ -1211,7 +1211,13 @@ static void atomic(global_State *g, lua_State *L)
   do {
     weakdrain = lj_gc2_worker_drain_progress(g, LJ_GC2_WEAK_DRAIN_BATCH);
   } while (weakdrain != 0);  /* 05 section 5.8 worker-owned weak-drain bridge. */
-  gc_clearweak(g, gcref(g->gc.weak));
+  /* 05 section 5.8 conditional legacy weak fallback. */
+  if (lj_gc2_weak_snapshot_covers_legacy(g, gcref(g->gc.weak))) {
+    lj_gc2_weak_legacy_result(g, 1);
+  } else {
+    lj_gc2_weak_legacy_result(g, 0);
+    gc_clearweak(g, gcref(g->gc.weak));
+  }
   lj_gc2_legacy_sweep_begin(g);
 
   lj_buf_shrink(L, &G2TG(g)->tmpbuf);  /* Shrink temp buffer. */

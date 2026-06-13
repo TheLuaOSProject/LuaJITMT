@@ -102,6 +102,8 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.weak_clear_tables, 0);
   la_store64_rlx(&g->gc2.weak_clear_slots, 0);
   la_store64_rlx(&g->gc2.weak_clear_cleared, 0);
+  la_store64_rlx(&g->gc2.weak_legacy_skipped, 0);
+  la_store64_rlx(&g->gc2.weak_legacy_fallbacks, 0);
   la_store64_rlx(&g->gc2.finreg_cdata_sets, 0);
   la_store64_rlx(&g->gc2.finreg_cdata_clears, 0);
   la_store64_rlx(&g->gc2.finreg_cdata_queued, 0);
@@ -867,6 +869,75 @@ uint32_t lj_gc2_weak_drain(global_State *g, uint32_t limit)
   if (!g || limit == 0 || g->gc2.phase != LJ_GC2_WEAK)
     return 0;
   return lj_gc2_weak_snapshot_clear(g, limit);
+}
+
+static int gc2_weak_snapshot_complete(global_State *g, uint32_t *pn)
+{
+  uint64_t reserved, cleared;
+  uint32_t n;
+  if (!g)
+    return 0;
+  if (la_load32_acq(&g->gc2.phase) != LJ_GC2_WEAK)
+    return 0;
+  if (!g->gc2.weak_stack || !g->gc2.weak_ready) {
+    if (pn)
+      *pn = 0;
+    return la_load64_acq(&g->gc2.weak_count) == 0;
+  }
+  reserved = la_load64_acq(&g->gc2.weak_count);
+  if (reserved > (uint64_t)g->gc2.weak_capacity)
+    return 0;  /* Overflowed this cycle; legacy remains the fallback. */
+  n = lj_gc2_weak_snapshot_count(g);
+  if ((uint64_t)n != reserved)
+    return 0;  /* Reserved slots must all be published in the ready prefix. */
+  cleared = la_load64_acq(&g->gc2.weak_clear_cursor);
+  if (cleared < (uint64_t)n)
+    return 0;  /* The bounded GC2 clear cursor has not drained the prefix. */
+  if (pn)
+    *pn = n;
+  return 1;
+}
+
+int lj_gc2_weak_snapshot_covers_legacy(global_State *g, GCobj *legacy)
+{
+  uint32_t i, n;
+  uint64_t legacy_count = 0;
+  if (!gc2_weak_snapshot_complete(g, &n))
+    return 0;
+  while (legacy) {
+    GCtab *t;
+    int found = 0;
+    uint8_t flags;
+    if (legacy->gch.gct != ~LJ_TTAB)
+      return 0;
+    t = gco2tab(legacy);
+    flags = lj_obj_gcflags(obj2gco(t));
+    if ((flags & LJ_GC_WEAK) != LJ_GC_WEAKVAL)
+      return 0;
+    if (legacy_count >= (uint64_t)n)
+      return 0;  /* Conservative guard against duplicates/corruption. */
+    legacy_count++;
+    for (i = 0; i < n; i++) {
+      if (lj_gc2_weak_snapshot_tab(g, i) == t) {
+	found = 1;
+	break;
+      }
+    }
+    if (!found)
+      return 0;
+    legacy = gcref_acq(t->gclist);
+  }
+  return 1;  /* 05 section 5.8: GC2-cleared snapshot covers legacy weak list. */
+}
+
+void lj_gc2_weak_legacy_result(global_State *g, int skipped)
+{
+  if (!g)
+    return;
+  if (skipped)
+    la_add64_rlx(&g->gc2.weak_legacy_skipped, 1);
+  else
+    la_add64_rlx(&g->gc2.weak_legacy_fallbacks, 1);
 }
 
 void lj_gc2_finreg_cdata_set(global_State *g, GCobj *o, int enabled)

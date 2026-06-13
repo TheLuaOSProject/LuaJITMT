@@ -152,9 +152,49 @@ static void test_incremental_fixpoint_round(lua_State *L, global_State *g)
   lua_pop(L, 1);
 }
 
-int main(void)
+static void test_isolated_weak_value_skip(void)
 {
   lua_State *L = luaL_newstate();
+  global_State *g;
+  TGState *tg;
+  uint64_t skipped0, fallbacks0, weak_clear_tables0, weak_clear_cleared0;
+
+  assert(L != NULL);
+  g = G(L);
+  tg = G2TG(g);
+  assert(tg != NULL);
+  assert_idle(g, tg);
+
+  lua_newtable(L);
+  lua_newtable(L);
+  lua_pushliteral(L, "__mode");
+  lua_pushliteral(L, "v");
+  lua_settable(L, -3);
+  lua_setmetatable(L, -2);
+  lua_newtable(L);
+  lua_newtable(L);
+  lua_pushvalue(L, -2);
+  lua_pushvalue(L, -2);
+  lua_settable(L, 1);
+  lua_pop(L, 2);  /* Keep only the weak-value table as a stack root. */
+
+  skipped0 = la_load64_acq(&g->gc2.weak_legacy_skipped);
+  fallbacks0 = la_load64_acq(&g->gc2.weak_legacy_fallbacks);
+  weak_clear_tables0 = la_load64_acq(&g->gc2.weak_clear_tables);
+  weak_clear_cleared0 = la_load64_acq(&g->gc2.weak_clear_cleared);
+  lj_gc_fullgc(L);
+  assert(la_load64_acq(&g->gc2.weak_clear_tables) > weak_clear_tables0);
+  assert(la_load64_acq(&g->gc2.weak_clear_cleared) > weak_clear_cleared0);
+  assert(la_load64_acq(&g->gc2.weak_legacy_skipped) == skipped0 + 1u);
+  assert(la_load64_acq(&g->gc2.weak_legacy_fallbacks) == fallbacks0);
+  assert_idle(g, tg);
+
+  lua_close(L);
+}
+
+int main(void)
+{
+  lua_State *L;
   global_State *g;
   TGState *tg;
   GCtab *phase_tab, *phase_child;
@@ -163,10 +203,15 @@ int main(void)
   uint64_t grey_pushed0, grey_drained0;
   uint64_t fixpoint_rounds0, fixpoint_hits0;
   uint64_t worker_weak0, weak_clear_tables0, weak_clear_cleared0;
+  uint64_t weak_legacy_fallbacks0;
+  MSize weak_n;
   void *phase_plain, *phase_trav;
   GCArena *phase_plain_a, *phase_trav_a;
   int i, done = 0, saw_mark = 0, saw_sweep = 0;
 
+  test_isolated_weak_value_skip();
+
+  L = luaL_newstate();
   assert(L != NULL);
   luaL_openlibs(L);
   g = G(L);
@@ -271,13 +316,39 @@ int main(void)
   worker_weak0 = la_load64_acq(&g->gc2.worker_weak_drained);
   weak_clear_tables0 = la_load64_acq(&g->gc2.weak_clear_tables);
   weak_clear_cleared0 = la_load64_acq(&g->gc2.weak_clear_cleared);
+  weak_legacy_fallbacks0 = la_load64_acq(&g->gc2.weak_legacy_fallbacks);
   lj_gc_fullgc(L);
   assert(la_load64_acq(&g->gc2.worker_weak_drained) > worker_weak0);
   assert(la_load64_acq(&g->gc2.weak_clear_tables) > weak_clear_tables0);
   assert(la_load64_acq(&g->gc2.weak_clear_cleared) > weak_clear_cleared0);
+  assert(la_load64_acq(&g->gc2.weak_legacy_fallbacks) >=
+	 weak_legacy_fallbacks0);
   assert_idle(g, tg);
   lua_pushnil(L);
   lua_setglobal(L, "weakcase");
+
+  weak_n = g->gc2.weak_capacity + 1u;
+  lua_pushinteger(L, (lua_Integer)weak_n);
+  lua_setglobal(L, "weak_n");
+  assert(luaL_dostring(L,
+    "weakmany = {}\n"
+    "for i = 1, weak_n do\n"
+    "  local w = setmetatable({}, {__mode = 'v'})\n"
+    "  do\n"
+    "    local k = {}\n"
+    "    w[k] = {}\n"
+    "  end\n"
+    "  weakmany[i] = w\n"
+    "end\n") == LUA_OK);
+  weak_legacy_fallbacks0 = la_load64_acq(&g->gc2.weak_legacy_fallbacks);
+  lj_gc_fullgc(L);
+  assert(la_load64_acq(&g->gc2.weak_legacy_fallbacks) >
+	 weak_legacy_fallbacks0);
+  assert_idle(g, tg);
+  lua_pushnil(L);
+  lua_setglobal(L, "weakmany");
+  lua_pushnil(L);
+  lua_setglobal(L, "weak_n");
 
   g->gc.stepmul = 1;
   g->gc.threshold = 0;

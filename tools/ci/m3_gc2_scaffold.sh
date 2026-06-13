@@ -33,6 +33,8 @@ for needle in \
   'uint64_t weak_clear_tables' \
   'uint64_t weak_clear_slots' \
   'uint64_t weak_clear_cleared' \
+  'uint64_t weak_legacy_skipped' \
+  'uint64_t weak_legacy_fallbacks' \
   'uint64_t worker_weak_drained' \
   'uint64_t sweep_owner_runs' \
   'uint64_t sweep_owner_arenas' \
@@ -58,8 +60,12 @@ for needle in \
   'lj_gc2_weak_snapshot_scan(global_State *g, uint32_t limit)' \
   'lj_gc2_weak_snapshot_clear(global_State *g, uint32_t limit)' \
   'lj_gc2_weak_drain(global_State *g, uint32_t limit)' \
+  'lj_gc2_weak_snapshot_covers_legacy(global_State *g' \
+  'lj_gc2_weak_legacy_result(global_State *g, int skipped)' \
   'la_store8_rel(&g->gc2.weak_ready' \
   'la_load8_acq(&g->gc2.weak_ready' \
+  'la_load64_acq(&g->gc2.weak_count)' \
+  'la_load64_acq(&g->gc2.weak_clear_cursor)' \
   'la_cas64(&g->gc2.weak_scan_cursor' \
   'la_cas64(&g->gc2.weak_clear_cursor' \
   'lj_gc2_finreg_cdata_set(global_State *g, GCobj *o, int enabled)' \
@@ -113,7 +119,10 @@ for needle in \
   'lj_gc2_ssb_empty(g)' \
   'la_loadptr_acq((void *const *)&tg->ssb_next)' \
   'la_storeptr_rel((void **)&tg->ssb_next' \
-  'lj_gc2_fixpoint_run(g, L, 64, ~(uint32_t)0)'
+  'lj_gc2_fixpoint_run(g, L, 64, ~(uint32_t)0)' \
+  'if (lj_gc2_weak_snapshot_covers_legacy(g, gcref(g->gc.weak)))' \
+  'gc_clearweak(g, gcref(g->gc.weak))' \
+  '05 section 5.8 conditional legacy weak fallback'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc.h" \
       "$ROOT/src/lj_gc2.c" "$ROOT/src/lj_gc2.h" "$ROOT/src/lj_obj.h" \

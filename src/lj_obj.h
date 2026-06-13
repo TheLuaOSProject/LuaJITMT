@@ -892,6 +892,8 @@ typedef struct GC2State {
   uint64_t weak_clear_tables;  /* Weak snapshot tables clear-scanned. */
   uint64_t weak_clear_slots;  /* Weak snapshot clear entries inspected. */
   uint64_t weak_clear_cleared;  /* Weak entries cleared by GC2. */
+  uint64_t weak_legacy_skipped;  /* Legacy weak pass skipped after coverage. */
+  uint64_t weak_legacy_fallbacks;  /* Legacy weak pass fallback executions. */
   uint64_t finreg_cdata_sets;  /* Cdata finalizer registrations mirrored. */
   uint64_t finreg_cdata_clears;  /* Cdata finalizer clears mirrored. */
   uint64_t finreg_cdata_queued;  /* Cdata finalizers queued by legacy. */

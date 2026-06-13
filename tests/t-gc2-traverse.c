@@ -660,6 +660,13 @@ static int weak_entry_is_nil(lua_State *L, GCtab *weak, GCtab *key)
   return tvisnil(lj_tab_get(L, weak, &k));
 }
 
+static void legacy_weak_link(global_State *g, GCtab *t, int weak)
+{
+  lj_obj_masksetgcflags(obj2gco(t), LJ_GC_WEAK, weak);
+  setgcrefr(t->gclist, g->gc.weak);
+  setgcref(g->gc.weak, obj2gco(t));
+}
+
 static void make_weak_table_batch(lua_State *L, MSize n)
 {
   MSize i;
@@ -750,6 +757,61 @@ static void test_weak_snapshot_ready_publication(lua_State *L, global_State *g)
   assert(lj_gc2_weak_snapshot_tab(g, 0) == t);
   lj_gc2_legacy_cycle_end(g);
   lua_pop(L, 1);
+}
+
+static void test_weak_snapshot_legacy_coverage(lua_State *L, global_State *g,
+					       TGState *tg)
+{
+  GCtab *weak, *key, *val;
+  GCtab *absent, *akey, *aval;
+  uint64_t idx, count;
+
+  lua_settop(L, 0);
+  make_weak_table(L, "v", &weak, &key, &val);
+  make_weak_table(L, "v", &absent, &akey, &aval);
+
+  lj_gc2_legacy_mark_begin(g);
+  assert(lj_gc2_markobj(g, obj2gco(weak)) == 1);
+  flush_and_drain(g, tg);
+  assert(lj_gc2_weak_snapshot_count(g) == 1u);
+  setgcrefnull(g->gc.weak);
+  legacy_weak_link(g, weak, LJ_GC_WEAKVAL);
+  assert(!lj_gc2_weak_snapshot_covers_legacy(g, gcref(g->gc.weak)));
+
+  lj_gc2_legacy_weak_begin(g);
+  assert(!lj_gc2_weak_snapshot_covers_legacy(g, gcref(g->gc.weak)));
+  assert(lj_gc2_weak_drain(g, 1) == 1u);
+  assert(lj_gc2_weak_snapshot_covers_legacy(g, gcref(g->gc.weak)));
+
+  lj_obj_cleargcflags(obj2gco(weak), LJ_GC_WEAK);
+  assert(!lj_gc2_weak_snapshot_covers_legacy(g, gcref(g->gc.weak)));
+  lj_obj_masksetgcflags(obj2gco(weak), LJ_GC_WEAK, LJ_GC_WEAKVAL);
+  assert(lj_gc2_weak_snapshot_covers_legacy(g, gcref(g->gc.weak)));
+  lj_obj_masksetgcflags(obj2gco(weak), LJ_GC_WEAK, LJ_GC_WEAKKEY);
+  assert(!lj_gc2_weak_snapshot_covers_legacy(g, gcref(g->gc.weak)));
+  lj_obj_masksetgcflags(obj2gco(weak), LJ_GC_WEAK, LJ_GC_WEAK);
+  assert(!lj_gc2_weak_snapshot_covers_legacy(g, gcref(g->gc.weak)));
+  lj_obj_masksetgcflags(obj2gco(weak), LJ_GC_WEAK, LJ_GC_WEAKVAL);
+
+  count = la_load64_acq(&g->gc2.weak_count);
+  idx = la_add64_rlx(&g->gc2.weak_count, 1);
+  assert(idx == count);
+  assert(idx < (uint64_t)g->gc2.weak_capacity);
+  assert(!lj_gc2_weak_snapshot_covers_legacy(g, gcref(g->gc.weak)));
+  la_store64_rlx(&g->gc2.weak_count, count);
+  assert(lj_gc2_weak_snapshot_covers_legacy(g, gcref(g->gc.weak)));
+
+  la_store64_rlx(&g->gc2.weak_count, (uint64_t)g->gc2.weak_capacity + 1u);
+  assert(!lj_gc2_weak_snapshot_covers_legacy(g, gcref(g->gc.weak)));
+  la_store64_rlx(&g->gc2.weak_count, count);
+
+  setgcrefnull(g->gc.weak);
+  legacy_weak_link(g, absent, LJ_GC_WEAKVAL);
+  assert(!lj_gc2_weak_snapshot_covers_legacy(g, gcref(g->gc.weak)));
+
+  setgcrefnull(g->gc.weak);
+  lj_gc2_legacy_cycle_end(g);
+  lua_pop(L, 6);
 }
 
 static void test_weak_tables(lua_State *L, global_State *g, TGState *tg)
@@ -1340,6 +1402,7 @@ int main(void)
   test_weak_snapshot_growth(L, g, tg);
   test_worker_weak_drain(L, g, tg);
   test_weak_snapshot_ready_publication(L, g);
+  test_weak_snapshot_legacy_coverage(L, g, tg);
   test_weak_clear_marks_string_slots(L, g, tg);
   test_weak_key_write_barrier(L, g, tg);
   test_vm_weak_key_write_barrier(L, g, tg);
