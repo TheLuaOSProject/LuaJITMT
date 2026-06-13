@@ -63,6 +63,13 @@ int main(void)
   assert(la_load64_acq(&tg->local_total) == 0);
   assert(la_load64_acq(&g->gc2.alloc_since_trigger) == total + 7);
 
+  lj_gc2_account_alloc(g, tg, 99);
+  assert(la_load64_acq(&tg->local_total) == 99);
+  lj_gc2_legacy_mark_begin(g);
+  assert(la_load64_acq(&tg->local_total) == 0);
+  assert(la_load64_acq(&g->gc2.alloc_since_trigger) == 0);
+  lj_gc2_legacy_cycle_end(g);
+
   lua_close(L);
   puts("t-gc2-alloc-account OK: allocation accounting flushes by threshold and safepoint");
   return 0;

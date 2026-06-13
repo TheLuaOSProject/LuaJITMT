@@ -16,8 +16,10 @@ for needle in \
   'la_xchg64_acqrel' \
   'lj_gc2_account_alloc(global_State *g, TGState *tg, GCSize bytes)' \
   'lj_gc2_flush_alloc(global_State *g, TGState *tg)' \
+  'static void gc2_reset_alloc_trigger(global_State *g)' \
   'la_add64_rlx(&tg->local_total' \
   'la_add64_rlx(&g->gc2.alloc_since_trigger' \
+  'la_store64_rlx(&g->gc2.alloc_since_trigger, 0)' \
   'lj_gc2_account_alloc(g, L2TG(L), nsz - osz)' \
   'lj_gc2_account_alloc(g, L2TG(L), size)' \
   'lj_gc2_flush_alloc(g, tg);  /* 04 section 4.8 safepoint flush. */' \

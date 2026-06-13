@@ -91,6 +91,16 @@ void lj_gc2_account_alloc(global_State *g, TGState *tg, GCSize bytes)
     (void)lj_gc2_flush_alloc(g, tg);
 }
 
+static void gc2_reset_alloc_trigger(global_State *g)
+{
+  TGState *tg;
+  for (tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
+       tg != NULL;
+       tg = (TGState *)la_loadptr_acq((void *const *)&tg->next_tg))
+    (void)lj_gc2_flush_alloc(g, tg);
+  la_store64_rlx(&g->gc2.alloc_since_trigger, 0);  /* 05 section 5.11. */
+}
+
 static TGState *gc2_tg_for_mem(global_State *g, const void *p)
 {
   if (p) {
@@ -160,6 +170,7 @@ void lj_gc2_legacy_mark_begin(global_State *g)
   la_store64_rlx(&g->gc2.grey_bottom, 0);
   if (g->gc2.grey_capacity == 0)
     (void)gc2_grey_grow(g);
+  gc2_reset_alloc_trigger(g);
   gc2_clear_marks_all(g);
   lj_gc2_handshake(g, LJ_GC2_HS_ENABLE_BARRIER|LJ_GC2_HS_ALLOC_BLACK);
 }

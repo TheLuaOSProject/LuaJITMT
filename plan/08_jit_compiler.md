@@ -261,8 +261,10 @@ handler — sized LJ_MAX_EXITSTUBGR-compatible; see lj_vmstruct notes.
   Current M6 bridge: allocation calls still update legacy `g->gc.total` and
   now also accumulate positive allocation growth into `TG.local_total`, which
   flushes into `GC2State.alloc_since_trigger` at 32 KiB boundaries, safepoint
-  ack, and TG detach. Bounded mark assists are not implemented yet, so keep
-  `lj_gc_step_jit`/`IR_GCSTEP` guarded until that prerequisite lands.
+  ack, and TG detach. Starting a GC2/legacy mark cycle flushes TG-local totals
+  and resets the trigger counter for the new cycle. Bounded mark assists are
+  not implemented yet, so keep `lj_gc_step_jit`/`IR_GCSTEP` guarded until that
+  prerequisite lands.
 - **Barriers on trace** (§8.8.5 details): stores to heap (HSTORE/ASTORE/
   USTORE/FSTORE-with-gc-value/XSTORE-to-gcobj? XSTORE is cdata: exempt)
   emit the phase-gated mark sequence. The TGMARK load may be CSE'd *within
