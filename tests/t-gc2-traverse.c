@@ -747,9 +747,12 @@ static void test_weak_tables(lua_State *L, global_State *g, TGState *tg)
   assert(la_load64_acq(&g->gc2.weak_scan_slots) == scan_slots0 + 3u);
   assert(la_load64_acq(&g->gc2.weak_scan_clearable) ==
 	 scan_clearable0 + 3u);
-  assert(lj_gc2_weak_snapshot_clear(g, 1) == 1u);
-  assert(lj_gc2_weak_snapshot_clear(g, 1) == 1u);
-  assert(lj_gc2_weak_snapshot_clear(g, 1) == 1u);
+  assert(lj_gc2_weak_drain(g, 1) == 0);
+  assert(la_load64_acq(&g->gc2.weak_clear_cursor) == 0);
+  lj_gc2_legacy_weak_begin(g);
+  assert(lj_gc2_weak_drain(g, 1) == 1u);
+  assert(lj_gc2_weak_drain(g, 1) == 1u);
+  assert(lj_gc2_weak_drain(g, 1) == 1u);
   assert(la_load64_acq(&g->gc2.weak_clear_runs) == clear_runs0 + 3u);
   assert(la_load64_acq(&g->gc2.weak_clear_tables) == clear_tables0 + 3u);
   assert(la_load64_acq(&g->gc2.weak_clear_slots) == clear_slots0 + 3u);
@@ -786,7 +789,9 @@ static void test_weak_clear_defers_string_slots(lua_State *L, global_State *g,
   flush_and_drain(g, tg);
   assert(lj_gc2_weak_snapshot_count(g) == 1u);
   assert(lj_gc2_ismarked(g, obj2gco(val)) == 0);
-  assert(lj_gc2_weak_snapshot_clear(g, 1) == 1u);
+  assert(lj_gc2_weak_drain(g, 1) == 0);
+  lj_gc2_legacy_weak_begin(g);
+  assert(lj_gc2_weak_drain(g, 1) == 1u);
   assert(la_load64_acq(&g->gc2.weak_clear_cleared) == clear_cleared0);
   lua_getfield(L, 1, "s");
   assert(tvistab(L->top - 1));

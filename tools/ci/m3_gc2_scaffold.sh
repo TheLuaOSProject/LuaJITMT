@@ -46,6 +46,7 @@ for needle in \
   'lj_gc2_weak_snapshot_tab(global_State *g' \
   'lj_gc2_weak_snapshot_scan(global_State *g, uint32_t limit)' \
   'lj_gc2_weak_snapshot_clear(global_State *g, uint32_t limit)' \
+  'lj_gc2_weak_drain(global_State *g, uint32_t limit)' \
   'la_store8_rel(&g->gc2.weak_ready' \
   'la_load8_acq(&g->gc2.weak_ready' \
   'la_cas64(&g->gc2.weak_scan_cursor' \
@@ -75,7 +76,7 @@ for needle in \
   'lj_gc2_fixpoint_run(global_State *g, lua_State *L' \
   'la_xchg64_acqrel(&g->gc2.marks_this_round, 0)' \
   'LJ_GC2_HS_SCAN_ROOTS|LJ_GC2_HS_FLUSH_SSB' \
-  'lj_gc2_weak_snapshot_clear(g, ~(uint32_t)0)' \
+  'lj_gc2_weak_drain(g, ~(uint32_t)0)' \
   'lj_gc2_worker_drain(g' \
   'lj_gc2_worker_drain_progress(global_State *g, uint32_t limit)' \
   'lj_gc2_ssb_empty(g)' \
