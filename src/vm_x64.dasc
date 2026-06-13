@@ -912,8 +912,14 @@ static void build_subroutines(BuildCtx *ctx)
   |  jz >3
   |  // NOBARRIER: lj_meta_tset ensures the table is not black.
   |  movzx RAd, PC_RA
-  |  mov RB, [BASE+RA*8]
-  |  mov [RC], RB
+  |  mov L:CARG1, SAVE_L
+  |  mov L:CARG1->base, BASE
+  |  mov CARG2, RC
+  |  lea CARG3, [BASE+RA*8]
+  |  mov L:RB, L:CARG1
+  |  call extern lj_tab_storetv		// (lua_State *L, TValue *d, TValue *s)
+  |  mov BASE, L:RB->base
+  |  mov RC, rax
   |  cmp TGMARK, 0
   |  jnz ->vm_gc2_barriertv
   |->cont_nop:				// BASE = base, (RC = result)

@@ -858,6 +858,12 @@ TValue *lj_tab_set(lua_State *L, GCtab *t, cTValue *key)
   return lj_tab_newkey(L, t, key);
 }
 
+LJ_FUNCA TValue *lj_tab_storetv(lua_State *L, TValue *dst, cTValue *src)
+{
+  copyTVrel(L, dst, src);
+  return dst;
+}
+
 /* -- Table traversal ----------------------------------------------------- */
 
 /* Table traversal indexes:

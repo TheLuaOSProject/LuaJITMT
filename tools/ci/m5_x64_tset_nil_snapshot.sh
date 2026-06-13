@@ -27,7 +27,8 @@ assert(a[1] == 10 and a[2] == 20)
 for needle in \
   'mov r8, [RC]' \
   'cmp r8, LJ_TNIL' \
-  'jmp ->vmeta_tsets		// M5: no legacy x64 hash-slot store.'
+  'jmp ->vmeta_tsets		// M5: no legacy x64 hash-slot store.' \
+  'call extern lj_tab_storetv'
 do
   if ! rg -F -q "$needle" "$ROOT/src/vm_x64.dasc"; then
     echo "guardrail: missing x64 TSET nil snapshot marker: $needle" >&2
@@ -37,7 +38,8 @@ done
 
 for reject in \
   'cmp aword [RC], LJ_TNIL' \
-  'cmp aword [TMPR], LJ_TNIL'
+  'cmp aword [TMPR], LJ_TNIL' \
+  'mov [RC], RB'
 do
   if rg -F -n "$reject" "$ROOT/src/vm_x64.dasc"; then
     echo "guardrail: x64 TSET nil decisions must load slot snapshots first: $reject" >&2
