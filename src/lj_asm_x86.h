@@ -1271,51 +1271,57 @@ static void asm_href(ASMState *as, IRIns *ir, IROp merge)
   if (khash == 0) {
     emit_rmro(as, XO_MOV, dest|REX_GC64, tab, offsetof(GCtab, node));
   } else {
-    emit_rmro(as, XO_ARITH(XOg_ADD), dest|REX_GC64, tab, offsetof(GCtab,node));
-    emit_shifti(as, XOg_SHL, dest, 3);
-    emit_rmrxo(as, XO_LEA, dest, dest, dest, XM_SCALE2, 0);
+    RegSet iallow = allow;
+    Reg idx;
+    if (key < RID_MAX_GPR) rset_clear(iallow, key);
+    if (tmp < RID_MAX_GPR) rset_clear(iallow, tmp);
+    idx = ra_scratch(as, iallow);
+    emit_rr(as, XO_ARITH(XOg_ADD), dest|REX_GC64, idx);
+    emit_shifti(as, XOg_SHL, idx, 3);
+    emit_rmrxo(as, XO_LEA, idx, idx, idx, XM_SCALE2, 0);
     if (isk) {
-      emit_gri(as, XG_ARITHi(XOg_AND), dest, (int32_t)khash);
-      emit_rmro(as, XO_MOV, dest, tab, offsetof(GCtab, hmask));
+      emit_gri(as, XG_ARITHi(XOg_AND), idx, (int32_t)khash);
+      emit_rmro(as, XO_MOV, idx, tab, offsetof(GCtab, hmask));
     } else if (irt_isstr(kt)) {
-      emit_rmro(as, XO_ARITH(XOg_AND), dest, key, offsetof(GCstr, sid));
-      emit_rmro(as, XO_MOV, dest, tab, offsetof(GCtab, hmask));
+      emit_rmro(as, XO_ARITH(XOg_AND), idx, key, offsetof(GCstr, sid));
+      emit_rmro(as, XO_MOV, idx, tab, offsetof(GCtab, hmask));
     } else {  /* Must match with hashrot() in lj_tab.c. */
-      emit_rmro(as, XO_ARITH(XOg_AND), dest, tab, offsetof(GCtab, hmask));
-      emit_rr(as, XO_ARITH(XOg_SUB), dest, tmp);
+      emit_rmro(as, XO_ARITH(XOg_AND), idx, tab, offsetof(GCtab, hmask));
+      emit_rr(as, XO_ARITH(XOg_SUB), idx, tmp);
       emit_shifti(as, XOg_ROL, tmp, HASH_ROT3);
-      emit_rr(as, XO_ARITH(XOg_XOR), dest, tmp);
+      emit_rr(as, XO_ARITH(XOg_XOR), idx, tmp);
       checkmclim(as);
-      emit_shifti(as, XOg_ROL, dest, HASH_ROT2);
-      emit_rr(as, XO_ARITH(XOg_SUB), tmp, dest);
-      emit_shifti(as, XOg_ROL, dest, HASH_ROT1);
-      emit_rr(as, XO_ARITH(XOg_XOR), tmp, dest);
+      emit_shifti(as, XOg_ROL, idx, HASH_ROT2);
+      emit_rr(as, XO_ARITH(XOg_SUB), tmp, idx);
+      emit_shifti(as, XOg_ROL, idx, HASH_ROT1);
+      emit_rr(as, XO_ARITH(XOg_XOR), tmp, idx);
       if (irt_isnum(kt)) {
-	emit_rr(as, XO_ARITH(XOg_ADD), dest, dest);
+	emit_rr(as, XO_ARITH(XOg_ADD), idx, idx);
 #if LJ_64
-	emit_shifti(as, XOg_SHR|REX_64, dest, 32);
-	emit_rr(as, XO_MOV, tmp, dest);
-	emit_rr(as, XO_MOVDto, key|REX_64, dest);
+	emit_shifti(as, XOg_SHR|REX_64, idx, 32);
+	emit_rr(as, XO_MOV, tmp, idx);
+	emit_rr(as, XO_MOVDto, key|REX_64, idx);
 #else
-	emit_rmro(as, XO_MOV, dest, RID_ESP, ra_spill(as, irkey)+4);
+	emit_rmro(as, XO_MOV, idx, RID_ESP, ra_spill(as, irkey)+4);
 	emit_rr(as, XO_MOVDto, key, tmp);
 #endif
       } else {
 	emit_rr(as, XO_MOV, tmp, key);
 #if LJ_GC64
-	emit_gri(as, XG_ARITHi(XOg_XOR), dest, irt_toitype(kt) << 15);
+	emit_gri(as, XG_ARITHi(XOg_XOR), idx, irt_toitype(kt) << 15);
 	if ((as->flags & JIT_F_BMI2)) {
 	  emit_i8(as, 32);
-	  emit_mrm(as, XV_RORX|VEX_64, dest, key);
+	  emit_mrm(as, XV_RORX|VEX_64, idx, key);
 	} else {
-	  emit_shifti(as, XOg_SHR|REX_64, dest, 32);
-	  emit_rr(as, XO_MOV, dest|REX_64, key|REX_64);
+	  emit_shifti(as, XOg_SHR|REX_64, idx, 32);
+	  emit_rr(as, XO_MOV, idx|REX_64, key|REX_64);
 	}
 #else
-	emit_rmro(as, XO_LEA, dest, key, HASH_BIAS);
+	emit_rmro(as, XO_LEA, idx, key, HASH_BIAS);
 #endif
       }
     }
+    emit_rmro(as, XO_MOV, dest|REX_GC64, tab, offsetof(GCtab, node));
   }
 }
 

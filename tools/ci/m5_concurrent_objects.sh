@@ -26,6 +26,7 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 "$ROOT/tools/ci/m5_threading_publish.sh"
 "$ROOT/tools/ci/m5_jit_profile_publish.sh"
 "$ROOT/tools/ci/m5_jit_table_fload_mutable.sh"
+"$ROOT/tools/ci/m5_jit_href_node_order.sh"
 "$ROOT/tools/ci/m5_runtime_publish.sh"
 "$ROOT/tools/ci/m5_upvalue_publish.sh"
 "$ROOT/tools/ci/m5_table_parser_publish.sh"
