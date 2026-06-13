@@ -201,9 +201,9 @@ resize, rehash counting, collision checks, and `next()` now make key/value
 decisions from acquired `TValue` snapshots instead of direct shared node-field
 reads; GC/GC2 table traversal, weak clearing, finalizer-table scans,
 serialization, bytecode writing, parser template-table fixup, recorder
-traversal typing, and `table.maxn` use the same snapshot helpers. These steps
-do not replace the legacy resize algorithm with the planned lock-free
-`AHdr`/`NHdr` generation protocol yet.
+traversal typing, recorder template-table growth scans, and `table.maxn` use
+the same snapshot helpers. These steps do not replace the legacy resize
+algorithm with the planned lock-free `AHdr`/`NHdr` generation protocol yet.
 ### 6.3.6 next/pairs (lj_tab_next)
 Iterate the *gen snapshot* captured at first call: store the NH pointer in
 the iterator control slot? Lua's `next(t,k)` is stateless — DECIDED:

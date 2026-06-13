@@ -19,6 +19,8 @@ assert(sum == 800 * 17)
 '
 
 for needle in \
+  'tb_hmask = lj_tab_node_hmask_acq(tb_node);' \
+  'uint32_t tpl_hmask = lj_tab_node_hmask_acq(node);' \
   'Node *hrefk_node = lj_tab_node_acq(t);' \
   'uint32_t hrefk_hmask = lj_tab_node_hmask_acq(hrefk_node);' \
   'Node *cur_node = lj_tab_node_acq(t);' \
@@ -35,6 +37,8 @@ do
 done
 
 for reject in \
+  'nhbits = tb->hmask > 0' \
+  'tpl->hmask' \
   '(char *)&lj_tab_node_acq(t)[0].val' \
   'hrefk_hmask == t->hmask' \
   'lj_ir_kint(J, (int32_t)t->hmask)'

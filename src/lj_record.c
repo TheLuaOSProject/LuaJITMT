@@ -1336,10 +1336,14 @@ static void rec_idx_bump(jit_State *J, RecordIndex *ix)
     const BCIns *pc = mref(rbc->pc, const BCIns);
     GCtab *tb = tabV(&ix->tabv);
     uint32_t nhbits;
+    Node *tb_node;
+    uint32_t tb_hmask;
     IRIns *ir;
     if (!tvisnil(&ix->keyv))
       (void)lj_tab_set(J->L, tb, &ix->keyv);  /* Grow table right now. */
-    nhbits = tb->hmask > 0 ? lj_fls(tb->hmask)+1 : 0;
+    tb_node = lj_tab_node_acq(tb);
+    tb_hmask = lj_tab_node_hmask_acq(tb_node);
+    nhbits = tb_hmask > 0 ? lj_fls(tb_hmask)+1 : 0;
     ir = IR(tref_ref(ix->tab));
     if (ir->o == IR_TNEW) {
       uint32_t ah = bc_d(*pc);
@@ -1360,11 +1364,12 @@ static void rec_idx_bump(jit_State *J, RecordIndex *ix)
       GCtab *tpl = gco2tab(proto_kgc(&gcref(rbc->pt)->pt, ~(ptrdiff_t)bc_d(*pc)));
       uint32_t tb_asize = lj_tab_asize_acq(tb);
       uint32_t tpl_asize = lj_tab_asize_acq(tpl);
+      Node *node = lj_tab_node_acq(tpl);
+      uint32_t tpl_hmask = lj_tab_node_hmask_acq(node);
       /* Grow template table, but preserve keys with nil values. */
-      if ((tb_asize > tpl_asize && (1u << nhbits)-1 == tpl->hmask) ||
-	  (tb_asize == tpl_asize && (1u << nhbits)-1 > tpl->hmask)) {
-	Node *node = lj_tab_node_acq(tpl);
-	uint32_t i, hmask = tpl->hmask, asize;
+      if ((tb_asize > tpl_asize && (1u << nhbits)-1 == tpl_hmask) ||
+	  (tb_asize == tpl_asize && (1u << nhbits)-1 > tpl_hmask)) {
+	uint32_t i, hmask = tpl_hmask, asize;
 	TValue *array;
 	for (i = 0; i <= hmask; i++) {
 	  TValue key, val;
@@ -1379,7 +1384,7 @@ static void rec_idx_bump(jit_State *J, RecordIndex *ix)
 	}
 	lj_tab_resize(J->L, tpl, tb_asize, nhbits);
 	node = lj_tab_node_acq(tpl);
-	hmask = tpl->hmask;
+	hmask = lj_tab_node_hmask_acq(node);
 	for (i = 0; i <= hmask; i++) {
 	  TValue val;
 	  lj_tv_load_acq(&val, &node[i].val);
