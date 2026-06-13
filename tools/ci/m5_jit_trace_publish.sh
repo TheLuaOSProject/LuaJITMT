@@ -130,6 +130,11 @@ if rg -F -q 'Temporary single-mutator flush action' "$ROOT/src/lj_safepoint.c"; 
   exit 1
 fi
 
+if ! rg -F -q 'lj_gc2_handshake(g, LJ_GC2_HS_EXIT_TRACES);' "$ROOT/src/lj_dispatch.c"; then
+  echo "guardrail: public scoped trace flushes must publish HS_EXIT_TRACES" >&2
+  exit 1
+fi
+
 hits=$(rg -n -- '\blj_trace_flushall\(L\)' \
   "$ROOT/src/lj_api.c" "$ROOT/src/lj_dispatch.c" "$ROOT/src/lj_profile.c" || true)
 if [ -n "$hits" ]; then

@@ -19,6 +19,7 @@
 #include "lj_bc.h"
 #include "lj_ff.h"
 #include "lj_strfmt.h"
+#include "lj_gc2.h"
 #if LJ_HASJIT
 #include "lj_jit.h"
 #endif
@@ -323,12 +324,15 @@ int luaJIT_setmode(lua_State *L, int idx, int mode)
       setptmode(g, pt, mode);
     if (mm != LUAJIT_MODE_FUNC)
       setptmode_all(g, pt, mode);
+    if (!(mode & LUAJIT_MODE_ON))
+      (void)lj_gc2_handshake(g, LJ_GC2_HS_EXIT_TRACES);
     break;
     }
   case LUAJIT_MODE_TRACE:
     if (!(mode & LUAJIT_MODE_FLUSH))
       return 0;  /* Failed. */
     lj_trace_flush(G2J(g), idx);
+    (void)lj_gc2_handshake(g, LJ_GC2_HS_EXIT_TRACES);
     break;
 #else
   case LUAJIT_MODE_ENGINE:

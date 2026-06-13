@@ -313,6 +313,14 @@ int main(void)
   assert(luaL_dostring(L, "jit.flush()") == LUA_OK);
   assert(g->gc2.hs_epoch == epoch0 + 1u);
   assert(tg->hs_epoch_ack == g->gc2.hs_epoch);
+  epoch0 = g->gc2.hs_epoch;
+  assert(luaL_dostring(L, "jit.flush(function() end)") == LUA_OK);
+  assert(g->gc2.hs_epoch == epoch0 + 1u);
+  assert(tg->hs_epoch_ack == g->gc2.hs_epoch);
+  epoch0 = g->gc2.hs_epoch;
+  assert(luaL_dostring(L, "jit.flush(1)") == LUA_OK);
+  assert(g->gc2.hs_epoch == epoch0 + 1u);
+  assert(tg->hs_epoch_ack == g->gc2.hs_epoch);
 #endif
 
   lua_close(L);
