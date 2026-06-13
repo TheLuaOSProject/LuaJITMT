@@ -323,9 +323,11 @@ published ready prefix with `weak_clear_cursor` without moving past
 reserved-but-unpublished slots, and now runs before legacy `gc_clearweak()`;
 `lj_gc2_weak_drain()` is the phase-gated bounded driver used by the legacy
 atomic bridge while the full worker-owned weak drain is staged. The legacy pass
-remains the authoritative fallback for weak tables not yet discovered by GC2 and for
-string-bearing hash slots that legacy must mark before clearing. The FFI
-finalizer table is explicitly excluded from the weak snapshot because it is
+remains the authoritative fallback for weak tables not yet discovered by GC2.
+String-bearing weak hash slots now follow legacy `gc_mayclear()` semantics in
+the GC2 clear driver: strings are marked but are not themselves weak-cleared,
+while a collectable key/value on the other side can still clear the entry. The
+FFI finalizer table is explicitly excluded from the weak snapshot because it is
 owned by the FINREG/finalizer path, not weak-table clearing. GC2 now mirrors
 cdata FINREG mutation telemetry from `ffi.gc(cd, fn)`, explicit
 `ffi.gc(cd, nil)` clears, ctype `__gc` registrations, and legacy

@@ -630,11 +630,15 @@ GCtab *lj_gc2_weak_snapshot_tab(global_State *g, uint32_t idx)
   return (o && o->gch.gct == ~LJ_TTAB) ? gco2tab(o) : NULL;
 }
 
-static int gc2_weak_mayclear(global_State *g, cTValue *o, int val)
+static int gc2_weak_mayclear(global_State *g, cTValue *o, int val,
+			     int markstr)
 {
   if (tvisgcv(o)) {
-    if (tvisstr(o))
+    if (tvisstr(o)) {
+      if (markstr)
+	(void)lj_gc2_markobj(g, gcV(o));
       return 0;  /* 05 section 5.8: strings are not weak-cleared. */
+    }
     if (lj_gc2_ismarked(g, gcV(o)) == 0)
       return 1;
     if (tvisudata(o) && val &&
@@ -669,7 +673,7 @@ static void gc2_weak_process_tab(global_State *g, GCtab *t, int clear,
       lj_tv_load_acq(&val, &array[i]);
       if (!tvisnil(&val)) {
 	(*slots)++;
-	if (gc2_weak_mayclear(g, &val, 1)) {
+	if (gc2_weak_mayclear(g, &val, 1, clear)) {
 	  (*clearable)++;
 	  if (clear)
 	    lj_tab_storenilraw(&array[i]);
@@ -688,14 +692,11 @@ static void gc2_weak_process_tab(global_State *g, GCtab *t, int clear,
 	if (!tvisnil(&val)) {
 	  lj_tv_load_acq(&key, &n->key);
 	  (*slots)++;
-	  if (gc2_weak_mayclear(g, &key, 0) ||
-	      gc2_weak_mayclear(g, &val, 1)) {
-	    if (!clear) {
-	      (*clearable)++;
-	    } else if (!tvisstr(&key) && !tvisstr(&val)) {
-	      (*clearable)++;
+	  if (gc2_weak_mayclear(g, &key, 0, clear) ||
+	      gc2_weak_mayclear(g, &val, 1, clear)) {
+	    (*clearable)++;
+	    if (clear)
 	      lj_tab_storenilraw(&n->val);
-	    }
 	  }
 	}
       }

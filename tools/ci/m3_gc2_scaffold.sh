@@ -62,10 +62,11 @@ for needle in \
   'lj_gc2_finreg_udata_set(g, obj2gco(ud), 1)' \
   'lj_gc2_finreg_udata_set(g, obj2gco(ud), 0)' \
   'lj_gc2_finreg_udata_queue(g, o)' \
-  'gc2_weak_mayclear(global_State *g, cTValue *o, int val)' \
+  'gc2_weak_mayclear(global_State *g, cTValue *o, int val,' \
+  'int markstr)' \
   'gc2_tab_is_ffi_fin(global_State *g, GCtab *t)' \
   'FFI finalizer registry is owned by FINREG' \
-  '!tvisstr(&key) && !tvisstr(&val)' \
+  'lj_gc2_markobj(g, gcV(o))' \
   'gc2_note_weak_table(global_State *g, GCtab *t, int weak)' \
   'lj_gc2_barrier_tvn_g(global_State *g, cTValue *tv' \
   'lj_gc2_legacy_weak_begin(global_State *g)' \
