@@ -272,8 +272,11 @@ stack costs ~1 ms, typical stacks ≪ that). Current bridge implementation
 loads each running stack slot into a local snapshot before marking. GC2 worker
 traversal now claims unowned suspended coroutine stacks with
 `lj_state_gcscan_claim()` before scanning and records busy deferrals when a
-running owner holds `thr_owner`; the owner-side `GCF_NEEDSCAN` handoff and
-`stack_dirty_epoch` skip optimization below remain staged.
+running owner holds `thr_owner`. If the owning TG's current `cur_L` is the
+thread, the owner's safepoint scan covers the stack; otherwise GC2 requeues the
+thread for a later claim attempt so the fixpoint predicate does not silently go
+empty. The owner-side `GCF_NEEDSCAN` handoff and `stack_dirty_epoch` skip
+optimization below remain staged.
 Suspended coroutines: workers traverse them as ordinary heap objects, but
 must hold the claim: `CAS th->thr_owner 0→GCSCAN`; on failure (running),
 set `th->gcflags|=GCF_NEEDSCAN` — the owner's next HS_SCAN_ROOTS scans any

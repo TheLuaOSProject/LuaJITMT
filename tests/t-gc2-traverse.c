@@ -31,6 +31,17 @@ static void flush_and_drain(global_State *g, TGState *tg)
   assert(lj_gc2_ssb_empty(g));
 }
 
+static void worker_drain_all(global_State *g)
+{
+  uint32_t i;
+  for (i = 0; i < 1024; i++) {
+    if (lj_gc2_ssb_empty(g))
+      return;
+    assert(lj_gc2_worker_drain(g, LJ_GC2_WORKER_DRAIN_BATCH) != 0);
+  }
+  assert(lj_gc2_ssb_empty(g));
+}
+
 static void test_strong_table(lua_State *L, global_State *g, TGState *tg)
 {
   GCtab *parent, *child;
@@ -1325,7 +1336,7 @@ static void test_thread(lua_State *L, global_State *g, TGState *tg)
 {
   lua_State *th, *busy;
   GCtab *stack_tab, *busy_tab;
-  uint64_t claims0, busy0;
+  uint64_t claims0, busy0, requeues0;
   uint32_t busy_owner = tg->tid + 5000u;
   if (busy_owner == 0 || busy_owner == LJ_THREAD_GCSCAN)
     busy_owner = 123u;
@@ -1354,14 +1365,22 @@ static void test_thread(lua_State *L, global_State *g, TGState *tg)
   busy_tab = tabV(busy->top - 1);
   busy->thr_owner = busy_owner;
   busy0 = la_load64_acq(&g->gc2.thread_scan_busy);
+  requeues0 = la_load64_acq(&g->gc2.thread_scan_requeues);
+  claims0 = la_load64_acq(&g->gc2.thread_scan_claims);
   lj_gc2_legacy_mark_begin(g);
   assert(lj_gc2_ismarked(g, obj2gco(busy_tab)) == 0);
   assert(lj_gc2_markobj(g, obj2gco(busy)) == 1);
-  flush_and_drain(g, tg);
+  assert(lj_gc2_flush_ssb(g, tg) == 1);
+  assert(lj_gc2_worker_drain(g, 2) == 2u);
   assert(la_load64_acq(&g->gc2.thread_scan_busy) == busy0 + 1u);
+  assert(la_load64_acq(&g->gc2.thread_scan_requeues) == requeues0 + 1u);
   assert(busy->thr_owner == busy_owner);
   assert(lj_gc2_ismarked(g, obj2gco(busy_tab)) == 0);
   busy->thr_owner = 0;
+  worker_drain_all(g);
+  assert(la_load64_acq(&g->gc2.thread_scan_claims) == claims0 + 1u);
+  assert(lj_gc2_ismarked(g, obj2gco(busy_tab)) == 1);
+  assert(lj_gc2_ssb_empty(g));
   lj_gc2_legacy_cycle_end(g);
   lua_pop(L, 1);
   lua_pop(L, 1);

@@ -95,6 +95,7 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.worker_async_progress, 0);
   la_store64_rlx(&g->gc2.thread_scan_claims, 0);
   la_store64_rlx(&g->gc2.thread_scan_busy, 0);
+  la_store64_rlx(&g->gc2.thread_scan_requeues, 0);
   la_store64_rlx(&g->gc2.sweep_owner_runs, 0);
   la_store64_rlx(&g->gc2.sweep_owner_arenas, 0);
   la_store64_rlx(&g->gc2.sweep_owner_live_cells, 0);
@@ -1885,6 +1886,21 @@ static TValue *gc2_stack_scan_top_worker(global_State *g, lua_State *L)
   return top;
 }
 
+static int gc2_thread_owner_scans(global_State *g, lua_State *th)
+{
+  uint32_t owner;
+  TGState *tg;
+  if (!g || !th)
+    return 0;
+  owner = la_load32_acq(&th->thr_owner);
+  if (owner == 0 || owner == LJ_THREAD_GCSCAN)
+    return 0;
+  tg = lj_tg_find_owner(g, owner);
+  if (!tg || (la_load8_acq(&tg->tg_flags) & TGF_DEAD))
+    return 0;
+  return (lua_State *)la_loadptr_acq((void *const *)&tg->cur_L) == th;
+}
+
 static void gc2_traverse_thread(global_State *g, lua_State *th)
 {
   LJStateClaim claim;
@@ -1895,7 +1911,13 @@ static void gc2_traverse_thread(global_State *g, lua_State *th)
     return;
   if (!lj_state_gcscan_claim(th, &claim)) {
     la_add64_rlx(&g->gc2.thread_scan_busy, 1);
-    return;  /* 05 section 5.7.2: running owner will scan at safepoint. */
+    if (!gc2_thread_owner_scans(g, th)) {
+      int pushed = gc2_grey_push(g, obj2gco(th));
+      lj_assertG(pushed, "gc2 busy thread requeue failed");
+      UNUSED(pushed);
+      la_add64_rlx(&g->gc2.thread_scan_requeues, 1);
+    }
+    return;  /* 05 section 5.7.2: owner scan or retry preserves work. */
   }
   la_add64_rlx(&g->gc2.thread_scan_claims, 1);
   lj_gc2_markmem(g, tvref(th->stack));

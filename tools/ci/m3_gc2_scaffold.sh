@@ -53,6 +53,7 @@ for needle in \
   'uint64_t worker_async_progress' \
   'uint64_t thread_scan_claims' \
   'uint64_t thread_scan_busy' \
+  'uint64_t thread_scan_requeues' \
   'uint64_t sweep_owner_runs' \
   'uint64_t sweep_owner_arenas' \
   'uint64_t sweep_owner_live_cells' \
@@ -139,10 +140,12 @@ for needle in \
   '05 section 5.6.3 parked worker scheduler' \
   'lj_state_gcscan_claim(lua_State *L, LJStateClaim *claim)' \
   'lj_state_gcscan_claim(th, &claim)' \
-  '05 section 5.7.2: running owner will scan at safepoint' \
+  'gc2_thread_owner_scans(global_State *g, lua_State *th)' \
+  '05 section 5.7.2: owner scan or retry preserves work' \
   'mt = gcref_acq(L->mt_thread)' \
   'la_add64_rlx(&g->gc2.thread_scan_claims' \
   'la_add64_rlx(&g->gc2.thread_scan_busy' \
+  'la_add64_rlx(&g->gc2.thread_scan_requeues' \
   '05 section 5.6.3 total worker progress contract' \
   'return lj_gc2_worker_drain(g, limit)' \
   'phase != LJ_GC2_MARK && phase != LJ_GC2_WEAK &&' \
