@@ -58,6 +58,8 @@ for needle in \
   'lj_tab_storetv(ls->L, lj_tab_set(ls->L, t, &key), &tv)' \
   'copyTVrel(sbufL(sbx), o, &tv)' \
   'settabV(sbufL(sbx), &tv, t)' \
+  'copyTVrel(J->L, o, &tv)' \
+  'lj_tab_storetv(J->L, val, &tmp)' \
   'lj_tab_storeint(L, lj_tab_newkey(L, dict, &tv), (int32_t)(i-1))'
 do
   if ! rg -F -q "$needle" "$ROOT/src"; then
@@ -110,6 +112,12 @@ fi
 if rg -n 'copyTV\(sbufL\(sbx\), o, &tv\)|settabV\(sbufL\(sbx\), o, t\)|setstrV\(sbufL\(sbx\), o,|setintV\(o,|setpriV\(o,|setcdataV\(sbufL\(sbx\), o,|setrawlightudV\(o,' \
     "$ROOT/src/lj_serialize.c"; then
   echo "guardrail: serializer decode outputs must release-publish" >&2
+  exit 1
+fi
+
+if rg -n 'settabV\(J->L, o, t\)|snap_restoreval\(J, T, ex, snapno, rfilt, irs->op2, val\)|val->u32\.hi' \
+    "$ROOT/src/lj_snap.c"; then
+  echo "guardrail: snapshot table restore slots must release-publish" >&2
   exit 1
 fi
 

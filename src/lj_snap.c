@@ -893,7 +893,11 @@ static void snap_unsink(jit_State *J, GCtrace *T, ExitState *ex,
     IRIns *irs, *irlast;
     GCtab *t = ir->o == IR_TNEW ? lj_tab_new(J->L, ir->op1, ir->op2) :
 				  lj_tab_dup(J->L, ir_ktab(&T->ir[ir->op1]));
-    settabV(J->L, o, t);
+    {
+      TValue tv;
+      settabV(J->L, &tv, t);
+      copyTVrel(J->L, o, &tv);
+    }
     irlast = &T->ir[T->snap[snapno].ref];
     for (irs = ir+1; irs < irlast; irs++)
       if (irs->r == RID_SINK && snap_sunk_store(T, ir, irs)) {
@@ -926,11 +930,13 @@ static void snap_unsink(jit_State *J, GCtrace *T, ExitState *ex,
 	  lj_ir_kvalue(J->L, &tmp, irk);
 	  val = lj_tab_set(J->L, t, &tmp);
 	  /* NOBARRIER: The table is new (marked white). */
-	  snap_restoreval(J, T, ex, snapno, rfilt, irs->op2, val);
+	  snap_restoreval(J, T, ex, snapno, rfilt, irs->op2, &tmp);
 	  if (LJ_SOFTFP32 && irs+1 < T->ir + T->nins && (irs+1)->o == IR_HIOP) {
-	    snap_restoreval(J, T, ex, snapno, rfilt, (irs+1)->op2, &tmp);
-	    val->u32.hi = tmp.u32.lo;
+	    TValue hi;
+	    snap_restoreval(J, T, ex, snapno, rfilt, (irs+1)->op2, &hi);
+	    tmp.u32.hi = hi.u32.lo;
 	  }
+	  lj_tab_storetv(J->L, val, &tmp);
 	}
       }
   }
