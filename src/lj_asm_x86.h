@@ -1401,6 +1401,10 @@ static void asm_hrefk(ASMState *as, IRIns *ir)
 	      ofs + (int32_t)offsetof(Node, key.it));
   }
 #endif
+  /* Guard HREFK's constant slot against a newer, smaller node generation. */
+  asm_guardcc(as, CC_B);
+  emit_gmroi(as, XG_ARITHi(XOg_CMP), node, -(int32_t)sizeof(TabNodeHdr),
+	     (int32_t)kslot->op2);
 }
 
 static void asm_uref(ASMState *as, IRIns *ir)

@@ -191,7 +191,8 @@ load the mask from the acquired node header instead of the legacy
 string-key slot addressing, but still needs the original RETIRING/FORWARD/CAS
 write protocol for migration correctness. Regular x64 dynamic `IR_HREF`
 lowering also uses the node-header mask instead of `GCtab.hmask`; constant-slot
-HREFK guards and hash stores remain on the original 08/06 plan. `lj_vm_next`
+HREFK lowering has an interim node-header bounds guard before reading its
+recorded slot, while hash stores remain on the original 08/06 plan. `lj_vm_next`
 hash traversal, the `BC_ITERN` array/hash iterator path, and `ipairs_aux` array
 iteration load candidate values into registers before nil decisions and copy
 those same snapshots to their results; `BC_TSETV`/`BC_TSETS`/`BC_TSETB` load
