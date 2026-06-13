@@ -105,7 +105,6 @@ void lj_dispatch_init_hotcount(global_State *g)
 #define DISPMODE_RET	0x02	/* Override return dispatch. */
 #define DISPMODE_INS	0x04	/* Override instruction dispatch. */
 #define DISPMODE_JIT	0x10	/* JIT compiler on. */
-#define DISPMODE_REC	0x20	/* Recording active. */
 #define DISPMODE_PROF	0x40	/* Profiling active. */
 
 static void dispatch_setins_cells(ASMFunction *disp, ASMFunction f)
@@ -140,6 +139,22 @@ static void dispatch_copycall(ASMFunction *disp)
     disp[i] = makeasmfunc(lj_bc_ofs[i]);
 }
 
+#if LJ_HASJIT
+static void dispatch_setrecord(ASMFunction *disp, uint8_t mode)
+{
+  ASMFunction f = (mode & DISPMODE_PROF) ? lj_vm_profhook : lj_vm_record;
+  uint32_t i;
+  disp[GG_LEN_DDISP+BC_FORL] = disp[GG_LEN_DDISP+BC_IFORL];
+  disp[GG_LEN_DDISP+BC_ITERL] = disp[GG_LEN_DDISP+BC_IITERL];
+  disp[GG_LEN_DDISP+BC_ITERN] = &lj_vm_IITERN;
+  disp[GG_LEN_DDISP+BC_LOOP] = disp[GG_LEN_DDISP+BC_ILOOP];
+  for (i = 0; i < BC_FUNCF; i++)
+    disp[i] = f;
+  dispatch_setins_cells(disp, f);
+  dispatch_setcall(disp, lj_vm_callhook);
+}
+#endif
+
 /* Update dispatch table depending on various flags. */
 void LJ_FASTCALL lj_dispatch_update(global_State *g, int nolock)
 {
@@ -150,9 +165,10 @@ void LJ_FASTCALL lj_dispatch_update(global_State *g, int nolock)
   uint8_t oldmode = g->dispatchmode;
   uint8_t mode = 0;
 #if LJ_HASJIT
-  mode |= (G2J(g)->flags & JIT_F_ON) ? DISPMODE_JIT : 0;
-  mode |= G2J(g)->state != LJ_TRACE_IDLE ?
-	    (DISPMODE_REC|DISPMODE_INS|DISPMODE_CALL) : 0;
+  jit_State *J = G2J(g);
+  TGState *tg = G2TG(g);
+  int rec_owner = J->state != LJ_TRACE_IDLE && lj_jit_token_held(J);
+  mode |= (J->flags & JIT_F_ON) ? DISPMODE_JIT : 0;
 #endif
 #if LJ_HASPROFILE
   mode |= (g->hookmask & HOOK_PROFILE) ? (DISPMODE_PROF|DISPMODE_INS) : 0;
@@ -165,8 +181,8 @@ void LJ_FASTCALL lj_dispatch_update(global_State *g, int nolock)
     ASMFunction f_forl, f_iterl, f_itern, f_loop, f_funcf, f_funcv;
     g->dispatchmode = mode;
 
-    /* Hotcount if JIT is on, but not while recording. */
-    if ((mode & (DISPMODE_JIT|DISPMODE_REC)) == DISPMODE_JIT) {
+    /* Hotcount if JIT is on. Recording overlays are TG-local below. */
+    if ((mode & DISPMODE_JIT)) {
       f_forl = makeasmfunc(lj_bc_ofs[BC_FORL]);
       f_iterl = makeasmfunc(lj_bc_ofs[BC_ITERL]);
       f_itern = makeasmfunc(lj_bc_ofs[BC_ITERN]);
@@ -188,7 +204,7 @@ void LJ_FASTCALL lj_dispatch_update(global_State *g, int nolock)
     disp[GG_LEN_DDISP+BC_LOOP] = f_loop;
 
     /* Set dynamic instruction dispatch. */
-    if ((oldmode ^ mode) & (DISPMODE_PROF|DISPMODE_REC|DISPMODE_INS)) {
+    if ((oldmode ^ mode) & (DISPMODE_PROF|DISPMODE_INS)) {
       /* Need to update the whole table. */
       if (!(mode & DISPMODE_INS)) {  /* No ins dispatch? */
 	/* Copy static dispatch table to dynamic dispatch table. */
@@ -202,9 +218,7 @@ void LJ_FASTCALL lj_dispatch_update(global_State *g, int nolock)
 	  disp[BC_RET1] = lj_vm_rethook;
 	}
       } else {
-	/* The recording dispatch also checks for hooks. */
-	ASMFunction f = (mode & DISPMODE_PROF) ? lj_vm_profhook :
-			(mode & DISPMODE_REC) ? lj_vm_record : lj_vm_inshook;
+	ASMFunction f = (mode & DISPMODE_PROF) ? lj_vm_profhook : lj_vm_inshook;
 	uint32_t i;
 	for (i = 0; i < BC_FUNCF; i++)
 	  disp[i] = f;
@@ -248,10 +262,14 @@ void LJ_FASTCALL lj_dispatch_update(global_State *g, int nolock)
 	if ((mode & DISPMODE_JIT) && !(oldmode & DISPMODE_JIT))
 	  lj_dispatch_init_hotcount(g);
 #endif
-	lj_tg_sync_dispatch(g);
 	if (la_load32_acq(&g->gc2.n_threads) > 1)
 	  redispatch = 1;
   }
+  lj_tg_sync_dispatch(g);
+#if LJ_HASJIT
+  if (rec_owner && tg)
+    dispatch_setrecord(tg->dispatch, mode);
+#endif
 #if LJ_HASPROFILE && !LJ_PROFILE_SIGPROF
   if (profile_locked) lj_profile_unlock();
 #else

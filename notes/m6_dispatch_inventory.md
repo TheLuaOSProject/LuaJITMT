@@ -12,6 +12,9 @@ M6 x64 dispatch localization inventory:
   `global_State *` from `TGState.gl` and `jit_State *` from `g->jitp` instead
   of deriving them from fixed `DISPATCH` offsets. `vm_x64.dasc` no longer has
   `DISPATCH_GL`, `DISPATCH_J`, `TG_DISP2G`, or `TG_DISP2J` uses.
+- Recording dispatch is TG-local. The global dispatch template no longer has a
+  recording mode; `lj_dispatch_update()` overlays record/call hooks only onto
+  the current TG when that TG holds the recorder token.
 - The JIT emitter also assumes `RID_DISPATCH` can address arbitrary constants
   relative to the recorder TG. Before trace execution is safe on secondary TGs,
   arbitrary `dispofs()` addressing must stop using `RID_DISPATCH`; only fixed

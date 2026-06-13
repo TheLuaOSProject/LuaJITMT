@@ -35,9 +35,12 @@ for needle in \
   'load_DISPATCH RB' \
   'TG_OFS_DISPATCH' \
   'TGPOLL, dword [DISPATCH+DISPATCH_TG(poll)]' \
+  'static void dispatch_setrecord' \
+  'rec_owner = J->state != LJ_TRACE_IDLE && lj_jit_token_held(J)' \
+  'dispatch_setrecord(tg->dispatch, mode)' \
   'Secondary TGs interpret until RID_DISPATCH is local'
 do
-  if ! rg -F -q "$needle" "$ROOT/src/vm_x64.dasc"; then
+  if ! rg -F -q "$needle" "$ROOT/src/vm_x64.dasc" "$ROOT/src/lj_dispatch.c"; then
     echo "guardrail: missing x64 dispatch-localization marker: $needle" >&2
     exit 1
   fi
@@ -56,6 +59,11 @@ fi
 if rg -n 'GG_G2TGDISP|L:RB->glref.*dispatch|add DISPATCH, GG_G2TGDISP' \
     "$ROOT/src/vm_x64.dasc"; then
   echo "guardrail: x64 VM entry must use the running TG dispatch table" >&2
+  exit 1
+fi
+
+if rg -n 'DISPMODE_REC' "$ROOT/src/lj_dispatch.c"; then
+  echo "guardrail: recording dispatch must stay TG-local, not global mode" >&2
   exit 1
 fi
 
