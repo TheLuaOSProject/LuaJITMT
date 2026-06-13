@@ -2232,11 +2232,9 @@ LJFOLDF(fwd_href_tdup)
   return NEXTFOLD;
 }
 
-/* We can safely FOLD/CSE array/hash refs and field loads, since there
-** are no corresponding stores. But we need to check for any NEWREF with
-** an aliased table, as it may invalidate all of the pointers and fields.
-** Only HREF needs the NEWREF check -- AREF and HREFK already depend on
-** FLOADs. And NEWREF itself is treated like a store (see below).
+/* We can safely FOLD/CSE array/hash refs, since there are no corresponding
+** stores. But we need to check for any NEWREF with an aliased table, as it
+** may invalidate refs. And NEWREF itself is treated like a store (see below).
 ** LREF is constant (per trace) since coroutine switches are not inlined.
 */
 LJFOLD(FLOAD TNEW IRFL_TAB_ASIZE)
@@ -2272,14 +2270,24 @@ LJFOLDF(fload_tab_tdup_hmask)
 }
 
 LJFOLD(HREF any any)
+LJFOLDF(href_ah)
+{
+  TRef tr = lj_opt_cse(J);
+  return lj_opt_fwd_tptr(J, tref_ref(tr)) ? tr : EMITFOLD;
+}
+
+/* Table shape/storage fields are mutable in the lockless runtime: array/node
+** vectors are release-published and retired, and asize/hmask can change on
+** resize. Keep each recorded access as a fresh load instead of CSE'ing it
+** under the old "no corresponding stores" assumption.
+*/
 LJFOLD(FLOAD any IRFL_TAB_ARRAY)
 LJFOLD(FLOAD any IRFL_TAB_NODE)
 LJFOLD(FLOAD any IRFL_TAB_ASIZE)
 LJFOLD(FLOAD any IRFL_TAB_HMASK)
-LJFOLDF(fload_tab_ah)
+LJFOLDF(fload_tab_mut)
 {
-  TRef tr = lj_opt_cse(J);
-  return lj_opt_fwd_tptr(J, tref_ref(tr)) ? tr : EMITFOLD;
+  return EMITFOLD;
 }
 
 /* Strings are immutable, so we can safely FOLD/CSE the related FLOAD. */

@@ -217,6 +217,12 @@ trace's PCs/parents, run by the leader between cycles with token.
    recorded AH pointer, never on asize_c inside the trace — asize_c is
    only for the pre-trace shape test. Then stale pairs are impossible.)
    IMPLEMENT the latter.
+   Current implementation status: before the full `AHdr`/`NHdr` reshape, the
+   legacy `GCtab` table-field `FLOAD`s for array/node/asize/hmask are emitted
+   as fresh loads instead of being CSE'd under the old "no corresponding
+   stores" assumption. This is an interim safety step for the release-published
+   and retired legacy vectors, not a replacement for the original header-based
+   FLOAD-indirection target above.
 2. **TDUP/TNEW colo**: colo removed (06 §6.2) — recorder paths that
    special-case colocated arrays (`lj_record_tnew`, table.new fast func)
    simplify.
