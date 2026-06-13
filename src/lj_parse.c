@@ -206,6 +206,11 @@ LJ_NORET static void err_limit(FuncState *fs, uint32_t limit, const char *what)
 #define tvhaskslot(o)	((o)->u32.hi == 0)
 #define tvkslot(o)	((o)->u32.lo)
 
+static void const_slot_store(TValue *o, BCReg slot)
+{
+  tv_rawstore_rel(o, (uint64_t)slot);
+}
+
 /* Add a number constant. */
 static BCReg const_num(FuncState *fs, ExpDesc *e)
 {
@@ -215,7 +220,7 @@ static BCReg const_num(FuncState *fs, ExpDesc *e)
   o = lj_tab_set(L, fs->kt, &e->u.nval);
   if (tvhaskslot(o))
     return tvkslot(o);
-  o->u64 = fs->nkn;
+  const_slot_store(o, fs->nkn);
   return fs->nkn++;
 }
 
@@ -229,7 +234,7 @@ static BCReg const_gc(FuncState *fs, GCobj *gc, uint32_t itype)
   o = lj_tab_set(L, fs->kt, &key);
   if (tvhaskslot(o))
     return tvkslot(o);
-  o->u64 = fs->nkgc;
+  const_slot_store(o, fs->nkgc);
   return fs->nkgc++;
 }
 
@@ -247,7 +252,7 @@ GCstr *lj_parse_keepstr(LexState *ls, const char *str, size_t len)
   lua_State *L = ls->L;
   GCstr *s = lj_str_new(L, str, len);
   TValue *tv = lj_tab_setstr(L, ls->fs->kt, s);
-  if (tvisnil(tv)) setboolV(tv, 1);
+  if (tvisnil(tv)) lj_tab_storebool(L, tv, 1);
   lj_gc_check(L);
   return s;
 }

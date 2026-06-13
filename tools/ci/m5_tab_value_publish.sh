@@ -51,6 +51,9 @@ for needle in \
   'lj_tab_storenilraw(&n->val)' \
   'lj_tab_storenilraw(tv)' \
   'lj_tab_storenilraw(&node[i].val)' \
+  'const_slot_store(o, fs->nkn)' \
+  'const_slot_store(o, fs->nkgc)' \
+  'lj_tab_storebool(L, tv, 1)' \
   'lj_tab_storeint(L, lj_tab_newkey(L, dict, &tv), (int32_t)(i-1))'
 do
   if ! rg -F -q "$needle" "$ROOT/src"; then
@@ -86,6 +89,11 @@ fi
 if rg -n 'setnilV\(&array\[i\]\)|setnilV\(&n->val\)|setnilV\(tv\)|setnilV\(&node\[i\]\.val\)' \
     "$ROOT/src/lj_tab.c" "$ROOT/src/lj_gc.c"; then
   echo "guardrail: shared table clearing must release-publish nil" >&2
+  exit 1
+fi
+
+if rg -n 'o->u64 = fs->nk|setboolV\(tv, 1\)' "$ROOT/src/lj_parse.c"; then
+  echo "guardrail: parser constant table slot markers must release-publish" >&2
   exit 1
 fi
 
