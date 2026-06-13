@@ -233,6 +233,15 @@ typedef uint32_t ExitNo;
 typedef uint32_t TraceNo;	/* Used to pass around trace numbers. */
 typedef uint16_t TraceNo1;	/* Stored trace number. */
 
+typedef struct TraceVec {
+  MSize sizetrace;	/* Number of trace slots. */
+  uint64_t retire_epoch;  /* Safepoint epoch when retired. */
+  struct TraceVec *retired_next;  /* Retired trace vectors. */
+  GCRef slot[1];	/* Trace slots. */
+} TraceVec;
+#define tracevec_size(sz) \
+  ((GCSize)offsetof(TraceVec, slot) + (GCSize)(sz)*sizeof(GCRef))
+
 /* Type of link. ORDER LJ_TRLINK */
 typedef enum {
   LJ_TRLINK_NONE,		/* Incomplete trace. No link, yet. */
@@ -294,10 +303,7 @@ static LJ_AINLINE GCtrace *traceref_fromgco(GCobj *o)
   return (uintptr_t)o <= LJ_TRACE_PENDING ? NULL : gco2trace(o);
 }
 #define tracevec_acq(J) \
-  ((GCRef *)la_loadptr_acq((void *const *)&(J)->trace))
-#define traceref(J, n) \
-  check_exp((n)>0 && (MSize)(n)<J->sizetrace, \
-	    traceref_fromgco(gcref_acq(tracevec_acq(J)[(n)])))
+  ((TraceVec *)la_loadptr_acq((void *const *)&(J)->tracev))
 #define traceslot_pending(J, n) \
   setgcrefrel((J)->trace[(n)], (const GCobj *)LJ_TRACE_PENDING)
 #define traceslot_publish(J, n, T) \
@@ -508,9 +514,11 @@ typedef struct jit_State {
 #endif
   uint8_t retryrec;	/* Retry recording. */
 
-  GCRef *trace;		/* Array of traces. */
+  TraceVec *tracev;	/* RCU-published trace vector. */
+  TraceVec *retiredtracev;  /* Retired trace vectors awaiting SMR. */
+  GCRef *trace;		/* Token-held trace slot mirror. */
   TraceNo freetrace;	/* Start of scan for next free trace. */
-  MSize sizetrace;	/* Size of trace array. */
+  MSize sizetrace;	/* Token-held trace vector size mirror. */
   IRRef1 ktrace;	/* Reference to KGC with GCtrace. */
 
   IRRef1 chain[IR__MAX];  /* IR instruction skip-list chain anchors. */
@@ -556,6 +564,13 @@ typedef struct jit_State {
   int prof_mode;	/* Profiling mode: 0, 'f', 'l'. */
 #endif
 } jit_State;
+
+static LJ_AINLINE GCtrace *traceref(jit_State *J, TraceNo n)
+{
+  TraceVec *tv = tracevec_acq(J);
+  return check_exp((n)>0 && tv != NULL && (MSize)(n)<tv->sizetrace,
+    traceref_fromgco(gcref_acq(tv->slot[(n)])));
+}
 
 #ifdef LUA_USE_ASSERT
 #define lj_assertJ(c, ...)	lj_assertG_(J2G(J), (c), __VA_ARGS__)

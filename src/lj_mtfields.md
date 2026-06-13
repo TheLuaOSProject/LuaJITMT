@@ -16,7 +16,7 @@ whenever a shared field is introduced or migrated.
 | Node.key | write-once | CAS rlx claim; read rlx and re-check |
 | Node.next | chain link | CAS rel insert; load acq walk |
 | strtab bucket head | chain link | CAS rel insert; load acq walk; bit0 = Harris mark, bit1 = secondary hash |
-| J->trace[i] | publish-once per id | store rel after mcode sync; load acq |
+| J->tracev / TraceVec.slot[i] | RCU vector + publish-once slots | vector store rel / load acq; slot store rel after mcode sync / load acq |
 | BCIns at patch sites | code word | single 32-bit store rel (`bc_publish`) |
 | GCtrace.exittab[i] | retarget word | store rel; loaded by indirect branch in mcode |
 | L->thr_owner | claim word | CAS acq_rel |

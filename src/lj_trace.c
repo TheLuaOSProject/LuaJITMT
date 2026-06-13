@@ -12,6 +12,7 @@
 
 #include "lj_arena.h"
 #include "lj_gc.h"
+#include "lj_gc2.h"
 #include "lj_err.h"
 #include "lj_debug.h"
 #include "lj_str.h"
@@ -58,10 +59,98 @@ void lj_trace_err_info(jit_State *J, TraceError e)
 ** are copied to a new (compact) GCtrace object.
 */
 
+static TraceVec *tracevec_new(lua_State *L, MSize sizetrace)
+{
+  TraceVec *tv = (TraceVec *)lj_mem_new(L, tracevec_size(sizetrace));
+  tv->sizetrace = sizetrace;
+  tv->retire_epoch = 0;
+  tv->retired_next = NULL;
+  memset(tv->slot, 0, sizetrace*sizeof(GCRef));
+  return tv;
+}
+
+static void tracevec_free(global_State *g, TraceVec *tv)
+{
+  lj_mem_free(g, tv, tracevec_size(tv->sizetrace));
+}
+
+static void tracevec_publish(jit_State *J, TraceVec *tv)
+{
+  J->trace = tv->slot;
+  J->sizetrace = tv->sizetrace;
+  la_storeptr_rel((void **)&J->tracev, tv);
+}
+
+static void tracevec_retired_push(jit_State *J, TraceVec *tv)
+{
+  void *head = la_loadptr_acq((void *const *)&J->retiredtracev);
+  do {
+    tv->retired_next = (TraceVec *)head;
+  } while (!la_casptr((void **)&J->retiredtracev, &head, tv,
+		      LA_ACQ_REL, LA_ACQ));  /* 08 section 8.3 RCU retire. */
+}
+
+static void tracevec_retire(jit_State *J, TraceVec *tv)
+{
+  if (tv) {
+    la_store64_rel(&tv->retire_epoch, la_load64_acq(&J2G(J)->gc2.hs_epoch));
+    tracevec_retired_push(J, tv);
+  }
+}
+
+uint32_t lj_trace_reclaim_retired(global_State *g, uint64_t completed_epoch)
+{
+  jit_State *J = G2J(g);
+  TraceVec *tv;
+  uint32_t reclaimed = 0;
+  if (!g || completed_epoch == 0)
+    return 0;
+  tv = (TraceVec *)la_xchgptr_acqrel((void **)&J->retiredtracev, NULL);
+  while (tv) {
+    TraceVec *next = tv->retired_next;
+    tv->retired_next = NULL;
+    if (la_load64_acq(&tv->retire_epoch) < completed_epoch) {
+      tracevec_free(g, tv);
+      reclaimed++;
+    } else {
+      tracevec_retired_push(J, tv);
+    }
+    tv = next;
+  }
+  return reclaimed;
+}
+
+void lj_trace_freeretired(global_State *g)
+{
+  jit_State *J = G2J(g);
+  TraceVec *tv = (TraceVec *)la_xchgptr_acqrel((void **)&J->retiredtracev,
+					       NULL);
+  while (tv) {
+    TraceVec *next = tv->retired_next;
+    tracevec_free(g, tv);
+    tv = next;
+  }
+}
+
+void lj_trace_markvecs(global_State *g, int gc2)
+{
+  jit_State *J = G2J(g);
+  TraceVec *tv = tracevec_acq(J);
+  if (tv) {
+    if (gc2) lj_gc2_markmem(g, tv); else lj_gc_arena_markmem(g, tv);
+  }
+  for (tv = (TraceVec *)la_loadptr_acq((void *const *)&J->retiredtracev);
+       tv != NULL;
+       tv = (TraceVec *)la_loadptr_acq((void *const *)&tv->retired_next)) {
+    if (gc2) lj_gc2_markmem(g, tv); else lj_gc_arena_markmem(g, tv);
+  }
+}
+
 /* Find a free trace number. */
 static TraceNo trace_findfree(jit_State *J)
 {
   MSize osz, lim;
+  TraceVec *oldtv, *newtv;
   if (J->freetrace == 0)
     J->freetrace = 1;
   for (; J->freetrace < J->sizetrace; J->freetrace++)
@@ -73,9 +162,12 @@ static TraceNo trace_findfree(jit_State *J)
   osz = J->sizetrace;
   if (osz >= lim)
     return 0;  /* Too many traces. */
-  lj_mem_growvec(J->L, J->trace, J->sizetrace, lim, GCRef);
-  for (; osz < J->sizetrace; osz++)
-    traceslot_clear(J, osz);
+  oldtv = J->tracev;
+  newtv = tracevec_new(J->L, lim);
+  if (oldtv)
+    memcpy(newtv->slot, oldtv->slot, osz*sizeof(GCRef));
+  tracevec_publish(J, newtv);
+  tracevec_retire(J, oldtv);
   return J->freetrace;
 }
 
@@ -424,7 +516,9 @@ void lj_trace_freestate(global_State *g)
   lj_mem_freevec(g, J->snapmapbuf, J->sizesnapmap, SnapEntry);
   lj_mem_freevec(g, J->snapbuf, J->sizesnap, SnapShot);
   lj_mem_freevec(g, J->irbuf + J->irbotlim, J->irtoplim - J->irbotlim, IRIns);
-  lj_mem_freevec(g, J->trace, J->sizetrace, GCRef);
+  if (J->tracev)
+    tracevec_free(g, J->tracev);
+  lj_trace_freeretired(g);
 }
 
 /* -- Penalties and blacklisting ------------------------------------------ */

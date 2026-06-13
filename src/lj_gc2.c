@@ -299,7 +299,7 @@ static void gc2_scan_global_roots(global_State *g)
 #if LJ_HASJIT
   {
     jit_State *J = G2J(g);
-    lj_gc2_markmem(g, J->trace);
+    lj_trace_markvecs(g, 1);
     lj_gc2_markmem(g, J->irbuf ? J->irbuf + J->irbotlim : NULL);
     lj_gc2_markmem(g, J->snapbuf);
     lj_gc2_markmem(g, J->snapmapbuf);

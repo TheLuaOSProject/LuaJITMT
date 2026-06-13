@@ -31,6 +31,10 @@ LJ_FUNC void lj_trace_flush(jit_State *J, TraceNo traceno);
 LJ_FUNC int lj_trace_flushall(lua_State *L);
 LJ_FUNC void lj_trace_initstate(global_State *g);
 LJ_FUNC void lj_trace_freestate(global_State *g);
+LJ_FUNC uint32_t lj_trace_reclaim_retired(global_State *g,
+					  uint64_t completed_epoch);
+LJ_FUNC void lj_trace_freeretired(global_State *g);
+LJ_FUNC void lj_trace_markvecs(global_State *g, int gc2);
 
 /* Event handling. */
 LJ_FUNC void lj_trace_ins(jit_State *J, const BCIns *pc);
@@ -50,6 +54,9 @@ LJ_FUNC uintptr_t LJ_FASTCALL lj_trace_unwind(jit_State *J, uintptr_t addr, Exit
 #define lj_trace_flushall(L)	(UNUSED(L), 0)
 #define lj_trace_initstate(g)	UNUSED(g)
 #define lj_trace_freestate(g)	UNUSED(g)
+#define lj_trace_reclaim_retired(g, e)	(UNUSED(g), UNUSED(e), 0)
+#define lj_trace_freeretired(g)	UNUSED(g)
+#define lj_trace_markvecs(g, gc2)	(UNUSED(g), UNUSED(gc2))
 #define lj_trace_abort(g)	UNUSED(g)
 #define lj_trace_end(J)		UNUSED(J)
 

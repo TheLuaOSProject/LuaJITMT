@@ -72,9 +72,11 @@ hotcount path are advisory only — acceptable staleness).
 
 Current M5 bridge: C-side `traceref()` acquire-loads trace slots, in-flight
 slots use the pending sentinel instead of `&J->cur`, and final slots are
-release-published before bytecode/exit/link go-signals. The full trace-vector
-RCU growth and exittab/no-code-patching design above remains the original
-target.
+release-published before bytecode/exit/link go-signals. `TraceVec` now pairs
+the acquired vector pointer with its size; growth allocate-copies and
+release-publishes a new header, then retires the old header through the
+safepoint epoch drain. The remaining original target here is the full trace
+flush handshake/deferred mcode retirement and non-x64 exit-patcher removal.
 
 ## 8.4 Bytecode patching & side exits — no code patching, ever
 
@@ -233,9 +235,8 @@ trace's PCs/parents, run by the leader between cycles with token.
 Current M5 bridge: x64 flush paths now release-reset every live `exittab` slot
 back to the legacy interpreter exit stub before trace slots are cleared or a
 root trace is unlinked. This implements the data-retargeting part of step 2 for
-the supported x64 path. The full `HS_FLUSHJ|HS_EXIT_TRACES` handshake,
-trace-vector RCU retirement, and deferred mcode reclamation remain the original
-target.
+the supported x64 path. The full `HS_FLUSHJ|HS_EXIT_TRACES` handshake and
+deferred mcode reclamation remain the original target.
 
 ## 8.8 Recorder/IR changes inventory
 

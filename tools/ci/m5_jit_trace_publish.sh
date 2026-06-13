@@ -3,12 +3,18 @@
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+CC=${CC:-cc}
+CFLAGS=${CFLAGS:-"-std=gnu99 -O2 -Wall -Wextra -Werror -mcx16"}
 JOBS=${JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)}
+OUT_TRACEVEC=${TMPDIR:-/tmp}/lj_t-jit-tracevec
 
 for needle in \
   'LJ_TRACE_PENDING' \
   'traceref_fromgco(GCobj *o)' \
-  'gcref_acq(tracevec_acq(J)[(n)])' \
+  'TraceVec *tracev' \
+  'TraceVec *retiredtracev' \
+  'TraceVec *tv = tracevec_acq(J)' \
+  'gcref_acq(tv->slot[(n)])' \
   'traceslot_pending(J, n)' \
   'traceslot_publish(J, n, T)' \
   'traceslot_clear(J, n)' \
@@ -23,6 +29,21 @@ for needle in \
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_jit.h"; then
     echo "guardrail: missing trace publication helper: $needle" >&2
+    exit 1
+  fi
+done
+
+for needle in \
+  'tracevec_new(lua_State *L, MSize sizetrace)' \
+  'tracevec_publish(J, newtv)' \
+  'tracevec_retire(J, oldtv)' \
+  'lj_trace_reclaim_retired(global_State *g, uint64_t completed_epoch)' \
+  'lj_trace_reclaim_retired(g, epoch)' \
+  'lj_trace_markvecs(g, 1)' \
+  'lj_trace_markvecs(g, 0)'
+do
+  if ! rg -F -q "$needle" "$ROOT/src/lj_trace.c" "$ROOT/src/lj_safepoint.c" "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc2.c"; then
+    echo "guardrail: missing trace-vector RCU/SMR bridge: $needle" >&2
     exit 1
   fi
 done
@@ -80,6 +101,14 @@ if [ -n "$hits" ]; then
   exit 1
 fi
 
+hits=$(rg -n -- 'lj_mem_growvec\(J->L, J->trace|lj_mem_freevec\(g, J->trace|gcref\(J->trace' \
+  "$ROOT/src" "$ROOT/tests" || true)
+if [ -n "$hits" ]; then
+  echo "guardrail: trace vectors must use TraceVec RCU helpers, not raw slot vectors:" >&2
+  echo "$hits" >&2
+  exit 1
+fi
+
 hits=$(rg -n -- 'pt->trace\b|->link\b|->nextroot\b|->nextside\b' \
   "$ROOT/src/lj_trace.c" "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc2.c" \
   "$ROOT/src/lib_jit.c" "$ROOT/src/lj_bcwrite.c" || true)
@@ -130,6 +159,10 @@ if ! rg -F -q 'm5_jit_trace_publish.sh' "$ROOT/tools/ci/m5_concurrent_objects.sh
 fi
 
 make -C "$ROOT/src" -j"$JOBS" >/dev/null
+
+"$CC" $CFLAGS -I"$ROOT/src" "$ROOT/tests/t-jit-tracevec.c" \
+  "$ROOT/src/libluajit.a" -lm -ldl -pthread -o "$OUT_TRACEVEC"
+timeout 20s "$OUT_TRACEVEC"
 
 "$ROOT/src/luajit" -e '
 local util = require"jit.util"

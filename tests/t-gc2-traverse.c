@@ -347,9 +347,11 @@ static GCtrace *find_trace(global_State *g)
 {
   jit_State *J = G2J(g);
   MSize i;
-  for (i = 1; i < J->sizetrace; i++)
-    if (gcref(J->trace[i]) != NULL)
-      return (GCtrace *)gcref(J->trace[i]);
+  for (i = 1; i < J->sizetrace; i++) {
+    GCtrace *T = traceref(J, i);
+    if (T != NULL)
+      return T;
+  }
   return NULL;
 }
 
