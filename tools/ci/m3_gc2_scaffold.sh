@@ -14,13 +14,20 @@ make -C "$ROOT/src" -j"$JOBS" >/dev/null
 for needle in \
   'uint64_t fixpoint_rounds' \
   'uint64_t fixpoint_hits' \
+  'GCRef *weak_stack' \
+  'uint64_t weak_count' \
   'uint64_t weak_tables_seen' \
   'uint64_t weak_tables_weakkey' \
   'uint64_t weak_tables_weakval' \
   'uint64_t weak_tables_allweak' \
+  'uint64_t weak_tables_queued' \
+  'uint64_t weak_tables_overflow' \
   'uint64_t weak_keys_marked' \
   'uint64_t weak_values_marked' \
-  'gc2_note_weak_table(global_State *g, int weak)' \
+  'gc2_weak_record(global_State *g, GCtab *t)' \
+  'lj_gc2_weak_snapshot_count(global_State *g)' \
+  'lj_gc2_weak_snapshot_tab(global_State *g' \
+  'gc2_note_weak_table(global_State *g, GCtab *t, int weak)' \
   'lj_gc2_barrier_tvn_g(global_State *g, cTValue *tv' \
   'lj_gc2_legacy_weak_begin(global_State *g)' \
   'lj_gc2_barrier_weak_key(lua_State *L, GCtab *t' \

@@ -629,12 +629,21 @@ static void make_weak_table(lua_State *L, const char *mode,
   lua_setmetatable(L, -4);
 }
 
+static int weak_snapshot_has(global_State *g, GCtab *t)
+{
+  uint32_t i, n = lj_gc2_weak_snapshot_count(g);
+  for (i = 0; i < n; i++)
+    if (lj_gc2_weak_snapshot_tab(g, i) == t)
+      return 1;
+  return 0;
+}
+
 static void test_weak_tables(lua_State *L, global_State *g, TGState *tg)
 {
   GCtab *weakv, *keyv, *valv;
   GCtab *weakk, *keyk, *valk;
   GCtab *weakkv, *keykv, *valkv;
-  uint64_t seen0, weakkey0, weakval0, allweak0;
+  uint64_t seen0, weakkey0, weakval0, allweak0, queued0, overflow0;
 
   make_weak_table(L, "v", &weakv, &keyv, &valv);
   make_weak_table(L, "k", &weakk, &keyk, &valk);
@@ -643,8 +652,11 @@ static void test_weak_tables(lua_State *L, global_State *g, TGState *tg)
   weakkey0 = la_load64_acq(&g->gc2.weak_tables_weakkey);
   weakval0 = la_load64_acq(&g->gc2.weak_tables_weakval);
   allweak0 = la_load64_acq(&g->gc2.weak_tables_allweak);
+  queued0 = la_load64_acq(&g->gc2.weak_tables_queued);
+  overflow0 = la_load64_acq(&g->gc2.weak_tables_overflow);
 
   lj_gc2_legacy_mark_begin(g);
+  assert(lj_gc2_weak_snapshot_count(g) == 0);
   assert(lj_gc2_markobj(g, obj2gco(weakv)) == 1);
   assert(lj_gc2_markobj(g, obj2gco(weakk)) == 1);
   assert(lj_gc2_markobj(g, obj2gco(weakkv)) == 1);
@@ -660,6 +672,12 @@ static void test_weak_tables(lua_State *L, global_State *g, TGState *tg)
   assert(la_load64_acq(&g->gc2.weak_tables_weakkey) == weakkey0 + 2u);
   assert(la_load64_acq(&g->gc2.weak_tables_weakval) == weakval0 + 2u);
   assert(la_load64_acq(&g->gc2.weak_tables_allweak) == allweak0 + 1u);
+  assert(la_load64_acq(&g->gc2.weak_tables_queued) == queued0 + 3u);
+  assert(la_load64_acq(&g->gc2.weak_tables_overflow) == overflow0);
+  assert(lj_gc2_weak_snapshot_count(g) == 3u);
+  assert(weak_snapshot_has(g, weakv));
+  assert(weak_snapshot_has(g, weakk));
+  assert(weak_snapshot_has(g, weakkv));
   lj_gc2_legacy_cycle_end(g);
   lua_pop(L, 9);
 }

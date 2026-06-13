@@ -29,9 +29,12 @@
 
 #define GC2_GREY_INIT	256u
 #define GC2_GREY_LIMIT	((MSize)(LJ_MAX_MEM32 / sizeof(GCRef)))
+#define GC2_WEAK_INIT	128u
+#define GC2_WEAK_LIMIT	((MSize)(LJ_MAX_MEM32 / sizeof(GCRef)))
 
 static int gc2_grey_grow(global_State *g);
 static int gc2_grey_empty(global_State *g);
+static void gc2_weak_reset(global_State *g);
 
 void lj_gc2_init(global_State *g)
 {
@@ -70,10 +73,15 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.worker_runs, 0);
   la_store64_rlx(&g->gc2.worker_grey_drained, 0);
   la_store64_rlx(&g->gc2.worker_ssb_converted, 0);
+  g->gc2.weak_stack = NULL;
+  g->gc2.weak_capacity = 0;
+  g->gc2.weak_count = 0;
   la_store64_rlx(&g->gc2.weak_tables_seen, 0);
   la_store64_rlx(&g->gc2.weak_tables_weakkey, 0);
   la_store64_rlx(&g->gc2.weak_tables_weakval, 0);
   la_store64_rlx(&g->gc2.weak_tables_allweak, 0);
+  la_store64_rlx(&g->gc2.weak_tables_queued, 0);
+  la_store64_rlx(&g->gc2.weak_tables_overflow, 0);
   la_store64_rlx(&g->gc2.weak_keys_marked, 0);
   la_store64_rlx(&g->gc2.weak_values_marked, 0);
   g->gc2.tg_list = NULL;
@@ -91,6 +99,12 @@ void lj_gc2_fini(global_State *g)
     g->gc2.grey_capacity = 0;
     g->gc2.grey_top = 0;
     g->gc2.grey_bottom = 0;
+  }
+  if (g && g->gc2.weak_stack) {
+    lj_mem_freevec(g, g->gc2.weak_stack, g->gc2.weak_capacity, GCRef);
+    g->gc2.weak_stack = NULL;
+    g->gc2.weak_capacity = 0;
+    g->gc2.weak_count = 0;
   }
 }
 
@@ -262,6 +276,7 @@ void lj_gc2_legacy_mark_begin(global_State *g)
   la_store64_rlx(&g->gc2.grey_bottom, 0);
   if (g->gc2.grey_capacity == 0)
     (void)gc2_grey_grow(g);
+  gc2_weak_reset(g);
   gc2_reset_alloc_trigger(g);
   gc2_clear_marks_all(g);
   lj_gc2_handshake(g, LJ_GC2_HS_ENABLE_BARRIER|LJ_GC2_HS_ALLOC_BLACK);
@@ -513,6 +528,69 @@ static int gc2_grey_empty(global_State *g)
     return 1;
   return la_load64_acq(&g->gc2.grey_top) ==
 	 la_load64_acq(&g->gc2.grey_bottom);
+}
+
+static int gc2_weak_ensure(global_State *g)
+{
+  lua_State *L;
+  if (!g)
+    return 0;
+  if (g->gc2.weak_stack && g->gc2.weak_capacity > 0)
+    return 1;
+  L = mainthread(g);
+  if (!L)
+    return 0;
+  g->gc2.weak_stack = lj_mem_newvec(L, GC2_WEAK_INIT, GCRef);
+  g->gc2.weak_capacity = GC2_WEAK_INIT;
+  return 1;
+}
+
+static void gc2_weak_reset(global_State *g)
+{
+  if (!g)
+    return;
+  (void)gc2_weak_ensure(g);
+  la_store64_rlx(&g->gc2.weak_count, 0);  /* 05 section 5.8 side vector. */
+}
+
+static void gc2_weak_record(global_State *g, GCtab *t)
+{
+  uint64_t idx;
+  if (!g || !t || !g->gc2.weak_stack || g->gc2.weak_capacity == 0) {
+    if (g)
+      la_add64_rlx(&g->gc2.weak_tables_overflow, 1);
+    return;
+  }
+  idx = la_add64_rlx(&g->gc2.weak_count, 1);  /* 05 section 5.8 MPSC slot. */
+  if (idx < g->gc2.weak_capacity) {
+    setgcref(g->gc2.weak_stack[(MSize)idx], obj2gco(t));
+    la_fence_rel();  /* Publish weak snapshot slot before later P_WEAK drain. */
+    la_add64_rlx(&g->gc2.weak_tables_queued, 1);
+  } else {
+    la_add64_rlx(&g->gc2.weak_tables_overflow, 1);
+  }
+}
+
+uint32_t lj_gc2_weak_snapshot_count(global_State *g)
+{
+  uint64_t count;
+  MSize cap;
+  if (!g || !g->gc2.weak_stack)
+    return 0;
+  count = la_load64_acq(&g->gc2.weak_count);
+  cap = g->gc2.weak_capacity;
+  if (count > (uint64_t)cap)
+    count = (uint64_t)cap;
+  return count > ~(uint32_t)0 ? ~(uint32_t)0 : (uint32_t)count;
+}
+
+GCtab *lj_gc2_weak_snapshot_tab(global_State *g, uint32_t idx)
+{
+  GCobj *o;
+  if (!g || !g->gc2.weak_stack || idx >= lj_gc2_weak_snapshot_count(g))
+    return NULL;
+  o = gcref(g->gc2.weak_stack[idx]);
+  return (o && o->gch.gct == ~LJ_TTAB) ? gco2tab(o) : NULL;
 }
 
 static GCobj *gc2_grey_pop(global_State *g)
@@ -1054,7 +1132,7 @@ static void gc2_mark_tv_worker(global_State *g, cTValue *tv)
     gc2_markobj_worker(g, gcV(tv));
 }
 
-static void gc2_note_weak_table(global_State *g, int weak)
+static void gc2_note_weak_table(global_State *g, GCtab *t, int weak)
 {
   if (!weak)
     return;
@@ -1065,6 +1143,7 @@ static void gc2_note_weak_table(global_State *g, int weak)
     la_add64_rlx(&g->gc2.weak_tables_weakval, 1);
   if (weak == LJ_GC_WEAK)
     la_add64_rlx(&g->gc2.weak_tables_allweak, 1);
+  gc2_weak_record(g, t);
 }
 
 #if LJ_HASJIT
@@ -1082,7 +1161,7 @@ static int gc2_traverse_tab(global_State *g, GCtab *t)
 {
   GCtab *mt = tabref_acq(t->metatable);
   int weak = gc2_tab_weak_mode(g, t, mt);
-  gc2_note_weak_table(g, weak);  /* 05 section 5.8 discovery scaffold. */
+  gc2_note_weak_table(g, t, weak);  /* 05 section 5.8 discovery scaffold. */
   if (t->acap > 0)
     lj_gc2_markmem(g, lj_tab_array_acq(t));
   {
