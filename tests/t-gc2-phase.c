@@ -10,6 +10,7 @@
 #include "lualib.h"
 
 #include "lj_obj.h"
+#include "lj_atomic.h"
 #include "lj_arena.h"
 #include "lj_gc.h"
 #include "lj_gc2.h"
@@ -78,7 +79,7 @@ int main(void)
   lj_gc2_legacy_mark_begin(g);
   assert(g->gc2.phase == LJ_GC2_MARK);
   assert(g->gc2.cycle == cycle0 + 1u);
-  assert(g->gc2.marks_this_round == 0);
+  assert(la_load64_acq(&g->gc2.marks_this_round) == 0);
   assert(tg->mark_active == 1);
   assert(tg->alloc.alloc_black == 1);
   assert(lj_gc2_ismarked(g, obj2gco(phase_tab)) == 0);

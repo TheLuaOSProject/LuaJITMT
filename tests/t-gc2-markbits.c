@@ -9,6 +9,7 @@
 #include "lauxlib.h"
 
 #include "lj_obj.h"
+#include "lj_atomic.h"
 #include "lj_arena.h"
 #include "lj_gc2.h"
 #include "lj_tg.h"
@@ -56,7 +57,7 @@ int main(void)
   tab = tabV(L->top - 1);
 
   lj_gc2_legacy_mark_begin(g);
-  assert(g->gc2.marks_this_round == 0);
+  assert(la_load64_acq(&g->gc2.marks_this_round) == 0);
   assert(lj_gc2_markobj(g, NULL) == 0);
   assert(lj_gc2_ssb_empty(g));
 
@@ -64,20 +65,20 @@ int main(void)
   assert(ptr_state(trav) == 3);
   assert(lj_gc2_ssb_empty(g));
   assert(lj_gc2_markmem(g, trav) == 0);
-  assert(g->gc2.marks_this_round == 1);
+  assert(la_load64_acq(&g->gc2.marks_this_round) == 1);
 
   assert(lj_gc2_markmem(g, plain) == 1);
   assert(ptr_state(plain) == 3);
   assert(lj_gc2_ssb_empty(g));
   assert(lj_gc2_markmem(g, plain) == 0);
-  assert(g->gc2.marks_this_round == 2);
+  assert(la_load64_acq(&g->gc2.marks_this_round) == 2);
 
   assert(lj_gc2_markmem(g, huge) == 1);
   assert(lj_arena_hugetab_lookup(&tg->huge, huge, &hi) == 1);
   assert(hi.flags == (LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_MARK));
   assert(lj_gc2_ssb_empty(g));
   assert(lj_gc2_markmem(g, huge) == 0);
-  assert(g->gc2.marks_this_round == 3);
+  assert(la_load64_acq(&g->gc2.marks_this_round) == 3);
 
   assert(lj_gc2_ismarked(g, obj2gco(tab)) == 0);
   assert(lj_gc2_markobj(g, obj2gco(tab)) == 1);
@@ -87,7 +88,7 @@ int main(void)
   assert(lj_gc2_flush_ssb(g, tg) == 1);
   assert(lj_gc2_drain_ssb(g) == 1);
   assert(lj_gc2_ssb_empty(g));
-  assert(g->gc2.marks_this_round == 4);
+  assert(la_load64_acq(&g->gc2.marks_this_round) == 4);
 
   lj_gc2_legacy_cycle_end(g);
   lj_arena_free(&tg->alloc, trav, trav_size);

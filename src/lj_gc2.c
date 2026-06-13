@@ -42,7 +42,7 @@ void lj_gc2_init(global_State *g)
   g->gc2.hs_epoch = 0;
   g->gc2.hs_pending = 0;
   g->gc2.hs_actions = 0;
-  g->gc2.marks_this_round = 0;
+  la_store64_rlx(&g->gc2.marks_this_round, 0);
   g->gc2.ssb_head = NULL;
   g->gc2.ssb_published = 0;
   g->gc2.ssb_drained = 0;
@@ -216,7 +216,7 @@ void lj_gc2_legacy_mark_begin(global_State *g)
     lj_tg_attach(g, tg);
   g->gc2.phase = LJ_GC2_MARK;
   g->gc2.cycle++;
-  g->gc2.marks_this_round = 0;
+  la_store64_rlx(&g->gc2.marks_this_round, 0);
   (void)lj_gc2_drain_ssb(g);  /* Finish prior-cycle scaffold work. */
   (void)lj_tg_reclaim_dead(g);
   lj_assertG(gc2_grey_empty(g), "gc2 grey deque not empty at mark begin");
@@ -874,7 +874,7 @@ int lj_gc2_markmem(global_State *g, void *p)
       return 0;
     marked = lj_arena_hugetab_mark(&tg->huge, p, NULL);
     if (marked == 1)
-      g->gc2.marks_this_round++;
+      la_add64_rlx(&g->gc2.marks_this_round, 1);  /* 05 section 5.7.1. */
     return marked == 1;
   }
   cell = lj_arena_cellof(p);
@@ -884,7 +884,7 @@ int lj_gc2_markmem(global_State *g, void *p)
   marked = !la_bit_test_and_set64(&a->mark[cell >> 6],
 				  cell & 63);  /* 05 section 5.6.1. */
   if (marked)
-    g->gc2.marks_this_round++;
+    la_add64_rlx(&g->gc2.marks_this_round, 1);  /* 05 section 5.7.1. */
   return marked;
 }
 

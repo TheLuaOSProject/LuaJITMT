@@ -204,7 +204,7 @@ int main(void)
   assert(g->gc2.hs_epoch == epoch0 + 1u);
   assert(g->gc2.hs_pending == 0);
   assert(lj_gc2_ismarked(g, obj2gco(root_tab)) == 1);
-  assert(g->gc2.marks_this_round > 0);
+  assert(la_load64_acq(&g->gc2.marks_this_round) > 0);
   assert(!lj_gc2_ssb_empty(g));
   assert(lj_gc2_flush_ssb(g, tg) > 0);
   assert(lj_gc2_drain_ssb(g) > 0);
