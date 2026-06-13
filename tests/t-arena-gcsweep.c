@@ -13,6 +13,7 @@
 #include "lj_atomic.h"
 #include "lj_arena.h"
 #include "lj_gc.h"
+#include "lj_gc2.h"
 #include "lj_tg.h"
 
 static uint32_t ptr_state(void *p)
@@ -27,6 +28,66 @@ static int noop_finalizer(lua_State *L)
 {
   (void)L;
   return 0;
+}
+
+static void test_boundary_lazy_sweep(void)
+{
+  lua_State *L = luaL_newstate();
+  global_State *g;
+  TGState *tg;
+  GCRef empty;
+  MSize oldstepmul;
+  uint64_t arenas0, delta;
+  uint32_t oldcycle, i;
+  const uint32_t seeded = LJ_GC2_SWEEP_BATCH + 3u;
+
+  assert(L != NULL);
+  g = G(L);
+  tg = G2TG(g);
+  assert(tg != NULL);
+  assert((tg->tg_flags & TGF_ARENA_INTERNAL) != 0);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+
+  oldcycle = g->gc2.cycle;
+  g->gc2.cycle = oldcycle + 1u;
+  g->gc2.phase = LJ_GC2_SWEEP;
+  tg->alloc.sweep_epoch = g->gc2.cycle;  /* Simulate prepared boundary. */
+  assert(tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE] == NULL);
+  assert(tg->alloc.needsweep[LJ_ARENAK_PLAIN] == NULL);
+
+  for (i = 0; i < seeded; i++) {
+    GCArena *a = lj_arena_map(&tg->prng, LJ_AF_TRAVERSABLE);
+    assert(a != NULL);
+    a->hdr.owner_tid = tg->alloc.owner_tid;
+    a->hdr.flags |= LJ_AF_NEEDSWEEP;
+    a->hdr.next = tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE];
+    tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE] = a;
+  }
+
+  setgcrefnull(empty);
+  setgcrefnull(g->gc.mmudata);
+  setmref(g->gc.sweep, &empty);
+  g->gc.state = GCSsweep;
+  oldstepmul = g->gc.stepmul;
+  g->gc.stepmul = 1;
+  arenas0 = la_load64_acq(&g->gc2.sweep_owner_arenas);
+
+  (void)lj_gc_step(L);
+  delta = la_load64_acq(&g->gc2.sweep_owner_arenas) - arenas0;
+  assert(delta > 0);
+  assert(delta <= LJ_GC2_SWEEP_BATCH);
+  assert(g->gc.state == GCSsweep);
+  assert(tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE] != NULL);
+  assert(tg->alloc.needsweep[LJ_ARENAK_PLAIN] == NULL);
+
+  for (i = 0; i < seeded + 4u && g->gc.state != GCSpause; i++)
+    (void)lj_gc_step(L);
+  assert(g->gc.state == GCSpause);
+  assert(tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE] == NULL);
+  assert(tg->alloc.needsweep[LJ_ARENAK_PLAIN] == NULL);
+  setmref(g->gc.sweep, &g->gc.root);
+  g->gc.stepmul = oldstepmul;
+  lua_close(L);
 }
 
 int main(void)
@@ -394,6 +455,7 @@ int main(void)
   assert((ptr_state(finpt) & 2u) == 0);
 
   lua_close(L);
+  test_boundary_lazy_sweep();
   printf("t-arena-gcsweep OK: traversable runtime sweep bridge verified\n");
   return 0;
 }

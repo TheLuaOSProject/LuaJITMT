@@ -105,21 +105,53 @@ static void gc_arena_rebuild_free(global_State *g)
     lj_arena_alloc_rebuild_free(&tg->alloc);
 }
 
-static void gc_arena_finish_sweep_boundary(global_State *g)
+static int gc_arena_sweep_ready(global_State *g, TGState **tgp)
 {
   TGState *tg = G2TG(g);
+  if (tgp)
+    *tgp = tg;
   if (!tg || !(tg->tg_flags & TGF_ARENA_INTERNAL))
-    return;
-  if (g->gc2.phase == LJ_GC2_SWEEP && gcref(g->gc.mmudata) == NULL) {
-    uint32_t swept;
-    lj_arena_alloc_prepare_sweep_kind(&tg->alloc, LJ_ARENAK_TRAVERSABLE);
-    do {
-      swept = lj_gc2_sweep_owner_progress(g, tg, LJ_GC2_SWEEP_BATCH);
-    } while (swept != 0);  /* 05 section 5.8 bounded traversable sweep bridge. */
-    lj_arena_alloc_restore_sweep_kind(&tg->alloc, LJ_ARENAK_PLAIN);
-  } else {
+    return 0;
+  return g->gc2.phase == LJ_GC2_SWEEP && gcref(g->gc.mmudata) == NULL;
+}
+
+static int gc_arena_sweep_needs_prepare(global_State *g)
+{
+  TGState *tg;
+  if (!gc_arena_sweep_ready(g, &tg))
+    return 0;
+  return tg->alloc.sweep_epoch != g->gc2.cycle;
+}
+
+static int gc_arena_sweep_pending(global_State *g)
+{
+  TGState *tg;
+  if (!gc_arena_sweep_ready(g, &tg))
+    return 0;
+  return tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE] != NULL;
+}
+
+static uint32_t gc_arena_finish_sweep_boundary(global_State *g, int drain)
+{
+  TGState *tg;
+  uint32_t total = 0;
+  if (!gc_arena_sweep_ready(g, &tg)) {
     gc_arena_rebuild_free(g);
+    return 0;
   }
+  if (tg->alloc.sweep_epoch != g->gc2.cycle) {
+    lj_arena_alloc_prepare_sweep_kind(&tg->alloc, LJ_ARENAK_TRAVERSABLE);
+    lj_arena_alloc_restore_sweep_kind(&tg->alloc, LJ_ARENAK_PLAIN);
+  }
+  do {
+    uint32_t swept = lj_gc2_sweep_owner_progress(g, tg, LJ_GC2_SWEEP_BATCH);
+    total += swept;
+    if (!drain)
+      break;
+    if (swept == 0)
+      break;
+  } while (1);  /* 05 section 5.8 boundary-lazy traversable sweep bridge. */
+  return total;
 }
 
 #ifdef LUA_USE_ASSERT
@@ -1199,13 +1231,20 @@ static size_t gc_onestep(lua_State *L)
     lj_assertG(old >= g->gc.total, "sweep increased memory");
     g->gc.estimate -= old - g->gc.total;
     if (gcref(*mref(g->gc.sweep, GCRef)) == NULL) {
-      StrTabHdr *hdr = (StrTabHdr *)la_loadptr_acq((void *const *)&g->str.tabh);
-      MSize mask = hdr ? hdr->mask : ~(MSize)0;
-      if (la_load32_acq(&g->str.num) <= (mask >> 2) &&
-	  mask > LJ_MIN_STRTAB*2-1)
-	lj_str_resize(L, mask >> 1);  /* Shrink string table. */
-      gc_arena_verify_sweep_boundary(g);
-      gc_arena_finish_sweep_boundary(g);
+      int arena_prepare = gc_arena_sweep_needs_prepare(g);
+      if (!gc_arena_sweep_pending(g) || arena_prepare) {
+	StrTabHdr *hdr = (StrTabHdr *)la_loadptr_acq(
+	  (void *const *)&g->str.tabh);
+	MSize mask = hdr ? hdr->mask : ~(MSize)0;
+	if (la_load32_acq(&g->str.num) <= (mask >> 2) &&
+	    mask > LJ_MIN_STRTAB*2-1)
+	  lj_str_resize(L, mask >> 1);  /* Shrink string table. */
+      }
+      if (arena_prepare)
+	gc_arena_verify_sweep_boundary(g);
+      (void)gc_arena_finish_sweep_boundary(g, 0);
+      if (gc_arena_sweep_pending(g))
+	return GCSWEEPMAX*GCSWEEPCOST;
       if (gcref(g->gc.mmudata)) {  /* Need any finalizations? */
 	g->gc.state = GCSfinalize;
       } else {  /* Otherwise skip this phase to help the JIT. */
@@ -1228,7 +1267,7 @@ static size_t gc_onestep(lua_State *L)
 	g->gc.estimate -= GCFINALIZECOST;
       return GCFINALIZECOST;
     }
-    gc_arena_finish_sweep_boundary(g);
+    (void)gc_arena_finish_sweep_boundary(g, 1);
     g->gc.state = GCSpause;  /* End of GC cycle. */
     lj_gc2_legacy_cycle_end(g);
     g->gc.debt = 0;
