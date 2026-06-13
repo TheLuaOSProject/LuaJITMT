@@ -1,5 +1,5 @@
 #!/bin/sh
-# Guard that legacy hash-slot table stores are not recorded before NHdr writes.
+# Guard that legacy table slot stores are not recorded before NHdr/AHdr writes.
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
@@ -35,30 +35,36 @@ for i = 1, 200 do
   a[1] = i
 end
 assert(a[1] == 200)
-assert(traces() > 0, "array table store should still trace")
+assert(traces() == 0, "array table store unexpectedly traced")
 '
 
 if ! awk '
-  /} else {  \/\* Indexed store\. \*\// { in_store = 1; saw_hash = saw_nyi = 0 }
+  /} else {  \/\* Indexed store\. \*\// {
+    in_store = 1
+    saw_hash = saw_hash_nyi = saw_array = saw_array_nyi = 0
+  }
   in_store && /loadop == IR_HLOAD/ { saw_hash = 1 }
-  in_store && /lj_trace_err_info\(J, LJ_TRERR_NYIBC\)/ { saw_nyi = 1 }
+  in_store && /M5: no legacy hash HSTORE/ { saw_hash_nyi = 1 }
+  in_store && /loadop == IR_ALOAD/ { saw_array = 1 }
+  in_store && /M5: no legacy array ASTORE/ { saw_array_nyi = 1 }
   in_store && /Convert int to number before storing/ {
-    if (!saw_hash || !saw_nyi)
+    if (!saw_hash || !saw_hash_nyi || !saw_array || !saw_array_nyi)
       bad = 1
     checked = 1
     in_store = 0
   }
   END { exit checked && !bad ? 0 : 1 }
 ' "$ROOT/src/lj_record.c"; then
-  echo "guardrail: recorder must reject legacy hash table stores" >&2
+  echo "guardrail: recorder must reject legacy hash and array table stores" >&2
   exit 1
 fi
 
-if rg -n 'M5: no legacy hash HSTORE' "$ROOT/src/lj_record.c" >/dev/null; then
+if rg -n 'M5: no legacy hash HSTORE' "$ROOT/src/lj_record.c" >/dev/null &&
+   rg -n 'M5: no legacy array ASTORE' "$ROOT/src/lj_record.c" >/dev/null; then
   :
 else
-  echo "guardrail: missing hash-store NYI marker" >&2
+  echo "guardrail: missing table-store NYI marker" >&2
   exit 1
 fi
 
-echo "M5 JIT hash-store NYI guard passed"
+echo "M5 JIT table-store NYI guard passed"

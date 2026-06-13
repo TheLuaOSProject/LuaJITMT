@@ -353,7 +353,8 @@ static GCtrace *find_trace(global_State *g)
   return NULL;
 }
 
-static void test_jit_table_barrier(lua_State *L, global_State *g, TGState *tg)
+static void test_jit_table_store_nyi_barrier(lua_State *L, global_State *g,
+					     TGState *tg)
 {
   GCtab *parent, *child;
 
@@ -372,7 +373,8 @@ static void test_jit_table_barrier(lua_State *L, global_State *g, TGState *tg)
   lua_pushvalue(L, -3);
   lua_pushinteger(L, 100);
   lua_call(L, 3, 0);
-  assert(find_trace(g) != NULL);
+  /* M5 keeps legacy table stores interpreted until traced AHdr/NHdr writes. */
+  assert(find_trace(g) == NULL);
   lua_pop(L, 2);
 
   lua_createtable(L, 1, 0);
@@ -608,7 +610,7 @@ int main(void)
   test_vm_table_barrier(L, g, tg);
   test_vm_meta_tset_barrier(L, g, tg);
 #if LJ_HASJIT
-  test_jit_table_barrier(L, g, tg);
+  test_jit_table_store_nyi_barrier(L, g, tg);
   test_jit_upvalue_barrier(L, g, tg);
 #endif
   test_weak_tables(L, g, tg);

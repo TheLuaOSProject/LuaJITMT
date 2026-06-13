@@ -202,8 +202,10 @@ generic x64 `vmeta_tset` continuation release-stores returned slots through
 RETIRING/FORWARD/CAS write protocol for migration correctness. Regular x64
 dynamic `IR_HREF` lowering also uses the node-header mask instead of
 `GCtab.hmask`; constant-slot HREFK lowering has an interim node-header bounds
-guard before reading its recorded slot, while hash-store codegen remains on the
-original 08/06 plan. `lj_vm_next`
+guard before reading its recorded slot, while hash and array table-store
+codegen remains on the original 08/06 plan. Until that trace write protocol
+lands, the recorder rejects both legacy `HSTORE` and `ASTORE` indexed stores
+with the normal NYI-bytecode trace error. `lj_vm_next`
 hash traversal, the `BC_ITERN` array/hash iterator path, and `ipairs_aux` array
 iteration load candidate values into registers before nil decisions and copy
 those same snapshots to their results; `BC_TSETV`/`BC_TSETS`/`BC_TSETB` load

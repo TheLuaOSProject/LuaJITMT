@@ -39,7 +39,7 @@ bench("tab_hash_read", 2e7, function(n)
   return s
 end)
 
--- 5. Array part write/read (ASTORE/ALOAD, no barriers today)
+-- 5. Array part write/read (M5: writes fall back before traced ASTORE)
 bench("tab_array", 3e7, function(n)
   local t = {}
   local s = 0

@@ -235,9 +235,11 @@ trace's PCs/parents, run by the leader between cycles with token.
    pointer during the current publish/retire phase. Constant-key `HREFK`
    recording snapshots the legacy node/hmask shape around `lj_tab_get()` and
    falls back to regular `HREF` if the shape changes while recording. Legacy
-   hash-slot table stores are not recorded for now: the recorder raises the
-   normal NYI-bytecode trace error before emitting `HSTORE` for hash-based
-   indexed stores. Array stores still record for existing barrier coverage.
+   table-slot stores are not recorded for now: the recorder raises the normal
+   NYI-bytecode trace error before emitting `HSTORE` or `ASTORE` for indexed
+   stores. The original plan kept traced array stores for barrier coverage, but
+   the current M5 bridge demotes them until the final generation-aware trace
+   write/barrier protocol can replace raw generated stores.
 2. **TDUP/TNEW colo**: colo removed (06 §6.2) — recorder paths that
    special-case colocated arrays (`lj_record_tnew`, table.new fast func)
    simplify.

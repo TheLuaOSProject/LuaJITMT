@@ -182,19 +182,20 @@ assert(v2 == 20 and f2() == 20)
 '
 
 LUA_PATH=$LUA_PATH_GUARD "$ROOT/src/luajit" -e '
+local util = require"jit.util"
+local pool = { "even", "odd" }
 jit.flush()
 jit.opt.start("hotloop=1")
-local util = require"jit.util"
 local function run(n)
-  local x = {0}
+  local x = pool[1]
   local function get() return x end
-  for i = 1, n do x = {i} end
-  return get()[1]
+  for i = 1, n do x = pool[(i % 2) + 1] end
+  return get()
 end
-assert(run(200) == 200)
+assert(run(200) == pool[1])
 assert(util.traceinfo(1), "expected traced GC-valued CSET owner loop")
 collectgarbage()
-assert(run(20) == 20)
+assert(run(20) == pool[1])
 '
 
 LUA_PATH=$LUA_PATH_GUARD "$ROOT/src/luajit" -e '
@@ -241,29 +242,35 @@ assert(f() == 202)
 '
 
 LUA_PATH=$LUA_PATH_GUARD "$ROOT/src/luajit" -e '
+local util = require"jit.util"
+local pool = { "even", "odd" }
 jit.flush()
 jit.opt.start("hotloop=1")
-local util = require"jit.util"
 local function make(seed)
-  local x = {seed}
+  local n = seed
+  local x = pool[1]
   return function()
-    x = {x[1] + 1}
-    return x[1]
+    n = n + 1
+    x = pool[(n % 2) + 1]
+    return n, x
   end
 end
 local function run(seed, n)
   local f = make(seed)
-  local last
-  for i = 1, n do last = f() end
-  return last, f
+  local last, lastx
+  for i = 1, n do last, lastx = f() end
+  return last, lastx, f
 end
-local v, f = run(0, 200)
-assert(v == 200 and f() == 201)
+local v, xv, f = run(0, 200)
+local fv, fx = f()
+assert(v == 200 and xv == pool[1] and fv == 201 and fx == pool[2])
 assert(util.traceinfo(1), "expected traced child GC upvalue loop")
 collectgarbage()
-local v2, f2 = run(1000, 30)
-assert(v2 == 1030 and f2() == 1031)
-assert(f() == 202)
+local v2, xv2, f2 = run(1000, 30)
+local f2v, f2x = f2()
+local fv2, fx2 = f()
+assert(v2 == 1030 and xv2 == pool[1] and f2v == 1031 and f2x == pool[2])
+assert(fv2 == 202 and fx2 == pool[1])
 '
 
 LUA_PATH=$LUA_PATH_GUARD "$ROOT/src/luajit" -e '
