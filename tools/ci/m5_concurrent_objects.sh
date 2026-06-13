@@ -37,6 +37,7 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 "$ROOT/tools/ci/m5_x64_ipairs_snapshot.sh"
 "$ROOT/tools/ci/m5_x64_tgets_node_order.sh"
 "$ROOT/tools/ci/m5_x64_getmetatable_node_order.sh"
+"$ROOT/tools/ci/m5_x64_tset_nil_snapshot.sh"
 "$ROOT/tools/ci/m5_parser_capture_meta.sh"
 "$ROOT/tools/ci/m5_bcdump_compat.sh"
 "$ROOT/tools/ci/m5_cell_ops.sh"

@@ -4079,7 +4079,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  jae ->vmeta_tsetv
     |  shl RCd, 3
     |  add RC, TAB:RB->array
-    |  cmp aword [RC], LJ_TNIL
+    |  mov r8, [RC]
+    |  cmp r8, LJ_TNIL
     |  je >3				// Previous value is nil?
     |1:
     |  test byte TAB:RB->marked, LJ_GC_BLACK	// isblack(table)
@@ -4126,7 +4127,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  cmp NODE:TMPR->key, ITYPE
     |  jne >5
     |  // Ok, key found. Assumes: offsetof(Node, val) == 0
-    |  cmp aword [TMPR], LJ_TNIL
+    |  mov r8, [TMPR]
+    |  cmp r8, LJ_TNIL
     |  je >4				// Previous value is nil?
     |2:
     |  test byte TAB:RB->marked, LJ_GC_BLACK	// isblack(table)
@@ -4185,7 +4187,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  jae ->vmeta_tsetb
     |  shl RCd, 3
     |  add RC, TAB:RB->array
-    |  cmp aword [RC], LJ_TNIL
+    |  mov r8, [RC]
+    |  cmp r8, LJ_TNIL
     |  je >3				// Previous value is nil?
     |1:
     |  test byte TAB:RB->marked, LJ_GC_BLACK	// isblack(table)

@@ -181,13 +181,15 @@ the current allocation capacity until the final `AHdr` port. On x86-64,
 decisions and copy those same snapshots to their results; `BC_TGETS`/`BC_TSETS`
 string-key hash fast paths load the legacy node base before hmask/index
 calculation, as does the x64 `getmetatable` fast-function probe for
-`__metatable`. Core C table lookup, resize, rehash counting, collision checks,
-and `next()` now make key/value decisions from acquired `TValue` snapshots
-instead of direct shared node-field reads; GC/GC2 table traversal, weak
-clearing, finalizer-table scans, serialization, bytecode writing, parser
-template-table fixup, recorder traversal typing, and `table.maxn` use the same
-snapshot helpers. These steps do not replace the legacy resize algorithm with
-the planned lock-free `AHdr`/`NHdr` generation protocol yet.
+`__metatable`; `BC_TSETV`/`BC_TSETS`/`BC_TSETB` load previous slot values into
+registers before nil/metamethod decisions. Core C table lookup, resize, rehash
+counting, collision checks, and `next()` now make key/value decisions from
+acquired `TValue` snapshots instead of direct shared node-field reads; GC/GC2
+table traversal, weak clearing, finalizer-table scans, serialization, bytecode
+writing, parser template-table fixup, recorder traversal typing, and
+`table.maxn` use the same snapshot helpers. These steps do not replace the
+legacy resize algorithm with the planned lock-free `AHdr`/`NHdr` generation
+protocol yet.
 ### 6.3.6 next/pairs (lj_tab_next)
 Iterate the *gen snapshot* captured at first call: store the NH pointer in
 the iterator control slot? Lua's `next(t,k)` is stateless — DECIDED:
