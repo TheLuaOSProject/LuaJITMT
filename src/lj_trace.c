@@ -154,6 +154,29 @@ static void trace_exittab_free(global_State *g, GCtrace *T)
   T->exitstub = NULL;
 }
 
+static void trace_exittab_reset(jit_State *J, GCtrace *T)
+{
+#if LJ_64 && defined(EXITSTUBS_PER_GROUP)
+  ExitNo i;
+  if (T->exittab == NULL)
+    return;
+  for (i = 0; i < T->nsnap; i++)
+    trace_exittarget_rel(T, i, exitstub_addr(J, i));
+#else
+  UNUSED(J); UNUSED(T);
+#endif
+}
+
+static void trace_exittab_resetroot(jit_State *J, TraceNo rootno)
+{
+  TraceNo i;
+  for (i = 1; i < J->sizetrace; i++) {
+    GCtrace *T = traceref(J, i);
+    if (T && (T->traceno == rootno || T->root == rootno))
+      trace_exittab_reset(J, T);
+  }
+}
+
 /* Save current trace by copying and compacting it. */
 static void trace_save(jit_State *J, GCtrace *T)
 {
@@ -255,6 +278,7 @@ static void trace_flushroot(jit_State *J, GCtrace *T)
   TraceNo nextroot = trace_nextroot_acq(T);
   lj_assertJ(T->root == 0, "not a root trace");
   lj_assertJ(pt != NULL, "trace has no prototype");
+  trace_exittab_resetroot(J, T->traceno);
   /* Unlink root trace from chain anchored in prototype. */
   if (head == T->traceno) {  /* Trace is first in chain. Easy. */
     proto_trace_rel(pt, nextroot);
@@ -309,6 +333,7 @@ int lj_trace_flushall(lua_State *L)
   for (i = (ptrdiff_t)J->sizetrace-1; i > 0; i--) {
     GCtrace *T = traceref(J, i);
     if (T) {
+      trace_exittab_reset(J, T);
       if (T->root == 0)
 	trace_flushroot(J, T);
       lj_gdbjit_deltrace(J, T);

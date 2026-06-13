@@ -61,6 +61,17 @@ do
   fi
 done
 
+for needle in \
+  'trace_exittab_reset(jit_State *J, GCtrace *T)' \
+  'trace_exittab_resetroot(J, T->traceno)' \
+  'trace_exittab_reset(J, T);'
+do
+  if ! rg -F -q "$needle" "$ROOT/src/lj_trace.c"; then
+    echo "guardrail: missing x64 exittab flush reset: $needle" >&2
+    exit 1
+  fi
+done
+
 hits=$(rg -n -- 'setgcrefp\(J->trace|setgcrefnull\(J->trace|gcref\(J->trace' \
   "$ROOT/src/lj_trace.c" "$ROOT/src/lj_jit.h" || true)
 if [ -n "$hits" ]; then
@@ -187,6 +198,11 @@ for _ = 1, 120 do
 end
 assert(tracecount() > before, "no side trace was published")
 for _ = 1, 120 do
+  assert(side(90, true) == expect(90, true))
+end
+jit.flush()
+assert(tracecount() == 0, "side traces were not flushed")
+for _ = 1, 20 do
   assert(side(90, true) == expect(90, true))
 end
 print("jit-trace-publish-smoke OK")

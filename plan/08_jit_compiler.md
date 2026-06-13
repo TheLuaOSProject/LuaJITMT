@@ -230,6 +230,13 @@ LJ_FLUSH_EPOCHS=2); 5) reset J fields as lj_trace_flushall does.
 Individual trace GC (a dead proto's traces): same steps scoped to that
 trace's PCs/parents, run by the leader between cycles with token.
 
+Current M5 bridge: x64 flush paths now release-reset every live `exittab` slot
+back to the legacy interpreter exit stub before trace slots are cleared or a
+root trace is unlinked. This implements the data-retargeting part of step 2 for
+the supported x64 path. The full `HS_FLUSHJ|HS_EXIT_TRACES` handshake,
+trace-vector RCU retirement, and deferred mcode reclamation remain the original
+target.
+
 ## 8.8 Recorder/IR changes inventory
 
 1. **HREFK & node addressing**: unchanged semantics — nodes never move
