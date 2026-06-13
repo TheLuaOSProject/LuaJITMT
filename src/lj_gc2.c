@@ -497,6 +497,42 @@ void lj_gc2_weak_to_sweep(global_State *g)
   lj_gc2_worker_wake(g);  /* 05 section 5.6.3 parked worker scheduler. */
 }
 
+int lj_gc2_sweep_tg_ready(TGState *tg)
+{
+  uint8_t flags;
+  if (!tg)
+    return 0;
+  flags = la_load8_acq(&tg->tg_flags);
+  return !(flags & TGF_DEAD) && (flags & TGF_ARENA_INTERNAL);
+}
+
+int lj_gc2_sweep_needs_prepare(global_State *g)
+{
+  TGState *tg;
+  if (!g || la_load32_acq(&g->gc2.phase) != LJ_GC2_SWEEP)
+    return 0;
+  for (tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
+       tg != NULL;
+       tg = (TGState *)la_loadptr_acq((void *const *)&tg->next_tg))
+    if (lj_gc2_sweep_tg_ready(tg) && tg->alloc.sweep_epoch != g->gc2.cycle)
+      return 1;
+  return 0;
+}
+
+int lj_gc2_sweep_pending(global_State *g)
+{
+  TGState *tg;
+  if (!g || la_load32_acq(&g->gc2.phase) != LJ_GC2_SWEEP)
+    return 0;
+  for (tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
+       tg != NULL;
+       tg = (TGState *)la_loadptr_acq((void *const *)&tg->next_tg))
+    if (lj_gc2_sweep_tg_ready(tg) &&
+	tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE] != NULL)
+      return 1;
+  return 0;
+}
+
 uint32_t lj_gc2_sweep_owner_progress(global_State *g, TGState *tg,
 				      uint32_t limit)
 {
@@ -581,6 +617,36 @@ void lj_gc2_legacy_preserve_abort(global_State *g)
 		   LJ_GC2_HS_FLUSH_SSB);
   (void)lj_gc2_drain_ssb(g);
   (void)lj_tg_reclaim_dead(g);
+}
+
+int lj_gc2_sweep_to_idle(global_State *g)
+{
+  uint32_t expect = 0, phase;
+  if (!g)
+    return 0;
+  if (!la_cas32(&g->gc2.worker_active, &expect, 1, LA_ACQ_REL, LA_ACQ))
+    return 0;  /* 05 section 5.8 scheduler close waits for worker owner. */
+  phase = la_load32_acq(&g->gc2.phase);
+  if (phase != LJ_GC2_SWEEP ||
+      lj_gc2_sweep_needs_prepare(g) || lj_gc2_sweep_pending(g)) {
+    la_store32_rel(&g->gc2.worker_active, 0);
+    return 0;
+  }
+  la_store32_rel(&g->gc2.cycle_leader, 0);
+  phase = la_xchg32_acqrel(&g->gc2.phase, LJ_GC2_IDLE);
+  if (phase != LJ_GC2_SWEEP) {
+    la_store32_rel(&g->gc2.worker_active, 0);
+    return 0;
+  }
+  la_add64_rlx(&g->gc2.sweep_to_idle, 1);
+  (void)lj_gc2_sweep_live_aggregate(g);
+  lj_gc2_handshake(g, LJ_GC2_HS_DISABLE_BARRIER|LJ_GC2_HS_ALLOC_WHITE|
+		   LJ_GC2_HS_FLUSH_SSB);
+  (void)lj_gc2_drain_ssb(g);
+  (void)lj_tg_reclaim_dead(g);
+  lj_gc2_update_pacing(g);
+  la_store32_rel(&g->gc2.worker_active, 0);
+  return 1;
 }
 
 void lj_gc2_legacy_cycle_end(global_State *g)
@@ -2283,6 +2349,12 @@ static uint32_t gc2_worker_drain_inner(global_State *g, uint32_t limit,
   if (!la_cas32(&g->gc2.worker_active, &expect, 1, LA_ACQ_REL, LA_ACQ)) {
     la_add64_rlx(&g->gc2.worker_busy_retries, 1);
     return 0;  /* 05 section 5.6.3 temporary single-worker bridge. */
+  }
+  phase = la_load32_acq(&g->gc2.phase);
+  if (phase != LJ_GC2_MARK && phase != LJ_GC2_WEAK &&
+      phase != LJ_GC2_SWEEP) {
+    la_store32_rel(&g->gc2.worker_active, 0);
+    return 0;
   }
   if (phase == LJ_GC2_SWEEP) {
     sweep = gc2_worker_sweep_progress(g, limit);

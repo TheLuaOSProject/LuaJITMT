@@ -210,11 +210,15 @@ for needle in \
   '05 section 5.6.3 worker-owned sweep bridge' \
   'weak = lj_gc2_weak_drain(g, limit - work)' \
   'la_add64_rlx(&g->gc2.worker_weak_drained' \
-  'gc_arena_sweep_tg_ready(TGState *tg)' \
   'gc_arena_sweep_pending(global_State *g)' \
   'la_loadptr_acq((void *const *)&g->gc2.tg_list)' \
+  'lj_gc2_sweep_tg_ready(TGState *tg)' \
+  'lj_gc2_sweep_needs_prepare(global_State *g)' \
+  'lj_gc2_sweep_pending(global_State *g)' \
+  'lj_gc2_sweep_to_idle(global_State *g)' \
   'lj_gc2_sweep_owner_progress(global_State *g, TGState *tg' \
   'la_add64_rlx(&g->gc2.sweep_owner_arenas' \
+  'la_cas32(&g->gc2.worker_active, &expect, 1' \
   'lj_gc2_sweep_live_aggregate(global_State *g)' \
   'lj_arena_hugetab_live_bytes(&tg->huge' \
   'LJ_HUGEF_MARK|LJ_HUGEF_TRAVERSABLE' \

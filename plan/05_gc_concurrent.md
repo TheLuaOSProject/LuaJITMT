@@ -420,18 +420,23 @@ P_SWEEP entry handshake: {DISABLE_BARRIER, RESET_ALLOC, FLUSH_SSB(last)}.
   threads that allocate slowly): aggregate live_estimate, compute next
   trigger (§5.11), → P_IDLE.
 Current bridge note: legacy sweep still owns the string/root sweep state
-machine and calls `lj_gc2_legacy_cycle_end()` at the final boundary. That
-boundary now records real `SWEEP -> IDLE` publications with `sweep_to_idle`.
+machine and calls `lj_gc2_sweep_to_idle()` at the final real `P_SWEEP`
+boundary. That GC2 helper waits for the worker token, rechecks phase and
+traversable sweep predicates, records real `SWEEP -> IDLE` publications with
+`sweep_to_idle`, aggregates live estimates, and updates pacing.
 The partial-cycle full-GC fast-forward path still calls
 `lj_gc2_legacy_preserve_abort()` instead of entering `P_SWEEP`; that path now
-records real active-phase aborts with `preserve_abort_to_idle`. Sweep-to-idle
-closure now also aggregates swept traversable arena live cells and marked
+records real active-phase aborts with `preserve_abort_to_idle` and retains the
+legacy close wrapper for its preserving sweep. Sweep-to-idle closure now also
+aggregates swept traversable arena live cells and marked
 traversable HugeTab entries across the TG list into `gc2.live_estimate`, records
 `sweep_live_updates`, and exposes the huge contribution through
-`sweep_live_huge_bytes`; pacing uses the larger of that GC2 estimate and the
-legacy `g->gc.estimate` until raw/plain arena aggregation is independently owned
-by GC2. Full scheduler-owned sweep completion and final `P_IDLE` ownership
-remain follow-up work.
+`sweep_live_huge_bytes`. GC2 also owns the live-TG sweep preparation and pending
+traversable sweep-list predicates used by the legacy bridge before final idle
+publication. Pacing uses the larger of that GC2 estimate and the legacy
+`g->gc.estimate` until raw/plain arena aggregation is independently owned by
+GC2. Full scheduler-owned string/root/finalizer sweep driving remains follow-up
+work.
 
 ## 5.9 Deferred reclamation (grace periods) — the GC as universal SMR
 

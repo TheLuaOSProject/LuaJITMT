@@ -283,9 +283,10 @@ int main(void)
   lj_arena_alloc_restore_sweep_kind(&tg->alloc, LJ_ARENAK_PLAIN);
   assert(tg->alloc.needsweep[LJ_ARENAK_PLAIN] == NULL);
   assert(tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE] == NULL);
+  tg->alloc.sweep_epoch = g->gc2.cycle;  /* Synthetic close boundary. */
   sweep_to_idle0 = la_load64_acq(&g->gc2.sweep_to_idle);
   sweep_live_updates0 = la_load64_acq(&g->gc2.sweep_live_updates);
-  lj_gc2_legacy_cycle_end(g);
+  assert(lj_gc2_sweep_to_idle(g) == 1);
   assert(la_load64_acq(&g->gc2.sweep_to_idle) == sweep_to_idle0 + 1u);
   assert(la_load64_acq(&g->gc2.sweep_live_updates) ==
 	 sweep_live_updates0 + 1u);

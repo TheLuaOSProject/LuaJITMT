@@ -16,10 +16,12 @@ make -C "$ROOT/src" -j"$JOBS" >/dev/null
 
 for needle in \
   'gc_arena_sweep_pending(global_State *g)' \
-  'gc_arena_sweep_tg_ready(TGState *tg)' \
+  'lj_gc2_sweep_tg_ready(TGState *tg)' \
+  'lj_gc2_sweep_pending(global_State *g)' \
   'gc_arena_finish_sweep_boundary(global_State *g, int drain)' \
   'la_loadptr_acq((void *const *)&g->gc2.tg_list)' \
   'lj_gc2_worker_drain_progress(g, LJ_GC2_SWEEP_BATCH)' \
+  'lj_gc2_sweep_to_idle(g)' \
   '05 section 5.6.3 worker-owned sweep bridge' \
   'assert(lj_gc2_worker_drain(g, 1) == 1u)' \
   'assert(lj_gc2_worker_drain(g, 1) == 0)' \
@@ -32,9 +34,11 @@ for needle in \
   'arena_list_contains(extra_tg.alloc.owned[LJ_ARENAK_PLAIN]' \
   'arena_list_contains(extra_tg.alloc.owned[LJ_ARENAK_TRAVERSABLE]' \
   'assert(extra_trav_a->hdr.sweep_epoch == sweep_cycle)' \
+  'assert(la_load64_acq(&g->gc2.sweep_to_idle) == sweep_to_idle0)' \
   'assert(delta <= LJ_GC2_SWEEP_BATCH)'
 do
-  if ! rg -F -q "$needle" "$ROOT/src/lj_gc.c" "$ROOT/tests/t-arena-gcsweep.c"; then
+  if ! rg -F -q "$needle" "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc2.c" \
+      "$ROOT/tests/t-arena-gcsweep.c"; then
     echo "guardrail: missing arena GC sweep marker: $needle" >&2
     exit 1
   fi

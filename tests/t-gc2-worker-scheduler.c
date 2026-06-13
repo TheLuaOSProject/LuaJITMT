@@ -228,6 +228,8 @@ static void test_async_sweep_and_stop(lua_State *L, global_State *g,
   assert((extra_plain_a->hdr.flags & LJ_AF_NEEDSWEEP) == 0);
   assert((swept_a->hdr.flags & LJ_AF_NEEDSWEEP) == 0);
   assert(swept_a->hdr.sweep_epoch == sweep_cycle);
+  assert(la_load32_acq(&g->gc2.phase) == LJ_GC2_SWEEP);
+  assert(!lj_gc2_sweep_pending(g));
 
   lj_gc2_worker_stop(g);
   assert(g->gc2.worker_thread == NULL);
@@ -235,7 +237,8 @@ static void test_async_sweep_and_stop(lua_State *L, global_State *g,
   assert(la_load32_acq(&g->gc2.worker_exited) == 1);
 
   lj_arena_alloc_restore_sweep_kind(&extra_tg.alloc, LJ_ARENAK_TRAVERSABLE);
-  lj_gc2_legacy_cycle_end(g);
+  tg->alloc.sweep_epoch = sweep_cycle;  /* Main TG had no synthetic work. */
+  assert(lj_gc2_sweep_to_idle(g) == 1);
   lj_tg_detach(g, &extra_tg);
   assert(g->gc2.n_threads == 1);
   assert(lj_tg_reclaim_dead(g) == 1u);

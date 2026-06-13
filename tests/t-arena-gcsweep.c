@@ -99,6 +99,9 @@ static void test_worker_owned_sweep_direct(void)
 			     extra_trav_a));
   swept_a = extra_tg.alloc.needsweep[LJ_ARENAK_TRAVERSABLE];
   assert(swept_a != NULL);
+  assert(lj_gc2_sweep_tg_ready(&extra_tg));
+  assert(lj_gc2_sweep_needs_prepare(g));
+  assert(lj_gc2_sweep_pending(g));
 
   worker_runs0 = la_load64_acq(&g->gc2.worker_runs);
   arenas0 = la_load64_acq(&g->gc2.sweep_owner_arenas);
@@ -113,6 +116,7 @@ static void test_worker_owned_sweep_direct(void)
   assert((extra_plain_a->hdr.flags & LJ_AF_NEEDSWEEP) == 0);
   assert((swept_a->hdr.flags & LJ_AF_NEEDSWEEP) == 0);
   assert(swept_a->hdr.sweep_epoch == sweep_cycle);
+  assert(!lj_gc2_sweep_pending(g));
   idle0 = la_load64_acq(&g->gc2.worker_idle_declares);
   assert(lj_gc2_worker_drain(g, 1) == 0);
   assert(la_load64_acq(&g->gc2.worker_idle_declares) == idle0 + 1u);
@@ -153,6 +157,7 @@ static void test_boundary_lazy_sweep(void)
   assert(tg->alloc.needsweep[LJ_ARENAK_PLAIN] == NULL);
 
   seed_traversable_needsweep(tg, seeded);
+  assert(lj_gc2_sweep_pending(g));
 
   setgcrefnull(empty);
   setgcrefnull(g->gc.mmudata);
@@ -169,12 +174,14 @@ static void test_boundary_lazy_sweep(void)
   assert(g->gc.state == GCSsweep);
   assert(tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE] != NULL);
   assert(tg->alloc.needsweep[LJ_ARENAK_PLAIN] == NULL);
+  assert(lj_gc2_sweep_pending(g));
 
   for (i = 0; i < seeded + 4u && g->gc.state != GCSpause; i++)
     (void)lj_gc_step(L);
   assert(g->gc.state == GCSpause);
   assert(tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE] == NULL);
   assert(tg->alloc.needsweep[LJ_ARENAK_PLAIN] == NULL);
+  assert(!lj_gc2_sweep_pending(g));
   setmref(g->gc.sweep, &g->gc.root);
   g->gc.stepmul = oldstepmul;
   lua_close(L);
@@ -230,6 +237,8 @@ static void test_boundary_lazy_sweep_extra_tg(void)
   assert((extra_plain_a->hdr.flags & LJ_AF_NEEDSWEEP) != 0);
   assert((extra_trav_a->hdr.flags & LJ_AF_NEEDSWEEP) != 0);
   seed_traversable_needsweep(&extra_tg, seeded);
+  assert(lj_gc2_sweep_needs_prepare(g));
+  assert(lj_gc2_sweep_pending(g));
 
   setgcrefnull(empty);
   setgcrefnull(g->gc.mmudata);
@@ -245,12 +254,15 @@ static void test_boundary_lazy_sweep_extra_tg(void)
   assert(delta <= LJ_GC2_SWEEP_BATCH);
   assert(g->gc.state == GCSsweep);
   assert(extra_tg.alloc.needsweep[LJ_ARENAK_TRAVERSABLE] != NULL);
+  assert(lj_gc2_sweep_pending(g));
 
   for (i = 0; i < seeded + 4u && g->gc.state != GCSpause; i++)
     (void)lj_gc_step(L);
   assert(g->gc.state == GCSpause);
   assert(extra_tg.alloc.needsweep[LJ_ARENAK_TRAVERSABLE] == NULL);
   assert(extra_tg.alloc.needsweep[LJ_ARENAK_PLAIN] == NULL);
+  assert(!lj_gc2_sweep_needs_prepare(g));
+  assert(!lj_gc2_sweep_pending(g));
   assert(arena_list_contains(extra_tg.alloc.owned[LJ_ARENAK_PLAIN],
 			     extra_plain_a));
   assert(arena_list_contains(extra_tg.alloc.owned[LJ_ARENAK_TRAVERSABLE],
@@ -265,6 +277,45 @@ static void test_boundary_lazy_sweep_extra_tg(void)
   assert(g->gc2.n_threads == 1);
   assert(lj_tg_reclaim_dead(g) == 1u);
   lj_tg_fini_thread(g, &extra_tg);
+  lua_close(L);
+}
+
+static void test_sweep_to_idle_worker_active(void)
+{
+  lua_State *L = luaL_newstate();
+  global_State *g;
+  TGState *tg;
+  GCRef empty;
+  uint64_t sweep_to_idle0;
+
+  assert(L != NULL);
+  g = G(L);
+  tg = G2TG(g);
+  assert(tg != NULL);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+
+  g->gc2.cycle++;
+  g->gc2.phase = LJ_GC2_SWEEP;
+  tg->alloc.sweep_epoch = g->gc2.cycle;
+  setgcrefnull(empty);
+  setgcrefnull(g->gc.mmudata);
+  setmref(g->gc.sweep, &empty);
+  g->gc.state = GCSsweep;
+  sweep_to_idle0 = la_load64_acq(&g->gc2.sweep_to_idle);
+
+  la_store32_rel(&g->gc2.worker_active, 1);
+  (void)lj_gc_step(L);
+  assert(g->gc.state == GCSsweep);
+  assert(la_load32_acq(&g->gc2.phase) == LJ_GC2_SWEEP);
+  assert(la_load64_acq(&g->gc2.sweep_to_idle) == sweep_to_idle0);
+
+  la_store32_rel(&g->gc2.worker_active, 0);
+  (void)lj_gc_step(L);
+  assert(g->gc.state == GCSpause);
+  assert(la_load32_acq(&g->gc2.phase) == LJ_GC2_IDLE);
+  assert(la_load64_acq(&g->gc2.sweep_to_idle) == sweep_to_idle0 + 1u);
+
+  setmref(g->gc.sweep, &g->gc.root);
   lua_close(L);
 }
 
@@ -637,6 +688,7 @@ int main(void)
   assert((ptr_state(finpt) & 2u) == 0);
 
   lua_close(L);
+  test_sweep_to_idle_worker_active();
   test_worker_owned_sweep_direct();
   test_boundary_lazy_sweep();
   test_boundary_lazy_sweep_extra_tg();

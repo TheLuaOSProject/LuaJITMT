@@ -110,40 +110,18 @@ static int gc_arena_sweep_ready(global_State *g)
   return g->gc2.phase == LJ_GC2_SWEEP && gcref(g->gc.mmudata) == NULL;
 }
 
-static int gc_arena_sweep_tg_ready(TGState *tg)
-{
-  uint8_t flags;
-  if (!tg)
-    return 0;
-  flags = la_load8_acq(&tg->tg_flags);
-  return !(flags & TGF_DEAD) && (flags & TGF_ARENA_INTERNAL);
-}
-
 static int gc_arena_sweep_needs_prepare(global_State *g)
 {
-  TGState *tg;
   if (!gc_arena_sweep_ready(g))
     return 0;
-  for (tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
-       tg != NULL;
-       tg = (TGState *)la_loadptr_acq((void *const *)&tg->next_tg))
-    if (gc_arena_sweep_tg_ready(tg) && tg->alloc.sweep_epoch != g->gc2.cycle)
-      return 1;
-  return 0;
+  return lj_gc2_sweep_needs_prepare(g);
 }
 
 static int gc_arena_sweep_pending(global_State *g)
 {
-  TGState *tg;
   if (!gc_arena_sweep_ready(g))
     return 0;
-  for (tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
-       tg != NULL;
-       tg = (TGState *)la_loadptr_acq((void *const *)&tg->next_tg))
-    if (gc_arena_sweep_tg_ready(tg) &&
-	tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE] != NULL)
-      return 1;
-  return 0;
+  return lj_gc2_sweep_pending(g);
 }
 
 static uint32_t gc_arena_finish_sweep_boundary(global_State *g, int drain)
@@ -158,7 +136,7 @@ static uint32_t gc_arena_finish_sweep_boundary(global_State *g, int drain)
        tg != NULL;
        tg = (TGState *)la_loadptr_acq((void *const *)&tg->next_tg)) {
     /* 05 section 5.8 boundary-lazy traversable sweep bridge. */
-    if (gc_arena_sweep_tg_ready(tg) &&
+    if (lj_gc2_sweep_tg_ready(tg) &&
 	tg->alloc.sweep_epoch != g->gc2.cycle) {
       lj_arena_alloc_prepare_sweep_kind(&tg->alloc, LJ_ARENAK_TRAVERSABLE);
       lj_arena_alloc_restore_sweep_kind(&tg->alloc, LJ_ARENAK_PLAIN);
@@ -174,6 +152,14 @@ static uint32_t gc_arena_finish_sweep_boundary(global_State *g, int drain)
       break;
   } while (1);
   return total;
+}
+
+static int gc2_legacy_sweep_close(global_State *g)
+{
+  if (la_load32_acq(&g->gc2.phase) == LJ_GC2_SWEEP)
+    return lj_gc2_sweep_to_idle(g);
+  lj_gc2_legacy_cycle_end(g);  /* Preserving full-GC fast-forward sweep. */
+  return 1;
 }
 
 #ifdef LUA_USE_ASSERT
@@ -1272,9 +1258,12 @@ static size_t gc_onestep(lua_State *L)
       if (gcref(g->gc.mmudata)) {  /* Need any finalizations? */
 	g->gc.state = GCSfinalize;
       } else {  /* Otherwise skip this phase to help the JIT. */
-	g->gc.state = GCSpause;  /* End of GC cycle. */
-	lj_gc2_legacy_cycle_end(g);
-	g->gc.debt = 0;
+	if (gc2_legacy_sweep_close(g)) {
+	  g->gc.state = GCSpause;  /* End of GC cycle. */
+	  g->gc.debt = 0;
+	} else {
+	  g->gc.state = GCSsweep;
+	}
       }
     }
     return GCSWEEPMAX*GCSWEEPCOST;
@@ -1292,9 +1281,10 @@ static size_t gc_onestep(lua_State *L)
       return GCFINALIZECOST;
     }
     (void)gc_arena_finish_sweep_boundary(g, 1);
-    g->gc.state = GCSpause;  /* End of GC cycle. */
-    lj_gc2_legacy_cycle_end(g);
-    g->gc.debt = 0;
+    if (gc2_legacy_sweep_close(g)) {
+      g->gc.state = GCSpause;  /* End of GC cycle. */
+      g->gc.debt = 0;
+    }
     return 0;
   default:
     lj_assertG(0, "bad GC state");
