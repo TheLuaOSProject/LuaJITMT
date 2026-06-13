@@ -157,6 +157,12 @@ prevented because the producer's wbarrier already marked it during P_MARK).
   poll/park-wakeup, raises error "thread interrupted: VM shutdown" through
   its pcall chain (unprotected → thread just ends). Main then joins all,
   runs pending finalizers (bounded by 2 cycles), lua_close.
+  Current x64 VM safepoint polls call `lj_safepoint_ack_check()`, which
+  applies pending actions and immediately raises on `HS_STOPREQ`. The x64
+  branch trigger currently checks `g->gc2.hs_pending` so secondary Lua threads
+  see pending handshakes while the VM dispatch base remains tied to the
+  embedded main `GG_State` layout. Native waits keep using
+  `lj_safepoint_checkstop()` after wake/leave.
 - lua_close from C: same, plus asserts caller is the main thread.
 - A crashed thread (error escaped f): error object stored, state DONE;
   nothing else dies (Go-style panics-are-isolated DECIDED; an

@@ -318,16 +318,15 @@
 |.define PC_RC, byte [PC-2]
 |.define PC_RD, word [PC-2]
 |
-|.define TGPOLL, dword [DISPATCH+DISPATCH_TG(poll)]
+|// Assumes DISPATCH is relative to TGState.dispatch.
+#define DISPATCH_GL(field)	(TG_DISP2G + (int)offsetof(global_State, field))
+#define DISPATCH_J(field)	(TG_DISP2J + (int)offsetof(jit_State, field))
+|.define TGPOLL, dword [DISPATCH+DISPATCH_GL(gc2.hs_pending)]
 |.define TGMARK, dword [DISPATCH+DISPATCH_TG(mark_active)]
 |
 |.macro branchPC, reg
 |  lea PC, [PC+reg*4-BCBIAS_J*4]
 |.endmacro
-|
-|// Assumes DISPATCH is relative to TGState.dispatch.
-#define DISPATCH_GL(field)	(TG_DISP2G + (int)offsetof(global_State, field))
-#define DISPATCH_J(field)	(TG_DISP2J + (int)offsetof(jit_State, field))
 |
 #define PC2PROTO(field)  ((int)offsetof(GCproto, field)-(int)sizeof(GCproto))
 |
@@ -398,7 +397,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov L:RB->base, BASE
   |  mov SAVE_PC, PC
   |  mov CARG1, L:RB
-  |  call extern lj_safepoint_ack
+  |  call extern lj_safepoint_ack_check
   |  mov BASE, L:RB->base
   |  ins_next
   |
@@ -484,7 +483,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  jz >9
   |  mov SAVE_PC, L:RB			// Outside bytecode while returning to C.
   |  mov CARG1, L:RB
-  |  call extern lj_safepoint_ack
+  |  call extern lj_safepoint_ack_check
   |9:
   |  mov RA, SAVE_CFRAME		// Restore previous C frame.
   |  mov L:RB->cframe, RA
@@ -543,7 +542,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov SAVE_ERRF, eax
   |  mov SAVE_PC, L:RB			// Outside bytecode while unwinding to C.
   |  mov CARG1, L:RB
-  |  call extern lj_safepoint_ack
+  |  call extern lj_safepoint_ack_check
   |  mov eax, SAVE_ERRF
   |  mov L:RB, SAVE_L
   |9:
@@ -2598,7 +2597,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov SAVE_ERRF, RDd
   |  mov SAVE_PC, PC
   |  mov CARG1, L:RB
-  |  call extern lj_safepoint_ack
+  |  call extern lj_safepoint_ack_check
   |  mov L:RB, SAVE_L
   |  mov BASE, L:RB->base
   |  mov RDd, SAVE_ERRF

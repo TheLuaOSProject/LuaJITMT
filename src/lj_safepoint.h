@@ -10,6 +10,7 @@
 #include "lj_gc2.h"
 
 LJ_FUNCA uint32_t lj_safepoint_ack(lua_State *L);
+LJ_FUNCA uint32_t lj_safepoint_ack_check(lua_State *L);
 LJ_FUNCA uint32_t lj_safepoint_poll(lua_State *L);
 LJ_FUNC void lj_safepoint_checkstop(lua_State *L, uint32_t actions);
 LJ_FUNC uint32_t lj_safepoint_handshake(global_State *g, uint32_t actions);

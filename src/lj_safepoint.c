@@ -102,6 +102,13 @@ void lj_safepoint_checkstop(lua_State *L, uint32_t actions)
     lj_err_callermsg(L, "thread interrupted: VM shutdown");
 }
 
+uint32_t lj_safepoint_ack_check(lua_State *L)
+{
+  uint32_t actions = lj_safepoint_ack(L);
+  lj_safepoint_checkstop(L, actions);
+  return actions;
+}
+
 void lj_native_enter(TGState *tg)
 {
   if (tg)
