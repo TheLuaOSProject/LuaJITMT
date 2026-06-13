@@ -729,7 +729,7 @@ static void trace_start(jit_State *J)
   if (LJ_UNLIKELY(traceno == 0)) {  /* No free trace? */
     lj_assertJ((J2G(J)->hookmask & HOOK_GC) == 0,
 	       "recorder called from GC hook");
-    lj_trace_flushall(J->L);
+    (void)lj_trace_flushall_hs(J->L);
     J->state = LJ_TRACE_IDLE;  /* Silently ignored. */
     return;
   }
@@ -977,7 +977,7 @@ static int trace_abort(jit_State *J)
       J->flags &= ~JIT_F_ON;
       lj_dispatch_update(J2G(J), 0);
     }
-    lj_trace_flushall(L);
+    (void)lj_trace_flushall_hs(L);
   }
   return 0;
 }
