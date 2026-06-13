@@ -70,6 +70,12 @@ hotcount path are advisory only — acceptable staleness).
   token holder's HS_SCAN_ROOTS ack (scan J->cur.* as roots while
   `jit_token==self`), replacing gc_traverse_curtrace (lj_gc.c atomic()).
 
+Current M5 bridge: C-side `traceref()` acquire-loads trace slots, in-flight
+slots use the pending sentinel instead of `&J->cur`, and final slots are
+release-published before bytecode/exit/link go-signals. The full trace-vector
+RCU growth and exittab/no-code-patching design above remains the original
+target.
+
 ## 8.4 Bytecode patching & side exits — no code patching, ever
 
 ### 8.4.1 bc_publish

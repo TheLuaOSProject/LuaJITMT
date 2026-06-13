@@ -286,8 +286,22 @@ typedef struct GCtrace {
 } GCtrace;
 
 #define gco2trace(o)	check_exp((o)->gch.gct == ~LJ_TTRACE, (GCtrace *)(o))
+#define LJ_TRACE_PENDING	((uintptr_t)1u)
+static LJ_AINLINE GCtrace *traceref_fromgco(GCobj *o)
+{
+  return (uintptr_t)o <= LJ_TRACE_PENDING ? NULL : gco2trace(o);
+}
+#define tracevec_acq(J) \
+  ((GCRef *)la_loadptr_acq((void *const *)&(J)->trace))
 #define traceref(J, n) \
-  check_exp((n)>0 && (MSize)(n)<J->sizetrace, (GCtrace *)gcref(J->trace[(n)]))
+  check_exp((n)>0 && (MSize)(n)<J->sizetrace, \
+	    traceref_fromgco(gcref_acq(tracevec_acq(J)[(n)])))
+#define traceslot_pending(J, n) \
+  setgcrefrel((J)->trace[(n)], (const GCobj *)LJ_TRACE_PENDING)
+#define traceslot_publish(J, n, T) \
+  setgcrefrel((J)->trace[(n)], obj2gco((T)))
+#define traceslot_clear(J, n) \
+  setgcrefrel((J)->trace[(n)], NULL)
 
 LJ_STATIC_ASSERT(offsetof(GChead, gclist) == offsetof(GCtrace, gclist));
 

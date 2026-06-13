@@ -75,7 +75,7 @@ static TraceNo trace_findfree(jit_State *J)
     return 0;  /* Too many traces. */
   lj_mem_growvec(J->L, J->trace, J->sizetrace, lim, GCRef);
   for (; osz < J->sizetrace; osz++)
-    setgcrefnull(J->trace[osz]);
+    traceslot_clear(J, osz);
   return J->freetrace;
 }
 
@@ -163,7 +163,7 @@ static void trace_save(jit_State *J, GCtrace *T)
   TRACE_APPENDVEC(snapmap, nsnapmap, SnapEntry)
   J->cur.traceno = 0;
   J->curfinal = NULL;
-  setgcrefp(J->trace[T->traceno], T);
+  traceslot_publish(J, T->traceno, T);
   lj_gc_barriertrace(J2G(J), T->traceno);
   lj_gdbjit_addtrace(J, T);
 #ifdef LUAJIT_USE_PERFTOOLS
@@ -178,7 +178,7 @@ void LJ_FASTCALL lj_trace_free(global_State *g, GCtrace *T)
     lj_gdbjit_deltrace(J, T);
     if (T->traceno < J->freetrace)
       J->freetrace = T->traceno;
-    setgcrefnull(J->trace[T->traceno]);
+    traceslot_clear(J, T->traceno);
   }
   lj_mem_free(g, T,
     ((sizeof(GCtrace)+7)&~7) + (T->nins-T->nk)*sizeof(IRIns) +
@@ -200,6 +200,18 @@ void lj_trace_reenableproto(GCproto *pt)
 	setbc_op(&bc[i], (int)op+(int)BC_LOOP-(int)BC_ILOOP);
     }
   }
+}
+
+static LJ_AINLINE void bc_publish(BCIns *pc, BCIns ins)
+{
+  la_store32_rel((uint32_t *)pc, (uint32_t)ins);
+}
+
+static LJ_AINLINE void bc_publish_op(BCIns *pc, BCOp op)
+{
+  BCIns ins = *pc;
+  setbc_op(&ins, op);
+  bc_publish(pc, ins);
 }
 
 /* Unpatch the bytecode modified by a root trace. */
@@ -288,7 +300,7 @@ int lj_trace_flushall(lua_State *L)
 	trace_flushroot(J, T);
       lj_gdbjit_deltrace(J, T);
       T->traceno = T->link = 0;  /* Blacklist the link for cont_stitch. */
-      setgcrefnull(J->trace[i]);
+      traceslot_clear(J, i);
     }
   }
   J->cur.traceno = 0;
@@ -450,7 +462,7 @@ static void trace_start(jit_State *J)
     J->state = LJ_TRACE_IDLE;  /* Silently ignored. */
     return;
   }
-  setgcrefp(J->trace[traceno], &J->cur);
+  traceslot_pending(J, traceno);
 
   /* Setup enough of the current trace to be able to send the vmevent. */
   memset(&J->cur, 0, sizeof(GCtrace));
@@ -505,61 +517,90 @@ static void trace_stop(jit_State *J)
   GCproto *pt = &gcref(J->cur.startpt)->pt;
   TraceNo traceno = J->cur.traceno;
   GCtrace *T = J->curfinal;
+  BCIns *patchpc = NULL;
+  BCIns patchins = 0;
+  GCtrace *parent = NULL;
+  GCtrace *root = NULL;
+  SnapShot *snap = NULL;
+  int addroot = 0;
 
   switch (op) {
   case BC_FORL:
-    setbc_op(pc+bc_j(J->cur.startins), BC_JFORI);  /* Patch FORI, too. */
+    /* The matching FORI is patched after trace publication. */
     /* fallthrough */
   case BC_LOOP:
   case BC_ITERL:
   case BC_FUNCF:
-    /* Patch bytecode of starting instruction in root trace. */
-    setbc_op(pc, (int)op+(int)BC_JLOOP-(int)BC_LOOP);
-    setbc_d(pc, traceno);
+    patchpc = pc;
+    patchins = BCINS_AD((int)op+(int)BC_JLOOP-(int)BC_LOOP,
+			bc_a(J->cur.startins), traceno);
   addroot:
-    /* Add to root trace chain in prototype. */
     J->cur.nextroot = pt->trace;
-    pt->trace = (TraceNo1)traceno;
+    addroot = 1;
     break;
   case BC_ITERN:
   case BC_RET:
   case BC_RET0:
   case BC_RET1:
-    *pc = BCINS_AD(BC_JLOOP, J->cur.snap[0].nslots, traceno);
+    patchpc = pc;
+    patchins = BCINS_AD(BC_JLOOP, J->cur.snap[0].nslots, traceno);
     goto addroot;
   case BC_JMP:
-    /* Patch exit branch in parent to side trace entry. */
     lj_assertJ(J->parent != 0 && J->cur.root != 0, "not a side trace");
-    lj_asm_patchexit(J, traceref(J, J->parent), J->exitno, J->cur.mcode);
+    parent = traceref(J, J->parent);
+    root = traceref(J, J->cur.root);
+    lj_assertJ(parent != NULL && root != NULL, "missing parent/root trace");
     /* Avoid compiling a side trace twice (stack resizing uses parent exit). */
-    {
-      SnapShot *snap = &traceref(J, J->parent)->snap[J->exitno];
-      snap->count = SNAPCOUNT_DONE;
-      if (J->cur.topslot > snap->topslot) snap->topslot = J->cur.topslot;
-    }
-    /* Add to side trace chain in root trace. */
-    {
-      GCtrace *root = traceref(J, J->cur.root);
-      root->nchild++;
-      J->cur.nextside = root->nextside;
-      root->nextside = (TraceNo1)traceno;
-    }
+    snap = &parent->snap[J->exitno];
+    J->cur.nextside = root->nextside;
     break;
   case BC_CALLM:
   case BC_CALL:
   case BC_ITERC:
-    /* Trace stitching: patch link of previous trace. */
-    traceref(J, J->exitno)->link = traceno;
+    parent = traceref(J, J->exitno);
+    lj_assertJ(parent != NULL, "missing stitched trace");
     break;
   default:
     lj_assertJ(0, "bad stop bytecode %d", op);
     break;
   }
 
-  /* Commit new mcode only after all patching is done. */
+  /* Commit and publish the final trace before enabling bytecode/exits. */
   lj_mcode_commit(J, J->cur.mcode);
   J->postproc = LJ_POST_NONE;
   trace_save(J, T);
+
+  switch (op) {
+  case BC_FORL:
+    bc_publish_op(pc+bc_j(J->cur.startins), BC_JFORI);
+    /* fallthrough */
+  case BC_LOOP:
+  case BC_ITERL:
+  case BC_FUNCF:
+  case BC_ITERN:
+  case BC_RET:
+  case BC_RET0:
+  case BC_RET1:
+    if (addroot)
+      la_store16_rel(&pt->trace, (TraceNo1)traceno);
+    if (patchpc)
+      bc_publish(patchpc, patchins);
+    break;
+  case BC_JMP:
+    lj_asm_patchexit(J, parent, J->exitno, T->mcode);
+    snap->count = SNAPCOUNT_DONE;
+    if (T->topslot > snap->topslot) snap->topslot = T->topslot;
+    root->nchild++;
+    la_store16_rel(&root->nextside, (TraceNo1)traceno);
+    break;
+  case BC_CALLM:
+  case BC_CALL:
+  case BC_ITERC:
+    la_store16_rel(&parent->link, (TraceNo1)traceno);
+    break;
+  default:
+    break;
+  }
 
   lj_vmevent_send(J2G(J), TRACE,
     setstrV(V, V->top++, lj_str_newlit(V, "stop"));
@@ -647,7 +688,7 @@ static int trace_abort(jit_State *J)
       copyTV(V, V->top++, &J->errinfo);
     );
     /* Drop aborted trace after the vmevent (which may still access it). */
-    setgcrefnull(J->trace[traceno]);
+    traceslot_clear(J, traceno);
     if (traceno < J->freetrace)
       J->freetrace = traceno;
     J->cur.traceno = 0;
