@@ -2515,8 +2515,10 @@ static void build_subroutines(BuildCtx *ctx)
   |  // DISPATCH is preserved on-trace in LJ_GC64 mode.
   |  mov RAd, [DISPATCH+DISPATCH_GL(vmstate)]	// Get trace number.
   |  set_vmstate EXIT
+  |.if X64WIN
   |  mov [DISPATCH+DISPATCH_J(exitno)], RCd
   |  mov [DISPATCH+DISPATCH_J(parent)], RAd
+  |.endif
   |.if X64WIN
   |  sub rsp, 16*8+4*8			// Room for SSE regs + save area.
   |.else
@@ -2534,16 +2536,27 @@ static void build_subroutines(BuildCtx *ctx)
   |  // Caveat: RB is rbp.
   |  mov L:RB, [DISPATCH+DISPATCH_TG(cur_L)]
   |  mov BASE, [DISPATCH+DISPATCH_TG(jit_base)]
+  |.if X64WIN
   |  mov aword [DISPATCH+DISPATCH_J(L)], L:RB
+  |.endif
   |  mov L:RB->base, BASE
   |.if X64WIN
   |  lea CARG2, [rsp+4*8]
   |.else
   |  mov CARG2, rsp
   |.endif
+  |.if X64WIN
   |  lea CARG1, [DISPATCH+TG_DISP2J]
   |  mov qword [DISPATCH+DISPATCH_TG(jit_base)], 0
   |  call extern lj_trace_exit		// (jit_State *J, ExitState *ex)
+  |.else
+  |  mov CARG3, L:RB
+  |  mov CARG5d, RCd
+  |  mov CARG4d, RAd
+  |  lea CARG1, [DISPATCH+TG_DISP2J]
+  |  mov qword [DISPATCH+DISPATCH_TG(jit_base)], 0
+  |  call extern lj_trace_exit		// (jit_State *J, ExitState *ex, lua_State *L, TraceNo parent, ExitNo exitno)
+  |.endif
   |  // MULTRES or negated error code returned in eax (RD).
   |  mov RA, L:RB->cframe
   |  and RA, CFRAME_RAWMASK

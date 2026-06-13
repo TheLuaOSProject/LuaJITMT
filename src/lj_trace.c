@@ -1126,13 +1126,14 @@ void LJ_FASTCALL lj_trace_hot(jit_State *J, const BCIns *pc)
 }
 
 /* Check for a hot side exit. If yes, start recording a side trace. */
-static void trace_hotside(jit_State *J, const BCIns *pc)
+static void trace_hotside(jit_State *J, const BCIns *pc, lua_State *L,
+			  TraceNo parent, ExitNo exitno)
 {
-  SnapShot *snap = &traceref(J, J->parent)->snap[J->exitno];
+  SnapShot *snap = &traceref(J, parent)->snap[exitno];
   uint32_t hotexit = J->param[JIT_P_hotexit];
   uint8_t count;
   if (!(J2G(J)->hookmask & (HOOK_GC|HOOK_VMEVENT)) &&
-      isluafunc(curr_func(J->L))) {
+      isluafunc(curr_func(L))) {
     count = snap->count;
     if (count == SNAPCOUNT_DONE)
       return;
@@ -1145,6 +1146,9 @@ static void trace_hotside(jit_State *J, const BCIns *pc)
       return;
     if (count < SNAPCOUNT_DONE-1)
       snap->count = (uint8_t)(count + 1u);
+    J->L = L;
+    J->parent = parent;
+    J->exitno = exitno;
     /* J->parent is non-zero for a side trace. */
     J->state = LJ_TRACE_START;
     lj_trace_ins(J, pc);
@@ -1179,7 +1183,10 @@ void LJ_FASTCALL lj_trace_stitch(jit_State *J, const BCIns *pc)
 /* Tiny struct to pass data to protected call. */
 typedef struct ExitDataCP {
   jit_State *J;
+  lua_State *L;
   void *exptr;		/* Pointer to exit state. */
+  TraceNo parent;	/* Exited trace. */
+  ExitNo exitno;	/* Exited snapshot. */
   const BCIns *pc;	/* Restart interpreter at this PC. */
 } ExitDataCP;
 
@@ -1190,7 +1197,12 @@ static TValue *trace_exit_cp(lua_State *L, lua_CFunction dummy, void *ud)
   /* Always catch error here and don't call error function. */
   cframe_errfunc(L->cframe) = 0;
   cframe_nres(L->cframe) = -2*LUAI_MAXSTACK*(int)sizeof(TValue);
+#if LJ_TARGET_X64 && !LJ_ABI_WIN
+  exd->pc = lj_snap_restore_exit(exd->J, exd->exptr, exd->L,
+				 exd->parent, exd->exitno);
+#else
   exd->pc = lj_snap_restore(exd->J, exd->exptr);
+#endif
   UNUSED(dummy);
   return NULL;
 }
@@ -1235,10 +1247,19 @@ static TraceNo trace_exit_find(jit_State *J, MCode *pc)
 #endif
 
 /* A trace exited. Restore interpreter state. */
+#if LJ_TARGET_X64 && !LJ_ABI_WIN
+int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr, lua_State *L,
+			      TraceNo parent, ExitNo exitno)
+#else
 int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr)
+#endif
 {
   ERRNO_SAVE
+#if !(LJ_TARGET_X64 && !LJ_ABI_WIN)
   lua_State *L = J->L;
+  TraceNo parent = J->parent;
+  ExitNo exitno = J->exitno;
+#endif
   ExitState *ex = (ExitState *)exptr;
   ExitDataCP exd;
   int errcode, exitcode = J->exitcode;
@@ -1254,22 +1275,25 @@ int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr)
   }
 
 #ifdef EXITSTATE_PCREG
-  J->parent = trace_exit_find(J, (MCode *)(intptr_t)ex->gpr[EXITSTATE_PCREG]);
+  parent = trace_exit_find(J, (MCode *)(intptr_t)ex->gpr[EXITSTATE_PCREG]);
 #else
   UNUSED(ex);
 #endif
-  T = traceref(J, J->parent); UNUSED(T);
+  T = traceref(J, parent); UNUSED(T);
 #ifdef EXITSTATE_CHECKEXIT
-  if (J->exitno == T->nsnap) {  /* Treat stack check like a parent exit. */
+  if (exitno == T->nsnap) {  /* Treat stack check like a parent exit. */
     lj_assertJ(T->root != 0, "stack check in root trace");
-    J->exitno = T->ir[REF_BASE].op2;
-    J->parent = T->ir[REF_BASE].op1;
-    T = traceref(J, J->parent);
+    exitno = T->ir[REF_BASE].op2;
+    parent = T->ir[REF_BASE].op1;
+    T = traceref(J, parent);
   }
 #endif
-  lj_assertJ(T != NULL && J->exitno < T->nsnap, "bad trace or exit number");
+  lj_assertJ(T != NULL && exitno < T->nsnap, "bad trace or exit number");
   exd.J = J;
+  exd.L = L;
   exd.exptr = exptr;
+  exd.parent = parent;
+  exd.exitno = exitno;
   errcode = lj_vm_cpcall(L, NULL, &exd, trace_exit_cp);
   if (errcode)
     return -errcode;  /* Return negated error code. */
@@ -1279,8 +1303,8 @@ int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr)
   if (!(LJ_HASPROFILE && (G(L)->hookmask & HOOK_PROFILE)))
     lj_vmevent_send(G(L), TEXIT,
       lj_state_checkstack(V, 4+RID_NUM_GPR+RID_NUM_FPR+LUA_MINSTACK);
-      setintV(V->top++, J->parent);
-      setintV(V->top++, J->exitno);
+      setintV(V->top++, parent);
+      setintV(V->top++, exitno);
       trace_exit_regs(V, ex);
     );
 
@@ -1295,7 +1319,7 @@ int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr)
     if (!(G(L)->hookmask & HOOK_GC))
       lj_gc_step(L);  /* Exited because of GC: drive GC forward. */
   } else if ((J->flags & JIT_F_ON)) {
-    trace_hotside(J, pc);
+    trace_hotside(J, pc, L, parent, exitno);
   }
   /* Return MULTRES or 0 or -17. */
   ERRNO_RESTORE

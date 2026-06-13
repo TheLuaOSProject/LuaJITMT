@@ -690,12 +690,12 @@ void lj_snap_replay(jit_State *J, GCtrace *T)
 
 /* -- Snapshot restore ---------------------------------------------------- */
 
-static void snap_unsink(jit_State *J, GCtrace *T, ExitState *ex,
+static void snap_unsink(lua_State *L, jit_State *J, GCtrace *T, ExitState *ex,
 			SnapNo snapno, BloomFilter rfilt,
 			IRIns *ir, TValue *o);
 
 /* Restore a value from the trace exit state. */
-static void snap_restoreval(jit_State *J, GCtrace *T, ExitState *ex,
+static void snap_restoreval(lua_State *L, jit_State *J, GCtrace *T, ExitState *ex,
 			    SnapNo snapno, BloomFilter rfilt,
 			    IRRef ref, TValue *o)
 {
@@ -709,7 +709,7 @@ static void snap_restoreval(jit_State *J, GCtrace *T, ExitState *ex,
       lj_assertJ(!(ir->o == IR_KKPTR || ir->o == IR_KNULL),
 		 "restore of const from IR %04d with bad op %d",
 		 ref - REF_BIAS, ir->o);
-      lj_ir_kvalue(J->L, o, ir);
+      lj_ir_kvalue(L, o, ir);
     }
     return;
   }
@@ -730,14 +730,14 @@ static void snap_restoreval(jit_State *J, GCtrace *T, ExitState *ex,
 #endif
     } else {
       lj_assertJ(!irt_ispri(t), "PRI ref with spill slot");
-      setgcV(J->L, o, (GCobj *)(uintptr_t)*(GCSize *)sps, irt_toitype(t));
+      setgcV(L, o, (GCobj *)(uintptr_t)*(GCSize *)sps, irt_toitype(t));
     }
   } else {  /* Restore from register. */
     Reg r = regsp_reg(rs);
     if (ra_noreg(r)) {
       lj_assertJ(ir->o == IR_CONV && ir->op2 == IRCONV_NUM_INT,
 		 "restore from IR %04d has no reg", ref - REF_BIAS);
-      snap_restoreval(J, T, ex, snapno, rfilt, ir->op1, o);
+      snap_restoreval(L, J, T, ex, snapno, rfilt, ir->op1, o);
       if (LJ_DUALNUM) setnumV(o, (lua_Number)intV(o));
       return;
     } else if (irt_isinteger(t)) {
@@ -757,7 +757,7 @@ static void snap_restoreval(jit_State *J, GCtrace *T, ExitState *ex,
     } else if (irt_ispri(t)) {
       setpriV(o, irt_toitype(t));
     } else {
-      setgcV(J->L, o, (GCobj *)ex->gpr[r-RID_MIN_GPR], irt_toitype(t));
+      setgcV(L, o, (GCobj *)ex->gpr[r-RID_MIN_GPR], irt_toitype(t));
     }
   }
 }
@@ -830,7 +830,7 @@ static void snap_restoredata(jit_State *J, GCtrace *T, ExitState *ex,
 #endif
 
 /* Unsink allocation from the trace exit state. Unsink sunk stores. */
-static void snap_unsink(jit_State *J, GCtrace *T, ExitState *ex,
+static void snap_unsink(lua_State *L, jit_State *J, GCtrace *T, ExitState *ex,
 			SnapNo snapno, BloomFilter rfilt,
 			IRIns *ir, TValue *o)
 {
@@ -839,12 +839,12 @@ static void snap_unsink(jit_State *J, GCtrace *T, ExitState *ex,
 	     "sunk allocation with bad op %d", ir->o);
 #if LJ_HASFFI
   if (ir->o == IR_CNEW || ir->o == IR_CNEWI) {
-    CTState *cts = ctype_cts(J->L);
+    CTState *cts = ctype_cts(L);
     CTypeID id = (CTypeID)T->ir[ir->op1].i;
     CTSize sz;
     CTInfo info = lj_ctype_info(cts, id, &sz);
     GCcdata *cd = lj_cdata_newx(cts, id, sz, info);
-    setcdataV(J->L, o, cd);
+    setcdataV(L, o, cd);
     if (ir->o == IR_CNEWI) {
       uint8_t *p = (uint8_t *)cdataptr(cd);
       lj_assertJ(sz == 4 || sz == 8, "sunk cdata with bad size %d", sz);
@@ -891,12 +891,12 @@ static void snap_unsink(jit_State *J, GCtrace *T, ExitState *ex,
 #endif
   {
     IRIns *irs, *irlast;
-    GCtab *t = ir->o == IR_TNEW ? lj_tab_new(J->L, ir->op1, ir->op2) :
-				  lj_tab_dup(J->L, ir_ktab(&T->ir[ir->op1]));
+    GCtab *t = ir->o == IR_TNEW ? lj_tab_new(L, ir->op1, ir->op2) :
+				  lj_tab_dup(L, ir_ktab(&T->ir[ir->op1]));
     {
       TValue tv;
-      settabV(J->L, &tv, t);
-      copyTVrel(J->L, o, &tv);
+      settabV(L, &tv, t);
+      copyTVrel(L, o, &tv);
     }
     irlast = &T->ir[T->snap[snapno].ref];
     for (irs = ir+1; irs < irlast; irs++)
@@ -912,7 +912,7 @@ static void snap_unsink(jit_State *J, GCtrace *T, ExitState *ex,
 	    if (T->ir[irs->op2].o == IR_KNULL) {
 	      setgcrefnull(t->metatable);
 	    } else {
-	      snap_restoreval(J, T, ex, snapno, rfilt, irs->op2, &tmp);
+	      snap_restoreval(L, J, T, ex, snapno, rfilt, irs->op2, &tmp);
 	      /* NOBARRIER: The table is new (marked white). */
 	      setgcref(t->metatable, obj2gco(tabV(&tmp)));
 	    }
@@ -927,27 +927,28 @@ static void snap_unsink(jit_State *J, GCtrace *T, ExitState *ex,
 	} else {
 	  irk = &T->ir[irk->op2];
 	  if (irk->o == IR_KSLOT) irk = &T->ir[irk->op1];
-	  lj_ir_kvalue(J->L, &tmp, irk);
-	  val = lj_tab_set(J->L, t, &tmp);
+	  lj_ir_kvalue(L, &tmp, irk);
+	  val = lj_tab_set(L, t, &tmp);
 	  /* NOBARRIER: The table is new (marked white). */
-	  snap_restoreval(J, T, ex, snapno, rfilt, irs->op2, &tmp);
+	  snap_restoreval(L, J, T, ex, snapno, rfilt, irs->op2, &tmp);
 	  if (LJ_SOFTFP32 && irs+1 < T->ir + T->nins && (irs+1)->o == IR_HIOP) {
 	    TValue hi;
-	    snap_restoreval(J, T, ex, snapno, rfilt, (irs+1)->op2, &hi);
+	    snap_restoreval(L, J, T, ex, snapno, rfilt, (irs+1)->op2, &hi);
 	    tmp.u32.hi = hi.u32.lo;
 	  }
-	  lj_tab_storetv(J->L, val, &tmp);
+	  lj_tab_storetv(L, val, &tmp);
 	}
       }
   }
 }
 
 /* Restore interpreter state from exit state with the help of a snapshot. */
-const BCIns *lj_snap_restore(jit_State *J, void *exptr)
+static const BCIns *snap_restore(jit_State *J, void *exptr, lua_State *L,
+				 TraceNo parent, ExitNo exitno)
 {
   ExitState *ex = (ExitState *)exptr;
-  SnapNo snapno = J->exitno;  /* For now, snapno == exitno. */
-  GCtrace *T = traceref(J, J->parent);
+  SnapNo snapno = exitno;  /* For now, snapno == exitno. */
+  GCtrace *T = traceref(J, parent);
   SnapShot *snap = &T->snap[snapno];
   MSize n, nent = snap->nent;
   SnapEntry *map = &T->snapmap[snap->mapofs];
@@ -960,7 +961,6 @@ const BCIns *lj_snap_restore(jit_State *J, void *exptr)
   TValue *frame;
   BloomFilter rfilt = snap_renamefilter(T, snapno);
   const BCIns *pc = snap_pc(&map[nent]);
-  lua_State *L = J->L;
 
   /* Set interpreter PC to the next PC to get correct error messages.
   ** But not for returns or tail calls, since pc+1 may be out-of-range.
@@ -992,14 +992,14 @@ const BCIns *lj_snap_restore(jit_State *J, void *exptr)
 	    copyTV(L, o, &frame[snap_slot(map[j])]);
 	    goto dupslot;
 	  }
-	snap_unsink(J, T, ex, snapno, rfilt, ir, o);
+	snap_unsink(L, J, T, ex, snapno, rfilt, ir, o);
       dupslot:
 	continue;
       }
-      snap_restoreval(J, T, ex, snapno, rfilt, ref, o);
+      snap_restoreval(L, J, T, ex, snapno, rfilt, ref, o);
       if (LJ_SOFTFP32 && (sn & SNAP_SOFTFPNUM) && tvisint(o)) {
 	TValue tmp;
-	snap_restoreval(J, T, ex, snapno, rfilt, ref+1, &tmp);
+	snap_restoreval(L, J, T, ex, snapno, rfilt, ref+1, &tmp);
 	o->u32.hi = tmp.u32.lo;
 #if !LJ_FR2
       } else if ((sn & (SNAP_CONT|SNAP_FRAME))) {
@@ -1033,6 +1033,19 @@ const BCIns *lj_snap_restore(jit_State *J, void *exptr)
   }
   return pc;
 }
+
+const BCIns *lj_snap_restore(jit_State *J, void *exptr)
+{
+  return snap_restore(J, exptr, J->L, J->parent, J->exitno);
+}
+
+#if LJ_TARGET_X64 && !LJ_ABI_WIN
+const BCIns *lj_snap_restore_exit(jit_State *J, void *exptr, lua_State *L,
+				  TraceNo parent, ExitNo exitno)
+{
+  return snap_restore(J, exptr, L, parent, exitno);
+}
+#endif
 
 #undef emitir_raw
 #undef emitir

@@ -64,8 +64,8 @@ for needle in \
   'lj_tab_storetv(ls->L, lj_tab_set(ls->L, t, &key), &tv)' \
   'copyTVrel(sbufL(sbx), o, &tv)' \
   'settabV(sbufL(sbx), &tv, t)' \
-  'copyTVrel(J->L, o, &tv)' \
-  'lj_tab_storetv(J->L, val, &tmp)' \
+  'copyTVrel(L, o, &tv)' \
+  'lj_tab_storetv(L, val, &tmp)' \
   'lj_tab_storeint(L, lj_tab_newkey(L, dict, &tv), (int32_t)(i-1))'
 do
   if ! rg -F -q "$needle" "$ROOT/src"; then

@@ -51,7 +51,12 @@ LJ_FUNCA void LJ_FASTCALL lj_trace_stitch(jit_State *J, const BCIns *pc,
 LJ_FUNCA void LJ_FASTCALL lj_trace_hot(jit_State *J, const BCIns *pc);
 LJ_FUNCA void LJ_FASTCALL lj_trace_stitch(jit_State *J, const BCIns *pc);
 #endif
+#if LJ_TARGET_X64 && !LJ_ABI_WIN
+LJ_FUNCA int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr, lua_State *L,
+				       TraceNo parent, ExitNo exitno);
+#else
 LJ_FUNCA int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr);
+#endif
 #if LJ_UNWIND_EXT
 LJ_FUNC uintptr_t LJ_FASTCALL lj_trace_unwind(jit_State *J, uintptr_t addr, ExitNo *ep);
 #endif

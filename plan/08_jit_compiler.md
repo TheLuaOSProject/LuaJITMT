@@ -55,13 +55,15 @@ acquired with the current TG tid by hot root traces, hot side traces, and stitch
 attempts. Record-mode dispatch callbacks only mutate `J` for the token holder,
 and the x64 hot-loop/stitch paths pass `lua_State *` (plus the invoking trace
 number for stitching) into C so `J->L`/stitch `J->exitno` are only written after
-token acquisition. The trace state machine releases the token whenever it
-returns to `LJ_TRACE_IDLE`, and token-busy hot side exits do not advance the
-retry budget into `SNAPCOUNT_DONE`. The remaining original targets are to localize
-record dispatch to the token holder's TG table instead of temporarily exposing
-record hooks through the global dispatch template, and to move trace-exit
-restore state (`J->L`, `J->parent`, `J->exitno`) into per-TG storage before
-side-trace token acquisition.
+token acquisition. The x64/POSIX trace-exit path passes `L`/parent/exitno into
+C and carries them as call-local snapshot-restore inputs; it publishes them to
+shared `J` only after hot side exits acquire the recorder token. The trace
+state machine releases the token whenever it returns to
+`LJ_TRACE_IDLE`, and token-busy hot side exits do not advance the retry budget
+into `SNAPCOUNT_DONE`. The remaining original target is to localize record
+dispatch to the token holder's TG table instead of temporarily exposing record
+hooks through the global dispatch template. The unwound-trace `J->exitcode`
+path remains separate shared-state follow-up work.
 
 ## 8.3 Trace registry & publication
 

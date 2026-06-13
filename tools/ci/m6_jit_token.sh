@@ -14,12 +14,15 @@ for needle in \
   'lj_jit_token_try(jit_State *J)' \
   'la_cas32(&g->jit_token, &expect, tg->tid, LA_ACQ_REL, LA_ACQ)' \
   'void LJ_FASTCALL lj_trace_hot(jit_State *J, const BCIns *pc, lua_State *L)' \
+  'lj_snap_restore_exit(jit_State *J, void *exptr, lua_State *L,' \
+  'int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr, lua_State *L,' \
   'J->L = L;' \
   'lj_jit_token_held(J)' \
   'lj_jit_token_release(J)'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_obj.h" "$ROOT/src/lj_trace.h" \
-      "$ROOT/src/lj_trace.c" "$ROOT/src/lj_dispatch.c"; then
+      "$ROOT/src/lj_trace.c" "$ROOT/src/lj_dispatch.c" \
+      "$ROOT/src/lj_snap.h" "$ROOT/src/lj_snap.c" "$ROOT/src/lj_tg.h"; then
     echo "guardrail: missing recorder token marker: $needle" >&2
     exit 1
   fi
@@ -55,6 +58,19 @@ if awk '
   END { exit bad ? 0 : 1 }
 ' "$ROOT/src/vm_x64.dasc"; then
   echo "guardrail: x64 stitch must not write J->exitno before token acquisition" >&2
+  exit 1
+fi
+
+if awk '
+  /->vm_exit_handler:/ { exitpath = 1 }
+  /->vm_exit_interp:/ { exitpath = 0 }
+  exitpath && /\|\.if X64WIN/ { winonly = 1 }
+  winonly && /\|\.else/ { winonly = 0 }
+  winonly && /\|\.endif/ { winonly = 0 }
+  exitpath && !winonly && /DISPATCH_J\((L|parent|exitno)\)/ { bad = 1; print }
+  END { exit bad ? 0 : 1 }
+' "$ROOT/src/vm_x64.dasc"; then
+  echo "guardrail: x64/POSIX trace exit restore state must stay call-local before side-token acquisition" >&2
   exit 1
 fi
 
