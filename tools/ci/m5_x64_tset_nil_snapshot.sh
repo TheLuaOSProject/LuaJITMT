@@ -28,7 +28,8 @@ for needle in \
   'mov r8, [RC]' \
   'cmp r8, LJ_TNIL' \
   'jmp ->vmeta_tsets		// M5: no legacy x64 hash-slot store.' \
-  'call extern lj_tab_storetv'
+  'call extern lj_tab_storetv' \
+  'jmp ->vm_gc2_barriertab'
 do
   if ! rg -F -q "$needle" "$ROOT/src/vm_x64.dasc"; then
     echo "guardrail: missing x64 TSET nil snapshot marker: $needle" >&2
@@ -39,7 +40,8 @@ done
 for reject in \
   'cmp aword [RC], LJ_TNIL' \
   'cmp aword [TMPR], LJ_TNIL' \
-  'mov [RC], RB'
+  'mov [RC], RB' \
+  'mov [RC], ITYPE'
 do
   if rg -F -n "$reject" "$ROOT/src/vm_x64.dasc"; then
     echo "guardrail: x64 TSET nil decisions must load slot snapshots first: $reject" >&2
@@ -56,6 +58,12 @@ if awk '
   :
 else
   echo "guardrail: x64 TSETS must not write hash slots directly" >&2
+  exit 1
+fi
+
+storetv_count=$(rg -F 'call extern lj_tab_storetv' "$ROOT/src/vm_x64.dasc" | wc -l | tr -d ' ')
+if [ "$storetv_count" -lt 4 ]; then
+  echo "guardrail: x64 TSET fast paths must publish via lj_tab_storetv" >&2
   exit 1
 fi
 

@@ -4095,10 +4095,21 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  test byte TAB:RB->marked, LJ_GC_BLACK	// isblack(table)
     |  jnz >7
     |2:  // Set array slot.
-    |  mov ITYPE, [BASE+RA*8]
-    |  mov [RC], ITYPE
+    |  mov L:CARG1, SAVE_L
+    |  mov L:CARG1->base, BASE
+    |  mov CARG2, RC
+    |  lea CARG3, [BASE+RA*8]
+    |  mov L:RB, L:CARG1
+    |  call extern lj_tab_storetv	// (lua_State *L, TValue *d, TValue *s)
+    |  mov BASE, L:RB->base
+    |  mov RC, rax
     |  cmp TGMARK, 0
-    |  jnz ->vm_gc2_barriertab
+    |  jz >8
+    |  movzx RBd, PC_RB
+    |  mov TAB:RB, [BASE+RB*8]
+    |  cleartp TAB:RB
+    |  jmp ->vm_gc2_barriertab
+    |8:
     |  ins_next
     |
     |3:  // Check for __newindex if previous value is nil.
@@ -4142,10 +4153,21 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  test byte TAB:RB->marked, LJ_GC_BLACK	// isblack(table)
     |  jnz >7
     |2:	 // Set array slot.
-    |  mov ITYPE, [BASE+RA*8]
-    |  mov [RC], ITYPE
+    |  mov L:CARG1, SAVE_L
+    |  mov L:CARG1->base, BASE
+    |  mov CARG2, RC
+    |  lea CARG3, [BASE+RA*8]
+    |  mov L:RB, L:CARG1
+    |  call extern lj_tab_storetv	// (lua_State *L, TValue *d, TValue *s)
+    |  mov BASE, L:RB->base
+    |  mov RC, rax
     |  cmp TGMARK, 0
-    |  jnz ->vm_gc2_barriertab
+    |  jz >8
+    |  movzx RBd, PC_RB
+    |  mov TAB:RB, [BASE+RB*8]
+    |  cleartp TAB:RB
+    |  jmp ->vm_gc2_barriertab
+    |8:
     |  ins_next
     |
     |3:  // Check for __newindex if previous value is nil.
@@ -4178,10 +4200,21 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  add RC, TAB:RB->array
     |  // Set array slot.
     |->BC_TSETR_Z:
-    |  mov ITYPE, [BASE+RA*8]
-    |  mov [RC], ITYPE
+    |  mov L:CARG1, SAVE_L
+    |  mov L:CARG1->base, BASE
+    |  mov CARG2, RC
+    |  lea CARG3, [BASE+RA*8]
+    |  mov L:RB, L:CARG1
+    |  call extern lj_tab_storetv	// (lua_State *L, TValue *d, TValue *s)
+    |  mov BASE, L:RB->base
+    |  mov RC, rax
     |  cmp TGMARK, 0
-    |  jnz ->vm_gc2_barriertab
+    |  jz >8
+    |  movzx RBd, PC_RB
+    |  mov TAB:RB, [BASE+RB*8]
+    |  cleartp TAB:RB
+    |  jmp ->vm_gc2_barriertab
+    |8:
     |  ins_next
     |
     |7:  // Possible table write barrier for the value. Skip valiswhite check.
