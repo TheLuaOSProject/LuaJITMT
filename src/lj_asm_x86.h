@@ -47,6 +47,38 @@ static MCode *asm_exitstub_gen(ASMState *as, ExitNo group)
   return mxpstart;
 }
 
+#if LJ_64
+/* Generate per-trace exit indirection stubs. */
+static void asm_exitstub_trace_setup(ASMState *as, ExitNo nexits)
+{
+  GCtrace *T = as->T;
+  MCode *mxp = as->mcbot;
+  ExitNo i;
+  if (nexits == 0)
+    return;
+  if (T->exittab == NULL)
+    T->exittab = lj_mem_newvec(as->J->L, nexits, MCode *);
+  while ((uintptr_t)mxp & 7) *mxp++ = XI_INT3;
+  if (mxp + nexits*EXITSTUB_TRACE_SPACING >= as->mctop)
+    asm_mclimit(as);
+  T->exitstub = mxp;
+  for (i = 0; i < nexits; i++) {
+    uint64_t slotaddr = (uint64_t)(uintptr_t)&T->exittab[i];
+    trace_exittarget_rel(T, i, exitstub_addr(as->J, i));
+    *mxp++ = XI_PUSH + RID_EAX;
+    *mxp++ = 0x48; *mxp++ = 0xa1;  /* mov rax, moffs64 */
+    memcpy(mxp, &slotaddr, sizeof(slotaddr)); mxp += sizeof(slotaddr);
+    *mxp++ = 0x48; *mxp++ = 0x87; *mxp++ = 0x04; *mxp++ = 0x24;
+    *mxp++ = 0xc3;  /* xchg [rsp], rax; ret */
+    lj_assertA(mxp == T->exitstub + EXITSTUB_TRACE_SPACING*(i+1),
+	       "bad trace exit stub size");
+  }
+  lj_mcode_commitbot(as->J, mxp);
+  as->mcbot = mxp;
+  as->mclim = as->mcbot + MCLIM_REDZONE;
+}
+#endif
+
 /* Setup all needed exit stubs. */
 static void asm_exitstub_setup(ASMState *as, ExitNo nexits)
 {
@@ -66,6 +98,9 @@ static void asm_exitstub_setup(ASMState *as, ExitNo nexits)
   for (i = 0; i < (nexits+EXITSTUBS_PER_GROUP-1)/EXITSTUBS_PER_GROUP; i++)
     if (as->J->exitstubgroup[i] == NULL)
       as->J->exitstubgroup[i] = asm_exitstub_gen(as, i);
+#if LJ_64
+  asm_exitstub_trace_setup(as, nexits);
+#endif
 }
 
 /* Emit conditional branch to exit for guard.
@@ -74,7 +109,11 @@ static void asm_exitstub_setup(ASMState *as, ExitNo nexits)
 */
 static void asm_guardcc(ASMState *as, int cc)
 {
+#if LJ_64
+  MCode *target = exitstub_trace_addr(as->T, as->snapno);
+#else
   MCode *target = exitstub_addr(as->J, as->snapno);
+#endif
   MCode *p = as->mcp;
   if (LJ_UNLIKELY(p == as->invmcp)) {
     as->loopinv = 1;

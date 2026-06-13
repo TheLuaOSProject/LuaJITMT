@@ -139,8 +139,19 @@ GCtrace * LJ_FASTCALL lj_trace_alloc(lua_State *L, GCtrace *T)
   T2->nk = T->nk;
   T2->nsnap = T->nsnap;
   T2->nsnapmap = T->nsnapmap;
+  T2->exittab = NULL;
+  T2->exitstub = NULL;
   memcpy(p, T->ir + T->nk, szins);
   return T2;
+}
+
+static void trace_exittab_free(global_State *g, GCtrace *T)
+{
+  if (T->exittab) {
+    lj_mem_freevec(g, T->exittab, T->nsnap, MCode *);
+    T->exittab = NULL;
+  }
+  T->exitstub = NULL;
 }
 
 /* Save current trace by copying and compacting it. */
@@ -162,6 +173,8 @@ static void trace_save(jit_State *J, GCtrace *T)
   TRACE_APPENDVEC(snap, nsnap, SnapShot)
   TRACE_APPENDVEC(snapmap, nsnapmap, SnapEntry)
   J->cur.traceno = 0;
+  J->cur.exittab = NULL;
+  J->cur.exitstub = NULL;
   J->curfinal = NULL;
   traceslot_publish(J, T->traceno, T);
   lj_gc_barriertrace(J2G(J), T->traceno);
@@ -180,6 +193,7 @@ void LJ_FASTCALL lj_trace_free(global_State *g, GCtrace *T)
       J->freetrace = T->traceno;
     traceslot_clear(J, T->traceno);
   }
+  trace_exittab_free(g, T);
   lj_mem_free(g, T,
     ((sizeof(GCtrace)+7)&~7) + (T->nins-T->nk)*sizeof(IRIns) +
     T->nsnap*sizeof(SnapShot) + T->nsnapmap*sizeof(SnapEntry));
@@ -587,7 +601,8 @@ static void trace_stop(jit_State *J)
       bc_publish(patchpc, patchins);
     break;
   case BC_JMP:
-    lj_asm_patchexit(J, parent, J->exitno, T->mcode);
+    lj_assertJ(parent->exittab != NULL, "missing parent exit table");
+    trace_exittarget_rel(parent, J->exitno, T->mcode);
     snap->count = SNAPCOUNT_DONE;
     if (T->topslot > snap->topslot) snap->topslot = T->topslot;
     root->nchild++;
@@ -644,6 +659,7 @@ static int trace_abort(jit_State *J)
     J->state = LJ_TRACE_ASM;
     return 1;  /* Retry ASM with new MCode area. */
   }
+  trace_exittab_free(J2G(J), &J->cur);
   /* Penalize or blacklist starting bytecode instruction. */
   if (J->parent == 0 && !bc_isret(bc_op(J->cur.startins))) {
     if (J->exitno == 0) {
@@ -1043,10 +1059,10 @@ uintptr_t LJ_FASTCALL lj_trace_unwind(jit_State *J, uintptr_t addr, ExitNo *ep)
     } while (lo < exitno);
     exitno--;
     *ep = exitno;
-#ifdef EXITSTUBS_PER_GROUP
-    return (uintptr_t)exitstub_addr(J, exitno);
-#else
+#ifdef exitstub_trace_addr
     return (uintptr_t)exitstub_trace_addr(T, exitno);
+#elif defined(EXITSTUBS_PER_GROUP)
+    return (uintptr_t)exitstub_addr(J, exitno);
 #endif
   }
   /* Cannot correlate addr with trace/exit. This will be fatal. */

@@ -163,6 +163,11 @@ typedef struct {
 /* Limited by the range of a short fwd jump (127): (2+2)*(32-1)-2 = 122. */
 #define EXITSTUB_SPACING	(2+2)
 #define EXITSTUBS_PER_GROUP	32
+#if LJ_64
+#define EXITSTUB_TRACE_SPACING	16
+#define exitstub_trace_addr(T, exitno) \
+  ((T)->exitstub + EXITSTUB_TRACE_SPACING*(exitno))
+#endif
 
 #define EXITTRACE_VMSTATE	1	/* g->vmstate has traceno on exit. */
 

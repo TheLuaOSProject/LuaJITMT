@@ -16,7 +16,10 @@ for needle in \
   'trace_link_acq(T)' \
   'trace_nextroot_acq(T)' \
   'trace_nextside_acq(T)' \
-  'proto_trace_acq(pt)'
+  'proto_trace_acq(pt)' \
+  'MCode **exittab' \
+  'trace_exittarget_acq(T, exitno)' \
+  'trace_exittarget_rel(T, exitno, target)'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_jit.h"; then
     echo "guardrail: missing trace publication helper: $needle" >&2
@@ -32,6 +35,28 @@ for needle in \
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_bc.h"; then
     echo "guardrail: missing bytecode publication helper: $needle" >&2
+    exit 1
+  fi
+done
+
+for needle in \
+  'EXITSTUB_TRACE_SPACING' \
+  'exitstub_trace_addr(T, exitno)'
+do
+  if ! rg -F -q "$needle" "$ROOT/src/lj_target_x86.h"; then
+    echo "guardrail: missing x64 trace exit-stub helper: $needle" >&2
+    exit 1
+  fi
+done
+
+for needle in \
+  'asm_exitstub_trace_setup(ASMState *as, ExitNo nexits)' \
+  'mov rax, moffs64' \
+  'xchg [rsp], rax; ret' \
+  'exitstub_trace_addr(as->T, as->snapno)'
+do
+  if ! rg -F -q "$needle" "$ROOT/src/lj_asm_x86.h"; then
+    echo "guardrail: missing x64 trace exit indirection: $needle" >&2
     exit 1
   fi
 done
@@ -61,12 +86,19 @@ if [ -n "$hits" ]; then
   exit 1
 fi
 
+hits=$(rg -n -- 'lj_asm_patchexit\(J, parent' "$ROOT/src/lj_trace.c" || true)
+if [ -n "$hits" ]; then
+  echo "guardrail: side traces must publish through exittab, not parent mcode patching:" >&2
+  echo "$hits" >&2
+  exit 1
+fi
+
 if ! awk '
   /static void trace_stop\(jit_State \*J\)/ { infn = 1 }
   infn && /lj_mcode_commit\(J, J->cur.mcode\)/ { commit = NR }
   infn && /trace_save\(J, T\)/ { save = NR }
   infn && /bc_publish\(patchpc, patchins\)/ { bc = NR }
-  infn && /lj_asm_patchexit\(J, parent, J->exitno, T->mcode\)/ { side = NR }
+  infn && /trace_exittarget_rel\(parent, J->exitno, T->mcode\)/ { side = NR }
   infn && /trace_link_rel\(parent, traceno\)/ { stitch = NR }
   END { exit(commit && save && bc && side && stitch &&
 	     commit < save && save < bc && save < side && save < stitch ? 0 : 1) }
@@ -128,6 +160,34 @@ end
 local function f2(a) return f1(a)() end
 for _ = 1, 41 do
   assert(f2(4) + f2(4) == 20)
+end
+
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local function side(n, flip)
+  local s = 0
+  for i = 1, n do
+    if flip and i % 3 == 0 then s = s + i else s = s - 1 end
+  end
+  return s
+end
+local function expect(n, flip)
+  local s = 0
+  for i = 1, n do
+    if flip and i % 3 == 0 then s = s + i else s = s - 1 end
+  end
+  return s
+end
+for _ = 1, 60 do
+  assert(side(90, false) == expect(90, false))
+end
+local before = tracecount()
+for _ = 1, 120 do
+  assert(side(90, true) == expect(90, true))
+end
+assert(tracecount() > before, "no side trace was published")
+for _ = 1, 120 do
+  assert(side(90, true) == expect(90, true))
 end
 print("jit-trace-publish-smoke OK")
 '

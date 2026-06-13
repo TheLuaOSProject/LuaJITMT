@@ -265,6 +265,8 @@ typedef struct GCtrace {
   BCIns startins;	/* Original bytecode of starting instruction. */
   MSize szmcode;	/* Size of machine code. */
   MCode *mcode;		/* Start of machine code. */
+  MCode **exittab;	/* Exit target slots, one per snapshot. */
+  MCode *exitstub;	/* Per-trace exit indirection stubs. */
 #if LJ_ABI_PAUTH
   ASMFunction mcauth;	/* Start of machine code, with ptr auth applied. */
 #endif
@@ -320,6 +322,10 @@ static LJ_AINLINE void traceno16_rel(uint16_t *p, TraceNo traceno)
 #define trace_nextroot_rel(T, tr)	traceno16_rel(&(T)->nextroot, (tr))
 #define trace_nextside_acq(T)	traceno16_acq(&(T)->nextside)
 #define trace_nextside_rel(T, tr)	traceno16_rel(&(T)->nextside, (tr))
+#define trace_exittarget_acq(T, exitno) \
+  ((MCode *)la_loadptr_acq((void *const *)&(T)->exittab[(exitno)]))
+#define trace_exittarget_rel(T, exitno, target) \
+  la_storeptr_rel((void **)&(T)->exittab[(exitno)], (void *)(target))
 
 LJ_STATIC_ASSERT(offsetof(GChead, gclist) == offsetof(GCtrace, gclist));
 

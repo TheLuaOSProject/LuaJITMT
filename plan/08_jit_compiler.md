@@ -146,6 +146,16 @@ Current M5 bridge: shared trace-number links now use helper-wrapped 16-bit
 release stores and acquire snapshots in GC/GC2, flush, bytecode writer, and
 reflection paths. Current-trace assembler-private link reads remain plain.
 
+Current M5 x64 exit bridge: `GCtrace` now owns `exittab` target slots plus
+trace-local exit rows. x64 guards branch to rows that preserve registers, load
+the writable target slot, and transfer to either the legacy interpreter exit
+stub or a release-published child `mcode` pointer. `trace_stop()` publishes side
+traces by `trace_exittarget_rel(parent, exitno, child->mcode)` after final trace
+slot publication, so parent mcode is no longer rewritten on the supported x64
+path. The older `lj_asm_patchexit()` implementations remain in non-x64 backends
+for now; the original target remains to remove or replace those paths when those
+architectures are brought into scope.
+
 ### 8.4.3 ExitNoReg / trampoline scratch
 Per-arch: x64 uses the existing exit-stub register conventions
 (group stubs push exitno today — keep the same register/stack slot so
