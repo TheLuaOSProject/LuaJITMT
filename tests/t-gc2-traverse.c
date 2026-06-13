@@ -659,6 +659,7 @@ static void test_weak_key_write_barrier(lua_State *L, global_State *g,
 					TGState *tg)
 {
   GCtab *weak, *key, *val;
+  uint64_t weak_keys0, weak_vals0;
 
   lua_settop(L, 0);
   lua_newtable(L);
@@ -679,6 +680,8 @@ static void test_weak_key_write_barrier(lua_State *L, global_State *g,
   assert(lj_gc2_ismarked(g, obj2gco(weak)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(key)) == 0);
   assert(lj_gc2_ismarked(g, obj2gco(val)) == 0);
+  weak_keys0 = la_load64_acq(&g->gc2.weak_keys_marked);
+  weak_vals0 = la_load64_acq(&g->gc2.weak_values_marked);
 
   lj_gc2_legacy_weak_begin(g);
   lua_pushvalue(L, 2);
@@ -686,6 +689,8 @@ static void test_weak_key_write_barrier(lua_State *L, global_State *g,
   lua_settable(L, 1);
   assert(lj_gc2_ismarked(g, obj2gco(key)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(val)) == 1);
+  assert(la_load64_acq(&g->gc2.weak_keys_marked) == weak_keys0 + 1u);
+  assert(la_load64_acq(&g->gc2.weak_values_marked) == weak_vals0 + 1u);
   assert(!lj_gc2_ssb_empty(g));
   flush_and_drain(g, tg);
   lj_gc2_legacy_cycle_end(g);

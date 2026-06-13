@@ -865,6 +865,8 @@ typedef struct GC2State {
   uint64_t worker_runs;  /* Non-owner worker drain attempts with work. */
   uint64_t worker_grey_drained;  /* Grey objects traced by workers. */
   uint64_t worker_ssb_converted;  /* SSB entries converted by workers. */
+  uint64_t weak_keys_marked;  /* P_WEAK write barriers marking keys. */
+  uint64_t weak_values_marked;  /* P_WEAK write barriers marking values. */
   TGState *tg_list;	/* Registered per-thread state blocks. */
   uint32_t n_threads;	/* Number of registered TG blocks. */
 } GC2State;

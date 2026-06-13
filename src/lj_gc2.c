@@ -70,6 +70,8 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.worker_runs, 0);
   la_store64_rlx(&g->gc2.worker_grey_drained, 0);
   la_store64_rlx(&g->gc2.worker_ssb_converted, 0);
+  la_store64_rlx(&g->gc2.weak_keys_marked, 0);
+  la_store64_rlx(&g->gc2.weak_values_marked, 0);
   g->gc2.tg_list = NULL;
   g->gc2.n_threads = 0;
   lj_gc2_update_pacing(g);
@@ -905,8 +907,9 @@ void lj_gc2_barrier_weak_key(lua_State *L, GCtab *t, cTValue *key)
   if (la_load32_acq(&g->gc2.phase) != LJ_GC2_WEAK)
     return;
   mt = tabref_acq(t->metatable);
-  if (gc2_tab_weak_mode(g, t, mt) & LJ_GC_WEAKKEY)
-    (void)lj_gc2_markobj(g, gcV(key));  /* 05 section 5.8 weak-key write. */
+  if ((gc2_tab_weak_mode(g, t, mt) & LJ_GC_WEAKKEY) &&
+      lj_gc2_markobj(g, gcV(key)))  /* 05 section 5.8 weak-key write. */
+    la_add64_rlx(&g->gc2.weak_keys_marked, 1);
 }
 
 void lj_gc2_barrier_weak_write(lua_State *L, GCtab *t, cTValue *key,
@@ -922,10 +925,10 @@ void lj_gc2_barrier_weak_write(lua_State *L, GCtab *t, cTValue *key,
   mt = tabref_acq(t->metatable);
   if (gc2_tab_weak_mode(g, t, mt) == 0)
     return;
-  if (key && tvisgcv(key))
-    (void)lj_gc2_markobj(g, gcV(key));
-  if (val && tvisgcv(val))
-    (void)lj_gc2_markobj(g, gcV(val));
+  if (key && tvisgcv(key) && lj_gc2_markobj(g, gcV(key)))
+    la_add64_rlx(&g->gc2.weak_keys_marked, 1);
+  if (val && tvisgcv(val) && lj_gc2_markobj(g, gcV(val)))
+    la_add64_rlx(&g->gc2.weak_values_marked, 1);
 }
 
 static int gc2_mark_base_traversable(global_State *g, void *p)

@@ -14,6 +14,8 @@ make -C "$ROOT/src" -j"$JOBS" >/dev/null
 for needle in \
   'uint64_t fixpoint_rounds' \
   'uint64_t fixpoint_hits' \
+  'uint64_t weak_keys_marked' \
+  'uint64_t weak_values_marked' \
   'lj_gc2_legacy_weak_begin(global_State *g)' \
   'lj_gc2_barrier_weak_key(lua_State *L, GCtab *t' \
   'lj_gc2_barrier_weak_write(lua_State *L, GCtab *t' \
