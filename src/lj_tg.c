@@ -35,6 +35,7 @@ static void tg_init_common(global_State *g, TGState *tg, lua_State *L)
   tg->gl = g;
   tg->cur_L = L;
   tg->thread_L = L;
+  tg->vmstate = ~LJ_VMST_INTERP;
   tg->prng = g->prng;
   tg_init_ssb(tg);
   lj_buf_init(NULL, &tg->tmpbuf);

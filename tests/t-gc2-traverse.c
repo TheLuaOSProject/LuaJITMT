@@ -750,6 +750,28 @@ static void test_jit_current_trace_root(lua_State *L, global_State *g,
   J->cur = saved;
   lj_gc2_legacy_cycle_end(g);
 }
+
+static void test_jit_tg_executing_trace_root(lua_State *L, global_State *g,
+					     TGState *tg)
+{
+  GCtrace *T = find_trace(g);
+  uint32_t old_vmstate;
+  uint64_t trace_roots0;
+  assert(T != NULL);
+  assert(T->traceno > 0);
+
+  old_vmstate = la_load32_acq((uint32_t *)&tg->vmstate);
+  trace_roots0 = la_load64_acq(&g->gc2.tg_trace_roots);
+  lj_gc2_legacy_mark_begin(g);
+  assert(lj_gc2_ismarked(g, obj2gco(T)) == 0);
+  la_store32_rel((uint32_t *)&tg->vmstate, (uint32_t)T->traceno);
+  lj_gc2_scan_roots(g, NULL);
+  assert(lj_gc2_ismarked(g, obj2gco(T)) == 1);
+  assert(la_load64_acq(&g->gc2.tg_trace_roots) == trace_roots0 + 1u);
+  la_store32_rel((uint32_t *)&tg->vmstate, old_vmstate);
+  lj_gc2_legacy_cycle_end(g);
+  UNUSED(L);
+}
 #endif
 
 static void make_weak_table(lua_State *L, const char *mode,
@@ -1666,6 +1688,7 @@ int main(void)
   test_jit_table_store_nyi_barrier(L, g, tg);
   test_jit_upvalue_barrier(L, g, tg);
   test_jit_current_trace_root(L, g, tg);
+  test_jit_tg_executing_trace_root(L, g, tg);
 #endif
   test_weak_tables(L, g, tg);
   test_weak_snapshot_growth(L, g, tg);

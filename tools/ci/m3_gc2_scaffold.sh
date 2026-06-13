@@ -61,6 +61,7 @@ for needle in \
   'uint64_t worker_async_progress' \
   'uint64_t tg_thread_roots' \
   'uint64_t tg_cur_roots' \
+  'uint64_t tg_trace_roots' \
   'uint64_t thread_scan_claims' \
   'uint64_t thread_scan_busy' \
   'uint64_t thread_scan_requeues' \
@@ -170,6 +171,13 @@ for needle in \
   'la_loadptr_acq((void *const *)&tg->cur_L)' \
   'la_add64_rlx(&g->gc2.tg_thread_roots' \
   'la_add64_rlx(&g->gc2.tg_cur_roots' \
+  'int32_t vmstate' \
+  'tg->vmstate = ~LJ_VMST_INTERP' \
+  'la_load32_acq((uint32_t *)&tg->vmstate)' \
+  'la_add64_rlx(&g->gc2.tg_trace_roots' \
+  'emit_movmroi(as, RID_DISPATCH, DISPATCH_TG(vmstate)' \
+  'mov dword [DISPATCH+DISPATCH_TG(vmstate)]' \
+  'mov RAd, dword [DISPATCH+DISPATCH_TG(vmstate)]' \
   'mt = gcref_acq(L->mt_thread)' \
   'la_add64_rlx(&g->gc2.thread_scan_claims' \
   'la_add64_rlx(&g->gc2.thread_scan_busy' \
@@ -205,7 +213,9 @@ do
   if ! rg -F -q "$needle" "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc.h" \
       "$ROOT/src/lj_gc2.c" "$ROOT/src/lj_gc2.h" "$ROOT/src/lj_obj.h" \
       "$ROOT/src/lj_safepoint.c" "$ROOT/src/lj_trace.c" \
-      "$ROOT/src/lj_thr.c" "$ROOT/src/lj_thr.h" \
+      "$ROOT/src/lj_thr.c" "$ROOT/src/lj_thr.h" "$ROOT/src/lj_tg.c" \
+      "$ROOT/src/lj_tg.h" "$ROOT/src/lj_emit_x86.h" \
+      "$ROOT/src/vm_x64.dasc" \
       "$ROOT/src/lj_tab.c" "$ROOT/src/lj_cdata.c" "$ROOT/src/lib_ffi.c" \
       "$ROOT/src/lj_api.c" "$ROOT/tests/t-gc2-traverse.c"; then
     echo "guardrail: missing GC2 fixpoint-round marker: $needle" >&2

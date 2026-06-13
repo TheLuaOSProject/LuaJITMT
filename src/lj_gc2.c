@@ -103,6 +103,7 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.worker_async_progress, 0);
   la_store64_rlx(&g->gc2.tg_thread_roots, 0);
   la_store64_rlx(&g->gc2.tg_cur_roots, 0);
+  la_store64_rlx(&g->gc2.tg_trace_roots, 0);
   la_store64_rlx(&g->gc2.thread_scan_claims, 0);
   la_store64_rlx(&g->gc2.thread_scan_busy, 0);
   la_store64_rlx(&g->gc2.thread_scan_requeues, 0);
@@ -414,6 +415,17 @@ static void gc2_mark_tab_retired_mem(global_State *g)
 
 #if LJ_HASJIT
 static void gc2_traverse_trace(global_State *g, GCtrace *T);
+static int gc2_mark_trace_root(global_State *g, TraceNo traceno)
+{
+  GCtrace *T;
+  if (traceno == 0)
+    return 0;
+  T = traceref(G2J(g), traceno);
+  if (!T)
+    return 0;
+  lj_gc2_markobj(g, obj2gco(T));
+  return 1;
+}
 #endif
 
 void lj_gc2_legacy_mark_begin(global_State *g)
@@ -683,6 +695,13 @@ static void gc2_scan_global_roots(global_State *g)
 	lj_gc2_markobj(g, obj2gco(cur_L));  /* 05 section 5.7.4 TG root. */
 	la_add64_rlx(&g->gc2.tg_cur_roots, 1);
       }
+#if LJ_HASJIT
+      {
+	int32_t vmstate = (int32_t)la_load32_acq((uint32_t *)&tg->vmstate);
+	if (vmstate > 0 && gc2_mark_trace_root(g, (TraceNo)vmstate))
+	  la_add64_rlx(&g->gc2.tg_trace_roots, 1);
+      }
+#endif
     }
   }
 #if LJ_HASFFI

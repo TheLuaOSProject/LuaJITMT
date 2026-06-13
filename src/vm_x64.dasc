@@ -362,6 +362,7 @@
 |
 |// Set current VM state.
 |.macro set_vmstate, st
+|  mov dword [DISPATCH+DISPATCH_TG(vmstate)], ~LJ_VMST_..st
 |  load_G TMPR
 |  mov dword GL:TMPR->vmstate, ~LJ_VMST_..st
 |.endmacro
@@ -576,6 +577,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov L:RB, SAVE_L
   |9:
   |  mov GL:RB, L:RB->glref
+  |  mov dword [DISPATCH+DISPATCH_TG(vmstate)], ~LJ_VMST_C
   |  mov dword GL:RB->vmstate, ~LJ_VMST_C
   |  jmp ->vm_leave_unw
   |
@@ -2548,8 +2550,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov RCH, byte [rbp-16]
   |  mov [rbp-8], r15; mov [rbp-16], r14
   |  // DISPATCH is preserved on-trace in LJ_GC64 mode.
-  |  load_G TMPR
-  |  mov RAd, dword GL:TMPR->vmstate	// Get trace number.
+  |  mov RAd, dword [DISPATCH+DISPATCH_TG(vmstate)]	// Get trace number.
   |  set_vmstate EXIT
   |.if X64WIN
   |  load_J TMPR

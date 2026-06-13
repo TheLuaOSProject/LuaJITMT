@@ -288,8 +288,14 @@ static void emit_movmroi(ASMState *as, Reg base, int32_t ofs, int32_t i)
 #define emit_gettg(as, r, field) emit_optg(as, XO_MOV, (r)|REX_GC64, field)
 #define emit_settg(as, r, field) emit_optg(as, XO_MOVto, (r)|REX_GC64, field)
 
+#if LJ_TARGET_X64
+#define emit_setvmstate(as, i) \
+  (emit_i32(as, i), emit_opgl(as, XO_MOVmi, 0, vmstate), \
+   emit_movmroi(as, RID_DISPATCH, DISPATCH_TG(vmstate), (int32_t)(i)))
+#else
 #define emit_setvmstate(as, i) \
   (emit_i32(as, i), emit_opgl(as, XO_MOVmi, 0, vmstate))
+#endif
 
 /* mov r, i / xor r, r */
 static void emit_loadi(ASMState *as, Reg r, int32_t i)

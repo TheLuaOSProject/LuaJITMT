@@ -314,10 +314,10 @@ vmstate>0. (Cheap, conservative: keeps a trace alive while any thread runs
 it. Freeing traces additionally requires the flush handshake, 08 §8.7.)
 Current bridge note: GC2 global root scanning now marks each live TG's
 `thread_L` and `cur_L` thread-object roots and still preserves the per-TG
-temporary-buffer root. It also traverses the recorder's in-progress `J->cur`
-trace, matching the legacy `gc_traverse_curtrace()` root for not-yet-published
-traces while the broader per-TG executing-trace root publication remains
-staged.
+temporary-buffer root. It also marks each live TG's positive `vmstate` as an
+executing trace root and traverses the recorder's in-progress `J->cur` trace,
+matching the legacy `gc_traverse_curtrace()` root for not-yet-published traces.
+Full trace freeing still relies on the 08 §8.7 flush handshake.
 
 ## 5.8 P_WEAK and P_SWEEP transitions
 
