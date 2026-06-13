@@ -332,8 +332,11 @@ static const char *clib_extsym(CTState *cts, CType *ct, GCstr *name)
 {
   if (ct->sib) {
     CType *ctf = ctype_get(cts, ct->sib);
-    if (ctype_isxattrib(ctf->info, CTA_REDIR))
-      return strdata(gco2str(gcref(ctf->name)));
+    GCstr *redir = ctype_name_acq(ctf);
+    if (ctype_isxattrib(ctf->info, CTA_REDIR)) {
+      lj_assertCTS(redir != NULL, "missing redirected symbol name");
+      return strdata(redir);
+    }
   }
   return strdata(name);
 }

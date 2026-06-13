@@ -583,10 +583,12 @@ LJLIB_CF(ffi_typeinfo)
     if (ct->sib)
       lj_tab_storeint(L, lj_tab_setstr(L, t, lj_str_newlit(L, "sib")),
 		      (int32_t)ct->sib);
-    if (gcref(ct->name)) {
-      GCstr *s = gco2str(gcref(ct->name));
-      if (isdead(G(L), obj2gco(s))) flipwhite(obj2gco(s));
-      lj_tab_storestr(L, lj_tab_setstr(L, t, lj_str_newlit(L, "name")), s);
+    {
+      GCstr *s = ctype_name_acq(ct);
+      if (s) {
+	if (isdead(G(L), obj2gco(s))) flipwhite(obj2gco(s));
+	lj_tab_storestr(L, lj_tab_setstr(L, t, lj_str_newlit(L, "name")), s);
+      }
     }
     lj_gc_check(L);
     return 1;

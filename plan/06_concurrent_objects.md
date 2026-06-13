@@ -432,6 +432,10 @@ by caller (typical pattern: parent moves args into a not-yet-started L).
 - `GCudata.udtype`: specialized userdata publish the discriminator with a
   release store only after payload/metatable initialization; C-side GC/runtime/
   recorder readers acquire-snapshot the discriminator before branching.
+- `CType.name`: fixed FFI type names are release-published by `ctype_setname()`
+  and acquire-snapshotted by name lookup/parser/recorder/library readers. This
+  is only the name-ref slice; `CTState.hash`, `top`, `next`, and table growth
+  remain on the original FFI concurrency plan.
 - `lua_concat`/lj_meta paths: use tg tmpbuf; barrier on results stored.
 - rawequal/rawget/rawset: thin wrappers over §6.3 ops (already are).
 - `os`, `io`: untouched (user-level objects; FILE* sharing is user's

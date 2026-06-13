@@ -230,7 +230,7 @@ static void ctype_addtype(CTState *cts, CType *ct, CTypeID id)
 /* Add named element to hash table. */
 void lj_ctype_addname(CTState *cts, CType *ct, CTypeID id)
 {
-  uint32_t h = ct_hashname(gcref(ct->name));
+  uint32_t h = ct_hashname(ctype_name_acq(ct));
   ct->next = cts->hash[h];
   cts->hash[h] = (CTypeID1)id;
 }
@@ -241,7 +241,7 @@ CTypeID lj_ctype_getname(CTState *cts, CType **ctp, GCstr *name, uint32_t tmask)
   CTypeID id = cts->hash[ct_hashname(name)];
   while (id) {
     CType *ct = ctype_get(cts, id);
-    if (gcref(ct->name) == obj2gco(name) &&
+    if (ctype_name_acq(ct) == name &&
 	((tmask >> ctype_type(ct->info)) & 1)) {
       *ctp = ct;
       return id;
@@ -258,7 +258,7 @@ CType *lj_ctype_getfieldq(CTState *cts, CType *ct, GCstr *name, CTSize *ofs,
 {
   while (ct->sib) {
     ct = ctype_get(cts, ct->sib);
-    if (gcref(ct->name) == obj2gco(name)) {
+    if (ctype_name_acq(ct) == name) {
       *ofs = ct->size;
       return ct;
     }
@@ -478,8 +478,8 @@ static void ctype_prepqual(CTRepr *ctr, CTInfo info)
 /* Prepend named type. */
 static void ctype_preptype(CTRepr *ctr, CType *ct, CTInfo qual, const char *t)
 {
-  if (gcref(ct->name)) {
-    GCstr *str = gco2str(gcref(ct->name));
+  GCstr *str = ctype_name_acq(ct);
+  if (str) {
     ctype_prepstr(ctr, strdata(str), str->len);
   } else {
     if (ctr->needsp) ctype_prepc(ctr, ' ');

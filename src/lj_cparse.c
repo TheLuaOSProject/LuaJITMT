@@ -1231,7 +1231,7 @@ static CTypeID cp_struct_name(CPState *cp, CPDecl *sdecl, CTInfo info)
       sid = cp->val.id;
       ct = cp->ct;
       if ((ct->info ^ info) & (CTMASK_NUM|CTF_UNION))  /* Wrong type. */
-	cp_errmsg(cp, 0, LJ_ERR_FFI_REDEF, strdata(gco2str(gcref(ct->name))));
+	cp_errmsg(cp, 0, LJ_ERR_FFI_REDEF, strdata(ctype_name_acq(ct)));
     } else {  /* Create named, incomplete struct/union/enum. */
       if ((cp->mode & CPARSE_MODE_NOIMPLICIT))
 	cp_errmsg(cp, 0, LJ_ERR_FFI_BADTAG, strdata(cp->str));
@@ -1249,7 +1249,7 @@ static CTypeID cp_struct_name(CPState *cp, CPDecl *sdecl, CTInfo info)
   }
   if (cp->tok == '{') {
     if (ct->size != CTSIZE_INVALID || ct->sib)
-      cp_errmsg(cp, 0, LJ_ERR_FFI_REDEF, strdata(gco2str(gcref(ct->name))));
+      cp_errmsg(cp, 0, LJ_ERR_FFI_REDEF, strdata(ctype_name_acq(ct)));
     ct->sib = 1;  /* Indicate the type is currently being defined. */
   }
   return sid;
@@ -1859,7 +1859,7 @@ static void cp_decl_multi(CPState *cp)
 	  /* Treat both static and extern function declarations as extern. */
 	  ct = ctype_get(cp->cts, ctypeid);
 	  /* We always get new anonymous functions (typedefs are copied). */
-	  lj_assertCP(gcref(ct->name) == NULL, "unexpected named function");
+	  lj_assertCP(ctype_name_acq(ct) == NULL, "unexpected named function");
 	  id = ctypeid;  /* Just name it. */
 	} else if ((scl & CDF_STATIC)) {  /* Accept static constants. */
 	  id = cp_decl_constinit(cp, &ct, ctypeid);

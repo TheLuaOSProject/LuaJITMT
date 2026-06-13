@@ -157,7 +157,7 @@ static MSize crec_copy_struct(CRecMemList *ml, CTState *cts, CType *ct)
     if (ctype_isfield(df->info)) {
       CType *cct;
       IRType tp;
-      if (!gcref(df->name)) continue;  /* Ignore unnamed fields. */
+      if (!ctype_name_acq(df)) continue;  /* Ignore unnamed fields. */
       cct = ctype_rawchild(cts, df);  /* Field type. */
       tp = crec_ct2irt(cts, cct);
       if (tp == IRT_CDATA) return 0;  /* NYI: aggregates. */
@@ -1053,7 +1053,7 @@ static void crec_alloc(jit_State *J, RecordFFData *rd, CTypeID id)
 	  fid = df->sib;
 	  if (ctype_isfield(df->info)) {
 	    CType *dc;
-	    if (!gcref(df->name)) continue;  /* Ignore unnamed fields. */
+	    if (!ctype_name_acq(df)) continue;  /* Ignore unnamed fields. */
 	    dc = ctype_rawchild(cts, df);  /* Field type. */
 	    if (!(ctype_isnum(dc->info) || ctype_isptr(dc->info) ||
 		  ctype_isenum(dc->info)))
@@ -1073,7 +1073,7 @@ static void crec_alloc(jit_State *J, RecordFFData *rd, CTypeID id)
 	  TValue tv;
 	  TValue *sval = &tv;
 	  setintV(&tv, 0);
-	  if (!gcref(df->name)) continue;  /* Ignore unnamed fields. */
+	  if (!ctype_name_acq(df)) continue;  /* Ignore unnamed fields. */
 	  dc = ctype_rawchild(cts, df);  /* Field type. */
 	  if (!(ctype_isnum(dc->info) || ctype_isptr(dc->info) ||
 		ctype_isenum(dc->info)))

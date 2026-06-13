@@ -505,10 +505,11 @@ static void cconv_substruct_tab(CTState *cts, CType *d, uint8_t *dp,
     CType *df = ctype_get(cts, id);
     id = df->sib;
     if (ctype_isfield(df->info) || ctype_isbitfield(df->info)) {
+      GCstr *dfname = ctype_name_acq(df);
       TValue *tv;
       TValue val;
       int32_t i = *ip, iz = i;
-      if (!gcref(df->name)) continue;  /* Ignore unnamed fields. */
+      if (!dfname) continue;  /* Ignore unnamed fields. */
       if (i >= 0) {
       retry:
 	tv = (TValue *)lj_tab_getint(t, i);
@@ -522,7 +523,7 @@ static void cconv_substruct_tab(CTState *cts, CType *d, uint8_t *dp,
 	*ip = i + 1;
       } else {
       tryname:
-	tv = (TValue *)lj_tab_getstr(t, gco2str(gcref(df->name)));
+	tv = (TValue *)lj_tab_getstr(t, dfname);
 	if (tv)
 	  lj_tv_load_acq(&val, tv);
 	if (!tv || tvisnil(&val)) continue;
@@ -716,7 +717,7 @@ static void cconv_substruct_init(CTState *cts, CType *d, uint8_t *dp,
     id = df->sib;
     if (ctype_isfield(df->info) || ctype_isbitfield(df->info)) {
       MSize i = *ip;
-      if (!gcref(df->name)) continue;  /* Ignore unnamed fields. */
+      if (!ctype_name_acq(df)) continue;  /* Ignore unnamed fields. */
       if (i >= len) break;
       *ip = i + 1;
       if (ctype_isfield(df->info))

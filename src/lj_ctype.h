@@ -456,7 +456,13 @@ static LJ_AINLINE void ctype_setname(CType *ct, GCstr *s)
 {
   /* NOBARRIER: mark string as fixed -- the C type table is never collected. */
   fixstring(s);
-  setgcref(ct->name, obj2gco(s));
+  setgcrefrel(ct->name, obj2gco(s));
+}
+
+static LJ_AINLINE GCstr *ctype_name_acq(const CType *ct)
+{
+  GCobj *o = gcref_acq(ct->name);
+  return o ? gco2str(o) : NULL;
 }
 
 LJ_FUNC CTypeID lj_ctype_new(CTState *cts, CType **ctp);
