@@ -51,6 +51,9 @@ void lj_gc2_init(global_State *g)
   g->gc2.alloc_since_trigger = 0;
   g->gc2.trigger_bytes = 0;
   g->gc2.hard_bytes = 0;
+  la_store64_rlx(&g->gc2.assist_runs, 0);
+  la_store64_rlx(&g->gc2.assist_grey_drained, 0);
+  la_store64_rlx(&g->gc2.assist_ssb_converted, 0);
   g->gc2.assist_active = 0;
   g->gc2.grey_stack = NULL;
   g->gc2.grey_capacity = 0;
@@ -703,6 +706,7 @@ uint32_t lj_gc2_assist(global_State *g, TGState *tg)
   if (!la_cas32(&g->gc2.assist_active, &expect, 1, LA_ACQ_REL, LA_ACQ))
     return 0;  /* Current global grey deque has one owner side. */
   tg->gc_assist = 1;
+  la_add64_rlx(&g->gc2.assist_runs, 1);  /* 05 section 5.11 telemetry. */
   shift = la_load32_acq(&g->gc2.assist_shift);
   if (shift > 8u)
     shift = 8u;
@@ -722,6 +726,10 @@ uint32_t lj_gc2_assist(global_State *g, TGState *tg)
       break;
     converted++;
   }
+  if (n)
+    la_add64_rlx(&g->gc2.assist_grey_drained, n);
+  if (converted)
+    la_add64_rlx(&g->gc2.assist_ssb_converted, converted);
   tg->gc_assist = 0;
   la_store32_rel(&g->gc2.assist_active, 0);
   return n;

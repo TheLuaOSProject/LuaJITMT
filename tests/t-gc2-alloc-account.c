@@ -23,6 +23,7 @@ int main(void)
   void *p;
   uint64_t total;
   uint64_t epoch0;
+  uint64_t assist_runs0, assist_grey0, assist_ssb0;
   GCtab *parent, *child, *grandchild;
 
   assert(L != NULL);
@@ -36,6 +37,9 @@ int main(void)
   assert(la_load64_acq(&g->gc2.trigger_bytes) >= LJ_GC2_ACCT_FLUSH);
   assert(la_load64_acq(&g->gc2.hard_bytes) ==
 	 2u * la_load64_acq(&g->gc2.trigger_bytes));
+  assert(la_load64_acq(&g->gc2.assist_runs) == 0);
+  assert(la_load64_acq(&g->gc2.assist_grey_drained) == 0);
+  assert(la_load64_acq(&g->gc2.assist_ssb_converted) == 0);
   assert(la_load32_acq(&g->gc2.assist_active) == 0);
 
   (void)lua_gc(L, LUA_GCSETPAUSE, 150);
@@ -123,9 +127,15 @@ int main(void)
   la_store64_rel(&g->gc2.hard_bytes, 1);
   la_store32_rel(&g->gc2.assist_shift, 0);
   (void)la_xchg64_acqrel(&g->gc2.alloc_since_trigger, 0);
+  assist_runs0 = la_load64_acq(&g->gc2.assist_runs);
+  assist_grey0 = la_load64_acq(&g->gc2.assist_grey_drained);
+  assist_ssb0 = la_load64_acq(&g->gc2.assist_ssb_converted);
   lj_gc2_account_alloc(g, tg, LJ_GC2_ACCT_FLUSH);
   assert(tg->gc_assist == 0);
   assert(la_load32_acq(&g->gc2.assist_active) == 0);
+  assert(la_load64_acq(&g->gc2.assist_runs) == assist_runs0 + 1u);
+  assert(la_load64_acq(&g->gc2.assist_grey_drained) == assist_grey0 + 1u);
+  assert(la_load64_acq(&g->gc2.assist_ssb_converted) == assist_ssb0 + 1u);
   assert(lj_gc2_ismarked(g, obj2gco(parent)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(grandchild)) == 0);
@@ -153,9 +163,15 @@ int main(void)
   la_store64_rel(&g->gc2.hard_bytes, 1);
   la_store32_rel(&g->gc2.assist_shift, 0);
   (void)la_xchg64_acqrel(&g->gc2.alloc_since_trigger, 0);
+  assist_runs0 = la_load64_acq(&g->gc2.assist_runs);
+  assist_grey0 = la_load64_acq(&g->gc2.assist_grey_drained);
+  assist_ssb0 = la_load64_acq(&g->gc2.assist_ssb_converted);
   lj_gc2_account_alloc(g, tg, LJ_GC2_ACCT_FLUSH);
   assert(tg->gc_assist == 0);
   assert(la_load32_acq(&g->gc2.assist_active) == 0);
+  assert(la_load64_acq(&g->gc2.assist_runs) == assist_runs0 + 1u);
+  assert(la_load64_acq(&g->gc2.assist_grey_drained) == assist_grey0 + 1u);
+  assert(la_load64_acq(&g->gc2.assist_ssb_converted) == assist_ssb0 + 1u);
   assert(lj_gc2_ismarked(g, obj2gco(parent)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(grandchild)) == 0);

@@ -844,6 +844,9 @@ typedef struct GC2State {
   uint64_t alloc_since_trigger;  /* Flushed mutator allocation bytes. */
   uint64_t trigger_bytes;  /* Allocation bytes before next GC2 trigger. */
   uint64_t hard_bytes;	/* Allocation bytes before mutator assists. */
+  uint64_t assist_runs;  /* Mutator assist attempts past hard limit. */
+  uint64_t assist_grey_drained;  /* Grey objects traced by assists. */
+  uint64_t assist_ssb_converted;  /* SSB entries converted by assists. */
   uint32_t gcpause_pct;	/* GC2 pacing percentage. */
   uint32_t assist_shift;  /* Bounded assist work is 1 << shift. */
   uint32_t assist_active;  /* Nonblocking owner token for mark assists. */
