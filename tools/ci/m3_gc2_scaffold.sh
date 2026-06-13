@@ -71,6 +71,7 @@ for needle in \
   'lj_gc2_worker_drain_progress(global_State *g, uint32_t limit)' \
   'lj_gc2_ssb_empty(g)' \
   'la_loadptr_acq((void *const *)&tg->ssb_next)' \
+  'la_storeptr_rel((void **)&tg->ssb_next' \
   'lj_gc2_fixpoint_run(g, L, 64, ~(uint32_t)0)'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc.h" \

@@ -235,7 +235,9 @@ the target: a scheduler-owned pool, per-worker idle declaration, and leader
 ownership of the `P_WEAK` transition are still follow-up work. The current
 empty-work predicate includes the global grey deque, published SSB stack, and
 each live TG's active SSB cursor, read through acquire loads while walking the
-shared TG list.
+shared TG list. Active SSB producers publish cursor advances with release
+stores after writing the slot; active SSB drains release-publish cursor
+retreats only after marking/enqueuing the popped slot.
 
 ### 5.7.2 Thread stacks
 `HS_SCAN_ROOTS` (mutator, at ack): for its *running* L (and the chain of
