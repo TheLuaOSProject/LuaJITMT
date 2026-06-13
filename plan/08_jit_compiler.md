@@ -219,6 +219,14 @@ handler — sized LJ_MAX_EXITSTUBGR-compatible; see lj_vmstruct notes.
   guarantees every core will execute the new instructions after it returns
   and orders the subsequent enabling stores against speculative fetch);
   4. `la_storeptr_rel(trace slot)`; 5. `bc_publish(...)` / exittab store.
+  Current M6 bridge: Linux/x64 VM init registers the private expedited
+  sync-core membarrier when available, and `trace_stop()` calls
+  `lj_mcode_sync_core()` after `lj_mcode_commit()` and before `trace_save()`
+  performs the trace-slot release publication. The later bytecode, exittab,
+  root/side-chain, and stitch-link release stores remain after `trace_save()`.
+  This does not implement dual mapping or remove the legacy `mcode_protect`
+  state machine yet; it only lands the cross-core publication barrier at the
+  current publication boundary.
 
 ## 8.6 GC interaction of running traces
 

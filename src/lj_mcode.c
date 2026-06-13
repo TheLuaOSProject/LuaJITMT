@@ -8,6 +8,7 @@
 
 #include "lj_obj.h"
 #if LJ_HASJIT
+#include "lj_atomic.h"
 #include "lj_gc.h"
 #include "lj_gc2.h"
 #include "lj_err.h"
@@ -63,6 +64,29 @@ void lj_mcode_sync(void *start, void *end)
 #endif
 
 #if LJ_HASJIT
+
+void lj_mcode_init(global_State *g)
+{
+#if defined(__linux__) && LJ_TARGET_X64
+  if (la_membarrier_register_synccore() == 0)
+    la_store32_rel(&g->jit_mcode_synccore, 1);  /* 08 section 8.5. */
+#else
+  UNUSED(g);
+#endif
+}
+
+void lj_mcode_sync_core(jit_State *J)
+{
+#if defined(__linux__) && LJ_TARGET_X64
+  global_State *g = J2G(J);
+  if (LJ_LIKELY(la_load32_acq(&g->jit_mcode_synccore) != 0)) {
+    if (LJ_UNLIKELY(la_membarrier_synccore() != 0))
+      la_store32_rel(&g->jit_mcode_synccore, 0);  /* Fall back to legacy path. */
+  }
+#else
+  UNUSED(J);
+#endif
+}
 
 #if LUAJIT_SECURITY_MCODE != 0
 /* Protection twiddling failed. Probably due to kernel security. */

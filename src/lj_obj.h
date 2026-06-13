@@ -890,6 +890,7 @@ typedef struct global_State {
 #if LJ_HASJIT
   jit_State *jitp;	/* Pointer to the universe-global JIT state. */
   uint32_t jit_token;	/* Recorder token owner tid, 0 if idle. */
+  uint32_t jit_mcode_synccore;  /* Sync-core membarrier is registered. */
 #endif
   TGState *main_tg;	/* Main per-OS-thread state block. */
   LJThreadLive *threading_live;  /* Lockless threading.thread root list. */

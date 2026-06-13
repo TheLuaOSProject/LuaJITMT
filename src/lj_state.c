@@ -31,6 +31,7 @@
 #include "lj_prng.h"
 #include "lj_lex.h"
 #include "lj_alloc.h"
+#include "lj_mcode.h"
 #include "luajit.h"
 
 /* -- Stack handling ------------------------------------------------------ */
@@ -208,6 +209,7 @@ static TValue *cpluaopen(lua_State *L, lua_CFunction dummy, void *ud)
 #if LJ_HASFFI
   lj_ctype_initfin(L);
 #endif
+  lj_mcode_init(g);
   lj_trace_initstate(g);
   lj_err_verify();
   setgcref(g->vmthref, obj2gco(lj_state_new(L)));

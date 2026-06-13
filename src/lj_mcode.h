@@ -16,6 +16,8 @@ LJ_FUNC void lj_mcode_sync(void *start, void *end);
 
 #include "lj_jit.h"
 
+LJ_FUNC void lj_mcode_init(global_State *g);
+LJ_FUNC void lj_mcode_sync_core(jit_State *J);
 LJ_FUNC void lj_mcode_free(jit_State *J);
 LJ_FUNC uint32_t lj_mcode_reclaim_retired(global_State *g,
 					  uint64_t completed_epoch);
@@ -31,6 +33,8 @@ LJ_FUNC_NORET void lj_mcode_limiterr(jit_State *J, size_t need);
 
 #else
 
+#define lj_mcode_init(g)		UNUSED(g)
+#define lj_mcode_sync_core(J)		UNUSED(J)
 #define lj_mcode_reclaim_retired(g, e)	(UNUSED(g), UNUSED(e), 0)
 #define lj_mcode_freeretired(g)		UNUSED(g)
 #define lj_mcode_markretired(g, gc2)	(UNUSED(g), UNUSED(gc2))

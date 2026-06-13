@@ -838,6 +838,7 @@ static void trace_stop(jit_State *J)
 
   /* Commit and publish the final trace before enabling bytecode/exits. */
   lj_mcode_commit(J, J->cur.mcode);
+  lj_mcode_sync_core(J);
   J->postproc = LJ_POST_NONE;
   trace_save(J, T);
 

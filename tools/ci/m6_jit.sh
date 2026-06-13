@@ -7,5 +7,6 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 "$ROOT/tools/ci/m6_jit_token.sh"
 "$ROOT/tools/ci/m6_jit_barrier_xpoll.sh"
 "$ROOT/tools/ci/m6_jit_gcstep_guard.sh"
+"$ROOT/tools/ci/m6_jit_mcode_publish.sh"
 
 echo "M6 JIT scaffold tests passed"
