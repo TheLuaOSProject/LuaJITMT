@@ -4119,68 +4119,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov STR:RC, [KBASE+RC*8]
     |  checktab TAB:RB, ->vmeta_tsets
     |->BC_TSETS_Z:	// RB = GCtab *, RC = GCstr *
-    |  mov r8, TAB:RB->node
-    |  mov TMPRd, dword [r8-8]
-    |  and TMPRd, STR:RC->sid
-    |  imul TMPRd, #NODE
-    |  mov byte TAB:RB->nomm, 0		// Clear metamethod cache.
-    |  add NODE:TMPR, r8
-    |  settp ITYPE, STR:RC, LJ_TSTR
-    |1:
-    |  cmp NODE:TMPR->key, ITYPE
-    |  jne >5
-    |  // Ok, key found. Assumes: offsetof(Node, val) == 0
-    |  mov r8, [TMPR]
-    |  cmp r8, LJ_TNIL
-    |  je >4				// Previous value is nil?
-    |2:
-    |  test byte TAB:RB->marked, LJ_GC_BLACK	// isblack(table)
-    |  jnz >7
-    |3:  // Set node value.
-    |  mov ITYPE, [BASE+RA*8]
-    |  mov [TMPR], ITYPE
-    |  cmp TGMARK, 0
-    |  jnz ->vm_gc2_barriertab
-    |  ins_next
-    |
-    |4:  // Check for __newindex if previous value is nil.
-    |  mov TAB:ITYPE, TAB:RB->metatable
-    |  test TAB:ITYPE, TAB:ITYPE
-    |  jz <2
-    |  test byte TAB:ITYPE->nomm, 1<<MM_newindex
-    |  jz ->vmeta_tsets			// 'no __newindex' flag NOT set: check.
-    |  jmp <2
-    |
-    |5:  // Follow hash chain.
-    |  mov NODE:TMPR, NODE:TMPR->next
-    |  test NODE:TMPR, NODE:TMPR
-    |  jnz <1
-    |  // End of hash chain: key not found, add a new one.
-    |
-    |  // But check for __newindex first.
-    |  mov TAB:TMPR, TAB:RB->metatable
-    |  test TAB:TMPR, TAB:TMPR
-    |  jz >6				// No metatable: continue.
-    |  test byte TAB:TMPR->nomm, 1<<MM_newindex
-    |  jz ->vmeta_tsets			// 'no __newindex' flag NOT set: check.
-    |6:
-    |  mov TMP1, ITYPE
-    |  mov L:CARG1, SAVE_L
-    |  mov L:CARG1->base, BASE
-    |  lea CARG3, TMP1
-    |  mov CARG2, TAB:RB
-    |  mov SAVE_PC, PC
-    |  call extern lj_tab_newkey	// (lua_State *L, GCtab *t, TValue *k)
-    |  // Handles write barrier for the new key. TValue * returned in eax (RC).
-    |  mov L:CARG1, SAVE_L
-    |  mov BASE, L:CARG1->base
-    |  mov TMPR, rax
-    |  movzx RAd, PC_RA
-    |  jmp <2				// Must check write barrier for value.
-    |
-    |7:  // Possible table write barrier for the value. Skip valiswhite check.
-    |  barrierback TAB:RB, ITYPE
-    |  jmp <3
+    |  jmp ->vmeta_tsets		// M5: no legacy x64 hash-slot store.
     break;
   case BC_TSETB:
     |  ins_ABC	// RA = src, RB = table, RC = byte literal

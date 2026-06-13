@@ -26,8 +26,8 @@ assert(a[1] == 10 and a[2] == 20)
 
 for needle in \
   'mov r8, [RC]' \
-  'mov r8, [TMPR]' \
-  'cmp r8, LJ_TNIL'
+  'cmp r8, LJ_TNIL' \
+  'jmp ->vmeta_tsets		// M5: no legacy x64 hash-slot store.'
 do
   if ! rg -F -q "$needle" "$ROOT/src/vm_x64.dasc"; then
     echo "guardrail: missing x64 TSET nil snapshot marker: $needle" >&2
@@ -44,5 +44,17 @@ do
     exit 1
   fi
 done
+
+if awk '
+  /[|]->BC_TSETS_Z:/ { in_set = 1; next }
+  in_set && /jmp ->vmeta_tsets/ { in_set = 0 }
+  in_set && /mov \[TMPR\], ITYPE/ { bad = 1 }
+  END { exit bad ? 1 : 0 }
+' "$ROOT/src/vm_x64.dasc"; then
+  :
+else
+  echo "guardrail: x64 TSETS must not write hash slots directly" >&2
+  exit 1
+fi
 
 echo "M5 x64 TSET nil snapshot guard passed"

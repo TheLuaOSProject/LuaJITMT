@@ -1,5 +1,5 @@
 #!/bin/sh
-# Guard x64 TGETS/TSETS node-before-hmask ordering.
+# Guard x64 TGETS node-header hmask loads and TSETS hash-store demotion.
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
@@ -24,10 +24,11 @@ for needle in \
   '|  mov r8, TAB:RB->node' \
   '|  mov TMPRd, dword [r8-8]' \
   '|  add NODE:TMPR, r8' \
-  '|->BC_TSETS_Z:'
+  '|->BC_TSETS_Z:' \
+  '|  jmp ->vmeta_tsets		// M5: no legacy x64 hash-slot store.'
 do
   if ! rg -F -q "$needle" "$ROOT/src/vm_x64.dasc"; then
-    echo "guardrail: missing x64 TGETS/TSETS node-order marker: $needle" >&2
+    echo "guardrail: missing x64 TGETS/TSETS marker: $needle" >&2
     exit 1
   fi
 done
@@ -38,15 +39,13 @@ if ! awk '
   in_get && /mov TMPRd, dword \[r8-8\]/ { saw_hmask = 1; if (!saw_node) bad = 1 }
   in_get && /TAB:RB->hmask/ { bad = 1 }
   in_get && /settp ITYPE, STR:RC, LJ_TSTR/ { in_get = 0 }
-  /[|]->BC_TSETS_Z:/ { in_set = 1; saw_node = saw_hmask = 0 }
-  in_set && /mov r8, TAB:RB->node/ { saw_node = 1 }
-  in_set && /mov TMPRd, dword \[r8-8\]/ { saw_hmask = 1; if (!saw_node) bad = 1 }
-  in_set && /TAB:RB->hmask/ { bad = 1 }
-  in_set && /settp ITYPE, STR:RC, LJ_TSTR/ { in_set = 0 }
-  END { exit bad ? 1 : 0 }
+  /[|]->BC_TSETS_Z:/ { in_set = 1; checked_set = 1; next }
+  in_set && /jmp ->vmeta_tsets/ { in_set = 0 }
+  in_set && /mov \[TMPR\], ITYPE/ { bad = 1 }
+  END { if (!checked_set || in_set) bad = 1; exit bad ? 1 : 0 }
 ' "$ROOT/src/vm_x64.dasc"; then
-  echo "guardrail: x64 TGETS/TSETS must load hmask from the node header" >&2
+  echo "guardrail: x64 TGETS must use node headers and TSETS must slow-path" >&2
   exit 1
 fi
 
-echo "M5 x64 TGETS/TSETS node-header hmask guard passed"
+echo "M5 x64 TGETS node-header and TSETS slow-path guard passed"

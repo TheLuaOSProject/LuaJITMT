@@ -195,12 +195,13 @@ allocation capacity until the final `AHdr` port. On x86-64,
 `getmetatable`'s `__metatable` probe, `ipairs_aux` empty-hash fallback,
 `lj_vm_next` hash traversal, `BC_TGETS_Z`, and `BC_ITERN` hash traversal now
 load the mask from the acquired node header instead of the legacy
-`GCtab.hmask` mirror. `BC_TSETS_Z` uses the same node-header mask for coherent
-string-key slot addressing, but still needs the original RETIRING/FORWARD/CAS
-write protocol for migration correctness. Regular x64 dynamic `IR_HREF`
-lowering also uses the node-header mask instead of `GCtab.hmask`; constant-slot
-HREFK lowering has an interim node-header bounds guard before reading its
-recorded slot, while hash stores remain on the original 08/06 plan. `lj_vm_next`
+`GCtab.hmask` mirror. `BC_TSETS_Z` string-key stores are currently demoted to
+`vmeta_tsets`, removing the x64 VM's direct legacy hash-slot store while the
+C-side table setter still awaits the original RETIRING/FORWARD/CAS write
+protocol for migration correctness. Regular x64 dynamic `IR_HREF` lowering
+also uses the node-header mask instead of `GCtab.hmask`; constant-slot HREFK
+lowering has an interim node-header bounds guard before reading its recorded
+slot, while hash-store codegen remains on the original 08/06 plan. `lj_vm_next`
 hash traversal, the `BC_ITERN` array/hash iterator path, and `ipairs_aux` array
 iteration load candidate values into registers before nil decisions and copy
 those same snapshots to their results; `BC_TSETV`/`BC_TSETS`/`BC_TSETB` load
