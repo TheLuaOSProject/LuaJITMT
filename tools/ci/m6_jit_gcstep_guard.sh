@@ -1,5 +1,5 @@
 #!/bin/sh
-# Guard legacy JIT GC-step pacing until allocator assists replace it.
+# Guard legacy JIT GC-step pacing until independent GC2 trace pacing replaces it.
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
