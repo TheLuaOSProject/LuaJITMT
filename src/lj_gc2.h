@@ -55,6 +55,9 @@ LJ_FUNC int lj_gc2_ssb_push(global_State *g, GCobj *o);
 LJ_FUNC uint32_t lj_gc2_flush_ssb(global_State *g, TGState *tg);
 LJ_FUNC uint32_t lj_gc2_drain_ssb(global_State *g);
 LJ_FUNC GCobj *lj_gc2_grey_steal(global_State *g);
+LJ_FUNC int lj_gc2_worker_start(global_State *g);
+LJ_FUNC void lj_gc2_worker_stop(global_State *g);
+LJ_FUNC void lj_gc2_worker_wake(global_State *g);
 LJ_FUNC uint32_t lj_gc2_worker_drain(global_State *g, uint32_t limit);
 LJ_FUNC uint32_t lj_gc2_worker_drain_progress(global_State *g,
 					      uint32_t limit);

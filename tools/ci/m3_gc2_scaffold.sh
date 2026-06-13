@@ -42,6 +42,15 @@ for needle in \
   'uint64_t worker_weak_drained' \
   'uint64_t worker_idle_declares' \
   'uint64_t worker_busy_retries' \
+  'void *worker_thread' \
+  'uint32_t n_workers' \
+  'uint32_t worker_stop' \
+  'uint32_t worker_wake' \
+  'uint32_t worker_started' \
+  'uint32_t worker_exited' \
+  'uint64_t worker_wakes' \
+  'uint64_t worker_parks' \
+  'uint64_t worker_async_progress' \
   'uint64_t sweep_owner_runs' \
   'uint64_t sweep_owner_arenas' \
   'uint64_t sweep_owner_live_cells' \
@@ -119,6 +128,13 @@ for needle in \
   'la_add64_rlx(&g->gc2.worker_busy_retries' \
   'lj_gc2_worker_drain(g' \
   'lj_gc2_worker_drain_progress(global_State *g, uint32_t limit)' \
+  'lj_gc2_worker_start(global_State *g)' \
+  'lj_gc2_worker_stop(global_State *g)' \
+  'lj_gc2_worker_wake(global_State *g)' \
+  'static void *gc2_worker_main(void *arg)' \
+  'la_futex_wait(&g->gc2.worker_wake, wake, -1)' \
+  'la_futex_wake(&g->gc2.worker_wake, 1)' \
+  '05 section 5.6.3 parked worker scheduler' \
   '05 section 5.6.3 total worker progress contract' \
   'return lj_gc2_worker_drain(g, limit)' \
   'phase != LJ_GC2_MARK && phase != LJ_GC2_WEAK &&' \
@@ -163,6 +179,7 @@ for name in t-gc2-phase t-gc2-markbits t-gc2-traverse; do
   "$out"
 done
 
+"$ROOT/tools/ci/m3_gc2_worker_scheduler.sh"
 "$ROOT/tools/ci/m3_safepoint_handshake.sh"
 "$ROOT/tools/ci/m3_vm_safepoint.sh"
 "$ROOT/tools/ci/m3_gc2_paranoia.sh"

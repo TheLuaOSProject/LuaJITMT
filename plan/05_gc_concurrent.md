@@ -191,6 +191,17 @@ can spend its budget on bounded traversable arena sweep batches through
 arena lists and restores plain arenas. This keeps the previous boundary-lazy
 sweep bridge but removes its direct sweep loop from `lj_gc.c`.
 
+Current parked-worker delta: the original target remains the full worker pool
+with per-worker Chase-Lev ownership, grow-safe deque migration, steal/idle
+declaration, and scheduler-owned phase transitions described above. The current
+implementation adds an explicit, opt-in `lj_gc2_worker_start/stop/wake`
+lifecycle for one parked internal worker over the existing bounded
+`lj_gc2_worker_drain()` surface. It does not auto-start workers and does not add
+an `LJ_MT`/`LUAJIT_THREADSAFE` lock gate. Phase transitions and mutator SSB
+publication now wake the parked worker if one has been started, with
+`worker_wakes`, `worker_parks`, and `worker_async_progress` recording the
+bridge behavior until the full scheduler replaces the single-owner token.
+
 ### 5.6.4 gc2_traverse — per-type tracing
 Port the existing traversal logic, replacing color plumbing:
 - `gc_traverse_tab` (lj_gc.c:174): mark metatable, then **load the current

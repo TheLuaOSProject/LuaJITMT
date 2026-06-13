@@ -37,6 +37,7 @@ static int gc2_grey_empty(global_State *g);
 static int gc2_weak_resize(global_State *g, MSize cap);
 static void gc2_weak_reset(global_State *g);
 static int gc2_tab_weak_mode(global_State *g, GCtab *t, GCtab *mt);
+static void *gc2_worker_main(void *arg);
 
 void lj_gc2_init(global_State *g)
 {
@@ -76,6 +77,12 @@ void lj_gc2_init(global_State *g)
   g->gc2.grey_bottom = 0;
   la_store64_rlx(&g->gc2.grey_pushed, 0);
   la_store64_rlx(&g->gc2.grey_drained, 0);
+  g->gc2.worker_thread = NULL;
+  la_store32_rlx(&g->gc2.n_workers, 0);
+  la_store32_rlx(&g->gc2.worker_stop, 0);
+  la_store32_rlx(&g->gc2.worker_wake, 0);
+  la_store32_rlx(&g->gc2.worker_started, 0);
+  la_store32_rlx(&g->gc2.worker_exited, 0);
   la_store32_rlx(&g->gc2.worker_active, 0);
   la_store64_rlx(&g->gc2.worker_runs, 0);
   la_store64_rlx(&g->gc2.worker_grey_drained, 0);
@@ -83,6 +90,9 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.worker_weak_drained, 0);
   la_store64_rlx(&g->gc2.worker_idle_declares, 0);
   la_store64_rlx(&g->gc2.worker_busy_retries, 0);
+  la_store64_rlx(&g->gc2.worker_wakes, 0);
+  la_store64_rlx(&g->gc2.worker_parks, 0);
+  la_store64_rlx(&g->gc2.worker_async_progress, 0);
   la_store64_rlx(&g->gc2.sweep_owner_runs, 0);
   la_store64_rlx(&g->gc2.sweep_owner_arenas, 0);
   la_store64_rlx(&g->gc2.sweep_owner_live_cells, 0);
@@ -124,6 +134,7 @@ void lj_gc2_init(global_State *g)
 
 void lj_gc2_fini(global_State *g)
 {
+  lj_gc2_worker_stop(g);
   (void)lj_tg_reclaim_dead(g);
   if (g && g->gc2.grey_stack) {
     lj_mem_freevec(g, g->gc2.grey_stack, g->gc2.grey_capacity, GCRef);
@@ -144,6 +155,99 @@ void lj_gc2_fini(global_State *g)
     g->gc2.weak_capacity = 0;
     g->gc2.weak_count = 0;
   }
+}
+
+void lj_gc2_worker_wake(global_State *g)
+{
+  if (!g || la_load32_acq(&g->gc2.n_workers) == 0)
+    return;
+  la_add64_rlx(&g->gc2.worker_wakes, 1);
+  (void)la_add32_rlx(&g->gc2.worker_wake, 1);
+  la_futex_wake(&g->gc2.worker_wake, 1);
+}
+
+int lj_gc2_worker_start(global_State *g)
+{
+  lua_State *L;
+  LJThr *thr;
+  int rc, i;
+  if (!g)
+    return 0;
+  if (g->gc2.worker_thread != NULL)
+    return 1;
+  L = gcref(g->mainthref) ? mainthread(g) : NULL;
+  if (!L)
+    return 0;
+  thr = (LJThr *)lj_mem_new(L, sizeof(LJThr));
+  thr->tid = 0;
+  g->gc2.worker_thread = thr;
+  la_store32_rel(&g->gc2.worker_stop, 0);
+  la_store32_rel(&g->gc2.worker_started, 0);
+  la_store32_rel(&g->gc2.worker_exited, 0);
+  la_store32_rel(&g->gc2.n_workers, 1);  /* 05 section 5.6.3 parked worker. */
+  rc = lj_thr_create(thr, gc2_worker_main, g);
+  if (rc != 0) {
+    la_store32_rel(&g->gc2.n_workers, 0);
+    g->gc2.worker_thread = NULL;
+    lj_mem_free(g, thr, sizeof(LJThr));
+    return 0;
+  }
+  for (i = 0; i < 1000; i++) {
+    if (la_load32_acq(&g->gc2.worker_started) != 0)
+      return 1;
+    la_futex_wait(&g->gc2.worker_started, 0, 1000000);
+  }
+  if (la_load32_acq(&g->gc2.worker_started) != 0)
+    return 1;
+  lj_gc2_worker_stop(g);
+  return 0;
+}
+
+void lj_gc2_worker_stop(global_State *g)
+{
+  LJThr *thr;
+  if (!g || !g->gc2.worker_thread)
+    return;
+  thr = (LJThr *)g->gc2.worker_thread;
+  la_store32_rel(&g->gc2.worker_stop, 1);
+  lj_gc2_worker_wake(g);
+  (void)lj_thr_join(thr, NULL);
+  g->gc2.worker_thread = NULL;
+  la_store32_rel(&g->gc2.n_workers, 0);
+  lj_mem_free(g, thr, sizeof(LJThr));
+}
+
+static void *gc2_worker_main(void *arg)
+{
+  global_State *g = (global_State *)arg;
+  la_store32_rel(&g->gc2.worker_started, 1);
+  la_futex_wake(&g->gc2.worker_started, 1);
+  while (la_load32_acq(&g->gc2.worker_stop) == 0) {
+    uint32_t total = 0;
+    for (;;) {
+      uint32_t step;
+      if (la_load32_acq(&g->gc2.worker_stop) != 0)
+	break;
+      step = lj_gc2_worker_drain(g, LJ_GC2_WORKER_DRAIN_BATCH);
+      if (step == 0)
+	break;
+      total = step > ~(uint32_t)0 - total ? ~(uint32_t)0 : total + step;
+    }
+    if (total)
+      la_add64_rlx(&g->gc2.worker_async_progress, total);
+    if (la_load32_acq(&g->gc2.worker_stop) != 0)
+      break;
+    la_add64_rlx(&g->gc2.worker_parks, 1);
+    {
+      uint32_t wake = la_load32_acq(&g->gc2.worker_wake);
+      if (la_load32_acq(&g->gc2.worker_stop) != 0)
+	break;
+      la_futex_wait(&g->gc2.worker_wake, wake, -1);
+    }
+  }
+  la_store32_rel(&g->gc2.worker_exited, 1);
+  la_futex_wake(&g->gc2.worker_exited, 1);
+  return NULL;
 }
 
 uint64_t lj_gc2_flush_alloc(global_State *g, TGState *tg)
@@ -322,11 +426,13 @@ void lj_gc2_legacy_mark_begin(global_State *g)
   gc2_reset_alloc_trigger(g);
   gc2_clear_marks_all(g);
   lj_gc2_handshake(g, LJ_GC2_HS_ENABLE_BARRIER|LJ_GC2_HS_ALLOC_BLACK);
+  lj_gc2_worker_wake(g);  /* 05 section 5.6.3 parked worker scheduler. */
 }
 
 void lj_gc2_legacy_weak_begin(global_State *g)
 {
   g->gc2.phase = LJ_GC2_WEAK;  /* 05 section 5.8 legacy weak-phase bridge. */
+  lj_gc2_worker_wake(g);  /* 05 section 5.6.3 parked worker scheduler. */
 }
 
 void lj_gc2_legacy_sweep_begin(global_State *g)
@@ -336,6 +442,7 @@ void lj_gc2_legacy_sweep_begin(global_State *g)
 		   LJ_GC2_HS_FLUSH_SSB);
   (void)lj_gc2_drain_ssb(g);  /* Temporary worker-consume stand-in. */
   (void)lj_tg_reclaim_dead(g);
+  lj_gc2_worker_wake(g);  /* 05 section 5.6.3 parked worker scheduler. */
 }
 
 uint32_t lj_gc2_sweep_owner_progress(global_State *g, TGState *tg,
@@ -1077,6 +1184,7 @@ static void gc2_ssb_publish(global_State *g, GC2SSBNode *node)
     node->next = (GC2SSBNode *)head;
   } while (!la_casptr((void **)&g->gc2.ssb_head, &head, node,
 		      LA_ACQ_REL, LA_ACQ));  /* 05 section 5.6.2 MPSC stack. */
+  lj_gc2_worker_wake(g);  /* 05 section 5.6.3 parked worker scheduler. */
 }
 
 uint32_t lj_gc2_flush_ssb(global_State *g, TGState *tg)

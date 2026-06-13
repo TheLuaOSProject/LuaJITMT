@@ -866,6 +866,12 @@ typedef struct GC2State {
   uint64_t grey_bottom;	/* Chase-Lev owner-side index. */
   uint64_t grey_pushed;	/* Grey entries scheduled from SSB/traversal. */
   uint64_t grey_drained;  /* Grey entries popped for traversal. */
+  void *worker_thread;  /* Opaque LJThr* for staged parked GC worker. */
+  uint32_t n_workers;	/* Parked GC workers started for this state. */
+  uint32_t worker_stop;  /* Request parked worker shutdown. */
+  uint32_t worker_wake;  /* Futex word for worker wakeups. */
+  uint32_t worker_started;  /* Worker has entered its loop. */
+  uint32_t worker_exited;  /* Worker has left its loop. */
   uint32_t worker_active;  /* Temporary single worker-drain owner token. */
   uint64_t worker_runs;  /* Non-owner worker drain attempts with work. */
   uint64_t worker_grey_drained;  /* Grey objects traced by workers. */
@@ -873,6 +879,9 @@ typedef struct GC2State {
   uint64_t worker_weak_drained;  /* Weak tables clear-scanned by workers. */
   uint64_t worker_idle_declares;  /* Owned worker passes with no progress. */
   uint64_t worker_busy_retries;  /* Worker attempts that found active owner. */
+  uint64_t worker_wakes;  /* Parked worker wake publications. */
+  uint64_t worker_parks;  /* Parked worker sleeps after no progress. */
+  uint64_t worker_async_progress;  /* Work completed by parked workers. */
   uint64_t sweep_owner_runs;  /* Owner traversable arena sweep batches. */
   uint64_t sweep_owner_arenas;  /* Traversable arenas swept by owner. */
   uint64_t sweep_owner_live_cells;  /* Post-sweep live cells observed. */
