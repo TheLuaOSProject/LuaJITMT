@@ -21,6 +21,7 @@ done
 
 make -C "$ROOT/src" clean >/dev/null
 make -C "$ROOT/src" \
+  BUILDMODE=static \
   XCFLAGS="-DLUA_USE_ASSERT -DLJ_GC2_PARANOIA=1 -DLUAJIT_DISABLE_JIT" \
   -j"$JOBS" >/dev/null
 "$ROOT/tools/ci/run_stock_tests.sh" "$ROOT/src/luajit" --quiet -jit

@@ -9,7 +9,7 @@ JOBS=${JOBS:-$(getconf _NPROCESSORS_ONLN)}
 TMP=${TMPDIR:-/tmp}
 
 make -C "$ROOT/src" clean >/dev/null
-make -C "$ROOT/src" -j"$JOBS" >/dev/null
+make -C "$ROOT/src" >/dev/null
 
 for needle in \
   'uint64_t fixpoint_rounds' \
@@ -40,6 +40,7 @@ for needle in \
   'uint64_t smr_reclaim_runs' \
   'uint64_t smr_reclaimed' \
   'LJ_GC2_WEAK_DRAIN_BATCH' \
+  'LJ_GC2_WORKER_DRAIN_BATCH' \
   'LJ_GC2_SWEEP_BATCH' \
   'uint64_t finreg_cdata_sets' \
   'uint64_t finreg_cdata_clears' \
@@ -90,6 +91,8 @@ for needle in \
   'la_xchg64_acqrel(&g->gc2.marks_this_round, 0)' \
   'LJ_GC2_HS_SCAN_ROOTS|LJ_GC2_HS_FLUSH_SSB' \
   'lj_gc2_worker_drain_progress(g, LJ_GC2_WEAK_DRAIN_BATCH)' \
+  'lj_gc2_worker_drain_progress(g, LJ_GC2_WORKER_DRAIN_BATCH)' \
+  '05 section 5.6.3 bounded worker step bridge' \
   '05 section 5.8 worker-owned weak-drain bridge' \
   'lj_gc2_worker_drain(g' \
   'lj_gc2_worker_drain_progress(global_State *g, uint32_t limit)' \
@@ -133,9 +136,9 @@ done
 "$ROOT/tools/ci/m2_gc_header_accessors.sh"
 
 make -C "$ROOT/src" clean >/dev/null
-make -C "$ROOT/src" -j"$JOBS" >/dev/null
+make -C "$ROOT/src" >/dev/null
 make -C "$ROOT/src" clean >/dev/null
-make -C "$ROOT/src" amalg -j"$JOBS" >/dev/null
+make -C "$ROOT/src" amalg >/dev/null
 
 "$ROOT/tools/ci/m0_matrix.sh"
 

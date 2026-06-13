@@ -1234,6 +1234,8 @@ static size_t gc_onestep(lua_State *L)
   case GCSpropagate:
     if (gcref(g->gc.gray) != NULL)
       return propagatemark(g);  /* Propagate one gray object. */
+    if (lj_gc2_worker_drain_progress(g, LJ_GC2_WORKER_DRAIN_BATCH) != 0)
+      return GCSWEEPCOST;  /* 05 section 5.6.3 bounded worker step bridge. */
     g->gc.state = GCSatomic;  /* End of mark phase. */
     return 0;
   case GCSatomic:

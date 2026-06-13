@@ -47,6 +47,56 @@ static int finalizer_churn(lua_State *L)
   return 0;
 }
 
+static void test_incremental_worker_step(lua_State *L, global_State *g,
+					 TGState *tg)
+{
+  GCtab *parent, *child, *grandchild;
+  uint64_t worker_runs0, worker_grey0, worker_ssb0;
+  uint32_t old_stepmul = g->gc.stepmul;
+
+  lua_settop(L, 0);
+  lua_newtable(L);
+  parent = tabV(L->top - 1);
+  lua_newtable(L);
+  child = tabV(L->top - 1);
+  lua_newtable(L);
+  grandchild = tabV(L->top - 1);
+  lua_pushvalue(L, -1);
+  lua_rawseti(L, -3, 1);  /* child[1] = grandchild. */
+  lua_pushvalue(L, -2);
+  lua_rawseti(L, -4, 1);  /* parent[1] = child. */
+
+  lj_gc2_legacy_mark_begin(g);
+  setgcrefnull(g->gc.gray);
+  setgcrefnull(g->gc.grayagain);
+  setgcrefnull(g->gc.weak);
+  g->gc.state = GCSpropagate;
+  assert(lj_gc2_markobj(g, obj2gco(parent)) == 1);
+  assert(lj_gc2_flush_ssb(g, tg) == 1);
+  assert(!lj_gc2_ssb_empty(g));
+
+  worker_runs0 = la_load64_acq(&g->gc2.worker_runs);
+  worker_grey0 = la_load64_acq(&g->gc2.worker_grey_drained);
+  worker_ssb0 = la_load64_acq(&g->gc2.worker_ssb_converted);
+  g->gc.stepmul = 1;
+  g->gc.debt = 0;
+  lj_gc_threshold_store(g, g->gc.total);
+  assert(lj_gc_step(L) <= 0);
+  assert(g->gc.state == GCSpropagate);
+  assert(lj_gc2_ssb_empty(g));
+  assert(lj_gc2_ismarked(g, obj2gco(parent)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(grandchild)) == 1);
+  assert(la_load64_acq(&g->gc2.worker_runs) == worker_runs0 + 1u);
+  assert(la_load64_acq(&g->gc2.worker_grey_drained) == worker_grey0 + 3u);
+  assert(la_load64_acq(&g->gc2.worker_ssb_converted) == worker_ssb0 + 1u);
+
+  g->gc.stepmul = old_stepmul;
+  g->gc.state = GCSpause;
+  lj_gc2_legacy_cycle_end(g);
+  lua_pop(L, 3);
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -70,6 +120,8 @@ int main(void)
   assert(g->gc2.tg_list == tg);
   assert(g->gc2.n_threads == 1);
   assert_idle(g, tg);
+
+  test_incremental_worker_step(L, g, tg);
 
   lua_newtable(L);
   phase_tab = tabV(L->top - 1);
