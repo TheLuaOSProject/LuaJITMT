@@ -316,7 +316,6 @@ LJLIB_CF(buffer_new)
   }
   env = tabref_acq(curr_func(L)->c.env);
   ud = lj_udata_new(L, sizeof(SBufExt), env);
-  ud->udtype = UDTYPE_BUFFER;
   /* NOBARRIER: The GCudata is new (marked white). */
   setgcref(ud->metatable, obj2gco(env));
   setudataV(L, L->top++, ud);
@@ -324,6 +323,7 @@ LJLIB_CF(buffer_new)
   lj_bufx_init(L, sbx);
   setgcref(sbx->dict_str, obj2gco(dict_str));
   setgcref(sbx->dict_mt, obj2gco(dict_mt));
+  lj_udata_udtype_rel(ud, UDTYPE_BUFFER);
   if (sz > 0) lj_buf_need2((SBuf *)sbx, sz);
   lj_gc_check(L);
   return 1;

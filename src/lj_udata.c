@@ -17,11 +17,11 @@ GCudata *lj_udata_new(lua_State *L, MSize sz, GCtab *env)
   global_State *g = G(L);
   newwhite(g, ud);  /* Not finalized. */
   ud->gct = ~LJ_TUDATA;
-  ud->udtype = UDTYPE_USERDATA;
   ud->len = sz;
   /* NOBARRIER: The GCudata is new (marked white). */
   setgcrefnull(ud->metatable);
   setgcref(ud->env, obj2gco(env));
+  lj_udata_udtype_rel(ud, UDTYPE_USERDATA);
   /* Chain to userdata list (after main thread). */
   lj_obj_setgcwr(obj2gco(ud), *lj_obj_gcwref(obj2gco(mainthread(g))));
   setgcref(*lj_obj_gcwref(obj2gco(mainthread(g))), obj2gco(ud));

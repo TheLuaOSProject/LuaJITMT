@@ -629,12 +629,12 @@ static TRef crec_ct_tv(jit_State *J, CType *d, TRef dp, TRef sp, cTValue *sval)
     sp = lj_ir_kptr(J, NULL);
   } else if (tref_isudata(sp)) {
     GCudata *ud = udataV(sval);
-    if (ud->udtype == UDTYPE_IO_FILE || ud->udtype == UDTYPE_BUFFER) {
+    uint8_t udtype = lj_udata_udtype_acq(ud);
+    if (udtype == UDTYPE_IO_FILE || udtype == UDTYPE_BUFFER) {
       TRef tr = emitir(IRT(IR_FLOAD, IRT_U8), sp, IRFL_UDATA_UDTYPE);
-      emitir(IRTGI(IR_EQ), tr, lj_ir_kint(J, ud->udtype));
+      emitir(IRTGI(IR_EQ), tr, lj_ir_kint(J, udtype));
       sp = emitir(IRT(IR_FLOAD, IRT_PTR), sp,
-		  ud->udtype == UDTYPE_IO_FILE ? IRFL_UDATA_FILE :
-						 IRFL_SBUF_R);
+		  udtype == UDTYPE_IO_FILE ? IRFL_UDATA_FILE : IRFL_SBUF_R);
     } else {
       sp = emitir(IRT(IR_ADD, IRT_PTR), sp, lj_ir_kintp(J, sizeof(GCudata)));
     }
@@ -1638,7 +1638,7 @@ void LJ_FASTCALL recff_clib_index(jit_State *J, RecordFFData *rd)
 {
   CTState *cts = ctype_ctsG(J2G(J));
   if (tref_isudata(J->base[0]) && tref_isstr(J->base[1]) &&
-      udataV(&rd->argv[0])->udtype == UDTYPE_FFI_CLIB) {
+      lj_udata_udtype_acq(udataV(&rd->argv[0])) == UDTYPE_FFI_CLIB) {
     CLibrary *cl = (CLibrary *)uddata(udataV(&rd->argv[0]));
     GCstr *name = strV(&rd->argv[1]);
     CType *ct;

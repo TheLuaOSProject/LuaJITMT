@@ -268,7 +268,7 @@ static void gc2_scan_global_roots(global_State *g)
 	   la_loadptr_acq((void *const *)&node->next)) {
       GCobj *o = gcref_acq(node->ud);
       if (o && o->gch.gct == ~LJ_TUDATA &&
-	  gco2ud(o)->udtype == UDTYPE_THREAD)
+	  lj_udata_udtype_acq(gco2ud(o)) == UDTYPE_THREAD)
 	lj_gc2_markobj(g, o);
     }
   }
@@ -821,11 +821,12 @@ static void gc2_traverse_udata(global_State *g, GCudata *ud)
 {
   GCtab *mt = tabref_acq(ud->metatable);
   GCtab *env = tabref_acq(ud->env);
+  uint8_t udtype = lj_udata_udtype_acq(ud);
   if (mt)
     gc2_markobj_worker(g, obj2gco(mt));
   if (env)
     gc2_markobj_worker(g, obj2gco(env));
-  if (LJ_HASBUFFER && ud->udtype == UDTYPE_BUFFER) {
+  if (LJ_HASBUFFER && udtype == UDTYPE_BUFFER) {
     SBufExt *sbx = (SBufExt *)uddata(ud);
     GCobj *ref;
     if (!sbufiscoworborrow(sbx))
@@ -840,7 +841,7 @@ static void gc2_traverse_udata(global_State *g, GCudata *ud)
     if (ref)
       gc2_markobj_worker(g, ref);
   }
-  if (ud->udtype == UDTYPE_CHANNEL) {
+  if (udtype == UDTYPE_CHANNEL) {
     LJChan *ch = (LJChan *)uddata(ud);
     uint32_t i;
     for (i = 0; i < ch->cap; i++) {
@@ -849,7 +850,7 @@ static void gc2_traverse_udata(global_State *g, GCudata *ud)
       gc2_mark_tv_worker(g, &tv);  /* 09 section 9.5. */
     }
   }
-  if (ud->udtype == UDTYPE_THREAD) {
+  if (udtype == UDTYPE_THREAD) {
     LJThread *th = (LJThread *)uddata(ud);
     if (th->L)
       gc2_markobj_worker(g, obj2gco(th->L));  /* 09 section 9.2. */

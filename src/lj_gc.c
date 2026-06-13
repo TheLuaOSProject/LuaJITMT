@@ -210,10 +210,12 @@ static void gc2_paranoia_checkthread(global_State *g, lua_State *th)
 
 static void gc2_paranoia_check_udata(global_State *g, GCudata *ud)
 {
+  uint8_t udtype;
   if (!gc2_paranoia_liveobj(obj2gco(ud)))
     return;
   gc2_paranoia_checkobj(g, obj2gco(ud), "userdata");
-  if (LJ_HASBUFFER && ud->udtype == UDTYPE_BUFFER) {
+  udtype = lj_udata_udtype_acq(ud);
+  if (LJ_HASBUFFER && udtype == UDTYPE_BUFFER) {
     SBufExt *sbx = (SBufExt *)uddata(ud);
     if (!sbufiscoworborrow(sbx))
       gc2_paranoia_checkmem(g, sbx->b, "buffer userdata data");
@@ -366,13 +368,15 @@ static void gc_mark(global_State *g, GCobj *o)
   lj_gc_arena_markobj(g, o);
   white2gray(o);
   if (LJ_UNLIKELY(gct == ~LJ_TUDATA)) {
-    GCtab *mt = tabref_acq(gco2ud(o)->metatable);
-    GCtab *env = tabref_acq(gco2ud(o)->env);
+    GCudata *ud = gco2ud(o);
+    uint8_t udtype = lj_udata_udtype_acq(ud);
+    GCtab *mt = tabref_acq(ud->metatable);
+    GCtab *env = tabref_acq(ud->env);
     gray2black(o);  /* Userdata are never gray. */
     if (mt) gc_markobj(g, mt);
     if (env) gc_markobj(g, env);
-    if (LJ_HASBUFFER && gco2ud(o)->udtype == UDTYPE_BUFFER) {
-      SBufExt *sbx = (SBufExt *)uddata(gco2ud(o));
+    if (LJ_HASBUFFER && udtype == UDTYPE_BUFFER) {
+      SBufExt *sbx = (SBufExt *)uddata(ud);
       GCobj *ref;
       if (!sbufiscoworborrow(sbx))
 	lj_gc_arena_markmem(g, sbx->b);
@@ -386,8 +390,8 @@ static void gc_mark(global_State *g, GCobj *o)
       if (ref)
 	gc_markobj(g, ref);
     }
-    if (gco2ud(o)->udtype == UDTYPE_CHANNEL) {
-      LJChan *ch = (LJChan *)uddata(gco2ud(o));
+    if (udtype == UDTYPE_CHANNEL) {
+      LJChan *ch = (LJChan *)uddata(ud);
       uint32_t i;
       for (i = 0; i < ch->cap; i++) {
 	TValue tv;
@@ -395,8 +399,8 @@ static void gc_mark(global_State *g, GCobj *o)
 	gc_marktv(g, &tv);  /* 09 section 9.5 channel slots. */
       }
     }
-    if (gco2ud(o)->udtype == UDTYPE_THREAD) {
-      LJThread *th = (LJThread *)uddata(gco2ud(o));
+    if (udtype == UDTYPE_THREAD) {
+      LJThread *th = (LJThread *)uddata(ud);
       if (th->L)
 	gc_markobj(g, obj2gco(th->L));  /* 09 section 9.2 child stack. */
     }
@@ -442,7 +446,7 @@ static void gc_mark_threading_live(global_State *g)
        node = (LJThreadLive *)la_loadptr_acq((void *const *)&node->next)) {
     GCobj *o = gcref_acq(node->ud);
     if (o && o->gch.gct == ~LJ_TUDATA &&
-	gco2ud(o)->udtype == UDTYPE_THREAD)
+	lj_udata_udtype_acq(gco2ud(o)) == UDTYPE_THREAD)
       gc_markobj(g, o);
   }
 }

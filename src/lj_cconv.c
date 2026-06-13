@@ -625,10 +625,11 @@ void lj_cconv_ct_tv(CTState *cts, CType *d,
     flags |= CCF_FROMTV;
   } else if (tvisudata(o)) {
     GCudata *ud = udataV(o);
+    uint8_t udtype = lj_udata_udtype_acq(ud);
     tmpptr = uddata(ud);
-    if (ud->udtype == UDTYPE_IO_FILE)
+    if (udtype == UDTYPE_IO_FILE)
       tmpptr = *(void **)tmpptr;
-    else if (ud->udtype == UDTYPE_BUFFER)
+    else if (udtype == UDTYPE_BUFFER)
       tmpptr = ((SBufExt *)tmpptr)->r;
   } else if (tvislightud(o)) {
     tmpptr = lightudV(cts->g, o);

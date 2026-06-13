@@ -63,7 +63,8 @@ typedef struct SBufExt {
 #define setsbufflag(sb, flag)	(setmrefu((sb)->L, (flag)))
 
 #define tvisbuf(o) \
-  (LJ_HASBUFFER && tvisudata(o) && udataV(o)->udtype == UDTYPE_BUFFER)
+  (LJ_HASBUFFER && tvisudata(o) && \
+   lj_udata_udtype_acq(udataV(o)) == UDTYPE_BUFFER)
 #define bufV(o)		check_exp(tvisbuf(o), ((SBufExt *)uddata(udataV(o))))
 
 /* Buffer management */

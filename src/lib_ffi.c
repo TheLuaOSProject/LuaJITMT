@@ -368,7 +368,8 @@ static TValue *ffi_clib_index(lua_State *L)
 {
   TValue *o = L->base;
   CLibrary *cl;
-  if (!(o < L->top && tvisudata(o) && udataV(o)->udtype == UDTYPE_FFI_CLIB))
+  if (!(o < L->top && tvisudata(o) &&
+	lj_udata_udtype_acq(udataV(o)) == UDTYPE_FFI_CLIB))
     lj_err_argt(L, 1, LUA_TUSERDATA);
   cl = (CLibrary *)uddata(udataV(o));
   if (!(o+1 < L->top && tvisstr(o+1)))
@@ -424,7 +425,8 @@ LJLIB_CF(ffi_clib___newindex)	LJLIB_REC(clib_index 0)
 LJLIB_CF(ffi_clib___gc)
 {
   TValue *o = L->base;
-  if (o < L->top && tvisudata(o) && udataV(o)->udtype == UDTYPE_FFI_CLIB)
+  if (o < L->top && tvisudata(o) &&
+      lj_udata_udtype_acq(udataV(o)) == UDTYPE_FFI_CLIB)
     lj_clib_unload((CLibrary *)uddata(udataV(o)));
   return 0;
 }

@@ -359,6 +359,16 @@ enum {
   UDTYPE__MAX
 };
 
+static LJ_AINLINE uint8_t lj_udata_udtype_acq(const GCudata *ud)
+{
+  return la_load8_acq(&ud->udtype);
+}
+
+static LJ_AINLINE void lj_udata_udtype_rel(GCudata *ud, uint8_t udtype)
+{
+  la_store8_rel(&ud->udtype, udtype);
+}
+
 #define uddata(u)	((void *)((u)+1))
 #define sizeudata(u)	(sizeof(struct GCudata)+(u)->len)
 

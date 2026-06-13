@@ -1094,7 +1094,7 @@ int lj_record_mm_lookup(jit_State *J, RecordIndex *ix, MMS mm)
     mt = tabref_acq(tabV(&ix->tabv)->metatable);
     mix.tab = emitir(IRT(IR_FLOAD, IRT_TAB), ix->tab, IRFL_TAB_META);
   } else if (tref_isudata(ix->tab)) {
-    int udtype = udataV(&ix->tabv)->udtype;
+    int udtype = lj_udata_udtype_acq(udataV(&ix->tabv));
     mt = tabref_acq(udataV(&ix->tabv)->metatable);
     mix.tab = emitir(IRT(IR_FLOAD, IRT_TAB), ix->tab, IRFL_UDATA_META);
     /* The metatables of special userdata objects are treated as immutable. */
@@ -1597,7 +1597,8 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
 #if LJ_HASBUFFER
     /* The index table of buffer objects is treated as immutable. */
     if (ix->mt == TREF_NIL && !ix->val &&
-	tref_isudata(ix->tab) && udataV(&ix->tabv)->udtype == UDTYPE_BUFFER &&
+	tref_isudata(ix->tab) &&
+	lj_udata_udtype_acq(udataV(&ix->tabv)) == UDTYPE_BUFFER &&
 	tref_istab(ix->mobj) && tref_isstr(ix->key) && tref_isk(ix->key)) {
       cTValue *val = lj_tab_getstr(tabV(&ix->mobjv), strV(&ix->keyv));
       TRef tr = lj_record_constify(J, val);

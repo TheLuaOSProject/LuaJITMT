@@ -43,7 +43,7 @@ static int threading_arena_internal(global_State *g)
 static LJThread *threading_tothread(lua_State *L)
 {
   if (!(L->base < L->top && tvisudata(L->base) &&
-	udataV(L->base)->udtype == UDTYPE_THREAD))
+	lj_udata_udtype_acq(udataV(L->base)) == UDTYPE_THREAD))
     lj_err_argtype(L, 1, "threading.thread");
   return (LJThread *)uddata(udataV(L->base));
 }
@@ -56,7 +56,8 @@ static LJThreadLive *threading_live_head(global_State *g)
 static GCudata *threading_live_ud(LJThreadLive *node)
 {
   GCobj *o = gcref_acq(node->ud);
-  if (o && o->gch.gct == ~LJ_TUDATA && gco2ud(o)->udtype == UDTYPE_THREAD)
+  if (o && o->gch.gct == ~LJ_TUDATA &&
+      lj_udata_udtype_acq(gco2ud(o)) == UDTYPE_THREAD)
     return gco2ud(o);
   return NULL;
 }
@@ -175,10 +176,10 @@ static GCudata *threading_new_thread_ud(lua_State *L, GCtab *env)
   GCudata *ud = lj_udata_new(L, sizeof(LJThread), env);
   LJThread *th = (LJThread *)uddata(ud);
   memset(th, 0, sizeof(*th));
-  ud->udtype = UDTYPE_THREAD;
   /* NOBARRIER: The GCudata is new (marked white). */
   setgcref(ud->metatable, obj2gco(env));
   th->ud = ud;
+  lj_udata_udtype_rel(ud, UDTYPE_THREAD);
   setudataV(L, L->top++, ud);
   return ud;
 }
@@ -363,7 +364,7 @@ static LJThread *threading_thread_from_state(lua_State *L, lua_State *child)
   o = gcref_acq(child->mt_thread);
   if (o && o->gch.gct == ~LJ_TUDATA) {
     GCudata *ud = gco2ud(o);
-    if (ud->udtype == UDTYPE_THREAD) {
+    if (lj_udata_udtype_acq(ud) == UDTYPE_THREAD) {
       LJThread *th = (LJThread *)uddata(ud);
       if (th->L == child)
 	return th;
@@ -489,7 +490,7 @@ typedef struct LJMutex {
 static LJMutex *threading_tomutex(lua_State *L)
 {
   if (!(L->base < L->top && tvisudata(L->base) &&
-	udataV(L->base)->udtype == UDTYPE_MUTEX))
+	lj_udata_udtype_acq(udataV(L->base)) == UDTYPE_MUTEX))
     lj_err_argtype(L, 1, "threading.mutex");
   return (LJMutex *)uddata(udataV(L->base));
 }
@@ -543,7 +544,7 @@ LJLIB_PUSH(top-1) LJLIB_SET(__index)
 static LJChan *threading_tochan(lua_State *L)
 {
   if (!(L->base < L->top && tvisudata(L->base) &&
-	udataV(L->base)->udtype == UDTYPE_CHANNEL))
+	lj_udata_udtype_acq(udataV(L->base)) == UDTYPE_CHANNEL))
     lj_err_argtype(L, 1, "threading.channel");
   return (LJChan *)uddata(udataV(L->base));
 }
@@ -620,7 +621,7 @@ LJLIB_CF(threading_channel_close)
 LJLIB_CF(threading_channel___gc)
 {
   if (L->base < L->top && tvisudata(L->base) &&
-      udataV(L->base)->udtype == UDTYPE_CHANNEL)
+      lj_udata_udtype_acq(udataV(L->base)) == UDTYPE_CHANNEL)
     lj_chan_close((LJChan *)uddata(udataV(L->base)));
   return 0;
 }
@@ -747,7 +748,8 @@ LJLIB_CF(threading_current)
     cTValue *tv = lj_tab_getstr(env, key);
     if (L != mainthread(G(L)))
       lj_err_callermsg(L, "attached thread is not joinable");
-    if (tv && tvisudata(tv) && udataV(tv)->udtype == UDTYPE_THREAD) {
+    if (tv && tvisudata(tv) &&
+	lj_udata_udtype_acq(udataV(tv)) == UDTYPE_THREAD) {
       ud = udataV(tv);
     } else {
       LJThread *th;
@@ -780,10 +782,10 @@ LJLIB_CF(threading_mutex)
   GCtab *env = tabref_acq(curr_func(L)->c.env);
   GCudata *ud = lj_udata_new(L, sizeof(LJMutex), env);
   LJMutex *m = (LJMutex *)uddata(ud);
-  ud->udtype = UDTYPE_MUTEX;
   /* NOBARRIER: The GCudata is new (marked white). */
   setgcref(ud->metatable, obj2gco(env));
   m->state = LJ_MUTEX_UNLOCKED;
+  lj_udata_udtype_rel(ud, UDTYPE_MUTEX);
   setudataV(L, L->top++, ud);
   lj_gc_check(L);
   return 1;
@@ -808,10 +810,10 @@ LJLIB_CF(threading_channel)
     lj_err_arg(L, 1, LJ_ERR_NUMRNG);
   env = tabref_acq(curr_func(L)->c.env);
   ud = lj_udata_new(L, lj_chan_memsize(cap), env);
-  ud->udtype = UDTYPE_CHANNEL;
   /* NOBARRIER: The GCudata is new (marked white). */
   setgcref(ud->metatable, obj2gco(env));
   lj_chan_init((LJChan *)uddata(ud), cap);
+  lj_udata_udtype_rel(ud, UDTYPE_CHANNEL);
   setudataV(L, L->top++, ud);
   lj_gc_check(L);
   return 1;
@@ -880,7 +882,8 @@ LUA_API int luaMT_attach(lua_State *L)
   tg->cur_L = L;
   tg->thread_L = L;
   o = gcref_acq(L->mt_thread);
-  if (o && o->gch.gct == ~LJ_TUDATA && gco2ud(o)->udtype == UDTYPE_THREAD)
+  if (o && o->gch.gct == ~LJ_TUDATA &&
+      lj_udata_udtype_acq(gco2ud(o)) == UDTYPE_THREAD)
     tg->thread_ud = gco2ud(o);
   if (!threading_gc_enter(L)) {
     L->tg_hint = NULL;

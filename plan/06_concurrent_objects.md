@@ -429,6 +429,9 @@ by caller (typical pattern: parent moves args into a not-yet-started L).
 - registry/gcroot stores: release-publish + wbarrier; C-side gcroot readers
   acquire-snapshot the published root.
 - getmetatable/setmetatable on udata/cdata basemt (gcroot): same.
+- `GCudata.udtype`: specialized userdata publish the discriminator with a
+  release store only after payload/metatable initialization; C-side GC/runtime/
+  recorder readers acquire-snapshot the discriminator before branching.
 - `lua_concat`/lj_meta paths: use tg tmpbuf; barrier on results stored.
 - rawequal/rawget/rawset: thin wrappers over §6.3 ops (already are).
 - `os`, `io`: untouched (user-level objects; FILE* sharing is user's

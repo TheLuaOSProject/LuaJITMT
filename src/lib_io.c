@@ -156,7 +156,7 @@ static int io_native_pclose(lua_State *L, FILE *fp)
 static IOFileUD *io_tofilep(lua_State *L)
 {
   if (!(L->base < L->top && tvisudata(L->base) &&
-	udataV(L->base)->udtype == UDTYPE_IO_FILE))
+	lj_udata_udtype_acq(udataV(L->base)) == UDTYPE_IO_FILE))
     lj_err_argtype(L, 1, "FILE*");
   return (IOFileUD *)uddata(udataV(L->base));
 }
@@ -181,11 +181,11 @@ static IOFileUD *io_file_new(lua_State *L)
 {
   IOFileUD *iof = (IOFileUD *)lua_newuserdata(L, sizeof(IOFileUD));
   GCudata *ud = udataV(L->top-1);
-  ud->udtype = UDTYPE_IO_FILE;
   /* NOBARRIER: The GCudata is new (marked white). */
   setgcrefr(ud->metatable, curr_func(L)->c.env);
   iof->fp = NULL;
   iof->type = IOFILE_TYPE_FILE;
+  lj_udata_udtype_rel(ud, UDTYPE_IO_FILE);
   return iof;
 }
 
@@ -641,7 +641,7 @@ LJLIB_CF(io_lines)
 LJLIB_CF(io_type)
 {
   cTValue *o = lj_lib_checkany(L, 1);
-  if (!(tvisudata(o) && udataV(o)->udtype == UDTYPE_IO_FILE))
+  if (!(tvisudata(o) && lj_udata_udtype_acq(udataV(o)) == UDTYPE_IO_FILE))
     setnilV(L->top++);
   else if (((IOFileUD *)uddata(udataV(o)))->fp != NULL)
     lua_pushliteral(L, "file");
@@ -658,11 +658,11 @@ static GCobj *io_std_new(lua_State *L, FILE *fp, const char *name)
 {
   IOFileUD *iof = (IOFileUD *)lua_newuserdata(L, sizeof(IOFileUD));
   GCudata *ud = udataV(L->top-1);
-  ud->udtype = UDTYPE_IO_FILE;
   /* NOBARRIER: The GCudata is new (marked white). */
   setgcref(ud->metatable, gcV(L->top-3));
   iof->fp = fp;
   iof->type = IOFILE_TYPE_STDF;
+  lj_udata_udtype_rel(ud, UDTYPE_IO_FILE);
   lua_setfield(L, -2, name);
   return obj2gco(ud);
 }
