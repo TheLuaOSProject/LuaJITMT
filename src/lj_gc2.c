@@ -1037,10 +1037,15 @@ int lj_gc2_ssb_empty(global_State *g)
     return 0;  /* 05 section 5.7.1 SSB-empty fixpoint predicate. */
   if (!gc2_grey_empty(g))
     return 0;
-  for (tg = g->gc2.tg_list; tg != NULL; tg = tg->next_tg) {
-    if (tg->tg_flags & TGF_DEAD)
+  for (tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
+       tg != NULL;
+       tg = (TGState *)la_loadptr_acq((void *const *)&tg->next_tg)) {
+    GCRef *next, *base;
+    if (la_load8_acq(&tg->tg_flags) & TGF_DEAD)
       continue;
-    if (tg->ssb_next != tg->ssb_base)
+    next = (GCRef *)la_loadptr_acq((void *const *)&tg->ssb_next);
+    base = (GCRef *)la_loadptr_acq((void *const *)&tg->ssb_base);
+    if (next != base)
       return 0;
   }
   return 1;

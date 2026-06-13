@@ -229,7 +229,10 @@ zero-mark/empty-work predicate. `lj_gc2_fixpoint_run()` repeats that bounded
 round and the legacy atomic bridge now calls it before paranoia/weak clearing,
 so current cycles exercise the detector. The original full loop above remains
 the target: a scheduler-owned pool, per-worker idle declaration, and leader
-ownership of the `P_WEAK` transition are still follow-up work.
+ownership of the `P_WEAK` transition are still follow-up work. The current
+empty-work predicate includes the global grey deque, published SSB stack, and
+each live TG's active SSB cursor, read through acquire loads while walking the
+shared TG list.
 
 ### 5.7.2 Thread stacks
 `HS_SCAN_ROOTS` (mutator, at ack): for its *running* L (and the chain of
