@@ -73,12 +73,10 @@ current TG's `poll` word. x64 VM slow paths load `global_State *` through
 register instead of clobbering `RID_DISPATCH`. `REF_NIL` GG-state FLOADs now
 use absolute/RIP/global-address forms, and the x64 exit patcher recognizes the
 resulting vmstate store patterns instead of scanning for `GG_OFS_TGDISP`.
-Secondary TGs currently still neither enter `BC_JLOOP` mcode nor acquire the
-recorder token to produce new x64 traces. This is a temporary x64/POSIX
-validation guard, not the original end-state; the remaining original target is
-to remove the secondary-TG recorder/entry guard once this non-dispatch emitter
-migration is validated. Record dispatch itself is now localized to the token
-holder's TG table instead of being exposed through the global dispatch template.
+Secondary TGs may now acquire the recorder token and enter `BC_JLOOP` mcode
+through their own TG-local dispatch table. Record dispatch itself is localized
+to the token holder's TG table instead of being exposed through the global
+dispatch template.
 
 ## 8.3 Trace registry & publication
 

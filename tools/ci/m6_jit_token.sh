@@ -12,8 +12,6 @@ make -C "$ROOT/src" >/dev/null
 for needle in \
   'uint32_t jit_token' \
   'lj_jit_token_try(jit_State *J)' \
-  'tg != g->main_tg' \
-  'Temporary until x64 RID_DISPATCH addressing is localized' \
   'emit_leatg(as, dest, tmptv)' \
   'DISPATCH_TG(jit_base)' \
   'emit_gettg(as, tmp, gl)' \
@@ -28,7 +26,6 @@ for needle in \
   'int jit_exitcode' \
   'G2TG(g)->jit_exitcode' \
   'tg->jit_exitcode' \
-  'Secondary TGs interpret until RID_DISPATCH is local' \
   'J->L = L;' \
   'lj_jit_token_held(J)' \
   'lj_jit_token_release(J)'
@@ -46,6 +43,12 @@ done
 if rg -n 'while .*jit_token|la_futex_wait\(&g->jit_token|la_futex_wait\([^)]*jit_token' \
     "$ROOT/src"; then
   echo "guardrail: recorder token must never block or spin-wait" >&2
+  exit 1
+fi
+
+if rg -n 'tg != g->main_tg|Temporary until x64 RID_DISPATCH addressing is localized|Secondary TGs interpret until RID_DISPATCH is local' \
+    "$ROOT/src/lj_trace.c" "$ROOT/src/vm_x64.dasc"; then
+  echo "guardrail: secondary TGs must be allowed to record and enter x64 traces" >&2
   exit 1
 fi
 
@@ -104,5 +107,6 @@ fi
 "$CC" $CFLAGS -I"$ROOT/src" "$ROOT/tests/t-jit-token.c" \
   "$ROOT/src/libluajit.a" -lm -ldl -pthread -o "$OUT"
 timeout 20s "$OUT"
+timeout 20s "$ROOT/src/luajit" "$ROOT/tests/t-jit-secondary.lua"
 
 echo "M6 JIT recorder token guard passed"

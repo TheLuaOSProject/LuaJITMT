@@ -23,10 +23,9 @@ M6 x64 dispatch localization inventory:
 - `REF_NIL` GG-state FLOADs now use absolute/RIP/global-address forms, and the
   x64 exit patcher recognizes the resulting vmstate store patterns instead of
   scanning for `GG_OFS_TGDISP`.
-- Transitional x64/POSIX safety guard still keeps secondary TGs from acquiring
-  the recorder token as well as from entering `BC_JLOOP` mcode. This is now a
-  validation guard only; the original target is to remove it after the
-  non-dispatch emitter migration is exercised.
+- Secondary TGs may now acquire the recorder token and enter `BC_JLOOP` mcode.
+  The old x64/POSIX validation guards were removed after `RID_DISPATCH`
+  addressing was limited to fixed `DISPATCH_TG(...)` fields.
 - Completed prerequisite in this slice: `lj_dispatch_update()` now requests
   `HS_REDISPATCH` when more than one TG is live, so attached TG dispatch tables
   refresh through their own safepoint acknowledgement instead of remote copying.

@@ -45,7 +45,10 @@ int main(void)
     assert(g->main_tg != NULL);
     secondary.tid = g->main_tg->tid == 0x7ffffffeu ? 0x7ffffffdu : 0x7ffffffeu;
     lj_thr_set_tg(&secondary);
-    assert(lj_jit_token_try(g->jitp) == 0);
+    assert(lj_jit_token_try(g->jitp) != 0);
+    assert(la_load32_acq(&g->jit_token) == secondary.tid);
+    assert(lj_jit_token_held(g->jitp) != 0);
+    lj_jit_token_release(g->jitp);
     assert(la_load32_acq(&g->jit_token) == 0);
     lj_thr_set_tg(saved_tg);
   }
@@ -110,6 +113,6 @@ int main(void)
   assert(la_load32_acq(&g->jit_token) == 0);
 
   lua_close(L);
-  printf("t-jit-token OK: recorder token skips busy recording and releases\n");
+  printf("t-jit-token OK: recorder token accepts secondary TGs and skips busy recording\n");
   return 0;
 }

@@ -37,14 +37,19 @@ for needle in \
   'TGPOLL, dword [DISPATCH+DISPATCH_TG(poll)]' \
   'static void dispatch_setrecord' \
   'rec_owner = J->state != LJ_TRACE_IDLE && lj_jit_token_held(J)' \
-  'dispatch_setrecord(tg->dispatch, mode)' \
-  'Secondary TGs interpret until RID_DISPATCH is local'
+  'dispatch_setrecord(tg->dispatch, mode)'
 do
   if ! rg -F -q "$needle" "$ROOT/src/vm_x64.dasc" "$ROOT/src/lj_dispatch.c"; then
     echo "guardrail: missing x64 dispatch-localization marker: $needle" >&2
     exit 1
   fi
 done
+
+if rg -n 'Secondary TGs interpret until RID_DISPATCH is local' \
+    "$ROOT/src/vm_x64.dasc"; then
+  echo "guardrail: x64 secondary TGs must enter localized trace dispatch" >&2
+  exit 1
+fi
 
 if rg -n 'DISPATCH_[GJ]\(' "$ROOT/src/vm_x64.dasc"; then
   echo "guardrail: x64 VM must not derive g/J from fixed DISPATCH offsets" >&2
