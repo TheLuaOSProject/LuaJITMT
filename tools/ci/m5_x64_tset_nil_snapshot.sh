@@ -22,6 +22,16 @@ a[1] = 10
 local k = 2
 a[k] = 20
 assert(a[1] == 10 and a[2] == 20)
+local function many() return 1, 2, 3 end
+local m = { many() }
+assert(m[1] == 1 and m[2] == 2 and m[3] == 3)
+local function spread(n)
+  local r = {}
+  for i = 1, n do r[i] = i end
+  return unpack(r, 1, n)
+end
+local big = { spread(96) }
+assert(#big == 96 and big[1] == 1 and big[96] == 96)
 '
 
 for needle in \
@@ -29,6 +39,7 @@ for needle in \
   'cmp r8, LJ_TNIL' \
   'jmp ->vmeta_tsets		// M5: no legacy x64 hash-slot store.' \
   'call extern lj_tab_storetv' \
+  'call extern lj_tab_storetvn' \
   'jmp ->vm_gc2_barriertab'
 do
   if ! rg -F -q "$needle" "$ROOT/src/vm_x64.dasc"; then
@@ -58,6 +69,24 @@ if awk '
   :
 else
   echo "guardrail: x64 TSETS must not write hash slots directly" >&2
+  exit 1
+fi
+
+if awk '
+  /case BC_TSETM:/ { in_setm = 1; saw_storetvn = 0; next }
+  in_setm && /call extern lj_tab_storetvn/ { saw_storetvn = 1 }
+  in_setm && /mov \[TMPR\], ITYPE/ { bad = 1 }
+  in_setm && /break;/ {
+    checked = 1
+    if (!saw_storetvn)
+      bad = 1
+    in_setm = 0
+  }
+  END { exit checked && !bad ? 0 : 1 }
+' "$ROOT/src/vm_x64.dasc"; then
+  :
+else
+  echo "guardrail: x64 TSETM must release-publish batch array slots" >&2
   exit 1
 fi
 

@@ -31,8 +31,10 @@ for needle in \
   'lj_tab_storeproto' \
   'lj_tab_storefunc' \
   'lj_tab_storeudata' \
+  'lj_tab_storetvn' \
   'lj_tab_storenilraw' \
   'copyTVrel(L, dst, src)' \
+  'copyTVrel(L, &dst[i], &src[i])' \
   'copyTVrel(L, o, L->top+1)' \
   'copyTVrel(L, o, --L->top)' \
   'lj_tab_storetv(L, dst, &val)' \

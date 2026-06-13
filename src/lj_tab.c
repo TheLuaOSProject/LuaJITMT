@@ -865,6 +865,14 @@ LJ_FUNCA TValue *lj_tab_storetv(lua_State *L, TValue *dst, cTValue *src)
   return dst;
 }
 
+LJ_FUNCA void lj_tab_storetvn(lua_State *L, TValue *dst, cTValue *src,
+			      uint32_t n)
+{
+  uint32_t i;
+  for (i = 0; i < n; i++)
+    copyTVrel(L, &dst[i], &src[i]);
+}
+
 TValue *lj_tab_storenilraw(TValue *dst)
 {
   TValue tv;

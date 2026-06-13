@@ -4241,15 +4241,21 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  sub RDd, TMPRd
     |  shl TMPRd, 3
     |  add TMPR, TAB:RB->array
-    |3:  // Copy result slots to table.
-    |  mov ITYPE, [RA]
-    |  add RA, 8
-    |  mov [TMPR], ITYPE
-    |  add TMPR, 8
-    |  sub RDd, 1
-    |  jnz <3
+    |  mov ITYPE, RA
+    |  mov L:CARG1, SAVE_L
+    |  mov L:CARG1->base, BASE
+    |  mov CARG2, TMPR
+    |  mov CARG3, ITYPE
+    |  mov CARG4d, RDd
+    |  mov L:RB, L:CARG1
+    |  call extern lj_tab_storetvn	// (lua_State *L, TValue *d, TValue *s, uint32_t n)
+    |  mov BASE, L:RB->base
     |  cmp TGMARK, 0
-    |  jnz ->vm_gc2_barriertab
+    |  jz >4
+    |  movzx RAd, PC_RA
+    |  mov TAB:RB, [BASE+RA*8-8]
+    |  cleartp TAB:RB
+    |  jmp ->vm_gc2_barriertab
     |4:
     |  ins_next
     |

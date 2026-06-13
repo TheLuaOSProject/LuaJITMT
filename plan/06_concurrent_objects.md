@@ -209,12 +209,15 @@ with the normal NYI-bytecode trace error. `lj_vm_next`
 hash traversal, the `BC_ITERN` array/hash iterator path, and `ipairs_aux` array
 iteration load candidate values into registers before nil decisions and copy
 those same snapshots to their results; `BC_TSETV`/`BC_TSETS`/`BC_TSETB` load
-previous slot values into registers before nil/metamethod decisions. C-side
-runtime/library/parser/serializer table-slot writers converted so far publish
-values through `lj_tab_store*()` helpers or `copyTVrel()` instead of raw
-`lj_tab_set*()` destination stores; this records a scoped release-store bridge
-without changing the original write-protocol target above. Core C table lookup,
-resize, rehash counting, collision checks, and `next()` now make key/value
+previous slot values into registers before nil/metamethod decisions. x64
+`BC_TSETM` keeps its constructor fit check and `lj_tab_reasize()` retry, but
+batch-publishes copied result slots through `lj_tab_storetvn()` instead of the
+old raw `mov [array], TValue` loop. C-side runtime/library/parser/serializer
+table-slot writers converted so far publish values through `lj_tab_store*()`
+helpers or `copyTVrel()` instead of raw `lj_tab_set*()` destination stores;
+this records a scoped release-store bridge without changing the original
+write-protocol target above. Core C table lookup, resize, rehash counting,
+collision checks, and `next()` now make key/value
 decisions from acquired `TValue` snapshots instead of direct shared node-field
 reads; GC/GC2 table traversal, weak clearing, finalizer-table scans,
 serialization, bytecode writing, parser template-table fixup, recorder
