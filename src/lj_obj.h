@@ -854,6 +854,8 @@ typedef struct GC2State {
   uint64_t weak_complete_runs;  /* P_WEAK completion attempts. */
   uint64_t weak_complete_progress;  /* Worker progress during P_WEAK finish. */
   uint64_t weak_to_sweep;  /* WEAK-to-SWEEP phase publications. */
+  uint64_t sweep_to_idle;  /* SWEEP-to-IDLE phase publications. */
+  uint64_t preserve_abort_to_idle;  /* Preserve aborts leaving an active phase. */
   uint64_t alloc_since_trigger;  /* Flushed mutator allocation bytes. */
   uint64_t trigger_bytes;  /* Allocation bytes before next GC2 trigger. */
   uint64_t hard_bytes;	/* Allocation bytes before mutator assists. */

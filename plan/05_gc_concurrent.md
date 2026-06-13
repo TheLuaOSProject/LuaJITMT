@@ -404,6 +404,14 @@ P_SWEEP entry handshake: {DISABLE_BARRIER, RESET_ALLOC, FLUSH_SSB(last)}.
   When all arenas have sweep_epoch==cycle (workers finish stragglers of
   threads that allocate slowly): aggregate live_estimate, compute next
   trigger (§5.11), → P_IDLE.
+Current bridge note: legacy sweep still owns the string/root sweep state
+machine and calls `lj_gc2_legacy_cycle_end()` at the final boundary. That
+boundary now records real `SWEEP -> IDLE` publications with `sweep_to_idle`.
+The partial-cycle full-GC fast-forward path still calls
+`lj_gc2_legacy_preserve_abort()` instead of entering `P_SWEEP`; that path now
+records real active-phase aborts with `preserve_abort_to_idle`. Full
+scheduler-owned sweep completion, live aggregation, and `P_IDLE` ownership
+remain follow-up work.
 
 ## 5.9 Deferred reclamation (grace periods) — the GC as universal SMR
 

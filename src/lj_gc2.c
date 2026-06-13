@@ -67,6 +67,8 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.weak_complete_runs, 0);
   la_store64_rlx(&g->gc2.weak_complete_progress, 0);
   la_store64_rlx(&g->gc2.weak_to_sweep, 0);
+  la_store64_rlx(&g->gc2.sweep_to_idle, 0);
+  la_store64_rlx(&g->gc2.preserve_abort_to_idle, 0);
   g->gc2.alloc_since_trigger = 0;
   g->gc2.trigger_bytes = 0;
   g->gc2.hard_bytes = 0;
@@ -501,8 +503,11 @@ uint32_t lj_gc2_sweep_owner_progress(global_State *g, TGState *tg,
 
 void lj_gc2_legacy_preserve_abort(global_State *g)
 {
+  uint32_t phase;
   la_store32_rel(&g->gc2.cycle_leader, 0);
-  g->gc2.phase = LJ_GC2_IDLE;
+  phase = la_xchg32_acqrel(&g->gc2.phase, LJ_GC2_IDLE);
+  if (phase != LJ_GC2_IDLE)
+    la_add64_rlx(&g->gc2.preserve_abort_to_idle, 1);
   lj_gc2_handshake(g, LJ_GC2_HS_DISABLE_BARRIER|LJ_GC2_HS_ALLOC_WHITE|
 		   LJ_GC2_HS_FLUSH_SSB);
   (void)lj_gc2_drain_ssb(g);
@@ -511,8 +516,11 @@ void lj_gc2_legacy_preserve_abort(global_State *g)
 
 void lj_gc2_legacy_cycle_end(global_State *g)
 {
+  uint32_t phase;
   la_store32_rel(&g->gc2.cycle_leader, 0);
-  g->gc2.phase = LJ_GC2_IDLE;
+  phase = la_xchg32_acqrel(&g->gc2.phase, LJ_GC2_IDLE);
+  if (phase == LJ_GC2_SWEEP)
+    la_add64_rlx(&g->gc2.sweep_to_idle, 1);
   lj_gc2_handshake(g, LJ_GC2_HS_DISABLE_BARRIER|LJ_GC2_HS_ALLOC_WHITE|
 		   LJ_GC2_HS_FLUSH_SSB);
   (void)lj_gc2_drain_ssb(g);

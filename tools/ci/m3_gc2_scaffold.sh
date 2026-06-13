@@ -20,6 +20,8 @@ for needle in \
   'uint64_t weak_complete_runs' \
   'uint64_t weak_complete_progress' \
   'uint64_t weak_to_sweep' \
+  'uint64_t sweep_to_idle' \
+  'uint64_t preserve_abort_to_idle' \
   'GCRef *weak_stack' \
   'uint8_t *weak_ready' \
   'uint64_t weak_count' \
@@ -129,6 +131,8 @@ for needle in \
   'la_add64_rlx(&g->gc2.mark_to_weak' \
   '05 section 5.8 scheduler-owned weak completion bridge' \
   'la_add64_rlx(&g->gc2.weak_to_sweep' \
+  'la_add64_rlx(&g->gc2.sweep_to_idle' \
+  'la_add64_rlx(&g->gc2.preserve_abort_to_idle' \
   'LJ_GC2_HS_SCAN_ROOTS|LJ_GC2_HS_FLUSH_SSB' \
   'gc2_traverse_trace(g, &J->cur)' \
   '05 section 5.7.4 current trace root' \

@@ -204,6 +204,7 @@ int main(void)
   uint64_t fixpoint_rounds0, fixpoint_hits0;
   uint64_t mark_complete_runs0, mark_complete_hits0, mark_to_weak0;
   uint64_t weak_complete_runs0, weak_complete_progress0, weak_to_sweep0;
+  uint64_t sweep_to_idle0, preserve_abort_to_idle0;
   uint64_t worker_weak0, weak_clear_tables0, weak_clear_cleared0;
   uint64_t weak_legacy_fallbacks0;
   MSize weak_n;
@@ -281,7 +282,9 @@ int main(void)
   lj_arena_alloc_restore_sweep_kind(&tg->alloc, LJ_ARENAK_PLAIN);
   assert(tg->alloc.needsweep[LJ_ARENAK_PLAIN] == NULL);
   assert(tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE] == NULL);
+  sweep_to_idle0 = la_load64_acq(&g->gc2.sweep_to_idle);
   lj_gc2_legacy_cycle_end(g);
+  assert(la_load64_acq(&g->gc2.sweep_to_idle) == sweep_to_idle0 + 1u);
   assert_idle(g, tg);
   lua_pop(L, 2);
   lj_arena_free(&tg->alloc, phase_plain, 64);
@@ -294,7 +297,10 @@ int main(void)
   assert(g->gc2.phase == LJ_GC2_WEAK);
   assert(tg->mark_active == 1);
   assert(tg->alloc.alloc_black == 1);
+  preserve_abort_to_idle0 = la_load64_acq(&g->gc2.preserve_abort_to_idle);
   lj_gc2_legacy_preserve_abort(g);
+  assert(la_load64_acq(&g->gc2.preserve_abort_to_idle) ==
+	 preserve_abort_to_idle0 + 1u);
   assert_idle(g, tg);
 
   assert(luaL_dostring(L,
