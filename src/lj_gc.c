@@ -74,6 +74,19 @@ static void gc_mark_strtab_mem(global_State *g)
     lj_gc_arena_markmem(g, hdr);
 }
 
+static void gc_mark_tab_retired_mem(global_State *g)
+{
+  TabNodeRetire *ret;
+  for (ret = (TabNodeRetire *)la_loadptr_acq(
+	 (void *const *)&g->tab.retired_nodes);
+       ret != NULL;
+       ret = (TabNodeRetire *)la_loadptr_acq((void *const *)&ret->next)) {
+    lj_gc_arena_markmem(g, ret);
+    if (la_load32_acq(&ret->armed))
+      lj_gc_arena_markmem(g, ret->node);
+  }
+}
+
 static void gc_arena_rebuild_free(global_State *g)
 {
   TGState *tg = G2TG(g);
@@ -249,6 +262,7 @@ static void gc2_paranoia_check_roots(global_State *g)
 static void gc2_paranoia_check_rawroots(global_State *g)
 {
   StrTabHdr *hdr;
+  TabNodeRetire *ret;
   hdr = (StrTabHdr *)la_loadptr_acq((void *const *)&g->str.tabh);
   if (hdr)
     gc2_paranoia_checkmem(g, hdr, "string table");
@@ -256,6 +270,14 @@ static void gc2_paranoia_check_rawroots(global_State *g)
        hdr != NULL;
        hdr = (StrTabHdr *)la_loadptr_acq((void *const *)&hdr->retired_next))
     gc2_paranoia_checkmem(g, hdr, "retired string table");
+  for (ret = (TabNodeRetire *)la_loadptr_acq(
+	 (void *const *)&g->tab.retired_nodes);
+       ret != NULL;
+       ret = (TabNodeRetire *)la_loadptr_acq((void *const *)&ret->next)) {
+    gc2_paranoia_checkmem(g, ret, "retired table node record");
+    if (la_load32_acq(&ret->armed))
+      gc2_paranoia_checkmem(g, ret->node, "retired table nodes");
+  }
 #if LJ_64
   gc2_paranoia_checkmem(g, mref(g->gc.lightudseg, uint32_t),
 			"lightuserdata segments");
@@ -388,6 +410,7 @@ static void gc_mark_gcroot(global_State *g)
       gc_markobj(g, gcref(g->gcroot[i]));
   gc_mark_fixedstr(g);
   gc_mark_strtab_mem(g);
+  gc_mark_tab_retired_mem(g);
 #if LJ_64
   lj_gc_arena_markmem(g, mref(g->gc.lightudseg, uint32_t));
 #endif

@@ -158,6 +158,16 @@ Readers never help, never block.
 Progress: lock-free — a stalled initiator cannot block others (helpers
 advance cursor; publication is idempotent via CAS on t->nodehdr expected
 G). Memory: at most 2 gens live per table transiently.
+
+Current implementation status: runtime tables still use the legacy `GCtab`
+layout and Brent hash insertion while the tracked `nbtab_model` remains the
+reference for the final header-generation/helper-copy port. The landed
+intermediate slices keep the shared nilnode read-only for first hash inserts
+and now retire old hash `Node[]` vectors from `lj_tab_resize()` behind the
+completed safepoint epoch before freeing them. This removes the immediate
+resize free hazard for future acquire-load readers, but does not replace the
+legacy insertion/resize algorithm with the planned lock-free `NHdr` generation
+protocol yet.
 ### 6.3.6 next/pairs (lj_tab_next)
 Iterate the *gen snapshot* captured at first call: store the NH pointer in
 the iterator control slot? Lua's `next(t,k)` is stateless — DECIDED:

@@ -10,6 +10,7 @@
 #define LUA_CORE
 
 #include "lj_obj.h"
+#include "lj_atomic.h"
 #include "lj_gc.h"
 #include "lj_err.h"
 #include "lj_tab.h"
@@ -46,6 +47,34 @@ static LJ_AINLINE void newhpart(lua_State *L, GCtab *t, uint32_t hbits)
   setmref(t->node, node);
   setfreetop(t, node, &node[hsize]);
   t->hmask = hsize-1;
+}
+
+static void tab_retired_push(global_State *g, TabNodeRetire *ret)
+{
+  void *head = la_loadptr_acq((void *const *)&g->tab.retired_nodes);
+  do {
+    ret->next = (TabNodeRetire *)head;
+  } while (!la_casptr((void **)&g->tab.retired_nodes, &head, ret,
+		      LA_ACQ_REL, LA_ACQ));  /* 06 section 6.3.5 raw retire. */
+}
+
+static TabNodeRetire *tab_retire_reserve(lua_State *L, Node *node,
+					 MSize hmask)
+{
+  TabNodeRetire *ret = lj_mem_newt(L, sizeof(TabNodeRetire), TabNodeRetire);
+  ret->node = node;
+  ret->hmask = hmask;
+  la_store64_rel(&ret->retire_epoch, 0);
+  la_store32_rel(&ret->armed, 0);
+  ret->next = NULL;
+  tab_retired_push(G(L), ret);
+  return ret;
+}
+
+static void tab_retire_arm(global_State *g, TabNodeRetire *ret)
+{
+  la_store64_rel(&ret->retire_epoch, la_load64_acq(&g->gc2.hs_epoch));
+  la_store32_rel(&ret->armed, 1);
 }
 
 /*
@@ -233,6 +262,8 @@ void lj_tab_resize(lua_State *L, GCtab *t, uint32_t asize, uint32_t hbits)
   Node *oldnode = noderef(t->node);
   uint32_t oldasize = t->asize;
   uint32_t oldhmask = t->hmask;
+  TabNodeRetire *oldret = oldhmask > 0 ?
+    tab_retire_reserve(L, oldnode, oldhmask) : NULL;
   if (asize > oldasize) {  /* Array part grows? */
     TValue *array;
     uint32_t i;
@@ -258,6 +289,9 @@ void lj_tab_resize(lua_State *L, GCtab *t, uint32_t asize, uint32_t hbits)
   if (hbits) {
     newhpart(L, t, hbits);
     clearhpart(t);
+    if (oldret) {
+      tab_retire_arm(G(L), oldret);
+    }
   } else {
     global_State *g = G(L);
     setmref(t->node, &g->nilnode);
@@ -265,6 +299,9 @@ void lj_tab_resize(lua_State *L, GCtab *t, uint32_t asize, uint32_t hbits)
     setmref(t->freetop, &g->nilnode);
 #endif
     t->hmask = 0;
+    if (oldret) {
+      tab_retire_arm(g, oldret);
+    }
   }
   if (asize < oldasize) {  /* Array part shrinks? */
     TValue *array = tvref(t->array);
@@ -279,15 +316,55 @@ void lj_tab_resize(lua_State *L, GCtab *t, uint32_t asize, uint32_t hbits)
 	      oldasize*sizeof(TValue), asize*sizeof(TValue)));
   }
   if (oldhmask > 0) {  /* Reinsert pairs from old hash part. */
-    global_State *g;
     uint32_t i;
     for (i = 0; i <= oldhmask; i++) {
       Node *n = &oldnode[i];
       if (!tvisnil(&n->val))
 	copyTV(L, lj_tab_set(L, t, &n->key), &n->val);
     }
-    g = G(L);
-    lj_mem_freevec(g, oldnode, oldhmask+1, Node);
+    lj_assertL(oldret && la_load32_acq(&oldret->armed),
+	       "retired table nodes not armed");
+  }
+}
+
+uint32_t lj_tab_reclaim_retired(global_State *g, uint64_t completed_epoch)
+{
+  TabNodeRetire *ret;
+  uint32_t reclaimed = 0;
+  if (!g || completed_epoch == 0)
+    return 0;
+  ret = (TabNodeRetire *)la_xchgptr_acqrel((void **)&g->tab.retired_nodes,
+					   NULL);
+  while (ret) {
+    TabNodeRetire *next = ret->next;
+    ret->next = NULL;
+    if (!la_load32_acq(&ret->armed)) {
+      tab_retired_push(g, ret);
+    } else if (la_load64_acq(&ret->retire_epoch) < completed_epoch) {
+      lj_mem_freevec(g, ret->node, ret->hmask+1, Node);
+      lj_mem_freet(g, ret);
+      reclaimed++;
+    } else {
+      tab_retired_push(g, ret);
+    }
+    ret = next;
+  }
+  return reclaimed;
+}
+
+void lj_tab_freeretired(global_State *g)
+{
+  TabNodeRetire *ret;
+  if (!g)
+    return;
+  ret = (TabNodeRetire *)la_xchgptr_acqrel((void **)&g->tab.retired_nodes,
+					   NULL);
+  while (ret) {
+    TabNodeRetire *next = ret->next;
+    if (la_load32_acq(&ret->armed))
+      lj_mem_freevec(g, ret->node, ret->hmask+1, Node);
+    lj_mem_freet(g, ret);
+    ret = next;
   }
 }
 

@@ -61,6 +61,9 @@ LJ_FUNCA GCtab * LJ_FASTCALL lj_tab_dup(lua_State *L, const GCtab *kt);
 LJ_FUNC void LJ_FASTCALL lj_tab_clear(GCtab *t);
 LJ_FUNC void LJ_FASTCALL lj_tab_free(global_State *g, GCtab *t);
 LJ_FUNC void lj_tab_resize(lua_State *L, GCtab *t, uint32_t asize, uint32_t hbits);
+LJ_FUNC uint32_t lj_tab_reclaim_retired(global_State *g,
+					uint64_t completed_epoch);
+LJ_FUNC void lj_tab_freeretired(global_State *g);
 LJ_FUNCA void lj_tab_reasize(lua_State *L, GCtab *t, uint32_t nasize);
 
 /* Caveat: all getters except lj_tab_get() can return NULL! */

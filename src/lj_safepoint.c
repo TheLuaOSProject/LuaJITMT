@@ -13,6 +13,7 @@
 #include "lj_gc2.h"
 #include "lj_safepoint.h"
 #include "lj_str.h"
+#include "lj_tab.h"
 #include "lj_tg.h"
 #include "lj_trace.h"
 
@@ -192,5 +193,6 @@ uint32_t lj_safepoint_handshake(global_State *g, uint32_t actions)
 		  1000000);
   }
   (void)lj_str_reclaim_retired(g, epoch);  /* 05 section 5.9 SMR drain. */
+  (void)lj_tab_reclaim_retired(g, epoch);  /* 06 section 6.3.5 SMR drain. */
   return signaled;
 }

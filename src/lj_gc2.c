@@ -108,6 +108,19 @@ static void gc2_mark_strtab_mem(global_State *g)
     lj_gc2_markmem(g, hdr);
 }
 
+static void gc2_mark_tab_retired_mem(global_State *g)
+{
+  TabNodeRetire *ret;
+  for (ret = (TabNodeRetire *)la_loadptr_acq(
+	 (void *const *)&g->tab.retired_nodes);
+       ret != NULL;
+       ret = (TabNodeRetire *)la_loadptr_acq((void *const *)&ret->next)) {
+    lj_gc2_markmem(g, ret);
+    if (la_load32_acq(&ret->armed))
+      lj_gc2_markmem(g, ret->node);
+  }
+}
+
 void lj_gc2_legacy_mark_begin(global_State *g)
 {
   TGState *tg = G2TG(g);
@@ -233,6 +246,7 @@ static void gc2_scan_global_roots(global_State *g)
       lj_gc2_markobj(g, gcref(g->gcroot[i]));
   gc2_mark_fixedstr(g);
   gc2_mark_strtab_mem(g);
+  gc2_mark_tab_retired_mem(g);
 #if LJ_64
   lj_gc2_markmem(g, mref(g->gc.lightudseg, uint32_t));
 #endif

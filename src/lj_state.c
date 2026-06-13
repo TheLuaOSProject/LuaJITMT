@@ -229,6 +229,7 @@ static void close_state(lua_State *L)
   lj_ctype_freestate(g);
 #endif
   lj_str_freetab(g);
+  lj_tab_freeretired(g);
   lj_gc2_fini(g);
   if (arena_alloc && g->main_tg)
     lj_buf_free(g, &g->main_tg->tmpbuf);
@@ -343,6 +344,7 @@ LUA_API lua_State *lua_newstate(lua_Alloc allocf, void *allocd)
   g->str.tabh = NULL;
   g->str.retired = NULL;
   g->str.mask = ~(MSize)0;
+  g->tab.retired_nodes = NULL;
   setnilV(registry(L));
   setnilV(&g->nilnode.val);
   setnilV(&g->nilnode.key);

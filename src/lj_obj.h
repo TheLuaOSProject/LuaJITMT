@@ -531,6 +531,14 @@ typedef struct Node {
 
 LJ_STATIC_ASSERT(offsetof(Node, val) == 0);
 
+typedef struct TabNodeRetire {
+  Node *node;		/* Retired hash vector, owned only when armed. */
+  MSize hmask;		/* Original hash mask for vector free. */
+  uint64_t retire_epoch;  /* Safepoint epoch when retired. */
+  uint32_t armed;	/* Node vector has been unpublished from its table. */
+  struct TabNodeRetire *next;
+} TabNodeRetire;
+
 typedef struct GCtab {
   GCHeader;
   uint8_t nomm;		/* Negative cache for fast metamethods. */
@@ -669,6 +677,10 @@ typedef struct StrInternState {
   LJ_ALIGN(8) uint64_t seed;	/* Random string seed. */
 } StrInternState;
 
+typedef struct TabState {
+  TabNodeRetire *retired_nodes;  /* Retired hash vectors awaiting SMR. */
+} TabState;
+
 typedef struct TGState TGState;
 typedef struct GC2SSBNode GC2SSBNode;
 typedef struct GC2State {
@@ -707,6 +719,7 @@ typedef struct global_State {
   uint8_t dispatchmode;	/* Dispatch mode. */
   uint8_t vmevmask;	/* VM event mask. */
   StrInternState str;	/* String interning. */
+  TabState tab;		/* Table raw storage retirement. */
   volatile int32_t vmstate;  /* VM state or current JIT code trace number. */
   GCRef mainthref;	/* Link to main thread. */
   SBuf tmpbuf;		/* Temporary string buffer. */
