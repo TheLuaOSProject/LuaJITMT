@@ -4390,13 +4390,13 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov ITYPE, TAB:RB->array
     |1:  // Traverse array part.
     |  cmp RCd, TMPRd; jae >5		// Index points after array part?
-    |  cmp aword [ITYPE+RC*8], LJ_TNIL; je >4
+    |  mov r8, [ITYPE+RC*8]
+    |  cmp r8, LJ_TNIL; je >4
     |.if not DUALNUM
     |  cvtsi2sd xmm0, RCd
     |.endif
     |  // Copy array slot to returned value.
-    |  mov RB, [ITYPE+RC*8]
-    |  mov [BASE+RA*8+8], RB
+    |  mov [BASE+RA*8+8], r8
     |  // Return array index as a numeric key.
     |.if DUALNUM
     |  setint ITYPE, RC
@@ -4424,13 +4424,13 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  cmp RCd, TAB:RB->hmask; ja <3	// End of iteration? Branch to ITERL+1.
     |  imul ITYPEd, RCd, #NODE
     |  add NODE:ITYPE, TAB:RB->node
-    |  cmp aword NODE:ITYPE->val, LJ_TNIL; je >7
+    |  mov r8, NODE:ITYPE->val
+    |  cmp r8, LJ_TNIL; je >7
     |  lea TMPRd, [RCd+TMPRd+1]
     |  // Copy key and value from hash slot.
-    |  mov RB, NODE:ITYPE->key
-    |  mov RC, NODE:ITYPE->val
-    |  mov [BASE+RA*8], RB
-    |  mov [BASE+RA*8+8], RC
+    |  mov r9, NODE:ITYPE->key
+    |  mov [BASE+RA*8], r9
+    |  mov [BASE+RA*8+8], r8
     |  mov [BASE+RA*8-8], TMPRd
     |  jmp <2
     |
