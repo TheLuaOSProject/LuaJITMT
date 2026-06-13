@@ -163,6 +163,26 @@ static void load_trace_stopreq_loop(lua_State *L)
     assert(status == LUA_OK);
   }
 }
+
+static void load_scoped_flush_root(lua_State *L)
+{
+  int status = luaL_loadstring(L,
+    "jit.flush()\n"
+    "jit.opt.start('hotloop=1', 'hotexit=1')\n"
+    "local function f(n)\n"
+    "  local s = 0\n"
+    "  for i = 1, n do s = s + i end\n"
+    "  return s\n"
+    "end\n"
+    "for _ = 1, 20 do assert(f(80) == 3240) end\n"
+    "jit.opt.start('hotloop=1000000', 'hotexit=1000000')\n"
+    "return f\n");
+  if (status != LUA_OK) {
+    fprintf(stderr, "load_scoped_flush_root failed: %s\n",
+	    lua_tostring(L, -1));
+    assert(status == LUA_OK);
+  }
+}
 #endif
 
 static void call_expect(lua_State *L, int expected, const char *name)
@@ -363,12 +383,30 @@ int main(void)
   assert(tg->hs_epoch_ack == g->gc2.hs_epoch);
   epoch0 = g->gc2.hs_epoch;
   assert(luaL_dostring(L, "jit.flush(function() end)") == LUA_OK);
+  assert(g->gc2.hs_epoch == epoch0);
+  assert(tg->hs_epoch_ack == g->gc2.hs_epoch);
+  epoch0 = g->gc2.hs_epoch;
+  assert(luaL_dostring(L, "jit.off(function() end)") == LUA_OK);
+  assert(g->gc2.hs_epoch == epoch0 + 1u);
+  assert(tg->hs_epoch_ack == g->gc2.hs_epoch);
+  epoch0 = g->gc2.hs_epoch;
+  assert(luaL_dostring(L, "jit.flush(1)") == LUA_OK);
+  assert(g->gc2.hs_epoch == epoch0);
+  assert(tg->hs_epoch_ack == g->gc2.hs_epoch);
+
+  load_scoped_flush_root(L);
+  assert(lua_pcall(L, 0, 1, 0) == LUA_OK);
+  assert(lua_isfunction(L, -1));
+  assert(traceref(G2J(g), 1) != NULL);
+  epoch0 = g->gc2.hs_epoch;
+  assert(luaL_dostring(L, "jit.flush(1)") == LUA_OK);
   assert(g->gc2.hs_epoch == epoch0 + 1u);
   assert(tg->hs_epoch_ack == g->gc2.hs_epoch);
   epoch0 = g->gc2.hs_epoch;
   assert(luaL_dostring(L, "jit.flush(1)") == LUA_OK);
   assert(g->gc2.hs_epoch == epoch0 + 1u);
   assert(tg->hs_epoch_ack == g->gc2.hs_epoch);
+  lua_pop(L, 1);
 
   load_trace_stopreq_loop(L);
   assert(lua_pcall(L, 0, 1, 0) == LUA_OK);

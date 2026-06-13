@@ -325,10 +325,15 @@ public `jit.flush`/flushall path now calls `lj_trace_flushall_hs()`, which runs
 `HS_EXIT_TRACES|HS_FLUSHJ` before the leader clears trace slots. This covers the
 full-flush API part of the original protocol. Recorder-internal full-flush
 recovery for trace-table exhaustion and mcode-allocation failure uses the same
-`lj_trace_flushall_hs()` boundary. Public scoped function/proto/trace flushes
-now run their existing root retarget/unpatch logic and then publish an
-`HS_EXIT_TRACES` boundary; they still need per-root retirement/token structure
-to finish the original scoped-flush target.
+`lj_trace_flushall_hs()` boundary. Original scoped bridge state: public
+function/proto/trace flushes always published `HS_EXIT_TRACES` after their
+existing root retarget/unpatch logic, even when the requested scope had no
+trace object and did not disable a proto. Current scoped bridge:
+`trace_flushroot()`, `lj_trace_flush()`, and `lj_trace_flushproto()` now report
+scoped trace-exit publication work, and `jit.off(func)`/proto disabling counts
+as boundary work even without existing traces. Public scoped flushes publish one
+`HS_EXIT_TRACES` boundary only when that work count is nonzero. They still need
+per-root retirement/token structure to finish the original scoped-flush target.
 
 ## 8.8 Recorder/IR changes inventory
 

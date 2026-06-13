@@ -283,30 +283,35 @@ void LJ_FASTCALL lj_dispatch_update(global_State *g, int nolock)
 
 #if LJ_HASJIT
 /* Set JIT mode for a single prototype. */
-static void setptmode(global_State *g, GCproto *pt, int mode)
+static uint32_t setptmode(global_State *g, GCproto *pt, int mode)
 {
   if ((mode & LUAJIT_MODE_ON)) {  /* (Re-)enable JIT compilation. */
     pt->flags &= ~PROTO_NOJIT;
     lj_trace_reenableproto(pt);  /* Unpatch all ILOOP etc. bytecodes. */
+    return 0;
   } else {  /* Flush and/or disable JIT compilation. */
+    uint32_t flushed;
     if (!(mode & LUAJIT_MODE_FLUSH))
       pt->flags |= PROTO_NOJIT;
-    lj_trace_flushproto(g, pt);  /* Flush all traces of prototype. */
+    flushed = lj_trace_flushproto(g, pt);  /* Flush all traces of prototype. */
+    return (mode & LUAJIT_MODE_FLUSH) ? flushed : flushed + 1u;
   }
 }
 
 /* Recursively set the JIT mode for all children of a prototype. */
-static void setptmode_all(global_State *g, GCproto *pt, int mode)
+static uint32_t setptmode_all(global_State *g, GCproto *pt, int mode)
 {
+  uint32_t flushed = 0;
   ptrdiff_t i;
-  if (!(pt->flags & PROTO_CHILD)) return;
+  if (!(pt->flags & PROTO_CHILD)) return 0;
   for (i = -(ptrdiff_t)pt->sizekgc; i < 0; i++) {
     GCobj *o = proto_kgc(pt, i);
     if (o->gch.gct == ~LJ_TPROTO) {
-      setptmode(g, gco2pt(o), mode);
-      setptmode_all(g, gco2pt(o), mode);
+      flushed += setptmode(g, gco2pt(o), mode);
+      flushed += setptmode_all(g, gco2pt(o), mode);
     }
   }
+  return flushed;
 }
 #endif
 
@@ -335,6 +340,7 @@ int luaJIT_setmode(lua_State *L, int idx, int mode)
   case LUAJIT_MODE_FUNC:
   case LUAJIT_MODE_ALLFUNC:
   case LUAJIT_MODE_ALLSUBFUNC: {
+    uint32_t flushed = 0;
     cTValue *tv = idx == 0 ? frame_prev(L->base-1)-LJ_FR2 :
 		  idx > 0 ? L->base + (idx-1) : L->top + idx;
     GCproto *pt;
@@ -345,18 +351,17 @@ int luaJIT_setmode(lua_State *L, int idx, int mode)
     else
       return 0;  /* Failed. */
     if (mm != LUAJIT_MODE_ALLSUBFUNC)
-      setptmode(g, pt, mode);
+      flushed += setptmode(g, pt, mode);
     if (mm != LUAJIT_MODE_FUNC)
-      setptmode_all(g, pt, mode);
+      flushed += setptmode_all(g, pt, mode);
     if (!(mode & LUAJIT_MODE_ON))
-      (void)lj_gc2_handshake(g, LJ_GC2_HS_EXIT_TRACES);
+      lj_trace_flushscope_hs(g, flushed);
     break;
     }
   case LUAJIT_MODE_TRACE:
     if (!(mode & LUAJIT_MODE_FLUSH))
       return 0;  /* Failed. */
-    lj_trace_flush(G2J(g), idx);
-    (void)lj_gc2_handshake(g, LJ_GC2_HS_EXIT_TRACES);
+    lj_trace_flushscope_hs(g, lj_trace_flush(G2J(g), idx));
     break;
 #else
   case LUAJIT_MODE_ENGINE:

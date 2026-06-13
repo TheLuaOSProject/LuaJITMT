@@ -489,12 +489,13 @@ static void trace_unpatch(jit_State *J, GCtrace *T)
   }
 }
 
-/* Flush a root trace. */
-static void trace_flushroot(jit_State *J, GCtrace *T)
+/* Flush a root trace. Returns 1 iff trace-exit publication changed. */
+static uint32_t trace_flushroot(jit_State *J, GCtrace *T)
 {
   GCproto *pt = &gcref(T->startpt)->pt;
   TraceNo head = proto_trace_acq(pt);
   TraceNo nextroot = trace_nextroot_acq(T);
+  uint32_t retargeted = 1;
   lj_assertJ(T->root == 0, "not a root trace");
   lj_assertJ(pt != NULL, "trace has no prototype");
   trace_exittab_resetroot(J, T->traceno);
@@ -504,6 +505,7 @@ static void trace_flushroot(jit_State *J, GCtrace *T)
 unpatch:
     /* Unpatch modified bytecode only if the trace has not been flushed. */
     trace_unpatch(J, T);
+    return 1;
   } else if (head) {  /* Otherwise search in chain of root traces. */
     GCtrace *T2 = traceref(J, head);
     if (T2) {
@@ -518,28 +520,34 @@ unpatch:
       }
     }
   }
+  return retargeted;
 }
 
 /* Flush a trace. Only root traces are considered. */
-void lj_trace_flush(jit_State *J, TraceNo traceno)
+uint32_t lj_trace_flush(jit_State *J, TraceNo traceno)
 {
   if (traceno > 0 && traceno < J->sizetrace) {
     GCtrace *T = traceref(J, traceno);
     if (T && T->root == 0)
-      trace_flushroot(J, T);
+      return trace_flushroot(J, T);
   }
+  return 0;
 }
 
 /* Flush all traces associated with a prototype. */
-void lj_trace_flushproto(global_State *g, GCproto *pt)
+uint32_t lj_trace_flushproto(global_State *g, GCproto *pt)
 {
   TraceNo trace;
+  uint32_t flushed = 0;
   while ((trace = proto_trace_acq(pt)) != 0) {
     GCtrace *T = traceref(G2J(g), trace);
     if (!T)
       break;
-    trace_flushroot(G2J(g), T);
+    if (!trace_flushroot(G2J(g), T))
+      break;
+    flushed++;
   }
+  return flushed;
 }
 
 /* Flush all traces. */
@@ -582,6 +590,12 @@ int lj_trace_flushall_hs(lua_State *L)
     return 1;
   (void)lj_gc2_handshake(g, LJ_GC2_HS_EXIT_TRACES|LJ_GC2_HS_FLUSHJ);
   return 0;
+}
+
+void lj_trace_flushscope_hs(global_State *g, uint32_t work)
+{
+  if (work != 0)
+    (void)lj_gc2_handshake(g, LJ_GC2_HS_EXIT_TRACES);  /* 08 section 8.7 scoped boundary. */
 }
 
 /* Initialize JIT compiler state. */

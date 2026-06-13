@@ -118,6 +118,8 @@ for needle in \
   'trace_exittab_resetroot(J, T->traceno)' \
   'trace_exittab_reset(J, T);' \
   'lj_trace_flushall_hs(lua_State *L)' \
+  'lj_trace_flushscope_hs(global_State *g, uint32_t work)' \
+  'if (work != 0)' \
   'lj_gc2_handshake(g, LJ_GC2_HS_EXIT_TRACES|LJ_GC2_HS_FLUSHJ)' \
   'lj_trace_flushall(mainthread(g));  /* 08 section 8.7 leader action. */'
 do
@@ -127,13 +129,29 @@ do
   fi
 done
 
+for needle in \
+  'static uint32_t trace_flushroot(jit_State *J, GCtrace *T)' \
+  'uint32_t lj_trace_flush(jit_State *J, TraceNo traceno)' \
+  'uint32_t lj_trace_flushproto(global_State *g, GCproto *pt)' \
+  'return (mode & LUAJIT_MODE_FLUSH) ? flushed : flushed + 1u;' \
+  'return trace_flushroot(J, T);' \
+  'flushed += setptmode(g, pt, mode);' \
+  'lj_trace_flushscope_hs(g, flushed);' \
+  'lj_trace_flushscope_hs(g, lj_trace_flush(G2J(g), idx));'
+do
+  if ! rg -F -q "$needle" "$ROOT/src/lj_trace.c" "$ROOT/src/lj_dispatch.c"; then
+    echo "guardrail: missing scoped trace flush handshake precision: $needle" >&2
+    exit 1
+  fi
+done
+
 if rg -F -q 'Temporary single-mutator flush action' "$ROOT/src/lj_safepoint.c"; then
   echo "guardrail: HS_FLUSHJ must be a leader action after ack drain" >&2
   exit 1
 fi
 
-if ! rg -F -q 'lj_gc2_handshake(g, LJ_GC2_HS_EXIT_TRACES);' "$ROOT/src/lj_dispatch.c"; then
-  echo "guardrail: public scoped trace flushes must publish HS_EXIT_TRACES" >&2
+if rg -F -q 'lj_gc2_handshake(g, LJ_GC2_HS_EXIT_TRACES);' "$ROOT/src/lj_dispatch.c"; then
+  echo "guardrail: public scoped trace flushes must use count-aware scope helper" >&2
   exit 1
 fi
 
