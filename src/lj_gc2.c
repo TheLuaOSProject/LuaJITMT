@@ -247,9 +247,11 @@ static void gc2_scan_global_roots(global_State *g)
   lj_gc2_markobj(g, obj2gco(tabref(mainthread(g)->env)));
   lj_gc2_markobj(g, obj2gco(vmthread(g)));
   gc2_mark_tv(g, &g->registrytv);
-  for (i = 0; i < GCROOT_MAX; i++)
-    if (gcref(g->gcroot[i]) != NULL)
-      lj_gc2_markobj(g, gcref(g->gcroot[i]));
+  for (i = 0; i < GCROOT_MAX; i++) {
+    GCobj *o = gcref_acq(g->gcroot[i]);
+    if (o != NULL)
+      lj_gc2_markobj(g, o);
+  }
   {
     LJThreadLive *node;
     for (node = (LJThreadLive *)
@@ -773,7 +775,7 @@ static int gc2_traverse_tab(global_State *g, GCtab *t)
       else if (c == 'v') weak |= LJ_GC_WEAKVAL;
     }
 #if LJ_HASFFI
-    if (weak && gcref(g->gcroot[GCROOT_FFI_FIN]) == obj2gco(t))
+    if (weak && gcref_acq(g->gcroot[GCROOT_FFI_FIN]) == obj2gco(t))
       weak = (int)(~0u & ~LJ_GC_WEAKVAL);
 #endif
   }

@@ -520,7 +520,7 @@ LJLIB_CF(ffi_new)	LJLIB_REC(.)
     TValue gctv;
     cTValue *tv = lj_ctype_metatv(cts, &gctv, id, MM_gc);
     if (tv) {
-      GCtab *t = tabref(G(L)->gcroot[GCROOT_FFI_FIN]);
+      GCtab *t = gco2tab(gcref_acq(G(L)->gcroot[GCROOT_FFI_FIN]));
       if (gcref(t->metatable)) {
 	/* Add to finalizer table, if still enabled. */
 	copyTVrel(L, lj_tab_set(L, t, o-1), tv);

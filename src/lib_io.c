@@ -42,7 +42,7 @@ typedef struct IOFileUD {
 
 #define IOFILE_FLAG_CLOSE	4	/* Close after io.lines() iterator. */
 
-#define IOSTDF_UD(L, id)	(&gcref(G(L)->gcroot[(id)])->ud)
+#define IOSTDF_UD(L, id)	(gco2ud(gcref_acq(G(L)->gcroot[(id)])))
 #define IOSTDF_IOF(L, id)	((IOFileUD *)uddata(IOSTDF_UD(L, (id))))
 
 /* -- Native-state wrappers ---------------------------------------------- */

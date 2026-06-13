@@ -16,4 +16,29 @@ if [ -n "$hits" ]; then
   exit 1
 fi
 
+reader_hits=$(
+  cd "$ROOT/src" && \
+  rg -n 'gcref\(g->gcroot\[|gcref\(G\([^)]*\)->gcroot|tabref\(g->gcroot|tabref\(G\([^)]*\)->gcroot|&gcref\([^)]*gcroot' \
+    --glob '*.c' --glob '*.h' || true
+)
+
+if [ -n "$reader_hits" ]; then
+  printf '%s\n' "$reader_hits"
+  echo "guardrail: gcroot readers must acquire-load release-published roots" >&2
+  exit 1
+fi
+
+for needle in \
+  'GCobj *o = gcref_acq(g->gcroot[i])' \
+  'gco2tab(gcref_acq(g->gcroot[GCROOT_FFI_FIN]))' \
+  'gco2tab(gcref_acq(G(L)->gcroot[GCROOT_FFI_FIN]))' \
+  'gco2ud(gcref_acq(G(L)->gcroot[(id)]))'
+do
+  if ! rg -F -q "$needle" "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc2.c" \
+      "$ROOT/src/lj_cdata.c" "$ROOT/src/lib_ffi.c" "$ROOT/src/lib_io.c"; then
+    echo "guardrail: missing gcroot acquire-load marker: $needle" >&2
+    exit 1
+  fi
+done
+
 echo "M5 gcroot publication guard passed"

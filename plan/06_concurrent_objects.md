@@ -421,7 +421,8 @@ error "thread busy". lua_xmove across OS threads: allowed when both claimed
 by caller (typical pattern: parent moves args into a not-yet-started L).
 
 ## 6.8 Long tail (each is a one-liner to implement; all M5)
-- registry/gcroot stores: la_storeptr_rel + wbarrier (lj_api.c sites).
+- registry/gcroot stores: release-publish + wbarrier; C-side gcroot readers
+  acquire-snapshot the published root.
 - getmetatable/setmetatable on udata/cdata basemt (gcroot): same.
 - `lua_concat`/lj_meta paths: use tg tmpbuf; barrier on results stored.
 - rawequal/rawget/rawset: thin wrappers over §6.3 ops (already are).

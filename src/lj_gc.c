@@ -445,9 +445,11 @@ static void gc_mark_threading_live(global_State *g)
 static void gc_mark_gcroot(global_State *g)
 {
   ptrdiff_t i;
-  for (i = 0; i < GCROOT_MAX; i++)
-    if (gcref(g->gcroot[i]) != NULL)
-      gc_markobj(g, gcref(g->gcroot[i]));
+  for (i = 0; i < GCROOT_MAX; i++) {
+    GCobj *o = gcref_acq(g->gcroot[i]);
+    if (o != NULL)
+      gc_markobj(g, o);
+  }
   gc_mark_threading_live(g);
   gc_mark_fixedstr(g);
   gc_mark_strtab_mem(g);
@@ -586,7 +588,7 @@ static int gc_traverse_tab(global_State *g, GCtab *t)
     }
     if (weak) {  /* Weak tables are cleared in the atomic phase. */
 #if LJ_HASFFI
-      if (gcref(g->gcroot[GCROOT_FFI_FIN]) == obj2gco(t)) {
+      if (gcref_acq(g->gcroot[GCROOT_FFI_FIN]) == obj2gco(t)) {
 	weak = (int)(~0u & ~LJ_GC_WEAKVAL);
       } else
 #endif
@@ -990,7 +992,7 @@ static void gc_finalize(lua_State *L)
     lj_obj_cleargcflags(o, LJ_GC_CDATA_FIN);
     /* Resolve finalizer. */
     setcdataV(L, &tmp, gco2cd(o));
-    tv = lj_tab_set(L, tabref(g->gcroot[GCROOT_FFI_FIN]), &tmp);
+    tv = lj_tab_set(L, gco2tab(gcref_acq(g->gcroot[GCROOT_FFI_FIN])), &tmp);
     if (!tvisnil(tv)) {
       copyTV(L, &tmp, tv);
       lj_tab_storenilraw(tv);  /* Clear entry in finalizer table. */
@@ -1022,7 +1024,7 @@ void lj_gc_finalize_udata(lua_State *L)
 void lj_gc_finalize_cdata(lua_State *L)
 {
   global_State *g = G(L);
-  GCtab *t = tabref(g->gcroot[GCROOT_FFI_FIN]);
+  GCtab *t = gco2tab(gcref_acq(g->gcroot[GCROOT_FFI_FIN]));
   Node *node = lj_tab_node_acq(t);
   MSize hmask = lj_tab_node_hmask_acq(node);
   ptrdiff_t i;
