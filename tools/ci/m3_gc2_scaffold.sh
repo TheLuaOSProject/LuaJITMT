@@ -66,6 +66,8 @@ for needle in \
   'uint64_t thread_scan_busy' \
   'uint64_t thread_scan_requeues' \
   'uint64_t thread_scan_owner_scans' \
+  'uint64_t thread_scan_needscan' \
+  'uint64_t thread_scan_owner_needscans' \
   'uint64_t sweep_owner_runs' \
   'uint64_t sweep_owner_arenas' \
   'uint64_t sweep_owner_live_cells' \
@@ -164,9 +166,15 @@ for needle in \
   'lj_state_gcscan_claim(lua_State *L, LJStateClaim *claim)' \
   'lj_state_gcscan_claim(th, &claim)' \
   'gc2_thread_owner_scans(global_State *g, lua_State *th)' \
+  'gc2_thread_set_needscan(global_State *g, lua_State *L)' \
+  'gc2_scan_owned_needscan(global_State *g, lua_State *owner_L)' \
+  'LJ_GC_NEEDSCAN' \
+  'la_and8_rlx' \
   '05 section 5.7.2: owner scan or retry preserves work' \
   'la_store64_rel(&L->scan_epoch, g->gc2.cycle)' \
   'la_load64_acq(&th->scan_epoch) == g->gc2.cycle' \
+  'la_add64_rlx(&g->gc2.thread_scan_needscan' \
+  'la_add64_rlx(&g->gc2.thread_scan_owner_needscans' \
   'la_loadptr_acq((void *const *)&tg->thread_L)' \
   'la_loadptr_acq((void *const *)&tg->cur_L)' \
   'la_add64_rlx(&g->gc2.tg_thread_roots' \
@@ -212,7 +220,7 @@ for needle in \
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc.h" \
       "$ROOT/src/lj_gc2.c" "$ROOT/src/lj_gc2.h" "$ROOT/src/lj_obj.h" \
-      "$ROOT/src/lj_safepoint.c" "$ROOT/src/lj_trace.c" \
+      "$ROOT/src/lj_atomic.h" "$ROOT/src/lj_safepoint.c" "$ROOT/src/lj_trace.c" \
       "$ROOT/src/lj_thr.c" "$ROOT/src/lj_thr.h" "$ROOT/src/lj_tg.c" \
       "$ROOT/src/lj_tg.h" "$ROOT/src/lj_emit_x86.h" \
       "$ROOT/src/vm_x64.dasc" \

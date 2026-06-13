@@ -278,9 +278,11 @@ running owner holds `thr_owner`. Owner safepoint scans now publish the thread's
 `scan_epoch`; if the owning TG's current `cur_L` is the thread and that epoch
 matches the current GC2 cycle, the worker records owner coverage. Otherwise GC2
 requeues the thread for a later claim or owner-scan attempt so the fixpoint
-predicate does not silently go empty. The general owner-side `GCF_NEEDSCAN`
-handoff for non-current claimed coroutines and the `stack_dirty_epoch` skip
-optimization below remain staged.
+predicate does not silently go empty. Busy stacks with a known live owner now
+also set `LJ_GC_NEEDSCAN`; the owning TG's next root scan walks owned pending
+coroutine stacks, publishes their `scan_epoch`, and lets requeued worker items
+observe same-cycle owner coverage instead of requeueing forever. The
+`stack_dirty_epoch` skip optimization below remains staged.
 Suspended coroutines: workers traverse them as ordinary heap objects, but
 must hold the claim: `CAS th->thr_owner 0→GCSCAN`; on failure (running),
 set `th->gcflags|=GCF_NEEDSCAN` — the owner's next HS_SCAN_ROOTS scans any

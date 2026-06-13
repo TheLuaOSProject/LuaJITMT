@@ -896,7 +896,9 @@ typedef struct GC2State {
   uint64_t thread_scan_claims;  /* Suspended thread stacks claimed by GC2. */
   uint64_t thread_scan_busy;  /* Thread stacks deferred to running owners. */
   uint64_t thread_scan_requeues;  /* Busy suspended threads kept grey. */
-  uint64_t thread_scan_owner_scans;  /* Busy current stacks covered by owner. */
+  uint64_t thread_scan_owner_scans;  /* Busy stacks covered by owner scans. */
+  uint64_t thread_scan_needscan;  /* Busy stacks handed to owning TG scan. */
+  uint64_t thread_scan_owner_needscans;  /* Pending owned stacks scanned. */
   uint64_t sweep_owner_runs;  /* Owner traversable arena sweep batches. */
   uint64_t sweep_owner_arenas;  /* Traversable arenas swept by owner. */
   uint64_t sweep_owner_live_cells;  /* Post-sweep live cells observed. */
@@ -1106,6 +1108,11 @@ static LJ_AINLINE GCobj *lj_obj_gcw(GCobj *o)
   return gcref(o->gch.nextgc);
 }
 
+static LJ_AINLINE GCobj *lj_obj_gcw_acq(GCobj *o)
+{
+  return gcref_acq(o->gch.nextgc);
+}
+
 static LJ_AINLINE void lj_obj_setgcw(GCobj *o, GCobj *next)
 {
   setgcref(o->gch.nextgc, next);
@@ -1124,6 +1131,11 @@ static LJ_AINLINE void lj_obj_setgcwnull(GCobj *o)
 static LJ_AINLINE uint8_t lj_obj_gcflags(const GCobj *o)
 {
   return o->gch.marked;
+}
+
+static LJ_AINLINE uint8_t *lj_obj_gcflags_ref(GCobj *o)
+{
+  return &o->gch.marked;
 }
 
 static LJ_AINLINE void lj_obj_setgcflags(GCobj *o, uint8_t flags)

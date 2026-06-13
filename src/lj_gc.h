@@ -23,6 +23,7 @@ enum {
 #define LJ_GC_CDATA_FIN	0x10
 #define LJ_GC_FIXED	0x20
 #define LJ_GC_SFIXED	0x40
+#define LJ_GC_NEEDSCAN	0x80
 
 #define LJ_GC_WHITES	(LJ_GC_WHITE0 | LJ_GC_WHITE1)
 #define LJ_GC_COLORS	(LJ_GC_WHITES | LJ_GC_BLACK)
@@ -34,6 +35,7 @@ LJ_STATIC_ASSERT(LJ_GC_BLACK == 0x04);
 LJ_STATIC_ASSERT(LJ_GC_WHITES == 0x03);
 LJ_STATIC_ASSERT(LJ_GC_FINALIZED == LJ_GC_WEAKKEY);
 LJ_STATIC_ASSERT(LJ_GC_CDATA_FIN == LJ_GC_WEAKVAL);
+LJ_STATIC_ASSERT(LJ_GC_NEEDSCAN == 0x80);
 
 /* Macros to test and set GCobj colors. */
 #define iswhite(x)	(lj_obj_gcflags((x)) & LJ_GC_WHITES)
