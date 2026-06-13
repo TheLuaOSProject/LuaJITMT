@@ -519,6 +519,7 @@ void lj_trace_freestate(global_State *g)
   if (J->tracev)
     tracevec_free(g, J->tracev);
   lj_trace_freeretired(g);
+  lj_mcode_freeretired(g);
 }
 
 /* -- Penalties and blacklisting ------------------------------------------ */

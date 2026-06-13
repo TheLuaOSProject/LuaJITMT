@@ -7,6 +7,7 @@ CC=${CC:-cc}
 CFLAGS=${CFLAGS:-"-std=gnu99 -O2 -Wall -Wextra -Werror -mcx16"}
 JOBS=${JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)}
 OUT_TRACEVEC=${TMPDIR:-/tmp}/lj_t-jit-tracevec
+OUT_MCODE=${TMPDIR:-/tmp}/lj_t-jit-mcode-retire
 
 for needle in \
   'LJ_TRACE_PENDING' \
@@ -44,6 +45,25 @@ for needle in \
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_trace.c" "$ROOT/src/lj_safepoint.c" "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc2.c"; then
     echo "guardrail: missing trace-vector RCU/SMR bridge: $needle" >&2
+    exit 1
+  fi
+done
+
+for needle in \
+  'typedef struct MCodeRetire' \
+  'MCodeRetire *retiredmcode' \
+  'MCodeRetire *ret = lj_mem_newt(J->L, sizeof(MCodeRetire), MCodeRetire)' \
+  'mcode_retired_push(jit_State *J, MCodeRetire *ret)' \
+  'lj_mcode_reclaim_retired(global_State *g, uint64_t completed_epoch)' \
+  'lj_mcode_reclaim_retired(g, epoch)' \
+  'lj_mcode_freeretired(g)' \
+  'lj_mcode_markretired(g, 1)' \
+  'lj_mcode_markretired(g, 0)'
+do
+  if ! rg -F -q "$needle" "$ROOT/src/lj_jit.h" "$ROOT/src/lj_mcode.c" \
+    "$ROOT/src/lj_safepoint.c" "$ROOT/src/lj_trace.c" \
+    "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc2.c"; then
+    echo "guardrail: missing mcode SMR bridge: $needle" >&2
     exit 1
   fi
 done
@@ -163,6 +183,10 @@ make -C "$ROOT/src" -j"$JOBS" >/dev/null
 "$CC" $CFLAGS -I"$ROOT/src" "$ROOT/tests/t-jit-tracevec.c" \
   "$ROOT/src/libluajit.a" -lm -ldl -pthread -o "$OUT_TRACEVEC"
 timeout 20s "$OUT_TRACEVEC"
+
+"$CC" $CFLAGS -I"$ROOT/src" "$ROOT/tests/t-jit-mcode-retire.c" \
+  "$ROOT/src/libluajit.a" -lm -ldl -pthread -o "$OUT_MCODE"
+timeout 20s "$OUT_MCODE"
 
 "$ROOT/src/luajit" -e '
 local util = require"jit.util"

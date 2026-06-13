@@ -176,6 +176,13 @@ typedef struct MCLink {
   size_t size;		/* Size of current area. */
 } MCLink;
 
+typedef struct MCodeRetire {
+  MCode *area;		/* Retired mcode area. */
+  size_t size;		/* Size of retired area. */
+  uint64_t retire_epoch;  /* Safepoint epoch when retired. */
+  struct MCodeRetire *next;  /* Retired area records. */
+} MCodeRetire;
+
 /* Stack snapshot header. */
 typedef struct SnapShot {
   uint32_t mapofs;	/* Offset into snapshot map. */
@@ -554,6 +561,7 @@ typedef struct jit_State {
   MCode *mcbot;		/* Bottom of current mcode area. */
   size_t szmcarea;	/* Size of current mcode area. */
   size_t szallmcarea;	/* Total size of all allocated mcode areas. */
+  MCodeRetire *retiredmcode;  /* Retired mcode areas awaiting SMR. */
   uintptr_t mcmin, mcmax;	/* Mcode allocation range. */
 
   TValue errinfo;	/* Additional info element for trace errors. */

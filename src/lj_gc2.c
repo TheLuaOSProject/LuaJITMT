@@ -23,6 +23,7 @@
 #include "lj_ctype.h"
 #endif
 #include "lj_trace.h"
+#include "lj_mcode.h"
 #include "lj_dispatch.h"
 
 #define GC2_GREY_INIT	256u
@@ -300,6 +301,7 @@ static void gc2_scan_global_roots(global_State *g)
   {
     jit_State *J = G2J(g);
     lj_trace_markvecs(g, 1);
+    lj_mcode_markretired(g, 1);
     lj_gc2_markmem(g, J->irbuf ? J->irbuf + J->irbotlim : NULL);
     lj_gc2_markmem(g, J->snapbuf);
     lj_gc2_markmem(g, J->snapmapbuf);

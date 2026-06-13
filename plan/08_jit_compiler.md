@@ -234,9 +234,12 @@ trace's PCs/parents, run by the leader between cycles with token.
 
 Current M5 bridge: x64 flush paths now release-reset every live `exittab` slot
 back to the legacy interpreter exit stub before trace slots are cleared or a
-root trace is unlinked. This implements the data-retargeting part of step 2 for
-the supported x64 path. The full `HS_FLUSHJ|HS_EXIT_TRACES` handshake and
-deferred mcode reclamation remain the original target.
+root trace is unlinked. `lj_mcode_free()` detaches active mcode areas and moves
+heap-side retirement records onto `J->retiredmcode`; safepoint epoch drain
+physically unmaps only after a later completed epoch. This implements the
+data-retargeting part of step 2 and the mcode half of step 4 for the supported
+x64 path. The full leader-owned `HS_FLUSHJ|HS_EXIT_TRACES` handshake and
+deferred `GCtrace`/`exittab` body reclamation remain the original target.
 
 ## 8.8 Recorder/IR changes inventory
 

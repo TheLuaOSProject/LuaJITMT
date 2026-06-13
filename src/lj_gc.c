@@ -31,6 +31,7 @@
 #include "lj_state.h"
 #include "lj_frame.h"
 #include "lj_trace.h"
+#include "lj_mcode.h"
 #if LJ_HASFFI
 #include "lj_ctype.h"
 #include "lj_cdata.h"
@@ -326,6 +327,7 @@ static void gc2_paranoia_check_rawroots(global_State *g)
 #if LJ_HASJIT
   {
     jit_State *J = G2J(g);
+    MCodeRetire *mcret;
     TraceVec *tv = tracevec_acq(J);
     if (tv)
       gc2_paranoia_checkmem(g, tv, "trace vector");
@@ -333,6 +335,11 @@ static void gc2_paranoia_check_rawroots(global_State *g)
 	 tv != NULL;
 	 tv = (TraceVec *)la_loadptr_acq((void *const *)&tv->retired_next))
       gc2_paranoia_checkmem(g, tv, "retired trace vector");
+    for (mcret = (MCodeRetire *)la_loadptr_acq(
+	   (void *const *)&J->retiredmcode);
+	 mcret != NULL;
+	 mcret = (MCodeRetire *)la_loadptr_acq((void *const *)&mcret->next))
+      gc2_paranoia_checkmem(g, mcret, "retired mcode record");
     gc2_paranoia_checkmem(g, J->irbuf ? J->irbuf + J->irbotlim : NULL,
 			  "IR buffer");
     gc2_paranoia_checkmem(g, J->snapbuf, "snapshot buffer");
@@ -493,6 +500,7 @@ static void gc_mark_gcroot(global_State *g)
   {
     jit_State *J = G2J(g);
     lj_trace_markvecs(g, 0);
+    lj_mcode_markretired(g, 0);
     lj_gc_arena_markmem(g, J->irbuf ? J->irbuf + J->irbotlim : NULL);
     lj_gc_arena_markmem(g, J->snapbuf);
     lj_gc_arena_markmem(g, J->snapmapbuf);

@@ -68,9 +68,10 @@ floating garbage, snapshot subtleties with lock-free tables (the FORWARD
 freeze must log displaced values). Switch only if R2 proves unmanageable;
 the barrier call sites are shared, so the swap is localized to
 lj_gc2_wbarrier + scan scheduling. F-3 poll placement reduction (R1).
-F-4 resize seqlock (R3). F-5 single-threaded-JIT mode (token never
-released to others) if M6 overruns: MT interpreter + ST JIT is still a
-shippable intermediate.
+F-4 resize seqlock (R3). F-5 split M6 into smaller trace-publication,
+exit-indirection, and retirement milestones if it overruns; do not ship a
+single-threaded-JIT mode, long-held recorder-token fallback, or
+`LJ_MT`/threadsafe build wall.
 
 ## 14.4 Alternatives considered and rejected (so you don't re-explore)
 A. Isolated states + message passing (Lanes model): fails requirement 3.
