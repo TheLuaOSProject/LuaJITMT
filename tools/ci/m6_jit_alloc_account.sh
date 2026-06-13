@@ -15,6 +15,7 @@ for needle in \
   'uint64_t hard_bytes' \
   'uint32_t gcpause_pct' \
   'uint32_t assist_shift' \
+  'uint32_t assist_active' \
   'uint64_t local_total' \
   'LJ_GC2_ACCT_FLUSH' \
   'la_xchg64_acqrel' \
@@ -22,8 +23,14 @@ for needle in \
   'lj_gc2_flush_alloc(global_State *g, TGState *tg)' \
   'lj_gc2_update_pacing(global_State *g)' \
   'lj_gc2_assist_shift_from_stepmul(uint32_t stepmul)' \
+  'lj_gc2_assist(global_State *g, TGState *tg)' \
   'la_store64_rel(&g->gc2.trigger_bytes' \
   'la_store64_rel(&g->gc2.hard_bytes' \
+  'la_cas32(&g->gc2.assist_active' \
+  'tg->gc_assist = 1' \
+  'gc2_drain_active_ssb_to_grey(global_State *g, TGState *tg' \
+  'gc2_drain_published_ssb_to_grey(global_State *g' \
+  'gc2_drain_grey(g, left)' \
   'static void gc2_reset_alloc_trigger(global_State *g)' \
   'la_add64_rlx(&tg->local_total' \
   'la_add64_rlx(&g->gc2.alloc_since_trigger' \

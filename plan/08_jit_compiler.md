@@ -264,9 +264,14 @@ handler — sized LJ_MAX_EXITSTUBGR-compatible; see lj_vmstruct notes.
   ack, and TG detach. Starting a GC2/legacy mark cycle flushes TG-local totals
   and resets the trigger counter for the new cycle. `GC2State.trigger_bytes`,
   `hard_bytes`, `gcpause_pct`, and `assist_shift` are initialized and updated
-  from `lua_gc` pause/stepmul controls, so the later bounded-assist path has
-  concrete thresholds to consume. Bounded mark assists are not implemented yet,
-  so keep `lj_gc_step_jit`/`IR_GCSTEP` guarded until that prerequisite lands.
+  from `lua_gc` pause/stepmul controls. The first bounded-assist bridge now
+  has `lj_gc2_account_alloc()` call `lj_gc2_assist()` past `hard_bytes` during
+  GC2 MARK/WEAK. Assists use `TGState.gc_assist` to prevent reentry, a
+  nonblocking assist-owner token for the current global grey deque owner side,
+  bounded active/published SSB conversion, and at most `1 << assist_shift`
+  grey-object traversals. Keep `lj_gc_step_jit`/`IR_GCSTEP` guarded until
+  cycle triggering, worker ownership, and trace allocation checks fully
+  replace legacy pacing.
 - **Barriers on trace** (§8.8.5 details): stores to heap (HSTORE/ASTORE/
   USTORE/FSTORE-with-gc-value/XSTORE-to-gcobj? XSTORE is cdata: exempt)
   emit the phase-gated mark sequence. The TGMARK load may be CSE'd *within

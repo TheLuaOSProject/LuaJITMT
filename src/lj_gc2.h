@@ -39,6 +39,7 @@ LJ_FUNC void lj_gc2_account_alloc(global_State *g, TGState *tg, GCSize bytes);
 LJ_FUNC uint64_t lj_gc2_flush_alloc(global_State *g, TGState *tg);
 LJ_FUNC void lj_gc2_update_pacing(global_State *g);
 LJ_FUNC uint32_t lj_gc2_assist_shift_from_stepmul(uint32_t stepmul);
+LJ_FUNC uint32_t lj_gc2_assist(global_State *g, TGState *tg);
 LJ_FUNC void lj_gc2_legacy_mark_begin(global_State *g);
 LJ_FUNC void lj_gc2_legacy_sweep_begin(global_State *g);
 LJ_FUNC void lj_gc2_legacy_preserve_abort(global_State *g);

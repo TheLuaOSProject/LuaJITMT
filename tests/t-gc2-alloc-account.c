@@ -23,6 +23,7 @@ int main(void)
   void *p;
   uint64_t total;
   uint64_t epoch0;
+  GCtab *parent, *child, *grandchild;
 
   assert(L != NULL);
   g = G(L);
@@ -35,6 +36,7 @@ int main(void)
   assert(la_load64_acq(&g->gc2.trigger_bytes) >= LJ_GC2_ACCT_FLUSH);
   assert(la_load64_acq(&g->gc2.hard_bytes) ==
 	 2u * la_load64_acq(&g->gc2.trigger_bytes));
+  assert(la_load32_acq(&g->gc2.assist_active) == 0);
 
   (void)lua_gc(L, LUA_GCSETPAUSE, 150);
   assert(la_load32_acq(&g->gc2.gcpause_pct) == 150);
@@ -83,6 +85,38 @@ int main(void)
   lj_gc2_legacy_mark_begin(g);
   assert(la_load64_acq(&tg->local_total) == 0);
   assert(la_load64_acq(&g->gc2.alloc_since_trigger) == 0);
+  lj_gc2_legacy_cycle_end(g);
+
+  lua_settop(L, 0);
+  lua_newtable(L);
+  parent = tabV(L->top - 1);
+  lua_newtable(L);
+  child = tabV(L->top - 1);
+  lua_newtable(L);
+  grandchild = tabV(L->top - 1);
+  lua_pushvalue(L, -1);
+  lua_rawseti(L, -3, 1);  /* child[1] = grandchild. */
+  lua_pushvalue(L, -2);
+  lua_rawseti(L, -4, 1);  /* parent[1] = child. */
+
+  lj_gc2_legacy_mark_begin(g);
+  assert(lj_gc2_ismarked(g, obj2gco(parent)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(grandchild)) == 0);
+  assert(lj_gc2_markobj(g, obj2gco(parent)) == 1);
+  assert(!lj_gc2_ssb_empty(g));
+  la_store64_rel(&g->gc2.hard_bytes, 1);
+  la_store32_rel(&g->gc2.assist_shift, 0);
+  (void)la_xchg64_acqrel(&g->gc2.alloc_since_trigger, 0);
+  lj_gc2_account_alloc(g, tg, LJ_GC2_ACCT_FLUSH);
+  assert(tg->gc_assist == 0);
+  assert(la_load32_acq(&g->gc2.assist_active) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(parent)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(grandchild)) == 0);
+  assert(!lj_gc2_ssb_empty(g));
+  (void)lj_gc2_drain_ssb(g);
+  assert(lj_gc2_ismarked(g, obj2gco(grandchild)) == 1);
   lj_gc2_legacy_cycle_end(g);
 
   lua_close(L);

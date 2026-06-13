@@ -846,6 +846,7 @@ typedef struct GC2State {
   uint64_t hard_bytes;	/* Allocation bytes before mutator assists. */
   uint32_t gcpause_pct;	/* GC2 pacing percentage. */
   uint32_t assist_shift;  /* Bounded assist work is 1 << shift. */
+  uint32_t assist_active;  /* Nonblocking owner token for mark assists. */
   GCRef *grey_stack;	/* GC2 grey work deque ring. */
   MSize grey_capacity;	/* Allocated grey deque slots. */
   uint64_t grey_top;	/* Chase-Lev steal-side index. */

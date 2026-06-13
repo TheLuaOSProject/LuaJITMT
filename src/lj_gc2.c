@@ -51,6 +51,7 @@ void lj_gc2_init(global_State *g)
   g->gc2.alloc_since_trigger = 0;
   g->gc2.trigger_bytes = 0;
   g->gc2.hard_bytes = 0;
+  g->gc2.assist_active = 0;
   g->gc2.grey_stack = NULL;
   g->gc2.grey_capacity = 0;
   g->gc2.grey_top = 0;
@@ -92,8 +93,11 @@ void lj_gc2_account_alloc(global_State *g, TGState *tg, GCSize bytes)
   if (!g || !tg || bytes == 0)
     return;
   old = la_add64_rlx(&tg->local_total, (uint64_t)bytes);  /* 04 section 4.8. */
-  if (old + (uint64_t)bytes >= LJ_GC2_ACCT_FLUSH)
+  if (old + (uint64_t)bytes < old || old + (uint64_t)bytes >= LJ_GC2_ACCT_FLUSH)
     (void)lj_gc2_flush_alloc(g, tg);
+  if (la_load64_acq(&g->gc2.alloc_since_trigger) >
+      la_load64_acq(&g->gc2.hard_bytes))  /* 05 section 5.11 hard limit. */
+    (void)lj_gc2_assist(g, tg);
 }
 
 uint32_t lj_gc2_assist_shift_from_stepmul(uint32_t stepmul)
@@ -392,7 +396,7 @@ void lj_gc2_scan_roots(global_State *g, lua_State *L)
 static void *gc2_mark_base(GCobj *o);
 static int gc2_mark_base_traversable(global_State *g, void *p);
 static int gc2_grey_push(global_State *g, GCobj *o);
-static uint32_t gc2_drain_grey(global_State *g);
+static uint32_t gc2_drain_grey(global_State *g, uint32_t limit);
 static void gc2_traverse_udata(global_State *g, GCudata *ud);
 
 static int gc2_grey_grow(global_State *g)
@@ -568,46 +572,146 @@ int lj_gc2_ssb_push(global_State *g, GCobj *o)
   return 1;
 }
 
-uint32_t lj_gc2_drain_ssb(global_State *g)
+static void gc2_ssb_mark_one(global_State *g, GCobj *o)
+{
+  if (o) {
+    void *base = gc2_mark_base(o);
+    (void)lj_gc2_markmem(g, base);
+    if (gc2_mark_base_traversable(g, base)) {
+      int pushed = gc2_grey_push(g, o);
+      lj_assertG(pushed, "gc2 grey push failed for SSB object");
+      UNUSED(pushed);
+    }
+  }
+}
+
+static void gc2_ssb_recycle_node(GC2SSBNode *node)
+{
+  TGState *owner = node->owner;
+  node->n = 0;
+  if (owner) {
+    node->next = owner->ssb_free;
+    owner->ssb_free = node;
+  } else {
+    node->next = NULL;
+  }
+}
+
+static void gc2_ssb_publish_list(global_State *g, GC2SSBNode *head)
+{
+  GC2SSBNode *tail;
+  void *oldhead;
+  if (!g || !head)
+    return;
+  tail = head;
+  while (tail->next)
+    tail = tail->next;
+  oldhead = la_loadptr_acq((void *const *)&g->gc2.ssb_head);
+  do {
+    tail->next = (GC2SSBNode *)oldhead;
+  } while (!la_casptr((void **)&g->gc2.ssb_head, &oldhead, head,
+		      LA_ACQ_REL, LA_ACQ));  /* 05 section 5.6.2 partial drain. */
+}
+
+static LJ_NOINLINE uint32_t gc2_drain_published_ssb_to_grey(global_State *g,
+							    uint32_t limit)
 {
   GC2SSBNode *node;
   uint32_t nitems = 0, nnodes = 0;
-  if (!g)
+  if (!g || limit == 0)
     return 0;
   node = (GC2SSBNode *)la_xchgptr_acqrel((void **)&g->gc2.ssb_head, NULL);
-  while (node) {
+  while (node && nitems < limit) {
     GC2SSBNode *next = node->next;
-    TGState *owner = node->owner;
-    uint32_t i;
-    for (i = 0; i < node->n; i++) {
-      GCobj *o = gcref(node->slot[i]);
-      if (o) {
-	void *base = gc2_mark_base(o);
-	(void)lj_gc2_markmem(g, base);
-	if (gc2_mark_base_traversable(g, base)) {
-	  int pushed = gc2_grey_push(g, o);
-	  lj_assertG(pushed, "gc2 grey push failed for SSB object");
-	  UNUSED(pushed);
-	}
-      }
+    while (node->n > 0 && nitems < limit) {
+      GCRef *slot = &node->slot[node->n - 1u];
+      GCobj *o = gcref(*slot);
+      setgcrefnull(*slot);
+      node->n--;
+      gc2_ssb_mark_one(g, o);
+      nitems++;
     }
-    nitems += node->n;
-    nnodes++;
-    node->n = 0;
-    if (owner) {
-      node->next = owner->ssb_free;
-      owner->ssb_free = node;
+    if (node->n == 0) {
+      nnodes++;
+      gc2_ssb_recycle_node(node);
+      node = next;
     } else {
-      node->next = NULL;
+      node->next = next;
+      break;
     }
-    node = next;
   }
+  if (node)
+    gc2_ssb_publish_list(g, node);
   if (nnodes) {
     la_add32_rlx(&g->gc2.ssb_drained, nnodes);
-    la_add64_rlx(&g->gc2.ssb_items_drained, nitems);
   }
-  (void)gc2_drain_grey(g);  /* Temporary single-worker drain scaffold. */
+  if (nitems)
+    la_add64_rlx(&g->gc2.ssb_items_drained, nitems);
   return nitems;
+}
+
+static uint32_t gc2_drain_active_ssb_to_grey(global_State *g, TGState *tg,
+					     uint32_t limit)
+{
+  uint32_t n = 0;
+  if (!g || !tg || !tg->ssb_base || !tg->ssb_next || limit == 0)
+    return 0;
+  while (n < limit && tg->ssb_next > tg->ssb_base) {
+    GCRef *slot = --tg->ssb_next;
+    GCobj *o = gcref(*slot);
+    setgcrefnull(*slot);
+    gc2_ssb_mark_one(g, o);
+    n++;
+  }
+  return n;
+}
+
+uint32_t lj_gc2_drain_ssb(global_State *g)
+{
+  uint32_t nitems;
+  if (!g)
+    return 0;
+  nitems = gc2_drain_published_ssb_to_grey(g, ~(uint32_t)0);
+  (void)gc2_drain_grey(g, ~(uint32_t)0);  /* Temporary single-worker scaffold. */
+  return nitems;
+}
+
+uint32_t lj_gc2_assist(global_State *g, TGState *tg)
+{
+  uint32_t phase, shift, limit, expect = 0, n = 0, converted = 0;
+  if (!g || !tg || tg->gc_assist)
+    return 0;
+  phase = la_load32_acq(&g->gc2.phase);
+  if (phase != LJ_GC2_MARK && phase != LJ_GC2_WEAK)
+    return 0;
+  if (la_load64_acq(&g->gc2.alloc_since_trigger) <=
+      la_load64_acq(&g->gc2.hard_bytes))
+    return 0;
+  if (!la_cas32(&g->gc2.assist_active, &expect, 1, LA_ACQ_REL, LA_ACQ))
+    return 0;  /* Current global grey deque has one owner side. */
+  tg->gc_assist = 1;
+  shift = la_load32_acq(&g->gc2.assist_shift);
+  if (shift > 8u)
+    shift = 8u;
+  limit = 1u << shift;
+  (void)lj_gc2_flush_alloc(g, tg);
+  while (n < limit) {
+    uint32_t left = limit - n;
+    uint32_t drained = gc2_drain_grey(g, left);
+    if (drained) {
+      n += drained;
+      continue;
+    }
+    if (converted >= limit)
+      break;
+    if (!gc2_drain_active_ssb_to_grey(g, tg, 1) &&
+	!gc2_drain_published_ssb_to_grey(g, 1))
+      break;
+    converted++;
+  }
+  tg->gc_assist = 0;
+  la_store32_rel(&g->gc2.assist_active, 0);
+  return n;
 }
 
 int lj_gc2_ssb_empty(global_State *g)
@@ -1069,10 +1173,10 @@ static void gc2_traverse_obj(global_State *g, GCobj *o)
   }
 }
 
-static uint32_t gc2_drain_grey(global_State *g)
+static uint32_t gc2_drain_grey(global_State *g, uint32_t limit)
 {
   uint32_t n = 0;
-  while (g && !gc2_grey_empty(g)) {
+  while (g && n < limit && !gc2_grey_empty(g)) {
     GCobj *o = gc2_grey_pop(g);
     if (o) {
       gc2_traverse_obj(g, o);
