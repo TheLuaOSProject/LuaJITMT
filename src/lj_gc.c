@@ -573,6 +573,7 @@ size_t lj_gc_separateudata(global_State *g, int all)
     } else {  /* Otherwise move userdata to be finalized to mmudata list. */
       m += sizeudata(gco2ud(o));
       markfinalized(o);
+      lj_gc2_finreg_udata_queue(g, o);
       *p = *lj_obj_gcwref(o);
       if (gcref(g->gc.mmudata)) {  /* Link to end of mmudata list. */
 	GCobj *root = gcref(g->gc.mmudata);

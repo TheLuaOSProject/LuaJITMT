@@ -1003,6 +1003,42 @@ static void test_userdata(lua_State *L, global_State *g)
   lua_pop(L, 2);
 }
 
+static int gc2_empty_finalizer(lua_State *L)
+{
+  UNUSED(L);
+  return 0;
+}
+
+static void push_udata_finalizer_mt(lua_State *L)
+{
+  lua_newtable(L);
+  lua_pushcfunction(L, gc2_empty_finalizer);
+  lua_setfield(L, -2, "__gc");
+}
+
+static void test_finreg_userdata_telemetry(lua_State *L, global_State *g)
+{
+  uint64_t sets0 = la_load64_acq(&g->gc2.finreg_udata_sets);
+  uint64_t clears0 = la_load64_acq(&g->gc2.finreg_udata_clears);
+  uint64_t queued0 = la_load64_acq(&g->gc2.finreg_udata_queued);
+
+  lua_settop(L, 0);
+  lua_newuserdata(L, 1);
+  push_udata_finalizer_mt(L);
+  lua_setmetatable(L, -2);
+  assert(la_load64_acq(&g->gc2.finreg_udata_sets) == sets0 + 1u);
+  lua_pushnil(L);
+  lua_setmetatable(L, -2);
+  assert(la_load64_acq(&g->gc2.finreg_udata_clears) == clears0 + 1u);
+  push_udata_finalizer_mt(L);
+  lua_setmetatable(L, -2);
+  assert(la_load64_acq(&g->gc2.finreg_udata_sets) == sets0 + 2u);
+  lua_pop(L, 1);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  lua_gc(L, LUA_GCSTOP, 0);
+  assert(la_load64_acq(&g->gc2.finreg_udata_queued) == queued0 + 1u);
+}
+
 #if LJ_HASFFI
 static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
 {
@@ -1074,6 +1110,7 @@ int main(void)
   test_closure(L, g, tg);
   test_thread(L, g, tg);
   test_userdata(L, g);
+  test_finreg_userdata_telemetry(L, g);
 #if LJ_HASFFI
   test_finreg_cdata_telemetry(L, g);
 #endif

@@ -1107,9 +1107,18 @@ LUA_API int lua_setmetatable(lua_State *L, int idx)
     if (mt)
       lj_gc_pubtabobj(L, tabV(o), mt);
   } else if (tvisudata(o)) {
-    setgcrefmt(udataV(o)->metatable, obj2gco(mt));
+    GCudata *ud = udataV(o);
+    GCtab *oldmt = tabref_acq(ud->metatable);
+    TValue oldv, newv;
+    int oldfin = lj_meta_fasttv(g, oldmt, MM_gc, &oldv) != NULL;
+    int newfin = lj_meta_fasttv(g, mt, MM_gc, &newv) != NULL;
+    setgcrefmt(ud->metatable, obj2gco(mt));
     if (mt)
-      lj_gc_pubobjobj(L, udataV(o), mt);
+      lj_gc_pubobjobj(L, ud, mt);
+    if (newfin)
+      lj_gc2_finreg_udata_set(g, obj2gco(ud), 1);
+    else if (oldfin)
+      lj_gc2_finreg_udata_set(g, obj2gco(ud), 0);
   } else {
     /* Flush cache, since traces specialize to basemt. But not during __gc. */
     if (lj_trace_flushall_hs(L))
