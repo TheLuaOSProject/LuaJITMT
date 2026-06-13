@@ -731,6 +731,7 @@ static void gc2_marktrace_worker(global_State *g, TraceNo traceno)
 static int gc2_traverse_tab(global_State *g, GCtab *t)
 {
   int weak = 0;
+  TValue modev;
   cTValue *mode;
   GCtab *mt = tabref(t->metatable);
   if (t->acap > 0)
@@ -742,7 +743,7 @@ static int gc2_traverse_tab(global_State *g, GCtab *t)
   }
   if (mt)
     gc2_markobj_worker(g, obj2gco(mt));
-  mode = lj_meta_fastg(g, mt, MM_mode);
+  mode = lj_meta_fasttv(g, mt, MM_mode, &modev);
   if (mode && tvisstr(mode)) {
     const char *modestr = strVdata(mode);
     int c;

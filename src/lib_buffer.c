@@ -118,6 +118,7 @@ LJLIB_CF(buffer_method_put)		LJLIB_REC(.)
   SBufExt *sbx = buffer_tobufw(L);
   ptrdiff_t arg, narg = L->top - L->base;
   for (arg = 1; arg < narg; arg++) {
+    TValue motv;
     cTValue *o = &L->base[arg], *mo = NULL;
   retry:
     if (tvisstr(o)) {
@@ -130,7 +131,8 @@ LJLIB_CF(buffer_method_put)		LJLIB_REC(.)
       SBufExt *sbx2 = bufV(o);
       if (sbx2 == sbx) lj_err_arg(L, (int)(arg+1), LJ_ERR_BUFFER_SELF);
       lj_buf_putmem((SBuf *)sbx, sbx2->r, sbufxlen(sbx2));
-    } else if (!mo && !tvisnil(mo = lj_meta_lookup(L, o, MM_tostring))) {
+    } else if (!mo &&
+	       !tvisnil(mo = lj_meta_lookuptv(L, &motv, o, MM_tostring))) {
       /* Call __tostring metamethod inline. */
       copyTV(L, L->top++, mo);
       copyTV(L, L->top++, o);

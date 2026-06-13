@@ -21,6 +21,7 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 "$ROOT/tools/ci/m5_metatable_publish.sh"
 "$ROOT/tools/ci/m5_registry_root.sh"
 "$ROOT/tools/ci/m5_nomm_cache.sh"
+"$ROOT/tools/ci/m5_meta_snapshot.sh"
 "$ROOT/tools/ci/m5_os_reentrant.sh"
 "$ROOT/tools/ci/m5_state_owner.sh"
 "$ROOT/tools/ci/m5_tmpbuf_tg.sh"

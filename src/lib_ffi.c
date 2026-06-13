@@ -513,7 +513,10 @@ LJLIB_CF(ffi_new)	LJLIB_REC(.)
   if (ctype_isstruct(ct->info)) {
     /* Handle ctype __gc metamethod. Use the fast lookup here. */
     cTValue *tv = lj_tab_getinth(cts->miscmap, -(int32_t)id);
-    if (tv && tvistab(tv) && (tv = lj_meta_fast(L, tabV(tv), MM_gc))) {
+    TValue mtv, gctv;
+    if (tv) lj_tv_load_acq(&mtv, tv);
+    if (tv && tvistab(&mtv) &&
+	(tv = lj_meta_fasttv(G(L), tabV(&mtv), MM_gc, &gctv))) {
       GCtab *t = tabref(G(L)->gcroot[GCROOT_FFI_FIN]);
       if (gcref(t->metatable)) {
 	/* Add to finalizer table, if still enabled. */

@@ -425,9 +425,10 @@ int lj_strfmt_putarg(lua_State *L, SBuf *sb, int arg, int retry)
       case STRFMT_STR: {
 	MSize len;
 	const char *s;
+	TValue motv;
 	cTValue *mo;
 	if (LJ_UNLIKELY(!tvisstr(o) && !tvisbuf(o)) && retry >= 0 &&
-	    !tvisnil(mo = lj_meta_lookup(L, o, MM_tostring))) {
+	    !tvisnil(mo = lj_meta_lookuptv(L, &motv, o, MM_tostring))) {
 	  /* Call __tostring metamethod once. */
 	  copyTV(L, L->top++, mo);
 	  copyTV(L, L->top++, o);
@@ -598,4 +599,3 @@ const char *lj_strfmt_pushf(lua_State *L, const char *fmt, ...)
   va_end(argp);
   return msg;
 }
-

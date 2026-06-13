@@ -518,10 +518,12 @@ size_t lj_gc_separateudata(global_State *g, int all)
   size_t m = 0;
   GCRef *p = lj_obj_gcwref(obj2gco(mainthread(g)));
   GCobj *o;
+  TValue mmv;
   while ((o = gcref(*p)) != NULL) {
     if (!(iswhite(o) || all) || isfinalized(gco2ud(o))) {
       p = lj_obj_gcwref(o);  /* Nothing to do. */
-    } else if (!lj_meta_fastg(g, tabref(gco2ud(o)->metatable), MM_gc)) {
+    } else if (!lj_meta_fasttv(g, tabref(gco2ud(o)->metatable),
+			       MM_gc, &mmv)) {
       markfinalized(o);  /* Done, as there's no __gc metamethod. */
       p = lj_obj_gcwref(o);
     } else {  /* Otherwise move userdata to be finalized to mmudata list. */
@@ -548,6 +550,7 @@ size_t lj_gc_separateudata(global_State *g, int all)
 static int gc_traverse_tab(global_State *g, GCtab *t)
 {
   int weak = 0;
+  TValue modev;
   cTValue *mode;
   GCtab *mt = tabref(t->metatable);
   if (t->acap > 0)
@@ -559,7 +562,7 @@ static int gc_traverse_tab(global_State *g, GCtab *t)
   }
   if (mt)
     gc_markobj(g, mt);
-  mode = lj_meta_fastg(g, mt, MM_mode);
+  mode = lj_meta_fasttv(g, mt, MM_mode, &modev);
   if (mode && tvisstr(mode)) {  /* Valid __mode field? */
     const char *modestr = strVdata(mode);
     int c;
@@ -955,6 +958,7 @@ static void gc_finalize(lua_State *L)
   global_State *g = G(L);
   GCobj *o = gcnext(gcref(g->gc.mmudata));
   cTValue *mo;
+  TValue motv;
   lj_assertG(lj_tg_jit_base(g) == NULL, "finalizer called on trace");
   /* Unchain from list of userdata to be finalized. */
   if (o == gcref(g->gc.mmudata))
@@ -987,7 +991,7 @@ static void gc_finalize(lua_State *L)
   makewhite(g, o);
   lj_gc_arena_markobj(g, o);
   /* Resolve the __gc metamethod. */
-  mo = lj_meta_fastg(g, tabref(gco2ud(o)->metatable), MM_gc);
+  mo = lj_meta_fasttv(g, tabref(gco2ud(o)->metatable), MM_gc, &motv);
   if (mo)
     gc_call_finalizer(g, L, mo, o);
 }

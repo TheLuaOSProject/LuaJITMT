@@ -88,7 +88,8 @@ LJLIB_ASM(next)			LJLIB_REC(.)
 static int ffh_pairs(lua_State *L, MMS mm)
 {
   TValue *o = lj_lib_checkany(L, 1);
-  cTValue *mo = lj_meta_lookup(L, o, mm);
+  TValue motv;
+  cTValue *mo = lj_meta_lookuptv(L, &motv, o, mm);
   if ((LJ_52 || tviscdata(o)) && !tvisnil(mo)) {
     L->top = o+1;  /* Only keep one argument. */
     copyTV(L, L->base-1-LJ_FR2, mo);  /* Replace callable. */
@@ -133,7 +134,8 @@ LJLIB_ASM(setmetatable)		LJLIB_REC(.)
 {
   GCtab *t = lj_lib_checktab(L, 1);
   GCtab *mt = lj_lib_checktabornil(L, 2);
-  if (!tvisnil(lj_meta_lookup(L, L->base, MM_metatable)))
+  TValue motv;
+  if (!tvisnil(lj_meta_lookuptv(L, &motv, L->base, MM_metatable)))
     lj_err_caller(L, LJ_ERR_PROTMT);
   if (mt)
     mt->nomm = 0;  /* Do not trust stale metamethod miss caches. */
@@ -333,9 +335,10 @@ LJLIB_ASM(tonumber)		LJLIB_REC(.)
 LJLIB_ASM(tostring)		LJLIB_REC(.)
 {
   TValue *o = lj_lib_checkany(L, 1);
+  TValue motv;
   cTValue *mo;
   L->top = o+1;  /* Only keep one argument. */
-  if (!tvisnil(mo = lj_meta_lookup(L, o, MM_tostring))) {
+  if (!tvisnil(mo = lj_meta_lookuptv(L, &motv, o, MM_tostring))) {
     copyTV(L, L->base-1-LJ_FR2, mo);  /* Replace callable. */
     return FFH_TAILCALL;
   }

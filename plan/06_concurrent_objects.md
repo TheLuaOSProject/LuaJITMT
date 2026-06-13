@@ -255,7 +255,10 @@ metatable ptr also matches the cached… DECIDED minimal-risk: in the lockless r
 on setmetatable; mm-presence fast checks degrade to metatable-load + method
 lookup when a metatable exists (same as interpreter slow path today; JIT
 guards on metatable identity anyway, 08 §8.8.3). Cost: metamethod-heavy
-interpreter code loses one shortcut; benchmark gate covers it.
+interpreter code loses one shortcut; benchmark gate covers it. Current bridge
+code snapshots Lua metamethod table slots with acquire loads before tag checks,
+copies, finalizer decisions, or recorder metadata caching; the original
+per-generation table protocol above remains the final table-storage target.
 
 ## 6.4 Upvalue cells (the closed-only model)
 

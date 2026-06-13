@@ -11,7 +11,11 @@
 /* Metamethod handling */
 LJ_FUNC void lj_meta_init(lua_State *L);
 LJ_FUNC cTValue *lj_meta_cache(GCtab *mt, MMS mm, GCstr *name);
+LJ_FUNC cTValue *lj_meta_cachetv(GCtab *mt, MMS mm, GCstr *name,
+				 TValue *out);
 LJ_FUNC cTValue *lj_meta_lookup(lua_State *L, cTValue *o, MMS mm);
+LJ_FUNC cTValue *lj_meta_lookuptv(lua_State *L, TValue *out,
+				  cTValue *o, MMS mm);
 #if LJ_HASFFI
 LJ_FUNC int lj_meta_tailcall(lua_State *L, cTValue *tv);
 #endif
@@ -20,6 +24,9 @@ LJ_FUNC int lj_meta_tailcall(lua_State *L, cTValue *tv);
   ((mt) == NULL ? NULL : ((mt)->nomm & (1u<<(mm))) ? NULL : \
    lj_meta_cache(mt, mm, mmname_str(g, mm)))
 #define lj_meta_fast(L, mt, mm)	lj_meta_fastg(G(L), mt, mm)
+#define lj_meta_fasttv(g, mt, mm, out) \
+  ((mt) == NULL ? NULL : ((mt)->nomm & (1u<<(mm))) ? NULL : \
+   lj_meta_cachetv(mt, mm, mmname_str(g, mm), (out)))
 
 /* C helpers for some instructions, called from assembler VM. */
 LJ_FUNCA cTValue *lj_meta_tget(lua_State *L, cTValue *o, cTValue *k);

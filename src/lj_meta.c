@@ -54,6 +54,16 @@ cTValue *lj_meta_cache(GCtab *mt, MMS mm, GCstr *name)
   return mo;
 }
 
+cTValue *lj_meta_cachetv(GCtab *mt, MMS mm, GCstr *name, TValue *out)
+{
+  cTValue *mo = lj_tab_getstr(mt, name);
+  lj_assertX(mm <= MM_FAST, "bad metamethod %d", mm);
+  if (!mo)
+    return NULL;
+  lj_tv_load_acq(out, mo);
+  return tvisnil(out) ? NULL : out;
+}
+
 /* Lookup metamethod for object. */
 cTValue *lj_meta_lookup(lua_State *L, cTValue *o, MMS mm)
 {
@@ -70,6 +80,26 @@ cTValue *lj_meta_lookup(lua_State *L, cTValue *o, MMS mm)
       return mo;
   }
   return niltv(L);
+}
+
+cTValue *lj_meta_lookuptv(lua_State *L, TValue *out, cTValue *o, MMS mm)
+{
+  GCtab *mt;
+  if (tvistab(o))
+    mt = tabref(tabV(o)->metatable);
+  else if (tvisudata(o))
+    mt = tabref(udataV(o)->metatable);
+  else
+    mt = tabref(basemt_obj(G(L), o));
+  if (mt) {
+    cTValue *mo = lj_tab_getstr(mt, mmname_str(G(L), mm));
+    if (mo) {
+      lj_tv_load_acq(out, mo);
+      return out;
+    }
+  }
+  setnilV(out);
+  return out;
 }
 
 #if LJ_HASFFI
@@ -133,6 +163,7 @@ static TValue *mmcall(lua_State *L, ASMFunction cont, cTValue *mo,
 /* Helper for TGET*. __index chain and metamethod. */
 cTValue *lj_meta_tget(lua_State *L, cTValue *o, cTValue *k)
 {
+  TValue motv;
   int loop;
   for (loop = 0; loop < LJ_MAX_IDXCHAIN; loop++) {
     cTValue *mo;
@@ -140,9 +171,9 @@ cTValue *lj_meta_tget(lua_State *L, cTValue *o, cTValue *k)
       GCtab *t = tabV(o);
       cTValue *tv = lj_tab_get(L, t, k);
       if (!tvisnil(tv) ||
-	  !(mo = lj_meta_fast(L, tabref(t->metatable), MM_index)))
+	  !(mo = lj_meta_fasttv(G(L), tabref(t->metatable), MM_index, &motv)))
 	return tv;
-    } else if (tvisnil(mo = lj_meta_lookup(L, o, MM_index))) {
+    } else if (tvisnil(mo = lj_meta_lookuptv(L, &motv, o, MM_index))) {
       lj_err_optype(L, o, LJ_ERR_OPINDEX);
       return NULL;  /* unreachable */
     }
@@ -159,7 +190,7 @@ cTValue *lj_meta_tget(lua_State *L, cTValue *o, cTValue *k)
 /* Helper for TSET*. __newindex chain and metamethod. */
 TValue *lj_meta_tset(lua_State *L, cTValue *o, cTValue *k)
 {
-  TValue tmp;
+  TValue tmp, motv;
   int loop;
   for (loop = 0; loop < LJ_MAX_IDXCHAIN; loop++) {
     cTValue *mo;
@@ -170,7 +201,8 @@ TValue *lj_meta_tset(lua_State *L, cTValue *o, cTValue *k)
 	t->nomm = 0;  /* Invalidate negative metamethod cache. */
 	lj_gc_pubtab(L, t);
 	return (TValue *)tv;
-      } else if (!(mo = lj_meta_fast(L, tabref(t->metatable), MM_newindex))) {
+      } else if (!(mo = lj_meta_fasttv(G(L), tabref(t->metatable),
+				       MM_newindex, &motv))) {
 	t->nomm = 0;  /* Invalidate negative metamethod cache. */
 	lj_gc_pubtab(L, t);
 	if (tv != niltv(L))
@@ -180,7 +212,7 @@ TValue *lj_meta_tset(lua_State *L, cTValue *o, cTValue *k)
 	else if (tvisnum(k) && tvisnan(k)) lj_err_msg(L, LJ_ERR_NANIDX);
 	return lj_tab_newkey(L, t, k);
       }
-    } else if (tvisnil(mo = lj_meta_lookup(L, o, MM_newindex))) {
+    } else if (tvisnil(mo = lj_meta_lookuptv(L, &motv, o, MM_newindex))) {
       lj_err_optype(L, o, LJ_ERR_OPINDEX);
       return NULL;  /* unreachable */
     }
@@ -213,16 +245,16 @@ TValue *lj_meta_arith(lua_State *L, TValue *ra, cTValue *rb, cTValue *rc,
 		      BCReg op)
 {
   MMS mm = bcmode_mm(op);
-  TValue tempb, tempc;
+  TValue tempb, tempc, motv;
   cTValue *b, *c;
   if ((b = str2num(rb, &tempb)) != NULL &&
       (c = str2num(rc, &tempc)) != NULL) {  /* Try coercion first. */
     setnumV(ra, lj_vm_foldarith(numV(b), numV(c), (int)mm-MM_add));
     return NULL;
   } else {
-    cTValue *mo = lj_meta_lookup(L, rb, mm);
+    cTValue *mo = lj_meta_lookuptv(L, &motv, rb, mm);
     if (tvisnil(mo)) {
-      mo = lj_meta_lookup(L, rc, mm);
+      mo = lj_meta_lookuptv(L, &motv, rc, mm);
       if (tvisnil(mo)) {
 	if (str2num(rb, &tempb) == NULL) rc = rb;
 	lj_err_optype(L, rc, LJ_ERR_OPARITH);
@@ -236,14 +268,15 @@ TValue *lj_meta_arith(lua_State *L, TValue *ra, cTValue *rb, cTValue *rc,
 /* Helper for CAT. Coercion, iterative concat, __concat metamethod. */
 TValue *lj_meta_cat(lua_State *L, TValue *top, int left)
 {
+  TValue motv;
   int fromc = 0;
   if (left < 0) { left = -left; fromc = 1; }
   do {
     if (!(tvisstr(top) || tvisnumber(top) || tvisbuf(top)) ||
 	!(tvisstr(top-1) || tvisnumber(top-1) || tvisbuf(top-1))) {
-      cTValue *mo = lj_meta_lookup(L, top-1, MM_concat);
+      cTValue *mo = lj_meta_lookuptv(L, &motv, top-1, MM_concat);
       if (tvisnil(mo)) {
-	mo = lj_meta_lookup(L, top, MM_concat);
+	mo = lj_meta_lookuptv(L, &motv, top, MM_concat);
 	if (tvisnil(mo)) {
 	  if (tvisstr(top-1) || tvisnumber(top-1)) top++;
 	  lj_err_optype(L, top-1, LJ_ERR_OPCAT);
@@ -313,7 +346,8 @@ TValue *lj_meta_cat(lua_State *L, TValue *top, int left)
 /* Helper for LEN. __len metamethod. */
 TValue * LJ_FASTCALL lj_meta_len(lua_State *L, cTValue *o)
 {
-  cTValue *mo = lj_meta_lookup(L, o, MM_len);
+  TValue motv;
+  cTValue *mo = lj_meta_lookuptv(L, &motv, o, MM_len);
   if (tvisnil(mo)) {
     if (!(LJ_52 && tvistab(o)))
       lj_err_optype(L, o, LJ_ERR_OPLEN);
@@ -326,12 +360,14 @@ TValue * LJ_FASTCALL lj_meta_len(lua_State *L, cTValue *o)
 TValue *lj_meta_equal(lua_State *L, GCobj *o1, GCobj *o2, int ne)
 {
   /* Field metatable must be at same offset for GCtab and GCudata! */
-  cTValue *mo = lj_meta_fast(L, tabref(o1->gch.metatable), MM_eq);
+  TValue motv, motv2;
+  cTValue *mo = lj_meta_fasttv(G(L), tabref(o1->gch.metatable), MM_eq, &motv);
   if (mo) {
     TValue *top;
     uint32_t it;
     if (tabref(o1->gch.metatable) != tabref(o2->gch.metatable)) {
-      cTValue *mo2 = lj_meta_fast(L, tabref(o2->gch.metatable), MM_eq);
+      cTValue *mo2 = lj_meta_fasttv(G(L), tabref(o2->gch.metatable),
+				    MM_eq, &motv2);
       if (mo2 == NULL || !lj_obj_equal(mo, mo2))
 	return (TValue *)(intptr_t)ne;
     }
@@ -353,7 +389,7 @@ TValue * LJ_FASTCALL lj_meta_equal_cd(lua_State *L, BCIns ins)
 {
   ASMFunction cont = (bc_op(ins) & 1) ? lj_cont_condf : lj_cont_condt;
   int op = (int)bc_op(ins) & ~1;
-  TValue tv;
+  TValue tv, motv;
   cTValue *mo, *o2, *o1 = &L->base[bc_a(ins)];
   cTValue *o1mm = o1;
   if (op == BC_ISEQV) {
@@ -369,7 +405,7 @@ TValue * LJ_FASTCALL lj_meta_equal_cd(lua_State *L, BCIns ins)
     setpriV(&tv, ~bc_d(ins));
     o2 = &tv;
   }
-  mo = lj_meta_lookup(L, o1mm, MM_eq);
+  mo = lj_meta_lookuptv(L, &motv, o1mm, MM_eq);
   if (LJ_LIKELY(!tvisnil(mo)))
     return mmcall(L, cont, mo, o1, o2);
   else
@@ -383,7 +419,8 @@ TValue *lj_meta_comp(lua_State *L, cTValue *o1, cTValue *o2, int op)
   if (LJ_HASFFI && (tviscdata(o1) || tviscdata(o2))) {
     ASMFunction cont = (op & 1) ? lj_cont_condf : lj_cont_condt;
     MMS mm = (op & 2) ? MM_le : MM_lt;
-    cTValue *mo = lj_meta_lookup(L, tviscdata(o1) ? o1 : o2, mm);
+    TValue motv;
+    cTValue *mo = lj_meta_lookuptv(L, &motv, tviscdata(o1) ? o1 : o2, mm);
     if (LJ_UNLIKELY(tvisnil(mo))) goto err;
     return mmcall(L, cont, mo, o1, o2);
   } else if (LJ_52 || itype(o1) == itype(o2)) {
@@ -396,11 +433,13 @@ TValue *lj_meta_comp(lua_State *L, cTValue *o1, cTValue *o2, int op)
       while (1) {
 	ASMFunction cont = (op & 1) ? lj_cont_condf : lj_cont_condt;
 	MMS mm = (op & 2) ? MM_le : MM_lt;
-	cTValue *mo = lj_meta_lookup(L, o1, mm);
+	TValue motv, motv2;
+	cTValue *mo = lj_meta_lookuptv(L, &motv, o1, mm);
 #if LJ_52
-	if (tvisnil(mo) && tvisnil((mo = lj_meta_lookup(L, o2, mm))))
+	if (tvisnil(mo) &&
+	    tvisnil((mo = lj_meta_lookuptv(L, &motv, o2, mm))))
 #else
-	cTValue *mo2 = lj_meta_lookup(L, o2, mm);
+	cTValue *mo2 = lj_meta_lookuptv(L, &motv2, o2, mm);
 	if (tvisnil(mo) || !lj_obj_equal(mo, mo2))
 #endif
 	{
@@ -438,7 +477,8 @@ void lj_meta_istype(lua_State *L, BCReg ra, BCReg tp)
 /* Helper for calls. __call metamethod. */
 void lj_meta_call(lua_State *L, TValue *func, TValue *top)
 {
-  cTValue *mo = lj_meta_lookup(L, func, MM_call);
+  TValue motv;
+  cTValue *mo = lj_meta_lookuptv(L, &motv, func, MM_call);
   TValue *p;
   if (!tvisfunc(mo))
     lj_err_optype_call(L, func);

@@ -1089,6 +1089,7 @@ int lj_record_mm_lookup(jit_State *J, RecordIndex *ix, MMS mm)
 {
   RecordIndex mix;
   GCtab *mt;
+  TValue motv, motv2;
   if (tref_istab(ix->tab)) {
     mt = tabref(tabV(&ix->tabv)->metatable);
     mix.tab = emitir(IRT(IR_FLOAD, IRT_TAB), ix->tab, IRFL_TAB_META);
@@ -1111,7 +1112,11 @@ int lj_record_mm_lookup(jit_State *J, RecordIndex *ix, MMS mm)
       mo = lj_tab_getstr(mt, mmname_str(J2G(J), mm));
       ix->mt = mix.tab;
       ix->mtv = mt;
-      if (!mo || tvisnil(mo))
+      if (!mo)
+	return 0;  /* No metamethod. */
+      lj_tv_load_acq(&motv, mo);
+      mo = &motv;
+      if (tvisnil(mo))
 	return 0;  /* No metamethod. */
       /* Treat metamethod or index table as immutable, too. */
       if (!(tvisfunc(mo) || tvistab(mo)))
@@ -1142,8 +1147,11 @@ nocheck:
   if (mt) {
     GCstr *mmstr = mmname_str(J2G(J), mm);
     cTValue *mo = lj_tab_getstr(mt, mmstr);
-    if (mo && !tvisnil(mo))
-      copyTV(J->L, &ix->mobjv, mo);
+    if (mo) {
+      lj_tv_load_acq(&motv2, mo);
+      if (!tvisnil(&motv2))
+	copyTV(J->L, &ix->mobjv, &motv2);
+    }
     ix->mtv = mt;
     settabV(J->L, &mix.tabv, mt);
     setstrV(J->L, &mix.keyv, mmstr);
@@ -1651,8 +1659,12 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
       /* Need to duplicate the hasmm check for the early guards. */
       int hasmm = 0;
       if (ix->idxchain && mt) {
+	TValue motv;
 	cTValue *mo = lj_tab_getstr(mt, mmname_str(J2G(J), MM_newindex));
-	hasmm = mo && !tvisnil(mo);
+	if (mo) {
+	  lj_tv_load_acq(&motv, mo);
+	  hasmm = !tvisnil(&motv);
+	}
       }
       if (hasmm)
 	emitir(IRTG(loadop, IRT_NIL), xref, 0);  /* Guard for nil value. */
