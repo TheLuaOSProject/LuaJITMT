@@ -34,18 +34,6 @@ static Node *hashkey(const GCtab *t, cTValue *key)
 
 /* -- Table creation and destruction -------------------------------------- */
 
-static LJ_AINLINE void tabslot_load_acq(TValue *dst, const TValue *src)
-{
-  dst->u64 = tv_rawload_acq(src);
-}
-
-static LJ_AINLINE int tabslot_isnil_acq(const TValue *src)
-{
-  TValue tv;
-  tabslot_load_acq(&tv, src);
-  return tvisnil(&tv);
-}
-
 /* Create new hash part for table. */
 static LJ_AINLINE void newhpart(lua_State *L, GCtab *t, uint32_t hbits)
 {
@@ -239,8 +227,8 @@ GCtab * LJ_FASTCALL lj_tab_dup(lua_State *L, const GCtab *kt)
       TValue key, val;
       Node *next = lj_tab_nextnode_acq(kn);
       /* Don't use copyTV here, since it asserts on a copy of a dead key. */
-      tabslot_load_acq(&val, &kn->val);
-      tabslot_load_acq(&key, &kn->key);
+      lj_tv_load_acq(&val, &kn->val);
+      lj_tv_load_acq(&key, &kn->key);
       n->val = val; n->key = key;
       if (tvistab(&n->val)) setnilV(&n->val); /* Replace nil value marker. */
       lj_tab_nextnode_set(n, next == NULL ? next : (Node *)((char *)next + d));
@@ -338,9 +326,9 @@ void lj_tab_resize(lua_State *L, GCtab *t, uint32_t asize, uint32_t hbits)
     for (i = 0; i <= oldhmask; i++) {
       Node *n = &oldnode[i];
       TValue key, val;
-      tabslot_load_acq(&val, &n->val);
+      lj_tv_load_acq(&val, &n->val);
       if (!tvisnil(&val)) {
-	tabslot_load_acq(&key, &n->key);
+	lj_tv_load_acq(&key, &n->key);
 	copyTV(L, lj_tab_set(L, t, &key), &val);
       }
     }
@@ -433,9 +421,9 @@ static uint32_t counthash(const GCtab *t, uint32_t *bins, uint32_t *narray)
   for (total = na = 0, i = 0; i <= hmask; i++) {
     Node *n = &node[i];
     TValue key, val;
-    tabslot_load_acq(&val, &n->val);
+    lj_tv_load_acq(&val, &n->val);
     if (!tvisnil(&val)) {
-      tabslot_load_acq(&key, &n->key);
+      lj_tv_load_acq(&key, &n->key);
       na += countint(&key, bins);
       total++;
     }
@@ -485,7 +473,7 @@ cTValue * LJ_FASTCALL lj_tab_getinth(GCtab *t, int32_t key)
   n = hashnum(t, &k);
   do {
     TValue nk;
-    tabslot_load_acq(&nk, &n->key);
+    lj_tv_load_acq(&nk, &n->key);
     if (tvisnum(&nk) && nk.n == k.n)
       return &n->val;
   } while ((n = lj_tab_nextnode_acq(n)));
@@ -497,7 +485,7 @@ cTValue *lj_tab_getstr(GCtab *t, const GCstr *key)
   Node *n = hashstr(t, key);
   do {
     TValue nk;
-    tabslot_load_acq(&nk, &n->key);
+    lj_tv_load_acq(&nk, &n->key);
     if (tvisstr(&nk) && strV(&nk) == key)
       return &n->val;
   } while ((n = lj_tab_nextnode_acq(n)));
@@ -530,7 +518,7 @@ cTValue *lj_tab_get(lua_State *L, GCtab *t, cTValue *key)
     n = hashkey(t, key);
     do {
       TValue nk;
-      tabslot_load_acq(&nk, &n->key);
+      lj_tv_load_acq(&nk, &n->key);
       if (lj_obj_equal(&nk, key))
 	return &n->val;
     } while ((n = lj_tab_nextnode_acq(n)));
@@ -549,7 +537,7 @@ TValue *lj_tab_newkey(lua_State *L, GCtab *t, cTValue *key)
     return lj_tab_set(L, t, key);
   }
   n = hashkey(t, key);
-  if (!tabslot_isnil_acq(&n->val)) {
+  if (!lj_tv_isnil_acq(&n->val)) {
     Node *nodebase = lj_tab_node_acq(t);
     Node *freenode = getfreetop(t, nodebase);
     lj_assertL(nodebase != &G(L)->nilnode, "insert into fallback hash");
@@ -560,7 +548,7 @@ TValue *lj_tab_newkey(lua_State *L, GCtab *t, cTValue *key)
 	rehashtab(L, t, key);  /* Rehash table. */
 	return lj_tab_set(L, t, key);  /* Retry key insertion. */
       }
-    } while (!tabslot_isnil_acq(&(--freenode)->key));
+    } while (!lj_tv_isnil_acq(&(--freenode)->key));
     setfreetop(t, nodebase, freenode);
     lj_assertL(freenode != &G(L)->nilnode, "store to fallback hash");
     lj_tab_nextnode_set(freenode, lj_tab_nextnode_acq(n));
@@ -568,7 +556,7 @@ TValue *lj_tab_newkey(lua_State *L, GCtab *t, cTValue *key)
     if (LJ_UNLIKELY(tvismzero(key)))
       freenode->key.u64 = 0;
     lj_gc_pubtab(L, t);
-    lj_assertL(tabslot_isnil_acq(&freenode->val),
+    lj_assertL(lj_tv_isnil_acq(&freenode->val),
 	       "new hash slot is not empty");
     lj_tab_nextnode_rel(n, freenode);
     return &freenode->val;
@@ -577,7 +565,7 @@ TValue *lj_tab_newkey(lua_State *L, GCtab *t, cTValue *key)
   if (LJ_UNLIKELY(tvismzero(key)))
     n->key.u64 = 0;
   lj_gc_pubtab(L, t);
-  lj_assertL(tabslot_isnil_acq(&n->val), "new hash slot is not empty");
+  lj_assertL(lj_tv_isnil_acq(&n->val), "new hash slot is not empty");
   return &n->val;
 }
 
@@ -589,7 +577,7 @@ TValue *lj_tab_setinth(lua_State *L, GCtab *t, int32_t key)
   n = hashnum(t, &k);
   do {
     TValue nk;
-    tabslot_load_acq(&nk, &n->key);
+    lj_tv_load_acq(&nk, &n->key);
     if (tvisnum(&nk) && nk.n == k.n)
       return &n->val;
   } while ((n = lj_tab_nextnode_acq(n)));
@@ -602,7 +590,7 @@ TValue *lj_tab_setstr(lua_State *L, GCtab *t, const GCstr *key)
   Node *n = hashstr(t, key);
   do {
     TValue nk;
-    tabslot_load_acq(&nk, &n->key);
+    lj_tv_load_acq(&nk, &n->key);
     if (tvisstr(&nk) && strV(&nk) == key)
       return &n->val;
   } while ((n = lj_tab_nextnode_acq(n)));
@@ -632,7 +620,7 @@ TValue *lj_tab_set(lua_State *L, GCtab *t, cTValue *key)
   n = hashkey(t, key);
   do {
     TValue nk;
-    tabslot_load_acq(&nk, &n->key);
+    lj_tv_load_acq(&nk, &n->key);
     if (lj_obj_equal(&nk, key))
       return &n->val;
   } while ((n = lj_tab_nextnode_acq(n)));
@@ -668,7 +656,7 @@ uint32_t LJ_FASTCALL lj_tab_keyindex(GCtab *t, cTValue *key)
     Node *n = hashkey(t, key);
     do {
       TValue nk;
-      tabslot_load_acq(&nk, &n->key);
+      lj_tv_load_acq(&nk, &n->key);
       if (lj_obj_equal(&nk, key))
 	return t->asize + (uint32_t)((n+1) - lj_tab_node_acq(t));
     } while ((n = lj_tab_nextnode_acq(n)));
@@ -700,9 +688,9 @@ int lj_tab_next(GCtab *t, cTValue *key, TValue *o)
     for (; idx <= hmask; idx++) {
       Node *n = &node[idx];
       TValue key, val;
-      tabslot_load_acq(&val, &n->val);
+      lj_tv_load_acq(&val, &n->val);
       if (!tvisnil(&val)) {
-	tabslot_load_acq(&key, &n->key);
+	lj_tv_load_acq(&key, &n->key);
 	o[0] = key;
 	o[1] = val;
 	return 1;

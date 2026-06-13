@@ -69,11 +69,17 @@ LJLIB_CF(table_maxn)
     }
   node = lj_tab_node_acq(t);
   hmask = t->hmask;
-  for (i = (ptrdiff_t)hmask; i >= 0; i--)
-    if (!tvisnil(&node[i].val) && tvisnumber(&node[i].key)) {
-      lua_Number n = numberVnum(&node[i].key);
-      if (n > m) m = n;
+  for (i = (ptrdiff_t)hmask; i >= 0; i--) {
+    TValue key, val;
+    lj_tv_load_acq(&val, &node[i].val);
+    if (!tvisnil(&val)) {
+      lj_tv_load_acq(&key, &node[i].key);
+      if (tvisnumber(&key)) {
+	lua_Number n = numberVnum(&key);
+	if (n > m) m = n;
+      }
     }
+  }
   setnumV(L->top-1, m);
   return 1;
 }

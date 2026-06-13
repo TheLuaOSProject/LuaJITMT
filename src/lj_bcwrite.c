@@ -21,14 +21,21 @@
 #include "lj_bcdump.h"
 #include "lj_vm.h"
 
+typedef struct BCWriteHashSnap {
+  TValue key;
+  TValue val;
+} BCWriteHashSnap;
+
 /* Context for bytecode writer. */
 typedef struct BCWriteCtx {
   SBuf sb;			/* Output buffer. */
   GCproto *pt;			/* Root prototype. */
   lua_Writer wfunc;		/* Writer callback. */
   void *wdata;			/* Writer callback data. */
-  TValue **heap;		/* Heap used for deterministic sorting. */
+  BCWriteHashSnap **heap;	/* Heap used for deterministic sorting. */
+  BCWriteHashSnap *hsnap;	/* Hash key/value snapshots for the heap. */
   uint32_t heapsz;		/* Size of heap. */
+  uint32_t hsnapsz;		/* Number of hash snapshots. */
   uint32_t flags;		/* BCDUMP_F_* flags. */
   int status;			/* Status from writer callback. */
 #ifdef LUA_USE_ASSERT
@@ -81,7 +88,7 @@ static void bcwrite_ktabk(BCWriteCtx *ctx, cTValue *o, int narrow)
 }
 
 /* Compare two template table keys. */
-static LJ_AINLINE int bcwrite_ktabk_lt(TValue *a, TValue *b)
+static LJ_AINLINE int bcwrite_ktabk_lt(const TValue *a, const TValue *b)
 {
   uint32_t at = itype(a), bt = itype(b);
   if (at != bt) {  /* This also handles false and true keys. */
@@ -94,25 +101,26 @@ static LJ_AINLINE int bcwrite_ktabk_lt(TValue *a, TValue *b)
 }
 
 /* Insert key into a sorted heap. */
-static void bcwrite_ktabk_heap_insert(TValue **heap, MSize idx, MSize end,
-				      TValue *key)
+static void bcwrite_ktabk_heap_insert(BCWriteHashSnap **heap, MSize idx,
+				      MSize end, BCWriteHashSnap *snap)
 {
   MSize child;
   while ((child = idx * 2 + 1) < end) {
     /* Find lower of the two children. */
-    TValue *c0 = heap[child];
+    BCWriteHashSnap *c0 = heap[child];
     if (child + 1 < end) {
-      TValue *c1 = heap[child + 1];
-      if (bcwrite_ktabk_lt(c1, c0)) {
+      BCWriteHashSnap *c1 = heap[child + 1];
+      if (bcwrite_ktabk_lt(&c1->key, &c0->key)) {
 	c0 = c1;
 	child++;
       }
     }
-    if (bcwrite_ktabk_lt(key, c0)) break;  /* Key lower? Found our position. */
+    if (bcwrite_ktabk_lt(&snap->key, &c0->key))
+      break;  /* Key lower? Found our position. */
     heap[idx] = c0;  /* Move lower child up. */
     idx = child;  /* Descend. */
   }
-  heap[idx] = key;  /* Insert key here. */
+  heap[idx] = snap;  /* Insert key here. */
 }
 
 /* Resize heap, dropping content. */
@@ -120,32 +128,45 @@ static void bcwrite_heap_resize(BCWriteCtx *ctx, uint32_t nsz)
 {
   lua_State *L = sbufL(&ctx->sb);
   if (ctx->heapsz) {
-    lj_mem_freevec(G(L), ctx->heap, ctx->heapsz, TValue *);
+    lj_mem_freevec(G(L), ctx->heap, ctx->heapsz, BCWriteHashSnap *);
     ctx->heapsz = 0;
   }
+  if (ctx->hsnapsz) {
+    lj_mem_freevec(G(L), ctx->hsnap, ctx->hsnapsz, BCWriteHashSnap);
+    ctx->hsnapsz = 0;
+  }
   if (nsz) {
-    ctx->heap = lj_mem_newvec(L, nsz, TValue *);
+    ctx->heap = lj_mem_newvec(L, nsz, BCWriteHashSnap *);
     ctx->heapsz = nsz;
+    ctx->hsnap = lj_mem_newvec(L, nsz, BCWriteHashSnap);
+    ctx->hsnapsz = nsz;
   }
 }
 
 /* Write hash part of template table in sorted order. */
 static void bcwrite_ktab_sorted_hash(BCWriteCtx *ctx, Node *node, MSize nhash)
 {
-  TValue **heap = ctx->heap;
+  BCWriteHashSnap **heap = ctx->heap;
+  BCWriteHashSnap *snap = ctx->hsnap;
   MSize i = nhash;
+  MSize j = 0;
   for (;; node--) {  /* Build heap. */
-    if (!tvisnil(&node->val)) {
-      bcwrite_ktabk_heap_insert(heap, --i, nhash, &node->key);
+    TValue val;
+    lj_tv_load_acq(&val, &node->val);
+    if (!tvisnil(&val)) {
+      BCWriteHashSnap *s = &snap[j++];
+      lj_tv_load_acq(&s->key, &node->key);
+      s->val = val;
+      bcwrite_ktabk_heap_insert(heap, --i, nhash, s);
       if (i == 0) break;
     }
   }
   do {  /* Drain heap. */
-    TValue *key = heap[0];  /* Output lowest key from top. */
-    bcwrite_ktabk(ctx, key, 0);
-    bcwrite_ktabk(ctx, (TValue *)((char *)key - offsetof(Node, key)), 1);
-    key = heap[--nhash];  /* Remove last key. */
-    bcwrite_ktabk_heap_insert(heap, 0, nhash, key);  /* Re-insert. */
+    BCWriteHashSnap *s = heap[0];  /* Output lowest key from top. */
+    bcwrite_ktabk(ctx, &s->key, 0);
+    bcwrite_ktabk(ctx, &s->val, 1);
+    s = heap[--nhash];  /* Remove last key. */
+    bcwrite_ktabk_heap_insert(heap, 0, nhash, s);  /* Re-insert. */
   } while (nhash);
 }
 
@@ -168,7 +189,7 @@ static void bcwrite_ktab(BCWriteCtx *ctx, char *p, const GCtab *t)
     hashnode = lj_tab_node_acq(t);
     hmask = t->hmask;
     for (i = 0; i <= hmask; i++)
-      nhash += !tvisnil(&hashnode[i].val);
+      nhash += !lj_tv_isnil_acq(&hashnode[i].val);
   }
   /* Write number of array slots and hash slots. */
   p = lj_strfmt_wuleb128(p, narray);
@@ -188,12 +209,16 @@ static void bcwrite_ktab(BCWriteCtx *ctx, char *p, const GCtab *t)
       bcwrite_ktab_sorted_hash(ctx, node, nhash);
     } else {
       MSize i = nhash;
-      for (;; node--)
-	if (!tvisnil(&node->val)) {
-	  bcwrite_ktabk(ctx, &node->key, 0);
-	  bcwrite_ktabk(ctx, &node->val, 1);
+      for (;; node--) {
+	TValue key, val;
+	lj_tv_load_acq(&val, &node->val);
+	if (!tvisnil(&val)) {
+	  lj_tv_load_acq(&key, &node->key);
+	  bcwrite_ktabk(ctx, &key, 0);
+	  bcwrite_ktabk(ctx, &val, 1);
 	  if (--i == 0) break;
 	}
+      }
     }
   }
 }
@@ -457,6 +482,7 @@ int lj_bcwrite(lua_State *L, GCproto *pt, lua_Writer writer, void *data,
   ctx.wfunc = writer;
   ctx.wdata = data;
   ctx.heapsz = 0;
+  ctx.hsnapsz = 0;
   if (bcwrite_has_legacyuv(pt))
     return 1;
   if ((bc_op(proto_bc(pt)[0]) != BC_NOT) == LJ_FR2) flags |= BCDUMP_F_FR2;

@@ -205,7 +205,7 @@ static char *serialize_put(char *w, SBufExt *sbx, cTValue *o)
       hashnode = lj_tab_node_acq(t);
       hmask = t->hmask;
       for (i = 0; i <= hmask; i++)
-	nhash += !tvisnil(&hashnode[i].val);
+	nhash += !lj_tv_isnil_acq(&hashnode[i].val);
     }
     /* Write metatable index. */
     if (LJ_UNLIKELY(tabref(sbx->dict_mt)) && tabref(t->metatable)) {
@@ -214,8 +214,11 @@ static char *serialize_put(char *w, SBufExt *sbx, cTValue *o)
       settabV(sbufL(sbx), &mto, tabref(t->metatable));
       n = hashgcref(tabref(sbx->dict_mt), mto.gcr);
       do {
-	if (n->key.u64 == mto.u64) {
-	  uint32_t idx = n->val.u32.lo;
+	TValue nk, nv;
+	lj_tv_load_acq(&nk, &n->key);
+	if (nk.u64 == mto.u64) {
+	  lj_tv_load_acq(&nv, &n->val);
+	  uint32_t idx = nv.u32.lo;
 	  w = serialize_more(w, sbx, 1+5);
 	  *w++ = SER_TAG_DICT_MT;
 	  w = serialize_wu124(w, idx);
@@ -237,15 +240,21 @@ static char *serialize_put(char *w, SBufExt *sbx, cTValue *o)
       const Node *node = hashnode + hmask;
       GCtab *dict_str = tabref(sbx->dict_str);
       if (LJ_UNLIKELY(dict_str)) {
-	for (;; node--)
-	  if (!tvisnil(&node->val)) {
-	    if (LJ_LIKELY(tvisstr(&node->key))) {
+	for (;; node--) {
+	  TValue key, val;
+	  lj_tv_load_acq(&val, &node->val);
+	  if (!tvisnil(&val)) {
+	    lj_tv_load_acq(&key, &node->key);
+	    if (LJ_LIKELY(tvisstr(&key))) {
 	      /* Inlined lj_tab_getstr is 30% faster. */
-	      const GCstr *str = strV(&node->key);
+	      const GCstr *str = strV(&key);
 	      Node *n = hashstr(dict_str, str);
 	      do {
-		if (tvisstr(&n->key) && strV(&n->key) == str) {
-		  uint32_t idx = n->val.u32.lo;
+		TValue nk, nv;
+		lj_tv_load_acq(&nk, &n->key);
+		if (tvisstr(&nk) && strV(&nk) == str) {
+		  lj_tv_load_acq(&nv, &n->val);
+		  uint32_t idx = nv.u32.lo;
 		  w = serialize_more(w, sbx, 1+5);
 		  *w++ = SER_TAG_DICT_STR;
 		  w = serialize_wu124(w, idx);
@@ -261,18 +270,23 @@ static char *serialize_put(char *w, SBufExt *sbx, cTValue *o)
 		}
 	      } while (1);
 	    } else {
-	      w = serialize_put(w, sbx, &node->key);
+	      w = serialize_put(w, sbx, &key);
 	    }
-	    w = serialize_put(w, sbx, &node->val);
+	    w = serialize_put(w, sbx, &val);
 	    if (--nhash == 0) break;
 	  }
+	}
       } else {
-	for (;; node--)
-	  if (!tvisnil(&node->val)) {
-	    w = serialize_put(w, sbx, &node->key);
-	    w = serialize_put(w, sbx, &node->val);
+	for (;; node--) {
+	  TValue key, val;
+	  lj_tv_load_acq(&val, &node->val);
+	  if (!tvisnil(&val)) {
+	    lj_tv_load_acq(&key, &node->key);
+	    w = serialize_put(w, sbx, &key);
+	    w = serialize_put(w, sbx, &val);
 	    if (--nhash == 0) break;
 	  }
+	}
       }
     }
     sbx->depth++;

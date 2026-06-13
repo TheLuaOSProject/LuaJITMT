@@ -559,10 +559,13 @@ static int gc_traverse_tab(global_State *g, GCtab *t)
     MSize i, hmask = t->hmask;
     for (i = 0; i <= hmask; i++) {
       Node *n = &node[i];
-      if (!tvisnil(&n->val)) {  /* Mark non-empty slot. */
-	lj_assertG(!tvisnil(&n->key), "mark of nil key in non-empty slot");
-	if (!(weak & LJ_GC_WEAKKEY)) gc_marktv(g, &n->key);
-	if (!(weak & LJ_GC_WEAKVAL)) gc_marktv(g, &n->val);
+      TValue key, val;
+      lj_tv_load_acq(&val, &n->val);
+      if (!tvisnil(&val)) {  /* Mark non-empty slot. */
+	lj_tv_load_acq(&key, &n->key);
+	lj_assertG(!tvisnil(&key), "mark of nil key in non-empty slot");
+	if (!(weak & LJ_GC_WEAKKEY)) gc_marktv(g, &key);
+	if (!(weak & LJ_GC_WEAKVAL)) gc_marktv(g, &val);
       }
     }
   }
@@ -842,10 +845,14 @@ static void gc_clearweak(global_State *g, GCobj *o)
       MSize i, hmask = t->hmask;
       for (i = 0; i <= hmask; i++) {
 	Node *n = &node[i];
+	TValue key, val;
 	/* Clear hash slot when key or value is about to be collected. */
-	if (!tvisnil(&n->val) && (gc_mayclear(g, &n->key, 0) ||
-				  gc_mayclear(g, &n->val, 1)))
-	  setnilV(&n->val);
+	lj_tv_load_acq(&val, &n->val);
+	if (!tvisnil(&val)) {
+	  lj_tv_load_acq(&key, &n->key);
+	  if (gc_mayclear(g, &key, 0) || gc_mayclear(g, &val, 1))
+	    setnilV(&n->val);
+	}
       }
     }
     o = gcref(t->gclist);
@@ -946,16 +953,22 @@ void lj_gc_finalize_cdata(lua_State *L)
   MSize hmask = t->hmask;
   ptrdiff_t i;
   setgcrefnull(t->metatable);  /* Mark finalizer table as disabled. */
-  for (i = (ptrdiff_t)hmask; i >= 0; i--)
-    if (!tvisnil(&node[i].val) && tviscdata(&node[i].key)) {
-      GCobj *o = gcV(&node[i].key);
-      TValue tmp;
-      makewhite(g, o);
-      lj_obj_cleargcflags(o, LJ_GC_CDATA_FIN);
-      copyTV(L, &tmp, &node[i].val);
-      setnilV(&node[i].val);
-      gc_call_finalizer(g, L, &tmp, o);
+  for (i = (ptrdiff_t)hmask; i >= 0; i--) {
+    TValue key, val;
+    lj_tv_load_acq(&val, &node[i].val);
+    if (!tvisnil(&val)) {
+      lj_tv_load_acq(&key, &node[i].key);
+      if (tviscdata(&key)) {
+	GCobj *o = gcV(&key);
+	TValue tmp;
+	makewhite(g, o);
+	lj_obj_cleargcflags(o, LJ_GC_CDATA_FIN);
+	copyTV(L, &tmp, &val);
+	setnilV(&node[i].val);
+	gc_call_finalizer(g, L, &tmp, o);
+      }
     }
+  }
 }
 #endif
 

@@ -1027,6 +1027,18 @@ static LJ_AINLINE void setgcrefrel_(GCRef *r, const GCobj *gc)
 #define tvisint(o)	(LJ_DUALNUM && itype(o) == LJ_TISNUM)
 #define tvisnum(o)	(itype(o) < LJ_TISNUM)
 
+static LJ_AINLINE void lj_tv_load_acq(TValue *dst, const TValue *src)
+{
+  dst->u64 = tv_rawload_acq(src);
+}
+
+static LJ_AINLINE int lj_tv_isnil_acq(const TValue *src)
+{
+  TValue tv;
+  lj_tv_load_acq(&tv, src);
+  return tvisnil(&tv);
+}
+
 #define tvistruecond(o)	(itype(o) < LJ_TISTRUECOND)
 #define tvispri(o)	(itype(o) >= LJ_TISPRI)
 #define tvistabud(o)	(itype(o) <= LJ_TISTABUD)  /* && !tvisnum() */

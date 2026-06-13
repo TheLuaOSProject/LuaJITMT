@@ -1401,27 +1401,30 @@ static void fs_fixup_k(FuncState *fs, GCproto *pt, void *kptr)
   hmask = kt->hmask;
   for (i = 0; i <= hmask; i++) {
     Node *n = &node[i];
-    if (tvhaskslot(&n->val)) {
-      ptrdiff_t kidx = (ptrdiff_t)tvkslot(&n->val);
-      lj_assertFS(!tvisint(&n->key), "unexpected integer key");
-      if (tvisnum(&n->key)) {
+    TValue key, val;
+    lj_tv_load_acq(&val, &n->val);
+    if (tvhaskslot(&val)) {
+      ptrdiff_t kidx = (ptrdiff_t)tvkslot(&val);
+      lj_tv_load_acq(&key, &n->key);
+      lj_assertFS(!tvisint(&key), "unexpected integer key");
+      if (tvisnum(&key)) {
 	TValue *tv = &((TValue *)kptr)[kidx];
 	if (LJ_DUALNUM) {
 	  int64_t i64;
 	  int32_t k;
-	  lj_assertFS(!tvismzero(&n->key), "unexpected -0 key");
-	  if (lj_num2int_check(numV(&n->key), i64, k))
+	  lj_assertFS(!tvismzero(&key), "unexpected -0 key");
+	  if (lj_num2int_check(numV(&key), i64, k))
 	    setintV(tv, k);
 	  else
-	    *tv = n->key;
+	    *tv = key;
 	} else {
-	  *tv = n->key;
+	  *tv = key;
 	}
       } else {
-	GCobj *o = gcV(&n->key);
+	GCobj *o = gcV(&key);
 	setgcrefrel(((GCRef *)kptr)[~kidx], o);
 	lj_gc_pubobjobj(fs->L, pt, o);
-	if (tvisproto(&n->key))
+	if (tvisproto(&key))
 	  fs_fixup_uv2(fs, gco2pt(o));
       }
     }

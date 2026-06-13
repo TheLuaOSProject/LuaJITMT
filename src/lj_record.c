@@ -1364,7 +1364,10 @@ static void rec_idx_bump(jit_State *J, RecordIndex *ix)
 	uint32_t i, hmask = tpl->hmask, asize;
 	TValue *array;
 	for (i = 0; i <= hmask; i++) {
-	  if (!tvisnil(&node[i].key) && tvisnil(&node[i].val))
+	  TValue key, val;
+	  lj_tv_load_acq(&key, &node[i].key);
+	  lj_tv_load_acq(&val, &node[i].val);
+	  if (!tvisnil(&key) && tvisnil(&val))
 	    settabV(J->L, &node[i].val, tpl);
 	}
 	if (!tvisnil(&ix->keyv) && tref_isk(ix->key)) {
@@ -1375,8 +1378,10 @@ static void rec_idx_bump(jit_State *J, RecordIndex *ix)
 	node = lj_tab_node_acq(tpl);
 	hmask = tpl->hmask;
 	for (i = 0; i <= hmask; i++) {
+	  TValue val;
+	  lj_tv_load_acq(&val, &node[i].val);
 	  /* This is safe, since template tables only hold immutable values. */
-	  if (tvistab(&node[i].val))
+	  if (tvistab(&val))
 	    setnilV(&node[i].val);
 	}
 	/* The shape of the table may have changed. Clean up array part, too. */
@@ -1702,8 +1707,12 @@ static IRType rec_next_types(GCtab *t, uint32_t idx)
     uint32_t hmask = t->hmask;
     for (; idx <= hmask; idx++) {
       Node *n = &node[idx];
-      if (!tvisnil(&n->val))
-	return itype2irt(&n->key) + (itype2irt(&n->val) << 8);
+      TValue key, val;
+      lj_tv_load_acq(&val, &n->val);
+      if (!tvisnil(&val)) {
+	lj_tv_load_acq(&key, &n->key);
+	return itype2irt(&key) + (itype2irt(&val) << 8);
+      }
     }
   }
   return IRT_NIL + (IRT_NIL << 8);

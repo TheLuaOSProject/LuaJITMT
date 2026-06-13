@@ -758,10 +758,13 @@ static int gc2_traverse_tab(global_State *g, GCtab *t)
     MSize i, hmask = t->hmask;
     for (i = 0; i <= hmask; i++) {
       Node *n = &node[i];
-      if (!tvisnil(&n->val)) {
-	lj_assertG(!tvisnil(&n->key), "mark of nil key in non-empty slot");
-	if (!(weak & LJ_GC_WEAKKEY)) gc2_mark_tv_worker(g, &n->key);
-	if (!(weak & LJ_GC_WEAKVAL)) gc2_mark_tv_worker(g, &n->val);
+      TValue key, val;
+      lj_tv_load_acq(&val, &n->val);
+      if (!tvisnil(&val)) {
+	lj_tv_load_acq(&key, &n->key);
+	lj_assertG(!tvisnil(&key), "mark of nil key in non-empty slot");
+	if (!(weak & LJ_GC_WEAKKEY)) gc2_mark_tv_worker(g, &key);
+	if (!(weak & LJ_GC_WEAKVAL)) gc2_mark_tv_worker(g, &val);
       }
     }
   }
