@@ -860,6 +860,9 @@ typedef struct GC2State {
   uint64_t grey_bottom;	/* Chase-Lev owner-side index. */
   uint64_t grey_pushed;	/* Grey entries scheduled from SSB/traversal. */
   uint64_t grey_drained;  /* Grey entries popped for traversal. */
+  uint64_t worker_runs;  /* Non-owner worker drain attempts with work. */
+  uint64_t worker_grey_drained;  /* Grey objects traced by workers. */
+  uint64_t worker_ssb_converted;  /* SSB entries converted by workers. */
   TGState *tg_list;	/* Registered per-thread state blocks. */
   uint32_t n_threads;	/* Number of registered TG blocks. */
 } GC2State;

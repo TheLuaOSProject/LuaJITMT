@@ -170,6 +170,12 @@ upgrade (M9): route pushes through per-arena grey stacks with an arena
 priority queue as in Pall's doc; the deque design is the correctness
 baseline and may already be sufficient.
 
+Current bridge note: `lj_gc2_worker_drain()` now provides a bounded non-owner
+worker entrypoint that converts published SSB entries to grey work, steals
+from the Chase-Lev top side, and traverses stolen objects. The full worker
+pool, grow-safe per-worker deque ownership, idle declaration, and scheduling
+remain the original target above.
+
 ### 5.6.4 gc2_traverse — per-type tracing
 Port the existing traversal logic, replacing color plumbing:
 - `gc_traverse_tab` (lj_gc.c:174): mark metatable, then **load the current

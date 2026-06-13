@@ -101,6 +101,12 @@ typedef struct GreyRaceCtx {
   GCobj *stolen;
 } GreyRaceCtx;
 
+typedef struct WorkerDrainCtx {
+  global_State *g;
+  uint32_t limit;
+  uint32_t drained;
+} WorkerDrainCtx;
+
 static void grey_wait(pthread_barrier_t *barrier)
 {
   int rc = pthread_barrier_wait(barrier);
@@ -120,6 +126,13 @@ static void *grey_thief_thread(void *arg)
   GreyRaceCtx *ctx = (GreyRaceCtx *)arg;
   grey_wait(&ctx->barrier);
   ctx->stolen = lj_gc2_grey_steal(ctx->g);
+  return NULL;
+}
+
+static void *grey_worker_drain_thread(void *arg)
+{
+  WorkerDrainCtx *ctx = (WorkerDrainCtx *)arg;
+  ctx->drained = lj_gc2_worker_drain(ctx->g, ctx->limit);
   return NULL;
 }
 
@@ -190,6 +203,57 @@ static void test_grey_deque_steal_race(lua_State *L, global_State *g,
   }
 
   lj_gc2_legacy_cycle_end(g);
+}
+
+static void test_worker_drain(lua_State *L, global_State *g, TGState *tg)
+{
+  GCtab *parent, *child, *grandchild;
+  WorkerDrainCtx ctx;
+  pthread_t worker;
+  uint64_t grey_drained0, worker_runs0, worker_grey0, worker_ssb0;
+
+  lua_settop(L, 0);
+  lua_newtable(L);
+  parent = tabV(L->top - 1);
+  lua_newtable(L);
+  child = tabV(L->top - 1);
+  lua_newtable(L);
+  grandchild = tabV(L->top - 1);
+  lua_pushvalue(L, -1);
+  lua_rawseti(L, -3, 1);  /* child[1] = grandchild. */
+  lua_pushvalue(L, -2);
+  lua_rawseti(L, -4, 1);  /* parent[1] = child. */
+
+  lj_gc2_legacy_mark_begin(g);
+  assert(lj_gc2_markobj(g, obj2gco(parent)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(grandchild)) == 0);
+  assert(lj_gc2_flush_ssb(g, tg) == 1);
+  assert(!lj_gc2_ssb_empty(g));
+
+  grey_drained0 = la_load64_acq(&g->gc2.grey_drained);
+  worker_runs0 = la_load64_acq(&g->gc2.worker_runs);
+  worker_grey0 = la_load64_acq(&g->gc2.worker_grey_drained);
+  worker_ssb0 = la_load64_acq(&g->gc2.worker_ssb_converted);
+
+  ctx.g = g;
+  ctx.limit = 8;
+  ctx.drained = 0;
+  assert(pthread_create(&worker, NULL, grey_worker_drain_thread, &ctx) == 0);
+  assert(pthread_join(worker, NULL) == 0);
+
+  assert(ctx.drained == 3);
+  assert(lj_gc2_ismarked(g, obj2gco(parent)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(grandchild)) == 1);
+  assert(lj_gc2_ssb_empty(g));
+  assert(la_load64_acq(&g->gc2.grey_drained) == grey_drained0 + 3u);
+  assert(la_load64_acq(&g->gc2.worker_runs) == worker_runs0 + 1u);
+  assert(la_load64_acq(&g->gc2.worker_grey_drained) == worker_grey0 + 3u);
+  assert(la_load64_acq(&g->gc2.worker_ssb_converted) == worker_ssb0 + 1u);
+
+  lj_gc2_legacy_cycle_end(g);
+  lua_pop(L, 3);
 }
 
 static void test_c_value_barrier(lua_State *L, global_State *g, TGState *tg)
@@ -609,6 +673,7 @@ int main(void)
   test_strong_table(L, g, tg);
   test_grey_deque_growth(L, g, tg);
   test_grey_deque_steal_race(L, g, tg);
+  test_worker_drain(L, g, tg);
   test_c_value_barrier(L, g, tg);
   test_c_table_rescan_barrier(L, g, tg);
   test_vm_upvalue_barrier(L, g, tg);

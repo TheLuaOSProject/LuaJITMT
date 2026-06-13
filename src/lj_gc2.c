@@ -65,6 +65,9 @@ void lj_gc2_init(global_State *g)
   g->gc2.grey_bottom = 0;
   la_store64_rlx(&g->gc2.grey_pushed, 0);
   la_store64_rlx(&g->gc2.grey_drained, 0);
+  la_store64_rlx(&g->gc2.worker_runs, 0);
+  la_store64_rlx(&g->gc2.worker_grey_drained, 0);
+  la_store64_rlx(&g->gc2.worker_ssb_converted, 0);
   g->gc2.tg_list = NULL;
   g->gc2.n_threads = 0;
   lj_gc2_update_pacing(g);
@@ -1232,6 +1235,41 @@ static uint32_t gc2_drain_grey(global_State *g, uint32_t limit)
   }
   if (n)
     la_add64_rlx(&g->gc2.grey_drained, n);
+  return n;
+}
+
+uint32_t lj_gc2_worker_drain(global_State *g, uint32_t limit)
+{
+  uint32_t phase, n = 0, converted = 0;
+  if (!g || limit == 0)
+    return 0;
+  phase = la_load32_acq(&g->gc2.phase);
+  if (phase != LJ_GC2_MARK && phase != LJ_GC2_WEAK)
+    return 0;
+  while (n < limit) {
+    GCobj *o = lj_gc2_grey_steal(g);
+    if (o) {
+      gc2_traverse_obj(g, o);  /* 05 section 5.6.3 worker steal+trace. */
+      n++;
+      continue;
+    }
+    if (converted >= limit)
+      break;
+    {
+      uint32_t moved = gc2_drain_published_ssb_to_grey(g, limit - converted);
+      if (!moved)
+	break;
+      converted += moved;
+    }
+  }
+  if (n || converted)
+    la_add64_rlx(&g->gc2.worker_runs, 1);
+  if (n) {
+    la_add64_rlx(&g->gc2.grey_drained, n);
+    la_add64_rlx(&g->gc2.worker_grey_drained, n);
+  }
+  if (converted)
+    la_add64_rlx(&g->gc2.worker_ssb_converted, converted);
   return n;
 }
 
