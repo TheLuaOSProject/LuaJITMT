@@ -1344,9 +1344,10 @@ static void rec_idx_bump(jit_State *J, RecordIndex *ix)
     if (ir->o == IR_TNEW) {
       uint32_t ah = bc_d(*pc);
       uint32_t asize = ah & 0x7ff, hbits = ah >> 11;
+      uint32_t tb_asize = lj_tab_asize_acq(tb);
       if (nhbits > hbits) hbits = nhbits;
-      if (tb->asize > asize) {
-	asize = tb->asize <= 0x7ff ? tb->asize : 0x7ff;
+      if (tb_asize > asize) {
+	asize = tb_asize <= 0x7ff ? tb_asize : 0x7ff;
       }
       if ((asize | (hbits<<11)) != ah) {  /* Has the size changed? */
 	/* Patch bytecode, but continue recording (for more patching). */
@@ -1357,9 +1358,11 @@ static void rec_idx_bump(jit_State *J, RecordIndex *ix)
       }
     } else if (ir->o == IR_TDUP) {
       GCtab *tpl = gco2tab(proto_kgc(&gcref(rbc->pt)->pt, ~(ptrdiff_t)bc_d(*pc)));
+      uint32_t tb_asize = lj_tab_asize_acq(tb);
+      uint32_t tpl_asize = lj_tab_asize_acq(tpl);
       /* Grow template table, but preserve keys with nil values. */
-      if ((tb->asize > tpl->asize && (1u << nhbits)-1 == tpl->hmask) ||
-	  (tb->asize == tpl->asize && (1u << nhbits)-1 > tpl->hmask)) {
+      if ((tb_asize > tpl_asize && (1u << nhbits)-1 == tpl->hmask) ||
+	  (tb_asize == tpl_asize && (1u << nhbits)-1 > tpl->hmask)) {
 	Node *node = lj_tab_node_acq(tpl);
 	uint32_t i, hmask = tpl->hmask, asize;
 	TValue *array;
@@ -1374,7 +1377,7 @@ static void rec_idx_bump(jit_State *J, RecordIndex *ix)
 	  TValue *o = lj_tab_set(J->L, tpl, &ix->keyv);
 	  if (tvisnil(o)) settabV(J->L, o, tpl);
 	}
-	lj_tab_resize(J->L, tpl, tb->asize, nhbits);
+	lj_tab_resize(J->L, tpl, tb_asize, nhbits);
 	node = lj_tab_node_acq(tpl);
 	hmask = tpl->hmask;
 	for (i = 0; i <= hmask; i++) {
@@ -1385,10 +1388,12 @@ static void rec_idx_bump(jit_State *J, RecordIndex *ix)
 	    setnilV(&node[i].val);
 	}
 	/* The shape of the table may have changed. Clean up array part, too. */
-	asize = tpl->asize;
-	array = tvref(tpl->array);
+	asize = lj_tab_asize_acq(tpl);
+	array = lj_tab_array_acq(tpl);
 	for (i = 0; i < asize; i++) {
-	  if (tvistab(&array[i]))
+	  TValue val;
+	  lj_tv_load_acq(&val, &array[i]);
+	  if (tvistab(&val))
 	    setnilV(&array[i]);
 	}
 	J->retryrec = 1;  /* Abort the trace at the end of recording. */
@@ -1461,9 +1466,10 @@ static TRef rec_idx_key(jit_State *J, RecordIndex *ix, IRRef *rbref,
     if ((MSize)k < LJ_MAX_ASIZE) {  /* Potential array key? */
       TRef ikey = lj_opt_narrow_index(J, key);
       TRef asizeref = emitir(IRTI(IR_FLOAD), ix->tab, IRFL_TAB_ASIZE);
-      if ((MSize)k < t->asize) {  /* Currently an array key? */
+      MSize asize = lj_tab_asize_acq(t);
+      if ((MSize)k < asize) {  /* Currently an array key? */
 	TRef arrayref;
-	rec_idx_abc(J, asizeref, ikey, t->asize);
+	rec_idx_abc(J, asizeref, ikey, asize);
 	arrayref = emitir(IRT(IR_FLOAD, IRT_PGC), ix->tab, IRFL_TAB_ARRAY);
 	return emitir(IRT(IR_AREF, IRT_PGC), arrayref, ikey);
       } else {  /* Currently not in array (may be an array extension)? */
@@ -1476,7 +1482,7 @@ static TRef rec_idx_key(jit_State *J, RecordIndex *ix, IRRef *rbref,
       /* We can rule out const numbers which failed the integerness test
       ** above. But all other numbers are potential array keys.
       */
-      if (t->asize == 0) {  /* True sparse tables have an empty array part. */
+      if (lj_tab_asize_acq(t) == 0) {  /* True sparse tables have an empty array part. */
 	/* Guard that the array part stays empty. */
 	TRef tmp = emitir(IRTI(IR_FLOAD), ix->tab, IRFL_TAB_ASIZE);
 	emitir(IRTGI(IR_EQ), tmp, lj_ir_kint(J, 0));
@@ -1696,12 +1702,15 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
 /* Determine result type of table traversal. */
 static IRType rec_next_types(GCtab *t, uint32_t idx)
 {
-  for (; idx < t->asize; idx++) {
-    cTValue *a = arrayslot(t, idx);
-    if (LJ_LIKELY(!tvisnil(a)))
-      return (LJ_DUALNUM ? IRT_INT : IRT_NUM) + (itype2irt(a) << 8);
+  uint32_t asize = lj_tab_asize_acq(t);
+  TValue *array = lj_tab_array_acq(t);
+  for (; idx < asize; idx++) {
+    TValue val;
+    lj_tv_load_acq(&val, &array[idx]);
+    if (LJ_LIKELY(!tvisnil(&val)))
+      return (LJ_DUALNUM ? IRT_INT : IRT_NUM) + (itype2irt(&val) << 8);
   }
-  idx -= t->asize;
+  idx -= asize;
   {
     Node *node = lj_tab_node_acq(t);
     uint32_t hmask = t->hmask;
@@ -1752,7 +1761,7 @@ static void rec_tsetm(jit_State *J, BCReg ra, BCReg rn, int32_t i)
   ix.idxchain = 0;
 #ifdef LUAJIT_ENABLE_TABLE_BUMP
   if ((J->flags & JIT_F_OPT_SINK)) {
-    if (t->asize < i+rn-ra)
+    if (lj_tab_asize_acq(t) < i+rn-ra)
       lj_tab_reasize(J->L, t, i+rn-ra);
     setnilV(&ix.keyv);
     rec_idx_bump(J, &ix);

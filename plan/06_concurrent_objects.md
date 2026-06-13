@@ -163,21 +163,26 @@ Current implementation status: runtime tables still use the legacy `GCtab`
 layout and freetop scan while the tracked `nbtab_model` remains the reference
 for the final header-generation/helper-copy port. The landed intermediate
 slices keep the shared nilnode read-only for first hash inserts and now retire
-old hash `Node[]` vectors from `lj_tab_resize()` behind the completed
-safepoint epoch before freeing them. This removes the immediate resize free
-hazard for future acquire-load readers. Hash-chain walks in the C runtime and
-serialization paths now use acquire loads, and collision inserts initialize a
-stable free node before release-publishing it through the anchor's `next` link;
-legacy Brent node relocation has been removed. The legacy `GCtab.node` pointer
-itself is now release-published after vector initialization and acquire-loaded
-by C-side table, GC, serialization, bytecode-writer, parser, and recorder
-readers. Core C table lookup, resize, rehash counting, collision checks, and
-`next()` now make key/value decisions from acquired `TValue` snapshots instead
-of direct shared node-field reads; GC/GC2 table traversal, weak clearing,
-finalizer-table scans, serialization, bytecode writing, parser template-table
-fixup, recorder traversal typing, and `table.maxn` use the same snapshot
-helpers. These steps do not replace the legacy resize algorithm with the
-planned lock-free `NHdr` generation protocol yet.
+old hash `Node[]` vectors plus separated legacy array vectors from
+`lj_tab_resize()` behind the completed safepoint epoch before freeing them.
+This removes the immediate resize free hazard for future acquire-load readers.
+Hash-chain walks in the C runtime and serialization paths now use acquire
+loads, and collision inserts initialize a stable free node before
+release-publishing it through the anchor's `next` link; legacy Brent node
+relocation has been removed. The legacy `GCtab.node` pointer itself is now
+release-published after vector initialization and acquire-loaded by C-side
+table, GC, serialization, bytecode-writer, parser, and recorder readers.
+Legacy `GCtab.array` C readers use acquire-loaded pointer/size helpers and
+snapshot slot values before nil/type/copy decisions; array growth initializes
+slots before release-publishing the pointer and then `asize`, while shrink keeps
+the current allocation capacity until the final `AHdr` port. Core C table
+lookup, resize, rehash counting, collision checks, and `next()` now make
+key/value decisions from acquired `TValue` snapshots instead of direct shared
+node-field reads; GC/GC2 table traversal, weak clearing, finalizer-table scans,
+serialization, bytecode writing, parser template-table fixup, recorder
+traversal typing, and `table.maxn` use the same snapshot helpers. These steps
+do not replace the legacy resize algorithm with the planned lock-free
+`AHdr`/`NHdr` generation protocol yet.
 ### 6.3.6 next/pairs (lj_tab_next)
 Iterate the *gen snapshot* captured at first call: store the NH pointer in
 the iterator control slot? Lua's `next(t,k)` is stateless — DECIDED:

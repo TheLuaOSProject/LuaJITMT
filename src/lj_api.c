@@ -862,8 +862,10 @@ LUA_API void lua_getfield(lua_State *L, int idx, const char *k)
 LUA_API void lua_rawget(lua_State *L, int idx)
 {
   cTValue *t = index2adr(L, idx);
+  TValue val;
   lj_checkapi(tvistab(t), "stack slot %d is not a table", idx);
-  copyTV(L, L->top-1, lj_tab_get(L, tabV(t), L->top-1));
+  lj_tv_load_acq(&val, lj_tab_get(L, tabV(t), L->top-1));
+  copyTV(L, L->top-1, &val);
 }
 
 LUA_API void lua_rawgeti(lua_State *L, int idx, int n)
@@ -872,7 +874,9 @@ LUA_API void lua_rawgeti(lua_State *L, int idx, int n)
   lj_checkapi(tvistab(t), "stack slot %d is not a table", idx);
   v = lj_tab_getint(tabV(t), n);
   if (v) {
-    copyTV(L, L->top, v);
+    TValue val;
+    lj_tv_load_acq(&val, v);
+    copyTV(L, L->top, &val);
   } else {
     setnilV(L->top);
   }

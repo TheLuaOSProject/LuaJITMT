@@ -57,16 +57,20 @@ LJLIB_LUA(table_getn) /*
 LJLIB_CF(table_maxn)
 {
   GCtab *t = lj_lib_checktab(L, 1);
-  TValue *array = tvref(t->array);
+  MSize asize = lj_tab_asize_acq(t);
+  TValue *array = lj_tab_array_acq(t);
   Node *node;
   MSize hmask;
   lua_Number m = 0;
   ptrdiff_t i;
-  for (i = (ptrdiff_t)t->asize - 1; i >= 0; i--)
-    if (!tvisnil(&array[i])) {
+  for (i = (ptrdiff_t)asize - 1; i >= 0; i--) {
+    TValue val;
+    lj_tv_load_acq(&val, &array[i]);
+    if (!tvisnil(&val)) {
       m = (lua_Number)(int32_t)i;
       break;
     }
+  }
   node = lj_tab_node_acq(t);
   hmask = t->hmask;
   for (i = (ptrdiff_t)hmask; i >= 0; i--) {
@@ -98,7 +102,9 @@ LJLIB_CF(table_insert)		LJLIB_REC(.)
       TValue *dst = lj_tab_setint(L, t, i);
       cTValue *src = lj_tab_getint(t, i-1);
       if (src) {
-	copyTV(L, dst, src);
+	TValue val;
+	lj_tv_load_acq(&val, src);
+	copyTV(L, dst, &val);
       } else {
 	setnilV(dst);
       }
@@ -169,8 +175,11 @@ LJLIB_CF(table_concat)		LJLIB_REC(.)
   if (LJ_UNLIKELY(!sbx)) {  /* Error: bad element type. */
     int32_t idx = (int32_t)(intptr_t)sb->w;
     cTValue *o = lj_tab_getint(t, idx);
+    TValue val;
+    if (o)
+      lj_tv_load_acq(&val, o);
     lj_err_callerv(L, LJ_ERR_TABCAT,
-		   lj_obj_itypename[o ? itypemap(o) : ~LJ_TNIL], idx);
+		   lj_obj_itypename[o ? itypemap(&val) : ~LJ_TNIL], idx);
   }
   setstrV(L, L->top-1, lj_buf_str(L, sbx));
   lj_gc_check(L);
@@ -284,7 +293,7 @@ LJLIB_CF(table_pack)
   GCtab *t = lj_tab_new(L, n ? n+1 : 0, 1);
   /* NOBARRIER: The table is new (marked white). */
   setintV(lj_tab_setstr(L, t, strV(lj_lib_upvalue(L, 1))), (int32_t)n);
-  for (array = tvref(t->array) + 1, i = 0; i < n; i++)
+  for (array = lj_tab_array_acq(t) + 1, i = 0; i < n; i++)
     copyTV(L, &array[i], &base[i]);
   settabV(L, base, t);
   L->top = base+1;

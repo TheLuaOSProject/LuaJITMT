@@ -21,12 +21,17 @@ ptrdiff_t lj_vmevent_prepare(lua_State *L, VMEvent ev)
   global_State *g = G(L);
   GCstr *s = lj_str_newlit(L, LJ_VMEVENTS_REGKEY);
   cTValue *tv = lj_tab_getstr(tabV(registry(L)), s);
-  if (tvistab(tv)) {
+  TValue tabv;
+  lj_tv_load_acq(&tabv, tv);
+  if (tvistab(&tabv)) {
     int hash = VMEVENT_HASH(ev);
-    tv = lj_tab_getint(tabV(tv), hash);
-    if (tv && tvisfunc(tv)) {
+    TValue fnv;
+    tv = lj_tab_getint(tabV(&tabv), hash);
+    if (tv)
+      lj_tv_load_acq(&fnv, tv);
+    if (tv && tvisfunc(&fnv)) {
       lj_state_checkstack(L, LUA_MINSTACK);
-      setfuncV(L, L->top++, funcV(tv));
+      setfuncV(L, L->top++, funcV(&fnv));
       if (LJ_FR2) setnilV(L->top++);
       return savestack(L, L->top);
     }

@@ -215,7 +215,7 @@ static GCtab *bcread_ktab(LexState *ls)
   GCtab *t = lj_tab_new(ls->L, narray, hsize2hbits(nhash));
   if (narray) {  /* Read array entries. */
     MSize i;
-    TValue *o = tvref(t->array);
+    TValue *o = lj_tab_array_acq(t);
     for (i = 0; i < narray; i++, o++)
       bcread_ktabk(ls, o, NULL);
   }

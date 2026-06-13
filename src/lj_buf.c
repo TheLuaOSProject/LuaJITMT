@@ -244,18 +244,21 @@ SBuf *lj_buf_puttab(SBuf *sb, GCtab *t, GCstr *sep, int32_t i, int32_t e)
   if (i <= e) {
     for (;;) {
       cTValue *o = lj_tab_getint(t, i);
+      TValue tv;
       char *w;
       if (!o) {
       badtype:  /* Error: bad element type. */
 	sb->w = (char *)(intptr_t)i;  /* Store failing index. */
 	return NULL;
-      } else if (tvisstr(o)) {
-	MSize len = strV(o)->len;
-	w = lj_buf_wmem(lj_buf_more(sb, len + seplen), strVdata(o), len);
-      } else if (tvisint(o)) {
-	w = lj_strfmt_wint(lj_buf_more(sb, STRFMT_MAXBUF_INT+seplen), intV(o));
-      } else if (tvisnum(o)) {
-	w = lj_buf_more(lj_strfmt_putfnum(sb, STRFMT_G14, numV(o)), seplen);
+      }
+      lj_tv_load_acq(&tv, o);
+      if (tvisstr(&tv)) {
+	MSize len = strV(&tv)->len;
+	w = lj_buf_wmem(lj_buf_more(sb, len + seplen), strVdata(&tv), len);
+      } else if (tvisint(&tv)) {
+	w = lj_strfmt_wint(lj_buf_more(sb, STRFMT_MAXBUF_INT+seplen), intV(&tv));
+      } else if (tvisnum(&tv)) {
+	w = lj_buf_more(lj_strfmt_putfnum(sb, STRFMT_G14, numV(&tv)), seplen);
       } else {
 	goto badtype;
       }

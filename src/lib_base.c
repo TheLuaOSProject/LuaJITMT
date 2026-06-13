@@ -242,7 +242,9 @@ LJLIB_CF(unpack)
   do {
     cTValue *tv = lj_tab_getint(t, i);
     if (tv) {
-      copyTV(L, L->top++, tv);
+      TValue val;
+      lj_tv_load_acq(&val, tv);
+      copyTV(L, L->top++, &val);
     } else {
       setnilV(L->top++);
     }

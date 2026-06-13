@@ -1388,15 +1388,18 @@ static void fs_fixup_k(FuncState *fs, GCproto *pt, void *kptr)
   pt->sizekn = fs->nkn;
   pt->sizekgc = fs->nkgc;
   kt = fs->kt;
-  array = tvref(kt->array);
-  for (i = 0; i < kt->asize; i++)
-    if (tvhaskslot(&array[i])) {
-      TValue *tv = &((TValue *)kptr)[tvkslot(&array[i])];
+  array = lj_tab_array_acq(kt);
+  for (i = 0; i < lj_tab_asize_acq(kt); i++) {
+    TValue val;
+    lj_tv_load_acq(&val, &array[i]);
+    if (tvhaskslot(&val)) {
+      TValue *tv = &((TValue *)kptr)[tvkslot(&val)];
       if (LJ_DUALNUM)
 	setintV(tv, (int32_t)i);
       else
 	setnumV(tv, (lua_Number)i);
     }
+  }
   node = lj_tab_node_acq(kt);
   hmask = kt->hmask;
   for (i = 0; i <= hmask; i++) {
@@ -1846,7 +1849,7 @@ static void expr_table(LexState *ls, ExpDesc *e)
     else if (narr > 0x7ff) narr = 0x7ff;
     setbc_d(ip, narr|(hsize2hbits(nhash)<<11));
   } else {
-    if (needarr && t->asize < narr)
+    if (needarr && lj_tab_asize_acq(t) < narr)
       lj_tab_reasize(fs->L, t, narr-1);
     lj_gc_check(fs->L);
   }

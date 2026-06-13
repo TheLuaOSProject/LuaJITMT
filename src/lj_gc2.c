@@ -727,8 +727,8 @@ static int gc2_traverse_tab(global_State *g, GCtab *t)
   int weak = 0;
   cTValue *mode;
   GCtab *mt = tabref(t->metatable);
-  if (t->asize > 0)
-    lj_gc2_markmem(g, tvref(t->array));
+  if (t->acap > 0)
+    lj_gc2_markmem(g, lj_tab_array_acq(t));
   if (t->hmask > 0)
     lj_gc2_markmem(g, lj_tab_node_acq(t));
   if (mt)
@@ -749,9 +749,13 @@ static int gc2_traverse_tab(global_State *g, GCtab *t)
   if (weak == LJ_GC_WEAK)
     return weak;
   if (!(weak & LJ_GC_WEAKVAL)) {
-    MSize i, asize = t->asize;
-    for (i = 0; i < asize; i++)
-      gc2_mark_tv_worker(g, arrayslot(t, i));
+    MSize i, asize = lj_tab_asize_acq(t);
+    TValue *array = lj_tab_array_acq(t);
+    for (i = 0; i < asize; i++) {
+      TValue val;
+      lj_tv_load_acq(&val, &array[i]);
+      gc2_mark_tv_worker(g, &val);
+    }
   }
   if (t->hmask > 0) {
     Node *node = lj_tab_node_acq(t);

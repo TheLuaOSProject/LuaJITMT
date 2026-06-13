@@ -127,16 +127,20 @@ static LJ_AINLINE char *serialize_ru124(char *r, char *w, uint32_t *pv)
 void LJ_FASTCALL lj_serialize_dict_prep_str(lua_State *L, GCtab *dict)
 {
   if (!dict->hmask) {  /* No hash part means not prepared, yet. */
-    MSize i, len = lj_tab_len(dict);
+    MSize i, len = lj_tab_len(dict), asize;
+    TValue *array;
     if (!len) return;
-    lj_tab_resize(L, dict, dict->asize, hsize2hbits(len));
-    for (i = 1; i <= len && i < dict->asize; i++) {
-      cTValue *o = arrayslot(dict, i);
-      if (tvisstr(o)) {
-	if (!lj_tab_getstr(dict, strV(o))) {  /* Ignore dups. */
-	  lj_tab_newkey(L, dict, o)->u64 = (uint64_t)(i-1);
+    lj_tab_resize(L, dict, lj_tab_asize_acq(dict), hsize2hbits(len));
+    asize = lj_tab_asize_acq(dict);
+    array = lj_tab_array_acq(dict);
+    for (i = 1; i <= len && i < asize; i++) {
+      TValue tv;
+      lj_tv_load_acq(&tv, &array[i]);
+      if (tvisstr(&tv)) {
+	if (!lj_tab_getstr(dict, strV(&tv))) {  /* Ignore dups. */
+	  lj_tab_newkey(L, dict, &tv)->u64 = (uint64_t)(i-1);
 	}
-      } else if (!tvisfalse(o)) {
+      } else if (!tvisfalse(&tv)) {
 	lj_err_caller(L, LJ_ERR_BUFFER_BADOPT);
       }
     }
@@ -147,16 +151,20 @@ void LJ_FASTCALL lj_serialize_dict_prep_str(lua_State *L, GCtab *dict)
 void LJ_FASTCALL lj_serialize_dict_prep_mt(lua_State *L, GCtab *dict)
 {
   if (!dict->hmask) {  /* No hash part means not prepared, yet. */
-    MSize i, len = lj_tab_len(dict);
+    MSize i, len = lj_tab_len(dict), asize;
+    TValue *array;
     if (!len) return;
-    lj_tab_resize(L, dict, dict->asize, hsize2hbits(len));
-    for (i = 1; i <= len && i < dict->asize; i++) {
-      cTValue *o = arrayslot(dict, i);
-      if (tvistab(o)) {
-	if (tvisnil(lj_tab_get(L, dict, o))) {  /* Ignore dups. */
-	  lj_tab_newkey(L, dict, o)->u64 = (uint64_t)(i-1);
+    lj_tab_resize(L, dict, lj_tab_asize_acq(dict), hsize2hbits(len));
+    asize = lj_tab_asize_acq(dict);
+    array = lj_tab_array_acq(dict);
+    for (i = 1; i <= len && i < asize; i++) {
+      TValue tv;
+      lj_tv_load_acq(&tv, &array[i]);
+      if (tvistab(&tv)) {
+	if (lj_tv_isnil_acq(lj_tab_get(L, dict, &tv))) {  /* Ignore dups. */
+	  lj_tab_newkey(L, dict, &tv)->u64 = (uint64_t)(i-1);
 	}
-      } else if (!tvisfalse(o)) {
+      } else if (!tvisfalse(&tv)) {
 	lj_err_caller(L, LJ_ERR_BUFFER_BADOPT);
       }
     }
@@ -189,16 +197,21 @@ static char *serialize_put(char *w, SBufExt *sbx, cTValue *o)
     const GCtab *t = tabV(o);
     const Node *hashnode = NULL;
     uint32_t narray = 0, nhash = 0, one = 2, hmask = 0;
+    TValue *array = NULL;
+    MSize asize = lj_tab_asize_acq(t);
     if (sbx->depth <= 0) lj_err_caller(sbufL(sbx), LJ_ERR_BUFFER_DEPTH);
     sbx->depth--;
-    if (t->asize > 0) {  /* Determine max. length of array part. */
+    if (asize > 0) {  /* Determine max. length of array part. */
       ptrdiff_t i;
-      TValue *array = tvref(t->array);
-      for (i = (ptrdiff_t)t->asize-1; i >= 0; i--)
-	if (!tvisnil(&array[i]))
+      array = lj_tab_array_acq(t);
+      for (i = (ptrdiff_t)asize-1; i >= 0; i--) {
+	TValue val;
+	lj_tv_load_acq(&val, &array[i]);
+	if (!tvisnil(&val))
 	  break;
+      }
       narray = (uint32_t)(i+1);
-      if (narray && tvisnil(&array[0])) one = 4;
+      if (narray && lj_tv_isnil_acq(&array[0])) one = 4;
     }
     if (t->hmask > 0) {  /* Count number of used hash slots. */
       uint32_t i;
@@ -232,9 +245,12 @@ static char *serialize_put(char *w, SBufExt *sbx, cTValue *o)
     if (narray) w = serialize_wu124(w, narray);
     if (nhash) w = serialize_wu124(w, nhash);
     if (narray) {  /* Write array entries. */
-      cTValue *oa = tvref(t->array) + (one >> 2);
-      cTValue *oe = tvref(t->array) + narray;
-      while (oa < oe) w = serialize_put(w, sbx, oa++);
+      MSize i;
+      for (i = (one >> 2); i < narray; i++) {
+	TValue val;
+	lj_tv_load_acq(&val, &array[i]);
+	w = serialize_put(w, sbx, &val);
+      }
     }
     if (nhash) {  /* Write hash entries. */
       const Node *node = hashnode + hmask;
@@ -380,10 +396,17 @@ static char *serialize_get(char *r, SBufExt *sbx, TValue *o)
     r = serialize_ru124(r, w, &idx); if (LJ_UNLIKELY(!r)) goto eob;
     idx++;
     dict_str = tabref(sbx->dict_str);
-    if (dict_str && idx < dict_str->asize && tvisstr(arrayslot(dict_str, idx)))
-      copyTV(sbufL(sbx), o, arrayslot(dict_str, idx));
-    else
+    if (dict_str && idx < lj_tab_asize_acq(dict_str)) {
+      TValue tv;
+      lj_tv_load_acq(&tv, &lj_tab_array_acq(dict_str)[idx]);
+      if (tvisstr(&tv)) {
+	copyTV(sbufL(sbx), o, &tv);
+      } else {
+	lj_err_callerv(sbufL(sbx), LJ_ERR_BUFFER_BADDICTX, idx);
+      }
+    } else {
       lj_err_callerv(sbufL(sbx), LJ_ERR_BUFFER_BADDICTX, idx);
+    }
   } else if (tp >= SER_TAG_TAB && tp <= SER_TAG_DICT_MT) {
     uint32_t narray = 0, nhash = 0;
     GCtab *t, *mt = NULL;
@@ -395,10 +418,17 @@ static char *serialize_get(char *r, SBufExt *sbx, TValue *o)
       r = serialize_ru124(r, w, &idx); if (LJ_UNLIKELY(!r)) goto eob;
       idx++;
       dict_mt = tabref(sbx->dict_mt);
-      if (dict_mt && idx < dict_mt->asize && tvistab(arrayslot(dict_mt, idx)))
-	mt = tabV(arrayslot(dict_mt, idx));
-      else
+      if (dict_mt && idx < lj_tab_asize_acq(dict_mt)) {
+	TValue tv;
+	lj_tv_load_acq(&tv, &lj_tab_array_acq(dict_mt)[idx]);
+	if (tvistab(&tv)) {
+	  mt = tabV(&tv);
+	} else {
+	  lj_err_callerv(sbufL(sbx), LJ_ERR_BUFFER_BADDICTX, idx);
+	}
+      } else {
 	lj_err_callerv(sbufL(sbx), LJ_ERR_BUFFER_BADDICTX, idx);
+      }
       r = serialize_ru124(r, w, &tp); if (LJ_UNLIKELY(!r)) goto eob;
       if (!(tp >= SER_TAG_TAB && tp < SER_TAG_DICT_MT)) goto badtag;
     }
@@ -413,8 +443,8 @@ static char *serialize_get(char *r, SBufExt *sbx, TValue *o)
     setgcref(t->metatable, obj2gco(mt));
     settabV(sbufL(sbx), o, t);
     if (narray) {
-      TValue *oa = tvref(t->array) + (tp >= SER_TAG_TAB+4);
-      TValue *oe = tvref(t->array) + narray;
+      TValue *oa = lj_tab_array_acq(t) + (tp >= SER_TAG_TAB+4);
+      TValue *oe = lj_tab_array_acq(t) + narray;
       while (oa < oe) r = serialize_get(r, sbx, oa++);
     }
     if (nhash) {

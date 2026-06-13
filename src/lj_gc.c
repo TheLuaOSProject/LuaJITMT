@@ -77,6 +77,7 @@ static void gc_mark_strtab_mem(global_State *g)
 static void gc_mark_tab_retired_mem(global_State *g)
 {
   TabNodeRetire *ret;
+  TabArrayRetire *aret;
   for (ret = (TabNodeRetire *)la_loadptr_acq(
 	 (void *const *)&g->tab.retired_nodes);
        ret != NULL;
@@ -84,6 +85,14 @@ static void gc_mark_tab_retired_mem(global_State *g)
     lj_gc_arena_markmem(g, ret);
     if (la_load32_acq(&ret->armed))
       lj_gc_arena_markmem(g, ret->node);
+  }
+  for (aret = (TabArrayRetire *)la_loadptr_acq(
+	 (void *const *)&g->tab.retired_arrays);
+       aret != NULL;
+       aret = (TabArrayRetire *)la_loadptr_acq((void *const *)&aret->next)) {
+    lj_gc_arena_markmem(g, aret);
+    if (la_load32_acq(&aret->armed))
+      lj_gc_arena_markmem(g, aret->array);
   }
 }
 
@@ -179,8 +188,8 @@ static void gc2_paranoia_checktab(global_State *g, GCtab *t)
   if (!gc2_paranoia_liveobj(obj2gco(t)))
     return;
   gc2_paranoia_checkobj(g, obj2gco(t), "table");
-  if (t->asize > 0)
-    gc2_paranoia_checkmem(g, tvref(t->array), "table array");
+  if (t->acap > 0)
+    gc2_paranoia_checkmem(g, lj_tab_array_acq(t), "table array");
   if (t->hmask > 0)
     gc2_paranoia_checkmem(g, lj_tab_node_acq(t), "table node");
 }
@@ -263,6 +272,7 @@ static void gc2_paranoia_check_rawroots(global_State *g)
 {
   StrTabHdr *hdr;
   TabNodeRetire *ret;
+  TabArrayRetire *aret;
   hdr = (StrTabHdr *)la_loadptr_acq((void *const *)&g->str.tabh);
   if (hdr)
     gc2_paranoia_checkmem(g, hdr, "string table");
@@ -277,6 +287,14 @@ static void gc2_paranoia_check_rawroots(global_State *g)
     gc2_paranoia_checkmem(g, ret, "retired table node record");
     if (la_load32_acq(&ret->armed))
       gc2_paranoia_checkmem(g, ret->node, "retired table nodes");
+  }
+  for (aret = (TabArrayRetire *)la_loadptr_acq(
+	 (void *const *)&g->tab.retired_arrays);
+       aret != NULL;
+       aret = (TabArrayRetire *)la_loadptr_acq((void *const *)&aret->next)) {
+    gc2_paranoia_checkmem(g, aret, "retired table array record");
+    if (la_load32_acq(&aret->armed))
+      gc2_paranoia_checkmem(g, aret->array, "retired table array");
   }
 #if LJ_64
   gc2_paranoia_checkmem(g, mref(g->gc.lightudseg, uint32_t),
@@ -520,8 +538,8 @@ static int gc_traverse_tab(global_State *g, GCtab *t)
   int weak = 0;
   cTValue *mode;
   GCtab *mt = tabref(t->metatable);
-  if (t->asize > 0)
-    lj_gc_arena_markmem(g, tvref(t->array));
+  if (t->acap > 0)
+    lj_gc_arena_markmem(g, lj_tab_array_acq(t));
   if (t->hmask > 0)
     lj_gc_arena_markmem(g, lj_tab_node_acq(t));
   if (mt)
@@ -550,9 +568,13 @@ static int gc_traverse_tab(global_State *g, GCtab *t)
   if (weak == LJ_GC_WEAK)  /* Nothing to mark if both keys/values are weak. */
     return 1;
   if (!(weak & LJ_GC_WEAKVAL)) {  /* Mark array part. */
-    MSize i, asize = t->asize;
-    for (i = 0; i < asize; i++)
-      gc_marktv(g, arrayslot(t, i));
+    MSize i, asize = lj_tab_asize_acq(t);
+    TValue *array = lj_tab_array_acq(t);
+    for (i = 0; i < asize; i++) {
+      TValue val;
+      lj_tv_load_acq(&val, &array[i]);
+      gc_marktv(g, &val);
+    }
   }
   if (t->hmask > 0) {  /* Mark hash part. */
     Node *node = lj_tab_node_acq(t);
@@ -687,8 +709,11 @@ static size_t propagatemark(global_State *g)
     GCtab *t = gco2tab(o);
     if (gc_traverse_tab(g, t) > 0)
       black2gray(o);  /* Keep weak tables gray. */
-    return sizeof(GCtab) + sizeof(TValue) * t->asize +
-			   (t->hmask ? sizeof(Node) * (t->hmask + 1) : 0);
+    return (LJ_MAX_COLOSIZE != 0 && t->colo ?
+	    sizetabcolo((uint32_t)t->colo & 0x7f) : sizeof(GCtab)) +
+	   (t->acap && (LJ_MAX_COLOSIZE == 0 || t->colo <= 0) ?
+	    sizeof(TValue) * t->acap : 0) +
+	   (t->hmask ? sizeof(Node) * (t->hmask + 1) : 0);
   } else if (LJ_LIKELY(gct == ~LJ_TFUNC)) {
     GCfunc *fn = gco2func(o);
     gc_traverse_func(g, fn);
@@ -832,12 +857,14 @@ static void gc_clearweak(global_State *g, GCobj *o)
     lj_assertG((lj_obj_gcflags(obj2gco(t)) & LJ_GC_WEAK),
 	       "clear of non-weak table");
     if ((lj_obj_gcflags(obj2gco(t)) & LJ_GC_WEAKVAL)) {
-      MSize i, asize = t->asize;
+      MSize i, asize = lj_tab_asize_acq(t);
+      TValue *array = lj_tab_array_acq(t);
       for (i = 0; i < asize; i++) {
 	/* Clear array slot when value is about to be collected. */
-	TValue *tv = arrayslot(t, i);
-	if (gc_mayclear(g, tv, 1))
-	  setnilV(tv);
+	TValue val;
+	lj_tv_load_acq(&val, &array[i]);
+	if (gc_mayclear(g, &val, 1))
+	  setnilV(&array[i]);
       }
     }
     if (t->hmask > 0) {

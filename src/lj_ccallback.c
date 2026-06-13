@@ -579,9 +579,11 @@ static void callback_conv_args(CTState *cts, lua_State *L)
 #endif
 
   if (slot < cts->cb.sizeid && (id = cts->cb.cbid[slot]) != 0) {
+    TValue tv;
     ct = ctype_get(cts, id);
     rid = ctype_cid(ct->info);  /* Return type. x86: +(spadj<<16). */
-    fn = funcV(lj_tab_getint(cts->miscmap, (int32_t)slot));
+    lj_tv_load_acq(&tv, lj_tab_getint(cts->miscmap, (int32_t)slot));
+    fn = funcV(&tv);
     fntp = LJ_TFUNC;
   } else {  /* Must set up frame first, before throwing the error. */
     ct = NULL;

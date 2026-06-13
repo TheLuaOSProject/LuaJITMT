@@ -539,6 +539,14 @@ typedef struct TabNodeRetire {
   struct TabNodeRetire *next;
 } TabNodeRetire;
 
+typedef struct TabArrayRetire {
+  TValue *array;	/* Retired array vector, owned only when armed. */
+  MSize acap;		/* Original array capacity for vector free. */
+  uint64_t retire_epoch;  /* Safepoint epoch when retired. */
+  uint32_t armed;	/* Array vector has been unpublished from its table. */
+  struct TabArrayRetire *next;
+} TabArrayRetire;
+
 typedef struct GCtab {
   GCHeader;
   uint8_t nomm;		/* Negative cache for fast metamethods. */
@@ -552,12 +560,46 @@ typedef struct GCtab {
 #if LJ_GC64
   MRef freetop;		/* Top of free elements. */
 #endif
+  uint32_t acap;	/* Allocated array capacity. */
 } GCtab;
 
 #define sizetabcolo(n)	((n)*sizeof(TValue) + sizeof(GCtab))
 #define tabref(r)	((GCtab *)gcref((r)))
 #define noderef(r)	(mref((r), Node))
 #define nextnode(n)	(mref((n)->next, Node))
+
+static LJ_AINLINE TValue *lj_tab_array_acq(const GCtab *t)
+{
+#if LJ_GC64
+  return (TValue *)(void *)(uintptr_t)la_load64_acq(&t->array.ptr64);
+#else
+  return (TValue *)(void *)(uintptr_t)la_load32_acq(&t->array.ptr32);
+#endif
+}
+
+static LJ_AINLINE void lj_tab_array_set(GCtab *t, const TValue *array)
+{
+  setmref(t->array, array);
+}
+
+static LJ_AINLINE void lj_tab_array_rel(GCtab *t, const TValue *array)
+{
+#if LJ_GC64
+  la_store64_rel(&t->array.ptr64, (uint64_t)(uintptr_t)(const void *)array);
+#else
+  la_store32_rel(&t->array.ptr32, (uint32_t)(uintptr_t)(const void *)array);
+#endif
+}
+
+static LJ_AINLINE MSize lj_tab_asize_acq(const GCtab *t)
+{
+  return (MSize)la_load32_acq(&t->asize);
+}
+
+static LJ_AINLINE void lj_tab_asize_rel(GCtab *t, MSize asize)
+{
+  la_store32_rel(&t->asize, (uint32_t)asize);
+}
 
 static LJ_AINLINE Node *lj_tab_node_acq(const GCtab *t)
 {
@@ -725,6 +767,7 @@ typedef struct StrInternState {
 
 typedef struct TabState {
   TabNodeRetire *retired_nodes;  /* Retired hash vectors awaiting SMR. */
+  TabArrayRetire *retired_arrays;  /* Retired array vectors awaiting SMR. */
 } TabState;
 
 typedef struct TGState TGState;

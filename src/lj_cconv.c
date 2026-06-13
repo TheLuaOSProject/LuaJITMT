@@ -475,13 +475,16 @@ static void cconv_array_tab(CTState *cts, CType *d,
   CTSize size = d->size, esize = dc->size, ofs = 0;
   for (i = 0; ; i++) {
     TValue *tv = (TValue *)lj_tab_getint(t, i);
-    if (!tv || tvisnil(tv)) {
+    TValue val;
+    if (tv)
+      lj_tv_load_acq(&val, tv);
+    if (!tv || tvisnil(&val)) {
       if (i == 0) continue;  /* Try again for 1-based tables. */
       break;  /* Stop at first nil. */
     }
     if (ofs >= size)
       cconv_err_initov(cts, d);
-    lj_cconv_ct_tv(cts, dc, dp + ofs, tv, flags);
+    lj_cconv_ct_tv(cts, dc, dp + ofs, &val, flags);
     ofs += esize;
   }
   if (size != CTSIZE_INVALID) {  /* Only fill up arrays with known size. */
@@ -503,12 +506,15 @@ static void cconv_substruct_tab(CTState *cts, CType *d, uint8_t *dp,
     id = df->sib;
     if (ctype_isfield(df->info) || ctype_isbitfield(df->info)) {
       TValue *tv;
+      TValue val;
       int32_t i = *ip, iz = i;
       if (!gcref(df->name)) continue;  /* Ignore unnamed fields. */
       if (i >= 0) {
       retry:
 	tv = (TValue *)lj_tab_getint(t, i);
-	if (!tv || tvisnil(tv)) {
+	if (tv)
+	  lj_tv_load_acq(&val, tv);
+	if (!tv || tvisnil(&val)) {
 	  if (i == 0) { i = 1; goto retry; }  /* 1-based tables. */
 	  if (iz == 0) { *ip = i = -1; goto tryname; }  /* Init named fields. */
 	  break;  /* Stop at first nil. */
@@ -517,12 +523,14 @@ static void cconv_substruct_tab(CTState *cts, CType *d, uint8_t *dp,
       } else {
       tryname:
 	tv = (TValue *)lj_tab_getstr(t, gco2str(gcref(df->name)));
-	if (!tv || tvisnil(tv)) continue;
+	if (tv)
+	  lj_tv_load_acq(&val, tv);
+	if (!tv || tvisnil(&val)) continue;
       }
       if (ctype_isfield(df->info))
-	lj_cconv_ct_tv(cts, ctype_rawchild(cts, df), dp+df->size, tv, flags);
+	lj_cconv_ct_tv(cts, ctype_rawchild(cts, df), dp+df->size, &val, flags);
       else
-	lj_cconv_bf_tv(cts, df, dp+df->size, tv);
+	lj_cconv_bf_tv(cts, df, dp+df->size, &val);
       if ((d->info & CTF_UNION)) break;
     } else if (ctype_isxattrib(df->info, CTA_SUBTYPE)) {
       cconv_substruct_tab(cts, ctype_rawchild(cts, df),

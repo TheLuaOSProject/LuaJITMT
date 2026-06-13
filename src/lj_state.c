@@ -345,6 +345,7 @@ LUA_API lua_State *lua_newstate(lua_Alloc allocf, void *allocd)
   g->str.retired = NULL;
   g->str.mask = ~(MSize)0;
   g->tab.retired_nodes = NULL;
+  g->tab.retired_arrays = NULL;
   setnilV(registry(L));
   setnilV(&g->nilnode.val);
   setnilV(&g->nilnode.key);
