@@ -744,12 +744,15 @@ uint32_t lj_gc2_weak_snapshot_clear(global_State *g, uint32_t limit)
   if (!g || limit == 0)
     return 0;
   n = lj_gc2_weak_snapshot_count(g);
-  start = la_add64_rlx(&g->gc2.weak_clear_cursor, limit);
-  if (start >= (uint64_t)n)
-    return 0;
-  end = start + limit;
-  if (end < start || end > (uint64_t)n)
-    end = (uint64_t)n;
+  do {
+    start = la_load64_acq(&g->gc2.weak_clear_cursor);
+    if (start >= (uint64_t)n)
+      return 0;
+    end = start + limit;
+    if (end < start || end > (uint64_t)n)
+      end = (uint64_t)n;
+  } while (!la_cas64(&g->gc2.weak_clear_cursor, &start, end,
+		     LA_ACQ_REL, LA_ACQ));  /* 05 section 5.8 bounded clear cursor. */
   for (i = (uint32_t)start; (uint64_t)i < end; i++) {
     GCtab *t = lj_gc2_weak_snapshot_tab(g, i);
     if (!t)

@@ -49,6 +49,7 @@ for needle in \
   'la_store8_rel(&g->gc2.weak_ready' \
   'la_load8_acq(&g->gc2.weak_ready' \
   'la_cas64(&g->gc2.weak_scan_cursor' \
+  'la_cas64(&g->gc2.weak_clear_cursor' \
   'lj_gc2_finreg_cdata_set(global_State *g, GCobj *o, int enabled)' \
   'lj_gc2_finreg_cdata_queue(global_State *g, GCobj *o)' \
   'lj_gc2_finreg_cdata_set(G(L), obj2gco(cd), 1)' \
@@ -75,7 +76,6 @@ for needle in \
   'la_xchg64_acqrel(&g->gc2.marks_this_round, 0)' \
   'LJ_GC2_HS_SCAN_ROOTS|LJ_GC2_HS_FLUSH_SSB' \
   'lj_gc2_weak_snapshot_clear(g, ~(uint32_t)0)' \
-  'weak_clear_cursor, limit' \
   'lj_gc2_worker_drain(g' \
   'lj_gc2_worker_drain_progress(global_State *g, uint32_t limit)' \
   'lj_gc2_ssb_empty(g)' \

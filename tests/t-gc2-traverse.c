@@ -676,9 +676,13 @@ static void test_weak_snapshot_ready_publication(lua_State *L, global_State *g)
   idx = la_add64_rlx(&g->gc2.weak_count, 1);
   assert(idx == 0);
   assert(lj_gc2_weak_snapshot_count(g) == 0);
+  assert(lj_gc2_weak_snapshot_clear(g, 1) == 0);
+  assert(la_load64_acq(&g->gc2.weak_clear_cursor) == 0);
   setgcref(g->gc2.weak_stack[0], obj2gco(t));
   la_store8_rel(&g->gc2.weak_ready[0], 1);
   assert(lj_gc2_weak_snapshot_count(g) == 1u);
+  assert(lj_gc2_weak_snapshot_clear(g, 1) == 1u);
+  assert(la_load64_acq(&g->gc2.weak_clear_cursor) == 1u);
   assert(lj_gc2_weak_snapshot_tab(g, 0) == t);
   lj_gc2_legacy_cycle_end(g);
   lua_pop(L, 1);
