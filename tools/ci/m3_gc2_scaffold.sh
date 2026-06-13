@@ -15,6 +15,7 @@ for needle in \
   'uint64_t fixpoint_rounds' \
   'uint64_t fixpoint_hits' \
   'GCRef *weak_stack' \
+  'uint8_t *weak_ready' \
   'uint64_t weak_count' \
   'uint64_t weak_tables_seen' \
   'uint64_t weak_tables_weakkey' \
@@ -43,6 +44,8 @@ for needle in \
   'lj_gc2_weak_snapshot_tab(global_State *g' \
   'lj_gc2_weak_snapshot_scan(global_State *g, uint32_t limit)' \
   'lj_gc2_weak_snapshot_clear(global_State *g, uint32_t limit)' \
+  'la_store8_rel(&g->gc2.weak_ready' \
+  'la_load8_acq(&g->gc2.weak_ready' \
   'lj_gc2_finreg_cdata_set(global_State *g, GCobj *o, int enabled)' \
   'lj_gc2_finreg_cdata_set(G(L), obj2gco(cd), 1)' \
   'lj_gc2_finreg_cdata_set(G(L), obj2gco(cd), 0)' \

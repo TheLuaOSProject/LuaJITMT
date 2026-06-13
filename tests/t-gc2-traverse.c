@@ -660,6 +660,30 @@ static int weak_entry_is_nil(lua_State *L, GCtab *weak, GCtab *key)
   return tvisnil(lj_tab_get(L, weak, &k));
 }
 
+static void test_weak_snapshot_ready_publication(lua_State *L, global_State *g)
+{
+  GCtab *t;
+  uint64_t idx;
+
+  lua_settop(L, 0);
+  lua_newtable(L);
+  t = tabV(L->top - 1);
+
+  lj_gc2_legacy_mark_begin(g);
+  assert(g->gc2.weak_stack != NULL);
+  assert(g->gc2.weak_ready != NULL);
+  assert(lj_gc2_weak_snapshot_count(g) == 0);
+  idx = la_add64_rlx(&g->gc2.weak_count, 1);
+  assert(idx == 0);
+  assert(lj_gc2_weak_snapshot_count(g) == 0);
+  setgcref(g->gc2.weak_stack[0], obj2gco(t));
+  la_store8_rel(&g->gc2.weak_ready[0], 1);
+  assert(lj_gc2_weak_snapshot_count(g) == 1u);
+  assert(lj_gc2_weak_snapshot_tab(g, 0) == t);
+  lj_gc2_legacy_cycle_end(g);
+  lua_pop(L, 1);
+}
+
 static void test_weak_tables(lua_State *L, global_State *g, TGState *tg)
 {
   GCtab *weakv, *keyv, *valv;
@@ -1117,6 +1141,7 @@ int main(void)
   test_jit_upvalue_barrier(L, g, tg);
 #endif
   test_weak_tables(L, g, tg);
+  test_weak_snapshot_ready_publication(L, g);
   test_weak_clear_defers_string_slots(L, g, tg);
   test_weak_key_write_barrier(L, g, tg);
   test_vm_weak_key_write_barrier(L, g, tg);

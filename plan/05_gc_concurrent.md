@@ -309,15 +309,17 @@ preserves the original `MARK -> WEAK -> SWEEP` phase shape for follow-up work,
 but legacy weak clearing remains authoritative; the weak-table worklist and
 full concurrent weak clearing above are not implemented yet. GC2 traversal now
 stores weak-table discoveries in a bounded GC2-owned side vector
-(`weak_stack`/`weak_count`) and counts them by mode (`weak_tables_seen`,
-`weak_tables_weakkey`, `weak_tables_weakval`, `weak_tables_allweak`,
-`weak_tables_queued`, `weak_tables_overflow`) without linking through
-`GCtab.gclist`, because the legacy bridge still owns that link for
-`g->gc.weak`. `lj_gc2_weak_snapshot_scan()` is a bounded, read-only oracle over
-that vector that mirrors the legacy weak clear predicate and publishes scan
-telemetry. `lj_gc2_weak_snapshot_clear()` applies the same predicate with
-release nil stores, advances through the snapshot with `weak_clear_cursor`, and
-now runs before legacy `gc_clearweak()`; the legacy pass remains the
+(`weak_stack`/`weak_count`) with per-slot ready publication, and counts them by
+mode (`weak_tables_seen`, `weak_tables_weakkey`, `weak_tables_weakval`,
+`weak_tables_allweak`, `weak_tables_queued`, `weak_tables_overflow`) without
+linking through `GCtab.gclist`, because the legacy bridge still owns that link
+for `g->gc.weak`. Snapshot readers expose only the contiguous ready prefix, so
+reserved-but-unpublished MPSC slots are not scanned. `lj_gc2_weak_snapshot_scan()`
+is a bounded, read-only oracle over that vector that mirrors the legacy weak
+clear predicate and publishes scan telemetry. `lj_gc2_weak_snapshot_clear()`
+applies the same predicate with release nil stores, advances through the
+snapshot with `weak_clear_cursor`, and now runs before legacy `gc_clearweak()`;
+the legacy pass remains the
 authoritative fallback for weak tables not yet discovered by GC2 and for
 string-bearing hash slots that legacy must mark before clearing. The FFI
 finalizer table is explicitly excluded from the weak snapshot because it is
