@@ -141,7 +141,7 @@ LJLIB_CF(jit_attach)
     while (lua_next(L, -2)) {
       L->top--;
       if (tvisfunc(L->top) && funcV(L->top) == fn) {
-	setnilV(lj_tab_set(L, tabV(L->top-2), L->top-1));
+	lj_tab_storenil(L, lj_tab_set(L, tabV(L->top-2), L->top-1));
       }
     }
   }
@@ -164,7 +164,7 @@ LJLIB_PUSH(top-2) LJLIB_SET(version)
 
 static void setintfield(lua_State *L, GCtab *t, const char *name, int32_t val)
 {
-  setintV(lj_tab_setstr(L, t, lj_str_newz(L, name)), val);
+  lj_tab_storeint(L, lj_tab_setstr(L, t, lj_str_newz(L, name)), val);
 }
 
 /* local info = jit.util.funcinfo(func [,pc]) */
@@ -194,7 +194,7 @@ LJLIB_CF(jit_util_funcinfo)
     lua_setfield(L, -2, "source");
     lj_debug_pushloc(L, pt, pc);
     lua_setfield(L, -2, "loc");
-    setprotoV(L, lj_tab_setstr(L, t, lj_str_newlit(L, "proto")), pt);
+    lj_tab_storeproto(L, lj_tab_setstr(L, t, lj_str_newlit(L, "proto")), pt);
   } else {
     GCfunc *fn = funcV(L->base);
     GCtab *t;
@@ -202,8 +202,8 @@ LJLIB_CF(jit_util_funcinfo)
     t = tabV(L->top-1);
     if (!iscfunc(fn))
       setintfield(L, t, "ffid", fn->c.ffid);
-    setintptrV(lj_tab_setstr(L, t, lj_str_newlit(L, "addr")),
-	       (intptr_t)(void *)fn->c.f);
+    lj_tab_storeintptr(L, lj_tab_setstr(L, t, lj_str_newlit(L, "addr")),
+		       (intptr_t)(void *)fn->c.f);
     setintfield(L, t, "upvalues", fn->c.nupvalues);
   }
   return 1;
@@ -353,11 +353,13 @@ LJLIB_CF(jit_util_tracesnap)
     GCtab *t;
     lua_createtable(L, nent+2, 0);
     t = tabV(L->top-1);
-    setintV(lj_tab_setint(L, t, 0), (int32_t)snap->ref - REF_BIAS);
-    setintV(lj_tab_setint(L, t, 1), (int32_t)snap->nslots);
+    lj_tab_storeint(L, lj_tab_setint(L, t, 0), (int32_t)snap->ref - REF_BIAS);
+    lj_tab_storeint(L, lj_tab_setint(L, t, 1), (int32_t)snap->nslots);
     for (n = 0; n < nent; n++)
-      setintV(lj_tab_setint(L, t, (int32_t)(n+2)), (int32_t)map[n]);
-    setintV(lj_tab_setint(L, t, (int32_t)(nent+2)), (int32_t)SNAP(255, 0, 0));
+      lj_tab_storeint(L, lj_tab_setint(L, t, (int32_t)(n+2)),
+		      (int32_t)map[n]);
+    lj_tab_storeint(L, lj_tab_setint(L, t, (int32_t)(nent+2)),
+		    (int32_t)SNAP(255, 0, 0));
     return 1;
   }
   return 0;
@@ -595,9 +597,9 @@ LJLIB_CF(jit_profile_stop)
   luaJIT_profile_stop(L);
   registry = tabV(registry(L));
   key.u64 = KEY_PROFILE_THREAD;
-  setnilV(lj_tab_set(L, registry, &key));
+  lj_tab_storenil(L, lj_tab_set(L, registry, &key));
   key.u64 = KEY_PROFILE_FUNC;
-  setnilV(lj_tab_set(L, registry, &key));
+  lj_tab_storenil(L, lj_tab_set(L, registry, &key));
   lj_gc_pubtab(L, registry);
   return 0;
 }

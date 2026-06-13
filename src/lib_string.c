@@ -680,11 +680,11 @@ LUALIB_API int luaopen_string(lua_State *L)
   /* NOBARRIER: basemt is a GC root. */
   g = G(L);
   setgcrefroot(basemt_it(g, LJ_TSTR), obj2gco(mt));
-  settabV(L, lj_tab_setstr(L, mt, mmname_str(g, MM_index)), tabV(L->top-1));
+  lj_tab_storetab(L, lj_tab_setstr(L, mt, mmname_str(g, MM_index)),
+		  tabV(L->top-1));
   mt->nomm = (uint8_t)(~(1u<<MM_index));
 #if LJ_HASBUFFER
   lj_lib_prereg(L, LUA_STRLIBNAME ".buffer", luaopen_string_buffer, tabV(L->top-1));
 #endif
   return 1;
 }
-

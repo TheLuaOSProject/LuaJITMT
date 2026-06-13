@@ -207,8 +207,11 @@ original 08/06 plan. `lj_vm_next`
 hash traversal, the `BC_ITERN` array/hash iterator path, and `ipairs_aux` array
 iteration load candidate values into registers before nil decisions and copy
 those same snapshots to their results; `BC_TSETV`/`BC_TSETS`/`BC_TSETB` load
-previous slot values into registers before nil/metamethod decisions. Core C
-table lookup,
+previous slot values into registers before nil/metamethod decisions. C-side
+runtime/library/parser/serializer table-slot writers converted so far publish
+values through `lj_tab_store*()` helpers or `copyTVrel()` instead of raw
+`lj_tab_set*()` destination stores; this records a scoped release-store bridge
+without changing the original write-protocol target above. Core C table lookup,
 resize, rehash counting, collision checks, and `next()` now make key/value
 decisions from acquired `TValue` snapshots instead of direct shared node-field
 reads; GC/GC2 table traversal, weak clearing, finalizer-table scans,

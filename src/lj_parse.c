@@ -259,7 +259,7 @@ void lj_parse_keepcdata(LexState *ls, TValue *tv, GCcdata *cd)
   /* NOBARRIER: the key is new or kept alive. */
   lua_State *L = ls->L;
   setcdataV(L, tv, cd);
-  setboolV(lj_tab_set(L, ls->fs->kt, tv), 1);
+  lj_tab_storebool(L, lj_tab_set(L, ls->fs->kt, tv), 1);
 }
 #endif
 

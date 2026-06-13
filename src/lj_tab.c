@@ -864,6 +864,76 @@ LJ_FUNCA TValue *lj_tab_storetv(lua_State *L, TValue *dst, cTValue *src)
   return dst;
 }
 
+TValue *lj_tab_storenil(lua_State *L, TValue *dst)
+{
+  TValue tv;
+  setnilV(&tv);
+  return lj_tab_storetv(L, dst, &tv);
+}
+
+TValue *lj_tab_storebool(lua_State *L, TValue *dst, int b)
+{
+  TValue tv;
+  setboolV(&tv, b);
+  return lj_tab_storetv(L, dst, &tv);
+}
+
+TValue *lj_tab_storeint(lua_State *L, TValue *dst, int32_t i)
+{
+  TValue tv;
+  setintV(&tv, i);
+  return lj_tab_storetv(L, dst, &tv);
+}
+
+TValue *lj_tab_storeintptr(lua_State *L, TValue *dst, intptr_t i)
+{
+  TValue tv;
+  setintptrV(&tv, i);
+  return lj_tab_storetv(L, dst, &tv);
+}
+
+TValue *lj_tab_storestr(lua_State *L, TValue *dst, GCstr *s)
+{
+  TValue tv;
+  setstrV(L, &tv, s);
+  return lj_tab_storetv(L, dst, &tv);
+}
+
+TValue *lj_tab_storetab(lua_State *L, TValue *dst, GCtab *tab)
+{
+  TValue tv;
+  settabV(L, &tv, tab);
+  return lj_tab_storetv(L, dst, &tv);
+}
+
+TValue *lj_tab_storethread(lua_State *L, TValue *dst, lua_State *th)
+{
+  TValue tv;
+  setthreadV(L, &tv, th);
+  return lj_tab_storetv(L, dst, &tv);
+}
+
+TValue *lj_tab_storeproto(lua_State *L, TValue *dst, GCproto *pt)
+{
+  TValue tv;
+  setprotoV(L, &tv, pt);
+  return lj_tab_storetv(L, dst, &tv);
+}
+
+TValue *lj_tab_storefunc(lua_State *L, TValue *dst, GCfunc *fn)
+{
+  TValue tv;
+  setfuncV(L, &tv, fn);
+  return lj_tab_storetv(L, dst, &tv);
+}
+
+TValue *lj_tab_storeudata(lua_State *L, TValue *dst, GCudata *ud)
+{
+  TValue tv;
+  setudataV(L, &tv, ud);
+  return lj_tab_storetv(L, dst, &tv);
+}
+
 /* -- Table traversal ----------------------------------------------------- */
 
 /* Table traversal indexes:

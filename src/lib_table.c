@@ -292,7 +292,8 @@ LJLIB_CF(table_pack)
   MSize i, n = (uint32_t)(L->top - base);
   GCtab *t = lj_tab_new(L, n ? n+1 : 0, 1);
   /* NOBARRIER: The table is new (marked white). */
-  setintV(lj_tab_setstr(L, t, strV(lj_lib_upvalue(L, 1))), (int32_t)n);
+  lj_tab_storeint(L, lj_tab_setstr(L, t, strV(lj_lib_upvalue(L, 1))),
+		  (int32_t)n);
   for (array = lj_tab_array_acq(t) + 1, i = 0; i < n; i++)
     copyTV(L, &array[i], &base[i]);
   settabV(L, base, t);

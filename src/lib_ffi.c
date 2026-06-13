@@ -569,15 +569,18 @@ LJLIB_CF(ffi_typeinfo)
     GCtab *t;
     lua_createtable(L, 0, 4);  /* Increment hash size if fields are added. */
     t = tabV(L->top-1);
-    setintV(lj_tab_setstr(L, t, lj_str_newlit(L, "info")), (int32_t)ct->info);
+    lj_tab_storeint(L, lj_tab_setstr(L, t, lj_str_newlit(L, "info")),
+		    (int32_t)ct->info);
     if (ct->size != CTSIZE_INVALID)
-      setintV(lj_tab_setstr(L, t, lj_str_newlit(L, "size")), (int32_t)ct->size);
+      lj_tab_storeint(L, lj_tab_setstr(L, t, lj_str_newlit(L, "size")),
+		      (int32_t)ct->size);
     if (ct->sib)
-      setintV(lj_tab_setstr(L, t, lj_str_newlit(L, "sib")), (int32_t)ct->sib);
+      lj_tab_storeint(L, lj_tab_setstr(L, t, lj_str_newlit(L, "sib")),
+		      (int32_t)ct->sib);
     if (gcref(ct->name)) {
       GCstr *s = gco2str(gcref(ct->name));
       if (isdead(G(L), obj2gco(s))) flipwhite(obj2gco(s));
-      setstrV(L, lj_tab_setstr(L, t, lj_str_newlit(L, "name")), s);
+      lj_tab_storestr(L, lj_tab_setstr(L, t, lj_str_newlit(L, "name")), s);
     }
     lj_gc_check(L);
     return 1;
@@ -853,7 +856,8 @@ LUALIB_API int luaopen_ffi(lua_State *L)
   LJ_LIB_REG(L, NULL, ffi_clib);
   LJ_LIB_REG(L, NULL, ffi_callback);
   /* NOBARRIER: the key is new and lj_tab_newkey() handles the barrier. */
-  settabV(L, lj_tab_setstr(L, cts->miscmap, &cts->g->strempty), tabV(L->top-1));
+  lj_tab_storetab(L, lj_tab_setstr(L, cts->miscmap, &cts->g->strempty),
+		  tabV(L->top-1));
   L->top--;
   lj_clib_default(L, tabV(L->top-1));  /* Create ffi.C default namespace. */
   lua_pushliteral(L, LJ_OS_NAME);

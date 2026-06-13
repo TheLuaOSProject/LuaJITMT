@@ -94,6 +94,16 @@ LJ_FUNCA TValue *lj_tab_setinth(lua_State *L, GCtab *t, int32_t key);
 LJ_FUNC TValue *lj_tab_setstr(lua_State *L, GCtab *t, const GCstr *key);
 LJ_FUNC TValue *lj_tab_set(lua_State *L, GCtab *t, cTValue *key);
 LJ_FUNCA TValue *lj_tab_storetv(lua_State *L, TValue *dst, cTValue *src);
+LJ_FUNC TValue *lj_tab_storenil(lua_State *L, TValue *dst);
+LJ_FUNC TValue *lj_tab_storebool(lua_State *L, TValue *dst, int b);
+LJ_FUNC TValue *lj_tab_storeint(lua_State *L, TValue *dst, int32_t i);
+LJ_FUNC TValue *lj_tab_storeintptr(lua_State *L, TValue *dst, intptr_t i);
+LJ_FUNC TValue *lj_tab_storestr(lua_State *L, TValue *dst, GCstr *s);
+LJ_FUNC TValue *lj_tab_storetab(lua_State *L, TValue *dst, GCtab *t);
+LJ_FUNC TValue *lj_tab_storethread(lua_State *L, TValue *dst, lua_State *th);
+LJ_FUNC TValue *lj_tab_storeproto(lua_State *L, TValue *dst, GCproto *pt);
+LJ_FUNC TValue *lj_tab_storefunc(lua_State *L, TValue *dst, GCfunc *fn);
+LJ_FUNC TValue *lj_tab_storeudata(lua_State *L, TValue *dst, GCudata *ud);
 
 #define inarray(t, key)		((MSize)(key) < lj_tab_asize_acq((t)))
 #define arrayslot(t, i)		(&lj_tab_array_acq((t))[(i)])

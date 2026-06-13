@@ -1245,7 +1245,7 @@ int lj_ccall_func(lua_State *L, GCcdata *cd)
     if (cts->cb.slot != ~0u) {  /* Blacklist function that called a callback. */
       TValue tv;
       tv.u64 = ((uintptr_t)(void *)cc.func >> 2) | U64x(800000000, 00000000);
-      setboolV(lj_tab_set(L, cts->miscmap, &tv), 1);
+      lj_tab_storebool(L, lj_tab_set(L, cts->miscmap, &tv), 1);
     }
     ct = ctype_get(cts, id);  /* Table may have been reallocated. */
     gcsteps += ccall_get_results(L, cts, ct, &cc, &ret);

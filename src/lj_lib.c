@@ -68,7 +68,7 @@ static const uint8_t *lib_read_lfunc(lua_State *L, const uint8_t *p, GCtab *tab)
   pt->firstline = ~(BCLine)0;
   fn = lj_func_newL_empty(L, pt, tabref(L->env));
   /* NOBARRIER: See below for common barrier. */
-  setfuncV(L, lj_tab_setstr(L, tab, name), fn);
+  lj_tab_storefunc(L, lj_tab_setstr(L, tab, name), fn);
   return (const uint8_t *)ls.p;
 }
 
@@ -111,7 +111,8 @@ void lj_lib_register(lua_State *L, const char *libname,
 	fn->c.f = *cf++;  /* Get cf or handler from C function table. */
       if (len) {
 	/* NOBARRIER: See above for common barrier. */
-	setfuncV(L, lj_tab_setstr(L, tab, lj_str_new(L, name, len)), fn);
+	lj_tab_storefunc(L, lj_tab_setstr(L, tab, lj_str_new(L, name, len)),
+			 fn);
       }
       ofn = fn;
     } else {
@@ -124,7 +125,7 @@ void lj_lib_register(lua_State *L, const char *libname,
 	if (tvisstr(L->top+1) && strV(L->top+1)->len == 0)
 	  env = tabV(L->top);
 	else  /* NOBARRIER: See above for common barrier. */
-	  copyTV(L, lj_tab_set(L, tab, L->top+1), L->top);
+	  copyTVrel(L, lj_tab_set(L, tab, L->top+1), L->top);
 	break;
       case LIBINIT_NUMBER:
 	memcpy(&L->top->n, p, sizeof(double));

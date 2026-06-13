@@ -62,7 +62,7 @@ static GCtab *threading_live_table(lua_State *L, GCtab *env)
   cTValue *tv = lj_tab_getstr(env, key);
   if (live) {
     if (!tv || !tvistab(tv) || tabV(tv) != live) {
-      settabV(L, lj_tab_setstr(L, env, key), live);
+      lj_tab_storetab(L, lj_tab_setstr(L, env, key), live);
       lj_gc_pubtab(L, env);
     }
     return live;
@@ -73,7 +73,7 @@ static GCtab *threading_live_table(lua_State *L, GCtab *env)
   }
   {
     GCtab *t = lj_tab_new(L, 0, 0);
-    settabV(L, lj_tab_setstr(L, env, key), t);
+    lj_tab_storetab(L, lj_tab_setstr(L, env, key), t);
     setgcrefroot(G(L)->gcroot[GCROOT_THREADING], obj2gco(t));
     lj_gc_pubtab(L, env);
     return t;
@@ -139,9 +139,9 @@ static void threading_live_set(lua_State *L, GCtab *env, GCudata *ud,
   TValue key;
   setudataV(L, &key, ud);
   if (L1)
-    setthreadV(L, lj_tab_set(L, live, &key), L1);
+    lj_tab_storethread(L, lj_tab_set(L, live, &key), L1);
   else
-    setnilV(lj_tab_set(L, live, &key));
+    lj_tab_storenil(L, lj_tab_set(L, live, &key));
   lj_gc_pubtab(L, live);
 }
 
@@ -152,7 +152,7 @@ static void threading_live_remove(lua_State *L, GCudata *ud)
   if (!live || !ud)
     return;
   setudataV(L, &key, ud);
-  setnilV(lj_tab_set(L, live, &key));
+  lj_tab_storenil(L, lj_tab_set(L, live, &key));
 }
 
 static LJThread *threading_live_next(global_State *g, GCudata **pud)
@@ -705,7 +705,7 @@ LJLIB_CF(threading_current)
       threading_state_set_ud(L, L, ud);
       if (tg)
 	tg->thread_ud = ud;
-      setudataV(L, lj_tab_setstr(L, env, key), ud);
+      lj_tab_storeudata(L, lj_tab_setstr(L, env, key), ud);
       lj_gc_pubtab(L, env);
       return 1;
     }

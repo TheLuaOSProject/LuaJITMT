@@ -564,7 +564,7 @@ int lj_debug_getinfo(lua_State *L, const char *what, lj_Debug *ar, int ext)
 	    (sz == 1 ? (BCLine)((const uint8_t *)lineinfo)[i] :
 	     sz == 2 ? (BCLine)((const uint16_t *)lineinfo)[i] :
 	     (BCLine)((const uint32_t *)lineinfo)[i]);
-	  setboolV(lj_tab_setint(L, t, line), 1);
+	  lj_tab_storebool(L, lj_tab_setint(L, t, line), 1);
 	}
       }
       settabV(L, L->top, t);

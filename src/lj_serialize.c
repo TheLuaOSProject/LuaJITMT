@@ -139,7 +139,7 @@ void LJ_FASTCALL lj_serialize_dict_prep_str(lua_State *L, GCtab *dict)
       lj_tv_load_acq(&tv, &array[i]);
       if (tvisstr(&tv)) {
 	if (!lj_tab_getstr(dict, strV(&tv))) {  /* Ignore dups. */
-	  lj_tab_newkey(L, dict, &tv)->u64 = (uint64_t)(i-1);
+	  lj_tab_storeint(L, lj_tab_newkey(L, dict, &tv), (int32_t)(i-1));
 	}
       } else if (!tvisfalse(&tv)) {
 	lj_err_caller(L, LJ_ERR_BUFFER_BADOPT);
@@ -164,7 +164,7 @@ void LJ_FASTCALL lj_serialize_dict_prep_mt(lua_State *L, GCtab *dict)
       lj_tv_load_acq(&tv, &array[i]);
       if (tvistab(&tv)) {
 	if (lj_tv_isnil_acq(lj_tab_get(L, dict, &tv))) {  /* Ignore dups. */
-	  lj_tab_newkey(L, dict, &tv)->u64 = (uint64_t)(i-1);
+	  lj_tab_storeint(L, lj_tab_newkey(L, dict, &tv), (int32_t)(i-1));
 	}
       } else if (!tvisfalse(&tv)) {
 	lj_err_caller(L, LJ_ERR_BUFFER_BADOPT);
