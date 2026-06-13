@@ -638,6 +638,13 @@ static int weak_snapshot_has(global_State *g, GCtab *t)
   return 0;
 }
 
+static int weak_entry_is_nil(lua_State *L, GCtab *weak, GCtab *key)
+{
+  TValue k;
+  settabV(L, &k, key);
+  return tvisnil(lj_tab_get(L, weak, &k));
+}
+
 static void test_weak_tables(lua_State *L, global_State *g, TGState *tg)
 {
   GCtab *weakv, *keyv, *valv;
@@ -645,6 +652,7 @@ static void test_weak_tables(lua_State *L, global_State *g, TGState *tg)
   GCtab *weakkv, *keykv, *valkv;
   uint64_t seen0, weakkey0, weakval0, allweak0, queued0, overflow0;
   uint64_t scan_runs0, scan_tables0, scan_slots0, scan_clearable0;
+  uint64_t clear_runs0, clear_tables0, clear_slots0, clear_cleared0;
 
   make_weak_table(L, "v", &weakv, &keyv, &valv);
   make_weak_table(L, "k", &weakk, &keyk, &valk);
@@ -659,6 +667,10 @@ static void test_weak_tables(lua_State *L, global_State *g, TGState *tg)
   scan_tables0 = la_load64_acq(&g->gc2.weak_scan_tables);
   scan_slots0 = la_load64_acq(&g->gc2.weak_scan_slots);
   scan_clearable0 = la_load64_acq(&g->gc2.weak_scan_clearable);
+  clear_runs0 = la_load64_acq(&g->gc2.weak_clear_runs);
+  clear_tables0 = la_load64_acq(&g->gc2.weak_clear_tables);
+  clear_slots0 = la_load64_acq(&g->gc2.weak_clear_slots);
+  clear_cleared0 = la_load64_acq(&g->gc2.weak_clear_cleared);
 
   lj_gc2_legacy_mark_begin(g);
   assert(lj_gc2_weak_snapshot_count(g) == 0);
@@ -689,8 +701,51 @@ static void test_weak_tables(lua_State *L, global_State *g, TGState *tg)
   assert(la_load64_acq(&g->gc2.weak_scan_slots) == scan_slots0 + 3u);
   assert(la_load64_acq(&g->gc2.weak_scan_clearable) ==
 	 scan_clearable0 + 3u);
+  assert(lj_gc2_weak_snapshot_clear(g, 3) == 3u);
+  assert(la_load64_acq(&g->gc2.weak_clear_runs) == clear_runs0 + 1u);
+  assert(la_load64_acq(&g->gc2.weak_clear_tables) == clear_tables0 + 3u);
+  assert(la_load64_acq(&g->gc2.weak_clear_slots) == clear_slots0 + 3u);
+  assert(la_load64_acq(&g->gc2.weak_clear_cleared) == clear_cleared0 + 3u);
+  assert(weak_entry_is_nil(L, weakv, keyv));
+  assert(weak_entry_is_nil(L, weakk, keyk));
+  assert(weak_entry_is_nil(L, weakkv, keykv));
   lj_gc2_legacy_cycle_end(g);
   lua_pop(L, 9);
+}
+
+static void test_weak_clear_defers_string_slots(lua_State *L, global_State *g,
+						TGState *tg)
+{
+  GCtab *weak, *val;
+  uint64_t clear_cleared0;
+
+  lua_settop(L, 0);
+  lua_newtable(L);
+  weak = tabV(L->top - 1);
+  lua_newtable(L);
+  lua_pushliteral(L, "__mode");
+  lua_pushliteral(L, "v");
+  lua_settable(L, -3);
+  lua_setmetatable(L, -2);
+  lua_newtable(L);
+  val = tabV(L->top - 1);
+  lua_pushvalue(L, 2);
+  lua_setfield(L, 1, "s");
+  clear_cleared0 = la_load64_acq(&g->gc2.weak_clear_cleared);
+
+  lj_gc2_legacy_mark_begin(g);
+  assert(lj_gc2_markobj(g, obj2gco(weak)) == 1);
+  flush_and_drain(g, tg);
+  assert(lj_gc2_weak_snapshot_count(g) == 1u);
+  assert(lj_gc2_ismarked(g, obj2gco(val)) == 0);
+  assert(lj_gc2_weak_snapshot_clear(g, 1) == 1u);
+  assert(la_load64_acq(&g->gc2.weak_clear_cleared) == clear_cleared0);
+  lua_getfield(L, 1, "s");
+  assert(tvistab(L->top - 1));
+  assert(tabV(L->top - 1) == val);
+  lua_pop(L, 1);
+  lj_gc2_legacy_cycle_end(g);
+  lua_pop(L, 2);
 }
 
 static void test_weak_key_write_barrier(lua_State *L, global_State *g,
@@ -991,6 +1046,7 @@ int main(void)
   test_jit_upvalue_barrier(L, g, tg);
 #endif
   test_weak_tables(L, g, tg);
+  test_weak_clear_defers_string_slots(L, g, tg);
   test_weak_key_write_barrier(L, g, tg);
   test_vm_weak_key_write_barrier(L, g, tg);
   test_vm_weak_value_array_barrier(L, g, tg);

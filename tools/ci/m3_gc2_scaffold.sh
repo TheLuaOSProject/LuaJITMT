@@ -26,13 +26,21 @@ for needle in \
   'uint64_t weak_scan_tables' \
   'uint64_t weak_scan_slots' \
   'uint64_t weak_scan_clearable' \
+  'uint64_t weak_clear_runs' \
+  'uint64_t weak_clear_tables' \
+  'uint64_t weak_clear_slots' \
+  'uint64_t weak_clear_cleared' \
   'uint64_t weak_keys_marked' \
   'uint64_t weak_values_marked' \
   'gc2_weak_record(global_State *g, GCtab *t)' \
   'lj_gc2_weak_snapshot_count(global_State *g)' \
   'lj_gc2_weak_snapshot_tab(global_State *g' \
   'lj_gc2_weak_snapshot_scan(global_State *g, uint32_t limit)' \
+  'lj_gc2_weak_snapshot_clear(global_State *g, uint32_t limit)' \
   'gc2_weak_mayclear(global_State *g, cTValue *o, int val)' \
+  'gc2_tab_is_ffi_fin(global_State *g, GCtab *t)' \
+  'FFI finalizer registry is owned by FINREG' \
+  '!tvisstr(&key) && !tvisstr(&val)' \
   'gc2_note_weak_table(global_State *g, GCtab *t, int weak)' \
   'lj_gc2_barrier_tvn_g(global_State *g, cTValue *tv' \
   'lj_gc2_legacy_weak_begin(global_State *g)' \
@@ -43,6 +51,7 @@ for needle in \
   'lj_gc2_fixpoint_run(global_State *g, lua_State *L' \
   'la_xchg64_acqrel(&g->gc2.marks_this_round, 0)' \
   'LJ_GC2_HS_SCAN_ROOTS|LJ_GC2_HS_FLUSH_SSB' \
+  'lj_gc2_weak_snapshot_clear(g, ~(uint32_t)0)' \
   'lj_gc2_worker_drain(g' \
   'lj_gc2_ssb_empty(g)' \
   'lj_gc2_fixpoint_run(g, L, 64, ~(uint32_t)0)'

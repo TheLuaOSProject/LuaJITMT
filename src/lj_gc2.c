@@ -87,6 +87,10 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.weak_scan_tables, 0);
   la_store64_rlx(&g->gc2.weak_scan_slots, 0);
   la_store64_rlx(&g->gc2.weak_scan_clearable, 0);
+  la_store64_rlx(&g->gc2.weak_clear_runs, 0);
+  la_store64_rlx(&g->gc2.weak_clear_tables, 0);
+  la_store64_rlx(&g->gc2.weak_clear_slots, 0);
+  la_store64_rlx(&g->gc2.weak_clear_cleared, 0);
   la_store64_rlx(&g->gc2.weak_keys_marked, 0);
   la_store64_rlx(&g->gc2.weak_values_marked, 0);
   g->gc2.tg_list = NULL;
@@ -612,8 +616,18 @@ static int gc2_weak_mayclear(global_State *g, cTValue *o, int val)
   return 0;
 }
 
-static void gc2_weak_scan_tab(global_State *g, GCtab *t,
-			      uint64_t *slots, uint64_t *clearable)
+static int gc2_tab_is_ffi_fin(global_State *g, GCtab *t)
+{
+#if LJ_HASFFI
+  return gcref_acq(g->gcroot[GCROOT_FFI_FIN]) == obj2gco(t);
+#else
+  UNUSED(g); UNUSED(t);
+  return 0;
+#endif
+}
+
+static void gc2_weak_process_tab(global_State *g, GCtab *t, int clear,
+				 uint64_t *slots, uint64_t *clearable)
 {
   GCtab *mt = tabref_acq(t->metatable);
   int weak = gc2_tab_weak_mode(g, t, mt);
@@ -627,8 +641,11 @@ static void gc2_weak_scan_tab(global_State *g, GCtab *t,
       lj_tv_load_acq(&val, &array[i]);
       if (!tvisnil(&val)) {
 	(*slots)++;
-	if (gc2_weak_mayclear(g, &val, 1))
+	if (gc2_weak_mayclear(g, &val, 1)) {
 	  (*clearable)++;
+	  if (clear)
+	    lj_tab_storenilraw(&array[i]);
+	}
       }
     }
   }
@@ -644,8 +661,14 @@ static void gc2_weak_scan_tab(global_State *g, GCtab *t,
 	  lj_tv_load_acq(&key, &n->key);
 	  (*slots)++;
 	  if (gc2_weak_mayclear(g, &key, 0) ||
-	      gc2_weak_mayclear(g, &val, 1))
-	    (*clearable)++;
+	      gc2_weak_mayclear(g, &val, 1)) {
+	    if (!clear) {
+	      (*clearable)++;
+	    } else if (!tvisstr(&key) && !tvisstr(&val)) {
+	      (*clearable)++;
+	      lj_tab_storenilraw(&n->val);
+	    }
+	  }
 	}
       }
     }
@@ -663,7 +686,7 @@ uint32_t lj_gc2_weak_snapshot_scan(global_State *g, uint32_t limit)
     GCtab *t = lj_gc2_weak_snapshot_tab(g, i);
     if (!t)
       continue;
-    gc2_weak_scan_tab(g, t, &slots, &clearable);
+    gc2_weak_process_tab(g, t, 0, &slots, &clearable);
     scanned++;
   }
   if (scanned) {
@@ -671,6 +694,29 @@ uint32_t lj_gc2_weak_snapshot_scan(global_State *g, uint32_t limit)
     la_add64_rlx(&g->gc2.weak_scan_tables, scanned);
     la_add64_rlx(&g->gc2.weak_scan_slots, slots);
     la_add64_rlx(&g->gc2.weak_scan_clearable, clearable);
+  }
+  return scanned;
+}
+
+uint32_t lj_gc2_weak_snapshot_clear(global_State *g, uint32_t limit)
+{
+  uint32_t i, n, scanned = 0;
+  uint64_t slots = 0, cleared = 0;
+  if (!g || limit == 0)
+    return 0;
+  n = lj_gc2_weak_snapshot_count(g);
+  for (i = 0; i < n && scanned < limit; i++) {
+    GCtab *t = lj_gc2_weak_snapshot_tab(g, i);
+    if (!t)
+      continue;
+    gc2_weak_process_tab(g, t, 1, &slots, &cleared);
+    scanned++;
+  }
+  if (scanned) {
+    la_add64_rlx(&g->gc2.weak_clear_runs, 1);
+    la_add64_rlx(&g->gc2.weak_clear_tables, scanned);
+    la_add64_rlx(&g->gc2.weak_clear_slots, slots);
+    la_add64_rlx(&g->gc2.weak_clear_cleared, cleared);
   }
   return scanned;
 }
@@ -993,7 +1039,7 @@ static int gc2_tab_weak_mode(global_State *g, GCtab *t, GCtab *mt)
       else if (c == 'v') weak |= LJ_GC_WEAKVAL;
     }
   #if LJ_HASFFI
-    if (weak && gcref_acq(g->gcroot[GCROOT_FFI_FIN]) == obj2gco(t))
+    if (weak && gc2_tab_is_ffi_fin(g, t))
       weak = (int)(~0u & ~LJ_GC_WEAKVAL);
   #endif
   }
@@ -1218,6 +1264,8 @@ static void gc2_note_weak_table(global_State *g, GCtab *t, int weak)
 {
   if (!weak)
     return;
+  if (gc2_tab_is_ffi_fin(g, t))
+    return;  /* FFI finalizer registry is owned by FINREG, not weak clear. */
   la_add64_rlx(&g->gc2.weak_tables_seen, 1);
   if (weak & LJ_GC_WEAKKEY)
     la_add64_rlx(&g->gc2.weak_tables_weakkey, 1);

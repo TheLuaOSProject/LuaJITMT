@@ -1141,6 +1141,7 @@ static void atomic(global_State *g, lua_State *L)
 
   /* All marking done, clear weak tables. */
   lj_gc2_legacy_weak_begin(g);
+  (void)lj_gc2_weak_snapshot_clear(g, ~(uint32_t)0);
   gc_clearweak(g, gcref(g->gc.weak));
   lj_gc2_legacy_sweep_begin(g);
 

@@ -60,6 +60,7 @@ LJ_FUNC int lj_gc2_ssb_empty(global_State *g);
 LJ_FUNC uint32_t lj_gc2_weak_snapshot_count(global_State *g);
 LJ_FUNC GCtab *lj_gc2_weak_snapshot_tab(global_State *g, uint32_t idx);
 LJ_FUNC uint32_t lj_gc2_weak_snapshot_scan(global_State *g, uint32_t limit);
+LJ_FUNC uint32_t lj_gc2_weak_snapshot_clear(global_State *g, uint32_t limit);
 LJ_FUNC void lj_gc2_barrier_tv(lua_State *L, cTValue *tv);
 LJ_FUNCA void lj_gc2_barrier_tv_g(global_State *g, cTValue *tv);
 LJ_FUNCA void lj_gc2_barrier_tvn_g(global_State *g, cTValue *tv, uint32_t n);
