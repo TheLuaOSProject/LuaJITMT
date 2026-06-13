@@ -301,6 +301,32 @@ static void asm_fuseahuref(ASMState *as, IRRef ref, RegSet allow)
   as->mrm.idx = RID_NONE;
 }
 
+#if LJ_GC64
+static const void *asm_ggfrefaddr(ASMState *as, const IRIns *ir)
+{
+  return (const char *)J2GG(as->J) + ((uintptr_t)ir->op2 << 2);
+}
+
+static int asm_fuseggfref(ASMState *as, const IRIns *ir)
+{
+  const void *p = asm_ggfrefaddr(as, ir);
+  if (checki32((intptr_t)p)) {
+    as->mrm.ofs = ptr2addr(p);
+    as->mrm.base = RID_NONE;
+    as->mrm.idx = RID_NONE;
+    return 1;
+  } else if (checki32(mcpofs(as, p)) && checki32(mctopofs(as, p))) {
+    as->mrm.ofs = (int32_t)mcpofs(as, p);
+    as->mrm.base = RID_RIP;
+    as->mrm.idx = RID_NONE;
+    return 1;
+  }
+  return 0;
+}
+#else
+#define asm_fuseggfref(as, ir)	0
+#endif
+
 /* Fuse FLOAD/FREF reference into memory operand. */
 static void asm_fusefref(ASMState *as, IRIns *ir, RegSet allow)
 {
@@ -309,8 +335,10 @@ static void asm_fusefref(ASMState *as, IRIns *ir, RegSet allow)
   as->mrm.idx = RID_NONE;
   if (ir->op1 == REF_NIL) {  /* FLOAD from GG_State with offset. */
 #if LJ_GC64
-    as->mrm.ofs = (int32_t)(ir->op2 << 2) - GG_OFS_TGDISP;
-    as->mrm.base = RID_DISPATCH;
+    if (!asm_fuseggfref(as, ir)) {
+      setintV(&as->J->errinfo, ir->o);
+      lj_trace_err_info(as->J, LJ_TRERR_NYIIR);
+    }
 #else
     as->mrm.ofs = (int32_t)(ir->op2 << 2) + ptr2addr(J2GG(as->J));
     as->mrm.base = RID_NONE;
@@ -535,7 +563,8 @@ static Reg asm_fuseload(ASMState *as, IRRef ref, RegSet allow)
     } else if (ir->o == IR_FLOAD) {
       /* Generic fusion is only ok for 32 bit operand (but see asm_comp). */
       if ((irt_isint(ir->t) || irt_isu32(ir->t) || irt_isaddr(ir->t)) &&
-	  noconflict(as, ref, IR_FSTORE, 2)) {
+	  noconflict(as, ref, IR_FSTORE, 2) &&
+	  !(LJ_GC64 && ir->op1 == REF_NIL && !asm_fuseggfref(as, ir))) {
 	asm_fusefref(as, ir, xallow);
 	return RID_MRM;
       }
@@ -562,8 +591,14 @@ static Reg asm_fuseload(ASMState *as, IRRef ref, RegSet allow)
     }
   }
   if (ir->o == IR_FLOAD && ir->op1 == REF_NIL) {
-    asm_fusefref(as, ir, RSET_EMPTY);
-    return RID_MRM;
+    if (!LJ_GC64 || asm_fuseggfref(as, ir)) {
+      asm_fusefref(as, ir, RSET_EMPTY);
+      return RID_MRM;
+    }
+    if (allow == RSET_EMPTY) {
+      setintV(&as->J->errinfo, ir->o);
+      lj_trace_err_info(as->J, LJ_TRERR_NYIIR);
+    }
   }
   if (!(as->freeset & allow) && !emit_canremat(ref) &&
       (allow == RSET_EMPTY || ra_hasspill(ir->s) || iscrossref(as, ref)))
@@ -1520,10 +1555,6 @@ static void asm_fxload(ASMState *as, IRIns *ir)
 {
   Reg dest = ra_dest(as, ir, irt_isfp(ir->t) ? RSET_FPR : RSET_GPR);
   x86Op xo;
-  if (ir->o == IR_FLOAD)
-    asm_fusefref(as, ir, RSET_GPR);
-  else
-    asm_fusexref(as, ir->op1, RSET_GPR);
   /* ir->op2 is ignored -- unaligned loads are ok on x86. */
   switch (irt_type(ir->t)) {
   case IRT_I8: xo = XO_MOVSXb; break;
@@ -1541,6 +1572,16 @@ static void asm_fxload(ASMState *as, IRIns *ir)
     xo = XO_MOV;
     break;
   }
+#if LJ_GC64
+  if (ir->o == IR_FLOAD && ir->op1 == REF_NIL) {
+    emit_rma(as, xo, dest, asm_ggfrefaddr(as, ir));
+    return;
+  }
+#endif
+  if (ir->o == IR_FLOAD)
+    asm_fusefref(as, ir, RSET_GPR);
+  else
+    asm_fusexref(as, ir->op1, RSET_GPR);
   emit_mrm(as, xo, dest, RID_MRM);
 }
 
@@ -3185,6 +3226,47 @@ static uint32_t asm_x86_inslen(const uint8_t* p)
   }
 }
 
+#if LJ_GC64
+static int asm_x86_prevloadaddr(MCode *p, uint32_t ilen, Reg r, uintptr_t addr)
+{
+  if (p == NULL)
+    return 0;
+  if (ilen == 5 && checku32(addr) && p[0] == XI_MOVri+(r&7) &&
+      *(uint32_t *)(p+1) == (uint32_t)addr)
+    return 1;
+  if (ilen == 7 && p[0] == (MCode)(0x48 + ((r>>3)&1)) &&
+      p[1] == XI_MOVmi && p[2] == MODRM(XM_REG, 0, (r&7)) &&
+      (uintptr_t)(int64_t)*(int32_t *)(p+3) == addr)
+    return 1;
+  if (ilen == 10 && p[0] == (MCode)(0x48 + ((r>>3)&1)) &&
+      p[1] == XI_MOVri+(r&7) && *(uint64_t *)(p+2) == (uint64_t)addr)
+    return 1;
+  if (ilen == 7 && p[0] == (MCode)(0x48 + ((r>>1)&4)) &&
+      p[1] == XI_LEA && p[2] == MODRM(XM_OFS0, (r&7), RID_RIP) &&
+      (uintptr_t)(p + ilen + *(int32_t *)(p+3)) == addr)
+    return 1;
+  return 0;
+}
+
+static int asm_x86_isvmstate(MCode *p, MCode *prev, uint32_t ilen,
+			     uint32_t prevlen, const void *statep,
+			     int32_t traceno)
+{
+  uintptr_t stateaddr = (uintptr_t)statep;
+  if (p[0] != XI_MOVmi || *(int32_t *)(p+ilen-4) != traceno)
+    return 0;
+  if (p[1] == MODRM(XM_OFS0, 0, RID_RIP)) {
+    return (uintptr_t)(p + ilen + *(int32_t *)(p+2)) == stateaddr;
+  } else if (p[1] == MODRM(XM_OFS0, 0, RID_ESP) &&
+	     p[2] == MODRM(XM_SCALE1, RID_ESP, RID_EBP)) {
+    return (uintptr_t)(int64_t)*(int32_t *)(p+3) == stateaddr;
+  } else if (p[1] == MODRM(XM_OFS0, 0, RID_ECX)) {
+    return asm_x86_prevloadaddr(prev, prevlen, RID_ECX, stateaddr);
+  }
+  return 0;
+}
+#endif
+
 /* Patch exit jumps of existing machine code to a new target. */
 void lj_asm_patchexit(jit_State *J, GCtrace *T, ExitNo exitno, MCode *target)
 {
@@ -3195,18 +3277,34 @@ void lj_asm_patchexit(jit_State *J, GCtrace *T, ExitNo exitno, MCode *target)
   MCode *pe = p+len-6;
   MCode *pgc = NULL;
 #if LJ_GC64
-  uint32_t statei = (uint32_t)(GG_OFS(g.vmstate) - GG_OFS_TGDISP);
+  const void *statep = (const void *)&J2G(J)->vmstate;
 #else
   uint32_t statei = u32ptr(&J2G(J)->vmstate);
 #endif
   if (len > 5 && p[len-5] == XI_JMP && p+len-6 + *(int32_t *)(p+len-4) == px)
     *(int32_t *)(p+len-4) = jmprel(J, p+len, target);
   /* Do not patch parent exit for a stack check. Skip beyond vmstate update. */
+#if LJ_GC64
+  {
+    MCode *prev = NULL;
+    uint32_t prevlen = 0;
+    for (; p < pe; ) {
+      uint32_t ilen = asm_x86_inslen(p);
+      if (asm_x86_isvmstate(p, prev, ilen, prevlen, statep,
+			    (int32_t)T->traceno))
+	break;
+      prev = p;
+      prevlen = ilen;
+      p += ilen;
+    }
+  }
+#else
   for (; p < pe; p += asm_x86_inslen(p)) {
     intptr_t ofs = LJ_GC64 ? (p[0] & 0xf0) == 0x40 : LJ_64;
     if (*(uint32_t *)(p+2+ofs) == statei && p[ofs+LJ_GC64-LJ_64] == XI_MOVmi)
       break;
   }
+#endif
   lj_assertJ(p < pe, "instruction length decoder failed");
   for (; p < pe; p += asm_x86_inslen(p)) {
     if ((*(uint16_t *)p & 0xf0ff) == 0x800f && p + *(int32_t *)(p+2) == px &&

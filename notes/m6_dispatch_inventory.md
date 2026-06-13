@@ -15,18 +15,18 @@ M6 x64 dispatch localization inventory:
 - Recording dispatch is TG-local. The global dispatch template no longer has a
   recording mode; `lj_dispatch_update()` overlays record/call hooks only onto
   the current TG when that TG holds the recorder token.
-- Emitter prerequisite in progress: fixed TG fields now use symbolic
+- Emitter prerequisite complete: fixed TG fields now use symbolic
   `DISPATCH_TG(...)` offsets (`jit_base`, `cur_L`, `tmptv`, `gl`) instead of
   recorder-TG pointer subtraction. Generic `dispofs()` addressing has been
   removed; arbitrary constants and object pointers now use absolute/RIP forms
   or a saved scratch fallback instead of `RID_DISPATCH`.
-- Remaining emitter blocker: the `REF_NIL` GG-state fused load path still uses
-  a `GG_OFS_TGDISP` dispatch-relative operand. Before trace execution is safe
-  on secondary TGs, that path must move to a non-dispatch global address form.
-- Transitional x64/POSIX safety guard now keeps secondary TGs from acquiring
-  the recorder token as well as from entering `BC_JLOOP` mcode. This preserves
-  interpreter progress while preventing secondary TGs from producing traces
-  with recorder-relative dispatch references.
+- `REF_NIL` GG-state FLOADs now use absolute/RIP/global-address forms, and the
+  x64 exit patcher recognizes the resulting vmstate store patterns instead of
+  scanning for `GG_OFS_TGDISP`.
+- Transitional x64/POSIX safety guard still keeps secondary TGs from acquiring
+  the recorder token as well as from entering `BC_JLOOP` mcode. This is now a
+  validation guard only; the original target is to remove it after the
+  non-dispatch emitter migration is exercised.
 - Completed prerequisite in this slice: `lj_dispatch_update()` now requests
   `HS_REDISPATCH` when more than one TG is live, so attached TG dispatch tables
   refresh through their own safepoint acknowledgement instead of remote copying.

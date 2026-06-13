@@ -67,20 +67,18 @@ their own safepoint ack. x64 VM entry paths now load `DISPATCH` from the
 running `L->tg_hint` plus `offsetof(TGState, dispatch)`, and `TGPOLL` reads the
 current TG's `poll` word. x64 VM slow paths load `global_State *` through
 `TGState.gl` and `jit_State *` through `g->jitp` instead of fixed offsets from
-`DISPATCH`. Existing x64 traces still assume recorder-TG-relative
-`RID_DISPATCH` addressing, so secondary TGs currently neither enter `BC_JLOOP`
-mcode nor acquire the recorder token to produce new x64 traces. This is a
-temporary x64/POSIX safety guard, not the original end-state. The remaining
-original target is to finish migrating emitter `RID_DISPATCH` addressing to
-explicit TG fields or non-dispatch globals, and then remove the secondary-TG
-recorder/entry guard once emitter dispatch addressing is local. Fixed TG fields
-in the x64 emitter now use symbolic `DISPATCH_TG(...)` offsets for `jit_base`,
-`cur_L`, `tmptv`, and `gl`; generic `dispofs()` has been removed, with far
-non-MOV operands saving a scratch register instead of clobbering
-`RID_DISPATCH`. The remaining non-TG `RID_DISPATCH` emitter blocker is the
-`REF_NIL` GG-state fused load path. Record dispatch itself is now localized to
-the token holder's TG table instead of being exposed through the global dispatch
-template.
+`DISPATCH`. Fixed TG fields in the x64 emitter now use symbolic
+`DISPATCH_TG(...)` offsets for `jit_base`, `cur_L`, `tmptv`, and `gl`; generic
+`dispofs()` has been removed, with far non-MOV operands saving a scratch
+register instead of clobbering `RID_DISPATCH`. `REF_NIL` GG-state FLOADs now
+use absolute/RIP/global-address forms, and the x64 exit patcher recognizes the
+resulting vmstate store patterns instead of scanning for `GG_OFS_TGDISP`.
+Secondary TGs currently still neither enter `BC_JLOOP` mcode nor acquire the
+recorder token to produce new x64 traces. This is a temporary x64/POSIX
+validation guard, not the original end-state; the remaining original target is
+to remove the secondary-TG recorder/entry guard once this non-dispatch emitter
+migration is validated. Record dispatch itself is now localized to the token
+holder's TG table instead of being exposed through the global dispatch template.
 
 ## 8.3 Trace registry & publication
 
