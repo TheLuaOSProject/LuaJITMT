@@ -256,6 +256,89 @@ static void test_worker_drain(lua_State *L, global_State *g, TGState *tg)
   lua_pop(L, 3);
 }
 
+static void test_worker_leaf_ssb(lua_State *L, global_State *g, TGState *tg)
+{
+  GCstr *s;
+  uint64_t worker_runs0, worker_ssb0, worker_grey0;
+
+  lua_pushliteral(L, "gc2 worker leaf ssb");
+  s = strV(L->top - 1);
+
+  lj_gc2_legacy_mark_begin(g);
+  assert(lj_gc2_ssb_push(g, obj2gco(s)) == 1);
+  assert(lj_gc2_flush_ssb(g, tg) == 1);
+  assert(!lj_gc2_ssb_empty(g));
+
+  worker_runs0 = la_load64_acq(&g->gc2.worker_runs);
+  worker_ssb0 = la_load64_acq(&g->gc2.worker_ssb_converted);
+  worker_grey0 = la_load64_acq(&g->gc2.worker_grey_drained);
+
+  assert(lj_gc2_worker_drain(g, 1) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(s)) == 1);
+  assert(lj_gc2_ssb_empty(g));
+  assert(la_load64_acq(&g->gc2.worker_runs) == worker_runs0 + 1u);
+  assert(la_load64_acq(&g->gc2.worker_ssb_converted) == worker_ssb0 + 1u);
+  assert(la_load64_acq(&g->gc2.worker_grey_drained) == worker_grey0);
+
+  lj_gc2_legacy_cycle_end(g);
+  lua_pop(L, 1);
+}
+
+static void test_fixpoint_round(lua_State *L, global_State *g, TGState *tg)
+{
+  GCtab *parent, *child, *grandchild;
+  uint64_t rounds0, hits0, worker_runs0;
+  UNUSED(tg);
+
+  lua_settop(L, 0);
+  lua_newtable(L);
+  parent = tabV(L->top - 1);
+  lua_newtable(L);
+  child = tabV(L->top - 1);
+  lua_newtable(L);
+  grandchild = tabV(L->top - 1);
+  lua_pushvalue(L, -1);
+  lua_rawseti(L, -3, 1);  /* child[1] = grandchild. */
+  lua_pushvalue(L, -2);
+  lua_rawseti(L, -4, 1);  /* parent[1] = child. */
+  lua_pop(L, 2);  /* Keep only parent as a stack root. */
+
+  lj_gc2_legacy_mark_begin(g);
+  assert(lj_gc2_ismarked(g, obj2gco(parent)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(grandchild)) == 0);
+
+  rounds0 = la_load64_acq(&g->gc2.fixpoint_rounds);
+  hits0 = la_load64_acq(&g->gc2.fixpoint_hits);
+  worker_runs0 = la_load64_acq(&g->gc2.worker_runs);
+
+  assert(lj_gc2_fixpoint_round(g, L, 1) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(parent)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(grandchild)) == 0);
+  assert(!lj_gc2_ssb_empty(g));
+  assert(la_load64_acq(&g->gc2.marks_this_round) > 0);
+  assert(la_load64_acq(&g->gc2.fixpoint_rounds) == rounds0 + 1u);
+  assert(la_load64_acq(&g->gc2.fixpoint_hits) == hits0);
+  assert(la_load64_acq(&g->gc2.worker_runs) > worker_runs0);
+
+  assert(lj_gc2_fixpoint_round(g, L, ~(uint32_t)0) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(grandchild)) == 1);
+  assert(lj_gc2_ssb_empty(g));
+  assert(la_load64_acq(&g->gc2.marks_this_round) > 0);
+  assert(la_load64_acq(&g->gc2.fixpoint_rounds) == rounds0 + 2u);
+  assert(la_load64_acq(&g->gc2.fixpoint_hits) == hits0);
+
+  assert(lj_gc2_fixpoint_round(g, L, ~(uint32_t)0) == 1);
+  assert(lj_gc2_ssb_empty(g));
+  assert(la_load64_acq(&g->gc2.marks_this_round) == 0);
+  assert(la_load64_acq(&g->gc2.fixpoint_rounds) == rounds0 + 3u);
+  assert(la_load64_acq(&g->gc2.fixpoint_hits) == hits0 + 1u);
+
+  lj_gc2_legacy_cycle_end(g);
+  lua_pop(L, 1);
+}
+
 static void test_c_value_barrier(lua_State *L, global_State *g, TGState *tg)
 {
   GCtab *parent, *child;
@@ -674,6 +757,8 @@ int main(void)
   test_grey_deque_growth(L, g, tg);
   test_grey_deque_steal_race(L, g, tg);
   test_worker_drain(L, g, tg);
+  test_worker_leaf_ssb(L, g, tg);
+  test_fixpoint_round(L, g, tg);
   test_c_value_barrier(L, g, tg);
   test_c_table_rescan_barrier(L, g, tg);
   test_vm_upvalue_barrier(L, g, tg);

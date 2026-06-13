@@ -51,6 +51,8 @@ void lj_gc2_init(global_State *g)
   la_store32_rlx(&g->gc2.ssb_drained, 0);
   la_store64_rlx(&g->gc2.ssb_items_published, 0);
   la_store64_rlx(&g->gc2.ssb_items_drained, 0);
+  la_store64_rlx(&g->gc2.fixpoint_rounds, 0);
+  la_store64_rlx(&g->gc2.fixpoint_hits, 0);
   g->gc2.alloc_since_trigger = 0;
   g->gc2.trigger_bytes = 0;
   g->gc2.hard_bytes = 0;
@@ -1271,6 +1273,53 @@ uint32_t lj_gc2_worker_drain(global_State *g, uint32_t limit)
   if (converted)
     la_add64_rlx(&g->gc2.worker_ssb_converted, converted);
   return n;
+}
+
+static uint32_t gc2_worker_drain_budget(global_State *g, uint32_t limit)
+{
+  uint32_t n = 0;
+  while (n < limit && !lj_gc2_ssb_empty(g)) {
+    uint64_t converted0 = la_load64_acq(&g->gc2.worker_ssb_converted);
+    uint64_t converted;
+    uint32_t step, drained = lj_gc2_worker_drain(g, limit - n);
+    converted = la_load64_acq(&g->gc2.worker_ssb_converted) - converted0;
+    step = drained;
+    if (converted > (uint64_t)(~(uint32_t)0) - step)
+      step = ~(uint32_t)0;
+    else
+      step += (uint32_t)converted;
+    if (step == 0)
+      break;
+    if (step > limit - n)
+      n = limit;
+    else
+      n += step;
+  }
+  return n;
+}
+
+uint32_t lj_gc2_fixpoint_round(global_State *g, lua_State *L, uint32_t limit)
+{
+  uint32_t phase, acked, fixpoint;
+  if (!g || limit == 0)
+    return 0;
+  phase = la_load32_acq(&g->gc2.phase);
+  if (phase != LJ_GC2_MARK)
+    return 0;
+  (void)la_xchg64_acqrel(&g->gc2.marks_this_round, 0);
+  (void)gc2_worker_drain_budget(g, limit);  /* 05 section 5.7.1 pre-round drain. */
+  acked = lj_gc2_handshake(g, LJ_GC2_HS_SCAN_ROOTS|LJ_GC2_HS_FLUSH_SSB);
+  if (acked == 0 && L) {
+    lj_gc2_scan_roots(g, L);
+    (void)lj_gc2_flush_ssb(g, L2TG(L));
+  }
+  (void)gc2_worker_drain_budget(g, limit);  /* 05 section 5.7.1 post-root drain. */
+  fixpoint = la_load64_acq(&g->gc2.marks_this_round) == 0 &&
+	     lj_gc2_ssb_empty(g);
+  la_add64_rlx(&g->gc2.fixpoint_rounds, 1);
+  if (fixpoint)
+    la_add64_rlx(&g->gc2.fixpoint_hits, 1);
+  return fixpoint;
 }
 
 int lj_gc2_ismarkedmem(global_State *g, void *p)

@@ -220,6 +220,15 @@ one zero round suffices (prove in code comment; the model in
 aux/nbtab_model.c is unrelated — write a 30-line unit test for the
 detector in lj_gc2_test.c, 13 §13.5).
 
+Current bridge note: `lj_gc2_fixpoint_round()` is the first bounded
+leader-side implementation of one `P_MARK` §5.7.1 round. It resets
+`marks_this_round` with an atomic exchange, drains current published work
+through the worker-drain surface while counting leaf-only SSB conversion as
+progress, handshakes `{SCAN_ROOTS, FLUSH_SSB}`, drains again, and reports the
+zero-mark/empty-work predicate. The original full loop above remains the
+target: a scheduler-owned pool, per-worker idle declaration, and repeated
+rounds until the leader transitions to `P_WEAK` are still follow-up work.
+
 ### 5.7.2 Thread stacks
 `HS_SCAN_ROOTS` (mutator, at ack): for its *running* L (and the chain of
 parents if inside coroutine.resume — walk `L->cframe`/frame links exactly
