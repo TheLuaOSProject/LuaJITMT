@@ -12,6 +12,8 @@ make -C "$ROOT/src" >/dev/null
 for needle in \
   'uint32_t jit_token' \
   'lj_jit_token_try(jit_State *J)' \
+  'tg != g->main_tg' \
+  'Temporary until x64 RID_DISPATCH addressing is localized' \
   'la_cas32(&g->jit_token, &expect, tg->tid, LA_ACQ_REL, LA_ACQ)' \
   'void LJ_FASTCALL lj_trace_hot(jit_State *J, const BCIns *pc, lua_State *L)' \
   'lj_snap_restore_exit(jit_State *J, void *exptr, lua_State *L,' \

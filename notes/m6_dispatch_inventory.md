@@ -11,6 +11,10 @@ M6 x64 dispatch localization inventory:
   relative to the recorder TG. Before trace execution is safe on secondary TGs,
   arbitrary `dispofs()` addressing must stop using `RID_DISPATCH`; only fixed
   `DISPATCH_TG(field)` offsets are valid for per-TG fields.
+- Transitional x64/POSIX safety guard now keeps secondary TGs from acquiring
+  the recorder token as well as from entering `BC_JLOOP` mcode. This preserves
+  interpreter progress while preventing secondary TGs from producing traces
+  with recorder-relative dispatch references.
 - Completed prerequisite in this slice: `lj_dispatch_update()` now requests
   `HS_REDISPATCH` when more than one TG is live, so attached TG dispatch tables
   refresh through their own safepoint acknowledgement instead of remote copying.

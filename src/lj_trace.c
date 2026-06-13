@@ -44,6 +44,10 @@ int lj_jit_token_try(jit_State *J)
   uint32_t expect = 0;
   if (!tg || tg->tid == 0)
     return 0;
+#if LJ_TARGET_X64 && !LJ_ABI_WIN
+  if (tg != g->main_tg)
+    return 0;  /* Temporary until x64 RID_DISPATCH addressing is localized. */
+#endif
   return la_cas32(&g->jit_token, &expect, tg->tid, LA_ACQ_REL, LA_ACQ);
 }
 

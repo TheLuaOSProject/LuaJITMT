@@ -64,11 +64,13 @@ shared `J->exitcode`, and token-busy hot side exits do not advance the retry
 budget into `SNAPCOUNT_DONE`. Dispatch mode transitions now request
 `HS_REDISPATCH` for already-attached TGs, so TG dispatch copies refresh through
 their own safepoint ack. Existing x64 traces still assume recorder-TG-relative
-`RID_DISPATCH` addressing, so secondary TGs interpret `BC_JLOOP` instead of
-entering mcode until the emitter migration is complete. The remaining original
-target is to make x64 `DISPATCH` load the running TG's dispatch table and then
+`RID_DISPATCH` addressing, so secondary TGs currently neither enter `BC_JLOOP`
+mcode nor acquire the recorder token to produce new x64 traces. This is a
+temporary x64/POSIX safety guard, not the original end-state. The remaining
+original target is to make x64 `DISPATCH` load the running TG's dispatch table,
 localize record dispatch to the token holder's TG table instead of temporarily
-exposing record hooks through the global dispatch template.
+exposing record hooks through the global dispatch template, and then remove the
+secondary-TG recorder/entry guard once emitter dispatch addressing is local.
 
 ## 8.3 Trace registry & publication
 

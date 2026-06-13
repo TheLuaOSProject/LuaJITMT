@@ -4,6 +4,7 @@
 
 #include <assert.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "lua.h"
 #include "lauxlib.h"
@@ -12,6 +13,10 @@
 #include "lj_obj.h"
 #include "lj_atomic.h"
 #include "lj_jit.h"
+#include "lj_trace.h"
+#include "lj_tg.h"
+#include "lj_thr.h"
+#include "lj_target.h"
 
 static void dostring(lua_State *L, const char *src)
 {
@@ -31,6 +36,20 @@ int main(void)
   luaL_openlibs(L);
   g = G(L);
   assert(la_load32_acq(&g->jit_token) == 0);
+
+#if LJ_TARGET_X64 && !LJ_ABI_WIN
+  {
+    TGState secondary;
+    TGState *saved_tg = lj_thr_get_tg();
+    memset(&secondary, 0, sizeof(secondary));
+    assert(g->main_tg != NULL);
+    secondary.tid = g->main_tg->tid == 0x7ffffffeu ? 0x7ffffffdu : 0x7ffffffeu;
+    lj_thr_set_tg(&secondary);
+    assert(lj_jit_token_try(g->jitp) == 0);
+    assert(la_load32_acq(&g->jit_token) == 0);
+    lj_thr_set_tg(saved_tg);
+  }
+#endif
 
   dostring(L,
     "local util = require'jit.util'\n"
