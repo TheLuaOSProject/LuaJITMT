@@ -14,6 +14,7 @@
 #include "lj_arena.h"
 #include "lj_gc.h"
 #include "lj_gc2.h"
+#include "lj_safepoint.h"
 #include "lj_tg.h"
 
 static uint32_t ptr_state(void *p)
@@ -24,10 +25,33 @@ static uint32_t ptr_state(void *p)
   return lj_arena_state(a, cell);
 }
 
+static int arena_list_contains(GCArena *a, GCArena *needle)
+{
+  while (a) {
+    if (a == needle)
+      return 1;
+    a = a->hdr.next;
+  }
+  return 0;
+}
+
 static int noop_finalizer(lua_State *L)
 {
   (void)L;
   return 0;
+}
+
+static void seed_traversable_needsweep(TGState *tg, uint32_t n)
+{
+  uint32_t i;
+  for (i = 0; i < n; i++) {
+    GCArena *a = lj_arena_map(&tg->prng, LJ_AF_TRAVERSABLE);
+    assert(a != NULL);
+    a->hdr.owner_tid = tg->alloc.owner_tid;
+    a->hdr.flags |= LJ_AF_NEEDSWEEP;
+    a->hdr.next = tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE];
+    tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE] = a;
+  }
 }
 
 static void test_boundary_lazy_sweep(void)
@@ -55,14 +79,7 @@ static void test_boundary_lazy_sweep(void)
   assert(tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE] == NULL);
   assert(tg->alloc.needsweep[LJ_ARENAK_PLAIN] == NULL);
 
-  for (i = 0; i < seeded; i++) {
-    GCArena *a = lj_arena_map(&tg->prng, LJ_AF_TRAVERSABLE);
-    assert(a != NULL);
-    a->hdr.owner_tid = tg->alloc.owner_tid;
-    a->hdr.flags |= LJ_AF_NEEDSWEEP;
-    a->hdr.next = tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE];
-    tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE] = a;
-  }
+  seed_traversable_needsweep(tg, seeded);
 
   setgcrefnull(empty);
   setgcrefnull(g->gc.mmudata);
@@ -87,6 +104,94 @@ static void test_boundary_lazy_sweep(void)
   assert(tg->alloc.needsweep[LJ_ARENAK_PLAIN] == NULL);
   setmref(g->gc.sweep, &g->gc.root);
   g->gc.stepmul = oldstepmul;
+  lua_close(L);
+}
+
+static void test_boundary_lazy_sweep_extra_tg(void)
+{
+  lua_State *L = luaL_newstate();
+  global_State *g;
+  TGState *tg, extra_tg;
+  GCRef empty;
+  MSize oldstepmul;
+  uint64_t arenas0, delta;
+  uint32_t oldcycle, sweep_cycle, i;
+  void *extra_plain, *extra_trav;
+  GCArena *extra_plain_a, *extra_trav_a;
+  const uint32_t seeded = LJ_GC2_SWEEP_BATCH + 2u;
+
+  assert(L != NULL);
+  g = G(L);
+  tg = G2TG(g);
+  assert(tg != NULL);
+  assert((tg->tg_flags & TGF_ARENA_INTERNAL) != 0);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+
+  lj_tg_init_thread(g, &extra_tg, NULL, 1);
+  extra_tg.tid = tg->tid + 2000u;
+  extra_tg.alloc.owner_tid = extra_tg.tid;
+  extra_tg.cur_L = L;
+  lj_native_enter(&extra_tg);
+  lj_tg_attach(g, &extra_tg);
+  assert(g->gc2.n_threads == 2);
+
+  extra_plain = lj_arena_alloc(&extra_tg.alloc, &extra_tg.prng, 64, 0);
+  extra_trav = lj_arena_alloc(&extra_tg.alloc, &extra_tg.prng, 64,
+			      LJ_AF_TRAVERSABLE);
+  assert(extra_plain != NULL);
+  assert(extra_trav != NULL);
+  extra_plain_a = lj_arena_of(extra_plain);
+  extra_trav_a = lj_arena_of(extra_trav);
+  assert(extra_plain_a->hdr.owner_tid == extra_tg.alloc.owner_tid);
+  assert(extra_trav_a->hdr.owner_tid == extra_tg.alloc.owner_tid);
+
+  oldcycle = g->gc2.cycle;
+  g->gc2.cycle = oldcycle + 1u;
+  sweep_cycle = g->gc2.cycle;
+  g->gc2.phase = LJ_GC2_SWEEP;
+  assert(lj_gc2_handshake(g, LJ_GC2_HS_RESET_ALLOC) == 2);
+  assert(arena_list_contains(extra_tg.alloc.needsweep[LJ_ARENAK_PLAIN],
+			     extra_plain_a));
+  assert(arena_list_contains(extra_tg.alloc.needsweep[LJ_ARENAK_TRAVERSABLE],
+			     extra_trav_a));
+  assert((extra_plain_a->hdr.flags & LJ_AF_NEEDSWEEP) != 0);
+  assert((extra_trav_a->hdr.flags & LJ_AF_NEEDSWEEP) != 0);
+  seed_traversable_needsweep(&extra_tg, seeded);
+
+  setgcrefnull(empty);
+  setgcrefnull(g->gc.mmudata);
+  setmref(g->gc.sweep, &empty);
+  g->gc.state = GCSsweep;
+  oldstepmul = g->gc.stepmul;
+  g->gc.stepmul = 1;
+  arenas0 = la_load64_acq(&g->gc2.sweep_owner_arenas);
+
+  (void)lj_gc_step(L);
+  delta = la_load64_acq(&g->gc2.sweep_owner_arenas) - arenas0;
+  assert(delta > 0);
+  assert(delta <= LJ_GC2_SWEEP_BATCH);
+  assert(g->gc.state == GCSsweep);
+  assert(extra_tg.alloc.needsweep[LJ_ARENAK_TRAVERSABLE] != NULL);
+
+  for (i = 0; i < seeded + 4u && g->gc.state != GCSpause; i++)
+    (void)lj_gc_step(L);
+  assert(g->gc.state == GCSpause);
+  assert(extra_tg.alloc.needsweep[LJ_ARENAK_TRAVERSABLE] == NULL);
+  assert(extra_tg.alloc.needsweep[LJ_ARENAK_PLAIN] == NULL);
+  assert(arena_list_contains(extra_tg.alloc.owned[LJ_ARENAK_PLAIN],
+			     extra_plain_a));
+  assert(arena_list_contains(extra_tg.alloc.owned[LJ_ARENAK_TRAVERSABLE],
+			     extra_trav_a));
+  assert((extra_plain_a->hdr.flags & LJ_AF_NEEDSWEEP) == 0);
+  assert((extra_trav_a->hdr.flags & LJ_AF_NEEDSWEEP) == 0);
+  assert(extra_trav_a->hdr.sweep_epoch == sweep_cycle);
+  assert(extra_tg.in_native == 1);
+
+  g->gc.stepmul = oldstepmul;
+  lj_tg_detach(g, &extra_tg);
+  assert(g->gc2.n_threads == 1);
+  assert(lj_tg_reclaim_dead(g) == 1u);
+  lj_tg_fini_thread(g, &extra_tg);
   lua_close(L);
 }
 
@@ -456,6 +561,7 @@ int main(void)
 
   lua_close(L);
   test_boundary_lazy_sweep();
+  test_boundary_lazy_sweep_extra_tg();
   printf("t-arena-gcsweep OK: traversable runtime sweep bridge verified\n");
   return 0;
 }

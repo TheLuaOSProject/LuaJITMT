@@ -16,10 +16,18 @@ make -C "$ROOT/src" -j"$JOBS" >/dev/null
 
 for needle in \
   'gc_arena_sweep_pending(global_State *g)' \
+  'gc_arena_sweep_tg_ready(TGState *tg)' \
   'gc_arena_finish_sweep_boundary(global_State *g, int drain)' \
+  'la_loadptr_acq((void *const *)&g->gc2.tg_list)' \
   'lj_gc2_sweep_owner_progress(g, tg, LJ_GC2_SWEEP_BATCH)' \
   '05 section 5.8 boundary-lazy traversable sweep bridge' \
+  'lj_gc2_handshake(g, LJ_GC2_HS_RESET_ALLOC)' \
+  'seed_traversable_needsweep(&extra_tg, seeded)' \
   'assert(g->gc.state == GCSsweep)' \
+  'assert(extra_tg.alloc.needsweep[LJ_ARENAK_TRAVERSABLE] != NULL)' \
+  'arena_list_contains(extra_tg.alloc.owned[LJ_ARENAK_PLAIN]' \
+  'arena_list_contains(extra_tg.alloc.owned[LJ_ARENAK_TRAVERSABLE]' \
+  'assert(extra_trav_a->hdr.sweep_epoch == sweep_cycle)' \
   'assert(delta <= LJ_GC2_SWEEP_BATCH)'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_gc.c" "$ROOT/tests/t-arena-gcsweep.c"; then

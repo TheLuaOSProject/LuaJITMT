@@ -95,7 +95,9 @@ for needle in \
   'lj_gc2_worker_drain_progress(global_State *g, uint32_t limit)' \
   'weak = lj_gc2_weak_drain(g, limit - work)' \
   'la_add64_rlx(&g->gc2.worker_weak_drained' \
+  'gc_arena_sweep_tg_ready(TGState *tg)' \
   'gc_arena_sweep_pending(global_State *g)' \
+  'la_loadptr_acq((void *const *)&g->gc2.tg_list)' \
   'lj_gc2_sweep_owner_progress(global_State *g, TGState *tg' \
   'la_add64_rlx(&g->gc2.sweep_owner_arenas' \
   '05 section 5.8 boundary-lazy traversable sweep bridge' \
