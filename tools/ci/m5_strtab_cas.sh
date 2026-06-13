@@ -30,9 +30,12 @@ for needle in \
   'retire_epoch' \
   'g->str.retired' \
   'lj_str_reclaim_retired' \
+  'lj_gc2_reclaim_retired' \
   'la_xchgptr_acqrel((void **)&g->str.retired' \
   'la_load64_acq(&hdr->retire_epoch) < completed_epoch' \
   'lj_str_reclaim_retired(g, epoch)' \
+  'lj_gc2_reclaim_retired(g, epoch)' \
+  'smr_reclaimed' \
   'gc_mark_strtab_mem' \
   'gc2_mark_strtab_mem' \
   'LJ_STRTAB_ACTIVE_MASK' \

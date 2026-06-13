@@ -48,6 +48,8 @@ void lj_gc2_init(global_State *g)
   g->gc2.hs_epoch = 0;
   g->gc2.hs_pending = 0;
   g->gc2.hs_actions = 0;
+  la_store64_rlx(&g->gc2.smr_reclaim_runs, 0);
+  la_store64_rlx(&g->gc2.smr_reclaimed, 0);
   la_store64_rlx(&g->gc2.cycle_requests, 0);
   la_store64_rlx(&g->gc2.cycle_starts, 0);
   la_store64_rlx(&g->gc2.marks_this_round, 0);
@@ -377,6 +379,22 @@ void lj_gc2_legacy_cycle_end(global_State *g)
 uint32_t lj_gc2_handshake(global_State *g, uint32_t actions)
 {
   return lj_safepoint_handshake(g, actions);
+}
+
+uint32_t lj_gc2_reclaim_retired(global_State *g, uint64_t epoch)
+{
+  uint32_t n = 0;
+  if (!g)
+    return 0;
+  n += lj_str_reclaim_retired(g, epoch);  /* 05 section 5.9 SMR drain. */
+  n += lj_tab_reclaim_retired(g, epoch);  /* 06 section 6.3.5 SMR drain. */
+  n += lj_mcode_reclaim_retired(g, epoch);  /* 08 section 8.7 SMR drain. */
+  n += lj_trace_reclaim_retired(g, epoch);  /* 08 section 8.3/8.7 drain. */
+  if (n) {
+    la_add64_rlx(&g->gc2.smr_reclaim_runs, 1);
+    la_add64_rlx(&g->gc2.smr_reclaimed, n);
+  }
+  return n;
 }
 
 static void gc2_mark_tv(global_State *g, cTValue *tv)

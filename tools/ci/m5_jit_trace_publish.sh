@@ -48,6 +48,7 @@ for needle in \
   'trace_markbody(global_State *g, GCtrace *T, int gc2)' \
   'lj_trace_reclaim_retired(global_State *g, uint64_t completed_epoch)' \
   'lj_trace_reclaim_retired(g, epoch)' \
+  'lj_gc2_reclaim_retired(g, epoch)' \
   'lj_trace_markvecs(g, 1)' \
   'lj_trace_markvecs(g, 0)'
 do
@@ -65,6 +66,7 @@ for needle in \
   'mcode_retired_push(jit_State *J, MCodeRetire *ret)' \
   'lj_mcode_reclaim_retired(global_State *g, uint64_t completed_epoch)' \
   'lj_mcode_reclaim_retired(g, epoch)' \
+  'lj_gc2_reclaim_retired(g, epoch)' \
   'lj_mcode_freeretired(g)' \
   'lj_mcode_markretired(g, 1)' \
   'lj_mcode_markretired(g, 0)'

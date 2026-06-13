@@ -17,7 +17,8 @@ make -C "$ROOT/src" -j"$JOBS" >/dev/null
 for needle in \
   'TGState *self = lj_thr_get_tg()' \
   'Leader self-ack is a real poll' \
-  'remote native ack'
+  'remote native ack' \
+  'lj_gc2_reclaim_retired(g, epoch)'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_safepoint.c"; then
     echo "guardrail: missing safepoint handshake marker: $needle" >&2

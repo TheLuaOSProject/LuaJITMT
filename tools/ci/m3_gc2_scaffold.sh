@@ -37,6 +37,8 @@ for needle in \
   'uint64_t sweep_owner_runs' \
   'uint64_t sweep_owner_arenas' \
   'uint64_t sweep_owner_live_cells' \
+  'uint64_t smr_reclaim_runs' \
+  'uint64_t smr_reclaimed' \
   'LJ_GC2_WEAK_DRAIN_BATCH' \
   'LJ_GC2_SWEEP_BATCH' \
   'uint64_t finreg_cdata_sets' \
@@ -96,6 +98,9 @@ for needle in \
   'lj_gc2_sweep_owner_progress(global_State *g, TGState *tg' \
   'la_add64_rlx(&g->gc2.sweep_owner_arenas' \
   '05 section 5.8 bounded traversable sweep bridge' \
+  'lj_gc2_reclaim_retired(global_State *g, uint64_t epoch)' \
+  'la_add64_rlx(&g->gc2.smr_reclaimed' \
+  'lj_gc2_reclaim_retired(g, epoch)' \
   'lj_gc2_ssb_empty(g)' \
   'la_loadptr_acq((void *const *)&tg->ssb_next)' \
   'la_storeptr_rel((void **)&tg->ssb_next' \
@@ -103,6 +108,7 @@ for needle in \
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc.h" \
       "$ROOT/src/lj_gc2.c" "$ROOT/src/lj_gc2.h" "$ROOT/src/lj_obj.h" \
+      "$ROOT/src/lj_safepoint.c" \
       "$ROOT/src/lj_tab.c" "$ROOT/src/lj_cdata.c" "$ROOT/src/lib_ffi.c" \
       "$ROOT/src/lj_api.c"; then
     echo "guardrail: missing GC2 fixpoint-round marker: $needle" >&2

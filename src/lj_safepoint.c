@@ -199,9 +199,6 @@ uint32_t lj_safepoint_handshake(global_State *g, uint32_t actions)
   }
   if (actions & LJ_GC2_HS_FLUSHJ)
     (void)lj_trace_flushall(mainthread(g));  /* 08 section 8.7 leader action. */
-  (void)lj_str_reclaim_retired(g, epoch);  /* 05 section 5.9 SMR drain. */
-  (void)lj_tab_reclaim_retired(g, epoch);  /* 06 section 6.3.5 SMR drain. */
-  (void)lj_mcode_reclaim_retired(g, epoch);  /* 08 section 8.7 SMR drain. */
-  (void)lj_trace_reclaim_retired(g, epoch);  /* 08 section 8.3/8.7 SMR drain. */
+  (void)lj_gc2_reclaim_retired(g, epoch);  /* 05 section 5.9 grace drain. */
   return signaled;
 }

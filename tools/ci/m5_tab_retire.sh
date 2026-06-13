@@ -23,6 +23,7 @@ for needle in \
   'lj_tab_reclaim_retired' \
   'lj_tab_freeretired' \
   'lj_tab_reclaim_retired(g, epoch)' \
+  'lj_gc2_reclaim_retired(g, epoch)' \
   'gc_mark_tab_retired_mem' \
   'gc2_mark_tab_retired_mem'
 do

@@ -836,6 +836,8 @@ typedef struct GC2State {
   uint64_t hs_epoch;	/* Soft-handshake generation. */
   uint32_t hs_pending;	/* Outstanding handshake acknowledgements. */
   uint32_t hs_actions;	/* Current LJ_GC2_HS_* action bits. */
+  uint64_t smr_reclaim_runs;  /* Retired-object epoch drains with work. */
+  uint64_t smr_reclaimed;  /* Retired objects freed after a grace period. */
   uint64_t cycle_requests;  /* Allocation-triggered cycle requests. */
   uint64_t cycle_starts;  /* Requested cycles consumed at mark begin. */
   uint64_t marks_this_round;  /* New arena/HugeTab marks this round. */
