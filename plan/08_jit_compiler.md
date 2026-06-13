@@ -246,7 +246,10 @@ handler — sized LJ_MAX_EXITSTUBGR-compatible; see lj_vmstruct notes.
   regions and gates their x64 GC2 helper calls on the current TG's
   `mark_active` mirror, so a trace poll can enable the GC2 barrier before
   later heap stores. The broader XBAR/TGMARK alias model remains the follow-up
-  target rather than being silently deleted.
+  target rather than being silently deleted. Existing FFI/raw-memory
+  `IR_XBAR` alias limits now also treat `IR_XPOLL` as a poll-region boundary
+  for `XLOAD` forwarding/CSE and `XSTORE` DSE; this advances the current XBAR
+  surface without enabling table `ASTORE`/`HSTORE` tracing.
 - **Allocation on trace**: TNEW/TDUP/CNEW/SNEW already call into C or use
   inline alloc IR; route them to the TG bump (mirror of 07 §7.5) — the IR
   for inline alloc (lj_asm.c asm_snew/asm_tnew via lj_ir_call → actually

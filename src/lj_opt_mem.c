@@ -26,6 +26,13 @@
 #define fleft		(J->fold.left)
 #define fright		(J->fold.right)
 
+static LJ_AINLINE IRRef poll_alias_limit(jit_State *J, IRRef lim)
+{
+  if (J->chain[IR_XBAR] > lim) lim = J->chain[IR_XBAR];
+  if (J->chain[IR_XPOLL] > lim) lim = J->chain[IR_XPOLL];
+  return lim;
+}
+
 /*
 ** Caveat #1: return value is not always a TRef -- only use with tref_ref().
 ** Caveat #2: FWD relies on active CSE for xREF operands -- see lj_opt_fold().
@@ -837,7 +844,7 @@ TRef LJ_FASTCALL lj_opt_fwd_xload(jit_State *J)
   ref = J->chain[IR_XSTORE];
 retry:
   if (J->chain[IR_CALLXS] > lim) lim = J->chain[IR_CALLXS];
-  if (J->chain[IR_XBAR] > lim) lim = J->chain[IR_XBAR];
+  lim = poll_alias_limit(J, lim);
   while (ref > lim) {
     IRIns *store = IR(ref);
     switch (aa_xref(J, xr, fins, store)) {
@@ -898,7 +905,7 @@ TRef LJ_FASTCALL lj_opt_dse_xstore(jit_State *J)
   IRRef1 *refp = &J->chain[IR_XSTORE];
   IRRef ref = *refp;
   if (J->chain[IR_CALLXS] > lim) lim = J->chain[IR_CALLXS];
-  if (J->chain[IR_XBAR] > lim) lim = J->chain[IR_XBAR];
+  lim = poll_alias_limit(J, lim);
   if (J->chain[IR_XSNEW] > lim) lim = J->chain[IR_XSNEW];
   while (ref > lim) {  /* Search for redundant or conflicting stores. */
     IRIns *store = IR(ref);
