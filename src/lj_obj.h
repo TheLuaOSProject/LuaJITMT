@@ -841,6 +841,7 @@ typedef struct GC2State {
   uint32_t ssb_drained;	/* Drained/recycled SSB node count. */
   uint64_t ssb_items_published;  /* Published SSB entries. */
   uint64_t ssb_items_drained;  /* Drained/recycled SSB entries. */
+  uint64_t alloc_since_trigger;  /* Flushed mutator allocation bytes. */
   GCRef *grey_stack;	/* GC2 grey work deque ring. */
   MSize grey_capacity;	/* Allocated grey deque slots. */
   uint64_t grey_top;	/* Chase-Lev steal-side index. */

@@ -34,6 +34,7 @@ void lj_safepoint_apply_tg(global_State *g, TGState *tg, uint32_t actions)
   }
   if (actions & LJ_GC2_HS_FLUSH_SSB)
     lj_gc2_flush_ssb(g, tg);  /* 05 section 5.6.2. */
+  (void)lj_gc2_flush_alloc(g, tg);  /* 04 section 4.8 safepoint flush. */
   if ((actions & LJ_GC2_HS_RESET_ALLOC) &&
       (tg->tg_flags & TGF_ARENA_INTERNAL))
     lj_arena_alloc_prepare_sweep(&tg->alloc);  /* 04 section 4.6. */

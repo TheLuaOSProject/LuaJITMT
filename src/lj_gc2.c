@@ -7,6 +7,7 @@
 #define LUA_CORE
 
 #include "lj_obj.h"
+#include "lj_atomic.h"
 #include "lj_chan.h"
 #include "lj_gc2.h"
 #include "lj_gc.h"
@@ -45,6 +46,7 @@ void lj_gc2_init(global_State *g)
   g->gc2.ssb_drained = 0;
   g->gc2.ssb_items_published = 0;
   g->gc2.ssb_items_drained = 0;
+  g->gc2.alloc_since_trigger = 0;
   g->gc2.grey_stack = NULL;
   g->gc2.grey_capacity = 0;
   g->gc2.grey_top = 0;
@@ -66,6 +68,27 @@ void lj_gc2_fini(global_State *g)
     g->gc2.grey_top = 0;
     g->gc2.grey_bottom = 0;
   }
+}
+
+uint64_t lj_gc2_flush_alloc(global_State *g, TGState *tg)
+{
+  uint64_t bytes;
+  if (!g || !tg)
+    return 0;
+  bytes = la_xchg64_acqrel(&tg->local_total, 0);  /* 04 section 4.8. */
+  if (bytes != 0)
+    la_add64_rlx(&g->gc2.alloc_since_trigger, bytes);  /* 05 section 5.11. */
+  return bytes;
+}
+
+void lj_gc2_account_alloc(global_State *g, TGState *tg, GCSize bytes)
+{
+  uint64_t old;
+  if (!g || !tg || bytes == 0)
+    return;
+  old = la_add64_rlx(&tg->local_total, (uint64_t)bytes);  /* 04 section 4.8. */
+  if (old + (uint64_t)bytes >= LJ_GC2_ACCT_FLUSH)
+    (void)lj_gc2_flush_alloc(g, tg);
 }
 
 static TGState *gc2_tg_for_mem(global_State *g, const void *p)

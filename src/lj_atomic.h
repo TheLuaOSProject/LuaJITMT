@@ -95,6 +95,7 @@ LA_INLINE uint8_t  la_or8_rlx (uint8_t  *p,uint8_t  v){return __atomic_fetch_or(
 LA_INLINE uint64_t la_or64_rlx(uint64_t *p,uint64_t v){return __atomic_fetch_or(p,v,__ATOMIC_RELAXED);}
 LA_INLINE uint64_t la_and64_rlx(uint64_t *p,uint64_t v){return __atomic_fetch_and(p,v,__ATOMIC_RELAXED);}
 LA_INLINE uint32_t la_xchg32_acqrel(uint32_t *p,uint32_t v){return __atomic_exchange_n(p,v,__ATOMIC_ACQ_REL);}
+LA_INLINE uint64_t la_xchg64_acqrel(uint64_t *p,uint64_t v){return __atomic_exchange_n(p,v,__ATOMIC_ACQ_REL);}
 LA_INLINE void    *la_xchgptr_acqrel(void **p,void *v){return __atomic_exchange_n(p,v,__ATOMIC_ACQ_REL);}
 
 /* Test-and-set one bit in a 64-bit word; returns previous bit value.

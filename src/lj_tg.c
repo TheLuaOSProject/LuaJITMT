@@ -156,6 +156,7 @@ void lj_tg_detach(global_State *g, TGState *tg)
       (la_load32_acq(&tg->reqmask) != 0 || la_load32_acq(&tg->poll) != 0))
     (void)lj_safepoint_ack(tg->thread_L);  /* Leaving TG owns its ack. */
   (void)lj_gc2_flush_ssb(g, tg);  /* 09 section 9.3 detach publishes SSB. */
+  (void)lj_gc2_flush_alloc(g, tg);  /* 04 section 4.8 detach accounting. */
   la_fence_rel();
   oldflags = la_or8_rlx(&tg->tg_flags, TGF_DEAD);  /* 05 section 5.4.1. */
   if (!(oldflags & TGF_DEAD))

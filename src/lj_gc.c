@@ -1430,6 +1430,8 @@ void *lj_mem_realloc(lua_State *L, void *p, GCSize osz, GCSize nsz)
   lj_assertG(checkptrGC(p),
 	     "allocated memory address %p outside required range", p);
   g->gc.total = (g->gc.total - osz) + nsz;
+  if (nsz > osz)
+    lj_gc2_account_alloc(g, L2TG(L), nsz - osz);  /* 04 section 4.8. */
   return p;
 }
 
@@ -1448,6 +1450,7 @@ void *lj_mem_newgco_raw(lua_State *L, GCSize size, uint32_t flags)
   lj_assertG(checkptrGC(o),
 	     "allocated memory address %p outside required range", o);
   g->gc.total += size;
+  lj_gc2_account_alloc(g, L2TG(L), size);  /* 04 section 4.8. */
   return o;
 }
 
