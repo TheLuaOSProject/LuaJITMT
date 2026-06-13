@@ -115,6 +115,8 @@ for needle in \
   'trace_exittab_reset(jit_State *J, GCtrace *T)' \
   'trace_exittab_resetroot(J, T->traceno)' \
   'trace_exittab_reset(J, T);' \
+  'lj_trace_flushall_hs(lua_State *L)' \
+  'lj_gc2_handshake(g, LJ_GC2_HS_EXIT_TRACES|LJ_GC2_HS_FLUSHJ)' \
   'lj_trace_flushall(mainthread(g));  /* 08 section 8.7 leader action. */'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_trace.c" "$ROOT/src/lj_safepoint.c"; then
@@ -125,6 +127,14 @@ done
 
 if rg -F -q 'Temporary single-mutator flush action' "$ROOT/src/lj_safepoint.c"; then
   echo "guardrail: HS_FLUSHJ must be a leader action after ack drain" >&2
+  exit 1
+fi
+
+hits=$(rg -n -- '\blj_trace_flushall\(L\)' \
+  "$ROOT/src/lj_api.c" "$ROOT/src/lj_dispatch.c" "$ROOT/src/lj_profile.c" || true)
+if [ -n "$hits" ]; then
+  echo "guardrail: public full flush callers must route through HS_FLUSHJ:" >&2
+  echo "$hits" >&2
   exit 1
 fi
 

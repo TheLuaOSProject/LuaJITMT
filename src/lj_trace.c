@@ -548,6 +548,16 @@ int lj_trace_flushall(lua_State *L)
   return 0;
 }
 
+/* Request a leader-owned full trace flush through the safepoint protocol. */
+int lj_trace_flushall_hs(lua_State *L)
+{
+  global_State *g = G(L);
+  if ((g->hookmask & HOOK_GC))
+    return 1;
+  (void)lj_gc2_handshake(g, LJ_GC2_HS_EXIT_TRACES|LJ_GC2_HS_FLUSHJ);
+  return 0;
+}
+
 /* Initialize JIT compiler state. */
 void lj_trace_initstate(global_State *g)
 {

@@ -342,7 +342,7 @@ LUA_API void luaJIT_profile_start(lua_State *L, const char *mode,
 #if LJ_HASJIT
     case 'l': case 'f':
       L2J(L)->prof_mode = m;
-      lj_trace_flushall(L);
+      (void)lj_trace_flushall_hs(L);
       break;
 #endif
     default:  /* Ignore unknown mode chars. */
@@ -373,7 +373,7 @@ LUA_API void luaJIT_profile_stop(lua_State *L)
     lj_dispatch_update(g, 0);
 #if LJ_HASJIT
     G2J(g)->prof_mode = 0;
-    lj_trace_flushall(L);
+    (void)lj_trace_flushall_hs(L);
 #endif
     lj_buf_free(g, &ps->sb);
     ps->sb.w = ps->sb.e = NULL;

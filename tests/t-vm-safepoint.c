@@ -309,6 +309,10 @@ int main(void)
   assert(lj_gc2_handshake(g, LJ_GC2_HS_FLUSHJ) == 1);
   assert(g->gc2.hs_epoch == epoch0 + 1u);
   assert(G2J(g)->freetrace == 0);
+  epoch0 = g->gc2.hs_epoch;
+  assert(luaL_dostring(L, "jit.flush()") == LUA_OK);
+  assert(g->gc2.hs_epoch == epoch0 + 1u);
+  assert(tg->hs_epoch_ack == g->gc2.hs_epoch);
 #endif
 
   lua_close(L);

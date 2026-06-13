@@ -240,9 +240,10 @@ themselves through `GCtrace.retired_next` and keep `exittab` storage until
 retirement. Safepoint epoch drain physically unmaps/frees both after the
 `LJ_FLUSH_EPOCHS=2` margin. This implements the data-retargeting part of step 2
 and the reclamation half of step 4 for the supported x64 path. The full
-public `jit.flush`/flushall routing through `HS_FLUSHJ|HS_EXIT_TRACES` before
-trace-slot clearing remains the original target; the safepoint `HS_FLUSHJ`
-action itself is leader-owned after ack drain.
+public `jit.flush`/flushall path now calls `lj_trace_flushall_hs()`, which runs
+`HS_EXIT_TRACES|HS_FLUSHJ` before the leader clears trace slots. This covers the
+full-flush API part of the original protocol; scoped trace/proto flushes still
+need the same boundary to finish the original target.
 
 ## 8.8 Recorder/IR changes inventory
 
