@@ -1858,10 +1858,16 @@ static uint32_t gc2_worker_sweep_progress(global_State *g, uint32_t limit)
   return n;  /* 05 section 5.6.3 worker-owned sweep bridge. */
 }
 
+static uint32_t gc2_worker_progress_add(uint32_t a, uint32_t b)
+{
+  return b > ~(uint32_t)0 - a ? ~(uint32_t)0 : a + b;
+}
+
 static uint32_t gc2_worker_drain_inner(global_State *g, uint32_t limit,
 				       uint32_t *progress)
 {
   uint32_t phase, expect = 0, n = 0, converted = 0, weak = 0, sweep = 0;
+  uint32_t total;
   if (progress)
     *progress = 0;
   if (!g || limit == 0)
@@ -1877,29 +1883,34 @@ static uint32_t gc2_worker_drain_inner(global_State *g, uint32_t limit,
   if (phase == LJ_GC2_SWEEP) {
     sweep = gc2_worker_sweep_progress(g, limit);
   } else {
-    while (n < limit) {
+    while (gc2_worker_progress_add(n, converted) < limit) {
+      uint32_t work;
       GCobj *o = lj_gc2_grey_steal(g);
       if (o) {
 	gc2_traverse_obj(g, o);  /* 05 section 5.6.3 worker steal+trace. */
 	n++;
 	continue;
       }
-      if (converted >= limit)
+      work = gc2_worker_progress_add(n, converted);
+      if (work >= limit)
 	break;
       {
-	uint32_t moved = gc2_drain_published_ssb_to_grey(g, limit - converted);
+	uint32_t moved = gc2_drain_published_ssb_to_grey(g, limit - work);
 	if (!moved)
 	  break;
 	converted += moved;
       }
     }
     if (phase == LJ_GC2_WEAK) {
-      uint32_t work = n + converted;
+      uint32_t work = gc2_worker_progress_add(n, converted);
       if (work < limit)
 	weak = lj_gc2_weak_drain(g, limit - work);  /* 05 section 5.8. */
     }
   }
-  if (n || converted || weak || sweep)
+  total = gc2_worker_progress_add(n, converted);
+  total = gc2_worker_progress_add(total, weak);
+  total = gc2_worker_progress_add(total, sweep);
+  if (total)
     la_add64_rlx(&g->gc2.worker_runs, 1);
   if (n) {
     la_add64_rlx(&g->gc2.grey_drained, n);
@@ -1909,26 +1920,12 @@ static uint32_t gc2_worker_drain_inner(global_State *g, uint32_t limit,
     la_add64_rlx(&g->gc2.worker_ssb_converted, converted);
   if (weak)
     la_add64_rlx(&g->gc2.worker_weak_drained, weak);
-  if (!(n || converted || weak || sweep))
+  if (!total)
     la_add64_rlx(&g->gc2.worker_idle_declares, 1);
-  if (progress) {
-    uint32_t total = n;
-    if (converted > ~(uint32_t)0 - total)
-      total = ~(uint32_t)0;
-    else
-      total += converted;
-    if (weak > ~(uint32_t)0 - total)
-      total = ~(uint32_t)0;
-    else
-      total += weak;
-    if (sweep > ~(uint32_t)0 - total)
-      total = ~(uint32_t)0;
-    else
-      total += sweep;
+  if (progress)
     *progress = total;
-  }
   la_store32_rel(&g->gc2.worker_active, 0);
-  return n;
+  return total;  /* 05 section 5.6.3 total worker progress contract. */
 }
 
 uint32_t lj_gc2_worker_drain(global_State *g, uint32_t limit)
@@ -1938,9 +1935,7 @@ uint32_t lj_gc2_worker_drain(global_State *g, uint32_t limit)
 
 uint32_t lj_gc2_worker_drain_progress(global_State *g, uint32_t limit)
 {
-  uint32_t progress;
-  (void)gc2_worker_drain_inner(g, limit, &progress);
-  return progress;
+  return lj_gc2_worker_drain(g, limit);
 }
 
 static uint32_t gc2_worker_drain_budget(global_State *g, uint32_t limit)

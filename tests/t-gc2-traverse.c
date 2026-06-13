@@ -265,7 +265,7 @@ static void test_worker_drain(lua_State *L, global_State *g, TGState *tg)
   assert(pthread_create(&worker, NULL, grey_worker_drain_thread, &ctx) == 0);
   assert(pthread_join(worker, NULL) == 0);
 
-  assert(ctx.drained == 3);
+  assert(ctx.drained == 4);
   assert(lj_gc2_ismarked(g, obj2gco(parent)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(grandchild)) == 1);
@@ -361,7 +361,7 @@ static void test_worker_leaf_ssb(lua_State *L, global_State *g, TGState *tg)
   worker_ssb0 = la_load64_acq(&g->gc2.worker_ssb_converted);
   worker_grey0 = la_load64_acq(&g->gc2.worker_grey_drained);
 
-  assert(lj_gc2_worker_drain(g, 1) == 0);
+  assert(lj_gc2_worker_drain(g, 1) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(s)) == 1);
   assert(lj_gc2_ssb_empty(g));
   assert(la_load64_acq(&g->gc2.worker_runs) == worker_runs0 + 1u);
@@ -1024,7 +1024,7 @@ static void test_worker_weak_drain(lua_State *L, global_State *g, TGState *tg)
   worker_weak0 = la_load64_acq(&g->gc2.worker_weak_drained);
   clear_tables0 = la_load64_acq(&g->gc2.weak_clear_tables);
   clear_cleared0 = la_load64_acq(&g->gc2.weak_clear_cleared);
-  assert(lj_gc2_worker_drain_progress(g, 1) == 1u);
+  assert(lj_gc2_worker_drain(g, 1) == 1u);
   assert(la_load64_acq(&g->gc2.worker_runs) == worker_runs0 + 1u);
   assert(la_load64_acq(&g->gc2.worker_weak_drained) == worker_weak0 + 1u);
   assert(la_load64_acq(&g->gc2.weak_clear_tables) == clear_tables0 + 1u);

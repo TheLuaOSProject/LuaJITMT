@@ -59,7 +59,7 @@ static void test_worker_owned_sweep_direct(void)
   lua_State *L = luaL_newstate();
   global_State *g;
   TGState *tg, extra_tg;
-  uint64_t worker_runs0, arenas0;
+  uint64_t worker_runs0, arenas0, idle0;
   uint32_t sweep_cycle;
   void *extra_plain, *extra_trav;
   GCArena *extra_plain_a, *extra_trav_a, *swept_a;
@@ -102,7 +102,7 @@ static void test_worker_owned_sweep_direct(void)
 
   worker_runs0 = la_load64_acq(&g->gc2.worker_runs);
   arenas0 = la_load64_acq(&g->gc2.sweep_owner_arenas);
-  assert(lj_gc2_worker_drain_progress(g, 1) == 1u);
+  assert(lj_gc2_worker_drain(g, 1) == 1u);
   assert(la_load64_acq(&g->gc2.worker_runs) == worker_runs0 + 1u);
   assert(la_load64_acq(&g->gc2.sweep_owner_arenas) == arenas0 + 1u);
   assert(la_load32_acq(&g->gc2.worker_active) == 0);
@@ -113,6 +113,10 @@ static void test_worker_owned_sweep_direct(void)
   assert((extra_plain_a->hdr.flags & LJ_AF_NEEDSWEEP) == 0);
   assert((swept_a->hdr.flags & LJ_AF_NEEDSWEEP) == 0);
   assert(swept_a->hdr.sweep_epoch == sweep_cycle);
+  idle0 = la_load64_acq(&g->gc2.worker_idle_declares);
+  assert(lj_gc2_worker_drain(g, 1) == 0);
+  assert(la_load64_acq(&g->gc2.worker_idle_declares) == idle0 + 1u);
+  assert(la_load32_acq(&g->gc2.worker_active) == 0);
 
   lj_arena_alloc_restore_sweep_kind(&extra_tg.alloc, LJ_ARENAK_TRAVERSABLE);
   lj_gc2_legacy_cycle_end(g);

@@ -21,7 +21,8 @@ for needle in \
   'la_loadptr_acq((void *const *)&g->gc2.tg_list)' \
   'lj_gc2_worker_drain_progress(g, LJ_GC2_SWEEP_BATCH)' \
   '05 section 5.6.3 worker-owned sweep bridge' \
-  'assert(lj_gc2_worker_drain_progress(g, 1) == 1u)' \
+  'assert(lj_gc2_worker_drain(g, 1) == 1u)' \
+  'assert(lj_gc2_worker_drain(g, 1) == 0)' \
   'worker_runs0 = la_load64_acq(&g->gc2.worker_runs)' \
   'lj_arena_alloc_restore_sweep_kind(&extra_tg.alloc, LJ_ARENAK_PLAIN)' \
   'lj_gc2_handshake(g, LJ_GC2_HS_RESET_ALLOC)' \

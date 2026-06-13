@@ -119,6 +119,8 @@ for needle in \
   'la_add64_rlx(&g->gc2.worker_busy_retries' \
   'lj_gc2_worker_drain(g' \
   'lj_gc2_worker_drain_progress(global_State *g, uint32_t limit)' \
+  '05 section 5.6.3 total worker progress contract' \
+  'return lj_gc2_worker_drain(g, limit)' \
   'phase != LJ_GC2_MARK && phase != LJ_GC2_WEAK &&' \
   'gc2_worker_sweep_progress(global_State *g, uint32_t limit)' \
   'sweep = gc2_worker_sweep_progress(g, limit)' \
