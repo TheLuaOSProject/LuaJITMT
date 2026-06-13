@@ -11,5 +11,5 @@ OUT=${TMPDIR:-/tmp}/lj_t_vm_safepoint
 make -C "$ROOT/src" clean >/dev/null
 make -C "$ROOT/src" -j"$JOBS" >/dev/null
 "$CC" $CFLAGS -I"$ROOT/src" "$ROOT/tests/t-vm-safepoint.c" \
-  "$ROOT/src/libluajit.a" -lm -ldl -o "$OUT"
-"$OUT"
+  "$ROOT/src/libluajit.a" -lm -ldl -pthread -o "$OUT"
+timeout 20s "$OUT"

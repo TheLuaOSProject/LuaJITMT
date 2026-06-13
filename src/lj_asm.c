@@ -1681,6 +1681,11 @@ static void asm_phi(ASMState *as, IRIns *ir)
 }
 
 static void asm_loop_fixup(ASMState *as);
+#if LJ_TARGET_X86ORX64
+static void asm_loop_poll(ASMState *as);
+#else
+#define asm_loop_poll(as)	((void)0)
+#endif
 
 /* Middle part of a loop. */
 static void asm_loop(ASMState *as)
@@ -1690,6 +1695,7 @@ static void asm_loop(ASMState *as)
   as->loopsnapno = as->snapno;
   if (as->gcsteps)
     asm_gc_check(as);
+  asm_loop_poll(as);
   /* LOOP marks the transition from the variant to the invariant part. */
   as->flagmcp = as->invmcp = NULL;
   as->sectref = 0;

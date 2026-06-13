@@ -3,7 +3,10 @@
 */
 
 #include <assert.h>
+#include <pthread.h>
 #include <stdio.h>
+#include <string.h>
+#include <time.h>
 
 #include "lua.h"
 #include "lauxlib.h"
@@ -21,7 +24,7 @@
 static void publish_manual(global_State *g, TGState *tg, uint32_t actions)
 {
   uint64_t epoch = la_load64_rlx(&g->gc2.hs_epoch) + 1u;
-  g->gc2.hs_actions = actions;
+  la_store32_rel(&g->gc2.hs_actions, actions);
   la_store32_rel(&g->gc2.hs_pending, 1);  /* 05 section 5.4.2. */
   la_store64_rel(&g->gc2.hs_epoch, epoch);  /* 05 section 5.4.2. */
   la_store32_rel(&tg->reqmask, actions);  /* 05 section 5.4.2. */
@@ -95,6 +98,31 @@ static void load_error_after_publish(lua_State *L)
 }
 
 #if LJ_HASJIT
+typedef struct TracePollPublisher {
+  global_State *g;
+  TGState *tg;
+  uint32_t start;
+} TracePollPublisher;
+
+static void sleep_ns(long ns)
+{
+  struct timespec ts;
+  ts.tv_sec = 0;
+  ts.tv_nsec = ns;
+  while (nanosleep(&ts, &ts) != 0) {
+  }
+}
+
+static void *trace_poll_publisher(void *arg)
+{
+  TracePollPublisher *p = (TracePollPublisher *)arg;
+  while (la_load32_acq(&p->start) == 0)
+    la_cpu_pause();
+  sleep_ns(1000000);
+  publish_manual(p->g, p->tg, LJ_GC2_HS_STOPREQ);
+  return NULL;
+}
+
 static void load_jloop_flush_after_publish(lua_State *L)
 {
   int status = luaL_loadstring(L,
@@ -111,6 +139,26 @@ static void load_jloop_flush_after_publish(lua_State *L)
     "return f\n");
   if (status != LUA_OK) {
     fprintf(stderr, "load_jloop_flush_after_publish failed: %s\n",
+	    lua_tostring(L, -1));
+    assert(status == LUA_OK);
+  }
+}
+
+static void load_trace_stopreq_loop(lua_State *L)
+{
+  int status = luaL_loadstring(L,
+    "jit.flush()\n"
+    "jit.opt.start('hotloop=1', 'hotexit=1')\n"
+    "local function f(n)\n"
+    "  local x = 0.0\n"
+    "  while x < n do x = x + 1.0 end\n"
+    "  return x\n"
+    "end\n"
+    "assert(f(128.0) == 128.0)\n"
+    "jit.opt.start('hotloop=1000000', 'hotexit=1000000')\n"
+    "return f\n");
+  if (status != LUA_OK) {
+    fprintf(stderr, "load_trace_stopreq_loop failed: %s\n",
 	    lua_tostring(L, -1));
     assert(status == LUA_OK);
   }
@@ -321,10 +369,40 @@ int main(void)
   assert(luaL_dostring(L, "jit.flush(1)") == LUA_OK);
   assert(g->gc2.hs_epoch == epoch0 + 1u);
   assert(tg->hs_epoch_ack == g->gc2.hs_epoch);
+
+  load_trace_stopreq_loop(L);
+  assert(lua_pcall(L, 0, 1, 0) == LUA_OK);
+  assert(lua_isfunction(L, -1));
+  assert(traceref(G2J(g), 1) != NULL || G2J(g)->freetrace > 0);
+  {
+    TracePollPublisher pub;
+    pthread_t th;
+    int status;
+    pub.g = g;
+    pub.tg = tg;
+    pub.start = 0;
+    assert(pthread_create(&th, NULL, trace_poll_publisher, &pub) == 0);
+    epoch0 = g->gc2.hs_epoch;
+    lua_pushnumber(L, 1e100);
+    la_store32_rel(&pub.start, 1);
+    status = lua_pcall(L, 1, 1, 0);
+    assert(pthread_join(th, NULL) == 0);
+    if (status != LUA_ERRRUN) {
+      fprintf(stderr, "trace_stopreq_loop unexpected status %d: %s\n", status,
+	      lua_tostring(L, -1));
+      assert(status == LUA_ERRRUN);
+    }
+    assert(strstr(lua_tostring(L, -1), "thread interrupted: VM shutdown") != NULL);
+    lua_pop(L, 1);
+    assert_acked(g, tg, epoch0);
+    assert((la_load8_acq(&tg->tg_flags) & TGF_STOPREQ) != 0);
+    la_store8_rel(&tg->tg_flags,
+		  (uint8_t)(la_load8_acq(&tg->tg_flags) & ~TGF_STOPREQ));
+  }
 #endif
 
   lua_close(L);
 
-  printf("t-vm-safepoint OK: x64 loop, trace-entry, return, unwind polls acked\n");
+  printf("t-vm-safepoint OK: x64 loop, trace-loop, trace-entry, return, unwind polls acked\n");
   return 0;
 }

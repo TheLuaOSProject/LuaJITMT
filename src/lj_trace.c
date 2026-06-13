@@ -1155,6 +1155,12 @@ static void trace_hotside(jit_State *J, const BCIns *pc, lua_State *L,
   }
 }
 
+static int trace_poll_pending(lua_State *L)
+{
+  TGState *tg = L ? L2TG(L) : NULL;
+  return tg && la_load32_acq(&tg->poll) != 0;
+}
+
 /* Stitch a new trace to the previous trace. */
 #if LJ_TARGET_X64
 void LJ_FASTCALL lj_trace_stitch(jit_State *J, const BCIns *pc, lua_State *L,
@@ -1329,7 +1335,7 @@ int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr)
   } else if (G(L)->gc.state == GCSatomic || G(L)->gc.state == GCSfinalize) {
     if (!(G(L)->hookmask & HOOK_GC))
       lj_gc_step(L);  /* Exited because of GC: drive GC forward. */
-  } else if ((J->flags & JIT_F_ON)) {
+  } else if ((J->flags & JIT_F_ON) && !trace_poll_pending(L)) {
     trace_hotside(J, pc, L, parent, exitno);
   }
   /* Return MULTRES or 0 or -17. */

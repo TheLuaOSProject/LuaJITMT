@@ -15,6 +15,10 @@ for needle in \
   'emit_leatg(as, dest, tmptv)' \
   'DISPATCH_TG(jit_base)' \
   'emit_gettg(as, tmp, gl)' \
+  'static void asm_loop_poll(ASMState *as)' \
+  'emit_gmroi(as, XG_ARITHi(XOg_CMP), RID_DISPATCH, DISPATCH_TG(poll), 0)' \
+  'static int trace_poll_pending(lua_State *L)' \
+  '!trace_poll_pending(L)' \
   'static void emit_pushx' \
   'static void emit_popx' \
   'static int asm_fuseggfref' \
