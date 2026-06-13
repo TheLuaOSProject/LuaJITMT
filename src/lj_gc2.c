@@ -261,6 +261,11 @@ void lj_gc2_legacy_mark_begin(global_State *g)
   lj_gc2_handshake(g, LJ_GC2_HS_ENABLE_BARRIER|LJ_GC2_HS_ALLOC_BLACK);
 }
 
+void lj_gc2_legacy_weak_begin(global_State *g)
+{
+  g->gc2.phase = LJ_GC2_WEAK;  /* 05 section 5.8 legacy weak-phase bridge. */
+}
+
 void lj_gc2_legacy_sweep_begin(global_State *g)
 {
   g->gc2.phase = LJ_GC2_SWEEP;

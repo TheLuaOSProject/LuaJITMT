@@ -1140,6 +1140,7 @@ static void atomic(global_State *g, lua_State *L)
   gc2_paranoia_check_fixpoint(g);
 
   /* All marking done, clear weak tables. */
+  lj_gc2_legacy_weak_begin(g);
   gc_clearweak(g, gcref(g->gc.weak));
   lj_gc2_legacy_sweep_begin(g);
 

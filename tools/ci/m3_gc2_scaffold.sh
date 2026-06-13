@@ -14,6 +14,7 @@ make -C "$ROOT/src" -j"$JOBS" >/dev/null
 for needle in \
   'uint64_t fixpoint_rounds' \
   'uint64_t fixpoint_hits' \
+  'lj_gc2_legacy_weak_begin(global_State *g)' \
   'lj_gc2_fixpoint_round(global_State *g, lua_State *L' \
   'lj_gc2_fixpoint_run(global_State *g, lua_State *L' \
   'la_xchg64_acqrel(&g->gc2.marks_this_round, 0)' \

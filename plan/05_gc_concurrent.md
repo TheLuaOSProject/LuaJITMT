@@ -295,6 +295,11 @@ P_WEAK (leader+workers, barrier still ON, mutators running):
   clear FINREG (run-once, like markfinalized today). Finalizer thread runs
   entries after P_SWEEP begins (ordering: reverse registration like today’s
   mmudata list — preserve by pushing in registry order and reversing).
+Current bridge note: `lj_gc2_legacy_weak_begin()` now makes `P_WEAK` visible
+after the fixpoint/paranoia bridge and before legacy `gc_clearweak()`. This
+preserves the original `MARK -> WEAK -> SWEEP` phase shape for follow-up work,
+but legacy weak clearing remains authoritative; the weak-table worklist and
+concurrent weak-write resurrection barrier above are not implemented yet.
 P_SWEEP entry handshake: {DISABLE_BARRIER, RESET_ALLOC, FLUSH_SSB(last)}.
   After it: workers sweep global/orphan arenas + huge table (free unmarked
   huge via munmap, deferred one epoch); owners lazy-sweep per 04 §4.6.
