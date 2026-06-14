@@ -2054,14 +2054,16 @@ void lj_gc2_barrier_weak_key(lua_State *L, GCtab *t, cTValue *key)
 {
   global_State *g;
   GCtab *mt;
+  int weak;
   if (!L || !t || !key || !tvisgcv(key))
     return;
   g = G(L);
   if (la_load32_acq(&g->gc2.phase) != LJ_GC2_WEAK)
     return;
   mt = tabref_acq(t->metatable);
-  if ((gc2_tab_weak_mode(g, t, mt) & LJ_GC_WEAKKEY) &&
-      lj_gc2_markobj(g, gcV(key)))  /* 05 section 5.8 weak-key write. */
+  weak = gc2_tab_weak_mode(g, t, mt);
+  /* 05 section 5.8 weak-table key write. */
+  if (weak && lj_gc2_markobj(g, gcV(key)))
     la_add64_rlx(&g->gc2.weak_keys_marked, 1);
 }
 

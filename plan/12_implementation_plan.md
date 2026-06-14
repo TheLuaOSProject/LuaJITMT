@@ -184,8 +184,9 @@ balance under the current bridge. The traversal gate now covers
 GC2-cleared snapshot bridge, captured traversal-time weak modes across later
 `mt.__mode` mutation, and a post-clear weak-phase store hook for the original
 resurrection-race case, including VM rewrites of existing nil-valued weak-key
-hash slots. Paranoia builds now rescan the legacy weak list after a GC2 skip
-decision and fail if any weak slot remains clearable.
+hash slots and VM insertion of strong hash keys into weak-value tables.
+Paranoia builds now rescan the legacy weak list after a GC2 skip decision and
+fail if any weak slot remains clearable.
 Finalizer dispatch now has a GC2 owner try-claim around legacy
 `mmudata` draining, so peer TGs back off instead of racing the shared finalizer
 list while close-time drains still complete through the blocking wrapper. The
