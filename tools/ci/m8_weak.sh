@@ -19,6 +19,8 @@ for needle in \
   'test_vm_weak_key_write_barrier' \
   'test_vm_weak_value_hash_key_barrier' \
   'test_vm_weak_value_array_barrier' \
+  'lj_meta_tset_owner(lua_State *L, cTValue *o, cTValue *k,' \
+  'test_capi_weak_newindex_target_write_barrier' \
   'test_weak_clear_marks_string_slots' \
   'test_weak_drain_uses_captured_mode' \
   'test_weak_post_clear_resurrection_write' \

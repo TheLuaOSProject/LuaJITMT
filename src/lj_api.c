@@ -1017,14 +1017,14 @@ LUA_API void lua_settable(lua_State *L, int idx)
 {
   TValue *o;
   cTValue *t = index2adr_check(L, idx);
+  GCtab *owner;
   lj_checkapi_slot(2);
-  o = lj_meta_tset(L, t, L->top-2);
+  o = lj_meta_tset_owner(L, t, L->top-2, &owner);
   if (o) {
     /* NOBARRIER: lj_meta_tset ensures the table is not black. */
     TValue *key = L->top-2, *val = L->top-1;
     copyTVrel(L, o, val);
-    if (tvistab(t))
-      lj_gc2_barrier_weak_write(L, tabV(t), key, val);
+    lj_gc2_barrier_weak_write(L, owner, key, val);
     L->top = key;
   } else {
     TValue *base = L->top;
@@ -1040,15 +1040,15 @@ LUA_API void lua_setfield(lua_State *L, int idx, const char *k)
   TValue *o;
   TValue key;
   cTValue *t = index2adr_check(L, idx);
+  GCtab *owner;
   lj_checkapi_slot(1);
   setstrV(L, &key, lj_str_newz(L, k));
-  o = lj_meta_tset(L, t, &key);
+  o = lj_meta_tset_owner(L, t, &key, &owner);
   if (o) {
     /* NOBARRIER: lj_meta_tset ensures the table is not black. */
     TValue *val = L->top-1;
     copyTVrel(L, o, val);
-    if (tvistab(t))
-      lj_gc2_barrier_weak_write(L, tabV(t), &key, val);
+    lj_gc2_barrier_weak_write(L, owner, &key, val);
     L->top = val;
   } else {
     TValue *base = L->top;

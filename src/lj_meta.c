@@ -189,11 +189,12 @@ cTValue *lj_meta_tget(lua_State *L, cTValue *o, cTValue *k)
   return NULL;  /* unreachable */
 }
 
-/* Helper for TSET*. __newindex chain and metamethod. */
-TValue *lj_meta_tset(lua_State *L, cTValue *o, cTValue *k)
+static TValue *meta_tset(lua_State *L, cTValue *o, cTValue *k, GCtab **owner)
 {
   TValue tmp, motv;
   int loop;
+  if (owner)
+    *owner = NULL;
   for (loop = 0; loop < LJ_MAX_IDXCHAIN; loop++) {
     cTValue *mo;
     if (LJ_LIKELY(tvistab(o))) {
@@ -203,6 +204,8 @@ TValue *lj_meta_tset(lua_State *L, cTValue *o, cTValue *k)
 	t->nomm = 0;  /* Invalidate negative metamethod cache. */
 	lj_gc2_barrier_weak_key(L, t, k);
 	lj_gc_pubtab(L, t);
+	if (owner)
+	  *owner = t;
 	return (TValue *)tv;
       } else if (!(mo = lj_meta_fasttv(G(L), tabref_acq(t->metatable),
 				       MM_newindex, &motv))) {
@@ -210,11 +213,16 @@ TValue *lj_meta_tset(lua_State *L, cTValue *o, cTValue *k)
 	if (tv != niltv(L))
 	  lj_gc2_barrier_weak_key(L, t, k);
 	lj_gc_pubtab(L, t);
-	if (tv != niltv(L))
+	if (tv != niltv(L)) {
+	  if (owner)
+	    *owner = t;
 	  return (TValue *)tv;
+	}
 	if (tvisnil(k)) lj_err_msg(L, LJ_ERR_NILIDX);
 	else if (tvisint(k)) { setnumV(&tmp, (lua_Number)intV(k)); k = &tmp; }
 	else if (tvisnum(k) && tvisnan(k)) lj_err_msg(L, LJ_ERR_NANIDX);
+	if (owner)
+	  *owner = t;
 	return lj_tab_newkey(L, t, k);
       }
     } else if (tvisnil(mo = lj_meta_lookuptv(L, &motv, o, MM_newindex))) {
@@ -231,6 +239,18 @@ TValue *lj_meta_tset(lua_State *L, cTValue *o, cTValue *k)
   }
   lj_err_msg(L, LJ_ERR_SETLOOP);
   return NULL;  /* unreachable */
+}
+
+/* Helper for TSET*. __newindex chain and metamethod. */
+TValue *lj_meta_tset(lua_State *L, cTValue *o, cTValue *k)
+{
+  return meta_tset(L, o, k, NULL);
+}
+
+/* C API variant that reports the resolved target table for post-store barriers. */
+TValue *lj_meta_tset_owner(lua_State *L, cTValue *o, cTValue *k, GCtab **owner)
+{
+  return meta_tset(L, o, k, owner);
 }
 
 static cTValue *str2num(cTValue *o, TValue *n)
