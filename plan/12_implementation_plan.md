@@ -140,7 +140,9 @@ string weak-reference parity, weak-table cycles, current `ffi.gc()` ordering
 and clear/nested-GC behavior, close-time cdata/userdata finalizer drain, and
 focused GC2 weak/barrier paranoia coverage. It also reruns the GC2 phase
 accounting test to assert finalizer owner tracking and enter/leave counter
-balance under the current bridge.
+balance under the current bridge. The traversal gate now covers
+`lj_gc2_weak_complete()` skip/fallback accounting for the current
+GC2-cleared snapshot bridge; broader weak-set zero-diff/paranoia work remains.
 The original "finalizer that spawns a thread" item now has a bridge test for
 spawn+join during explicit-GC finalization; the broader planned async finalizer
 dispatch path remains M8 work, not an M9 performance cleanup.

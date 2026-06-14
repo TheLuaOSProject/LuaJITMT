@@ -17,6 +17,8 @@ for needle in \
   'test_vm_weak_key_write_barrier' \
   'test_vm_weak_value_array_barrier' \
   'test_weak_clear_marks_string_slots' \
+  'test_weak_complete_bridge' \
+  'lj_gc2_weak_complete(g, gcref(g->gc.weak), 1)' \
   'lj_gc2_finalizer_pending(global_State *g)' \
   'lj_gc2_finalizer_sweep_pending(global_State *g)' \
   'assert(la_load32_acq(&g->gc2.finalizer_owner_tid) ==' \
