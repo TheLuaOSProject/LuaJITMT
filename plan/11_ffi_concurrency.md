@@ -52,12 +52,12 @@ GCtab *miscmap; CCallback cb; CTypeID1 hash[CTHASH_SIZE]; }`
   `CTA_BAD` holes rather than exposing them as live type records.
 - `cts->L` field: delete; pass L explicitly (it's already threaded through
   most call paths; grep `cts->L` ≈ 15 sites, mechanical).
-- **cparse (ffi.cdef)** mutates parser state + tab: serialize whole cdef
-  through a tiny CAS token (`cts->parse_token`) — cdef is initialization-
-  time API; token-not-lock per 02 §2.2 (busy ⇒ la_cpu_pause retry loop is
-  acceptable here? That IS waiting on a specific thread. DECIDED: cdef
-  parks on a futex — cdef is explicitly allowed to block, added to the
-  §2.2 whitelist; it is never on a hot path).
+- **cparse (ffi.cdef)** mutates parser state + tab: the original sketch
+  serialized the whole cdef through a tiny CAS token (`cts->parse_token`)
+  because cdef is an initialization-time API. Current implementation decision:
+  this is an accepted blocking exception, not a hot-path lock-free target.
+  Waiters park on a futex in `lj_ctype_parse_lock()`, and cleanup/naming can be
+  revisited in M9 without changing the functional requirement.
 - `ffi.typeof/metatype/istype` read paths: pure RCU reads. `ffi.metatype`
   one-shot rule enforced with CAS on the miscmap slot (raw nil→mt).
   Current implementation note: metatypes use a CTState side root
