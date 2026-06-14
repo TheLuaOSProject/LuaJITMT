@@ -381,9 +381,10 @@ scoped-flush target.
    after the landed `TabNodeHdr` slice, while C readers and regular x64
    dynamic `IR_HREF` lowering use the node header. The original JIT target
    above remains pending for the final generation-aware HREFK guard model and
-   HSTORE/write codegen; current x64 HREFK lowering has an interim
-   node-header slot-bounds guard before reading `node[slot].key`. Do not treat
-   the mirror as the final correctness source.
+   HSTORE/write codegen; current Linux/x64 HREFK recording loads the current
+   node pointer and relies on the x64 node-header slot-bounds guard before
+   reading `node[slot].key`, instead of recording a legacy `GCtab.hmask` mirror
+   equality guard. Do not treat the mirror as the final correctness source.
    Current implementation status: before the full `AHdr`/`NHdr` reshape, the
    legacy `GCtab` table-field `FLOAD`s for array/node/asize/hmask are emitted
    as fresh loads instead of being CSE'd under the old "no corresponding

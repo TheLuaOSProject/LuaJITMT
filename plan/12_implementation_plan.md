@@ -124,11 +124,14 @@ type-stable loop slots. A narrow trace-local table-store bridge now records
 non-nil `ASTORE`/`HSTORE` updates to `TNEW`/`TDUP` tables and lowers them
 through `lj_tab_storetv_forjit()`; the original broad generation-aware table
 write protocol remains pending, so shared and shape-changing indexed stores
-stay NYI. Linux/x64 secure builds currently keep generated mcode execute-stable
-with a fresh-area W^X bridge: once an area has committed trace bytes, the next
-reserve allocates a new unpublished area instead of flipping the old area
-writable. The planned dual-map mcode write view remains the original M6 target
-and still replaces this bridge.
+stay NYI. Linux/x64 HREFK recording now avoids the legacy `GCtab.hmask` mirror
+guard and relies on the loaded node pointer plus x64 node-header slot guard;
+the broader array/header FLOAD indirection target remains pending. Linux/x64
+secure builds currently keep generated mcode execute-stable with a fresh-area
+W^X bridge: once an area has committed trace bytes, the next reserve allocates
+a new unpublished area instead of flipping the old area writable. The planned
+dual-map mcode write view remains the original M6 target and still replaces
+this bridge.
 Tests: stock with -jon; t-jit-01..06 (trace same loop from 2 threads;
 side-trace attach while parent runs on another thread; flush storm;
 exit-handler stress; recording-thread killed mid-trace (error in

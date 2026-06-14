@@ -1529,12 +1529,16 @@ static TRef rec_idx_key(jit_State *J, RecordIndex *ix, IRRef *rbref,
 		     ~(GCSize)0;
       if (hslot <= hrefk_hmask*(GCSize)sizeof(Node) &&
 	  hslot <= 65535*(GCSize)sizeof(Node)) {
-	TRef node, kslot, hm;
+	TRef node, kslot;
 	*rbref = J->cur.nins;  /* Mark possible rollback point. */
 	*rbguard = J->guardemit;
+#if !(defined(__linux__) && LJ_TARGET_X64)
 	hm = emitir(IRTI(IR_FLOAD), ix->tab, IRFL_TAB_HMASK);
 	emitir(IRTGI(IR_EQ), hm, lj_ir_kint(J, (int32_t)hrefk_hmask));
+#endif
 	node = emitir(IRT(IR_FLOAD, IRT_PGC), ix->tab, IRFL_TAB_NODE);
+	/* M6: x64 HREFK guards the constant slot against the loaded node header,
+	** avoiding the legacy GCtab.hmask mirror as a correctness source. */
 	kslot = lj_ir_kslot(J, key, (IRRef)(hslot / sizeof(Node)));
 	return emitir(IRTG(IR_HREFK, IRT_PGC), node, kslot);
       }
