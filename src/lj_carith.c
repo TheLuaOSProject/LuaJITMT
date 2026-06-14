@@ -133,7 +133,10 @@ static int carith_ptr(lua_State *L, CTState *cts, CDArith *ca, MMS mm)
 	return 0;
       if (mm == MM_sub) {  /* Pointer difference. */
 	intptr_t diff;
+	lj_ctype_parse_lock(cts, L);
+	/* 11.2: cdata pointer arithmetic readers wait out parser rollback. */
 	sz = lj_ctype_size(cts, ctype_cid(ctp->info));  /* Element size. */
+	lj_ctype_parse_unlock(cts);
 	if (sz == 0 || sz == CTSIZE_INVALID)
 	  return 0;
 	diff = ((intptr_t)pp - (intptr_t)pp2) / (int32_t)sz;
@@ -167,7 +170,10 @@ static int carith_ptr(lua_State *L, CTState *cts, CDArith *ca, MMS mm)
   } else {
     return 0;
   }
+  lj_ctype_parse_lock(cts, L);
+  /* 11.2: cdata pointer arithmetic readers wait out parser rollback. */
   sz = lj_ctype_size(cts, ctype_cid(ctp->info));  /* Element size. */
+  lj_ctype_parse_unlock(cts);
   if (sz == CTSIZE_INVALID)
     return 0;
   pp += idx*(int32_t)sz;  /* Compute pointer + index. */

@@ -1484,8 +1484,12 @@ static TRef crec_arith_ptr(jit_State *J, TRef *sp, CType **s, MMS mm)
 	(ctype_isptr(s[1]->info) || ctype_isrefarray(s[1]->info))) {
       if (mm == MM_sub) {  /* Pointer difference. */
 	TRef tr;
-	CTSize sz = lj_ctype_size(cts, ctype_cid(ctp->info));
-	if (sz == 0 || (sz & (sz-1)) != 0)
+	CTSize sz;
+	lj_ctype_parse_lock(cts, J->L);
+	/* 11.2: cdata recorder pointer arithmetic waits out rollback. */
+	sz = lj_ctype_size(cts, ctype_cid(ctp->info));
+	lj_ctype_parse_unlock(cts);
+	if (sz == 0 || sz == CTSIZE_INVALID || (sz & (sz-1)) != 0)
 	  return 0;  /* NYI: integer division. */
 	tr = emitir(IRT(IR_SUB, IRT_INTP), sp[0], sp[1]);
 	tr = emitir(IRT(IR_BSAR, IRT_INTP), tr, lj_ir_kint(J, lj_fls(sz)));
@@ -1513,8 +1517,14 @@ static TRef crec_arith_ptr(jit_State *J, TRef *sp, CType **s, MMS mm)
   {
     TRef tr = sp[1];
     IRType t = tref_type(tr);
-    CTSize sz = lj_ctype_size(cts, ctype_cid(ctp->info));
+    CTSize sz;
     CTypeID id;
+    lj_ctype_parse_lock(cts, J->L);
+    /* 11.2: cdata recorder pointer arithmetic waits out rollback. */
+    sz = lj_ctype_size(cts, ctype_cid(ctp->info));
+    lj_ctype_parse_unlock(cts);
+    if (sz == CTSIZE_INVALID)
+      return 0;
 #if LJ_64
     if (t == IRT_NUM || t == IRT_FLOAT)
       tr = emitconv(tr, IRT_INTP, t, IRCONV_ANY);

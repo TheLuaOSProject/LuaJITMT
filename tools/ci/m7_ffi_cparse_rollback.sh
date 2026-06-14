@@ -42,11 +42,15 @@ for needle in \
   'cdata __index observed failed cdef rollback state' \
   'cdata __newindex observed failed cdef rollback state' \
   'cdata numeric __index observed failed cdef rollback state' \
-  'direct ctype/typeinfo/new/field/numeric readers wait out rollback' \
+  'cdata pointer add observed failed cdef rollback state' \
+  'cdata pointer diff observed failed cdef rollback state' \
+  'direct ctype/typeinfo/new/field/numeric/ptrarith readers wait out rollback' \
   'cdata string-key readers wait out parser rollback' \
   'cdata numeric-key readers wait out parser rollback' \
+  'cdata pointer arithmetic readers wait out parser rollback' \
   'cdata recorder field reader waits out parser rollback' \
   'cdata recorder numeric-key reader waits out parser rollback' \
+  'cdata recorder pointer arithmetic waits out rollback' \
   'if (errcode || cp.newtype)' \
   'ctype_top_acq(cp->cts)'
 do

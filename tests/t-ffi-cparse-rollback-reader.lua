@@ -5,8 +5,10 @@ ffi.cdef("struct lj_m7_rollback_reader;")
 
 local ct = ffi.typeof("struct lj_m7_rollback_reader")
 local ctid = tonumber(ct)
-local backing = ffi.new("char[8]")
+local backing = ffi.new("char[16]")
 local p = ffi.cast("struct lj_m7_rollback_reader *", backing)
+local q = ffi.cast("struct lj_m7_rollback_reader *",
+		   ffi.cast("char *", backing) + 4)
 
 local function bad_cdef_source(tag)
   local parts = { "struct lj_m7_rollback_reader { int x; };\n" }
@@ -62,6 +64,16 @@ race_failed_cdef("numindex", function()
 	 "cdata numeric __index observed failed cdef rollback state")
 end)
 
+race_failed_cdef("ptradd", function()
+  assert(not pcall(function() return p + 1 end),
+	 "cdata pointer add observed failed cdef rollback state")
+end)
+
+race_failed_cdef("ptrdiff", function()
+  assert(not pcall(function() return q - p end),
+	 "cdata pointer diff observed failed cdef rollback state")
+end)
+
 assert(ffi.sizeof(ct) == nil, "failed cdef left incomplete struct completed")
 assert(ffi.typeinfo(ctid).size == nil,
        "failed cdef left typeinfo for incomplete struct completed")
@@ -73,5 +85,9 @@ assert(not pcall(function() p.x = 123 end),
        "failed cdef left cdata __newindex able to write incomplete struct")
 assert(not pcall(function() return p[0] end),
        "failed cdef left cdata numeric __index able to read incomplete struct")
+assert(not pcall(function() return p + 1 end),
+       "failed cdef left cdata pointer add able to step incomplete struct")
+assert(not pcall(function() return q - p end),
+       "failed cdef left cdata pointer diff able to size incomplete struct")
 
-print("t-ffi-cparse-rollback-reader OK: direct ctype/typeinfo/new/field/numeric readers wait out rollback")
+print("t-ffi-cparse-rollback-reader OK: direct ctype/typeinfo/new/field/numeric/ptrarith readers wait out rollback")
