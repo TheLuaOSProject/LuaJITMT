@@ -31,7 +31,10 @@ for needle in \
   'finalizer_leaves0 + 1u' \
   'gc_finalizer_mt_release_exclusive(global_State *g)' \
   'gc_finalizer_mt_reclaim_exclusive(global_State *g)' \
-  '09 section 9.6: finalizer may spawn while GC is paused.'
+  '09 section 9.6: finalizer may spawn while GC is paused.' \
+  'lj_state_tryclaim(cbL, lj_thr_current_id(g), &claim)' \
+  'lua_State *oldL' \
+  'gc_call_finalizer must not use shared vmthread callback stack'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_gc2.c" "$ROOT/src/lj_gc2.h" \
       "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc.h" "$ROOT/tests/t-gc2-phase.c" \
@@ -40,6 +43,22 @@ do
     exit 1
   fi
 done
+
+if awk '
+  /static void gc_call_finalizer\(global_State \*g, lua_State \*L,/ {
+    infn = 1
+  }
+  infn && /lua_State \*[^=]+=[[:space:]]*vmthread\(g\)/ {
+    bad = 1
+  }
+  infn && /^}/ {
+    infn = 0
+  }
+  END { exit bad ? 0 : 1 }
+' "$ROOT/src/lj_gc.c"; then
+  echo "guardrail: gc_call_finalizer must not assign vmthread(g) as its callback stack" >&2
+  exit 1
+fi
 
 make -C "$ROOT/src" clean >/dev/null
 make -C "$ROOT/src" -j"$JOBS" >/dev/null
@@ -59,6 +78,11 @@ out="$TMP/lj_t-gc2-traverse_m8"
 
 out="$TMP/lj_t-m8-close-finalizers"
 "$CC" $CFLAGS -I"$ROOT/src" "$ROOT/tests/t-m8-close-finalizers.c" \
+  "$ROOT/src/libluajit.a" -lm -ldl -pthread -o "$out"
+"$out"
+
+out="$TMP/lj_t-m8-finalizer-state"
+"$CC" $CFLAGS -I"$ROOT/src" "$ROOT/tests/t-m8-finalizer-state.c" \
   "$ROOT/src/libluajit.a" -lm -ldl -pthread -o "$out"
 "$out"
 
@@ -84,6 +108,12 @@ out="$TMP/lj_t-gc2-traverse_m8_paranoia"
 out="$TMP/lj_t-m8-close-finalizers_paranoia"
 "$CC" $CFLAGS -DLUA_USE_ASSERT -DLJ_GC2_PARANOIA=1 -I"$ROOT/src" \
   "$ROOT/tests/t-m8-close-finalizers.c" "$ROOT/src/libluajit.a" \
+  -lm -ldl -pthread -o "$out"
+"$out"
+
+out="$TMP/lj_t-m8-finalizer-state_paranoia"
+"$CC" $CFLAGS -DLUA_USE_ASSERT -DLJ_GC2_PARANOIA=1 -I"$ROOT/src" \
+  "$ROOT/tests/t-m8-finalizer-state.c" "$ROOT/src/libluajit.a" \
   -lm -ldl -pthread -o "$out"
 "$out"
 

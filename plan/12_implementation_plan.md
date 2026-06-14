@@ -148,8 +148,11 @@ list after a GC2 skip decision and fail if any weak slot remains clearable.
 Finalizer dispatch now has a GC2 owner try-claim around legacy
 `mmudata` draining, so peer TGs back off instead of racing the shared finalizer
 list while close-time drains still complete through the blocking wrapper. The
-older `finalizer_token` bridge has been removed; the remaining finalizer bridge
-is the shared `vmthread(g)` callback stack.
+older `finalizer_token` bridge has been removed. User finalizer callbacks now
+run on the claimed collector caller `lua_State` instead of the shared
+`vmthread(g)` stack; the remaining finalizer bridge is legacy
+`mmudata`/FINREG membership and execution rather than the original planned
+FINREG/finqueue dispatch path.
 The original "finalizer that spawns a thread" item now has a bridge test for
 spawn+join during explicit-GC finalization; the broader planned async finalizer
 dispatch path remains M8 work, not an M9 performance cleanup.

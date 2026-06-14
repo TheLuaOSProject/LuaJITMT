@@ -1159,38 +1159,53 @@ static void gc_call_finalizer(global_State *g, lua_State *L,
 			      cTValue *mo, GCobj *o)
 {
   /* Save and restore lots of state around the __gc callback. */
+  LJStateClaim claim;
+  lua_State *cbL = L;
+  lua_State *oldL;
   uint8_t oldh;
   GCSize oldt;
   int had_mt_exclusive;
   int errcode;
-  lua_State *VL = vmthread(g);
-  TValue *top;
+  TValue *oldtop, *top;
+  while (!lj_state_tryclaim(cbL, lj_thr_current_id(g), &claim))
+    la_cpu_pause();
+  lj_assertG(cbL != vmthread(g),
+	     "gc_call_finalizer must not use shared vmthread callback stack");
+  oldL = lj_tg_cur_L(g);
   oldh = hook_save(g);
   oldt = lj_gc_threshold_load(g);
   lj_trace_abort(g);
   hook_entergc(g);  /* Disable hooks and new traces during __gc. */
   if (LJ_HASPROFILE && (oldh & HOOK_PROFILE)) lj_dispatch_update(g, 0);
   lj_gc_threshold_store(g, LJ_MAX_MEM);  /* Prevent GC steps. */
-  top = VL->top;
-  copyTV(VL, top++, mo);
+  oldtop = cbL->top;
+  top = cbL->top;
+  copyTV(cbL, top++, mo);
   if (LJ_FR2) setnilV(top++);
-  setgcV(VL, top, o, ~o->gch.gct);
-  VL->top = top+1;
+  setgcV(cbL, top, o, ~o->gch.gct);
+  cbL->top = top+1;
   had_mt_exclusive = gc_finalizer_mt_release_exclusive(g);
-  errcode = lj_vm_pcall(VL, top, 1+0, -1);  /* Stack: |mo|o| -> | */
+  errcode = lj_vm_pcall(cbL, top, 1+0, -1);  /* Stack: |mo|o| -> | */
   if (had_mt_exclusive)
     gc_finalizer_mt_reclaim_exclusive(g);
-  lj_tg_setcur_L(g, L);
+  if (oldL)
+    lj_tg_setcur_L(g, oldL);
+  else
+    lj_tg_clearcur_L(g);
   hook_restore(g, oldh);
   if (LJ_HASPROFILE && (oldh & HOOK_PROFILE)) lj_dispatch_update(g, 0);
   lj_gc_threshold_store(g, oldt);  /* Restore GC threshold. */
   if (errcode) {
     TValue tmp;
-    copyTV(VL, &tmp, VL->top-1);
-    VL->top--;
+    copyTV(cbL, &tmp, cbL->top-1);
+    cbL->top = oldtop;
+    lj_state_dropclaim(&claim);
     lj_vmevent_send(g, ERRFIN,
       copyTV(V, V->top++, &tmp);
     );
+  } else {
+    cbL->top = oldtop;
+    lj_state_dropclaim(&claim);
   }
 }
 
