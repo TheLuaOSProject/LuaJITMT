@@ -35,6 +35,7 @@
 #if LJ_HASFFI
 #include "lj_ctype.h"
 #include "lj_cdata.h"
+#include "lj_clib.h"
 #endif
 #include "lj_trace.h"
 #include "lj_dispatch.h"
@@ -265,6 +266,25 @@ static void gc2_paranoia_check_udata(global_State *g, GCudata *ud)
     if (!sbufiscoworborrow(sbx))
       gc2_paranoia_checkmem(g, sbx->b, "buffer userdata data");
   }
+#if LJ_HASFFI
+  if (udtype == UDTYPE_FFI_CLIB) {
+    CLibrary *cl = (CLibrary *)uddata(ud);
+    CLibCacheEntry *e;
+    for (e = (CLibCacheEntry *)la_loadptr_acq(
+	   (void *const *)&cl->cache_head);
+	 e != NULL;
+	 e = (CLibCacheEntry *)la_loadptr_acq((void *const *)&e->next)) {
+      GCstr *name = (GCstr *)la_loadptr_acq((void *const *)&e->name);
+      TValue tv;
+      gc2_paranoia_checkmem(g, e, "FFI CLibrary cache entry");
+      if (name)
+	gc2_paranoia_checkobj(g, obj2gco(name), "FFI CLibrary cache key");
+      lj_tv_load_acq(&tv, &e->val);
+      if (tvisgcv(&tv))
+	gc2_paranoia_checkobj(g, gcV(&tv), "FFI CLibrary cache value");
+    }
+  }
+#endif
 }
 
 static void gc2_paranoia_checkone(global_State *g, GCobj *o)
@@ -412,6 +432,8 @@ static void gc2_paranoia_check_fixpoint(global_State *g)
 #define gc2_paranoia_check_fixpoint(g)	((void)0)
 #endif
 
+static void gc_mark(global_State *g, GCobj *o);
+
 /* Mark a TValue (if needed). */
 #define gc_marktv(g, tv) \
   { lj_assertG(!tvisgcv(tv) || (~itype(tv) == gcval(tv)->gch.gct), \
@@ -426,6 +448,25 @@ static void gc2_paranoia_check_fixpoint(global_State *g)
 #define gc_mark_str(g, s) \
   (lj_gc_arena_markobj((g), obj2gco(s)), \
    lj_obj_cleargcflags(obj2gco(s), LJ_GC_WHITES))
+
+#if LJ_HASFFI
+static void gc_mark_clib_cache(global_State *g, CLibrary *cl)
+{
+  CLibCacheEntry *e;
+  for (e = (CLibCacheEntry *)la_loadptr_acq(
+	 (void *const *)&cl->cache_head);
+       e != NULL;
+       e = (CLibCacheEntry *)la_loadptr_acq((void *const *)&e->next)) {
+    GCstr *name = (GCstr *)la_loadptr_acq((void *const *)&e->name);
+    TValue tv;
+    lj_gc_arena_markmem(g, e);
+    if (name)
+      gc_mark_str(g, name);
+    lj_tv_load_acq(&tv, &e->val);
+    gc_marktv(g, &tv);
+  }
+}
+#endif
 
 /* Mark a white GCobj. */
 static void gc_mark(global_State *g, GCobj *o)
@@ -443,6 +484,12 @@ static void gc_mark(global_State *g, GCobj *o)
     gray2black(o);  /* Userdata are never gray. */
     if (mt) gc_markobj(g, mt);
     if (env) gc_markobj(g, env);
+#if LJ_HASFFI
+    if (udtype == UDTYPE_FFI_CLIB) {
+      CLibrary *cl = (CLibrary *)uddata(ud);
+      gc_mark_clib_cache(g, cl);
+    }
+#endif
     if (LJ_HASBUFFER && udtype == UDTYPE_BUFFER) {
       SBufExt *sbx = (SBufExt *)uddata(ud);
       GCobj *ref;

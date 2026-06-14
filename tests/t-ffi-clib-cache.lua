@@ -75,4 +75,8 @@ collectgarbage("restart")
 collectgarbage("collect")
 collectgarbage("collect")
 
+assert(ffi.C.abs(-77) == 77)
+assert(tonumber(ffi.C.strlen("cache-root")) == 10)
+assert(ffi.C.LJ_M7_CLIB_CONST == 73)
+
 print(("t-ffi-clib-cache OK: %d threads, %d cache hits"):format(nthreads, total))

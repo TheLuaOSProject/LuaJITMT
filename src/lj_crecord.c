@@ -1670,7 +1670,7 @@ void LJ_FASTCALL recff_clib_index(jit_State *J, RecordFFData *rd)
     GCstr *name = strV(&rd->argv[1]);
     CType *ct;
     CTypeID id = lj_ctype_getname(cts, &ct, name, CLNS_INDEX);
-    cTValue *tv = lj_tab_getstr(cl->cache, name);
+    cTValue *tv = lj_clib_cache_get(cl, name);
     rd->nres = rd->data;
     if (id && tv && !tvisnil(tv)) {
       /* Specialize to the symbol name and make the result a constant. */

@@ -10,6 +10,9 @@
 #include "lj_gc.h"
 #include "lj_err.h"
 #include "lj_udata.h"
+#if LJ_HASFFI
+#include "lj_clib.h"
+#endif
 
 GCudata *lj_udata_new(lua_State *L, MSize sz, GCtab *env)
 {
@@ -30,6 +33,10 @@ GCudata *lj_udata_new(lua_State *L, MSize sz, GCtab *env)
 
 void LJ_FASTCALL lj_udata_free(global_State *g, GCudata *ud)
 {
+#if LJ_HASFFI
+  if (lj_udata_udtype_acq(ud) == UDTYPE_FFI_CLIB)
+    lj_clib_unload(g, (CLibrary *)uddata(ud));
+#endif
   lj_mem_free(g, ud, sizeudata(ud));
 }
 

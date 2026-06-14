@@ -13,6 +13,7 @@
 #include "lj_tab.h"
 #include "lj_str.h"
 #include "lj_udata.h"
+#include "lj_state.h"
 #include "lj_ctype.h"
 #include "lj_cconv.h"
 #include "lj_cdata.h"
@@ -311,26 +312,67 @@ static void *clib_getsym(CLibrary *cl, const char *name)
 
 /* -- C library indexing -------------------------------------------------- */
 
-static void clib_cache_lock(CLibrary *cl)
+static CLibCacheEntry *clib_cache_find(CLibCacheEntry *head, GCstr *name)
 {
+  CLibCacheEntry *e;
+  for (e = head; e != NULL;
+       e = (CLibCacheEntry *)la_loadptr_acq((void *const *)&e->next)) {
+    if ((GCstr *)la_loadptr_acq((void *const *)&e->name) == name)
+      return e;
+  }
+  return NULL;
+}
+
+cTValue *lj_clib_cache_get(CLibrary *cl, GCstr *name)
+{
+  CLibCacheEntry *head = (CLibCacheEntry *)la_loadptr_acq(
+    (void *const *)&cl->cache_head);
+  CLibCacheEntry *e = clib_cache_find(head, name);
+  return e ? (cTValue *)&e->val : NULL;
+}
+
+static TValue *clib_cache_publish(lua_State *L, CLibrary *cl, GCstr *name,
+				  cTValue *val)
+{
+  TValue key;
+  CLibCacheEntry *e;
+  setstrV(L, &key, name);
+  lj_gc_barrierroot(L, &key);  /* 11.7 CLibrary side-cache key. */
+  lj_gc_barrierroot(L, val);  /* 11.7 CLibrary side-cache value. */
+  e = lj_mem_newt(L, sizeof(CLibCacheEntry), CLibCacheEntry);
+  e->name = name;
+  copyTV(L, &e->val, val);
   for (;;) {
-    uint32_t expect = 0;
-    if (la_cas32(&cl->cache_token, &expect, 1, LA_ACQ_REL, LA_ACQ))
-      return;  /* 11.7 bridge: serialize legacy GCtab cache insertion. */
-#if defined(__linux__)
-    (void)la_futex_wait(&cl->cache_token, 1, 1000000);
-#else
+    CLibCacheEntry *head = (CLibCacheEntry *)la_loadptr_acq(
+      (void *const *)&cl->cache_head);
+    CLibCacheEntry *old = clib_cache_find(head, name);
+    void *expect;
+    if (old) {
+      lj_mem_freet(G(L), e);
+      return &old->val;
+    }
+    e->next = head;
+    expect = head;
+    if (la_casptr((void **)&cl->cache_head, &expect, e, LA_REL, LA_ACQ)) {
+      lj_gc_arena_markmem(G(L), e);  /* 11.7 side-entry publish barrier. */
+      lj_gc_barrierroot(L, &key);  /* Publish-race barrier, see 11.7. */
+      lj_gc_barrierroot(L, &e->val);
+      return &e->val;
+    }
     la_cpu_pause();
-#endif
   }
 }
 
-static void clib_cache_unlock(CLibrary *cl)
+static void clib_cache_free(global_State *g, CLibrary *cl)
 {
-  la_store32_rel(&cl->cache_token, 0);  /* 11.7: publish cache fill. */
-#if defined(__linux__)
-  (void)la_futex_wake(&cl->cache_token, 1);
-#endif
+  CLibCacheEntry *e = (CLibCacheEntry *)la_xchgptr_acqrel(
+    (void **)&cl->cache_head, NULL);
+  while (e) {
+    CLibCacheEntry *next = (CLibCacheEntry *)la_loadptr_acq(
+      (void *const *)&e->next);
+    lj_mem_freet(g, e);
+    e = next;
+  }
 }
 
 #if LJ_TARGET_X86 && LJ_ABI_WIN
@@ -367,14 +409,14 @@ static const char *clib_extsym(CTState *cts, CType *ct, GCstr *name)
 /* Index a C library by name. */
 TValue *lj_clib_index(lua_State *L, CLibrary *cl, GCstr *name)
 {
-  cTValue *ctv = lj_tab_getstr(cl->cache, name);
+  cTValue *ctv = lj_clib_cache_get(cl, name);
   if (LJ_LIKELY(ctv && !lj_tv_isnil_acq(ctv)))
     return (TValue *)ctv;
   {
     CTState *cts = ctype_cts(L);
     CType *ct;
     CTypeID id = lj_ctype_getname(cts, &ct, name, CLNS_INDEX);
-    TValue tmp, *tv;
+    TValue tmp, *tv, *anchor;
     if (!id)
       lj_err_callerv(L, LJ_ERR_FFI_NODECL, strdata(name));
     if (ctype_isconstval(ct->info)) {
@@ -418,13 +460,11 @@ TValue *lj_clib_index(lua_State *L, CLibrary *cl, GCstr *name)
       *(void **)cdataptr(cd) = p;
       setcdataV(L, &tmp, cd);
     }
-    clib_cache_lock(cl);
-    tv = lj_tab_setstr(L, cl->cache, name);
-    if (lj_tv_isnil_acq(tv)) {
-      copyTVrel(L, tv, &tmp);
-      lj_gc_pubtab(L, cl->cache);
-    }
-    clib_cache_unlock(cl);
+    lj_state_checkstack(L, 1);
+    anchor = L->top++;
+    copyTV(L, anchor, &tmp);  /* Root tmp while allocating/publishing entry. */
+    tv = clib_cache_publish(L, cl, name, anchor);
+    L->top--;
     return tv;
   }
 }
@@ -438,7 +478,7 @@ static CLibrary *clib_new(lua_State *L, GCtab *mt)
   GCudata *ud = lj_udata_new(L, sizeof(CLibrary), t);
   CLibrary *cl = (CLibrary *)uddata(ud);
   cl->cache = t;
-  cl->cache_token = 0;
+  cl->cache_head = NULL;
   /* NOBARRIER: The GCudata is new (marked white). */
   setgcref(ud->metatable, obj2gco(mt));
   lj_udata_udtype_rel(ud, UDTYPE_FFI_CLIB);
@@ -455,8 +495,9 @@ void lj_clib_load(lua_State *L, GCtab *mt, GCstr *name, int global)
 }
 
 /* Unload a C library. */
-void lj_clib_unload(CLibrary *cl)
+void lj_clib_unload(global_State *g, CLibrary *cl)
 {
+  clib_cache_free(g, cl);
   clib_unloadlib(cl);
   cl->handle = NULL;
 }

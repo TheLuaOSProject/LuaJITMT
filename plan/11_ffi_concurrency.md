@@ -130,6 +130,18 @@ concurrent table; symbol lookup writes (lj_clib_index caching into
 cl->cache GCtab) are plain table sets. One-time init of `CLIBLINKMAP` etc.
 under the cdef token.
 
+Current implementation note: the original normal-concurrent-`GCtab` target
+above is preserved, but the earlier per-`CLibrary` `cache_token` bridge has
+been removed. Runtime cache misses now publish immutable `CLibCacheEntry`
+records to `CLibrary.cache_head` with a CAS prepend, after rooting the resolved
+TValue on the active Lua stack. `lj_clib_cache_get()` is the shared acquire
+lookup path for the interpreter and recorder. A successful cache-head CAS marks
+the raw side-entry allocation before key/value barriers. Legacy GC and GC2
+traverse the side cache as a CLibrary userdata root; `__gc` unload and the
+`lj_udata_free()` backstop both free side entries idempotently.
+Performance/cleanup of this side cache, or folding it back into a full
+concurrent table protocol, is deferred to M9.
+
 ## 11.8 Tests
 t-ffi-01 concurrent cdef of distinct types; t-ffi-02 same-struct cdef race
 (both threads get identical ctype id semantics); t-ffi-03 cross-thread

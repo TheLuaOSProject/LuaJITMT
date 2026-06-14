@@ -22,6 +22,7 @@
 #include "lj_frame.h"
 #if LJ_HASFFI
 #include "lj_ctype.h"
+#include "lj_clib.h"
 #endif
 #include "lj_trace.h"
 #include "lj_mcode.h"
@@ -2174,6 +2175,25 @@ static int gc2_traverse_tab(global_State *g, GCtab *t)
   return weak;
 }
 
+#if LJ_HASFFI
+static void gc2_traverse_clib_cache(global_State *g, CLibrary *cl)
+{
+  CLibCacheEntry *e;
+  for (e = (CLibCacheEntry *)la_loadptr_acq(
+	 (void *const *)&cl->cache_head);
+       e != NULL;
+       e = (CLibCacheEntry *)la_loadptr_acq((void *const *)&e->next)) {
+    GCstr *name = (GCstr *)la_loadptr_acq((void *const *)&e->name);
+    TValue tv;
+    lj_gc2_markmem(g, e);
+    if (name)
+      gc2_markobj_worker(g, obj2gco(name));
+    lj_tv_load_acq(&tv, &e->val);
+    gc2_mark_tv_worker(g, &tv);
+  }
+}
+#endif
+
 static void gc2_traverse_udata(global_State *g, GCudata *ud)
 {
   GCtab *mt = tabref_acq(ud->metatable);
@@ -2183,6 +2203,10 @@ static void gc2_traverse_udata(global_State *g, GCudata *ud)
     gc2_markobj_worker(g, obj2gco(mt));
   if (env)
     gc2_markobj_worker(g, obj2gco(env));
+#if LJ_HASFFI
+  if (udtype == UDTYPE_FFI_CLIB)
+    gc2_traverse_clib_cache(g, (CLibrary *)uddata(ud));
+#endif
   if (LJ_HASBUFFER && udtype == UDTYPE_BUFFER) {
     SBufExt *sbx = (SBufExt *)uddata(ud);
     GCobj *ref;
