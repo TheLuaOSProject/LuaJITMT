@@ -56,8 +56,19 @@ do
 done
 
 for needle in \
+  'io_native_fflush(lua_State *L, FILE *fp)' \
+  'lj_safepoint_checkstop(L, lj_native_leave(L));'
+do
+  if ! rg -F -q "$needle" "$ROOT/src/lib_io.c"; then
+    echo "guardrail: lib_io fflush native leave must propagate STOPREQ: $needle" >&2
+    exit 1
+  fi
+done
+
+for needle in \
   'publish_stopreq()' \
   "os.execute(':')" \
+  'f:flush()' \
   'thread interrupted: VM shutdown'
 do
   if ! rg -F -q "$needle" "$ROOT/tests/t-safepoint-handshake.c"; then

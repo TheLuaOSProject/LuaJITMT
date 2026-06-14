@@ -121,11 +121,11 @@ while in native (FFI callbacks re-enter via lj_native_leave first; 11
 CASes old→new performs/owns the ack; the loser does nothing.
 
 Current bridge note: native exits may also be shutdown delivery points.
-`os.execute`, `os.remove`, and `os.rename` now feed their `lj_native_leave(L)`
-result into `lj_safepoint_checkstop()`, so a STOPREQ acknowledged by the native
-leave is raised before those functions build their normal Lua results. The
-broader native-exit audit for IO, FFI, callbacks, and other wrappers remains
-separate follow-up work.
+`os.execute`, `os.remove`, `os.rename`, and the `lib_io` `fflush` wrapper now
+feed their `lj_native_leave(L)` result into `lj_safepoint_checkstop()`, so a
+STOPREQ acknowledged by the native leave is raised before those functions build
+their normal Lua results. The broader native-exit audit for IO, FFI, callbacks,
+and other wrappers remains separate follow-up work.
 
 ## 5.5 Mark state & colors
 

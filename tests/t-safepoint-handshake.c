@@ -412,7 +412,13 @@ int main(void)
     "f:close()\n"
     "expect_stopreq(function() return os.remove(q) end)\n"
     "os.remove(q)\n"
-    "expect_stopreq(function() return os.execute(':') end)\n") == LUA_OK);
+    "expect_stopreq(function() return os.execute(':') end)\n"
+    "p = os.tmpname()\n"
+    "f = assert(io.open(p, 'w'))\n"
+    "f:write('z')\n"
+    "expect_stopreq(function() return f:flush() end)\n"
+    "f:close()\n"
+    "os.remove(p)\n") == LUA_OK);
 
 #if LJ_HASFFI
   assert(luaL_dostring(L,

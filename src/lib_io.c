@@ -71,7 +71,7 @@ static int io_native_fflush(lua_State *L, FILE *fp)
   int ok;
   lj_native_enter(L2TG(L));
   ok = fflush(fp);
-  (void)lj_native_leave(L);
+  lj_safepoint_checkstop(L, lj_native_leave(L));
   return ok;
 }
 
