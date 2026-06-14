@@ -40,6 +40,10 @@ GCtab *miscmap; CCallback cb; CTypeID1 hash[CTHASH_SIZE]; }`
   allocate records; CAS loser re-looks-up, finds winner, abandons its
   record (IDs leak a hole — append-only array tolerates gaps; add
   CT_ABANDONED info tag so ctype_get asserts don't trip).
+  Current implementation note: anonymous/non-parser interning follows this
+  winner relookup and `CTA_BAD` abandon path. Parser-created named cdefs are
+  still serialized by `parse_token`; `lj_ctype_addname()` is not yet claimed as
+  a lock-free duplicate-name publication protocol.
 - `cts->L` field: delete; pass L explicitly (it's already threaded through
   most call paths; grep `cts->L` ≈ 15 sites, mechanical).
 - **cparse (ffi.cdef)** mutates parser state + tab: serialize whole cdef

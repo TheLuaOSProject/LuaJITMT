@@ -19,7 +19,9 @@ for needle in \
   'lj_ctype_intern_new_l(lua_State *L, CTState *cts' \
   'if (newp) *newp = 1' \
   'cp_ctype_intern(CPState *cp, CTInfo info, CTSize size)' \
-  'cp_ctype_publish(CPState *cp, CTypeID id, CType *src)'
+  'cp_ctype_publish(CPState *cp, CTypeID id, CType *src)' \
+  'lj_cdata_newref_l(lua_State *L, CTState *cts, const void *p,' \
+  'lj_ctype_intern_l(L, cts, CTINFO_REF(id), CTSIZE_PTR)'
 do
   if ! rg -F -q "$needle" "$ROOT/src"; then
     echo "guardrail: missing FFI ctype ticket/intern marker: $needle" >&2
@@ -50,5 +52,9 @@ make -C "$ROOT/src" -j"$JOBS" >/dev/null
 "$CC" $CFLAGS -I"$ROOT/src" "$ROOT/tests/t-ffi-ctype-ticket-intern.c" \
   "$ROOT/src/libluajit.a" -lm -ldl -pthread -o "$OUT"
 timeout 20s "$OUT"
+"$ROOT/src/luajit" -joff "$ROOT/tests/t-ffi-ctype-intern-race.lua" \
+  "${LJ_M7_FFI_INTERN_THREADS:-6}" \
+  "${LJ_M7_FFI_INTERN_SHAPES:-48}" \
+  "${LJ_M7_FFI_INTERN_ROUNDS:-4}"
 
 echo "M7 FFI ctype ticket/intern guard passed"
