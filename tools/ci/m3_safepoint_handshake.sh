@@ -5,13 +5,14 @@ set -eu
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 CC=${CC:-cc}
 CFLAGS=${CFLAGS:-"-std=gnu99 -O2 -Wall -Wextra -Werror -mcx16"}
+PTHREAD=${PTHREAD:-"-pthread"}
 JOBS=${JOBS:-$(getconf _NPROCESSORS_ONLN)}
 OUT=${TMPDIR:-/tmp}/lj_t_safepoint_handshake
 
 make -C "$ROOT/src" clean >/dev/null
 make -C "$ROOT/src" -j"$JOBS" >/dev/null
-"$CC" $CFLAGS -I"$ROOT/src" "$ROOT/tests/t-safepoint-handshake.c" \
-  "$ROOT/src/libluajit.a" -lm -ldl -o "$OUT"
+"$CC" $CFLAGS $PTHREAD -I"$ROOT/src" "$ROOT/tests/t-safepoint-handshake.c" \
+  "$ROOT/src/libluajit.a" -lm -ldl $PTHREAD -o "$OUT"
 "$OUT"
 
 for needle in \
@@ -78,6 +79,23 @@ do
 done
 
 for needle in \
+  'io_native_fopen(lua_State *L, const char *fname,' \
+  'io_fopen_checkstop(lua_State *L, IOFileUD *iof, uint32_t actions,' \
+  'int had_stopreq)' \
+  '(!had_stopreq && tg && (la_load8_acq(&tg->tg_flags) & TGF_STOPREQ));' \
+  'int had_stopreq = tg && (la_load8_acq(&tg->tg_flags) & TGF_STOPREQ);' \
+  'iof->fp = io_native_fopen(L, fname, mode, &actions);' \
+  'io_fopen_checkstop(L, iof, actions, had_stopreq);' \
+  '(void)fclose(fp);' \
+  'lj_safepoint_checkstop(L, actions);'
+do
+  if ! rg -F -q "$needle" "$ROOT/src/lib_io.c"; then
+    echo "guardrail: lib_io fopen native leave must cleanup and propagate STOPREQ: $needle" >&2
+    exit 1
+  fi
+done
+
+for needle in \
   'io_native_fscanf_num(lua_State *L, FILE *fp, lua_Number *dp)' \
   'io_native_fgets(lua_State *L, char *buf, int size, FILE *fp)' \
   'io_native_fread(lua_State *L, void *buf, size_t size,' \
@@ -128,9 +146,14 @@ done
 
 for needle in \
   'publish_stopreq()' \
+  'mkfifo_test(fifo)' \
+  'start_fifo_stopreq(fifo)' \
+  'join_fifo_stopreq()' \
   "os.execute(':')" \
   'os.tmpname()' \
   'io.tmpfile()' \
+  "io.open(fifo, 'r')" \
+  'io.lines(fifo)' \
   'f:flush()' \
   "f:seek('set', 0)" \
   "f:read('*n')" \

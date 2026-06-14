@@ -49,13 +49,29 @@ typedef struct IOFileUD {
 /* -- Native-state wrappers ---------------------------------------------- */
 
 static FILE *io_native_fopen(lua_State *L, const char *fname,
-			     const char *mode)
+			     const char *mode, uint32_t *actionsp)
 {
   FILE *fp;
   lj_native_enter(L2TG(L));
   fp = fopen(fname, mode);
-  (void)lj_native_leave(L);
+  *actionsp = lj_native_leave(L);
   return fp;
+}
+
+static void io_fopen_checkstop(lua_State *L, IOFileUD *iof, uint32_t actions,
+			       int had_stopreq)
+{
+  TGState *tg = L2TG(L);
+  int stopreq = (actions & LJ_GC2_HS_STOPREQ) ||
+    (!had_stopreq && tg && (la_load8_acq(&tg->tg_flags) & TGF_STOPREQ));
+  if (stopreq) {
+    if (iof->fp != NULL) {
+      FILE *fp = iof->fp;
+      iof->fp = NULL;
+      (void)fclose(fp);
+    }
+    lj_safepoint_checkstop(L, actions);
+  }
 }
 
 static int io_native_fclose(lua_State *L, FILE *fp)
@@ -193,8 +209,12 @@ static IOFileUD *io_file_new(lua_State *L)
 static IOFileUD *io_file_open(lua_State *L, const char *mode)
 {
   const char *fname = strdata(lj_lib_checkstr(L, 1));
+  TGState *tg = L2TG(L);
+  int had_stopreq = tg && (la_load8_acq(&tg->tg_flags) & TGF_STOPREQ);
   IOFileUD *iof = io_file_new(L);
-  iof->fp = io_native_fopen(L, fname, mode);
+  uint32_t actions;
+  iof->fp = io_native_fopen(L, fname, mode, &actions);
+  io_fopen_checkstop(L, iof, actions, had_stopreq);
   if (iof->fp == NULL)
     luaL_argerror(L, 1, lj_strfmt_pushf(L, "%s: %s", fname, strerror(errno)));
   return iof;
@@ -550,8 +570,12 @@ LJLIB_CF(io_open)
   const char *fname = strdata(lj_lib_checkstr(L, 1));
   GCstr *s = lj_lib_optstr(L, 2);
   const char *mode = s ? strdata(s) : "r";
+  TGState *tg = L2TG(L);
+  int had_stopreq = tg && (la_load8_acq(&tg->tg_flags) & TGF_STOPREQ);
   IOFileUD *iof = io_file_new(L);
-  iof->fp = io_native_fopen(L, fname, mode);
+  uint32_t actions;
+  iof->fp = io_native_fopen(L, fname, mode, &actions);
+  io_fopen_checkstop(L, iof, actions, had_stopreq);
   return iof->fp != NULL ? 1 : luaL_fileresult(L, 0, fname);
 }
 

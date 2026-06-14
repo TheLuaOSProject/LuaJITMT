@@ -3,7 +3,15 @@
 */
 
 #include <assert.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <limits.h>
+#include <pthread.h>
 #include <stdio.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <time.h>
+#include <unistd.h>
 
 #include "lua.h"
 #include "lauxlib.h"
@@ -17,10 +25,21 @@
 #include "lj_safepoint.h"
 #include "lj_tg.h"
 
+typedef struct FifoStopReqCtx {
+  global_State *g;
+  TGState *tg;
+  pthread_t thread;
+  char path[PATH_MAX];
+  int active;
+  int open_errno;
+} FifoStopReqCtx;
+
+static FifoStopReqCtx fifo_stopreq_ctx;
+
 static void publish_manual(global_State *g, TGState *tg, uint32_t actions)
 {
   uint64_t epoch = la_load64_rlx(&g->gc2.hs_epoch) + 1u;
-  g->gc2.hs_actions = actions;
+  la_store32_rel(&g->gc2.hs_actions, actions);
   la_store32_rel(&g->gc2.hs_pending, 1);  /* 05 section 5.4.2. */
   la_store64_rel(&g->gc2.hs_epoch, epoch);  /* 05 section 5.4.2. */
   la_store32_rel(&tg->reqmask, actions);  /* 05 section 5.4.2. */
@@ -83,6 +102,71 @@ static int clear_stopreq_c(lua_State *L)
   flags = la_load8_acq(&tg->tg_flags);
   assert((flags & TGF_STOPREQ) != 0);
   la_store8_rel(&tg->tg_flags, (uint8_t)(flags & ~TGF_STOPREQ));
+  return 0;
+}
+
+static int mkfifo_test_c(lua_State *L)
+{
+  const char *path = luaL_checkstring(L, 1);
+  if (mkfifo(path, 0600) != 0)
+    return luaL_error(L, "mkfifo failed: %s", strerror(errno));
+  lua_pushboolean(L, 1);
+  return 1;
+}
+
+static void *fifo_stopreq_thread(void *arg)
+{
+  FifoStopReqCtx *ctx = (FifoStopReqCtx *)arg;
+  struct timespec delay;
+  int fd;
+  int i;
+  delay.tv_sec = 0;
+  delay.tv_nsec = 1000000;
+  for (i = 0; i < 1000 &&
+       la_load8_acq(&ctx->tg->in_native) == 0; i++)
+    (void)nanosleep(&delay, NULL);
+  publish_manual(ctx->g, ctx->tg, LJ_GC2_HS_STOPREQ);
+  fd = open(ctx->path, O_WRONLY);
+  if (fd == -1)
+    ctx->open_errno = errno;
+  else
+    (void)close(fd);
+  return NULL;
+}
+
+static int start_fifo_stopreq_c(lua_State *L)
+{
+  const char *path = luaL_checkstring(L, 1);
+  size_t len = strlen(path);
+  int err;
+  if (fifo_stopreq_ctx.active)
+    return luaL_error(L, "FIFO STOPREQ helper already active");
+  if (len >= sizeof(fifo_stopreq_ctx.path))
+    return luaL_error(L, "FIFO path too long");
+  fifo_stopreq_ctx.g = G(L);
+  fifo_stopreq_ctx.tg = G2TG(fifo_stopreq_ctx.g);
+  fifo_stopreq_ctx.open_errno = 0;
+  memcpy(fifo_stopreq_ctx.path, path, len + 1u);
+  err = pthread_create(&fifo_stopreq_ctx.thread, NULL,
+		       fifo_stopreq_thread, &fifo_stopreq_ctx);
+  if (err != 0)
+    return luaL_error(L, "pthread_create failed: %s", strerror(err));
+  fifo_stopreq_ctx.active = 1;
+  return 0;
+}
+
+static int join_fifo_stopreq_c(lua_State *L)
+{
+  int err;
+  if (!fifo_stopreq_ctx.active)
+    return luaL_error(L, "FIFO STOPREQ helper is not active");
+  err = pthread_join(fifo_stopreq_ctx.thread, NULL);
+  fifo_stopreq_ctx.active = 0;
+  if (err != 0)
+    return luaL_error(L, "pthread_join failed: %s", strerror(err));
+  if (fifo_stopreq_ctx.open_errno != 0)
+    return luaL_error(L, "FIFO writer open failed: %s",
+		      strerror(fifo_stopreq_ctx.open_errno));
   return 0;
 }
 
@@ -188,6 +272,12 @@ int main(void)
   lua_setglobal(L, "clear_stopreq");
   lua_pushcfunction(L, assert_not_native_c);
   lua_setglobal(L, "assert_not_native");
+  lua_pushcfunction(L, mkfifo_test_c);
+  lua_setglobal(L, "mkfifo_test");
+  lua_pushcfunction(L, start_fifo_stopreq_c);
+  lua_setglobal(L, "start_fifo_stopreq");
+  lua_pushcfunction(L, join_fifo_stopreq_c);
+  lua_setglobal(L, "join_fifo_stopreq");
   g = G(L);
   tg = G2TG(g);
   assert(tg != NULL);
@@ -419,13 +509,28 @@ int main(void)
     "assert_acked_alloc_white()\n"
     "os.remove(r)\n") == LUA_OK);
 
-  assert(luaL_dostring(L,
+  if (luaL_dostring(L,
+    "local stopreq_case = 0\n"
     "local function expect_stopreq(fn)\n"
+    "  stopreq_case = stopreq_case + 1\n"
     "  publish_stopreq()\n"
     "  local ok, err = pcall(fn)\n"
-    "  assert(not ok)\n"
+    "  assert(not ok, 'expected STOPREQ case ' .. stopreq_case)\n"
     "  assert(tostring(err):find('thread interrupted: VM shutdown', 1, true))\n"
     "  clear_stopreq()\n"
+    "end\n"
+    "local function expect_fopen_stopreq(fn)\n"
+    "  stopreq_case = stopreq_case + 1\n"
+    "  local fifo = os.tmpname()\n"
+    "  os.remove(fifo)\n"
+    "  assert(mkfifo_test(fifo))\n"
+    "  start_fifo_stopreq(fifo)\n"
+    "  local ok, err = pcall(function() return fn(fifo) end)\n"
+    "  join_fifo_stopreq()\n"
+    "  assert(not ok, 'expected STOPREQ case ' .. stopreq_case)\n"
+    "  assert(tostring(err):find('thread interrupted: VM shutdown', 1, true))\n"
+    "  clear_stopreq()\n"
+    "  os.remove(fifo)\n"
     "end\n"
     "local p = os.tmpname()\n"
     "local q = p .. '.stopreq'\n"
@@ -453,6 +558,8 @@ int main(void)
     "f = assert(io.open(p, 'w'))\n"
     "f:write('12\\nabc\\nxyz')\n"
     "f:close()\n"
+    "expect_fopen_stopreq(function(fifo) return io.open(fifo, 'r') end)\n"
+    "expect_fopen_stopreq(function(fifo) return io.lines(fifo) end)\n"
     "f = assert(io.open(p, 'r'))\n"
     "expect_stopreq(function() return f:read('*n') end)\n"
     "f:seek('set', 0)\n"
@@ -464,7 +571,11 @@ int main(void)
     "f:seek('set', 0)\n"
     "expect_stopreq(function() return f:read(0) end)\n"
     "f:close()\n"
-    "os.remove(p)\n") == LUA_OK);
+    "os.remove(p)\n") != LUA_OK) {
+    fprintf(stderr, "STOPREQ coverage chunk failed: %s\n",
+	    lua_tostring(L, -1));
+    assert(0);
+  }
 
   assert(luaL_dostring(L,
     "local th = require('threading')\n"
