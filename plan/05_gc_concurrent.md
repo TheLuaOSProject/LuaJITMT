@@ -262,7 +262,11 @@ empty-work predicate includes the global grey deque, published SSB stack, and
 each live TG's active SSB cursor, read through acquire loads while walking the
 shared TG list. Active SSB producers publish cursor advances with release
 stores after writing the slot; active SSB drains release-publish cursor
-retreats only after marking/enqueuing the popped slot.
+retreats only after marking/enqueuing the popped slot. The original final
+mark-completion bridge could return a miss while another worker held the
+temporary `worker_active` drain token; `lj_gc2_mark_complete()` now waits for
+that peer drain to finish and retries before the legacy bridge can publish
+`P_WEAK`, recording `mark_complete_peer_waits` telemetry.
 
 ### 5.7.2 Thread stacks
 `HS_SCAN_ROOTS` (mutator, at ack): for its *running* L (and the chain of

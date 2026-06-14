@@ -3,7 +3,9 @@
 */
 
 #include <assert.h>
+#include <pthread.h>
 #include <stdio.h>
+#include <time.h>
 
 #include "lua.h"
 #include "lauxlib.h"
@@ -33,6 +35,28 @@ static void assert_idle(global_State *g, TGState *tg)
   assert(tg->alloc.alloc_black == 0);
 }
 
+typedef struct PeerRelease {
+  global_State *g;
+  long delay_ns;
+} PeerRelease;
+
+static void sleep_ns(long ns)
+{
+  struct timespec ts;
+  ts.tv_sec = ns / 1000000000L;
+  ts.tv_nsec = ns % 1000000000L;
+  while (nanosleep(&ts, &ts) != 0) {
+  }
+}
+
+static void *release_worker_active(void *arg)
+{
+  PeerRelease *rel = (PeerRelease *)arg;
+  sleep_ns(rel->delay_ns);
+  la_store32_rel(&rel->g->gc2.worker_active, 0);
+  return NULL;
+}
+
 static int finalizer_churn(lua_State *L)
 {
   int status = luaL_dostring(L,
@@ -45,6 +69,53 @@ static int finalizer_churn(lua_State *L)
   if (status != LUA_OK)
     lua_pop(L, 1);
   return 0;
+}
+
+static void test_mark_complete_waits_for_peer(lua_State *L, global_State *g,
+					      TGState *tg)
+{
+  GCtab *parent, *child;
+  PeerRelease rel;
+  pthread_t thread;
+  uint64_t runs0, hits0, waits0;
+
+  lua_settop(L, 0);
+  lua_newtable(L);
+  parent = tabV(L->top - 1);
+  lua_newtable(L);
+  child = tabV(L->top - 1);
+  lua_pushvalue(L, -1);
+  lua_rawseti(L, -3, 1);
+  lua_pop(L, 1);
+
+  lj_gc2_legacy_mark_begin(g);
+  setgcrefnull(g->gc.gray);
+  setgcrefnull(g->gc.grayagain);
+  setgcrefnull(g->gc.weak);
+  g->gc.state = GCSpropagate;
+  assert(lj_gc2_markobj(g, obj2gco(parent)) == 1);
+  assert(lj_gc2_flush_ssb(g, tg) == 1);
+  assert(!lj_gc2_ssb_empty(g));
+
+  la_store32_rel(&g->gc2.worker_active, 1);
+  rel.g = g;
+  rel.delay_ns = 20000000L;
+  runs0 = la_load64_acq(&g->gc2.mark_complete_runs);
+  hits0 = la_load64_acq(&g->gc2.mark_complete_hits);
+  waits0 = la_load64_acq(&g->gc2.mark_complete_peer_waits);
+  assert(pthread_create(&thread, NULL, release_worker_active, &rel) == 0);
+  assert(lj_gc2_mark_complete(g, L, 2, ~(uint32_t)0) == 1);
+  assert(pthread_join(thread, NULL) == 0);
+  assert(la_load32_acq(&g->gc2.worker_active) == 0);
+  assert(la_load64_acq(&g->gc2.mark_complete_runs) == runs0 + 1u);
+  assert(la_load64_acq(&g->gc2.mark_complete_hits) == hits0 + 1u);
+  assert(la_load64_acq(&g->gc2.mark_complete_peer_waits) > waits0);
+  assert(lj_gc2_ssb_empty(g));
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
+
+  g->gc.state = GCSpause;
+  lj_gc2_legacy_cycle_end(g);
+  lua_pop(L, 1);
 }
 
 static void test_incremental_worker_step(lua_State *L, global_State *g,
@@ -231,6 +302,7 @@ int main(void)
 
   test_incremental_worker_step(L, g, tg);
   test_incremental_fixpoint_round(L, g);
+  test_mark_complete_waits_for_peer(L, g, tg);
 
   lua_newtable(L);
   phase_tab = tabV(L->top - 1);

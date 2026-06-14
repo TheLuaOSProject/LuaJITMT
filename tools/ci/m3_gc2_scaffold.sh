@@ -16,6 +16,7 @@ for needle in \
   'uint64_t fixpoint_hits' \
   'uint64_t mark_complete_runs' \
   'uint64_t mark_complete_hits' \
+  'uint64_t mark_complete_peer_waits' \
   'uint64_t mark_to_weak' \
   'uint64_t weak_complete_runs' \
   'uint64_t weak_complete_progress' \
@@ -209,6 +210,7 @@ for needle in \
   '05 section 5.6.3 total worker progress contract' \
   'return lj_gc2_worker_drain(g, limit)' \
   'phase != LJ_GC2_MARK && phase != LJ_GC2_WEAK &&' \
+  'la_add64_rlx(&g->gc2.mark_complete_peer_waits' \
   'gc2_worker_sweep_progress(global_State *g, uint32_t limit)' \
   'sweep = gc2_worker_sweep_progress(g, limit)' \
   'lj_gc2_worker_drain_progress(g, LJ_GC2_SWEEP_BATCH)' \

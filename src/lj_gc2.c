@@ -63,6 +63,7 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.fixpoint_hits, 0);
   la_store64_rlx(&g->gc2.mark_complete_runs, 0);
   la_store64_rlx(&g->gc2.mark_complete_hits, 0);
+  la_store64_rlx(&g->gc2.mark_complete_peer_waits, 0);
   la_store64_rlx(&g->gc2.mark_to_weak, 0);
   la_store64_rlx(&g->gc2.weak_complete_runs, 0);
   la_store64_rlx(&g->gc2.weak_complete_progress, 0);
@@ -2555,7 +2556,14 @@ uint32_t lj_gc2_mark_complete(global_State *g, lua_State *L,
   if (!g || la_load32_acq(&g->gc2.phase) != LJ_GC2_MARK)
     return 0;
   la_add64_rlx(&g->gc2.mark_complete_runs, 1);
-  hit = lj_gc2_fixpoint_run(g, L, max_rounds, limit);
+  for (;;) {
+    hit = lj_gc2_fixpoint_run(g, L, max_rounds, limit);
+    if (hit || la_load32_acq(&g->gc2.worker_active) == 0)
+      break;
+    la_add64_rlx(&g->gc2.mark_complete_peer_waits, 1);
+    while (la_load32_acq(&g->gc2.worker_active) != 0)
+      la_cpu_pause();  /* 05 section 5.7.1 peer drain before P_WEAK. */
+  }
   if (hit)
     la_add64_rlx(&g->gc2.mark_complete_hits, 1);
   return hit;  /* 05 section 5.7.1 scheduler-owned mark completion bridge. */
