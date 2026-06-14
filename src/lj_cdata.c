@@ -41,22 +41,27 @@ GCcdata *lj_cdata_newv(lua_State *L, CTypeID id, CTSize sz, CTSize align)
   cdatav(cd)->extra = extra;
   cdatav(cd)->len = sz;
   g = G(L);
-  lj_obj_setgcwr(obj2gco(cd), g->gc.root);
-  setgcref(g->gc.root, obj2gco(cd));
-  newwhite(g, obj2gco(cd));
-  lj_obj_addgcflags(obj2gco(cd), 0x80);
   cd->gct = ~LJ_TCDATA;
   cd->ctypeid = id;
+  newwhite(g, obj2gco(cd));
+  lj_obj_addgcflags(obj2gco(cd), 0x80);
+  lj_gc_linkobj(g, obj2gco(cd));
   return cd;
 }
 
 /* Allocate arbitrary C data object. */
 GCcdata *lj_cdata_newx(CTState *cts, CTypeID id, CTSize sz, CTInfo info)
 {
+  return lj_cdata_newx_l(cts->L, cts, id, sz, info);
+}
+
+GCcdata *lj_cdata_newx_l(lua_State *L, CTState *cts, CTypeID id, CTSize sz,
+			 CTInfo info)
+{
   if (!(info & CTF_VLA) && ctype_align(info) <= CT_MEMALIGN)
-    return lj_cdata_new(cts, id, sz);
+    return lj_cdata_new_l(L, cts, id, sz);
   else
-    return lj_cdata_newv(cts->L, id, sz, ctype_align(info));
+    return lj_cdata_newv(L, id, sz, ctype_align(info));
 }
 
 /* Free a C data object. */

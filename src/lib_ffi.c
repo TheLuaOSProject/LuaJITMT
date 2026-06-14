@@ -518,7 +518,7 @@ LJLIB_CF(ffi_new)	LJLIB_REC(.)
   }
   if (sz == CTSIZE_INVALID)
     lj_err_arg(L, 1, LJ_ERR_FFI_INVSIZE);
-  cd = lj_cdata_newx(cts, id, sz, info);
+  cd = lj_cdata_newx_l(L, cts, id, sz, info);
   setcdataV(L, o-1, cd);  /* Anchor the uninitialized cdata. */
   lj_cconv_ct_init(cts, ct, sz, cdataptr(cd),
 		   o, (MSize)(L->top - o));  /* Initialize cdata. */
@@ -552,7 +552,7 @@ LJLIB_CF(ffi_cast)	LJLIB_REC(ffi_new)
   if (!(ctype_isnum(d->info) || ctype_isptr(d->info) || ctype_isenum(d->info)))
     lj_err_arg(L, 1, LJ_ERR_FFI_INVTYPE);
   if (!(tviscdata(o) && cdataV(o)->ctypeid == id)) {
-    GCcdata *cd = lj_cdata_new(cts, id, d->size);
+    GCcdata *cd = lj_cdata_new_l(L, cts, id, d->size);
     lj_cconv_ct_tv(cts, d, cdataptr(cd), o, CCF_CAST);
     setcdataV(L, o, cd);
     lj_gc_check(L);
@@ -564,7 +564,7 @@ LJLIB_CF(ffi_typeof)	LJLIB_REC(.)
 {
   CTState *cts = ctype_cts(L);
   CTypeID id = ffi_checkctype(L, cts, L->base+1);
-  GCcdata *cd = lj_cdata_new(cts, CTID_CTYPEID, 4);
+  GCcdata *cd = lj_cdata_new_(L, CTID_CTYPEID, 4);
   *(CTypeID *)cdataptr(cd) = id;
   setcdataV(L, L->top-1, cd);
   lj_gc_check(L);
@@ -809,7 +809,7 @@ LJLIB_CF(ffi_metatype)
   settabV(L, &tmp, mt);
   copyTVrel(L, tv, &tmp);
   lj_gc_pubtab(L, t);
-  cd = lj_cdata_new(cts, CTID_CTYPEID, 4);
+  cd = lj_cdata_new_(L, CTID_CTYPEID, 4);
   *(CTypeID *)cdataptr(cd) = id;
   setcdataV(L, L->top-1, cd);
   lj_gc_check(L);

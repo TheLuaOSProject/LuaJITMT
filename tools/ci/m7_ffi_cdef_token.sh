@@ -31,6 +31,7 @@ if [ "$count" != 3 ]; then
   exit 1
 fi
 
+make -C "$ROOT/src" clean >/dev/null
 make -C "$ROOT/src" -j"$JOBS" >/dev/null
 
 "$ROOT/src/luajit" -joff "$ROOT/tests/t-ffi-cdef-token.lua" \

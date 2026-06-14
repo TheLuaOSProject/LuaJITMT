@@ -1534,14 +1534,41 @@ void *lj_mem_newgco_raw(lua_State *L, GCSize size, uint32_t flags)
   return o;
 }
 
+void *lj_mem_newgco_unlinked(lua_State *L, GCSize size)
+{
+  return lj_mem_newgco_raw(L, size, LJ_AF_TRAVERSABLE);
+}
+
+void lj_gc_linkobj(global_State *g, GCobj *o)
+{
+#if LJ_GC64
+  uint64_t head;
+  GCRef next;
+  do {
+    head = la_load64_acq(&g->gc.root.gcptr64);  /* M7 root-list snapshot. */
+    setgcrefp(next, (void *)(uintptr_t)head);
+    lj_obj_setgcwr(o, next);
+  } while (!la_cas64(&g->gc.root.gcptr64, &head,
+		     (uint64_t)(uintptr_t)&o->gch, LA_REL, LA_ACQ));  /* M7 publish. */
+#else
+  uint32_t head;
+  GCRef next;
+  do {
+    head = la_load32_acq(&g->gc.root.gcptr32);  /* M7 root-list snapshot. */
+    setgcrefp(next, (void *)(uintptr_t)head);
+    lj_obj_setgcwr(o, next);
+  } while (!la_cas32(&g->gc.root.gcptr32, &head,
+		     (uint32_t)(uintptr_t)&o->gch, LA_REL, LA_ACQ));  /* M7 publish. */
+#endif
+}
+
 /* Allocate new GC object and link it to the root set. */
 void * LJ_FASTCALL lj_mem_newgco(lua_State *L, GCSize size)
 {
   global_State *g = G(L);
   GCobj *o = (GCobj *)lj_mem_newgco_raw(L, size, LJ_AF_TRAVERSABLE);
-  lj_obj_setgcwr(o, g->gc.root);
-  setgcref(g->gc.root, o);
   newwhite(g, o);
+  lj_gc_linkobj(g, o);
   return o;
 }
 

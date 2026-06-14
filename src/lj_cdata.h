@@ -34,27 +34,41 @@ static LJ_AINLINE void cdata_setptr(void *p, CTSize sz, const void *v)
   }
 }
 
-/* Allocate fixed-size C data object. */
-static LJ_AINLINE GCcdata *lj_cdata_new(CTState *cts, CTypeID id, CTSize sz)
+static LJ_AINLINE GCcdata *lj_cdata_new_l(lua_State *L, CTState *cts,
+					  CTypeID id, CTSize sz)
 {
   GCcdata *cd;
+  CTypeID checked;
+  global_State *g = G(L);
 #ifdef LUA_USE_ASSERT
   CType *ct = ctype_raw(cts, id);
   lj_assertCTS((ctype_hassize(ct->info) ? ct->size : CTSIZE_PTR) == sz,
 	       "inconsistent size of fixed-size cdata alloc");
 #endif
-  cd = (GCcdata *)lj_mem_newgco(cts->L, sizeof(GCcdata) + sz);
+  checked = ctype_check(cts, id);
+  cd = (GCcdata *)lj_mem_newgco_unlinked(L, sizeof(GCcdata) + sz);
   cd->gct = ~LJ_TCDATA;
-  cd->ctypeid = ctype_check(cts, id);
+  cd->ctypeid = checked;
+  newwhite(g, obj2gco(cd));
+  lj_gc_linkobj(g, obj2gco(cd));
   return cd;
+}
+
+/* Allocate fixed-size C data object. */
+static LJ_AINLINE GCcdata *lj_cdata_new(CTState *cts, CTypeID id, CTSize sz)
+{
+  return lj_cdata_new_l(cts->L, cts, id, sz);
 }
 
 /* Variant which works without a valid CTState. */
 static LJ_AINLINE GCcdata *lj_cdata_new_(lua_State *L, CTypeID id, CTSize sz)
 {
-  GCcdata *cd = (GCcdata *)lj_mem_newgco(L, sizeof(GCcdata) + sz);
+  global_State *g = G(L);
+  GCcdata *cd = (GCcdata *)lj_mem_newgco_unlinked(L, sizeof(GCcdata) + sz);
   cd->gct = ~LJ_TCDATA;
   cd->ctypeid = id;
+  newwhite(g, obj2gco(cd));
+  lj_gc_linkobj(g, obj2gco(cd));
   return cd;
 }
 
@@ -63,6 +77,8 @@ LJ_FUNC GCcdata *lj_cdata_newv(lua_State *L, CTypeID id, CTSize sz,
 			       CTSize align);
 LJ_FUNC GCcdata *lj_cdata_newx(CTState *cts, CTypeID id, CTSize sz,
 			       CTInfo info);
+LJ_FUNC GCcdata *lj_cdata_newx_l(lua_State *L, CTState *cts, CTypeID id,
+				 CTSize sz, CTInfo info);
 
 LJ_FUNC void LJ_FASTCALL lj_cdata_free(global_State *g, GCcdata *cd);
 LJ_FUNC void lj_cdata_setfin(lua_State *L, GCcdata *cd, GCobj *obj,
