@@ -261,6 +261,7 @@ typedef struct CTState {
 #define ctype_isxattrib(info, at) \
   (((info) & (CTMASK_NUM|CTATTRIB(CTMASK_ATTRIB))) == \
    CTINFO(CT_ATTRIB, CTATTRIB(at)))
+#define ctype_isabandoned(info)	ctype_isxattrib((info), CTA_BAD)
 
 /* Target-dependent sizes and alignments. */
 #if LJ_64
@@ -417,12 +418,6 @@ static LJ_AINLINE CTState *ctype_cts(lua_State *L)
       L->top = (TValue *)(mref(L->stack, char) + oldtop); \
     } \
   } while (0)
-
-/* Save and restore state of C type table. */
-#define LJ_CTYPE_SAVE(cts)	CTState savects_ = *(cts)
-#define LJ_CTYPE_RESTORE(cts) \
-  ((cts)->top = savects_.top, \
-   memcpy((cts)->hash, savects_.hash, sizeof(savects_.hash)))
 
 /* Check C type ID for validity when assertions are enabled. */
 static LJ_AINLINE CTypeID ctype_check(CTState *cts, CTypeID id)

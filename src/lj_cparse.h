@@ -27,6 +27,7 @@
 
 typedef int CPChar;	/* C parser character. Unsigned ext. from char. */
 typedef int CPToken;	/* C parser token. */
+typedef struct CPRollback CPRollback;
 
 /* C parser internal value representation. */
 typedef struct CPValue {
@@ -50,10 +51,13 @@ typedef struct CPState {
   CTState *cts;		/* C type state. */
   TValue *param;	/* C type parameters. */
   const char *srcname;	/* Current source name. */
+  CPRollback *rollback;	/* Parser rollback log for existing CTypes. */
+  CTypeID starttop;	/* C type table top at parser entry. */
   BCLine linenumber;	/* Input line counter. */
   int depth;		/* Recursive declaration depth. */
   uint32_t tmask;	/* Type mask for next identifier. */
   uint32_t mode;	/* C parser mode. */
+  uint8_t newtype;	/* Parser created a unique type. */
   uint8_t packstack[CPARSE_MAX_PACKSTACK];  /* Stack for pack pragmas. */
   uint8_t curpack;	/* Current position in pack pragma stack. */
 } CPState;

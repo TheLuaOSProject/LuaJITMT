@@ -333,7 +333,7 @@ CTypeID lj_ctype_intern_l(lua_State *L, CTState *cts, CTInfo info, CTSize size)
   CTypeID id = ctype_hash_load(cts, h);
   while (id) {
     CType *ct = ctype_get(cts, id);
-    if (ct->info == info && ct->size == size)
+    if (!ctype_isabandoned(ct->info) && ct->info == info && ct->size == size)
       return id;
     id = ct->next;
   }
@@ -375,7 +375,7 @@ CTypeID lj_ctype_getname(CTState *cts, CType **ctp, GCstr *name, uint32_t tmask)
   CTypeID id = ctype_hash_load(cts, ct_hashname(name));
   while (id) {
     CType *ct = ctype_get(cts, id);
-    if (ctype_name_acq(ct) == name &&
+    if (!ctype_isabandoned(ct->info) && ctype_name_acq(ct) == name &&
 	((tmask >> ctype_type(ct->info)) & 1)) {
       *ctp = ct;
       return id;

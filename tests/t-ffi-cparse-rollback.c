@@ -1,0 +1,63 @@
+/*
+** Focused guard for M7 FFI cparser rollback without CTState top/hash rewind.
+*/
+
+#include <assert.h>
+#include <stdio.h>
+
+#include "lua.h"
+#include "lauxlib.h"
+#include "lualib.h"
+
+#include "lj_obj.h"
+#include "lj_ctype.h"
+
+static void dostring(lua_State *L, const char *src)
+{
+  if (luaL_dostring(L, src) != LUA_OK) {
+    const char *err = lua_tostring(L, -1);
+    fprintf(stderr, "lua error: %s\n", err ? err : "(non-string)");
+    assert(0);
+  }
+}
+
+int main(void)
+{
+  lua_State *L = luaL_newstate();
+  global_State *g;
+  CTState *cts;
+  CTypeID top0, top1;
+
+  assert(L != NULL);
+  luaL_openlibs(L);
+  g = G(L);
+
+  dostring(L, "require('ffi')");
+  cts = ctype_ctsG(g);
+  assert(cts != NULL);
+  top0 = cts->top;
+
+  dostring(L,
+    "local ffi = require('ffi')\n"
+    "local ok = pcall(ffi.cdef, 'struct m7_badrollback { int x; ')\n"
+    "assert(not ok)\n");
+
+  top1 = cts->top;
+  assert(top1 > top0);
+
+  dostring(L,
+    "local ffi = require('ffi')\n"
+    "ffi.cdef('struct m7_badrollback;')\n"
+    "assert(ffi.typeof('struct m7_badrollback *'))\n"
+    "ffi.cdef('struct m7_keep;')\n"
+    "local ok = pcall(ffi.cdef, 'struct m7_keep { int a; ')\n"
+    "assert(not ok)\n"
+    "ffi.cdef('struct m7_keep { int a; };')\n"
+    "local v = ffi.new('struct m7_keep')\n"
+    "v.a = 42\n"
+    "assert(v.a == 42)\n");
+
+  lua_close(L);
+  printf("t-ffi-cparse-rollback OK: failed parses abandon new ctype records\n");
+  return 0;
+}
