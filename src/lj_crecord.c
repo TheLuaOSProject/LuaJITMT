@@ -1032,11 +1032,18 @@ static void crec_alloc(jit_State *J, RecordFFData *rd, CTypeID id)
 {
   CTState *cts = ctype_ctsG(J2G(J));
   CTSize sz;
-  CTInfo info = lj_ctype_info(cts, id, &sz);
-  CType *d = ctype_raw(cts, id);
+  CTInfo info;
+  CType *d;
   TRef trcd, trid = lj_ir_kint(J, id);
   cTValue *fin;
   TValue fintv;
+  lj_ctype_parse_lock(cts, J->L);
+  /* 11.2: ffi.new recorder waits out parser rollback. */
+  info = lj_ctype_info(cts, id, &sz);
+  d = ctype_raw(cts, id);
+  lj_ctype_parse_unlock(cts);
+  if (sz == CTSIZE_INVALID)
+    lj_trace_err(J, LJ_TRERR_BADTYPE);
   /* Use special instruction to box pointer or 32/64 bit integer. */
   if (ctype_isptr(info) || (ctype_isinteger(info) && (sz == 4 || sz == 8))) {
     TRef sp = J->base[1] ? crec_ct_tv(J, d, 0, J->base[1], &rd->argv[1]) :

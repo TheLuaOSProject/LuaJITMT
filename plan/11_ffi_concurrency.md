@@ -54,10 +54,10 @@ GCtab *miscmap; CCallback cb; CTypeID1 hash[CTHASH_SIZE]; }`
   lookup, numeric cdata element-size lookup, cdata pointer arithmetic, enum
   string constant resolution, and `ffi.C` namespace lookup take the parser token
   while snapshotting ctype layout, field metadata, pointer element size, or
-  name/hash-visible constants, including the recorder's field, numeric-index,
-  pointer arithmetic, enum-string, and `ffi.C` specialization paths. This
-  prevents a failed `ffi.cdef()` from leaking a transient struct definition or
-  constant to `ffi.sizeof()`, `ffi.new()`, `ffi.typeinfo()`, cdata
+  name/hash-visible constants, including the recorder's `ffi.new`, field,
+  numeric-index, pointer arithmetic, enum-string, and `ffi.C` specialization
+  paths. This prevents a failed `ffi.cdef()` from leaking a transient struct
+  definition or constant to `ffi.sizeof()`, `ffi.new()`, `ffi.typeinfo()`, cdata
   `__index`/`__newindex`, numeric indexing, pointer arithmetic, enum string
   casts, or `ffi.C`; narrowing the hot cdata reader fences is deferred to M9
   cleanup.

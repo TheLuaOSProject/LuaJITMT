@@ -35,6 +35,7 @@ for needle in \
   'LJLIB_CF(ffi_typeinfo)' \
   'Snapshot ctype while parser rollback cannot mutate layout.' \
   'layout reader waits out parser rollback' \
+  'ffi.new recorder waits out parser rollback' \
   'lj_ctype_parse_unlock(cts);' \
   'direct ctype reader observed failed cdef rollback state' \
   'ffi.typeinfo observed failed cdef rollback state' \
