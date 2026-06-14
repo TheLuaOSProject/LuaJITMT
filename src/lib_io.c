@@ -104,12 +104,12 @@ static size_t io_native_fread(lua_State *L, void *buf, size_t size,
   return nr;
 }
 
-static int io_native_getc(lua_State *L, FILE *fp)
+static int io_native_getc(lua_State *L, FILE *fp, uint32_t *actionsp)
 {
   int c;
   lj_native_enter(L2TG(L));
   c = getc(fp);
-  (void)lj_native_leave(L);
+  *actionsp = lj_native_leave(L);
   return c;
 }
 
@@ -289,8 +289,10 @@ static int io_file_readlen(lua_State *L, FILE *fp, MSize m)
     lj_gc_check(L);
     return n > 0;
   } else {
-    int c = io_native_getc(L, fp);
+    uint32_t actions;
+    int c = io_native_getc(L, fp, &actions);
     ungetc(c, fp);
+    lj_safepoint_checkstop(L, actions);
     setstrV(L, L->top++, &G(L)->strempty);
     return (c != EOF);
   }

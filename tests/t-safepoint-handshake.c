@@ -58,6 +58,18 @@ static int assert_acked_alloc_white_c(lua_State *L)
   return 0;
 }
 
+static int assert_acked_c(lua_State *L)
+{
+  global_State *g = G(L);
+  TGState *tg = G2TG(g);
+  assert(tg != NULL);
+  assert(g->gc2.hs_pending == 0);
+  assert(tg->poll == 0);
+  assert(tg->reqmask == 0);
+  assert(tg->hs_epoch_ack == g->gc2.hs_epoch);
+  return 0;
+}
+
 static int clear_stopreq_c(lua_State *L)
 {
   global_State *g = G(L);
@@ -170,6 +182,8 @@ int main(void)
   lua_setglobal(L, "publish_stopreq");
   lua_pushcfunction(L, assert_acked_alloc_white_c);
   lua_setglobal(L, "assert_acked_alloc_white");
+  lua_pushcfunction(L, assert_acked_c);
+  lua_setglobal(L, "assert_acked");
   lua_pushcfunction(L, clear_stopreq_c);
   lua_setglobal(L, "clear_stopreq");
   lua_pushcfunction(L, assert_not_native_c);
@@ -447,6 +461,8 @@ int main(void)
     "expect_stopreq(function() return f:read(1) end)\n"
     "f:seek('set', 0)\n"
     "expect_stopreq(function() return f:read('*a') end)\n"
+    "f:seek('set', 0)\n"
+    "expect_stopreq(function() return f:read(0) end)\n"
     "f:close()\n"
     "os.remove(p)\n") == LUA_OK);
 
@@ -489,7 +505,7 @@ int main(void)
     "end)\n"
     "publish_alloc_white()\n"
     "ffi.C.qsort(arr, 2, ffi.sizeof('int'), cmp)\n"
-    "assert_acked_alloc_white()\n"
+    "assert_acked()\n"
     "cmp:free()\n"
     "assert(arr[0] == 1 and arr[1] == 2)\n"
     "local stopreq = ffi.cast('stopreq_t', ffi_stopreq_ptr)\n"

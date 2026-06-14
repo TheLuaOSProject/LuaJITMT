@@ -81,6 +81,9 @@ for needle in \
   'io_native_fscanf_num(lua_State *L, FILE *fp, lua_Number *dp)' \
   'io_native_fgets(lua_State *L, char *buf, int size, FILE *fp)' \
   'io_native_fread(lua_State *L, void *buf, size_t size,' \
+  'io_native_getc(lua_State *L, FILE *fp, uint32_t *actionsp)' \
+  '*actionsp = lj_native_leave(L);' \
+  'lj_safepoint_checkstop(L, actions);' \
   'lj_safepoint_checkstop(L, lj_native_leave(L));'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lib_io.c"; then
@@ -134,6 +137,7 @@ for needle in \
   "f:read('*l')" \
   'f:read(1)' \
   "f:read('*a')" \
+  'f:read(0)' \
   'thread interrupted: VM shutdown'
 do
   if ! rg -F -q "$needle" "$ROOT/tests/t-safepoint-handshake.c"; then
