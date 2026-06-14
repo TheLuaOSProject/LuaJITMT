@@ -10,6 +10,7 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 "$ROOT/tools/ci/m6_jit_barrier_xpoll.sh"
 "$ROOT/tools/ci/m6_jit_xbar_xpoll.sh"
 "$ROOT/tools/ci/m6_jit_table_store_helper.sh"
+"$ROOT/tools/ci/m6_jit_aref_pair_guard.sh"
 "$ROOT/tools/ci/m6_jit_hrefk_nodehdr.sh"
 "$ROOT/tools/ci/m6_jit_href_nodehdr.sh"
 "$ROOT/tools/ci/m6_jit_alloc_account.sh"

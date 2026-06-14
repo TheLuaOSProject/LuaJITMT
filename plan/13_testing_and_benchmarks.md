@@ -69,7 +69,8 @@ Current M6 scaffold gates include dispatch redispatch, recorder-token
 ownership, local-cell recorder IR shape including self-cell CNEW/FNEW creation,
 mixed raw-local FNEW sync-helper traces, promoted-cell update loops,
 first-promotion FNEW traces, XPOLL barriers, XBAR/XPOLL aliasing, allocation
-accounting, GC-step bridging, mcode publication, and flush handshake coverage.
+accounting, shared AREF pair-stability, GC-step bridging, mcode publication,
+and flush handshake coverage.
 These are milestone
 guardrails, not the final M9 performance matrix.
 

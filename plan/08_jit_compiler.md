@@ -414,6 +414,12 @@ scoped-flush target.
    `HREFK` node-header pairing. Constant-key `HREFK`
    recording snapshots the legacy node/hmask shape around `lj_tab_get()` and
    falls back to regular `HREF` if the shape changes while recording. Legacy
+   shared array reads now have an interim x64 pair-stability guard: the recorder
+   emits a `TAB_ARRAY` FLOAD before `TAB_ASIZE`, then emits a second fresh
+   `TAB_ARRAY` FLOAD and guards it equal before `AREF`/`ALOAD`, while trace-local
+   `TNEW`/`TDUP` arrays skip the extra guard. This is not the final `AHdr`
+   design, but it prevents the current shared-array trace from combining an old
+   array pointer with a newer size check. Legacy
    shared table-slot stores are not recorded for now: the recorder raises the
    normal NYI-bytecode trace error before emitting `HSTORE` or `ASTORE` for
    shared existing-table updates, new-key insertion, and nil-slot stores, and

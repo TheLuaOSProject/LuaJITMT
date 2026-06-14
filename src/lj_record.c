@@ -1458,6 +1458,20 @@ static void rec_idx_abc(jit_State *J, TRef asizeref, TRef ikey, uint32_t asize)
   emitir(IRTGI(IR_ABC), asizeref, ikey);  /* Emit regular bounds check. */
 }
 
+static int rec_idx_tab_trace_local(jit_State *J, TRef tab)
+{
+  IRIns *ir;
+  if (tref_ref(tab) < REF_FIRST)
+    return 0;
+  ir = IR(tref_ref(tab));
+  return ir->o == IR_TNEW || ir->o == IR_TDUP;
+}
+
+static int rec_idx_store_trace_local(jit_State *J, TRef tab)
+{
+  return rec_idx_tab_trace_local(J, tab);
+}
+
 /* Record indexed key lookup. */
 static TRef rec_idx_key(jit_State *J, RecordIndex *ix, IRRef *rbref,
 			IRType1 *rbguard)
@@ -1482,14 +1496,28 @@ static TRef rec_idx_key(jit_State *J, RecordIndex *ix, IRRef *rbref,
     }
     if ((MSize)k < LJ_MAX_ASIZE) {  /* Potential array key? */
       TRef ikey = lj_opt_narrow_index(J, key);
-      TRef asizeref = emitir(IRTI(IR_FLOAD), ix->tab, IRFL_TAB_ASIZE);
+      TRef asizeref;
       MSize asize = lj_tab_asize_acq(t);
       if ((MSize)k < asize) {  /* Currently an array key? */
 	TRef arrayref;
-	rec_idx_abc(J, asizeref, ikey, asize);
+#if defined(__linux__) && LJ_TARGET_X64
 	arrayref = emitir(IRT(IR_FLOAD, IRT_PGC), ix->tab, IRFL_TAB_ARRAY);
+#endif
+	asizeref = emitir(IRTI(IR_FLOAD), ix->tab, IRFL_TAB_ASIZE);
+	rec_idx_abc(J, asizeref, ikey, asize);
+#if defined(__linux__) && LJ_TARGET_X64
+	if (!rec_idx_tab_trace_local(J, ix->tab)) {
+	  TRef arrayref2 = emitir(IRT(IR_FLOAD, IRT_PGC), ix->tab,
+				  IRFL_TAB_ARRAY);
+	  /* M6: shared AREF guards TAB_ARRAY pair stability until AHdr lands. */
+	  emitir(IRTG(IR_EQ, IRT_PGC), arrayref2, arrayref);
+	}
+#else
+	arrayref = emitir(IRT(IR_FLOAD, IRT_PGC), ix->tab, IRFL_TAB_ARRAY);
+#endif
 	return emitir(IRT(IR_AREF, IRT_PGC), arrayref, ikey);
       } else {  /* Currently not in array (may be an array extension)? */
+	asizeref = emitir(IRTI(IR_FLOAD), ix->tab, IRFL_TAB_ASIZE);
 	emitir(IRTGI(IR_ULE), asizeref, ikey);  /* Inv. bounds check. */
 	if (k == 0 && tref_isk(key))
 	  key = lj_ir_knum_zero(J);  /* Canonicalize 0 or +-0.0 to +0.0. */
@@ -1546,15 +1574,6 @@ static TRef rec_idx_key(jit_State *J, RecordIndex *ix, IRRef *rbref,
   }
   /* Fall back to a regular hash lookup. */
   return emitir(IRT(IR_HREF, IRT_PGC), ix->tab, key);
-}
-
-static int rec_idx_store_trace_local(jit_State *J, TRef tab)
-{
-  IRIns *ir;
-  if (tref_ref(tab) < REF_FIRST)
-    return 0;
-  ir = IR(tref_ref(tab));
-  return ir->o == IR_TNEW || ir->o == IR_TDUP;
 }
 
 /* Determine whether a key is NOT one of the fast metamethod names. */
