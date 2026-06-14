@@ -540,13 +540,29 @@ static int trace_scope_flushing(jit_State *J, TraceNo traceno)
   return 0;
 }
 
+static uint32_t trace_flushside(jit_State *J, GCtrace *T, int scoped)
+{
+  IRIns *base = &T->ir[REF_BASE];
+  TraceNo parentno = (TraceNo)base->op1;
+  GCtrace *parent = traceref(J, parentno);
+  ExitNo exitno = (ExitNo)base->op2;
+  lj_assertJ(T->root != 0, "not a side trace");
+  trace_exittab_reset(J, T);
+  if (parent && parent->traceno == parentno &&
+      parent->exittab && exitno < parent->nsnap)
+    trace_exittarget_rel(parent, exitno, exitstub_addr(J, exitno));
+  if (scoped)
+    la_store64_rel(&T->retire_epoch, LJ_TRACE_SCOPE_FLUSHING);
+  return 1;
+}
+
 static int trace_scope_flush_dependency(jit_State *J, GCtrace *T)
 {
   TraceNo link = trace_link_acq(T);
   if (trace_scope_flushing(J, link))
     return 1;
   if (T->root != 0) {
-    TraceNo parent = T->ir[REF_BASE].op1;
+    TraceNo parent = (TraceNo)T->ir[REF_BASE].op1;
     if (trace_scope_flushing(J, T->root) ||
 	trace_scope_flushing(J, parent))
       return 1;
@@ -569,8 +585,7 @@ static uint32_t trace_flushscope_mark_deps(jit_State *J)
 	  if (!trace_flushroot(J, T, 1))
 	    continue;
 	} else {
-	  trace_exittab_resetroot(J, T->root);
-	  la_store64_rel(&T->retire_epoch, LJ_TRACE_SCOPE_FLUSHING);
+	  (void)trace_flushside(J, T, 1);
 	}
 	marked++;
 	changed = 1;
@@ -580,13 +595,16 @@ static uint32_t trace_flushscope_mark_deps(jit_State *J)
   return marked;
 }
 
-/* Flush a trace. Only root traces are considered. */
+/* Flush a root or side trace. Returns non-zero iff scoped work was marked. */
 uint32_t lj_trace_flush(jit_State *J, TraceNo traceno)
 {
   if (traceno > 0 && traceno < J->sizetrace) {
     GCtrace *T = traceref(J, traceno);
-    if (T && T->root == 0)
-      return trace_flushroot(J, T, 1);
+    if (T && T->traceno == traceno) {
+      if (T->root == 0)
+	return trace_flushroot(J, T, 1);
+      return trace_flushside(J, T, 1);
+    }
   }
   return 0;
 }
@@ -610,6 +628,30 @@ uint32_t lj_trace_flushproto(global_State *g, GCproto *pt)
 static void trace_scope_clear_slot(jit_State *J, TraceNo traceno, GCtrace *T,
 				   uint64_t epoch)
 {
+  if (T->root != 0) {
+    GCtrace *root = traceref(J, T->root);
+    if (root && root->traceno == T->root) {
+      TraceNo next = trace_nextside_acq(T);
+      TraceNo head = trace_nextside_acq(root);
+      if (head == traceno) {
+	trace_nextside_rel(root, next);
+	if (root->nchild > 0)
+	  root->nchild--;
+      } else if (head != 0) {
+	GCtrace *prev = traceref(J, head);
+	while (prev) {
+	  TraceNo prevnext = trace_nextside_acq(prev);
+	  if (prevnext == traceno) {
+	    trace_nextside_rel(prev, next);
+	    if (root->nchild > 0)
+	      root->nchild--;
+	    break;
+	  }
+	  prev = prevnext ? traceref(J, prevnext) : NULL;
+	}
+      }
+    }
+  }
   lj_gdbjit_deltrace(J, T);
   T->traceno = 0;  /* Scoped slot retired after HS_EXIT_TRACES grace. */
   trace_link_rel(T, 0);

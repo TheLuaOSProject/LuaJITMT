@@ -139,7 +139,9 @@ still allocates a new unpublished area once an area contains committed trace
 bytes; that cleanup/perf reduction is left for M9 rather than changing the M6
 correctness target. Recorder-internal `LJ_TRLINK_RETURN` call-unroll flushes now
 use `lj_trace_flushscope()`, sharing the public scoped `HS_EXIT_TRACES` boundary
-and slot-retirement path instead of leaving marked scoped slots behind.
+and slot-retirement path instead of leaving marked scoped slots behind. Numeric
+side-trace flushes now mark and retire the named side slot through the same
+boundary while preserving the root trace.
 Tests: stock with -jon; t-jit-01..06 (trace same loop from 2 threads;
 side-trace attach while parent runs on another thread; flush storm;
 exit-handler stress; recording-thread killed mid-trace (error in
@@ -199,10 +201,11 @@ priority queue (05 §5.6.3); inline-alloc IR on trace (08 §8.6); cell
 sinking (08 §8.8.4); bump-window policy tuning (04 §4.4); barrier
 hoisting quality (XBARFLG CSE region sizing); TG layout cache-line audit
 (perf c2c); bridge cleanup for temporary tokens/owner claims/locks that are
-not part of the final design; channel spin K tuning; sweep SIMD (the bitmap
-identities vectorize — 04 §4.1.1). Accepted serialized surfaces are
-`ffi.cdef`, `require`, and the recorder token; do not spend M9 trying to make
-those parallel unless a correctness issue demands it.
+not part of the final design, especially leftover temporary locks and tokens;
+channel spin K tuning; sweep SIMD (the bitmap identities vectorize — 04 §4.1.1).
+Accepted serialized surfaces are `ffi.cdef`, `require`, and the serialized
+recorder/recorder token; do not spend M9 trying to make those parallel unless a
+correctness issue demands it.
 Gate: ≤10% single-thread geomean (stretch 5%); bench_mt scaling ≥6x on
 8 cores for tab_hash_read-MT and arith-MT; GC pause P99 (mutator-observed
 via poll latency probe) <500µs on the churn bench.

@@ -244,10 +244,21 @@ static uint32_t count_traces_with_root(jit_State *J, TraceNo root)
   uint32_t n = 0;
   for (i = 1; i < J->sizetrace; i++) {
     GCtrace *T = traceref(J, i);
-    if (T && T->root == root)
+    if (T && T->traceno == i && T->root == root)
       n++;
   }
   return n;
+}
+
+static TraceNo first_trace_with_root(jit_State *J, TraceNo root)
+{
+  TraceNo i;
+  for (i = 1; i < J->sizetrace; i++) {
+    GCtrace *T = traceref(J, i);
+    if (T && T->traceno == i && T->root == root)
+      return i;
+  }
+  return 0;
 }
 
 static uint32_t count_scope_flushing_traces(jit_State *J)
@@ -364,6 +375,22 @@ static int assert_pending_flushj_c(lua_State *L)
   assert(tg != NULL);
   assert_pending(g, tg, g->gc2.hs_epoch - 1u, LJ_GC2_HS_FLUSHJ);
   return 0;
+}
+
+static void call_jit_flush_trace(lua_State *L, TraceNo traceno)
+{
+  int status;
+  lua_getglobal(L, "jit");
+  assert(lua_istable(L, -1));
+  lua_getfield(L, -1, "flush");
+  lua_remove(L, -2);
+  lua_pushinteger(L, (lua_Integer)traceno);
+  status = lua_pcall(L, 1, 0, 0);
+  if (status != LUA_OK) {
+    fprintf(stderr, "jit.flush(%u) failed: %s\n", (unsigned)traceno,
+	    lua_tostring(L, -1));
+    assert(status == LUA_OK);
+  }
 }
 #endif
 
@@ -491,6 +518,74 @@ int main(void)
   assert(g->gc2.hs_epoch == epoch0);
   assert(tg->hs_epoch_ack == g->gc2.hs_epoch);
   assert(la_load64_acq(&g->gc2.jit_scoped_slots_retired) == scoped_slots0);
+  lua_pop(L, 1);
+
+  load_scoped_flush_side(L);
+  assert(lua_pcall(L, 0, 1, 0) == LUA_OK);
+  assert(lua_isfunction(L, -1));
+  {
+    jit_State *J = G2J(g);
+    GCtrace *root = traceref(J, 1);
+    TraceNo sidetrace = first_trace_with_root(J, 1);
+    GCtrace *side;
+    IRIns *base;
+    TraceNo parentno;
+    ExitNo exitno;
+    MCode *sidetarget;
+    GCtrace *parent;
+    uint32_t side_count0;
+    uint32_t side_count1;
+    uint16_t nchild0;
+    int status;
+    assert(root != NULL);
+    assert(root->traceno == 1);
+    assert(sidetrace != 0);
+    side = traceref(J, sidetrace);
+    assert(side != NULL);
+    assert(side->traceno == sidetrace);
+    base = &side->ir[REF_BASE];
+    parentno = (TraceNo)base->op1;
+    exitno = (ExitNo)base->op2;
+    sidetarget = side->mcode;
+    UNUSED(exitno);
+    UNUSED(sidetarget);
+    side_count0 = count_traces_with_root(J, 1);
+    nchild0 = root->nchild;
+    assert(side_count0 > 0);
+    assert(nchild0 > 0);
+    epoch0 = g->gc2.hs_epoch;
+    scoped_slots0 = la_load64_acq(&g->gc2.jit_scoped_slots_retired);
+    call_jit_flush_trace(L, sidetrace);
+    assert(g->gc2.hs_epoch == epoch0 + 1u);
+    assert(tg->hs_epoch_ack == g->gc2.hs_epoch);
+    assert(traceref(J, sidetrace) == NULL);
+    root = traceref(J, 1);
+    assert(root != NULL);
+    assert(root->traceno == 1);
+    side_count1 = count_traces_with_root(J, 1);
+    assert(side_count1 < side_count0);
+    assert(root->nchild < nchild0);
+    assert(count_scope_flushing_traces(J) == 0);
+    assert(la_load64_acq(&g->gc2.jit_scoped_slots_retired) >
+	   scoped_slots0);
+    parent = traceref(J, parentno);
+    assert(parent != NULL);
+#if LJ_64 && defined(EXITSTUBS_PER_GROUP)
+    if (parent->exittab && exitno < parent->nsnap)
+      assert(trace_exittarget_acq(parent, exitno) != sidetarget);
+#endif
+    lua_pushvalue(L, -1);
+    lua_pushinteger(L, 80);
+    lua_pushboolean(L, 1);
+    status = lua_pcall(L, 2, 1, 0);
+    if (status != LUA_OK) {
+      fprintf(stderr, "post-side-flush call failed: %s\n",
+	      lua_tostring(L, -1));
+      assert(status == LUA_OK);
+    }
+    assert(lua_tointeger(L, -1) == 4230);
+    lua_pop(L, 1);
+  }
   lua_pop(L, 1);
 
   load_scoped_flush_side(L);

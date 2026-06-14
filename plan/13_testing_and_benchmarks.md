@@ -71,7 +71,8 @@ mixed raw-local FNEW sync-helper traces, promoted-cell update loops,
 first-promotion FNEW traces, XPOLL barriers, XBAR/XPOLL aliasing, allocation
 accounting, TNEW/CNEW/SNEW GC2 hard-check readiness, shared AREF
 pair-stability, GC-step bridging, mcode publication, public and
-recorder-internal scoped flush handshake coverage.
+recorder-internal scoped flush handshake coverage, and numeric side-trace
+flush slot-retirement coverage.
 These are milestone
 guardrails, not the final M9 performance matrix.
 

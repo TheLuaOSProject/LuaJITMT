@@ -1,5 +1,5 @@
 #!/bin/sh
-# Guard recorder-internal full flushes use the safepoint protocol.
+# Guard JIT flushes use safepoint-scoped publication and retirement.
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
@@ -15,12 +15,18 @@ for needle in \
   'uint32_t lj_trace_flushscope(jit_State *J, TraceNo traceno)' \
   '(void)lj_trace_flushscope(J, lnk);  /* Flush return trace after HS. */' \
   'trace_scope_flush_dependency(jit_State *J, GCtrace *T)' \
-  '(void)trace_flushscope_mark_deps(G2J(g));'
+  '(void)trace_flushscope_mark_deps(G2J(g));' \
+  'trace_flushside(jit_State *J, GCtrace *T, int scoped)' \
+  'return trace_flushside(J, T, 1);' \
+  '(void)trace_flushside(J, T, 1);' \
+  'trace_nextside_rel(root, next);' \
+  'first_trace_with_root(jit_State *J, TraceNo root)' \
+  'call_jit_flush_trace(L, sidetrace);'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_trace.c" \
       "$ROOT/src/lj_safepoint.c" "$ROOT/src/lj_record.c" \
-      "$ROOT/src/lj_dispatch.c"; then
-    echo "guardrail: missing recorder flush handshake marker: $needle" >&2
+      "$ROOT/src/lj_dispatch.c" "$ROOT/tests/t-vm-safepoint.c"; then
+    echo "guardrail: missing JIT flush handshake marker: $needle" >&2
     exit 1
   fi
 done
@@ -32,6 +38,11 @@ fi
 
 if rg -n 'lj_trace_flush\(J, lnk\)' "$ROOT/src/lj_record.c"; then
   echo "guardrail: recorder-internal scoped return flushes must route through HS_EXIT_TRACES" >&2
+  exit 1
+fi
+
+if rg -F -q 'Only root traces are considered' "$ROOT/src/lj_trace.c"; then
+  echo "guardrail: numeric trace flushes must not document side traces as ignored" >&2
   exit 1
 fi
 

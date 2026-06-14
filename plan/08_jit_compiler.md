@@ -369,9 +369,13 @@ side-trace slots and side-trace slots rooted at flushed roots are cleared first,
 then the root slots are cleared with `T->traceno = 0`. This makes trace numbers
 reusable without leaving stale sides or cross-root tail links pointing at a
 reusable trace number, and without letting the later GC sweep clear a reused
-slot. The physical `GCtrace` body/exittab still reaches `J->retiredtraces`
-through the existing sweep path, preserving the original bridge shape, but sweep
-now keeps a finite scoped-retire epoch already stamped after the
+slot. Numeric `jit.flush(side_trace_no)` now marks the named side trace too:
+its parent exit is reset to the interpreter exit stub, side dependents are
+closed over by the same marker, and post-boundary slot retirement unlinks the
+side from the root `nextside` chain while decrementing `nchild`. The physical
+`GCtrace` body/exittab still reaches `J->retiredtraces` through the existing
+sweep path, preserving the original bridge shape, but sweep now keeps a finite
+scoped-retire epoch already stamped after the
 `HS_EXIT_TRACES` boundary instead of replacing it with the later sweep epoch.
 Recorder-internal call-unroll recovery now shares the scoped helper:
 `check_call_unroll()` routes `LJ_TRLINK_RETURN` flushes through
