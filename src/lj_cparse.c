@@ -155,9 +155,9 @@ LJ_NORET LJ_NOINLINE static void cp_err_token(CPState *cp, CPToken tok)
   cp_errmsg(cp, cp->tok, LJ_ERR_XTOKEN, cp_tok2str(cp, tok));
 }
 
-LJ_NORET LJ_NOINLINE static void cp_err_badidx(CPState *cp, CType *ct)
+LJ_NORET LJ_NOINLINE static void cp_err_badidx(CPState *cp, CTypeID id)
 {
-  GCstr *s = lj_ctype_repr(cp->L, ctype_typeid(cp->cts, ct), NULL);
+  GCstr *s = lj_ctype_repr(cp->L, id, NULL);
   cp_errmsg(cp, 0, LJ_ERR_FFI_BADIDX, strdata(s));
 }
 
@@ -505,10 +505,12 @@ static void cp_expr_prefix(CPState *cp, CPValue *k)
     }
   } else if (cp_opt(cp, '*')) {  /* Indirection. */
     CType *ct;
+    CTypeID id;
     cp_expr_unary(cp, k);
-    ct = lj_ctype_rawref(cp->cts, k->id);
+    id = ctype_rawrefid(cp->cts, k->id);
+    ct = ctype_get(cp->cts, id);
     if (!ctype_ispointer(ct->info))
-      cp_err_badidx(cp, ct);
+      cp_err_badidx(cp, id);
     k->u32 = 0; k->id = ctype_cid(ct->info);
   } else if (cp_opt(cp, '&')) {  /* Address operator. */
     cp_expr_unary(cp, k);
@@ -548,30 +550,35 @@ static void cp_expr_postfix(CPState *cp, CPValue *k)
     CType *ct;
     if (cp_opt(cp, '[')) {  /* Array/pointer index. */
       CPValue k2;
+      CTypeID id;
       cp_expr_comma(cp, &k2);
-      ct = lj_ctype_rawref(cp->cts, k->id);
+      id = ctype_rawrefid(cp->cts, k->id);
+      ct = ctype_get(cp->cts, id);
       if (!ctype_ispointer(ct->info)) {
-	ct = lj_ctype_rawref(cp->cts, k2.id);
+	id = ctype_rawrefid(cp->cts, k2.id);
+	ct = ctype_get(cp->cts, id);
 	if (!ctype_ispointer(ct->info))
-	  cp_err_badidx(cp, ct);
+	  cp_err_badidx(cp, id);
       }
       cp_check(cp, ']');
       k->u32 = 0;
     } else if (cp->tok == '.' || cp->tok == CTOK_DEREF) {  /* Struct deref. */
       CTSize ofs;
       CType *fct;
-      ct = lj_ctype_rawref(cp->cts, k->id);
+      CTypeID id = ctype_rawrefid(cp->cts, k->id);
+      ct = ctype_get(cp->cts, id);
       if (cp->tok == CTOK_DEREF) {
 	if (!ctype_ispointer(ct->info))
-	  cp_err_badidx(cp, ct);
-	ct = lj_ctype_rawref(cp->cts, ctype_cid(ct->info));
+	  cp_err_badidx(cp, id);
+	id = ctype_rawrefid(cp->cts, ctype_cid(ct->info));
+	ct = ctype_get(cp->cts, id);
       }
       cp_next(cp);
       if (cp->tok != CTOK_IDENT) cp_err_token(cp, CTOK_IDENT);
       if (!ctype_isstruct(ct->info) || ct->size == CTSIZE_INVALID ||
 	  !(fct = lj_ctype_getfield(cp->cts, ct, cp->str, &ofs)) ||
 	  ctype_isbitfield(fct->info)) {
-	GCstr *s = lj_ctype_repr(cp->L, ctype_typeid(cp->cts, ct), NULL);
+	GCstr *s = lj_ctype_repr(cp->L, id, NULL);
 	cp_errmsg(cp, 0, LJ_ERR_FFI_BADMEMBER, strdata(s), strdata(cp->str));
       }
       ct = fct;

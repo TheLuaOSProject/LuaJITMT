@@ -561,14 +561,15 @@ static void ctype_prepqual(CTRepr *ctr, CTInfo info)
 }
 
 /* Prepend named type. */
-static void ctype_preptype(CTRepr *ctr, CType *ct, CTInfo qual, const char *t)
+static void ctype_preptype(CTRepr *ctr, CTypeID id, CType *ct, CTInfo qual,
+			   const char *t)
 {
   GCstr *str = ctype_name_acq(ct);
   if (str) {
     ctype_prepstr(ctr, strdata(str), str->len);
   } else {
     if (ctr->needsp) ctype_prepc(ctr, ' ');
-    ctype_prepnum(ctr, ctype_typeid(ctr->cts, ct));
+    ctype_prepnum(ctr, id);
     ctr->needsp = 1;
   }
   ctype_prepstr(ctr, t, (MSize)strlen(t));
@@ -612,14 +613,14 @@ static void ctype_repr(CTRepr *ctr, CTypeID id)
       ctype_prepqual(ctr, (qual|info));
       return;
     case CT_STRUCT:
-      ctype_preptype(ctr, ct, qual, (info & CTF_UNION) ? "union" : "struct");
+      ctype_preptype(ctr, id, ct, qual, (info & CTF_UNION) ? "union" : "struct");
       return;
     case CT_ENUM:
       if (id == CTID_CTYPEID) {
 	ctype_preplit(ctr, "ctype");
 	return;
       }
-      ctype_preptype(ctr, ct, qual, "enum");
+      ctype_preptype(ctr, id, ct, qual, "enum");
       return;
     case CT_ATTRIB:
       if (ctype_attrib(info) == CTA_QUAL) qual |= size;

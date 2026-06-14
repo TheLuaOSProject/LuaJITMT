@@ -40,7 +40,12 @@ for needle in \
   'if (rid1 == rid2)' \
   'rid1 == ctype_rawid(cts, ctype_cid(ct2->info))' \
   'lj_ctype_metatv(cts, &metatv, rid, MM_tostring)' \
-  'tv = lj_tab_setinth(L, t, -(int32_t)rid)'
+  'tv = lj_tab_setinth(L, t, -(int32_t)rid)' \
+  'ctype_preptype(CTRepr *ctr, CTypeID id' \
+  'ctype_prepnum(ctr, id)' \
+  'cp_err_badidx(CPState *cp, CTypeID id)' \
+  'id = ctype_rawrefid(cp->cts, k->id)' \
+  'GCstr *s = lj_ctype_repr(cp->L, id, NULL)'
 do
   if ! rg -F -q "$needle" "$ROOT/src"; then
     echo "guardrail: missing FFI ctype raw-ID marker: $needle" >&2
@@ -77,6 +82,13 @@ fi
 if rg -n 'ctype_typeid\(cts' "$ROOT/src/lj_cconv.c" "$ROOT/src/lj_carith.c" \
     "$ROOT/src/lj_cdata.c" "$ROOT/src/lj_crecord.c"; then
   echo "guardrail: runtime conversion paths must not derive IDs from CType *" >&2
+  exit 1
+fi
+
+if rg -n 'ctype_typeid\(' "$ROOT/src/lj_ctype.c" "$ROOT/src/lj_cparse.c" \
+    "$ROOT/src/lj_crecord.c" "$ROOT/src/lj_cconv.c" \
+    "$ROOT/src/lj_carith.c" "$ROOT/src/lj_cdata.c" "$ROOT/src/lib_ffi.c"; then
+  echo "guardrail: x86_64 FFI raw-ID paths must not derive IDs from CType *" >&2
   exit 1
 fi
 
