@@ -250,7 +250,7 @@ int main(void)
 		   "local function f() return f end; keep=f end; return keep",
 		   &base);
   assert_lua_ok(L, load_dump(L, &base), "load v4 CNEW dump");
-  assert((top_proto(L)->flags & PROTO_NOJIT) != 0);
+  assert((top_proto(L)->flags & PROTO_NOJIT) == 0);
   lua_pop(L, 1);
 
   dump_free(&redump);

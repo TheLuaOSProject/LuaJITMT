@@ -311,7 +311,7 @@ end
 local run = assert(loadstring(string.dump(src)))
 local f = run(30)
 assert(f() == f)
-assert(not util.traceinfo(1), "expected loaded CNEW creation proto to stay nojit")
+assert(util.traceinfo(1), "expected loaded CNEW creation trace")
 '
 
 cd "$ROOT/tests/stock/test"

@@ -114,8 +114,10 @@ first TGMARK invalidation slice keeps `TBAR`/`OBAR` inside XPOLL-delimited
 poll regions; broader XBAR invalidation work remains pending. The CGET/CSET
 recording subtask is covered for the current x64 bridge by explicit IR guards
 over raw-slot fallback, promoted-cell `UREFC`/`ULOAD`/`USTORE`, and GC-valued
-`OBAR`; `BC_CNEW` allocation plus FNEW creation tracing remains the preserved
-follow-up before removing the current `PROTO_NOJIT` gates. Linux/x64 `LJ_MT`
+`OBAR`; the first `BC_CNEW`/`BC_FNEW` helper-backed slice covers source and
+loaded v4 self-cell creation traces and removes the CNEW-specific `PROTO_NOJIT`
+gates. Raw-local FNEW promotion remains the preserved follow-up before the
+broader local-function creation target is complete. Linux/x64 `LJ_MT`
 secure builds currently keep generated mcode execute-stable with a fresh-area
 W^X bridge: once an area has committed trace bytes, the next reserve allocates
 a new unpublished area instead of flipping the old area writable. The planned

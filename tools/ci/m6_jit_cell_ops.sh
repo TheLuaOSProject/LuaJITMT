@@ -1,5 +1,5 @@
 #!/bin/sh
-# Guard CGET/CSET recording under the M6 x64 JIT bridge.
+# Guard local-cell recording under the M6 x64 JIT bridge.
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
@@ -12,7 +12,7 @@ need_marker()
   needle=$1
   shift
   if ! rg -F -q "$needle" "$@"; then
-    echo "guardrail: missing CGET/CSET JIT marker: $needle" >&2
+    echo "guardrail: missing local-cell JIT marker: $needle" >&2
     exit 1
   fi
 }
@@ -22,7 +22,7 @@ need_dump()
   pattern=$1
   desc=$2
   if ! rg -q "$pattern" "$DUMP"; then
-    echo "guardrail: missing $desc in CGET/CSET IR dump" >&2
+    echo "guardrail: missing $desc in local-cell IR dump" >&2
     sed -n '1,160p' "$DUMP" >&2
     exit 1
   fi
@@ -35,9 +35,16 @@ need_marker 'IRT(IR_UREFC, IRT_PGC), slotref' "$ROOT/src/lj_record.c"
 need_marker 'emitir(IRTG(IR_ULOAD' "$ROOT/src/lj_record.c"
 need_marker 'emitir(IRT(IR_USTORE' "$ROOT/src/lj_record.c"
 need_marker 'emitir(IRT(IR_OBAR' "$ROOT/src/lj_record.c"
+need_marker 'case BC_CNEW:' "$ROOT/src/lj_record.c"
+need_marker 'case BC_FNEW:' "$ROOT/src/lj_record.c"
+need_marker 'rec_fnew_celluv(jit_State *J' "$ROOT/src/lj_record.c"
+need_marker 'IRCALL_lj_func_newuvcell_forjit' "$ROOT/src/lj_record.c" "$ROOT/src/lj_ircall.h"
+need_marker 'IRCALL_lj_func_newL_gc_forjit' "$ROOT/src/lj_record.c" "$ROOT/src/lj_ircall.h"
+need_marker 'lj_func_newuvcell_forjit' "$ROOT/src/lj_func.c" "$ROOT/src/lj_func.h"
+need_marker 'lj_func_newL_gc_forjit' "$ROOT/src/lj_func.c" "$ROOT/src/lj_func.h"
 need_marker 'irt_isp32(IR(ir->op1)->t)' "$ROOT/src/lj_asm_x86.h"
-need_marker 'cellops & BCREAD_CELL_CNEW' "$ROOT/src/lj_bcread.c"
-need_marker 'pt->flags |= PROTO_NOJIT' "$ROOT/src/lj_bcread.c"
+need_marker 'irt_type(IR(ir->op1)->t) == IRT_PGC' "$ROOT/src/lj_asm_x86.h"
+need_marker 'cellops |= BCREAD_CELL_CNEW' "$ROOT/src/lj_bcread.c"
 
 LUA_PATH=$LUA_PATH_GUARD "$ROOT/src/luajit" -jdump=i -e '
 jit.opt.start("hotloop=1", "hotexit=1")
@@ -92,7 +99,30 @@ need_dump 'UREFC' 'loaded v4 CGET/CSET UREFC'
 need_dump 'ULOAD' 'loaded v4 CGET/CSET ULOAD'
 need_dump 'USTORE' 'loaded v4 CGET/CSET USTORE'
 
-LUA_PATH=$LUA_PATH_GUARD "$ROOT/src/luajit" -e '
+LUA_PATH=$LUA_PATH_GUARD "$ROOT/src/luajit" -jdump=i -e '
+local util = require"jit.util"
+jit.flush()
+jit.opt.start("hotloop=1")
+local function run(n)
+  local keep
+  for i = 1, n do
+    local function f() return f end
+    keep = f
+  end
+  return keep
+end
+local f = run(30)
+assert(f() == f)
+assert(util.traceinfo(1), "source CNEW/FNEW creation should trace")
+' >"$DUMP"
+
+need_dump 'CALLS.*lj_func_newuvcell_forjit' 'source CNEW helper call'
+need_dump 'CALLA.*lj_func_newL_gc_forjit' 'source FNEW helper call'
+need_dump 'UREFC' 'source CNEW/FNEW UREFC'
+need_dump 'USTORE' 'source CNEW/FNEW USTORE'
+need_dump 'OBAR' 'source CNEW/FNEW OBAR'
+
+LUA_PATH=$LUA_PATH_GUARD "$ROOT/src/luajit" -jdump=i -e '
 local util = require"jit.util"
 jit.flush()
 jit.opt.start("hotloop=1")
@@ -107,7 +137,32 @@ end
 local run = assert(loadstring(string.dump(src)))
 local f = run(30)
 assert(f() == f)
-assert(not util.traceinfo(1), "loaded CNEW creation should remain PROTO_NOJIT")
+assert(util.traceinfo(1), "loaded CNEW/FNEW creation should trace")
+' >"$DUMP"
+
+need_dump 'CALLS.*lj_func_newuvcell_forjit' 'loaded CNEW helper call'
+need_dump 'CALLA.*lj_func_newL_gc_forjit' 'loaded FNEW helper call'
+need_dump 'UREFC' 'loaded CNEW/FNEW UREFC'
+need_dump 'USTORE' 'loaded CNEW/FNEW USTORE'
+need_dump 'OBAR' 'loaded CNEW/FNEW OBAR'
+
+LUA_PATH=$LUA_PATH_GUARD "$ROOT/src/luajit" -e '
+local util = require"jit.util"
+jit.flush()
+jit.opt.start("hotloop=1")
+local function run(n)
+  local x = 1
+  local keep
+  for i = 1, n do
+    local function f() return f, x end
+    keep = f
+  end
+  return keep
+end
+local f = run(30)
+local self, x = f()
+assert(self == f and x == 1)
+assert(not util.traceinfo(1), "mixed raw-local CNEW/FNEW should remain NYI")
 '
 
-echo "M6 JIT CGET/CSET guard passed"
+echo "M6 JIT local-cell guard passed"

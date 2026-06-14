@@ -329,9 +329,11 @@ redispatch. Source child protos and loaded v4 child protos with parent-cell
 upvalues can trace through normal closed-upvalue UGET/USET recording after
 FNEW promotion; loaded v4 owner CGET/CSET protos can trace on the same x64
 owner-cell path. Original plan/WIP wording kept all loaded v4 cell protos
-`PROTO_NOJIT`; the audited boundary is narrower: self-captured local-function
-CNEW/CSET source protos and loaded v4 protos containing `BC_CNEW` remain
-`PROTO_NOJIT` until CNEW snapshot/FNEW recording behavior is implemented.
+`PROTO_NOJIT`; the audited boundary is narrower. Self-captured
+local-function CNEW/FNEW/CSET source protos and loaded v4 protos containing
+the same self-cell shape can now trace through the first helper-backed M6
+slice. FNEW shapes that need raw local promotion remain NYI until the broader
+closure-construction path lands.
 ### 6.4.4 Legacy chunks: see 10 §10.4 (capture-at-FNEW under MT).
 
 ## 6.5 String interning (lj_str.c rewrite)

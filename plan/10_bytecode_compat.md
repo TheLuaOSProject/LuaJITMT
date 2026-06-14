@@ -51,9 +51,10 @@ source cells; UCLO 0 remains as a return/jump carrier for now. Original
 implementation-plan wording marked loaded v4 cell protos `PROTO_NOJIT` until
 the recorder/snapshot work was audited; the current audited boundary is that
 source owner CGET/CSET, source child-cell upvalues, loaded v4 CGET/CSET, and
-loaded v4 child-cell upvalues can trace on x64, while source self-captured
-local-function CNEW/CSET protos and loaded v4 protos containing `BC_CNEW`
-remain `PROTO_NOJIT`.
+loaded v4 child-cell upvalues can trace on x64. Source and loaded v4
+self-captured local-function CNEW/FNEW/CSET loops can also trace through the
+first helper-backed M6 slice; FNEW shapes that need raw local promotion remain
+NYI until the broader closure-construction path lands.
 
 ## 10.4 Legacy v2 chunks (the compatibility deviation, DECIDED)
 

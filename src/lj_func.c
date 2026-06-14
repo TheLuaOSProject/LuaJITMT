@@ -93,6 +93,13 @@ GCupval *LJ_FASTCALL lj_func_newuvcell(lua_State *L)
   return func_newuvclosed(L);
 }
 
+GCupval *lj_func_newuvcell_forjit(lua_State *L, TValue *base, int32_t slot)
+{
+  GCupval *uv = lj_func_newuvcell(L);
+  setgcV(L, base + slot, obj2gco(uv), LJ_TUPVAL);
+  return uv;
+}
+
 /* Create a closed upvalue initialized from a stack slot. */
 static GCupval *func_snapshotuv(lua_State *L, const TValue *slot)
 {
@@ -205,18 +212,18 @@ GCfunc *lj_func_newL_empty(lua_State *L, GCproto *pt, GCtab *env)
 }
 
 /* Do a GC check and create a new Lua function with inherited upvalues. */
-GCfunc *lj_func_newL_gc(lua_State *L, GCproto *pt, GCfuncL *parent)
+static GCfunc *func_newL_gc_base(lua_State *L, TValue *base, GCproto *pt,
+				 GCfuncL *parent)
 {
   GCfunc *fn;
   GCRef *puv;
   MSize i, nuv;
-  TValue *base;
-  lj_gc_check_fixtop(L);
   fn = func_newL(L, pt, tabref_acq(parent->env));
   /* NOBARRIER: The GCfunc is new (marked white). */
   puv = parent->uvptr;
   nuv = pt->sizeuv;
-  base = L->base;
+  if (base == NULL)
+    base = L->base;
   for (i = 0; i < nuv; i++) {
     uint32_t v = proto_uv(pt)[i];
     GCupval *uv;
@@ -236,6 +243,19 @@ GCfunc *lj_func_newL_gc(lua_State *L, GCproto *pt, GCfuncL *parent)
   }
   fn->l.nupvalues = (uint8_t)nuv;
   return fn;
+}
+
+GCfunc *lj_func_newL_gc(lua_State *L, GCproto *pt, GCfuncL *parent)
+{
+  lj_gc_check_fixtop(L);
+  return func_newL_gc_base(L, NULL, pt, parent);
+}
+
+GCfunc *lj_func_newL_gc_forjit(lua_State *L, TValue *base, GCproto *pt,
+			       GCfuncL *parent)
+{
+  lj_gc_check_fixtop(L);
+  return func_newL_gc_base(L, base, pt, parent);
 }
 
 void LJ_FASTCALL lj_func_free(global_State *g, GCfunc *fn)

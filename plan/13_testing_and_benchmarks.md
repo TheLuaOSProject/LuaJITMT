@@ -66,10 +66,10 @@ Coroutine×thread matrix: t-co-01 resume/yield storms while markers scan
 (exercises thr_owner GCSCAN spin); t-co-02 cross-thread resume handoff of
 the same coroutine through a channel.
 Current M6 scaffold gates include dispatch redispatch, recorder-token
-ownership, CGET/CSET recorder IR shape, XPOLL barriers, XBAR/XPOLL aliasing,
-allocation accounting, GC-step bridging, mcode publication, and flush
-handshake coverage. These are milestone guardrails, not the final M9
-performance matrix.
+ownership, local-cell recorder IR shape including self-cell CNEW/FNEW creation,
+XPOLL barriers, XBAR/XPOLL aliasing, allocation accounting, GC-step bridging,
+mcode publication, and flush handshake coverage. These are milestone
+guardrails, not the final M9 performance matrix.
 
 ## 13.5 GC-specific unit tests (C, tests/c/)
 gc2_fixpoint_test.c: detector unit (05 §5.7.1) — mock workers inject

@@ -11,7 +11,9 @@ for needle in \
   'lj_gc2_handshake(g, LJ_GC2_HS_EXIT_TRACES|LJ_GC2_HS_FLUSHJ)' \
   'lj_trace_flushall(mainthread(g));  /* 08 section 8.7 leader action. */' \
   '(void)lj_trace_flushall_hs(J->L);' \
-  '(void)lj_trace_flushall_hs(L);'
+  '(void)lj_trace_flushall_hs(L);' \
+  'trace_scope_flush_dependency(jit_State *J, GCtrace *T)' \
+  '(void)trace_flushscope_mark_deps(G2J(g));'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_trace.c" \
       "$ROOT/src/lj_safepoint.c"; then

@@ -342,10 +342,12 @@ scoped trace-exit publication work, and `jit.off(func)`/proto disabling counts
 as boundary work even without existing traces. Public scoped flushes publish one
 `HS_EXIT_TRACES` boundary only when that work count is nonzero. Current scoped
 slot-retirement bridge: roots touched by scoped flush are tagged before the
-handshake, and after the `HS_EXIT_TRACES` grace boundary side-trace slots rooted
-at those tags are cleared first, then the root slots are cleared with
-`T->traceno = 0`. This makes trace numbers reusable without leaving stale sides
-pointing at a reusable root number or letting the later GC sweep clear a reused
+handshake, dependent links and side-trace immediate parents are marked to
+closure, and after the `HS_EXIT_TRACES` grace boundary explicitly marked
+side-trace slots and side-trace slots rooted at flushed roots are cleared first,
+then the root slots are cleared with `T->traceno = 0`. This makes trace numbers
+reusable without leaving stale sides or cross-root tail links pointing at a
+reusable trace number, and without letting the later GC sweep clear a reused
 slot. The physical `GCtrace` body/exittab still reaches `J->retiredtraces`
 through the existing sweep path, preserving the original bridge shape, but sweep
 now keeps a finite scoped-retire epoch already stamped after the
@@ -410,14 +412,15 @@ scoped-flush target.
    ranges. Source and loaded v4 child protos with parent-cell upvalues can
    trace through normal closed-upvalue UGET/USET recording after FNEW
    promotion. Original plan/WIP wording kept all loaded v4 cell protos
-   `PROTO_NOJIT`; after audit, only self-captured local-function CNEW/CSET
-   source protos and loaded v4 protos containing `BC_CNEW` stay `PROTO_NOJIT`
-   until CNEW snapshot/FNEW recording behavior is implemented.
+   `PROTO_NOJIT`; after audit and the first M6 CNEW/FNEW slice, self-captured
+   local-function source protos and loaded v4 protos containing only the
+   self-cell CNEW/FNEW/CSET shape no longer need that gate.
    Current M6 guard coverage requires IR dumps for owner numeric cells,
-   GC-valued CSET with `OBAR`, and loaded v4 CGET/CSET traces. The original
-   broader local-cell target is preserved: `BC_CNEW` allocation and the FNEW
-   creation trace path remain the next correctness slice before relaxing those
-   `PROTO_NOJIT` gates.
+   GC-valued CSET with `OBAR`, loaded v4 CGET/CSET traces, and source/loaded
+   self-cell CNEW/FNEW helper traces. The original broader local-cell target is
+   preserved: FNEW shapes that need raw local promotion remain the next
+   correctness slice before claiming fully general local-function creation
+   recording.
 5. **Barrier IR**: extend the store lowerings: after computing the value
    ref, if `irt_isgcv(t)` emit `XBAR ref` (new IR, lowered to the §8.6
    guarded call/inline mark). Skip when value is a constant that the

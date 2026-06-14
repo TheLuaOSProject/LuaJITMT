@@ -1497,7 +1497,9 @@ static void asm_uref(ASMState *as, IRIns *ir)
     GCupval *uv = (GCupval *)ir_kptr(IR(ir->op1));
     emit_loada(as, dest, ir->o == IR_UREFC ? (void *)&uv->tv :
 					    (void *)mref(uv->v, TValue));
-  } else if (ir->o == IR_UREFC && irt_isp32(IR(ir->op1)->t)) {
+  } else if (ir->o == IR_UREFC &&
+	     (irt_isp32(IR(ir->op1)->t) ||
+	      irt_type(IR(ir->op1)->t) == IRT_PGC)) {
     Reg uv = ra_alloc1(as, ir->op1, rset_exclude(RSET_GPR, dest));
     emit_rmro(as, XO_LEA, dest|REX_GC64, uv, offsetof(GCupval, tv));
   } else if (irref_isk(ir->op1) && !guarded) {

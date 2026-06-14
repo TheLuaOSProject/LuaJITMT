@@ -530,6 +530,56 @@ unpatch:
   return retargeted;
 }
 
+static int trace_scope_flushing(jit_State *J, TraceNo traceno)
+{
+  if (traceno > 0 && traceno < J->sizetrace) {
+    GCtrace *T = traceref(J, traceno);
+    return T && T->traceno == traceno &&
+	   la_load64_acq(&T->retire_epoch) == LJ_TRACE_SCOPE_FLUSHING;
+  }
+  return 0;
+}
+
+static int trace_scope_flush_dependency(jit_State *J, GCtrace *T)
+{
+  TraceNo link = trace_link_acq(T);
+  if (trace_scope_flushing(J, link))
+    return 1;
+  if (T->root != 0) {
+    TraceNo parent = T->ir[REF_BASE].op1;
+    if (trace_scope_flushing(J, T->root) ||
+	trace_scope_flushing(J, parent))
+      return 1;
+  }
+  return 0;
+}
+
+static uint32_t trace_flushscope_mark_deps(jit_State *J)
+{
+  uint32_t marked = 0, changed;
+  do {
+    TraceNo i;
+    changed = 0;
+    for (i = 1; i < J->sizetrace; i++) {
+      GCtrace *T = traceref(J, i);
+      if (T && T->traceno == i &&
+	  la_load64_acq(&T->retire_epoch) != LJ_TRACE_SCOPE_FLUSHING &&
+	  trace_scope_flush_dependency(J, T)) {
+	if (T->root == 0) {
+	  if (!trace_flushroot(J, T, 1))
+	    continue;
+	} else {
+	  trace_exittab_resetroot(J, T->root);
+	  la_store64_rel(&T->retire_epoch, LJ_TRACE_SCOPE_FLUSHING);
+	}
+	marked++;
+	changed = 1;
+      }
+    }
+  } while (changed);
+  return marked;
+}
+
 /* Flush a trace. Only root traces are considered. */
 uint32_t lj_trace_flush(jit_State *J, TraceNo traceno)
 {
@@ -580,8 +630,9 @@ static uint32_t lj_trace_flushscope_retire(global_State *g, uint64_t epoch)
     GCtrace *T = traceref(J, i);
     if (T && T->root != 0 && T->traceno == i) {
       GCtrace *root = traceref(J, T->root);
-      if (root && root->traceno == T->root &&
-	  la_load64_acq(&root->retire_epoch) == LJ_TRACE_SCOPE_FLUSHING) {
+      if (la_load64_acq(&T->retire_epoch) == LJ_TRACE_SCOPE_FLUSHING ||
+	  (root && root->traceno == T->root &&
+	   la_load64_acq(&root->retire_epoch) == LJ_TRACE_SCOPE_FLUSHING)) {
 	trace_scope_clear_slot(J, i, T, epoch);
 	retired++;
       }
@@ -645,6 +696,7 @@ int lj_trace_flushall_hs(lua_State *L)
 void lj_trace_flushscope_hs(global_State *g, uint32_t work)
 {
   if (work != 0) {
+    (void)trace_flushscope_mark_deps(G2J(g));
     (void)lj_gc2_handshake(g, LJ_GC2_HS_EXIT_TRACES);  /* 08 section 8.7 scoped boundary. */
     (void)lj_trace_flushscope_retire(g, la_load64_acq(&g->gc2.hs_epoch));
   }

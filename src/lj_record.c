@@ -1919,6 +1919,26 @@ noconstify:
   }
 }
 
+/* Find the latest traced CNEW helper for this cell slot, if any. */
+static TRef rec_celluv_cnewref(jit_State *J, BCReg slotno)
+{
+  IRRef ref;
+  IRIns *ir;
+  for (ref = J->chain[IR_CALLS]; ref; ref = ir->prev) {
+    IRIns *arg;
+    ir = IR(ref);
+    if (ir->op2 != IRCALL_lj_func_newuvcell_forjit || ir->op1 < REF_FIRST)
+      continue;
+    arg = IR(ir->op1);
+    if (arg->o == IR_CARG && arg->op1 == REF_BASE && irref_isk(arg->op2)) {
+      IRIns *slot = IR(arg->op2);
+      if (slot->o == IR_KINT && slot->i == (int32_t)slotno)
+	return TREF(ref, IRT_PGC);
+    }
+  }
+  return 0;
+}
+
 /* Record local cell load/store. */
 static TRef rec_celluv(jit_State *J, cTValue *slot, TRef slotref, TRef val,
 		       BCReg slotno)
@@ -1937,6 +1957,11 @@ static TRef rec_celluv(jit_State *J, cTValue *slot, TRef slotref, TRef val,
   lj_assertJ(uvp->closed && uvval(uvp) == &uvp->tv,
 	     "bad local cell upvalue");
   uh = hashrot(uvp->dhash, uvp->dhash + HASH_BIAS) & 0xff;
+  {
+    TRef cnewref = rec_celluv_cnewref(J, slotno);
+    if (cnewref)
+      slotref = cnewref;
+  }
   uref = tref_ref(emitir(IRT(IR_UREFC, IRT_PGC), slotref, uh));
   if (val == 0) {
     IRType t = itype2irt(uvval(uvp));
@@ -1952,6 +1977,40 @@ static TRef rec_celluv(jit_State *J, cTValue *slot, TRef slotref, TRef val,
     J->needsnap = 1;
     return 0;
   }
+}
+
+/* Check whether traced FNEW can safely use the explicit-base helper.
+** Raw local promotion needs synchronized stack slots and remains NYI here.
+*/
+static int rec_fnew_celluv(jit_State *J, GCproto *pt)
+{
+  MSize i, n = pt->sizeuv;
+  int nlocal = 0;
+  if (!proto_celluv(pt))
+    return 0;
+  for (i = 0; i < n; i++) {
+    uint32_t v = proto_uv(pt)[i];
+    if ((v & PROTO_UV_LOCAL)) {
+      BCReg slot = (BCReg)(v & 0xff);
+      if (slot >= J->maxslot || itype(&J->L->base[slot]) != LJ_TUPVAL ||
+	  !tref_istype(J->base[slot], IRT_P32))
+	return 0;
+      nlocal++;
+    }
+  }
+  return nlocal != 0;
+}
+
+/* Record local-cell function creation. */
+static TRef rec_fnew(jit_State *J, GCproto *pt)
+{
+  if (!rec_fnew_celluv(J, pt)) {
+    setintV(&J->errinfo, BC_FNEW);
+    lj_trace_err_info(J, LJ_TRERR_NYIBC);
+  }
+  J->needsnap = 1;
+  return lj_ir_call(J, IRCALL_lj_func_newL_gc_forjit, REF_BASE,
+		    lj_ir_kptr(J, pt), getcurrf(J));
 }
 
 /* -- Record calls to Lua functions --------------------------------------- */
@@ -2658,11 +2717,19 @@ void lj_record_ins(jit_State *J)
   case BC_USETV: case BC_USETS: case BC_USETN: case BC_USETP:
     rec_upvalue(J, ra, rc);
     break;
+  case BC_CNEW:
+    lj_ir_call(J, IRCALL_lj_func_newuvcell_forjit, REF_BASE,
+	       lj_ir_kint(J, (int32_t)ra));
+    rc = sloadt(J, (int32_t)ra, IRT_P32, 0);
+    break;
   case BC_CGET:
     rc = rec_celluv(J, rcv, rc, 0, bc_c(ins));
     break;
   case BC_CSET:
     rec_celluv(J, rav, ra, rc, bc_a(ins));
+    break;
+  case BC_FNEW:
+    rc = rec_fnew(J, gco2pt(proto_kgc(J->pt, ~(ptrdiff_t)rc)));
     break;
 
   /* -- Table ops --------------------------------------------------------- */
@@ -2838,7 +2905,6 @@ void lj_record_ins(jit_State *J)
     }
     /* fallthrough */
   case BC_UCLO:
-  case BC_FNEW:
     setintV(&J->errinfo, (int32_t)op);
     lj_trace_err_info(J, LJ_TRERR_NYIBC);
     break;

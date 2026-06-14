@@ -448,9 +448,6 @@ GCproto *lj_bcread_proto(LexState *ls)
   bcread_uv(ls, pt, sizeuv);
   if (bcread_version(ls) == BCDUMP_VERSION_LOCKLESS && bcread_uv_haslocal(pt))
     proto_setcelluv(pt);
-  if (cellops & BCREAD_CELL_CNEW)
-    pt->flags |= PROTO_NOJIT;
-
   /* Read constants. */
   bcread_kgc(ls, pt, sizekgc);
   pt->sizekgc = sizekgc;

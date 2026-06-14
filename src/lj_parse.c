@@ -2306,7 +2306,6 @@ static void parse_local(LexState *ls)
       BCIns fnew = fs->bcbase[b.u.s.info].ins;
       lj_assertFS(b.k == VRELOCABLE && b.u.s.info == fs->pc-1 &&
 		  bc_op(fnew) == BC_FNEW, "bad local function cellization");
-      fs->flags |= PROTO_NOJIT;
       fs->bcbase[b.u.s.info].ins = BCINS_AD(BC_CNEW, v.u.s.info, 0);
       b.u.s.info = bcemit_INS(fs, fnew);
       expr_tonextreg(fs, &b);
