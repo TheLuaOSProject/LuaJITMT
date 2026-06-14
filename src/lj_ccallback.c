@@ -650,8 +650,10 @@ static void callback_conv_args(CTState *cts, lua_State *L, CCallbackRuntime *cb)
       CTSize sz;
       int isfp;
       MSize n;
+      CTypeID aid;
       lj_assertCTS(ctype_isfield(ctf->info), "field expected");
-      cta = ctype_rawchild(cts, ctf);
+      aid = ctype_rawid(cts, ctype_cid(ctf->info));
+      cta = ctype_get(cts, aid);
       isfp = ctype_isfp(cta->info);
       sz = (cta->size + CTSIZE_PTR-1) & ~(CTSIZE_PTR-1);
       n = sz / CTSIZE_PTR;  /* Number of GPRs or stack slots needed. */
@@ -671,7 +673,7 @@ static void callback_conv_args(CTState *cts, lua_State *L, CCallbackRuntime *cb)
 #endif
 	 )
 	sp = (void *)((uint8_t *)sp + CTSIZE_PTR-cta->size);
-      gcsteps += lj_cconv_tv_ct_l(L, cts, cta, 0, o++, sp);
+      gcsteps += lj_cconv_tv_ct_l(L, cts, cta, aid, o++, sp);
     }
     fid = ctf->sib;
   }

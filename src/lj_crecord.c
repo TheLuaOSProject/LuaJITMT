@@ -1024,7 +1024,7 @@ static void crec_alloc(jit_State *J, RecordFFData *rd, CTypeID id)
       if (align < CT_MEMALIGN) align = CT_MEMALIGN;
       crec_fill(J, dp, trsz, lj_ir_kint(J, 0), (1u << align));
     } else if (J->base[1] && !J->base[2] &&
-	!lj_cconv_multi_init(cts, d, &rd->argv[1])) {
+	!lj_cconv_multi_init(cts, ctype_rawid(cts, id), d, &rd->argv[1])) {
       goto single_init;
     } else if (ctype_isarray(d->info)) {
       CType *dc = ctype_rawchild(cts, d);  /* Array element type. */

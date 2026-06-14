@@ -413,7 +413,7 @@ int lj_cconv_tv_ct_l(lua_State *L, CTState *cts, CType *s, CTypeID sid,
     sz = s->size;
     lj_assertCTS(sz != CTSIZE_INVALID, "value copy with invalid size");
     /* Attributes are stripped, qualifiers are kept (but mostly ignored). */
-    cd = lj_cdata_new_l(L, cts, ctype_typeid(cts, s), sz);
+    cd = lj_cdata_new_l(L, cts, sid, sz);
     setcdataV(L, o, cd);
     memcpy(cdataptr(cd), sp, sz);
     return 1;  /* Need GC step. */
@@ -757,24 +757,24 @@ static void cconv_struct_init_l(lua_State *L, CTState *cts, CType *d,
 ** This is true if an aggregate is to be initialized with a value.
 ** Valarrays are treated as values here so ct_tv handles (V|C, I|F).
 */
-int lj_cconv_multi_init(CTState *cts, CType *d, TValue *o)
+int lj_cconv_multi_init(CTState *cts, CTypeID did, CType *d, TValue *o)
 {
   if (!(ctype_isrefarray(d->info) || ctype_isstruct(d->info)))
     return 0;  /* Destination is not an aggregate. */
   if (tvistab(o) || (tvisstr(o) && !ctype_isstruct(d->info)))
     return 0;  /* Initializer is not a value. */
-  if (tviscdata(o) && lj_ctype_rawref(cts, cdataV(o)->ctypeid) == d)
+  if (tviscdata(o) && ctype_rawrefid(cts, cdataV(o)->ctypeid) == did)
     return 0;  /* Source and destination are identical aggregates. */
   return 1;  /* Otherwise the initializer is a value. */
 }
 
 /* Initialize C type with TValues. Caveat: expects to get the raw CType! */
-void lj_cconv_ct_init_l(lua_State *L, CTState *cts, CType *d, CTSize sz,
-			uint8_t *dp, TValue *o, MSize len)
+void lj_cconv_ct_init_l(lua_State *L, CTState *cts, CType *d, CTypeID did,
+			CTSize sz, uint8_t *dp, TValue *o, MSize len)
 {
   if (len == 0)
     memset(dp, 0, sz);
-  else if (len == 1 && !lj_cconv_multi_init(cts, d, o))
+  else if (len == 1 && !lj_cconv_multi_init(cts, did, d, o))
     lj_cconv_ct_tv_l(L, cts, d, dp, o, 0);
   else if (ctype_isarray(d->info))  /* Also handles valarray init with len>1. */
     cconv_array_init_l(L, cts, d, sz, dp, o, len);

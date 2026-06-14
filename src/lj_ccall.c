@@ -1187,7 +1187,8 @@ static int ccall_set_args(lua_State *L, CTState *cts, CType *ct,
 static int ccall_get_results(lua_State *L, CTState *cts, CType *ct,
 			     CCallState *cc, int *ret)
 {
-  CType *ctr = ctype_rawchild(cts, ct);
+  CTypeID rid = ctype_rawid(cts, ctype_cid(ct->info));
+  CType *ctr = ctype_get(cts, rid);
   uint8_t *sp = (uint8_t *)&cc->gpr[0];
   if (ctype_isvoid(ctr->info)) {
     *ret = 0;  /* Zero results. */
@@ -1218,10 +1219,9 @@ static int ccall_get_results(lua_State *L, CTState *cts, CType *ct,
 #ifdef CCALL_HANDLE_RET
   CCALL_HANDLE_RET
 #endif
-  /* No reference types end up here, so there's no need for the CTypeID. */
   lj_assertL(!(ctype_isrefarray(ctr->info) || ctype_isstruct(ctr->info)),
 	     "unexpected reference ctype");
-  return lj_cconv_tv_ct_l(L, cts, ctr, 0, L->top-1, sp);
+  return lj_cconv_tv_ct_l(L, cts, ctr, rid, L->top-1, sp);
 }
 
 /* Call C function. */

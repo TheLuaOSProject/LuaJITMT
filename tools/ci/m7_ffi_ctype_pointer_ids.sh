@@ -15,6 +15,11 @@ for needle in \
   'static int ffi_index_meta(lua_State *L, CTState *cts, CTypeID id' \
   'lj_cdata_index_l(L, cts, cdataV(o), o+1, &p, &qual, &id)' \
   'CTypeID id = ctype_rawid(cts, cd->ctypeid)' \
+  'lj_cconv_multi_init(CTState *cts, CTypeID did' \
+  'ctype_rawrefid(cts, cdataV(o)->ctypeid) == did' \
+  'lj_cconv_ct_init_l(L, cts, ct, ctype_rawid(cts, id)' \
+  'return lj_cconv_tv_ct_l(L, cts, ctr, rid' \
+  'gcsteps += lj_cconv_tv_ct_l(L, cts, cta, aid' \
   'CTypeID rid1 = ctype_rawrefid(cts, id1)' \
   'CTypeID rid2 = ctype_rawrefid(cts, id2)' \
   'if (rid1 == rid2)' \

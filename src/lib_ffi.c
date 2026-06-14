@@ -532,7 +532,7 @@ LJLIB_CF(ffi_new)	LJLIB_REC(.)
     lj_err_arg(L, 1, LJ_ERR_FFI_INVSIZE);
   cd = lj_cdata_newx_l(L, cts, id, sz, info);
   setcdataV(L, o-1, cd);  /* Anchor the uninitialized cdata. */
-  lj_cconv_ct_init_l(L, cts, ct, sz, cdataptr(cd),
+  lj_cconv_ct_init_l(L, cts, ct, ctype_rawid(cts, id), sz, cdataptr(cd),
 		     o, (MSize)(L->top - o));  /* Initialize cdata. */
   if (ctype_isstruct(ct->info)) {
     /* Handle ctype __gc metamethod. Use the fast lookup here. */
