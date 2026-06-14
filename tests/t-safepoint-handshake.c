@@ -414,6 +414,7 @@ int main(void)
     "os.remove(q)\n"
     "expect_stopreq(function() return os.execute(':') end)\n"
     "expect_stopreq(function() return os.tmpname() end)\n"
+    "expect_stopreq(function() return io.tmpfile() end)\n"
     "p = os.tmpname()\n"
     "f = assert(io.open(p, 'w'))\n"
     "f:write('z')\n"

@@ -122,13 +122,14 @@ CASes old→new performs/owns the ack; the loser does nothing.
 
 Current bridge note: native exits may also be shutdown delivery points.
 `os.execute`, `os.remove`, `os.rename`, POSIX `os.tmpname`/`mkstemp`, and the
-`lib_io` `fflush` and `file:seek()` native calls now feed their
+`lib_io` `io.tmpfile()`, `fflush`, and `file:seek()` native calls now feed their
 `lj_native_leave(L)` result into `lj_safepoint_checkstop()`, so a STOPREQ
 acknowledged by the native leave is raised before those functions build their
 normal Lua results. The POSIX `os.tmpname` helper unlinks the just-created
-temporary file before raising when Lua will not receive the filename. The
-broader native-exit audit for IO, FFI, callbacks, and other wrappers remains
-separate follow-up work.
+temporary file before raising when Lua will not receive the filename, and
+`io.tmpfile()` closes the just-created handle before raising. The broader
+native-exit audit for IO, FFI, callbacks, and other wrappers remains separate
+follow-up work.
 
 ## 5.5 Mark state & colors
 

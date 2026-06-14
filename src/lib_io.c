@@ -17,6 +17,7 @@
 #include "lualib.h"
 
 #include "lj_obj.h"
+#include "lj_atomic.h"
 #include "lj_gc.h"
 #include "lj_err.h"
 #include "lj_buf.h"
@@ -578,9 +579,18 @@ LJLIB_CF(io_tmpfile)
 #if LJ_TARGET_PS3 || LJ_TARGET_PS4 || LJ_TARGET_PS5 || LJ_TARGET_PSVITA || LJ_TARGET_NX
   iof->fp = NULL; errno = ENOSYS;
 #else
-  lj_native_enter(L2TG(L));
+  TGState *tg = L2TG(L);
+  uint32_t actions;
+  lj_native_enter(tg);
   iof->fp = tmpfile();
-  (void)lj_native_leave(L);
+  actions = lj_native_leave(L);
+  if (iof->fp != NULL && ((actions & LJ_GC2_HS_STOPREQ) ||
+      (tg && (la_load8_acq(&tg->tg_flags) & TGF_STOPREQ)))) {
+    FILE *fp = iof->fp;
+    iof->fp = NULL;
+    (void)fclose(fp);
+  }
+  lj_safepoint_checkstop(L, actions);
 #endif
   return iof->fp != NULL ? 1 : luaL_fileresult(L, 0, NULL);
 }

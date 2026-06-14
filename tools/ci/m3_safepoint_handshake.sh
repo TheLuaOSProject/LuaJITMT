@@ -78,6 +78,18 @@ do
 done
 
 for needle in \
+  'LJLIB_CF(io_tmpfile)' \
+  'actions = lj_native_leave(L);' \
+  '(void)fclose(fp);' \
+  'lj_safepoint_checkstop(L, actions);'
+do
+  if ! rg -F -q "$needle" "$ROOT/src/lib_io.c"; then
+    echo "guardrail: io.tmpfile native leave must cleanup and propagate STOPREQ: $needle" >&2
+    exit 1
+  fi
+done
+
+for needle in \
   'LJLIB_CF(io_method_seek)' \
   'res = fseeko(fp, ofs, opt);' \
   'ofs = ftello(fp);' \
@@ -93,6 +105,7 @@ for needle in \
   'publish_stopreq()' \
   "os.execute(':')" \
   'os.tmpname()' \
+  'io.tmpfile()' \
   'f:flush()' \
   "f:seek('set', 0)" \
   'thread interrupted: VM shutdown'
