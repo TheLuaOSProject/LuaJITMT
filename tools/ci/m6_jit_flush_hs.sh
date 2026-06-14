@@ -31,8 +31,13 @@ do
   fi
 done
 
-if rg -n 'lj_trace_flushall\((J->L|L)\)' "$ROOT/src/lj_trace.c"; then
-  echo "guardrail: recorder-internal full flushes must route through HS_FLUSHJ" >&2
+hits=$(rg -n -- 'lj_trace_flushall\((J->L|L)\)' \
+  "$ROOT/src/lj_trace.c" "$ROOT/src/lj_record.c" \
+  "$ROOT/src/lj_dispatch.c" "$ROOT/src/lj_api.c" \
+  "$ROOT/src/lj_profile.c" "$ROOT/src/lib_ffi.c" || true)
+if [ -n "$hits" ]; then
+  echo "guardrail: full trace flush callers must route through HS_FLUSHJ" >&2
+  echo "$hits" >&2
   exit 1
 fi
 
