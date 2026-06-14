@@ -25,6 +25,7 @@
 typedef struct CDArith {
   uint8_t *p[2];
   CType *ct[2];
+  CTypeID id[2];
 } CDArith;
 
 /* Check arguments for arithmetic metamethods. */
@@ -39,54 +40,71 @@ static int carith_checkarg(lua_State *L, CTState *cts, CDArith *ca)
     if (tviscdata(o)) {
       GCcdata *cd = cdataV(o);
       CTypeID id = (CTypeID)cd->ctypeid;
-      CType *ct = ctype_raw(cts, id);
+      CTypeID cid = ctype_rawid(cts, id);
+      CType *ct = ctype_get(cts, cid);
       uint8_t *p = (uint8_t *)cdataptr(cd);
       if (ctype_isptr(ct->info)) {
 	p = (uint8_t *)cdata_getptr(p, ct->size);
-	if (ctype_isref(ct->info)) ct = ctype_rawchild(cts, ct);
+	if (ctype_isref(ct->info)) {
+	  cid = ctype_rawid(cts, ctype_cid(ct->info));
+	  ct = ctype_get(cts, cid);
+	}
       } else if (ctype_isfunc(ct->info)) {
-	CTypeID id0 = i ? ctype_typeid(cts, ca->ct[0]) : 0;
+	CTypeID id0 = i ? ca->id[0] : 0;
 	p = (uint8_t *)*(void **)p;
-	ct = ctype_get(cts,
-	  lj_ctype_intern_l(L, cts, CTINFO(CT_PTR, CTALIGN_PTR|id),
-			    CTSIZE_PTR));
+	cid = lj_ctype_intern_l(L, cts, CTINFO(CT_PTR, CTALIGN_PTR|id),
+				CTSIZE_PTR);
+	ct = ctype_get(cts, cid);
 	if (i) {  /* cts->tab may have been reallocated. */
 	  ca->ct[0] = ctype_get(cts, id0);
 	}
       }
-      if (ctype_isenum(ct->info)) ct = ctype_child(cts, ct);
+      if (ctype_isenum(ct->info)) {
+	cid = ctype_cid(ct->info);
+	ct = ctype_get(cts, cid);
+      }
       ca->ct[i] = ct;
+      ca->id[i] = cid;
       ca->p[i] = p;
     } else if (tvisint(o)) {
       ca->ct[i] = ctype_get(cts, CTID_INT32);
+      ca->id[i] = CTID_INT32;
       ca->p[i] = (uint8_t *)&o->i;
     } else if (tvisnum(o)) {
       ca->ct[i] = ctype_get(cts, CTID_DOUBLE);
+      ca->id[i] = CTID_DOUBLE;
       ca->p[i] = (uint8_t *)&o->n;
     } else if (tvisnil(o)) {
       ca->ct[i] = ctype_get(cts, CTID_P_VOID);
+      ca->id[i] = CTID_P_VOID;
       ca->p[i] = (uint8_t *)0;
     } else if (tvisstr(o)) {
       TValue *o2 = i == 0 ? o+1 : o-1;
-      CType *ct = ctype_raw(cts, cdataV(o2)->ctypeid);
+      CTypeID cid = ctype_rawid(cts, cdataV(o2)->ctypeid);
+      CType *ct = ctype_get(cts, cid);
       ca->ct[i] = NULL;
+      ca->id[i] = 0;
       ca->p[i] = (uint8_t *)strVdata(o);
       ok = 0;
       if (ctype_isenum(ct->info)) {
 	CTSize ofs;
 	CType *cct = lj_ctype_getfield(cts, ct, strV(o), &ofs);
 	if (cct && ctype_isconstval(cct->info)) {
+	  cid = ctype_cid(cct->info);
 	  ca->ct[i] = ctype_child(cts, cct);
+	  ca->id[i] = cid;
 	  ca->p[i] = (uint8_t *)&cct->size;  /* Assumes ct does not grow. */
 	  ok = 1;
 	} else {
 	  ca->ct[1-i] = ct;  /* Use enum to improve error message. */
+	  ca->id[1-i] = cid;
 	  ca->p[1-i] = NULL;
 	  break;
 	}
       }
     } else {
       ca->ct[i] = NULL;
+      ca->id[i] = 0;
       ca->p[i] = (void *)(intptr_t)1;  /* To make it unequal. */
       ok = 0;
     }
@@ -254,7 +272,7 @@ static int lj_carith_meta(lua_State *L, CTState *cts, CDArith *ca, MMS mm)
     for (i = 0; i < 2; i++) {
       if (ca->ct[i] && tviscdata(L->base+i)) {
 	if (ctype_isenum(ca->ct[i]->info)) isenum = i;
-	repr[i] = strdata(lj_ctype_repr(L, ctype_typeid(cts, ca->ct[i]), NULL));
+	repr[i] = strdata(lj_ctype_repr(L, ca->id[i], NULL));
       } else {
 	if (tvisstr(&L->base[i])) isstr = i;
 	repr[i] = lj_typename(&L->base[i]);

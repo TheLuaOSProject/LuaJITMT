@@ -12,6 +12,9 @@ for needle in \
   'lj_cconv_ct_ct_l(L, cts, ctype_get(cts, *id)' \
   'lj_cdata_new_l(L, cts, id, CTSIZE_PTR)' \
   'lj_cdata_new_l(L, cts, id, 8)' \
+  'CTypeID id[2]' \
+  'CTypeID id0 = i ? ca->id[0] : 0' \
+  'repr[i] = strdata(lj_ctype_repr(L, ca->id[i], NULL))' \
   'lj_cconv_ct_ct_l(L, cts, ctype_get(cts, CTID_INT32)' \
   'lj_cconv_ct_ct_l(L, cts, ctype_get(cts, CTID_DOUBLE)'
 do
