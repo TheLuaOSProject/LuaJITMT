@@ -91,7 +91,8 @@ Explicit `ffi.gc(cd, nil)` on a cdata with no registry entry now returns before
 that fallback. Enabled missing-key insertion first tries a lock-free
 empty-anchor path: CAS the target anchor value from nil to the FINREG claim
 sentinel, publish the cdata key, then publish the finalizer value. Legacy GC
-traversal waits out that claim sentinel for the hidden FFI finalizer table.
+and GC2 traversal wait out that claim sentinel for the hidden FFI finalizer
+table.
 Collision-chain insertion and table growth still use the `fin_token`
 structural fallback because `lj_tab_newkey()` is not yet a multi-writer-safe
 table insertion path: the current inserter still owns `freetop`, collision

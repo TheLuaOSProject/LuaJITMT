@@ -26,6 +26,7 @@ for needle in \
   'Another claimed empty anchor is publishing key.' \
   'Collision/resize: structural insertion still uses fin_token.' \
   'while (ffi_fin && lj_cdata_fin_isclaim(&val))' \
+  '#include "lj_cdata.h"' \
   'lj_tab_get(L, t, &tmp)' \
   'lj_cdata_setfin(L, cd, gcV(tv), itype(tv))' \
   'Finalizer registry mutation stays on the interpreter path until FINREG' \
@@ -139,6 +140,19 @@ if awk '
   echo "guardrail: empty-anchor table claim helper is currently only validated for GCROOT_FFI_FIN" >&2
   exit 1
 fi
+
+for file in "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc2.c"; do
+  if ! awk '
+    /static int gc2_traverse_tab\(global_State \*g, GCtab \*t\)/ { infn = 1 }
+    /static int gc_traverse_tab\(global_State \*g, GCtab \*t\)/ { infn = 1 }
+    infn && /while \(ffi_fin && lj_cdata_fin_isclaim\(&val\)\)/ { found = 1 }
+    infn && /^}/ { infn = 0 }
+    END { exit found ? 0 : 1 }
+  ' "$file"; then
+    echo "guardrail: GC traversal of GCROOT_FFI_FIN must wait out FINREG claim sentinels in $file" >&2
+    exit 1
+  fi
+done
 
 if ! awk '
   /LJLIB_CF\(ffi_gc\)/ { infn = 1 }

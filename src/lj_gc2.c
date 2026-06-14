@@ -27,6 +27,7 @@
 #include "lj_frame.h"
 #if LJ_HASFFI
 #include "lj_ctype.h"
+#include "lj_cdata.h"
 #include "lj_clib.h"
 #endif
 #include "lj_trace.h"
@@ -2202,6 +2203,7 @@ static int gc2_traverse_tab(global_State *g, GCtab *t)
 {
   GCtab *mt = tabref_acq(t->metatable);
   int weak = gc2_tab_weak_mode(g, t, mt);
+  int ffi_fin = gc2_tab_is_ffi_fin(g, t);
   gc2_note_weak_table(g, t, weak);  /* 05 section 5.8 discovery scaffold. */
   if (t->acap > 0)
     lj_gc2_markmem(g, lj_tab_array_acq(t));
@@ -2231,6 +2233,12 @@ static int gc2_traverse_tab(global_State *g, GCtab *t)
 	Node *n = &node[i];
 	TValue key, val;
 	lj_tv_load_acq(&val, &n->val);
+#if LJ_HASFFI
+	while (ffi_fin && lj_cdata_fin_isclaim(&val)) {
+	  la_cpu_pause();
+	  lj_tv_load_acq(&val, &n->val);
+	}
+#endif
 	if (!tvisnil(&val)) {
 	  lj_tv_load_acq(&key, &n->key);
 	  lj_assertG(!tvisnil(&key), "mark of nil key in non-empty slot");
