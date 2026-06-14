@@ -23,10 +23,11 @@ GCcdata *lj_cdata_new_forjit(lua_State *L, CTypeID id, CTSize sz)
 }
 
 /* Allocate a new C data object holding a reference to another object. */
-GCcdata *lj_cdata_newref(CTState *cts, const void *p, CTypeID id)
+GCcdata *lj_cdata_newref_l(lua_State *L, CTState *cts, const void *p,
+			   CTypeID id)
 {
   CTypeID refid = lj_ctype_intern(cts, CTINFO_REF(id), CTSIZE_PTR);
-  GCcdata *cd = lj_cdata_new(cts, refid, CTSIZE_PTR);
+  GCcdata *cd = lj_cdata_new_l(L, cts, refid, CTSIZE_PTR);
   *(const void **)cdataptr(cd) = p;
   return cd;
 }
@@ -127,8 +128,8 @@ void lj_cdata_setfin(lua_State *L, GCcdata *cd, GCobj *obj, uint32_t it)
 /* -- C data indexing ----------------------------------------------------- */
 
 /* Index C data by a TValue. Return CType and pointer. */
-CType *lj_cdata_index(CTState *cts, GCcdata *cd, cTValue *key, uint8_t **pp,
-		      CTInfo *qual)
+CType *lj_cdata_index_l(lua_State *L, CTState *cts, GCcdata *cd,
+			cTValue *key, uint8_t **pp, CTInfo *qual)
 {
   uint8_t *p = (uint8_t *)cdataptr(cd);
   CType *ct = ctype_get(cts, cd->ctypeid);
@@ -159,7 +160,7 @@ collect_attrib:
     if (ctype_ispointer(ct->info)) {
       CTSize sz = lj_ctype_size(cts, ctype_cid(ct->info));  /* Element size. */
       if (sz == CTSIZE_INVALID)
-	lj_err_caller(cts->L, LJ_ERR_FFI_INVSIZE);
+	lj_err_caller(L, LJ_ERR_FFI_INVSIZE);
       if (ctype_isptr(ct->info)) {
 	p = (uint8_t *)cdata_getptr(p, ct->size);
       } else if ((ct->info & (CTF_VECTOR|CTF_COMPLEX))) {
@@ -239,7 +240,8 @@ static void cdata_getconst(CTState *cts, TValue *o, CType *ct)
 }
 
 /* Get C data value and convert to TValue. */
-int lj_cdata_get(CTState *cts, CType *s, TValue *o, uint8_t *sp)
+int lj_cdata_get_l(lua_State *L, CTState *cts, CType *s, TValue *o,
+		   uint8_t *sp)
 {
   CTypeID sid;
 
@@ -247,7 +249,7 @@ int lj_cdata_get(CTState *cts, CType *s, TValue *o, uint8_t *sp)
     cdata_getconst(cts, o, s);
     return 0;  /* No GC step needed. */
   } else if (ctype_isbitfield(s->info)) {
-    return lj_cconv_tv_bf(cts, s, o, sp);
+    return lj_cconv_tv_bf_l(L, cts, s, o, sp);
   }
 
   /* Get child type of pointer/array/field. */
@@ -268,7 +270,7 @@ int lj_cdata_get(CTState *cts, CType *s, TValue *o, uint8_t *sp)
   while (ctype_isattrib(s->info))
     s = ctype_child(cts, s);
 
-  return lj_cconv_tv_ct(cts, s, sid, o, sp);
+  return lj_cconv_tv_ct_l(L, cts, s, sid, o, sp);
 }
 
 /* -- C data setters ------------------------------------------------------ */

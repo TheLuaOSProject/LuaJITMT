@@ -73,7 +73,8 @@ static LJ_AINLINE GCcdata *lj_cdata_new_(lua_State *L, CTypeID id, CTSize sz)
 }
 
 LJ_FUNC GCcdata *lj_cdata_new_forjit(lua_State *L, CTypeID id, CTSize sz);
-LJ_FUNC GCcdata *lj_cdata_newref(CTState *cts, const void *pp, CTypeID id);
+LJ_FUNC GCcdata *lj_cdata_newref_l(lua_State *L, CTState *cts,
+				   const void *pp, CTypeID id);
 LJ_FUNC GCcdata *lj_cdata_newv(lua_State *L, CTypeID id, CTSize sz,
 			       CTSize align);
 LJ_FUNC GCcdata *lj_cdata_newx(CTState *cts, CTypeID id, CTSize sz,
@@ -85,9 +86,10 @@ LJ_FUNC void LJ_FASTCALL lj_cdata_free(global_State *g, GCcdata *cd);
 LJ_FUNC void lj_cdata_setfin(lua_State *L, GCcdata *cd, GCobj *obj,
 			     uint32_t it);
 
-LJ_FUNC CType *lj_cdata_index(CTState *cts, GCcdata *cd, cTValue *key,
-			      uint8_t **pp, CTInfo *qual);
-LJ_FUNC int lj_cdata_get(CTState *cts, CType *s, TValue *o, uint8_t *sp);
+LJ_FUNC CType *lj_cdata_index_l(lua_State *L, CTState *cts, GCcdata *cd,
+				cTValue *key, uint8_t **pp, CTInfo *qual);
+LJ_FUNC int lj_cdata_get_l(lua_State *L, CTState *cts, CType *s,
+			   TValue *o, uint8_t *sp);
 LJ_FUNC void lj_cdata_set(CTState *cts, CType *d, uint8_t *dp, TValue *o,
 			  CTInfo qual);
 

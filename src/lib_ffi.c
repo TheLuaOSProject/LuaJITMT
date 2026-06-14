@@ -157,10 +157,10 @@ LJLIB_CF(ffi_meta___index)	LJLIB_REC(cdata_index 0)
   TValue *o = L->base;
   if (!(o+1 < L->top && tviscdata(o)))  /* Also checks for presence of key. */
     lj_err_argt(L, 1, LUA_TCDATA);
-  ct = lj_cdata_index(cts, cdataV(o), o+1, &p, &qual);
+  ct = lj_cdata_index_l(L, cts, cdataV(o), o+1, &p, &qual);
   if ((qual & 1))
     return ffi_index_meta(L, cts, ct, MM_index);
-  if (lj_cdata_get(cts, ct, L->top-1, p))
+  if (lj_cdata_get_l(L, cts, ct, L->top-1, p))
     lj_gc_check(L);
   return 1;
 }
@@ -174,7 +174,7 @@ LJLIB_CF(ffi_meta___newindex)	LJLIB_REC(cdata_index 1)
   TValue *o = L->base;
   if (!(o+2 < L->top && tviscdata(o)))  /* Also checks for key and value. */
     lj_err_argt(L, 1, LUA_TCDATA);
-  ct = lj_cdata_index(cts, cdataV(o), o+1, &p, &qual);
+  ct = lj_cdata_index_l(L, cts, cdataV(o), o+1, &p, &qual);
   if ((qual & 1)) {
     if ((qual & CTF_CONST))
       lj_err_caller(L, LJ_ERR_FFI_WRCONST);
@@ -391,7 +391,7 @@ LJLIB_CF(ffi_clib___index)	LJLIB_REC(clib_index 1)
       CTypeID sid = ctype_cid(s->info);
       void *sp = *(void **)cdataptr(cd);
       CType *ct = ctype_raw(cts, sid);
-      if (lj_cconv_tv_ct(cts, ct, sid, L->top-1, sp))
+      if (lj_cconv_tv_ct_l(L, cts, ct, sid, L->top-1, sp))
 	lj_gc_check(L);
       return 1;
     }

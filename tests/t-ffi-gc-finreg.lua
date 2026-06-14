@@ -86,5 +86,19 @@ do
          ("main: finalized %d, expected %d"):format(finalized, expected))
 end
 
+do
+  local finalized = 0
+  local function fin(_)
+    finalized = finalized + 1
+    collectgarbage("collect")
+  end
+  local cd = ffi.gc(ffi.new("uint8_t[1]"), fin)
+  cd = nil
+  collectgarbage("collect")
+  collectgarbage("collect")
+  assert(finalized == 1,
+         ("nested finalizer GC: finalized %d, expected 1"):format(finalized))
+end
+
 print(("t-ffi-gc-finreg OK: %d threads, %d iterations, %d worker registrations"):format(
   nthreads, iters, total))

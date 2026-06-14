@@ -375,8 +375,8 @@ copyval:  /* Copy value. */
 /* -- C type to TValue conversion ----------------------------------------- */
 
 /* Convert C type to TValue. Caveat: expects to get the raw CType! */
-int lj_cconv_tv_ct(CTState *cts, CType *s, CTypeID sid,
-		   TValue *o, uint8_t *sp)
+int lj_cconv_tv_ct_l(lua_State *L, CTState *cts, CType *s, CTypeID sid,
+		     TValue *o, uint8_t *sp)
 {
   CTInfo sinfo = s->info;
   if (ctype_isnum(sinfo)) {
@@ -399,12 +399,12 @@ int lj_cconv_tv_ct(CTState *cts, CType *s, CTypeID sid,
     } else {
       uint32_t b = s->size == 1 ? (*sp != 0) : (*(int *)sp != 0);
       setboolV(o, b);
-      setboolV(&L2TG(cts->L)->tmptv2, b);  /* Remember for trace recorder. */
+      setboolV(&L2TG(L)->tmptv2, b);  /* Remember for trace recorder. */
     }
     return 0;
   } else if (ctype_isrefarray(sinfo) || ctype_isstruct(sinfo)) {
     /* Create reference. */
-    setcdataV(cts->L, o, lj_cdata_newref(cts, sp, sid));
+    setcdataV(L, o, lj_cdata_newref_l(L, cts, sp, sid));
     return 1;  /* Need GC step. */
   } else {
     GCcdata *cd;
@@ -413,15 +413,16 @@ int lj_cconv_tv_ct(CTState *cts, CType *s, CTypeID sid,
     sz = s->size;
     lj_assertCTS(sz != CTSIZE_INVALID, "value copy with invalid size");
     /* Attributes are stripped, qualifiers are kept (but mostly ignored). */
-    cd = lj_cdata_new(cts, ctype_typeid(cts, s), sz);
-    setcdataV(cts->L, o, cd);
+    cd = lj_cdata_new_l(L, cts, ctype_typeid(cts, s), sz);
+    setcdataV(L, o, cd);
     memcpy(cdataptr(cd), sp, sz);
     return 1;  /* Need GC step. */
   }
 }
 
 /* Convert bitfield to TValue. */
-int lj_cconv_tv_bf(CTState *cts, CType *s, TValue *o, uint8_t *sp)
+int lj_cconv_tv_bf_l(lua_State *L, CTState *cts, CType *s, TValue *o,
+		     uint8_t *sp)
 {
   CTInfo info = s->info;
   CTSize pos, bsz;
@@ -443,7 +444,7 @@ int lj_cconv_tv_bf(CTState *cts, CType *s, TValue *o, uint8_t *sp)
   lj_assertCTS(pos < 8*ctype_bitcsz(info), "bad bitfield position");
   lj_assertCTS(bsz > 0 && bsz <= 8*ctype_bitcsz(info), "bad bitfield size");
   if (pos + bsz > 8*ctype_bitcsz(info))
-    lj_err_caller(cts->L, LJ_ERR_FFI_NYIPACKBIT);
+    lj_err_caller(L, LJ_ERR_FFI_NYIPACKBIT);
   if (!(info & CTF_BOOL)) {
     CTSize shift = 32 - bsz;
     if (!(info & CTF_UNSIGNED)) {
@@ -459,7 +460,7 @@ int lj_cconv_tv_bf(CTState *cts, CType *s, TValue *o, uint8_t *sp)
     uint32_t b = (val >> pos) & 1;
     lj_assertCTS(bsz == 1, "bad bool bitfield size");
     setboolV(o, b);
-    setboolV(&L2TG(cts->L)->tmptv2, b);  /* Remember for trace recorder. */
+    setboolV(&L2TG(L)->tmptv2, b);  /* Remember for trace recorder. */
   }
   return 0;  /* No GC step needed. */
 }

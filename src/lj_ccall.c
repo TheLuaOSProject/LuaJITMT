@@ -1219,7 +1219,7 @@ static int ccall_get_results(lua_State *L, CTState *cts, CType *ct,
   /* No reference types end up here, so there's no need for the CTypeID. */
   lj_assertL(!(ctype_isrefarray(ctr->info) || ctype_isstruct(ctr->info)),
 	     "unexpected reference ctype");
-  return lj_cconv_tv_ct(cts, ctr, 0, L->top-1, sp);
+  return lj_cconv_tv_ct_l(L, cts, ctr, 0, L->top-1, sp);
 }
 
 /* Call C function. */

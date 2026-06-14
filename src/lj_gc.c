@@ -1027,6 +1027,42 @@ static void gc_clearweak(global_State *g, GCobj *o)
 }
 
 /* Call a userdata or cdata finalizer. */
+static void gc_finalizer_vm_lock(global_State *g)
+{
+  TGState *tg = lj_thr_get_tg();
+  uint32_t tid = tg ? la_load32_acq(&tg->tid) : 0;
+  uint32_t owner = tid != 0 ? tid : ~0u;
+  if (la_load32_acq(&g->finalizer_token_owner) == owner) {
+    g->finalizer_token_depth++;
+    return;
+  }
+  for (;;) {
+    uint32_t expect = 0;
+    if (la_cas32(&g->finalizer_token, &expect, 1, LA_ACQ_REL, LA_ACQ)) {
+      la_store32_rel(&g->finalizer_token_owner, owner);
+      g->finalizer_token_depth = 1;
+      return;
+    }
+#if defined(__linux__)
+    (void)la_futex_wait(&g->finalizer_token, 1, 1000000);
+#else
+    la_cpu_pause();
+#endif
+  }
+}
+
+static void gc_finalizer_vm_unlock(global_State *g)
+{
+  lj_assertG(g->finalizer_token_depth != 0, "finalizer token underflow");
+  if (--g->finalizer_token_depth != 0)
+    return;
+  la_store32_rel(&g->finalizer_token_owner, 0);
+  la_store32_rel(&g->finalizer_token, 0);
+#if defined(__linux__)
+  (void)la_futex_wake(&g->finalizer_token, 1);
+#endif
+}
+
 static void gc_call_finalizer(global_State *g, lua_State *L,
 			      cTValue *mo, GCobj *o)
 {
@@ -1036,6 +1072,7 @@ static void gc_call_finalizer(global_State *g, lua_State *L,
   int errcode;
   lua_State *VL = vmthread(g);
   TValue *top;
+  gc_finalizer_vm_lock(g);
   lj_trace_abort(g);
   hook_entergc(g);  /* Disable hooks and new traces during __gc. */
   if (LJ_HASPROFILE && (oldh & HOOK_PROFILE)) lj_dispatch_update(g, 0);
@@ -1054,9 +1091,12 @@ static void gc_call_finalizer(global_State *g, lua_State *L,
     TValue tmp;
     copyTV(VL, &tmp, VL->top-1);
     VL->top--;
+    gc_finalizer_vm_unlock(g);
     lj_vmevent_send(g, ERRFIN,
       copyTV(V, V->top++, &tmp);
     );
+  } else {
+    gc_finalizer_vm_unlock(g);
   }
 }
 

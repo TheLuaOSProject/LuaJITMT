@@ -994,6 +994,9 @@ typedef struct global_State {
   uint32_t mt_live;	/* Active secondary Lua threads. */
   uint32_t mt_gc_exclusive;  /* Explicit legacy GC excludes secondary entry. */
   uint32_t mt_shutdown;	/* VM teardown is rejecting new secondary threads. */
+  uint32_t finalizer_token;  /* Serializes shared VM-thread finalizer calls. */
+  uint32_t finalizer_token_owner;  /* Reentrant finalizer token owner tid. */
+  uint32_t finalizer_token_depth;  /* Reentrant finalizer token depth. */
   GCSize mt_gc_threshold;  /* Saved automatic-GC threshold. */
 } global_State;
 

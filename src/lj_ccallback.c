@@ -650,7 +650,7 @@ static void callback_conv_args(CTState *cts, lua_State *L)
 #endif
 	 )
 	sp = (void *)((uint8_t *)sp + CTSIZE_PTR-cta->size);
-      gcsteps += lj_cconv_tv_ct(cts, cta, 0, o++, sp);
+      gcsteps += lj_cconv_tv_ct_l(L, cts, cta, 0, o++, sp);
     }
     fid = ctf->sib;
   }

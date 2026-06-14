@@ -13,7 +13,11 @@ for needle in \
   'lj_ctype_fin_unlock(CTState *cts)' \
   'lj_ctype_fin_lock(cts)' \
   'lj_tab_get(L, t, &tmp)' \
-  'lj_cdata_setfin(L, cd, gcV(tv), itype(tv))'
+  'lj_cdata_setfin(L, cd, gcV(tv), itype(tv))' \
+  'uint32_t finalizer_token' \
+  'gc_finalizer_vm_lock(global_State *g)' \
+  'la_cas32(&g->finalizer_token' \
+  'gc_finalizer_vm_unlock(g)'
 do
   if ! rg -F -q "$needle" "$ROOT/src"; then
     echo "guardrail: missing FFI finalizer registry marker: $needle" >&2
