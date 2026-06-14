@@ -1972,6 +1972,23 @@ static int gc2_empty_finalizer(lua_State *L)
   return 0;
 }
 
+static int gc2_udata_finalized;
+
+static int gc2_counting_finalizer(lua_State *L)
+{
+  UNUSED(L);
+  gc2_udata_finalized++;
+  return 0;
+}
+
+static void drive_udata_finalizers(lua_State *L)
+{
+  int i;
+  for (i = 0; i < 4; i++)
+    lua_gc(L, LUA_GCCOLLECT, 0);
+  lua_gc(L, LUA_GCSTOP, 0);
+}
+
 static void push_udata_finalizer_mt(lua_State *L)
 {
   lua_newtable(L);
@@ -2030,6 +2047,37 @@ static void test_finreg_userdata_telemetry(lua_State *L, global_State *g)
   assert(la_load64_acq(&g->gc2.finreg_udata_sets) == sets0 + 4u);
   assert(la_load64_acq(&g->gc2.finreg_udata_queued) == queued0 + 2u);
   assert(la_load64_acq(&g->gc2.finreg_udata_clears) == clears0 + 4u);
+}
+
+static void test_finreg_userdata_inplace_finalizer_behavior(lua_State *L)
+{
+  int finalized0;
+
+  lua_settop(L, 0);
+  finalized0 = gc2_udata_finalized;
+  lua_newuserdata(L, 1);
+  lua_newtable(L);
+  lua_setmetatable(L, -2);
+  lua_getmetatable(L, -1);
+  lua_pushcfunction(L, gc2_counting_finalizer);
+  lua_setfield(L, -2, "__gc");
+  lua_pop(L, 2);
+  drive_udata_finalizers(L);
+  assert(gc2_udata_finalized == finalized0 + 1);
+
+  lua_settop(L, 0);
+  finalized0 = gc2_udata_finalized;
+  lua_newuserdata(L, 1);
+  lua_newtable(L);
+  lua_pushcfunction(L, gc2_counting_finalizer);
+  lua_setfield(L, -2, "__gc");
+  lua_setmetatable(L, -2);
+  lua_getmetatable(L, -1);
+  lua_pushnil(L);
+  lua_setfield(L, -2, "__gc");
+  lua_pop(L, 2);
+  drive_udata_finalizers(L);
+  assert(gc2_udata_finalized == finalized0);
 }
 
 static void test_finreg_userdata_queue_mark(lua_State *L, global_State *g,
@@ -2171,6 +2219,7 @@ int main(void)
   test_userdata(L, g);
   test_finreg_userdata_queue_mark(L, g, tg);
   test_finreg_userdata_telemetry(L, g);
+  test_finreg_userdata_inplace_finalizer_behavior(L);
 #if LJ_HASFFI
   test_finreg_cdata_telemetry(L, g);
 #endif

@@ -76,6 +76,8 @@ for needle in \
   'sets0 + 4u' \
   'finreg_udata_queued) == queued0 + 2u' \
   'finreg_udata_clears) == clears0 + 4u' \
+  'test_finreg_userdata_inplace_finalizer_behavior' \
+  'gc2_counting_finalizer' \
   '09 section 9.6: finalizer may spawn while GC is paused.' \
   'lj_state_tryclaim(cbL, lj_thr_current_id(g), &claim)' \
   'lua_State *oldL' \

@@ -434,7 +434,9 @@ original bridge left userdata finalizer membership and execution on the legacy
 path; it now also mirrors the legacy userdata finalizer run-once clear at
 `gc_finalize()`, and uses a userdata-only FINREG membership bit to mirror lazy
 membership additions and stale clears if the metatable's `__gc` field is mutated
-in place before separation. The linked queue itself remains legacy-owned.
+in place before separation. The traversal harness covers both in-place behavior
+directions: a lazy add runs once, and a stale clear suppresses finalization. The
+linked queue itself remains legacy-owned.
 The first
 weak-write bridge is present for new weak-table hash keys:
 `lj_tab_newkey()` calls `lj_gc2_barrier_weak_key()` during `P_WEAK`, marking a
