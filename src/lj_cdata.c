@@ -144,7 +144,10 @@ static void cdata_fin_store(lua_State *L, global_State *g, GCtab *t,
 			    int enabled)
 {
   if (enabled) {
+    TValue key;
     copyTVrel(L, tv, val);
+    setcdataV(L, &key, cd);
+    lj_gc2_barrier_weak_key(L, t, &key);
     lj_obj_addgcflags_atomic(obj2gco(cd), LJ_GC_CDATA_FIN);
     lj_gc2_finreg_cdata_set(g, obj2gco(cd), 1);
   } else {
@@ -152,7 +155,7 @@ static void cdata_fin_store(lua_State *L, global_State *g, GCtab *t,
     lj_obj_cleargcflags_atomic(obj2gco(cd), LJ_GC_CDATA_FIN);
     lj_gc2_finreg_cdata_set(g, obj2gco(cd), 0);
   }
-  lj_gc_pubtab(L, t);
+  lj_gc_pubtab(L, t);  /* 11.4 FINREG publish after claim resolution. */
 }
 
 void lj_cdata_setfin(lua_State *L, GCcdata *cd, GCobj *obj, uint32_t it)
@@ -193,8 +196,25 @@ void lj_cdata_setfin(lua_State *L, GCcdata *cd, GCobj *obj, uint32_t it)
 	  lj_ctype_fin_anchor_end(cts);
 	  continue;  /* Racing insert published the key; claim existing slot. */
 	default:
-	  lj_ctype_fin_anchor_end(cts);
-	  break;  /* Collision/resize: structural insertion still uses fin_token. */
+	  switch (lj_tab_try_newkey_chain(L, t, &key, &old, &tv)) {
+	  case 1:
+	    if (!gcref_acq(t->metatable)) {
+	      lj_cdata_fin_storenil(L, tv);
+	      lj_obj_cleargcflags_atomic(obj2gco(cd), LJ_GC_CDATA_FIN);
+	      lj_gc2_finreg_cdata_set(g, obj2gco(cd), 0);
+	      lj_ctype_fin_anchor_end(cts);
+	      return;
+	    }
+	    cdata_fin_store(L, g, t, cd, tv, &val, enabled);
+	    lj_ctype_fin_anchor_end(cts);
+	    return;
+	  case -1:
+	    lj_ctype_fin_anchor_end(cts);
+	    continue;  /* Racing collision insert published the key. */
+	  default:
+	    lj_ctype_fin_anchor_end(cts);
+	    break;  /* Resize/full fallback still uses fin_token. */
+	  }
 	}
       }
       break;

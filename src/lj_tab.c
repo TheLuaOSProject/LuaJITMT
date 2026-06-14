@@ -45,6 +45,32 @@ static Node *hashkey_node(Node *node, MSize hmask, cTValue *key)
     return hashgcref_node(node, hmask, key->gcr);
 }
 
+static LJ_AINLINE int tab_nextnode_cas(Node *n, Node **expect, Node *want)
+{
+#if LJ_GC64
+  uint64_t old = (uint64_t)(uintptr_t)(*expect);
+  int ok = la_cas64(&n->next.ptr64, &old, (uint64_t)(uintptr_t)want,
+		    LA_ACQ_REL, LA_ACQ);
+  if (!ok)
+    *expect = (Node *)(void *)(uintptr_t)old;
+  return ok;
+#else
+  uint32_t old = (uint32_t)(uintptr_t)(*expect);
+  int ok = la_cas32(&n->next.ptr32, &old, (uint32_t)(uintptr_t)want,
+		    LA_ACQ_REL, LA_ACQ);
+  if (!ok)
+    *expect = (Node *)(void *)(uintptr_t)old;
+  return ok;
+#endif
+}
+
+static LJ_AINLINE int tab_val_isclaim(cTValue *tv, cTValue *claim)
+{
+  return tv_rawload(tv) == tv_rawload(claim);
+}
+
+#define TAB_FINREG_CHAIN_RETRY_MAX	64
+
 /* -- Table creation and destruction -------------------------------------- */
 
 static LJ_AINLINE Node *tab_node_new(lua_State *L, MSize hmask)
@@ -822,7 +848,7 @@ int lj_tab_try_newkey_anchor(lua_State *L, GCtab *t, cTValue *key,
     if (lj_obj_equal(&nk, key))
       return -1;  /* A racing inserter published the key; retry lookup. */
     if (!tvisnil(&nk))
-      return 0;  /* Collision chains still use the structural fallback. */
+      return 0;  /* Caller handles collision-chain or resize fallback. */
     lj_tv_load_acq(&nv, &n->val);
     if (!tvisnil(&nv)) {
       la_cpu_pause();  /* Another claimed empty anchor is publishing key. */
@@ -831,11 +857,99 @@ int lj_tab_try_newkey_anchor(lua_State *L, GCtab *t, cTValue *key,
     setnilV(&expect);
     if (lj_tv_cas(&n->val, &expect, claim)) {
       tab_storekeyrel(L, &n->key, key);
-      lj_gc2_barrier_weak_key(L, t, key);
-      lj_gc_pubtab(L, t);
       *slot = &n->val;
       return 1;
     }
+  }
+}
+
+static void tab_release_claimed_free(Node *n)
+{
+  lj_tab_nextnode_set(n, NULL);
+  lj_tab_storenilraw(&n->key);
+  lj_tab_storenilraw(&n->val);
+}
+
+static LJ_AINLINE int tab_chain_retry_exhausted(uint32_t *retry, Node *reserved)
+{
+  if (++*retry <= TAB_FINREG_CHAIN_RETRY_MAX)
+    return 0;
+  if (reserved)
+    tab_release_claimed_free(reserved);
+  return 1;
+}
+
+int lj_tab_try_newkey_chain(lua_State *L, GCtab *t, cTValue *key,
+			    cTValue *claim, TValue **slot)
+{
+  Node *nodebase = lj_tab_node_acq(t);
+  MSize hmask = lj_tab_node_hmask_acq(nodebase);
+  Node *anchor, *reserved = NULL;
+  uint32_t retry = 0;
+  if (hmask == 0)
+    return 0;
+  anchor = hashkey_node(nodebase, hmask, key);
+  for (;;) {
+    Node *n;
+    MSize i;
+    for (n = anchor; n != NULL; n = lj_tab_nextnode_acq(n)) {
+      TValue nk, nv;
+      lj_tv_load_acq(&nv, &n->val);
+      lj_tv_load_acq(&nk, &n->key);
+      if (lj_obj_equal(&nk, key)) {
+	if (reserved)
+	  tab_release_claimed_free(reserved);
+	return -1;  /* Existing or racing insert for this key; retry lookup. */
+      }
+      if (tvisnil(&nk) && tab_val_isclaim(&nv, claim)) {
+	la_cpu_pause();  /* Linked collision insert has not published key. */
+	if (tab_chain_retry_exhausted(&retry, reserved))
+	  return 0;
+	goto retry;
+      }
+    }
+    if (!reserved) {
+      for (i = 0; i <= hmask; i++) {
+	TValue nk, nv, expect;
+	n = &nodebase[i];
+	if (n == anchor)
+	  continue;
+	lj_tv_load_acq(&nk, &n->key);
+	if (lj_obj_equal(&nk, key))
+	  return -1;
+	if (!tvisnil(&nk))
+	  continue;
+	lj_tv_load_acq(&nv, &n->val);
+	if (!tvisnil(&nv)) {
+	  if (tab_val_isclaim(&nv, claim)) {
+	    la_cpu_pause();  /* Unlinked free-node claim is still publishing. */
+	    if (tab_chain_retry_exhausted(&retry, reserved))
+	      return 0;
+	    goto retry;
+	  }
+	  continue;
+	}
+	setnilV(&expect);
+	if (lj_tv_cas(&n->val, &expect, claim)) {
+	  reserved = n;  /* Claimed free node; not visible until CAS-prepend. */
+	  break;
+	}
+      }
+      if (!reserved)
+	return 0;  /* No free node in this hash generation: resize fallback. */
+      continue;  /* Re-scan chain before publishing the claimed node. */
+    }
+    n = lj_tab_nextnode_acq(anchor);
+    lj_tab_nextnode_set(reserved, n);
+    if (tab_nextnode_cas(anchor, &n, reserved)) {
+      tab_storekeyrel(L, &reserved->key, key);
+      *slot = &reserved->val;
+      return 1;  /* 11.4 FINREG collision insert CAS-prepend. */
+    }
+    if (tab_chain_retry_exhausted(&retry, reserved))
+      return 0;
+  retry:
+    continue;
   }
 }
 

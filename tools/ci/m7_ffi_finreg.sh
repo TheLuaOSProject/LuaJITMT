@@ -27,8 +27,13 @@ for needle in \
   'lj_cdata_fin_storenil(L, tv)' \
   'Missing clear is a no-op; avoid fin_token insert.' \
   'lj_tab_try_newkey_anchor(lua_State *L, GCtab *t, cTValue *key,' \
+  'lj_tab_try_newkey_chain(lua_State *L, GCtab *t, cTValue *key,' \
   'Another claimed empty anchor is publishing key.' \
-  'Collision/resize: structural insertion still uses fin_token.' \
+  'Linked collision insert has not published key.' \
+  'TAB_FINREG_CHAIN_RETRY_MAX' \
+  '11.4 FINREG collision insert CAS-prepend.' \
+  '11.4 FINREG publish after claim resolution.' \
+  'Resize/full fallback still uses fin_token.' \
   'while (ffi_fin && lj_cdata_fin_isclaim(&val))' \
   '#include "lj_cdata.h"' \
   'lj_tab_get(L, t, &key)' \
@@ -123,13 +128,14 @@ if awk '
 fi
 
 if ! awk '
-  /void lj_cdata_setfin\(lua_State \*L, GCcdata \*cd,/ { infn = 1; begin = 0; fast = 0 }
+  /void lj_cdata_setfin\(lua_State \*L, GCcdata \*cd,/ { infn = 1; begin = 0; anchor = 0; chain = 0 }
   infn && /lj_ctype_fin_anchor_begin\(cts\)/ { begin = 1 }
-  infn && /lj_tab_try_newkey_anchor\(L, t, &key, &old, &tv\)/ { fast = 1 }
-  infn && /lj_ctype_fin_lock\(cts\)/ { found = begin && fast; infn = 0 }
+  infn && /lj_tab_try_newkey_anchor\(L, t, &key, &old, &tv\)/ { anchor = 1 }
+  infn && /lj_tab_try_newkey_chain\(L, t, &key, &old, &tv\)/ { chain = 1 }
+  infn && /lj_ctype_fin_lock\(cts\)/ { found = begin && anchor && chain; infn = 0 }
   END { exit found ? 0 : 1 }
 ' "$ROOT/src/lj_cdata.c"; then
-  echo "guardrail: enabled missing-key registration must bracket lockless empty-anchor insert before fin_token fallback" >&2
+  echo "guardrail: enabled missing-key registration must try lockless anchor and chain inserts before fin_token fallback" >&2
   exit 1
 fi
 
@@ -144,7 +150,7 @@ if ! awk '
 fi
 
 if awk '
-  /lj_tab_try_newkey_anchor\(L, t, &key, &old, &tv\)/ {
+  /lj_tab_try_newkey_anchor\(L, t, &key, &old, &tv\)|lj_tab_try_newkey_chain\(L, t, &key, &old, &tv\)/ {
     if (FILENAME !~ /src\/lj_cdata\.c$/) {
       bad = 1
       print FILENAME ":" FNR ":" $0
@@ -152,7 +158,48 @@ if awk '
   }
   END { exit bad ? 0 : 1 }
 ' "$ROOT"/src/*.c; then
-  echo "guardrail: empty-anchor table claim helper is currently only validated for GCROOT_FFI_FIN" >&2
+  echo "guardrail: lock-free table claim helpers are currently only validated for GCROOT_FFI_FIN" >&2
+  exit 1
+fi
+
+if awk '
+  /int lj_tab_try_newkey_anchor\(lua_State \*L,/ { infn = 1 }
+  /int lj_tab_try_newkey_chain\(lua_State \*L,/ { infn = 1 }
+  infn && /lj_gc_pubtab\(L, t\)|lj_gc2_barrier_weak_key\(L, t, key\)/ {
+    bad = 1
+    print
+  }
+  infn && /^}/ { infn = 0 }
+  END { exit bad ? 0 : 1 }
+' "$ROOT/src/lj_tab.c"; then
+  echo "guardrail: FINREG claim helpers must not publish the table before claim resolution" >&2
+  exit 1
+fi
+
+if awk '
+  /int lj_tab_try_newkey_chain\(lua_State \*L,/ { infn = 1 }
+  infn && /lj_tab_newkey\(L, t|lj_tab_set\(L, t|rehashtab\(L, t|lj_tab_resize|setfreetop\(/ {
+    bad = 1
+    print
+  }
+  infn && /^}/ { infn = 0 }
+  END { exit bad ? 0 : 1 }
+' "$ROOT/src/lj_tab.c"; then
+  echo "guardrail: FINREG collision helper must stay bounded to the current hash generation" >&2
+  exit 1
+fi
+
+if ! awk '
+  /static void cdata_fin_store\(lua_State \*L,/ { infn = 1; copied = 0; weak = 0 }
+  infn && /copyTVrel\(L, tv, val\)/ { copied = 1 }
+  infn && copied && /lj_gc2_barrier_weak_key\(L, t, &key\)/ { weak = 1 }
+  infn && /lj_gc_pubtab\(L, t\).*FINREG publish after claim resolution/ {
+    found = copied && weak
+    infn = 0
+  }
+  END { exit found ? 0 : 1 }
+' "$ROOT/src/lj_cdata.c"; then
+  echo "guardrail: FINREG table publication must happen after finalizer claim resolution" >&2
   exit 1
 fi
 
