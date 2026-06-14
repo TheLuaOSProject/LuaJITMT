@@ -21,6 +21,9 @@ for needle in \
   'test_vm_weak_value_array_barrier' \
   'lj_meta_tset_owner(lua_State *L, cTValue *o, cTValue *k,' \
   'test_capi_weak_newindex_target_write_barrier' \
+  'lj_meta_tset_owner(L, tv, base+1, &owner)' \
+  'test_ffi_weak_newindex_target_write_barrier' \
+  't-m8-ffi-weak-newindex OK' \
   'test_weak_clear_marks_string_slots' \
   'test_weak_drain_uses_captured_mode' \
   'test_weak_post_clear_resurrection_write' \
@@ -75,10 +78,12 @@ for needle in \
   'gc_call_finalizer must not use shared vmthread callback stack'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_gc2.c" "$ROOT/src/lj_gc2.h" \
-      "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc.h" "$ROOT/tests/t-gc2-phase.c" \
-      "$ROOT/src/lj_meta.c" "$ROOT/tests/t-gc2-traverse.c" \
-      "$ROOT/tests/t-m8-finalizer-spawn-live.lua" "$ROOT/src/lj_state.c" \
-      "$ROOT/tests/t-m8-close-finalizers.c"; then
+	      "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc.h" "$ROOT/tests/t-gc2-phase.c" \
+	      "$ROOT/src/lj_meta.c" "$ROOT/src/lib_ffi.c" \
+	      "$ROOT/tests/t-gc2-traverse.c" \
+	      "$ROOT/tests/t-m8-ffi-weak-newindex.c" \
+	      "$ROOT/tests/t-m8-finalizer-spawn-live.lua" "$ROOT/src/lj_state.c" \
+	      "$ROOT/tests/t-m8-close-finalizers.c"; then
     echo "guardrail: missing M8 weak/finalizer marker: $needle" >&2
     exit 1
   fi
@@ -173,6 +178,11 @@ out="$TMP/lj_t-gc2-traverse_m8"
   "$ROOT/src/libluajit.a" -lm -ldl -pthread -o "$out"
 "$out"
 
+out="$TMP/lj_t-m8-ffi-weak-newindex"
+"$CC" $CFLAGS -I"$ROOT/src" "$ROOT/tests/t-m8-ffi-weak-newindex.c" \
+  "$ROOT/src/libluajit.a" -lm -ldl -pthread -o "$out"
+"$out"
+
 out="$TMP/lj_t-m8-close-finalizers"
 "$CC" $CFLAGS -I"$ROOT/src" "$ROOT/tests/t-m8-close-finalizers.c" \
   "$ROOT/src/libluajit.a" -lm -ldl -pthread -o "$out"
@@ -199,6 +209,12 @@ out="$TMP/lj_t-gc2-phase_m8_paranoia"
 out="$TMP/lj_t-gc2-traverse_m8_paranoia"
 "$CC" $CFLAGS -DLUA_USE_ASSERT -DLJ_GC2_PARANOIA=1 -I"$ROOT/src" \
   "$ROOT/tests/t-gc2-traverse.c" "$ROOT/src/libluajit.a" \
+  -lm -ldl -pthread -o "$out"
+"$out"
+
+out="$TMP/lj_t-m8-ffi-weak-newindex_paranoia"
+"$CC" $CFLAGS -DLUA_USE_ASSERT -DLJ_GC2_PARANOIA=1 -I"$ROOT/src" \
+  "$ROOT/tests/t-m8-ffi-weak-newindex.c" "$ROOT/src/libluajit.a" \
   -lm -ldl -pthread -o "$out"
 "$out"
 

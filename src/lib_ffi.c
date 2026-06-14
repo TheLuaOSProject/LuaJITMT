@@ -176,9 +176,11 @@ static int ffi_index_meta(lua_State *L, CTState *cts, CTypeID id, MMS mm)
 	return 1;
       }
     } else {
-      TValue *o = lj_meta_tset(L, tv, base+1);
+      GCtab *owner;
+      TValue *o = lj_meta_tset_owner(L, tv, base+1, &owner);
       if (o) {
 	copyTVrel(L, o, base+2);
+	lj_gc2_barrier_weak_write(L, owner, base+1, base+2);
 	return 0;
       }
     }
