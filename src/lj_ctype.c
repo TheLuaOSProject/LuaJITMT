@@ -16,6 +16,7 @@
 #include "lj_ctype.h"
 #include "lj_ccallback.h"
 #include "lj_buf.h"
+#include "lj_safepoint.h"
 
 /* -- C type definitions -------------------------------------------------- */
 
@@ -154,15 +155,21 @@ CTKWDEF(CTKWNAMEDEF)
 
 void lj_ctype_parse_lock(CTState *cts, lua_State *L)
 {
-  UNUSED(L);
   for (;;) {
     uint32_t expect = 0;
     if (la_cas32(&cts->parse_token, &expect, 1, LA_ACQ_REL, LA_ACQ)) {
       return;  /* 11.2: acquire the cparse CTState mutation token. */
     }
 #if defined(__linux__)
-    (void)la_futex_wait(&cts->parse_token, 1, 1000000);  /* 11.2: cdef may park. */
+    {
+      uint32_t actions;
+      lj_native_enter(L2TG(L));
+      (void)la_futex_wait(&cts->parse_token, 1, 1000000);
+      actions = lj_native_leave(L);
+      lj_safepoint_checkstop(L, actions);  /* 11.2: cdef may park. */
+    }
 #else
+    UNUSED(L);
     la_cpu_pause();  /* 11.2: non-Linux fallback outside the target matrix. */
 #endif
   }

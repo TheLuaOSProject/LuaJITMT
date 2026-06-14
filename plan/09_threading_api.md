@@ -149,6 +149,13 @@ private-environment GC root is release-published through `setgcrefroot()` and
 acquire-loaded in lib_threading readers. The old live-table root from the
 original report has been replaced by CAS-published `LJThreadLive` nodes whose
 `GCRef ud` is release-published and acquire-scanned by legacy GC and GC2.
+Current implementation note: spawned child stacks are now moved to the child
+TG's arena before the pthread is published/started. The original spawn flow
+created `lua_newthread()` stacks in the parent/main arena, which was faithful
+to legacy single-thread allocation but not to the per-owner arena rule from
+04. `lj_state_rehome_stack()` preserves the original stack contents and pointer
+offsets, accounts the allocation to the worker TG, and frees the parent-arena
+stack while only the spawning thread can touch it.
 
 The temporary M4 active-child GC pause treats `g->gc.threshold` and the saved
 `g->mt_gc_threshold` as shared handoff words. C-side checks and updates go

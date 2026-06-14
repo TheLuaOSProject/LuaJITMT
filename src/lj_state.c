@@ -10,6 +10,7 @@
 #define LUA_CORE
 
 #include "lj_obj.h"
+#include "lj_arena.h"
 #include "lj_gc.h"
 #include "lj_gc2.h"
 #include "lj_err.h"
@@ -87,6 +88,38 @@ static void resizestack(lua_State *L, MSize n)
   L->top = (TValue *)((char *)L->top + delta);
   for (up = gcref(L->openupval); up != NULL; up = gcnext(up))
     setmref(gco2uv(up)->v, (TValue *)((char *)uvval(gco2uv(up)) + delta));
+}
+
+int lj_state_rehome_stack(lua_State *L)
+{
+  global_State *g = G(L);
+  TGState *tg = L2TG(L);
+  TValue *oldst = tvref(L->stack);
+  TValue *st;
+  ptrdiff_t delta;
+  GCobj *up;
+  MSize stacksize = L->stacksize;
+  size_t sz = (size_t)stacksize * sizeof(TValue);
+  if (!oldst || !tg || !(tg->tg_flags & TGF_ARENA_INTERNAL) ||
+      g->allocf != lj_arena_allocf)
+    return 1;
+  if (lj_arena_of(oldst)->hdr.owner_tid == tg->alloc.owner_tid)
+    return 1;
+  st = (TValue *)lj_arena_allocf(&tg->allocd, NULL, 0, sz);
+  if (st == NULL)
+    return 0;
+  memcpy(st, oldst, sz);
+  g->gc.total += (GCSize)sz;
+  lj_gc2_account_alloc(g, tg, (GCSize)sz);  /* 04 section 4.8 worker stack. */
+  setmref(L->stack, st);
+  delta = (char *)st - (char *)oldst;
+  setmref(L->maxstack, (TValue *)((char *)tvref(L->maxstack) + delta));
+  L->base = (TValue *)((char *)L->base + delta);
+  L->top = (TValue *)((char *)L->top + delta);
+  for (up = gcref(L->openupval); up != NULL; up = gcnext(up))
+    setmref(gco2uv(up)->v, (TValue *)((char *)uvval(gco2uv(up)) + delta));
+  lj_mem_freevec(g, oldst, stacksize, TValue);
+  return 1;
 }
 
 /* Relimit stack after error, in case the limit was overdrawn. */

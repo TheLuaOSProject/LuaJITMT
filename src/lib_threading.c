@@ -702,6 +702,14 @@ static lua_State *threading_spawn_core(lua_State *L, GCtab *env, TValue *base,
   tg->tid = th->thr.tid;
   tg->alloc.owner_tid = th->thr.tid;
   tg->thread_ud = ud;
+  if (!lj_state_rehome_stack(L1)) {
+    L1->tg_hint = L2TG(L);
+    lj_tg_fini_thread(G(L), tg);
+    lj_mem_freet(G(L), tg);
+    th->tg = NULL;
+    th->state = LJ_THREAD_DONE;
+    lj_err_mem(L);
+  }
   live = threading_live_new(L, ud);
 
   if (!threading_gc_enter(L)) {

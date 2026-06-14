@@ -121,3 +121,10 @@ stall other threads' GC progress (asserts a full cycle completes while one
 thread sleeps in C); t-ffi-06 struct-field hammering from 4 threads,
 TSAN-clean (cdata accesses are user-racy: M-5 only guarantees the *VM*
 stays safe — test asserts no crash, values within written set per field).
+Current implementation note: the same-struct/same-name cdef race also exposed
+a spawned-thread stack ownership bug before the FFI parser or ctype table
+itself failed. `tests/t-ffi-cdef-dup-stack.lua` keeps the original t-ffi-02
+intent, but forces worker stack growth while racing duplicate `ffi.cdef()` plus
+string `sizeof`/`typeof`; `tools/ci/m7_ffi_cdef_dup_stack.sh` guards the
+worker-stack rehome that moves child stacks into their TG arena before thread
+publication.
