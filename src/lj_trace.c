@@ -702,6 +702,13 @@ void lj_trace_flushscope_hs(global_State *g, uint32_t work)
   }
 }
 
+uint32_t lj_trace_flushscope(jit_State *J, TraceNo traceno)
+{
+  uint32_t work = lj_trace_flush(J, traceno);
+  lj_trace_flushscope_hs(J2G(J), work);
+  return work;
+}
+
 /* Initialize JIT compiler state. */
 void lj_trace_initstate(global_State *g)
 {

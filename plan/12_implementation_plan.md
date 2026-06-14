@@ -137,7 +137,9 @@ writable alias, generated-code/unwind writes go through RX/RW translation
 helpers, and teardown unmaps both aliases. The conservative fresh-area bridge
 still allocates a new unpublished area once an area contains committed trace
 bytes; that cleanup/perf reduction is left for M9 rather than changing the M6
-correctness target.
+correctness target. Recorder-internal `LJ_TRLINK_RETURN` call-unroll flushes now
+use `lj_trace_flushscope()`, sharing the public scoped `HS_EXIT_TRACES` boundary
+and slot-retirement path instead of leaving marked scoped slots behind.
 Tests: stock with -jon; t-jit-01..06 (trace same loop from 2 threads;
 side-trace attach while parent runs on another thread; flush storm;
 exit-handler stress; recording-thread killed mid-trace (error in

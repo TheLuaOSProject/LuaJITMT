@@ -372,6 +372,11 @@ slot. The physical `GCtrace` body/exittab still reaches `J->retiredtraces`
 through the existing sweep path, preserving the original bridge shape, but sweep
 now keeps a finite scoped-retire epoch already stamped after the
 `HS_EXIT_TRACES` boundary instead of replacing it with the later sweep epoch.
+Recorder-internal call-unroll recovery now shares the scoped helper:
+`check_call_unroll()` routes `LJ_TRLINK_RETURN` flushes through
+`lj_trace_flushscope()`, so return-trace unpatching is followed by the same
+`HS_EXIT_TRACES` epoch boundary and slot retirement used by public numeric
+`jit.flush(n)`.
 Full token ownership and per-root body retirement remain to finish the original
 scoped-flush target.
 

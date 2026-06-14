@@ -140,6 +140,7 @@ for needle in \
   'la_store64_rel(&T->retire_epoch, LJ_TRACE_SCOPE_FLUSHING)' \
   'trace_scope_clear_slot(J, i, T, epoch);' \
   'lj_trace_flushscope_retire(global_State *g, uint64_t epoch)' \
+  'uint32_t lj_trace_flushscope(jit_State *J, TraceNo traceno)' \
   'root && root->traceno == T->root' \
   'T->traceno = 0;  /* Scoped slot retired after HS_EXIT_TRACES grace. */' \
   'epoch = la_load64_acq(&T->retire_epoch)' \
@@ -150,7 +151,7 @@ for needle in \
   'return trace_flushroot(J, T, 1);' \
   'flushed += setptmode(g, pt, mode);' \
   'lj_trace_flushscope_hs(g, flushed);' \
-  'lj_trace_flushscope_hs(g, lj_trace_flush(G2J(g), idx));'
+  '(void)lj_trace_flushscope(G2J(g), idx);'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_trace.c" "$ROOT/src/lj_dispatch.c"; then
     echo "guardrail: missing scoped trace flush handshake precision: $needle" >&2

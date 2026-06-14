@@ -2210,7 +2210,7 @@ static void check_call_unroll(jit_State *J, TraceNo lnk)
   } else {
     if (count > J->param[JIT_P_callunroll]) {
       if (lnk) {  /* Possible tail- or up-recursion. */
-	lj_trace_flush(J, lnk);  /* Flush trace that only returns. */
+	(void)lj_trace_flushscope(J, lnk);  /* Flush return trace after HS. */
 	/* Set a small, pseudo-random hotcount for a quick retry of JFUNC*. */
 	hotcount_setg(J2G(J), J->pc+1, lj_prng_u64(&J2TG(J)->prng) & 15u);
       }
