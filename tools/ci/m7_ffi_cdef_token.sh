@@ -13,7 +13,7 @@ for needle in \
   'la_store32_rel(&cts->parse_token, 0)' \
   'la_futex_wake(&cts->parse_token, 1)' \
   'lj_ctype_new_l(cp->L, cp->cts' \
-  'lj_ctype_intern_l(cp->L, cp->cts' \
+  'cp_ctype_intern(cp,' \
   'lj_ctype_parse_lock(cts, L)' \
   'lj_ctype_parse_lock(cp.cts, L)' \
   'lj_ctype_parse_lock(cp.cts, J->L)'

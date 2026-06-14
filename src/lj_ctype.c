@@ -235,44 +235,86 @@ static LJ_AINLINE int ctype_hash_cas(CTState *cts, uint32_t h,
   return ok;  /* 11.2: CAS-prepend ctype hash publication. */
 }
 
+static void ctype_hash_setnext(CTState *cts, CType *src, CTypeID id,
+			       CTypeID next)
+{
+  CType *tab, *dst;
+  do {
+    dst = ctype_get(cts, id);
+    if (dst != src)
+      *dst = *src;
+    dst->next = (CTypeID1)next;
+    tab = ctype_tab_acq(cts);
+  } while (dst != &tab[id]);
+}
+
+static int ctype_hash_try_prepend(CTState *cts, uint32_t h, CType *src,
+				  CTypeID id, CTypeID *head)
+{
+  ctype_hash_setnext(cts, src, id, *head);
+  return ctype_hash_cas(cts, h, head, id);
+}
+
 static void ctype_hash_prepend(CTState *cts, uint32_t h, CType *src, CTypeID id)
 {
   CTypeID head = ctype_hash_load(cts, h);
   if (id == 0)
     return;  /* CTID 0 is the hash-chain sentinel. */
-  do {
-    CType *tab, *dst;
-    do {
-      dst = ctype_get(cts, id);
-      if (dst != src)
-	*dst = *src;
-      dst->next = (CTypeID1)head;
-      tab = ctype_tab_acq(cts);
-    } while (dst != &tab[id]);
-  } while (!ctype_hash_cas(cts, h, &head, id));
+  while (!ctype_hash_try_prepend(cts, h, src, id, &head))
+    ;
 }
 
-static void ctype_tab_retired_push(CTState *cts, CTypeTabRetire *ret)
+static CTypeID ctype_hash_findtype(CTState *cts, CTypeID id, CTInfo info,
+				   CTSize size)
+{
+  while (id) {
+    CType *ct = ctype_get(cts, id);
+    if (!ctype_isabandoned(ct->info) && ct->info == info && ct->size == size)
+      return id;
+    id = ct->next;
+  }
+  return 0;
+}
+
+static void ctype_abandon(CTState *cts, CTypeID id)
+{
+  CType *ct = ctype_get(cts, id);
+  ct->info = CTINFO(CT_ATTRIB, CTATTRIB(CTA_BAD));
+  ct->size = 0;
+  ct->sib = 0;
+  setgcrefnull(ct->name);
+  /* Keep ct->next so hash walkers can skip through abandoned entries. */
+}
+
+static GCSize ctype_tab_size(MSize sizetab)
+{
+  return (GCSize)(sizeof(CTypeTab) + (sizetab - 1u)*sizeof(CType));
+}
+
+static CTypeTab *ctype_tab_new(lua_State *L, MSize sizetab)
+{
+  CTypeTab *tabh = (CTypeTab *)lj_mem_new(L, ctype_tab_size(sizetab));
+  tabh->sizetab = sizetab;
+  tabh->retire_epoch = 0;
+  tabh->retired_next = NULL;
+  return tabh;
+}
+
+static void ctype_tab_free(global_State *g, CTypeTab *tabh)
+{
+  lj_mem_free(g, tabh, ctype_tab_size(tabh->sizetab));
+}
+
+static void ctype_tab_retired_push(CTState *cts, CTypeTab *ret)
 {
   void *head = la_loadptr_acq((void *const *)&cts->retiredtab);
   do {
-    ret->next = (CTypeTabRetire *)head;
+    ret->retired_next = (CTypeTab *)head;
   } while (!la_casptr((void **)&cts->retiredtab, &head, ret,
 		      LA_ACQ_REL, LA_ACQ));  /* 11.2 CTState table SMR. */
 }
 
-static CTypeTabRetire *ctype_tab_retire_reserve(lua_State *L, CType *tab,
-						MSize sizetab)
-{
-  CTypeTabRetire *ret = lj_mem_newt(L, sizeof(CTypeTabRetire), CTypeTabRetire);
-  ret->tab = tab;
-  ret->sizetab = sizetab;
-  la_store64_rel(&ret->retire_epoch, 0);
-  ret->next = NULL;
-  return ret;
-}
-
-static void ctype_tab_retire_arm(CTState *cts, CTypeTabRetire *ret)
+static void ctype_tab_retire(CTState *cts, CTypeTab *ret)
 {
   la_store64_rel(&ret->retire_epoch, la_load64_acq(&cts->g->gc2.hs_epoch));
   ctype_tab_retired_push(cts, ret);
@@ -292,32 +334,54 @@ static MSize ctype_tab_growsize(MSize osz, CTypeID id)
 
 static CType *ctype_tab_grow_l(lua_State *L, CTState *cts, CTypeID id)
 {
-  CType *oldtab = ctype_tab_acq(cts);
-  MSize osz = cts->sizetab, nsz;
-  CTypeTabRetire *oldret;
-  CType *newtab;
   if (id >= CTID_MAX) lj_err_msg(L, LJ_ERR_TABOV);
-  oldret = ctype_tab_retire_reserve(L, oldtab, osz);
-  nsz = ctype_tab_growsize(osz, id);
-  newtab = lj_mem_newvec(L, nsz, CType);
-  memcpy(newtab, oldtab, osz*sizeof(CType));
-  memset(newtab + osz, 0, (nsz - osz)*sizeof(CType));
-  la_storeptr_rel((void **)&cts->tab, newtab);
-  cts->sizetab = nsz;
-  ctype_tab_retire_arm(cts, oldret);
-  return newtab;
+  for (;;) {
+    CTypeTab *oldh = ctype_tabh_acq(cts);
+    MSize osz = oldh->sizetab;
+    MSize nsz;
+    CTypeTab *newh;
+    void *expect;
+    if ((MSize)id < osz)
+      return oldh->tab;
+    nsz = ctype_tab_growsize(osz, id);
+    newh = ctype_tab_new(L, nsz);
+    memcpy(newh->tab, oldh->tab, osz*sizeof(CType));
+    memset(newh->tab + osz, 0, (nsz - osz)*sizeof(CType));
+    expect = oldh;
+    if (la_casptr((void **)&cts->tabh, &expect, newh, LA_ACQ_REL, LA_ACQ)) {
+      cts->tab = newh->tab;  /* Token-held/diagnostic mirror. */
+      cts->sizetab = nsz;
+      ctype_tab_retire(cts, oldh);
+      return newh->tab;
+    }
+    ctype_tab_free(cts->g, newh);
+  }
+}
+
+static CTypeID ctype_top_reserve_l(lua_State *L, CTState *cts, CType **ctp)
+{
+  for (;;) {
+    CTypeTab *tabh = ctype_tabh_acq(cts);
+    CTypeID id = ctype_top_acq(cts);
+    uint32_t expect = id;
+    if (LJ_UNLIKELY(id >= CTID_MAX)) lj_err_msg(L, LJ_ERR_TABOV);
+    if (LJ_UNLIKELY((MSize)id >= tabh->sizetab)) {
+      (void)ctype_tab_grow_l(L, cts, id);
+      continue;
+    }
+    if (la_cas32(&cts->top, &expect, id+1u, LA_ACQ_REL, LA_ACQ)) {
+      *ctp = &tabh->tab[id];
+      return id;
+    }
+  }
 }
 
 /* Create new type element. */
 CTypeID lj_ctype_new_l(lua_State *L, CTState *cts, CType **ctp)
 {
-  CTypeID id = cts->top;
-  CType *tab = ctype_tab_acq(cts);
+  CTypeID id = ctype_top_reserve_l(L, cts, ctp);
   CType *ct;
-  if (LJ_UNLIKELY(id >= cts->sizetab))
-    tab = ctype_tab_grow_l(L, cts, id);
-  cts->top = id+1;
-  *ctp = ct = &tab[id];
+  ct = *ctp;
   ct->info = 0;
   ct->size = 0;
   ct->sib = 0;
@@ -326,33 +390,48 @@ CTypeID lj_ctype_new_l(lua_State *L, CTState *cts, CType **ctp)
   return id;
 }
 
-/* Intern a type element. */
-CTypeID lj_ctype_intern_l(lua_State *L, CTState *cts, CTInfo info, CTSize size)
+static CTypeID ctype_intern_l(lua_State *L, CTState *cts, CTInfo info,
+			      CTSize size, int *newp)
 {
   uint32_t h = ct_hashtype(info, size);
-  CTypeID id = ctype_hash_load(cts, h);
-  while (id) {
-    CType *ct = ctype_get(cts, id);
-    if (!ctype_isabandoned(ct->info) && ct->info == info && ct->size == size)
-      return id;
-    id = ct->next;
-  }
-  id = cts->top;
+  CTypeID head = ctype_hash_load(cts, h);
+  CTypeID id = ctype_hash_findtype(cts, head, info, size);
+  if (newp) *newp = 0;
+  if (id)
+    return id;
   {
-    CType *tab = ctype_tab_acq(cts);
     CType *ct;
-    if (LJ_UNLIKELY(id >= cts->sizetab))
-      tab = ctype_tab_grow_l(L, cts, id);
-    ct = &tab[id];
+    id = ctype_top_reserve_l(L, cts, &ct);
     ct->info = info;
     ct->size = size;
     ct->sib = 0;
     ct->next = 0;
     setgcrefnull(ct->name);
-    cts->top = id+1;
-    ctype_hash_prepend(cts, h, ct, id);
+    head = ctype_hash_load(cts, h);
+    for (;;) {
+      CTypeID winner = ctype_hash_findtype(cts, head, info, size);
+      if (winner) {
+	ctype_abandon(cts, id);
+	return winner;
+      }
+      if (ctype_hash_try_prepend(cts, h, ct, id, &head)) {
+	if (newp) *newp = 1;
+	return id;
+      }
+    }
   }
-  return id;
+}
+
+/* Intern a type element. */
+CTypeID lj_ctype_intern_l(lua_State *L, CTState *cts, CTInfo info, CTSize size)
+{
+  return ctype_intern_l(L, cts, info, size, NULL);
+}
+
+CTypeID lj_ctype_intern_new_l(lua_State *L, CTState *cts, CTInfo info,
+			      CTSize size, int *newp)
+{
+  return ctype_intern_l(L, cts, info, size, newp);
 }
 
 /* Add type element to hash table. */
@@ -773,17 +852,16 @@ GCstr *lj_ctype_repr_complex(lua_State *L, void *sp, CTSize size)
 uint32_t lj_ctype_reclaim_retired(global_State *g, uint64_t completed_epoch)
 {
   CTState *cts = ctype_ctsG(g);
-  CTypeTabRetire *ret;
+  CTypeTab *ret;
   uint32_t reclaimed = 0;
   if (!cts || completed_epoch == 0)
     return 0;
-  ret = (CTypeTabRetire *)la_xchgptr_acqrel((void **)&cts->retiredtab, NULL);
+  ret = (CTypeTab *)la_xchgptr_acqrel((void **)&cts->retiredtab, NULL);
   while (ret) {
-    CTypeTabRetire *next = ret->next;
-    ret->next = NULL;
+    CTypeTab *next = ret->retired_next;
+    ret->retired_next = NULL;
     if (la_load64_acq(&ret->retire_epoch) < completed_epoch) {
-      lj_mem_freevec(g, ret->tab, ret->sizetab, CType);
-      lj_mem_freet(g, ret);
+      ctype_tab_free(g, ret);
       reclaimed++;
     } else {
       ctype_tab_retired_push(cts, ret);
@@ -795,12 +873,11 @@ uint32_t lj_ctype_reclaim_retired(global_State *g, uint64_t completed_epoch)
 
 static void ctype_freeretired(global_State *g, CTState *cts)
 {
-  CTypeTabRetire *ret = (CTypeTabRetire *)la_xchgptr_acqrel(
-    (void **)&cts->retiredtab, NULL);
+  CTypeTab *ret = (CTypeTab *)la_xchgptr_acqrel((void **)&cts->retiredtab,
+						NULL);
   while (ret) {
-    CTypeTabRetire *next = ret->next;
-    lj_mem_freevec(g, ret->tab, ret->sizetab, CType);
-    lj_mem_freet(g, ret);
+    CTypeTab *next = ret->retired_next;
+    ctype_tab_free(g, ret);
     ret = next;
   }
 }
@@ -811,13 +888,15 @@ static void ctype_freeretired(global_State *g, CTState *cts)
 CTState *lj_ctype_init(lua_State *L)
 {
   CTState *cts = lj_mem_newt(L, sizeof(CTState), CTState);
-  CType *ct = lj_mem_newvec(L, CTTYPETAB_MIN, CType);
+  CTypeTab *tabh = ctype_tab_new(L, CTTYPETAB_MIN);
+  CType *ct = tabh->tab;
   const char *name = lj_ctype_typenames;
   CTypeID id;
   memset(cts, 0, sizeof(CTState));
-  la_storeptr_rel((void **)&cts->tab, ct);
+  la_storeptr_rel((void **)&cts->tabh, tabh);
+  cts->tab = ct;
   cts->sizetab = CTTYPETAB_MIN;
-  cts->top = CTTYPEINFO_NUM;
+  la_store32_rel(&cts->top, CTTYPEINFO_NUM);
   cts->g = G(L);
   for (id = 0; id < CTTYPEINFO_NUM; id++, ct++) {
     CTInfo info = lj_ctype_typeinfo[id];
@@ -859,7 +938,7 @@ void lj_ctype_freestate(global_State *g)
   if (cts) {
     lj_ccallback_mcode_free(cts);
     ctype_freeretired(g, cts);
-    lj_mem_freevec(g, ctype_tab_acq(cts), cts->sizetab, CType);
+    ctype_tab_free(g, ctype_tabh_acq(cts));
     lj_mem_freevec(g, cts->cb.cbid, cts->cb.sizeid, CTypeID1);
     lj_mem_freevec(g, cts->cb.owner, cts->cb.sizeid, lua_State *);
     lj_mem_freet(g, cts);

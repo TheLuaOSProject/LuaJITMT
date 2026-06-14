@@ -999,15 +999,15 @@ static void gc2_scan_global_roots(global_State *g)
   {
     CTState *cts = ctype_ctsG(g);
     if (cts) {
-      CTypeTabRetire *ret;
+      CTypeTab *ret;
       lj_gc2_markmem(g, cts);
-      lj_gc2_markmem(g, ctype_tab_acq(cts));
-      for (ret = (CTypeTabRetire *)la_loadptr_acq(
+      lj_gc2_markmem(g, ctype_tabh_acq(cts));
+      for (ret = (CTypeTab *)la_loadptr_acq(
 	     (void *const *)&cts->retiredtab);
 	   ret != NULL;
-	   ret = (CTypeTabRetire *)la_loadptr_acq((void *const *)&ret->next)) {
+	   ret = (CTypeTab *)la_loadptr_acq(
+	     (void *const *)&ret->retired_next)) {
 	lj_gc2_markmem(g, ret);
-	lj_gc2_markmem(g, ret->tab);
       }
       lj_gc2_markmem(g, cts->cb.cbid);
       lj_gc2_markmem(g, cts->cb.owner);

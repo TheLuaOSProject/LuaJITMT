@@ -588,7 +588,7 @@ LJLIB_CF(ffi_typeinfo)
 {
   CTState *cts = ctype_cts(L);
   CTypeID id = (CTypeID)ffi_checkint(L, 1);
-  if (id > 0 && id < cts->top) {
+  if (id > 0 && id < ctype_top_acq(cts)) {
     CType *ct = ctype_get(cts, id);
     GCtab *t;
     lua_createtable(L, 0, 4);  /* Increment hash size if fields are added. */

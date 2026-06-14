@@ -7,20 +7,30 @@ CC=${CC:-cc}
 CFLAGS=${CFLAGS:-"-std=gnu99 -O2 -Wall -Wextra -Werror -mcx16"}
 JOBS=${JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)}
 OUT=${TMPDIR:-/tmp}/lj_t-ffi-cparse-rollback
+ANCHOR_OUT=${TMPDIR:-/tmp}/lj_t-ffi-cparse-rollback-anchor
 
 for needle in \
   'typedef struct CPRollback CPRollback' \
   'CPRollback *rollback' \
   'CTypeID starttop' \
   'uint8_t newtype' \
+  'CPAlloc *newct' \
   'ctype_isabandoned(info)' \
   'cp_rollback_log(CPState *cp, CTypeID id)' \
+  'cp_ctype_publish(CPState *cp, CTypeID id, CType *src)' \
+  'cp_ctype_setsib(CPState *cp, CTypeID id, CTypeID sib)' \
   'cp_ctype_new(CPState *cp, CType **ctp)' \
+  'cp_ctype_intern(CPState *cp, CTInfo info, CTSize size)' \
+  'lj_ctype_intern_new_l(cp->L, cp->cts' \
   'cp_ctype_abandon(CPState *cp)' \
+  'cp_ctype_publish(cp, rb->id, ct)' \
+  'cp_ctype_publish(cp, fieldid, ct)' \
+  'for (ca = cp->newct; ca != NULL; ca = ca->next)' \
   'cp_rollback_restore(CPState *cp)' \
   'if (errcode)' \
   'cp_rollback_restore(cp)' \
-  'if (errcode || cp.newtype)'
+  'if (errcode || cp.newtype)' \
+  'ctype_top_acq(cp->cts)'
 do
   if ! rg -F -q "$needle" "$ROOT/src"; then
     echo "guardrail: missing FFI cparser rollback marker: $needle" >&2
@@ -44,11 +54,35 @@ if awk '
   exit 1
 fi
 
+if awk '
+  /cp_ctype_intern\(CPState \*cp, CTInfo info, CTSize size\)/ { helper = 1 }
+  helper && /^}/ { helper = 0; next }
+  !helper && /lj_ctype_intern_l\(cp->L, cp->cts/ { print; bad = 1 }
+  !helper && /lj_ctype_intern_new_l\(cp->L, cp->cts/ { print; bad = 1 }
+  END { exit bad ? 0 : 1 }
+' "$ROOT/src/lj_cparse.c"; then
+  echo "guardrail: parser intern allocations must route through cp_ctype_intern" >&2
+  exit 1
+fi
+
+if rg -n 'cp_ctype_mut\(cp, [^)]+\)->sib' "$ROOT/src/lj_cparse.c"; then
+  echo "guardrail: parser sib writes must publish through cp_ctype_setsib" >&2
+  exit 1
+fi
+
 make -C "$ROOT/src" clean >/dev/null
 make -C "$ROOT/src" -j"$JOBS" >/dev/null
 
 "$CC" $CFLAGS -I"$ROOT/src" "$ROOT/tests/t-ffi-cparse-rollback.c" \
   "$ROOT/src/libluajit.a" -lm -ldl -pthread -o "$OUT"
 timeout 20s "$OUT"
+
+make -C "$ROOT/src" clean >/dev/null
+make -C "$ROOT/src" -j"$JOBS" XCFLAGS="-DLUAJIT_CTYPE_CHECK_ANCHOR" >/dev/null
+
+"$CC" $CFLAGS -I"$ROOT/src" "$ROOT/tests/t-ffi-cparse-rollback.c" \
+  "$ROOT/src/libluajit.a" -lm -ldl -pthread -o "$ANCHOR_OUT"
+timeout 20s "$ANCHOR_OUT"
+"$ROOT/src/luajit" -joff "$ROOT/tests/t-ffi-cdef-token.lua" 2 20
 
 echo "M7 FFI cparser rollback guard passed"

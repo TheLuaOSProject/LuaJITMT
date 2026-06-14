@@ -35,14 +35,14 @@ int main(void)
   dostring(L, "require('ffi')");
   cts = ctype_ctsG(g);
   assert(cts != NULL);
-  top0 = cts->top;
+  top0 = ctype_top_acq(cts);
 
   dostring(L,
     "local ffi = require('ffi')\n"
     "local ok = pcall(ffi.cdef, 'struct m7_badrollback { int x; ')\n"
     "assert(not ok)\n");
 
-  top1 = cts->top;
+  top1 = ctype_top_acq(cts);
   assert(top1 > top0);
 
   dostring(L,

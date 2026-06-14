@@ -8,9 +8,10 @@ JOBS=${JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)}
 for needle in \
   'lj_ctype_new_l(lua_State *L, CTState *cts' \
   'lj_ctype_intern_l(lua_State *L, CTState *cts' \
+  'lj_ctype_intern_new_l(lua_State *L, CTState *cts' \
   'lj_ccall_ctid_vararg(lua_State *L, CTState *cts' \
   'lj_ctype_new_l(cp->L, cp->cts' \
-  'lj_ctype_intern_l(cp->L, cp->cts' \
+  'cp_ctype_intern(cp,' \
   'lj_ctype_intern_l(L, cts' \
   'lj_ctype_intern_l(J->L, cts' \
   'lj_ccall_ctid_vararg(L, cts' \

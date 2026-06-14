@@ -9,18 +9,20 @@ JOBS=${JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)}
 OUT=${TMPDIR:-/tmp}/lj_t-ffi-ctype-tab-retire
 
 for needle in \
-  'CTypeTabRetire' \
-  'CTypeTabRetire *retiredtab' \
+  'typedef struct CTypeTab' \
+  'CTypeTab *tabh' \
+  'CTypeTab *retiredtab' \
+  'ctype_tabh_acq(CTState *cts)' \
   'ctype_tab_acq(CTState *cts)' \
-  'la_loadptr_acq((void *const *)&cts->tab)' \
+  'la_loadptr_acq((void *const *)&cts->tabh)' \
   'ctype_tab_grow_l(lua_State *L, CTState *cts, CTypeID id)' \
-  'la_storeptr_rel((void **)&cts->tab, newtab)' \
-  'ctype_tab_retire_arm(cts, oldret)' \
+  'la_casptr((void **)&cts->tabh, &expect, newh' \
+  'ctype_tab_retire(cts, oldh)' \
   'lj_ctype_reclaim_retired(global_State *g, uint64_t completed_epoch)' \
   'lj_ctype_reclaim_retired(g, epoch)' \
-  'lj_gc2_markmem(g, ctype_tab_acq(cts))' \
-  'lj_gc_arena_markmem(g, ctype_tab_acq(cts))' \
-  'gc2_paranoia_checkmem(g, ctype_tab_acq(cts), "ctype table")'
+  'lj_gc2_markmem(g, ctype_tabh_acq(cts))' \
+  'lj_gc_arena_markmem(g, ctype_tabh_acq(cts))' \
+  'gc2_paranoia_checkmem(g, ctype_tabh_acq(cts), "ctype table")'
 do
   if ! rg -F -q "$needle" "$ROOT/src"; then
     echo "guardrail: missing FFI ctype table-retirement marker: $needle" >&2
@@ -28,7 +30,7 @@ do
   fi
 done
 
-if rg -n 'lj_mem_growvec\(L, cts->tab|lj_mem_freevec\(cts->g, cts->tab|cts->tab = ' \
+if rg -n 'lj_mem_growvec\(L, cts->tab|lj_mem_freevec\(cts->g, cts->tab|la_storeptr_rel\(\(void \*\*\)&cts->tab,' \
     "$ROOT/src/lj_ctype.c"; then
   echo "guardrail: ctype table growth must publish/retire, not realloc/free in place" >&2
   exit 1

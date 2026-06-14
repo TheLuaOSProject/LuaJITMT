@@ -149,6 +149,13 @@ typedef struct CType {
   GCRef name;		/* Element name (GCstr). */
 } CType;
 
+typedef struct CTypeTab {
+  MSize sizetab;		/* Number of C type table slots. */
+  uint64_t retire_epoch;	/* Safepoint epoch when retired. */
+  struct CTypeTab *retired_next;  /* Retired C type tables awaiting SMR. */
+  CType tab[1];			/* C type table slots. */
+} CTypeTab;
+
 #define CTHASH_SIZE	128	/* Number of hash anchors. */
 #define CTHASH_MASK	(CTHASH_SIZE-1)
 
@@ -177,17 +184,11 @@ typedef LJ_ALIGN(8) struct CCallback {
   MSize topid;			/* Highest unused callback type table slot. */
 } CCallback;
 
-typedef struct CTypeTabRetire {
-  CType *tab;			/* Retired C type table. */
-  MSize sizetab;		/* Size of retired C type table. */
-  uint64_t retire_epoch;	/* Safepoint epoch when retired. */
-  struct CTypeTabRetire *next;	/* Retired C type tables awaiting SMR. */
-} CTypeTabRetire;
-
 /* C type state. */
 typedef struct CTState {
+  CTypeTab *tabh;	/* RCU-published C type table header. */
   CType *tab;		/* C type table. */
-  CTypeTabRetire *retiredtab;  /* Retired C type tables awaiting SMR. */
+  CTypeTab *retiredtab;  /* Retired C type tables awaiting SMR. */
   CTypeID top;		/* Current top of C type table. */
   MSize sizetab;	/* Size of C type table. */
   global_State *g;	/* Global state. */
@@ -422,15 +423,26 @@ static LJ_AINLINE CTState *ctype_cts(lua_State *L)
 /* Check C type ID for validity when assertions are enabled. */
 static LJ_AINLINE CTypeID ctype_check(CTState *cts, CTypeID id)
 {
-  UNUSED(cts);
-  lj_assertCTS(id > 0 && id < cts->top, "bad CTID %d", id);
+  lj_assertCTS(id > 0 && id < (CTypeID)la_load32_acq(&cts->top),
+	       "bad CTID %d", id);
   return id;
+}
+
+static LJ_AINLINE CTypeID ctype_top_acq(CTState *cts)
+{
+  return (CTypeID)la_load32_acq(&cts->top);
+}
+
+/* Acquire current C type table header. */
+static LJ_AINLINE CTypeTab *ctype_tabh_acq(CTState *cts)
+{
+  return (CTypeTab *)la_loadptr_acq((void *const *)&cts->tabh);
 }
 
 /* Acquire current C type table. */
 static LJ_AINLINE CType *ctype_tab_acq(CTState *cts)
 {
-  return (CType *)la_loadptr_acq((void *const *)&cts->tab);
+  return ctype_tabh_acq(cts)->tab;
 }
 
 /* Get C type for C type ID. */
@@ -503,6 +515,8 @@ static LJ_AINLINE GCstr *ctype_name_acq(const CType *ct)
 LJ_FUNC CTypeID lj_ctype_new_l(lua_State *L, CTState *cts, CType **ctp);
 LJ_FUNC CTypeID lj_ctype_intern_l(lua_State *L, CTState *cts, CTInfo info,
 				  CTSize size);
+LJ_FUNC CTypeID lj_ctype_intern_new_l(lua_State *L, CTState *cts,
+				      CTInfo info, CTSize size, int *newp);
 LJ_FUNC void lj_ctype_parse_lock(CTState *cts, lua_State *L);
 LJ_FUNC void lj_ctype_parse_unlock(CTState *cts);
 LJ_FUNC void lj_ctype_fin_lock(CTState *cts);

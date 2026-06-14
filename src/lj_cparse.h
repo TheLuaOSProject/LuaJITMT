@@ -28,6 +28,7 @@
 typedef int CPChar;	/* C parser character. Unsigned ext. from char. */
 typedef int CPToken;	/* C parser token. */
 typedef struct CPRollback CPRollback;
+typedef struct CPAlloc CPAlloc;
 
 /* C parser internal value representation. */
 typedef struct CPValue {
@@ -52,6 +53,7 @@ typedef struct CPState {
   TValue *param;	/* C type parameters. */
   const char *srcname;	/* Current source name. */
   CPRollback *rollback;	/* Parser rollback log for existing CTypes. */
+  CPAlloc *newct;	/* Parser-owned allocated CTypes. */
   CTypeID starttop;	/* C type table top at parser entry. */
   BCLine linenumber;	/* Input line counter. */
   int depth;		/* Recursive declaration depth. */

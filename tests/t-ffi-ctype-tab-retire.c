@@ -12,11 +12,11 @@
 #include "lj_obj.h"
 #include "lj_ctype.h"
 
-static CTypeTabRetire *find_retired(CTState *cts, CType *tab)
+static CTypeTab *find_retired(CTState *cts, CTypeTab *tabh)
 {
-  CTypeTabRetire *ret;
-  for (ret = cts->retiredtab; ret != NULL; ret = ret->next)
-    if (ret->tab == tab)
+  CTypeTab *ret;
+  for (ret = cts->retiredtab; ret != NULL; ret = ret->retired_next)
+    if (ret == tabh)
       return ret;
   return NULL;
 }
@@ -35,8 +35,8 @@ int main(void)
   lua_State *L = luaL_newstate();
   global_State *g;
   CTState *cts;
-  CType *oldtab, *newtab;
-  CTypeTabRetire *ret;
+  CTypeTab *oldh, *newh;
+  CTypeTab *ret;
   uint64_t retire_epoch;
 
   assert(L != NULL);
@@ -46,26 +46,26 @@ int main(void)
   dostring(L, "local ffi = require('ffi')");
   cts = ctype_ctsG(g);
   assert(cts != NULL);
-  oldtab = ctype_tab_acq(cts);
-  assert(oldtab != NULL);
+  oldh = ctype_tabh_acq(cts);
+  assert(oldh != NULL);
   assert(cts->retiredtab == NULL);
 
   dostring(L,
     "local ffi = require('ffi')\n"
     "ffi.typeof('struct { int m7_ctype_tab_retire; }')\n");
 
-  newtab = ctype_tab_acq(cts);
-  assert(newtab != NULL);
-  assert(newtab != oldtab);
-  ret = find_retired(cts, oldtab);
+  newh = ctype_tabh_acq(cts);
+  assert(newh != NULL);
+  assert(newh != oldh);
+  ret = find_retired(cts, oldh);
   assert(ret != NULL);
   assert(ret->sizetab > 0);
   retire_epoch = ret->retire_epoch;
   assert(lj_ctype_reclaim_retired(g, retire_epoch) == 0);
-  assert(find_retired(cts, oldtab) != NULL);
+  assert(find_retired(cts, oldh) != NULL);
   assert(lj_ctype_reclaim_retired(g, retire_epoch + 1u) == 1);
-  assert(find_retired(cts, oldtab) == NULL);
-  assert(ctype_tab_acq(cts) == newtab);
+  assert(find_retired(cts, oldh) == NULL);
+  assert(ctype_tabh_acq(cts) == newh);
 
   lua_close(L);
   printf("t-ffi-ctype-tab-retire OK: ctype table grows by RCU and retires by epoch\n");
