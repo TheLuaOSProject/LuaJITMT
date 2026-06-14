@@ -734,6 +734,7 @@ size_t lj_gc_separateudata(global_State *g, int all)
 static int gc_traverse_tab(global_State *g, GCtab *t)
 {
   int weak = 0;
+  int ffi_fin = 0;
   TValue modev;
   cTValue *mode;
   GCtab *mt = tabref_acq(t->metatable);
@@ -757,6 +758,7 @@ static int gc_traverse_tab(global_State *g, GCtab *t)
     if (weak) {  /* Weak tables are cleared in the atomic phase. */
 #if LJ_HASFFI
       if (gcref_acq(g->gcroot[GCROOT_FFI_FIN]) == obj2gco(t)) {
+	ffi_fin = 1;
 	weak = (int)(~0u & ~LJ_GC_WEAKVAL);
       } else
 #endif
@@ -786,6 +788,12 @@ static int gc_traverse_tab(global_State *g, GCtab *t)
 	Node *n = &node[i];
 	TValue key, val;
 	lj_tv_load_acq(&val, &n->val);
+#if LJ_HASFFI
+	while (ffi_fin && lj_cdata_fin_isclaim(&val)) {
+	  la_cpu_pause();
+	  lj_tv_load_acq(&val, &n->val);
+	}
+#endif
 	if (!tvisnil(&val)) {  /* Mark non-empty slot. */
 	  lj_tv_load_acq(&key, &n->key);
 	  lj_assertG(!tvisnil(&key), "mark of nil key in non-empty slot");

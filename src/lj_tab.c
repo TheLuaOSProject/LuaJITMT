@@ -807,6 +807,38 @@ TValue *lj_tab_newkey(lua_State *L, GCtab *t, cTValue *key)
   return &n->val;
 }
 
+int lj_tab_try_newkey_anchor(lua_State *L, GCtab *t, cTValue *key,
+			     cTValue *claim, TValue **slot)
+{
+  Node *nodebase = lj_tab_node_acq(t);
+  MSize hmask = lj_tab_node_hmask_acq(nodebase);
+  Node *n;
+  if (hmask == 0)
+    return 0;
+  n = hashkey_node(nodebase, hmask, key);
+  for (;;) {
+    TValue nk, nv, expect;
+    lj_tv_load_acq(&nk, &n->key);
+    if (lj_obj_equal(&nk, key))
+      return -1;  /* A racing inserter published the key; retry lookup. */
+    if (!tvisnil(&nk))
+      return 0;  /* Collision chains still use the structural fallback. */
+    lj_tv_load_acq(&nv, &n->val);
+    if (!tvisnil(&nv)) {
+      la_cpu_pause();  /* Another claimed empty anchor is publishing key. */
+      continue;
+    }
+    setnilV(&expect);
+    if (lj_tv_cas(&n->val, &expect, claim)) {
+      tab_storekeyrel(L, &n->key, key);
+      lj_gc2_barrier_weak_key(L, t, key);
+      lj_gc_pubtab(L, t);
+      *slot = &n->val;
+      return 1;
+    }
+  }
+}
+
 TValue *lj_tab_setinth(lua_State *L, GCtab *t, int32_t key)
 {
   TValue k;

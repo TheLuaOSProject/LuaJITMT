@@ -22,6 +22,10 @@ for needle in \
   'lj_cdata_fin_claim_func(tv, &tmp)' \
   'lj_cdata_fin_storenil(L, tv)' \
   'Missing clear is a no-op; avoid fin_token insert.' \
+  'lj_tab_try_newkey_anchor(lua_State *L, GCtab *t, cTValue *key,' \
+  'Another claimed empty anchor is publishing key.' \
+  'Collision/resize: structural insertion still uses fin_token.' \
+  'while (ffi_fin && lj_cdata_fin_isclaim(&val))' \
   'lj_tab_get(L, t, &tmp)' \
   'lj_cdata_setfin(L, cd, gcV(tv), itype(tv))' \
   'Finalizer registry mutation stays on the interpreter path until FINREG' \
@@ -110,6 +114,29 @@ if awk '
   END { exit bad ? 0 : 1 }
 ' "$ROOT/src/lj_cdata.c"; then
   echo "guardrail: GCROOT_FFI_FIN missing-key insertion must not call lj_tab_set without the current structural fallback" >&2
+  exit 1
+fi
+
+if ! awk '
+  /void lj_cdata_setfin\(lua_State \*L, GCcdata \*cd,/ { infn = 1; fast = 0 }
+  infn && /lj_tab_try_newkey_anchor\(L, t, &key, &old, &tv\)/ { fast = 1 }
+  infn && /lj_ctype_fin_lock\(cts\)/ { found = fast; infn = 0 }
+  END { exit found ? 0 : 1 }
+' "$ROOT/src/lj_cdata.c"; then
+  echo "guardrail: enabled missing-key registration must try lockless empty-anchor insert before fin_token fallback" >&2
+  exit 1
+fi
+
+if awk '
+  /lj_tab_try_newkey_anchor\(L, t, &key, &old, &tv\)/ {
+    if (FILENAME !~ /src\/lj_cdata\.c$/) {
+      bad = 1
+      print FILENAME ":" FNR ":" $0
+    }
+  }
+  END { exit bad ? 0 : 1 }
+' "$ROOT"/src/*.c; then
+  echo "guardrail: empty-anchor table claim helper is currently only validated for GCROOT_FFI_FIN" >&2
   exit 1
 fi
 

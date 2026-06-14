@@ -90,6 +90,8 @@ LJ_FUNCA cTValue *lj_tab_get(lua_State *L, GCtab *t, cTValue *key);
 /* Caveat: all setters require a write barrier for the stored value. */
 
 LJ_FUNCA TValue *lj_tab_newkey(lua_State *L, GCtab *t, cTValue *key);
+LJ_FUNC int lj_tab_try_newkey_anchor(lua_State *L, GCtab *t, cTValue *key,
+				     cTValue *claim, TValue **slot);
 LJ_FUNCA TValue *lj_tab_setinth(lua_State *L, GCtab *t, int32_t key);
 LJ_FUNC TValue *lj_tab_setstr(lua_State *L, GCtab *t, const GCstr *key);
 LJ_FUNC TValue *lj_tab_set(lua_State *L, GCtab *t, cTValue *key);

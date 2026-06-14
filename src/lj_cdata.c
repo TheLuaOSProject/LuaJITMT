@@ -175,7 +175,23 @@ void lj_cdata_setfin(lua_State *L, GCcdata *cd, GCobj *obj, uint32_t it)
 	lj_gc2_finreg_cdata_set(g, obj2gco(cd), 0);
 	return;
       }
-      break;  /* Missing key: structural insertion still uses fin_token. */
+      cdata_fin_setclaim(&old);
+      switch (lj_tab_try_newkey_anchor(L, t, &key, &old, &tv)) {
+      case 1:
+	if (!gcref_acq(t->metatable)) {
+	  lj_cdata_fin_storenil(L, tv);
+	  lj_obj_cleargcflags_atomic(obj2gco(cd), LJ_GC_CDATA_FIN);
+	  lj_gc2_finreg_cdata_set(g, obj2gco(cd), 0);
+	  return;
+	}
+	cdata_fin_store(L, g, t, cd, tv, &val, enabled);
+	return;
+      case -1:
+	continue;  /* Racing insert published the key; claim existing slot. */
+      default:
+	break;  /* Collision/resize: structural insertion still uses fin_token. */
+      }
+      break;
     }
     (void)lj_cdata_fin_claim_any(tv, &old);
     if (!gcref_acq(t->metatable)) {
