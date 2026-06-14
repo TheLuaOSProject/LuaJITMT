@@ -1245,6 +1245,10 @@ static int gc_finalize(lua_State *L)
   lj_assertG(lj_tg_jit_base(g) == NULL, "finalizer called on trace");
   if (!lj_gc2_finalizer_try_enter(g))
     return 0;
+  if (gcref_acq(g->gc.mmudata) == NULL) {
+    lj_gc2_finalizer_leave(g);
+    return 0;
+  }
   o = gcnext(gcref(g->gc.mmudata));
   /* Unchain from list of userdata to be finalized. */
   if (o == gcref(g->gc.mmudata))

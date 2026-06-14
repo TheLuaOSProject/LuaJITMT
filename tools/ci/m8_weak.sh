@@ -23,6 +23,7 @@ for needle in \
   'gc2_weak_paranoia_zero_diff(global_State *g, GCobj *legacy)' \
   'lj_gc2_finalizer_try_enter(global_State *g)' \
   'peer finalizer dispatch backs off' \
+  'gcref_acq(g->gc.mmudata) == NULL' \
   'lj_gc2_finalizer_pending(global_State *g)' \
   'lj_gc2_finalizer_sweep_pending(global_State *g)' \
   'assert(la_load32_acq(&g->gc2.finalizer_owner_tid) ==' \
