@@ -43,6 +43,7 @@ for needle in \
   'asm_mcode_put_i32(ASMState *as, MCode *p, int32_t v)' \
   'asm_mcode_put_u32(ASMState *as, MCode *p, uint32_t v)' \
   'asm_mcode_put_u64(ASMState *as, MCode *p, uint64_t v)' \
+  'asm_mcode_patch_i32(jit_State *J, MCode *p, int32_t v)' \
   'emit_op(ASMState *as, x86Op xo' \
   'emit_opm(ASMState *as, x86Op xo' \
   'emit_opmx(ASMState *as, x86Op xo' \
@@ -50,6 +51,8 @@ for needle in \
   'asm_mcode_i32(as, &mcp, jmprel(as->J, mcp + 4, target));' \
   '*lj_mcode_rw(as->J, as->mctop) = XI_NOP;' \
   'asm_mcode_put_i32(as, p+1, jmprel(as->J, p+5, target));' \
+  'asm_mcode_patch_i32(J, p+len-4, jmprel(J, p+len, target));' \
+  'asm_mcode_patch_i32(J, p+2, jmprel(J, p+6, target));' \
   'memfd dual-map W^X implementation'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_obj.h" "$ROOT/src/lj_jit.h" \
@@ -112,6 +115,16 @@ if awk '
   END { exit bad ? 0 : 1 }
 ' "$ROOT/src/lj_asm_x86.h"; then
   echo "guardrail: x64 trace tail fixups must go through lj_mcode_rw helpers" >&2
+  exit 1
+fi
+
+if awk '
+  /void lj_asm_patchexit\(jit_State \*J, GCtrace \*T, ExitNo exitno, MCode \*target\)/ { infn = 1 }
+  infn && /\*\(u?int(16|32|64)_t \*\)\(?p[-+0-9a-z ]*\)?[[:space:]]*=[^=]|(^|[^[:alnum:]_])p\[[^]]+\][[:space:]]*=[^=]/ { bad = 1 }
+  infn && /^\}/ { infn = 0 }
+  END { exit bad ? 0 : 1 }
+' "$ROOT/src/lj_asm_x86.h"; then
+  echo "guardrail: x64 committed-code exit patches must go through lj_mcode_rw helpers" >&2
   exit 1
 fi
 

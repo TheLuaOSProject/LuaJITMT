@@ -244,9 +244,11 @@ handler — sized LJ_MAX_EXITSTUBGR-compatible; see lj_vmstruct notes.
   x64 main emitter has also been routed through `asm_mcode_put_*()` helpers for
   core opcode, addressing, immediate, branch, and selected generation-time
   fixup writes, keeping labels/cursors in RX space while translating only the
-  destination store. Committed-code patching in `lj_asm_patchexit()` remains a
-  separate dual-map slice because it mutates already published traces under the
-  patch-protection path.
+  destination store. Committed-code patching in `lj_asm_patchexit()` mutates
+  already published traces under the patch-protection path; it now uses
+  `asm_mcode_patch_i32()` for the x64 parent-exit and exit-branch rel32 stores,
+  preserving RX-space decoding and the existing `lj_mcode_patch()`
+  protection/sync protocol while routing the actual writes through the RW view.
   This still does not implement the final memfd dual mapping; it replaces the
   temporary RWX bridge while preserving the original dual-map write-view
   target.

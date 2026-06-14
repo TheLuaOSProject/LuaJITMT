@@ -82,6 +82,11 @@ static LJ_AINLINE void asm_mcode_put_u64(ASMState *as, MCode *p, uint64_t v)
   *(uint64_t *)lj_mcode_rw(as->J, p) = v;
 }
 
+static LJ_AINLINE void asm_mcode_patch_i32(jit_State *J, MCode *p, int32_t v)
+{
+  *(int32_t *)lj_mcode_rw(J, p) = v;
+}
+
 #define emit_i8(as, i) \
   (asm_mcode_put_u8((as), --(as)->mcp, (MCode)(i)))
 #define emit_i32(as, i) \

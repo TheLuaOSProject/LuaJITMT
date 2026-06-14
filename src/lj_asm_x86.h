@@ -3373,7 +3373,7 @@ void lj_asm_patchexit(jit_State *J, GCtrace *T, ExitNo exitno, MCode *target)
   uint32_t statei = u32ptr(&J2G(J)->vmstate);
 #endif
   if (len > 5 && p[len-5] == XI_JMP && p+len-6 + *(int32_t *)(p+len-4) == px)
-    *(int32_t *)(p+len-4) = jmprel(J, p+len, target);
+    asm_mcode_patch_i32(J, p+len-4, jmprel(J, p+len, target));
   /* Do not patch parent exit for a stack check. Skip beyond vmstate update. */
 #if LJ_GC64
   {
@@ -3400,7 +3400,7 @@ void lj_asm_patchexit(jit_State *J, GCtrace *T, ExitNo exitno, MCode *target)
   for (; p < pe; p += asm_x86_inslen(p)) {
     if ((*(uint16_t *)p & 0xf0ff) == 0x800f && p + *(int32_t *)(p+2) == px &&
 	p != pgc) {
-      *(int32_t *)(p+2) = jmprel(J, p+6, target);
+      asm_mcode_patch_i32(J, p+2, jmprel(J, p+6, target));
     } else if (*p == XI_CALL &&
 	      (void *)(p+5+*(int32_t *)(p+1)) == (void *)lj_gc_step_jit) {
       pgc = p+7;  /* Do not patch GC check exit. */
