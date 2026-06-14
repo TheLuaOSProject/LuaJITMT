@@ -48,7 +48,8 @@ static int carith_checkarg(lua_State *L, CTState *cts, CDArith *ca)
 	CTypeID id0 = i ? ctype_typeid(cts, ca->ct[0]) : 0;
 	p = (uint8_t *)*(void **)p;
 	ct = ctype_get(cts,
-	  lj_ctype_intern(cts, CTINFO(CT_PTR, CTALIGN_PTR|id), CTSIZE_PTR));
+	  lj_ctype_intern_l(L, cts, CTINFO(CT_PTR, CTALIGN_PTR|id),
+			    CTSIZE_PTR));
 	if (i) {  /* cts->tab may have been reallocated. */
 	  ca->ct[0] = ctype_get(cts, id0);
 	}
@@ -150,8 +151,9 @@ static int carith_ptr(lua_State *L, CTState *cts, CDArith *ca, MMS mm)
   if (sz == CTSIZE_INVALID)
     return 0;
   pp += idx*(int32_t)sz;  /* Compute pointer + index. */
-  id = lj_ctype_intern(cts, CTINFO(CT_PTR, CTALIGN_PTR|ctype_cid(ctp->info)),
-		       CTSIZE_PTR);
+  id = lj_ctype_intern_l(L, cts,
+			 CTINFO(CT_PTR, CTALIGN_PTR|ctype_cid(ctp->info)),
+			 CTSIZE_PTR);
   cd = lj_cdata_new_l(L, cts, id, CTSIZE_PTR);
   *(uint8_t **)cdataptr(cd) = pp;
   setcdataV(L, L->top-1, cd);

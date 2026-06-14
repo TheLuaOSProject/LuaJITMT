@@ -181,8 +181,6 @@ typedef struct CTState {
   CType *tab;		/* C type table. */
   CTypeID top;		/* Current top of C type table. */
   MSize sizetab;	/* Size of C type table. */
-  lua_State *L;		/* Lua state (needed for errors and allocations). */
-  lua_State *parse_L;	/* Lua state owning parse_token. */
   global_State *g;	/* Global state. */
   GCtab *miscmap;	/* Map of -CTypeID to metatable and cb slot to func. */
   CCallback cb;		/* Temporary callback state. */
@@ -398,9 +396,7 @@ CDSDEF(CDSFLAG)
 /* Get C type state. */
 static LJ_AINLINE CTState *ctype_cts(lua_State *L)
 {
-  CTState *cts = ctype_ctsG(G(L));
-  cts->L = L;  /* Save L for errors and allocations. */
-  return cts;
+  return ctype_ctsG(G(L));
 }
 
 /* Load FFI library on-demand. */
@@ -474,8 +470,9 @@ static LJ_AINLINE GCstr *ctype_name_acq(const CType *ct)
   return o ? gco2str(o) : NULL;
 }
 
-LJ_FUNC CTypeID lj_ctype_new(CTState *cts, CType **ctp);
-LJ_FUNC CTypeID lj_ctype_intern(CTState *cts, CTInfo info, CTSize size);
+LJ_FUNC CTypeID lj_ctype_new_l(lua_State *L, CTState *cts, CType **ctp);
+LJ_FUNC CTypeID lj_ctype_intern_l(lua_State *L, CTState *cts, CTInfo info,
+				  CTSize size);
 LJ_FUNC void lj_ctype_parse_lock(CTState *cts, lua_State *L);
 LJ_FUNC void lj_ctype_parse_unlock(CTState *cts);
 LJ_FUNC void lj_ctype_fin_lock(CTState *cts);

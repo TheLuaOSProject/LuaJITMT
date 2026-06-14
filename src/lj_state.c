@@ -447,10 +447,6 @@ void LJ_FASTCALL lj_state_free(global_State *g, lua_State *L)
   lj_assertG(L != mainthread(g), "free of main thread");
   if (L == lj_tg_cur_L(g))
     lj_tg_clearcur_L(g);
-#if LJ_HASFFI
-  if (ctype_ctsG(g) && ctype_ctsG(g)->L == L)  /* Avoid dangling cts->L. */
-    ctype_ctsG(g)->L = mainthread(g);
-#endif
   if (gcref(L->openupval) != NULL) {
     lj_func_closeuv(L, tvref(L->stack));
     lj_trace_abort(g);  /* For aa_uref soundness. */

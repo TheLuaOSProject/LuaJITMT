@@ -512,7 +512,7 @@ static void cp_expr_prefix(CPState *cp, CPValue *k)
     k->u32 = 0; k->id = ctype_cid(ct->info);
   } else if (cp_opt(cp, '&')) {  /* Address operator. */
     cp_expr_unary(cp, k);
-    k->id = lj_ctype_intern(cp->cts, CTINFO(CT_PTR, CTALIGN_PTR+k->id),
+    k->id = lj_ctype_intern_l(cp->L, cp->cts, CTINFO(CT_PTR, CTALIGN_PTR+k->id),
 			    CTSIZE_PTR);
   } else if (cp_opt(cp, CTOK_SIZEOF)) {
     cp_expr_sizeof(cp, k, 1);
@@ -883,7 +883,7 @@ static CTypeID cp_decl_intern(CPState *cp, CPDecl *decl)
 	idx = ctn->next;  /* Skip attribute. */
       }
       sib = ct->sib;  /* Next line may reallocate the C type table. */
-      fid = lj_ctype_new(cp->cts, &fct);
+      fid = lj_ctype_new_l(cp->L, cp->cts, &fct);
       csize = CTSIZE_INVALID;
       fct->info = cinfo = info + id;
       fct->size = size;
@@ -894,7 +894,7 @@ static CTypeID cp_decl_intern(CPState *cp, CPDecl *decl)
 	cinfo |= size;
       else if (ctype_isxattrib(info, CTA_ALIGN))
 	CTF_INSERT(cinfo, ALIGN, size);
-      id = lj_ctype_intern(cp->cts, info+id, size);
+      id = lj_ctype_intern_l(cp->L, cp->cts, info+id, size);
       /* Inherit csize/cinfo from original type. */
     } else {
       if (ctype_isnum(info)) {  /* Handle mode/vector-size attributes. */
@@ -912,7 +912,7 @@ static CTypeID cp_decl_intern(CPState *cp, CPDecl *decl)
 	    CTSize esize = lj_fls(size);
 	    if (vsize >= esize) {
 	      /* Intern the element type first. */
-	      id = lj_ctype_intern(cp->cts, info, size);
+	      id = lj_ctype_intern_l(cp->L, cp->cts, info, size);
 	      /* Then create a vector (array) with vsize alignment. */
 	      size = (1u << vsize);
 	      if (vsize > 4) vsize = 4;  /* Limit alignment. */
@@ -957,7 +957,7 @@ static CTypeID cp_decl_intern(CPState *cp, CPDecl *decl)
       }
       csize = size;
       cinfo = info+id;
-      id = lj_ctype_intern(cp->cts, info+id, size);
+      id = lj_ctype_intern_l(cp->L, cp->cts, info+id, size);
     }
   } while (idx);
   return id;
@@ -996,7 +996,7 @@ static CTypeID cp_decl_constinit(CPState *cp, CType **ctp, CTypeID ctypeid)
     cp_err(cp, LJ_ERR_FFI_INVTYPE);
   cp_check(cp, '=');
   cp_expr_sub(cp, &k, 0);
-  constid = lj_ctype_new(cp->cts, ctp);
+  constid = lj_ctype_new_l(cp->L, cp->cts, ctp);
   (*ctp)->info = CTINFO(CT_CONSTVAL, CTF_CONST|ctypeid);
   k.u32 <<= 8*(4-size);
   if ((info & CTF_UNSIGNED))
@@ -1235,7 +1235,7 @@ static CTypeID cp_struct_name(CPState *cp, CPDecl *sdecl, CTInfo info)
     } else {  /* Create named, incomplete struct/union/enum. */
       if ((cp->mode & CPARSE_MODE_NOIMPLICIT))
 	cp_errmsg(cp, 0, LJ_ERR_FFI_BADTAG, strdata(cp->str));
-      sid = lj_ctype_new(cp->cts, &ct);
+      sid = lj_ctype_new_l(cp->L, cp->cts, &ct);
       ct->info = info;
       ct->size = CTSIZE_INVALID;
       ctype_setname(ct, cp->str);
@@ -1243,7 +1243,7 @@ static CTypeID cp_struct_name(CPState *cp, CPDecl *sdecl, CTInfo info)
     }
     cp_next(cp);
   } else {  /* Create anonymous, incomplete struct/union/enum. */
-    sid = lj_ctype_new(cp->cts, &ct);
+    sid = lj_ctype_new_l(cp->L, cp->cts, &ct);
     ct->info = info;
     ct->size = CTSIZE_INVALID;
   }
@@ -1394,7 +1394,7 @@ static CTypeID cp_decl_struct(CPState *cp, CPDecl *sdecl, CTInfo sinfo)
 	} else {
 	  CTSize bsz = CTBSZ_FIELD;  /* Temp. for layout phase. */
 	  CType *ct;
-	  CTypeID fieldid = lj_ctype_new(cp->cts, &ct);  /* Do this first. */
+	  CTypeID fieldid = lj_ctype_new_l(cp->L, cp->cts, &ct);  /* Do this first. */
 	  CType *tct = ctype_raw(cp->cts, ctypeid);
 
 	  if (decl.bits == CTSIZE_INVALID) {  /* Regular field. */
@@ -1477,7 +1477,7 @@ static CTypeID cp_decl_enum(CPState *cp, CPDecl *sdecl)
       /* Add named enum constant. */
       {
 	CType *ct;
-	CTypeID constid = lj_ctype_new(cp->cts, &ct);
+	CTypeID constid = lj_ctype_new_l(cp->L, cp->cts, &ct);
 	ctype_get(cp->cts, lastid)->sib = constid;
 	lastid = constid;
 	ctype_setname(ct, name);
@@ -1648,13 +1648,13 @@ static void cp_decl_func(CPState *cp, CPDecl *fdecl)
       if (ctype_isvoid(ct->info))
 	break;
       else if (ctype_isrefarray(ct->info))
-	ctypeid = lj_ctype_intern(cp->cts,
+	ctypeid = lj_ctype_intern_l(cp->L, cp->cts,
 	  CTINFO(CT_PTR, CTALIGN_PTR|ctype_cid(ct->info)), CTSIZE_PTR);
       else if (ctype_isfunc(ct->info))
-	ctypeid = lj_ctype_intern(cp->cts,
+	ctypeid = lj_ctype_intern_l(cp->L, cp->cts,
 	  CTINFO(CT_PTR, CTALIGN_PTR|ctypeid), CTSIZE_PTR);
       /* Add new parameter. */
-      fieldid = lj_ctype_new(cp->cts, &ct);
+      fieldid = lj_ctype_new_l(cp->L, cp->cts, &ct);
       if (anchor)
 	ctype_get(cp->cts, lastid)->sib = fieldid;
       else
@@ -1852,7 +1852,7 @@ static void cp_decl_multi(CPState *cp)
 	CType *ct;
 	CTypeID id;
 	if ((scl & CDF_TYPEDEF)) {  /* Create new typedef. */
-	  id = lj_ctype_new(cp->cts, &ct);
+	  id = lj_ctype_new_l(cp->L, cp->cts, &ct);
 	  ct->info = CTINFO(CT_TYPEDEF, ctypeid);
 	  goto noredir;
 	} else if (ctype_isfunc(ctype_get(cp->cts, ctypeid)->info)) {
@@ -1865,12 +1865,12 @@ static void cp_decl_multi(CPState *cp)
 	  id = cp_decl_constinit(cp, &ct, ctypeid);
 	  goto noredir;
 	} else {  /* External references have extern or no storage class. */
-	  id = lj_ctype_new(cp->cts, &ct);
+	  id = lj_ctype_new_l(cp->L, cp->cts, &ct);
 	  ct->info = CTINFO(CT_EXTERN, ctypeid);
 	}
 	if (decl.redir) {  /* Add attribute for redirected symbol name. */
 	  CType *cta;
-	  CTypeID aid = lj_ctype_new(cp->cts, &cta);
+	  CTypeID aid = lj_ctype_new_l(cp->L, cp->cts, &cta);
 	  ct = ctype_get(cp->cts, id);  /* Table may have been reallocated. */
 	  cta->info = CTINFO(CT_ATTRIB, CTATTRIB(CTA_REDIR));
 	  cta->sib = ct->sib;

@@ -6,13 +6,14 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 JOBS=${JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)}
 
 for needle in \
-  'lua_State *parse_L' \
   'uint32_t parse_token' \
   'lj_ctype_parse_lock(CTState *cts, lua_State *L)' \
   'la_cas32(&cts->parse_token, &expect, 1, LA_ACQ_REL, LA_ACQ)' \
   'la_futex_wait(&cts->parse_token, 1, 1000000)' \
   'la_store32_rel(&cts->parse_token, 0)' \
   'la_futex_wake(&cts->parse_token, 1)' \
+  'lj_ctype_new_l(cp->L, cp->cts' \
+  'lj_ctype_intern_l(cp->L, cp->cts' \
   'lj_ctype_parse_lock(cts, L)' \
   'lj_ctype_parse_lock(cp.cts, L)' \
   'lj_ctype_parse_lock(cp.cts, J->L)'

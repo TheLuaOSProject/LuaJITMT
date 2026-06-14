@@ -26,7 +26,7 @@ GCcdata *lj_cdata_new_forjit(lua_State *L, CTypeID id, CTSize sz)
 GCcdata *lj_cdata_newref_l(lua_State *L, CTState *cts, const void *p,
 			   CTypeID id)
 {
-  CTypeID refid = lj_ctype_intern(cts, CTINFO_REF(id), CTSIZE_PTR);
+  CTypeID refid = lj_ctype_intern_l(L, cts, CTINFO_REF(id), CTSIZE_PTR);
   GCcdata *cd = lj_cdata_new_l(L, cts, refid, CTSIZE_PTR);
   *(const void **)cdataptr(cd) = p;
   return cd;

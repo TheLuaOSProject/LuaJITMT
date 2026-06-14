@@ -591,8 +591,7 @@ static TRef crec_tv_ct(jit_State *J, CType *s, CTypeID sid, TRef sp)
   } else if (ctype_isptr(sinfo) || ctype_isenum(sinfo)) {
     sp = emitir(IRT(IR_XLOAD, t), sp, 0);  /* Box pointers and enums. */
   } else if (ctype_isrefarray(sinfo) || ctype_isstruct(sinfo)) {
-    cts->L = J->L;
-    sid = lj_ctype_intern(cts, CTINFO_REF(sid), CTSIZE_PTR);  /* Create ref. */
+    sid = lj_ctype_intern_l(J->L, cts, CTINFO_REF(sid), CTSIZE_PTR);
   } else if (ctype_iscomplex(sinfo)) {  /* Unbox/box complex. */
     ptrdiff_t esz = (ptrdiff_t)(s->size >> 1);
     TRef ptr, tr1, tr2, dp;
@@ -675,7 +674,8 @@ static TRef crec_ct_tv(jit_State *J, CType *d, TRef dp, TRef sp, cTValue *sval)
     s = ctype_raw(cts, sid);
     svisnz = cdataptr(cdataV(sval));
     if (ctype_isfunc(s->info)) {
-      sid = lj_ctype_intern(cts, CTINFO(CT_PTR, CTALIGN_PTR|sid), CTSIZE_PTR);
+      sid = lj_ctype_intern_l(J->L, cts, CTINFO(CT_PTR, CTALIGN_PTR|sid),
+			      CTSIZE_PTR);
       s = ctype_get(cts, sid);
       t = IRT_PTR;
     } else {
@@ -1180,7 +1180,7 @@ static TRef crec_call_args(jit_State *J, RecordFFData *rd,
 	  lj_trace_err(J, LJ_TRERR_NYICALL);
       }
 #endif
-      did = lj_ccall_ctid_vararg(cts, o);  /* Infer vararg type. */
+      did = lj_ccall_ctid_vararg(J->L, cts, o);  /* Infer vararg type. */
     }
     d = ctype_raw(cts, did);
     if (!(ctype_isnum(d->info) || ctype_isptr(d->info) ||
@@ -1485,8 +1485,9 @@ static TRef crec_arith_ptr(jit_State *J, TRef *sp, CType **s, MMS mm)
 #endif
     tr = emitir(IRT(IR_MUL, IRT_INTP), tr, lj_ir_kintp(J, sz));
     tr = emitir(IRT(mm+(int)IR_ADD-(int)MM_add, IRT_PTR), sp[0], tr);
-    id = lj_ctype_intern(cts, CTINFO(CT_PTR, CTALIGN_PTR|ctype_cid(ctp->info)),
-			 CTSIZE_PTR);
+    id = lj_ctype_intern_l(J->L, cts,
+			   CTINFO(CT_PTR, CTALIGN_PTR|ctype_cid(ctp->info)),
+			   CTSIZE_PTR);
     return emitir(IRTG(IR_CNEWI, IRT_CDATA), lj_ir_kint(J, id), tr);
   }
 }
@@ -1565,7 +1566,8 @@ void LJ_FASTCALL recff_cdata_arith(jit_State *J, RecordFFData *rd)
 	CTypeID id0 = i ? ctype_typeid(cts, s[0]) : 0;
 	tr = emitir(IRT(IR_FLOAD, IRT_PTR), tr, IRFL_CDATA_PTR);
 	ct = ctype_get(cts,
-	  lj_ctype_intern(cts, CTINFO(CT_PTR, CTALIGN_PTR|id), CTSIZE_PTR));
+	  lj_ctype_intern_l(J->L, cts, CTINFO(CT_PTR, CTALIGN_PTR|id),
+			    CTSIZE_PTR));
 	if (i) {
 	  s[0] = ctype_get(cts, id0);  /* cts->tab may have been reallocated. */
 	}

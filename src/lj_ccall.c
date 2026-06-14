@@ -941,7 +941,7 @@ static void ccall_copy_struct(CCallState *cc, CType *ctr, void *dp, void *sp,
 /* Infer the destination CTypeID for a vararg argument.
 ** Note: may reallocate cts->tab and invalidate CType pointers.
 */
-CTypeID lj_ccall_ctid_vararg(CTState *cts, cTValue *o)
+CTypeID lj_ccall_ctid_vararg(lua_State *L, CTState *cts, cTValue *o)
 {
   if (tvisnumber(o)) {
     return CTID_DOUBLE;
@@ -949,11 +949,12 @@ CTypeID lj_ccall_ctid_vararg(CTState *cts, cTValue *o)
     CTypeID id = cdataV(o)->ctypeid;
     CType *s = ctype_get(cts, id);
     if (ctype_isrefarray(s->info)) {
-      return lj_ctype_intern(cts,
+      return lj_ctype_intern_l(L, cts,
 	       CTINFO(CT_PTR, CTALIGN_PTR|ctype_cid(s->info)), CTSIZE_PTR);
     } else if (ctype_isstruct(s->info) || ctype_isfunc(s->info)) {
       /* NYI: how to pass a struct by value in a vararg argument? */
-      return lj_ctype_intern(cts, CTINFO(CT_PTR, CTALIGN_PTR|id), CTSIZE_PTR);
+      return lj_ctype_intern_l(L, cts, CTINFO(CT_PTR, CTALIGN_PTR|id),
+			       CTSIZE_PTR);
     } else if (ctype_isfp(s->info) && s->size == sizeof(float)) {
       return CTID_DOUBLE;
     } else {
@@ -1062,7 +1063,7 @@ static int ccall_set_args(lua_State *L, CTState *cts, CType *ct,
     } else {
       if (!(info & CTF_VARARG))
 	lj_err_caller(L, LJ_ERR_FFI_NUMARG);  /* Too many arguments. */
-      did = lj_ccall_ctid_vararg(cts, o);  /* Infer vararg type. */
+      did = lj_ccall_ctid_vararg(L, cts, o);  /* Infer vararg type. */
       isva = 1;
     }
     d = ctype_raw(cts, did);

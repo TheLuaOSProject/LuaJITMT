@@ -580,7 +580,8 @@ void lj_cconv_ct_tv_l(lua_State *L, CTState *cts, CType *d,
     s = ctype_raw(cts, sid);
     if (ctype_isfunc(s->info)) {
       CTypeID did = ctype_typeid(cts, d);
-      sid = lj_ctype_intern(cts, CTINFO(CT_PTR, CTALIGN_PTR|sid), CTSIZE_PTR);
+      sid = lj_ctype_intern_l(L, cts, CTINFO(CT_PTR, CTALIGN_PTR|sid),
+			      CTSIZE_PTR);
       d = ctype_get(cts, did);  /* cts->tab may have been reallocated. */
     } else {
       if (ctype_isenum(s->info)) s = ctype_child(cts, s);
