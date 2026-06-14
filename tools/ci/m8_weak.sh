@@ -69,9 +69,11 @@ for needle in \
   'lj_ctype_fin_get(L, cts, key, &t)' \
   'LJ_GC_UDATA_FINREG == LJ_GC_WEAKVAL' \
   'old | LJ_GC_UDATA_FINREG' \
+  'lj_gc2_finreg_udata_set(g, o, 1);' \
   'lj_gc2_finreg_udata_set(g, o, 0);' \
-  'sets0 + 3u' \
-  'finreg_udata_clears) == clears0 + 3u' \
+  'sets0 + 4u' \
+  'finreg_udata_queued) == queued0 + 2u' \
+  'finreg_udata_clears) == clears0 + 4u' \
   '09 section 9.6: finalizer may spawn while GC is paused.' \
   'lj_state_tryclaim(cbL, lj_thr_current_id(g), &claim)' \
   'lua_State *oldL' \

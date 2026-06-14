@@ -721,6 +721,7 @@ size_t lj_gc_separateudata(global_State *g, int all)
       p = lj_obj_gcwref(o);
     } else {  /* Otherwise move userdata to be finalized to mmudata list. */
       m += sizeudata(gco2ud(o));
+      lj_gc2_finreg_udata_set(g, o, 1);
       markfinalized(o);
       lj_gc2_finreg_udata_queue(g, o);
       *p = *lj_obj_gcwref(o);

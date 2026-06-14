@@ -432,9 +432,9 @@ FINREG telemetry also mirrors C/API `__gc` metatable assignment/clear events
 and counts the legacy `mmudata` queue point in `lj_gc_separateudata()`. The
 original bridge left userdata finalizer membership and execution on the legacy
 path; it now also mirrors the legacy userdata finalizer run-once clear at
-`gc_finalize()`, and uses a userdata-only FINREG membership bit to clear stale
-membership if the metatable's `__gc` field is removed in place before
-separation. The linked queue itself remains legacy-owned.
+`gc_finalize()`, and uses a userdata-only FINREG membership bit to mirror lazy
+membership additions and stale clears if the metatable's `__gc` field is mutated
+in place before separation. The linked queue itself remains legacy-owned.
 The first
 weak-write bridge is present for new weak-table hash keys:
 `lj_tab_newkey()` calls `lj_gc2_barrier_weak_key()` during `P_WEAK`, marking a
