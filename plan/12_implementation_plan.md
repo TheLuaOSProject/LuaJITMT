@@ -142,7 +142,9 @@ focused GC2 weak/barrier paranoia coverage. It also reruns the GC2 phase
 accounting test to assert finalizer owner tracking and enter/leave counter
 balance under the current bridge. The traversal gate now covers
 `lj_gc2_weak_complete()` skip/fallback accounting for the current
-GC2-cleared snapshot bridge; broader weak-set zero-diff/paranoia work remains.
+GC2-cleared snapshot bridge and a post-clear weak-phase store hook for the
+original resurrection-race case; broader weak-set zero-diff/paranoia work
+remains.
 The original "finalizer that spawns a thread" item now has a bridge test for
 spawn+join during explicit-GC finalization; the broader planned async finalizer
 dispatch path remains M8 work, not an M9 performance cleanup.

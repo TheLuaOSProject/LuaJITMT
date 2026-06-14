@@ -1179,6 +1179,54 @@ static void test_weak_clear_marks_string_slots(lua_State *L, global_State *g,
   lua_pop(L, 2);
 }
 
+static void test_weak_post_clear_resurrection_write(lua_State *L,
+						    global_State *g,
+						    TGState *tg)
+{
+  GCtab *weak, *key, *val, *late_key, *late_val;
+  uint64_t weak_keys0, weak_vals0;
+
+  lua_settop(L, 0);
+  make_weak_table(L, "kv", &weak, &key, &val);
+  lua_newtable(L);
+  late_key = tabV(L->top - 1);
+  lua_newtable(L);
+  late_val = tabV(L->top - 1);
+
+  lj_gc2_legacy_mark_begin(g);
+  assert(lj_gc2_markobj(g, obj2gco(weak)) == 1);
+  flush_and_drain(g, tg);
+  assert(lj_gc2_weak_snapshot_count(g) == 1u);
+  assert(lj_gc2_ismarked(g, obj2gco(key)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(val)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(late_key)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(late_val)) == 0);
+
+  lj_gc2_legacy_weak_begin(g);
+  assert(lj_gc2_weak_drain(g, 1) == 1u);
+  assert(weak_entry_is_nil(L, weak, key));
+  assert(lj_gc2_weak_drain(g, 1) == 0);
+  weak_keys0 = la_load64_acq(&g->gc2.weak_keys_marked);
+  weak_vals0 = la_load64_acq(&g->gc2.weak_values_marked);
+
+  lua_pushvalue(L, 4);
+  lua_pushvalue(L, 5);
+  lua_settable(L, 1);
+  assert(lj_gc2_ismarked(g, obj2gco(late_key)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(late_val)) == 1);
+  assert(la_load64_acq(&g->gc2.weak_keys_marked) == weak_keys0 + 1u);
+  assert(la_load64_acq(&g->gc2.weak_values_marked) == weak_vals0 + 1u);
+  assert(!lj_gc2_ssb_empty(g));
+  flush_and_drain(g, tg);
+  lua_pushvalue(L, 4);
+  lua_gettable(L, 1);
+  assert(tvistab(L->top - 1) && tabV(L->top - 1) == late_val);
+  lua_pop(L, 1);
+
+  lj_gc2_legacy_cycle_end(g);
+  lua_pop(L, 5);
+}
+
 static void test_weak_key_write_barrier(lua_State *L, global_State *g,
 					TGState *tg)
 {
@@ -1844,6 +1892,7 @@ int main(void)
   test_weak_snapshot_legacy_coverage(L, g, tg);
   test_weak_complete_bridge(L, g, tg);
   test_weak_clear_marks_string_slots(L, g, tg);
+  test_weak_post_clear_resurrection_write(L, g, tg);
   test_weak_key_write_barrier(L, g, tg);
   test_vm_weak_key_write_barrier(L, g, tg);
   test_vm_weak_value_array_barrier(L, g, tg);
