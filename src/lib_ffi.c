@@ -16,12 +16,14 @@
 
 #if LJ_HASFFI
 
+#include "lj_atomic.h"
 #include "lj_gc.h"
 #include "lj_gc2.h"
 #include "lj_err.h"
 #include "lj_str.h"
 #include "lj_tab.h"
 #include "lj_meta.h"
+#include "lj_state.h"
 #include "lj_ctype.h"
 #include "lj_cparse.h"
 #include "lj_cdata.h"
@@ -448,7 +450,11 @@ static int ffi_callback_set(lua_State *L, GCfunc *fn)
   CType *ct = ctype_raw(cts, cd->ctypeid);
   if (ctype_isptr(ct->info) && (LJ_32 || ct->size == 8)) {
     MSize slot = lj_ccallback_ptr2slot(cts, *(void **)cdataptr(cd));
-    if (slot < cts->cb.sizeid && cts->cb.cbid[slot] != 0) {
+    CTypeID1 *cbid;
+    lj_ctype_misc_lock(cts);
+    if (slot < la_load32_acq(&cts->cb.sizeid) &&
+	(cbid = (CTypeID1 *)la_loadptr_acq((void *const *)&cts->cb.cbid)) != NULL &&
+	la_load16_acq(&cbid[slot]) != 0) {
       GCtab *t = cts->miscmap;
       TValue *tv = lj_tab_setint(L, t, (int32_t)slot);
       if (fn) {
@@ -456,11 +462,13 @@ static int ffi_callback_set(lua_State *L, GCfunc *fn)
 	lj_gc_pubtab(L, t);
       } else {
 	lj_tab_storenil(L, tv);
-	cts->cb.cbid[slot] = 0;
+	la_store16_rel(&cbid[slot], 0);  /* 11.5 callback slot publish. */
 	cts->cb.topid = slot < cts->cb.topid ? slot : cts->cb.topid;
       }
+      lj_ctype_misc_unlock(cts);
       return 0;
     }
+    lj_ctype_misc_unlock(cts);
   }
   lj_err_caller(L, LJ_ERR_FFI_BADCBACK);
   return 0;
@@ -541,12 +549,17 @@ LJLIB_CF(ffi_cast)	LJLIB_REC(ffi_new)
   CTypeID id = ffi_checkctype(L, cts, NULL);
   CType *d = ctype_raw(cts, id);
   TValue *o = lj_lib_checkany(L, 2);
+  ptrdiff_t ofs = o - L->base;
   L->top = o+1;  /* Make sure this is the last item on the stack. */
+  lj_state_checkstack(L, 1);
+  o = L->base + ofs;
   if (!(ctype_isnum(d->info) || ctype_isptr(d->info) || ctype_isenum(d->info)))
     lj_err_arg(L, 1, LJ_ERR_FFI_INVTYPE);
   if (!(tviscdata(o) && cdataV(o)->ctypeid == id)) {
     GCcdata *cd = lj_cdata_new_l(L, cts, id, d->size);
+    setcdataV(L, L->top++, cd);  /* Anchor across callback allocation. */
     lj_cconv_ct_tv_l(L, cts, d, cdataptr(cd), o, CCF_CAST);
+    L->top = o+1;
     setcdataV(L, o, cd);
     lj_gc_check(L);
   }
@@ -860,7 +873,9 @@ static void ffi_register_module(lua_State *L)
 LUALIB_API int luaopen_ffi(lua_State *L)
 {
   CTState *cts = lj_ctype_init(L);
-  settabV(L, L->top++, (cts->miscmap = lj_tab_new(L, 0, 1)));
+  lj_ccallback_init_l(L, cts);
+  settabV(L, L->top++,
+	  (cts->miscmap = lj_tab_new(L, (uint32_t)lj_ccallback_maxslot(), 1)));
   LJ_LIB_REG(L, NULL, ffi_meta);
   /* NOBARRIER: basemt is a GC root. */
   setgcrefroot(basemt_it(G(L), LJ_TCDATA), obj2gco(tabV(L->top-1)));

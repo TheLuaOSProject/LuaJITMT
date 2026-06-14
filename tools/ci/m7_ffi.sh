@@ -11,5 +11,6 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 "$ROOT/tools/ci/m7_ffi_metatype.sh"
 "$ROOT/tools/ci/m7_ffi_cdata_get_l.sh"
 "$ROOT/tools/ci/m7_ffi_cdata_set_l.sh"
+"$ROOT/tools/ci/m7_ffi_callback_install.sh"
 
 echo "M7 FFI gates passed"

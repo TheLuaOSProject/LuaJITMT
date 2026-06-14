@@ -7,6 +7,7 @@
 
 #if LJ_HASFFI
 
+#include "lj_atomic.h"
 #include "lj_gc.h"
 #include "lj_err.h"
 #include "lj_tab.h"
@@ -26,6 +27,17 @@
 /* -- Target-specific handling of callback slots -------------------------- */
 
 #define CALLBACK_MCODE_SIZE	(LJ_PAGESIZE * LJ_NUM_CBPAGE)
+
+static LJ_AINLINE CTypeID1 callback_cbid_load(CTypeID1 *cbid, MSize slot)
+{
+  return (CTypeID1)la_load16_acq(&cbid[slot]);  /* 11.5 callback slot publish. */
+}
+
+static LJ_AINLINE void callback_cbid_store(CTypeID1 *cbid, MSize slot,
+					   CTypeID id)
+{
+  la_store16_rel(&cbid[slot], (CTypeID1)id);  /* 11.5 callback slot publish. */
+}
 
 #if LJ_OS_NOJIT
 
@@ -297,27 +309,33 @@ static void *callback_mcode_init(global_State *g, uint32_t *page)
 #endif
 
 /* Allocate and initialize area for callback function pointers. */
-static void callback_mcode_new(CTState *cts)
+LJ_NORET static void callback_err_locked(lua_State *L, CTState *cts)
+{
+  lj_ctype_misc_unlock(cts);
+  lj_err_caller(L, LJ_ERR_FFI_CBACKOV);
+}
+
+static void callback_mcode_new_l(lua_State *L, CTState *cts)
 {
   size_t sz = (size_t)CALLBACK_MCODE_SIZE;
   void *p, *pe;
   if (CALLBACK_MAX_SLOT == 0)
-    lj_err_caller(cts->L, LJ_ERR_FFI_CBACKOV);
+    callback_err_locked(L, cts);
 #if LJ_TARGET_WINDOWS
   p = LJ_WIN_VALLOC(NULL, sz, MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
   if (!p)
-    lj_err_caller(cts->L, LJ_ERR_FFI_CBACKOV);
+    callback_err_locked(L, cts);
 #elif LJ_TARGET_POSIX
   p = mmap(NULL, sz, PROT_READ|PROT_WRITE|CCPROT_CREATE,
 	   MAP_PRIVATE|MAP_ANONYMOUS|CCMAP_CREATE, -1, 0);
   if (p == MAP_FAILED)
-    lj_err_caller(cts->L, LJ_ERR_FFI_CBACKOV);
+    callback_err_locked(L, cts);
 #if CCMAP_CREATE
   pthread_jit_write_protect_np(0);
 #endif
 #else
   /* Fallback allocator. Fails if memory is not executable by default. */
-  p = lj_mem_new(cts->L, sz);
+  p = lj_mem_new(L, sz);
 #endif
   cts->cb.mcode = p;
   pe = callback_mcode_init(cts->g, p);
@@ -566,6 +584,7 @@ static void callback_conv_args(CTState *cts, lua_State *L)
   intptr_t *stack = cts->cb.stack;
   MSize slot = cts->cb.slot;
   CTypeID id = 0, rid, fid;
+  CTypeID1 *cbid;
   int gcsteps = 0;
   CType *ct;
   GCfunc *fn;
@@ -578,7 +597,9 @@ static void callback_conv_args(CTState *cts, lua_State *L)
 #endif
 #endif
 
-  if (slot < cts->cb.sizeid && (id = cts->cb.cbid[slot]) != 0) {
+  if (slot < la_load32_acq(&cts->cb.sizeid) &&
+      (cbid = (CTypeID1 *)la_loadptr_acq((void *const *)&cts->cb.cbid)) != NULL &&
+      (id = callback_cbid_load(cbid, slot)) != 0) {
     TValue tv;
     ct = ctype_get(cts, id);
     rid = ctype_cid(ct->info);  /* Return type. x86: +(spadj<<16). */
@@ -777,26 +798,48 @@ void LJ_FASTCALL lj_ccallback_leave(CTState *cts, TValue *o)
 
 /* -- C callback management ----------------------------------------------- */
 
+MSize lj_ccallback_maxslot(void)
+{
+  return CALLBACK_MAX_SLOT;
+}
+
+void lj_ccallback_init_l(lua_State *L, CTState *cts)
+{
+#if CALLBACK_MAX_SLOT
+  if (cts->cb.cbid == NULL) {
+    CTypeID1 *cbid = lj_mem_newvec(L, CALLBACK_MAX_SLOT, CTypeID1);
+    memset(cbid, 0, CALLBACK_MAX_SLOT*sizeof(CTypeID1));
+    la_storeptr_rel((void **)&cts->cb.cbid, cbid);
+    la_store32_rel(&cts->cb.sizeid, CALLBACK_MAX_SLOT);
+  }
+#else
+  UNUSED(L); UNUSED(cts);
+#endif
+}
+
 /* Get an unused slot in the callback slot table. */
-static MSize callback_slot_new(CTState *cts, CType *ct)
+static MSize callback_slot_new_l(lua_State *L, CTState *cts, CType *ct)
 {
   CTypeID id = ctype_typeid(cts, ct);
   CTypeID1 *cbid = cts->cb.cbid;
   MSize top;
+  if (!cts->cb.mcode)
+    callback_mcode_new_l(L, cts);
+  if (cbid == NULL) {
+    cbid = lj_mem_newvec(L, CALLBACK_MAX_SLOT, CTypeID1);
+    memset(cbid, 0, CALLBACK_MAX_SLOT*sizeof(CTypeID1));
+    la_storeptr_rel((void **)&cts->cb.cbid, cbid);
+    la_store32_rel(&cts->cb.sizeid, CALLBACK_MAX_SLOT);
+  }
   for (top = cts->cb.topid; top < cts->cb.sizeid; top++)
-    if (LJ_LIKELY(cbid[top] == 0))
+    if (LJ_LIKELY(callback_cbid_load(cbid, top) == 0))
       goto found;
 #if CALLBACK_MAX_SLOT
   if (top >= CALLBACK_MAX_SLOT)
 #endif
-    lj_err_caller(cts->L, LJ_ERR_FFI_CBACKOV);
-  if (!cts->cb.mcode)
-    callback_mcode_new(cts);
-  lj_mem_growvec(cts->L, cbid, cts->cb.sizeid, CALLBACK_MAX_SLOT, CTypeID1);
-  cts->cb.cbid = cbid;
-  memset(cbid+top, 0, (cts->cb.sizeid-top)*sizeof(CTypeID1));
+    callback_err_locked(L, cts);
 found:
-  cbid[top] = id;
+  callback_cbid_store(cbid, top, id);
   cts->cb.topid = top+1;
   return top;
 }
@@ -835,16 +878,19 @@ static CType *callback_checkfunc(CTState *cts, CType *ct)
 }
 
 /* Create a new callback and return the callback function pointer. */
-void *lj_ccallback_new(CTState *cts, CType *ct, GCfunc *fn)
+void *lj_ccallback_new_l(lua_State *L, CTState *cts, CType *ct, GCfunc *fn)
 {
   ct = callback_checkfunc(cts, ct);
   if (ct) {
-    MSize slot = callback_slot_new(cts, ct);
+    MSize slot;
     GCtab *t = cts->miscmap;
     TValue tv;
-    setfuncV(cts->L, &tv, fn);
-    copyTVrel(cts->L, lj_tab_setint(cts->L, t, (int32_t)slot), &tv);
-    lj_gc_pubtab(cts->L, t);
+    lj_ctype_misc_lock(cts);
+    slot = callback_slot_new_l(L, cts, ct);
+    setfuncV(L, &tv, fn);
+    copyTVrel(L, lj_tab_setint(L, t, (int32_t)slot), &tv);
+    lj_gc_pubtab(L, t);
+    lj_ctype_misc_unlock(cts);
     return callback_slot2ptr(cts, slot);
   }
   return NULL;  /* Bad conversion. */
