@@ -141,8 +141,9 @@ FINREG/finqueue dispatch lands.
   §9.9) the first time — callbacks become legal from any thread (today:
   single VM thread assumption). Callback exit re-enters native state.
   CCallback cb scratch in CTState → per-TG copy (it's setup scratch;
-  move `cb` fields used at runtime (mcode slots) read-only after init,
-  setup token = cdef token).
+  move `cb` fields used at runtime (mcode slots) read-only after init). Original
+  sketch state had callback setup share the cdef token; the current
+  implementation does not use that bridge.
   Current x64/Linux implementation note: runtime callback scratch now lives in
   `TGState`, callback slot arrays are preallocated at `luaopen_ffi()`, setup
   reserves a free slot with an owner-pointer CAS, stores the callback function
