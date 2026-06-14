@@ -17,33 +17,33 @@ static MCode *asm_exitstub_gen(ASMState *as, ExitNo group)
 	     (LJ_64 ? 6 : 5)) >= as->mctop)
     asm_mclimit(as);
   /* Push low byte of exitno for each exit stub. */
-  asm_mcbot_u8(as, &mxp, XI_PUSHi8);
-  asm_mcbot_u8(as, &mxp, (MCode)groupofs);
+  asm_mcode_u8(as, &mxp, XI_PUSHi8);
+  asm_mcode_u8(as, &mxp, (MCode)groupofs);
   for (i = 1; i < EXITSTUBS_PER_GROUP; i++) {
-    asm_mcbot_u8(as, &mxp, XI_JMPs);
-    asm_mcbot_u8(as, &mxp, (MCode)((2+2)*(EXITSTUBS_PER_GROUP - i) - 2));
-    asm_mcbot_u8(as, &mxp, XI_PUSHi8);
-    asm_mcbot_u8(as, &mxp, (MCode)(groupofs + i));
+    asm_mcode_u8(as, &mxp, XI_JMPs);
+    asm_mcode_u8(as, &mxp, (MCode)((2+2)*(EXITSTUBS_PER_GROUP - i) - 2));
+    asm_mcode_u8(as, &mxp, XI_PUSHi8);
+    asm_mcode_u8(as, &mxp, (MCode)(groupofs + i));
   }
   /* Push the high byte of the exitno for each exit stub group. */
-  asm_mcbot_u8(as, &mxp, XI_PUSHi8);
-  asm_mcbot_u8(as, &mxp, (MCode)((group*EXITSTUBS_PER_GROUP)>>8));
+  asm_mcode_u8(as, &mxp, XI_PUSHi8);
+  asm_mcode_u8(as, &mxp, (MCode)((group*EXITSTUBS_PER_GROUP)>>8));
 #if !LJ_GC64
   /* Store DISPATCH at original stack slot 0. Account for the two push ops. */
-  asm_mcbot_u8(as, &mxp, XI_MOVmi);
-  asm_mcbot_u8(as, &mxp, MODRM(XM_OFS8, 0, RID_ESP));
-  asm_mcbot_u8(as, &mxp, MODRM(XM_SCALE1, RID_ESP, RID_ESP));
-  asm_mcbot_u8(as, &mxp, 2*sizeof(void *));
-  asm_mcbot_i32(as, &mxp, ptr2addr(J2GG(as->J)->dispatch));
+  asm_mcode_u8(as, &mxp, XI_MOVmi);
+  asm_mcode_u8(as, &mxp, MODRM(XM_OFS8, 0, RID_ESP));
+  asm_mcode_u8(as, &mxp, MODRM(XM_SCALE1, RID_ESP, RID_ESP));
+  asm_mcode_u8(as, &mxp, 2*sizeof(void *));
+  asm_mcode_i32(as, &mxp, ptr2addr(J2GG(as->J)->dispatch));
 #endif
   /* Jump to exit handler which fills in the ExitState. */
   if (jmprel_ok(mxp + 5, target)) {  /* Direct jump. */
-    asm_mcbot_u8(as, &mxp, XI_JMP);
-    asm_mcbot_i32(as, &mxp, jmprel(as->J, mxp + 4, target));
+    asm_mcode_u8(as, &mxp, XI_JMP);
+    asm_mcode_i32(as, &mxp, jmprel(as->J, mxp + 4, target));
   } else { /* RIP-relative indirect jump. */
-    asm_mcbot_u8(as, &mxp, XI_GROUP5);
-    asm_mcbot_u8(as, &mxp, XM_OFS0 + (XOg_JMP<<3) + RID_EBP);
-    asm_mcbot_i32(as, &mxp,
+    asm_mcode_u8(as, &mxp, XI_GROUP5);
+    asm_mcode_u8(as, &mxp, XM_OFS0 + (XOg_JMP<<3) + RID_EBP);
+    asm_mcode_i32(as, &mxp,
       (int32_t)((group ? as->J->exitstubgroup[0] : mxpstart) - 8 - (mxp + 4)));
   }
   /* Commit the code for this group (even if assembly fails later on). */
@@ -64,22 +64,22 @@ static void asm_exitstub_trace_setup(ASMState *as, ExitNo nexits)
     return;
   if (T->exittab == NULL)
     T->exittab = lj_mem_newvec(as->J->L, nexits, MCode *);
-  while ((uintptr_t)mxp & 7) asm_mcbot_u8(as, &mxp, XI_INT3);
+  while ((uintptr_t)mxp & 7) asm_mcode_u8(as, &mxp, XI_INT3);
   if (mxp + nexits*EXITSTUB_TRACE_SPACING >= as->mctop)
     asm_mclimit(as);
   T->exitstub = mxp;
   for (i = 0; i < nexits; i++) {
     uint64_t slotaddr = (uint64_t)(uintptr_t)&T->exittab[i];
     trace_exittarget_rel(T, i, exitstub_addr(as->J, i));
-    asm_mcbot_u8(as, &mxp, XI_PUSH + RID_EAX);
-    asm_mcbot_u8(as, &mxp, 0x48);
-    asm_mcbot_u8(as, &mxp, 0xa1);  /* mov rax, moffs64 */
-    asm_mcbot_mem(as, &mxp, &slotaddr, sizeof(slotaddr));
-    asm_mcbot_u8(as, &mxp, 0x48);
-    asm_mcbot_u8(as, &mxp, 0x87);
-    asm_mcbot_u8(as, &mxp, 0x04);
-    asm_mcbot_u8(as, &mxp, 0x24);
-    asm_mcbot_u8(as, &mxp, 0xc3);  /* xchg [rsp], rax; ret */
+    asm_mcode_u8(as, &mxp, XI_PUSH + RID_EAX);
+    asm_mcode_u8(as, &mxp, 0x48);
+    asm_mcode_u8(as, &mxp, 0xa1);  /* mov rax, moffs64 */
+    asm_mcode_mem(as, &mxp, &slotaddr, sizeof(slotaddr));
+    asm_mcode_u8(as, &mxp, 0x48);
+    asm_mcode_u8(as, &mxp, 0x87);
+    asm_mcode_u8(as, &mxp, 0x04);
+    asm_mcode_u8(as, &mxp, 0x24);
+    asm_mcode_u8(as, &mxp, 0xc3);  /* xchg [rsp], rax; ret */
     lj_assertA(mxp == T->exitstub + EXITSTUB_TRACE_SPACING*(i+1),
 	       "bad trace exit stub size");
   }
@@ -99,9 +99,9 @@ static void asm_exitstub_setup(ASMState *as, ExitNo nexits)
   if (as->J->exitstubgroup[0] == NULL) {
     /* Store the two potentially out-of-range targets below group 0. */
     MCode *mxp = as->mcbot;
-    while ((uintptr_t)mxp & 7) asm_mcbot_u8(as, &mxp, XI_INT3);
-    asm_mcbot_ptr(as, &mxp, (void *)lj_vm_exit_interp);
-    asm_mcbot_ptr(as, &mxp, (void *)lj_vm_exit_handler);
+    while ((uintptr_t)mxp & 7) asm_mcode_u8(as, &mxp, XI_INT3);
+    asm_mcode_ptr(as, &mxp, (void *)lj_vm_exit_interp);
+    asm_mcode_ptr(as, &mxp, (void *)lj_vm_exit_handler);
     as->mcbot = mxp;  /* Don't bother to commit, done in asm_exitstub_gen. */
   }
 #endif
@@ -500,9 +500,9 @@ static Reg asm_fuseloadk64(ASMState *as, IRIns *ir)
 		 "bad interned 64 bit constant");
     } else {
       MCode *mxp = as->mcbot;
-      while ((uintptr_t)mxp & 7) asm_mcbot_u8(as, &mxp, XI_INT3);
+      while ((uintptr_t)mxp & 7) asm_mcode_u8(as, &mxp, XI_INT3);
       ir->i = (int32_t)(as->mctop - mxp);
-      asm_mcbot_u64(as, &mxp, *k);
+      asm_mcode_u64(as, &mxp, *k);
       as->mcbot = mxp;
       as->mclim = as->mcbot + MCLIM_REDZONE;
       lj_mcode_commitbot(as->J, as->mcbot);
@@ -3131,29 +3131,33 @@ static void asm_tail_fixup(ASMState *as, TraceNo lnk)
   MCode *target;
   int32_t spadj = as->T->spadjust;
   if (spadj) {  /* Emit stack adjustment. */
-    if (LJ_64) *mcp++ = 0x48;
+    if (LJ_64) asm_mcode_u8(as, &mcp, 0x48);
     if (checki8(spadj)) {
-      *mcp++ = XI_ARITHi8;
-      *mcp++ = MODRM(XM_REG, XOg_ADD, RID_ESP);
-      *mcp++ = (MCode)spadj;
+      asm_mcode_u8(as, &mcp, XI_ARITHi8);
+      asm_mcode_u8(as, &mcp, MODRM(XM_REG, XOg_ADD, RID_ESP));
+      asm_mcode_u8(as, &mcp, (MCode)spadj);
     } else {
-      *mcp++ = XI_ARITHi;
-      *mcp++ = MODRM(XM_REG, XOg_ADD, RID_ESP);
-      *(int32_t *)mcp = spadj; mcp += 4;
+      asm_mcode_u8(as, &mcp, XI_ARITHi);
+      asm_mcode_u8(as, &mcp, MODRM(XM_REG, XOg_ADD, RID_ESP));
+      asm_mcode_i32(as, &mcp, spadj);
     }
   }
   /* Emit exit branch. */
   target = lnk ? (lnk == as->T->traceno ? as->T : traceref(as->J, lnk))->mcode :
 		  (MCode *)(void *)lj_vm_exit_interp;
   if (lnk || jmprel_ok(mcp + 5, target)) {  /* Direct jump. */
-    *mcp++ = XI_JMP; mcp += 4;
-    *(int32_t *)(mcp-4) = jmprel(as->J, mcp, target);
+    asm_mcode_u8(as, &mcp, XI_JMP);
+    asm_mcode_i32(as, &mcp, jmprel(as->J, mcp + 4, target));
   } else {  /* RIP-relative indirect jump. */
-    *mcp++ = XI_GROUP5; *mcp++ = XM_OFS0 + (XOg_JMP<<3) + RID_EBP; mcp += 4;
-    *((int32_t *)(mcp-4)) = (int32_t)(as->J->exitstubgroup[0] - 16 - mcp);
+    asm_mcode_u8(as, &mcp, XI_GROUP5);
+    asm_mcode_u8(as, &mcp, XM_OFS0 + (XOg_JMP<<3) + RID_EBP);
+    asm_mcode_i32(as, &mcp, (int32_t)(as->J->exitstubgroup[0] - 16 - (mcp + 4)));
   }
   /* Drop unused mcode tail. Fill with NOPs to make the prefetcher happy. */
-  while (as->mctop > mcp) *--as->mctop = XI_NOP;
+  while (as->mctop > mcp) {
+    as->mctop--;
+    *lj_mcode_rw(as->J, as->mctop) = XI_NOP;
+  }
 }
 
 /* Prepare tail of code. */

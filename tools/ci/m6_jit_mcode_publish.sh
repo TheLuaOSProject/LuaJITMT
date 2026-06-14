@@ -33,12 +33,14 @@ for needle in \
   'mcode_free_mapping(MCode *area, size_t sz)' \
   '((MCLink *)J->mcarea)->rw = J->mcarea;  /* 08.5: single-map write view. */' \
   'mcode_free_mapping(area, size);' \
-  'asm_mcbot_u8(ASMState *as, MCode **pp, MCode v)' \
-  'asm_mcbot_u64(ASMState *as, MCode **pp, uint64_t v)' \
-  'asm_mcbot_i32(ASMState *as, MCode **pp, int32_t v)' \
-  'asm_mcbot_ptr(ASMState *as, MCode **pp, const void *v)' \
-  'asm_mcbot_mem(ASMState *as, MCode **pp,' \
+  'asm_mcode_u8(ASMState *as, MCode **pp, MCode v)' \
+  'asm_mcode_u64(ASMState *as, MCode **pp, uint64_t v)' \
+  'asm_mcode_i32(ASMState *as, MCode **pp, int32_t v)' \
+  'asm_mcode_ptr(ASMState *as, MCode **pp, const void *v)' \
+  'asm_mcode_mem(ASMState *as, MCode **pp,' \
   'lj_mcode_rw(as->J, *pp)' \
+  'asm_mcode_i32(as, &mcp, jmprel(as->J, mcp + 4, target));' \
+  '*lj_mcode_rw(as->J, as->mctop) = XI_NOP;' \
   'memfd dual-map W^X implementation'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_obj.h" "$ROOT/src/lj_jit.h" \
@@ -69,6 +71,16 @@ fi
 if rg -n '\*as->mcbot|\*mxp\+\+|\*\(uint64_t \*\)as->mcbot|\*\(void \*\*\)mxp|memcpy\(mxp' \
     "$ROOT/src/lj_emit_x86.h" "$ROOT/src/lj_asm_x86.h"; then
   echo "guardrail: x64 mcode bottom writes must go through lj_mcode_rw helpers" >&2
+  exit 1
+fi
+
+if awk '
+  /static void asm_tail_fixup\(ASMState \*as, TraceNo lnk\)/ { infn = 1 }
+  infn && /\*mcp\+\+|mcp \+= 4|\*\(int32_t \*\)mcp|\*\(int32_t \*\)\(mcp-4\)|\*--as->mctop/ { bad = 1 }
+  infn && /^\}/ { infn = 0 }
+  END { exit bad ? 0 : 1 }
+' "$ROOT/src/lj_asm_x86.h"; then
+  echo "guardrail: x64 trace tail fixups must go through lj_mcode_rw helpers" >&2
   exit 1
 fi
 

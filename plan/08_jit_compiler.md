@@ -239,7 +239,8 @@ handler — sized LJ_MAX_EXITSTUBGR-compatible; see lj_vmstruct notes.
   claiming that dual mapping is complete. x64 exit-stub group, per-trace
   exit-row emission, and bottom-of-area 64-bit constant pools already write
   through `lj_mcode_rw()` while retaining RX cursors for published addresses
-  and relative offsets.
+  and relative offsets. x64 trace-tail fixups now do the same for stack
+  adjustment bytes, exit-branch displacement writes, and NOP tail fill.
   This still does not implement the final memfd dual mapping; it replaces the
   temporary RWX bridge while preserving the original dual-map write-view
   target.

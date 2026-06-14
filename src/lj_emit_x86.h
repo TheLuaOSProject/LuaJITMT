@@ -33,31 +33,31 @@
 #define emit_x87op(as, xo) \
   (*(uint16_t *)(as->mcp-2) = (uint16_t)(xo), as->mcp -= 2)
 
-static LJ_AINLINE void asm_mcbot_u8(ASMState *as, MCode **pp, MCode v)
+static LJ_AINLINE void asm_mcode_u8(ASMState *as, MCode **pp, MCode v)
 {
   *lj_mcode_rw(as->J, *pp) = v;
   (*pp)++;
 }
 
-static LJ_AINLINE void asm_mcbot_u64(ASMState *as, MCode **pp, uint64_t v)
+static LJ_AINLINE void asm_mcode_u64(ASMState *as, MCode **pp, uint64_t v)
 {
   *(uint64_t *)lj_mcode_rw(as->J, *pp) = v;
   *pp += 8;
 }
 
-static LJ_AINLINE void asm_mcbot_i32(ASMState *as, MCode **pp, int32_t v)
+static LJ_AINLINE void asm_mcode_i32(ASMState *as, MCode **pp, int32_t v)
 {
   *(int32_t *)lj_mcode_rw(as->J, *pp) = v;
   *pp += 4;
 }
 
-static LJ_AINLINE void asm_mcbot_ptr(ASMState *as, MCode **pp, const void *v)
+static LJ_AINLINE void asm_mcode_ptr(ASMState *as, MCode **pp, const void *v)
 {
   *(const void **)lj_mcode_rw(as->J, *pp) = v;
   *pp += sizeof(void *);
 }
 
-static LJ_AINLINE void asm_mcbot_mem(ASMState *as, MCode **pp,
+static LJ_AINLINE void asm_mcode_mem(ASMState *as, MCode **pp,
 				     const void *src, size_t sz)
 {
   memcpy(lj_mcode_rw(as->J, *pp), src, sz);
@@ -475,9 +475,9 @@ static void emit_loadk64(ASMState *as, Reg r, IRIns *ir)
     } else {
       /* If all else fails, add the FP constant at the MCode area bottom. */
       while ((uintptr_t)as->mcbot & 7)
-	asm_mcbot_u8(as, &as->mcbot, XI_INT3);
+	asm_mcode_u8(as, &as->mcbot, XI_INT3);
       ir->i = (int32_t)(as->mctop - as->mcbot);
-      asm_mcbot_u64(as, &as->mcbot, *k);
+      asm_mcode_u64(as, &as->mcbot, *k);
       as->mclim = as->mcbot + MCLIM_REDZONE;
       lj_mcode_commitbot(as->J, as->mcbot);
     }
