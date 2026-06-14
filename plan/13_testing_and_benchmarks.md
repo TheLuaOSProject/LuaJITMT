@@ -77,8 +77,9 @@ assert no UAF and no leak (counted).
 
 ## 13.6 Sanitizers
 ### 13.6.1 ASAN/UBSAN
-Full builds, all Lua suites, both -joff/-jon (mcode RWX fallback flag for
-ASAN runs). Arena allocator gains ASAN poisoning hooks: poison free runs,
+Full builds, all Lua suites, both -joff/-jon (use the explicit insecure mcode
+flag only if an ASAN environment cannot tolerate W^X protection flips). Arena
+allocator gains ASAN poisoning hooks: poison free runs,
 unpoison on alloc (ASAN_(UN)POISON_MEMORY_REGION; ~20 lines, dev builds).
 ### 13.6.2 TSAN C unit drivers (the load-bearing TSAN coverage)
 tests/c/{nbtab,strtab,chan,deque,arena,safepoint}_stress.c — pthreads

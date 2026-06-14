@@ -112,9 +112,11 @@ canonical target. The current x86-64 bridge has implemented guarded `IR_XPOLL`
 for LOOP-backedge trace safepoint polls and inlined FUNCF-depth entries. The
 first TGMARK invalidation slice keeps `TBAR`/`OBAR` inside XPOLL-delimited
 poll regions; broader XBAR invalidation work remains pending. Linux/x64
-`LJ_MT` builds currently keep generated mcode execute-stable with the
-documented RWX fallback until the planned dual-map mcode write view replaces
-whole-area protection flips.
+`LJ_MT` secure builds currently keep generated mcode execute-stable with a
+fresh-area W^X bridge: once an area has committed trace bytes, the next reserve
+allocates a new unpublished area instead of flipping the old area writable.
+The planned dual-map mcode write view remains the original M6 target and still
+replaces this bridge.
 Tests: stock with -jon; t-jit-01..06 (trace same loop from 2 threads;
 side-trace attach while parent runs on another thread; flush storm;
 exit-handler stress; recording-thread killed mid-trace (error in

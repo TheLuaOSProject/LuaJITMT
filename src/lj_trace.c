@@ -715,14 +715,13 @@ void lj_trace_freestate(global_State *g)
 		 "trace still allocated");
   }
 #endif
-  lj_mcode_free(J);
   lj_mem_freevec(g, J->snapmapbuf, J->sizesnapmap, SnapEntry);
   lj_mem_freevec(g, J->snapbuf, J->sizesnap, SnapShot);
   lj_mem_freevec(g, J->irbuf + J->irbotlim, J->irtoplim - J->irbotlim, IRIns);
   if (J->tracev)
     tracevec_free(g, J->tracev);
   lj_trace_freeretired(g);
-  lj_mcode_freeretired(g);
+  lj_mcode_freeall(g);
 }
 
 /* -- Penalties and blacklisting ------------------------------------------ */

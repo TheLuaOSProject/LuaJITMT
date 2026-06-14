@@ -17,9 +17,14 @@ for needle in \
   'lj_mcode_init(g);' \
   'lj_mcode_sync_core(J);' \
   'LJ_MCODE_EXEC_STABLE' \
-  'memfd dual-map W^X implementation' \
-  '#define MCPROT_GEN	MCPROT_RWX' \
-  '#define MCPROT_RUN	MCPROT_RWX'
+  'LJ_MCODE_FRESH_AREA' \
+  'mcode_area_has_published(jit_State *J)' \
+  'mcode_allocarea_checked(jit_State *J, size_t sz)' \
+  'lj_mcode_freeall(global_State *g)' \
+  'mcode_freearea_direct(global_State *g, MCode *area, size_t size)' \
+  'lj_mcode_freeall(g);' \
+  'J->szallmcarea + sz > maxmcode' \
+  'memfd dual-map W^X implementation'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_obj.h" "$ROOT/src/lj_mcode.h" \
       "$ROOT/src/lj_mcode.c" "$ROOT/src/lj_state.c" \
@@ -28,6 +33,33 @@ do
     exit 1
   fi
 done
+
+if awk '
+  /#if LJ_MT && defined\(__linux__\) && LJ_TARGET_X64/ { inmt = 1 }
+  inmt && /#endif/ { inmt = 0 }
+  inmt && /MCPROT_RWX/ { bad = 1 }
+  END { exit bad ? 0 : 1 }
+' "$ROOT/src/lj_mcode.c"; then
+  echo "guardrail: secure Linux/x64 LJ_MT mcode bridge must not fall back to RWX" >&2
+  exit 1
+fi
+
+if ! awk '
+  /MCode \*lj_mcode_reserve\(jit_State \*J, MCode \*\*lim\)/ { infn = 1 }
+  infn && /#ifdef LJ_MCODE_FRESH_AREA/ { fresh = NR }
+  infn && /mcode_area_has_published\(J\)/ { has = NR }
+  infn && /mcode_allocarea_checked\(J, mcode_fresh_size\(J\)\)/ { alloc = NR }
+  infn && /mcode_protect\(J, MCPROT_GEN\)/ && !protect { protect = NR }
+  infn && /#else/ { els = NR }
+  infn && /^\}/ {
+    exit !(fresh && has && alloc && protect && els &&
+	   fresh < has && has < alloc && alloc < protect && protect < els)
+  }
+  END { if (!infn) exit 1 }
+' "$ROOT/src/lj_mcode.c"; then
+  echo "guardrail: LJ_MT reserve must allocate a fresh area before reopening published mcode" >&2
+  exit 1
+fi
 
 if ! awk '
   /static void trace_stop\(jit_State \*J\)/ { infn = 1 }
@@ -60,5 +92,8 @@ fi
 LUA_PATH="$ROOT/src/?.lua;$ROOT/src/jit/?.lua;;" \
   timeout 20s "$ROOT/src/luajit" -e \
   'jit.opt.start("hotloop=1","hotexit=1"); local s=0; for i=1,80 do s=s+i end; assert(s==3240)'
+
+LUA_PATH="$ROOT/src/?.lua;$ROOT/src/jit/?.lua;;" \
+  timeout 30s "$ROOT/src/luajit" "$ROOT/tests/t-jit-mcode-fresh.lua"
 
 echo "M6 JIT mcode publication guard passed"

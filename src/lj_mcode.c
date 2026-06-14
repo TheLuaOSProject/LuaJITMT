@@ -274,21 +274,12 @@ static void mcode_protect(jit_State *J, int prot)
 #define MCPROT_RUN	MCPROT_RX
 
 #if LJ_MT && defined(__linux__) && LJ_TARGET_X64
-
-/* M6/M8 bridge: keep mcode execute-stable for peer TGs until the final
-** memfd dual-map W^X implementation lands (08 section 8.5). */
+/* M6 bridge: keep published mcode execute-stable for peer TGs by never
+** reopening an area that already contains trace code. The final target
+** remains the memfd dual-map W^X implementation from 08 section 8.5. */
 #define LJ_MCODE_EXEC_STABLE	1
-#undef MCPROT_GEN
-#undef MCPROT_RUN
-#define MCPROT_GEN	MCPROT_RWX
-#define MCPROT_RUN	MCPROT_RWX
-
-static void mcode_protect(jit_State *J, int prot)
-{
-  UNUSED(J); UNUSED(prot);
-}
-
-#else
+#define LJ_MCODE_FRESH_AREA	1
+#endif
 
 /* Change protection of MCode area. */
 static void mcode_protect(jit_State *J, int prot)
@@ -298,8 +289,6 @@ static void mcode_protect(jit_State *J, int prot)
     J->mcprot = prot;
   }
 }
-
-#endif
 
 #endif
 
@@ -398,11 +387,15 @@ static void *mcode_alloc(jit_State *J, size_t sz)
 
 /* -- MCode area management ----------------------------------------------- */
 
+static LJ_AINLINE size_t mcode_default_size(jit_State *J)
+{
+  return (size_t)J->param[JIT_P_sizemcode] << 10;
+}
+
 /* Allocate a new MCode area. */
-static void mcode_allocarea(jit_State *J)
+static void mcode_allocarea(jit_State *J, size_t sz)
 {
   MCode *oldarea = J->mcarea;
-  size_t sz = (size_t)J->param[JIT_P_sizemcode] << 10;
   J->mcarea = (MCode *)mcode_alloc(J, sz);
   J->szmcarea = sz;
   J->mcprot = MCPROT_GEN;
@@ -413,6 +406,29 @@ static void mcode_allocarea(jit_State *J)
   J->szallmcarea += sz;
   J->mcbot = (MCode *)lj_err_register_mcode(J->mcarea, sz, (uint8_t *)J->mcbot);
 }
+
+#ifdef LJ_MCODE_FRESH_AREA
+static LJ_AINLINE int mcode_area_has_published(jit_State *J)
+{
+  MCode *top = (MCode *)((char *)J->mcarea + J->szmcarea);
+  return J->mctop < top;
+}
+
+static LJ_AINLINE size_t mcode_fresh_size(jit_State *J)
+{
+  size_t sz = LJ_PAGESIZE;
+  size_t maxsz = mcode_default_size(J);
+  return sz < maxsz ? sz : maxsz;
+}
+
+static void mcode_allocarea_checked(jit_State *J, size_t sz)
+{
+  size_t maxmcode = (size_t)J->param[JIT_P_maxmcode] << 10;
+  if (J->szallmcarea + sz > maxmcode)
+    lj_trace_err(J, LJ_TRERR_MCODEAL);
+  mcode_allocarea(J, sz);
+}
+#endif
 
 static void mcode_retired_push(jit_State *J, MCodeRetire *ret)
 {
@@ -429,13 +445,17 @@ static void mcode_retired_push(jit_State *J, MCodeRetire *ret)
 		      LA_ACQ_REL, LA_ACQ));  /* 08 section 8.7 mcode SMR. */
 }
 
-static void mcode_freearea(global_State *g, MCodeRetire *ret)
+static void mcode_freearea_direct(global_State *g, MCode *area, size_t size)
 {
   jit_State *J = G2J(g);
-  lj_err_deregister_mcode(ret->area, ret->size,
-			  (uint8_t *)ret->area + sizeof(MCLink));
-  mcode_free(ret->area, ret->size);
-  J->szallmcarea -= ret->size;
+  lj_err_deregister_mcode(area, size, (uint8_t *)area + sizeof(MCLink));
+  mcode_free(area, size);
+  J->szallmcarea -= size;
+}
+
+static void mcode_freearea(global_State *g, MCodeRetire *ret)
+{
+  mcode_freearea_direct(g, ret->area, ret->size);
   lj_mem_freet(g, ret);
 }
 
@@ -471,6 +491,25 @@ void lj_mcode_free(jit_State *J)
   J->mctop = J->mcbot = NULL;
   J->szmcarea = 0;
   mcode_retired_push(J, retired);
+}
+
+void lj_mcode_freeall(global_State *g)
+{
+  jit_State *J;
+  MCode *mc;
+  if (!g)
+    return;
+  J = G2J(g);
+  mc = J->mcarea;
+  while (mc) {
+    MCode *next = ((MCLink *)mc)->next;
+    mcode_freearea_direct(g, mc, ((MCLink *)mc)->size);
+    mc = next;
+  }
+  J->mcarea = NULL;
+  J->mctop = J->mcbot = NULL;
+  J->szmcarea = 0;
+  lj_mcode_freeretired(g);
 }
 
 uint32_t lj_mcode_reclaim_retired(global_State *g, uint64_t completed_epoch)
@@ -530,10 +569,17 @@ void lj_mcode_markretired(global_State *g, int gc2)
 /* Reserve the remainder of the current MCode area. */
 MCode *lj_mcode_reserve(jit_State *J, MCode **lim)
 {
-  if (!J->mcarea)
-    mcode_allocarea(J);
+#ifdef LJ_MCODE_FRESH_AREA
+  if (!J->mcarea || mcode_area_has_published(J))
+    mcode_allocarea_checked(J, mcode_fresh_size(J));
   else
     mcode_protect(J, MCPROT_GEN);
+#else
+  if (!J->mcarea)
+    mcode_allocarea(J, mcode_default_size(J));
+  else
+    mcode_protect(J, MCPROT_GEN);
+#endif
   *lim = J->mcbot;
   return J->mctop;
 }
@@ -585,13 +631,13 @@ void lj_mcode_limiterr(jit_State *J, size_t need)
 {
   size_t sizemcode, maxmcode;
   lj_mcode_abort(J);
-  sizemcode = (size_t)J->param[JIT_P_sizemcode] << 10;
+  sizemcode = mcode_default_size(J);
   maxmcode = (size_t)J->param[JIT_P_maxmcode] << 10;
   if (need * sizeof(MCode) > sizemcode)
     lj_trace_err(J, LJ_TRERR_MCODEOV);  /* Too long for any area. */
   if (J->szallmcarea + sizemcode > maxmcode)
     lj_trace_err(J, LJ_TRERR_MCODEAL);
-  mcode_allocarea(J);
+  mcode_allocarea(J, sizemcode);
   lj_trace_err(J, LJ_TRERR_MCODELM);  /* Retry with new area. */
 }
 
