@@ -39,6 +39,9 @@ for tid = 1, nthreads do
           ffi.gc(cd, nil)
           cleared = cleared + 1
         end
+        if i % 6 == 0 then
+          ffi.gc(fin_obj_t(), nil)
+        end
       end
       return count - cleared
     end
@@ -78,6 +81,9 @@ do
       if i % 5 == 0 then
         ffi.gc(cd, nil)
         cleared = cleared + 1
+      end
+      if i % 7 == 0 then
+        ffi.gc(fin_obj_t(), nil)
       end
     end
     return iters - cleared

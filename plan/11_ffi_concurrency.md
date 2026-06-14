@@ -87,8 +87,10 @@ Current implementation note: existing `GCROOT_FFI_FIN` value slots use a
 FINREG claim sentinel and `TValue` CAS for registration replacement, explicit
 clear, and collector claim/delete. Close-time table disable now runs without
 `fin_token` after `lua_close()` shutdown has joined secondary threads.
-Missing-key insertion still uses the `fin_token` structural fallback because
-`lj_tab_newkey()` is not yet a multi-writer-safe table insertion path.
+Explicit `ffi.gc(cd, nil)` on a cdata with no registry entry now returns before
+that fallback. Enabled missing-key insertion still uses the `fin_token`
+structural fallback because `lj_tab_newkey()` is not yet a multi-writer-safe
+table insertion path.
 
 ## 11.5 Calls & callbacks (native state discipline)
 - **FFI call out** (interpreter `->vm_ffi_call`, JIT IR_CALLXS): wrap with

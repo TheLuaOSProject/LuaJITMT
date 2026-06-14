@@ -21,6 +21,7 @@ for needle in \
   'lj_cdata_fin_claim_func(TValue *tv, TValue *old)' \
   'lj_cdata_fin_claim_func(tv, &tmp)' \
   'lj_cdata_fin_storenil(L, tv)' \
+  'Missing clear is a no-op; avoid fin_token insert.' \
   'lj_tab_get(L, t, &tmp)' \
   'lj_cdata_setfin(L, cd, gcV(tv), itype(tv))' \
   'lj_gc2_finalizer_try_enter(global_State *g)' \
@@ -68,6 +69,16 @@ if awk '
   END { exit bad ? 0 : 1 }
 ' "$ROOT/src/lj_gc.c"; then
   echo "guardrail: close-time cdata finalizer drain must disable FINREG without fin_token" >&2
+  exit 1
+fi
+
+if ! awk '
+  /void lj_cdata_setfin\(lua_State \*L, GCcdata \*cd,/ { infn = 1 }
+  infn && /lj_ctype_fin_lock\(cts\)/ { exit(seen ? 0 : 1) }
+  infn && /Missing clear is a no-op; avoid fin_token insert\./ { seen = 1 }
+  END { if (infn) exit(seen ? 0 : 1); exit 1 }
+' "$ROOT/src/lj_cdata.c"; then
+  echo "guardrail: missing ffi.gc(cd, nil) clear must return before fin_token insertion" >&2
   exit 1
 fi
 

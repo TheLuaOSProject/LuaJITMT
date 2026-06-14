@@ -169,8 +169,14 @@ void lj_cdata_setfin(lua_State *L, GCcdata *cd, GCobj *obj, uint32_t it)
     if (!gcref_acq(t->metatable))
       return;
     tv = (TValue *)lj_tab_get(L, t, &key);
-    if (tv == niltv(L))
+    if (tv == niltv(L)) {
+      if (!enabled) {  /* Missing clear is a no-op; avoid fin_token insert. */
+	lj_obj_cleargcflags_atomic(obj2gco(cd), LJ_GC_CDATA_FIN);
+	lj_gc2_finreg_cdata_set(g, obj2gco(cd), 0);
+	return;
+      }
       break;  /* Missing key: structural insertion still uses fin_token. */
+    }
     (void)lj_cdata_fin_claim_any(tv, &old);
     if (!gcref_acq(t->metatable)) {
       lj_cdata_fin_storenil(L, tv);
