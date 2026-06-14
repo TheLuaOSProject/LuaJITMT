@@ -225,9 +225,22 @@ static LJ_AINLINE CTypeID ctype_hash_load(CTState *cts, uint32_t h)
   return (CTypeID)(la_load32_acq(&cts->hash[h]) & 0xffffu);  /* 11.2: ctype hash publication. */
 }
 
-static LJ_AINLINE void ctype_hash_store(CTState *cts, uint32_t h, CTypeID id)
+static LJ_AINLINE int ctype_hash_cas(CTState *cts, uint32_t h,
+				     CTypeID *oldid, CTypeID newid)
 {
-  la_store32_rel(&cts->hash[h], (uint32_t)id);  /* 11.2: ctype hash publication. */
+  uint32_t old = (uint32_t)*oldid;
+  int ok = la_cas32(&cts->hash[h], &old, (uint32_t)newid,
+		    LA_ACQ_REL, LA_ACQ);
+  *oldid = (CTypeID)(old & 0xffffu);
+  return ok;  /* 11.2: CAS-prepend ctype hash publication. */
+}
+
+static void ctype_hash_prepend(CTState *cts, uint32_t h, CType *ct, CTypeID id)
+{
+  CTypeID head = ctype_hash_load(cts, h);
+  do {
+    ct->next = (CTypeID1)head;
+  } while (!ctype_hash_cas(cts, h, &head, id));
 }
 
 /* Create new type element. */
@@ -290,9 +303,9 @@ CTypeID lj_ctype_intern_l(lua_State *L, CTState *cts, CTInfo info, CTSize size)
   cts->tab[id].info = info;
   cts->tab[id].size = size;
   cts->tab[id].sib = 0;
-  cts->tab[id].next = (CTypeID1)ctype_hash_load(cts, h);
+  cts->tab[id].next = 0;
   setgcrefnull(cts->tab[id].name);
-  ctype_hash_store(cts, h, id);
+  ctype_hash_prepend(cts, h, &cts->tab[id], id);
   return id;
 }
 
@@ -300,16 +313,14 @@ CTypeID lj_ctype_intern_l(lua_State *L, CTState *cts, CTInfo info, CTSize size)
 static void ctype_addtype(CTState *cts, CType *ct, CTypeID id)
 {
   uint32_t h = ct_hashtype(ct->info, ct->size);
-  ct->next = (CTypeID1)ctype_hash_load(cts, h);
-  ctype_hash_store(cts, h, id);
+  ctype_hash_prepend(cts, h, ct, id);
 }
 
 /* Add named element to hash table. */
 void lj_ctype_addname(CTState *cts, CType *ct, CTypeID id)
 {
   uint32_t h = ct_hashname(ctype_name_acq(ct));
-  ct->next = (CTypeID1)ctype_hash_load(cts, h);
-  ctype_hash_store(cts, h, id);
+  ctype_hash_prepend(cts, h, ct, id);
 }
 
 /* Get a C type by name, matching the type mask. */

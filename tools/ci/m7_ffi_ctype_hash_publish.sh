@@ -9,12 +9,14 @@ for needle in \
   'uint32_t hash[CTHASH_SIZE]' \
   'ctype_hash_load(CTState *cts, uint32_t h)' \
   'la_load32_acq(&cts->hash[h])' \
-  'ctype_hash_store(CTState *cts, uint32_t h, CTypeID id)' \
-  'la_store32_rel(&cts->hash[h], (uint32_t)id)' \
+  'ctype_hash_cas(CTState *cts, uint32_t h,' \
+  'la_cas32(&cts->hash[h], &old, (uint32_t)newid' \
+  'ctype_hash_prepend(CTState *cts, uint32_t h, CType *ct, CTypeID id)' \
   'CTypeID id = ctype_hash_load(cts, h)' \
-  'cts->tab[id].next = (CTypeID1)ctype_hash_load(cts, h)' \
-  'ct->next = (CTypeID1)ctype_hash_load(cts, h)' \
-  'ctype_hash_store(cts, h, id)' \
+  'ct->next = (CTypeID1)head' \
+  'while (!ctype_hash_cas(cts, h, &head, id))' \
+  'ctype_hash_prepend(cts, h, &cts->tab[id], id)' \
+  'ctype_hash_prepend(cts, h, ct, id)' \
   'CTypeID id = ctype_hash_load(cts, ct_hashname(name))'
 do
   if ! rg -F -q "$needle" "$ROOT/src"; then
@@ -24,7 +26,12 @@ do
 done
 
 if rg -n 'cts->hash\[[^]]+\]\s*=' "$ROOT/src/lj_ctype.c"; then
-  echo "guardrail: ctype hash heads must publish through ctype_hash_store" >&2
+  echo "guardrail: ctype hash heads must publish through ctype_hash_prepend" >&2
+  exit 1
+fi
+
+if rg -n 'ctype_hash_store|la_store32_rel\(&cts->hash' "$ROOT/src/lj_ctype.c"; then
+  echo "guardrail: ctype hash publication must stay CAS-prepend" >&2
   exit 1
 fi
 
