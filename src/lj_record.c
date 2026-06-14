@@ -1467,9 +1467,23 @@ static int rec_idx_tab_trace_local(jit_State *J, TRef tab)
   return ir->o == IR_TNEW || ir->o == IR_TDUP;
 }
 
+static int rec_idx_tab_store_escaped(jit_State *J, IRRef tabref)
+{
+  IRRef ref;
+  for (ref = (IRRef)(tabref + 1); ref < J->cur.nins; ref++) {
+    IRIns *ir = IR(ref);
+    /* M6 bridge: same-trace upvalue publication makes the table shared. */
+    if (ir->o == IR_USTORE && ir->op2 == tabref)
+      return 1;
+  }
+  return 0;
+}
+
 static int rec_idx_store_trace_local(jit_State *J, TRef tab)
 {
-  return rec_idx_tab_trace_local(J, tab);
+  IRRef tabref = tref_ref(tab);
+  return rec_idx_tab_trace_local(J, tab) &&
+	 !rec_idx_tab_store_escaped(J, tabref);
 }
 
 /* Record indexed key lookup. */

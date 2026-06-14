@@ -121,10 +121,11 @@ raw captures through stack-value synchronization, mutable captures once the
 cell is promoted at trace entry, and source/loaded first-promotion loops where
 the hot trace performs the first mutable raw-slot promotion with otherwise
 type-stable loop slots. A narrow trace-local table-store bridge now records
-non-nil `ASTORE`/`HSTORE` updates to `TNEW`/`TDUP` tables and lowers them
-through `lj_tab_storetv_forjit()`; the original broad generation-aware table
-write protocol remains pending, so shared and shape-changing indexed stores
-stay NYI. Linux/x64 HREFK recording now avoids the legacy `GCtab.hmask` mirror
+non-nil `ASTORE`/`HSTORE` updates to `TNEW`/`TDUP` tables that have not already
+escaped through a same-trace upvalue store and lowers them through
+`lj_tab_storetv_forjit()`; the original broad generation-aware table write
+protocol remains pending, so shared and shape-changing indexed stores stay NYI.
+Linux/x64 HREFK recording now avoids the legacy `GCtab.hmask` mirror
 guard and relies on the loaded node pointer plus x64 node-header slot guard;
 empty-hash misses fall through to regular `HREF` instead of the legacy
 `TAB_HMASK == 0` shortcut. Shared array reads now have an interim x64

@@ -13,6 +13,8 @@ for needle in \
   'asm_ahstore_forjit(ASMState *as, IRIns *ir)' \
   '#if defined(__linux__) && LJ_TARGET_X64' \
   'rec_idx_store_trace_local(jit_State *J, TRef tab)' \
+  'rec_idx_tab_store_escaped(jit_State *J, IRRef tabref)' \
+  'ir->o == IR_USTORE && ir->op2 == tabref' \
   'M6: no shared/new HSTORE bridge.' \
   'M6: no shared/nil ASTORE bridge.'
 do
@@ -102,6 +104,23 @@ local function upvalue_store(n)
 end
 assert(upvalue_store(80) == 80)
 assert(not util.traceinfo(1), "upvalue-carried table store unexpectedly traced")
+
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local function make_escaped_store()
+  local sink
+  return function(n)
+    for i = 1, n do
+      local t = { stable = 0 }
+      sink = t
+      t.stable = i
+    end
+    return sink.stable
+  end
+end
+local escaped_store = make_escaped_store()
+assert(escaped_store(80) == 80)
+assert(not util.traceinfo(1), "closed-upvalue escaped table store unexpectedly traced")
 '
 
 HASH_IR=$(mktemp "${TMPDIR:-/tmp}/lj-m6-hstore-ir.XXXXXX")
