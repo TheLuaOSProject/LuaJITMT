@@ -10,6 +10,7 @@
 #include "lauxlib.h"
 
 #include "lj_obj.h"
+#include "lj_atomic.h"
 #include "lj_gc.h"
 #include "lj_jit.h"
 #include "lj_trace.h"
@@ -32,7 +33,7 @@ int main(void)
   static IRIns dummyir[REF_TRUE+1];
   MCode **exittab;
   GCtrace *ret;
-  uint64_t epoch;
+  uint64_t epoch, scoped_epoch;
 
   assert(L != NULL);
   g = G(L);
@@ -66,6 +67,25 @@ int main(void)
   assert(lj_trace_reclaim_retired(g, epoch + 1u) == 0);
   assert(retired_find(J, T) != NULL);
   assert(lj_trace_reclaim_retired(g, epoch + LJ_FLUSH_EPOCHS) >= 1);
+  assert(retired_find(J, T) == NULL);
+
+  T = lj_trace_alloc(L, &tmpl);
+  exittab = lj_mem_newvec(L, 1, MCode *);
+  exittab[0] = NULL;
+  T->exittab = exittab;
+  T->nsnap = 1;
+  scoped_epoch = la_load64_acq(&g->gc2.hs_epoch) + 1u;
+  la_store64_rel(&T->retire_epoch, scoped_epoch);
+  la_store64_rel(&g->gc2.hs_epoch, scoped_epoch + 1u);
+
+  lj_trace_free(g, T);
+  ret = retired_find(J, T);
+  assert(ret != NULL);
+  assert(ret == T);
+  assert(ret->retire_epoch == scoped_epoch);
+  assert(lj_trace_reclaim_retired(g, scoped_epoch + LJ_FLUSH_EPOCHS - 1u) == 0);
+  assert(retired_find(J, T) != NULL);
+  assert(lj_trace_reclaim_retired(g, scoped_epoch + LJ_FLUSH_EPOCHS) >= 1);
   assert(retired_find(J, T) == NULL);
 
   lua_close(L);

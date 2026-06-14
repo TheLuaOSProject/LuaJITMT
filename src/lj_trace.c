@@ -147,7 +147,10 @@ static void trace_retired_push(jit_State *J, GCtrace *T)
 static void trace_retire(global_State *g, GCtrace *T)
 {
   jit_State *J = G2J(g);
-  T->retire_epoch = la_load64_acq(&g->gc2.hs_epoch);
+  uint64_t epoch = la_load64_acq(&T->retire_epoch);
+  if (epoch == 0 || epoch == LJ_TRACE_SCOPE_FLUSHING)
+    epoch = la_load64_acq(&g->gc2.hs_epoch);
+  la_store64_rel(&T->retire_epoch, epoch);
   T->retired_next = NULL;
   lj_gc_arena_markmem(g, T);
   if (T->exittab)

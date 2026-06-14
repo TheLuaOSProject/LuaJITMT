@@ -339,8 +339,11 @@ at those tags are cleared first, then the root slots are cleared with
 `T->traceno = 0`. This makes trace numbers reusable without leaving stale sides
 pointing at a reusable root number or letting the later GC sweep clear a reused
 slot. The physical `GCtrace` body/exittab still reaches `J->retiredtraces`
-through the existing sweep path; full token ownership and per-root body
-retirement remain to finish the original scoped-flush target.
+through the existing sweep path, preserving the original bridge shape, but sweep
+now keeps a finite scoped-retire epoch already stamped after the
+`HS_EXIT_TRACES` boundary instead of replacing it with the later sweep epoch.
+Full token ownership and per-root body retirement remain to finish the original
+scoped-flush target.
 
 ## 8.8 Recorder/IR changes inventory
 

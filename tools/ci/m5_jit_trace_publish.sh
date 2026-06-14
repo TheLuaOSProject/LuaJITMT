@@ -142,6 +142,9 @@ for needle in \
   'lj_trace_flushscope_retire(global_State *g, uint64_t epoch)' \
   'root && root->traceno == T->root' \
   'T->traceno = 0;  /* Scoped slot retired after HS_EXIT_TRACES grace. */' \
+  'epoch = la_load64_acq(&T->retire_epoch)' \
+  'epoch == 0 || epoch == LJ_TRACE_SCOPE_FLUSHING' \
+  'la_store64_rel(&T->retire_epoch, epoch)' \
   'la_add64_rlx(&g->gc2.jit_scoped_slots_retired, retired)' \
   'return (mode & LUAJIT_MODE_FLUSH) ? flushed : flushed + 1u;' \
   'return trace_flushroot(J, T, 1);' \
@@ -154,6 +157,12 @@ do
     exit 1
   fi
 done
+
+if ! rg -F -q 'scoped_epoch = la_load64_acq(&g->gc2.hs_epoch) + 1u;' \
+    "$ROOT/tests/t-jit-trace-retire.c"; then
+  echo "guardrail: trace retirement test must cover preserved scoped epochs" >&2
+  exit 1
+fi
 
 if rg -F -q 'Temporary single-mutator flush action' "$ROOT/src/lj_safepoint.c"; then
   echo "guardrail: HS_FLUSHJ must be a leader action after ack drain" >&2
