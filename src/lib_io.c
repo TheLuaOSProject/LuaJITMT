@@ -152,7 +152,7 @@ static size_t io_native_fwrite(lua_State *L, const void *buf, size_t size,
 
 #if LJ_TARGET_POSIX || (LJ_TARGET_WINDOWS && !LJ_TARGET_XBOXONE && !LJ_TARGET_UWP)
 static FILE *io_native_popen(lua_State *L, const char *fname,
-			     const char *mode)
+			     const char *mode, uint32_t *actionsp)
 {
   FILE *fp;
   lj_native_enter(L2TG(L));
@@ -161,7 +161,7 @@ static FILE *io_native_popen(lua_State *L, const char *fname,
 #else
   fp = _popen(fname, mode);
 #endif
-  (void)lj_native_leave(L);
+  *actionsp = lj_native_leave(L);
   return fp;
 }
 
@@ -600,14 +600,27 @@ LJLIB_CF(io_popen)
   const char *fname = strdata(lj_lib_checkstr(L, 1));
   GCstr *s = lj_lib_optstr(L, 2);
   const char *mode = s ? strdata(s) : "r";
+  TGState *tg = L2TG(L);
+  int had_stopreq = tg && (la_load8_acq(&tg->tg_flags) & TGF_STOPREQ);
   IOFileUD *iof = io_file_new(L);
+  uint32_t actions;
   iof->type = IOFILE_TYPE_PIPE;
 #if LJ_TARGET_POSIX
   (void)io_native_fflush(L, NULL);
-  iof->fp = io_native_popen(L, fname, mode);
+  iof->fp = io_native_popen(L, fname, mode, &actions);
 #else
-  iof->fp = io_native_popen(L, fname, mode);
+  iof->fp = io_native_popen(L, fname, mode, &actions);
 #endif
+  if (io_fresh_stopreq(L, actions, had_stopreq)) {
+    if (iof->fp != NULL) {
+      uint32_t close_actions;
+      FILE *fp = iof->fp;
+      iof->fp = NULL;
+      (void)io_native_pclose(L, fp, &close_actions);
+      actions |= close_actions;
+    }
+    lj_safepoint_checkstop(L, actions);
+  }
   return iof->fp != NULL ? 1 : luaL_fileresult(L, 0, fname);
 #else
   return luaL_error(L, LUA_QL("popen") " not supported");

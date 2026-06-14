@@ -109,6 +109,23 @@ do
 done
 
 for needle in \
+  'io_native_popen(lua_State *L, const char *fname,' \
+  'const char *mode, uint32_t *actionsp)' \
+  '*actionsp = lj_native_leave(L);' \
+  'iof->fp = io_native_popen(L, fname, mode, &actions);' \
+  'if (io_fresh_stopreq(L, actions, had_stopreq))' \
+  'iof->fp = NULL;' \
+  '(void)io_native_pclose(L, fp, &close_actions);' \
+  'actions |= close_actions;' \
+  'lj_safepoint_checkstop(L, actions);'
+do
+  if ! rg -F -q "$needle" "$ROOT/src/lib_io.c"; then
+    echo "guardrail: lib_io popen native leave must cleanup and propagate STOPREQ: $needle" >&2
+    exit 1
+  fi
+done
+
+for needle in \
   'io_native_fscanf_num(lua_State *L, FILE *fp, lua_Number *dp)' \
   'io_native_fgets(lua_State *L, char *buf, int size, FILE *fp)' \
   'io_native_fread(lua_State *L, void *buf, size_t size,' \
