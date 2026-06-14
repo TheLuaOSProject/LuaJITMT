@@ -81,7 +81,7 @@ static int io_native_fscanf_num(lua_State *L, FILE *fp, lua_Number *dp)
   int ok;
   lj_native_enter(L2TG(L));
   ok = fscanf(fp, LUA_NUMBER_SCAN, dp);
-  (void)lj_native_leave(L);
+  lj_safepoint_checkstop(L, lj_native_leave(L));
   return ok;
 }
 
@@ -90,7 +90,7 @@ static char *io_native_fgets(lua_State *L, char *buf, int size, FILE *fp)
   char *p;
   lj_native_enter(L2TG(L));
   p = fgets(buf, size, fp);
-  (void)lj_native_leave(L);
+  lj_safepoint_checkstop(L, lj_native_leave(L));
   return p;
 }
 
@@ -100,7 +100,7 @@ static size_t io_native_fread(lua_State *L, void *buf, size_t size,
   size_t nr;
   lj_native_enter(L2TG(L));
   nr = fread(buf, size, n, fp);
-  (void)lj_native_leave(L);
+  lj_safepoint_checkstop(L, lj_native_leave(L));
   return nr;
 }
 

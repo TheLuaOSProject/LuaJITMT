@@ -434,6 +434,20 @@ int main(void)
     "expect_stopreq(function() return f:flush() end)\n"
     "expect_stopreq(function() return f:seek('set', 0) end)\n"
     "f:close()\n"
+    "os.remove(p)\n"
+    "p = os.tmpname()\n"
+    "f = assert(io.open(p, 'w'))\n"
+    "f:write('12\\nabc\\nxyz')\n"
+    "f:close()\n"
+    "f = assert(io.open(p, 'r'))\n"
+    "expect_stopreq(function() return f:read('*n') end)\n"
+    "f:seek('set', 0)\n"
+    "expect_stopreq(function() return f:read('*l') end)\n"
+    "f:seek('set', 0)\n"
+    "expect_stopreq(function() return f:read(1) end)\n"
+    "f:seek('set', 0)\n"
+    "expect_stopreq(function() return f:read('*a') end)\n"
+    "f:close()\n"
     "os.remove(p)\n") == LUA_OK);
 
   assert(luaL_dostring(L,
