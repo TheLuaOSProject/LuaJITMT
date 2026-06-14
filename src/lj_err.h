@@ -43,10 +43,12 @@ LJ_FUNC_NORET void lj_err_argtype(lua_State *L, int narg, const char *xname);
 LJ_FUNC_NORET void lj_err_argt(lua_State *L, int narg, int tt);
 
 #if LJ_UNWIND_JIT && !LJ_ABI_WIN
-LJ_FUNC uint8_t *lj_err_register_mcode(void *base, size_t sz, uint8_t *info);
+LJ_FUNC uint8_t *lj_err_register_mcode(void *base, size_t sz, uint8_t *info,
+				       uint8_t *winfo);
 LJ_FUNC void lj_err_deregister_mcode(void *base, size_t sz, uint8_t *info);
 #else
-#define lj_err_register_mcode(base, sz, info)	(info)
+#define lj_err_register_mcode(base, sz, info, winfo) \
+  (UNUSED(winfo), (info))
 #define lj_err_deregister_mcode(base, sz, info)	UNUSED(base)
 #endif
 

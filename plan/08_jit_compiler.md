@@ -232,11 +232,10 @@ handler — sized LJ_MAX_EXITSTUBGR-compatible; see lj_vmstruct notes.
   checks `maxmcode`, since the legacy limit check only ran on area exhaustion.
   Final JIT teardown frees active mcode immediately with `lj_mcode_freeall()`
   instead of allocating new SMR retirement records after `lj_gc_freeall()`.
-  The first dual-map scaffold is now in place: each `MCLink` carries a writable
-  alias pointer and area registration/freeing uses RX/RW translation helpers,
-  while the current single-map bridge initializes `rw == rx`. This preserves
-  the original memfd target and prepares the allocator/emitter split without
-  claiming that dual mapping is complete. x64 exit-stub group, per-trace
+  The Linux/x64 dual-map write view is now in place: each `MCLink` carries a
+  writable alias pointer, mcode areas are backed by memfd and mapped once RX
+  and once RW, and area registration/freeing uses RX/RW translation helpers.
+  x64 exit-stub group, per-trace
   exit-row emission, and bottom-of-area 64-bit constant pools already write
   through `lj_mcode_rw()` while retaining RX cursors for published addresses
   and relative offsets. x64 trace-tail fixups now do the same for stack
@@ -249,9 +248,9 @@ handler — sized LJ_MAX_EXITSTUBGR-compatible; see lj_vmstruct notes.
   `asm_mcode_patch_i32()` for the x64 parent-exit and exit-branch rel32 stores,
   preserving RX-space decoding and the existing `lj_mcode_patch()`
   protection/sync protocol while routing the actual writes through the RW view.
-  This still does not implement the final memfd dual mapping; it replaces the
-  temporary RWX bridge while preserving the original dual-map write-view
-  target.
+  The conservative fresh-area behavior remains until M9 cleanup/perf, but the
+  implementation no longer depends on whole-area RW/RX flips for Linux/x64
+  correctness.
 
 ## 8.6 GC interaction of running traces
 

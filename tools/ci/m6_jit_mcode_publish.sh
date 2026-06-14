@@ -29,9 +29,21 @@ for needle in \
   'lj_mcode_rx2rw(MCode *area, MCode *rx)' \
   'lj_mcode_rw2rx(MCode *area, MCode *rw)' \
   'lj_mcode_rw(jit_State *J, MCode *rx)' \
+  'LJ_MCODE_DUALMAP' \
+  'mcode_memfd_create(void)' \
+  'mcode_alloc_dualmap(uintptr_t hint, size_t sz)' \
+  'mmap((void *)hint, sz, MCPROT_RX, MAP_SHARED, fd, 0)' \
+  'mmap(NULL, sz, MCPROT_RW, MAP_SHARED, fd, 0)' \
+  '((MCLink *)rw)->rw = (MCode *)rw;' \
   'mcode_register_area(jit_State *J, MCode *area' \
   'mcode_free_mapping(MCode *area, size_t sz)' \
-  '((MCLink *)J->mcarea)->rw = J->mcarea;  /* 08.5: single-map write view. */' \
+  'lj_err_register_mcode(area, sz, (uint8_t *)bot,' \
+  'uint8_t *lj_err_register_mcode(void *base, size_t sz, uint8_t *info,' \
+  'memcpy(winfo, err_frame_jit_template, sizeof(err_frame_jit_template));' \
+  'memcpy(winfo + ERR_FRAME_JIT_OFS_HANDLER, &handler, sizeof(handler));' \
+  'rwlink->next = oldarea;' \
+  'rwlink->size = sz;' \
+  'rwlink->rw = rwarea;' \
   'mcode_free_mapping(area, size);' \
   'asm_mcode_u8(ASMState *as, MCode **pp, MCode v)' \
   'asm_mcode_u64(ASMState *as, MCode **pp, uint64_t v)' \
@@ -53,12 +65,12 @@ for needle in \
   'asm_mcode_put_i32(as, p+1, jmprel(as->J, p+5, target));' \
   'asm_mcode_patch_i32(J, p+len-4, jmprel(J, p+len, target));' \
   'asm_mcode_patch_i32(J, p+2, jmprel(J, p+6, target));' \
-  'memfd dual-map W^X implementation'
+  'memfd dual-map W^X write view'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_obj.h" "$ROOT/src/lj_jit.h" \
       "$ROOT/src/lj_mcode.h" "$ROOT/src/lj_mcode.c" "$ROOT/src/lj_state.c" \
       "$ROOT/src/lj_trace.c" "$ROOT/src/lj_emit_x86.h" \
-      "$ROOT/src/lj_asm_x86.h"; then
+      "$ROOT/src/lj_asm_x86.h" "$ROOT/src/lj_err.h" "$ROOT/src/lj_err.c"; then
     echo "guardrail: missing mcode publication marker: $needle" >&2
     exit 1
   fi
@@ -77,6 +89,11 @@ fi
 if rg -n '#if[[:space:]]+LJ_MT|#ifdef[[:space:]]+LJ_MT|LUAJIT_THREADSAFE' \
     "$ROOT/src/lj_mcode.c"; then
   echo "guardrail: mcode publication bridge must not be hidden behind LJ_MT" >&2
+  exit 1
+fi
+
+if rg -n 'single-map write view|rw == rx|rw = J->mcarea' "$ROOT/src/lj_mcode.c"; then
+  echo "guardrail: Linux/x64 mcode bridge must not retain the single-map scaffold" >&2
   exit 1
 fi
 

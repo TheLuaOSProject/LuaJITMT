@@ -65,6 +65,10 @@ void lj_mcode_sync(void *start, void *end)
 
 #if LJ_HASJIT
 
+#if defined(__linux__) && LJ_TARGET_X64 && LUAJIT_SECURITY_MCODE != 0
+#define LJ_MCODE_DUALMAP	1
+#endif
+
 void lj_mcode_init(global_State *g)
 {
 #if defined(__linux__) && LJ_TARGET_X64
@@ -88,7 +92,7 @@ void lj_mcode_sync_core(jit_State *J)
 #endif
 }
 
-#if LUAJIT_SECURITY_MCODE != 0
+#if LUAJIT_SECURITY_MCODE != 0 && !LJ_MCODE_DUALMAP
 /* Protection twiddling failed. Probably due to kernel security. */
 static LJ_NORET LJ_NOINLINE void mcode_protfail(jit_State *J)
 {
@@ -132,7 +136,21 @@ static void mcode_setprot(jit_State *J, void *p, size_t sz, DWORD prot)
 
 #elif LJ_TARGET_POSIX
 
+#include <sys/types.h>
 #include <sys/mman.h>
+#if LJ_MCODE_DUALMAP
+#include <fcntl.h>
+#include <sys/syscall.h>
+#include <unistd.h>
+#ifndef MFD_CLOEXEC
+#define MFD_CLOEXEC	0x0001U
+#endif
+#ifndef SYS_memfd_create
+#ifdef __NR_memfd_create
+#define SYS_memfd_create	__NR_memfd_create
+#endif
+#endif
+#endif
 
 #ifndef MAP_ANONYMOUS
 #define MAP_ANONYMOUS	MAP_ANON
@@ -157,14 +175,55 @@ static void mcode_setprot(jit_State *J, void *p, size_t sz, DWORD prot)
 #define MCPROT_CREATE	0
 #endif
 
+#if LJ_MCODE_DUALMAP
+static int mcode_memfd_create(void)
+{
+#ifdef SYS_memfd_create
+  return (int)syscall(SYS_memfd_create, "luajit-mcode", MFD_CLOEXEC);
+#else
+  return -1;
+#endif
+}
+
+static void *mcode_alloc_dualmap(uintptr_t hint, size_t sz)
+{
+  int fd = mcode_memfd_create();
+  void *rx, *rw;
+  if (fd == -1)
+    return NULL;
+  if (ftruncate(fd, (off_t)sz) != 0) {
+    close(fd);
+    return NULL;
+  }
+  rx = mmap((void *)hint, sz, MCPROT_RX, MAP_SHARED, fd, 0);
+  if (rx == MAP_FAILED) {
+    close(fd);
+    return NULL;
+  }
+  rw = mmap(NULL, sz, MCPROT_RW, MAP_SHARED, fd, 0);
+  close(fd);
+  if (rw == MAP_FAILED) {
+    munmap(rx, sz);
+    return NULL;
+  }
+  ((MCLink *)rw)->rw = (MCode *)rw;
+  return rx;
+}
+#endif
+
 static void *mcode_alloc_at(uintptr_t hint, size_t sz, int prot)
 {
+#if LJ_MCODE_DUALMAP
+  UNUSED(prot);
+  return mcode_alloc_dualmap(hint, sz);
+#else
   void *p = mmap((void *)hint, sz, prot|MCPROT_CREATE, MAP_PRIVATE|MAP_ANONYMOUS|MCMAP_CREATE, -1, 0);
   if (p == MAP_FAILED) return NULL;
 #if MCMAP_CREATE
   pthread_jit_write_protect_np(0);
 #endif
   return p;
+#endif
 }
 
 static void mcode_free(void *p, size_t sz)
@@ -174,7 +233,9 @@ static void mcode_free(void *p, size_t sz)
 
 static void mcode_setprot(jit_State *J, void *p, size_t sz, int prot)
 {
-#if LUAJIT_SECURITY_MCODE != 0
+#if LJ_MCODE_DUALMAP
+  UNUSED(J); UNUSED(p); UNUSED(sz); UNUSED(prot);
+#elif LUAJIT_SECURITY_MCODE != 0
 #if MCMAP_CREATE
   UNUSED(J); UNUSED(p); UNUSED(sz);
   pthread_jit_write_protect_np((prot & PROT_EXEC));
@@ -236,6 +297,14 @@ static void *mcode_alloc_at_TEST(jit_State *J, uintptr_t hint, size_t sz, int pr
 #define mcode_alloc_at(hint, sz, prot)	mcode_alloc_at_TEST(J, hint, sz, prot)
 #endif
 
+static void mcode_free_mapping(MCode *area, size_t sz)
+{
+  MCode *rw = lj_mcode_area_rw(area);
+  if (rw && rw != area)
+    mcode_free(rw, sz);
+  mcode_free(area, sz);
+}
+
 /* -- MCode area protection ----------------------------------------------- */
 
 #if LUAJIT_SECURITY_MCODE == 0
@@ -274,9 +343,9 @@ static void mcode_protect(jit_State *J, int prot)
 #define MCPROT_RUN	MCPROT_RX
 
 #if defined(__linux__) && LJ_TARGET_X64
-/* M6 bridge: keep published mcode execute-stable for peer TGs by never
-** reopening an area that already contains trace code. The final target
-** remains the memfd dual-map W^X implementation from 08 section 8.5. */
+/* M6 bridge: keep published mcode execute-stable for peer TGs. The Linux/x64
+** path uses a memfd dual-map W^X write view; fresh areas remain until the
+** M9 cleanup/perf pass removes the conservative bridge behavior. */
 #define LJ_MCODE_EXEC_STABLE	1
 #define LJ_MCODE_FRESH_AREA	1
 #endif
@@ -342,7 +411,11 @@ static void *mcode_alloc(jit_State *J, size_t sz)
     if (mcode_inrange(J, (uintptr_t)p, sz))
       return p;  /* Success. */
     else if (p)
+#if LJ_MCODE_DUALMAP
+      mcode_free_mapping((MCode *)p, sz);  /* Free badly placed area. */
+#else
       mcode_free(p, sz);  /* Free badly placed area. */
+#endif
   probe:
     /* Next try probing 64KB-aligned pseudo-random addresses. */
     j = 0;
@@ -396,31 +469,32 @@ static LJ_AINLINE MCode *mcode_register_area(jit_State *J, MCode *area,
 					     size_t sz, MCode *bot)
 {
   MCode *rwbot = lj_mcode_rx2rw(area, bot);
-  MCode *rwnewbot = (MCode *)lj_err_register_mcode(area, sz, (uint8_t *)rwbot);
+  MCode *newbot = (MCode *)lj_err_register_mcode(area, sz, (uint8_t *)bot,
+						 (uint8_t *)rwbot);
   UNUSED(J);
-  return lj_mcode_rw2rx(area, rwnewbot);
-}
-
-static void mcode_free_mapping(MCode *area, size_t sz)
-{
-  MCode *rw = lj_mcode_area_rw(area);
-  if (rw && rw != area)
-    mcode_free(rw, sz);
-  mcode_free(area, sz);
+  return newbot;
 }
 
 /* Allocate a new MCode area. */
 static void mcode_allocarea(jit_State *J, size_t sz)
 {
   MCode *oldarea = J->mcarea;
+  MCode *rwarea;
+  MCLink *rwlink;
   J->mcarea = (MCode *)mcode_alloc(J, sz);
   J->szmcarea = sz;
   J->mcprot = MCPROT_GEN;
   J->mctop = (MCode *)((char *)J->mcarea + J->szmcarea);
   J->mcbot = (MCode *)((char *)J->mcarea + sizeof(MCLink));
-  ((MCLink *)J->mcarea)->next = oldarea;
-  ((MCLink *)J->mcarea)->size = sz;
-  ((MCLink *)J->mcarea)->rw = J->mcarea;  /* 08.5: single-map write view. */
+#if LJ_MCODE_DUALMAP
+  rwarea = lj_mcode_area_rw(J->mcarea);
+#else
+  rwarea = J->mcarea;
+#endif
+  rwlink = (MCLink *)rwarea;
+  rwlink->next = oldarea;
+  rwlink->size = sz;
+  rwlink->rw = rwarea;
   J->szallmcarea += sz;
   J->mcbot = mcode_register_area(J, J->mcarea, sz, J->mcbot);
 }

@@ -610,10 +610,11 @@ static const uint8_t err_frame_jit_template[] = {
 extern void __register_frame(const void *);
 extern void __deregister_frame(const void *);
 
-uint8_t *lj_err_register_mcode(void *base, size_t sz, uint8_t *info)
+uint8_t *lj_err_register_mcode(void *base, size_t sz, uint8_t *info,
+			       uint8_t *winfo)
 {
   ASMFunction handler = (ASMFunction)err_unwind_jit;
-  memcpy(info, err_frame_jit_template, sizeof(err_frame_jit_template));
+  memcpy(winfo, err_frame_jit_template, sizeof(err_frame_jit_template));
 #if LJ_ABI_PAUTH
 #if LJ_TARGET_ARM64
   handler = ptrauth_auth_and_resign(handler,
@@ -623,8 +624,8 @@ uint8_t *lj_err_register_mcode(void *base, size_t sz, uint8_t *info)
 #error "missing pointer authentication support for this architecture"
 #endif
 #endif
-  memcpy(info + ERR_FRAME_JIT_OFS_HANDLER, &handler, sizeof(handler));
-  *(uint32_t *)(info + ERR_FRAME_JIT_OFS_CODE_SIZE) =
+  memcpy(winfo + ERR_FRAME_JIT_OFS_HANDLER, &handler, sizeof(handler));
+  *(uint32_t *)(winfo + ERR_FRAME_JIT_OFS_CODE_SIZE) =
     (uint32_t)(sz - sizeof(err_frame_jit_template) - (info - (uint8_t *)base));
   __register_frame(info + ERR_FRAME_JIT_OFS_REGISTER);
 #ifdef LUA_USE_ASSERT
