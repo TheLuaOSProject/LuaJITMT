@@ -423,6 +423,18 @@ int main(void)
     "f:close()\n"
     "os.remove(p)\n") == LUA_OK);
 
+  assert(luaL_dostring(L,
+    "local th = require('threading')\n"
+    "local worker = th.spawn(function() return 'joined' end)\n"
+    "while worker:running() do th.sleep(0.001) end\n"
+    "publish_stopreq()\n"
+    "local ok, err = pcall(function() return worker:join() end)\n"
+    "assert(not ok)\n"
+    "assert(tostring(err):find('thread interrupted: VM shutdown', 1, true))\n"
+    "clear_stopreq()\n"
+    "local jok, value = worker:join()\n"
+    "assert(jok == true and value == 'joined')\n") == LUA_OK);
+
 #if LJ_HASFFI
   assert(luaL_dostring(L,
     "local ffi = require('ffi')\n"

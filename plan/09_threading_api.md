@@ -87,6 +87,14 @@ thread:join(timeout):
   Main thread exiting with unjoined threads: §9.6.
 ```
 
+Current bridge note: the wait path already checks STOPREQ after each native
+futex wait. The final winner-side `pthread_join()` native leave now records its
+action mask, completes result copying and live-root/TG cleanup, then checks
+STOPREQ before returning normal join results. The original target above still
+holds the live root through stack growth and result copy; shutdown delivery is
+deferred until that cleanup is complete so a caught interrupt cannot strand the
+joined child in the live list.
+
 ## 9.5 channels
 
 Implementation: bounded MPMC ring of TValue slots + seq counters

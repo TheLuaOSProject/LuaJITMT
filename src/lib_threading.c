@@ -378,6 +378,7 @@ static int threading_join_core(lua_State *L, LJThread *th, int has_timeout,
 			       int64_t ns)
 {
   int remove_live = 0;
+  uint32_t join_actions = 0;
   uint32_t state;
   if (threading_is_current_thread(L, th)) {
     if (has_timeout) {
@@ -418,7 +419,7 @@ static int threading_join_core(lua_State *L, LJThread *th, int has_timeout,
     if (la_cas32(&th->joined, &expect, 1, LA_ACQ_REL, LA_ACQ)) {
       lj_native_enter(L2TG(L));
       (void)lj_thr_join(&th->thr, NULL);
-      (void)lj_native_leave(L);
+      join_actions = lj_native_leave(L);
       remove_live = 1;
     }
   }
@@ -438,6 +439,7 @@ static int threading_join_core(lua_State *L, LJThread *th, int has_timeout,
     threading_live_remove(th);
     (void)lj_tg_reclaim_dead(G(L));
   }
+  lj_safepoint_checkstop(L, join_actions);
   return (int)th->nresults + 1;
 }
 
