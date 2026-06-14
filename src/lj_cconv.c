@@ -372,12 +372,6 @@ copyval:  /* Copy value. */
   }
 }
 
-void lj_cconv_ct_ct(CTState *cts, CType *d, CType *s,
-		    uint8_t *dp, uint8_t *sp, CTInfo flags)
-{
-  lj_cconv_ct_ct_l(cts->L, cts, d, s, dp, sp, flags);
-}
-
 /* -- C type to TValue conversion ----------------------------------------- */
 
 /* Convert C type to TValue. Caveat: expects to get the raw CType! */
@@ -390,15 +384,15 @@ int lj_cconv_tv_ct_l(lua_State *L, CTState *cts, CType *s, CTypeID sid,
       if (ctype_isinteger(sinfo) && s->size > 4) goto copyval;
       if (LJ_DUALNUM && ctype_isinteger(sinfo)) {
 	int32_t i;
-	lj_cconv_ct_ct(cts, ctype_get(cts, CTID_INT32), s,
-		       (uint8_t *)&i, sp, 0);
+	lj_cconv_ct_ct_l(L, cts, ctype_get(cts, CTID_INT32), s,
+			 (uint8_t *)&i, sp, 0);
 	if ((sinfo & CTF_UNSIGNED) && i < 0)
 	  setnumV(o, (lua_Number)(uint32_t)i);
 	else
 	  setintV(o, i);
       } else {
-	lj_cconv_ct_ct(cts, ctype_get(cts, CTID_DOUBLE), s,
-		       (uint8_t *)&o->n, sp, 0);
+	lj_cconv_ct_ct_l(L, cts, ctype_get(cts, CTID_DOUBLE), s,
+			 (uint8_t *)&o->n, sp, 0);
 	/* Numbers are NOT canonicalized here! Beware of uninitialized data. */
 	lj_assertCTS(tvisnum(o), "non-canonical NaN passed");
       }

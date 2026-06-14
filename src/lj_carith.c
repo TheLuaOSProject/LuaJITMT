@@ -134,15 +134,15 @@ static int carith_ptr(lua_State *L, CTState *cts, CDArith *ca, MMS mm)
     }
     if (!((mm == MM_add || mm == MM_sub) && ctype_isnum(ca->ct[1]->info)))
       return 0;
-    lj_cconv_ct_ct(cts, ctype_get(cts, CTID_INT_PSZ), ca->ct[1],
-		   (uint8_t *)&idx, ca->p[1], 0);
+    lj_cconv_ct_ct_l(L, cts, ctype_get(cts, CTID_INT_PSZ), ca->ct[1],
+		     (uint8_t *)&idx, ca->p[1], 0);
     if (mm == MM_sub) idx = (ptrdiff_t)(~(uintptr_t)idx+1u);
   } else if (mm == MM_add && ctype_isnum(ctp->info) &&
       (ctype_isptr(ca->ct[1]->info) || ctype_isrefarray(ca->ct[1]->info))) {
     /* Swap pointer and index. */
     ctp = ca->ct[1]; pp = ca->p[1];
-    lj_cconv_ct_ct(cts, ctype_get(cts, CTID_INT_PSZ), ca->ct[0],
-		   (uint8_t *)&idx, ca->p[0], 0);
+    lj_cconv_ct_ct_l(L, cts, ctype_get(cts, CTID_INT_PSZ), ca->ct[0],
+		     (uint8_t *)&idx, ca->p[0], 0);
   } else {
     return 0;
   }
@@ -152,7 +152,7 @@ static int carith_ptr(lua_State *L, CTState *cts, CDArith *ca, MMS mm)
   pp += idx*(int32_t)sz;  /* Compute pointer + index. */
   id = lj_ctype_intern(cts, CTINFO(CT_PTR, CTALIGN_PTR|ctype_cid(ctp->info)),
 		       CTSIZE_PTR);
-  cd = lj_cdata_new(cts, id, CTSIZE_PTR);
+  cd = lj_cdata_new_l(L, cts, id, CTSIZE_PTR);
   *(uint8_t **)cdataptr(cd) = pp;
   setcdataV(L, L->top-1, cd);
   lj_gc_check(L);
@@ -170,9 +170,9 @@ static int carith_int64(lua_State *L, CTState *cts, CDArith *ca, MMS mm)
     CType *ct = ctype_get(cts, id);
     GCcdata *cd;
     uint64_t u0, u1, *up;
-    lj_cconv_ct_ct(cts, ct, ca->ct[0], (uint8_t *)&u0, ca->p[0], 0);
+    lj_cconv_ct_ct_l(L, cts, ct, ca->ct[0], (uint8_t *)&u0, ca->p[0], 0);
     if (mm != MM_unm)
-      lj_cconv_ct_ct(cts, ct, ca->ct[1], (uint8_t *)&u1, ca->p[1], 0);
+      lj_cconv_ct_ct_l(L, cts, ct, ca->ct[1], (uint8_t *)&u1, ca->p[1], 0);
     switch (mm) {
     case MM_eq:
       setboolV(L->top-1, (u0 == u1));
@@ -187,7 +187,7 @@ static int carith_int64(lua_State *L, CTState *cts, CDArith *ca, MMS mm)
       return 1;
     default: break;
     }
-    cd = lj_cdata_new(cts, id, 8);
+    cd = lj_cdata_new_l(L, cts, id, 8);
     up = (uint64_t *)cdataptr(cd);
     setcdataV(L, L->top-1, cd);
     switch (mm) {
@@ -342,8 +342,8 @@ uint64_t lj_carith_check64(lua_State *L, int narg, CTypeID *id)
       *id = CTID_UINT64;  /* Use uint64_t, since it has the highest rank. */
     else if (!*id)
       *id = CTID_INT64;  /* Use int64_t, unless already set. */
-    lj_cconv_ct_ct(cts, ctype_get(cts, *id), s,
-		   (uint8_t *)&x, sp, CCF_ARG(narg));
+    lj_cconv_ct_ct_l(L, cts, ctype_get(cts, *id), s,
+		     (uint8_t *)&x, sp, CCF_ARG(narg));
     return x;
   } else if (!(tvisstr(o) && lj_strscan_number(strV(o), o))) {
     goto err;
