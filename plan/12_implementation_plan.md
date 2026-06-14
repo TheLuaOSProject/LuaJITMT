@@ -120,7 +120,11 @@ gates. Mixed raw-local FNEW traces are now covered for source/loaded immutable
 raw captures through stack-value synchronization, mutable captures once the
 cell is promoted at trace entry, and source/loaded first-promotion loops where
 the hot trace performs the first mutable raw-slot promotion with otherwise
-type-stable loop slots. Linux/x64 `LJ_MT`
+type-stable loop slots. A narrow trace-local table-store bridge now records
+non-nil `ASTORE`/`HSTORE` updates to `TNEW`/`TDUP` tables and lowers them
+through `lj_tab_storetv_forjit()`; the original broad generation-aware table
+write protocol remains pending, so shared and shape-changing indexed stores
+stay NYI. Linux/x64 `LJ_MT`
 secure builds currently keep generated mcode execute-stable with a fresh-area
 W^X bridge: once an area has committed trace bytes, the next reserve allocates
 a new unpublished area instead of flipping the old area writable. The planned

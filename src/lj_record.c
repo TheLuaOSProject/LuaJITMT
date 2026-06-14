@@ -1544,6 +1544,15 @@ static TRef rec_idx_key(jit_State *J, RecordIndex *ix, IRRef *rbref,
   return emitir(IRT(IR_HREF, IRT_PGC), ix->tab, key);
 }
 
+static int rec_idx_store_trace_local(jit_State *J, TRef tab)
+{
+  IRIns *ir;
+  if (tref_ref(tab) < REF_FIRST)
+    return 0;
+  ir = IR(tref_ref(tab));
+  return ir->o == IR_TNEW || ir->o == IR_TDUP;
+}
+
 /* Determine whether a key is NOT one of the fast metamethod names. */
 static int nommstr(jit_State *J, TRef key)
 {
@@ -1650,10 +1659,19 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
   } else {  /* Indexed store. */
     GCtab *mt = tabref_acq(tabV(&ix->tabv)->metatable);
     int keybarrier = tref_isgcv(ix->key) && !tref_isnil(ix->val);
+#if defined(__linux__) && LJ_TARGET_X64
+    if (tvisnil(oldv) || !rec_idx_store_trace_local(J, ix->tab)) {
+      if (loadop == IR_HLOAD)
+	lj_trace_err_info(J, LJ_TRERR_NYIBC);  /* M6: no shared/new HSTORE bridge. */
+      if (loadop == IR_ALOAD)
+	lj_trace_err_info(J, LJ_TRERR_NYIBC);  /* M6: no shared/nil ASTORE bridge. */
+    }
+#else
     if (loadop == IR_HLOAD)
       lj_trace_err_info(J, LJ_TRERR_NYIBC);  /* M5: no legacy hash HSTORE. */
     if (loadop == IR_ALOAD)
       lj_trace_err_info(J, LJ_TRERR_NYIBC);  /* M5: no legacy array ASTORE. */
+#endif
     if (tref_ref(xref) < rbref) {  /* HREFK forwarded? */
       lj_ir_rollback(J, rbref);  /* Rollback to eliminate hmask guard. */
       J->guardemit = rbguard;

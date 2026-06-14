@@ -1003,6 +1003,13 @@ LJ_FUNCA TValue *lj_tab_storetv(lua_State *L, TValue *dst, cTValue *src)
   return dst;
 }
 
+LJ_FUNCA TValue *lj_tab_storetv_forjit(lua_State *L, TValue *dst, cTValue *src)
+{
+  copyTVrel(L, dst, src);
+  lj_gc2_barrier_tv(L, dst);  /* M6: traced table store value barrier. */
+  return dst;
+}
+
 LJ_FUNCA TValue *lj_tab_storetvn(lua_State *L, TValue *dst, cTValue *src,
 				 uint32_t n)
 {

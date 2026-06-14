@@ -257,7 +257,11 @@ handler — sized LJ_MAX_EXITSTUBGR-compatible; see lj_vmstruct notes.
   target rather than being silently deleted. Existing FFI/raw-memory
   `IR_XBAR` alias limits now also treat `IR_XPOLL` as a poll-region boundary
   for `XLOAD` forwarding/CSE and `XSTORE` DSE; this advances the current XBAR
-  surface without enabling table `ASTORE`/`HSTORE` tracing.
+  surface without enabling broad table `ASTORE`/`HSTORE` tracing. A narrow M6
+  bridge records non-nil slot stores only for trace-local `TNEW`/`TDUP` tables
+  and lowers them through the release-store `lj_tab_storetv_forjit()` helper;
+  shared and shape-changing table stores remain NYI until the full table-write
+  protocol below lands.
 - **Allocation on trace**: TNEW/TDUP/CNEW/SNEW already call into C or use
   inline alloc IR; route them to the TG bump (mirror of 07 §7.5) — the IR
   for inline alloc (lj_asm.c asm_snew/asm_tnew via lj_ir_call → actually
@@ -391,13 +395,16 @@ scoped-flush target.
    pointer during the current publish/retire phase. Constant-key `HREFK`
    recording snapshots the legacy node/hmask shape around `lj_tab_get()` and
    falls back to regular `HREF` if the shape changes while recording. Legacy
-   table-slot stores are not recorded for now: the recorder raises the normal
-   NYI-bytecode trace error before emitting `HSTORE` or `ASTORE` for indexed
-   stores, and the M5 guardrail asserts both array and hash table-store loops
-   stay untraced. The original plan kept traced array stores for barrier
-   coverage, but the current M5 bridge demotes them until the final
-   generation-aware trace write/barrier protocol can replace raw generated
-   stores.
+   shared table-slot stores are not recorded for now: the recorder raises the
+   normal NYI-bytecode trace error before emitting `HSTORE` or `ASTORE` for
+   shared existing-table updates, new-key insertion, and nil-slot stores, and
+   the M5 guardrail asserts shared array/hash update loops stay untraced. The
+   original plan kept traced array stores for barrier coverage, but the current
+   bridge only admits trace-local `TNEW`/`TDUP` non-nil slot updates and lowers
+   them through a helper that release-publishes the TValue and runs the GC2 value
+   barrier. The final generation-aware trace write/barrier protocol remains
+   required before raw generated stores or shared table stores can replace this
+   helper bridge.
 2. **TDUP/TNEW colo**: colo removed (06 §6.2) — recorder paths that
    special-case colocated arrays (`lj_record_tnew`, table.new fast func)
    simplify.
