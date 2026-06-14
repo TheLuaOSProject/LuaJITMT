@@ -19,6 +19,7 @@
 #include "lj_obj.h"
 #include "lj_atomic.h"
 #include "lj_chan.h"
+#include "lj_ccallback.h"
 #include "lj_err.h"
 #include "lj_gc.h"
 #include "lj_lib.h"
@@ -337,6 +338,7 @@ static void *threading_worker(void *arg)
     th->nresults = (uint32_t)(L->top - L->base);
   }
 
+  lj_ccallback_disown_state(L);
   lj_state_release(L, tid);
   lj_tg_detach(g, tg);
   tg->cur_L = NULL;
@@ -923,6 +925,7 @@ LUA_API void luaMT_detach(lua_State *L)
   if (!tg || tg == g->main_tg || tg->thread_L != L)
     return;
   tid = tg->tid;
+  lj_ccallback_disown_state(L);
   lj_tg_detach(g, tg);
   tg->cur_L = NULL;
   tg->thread_L = NULL;

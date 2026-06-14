@@ -22,6 +22,7 @@
 #include "lj_state.h"
 #include "lj_frame.h"
 #if LJ_HASFFI
+#include "lj_ccallback.h"
 #include "lj_ctype.h"
 #endif
 #include "lj_trace.h"
@@ -482,6 +483,9 @@ lua_State *lj_state_new(lua_State *L)
 void LJ_FASTCALL lj_state_free(global_State *g, lua_State *L)
 {
   lj_assertG(L != mainthread(g), "free of main thread");
+#if LJ_HASFFI
+  lj_ccallback_disown_state(L);
+#endif
   if (L == lj_tg_cur_L(g))
     lj_tg_clearcur_L(g);
   if (gcref(L->openupval) != NULL) {

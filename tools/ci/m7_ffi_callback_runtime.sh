@@ -31,6 +31,9 @@ for needle in \
   'callback_conv_args(CTState *cts, lua_State *L, CCallbackRuntime *cb)' \
   'callback_conv_result(CTState *cts, lua_State *L, TValue *o,' \
   'callback_owner_claim(owner, top, L)' \
+  'callback_owner_clear(lua_State **owner, MSize slot,' \
+  'lj_ccallback_disown_state(lua_State *L)' \
+  'callback_owner_clear(owner, slot, L)' \
   'void *old_ffi_call_func = tg->ffi_call_func' \
   'tg->ffi_call_func = (void *)cc.func' \
   'tg->ffi_call_func = old_ffi_call_func' \
@@ -83,11 +86,49 @@ if rg -n 'lj_tab_storebool\(L, lj_tab_set\(L, cts->miscmap|lj_tab_get\(J->L, cts
   exit 1
 fi
 
+if ! awk '
+  /static void \*threading_worker\(void \*arg\)/ { inworker = 1 }
+  inworker && /lj_ccallback_disown_state\(L\)/ { disown = NR }
+  inworker && /lj_tg_detach\(g, tg\)/ { detach = NR }
+  inworker && /^}/ { found = disown && detach && disown < detach; inworker = 0 }
+  END { exit found ? 0 : 1 }
+' "$ROOT/src/lib_threading.c"; then
+  echo "guardrail: worker callback owners must be disowned before TG detach" >&2
+  exit 1
+fi
+
+if ! awk '
+  /LUA_API void luaMT_detach\(lua_State \*L\)/ { indetach = 1 }
+  indetach && /lj_ccallback_disown_state\(L\)/ { disown = NR }
+  indetach && /lj_tg_detach\(g, tg\)/ { detach = NR }
+  indetach && /^}/ { found = disown && detach && disown < detach; indetach = 0 }
+  END { exit found ? 0 : 1 }
+' "$ROOT/src/lib_threading.c"; then
+  echo "guardrail: C API callback owners must be disowned before TG detach" >&2
+  exit 1
+fi
+
+if ! awk '
+  /void LJ_FASTCALL lj_state_free\(global_State \*g, lua_State \*L\)/ { infree = 1 }
+  infree && /lj_ccallback_disown_state\(L\)/ { disown = NR }
+  infree && /lj_mem_freevec\(g, tvref\(L->stack\)/ { freestack = NR }
+  infree && /^}/ { found = disown && freestack && disown < freestack; infree = 0 }
+  END { exit found ? 0 : 1 }
+' "$ROOT/src/lj_state.c"; then
+  echo "guardrail: callback owners must be disowned before lua_State stack free" >&2
+  exit 1
+fi
+
 make -C "$ROOT/src" clean >/dev/null
 make -C "$ROOT/src" -j"$JOBS" >/dev/null
 
 out="$TMP/lj_t-ffi-callback-nested-native"
 "$CC" $CFLAGS -I"$ROOT/src" "$ROOT/tests/t-ffi-callback-nested-native.c" \
+  "$ROOT/src/libluajit.a" -lm -ldl -pthread -o "$out"
+"$out"
+
+out="$TMP/lj_t-ffi-callback-owner-lifetime"
+"$CC" $CFLAGS -I"$ROOT/src" "$ROOT/tests/t-ffi-callback-owner-lifetime.c" \
   "$ROOT/src/libluajit.a" -lm -ldl -pthread -o "$out"
 "$out"
 

@@ -52,6 +52,14 @@ static LJ_AINLINE int callback_owner_claim(lua_State **owner, MSize slot,
 		   LA_ACQ_REL, LA_ACQ);  /* 11.5 callback slot owner claim. */
 }
 
+static LJ_AINLINE int callback_owner_clear(lua_State **owner, MSize slot,
+					   lua_State *L)
+{
+  void *expect = L;
+  return la_casptr((void **)&owner[slot], &expect, NULL,
+		   LA_ACQ_REL, LA_ACQ);  /* 11.5 callback owner disown. */
+}
+
 #if LJ_OS_NOJIT
 
 /* Callbacks disabled. */
@@ -887,6 +895,25 @@ void LJ_FASTCALL lj_ccallback_leave(CTState *cts, TValue *o,
 MSize lj_ccallback_maxslot(void)
 {
   return CALLBACK_MAX_SLOT;
+}
+
+void lj_ccallback_disown_state(lua_State *L)
+{
+  CTState *cts;
+  lua_State **owner;
+  MSize slot, sizeid;
+  if (L == NULL)
+    return;
+  cts = ctype_ctsG(G(L));
+  if (cts == NULL)
+    return;
+  owner = (lua_State **)la_loadptr_acq((void *const *)&cts->cb.owner);
+  sizeid = (MSize)la_load32_acq(&cts->cb.sizeid);
+  if (owner == NULL || sizeid == 0)
+    return;
+  for (slot = 0; slot < sizeid; slot++)
+    if (callback_owner_load(owner, slot) == L)
+      (void)callback_owner_clear(owner, slot, L);
 }
 
 static CTypeID1 *callback_slots_init_l(lua_State *L, CTState *cts)

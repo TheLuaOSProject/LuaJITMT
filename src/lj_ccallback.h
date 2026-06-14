@@ -20,11 +20,16 @@ LJ_FUNCA lua_State * LJ_FASTCALL lj_ccallback_enter(CTState *cts, void *cf,
 LJ_FUNCA void LJ_FASTCALL lj_ccallback_leave(CTState *cts, TValue *o,
 					     CCallbackRuntime *cb);
 LJ_FUNC void lj_ccallback_unwind(lua_State *L, TValue *cont);
+LJ_FUNC void lj_ccallback_disown_state(lua_State *L);
 LJ_FUNC MSize lj_ccallback_maxslot(void);
 LJ_FUNC void lj_ccallback_init_l(lua_State *L, CTState *cts);
 LJ_FUNC void *lj_ccallback_new_l(lua_State *L, CTState *cts, CType *ct,
 				 GCfunc *fn);
 LJ_FUNC void lj_ccallback_mcode_free(CTState *cts);
+
+#else
+
+#define lj_ccallback_disown_state(L)	UNUSED(L)
 
 #endif
 
