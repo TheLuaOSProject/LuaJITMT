@@ -111,7 +111,10 @@ Current implementation note: the original report's M6 task above remains the
 canonical target. The current x86-64 bridge has implemented guarded `IR_XPOLL`
 for LOOP-backedge trace safepoint polls and inlined FUNCF-depth entries. The
 first TGMARK invalidation slice keeps `TBAR`/`OBAR` inside XPOLL-delimited
-poll regions; broader XBAR invalidation work remains pending.
+poll regions; broader XBAR invalidation work remains pending. Linux/x64
+`LJ_MT` builds currently keep generated mcode execute-stable with the
+documented RWX fallback until the planned dual-map mcode write view replaces
+whole-area protection flips.
 Tests: stock with -jon; t-jit-01..06 (trace same loop from 2 threads;
 side-trace attach while parent runs on another thread; flush storm;
 exit-handler stress; recording-thread killed mid-trace (error in
@@ -125,6 +128,14 @@ cdata alloc switch, ffi.gc registry, native-state wrapping + fast-call
 exemption, callbacks attach, clib.
 Tests: t-ffi-01..06 (11 §11.8); stock FFI tests under torture, 8 threads.
 Gate: green; ffi_struct bench within 10% of M0.
+
+Current implementation note: the original M7 target above remains intact.
+FINREG uses CAS-published weak-key generations for cdata finalizer registry
+growth, and recorded `ffi.gc()`/ctype `__gc` now emits the FINREG mutation
+helper instead of falling back to NYI. The current guard covers direct
+registration, nil clear, metatype registration, and multi-threaded default-JIT
+FINREG stress; the broader final FINREG/finqueue execution design remains M8
+follow-up rather than M9 performance cleanup.
 
 ## M8 — Weak tables & finalizers, complete semantics (≈1200)
 Tasks: full gc_mayclear rule port (05 §5.8), resurrection-race store hook,

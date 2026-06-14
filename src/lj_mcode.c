@@ -273,6 +273,23 @@ static void mcode_protect(jit_State *J, int prot)
 #define MCPROT_GEN	MCPROT_RW
 #define MCPROT_RUN	MCPROT_RX
 
+#if LJ_MT && defined(__linux__) && LJ_TARGET_X64
+
+/* M6/M8 bridge: keep mcode execute-stable for peer TGs until the final
+** memfd dual-map W^X implementation lands (08 section 8.5). */
+#define LJ_MCODE_EXEC_STABLE	1
+#undef MCPROT_GEN
+#undef MCPROT_RUN
+#define MCPROT_GEN	MCPROT_RWX
+#define MCPROT_RUN	MCPROT_RWX
+
+static void mcode_protect(jit_State *J, int prot)
+{
+  UNUSED(J); UNUSED(prot);
+}
+
+#else
+
 /* Change protection of MCode area. */
 static void mcode_protect(jit_State *J, int prot)
 {
@@ -281,6 +298,8 @@ static void mcode_protect(jit_State *J, int prot)
     J->mcprot = prot;
   }
 }
+
+#endif
 
 #endif
 

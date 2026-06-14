@@ -15,7 +15,11 @@ for needle in \
   'la_load32_acq(&g->jit_mcode_synccore)' \
   'la_membarrier_synccore()' \
   'lj_mcode_init(g);' \
-  'lj_mcode_sync_core(J);'
+  'lj_mcode_sync_core(J);' \
+  'LJ_MCODE_EXEC_STABLE' \
+  'memfd dual-map W^X implementation' \
+  '#define MCPROT_GEN	MCPROT_RWX' \
+  '#define MCPROT_RUN	MCPROT_RWX'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_obj.h" "$ROOT/src/lj_mcode.h" \
       "$ROOT/src/lj_mcode.c" "$ROOT/src/lj_state.c" \

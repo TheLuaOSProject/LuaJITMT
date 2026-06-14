@@ -4,6 +4,7 @@ set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 JOBS=${JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)}
+DUMP=${TMPDIR:-/tmp}/lj_t-ffi-gc-trace.dump
 
 for needle in \
   'typedef struct FinRegGen' \
@@ -27,6 +28,9 @@ for needle in \
   'lj_cdata_fin_claim_func(TValue *tv, TValue *old)' \
   'lj_cdata_fin_claim_func(slot, &fin)' \
   'lj_cdata_fin_storenil(L, tv)' \
+  'TValue *anchor = L->top' \
+  'lj_gc_barrierroot(L, &val)' \
+  'L->top = anchor' \
   'Missing clear is a no-op; avoid structural insert.' \
   'lj_tab_try_newkey_anchor(lua_State *L, GCtab *t, cTValue *key,' \
   'lj_tab_try_newkey_chain(lua_State *L, GCtab *t, cTValue *key,' \
@@ -39,8 +43,8 @@ for needle in \
   'lj_ctype_fin_get(L, cts, &key, &t)' \
   'lj_ctype_fin_get(L, cts, key, &t)' \
   'lj_cdata_setfin(L, cd, gcV(tv), itype(tv))' \
-  'Finalizer registry mutation stays on the interpreter path until the' \
-  'lj_trace_err_info(J, LJ_TRERR_NYIFFU)' \
+  'lj_ir_call(J, IRCALL_lj_cdata_setfin, trcd, trobj,' \
+  'IRCALL_lj_cdata_setfin' \
   'lj_gc2_finalizer_try_enter(global_State *g)' \
   'peer finalizer dispatch backs off'
 do
@@ -248,8 +252,16 @@ if ! awk '
   exit 1
 fi
 
-if rg -n 'IRCALL_lj_cdata_setfin' "$ROOT/src/lj_crecord.c"; then
-  echo "guardrail: traced ffi finalizer mutations must stay disabled until recorder tests land" >&2
+if awk '
+  /static void crec_finalizer\(jit_State \*J,/ { infn = 1 }
+  infn && /lj_trace_err_info\(J, LJ_TRERR_NYIFFU\)/ {
+    bad = 1
+    print
+  }
+  infn && /^}/ { infn = 0 }
+  END { exit bad ? 0 : 1 }
+' "$ROOT/src/lj_crecord.c"; then
+  echo "guardrail: ffi.gc recorder must emit FINREG mutation, not NYI" >&2
   exit 1
 fi
 
@@ -267,5 +279,17 @@ make -C "$ROOT/src" -j"$JOBS" >/dev/null
 
 "$ROOT/src/luajit" "$ROOT/tests/t-ffi-gc-finreg.lua" \
   "${LJ_M7_FFI_FIN_THREADS:-6}" "${LJ_M7_FFI_FIN_ITERS:-240}"
+
+LUA_PATH="$ROOT/src/?.lua;$ROOT/src/jit/?.lua;;" \
+  timeout 20s "$ROOT/src/luajit" "$ROOT/tests/t-ffi-gc-trace.lua"
+
+LUA_PATH="$ROOT/src/?.lua;$ROOT/src/jit/?.lua;;" \
+  timeout 20s "$ROOT/src/luajit" -jdump=ir "$ROOT/tests/t-ffi-gc-trace.lua" \
+  >"$DUMP"
+
+if ! rg -q 'lj_cdata_setfin' "$DUMP"; then
+  echo "guardrail: traced ffi.gc dump must emit lj_cdata_setfin" >&2
+  exit 1
+fi
 
 echo "M7 FFI finalizer registry guard passed"

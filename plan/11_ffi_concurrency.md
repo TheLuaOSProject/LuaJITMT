@@ -100,12 +100,13 @@ head. Legacy GC and GC2 root, identify, traverse, and close-drain every FINREG
 generation; traversal waits out claim sentinels before marking finalizer
 values. The initial `GCROOT_FFI_FIN` table remains the startup root/initial
 generation, but normal FINREG operations use the generation list. Recorded
-`ffi.gc()`/ctype-`__gc` finalizer registration is still NYI until the recorder
-is re-enabled with FINREG multi-generation tests: JIT-enabled code falls back
-to the interpreter. Normal `mmudata` cdata finalization now rechecks the
-generation list and claims the slot before clearing/calling it; close-time
-cdata drain remains exclusive. Membership and ordering remain legacy-owned
-until the planned FINREG/finqueue dispatch lands.
+`ffi.gc()`/ctype-`__gc` finalizer registration now emits
+`IRCALL_lj_cdata_setfin` and is covered by traced direct, nil-clear, and
+metatype tests plus the multi-threaded default-JIT FINREG stress. Normal
+`mmudata` cdata finalization now rechecks the generation list and claims the
+slot before clearing/calling it; close-time cdata drain remains exclusive.
+Membership and ordering remain legacy-owned until the planned
+FINREG/finqueue dispatch lands.
 
 ## 11.5 Calls & callbacks (native state discipline)
 - **FFI call out** (interpreter `->vm_ffi_call`, JIT IR_CALLXS): wrap with

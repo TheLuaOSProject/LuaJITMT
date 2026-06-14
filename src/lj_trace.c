@@ -1208,7 +1208,8 @@ static void trace_hotside(jit_State *J, const BCIns *pc, lua_State *L,
       snap->count = (uint8_t)(count + 1u);
       return;
     }
-    lj_assertJ(J->state == LJ_TRACE_IDLE, "hot side exit while recording");
+    if (J->state != LJ_TRACE_IDLE)
+      return;
     if (!lj_jit_token_try(J))
       return;
     if (count < SNAPCOUNT_DONE-1)

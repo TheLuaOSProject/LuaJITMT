@@ -224,9 +224,12 @@ handler — sized LJ_MAX_EXITSTUBGR-compatible; see lj_vmstruct notes.
   `lj_mcode_sync_core()` after `lj_mcode_commit()` and before `trace_save()`
   performs the trace-slot release publication. The later bytecode, exittab,
   root/side-chain, and stitch-link release stores remain after `trace_save()`.
-  This does not implement dual mapping or remove the legacy `mcode_protect`
-  state machine yet; it only lands the cross-core publication barrier at the
-  current publication boundary.
+  Follow-up bridge: Linux/x64 `LJ_MT` builds now use the documented plain RWX
+  fallback for generated mcode so peer TGs keep execute permission while the
+  recorder appends to the active area. This still does not implement the final
+  memfd dual mapping; it removes the whole-area RW/RX execution fault in the
+  current bridge until the dual-map write view replaces the legacy protection
+  state machine.
 
 ## 8.6 GC interaction of running traces
 
