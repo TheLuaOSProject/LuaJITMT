@@ -139,6 +139,19 @@ do
 done
 
 for needle in \
+  'io_native_fclose(lua_State *L, FILE *fp, uint32_t *actionsp)' \
+  '*actionsp = lj_native_leave(L);' \
+  'ok = (io_native_fclose(L, iof->fp, &actions) == 0);' \
+  'iof->fp = NULL;' \
+  'io_checkstop_fresh(L, actions, had_stopreq);'
+do
+  if ! rg -F -q "$needle" "$ROOT/src/lib_io.c"; then
+    echo "guardrail: lib_io fclose native leave must cleanup and propagate STOPREQ: $needle" >&2
+    exit 1
+  fi
+done
+
+for needle in \
   'io_native_fscanf_num(lua_State *L, FILE *fp, lua_Number *dp)' \
   'io_native_fgets(lua_State *L, char *buf, int size, FILE *fp)' \
   'io_native_fread(lua_State *L, void *buf, size_t size,' \

@@ -85,12 +85,12 @@ static void io_fopen_checkstop(lua_State *L, IOFileUD *iof, uint32_t actions,
   }
 }
 
-static int io_native_fclose(lua_State *L, FILE *fp)
+static int io_native_fclose(lua_State *L, FILE *fp, uint32_t *actionsp)
 {
   int ok;
   lj_native_enter(L2TG(L));
   ok = fclose(fp);
-  (void)lj_native_leave(L);
+  *actionsp = lj_native_leave(L);
   return ok;
 }
 
@@ -235,7 +235,12 @@ static int io_file_close(lua_State *L, IOFileUD *iof)
 {
   int ok;
   if ((iof->type & IOFILE_TYPE_MASK) == IOFILE_TYPE_FILE) {
-    ok = (io_native_fclose(L, iof->fp) == 0);
+    TGState *tg = L2TG(L);
+    int had_stopreq = tg && (la_load8_acq(&tg->tg_flags) & TGF_STOPREQ);
+    uint32_t actions;
+    ok = (io_native_fclose(L, iof->fp, &actions) == 0);
+    iof->fp = NULL;
+    io_checkstop_fresh(L, actions, had_stopreq);
   } else if ((iof->type & IOFILE_TYPE_MASK) == IOFILE_TYPE_PIPE) {
     TGState *tg = L2TG(L);
     int had_stopreq = tg && (la_load8_acq(&tg->tg_flags) & TGF_STOPREQ);
