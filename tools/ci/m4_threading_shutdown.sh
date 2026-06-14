@@ -14,7 +14,8 @@ trap 'rm -f "$MARKER" "$SPIN_MARKER"' EXIT HUP INT TERM
 for needle in \
   'lj_safepoint_ack_check' \
   'call extern lj_safepoint_ack_check' \
-  'DISPATCH_GL(gc2.hs_pending)'
+  'TGPOLL, dword [DISPATCH+DISPATCH_TG(poll)]' \
+  'cmp TGPOLL, 0'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_safepoint.c" "$ROOT/src/lj_safepoint.h" "$ROOT/src/vm_x64.dasc"; then
     echo "guardrail: VM safepoints must check STOPREQ after ack: $needle" >&2
