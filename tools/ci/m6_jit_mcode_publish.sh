@@ -34,6 +34,7 @@ for needle in \
   '((MCLink *)J->mcarea)->rw = J->mcarea;  /* 08.5: single-map write view. */' \
   'mcode_free_mapping(area, size);' \
   'asm_mcbot_u8(ASMState *as, MCode **pp, MCode v)' \
+  'asm_mcbot_u64(ASMState *as, MCode **pp, uint64_t v)' \
   'asm_mcbot_i32(ASMState *as, MCode **pp, int32_t v)' \
   'asm_mcbot_ptr(ASMState *as, MCode **pp, const void *v)' \
   'asm_mcbot_mem(ASMState *as, MCode **pp,' \
@@ -42,7 +43,8 @@ for needle in \
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_obj.h" "$ROOT/src/lj_jit.h" \
       "$ROOT/src/lj_mcode.h" "$ROOT/src/lj_mcode.c" "$ROOT/src/lj_state.c" \
-      "$ROOT/src/lj_trace.c" "$ROOT/src/lj_asm_x86.h"; then
+      "$ROOT/src/lj_trace.c" "$ROOT/src/lj_emit_x86.h" \
+      "$ROOT/src/lj_asm_x86.h"; then
     echo "guardrail: missing mcode publication marker: $needle" >&2
     exit 1
   fi
@@ -61,6 +63,12 @@ fi
 if rg -n '#if[[:space:]]+LJ_MT|#ifdef[[:space:]]+LJ_MT|LUAJIT_THREADSAFE' \
     "$ROOT/src/lj_mcode.c"; then
   echo "guardrail: mcode publication bridge must not be hidden behind LJ_MT" >&2
+  exit 1
+fi
+
+if rg -n '\*as->mcbot|\*mxp\+\+|\*\(uint64_t \*\)as->mcbot|\*\(void \*\*\)mxp|memcpy\(mxp' \
+    "$ROOT/src/lj_emit_x86.h" "$ROOT/src/lj_asm_x86.h"; then
+  echo "guardrail: x64 mcode bottom writes must go through lj_mcode_rw helpers" >&2
   exit 1
 fi
 

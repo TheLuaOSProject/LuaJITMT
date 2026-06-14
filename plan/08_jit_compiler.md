@@ -236,9 +236,10 @@ handler — sized LJ_MAX_EXITSTUBGR-compatible; see lj_vmstruct notes.
   alias pointer and area registration/freeing uses RX/RW translation helpers,
   while the current single-map bridge initializes `rw == rx`. This preserves
   the original memfd target and prepares the allocator/emitter split without
-  claiming that dual mapping is complete. x64 exit-stub group and per-trace
-  exit-row emission already writes through `lj_mcode_rw()` while retaining RX
-  cursors for published addresses and relative offsets.
+  claiming that dual mapping is complete. x64 exit-stub group, per-trace
+  exit-row emission, and bottom-of-area 64-bit constant pools already write
+  through `lj_mcode_rw()` while retaining RX cursors for published addresses
+  and relative offsets.
   This still does not implement the final memfd dual mapping; it replaces the
   temporary RWX bridge while preserving the original dual-map write-view
   target.

@@ -5,31 +5,6 @@
 
 /* -- Guard handling ------------------------------------------------------ */
 
-static LJ_AINLINE void asm_mcbot_u8(ASMState *as, MCode **pp, MCode v)
-{
-  *lj_mcode_rw(as->J, *pp) = v;
-  (*pp)++;
-}
-
-static LJ_AINLINE void asm_mcbot_i32(ASMState *as, MCode **pp, int32_t v)
-{
-  *(int32_t *)lj_mcode_rw(as->J, *pp) = v;
-  *pp += 4;
-}
-
-static LJ_AINLINE void asm_mcbot_ptr(ASMState *as, MCode **pp, const void *v)
-{
-  *(const void **)lj_mcode_rw(as->J, *pp) = v;
-  *pp += sizeof(void *);
-}
-
-static LJ_AINLINE void asm_mcbot_mem(ASMState *as, MCode **pp,
-				     const void *src, size_t sz)
-{
-  memcpy(lj_mcode_rw(as->J, *pp), src, sz);
-  *pp += sz;
-}
-
 /* Generate an exit stub group at the bottom of the reserved MCode memory. */
 static MCode *asm_exitstub_gen(ASMState *as, ExitNo group)
 {
@@ -524,10 +499,11 @@ static Reg asm_fuseloadk64(ASMState *as, IRIns *ir)
       lj_assertA(*k == *(uint64_t*)(as->mctop - ir->i),
 		 "bad interned 64 bit constant");
     } else {
-      while ((uintptr_t)as->mcbot & 7) *as->mcbot++ = XI_INT3;
-      *(uint64_t *)as->mcbot = *k;
-      ir->i = (int32_t)(as->mctop - as->mcbot);
-      as->mcbot += 8;
+      MCode *mxp = as->mcbot;
+      while ((uintptr_t)mxp & 7) asm_mcbot_u8(as, &mxp, XI_INT3);
+      ir->i = (int32_t)(as->mctop - mxp);
+      asm_mcbot_u64(as, &mxp, *k);
+      as->mcbot = mxp;
       as->mclim = as->mcbot + MCLIM_REDZONE;
       lj_mcode_commitbot(as->J, as->mcbot);
     }
