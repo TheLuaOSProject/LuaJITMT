@@ -271,7 +271,10 @@ retreats only after marking/enqueuing the popped slot. The original final
 mark-completion bridge could return a miss while another worker held the
 temporary `worker_active` drain token; `lj_gc2_mark_complete()` now waits for
 that peer drain to finish and retries before the legacy bridge can publish
-`P_WEAK`, recording `mark_complete_peer_waits` telemetry.
+`P_WEAK`, recording `mark_complete_peer_waits` telemetry. The `MARK -> WEAK`
+and `WEAK -> SWEEP` publication helpers are now CAS-gated from their expected
+source phase, so stale helper calls cannot force an idle or wrong-phase
+collector into a later phase or run the sweep-entry handshake.
 
 ### 5.7.2 Thread stacks
 `HS_SCAN_ROOTS` (mutator, at ack): for its *running* L (and the chain of
@@ -367,7 +370,8 @@ the fixpoint/paranoia bridge, and `lj_gc2_legacy_weak_begin()` aliases that
 helper for current callers. `lj_gc2_weak_complete()` owns the current bounded
 weak-drain loop and legacy fallback decision, while `lj_gc2_weak_to_sweep()`
 publishes the staged `P_SWEEP` transition and runs the existing sweep-entry
-handshake. This preserves the original `MARK -> WEAK -> SWEEP` phase shape for
+handshake after a successful `P_WEAK -> P_SWEEP` CAS. This preserves the
+original `MARK -> WEAK -> SWEEP` phase shape for
 follow-up work, but legacy atomic still supplies the stop-the-world oracle; the
 independent weak-table worklist and full concurrent weak/sweep phase ownership
 above are not implemented yet. GC2 traversal now stores weak-table discoveries

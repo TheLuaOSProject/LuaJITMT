@@ -71,6 +71,34 @@ static int finalizer_churn(lua_State *L)
   return 0;
 }
 
+static void test_phase_transition_guards(global_State *g, TGState *tg)
+{
+  uint64_t mark_to_weak0, weak_to_sweep0;
+
+  assert_idle(g, tg);
+  mark_to_weak0 = la_load64_acq(&g->gc2.mark_to_weak);
+  weak_to_sweep0 = la_load64_acq(&g->gc2.weak_to_sweep);
+  lj_gc2_mark_to_weak(g);
+  assert(g->gc2.phase == LJ_GC2_IDLE);
+  assert(la_load64_acq(&g->gc2.mark_to_weak) == mark_to_weak0);
+  lj_gc2_weak_to_sweep(g);
+  assert(g->gc2.phase == LJ_GC2_IDLE);
+  assert(la_load64_acq(&g->gc2.weak_to_sweep) == weak_to_sweep0);
+
+  la_store32_rel(&g->gc2.phase, LJ_GC2_MARK);
+  lj_gc2_weak_to_sweep(g);
+  assert(g->gc2.phase == LJ_GC2_MARK);
+  assert(la_load64_acq(&g->gc2.weak_to_sweep) == weak_to_sweep0);
+
+  la_store32_rel(&g->gc2.phase, LJ_GC2_WEAK);
+  lj_gc2_mark_to_weak(g);
+  assert(g->gc2.phase == LJ_GC2_WEAK);
+  assert(la_load64_acq(&g->gc2.mark_to_weak) == mark_to_weak0);
+
+  la_store32_rel(&g->gc2.phase, LJ_GC2_IDLE);
+  assert_idle(g, tg);
+}
+
 static void test_mark_complete_waits_for_peer(lua_State *L, global_State *g,
 					      TGState *tg)
 {
@@ -300,6 +328,7 @@ int main(void)
   assert(g->gc2.n_threads == 1);
   assert_idle(g, tg);
 
+  test_phase_transition_guards(g, tg);
   test_incremental_worker_step(L, g, tg);
   test_incremental_fixpoint_round(L, g);
   test_mark_complete_waits_for_peer(L, g, tg);
@@ -333,6 +362,10 @@ int main(void)
   assert(phase_trav != NULL);
   phase_plain_a = lj_arena_of(phase_plain);
   phase_trav_a = lj_arena_of(phase_trav);
+  lj_gc2_legacy_weak_begin(g);
+  assert(g->gc2.phase == LJ_GC2_WEAK);
+  assert(tg->mark_active == 1);
+  assert(tg->alloc.alloc_black == 1);
   lj_gc2_legacy_sweep_begin(g);
   assert(g->gc2.phase == LJ_GC2_SWEEP);
   assert(tg->mark_active == 0);

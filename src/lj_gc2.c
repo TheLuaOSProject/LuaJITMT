@@ -476,10 +476,11 @@ void lj_gc2_legacy_weak_begin(global_State *g)
 
 void lj_gc2_mark_to_weak(global_State *g)
 {
-  uint32_t phase;
-  phase = la_xchg32_acqrel(&g->gc2.phase, LJ_GC2_WEAK);
-  if (phase == LJ_GC2_MARK)
-    la_add64_rlx(&g->gc2.mark_to_weak, 1);
+  uint32_t expect = LJ_GC2_MARK;
+  if (!g || !la_cas32(&g->gc2.phase, &expect, LJ_GC2_WEAK,
+		      LA_ACQ_REL, LA_ACQ))
+    return;
+  la_add64_rlx(&g->gc2.mark_to_weak, 1);
   lj_gc2_worker_wake(g);  /* 05 section 5.6.3 parked worker scheduler. */
 }
 
@@ -490,12 +491,12 @@ void lj_gc2_legacy_sweep_begin(global_State *g)
 
 void lj_gc2_weak_to_sweep(global_State *g)
 {
-  uint32_t phase;
+  uint32_t expect = LJ_GC2_WEAK;
   if (!g)
     return;
-  phase = la_xchg32_acqrel(&g->gc2.phase, LJ_GC2_SWEEP);
-  if (phase == LJ_GC2_WEAK)
-    la_add64_rlx(&g->gc2.weak_to_sweep, 1);
+  if (!la_cas32(&g->gc2.phase, &expect, LJ_GC2_SWEEP, LA_ACQ_REL, LA_ACQ))
+    return;
+  la_add64_rlx(&g->gc2.weak_to_sweep, 1);
   lj_gc2_handshake(g, LJ_GC2_HS_DISABLE_BARRIER|LJ_GC2_HS_RESET_ALLOC|
 		   LJ_GC2_HS_FLUSH_SSB);
   (void)lj_gc2_drain_ssb(g);  /* Temporary worker-consume stand-in. */
