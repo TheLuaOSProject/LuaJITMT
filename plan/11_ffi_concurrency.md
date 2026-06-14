@@ -83,6 +83,11 @@ cdata, value=finalizer) — reuse, don't invent. Order: registration order
 preserved per 05 §5.8. `ffi.gc(cd, nil)` clears flag + table entry; race
 with collection resolved by the registry delete CAS (collector claims the
 entry by replacing value with KEYLOCK sentinel before queueing).
+Current implementation note: existing `GCROOT_FFI_FIN` value slots use a
+FINREG claim sentinel and `TValue` CAS for registration replacement, explicit
+clear, and collector claim/delete. Missing-key insertion and close-time table
+disable still use the `fin_token` structural fallback because `lj_tab_newkey()`
+is not yet a multi-writer-safe table insertion path.
 
 ## 11.5 Calls & callbacks (native state discipline)
 - **FFI call out** (interpreter `->vm_ffi_call`, JIT IR_CALLXS): wrap with

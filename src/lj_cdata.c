@@ -92,29 +92,101 @@ void LJ_FASTCALL lj_cdata_free(global_State *g, GCcdata *cd)
   }
 }
 
+#define LJ_CDATA_FINCLAIM_U64 \
+  ((((uint64_t)LJ_TLIGHTUD) << 47) | (((uint64_t)1 << 47) - 1u))
+
+static void cdata_fin_setclaim(TValue *tv)
+{
+  tv_rawstore(tv, LJ_CDATA_FINCLAIM_U64);
+}
+
+int lj_cdata_fin_isclaim(cTValue *tv)
+{
+  return tv_rawload(tv) == LJ_CDATA_FINCLAIM_U64;
+}
+
+static int cdata_fin_claim(TValue *tv, TValue *old, int nonnil)
+{
+  TValue claim;
+  cdata_fin_setclaim(&claim);
+  for (;;) {
+    lj_tv_load_acq(old, tv);
+    if (lj_cdata_fin_isclaim(old)) {
+      la_cpu_pause();
+      continue;
+    }
+    if (nonnil && tvisnil(old))
+      return 0;
+    if (lj_tv_cas(tv, old, &claim))
+      return 1;  /* 11.4 FINREG slot claim. */
+  }
+}
+
+int lj_cdata_fin_claim_any(TValue *tv, TValue *old)
+{
+  return cdata_fin_claim(tv, old, 0);
+}
+
+int lj_cdata_fin_claim_func(TValue *tv, TValue *old)
+{
+  return cdata_fin_claim(tv, old, 1);
+}
+
+void lj_cdata_fin_storenil(lua_State *L, TValue *tv)
+{
+  TValue nilv;
+  setnilV(&nilv);
+  copyTVrel(L, tv, &nilv);
+}
+
+static void cdata_fin_store(lua_State *L, global_State *g, GCtab *t,
+			    GCcdata *cd, TValue *tv, TValue *val,
+			    int enabled)
+{
+  if (enabled) {
+    copyTVrel(L, tv, val);
+    lj_obj_addgcflags_atomic(obj2gco(cd), LJ_GC_CDATA_FIN);
+    lj_gc2_finreg_cdata_set(g, obj2gco(cd), 1);
+  } else {
+    lj_cdata_fin_storenil(L, tv);
+    lj_obj_cleargcflags_atomic(obj2gco(cd), LJ_GC_CDATA_FIN);
+    lj_gc2_finreg_cdata_set(g, obj2gco(cd), 0);
+  }
+  lj_gc_pubtab(L, t);
+}
+
 void lj_cdata_setfin(lua_State *L, GCcdata *cd, GCobj *obj, uint32_t it)
 {
   global_State *g = G(L);
   CTState *cts = ctype_ctsG(g);
   GCtab *t = gco2tab(gcref_acq(g->gcroot[GCROOT_FFI_FIN]));
+  TValue *tv, key, val, old;
+  int enabled = (it != LJ_TNIL);
+  setcdataV(L, &key, cd);
+  if (enabled)
+    setgcV(L, &val, obj, it);
+  for (;;) {
+    if (!gcref_acq(t->metatable))
+      return;
+    tv = (TValue *)lj_tab_get(L, t, &key);
+    if (tv == niltv(L))
+      break;  /* Missing key: structural insertion still uses fin_token. */
+    (void)lj_cdata_fin_claim_any(tv, &old);
+    if (!gcref_acq(t->metatable)) {
+      lj_cdata_fin_storenil(L, tv);
+      lj_obj_cleargcflags_atomic(obj2gco(cd), LJ_GC_CDATA_FIN);
+      lj_gc2_finreg_cdata_set(g, obj2gco(cd), 0);
+      return;
+    }
+    cdata_fin_store(L, g, t, cd, tv, &val, enabled);
+    return;
+  }
   lj_ctype_fin_lock(cts);
   if (gcref_acq(t->metatable)) {
     /* Add cdata to finalizer table, if still enabled. */
-    TValue *tv, key, val;
-    setcdataV(L, &key, cd);
     tv = lj_tab_set(L, t, &key);
-    if (it == LJ_TNIL) {
-      setnilV(&val);
-      copyTVrel(L, tv, &val);
-      lj_obj_cleargcflags(obj2gco(cd), LJ_GC_CDATA_FIN);
-      lj_gc2_finreg_cdata_set(g, obj2gco(cd), 0);
-    } else {
-      setgcV(L, &val, obj, it);
-      copyTVrel(L, tv, &val);
-      lj_obj_addgcflags(obj2gco(cd), LJ_GC_CDATA_FIN);
-      lj_gc2_finreg_cdata_set(g, obj2gco(cd), 1);
-    }
-    lj_gc_pubtab(L, t);
+    (void)lj_cdata_fin_claim_any(tv, &old);
+    cdata_fin_store(L, g, t, cd, tv, &val, enabled);
   }
   lj_ctype_fin_unlock(cts);
 }

@@ -48,6 +48,8 @@ LA_INLINE void la_storeptr_rel(void **p,void *v){__atomic_store_n(p,v,__ATOMIC_R
 /* ---- CAS (strong; returns 1 on success; *exp updated on failure) ---- */
 LA_INLINE int la_cas32(uint32_t *p,uint32_t *exp,uint32_t des,int mo_s,int mo_f)
 {return __atomic_compare_exchange_n(p,exp,des,0,mo_s,mo_f);}
+LA_INLINE int la_cas8(uint8_t *p,uint8_t *exp,uint8_t des,int mo_s,int mo_f)
+{return __atomic_compare_exchange_n(p,exp,des,0,mo_s,mo_f);}
 LA_INLINE int la_cas64(uint64_t *p,uint64_t *exp,uint64_t des,int mo_s,int mo_f)
 {return __atomic_compare_exchange_n(p,exp,des,0,mo_s,mo_f);}
 LA_INLINE int la_casptr(void **p,void **exp,void *des,int mo_s,int mo_f)

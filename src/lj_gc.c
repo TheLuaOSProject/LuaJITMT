@@ -1213,7 +1213,6 @@ static void gc_finalize(lua_State *L)
     setgcrefr(*lj_obj_gcwref(gcref(g->gc.mmudata)), *lj_obj_gcwref(o));
 #if LJ_HASFFI
   if (o->gch.gct == ~LJ_TCDATA) {
-    CTState *cts = ctype_ctsG(g);
     GCtab *t = gco2tab(gcref_acq(g->gcroot[GCROOT_FFI_FIN]));
     TValue tmp, *tv;
     /* Add cdata back to the GC list and make it white. */
@@ -1223,19 +1222,15 @@ static void gc_finalize(lua_State *L)
     lj_gc_arena_markobj(g, o);
     /* Resolve finalizer. */
     setcdataV(L, &tmp, gco2cd(o));
-    lj_ctype_fin_lock(cts);
     tv = (TValue *)lj_tab_get(L, t, &tmp);
-    if (tv != niltv(L) && !tvisnil(tv)) {
-      copyTV(L, &tmp, tv);
-      lj_tab_storenilraw(tv);  /* Clear entry in finalizer table. */
-      lj_obj_cleargcflags(o, LJ_GC_CDATA_FIN);
+    if (tv != niltv(L) && lj_cdata_fin_claim_func(tv, &tmp)) {
+      lj_cdata_fin_storenil(L, tv);  /* Clear claimed finalizer slot. */
+      lj_obj_cleargcflags_atomic(o, LJ_GC_CDATA_FIN);
       lj_gc2_finreg_cdata_set(g, o, 0);
-      lj_ctype_fin_unlock(cts);
       gc_call_finalizer(g, L, &tmp, o);
     } else {
-      lj_obj_cleargcflags(o, LJ_GC_CDATA_FIN);
+      lj_obj_cleargcflags_atomic(o, LJ_GC_CDATA_FIN);
       lj_gc2_finreg_cdata_set(g, o, 0);
-      lj_ctype_fin_unlock(cts);
     }
     lj_gc2_finalizer_leave(g);
     return;
@@ -1283,16 +1278,20 @@ void lj_gc_finalize_cdata(lua_State *L)
   for (i = (ptrdiff_t)hmask; i >= 0; i--) {
     TValue key, val;
     lj_tv_load_acq(&val, &node[i].val);
+    while (lj_cdata_fin_isclaim(&val)) {
+      la_cpu_pause();
+      lj_tv_load_acq(&val, &node[i].val);
+    }
     if (!tvisnil(&val)) {
       lj_tv_load_acq(&key, &node[i].key);
       if (tviscdata(&key)) {
 	GCobj *o = gcV(&key);
 	TValue tmp;
 	makewhite(g, o);
-	lj_obj_cleargcflags(o, LJ_GC_CDATA_FIN);
+	lj_obj_cleargcflags_atomic(o, LJ_GC_CDATA_FIN);
 	lj_gc2_finreg_cdata_set(g, o, 0);
 	copyTV(L, &tmp, &val);
-	lj_tab_storenilraw(&node[i].val);
+	lj_cdata_fin_storenil(L, &node[i].val);
 	gc_call_finalizer(g, L, &tmp, o);
       }
     }

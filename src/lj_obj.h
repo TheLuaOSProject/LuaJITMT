@@ -1163,9 +1163,29 @@ static LJ_AINLINE void lj_obj_addgcflags(GCobj *o, uint8_t flags)
   o->gch.marked |= flags;
 }
 
+static LJ_AINLINE void lj_obj_addgcflags_atomic(GCobj *o, uint8_t flags)
+{
+  uint8_t old = la_load8_acq(&o->gch.marked);
+  for (;;) {
+    uint8_t next = (uint8_t)(old | flags);
+    if (la_cas8(&o->gch.marked, &old, next, LA_ACQ_REL, LA_ACQ))
+      return;
+  }
+}
+
 static LJ_AINLINE void lj_obj_cleargcflags(GCobj *o, uint8_t flags)
 {
   o->gch.marked &= (uint8_t)~flags;
+}
+
+static LJ_AINLINE void lj_obj_cleargcflags_atomic(GCobj *o, uint8_t flags)
+{
+  uint8_t old = la_load8_acq(&o->gch.marked);
+  for (;;) {
+    uint8_t next = (uint8_t)(old & (uint8_t)~flags);
+    if (la_cas8(&o->gch.marked, &old, next, LA_ACQ_REL, LA_ACQ))
+      return;
+  }
 }
 
 static LJ_AINLINE void lj_obj_xorgcflags(GCobj *o, uint8_t flags)
@@ -1256,6 +1276,16 @@ static LJ_AINLINE int lj_tv_isnil_acq(const TValue *src)
   TValue tv;
   lj_tv_load_acq(&tv, src);
   return tvisnil(&tv);
+}
+
+static LJ_AINLINE int lj_tv_cas(TValue *dst, TValue *expect,
+				const TValue *src)
+{
+  uint64_t old = tv_rawload(expect);
+  int ok = la_cas64(&dst->u64, &old, tv_rawload(src), LA_ACQ_REL, LA_ACQ);
+  if (!ok)
+    tv_rawstore(expect, old);
+  return ok;
 }
 
 #define tvistruecond(o)	(itype(o) < LJ_TISTRUECOND)
