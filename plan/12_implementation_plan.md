@@ -117,10 +117,10 @@ over raw-slot fallback, promoted-cell `UREFC`/`ULOAD`/`USTORE`, and GC-valued
 `OBAR`; the first `BC_CNEW`/`BC_FNEW` helper-backed slice covers source and
 loaded v4 self-cell creation traces and removes the CNEW-specific `PROTO_NOJIT`
 gates. Mixed raw-local FNEW traces are now covered for source/loaded immutable
-raw captures through stack-value synchronization and for mutable captures once
-the cell is promoted at trace entry. Conditional first-promotion loops remain
-the preserved follow-up before the broader local-function creation target is
-complete. Linux/x64 `LJ_MT`
+raw captures through stack-value synchronization, mutable captures once the
+cell is promoted at trace entry, and source/loaded first-promotion loops where
+the hot trace performs the first mutable raw-slot promotion with otherwise
+type-stable loop slots. Linux/x64 `LJ_MT`
 secure builds currently keep generated mcode execute-stable with a fresh-area
 W^X bridge: once an area has committed trace bytes, the next reserve allocates
 a new unpublished area instead of flipping the old area writable. The planned

@@ -56,8 +56,8 @@ self-captured local-function CNEW/FNEW/CSET loops can also trace through the
 first helper-backed M6 slice. Mixed source/loaded FNEW traces with raw
 immutable captures now sync the traced stack value before helper construction,
 and mutable captures can trace once the owner slot is already promoted at trace
-entry. Conditional first-promotion loops remain follow-up until the broader
-closure-construction path lands.
+entry or when the hot trace itself performs the first mutable raw-slot promotion
+with otherwise type-stable loop-carried slots.
 
 ## 10.4 Legacy v2 chunks (the compatibility deviation, DECIDED)
 

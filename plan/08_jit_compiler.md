@@ -418,11 +418,11 @@ scoped-flush target.
    Current M6 guard coverage requires IR dumps for owner numeric cells,
    GC-valued CSET with `OBAR`, loaded v4 CGET/CSET traces, source/loaded
    self-cell CNEW/FNEW helper traces, mixed raw-local sync-helper FNEW traces,
-   and mutable pre/post FNEW update loops once the slot is promoted at trace
-   entry. The original broader local-cell target is preserved: conditional
-   first-promotion loops, where the hot trace itself performs the first mutable
-   raw-slot promotion, remain the next correctness slice before claiming fully
-   general local-function creation recording.
+   mutable pre/post FNEW update loops after promotion at trace entry, and
+   source/loaded first-promotion FNEW traces where the hot trace performs the
+   first mutable raw-slot promotion with otherwise type-stable loop slots. The
+   original broader local-cell target is preserved for remaining unguarded
+   closure-construction combinations.
 5. **Barrier IR**: extend the store lowerings: after computing the value
    ref, if `irt_isgcv(t)` emit `XBAR ref` (new IR, lowered to the §8.6
    guarded call/inline mark). Skip when value is a constant that the

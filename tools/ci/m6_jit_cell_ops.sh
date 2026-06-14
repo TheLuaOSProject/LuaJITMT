@@ -43,9 +43,12 @@ need_marker 'rec_celluv_promote_pending(J)' "$ROOT/src/lj_record.c"
 need_marker 'IRCALL_lj_func_newuvcell_forjit' "$ROOT/src/lj_record.c" "$ROOT/src/lj_ircall.h"
 need_marker 'IRCALL_lj_func_newL_gc_forjit' "$ROOT/src/lj_record.c" "$ROOT/src/lj_ircall.h"
 need_marker 'IRCALL_lj_func_syncslot_forjit' "$ROOT/src/lj_record.c" "$ROOT/src/lj_ircall.h"
+need_marker 'IRCALL_lj_func_promoteuv_forjit' "$ROOT/src/lj_record.c" "$ROOT/src/lj_ircall.h"
 need_marker 'lj_func_newuvcell_forjit' "$ROOT/src/lj_func.c" "$ROOT/src/lj_func.h"
 need_marker 'lj_func_newL_gc_forjit' "$ROOT/src/lj_func.c" "$ROOT/src/lj_func.h"
 need_marker 'lj_func_syncslot_forjit' "$ROOT/src/lj_func.c" "$ROOT/src/lj_func.h"
+need_marker 'lj_func_promoteuv_forjit' "$ROOT/src/lj_func.c" "$ROOT/src/lj_func.h"
+need_marker 'IRSLOAD_INHERIT' "$ROOT/src/lj_record.c"
 need_marker 'irt_isp32(IR(ir->op1)->t)' "$ROOT/src/lj_asm_x86.h"
 need_marker 'IR(ir->op1)->o == IR_SLOAD' "$ROOT/src/lj_asm_x86.h"
 need_marker 'emit_shifti(as, XOg_SHR|REX_64' "$ROOT/src/lj_asm_x86.h"
@@ -201,6 +204,64 @@ assert(util.traceinfo(1), "loaded mixed raw-local CNEW/FNEW should trace")
 need_dump 'TRACE 1 stop -> loop' 'loaded mixed raw-local FNEW trace'
 need_dump 'CALLS.*lj_func_syncslot_forjit' 'loaded mixed raw-local sync helper'
 need_dump 'CALLA.*lj_func_newL_gc_forjit' 'loaded mixed raw-local FNEW helper'
+
+LUA_PATH=$LUA_PATH_GUARD "$ROOT/src/luajit" -jdump=i -e '
+local util = require"jit.util"
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local function run(n)
+  local dummy = function() end
+  local x = 0
+  local keep = dummy
+  for i = 1, n do
+    x = x + 1
+    if i >= 2 then
+      local function f() return f, x end
+      keep = f
+    end
+  end
+  return keep, x
+end
+local f, x = run(30)
+local self, fx = f()
+assert(self == f and fx == 30 and x == 30)
+assert(util.traceinfo(1), "source first-promotion FNEW should trace")
+' >"$DUMP"
+
+need_dump 'TRACE 1 stop -> loop' 'source first-promotion FNEW trace'
+need_dump 'CALLS.*lj_func_promoteuv_forjit' 'source first-promotion helper'
+need_dump 'NULL' 'source first-promotion stack snapshot argument'
+need_dump 'SLOAD.*I' 'source first-promotion inherited cell reload'
+need_dump 'UREFC' 'source first-promotion UREFC'
+need_dump 'USTORE' 'source first-promotion USTORE'
+
+LUA_PATH=$LUA_PATH_GUARD "$ROOT/src/luajit" -jdump=i -e '
+local util = require"jit.util"
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local src = function(n)
+  local dummy = function() end
+  local x = 0
+  local keep = dummy
+  for i = 1, n do
+    x = x + 1
+    if i >= 2 then
+      local function f() return f, x end
+      keep = f
+    end
+  end
+  return keep, x
+end
+local run = assert(loadstring(string.dump(src)))
+local f, x = run(30)
+local self, fx = f()
+assert(self == f and fx == 30 and x == 30)
+assert(util.traceinfo(1), "loaded first-promotion FNEW should trace")
+' >"$DUMP"
+
+need_dump 'TRACE 1 stop -> loop' 'loaded first-promotion FNEW trace'
+need_dump 'CALLS.*lj_func_promoteuv_forjit' 'loaded first-promotion helper'
+need_dump 'CALLA.*lj_func_newL_gc_forjit' 'loaded first-promotion FNEW helper'
 
 LUA_PATH=$LUA_PATH_GUARD "$ROOT/src/luajit" -e '
 local util = require"jit.util"

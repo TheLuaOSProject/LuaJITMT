@@ -1995,7 +1995,7 @@ static TRef rec_celluv_promote_slot(jit_State *J, BCReg slotno, int fromstack)
     }
     lj_ir_call(J, IRCALL_lj_func_promoteuv_forjit, REF_BASE,
 	       lj_ir_kint(J, (int32_t)slotno), tmp);
-    slotref = sloadt(J, (int32_t)slotno, IRT_P32, 0);
+    slotref = sloadt(J, (int32_t)slotno, IRT_P32, IRSLOAD_INHERIT);
   }
   return slotref;
 }
@@ -2118,7 +2118,7 @@ static void rec_fnew_promoted_slots(jit_State *J, GCproto *pt)
     if ((v & PROTO_UV_LOCAL) && !(v & PROTO_UV_IMMUTABLE)) {
       BCReg slot = (BCReg)(v & 0xff);
       if (slot < J->maxslot && itype(&J->L->base[slot]) != LJ_TUPVAL)
-	sloadt(J, (int32_t)slot, IRT_P32, 0);
+	sloadt(J, (int32_t)slot, IRT_P32, IRSLOAD_INHERIT);
     }
   }
 }
