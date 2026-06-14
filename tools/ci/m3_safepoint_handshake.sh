@@ -126,6 +126,19 @@ do
 done
 
 for needle in \
+  'io_native_fwrite(lua_State *L, const void *buf, size_t size,' \
+  'size_t n, FILE *fp, uint32_t *actionsp)' \
+  '*actionsp = lj_native_leave(L);' \
+  'io_native_fwrite(L, p, 1, len, fp, &actions)' \
+  'io_checkstop_fresh(L, actions, had_stopreq);'
+do
+  if ! rg -F -q "$needle" "$ROOT/src/lib_io.c"; then
+    echo "guardrail: lib_io fwrite native leave must propagate STOPREQ: $needle" >&2
+    exit 1
+  fi
+done
+
+for needle in \
   'io_native_fscanf_num(lua_State *L, FILE *fp, lua_Number *dp)' \
   'io_native_fgets(lua_State *L, char *buf, int size, FILE *fp)' \
   'io_native_fread(lua_State *L, void *buf, size_t size,' \
@@ -195,6 +208,8 @@ for needle in \
   'f:read(0)' \
   "io.popen('sleep 0.2', 'r')" \
   'pipe:close()' \
+  "sh -c 'sleep 0.2; cat >/dev/null'" \
+  'write_pipe:write(big)' \
   'thread interrupted: VM shutdown'
 do
   if ! rg -F -q "$needle" "$ROOT/tests/t-safepoint-handshake.c"; then

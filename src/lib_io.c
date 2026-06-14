@@ -141,12 +141,12 @@ static int io_native_getc(lua_State *L, FILE *fp, uint32_t *actionsp)
 }
 
 static size_t io_native_fwrite(lua_State *L, const void *buf, size_t size,
-			       size_t n, FILE *fp)
+			       size_t n, FILE *fp, uint32_t *actionsp)
 {
   size_t nw;
   lj_native_enter(L2TG(L));
   nw = fwrite(buf, size, n, fp);
-  (void)lj_native_leave(L);
+  *actionsp = lj_native_leave(L);
   return nw;
 }
 
@@ -374,6 +374,8 @@ static int io_file_read(lua_State *L, IOFileUD *iof, int start)
 static int io_file_write(lua_State *L, IOFileUD *iof, int start)
 {
   FILE *fp = iof->fp;
+  TGState *tg = L2TG(L);
+  int had_stopreq = tg && (la_load8_acq(&tg->tg_flags) & TGF_STOPREQ);
   cTValue *tv;
   int status = 1;
   for (tv = L->base+start; tv < L->top; tv++) {
@@ -381,7 +383,11 @@ static int io_file_write(lua_State *L, IOFileUD *iof, int start)
     const char *p = lj_strfmt_wstrnum(L, tv, &len);
     if (!p)
       lj_err_argt(L, (int)(tv - L->base) + 1, LUA_TSTRING);
-    status = status && (io_native_fwrite(L, p, 1, len, fp) == len);
+    if (status) {
+      uint32_t actions;
+      status = (io_native_fwrite(L, p, 1, len, fp, &actions) == len);
+      io_checkstop_fresh(L, actions, had_stopreq);
+    }
   }
   if (LJ_52 && status) {
     L->top = L->base+1;

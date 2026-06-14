@@ -606,6 +606,10 @@ int main(void)
     "f:close()\n"
     "local pipe = assert(io.popen('sleep 0.2', 'r'))\n"
     "expect_native_stopreq(function() return pipe:close() end)\n"
+    "local write_pipe = assert(io.popen(\"sh -c 'sleep 0.2; cat >/dev/null'\", 'w'))\n"
+    "local big = string.rep('w', 4 * 1024 * 1024)\n"
+    "expect_native_stopreq(function() return write_pipe:write(big) end)\n"
+    "write_pipe:close()\n"
     "os.remove(p)\n") != LUA_OK) {
     fprintf(stderr, "STOPREQ coverage chunk failed: %s\n",
 	    lua_tostring(L, -1));
