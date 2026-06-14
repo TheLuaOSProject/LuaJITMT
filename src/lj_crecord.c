@@ -643,7 +643,14 @@ static TRef crec_ct_tv(jit_State *J, CType *d, TRef dp, TRef sp, cTValue *sval)
     if (ctype_isenum(d->info)) {  /* Match string against enum constant. */
       GCstr *str = strV(sval);
       CTSize ofs;
-      CType *cct = lj_ctype_getfield(cts, d, str, &ofs);
+      CType *cct;
+      lj_ctype_parse_lock(cts, J->L);
+      /* 11.2: recorder enum string reader waits out parser rollback. */
+      cct = lj_ctype_getfield(cts, d, str, &ofs);
+      if (cct && ctype_isconstval(cct->info)) {
+	sid = ctype_cid(cct->info);
+      }
+      lj_ctype_parse_unlock(cts);
       /* Specialize to the name of the enum constant. */
       emitir(IRTG(IR_EQ, IRT_STR), sp, lj_ir_kstr(J, str));
       if (cct && ctype_isconstval(cct->info)) {
@@ -651,7 +658,6 @@ static TRef crec_ct_tv(jit_State *J, CType *d, TRef dp, TRef sp, cTValue *sval)
 		   "only 32 bit const supported");  /* NYI */
 	svisnz = (void *)(intptr_t)(ofs != 0);
 	sp = lj_ir_kint(J, (int32_t)ofs);
-	sid = ctype_cid(cct->info);
       }  /* else: interpreter will throw. */
     } else if (ctype_isrefarray(d->info)) {  /* Copy string to array. */
       lj_trace_err(J, LJ_TRERR_BADTYPE);  /* NYI */
@@ -1663,11 +1669,16 @@ void LJ_FASTCALL recff_cdata_arith(jit_State *J, RecordFFData *rd)
       if (ctype_isenum(ct->info)) {  /* Match string against enum constant. */
 	GCstr *str = strV(&rd->argv[i]);
 	CTSize ofs;
-	CType *cct = lj_ctype_getfield(cts, ct, str, &ofs);
+	CType *cct;
+	lj_ctype_parse_lock(cts, J->L);
+	/* 11.2: recorder enum string reader waits out parser rollback. */
+	cct = lj_ctype_getfield(cts, ct, str, &ofs);
+	if (cct && ctype_isconstval(cct->info))
+	  id = ctype_cid(cct->info);
+	lj_ctype_parse_unlock(cts);
 	if (cct && ctype_isconstval(cct->info)) {
 	  /* Specialize to the name of the enum constant. */
 	  emitir(IRTG(IR_EQ, IRT_STR), tr, lj_ir_kstr(J, str));
-	  id = ctype_cid(cct->info);
 	  ct = ctype_get(cts, id);
 	  tr = lj_ir_kint(J, (int32_t)ofs);
 	} else {  /* Interpreter will throw or return false. */
@@ -1718,9 +1729,13 @@ void LJ_FASTCALL recff_clib_index(jit_State *J, RecordFFData *rd)
     CLibrary *cl = (CLibrary *)uddata(udataV(&rd->argv[0]));
     GCstr *name = strV(&rd->argv[1]);
     CType *ct;
-    CTypeID id = lj_ctype_getname(cts, &ct, name, CLNS_INDEX);
+    CTypeID id;
     cTValue *tv = lj_clib_cache_get(cl, name);
     rd->nres = rd->data;
+    lj_ctype_parse_lock(cts, J->L);
+    /* 11.2: recorder ffi.C namespace reader waits out parser rollback. */
+    id = lj_ctype_getname(cts, &ct, name, CLNS_INDEX);
+    lj_ctype_parse_unlock(cts);
     if (id && tv && !tvisnil(tv)) {
       /* Specialize to the symbol name and make the result a constant. */
       emitir(IRTG(IR_EQ, IRT_STR), J->base[1], lj_ir_kstr(J, name));

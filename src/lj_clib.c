@@ -415,10 +415,15 @@ TValue *lj_clib_index(lua_State *L, CLibrary *cl, GCstr *name)
   {
     CTState *cts = ctype_cts(L);
     CType *ct;
-    CTypeID id = lj_ctype_getname(cts, &ct, name, CLNS_INDEX);
+    CTypeID id;
     TValue tmp, *tv, *anchor;
-    if (!id)
+    lj_ctype_parse_lock(cts, L);
+    /* 11.2: ffi.C namespace readers wait out parser rollback. */
+    id = lj_ctype_getname(cts, &ct, name, CLNS_INDEX);
+    if (!id) {
+      lj_ctype_parse_unlock(cts);
       lj_err_callerv(L, LJ_ERR_FFI_NODECL, strdata(name));
+    }
     if (ctype_isconstval(ct->info)) {
       CType *ctt = ctype_child(cts, ct);
       lj_assertCTS(ctype_isinteger(ctt->info) && ctt->size <= 4,
@@ -428,7 +433,9 @@ TValue *lj_clib_index(lua_State *L, CLibrary *cl, GCstr *name)
       } else {
 	setintV(&tmp, (int32_t)ct->size);
       }
+      lj_ctype_parse_unlock(cts);
     } else {
+      lj_ctype_parse_unlock(cts);
       const char *sym = clib_extsym(cts, ct, name);
 #if LJ_TARGET_WINDOWS
       DWORD oldwerr = GetLastError();

@@ -88,14 +88,19 @@ static int carith_checkarg(lua_State *L, CTState *cts, CDArith *ca)
       ok = 0;
       if (ctype_isenum(ct->info)) {
 	CTSize ofs;
-	CType *cct = lj_ctype_getfield(cts, ct, strV(o), &ofs);
+	CType *cct;
+	lj_ctype_parse_lock(cts, L);
+	/* 11.2: enum string readers wait out parser rollback. */
+	cct = lj_ctype_getfield(cts, ct, strV(o), &ofs);
 	if (cct && ctype_isconstval(cct->info)) {
 	  cid = ctype_cid(cct->info);
 	  ca->ct[i] = ctype_child(cts, cct);
 	  ca->id[i] = cid;
 	  ca->p[i] = (uint8_t *)&cct->size;  /* Assumes ct does not grow. */
 	  ok = 1;
+	  lj_ctype_parse_unlock(cts);
 	} else {
+	  lj_ctype_parse_unlock(cts);
 	  ca->ct[1-i] = ct;  /* Use enum to improve error message. */
 	  ca->id[1-i] = cid;
 	  ca->p[1-i] = NULL;
