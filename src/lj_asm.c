@@ -2351,6 +2351,8 @@ static void asm_setup_regsp(ASMState *as)
     case IR_CNEW:
 	if (ir->op2 != REF_NIL && as->evenspill < 4)
 	  as->evenspill = 4;  /* lj_cdata_newv needs 4 args. */
+	else if (as->evenspill < 3)
+	  as->evenspill = 3;  /* lj_cdata_new_forjit needs 3 args. */
       }
       /* fallthrough */
 #else

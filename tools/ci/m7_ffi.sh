@@ -6,5 +6,6 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 
 "$ROOT/tools/ci/m7_ffi_cdef_token.sh"
 "$ROOT/tools/ci/m7_ffi_cdata_alloc.sh"
+"$ROOT/tools/ci/m7_ffi_jit_cnew.sh"
 
 echo "M7 FFI gates passed"

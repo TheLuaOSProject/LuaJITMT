@@ -72,6 +72,7 @@ static LJ_AINLINE GCcdata *lj_cdata_new_(lua_State *L, CTypeID id, CTSize sz)
   return cd;
 }
 
+LJ_FUNC GCcdata *lj_cdata_new_forjit(lua_State *L, CTypeID id, CTSize sz);
 LJ_FUNC GCcdata *lj_cdata_newref(CTState *cts, const void *pp, CTypeID id);
 LJ_FUNC GCcdata *lj_cdata_newv(lua_State *L, CTypeID id, CTSize sz,
 			       CTSize align);

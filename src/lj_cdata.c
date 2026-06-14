@@ -17,6 +17,11 @@
 
 /* -- C data allocation --------------------------------------------------- */
 
+GCcdata *lj_cdata_new_forjit(lua_State *L, CTypeID id, CTSize sz)
+{
+  return lj_cdata_new_(L, id, sz);
+}
+
 /* Allocate a new C data object holding a reference to another object. */
 GCcdata *lj_cdata_newref(CTState *cts, const void *p, CTypeID id)
 {

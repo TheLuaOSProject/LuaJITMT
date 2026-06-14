@@ -1963,7 +1963,7 @@ static void asm_cnew(ASMState *as, IRIns *ir)
   CTypeID id = (CTypeID)IR(ir->op1)->i;
   CTSize sz;
   CTInfo info = lj_ctype_info(cts, id, &sz);
-  const CCallInfo *ci = &lj_ir_callinfo[IRCALL_lj_mem_newgco];
+  const CCallInfo *ci = &lj_ir_callinfo[IRCALL_lj_cdata_new_forjit];
   IRRef args[4];
   lj_assertA(sz != CTSIZE_INVALID || (ir->o == IR_CNEW && ir->op2 != REF_NIL),
 	     "bad CNEW/CNEWI operands");
@@ -2022,17 +2022,11 @@ static void asm_cnew(ASMState *as, IRIns *ir)
     return;
   }
 
-  /* Combine initialization of marked, gct and ctypeid. */
-  emit_movtomro(as, RID_ECX, RID_RET, offsetof(GCcdata, marked));
-  emit_gri(as, XG_ARITHi(XOg_OR), RID_ECX,
-	   (int32_t)((~LJ_TCDATA<<8)+(id<<16)));
-  emit_gri(as, XG_ARITHi(XOg_AND), RID_ECX, LJ_GC_WHITES);
-  emit_opgl(as, XO_MOVZXb, RID_ECX, gc.currentwhite);
-
   args[0] = ASMREF_L;     /* lua_State *L */
-  args[1] = ASMREF_TMP1;  /* MSize size   */
+  args[1] = ir->op1;      /* CTypeID id   */
+  args[2] = ASMREF_TMP1;  /* CTSize sz    */
   asm_gencall(as, ci, args);
-  emit_loadi(as, ra_releasetmp(as, ASMREF_TMP1), (int32_t)(sz+sizeof(GCcdata)));
+  emit_loadi(as, ra_releasetmp(as, ASMREF_TMP1), (int32_t)sz);
 }
 #endif
 
