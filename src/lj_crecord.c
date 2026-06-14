@@ -884,58 +884,87 @@ again:
     }
   } else if (tref_isstr(idx)) {
     GCstr *name = strV(&rd->argv[1]);
+    CTInfo cinfo, finfo = 0, childinfo = 0;
+    CTSize csize, fofs = 0, fsize = 0;
+    CTypeID fid = 0;
+    int found = 0;
     if (cd && cd->ctypeid == CTID_CTYPEID) {
       id = ctype_rawid(cts, crec_constructor(J, cd, ptr));
-      ct = ctype_get(cts, id);
     }
-    if (ctype_isstruct(ct->info)) {
-      CTSize fofs;
-      CType *fct;
-      fct = lj_ctype_getfield(cts, ct, name, &fofs);
-      if (fct) {
+    lj_ctype_parse_lock(cts, J->L);
+    /* 11.2: cdata recorder field reader waits out parser rollback. */
+    ct = ctype_get(cts, id);
+    cinfo = ct->info;
+    csize = ct->size;
+    if (ctype_isstruct(cinfo)) {
+      CType *fct = lj_ctype_getfield(cts, ct, name, &fofs);
+      found = fct != NULL;
+      if (found) {
+	finfo = fct->info;
+	fsize = fct->size;
+	fid = ctype_cid(finfo);
+	if (ctype_isconstval(finfo))
+	  childinfo = ctype_child(cts, fct)->info;
+      }
+    }
+    lj_ctype_parse_unlock(cts);
+    if (ctype_isstruct(cinfo)) {
+      if (found) {
 	ofs += (ptrdiff_t)fofs;
 	/* Always specialize to the field name. */
 	emitir(IRTG(IR_EQ, IRT_STR), idx, lj_ir_kstr(J, name));
-	if (ctype_isconstval(fct->info)) {
-	  if (fct->size >= 0x80000000u &&
-	      (ctype_child(cts, fct)->info & CTF_UNSIGNED)) {
-	    J->base[0] = lj_ir_knum(J, (lua_Number)(uint32_t)fct->size);
+	if (ctype_isconstval(finfo)) {
+	  if (fsize >= 0x80000000u && (childinfo & CTF_UNSIGNED)) {
+	    J->base[0] = lj_ir_knum(J, (lua_Number)(uint32_t)fsize);
 	    return;
 	  }
-	  J->base[0] = lj_ir_kint(J, (int32_t)fct->size);
+	  J->base[0] = lj_ir_kint(J, (int32_t)fsize);
 	  return;  /* Interpreter will throw for newindex. */
 	} else if (cd && cd->ctypeid == CTID_CTYPEID) {
 	  /* Only resolve constants and metamethods for constructors. */
-	} else if (ctype_isbitfield(fct->info)) {
+	} else if (ctype_isbitfield(finfo)) {
 	  if (ofs)
 	    ptr = emitir(IRT(IR_ADD, IRT_PTR), ptr, lj_ir_kintp(J, ofs));
-	  crec_index_bf(J, rd, ptr, fct->info);
+	  crec_index_bf(J, rd, ptr, finfo);
 	  return;
 	} else {
-	  lj_assertJ(ctype_isfield(fct->info), "field expected");
-	  sid = ctype_cid(fct->info);
+	  lj_assertJ(ctype_isfield(finfo), "field expected");
+	  sid = fid;
 	}
       }
-    } else if (ctype_iscomplex(ct->info)) {
+    } else if (ctype_iscomplex(cinfo)) {
       if (name->len == 2 &&
 	  ((strdata(name)[0] == 'r' && strdata(name)[1] == 'e') ||
 	   (strdata(name)[0] == 'i' && strdata(name)[1] == 'm'))) {
 	/* Always specialize to the field name. */
 	emitir(IRTG(IR_EQ, IRT_STR), idx, lj_ir_kstr(J, name));
-	if (strdata(name)[0] == 'i') ofs += (ct->size >> 1);
-	sid = ctype_cid(ct->info);
+	if (strdata(name)[0] == 'i') ofs += (csize >> 1);
+	sid = ctype_cid(cinfo);
       }
     }
   }
   if (!sid) {
-    if (ctype_isptr(ct->info)) {  /* Automatically perform '->'. */
+    if (tref_isstr(idx)) {
+      CTypeID cid = 0;
+      int ptrstruct = 0;
+      lj_ctype_parse_lock(cts, J->L);
+      ct = ctype_get(cts, id);
+      if (ctype_isptr(ct->info)) {  /* Automatically perform '->'. */
+	cid = ctype_rawid(cts, ctype_cid(ct->info));
+	ptrstruct = ctype_isstruct(ctype_get(cts, cid)->info);
+      }
+      lj_ctype_parse_unlock(cts);
+      if (ptrstruct) {
+	id = cid;
+	cd = NULL;
+	goto again;
+      }
+    } else if (ctype_isptr(ct->info)) {  /* Automatically perform '->'. */
       CTypeID cid = ctype_rawid(cts, ctype_cid(ct->info));
       CType *cct = ctype_get(cts, cid);
       if (ctype_isstruct(cct->info)) {
 	ct = cct;
 	id = cid;
-	cd = NULL;
-	if (tref_isstr(idx)) goto again;
       }
     }
     crec_index_meta(J, cts, id, rd);

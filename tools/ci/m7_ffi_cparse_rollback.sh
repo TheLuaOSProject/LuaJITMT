@@ -39,7 +39,11 @@ for needle in \
   'direct ctype reader observed failed cdef rollback state' \
   'ffi.typeinfo observed failed cdef rollback state' \
   'ffi.new observed failed cdef rollback state' \
-  'direct ctype/typeinfo/new readers wait out rollback' \
+  'cdata __index observed failed cdef rollback state' \
+  'cdata __newindex observed failed cdef rollback state' \
+  'direct ctype/typeinfo/new/field readers wait out rollback' \
+  'cdata string-key readers wait out parser rollback' \
+  'cdata recorder field reader waits out parser rollback' \
   'if (errcode || cp.newtype)' \
   'ctype_top_acq(cp->cts)'
 do
@@ -115,6 +119,7 @@ make -C "$ROOT/src" -j"$JOBS" >/dev/null
   "$ROOT/src/libluajit.a" -lm -ldl -pthread -o "$OUT"
 timeout 20s "$OUT"
 "$ROOT/src/luajit" -joff "$ROOT/tests/t-ffi-cparse-rollback-reader.lua"
+"$ROOT/src/luajit" "$ROOT/tests/t-ffi-cparse-rollback-reader.lua"
 
 make -C "$ROOT/src" clean >/dev/null
 make -C "$ROOT/src" -j"$JOBS" XCFLAGS="-DLUAJIT_CTYPE_CHECK_ANCHOR" >/dev/null
@@ -123,6 +128,7 @@ make -C "$ROOT/src" -j"$JOBS" XCFLAGS="-DLUAJIT_CTYPE_CHECK_ANCHOR" >/dev/null
   "$ROOT/src/libluajit.a" -lm -ldl -pthread -o "$ANCHOR_OUT"
 timeout 20s "$ANCHOR_OUT"
 "$ROOT/src/luajit" -joff "$ROOT/tests/t-ffi-cparse-rollback-reader.lua"
+"$ROOT/src/luajit" "$ROOT/tests/t-ffi-cparse-rollback-reader.lua"
 "$ROOT/src/luajit" -joff "$ROOT/tests/t-ffi-cdef-token.lua" 2 20
 
 echo "M7 FFI cparser rollback guard passed"

@@ -263,8 +263,15 @@ CType *lj_cdata_index_l(lua_State *L, CTState *cts, GCcdata *cd,
 {
   uint8_t *p = (uint8_t *)cdataptr(cd);
   CTypeID id = cd->ctypeid;
-  CType *ct = ctype_get(cts, id);
+  CType *ct;
   ptrdiff_t idx;
+  int locked = tvisstr(key);
+
+  if (locked) {
+    /* 11.2: cdata string-key readers wait out parser rollback. */
+    lj_ctype_parse_lock(cts, L);
+  }
+  ct = ctype_get(cts, id);
 
   /* Resolve reference for cdata object. */
   if (ctype_isref(ct->info)) {
@@ -301,6 +308,8 @@ collect_attrib:
 	*qual |= CTF_CONST;  /* Valarray elements are constant. */
       }
       *pp = p + idx*(int32_t)sz;
+      if (locked)
+	lj_ctype_parse_unlock(cts);
       return ct;
     }
   } else if (tviscdata(key)) {  /* Integer cdata key. */
@@ -324,6 +333,7 @@ collect_attrib:
       CType *fct = lj_ctype_getfieldq(cts, ct, name, &ofs, qual);
       if (fct) {
 	*pp = p + ofs;
+	lj_ctype_parse_unlock(cts);  /* 11.2: cdata field reader fence. */
 	return fct;
       }
     } else if (ctype_iscomplex(ct->info)) {
@@ -331,9 +341,11 @@ collect_attrib:
 	*qual |= CTF_CONST;  /* Complex fields are constant. */
 	if (strdata(name)[0] == 'r' && strdata(name)[1] == 'e') {
 	  *pp = p;
+	  lj_ctype_parse_unlock(cts);
 	  return ct;
 	} else if (strdata(name)[0] == 'i' && strdata(name)[1] == 'm') {
 	  *pp = p + (ct->size >> 1);
+	  lj_ctype_parse_unlock(cts);
 	  return ct;
 	}
       }
@@ -348,8 +360,10 @@ collect_attrib:
       if (ctype_isstruct(sct->info)) {
 	CTSize ofs;
 	CType *fct = lj_ctype_getfield(cts, sct, name, &ofs);
-	if (fct && ctype_isconstval(fct->info))
+	if (fct && ctype_isconstval(fct->info)) {
+	  lj_ctype_parse_unlock(cts);
 	  return fct;
+	}
       }
       ct = sct;  /* Allow resolving metamethods for constructors, too. */
       id = sid;
@@ -366,6 +380,8 @@ collect_attrib:
   }
   if (idp) *idp = id;
   *qual |= 1;  /* Lookup failed. */
+  if (locked)
+    lj_ctype_parse_unlock(cts);
   return ct;  /* But return the resolved raw type. */
 }
 
