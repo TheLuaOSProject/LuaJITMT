@@ -127,7 +127,7 @@ static void asm_guardcc(ASMState *as, int cc)
   MCode *p = as->mcp;
   if (LJ_UNLIKELY(p == as->invmcp)) {
     as->loopinv = 1;
-    *(int32_t *)(p+1) = jmprel(as->J, p+5, target);
+    asm_mcode_put_i32(as, p+1, jmprel(as->J, p+5, target));
     target = p;
     cc ^= 1;
     if (as->realign) {
@@ -697,7 +697,7 @@ static void asm_gencall(ASMState *as, const CCallInfo *ci, IRRef *args)
     }
 #else
     patchnfpr = --as->mcp;  /* Indicate number of used FPRs in register al. */
-    *--as->mcp = XI_MOVrib | RID_EAX;
+    asm_mcode_put_u8(as, --as->mcp, XI_MOVrib | RID_EAX);
 #endif
   }
 #endif
@@ -767,7 +767,7 @@ static void asm_gencall(ASMState *as, const CCallInfo *ci, IRRef *args)
     checkmclim(as);
   }
 #if LJ_64 && !LJ_ABI_WIN
-  if (patchnfpr) *patchnfpr = fpr - REGARG_FIRSTFPR;
+  if (patchnfpr) asm_mcode_put_u8(as, patchnfpr, fpr - REGARG_FIRSTFPR);
 #endif
 }
 
@@ -2186,9 +2186,10 @@ static void asm_fpmath(ASMState *as, IRIns *ir)
       emit_i8(as, 0x09 + fpm);
       emit_mrm(as, XO_ROUNDSD, dest, left);
       if (LJ_64 && as->mcp[1] != (MCode)(XO_ROUNDSD >> 16)) {
-	as->mcp[0] = as->mcp[1]; as->mcp[1] = 0x0f;  /* Swap 0F and REX. */
+	asm_mcode_put_u8(as, as->mcp, as->mcp[1]);
+	asm_mcode_put_u8(as, as->mcp+1, 0x0f);  /* Swap 0F and REX. */
       }
-      *--as->mcp = 0x66;  /* 1st byte of ROUNDSD opcode. */
+      asm_mcode_put_u8(as, --as->mcp, 0x66);  /* 1st byte of ROUNDSD opcode. */
     } else {  /* Call helper functions for SSE2 variant. */
       /* The modified regs must match with the *.dasc implementation. */
       RegSet drop = RSET_RANGE(RID_XMM0, RID_XMM3+1)|RID2RSET(RID_EAX);
@@ -2280,8 +2281,10 @@ static void asm_intarith(ASMState *as, IRIns *ir, x86Arith xa)
     /* Drop test r,r instruction. */
     MCode *p = as->mcp + ((LJ_64 && *as->mcp < XI_TESTb) ? 3 : 2);
     MCode *q = p[0] == 0x0f ? p+1 : p;
-    if ((*q & 15) < 14) {
-      if ((*q & 15) >= 12) *q -= 4;  /* L <->S, NL <-> NS */
+    MCode *qrw = lj_mcode_rw(as->J, q);
+    if ((*qrw & 15) < 14) {
+      if ((*qrw & 15) >= 12)  /* L <->S, NL <-> NS */
+	asm_mcode_put_u8(as, q, (MCode)(*qrw - 4));
       as->flagmcp = NULL;
       as->mcp = p;
     }  /* else: cannot transform LE/NLE to cc without use of OF. */
@@ -2474,7 +2477,7 @@ static void asm_max(ASMState *as, IRIns *ir)
 static void asm_bswap(ASMState *as, IRIns *ir)
 {
   Reg dest = ra_dest(as, ir, RSET_GPR);
-  as->mcp = emit_op(XO_BSWAP + ((dest&7) << 24),
+  as->mcp = emit_op(as, XO_BSWAP + ((dest&7) << 24),
 		    REX_64IR(ir, 0), dest, 0, as->mcp, 1);
   ra_left(as, dest, ir->op1);
 }
@@ -3000,7 +3003,8 @@ static void asm_gc_check(ASMState *as)
   args[0] = ASMREF_TMP1;  /* global_State *g */
   args[1] = ASMREF_TMP2;  /* MSize steps     */
   /* Insert nop to simplify GC exit recognition in lj_asm_patchexit. */
-  if (!jmprel_ok(as->mcp, (MCode *)(void *)ci->func)) *--as->mcp = XI_NOP;
+  if (!jmprel_ok(as->mcp, (MCode *)(void *)ci->func))
+    asm_mcode_put_u8(as, --as->mcp, XI_NOP);
   asm_gencall(as, ci, args);
   checkmclim(as);  /* M6: split long GC check sequence for assert red zone. */
   tmp = ra_releasetmp(as, ASMREF_TMP1);
@@ -3042,30 +3046,30 @@ static void asm_loop_fixup(ASMState *as)
     lj_assertA(((intptr_t)target & 15) == 0, "loop realign failed");
     if (as->loopinv) {  /* Inverted loop branch? */
       p -= 5;
-      p[0] = XI_JMP;
+      asm_mcode_put_u8(as, p, XI_JMP);
       lj_assertA(target - p >= -128, "loop realign failed");
-      p[-1] = (MCode)(target - p);  /* Patch sjcc. */
+      asm_mcode_put_u8(as, p-1, (MCode)(target - p));  /* Patch sjcc. */
       if (as->loopinv == 2)
-	p[-3] = (MCode)(target - p + 2);  /* Patch opt. short jp. */
+	asm_mcode_put_u8(as, p-3, (MCode)(target - p + 2));  /* Patch opt. short jp. */
     } else {
       lj_assertA(target - p >= -128, "loop realign failed");
-      p[-1] = (MCode)(int8_t)(target - p);  /* Patch short jmp. */
-      p[-2] = XI_JMPs;
+      asm_mcode_put_u8(as, p-1, (MCode)(int8_t)(target - p));  /* Patch short jmp. */
+      asm_mcode_put_u8(as, p-2, XI_JMPs);
     }
   } else {
     MCode *newloop;
-    p[-5] = XI_JMP;
+    asm_mcode_put_u8(as, p-5, XI_JMP);
     if (as->loopinv) {  /* Inverted loop branch? */
       /* asm_guardcc already inverted the jcc and patched the jmp. */
       p -= 5;
       newloop = target+4;
-      *(int32_t *)(p-4) = (int32_t)(target - p);  /* Patch jcc. */
+      asm_mcode_put_i32(as, p-4, (int32_t)(target - p));  /* Patch jcc. */
       if (as->loopinv == 2) {
-	*(int32_t *)(p-10) = (int32_t)(target - p + 6);  /* Patch opt. jp. */
+	asm_mcode_put_i32(as, p-10, (int32_t)(target - p + 6));  /* Patch opt. jp. */
 	newloop = target+8;
       }
     } else {  /* Otherwise just patch jmp. */
-      *(int32_t *)(p-4) = (int32_t)(target - p);
+      asm_mcode_put_i32(as, p-4, (int32_t)(target - p));
       newloop = target+3;
     }
     /* Realign small loops and shorten the loop branch. */
@@ -3169,7 +3173,7 @@ static void asm_tail_prep(ASMState *as, TraceNo lnk)
     int i = ((int)(intptr_t)as->realign) & 15;
     /* Fill unused mcode tail with NOPs to make the prefetcher happy. */
     while (i-- > 0)
-      *--p = XI_NOP;
+      asm_mcode_put_u8(as, --p, XI_NOP);
     as->mctop = p;
     p -= (as->loopinv ? 5 : 2);  /* Space for short/near jmp. */
   } else {

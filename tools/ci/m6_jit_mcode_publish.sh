@@ -38,9 +38,18 @@ for needle in \
   'asm_mcode_i32(ASMState *as, MCode **pp, int32_t v)' \
   'asm_mcode_ptr(ASMState *as, MCode **pp, const void *v)' \
   'asm_mcode_mem(ASMState *as, MCode **pp,' \
+  'asm_mcode_put_u8(ASMState *as, MCode *p, MCode v)' \
+  'asm_mcode_put_u16(ASMState *as, MCode *p, uint16_t v)' \
+  'asm_mcode_put_i32(ASMState *as, MCode *p, int32_t v)' \
+  'asm_mcode_put_u32(ASMState *as, MCode *p, uint32_t v)' \
+  'asm_mcode_put_u64(ASMState *as, MCode *p, uint64_t v)' \
+  'emit_op(ASMState *as, x86Op xo' \
+  'emit_opm(ASMState *as, x86Op xo' \
+  'emit_opmx(ASMState *as, x86Op xo' \
   'lj_mcode_rw(as->J, *pp)' \
   'asm_mcode_i32(as, &mcp, jmprel(as->J, mcp + 4, target));' \
   '*lj_mcode_rw(as->J, as->mctop) = XI_NOP;' \
+  'asm_mcode_put_i32(as, p+1, jmprel(as->J, p+5, target));' \
   'memfd dual-map W^X implementation'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_obj.h" "$ROOT/src/lj_jit.h" \
@@ -71,6 +80,28 @@ fi
 if rg -n '\*as->mcbot|\*mxp\+\+|\*\(uint64_t \*\)as->mcbot|\*\(void \*\*\)mxp|memcpy\(mxp' \
     "$ROOT/src/lj_emit_x86.h" "$ROOT/src/lj_asm_x86.h"; then
   echo "guardrail: x64 mcode bottom writes must go through lj_mcode_rw helpers" >&2
+  exit 1
+fi
+
+if rg -n '\*--as->mcp|as->mcp\[[0-9]+\][[:space:]]*=[^=]|source\[[^]]+\][[:space:]]*=[^=]|(^|[^[:alnum:]_])p\[[^]]+\][[:space:]]*=[^=]|\*\(u?int(16|32|64)_t \*\)\(?p[-+0-9]*\)?[[:space:]]*=[^=]' \
+    "$ROOT/src/lj_emit_x86.h"; then
+  echo "guardrail: x64 core emitter writes must go through lj_mcode_rw helpers" >&2
+  exit 1
+fi
+
+if awk '
+  /void lj_asm_patchexit\(jit_State \*J, GCtrace \*T, ExitNo exitno, MCode \*target\)/ {
+    seen_patchexit = 1
+    exit bad ? 0 : 1
+  }
+  /\*--as->mcp|as->mcp\[[0-9]+\][[:space:]]*=[^=]|\*--p/ { bad = 1 }
+  !/MCode \*patchnfpr/ && /\*patchnfpr[[:space:]]*=[^=]/ { bad = 1 }
+  !/MCode \*q/ && /\*q[[:space:]]*[-+]?=[^=]/ { bad = 1 }
+  /(^|[^[:alnum:]_])p\[[^]]+\][[:space:]]*=[^=]/ { bad = 1 }
+  /\*\(u?int(16|32|64)_t \*\)\(?p[-+0-9]*\)?[[:space:]]*=[^=]/ { bad = 1 }
+  END { if (!seen_patchexit) exit 1; exit bad ? 0 : 1 }
+' "$ROOT/src/lj_asm_x86.h"; then
+  echo "guardrail: x64 generation-time asm writes must go through lj_mcode_rw helpers" >&2
   exit 1
 fi
 

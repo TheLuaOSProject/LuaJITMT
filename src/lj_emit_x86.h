@@ -8,14 +8,14 @@
 #define MODRM(mode, r1, r2)	((MCode)((mode)+(((r1)&7)<<3)+((r2)&7)))
 
 #if LJ_64
-#define REXRB(p, rr, rb) \
+#define REXRB(as, p, rr, rb) \
     { MCode rex = 0x40 + (((rr)>>1)&4) + (((rb)>>3)&1); \
-      if (rex != 0x40) *--(p) = rex; }
+      if (rex != 0x40) asm_mcode_put_u8((as), --(p), rex); }
 #define FORCE_REX		0x200
 #define REX_64			(FORCE_REX|0x080000)
 #define VEX_64			0x800000
 #else
-#define REXRB(p, rr, rb)	((void)0)
+#define REXRB(as, p, rr, rb)	((void)0)
 #define FORCE_REX		0
 #define REX_64			0
 #define VEX_64			0
@@ -25,13 +25,6 @@
 #else
 #define REX_GC64		0
 #endif
-
-#define emit_i8(as, i)		(*--as->mcp = (MCode)(i))
-#define emit_i32(as, i)		(*(int32_t *)(as->mcp-4) = (i), as->mcp -= 4)
-#define emit_u32(as, u)		(*(uint32_t *)(as->mcp-4) = (u), as->mcp -= 4)
-
-#define emit_x87op(as, xo) \
-  (*(uint16_t *)(as->mcp-2) = (uint16_t)(xo), as->mcp -= 2)
 
 static LJ_AINLINE void asm_mcode_u8(ASMState *as, MCode **pp, MCode v)
 {
@@ -64,8 +57,43 @@ static LJ_AINLINE void asm_mcode_mem(ASMState *as, MCode **pp,
   *pp += sz;
 }
 
+static LJ_AINLINE void asm_mcode_put_u8(ASMState *as, MCode *p, MCode v)
+{
+  *lj_mcode_rw(as->J, p) = v;
+}
+
+static LJ_AINLINE void asm_mcode_put_u16(ASMState *as, MCode *p, uint16_t v)
+{
+  *(uint16_t *)lj_mcode_rw(as->J, p) = v;
+}
+
+static LJ_AINLINE void asm_mcode_put_i32(ASMState *as, MCode *p, int32_t v)
+{
+  *(int32_t *)lj_mcode_rw(as->J, p) = v;
+}
+
+static LJ_AINLINE void asm_mcode_put_u32(ASMState *as, MCode *p, uint32_t v)
+{
+  *(uint32_t *)lj_mcode_rw(as->J, p) = v;
+}
+
+static LJ_AINLINE void asm_mcode_put_u64(ASMState *as, MCode *p, uint64_t v)
+{
+  *(uint64_t *)lj_mcode_rw(as->J, p) = v;
+}
+
+#define emit_i8(as, i) \
+  (asm_mcode_put_u8((as), --(as)->mcp, (MCode)(i)))
+#define emit_i32(as, i) \
+  ((as)->mcp -= 4, asm_mcode_put_i32((as), (as)->mcp, (i)))
+#define emit_u32(as, u) \
+  ((as)->mcp -= 4, asm_mcode_put_u32((as), (as)->mcp, (u)))
+
+#define emit_x87op(as, xo) \
+  ((as)->mcp -= 2, asm_mcode_put_u16((as), (as)->mcp, (uint16_t)(xo)))
+
 /* op */
-static LJ_AINLINE MCode *emit_op(x86Op xo, Reg rr, Reg rb, Reg rx,
+static LJ_AINLINE MCode *emit_op(ASMState *as, x86Op xo, Reg rr, Reg rb, Reg rx,
 				 MCode *p, int delta)
 {
   int n = (int8_t)xo;
@@ -73,30 +101,35 @@ static LJ_AINLINE MCode *emit_op(x86Op xo, Reg rr, Reg rb, Reg rx,
 #if LJ_64
     xo ^= (((rr>>1)&4)+((rx>>2)&2)+((rb>>3)&1))<<13;
 #endif
-    *(uint32_t *)(p+delta-5) = (uint32_t)xo;
+    asm_mcode_put_u32(as, p+delta-5, (uint32_t)xo);
     return p+delta-5;
   }
 #if defined(__GNUC__) || defined(__clang__)
   if (__builtin_constant_p(xo) && n == -2)
-    p[delta-2] = (MCode)(xo >> 24);
+    asm_mcode_put_u8(as, p+delta-2, (MCode)(xo >> 24));
   else if (__builtin_constant_p(xo) && n == -3)
-    *(uint16_t *)(p+delta-3) = (uint16_t)(xo >> 16);
+    asm_mcode_put_u16(as, p+delta-3, (uint16_t)(xo >> 16));
   else
 #endif
-    *(uint32_t *)(p+delta-5) = (uint32_t)xo;
+    asm_mcode_put_u32(as, p+delta-5, (uint32_t)xo);
   p += n + delta;
 #if LJ_64
   {
     uint32_t rex = 0x40 + ((rr>>1)&(4+(FORCE_REX>>1)))+((rx>>2)&2)+((rb>>3)&1);
     if (rex != 0x40) {
       rex |= (rr >> 16);
-      if (n == -4) { *p = (MCode)rex; rex = (MCode)(xo >> 8); }
-      else if ((xo & 0xffffff) == 0x6600fd) { *p = (MCode)rex; rex = 0x66; }
-      *--p = (MCode)rex;
+      if (n == -4) {
+	asm_mcode_put_u8(as, p, (MCode)rex);
+	rex = (MCode)(xo >> 8);
+      } else if ((xo & 0xffffff) == 0x6600fd) {
+	asm_mcode_put_u8(as, p, (MCode)rex);
+	rex = 0x66;
+      }
+      asm_mcode_put_u8(as, --p, (MCode)rex);
     }
   }
 #else
-  UNUSED(rr); UNUSED(rb); UNUSED(rx);
+  UNUSED(as); UNUSED(rr); UNUSED(rb); UNUSED(rx);
 #endif
   return p;
 }
@@ -109,21 +142,28 @@ static void emit_branch_track(ASMState *as)
 #endif
 
 /* op + modrm */
-#define emit_opm(xo, mode, rr, rb, p, delta) \
-  (p[(delta)-1] = MODRM((mode), (rr), (rb)), \
-   emit_op((xo), (rr), (rb), 0, (p), (delta)))
+static LJ_AINLINE MCode *emit_opm(ASMState *as, x86Op xo, x86Mode mode,
+				  Reg rr, Reg rb, MCode *p, int delta)
+{
+  asm_mcode_put_u8(as, p+delta-1, MODRM(mode, rr, rb));
+  return emit_op(as, xo, rr, rb, 0, p, delta);
+}
 
 /* op + modrm + sib */
-#define emit_opmx(xo, mode, scale, rr, rb, rx, p) \
-  (p[-1] = MODRM((scale), (rx), (rb)), \
-   p[-2] = MODRM((mode), (rr), RID_ESP), \
-   emit_op((xo), (rr), (rb), (rx), (p), -1))
+static LJ_AINLINE MCode *emit_opmx(ASMState *as, x86Op xo, x86Mode mode,
+				   x86Mode scale, Reg rr, Reg rb, Reg rx,
+				   MCode *p)
+{
+  asm_mcode_put_u8(as, p-1, MODRM(scale, rx, rb));
+  asm_mcode_put_u8(as, p-2, MODRM(mode, rr, RID_ESP));
+  return emit_op(as, xo, rr, rb, rx, p, -1);
+}
 
 /* op r1, r2 */
 static void emit_rr(ASMState *as, x86Op xo, Reg r1, Reg r2)
 {
   MCode *p = as->mcp;
-  as->mcp = emit_opm(xo, XM_REG, r1, r2, p, 0);
+  as->mcp = emit_opm(as, xo, XM_REG, r1, r2, p, 0);
 }
 
 #if LJ_64 && defined(LUA_USE_ASSERT)
@@ -146,23 +186,23 @@ static void emit_rmro(ASMState *as, x86Op xo, Reg rr, Reg rb, int32_t ofs)
     if (LJ_GC64 && rb == RID_RIP) {
       mode = XM_OFS0;
       p -= 4;
-      *(int32_t *)p = ofs;
+      asm_mcode_put_i32(as, p, ofs);
     } else if (ofs == 0 && (rb&7) != RID_EBP) {
       mode = XM_OFS0;
     } else if (checki8(ofs)) {
-      *--p = (MCode)ofs;
+      asm_mcode_put_u8(as, --p, (MCode)ofs);
       mode = XM_OFS8;
     } else {
       p -= 4;
-      *(int32_t *)p = ofs;
+      asm_mcode_put_i32(as, p, ofs);
       mode = XM_OFS32;
     }
     if ((rb&7) == RID_ESP)
-      *--p = MODRM(XM_SCALE1, RID_ESP, RID_ESP);
+      asm_mcode_put_u8(as, --p, MODRM(XM_SCALE1, RID_ESP, RID_ESP));
   } else {
-    *(int32_t *)(p-4) = ofs;
+    asm_mcode_put_i32(as, p-4, ofs);
 #if LJ_64
-    p[-5] = MODRM(XM_SCALE1, RID_ESP, RID_EBP);
+    asm_mcode_put_u8(as, p-5, MODRM(XM_SCALE1, RID_ESP, RID_EBP));
     p -= 5;
     rb = RID_ESP;
 #else
@@ -171,7 +211,7 @@ static void emit_rmro(ASMState *as, x86Op xo, Reg rr, Reg rb, int32_t ofs)
 #endif
     mode = XM_OFS0;
   }
-  as->mcp = emit_opm(xo, mode, rr, rb, p, 0);
+  as->mcp = emit_opm(as, xo, mode, rr, rb, p, 0);
 }
 
 /* op r, [base+idx*scale+ofs] */
@@ -184,13 +224,13 @@ static void emit_rmrxo(ASMState *as, x86Op xo, Reg rr, Reg rb, Reg rx,
     mode = XM_OFS0;
   } else if (checki8(ofs)) {
     mode = XM_OFS8;
-    *--p = (MCode)ofs;
+    asm_mcode_put_u8(as, --p, (MCode)ofs);
   } else {
     mode = XM_OFS32;
     p -= 4;
-    *(int32_t *)p = ofs;
+    asm_mcode_put_i32(as, p, ofs);
   }
-  as->mcp = emit_opmx(xo, mode, scale, rr, rb, rx, p);
+  as->mcp = emit_opmx(as, xo, mode, scale, rr, rb, rx, p);
 }
 
 /* op r, i */
@@ -199,14 +239,14 @@ static void emit_gri(ASMState *as, x86Group xg, Reg rb, int32_t i)
   MCode *p = as->mcp;
   x86Op xo;
   if (checki8(i)) {
-    *--p = (MCode)i;
+    asm_mcode_put_u8(as, --p, (MCode)i);
     xo = XG_TOXOi8(xg);
   } else {
     p -= 4;
-    *(int32_t *)p = i;
+    asm_mcode_put_i32(as, p, i);
     xo = XG_TOXOi(xg);
   }
-  as->mcp = emit_opm(xo, XM_REG, (Reg)(xg & 7) | (rb & REX_64), rb, p, 0);
+  as->mcp = emit_opm(as, xo, XM_REG, (Reg)(xg & 7) | (rb & REX_64), rb, p, 0);
 }
 
 /* op [base+ofs], i */
@@ -238,39 +278,39 @@ static void emit_mrm(ASMState *as, x86Op xo, Reg rr, Reg rb)
       rb = RID_EBP;
       mode = XM_OFS0;
       p -= 4;
-      *(int32_t *)p = as->mrm.ofs;
+      asm_mcode_put_i32(as, p, as->mrm.ofs);
       if (as->mrm.idx != RID_NONE)
 	goto mrmidx;
 #if LJ_64
-      *--p = MODRM(XM_SCALE1, RID_ESP, RID_EBP);
+      asm_mcode_put_u8(as, --p, MODRM(XM_SCALE1, RID_ESP, RID_EBP));
       rb = RID_ESP;
 #endif
     } else if (LJ_GC64 && rb == RID_RIP) {
       lj_assertA(as->mrm.idx == RID_NONE, "RIP-rel mrm cannot have index");
       mode = XM_OFS0;
       p -= 4;
-      *(int32_t *)p = as->mrm.ofs;
+      asm_mcode_put_i32(as, p, as->mrm.ofs);
     } else {
       if (as->mrm.ofs == 0 && (rb&7) != RID_EBP) {
 	mode = XM_OFS0;
       } else if (checki8(as->mrm.ofs)) {
-	*--p = (MCode)as->mrm.ofs;
+	asm_mcode_put_u8(as, --p, (MCode)as->mrm.ofs);
 	mode = XM_OFS8;
       } else {
 	p -= 4;
-	*(int32_t *)p = as->mrm.ofs;
+	asm_mcode_put_i32(as, p, as->mrm.ofs);
 	mode = XM_OFS32;
       }
       if (as->mrm.idx != RID_NONE) {
       mrmidx:
-	as->mcp = emit_opmx(xo, mode, as->mrm.scale, rr, rb, as->mrm.idx, p);
+	as->mcp = emit_opmx(as, xo, mode, as->mrm.scale, rr, rb, as->mrm.idx, p);
 	return;
       }
       if ((rb&7) == RID_ESP)
-	*--p = MODRM(XM_SCALE1, RID_ESP, RID_ESP);
+	asm_mcode_put_u8(as, --p, MODRM(XM_SCALE1, RID_ESP, RID_ESP));
     }
   }
-  as->mcp = emit_opm(xo, mode, rr, rb, p, 0);
+  as->mcp = emit_opm(as, xo, mode, rr, rb, p, 0);
 }
 
 /* op rm/mrm, i */
@@ -340,10 +380,10 @@ static void emit_loadi(ASMState *as, Reg r, int32_t i)
     emit_rr(as, XO_ARITH(XOg_XOR), r, r);
   } else {
     MCode *p = as->mcp;
-    *(int32_t *)(p-4) = i;
-    p[-5] = (MCode)(XI_MOVri+(r&7));
+    asm_mcode_put_i32(as, p-4, i);
+    asm_mcode_put_u8(as, p-5, (MCode)(XI_MOVri+(r&7)));
     p -= 5;
-    REXRB(p, 0, r);
+    REXRB(as, p, 0, r);
     as->mcp = p;
   }
 }
@@ -366,18 +406,18 @@ static void emit_loadi(ASMState *as, Reg r, int32_t i)
 static void emit_pushx(ASMState *as, Reg r)
 {
   MCode *p = as->mcp;
-  p[-1] = (MCode)(XI_PUSH + (r & 7));
+  asm_mcode_put_u8(as, p-1, (MCode)(XI_PUSH + (r & 7)));
   p -= 1;
-  REXRB(p, 0, r);
+  REXRB(as, p, 0, r);
   as->mcp = p;
 }
 
 static void emit_popx(ASMState *as, Reg r)
 {
   MCode *p = as->mcp;
-  p[-1] = (MCode)(XI_POP + (r & 7));
+  asm_mcode_put_u8(as, p-1, (MCode)(XI_POP + (r & 7)));
   p -= 1;
-  REXRB(p, 0, r);
+  REXRB(as, p, 0, r);
   as->mcp = p;
 }
 
@@ -388,8 +428,8 @@ static void emit_loadu64(ASMState *as, Reg r, uint64_t u64)
     emit_loadi(as, r, (int32_t)u64);
   } else if (checki32((int64_t)u64)) {  /* Sign-extended 32 bit load. */
     MCode *p = as->mcp;
-    *(int32_t *)(p-4) = (int32_t)u64;
-    as->mcp = emit_opm(XO_MOVmi, XM_REG, REX_64, r, p, -4);
+    asm_mcode_put_i32(as, p-4, (int32_t)u64);
+    as->mcp = emit_opm(as, XO_MOVmi, XM_REG, REX_64, r, p, -4);
 #if LJ_GC64
   } else if (checki32(mcpofs(as, u64)) && checki32(mctopofs(as, u64))) {
     /* Since as->realign assumes the code size doesn't change, check
@@ -399,9 +439,9 @@ static void emit_loadu64(ASMState *as, Reg r, uint64_t u64)
 #endif
   } else {  /* Full-size 64 bit load. */
     MCode *p = as->mcp;
-    *(uint64_t *)(p-8) = u64;
-    p[-9] = (MCode)(XI_MOVri+(r&7));
-    p[-10] = 0x48 + ((r>>3)&1);
+    asm_mcode_put_u64(as, p-8, u64);
+    asm_mcode_put_u8(as, p-9, (MCode)(XI_MOVri+(r&7)));
+    asm_mcode_put_u8(as, p-10, 0x48 + ((r>>3)&1));
     p -= 10;
     as->mcp = p;
   }
@@ -436,12 +476,12 @@ static void emit_rma(ASMState *as, x86Op xo, Reg rr, const void *addr)
 #endif
   {
     MCode *p = as->mcp;
-    *(int32_t *)(p-4) = ptr2addr(addr);
+    asm_mcode_put_i32(as, p-4, ptr2addr(addr));
 #if LJ_64
-    p[-5] = MODRM(XM_SCALE1, RID_ESP, RID_EBP);
-    as->mcp = emit_opm(xo, XM_OFS0, rr, RID_ESP, p, -5);
+    asm_mcode_put_u8(as, p-5, MODRM(XM_SCALE1, RID_ESP, RID_EBP));
+    as->mcp = emit_opm(as, xo, XM_OFS0, rr, RID_ESP, p, -5);
 #else
-    as->mcp = emit_opm(xo, XM_OFS0, rr, RID_EBP, p, -4);
+    as->mcp = emit_opm(as, xo, XM_OFS0, rr, RID_EBP, p, -4);
 #endif
   }
 }
@@ -501,8 +541,8 @@ static void emit_sjmp(ASMState *as, MCLabel target)
   MCode *p = as->mcp;
   ptrdiff_t delta = target - p;
   lj_assertA(delta == (int8_t)delta, "short jump target out of range");
-  p[-1] = (MCode)(int8_t)delta;
-  p[-2] = XI_JMPs;
+  asm_mcode_put_u8(as, p-1, (MCode)(int8_t)delta);
+  asm_mcode_put_u8(as, p-2, XI_JMPs);
   as->mcp = p - 2;
 }
 #endif
@@ -513,8 +553,8 @@ static void emit_sjcc(ASMState *as, int cc, MCLabel target)
   MCode *p = as->mcp;
   ptrdiff_t delta = target - p;
   lj_assertA(delta == (int8_t)delta, "short jump target out of range");
-  p[-1] = (MCode)(int8_t)delta;
-  p[-2] = (MCode)(XI_JCCs+(cc&15));
+  asm_mcode_put_u8(as, p-1, (MCode)(int8_t)delta);
+  asm_mcode_put_u8(as, p-2, (MCode)(XI_JCCs+(cc&15)));
   as->mcp = p - 2;
 }
 
@@ -522,8 +562,8 @@ static void emit_sjcc(ASMState *as, int cc, MCLabel target)
 static MCLabel emit_sjcc_label(ASMState *as, int cc)
 {
   MCode *p = as->mcp;
-  p[-1] = 0;
-  p[-2] = (MCode)(XI_JCCs+(cc&15));
+  asm_mcode_put_u8(as, p-1, 0);
+  asm_mcode_put_u8(as, p-2, (MCode)(XI_JCCs+(cc&15)));
   as->mcp = p - 2;
   return p;
 }
@@ -531,7 +571,7 @@ static MCLabel emit_sjcc_label(ASMState *as, int cc)
 /* Fixup jcc short target. */
 static void emit_sfixup(ASMState *as, MCLabel source)
 {
-  source[-1] = (MCode)(as->mcp-source);
+  asm_mcode_put_u8(as, source-1, (MCode)(as->mcp-source));
 }
 
 /* Return label pointing to current PC. */
@@ -561,9 +601,9 @@ static LJ_AINLINE int32_t jmprel(jit_State *J, MCode *p, MCode *target)
 static void emit_jcc(ASMState *as, int cc, MCode *target)
 {
   MCode *p = as->mcp;
-  *(int32_t *)(p-4) = jmprel(as->J, p, target);
-  p[-5] = (MCode)(XI_JCCn+(cc&15));
-  p[-6] = 0x0f;
+  asm_mcode_put_i32(as, p-4, jmprel(as->J, p, target));
+  asm_mcode_put_u8(as, p-5, (MCode)(XI_JCCn+(cc&15)));
+  asm_mcode_put_u8(as, p-6, 0x0f);
   as->mcp = p - 6;
 }
 
@@ -571,8 +611,8 @@ static void emit_jcc(ASMState *as, int cc, MCode *target)
 static void emit_jmp(ASMState *as, MCode *target)
 {
   MCode *p = as->mcp;
-  *(int32_t *)(p-4) = jmprel(as->J, p, target);
-  p[-5] = XI_JMP;
+  asm_mcode_put_i32(as, p-4, jmprel(as->J, p, target));
+  asm_mcode_put_u8(as, p-5, XI_JMP);
   as->mcp = p - 5;
 }
 
@@ -588,8 +628,8 @@ static void emit_call_(ASMState *as, MCode *target)
     return;
   }
 #endif
-  *(int32_t *)(p-4) = jmprel(as->J, p, target);
-  p[-5] = XI_CALL;
+  asm_mcode_put_i32(as, p-4, jmprel(as->J, p, target));
+  asm_mcode_put_u8(as, p-5, XI_CALL);
   as->mcp = p - 5;
 }
 

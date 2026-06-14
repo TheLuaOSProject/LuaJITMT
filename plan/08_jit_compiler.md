@@ -240,7 +240,13 @@ handler — sized LJ_MAX_EXITSTUBGR-compatible; see lj_vmstruct notes.
   exit-row emission, and bottom-of-area 64-bit constant pools already write
   through `lj_mcode_rw()` while retaining RX cursors for published addresses
   and relative offsets. x64 trace-tail fixups now do the same for stack
-  adjustment bytes, exit-branch displacement writes, and NOP tail fill.
+  adjustment bytes, exit-branch displacement writes, and NOP tail fill. The
+  x64 main emitter has also been routed through `asm_mcode_put_*()` helpers for
+  core opcode, addressing, immediate, branch, and selected generation-time
+  fixup writes, keeping labels/cursors in RX space while translating only the
+  destination store. Committed-code patching in `lj_asm_patchexit()` remains a
+  separate dual-map slice because it mutates already published traces under the
+  patch-protection path.
   This still does not implement the final memfd dual mapping; it replaces the
   temporary RWX bridge while preserving the original dual-map write-view
   target.
