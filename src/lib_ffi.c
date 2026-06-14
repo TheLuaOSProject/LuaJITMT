@@ -35,6 +35,7 @@
 #include "lj_clib.h"
 #include "lj_strfmt.h"
 #include "lj_ff.h"
+#include "lj_trace.h"
 #include "lj_tg.h"
 #include "lj_lib.h"
 
@@ -901,6 +902,26 @@ LJLIB_CF(ffi_pin)
   lj_udata_udtype_rel(ud, UDTYPE_FFI_PIN);
   setudataV(L, L->top++, ud);
   lj_gc_check(L);
+  return 1;
+}
+
+LJLIB_CF(ffi_blocking)
+{
+  GCcdata *cd = ffi_checkcdata(L, 1);
+  CTState *cts = ctype_cts(L);
+  CTypeID id = ctype_rawid(cts, cd->ctypeid);
+  CType *ct = ctype_get(cts, id);
+  CTSize sz = CTSIZE_PTR;
+  if (ctype_isptr(ct->info)) {
+    sz = ct->size;
+    id = ctype_rawid(cts, ctype_cid(ct->info));
+    ct = ctype_get(cts, id);
+  }
+  if (!ctype_isfunc(ct->info))
+    lj_err_arg(L, 1, LJ_ERR_FFI_INVTYPE);
+  lj_ctype_cb_blacklist(cts, cdata_getptr(cdataptr(cd), sz));
+  (void)lj_trace_flushall_hs(L);
+  L->top = L->base+1;  /* Pass through the function pointer. */
   return 1;
 }
 
