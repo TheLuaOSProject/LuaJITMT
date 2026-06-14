@@ -99,6 +99,23 @@ int main(void)
   assert(lj_ctype_getname(cts, &found, name, struct_ns) == id3);
   assert(lj_ctype_getname(cts, &found, name, default_ns) == id1);
 
+  dostring(L,
+    "local ffi = require('ffi')\n"
+    "ffi.cdef[[\n"
+    "struct lj_m7_parser_name_claim { double x; };\n"
+    "typedef int lj_m7_parser_name_claim;\n"
+    "enum lj_m7_parser_enum_a { LJ_M7_PARSER_DUP_CONST = 11 };\n"
+    "]]\n"
+    "assert(ffi.sizeof('struct lj_m7_parser_name_claim') == 8,\n"
+    "       'parser struct tag namespace was shadowed')\n"
+    "assert(ffi.sizeof('lj_m7_parser_name_claim') == 4,\n"
+    "       'parser typedef namespace was shadowed')\n"
+    "assert(not pcall(ffi.cdef,\n"
+    "  'enum lj_m7_parser_enum_b { LJ_M7_PARSER_DUP_CONST = 12 };'),\n"
+    "  'parser duplicate enum constant was accepted')\n"
+    "assert(ffi.C.LJ_M7_PARSER_DUP_CONST == 11,\n"
+    "       'parser duplicate enum loser replaced winner')\n");
+
   lua_close(L);
   printf("t-ffi-ctype-name-claim OK: duplicate names pick one winner and abandon losers\n");
   return 0;

@@ -20,7 +20,11 @@ for needle in \
   'lj_ctype_addname_unique(cp->cts, ct, id, CPNS_DEFAULT)' \
   'force_table_move_after_reserve(lua_State *L, CTState *cts)' \
   'assert(ct3 != ctype_get(cts, id3))' \
-  'ffi.typeinfo exposed abandoned ctype'
+  'ffi.typeinfo exposed abandoned ctype' \
+  'parser struct tag namespace was shadowed' \
+  'parser typedef namespace was shadowed' \
+  'parser duplicate enum constant was accepted' \
+  'parser duplicate enum loser replaced winner'
 do
   if ! rg -F -q "$needle" "$ROOT/src" "$ROOT/tests/t-ffi-ctype-name-claim.c"; then
     echo "guardrail: missing FFI ctype name-claim marker: $needle" >&2
