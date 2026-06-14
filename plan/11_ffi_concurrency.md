@@ -138,12 +138,13 @@ FINREG/finqueue dispatch lands.
   Current x64/Linux implementation note: runtime callback scratch now lives in
   `TGState`, callback slot arrays are preallocated at `luaopen_ffi()`, setup
   reserves a free slot with an owner-pointer CAS, stores the callback function
-  before release-publishing `cbid`, and free clears `cbid` before niling the
-  function slot and releasing the owner. Callback mcode is allocated at
-  `luaopen_ffi()` before concurrent callback creation, so the former
-  `misc_token` lazy-init bridge is gone. Callback-calling C functions are
-  blacklisted through a fixed CTState pointer-key CAS set, not arbitrary
-  `miscmap` keys.
+  before release-publishing `cbid`. Owned callback free preserves the original
+  `cbid`→function→owner release order; disowned callback free nils the function
+  before release-clearing `cbid` and performs no owner write after the slot is
+  reusable. Callback mcode is allocated at `luaopen_ffi()` before concurrent
+  callback creation, so the former `misc_token` lazy-init bridge is gone.
+  Callback-calling C functions are blacklisted through a fixed CTState
+  pointer-key CAS set, not arbitrary `miscmap` keys.
 - **errno/GetLastError save** (lj_ccall) is already per-call/TLS — audit.
 
 ## 11.6 Pinning rules for C-held references
