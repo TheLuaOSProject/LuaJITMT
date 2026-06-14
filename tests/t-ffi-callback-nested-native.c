@@ -10,9 +10,11 @@
 #include "lualib.h"
 
 #include "lj_obj.h"
+#include "lj_ctype.h"
 #include "lj_tg.h"
 
 typedef void (*NestedCallback)(void);
+typedef int (*IntCallback)(void);
 
 static TGState *test_tg;
 static int outer_checked;
@@ -21,6 +23,21 @@ static int outer_saw_native;
 static void inner_call(NestedCallback cb)
 {
   cb();
+}
+
+static void error_call(NestedCallback cb)
+{
+  cb();
+}
+
+static void dead_call(NestedCallback cb)
+{
+  cb();
+}
+
+static int int_call(IntCallback cb)
+{
+  return cb();
 }
 
 static void outer_call(NestedCallback cb)
@@ -51,6 +68,12 @@ int main(void)
   lua_setglobal(L, "lj_m7_outer_call");
   lua_pushlightuserdata(L, (void *)inner_call);
   lua_setglobal(L, "lj_m7_inner_call");
+  lua_pushlightuserdata(L, (void *)error_call);
+  lua_setglobal(L, "lj_m7_error_call");
+  lua_pushlightuserdata(L, (void *)dead_call);
+  lua_setglobal(L, "lj_m7_dead_call");
+  lua_pushlightuserdata(L, (void *)int_call);
+  lua_setglobal(L, "lj_m7_int_call");
 
   dostring(L,
     "local ffi = require('ffi')\n"
@@ -58,6 +81,7 @@ int main(void)
     "typedef void (*lj_m7_nested_cb_t)(void);\n"
     "typedef int (*lj_m7_int_cb_t)(void);\n"
     "typedef void (*lj_m7_call_cb_t)(lj_m7_nested_cb_t);\n"
+    "typedef int (*lj_m7_call_int_cb_t)(lj_m7_int_cb_t);\n"
     "]]\n"
     "local outer = ffi.cast('lj_m7_call_cb_t', lj_m7_outer_call)\n"
     "local inner = ffi.cast('lj_m7_call_cb_t', lj_m7_inner_call)\n"
@@ -79,38 +103,43 @@ int main(void)
 
   dostring(L,
     "local ffi = require('ffi')\n"
+    "local call_bad = ffi.cast('lj_m7_call_cb_t', lj_m7_error_call)\n"
     "local bad_body = ffi.cast('lj_m7_nested_cb_t', function()\n"
     "  error('nested callback body error')\n"
     "end)\n"
-    "local ok = pcall(function() bad_body() end)\n"
+    "local ok = pcall(function() call_bad(bad_body) end)\n"
     "bad_body:free()\n"
     "assert(not ok)\n");
 
   assert(test_tg->cb.depth == 0);
   assert(test_tg->in_native == 0);
+  assert(lj_ctype_cb_isblacklisted(ctype_cts(L), (void *)error_call));
 
   dostring(L,
     "local ffi = require('ffi')\n"
-    "local inner = ffi.cast('lj_m7_call_cb_t', lj_m7_inner_call)\n"
+    "local call_dead = ffi.cast('lj_m7_call_cb_t', lj_m7_dead_call)\n"
     "local dead = ffi.cast('lj_m7_nested_cb_t', function() end)\n"
     "dead:free()\n"
-    "local ok = pcall(function() inner(dead) end)\n"
+    "local ok = pcall(function() call_dead(dead) end)\n"
     "assert(not ok)\n");
 
   assert(test_tg->cb.depth == 0);
   assert(test_tg->in_native == 0);
+  assert(lj_ctype_cb_isblacklisted(ctype_cts(L), (void *)dead_call));
 
   dostring(L,
     "local ffi = require('ffi')\n"
+    "local call_bad = ffi.cast('lj_m7_call_int_cb_t', lj_m7_int_call)\n"
     "local bad_result = ffi.cast('lj_m7_int_cb_t', function()\n"
     "  return {}\n"
     "end)\n"
-    "local ok = pcall(function() return bad_result() end)\n"
+    "local ok = pcall(function() return call_bad(bad_result) end)\n"
     "bad_result:free()\n"
     "assert(not ok)\n");
 
   assert(test_tg->cb.depth == 0);
   assert(test_tg->in_native == 0);
+  assert(lj_ctype_cb_isblacklisted(ctype_cts(L), (void *)int_call));
 
   lua_close(L);
   printf("t-ffi-callback-nested-native OK: nested callbacks restore native state\n");

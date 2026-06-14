@@ -629,6 +629,7 @@ void lj_ccallback_unwind(lua_State *L, TValue *cont)
   if (tg == NULL)
     return;
   cb = &tg->cb;
+  tg->ffi_call_func = NULL;
   frame = callback_frame_top(cb);
   if (frame != NULL && frame->cont == cont)
     callback_frame_pop(cb);
@@ -836,8 +837,11 @@ lua_State * LJ_FASTCALL lj_ccallback_enter(CTState *cts, void *cf,
   cframe_nres(cf) = 0;
   L->cframe = cf;
   was_native = (uint8_t)(tg != NULL && tg->in_native != 0);
-  if (was_native)
+  if (was_native) {
+    if (tg->ffi_call_func != NULL)
+      lj_ctype_cb_blacklist(cts, tg->ffi_call_func);
     actions = lj_native_leave(L);
+  }
   callback_conv_args(cts, L, cb);
   callback_frame_push(L, cb, L->base-1, was_native);
   if (was_native) {

@@ -77,6 +77,7 @@ struct TGState {
   TValue tmptv, tmptv2;
   PRNGState prng;
 #if LJ_HASFFI
+  void *ffi_call_func;
   CCallbackRuntime cb;
 #endif
   lua_State *thread_L;

@@ -16,6 +16,7 @@ for needle in \
   'CCALLBACK_MAX_NEST' \
   'TValue *cont' \
   'CCallbackFrame frame[CCALLBACK_MAX_NEST]' \
+  'void *ffi_call_func' \
   'lj_ccallback_enter(CTState *cts, void *cf,' \
   'lj_ccallback_leave(CTState *cts, TValue *o,' \
   'lj_ccallback_unwind(lua_State *L, TValue *cont)' \
@@ -30,6 +31,11 @@ for needle in \
   'callback_conv_args(CTState *cts, lua_State *L, CCallbackRuntime *cb)' \
   'callback_conv_result(CTState *cts, lua_State *L, TValue *o,' \
   'callback_owner_claim(owner, top, L)' \
+  'void *old_ffi_call_func = tg->ffi_call_func' \
+  'tg->ffi_call_func = (void *)cc.func' \
+  'tg->ffi_call_func = old_ffi_call_func' \
+  'tg->ffi_call_func = NULL' \
+  'lj_ctype_cb_blacklist(cts, tg->ffi_call_func)' \
   'cb->slot = ~0u' \
   'uint64_t *cbblack' \
   'ctype_cbblack_init_l(lua_State *L, CTState *cts)' \

@@ -169,6 +169,9 @@ void lj_tg_detach(global_State *g, TGState *tg)
   la_store32_rel(&tg->reqmask, 0);
   la_store32_rel(&tg->poll, 0);
   la_store8_rlx(&tg->in_native, 0);
+#if LJ_HASFFI
+  tg->ffi_call_func = NULL;
+#endif
 }
 
 static int tg_transfer_dead_alloc(global_State *g, TGState *tg)
