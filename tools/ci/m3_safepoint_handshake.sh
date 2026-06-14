@@ -102,6 +102,16 @@ do
 done
 
 for needle in \
+  'actions = lj_native_leave(L);' \
+  'lj_safepoint_checkstop(L, actions);'
+do
+  if ! rg -F -q "$needle" "$ROOT/src/lj_ccall.c"; then
+    echo "guardrail: FFI native leave must propagate STOPREQ after cleanup: $needle" >&2
+    exit 1
+  fi
+done
+
+for needle in \
   'publish_stopreq()' \
   "os.execute(':')" \
   'os.tmpname()' \
@@ -112,6 +122,17 @@ for needle in \
 do
   if ! rg -F -q "$needle" "$ROOT/tests/t-safepoint-handshake.c"; then
     echo "guardrail: missing lib_os STOPREQ coverage marker: $needle" >&2
+    exit 1
+  fi
+done
+
+for needle in \
+  'ffi_stopreq_ptr' \
+  "ffi.cast('stopreq_t', ffi_stopreq_ptr)" \
+  'return stopreq()'
+do
+  if ! rg -F -q "$needle" "$ROOT/tests/t-safepoint-handshake.c"; then
+    echo "guardrail: missing FFI STOPREQ coverage marker: $needle" >&2
     exit 1
   fi
 done

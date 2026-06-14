@@ -83,6 +83,19 @@ static int assert_not_native_c(lua_State *L)
   return 0;
 }
 
+#if LJ_HASFFI
+static global_State *ffi_stopreq_g;
+static TGState *ffi_stopreq_tg;
+
+static int ffi_publish_stopreq(void)
+{
+  assert(ffi_stopreq_g != NULL);
+  assert(ffi_stopreq_tg != NULL);
+  publish_manual(ffi_stopreq_g, ffi_stopreq_tg, LJ_GC2_HS_STOPREQ);
+  return 123;
+}
+#endif
+
 static int arena_list_contains(GCArena *a, GCArena *needle)
 {
   while (a) {
@@ -436,11 +449,16 @@ int main(void)
     "assert(jok == true and value == 'joined')\n") == LUA_OK);
 
 #if LJ_HASFFI
+  ffi_stopreq_g = g;
+  ffi_stopreq_tg = tg;
+  lua_pushlightuserdata(L, (void *)ffi_publish_stopreq);
+  lua_setglobal(L, "ffi_stopreq_ptr");
   assert(luaL_dostring(L,
     "local ffi = require('ffi')\n"
     "ffi.cdef[[\n"
     "int getpid(void);\n"
     "typedef int (*cmp_t)(const void *, const void *);\n"
+    "typedef int (*stopreq_t)(void);\n"
     "void qsort(void *base, unsigned long nmemb, unsigned long size,\n"
     "           cmp_t compar);\n"
     "]]\n"
@@ -459,7 +477,12 @@ int main(void)
     "ffi.C.qsort(arr, 2, ffi.sizeof('int'), cmp)\n"
     "assert_acked_alloc_white()\n"
     "cmp:free()\n"
-    "assert(arr[0] == 1 and arr[1] == 2)\n") == LUA_OK);
+    "assert(arr[0] == 1 and arr[1] == 2)\n"
+    "local stopreq = ffi.cast('stopreq_t', ffi_stopreq_ptr)\n"
+    "local ok, err = pcall(function() return stopreq() end)\n"
+    "assert(not ok)\n"
+    "assert(tostring(err):find('thread interrupted: VM shutdown', 1, true))\n"
+    "clear_stopreq()\n") == LUA_OK);
 #endif
 
   plain_reset = lj_arena_alloc(&tg->alloc, &tg->prng, 64, 0);

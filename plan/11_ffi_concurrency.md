@@ -75,6 +75,10 @@ entry by replacing value with KEYLOCK sentinel before queueing).
   wait, hard-pacing throttles only the offender (05 §5.4.2/5.11). A truly
   blocking C function called via the fast path can stall GC completion:
   document `ffi.blocking(fn)` wrapper that forces native-state per call.
+  Current bridge: interpreted FFI calls enter native state around
+  `lj_vm_ffi_call(&cc)`, preserve the native-leave action mask, and check
+  `HS_STOPREQ` after callback blacklist handling and result conversion have
+  restored local FFI bookkeeping.
 - **Callbacks (C→Lua)**: callback entry (lj_ccallback.c enter) runs
   `lj_native_leave` on the carrier thread; if the OS thread is foreign
   (created by C, never attached), auto-attach a TG (luaMT_attach path, 09

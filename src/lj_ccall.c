@@ -1235,13 +1235,14 @@ int lj_ccall_func(lua_State *L, GCcdata *cd)
   if (ctype_isfunc(ct->info)) {
     CTypeID id = ctype_typeid(cts, ct);
     CCallState cc;
+    uint32_t actions;
     int gcsteps, ret;
     cc.func = (void (*)(void))cdata_getptr(cdataptr(cd), sz);
     gcsteps = ccall_set_args(L, cts, ct, &cc);
     cts->cb.slot = ~0u;
     lj_native_enter(L2TG(L));
     lj_vm_ffi_call(&cc);
-    (void)lj_native_leave(L);
+    actions = lj_native_leave(L);
     if (cts->cb.slot != ~0u) {  /* Blacklist function that called a callback. */
       TValue tv;
       tv.u64 = ((uintptr_t)(void *)cc.func >> 2) | U64x(800000000, 00000000);
@@ -1256,6 +1257,7 @@ int lj_ccall_func(lua_State *L, GCcdata *cd)
       lj_trace_abort(G(L));
     }
 #endif
+    lj_safepoint_checkstop(L, actions);
     while (gcsteps-- > 0)
       lj_gc_check(L);
     return ret;
