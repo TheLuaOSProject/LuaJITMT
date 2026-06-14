@@ -35,12 +35,18 @@ do
 done
 
 if awk '
-  /#if LJ_MT && defined\(__linux__\) && LJ_TARGET_X64/ { inmt = 1 }
-  inmt && /#endif/ { inmt = 0 }
-  inmt && /MCPROT_RWX/ { bad = 1 }
+  /#if defined\(__linux__\) && LJ_TARGET_X64/ { inx64 = 1 }
+  inx64 && /#endif/ { inx64 = 0 }
+  inx64 && /MCPROT_RWX/ { bad = 1 }
   END { exit bad ? 0 : 1 }
 ' "$ROOT/src/lj_mcode.c"; then
-  echo "guardrail: secure Linux/x64 LJ_MT mcode bridge must not fall back to RWX" >&2
+  echo "guardrail: secure Linux/x64 mcode bridge must not fall back to RWX" >&2
+  exit 1
+fi
+
+if rg -n '#if[[:space:]]+LJ_MT|#ifdef[[:space:]]+LJ_MT|LUAJIT_THREADSAFE' \
+    "$ROOT/src/lj_mcode.c"; then
+  echo "guardrail: mcode publication bridge must not be hidden behind LJ_MT" >&2
   exit 1
 fi
 
@@ -57,7 +63,7 @@ if ! awk '
   }
   END { if (!infn) exit 1 }
 ' "$ROOT/src/lj_mcode.c"; then
-  echo "guardrail: LJ_MT reserve must allocate a fresh area before reopening published mcode" >&2
+  echo "guardrail: reserve must allocate a fresh area before reopening published mcode" >&2
   exit 1
 fi
 

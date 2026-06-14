@@ -224,7 +224,7 @@ handler — sized LJ_MAX_EXITSTUBGR-compatible; see lj_vmstruct notes.
   `lj_mcode_sync_core()` after `lj_mcode_commit()` and before `trace_save()`
   performs the trace-slot release publication. The later bytecode, exittab,
   root/side-chain, and stitch-link release stores remain after `trace_save()`.
-  Follow-up bridge: Linux/x64 `LJ_MT` secure builds now keep W^X without
+  Follow-up bridge: Linux/x64 secure builds now keep W^X without
   reopening published areas. `lj_mcode_reserve()` allocates a fresh
   unpublished area once the current area contains committed trace bytes, and
   `lj_mcode_commit()` flips only that fresh area RX before trace-slot,

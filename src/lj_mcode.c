@@ -273,7 +273,7 @@ static void mcode_protect(jit_State *J, int prot)
 #define MCPROT_GEN	MCPROT_RW
 #define MCPROT_RUN	MCPROT_RX
 
-#if LJ_MT && defined(__linux__) && LJ_TARGET_X64
+#if defined(__linux__) && LJ_TARGET_X64
 /* M6 bridge: keep published mcode execute-stable for peer TGs by never
 ** reopening an area that already contains trace code. The final target
 ** remains the memfd dual-map W^X implementation from 08 section 8.5. */
