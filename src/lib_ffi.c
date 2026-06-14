@@ -526,16 +526,8 @@ LJLIB_CF(ffi_new)	LJLIB_REC(.)
     /* Handle ctype __gc metamethod. Use the fast lookup here. */
     TValue gctv;
     cTValue *tv = lj_ctype_metatv(cts, &gctv, id, MM_gc);
-    if (tv) {
-      GCtab *t = gco2tab(gcref_acq(G(L)->gcroot[GCROOT_FFI_FIN]));
-      if (gcref_acq(t->metatable)) {
-	/* Add to finalizer table, if still enabled. */
-	copyTVrel(L, lj_tab_set(L, t, o-1), tv);
-	lj_gc_pubtab(L, t);
-	lj_obj_addgcflags(obj2gco(cd), LJ_GC_CDATA_FIN);
-	lj_gc2_finreg_cdata_set(G(L), obj2gco(cd), 1);
-      }
-    }
+    if (tv)
+      lj_cdata_setfin(L, cd, gcV(tv), itype(tv));
   }
   L->top = o;  /* Only return the cdata itself. */
   lj_gc_check(L);

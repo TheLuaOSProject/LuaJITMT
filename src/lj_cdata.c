@@ -99,7 +99,10 @@ void LJ_FASTCALL lj_cdata_free(global_State *g, GCcdata *cd)
 
 void lj_cdata_setfin(lua_State *L, GCcdata *cd, GCobj *obj, uint32_t it)
 {
-  GCtab *t = gco2tab(gcref_acq(G(L)->gcroot[GCROOT_FFI_FIN]));
+  global_State *g = G(L);
+  CTState *cts = ctype_ctsG(g);
+  GCtab *t = gco2tab(gcref_acq(g->gcroot[GCROOT_FFI_FIN]));
+  lj_ctype_fin_lock(cts);
   if (gcref_acq(t->metatable)) {
     /* Add cdata to finalizer table, if still enabled. */
     TValue *tv, key, val;
@@ -109,15 +112,16 @@ void lj_cdata_setfin(lua_State *L, GCcdata *cd, GCobj *obj, uint32_t it)
       setnilV(&val);
       copyTVrel(L, tv, &val);
       lj_obj_cleargcflags(obj2gco(cd), LJ_GC_CDATA_FIN);
-      lj_gc2_finreg_cdata_set(G(L), obj2gco(cd), 0);
+      lj_gc2_finreg_cdata_set(g, obj2gco(cd), 0);
     } else {
       setgcV(L, &val, obj, it);
       copyTVrel(L, tv, &val);
       lj_obj_addgcflags(obj2gco(cd), LJ_GC_CDATA_FIN);
-      lj_gc2_finreg_cdata_set(G(L), obj2gco(cd), 1);
+      lj_gc2_finreg_cdata_set(g, obj2gco(cd), 1);
     }
     lj_gc_pubtab(L, t);
   }
+  lj_ctype_fin_unlock(cts);
 }
 
 /* -- C data indexing ----------------------------------------------------- */

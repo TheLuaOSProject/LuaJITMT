@@ -182,6 +182,7 @@ typedef struct CTState {
   GCtab *miscmap;	/* Map of -CTypeID to metatable and cb slot to func. */
   CCallback cb;		/* Temporary callback state. */
   uint32_t parse_token;	/* 11.2 cparse mutation token. */
+  uint32_t fin_token;	/* 11.4 FFI finalizer table mutation token. */
   CTypeID1 hash[CTHASH_SIZE];  /* Hash anchors for C type table. */
 } CTState;
 
@@ -471,6 +472,8 @@ LJ_FUNC CTypeID lj_ctype_new(CTState *cts, CType **ctp);
 LJ_FUNC CTypeID lj_ctype_intern(CTState *cts, CTInfo info, CTSize size);
 LJ_FUNC void lj_ctype_parse_lock(CTState *cts, lua_State *L);
 LJ_FUNC void lj_ctype_parse_unlock(CTState *cts);
+LJ_FUNC void lj_ctype_fin_lock(CTState *cts);
+LJ_FUNC void lj_ctype_fin_unlock(CTState *cts);
 LJ_FUNC void lj_ctype_addname(CTState *cts, CType *ct, CTypeID id);
 LJ_FUNC CTypeID lj_ctype_getname(CTState *cts, CType **ctp, GCstr *name,
 				 uint32_t tmask);

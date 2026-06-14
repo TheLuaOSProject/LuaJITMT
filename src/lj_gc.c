@@ -1077,21 +1077,29 @@ static void gc_finalize(lua_State *L)
     setgcrefr(*lj_obj_gcwref(gcref(g->gc.mmudata)), *lj_obj_gcwref(o));
 #if LJ_HASFFI
   if (o->gch.gct == ~LJ_TCDATA) {
+    CTState *cts = ctype_ctsG(g);
+    GCtab *t = gco2tab(gcref_acq(g->gcroot[GCROOT_FFI_FIN]));
     TValue tmp, *tv;
     /* Add cdata back to the GC list and make it white. */
     lj_obj_setgcwr(o, g->gc.root);
     setgcref(g->gc.root, o);
     makewhite(g, o);
     lj_gc_arena_markobj(g, o);
-    lj_obj_cleargcflags(o, LJ_GC_CDATA_FIN);
-    lj_gc2_finreg_cdata_set(g, o, 0);
     /* Resolve finalizer. */
     setcdataV(L, &tmp, gco2cd(o));
-    tv = lj_tab_set(L, gco2tab(gcref_acq(g->gcroot[GCROOT_FFI_FIN])), &tmp);
-    if (!tvisnil(tv)) {
+    lj_ctype_fin_lock(cts);
+    tv = (TValue *)lj_tab_get(L, t, &tmp);
+    if (tv != niltv(L) && !tvisnil(tv)) {
       copyTV(L, &tmp, tv);
       lj_tab_storenilraw(tv);  /* Clear entry in finalizer table. */
+      lj_obj_cleargcflags(o, LJ_GC_CDATA_FIN);
+      lj_gc2_finreg_cdata_set(g, o, 0);
+      lj_ctype_fin_unlock(cts);
       gc_call_finalizer(g, L, &tmp, o);
+    } else {
+      lj_obj_cleargcflags(o, LJ_GC_CDATA_FIN);
+      lj_gc2_finreg_cdata_set(g, o, 0);
+      lj_ctype_fin_unlock(cts);
     }
     lj_gc2_finalizer_leave(g);
     return;
@@ -1122,11 +1130,20 @@ void lj_gc_finalize_udata(lua_State *L)
 void lj_gc_finalize_cdata(lua_State *L)
 {
   global_State *g = G(L);
-  GCtab *t = gco2tab(gcref_acq(g->gcroot[GCROOT_FFI_FIN]));
-  Node *node = lj_tab_node_acq(t);
-  MSize hmask = lj_tab_node_hmask_acq(node);
+  CTState *cts = ctype_ctsG(g);
+  GCobj *fo = gcref_acq(g->gcroot[GCROOT_FFI_FIN]);
+  GCtab *t;
+  Node *node;
+  MSize hmask;
   ptrdiff_t i;
+  if (cts == NULL || fo == NULL)
+    return;
+  t = gco2tab(fo);
+  lj_ctype_fin_lock(cts);
   setgcrefnull(t->metatable);  /* Mark finalizer table as disabled. */
+  node = lj_tab_node_acq(t);
+  hmask = lj_tab_node_hmask_acq(node);
+  lj_ctype_fin_unlock(cts);
   for (i = (ptrdiff_t)hmask; i >= 0; i--) {
     TValue key, val;
     lj_tv_load_acq(&val, &node[i].val);

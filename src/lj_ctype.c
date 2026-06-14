@@ -185,6 +185,28 @@ void lj_ctype_parse_unlock(CTState *cts)
 #endif
 }
 
+void lj_ctype_fin_lock(CTState *cts)
+{
+  for (;;) {
+    uint32_t expect = 0;
+    if (la_cas32(&cts->fin_token, &expect, 1, LA_ACQ_REL, LA_ACQ))
+      return;  /* 11.4 bridge: serialize hidden finalizer table mutation. */
+#if defined(__linux__)
+    (void)la_futex_wait(&cts->fin_token, 1, 1000000);
+#else
+    la_cpu_pause();
+#endif
+  }
+}
+
+void lj_ctype_fin_unlock(CTState *cts)
+{
+  la_store32_rel(&cts->fin_token, 0);  /* 11.4: publish finalizer table update. */
+#if defined(__linux__)
+  (void)la_futex_wake(&cts->fin_token, 1);
+#endif
+}
+
 /* Create new type element. */
 CTypeID lj_ctype_new(CTState *cts, CType **ctp)
 {

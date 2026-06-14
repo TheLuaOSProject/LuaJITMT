@@ -114,8 +114,8 @@ for needle in \
   'gc2_finreg_queue_mark(global_State *g, GCobj *o)' \
   '05 section 5.8 FINREG resurrection' \
   'lj_gc2_finreg_cdata_queue(global_State *g, GCobj *o)' \
-  'lj_gc2_finreg_cdata_set(G(L), obj2gco(cd), 1)' \
-  'lj_gc2_finreg_cdata_set(G(L), obj2gco(cd), 0)' \
+  'lj_gc2_finreg_cdata_set(g, obj2gco(cd), 1)' \
+  'lj_gc2_finreg_cdata_set(g, obj2gco(cd), 0)' \
   'lj_gc2_finreg_cdata_set(g, o, 0)' \
   'lj_gc2_finreg_cdata_queue(g, obj2gco(cd))' \
   'lj_gc2_finreg_udata_set(global_State *g, GCobj *o, int enabled)' \
