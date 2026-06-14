@@ -196,7 +196,7 @@ int main(void)
   cts = ctype_ctsG(g);
   assert(cts != NULL);
   assert(arena_mem_marked(g, cts));
-  assert(arena_mem_marked(g, cts->tab));
+  assert(arena_mem_marked(g, ctype_tabh_acq(cts)));
 #endif
 
   lua_getfield(L, -1, "co");
