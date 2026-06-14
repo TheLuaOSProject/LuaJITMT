@@ -23,10 +23,8 @@ for needle in \
   'lj_cdata_fin_storenil(L, tv)' \
   'lj_tab_get(L, t, &tmp)' \
   'lj_cdata_setfin(L, cd, gcV(tv), itype(tv))' \
-  'uint32_t finalizer_token' \
-  'gc_finalizer_vm_lock(global_State *g)' \
-  'la_cas32(&g->finalizer_token' \
-  'gc_finalizer_vm_unlock(g)'
+  'lj_gc2_finalizer_try_enter(global_State *g)' \
+  'peer finalizer dispatch backs off'
 do
   if ! rg -F -q "$needle" "$ROOT/src"; then
     echo "guardrail: missing FFI finalizer registry marker: $needle" >&2
@@ -57,6 +55,12 @@ if awk '
   END { exit bad ? 0 : 1 }
 ' "$ROOT/src/lj_gc.c"; then
   echo "guardrail: per-cdata finalizer claim must use FINREG slot CAS, not fin_token" >&2
+  exit 1
+fi
+
+if rg -n 'finalizer_token|gc_finalizer_vm_lock|gc_finalizer_vm_unlock' \
+  "$ROOT/src"; then
+  echo "guardrail: finalizer callbacks must use the GC2 owner claim, not a shared VM-thread token" >&2
   exit 1
 fi
 

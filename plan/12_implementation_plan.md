@@ -147,7 +147,9 @@ original resurrection-race case. Paranoia builds now rescan the legacy weak
 list after a GC2 skip decision and fail if any weak slot remains clearable.
 Finalizer dispatch now has a GC2 owner try-claim around legacy
 `mmudata` draining, so peer TGs back off instead of racing the shared finalizer
-list while close-time drains still complete through the blocking wrapper.
+list while close-time drains still complete through the blocking wrapper. The
+older `finalizer_token` bridge has been removed; the remaining finalizer bridge
+is the shared `vmthread(g)` callback stack.
 The original "finalizer that spawns a thread" item now has a bridge test for
 spawn+join during explicit-GC finalization; the broader planned async finalizer
 dispatch path remains M8 work, not an M9 performance cleanup.
