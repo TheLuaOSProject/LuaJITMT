@@ -46,7 +46,7 @@ static int os_native_remove(lua_State *L, const char *filename)
   int ok;
   lj_native_enter(L2TG(L));
   ok = remove(filename);
-  (void)lj_native_leave(L);
+  lj_safepoint_checkstop(L, lj_native_leave(L));
   return ok;
 }
 
@@ -56,7 +56,7 @@ static int os_native_rename(lua_State *L, const char *fromname,
   int ok;
   lj_native_enter(L2TG(L));
   ok = rename(fromname, toname);
-  (void)lj_native_leave(L);
+  lj_safepoint_checkstop(L, lj_native_leave(L));
   return ok;
 }
 
@@ -97,10 +97,12 @@ LJLIB_CF(os_execute)
 #else
   const char *cmd = luaL_optstring(L, 1, NULL);
   TGState *tg = L2TG(L);
+  uint32_t actions;
   int stat;
   lj_native_enter(tg);
   stat = system(cmd);
-  (void)lj_native_leave(L);
+  actions = lj_native_leave(L);
+  lj_safepoint_checkstop(L, actions);
 #if LJ_52
   if (cmd)
     return luaL_execresult(L, stat);

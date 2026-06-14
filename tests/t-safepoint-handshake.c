@@ -36,6 +36,15 @@ static int publish_alloc_white_c(lua_State *L)
   return 0;
 }
 
+static int publish_stopreq_c(lua_State *L)
+{
+  global_State *g = G(L);
+  TGState *tg = G2TG(g);
+  assert(tg != NULL);
+  publish_manual(g, tg, LJ_GC2_HS_STOPREQ);
+  return 0;
+}
+
 static int assert_acked_alloc_white_c(lua_State *L)
 {
   global_State *g = G(L);
@@ -46,6 +55,22 @@ static int assert_acked_alloc_white_c(lua_State *L)
   assert(tg->reqmask == 0);
   assert(tg->hs_epoch_ack == g->gc2.hs_epoch);
   assert(tg->alloc.alloc_black == 0);
+  return 0;
+}
+
+static int clear_stopreq_c(lua_State *L)
+{
+  global_State *g = G(L);
+  TGState *tg = G2TG(g);
+  uint8_t flags;
+  assert(tg != NULL);
+  assert(g->gc2.hs_pending == 0);
+  assert(tg->poll == 0);
+  assert(tg->reqmask == 0);
+  assert(tg->hs_epoch_ack == g->gc2.hs_epoch);
+  flags = la_load8_acq(&tg->tg_flags);
+  assert((flags & TGF_STOPREQ) != 0);
+  la_store8_rel(&tg->tg_flags, (uint8_t)(flags & ~TGF_STOPREQ));
   return 0;
 }
 
@@ -128,8 +153,12 @@ int main(void)
   luaL_openlibs(L);
   lua_pushcfunction(L, publish_alloc_white_c);
   lua_setglobal(L, "publish_alloc_white");
+  lua_pushcfunction(L, publish_stopreq_c);
+  lua_setglobal(L, "publish_stopreq");
   lua_pushcfunction(L, assert_acked_alloc_white_c);
   lua_setglobal(L, "assert_acked_alloc_white");
+  lua_pushcfunction(L, clear_stopreq_c);
+  lua_setglobal(L, "clear_stopreq");
   lua_pushcfunction(L, assert_not_native_c);
   lua_setglobal(L, "assert_not_native");
   g = G(L);
@@ -362,6 +391,28 @@ int main(void)
     "local r = os.tmpname()\n"
     "assert_acked_alloc_white()\n"
     "os.remove(r)\n") == LUA_OK);
+
+  assert(luaL_dostring(L,
+    "local function expect_stopreq(fn)\n"
+    "  publish_stopreq()\n"
+    "  local ok, err = pcall(fn)\n"
+    "  assert(not ok)\n"
+    "  assert(tostring(err):find('thread interrupted: VM shutdown', 1, true))\n"
+    "  clear_stopreq()\n"
+    "end\n"
+    "local p = os.tmpname()\n"
+    "local q = p .. '.stopreq'\n"
+    "local f = assert(io.open(p, 'w'))\n"
+    "f:write('x')\n"
+    "f:close()\n"
+    "expect_stopreq(function() return os.rename(p, q) end)\n"
+    "os.remove(p)\n"
+    "f = assert(io.open(q, 'w'))\n"
+    "f:write('y')\n"
+    "f:close()\n"
+    "expect_stopreq(function() return os.remove(q) end)\n"
+    "os.remove(q)\n"
+    "expect_stopreq(function() return os.execute(':') end)\n") == LUA_OK);
 
 #if LJ_HASFFI
   assert(luaL_dostring(L,

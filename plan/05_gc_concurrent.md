@@ -120,6 +120,13 @@ while in native (FFI callbacks re-enter via lj_native_leave first; 11
 §11.5). Races at the boundary are resolved by `hs_epoch_ack` CAS: whoever
 CASes old→new performs/owns the ack; the loser does nothing.
 
+Current bridge note: native exits may also be shutdown delivery points.
+`os.execute`, `os.remove`, and `os.rename` now feed their `lj_native_leave(L)`
+result into `lj_safepoint_checkstop()`, so a STOPREQ acknowledged by the native
+leave is raised before those functions build their normal Lua results. The
+broader native-exit audit for IO, FFI, callbacks, and other wrappers remains
+separate follow-up work.
+
 ## 5.5 Mark state & colors
 
 Mark = bit in the arena `mark` bitmap (or huge-table flag). Set with

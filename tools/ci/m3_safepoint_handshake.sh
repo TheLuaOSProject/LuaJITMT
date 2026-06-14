@@ -45,4 +45,25 @@ do
   fi
 done
 
+for needle in \
+  'lj_safepoint_checkstop(L, lj_native_leave(L));' \
+  'lj_safepoint_checkstop(L, actions);'
+do
+  if ! rg -F -q "$needle" "$ROOT/src/lib_os.c"; then
+    echo "guardrail: lib_os native leave must propagate STOPREQ: $needle" >&2
+    exit 1
+  fi
+done
+
+for needle in \
+  'publish_stopreq()' \
+  "os.execute(':')" \
+  'thread interrupted: VM shutdown'
+do
+  if ! rg -F -q "$needle" "$ROOT/tests/t-safepoint-handshake.c"; then
+    echo "guardrail: missing lib_os STOPREQ coverage marker: $needle" >&2
+    exit 1
+  fi
+done
+
 echo "M3 safepoint handshake tests passed"
