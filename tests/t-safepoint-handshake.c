@@ -413,6 +413,7 @@ int main(void)
     "expect_stopreq(function() return os.remove(q) end)\n"
     "os.remove(q)\n"
     "expect_stopreq(function() return os.execute(':') end)\n"
+    "expect_stopreq(function() return os.tmpname() end)\n"
     "p = os.tmpname()\n"
     "f = assert(io.open(p, 'w'))\n"
     "f:write('z')\n"

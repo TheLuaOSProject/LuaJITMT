@@ -64,12 +64,18 @@ static int os_native_rename(lua_State *L, const char *fromname,
 #if LJ_TARGET_POSIX
 static int os_native_mkstemp(lua_State *L, char *buf)
 {
+  TGState *tg = L2TG(L);
+  uint32_t actions;
   int fd;
-  lj_native_enter(L2TG(L));
+  lj_native_enter(tg);
   fd = mkstemp(buf);
   if (fd != -1)
     close(fd);
-  (void)lj_native_leave(L);
+  actions = lj_native_leave(L);
+  if (fd != -1 && ((actions & LJ_GC2_HS_STOPREQ) ||
+      (tg && (la_load8_acq(&tg->tg_flags) & TGF_STOPREQ))))
+    (void)remove(buf);
+  lj_safepoint_checkstop(L, actions);
   return fd;
 }
 #else

@@ -56,6 +56,18 @@ do
 done
 
 for needle in \
+  'os_native_mkstemp(lua_State *L, char *buf)' \
+  'actions = lj_native_leave(L);' \
+  'remove(buf);' \
+  'lj_safepoint_checkstop(L, actions);'
+do
+  if ! rg -F -q "$needle" "$ROOT/src/lib_os.c"; then
+    echo "guardrail: os.tmpname native leave must propagate STOPREQ: $needle" >&2
+    exit 1
+  fi
+done
+
+for needle in \
   'io_native_fflush(lua_State *L, FILE *fp)' \
   'lj_safepoint_checkstop(L, lj_native_leave(L));'
 do
@@ -68,6 +80,7 @@ done
 for needle in \
   'publish_stopreq()' \
   "os.execute(':')" \
+  'os.tmpname()' \
   'f:flush()' \
   'thread interrupted: VM shutdown'
 do
