@@ -220,6 +220,16 @@ void lj_ctype_misc_unlock(CTState *cts)
 #endif
 }
 
+static LJ_AINLINE CTypeID ctype_hash_load(CTState *cts, uint32_t h)
+{
+  return (CTypeID)(la_load32_acq(&cts->hash[h]) & 0xffffu);  /* 11.2: ctype hash publication. */
+}
+
+static LJ_AINLINE void ctype_hash_store(CTState *cts, uint32_t h, CTypeID id)
+{
+  la_store32_rel(&cts->hash[h], (uint32_t)id);  /* 11.2: ctype hash publication. */
+}
+
 /* Create new type element. */
 CTypeID lj_ctype_new_l(lua_State *L, CTState *cts, CType **ctp)
 {
@@ -252,7 +262,7 @@ CTypeID lj_ctype_new_l(lua_State *L, CTState *cts, CType **ctp)
 CTypeID lj_ctype_intern_l(lua_State *L, CTState *cts, CTInfo info, CTSize size)
 {
   uint32_t h = ct_hashtype(info, size);
-  CTypeID id = cts->hash[h];
+  CTypeID id = ctype_hash_load(cts, h);
   while (id) {
     CType *ct = ctype_get(cts, id);
     if (ct->info == info && ct->size == size)
@@ -280,9 +290,9 @@ CTypeID lj_ctype_intern_l(lua_State *L, CTState *cts, CTInfo info, CTSize size)
   cts->tab[id].info = info;
   cts->tab[id].size = size;
   cts->tab[id].sib = 0;
-  cts->tab[id].next = cts->hash[h];
+  cts->tab[id].next = (CTypeID1)ctype_hash_load(cts, h);
   setgcrefnull(cts->tab[id].name);
-  cts->hash[h] = (CTypeID1)id;
+  ctype_hash_store(cts, h, id);
   return id;
 }
 
@@ -290,22 +300,22 @@ CTypeID lj_ctype_intern_l(lua_State *L, CTState *cts, CTInfo info, CTSize size)
 static void ctype_addtype(CTState *cts, CType *ct, CTypeID id)
 {
   uint32_t h = ct_hashtype(ct->info, ct->size);
-  ct->next = cts->hash[h];
-  cts->hash[h] = (CTypeID1)id;
+  ct->next = (CTypeID1)ctype_hash_load(cts, h);
+  ctype_hash_store(cts, h, id);
 }
 
 /* Add named element to hash table. */
 void lj_ctype_addname(CTState *cts, CType *ct, CTypeID id)
 {
   uint32_t h = ct_hashname(ctype_name_acq(ct));
-  ct->next = cts->hash[h];
-  cts->hash[h] = (CTypeID1)id;
+  ct->next = (CTypeID1)ctype_hash_load(cts, h);
+  ctype_hash_store(cts, h, id);
 }
 
 /* Get a C type by name, matching the type mask. */
 CTypeID lj_ctype_getname(CTState *cts, CType **ctp, GCstr *name, uint32_t tmask)
 {
-  CTypeID id = cts->hash[ct_hashname(name)];
+  CTypeID id = ctype_hash_load(cts, ct_hashname(name));
   while (id) {
     CType *ct = ctype_get(cts, id);
     if (ctype_name_acq(ct) == name &&

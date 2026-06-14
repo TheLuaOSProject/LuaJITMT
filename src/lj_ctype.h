@@ -187,7 +187,7 @@ typedef struct CTState {
   uint32_t parse_token;	/* 11.2 cparse mutation token. */
   uint32_t fin_token;	/* 11.4 FFI finalizer table mutation token. */
   uint32_t misc_token;	/* 11.2/11.5 miscmap mutation token bridge. */
-  CTypeID1 hash[CTHASH_SIZE];  /* Hash anchors for C type table. */
+  uint32_t hash[CTHASH_SIZE];  /* Hash anchors. Low 16 bits hold CTypeID. */
 } CTState;
 
 #define CTINFO(ct, flags)	(((CTInfo)(ct) << CTSHIFT_NUM) + (flags))
