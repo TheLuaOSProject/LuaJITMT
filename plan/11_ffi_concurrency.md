@@ -16,7 +16,7 @@ GCtab *miscmap; CCallback cb; CTypeID1 hash[CTHASH_SIZE]; }`
   GCtab (becomes concurrent for free via 06).
   Current implementation note: metatables have moved to the CTID-indexed
   `CTState.metamap` side root; `miscmap` remains for callback slots, the
-  function-pointer metatable, and the C-call callback blacklist.
+  function-pointer metatable, and legacy compatibility.
 - `cb` is scratch for callback setup.
 
 ## 11.2 Lock-free CTState (M7)
@@ -60,8 +60,7 @@ GCtab *miscmap; CCallback cb; CTypeID1 hash[CTHASH_SIZE]; }`
   Current implementation note: metatypes use a CTState side root
   (`metamap[raw_ctypeid]`) instead of structural `miscmap` negative-key
   insertion. `ffi.metatype()` CAS-publishes the metatable and both collectors
-  scan the side root; `miscmap` remains for callback function slots and the
-  C-call callback blacklist.
+  scan the side root; `miscmap` remains for callback function slots.
 
 ## 11.3 cdata objects
 Allocation: ordinary GC objects from non-traversable arenas (04 §4.2) —
@@ -112,7 +111,8 @@ entry by replacing value with KEYLOCK sentinel before queueing).
   reserves a free slot with an owner-pointer CAS, stores the callback function
   before release-publishing `cbid`, and free clears `cbid` before niling the
   function slot and releasing the owner. One-time mcode allocation still uses
-  the small `misc_token` bridge.
+  the small `misc_token` bridge. Callback-calling C functions are blacklisted
+  through a fixed CTState pointer-key CAS set, not arbitrary `miscmap` keys.
 - **errno/GetLastError save** (lj_ccall) is already per-call/TLS — audit.
 
 ## 11.6 Pinning rules for C-held references

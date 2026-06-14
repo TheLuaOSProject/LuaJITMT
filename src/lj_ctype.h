@@ -194,6 +194,9 @@ typedef struct CTState {
   GCtab *miscmap;	/* Callback slots, function metatable, blacklist. */
   GCRef *metamap;	/* CAS-installed metatables by raw CTypeID. */
   MSize sizemeta;	/* Size of metatable side map. */
+  uint64_t *cbblack;	/* Callback-calling C function blacklist set. */
+  MSize sizecbblack;	/* Size of callback blacklist set. */
+  uint32_t cbblack_all;	/* Conservative blacklist overflow flag. */
   CCallback cb;		/* Temporary callback state. */
   uint32_t parse_token;	/* 11.2 cparse mutation token. */
   uint32_t fin_token;	/* 11.4 FFI finalizer table mutation token. */
@@ -525,6 +528,8 @@ LJ_FUNC void lj_ctype_fin_unlock(CTState *cts);
 LJ_FUNC void lj_ctype_misc_lock(CTState *cts);
 LJ_FUNC void lj_ctype_misc_unlock(CTState *cts);
 LJ_FUNC int lj_ctype_setmeta(CTState *cts, CTypeID id, GCtab *mt);
+LJ_FUNC void lj_ctype_cb_blacklist(CTState *cts, void *func);
+LJ_FUNC int lj_ctype_cb_isblacklisted(CTState *cts, void *func);
 LJ_FUNC void lj_ctype_addname(CTState *cts, CType *ct, CTypeID id);
 LJ_FUNC CTypeID lj_ctype_getname(CTState *cts, CType **ctp, GCstr *name,
 				 uint32_t tmask);

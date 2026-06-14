@@ -365,6 +365,7 @@ static void gc2_paranoia_check_rawroots(global_State *g)
       gc2_paranoia_checkmem(g, cts, "ctype state");
       gc2_paranoia_checkmem(g, ctype_tabh_acq(cts), "ctype table");
       gc2_paranoia_checkmem(g, cts->metamap, "ctype metatype side map");
+      gc2_paranoia_checkmem(g, cts->cbblack, "ctype callback blacklist");
       for (ctret = (CTypeTab *)la_loadptr_acq(
 	     (void *const *)&cts->retiredtab);
 	   ctret != NULL;
@@ -554,6 +555,7 @@ static void gc_mark_gcroot(global_State *g)
 	lj_gc_arena_markmem(g, ctret);
       }
       lj_gc_arena_markmem(g, cts->metamap);
+      lj_gc_arena_markmem(g, cts->cbblack);
       if (cts->metamap) {
 	MSize i, n = (MSize)la_load32_acq(&cts->sizemeta);
 	for (i = 0; i < n; i++) {

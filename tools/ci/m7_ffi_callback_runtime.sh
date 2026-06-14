@@ -15,6 +15,16 @@ for needle in \
   'callback_conv_result(CTState *cts, lua_State *L, TValue *o,' \
   'callback_owner_claim(owner, top, L)' \
   'cb->slot = ~0u' \
+  'uint64_t *cbblack' \
+  'ctype_cbblack_init_l(lua_State *L, CTState *cts)' \
+  'lj_ctype_cb_blacklist(CTState *cts, void *func)' \
+  'lj_ctype_cb_isblacklisted(CTState *cts, void *func)' \
+  'la_cas64(&tab[slot], &expect, key, LA_ACQ_REL, LA_ACQ)' \
+  'la_store32_rel(&cts->cbblack_all, 1)' \
+  'lj_ctype_cb_blacklist(cts, (void *)cc.func)' \
+  'lj_ctype_cb_isblacklisted(cts,' \
+  'lj_gc_arena_markmem(g, cts->cbblack)' \
+  'lj_gc2_markmem(g, cts->cbblack)' \
   'mov TG:KBASE, L:ITYPE->tg_hint' \
   'mov CBACK:KBASE->L, ITYPE' \
   'mov CBACK:KBASE->gpr[0], CARG1' \
@@ -37,6 +47,12 @@ fi
 if rg -n 'cts->cb\.(gpr|fpr|stack|slot|was_native)' \
     "$ROOT/src/lj_ccallback.c" "$ROOT/src/lj_ccall.c"; then
   echo "guardrail: C callback runtime must use per-TG callback scratch" >&2
+  exit 1
+fi
+
+if rg -n 'lj_tab_storebool\(L, lj_tab_set\(L, cts->miscmap|lj_tab_get\(J->L, cts->miscmap, &key\)' \
+    "$ROOT/src/lj_ccall.c" "$ROOT/src/lj_crecord.c"; then
+  echo "guardrail: callback blacklist must not mutate miscmap structurally" >&2
   exit 1
 fi
 

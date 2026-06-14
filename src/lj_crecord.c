@@ -1294,11 +1294,9 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
     CTInfo ctr_info = ctr->info;  /* crec_call_args may invalidate ctr. */
     IRType t = crec_ct2irt(cts, ctr);
     TRef tr;
-    TValue key, tv;
     /* Check for blacklisted C functions that might call a callback. */
-    key.u64 = ((uintptr_t)cdata_getptr(cdataptr(cd), (LJ_64 && tp == IRT_P64) ? 8 : 4) >> 2) | U64x(800000000, 00000000);
-    lj_tv_load_acq(&tv, lj_tab_get(J->L, cts->miscmap, &key));
-    if (tvistrue(&tv))
+    if (lj_ctype_cb_isblacklisted(cts,
+	  cdata_getptr(cdataptr(cd), (LJ_64 && tp == IRT_P64) ? 8 : 4)))
       lj_trace_err(J, LJ_TRERR_BLACKL);
     if (ctype_isvoid(ctr_info)) {
       t = IRT_NIL;

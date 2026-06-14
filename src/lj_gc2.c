@@ -1010,6 +1010,7 @@ static void gc2_scan_global_roots(global_State *g)
 	lj_gc2_markmem(g, ret);
       }
       lj_gc2_markmem(g, cts->metamap);
+      lj_gc2_markmem(g, cts->cbblack);
       if (cts->metamap) {
 	MSize i, n = (MSize)la_load32_acq(&cts->sizemeta);
 	for (i = 0; i < n; i++) {
