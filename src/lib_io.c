@@ -434,6 +434,7 @@ LJLIB_CF(io_method_seek)
   int opt = lj_lib_checkopt(L, 2, 1, "\3set\3cur\3end");
   int64_t ofs = 0;
   TValue *o;
+  uint32_t actions;
   int res;
   if (opt == 0) opt = SEEK_SET;
   else if (opt == 1) opt = SEEK_CUR;
@@ -451,38 +452,46 @@ LJLIB_CF(io_method_seek)
 #if LJ_TARGET_POSIX
   lj_native_enter(L2TG(L));
   res = fseeko(fp, ofs, opt);
-  (void)lj_native_leave(L);
+  actions = lj_native_leave(L);
+  lj_safepoint_checkstop(L, actions);
 #elif _MSC_VER >= 1400
   lj_native_enter(L2TG(L));
   res = _fseeki64(fp, ofs, opt);
-  (void)lj_native_leave(L);
+  actions = lj_native_leave(L);
+  lj_safepoint_checkstop(L, actions);
 #elif defined(__MINGW32__)
   lj_native_enter(L2TG(L));
   res = fseeko64(fp, ofs, opt);
-  (void)lj_native_leave(L);
+  actions = lj_native_leave(L);
+  lj_safepoint_checkstop(L, actions);
 #else
   lj_native_enter(L2TG(L));
   res = fseek(fp, (long)ofs, opt);
-  (void)lj_native_leave(L);
+  actions = lj_native_leave(L);
+  lj_safepoint_checkstop(L, actions);
 #endif
   if (res)
     return luaL_fileresult(L, 0, NULL);
 #if LJ_TARGET_POSIX
   lj_native_enter(L2TG(L));
   ofs = ftello(fp);
-  (void)lj_native_leave(L);
+  actions = lj_native_leave(L);
+  lj_safepoint_checkstop(L, actions);
 #elif _MSC_VER >= 1400
   lj_native_enter(L2TG(L));
   ofs = _ftelli64(fp);
-  (void)lj_native_leave(L);
+  actions = lj_native_leave(L);
+  lj_safepoint_checkstop(L, actions);
 #elif defined(__MINGW32__)
   lj_native_enter(L2TG(L));
   ofs = ftello64(fp);
-  (void)lj_native_leave(L);
+  actions = lj_native_leave(L);
+  lj_safepoint_checkstop(L, actions);
 #else
   lj_native_enter(L2TG(L));
   ofs = (int64_t)ftell(fp);
-  (void)lj_native_leave(L);
+  actions = lj_native_leave(L);
+  lj_safepoint_checkstop(L, actions);
 #endif
   setint64V(L->top-1, ofs);
   return 1;

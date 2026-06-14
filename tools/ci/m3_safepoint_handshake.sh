@@ -78,10 +78,23 @@ do
 done
 
 for needle in \
+  'LJLIB_CF(io_method_seek)' \
+  'res = fseeko(fp, ofs, opt);' \
+  'ofs = ftello(fp);' \
+  'lj_safepoint_checkstop(L, actions);'
+do
+  if ! rg -F -q "$needle" "$ROOT/src/lib_io.c"; then
+    echo "guardrail: lib_io seek native leave must propagate STOPREQ: $needle" >&2
+    exit 1
+  fi
+done
+
+for needle in \
   'publish_stopreq()' \
   "os.execute(':')" \
   'os.tmpname()' \
   'f:flush()' \
+  "f:seek('set', 0)" \
   'thread interrupted: VM shutdown'
 do
   if ! rg -F -q "$needle" "$ROOT/tests/t-safepoint-handshake.c"; then

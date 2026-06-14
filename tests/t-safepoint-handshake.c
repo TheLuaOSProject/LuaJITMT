@@ -418,6 +418,7 @@ int main(void)
     "f = assert(io.open(p, 'w'))\n"
     "f:write('z')\n"
     "expect_stopreq(function() return f:flush() end)\n"
+    "expect_stopreq(function() return f:seek('set', 0) end)\n"
     "f:close()\n"
     "os.remove(p)\n") == LUA_OK);
 
