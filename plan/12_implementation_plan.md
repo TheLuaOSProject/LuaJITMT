@@ -138,9 +138,9 @@ Current implementation note: the original M8 target above remains intact.
 `tools/ci/m8_weak.sh` now covers deterministic weak-mode semantics,
 string weak-reference parity, weak-table cycles, current `ffi.gc()` ordering
 and clear/nested-GC behavior, and focused GC2 weak/barrier paranoia coverage.
-The original "finalizer that spawns a thread" item is still open: current
-probes hang under the shared VM-thread/finalizer bridge and need the planned
-M8 finalizer dispatch work, not an M9 performance cleanup.
+The original "finalizer that spawns a thread" item now has a bridge test for
+spawn+join during explicit-GC finalization; the broader planned async finalizer
+dispatch path remains M8 work, not an M9 performance cleanup.
 
 ## M9 — Performance closing (open-ended; budget ≈2000)
 Menu (in expected-value order; measure each): per-arena grey stacks +

@@ -116,6 +116,27 @@ if ok_ffi then
     fullgc(2)
     assert(fired == 1, "ffi.gc finalizer ran more than once")
   end
+
+  if ok_th and os.getenv("LJ_M8_FINALIZER_SPAWN") ~= "0" then
+    local done = th.channel(1)
+    local fired = 0
+    local function make_finalizer()
+      ffi.gc(fin_t(), function(_)
+	fired = fired + 1
+	local worker = th.spawn(function(q)
+	  q:send("spawned")
+	  return "joined"
+	end, done)
+	local ok, result = worker:join(10)
+	assert(ok == true and result == "joined", tostring(result))
+      end)
+    end
+    make_finalizer()
+    fullgc(3)
+    local msg, ok = done:recv(1)
+    assert(ok == true and msg == "spawned", "finalizer-spawned thread did not run")
+    assert(fired == 1, "finalizer-spawn case ran more than once")
+  end
 end
 
 do

@@ -9,6 +9,8 @@
 #define lj_gc_c
 #define LUA_CORE
 
+#include <limits.h>
+
 #if LJ_GC2_PARANOIA
 #include <stdio.h>
 #include <stdlib.h>
@@ -1157,12 +1159,46 @@ static void gc_finalizer_vm_unlock(global_State *g)
 #endif
 }
 
+static int gc_finalizer_mt_release_exclusive(global_State *g)
+{
+  if (la_load32_acq(&g->mt_gc_exclusive) == 0)
+    return 0;
+  la_store32_rel(&g->mt_gc_exclusive, 0);
+#if defined(__linux__)
+  (void)la_futex_wake(&g->mt_gc_exclusive, INT_MAX);
+#endif
+  return 1;  /* 09 section 9.6: finalizer may spawn while GC is paused. */
+}
+
+static void gc_finalizer_mt_reclaim_exclusive(global_State *g)
+{
+  for (;;) {
+    uint32_t live, expect = 0;
+    while ((live = la_load32_acq(&g->mt_live)) != 0) {
+#if defined(__linux__)
+      (void)la_futex_wait(&g->mt_live, live, 1000000);
+#else
+      la_cpu_pause();
+#endif
+    }
+    if (la_cas32(&g->mt_gc_exclusive, &expect, 1, LA_ACQ_REL, LA_ACQ)) {
+      if (la_load32_acq(&g->mt_live) == 0)
+	return;
+      la_store32_rel(&g->mt_gc_exclusive, 0);
+#if defined(__linux__)
+      (void)la_futex_wake(&g->mt_gc_exclusive, INT_MAX);
+#endif
+    }
+  }
+}
+
 static void gc_call_finalizer(global_State *g, lua_State *L,
 			      cTValue *mo, GCobj *o)
 {
   /* Save and restore lots of state around the __gc callback. */
   uint8_t oldh;
   GCSize oldt;
+  int had_mt_exclusive;
   int errcode;
   lua_State *VL = vmthread(g);
   TValue *top;
@@ -1178,7 +1214,10 @@ static void gc_call_finalizer(global_State *g, lua_State *L,
   if (LJ_FR2) setnilV(top++);
   setgcV(VL, top, o, ~o->gch.gct);
   VL->top = top+1;
+  had_mt_exclusive = gc_finalizer_mt_release_exclusive(g);
   errcode = lj_vm_pcall(VL, top, 1+0, -1);  /* Stack: |mo|o| -> | */
+  if (had_mt_exclusive)
+    gc_finalizer_mt_reclaim_exclusive(g);
   lj_tg_setcur_L(g, L);
   hook_restore(g, oldh);
   if (LJ_HASPROFILE && (oldh & HOOK_PROFILE)) lj_dispatch_update(g, 0);
