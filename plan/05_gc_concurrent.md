@@ -430,7 +430,9 @@ separation. The linked queue itself remains legacy-owned.
 The first
 weak-write bridge is present for new weak keys: `lj_tab_newkey()` calls
 `lj_gc2_barrier_weak_key()` during `P_WEAK`, marking a collectable inserted key
-immediately. C API table setters that bypass normal legacy barriers also call
+immediately. `lj_meta_tset()` also marks collectable weak keys when it reuses
+an existing hash slot, including nil-valued dead-key slots left behind by weak
+clearing. C API table setters that bypass normal legacy barriers also call
 `lj_gc2_barrier_weak_write()` to mark collectable inserted keys and values.
 `weak_keys_marked` and `weak_values_marked` expose first-time marks from these
 bridges for follow-up tests. x64 VM single-value array table stores now route

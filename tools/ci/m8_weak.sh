@@ -18,6 +18,8 @@ for needle in \
   'test_vm_weak_value_array_barrier' \
   'test_weak_clear_marks_string_slots' \
   'test_weak_post_clear_resurrection_write' \
+  'test_vm_weak_post_clear_existing_key_write' \
+  'lj_gc2_barrier_weak_key(L, t, k);' \
   'test_weak_complete_bridge' \
   'lj_gc2_weak_complete(g, gcref(g->gc.weak), 1)' \
   'gc2_weak_paranoia_zero_diff(global_State *g, GCobj *legacy)' \
@@ -46,7 +48,7 @@ for needle in \
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_gc2.c" "$ROOT/src/lj_gc2.h" \
       "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc.h" "$ROOT/tests/t-gc2-phase.c" \
-      "$ROOT/tests/t-gc2-traverse.c"; then
+      "$ROOT/src/lj_meta.c" "$ROOT/tests/t-gc2-traverse.c"; then
     echo "guardrail: missing M8 weak/finalizer marker: $needle" >&2
     exit 1
   fi

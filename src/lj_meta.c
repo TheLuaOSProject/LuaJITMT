@@ -11,6 +11,7 @@
 
 #include "lj_obj.h"
 #include "lj_gc.h"
+#include "lj_gc2.h"
 #include "lj_err.h"
 #include "lj_buf.h"
 #include "lj_str.h"
@@ -200,11 +201,14 @@ TValue *lj_meta_tset(lua_State *L, cTValue *o, cTValue *k)
       cTValue *tv = lj_tab_get(L, t, k);
       if (LJ_LIKELY(!tvisnil(tv))) {
 	t->nomm = 0;  /* Invalidate negative metamethod cache. */
+	lj_gc2_barrier_weak_key(L, t, k);
 	lj_gc_pubtab(L, t);
 	return (TValue *)tv;
       } else if (!(mo = lj_meta_fasttv(G(L), tabref_acq(t->metatable),
 				       MM_newindex, &motv))) {
 	t->nomm = 0;  /* Invalidate negative metamethod cache. */
+	if (tv != niltv(L))
+	  lj_gc2_barrier_weak_key(L, t, k);
 	lj_gc_pubtab(L, t);
 	if (tv != niltv(L))
 	  return (TValue *)tv;
