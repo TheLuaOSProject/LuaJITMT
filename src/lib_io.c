@@ -58,12 +58,23 @@ static FILE *io_native_fopen(lua_State *L, const char *fname,
   return fp;
 }
 
+static int io_fresh_stopreq(lua_State *L, uint32_t actions, int had_stopreq)
+{
+  TGState *tg = L2TG(L);
+  return (actions & LJ_GC2_HS_STOPREQ) ||
+    (!had_stopreq && tg && (la_load8_acq(&tg->tg_flags) & TGF_STOPREQ));
+}
+
+static void io_checkstop_fresh(lua_State *L, uint32_t actions, int had_stopreq)
+{
+  if (io_fresh_stopreq(L, actions, had_stopreq))
+    lj_safepoint_checkstop(L, actions);
+}
+
 static void io_fopen_checkstop(lua_State *L, IOFileUD *iof, uint32_t actions,
 			       int had_stopreq)
 {
-  TGState *tg = L2TG(L);
-  int stopreq = (actions & LJ_GC2_HS_STOPREQ) ||
-    (!had_stopreq && tg && (la_load8_acq(&tg->tg_flags) & TGF_STOPREQ));
+  int stopreq = io_fresh_stopreq(L, actions, had_stopreq);
   if (stopreq) {
     if (iof->fp != NULL) {
       FILE *fp = iof->fp;
@@ -154,7 +165,7 @@ static FILE *io_native_popen(lua_State *L, const char *fname,
   return fp;
 }
 
-static int io_native_pclose(lua_State *L, FILE *fp)
+static int io_native_pclose(lua_State *L, FILE *fp, uint32_t *actionsp)
 {
   int stat;
   lj_native_enter(L2TG(L));
@@ -163,7 +174,7 @@ static int io_native_pclose(lua_State *L, FILE *fp)
 #else
   stat = _pclose(fp);
 #endif
-  (void)lj_native_leave(L);
+  *actionsp = lj_native_leave(L);
   return stat;
 }
 #endif
@@ -226,12 +237,16 @@ static int io_file_close(lua_State *L, IOFileUD *iof)
   if ((iof->type & IOFILE_TYPE_MASK) == IOFILE_TYPE_FILE) {
     ok = (io_native_fclose(L, iof->fp) == 0);
   } else if ((iof->type & IOFILE_TYPE_MASK) == IOFILE_TYPE_PIPE) {
+    TGState *tg = L2TG(L);
+    int had_stopreq = tg && (la_load8_acq(&tg->tg_flags) & TGF_STOPREQ);
+    uint32_t actions = 0;
     int stat = -1;
 #if LJ_TARGET_POSIX || (LJ_TARGET_WINDOWS && !LJ_TARGET_XBOXONE && !LJ_TARGET_UWP)
-    stat = io_native_pclose(L, iof->fp);
+    stat = io_native_pclose(L, iof->fp, &actions);
 #endif
-#if LJ_52
     iof->fp = NULL;
+    io_checkstop_fresh(L, actions, had_stopreq);
+#if LJ_52
     return luaL_execresult(L, stat);
 #else
     ok = (stat != -1);

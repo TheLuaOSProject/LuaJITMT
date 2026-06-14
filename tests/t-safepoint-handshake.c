@@ -25,16 +25,17 @@
 #include "lj_safepoint.h"
 #include "lj_tg.h"
 
-typedef struct FifoStopReqCtx {
+typedef struct NativeStopReqCtx {
   global_State *g;
   TGState *tg;
   pthread_t thread;
   char path[PATH_MAX];
   int active;
+  int open_fifo;
   int open_errno;
-} FifoStopReqCtx;
+} NativeStopReqCtx;
 
-static FifoStopReqCtx fifo_stopreq_ctx;
+static NativeStopReqCtx native_stopreq_ctx;
 
 static void publish_manual(global_State *g, TGState *tg, uint32_t actions)
 {
@@ -114,11 +115,10 @@ static int mkfifo_test_c(lua_State *L)
   return 1;
 }
 
-static void *fifo_stopreq_thread(void *arg)
+static void *native_stopreq_thread(void *arg)
 {
-  FifoStopReqCtx *ctx = (FifoStopReqCtx *)arg;
+  NativeStopReqCtx *ctx = (NativeStopReqCtx *)arg;
   struct timespec delay;
-  int fd;
   int i;
   delay.tv_sec = 0;
   delay.tv_nsec = 1000000;
@@ -126,48 +126,68 @@ static void *fifo_stopreq_thread(void *arg)
        la_load8_acq(&ctx->tg->in_native) == 0; i++)
     (void)nanosleep(&delay, NULL);
   publish_manual(ctx->g, ctx->tg, LJ_GC2_HS_STOPREQ);
-  fd = open(ctx->path, O_WRONLY);
-  if (fd == -1)
-    ctx->open_errno = errno;
-  else
-    (void)close(fd);
+  if (ctx->open_fifo) {
+    int fd = open(ctx->path, O_WRONLY);
+    if (fd == -1)
+      ctx->open_errno = errno;
+    else
+      (void)close(fd);
+  }
   return NULL;
+}
+
+static int start_native_stopreq(lua_State *L, const char *path)
+{
+  size_t len = path ? strlen(path) : 0;
+  int err;
+  if (native_stopreq_ctx.active)
+    return luaL_error(L, "native STOPREQ helper already active");
+  if (len >= sizeof(native_stopreq_ctx.path))
+    return luaL_error(L, "FIFO path too long");
+  native_stopreq_ctx.g = G(L);
+  native_stopreq_ctx.tg = G2TG(native_stopreq_ctx.g);
+  native_stopreq_ctx.open_fifo = path != NULL;
+  native_stopreq_ctx.open_errno = 0;
+  if (path != NULL)
+    memcpy(native_stopreq_ctx.path, path, len + 1u);
+  else
+    native_stopreq_ctx.path[0] = '\0';
+  err = pthread_create(&native_stopreq_ctx.thread, NULL,
+		       native_stopreq_thread, &native_stopreq_ctx);
+  if (err != 0)
+    return luaL_error(L, "pthread_create failed: %s", strerror(err));
+  native_stopreq_ctx.active = 1;
+  return 0;
 }
 
 static int start_fifo_stopreq_c(lua_State *L)
 {
-  const char *path = luaL_checkstring(L, 1);
-  size_t len = strlen(path);
+  return start_native_stopreq(L, luaL_checkstring(L, 1));
+}
+
+static int start_native_stopreq_c(lua_State *L)
+{
+  return start_native_stopreq(L, NULL);
+}
+
+static int join_native_stopreq_c(lua_State *L)
+{
   int err;
-  if (fifo_stopreq_ctx.active)
-    return luaL_error(L, "FIFO STOPREQ helper already active");
-  if (len >= sizeof(fifo_stopreq_ctx.path))
-    return luaL_error(L, "FIFO path too long");
-  fifo_stopreq_ctx.g = G(L);
-  fifo_stopreq_ctx.tg = G2TG(fifo_stopreq_ctx.g);
-  fifo_stopreq_ctx.open_errno = 0;
-  memcpy(fifo_stopreq_ctx.path, path, len + 1u);
-  err = pthread_create(&fifo_stopreq_ctx.thread, NULL,
-		       fifo_stopreq_thread, &fifo_stopreq_ctx);
+  if (!native_stopreq_ctx.active)
+    return luaL_error(L, "native STOPREQ helper is not active");
+  err = pthread_join(native_stopreq_ctx.thread, NULL);
+  native_stopreq_ctx.active = 0;
   if (err != 0)
-    return luaL_error(L, "pthread_create failed: %s", strerror(err));
-  fifo_stopreq_ctx.active = 1;
+    return luaL_error(L, "pthread_join failed: %s", strerror(err));
+  if (native_stopreq_ctx.open_errno != 0)
+    return luaL_error(L, "FIFO writer open failed: %s",
+		      strerror(native_stopreq_ctx.open_errno));
   return 0;
 }
 
 static int join_fifo_stopreq_c(lua_State *L)
 {
-  int err;
-  if (!fifo_stopreq_ctx.active)
-    return luaL_error(L, "FIFO STOPREQ helper is not active");
-  err = pthread_join(fifo_stopreq_ctx.thread, NULL);
-  fifo_stopreq_ctx.active = 0;
-  if (err != 0)
-    return luaL_error(L, "pthread_join failed: %s", strerror(err));
-  if (fifo_stopreq_ctx.open_errno != 0)
-    return luaL_error(L, "FIFO writer open failed: %s",
-		      strerror(fifo_stopreq_ctx.open_errno));
-  return 0;
+  return join_native_stopreq_c(L);
 }
 
 static int assert_not_native_c(lua_State *L)
@@ -278,6 +298,10 @@ int main(void)
   lua_setglobal(L, "start_fifo_stopreq");
   lua_pushcfunction(L, join_fifo_stopreq_c);
   lua_setglobal(L, "join_fifo_stopreq");
+  lua_pushcfunction(L, start_native_stopreq_c);
+  lua_setglobal(L, "start_native_stopreq");
+  lua_pushcfunction(L, join_native_stopreq_c);
+  lua_setglobal(L, "join_native_stopreq");
   g = G(L);
   tg = G2TG(g);
   assert(tg != NULL);
@@ -532,6 +556,15 @@ int main(void)
     "  clear_stopreq()\n"
     "  os.remove(fifo)\n"
     "end\n"
+    "local function expect_native_stopreq(fn)\n"
+    "  stopreq_case = stopreq_case + 1\n"
+    "  start_native_stopreq()\n"
+    "  local ok, err = pcall(fn)\n"
+    "  join_native_stopreq()\n"
+    "  assert(not ok, 'expected STOPREQ case ' .. stopreq_case)\n"
+    "  assert(tostring(err):find('thread interrupted: VM shutdown', 1, true))\n"
+    "  clear_stopreq()\n"
+    "end\n"
     "local p = os.tmpname()\n"
     "local q = p .. '.stopreq'\n"
     "local f = assert(io.open(p, 'w'))\n"
@@ -571,6 +604,8 @@ int main(void)
     "f:seek('set', 0)\n"
     "expect_stopreq(function() return f:read(0) end)\n"
     "f:close()\n"
+    "local pipe = assert(io.popen('sleep 0.2', 'r'))\n"
+    "expect_native_stopreq(function() return pipe:close() end)\n"
     "os.remove(p)\n") != LUA_OK) {
     fprintf(stderr, "STOPREQ coverage chunk failed: %s\n",
 	    lua_tostring(L, -1));

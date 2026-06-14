@@ -80,6 +80,7 @@ done
 
 for needle in \
   'io_native_fopen(lua_State *L, const char *fname,' \
+  'io_fresh_stopreq(lua_State *L, uint32_t actions, int had_stopreq)' \
   'io_fopen_checkstop(lua_State *L, IOFileUD *iof, uint32_t actions,' \
   'int had_stopreq)' \
   '(!had_stopreq && tg && (la_load8_acq(&tg->tg_flags) & TGF_STOPREQ));' \
@@ -91,6 +92,18 @@ for needle in \
 do
   if ! rg -F -q "$needle" "$ROOT/src/lib_io.c"; then
     echo "guardrail: lib_io fopen native leave must cleanup and propagate STOPREQ: $needle" >&2
+    exit 1
+  fi
+done
+
+for needle in \
+  'io_native_pclose(lua_State *L, FILE *fp, uint32_t *actionsp)' \
+  '*actionsp = lj_native_leave(L);' \
+  'stat = io_native_pclose(L, iof->fp, &actions);' \
+  'io_checkstop_fresh(L, actions, had_stopreq);'
+do
+  if ! rg -F -q "$needle" "$ROOT/src/lib_io.c"; then
+    echo "guardrail: lib_io pclose native leave must cleanup and propagate STOPREQ: $needle" >&2
     exit 1
   fi
 done
@@ -149,6 +162,8 @@ for needle in \
   'mkfifo_test(fifo)' \
   'start_fifo_stopreq(fifo)' \
   'join_fifo_stopreq()' \
+  'start_native_stopreq()' \
+  'join_native_stopreq()' \
   "os.execute(':')" \
   'os.tmpname()' \
   'io.tmpfile()' \
@@ -161,6 +176,8 @@ for needle in \
   'f:read(1)' \
   "f:read('*a')" \
   'f:read(0)' \
+  "io.popen('sleep 0.2', 'r')" \
+  'pipe:close()' \
   'thread interrupted: VM shutdown'
 do
   if ! rg -F -q "$needle" "$ROOT/tests/t-safepoint-handshake.c"; then
