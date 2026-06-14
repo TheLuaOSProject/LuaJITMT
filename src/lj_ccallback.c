@@ -589,6 +589,51 @@ void lj_ccallback_mcode_free(CTState *cts)
 #error "Missing calling convention definitions for this architecture"
 #endif
 
+static void callback_frame_push(lua_State *L, CCallbackRuntime *cb,
+				TValue *cont, uint8_t was_native)
+{
+  MSize depth = cb->depth;
+  if (LJ_UNLIKELY(depth >= CCALLBACK_MAX_NEST))
+    lj_err_caller(L, LJ_ERR_FFI_CBACKOV);
+  cb->frame[depth].L = L;
+  cb->frame[depth].cont = cont;
+  cb->frame[depth].was_native = was_native;
+  cb->depth = depth + 1;
+}
+
+static CCallbackFrame *callback_frame_top(CCallbackRuntime *cb)
+{
+  MSize depth = cb->depth;
+  return depth == 0 ? NULL : &cb->frame[depth-1];
+}
+
+static void callback_frame_pop(CCallbackRuntime *cb)
+{
+  MSize depth = cb->depth;
+  CCallbackFrame *frame;
+  if (depth == 0)
+    return;
+  depth--;
+  frame = &cb->frame[depth];
+  frame->L = NULL;
+  frame->cont = NULL;
+  frame->was_native = 0;
+  cb->depth = depth;
+}
+
+void lj_ccallback_unwind(lua_State *L, TValue *cont)
+{
+  TGState *tg = L2TG(L);
+  CCallbackRuntime *cb;
+  CCallbackFrame *frame;
+  if (tg == NULL)
+    return;
+  cb = &tg->cb;
+  frame = callback_frame_top(cb);
+  if (frame != NULL && frame->cont == cont)
+    callback_frame_pop(cb);
+}
+
 /* Convert and push callback arguments to Lua stack. */
 static void callback_conv_args(CTState *cts, lua_State *L, CCallbackRuntime *cb)
 {
@@ -789,11 +834,12 @@ lua_State * LJ_FASTCALL lj_ccallback_enter(CTState *cts, void *cf,
   cframe_nres(cf) = 0;
   L->cframe = cf;
   callback_conv_args(cts, L, cb);
-  cb->was_native = (uint8_t)(tg != NULL && tg->in_native != 0);
-  if (cb->was_native) {
+  callback_frame_push(L, cb, L->base-1,
+		      (uint8_t)(tg != NULL && tg->in_native != 0));
+  if (callback_frame_top(cb)->was_native) {
     uint32_t actions = lj_native_leave(L);
     if (actions & LJ_GC2_HS_STOPREQ) {
-      cb->was_native = 0;
+      callback_frame_top(cb)->was_native = 0;
       lj_safepoint_checkstop(L, actions);
     }
   }
@@ -804,7 +850,9 @@ lua_State * LJ_FASTCALL lj_ccallback_enter(CTState *cts, void *cf,
 void LJ_FASTCALL lj_ccallback_leave(CTState *cts, TValue *o,
 				    CCallbackRuntime *cb)
 {
-  lua_State *L = cb->L;
+  CCallbackFrame *frame = callback_frame_top(cb);
+  lua_State *L = frame ? frame->L : cb->L;
+  uint8_t was_native = frame ? frame->was_native : 0;
   GCfunc *fn;
   TValue *obase = L->base;
   L->base = L->top;  /* Keep continuation frame for throwing errors. */
@@ -822,10 +870,9 @@ void LJ_FASTCALL lj_ccallback_leave(CTState *cts, TValue *o,
   L->base = obase;
   L->cframe = cframe_prev(L->cframe);
   cb->slot = 0;  /* Blacklist C function that called the callback. */
-  if (cb->was_native) {
+  callback_frame_pop(cb);
+  if (was_native)
     lj_native_enter(L2TG(L));
-    cb->was_native = 0;
-  }
 }
 
 /* -- C callback management ----------------------------------------------- */

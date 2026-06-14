@@ -16,6 +16,7 @@
 #include "lj_ff.h"
 #include "lj_trace.h"
 #include "lj_tg.h"
+#include "lj_ccallback.h"
 #include "lj_vm.h"
 #include "lj_strfmt.h"
 
@@ -166,8 +167,13 @@ static void *err_unwind(lua_State *L, void *stopcf, int errcode)
       }
       return cf;
     case FRAME_CONT:  /* Continuation frame. */
-      if (frame_iscont_fficb(frame))
+      if (frame_iscont_fficb(frame)) {
+#if LJ_HASFFI
+	if (errcode)
+	  lj_ccallback_unwind(L, frame);
+#endif
 	goto unwind_c;
+      }
       /* fallthrough */
     case FRAME_VARG:  /* Vararg frame. */
       frame = frame_prevd(frame);

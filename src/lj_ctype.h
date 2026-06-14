@@ -172,13 +172,22 @@ typedef LJ_ALIGN(8) union FPRCBArg { double d; float f[2]; } FPRCBArg;
 
 /* C callback state. Defined here, to avoid dragging in lj_ccall.h. */
 
+#define CCALLBACK_MAX_NEST	LJ_MAX_XLEVEL
+
+typedef struct CCallbackFrame {
+  lua_State *L;			/* Callback owner Lua state. */
+  TValue *cont;			/* Continuation frame owning this entry. */
+  uint8_t was_native;		/* Callback entered from a native region. */
+} CCallbackFrame;
+
 typedef LJ_ALIGN(8) struct CCallbackRuntime {
   FPRCBArg fpr[CCALL_MAX_FPR];	/* Arguments/results in FPRs. */
   intptr_t gpr[CCALL_MAX_GPR];	/* Arguments/results in GPRs. */
   intptr_t *stack;		/* Pointer to arguments on stack. */
-  lua_State *L;			/* Callback owner Lua state. */
+  lua_State *L;			/* Current callback owner from the trampoline. */
   MSize slot;			/* Current callback slot. */
-  uint8_t was_native;		/* Callback entered from a native region. */
+  MSize depth;			/* Active callback frames on this TG. */
+  CCallbackFrame frame[CCALLBACK_MAX_NEST];  /* Per-callback return state. */
 } CCallbackRuntime;
 
 typedef LJ_ALIGN(8) struct CCallback {
