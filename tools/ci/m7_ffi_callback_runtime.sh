@@ -13,7 +13,7 @@ for needle in \
   'lj_ccallback_leave(CTState *cts, TValue *o,' \
   'callback_conv_args(CTState *cts, lua_State *L, CCallbackRuntime *cb)' \
   'callback_conv_result(CTState *cts, lua_State *L, TValue *o,' \
-  'cts->cb.owner[top] = L' \
+  'callback_owner_claim(owner, top, L)' \
   'cb->slot = ~0u' \
   'mov TG:KBASE, L:ITYPE->tg_hint' \
   'mov CBACK:KBASE->L, ITYPE' \

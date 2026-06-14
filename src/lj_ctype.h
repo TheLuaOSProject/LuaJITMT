@@ -181,7 +181,6 @@ typedef LJ_ALIGN(8) struct CCallback {
   CTypeID1 *cbid;		/* Callback type table. */
   lua_State **owner;		/* Callback slot owner Lua states. */
   MSize sizeid;			/* Size of callback type table. */
-  MSize topid;			/* Highest unused callback type table slot. */
 } CCallback;
 
 /* C type state. */

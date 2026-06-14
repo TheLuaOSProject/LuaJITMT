@@ -1,5 +1,5 @@
 #!/bin/sh
-# Guard M7 FFI callback setup slot/miscmap mutation bridge.
+# Guard M7 FFI callback setup slot claiming and publish/free ordering.
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
@@ -7,29 +7,34 @@ JOBS=${JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)}
 
 for needle in \
   'lj_ccallback_new_l(lua_State *L, CTState *cts' \
-  'callback_slot_new_l(lua_State *L, CTState *cts, CTypeID id)' \
+  'callback_slot_claim_l(lua_State *L, CTState *cts)' \
   'callback_checkfunc(CTState *cts, CType *ct, CTypeID *idp)' \
   '*idp = ctype_rawid(cts, ctype_cid(ct->info))' \
   'callback_mcode_new_l(lua_State *L, CTState *cts)' \
   'lj_ccallback_init_l(lua_State *L, CTState *cts)' \
   'lj_ccallback_maxslot(void)' \
-  'lj_ctype_misc_lock(cts)' \
-  'lj_ctype_misc_unlock(cts)' \
+  'callback_owner_claim(lua_State **owner, MSize slot,' \
+  'la_casptr((void **)&owner[slot], &expect, L,' \
+  'callback_owner_load(owner, top) == NULL' \
+  'if (cbid == NULL || owner == NULL || sizeid == 0)' \
   'lj_mem_newvec(L, CALLBACK_MAX_SLOT, CTypeID1)' \
   'la_storeptr_rel((void **)&cts->cb.cbid, cbid)' \
   'la_store32_rel(&cts->cb.sizeid, CALLBACK_MAX_SLOT)' \
   'callback_cbid_load(cbid, top)' \
-  'callback_cbid_store(cbid, top, id)' \
+  'callback_cbid_store(cbid, slot, id)' \
   'setfuncV(L, &tv, fn)' \
   'copyTVrel(L, lj_tab_setint(L, t, (int32_t)slot), &tv)' \
   'lj_gc_pubtab(L, t)' \
+  'lj_tv_load_acq(&tv, lj_tab_getint(cts->miscmap, (int32_t)slot))' \
+  'if (tvisfunc(&tv))' \
   'lj_ccallback_new_l(L, cts' \
   'lj_ccallback_init_l(L, cts)' \
   'lj_tab_new(L, (uint32_t)lj_ccallback_maxslot(), 1)' \
   'lj_state_checkstack(L, 1)' \
   'setcdataV(L, L->top++, cd)' \
   'LJLIB_CF(ffi_callback_free)' \
-  'la_store16_rel(&cbid[slot], 0)'
+  'la_store16_rel(&cbid[slot], 0)' \
+  'la_storeptr_rel((void **)&owner[slot], NULL)'
 do
   if ! rg -F -q "$needle" "$ROOT/src"; then
     echo "guardrail: missing FFI callback install marker: $needle" >&2
@@ -37,43 +42,53 @@ do
   fi
 done
 
-if rg -n 'lj_ccallback_new\(CTState|callback_slot_new\(CTState|callback_mcode_new\(CTState' "$ROOT/src"; then
+if rg -n 'lj_ccallback_new\(CTState|callback_slot_new|callback_mcode_new\(CTState' "$ROOT/src"; then
   echo "guardrail: callback setup wrappers must stay explicit-L only" >&2
   exit 1
 fi
 
-if awk '
+if rg -n 'cb\.topid|MSize topid' "$ROOT/src/lj_ccallback.c" "$ROOT/src/lj_ctype.h"; then
+  echo "guardrail: callback slot reuse must not depend on the old topid cursor" >&2
+  exit 1
+fi
+
+if ! awk '
   /void \*lj_ccallback_new_l/ { innew = 1 }
   innew && /^}/ { innew = 0 }
-  innew && /lj_ctype_misc_lock\(cts\)/ { sawlock = 1 }
-  innew && /lj_tab_setint\(L, t, \(int32_t\)slot\)/ { sawset = 1 }
-  innew && /lj_ctype_misc_unlock\(cts\)/ { sawunlock = 1 }
-  END { exit sawlock && sawset && sawunlock ? 1 : 0 }
+  innew && /lj_ctype_misc_lock\(cts\)/ { lock = NR }
+  innew && /lj_ctype_misc_unlock\(cts\)/ { unlock = NR }
+  innew && /callback_slot_claim_l\(L, cts\)/ { claim = NR }
+  innew && /lj_tab_setint\(L, t, \(int32_t\)slot\)/ { sawset = NR }
+  innew && /callback_cbid_store\(cbid, slot, id\)/ { publish = NR }
+  END { exit lock && unlock && unlock < claim && claim < sawset && sawset < publish ? 0 : 1 }
 ' "$ROOT/src/lj_ccallback.c"; then
-  echo "guardrail: callback slot/miscmap install must stay covered by misc token" >&2
+  echo "guardrail: callback install must initialize mcode before lockless slot/function/cbid publish" >&2
   exit 1
 fi
 
-if awk '
-  /static MSize callback_slot_new_l/ { inslot = 1 }
+if ! awk '
+  /static MSize callback_slot_claim_l/ { inslot = 1 }
   inslot && /^}/ { inslot = 0 }
-  inslot && /callback_mcode_new_l\(L, cts\)/ { sawmcode = 1 }
-  inslot && /for \(top = cts->cb.topid/ { sawfor = 1; if (!sawmcode) bad = 1 }
-  END { exit sawmcode && sawfor && !bad ? 1 : 0 }
+  inslot && /callback_slots_init_l/ { badinit = 1 }
+  inslot && /for \(top = 0; top < sizeid; top\+\+\)/ { sawfor = 1 }
+  inslot && /callback_cbid_load\(cbid, top\) == 0/ { sawcbid = 1 }
+  inslot && /callback_owner_claim\(owner, top, L\)/ { sawclaim = 1 }
+  END { exit sawfor && sawcbid && sawclaim && !badinit ? 0 : 1 }
 ' "$ROOT/src/lj_ccallback.c"; then
-  echo "guardrail: callback mcode must be allocated before slot scan" >&2
+  echo "guardrail: callback slot claim must use owner CAS over the preallocated table" >&2
   exit 1
 fi
 
-if awk '
+if ! awk '
   /static int ffi_callback_set/ { inset = 1 }
   inset && /^}/ { inset = 0 }
-  inset && /lj_ctype_misc_lock\(cts\)/ { sawlock = 1 }
-  inset && /la_store16_rel\(&cbid\[slot\], 0\)/ { sawclear = 1 }
-  inset && /lj_ctype_misc_unlock\(cts\)/ { sawunlock = 1 }
-  END { exit sawlock && sawclear && sawunlock ? 1 : 0 }
+  inset && /lj_ctype_misc_lock\(cts\)/ { badlock = 1 }
+  inset && /la_store16_rel\(&cbid\[slot\], 0\)/ { clear = NR }
+  inset && /lj_tab_storenil\(L, tv\)/ { nilslot = NR }
+  inset && /la_storeptr_rel\(\(void \*\*\)&owner\[slot\], NULL\)/ { owner = NR }
+  END { exit !badlock && clear && nilslot && owner && clear < nilslot && nilslot < owner ? 0 : 1 }
 ' "$ROOT/src/lib_ffi.c"; then
-  echo "guardrail: callback free/set must stay covered by misc token" >&2
+  echo "guardrail: callback free must clear cbid before niling function and releasing owner" >&2
   exit 1
 fi
 

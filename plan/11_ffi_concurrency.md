@@ -95,6 +95,13 @@ entry by replacing value with KEYLOCK sentinel before queueing).
   CCallback cb scratch in CTState → per-TG copy (it's setup scratch;
   move `cb` fields used at runtime (mcode slots) read-only after init,
   setup token = cdef token).
+  Current x64/Linux implementation note: runtime callback scratch now lives in
+  `TGState`, callback slot arrays are preallocated at `luaopen_ffi()`, setup
+  reserves a free slot with an owner-pointer CAS, stores the callback function
+  before release-publishing `cbid`, and free clears `cbid` before niling the
+  function slot and releasing the owner. One-time mcode allocation still uses
+  the small `misc_token` bridge; metatype/miscmap structural CAS remains a
+  separate M7 item.
 - **errno/GetLastError save** (lj_ccall) is already per-call/TLS — audit.
 
 ## 11.6 Pinning rules for C-held references

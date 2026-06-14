@@ -39,6 +39,19 @@ static LJ_AINLINE void callback_cbid_store(CTypeID1 *cbid, MSize slot,
   la_store16_rel(&cbid[slot], (CTypeID1)id);  /* 11.5 callback slot publish. */
 }
 
+static LJ_AINLINE lua_State *callback_owner_load(lua_State **owner, MSize slot)
+{
+  return (lua_State *)la_loadptr_acq((void *const *)&owner[slot]);
+}
+
+static LJ_AINLINE int callback_owner_claim(lua_State **owner, MSize slot,
+					   lua_State *L)
+{
+  void *expect = NULL;
+  return la_casptr((void **)&owner[slot], &expect, L,
+		   LA_ACQ_REL, LA_ACQ);  /* 11.5 callback slot owner claim. */
+}
+
 #if LJ_OS_NOJIT
 
 /* Callbacks disabled. */
@@ -337,7 +350,6 @@ static void callback_mcode_new_l(lua_State *L, CTState *cts)
   /* Fallback allocator. Fails if memory is not executable by default. */
   p = lj_mem_new(L, sz);
 #endif
-  cts->cb.mcode = p;
   pe = callback_mcode_init(cts->g, p);
   UNUSED(pe);
   lj_assertCTS((size_t)((char *)pe - (char *)p) <= sz,
@@ -355,6 +367,7 @@ static void callback_mcode_new_l(lua_State *L, CTState *cts)
   mprotect(p, sz, (PROT_READ|PROT_EXEC));
 #endif
 #endif
+  la_storeptr_rel((void **)&cts->cb.mcode, p);  /* 11.5 publish mcode. */
 }
 
 /* Free area for callback function pointers. */
@@ -604,8 +617,15 @@ static void callback_conv_args(CTState *cts, lua_State *L, CCallbackRuntime *cb)
     ct = ctype_get(cts, id);
     rid = ctype_cid(ct->info);  /* Return type. x86: +(spadj<<16). */
     lj_tv_load_acq(&tv, lj_tab_getint(cts->miscmap, (int32_t)slot));
-    fn = funcV(&tv);
-    fntp = LJ_TFUNC;
+    if (tvisfunc(&tv)) {
+      fn = funcV(&tv);
+      fntp = LJ_TFUNC;
+    } else {
+      ct = NULL;
+      rid = 0;
+      fn = (GCfunc *)L;
+      fntp = LJ_TTHREAD;
+    }
   } else {  /* Must set up frame first, before throwing the error. */
     ct = NULL;
     rid = 0;
@@ -843,26 +863,25 @@ void lj_ccallback_init_l(lua_State *L, CTState *cts)
 }
 
 /* Get an unused slot in the callback slot table. */
-static MSize callback_slot_new_l(lua_State *L, CTState *cts, CTypeID id)
+static MSize callback_slot_claim_l(lua_State *L, CTState *cts)
 {
-  CTypeID1 *cbid = cts->cb.cbid;
-  MSize top;
-  if (!cts->cb.mcode)
-    callback_mcode_new_l(L, cts);
-  if (cbid == NULL || cts->cb.owner == NULL)
-    cbid = callback_slots_init_l(L, cts);
-  for (top = cts->cb.topid; top < cts->cb.sizeid; top++)
-    if (LJ_LIKELY(callback_cbid_load(cbid, top) == 0))
-      goto found;
+  CTypeID1 *cbid = (CTypeID1 *)la_loadptr_acq((void *const *)&cts->cb.cbid);
+  lua_State **owner = (lua_State **)la_loadptr_acq((void *const *)&cts->cb.owner);
+  MSize top, sizeid;
+  sizeid = (MSize)la_load32_acq(&cts->cb.sizeid);
+  if (cbid == NULL || owner == NULL || sizeid == 0)
+    lj_err_caller(L, LJ_ERR_FFI_CBACKOV);
+  for (top = 0; top < sizeid; top++) {
+    if (LJ_LIKELY(callback_cbid_load(cbid, top) == 0 &&
+		  callback_owner_load(owner, top) == NULL &&
+		  callback_owner_claim(owner, top, L)))
+      return top;
+  }
 #if CALLBACK_MAX_SLOT
   if (top >= CALLBACK_MAX_SLOT)
 #endif
-    callback_err_locked(L, cts);
-found:
-  cts->cb.owner[top] = L;
-  callback_cbid_store(cbid, top, id);
-  cts->cb.topid = top+1;
-  return top;
+    lj_err_caller(L, LJ_ERR_FFI_CBACKOV);
+  return ~0u;
 }
 
 /* Check for function pointer and supported argument/result types. */
@@ -906,14 +925,21 @@ void *lj_ccallback_new_l(lua_State *L, CTState *cts, CType *ct, GCfunc *fn)
   ct = callback_checkfunc(cts, ct, &id);
   if (ct) {
     MSize slot;
+    CTypeID1 *cbid;
     GCtab *t = cts->miscmap;
     TValue tv;
-    lj_ctype_misc_lock(cts);
-    slot = callback_slot_new_l(L, cts, id);
+    if (!la_loadptr_acq((void *const *)&cts->cb.mcode)) {
+      lj_ctype_misc_lock(cts);
+      if (!cts->cb.mcode)
+	callback_mcode_new_l(L, cts);
+      lj_ctype_misc_unlock(cts);
+    }
+    slot = callback_slot_claim_l(L, cts);
+    cbid = (CTypeID1 *)la_loadptr_acq((void *const *)&cts->cb.cbid);
     setfuncV(L, &tv, fn);
     copyTVrel(L, lj_tab_setint(L, t, (int32_t)slot), &tv);
     lj_gc_pubtab(L, t);
-    lj_ctype_misc_unlock(cts);
+    callback_cbid_store(cbid, slot, id);
     return callback_slot2ptr(cts, slot);
   }
   return NULL;  /* Bad conversion. */

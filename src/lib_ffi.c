@@ -455,8 +455,8 @@ static int ffi_callback_set(lua_State *L, GCfunc *fn)
   CType *ct = ctype_raw(cts, cd->ctypeid);
   if (ctype_isptr(ct->info) && (LJ_32 || ct->size == 8)) {
     MSize slot = lj_ccallback_ptr2slot(cts, *(void **)cdataptr(cd));
-    CTypeID1 *cbid;
-    lj_ctype_misc_lock(cts);
+    CTypeID1 *cbid = NULL;
+    lua_State **owner = NULL;
     if (slot < la_load32_acq(&cts->cb.sizeid) &&
 	(cbid = (CTypeID1 *)la_loadptr_acq((void *const *)&cts->cb.cbid)) != NULL &&
 	la_load16_acq(&cbid[slot]) != 0) {
@@ -466,14 +466,14 @@ static int ffi_callback_set(lua_State *L, GCfunc *fn)
 	lj_tab_storefunc(L, tv, fn);
 	lj_gc_pubtab(L, t);
       } else {
+	la_store16_rel(&cbid[slot], 0);  /* 11.5 callback slot release. */
 	lj_tab_storenil(L, tv);
-	la_store16_rel(&cbid[slot], 0);  /* 11.5 callback slot publish. */
-	cts->cb.topid = slot < cts->cb.topid ? slot : cts->cb.topid;
+	owner = (lua_State **)la_loadptr_acq((void *const *)&cts->cb.owner);
+	if (owner)
+	  la_storeptr_rel((void **)&owner[slot], NULL);  /* 11.5 slot reusable. */
       }
-      lj_ctype_misc_unlock(cts);
       return 0;
     }
-    lj_ctype_misc_unlock(cts);
   }
   lj_err_caller(L, LJ_ERR_FFI_BADCBACK);
   return 0;
