@@ -7,7 +7,9 @@ JOBS=${JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)}
 
 for needle in \
   'lj_ccallback_new_l(lua_State *L, CTState *cts' \
-  'callback_slot_new_l(lua_State *L, CTState *cts' \
+  'callback_slot_new_l(lua_State *L, CTState *cts, CTypeID id)' \
+  'callback_checkfunc(CTState *cts, CType *ct, CTypeID *idp)' \
+  '*idp = ctype_rawid(cts, ctype_cid(ct->info))' \
   'callback_mcode_new_l(lua_State *L, CTState *cts)' \
   'lj_ccallback_init_l(lua_State *L, CTState *cts)' \
   'lj_ccallback_maxslot(void)' \

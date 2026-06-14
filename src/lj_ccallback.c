@@ -838,9 +838,8 @@ void lj_ccallback_init_l(lua_State *L, CTState *cts)
 }
 
 /* Get an unused slot in the callback slot table. */
-static MSize callback_slot_new_l(lua_State *L, CTState *cts, CType *ct)
+static MSize callback_slot_new_l(lua_State *L, CTState *cts, CTypeID id)
 {
-  CTypeID id = ctype_typeid(cts, ct);
   CTypeID1 *cbid = cts->cb.cbid;
   MSize top;
   if (!cts->cb.mcode)
@@ -862,12 +861,13 @@ found:
 }
 
 /* Check for function pointer and supported argument/result types. */
-static CType *callback_checkfunc(CTState *cts, CType *ct)
+static CType *callback_checkfunc(CTState *cts, CType *ct, CTypeID *idp)
 {
   int narg = 0;
   if (!ctype_isptr(ct->info) || (LJ_64 && ct->size != CTSIZE_PTR))
     return NULL;
-  ct = ctype_rawchild(cts, ct);
+  *idp = ctype_rawid(cts, ctype_cid(ct->info));
+  ct = ctype_get(cts, *idp);
   if (ctype_isfunc(ct->info)) {
     CType *ctr = ctype_rawchild(cts, ct);
     CTypeID fid = ct->sib;
@@ -897,13 +897,14 @@ static CType *callback_checkfunc(CTState *cts, CType *ct)
 /* Create a new callback and return the callback function pointer. */
 void *lj_ccallback_new_l(lua_State *L, CTState *cts, CType *ct, GCfunc *fn)
 {
-  ct = callback_checkfunc(cts, ct);
+  CTypeID id = 0;
+  ct = callback_checkfunc(cts, ct, &id);
   if (ct) {
     MSize slot;
     GCtab *t = cts->miscmap;
     TValue tv;
     lj_ctype_misc_lock(cts);
-    slot = callback_slot_new_l(L, cts, ct);
+    slot = callback_slot_new_l(L, cts, id);
     setfuncV(L, &tv, fn);
     copyTVrel(L, lj_tab_setint(L, t, (int32_t)slot), &tv);
     lj_gc_pubtab(L, t);
