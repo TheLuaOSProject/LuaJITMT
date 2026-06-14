@@ -394,10 +394,24 @@ int main(void)
   sweep_to_idle0 = la_load64_acq(&g->gc2.sweep_to_idle);
   sweep_live_updates0 = la_load64_acq(&g->gc2.sweep_live_updates);
   finalizer_blocks0 = la_load64_acq(&g->gc2.finalizer_sweep_blocks);
+  finalizer_enters0 = la_load64_acq(&g->gc2.finalizer_enters);
+  finalizer_leaves0 = la_load64_acq(&g->gc2.finalizer_leaves);
   lj_gc2_finalizer_enter(g);
+  assert(la_load32_acq(&g->gc2.finalizer_active) == 1);
+  assert(la_load32_acq(&g->gc2.finalizer_owner_tid) ==
+	 la_load32_acq(&tg->tid));
+  assert(la_load64_acq(&g->gc2.finalizer_enters) ==
+	 finalizer_enters0 + 1u);
+  assert(la_load64_acq(&g->gc2.finalizer_leaves) == finalizer_leaves0);
   assert(lj_gc2_finalizer_pending(g));
   assert(!lj_gc2_finalizer_sweep_pending(g));
   lj_gc2_finalizer_leave(g);
+  assert(la_load32_acq(&g->gc2.finalizer_active) == 0);
+  assert(la_load32_acq(&g->gc2.finalizer_owner_tid) == 0);
+  assert(la_load64_acq(&g->gc2.finalizer_enters) ==
+	 finalizer_enters0 + 1u);
+  assert(la_load64_acq(&g->gc2.finalizer_leaves) ==
+	 finalizer_leaves0 + 1u);
   assert(!lj_gc2_finalizer_pending(g));
   setgcrefr(mmudata0, g->gc.mmudata);
   setgcref(g->gc.mmudata, obj2gco(phase_tab));

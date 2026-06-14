@@ -138,7 +138,9 @@ Current implementation note: the original M8 target above remains intact.
 `tools/ci/m8_weak.sh` now covers deterministic weak-mode semantics,
 string weak-reference parity, weak-table cycles, current `ffi.gc()` ordering
 and clear/nested-GC behavior, close-time cdata/userdata finalizer drain, and
-focused GC2 weak/barrier paranoia coverage.
+focused GC2 weak/barrier paranoia coverage. It also reruns the GC2 phase
+accounting test to assert finalizer owner tracking and enter/leave counter
+balance under the current bridge.
 The original "finalizer that spawns a thread" item now has a bridge test for
 spawn+join during explicit-GC finalization; the broader planned async finalizer
 dispatch path remains M8 work, not an M9 performance cleanup.

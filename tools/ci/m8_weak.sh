@@ -19,12 +19,16 @@ for needle in \
   'test_weak_clear_marks_string_slots' \
   'lj_gc2_finalizer_pending(global_State *g)' \
   'lj_gc2_finalizer_sweep_pending(global_State *g)' \
+  'assert(la_load32_acq(&g->gc2.finalizer_owner_tid) ==' \
+  'finalizer_enters0 + 1u' \
+  'finalizer_leaves0 + 1u' \
   'gc_finalizer_mt_release_exclusive(global_State *g)' \
   'gc_finalizer_mt_reclaim_exclusive(global_State *g)' \
   '09 section 9.6: finalizer may spawn while GC is paused.'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_gc2.c" "$ROOT/src/lj_gc2.h" \
-      "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc.h" "$ROOT/tests/t-gc2-traverse.c"; then
+      "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc.h" "$ROOT/tests/t-gc2-phase.c" \
+      "$ROOT/tests/t-gc2-traverse.c"; then
     echo "guardrail: missing M8 weak/finalizer marker: $needle" >&2
     exit 1
   fi
@@ -35,6 +39,11 @@ make -C "$ROOT/src" -j"$JOBS" >/dev/null
 
 "$ROOT/src/luajit" -joff "$ROOT/tests/t-weak-modes.lua"
 "$ROOT/src/luajit" "$ROOT/tests/t-weak-modes.lua"
+
+out="$TMP/lj_t-gc2-phase_m8"
+"$CC" $CFLAGS -I"$ROOT/src" "$ROOT/tests/t-gc2-phase.c" \
+  "$ROOT/src/libluajit.a" -lm -ldl -pthread -o "$out"
+"$out"
 
 out="$TMP/lj_t-gc2-traverse_m8"
 "$CC" $CFLAGS -I"$ROOT/src" "$ROOT/tests/t-gc2-traverse.c" \
@@ -52,6 +61,12 @@ make -C "$ROOT/src" XCFLAGS="-DLUA_USE_ASSERT -DLJ_GC2_PARANOIA=1" \
 
 LJ_M8_WEAK_RACE_ITERS=0 LJ_M8_FINALIZER_SPAWN=0 \
   "$ROOT/src/luajit" -joff "$ROOT/tests/t-weak-modes.lua"
+
+out="$TMP/lj_t-gc2-phase_m8_paranoia"
+"$CC" $CFLAGS -DLUA_USE_ASSERT -DLJ_GC2_PARANOIA=1 -I"$ROOT/src" \
+  "$ROOT/tests/t-gc2-phase.c" "$ROOT/src/libluajit.a" \
+  -lm -ldl -pthread -o "$out"
+"$out"
 
 out="$TMP/lj_t-gc2-traverse_m8_paranoia"
 "$CC" $CFLAGS -DLUA_USE_ASSERT -DLJ_GC2_PARANOIA=1 -I"$ROOT/src" \
