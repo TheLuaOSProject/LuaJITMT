@@ -1359,7 +1359,7 @@ static void asm_href(ASMState *as, IRIns *ir, IROp merge)
   }
 #endif
 
-  /* Load main position relative to tab->node into dest. */
+  /* M6: dynamic HREF masks against the loaded node header, not GCtab.hmask. */
   khash = isk ? ir_khash(as, irkey) : 1;
   if (khash == 0) {
     emit_rmro(as, XO_MOV, dest|REX_GC64, tab, offsetof(GCtab, node));
