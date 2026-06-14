@@ -20,10 +20,18 @@ GCtab *miscmap; CCallback cb; CTypeID1 hash[CTHASH_SIZE]; }`
 - **tab growth = RCU vector** exactly like J->trace (08 §8.3):
   `la_loadptr_acq` readers; grower allocates 2x, memcpys, rel-publishes,
   defer_free old. CType records are immutable once their ID is published.
-- **ID allocation = ticket**: `id = la_add32(&cts->top, n)` then bounds
-  check vs sizetab snapshot → grow loop. Records are written *before*
-  publication; publication = the hash insert below (or, for anonymous
-  types, the store of the ID into its referencing record/cdata —
+  Current implementation note: the published pointer is `CTState.tabh`, a
+  `CTypeTab` header carrying `sizetab`, retire metadata, and `tab[]`;
+  `cts->tab`/`cts->sizetab` are compatibility mirrors, not the reader
+  correctness boundary.
+- **ID allocation = ticket**: original sketch was `id = la_add32(&cts->top,
+  n)` then bounds check vs sizetab snapshot → grow loop. Current implementation
+  uses a CAS reservation loop instead: acquire `tabh`, grow/publish a bigger
+  header before retrying if the candidate ID does not fit, then CAS
+  `cts->top` from `id` to `id+1`. This avoids advancing `top` past capacity if
+  growth allocation throws or another grower wins publication. Records are
+  written *before* publication; publication = the hash insert below (or, for
+  anonymous types, the store of the ID into its referencing record/cdata —
   release).
 - **hash chains**: CAS-prepend on `hash[h]` (CTypeID1 16-bit heads — CAS
   via the containing aligned 32-bit pair? CTypeID1 is uint16; widen
