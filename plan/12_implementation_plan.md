@@ -127,12 +127,13 @@ write protocol remains pending, so shared and shape-changing indexed stores
 stay NYI. Linux/x64 HREFK recording now avoids the legacy `GCtab.hmask` mirror
 guard and relies on the loaded node pointer plus x64 node-header slot guard;
 the broader array/header FLOAD indirection target remains pending. Linux/x64
-secure builds currently keep generated mcode execute-stable with a fresh-area
-W^X bridge: once an area has committed trace bytes, the next reserve allocates
-a new unpublished area instead of flipping the old area writable. The planned
-dual-map mcode write view remains the original M6 target and still replaces
-this bridge. `MCLink` now carries an `rw` write-view alias plus RX/RW translation
-helpers as a scaffold; the current bridge still sets `rw == rx`.
+secure builds now use the original M6 dual-map mcode write view: each mcode
+area is memfd-backed, mapped once RX and once RW, `MCLink.rw` carries the
+writable alias, generated-code/unwind writes go through RX/RW translation
+helpers, and teardown unmaps both aliases. The conservative fresh-area bridge
+still allocates a new unpublished area once an area contains committed trace
+bytes; that cleanup/perf reduction is left for M9 rather than changing the M6
+correctness target.
 Tests: stock with -jon; t-jit-01..06 (trace same loop from 2 threads;
 side-trace attach while parent runs on another thread; flush storm;
 exit-handler stress; recording-thread killed mid-trace (error in
