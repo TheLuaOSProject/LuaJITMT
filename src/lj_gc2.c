@@ -6,6 +6,11 @@
 #define lj_gc2_c
 #define LUA_CORE
 
+#if LJ_GC2_PARANOIA
+#include <stdio.h>
+#include <stdlib.h>
+#endif
+
 #include "lj_obj.h"
 #include "lj_atomic.h"
 #include "lj_chan.h"
@@ -1337,6 +1342,32 @@ static void gc2_weak_process_tab(global_State *g, GCtab *t, int clear,
   }
 }
 
+#if LJ_GC2_PARANOIA
+static void gc2_weak_paranoia_zero_diff(global_State *g, GCobj *legacy)
+{
+  uint64_t tables = 0, slots = 0, clearable = 0;
+  while (legacy) {
+    GCtab *t;
+    if (legacy->gch.gct != ~LJ_TTAB) {
+      fprintf(stderr, "GC2 weak paranoia: non-table legacy weak node %p\n",
+	      (void *)legacy);
+      abort();
+    }
+    t = gco2tab(legacy);
+    gc2_weak_process_tab(g, t, 0, &slots, &clearable);
+    tables++;
+    legacy = gcref_acq(t->gclist);
+  }
+  if (clearable != 0) {
+    fprintf(stderr, "GC2 weak paranoia: %llu/%llu clearable weak slots "
+	    "after GC2 skip across %llu tables\n",
+	    (unsigned long long)clearable, (unsigned long long)slots,
+	    (unsigned long long)tables);
+    abort();
+  }
+}
+#endif
+
 uint32_t lj_gc2_weak_snapshot_scan(global_State *g, uint32_t limit)
 {
   uint64_t start, end;
@@ -1499,6 +1530,9 @@ int lj_gc2_weak_complete(global_State *g, GCobj *legacy, uint32_t drain_limit)
   if (progress)
     la_add64_rlx(&g->gc2.weak_complete_progress, progress);
   if (lj_gc2_weak_snapshot_covers_legacy(g, legacy)) {
+#if LJ_GC2_PARANOIA
+    gc2_weak_paranoia_zero_diff(g, legacy);
+#endif
     lj_gc2_weak_legacy_result(g, 1);
     return 1;  /* 05 section 5.8 scheduler-owned weak completion bridge. */
   }

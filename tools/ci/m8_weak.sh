@@ -20,6 +20,7 @@ for needle in \
   'test_weak_post_clear_resurrection_write' \
   'test_weak_complete_bridge' \
   'lj_gc2_weak_complete(g, gcref(g->gc.weak), 1)' \
+  'gc2_weak_paranoia_zero_diff(global_State *g, GCobj *legacy)' \
   'lj_gc2_finalizer_try_enter(global_State *g)' \
   'peer finalizer dispatch backs off' \
   'lj_gc2_finalizer_pending(global_State *g)' \

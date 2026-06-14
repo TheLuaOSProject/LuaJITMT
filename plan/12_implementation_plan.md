@@ -143,8 +143,9 @@ accounting test to assert finalizer owner tracking and enter/leave counter
 balance under the current bridge. The traversal gate now covers
 `lj_gc2_weak_complete()` skip/fallback accounting for the current
 GC2-cleared snapshot bridge and a post-clear weak-phase store hook for the
-original resurrection-race case; broader weak-set zero-diff/paranoia work
-remains. Finalizer dispatch now has a GC2 owner try-claim around legacy
+original resurrection-race case. Paranoia builds now rescan the legacy weak
+list after a GC2 skip decision and fail if any weak slot remains clearable.
+Finalizer dispatch now has a GC2 owner try-claim around legacy
 `mmudata` draining, so peer TGs back off instead of racing the shared finalizer
 list while close-time drains still complete through the blocking wrapper.
 The original "finalizer that spawns a thread" item now has a bridge test for
