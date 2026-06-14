@@ -25,18 +25,24 @@ for needle in \
   'lj_mcode_freeall(g);' \
   'J->szallmcarea + sz > maxmcode' \
   'MCode *rw;		/* Writable alias of this area. */' \
-  'mcode_area_rw(MCode *area)' \
-  'mcode_rx2rw(MCode *area, MCode *rx)' \
-  'mcode_rw2rx(MCode *area, MCode *rw)' \
+  'lj_mcode_area_rw(MCode *area)' \
+  'lj_mcode_rx2rw(MCode *area, MCode *rx)' \
+  'lj_mcode_rw2rx(MCode *area, MCode *rw)' \
+  'lj_mcode_rw(jit_State *J, MCode *rx)' \
   'mcode_register_area(jit_State *J, MCode *area' \
   'mcode_free_mapping(MCode *area, size_t sz)' \
   '((MCLink *)J->mcarea)->rw = J->mcarea;  /* 08.5: single-map write view. */' \
   'mcode_free_mapping(area, size);' \
+  'asm_mcbot_u8(ASMState *as, MCode **pp, MCode v)' \
+  'asm_mcbot_i32(ASMState *as, MCode **pp, int32_t v)' \
+  'asm_mcbot_ptr(ASMState *as, MCode **pp, const void *v)' \
+  'asm_mcbot_mem(ASMState *as, MCode **pp,' \
+  'lj_mcode_rw(as->J, *pp)' \
   'memfd dual-map W^X implementation'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_obj.h" "$ROOT/src/lj_jit.h" \
       "$ROOT/src/lj_mcode.h" "$ROOT/src/lj_mcode.c" "$ROOT/src/lj_state.c" \
-      "$ROOT/src/lj_trace.c"; then
+      "$ROOT/src/lj_trace.c" "$ROOT/src/lj_asm_x86.h"; then
     echo "guardrail: missing mcode publication marker: $needle" >&2
     exit 1
   fi

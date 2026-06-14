@@ -30,6 +30,35 @@ LJ_FUNC void lj_mcode_abort(jit_State *J);
 LJ_FUNC MCode *lj_mcode_patch(jit_State *J, MCode *ptr, int finish);
 LJ_FUNC_NORET void lj_mcode_limiterr(jit_State *J, size_t need);
 
+static LJ_AINLINE MCode *lj_mcode_area_rw(MCode *area)
+{
+  return ((MCLink *)area)->rw;
+}
+
+static LJ_AINLINE MCode *lj_mcode_rx2rw(MCode *area, MCode *rx)
+{
+  return (MCode *)((char *)lj_mcode_area_rw(area) +
+		  ((char *)rx - (char *)area));
+}
+
+static LJ_AINLINE MCode *lj_mcode_rw2rx(MCode *area, MCode *rw)
+{
+  return (MCode *)((char *)area +
+		  ((char *)rw - (char *)lj_mcode_area_rw(area)));
+}
+
+static LJ_AINLINE MCode *lj_mcode_rw(jit_State *J, MCode *rx)
+{
+  MCode *area = J->mcarea;
+  while (area) {
+    size_t sz = ((MCLink *)area)->size;
+    if (rx >= area && rx < (MCode *)((char *)area + sz))
+      return lj_mcode_rx2rw(area, rx);
+    area = ((MCLink *)area)->next;
+  }
+  return rx;
+}
+
 #define lj_mcode_commitbot(J, m)	(J->mcbot = (m))
 
 #else

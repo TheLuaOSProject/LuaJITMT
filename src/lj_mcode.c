@@ -392,33 +392,18 @@ static LJ_AINLINE size_t mcode_default_size(jit_State *J)
   return (size_t)J->param[JIT_P_sizemcode] << 10;
 }
 
-static LJ_AINLINE MCode *mcode_area_rw(MCode *area)
-{
-  return ((MCLink *)area)->rw;
-}
-
-static LJ_AINLINE MCode *mcode_rx2rw(MCode *area, MCode *rx)
-{
-  return (MCode *)((char *)mcode_area_rw(area) + ((char *)rx - (char *)area));
-}
-
-static LJ_AINLINE MCode *mcode_rw2rx(MCode *area, MCode *rw)
-{
-  return (MCode *)((char *)area + ((char *)rw - (char *)mcode_area_rw(area)));
-}
-
 static LJ_AINLINE MCode *mcode_register_area(jit_State *J, MCode *area,
 					     size_t sz, MCode *bot)
 {
-  MCode *rwbot = mcode_rx2rw(area, bot);
+  MCode *rwbot = lj_mcode_rx2rw(area, bot);
   MCode *rwnewbot = (MCode *)lj_err_register_mcode(area, sz, (uint8_t *)rwbot);
   UNUSED(J);
-  return mcode_rw2rx(area, rwnewbot);
+  return lj_mcode_rw2rx(area, rwnewbot);
 }
 
 static void mcode_free_mapping(MCode *area, size_t sz)
 {
-  MCode *rw = mcode_area_rw(area);
+  MCode *rw = lj_mcode_area_rw(area);
   if (rw && rw != area)
     mcode_free(rw, sz);
   mcode_free(area, sz);
