@@ -717,6 +717,7 @@ size_t lj_gc_separateudata(global_State *g, int all)
     } else if (!lj_meta_fasttv(g, tabref_acq(gco2ud(o)->metatable),
 			       MM_gc, &mmv)) {
       markfinalized(o);  /* Done, as there's no __gc metamethod. */
+      lj_gc2_finreg_udata_set(g, o, 0);
       p = lj_obj_gcwref(o);
     } else {  /* Otherwise move userdata to be finalized to mmudata list. */
       m += sizeudata(gco2ud(o));

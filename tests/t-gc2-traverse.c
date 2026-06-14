@@ -1767,6 +1767,20 @@ static void test_finreg_userdata_telemetry(lua_State *L, global_State *g)
   lua_gc(L, LUA_GCSTOP, 0);
   assert(la_load64_acq(&g->gc2.finreg_udata_queued) == queued0 + 1u);
   assert(la_load64_acq(&g->gc2.finreg_udata_clears) == clears0 + 2u);
+
+  lua_settop(L, 0);
+  lua_newuserdata(L, 1);
+  push_udata_finalizer_mt(L);
+  lua_setmetatable(L, -2);
+  assert(la_load64_acq(&g->gc2.finreg_udata_sets) == sets0 + 3u);
+  lua_getmetatable(L, -1);
+  lua_pushnil(L);
+  lua_setfield(L, -2, "__gc");
+  lua_pop(L, 2);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  lua_gc(L, LUA_GCSTOP, 0);
+  assert(la_load64_acq(&g->gc2.finreg_udata_queued) == queued0 + 1u);
+  assert(la_load64_acq(&g->gc2.finreg_udata_clears) == clears0 + 3u);
 }
 
 static void test_finreg_userdata_queue_mark(lua_State *L, global_State *g,

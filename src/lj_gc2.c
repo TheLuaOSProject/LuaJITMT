@@ -1592,8 +1592,18 @@ void lj_gc2_finreg_cdata_queue(global_State *g, GCobj *o)
 
 void lj_gc2_finreg_udata_set(global_State *g, GCobj *o, int enabled)
 {
+  uint8_t old;
   if (!g || !o || o->gch.gct != ~LJ_TUDATA)
     return;
+  old = la_load8_acq(lj_obj_gcflags_ref(o));
+  for (;;) {
+    uint8_t next = enabled ? (uint8_t)(old | LJ_GC_UDATA_FINREG) :
+			     (uint8_t)(old & (uint8_t)~LJ_GC_UDATA_FINREG);
+    if (next == old)
+      return;
+    if (la_cas8(lj_obj_gcflags_ref(o), &old, next, LA_ACQ_REL, LA_ACQ))
+      break;
+  }
   if (enabled)
     la_add64_rlx(&g->gc2.finreg_udata_sets, 1);
   else

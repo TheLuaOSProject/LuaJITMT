@@ -191,7 +191,9 @@ older `finalizer_token` bridge has been removed. User finalizer callbacks now
 run on the claimed collector caller `lua_State` instead of the shared
 `vmthread(g)` stack; the remaining finalizer bridge is legacy
 `mmudata`/FINREG membership and execution rather than the original planned
-FINREG/finqueue dispatch path.
+FINREG/finqueue dispatch path. Userdata FINREG membership now has a
+userdata-only bit so in-place `mt.__gc = nil` mutation is cleared at legacy
+separation instead of leaving stale GC2 membership.
 The original "finalizer that spawns a thread" item now has a bridge test for
 spawn+join during explicit-GC finalization; the broader planned async finalizer
 dispatch path remains M8 work, not an M9 performance cleanup.
