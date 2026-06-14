@@ -125,7 +125,7 @@ LJLIB_ASM(bit_band)		LJLIB_REC(bit_nary IR_BAND)
     uint64_t x, y = op >= 0 ? 0 : ~(uint64_t)0;
     o = L->base;
     do {
-      lj_cconv_ct_tv_l(L, cts, ct, (uint8_t *)&x, o, 0);
+      lj_cconv_ct_tv_l(L, cts, ct, id, (uint8_t *)&x, o, 0);
       if (op < 0) y &= x; else if (op == 0) y |= x; else y ^= x;
     } while (++o < top);
     return bit_result64(L, id, y);

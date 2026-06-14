@@ -696,11 +696,14 @@ static void callback_conv_args(CTState *cts, lua_State *L, CCallbackRuntime *cb)
 static void callback_conv_result(CTState *cts, lua_State *L, TValue *o,
 				 CCallbackRuntime *cb)
 {
+  CTypeID rid;
+  CType *ctr;
 #if LJ_FR2
-  CType *ctr = ctype_raw(cts, (uint16_t)(L->base-3)->u64);
+  rid = ctype_rawid(cts, (uint16_t)(L->base-3)->u64);
 #else
-  CType *ctr = ctype_raw(cts, (uint16_t)(L->base-2)->u32.hi);
+  rid = ctype_rawid(cts, (uint16_t)(L->base-2)->u32.hi);
 #endif
+  ctr = ctype_get(cts, rid);
 #if LJ_TARGET_X86
   cb->gpr[2] = 0;
 #endif
@@ -714,7 +717,7 @@ static void callback_conv_result(CTState *cts, lua_State *L, TValue *o,
     if (ctype_isfp(ctr->info) && ctr->size == sizeof(float))
       dp = (uint8_t *)&cb->fpr[0].f[1];
 #endif
-    lj_cconv_ct_tv_l(L, cts, ctr, dp, o, 0);
+    lj_cconv_ct_tv_l(L, cts, ctr, rid, dp, o, 0);
 #ifdef CALLBACK_HANDLE_RET
     CALLBACK_HANDLE_RET
 #endif

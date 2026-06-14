@@ -18,6 +18,12 @@ for needle in \
   'lj_cconv_multi_init(CTState *cts, CTypeID did' \
   'ctype_rawrefid(cts, cdataV(o)->ctypeid) == did' \
   'lj_cconv_ct_init_l(L, cts, ct, ctype_rawid(cts, id)' \
+  'lj_cconv_ct_tv_l(lua_State *L, CTState *cts, CType *d,' \
+  'CTypeID did, uint8_t *dp' \
+  'd = ctype_get(cts, did);  /* cts->tab may have been reallocated. */' \
+  'lj_cdata_set_l(L, cts, ct, id' \
+  'lj_cconv_ct_tv_l(L, cts, d, did' \
+  'lj_cconv_ct_tv_l(L, cts, ctr, rid' \
   'return lj_cconv_tv_ct_l(L, cts, ctr, rid' \
   'gcsteps += lj_cconv_tv_ct_l(L, cts, cta, aid' \
   'CTypeID rid1 = ctype_rawrefid(cts, id1)' \
@@ -46,6 +52,16 @@ if awk '
   END { exit bad ? 0 : 1 }
 ' "$ROOT/src/lib_ffi.c"; then
   echo "guardrail: FFI API raw-ID paths must not derive IDs from CType *" >&2
+  exit 1
+fi
+
+if awk '
+  /void lj_cconv_ct_tv_l\(lua_State \*L, CTState \*cts, CType \*d,/ { inside = 1 }
+  inside && /^}/ { inside = 0 }
+  inside && /ctype_typeid\(cts, d\)/ { print; bad = 1 }
+  END { exit bad ? 0 : 1 }
+' "$ROOT/src/lj_cconv.c"; then
+  echo "guardrail: TValue-to-C conversion must not derive destination IDs from CType *" >&2
   exit 1
 fi
 

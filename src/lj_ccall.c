@@ -167,7 +167,7 @@
   int rcl[2]; rcl[0] = rcl[1] = 0; \
   if (!ccall_classify_struct(cts, d, rcl, 0)) { \
     cc->nsp = nsp; cc->ngpr = ngpr; cc->nfpr = nfpr; \
-    if (ccall_struct_arg(cc, L, cts, d, rcl, o, narg)) goto err_nyi; \
+    if (ccall_struct_arg(cc, L, cts, d, did, rcl, o, narg)) goto err_nyi; \
     nsp = cc->nsp; ngpr = cc->ngpr; nfpr = cc->nfpr; \
     continue; \
   } else {  /* Pass all other structs by value on stack. */ \
@@ -695,12 +695,13 @@ static int ccall_struct_reg(CCallState *cc, CTState *cts, GPRArg *dp, int *rcl)
 
 /* Pass a small struct argument. */
 static int ccall_struct_arg(CCallState *cc, lua_State *L, CTState *cts,
-			    CType *d, int *rcl, TValue *o, int narg)
+			    CType *d, CTypeID did, int *rcl, TValue *o,
+			    int narg)
 {
   GPRArg dp[2];
   dp[0] = dp[1] = 0;
   /* Convert to temp. struct. */
-  lj_cconv_ct_tv_l(L, cts, d, (uint8_t *)dp, o, CCF_ARG(narg));
+  lj_cconv_ct_tv_l(L, cts, d, did, (uint8_t *)dp, o, CCF_ARG(narg));
   if (ccall_struct_reg(cc, cts, dp, rcl)) {
     /* Register overflow? Pass on stack. */
     MSize nsp = cc->nsp, sz = rcl[1] ? 2*CTSIZE_PTR : CTSIZE_PTR;
@@ -1119,7 +1120,7 @@ static int ccall_set_args(lua_State *L, CTState *cts, CType *ct,
       *(void **)dp = rp;
       dp = rp;
     }
-    lj_cconv_ct_tv_l(L, cts, d, (uint8_t *)dp, o, CCF_ARG(narg));
+    lj_cconv_ct_tv_l(L, cts, d, did, (uint8_t *)dp, o, CCF_ARG(narg));
     /* Extend passed integers to 32 bits at least. */
     if (ctype_isinteger_or_bool(d->info) && d->size < 4 &&
 	(!CCALL_PACK_STACKARG || !((uintptr_t)dp & 3))) {  /* Assumes LJ_LE. */

@@ -281,8 +281,8 @@ int lj_cdata_get_l(lua_State *L, CTState *cts, CType *s, TValue *o,
 /* -- C data setters ------------------------------------------------------ */
 
 /* Convert TValue and set C data value. */
-void lj_cdata_set_l(lua_State *L, CTState *cts, CType *d, uint8_t *dp,
-		    TValue *o, CTInfo qual)
+void lj_cdata_set_l(lua_State *L, CTState *cts, CType *d, CTypeID did,
+		    uint8_t *dp, TValue *o, CTInfo qual)
 {
   if (ctype_isconstval(d->info)) {
     goto err_const;
@@ -295,13 +295,15 @@ void lj_cdata_set_l(lua_State *L, CTState *cts, CType *d, uint8_t *dp,
   /* Get child type of pointer/array/field. */
   lj_assertCTS(ctype_ispointer(d->info) || ctype_isfield(d->info),
 	       "pointer or field expected");
-  d = ctype_child(cts, d);
+  did = ctype_cid(d->info);
+  d = ctype_get(cts, did);
 
   /* Resolve reference for field. */
   if (ctype_isref(d->info)) {
     lj_assertCTS(d->size == CTSIZE_PTR, "ref is not pointer-sized");
     dp = *(uint8_t **)dp;
-    d = ctype_child(cts, d);
+    did = ctype_cid(d->info);
+    d = ctype_get(cts, did);
   }
 
   /* Skip attributes and collect qualifiers. */
@@ -311,7 +313,8 @@ void lj_cdata_set_l(lua_State *L, CTState *cts, CType *d, uint8_t *dp,
     } else {
       break;
     }
-    d = ctype_child(cts, d);
+    did = ctype_cid(d->info);
+    d = ctype_get(cts, did);
   }
 
   lj_assertCTS(ctype_hassize(d->info), "store to ctype without size");
@@ -322,7 +325,7 @@ void lj_cdata_set_l(lua_State *L, CTState *cts, CType *d, uint8_t *dp,
     lj_err_caller(L, LJ_ERR_FFI_WRCONST);
   }
 
-  lj_cconv_ct_tv_l(L, cts, d, dp, o, 0);
+  lj_cconv_ct_tv_l(L, cts, d, did, dp, o, 0);
 }
 
 #endif

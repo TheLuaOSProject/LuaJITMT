@@ -292,12 +292,12 @@ LJLIB_ASM(tonumber)		LJLIB_REC(.)
 	if (LJ_DUALNUM && ctype_isinteger_or_bool(ct->info) &&
 	    ct->size <= 4 && !(ct->size == 4 && (ct->info & CTF_UNSIGNED))) {
 	  int32_t i;
-	  lj_cconv_ct_tv_l(L, cts, ctype_get(cts, CTID_INT32),
+	  lj_cconv_ct_tv_l(L, cts, ctype_get(cts, CTID_INT32), CTID_INT32,
 			   (uint8_t *)&i, o, 0);
 	  setintV(L->base-1-LJ_FR2, i);
 	  return FFH_RES(1);
 	}
-	lj_cconv_ct_tv_l(L, cts, ctype_get(cts, CTID_DOUBLE),
+	lj_cconv_ct_tv_l(L, cts, ctype_get(cts, CTID_DOUBLE), CTID_DOUBLE,
 			 (uint8_t *)&(L->base-1-LJ_FR2)->n, o, 0);
 	return FFH_RES(1);
       }

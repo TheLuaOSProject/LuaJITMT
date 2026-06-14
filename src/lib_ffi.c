@@ -88,7 +88,7 @@ static void *ffi_checkptr(lua_State *L, int narg, CTypeID id)
   void *p;
   if (o >= L->top)
     lj_err_arg(L, narg, LJ_ERR_NOVAL);
-  lj_cconv_ct_tv_l(L, cts, ctype_get(cts, id), (uint8_t *)&p, o,
+  lj_cconv_ct_tv_l(L, cts, ctype_get(cts, id), id, (uint8_t *)&p, o,
 		   CCF_ARG(narg));
   return p;
 }
@@ -101,8 +101,8 @@ static int32_t ffi_checkint(lua_State *L, int narg)
   int32_t i;
   if (o >= L->top)
     lj_err_arg(L, narg, LJ_ERR_NOVAL);
-  lj_cconv_ct_tv_l(L, cts, ctype_get(cts, CTID_INT32), (uint8_t *)&i, o,
-		   CCF_ARG(narg));
+  lj_cconv_ct_tv_l(L, cts, ctype_get(cts, CTID_INT32), CTID_INT32,
+		   (uint8_t *)&i, o, CCF_ARG(narg));
   return i;
 }
 
@@ -184,7 +184,7 @@ LJLIB_CF(ffi_meta___newindex)	LJLIB_REC(cdata_index 1)
       lj_err_caller(L, LJ_ERR_FFI_WRCONST);
     return ffi_index_meta(L, cts, id, MM_newindex);
   }
-  lj_cdata_set_l(L, cts, ct, p, o+2, qual);
+  lj_cdata_set_l(L, cts, ct, id, p, o+2, qual);
   return 0;
 }
 
@@ -413,16 +413,18 @@ LJLIB_CF(ffi_clib___newindex)	LJLIB_REC(clib_index 0)
   if (o < L->top && tviscdata(tv)) {
     CTState *cts = ctype_cts(L);
     GCcdata *cd = cdataV(tv);
-    CType *d = ctype_get(cts, cd->ctypeid);
+    CTypeID did = cd->ctypeid;
+    CType *d = ctype_get(cts, did);
     if (ctype_isextern(d->info)) {
       CTInfo qual = 0;
       for (;;) {  /* Skip attributes and collect qualifiers. */
-	d = ctype_child(cts, d);
+	did = ctype_cid(d->info);
+	d = ctype_get(cts, did);
 	if (!ctype_isattrib(d->info)) break;
 	if (ctype_attrib(d->info) == CTA_QUAL) qual |= d->size;
       }
       if (!((d->info|qual) & CTF_CONST)) {
-	lj_cconv_ct_tv_l(L, cts, d, *(void **)cdataptr(cd), o, 0);
+	lj_cconv_ct_tv_l(L, cts, d, did, *(void **)cdataptr(cd), o, 0);
 	return 0;
       }
     }
@@ -561,7 +563,8 @@ LJLIB_CF(ffi_cast)	LJLIB_REC(ffi_new)
   if (!(tviscdata(o) && cdataV(o)->ctypeid == id)) {
     GCcdata *cd = lj_cdata_new_l(L, cts, id, d->size);
     setcdataV(L, L->top++, cd);  /* Anchor across callback allocation. */
-    lj_cconv_ct_tv_l(L, cts, d, cdataptr(cd), o, CCF_CAST);
+    lj_cconv_ct_tv_l(L, cts, d, ctype_rawid(cts, id), cdataptr(cd), o,
+		     CCF_CAST);
     L->top = o+1;
     setcdataV(L, o, cd);
     lj_gc_check(L);
@@ -715,11 +718,11 @@ LJLIB_CF(ffi_string)	LJLIB_REC(.)
   size_t len;
   if (o+1 < L->top && !tvisnil(o+1)) {
     len = (size_t)ffi_checkint(L, 2);
-    lj_cconv_ct_tv_l(L, cts, ctype_get(cts, CTID_P_CVOID), (uint8_t *)&p, o,
-		     CCF_ARG(1));
+    lj_cconv_ct_tv_l(L, cts, ctype_get(cts, CTID_P_CVOID), CTID_P_CVOID,
+		     (uint8_t *)&p, o, CCF_ARG(1));
   } else {
-    lj_cconv_ct_tv_l(L, cts, ctype_get(cts, CTID_P_CCHAR), (uint8_t *)&p, o,
-		     CCF_ARG(1));
+    lj_cconv_ct_tv_l(L, cts, ctype_get(cts, CTID_P_CCHAR), CTID_P_CCHAR,
+		     (uint8_t *)&p, o, CCF_ARG(1));
     len = strlen(p);
   }
   L->top = o+1;  /* Make sure this is the last item on the stack. */

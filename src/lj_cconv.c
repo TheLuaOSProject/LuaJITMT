@@ -35,10 +35,10 @@ LJ_NORET static void cconv_err_conv_l(lua_State *L, CTState *cts, CType *d,
 }
 
 /* Bad conversion from TValue. */
-LJ_NORET static void cconv_err_convtv_l(lua_State *L, CTState *cts, CType *d,
-					TValue *o, CTInfo flags)
+LJ_NORET static void cconv_err_convtv_l(lua_State *L, CTState *cts,
+					CTypeID did, TValue *o, CTInfo flags)
 {
-  const char *dst = strdata(lj_ctype_repr(L, ctype_typeid(cts, d), NULL));
+  const char *dst = strdata(lj_ctype_repr(L, did, NULL));
   const char *src = lj_typename(o);
   if (CCF_GETARG(flags))
     lj_err_argv(L, CCF_GETARG(flags), LJ_ERR_FFI_BADCONV, src, dst);
@@ -47,9 +47,10 @@ LJ_NORET static void cconv_err_convtv_l(lua_State *L, CTState *cts, CType *d,
 }
 
 /* Initializer overflow. */
-LJ_NORET static void cconv_err_initov_l(lua_State *L, CTState *cts, CType *d)
+LJ_NORET static void cconv_err_initov_l(lua_State *L, CTState *cts,
+					CTypeID did)
 {
-  const char *dst = strdata(lj_ctype_repr(L, ctype_typeid(cts, d), NULL));
+  const char *dst = strdata(lj_ctype_repr(L, did, NULL));
   lj_err_callerv(L, LJ_ERR_FFI_INITOV, dst);
 }
 
@@ -469,10 +470,12 @@ int lj_cconv_tv_bf_l(lua_State *L, CTState *cts, CType *s, TValue *o,
 
 /* Convert table to array. */
 static void cconv_array_tab_l(lua_State *L, CTState *cts, CType *d,
-			    uint8_t *dp, GCtab *t, CTInfo flags)
+			      CTypeID did, uint8_t *dp, GCtab *t,
+			      CTInfo flags)
 {
   int32_t i;
-  CType *dc = ctype_rawchild(cts, d);  /* Array element type. */
+  CTypeID dcid = ctype_rawid(cts, ctype_cid(d->info));
+  CType *dc = ctype_get(cts, dcid);  /* Array element type. */
   CTSize size = d->size, esize = dc->size, ofs = 0;
   for (i = 0; ; i++) {
     TValue *tv = (TValue *)lj_tab_getint(t, i);
@@ -484,8 +487,8 @@ static void cconv_array_tab_l(lua_State *L, CTState *cts, CType *d,
       break;  /* Stop at first nil. */
     }
     if (ofs >= size)
-      cconv_err_initov_l(L, cts, d);
-    lj_cconv_ct_tv_l(L, cts, dc, dp + ofs, &val, flags);
+      cconv_err_initov_l(L, cts, did);
+    lj_cconv_ct_tv_l(L, cts, dc, dcid, dp + ofs, &val, flags);
     ofs += esize;
   }
   if (size != CTSIZE_INVALID) {  /* Only fill up arrays with known size. */
@@ -499,10 +502,11 @@ static void cconv_array_tab_l(lua_State *L, CTState *cts, CType *d,
 
 /* Convert table to sub-struct/union. */
 static void cconv_substruct_tab_l(lua_State *L, CTState *cts, CType *d,
-				uint8_t *dp,
-				GCtab *t, int32_t *ip, CTInfo flags)
+				  CTypeID did, uint8_t *dp,
+				  GCtab *t, int32_t *ip, CTInfo flags)
 {
   CTypeID id = d->sib;
+  UNUSED(did);
   while (id) {
     CType *df = ctype_get(cts, id);
     id = df->sib;
@@ -530,14 +534,17 @@ static void cconv_substruct_tab_l(lua_State *L, CTState *cts, CType *d,
 	  lj_tv_load_acq(&val, tv);
 	if (!tv || tvisnil(&val)) continue;
       }
-      if (ctype_isfield(df->info))
-	lj_cconv_ct_tv_l(L, cts, ctype_rawchild(cts, df), dp+df->size,
+      if (ctype_isfield(df->info)) {
+	CTypeID dfid = ctype_rawid(cts, ctype_cid(df->info));
+	lj_cconv_ct_tv_l(L, cts, ctype_get(cts, dfid), dfid, dp+df->size,
 			 &val, flags);
-      else
+      } else {
 	lj_cconv_bf_tv_l(L, cts, df, dp+df->size, &val);
+      }
       if ((d->info & CTF_UNION)) break;
     } else if (ctype_isxattrib(df->info, CTA_SUBTYPE)) {
-      cconv_substruct_tab_l(L, cts, ctype_rawchild(cts, df),
+      CTypeID dfid = ctype_rawid(cts, ctype_cid(df->info));
+      cconv_substruct_tab_l(L, cts, ctype_get(cts, dfid), dfid,
 			    dp+df->size, t, ip, flags);
     }  /* Ignore all other entries in the chain. */
   }
@@ -545,16 +552,17 @@ static void cconv_substruct_tab_l(lua_State *L, CTState *cts, CType *d,
 
 /* Convert table to struct/union. */
 static void cconv_struct_tab_l(lua_State *L, CTState *cts, CType *d,
-			     uint8_t *dp, GCtab *t, CTInfo flags)
+			       CTypeID did, uint8_t *dp, GCtab *t,
+			       CTInfo flags)
 {
   int32_t i = 0;
   memset(dp, 0, d->size);  /* Much simpler to clear the struct first. */
-  cconv_substruct_tab_l(L, cts, d, dp, t, &i, flags);
+  cconv_substruct_tab_l(L, cts, d, did, dp, t, &i, flags);
 }
 
 /* Convert TValue to C type. Caveat: expects to get the raw CType! */
 void lj_cconv_ct_tv_l(lua_State *L, CTState *cts, CType *d,
-		      uint8_t *dp, TValue *o, CTInfo flags)
+		      CTypeID did, uint8_t *dp, TValue *o, CTInfo flags)
 {
   CTypeID sid = CTID_P_VOID;
   CType *s;
@@ -579,7 +587,6 @@ void lj_cconv_ct_tv_l(lua_State *L, CTState *cts, CType *d,
     }
     s = ctype_raw(cts, sid);
     if (ctype_isfunc(s->info)) {
-      CTypeID did = ctype_typeid(cts, d);
       sid = lj_ctype_intern_l(L, cts, CTINFO(CT_PTR, CTALIGN_PTR|sid),
 			      CTSIZE_PTR);
       d = ctype_get(cts, did);  /* cts->tab may have been reallocated. */
@@ -613,10 +620,10 @@ void lj_cconv_ct_tv_l(lua_State *L, CTState *cts, CType *d,
     }
   } else if (tvistab(o)) {
     if (ctype_isarray(d->info)) {
-      cconv_array_tab_l(L, cts, d, dp, tabV(o), flags);
+      cconv_array_tab_l(L, cts, d, did, dp, tabV(o), flags);
       return;
     } else if (ctype_isstruct(d->info)) {
-      cconv_struct_tab_l(L, cts, d, dp, tabV(o), flags);
+      cconv_struct_tab_l(L, cts, d, did, dp, tabV(o), flags);
       return;
     } else {
       goto err_conv;
@@ -647,7 +654,7 @@ void lj_cconv_ct_tv_l(lua_State *L, CTState *cts, CType *d,
     goto err_conv;
   } else {
   err_conv:
-    cconv_err_convtv_l(L, cts, d, o, flags);
+    cconv_err_convtv_l(L, cts, did, o, flags);
   }
   s = ctype_get(cts, sid);
 doconv:
@@ -666,11 +673,12 @@ void lj_cconv_bf_tv_l(lua_State *L, CTState *cts, CType *d, uint8_t *dp,
   if ((info & CTF_BOOL)) {
     uint8_t tmpbool;
     lj_assertCTS(ctype_bitbsz(info) == 1, "bad bool bitfield size");
-    lj_cconv_ct_tv_l(L, cts, ctype_get(cts, CTID_BOOL), &tmpbool, o, 0);
+    lj_cconv_ct_tv_l(L, cts, ctype_get(cts, CTID_BOOL), CTID_BOOL,
+		     &tmpbool, o, 0);
     val = tmpbool;
   } else {
     CTypeID did = (info & CTF_UNSIGNED) ? CTID_UINT32 : CTID_INT32;
-    lj_cconv_ct_tv_l(L, cts, ctype_get(cts, did), (uint8_t *)&val, o, 0);
+    lj_cconv_ct_tv_l(L, cts, ctype_get(cts, did), did, (uint8_t *)&val, o, 0);
   }
   pos = ctype_bitpos(info);
   bsz = ctype_bitbsz(info);
@@ -695,17 +703,18 @@ void lj_cconv_bf_tv_l(lua_State *L, CTState *cts, CType *d, uint8_t *dp,
 /* -- Initialize C type with TValues -------------------------------------- */
 
 /* Initialize an array with TValues. */
-static void cconv_array_init_l(lua_State *L, CTState *cts, CType *d, CTSize sz,
-			     uint8_t *dp,
-			     TValue *o, MSize len)
+static void cconv_array_init_l(lua_State *L, CTState *cts, CType *d,
+			       CTypeID did, CTSize sz, uint8_t *dp,
+			       TValue *o, MSize len)
 {
-  CType *dc = ctype_rawchild(cts, d);  /* Array element type. */
+  CTypeID dcid = ctype_rawid(cts, ctype_cid(d->info));
+  CType *dc = ctype_get(cts, dcid);  /* Array element type. */
   CTSize ofs, esize = dc->size;
   MSize i;
   if (len*esize > sz)
-    cconv_err_initov_l(L, cts, d);
+    cconv_err_initov_l(L, cts, did);
   for (i = 0, ofs = 0; i < len; i++, ofs += esize)
-    lj_cconv_ct_tv_l(L, cts, dc, dp + ofs, o + i, 0);
+    lj_cconv_ct_tv_l(L, cts, dc, dcid, dp + ofs, o + i, 0);
   if (ofs == esize) {  /* Replicate a single element. */
     for (; ofs < sz; ofs += esize) memcpy(dp + ofs, dp, esize);
   } else {  /* Otherwise fill the remainder with zero. */
@@ -715,10 +724,11 @@ static void cconv_array_init_l(lua_State *L, CTState *cts, CType *d, CTSize sz,
 
 /* Initialize a sub-struct/union with TValues. */
 static void cconv_substruct_init_l(lua_State *L, CTState *cts, CType *d,
-				 uint8_t *dp,
-				 TValue *o, MSize len, MSize *ip)
+				   CTypeID did, uint8_t *dp,
+				   TValue *o, MSize len, MSize *ip)
 {
   CTypeID id = d->sib;
+  UNUSED(did);
   while (id) {
     CType *df = ctype_get(cts, id);
     id = df->sib;
@@ -727,14 +737,17 @@ static void cconv_substruct_init_l(lua_State *L, CTState *cts, CType *d,
       if (!ctype_name_acq(df)) continue;  /* Ignore unnamed fields. */
       if (i >= len) break;
       *ip = i + 1;
-      if (ctype_isfield(df->info))
-	lj_cconv_ct_tv_l(L, cts, ctype_rawchild(cts, df), dp+df->size,
+      if (ctype_isfield(df->info)) {
+	CTypeID dfid = ctype_rawid(cts, ctype_cid(df->info));
+	lj_cconv_ct_tv_l(L, cts, ctype_get(cts, dfid), dfid, dp+df->size,
 			 o + i, 0);
-      else
+      } else {
 	lj_cconv_bf_tv_l(L, cts, df, dp+df->size, o + i);
+      }
       if ((d->info & CTF_UNION)) break;
     } else if (ctype_isxattrib(df->info, CTA_SUBTYPE)) {
-      cconv_substruct_init_l(L, cts, ctype_rawchild(cts, df),
+      CTypeID dfid = ctype_rawid(cts, ctype_cid(df->info));
+      cconv_substruct_init_l(L, cts, ctype_get(cts, dfid), dfid,
 			     dp+df->size, o, len, ip);
       if ((d->info & CTF_UNION)) break;
     }  /* Ignore all other entries in the chain. */
@@ -743,14 +756,14 @@ static void cconv_substruct_init_l(lua_State *L, CTState *cts, CType *d,
 
 /* Initialize a struct/union with TValues. */
 static void cconv_struct_init_l(lua_State *L, CTState *cts, CType *d,
-				CTSize sz, uint8_t *dp, TValue *o,
-				MSize len)
+				CTypeID did, CTSize sz, uint8_t *dp,
+				TValue *o, MSize len)
 {
   MSize i = 0;
   memset(dp, 0, sz);  /* Much simpler to clear the struct first. */
-  cconv_substruct_init_l(L, cts, d, dp, o, len, &i);
+  cconv_substruct_init_l(L, cts, d, did, dp, o, len, &i);
   if (i < len)
-    cconv_err_initov_l(L, cts, d);
+    cconv_err_initov_l(L, cts, did);
 }
 
 /* Check whether to use a multi-value initializer.
@@ -775,13 +788,13 @@ void lj_cconv_ct_init_l(lua_State *L, CTState *cts, CType *d, CTypeID did,
   if (len == 0)
     memset(dp, 0, sz);
   else if (len == 1 && !lj_cconv_multi_init(cts, did, d, o))
-    lj_cconv_ct_tv_l(L, cts, d, dp, o, 0);
+    lj_cconv_ct_tv_l(L, cts, d, did, dp, o, 0);
   else if (ctype_isarray(d->info))  /* Also handles valarray init with len>1. */
-    cconv_array_init_l(L, cts, d, sz, dp, o, len);
+    cconv_array_init_l(L, cts, d, did, sz, dp, o, len);
   else if (ctype_isstruct(d->info))
-    cconv_struct_init_l(L, cts, d, sz, dp, o, len);
+    cconv_struct_init_l(L, cts, d, did, sz, dp, o, len);
   else
-    cconv_err_initov_l(L, cts, d);
+    cconv_err_initov_l(L, cts, did);
 }
 
 #endif

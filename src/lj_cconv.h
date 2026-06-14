@@ -61,7 +61,8 @@ LJ_FUNC int lj_cconv_tv_ct_l(lua_State *L, CTState *cts, CType *s,
 LJ_FUNC int lj_cconv_tv_bf_l(lua_State *L, CTState *cts, CType *s,
 			     TValue *o, uint8_t *sp);
 LJ_FUNC void lj_cconv_ct_tv_l(lua_State *L, CTState *cts, CType *d,
-			      uint8_t *dp, TValue *o, CTInfo flags);
+			      CTypeID did, uint8_t *dp, TValue *o,
+			      CTInfo flags);
 LJ_FUNC void lj_cconv_bf_tv_l(lua_State *L, CTState *cts, CType *d,
 			      uint8_t *dp, TValue *o);
 LJ_FUNC int lj_cconv_multi_init(CTState *cts, CTypeID did, CType *d,
