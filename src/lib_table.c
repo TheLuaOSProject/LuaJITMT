@@ -15,6 +15,7 @@
 
 #include "lj_obj.h"
 #include "lj_gc.h"
+#include "lj_gc2.h"
 #include "lj_err.h"
 #include "lj_buf.h"
 #include "lj_tab.h"
@@ -96,15 +97,18 @@ LJLIB_CF(table_insert)		LJLIB_REC(.)
   if (nargs != 2*sizeof(TValue)) {
     if (nargs != 3*sizeof(TValue))
       lj_err_caller(L, LJ_ERR_TABINS);
-    /* NOBARRIER: This just moves existing elements around. */
+    /* Shifted weak-table writes still need the P_WEAK bridge. */
     for (n = lj_lib_checkint(L, 2); i > n; i--) {
       /* The set may invalidate the get pointer, so need to do it first! */
       TValue *dst = lj_tab_setint(L, t, i);
       cTValue *src = lj_tab_getint(t, i-1);
       if (src) {
 	TValue val;
+	TValue key;
 	lj_tv_load_acq(&val, src);
 	lj_tab_storetv(L, dst, &val);
+	setintV(&key, i);
+	lj_gc2_barrier_weak_write(L, t, &key, &val);
       } else {
 	lj_tab_storenil(L, dst);
       }
@@ -113,7 +117,10 @@ LJLIB_CF(table_insert)		LJLIB_REC(.)
   }
   {
     TValue *dst = lj_tab_setint(L, t, i);
+    TValue key;
     copyTVrel(L, dst, L->top-1);  /* Set new value. */
+    setintV(&key, i);
+    lj_gc2_barrier_weak_write(L, t, &key, L->top-1);
     lj_gc_pubtabtv(L, t, dst);
   }
   return 0;

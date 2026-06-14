@@ -19,6 +19,8 @@ for needle in \
   'test_vm_weak_key_write_barrier' \
   'test_vm_weak_value_hash_key_barrier' \
   'test_vm_weak_value_array_barrier' \
+  'test_table_insert_weak_value_array_barrier' \
+  'table.insert weak-value array write' \
   'lj_meta_tset_owner(lua_State *L, cTValue *o, cTValue *k,' \
   'test_capi_weak_newindex_target_write_barrier' \
   'lj_meta_tset_owner(L, tv, base+1, &owner)' \

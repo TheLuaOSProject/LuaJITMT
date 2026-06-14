@@ -1482,6 +1482,48 @@ static void test_vm_weak_value_array_barrier(lua_State *L, global_State *g,
   lua_pop(L, 3);
 }
 
+static void test_table_insert_weak_value_array_barrier(lua_State *L,
+						       global_State *g,
+						       TGState *tg)
+{
+  GCtab *weak, *val;
+  uint64_t weak_vals0;
+
+  lua_settop(L, 0);
+  lua_newtable(L);
+  weak = tabV(L->top - 1);
+  lua_pushboolean(L, 0);
+  lua_rawseti(L, -2, 1);
+  lua_newtable(L);
+  lua_pushliteral(L, "__mode");
+  lua_pushliteral(L, "v");
+  lua_settable(L, -3);
+  lua_setmetatable(L, -2);
+  lua_newtable(L);
+  val = tabV(L->top - 1);
+
+  lj_gc2_legacy_mark_begin(g);
+  assert(lj_gc2_markobj(g, obj2gco(weak)) == 1);
+  flush_and_drain(g, tg);
+  assert(lj_gc2_ismarked(g, obj2gco(weak)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(val)) == 0);
+
+  lj_gc2_legacy_weak_begin(g);
+  weak_vals0 = la_load64_acq(&g->gc2.weak_values_marked);
+  lua_getglobal(L, "table");
+  lua_getfield(L, -1, "insert");
+  lua_pushvalue(L, 1);
+  lua_pushvalue(L, 2);
+  lua_call(L, 2, 0);  /* table.insert weak-value array write. */
+  lua_pop(L, 1);
+  assert(lj_gc2_ismarked(g, obj2gco(val)) == 1);
+  assert(la_load64_acq(&g->gc2.weak_values_marked) == weak_vals0 + 1u);
+  assert(!lj_gc2_ssb_empty(g));
+  flush_and_drain(g, tg);
+  lj_gc2_legacy_cycle_end(g);
+  lua_pop(L, 2);
+}
+
 static void test_capi_weak_newindex_target_write_barrier(lua_State *L,
 							 global_State *g,
 							 TGState *tg)
@@ -2120,6 +2162,7 @@ int main(void)
   test_vm_weak_key_write_barrier(L, g, tg);
   test_vm_weak_value_hash_key_barrier(L, g, tg);
   test_vm_weak_value_array_barrier(L, g, tg);
+  test_table_insert_weak_value_array_barrier(L, g, tg);
   test_capi_weak_newindex_target_write_barrier(L, g, tg);
   test_vm_tsetm_range_barrier(L, g, tg);
   test_closure(L, g, tg);
