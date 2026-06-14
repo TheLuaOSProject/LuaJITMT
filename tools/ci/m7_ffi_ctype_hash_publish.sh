@@ -20,7 +20,8 @@ for needle in \
   'dst->next = (CTypeID1)next' \
   'while (!ctype_hash_try_prepend(cts, h, src, id, &head))' \
   'ctype_hash_prepend(cts, h, ct, id)' \
-  'CTypeID id = ctype_hash_load(cts, ct_hashname(name))'
+  'ctype_hash_findname(cts,' \
+  'ctype_hash_load(cts, ct_hashname(name)), name, tmask)'
 do
   if ! rg -F -q "$needle" "$ROOT/src"; then
     echo "guardrail: missing FFI ctype hash publication marker: $needle" >&2

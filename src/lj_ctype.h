@@ -529,6 +529,8 @@ LJ_FUNC int lj_ctype_setmeta(CTState *cts, CTypeID id, GCtab *mt);
 LJ_FUNC void lj_ctype_cb_blacklist(CTState *cts, void *func);
 LJ_FUNC int lj_ctype_cb_isblacklisted(CTState *cts, void *func);
 LJ_FUNC void lj_ctype_addname(CTState *cts, CType *ct, CTypeID id);
+LJ_FUNC CTypeID lj_ctype_addname_unique(CTState *cts, CType *ct, CTypeID id,
+					uint32_t tmask);
 LJ_FUNC CTypeID lj_ctype_getname(CTState *cts, CType **ctp, GCstr *name,
 				 uint32_t tmask);
 LJ_FUNC CType *lj_ctype_getfieldq(CTState *cts, CType *ct, GCstr *name,

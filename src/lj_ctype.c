@@ -367,6 +367,19 @@ static CTypeID ctype_hash_findtype(CTState *cts, CTypeID id, CTInfo info,
   return 0;
 }
 
+static CTypeID ctype_hash_findname(CTState *cts, CTypeID id, GCstr *name,
+				   uint32_t tmask)
+{
+  while (id) {
+    CType *ct = ctype_get(cts, id);
+    if (!ctype_isabandoned(ct->info) && ctype_name_acq(ct) == name &&
+	((tmask >> ctype_type(ct->info)) & 1))
+      return id;
+    id = ct->next;
+  }
+  return 0;
+}
+
 static void ctype_abandon(CTState *cts, CTypeID id)
 {
   CType *ct = ctype_get(cts, id);
@@ -539,18 +552,35 @@ void lj_ctype_addname(CTState *cts, CType *ct, CTypeID id)
   ctype_hash_prepend(cts, h, ct, id);
 }
 
+/* Add named element to hash table, abandoning duplicate-name losers. */
+CTypeID lj_ctype_addname_unique(CTState *cts, CType *ct, CTypeID id,
+				uint32_t tmask)
+{
+  GCstr *name = ctype_name_acq(ct);
+  uint32_t h = ct_hashname(name);
+  CTypeID head = ctype_hash_load(cts, h);
+  if (id == 0)
+    return 0;  /* CTID 0 is the hash-chain sentinel. */
+  for (;;) {
+    CTypeID winner = ctype_hash_findname(cts, head, name, tmask);
+    if (winner) {
+      if (winner != id)
+	ctype_abandon(cts, id);
+      return winner;  /* 11.2 named ctype duplicate winner. */
+    }
+    if (ctype_hash_try_prepend(cts, h, ct, id, &head))
+      return id;  /* 11.2 CAS-prepend named ctype publication. */
+  }
+}
+
 /* Get a C type by name, matching the type mask. */
 CTypeID lj_ctype_getname(CTState *cts, CType **ctp, GCstr *name, uint32_t tmask)
 {
-  CTypeID id = ctype_hash_load(cts, ct_hashname(name));
-  while (id) {
-    CType *ct = ctype_get(cts, id);
-    if (!ctype_isabandoned(ct->info) && ctype_name_acq(ct) == name &&
-	((tmask >> ctype_type(ct->info)) & 1)) {
-      *ctp = ct;
-      return id;
-    }
-    id = ct->next;
+  CTypeID id = ctype_hash_findname(cts,
+		   ctype_hash_load(cts, ct_hashname(name)), name, tmask);
+  if (id) {
+    *ctp = ctype_get(cts, id);
+    return id;
   }
   *ctp = &ctype_tab_acq(cts)[0];  /* Simplify caller logic. */
   return 0;

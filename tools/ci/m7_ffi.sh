@@ -11,6 +11,7 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 "$ROOT/tools/ci/m7_ffi_ctype_hash_publish.sh"
 "$ROOT/tools/ci/m7_ffi_ctype_tab_retire.sh"
 "$ROOT/tools/ci/m7_ffi_ctype_ticket_intern.sh"
+"$ROOT/tools/ci/m7_ffi_ctype_name_claim.sh"
 "$ROOT/tools/ci/m7_ffi_ctype_pointer_ids.sh"
 "$ROOT/tools/ci/m7_ffi_cdata_alloc.sh"
 "$ROOT/tools/ci/m7_ffi_jit_cnew.sh"

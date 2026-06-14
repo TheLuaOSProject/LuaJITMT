@@ -1,0 +1,80 @@
+/*
+** Focused guard for M7 FFI ctype duplicate-name publication.
+*/
+
+#include <assert.h>
+#include <stdio.h>
+
+#include "lua.h"
+#include "lauxlib.h"
+#include "lualib.h"
+
+#include "lj_obj.h"
+#include "lj_str.h"
+#include "lj_ctype.h"
+
+static void dostring(lua_State *L, const char *src)
+{
+  if (luaL_dostring(L, src) != LUA_OK) {
+    const char *err = lua_tostring(L, -1);
+    fprintf(stderr, "lua error: %s\n", err ? err : "(non-string)");
+    assert(0);
+  }
+}
+
+static CTypeID new_named(CTState *cts, lua_State *L, CTInfo info, CTSize size,
+			 GCstr *name, CType **ctp)
+{
+  CTypeID id = lj_ctype_new_l(L, cts, ctp);
+  CType *ct = *ctp;
+  ct->info = info;
+  ct->size = size;
+  ct->sib = 0;
+  ct->next = 0;
+  ctype_setname(ct, name);
+  return id;
+}
+
+int main(void)
+{
+  lua_State *L = luaL_newstate();
+  global_State *g;
+  CTState *cts;
+  GCstr *name;
+  CType *ct1, *ct2, *ct3, *found;
+  CTypeID id1, id2, id3, winner;
+  const uint32_t default_ns = (1u << CT_TYPEDEF);
+  const uint32_t struct_ns = (1u << CT_STRUCT);
+
+  assert(L != NULL);
+  luaL_openlibs(L);
+  g = G(L);
+
+  dostring(L, "local ffi = require('ffi')");
+  cts = ctype_ctsG(g);
+  assert(cts != NULL);
+
+  name = lj_str_newlit(L, "lj_m7_name_claim_t");
+
+  id1 = new_named(cts, L, CTINFO(CT_TYPEDEF, CTID_INT32), 0, name, &ct1);
+  winner = lj_ctype_addname_unique(cts, ct1, id1, default_ns);
+  assert(winner == id1);
+  assert(lj_ctype_getname(cts, &found, name, default_ns) == id1);
+  assert(found == ctype_get(cts, id1));
+
+  id2 = new_named(cts, L, CTINFO(CT_TYPEDEF, CTID_INT32), 0, name, &ct2);
+  winner = lj_ctype_addname_unique(cts, ct2, id2, default_ns);
+  assert(winner == id1);
+  assert(ctype_isabandoned(ctype_get(cts, id2)->info));
+  assert(lj_ctype_getname(cts, &found, name, default_ns) == id1);
+
+  id3 = new_named(cts, L, CTINFO(CT_STRUCT, CTALIGN(2)), 4, name, &ct3);
+  winner = lj_ctype_addname_unique(cts, ct3, id3, struct_ns);
+  assert(winner == id3);
+  assert(lj_ctype_getname(cts, &found, name, struct_ns) == id3);
+  assert(lj_ctype_getname(cts, &found, name, default_ns) == id1);
+
+  lua_close(L);
+  printf("t-ffi-ctype-name-claim OK: duplicate names pick one winner and abandon losers\n");
+  return 0;
+}

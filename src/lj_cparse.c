@@ -492,6 +492,17 @@ static void cp_ctype_abandon(CPState *cp)
   }
 }
 
+static void cp_ctype_abandon_id(CPState *cp, CTypeID id)
+{
+  CType *ct = ctype_get(cp->cts, id);
+  ct->info = CTINFO(CT_ATTRIB, CTATTRIB(CTA_BAD));
+  ct->size = 0;
+  ct->sib = 0;
+  setgcrefnull(ct->name);
+  /* Keep ct->next so hash walkers can skip through abandoned entries. */
+  cp_ctype_publish(cp, id, ct);
+}
+
 static void cp_rollback_restore(CPState *cp)
 {
   CPRollback *rb;
@@ -1386,7 +1397,16 @@ static CTypeID cp_struct_name(CPState *cp, CPDecl *sdecl, CTInfo info)
       ct->size = CTSIZE_INVALID;
       ct = cp_ctype_publish(cp, sid, ct);
       ct = cp_ctype_setname(cp, sid, cp->str);
-      lj_ctype_addname(cp->cts, ct, sid);
+      {
+	CTypeID winner = lj_ctype_addname_unique(cp->cts, ct, sid,
+						 CPNS_STRUCT);
+	if (winner != sid) {
+	  sid = winner;
+	  ct = ctype_get(cp->cts, sid);
+	}
+      }
+      if ((ct->info ^ info) & (CTMASK_NUM|CTF_UNION))  /* Wrong type. */
+	cp_errmsg(cp, 0, LJ_ERR_FFI_REDEF, strdata(ctype_name_acq(ct)));
     }
     cp_next(cp);
   } else {  /* Create anonymous, incomplete struct/union/enum. */
@@ -1640,7 +1660,9 @@ static CTypeID cp_decl_enum(CPState *cp, CPDecl *sdecl)
 	ct->size = k.u32++;
 	ct = cp_ctype_publish(cp, constid, ct);
 	if (k.u32 == 0x80000000u) k.id = CTID_UINT32;
-	lj_ctype_addname(cp->cts, ct, constid);
+	if (lj_ctype_addname_unique(cp->cts, ct, constid, CPNS_DEFAULT) !=
+	    constid)
+	  cp_errmsg(cp, 0, LJ_ERR_FFI_REDEF, strdata(name));
 	cp_ctype_setsib(cp, lastid, constid);
 	lastid = constid;
       }
@@ -2014,6 +2036,7 @@ static void cp_decl_multi(CPState *cp)
       if (decl.name && !decl.nameid) {  /* NYI: redeclarations are ignored. */
 	CType *ct;
 	CTypeID id;
+	CTypeID aid = 0;
 	if ((scl & CDF_TYPEDEF)) {  /* Create new typedef. */
 	  id = cp_ctype_new(cp, &ct);
 	  ct->info = CTINFO(CT_TYPEDEF, ctypeid);
@@ -2035,7 +2058,7 @@ static void cp_decl_multi(CPState *cp)
 	}
 	if (decl.redir) {  /* Add attribute for redirected symbol name. */
 	  CType *cta;
-	  CTypeID aid = cp_ctype_new(cp, &cta);
+	  aid = cp_ctype_new(cp, &cta);
 	  ct = ctype_get(cp->cts, id);  /* Table may have been reallocated. */
 	  cta->info = CTINFO(CT_ATTRIB, CTATTRIB(CTA_REDIR));
 	  cta->sib = ct->sib;
@@ -2045,7 +2068,9 @@ static void cp_decl_multi(CPState *cp)
 	}
       noredir:
 	ct = cp_ctype_setname(cp, id, decl.name);
-	lj_ctype_addname(cp->cts, ct, id);
+	if (lj_ctype_addname_unique(cp->cts, ct, id, CPNS_DEFAULT) != id &&
+	    aid)
+	  cp_ctype_abandon_id(cp, aid);
       }
       if (!cp_opt(cp, ',')) break;
       cp_decl_reset(&decl);
