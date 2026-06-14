@@ -1228,14 +1228,15 @@ static int ccall_get_results(lua_State *L, CTState *cts, CType *ct,
 int lj_ccall_func(lua_State *L, GCcdata *cd)
 {
   CTState *cts = ctype_cts(L);
-  CType *ct = ctype_raw(cts, cd->ctypeid);
+  CTypeID id = ctype_rawid(cts, cd->ctypeid);
+  CType *ct = ctype_get(cts, id);
   CTSize sz = CTSIZE_PTR;
   if (ctype_isptr(ct->info)) {
     sz = ct->size;
-    ct = ctype_rawchild(cts, ct);
+    id = ctype_rawid(cts, ctype_cid(ct->info));
+    ct = ctype_get(cts, id);
   }
   if (ctype_isfunc(ct->info)) {
-    CTypeID id = ctype_typeid(cts, ct);
     CCallState cc;
     uint32_t actions;
     CCallbackRuntime *cb = &L2TG(L)->cb;

@@ -14,6 +14,7 @@ for needle in \
   'CTypeID *idp' \
   'static int ffi_index_meta(lua_State *L, CTState *cts, CTypeID id' \
   'lj_cdata_index_l(L, cts, cdataV(o), o+1, &p, &qual, &id)' \
+  'CTypeID id = ctype_rawid(cts, cd->ctypeid)' \
   'CTypeID rid1 = ctype_rawrefid(cts, id1)' \
   'CTypeID rid2 = ctype_rawrefid(cts, id2)' \
   'if (rid1 == rid2)' \
