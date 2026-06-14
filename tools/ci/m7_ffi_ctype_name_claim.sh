@@ -17,9 +17,11 @@ for needle in \
   'return id;  /* 11.2 CAS-prepend named ctype publication. */' \
   'lj_ctype_addname_unique(cp->cts, ct, sid,' \
   'lj_ctype_addname_unique(cp->cts, ct, constid, CPNS_DEFAULT)' \
-  'lj_ctype_addname_unique(cp->cts, ct, id, CPNS_DEFAULT)'
+  'lj_ctype_addname_unique(cp->cts, ct, id, CPNS_DEFAULT)' \
+  'force_table_move_after_reserve(lua_State *L, CTState *cts)' \
+  'assert(ct3 != ctype_get(cts, id3))'
 do
-  if ! rg -F -q "$needle" "$ROOT/src"; then
+  if ! rg -F -q "$needle" "$ROOT/src" "$ROOT/tests/t-ffi-ctype-name-claim.c"; then
     echo "guardrail: missing FFI ctype name-claim marker: $needle" >&2
     exit 1
   fi

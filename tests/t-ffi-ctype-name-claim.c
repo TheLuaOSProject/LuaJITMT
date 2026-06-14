@@ -35,6 +35,23 @@ static CTypeID new_named(CTState *cts, lua_State *L, CTInfo info, CTSize size,
   return id;
 }
 
+static void force_table_move_after_reserve(lua_State *L, CTState *cts)
+{
+  CTypeTab *before = ctype_tabh_acq(cts);
+  int guard = 0;
+  while (ctype_tabh_acq(cts) == before) {
+    CType *ct;
+    CTypeID id = lj_ctype_new_l(L, cts, &ct);
+    ct->info = CTINFO(CT_ATTRIB, CTATTRIB(CTA_BAD));
+    ct->size = 0;
+    ct->sib = 0;
+    ct->next = 0;
+    setgcrefnull(ct->name);
+    assert(id != 0);
+    assert(++guard < CTID_MAX);
+  }
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -69,6 +86,8 @@ int main(void)
   assert(lj_ctype_getname(cts, &found, name, default_ns) == id1);
 
   id3 = new_named(cts, L, CTINFO(CT_STRUCT, CTALIGN(2)), 4, name, &ct3);
+  force_table_move_after_reserve(L, cts);
+  assert(ct3 != ctype_get(cts, id3));
   winner = lj_ctype_addname_unique(cts, ct3, id3, struct_ns);
   assert(winner == id3);
   assert(lj_ctype_getname(cts, &found, name, struct_ns) == id3);
