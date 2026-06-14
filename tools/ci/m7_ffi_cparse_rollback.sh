@@ -29,10 +29,15 @@ for needle in \
   'cp_rollback_restore(CPState *cp)' \
   'if (errcode)' \
   'cp_rollback_restore(cp)' \
+  'ffi_checkctype_layout_lock(lua_State *L, CTState *cts,' \
+  'layout reader waits out parser rollback' \
+  'lj_ctype_parse_unlock(cts);' \
+  'direct ctype reader observed failed cdef rollback state' \
   'if (errcode || cp.newtype)' \
   'ctype_top_acq(cp->cts)'
 do
-  if ! rg -F -q "$needle" "$ROOT/src"; then
+  if ! rg -F -q "$needle" "$ROOT/src" \
+      "$ROOT/tests/t-ffi-cparse-rollback-reader.lua"; then
     echo "guardrail: missing FFI cparser rollback marker: $needle" >&2
     exit 1
   fi
@@ -76,6 +81,7 @@ make -C "$ROOT/src" -j"$JOBS" >/dev/null
 "$CC" $CFLAGS -I"$ROOT/src" "$ROOT/tests/t-ffi-cparse-rollback.c" \
   "$ROOT/src/libluajit.a" -lm -ldl -pthread -o "$OUT"
 timeout 20s "$OUT"
+"$ROOT/src/luajit" -joff "$ROOT/tests/t-ffi-cparse-rollback-reader.lua"
 
 make -C "$ROOT/src" clean >/dev/null
 make -C "$ROOT/src" -j"$JOBS" XCFLAGS="-DLUAJIT_CTYPE_CHECK_ANCHOR" >/dev/null
@@ -83,6 +89,7 @@ make -C "$ROOT/src" -j"$JOBS" XCFLAGS="-DLUAJIT_CTYPE_CHECK_ANCHOR" >/dev/null
 "$CC" $CFLAGS -I"$ROOT/src" "$ROOT/tests/t-ffi-cparse-rollback.c" \
   "$ROOT/src/libluajit.a" -lm -ldl -pthread -o "$ANCHOR_OUT"
 timeout 20s "$ANCHOR_OUT"
+"$ROOT/src/luajit" -joff "$ROOT/tests/t-ffi-cparse-rollback-reader.lua"
 "$ROOT/src/luajit" -joff "$ROOT/tests/t-ffi-cdef-token.lua" 2 20
 
 echo "M7 FFI cparser rollback guard passed"
