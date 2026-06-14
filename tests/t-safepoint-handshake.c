@@ -202,6 +202,7 @@ static int assert_not_native_c(lua_State *L)
 #if LJ_HASFFI
 static global_State *ffi_stopreq_g;
 static TGState *ffi_stopreq_tg;
+typedef int (*ffi_stopreq_cb_t)(void);
 
 static int ffi_publish_stopreq(void)
 {
@@ -209,6 +210,14 @@ static int ffi_publish_stopreq(void)
   assert(ffi_stopreq_tg != NULL);
   publish_manual(ffi_stopreq_g, ffi_stopreq_tg, LJ_GC2_HS_STOPREQ);
   return 123;
+}
+
+static int ffi_call_callback_stopreq(ffi_stopreq_cb_t cb)
+{
+  assert(ffi_stopreq_g != NULL);
+  assert(ffi_stopreq_tg != NULL);
+  publish_manual(ffi_stopreq_g, ffi_stopreq_tg, LJ_GC2_HS_STOPREQ);
+  return cb();
 }
 #endif
 
@@ -633,12 +642,16 @@ int main(void)
   ffi_stopreq_tg = tg;
   lua_pushlightuserdata(L, (void *)ffi_publish_stopreq);
   lua_setglobal(L, "ffi_stopreq_ptr");
+  lua_pushlightuserdata(L, (void *)ffi_call_callback_stopreq);
+  lua_setglobal(L, "ffi_call_callback_stopreq_ptr");
   assert(luaL_dostring(L,
     "local ffi = require('ffi')\n"
     "ffi.cdef[[\n"
     "int getpid(void);\n"
     "typedef int (*cmp_t)(const void *, const void *);\n"
     "typedef int (*stopreq_t)(void);\n"
+    "typedef int (*cb_stopreq_t)(void);\n"
+    "typedef int (*call_cb_stopreq_t)(cb_stopreq_t);\n"
     "void qsort(void *base, unsigned long nmemb, unsigned long size,\n"
     "           cmp_t compar);\n"
     "]]\n"
@@ -662,7 +675,19 @@ int main(void)
     "local ok, err = pcall(function() return stopreq() end)\n"
     "assert(not ok)\n"
     "assert(tostring(err):find('thread interrupted: VM shutdown', 1, true))\n"
-    "clear_stopreq()\n") == LUA_OK);
+    "clear_stopreq()\n"
+    "local call_cb_stopreq = ffi.cast('call_cb_stopreq_t', ffi_call_callback_stopreq_ptr)\n"
+    "local entered = false\n"
+    "local cb_stopreq = ffi.cast('cb_stopreq_t', function()\n"
+    "  entered = true\n"
+    "  return 77\n"
+    "end)\n"
+    "ok, err = pcall(function() return call_cb_stopreq(cb_stopreq) end)\n"
+    "assert(not ok)\n"
+    "assert(not entered)\n"
+    "assert(tostring(err):find('thread interrupted: VM shutdown', 1, true))\n"
+    "clear_stopreq()\n"
+    "cb_stopreq:free()\n") == LUA_OK);
 #endif
 
   plain_reset = lj_arena_alloc(&tg->alloc, &tg->prng, 64, 0);

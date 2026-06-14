@@ -738,8 +738,13 @@ lua_State * LJ_FASTCALL lj_ccallback_enter(CTState *cts, void *cf)
   L->cframe = cf;
   callback_conv_args(cts, L);
   cts->cb.was_native = (uint8_t)(tg != NULL && tg->in_native != 0);
-  if (cts->cb.was_native)
-    (void)lj_native_leave(L);
+  if (cts->cb.was_native) {
+    uint32_t actions = lj_native_leave(L);
+    if (actions & LJ_GC2_HS_STOPREQ) {
+      cts->cb.was_native = 0;
+      lj_safepoint_checkstop(L, actions);
+    }
+  }
   return L;  /* Now call the function on this stack. */
 }
 

@@ -201,6 +201,18 @@ do
 done
 
 for needle in \
+  'uint32_t actions = lj_native_leave(L);' \
+  'if (actions & LJ_GC2_HS_STOPREQ)' \
+  'cts->cb.was_native = 0;' \
+  'lj_safepoint_checkstop(L, actions);'
+do
+  if ! rg -F -q "$needle" "$ROOT/src/lj_ccallback.c"; then
+    echo "guardrail: FFI callback entry must propagate STOPREQ after leaving native: $needle" >&2
+    exit 1
+  fi
+done
+
+for needle in \
   'publish_stopreq()' \
   'mkfifo_test(fifo)' \
   'start_fifo_stopreq(fifo)' \
@@ -233,8 +245,11 @@ done
 
 for needle in \
   'ffi_stopreq_ptr' \
+  'ffi_call_callback_stopreq_ptr' \
   "ffi.cast('stopreq_t', ffi_stopreq_ptr)" \
-  'return stopreq()'
+  'return stopreq()' \
+  "ffi.cast('call_cb_stopreq_t', ffi_call_callback_stopreq_ptr)" \
+  'assert(not entered)'
 do
   if ! rg -F -q "$needle" "$ROOT/tests/t-safepoint-handshake.c"; then
     echo "guardrail: missing FFI STOPREQ coverage marker: $needle" >&2
