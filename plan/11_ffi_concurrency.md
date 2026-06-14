@@ -90,7 +90,15 @@ clear, and collector claim/delete. Close-time table disable now runs without
 Explicit `ffi.gc(cd, nil)` on a cdata with no registry entry now returns before
 that fallback. Enabled missing-key insertion still uses the `fin_token`
 structural fallback because `lj_tab_newkey()` is not yet a multi-writer-safe
-table insertion path.
+table insertion path: the current inserter still owns `freetop`, anchor
+installation, collision links, and resize publication as a single writer.
+Removing this last bridge requires either a finalizer-specific FINREG insertion
+path with claim sentinels/probing that all lookups understand, or the original
+`NHdr`/KEYLOCK/freecount/CAS-prepend table protocol from §6.3. Do not replace
+the token with an unlocked call to the legacy table inserter. Recorded
+`ffi.gc()`/ctype-`__gc` finalizer registration is currently NYI for the same
+reason: JIT-enabled code falls back to the interpreter until FINREG insertion
+is lock-free.
 
 ## 11.5 Calls & callbacks (native state discipline)
 - **FFI call out** (interpreter `->vm_ffi_call`, JIT IR_CALLXS): wrap with

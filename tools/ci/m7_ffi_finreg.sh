@@ -24,6 +24,8 @@ for needle in \
   'Missing clear is a no-op; avoid fin_token insert.' \
   'lj_tab_get(L, t, &tmp)' \
   'lj_cdata_setfin(L, cd, gcV(tv), itype(tv))' \
+  'Finalizer registry mutation stays on the interpreter path until FINREG' \
+  'lj_trace_err_info(J, LJ_TRERR_NYIFFU)' \
   'lj_gc2_finalizer_try_enter(global_State *g)' \
   'peer finalizer dispatch backs off'
 do
@@ -82,6 +84,50 @@ if ! awk '
   exit 1
 fi
 
+if awk '
+  /lj_ctype_fin_lock\(cts\)|lj_ctype_fin_unlock\(cts\)/ {
+    if (FILENAME !~ /src\/lj_cdata\.c$/) {
+      bad = 1
+      print FILENAME ":" FNR ":" $0
+    }
+  }
+  END { exit bad ? 0 : 1 }
+' "$ROOT"/src/*.c; then
+  echo "guardrail: fin_token calls must stay boxed into lj_cdata_setfin missing-key insertion" >&2
+  exit 1
+fi
+
+if awk '
+  /void lj_cdata_setfin\(lua_State \*L, GCcdata \*cd,/ { infn = 1; locked = 0 }
+  infn && /^}/ { infn = 0 }
+  infn && /lj_ctype_fin_lock\(cts\)/ { locked = 1 }
+  infn && /lj_tab_set\(L, t, &key\)/ {
+    if (!locked) {
+      bad = 1
+      print
+    }
+  }
+  END { exit bad ? 0 : 1 }
+' "$ROOT/src/lj_cdata.c"; then
+  echo "guardrail: GCROOT_FFI_FIN missing-key insertion must not call lj_tab_set without the current structural fallback" >&2
+  exit 1
+fi
+
+if ! awk '
+  /LJLIB_CF\(ffi_gc\)/ { infn = 1 }
+  infn && /lj_cdata_setfin\(L, cd, gcval\(fin\), itype\(fin\)\)/ { seen = 1 }
+  infn && /return 1;/ { found = seen; infn = 0 }
+  END { exit found ? 0 : 1 }
+' "$ROOT/src/lib_ffi.c"; then
+  echo "guardrail: ffi.gc must route finalizer changes through lj_cdata_setfin" >&2
+  exit 1
+fi
+
+if rg -n 'IRCALL_lj_cdata_setfin' "$ROOT/src/lj_crecord.c"; then
+  echo "guardrail: traced ffi finalizer mutations must stay disabled until FINREG insertion is lock-free" >&2
+  exit 1
+fi
+
 if rg -n 'finalizer_token|gc_finalizer_vm_lock|gc_finalizer_vm_unlock' \
   "$ROOT/src"; then
   echo "guardrail: finalizer callbacks must use the GC2 owner claim, not a shared VM-thread token" >&2
@@ -92,6 +138,9 @@ make -C "$ROOT/src" clean >/dev/null
 make -C "$ROOT/src" -j"$JOBS" >/dev/null
 
 "$ROOT/src/luajit" -joff "$ROOT/tests/t-ffi-gc-finreg.lua" \
+  "${LJ_M7_FFI_FIN_THREADS:-6}" "${LJ_M7_FFI_FIN_ITERS:-240}"
+
+"$ROOT/src/luajit" "$ROOT/tests/t-ffi-gc-finreg.lua" \
   "${LJ_M7_FFI_FIN_THREADS:-6}" "${LJ_M7_FFI_FIN_ITERS:-240}"
 
 echo "M7 FFI finalizer registry guard passed"

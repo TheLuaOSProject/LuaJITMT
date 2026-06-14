@@ -65,6 +65,55 @@ for tid = 1, nthreads do
   total = total + result
 end
 
+do
+  local shared_finalized = 0
+  local shared = ffi.gc(fin_obj_t(), function(_) end)
+  local race_ready = th.channel(nthreads)
+  local race_start = th.channel(nthreads)
+  local race_workers = {}
+  local race_iters = math.max(16, math.floor(iters / 2))
+
+  for tid = 1, nthreads do
+    race_workers[tid] = th.spawn(function(ready_ch, start_ch, cd, id, count)
+      local ffi = require"ffi"
+      local function fin(_) end
+      ready_ch:send(id)
+      local token, ok = start_ch:recv(10)
+      assert(ok == true and token == "go")
+      for i = 1, count do
+	ffi.gc(cd, fin)
+	if i % 3 == 0 then
+	  ffi.gc(cd, nil)
+	end
+      end
+      return count
+    end, race_ready, race_start, shared, tid, race_iters)
+    local _, ok = race_ready:recv(10)
+    assert(ok == true)
+  end
+
+  for _ = 1, nthreads do
+    assert(race_start:send("go", 10) == true)
+  end
+
+  for tid = 1, nthreads do
+    local ok, result = race_workers[tid]:join(30)
+    assert(ok == true, tostring(result))
+    assert(result == race_iters)
+  end
+
+  ffi.gc(shared, function(_)
+    shared_finalized = shared_finalized + 1
+  end)
+  shared = nil
+  collectgarbage("restart")
+  collectgarbage("collect")
+  collectgarbage("collect")
+  assert(shared_finalized == 1,
+	 ("shared cdata race: finalized %d, expected 1"):format(shared_finalized))
+  collectgarbage("stop")
+end
+
 collectgarbage("restart")
 collectgarbage("collect")
 collectgarbage("collect")

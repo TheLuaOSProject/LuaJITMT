@@ -970,16 +970,13 @@ again:
 /* Record setting a finalizer. */
 static void crec_finalizer(jit_State *J, TRef trcd, TRef trfin, cTValue *fin)
 {
-  if (tvisgcv(fin)) {
-    if (!trfin) trfin = lj_ir_kptr(J, gcval(fin));
-  } else if (tvisnil(fin)) {
-    trfin = lj_ir_kptr(J, NULL);
-  } else {
+  UNUSED(trcd); UNUSED(trfin);
+  if (!(tvisgcv(fin) || tvisnil(fin)))
     lj_trace_err(J, LJ_TRERR_BADTYPE);
-  }
-  lj_ir_call(J, IRCALL_lj_cdata_setfin, trcd,
-	     trfin, lj_ir_kint(J, (int32_t)itype(fin)));
-  J->needsnap = 1;
+  /* Finalizer registry mutation stays on the interpreter path until FINREG
+  ** insertion/table growth no longer depends on the structural token bridge. */
+  setfuncV(J->L, &J->errinfo, J->fn);
+  lj_trace_err_info(J, LJ_TRERR_NYIFFU);
 }
 
 /* Record cdata allocation. */
