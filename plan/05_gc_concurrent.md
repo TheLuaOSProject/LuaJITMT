@@ -376,6 +376,10 @@ P_WEAK (leader+workers, barrier still ON, mutators running):
   clear FINREG (run-once, like markfinalized today). Finalizer thread runs
   entries after P_SWEEP begins (ordering: reverse registration like today’s
   mmudata list — preserve by pushing in registry order and reversing).
+  Current close-time bridge: cdata finalizers now separate from the root list
+  into the existing `mmudata` finalizer queue instead of running directly from
+  FINREG hash order; FINREG generation scans still detect pending close-time
+  cdata work.
 Current bridge note: `lj_gc2_mark_to_weak()` now makes `P_WEAK` visible after
 the fixpoint/paranoia bridge, and `lj_gc2_legacy_weak_begin()` aliases that
 helper for current callers. `lj_gc2_weak_complete()` owns the current bounded

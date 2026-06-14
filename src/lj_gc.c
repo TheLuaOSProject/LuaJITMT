@@ -1237,17 +1237,6 @@ static void gc_finalize_cdata_clear(global_State *g, GCobj *o)
   lj_gc2_finreg_cdata_set(g, o, 0);
 }
 
-static int gc_finalize_cdata_call_owned(lua_State *L, GCobj *o,
-					TValue *slot, cTValue *fin)
-{
-  global_State *g = G(L);
-  TValue tmp;
-  copyTV(L, &tmp, fin);
-  lj_cdata_fin_storenil(L, slot);  /* Clear claimed finalizer slot. */
-  gc_finalize_cdata_clear(g, o);
-  return gc_call_finalizer(g, L, &tmp, o);
-}
-
 static int gc_finalize_cdata_slot_owned(lua_State *L, GCobj *o, cTValue *key)
 {
   global_State *g = G(L);
@@ -1335,32 +1324,30 @@ void lj_gc_finalize_udata(lua_State *L)
 }
 
 #if LJ_HASFFI
-static void gc_finalize_cdata_tab(lua_State *L, GCtab *t)
+static void gc_queue_cdata_finalizer(global_State *g, GCobj *o)
 {
-  global_State *g = G(L);
-  Node *node = lj_tab_node_acq(t);
-  MSize hmask = lj_tab_node_hmask_acq(node);
-  ptrdiff_t i;
-  for (i = (ptrdiff_t)hmask; i >= 0; i--) {
-    TValue key, val;
-    lj_tv_load_acq(&val, &node[i].val);
-    while (lj_cdata_fin_isclaim(&val)) {
-      la_cpu_pause();
-      lj_tv_load_acq(&val, &node[i].val);
-    }
-    if (!tvisnil(&val)) {
-      lj_tv_load_acq(&key, &node[i].key);
-      if (tviscdata(&key)) {
-	GCobj *o = gcV(&key);
-	if (lj_obj_gcflags(o) & LJ_GC_CDATA_FIN) {
-	  makewhite(g, o);
-	  lj_gc2_finalizer_enter(g);
-	  (void)gc_finalize_cdata_call_owned(L, o, &node[i].val, &val);
-	  lj_gc2_finalizer_leave(g);
-	} else {
-	  lj_cdata_fin_storenil(L, &node[i].val);
-	}
-      }
+  if (gcref(g->gc.mmudata)) {
+    GCobj *root = gcref(g->gc.mmudata);
+    lj_obj_setgcwr(o, *lj_obj_gcwref(root));
+    setgcref(*lj_obj_gcwref(root), o);
+    setgcref(g->gc.mmudata, o);
+  } else {
+    lj_obj_setgcw(o, o);
+    setgcref(g->gc.mmudata, o);
+  }
+}
+
+static void gc_separate_cdata_finalizers(global_State *g)
+{
+  GCRef *p = &g->gc.root;
+  GCobj *o;
+  while ((o = gcref(*p)) != NULL) {
+    if (o->gch.gct == ~LJ_TCDATA &&
+	(lj_obj_gcflags(o) & LJ_GC_CDATA_FIN)) {
+      setgcrefr(*p, *lj_obj_gcwref(o));
+      gc_queue_cdata_finalizer(g, o);
+    } else {
+      p = lj_obj_gcwref(o);
     }
   }
 }
@@ -1406,17 +1393,8 @@ int lj_gc_cdata_fin_pending(global_State *g)
 void lj_gc_finalize_cdata(lua_State *L)
 {
   global_State *g = G(L);
-  CTState *cts = ctype_ctsG(g);
-  FinRegGen *gen;
-  if (cts == NULL)
-    return;
-  for (gen = (FinRegGen *)la_loadptr_acq((void *const *)&cts->fin_head);
-       gen != NULL;
-       gen = (FinRegGen *)la_loadptr_acq((void *const *)&gen->next)) {
-    GCtab *t = (GCtab *)la_loadptr_acq((void *const *)&gen->tab);
-    if (t)
-      gc_finalize_cdata_tab(L, t);
-  }
+  if (ctype_ctsG(g) != NULL)
+    gc_separate_cdata_finalizers(g);
 }
 
 void lj_gc_finalize_cdata_disable(global_State *g)

@@ -35,12 +35,15 @@ for needle in \
   'gcref_acq(g->gc.mmudata) == NULL' \
   'lj_gc_cdata_fin_pending(global_State *g)' \
   '!lj_gc_cdata_fin_pending(g)' \
+  'gc_queue_cdata_finalizer(global_State *g, GCobj *o)' \
+  'gc_separate_cdata_finalizers(global_State *g)' \
   'lj_gc_finalize_cdata_disable(global_State *g)' \
   'm8_close_chain_cdata' \
   'cdata_finalized == 4' \
   'ALTERNATING_CLOSE_CHAIN' \
   'm8_close_chain_alternating_cdata' \
   'alternating_cdata_finalized == ALTERNATING_CLOSE_CHAIN' \
+  'order_cdata_finalized[0] == 3' \
   'lua_close drains alternating cdata/userdata finalizers to fixed point' \
   'lj_gc2_finalizer_pending(global_State *g)' \
   'lj_gc2_finalizer_sweep_pending(global_State *g)' \
@@ -57,7 +60,6 @@ for needle in \
   'collectgarbage("step", 1000000)' \
   'GC step completed while finalizer-spawned worker was live' \
   'finalizer-spawned worker can outlive callback' \
-  'gc_finalize_cdata_call_owned(lua_State *L, GCobj *o,' \
   'gc_finalize_cdata_slot_owned(lua_State *L, GCobj *o, cTValue *key)' \
   'lj_ctype_fin_get(L, cts, key, &t)' \
   'LJ_GC_UDATA_FINREG == LJ_GC_WEAKVAL' \
@@ -124,9 +126,6 @@ if awk '
 fi
 
 if awk '
-  /static int gc_finalize_cdata_call_owned\(lua_State \*L, GCobj \*o,/ {
-    inhelper = 1
-  }
   /static int gc_finalize_cdata_slot_owned\(lua_State \*L, GCobj \*o,/ {
     inhelper = 1
   }
@@ -151,7 +150,7 @@ if awk '
   }
   END { exit bad ? 0 : 1 }
 ' "$ROOT/src/lj_gc.c"; then
-  echo "guardrail: cdata finalizer dispatch must route through gc_finalize_cdata_call_owned" >&2
+  echo "guardrail: cdata finalizer dispatch must route through owned slot helper" >&2
   exit 1
 fi
 

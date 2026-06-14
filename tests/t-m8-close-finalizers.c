@@ -13,6 +13,8 @@ static int cdata_finalized;
 static int udata_finalized;
 static int alternating_cdata_finalized;
 static int alternating_udata_finalized;
+static int order_cdata_finalized[3];
+static int order_cdata_count;
 
 static int close_udata_finalizer(lua_State *L);
 static int close_alternating_udata_finalizer(lua_State *L);
@@ -31,6 +33,29 @@ static int close_cdata_finalizer(lua_State *L)
     assert(lua_pcall(L, 0, 0, 0) == LUA_OK);
   }
   return 0;
+}
+
+static int close_order_cdata_finalizer(lua_State *L, int id)
+{
+  (void)L;
+  assert(order_cdata_count < 3);
+  order_cdata_finalized[order_cdata_count++] = id;
+  return 0;
+}
+
+static int close_order_cdata_finalizer_1(lua_State *L)
+{
+  return close_order_cdata_finalizer(L, 1);
+}
+
+static int close_order_cdata_finalizer_2(lua_State *L)
+{
+  return close_order_cdata_finalizer(L, 2);
+}
+
+static int close_order_cdata_finalizer_3(lua_State *L)
+{
+  return close_order_cdata_finalizer(L, 3);
 }
 
 static int close_udata_finalizer(lua_State *L)
@@ -96,11 +121,18 @@ int main(void)
   lua_setglobal(L, "m8_close_cdata_finalizer");
   lua_pushcfunction(L, close_alternating_cdata_finalizer);
   lua_setglobal(L, "m8_close_alternating_cdata_finalizer");
+  lua_pushcfunction(L, close_order_cdata_finalizer_1);
+  lua_setglobal(L, "m8_close_order_cdata_finalizer_1");
+  lua_pushcfunction(L, close_order_cdata_finalizer_2);
+  lua_setglobal(L, "m8_close_order_cdata_finalizer_2");
+  lua_pushcfunction(L, close_order_cdata_finalizer_3);
+  lua_setglobal(L, "m8_close_order_cdata_finalizer_3");
   assert(luaL_dostring(L,
     "local ffi = require('ffi')\n"
     "ffi.cdef[[\n"
     "typedef struct { int x; } lj_m8_close_fin_t;\n"
     "typedef struct { int x; } lj_m8_close_alt_fin_t;\n"
+    "typedef struct { int x; } lj_m8_close_order_fin_t;\n"
     "]]\n"
     "local keep = {}\n"
     "function m8_close_chain_cdata()\n"
@@ -112,6 +144,9 @@ int main(void)
     "for i = 1, 3 do\n"
     "  keep[i] = ffi.gc(ffi.new('lj_m8_close_fin_t'), m8_close_cdata_finalizer)\n"
     "end\n"
+    "keep.order1 = ffi.gc(ffi.new('lj_m8_close_order_fin_t'), m8_close_order_cdata_finalizer_1)\n"
+    "keep.order2 = ffi.gc(ffi.new('lj_m8_close_order_fin_t'), m8_close_order_cdata_finalizer_2)\n"
+    "keep.order3 = ffi.gc(ffi.new('lj_m8_close_order_fin_t'), m8_close_order_cdata_finalizer_3)\n"
     "m8_close_chain_alternating_cdata()\n") == LUA_OK);
   push_close_udata(L);
 
@@ -120,6 +155,10 @@ int main(void)
   assert(udata_finalized == 3);
   assert(alternating_cdata_finalized == ALTERNATING_CLOSE_CHAIN);
   assert(alternating_udata_finalized == ALTERNATING_CLOSE_CHAIN);
+  assert(order_cdata_count == 3);
+  assert(order_cdata_finalized[0] == 3);
+  assert(order_cdata_finalized[1] == 2);
+  assert(order_cdata_finalized[2] == 1);
   printf("t-m8-close-finalizers OK: lua_close drains alternating cdata/userdata finalizers to fixed point\n");
   return 0;
 }
