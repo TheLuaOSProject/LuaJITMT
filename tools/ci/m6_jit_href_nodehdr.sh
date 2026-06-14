@@ -17,6 +17,12 @@ do
   fi
 done
 
+if ! rg -F -q 'M6: empty-hash misses fall through to HREF so x64 uses TabNodeHdr.hmask.' \
+    "$ROOT/src/lj_record.c"; then
+  echo "guardrail: x64 empty-hash misses must avoid the GCtab.hmask shortcut" >&2
+  exit 1
+fi
+
 if awk '
   /static void asm_href\(ASMState \*as, IRIns \*ir, IROp merge\)/ { infn = 1 }
   infn && /static void asm_hrefk\(ASMState \*as, IRIns \*ir\)/ { infn = 0 }
@@ -51,6 +57,33 @@ if ! awk '
 ' "$TMP"; then
   cat "$TMP" >&2
   echo "guardrail: dynamic string-key lookup must record HREF, not HREFK" >&2
+  exit 1
+fi
+
+LUA_PATH="$ROOT/src/?.lua;$ROOT/src/jit/?.lua;;" \
+  timeout 20s "$ROOT/src/luajit" -jdump=ir -e '
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    local t = {}
+    local keys = {"missing_a", "missing_b"}
+    local seen = 0
+    for i = 1, 80 do
+      local k = keys[i % 2 + 1]
+      if t[k] == nil then seen = seen + 1 end
+    end
+    assert(seen == 80)
+  ' >"$TMP" 2>&1
+
+if ! awk '
+  /---- TRACE 1 IR/ { inir = 1; next }
+  /---- TRACE 1 stop/ { done = 1; exit !(href && !hrefk && !hmask) }
+  inir && / HREF / { href = 1 }
+  inir && / HREFK / { hrefk = 1 }
+  inir && /tab[.]hmask/ { hmask = 1 }
+  END { if (!done) exit 1 }
+' "$TMP"; then
+  cat "$TMP" >&2
+  echo "guardrail: x64 empty-hash miss must fall through to HREF without tab.hmask" >&2
   exit 1
 fi
 

@@ -413,7 +413,10 @@ scoped-flush target.
    phase. The M6 guard suite now covers both dynamic `HREF` and constant-key
    `HREFK` node-header pairing. Constant-key `HREFK`
    recording snapshots the legacy node/hmask shape around `lj_tab_get()` and
-   falls back to regular `HREF` if the shape changes while recording. Legacy
+   falls back to regular `HREF` if the shape changes while recording. x64
+   empty-hash misses also fall through to regular `HREF` instead of recording
+   the legacy `TAB_HMASK == 0` shortcut, so even empty hash generations take the
+   mask from `TabNodeHdr`. Legacy
    shared array reads now have an interim x64 pair-stability guard: the recorder
    emits a `TAB_ARRAY` FLOAD before `TAB_ASIZE`, then emits a second fresh
    `TAB_ARRAY` FLOAD and guards it equal before `AREF`/`ALOAD`, while trace-local

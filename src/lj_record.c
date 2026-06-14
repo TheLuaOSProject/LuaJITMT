@@ -1537,13 +1537,17 @@ static TRef rec_idx_key(jit_State *J, RecordIndex *ix, IRRef *rbref,
     }
   }
 
-  /* Otherwise the key is located in the hash part. */
+#if defined(__linux__) && LJ_TARGET_X64
+  /* M6: empty-hash misses fall through to HREF so x64 uses TabNodeHdr.hmask. */
+#else
   if (hrefk_hmask == 0) {  /* Shortcut for empty hash part. */
     /* Guard that the hash part stays empty. */
     TRef tmp = emitir(IRTI(IR_FLOAD), ix->tab, IRFL_TAB_HMASK);
     emitir(IRTGI(IR_EQ), tmp, lj_ir_kint(J, 0));
     return lj_ir_kkptr(J, niltvg(J2G(J)));
   }
+#endif
+  /* Otherwise the key is located in the hash part. */
   if (tref_isinteger(key))  /* Hash keys are based on numbers, not ints. */
     key = emitir(IRTN(IR_CONV), key, IRCONV_NUM_INT);
   if (tref_isk(key)) {
