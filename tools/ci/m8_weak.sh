@@ -20,6 +20,8 @@ for needle in \
   'test_weak_post_clear_resurrection_write' \
   'test_weak_complete_bridge' \
   'lj_gc2_weak_complete(g, gcref(g->gc.weak), 1)' \
+  'lj_gc2_finalizer_try_enter(global_State *g)' \
+  'peer finalizer dispatch backs off' \
   'lj_gc2_finalizer_pending(global_State *g)' \
   'lj_gc2_finalizer_sweep_pending(global_State *g)' \
   'assert(la_load32_acq(&g->gc2.finalizer_owner_tid) ==' \

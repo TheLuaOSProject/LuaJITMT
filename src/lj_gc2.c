@@ -505,19 +505,47 @@ void lj_gc2_weak_to_sweep(global_State *g)
   lj_gc2_worker_wake(g);  /* 05 section 5.6.3 parked worker scheduler. */
 }
 
+static uint32_t gc2_finalizer_current_owner(void)
+{
+  TGState *tg = lj_thr_get_tg();
+  uint32_t tid = tg ? la_load32_acq(&tg->tid) : 0;
+  return tid != 0 ? tid : ~(uint32_t)0;
+}
+
+int lj_gc2_finalizer_try_enter(global_State *g)
+{
+  uint32_t owner, old;
+  if (!g)
+    return 0;
+  owner = gc2_finalizer_current_owner();
+  for (;;) {
+    old = la_load32_acq(&g->gc2.finalizer_active);
+    if (old != 0) {
+      if (la_load32_acq(&g->gc2.finalizer_owner_tid) != owner)
+	return 0;  /* 05 section 5.8: peer finalizer dispatch backs off. */
+      if (old == ~(uint32_t)0)
+	return 0;
+      if (la_cas32(&g->gc2.finalizer_active, &old, old + 1,
+		   LA_ACQ_REL, LA_ACQ)) {
+	la_add64_rlx(&g->gc2.finalizer_enters, 1);
+	return 1;
+      }
+      continue;
+    }
+    if (la_cas32(&g->gc2.finalizer_active, &old, 1, LA_ACQ_REL, LA_ACQ)) {
+      la_store32_rel(&g->gc2.finalizer_owner_tid, owner);
+      la_add64_rlx(&g->gc2.finalizer_enters, 1);
+      return 1;
+    }
+  }
+}
+
 void lj_gc2_finalizer_enter(global_State *g)
 {
-  TGState *tg;
-  uint32_t old;
   if (!g)
     return;
-  old = la_add32_rlx(&g->gc2.finalizer_active, 1);  /* 05 section 5.8. */
-  if (old == 0) {
-    tg = lj_thr_get_tg();
-    la_store32_rel(&g->gc2.finalizer_owner_tid,
-		   tg ? la_load32_acq(&tg->tid) : 0);
-  }
-  la_add64_rlx(&g->gc2.finalizer_enters, 1);
+  while (!lj_gc2_finalizer_try_enter(g))
+    la_cpu_pause();
 }
 
 void lj_gc2_finalizer_leave(global_State *g)
@@ -525,6 +553,12 @@ void lj_gc2_finalizer_leave(global_State *g)
   uint32_t old;
   if (!g)
     return;
+  old = la_load32_acq(&g->gc2.finalizer_active);
+  lj_assertG(old != 0, "gc2 finalizer active underflow");
+  if (old == 0)
+    return;
+  if (old == 1)
+    la_store32_rel(&g->gc2.finalizer_owner_tid, 0);
   old = la_sub32_acqrel(&g->gc2.finalizer_active, 1);  /* 05 section 5.8. */
   lj_assertG(old != 0, "gc2 finalizer active underflow");
   if (old == 0) {
@@ -532,8 +566,6 @@ void lj_gc2_finalizer_leave(global_State *g)
     la_store32_rel(&g->gc2.finalizer_owner_tid, 0);
     return;
   }
-  if (old == 1)
-    la_store32_rel(&g->gc2.finalizer_owner_tid, 0);
   la_add64_rlx(&g->gc2.finalizer_leaves, 1);
 }
 
@@ -547,7 +579,7 @@ static int gc2_finalizer_owned_by_current(global_State *g)
   if (owner == 0)
     return 0;
   tg = lj_thr_get_tg();
-  return tg && la_load32_acq(&tg->tid) == owner;
+  return owner == (tg ? la_load32_acq(&tg->tid) : ~(uint32_t)0);
 }
 
 static int gc2_finalizer_pending_for_sweep(global_State *g, int owner_ok)

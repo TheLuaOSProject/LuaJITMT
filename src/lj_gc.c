@@ -1236,14 +1236,15 @@ static void gc_call_finalizer(global_State *g, lua_State *L,
 }
 
 /* Finalize one userdata or cdata object from the mmudata list. */
-static void gc_finalize(lua_State *L)
+static int gc_finalize(lua_State *L)
 {
   global_State *g = G(L);
   GCobj *o;
   cTValue *mo;
   TValue motv;
   lj_assertG(lj_tg_jit_base(g) == NULL, "finalizer called on trace");
-  lj_gc2_finalizer_enter(g);
+  if (!lj_gc2_finalizer_try_enter(g))
+    return 0;
   o = gcnext(gcref(g->gc.mmudata));
   /* Unchain from list of userdata to be finalized. */
   if (o == gcref(g->gc.mmudata))
@@ -1272,7 +1273,7 @@ static void gc_finalize(lua_State *L)
       lj_gc2_finreg_cdata_set(g, o, 0);
     }
     lj_gc2_finalizer_leave(g);
-    return;
+    return 1;
   }
 #endif
   /* Add userdata back to the main userdata list and make it white. */
@@ -1286,13 +1287,15 @@ static void gc_finalize(lua_State *L)
   if (mo)
     gc_call_finalizer(g, L, mo, o);
   lj_gc2_finalizer_leave(g);
+  return 1;
 }
 
 /* Finalize all userdata objects from mmudata list. */
 void lj_gc_finalize_udata(lua_State *L)
 {
   while (gcref(G(L)->gc.mmudata) != NULL)
-    gc_finalize(L);
+    if (!gc_finalize(L))
+      la_cpu_pause();
 }
 
 #if LJ_HASFFI
@@ -1331,7 +1334,9 @@ void lj_gc_finalize_cdata(lua_State *L)
 	lj_gc2_finreg_cdata_set(g, o, 0);
 	copyTV(L, &tmp, &val);
 	lj_cdata_fin_storenil(L, &node[i].val);
+	lj_gc2_finalizer_enter(g);
 	gc_call_finalizer(g, L, &tmp, o);
+	lj_gc2_finalizer_leave(g);
       }
     }
   }
@@ -1470,7 +1475,8 @@ static size_t gc_onestep(lua_State *L)
       GCSize old = g->gc.total;
       if (lj_tg_jit_base(g))  /* Don't call finalizers on trace. */
 	return LJ_MAX_MEM;
-      gc_finalize(L);  /* Finalize one userdata object. */
+      if (!gc_finalize(L))  /* Finalize one userdata object. */
+	return LJ_MAX_MEM;
       if (old >= g->gc.total && g->gc.estimate > old - g->gc.total)
 	g->gc.estimate -= old - g->gc.total;
       if (g->gc.estimate > GCFINALIZECOST)

@@ -16,6 +16,7 @@
 #include "lj_arena.h"
 #include "lj_gc.h"
 #include "lj_gc2.h"
+#include "lj_thr.h"
 #include "lj_tg.h"
 
 static int arena_list_contains(GCArena *a, GCArena *needle)
@@ -296,6 +297,7 @@ int main(void)
   lua_State *L;
   global_State *g;
   TGState *tg;
+  TGState peer_tg, *saved_tg;
   GCtab *phase_tab, *phase_child;
   uint32_t cycle0;
   uint32_t ssb_published0, ssb_drained0;
@@ -405,13 +407,38 @@ int main(void)
   assert(la_load64_acq(&g->gc2.finalizer_leaves) == finalizer_leaves0);
   assert(lj_gc2_finalizer_pending(g));
   assert(!lj_gc2_finalizer_sweep_pending(g));
+  saved_tg = lj_thr_get_tg();
+  lj_tg_init_thread(g, &peer_tg, NULL, 0);
+  peer_tg.tid = tg->tid + 5000u;
+  if (peer_tg.tid == 0 || peer_tg.tid == LJ_THREAD_GCSCAN)
+    peer_tg.tid = 5000u;
+  peer_tg.alloc.owner_tid = peer_tg.tid;
+  peer_tg.cur_L = L;
+  lj_thr_set_tg(&peer_tg);
+  assert(!lj_gc2_finalizer_try_enter(g));
+  assert(la_load32_acq(&g->gc2.finalizer_active) == 1);
+  assert(lj_gc2_finalizer_sweep_pending(g));
+  lj_thr_set_tg(saved_tg);
+  lj_tg_fini_thread(g, &peer_tg);
+  assert(lj_gc2_finalizer_try_enter(g));
+  assert(la_load32_acq(&g->gc2.finalizer_active) == 2);
+  assert(la_load32_acq(&g->gc2.finalizer_owner_tid) ==
+	 la_load32_acq(&tg->tid));
+  assert(la_load64_acq(&g->gc2.finalizer_enters) ==
+	 finalizer_enters0 + 2u);
+  lj_gc2_finalizer_leave(g);
+  assert(la_load32_acq(&g->gc2.finalizer_active) == 1);
+  assert(la_load32_acq(&g->gc2.finalizer_owner_tid) ==
+	 la_load32_acq(&tg->tid));
+  assert(la_load64_acq(&g->gc2.finalizer_leaves) ==
+	 finalizer_leaves0 + 1u);
   lj_gc2_finalizer_leave(g);
   assert(la_load32_acq(&g->gc2.finalizer_active) == 0);
   assert(la_load32_acq(&g->gc2.finalizer_owner_tid) == 0);
   assert(la_load64_acq(&g->gc2.finalizer_enters) ==
-	 finalizer_enters0 + 1u);
+	 finalizer_enters0 + 2u);
   assert(la_load64_acq(&g->gc2.finalizer_leaves) ==
-	 finalizer_leaves0 + 1u);
+	 finalizer_leaves0 + 2u);
   assert(!lj_gc2_finalizer_pending(g));
   setgcrefr(mmudata0, g->gc.mmudata);
   setgcref(g->gc.mmudata, obj2gco(phase_tab));
