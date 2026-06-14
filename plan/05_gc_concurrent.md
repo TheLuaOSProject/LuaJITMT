@@ -450,7 +450,10 @@ table-valued `__newindex` chain, they use the resolved owner table rather than
 the original proxy for that weak-write barrier. FFI cdata metatype
 `__newindex = weak_table` uses the same resolved-owner bridge for
 `ffi_meta___newindex`, with dedicated coverage in
-`tests/t-m8-ffi-weak-newindex.c`.
+`tests/t-m8-ffi-weak-newindex.c`. The traversal harness also pins the raw C API
+setter path directly: `lua_rawset()` all-weak hash insertion and `lua_rawseti()`
+weak-value array insertion both keep late `P_WEAK` keys/values alive through
+the same bridge.
 `weak_keys_marked` and `weak_values_marked` expose first-time marks from these
 bridges for follow-up tests. x64 VM single-value array table stores now route
 their GC2 barrier to the stored TValue directly, and `BC_TSETM` routes the

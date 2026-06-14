@@ -186,7 +186,8 @@ GC2-cleared snapshot bridge, captured traversal-time weak modes across later
 weak-phase store hook for the original resurrection-race case, including VM
 rewrites of existing nil-valued weak-key hash slots and VM insertion of strong
 hash keys into weak-value tables. `table.insert()` direct array writes now use
-the same weak-write bridge for weak-value tables during `P_WEAK`.
+the same weak-write bridge for weak-value tables during `P_WEAK`, and direct
+C API raw setters are covered for all-weak hash and weak-value array writes.
 Paranoia builds now rescan the legacy weak list after a GC2 skip decision and
 fail if any weak slot remains clearable.
 Finalizer dispatch now has a GC2 owner try-claim around legacy

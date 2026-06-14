@@ -1310,6 +1310,66 @@ static void test_vm_weak_post_clear_existing_key_write(lua_State *L,
   lua_pop(L, 5);
 }
 
+static void test_capi_rawset_weak_write_barrier(lua_State *L, global_State *g,
+						TGState *tg)
+{
+  GCtab *hash_weak, *hash_key, *hash_val, *array_weak, *array_val;
+  uint64_t weak_keys0, weak_vals0;
+
+  lua_settop(L, 0);
+  lua_newtable(L);
+  hash_weak = tabV(L->top - 1);
+  lua_newtable(L);
+  lua_pushliteral(L, "__mode");
+  lua_pushliteral(L, "kv");
+  lua_settable(L, -3);
+  lua_setmetatable(L, -2);
+  lua_newtable(L);
+  hash_key = tabV(L->top - 1);
+  lua_newtable(L);
+  hash_val = tabV(L->top - 1);
+
+  lua_newtable(L);
+  array_weak = tabV(L->top - 1);
+  lua_newtable(L);
+  lua_pushliteral(L, "__mode");
+  lua_pushliteral(L, "v");
+  lua_settable(L, -3);
+  lua_setmetatable(L, -2);
+  lua_newtable(L);
+  array_val = tabV(L->top - 1);
+
+  lj_gc2_legacy_mark_begin(g);
+  assert(lj_gc2_markobj(g, obj2gco(hash_weak)) == 1);
+  assert(lj_gc2_markobj(g, obj2gco(array_weak)) == 1);
+  flush_and_drain(g, tg);
+  assert(lj_gc2_ismarked(g, obj2gco(hash_weak)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(array_weak)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(hash_key)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(hash_val)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(array_val)) == 0);
+
+  lj_gc2_legacy_weak_begin(g);
+  weak_keys0 = la_load64_acq(&g->gc2.weak_keys_marked);
+  weak_vals0 = la_load64_acq(&g->gc2.weak_values_marked);
+
+  lua_pushvalue(L, 2);
+  lua_pushvalue(L, 3);
+  lua_rawset(L, 1);  /* C API raw hash weak write. */
+  lua_pushvalue(L, 5);
+  lua_rawseti(L, 4, 1);  /* C API raw array weak write. */
+
+  assert(lj_gc2_ismarked(g, obj2gco(hash_key)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(hash_val)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(array_val)) == 1);
+  assert(la_load64_acq(&g->gc2.weak_keys_marked) == weak_keys0 + 1u);
+  assert(la_load64_acq(&g->gc2.weak_values_marked) == weak_vals0 + 2u);
+  assert(!lj_gc2_ssb_empty(g));
+  flush_and_drain(g, tg);
+  lj_gc2_legacy_cycle_end(g);
+  lua_pop(L, 5);
+}
+
 static void test_weak_key_write_barrier(lua_State *L, global_State *g,
 					TGState *tg)
 {
@@ -2206,6 +2266,7 @@ int main(void)
   test_weak_drain_uses_captured_mode(L, g, tg);
   test_weak_post_clear_resurrection_write(L, g, tg);
   test_vm_weak_post_clear_existing_key_write(L, g, tg);
+  test_capi_rawset_weak_write_barrier(L, g, tg);
   test_weak_key_write_barrier(L, g, tg);
   test_vm_weak_key_write_barrier(L, g, tg);
   test_vm_weak_value_hash_key_barrier(L, g, tg);

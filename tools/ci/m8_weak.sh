@@ -30,6 +30,9 @@ for needle in \
   'test_weak_drain_uses_captured_mode' \
   'test_weak_post_clear_resurrection_write' \
   'test_vm_weak_post_clear_existing_key_write' \
+  'test_capi_rawset_weak_write_barrier' \
+  'C API raw hash weak write' \
+  'C API raw array weak write' \
   'lj_gc2_barrier_weak_key(L, t, k);' \
   'weak-table key write' \
   'test_weak_complete_bridge' \
