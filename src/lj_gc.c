@@ -107,7 +107,8 @@ static void gc_arena_rebuild_free(global_State *g)
 
 static int gc_arena_sweep_ready(global_State *g)
 {
-  return g->gc2.phase == LJ_GC2_SWEEP && gcref(g->gc.mmudata) == NULL;
+  return la_load32_acq(&g->gc2.phase) == LJ_GC2_SWEEP &&
+	 !lj_gc2_finalizer_sweep_pending(g);
 }
 
 static int gc_arena_sweep_needs_prepare(global_State *g)
@@ -181,7 +182,7 @@ static void gc_arena_verify_sweep_boundary(global_State *g)
   GCobj *o;
   if (!tg || !(tg->tg_flags & TGF_ARENA_INTERNAL) ||
       g->gc2.phase != LJ_GC2_SWEEP ||
-      gcref(g->gc.mmudata) != NULL)
+      lj_gc2_finalizer_sweep_pending(g))
     return;
   for (o = gcref(g->gc.root); o != NULL; o = gcnext(o)) {
     gc_arena_verify_marked(g, o);
@@ -1063,10 +1064,12 @@ static void gc_call_finalizer(global_State *g, lua_State *L,
 static void gc_finalize(lua_State *L)
 {
   global_State *g = G(L);
-  GCobj *o = gcnext(gcref(g->gc.mmudata));
+  GCobj *o;
   cTValue *mo;
   TValue motv;
   lj_assertG(lj_tg_jit_base(g) == NULL, "finalizer called on trace");
+  lj_gc2_finalizer_enter(g);
+  o = gcnext(gcref(g->gc.mmudata));
   /* Unchain from list of userdata to be finalized. */
   if (o == gcref(g->gc.mmudata))
     setgcrefnull(g->gc.mmudata);
@@ -1090,6 +1093,7 @@ static void gc_finalize(lua_State *L)
       lj_tab_storenilraw(tv);  /* Clear entry in finalizer table. */
       gc_call_finalizer(g, L, &tmp, o);
     }
+    lj_gc2_finalizer_leave(g);
     return;
   }
 #endif
@@ -1103,6 +1107,7 @@ static void gc_finalize(lua_State *L)
   mo = lj_meta_fasttv(g, tabref_acq(gco2ud(o)->metatable), MM_gc, &motv);
   if (mo)
     gc_call_finalizer(g, L, mo, o);
+  lj_gc2_finalizer_leave(g);
 }
 
 /* Finalize all userdata objects from mmudata list. */

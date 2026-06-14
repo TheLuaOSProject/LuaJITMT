@@ -20,9 +20,14 @@ for needle in \
   'uint64_t worker_wakes' \
   'uint64_t worker_parks' \
   'uint64_t worker_async_progress' \
+  'uint32_t finalizer_active' \
+  'uint32_t finalizer_owner_tid' \
+  'uint64_t finalizer_sweep_blocks' \
   'lj_gc2_worker_start(global_State *g)' \
   'lj_gc2_worker_stop(global_State *g)' \
   'lj_gc2_worker_wake(global_State *g)' \
+  'lj_gc2_finalizer_pending(global_State *g)' \
+  'lj_gc2_finalizer_sweep_pending(global_State *g)' \
   'static void *gc2_worker_main(void *arg)' \
   'la_futex_wait(&g->gc2.worker_wake, wake, -1)' \
   'la_futex_wake(&g->gc2.worker_wake, 1)' \
@@ -30,6 +35,7 @@ for needle in \
   'assert(lj_gc2_worker_start(g) == 1)' \
   'test_async_sweep_and_stop' \
   'wait_until_marked' \
+  'assert(lj_gc2_finalizer_pending(g))' \
   'lj_gc2_worker_wake(g);'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_gc2.c" "$ROOT/src/lj_gc2.h" \

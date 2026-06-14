@@ -145,6 +145,11 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.finreg_udata_sets, 0);
   la_store64_rlx(&g->gc2.finreg_udata_clears, 0);
   la_store64_rlx(&g->gc2.finreg_udata_queued, 0);
+  la_store32_rlx(&g->gc2.finalizer_active, 0);
+  la_store32_rlx(&g->gc2.finalizer_owner_tid, 0);
+  la_store64_rlx(&g->gc2.finalizer_enters, 0);
+  la_store64_rlx(&g->gc2.finalizer_leaves, 0);
+  la_store64_rlx(&g->gc2.finalizer_sweep_blocks, 0);
   la_store64_rlx(&g->gc2.weak_keys_marked, 0);
   la_store64_rlx(&g->gc2.weak_values_marked, 0);
   g->gc2.tg_list = NULL;
@@ -497,6 +502,80 @@ void lj_gc2_weak_to_sweep(global_State *g)
   lj_gc2_worker_wake(g);  /* 05 section 5.6.3 parked worker scheduler. */
 }
 
+void lj_gc2_finalizer_enter(global_State *g)
+{
+  TGState *tg;
+  uint32_t old;
+  if (!g)
+    return;
+  old = la_add32_rlx(&g->gc2.finalizer_active, 1);  /* 05 section 5.8. */
+  if (old == 0) {
+    tg = lj_thr_get_tg();
+    la_store32_rel(&g->gc2.finalizer_owner_tid,
+		   tg ? la_load32_acq(&tg->tid) : 0);
+  }
+  la_add64_rlx(&g->gc2.finalizer_enters, 1);
+}
+
+void lj_gc2_finalizer_leave(global_State *g)
+{
+  uint32_t old;
+  if (!g)
+    return;
+  old = la_sub32_acqrel(&g->gc2.finalizer_active, 1);  /* 05 section 5.8. */
+  lj_assertG(old != 0, "gc2 finalizer active underflow");
+  if (old == 0) {
+    la_store32_rel(&g->gc2.finalizer_active, 0);
+    la_store32_rel(&g->gc2.finalizer_owner_tid, 0);
+    return;
+  }
+  if (old == 1)
+    la_store32_rel(&g->gc2.finalizer_owner_tid, 0);
+  la_add64_rlx(&g->gc2.finalizer_leaves, 1);
+}
+
+static int gc2_finalizer_owned_by_current(global_State *g)
+{
+  TGState *tg;
+  uint32_t owner;
+  if (!g)
+    return 0;
+  owner = la_load32_acq(&g->gc2.finalizer_owner_tid);
+  if (owner == 0)
+    return 0;
+  tg = lj_thr_get_tg();
+  return tg && la_load32_acq(&tg->tid) == owner;
+}
+
+static int gc2_finalizer_pending_for_sweep(global_State *g, int owner_ok)
+{
+  if (!g)
+    return 0;
+  if (gcref_acq(g->gc.mmudata) != NULL)
+    return 1;
+  if (la_load32_acq(&g->gc2.finalizer_active) == 0)
+    return 0;
+  return !(owner_ok && gc2_finalizer_owned_by_current(g));
+}
+
+int lj_gc2_finalizer_pending(global_State *g)
+{
+  return gc2_finalizer_pending_for_sweep(g, 0);
+}
+
+int lj_gc2_finalizer_sweep_pending(global_State *g)
+{
+  return gc2_finalizer_pending_for_sweep(g, 1);
+}
+
+static int gc2_sweep_blocked_by_finalizer(global_State *g)
+{
+  if (!lj_gc2_finalizer_sweep_pending(g))
+    return 0;
+  la_add64_rlx(&g->gc2.finalizer_sweep_blocks, 1);
+  return 1;  /* 05 section 5.8 finalizer drain before traversable sweep. */
+}
+
 int lj_gc2_sweep_tg_ready(TGState *tg)
 {
   uint8_t flags;
@@ -541,6 +620,8 @@ uint32_t lj_gc2_sweep_owner_progress(global_State *g, TGState *tg,
   if (!g || !tg || limit == 0 || !(tg->tg_flags & TGF_ARENA_INTERNAL))
     return 0;
   if (la_load32_acq(&g->gc2.phase) != LJ_GC2_SWEEP)
+    return 0;
+  if (gc2_sweep_blocked_by_finalizer(g))
     return 0;
   epoch = g->gc2.cycle;
   tg->alloc.sweep_epoch = epoch;
@@ -627,7 +708,7 @@ int lj_gc2_sweep_to_idle(global_State *g)
   if (!la_cas32(&g->gc2.worker_active, &expect, 1, LA_ACQ_REL, LA_ACQ))
     return 0;  /* 05 section 5.8 scheduler close waits for worker owner. */
   phase = la_load32_acq(&g->gc2.phase);
-  if (phase != LJ_GC2_SWEEP ||
+  if (phase != LJ_GC2_SWEEP || gc2_sweep_blocked_by_finalizer(g) ||
       lj_gc2_sweep_needs_prepare(g) || lj_gc2_sweep_pending(g)) {
     la_store32_rel(&g->gc2.worker_active, 0);
     return 0;
@@ -2317,6 +2398,8 @@ static uint32_t gc2_worker_sweep_progress(global_State *g, uint32_t limit)
 {
   TGState *tg;
   uint32_t n = 0;
+  if (gc2_sweep_blocked_by_finalizer(g))
+    return 0;
   for (tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
        tg != NULL && n < limit;
        tg = (TGState *)la_loadptr_acq((void *const *)&tg->next_tg)) {

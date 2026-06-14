@@ -437,8 +437,16 @@ traversable HugeTab entries across the TG list into `gc2.live_estimate`, records
 traversable sweep-list predicates used by the legacy bridge before final idle
 publication. Pacing uses the larger of that GC2 estimate and the legacy
 `g->gc.estimate` until raw/plain arena aggregation is independently owned by
-GC2. Full scheduler-owned string/root/finalizer sweep driving remains follow-up
-work.
+GC2. The original bridge gated legacy boundary-lazy sweep on `mmudata != NULL`,
+but the parked worker could still see `P_SWEEP` after the last item was unlinked
+and while its finalizer callback was running. GC2 now publishes
+`finalizer_active` around legacy `gc_finalize()`, exposes
+`lj_gc2_finalizer_pending()`, and uses an owner-aware sweep predicate to block
+traversable worker sweep progress and `lj_gc2_sweep_to_idle()` while finalizers
+are queued or running on another TG. The current finalizer owner may still finish
+a nested full-GC sweep so `collectgarbage('collect')` inside `__gc` cannot
+self-deadlock. Full scheduler-owned string/root/finalizer sweep driving remains
+follow-up work.
 
 ## 5.9 Deferred reclamation (grace periods) — the GC as universal SMR
 

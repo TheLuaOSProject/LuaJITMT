@@ -86,6 +86,11 @@ for needle in \
   'uint64_t finreg_udata_sets' \
   'uint64_t finreg_udata_clears' \
   'uint64_t finreg_udata_queued' \
+  'uint32_t finalizer_active' \
+  'uint32_t finalizer_owner_tid' \
+  'uint64_t finalizer_enters' \
+  'uint64_t finalizer_leaves' \
+  'uint64_t finalizer_sweep_blocks' \
   'uint64_t weak_keys_marked' \
   'uint64_t weak_values_marked' \
   'gc2_weak_record(global_State *g, GCtab *t)' \
@@ -216,8 +221,12 @@ for needle in \
   'lj_gc2_sweep_needs_prepare(global_State *g)' \
   'lj_gc2_sweep_pending(global_State *g)' \
   'lj_gc2_sweep_to_idle(global_State *g)' \
+  'lj_gc2_finalizer_pending(global_State *g)' \
+  'lj_gc2_finalizer_sweep_pending(global_State *g)' \
+  'gc2_sweep_blocked_by_finalizer(global_State *g)' \
   'lj_gc2_sweep_owner_progress(global_State *g, TGState *tg' \
   'la_add64_rlx(&g->gc2.sweep_owner_arenas' \
+  'la_add64_rlx(&g->gc2.finalizer_sweep_blocks' \
   'la_cas32(&g->gc2.worker_active, &expect, 1' \
   'lj_gc2_sweep_live_aggregate(global_State *g)' \
   'lj_arena_hugetab_live_bytes(&tg->huge' \

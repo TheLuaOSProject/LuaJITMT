@@ -39,17 +39,6 @@ static int wait_until_marked(global_State *g, GCobj *o)
   return 0;
 }
 
-static int wait_u64_gt(uint64_t *p, uint64_t base)
-{
-  int i;
-  for (i = 0; i < 1000; i++) {
-    if (la_load64_acq(p) > base)
-      return 1;
-    sleep_ns(1000000L);
-  }
-  return 0;
-}
-
 static int wait_ssb_empty(global_State *g)
 {
   int i;
@@ -178,10 +167,11 @@ static void test_async_sweep_and_stop(lua_State *L, global_State *g,
 				      TGState *tg)
 {
   TGState extra_tg;
-  uint64_t async0, arenas0, wakes0;
+  uint64_t async0, arenas0, blocks0, wakes0;
   uint32_t sweep_cycle;
   void *extra_plain, *extra_trav;
   GCArena *extra_plain_a, *extra_trav_a, *swept_a;
+  int i;
 
   lj_tg_init_thread(g, &extra_tg, NULL, 1);
   extra_tg.tid = tg->tid + 4000u;
@@ -200,6 +190,8 @@ static void test_async_sweep_and_stop(lua_State *L, global_State *g,
   extra_trav_a = lj_arena_of(extra_trav);
   lj_native_enter(tg);
 
+  lj_gc2_finalizer_enter(g);
+  assert(lj_gc2_finalizer_pending(g));
   g->gc2.cycle++;
   sweep_cycle = g->gc2.cycle;
   g->gc2.phase = LJ_GC2_SWEEP;
@@ -216,10 +208,29 @@ static void test_async_sweep_and_stop(lua_State *L, global_State *g,
 
   async0 = la_load64_acq(&g->gc2.worker_async_progress);
   arenas0 = la_load64_acq(&g->gc2.sweep_owner_arenas);
+  blocks0 = la_load64_acq(&g->gc2.finalizer_sweep_blocks);
   wakes0 = la_load64_acq(&g->gc2.worker_wakes);
-  lj_gc2_worker_wake(g);
+  for (i = 0; i < 1000 &&
+	      la_load64_acq(&g->gc2.finalizer_sweep_blocks) == blocks0; i++) {
+    lj_gc2_worker_wake(g);
+    sleep_ns(1000000L);
+  }
   assert(la_load64_acq(&g->gc2.worker_wakes) > wakes0);
-  assert(wait_u64_gt(&g->gc2.sweep_owner_arenas, arenas0));
+  assert(la_load64_acq(&g->gc2.finalizer_sweep_blocks) > blocks0);
+  assert(la_load64_acq(&g->gc2.sweep_owner_arenas) == arenas0);
+  assert(la_load64_acq(&g->gc2.worker_async_progress) == async0);
+  assert(arena_list_contains(extra_tg.alloc.needsweep[LJ_ARENAK_TRAVERSABLE],
+			     swept_a));
+  lj_gc2_finalizer_leave(g);
+  assert(!lj_gc2_finalizer_pending(g));
+  wakes0 = la_load64_acq(&g->gc2.worker_wakes);
+  for (i = 0; i < 1000 &&
+	      la_load64_acq(&g->gc2.sweep_owner_arenas) == arenas0; i++) {
+    lj_gc2_worker_wake(g);
+    sleep_ns(1000000L);
+  }
+  assert(la_load64_acq(&g->gc2.worker_wakes) > wakes0);
+  assert(la_load64_acq(&g->gc2.sweep_owner_arenas) > arenas0);
   assert(la_load64_acq(&g->gc2.worker_async_progress) > async0);
   assert(!arena_list_contains(extra_tg.alloc.needsweep[LJ_ARENAK_TRAVERSABLE],
 			      swept_a));

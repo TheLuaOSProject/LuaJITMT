@@ -208,9 +208,11 @@ int main(void)
   uint64_t sweep_live_updates0, live_estimate;
   uint64_t worker_weak0, weak_clear_tables0, weak_clear_cleared0;
   uint64_t weak_legacy_fallbacks0;
+  uint64_t finalizer_enters0, finalizer_leaves0, finalizer_blocks0;
   MSize weak_n;
   void *phase_plain, *phase_trav;
   GCArena *phase_plain_a, *phase_trav_a;
+  GCRef mmudata0;
   int i, done = 0, saw_mark = 0, saw_sweep = 0;
 
   test_isolated_weak_skip_case("v");
@@ -286,6 +288,24 @@ int main(void)
   tg->alloc.sweep_epoch = g->gc2.cycle;  /* Synthetic close boundary. */
   sweep_to_idle0 = la_load64_acq(&g->gc2.sweep_to_idle);
   sweep_live_updates0 = la_load64_acq(&g->gc2.sweep_live_updates);
+  finalizer_blocks0 = la_load64_acq(&g->gc2.finalizer_sweep_blocks);
+  lj_gc2_finalizer_enter(g);
+  assert(lj_gc2_finalizer_pending(g));
+  assert(!lj_gc2_finalizer_sweep_pending(g));
+  lj_gc2_finalizer_leave(g);
+  assert(!lj_gc2_finalizer_pending(g));
+  setgcrefr(mmudata0, g->gc.mmudata);
+  setgcref(g->gc.mmudata, obj2gco(phase_tab));
+  assert(lj_gc2_finalizer_pending(g));
+  assert(lj_gc2_finalizer_sweep_pending(g));
+  assert(lj_gc2_sweep_to_idle(g) == 0);
+  assert(la_load32_acq(&g->gc2.phase) == LJ_GC2_SWEEP);
+  assert(la_load64_acq(&g->gc2.sweep_to_idle) == sweep_to_idle0);
+  assert(la_load64_acq(&g->gc2.finalizer_sweep_blocks) ==
+	 finalizer_blocks0 + 1u);
+  setgcrefr(g->gc.mmudata, mmudata0);
+  assert(!lj_gc2_finalizer_pending(g));
+  assert(!lj_gc2_finalizer_sweep_pending(g));
   assert(lj_gc2_sweep_to_idle(g) == 1);
   assert(la_load64_acq(&g->gc2.sweep_to_idle) == sweep_to_idle0 + 1u);
   assert(la_load64_acq(&g->gc2.sweep_live_updates) ==
@@ -420,7 +440,14 @@ int main(void)
   lua_setfield(L, -2, "__gc");
   lua_setmetatable(L, -2);
   lua_pop(L, 1);
+  finalizer_enters0 = la_load64_acq(&g->gc2.finalizer_enters);
+  finalizer_leaves0 = la_load64_acq(&g->gc2.finalizer_leaves);
   lj_gc_fullgc(L);
+  assert(la_load32_acq(&g->gc2.finalizer_active) == 0);
+  assert(la_load64_acq(&g->gc2.finalizer_enters) > finalizer_enters0);
+  assert(la_load64_acq(&g->gc2.finalizer_leaves) > finalizer_leaves0);
+  assert(la_load64_acq(&g->gc2.finalizer_enters) ==
+	 la_load64_acq(&g->gc2.finalizer_leaves));
   assert_idle(g, tg);
 
   lua_close(L);
