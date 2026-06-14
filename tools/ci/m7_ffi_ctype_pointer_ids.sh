@@ -10,6 +10,10 @@ for needle in \
   'ctype_rawrefid(CTState *cts, CTypeID id)' \
   'return ctype_get(cts, ctype_rawid(cts, id))' \
   'return ctype_get(cts, ctype_rawrefid(cts, id))' \
+  'lj_cdata_index_l(lua_State *L, CTState *cts, GCcdata *cd' \
+  'CTypeID *idp' \
+  'static int ffi_index_meta(lua_State *L, CTState *cts, CTypeID id' \
+  'lj_cdata_index_l(L, cts, cdataV(o), o+1, &p, &qual, &id)' \
   'CTypeID rid1 = ctype_rawrefid(cts, id1)' \
   'CTypeID rid2 = ctype_rawrefid(cts, id2)' \
   'if (rid1 == rid2)' \
@@ -24,6 +28,8 @@ do
 done
 
 if awk '
+  /static int ffi_index_meta/ { inside = 1 }
+  inside && /LJLIB_CF\(ffi_meta___index\)/ { inside = 0 }
   /LJLIB_CF\(ffi_meta___tostring\)/ { inside = 1 }
   inside && /LJLIB_CF\(ffi_clib___index\)/ { inside = 0 }
   /LJLIB_CF\(ffi_istype\)/ { inside = 1 }

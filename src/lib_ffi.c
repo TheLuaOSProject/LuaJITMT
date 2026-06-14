@@ -111,9 +111,8 @@ static int32_t ffi_checkint(lua_State *L, int narg)
 #define LJLIB_MODULE_ffi_meta
 
 /* Handle ctype __index/__newindex metamethods. */
-static int ffi_index_meta(lua_State *L, CTState *cts, CType *ct, MMS mm)
+static int ffi_index_meta(lua_State *L, CTState *cts, CTypeID id, MMS mm)
 {
-  CTypeID id = ctype_typeid(cts, ct);
   TValue metatv;
   cTValue *tv = lj_ctype_metatv(cts, &metatv, id, mm);
   TValue *base = L->base;
@@ -155,14 +154,15 @@ LJLIB_CF(ffi_meta___index)	LJLIB_REC(cdata_index 0)
 {
   CTState *cts = ctype_cts(L);
   CTInfo qual = 0;
+  CTypeID id = 0;
   CType *ct;
   uint8_t *p;
   TValue *o = L->base;
   if (!(o+1 < L->top && tviscdata(o)))  /* Also checks for presence of key. */
     lj_err_argt(L, 1, LUA_TCDATA);
-  ct = lj_cdata_index_l(L, cts, cdataV(o), o+1, &p, &qual);
+  ct = lj_cdata_index_l(L, cts, cdataV(o), o+1, &p, &qual, &id);
   if ((qual & 1))
-    return ffi_index_meta(L, cts, ct, MM_index);
+    return ffi_index_meta(L, cts, id, MM_index);
   if (lj_cdata_get_l(L, cts, ct, L->top-1, p))
     lj_gc_check(L);
   return 1;
@@ -172,16 +172,17 @@ LJLIB_CF(ffi_meta___newindex)	LJLIB_REC(cdata_index 1)
 {
   CTState *cts = ctype_cts(L);
   CTInfo qual = 0;
+  CTypeID id = 0;
   CType *ct;
   uint8_t *p;
   TValue *o = L->base;
   if (!(o+2 < L->top && tviscdata(o)))  /* Also checks for key and value. */
     lj_err_argt(L, 1, LUA_TCDATA);
-  ct = lj_cdata_index_l(L, cts, cdataV(o), o+1, &p, &qual);
+  ct = lj_cdata_index_l(L, cts, cdataV(o), o+1, &p, &qual, &id);
   if ((qual & 1)) {
     if ((qual & CTF_CONST))
       lj_err_caller(L, LJ_ERR_FFI_WRCONST);
-    return ffi_index_meta(L, cts, ct, MM_newindex);
+    return ffi_index_meta(L, cts, id, MM_newindex);
   }
   lj_cdata_set_l(L, cts, ct, p, o+2, qual);
   return 0;

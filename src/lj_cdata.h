@@ -79,7 +79,8 @@ LJ_FUNC void lj_cdata_setfin(lua_State *L, GCcdata *cd, GCobj *obj,
 			     uint32_t it);
 
 LJ_FUNC CType *lj_cdata_index_l(lua_State *L, CTState *cts, GCcdata *cd,
-				cTValue *key, uint8_t **pp, CTInfo *qual);
+				cTValue *key, uint8_t **pp, CTInfo *qual,
+				CTypeID *idp);
 LJ_FUNC int lj_cdata_get_l(lua_State *L, CTState *cts, CType *s,
 			   TValue *o, uint8_t *sp);
 LJ_FUNC void lj_cdata_set_l(lua_State *L, CTState *cts, CType *d,

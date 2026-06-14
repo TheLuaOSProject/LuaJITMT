@@ -121,26 +121,30 @@ void lj_cdata_setfin(lua_State *L, GCcdata *cd, GCobj *obj, uint32_t it)
 
 /* -- C data indexing ----------------------------------------------------- */
 
-/* Index C data by a TValue. Return CType and pointer. */
+/* Index C data by a TValue. Return CType, pointer and resolved container ID. */
 CType *lj_cdata_index_l(lua_State *L, CTState *cts, GCcdata *cd,
-			cTValue *key, uint8_t **pp, CTInfo *qual)
+			cTValue *key, uint8_t **pp, CTInfo *qual,
+			CTypeID *idp)
 {
   uint8_t *p = (uint8_t *)cdataptr(cd);
-  CType *ct = ctype_get(cts, cd->ctypeid);
+  CTypeID id = cd->ctypeid;
+  CType *ct = ctype_get(cts, id);
   ptrdiff_t idx;
 
   /* Resolve reference for cdata object. */
   if (ctype_isref(ct->info)) {
     lj_assertCTS(ct->size == CTSIZE_PTR, "ref is not pointer-sized");
     p = *(uint8_t **)p;
-    ct = ctype_child(cts, ct);
+    id = ctype_cid(ct->info);
+    ct = ctype_get(cts, id);
   }
 
 collect_attrib:
   /* Skip attributes and collect qualifiers. */
   while (ctype_isattrib(ct->info)) {
     if (ctype_attrib(ct->info) == CTA_QUAL) *qual |= ct->size;
-    ct = ctype_child(cts, ct);
+    id = ctype_cid(ct->info);
+    ct = ctype_get(cts, id);
   }
   /* Interning rejects refs to refs. */
   lj_assertCTS(!ctype_isref(ct->info), "bad ref of ref");
@@ -195,9 +199,12 @@ collect_attrib:
       }
     } else if (cd->ctypeid == CTID_CTYPEID) {
       /* Allow indexing a (pointer to) struct constructor to get constants. */
-      CType *sct = ctype_raw(cts, *(CTypeID *)p);
-      if (ctype_isptr(sct->info))
-	sct = ctype_rawchild(cts, sct);
+      CTypeID sid = ctype_rawid(cts, *(CTypeID *)p);
+      CType *sct = ctype_get(cts, sid);
+      if (ctype_isptr(sct->info)) {
+	sid = ctype_rawid(cts, ctype_cid(sct->info));
+	sct = ctype_get(cts, sid);
+      }
       if (ctype_isstruct(sct->info)) {
 	CTSize ofs;
 	CType *fct = lj_ctype_getfield(cts, sct, name, &ofs);
@@ -205,15 +212,19 @@ collect_attrib:
 	  return fct;
       }
       ct = sct;  /* Allow resolving metamethods for constructors, too. */
+      id = sid;
     }
   }
   if (ctype_isptr(ct->info)) {  /* Automatically perform '->'. */
-    if (ctype_isstruct(ctype_rawchild(cts, ct)->info)) {
+    CTypeID cid = ctype_rawid(cts, ctype_cid(ct->info));
+    if (ctype_isstruct(ctype_get(cts, cid)->info)) {
       p = (uint8_t *)cdata_getptr(p, ct->size);
-      ct = ctype_child(cts, ct);
+      id = ctype_cid(ct->info);
+      ct = ctype_get(cts, id);
       goto collect_attrib;
     }
   }
+  if (idp) *idp = id;
   *qual |= 1;  /* Lookup failed. */
   return ct;  /* But return the resolved raw type. */
 }
