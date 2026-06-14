@@ -690,7 +690,7 @@ static void callback_conv_result(CTState *cts, lua_State *L, TValue *o)
     if (ctype_isfp(ctr->info) && ctr->size == sizeof(float))
       dp = (uint8_t *)&cts->cb.fpr[0].f[1];
 #endif
-    lj_cconv_ct_tv(cts, ctr, dp, o, 0);
+    lj_cconv_ct_tv_l(L, cts, ctr, dp, o, 0);
 #ifdef CALLBACK_HANDLE_RET
     CALLBACK_HANDLE_RET
 #endif

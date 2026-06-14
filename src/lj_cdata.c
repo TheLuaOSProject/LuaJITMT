@@ -175,8 +175,8 @@ collect_attrib:
     CType *ctk = ctype_raw(cts, cdk->ctypeid);
     if (ctype_isenum(ctk->info)) ctk = ctype_child(cts, ctk);
     if (ctype_isinteger(ctk->info)) {
-      lj_cconv_ct_ct(cts, ctype_get(cts, CTID_INT_PSZ), ctk,
-		     (uint8_t *)&idx, cdataptr(cdk), 0);
+      lj_cconv_ct_ct_l(L, cts, ctype_get(cts, CTID_INT_PSZ), ctk,
+		       (uint8_t *)&idx, cdataptr(cdk), 0);
       goto integer_key;
     }
   } else if (tvisstr(key)) {  /* String key. */
@@ -276,13 +276,14 @@ int lj_cdata_get_l(lua_State *L, CTState *cts, CType *s, TValue *o,
 /* -- C data setters ------------------------------------------------------ */
 
 /* Convert TValue and set C data value. */
-void lj_cdata_set(CTState *cts, CType *d, uint8_t *dp, TValue *o, CTInfo qual)
+void lj_cdata_set_l(lua_State *L, CTState *cts, CType *d, uint8_t *dp,
+		    TValue *o, CTInfo qual)
 {
   if (ctype_isconstval(d->info)) {
     goto err_const;
   } else if (ctype_isbitfield(d->info)) {
     if (((d->info|qual) & CTF_CONST)) goto err_const;
-    lj_cconv_bf_tv(cts, d, dp, o);
+    lj_cconv_bf_tv_l(L, cts, d, dp, o);
     return;
   }
 
@@ -313,10 +314,10 @@ void lj_cdata_set(CTState *cts, CType *d, uint8_t *dp, TValue *o, CTInfo qual)
 
   if (((d->info|qual) & CTF_CONST)) {
   err_const:
-    lj_err_caller(cts->L, LJ_ERR_FFI_WRCONST);
+    lj_err_caller(L, LJ_ERR_FFI_WRCONST);
   }
 
-  lj_cconv_ct_tv(cts, d, dp, o, 0);
+  lj_cconv_ct_tv_l(L, cts, d, dp, o, 0);
 }
 
 #endif

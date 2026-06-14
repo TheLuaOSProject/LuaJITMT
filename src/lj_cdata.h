@@ -90,8 +90,8 @@ LJ_FUNC CType *lj_cdata_index_l(lua_State *L, CTState *cts, GCcdata *cd,
 				cTValue *key, uint8_t **pp, CTInfo *qual);
 LJ_FUNC int lj_cdata_get_l(lua_State *L, CTState *cts, CType *s,
 			   TValue *o, uint8_t *sp);
-LJ_FUNC void lj_cdata_set(CTState *cts, CType *d, uint8_t *dp, TValue *o,
-			  CTInfo qual);
+LJ_FUNC void lj_cdata_set_l(lua_State *L, CTState *cts, CType *d,
+			    uint8_t *dp, TValue *o, CTInfo qual);
 
 #endif
 

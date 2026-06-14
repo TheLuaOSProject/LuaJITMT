@@ -114,14 +114,14 @@
 #define CCALL_HANDLE_STRUCTARG \
   /* Pass structs of size 1, 2, 4 or 8 in a GPR by value. */ \
   if (!(sz == 1 || sz == 2 || sz == 4 || sz == 8)) { \
-    rp = cdataptr(lj_cdata_new(cts, did, sz)); \
+    rp = cdataptr(lj_cdata_new_l(L, cts, did, sz)); \
     sz = CTSIZE_PTR;  /* Pass all other structs by reference. */ \
   }
 
 #define CCALL_HANDLE_COMPLEXARG \
   /* Pass complex float in a GPR and complex double by reference. */ \
   if (sz != 2*sizeof(float)) { \
-    rp = cdataptr(lj_cdata_new(cts, did, sz)); \
+    rp = cdataptr(lj_cdata_new_l(L, cts, did, sz)); \
     sz = CTSIZE_PTR; \
   }
 
@@ -166,7 +166,7 @@
   int rcl[2]; rcl[0] = rcl[1] = 0; \
   if (!ccall_classify_struct(cts, d, rcl, 0)) { \
     cc->nsp = nsp; cc->ngpr = ngpr; cc->nfpr = nfpr; \
-    if (ccall_struct_arg(cc, cts, d, rcl, o, narg)) goto err_nyi; \
+    if (ccall_struct_arg(cc, L, cts, d, rcl, o, narg)) goto err_nyi; \
     nsp = cc->nsp; ngpr = cc->ngpr; nfpr = cc->nfpr; \
     continue; \
   } else {  /* Pass all other structs by value on stack. */ \
@@ -329,7 +329,7 @@
 #define CCALL_HANDLE_STRUCTARG \
   unsigned int cl = ccall_classify_struct(cts, d); \
   if (cl == 0) {  /* Pass struct by reference. */ \
-    rp = cdataptr(lj_cdata_new(cts, did, sz)); \
+    rp = cdataptr(lj_cdata_new_l(L, cts, did, sz)); \
     sz = CTSIZE_PTR; \
   } else if (cl > 1) {  /* Pass struct in FPRs or on stack. */ \
     isfp = (cl & 4) ? 2 : 1; \
@@ -386,7 +386,7 @@
   memcpy(dp, sp, ctr->size);  /* Copy complex from GPRs. */
 
 #define CCALL_HANDLE_STRUCTARG \
-  rp = cdataptr(lj_cdata_new(cts, did, sz)); \
+  rp = cdataptr(lj_cdata_new_l(L, cts, did, sz)); \
   sz = CTSIZE_PTR;  /* Pass all structs by reference. */
 
 #define CCALL_HANDLE_COMPLEXARG \
@@ -693,13 +693,13 @@ static int ccall_struct_reg(CCallState *cc, CTState *cts, GPRArg *dp, int *rcl)
 }
 
 /* Pass a small struct argument. */
-static int ccall_struct_arg(CCallState *cc, CTState *cts, CType *d, int *rcl,
-			    TValue *o, int narg)
+static int ccall_struct_arg(CCallState *cc, lua_State *L, CTState *cts,
+			    CType *d, int *rcl, TValue *o, int narg)
 {
   GPRArg dp[2];
   dp[0] = dp[1] = 0;
   /* Convert to temp. struct. */
-  lj_cconv_ct_tv(cts, d, (uint8_t *)dp, o, CCF_ARG(narg));
+  lj_cconv_ct_tv_l(L, cts, d, (uint8_t *)dp, o, CCF_ARG(narg));
   if (ccall_struct_reg(cc, cts, dp, rcl)) {
     /* Register overflow? Pass on stack. */
     MSize nsp = cc->nsp, sz = rcl[1] ? 2*CTSIZE_PTR : CTSIZE_PTR;
@@ -1012,7 +1012,7 @@ static int ccall_set_args(lua_State *L, CTState *cts, CType *ct,
   } else if (ctype_iscomplex(ctr->info) || ctype_isstruct(ctr->info)) {
     /* Preallocate cdata object and anchor it after arguments. */
     CTSize sz = ctr->size;
-    GCcdata *cd = lj_cdata_new(cts, ctype_cid(info), sz);
+    GCcdata *cd = lj_cdata_new_l(L, cts, ctype_cid(info), sz);
     void *dp = cdataptr(cd);
     setcdataV(L, L->top++, cd);
     if (ctype_isstruct(ctr->info)) {
@@ -1117,7 +1117,7 @@ static int ccall_set_args(lua_State *L, CTState *cts, CType *ct,
       *(void **)dp = rp;
       dp = rp;
     }
-    lj_cconv_ct_tv(cts, d, (uint8_t *)dp, o, CCF_ARG(narg));
+    lj_cconv_ct_tv_l(L, cts, d, (uint8_t *)dp, o, CCF_ARG(narg));
     /* Extend passed integers to 32 bits at least. */
     if (ctype_isinteger_or_bool(d->info) && d->size < 4 &&
 	(!CCALL_PACK_STACKARG || !((uintptr_t)dp & 3))) {  /* Assumes LJ_LE. */

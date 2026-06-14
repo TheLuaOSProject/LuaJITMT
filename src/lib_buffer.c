@@ -94,8 +94,8 @@ LJLIB_CF(buffer_method_set)		LJLIB_REC(.)
 #if LJ_HASFFI
   if (tviscdata(L->base+1)) {
     CTState *cts = ctype_cts(L);
-    lj_cconv_ct_tv(cts, ctype_get(cts, CTID_P_CVOID), (uint8_t *)&p,
-		   L->base+1, CCF_ARG(2));
+    lj_cconv_ct_tv_l(L, cts, ctype_get(cts, CTID_P_CVOID), (uint8_t *)&p,
+		     L->base+1, CCF_ARG(2));
     len = (MSize)lj_lib_checkintrange(L, 3, 0, LJ_MAX_BUF);
   } else
 #endif
@@ -190,8 +190,8 @@ LJLIB_CF(buffer_method_putcdata)	LJLIB_REC(.)
   MSize len;
   if (tviscdata(L->base+1)) {
     CTState *cts = ctype_cts(L);
-    lj_cconv_ct_tv(cts, ctype_get(cts, CTID_P_CVOID), (uint8_t *)&p,
-		   L->base+1, CCF_ARG(2));
+    lj_cconv_ct_tv_l(L, cts, ctype_get(cts, CTID_P_CVOID), (uint8_t *)&p,
+		     L->base+1, CCF_ARG(2));
   } else {
     lj_err_argtype(L, 2, "cdata");
   }
