@@ -39,8 +39,8 @@ for needle in \
   'copyTVrel(L, dst, &k)' \
   'copyTVrel(L, slot, &val)' \
   'copyTVrel(L, tab_rehash_insert(L, newnode, newhmask, &newfreetop, &key),' \
-  'copyTVrel(L, o, L->top+1)' \
-  'copyTVrel(L, o, --L->top)' \
+  'copyTVrel(L, lj_tab_set(L, tab, L->top+1), L->top)' \
+  'copyTVrel(L, o, f)' \
   'lj_tab_storetv(L, dst, &val)' \
   'lj_tab_storenil(L, dst)' \
   'lj_tab_storetv(L, &array[i], &base[i])' \
@@ -51,8 +51,7 @@ for needle in \
   'copyTVrel(L, o, base+2)' \
   'lj_tab_storefunc(L, tv, fn)' \
   'lj_tab_storenil(L, tv)' \
-  'lj_tab_storetv(L, tv, &tmp)' \
-  'lj_tab_storeint(L, tv, (int32_t)ct->size)' \
+  'copyTVrel(L, tv, &tmp)' \
   'lj_tab_storenilraw(&array[i])' \
   'lj_tab_storenilraw(&n->val)' \
   'lj_tab_storenilraw(tv)' \

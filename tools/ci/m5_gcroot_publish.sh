@@ -31,7 +31,7 @@ fi
 for needle in \
   'GCobj *o = gcref_acq(g->gcroot[i])' \
   'gco2tab(gcref_acq(g->gcroot[GCROOT_FFI_FIN]))' \
-  'gco2tab(gcref_acq(G(L)->gcroot[GCROOT_FFI_FIN]))' \
+  'GCtab *t = gco2tab(gcref_acq(g->gcroot[GCROOT_FFI_FIN]));' \
   'gco2ud(gcref_acq(G(L)->gcroot[(id)]))'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc2.c" \

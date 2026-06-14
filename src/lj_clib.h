@@ -17,6 +17,7 @@
 typedef struct CLibrary {
   void *handle;		/* Opaque handle for dynamic library loader. */
   GCtab *cache;		/* Cache for resolved symbols. Anchored in ud->env. */
+  uint32_t cache_token;	/* 11.7 bridge: serialize cache miss installs. */
 } CLibrary;
 
 LJ_FUNC TValue *lj_clib_index(lua_State *L, CLibrary *cl, GCstr *name);

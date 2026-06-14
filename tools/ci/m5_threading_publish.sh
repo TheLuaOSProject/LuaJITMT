@@ -194,7 +194,7 @@ if ! awk '
   exit 1
 fi
 
-for fn in gc2_scan_thread_roots gc2_traverse_thread; do
+for fn in gc2_scan_thread_stack gc2_traverse_thread; do
   if ! awk -v fn="$fn" '
     $0 ~ "static void " fn { infn = 1; seen = 1; next }
     infn && /lj_tv_load_acq\(&tv, o\)/ { load = 1 }

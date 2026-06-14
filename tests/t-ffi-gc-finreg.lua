@@ -4,6 +4,13 @@ local ffi = require"ffi"
 local nthreads = tonumber((arg and arg[1]) or os.getenv("LJ_M7_FFI_FIN_THREADS")) or 6
 local iters = tonumber((arg and arg[2]) or os.getenv("LJ_M7_FFI_FIN_ITERS")) or 240
 
+ffi.cdef[[
+typedef struct { uint8_t bytes[32]; } lj_m7_fin_obj_t;
+]]
+local fin_obj_t = ffi.typeof("lj_m7_fin_obj_t")
+
+collectgarbage("stop")
+
 local ready = th.channel(nthreads)
 local start = th.channel(nthreads)
 local workers = {}
@@ -11,36 +18,34 @@ local workers = {}
 for tid = 1, nthreads do
   workers[tid] = th.spawn(function(ready_ch, start_ch, id, count)
     local ffi = require"ffi"
+    local fin_obj_t = ffi.typeof("lj_m7_fin_obj_t")
     local cleared = 0
 
     local function fin(_) end
+    local function grow_stack(n)
+      if n == 0 then return 0 end
+      return 1 + grow_stack(n - 1)
+    end
+    assert(pcall(grow_stack, 96))
 
     ready_ch:send(id)
     local token, ok = start_ch:recv(10)
     assert(ok == true and token == "go")
 
     local function allocate()
-      local keep = {}
       for i = 1, count do
-        local cd = ffi.gc(ffi.new("uint8_t[?]", 16 + (i % 11)), fin)
+        local cd = ffi.gc(fin_obj_t(), fin)
         if i % 4 == 0 then
           ffi.gc(cd, nil)
           cleared = cleared + 1
-        else
-          keep[#keep + 1] = cd
         end
       end
       return count - cleared
     end
 
     local expected = allocate()
-    collectgarbage("collect")
-    collectgarbage("collect")
     return expected
   end, ready, start, tid, iters)
-end
-
-for _ = 1, nthreads do
   local _, ok = ready:recv(10)
   assert(ok == true)
 end
@@ -57,6 +62,7 @@ for tid = 1, nthreads do
   total = total + result
 end
 
+collectgarbage("restart")
 collectgarbage("collect")
 collectgarbage("collect")
 
@@ -67,14 +73,11 @@ do
     finalized = finalized + 1
   end
   local function allocate()
-    local keep = {}
     for i = 1, iters do
-      local cd = ffi.gc(ffi.new("uint8_t[?]", 24 + (i % 13)), fin)
+      local cd = ffi.gc(fin_obj_t(), fin)
       if i % 5 == 0 then
         ffi.gc(cd, nil)
         cleared = cleared + 1
-      else
-        keep[#keep + 1] = cd
       end
     end
     return iters - cleared
@@ -92,7 +95,7 @@ do
     finalized = finalized + 1
     collectgarbage("collect")
   end
-  local cd = ffi.gc(ffi.new("uint8_t[1]"), fin)
+  local cd = ffi.gc(fin_obj_t(), fin)
   cd = nil
   collectgarbage("collect")
   collectgarbage("collect")

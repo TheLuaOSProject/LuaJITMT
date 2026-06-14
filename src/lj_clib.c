@@ -7,6 +7,7 @@
 
 #if LJ_HASFFI
 
+#include "lj_atomic.h"
 #include "lj_gc.h"
 #include "lj_err.h"
 #include "lj_tab.h"
@@ -310,6 +311,28 @@ static void *clib_getsym(CLibrary *cl, const char *name)
 
 /* -- C library indexing -------------------------------------------------- */
 
+static void clib_cache_lock(CLibrary *cl)
+{
+  for (;;) {
+    uint32_t expect = 0;
+    if (la_cas32(&cl->cache_token, &expect, 1, LA_ACQ_REL, LA_ACQ))
+      return;  /* 11.7 bridge: serialize legacy GCtab cache insertion. */
+#if defined(__linux__)
+    (void)la_futex_wait(&cl->cache_token, 1, 1000000);
+#else
+    la_cpu_pause();
+#endif
+  }
+}
+
+static void clib_cache_unlock(CLibrary *cl)
+{
+  la_store32_rel(&cl->cache_token, 0);  /* 11.7: publish cache fill. */
+#if defined(__linux__)
+  (void)la_futex_wake(&cl->cache_token, 1);
+#endif
+}
+
 #if LJ_TARGET_X86 && LJ_ABI_WIN
 /* Compute argument size for fastcall/stdcall functions. */
 static CTSize clib_func_argsize(CTState *cts, CType *ct)
@@ -344,11 +367,14 @@ static const char *clib_extsym(CTState *cts, CType *ct, GCstr *name)
 /* Index a C library by name. */
 TValue *lj_clib_index(lua_State *L, CLibrary *cl, GCstr *name)
 {
-  TValue *tv = lj_tab_setstr(L, cl->cache, name);
-  if (LJ_UNLIKELY(tvisnil(tv))) {
+  cTValue *ctv = lj_tab_getstr(cl->cache, name);
+  if (LJ_LIKELY(ctv && !lj_tv_isnil_acq(ctv)))
+    return (TValue *)ctv;
+  {
     CTState *cts = ctype_cts(L);
     CType *ct;
     CTypeID id = lj_ctype_getname(cts, &ct, name, CLNS_INDEX);
+    TValue tmp, *tv;
     if (!id)
       lj_err_callerv(L, LJ_ERR_FFI_NODECL, strdata(name));
     if (ctype_isconstval(ct->info)) {
@@ -356,11 +382,9 @@ TValue *lj_clib_index(lua_State *L, CLibrary *cl, GCstr *name)
       lj_assertCTS(ctype_isinteger(ctt->info) && ctt->size <= 4,
 		   "only 32 bit const supported");  /* NYI */
       if ((ctt->info & CTF_UNSIGNED) && (int32_t)ct->size < 0) {
-	TValue tmp;
 	setnumV(&tmp, (lua_Number)(uint32_t)ct->size);
-	lj_tab_storetv(L, tv, &tmp);
       } else {
-	lj_tab_storeint(L, tv, (int32_t)ct->size);
+	setintV(&tmp, (int32_t)ct->size);
       }
     } else {
       const char *sym = clib_extsym(cts, ct, name);
@@ -390,17 +414,19 @@ TValue *lj_clib_index(lua_State *L, CLibrary *cl, GCstr *name)
 #if LJ_TARGET_WINDOWS
       SetLastError(oldwerr);
 #endif
-      cd = lj_cdata_new(cts, id, CTSIZE_PTR);
+      cd = lj_cdata_new_l(L, cts, id, CTSIZE_PTR);
       *(void **)cdataptr(cd) = p;
-      {
-	TValue tmp;
-	setcdataV(L, &tmp, cd);
-	copyTVrel(L, tv, &tmp);
-      }
+      setcdataV(L, &tmp, cd);
+    }
+    clib_cache_lock(cl);
+    tv = lj_tab_setstr(L, cl->cache, name);
+    if (lj_tv_isnil_acq(tv)) {
+      copyTVrel(L, tv, &tmp);
       lj_gc_pubtab(L, cl->cache);
     }
+    clib_cache_unlock(cl);
+    return tv;
   }
-  return tv;
 }
 
 /* -- C library management ------------------------------------------------ */
@@ -412,6 +438,7 @@ static CLibrary *clib_new(lua_State *L, GCtab *mt)
   GCudata *ud = lj_udata_new(L, sizeof(CLibrary), t);
   CLibrary *cl = (CLibrary *)uddata(ud);
   cl->cache = t;
+  cl->cache_token = 0;
   /* NOBARRIER: The GCudata is new (marked white). */
   setgcref(ud->metatable, obj2gco(mt));
   lj_udata_udtype_rel(ud, UDTYPE_FFI_CLIB);
