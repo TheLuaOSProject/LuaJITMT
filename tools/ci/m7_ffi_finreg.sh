@@ -231,14 +231,17 @@ for file in "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc2.c"; do
 done
 
 if ! awk '
-  /void lj_gc_finalize_cdata\(lua_State \*L\)/ { infn = 1; head = 0; disable = 0; scan = 0 }
-  infn && /cts->fin_head/ { head = 1 }
-  infn && /setgcrefnull\(t->metatable\).*FINREG generations disabled/ { disable = 1 }
-  infn && /gc_finalize_cdata_tab\(L, t\)/ { scan = 1 }
-  infn && /^}/ { found = head && disable && scan; infn = 0 }
-  END { exit found ? 0 : 1 }
+  /void lj_gc_finalize_cdata\(lua_State \*L\)/ { indrain = 1; drainhead = 0; scan = 0 }
+  indrain && /cts->fin_head/ { drainhead = 1 }
+  indrain && /gc_finalize_cdata_tab\(L, t\)/ { scan = 1 }
+  indrain && /^}/ { drain = drainhead && scan; indrain = 0 }
+  /void lj_gc_finalize_cdata_disable\(global_State \*g\)/ { indisable = 1; disablehead = 0; disable = 0 }
+  indisable && /cts->fin_head/ { disablehead = 1 }
+  indisable && /setgcrefnull\(t->metatable\).*FINREG generations disabled/ { disable = 1 }
+  indisable && /^}/ { disabled = disablehead && disable; indisable = 0 }
+  END { exit (drain && disabled) ? 0 : 1 }
 ' "$ROOT/src/lj_gc.c"; then
-  echo "guardrail: close-time cdata finalizer drain must disable and scan every FINREG generation" >&2
+  echo "guardrail: close-time cdata finalizer drain must scan and later disable every FINREG generation" >&2
   exit 1
 fi
 

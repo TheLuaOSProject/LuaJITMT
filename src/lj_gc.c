@@ -1365,6 +1365,43 @@ static void gc_finalize_cdata_tab(lua_State *L, GCtab *t)
   }
 }
 
+static int gc_cdata_fin_pending_tab(GCtab *t)
+{
+  Node *node = lj_tab_node_acq(t);
+  MSize hmask = lj_tab_node_hmask_acq(node);
+  ptrdiff_t i;
+  for (i = (ptrdiff_t)hmask; i >= 0; i--) {
+    TValue key, val;
+    lj_tv_load_acq(&val, &node[i].val);
+    while (lj_cdata_fin_isclaim(&val)) {
+      la_cpu_pause();
+      lj_tv_load_acq(&val, &node[i].val);
+    }
+    if (!tvisnil(&val)) {
+      lj_tv_load_acq(&key, &node[i].key);
+      if (tviscdata(&key) && (lj_obj_gcflags(gcV(&key)) & LJ_GC_CDATA_FIN))
+	return 1;
+    }
+  }
+  return 0;
+}
+
+int lj_gc_cdata_fin_pending(global_State *g)
+{
+  CTState *cts = ctype_ctsG(g);
+  FinRegGen *gen;
+  if (cts == NULL)
+    return 0;
+  for (gen = (FinRegGen *)la_loadptr_acq((void *const *)&cts->fin_head);
+       gen != NULL;
+       gen = (FinRegGen *)la_loadptr_acq((void *const *)&gen->next)) {
+    GCtab *t = (GCtab *)la_loadptr_acq((void *const *)&gen->tab);
+    if (t && gc_cdata_fin_pending_tab(t))
+      return 1;
+  }
+  return 0;
+}
+
 /* Finalize all cdata objects from finalizer table. */
 void lj_gc_finalize_cdata(lua_State *L)
 {
@@ -1378,14 +1415,22 @@ void lj_gc_finalize_cdata(lua_State *L)
        gen = (FinRegGen *)la_loadptr_acq((void *const *)&gen->next)) {
     GCtab *t = (GCtab *)la_loadptr_acq((void *const *)&gen->tab);
     if (t)
-      setgcrefnull(t->metatable);  /* Mark all FINREG generations disabled. */
+      gc_finalize_cdata_tab(L, t);
   }
+}
+
+void lj_gc_finalize_cdata_disable(global_State *g)
+{
+  CTState *cts = ctype_ctsG(g);
+  FinRegGen *gen;
+  if (cts == NULL)
+    return;
   for (gen = (FinRegGen *)la_loadptr_acq((void *const *)&cts->fin_head);
        gen != NULL;
        gen = (FinRegGen *)la_loadptr_acq((void *const *)&gen->next)) {
     GCtab *t = (GCtab *)la_loadptr_acq((void *const *)&gen->tab);
     if (t)
-      gc_finalize_cdata_tab(L, t);
+      setgcrefnull(t->metatable);  /* Mark all FINREG generations disabled. */
   }
 }
 #endif

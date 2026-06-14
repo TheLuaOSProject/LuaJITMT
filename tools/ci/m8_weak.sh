@@ -33,6 +33,11 @@ for needle in \
   'lj_gc2_finalizer_try_enter(global_State *g)' \
   'peer finalizer dispatch backs off' \
   'gcref_acq(g->gc.mmudata) == NULL' \
+  'lj_gc_cdata_fin_pending(global_State *g)' \
+  '!lj_gc_cdata_fin_pending(g)' \
+  'lj_gc_finalize_cdata_disable(global_State *g)' \
+  'm8_close_chain_cdata' \
+  'cdata_finalized == 4' \
   'lj_gc2_finalizer_pending(global_State *g)' \
   'lj_gc2_finalizer_sweep_pending(global_State *g)' \
   'assert(la_load32_acq(&g->gc2.finalizer_owner_tid) ==' \
@@ -64,7 +69,8 @@ do
   if ! rg -F -q "$needle" "$ROOT/src/lj_gc2.c" "$ROOT/src/lj_gc2.h" \
       "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc.h" "$ROOT/tests/t-gc2-phase.c" \
       "$ROOT/src/lj_meta.c" "$ROOT/tests/t-gc2-traverse.c" \
-      "$ROOT/tests/t-m8-finalizer-spawn-live.lua"; then
+      "$ROOT/tests/t-m8-finalizer-spawn-live.lua" "$ROOT/src/lj_state.c" \
+      "$ROOT/tests/t-m8-close-finalizers.c"; then
     echo "guardrail: missing M8 weak/finalizer marker: $needle" >&2
     exit 1
   fi
