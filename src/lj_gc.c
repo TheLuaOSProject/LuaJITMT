@@ -1151,30 +1151,28 @@ static int gc_finalizer_mt_release_exclusive(global_State *g)
   return 1;  /* 09 section 9.6: finalizer may spawn while GC is paused. */
 }
 
-static void gc_finalizer_mt_reclaim_exclusive(global_State *g)
+static int gc_finalizer_mt_reclaim_exclusive(global_State *g)
 {
   for (;;) {
-    uint32_t live, expect = 0;
-    while ((live = la_load32_acq(&g->mt_live)) != 0) {
-#if defined(__linux__)
-      (void)la_futex_wait(&g->mt_live, live, 1000000);
-#else
-      la_cpu_pause();
-#endif
-    }
+    uint32_t expect = 0;
+    if (la_load32_acq(&g->mt_live) != 0)
+      return 0;  /* 09 section 9.6: finalizer-spawn outlived callback. */
     if (la_cas32(&g->mt_gc_exclusive, &expect, 1, LA_ACQ_REL, LA_ACQ)) {
       if (la_load32_acq(&g->mt_live) == 0)
-	return;
+	return 1;
       la_store32_rel(&g->mt_gc_exclusive, 0);
 #if defined(__linux__)
       (void)la_futex_wake(&g->mt_gc_exclusive, INT_MAX);
 #endif
+      return 0;
     }
+    if (la_load32_acq(&g->mt_gc_exclusive) != 0)
+      return 0;
   }
 }
 
-static void gc_call_finalizer(global_State *g, lua_State *L,
-			      cTValue *mo, GCobj *o)
+static int gc_call_finalizer(global_State *g, lua_State *L,
+			     cTValue *mo, GCobj *o)
 {
   /* Save and restore lots of state around the __gc callback. */
   LJStateClaim claim;
@@ -1183,6 +1181,7 @@ static void gc_call_finalizer(global_State *g, lua_State *L,
   uint8_t oldh;
   GCSize oldt;
   int had_mt_exclusive;
+  int continue_gc = 1;
   int errcode;
   TValue *oldtop, *top;
   while (!lj_state_tryclaim(cbL, lj_thr_current_id(g), &claim))
@@ -1205,14 +1204,17 @@ static void gc_call_finalizer(global_State *g, lua_State *L,
   had_mt_exclusive = gc_finalizer_mt_release_exclusive(g);
   errcode = lj_vm_pcall(cbL, top, 1+0, -1);  /* Stack: |mo|o| -> | */
   if (had_mt_exclusive)
-    gc_finalizer_mt_reclaim_exclusive(g);
+    continue_gc = gc_finalizer_mt_reclaim_exclusive(g);
   if (oldL)
     lj_tg_setcur_L(g, oldL);
   else
     lj_tg_clearcur_L(g);
   hook_restore(g, oldh);
   if (LJ_HASPROFILE && (oldh & HOOK_PROFILE)) lj_dispatch_update(g, 0);
-  lj_gc_threshold_store(g, oldt);  /* Restore GC threshold. */
+  if (la_load32_acq(&g->mt_live) != 0)
+    lj_gc_mt_threshold_store(g, oldt);
+  else
+    lj_gc_threshold_store(g, oldt);  /* Restore GC threshold. */
   if (errcode) {
     TValue tmp;
     copyTV(cbL, &tmp, cbL->top-1);
@@ -1225,6 +1227,7 @@ static void gc_call_finalizer(global_State *g, lua_State *L,
     cbL->top = oldtop;
     lj_state_dropclaim(&claim);
   }
+  return continue_gc;
 }
 
 #if LJ_HASFFI
@@ -1234,15 +1237,15 @@ static void gc_finalize_cdata_clear(global_State *g, GCobj *o)
   lj_gc2_finreg_cdata_set(g, o, 0);
 }
 
-static void gc_finalize_cdata_call_owned(lua_State *L, GCobj *o,
-					 TValue *slot, cTValue *fin)
+static int gc_finalize_cdata_call_owned(lua_State *L, GCobj *o,
+					TValue *slot, cTValue *fin)
 {
   global_State *g = G(L);
   TValue tmp;
   copyTV(L, &tmp, fin);
   lj_cdata_fin_storenil(L, slot);  /* Clear claimed finalizer slot. */
   gc_finalize_cdata_clear(g, o);
-  gc_call_finalizer(g, L, &tmp, o);
+  return gc_call_finalizer(g, L, &tmp, o);
 }
 
 static int gc_finalize_cdata_slot_owned(lua_State *L, GCobj *o, cTValue *key)
@@ -1258,8 +1261,7 @@ static int gc_finalize_cdata_slot_owned(lua_State *L, GCobj *o, cTValue *key)
     copyTV(L, &tmp, &fin);
     lj_cdata_fin_storenil(L, slot);  /* Clear claimed finalizer slot. */
     gc_finalize_cdata_clear(g, o);
-    gc_call_finalizer(g, L, &tmp, o);
-    return 1;
+    return gc_call_finalizer(g, L, &tmp, o) ? 1 : -1;
   }
   gc_finalize_cdata_clear(g, o);
   return 0;
@@ -1296,9 +1298,9 @@ static int gc_finalize(lua_State *L)
     lj_gc_arena_markobj(g, o);
     /* Resolve finalizer. */
     setcdataV(L, &key, gco2cd(o));
-    (void)gc_finalize_cdata_slot_owned(L, o, &key);
+    int rc = gc_finalize_cdata_slot_owned(L, o, &key);
     lj_gc2_finalizer_leave(g);
-    return 1;
+    return rc < 0 ? -1 : 1;
   }
 #endif
   /* Add userdata back to the main userdata list and make it white. */
@@ -1309,8 +1311,10 @@ static int gc_finalize(lua_State *L)
   lj_gc2_finreg_udata_set(g, o, 0);
   /* Resolve the __gc metamethod. */
   mo = lj_meta_fasttv(g, tabref_acq(gco2ud(o)->metatable), MM_gc, &motv);
-  if (mo)
-    gc_call_finalizer(g, L, mo, o);
+  if (mo && !gc_call_finalizer(g, L, mo, o)) {
+    lj_gc2_finalizer_leave(g);
+    return -1;
+  }
   lj_gc2_finalizer_leave(g);
   return 1;
 }
@@ -1344,7 +1348,7 @@ static void gc_finalize_cdata_tab(lua_State *L, GCtab *t)
 	if (lj_obj_gcflags(o) & LJ_GC_CDATA_FIN) {
 	  makewhite(g, o);
 	  lj_gc2_finalizer_enter(g);
-	  gc_finalize_cdata_call_owned(L, o, &node[i].val, &val);
+	  (void)gc_finalize_cdata_call_owned(L, o, &node[i].val, &val);
 	  lj_gc2_finalizer_leave(g);
 	} else {
 	  lj_cdata_fin_storenil(L, &node[i].val);
@@ -1531,6 +1535,13 @@ static size_t gc_onestep(lua_State *L)
   }
 }
 
+static int gc_fullgc_deferred_by_finalizer(global_State *g)
+{
+  return g->gc.state == GCSfinalize &&
+	 la_load32_acq(&g->mt_live) != 0 &&
+	 la_load32_acq(&g->mt_gc_exclusive) == 0;
+}
+
 /* Perform a limited amount of incremental GC steps. */
 int LJ_FASTCALL lj_gc_step(lua_State *L)
 {
@@ -1617,7 +1628,13 @@ void lj_gc_fullgc(lua_State *L)
 	     "bad GC state");
   /* Now perform a full GC. */
   g->gc.state = GCSpause;
-  do { gc_onestep(L); } while (g->gc.state != GCSpause);
+  do {
+    gc_onestep(L);
+    if (gc_fullgc_deferred_by_finalizer(g)) {
+      g->vmstate = ostate;
+      return;
+    }
+  } while (g->gc.state != GCSpause);
   lj_gc_threshold_store(g, (g->gc.estimate/100) * g->gc.pause);
   g->vmstate = ostate;
 }

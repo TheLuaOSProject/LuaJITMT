@@ -473,10 +473,12 @@ and while its finalizer callback was running. GC2 now publishes
 traversable worker sweep progress and `lj_gc2_sweep_to_idle()` while finalizers
 are queued or running on another TG. The current finalizer owner may still finish
 a nested full-GC sweep so `collectgarbage('collect')` inside `__gc` cannot
-self-deadlock. User finalizer callbacks now run on the owner-claimed collector
-caller `lua_State` instead of the shared `vmthread(g)` stack, but full
-scheduler-owned string/root/finalizer sweep driving and FINREG/finqueue
-execution remain follow-up work.
+self-deadlock. If a finalizer-spawned worker outlives the callback, the current
+full-GC bridge returns to the mutator with GC still in finalization state
+instead of waiting forever for `mt_live == 0`. User finalizer callbacks now run
+on the owner-claimed collector caller `lua_State` instead of the shared
+`vmthread(g)` stack, but full scheduler-owned string/root/finalizer sweep
+driving and FINREG/finqueue execution remain follow-up work.
 
 ## 5.9 Deferred reclamation (grace periods) — the GC as universal SMR
 

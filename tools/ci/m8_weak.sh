@@ -33,6 +33,10 @@ for needle in \
   'finalizer_leaves0 + 1u' \
   'gc_finalizer_mt_release_exclusive(global_State *g)' \
   'gc_finalizer_mt_reclaim_exclusive(global_State *g)' \
+  'gc_fullgc_deferred_by_finalizer(global_State *g)' \
+  'finalizer-spawn outlived callback' \
+  'lj_gc_mt_threshold_store(g, oldt)' \
+  'finalizer-spawned worker can outlive callback' \
   'gc_finalize_cdata_call_owned(lua_State *L, GCobj *o,' \
   'gc_finalize_cdata_slot_owned(lua_State *L, GCobj *o, cTValue *key)' \
   'lj_ctype_fin_get(L, cts, key, &t)' \
@@ -48,7 +52,8 @@ for needle in \
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_gc2.c" "$ROOT/src/lj_gc2.h" \
       "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc.h" "$ROOT/tests/t-gc2-phase.c" \
-      "$ROOT/src/lj_meta.c" "$ROOT/tests/t-gc2-traverse.c"; then
+      "$ROOT/src/lj_meta.c" "$ROOT/tests/t-gc2-traverse.c" \
+      "$ROOT/tests/t-m8-finalizer-spawn-live.lua"; then
     echo "guardrail: missing M8 weak/finalizer marker: $needle" >&2
     exit 1
   fi
@@ -71,7 +76,7 @@ if awk '
 fi
 
 if awk '
-  /static void gc_finalize_cdata_call_owned\(lua_State \*L, GCobj \*o,/ {
+  /static int gc_finalize_cdata_call_owned\(lua_State \*L, GCobj \*o,/ {
     inhelper = 1
   }
   /static int gc_finalize_cdata_slot_owned\(lua_State \*L, GCobj \*o,/ {
@@ -107,6 +112,7 @@ make -C "$ROOT/src" -j"$JOBS" >/dev/null
 
 "$ROOT/src/luajit" -joff "$ROOT/tests/t-weak-modes.lua"
 "$ROOT/src/luajit" "$ROOT/tests/t-weak-modes.lua"
+timeout 10s "$ROOT/src/luajit" -joff "$ROOT/tests/t-m8-finalizer-spawn-live.lua"
 
 out="$TMP/lj_t-gc2-phase_m8"
 "$CC" $CFLAGS -I"$ROOT/src" "$ROOT/tests/t-gc2-phase.c" \
