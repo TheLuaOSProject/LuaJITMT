@@ -181,10 +181,11 @@ focused GC2 weak/barrier paranoia coverage. It also reruns the GC2 phase
 accounting test to assert finalizer owner tracking and enter/leave counter
 balance under the current bridge. The traversal gate now covers
 `lj_gc2_weak_complete()` skip/fallback accounting for the current
-GC2-cleared snapshot bridge and a post-clear weak-phase store hook for the
-original resurrection-race case, including VM rewrites of existing nil-valued
-weak-key hash slots. Paranoia builds now rescan the legacy weak list after a
-GC2 skip decision and fail if any weak slot remains clearable.
+GC2-cleared snapshot bridge, captured traversal-time weak modes across later
+`mt.__mode` mutation, and a post-clear weak-phase store hook for the original
+resurrection-race case, including VM rewrites of existing nil-valued weak-key
+hash slots. Paranoia builds now rescan the legacy weak list after a GC2 skip
+decision and fail if any weak slot remains clearable.
 Finalizer dispatch now has a GC2 owner try-claim around legacy
 `mmudata` draining, so peer TGs back off instead of racing the shared finalizer
 list while close-time drains still complete through the blocking wrapper. The

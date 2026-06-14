@@ -17,11 +17,14 @@ for needle in \
   'test_vm_weak_key_write_barrier' \
   'test_vm_weak_value_array_barrier' \
   'test_weak_clear_marks_string_slots' \
+  'test_weak_drain_uses_captured_mode' \
   'test_weak_post_clear_resurrection_write' \
   'test_vm_weak_post_clear_existing_key_write' \
   'lj_gc2_barrier_weak_key(L, t, k);' \
   'test_weak_complete_bridge' \
   'lj_gc2_weak_complete(g, gcref(g->gc.weak), 1)' \
+  'int weak = lj_obj_gcflags(obj2gco(t)) & LJ_GC_WEAK' \
+  'capture traversal-time weak mode' \
   'gc2_weak_paranoia_zero_diff(global_State *g, GCobj *legacy)' \
   'lj_gc2_finalizer_try_enter(global_State *g)' \
   'peer finalizer dispatch backs off' \

@@ -1313,8 +1313,7 @@ static int gc2_tab_is_ffi_fin(global_State *g, GCtab *t)
 static void gc2_weak_process_tab(global_State *g, GCtab *t, int clear,
 				 uint64_t *slots, uint64_t *clearable)
 {
-  GCtab *mt = tabref_acq(t->metatable);
-  int weak = gc2_tab_weak_mode(g, t, mt);
+  int weak = lj_obj_gcflags(obj2gco(t)) & LJ_GC_WEAK;
   if (!weak)
     return;
   if (weak & LJ_GC_WEAKVAL) {
@@ -2201,6 +2200,8 @@ static void gc2_note_weak_table(global_State *g, GCtab *t, int weak)
     return;
   if (gc2_tab_is_ffi_fin(g, t))
     return;  /* FFI finalizer registry is owned by FINREG, not weak clear. */
+  /* 05 section 5.8: capture traversal-time weak mode. */
+  lj_obj_masksetgcflags(obj2gco(t), LJ_GC_WEAK, weak);
   la_add64_rlx(&g->gc2.weak_tables_seen, 1);
   if (weak & LJ_GC_WEAKKEY)
     la_add64_rlx(&g->gc2.weak_tables_weakkey, 1);

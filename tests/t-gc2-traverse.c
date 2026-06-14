@@ -1179,6 +1179,35 @@ static void test_weak_clear_marks_string_slots(lua_State *L, global_State *g,
   lua_pop(L, 2);
 }
 
+static void test_weak_drain_uses_captured_mode(lua_State *L, global_State *g,
+					       TGState *tg)
+{
+  GCtab *weak, *key, *val;
+
+  lua_settop(L, 0);
+  make_weak_table(L, "v", &weak, &key, &val);
+
+  lj_gc2_legacy_mark_begin(g);
+  assert(lj_gc2_markobj(g, obj2gco(weak)) == 1);
+  flush_and_drain(g, tg);
+  assert(lj_gc2_weak_snapshot_count(g) == 1u);
+  assert(lj_gc2_ismarked(g, obj2gco(key)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(val)) == 0);
+
+  assert(lua_getmetatable(L, 1) == 1);
+  lua_pushliteral(L, "__mode");
+  lua_pushnil(L);
+  lua_settable(L, -3);
+  lua_pop(L, 1);
+
+  lj_gc2_legacy_weak_begin(g);
+  assert(lj_gc2_weak_drain(g, 1) == 1u);
+  assert(weak_entry_is_nil(L, weak, key));
+  assert(lj_gc2_weak_drain(g, 1) == 0);
+  lj_gc2_legacy_cycle_end(g);
+  lua_pop(L, 3);
+}
+
 static void test_weak_post_clear_resurrection_write(lua_State *L,
 						    global_State *g,
 						    TGState *tg)
@@ -1954,6 +1983,7 @@ int main(void)
   test_weak_snapshot_legacy_coverage(L, g, tg);
   test_weak_complete_bridge(L, g, tg);
   test_weak_clear_marks_string_slots(L, g, tg);
+  test_weak_drain_uses_captured_mode(L, g, tg);
   test_weak_post_clear_resurrection_write(L, g, tg);
   test_vm_weak_post_clear_existing_key_write(L, g, tg);
   test_weak_key_write_barrier(L, g, tg);
