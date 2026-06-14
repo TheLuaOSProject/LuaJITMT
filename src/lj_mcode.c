@@ -392,6 +392,38 @@ static LJ_AINLINE size_t mcode_default_size(jit_State *J)
   return (size_t)J->param[JIT_P_sizemcode] << 10;
 }
 
+static LJ_AINLINE MCode *mcode_area_rw(MCode *area)
+{
+  return ((MCLink *)area)->rw;
+}
+
+static LJ_AINLINE MCode *mcode_rx2rw(MCode *area, MCode *rx)
+{
+  return (MCode *)((char *)mcode_area_rw(area) + ((char *)rx - (char *)area));
+}
+
+static LJ_AINLINE MCode *mcode_rw2rx(MCode *area, MCode *rw)
+{
+  return (MCode *)((char *)area + ((char *)rw - (char *)mcode_area_rw(area)));
+}
+
+static LJ_AINLINE MCode *mcode_register_area(jit_State *J, MCode *area,
+					     size_t sz, MCode *bot)
+{
+  MCode *rwbot = mcode_rx2rw(area, bot);
+  MCode *rwnewbot = (MCode *)lj_err_register_mcode(area, sz, (uint8_t *)rwbot);
+  UNUSED(J);
+  return mcode_rw2rx(area, rwnewbot);
+}
+
+static void mcode_free_mapping(MCode *area, size_t sz)
+{
+  MCode *rw = mcode_area_rw(area);
+  if (rw && rw != area)
+    mcode_free(rw, sz);
+  mcode_free(area, sz);
+}
+
 /* Allocate a new MCode area. */
 static void mcode_allocarea(jit_State *J, size_t sz)
 {
@@ -403,8 +435,9 @@ static void mcode_allocarea(jit_State *J, size_t sz)
   J->mcbot = (MCode *)((char *)J->mcarea + sizeof(MCLink));
   ((MCLink *)J->mcarea)->next = oldarea;
   ((MCLink *)J->mcarea)->size = sz;
+  ((MCLink *)J->mcarea)->rw = J->mcarea;  /* 08.5: single-map write view. */
   J->szallmcarea += sz;
-  J->mcbot = (MCode *)lj_err_register_mcode(J->mcarea, sz, (uint8_t *)J->mcbot);
+  J->mcbot = mcode_register_area(J, J->mcarea, sz, J->mcbot);
 }
 
 #ifdef LJ_MCODE_FRESH_AREA
@@ -449,7 +482,7 @@ static void mcode_freearea_direct(global_State *g, MCode *area, size_t size)
 {
   jit_State *J = G2J(g);
   lj_err_deregister_mcode(area, size, (uint8_t *)area + sizeof(MCLink));
-  mcode_free(area, size);
+  mcode_free_mapping(area, size);
   J->szallmcarea -= size;
 }
 

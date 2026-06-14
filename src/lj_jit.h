@@ -174,6 +174,7 @@ typedef uint32_t MCode;
 typedef struct MCLink {
   MCode *next;		/* Next area. */
   size_t size;		/* Size of current area. */
+  MCode *rw;		/* Writable alias of this area. */
 } MCLink;
 
 typedef struct MCodeRetire {

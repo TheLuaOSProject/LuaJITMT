@@ -24,10 +24,18 @@ for needle in \
   'mcode_freearea_direct(global_State *g, MCode *area, size_t size)' \
   'lj_mcode_freeall(g);' \
   'J->szallmcarea + sz > maxmcode' \
+  'MCode *rw;		/* Writable alias of this area. */' \
+  'mcode_area_rw(MCode *area)' \
+  'mcode_rx2rw(MCode *area, MCode *rx)' \
+  'mcode_rw2rx(MCode *area, MCode *rw)' \
+  'mcode_register_area(jit_State *J, MCode *area' \
+  'mcode_free_mapping(MCode *area, size_t sz)' \
+  '((MCLink *)J->mcarea)->rw = J->mcarea;  /* 08.5: single-map write view. */' \
+  'mcode_free_mapping(area, size);' \
   'memfd dual-map W^X implementation'
 do
-  if ! rg -F -q "$needle" "$ROOT/src/lj_obj.h" "$ROOT/src/lj_mcode.h" \
-      "$ROOT/src/lj_mcode.c" "$ROOT/src/lj_state.c" \
+  if ! rg -F -q "$needle" "$ROOT/src/lj_obj.h" "$ROOT/src/lj_jit.h" \
+      "$ROOT/src/lj_mcode.h" "$ROOT/src/lj_mcode.c" "$ROOT/src/lj_state.c" \
       "$ROOT/src/lj_trace.c"; then
     echo "guardrail: missing mcode publication marker: $needle" >&2
     exit 1

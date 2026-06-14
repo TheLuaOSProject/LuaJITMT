@@ -131,7 +131,8 @@ secure builds currently keep generated mcode execute-stable with a fresh-area
 W^X bridge: once an area has committed trace bytes, the next reserve allocates
 a new unpublished area instead of flipping the old area writable. The planned
 dual-map mcode write view remains the original M6 target and still replaces
-this bridge.
+this bridge. `MCLink` now carries an `rw` write-view alias plus RX/RW translation
+helpers as a scaffold; the current bridge still sets `rw == rx`.
 Tests: stock with -jon; t-jit-01..06 (trace same loop from 2 threads;
 side-trace attach while parent runs on another thread; flush storm;
 exit-handler stress; recording-thread killed mid-trace (error in

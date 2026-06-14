@@ -232,6 +232,11 @@ handler — sized LJ_MAX_EXITSTUBGR-compatible; see lj_vmstruct notes.
   checks `maxmcode`, since the legacy limit check only ran on area exhaustion.
   Final JIT teardown frees active mcode immediately with `lj_mcode_freeall()`
   instead of allocating new SMR retirement records after `lj_gc_freeall()`.
+  The first dual-map scaffold is now in place: each `MCLink` carries a writable
+  alias pointer and area registration/freeing uses RX/RW translation helpers,
+  while the current single-map bridge initializes `rw == rx`. This preserves
+  the original memfd target and prepares the allocator/emitter split without
+  claiming that dual mapping is complete.
   This still does not implement the final memfd dual mapping; it replaces the
   temporary RWX bridge while preserving the original dual-map write-view
   target.
