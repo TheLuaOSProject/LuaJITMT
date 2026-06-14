@@ -54,12 +54,6 @@ static LJ_AINLINE GCcdata *lj_cdata_new_l(lua_State *L, CTState *cts,
   return cd;
 }
 
-/* Allocate fixed-size C data object. */
-static LJ_AINLINE GCcdata *lj_cdata_new(CTState *cts, CTypeID id, CTSize sz)
-{
-  return lj_cdata_new_l(cts->L, cts, id, sz);
-}
-
 /* Variant which works without a valid CTState. */
 static LJ_AINLINE GCcdata *lj_cdata_new_(lua_State *L, CTypeID id, CTSize sz)
 {
@@ -77,8 +71,6 @@ LJ_FUNC GCcdata *lj_cdata_newref_l(lua_State *L, CTState *cts,
 				   const void *pp, CTypeID id);
 LJ_FUNC GCcdata *lj_cdata_newv(lua_State *L, CTypeID id, CTSize sz,
 			       CTSize align);
-LJ_FUNC GCcdata *lj_cdata_newx(CTState *cts, CTypeID id, CTSize sz,
-			       CTInfo info);
 LJ_FUNC GCcdata *lj_cdata_newx_l(lua_State *L, CTState *cts, CTypeID id,
 				 CTSize sz, CTInfo info);
 

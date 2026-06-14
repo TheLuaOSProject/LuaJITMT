@@ -55,12 +55,6 @@ GCcdata *lj_cdata_newv(lua_State *L, CTypeID id, CTSize sz, CTSize align)
   return cd;
 }
 
-/* Allocate arbitrary C data object. */
-GCcdata *lj_cdata_newx(CTState *cts, CTypeID id, CTSize sz, CTInfo info)
-{
-  return lj_cdata_newx_l(cts->L, cts, id, sz, info);
-}
-
 GCcdata *lj_cdata_newx_l(lua_State *L, CTState *cts, CTypeID id, CTSize sz,
 			 CTInfo info)
 {
