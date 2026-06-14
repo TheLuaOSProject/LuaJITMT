@@ -53,8 +53,11 @@ the recorder/snapshot work was audited; the current audited boundary is that
 source owner CGET/CSET, source child-cell upvalues, loaded v4 CGET/CSET, and
 loaded v4 child-cell upvalues can trace on x64. Source and loaded v4
 self-captured local-function CNEW/FNEW/CSET loops can also trace through the
-first helper-backed M6 slice; FNEW shapes that need raw local promotion remain
-NYI until the broader closure-construction path lands.
+first helper-backed M6 slice. Mixed source/loaded FNEW traces with raw
+immutable captures now sync the traced stack value before helper construction,
+and mutable captures can trace once the owner slot is already promoted at trace
+entry. Conditional first-promotion loops remain follow-up until the broader
+closure-construction path lands.
 
 ## 10.4 Legacy v2 chunks (the compatibility deviation, DECIDED)
 

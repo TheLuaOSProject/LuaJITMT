@@ -93,6 +93,30 @@ GCupval *LJ_FASTCALL lj_func_newuvcell(lua_State *L)
   return func_newuvclosed(L);
 }
 
+static GCupval *func_snapshotuv(lua_State *L, const TValue *slot);
+
+void lj_func_syncslot_forjit(lua_State *L, TValue *base, int32_t slot,
+			     const TValue *tv)
+{
+  copyTV(L, base + slot, tv);
+}
+
+GCupval *lj_func_promoteuv_forjit(lua_State *L, TValue *base, int32_t slot,
+				  const TValue *tv)
+{
+  TValue *dst = base + slot;
+  GCupval *uv;
+  if (itype(dst) == LJ_TUPVAL) {
+    uv = gco2uv(gcV(dst));
+  } else {
+    if (tv == NULL)
+      tv = dst;
+    uv = func_snapshotuv(L, tv);
+    setgcV(L, dst, obj2gco(uv), LJ_TUPVAL);
+  }
+  return uv;
+}
+
 GCupval *lj_func_newuvcell_forjit(lua_State *L, TValue *base, int32_t slot)
 {
   GCupval *uv = lj_func_newuvcell(L);

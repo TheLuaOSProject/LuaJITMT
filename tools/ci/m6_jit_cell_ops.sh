@@ -38,11 +38,17 @@ need_marker 'emitir(IRT(IR_OBAR' "$ROOT/src/lj_record.c"
 need_marker 'case BC_CNEW:' "$ROOT/src/lj_record.c"
 need_marker 'case BC_FNEW:' "$ROOT/src/lj_record.c"
 need_marker 'rec_fnew_celluv(jit_State *J' "$ROOT/src/lj_record.c"
+need_marker 'rec_fnew_promoted_slots(jit_State *J' "$ROOT/src/lj_record.c"
+need_marker 'rec_celluv_promote_pending(J)' "$ROOT/src/lj_record.c"
 need_marker 'IRCALL_lj_func_newuvcell_forjit' "$ROOT/src/lj_record.c" "$ROOT/src/lj_ircall.h"
 need_marker 'IRCALL_lj_func_newL_gc_forjit' "$ROOT/src/lj_record.c" "$ROOT/src/lj_ircall.h"
+need_marker 'IRCALL_lj_func_syncslot_forjit' "$ROOT/src/lj_record.c" "$ROOT/src/lj_ircall.h"
 need_marker 'lj_func_newuvcell_forjit' "$ROOT/src/lj_func.c" "$ROOT/src/lj_func.h"
 need_marker 'lj_func_newL_gc_forjit' "$ROOT/src/lj_func.c" "$ROOT/src/lj_func.h"
+need_marker 'lj_func_syncslot_forjit' "$ROOT/src/lj_func.c" "$ROOT/src/lj_func.h"
 need_marker 'irt_isp32(IR(ir->op1)->t)' "$ROOT/src/lj_asm_x86.h"
+need_marker 'IR(ir->op1)->o == IR_SLOAD' "$ROOT/src/lj_asm_x86.h"
+need_marker 'emit_shifti(as, XOg_SHR|REX_64' "$ROOT/src/lj_asm_x86.h"
 need_marker 'irt_type(IR(ir->op1)->t) == IRT_PGC' "$ROOT/src/lj_asm_x86.h"
 need_marker 'cellops |= BCREAD_CELL_CNEW' "$ROOT/src/lj_bcread.c"
 
@@ -146,10 +152,10 @@ need_dump 'UREFC' 'loaded CNEW/FNEW UREFC'
 need_dump 'USTORE' 'loaded CNEW/FNEW USTORE'
 need_dump 'OBAR' 'loaded CNEW/FNEW OBAR'
 
-LUA_PATH=$LUA_PATH_GUARD "$ROOT/src/luajit" -e '
+LUA_PATH=$LUA_PATH_GUARD "$ROOT/src/luajit" -jdump=i -e '
 local util = require"jit.util"
 jit.flush()
-jit.opt.start("hotloop=1")
+jit.opt.start("hotloop=1", "hotexit=1")
 local function run(n)
   local x = 1
   local keep
@@ -162,7 +168,78 @@ end
 local f = run(30)
 local self, x = f()
 assert(self == f and x == 1)
-assert(not util.traceinfo(1), "mixed raw-local CNEW/FNEW should remain NYI")
+assert(util.traceinfo(1), "source mixed raw-local CNEW/FNEW should trace")
+' >"$DUMP"
+
+need_dump 'TRACE 1 stop -> loop' 'source mixed raw-local FNEW trace'
+need_dump 'TMPREF' 'source mixed raw-local TMPREF'
+need_dump 'CALLS.*lj_func_syncslot_forjit' 'source mixed raw-local sync helper'
+need_dump 'CALLA.*lj_func_newL_gc_forjit' 'source mixed raw-local FNEW helper'
+need_dump 'UREFC' 'source mixed raw-local UREFC'
+need_dump 'USTORE' 'source mixed raw-local USTORE'
+
+LUA_PATH=$LUA_PATH_GUARD "$ROOT/src/luajit" -jdump=i -e '
+local util = require"jit.util"
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local src = function(n)
+  local x = 1
+  local keep
+  for i = 1, n do
+    local function f() return f, x end
+    keep = f
+  end
+  return keep
+end
+local run = assert(loadstring(string.dump(src)))
+local f = run(30)
+local self, x = f()
+assert(self == f and x == 1)
+assert(util.traceinfo(1), "loaded mixed raw-local CNEW/FNEW should trace")
+' >"$DUMP"
+
+need_dump 'TRACE 1 stop -> loop' 'loaded mixed raw-local FNEW trace'
+need_dump 'CALLS.*lj_func_syncslot_forjit' 'loaded mixed raw-local sync helper'
+need_dump 'CALLA.*lj_func_newL_gc_forjit' 'loaded mixed raw-local FNEW helper'
+
+LUA_PATH=$LUA_PATH_GUARD "$ROOT/src/luajit" -e '
+local util = require"jit.util"
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local function run(n)
+  local x = 0
+  local keep
+  for i = 1, n do
+    x = x + 1
+    local function f() return f, x end
+    keep = f
+  end
+  return keep
+end
+local f = run(30)
+local self, x = f()
+assert(self == f and x == 30)
+assert(util.traceinfo(1), "pre-FNEW promoted local update should trace")
+'
+
+LUA_PATH=$LUA_PATH_GUARD "$ROOT/src/luajit" -e '
+local util = require"jit.util"
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local function run(n)
+  local x = 0
+  local keep
+  for i = 1, n do
+    local function f() return f, x end
+    x = x + 1
+    keep = f
+  end
+  return keep, x
+end
+local f, x = run(30)
+local self, fx = f()
+assert(self == f and fx == 30 and x == 30)
+assert(util.traceinfo(1), "post-FNEW promoted local update should trace")
 '
 
 echo "M6 JIT local-cell guard passed"

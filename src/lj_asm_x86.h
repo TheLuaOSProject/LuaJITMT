@@ -1497,6 +1497,25 @@ static void asm_uref(ASMState *as, IRIns *ir)
     GCupval *uv = (GCupval *)ir_kptr(IR(ir->op1));
     emit_loada(as, dest, ir->o == IR_UREFC ? (void *)&uv->tv :
 					    (void *)mref(uv->v, TValue));
+#if LJ_GC64
+  } else if (ir->o == IR_UREFC &&
+	     irt_isp32(IR(ir->op1)->t) && IR(ir->op1)->o == IR_SLOAD) {
+    IRIns *irs = IR(ir->op1);
+    int32_t ofs = 8*((int32_t)irs->op1-1-LJ_FR2) +
+		  (!LJ_FR2 && (irs->op2 & IRSLOAD_FRAME) ? 4 : 0);
+    Reg uv = ra_alloc1(as, ir->op1, rset_exclude(RSET_GPR, dest));
+    Reg base = ra_alloc1(as, REF_BASE,
+			 rset_exclude(rset_exclude(RSET_GPR, dest), uv));
+    emit_rmro(as, XO_LEA, dest|REX_GC64, uv, offsetof(GCupval, tv));
+    emit_shifti(as, XOg_SHR|REX_64, uv, 17);
+    if ((as->flags & JIT_F_BMI2)) {
+      emit_i8(as, 47);
+      emit_rmro(as, XV_RORX|VEX_64, uv, base, ofs);
+    } else {
+      emit_shifti(as, XOg_SHL|REX_64, uv, 17);
+      emit_rmro(as, XO_MOV, uv|REX_64, base, ofs);
+    }
+#endif
   } else if (ir->o == IR_UREFC &&
 	     (irt_isp32(IR(ir->op1)->t) ||
 	      irt_type(IR(ir->op1)->t) == IRT_PGC)) {

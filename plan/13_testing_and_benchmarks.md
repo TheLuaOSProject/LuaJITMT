@@ -67,8 +67,9 @@ Coroutine×thread matrix: t-co-01 resume/yield storms while markers scan
 the same coroutine through a channel.
 Current M6 scaffold gates include dispatch redispatch, recorder-token
 ownership, local-cell recorder IR shape including self-cell CNEW/FNEW creation,
-XPOLL barriers, XBAR/XPOLL aliasing, allocation accounting, GC-step bridging,
-mcode publication, and flush handshake coverage. These are milestone
+mixed raw-local FNEW sync-helper traces, promoted-cell update loops, XPOLL
+barriers, XBAR/XPOLL aliasing, allocation accounting, GC-step bridging, mcode
+publication, and flush handshake coverage. These are milestone
 guardrails, not the final M9 performance matrix.
 
 ## 13.5 GC-specific unit tests (C, tests/c/)

@@ -332,8 +332,10 @@ owner-cell path. Original plan/WIP wording kept all loaded v4 cell protos
 `PROTO_NOJIT`; the audited boundary is narrower. Self-captured
 local-function CNEW/FNEW/CSET source protos and loaded v4 protos containing
 the same self-cell shape can now trace through the first helper-backed M6
-slice. FNEW shapes that need raw local promotion remain NYI until the broader
-closure-construction path lands.
+slice. Mixed raw-local FNEW traces are covered for source/loaded immutable
+captures through stack-value synchronization and for mutable captures after the
+slot is promoted at trace entry. Conditional first-promotion loops remain
+follow-up until the broader closure-construction path lands.
 ### 6.4.4 Legacy chunks: see 10 §10.4 (capture-at-FNEW under MT).
 
 ## 6.5 String interning (lj_str.c rewrite)

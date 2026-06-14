@@ -1939,24 +1939,121 @@ static TRef rec_celluv_cnewref(jit_State *J, BCReg slotno)
   return 0;
 }
 
+/* Emit TMPREF for a value helper argument. */
+static TRef rec_tmpref(jit_State *J, TRef tr)
+{
+  if (!LJ_DUALNUM && tref_isinteger(tr))
+    tr = emitir(IRTN(IR_CONV), tr, IRCONV_NUM_INT);
+  return emitir(IRT(IR_TMPREF, IRT_PGC), tr, IRTMPREF_IN1);
+}
+
+/* Look ahead in the current loop body for FNEW promotion of a mutable slot. */
+static int rec_celluv_will_promote(jit_State *J, BCReg slotno)
+{
+  const BCIns *pc = J->pc;
+  const BCIns *end = proto_bc(J->pt) + J->pt->sizebc;
+  BCReg cnewslot = ~(BCReg)0;
+  for (; pc < end; pc++) {
+    BCIns ins = *pc;
+    BCOp op = bc_op(ins);
+    if (op == BC_CNEW) {
+      cnewslot = bc_a(ins);
+    } else if (op == BC_FNEW) {
+      GCproto *pt = gco2pt(proto_kgc(J->pt, ~(ptrdiff_t)bc_d(ins)));
+      MSize i, n = pt->sizeuv;
+      if (!proto_celluv(pt))
+	continue;
+      for (i = 0; i < n; i++) {
+	uint32_t v = proto_uv(pt)[i];
+	if ((v & PROTO_UV_LOCAL) && !(v & PROTO_UV_IMMUTABLE) &&
+	    (BCReg)(v & 0xff) == slotno && slotno != cnewslot)
+	  return 1;
+      }
+    } else if (op == BC_FORL || op == BC_ITERL || op == BC_LOOP ||
+	       op == BC_RET || op == BC_RET0 || op == BC_RET1 ||
+	       op == BC_UCLO) {
+      break;
+    }
+  }
+  return 0;
+}
+
+static TRef rec_celluv_promote_slot(jit_State *J, BCReg slotno, int fromstack)
+{
+  TRef slotref, tmp;
+  if (slotno >= curr_proto(J->L)->framesize)
+    lj_trace_err_info(J, LJ_TRERR_NYIBC);
+  if (slotno >= J->maxslot)
+    J->maxslot = (BCReg)(slotno + 1);
+  slotref = J->base[slotno];
+  if (!tref_istype(slotref, IRT_P32)) {
+    if (fromstack) {
+      tmp = lj_ir_kptr(J, NULL);
+    } else {
+      slotref = getslot(J, slotno);
+      tmp = rec_tmpref(J, slotref);
+    }
+    lj_ir_call(J, IRCALL_lj_func_promoteuv_forjit, REF_BASE,
+	       lj_ir_kint(J, (int32_t)slotno), tmp);
+    slotref = sloadt(J, (int32_t)slotno, IRT_P32, 0);
+  }
+  return slotref;
+}
+
+static void rec_celluv_promote_pending(jit_State *J)
+{
+  const BCIns *pc = J->pc;
+  const BCIns *end = proto_bc(J->pt) + J->pt->sizebc;
+  BCReg cnewslot = ~(BCReg)0;
+  for (; pc < end; pc++) {
+    BCIns ins = *pc;
+    BCOp op = bc_op(ins);
+    if (op == BC_CNEW) {
+      cnewslot = bc_a(ins);
+    } else if (op == BC_FNEW) {
+      GCproto *pt = gco2pt(proto_kgc(J->pt, ~(ptrdiff_t)bc_d(ins)));
+      MSize i, n = pt->sizeuv;
+      if (!proto_celluv(pt))
+	continue;
+      for (i = 0; i < n; i++) {
+	uint32_t v = proto_uv(pt)[i];
+	BCReg slot = (BCReg)(v & 0xff);
+	if ((v & PROTO_UV_LOCAL) && !(v & PROTO_UV_IMMUTABLE) &&
+	    slot != cnewslot)
+	  rec_celluv_promote_slot(J, slot, 1);
+      }
+    } else if (op == BC_FORL || op == BC_ITERL || op == BC_LOOP ||
+	       op == BC_RET || op == BC_RET0 || op == BC_RET1 ||
+	       op == BC_UCLO) {
+      break;
+    }
+  }
+}
+
 /* Record local cell load/store. */
 static TRef rec_celluv(jit_State *J, cTValue *slot, TRef slotref, TRef val,
 		       BCReg slotno)
 {
-  GCupval *uvp;
+  GCupval *uvp = NULL;
   IRRef uref;
-  uint32_t uh;
-  if (itype(slot) != LJ_TUPVAL) {
-    if (val == 0)
-      return slotref;
-    J->base[slotno] = val;
-    if (slotno >= J->maxslot) J->maxslot = (BCReg)(slotno+1);
-    return 0;
+  uint32_t uh = 0;
+  if (itype(slot) != LJ_TUPVAL && !tref_istype(slotref, IRT_P32)) {
+    if (rec_celluv_will_promote(J, slotno)) {
+      slotref = rec_celluv_promote_slot(J, slotno, 0);
+    } else {
+      if (val == 0)
+	return slotref;
+      J->base[slotno] = val;
+      if (slotno >= J->maxslot) J->maxslot = (BCReg)(slotno+1);
+      return 0;
+    }
   }
-  uvp = gco2uv(gcV(slot));
-  lj_assertJ(uvp->closed && uvval(uvp) == &uvp->tv,
-	     "bad local cell upvalue");
-  uh = hashrot(uvp->dhash, uvp->dhash + HASH_BIAS) & 0xff;
+  if (itype(slot) == LJ_TUPVAL) {
+    uvp = gco2uv(gcV(slot));
+    lj_assertJ(uvp->closed && uvval(uvp) == &uvp->tv,
+	       "bad local cell upvalue");
+    uh = hashrot(uvp->dhash, uvp->dhash + HASH_BIAS) & 0xff;
+  }
   {
     TRef cnewref = rec_celluv_cnewref(J, slotno);
     if (cnewref)
@@ -1964,7 +2061,7 @@ static TRef rec_celluv(jit_State *J, cTValue *slot, TRef slotref, TRef val,
   }
   uref = tref_ref(emitir(IRT(IR_UREFC, IRT_PGC), slotref, uh));
   if (val == 0) {
-    IRType t = itype2irt(uvval(uvp));
+    IRType t = uvp ? itype2irt(uvval(uvp)) : itype2irt(slot);
     TRef res = emitir(IRTG(IR_ULOAD, t), uref, 0);
     if (irtype_ispri(t)) res = TREF_PRI(t);
     return res;
@@ -1979,8 +2076,8 @@ static TRef rec_celluv(jit_State *J, cTValue *slot, TRef slotref, TRef val,
   }
 }
 
-/* Check whether traced FNEW can safely use the explicit-base helper.
-** Raw local promotion needs synchronized stack slots and remains NYI here.
+/* Check whether traced FNEW can safely use the explicit-base helper and sync
+** raw captured locals so runtime promotion snapshots current trace values.
 */
 static int rec_fnew_celluv(jit_State *J, GCproto *pt)
 {
@@ -1992,25 +2089,53 @@ static int rec_fnew_celluv(jit_State *J, GCproto *pt)
     uint32_t v = proto_uv(pt)[i];
     if ((v & PROTO_UV_LOCAL)) {
       BCReg slot = (BCReg)(v & 0xff);
-      if (slot >= J->maxslot || itype(&J->L->base[slot]) != LJ_TUPVAL ||
-	  !tref_istype(J->base[slot], IRT_P32))
+      cTValue *tv = &J->L->base[slot];
+      TRef tr;
+      if (slot >= J->maxslot)
 	return 0;
+      tr = getslot(J, slot);
+      if (tref_istype(tr, IRT_P32)) {
+	/* Already a cell from CNEW or an earlier promotion in this trace. */
+      } else if (itype(tv) == LJ_TUPVAL) {
+	return 0;
+      } else {
+	TRef tmp = rec_tmpref(J, tr);
+	lj_ir_call(J, IRCALL_lj_func_syncslot_forjit, REF_BASE,
+		   lj_ir_kint(J, (int32_t)slot), tmp);
+      }
       nlocal++;
     }
   }
   return nlocal != 0;
 }
 
+/* Reload slots that the FNEW helper promotes from raw values to cells. */
+static void rec_fnew_promoted_slots(jit_State *J, GCproto *pt)
+{
+  MSize i, n = pt->sizeuv;
+  for (i = 0; i < n; i++) {
+    uint32_t v = proto_uv(pt)[i];
+    if ((v & PROTO_UV_LOCAL) && !(v & PROTO_UV_IMMUTABLE)) {
+      BCReg slot = (BCReg)(v & 0xff);
+      if (slot < J->maxslot && itype(&J->L->base[slot]) != LJ_TUPVAL)
+	sloadt(J, (int32_t)slot, IRT_P32, 0);
+    }
+  }
+}
+
 /* Record local-cell function creation. */
 static TRef rec_fnew(jit_State *J, GCproto *pt)
 {
+  TRef fn;
   if (!rec_fnew_celluv(J, pt)) {
     setintV(&J->errinfo, BC_FNEW);
     lj_trace_err_info(J, LJ_TRERR_NYIBC);
   }
   J->needsnap = 1;
-  return lj_ir_call(J, IRCALL_lj_func_newL_gc_forjit, REF_BASE,
-		    lj_ir_kptr(J, pt), getcurrf(J));
+  fn = lj_ir_call(J, IRCALL_lj_func_newL_gc_forjit, REF_BASE,
+		  lj_ir_kptr(J, pt), getcurrf(J));
+  rec_fnew_promoted_slots(J, pt);
+  return fn;
 }
 
 /* -- Record calls to Lua functions --------------------------------------- */
@@ -3082,6 +3207,7 @@ void lj_record_setup(jit_State *J)
       rec_for_loop(J, J->pc-1, &J->scev, 1);
     else if (bc_op(J->cur.startins) == BC_ITERC)
       J->startpc = NULL;
+    rec_celluv_promote_pending(J);
     if (1 + J->pt->framesize >= LJ_MAX_JSLOTS)
       lj_trace_err(J, LJ_TRERR_STACKOV);
   }

@@ -416,11 +416,13 @@ scoped-flush target.
    local-function source protos and loaded v4 protos containing only the
    self-cell CNEW/FNEW/CSET shape no longer need that gate.
    Current M6 guard coverage requires IR dumps for owner numeric cells,
-   GC-valued CSET with `OBAR`, loaded v4 CGET/CSET traces, and source/loaded
-   self-cell CNEW/FNEW helper traces. The original broader local-cell target is
-   preserved: FNEW shapes that need raw local promotion remain the next
-   correctness slice before claiming fully general local-function creation
-   recording.
+   GC-valued CSET with `OBAR`, loaded v4 CGET/CSET traces, source/loaded
+   self-cell CNEW/FNEW helper traces, mixed raw-local sync-helper FNEW traces,
+   and mutable pre/post FNEW update loops once the slot is promoted at trace
+   entry. The original broader local-cell target is preserved: conditional
+   first-promotion loops, where the hot trace itself performs the first mutable
+   raw-slot promotion, remain the next correctness slice before claiming fully
+   general local-function creation recording.
 5. **Barrier IR**: extend the store lowerings: after computing the value
    ref, if `irt_isgcv(t)` emit `XBAR ref` (new IR, lowered to the §8.6
    guarded call/inline mark). Skip when value is a constant that the
