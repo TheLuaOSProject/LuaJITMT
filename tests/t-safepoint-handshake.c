@@ -78,6 +78,33 @@ static int tg_list_contains(TGState *tg, TGState *needle)
   return 0;
 }
 
+static void assert_attach_phase(lua_State *L, global_State *g, TGState *main_tg,
+				uint32_t phase, uint32_t mark_active,
+				uint32_t alloc_black)
+{
+  TGState phase_tg;
+  uint32_t oldphase = la_load32_acq(&g->gc2.phase);
+
+  lj_tg_init_thread(g, &phase_tg, NULL, 0);
+  phase_tg.tid = main_tg->tid + 2000u + phase;
+  phase_tg.alloc.owner_tid = phase_tg.tid;
+  phase_tg.cur_L = L;
+  la_store32_rel(&g->gc2.phase, phase);
+  lj_tg_attach(g, &phase_tg);
+  assert(g->gc2.n_threads == 2);
+  assert(tg_list_contains(g->gc2.tg_list, &phase_tg));
+  assert(phase_tg.mark_active == mark_active);
+  assert(phase_tg.alloc.alloc_black == alloc_black);
+  assert(phase_tg.hs_epoch_ack == g->gc2.hs_epoch);
+  lj_tg_detach(g, &phase_tg);
+  assert(g->gc2.n_threads == 1);
+  assert(phase_tg.tg_flags & TGF_DEAD);
+  assert(lj_tg_reclaim_dead(g) == 1u);
+  assert(!tg_list_contains(g->gc2.tg_list, &phase_tg));
+  la_store32_rel(&g->gc2.phase, oldphase);
+  lj_tg_fini_thread(g, &phase_tg);
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -124,6 +151,11 @@ int main(void)
   assert(tg->ssb_base == tg->ssb_node[0].slot);
   assert(tg->ssb_next == tg->ssb_base);
   assert(tg->ssb_end == tg->ssb_base + TG_GC2_SSB_SLOTS);
+
+  assert_attach_phase(L, g, tg, LJ_GC2_IDLE, 0, 0);
+  assert_attach_phase(L, g, tg, LJ_GC2_MARK, 1, 1);
+  assert_attach_phase(L, g, tg, LJ_GC2_WEAK, 1, 1);
+  assert_attach_phase(L, g, tg, LJ_GC2_SWEEP, 0, 1);
 
   epoch0 = g->gc2.hs_epoch;
   actions = LJ_GC2_HS_ENABLE_BARRIER|LJ_GC2_HS_ALLOC_BLACK;

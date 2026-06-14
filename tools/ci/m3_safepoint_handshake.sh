@@ -31,4 +31,18 @@ if rg -F -q 'Deterministic single-mutator scaffold' "$ROOT/src/lj_safepoint.c"; 
   exit 1
 fi
 
+for needle in \
+  'uint32_t phase = la_load32_acq(&g->gc2.phase)' \
+  'phase == LJ_GC2_MARK || phase == LJ_GC2_WEAK' \
+  'phase == LJ_GC2_SWEEP' \
+  'assert_attach_phase(L, g, tg, LJ_GC2_WEAK, 1, 1)' \
+  'assert_attach_phase(L, g, tg, LJ_GC2_SWEEP, 0, 1)'
+do
+  if ! rg -F -q "$needle" "$ROOT/src/lj_tg.c" \
+      "$ROOT/tests/t-safepoint-handshake.c"; then
+    echo "guardrail: missing TG attach phase marker: $needle" >&2
+    exit 1
+  fi
+done
+
 echo "M3 safepoint handshake tests passed"

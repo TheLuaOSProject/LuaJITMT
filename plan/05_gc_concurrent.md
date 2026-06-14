@@ -39,6 +39,11 @@ P_IDLE → P_MARK → P_WEAK → P_SWEEP → P_IDLE
   `TG.mark_active` (store barrier on/off) and `TG.alloc.alloc_black`
   (allocation color) — both are *per-thread mirrors written by the thread
   itself during handshake acks*, so hot paths never load shared phase state.
+  Attach catch-up now mirrors the current bridge phase explicitly: `P_MARK` and
+  `P_WEAK` adopt barrier-on/black allocation, `P_SWEEP` adopts barrier-off/black
+  allocation for the current black-through-cycle simplification, and `P_IDLE`
+  adopts barrier-off/white allocation. The previous attach bridge only treated
+  `P_MARK` as active.
 
 ## 5.3 State (struct GC2State, in global_State)
 
