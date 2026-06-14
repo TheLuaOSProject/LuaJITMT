@@ -31,6 +31,8 @@ for needle in \
   'finalizer_leaves0 + 1u' \
   'gc_finalizer_mt_release_exclusive(global_State *g)' \
   'gc_finalizer_mt_reclaim_exclusive(global_State *g)' \
+  'gc_finalize_cdata_call_owned(lua_State *L, GCobj *o,' \
+  'gc_finalize_cdata_slot_owned(lua_State *L, GCobj *o, TValue *slot)' \
   '09 section 9.6: finalizer may spawn while GC is paused.' \
   'lj_state_tryclaim(cbL, lj_thr_current_id(g), &claim)' \
   'lua_State *oldL' \
@@ -57,6 +59,35 @@ if awk '
   END { exit bad ? 0 : 1 }
 ' "$ROOT/src/lj_gc.c"; then
   echo "guardrail: gc_call_finalizer must not assign vmthread(g) as its callback stack" >&2
+  exit 1
+fi
+
+if awk '
+  /static void gc_finalize_cdata_call_owned\(lua_State \*L, GCobj \*o,/ {
+    inhelper = 1
+  }
+  inhelper && /^}/ {
+    inhelper = 0
+  }
+  /if \(o->gch.gct == ~LJ_TCDATA\)/ {
+    incdata = 1
+  }
+  incdata && /lj_gc2_finalizer_leave\(g\);/ {
+    incdata = 0
+  }
+  /void lj_gc_finalize_cdata\(lua_State \*L\)/ {
+    inclose = 1
+  }
+  inclose && /^}/ {
+    inclose = 0
+  }
+  !inhelper && (incdata || inclose) && /gc_call_finalizer\(g, L,/ {
+    bad = 1
+    print
+  }
+  END { exit bad ? 0 : 1 }
+' "$ROOT/src/lj_gc.c"; then
+  echo "guardrail: cdata finalizer dispatch must route through gc_finalize_cdata_call_owned" >&2
   exit 1
 fi
 

@@ -201,6 +201,7 @@ typedef struct CTState {
   GCtab *pinmt;		/* ffi.pin() handle metatable/root. */
   uint32_t parse_token;	/* 11.2 cparse mutation token. */
   uint32_t fin_token;	/* 11.4 FFI finalizer table mutation token. */
+  uint32_t fin_anchor_claims;  /* 11.4 active lock-free FINREG anchors. */
   uint32_t hash[CTHASH_SIZE];  /* Hash anchors. Low 16 bits hold CTypeID. */
 } CTState;
 
@@ -525,6 +526,8 @@ LJ_FUNC void lj_ctype_parse_lock(CTState *cts, lua_State *L);
 LJ_FUNC void lj_ctype_parse_unlock(CTState *cts);
 LJ_FUNC void lj_ctype_fin_lock(CTState *cts);
 LJ_FUNC void lj_ctype_fin_unlock(CTState *cts);
+LJ_FUNC int lj_ctype_fin_anchor_begin(CTState *cts);
+LJ_FUNC void lj_ctype_fin_anchor_end(CTState *cts);
 LJ_FUNC int lj_ctype_setmeta(CTState *cts, CTypeID id, GCtab *mt);
 LJ_FUNC void lj_ctype_cb_blacklist(CTState *cts, void *func);
 LJ_FUNC int lj_ctype_cb_isblacklisted(CTState *cts, void *func);

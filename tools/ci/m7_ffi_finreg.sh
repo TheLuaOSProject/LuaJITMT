@@ -12,6 +12,10 @@ for needle in \
   'la_futex_wait(&cts->fin_token, 1, 1000000)' \
   'lj_ctype_fin_unlock(CTState *cts)' \
   'lj_ctype_fin_lock(cts)' \
+  'uint32_t fin_anchor_claims' \
+  'lj_ctype_fin_anchor_begin(CTState *cts)' \
+  'lj_ctype_fin_anchor_begin(cts)' \
+  'la_futex_wait(&cts->fin_anchor_claims, claims, 1000000)' \
   'la_cas8(uint8_t *p,uint8_t *exp,uint8_t des,int mo_s,int mo_f)' \
   'lj_tv_cas(TValue *dst, TValue *expect,' \
   'lj_obj_addgcflags_atomic(GCobj *o, uint8_t flags)' \
@@ -19,7 +23,7 @@ for needle in \
   'LJ_CDATA_FINCLAIM_U64' \
   'lj_cdata_fin_claim_any(TValue *tv, TValue *old)' \
   'lj_cdata_fin_claim_func(TValue *tv, TValue *old)' \
-  'lj_cdata_fin_claim_func(tv, &tmp)' \
+  'lj_cdata_fin_claim_func(slot, &fin)' \
   'lj_cdata_fin_storenil(L, tv)' \
   'Missing clear is a no-op; avoid fin_token insert.' \
   'lj_tab_try_newkey_anchor(lua_State *L, GCtab *t, cTValue *key,' \
@@ -27,7 +31,7 @@ for needle in \
   'Collision/resize: structural insertion still uses fin_token.' \
   'while (ffi_fin && lj_cdata_fin_isclaim(&val))' \
   '#include "lj_cdata.h"' \
-  'lj_tab_get(L, t, &tmp)' \
+  'lj_tab_get(L, t, &key)' \
   'lj_cdata_setfin(L, cd, gcV(tv), itype(tv))' \
   'Finalizer registry mutation stays on the interpreter path until FINREG' \
   'lj_trace_err_info(J, LJ_TRERR_NYIFFU)' \
@@ -119,12 +123,23 @@ if awk '
 fi
 
 if ! awk '
-  /void lj_cdata_setfin\(lua_State \*L, GCcdata \*cd,/ { infn = 1; fast = 0 }
+  /void lj_cdata_setfin\(lua_State \*L, GCcdata \*cd,/ { infn = 1; begin = 0; fast = 0 }
+  infn && /lj_ctype_fin_anchor_begin\(cts\)/ { begin = 1 }
   infn && /lj_tab_try_newkey_anchor\(L, t, &key, &old, &tv\)/ { fast = 1 }
-  infn && /lj_ctype_fin_lock\(cts\)/ { found = fast; infn = 0 }
+  infn && /lj_ctype_fin_lock\(cts\)/ { found = begin && fast; infn = 0 }
   END { exit found ? 0 : 1 }
 ' "$ROOT/src/lj_cdata.c"; then
-  echo "guardrail: enabled missing-key registration must try lockless empty-anchor insert before fin_token fallback" >&2
+  echo "guardrail: enabled missing-key registration must bracket lockless empty-anchor insert before fin_token fallback" >&2
+  exit 1
+fi
+
+if ! awk '
+  /void lj_ctype_fin_lock\(CTState \*cts\)/ { infn = 1; waits = 0 }
+  infn && /fin_anchor_claims/ && /la_load32_acq/ { waits = 1 }
+  infn && /^}/ { found = waits; infn = 0 }
+  END { exit found ? 0 : 1 }
+' "$ROOT/src/lj_ctype.c"; then
+  echo "guardrail: fin_token structural fallback must wait for active FINREG anchor claims" >&2
   exit 1
 fi
 

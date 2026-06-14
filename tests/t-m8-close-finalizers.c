@@ -12,10 +12,14 @@
 static int cdata_finalized;
 static int udata_finalized;
 
+static int close_udata_finalizer(lua_State *L);
+static void push_close_udata(lua_State *L);
+
 static int close_cdata_finalizer(lua_State *L)
 {
-  (void)L;
   cdata_finalized++;
+  if (cdata_finalized == 1)
+    push_close_udata(L);
   return 0;
 }
 
@@ -54,13 +58,16 @@ int main(void)
   assert(luaL_dostring(L,
     "local ffi = require('ffi')\n"
     "ffi.cdef[[typedef struct { int x; } lj_m8_close_fin_t;]]\n"
-    "ffi.gc(ffi.new('lj_m8_close_fin_t'), m8_close_cdata_finalizer)\n") ==
+    "local keep = {}\n"
+    "for i = 1, 3 do\n"
+    "  keep[i] = ffi.gc(ffi.new('lj_m8_close_fin_t'), m8_close_cdata_finalizer)\n"
+    "end\n") ==
 	 LUA_OK);
   push_close_udata(L);
 
   lua_close(L);
-  assert(cdata_finalized == 1);
-  assert(udata_finalized == 2);
+  assert(cdata_finalized == 3);
+  assert(udata_finalized == 3);
   printf("t-m8-close-finalizers OK: lua_close drains cdata and chained udata finalizers\n");
   return 0;
 }

@@ -92,7 +92,9 @@ that fallback. Enabled missing-key insertion first tries a lock-free
 empty-anchor path: CAS the target anchor value from nil to the FINREG claim
 sentinel, publish the cdata key, then publish the finalizer value. Legacy GC
 and GC2 traversal wait out that claim sentinel for the hidden FFI finalizer
-table.
+table. Active empty-anchor claims are counted separately, and the remaining
+structural fallback waits for that count to drain after taking `fin_token`;
+new empty-anchor claims decline while the token is held.
 Collision-chain insertion and table growth still use the `fin_token`
 structural fallback because `lj_tab_newkey()` is not yet a multi-writer-safe
 table insertion path: the current inserter still owns `freetop`, collision
@@ -103,7 +105,9 @@ claim-sentinel/probing semantics that all lookups understand, or the original
 the token with an unlocked call to the legacy table inserter. Recorded
 `ffi.gc()`/ctype-`__gc` finalizer registration is currently NYI for the same
 reason: JIT-enabled code falls back to the interpreter until FINREG insertion
-is fully lock-free.
+is fully lock-free. Normal `mmudata` cdata finalization and close-time cdata
+drain now share the same owned slot-clear/callback helper, but membership and
+ordering remain legacy-owned until the planned FINREG/finqueue dispatch lands.
 
 ## 11.5 Calls & callbacks (native state discipline)
 - **FFI call out** (interpreter `->vm_ffi_call`, JIT IR_CALLXS): wrap with
