@@ -314,8 +314,9 @@ handler — sized LJ_MAX_EXITSTUBGR-compatible; see lj_vmstruct notes.
   `GC2State.alloc_since_trigger > hard_bytes`; the helper gates legacy
   `lj_gc_step()` calls on the legacy threshold so GC2 hard-limit assists do
   not add extra legacy GC work. `GC2State.jit_hard_checks` and
-  `tests/t-gc2-jit-hard-check.c` guard this staged path with a real x86-64
-  allocation trace while preserving the original removal target above.
+  `tests/t-gc2-jit-hard-check.c` guard this staged path with real x86-64
+  `TNEW`, `CNEW`, and `SNEW` allocation traces while preserving the original
+  removal target above.
 - **Barriers on trace** (§8.8.5 details): stores to heap (HSTORE/ASTORE/
   USTORE/FSTORE-with-gc-value/XSTORE-to-gcobj? XSTORE is cdata: exempt)
   emit the phase-gated mark sequence. The TGMARK load may be CSE'd *within

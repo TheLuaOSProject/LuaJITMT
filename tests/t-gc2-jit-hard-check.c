@@ -23,12 +23,41 @@ static void run_lua(lua_State *L, const char *src)
   }
 }
 
+static void run_hard_alloc_trace(lua_State *L, global_State *g,
+				 const char *name, const char *src)
+{
+  uint64_t jit_checks0, assist_runs0;
+  uint8_t legacy_state0;
+
+  lj_gc_threshold_store(g, LJ_MAX_MEM);
+  la_store64_rel(&g->gc2.hard_bytes, 1);
+  la_store32_rel(&g->gc2.assist_shift, 0);
+  la_store64_rel(&g->gc2.alloc_since_trigger, 2);
+  legacy_state0 = g->gc.state;
+  jit_checks0 = la_load64_acq(&g->gc2.jit_hard_checks);
+  assist_runs0 = la_load64_acq(&g->gc2.assist_runs);
+
+  run_lua(L, src);
+
+  if (la_load64_acq(&g->gc2.jit_hard_checks) <= jit_checks0) {
+    fprintf(stderr, "%s did not enter the x64 GC2 hard check\n", name);
+    assert(0);
+  }
+  if (la_load64_acq(&g->gc2.assist_runs) <= assist_runs0) {
+    fprintf(stderr, "%s did not run the GC2 hard assist\n", name);
+    assert(0);
+  }
+  if (g->gc.state != legacy_state0) {
+    fprintf(stderr, "%s moved legacy GC state %u -> %u\n",
+	    name, (unsigned)legacy_state0, (unsigned)g->gc.state);
+    assert(0);
+  }
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
   global_State *g;
-  uint64_t jit_checks0, assist_runs0;
-  uint8_t legacy_state0;
   GCtab *parent;
 
   assert(L != NULL);
@@ -50,28 +79,34 @@ int main(void)
   lj_gc2_legacy_mark_begin(g);
   assert(lj_gc2_markobj(g, obj2gco(parent)) == 1);
 
-  lj_gc_threshold_store(g, LJ_MAX_MEM);
-  la_store64_rel(&g->gc2.hard_bytes, 1);
-  la_store32_rel(&g->gc2.assist_shift, 0);
-  la_store64_rel(&g->gc2.alloc_since_trigger, 2);
-  legacy_state0 = g->gc.state;
-  jit_checks0 = la_load64_acq(&g->gc2.jit_hard_checks);
-  assist_runs0 = la_load64_acq(&g->gc2.assist_runs);
-
-  run_lua(L,
+  run_hard_alloc_trace(L, g, "TNEW",
     "jit.flush()\n"
     "jit.opt.start('hotloop=1','hotexit=1','-sink')\n"
     "local x\n"
     "for i=1,200 do x = {} end\n"
     "assert(type(x) == 'table')\n");
 
-  assert(la_load64_acq(&g->gc2.jit_hard_checks) > jit_checks0);
-  assert(la_load64_acq(&g->gc2.assist_runs) > assist_runs0);
-  assert(g->gc.state == legacy_state0);
+  run_hard_alloc_trace(L, g, "CNEW",
+    "jit.flush()\n"
+    "local ffi = require('ffi')\n"
+    "ffi.cdef('typedef struct { int x; } lj_gc2_hard_cnew_t;')\n"
+    "local ct = ffi.typeof('lj_gc2_hard_cnew_t')\n"
+    "jit.opt.start('hotloop=1','hotexit=1','-sink')\n"
+    "local x\n"
+    "for i=1,200 do x = ct(i) end\n"
+    "assert(x.x == 200)\n");
+
+  run_hard_alloc_trace(L, g, "SNEW",
+    "jit.flush()\n"
+    "jit.opt.start('hotloop=1','hotexit=1','-sink')\n"
+    "local s = 'abcdef'\n"
+    "local x\n"
+    "for i=1,200 do x = string.sub(s, 1, 3) end\n"
+    "assert(x == 'abc')\n");
 
   lj_gc_threshold_store(g, g->gc.total + 4u * LJ_GC2_ACCT_FLUSH);
   lj_gc2_legacy_cycle_end(g);
   lua_close(L);
-  puts("t-gc2-jit-hard-check OK: x64 trace GC checks enter GC2 hard assist");
+  puts("t-gc2-jit-hard-check OK: TNEW/CNEW/SNEW x64 GC checks enter GC2 hard assist");
   return 0;
 }

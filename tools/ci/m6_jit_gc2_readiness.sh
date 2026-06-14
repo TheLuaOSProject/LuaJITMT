@@ -3,7 +3,9 @@
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
-DUMP=${TMPDIR:-/tmp}/lj_t-jit-gc2-readiness.dump
+TNEW_DUMP=${TMPDIR:-/tmp}/lj_t-jit-gc2-readiness-tnew.dump
+CNEW_DUMP=${TMPDIR:-/tmp}/lj_t-jit-gc2-readiness-cnew.dump
+SNEW_DUMP=${TMPDIR:-/tmp}/lj_t-jit-gc2-readiness-snew.dump
 CC=${CC:-cc}
 CFLAGS=${CFLAGS:-"-std=gnu99 -O2 -Wall -Wextra -Werror -mcx16"}
 OUT=${TMPDIR:-/tmp}/lj_t-gc2-jit-hard-check
@@ -56,12 +58,38 @@ timeout 20s "$OUT"
 LUA_PATH="$ROOT/src/?.lua;$ROOT/src/jit/?.lua;;" \
   timeout 20s "$ROOT/src/luajit" -jdump=ir -e \
   'jit.opt.start("hotloop=1","hotexit=1"); local x; for i=1,100 do x={} end; assert(type(x)=="table")' \
-  >"$DUMP"
+  >"$TNEW_DUMP"
 
 for needle in 'TNEW' 'XPOLL' 'GCSTEP'
 do
-  if ! rg -q "$needle" "$DUMP"; then
-    echo "guardrail: allocation trace readiness dump missing IR marker: $needle" >&2
+  if ! rg -q "$needle" "$TNEW_DUMP"; then
+    echo "guardrail: TNEW trace readiness dump missing IR marker: $needle" >&2
+    exit 1
+  fi
+done
+
+LUA_PATH="$ROOT/src/?.lua;$ROOT/src/jit/?.lua;;" \
+  timeout 20s "$ROOT/src/luajit" -jdump=ir -e \
+  'local ffi=require("ffi"); ffi.cdef("typedef struct { int x; } lj_gc2_dump_cnew_t;"); local ct=ffi.typeof("lj_gc2_dump_cnew_t"); jit.opt.start("hotloop=1","hotexit=1","-sink"); local x; for i=1,100 do x=ct(i) end; assert(x.x==100)' \
+  >"$CNEW_DUMP"
+
+for needle in 'CNEW' 'XPOLL'
+do
+  if ! rg -q "$needle" "$CNEW_DUMP"; then
+    echo "guardrail: CNEW trace readiness dump missing IR marker: $needle" >&2
+    exit 1
+  fi
+done
+
+LUA_PATH="$ROOT/src/?.lua;$ROOT/src/jit/?.lua;;" \
+  timeout 20s "$ROOT/src/luajit" -jdump=ir -e \
+  'jit.opt.start("hotloop=1","hotexit=1","-sink"); local s="abcdef"; local x; for i=1,100 do x=string.sub(s,1,3) end; assert(x=="abc")' \
+  >"$SNEW_DUMP"
+
+for needle in 'SNEW' 'XPOLL'
+do
+  if ! rg -q "$needle" "$SNEW_DUMP"; then
+    echo "guardrail: SNEW trace readiness dump missing IR marker: $needle" >&2
     exit 1
   fi
 done
