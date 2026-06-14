@@ -1319,6 +1319,13 @@ static int gc_finalize(lua_State *L)
   return 1;
 }
 
+static int gc_fullgc_deferred_by_finalizer(global_State *g)
+{
+  return g->gc.state == GCSfinalize &&
+	 la_load32_acq(&g->mt_live) != 0 &&
+	 la_load32_acq(&g->mt_gc_exclusive) == 0;
+}
+
 /* Finalize all userdata objects from mmudata list. */
 void lj_gc_finalize_udata(lua_State *L)
 {
@@ -1513,9 +1520,11 @@ static size_t gc_onestep(lua_State *L)
   case GCSfinalize:
     if (gcref(g->gc.mmudata) != NULL) {
       GCSize old = g->gc.total;
+      int finrc;
       if (lj_tg_jit_base(g))  /* Don't call finalizers on trace. */
 	return LJ_MAX_MEM;
-      if (!gc_finalize(L))  /* Finalize one userdata object. */
+      finrc = gc_finalize(L);  /* Finalize one userdata/cdata object. */
+      if (finrc <= 0)  /* Busy owner or deferred finalizer-spawn reclaim. */
 	return LJ_MAX_MEM;
       if (old >= g->gc.total && g->gc.estimate > old - g->gc.total)
 	g->gc.estimate -= old - g->gc.total;
@@ -1523,6 +1532,8 @@ static size_t gc_onestep(lua_State *L)
 	g->gc.estimate -= GCFINALIZECOST;
       return GCFINALIZECOST;
     }
+    if (gc_fullgc_deferred_by_finalizer(g))
+      return LJ_MAX_MEM;  /* Keep GCSfinalize open until spawned TG exits. */
     (void)gc_arena_finish_sweep_boundary(g, 1);
     if (gc2_legacy_sweep_close(g)) {
       g->gc.state = GCSpause;  /* End of GC cycle. */
@@ -1533,13 +1544,6 @@ static size_t gc_onestep(lua_State *L)
     lj_assertG(0, "bad GC state");
     return 0;
   }
-}
-
-static int gc_fullgc_deferred_by_finalizer(global_State *g)
-{
-  return g->gc.state == GCSfinalize &&
-	 la_load32_acq(&g->mt_live) != 0 &&
-	 la_load32_acq(&g->mt_gc_exclusive) == 0;
 }
 
 /* Perform a limited amount of incremental GC steps. */

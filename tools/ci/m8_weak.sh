@@ -34,8 +34,12 @@ for needle in \
   'gc_finalizer_mt_release_exclusive(global_State *g)' \
   'gc_finalizer_mt_reclaim_exclusive(global_State *g)' \
   'gc_fullgc_deferred_by_finalizer(global_State *g)' \
+  'finrc <= 0' \
+  'Keep GCSfinalize open until spawned TG exits.' \
   'finalizer-spawn outlived callback' \
   'lj_gc_mt_threshold_store(g, oldt)' \
+  'collectgarbage("step", 1000000)' \
+  'GC step completed while finalizer-spawned worker was live' \
   'finalizer-spawned worker can outlive callback' \
   'gc_finalize_cdata_call_owned(lua_State *L, GCobj *o,' \
   'gc_finalize_cdata_slot_owned(lua_State *L, GCobj *o, cTValue *key)' \

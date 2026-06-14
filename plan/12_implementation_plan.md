@@ -198,8 +198,10 @@ separation instead of leaving stale GC2 membership.
 The original "finalizer that spawns a thread" item now has bridge tests for
 spawn+join during explicit-GC finalization and for a worker that outlives the
 callback; the latter defers the full-GC loop back to the mutator instead of
-waiting forever on `mt_live`. The broader planned async finalizer dispatch path
-remains M8 work, not an M9 performance cleanup.
+waiting forever on `mt_live`, and explicit `collectgarbage("step", ...)` no
+longer reports cycle completion while that spawned worker is still live. The
+broader planned async finalizer dispatch path remains M8 work, not an M9
+performance cleanup.
 
 ## M9 — Performance closing (open-ended; budget ≈2000)
 Menu (in expected-value order; measure each): per-arena grey stacks +

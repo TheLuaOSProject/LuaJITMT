@@ -475,8 +475,10 @@ are queued or running on another TG. The current finalizer owner may still finis
 a nested full-GC sweep so `collectgarbage('collect')` inside `__gc` cannot
 self-deadlock. If a finalizer-spawned worker outlives the callback, the current
 full-GC bridge returns to the mutator with GC still in finalization state
-instead of waiting forever for `mt_live == 0`. User finalizer callbacks now run
-on the owner-claimed collector caller `lua_State` instead of the shared
+instead of waiting forever for `mt_live == 0`, and explicit
+`collectgarbage("step", ...)` keeps `GCSfinalize` open instead of reporting a
+completed cycle while that worker is still live. User finalizer callbacks now
+run on the owner-claimed collector caller `lua_State` instead of the shared
 `vmthread(g)` stack, but full scheduler-owned string/root/finalizer sweep
 driving and FINREG/finqueue execution remain follow-up work.
 
