@@ -19,6 +19,8 @@ for needle in \
   'lj_ccallback_enter(CTState *cts, void *cf,' \
   'lj_ccallback_leave(CTState *cts, TValue *o,' \
   'lj_ccallback_unwind(lua_State *L, TValue *cont)' \
+  'was_native = (uint8_t)(tg != NULL && tg->in_native != 0)' \
+  'actions = lj_native_leave(L)' \
   'callback_frame_push(L, cb,' \
   'frame->cont == cont' \
   'callback_frame_top(cb)->was_native = 0' \

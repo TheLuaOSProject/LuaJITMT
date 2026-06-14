@@ -814,6 +814,8 @@ lua_State * LJ_FASTCALL lj_ccallback_enter(CTState *cts, void *cf,
   lua_State *L = cb->L;
   global_State *g = cts->g;
   TGState *tg;
+  uint8_t was_native;
+  uint32_t actions = 0;
   if (L == NULL) {
     L = lj_tg_cur_L(g);
     if (L == NULL)
@@ -833,11 +835,12 @@ lua_State * LJ_FASTCALL lj_ccallback_enter(CTState *cts, void *cf,
   cframe_errfunc(cf) = -1;
   cframe_nres(cf) = 0;
   L->cframe = cf;
+  was_native = (uint8_t)(tg != NULL && tg->in_native != 0);
+  if (was_native)
+    actions = lj_native_leave(L);
   callback_conv_args(cts, L, cb);
-  callback_frame_push(L, cb, L->base-1,
-		      (uint8_t)(tg != NULL && tg->in_native != 0));
-  if (callback_frame_top(cb)->was_native) {
-    uint32_t actions = lj_native_leave(L);
+  callback_frame_push(L, cb, L->base-1, was_native);
+  if (was_native) {
     if (actions & LJ_GC2_HS_STOPREQ) {
       callback_frame_top(cb)->was_native = 0;
       lj_safepoint_checkstop(L, actions);

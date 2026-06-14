@@ -87,6 +87,18 @@ int main(void)
     "assert(not ok)\n");
 
   assert(test_tg->cb.depth == 0);
+  assert(test_tg->in_native == 0);
+
+  dostring(L,
+    "local ffi = require('ffi')\n"
+    "local inner = ffi.cast('lj_m7_call_cb_t', lj_m7_inner_call)\n"
+    "local dead = ffi.cast('lj_m7_nested_cb_t', function() end)\n"
+    "dead:free()\n"
+    "local ok = pcall(function() inner(dead) end)\n"
+    "assert(not ok)\n");
+
+  assert(test_tg->cb.depth == 0);
+  assert(test_tg->in_native == 0);
 
   dostring(L,
     "local ffi = require('ffi')\n"
@@ -98,6 +110,7 @@ int main(void)
     "assert(not ok)\n");
 
   assert(test_tg->cb.depth == 0);
+  assert(test_tg->in_native == 0);
 
   lua_close(L);
   printf("t-ffi-callback-nested-native OK: nested callbacks restore native state\n");
