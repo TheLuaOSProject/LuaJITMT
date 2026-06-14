@@ -11,11 +11,13 @@ for needle in \
   'la_load32_acq(&cts->hash[h])' \
   'ctype_hash_cas(CTState *cts, uint32_t h,' \
   'la_cas32(&cts->hash[h], &old, (uint32_t)newid' \
-  'ctype_hash_prepend(CTState *cts, uint32_t h, CType *ct, CTypeID id)' \
+  'ctype_hash_prepend(CTState *cts, uint32_t h, CType *src, CTypeID id)' \
   'CTypeID id = ctype_hash_load(cts, h)' \
-  'ct->next = (CTypeID1)head' \
+  'if (id == 0)' \
+  'if (dst != src)' \
+  '*dst = *src' \
+  'dst->next = (CTypeID1)head' \
   'while (!ctype_hash_cas(cts, h, &head, id))' \
-  'ctype_hash_prepend(cts, h, &cts->tab[id], id)' \
   'ctype_hash_prepend(cts, h, ct, id)' \
   'CTypeID id = ctype_hash_load(cts, ct_hashname(name))'
 do

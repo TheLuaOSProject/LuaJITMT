@@ -361,8 +361,17 @@ static void gc2_paranoia_check_rawroots(global_State *g)
   {
     CTState *cts = ctype_ctsG(g);
     if (cts) {
+      CTypeTabRetire *ctret;
       gc2_paranoia_checkmem(g, cts, "ctype state");
-      gc2_paranoia_checkmem(g, cts->tab, "ctype table");
+      gc2_paranoia_checkmem(g, ctype_tab_acq(cts), "ctype table");
+      for (ctret = (CTypeTabRetire *)la_loadptr_acq(
+	     (void *const *)&cts->retiredtab);
+	   ctret != NULL;
+	   ctret = (CTypeTabRetire *)la_loadptr_acq(
+	     (void *const *)&ctret->next)) {
+	gc2_paranoia_checkmem(g, ctret, "retired ctype table record");
+	gc2_paranoia_checkmem(g, ctret->tab, "retired ctype table");
+      }
       gc2_paranoia_checkmem(g, cts->cb.cbid, "callback ids");
       gc2_paranoia_checkmem(g, cts->cb.owner, "callback owners");
     }
@@ -534,8 +543,17 @@ static void gc_mark_gcroot(global_State *g)
   {
     CTState *cts = ctype_ctsG(g);
     if (cts) {
+      CTypeTabRetire *ctret;
       lj_gc_arena_markmem(g, cts);
-      lj_gc_arena_markmem(g, cts->tab);
+      lj_gc_arena_markmem(g, ctype_tab_acq(cts));
+      for (ctret = (CTypeTabRetire *)la_loadptr_acq(
+	     (void *const *)&cts->retiredtab);
+	   ctret != NULL;
+	   ctret = (CTypeTabRetire *)la_loadptr_acq(
+	     (void *const *)&ctret->next)) {
+	lj_gc_arena_markmem(g, ctret);
+	lj_gc_arena_markmem(g, ctret->tab);
+      }
       lj_gc_arena_markmem(g, cts->cb.cbid);
       lj_gc_arena_markmem(g, cts->cb.owner);
     }

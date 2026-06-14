@@ -762,6 +762,9 @@ uint32_t lj_gc2_reclaim_retired(global_State *g, uint64_t epoch)
     return 0;
   n += lj_str_reclaim_retired(g, epoch);  /* 05 section 5.9 SMR drain. */
   n += lj_tab_reclaim_retired(g, epoch);  /* 06 section 6.3.5 SMR drain. */
+#if LJ_HASFFI
+  n += lj_ctype_reclaim_retired(g, epoch);  /* 11.2 CTState table SMR drain. */
+#endif
   n += lj_mcode_reclaim_retired(g, epoch);  /* 08 section 8.7 SMR drain. */
   n += lj_trace_reclaim_retired(g, epoch);  /* 08 section 8.3/8.7 drain. */
   if (n) {
@@ -996,8 +999,16 @@ static void gc2_scan_global_roots(global_State *g)
   {
     CTState *cts = ctype_ctsG(g);
     if (cts) {
+      CTypeTabRetire *ret;
       lj_gc2_markmem(g, cts);
-      lj_gc2_markmem(g, cts->tab);
+      lj_gc2_markmem(g, ctype_tab_acq(cts));
+      for (ret = (CTypeTabRetire *)la_loadptr_acq(
+	     (void *const *)&cts->retiredtab);
+	   ret != NULL;
+	   ret = (CTypeTabRetire *)la_loadptr_acq((void *const *)&ret->next)) {
+	lj_gc2_markmem(g, ret);
+	lj_gc2_markmem(g, ret->tab);
+      }
       lj_gc2_markmem(g, cts->cb.cbid);
       lj_gc2_markmem(g, cts->cb.owner);
     }

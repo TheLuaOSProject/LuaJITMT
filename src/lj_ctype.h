@@ -8,6 +8,7 @@
 
 #include "lj_obj.h"
 #include "lj_gc.h"
+#include "lj_atomic.h"
 
 #if LJ_HASFFI
 
@@ -176,9 +177,17 @@ typedef LJ_ALIGN(8) struct CCallback {
   MSize topid;			/* Highest unused callback type table slot. */
 } CCallback;
 
+typedef struct CTypeTabRetire {
+  CType *tab;			/* Retired C type table. */
+  MSize sizetab;		/* Size of retired C type table. */
+  uint64_t retire_epoch;	/* Safepoint epoch when retired. */
+  struct CTypeTabRetire *next;	/* Retired C type tables awaiting SMR. */
+} CTypeTabRetire;
+
 /* C type state. */
 typedef struct CTState {
   CType *tab;		/* C type table. */
+  CTypeTabRetire *retiredtab;  /* Retired C type tables awaiting SMR. */
   CTypeID top;		/* Current top of C type table. */
   MSize sizetab;	/* Size of C type table. */
   global_State *g;	/* Global state. */
@@ -423,10 +432,16 @@ static LJ_AINLINE CTypeID ctype_check(CTState *cts, CTypeID id)
   return id;
 }
 
+/* Acquire current C type table. */
+static LJ_AINLINE CType *ctype_tab_acq(CTState *cts)
+{
+  return (CType *)la_loadptr_acq((void *const *)&cts->tab);
+}
+
 /* Get C type for C type ID. */
 static LJ_AINLINE CType *ctype_get(CTState *cts, CTypeID id)
 {
-  return &cts->tab[ctype_check(cts, id)];
+  return &ctype_tab_acq(cts)[ctype_check(cts, id)];
 }
 
 /* Get C type ID for a C type. */
@@ -517,6 +532,8 @@ LJ_FUNC cTValue *lj_ctype_metatv(CTState *cts, TValue *out,
 LJ_FUNC GCstr *lj_ctype_repr(lua_State *L, CTypeID id, GCstr *name);
 LJ_FUNC GCstr *lj_ctype_repr_int64(lua_State *L, uint64_t n, int isunsigned);
 LJ_FUNC GCstr *lj_ctype_repr_complex(lua_State *L, void *sp, CTSize size);
+LJ_FUNC uint32_t lj_ctype_reclaim_retired(global_State *g,
+					  uint64_t completed_epoch);
 LJ_FUNC CTState *lj_ctype_init(lua_State *L);
 LJ_FUNC void lj_ctype_initfin(lua_State *L);
 LJ_FUNC void lj_ctype_freestate(global_State *g);
