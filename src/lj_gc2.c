@@ -1980,6 +1980,14 @@ static int gc2_tab_weak_mode(global_State *g, GCtab *t, GCtab *mt)
   return weak;
 }
 
+static int gc2_tab_weak_barrier_mode(global_State *g, GCtab *t)
+{
+  int weak = lj_obj_gcflags(obj2gco(t)) & LJ_GC_WEAK;
+  if (weak)
+    return weak;  /* 05 section 5.8: use captured P_WEAK mode. */
+  return gc2_tab_weak_mode(g, t, tabref_acq(t->metatable));
+}
+
 void lj_gc2_barrier_tv(lua_State *L, cTValue *tv)
 {
   global_State *g;
@@ -2053,15 +2061,13 @@ void lj_gc2_barrier_tab(lua_State *L, GCtab *t)
 void lj_gc2_barrier_weak_key(lua_State *L, GCtab *t, cTValue *key)
 {
   global_State *g;
-  GCtab *mt;
   int weak;
   if (!L || !t || !key || !tvisgcv(key))
     return;
   g = G(L);
   if (la_load32_acq(&g->gc2.phase) != LJ_GC2_WEAK)
     return;
-  mt = tabref_acq(t->metatable);
-  weak = gc2_tab_weak_mode(g, t, mt);
+  weak = gc2_tab_weak_barrier_mode(g, t);
   /* 05 section 5.8 weak-table key write. */
   if (weak && lj_gc2_markobj(g, gcV(key)))
     la_add64_rlx(&g->gc2.weak_keys_marked, 1);
@@ -2071,14 +2077,12 @@ void lj_gc2_barrier_weak_write(lua_State *L, GCtab *t, cTValue *key,
 			       cTValue *val)
 {
   global_State *g;
-  GCtab *mt;
   if (!L || !t)
     return;
   g = G(L);
   if (la_load32_acq(&g->gc2.phase) != LJ_GC2_WEAK)
     return;
-  mt = tabref_acq(t->metatable);
-  if (gc2_tab_weak_mode(g, t, mt) == 0)
+  if (gc2_tab_weak_barrier_mode(g, t) == 0)
     return;
   if (key && tvisgcv(key) && lj_gc2_markobj(g, gcV(key)))
     la_add64_rlx(&g->gc2.weak_keys_marked, 1);

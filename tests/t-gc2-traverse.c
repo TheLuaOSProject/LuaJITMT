@@ -1231,6 +1231,12 @@ static void test_weak_post_clear_resurrection_write(lua_State *L,
   assert(lj_gc2_ismarked(g, obj2gco(late_key)) == 0);
   assert(lj_gc2_ismarked(g, obj2gco(late_val)) == 0);
 
+  assert(lua_getmetatable(L, 1) == 1);
+  lua_pushliteral(L, "__mode");
+  lua_pushnil(L);
+  lua_settable(L, -3);
+  lua_pop(L, 1);
+
   lj_gc2_legacy_weak_begin(g);
   assert(lj_gc2_weak_drain(g, 1) == 1u);
   assert(weak_entry_is_nil(L, weak, key));

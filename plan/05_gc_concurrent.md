@@ -414,7 +414,8 @@ the GC2 clear driver: strings are marked but are not themselves weak-cleared,
 while a collectable key/value on the other side can still clear the entry. The
 current-cycle weak mode is captured in table GC flags at GC2 discovery, so a
 later `mt.__mode` mutation cannot change how the already-snapshotted table is
-cleared in `P_WEAK`. The
+cleared in `P_WEAK`, and late-write barriers prefer the same captured mode
+before falling back to current metatable lookup for uncaptured weak tables. The
 FFI finalizer table is explicitly excluded from the weak snapshot because it is
 owned by the FINREG/finalizer path, not weak-table clearing. GC2 now mirrors
 cdata FINREG mutation telemetry from `ffi.gc(cd, fn)`, explicit

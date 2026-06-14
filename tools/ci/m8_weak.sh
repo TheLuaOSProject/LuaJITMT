@@ -13,6 +13,8 @@ for needle in \
   'g->gc.state == GCSatomic && iswhite(gcV(o))' \
   'lj_gc2_barrier_weak_key(lua_State *L, GCtab *t' \
   'lj_gc2_barrier_weak_write(lua_State *L, GCtab *t' \
+  'gc2_tab_weak_barrier_mode(global_State *g, GCtab *t)' \
+  'use captured P_WEAK mode' \
   'test_weak_key_write_barrier' \
   'test_vm_weak_key_write_barrier' \
   'test_vm_weak_value_hash_key_barrier' \
