@@ -55,7 +55,9 @@ static CTypeID ffi_checkctype(lua_State *L, CTState *cts, TValue *param)
     cp.p = strdata(s);
     cp.param = param;
     cp.mode = CPARSE_MODE_ABSTRACT|CPARSE_MODE_NOIMPLICIT;
+    lj_ctype_parse_lock(cts, L);
     errcode = lj_cparse(&cp);
+    lj_ctype_parse_unlock(cts);
     if (errcode) lj_err_throw(L, errcode);  /* Propagate errors. */
     return cp.val.id;
   } else {
@@ -493,7 +495,9 @@ LJLIB_CF(ffi_cdef)
   cp.p = strdata(s);
   cp.param = L->base+1;
   cp.mode = CPARSE_MODE_MULTI|CPARSE_MODE_DIRECT;
+  lj_ctype_parse_lock(cp.cts, L);
   errcode = lj_cparse(&cp);
+  lj_ctype_parse_unlock(cp.cts);
   if (errcode) lj_err_throw(L, errcode);  /* Propagate errors. */
   lj_gc_check(L);
   return 0;

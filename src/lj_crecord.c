@@ -76,16 +76,22 @@ static CTypeID argv2ctype(jit_State *J, TRef tr, cTValue *o)
     GCstr *s = strV(o);
     CPState cp;
     CTypeID oldtop;
+    CTypeID newtop;
+    int errcode;
     /* Specialize to the string containing the C type declaration. */
     emitir(IRTG(IR_EQ, IRT_STR), tr, lj_ir_kstr(J, s));
     cp.L = J->L;
     cp.cts = ctype_cts(J->L);
+    lj_ctype_parse_lock(cp.cts, J->L);
     oldtop = cp.cts->top;
     cp.srcname = strdata(s);
     cp.p = strdata(s);
     cp.param = NULL;
     cp.mode = CPARSE_MODE_ABSTRACT|CPARSE_MODE_NOIMPLICIT;
-    if (lj_cparse(&cp) || cp.cts->top > oldtop)  /* Avoid new struct defs. */
+    errcode = lj_cparse(&cp);
+    newtop = cp.cts->top;
+    lj_ctype_parse_unlock(cp.cts);
+    if (errcode || newtop > oldtop)  /* Avoid new struct defs. */
       lj_trace_err(J, LJ_TRERR_BADTYPE);
     return cp.val.id;
   } else {

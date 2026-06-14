@@ -7,6 +7,7 @@
 
 #if LJ_HASFFI
 
+#include "lj_atomic.h"
 #include "lj_gc.h"
 #include "lj_err.h"
 #include "lj_str.h"
@@ -151,23 +152,56 @@ CTKWDEF(CTKWNAMEDEF)
 #define ct_hashname(name) \
   (hashrot(u32ptr(name), u32ptr(name) + HASH_BIAS) & CTHASH_MASK)
 
+static lua_State *ctype_allocL(CTState *cts)
+{
+  lua_State *L = cts->parse_L ? cts->parse_L : cts->L;
+  lj_assertCTS(L, "uninitialized cts->L");
+  return L;
+}
+
+void lj_ctype_parse_lock(CTState *cts, lua_State *L)
+{
+  for (;;) {
+    uint32_t expect = 0;
+    if (la_cas32(&cts->parse_token, &expect, 1, LA_ACQ_REL, LA_ACQ)) {
+      cts->parse_L = L;
+      cts->L = L;
+      return;  /* 11.2: acquire the cparse CTState mutation token. */
+    }
+#if defined(__linux__)
+    (void)la_futex_wait(&cts->parse_token, 1, 1000000);  /* 11.2: cdef may park. */
+#else
+    la_cpu_pause();  /* 11.2: non-Linux fallback outside the target matrix. */
+#endif
+  }
+}
+
+void lj_ctype_parse_unlock(CTState *cts)
+{
+  cts->parse_L = NULL;
+  la_store32_rel(&cts->parse_token, 0);  /* 11.2: publish parser mutations. */
+#if defined(__linux__)
+  (void)la_futex_wake(&cts->parse_token, 1);  /* 11.2: wake next cparse waiter. */
+#endif
+}
+
 /* Create new type element. */
 CTypeID lj_ctype_new(CTState *cts, CType **ctp)
 {
   CTypeID id = cts->top;
+  lua_State *L = ctype_allocL(cts);
   CType *ct;
-  lj_assertCTS(cts->L, "uninitialized cts->L");
   if (LJ_UNLIKELY(id >= cts->sizetab)) {
-    if (id >= CTID_MAX) lj_err_msg(cts->L, LJ_ERR_TABOV);
+    if (id >= CTID_MAX) lj_err_msg(L, LJ_ERR_TABOV);
 #ifdef LUAJIT_CTYPE_CHECK_ANCHOR
-    ct = lj_mem_newvec(cts->L, id+1, CType);
+    ct = lj_mem_newvec(L, id+1, CType);
     memcpy(ct, cts->tab, id*sizeof(CType));
     memset(cts->tab, 0, id*sizeof(CType));
     lj_mem_freevec(cts->g, cts->tab, cts->sizetab, CType);
     cts->tab = ct;
     cts->sizetab = id+1;
 #else
-    lj_mem_growvec(cts->L, cts->tab, cts->sizetab, CTID_MAX, CType);
+    lj_mem_growvec(L, cts->tab, cts->sizetab, CTID_MAX, CType);
 #endif
   }
   cts->top = id+1;
@@ -185,7 +219,7 @@ CTypeID lj_ctype_intern(CTState *cts, CTInfo info, CTSize size)
 {
   uint32_t h = ct_hashtype(info, size);
   CTypeID id = cts->hash[h];
-  lj_assertCTS(cts->L, "uninitialized cts->L");
+  lua_State *L = ctype_allocL(cts);
   while (id) {
     CType *ct = ctype_get(cts, id);
     if (ct->info == info && ct->size == size)
@@ -197,16 +231,16 @@ CTypeID lj_ctype_intern(CTState *cts, CTInfo info, CTSize size)
 #ifdef LUAJIT_CTYPE_CHECK_ANCHOR
     CType *ct;
 #endif
-    if (id >= CTID_MAX) lj_err_msg(cts->L, LJ_ERR_TABOV);
+    if (id >= CTID_MAX) lj_err_msg(L, LJ_ERR_TABOV);
 #ifdef LUAJIT_CTYPE_CHECK_ANCHOR
-    ct = lj_mem_newvec(cts->L, id+1, CType);
+    ct = lj_mem_newvec(L, id+1, CType);
     memcpy(ct, cts->tab, id*sizeof(CType));
     memset(cts->tab, 0, id*sizeof(CType));
     lj_mem_freevec(cts->g, cts->tab, cts->sizetab, CType);
     cts->tab = ct;
     cts->sizetab = id+1;
 #else
-    lj_mem_growvec(cts->L, cts->tab, cts->sizetab, CTID_MAX, CType);
+    lj_mem_growvec(L, cts->tab, cts->sizetab, CTID_MAX, CType);
 #endif
   }
   cts->top = id+1;

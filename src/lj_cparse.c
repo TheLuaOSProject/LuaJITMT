@@ -157,7 +157,7 @@ LJ_NORET LJ_NOINLINE static void cp_err_token(CPState *cp, CPToken tok)
 
 LJ_NORET LJ_NOINLINE static void cp_err_badidx(CPState *cp, CType *ct)
 {
-  GCstr *s = lj_ctype_repr(cp->cts->L, ctype_typeid(cp->cts, ct), NULL);
+  GCstr *s = lj_ctype_repr(cp->L, ctype_typeid(cp->cts, ct), NULL);
   cp_errmsg(cp, 0, LJ_ERR_FFI_BADIDX, strdata(s));
 }
 
@@ -571,7 +571,7 @@ static void cp_expr_postfix(CPState *cp, CPValue *k)
       if (!ctype_isstruct(ct->info) || ct->size == CTSIZE_INVALID ||
 	  !(fct = lj_ctype_getfield(cp->cts, ct, cp->str, &ofs)) ||
 	  ctype_isbitfield(fct->info)) {
-	GCstr *s = lj_ctype_repr(cp->cts->L, ctype_typeid(cp->cts, ct), NULL);
+	GCstr *s = lj_ctype_repr(cp->L, ctype_typeid(cp->cts, ct), NULL);
 	cp_errmsg(cp, 0, LJ_ERR_FFI_BADMEMBER, strdata(s), strdata(cp->str));
       }
       ct = fct;
