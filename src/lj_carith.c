@@ -153,14 +153,16 @@ static int carith_ptr(lua_State *L, CTState *cts, CDArith *ca, MMS mm)
     }
     if (!((mm == MM_add || mm == MM_sub) && ctype_isnum(ca->ct[1]->info)))
       return 0;
-    lj_cconv_ct_ct_l(L, cts, ctype_get(cts, CTID_INT_PSZ), ca->ct[1],
+    lj_cconv_ct_ct_l(L, cts, ctype_get(cts, CTID_INT_PSZ), CTID_INT_PSZ,
+		     ca->ct[1], ca->id[1],
 		     (uint8_t *)&idx, ca->p[1], 0);
     if (mm == MM_sub) idx = (ptrdiff_t)(~(uintptr_t)idx+1u);
   } else if (mm == MM_add && ctype_isnum(ctp->info) &&
       (ctype_isptr(ca->ct[1]->info) || ctype_isrefarray(ca->ct[1]->info))) {
     /* Swap pointer and index. */
     ctp = ca->ct[1]; pp = ca->p[1];
-    lj_cconv_ct_ct_l(L, cts, ctype_get(cts, CTID_INT_PSZ), ca->ct[0],
+    lj_cconv_ct_ct_l(L, cts, ctype_get(cts, CTID_INT_PSZ), CTID_INT_PSZ,
+		     ca->ct[0], ca->id[0],
 		     (uint8_t *)&idx, ca->p[0], 0);
   } else {
     return 0;
@@ -190,9 +192,11 @@ static int carith_int64(lua_State *L, CTState *cts, CDArith *ca, MMS mm)
     CType *ct = ctype_get(cts, id);
     GCcdata *cd;
     uint64_t u0, u1, *up;
-    lj_cconv_ct_ct_l(L, cts, ct, ca->ct[0], (uint8_t *)&u0, ca->p[0], 0);
+    lj_cconv_ct_ct_l(L, cts, ct, id, ca->ct[0], ca->id[0],
+		     (uint8_t *)&u0, ca->p[0], 0);
     if (mm != MM_unm)
-      lj_cconv_ct_ct_l(L, cts, ct, ca->ct[1], (uint8_t *)&u1, ca->p[1], 0);
+      lj_cconv_ct_ct_l(L, cts, ct, id, ca->ct[1], ca->id[1],
+		       (uint8_t *)&u1, ca->p[1], 0);
     switch (mm) {
     case MM_eq:
       setboolV(L->top-1, (u0 == u1));
@@ -355,14 +359,18 @@ uint64_t lj_carith_check64(lua_State *L, int narg, CTypeID *id)
       sp = *(void **)sp;
       sid = ctype_cid(s->info);
     }
-    s = ctype_raw(cts, sid);
-    if (ctype_isenum(s->info)) s = ctype_child(cts, s);
+    sid = ctype_rawid(cts, sid);
+    s = ctype_get(cts, sid);
+    if (ctype_isenum(s->info)) {
+      sid = ctype_cid(s->info);
+      s = ctype_get(cts, sid);
+    }
     if ((s->info & (CTMASK_NUM|CTF_BOOL|CTF_FP|CTF_UNSIGNED)) ==
 	CTINFO(CT_NUM, CTF_UNSIGNED) && s->size == 8)
       *id = CTID_UINT64;  /* Use uint64_t, since it has the highest rank. */
     else if (!*id)
       *id = CTID_INT64;  /* Use int64_t, unless already set. */
-    lj_cconv_ct_ct_l(L, cts, ctype_get(cts, *id), s,
+    lj_cconv_ct_ct_l(L, cts, ctype_get(cts, *id), *id, s, sid,
 		     (uint8_t *)&x, sp, CCF_ARG(narg));
     return x;
   } else if (!(tvisstr(o) && lj_strscan_number(strV(o), o))) {

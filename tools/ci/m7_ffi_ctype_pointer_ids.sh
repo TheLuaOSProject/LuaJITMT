@@ -18,6 +18,9 @@ for needle in \
   'lj_cconv_multi_init(CTState *cts, CTypeID did' \
   'ctype_rawrefid(cts, cdataV(o)->ctypeid) == did' \
   'lj_cconv_ct_init_l(L, cts, ct, ctype_rawid(cts, id)' \
+  'lj_cconv_ct_ct_l(lua_State *L, CTState *cts, CType *d,' \
+  'CTypeID did, CType *s, CTypeID sid' \
+  'cconv_err_conv_l(L, cts, did, sid, s, flags)' \
   'lj_cconv_ct_tv_l(lua_State *L, CTState *cts, CType *d,' \
   'CTypeID did, uint8_t *dp' \
   'd = ctype_get(cts, did);  /* cts->tab may have been reallocated. */' \
@@ -62,6 +65,12 @@ if awk '
   END { exit bad ? 0 : 1 }
 ' "$ROOT/src/lj_cconv.c"; then
   echo "guardrail: TValue-to-C conversion must not derive destination IDs from CType *" >&2
+  exit 1
+fi
+
+if rg -n 'ctype_typeid\(cts' "$ROOT/src/lj_cconv.c" "$ROOT/src/lj_carith.c" \
+    "$ROOT/src/lj_cdata.c"; then
+  echo "guardrail: runtime conversion paths must not derive IDs from CType *" >&2
   exit 1
 fi
 

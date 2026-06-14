@@ -6,7 +6,8 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 JOBS=${JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)}
 
 for needle in \
-  'lj_cconv_ct_ct_l(lua_State *L, CTState *cts' \
+  'lj_cconv_ct_ct_l(lua_State *L, CTState *cts, CType *d,' \
+  'CTypeID did, CType *s, CTypeID sid' \
   'lj_cconv_ct_tv_l(lua_State *L, CTState *cts, CType *d,' \
   'CTypeID did, uint8_t *dp' \
   'lj_cconv_bf_tv_l(lua_State *L, CTState *cts' \

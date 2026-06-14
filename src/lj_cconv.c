@@ -18,16 +18,18 @@
 /* -- Conversion errors --------------------------------------------------- */
 
 /* Bad conversion. */
-LJ_NORET static void cconv_err_conv_l(lua_State *L, CTState *cts, CType *d,
-				      CType *s, CTInfo flags)
+LJ_NORET static void cconv_err_conv_l(lua_State *L, CTState *cts,
+				      CTypeID did, CTypeID sid, CType *s,
+				      CTInfo flags)
 {
-  const char *dst = strdata(lj_ctype_repr(L, ctype_typeid(cts, d), NULL));
+  const char *dst = strdata(lj_ctype_repr(L, did, NULL));
   const char *src;
+  UNUSED(cts);
   if ((flags & CCF_FROMTV))
     src = lj_obj_typename[1+(ctype_isnum(s->info) ? LUA_TNUMBER :
 			     ctype_isarray(s->info) ? LUA_TSTRING : LUA_TNIL)];
   else
-    src = strdata(lj_ctype_repr(L, ctype_typeid(cts, s), NULL));
+    src = strdata(lj_ctype_repr(L, sid, NULL));
   if (CCF_GETARG(flags))
     lj_err_argv(L, CCF_GETARG(flags), LJ_ERR_FFI_BADCONV, src, dst);
   else
@@ -40,6 +42,7 @@ LJ_NORET static void cconv_err_convtv_l(lua_State *L, CTState *cts,
 {
   const char *dst = strdata(lj_ctype_repr(L, did, NULL));
   const char *src = lj_typename(o);
+  UNUSED(cts);
   if (CCF_GETARG(flags))
     lj_err_argv(L, CCF_GETARG(flags), LJ_ERR_FFI_BADCONV, src, dst);
   else
@@ -51,6 +54,7 @@ LJ_NORET static void cconv_err_initov_l(lua_State *L, CTState *cts,
 					CTypeID did)
 {
   const char *dst = strdata(lj_ctype_repr(L, did, NULL));
+  UNUSED(cts);
   lj_err_callerv(L, LJ_ERR_FFI_INITOV, dst);
 }
 
@@ -117,8 +121,9 @@ int lj_cconv_compatptr(CTState *cts, CType *d, CType *s, CTInfo flags)
 ** Note: This is only used by the interpreter and not optimized at all.
 ** The JIT compiler will do a much better job specializing for each case.
 */
-void lj_cconv_ct_ct_l(lua_State *L, CTState *cts, CType *d, CType *s,
-		      uint8_t *dp, uint8_t *sp, CTInfo flags)
+void lj_cconv_ct_ct_l(lua_State *L, CTState *cts, CType *d, CTypeID did,
+		      CType *s, CTypeID sid, uint8_t *dp, uint8_t *sp,
+		      CTInfo flags)
 {
   CTSize dsize = d->size, ssize = s->size;
   CTInfo dinfo = d->info, sinfo = s->info;
@@ -214,7 +219,8 @@ void lj_cconv_ct_ct_l(lua_State *L, CTState *cts, CType *d, CType *s,
     break;
     }
   case CCX(I, C):
-    s = ctype_child(cts, s);
+    sid = ctype_cid(s->info);
+    s = ctype_get(cts, sid);
     sinfo = s->info;
     ssize = s->size;
     goto conv_I_F;  /* Just convert re. */
@@ -278,20 +284,23 @@ void lj_cconv_ct_ct_l(lua_State *L, CTState *cts, CType *d, CType *s,
     break;
     }
   case CCX(F, C):
-    s = ctype_child(cts, s);
+    sid = ctype_cid(s->info);
+    s = ctype_get(cts, sid);
     sinfo = s->info;
     ssize = s->size;
     goto conv_F_F;  /* Ignore im, and convert from re. */
 
   /* Destination is a complex number. */
   case CCX(C, I):
-    d = ctype_child(cts, d);
+    did = ctype_cid(d->info);
+    d = ctype_get(cts, did);
     dinfo = d->info;
     dsize = d->size;
     memset(dp + dsize, 0, dsize);  /* Clear im. */
     goto conv_F_I;  /* Convert to re. */
   case CCX(C, F):
-    d = ctype_child(cts, d);
+    did = ctype_cid(d->info);
+    d = ctype_get(cts, did);
     dinfo = d->info;
     dsize = d->size;
     memset(dp + dsize, 0, dsize);  /* Clear im. */
@@ -299,10 +308,13 @@ void lj_cconv_ct_ct_l(lua_State *L, CTState *cts, CType *d, CType *s,
 
   case CCX(C, C):
     if (dsize != ssize) {  /* Different types: convert re/im separately. */
-      CType *dc = ctype_child(cts, d);
-      CType *sc = ctype_child(cts, s);
-      lj_cconv_ct_ct_l(L, cts, dc, sc, dp, sp, flags);
-      lj_cconv_ct_ct_l(L, cts, dc, sc, dp + dc->size, sp + sc->size, flags);
+      CTypeID dcid = ctype_cid(d->info);
+      CTypeID scid = ctype_cid(s->info);
+      CType *dc = ctype_get(cts, dcid);
+      CType *sc = ctype_get(cts, scid);
+      lj_cconv_ct_ct_l(L, cts, dc, dcid, sc, scid, dp, sp, flags);
+      lj_cconv_ct_ct_l(L, cts, dc, dcid, sc, scid,
+		       dp + dc->size, sp + sc->size, flags);
       return;
     }
     goto copyval;  /* Otherwise this is easy. */
@@ -311,10 +323,11 @@ void lj_cconv_ct_ct_l(lua_State *L, CTState *cts, CType *d, CType *s,
   case CCX(V, I):
   case CCX(V, F):
   case CCX(V, C): {
-    CType *dc = ctype_child(cts, d);
+    CTypeID dcid = ctype_cid(d->info);
+    CType *dc = ctype_get(cts, dcid);
     CTSize esize;
     /* First convert the scalar to the first element. */
-    lj_cconv_ct_ct_l(L, cts, dc, s, dp, sp, flags);
+    lj_cconv_ct_ct_l(L, cts, dc, dcid, s, sid, dp, sp, flags);
     /* Then replicate it to the other elements (splat). */
     for (sp = dp, esize = dc->size; dsize > esize; dsize -= esize) {
       dp += esize;
@@ -369,7 +382,7 @@ copyval:  /* Copy value. */
 
   default:
   err_conv:
-    cconv_err_conv_l(L, cts, d, s, flags);
+    cconv_err_conv_l(L, cts, did, sid, s, flags);
   }
 }
 
@@ -385,14 +398,16 @@ int lj_cconv_tv_ct_l(lua_State *L, CTState *cts, CType *s, CTypeID sid,
       if (ctype_isinteger(sinfo) && s->size > 4) goto copyval;
       if (LJ_DUALNUM && ctype_isinteger(sinfo)) {
 	int32_t i;
-	lj_cconv_ct_ct_l(L, cts, ctype_get(cts, CTID_INT32), s,
+	lj_cconv_ct_ct_l(L, cts, ctype_get(cts, CTID_INT32), CTID_INT32,
+			 s, sid,
 			 (uint8_t *)&i, sp, 0);
 	if ((sinfo & CTF_UNSIGNED) && i < 0)
 	  setnumV(o, (lua_Number)(uint32_t)i);
 	else
 	  setintV(o, i);
       } else {
-	lj_cconv_ct_ct_l(L, cts, ctype_get(cts, CTID_DOUBLE), s,
+	lj_cconv_ct_ct_l(L, cts, ctype_get(cts, CTID_DOUBLE), CTID_DOUBLE,
+			 s, sid,
 			 (uint8_t *)&o->n, sp, 0);
 	/* Numbers are NOT canonicalized here! Beware of uninitialized data. */
 	lj_assertCTS(tvisnum(o), "non-canonical NaN passed");
@@ -591,7 +606,10 @@ void lj_cconv_ct_tv_l(lua_State *L, CTState *cts, CType *d,
 			      CTSIZE_PTR);
       d = ctype_get(cts, did);  /* cts->tab may have been reallocated. */
     } else {
-      if (ctype_isenum(s->info)) s = ctype_child(cts, s);
+      if (ctype_isenum(s->info)) {
+	sid = ctype_cid(s->info);
+	s = ctype_get(cts, sid);
+      }
       goto doconv;
     }
   } else if (tvisstr(o)) {
@@ -658,8 +676,11 @@ void lj_cconv_ct_tv_l(lua_State *L, CTState *cts, CType *d,
   }
   s = ctype_get(cts, sid);
 doconv:
-  if (ctype_isenum(d->info)) d = ctype_child(cts, d);
-  lj_cconv_ct_ct_l(L, cts, d, s, dp, sp, flags);
+  if (ctype_isenum(d->info)) {
+    did = ctype_cid(d->info);
+    d = ctype_get(cts, did);
+  }
+  lj_cconv_ct_ct_l(L, cts, d, did, s, sid, dp, sp, flags);
 }
 
 /* Convert TValue to bitfield. */

@@ -170,10 +170,15 @@ collect_attrib:
     }
   } else if (tviscdata(key)) {  /* Integer cdata key. */
     GCcdata *cdk = cdataV(key);
-    CType *ctk = ctype_raw(cts, cdk->ctypeid);
-    if (ctype_isenum(ctk->info)) ctk = ctype_child(cts, ctk);
+    CTypeID kid = ctype_rawid(cts, cdk->ctypeid);
+    CType *ctk = ctype_get(cts, kid);
+    if (ctype_isenum(ctk->info)) {
+      kid = ctype_cid(ctk->info);
+      ctk = ctype_get(cts, kid);
+    }
     if (ctype_isinteger(ctk->info)) {
-      lj_cconv_ct_ct_l(L, cts, ctype_get(cts, CTID_INT_PSZ), ctk,
+      lj_cconv_ct_ct_l(L, cts, ctype_get(cts, CTID_INT_PSZ), CTID_INT_PSZ,
+		       ctk, kid,
 		       (uint8_t *)&idx, cdataptr(cdk), 0);
       goto integer_key;
     }
