@@ -413,6 +413,11 @@ scoped-flush target.
    `PROTO_NOJIT`; after audit, only self-captured local-function CNEW/CSET
    source protos and loaded v4 protos containing `BC_CNEW` stay `PROTO_NOJIT`
    until CNEW snapshot/FNEW recording behavior is implemented.
+   Current M6 guard coverage requires IR dumps for owner numeric cells,
+   GC-valued CSET with `OBAR`, and loaded v4 CGET/CSET traces. The original
+   broader local-cell target is preserved: `BC_CNEW` allocation and the FNEW
+   creation trace path remain the next correctness slice before relaxing those
+   `PROTO_NOJIT` gates.
 5. **Barrier IR**: extend the store lowerings: after computing the value
    ref, if `irt_isgcv(t)` emit `XBAR ref` (new IR, lowered to the §8.6
    guarded call/inline mark). Skip when value is a constant that the
