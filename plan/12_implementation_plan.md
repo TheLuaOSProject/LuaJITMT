@@ -137,7 +137,8 @@ Gate: paranoia oracle extended to weak sets, zero-diff.
 Current implementation note: the original M8 target above remains intact.
 `tools/ci/m8_weak.sh` now covers deterministic weak-mode semantics,
 string weak-reference parity, weak-table cycles, current `ffi.gc()` ordering
-and clear/nested-GC behavior, and focused GC2 weak/barrier paranoia coverage.
+and clear/nested-GC behavior, close-time cdata/userdata finalizer drain, and
+focused GC2 weak/barrier paranoia coverage.
 The original "finalizer that spawns a thread" item now has a bridge test for
 spawn+join during explicit-GC finalization; the broader planned async finalizer
 dispatch path remains M8 work, not an M9 performance cleanup.

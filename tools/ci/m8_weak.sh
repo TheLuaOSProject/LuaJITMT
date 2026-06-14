@@ -41,6 +41,11 @@ out="$TMP/lj_t-gc2-traverse_m8"
   "$ROOT/src/libluajit.a" -lm -ldl -pthread -o "$out"
 "$out"
 
+out="$TMP/lj_t-m8-close-finalizers"
+"$CC" $CFLAGS -I"$ROOT/src" "$ROOT/tests/t-m8-close-finalizers.c" \
+  "$ROOT/src/libluajit.a" -lm -ldl -pthread -o "$out"
+"$out"
+
 make -C "$ROOT/src" clean >/dev/null
 make -C "$ROOT/src" XCFLAGS="-DLUA_USE_ASSERT -DLJ_GC2_PARANOIA=1" \
   -j"$JOBS" >/dev/null
@@ -51,6 +56,12 @@ LJ_M8_WEAK_RACE_ITERS=0 LJ_M8_FINALIZER_SPAWN=0 \
 out="$TMP/lj_t-gc2-traverse_m8_paranoia"
 "$CC" $CFLAGS -DLUA_USE_ASSERT -DLJ_GC2_PARANOIA=1 -I"$ROOT/src" \
   "$ROOT/tests/t-gc2-traverse.c" "$ROOT/src/libluajit.a" \
+  -lm -ldl -pthread -o "$out"
+"$out"
+
+out="$TMP/lj_t-m8-close-finalizers_paranoia"
+"$CC" $CFLAGS -DLUA_USE_ASSERT -DLJ_GC2_PARANOIA=1 -I"$ROOT/src" \
+  "$ROOT/tests/t-m8-close-finalizers.c" "$ROOT/src/libluajit.a" \
   -lm -ldl -pthread -o "$out"
 "$out"
 
