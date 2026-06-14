@@ -94,21 +94,22 @@ sentinel, publish the cdata key, then publish the finalizer value. Collision
 insertion in the current hash generation claims a free node, CAS-prepends it
 as a claim/nil-key placeholder, then publishes the key/finalizer. Legacy GC and
 GC2 traversal wait out that claim sentinel for the hidden FFI finalizer table.
-Active lock-free FINREG insert claims are counted separately, and the remaining
-structural fallback waits for that count to drain after taking `fin_token`;
-new lock-free insert claims decline while the token is held.
-Table growth/full-table resize still uses the `fin_token` structural fallback
-because `lj_tab_newkey()` is not yet a multi-writer-safe resize path: the
-current inserter still owns `freetop` and resize publication as a single
-writer. Removing this last bridge requires either FINREG-specific resize
-semantics that all lookups understand, or the original
-`NHdr`/KEYLOCK/freecount/CAS-prepend table protocol from §6.3. Do not replace
-the token with an unlocked call to the legacy table inserter. Recorded
-`ffi.gc()`/ctype-`__gc` finalizer registration is currently NYI for the same
-reason: JIT-enabled code falls back to the interpreter until FINREG insertion
-is fully lock-free. Normal `mmudata` cdata finalization and close-time cdata
-drain now share the same owned slot-clear/callback helper, but membership and
-ordering remain legacy-owned until the planned FINREG/finqueue dispatch lands.
+Active FINREG mutations are counted separately, covering anchor/chain inserts,
+existing-slot updates, and normal collector slot claims. The legacy
+`lj_tab_set()` full-table fallback has been removed: if the current generation
+is full, `lj_tab_newkey_finreg_grow()` waits for active FINREG claims, builds a
+new hash-only vector, copies resolved non-nil slots, inserts the new key with
+the FINREG claim sentinel, and retires the old vector through table SMR. The
+remaining `fin_token` is a rare single grow-publisher claim, not a wrapper
+around generic table mutation. The next bridge removal should replace that
+grow-publisher token with a true FINREG multi-generation registry, or the
+original `NHdr`/KEYLOCK/freecount/CAS-prepend table protocol from §6.3.
+Recorded `ffi.gc()`/ctype-`__gc` finalizer registration is still NYI until
+FINREG growth is fully lock-free: JIT-enabled code falls back to the
+interpreter. Normal `mmudata` cdata finalization now rechecks and claims the
+slot inside the FINREG active-claim window; close-time cdata drain remains
+exclusive. Membership and ordering remain legacy-owned until the planned
+FINREG/finqueue dispatch lands.
 
 ## 11.5 Calls & callbacks (native state discipline)
 - **FFI call out** (interpreter `->vm_ffi_call`, JIT IR_CALLXS): wrap with

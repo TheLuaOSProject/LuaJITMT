@@ -32,7 +32,8 @@ for needle in \
   'gc_finalizer_mt_release_exclusive(global_State *g)' \
   'gc_finalizer_mt_reclaim_exclusive(global_State *g)' \
   'gc_finalize_cdata_call_owned(lua_State *L, GCobj *o,' \
-  'gc_finalize_cdata_slot_owned(lua_State *L, GCobj *o, TValue *slot)' \
+  'gc_finalize_cdata_slot_owned(lua_State *L, GCobj *o, GCtab *t,' \
+  'lj_ctype_fin_claim_wait(cts)' \
   '09 section 9.6: finalizer may spawn while GC is paused.' \
   'lj_state_tryclaim(cbL, lj_thr_current_id(g), &claim)' \
   'lua_State *oldL' \
@@ -64,6 +65,9 @@ fi
 
 if awk '
   /static void gc_finalize_cdata_call_owned\(lua_State \*L, GCobj \*o,/ {
+    inhelper = 1
+  }
+  /static int gc_finalize_cdata_slot_owned\(lua_State \*L, GCobj \*o,/ {
     inhelper = 1
   }
   inhelper && /^}/ {

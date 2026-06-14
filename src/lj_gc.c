@@ -1235,14 +1235,26 @@ static void gc_finalize_cdata_call_owned(lua_State *L, GCobj *o,
   gc_call_finalizer(g, L, &tmp, o);
 }
 
-static int gc_finalize_cdata_slot_owned(lua_State *L, GCobj *o, TValue *slot)
+static int gc_finalize_cdata_slot_owned(lua_State *L, GCobj *o, GCtab *t,
+					cTValue *key)
 {
+  global_State *g = G(L);
+  CTState *cts = ctype_ctsG(g);
+  TValue *slot;
   TValue fin;
+  lj_ctype_fin_claim_wait(cts);
+  slot = (TValue *)lj_tab_get(L, t, key);
   if (slot != niltv(L) && lj_cdata_fin_claim_func(slot, &fin)) {
-    gc_finalize_cdata_call_owned(L, o, slot, &fin);
+    TValue tmp;
+    copyTV(L, &tmp, &fin);
+    lj_cdata_fin_storenil(L, slot);  /* Clear claimed finalizer slot. */
+    gc_finalize_cdata_clear(g, o);
+    lj_ctype_fin_claim_end(cts);
+    gc_call_finalizer(g, L, &tmp, o);
     return 1;
   }
-  gc_finalize_cdata_clear(G(L), o);
+  lj_ctype_fin_claim_end(cts);
+  gc_finalize_cdata_clear(g, o);
   return 0;
 }
 #endif
@@ -1270,7 +1282,7 @@ static int gc_finalize(lua_State *L)
 #if LJ_HASFFI
   if (o->gch.gct == ~LJ_TCDATA) {
     GCtab *t = gco2tab(gcref_acq(g->gcroot[GCROOT_FFI_FIN]));
-    TValue key, *tv;
+    TValue key;
     /* Add cdata back to the GC list and make it white. */
     lj_obj_setgcwr(o, g->gc.root);
     setgcref(g->gc.root, o);
@@ -1278,8 +1290,7 @@ static int gc_finalize(lua_State *L)
     lj_gc_arena_markobj(g, o);
     /* Resolve finalizer. */
     setcdataV(L, &key, gco2cd(o));
-    tv = (TValue *)lj_tab_get(L, t, &key);
-    (void)gc_finalize_cdata_slot_owned(L, o, tv);
+    (void)gc_finalize_cdata_slot_owned(L, o, t, &key);
     lj_gc2_finalizer_leave(g);
     return 1;
   }

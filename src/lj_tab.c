@@ -953,6 +953,66 @@ int lj_tab_try_newkey_chain(lua_State *L, GCtab *t, cTValue *key,
   }
 }
 
+static void tab_finreg_load_resolved(TValue *dst, TValue *src, cTValue *claim)
+{
+  for (;;) {
+    lj_tv_load_acq(dst, src);
+    if (!tab_val_isclaim(dst, claim))
+      return;
+    la_cpu_pause();
+  }
+}
+
+int lj_tab_newkey_finreg_grow(lua_State *L, GCtab *t, cTValue *key,
+			      cTValue *claim, TValue **slot)
+{
+  Node *oldnode = lj_tab_node_acq(t);
+  MSize oldhmask = lj_tab_node_hmask_acq(oldnode);
+  uint32_t i, count = 1;  /* Include the new key. */
+  MSize newhmask;
+  Node *newnode, *newfreetop;
+  TabNodeRetire *oldret;
+  uint32_t growcount;
+  if (oldhmask > 0) {
+    for (i = 0; i <= oldhmask; i++) {
+      Node *n = &oldnode[i];
+      TValue oldkey, oldval;
+      tab_finreg_load_resolved(&oldval, &n->val, claim);
+      if (!tvisnil(&oldval)) {
+	lj_tv_load_acq(&oldkey, &n->key);
+	if (lj_obj_equal(&oldkey, key))
+	  return -1;  /* Racing insert won before the grow claim. */
+	count++;
+      }
+    }
+  }
+  oldret = oldhmask > 0 ? tab_retire_reserve(L, oldnode, oldhmask) : NULL;
+  growcount = count << 1;
+  newnode = newhpart_alloc(L, hsize2hbits(growcount), &newhmask);
+  newfreetop = &newnode[newhmask+1];
+  if (oldhmask > 0) {
+    for (i = 0; i <= oldhmask; i++) {
+      Node *n = &oldnode[i];
+      TValue oldkey, oldval;
+      tab_finreg_load_resolved(&oldval, &n->val, claim);
+      if (!tvisnil(&oldval)) {
+	TValue *newslot;
+	lj_tv_load_acq(&oldkey, &n->key);
+	lj_assertL(!lj_obj_equal(&oldkey, key),
+		   "duplicate FINREG key during grow copy");
+	newslot = tab_rehash_insert(L, newnode, newhmask, &newfreetop, &oldkey);
+	copyTVrel(L, newslot, &oldval);
+      }
+    }
+  }
+  *slot = tab_rehash_insert(L, newnode, newhmask, &newfreetop, key);
+  copyTVrel(L, *slot, claim);
+  newhpart_publish(t, newnode, newhmask, newfreetop);
+  if (oldret)
+    tab_retire_arm(G(L), oldret);
+  return 1;  /* 11.4 FINREG grow insert without legacy lj_tab_set(). */
+}
+
 TValue *lj_tab_setinth(lua_State *L, GCtab *t, int32_t key)
 {
   TValue k;

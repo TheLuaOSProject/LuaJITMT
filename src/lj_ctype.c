@@ -190,14 +190,14 @@ void lj_ctype_fin_lock(CTState *cts)
     uint32_t expect = 0;
     if (la_cas32(&cts->fin_token, &expect, 1, LA_ACQ_REL, LA_ACQ)) {
       uint32_t claims;
-      while ((claims = la_load32_acq(&cts->fin_anchor_claims)) != 0) {
+      while ((claims = la_load32_acq(&cts->fin_claims)) != 0) {
 #if defined(__linux__)
-	(void)la_futex_wait(&cts->fin_anchor_claims, claims, 1000000);
+	(void)la_futex_wait(&cts->fin_claims, claims, 1000000);
 #else
 	la_cpu_pause();
 #endif
       }
-      return;  /* 11.4 bridge: serialize hidden finalizer table mutation. */
+      return;  /* 11.4: single publisher for hidden FINREG growth. */
     }
 #if defined(__linux__)
     (void)la_futex_wait(&cts->fin_token, 1, 1000000);
@@ -209,28 +209,39 @@ void lj_ctype_fin_lock(CTState *cts)
 
 void lj_ctype_fin_unlock(CTState *cts)
 {
-  la_store32_rel(&cts->fin_token, 0);  /* 11.4: publish finalizer table update. */
+  la_store32_rel(&cts->fin_token, 0);  /* 11.4: publish FINREG growth. */
 #if defined(__linux__)
   (void)la_futex_wake(&cts->fin_token, 1);
 #endif
 }
 
-int lj_ctype_fin_anchor_begin(CTState *cts)
+int lj_ctype_fin_claim_begin(CTState *cts)
 {
-  la_add32_rlx(&cts->fin_anchor_claims, 1);
+  la_add32_rlx(&cts->fin_claims, 1);
   if (la_load32_acq(&cts->fin_token) == 0)
-    return 1;  /* 11.4: no structural fallback owns the hidden FIN table. */
-  lj_ctype_fin_anchor_end(cts);
+    return 1;  /* 11.4: no FINREG grow owns the hidden table. */
+  lj_ctype_fin_claim_end(cts);
   return 0;
 }
 
-void lj_ctype_fin_anchor_end(CTState *cts)
+void lj_ctype_fin_claim_wait(CTState *cts)
 {
-  uint32_t old = la_sub32_acqrel(&cts->fin_anchor_claims, 1);
-  lj_assertCTS(old != 0, "unbalanced FFI finalizer anchor claim");
+  while (!lj_ctype_fin_claim_begin(cts)) {
+#if defined(__linux__)
+    (void)la_futex_wait(&cts->fin_token, 1, 1000000);
+#else
+    la_cpu_pause();
+#endif
+  }
+}
+
+void lj_ctype_fin_claim_end(CTState *cts)
+{
+  uint32_t old = la_sub32_acqrel(&cts->fin_claims, 1);
+  lj_assertCTS(old != 0, "unbalanced FFI finalizer claim");
 #if defined(__linux__)
   if (old == 1)
-    (void)la_futex_wake(&cts->fin_anchor_claims, 1);
+    (void)la_futex_wake(&cts->fin_claims, 1);
 #endif
 }
 
