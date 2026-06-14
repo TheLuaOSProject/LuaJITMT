@@ -48,7 +48,8 @@ GCtab *miscmap; CCallback cb; CTypeID1 hash[CTHASH_SIZE]; }`
   publish through `lj_ctype_addname_unique()`, which rechecks the name bucket
   before CAS-prepend and abandons duplicate-name losers. The parser body is
   still serialized by `parse_token`; this helper does not claim lock-free
-  struct layout/rollback publication.
+  struct layout/rollback publication. `ffi.typeinfo(id)` hides abandoned
+  `CTA_BAD` holes rather than exposing them as live type records.
 - `cts->L` field: delete; pass L explicitly (it's already threaded through
   most call paths; grep `cts->L` ≈ 15 sites, mechanical).
 - **cparse (ffi.cdef)** mutates parser state + tab: serialize whole cdef

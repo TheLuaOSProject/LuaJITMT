@@ -29,11 +29,15 @@ while true do
 	 "direct ctype reader observed failed cdef rollback state")
   assert(ffi.typeinfo(ctid).size == nil,
 	 "ffi.typeinfo observed failed cdef rollback state")
+  assert(not pcall(ffi.new, ct, { x = 123 }),
+	 "ffi.new observed failed cdef rollback state")
 end
 
 assert(result == "err", result)
 assert(ffi.sizeof(ct) == nil, "failed cdef left incomplete struct completed")
 assert(ffi.typeinfo(ctid).size == nil,
        "failed cdef left typeinfo for incomplete struct completed")
+assert(not pcall(ffi.new, ct, { x = 123 }),
+       "failed cdef left ffi.new able to allocate incomplete struct")
 
-print("t-ffi-cparse-rollback-reader OK: direct ctype/typeinfo readers wait out rollback")
+print("t-ffi-cparse-rollback-reader OK: direct ctype/typeinfo/new readers wait out rollback")

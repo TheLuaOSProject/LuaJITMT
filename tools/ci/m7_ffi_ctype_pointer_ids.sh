@@ -17,7 +17,7 @@ for needle in \
   'CTypeID id = ctype_rawid(cts, cd->ctypeid)' \
   'lj_cconv_multi_init(CTState *cts, CTypeID did' \
   'ctype_rawrefid(cts, cdataV(o)->ctypeid) == did' \
-  'lj_cconv_ct_init_l(L, cts, ct, ctype_rawid(cts, id)' \
+  'lj_cconv_ct_init_l(L, cts, ct, rid' \
   'lj_cconv_ct_ct_l(lua_State *L, CTState *cts, CType *d,' \
   'CTypeID did, CType *s, CTypeID sid' \
   'cconv_err_conv_l(L, cts, did, sid, s, flags)' \

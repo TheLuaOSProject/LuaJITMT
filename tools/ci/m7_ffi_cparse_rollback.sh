@@ -30,12 +30,16 @@ for needle in \
   'if (errcode)' \
   'cp_rollback_restore(cp)' \
   'ffi_checkctype_layout_lock(lua_State *L, CTState *cts,' \
+  'LJLIB_CF(ffi_new)' \
+  'ffi.new waits out parser rollback.' \
   'LJLIB_CF(ffi_typeinfo)' \
   'Snapshot ctype while parser rollback cannot mutate layout.' \
   'layout reader waits out parser rollback' \
   'lj_ctype_parse_unlock(cts);' \
   'direct ctype reader observed failed cdef rollback state' \
   'ffi.typeinfo observed failed cdef rollback state' \
+  'ffi.new observed failed cdef rollback state' \
+  'direct ctype/typeinfo/new readers wait out rollback' \
   'if (errcode || cp.newtype)' \
   'ctype_top_acq(cp->cts)'
 do
@@ -75,6 +79,32 @@ fi
 
 if rg -n 'cp_ctype_mut\(cp, [^)]+\)->sib' "$ROOT/src/lj_cparse.c"; then
   echo "guardrail: parser sib writes must publish through cp_ctype_setsib" >&2
+  exit 1
+fi
+
+if ! awk '
+  /LJLIB_CF\(ffi_new\)/ {
+    infn = 1
+  }
+  infn && /ffi_checkctype\(L, cts, NULL\)/ {
+    badplain = 1
+  }
+  infn && /ffi_checkctype_layout_lock\(L, cts, NULL\)/ && !lock {
+    lock = NR
+  }
+  infn && /11\.2: ffi\.new waits out parser rollback/ {
+    unlock = NR
+  }
+  infn && /lj_cdata_newx_l\(L, cts, id, sz, info\)/ {
+    alloc = NR
+  }
+  infn && /^}/ {
+    infn = 0
+  }
+  END { exit !badplain && lock && unlock && alloc &&
+	      lock < unlock && unlock < alloc ? 0 : 1 }
+' "$ROOT/src/lib_ffi.c"; then
+  echo "guardrail: ffi.new must validate layout under parser rollback token before allocation" >&2
   exit 1
 fi
 

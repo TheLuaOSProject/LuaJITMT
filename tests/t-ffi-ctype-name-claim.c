@@ -84,6 +84,12 @@ int main(void)
   assert(winner == id1);
   assert(ctype_isabandoned(ctype_get(cts, id2)->info));
   assert(lj_ctype_getname(cts, &found, name, default_ns) == id1);
+  lua_pushinteger(L, (lua_Integer)id2);
+  lua_setglobal(L, "lj_m7_name_claim_loser_id");
+  dostring(L,
+    "local ffi = require('ffi')\n"
+    "assert(ffi.typeinfo(lj_m7_name_claim_loser_id) == nil,\n"
+    "       'ffi.typeinfo exposed abandoned ctype')\n");
 
   id3 = new_named(cts, L, CTINFO(CT_STRUCT, CTALIGN(2)), 4, name, &ct3);
   force_table_move_after_reserve(L, cts);

@@ -19,7 +19,8 @@ for needle in \
   'lj_ctype_addname_unique(cp->cts, ct, constid, CPNS_DEFAULT)' \
   'lj_ctype_addname_unique(cp->cts, ct, id, CPNS_DEFAULT)' \
   'force_table_move_after_reserve(lua_State *L, CTState *cts)' \
-  'assert(ct3 != ctype_get(cts, id3))'
+  'assert(ct3 != ctype_get(cts, id3))' \
+  'ffi.typeinfo exposed abandoned ctype'
 do
   if ! rg -F -q "$needle" "$ROOT/src" "$ROOT/tests/t-ffi-ctype-name-claim.c"; then
     echo "guardrail: missing FFI ctype name-claim marker: $needle" >&2
@@ -29,6 +30,17 @@ done
 
 if rg -n 'lj_ctype_addname\(cp->cts' "$ROOT/src/lj_cparse.c"; then
   echo "guardrail: parser global name publication must use duplicate-aware claim helper" >&2
+  exit 1
+fi
+
+if ! awk '
+  /LJLIB_CF\(ffi_typeinfo\)/ { infn = 1 }
+  infn && /ctype_isabandoned\(info\)/ { abandoned = NR }
+  infn && /lua_createtable\(L, 0, 4\)/ { create = NR }
+  infn && /^}/ { infn = 0 }
+  END { exit abandoned && create && abandoned < create ? 0 : 1 }
+' "$ROOT/src/lib_ffi.c"; then
+  echo "guardrail: ffi.typeinfo must hide abandoned ctype holes before allocation" >&2
   exit 1
 fi
 

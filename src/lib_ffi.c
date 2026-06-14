@@ -612,21 +612,35 @@ LJLIB_CF(ffi_cdef)
 LJLIB_CF(ffi_new)	LJLIB_REC(.)
 {
   CTState *cts = ctype_cts(L);
-  CTypeID id = ffi_checkctype(L, cts, NULL);
-  CType *ct = ctype_raw(cts, id);
+  CTypeID id = ffi_checkctype_layout_lock(L, cts, NULL);
+  CTypeID rid = ctype_rawid(cts, id);
+  CType *ct = ctype_get(cts, rid);
   CTSize sz;
   CTInfo info = lj_ctype_info(cts, id, &sz);
-  TValue *o = L->base+1;
+  MSize ofs = 1;
+  TValue *o;
   GCcdata *cd;
   if ((info & CTF_VLA)) {
-    o++;
-    sz = lj_ctype_vlsize(cts, ct, (CTSize)ffi_checkint(L, 2));
+    CTSize nelem;
+    lj_ctype_parse_unlock(cts);
+    nelem = (CTSize)ffi_checkint(L, 2);
+    id = ffi_checkctype_layout_lock(L, cts, NULL);
+    rid = ctype_rawid(cts, id);
+    ct = ctype_get(cts, rid);
+    info = lj_ctype_info(cts, id, &sz);
+    ofs = 2;
+    sz = (info & CTF_VLA) ? lj_ctype_vlsize(cts, ct, nelem) : CTSIZE_INVALID;
   }
-  if (sz == CTSIZE_INVALID)
+  if (sz == CTSIZE_INVALID) {
+    lj_ctype_parse_unlock(cts);
     lj_err_arg(L, 1, LJ_ERR_FFI_INVSIZE);
+  }
+  lj_ctype_parse_unlock(cts);  /* 11.2: ffi.new waits out parser rollback. */
+  o = L->base + ofs;
   cd = lj_cdata_newx_l(L, cts, id, sz, info);
   setcdataV(L, o-1, cd);  /* Anchor the uninitialized cdata. */
-  lj_cconv_ct_init_l(L, cts, ct, ctype_rawid(cts, id), sz, cdataptr(cd),
+  ct = ctype_get(cts, rid);  /* Table may have been reallocated. */
+  lj_cconv_ct_init_l(L, cts, ct, rid, sz, cdataptr(cd),
 		     o, (MSize)(L->top - o));  /* Initialize cdata. */
   if (ctype_isstruct(ct->info)) {
     /* Handle ctype __gc metamethod. Use the fast lookup here. */
@@ -689,6 +703,10 @@ LJLIB_CF(ffi_typeinfo)
     CType *ct = ctype_get(cts, id);
     GCtab *t;  /* Snapshot ctype while parser rollback cannot mutate layout. */
     info = ct->info;
+    if (ctype_isabandoned(info)) {
+      lj_ctype_parse_unlock(cts);
+      return 0;
+    }
     size = ct->size;
     sib = ct->sib;
     name = ctype_name_acq(ct);
