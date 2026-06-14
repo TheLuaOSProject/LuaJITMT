@@ -1208,6 +1208,45 @@ static void test_weak_drain_uses_captured_mode(lua_State *L, global_State *g,
   lua_pop(L, 3);
 }
 
+static void test_weak_pre_clear_late_write_survives_drain(lua_State *L,
+							  global_State *g,
+							  TGState *tg)
+{
+  GCtab *weak, *key, *oldval, *late_val;
+  uint8_t oldstate;
+
+  lua_settop(L, 0);
+  make_weak_table(L, "v", &weak, &key, &oldval);
+  lua_newtable(L);
+  late_val = tabV(L->top - 1);
+
+  lj_gc2_legacy_mark_begin(g);
+  assert(lj_gc2_markobj(g, obj2gco(weak)) == 1);
+  flush_and_drain(g, tg);
+  assert(lj_gc2_weak_snapshot_count(g) == 1u);
+  assert(lj_gc2_ismarked(g, obj2gco(key)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(oldval)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(late_val)) == 0);
+
+  lj_gc2_legacy_weak_begin(g);
+  oldstate = g->gc.state;
+  g->gc.state = GCSatomic;
+  lua_pushvalue(L, 2);
+  lua_pushvalue(L, 4);
+  lua_settable(L, 1);  /* P_WEAK late write before weak drain. */
+  assert(lj_gc2_ismarked(g, obj2gco(late_val)) == 1);
+  assert(lj_gc2_weak_drain(g, 1) == 1u);
+  g->gc.state = oldstate;
+
+  lua_pushvalue(L, 2);
+  lua_gettable(L, 1);
+  assert(tvistab(L->top - 1) && tabV(L->top - 1) == late_val);
+  lua_pop(L, 1);
+
+  lj_gc2_legacy_cycle_end(g);
+  lua_pop(L, 4);
+}
+
 static void test_weak_post_clear_resurrection_write(lua_State *L,
 						    global_State *g,
 						    TGState *tg)
@@ -2264,6 +2303,7 @@ int main(void)
   test_weak_complete_bridge(L, g, tg);
   test_weak_clear_marks_string_slots(L, g, tg);
   test_weak_drain_uses_captured_mode(L, g, tg);
+  test_weak_pre_clear_late_write_survives_drain(L, g, tg);
   test_weak_post_clear_resurrection_write(L, g, tg);
   test_vm_weak_post_clear_existing_key_write(L, g, tg);
   test_capi_rawset_weak_write_barrier(L, g, tg);

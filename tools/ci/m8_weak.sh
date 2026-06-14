@@ -28,6 +28,9 @@ for needle in \
   't-m8-ffi-weak-newindex OK' \
   'test_weak_clear_marks_string_slots' \
   'test_weak_drain_uses_captured_mode' \
+  'test_weak_pre_clear_late_write_survives_drain' \
+  'P_WEAK late write before weak drain' \
+  'GC2 late weak write mark wins over legacy white' \
   'test_weak_post_clear_resurrection_write' \
   'test_vm_weak_post_clear_existing_key_write' \
   'test_capi_rawset_weak_write_barrier' \

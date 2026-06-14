@@ -1289,10 +1289,12 @@ static int gc2_weak_mayclear(global_State *g, cTValue *o, int val,
 	(void)lj_gc2_markobj(g, gcV(o));
       return 0;  /* 05 section 5.8: strings are not weak-cleared. */
     }
-    if (g->gc.state == GCSatomic && iswhite(gcV(o)))
-      return 1;  /* 05 section 5.8: legacy-color weak oracle bridge. */
-    if (lj_gc2_ismarked(g, gcV(o)) == 0)
+    if (lj_gc2_ismarked(g, gcV(o)) == 0) {
+      if (g->gc.state == GCSatomic && iswhite(gcV(o)))
+	return 1;  /* 05 section 5.8: legacy-color weak oracle bridge. */
       return 1;
+    }
+    /* GC2 late weak write mark wins over legacy white during GCSatomic. */
     if (tvisudata(o) && val &&
 	(lj_obj_gcflags(obj2gco(udataV(o))) & LJ_GC_FINALIZED))
       return 1;

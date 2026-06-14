@@ -188,6 +188,9 @@ rewrites of existing nil-valued weak-key hash slots and VM insertion of strong
 hash keys into weak-value tables. `table.insert()` direct array writes now use
 the same weak-write bridge for weak-value tables during `P_WEAK`, and direct
 C API raw setters are covered for all-weak hash and weak-value array writes.
+The weak-clear bridge now treats a current-cycle GC2 mark from a pre-drain
+late write as authoritative over stale legacy white during `GCSatomic`, keeping
+the original weak-table semantics target while avoiding a larger plan change.
 Paranoia builds now rescan the legacy weak list after a GC2 skip decision and
 fail if any weak slot remains clearable.
 Finalizer dispatch now has a GC2 owner try-claim around legacy

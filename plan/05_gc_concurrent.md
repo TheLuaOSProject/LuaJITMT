@@ -453,7 +453,10 @@ the original proxy for that weak-write barrier. FFI cdata metatype
 `tests/t-m8-ffi-weak-newindex.c`. The traversal harness also pins the raw C API
 setter path directly: `lua_rawset()` all-weak hash insertion and `lua_rawseti()`
 weak-value array insertion both keep late `P_WEAK` keys/values alive through
-the same bridge.
+the same bridge. During weak clearing, a current-cycle GC2 mark produced by one
+of these late writes wins over stale legacy white while `GCSatomic` remains
+open, so queued weak snapshots cannot clear a value that was just rescued by the
+P_WEAK bridge.
 `weak_keys_marked` and `weak_values_marked` expose first-time marks from these
 bridges for follow-up tests. x64 VM single-value array table stores now route
 their GC2 barrier to the stored TValue directly, and `BC_TSETM` routes the
