@@ -1161,12 +1161,14 @@ static void gc_call_finalizer(global_State *g, lua_State *L,
 			      cTValue *mo, GCobj *o)
 {
   /* Save and restore lots of state around the __gc callback. */
-  uint8_t oldh = hook_save(g);
-  GCSize oldt = lj_gc_threshold_load(g);
+  uint8_t oldh;
+  GCSize oldt;
   int errcode;
   lua_State *VL = vmthread(g);
   TValue *top;
   gc_finalizer_vm_lock(g);
+  oldh = hook_save(g);
+  oldt = lj_gc_threshold_load(g);
   lj_trace_abort(g);
   hook_entergc(g);  /* Disable hooks and new traces during __gc. */
   if (LJ_HASPROFILE && (oldh & HOOK_PROFILE)) lj_dispatch_update(g, 0);
