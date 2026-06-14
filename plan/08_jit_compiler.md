@@ -430,9 +430,10 @@ scoped-flush target.
    array pointer with a newer size check. Legacy
    shared table-slot stores are not recorded for now: the recorder raises the
    normal NYI-bytecode trace error before emitting `HSTORE` or `ASTORE` for
-   shared existing-table updates, new-key insertion, and nil-slot stores, and
-   the M5 guardrail asserts shared array/hash update loops stay untraced. The
-   original plan kept traced array stores for barrier coverage, but the current
+   shared existing-table updates, new-key insertion, nil-slot stores, and
+   PHI/upvalue-carried table references. The M6 guardrail asserts those update
+   loops stay untraced. The original plan kept traced array stores for barrier
+   coverage, but the current
    bridge only admits trace-local `TNEW`/`TDUP` non-nil slot updates and lowers
    them through a helper that release-publishes the TValue and runs the GC2 value
    barrier. The final generation-aware trace write/barrier protocol remains

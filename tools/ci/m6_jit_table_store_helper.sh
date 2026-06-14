@@ -75,6 +75,33 @@ end
 local ai = array_insert(80)
 assert(ai[1] == 80)
 assert(not util.traceinfo(1), "trace-local array insertion unexpectedly traced")
+
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local function phi_store(n)
+  local a = { stable = 0 }
+  local b = { stable = 0 }
+  local t = a
+  for i = 1, n do
+    if i == 1 then t = a else t = b end
+    t.stable = i
+  end
+  return a.stable + b.stable
+end
+assert(phi_store(80) == 81)
+assert(not util.traceinfo(1), "PHI-carried table store unexpectedly traced")
+
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local up = { stable = 0 }
+local function upvalue_store(n)
+  for i = 1, n do
+    up.stable = i
+  end
+  return up.stable
+end
+assert(upvalue_store(80) == 80)
+assert(not util.traceinfo(1), "upvalue-carried table store unexpectedly traced")
 '
 
 HASH_IR=$(mktemp "${TMPDIR:-/tmp}/lj-m6-hstore-ir.XXXXXX")
