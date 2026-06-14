@@ -29,6 +29,7 @@
 #include "lj_cdata.h"
 #include "lj_cconv.h"
 #include "lj_carith.h"
+#include "lj_udata.h"
 #include "lj_ccall.h"
 #include "lj_ccallback.h"
 #include "lj_clib.h"
@@ -494,6 +495,53 @@ LJLIB_PUSH(top-1) LJLIB_SET(__index)
 
 #include "lj_libdef.h"
 
+/* -- ffi.pin() handle methods ------------------------------------------- */
+
+#define LJLIB_MODULE_ffi_pin
+
+static GCudata *ffi_pin_check(lua_State *L)
+{
+  TValue *o = L->base;
+  if (!(o < L->top && tvisudata(o) &&
+	lj_udata_udtype_acq(udataV(o)) == UDTYPE_FFI_PIN))
+    lj_err_argtype(L, 1, "ffi.pin");
+  return udataV(o);
+}
+
+static void ffi_pin_release_l(lua_State *L, GCudata *ud)
+{
+  TValue nilv;
+  setnilV(&nilv);
+  copyTVrel(L, (TValue *)uddata(ud), &nilv);
+}
+
+LJLIB_CF(ffi_pin_release)
+{
+  ffi_pin_release_l(L, ffi_pin_check(L));
+  return 0;
+}
+
+LJLIB_CF(ffi_pin___gc)
+{
+  TValue *o = L->base;
+  if (o < L->top && tvisudata(o) &&
+      lj_udata_udtype_acq(udataV(o)) == UDTYPE_FFI_PIN)
+    ffi_pin_release_l(L, udataV(o));
+  return 0;
+}
+
+LJLIB_CF(ffi_pin___tostring)
+{
+  (void)ffi_pin_check(L);
+  lua_pushliteral(L, "ffi.pin");
+  return 1;
+}
+
+LJLIB_PUSH("ffi.pin") LJLIB_SET(__metatable)
+LJLIB_PUSH(top-1) LJLIB_SET(__index)
+
+#include "lj_libdef.h"
+
 /* -- FFI library functions ----------------------------------------------- */
 
 #define LJLIB_MODULE_ffi
@@ -841,6 +889,21 @@ LJLIB_CF(ffi_gc)	LJLIB_REC(.)
   return 1;
 }
 
+LJLIB_CF(ffi_pin)
+{
+  TValue *o = lj_lib_checkany(L, 1);
+  CTState *cts = ctype_cts(L);
+  GCtab *mt = cts->pinmt;
+  GCudata *ud = lj_udata_new(L, sizeof(TValue), mt);
+  /* NOBARRIER: The GCudata is new (marked white). */
+  setgcref(ud->metatable, obj2gco(mt));
+  copyTV(L, (TValue *)uddata(ud), o);
+  lj_udata_udtype_rel(ud, UDTYPE_FFI_PIN);
+  setudataV(L, L->top++, ud);
+  lj_gc_check(L);
+  return 1;
+}
+
 LJLIB_PUSH(top-5) LJLIB_SET(!)  /* Store clib metatable in func environment. */
 
 LJLIB_CF(ffi_load)
@@ -885,6 +948,9 @@ LUALIB_API int luaopen_ffi(lua_State *L)
   /* NOBARRIER: the key is new and lj_tab_newkey() handles the barrier. */
   lj_tab_storetab(L, lj_tab_setstr(L, cts->miscmap, &cts->g->strempty),
 		  tabV(L->top-1));
+  L->top--;
+  LJ_LIB_REG(L, NULL, ffi_pin);
+  cts->pinmt = tabV(L->top-1);
   L->top--;
   lj_clib_default(L, tabV(L->top-1));  /* Create ffi.C default namespace. */
   lua_pushliteral(L, LJ_OS_NAME);

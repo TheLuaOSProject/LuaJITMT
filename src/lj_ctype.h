@@ -198,6 +198,7 @@ typedef struct CTState {
   MSize sizecbblack;	/* Size of callback blacklist set. */
   uint32_t cbblack_all;	/* Conservative blacklist overflow flag. */
   CCallback cb;		/* Temporary callback state. */
+  GCtab *pinmt;		/* ffi.pin() handle metatable/root. */
   uint32_t parse_token;	/* 11.2 cparse mutation token. */
   uint32_t fin_token;	/* 11.4 FFI finalizer table mutation token. */
   uint32_t hash[CTHASH_SIZE];  /* Hash anchors. Low 16 bits hold CTypeID. */

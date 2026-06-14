@@ -1020,6 +1020,8 @@ static void gc2_scan_global_roots(global_State *g)
 	    lj_gc2_markobj(g, o);
 	}
       }
+      if (cts->pinmt)
+	lj_gc2_markobj(g, obj2gco(cts->pinmt));
       lj_gc2_markmem(g, cts->cb.cbid);
       lj_gc2_markmem(g, cts->cb.owner);
     }
@@ -2206,6 +2208,11 @@ static void gc2_traverse_udata(global_State *g, GCudata *ud)
 #if LJ_HASFFI
   if (udtype == UDTYPE_FFI_CLIB)
     gc2_traverse_clib_cache(g, (CLibrary *)uddata(ud));
+  if (udtype == UDTYPE_FFI_PIN) {
+    TValue tv;
+    lj_tv_load_acq(&tv, (TValue *)uddata(ud));
+    gc2_mark_tv_worker(g, &tv);  /* 11.6 ffi.pin() root. */
+  }
 #endif
   if (LJ_HASBUFFER && udtype == UDTYPE_BUFFER) {
     SBufExt *sbx = (SBufExt *)uddata(ud);

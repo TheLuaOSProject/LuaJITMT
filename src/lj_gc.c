@@ -267,6 +267,14 @@ static void gc2_paranoia_check_udata(global_State *g, GCudata *ud)
       gc2_paranoia_checkmem(g, sbx->b, "buffer userdata data");
   }
 #if LJ_HASFFI
+  if (udtype == UDTYPE_FFI_PIN) {
+    TValue tv;
+    lj_tv_load_acq(&tv, (TValue *)uddata(ud));
+    if (tvisgcv(&tv))
+      gc2_paranoia_checkobj(g, gcV(&tv), "FFI pin value");
+  }
+#endif
+#if LJ_HASFFI
   if (udtype == UDTYPE_FFI_CLIB) {
     CLibrary *cl = (CLibrary *)uddata(ud);
     CLibCacheEntry *e;
@@ -386,6 +394,8 @@ static void gc2_paranoia_check_rawroots(global_State *g)
       gc2_paranoia_checkmem(g, ctype_tabh_acq(cts), "ctype table");
       gc2_paranoia_checkmem(g, cts->metamap, "ctype metatype side map");
       gc2_paranoia_checkmem(g, cts->cbblack, "ctype callback blacklist");
+      if (cts->pinmt)
+	gc2_paranoia_checkobj(g, obj2gco(cts->pinmt), "FFI pin metatable");
       for (ctret = (CTypeTab *)la_loadptr_acq(
 	     (void *const *)&cts->retiredtab);
 	   ctret != NULL;
@@ -488,6 +498,11 @@ static void gc_mark(global_State *g, GCobj *o)
     if (udtype == UDTYPE_FFI_CLIB) {
       CLibrary *cl = (CLibrary *)uddata(ud);
       gc_mark_clib_cache(g, cl);
+    }
+    if (udtype == UDTYPE_FFI_PIN) {
+      TValue tv;
+      lj_tv_load_acq(&tv, (TValue *)uddata(ud));
+      gc_marktv(g, &tv);  /* 11.6 ffi.pin() root. */
     }
 #endif
     if (LJ_HASBUFFER && udtype == UDTYPE_BUFFER) {
@@ -611,6 +626,8 @@ static void gc_mark_gcroot(global_State *g)
 	    gc_markobj(g, o);
 	}
       }
+      if (cts->pinmt)
+	gc_markobj(g, cts->pinmt);
       lj_gc_arena_markmem(g, cts->cb.cbid);
       lj_gc_arena_markmem(g, cts->cb.owner);
     }

@@ -118,13 +118,22 @@ entry by replacing value with KEYLOCK sentinel before queueing).
 - **errno/GetLastError save** (lj_ccall) is already per-call/TLS — audit.
 
 ## 11.6 Pinning rules for C-held references
-Restate the API contract (05 §5.7.3): C code may hold GCobj pointers only
-while they're anchored (stack/registry/upvalue of an active cfunc, or a
-cdata payload that itself is anchored). FFI buffers passed to async C
-(e.g. io_uring) must be anchored for the duration — user responsibility;
-provide `ffi.pin(obj) -> pin` / `pin:release()` helper (a registry-table
-insert/remove) as convenience, lib_ffi addition, trivially built on the
-concurrent registry table.
+Original plan state: restate the API contract (05 §5.7.3): C code may hold
+GCobj pointers only while they're anchored (stack/registry/upvalue of an
+active cfunc, or a cdata payload that itself is anchored). FFI buffers passed
+to async C (e.g. io_uring) must be anchored for the duration — user
+responsibility; provide `ffi.pin(obj) -> pin` / `pin:release()` helper as a
+registry-table insert/remove convenience, built on the concurrent registry
+table.
+
+Current implementation note: `ffi.pin(obj)` uses a dedicated `UDTYPE_FFI_PIN`
+userdata whose hidden payload is one `TValue`, with the pin metatable rooted in
+`CTState.pinmt`. `pin:release()` release-stores nil into that payload, and both
+GC engines acquire-load and mark the payload while the pin userdata is
+reachable. This preserves the original pinning contract without mutating a
+shared registry table during M7; a future concurrent-registry implementation
+can replace the representation if needed. Performance cleanup stays deferred
+to M9.
 
 ## 11.7 clib / dlopen
 `ffi.load`: dlopen is thread-safe; the CLibrary cache table is a normal
