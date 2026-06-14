@@ -4,6 +4,7 @@ local th = require("threading")
 ffi.cdef("struct lj_m7_rollback_reader;")
 
 local ct = ffi.typeof("struct lj_m7_rollback_reader")
+local ctid = tonumber(ct)
 local parts = { "struct lj_m7_rollback_reader { int x; };\n" }
 for i = 1, 20000 do
   parts[#parts + 1] = ("typedef int lj_m7_rollback_reader_pad_%d;\n"):format(i)
@@ -26,9 +27,13 @@ while true do
   end
   assert(ffi.sizeof(ct) == nil,
 	 "direct ctype reader observed failed cdef rollback state")
+  assert(ffi.typeinfo(ctid).size == nil,
+	 "ffi.typeinfo observed failed cdef rollback state")
 end
 
 assert(result == "err", result)
 assert(ffi.sizeof(ct) == nil, "failed cdef left incomplete struct completed")
+assert(ffi.typeinfo(ctid).size == nil,
+       "failed cdef left typeinfo for incomplete struct completed")
 
-print("t-ffi-cparse-rollback-reader OK: direct ctype readers wait out rollback")
+print("t-ffi-cparse-rollback-reader OK: direct ctype/typeinfo readers wait out rollback")

@@ -30,9 +30,12 @@ for needle in \
   'if (errcode)' \
   'cp_rollback_restore(cp)' \
   'ffi_checkctype_layout_lock(lua_State *L, CTState *cts,' \
+  'LJLIB_CF(ffi_typeinfo)' \
+  'Snapshot ctype while parser rollback cannot mutate layout.' \
   'layout reader waits out parser rollback' \
   'lj_ctype_parse_unlock(cts);' \
   'direct ctype reader observed failed cdef rollback state' \
+  'ffi.typeinfo observed failed cdef rollback state' \
   'if (errcode || cp.newtype)' \
   'ctype_top_acq(cp->cts)'
 do

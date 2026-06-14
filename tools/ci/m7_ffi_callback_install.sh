@@ -35,6 +35,9 @@ for needle in \
   'setcdataV(L, L->top++, cd)' \
   'LJLIB_CF(ffi_callback_free)' \
   'la_store16_rel(&cbid[slot], 0)' \
+  'la_loadptr_acq((void *const *)&owner[slot]) == NULL' \
+  '11.5 disowned callback free: nil function before cbid release.' \
+  '11.5 owned callback free: cbid release before owner release.' \
   'la_storeptr_rel((void **)&owner[slot], NULL)'
 do
   if ! rg -F -q "$needle" "$ROOT/src"; then
@@ -88,12 +91,31 @@ if ! awk '
   /static int ffi_callback_set/ { inset = 1 }
   inset && /^}/ { inset = 0 }
   inset && /lj_ctype_misc_lock\(cts\)/ { badlock = 1 }
-  inset && /la_store16_rel\(&cbid\[slot\], 0\)/ { clear = NR }
-  inset && /lj_tab_storenil\(L, tv\)/ { nilslot = NR }
-  inset && /la_storeptr_rel\(\(void \*\*\)&owner\[slot\], NULL\)/ { owner = NR }
-  END { exit !badlock && clear && nilslot && owner && clear < nilslot && nilslot < owner ? 0 : 1 }
+  inset && /11\.5 disowned callback free/ { branch = "disowned"; disowned = NR }
+  inset && branch == "disowned" && /lj_tab_storenil\(L, tv\)/ && !disowned_nil {
+    disowned_nil = NR
+  }
+  inset && branch == "disowned" && /la_store16_rel\(&cbid\[slot\], 0\)/ && !disowned_clear {
+    disowned_clear = NR
+  }
+  inset && /11\.5 owned callback free/ { branch = "owned"; owned = NR }
+  inset && branch == "owned" && /la_store16_rel\(&cbid\[slot\], 0\)/ && !owned_clear {
+    owned_clear = NR
+  }
+  inset && branch == "owned" && /lj_tab_storenil\(L, tv\)/ && !owned_nil {
+    owned_nil = NR
+  }
+  inset && branch == "owned" && /la_storeptr_rel\(\(void \*\*\)&owner\[slot\], NULL\)/ && !owned_owner {
+    owned_owner = NR
+  }
+  END {
+    exit !badlock &&
+      disowned && disowned_nil && disowned_clear && disowned_nil < disowned_clear &&
+      owned && owned_clear && owned_nil && owned_owner &&
+      owned_clear < owned_nil && owned_nil < owned_owner ? 0 : 1
+  }
 ' "$ROOT/src/lib_ffi.c"; then
-  echo "guardrail: callback free must clear cbid before niling function and releasing owner" >&2
+  echo "guardrail: callback free publish order must distinguish owned and disowned slots" >&2
   exit 1
 fi
 

@@ -504,11 +504,18 @@ static int ffi_callback_set(lua_State *L, GCfunc *fn)
 	lj_tab_storefunc(L, tv, fn);
 	lj_gc_pubtab(L, t);
       } else {
-	la_store16_rel(&cbid[slot], 0);  /* 11.5 callback slot release. */
-	lj_tab_storenil(L, tv);
 	owner = (lua_State **)la_loadptr_acq((void *const *)&cts->cb.owner);
-	if (owner)
-	  la_storeptr_rel((void **)&owner[slot], NULL);  /* 11.5 slot reusable. */
+	if (owner && la_loadptr_acq((void *const *)&owner[slot]) == NULL) {
+	  /* 11.5 disowned callback free: nil function before cbid release. */
+	  lj_tab_storenil(L, tv);
+	  la_store16_rel(&cbid[slot], 0);
+	} else {
+	  /* 11.5 owned callback free: cbid release before owner release. */
+	  la_store16_rel(&cbid[slot], 0);
+	  lj_tab_storenil(L, tv);
+	  if (owner)
+	    la_storeptr_rel((void **)&owner[slot], NULL);  /* 11.5 slot reusable. */
+	}
       }
       return 0;
     }
@@ -673,29 +680,37 @@ LJLIB_CF(ffi_typeinfo)
 {
   CTState *cts = ctype_cts(L);
   CTypeID id = (CTypeID)ffi_checkint(L, 1);
+  CTInfo info;
+  CTSize size;
+  CTypeID sib;
+  GCstr *name;
+  lj_ctype_parse_lock(cts, L);
   if (id > 0 && id < ctype_top_acq(cts)) {
     CType *ct = ctype_get(cts, id);
-    GCtab *t;
+    GCtab *t;  /* Snapshot ctype while parser rollback cannot mutate layout. */
+    info = ct->info;
+    size = ct->size;
+    sib = ct->sib;
+    name = ctype_name_acq(ct);
+    lj_ctype_parse_unlock(cts);
     lua_createtable(L, 0, 4);  /* Increment hash size if fields are added. */
     t = tabV(L->top-1);
     lj_tab_storeint(L, lj_tab_setstr(L, t, lj_str_newlit(L, "info")),
-		    (int32_t)ct->info);
-    if (ct->size != CTSIZE_INVALID)
+		    (int32_t)info);
+    if (size != CTSIZE_INVALID)
       lj_tab_storeint(L, lj_tab_setstr(L, t, lj_str_newlit(L, "size")),
-		      (int32_t)ct->size);
-    if (ct->sib)
+		      (int32_t)size);
+    if (sib)
       lj_tab_storeint(L, lj_tab_setstr(L, t, lj_str_newlit(L, "sib")),
-		      (int32_t)ct->sib);
-    {
-      GCstr *s = ctype_name_acq(ct);
-      if (s) {
-	if (isdead(G(L), obj2gco(s))) flipwhite(obj2gco(s));
-	lj_tab_storestr(L, lj_tab_setstr(L, t, lj_str_newlit(L, "name")), s);
-      }
+		      (int32_t)sib);
+    if (name) {
+      if (isdead(G(L), obj2gco(name))) flipwhite(obj2gco(name));
+      lj_tab_storestr(L, lj_tab_setstr(L, t, lj_str_newlit(L, "name")), name);
     }
     lj_gc_check(L);
     return 1;
   }
+  lj_ctype_parse_unlock(cts);
   return 0;
 }
 

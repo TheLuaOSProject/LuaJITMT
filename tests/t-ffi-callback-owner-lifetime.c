@@ -99,11 +99,17 @@ int main(void)
   assert(saved_cb(5) == 42);
 
   dostring(L,
+    "local ffi = require('ffi')\n"
+    "m7_owner_keep_cb:free()\n"
+    "m7_owner_keep_cb = ffi.cast('lj_m7_owner_cb_t', function(x)\n"
+    "  return x + 11\n"
+    "end)\n"
+    "assert(m7_owner_keep_cb(31) == 42)\n"
     "m7_owner_keep_cb:free()\n"
     "m7_owner_keep_cb = nil\n"
     "collectgarbage('collect')\n");
 
   lua_close(L);
-  printf("t-ffi-callback-owner-lifetime OK: worker-owned callback disowned on detach\n");
+  printf("t-ffi-callback-owner-lifetime OK: worker-owned callback disowned on detach and freed safely\n");
   return 0;
 }
