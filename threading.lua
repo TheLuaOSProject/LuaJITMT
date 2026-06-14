@@ -1,8 +1,10 @@
 ---@meta threading
 
 ---@alias threading.timeout_error "timeout"
+---@alias threading.thread_fn fun(...):...
 ---@alias threading.recv_status true|false|"timeout"
 ---@alias threading.peek_status true|false
+---@alias threading.send_result true|nil
 
 ---@class threading.thread: userdata
 local threading_thread = {}
@@ -38,6 +40,7 @@ function threading_thread:__tostring() end
 local threading_mutex = {}
 
 ---Block until the mutex is acquired.
+---@return nil
 function threading_mutex:lock() end
 
 ---@return boolean locked
@@ -47,6 +50,7 @@ function threading_mutex:trylock() end
 ---Release the mutex.
 ---
 ---Errors if the mutex is not currently locked.
+---@return nil
 function threading_mutex:unlock() end
 
 ---@return "threading.mutex"
@@ -55,10 +59,10 @@ function threading_mutex:__tostring() end
 
 ---@generic T
 ---@class threading.channel<T>: userdata
----@field send fun(self: threading.channel<T>, value: T, timeout?: number): true|nil, threading.timeout_error|nil
+---@field send fun(self: threading.channel<T>, value: T, timeout?: number): threading.send_result, threading.timeout_error|nil
 ---@field recv fun(self: threading.channel<T>, timeout?: number): T|nil, threading.recv_status
 ---@field peek fun(self: threading.channel<T>): T|nil, threading.peek_status
----@field close fun(self: threading.channel<T>)
+---@field close fun(self: threading.channel<T>): nil
 local threading_channel = {}
 
 ---Send a value to the channel.
@@ -71,7 +75,7 @@ local threading_channel = {}
 ---@overload fun(self: threading.channel<T>, value: T, timeout: number): nil, threading.timeout_error
 ---@param value T
 ---@param timeout? number seconds to wait; omitted blocks indefinitely.
----@return true|nil ok
+---@return threading.send_result ok
 ---@return threading.timeout_error|nil err
 function threading_channel:send(value, timeout) end
 
@@ -102,6 +106,7 @@ function threading_channel:recv(timeout) end
 function threading_channel:peek() end
 
 ---Close the channel.
+---@return nil
 function threading_channel:close() end
 
 ---@return "threading.channel"
@@ -116,13 +121,15 @@ local threading = {}
 function threading.cpucount() end
 
 ---Issue a cross-thread memory fence.
+---@return nil
 function threading.fence() end
 
 ---@param seconds? number seconds to sleep; defaults to 0.
+---@return nil
 function threading.sleep(seconds) end
 
 ---Spawn a new OS thread that calls `fn(...)`.
----@param fn fun(...):...
+---@param fn threading.thread_fn
 ---@param ... any
 ---@return threading.thread thread
 ---@nodiscard
