@@ -203,7 +203,7 @@ done
 for needle in \
   'uint32_t actions = lj_native_leave(L);' \
   'if (actions & LJ_GC2_HS_STOPREQ)' \
-  'cts->cb.was_native = 0;' \
+  'cb->was_native = 0;' \
   'lj_safepoint_checkstop(L, actions);'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_ccallback.c"; then

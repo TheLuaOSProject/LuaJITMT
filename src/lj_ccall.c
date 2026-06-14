@@ -16,6 +16,7 @@
 #include "lj_ccall.h"
 #include "lj_safepoint.h"
 #include "lj_trace.h"
+#include "lj_tg.h"
 
 /* Target-specific handling of register arguments. */
 #if LJ_TARGET_X86
@@ -1236,14 +1237,15 @@ int lj_ccall_func(lua_State *L, GCcdata *cd)
     CTypeID id = ctype_typeid(cts, ct);
     CCallState cc;
     uint32_t actions;
+    CCallbackRuntime *cb = &L2TG(L)->cb;
     int gcsteps, ret;
     cc.func = (void (*)(void))cdata_getptr(cdataptr(cd), sz);
     gcsteps = ccall_set_args(L, cts, ct, &cc);
-    cts->cb.slot = ~0u;
+    cb->slot = ~0u;
     lj_native_enter(L2TG(L));
     lj_vm_ffi_call(&cc);
     actions = lj_native_leave(L);
-    if (cts->cb.slot != ~0u) {  /* Blacklist function that called a callback. */
+    if (cb->slot != ~0u) {  /* Blacklist function that called a callback. */
       TValue tv;
       tv.u64 = ((uintptr_t)(void *)cc.func >> 2) | U64x(800000000, 00000000);
       lj_tab_storebool(L, lj_tab_set(L, cts->miscmap, &tv), 1);

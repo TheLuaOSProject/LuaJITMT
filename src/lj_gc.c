@@ -364,6 +364,7 @@ static void gc2_paranoia_check_rawroots(global_State *g)
       gc2_paranoia_checkmem(g, cts, "ctype state");
       gc2_paranoia_checkmem(g, cts->tab, "ctype table");
       gc2_paranoia_checkmem(g, cts->cb.cbid, "callback ids");
+      gc2_paranoia_checkmem(g, cts->cb.owner, "callback owners");
     }
   }
 #endif
@@ -536,6 +537,7 @@ static void gc_mark_gcroot(global_State *g)
       lj_gc_arena_markmem(g, cts);
       lj_gc_arena_markmem(g, cts->tab);
       lj_gc_arena_markmem(g, cts->cb.cbid);
+      lj_gc_arena_markmem(g, cts->cb.owner);
     }
   }
 #endif

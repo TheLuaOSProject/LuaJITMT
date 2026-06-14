@@ -772,6 +772,7 @@ void lj_ctype_freestate(global_State *g)
     lj_ccallback_mcode_free(cts);
     lj_mem_freevec(g, cts->tab, cts->sizetab, CType);
     lj_mem_freevec(g, cts->cb.cbid, cts->cb.sizeid, CTypeID1);
+    lj_mem_freevec(g, cts->cb.owner, cts->cb.sizeid, lua_State *);
     lj_mem_freet(g, cts);
   }
 }

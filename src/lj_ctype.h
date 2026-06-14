@@ -159,16 +159,21 @@ typedef LJ_ALIGN(8) union FPRCBArg { double d; float f[2]; } FPRCBArg;
 
 /* C callback state. Defined here, to avoid dragging in lj_ccall.h. */
 
-typedef LJ_ALIGN(8) struct CCallback {
+typedef LJ_ALIGN(8) struct CCallbackRuntime {
   FPRCBArg fpr[CCALL_MAX_FPR];	/* Arguments/results in FPRs. */
   intptr_t gpr[CCALL_MAX_GPR];	/* Arguments/results in GPRs. */
   intptr_t *stack;		/* Pointer to arguments on stack. */
-  void *mcode;			/* Machine code for callback func. pointers. */
-  CTypeID1 *cbid;		/* Callback type table. */
-  MSize sizeid;			/* Size of callback type table. */
-  MSize topid;			/* Highest unused callback type table slot. */
+  lua_State *L;			/* Callback owner Lua state. */
   MSize slot;			/* Current callback slot. */
   uint8_t was_native;		/* Callback entered from a native region. */
+} CCallbackRuntime;
+
+typedef LJ_ALIGN(8) struct CCallback {
+  void *mcode;			/* Machine code for callback func. pointers. */
+  CTypeID1 *cbid;		/* Callback type table. */
+  lua_State **owner;		/* Callback slot owner Lua states. */
+  MSize sizeid;			/* Size of callback type table. */
+  MSize topid;			/* Highest unused callback type table slot. */
 } CCallback;
 
 /* C type state. */

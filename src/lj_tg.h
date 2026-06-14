@@ -9,6 +9,9 @@
 #include "lj_obj.h"
 #include "lj_bc.h"
 #include "lj_arena.h"
+#if LJ_HASFFI
+#include "lj_ctype.h"
+#endif
 
 /* Type of hot counter. Must match the code in the assembler VM. */
 /* 16 bits are sufficient. Only 0.0015% overhead with maximum slot penalty. */
@@ -73,6 +76,9 @@ struct TGState {
   SBuf tmpbuf;
   TValue tmptv, tmptv2;
   PRNGState prng;
+#if LJ_HASFFI
+  CCallbackRuntime cb;
+#endif
   lua_State *thread_L;
   GCudata *thread_ud;
   uint32_t tid;

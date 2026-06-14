@@ -93,6 +93,9 @@
 |.type UPVAL,		GCupval
 |.type NODE,		Node
 |.type TG,		TGState
+|.if FFI
+|.type CBACK,		CCallbackRuntime
+|.endif
 |.type NARGS,		int
 |.type TRACE,		GCtrace
 |.type SBUF,		SBuf
@@ -2929,65 +2932,89 @@ static void build_subroutines(BuildCtx *ctx)
   |//-----------------------------------------------------------------------
   |
   |// Handler for callback functions. Callback slot number in ah/al.
-  |->vm_ffi_callback:
-  |.if FFI
-  |.type CTSTATE, CTState, PC
-  |  saveregs_	// ebp/rbp already saved. ebp now holds global_State *.
-  |  mov CTSTATE, GL:ebp->ctype_state
-  |  movzx eax, ax
-  |  mov CTSTATE->cb.slot, eax
-  |  mov CTSTATE->cb.gpr[0], CARG1
-  |  mov CTSTATE->cb.gpr[1], CARG2
-  |  mov CTSTATE->cb.gpr[2], CARG3
-  |  mov CTSTATE->cb.gpr[3], CARG4
-  |  movsd qword CTSTATE->cb.fpr[0], xmm0
-  |  movsd qword CTSTATE->cb.fpr[1], xmm1
-  |  movsd qword CTSTATE->cb.fpr[2], xmm2
-  |  movsd qword CTSTATE->cb.fpr[3], xmm3
-  |.if X64WIN
-  |  lea rax, [rsp+CFRAME_SIZE+4*8]
-  |.else
-  |  lea rax, [rsp+CFRAME_SIZE]
-  |  mov CTSTATE->cb.gpr[4], CARG5
-  |  mov CTSTATE->cb.gpr[5], CARG6
-  |  movsd qword CTSTATE->cb.fpr[4], xmm4
-  |  movsd qword CTSTATE->cb.fpr[5], xmm5
-  |  movsd qword CTSTATE->cb.fpr[6], xmm6
-  |  movsd qword CTSTATE->cb.fpr[7], xmm7
-  |.endif
-  |  mov CTSTATE->cb.stack, rax
-  |  mov CARG2, rsp
-  |  mov SAVE_PC, CTSTATE		// Any value outside of bytecode is ok.
-  |  mov CARG1, CTSTATE
-  |  call extern lj_ccallback_enter	// (CTState *cts, void *cf)
+|->vm_ffi_callback:
+|.if FFI
+|.type CTSTATE, CTState, PC
+|  saveregs_	// ebp/rbp already saved. ebp now holds global_State *.
+|  mov CTSTATE, GL:ebp->ctype_state
+|  movzx eax, ax
+|  mov TMPR, CTSTATE->cb.owner
+|  xor ITYPEd, ITYPEd
+|  test TMPR, TMPR
+|  jz >1
+|  mov L:ITYPE, [TMPR+rax*8]
+|  test ITYPE, ITYPE
+|  jz >1
+|  mov TG:KBASE, L:ITYPE->tg_hint
+|  test KBASE, KBASE
+|  jnz >2
+|1:
+|  mov TG:KBASE, GL:ebp->main_tg
+|2:
+|  lea KBASE, TG:KBASE->cb
+|  mov CBACK:KBASE->L, ITYPE
+|  mov CBACK:KBASE->slot, eax
+|  mov CBACK:KBASE->gpr[0], CARG1
+|  mov CBACK:KBASE->gpr[1], CARG2
+|  mov CBACK:KBASE->gpr[2], CARG3
+|  mov CBACK:KBASE->gpr[3], CARG4
+|  movsd qword CBACK:KBASE->fpr[0], xmm0
+|  movsd qword CBACK:KBASE->fpr[1], xmm1
+|  movsd qword CBACK:KBASE->fpr[2], xmm2
+|  movsd qword CBACK:KBASE->fpr[3], xmm3
+|.if X64WIN
+|  lea rax, [rsp+CFRAME_SIZE+4*8]
+|.else
+|  lea rax, [rsp+CFRAME_SIZE]
+|  mov CBACK:KBASE->gpr[4], CARG5
+|  mov CBACK:KBASE->gpr[5], CARG6
+|  movsd qword CBACK:KBASE->fpr[4], xmm4
+|  movsd qword CBACK:KBASE->fpr[5], xmm5
+|  movsd qword CBACK:KBASE->fpr[6], xmm6
+|  movsd qword CBACK:KBASE->fpr[7], xmm7
+|.endif
+|  mov CBACK:KBASE->stack, rax
+|  mov CARG3, KBASE
+|  mov CARG2, rsp
+|  mov SAVE_PC, CTSTATE		// Any value outside of bytecode is ok.
+|  mov CARG1, CTSTATE
+|  call extern lj_ccallback_enter	// (CTState *cts, void *cf, CCallbackRuntime *cb)
   |  // lua_State * returned in eax (RD).
   |  load_DISPATCH RD			// Setup pointer to TG dispatch table.
   |  set_vmstate INTERP
   |  mov BASE, L:RD->base
   |  mov RD, L:RD->top
-  |  sub RD, BASE
-  |  mov LFUNC:RB, [BASE-16]
-  |  cleartp LFUNC:RB
-  |  shr RD, 3
-  |  add RD, 1
-  |  ins_callt
+|  sub RD, BASE
+|  mov LFUNC:RB, [BASE-16]
+|  cleartp LFUNC:RB
+|  mov KBASE, LFUNC:RB->pc
+|  mov KBASE, [KBASE+PC2PROTO(k)]
+|  shr RD, 3
+|  add RD, 1
+|  ins_callt
   |.endif
   |
   |->cont_ffi_callback:			// Return from FFI callback.
-  |.if FFI
-  |  mov L:RA, SAVE_L
-  |  load_G TMPR
-  |  mov CTSTATE, GL:TMPR->ctype_state
-  |  mov aword CTSTATE->L, L:RA
-  |  mov L:RA->base, BASE
-  |  mov L:RA->top, RB
-  |  mov CARG1, CTSTATE
-  |  mov CARG2, RC
-  |  call extern lj_ccallback_leave	// (CTState *cts, TValue *o)
-  |  mov rax, CTSTATE->cb.gpr[0]
-  |  movsd xmm0, qword CTSTATE->cb.fpr[0]
-  |  jmp ->vm_leave_unw
-  |.endif
+|.if FFI
+|  mov L:RA, SAVE_L
+|  load_G TMPR
+|  mov CTSTATE, GL:TMPR->ctype_state
+|  mov TG:KBASE, L:RA->tg_hint
+|  test KBASE, KBASE
+|  jnz >1
+|  mov TG:KBASE, GL:TMPR->main_tg
+|1:
+|  lea KBASE, TG:KBASE->cb
+|  mov L:RA->base, BASE
+|  mov L:RA->top, RB
+|  mov CARG1, CTSTATE
+|  mov CARG2, RC
+|  mov CARG3, KBASE
+|  call extern lj_ccallback_leave	// (CTState *cts, TValue *o, CCallbackRuntime *cb)
+|  mov rax, CBACK:KBASE->gpr[0]
+|  movsd xmm0, qword CBACK:KBASE->fpr[0]
+|  jmp ->vm_leave_unw
+|.endif
   |
   |->vm_ffi_call:			// Call C function via FFI.
   |  // Caveat: needs special frame unwinding, see below.

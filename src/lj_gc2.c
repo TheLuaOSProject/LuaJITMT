@@ -999,6 +999,7 @@ static void gc2_scan_global_roots(global_State *g)
       lj_gc2_markmem(g, cts);
       lj_gc2_markmem(g, cts->tab);
       lj_gc2_markmem(g, cts->cb.cbid);
+      lj_gc2_markmem(g, cts->cb.owner);
     }
   }
 #endif
