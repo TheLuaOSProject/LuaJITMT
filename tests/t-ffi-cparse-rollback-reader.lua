@@ -57,6 +57,11 @@ race_failed_cdef("newindex", function()
 	 "cdata __newindex observed failed cdef rollback state")
 end)
 
+race_failed_cdef("numindex", function()
+  assert(not pcall(function() return p[0] end),
+	 "cdata numeric __index observed failed cdef rollback state")
+end)
+
 assert(ffi.sizeof(ct) == nil, "failed cdef left incomplete struct completed")
 assert(ffi.typeinfo(ctid).size == nil,
        "failed cdef left typeinfo for incomplete struct completed")
@@ -66,5 +71,7 @@ assert(not pcall(function() return p.x end),
        "failed cdef left cdata __index able to read incomplete struct")
 assert(not pcall(function() p.x = 123 end),
        "failed cdef left cdata __newindex able to write incomplete struct")
+assert(not pcall(function() return p[0] end),
+       "failed cdef left cdata numeric __index able to read incomplete struct")
 
-print("t-ffi-cparse-rollback-reader OK: direct ctype/typeinfo/new/field readers wait out rollback")
+print("t-ffi-cparse-rollback-reader OK: direct ctype/typeinfo/new/field/numeric readers wait out rollback")

@@ -298,9 +298,17 @@ collect_attrib:
     idx = lj_num2int_type(numV(key), ptrdiff_t);
   integer_key:
     if (ctype_ispointer(ct->info)) {
-      CTSize sz = lj_ctype_size(cts, ctype_cid(ct->info));  /* Element size. */
-      if (sz == CTSIZE_INVALID)
+      CTSize sz;
+      if (!locked) {
+	/* 11.2: cdata numeric-key readers wait out parser rollback. */
+	lj_ctype_parse_lock(cts, L);
+	locked = 1;
+      }
+      sz = lj_ctype_size(cts, ctype_cid(ct->info));  /* Element size. */
+      if (sz == CTSIZE_INVALID) {
+	lj_ctype_parse_unlock(cts);
 	lj_err_caller(L, LJ_ERR_FFI_INVSIZE);
+      }
       if (ctype_isptr(ct->info)) {
 	p = (uint8_t *)cdata_getptr(p, ct->size);
       } else if ((ct->info & (CTF_VECTOR|CTF_COMPLEX))) {

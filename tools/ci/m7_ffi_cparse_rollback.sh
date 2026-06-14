@@ -41,9 +41,12 @@ for needle in \
   'ffi.new observed failed cdef rollback state' \
   'cdata __index observed failed cdef rollback state' \
   'cdata __newindex observed failed cdef rollback state' \
-  'direct ctype/typeinfo/new/field readers wait out rollback' \
+  'cdata numeric __index observed failed cdef rollback state' \
+  'direct ctype/typeinfo/new/field/numeric readers wait out rollback' \
   'cdata string-key readers wait out parser rollback' \
+  'cdata numeric-key readers wait out parser rollback' \
   'cdata recorder field reader waits out parser rollback' \
+  'cdata recorder numeric-key reader waits out parser rollback' \
   'if (errcode || cp.newtype)' \
   'ctype_top_acq(cp->cts)'
 do

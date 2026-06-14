@@ -50,12 +50,13 @@ GCtab *miscmap; CCallback cb; CTypeID1 hash[CTHASH_SIZE]; }`
   still serialized by `parse_token`; this helper does not claim lock-free
   struct layout/rollback publication. `ffi.typeinfo(id)` hides abandoned
   `CTA_BAD` holes rather than exposing them as live type records.
-  Current rollback-reader bridge: direct layout readers and string-key cdata
-  field lookup take the parser token while snapshotting ctype layout or field
-  metadata, including the recorder's field-specialization path. This prevents a
-  failed `ffi.cdef()` from leaking a transient struct definition to
-  `ffi.sizeof()`, `ffi.new()`, `ffi.typeinfo()`, or cdata `__index`/`__newindex`;
-  narrowing the hot field-reader fence is deferred to M9 cleanup.
+  Current rollback-reader bridge: direct layout readers, string-key cdata field
+  lookup, and numeric cdata element-size lookup take the parser token while
+  snapshotting ctype layout or field metadata, including the recorder's field and
+  numeric-index specialization paths. This prevents a failed `ffi.cdef()` from
+  leaking a transient struct definition to `ffi.sizeof()`, `ffi.new()`,
+  `ffi.typeinfo()`, or cdata `__index`/`__newindex`; narrowing the hot cdata
+  reader fences is deferred to M9 cleanup.
 - `cts->L` field: delete; pass L explicitly (it's already threaded through
   most call paths; grep `cts->L` ≈ 15 sites, mechanical).
 - **cparse (ffi.cdef)** mutates parser state + tab: the original sketch

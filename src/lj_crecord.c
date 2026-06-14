@@ -841,10 +841,18 @@ again:
     idx = lj_opt_narrow_cindex(J, idx);
     if (ctype_ispointer(ct->info)) {
       CTSize sz;
+      CTInfo pinfo;
   integer_key:
-      if ((ct->info & CTF_COMPLEX))
+      lj_ctype_parse_lock(cts, J->L);
+      /* 11.2: cdata recorder numeric-key reader waits out parser rollback. */
+      pinfo = ct->info;
+      sid = ctype_cid(pinfo);
+      sz = lj_ctype_size(cts, sid);
+      lj_ctype_parse_unlock(cts);
+      if (sz == CTSIZE_INVALID)
+	lj_trace_err(J, LJ_TRERR_BADTYPE);
+      if ((pinfo & CTF_COMPLEX))
 	idx = emitir(IRT(IR_BAND, IRT_INTP), idx, lj_ir_kintp(J, 1));
-      sz = lj_ctype_size(cts, (sid = ctype_cid(ct->info)));
       idx = crec_reassoc_ofs(J, idx, &ofs, sz);
 #if LJ_TARGET_ARM || LJ_TARGET_PPC
       /* Hoist base add to allow fusion of index/shift into operands. */
