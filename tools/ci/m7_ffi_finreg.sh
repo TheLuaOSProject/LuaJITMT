@@ -58,6 +58,19 @@ if awk '
   exit 1
 fi
 
+if awk '
+  /void lj_gc_finalize_cdata\(lua_State \*L\)/ { infn = 1 }
+  infn && /^}/ { infn = 0 }
+  infn && /lj_ctype_fin_lock\(cts\)|lj_ctype_fin_unlock\(cts\)/ {
+    bad = 1
+    print
+  }
+  END { exit bad ? 0 : 1 }
+' "$ROOT/src/lj_gc.c"; then
+  echo "guardrail: close-time cdata finalizer drain must disable FINREG without fin_token" >&2
+  exit 1
+fi
+
 if rg -n 'finalizer_token|gc_finalizer_vm_lock|gc_finalizer_vm_unlock' \
   "$ROOT/src"; then
   echo "guardrail: finalizer callbacks must use the GC2 owner claim, not a shared VM-thread token" >&2

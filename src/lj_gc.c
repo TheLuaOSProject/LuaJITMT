@@ -1290,11 +1290,9 @@ void lj_gc_finalize_cdata(lua_State *L)
   if (cts == NULL || fo == NULL)
     return;
   t = gco2tab(fo);
-  lj_ctype_fin_lock(cts);
   setgcrefnull(t->metatable);  /* Mark finalizer table as disabled. */
   node = lj_tab_node_acq(t);
   hmask = lj_tab_node_hmask_acq(node);
-  lj_ctype_fin_unlock(cts);
   for (i = (ptrdiff_t)hmask; i >= 0; i--) {
     TValue key, val;
     lj_tv_load_acq(&val, &node[i].val);
