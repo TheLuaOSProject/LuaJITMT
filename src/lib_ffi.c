@@ -795,12 +795,16 @@ LJLIB_CF(ffi_metatype)
   if (!(ctype_isstruct(ct->info) || ctype_iscomplex(ct->info) ||
 	ctype_isvector(ct->info)))
     lj_err_arg(L, 1, LJ_ERR_FFI_INVTYPE);
+  lj_ctype_misc_lock(cts);
   tv = lj_tab_setinth(L, t, -(int32_t)ctype_typeid(cts, ct));
-  if (!tvisnil(tv))
+  if (!tvisnil(tv)) {
+    lj_ctype_misc_unlock(cts);
     lj_err_caller(L, LJ_ERR_PROTMT);
+  }
   settabV(L, &tmp, mt);
   copyTVrel(L, tv, &tmp);
   lj_gc_pubtab(L, t);
+  lj_ctype_misc_unlock(cts);
   cd = lj_cdata_new_(L, CTID_CTYPEID, 4);
   *(CTypeID *)cdataptr(cd) = id;
   setcdataV(L, L->top-1, cd);

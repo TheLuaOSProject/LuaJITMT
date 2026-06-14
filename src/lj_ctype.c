@@ -207,6 +207,28 @@ void lj_ctype_fin_unlock(CTState *cts)
 #endif
 }
 
+void lj_ctype_misc_lock(CTState *cts)
+{
+  for (;;) {
+    uint32_t expect = 0;
+    if (la_cas32(&cts->misc_token, &expect, 1, LA_ACQ_REL, LA_ACQ))
+      return;  /* 11.2 bridge: serialize miscmap structural mutation. */
+#if defined(__linux__)
+    (void)la_futex_wait(&cts->misc_token, 1, 1000000);
+#else
+    la_cpu_pause();
+#endif
+  }
+}
+
+void lj_ctype_misc_unlock(CTState *cts)
+{
+  la_store32_rel(&cts->misc_token, 0);  /* 11.2: publish miscmap update. */
+#if defined(__linux__)
+  (void)la_futex_wake(&cts->misc_token, 1);
+#endif
+}
+
 /* Create new type element. */
 CTypeID lj_ctype_new(CTState *cts, CType **ctp)
 {
