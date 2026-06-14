@@ -69,8 +69,6 @@ static LJ_AINLINE int tab_val_isclaim(cTValue *tv, cTValue *claim)
   return tv_rawload(tv) == tv_rawload(claim);
 }
 
-#define TAB_FINREG_CHAIN_RETRY_MAX	64
-
 /* -- Table creation and destruction -------------------------------------- */
 
 static LJ_AINLINE Node *tab_node_new(lua_State *L, MSize hmask)
@@ -870,22 +868,12 @@ static void tab_release_claimed_free(Node *n)
   lj_tab_storenilraw(&n->val);
 }
 
-static LJ_AINLINE int tab_chain_retry_exhausted(uint32_t *retry, Node *reserved)
-{
-  if (++*retry <= TAB_FINREG_CHAIN_RETRY_MAX)
-    return 0;
-  if (reserved)
-    tab_release_claimed_free(reserved);
-  return 1;
-}
-
 int lj_tab_try_newkey_chain(lua_State *L, GCtab *t, cTValue *key,
 			    cTValue *claim, TValue **slot)
 {
   Node *nodebase = lj_tab_node_acq(t);
   MSize hmask = lj_tab_node_hmask_acq(nodebase);
   Node *anchor, *reserved = NULL;
-  uint32_t retry = 0;
   if (hmask == 0)
     return 0;
   anchor = hashkey_node(nodebase, hmask, key);
@@ -903,8 +891,6 @@ int lj_tab_try_newkey_chain(lua_State *L, GCtab *t, cTValue *key,
       }
       if (tvisnil(&nk) && tab_val_isclaim(&nv, claim)) {
 	la_cpu_pause();  /* Linked collision insert has not published key. */
-	if (tab_chain_retry_exhausted(&retry, reserved))
-	  return 0;
 	goto retry;
       }
     }
@@ -923,8 +909,6 @@ int lj_tab_try_newkey_chain(lua_State *L, GCtab *t, cTValue *key,
 	if (!tvisnil(&nv)) {
 	  if (tab_val_isclaim(&nv, claim)) {
 	    la_cpu_pause();  /* Unlinked free-node claim is still publishing. */
-	    if (tab_chain_retry_exhausted(&retry, reserved))
-	      return 0;
 	    goto retry;
 	  }
 	  continue;
@@ -939,6 +923,10 @@ int lj_tab_try_newkey_chain(lua_State *L, GCtab *t, cTValue *key,
 	return 0;  /* No free node in this hash generation: resize fallback. */
       continue;  /* Re-scan chain before publishing the claimed node. */
     }
+    if (LJ_UNLIKELY(anchor == NULL)) {
+      tab_release_claimed_free(reserved);
+      return 0;
+    }
     n = lj_tab_nextnode_acq(anchor);
     lj_tab_nextnode_set(reserved, n);
     if (tab_nextnode_cas(anchor, &n, reserved)) {
@@ -946,71 +934,9 @@ int lj_tab_try_newkey_chain(lua_State *L, GCtab *t, cTValue *key,
       *slot = &reserved->val;
       return 1;  /* 11.4 FINREG collision insert CAS-prepend. */
     }
-    if (tab_chain_retry_exhausted(&retry, reserved))
-      return 0;
   retry:
     continue;
   }
-}
-
-static void tab_finreg_load_resolved(TValue *dst, TValue *src, cTValue *claim)
-{
-  for (;;) {
-    lj_tv_load_acq(dst, src);
-    if (!tab_val_isclaim(dst, claim))
-      return;
-    la_cpu_pause();
-  }
-}
-
-int lj_tab_newkey_finreg_grow(lua_State *L, GCtab *t, cTValue *key,
-			      cTValue *claim, TValue **slot)
-{
-  Node *oldnode = lj_tab_node_acq(t);
-  MSize oldhmask = lj_tab_node_hmask_acq(oldnode);
-  uint32_t i, count = 1;  /* Include the new key. */
-  MSize newhmask;
-  Node *newnode, *newfreetop;
-  TabNodeRetire *oldret;
-  uint32_t growcount;
-  if (oldhmask > 0) {
-    for (i = 0; i <= oldhmask; i++) {
-      Node *n = &oldnode[i];
-      TValue oldkey, oldval;
-      tab_finreg_load_resolved(&oldval, &n->val, claim);
-      if (!tvisnil(&oldval)) {
-	lj_tv_load_acq(&oldkey, &n->key);
-	if (lj_obj_equal(&oldkey, key))
-	  return -1;  /* Racing insert won before the grow claim. */
-	count++;
-      }
-    }
-  }
-  oldret = oldhmask > 0 ? tab_retire_reserve(L, oldnode, oldhmask) : NULL;
-  growcount = count << 1;
-  newnode = newhpart_alloc(L, hsize2hbits(growcount), &newhmask);
-  newfreetop = &newnode[newhmask+1];
-  if (oldhmask > 0) {
-    for (i = 0; i <= oldhmask; i++) {
-      Node *n = &oldnode[i];
-      TValue oldkey, oldval;
-      tab_finreg_load_resolved(&oldval, &n->val, claim);
-      if (!tvisnil(&oldval)) {
-	TValue *newslot;
-	lj_tv_load_acq(&oldkey, &n->key);
-	lj_assertL(!lj_obj_equal(&oldkey, key),
-		   "duplicate FINREG key during grow copy");
-	newslot = tab_rehash_insert(L, newnode, newhmask, &newfreetop, &oldkey);
-	copyTVrel(L, newslot, &oldval);
-      }
-    }
-  }
-  *slot = tab_rehash_insert(L, newnode, newhmask, &newfreetop, key);
-  copyTVrel(L, *slot, claim);
-  newhpart_publish(t, newnode, newhmask, newfreetop);
-  if (oldret)
-    tab_retire_arm(G(L), oldret);
-  return 1;  /* 11.4 FINREG grow insert without legacy lj_tab_set(). */
 }
 
 TValue *lj_tab_setinth(lua_State *L, GCtab *t, int32_t key)

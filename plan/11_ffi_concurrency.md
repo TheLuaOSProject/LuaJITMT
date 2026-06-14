@@ -83,33 +83,29 @@ cdata, value=finalizer) — reuse, don't invent. Order: registration order
 preserved per 05 §5.8. `ffi.gc(cd, nil)` clears flag + table entry; race
 with collection resolved by the registry delete CAS (collector claims the
 entry by replacing value with KEYLOCK sentinel before queueing).
-Current implementation note: existing `GCROOT_FFI_FIN` value slots use a
-FINREG claim sentinel and `TValue` CAS for registration replacement, explicit
-clear, and collector claim/delete. Close-time table disable now runs without
-`fin_token` after `lua_close()` shutdown has joined secondary threads.
-Explicit `ffi.gc(cd, nil)` on a cdata with no registry entry now returns before
-that fallback. Enabled missing-key insertion first tries a lock-free
-empty-anchor path: CAS the target anchor value from nil to the FINREG claim
-sentinel, publish the cdata key, then publish the finalizer value. Collision
-insertion in the current hash generation claims a free node, CAS-prepends it
-as a claim/nil-key placeholder, then publishes the key/finalizer. Legacy GC and
-GC2 traversal wait out that claim sentinel for the hidden FFI finalizer table.
-Active FINREG mutations are counted separately, covering anchor/chain inserts,
-existing-slot updates, and normal collector slot claims. The legacy
-`lj_tab_set()` full-table fallback has been removed: if the current generation
-is full, `lj_tab_newkey_finreg_grow()` waits for active FINREG claims, builds a
-new hash-only vector, copies resolved non-nil slots, inserts the new key with
-the FINREG claim sentinel, and retires the old vector through table SMR. The
-remaining `fin_token` is a rare single grow-publisher claim, not a wrapper
-around generic table mutation. The next bridge removal should replace that
-grow-publisher token with a true FINREG multi-generation registry, or the
-original `NHdr`/KEYLOCK/freecount/CAS-prepend table protocol from §6.3.
-Recorded `ffi.gc()`/ctype-`__gc` finalizer registration is still NYI until
-FINREG growth is fully lock-free: JIT-enabled code falls back to the
-interpreter. Normal `mmudata` cdata finalization now rechecks and claims the
-slot inside the FINREG active-claim window; close-time cdata drain remains
-exclusive. Membership and ordering remain legacy-owned until the planned
-FINREG/finqueue dispatch lands.
+Current implementation note: FINREG value slots use a claim sentinel and
+`TValue` CAS for registration replacement, explicit clear, and collector
+claim/delete. Explicit `ffi.gc(cd, nil)` on a cdata with no registry entry
+returns before structural insertion. Enabled missing-key insertion first tries
+a lock-free empty-anchor path: CAS the target anchor value from nil to the
+FINREG claim sentinel, publish the cdata key, then publish the finalizer
+value. Collision insertion in the current hash generation claims a free node,
+CAS-prepends it as a claim/nil-key placeholder, then publishes the
+key/finalizer. If the current generation has no free node, `CTState.fin_head`
+CAS-publishes a new weak-key FINREG generation instead of resizing/copying the
+old table. The generation publisher waits out visible FINREG claim sentinels
+across all generations, rechecks for the cdata key, creates a private
+generation with the new key already claimed, and publishes it as the newest
+head. Legacy GC and GC2 root, identify, traverse, and close-drain every FINREG
+generation; traversal waits out claim sentinels before marking finalizer
+values. The initial `GCROOT_FFI_FIN` table remains the startup root/initial
+generation, but normal FINREG operations use the generation list. Recorded
+`ffi.gc()`/ctype-`__gc` finalizer registration is still NYI until the recorder
+is re-enabled with FINREG multi-generation tests: JIT-enabled code falls back
+to the interpreter. Normal `mmudata` cdata finalization now rechecks the
+generation list and claims the slot before clearing/calling it; close-time
+cdata drain remains exclusive. Membership and ordering remain legacy-owned
+until the planned FINREG/finqueue dispatch lands.
 
 ## 11.5 Calls & callbacks (native state discipline)
 - **FFI call out** (interpreter `->vm_ffi_call`, JIT IR_CALLXS): wrap with

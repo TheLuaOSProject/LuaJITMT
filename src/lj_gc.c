@@ -552,6 +552,14 @@ static void gc_mark(global_State *g, GCobj *o)
   }
 }
 
+#if LJ_HASFFI
+static void gc_finreg_markobj(global_State *g, GCobj *o)
+{
+  if (iswhite(o))
+    gc_mark(g, o);
+}
+#endif
+
 /* Mark GC roots. */
 static void gc_mark_fixedstr(global_State *g)
 {
@@ -630,6 +638,7 @@ static void gc_mark_gcroot(global_State *g)
       }
       if (cts->pinmt)
 	gc_markobj(g, cts->pinmt);
+      lj_ctype_fin_mark(g, gc_finreg_markobj, lj_gc_arena_markmem);
       lj_gc_arena_markmem(g, cts->cb.cbid);
       lj_gc_arena_markmem(g, cts->cb.owner);
     }
@@ -757,7 +766,7 @@ static int gc_traverse_tab(global_State *g, GCtab *t)
     }
     if (weak) {  /* Weak tables are cleared in the atomic phase. */
 #if LJ_HASFFI
-      if (gcref_acq(g->gcroot[GCROOT_FFI_FIN]) == obj2gco(t)) {
+      if (lj_ctype_fin_istab(g, t)) {
 	ffi_fin = 1;
 	weak = (int)(~0u & ~LJ_GC_WEAKVAL);
       } else
@@ -1235,25 +1244,22 @@ static void gc_finalize_cdata_call_owned(lua_State *L, GCobj *o,
   gc_call_finalizer(g, L, &tmp, o);
 }
 
-static int gc_finalize_cdata_slot_owned(lua_State *L, GCobj *o, GCtab *t,
-					cTValue *key)
+static int gc_finalize_cdata_slot_owned(lua_State *L, GCobj *o, cTValue *key)
 {
   global_State *g = G(L);
   CTState *cts = ctype_ctsG(g);
+  GCtab *t;
   TValue *slot;
   TValue fin;
-  lj_ctype_fin_claim_wait(cts);
-  slot = (TValue *)lj_tab_get(L, t, key);
+  slot = (TValue *)lj_ctype_fin_get(L, cts, key, &t);
   if (slot != niltv(L) && lj_cdata_fin_claim_func(slot, &fin)) {
     TValue tmp;
     copyTV(L, &tmp, &fin);
     lj_cdata_fin_storenil(L, slot);  /* Clear claimed finalizer slot. */
     gc_finalize_cdata_clear(g, o);
-    lj_ctype_fin_claim_end(cts);
     gc_call_finalizer(g, L, &tmp, o);
     return 1;
   }
-  lj_ctype_fin_claim_end(cts);
   gc_finalize_cdata_clear(g, o);
   return 0;
 }
@@ -1281,7 +1287,6 @@ static int gc_finalize(lua_State *L)
     setgcrefr(*lj_obj_gcwref(gcref(g->gc.mmudata)), *lj_obj_gcwref(o));
 #if LJ_HASFFI
   if (o->gch.gct == ~LJ_TCDATA) {
-    GCtab *t = gco2tab(gcref_acq(g->gcroot[GCROOT_FFI_FIN]));
     TValue key;
     /* Add cdata back to the GC list and make it white. */
     lj_obj_setgcwr(o, g->gc.root);
@@ -1290,7 +1295,7 @@ static int gc_finalize(lua_State *L)
     lj_gc_arena_markobj(g, o);
     /* Resolve finalizer. */
     setcdataV(L, &key, gco2cd(o));
-    (void)gc_finalize_cdata_slot_owned(L, o, t, &key);
+    (void)gc_finalize_cdata_slot_owned(L, o, &key);
     lj_gc2_finalizer_leave(g);
     return 1;
   }
@@ -1318,22 +1323,12 @@ void lj_gc_finalize_udata(lua_State *L)
 }
 
 #if LJ_HASFFI
-/* Finalize all cdata objects from finalizer table. */
-void lj_gc_finalize_cdata(lua_State *L)
+static void gc_finalize_cdata_tab(lua_State *L, GCtab *t)
 {
   global_State *g = G(L);
-  CTState *cts = ctype_ctsG(g);
-  GCobj *fo = gcref_acq(g->gcroot[GCROOT_FFI_FIN]);
-  GCtab *t;
-  Node *node;
-  MSize hmask;
+  Node *node = lj_tab_node_acq(t);
+  MSize hmask = lj_tab_node_hmask_acq(node);
   ptrdiff_t i;
-  if (cts == NULL || fo == NULL)
-    return;
-  t = gco2tab(fo);
-  setgcrefnull(t->metatable);  /* Mark finalizer table as disabled. */
-  node = lj_tab_node_acq(t);
-  hmask = lj_tab_node_hmask_acq(node);
   for (i = (ptrdiff_t)hmask; i >= 0; i--) {
     TValue key, val;
     lj_tv_load_acq(&val, &node[i].val);
@@ -1345,12 +1340,40 @@ void lj_gc_finalize_cdata(lua_State *L)
       lj_tv_load_acq(&key, &node[i].key);
       if (tviscdata(&key)) {
 	GCobj *o = gcV(&key);
-	makewhite(g, o);
-	lj_gc2_finalizer_enter(g);
-	gc_finalize_cdata_call_owned(L, o, &node[i].val, &val);
-	lj_gc2_finalizer_leave(g);
+	if (lj_obj_gcflags(o) & LJ_GC_CDATA_FIN) {
+	  makewhite(g, o);
+	  lj_gc2_finalizer_enter(g);
+	  gc_finalize_cdata_call_owned(L, o, &node[i].val, &val);
+	  lj_gc2_finalizer_leave(g);
+	} else {
+	  lj_cdata_fin_storenil(L, &node[i].val);
+	}
       }
     }
+  }
+}
+
+/* Finalize all cdata objects from finalizer table. */
+void lj_gc_finalize_cdata(lua_State *L)
+{
+  global_State *g = G(L);
+  CTState *cts = ctype_ctsG(g);
+  FinRegGen *gen;
+  if (cts == NULL)
+    return;
+  for (gen = (FinRegGen *)la_loadptr_acq((void *const *)&cts->fin_head);
+       gen != NULL;
+       gen = (FinRegGen *)la_loadptr_acq((void *const *)&gen->next)) {
+    GCtab *t = (GCtab *)la_loadptr_acq((void *const *)&gen->tab);
+    if (t)
+      setgcrefnull(t->metatable);  /* Mark all FINREG generations disabled. */
+  }
+  for (gen = (FinRegGen *)la_loadptr_acq((void *const *)&cts->fin_head);
+       gen != NULL;
+       gen = (FinRegGen *)la_loadptr_acq((void *const *)&gen->next)) {
+    GCtab *t = (GCtab *)la_loadptr_acq((void *const *)&gen->tab);
+    if (t)
+      gc_finalize_cdata_tab(L, t);
   }
 }
 #endif

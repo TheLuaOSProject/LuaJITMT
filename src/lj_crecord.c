@@ -973,8 +973,8 @@ static void crec_finalizer(jit_State *J, TRef trcd, TRef trfin, cTValue *fin)
   UNUSED(trcd); UNUSED(trfin);
   if (!(tvisgcv(fin) || tvisnil(fin)))
     lj_trace_err(J, LJ_TRERR_BADTYPE);
-  /* Finalizer registry mutation stays on the interpreter path until FINREG
-  ** insertion/table growth no longer depends on the structural token bridge. */
+  /* Finalizer registry mutation stays on the interpreter path until the
+  ** recorder is re-enabled with FINREG multi-generation tests. */
   setfuncV(J->L, &J->errinfo, J->fn);
   lj_trace_err_info(J, LJ_TRERR_NYIFFU);
 }

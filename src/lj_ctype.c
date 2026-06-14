@@ -184,65 +184,150 @@ void lj_ctype_parse_unlock(CTState *cts)
 #endif
 }
 
-void lj_ctype_fin_lock(CTState *cts)
+static GCtab *ctype_fin_tab_new_l(lua_State *L, uint32_t hbits)
 {
-  for (;;) {
-    uint32_t expect = 0;
-    if (la_cas32(&cts->fin_token, &expect, 1, LA_ACQ_REL, LA_ACQ)) {
-      uint32_t claims;
-      while ((claims = la_load32_acq(&cts->fin_claims)) != 0) {
-#if defined(__linux__)
-	(void)la_futex_wait(&cts->fin_claims, claims, 1000000);
-#else
-	la_cpu_pause();
-#endif
-      }
-      return;  /* 11.4: single publisher for hidden FINREG growth. */
+  GCtab *t = lj_tab_new(L, 0, hbits);
+  setgcref(t->metatable, obj2gco(t));
+  lj_tab_storestr(L, lj_tab_setstr(L, t, lj_str_newlit(L, "__mode")),
+		  lj_str_newlit(L, "k"));
+  t->nomm = (uint8_t)(~(1u<<MM_mode));
+  return t;
+}
+
+static FinRegGen *ctype_fin_gen_new_l(lua_State *L, GCtab *t)
+{
+  FinRegGen *gen = lj_mem_newt(L, sizeof(FinRegGen), FinRegGen);
+  gen->tab = t;
+  gen->next = NULL;
+  return gen;
+}
+
+GCtab *lj_ctype_fin_head(CTState *cts)
+{
+  FinRegGen *gen = (FinRegGen *)la_loadptr_acq(
+    (void *const *)&cts->fin_head);
+  return gen ? (GCtab *)la_loadptr_acq((void *const *)&gen->tab) : NULL;
+}
+
+cTValue *lj_ctype_fin_get(lua_State *L, CTState *cts, cTValue *key,
+			  GCtab **tabp)
+{
+  FinRegGen *gen;
+  for (gen = (FinRegGen *)la_loadptr_acq((void *const *)&cts->fin_head);
+       gen != NULL;
+       gen = (FinRegGen *)la_loadptr_acq((void *const *)&gen->next)) {
+    GCtab *t = (GCtab *)la_loadptr_acq((void *const *)&gen->tab);
+    cTValue *tv = lj_tab_get(L, t, key);
+    if (tv != niltv(L)) {
+      *tabp = t;
+      return tv;
     }
-#if defined(__linux__)
-    (void)la_futex_wait(&cts->fin_token, 1, 1000000);
-#else
-    la_cpu_pause();
-#endif
   }
+  *tabp = NULL;
+  return niltv(L);
 }
 
-void lj_ctype_fin_unlock(CTState *cts)
+static int ctype_fin_any_key(CTState *cts, lua_State *L, cTValue *key)
 {
-  la_store32_rel(&cts->fin_token, 0);  /* 11.4: publish FINREG growth. */
-#if defined(__linux__)
-  (void)la_futex_wake(&cts->fin_token, 1);
-#endif
+  GCtab *t;
+  return lj_ctype_fin_get(L, cts, key, &t) != niltv(L);
 }
 
-int lj_ctype_fin_claim_begin(CTState *cts)
+static int ctype_fin_has_claim(CTState *cts, cTValue *claim)
 {
-  la_add32_rlx(&cts->fin_claims, 1);
-  if (la_load32_acq(&cts->fin_token) == 0)
-    return 1;  /* 11.4: no FINREG grow owns the hidden table. */
-  lj_ctype_fin_claim_end(cts);
+  FinRegGen *gen;
+  for (gen = (FinRegGen *)la_loadptr_acq((void *const *)&cts->fin_head);
+       gen != NULL;
+       gen = (FinRegGen *)la_loadptr_acq((void *const *)&gen->next)) {
+    GCtab *t = (GCtab *)la_loadptr_acq((void *const *)&gen->tab);
+    Node *node = lj_tab_node_acq(t);
+    MSize i, hmask = lj_tab_node_hmask_acq(node);
+    for (i = 0; i <= hmask; i++) {
+      TValue val;
+      lj_tv_load_acq(&val, &node[i].val);
+      if (tv_rawload(&val) == tv_rawload(claim))
+	return 1;
+    }
+  }
   return 0;
 }
 
-void lj_ctype_fin_claim_wait(CTState *cts)
+int lj_ctype_fin_newgen(lua_State *L, CTState *cts, cTValue *key,
+			cTValue *claim, GCtab **tabp, TValue **slot)
 {
-  while (!lj_ctype_fin_claim_begin(cts)) {
-#if defined(__linux__)
-    (void)la_futex_wait(&cts->fin_token, 1, 1000000);
-#else
+  for (;;) {
+    FinRegGen *head = (FinRegGen *)la_loadptr_acq(
+      (void *const *)&cts->fin_head);
+    GCtab *headtab = head ? (GCtab *)la_loadptr_acq(
+      (void *const *)&head->tab) : NULL;
+    MSize hmask = headtab ? lj_tab_node_hmask_acq(lj_tab_node_acq(headtab)) : 1;
+    uint32_t hbits = hmask > 0 ? lj_fls((uint32_t)hmask) + 2u : 1u;
+    GCtab *t;
+    FinRegGen *gen;
+    TValue *tv;
+    if (headtab && !gcref_acq(headtab->metatable))
+      return 0;
+    while (ctype_fin_has_claim(cts, claim))
+      la_cpu_pause();
+    if (ctype_fin_any_key(cts, L, key))
+      return -1;
+    t = ctype_fin_tab_new_l(L, hbits);
+    gen = ctype_fin_gen_new_l(L, t);
+    tv = lj_tab_set(L, t, key);  /* Private generation, unpublished. */
+    copyTVrel(L, tv, claim);
+    gen->next = head;
+    if (la_casptr((void **)&cts->fin_head, (void **)&head, gen,
+		  LA_ACQ_REL, LA_ACQ)) {
+      *tabp = t;
+      *slot = tv;
+      return 1;  /* 11.4 FINREG generation CAS publish. */
+    }
+    lj_mem_freet(G(L), gen);
     la_cpu_pause();
-#endif
   }
 }
 
-void lj_ctype_fin_claim_end(CTState *cts)
+int lj_ctype_fin_istab(global_State *g, GCtab *t)
 {
-  uint32_t old = la_sub32_acqrel(&cts->fin_claims, 1);
-  lj_assertCTS(old != 0, "unbalanced FFI finalizer claim");
-#if defined(__linux__)
-  if (old == 1)
-    (void)la_futex_wake(&cts->fin_claims, 1);
-#endif
+  CTState *cts = ctype_ctsG(g);
+  FinRegGen *gen;
+  if (!cts)
+    return 0;
+  for (gen = (FinRegGen *)la_loadptr_acq((void *const *)&cts->fin_head);
+       gen != NULL;
+       gen = (FinRegGen *)la_loadptr_acq((void *const *)&gen->next)) {
+    if ((GCtab *)la_loadptr_acq((void *const *)&gen->tab) == t)
+      return 1;
+  }
+  return 0;
+}
+
+void lj_ctype_fin_mark(global_State *g, void (*mark)(global_State *, GCobj *),
+		       void (*markmem)(global_State *, void *))
+{
+  CTState *cts = ctype_ctsG(g);
+  FinRegGen *gen;
+  if (!cts)
+    return;
+  for (gen = (FinRegGen *)la_loadptr_acq((void *const *)&cts->fin_head);
+       gen != NULL;
+       gen = (FinRegGen *)la_loadptr_acq((void *const *)&gen->next)) {
+    GCtab *t = (GCtab *)la_loadptr_acq((void *const *)&gen->tab);
+    markmem(g, gen);
+    if (t)
+      mark(g, obj2gco(t));
+  }
+}
+
+void lj_ctype_fin_freetabs(global_State *g, CTState *cts)
+{
+  FinRegGen *gen = (FinRegGen *)la_xchgptr_acqrel((void **)&cts->fin_head,
+						  NULL);
+  while (gen) {
+    FinRegGen *next = gen->next;
+    lj_mem_freet(g, gen);
+    gen = next;
+  }
 }
 
 static GCRef *ctype_metamap_init_l(lua_State *L, CTState *cts)
@@ -1091,18 +1176,20 @@ CTState *lj_ctype_init(lua_State *L)
     }
   }
   setmref(G(L)->ctype_state, cts);
+  {
+    GCobj *fo = gcref_acq(G(L)->gcroot[GCROOT_FFI_FIN]);
+    if (fo) {
+      FinRegGen *gen = ctype_fin_gen_new_l(L, gco2tab(fo));
+      la_storeptr_rel((void **)&cts->fin_head, gen);
+    }
+  }
   return cts;
 }
 
 /* Create special weak-keyed finalizer table. */
 void lj_ctype_initfin(lua_State *L)
 {
-  /* NOBARRIER: The table is new (marked white). */
-  GCtab *t = lj_tab_new(L, 0, 1);
-  setgcref(t->metatable, obj2gco(t));
-  lj_tab_storestr(L, lj_tab_setstr(L, t, lj_str_newlit(L, "__mode")),
-		  lj_str_newlit(L, "k"));
-  t->nomm = (uint8_t)(~(1u<<MM_mode));
+  GCtab *t = ctype_fin_tab_new_l(L, 1);
   setgcrefroot(G(L)->gcroot[GCROOT_FFI_FIN], obj2gco(t));
 }
 
@@ -1112,6 +1199,7 @@ void lj_ctype_freestate(global_State *g)
   CTState *cts = ctype_ctsG(g);
   if (cts) {
     lj_ccallback_mcode_free(cts);
+    lj_ctype_fin_freetabs(g, cts);
     ctype_freeretired(g, cts);
     ctype_tab_free(g, ctype_tabh_acq(cts));
     lj_mem_freevec(g, cts->metamap, cts->sizemeta, GCRef);

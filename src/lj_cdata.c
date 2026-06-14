@@ -162,101 +162,82 @@ void lj_cdata_setfin(lua_State *L, GCcdata *cd, GCobj *obj, uint32_t it)
 {
   global_State *g = G(L);
   CTState *cts = ctype_ctsG(g);
-  GCtab *t = gco2tab(gcref_acq(g->gcroot[GCROOT_FFI_FIN]));
+  GCtab *t;
   TValue *tv, key, val, old;
   int enabled = (it != LJ_TNIL);
+  if (LJ_UNLIKELY(cts == NULL))
+    return;
   setcdataV(L, &key, cd);
   if (enabled)
     setgcV(L, &val, obj, it);
-retry:
   for (;;) {
-    if (!gcref_acq(t->metatable))
-      return;
-    tv = (TValue *)lj_tab_get(L, t, &key);
+    tv = (TValue *)lj_ctype_fin_get(L, cts, &key, &t);
     if (tv == niltv(L)) {
-      if (!enabled) {  /* Missing clear is a no-op; avoid fin_token insert. */
+      if (!enabled) {  /* Missing clear is a no-op; avoid structural insert. */
 	lj_obj_cleargcflags_atomic(obj2gco(cd), LJ_GC_CDATA_FIN);
 	lj_gc2_finreg_cdata_set(g, obj2gco(cd), 0);
 	return;
       }
-      if (lj_ctype_fin_claim_begin(cts)) {
-	cdata_fin_setclaim(&old);
-	switch (lj_tab_try_newkey_anchor(L, t, &key, &old, &tv)) {
-	case 1:
-	  if (!gcref_acq(t->metatable)) {
-	    lj_cdata_fin_storenil(L, tv);
-	    lj_obj_cleargcflags_atomic(obj2gco(cd), LJ_GC_CDATA_FIN);
-	    lj_gc2_finreg_cdata_set(g, obj2gco(cd), 0);
-	    lj_ctype_fin_claim_end(cts);
-	    return;
-	  }
-	  cdata_fin_store(L, g, t, cd, tv, &val, enabled);
-	  lj_ctype_fin_claim_end(cts);
+      t = lj_ctype_fin_head(cts);
+      if (!t || !gcref_acq(t->metatable))
+	return;
+      cdata_fin_setclaim(&old);
+      switch (lj_tab_try_newkey_anchor(L, t, &key, &old, &tv)) {
+      case 1:
+	if (!gcref_acq(t->metatable)) {
+	  lj_cdata_fin_storenil(L, tv);
+	  lj_obj_cleargcflags_atomic(obj2gco(cd), LJ_GC_CDATA_FIN);
+	  lj_gc2_finreg_cdata_set(g, obj2gco(cd), 0);
 	  return;
-	case -1:
-	  lj_ctype_fin_claim_end(cts);
-	  continue;  /* Racing insert published the key; claim existing slot. */
-	default:
-	  switch (lj_tab_try_newkey_chain(L, t, &key, &old, &tv)) {
-	  case 1:
-	    if (!gcref_acq(t->metatable)) {
-	      lj_cdata_fin_storenil(L, tv);
-	      lj_obj_cleargcflags_atomic(obj2gco(cd), LJ_GC_CDATA_FIN);
-	      lj_gc2_finreg_cdata_set(g, obj2gco(cd), 0);
-	      lj_ctype_fin_claim_end(cts);
-	      return;
-	    }
-	    cdata_fin_store(L, g, t, cd, tv, &val, enabled);
-	    lj_ctype_fin_claim_end(cts);
-	    return;
-	  case -1:
-	    lj_ctype_fin_claim_end(cts);
-	    continue;  /* Racing collision insert published the key. */
-	  default:
-	    lj_ctype_fin_claim_end(cts);
-	    break;  /* Full generation: grow FINREG without legacy lj_tab_set(). */
-	  }
 	}
-      } else {
-	lj_ctype_fin_claim_wait(cts);
-	lj_ctype_fin_claim_end(cts);
-	continue;
+	cdata_fin_store(L, g, t, cd, tv, &val, enabled);
+	return;
+      case -1:
+	continue;  /* Racing insert published the key; claim existing slot. */
+      default:
+	break;
       }
-      break;
-    }
-    if (!lj_ctype_fin_claim_begin(cts)) {
-      lj_ctype_fin_claim_wait(cts);
-      lj_ctype_fin_claim_end(cts);
-      continue;
+      switch (lj_tab_try_newkey_chain(L, t, &key, &old, &tv)) {
+      case 1:
+	if (!gcref_acq(t->metatable)) {
+	  lj_cdata_fin_storenil(L, tv);
+	  lj_obj_cleargcflags_atomic(obj2gco(cd), LJ_GC_CDATA_FIN);
+	  lj_gc2_finreg_cdata_set(g, obj2gco(cd), 0);
+	  return;
+	}
+	cdata_fin_store(L, g, t, cd, tv, &val, enabled);
+	return;
+      case -1:
+	continue;  /* Racing collision insert published the key. */
+      default:
+	break;
+      }
+      switch (lj_ctype_fin_newgen(L, cts, &key, &old, &t, &tv)) {
+      case 1:
+	if (!gcref_acq(t->metatable)) {
+	  lj_cdata_fin_storenil(L, tv);
+	  lj_obj_cleargcflags_atomic(obj2gco(cd), LJ_GC_CDATA_FIN);
+	  lj_gc2_finreg_cdata_set(g, obj2gco(cd), 0);
+	  return;
+	}
+	cdata_fin_store(L, g, t, cd, tv, &val, enabled);
+	return;
+      case -1:
+	continue;  /* Racing generation already has this cdata key. */
+      default:
+	return;
+      }
     }
     (void)lj_cdata_fin_claim_any(tv, &old);
     if (!gcref_acq(t->metatable)) {
       lj_cdata_fin_storenil(L, tv);
       lj_obj_cleargcflags_atomic(obj2gco(cd), LJ_GC_CDATA_FIN);
       lj_gc2_finreg_cdata_set(g, obj2gco(cd), 0);
-      lj_ctype_fin_claim_end(cts);
       return;
     }
     cdata_fin_store(L, g, t, cd, tv, &val, enabled);
-    lj_ctype_fin_claim_end(cts);
     return;
   }
-  lj_ctype_fin_lock(cts);
-  if (gcref_acq(t->metatable)) {
-    cdata_fin_setclaim(&old);
-    switch (lj_tab_newkey_finreg_grow(L, t, &key, &old, &tv)) {
-    case 1:
-      cdata_fin_store(L, g, t, cd, tv, &val, enabled);
-      break;
-    case -1:
-      lj_ctype_fin_unlock(cts);
-      goto retry;  /* Racing insert published before the grow claim. */
-    default:
-      break;
-    }
-  }
-  lj_ctype_fin_unlock(cts);
-  return;
 }
 
 /* -- C data indexing ----------------------------------------------------- */

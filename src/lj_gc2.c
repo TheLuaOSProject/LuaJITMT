@@ -969,6 +969,18 @@ static void gc2_scan_thread_roots(global_State *g, lua_State *L)
   gc2_scan_owned_needscan(g, L);
 }
 
+#if LJ_HASFFI
+static void gc2_finreg_markobj(global_State *g, GCobj *o)
+{
+  (void)lj_gc2_markobj(g, o);
+}
+
+static void gc2_finreg_markmem(global_State *g, void *p)
+{
+  (void)lj_gc2_markmem(g, p);
+}
+#endif
+
 static void gc2_scan_global_roots(global_State *g)
 {
   ptrdiff_t i;
@@ -1060,6 +1072,7 @@ static void gc2_scan_global_roots(global_State *g)
       }
       if (cts->pinmt)
 	lj_gc2_markobj(g, obj2gco(cts->pinmt));
+      lj_ctype_fin_mark(g, gc2_finreg_markobj, gc2_finreg_markmem);
       lj_gc2_markmem(g, cts->cb.cbid);
       lj_gc2_markmem(g, cts->cb.owner);
     }
@@ -1290,7 +1303,7 @@ static int gc2_weak_mayclear(global_State *g, cTValue *o, int val,
 static int gc2_tab_is_ffi_fin(global_State *g, GCtab *t)
 {
 #if LJ_HASFFI
-  return gcref_acq(g->gcroot[GCROOT_FFI_FIN]) == obj2gco(t);
+  return lj_ctype_fin_istab(g, t);
 #else
   UNUSED(g); UNUSED(t);
   return 0;

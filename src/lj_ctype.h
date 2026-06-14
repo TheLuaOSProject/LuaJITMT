@@ -156,6 +156,11 @@ typedef struct CTypeTab {
   CType tab[1];			/* C type table slots. */
 } CTypeTab;
 
+typedef struct FinRegGen {
+  GCtab *tab;			/* One hash-only FINREG table generation. */
+  struct FinRegGen *next;	/* Older generation, searched after this one. */
+} FinRegGen;
+
 #define CTHASH_SIZE	128	/* Number of hash anchors. */
 #define CTHASH_MASK	(CTHASH_SIZE-1)
 
@@ -200,8 +205,7 @@ typedef struct CTState {
   CCallback cb;		/* Temporary callback state. */
   GCtab *pinmt;		/* ffi.pin() handle metatable/root. */
   uint32_t parse_token;	/* 11.2 cparse mutation token. */
-  uint32_t fin_token;	/* 11.4 single FINREG grow publisher. */
-  uint32_t fin_claims;	/* 11.4 active lock-free FINREG slot claims. */
+  FinRegGen *fin_head;	/* 11.4 CAS-published FINREG generation list. */
   uint32_t hash[CTHASH_SIZE];  /* Hash anchors. Low 16 bits hold CTypeID. */
 } CTState;
 
@@ -524,11 +528,16 @@ LJ_FUNC CTypeID lj_ctype_intern_new_l(lua_State *L, CTState *cts,
 				      CTInfo info, CTSize size, int *newp);
 LJ_FUNC void lj_ctype_parse_lock(CTState *cts, lua_State *L);
 LJ_FUNC void lj_ctype_parse_unlock(CTState *cts);
-LJ_FUNC void lj_ctype_fin_lock(CTState *cts);
-LJ_FUNC void lj_ctype_fin_unlock(CTState *cts);
-LJ_FUNC int lj_ctype_fin_claim_begin(CTState *cts);
-LJ_FUNC void lj_ctype_fin_claim_wait(CTState *cts);
-LJ_FUNC void lj_ctype_fin_claim_end(CTState *cts);
+LJ_FUNC GCtab *lj_ctype_fin_head(CTState *cts);
+LJ_FUNC cTValue *lj_ctype_fin_get(lua_State *L, CTState *cts, cTValue *key,
+				  GCtab **tabp);
+LJ_FUNC int lj_ctype_fin_newgen(lua_State *L, CTState *cts, cTValue *key,
+				cTValue *claim, GCtab **tabp, TValue **slot);
+LJ_FUNC int lj_ctype_fin_istab(global_State *g, GCtab *t);
+LJ_FUNC void lj_ctype_fin_mark(global_State *g, void (*mark)(global_State *,
+							    GCobj *),
+			       void (*markmem)(global_State *, void *));
+LJ_FUNC void lj_ctype_fin_freetabs(global_State *g, CTState *cts);
 LJ_FUNC int lj_ctype_setmeta(CTState *cts, CTypeID id, GCtab *mt);
 LJ_FUNC void lj_ctype_cb_blacklist(CTState *cts, void *func);
 LJ_FUNC int lj_ctype_cb_isblacklisted(CTState *cts, void *func);

@@ -6,17 +6,18 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 JOBS=${JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)}
 
 for needle in \
-  'uint32_t fin_token' \
-  'lj_ctype_fin_lock(CTState *cts)' \
-  'la_cas32(&cts->fin_token, &expect, 1, LA_ACQ_REL, LA_ACQ)' \
-  'la_futex_wait(&cts->fin_token, 1, 1000000)' \
-  'lj_ctype_fin_unlock(CTState *cts)' \
-  'lj_ctype_fin_lock(cts)' \
-  'uint32_t fin_claims' \
-  'lj_ctype_fin_claim_begin(CTState *cts)' \
-  'lj_ctype_fin_claim_begin(cts)' \
-  'lj_ctype_fin_claim_wait(cts)' \
-  'la_futex_wait(&cts->fin_claims, claims, 1000000)' \
+  'typedef struct FinRegGen' \
+  'FinRegGen *fin_head' \
+  'lj_ctype_fin_head(CTState *cts)' \
+  'lj_ctype_fin_get(lua_State *L, CTState *cts, cTValue *key,' \
+  'lj_ctype_fin_newgen(lua_State *L, CTState *cts, cTValue *key,' \
+  'ctype_fin_has_claim(CTState *cts, cTValue *claim)' \
+  'while (ctype_fin_has_claim(cts, claim))' \
+  'lj_tab_set(L, t, key);  /* Private generation, unpublished. */' \
+  '11.4 FINREG generation CAS publish.' \
+  'lj_ctype_fin_istab(global_State *g, GCtab *t)' \
+  'lj_ctype_fin_mark(global_State *g' \
+  'lj_ctype_fin_freetabs(global_State *g, CTState *cts)' \
   'la_cas8(uint8_t *p,uint8_t *exp,uint8_t des,int mo_s,int mo_f)' \
   'lj_tv_cas(TValue *dst, TValue *expect,' \
   'lj_obj_addgcflags_atomic(GCobj *o, uint8_t flags)' \
@@ -26,22 +27,19 @@ for needle in \
   'lj_cdata_fin_claim_func(TValue *tv, TValue *old)' \
   'lj_cdata_fin_claim_func(slot, &fin)' \
   'lj_cdata_fin_storenil(L, tv)' \
-  'Missing clear is a no-op; avoid fin_token insert.' \
+  'Missing clear is a no-op; avoid structural insert.' \
   'lj_tab_try_newkey_anchor(lua_State *L, GCtab *t, cTValue *key,' \
   'lj_tab_try_newkey_chain(lua_State *L, GCtab *t, cTValue *key,' \
   'Another claimed empty anchor is publishing key.' \
   'Linked collision insert has not published key.' \
-  'TAB_FINREG_CHAIN_RETRY_MAX' \
   '11.4 FINREG collision insert CAS-prepend.' \
-  'lj_tab_newkey_finreg_grow(lua_State *L, GCtab *t, cTValue *key,' \
-  '11.4 FINREG grow insert without legacy lj_tab_set().' \
   '11.4 FINREG publish after claim resolution.' \
-  'Full generation: grow FINREG without legacy lj_tab_set().' \
   'while (ffi_fin && lj_cdata_fin_isclaim(&val))' \
   '#include "lj_cdata.h"' \
-  'lj_tab_get(L, t, &key)' \
+  'lj_ctype_fin_get(L, cts, &key, &t)' \
+  'lj_ctype_fin_get(L, cts, key, &t)' \
   'lj_cdata_setfin(L, cd, gcV(tv), itype(tv))' \
-  'Finalizer registry mutation stays on the interpreter path until FINREG' \
+  'Finalizer registry mutation stays on the interpreter path until the' \
   'lj_trace_err_info(J, LJ_TRERR_NYIFFU)' \
   'lj_gc2_finalizer_try_enter(global_State *g)' \
   'peer finalizer dispatch backs off'
@@ -51,6 +49,12 @@ do
     exit 1
   fi
 done
+
+if rg -n 'fin_token|fin_claims|lj_ctype_fin_lock|lj_ctype_fin_unlock|lj_ctype_fin_claim_|lj_tab_newkey_finreg_grow|TAB_FINREG_CHAIN_RETRY_MAX' \
+  "$ROOT/src"; then
+  echo "guardrail: removed FINREG token/claim/grow bridge must not reappear" >&2
+  exit 1
+fi
 
 if awk '
   /LJLIB_CF\(ffi_new\)/ { innew = 1 }
@@ -65,89 +69,51 @@ if awk '
   exit 1
 fi
 
-if awk '
-  /if \(o->gch.gct == ~LJ_TCDATA\)/ { incdata = 1 }
-  incdata && /lj_gc2_finalizer_leave\(g\);/ { incdata = 0 }
-  incdata && /lj_ctype_fin_lock\(cts\)|lj_ctype_fin_unlock\(cts\)/ {
-    bad = 1
-    print
-  }
-  END { exit bad ? 0 : 1 }
-' "$ROOT/src/lj_gc.c"; then
-  echo "guardrail: per-cdata finalizer claim must use FINREG slot CAS, not fin_token" >&2
-  exit 1
-fi
-
-if awk '
-  /void lj_gc_finalize_cdata\(lua_State \*L\)/ { infn = 1 }
-  infn && /^}/ { infn = 0 }
-  infn && /lj_ctype_fin_lock\(cts\)|lj_ctype_fin_unlock\(cts\)/ {
-    bad = 1
-    print
-  }
-  END { exit bad ? 0 : 1 }
-' "$ROOT/src/lj_gc.c"; then
-  echo "guardrail: close-time cdata finalizer drain must disable FINREG without fin_token" >&2
-  exit 1
-fi
-
 if ! awk '
   /void lj_cdata_setfin\(lua_State \*L, GCcdata \*cd,/ { infn = 1 }
-  infn && /lj_ctype_fin_lock\(cts\)/ { exit(seen ? 0 : 1) }
-  infn && /Missing clear is a no-op; avoid fin_token insert\./ { seen = 1 }
+  infn && /lj_ctype_fin_head\(cts\)/ { exit(seen ? 0 : 1) }
+  infn && /Missing clear is a no-op; avoid structural insert\./ { seen = 1 }
   END { if (infn) exit(seen ? 0 : 1); exit 1 }
 ' "$ROOT/src/lj_cdata.c"; then
-  echo "guardrail: missing ffi.gc(cd, nil) clear must return before fin_token insertion" >&2
+  echo "guardrail: missing ffi.gc(cd, nil) clear must return before structural insertion" >&2
   exit 1
 fi
 
 if awk '
-  /lj_ctype_fin_lock\(cts\)|lj_ctype_fin_unlock\(cts\)/ {
-    if (FILENAME !~ /src\/lj_cdata\.c$/) {
-      bad = 1
-      print FILENAME ":" FNR ":" $0
-    }
-  }
-  END { exit bad ? 0 : 1 }
-' "$ROOT"/src/*.c; then
-  echo "guardrail: fin_token calls must stay boxed into lj_cdata_setfin missing-key insertion" >&2
-  exit 1
-fi
-
-if awk '
-  /void lj_cdata_setfin\(lua_State \*L, GCcdata \*cd,/ { infn = 1; locked = 0 }
+  /void lj_cdata_setfin\(lua_State \*L, GCcdata \*cd,/ { infn = 1 }
   infn && /^}/ { infn = 0 }
-  infn && /lj_ctype_fin_lock\(cts\)/ { locked = 1 }
-  infn && /lj_tab_set\(L, t, &key\)/ {
+  infn && /GCROOT_FFI_FIN|lj_tab_set\(L, t, &key\)/ {
     bad = 1
     print
   }
   END { exit bad ? 0 : 1 }
 ' "$ROOT/src/lj_cdata.c"; then
-  echo "guardrail: GCROOT_FFI_FIN missing-key insertion must not use legacy lj_tab_set" >&2
+  echo "guardrail: lj_cdata_setfin must use FINREG helpers, not GCROOT_FFI_FIN/legacy lj_tab_set" >&2
   exit 1
 fi
 
 if ! awk '
-  /void lj_cdata_setfin\(lua_State \*L, GCcdata \*cd,/ { infn = 1; begin = 0; anchor = 0; chain = 0; grow = 0 }
-  infn && /lj_ctype_fin_claim_begin\(cts\)/ { begin = 1 }
+  /void lj_cdata_setfin\(lua_State \*L, GCcdata \*cd,/ { infn = 1; anchor = 0; chain = 0; newgen = 0 }
   infn && /lj_tab_try_newkey_anchor\(L, t, &key, &old, &tv\)/ { anchor = 1 }
   infn && /lj_tab_try_newkey_chain\(L, t, &key, &old, &tv\)/ { chain = 1 }
-  infn && /lj_tab_newkey_finreg_grow\(L, t, &key, &old, &tv\)/ { grow = 1 }
-  infn && /lj_ctype_fin_unlock\(cts\)/ { found = begin && anchor && chain && grow; infn = 0 }
+  infn && /lj_ctype_fin_newgen\(L, cts, &key, &old, &t, &tv\)/ { newgen = 1 }
+  infn && /^}/ { found = anchor && chain && newgen; infn = 0 }
   END { exit found ? 0 : 1 }
 ' "$ROOT/src/lj_cdata.c"; then
-  echo "guardrail: enabled missing-key registration must try lockless anchor/chain and FINREG grow before returning" >&2
+  echo "guardrail: enabled missing-key registration must try anchor/chain and FINREG generation publish before returning" >&2
   exit 1
 fi
 
 if ! awk '
-  /void lj_ctype_fin_lock\(CTState \*cts\)/ { infn = 1; waits = 0 }
-  infn && /fin_claims/ && /la_load32_acq/ { waits = 1 }
-  infn && /^}/ { found = waits; infn = 0 }
+  /int lj_ctype_fin_newgen\(lua_State \*L,/ { infn = 1; wait = 0; scan = 0; private = 0; cas = 0 }
+  infn && /while \(ctype_fin_has_claim\(cts, claim\)\)/ { wait = 1 }
+  infn && /ctype_fin_any_key\(cts, L, key\)/ { scan = 1 }
+  infn && /lj_tab_set\(L, t, key\).*Private generation/ { private = 1 }
+  infn && /la_casptr\(\(void \*\*\)&cts->fin_head/ { cas = 1 }
+  infn && /^}/ { found = wait && scan && private && cas; infn = 0 }
   END { exit found ? 0 : 1 }
 ' "$ROOT/src/lj_ctype.c"; then
-  echo "guardrail: FINREG grow publisher must wait for active FINREG claims" >&2
+  echo "guardrail: FINREG generation publisher must wait claims, scan keys, and CAS-publish" >&2
   exit 1
 fi
 
@@ -165,12 +131,12 @@ if awk '
 fi
 
 if ! awk '
-  /void lj_cdata_setfin\(lua_State \*L, GCcdata \*cd,/ { infn = 1; began = 0 }
-  infn && /lj_ctype_fin_claim_begin\(cts\)/ { began = 1 }
-  infn && began && /lj_cdata_fin_claim_any\(tv, &old\)/ { found = 1; infn = 0 }
+  /void lj_cdata_setfin\(lua_State \*L, GCcdata \*cd,/ { infn = 1; got = 0 }
+  infn && /lj_ctype_fin_get\(L, cts, &key, &t\)/ { got = 1 }
+  infn && got && /lj_cdata_fin_claim_any\(tv, &old\)/ { found = 1; infn = 0 }
   END { exit found ? 0 : 1 }
 ' "$ROOT/src/lj_cdata.c"; then
-  echo "guardrail: existing FINREG slot updates must enter an active claim window" >&2
+  echo "guardrail: existing FINREG slot updates must claim the discovered slot" >&2
   exit 1
 fi
 
@@ -197,31 +163,31 @@ if awk '
   infn && /^}/ { infn = 0 }
   END { exit bad ? 0 : 1 }
 ' "$ROOT/src/lj_tab.c"; then
-  echo "guardrail: FINREG collision helper must stay bounded to the current hash generation" >&2
+  echo "guardrail: FINREG collision helper must stay within the current hash generation" >&2
   exit 1
 fi
 
 if awk '
-  /int lj_tab_newkey_finreg_grow\(lua_State \*L,/ { infn = 1 }
-  infn && /lj_tab_newkey\(L, t|lj_tab_set\(L, t|rehashtab\(L, t|lj_tab_resize\(/ {
+  /int lj_ctype_fin_newgen\(lua_State \*L,/ { infn = 1 }
+  infn && /lj_tab_newkey\(L, t|rehashtab\(L, t|lj_tab_resize\(L, t/ {
     bad = 1
     print
   }
   infn && /^}/ { infn = 0 }
   END { exit bad ? 0 : 1 }
-' "$ROOT/src/lj_tab.c"; then
-  echo "guardrail: FINREG grow helper must not call legacy table insertion or resize" >&2
+' "$ROOT/src/lj_ctype.c"; then
+  echo "guardrail: FINREG generation helper must not resize an existing table" >&2
   exit 1
 fi
 
 if ! awk '
-  /static int gc_finalize_cdata_slot_owned\(lua_State \*L,/ { infn = 1; wait = 0; claim = 0 }
-  infn && /lj_ctype_fin_claim_wait\(cts\)/ { wait = 1 }
+  /static int gc_finalize_cdata_slot_owned\(lua_State \*L,/ { infn = 1; get = 0; claim = 0 }
+  infn && /lj_ctype_fin_get\(L, cts, key, &t\)/ { get = 1 }
   infn && /lj_cdata_fin_claim_func\(slot, &fin\)/ { claim = 1 }
-  infn && /^}/ { found = wait && claim; infn = 0 }
+  infn && /^}/ { found = get && claim; infn = 0 }
   END { exit found ? 0 : 1 }
 ' "$ROOT/src/lj_gc.c"; then
-  echo "guardrail: cdata finalizer slot claims must coordinate with FINREG grow" >&2
+  echo "guardrail: cdata finalizer slot claims must scan FINREG generations and claim the slot" >&2
   exit 1
 fi
 
@@ -247,10 +213,30 @@ for file in "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc2.c"; do
     infn && /^}/ { infn = 0 }
     END { exit found ? 0 : 1 }
   ' "$file"; then
-    echo "guardrail: GC traversal of GCROOT_FFI_FIN must wait out FINREG claim sentinels in $file" >&2
+    echo "guardrail: GC traversal of every FINREG generation must wait out claim sentinels in $file" >&2
+    exit 1
+  fi
+  if ! rg -F -q 'lj_ctype_fin_istab(g, t)' "$file"; then
+    echo "guardrail: GC traversal must identify every FINREG generation in $file" >&2
+    exit 1
+  fi
+  if ! rg -F -q 'lj_ctype_fin_mark(g,' "$file"; then
+    echo "guardrail: GC roots must mark every FINREG generation in $file" >&2
     exit 1
   fi
 done
+
+if ! awk '
+  /void lj_gc_finalize_cdata\(lua_State \*L\)/ { infn = 1; head = 0; disable = 0; scan = 0 }
+  infn && /cts->fin_head/ { head = 1 }
+  infn && /setgcrefnull\(t->metatable\).*FINREG generations disabled/ { disable = 1 }
+  infn && /gc_finalize_cdata_tab\(L, t\)/ { scan = 1 }
+  infn && /^}/ { found = head && disable && scan; infn = 0 }
+  END { exit found ? 0 : 1 }
+' "$ROOT/src/lj_gc.c"; then
+  echo "guardrail: close-time cdata finalizer drain must disable and scan every FINREG generation" >&2
+  exit 1
+fi
 
 if ! awk '
   /LJLIB_CF\(ffi_gc\)/ { infn = 1 }
@@ -263,7 +249,7 @@ if ! awk '
 fi
 
 if rg -n 'IRCALL_lj_cdata_setfin' "$ROOT/src/lj_crecord.c"; then
-  echo "guardrail: traced ffi finalizer mutations must stay disabled until FINREG insertion is lock-free" >&2
+  echo "guardrail: traced ffi finalizer mutations must stay disabled until recorder tests land" >&2
   exit 1
 fi
 
