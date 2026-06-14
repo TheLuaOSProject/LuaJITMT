@@ -38,6 +38,10 @@ for needle in \
   'lj_gc_finalize_cdata_disable(global_State *g)' \
   'm8_close_chain_cdata' \
   'cdata_finalized == 4' \
+  'ALTERNATING_CLOSE_CHAIN' \
+  'm8_close_chain_alternating_cdata' \
+  'alternating_cdata_finalized == ALTERNATING_CLOSE_CHAIN' \
+  'lua_close drains alternating cdata/userdata finalizers to fixed point' \
   'lj_gc2_finalizer_pending(global_State *g)' \
   'lj_gc2_finalizer_sweep_pending(global_State *g)' \
   'assert(la_load32_acq(&g->gc2.finalizer_owner_tid) ==' \
@@ -89,6 +93,33 @@ if awk '
   END { exit bad ? 0 : 1 }
 ' "$ROOT/src/lj_gc.c"; then
   echo "guardrail: gc_call_finalizer must not assign vmthread(g) as its callback stack" >&2
+  exit 1
+fi
+
+if awk '
+  /LUA_API void lua_close\(lua_State \*L\)/ {
+    inclose = 1
+    incp = 0
+    sawudata = 0
+    sawcdata = 0
+  }
+  inclose && /lj_vm_cpcall\(L, NULL, NULL, cpfinalize\) == LUA_OK/ {
+    incp = 1
+  }
+  incp && /gcref\(g->gc\.mmudata\) == NULL/ {
+    sawudata = 1
+  }
+  incp && /!lj_gc_cdata_fin_pending\(g\)/ {
+    sawcdata = 1
+  }
+  incp && /break;/ && !(sawudata && sawcdata) {
+    bad = 1
+  }
+  incp && /^    }/ { incp = 0 }
+  inclose && /^}/ { inclose = 0 }
+  END { exit bad ? 0 : 1 }
+' "$ROOT/src/lj_state.c"; then
+  echo "guardrail: lua_close finalizer drain may only break after both pending-queue checks" >&2
   exit 1
 fi
 

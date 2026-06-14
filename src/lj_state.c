@@ -424,7 +424,6 @@ static TValue *cpfinalize(lua_State *L, lua_CFunction dummy, void *ud)
 LUA_API void lua_close(lua_State *L)
 {
   global_State *g = G(L);
-  int i;
   L = mainthread(g);  /* Only the main thread can be closed. */
 #if LJ_HASPROFILE
   luaJIT_profile_stop(L);
@@ -438,13 +437,12 @@ LUA_API void lua_close(lua_State *L)
   G2J(g)->state = LJ_TRACE_IDLE;
   lj_dispatch_update(g, 0);
 #endif
-  for (i = 0;;) {
+  for (;;) {
     hook_enter(g);
     L->status = LUA_OK;
     L->base = L->top = tvref(L->stack) + 1 + LJ_FR2;
     L->cframe = NULL;
     if (lj_vm_cpcall(L, NULL, NULL, cpfinalize) == LUA_OK) {
-      if (++i >= 10) break;
       lj_gc_separateudata(g, 1);  /* Separate udata again. */
       /* Until nothing is left to do. */
       if (gcref(g->gc.mmudata) == NULL && !lj_gc_cdata_fin_pending(g))
