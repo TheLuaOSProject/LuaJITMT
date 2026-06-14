@@ -27,6 +27,12 @@ for needle in \
   'lj_cdata_set_l(L, cts, ct, id' \
   'lj_cconv_ct_tv_l(L, cts, d, did' \
   'lj_cconv_ct_tv_l(L, cts, ctr, rid' \
+  'crec_index_meta(jit_State *J, CTState *cts, CTypeID id' \
+  'crec_index_meta(J, cts, id, rd)' \
+  'CTypeID sid[2]' \
+  'CTypeID id0 = i ? sid[0] : 0' \
+  'lj_ir_kint(J, id)' \
+  'lj_ctype_info(cts, id, &sz)' \
   'return lj_cconv_tv_ct_l(L, cts, ctr, rid' \
   'gcsteps += lj_cconv_tv_ct_l(L, cts, cta, aid' \
   'CTypeID rid1 = ctype_rawrefid(cts, id1)' \
@@ -69,7 +75,7 @@ if awk '
 fi
 
 if rg -n 'ctype_typeid\(cts' "$ROOT/src/lj_cconv.c" "$ROOT/src/lj_carith.c" \
-    "$ROOT/src/lj_cdata.c"; then
+    "$ROOT/src/lj_cdata.c" "$ROOT/src/lj_crecord.c"; then
   echo "guardrail: runtime conversion paths must not derive IDs from CType *" >&2
   exit 1
 fi
