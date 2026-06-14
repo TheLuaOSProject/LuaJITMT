@@ -134,6 +134,14 @@ Tests: t-weak-01..05 (k/v/kv modes, resurrection, cycle of weak tables,
 finalizer ordering, finalizer that spawns a thread).
 Gate: paranoia oracle extended to weak sets, zero-diff.
 
+Current implementation note: the original M8 target above remains intact.
+`tools/ci/m8_weak.sh` now covers deterministic weak-mode semantics,
+string weak-reference parity, weak-table cycles, current `ffi.gc()` ordering
+and clear/nested-GC behavior, and focused GC2 weak/barrier paranoia coverage.
+The original "finalizer that spawns a thread" item is still open: current
+probes hang under the shared VM-thread/finalizer bridge and need the planned
+M8 finalizer dispatch work, not an M9 performance cleanup.
+
 ## M9 — Performance closing (open-ended; budget ≈2000)
 Menu (in expected-value order; measure each): per-arena grey stacks +
 priority queue (05 §5.6.3); inline-alloc IR on trace (08 §8.6); cell
