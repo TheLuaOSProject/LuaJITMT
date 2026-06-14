@@ -40,7 +40,7 @@ for needle in \
   'if (rid1 == rid2)' \
   'rid1 == ctype_rawid(cts, ctype_cid(ct2->info))' \
   'lj_ctype_metatv(cts, &metatv, rid, MM_tostring)' \
-  'tv = lj_tab_setinth(L, t, -(int32_t)rid)' \
+  'lj_ctype_setmeta(cts, rid, mt)' \
   'ctype_preptype(CTRepr *ctr, CTypeID id' \
   'ctype_prepnum(ctr, id)' \
   'cp_err_badidx(CPState *cp, CTypeID id)' \

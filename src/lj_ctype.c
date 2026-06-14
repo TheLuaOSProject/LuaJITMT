@@ -227,6 +227,45 @@ void lj_ctype_misc_unlock(CTState *cts)
 #endif
 }
 
+static GCRef *ctype_metamap_init_l(lua_State *L, CTState *cts)
+{
+  GCRef *meta = lj_mem_newvec(L, CTID_MAX, GCRef);
+  memset(meta, 0, CTID_MAX*sizeof(GCRef));
+  la_storeptr_rel((void **)&cts->metamap, meta);
+  la_store32_rel(&cts->sizemeta, CTID_MAX);
+  return meta;
+}
+
+static LJ_AINLINE GCtab *ctype_meta_tab(CTState *cts, CTypeID id)
+{
+  GCRef *meta = (GCRef *)la_loadptr_acq((void *const *)&cts->metamap);
+  MSize sizemeta = (MSize)la_load32_acq(&cts->sizemeta);
+  if (LJ_UNLIKELY(meta == NULL || (MSize)id >= sizemeta))
+    return NULL;
+  return (GCtab *)gcref_acq(meta[id]);
+}
+
+int lj_ctype_setmeta(CTState *cts, CTypeID id, GCtab *mt)
+{
+  GCRef *meta = (GCRef *)la_loadptr_acq((void *const *)&cts->metamap);
+  MSize sizemeta = (MSize)la_load32_acq(&cts->sizemeta);
+  if (LJ_UNLIKELY(meta == NULL || (MSize)id >= sizemeta))
+    return 0;
+#if LJ_GC64
+  {
+    uint64_t expect = 0;
+    return la_cas64(&meta[id].gcptr64, &expect,
+		    (uint64_t)(uintptr_t)obj2gco(mt), LA_ACQ_REL, LA_ACQ);
+  }
+#else
+  {
+    uint32_t expect = 0;
+    return la_cas32(&meta[id].gcptr32, &expect,
+		    (uint32_t)(uintptr_t)obj2gco(mt), LA_ACQ_REL, LA_ACQ);
+  }
+#endif
+}
+
 static LJ_AINLINE CTypeID ctype_hash_load(CTState *cts, uint32_t h)
 {
   return (CTypeID)(la_load32_acq(&cts->hash[h]) & 0xffffu);  /* 11.2: ctype hash publication. */
@@ -585,8 +624,11 @@ cTValue *lj_ctype_meta(CTState *cts, CTypeID id, MMS mm)
   if (ctype_isptr(ct->info) &&
       ctype_isfunc(ctype_get(cts, ctype_cid(ct->info))->info))
     tv = lj_tab_getstr(cts->miscmap, &cts->g->strempty);
-  else
-    tv = lj_tab_getinth(cts->miscmap, -(int32_t)id);
+  else {
+    GCtab *mt = ctype_meta_tab(cts, id);
+    tv = mt ? lj_tab_getstr(mt, mmname_str(cts->g, mm)) : NULL;
+    return (tv && !tvisnil(tv)) ? tv : NULL;
+  }
   if (tv && tvistab(tv) &&
       (tv = lj_tab_getstr(tabV(tv), mmname_str(cts->g, mm))) && !tvisnil(tv))
     return tv;
@@ -605,8 +647,18 @@ cTValue *lj_ctype_metatv(CTState *cts, TValue *out, CTypeID id, MMS mm)
   if (ctype_isptr(ct->info) &&
       ctype_isfunc(ctype_get(cts, ctype_cid(ct->info))->info))
     tv = lj_tab_getstr(cts->miscmap, &cts->g->strempty);
-  else
-    tv = lj_tab_getinth(cts->miscmap, -(int32_t)id);
+  else {
+    GCtab *mt = ctype_meta_tab(cts, id);
+    if (mt) {
+      tv = lj_tab_getstr(mt, mmname_str(cts->g, mm));
+      if (tv) {
+	lj_tv_load_acq(out, tv);
+	return tvisnil(out) ? NULL : out;
+      }
+    }
+    setnilV(out);
+    return NULL;
+  }
   if (tv) {
     lj_tv_load_acq(&tabv, tv);
     if (tvistab(&tabv)) {
@@ -904,6 +956,7 @@ CTState *lj_ctype_init(lua_State *L)
   cts->tab = ct;
   cts->sizetab = CTTYPETAB_MIN;
   la_store32_rel(&cts->top, CTTYPEINFO_NUM);
+  ctype_metamap_init_l(L, cts);
   cts->g = G(L);
   for (id = 0; id < CTTYPEINFO_NUM; id++, ct++) {
     CTInfo info = lj_ctype_typeinfo[id];
@@ -946,6 +999,7 @@ void lj_ctype_freestate(global_State *g)
     lj_ccallback_mcode_free(cts);
     ctype_freeretired(g, cts);
     ctype_tab_free(g, ctype_tabh_acq(cts));
+    lj_mem_freevec(g, cts->metamap, cts->sizemeta, GCRef);
     lj_mem_freevec(g, cts->cb.cbid, cts->cb.sizeid, CTypeID1);
     lj_mem_freevec(g, cts->cb.owner, cts->cb.sizeid, lua_State *);
     lj_mem_freet(g, cts);

@@ -809,25 +809,17 @@ LJLIB_CF(ffi_metatype)
   CTState *cts = ctype_cts(L);
   CTypeID id = ffi_checkctype(L, cts, NULL);
   GCtab *mt = lj_lib_checktab(L, 2);
-  GCtab *t = cts->miscmap;
   CTypeID rid = ctype_rawid(cts, id);
   CType *ct = ctype_get(cts, rid);
-  TValue *tv;
   TValue tmp;
   GCcdata *cd;
   if (!(ctype_isstruct(ct->info) || ctype_iscomplex(ct->info) ||
 	ctype_isvector(ct->info)))
     lj_err_arg(L, 1, LJ_ERR_FFI_INVTYPE);
-  lj_ctype_misc_lock(cts);
-  tv = lj_tab_setinth(L, t, -(int32_t)rid);
-  if (!tvisnil(tv)) {
-    lj_ctype_misc_unlock(cts);
+  if (!lj_ctype_setmeta(cts, rid, mt))
     lj_err_caller(L, LJ_ERR_PROTMT);
-  }
   settabV(L, &tmp, mt);
-  copyTVrel(L, tv, &tmp);
-  lj_gc_pubtab(L, t);
-  lj_ctype_misc_unlock(cts);
+  lj_gc_barrierroot(L, &tmp);  /* 11.2 metatype side root. */
   cd = lj_cdata_new_(L, CTID_CTYPEID, 4);
   *(CTypeID *)cdataptr(cd) = id;
   setcdataV(L, L->top-1, cd);

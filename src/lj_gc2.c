@@ -1009,6 +1009,15 @@ static void gc2_scan_global_roots(global_State *g)
 	     (void *const *)&ret->retired_next)) {
 	lj_gc2_markmem(g, ret);
       }
+      lj_gc2_markmem(g, cts->metamap);
+      if (cts->metamap) {
+	MSize i, n = (MSize)la_load32_acq(&cts->sizemeta);
+	for (i = 0; i < n; i++) {
+	  GCobj *o = gcref_acq(cts->metamap[i]);
+	  if (o)
+	    lj_gc2_markobj(g, o);
+	}
+      }
       lj_gc2_markmem(g, cts->cb.cbid);
       lj_gc2_markmem(g, cts->cb.owner);
     }

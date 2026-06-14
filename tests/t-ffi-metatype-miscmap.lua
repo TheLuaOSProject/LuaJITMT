@@ -77,6 +77,23 @@ end
 
 assert(shared_winners == 1, ("shared metatype winners: %d"):format(shared_winners))
 
+ffi.cdef[[
+typedef struct { int x; } lj_m7_meta_root_t;
+]]
+
+do
+  local mt = {
+    __index = {
+      get = function(self) return self.x + 7 end,
+    },
+  }
+  local ct = ffi.metatype("lj_m7_meta_root_t", mt)
+  mt = nil
+  collectgarbage("collect")
+  collectgarbage("collect")
+  assert(ct(35):get() == 42)
+end
+
 collectgarbage("collect")
 collectgarbage("collect")
 

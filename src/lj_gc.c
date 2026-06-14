@@ -364,6 +364,7 @@ static void gc2_paranoia_check_rawroots(global_State *g)
       CTypeTab *ctret;
       gc2_paranoia_checkmem(g, cts, "ctype state");
       gc2_paranoia_checkmem(g, ctype_tabh_acq(cts), "ctype table");
+      gc2_paranoia_checkmem(g, cts->metamap, "ctype metatype side map");
       for (ctret = (CTypeTab *)la_loadptr_acq(
 	     (void *const *)&cts->retiredtab);
 	   ctret != NULL;
@@ -551,6 +552,15 @@ static void gc_mark_gcroot(global_State *g)
 	   ctret = (CTypeTab *)la_loadptr_acq(
 	     (void *const *)&ctret->retired_next)) {
 	lj_gc_arena_markmem(g, ctret);
+      }
+      lj_gc_arena_markmem(g, cts->metamap);
+      if (cts->metamap) {
+	MSize i, n = (MSize)la_load32_acq(&cts->sizemeta);
+	for (i = 0; i < n; i++) {
+	  GCobj *o = gcref_acq(cts->metamap[i]);
+	  if (o)
+	    gc_markobj(g, o);
+	}
       }
       lj_gc_arena_markmem(g, cts->cb.cbid);
       lj_gc_arena_markmem(g, cts->cb.owner);
