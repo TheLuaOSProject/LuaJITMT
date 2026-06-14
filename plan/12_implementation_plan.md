@@ -122,7 +122,7 @@ cell is promoted at trace entry, and source/loaded first-promotion loops where
 the hot trace performs the first mutable raw-slot promotion with otherwise
 type-stable loop slots. A narrow trace-local table-store bridge now records
 non-nil `ASTORE`/`HSTORE` updates to `TNEW`/`TDUP` tables that have not already
-escaped through a same-trace upvalue store and lowers them through
+escaped through a same-trace heap/upvalue store and lowers them through
 `lj_tab_storetv_forjit()`; the original broad generation-aware table write
 protocol remains pending, so shared and shape-changing indexed stores stay NYI.
 Linux/x64 HREFK recording now avoids the legacy `GCtab.hmask` mirror

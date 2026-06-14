@@ -275,9 +275,9 @@ handler — sized LJ_MAX_EXITSTUBGR-compatible; see lj_vmstruct notes.
   for `XLOAD` forwarding/CSE and `XSTORE` DSE; this advances the current XBAR
   surface without enabling broad table `ASTORE`/`HSTORE` tracing. A narrow M6
   bridge records non-nil slot stores only for trace-local `TNEW`/`TDUP` tables
-  that have not already escaped through a same-trace upvalue store, and lowers
-  them through the release-store `lj_tab_storetv_forjit()` helper; shared and
-  shape-changing table stores remain NYI until the full table-write protocol
+  that have not already escaped through a same-trace heap/upvalue store, and
+  lowers them through the release-store `lj_tab_storetv_forjit()` helper; shared
+  and shape-changing table stores remain NYI until the full table-write protocol
   below lands.
 - **Allocation on trace**: TNEW/TDUP/CNEW/SNEW already call into C or use
   inline alloc IR; route them to the TG bump (mirror of 07 §7.5) — the IR
@@ -441,10 +441,11 @@ scoped-flush target.
    loops stay untraced. The original plan kept traced array stores for barrier
    coverage, but the current
    bridge only admits trace-local `TNEW`/`TDUP` non-nil slot updates that have
-   not escaped through a same-trace upvalue store, and lowers them through a
-   helper that release-publishes the TValue and runs the GC2 value barrier. The
-   final generation-aware trace write/barrier protocol remains required before
-   raw generated stores or shared table stores can replace this helper bridge.
+   not escaped through a same-trace heap/upvalue store, and lowers them through
+   a helper that release-publishes the TValue and runs the GC2 value barrier.
+   The final generation-aware trace write/barrier protocol remains required
+   before raw generated stores or shared table stores can replace this helper
+   bridge.
 2. **TDUP/TNEW colo**: colo removed (06 §6.2) — recorder paths that
    special-case colocated arrays (`lj_record_tnew`, table.new fast func)
    simplify.

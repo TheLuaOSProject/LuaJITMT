@@ -1472,8 +1472,8 @@ static int rec_idx_tab_store_escaped(jit_State *J, IRRef tabref)
   IRRef ref;
   for (ref = (IRRef)(tabref + 1); ref < J->cur.nins; ref++) {
     IRIns *ir = IR(ref);
-    /* M6 bridge: same-trace upvalue publication makes the table shared. */
-    if (ir->o == IR_USTORE && ir->op2 == tabref)
+    /* M6 bridge: same-trace heap/upvalue publication makes the table shared. */
+    if (ir->o >= IR_ASTORE && ir->o <= IR_XSTORE && ir->op2 == tabref)
       return 1;
   }
   return 0;

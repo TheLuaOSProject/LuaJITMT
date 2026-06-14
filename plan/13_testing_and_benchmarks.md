@@ -73,7 +73,8 @@ accounting, TNEW/CNEW/SNEW GC2 hard-check readiness, shared AREF
 pair-stability, GC-step bridging, mcode publication, public and
 recorder-internal scoped flush handshake coverage, and numeric side-trace
 flush slot-retirement coverage. The table-store helper gate also rejects
-same-trace closed-upvalue escapes before a `TNEW`/`TDUP` slot update.
+same-trace closed-upvalue and nested heap escapes before a `TNEW`/`TDUP` slot
+update.
 These are milestone
 guardrails, not the final M9 performance matrix.
 

@@ -14,7 +14,7 @@ for needle in \
   '#if defined(__linux__) && LJ_TARGET_X64' \
   'rec_idx_store_trace_local(jit_State *J, TRef tab)' \
   'rec_idx_tab_store_escaped(jit_State *J, IRRef tabref)' \
-  'ir->o == IR_USTORE && ir->op2 == tabref' \
+  'ir->o >= IR_ASTORE && ir->o <= IR_XSTORE && ir->op2 == tabref' \
   'M6: no shared/new HSTORE bridge.' \
   'M6: no shared/nil ASTORE bridge.'
 do
@@ -121,6 +121,25 @@ end
 local escaped_store = make_escaped_store()
 assert(escaped_store(80) == 80)
 assert(not util.traceinfo(1), "closed-upvalue escaped table store unexpectedly traced")
+
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local function make_nested_escape()
+  local sink
+  return function(n)
+    for i = 1, n do
+      local outer = { inner = false }
+      local t = { stable = 0 }
+      outer.inner = t
+      sink = outer
+      t.stable = i
+    end
+    return sink.inner.stable
+  end
+end
+local nested_escape = make_nested_escape()
+assert(nested_escape(80) == 80)
+assert(not util.traceinfo(1), "nested escaped table store unexpectedly traced")
 '
 
 HASH_IR=$(mktemp "${TMPDIR:-/tmp}/lj-m6-hstore-ir.XXXXXX")
