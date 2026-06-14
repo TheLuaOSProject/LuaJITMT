@@ -362,10 +362,7 @@ CType *lj_ctype_getfieldq(CTState *cts, CType *ct, GCstr *name, CTSize *ofs,
 /* Follow references and get raw type for a C type ID. */
 CType *lj_ctype_rawref(CTState *cts, CTypeID id)
 {
-  CType *ct = ctype_get(cts, id);
-  while (ctype_isattrib(ct->info) || ctype_isref(ct->info))
-    ct = ctype_child(cts, ct);
-  return ct;
+  return ctype_get(cts, ctype_rawrefid(cts, id));
 }
 
 /* Get size for a C type ID. Does NOT support VLA/VLS. */

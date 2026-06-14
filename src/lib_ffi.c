@@ -298,10 +298,12 @@ LJLIB_CF(ffi_meta___tostring)
     id = *(CTypeID *)p;
   } else {
     CTState *cts = ctype_cts(L);
-    CType *ct = ctype_raw(cts, id);
+    CTypeID rid = ctype_rawid(cts, id);
+    CType *ct = ctype_get(cts, rid);
     if (ctype_isref(ct->info)) {
       p = *(void **)p;
-      ct = ctype_rawchild(cts, ct);
+      rid = ctype_rawid(cts, ctype_cid(ct->info));
+      ct = ctype_get(cts, rid);
     }
     if (ctype_iscomplex(ct->info)) {
       setstrV(L, L->top-1, lj_ctype_repr_complex(L, cdataptr(cd), ct->size));
@@ -318,13 +320,13 @@ LJLIB_CF(ffi_meta___tostring)
     } else {
       if (ctype_isptr(ct->info)) {
 	p = cdata_getptr(p, ct->size);
-	ct = ctype_rawchild(cts, ct);
+	rid = ctype_rawid(cts, ctype_cid(ct->info));
+	ct = ctype_get(cts, rid);
       }
       if (ctype_isstruct(ct->info) || ctype_isvector(ct->info)) {
 	/* Handle ctype __tostring metamethod. */
 	TValue metatv;
-	cTValue *tv = lj_ctype_metatv(cts, &metatv,
-				      ctype_typeid(cts, ct), MM_tostring);
+	cTValue *tv = lj_ctype_metatv(cts, &metatv, rid, MM_tostring);
 	if (tv)
 	  return lj_meta_tailcall(L, tv);
       }
@@ -618,9 +620,11 @@ LJLIB_CF(ffi_istype)	LJLIB_REC(.)
     GCcdata *cd = cdataV(o);
     CTypeID id2 = cd->ctypeid == CTID_CTYPEID ? *(CTypeID *)cdataptr(cd) :
 						cd->ctypeid;
-    CType *ct1 = lj_ctype_rawref(cts, id1);
-    CType *ct2 = lj_ctype_rawref(cts, id2);
-    if (ct1 == ct2) {
+    CTypeID rid1 = ctype_rawrefid(cts, id1);
+    CTypeID rid2 = ctype_rawrefid(cts, id2);
+    CType *ct1 = ctype_get(cts, rid1);
+    CType *ct2 = ctype_get(cts, rid2);
+    if (rid1 == rid2) {
       b = 1;
     } else if (ctype_type(ct1->info) == ctype_type(ct2->info) &&
 	       ct1->size == ct2->size) {
@@ -629,7 +633,7 @@ LJLIB_CF(ffi_istype)	LJLIB_REC(.)
       else if (ctype_isnum(ct1->info) || ctype_isvoid(ct1->info))
 	b = (((ct1->info ^ ct2->info) & ~(CTF_QUAL|CTF_LONG)) == 0);
     } else if (ctype_isstruct(ct1->info) && ctype_isptr(ct2->info) &&
-	       ct1 == ctype_rawchild(cts, ct2)) {
+	       rid1 == ctype_rawid(cts, ctype_cid(ct2->info))) {
       b = 1;
     }
   }
@@ -802,7 +806,8 @@ LJLIB_CF(ffi_metatype)
   CTypeID id = ffi_checkctype(L, cts, NULL);
   GCtab *mt = lj_lib_checktab(L, 2);
   GCtab *t = cts->miscmap;
-  CType *ct = ctype_raw(cts, id);
+  CTypeID rid = ctype_rawid(cts, id);
+  CType *ct = ctype_get(cts, rid);
   TValue *tv;
   TValue tmp;
   GCcdata *cd;
@@ -810,7 +815,7 @@ LJLIB_CF(ffi_metatype)
 	ctype_isvector(ct->info)))
     lj_err_arg(L, 1, LJ_ERR_FFI_INVTYPE);
   lj_ctype_misc_lock(cts);
-  tv = lj_tab_setinth(L, t, -(int32_t)ctype_typeid(cts, ct));
+  tv = lj_tab_setinth(L, t, -(int32_t)rid);
   if (!tvisnil(tv)) {
     lj_ctype_misc_unlock(cts);
     lj_err_caller(L, LJ_ERR_PROTMT);

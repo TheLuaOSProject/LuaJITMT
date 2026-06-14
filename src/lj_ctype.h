@@ -441,12 +441,32 @@ static LJ_AINLINE CType *ctype_child(CTState *cts, CType *ct)
   return ctype_get(cts, ctype_cid(ct->info));
 }
 
+/* Get raw type ID for a C type ID. */
+static LJ_AINLINE CTypeID ctype_rawid(CTState *cts, CTypeID id)
+{
+  CType *ct = ctype_get(cts, id);
+  while (ctype_isattrib(ct->info)) {
+    id = ctype_cid(ct->info);
+    ct = ctype_get(cts, id);
+  }
+  return id;
+}
+
+/* Follow references and get raw type ID for a C type ID. */
+static LJ_AINLINE CTypeID ctype_rawrefid(CTState *cts, CTypeID id)
+{
+  CType *ct = ctype_get(cts, id);
+  while (ctype_isattrib(ct->info) || ctype_isref(ct->info)) {
+    id = ctype_cid(ct->info);
+    ct = ctype_get(cts, id);
+  }
+  return id;
+}
+
 /* Get raw type for a C type ID. */
 static LJ_AINLINE CType *ctype_raw(CTState *cts, CTypeID id)
 {
-  CType *ct = ctype_get(cts, id);
-  while (ctype_isattrib(ct->info)) ct = ctype_child(cts, ct);
-  return ct;
+  return ctype_get(cts, ctype_rawid(cts, id));
 }
 
 /* Get raw type of the child of a C type. */

@@ -13,6 +13,7 @@ for needle in \
   'lj_ctype_misc_unlock(CTState *cts)' \
   'lj_ctype_misc_lock(cts)' \
   'lj_ctype_misc_unlock(cts)' \
+  'tv = lj_tab_setinth(L, t, -(int32_t)rid)' \
   'lj_err_caller(L, LJ_ERR_PROTMT)'
 do
   if ! rg -F -q "$needle" "$ROOT/src"; then
@@ -21,12 +22,13 @@ do
   fi
 done
 
-if awk '
+if ! awk '
   /LJLIB_CF\(ffi_metatype\)/ { inmeta = 1 }
   inmeta && /LJLIB_CF\(ffi_gc\)/ { inmeta = 0 }
-  inmeta && /lj_tab_setinth\(L, t, -\(int32_t\)ctype_typeid/ { sawset = 1 }
+  inmeta && /lj_ctype_misc_lock\(cts\)/ { sawlock = 1 }
+  inmeta && sawlock && /lj_tab_setinth\(L, t, -\(int32_t\)rid\)/ { sawset = 1 }
   inmeta && sawset && /lj_ctype_misc_unlock\(cts\)/ { sawunlock = 1 }
-  END { exit sawset && sawunlock ? 1 : 0 }
+  END { exit sawlock && sawset && sawunlock ? 0 : 1 }
 ' "$ROOT/src/lib_ffi.c"; then
   echo "guardrail: ffi.metatype miscmap store must be covered by misc token" >&2
   exit 1
