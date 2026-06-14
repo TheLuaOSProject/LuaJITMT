@@ -11,6 +11,7 @@ for needle in \
   'callback_checkfunc(CTState *cts, CType *ct, CTypeID *idp)' \
   '*idp = ctype_rawid(cts, ctype_cid(ct->info))' \
   'callback_mcode_new_l(lua_State *L, CTState *cts)' \
+  'callback_mcode_new_l(L, cts);  /* 11.5: mcode read-only after FFI init. */' \
   'lj_ccallback_init_l(lua_State *L, CTState *cts)' \
   'lj_ccallback_maxslot(void)' \
   'callback_owner_claim(lua_State **owner, MSize slot,' \
@@ -42,7 +43,7 @@ do
   fi
 done
 
-if rg -n 'lj_ccallback_new\(CTState|callback_slot_new|callback_mcode_new\(CTState' "$ROOT/src"; then
+if rg -n 'lj_ccallback_new\(CTState|callback_slot_new|callback_mcode_new\(CTState|misc_token|lj_ctype_misc_lock|lj_ctype_misc_unlock' "$ROOT/src"; then
   echo "guardrail: callback setup wrappers must stay explicit-L only" >&2
   exit 1
 fi
@@ -53,16 +54,20 @@ if rg -n 'cb\.topid|MSize topid' "$ROOT/src/lj_ccallback.c" "$ROOT/src/lj_ctype.
 fi
 
 if ! awk '
+  /void lj_ccallback_init_l/ { init = 1 }
+  init && /^}/ { init = 0 }
+  init && /callback_slots_init_l\(L, cts\)/ { slots = NR }
+  init && /callback_mcode_new_l\(L, cts\)/ { mcode = NR }
   /void \*lj_ccallback_new_l/ { innew = 1 }
   innew && /^}/ { innew = 0 }
-  innew && /lj_ctype_misc_lock\(cts\)/ { lock = NR }
-  innew && /lj_ctype_misc_unlock\(cts\)/ { unlock = NR }
+  innew && /callback_mcode_new_l|lj_ctype_misc_lock|lj_ctype_misc_unlock/ { badlazy = 1 }
   innew && /callback_slot_claim_l\(L, cts\)/ { claim = NR }
   innew && /lj_tab_setint\(L, t, \(int32_t\)slot\)/ { sawset = NR }
   innew && /callback_cbid_store\(cbid, slot, id\)/ { publish = NR }
-  END { exit lock && unlock && unlock < claim && claim < sawset && sawset < publish ? 0 : 1 }
+  END { exit slots && mcode && slots < mcode && claim && sawset && publish &&
+	      claim < sawset && sawset < publish && !badlazy ? 0 : 1 }
 ' "$ROOT/src/lj_ccallback.c"; then
-  echo "guardrail: callback install must initialize mcode before lockless slot/function/cbid publish" >&2
+  echo "guardrail: callback mcode must be initialized before runtime slot/function/cbid publish" >&2
   exit 1
 fi
 

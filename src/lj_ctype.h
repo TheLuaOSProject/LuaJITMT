@@ -200,7 +200,6 @@ typedef struct CTState {
   CCallback cb;		/* Temporary callback state. */
   uint32_t parse_token;	/* 11.2 cparse mutation token. */
   uint32_t fin_token;	/* 11.4 FFI finalizer table mutation token. */
-  uint32_t misc_token;	/* 11.2/11.5 miscmap mutation token bridge. */
   uint32_t hash[CTHASH_SIZE];  /* Hash anchors. Low 16 bits hold CTypeID. */
 } CTState;
 
@@ -525,8 +524,6 @@ LJ_FUNC void lj_ctype_parse_lock(CTState *cts, lua_State *L);
 LJ_FUNC void lj_ctype_parse_unlock(CTState *cts);
 LJ_FUNC void lj_ctype_fin_lock(CTState *cts);
 LJ_FUNC void lj_ctype_fin_unlock(CTState *cts);
-LJ_FUNC void lj_ctype_misc_lock(CTState *cts);
-LJ_FUNC void lj_ctype_misc_unlock(CTState *cts);
 LJ_FUNC int lj_ctype_setmeta(CTState *cts, CTypeID id, GCtab *mt);
 LJ_FUNC void lj_ctype_cb_blacklist(CTState *cts, void *func);
 LJ_FUNC int lj_ctype_cb_isblacklisted(CTState *cts, void *func);

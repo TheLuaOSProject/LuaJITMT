@@ -322,9 +322,8 @@ static void *callback_mcode_init(global_State *g, uint32_t *page)
 #endif
 
 /* Allocate and initialize area for callback function pointers. */
-LJ_NORET static void callback_err_locked(lua_State *L, CTState *cts)
+LJ_NORET static void callback_err(lua_State *L)
 {
-  lj_ctype_misc_unlock(cts);
   lj_err_caller(L, LJ_ERR_FFI_CBACKOV);
 }
 
@@ -333,16 +332,16 @@ static void callback_mcode_new_l(lua_State *L, CTState *cts)
   size_t sz = (size_t)CALLBACK_MCODE_SIZE;
   void *p, *pe;
   if (CALLBACK_MAX_SLOT == 0)
-    callback_err_locked(L, cts);
+    callback_err(L);
 #if LJ_TARGET_WINDOWS
   p = LJ_WIN_VALLOC(NULL, sz, MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
   if (!p)
-    callback_err_locked(L, cts);
+    callback_err(L);
 #elif LJ_TARGET_POSIX
   p = mmap(NULL, sz, PROT_READ|PROT_WRITE|CCPROT_CREATE,
 	   MAP_PRIVATE|MAP_ANONYMOUS|CCMAP_CREATE, -1, 0);
   if (p == MAP_FAILED)
-    callback_err_locked(L, cts);
+    callback_err(L);
 #if CCMAP_CREATE
   pthread_jit_write_protect_np(0);
 #endif
@@ -857,6 +856,7 @@ void lj_ccallback_init_l(lua_State *L, CTState *cts)
 {
 #if CALLBACK_MAX_SLOT
   (void)callback_slots_init_l(L, cts);
+  callback_mcode_new_l(L, cts);  /* 11.5: mcode read-only after FFI init. */
 #else
   UNUSED(L); UNUSED(cts);
 #endif
@@ -928,12 +928,6 @@ void *lj_ccallback_new_l(lua_State *L, CTState *cts, CType *ct, GCfunc *fn)
     CTypeID1 *cbid;
     GCtab *t = cts->miscmap;
     TValue tv;
-    if (!la_loadptr_acq((void *const *)&cts->cb.mcode)) {
-      lj_ctype_misc_lock(cts);
-      if (!cts->cb.mcode)
-	callback_mcode_new_l(L, cts);
-      lj_ctype_misc_unlock(cts);
-    }
     slot = callback_slot_claim_l(L, cts);
     cbid = (CTypeID1 *)la_loadptr_acq((void *const *)&cts->cb.cbid);
     setfuncV(L, &tv, fn);
