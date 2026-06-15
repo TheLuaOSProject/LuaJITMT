@@ -20,8 +20,9 @@ for needle in \
   'lj_ccallback_enter(CTState *cts, void *cf,' \
   'lj_ccallback_leave(CTState *cts, TValue *o,' \
   'lj_ccallback_unwind(lua_State *L, TValue *cont)' \
-  'was_native = (uint8_t)(tg != NULL && tg->in_native != 0)' \
-  'actions = lj_native_leave(L)' \
+  'was_native = (uint8_t)(tg->in_native != 0)' \
+  'la_store8_rlx(&tg->in_native, 0)' \
+  'actions = lj_safepoint_poll(L)' \
   'callback_frame_push(L, cb,' \
   'frame->cont == cont' \
   'callback_frame_top(cb)->was_native = 0' \
@@ -30,6 +31,8 @@ for needle in \
   'lj_ccallback_unwind(L, frame)' \
   'callback_conv_args(CTState *cts, lua_State *L, CCallbackRuntime *cb)' \
   'callback_conv_result(CTState *cts, lua_State *L, TValue *o,' \
+  'lj_ccallback_prepare(CTState *cts, MSize slot)' \
+  'Callback carrier TG from current TLS' \
   'callback_owner_claim(owner, top, L)' \
   'callback_owner_clear(lua_State **owner, MSize slot,' \
   'lj_ccallback_disown_state(lua_State *L)' \
@@ -50,9 +53,12 @@ for needle in \
   'lj_ctype_cb_isblacklisted(cts,' \
   'lj_gc_arena_markmem(g, cts->cbblack)' \
   'lj_gc2_markmem(g, cts->cbblack)' \
-  'mov TG:KBASE, L:ITYPE->tg_hint' \
-  'mov CBACK:KBASE->L, ITYPE' \
-  'mov CBACK:KBASE->gpr[0], CARG1' \
+  'call extern lj_ccallback_prepare' \
+  'sub rsp, 144' \
+  'add rsp, 144' \
+  'TG_CB2DISP' \
+  'lea KBASE, [DISPATCH+DISPATCH_TG(cb)]' \
+  'mov CBACK:KBASE->gpr[0], TMPR' \
   'mov CBACK:KBASE->stack, rax' \
   'mov rax, CBACK:KBASE->gpr[0]' \
   'movsd xmm0, qword CBACK:KBASE->fpr[0]'
@@ -66,6 +72,12 @@ done
 if rg -n 'CTSTATE->cb\.(gpr|fpr|stack|slot)|mov aword CTSTATE->L' \
     "$ROOT/src/vm_x64.dasc"; then
   echo "guardrail: x64 callback trampoline must not use shared CTState scratch" >&2
+  exit 1
+fi
+
+if rg -n 'mov TG:KBASE, L:(ITYPE|RA)->tg_hint|mov CBACK:KBASE->L, ITYPE' \
+    "$ROOT/src/vm_x64.dasc"; then
+  echo "guardrail: x64 callback trampoline must not route through slot owner TG" >&2
   exit 1
 fi
 
@@ -129,6 +141,11 @@ out="$TMP/lj_t-ffi-callback-nested-native"
 
 out="$TMP/lj_t-ffi-callback-owner-lifetime"
 "$CC" $CFLAGS -I"$ROOT/src" "$ROOT/tests/t-ffi-callback-owner-lifetime.c" \
+  "$ROOT/src/libluajit.a" -lm -ldl -pthread -o "$out"
+"$out"
+
+out="$TMP/lj_t-ffi-callback-attached-carrier"
+"$CC" $CFLAGS -I"$ROOT/src" "$ROOT/tests/t-ffi-callback-attached-carrier.c" \
   "$ROOT/src/libluajit.a" -lm -ldl -pthread -o "$out"
 "$out"
 

@@ -15,6 +15,8 @@
 LJ_ASMF void lj_vm_ffi_callback(void);
 
 LJ_FUNC MSize lj_ccallback_ptr2slot(CTState *cts, void *p);
+LJ_FUNCA CCallbackRuntime * LJ_FASTCALL lj_ccallback_prepare(CTState *cts,
+							     MSize slot);
 LJ_FUNCA lua_State * LJ_FASTCALL lj_ccallback_enter(CTState *cts, void *cf,
 						    CCallbackRuntime *cb);
 LJ_FUNCA void LJ_FASTCALL lj_ccallback_leave(CTState *cts, TValue *o,

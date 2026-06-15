@@ -184,7 +184,7 @@ typedef LJ_ALIGN(8) struct CCallbackRuntime {
   FPRCBArg fpr[CCALL_MAX_FPR];	/* Arguments/results in FPRs. */
   intptr_t gpr[CCALL_MAX_GPR];	/* Arguments/results in GPRs. */
   intptr_t *stack;		/* Pointer to arguments on stack. */
-  lua_State *L;			/* Current callback owner from the trampoline. */
+  lua_State *L;			/* Current callback carrier from the trampoline. */
   MSize slot;			/* Current callback slot. */
   MSize depth;			/* Active callback frames on this TG. */
   CCallbackFrame frame[CCALLBACK_MAX_NEST];  /* Per-callback return state. */

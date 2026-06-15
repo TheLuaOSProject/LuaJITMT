@@ -326,6 +326,7 @@
 #define GL_OFS(field)		((int)offsetof(global_State, field))
 #define J_OFS(field)		((int)offsetof(jit_State, field))
 #define TG_OFS_DISPATCH		((int)offsetof(TGState, dispatch))
+#define TG_CB2DISP		((int)offsetof(TGState, dispatch)-(int)offsetof(TGState, cb))
 |.define TGPOLL, dword [DISPATCH+DISPATCH_TG(poll)]
 |.define TGMARK, dword [DISPATCH+DISPATCH_TG(mark_active)]
 |.macro load_DISPATCH, lreg
@@ -2938,40 +2939,67 @@ static void build_subroutines(BuildCtx *ctx)
 |  saveregs_	// ebp/rbp already saved. ebp now holds global_State *.
 |  mov CTSTATE, GL:ebp->ctype_state
 |  movzx eax, ax
-|  mov TMPR, CTSTATE->cb.owner
-|  xor ITYPEd, ITYPEd
-|  test TMPR, TMPR
-|  jz >1
-|  mov L:ITYPE, [TMPR+rax*8]
-|  test ITYPE, ITYPE
-|  jz >1
-|  mov TG:KBASE, L:ITYPE->tg_hint
-|  test KBASE, KBASE
-|  jnz >2
-|1:
-|  mov TG:KBASE, GL:ebp->main_tg
-|2:
-|  lea KBASE, TG:KBASE->cb
-|  mov CBACK:KBASE->L, ITYPE
-|  mov CBACK:KBASE->slot, eax
-|  mov CBACK:KBASE->gpr[0], CARG1
-|  mov CBACK:KBASE->gpr[1], CARG2
-|  mov CBACK:KBASE->gpr[2], CARG3
-|  mov CBACK:KBASE->gpr[3], CARG4
+|  sub rsp, 144		// Includes Win64 helper-call shadow space.
+|  mov aword [rsp+32], CARG1
+|  mov aword [rsp+40], CARG2
+|  mov aword [rsp+48], CARG3
+|  mov aword [rsp+56], CARG4
+|.if X64WIN
+|.else
+|  mov aword [rsp+64], CARG5
+|  mov aword [rsp+72], CARG6
+|.endif
+|  movsd qword [rsp+80], xmm0
+|  movsd qword [rsp+88], xmm1
+|  movsd qword [rsp+96], xmm2
+|  movsd qword [rsp+104], xmm3
+|.if X64WIN
+|.else
+|  movsd qword [rsp+112], xmm4
+|  movsd qword [rsp+120], xmm5
+|  movsd qword [rsp+128], xmm6
+|  movsd qword [rsp+136], xmm7
+|.endif
+|  mov CARG1, CTSTATE
+|  mov CARG2d, eax
+|  call extern lj_ccallback_prepare
+|  mov KBASE, rax
+|  mov TMPR, aword [rsp+32]
+|  mov CBACK:KBASE->gpr[0], TMPR
+|  mov TMPR, aword [rsp+40]
+|  mov CBACK:KBASE->gpr[1], TMPR
+|  mov TMPR, aword [rsp+48]
+|  mov CBACK:KBASE->gpr[2], TMPR
+|  mov TMPR, aword [rsp+56]
+|  mov CBACK:KBASE->gpr[3], TMPR
+|  movsd xmm0, qword [rsp+80]
 |  movsd qword CBACK:KBASE->fpr[0], xmm0
-|  movsd qword CBACK:KBASE->fpr[1], xmm1
-|  movsd qword CBACK:KBASE->fpr[2], xmm2
-|  movsd qword CBACK:KBASE->fpr[3], xmm3
+|  movsd xmm0, qword [rsp+88]
+|  movsd qword CBACK:KBASE->fpr[1], xmm0
+|  movsd xmm0, qword [rsp+96]
+|  movsd qword CBACK:KBASE->fpr[2], xmm0
+|  movsd xmm0, qword [rsp+104]
+|  movsd qword CBACK:KBASE->fpr[3], xmm0
+|.if X64WIN
+|.else
+|  mov TMPR, aword [rsp+64]
+|  mov CBACK:KBASE->gpr[4], TMPR
+|  mov TMPR, aword [rsp+72]
+|  mov CBACK:KBASE->gpr[5], TMPR
+|  movsd xmm0, qword [rsp+112]
+|  movsd qword CBACK:KBASE->fpr[4], xmm0
+|  movsd xmm0, qword [rsp+120]
+|  movsd qword CBACK:KBASE->fpr[5], xmm0
+|  movsd xmm0, qword [rsp+128]
+|  movsd qword CBACK:KBASE->fpr[6], xmm0
+|  movsd xmm0, qword [rsp+136]
+|  movsd qword CBACK:KBASE->fpr[7], xmm0
+|.endif
+|  add rsp, 144
 |.if X64WIN
 |  lea rax, [rsp+CFRAME_SIZE+4*8]
 |.else
 |  lea rax, [rsp+CFRAME_SIZE]
-|  mov CBACK:KBASE->gpr[4], CARG5
-|  mov CBACK:KBASE->gpr[5], CARG6
-|  movsd qword CBACK:KBASE->fpr[4], xmm4
-|  movsd qword CBACK:KBASE->fpr[5], xmm5
-|  movsd qword CBACK:KBASE->fpr[6], xmm6
-|  movsd qword CBACK:KBASE->fpr[7], xmm7
 |.endif
 |  mov CBACK:KBASE->stack, rax
 |  mov CARG3, KBASE
@@ -2980,7 +3008,7 @@ static void build_subroutines(BuildCtx *ctx)
 |  mov CARG1, CTSTATE
 |  call extern lj_ccallback_enter	// (CTState *cts, void *cf, CCallbackRuntime *cb)
   |  // lua_State * returned in eax (RD).
-  |  load_DISPATCH RD			// Setup pointer to TG dispatch table.
+|  lea DISPATCH, [KBASE+TG_CB2DISP]	// Setup pointer to carrier TG dispatch table.
   |  set_vmstate INTERP
   |  mov BASE, L:RD->base
   |  mov RD, L:RD->top
@@ -2999,12 +3027,7 @@ static void build_subroutines(BuildCtx *ctx)
 |  mov L:RA, SAVE_L
 |  load_G TMPR
 |  mov CTSTATE, GL:TMPR->ctype_state
-|  mov TG:KBASE, L:RA->tg_hint
-|  test KBASE, KBASE
-|  jnz >1
-|  mov TG:KBASE, GL:TMPR->main_tg
-|1:
-|  lea KBASE, TG:KBASE->cb
+|  lea KBASE, [DISPATCH+DISPATCH_TG(cb)]
 |  mov L:RA->base, BASE
 |  mov L:RA->top, RB
 |  mov CARG1, CTSTATE

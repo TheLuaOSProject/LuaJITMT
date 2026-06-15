@@ -22,6 +22,7 @@
 #include "lj_mcode.h"
 #include "lj_trace.h"
 #include "lj_tg.h"
+#include "lj_thr.h"
 #include "lj_vm.h"
 
 /* -- Target-specific handling of callback slots -------------------------- */
@@ -629,12 +630,26 @@ static void callback_frame_pop(CCallbackRuntime *cb)
   cb->depth = depth;
 }
 
+CCallbackRuntime * LJ_FASTCALL lj_ccallback_prepare(CTState *cts, MSize slot)
+{
+  TGState *tg = lj_thr_get_tg();
+  lua_State *L;
+  CCallbackRuntime *cb;
+  if (LJ_UNLIKELY(tg == NULL || tg->gl != cts->g || tg->cur_L == NULL))
+    abort();  /* Foreign pthread callback auto-attach is not implemented yet. */
+  L = tg->cur_L;
+  cb = &tg->cb;
+  cb->L = L;  /* Callback carrier TG from current TLS, not slot owner. */
+  cb->slot = slot;
+  return cb;
+}
+
 void lj_ccallback_unwind(lua_State *L, TValue *cont)
 {
-  TGState *tg = L2TG(L);
+  TGState *tg = lj_thr_get_tg();
   CCallbackRuntime *cb;
   CCallbackFrame *frame;
-  if (tg == NULL)
+  if (L == NULL || tg == NULL || tg->gl != G(L))
     return;
   cb = &tg->cb;
   tg->ffi_call_func = NULL;
@@ -822,16 +837,12 @@ lua_State * LJ_FASTCALL lj_ccallback_enter(CTState *cts, void *cf,
 {
   lua_State *L = cb->L;
   global_State *g = cts->g;
-  TGState *tg;
+  TGState *tg = lj_thr_get_tg();
   uint8_t was_native;
   uint32_t actions = 0;
-  if (L == NULL) {
-    L = lj_tg_cur_L(g);
-    if (L == NULL)
-      L = mainthread(g);
-    cb->L = L;
-  }
-  tg = L2TG(L);
+  if (LJ_UNLIKELY(tg == NULL || tg->gl != g || cb != &tg->cb ||
+		  L == NULL || tg->cur_L != L || L2TG(L) != tg))
+    abort();
   if (lj_tg_jit_base(g)) {
     setstrV(L, L->top++, lj_err_str(L, LJ_ERR_FFI_BADCBACK));
     if (g->panic) g->panic(L);
@@ -844,11 +855,12 @@ lua_State * LJ_FASTCALL lj_ccallback_enter(CTState *cts, void *cf,
   cframe_errfunc(cf) = -1;
   cframe_nres(cf) = 0;
   L->cframe = cf;
-  was_native = (uint8_t)(tg != NULL && tg->in_native != 0);
+  was_native = (uint8_t)(tg->in_native != 0);
   if (was_native) {
     if (tg->ffi_call_func != NULL)
       lj_ctype_cb_blacklist(cts, tg->ffi_call_func);
-    actions = lj_native_leave(L);
+    la_store8_rlx(&tg->in_native, 0);
+    actions = lj_safepoint_poll(L);
   }
   callback_conv_args(cts, L, cb);
   callback_frame_push(L, cb, L->base-1, was_native);
@@ -868,8 +880,13 @@ void LJ_FASTCALL lj_ccallback_leave(CTState *cts, TValue *o,
   CCallbackFrame *frame = callback_frame_top(cb);
   lua_State *L = frame ? frame->L : cb->L;
   uint8_t was_native = frame ? frame->was_native : 0;
+  TGState *tg = lj_thr_get_tg();
   GCfunc *fn;
-  TValue *obase = L->base;
+  TValue *obase;
+  if (LJ_UNLIKELY(tg == NULL || tg->gl != cts->g || cb != &tg->cb ||
+		  L == NULL || L2TG(L) != tg))
+    abort();
+  obase = L->base;
   L->base = L->top;  /* Keep continuation frame for throwing errors. */
   if (o >= L->base) {
     /* PC of RET* is lost. Point to last line for result conv. errors. */
@@ -887,7 +904,7 @@ void LJ_FASTCALL lj_ccallback_leave(CTState *cts, TValue *o,
   cb->slot = 0;  /* Blacklist C function that called the callback. */
   callback_frame_pop(cb);
   if (was_native)
-    lj_native_enter(L2TG(L));
+    lj_native_enter(tg);
 }
 
 /* -- C callback management ----------------------------------------------- */
