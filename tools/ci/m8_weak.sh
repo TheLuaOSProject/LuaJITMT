@@ -71,6 +71,8 @@ for needle in \
   'finalizer-spawn outlived callback' \
   'lj_gc_mt_threshold_store(g, oldt)' \
   'collectgarbage("step", 1000000)' \
+  'newproxy(true)' \
+  'userdata explicit step' \
   'GC step completed while finalizer-spawned worker was live' \
   'finalizer-spawned worker can outlive callback' \
   'gc_finalize_cdata_slot_owned(lua_State *L, GCobj *o, cTValue *key)' \

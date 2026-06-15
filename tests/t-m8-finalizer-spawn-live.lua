@@ -5,12 +5,21 @@ ffi.cdef[[
 typedef struct { int x; } lj_m8_fin_spawn_live_t;
 ]]
 
-local function run_spawn_live(label, drive)
+local function setup_cdata_finalizer(fin)
+  ffi.gc(ffi.new("lj_m8_fin_spawn_live_t"), fin)
+end
+
+local function setup_udata_finalizer(fin)
+  local u = newproxy(true)
+  getmetatable(u).__gc = fin
+end
+
+local function run_spawn_live(label, setup_finalizer, drive)
   local started = th.channel(1)
   local release = th.channel(1)
   local worker
 
-  ffi.gc(ffi.new("lj_m8_fin_spawn_live_t"), function(_)
+  setup_finalizer(function(_)
     worker = th.spawn(function(started_ch, release_ch)
       started_ch:send("started")
       local msg, ok = release_ch:recv(10)
@@ -39,12 +48,20 @@ local function run_spawn_live(label, drive)
   collectgarbage("collect")
 end
 
-run_spawn_live("full collect", function()
+run_spawn_live("cdata full collect", setup_cdata_finalizer, function()
   collectgarbage("collect")
 end)
 
-run_spawn_live("explicit step", function()
+run_spawn_live("cdata explicit step", setup_cdata_finalizer, function()
   return collectgarbage("step", 1000000)
 end)
 
-print("t-m8-finalizer-spawn-live OK: finalizer-spawned worker can outlive callback")
+run_spawn_live("userdata full collect", setup_udata_finalizer, function()
+  collectgarbage("collect")
+end)
+
+run_spawn_live("userdata explicit step", setup_udata_finalizer, function()
+  return collectgarbage("step", 1000000)
+end)
+
+print("t-m8-finalizer-spawn-live OK: cdata/userdata finalizer-spawned worker can outlive callback")
