@@ -89,7 +89,7 @@ for needle in \
   'lj_gc_threshold_store(global_State *g, GCSize threshold)' \
   'lj_gc_mt_threshold_load(global_State *g)' \
   'lj_gc_mt_threshold_store(global_State *g,' \
-  'lj_gc_mt_threshold_store(g, lj_gc_threshold_load(g))' \
+  'lj_gc_mt_threshold_store(g, threshold)' \
   'lj_gc_threshold_store(g, lj_gc_mt_threshold_load(g))' \
   'api_gc_setlogical(global_State *g, GCSize threshold)' \
   'if (la_load32_acq(&g->mt_live) == 0)' \

@@ -58,6 +58,9 @@ int main(void)
   oldacap = t->acap;
   assert(oldarray != NULL);
   assert(oldasize == oldacap);
+  assert(lj_tab_array_mem_acq(t) == lj_tab_array_hdrw(oldarray));
+  assert(lj_tab_array_hdr_asize_acq(oldarray) == oldasize);
+  assert(lj_tab_array_hdr_acap_acq(oldarray) == oldacap);
   for (i = 0; i < (int)oldasize; i += 3)
     set_int(L, t, i, i + 1000);
 
@@ -66,9 +69,13 @@ int main(void)
   assert(array != oldarray);
   assert(lj_tab_asize_acq(t) == oldasize + 32);
   assert(t->acap == oldasize + 32);
+  assert(lj_tab_array_mem_acq(t) == lj_tab_array_hdrw(array));
+  assert(lj_tab_array_hdr_asize_acq(array) == oldasize + 32);
+  assert(lj_tab_array_hdr_acap_acq(array) == oldasize + 32);
   ret = find_retired_array(g, oldarray);
   assert(ret != NULL);
   assert(ret->acap == oldacap);
+  assert(lj_tab_array_hdr_acap_acq(ret->array) == ret->acap);
   assert(ret->armed == 1);
   retire_epoch = ret->retire_epoch;
   assert(lj_tab_reclaim_retired(g, retire_epoch) == 0);
@@ -88,6 +95,8 @@ int main(void)
   assert(lj_tab_array_acq(t) == array);
   assert(t->acap == oldacap);
   assert(lj_tab_asize_acq(t) == 6);
+  assert(lj_tab_array_hdr_asize_acq(array) == 6);
+  assert(lj_tab_array_hdr_acap_acq(array) == oldacap);
   assert(get_int(t, 9) == 9009);
   assert(get_int(t, (int32_t)oldasize + 4) == 4444);
   lua_pop(L, 1);
@@ -101,7 +110,11 @@ int main(void)
   lj_tab_resize(L, t, LJ_MAX_COLOSIZE + 24, 0);
   assert(t->colo < 0);
   assert(t->acap == LJ_MAX_COLOSIZE + 24);
-  assert(lj_tab_array_acq(t) != oldarray);
+  array = lj_tab_array_acq(t);
+  assert(array != oldarray);
+  assert(lj_tab_array_mem_acq(t) == lj_tab_array_hdrw(array));
+  assert(lj_tab_array_hdr_asize_acq(array) == LJ_MAX_COLOSIZE + 24);
+  assert(lj_tab_array_hdr_acap_acq(array) == LJ_MAX_COLOSIZE + 24);
   assert(find_retired_array(g, oldarray) == NULL);
   assert(get_int(t, 1) == 111);
   assert(oldacap <= LJ_MAX_COLOSIZE);

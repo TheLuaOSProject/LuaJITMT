@@ -438,7 +438,11 @@ scoped-flush target.
    `TAB_ARRAY` FLOAD and guards it equal before `AREF`/`ALOAD`, while trace-local
    `TNEW`/`TDUP` arrays skip the extra guard. This is not the final `AHdr`
    design, but it prevents the current shared-array trace from combining an old
-   array pointer with a newer size check. Existing non-nil table-slot stores are
+   array pointer with a newer size check. Separated arrays now have a
+   recoverable `TabArrayHdr` allocation base, but the x64 recorder still uses
+   the legacy `GCtab.array`/`GCtab.asize` loads for bounds and slots, so the
+   pair guard remains required until a later slice records both values through
+   the same array-generation header. Existing non-nil table-slot stores are
    now recorded on Linux/x64 for shared tables as well as PHI/upvalue/escaped
    table references, previous-nil in-bounds array slots, existing nil-value
    hash slots, non-numeric new hash keys, and fresh numeric insertions, then

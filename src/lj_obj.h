@@ -559,6 +559,13 @@ typedef struct TabNodeRetire {
   struct TabNodeRetire *next;
 } TabNodeRetire;
 
+typedef struct TabArrayHdr {
+  MSize asize;		/* Visible array size paired with the slots vector. */
+  MSize acap;		/* Allocated slot capacity for this array generation. */
+} TabArrayHdr;
+
+LJ_STATIC_ASSERT(sizeof(TabArrayHdr) == 8);
+
 typedef struct TabArrayRetire {
   TValue *array;	/* Retired array vector, owned only when armed. */
   MSize acap;		/* Original array capacity for vector free. */
@@ -625,6 +632,55 @@ static LJ_AINLINE MSize lj_tab_asize_acq(const GCtab *t)
 static LJ_AINLINE void lj_tab_asize_rel(GCtab *t, MSize asize)
 {
   la_store32_rel(&t->asize, (uint32_t)asize);
+}
+
+static LJ_AINLINE int lj_tab_array_separated(const GCtab *t)
+{
+  return LJ_MAX_COLOSIZE == 0 || t->colo <= 0;
+}
+
+static LJ_AINLINE const TabArrayHdr *lj_tab_array_hdr(const TValue *array)
+{
+  return (const TabArrayHdr *)(const void *)
+    ((const char *)(const void *)array - sizeof(TabArrayHdr));
+}
+
+static LJ_AINLINE TabArrayHdr *lj_tab_array_hdrw(TValue *array)
+{
+  return (TabArrayHdr *)(void *)((char *)(void *)array - sizeof(TabArrayHdr));
+}
+
+static LJ_AINLINE TValue *lj_tab_array_slots(TabArrayHdr *hdr)
+{
+  return (TValue *)(void *)((char *)(void *)hdr + sizeof(TabArrayHdr));
+}
+
+static LJ_AINLINE GCSize lj_tab_array_bytes(MSize acap)
+{
+  return (GCSize)sizeof(TabArrayHdr) + (GCSize)acap * (GCSize)sizeof(TValue);
+}
+
+static LJ_AINLINE void *lj_tab_array_mem_acq(const GCtab *t)
+{
+  TValue *array = lj_tab_array_acq(t);
+  if (array && lj_tab_array_separated(t))
+    return (void *)lj_tab_array_hdrw(array);
+  return (void *)array;
+}
+
+static LJ_AINLINE MSize lj_tab_array_hdr_asize_acq(const TValue *array)
+{
+  return (MSize)la_load32_acq(&lj_tab_array_hdr(array)->asize);
+}
+
+static LJ_AINLINE void lj_tab_array_hdr_asize_rel(TValue *array, MSize asize)
+{
+  la_store32_rel(&lj_tab_array_hdrw(array)->asize, (uint32_t)asize);
+}
+
+static LJ_AINLINE MSize lj_tab_array_hdr_acap_acq(const TValue *array)
+{
+  return (MSize)la_load32_acq(&lj_tab_array_hdr(array)->acap);
 }
 
 static LJ_AINLINE Node *lj_tab_node_acq(const GCtab *t)

@@ -134,7 +134,9 @@ empty-hash misses fall through to regular `HREF` instead of the legacy
 `TAB_HMASK == 0` shortcut. Shared array reads now have an interim x64
 pair-stability guard that brackets the `TAB_ASIZE` bounds check with two fresh
 `TAB_ARRAY` loads and guards the array pointers equal before `AREF`/`ALOAD`.
-The broader array/header FLOAD indirection target remains pending. Linux/x64
+Separated arrays now carry a recoverable `TabArrayHdr` allocation base, but the
+recorder still uses legacy `GCtab.array`/`GCtab.asize` loads, so the broader
+array/header FLOAD indirection target remains pending. Linux/x64
 secure builds now use the original M6 dual-map mcode write view: each mcode
 area is memfd-backed, mapped once RX and once RW, `MCLink.rw` carries the
 writable alias, generated-code/unwind writes go through RX/RW translation

@@ -154,7 +154,7 @@ int main(void)
   arrtab = tabV(tv);
   assert(arrtab->asize > 0);
   assert(arrtab->colo <= 0);
-  assert(arena_mem_marked(g, tvref(arrtab->array)));
+  assert(arena_mem_marked(g, lj_tab_array_hdrw(lj_tab_array_acq(arrtab))));
   L->top--;
 
   lua_getfield(L, -1, "hash");
@@ -162,7 +162,7 @@ int main(void)
   assert(tvistab(tv));
   hashtab = tabV(tv);
   assert(hashtab->hmask > 0);
-  assert(arena_mem_marked(g, noderef(hashtab->node)));
+  assert(arena_mem_marked(g, lj_tab_node_hdrw(lj_tab_node_acq(hashtab))));
   L->top--;
 
   lua_getfield(L, -1, "s");

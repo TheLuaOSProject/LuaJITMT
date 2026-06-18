@@ -49,13 +49,13 @@ for needle in \
   'lj_tab_storenil(J->L, &node[i].val)' \
   'lj_tab_storenil(J->L, &array[i])' \
   'copyTVrel(L, o, base+2)' \
-  'lj_tab_storefunc(L, tv, fn)' \
-  'lj_tab_storenil(L, tv)' \
-  'copyTVrel(L, tv, &tmp)' \
+  'slot = lj_tab_storefunc(L, lj_tab_setstr(L, tab, name), fn)' \
+  'lj_tab_storenil(L, lj_tab_set(L, registry, &key))' \
+  'copyTVrel(L, lj_tab_set(L, registry, &key), &tv)' \
   'lj_tab_storenilraw(&array[i])' \
   'lj_tab_storenilraw(&n->val)' \
-  'lj_tab_storenilraw(tv)' \
-  'lj_tab_storenilraw(&node[i].val)' \
+  'lj_cdata_fin_storenil(L, tv)' \
+  'lj_tab_storenilraw(&n->key)' \
   'const_slot_store(o, fs->nkn)' \
   'const_slot_store(o, fs->nkgc)' \
   'lj_tab_storebool(L, tv, 1)' \

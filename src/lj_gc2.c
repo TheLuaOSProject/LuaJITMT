@@ -3058,7 +3058,7 @@ static int gc2_traverse_tab(global_State *g, GCtab *t)
   int ffi_fin = gc2_tab_is_ffi_fin(g, t);
   gc2_note_weak_table(g, t, weak);  /* 05 section 5.8 discovery scaffold. */
   if (t->acap > 0)
-    lj_gc2_markmem(g, lj_tab_array_acq(t));
+    lj_gc2_markmem(g, lj_tab_array_mem_acq(t));
   {
     Node *node = lj_tab_node_acq(t);
     if (lj_tab_node_hmask_acq(node) > 0)

@@ -85,6 +85,19 @@ static LJ_AINLINE void tab_node_free(global_State *g, Node *node, MSize hmask)
   lj_mem_free(g, lj_tab_node_hdrw(node), lj_tab_node_bytes(hmask));
 }
 
+static LJ_AINLINE TValue *tab_array_new(lua_State *L, MSize asize, MSize acap)
+{
+  TabArrayHdr *hdr = (TabArrayHdr *)lj_mem_new(L, lj_tab_array_bytes(acap));
+  hdr->asize = asize;
+  hdr->acap = acap;
+  return lj_tab_array_slots(hdr);
+}
+
+static LJ_AINLINE void tab_array_free(global_State *g, TValue *array, MSize acap)
+{
+  lj_mem_free(g, lj_tab_array_hdrw(array), lj_tab_array_bytes(acap));
+}
+
 static LJ_AINLINE Node *newhpart_alloc(lua_State *L, uint32_t hbits,
 				       MSize *hmaskp)
 {
@@ -241,11 +254,6 @@ static void tab_retire_arm(global_State *g, TabNodeRetire *ret)
   la_store32_rel(&ret->armed, 1);
 }
 
-static LJ_AINLINE int tab_array_separated(const GCtab *t)
-{
-  return LJ_MAX_COLOSIZE == 0 || t->colo <= 0;
-}
-
 static void tab_array_retired_push(global_State *g, TabArrayRetire *ret)
 {
   void *head = la_loadptr_acq((void *const *)&g->tab.retired_arrays);
@@ -261,6 +269,8 @@ static TabArrayRetire *tab_array_retire_reserve(lua_State *L, TValue *array,
   TabArrayRetire *ret = lj_mem_newt(L, sizeof(TabArrayRetire), TabArrayRetire);
   ret->array = array;
   ret->acap = acap;
+  lj_assertL(!array || acap == lj_tab_array_hdr_acap_acq(array),
+	     "mismatched retired table array capacity");
   la_store64_rel(&ret->retire_epoch, 0);
   la_store32_rel(&ret->armed, 0);
   ret->next = NULL;
@@ -344,7 +354,7 @@ static GCtab *newtab(lua_State *L, uint32_t asize, uint32_t hbits)
     if (asize > 0) {
       if (asize > LJ_MAX_ASIZE)
 	lj_err_msg(L, LJ_ERR_TABOV);
-      lj_tab_array_set(t, lj_mem_newvec(L, asize, TValue));
+      lj_tab_array_set(t, tab_array_new(L, asize, asize));
       t->asize = asize;
       t->acap = asize;
     }
@@ -454,8 +464,8 @@ void LJ_FASTCALL lj_tab_free(global_State *g, GCtab *t)
   MSize hmask = lj_tab_node_hmask_acq(node);
   if (hmask > 0)
     tab_node_free(g, node, hmask);
-  if (t->acap > 0 && tab_array_separated(t))
-    lj_mem_freevec(g, lj_tab_array_acq(t), t->acap, TValue);
+  if (t->acap > 0 && lj_tab_array_separated(t))
+    tab_array_free(g, lj_tab_array_acq(t), t->acap);
   if (!lj_mem_freegco_defer(g, t, size))
     lj_mem_free(g, t, size);
 }
@@ -489,9 +499,9 @@ void lj_tab_resize(lua_State *L, GCtab *t, uint32_t asize, uint32_t hbits)
     if (asize > LJ_MAX_ASIZE)
       lj_err_msg(L, LJ_ERR_TABOV);
     if (asize > oldacap) {
-      if (tab_array_separated(t) && oldacap > 0)
+      if (lj_tab_array_separated(t) && oldacap > 0)
 	oldaret = tab_array_retire_reserve(L, oldarray, oldacap);
-      array = lj_mem_newvec(L, asize, TValue);
+      array = tab_array_new(L, asize, asize);
       for (i = 0; i < oldasize; i++)
 	lj_tv_load_acq(&array[i], &oldarray[i]);
       if (LJ_MAX_COLOSIZE != 0 && t->colo > 0)
@@ -538,6 +548,8 @@ void lj_tab_resize(lua_State *L, GCtab *t, uint32_t asize, uint32_t hbits)
     }
   }
   if (asize > oldasize) {
+    if (array && lj_tab_array_separated(t))
+      lj_tab_array_hdr_asize_rel(array, asize);
     if (array != oldarray)
       lj_tab_array_rel(t, array);
     lj_tab_asize_rel(t, asize);
@@ -561,6 +573,8 @@ void lj_tab_resize(lua_State *L, GCtab *t, uint32_t asize, uint32_t hbits)
     }
   }
   if (asize < oldasize) {  /* Array part shrinks? */
+    if (array && lj_tab_array_separated(t))
+      lj_tab_array_hdr_asize_rel(array, asize);
     lj_tab_asize_rel(t, asize);  /* This 'shrinks' even colocated arrays. */
   }
   if (oldhmask > 0)
@@ -599,7 +613,7 @@ uint32_t lj_tab_reclaim_retired(global_State *g, uint64_t completed_epoch)
     if (!la_load32_acq(&aret->armed)) {
       tab_array_retired_push(g, aret);
     } else if (la_load64_acq(&aret->retire_epoch) < completed_epoch) {
-      lj_mem_freevec(g, aret->array, aret->acap, TValue);
+      tab_array_free(g, aret->array, aret->acap);
       lj_mem_freet(g, aret);
       reclaimed++;
     } else {
@@ -630,7 +644,7 @@ void lj_tab_freeretired(global_State *g)
   while (aret) {
     TabArrayRetire *next = aret->next;
     if (la_load32_acq(&aret->armed))
-      lj_mem_freevec(g, aret->array, aret->acap, TValue);
+      tab_array_free(g, aret->array, aret->acap);
     lj_mem_freet(g, aret);
     aret = next;
   }

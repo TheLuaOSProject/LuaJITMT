@@ -77,8 +77,8 @@ static void test_strong_table(lua_State *L, global_State *g, TGState *tg)
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
   assert(parent->asize > 0);
   assert(parent->hmask > 0);
-  assert(lj_gc2_ismarkedmem(g, tvref(parent->array)) == 1);
-  assert(lj_gc2_ismarkedmem(g, noderef(parent->node)) == 1);
+  assert(lj_gc2_ismarkedmem(g, lj_tab_array_hdrw(lj_tab_array_acq(parent))) == 1);
+  assert(lj_gc2_ismarkedmem(g, lj_tab_node_hdrw(lj_tab_node_acq(parent))) == 1);
   assert(la_load64_acq(&g->gc2.grey_pushed) == grey_pushed0 + 2u);
   assert(la_load64_acq(&g->gc2.grey_drained) == grey_drained0 + 2u);
   lj_gc2_legacy_cycle_end(g);

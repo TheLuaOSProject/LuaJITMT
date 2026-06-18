@@ -97,7 +97,7 @@ static void gc_mark_tab_retired_mem(global_State *g)
        aret = (TabArrayRetire *)la_loadptr_acq((void *const *)&aret->next)) {
     lj_gc_arena_markmem(g, aret);
     if (la_load32_acq(&aret->armed))
-      lj_gc_arena_markmem(g, aret->array);
+      lj_gc_arena_markmem(g, lj_tab_array_hdrw(aret->array));
   }
 }
 
@@ -238,7 +238,7 @@ static void gc2_paranoia_checktab(global_State *g, GCtab *t)
     return;
   gc2_paranoia_checkobj(g, obj2gco(t), "table");
   if (t->acap > 0)
-    gc2_paranoia_checkmem(g, lj_tab_array_acq(t), "table array");
+    gc2_paranoia_checkmem(g, lj_tab_array_mem_acq(t), "table array");
   {
     Node *node = lj_tab_node_acq(t);
     if (lj_tab_node_hmask_acq(node) > 0)
@@ -379,7 +379,8 @@ static void gc2_paranoia_check_rawroots(global_State *g)
        aret = (TabArrayRetire *)la_loadptr_acq((void *const *)&aret->next)) {
     gc2_paranoia_checkmem(g, aret, "retired table array record");
     if (la_load32_acq(&aret->armed))
-      gc2_paranoia_checkmem(g, aret->array, "retired table array");
+      gc2_paranoia_checkmem(g, lj_tab_array_hdrw(aret->array),
+			    "retired table array");
   }
 #if LJ_64
   gc2_paranoia_checkmem(g, mref(g->gc.lightudseg, uint32_t),
@@ -830,7 +831,7 @@ static int gc_traverse_tab(global_State *g, GCtab *t)
   cTValue *mode;
   GCtab *mt = tabref_acq(t->metatable);
   if (t->acap > 0)
-    lj_gc_arena_markmem(g, lj_tab_array_acq(t));
+    lj_gc_arena_markmem(g, lj_tab_array_mem_acq(t));
   {
     Node *node = lj_tab_node_acq(t);
     if (lj_tab_node_hmask_acq(node) > 0)
@@ -1045,7 +1046,7 @@ static size_t propagatemark(global_State *g)
     return (LJ_MAX_COLOSIZE != 0 && t->colo ?
 	    sizetabcolo((uint32_t)t->colo & 0x7f) : sizeof(GCtab)) +
 	   (t->acap && (LJ_MAX_COLOSIZE == 0 || t->colo <= 0) ?
-	    sizeof(TValue) * t->acap : 0) +
+	    lj_tab_array_bytes(t->acap) : 0) +
 	   (hmask ? lj_tab_node_bytes(hmask) : 0);
   } else if (LJ_LIKELY(gct == ~LJ_TFUNC)) {
     GCfunc *fn = gco2func(o);

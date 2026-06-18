@@ -488,10 +488,10 @@ int main(void)
   arrtab = tabV(tv);
   assert(arrtab->asize > 0);
   assert(arrtab->colo <= 0);
-  arra = lj_arena_of(tvref(arrtab->array));
+  arra = lj_arena_of(lj_tab_array_hdrw(lj_tab_array_acq(arrtab)));
   assert((arra->hdr.flags & LJ_AF_TRAVERSABLE) == 0);
   assert(arra->hdr.sweep_epoch == 0);
-  assert(ptr_state(tvref(arrtab->array)) == 3);
+  assert(ptr_state(lj_tab_array_hdrw(lj_tab_array_acq(arrtab))) == 3);
   L->top--;
 
   lua_getfield(L, -1, "deadtab");
@@ -502,10 +502,10 @@ int main(void)
   assert(deadtab->hmask > 0);
   assert(deadtab->colo <= 0);
   deadtab_size = sizeof(GCtab);
-  deadarr = tvref(deadtab->array);
-  deadarr_size = (GCSize)deadtab->asize * sizeof(TValue);
-  deadnode = noderef(deadtab->node);
-  deadnode_size = (GCSize)(deadtab->hmask + 1) * sizeof(Node);
+  deadarr = lj_tab_array_hdrw(lj_tab_array_acq(deadtab));
+  deadarr_size = lj_tab_array_bytes(deadtab->acap);
+  deadnode = lj_tab_node_hdrw(lj_tab_node_acq(deadtab));
+  deadnode_size = lj_tab_node_bytes(deadtab->hmask);
   assert((lj_arena_of(deadtab)->hdr.flags & LJ_AF_TRAVERSABLE) != 0);
   assert((lj_arena_of(deadarr)->hdr.flags & LJ_AF_TRAVERSABLE) == 0);
   assert((lj_arena_of(deadnode)->hdr.flags & LJ_AF_TRAVERSABLE) == 0);
@@ -559,11 +559,12 @@ int main(void)
   assert(deadsplit->colo < 0);
   assert(deadsplit->asize > ((uint32_t)deadsplit->colo & 0x7f));
   deadsplit_size = sizetabcolo((uint32_t)deadsplit->colo & 0x7f);
-  splitarr = tvref(deadsplit->array);
-  splitarr_size = (GCSize)deadsplit->asize * sizeof(TValue);
+  splitarr = lj_tab_array_hdrw(lj_tab_array_acq(deadsplit));
+  splitarr_size = lj_tab_array_bytes(deadsplit->acap);
   splitnode_size = deadsplit->hmask > 0 ?
-		   (GCSize)(deadsplit->hmask + 1) * sizeof(Node) : 0;
-  splitnode = deadsplit->hmask > 0 ? (void *)noderef(deadsplit->node) : NULL;
+		   lj_tab_node_bytes(deadsplit->hmask) : 0;
+  splitnode = deadsplit->hmask > 0 ?
+	      (void *)lj_tab_node_hdrw(lj_tab_node_acq(deadsplit)) : NULL;
   assert((lj_arena_of(deadsplit)->hdr.flags & LJ_AF_TRAVERSABLE) != 0);
   assert((lj_arena_of(splitarr)->hdr.flags & LJ_AF_TRAVERSABLE) == 0);
   assert(ptr_state(deadsplit) == 2);

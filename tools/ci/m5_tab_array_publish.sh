@@ -20,12 +20,19 @@ for needle in \
   'lj_tab_array_rel' \
   'lj_tab_asize_acq' \
   'lj_tab_asize_rel' \
+  'TabArrayHdr' \
+  'lj_tab_array_hdrw' \
+  'lj_tab_array_bytes' \
+  'lj_tab_array_mem_acq' \
   'TabArrayRetire' \
   'retired_arrays' \
+  'tab_array_new' \
+  'tab_array_free' \
   'tab_array_retire_reserve' \
   'tab_array_retire_arm' \
   'lj_tab_array_rel(t, array)' \
   'lj_tab_asize_rel(t, asize)' \
+  'lj_tab_array_hdr_asize_rel(array, asize)' \
   'lj_tv_load_acq(&val, &array[i])'
 do
   if ! rg -F -q "$needle" "$ROOT/src"; then
