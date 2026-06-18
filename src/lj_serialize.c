@@ -132,8 +132,7 @@ void LJ_FASTCALL lj_serialize_dict_prep_str(lua_State *L, GCtab *dict)
     TValue *array;
     if (!len) return;
     lj_tab_resize(L, dict, lj_tab_asize_acq(dict), hsize2hbits(len));
-    asize = lj_tab_asize_acq(dict);
-    array = lj_tab_array_acq(dict);
+    asize = lj_tab_array_snapshot_acq(dict, &array);
     for (i = 1; i <= len && i < asize; i++) {
       TValue tv;
       lj_tv_load_acq(&tv, &array[i]);
@@ -157,8 +156,7 @@ void LJ_FASTCALL lj_serialize_dict_prep_mt(lua_State *L, GCtab *dict)
     TValue *array;
     if (!len) return;
     lj_tab_resize(L, dict, lj_tab_asize_acq(dict), hsize2hbits(len));
-    asize = lj_tab_asize_acq(dict);
-    array = lj_tab_array_acq(dict);
+    asize = lj_tab_array_snapshot_acq(dict, &array);
     for (i = 1; i <= len && i < asize; i++) {
       TValue tv;
       lj_tv_load_acq(&tv, &array[i]);
@@ -405,13 +403,17 @@ static char *serialize_get(char *r, SBufExt *sbx, TValue *o)
     copyTVrel(sbufL(sbx), o, &tv);
   } else if (tp == SER_TAG_DICT_STR) {
     GCtab *dict_str;
+    TValue *array = NULL;
+    MSize asize = 0;
     uint32_t idx;
     r = serialize_ru124(r, w, &idx); if (LJ_UNLIKELY(!r)) goto eob;
     idx++;
     dict_str = tabref_acq(sbx->dict_str);
-    if (dict_str && idx < lj_tab_asize_acq(dict_str)) {
+    if (dict_str)
+      asize = lj_tab_array_snapshot_acq(dict_str, &array);
+    if (idx < asize) {
       TValue tv;
-      lj_tv_load_acq(&tv, &lj_tab_array_acq(dict_str)[idx]);
+      lj_tv_load_acq(&tv, &array[idx]);
       if (tvisstr(&tv)) {
 	copyTVrel(sbufL(sbx), o, &tv);
       } else {
@@ -427,13 +429,17 @@ static char *serialize_get(char *r, SBufExt *sbx, TValue *o)
     sbx->depth--;
     if (tp == SER_TAG_DICT_MT) {
       GCtab *dict_mt;
+      TValue *array = NULL;
+      MSize asize = 0;
       uint32_t idx;
       r = serialize_ru124(r, w, &idx); if (LJ_UNLIKELY(!r)) goto eob;
       idx++;
       dict_mt = tabref_acq(sbx->dict_mt);
-      if (dict_mt && idx < lj_tab_asize_acq(dict_mt)) {
+      if (dict_mt)
+	asize = lj_tab_array_snapshot_acq(dict_mt, &array);
+      if (idx < asize) {
 	TValue tv;
-	lj_tv_load_acq(&tv, &lj_tab_array_acq(dict_mt)[idx]);
+	lj_tv_load_acq(&tv, &array[idx]);
 	if (tvistab(&tv)) {
 	  mt = tabV(&tv);
 	} else {

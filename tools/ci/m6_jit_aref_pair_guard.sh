@@ -14,6 +14,7 @@ for needle in \
   'rec_idx_tab_trace_local(jit_State *J, TRef tab)' \
   'rec_idx_tab_array_has_hdr(const GCtab *t, const TValue *array)' \
   'array == coloarray' \
+  'lj_tab_array_snapshot_acq(t, &record_array)' \
   'rec_idx_tab_array_has_hdr(t, record_array)' \
   'rec_idx_array_hdr_asize(jit_State *J, TRef arrayref)' \
   'rec_idx_array_hdr_guards(jit_State *J, TRef tab, TRef arrayref)' \

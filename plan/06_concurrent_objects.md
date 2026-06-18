@@ -196,9 +196,12 @@ allocation capacity until the final `AHdr` port. Integer `lj_tab_getint()` /
 `asize` mirror and then uses `TabArrayHdr.asize` for separated array
 generations, preserving the colocated-array path until the final `AHdr` port.
 Core C array scanners for clearing, duplication, resize counting,
-traversal/length, bytecode/serialization/parser walks, and legacy/GC2 marking
-now share that snapshot helper instead of independently pairing
-`GCtab.array` with the legacy size mirror.
+traversal/length, bytecode/serialization/parser walks, serializer dictionary
+prep/decode lookups, recorder table traversal type prediction, and legacy/GC2
+marking now share that snapshot helper instead of independently pairing
+`GCtab.array` with the legacy size mirror. Linux/x64 shared-array recording also
+uses the same record-time snapshot to decide whether the current table shape has
+a separated array header.
 On x86-64,
 `getmetatable`'s `__metatable` probe, `ipairs_aux` empty-hash fallback,
 `lj_vm_next` hash traversal, `BC_TGETS_Z`, and `BC_ITERN` hash traversal now

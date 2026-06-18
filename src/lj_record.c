@@ -1534,12 +1534,16 @@ static TRef rec_idx_key(jit_State *J, RecordIndex *ix, IRRef *rbref,
     if ((MSize)k < LJ_MAX_ASIZE) {  /* Potential array key? */
       TRef ikey = lj_opt_narrow_index(J, key);
       TRef asizeref;
+#if defined(__linux__) && LJ_TARGET_X64
+      TValue *record_array;
+      MSize asize = lj_tab_array_snapshot_acq(t, &record_array);
+#else
       MSize asize = lj_tab_asize_acq(t);
+#endif
       if ((MSize)k < asize) {  /* Currently an array key? */
 	TRef arrayref;
 #if defined(__linux__) && LJ_TARGET_X64
 	int trace_local = rec_idx_tab_trace_local(J, ix->tab);
-	TValue *record_array = lj_tab_array_acq(t);
 	arrayref = emitir(IRT(IR_FLOAD, IRT_PGC), ix->tab, IRFL_TAB_ARRAY);
 	if (!trace_local && rec_idx_tab_array_has_hdr(t, record_array)) {
 	  /* M6: shared separated AREF pairs slots with TabArrayHdr.asize. */
@@ -1821,8 +1825,8 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
 /* Determine result type of table traversal. */
 static IRType rec_next_types(GCtab *t, uint32_t idx)
 {
-  uint32_t asize = lj_tab_asize_acq(t);
-  TValue *array = lj_tab_array_acq(t);
+  TValue *array;
+  uint32_t asize = (uint32_t)lj_tab_array_snapshot_acq(t, &array);
   for (; idx < asize; idx++) {
     TValue val;
     lj_tv_load_acq(&val, &array[idx]);

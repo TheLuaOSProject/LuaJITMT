@@ -42,6 +42,10 @@ for needle in \
   'MSize asize = lj_tab_array_snapshot_acq(t, &array)' \
   'MSize i, asize = lj_tab_array_snapshot_acq(t, &array)' \
   'asize = lj_tab_array_snapshot_acq(kt, &array)' \
+  'asize = lj_tab_array_snapshot_acq(dict, &array)' \
+  'asize = lj_tab_array_snapshot_acq(dict_str, &array)' \
+  'asize = lj_tab_array_snapshot_acq(dict_mt, &array)' \
+  'lj_tab_array_snapshot_acq(t, &record_array)' \
   'lj_tv_load_acq(&val, &array[i])'
 do
   if ! rg -F -q "$needle" "$ROOT/src"; then
@@ -72,6 +76,39 @@ fi
 if rg -n 'lj_tab_array_hdr_asize_rel|la_store32_rel\(&lj_tab_array_hdrw' \
     "$ROOT/src"; then
   echo "guardrail: table array header asize must be immutable after publish" >&2
+  exit 1
+fi
+
+if rg -n 'asize = lj_tab_asize_acq\(dict\)|array = lj_tab_array_acq\(dict\)|idx < lj_tab_asize_acq\(dict_|lj_tab_array_acq\(dict_' \
+    "$ROOT/src/lj_serialize.c"; then
+  echo "guardrail: serializer dictionary array reads must use array snapshots" >&2
+  exit 1
+fi
+
+if rg -n 'TValue \*record_array = lj_tab_array_acq\(t\)' \
+    "$ROOT/src/lj_record.c"; then
+  echo "guardrail: recorder array-shape decisions must snapshot array bounds" >&2
+  exit 1
+fi
+
+if awk '
+  /static IRType rec_next_types\(GCtab \*t, uint32_t idx\)/ {
+    innext = 1
+    snap = bad = 0
+    next
+  }
+  innext && /lj_tab_array_snapshot_acq\(t, &array\)/ { snap = 1 }
+  innext && /lj_tab_asize_acq\(t\)/ { bad = 1 }
+  innext && /lj_tab_array_acq\(t\)/ { bad = 1 }
+  innext && /^}/ {
+    checked = 1
+    innext = 0
+  }
+  END { exit checked && snap && !bad ? 0 : 1 }
+' "$ROOT/src/lj_record.c"; then
+  :
+else
+  echo "guardrail: recorder next() type scan must use array snapshots" >&2
   exit 1
 fi
 
