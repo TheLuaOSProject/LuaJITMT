@@ -514,7 +514,7 @@ static void gc_stats_push(lua_State *L)
   global_State *g = G(L);
   GC2State *gc2 = &g->gc2;
   GCtab *t;
-  lua_createtable(L, 0, 32);
+  lua_createtable(L, 0, 80);
   t = tabV(L->top - 1);
   gc_stats_setnum(L, t, "total_bytes", g->gc.total);
   gc_stats_setnum(L, t, "total_kbytes", g->gc.total >> 10);
@@ -609,10 +609,76 @@ static void gc_stats_push(lua_State *L)
 		  la_load64_acq(&gc2->weak_legacy_fallbacks));
   gc_stats_setnum(L, t, "weak_legacy_backfills",
 		  la_load64_acq(&gc2->weak_legacy_backfills));
+  gc_stats_setnum(L, t, "weak_legacy_backfill_tables",
+		  la_load64_acq(&gc2->weak_legacy_backfill_tables));
+  gc_stats_setnum(L, t, "weak_legacy_backfill_slots",
+		  la_load64_acq(&gc2->weak_legacy_backfill_slots));
+  gc_stats_setnum(L, t, "weak_legacy_backfill_cleared",
+		  la_load64_acq(&gc2->weak_legacy_backfill_cleared));
+  gc_stats_setnum(L, t, "weak_keys_marked",
+		  la_load64_acq(&gc2->weak_keys_marked));
+  gc_stats_setnum(L, t, "weak_values_marked",
+		  la_load64_acq(&gc2->weak_values_marked));
+  gc_stats_setnum(L, t, "finreg_cdata_sets",
+		  la_load64_acq(&gc2->finreg_cdata_sets));
+  gc_stats_setnum(L, t, "finreg_cdata_clears",
+		  la_load64_acq(&gc2->finreg_cdata_clears));
+  gc_stats_setnum(L, t, "finreg_cdata_queued",
+		  la_load64_acq(&gc2->finreg_cdata_queued));
+  gc_stats_setnum(L, t, "finreg_cdata_sweep_queued",
+		  la_load64_acq(&gc2->finreg_cdata_sweep_queued));
+  gc_stats_setnum(L, t, "finreg_cdata_pweak_queued",
+		  la_load64_acq(&gc2->finreg_cdata_pweak_queued));
+  gc_stats_setnum(L, t, "finreg_cdata_pweak_claimed",
+		  la_load64_acq(&gc2->finreg_cdata_pweak_claimed));
+  gc_stats_setnum(L, t, "finreg_cdata_preclaim_overflow",
+		  la_load64_acq(&gc2->finreg_cdata_preclaim_overflow));
+  gc_stats_setnum(L, t, "finreg_cdata_preclaim_dispatched",
+		  la_load64_acq(&gc2->finreg_cdata_preclaim_dispatched));
+  gc_stats_setnum(L, t, "finreg_cdata_order_seen",
+		  la_load64_acq(&gc2->finreg_cdata_order_seen));
+  gc_stats_setnum(L, t, "finreg_cdata_order_claimed",
+		  la_load64_acq(&gc2->finreg_cdata_order_claimed));
+  gc_stats_setnum(L, t, "finreg_cdata_order_unlinked",
+		  la_load64_acq(&gc2->finreg_cdata_order_unlinked));
+  gc_stats_setnum(L, t, "finreg_cdata_order_queued",
+		  la_load64_acq(&gc2->finreg_cdata_order_queued));
+  gc_stats_setnum(L, t, "finreg_cdata_order_tombstones",
+		  la_load64_acq(&gc2->finreg_cdata_order_tombstones));
+  gc_stats_setnum(L, t, "finreg_cdata_order_fallbacks",
+		  la_load64_acq(&gc2->finreg_cdata_order_fallbacks));
+  gc_stats_setnum(L, t, "finreg_cdata_pweak_root_fallbacks",
+		  la_load64_acq(&gc2->finreg_cdata_pweak_root_fallbacks));
+  gc_stats_setnum(L, t, "finreg_cdata_close_root_fallbacks",
+		  la_load64_acq(&gc2->finreg_cdata_close_root_fallbacks));
+  gc_stats_setnum(L, t, "finreg_cdata_pending_order_hits",
+		  la_load64_acq(&gc2->finreg_cdata_pending_order_hits));
+  gc_stats_setnum(L, t, "finreg_udata_sets",
+		  la_load64_acq(&gc2->finreg_udata_sets));
+  gc_stats_setnum(L, t, "finreg_udata_clears",
+		  la_load64_acq(&gc2->finreg_udata_clears));
+  gc_stats_setnum(L, t, "finreg_udata_queued",
+		  la_load64_acq(&gc2->finreg_udata_queued));
+  gc_stats_setnum(L, t, "finreg_udata_registered",
+		  la_load64_acq(&gc2->finreg_udata_registered));
+  gc_stats_setnum(L, t, "finreg_udata_discovered",
+		  la_load64_acq(&gc2->finreg_udata_discovered));
+  gc_stats_setnum(L, t, "finreg_udata_forgets",
+		  la_load64_acq(&gc2->finreg_udata_forgets));
   gc_stats_setnum(L, t, "finalizer_queued",
 		  la_load64_acq(&gc2->finalizer_queued));
   gc_stats_setnum(L, t, "finalizer_dequeued",
 		  la_load64_acq(&gc2->finalizer_dequeued));
+  gc_stats_setnum(L, t, "finalizer_mpsc_drained",
+		  la_load64_acq(&gc2->finalizer_mpsc_drained));
+  gc_stats_setnum(L, t, "finalizer_enters",
+		  la_load64_acq(&gc2->finalizer_enters));
+  gc_stats_setnum(L, t, "finalizer_leaves",
+		  la_load64_acq(&gc2->finalizer_leaves));
+  gc_stats_setnum(L, t, "finalizer_sweep_blocks",
+		  la_load64_acq(&gc2->finalizer_sweep_blocks));
+  gc_stats_setnum(L, t, "finalizer_spawn_deferrals",
+		  la_load64_acq(&gc2->finalizer_spawn_deferrals));
 }
 
 LJLIB_CF(gcinfo)

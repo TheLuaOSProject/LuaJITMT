@@ -15,6 +15,42 @@ local function bucket_total(stats)
   return total
 end
 
+local finreg_stats = {
+  "weak_legacy_backfill_tables",
+  "weak_legacy_backfill_slots",
+  "weak_legacy_backfill_cleared",
+  "weak_keys_marked",
+  "weak_values_marked",
+  "finreg_cdata_sets",
+  "finreg_cdata_clears",
+  "finreg_cdata_queued",
+  "finreg_cdata_sweep_queued",
+  "finreg_cdata_pweak_queued",
+  "finreg_cdata_pweak_claimed",
+  "finreg_cdata_preclaim_overflow",
+  "finreg_cdata_preclaim_dispatched",
+  "finreg_cdata_order_seen",
+  "finreg_cdata_order_claimed",
+  "finreg_cdata_order_unlinked",
+  "finreg_cdata_order_queued",
+  "finreg_cdata_order_tombstones",
+  "finreg_cdata_order_fallbacks",
+  "finreg_cdata_pweak_root_fallbacks",
+  "finreg_cdata_close_root_fallbacks",
+  "finreg_cdata_pending_order_hits",
+  "finreg_udata_sets",
+  "finreg_udata_clears",
+  "finreg_udata_queued",
+  "finreg_udata_registered",
+  "finreg_udata_discovered",
+  "finreg_udata_forgets",
+  "finalizer_mpsc_drained",
+  "finalizer_enters",
+  "finalizer_leaves",
+  "finalizer_sweep_blocks",
+  "finalizer_spawn_deferrals",
+}
+
 local before = collectgarbage("stats")
 assert(type(before) == "table")
 assert(type(collectgarbage("count")) == "number")
@@ -71,6 +107,9 @@ assert_number(before, "weak_legacy_fallbacks")
 assert_number(before, "weak_legacy_backfills")
 assert_number(before, "finalizer_queued")
 assert_number(before, "finalizer_dequeued")
+for i = 1, #finreg_stats do
+  assert_number(before, finreg_stats[i])
+end
 
 local keep = {}
 for i = 1, 2000 do
@@ -105,5 +144,12 @@ assert(after_bucket_total >= before_bucket_total)
 assert(after.sweep_owner_runs >= before.sweep_owner_runs)
 assert(after.sweep_live_updates >= before.sweep_live_updates)
 assert(after.live_estimate >= 0)
+assert(after.finalizer_queued >= before.finalizer_queued)
+assert(after.finalizer_dequeued >= before.finalizer_dequeued)
+for i = 1, #finreg_stats do
+  local key = finreg_stats[i]
+  assert_number(after, key)
+  assert(after[key] >= before[key], key)
+end
 
 print("t-gc-stats OK")

@@ -129,8 +129,9 @@ workload). Report ops/sec/thread + total; plot speedup. GC metrics are dumped
 via `collectgarbage("stats")`: current fields include cycle requests/starts,
 poll-ack sample/sum/max latency plus histogram buckets for approximate P99,
 allocation trigger/hard-limit bytes, assist work, worker work, owner sweep
-work, weak clearing, finalizer queueing, and live estimates. `bench_mt.lua`
-reports per-run poll-ack P99 bucket bounds from histogram deltas.
+work, weak clearing/write marks, FINREG fallback/order counters, finalizer
+queueing/MPSC drains, finalizer-spawn deferrals, and live estimates.
+`bench_mt.lua` reports per-run poll-ack P99 bucket bounds from histogram deltas.
 
 ## 13.9 CI matrix (final)
 {x64} × {-joff,-jon} × {release, ASAN, TSAN-C, paranoia,

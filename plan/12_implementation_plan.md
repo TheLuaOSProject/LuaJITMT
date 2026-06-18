@@ -238,9 +238,10 @@ via poll latency probe) <500µs on the churn bench.
 Current implementation note: `collectgarbage("stats")` now returns a
 benchmark-facing table of GC2 counters for cycle starts, allocation pacing,
 poll-ack latency, assist/worker progress, owner sweep progress, weak clearing,
-finalizer queueing, and live estimates. `plan/aux/bench/bench_mt.lua` prints a
-stable subset of those fields after a run and reports approximate poll-ack P99
-latency from histogram deltas.
+weak-write marks, FINREG fallback/order counters, finalizer queueing/MPSC
+drains, finalizer-spawn deferrals, and live estimates.
+`plan/aux/bench/bench_mt.lua` prints a stable subset of those fields after a run
+and reports approximate poll-ack P99 latency from histogram deltas.
 
 ## M10 — Generational mode (≈800)
 Tasks: 05 §5.12 (minor sweep identity already in arena code from M2;

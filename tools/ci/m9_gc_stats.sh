@@ -20,7 +20,15 @@ for needle in \
   'sweep_owner_runs' \
   'sweep_live_updates' \
   'weak_legacy_backfills' \
-  'finalizer_queued'
+  'weak_keys_marked' \
+  'finreg_cdata_sweep_queued' \
+  'finreg_cdata_pweak_root_fallbacks' \
+  'finreg_cdata_close_root_fallbacks' \
+  'finreg_cdata_order_fallbacks' \
+  'finreg_udata_registered' \
+  'finalizer_queued' \
+  'finalizer_mpsc_drained' \
+  'finalizer_spawn_deferrals'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lib_base.c" \
       "$ROOT/src/lj_obj.h" "$ROOT/src/lj_safepoint.c" \

@@ -40,7 +40,13 @@ local gc_stat_keys = {
   "sweep_live_updates",
   "live_estimate",
   "weak_clear_tables",
+  "weak_keys_marked",
   "finalizer_queued",
+  "finalizer_mpsc_drained",
+  "finalizer_spawn_deferrals",
+  "finreg_cdata_sweep_queued",
+  "finreg_cdata_pweak_root_fallbacks",
+  "finreg_cdata_close_root_fallbacks",
 }
 
 local function snapshot_gc_stats()
