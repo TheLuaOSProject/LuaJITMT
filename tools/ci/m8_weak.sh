@@ -199,9 +199,13 @@ for needle in \
   'Side-list no-finalizer userdata is done' \
   'lj_gc2_finreg_udata_set(g, o, 1);' \
   'lj_gc2_finreg_udata_set(g, o, 0);' \
+  'uint64_t finreg_udata_root_fallbacks' \
+  'if (!fallback)' \
+  'finreg_udata_root_fallbacks, 1' \
   'finreg_udata_registered) == registered0 + 4u' \
   'finreg_udata_discovered) == discovered0 + 2u' \
   'finreg_udata_fallbacks) == fallbacks0' \
+  'finreg_udata_root_fallbacks) ==' \
   'sets0 + 4u' \
   'finreg_udata_queued) == queued0 + 2u' \
   'finreg_udata_clears) == clears0 + 4u' \

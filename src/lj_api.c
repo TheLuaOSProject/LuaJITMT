@@ -1112,11 +1112,11 @@ LUA_API int lua_setmetatable(lua_State *L, int idx)
     TValue oldv, newv;
     int oldfin = lj_meta_fasttv(g, oldmt, MM_gc, &oldv) != NULL;
     int newfin = lj_meta_fasttv(g, mt, MM_gc, &newv) != NULL;
+    if (mt)
+      lj_gc2_finreg_udata_register(L, g, obj2gco(ud));
     setgcrefmt(ud->metatable, obj2gco(mt));
     if (mt)
       lj_gc_pubobjobj(L, ud, mt);
-    if (mt)
-      lj_gc2_finreg_udata_register(L, g, obj2gco(ud));
     if (newfin) {
       (void)lj_gc2_finreg_udata_set(g, obj2gco(ud), 1);
     } else if (oldfin) {

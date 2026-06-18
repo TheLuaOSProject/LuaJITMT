@@ -961,6 +961,7 @@ typedef struct GC2State {
   uint64_t finreg_udata_discovered;  /* Userdata queued from side list. */
   uint64_t finreg_udata_forgets;  /* Stale userdata side-list refs cleared. */
   uint64_t finreg_udata_fallbacks;  /* Userdata side-list unlink misses. */
+  uint64_t finreg_udata_root_fallbacks;  /* Userdata chain fallbacks. */
   void *finalizer_mpsc;  /* Producer-published finalizer stack. */
   void *finalizer_tail;  /* Single-consumer finalizer ring tail. */
   uint32_t finalizer_active;  /* Finalizer callbacks currently executing. */

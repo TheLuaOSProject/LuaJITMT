@@ -2238,6 +2238,8 @@ static void test_finreg_userdata_telemetry(lua_State *L, global_State *g)
   uint64_t discovered0 = la_load64_acq(&g->gc2.finreg_udata_discovered);
   uint64_t forgets0 = la_load64_acq(&g->gc2.finreg_udata_forgets);
   uint64_t fallbacks0 = la_load64_acq(&g->gc2.finreg_udata_fallbacks);
+  uint64_t rootfallbacks0 =
+    la_load64_acq(&g->gc2.finreg_udata_root_fallbacks);
 
   lua_settop(L, 0);
   lua_newuserdata(L, 1);
@@ -2263,6 +2265,8 @@ static void test_finreg_userdata_telemetry(lua_State *L, global_State *g)
   assert(la_load64_acq(&g->gc2.finreg_udata_discovered) ==
 	 discovered0 + 1u);
   assert(la_load64_acq(&g->gc2.finreg_udata_fallbacks) == fallbacks0);
+  assert(la_load64_acq(&g->gc2.finreg_udata_root_fallbacks) ==
+	 rootfallbacks0);
 
   lua_settop(L, 0);
   lua_newuserdata(L, 1);
@@ -2282,6 +2286,8 @@ static void test_finreg_userdata_telemetry(lua_State *L, global_State *g)
   assert(la_load64_acq(&g->gc2.finreg_udata_discovered) ==
 	 discovered0 + 1u);
   assert(la_load64_acq(&g->gc2.finreg_udata_fallbacks) == fallbacks0);
+  assert(la_load64_acq(&g->gc2.finreg_udata_root_fallbacks) ==
+	 rootfallbacks0);
 
   lua_settop(L, 0);
   lua_newuserdata(L, 1);
@@ -2304,6 +2310,8 @@ static void test_finreg_userdata_telemetry(lua_State *L, global_State *g)
   assert(la_load64_acq(&g->gc2.finreg_udata_discovered) ==
 	 discovered0 + 2u);
   assert(la_load64_acq(&g->gc2.finreg_udata_fallbacks) == fallbacks0);
+  assert(la_load64_acq(&g->gc2.finreg_udata_root_fallbacks) ==
+	 rootfallbacks0);
 }
 
 static void test_finreg_userdata_inplace_finalizer_behavior(lua_State *L)
