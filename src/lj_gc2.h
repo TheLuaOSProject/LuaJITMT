@@ -91,6 +91,8 @@ LJ_FUNC void lj_gc2_finreg_cdata_set(global_State *g, GCobj *o, int enabled);
 LJ_FUNC void lj_gc2_finreg_cdata_queue(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc2_finreg_udata_set(global_State *g, GCobj *o, int enabled);
 LJ_FUNC void lj_gc2_finreg_udata_queue(global_State *g, GCobj *o);
+LJ_FUNC void lj_gc2_finalizer_enqueue(global_State *g, GCobj *o);
+LJ_FUNC GCobj *lj_gc2_finalizer_dequeue(global_State *g);
 LJ_FUNC int lj_gc2_finalizer_try_enter(global_State *g);
 LJ_FUNC void lj_gc2_finalizer_enter(global_State *g);
 LJ_FUNC void lj_gc2_finalizer_leave(global_State *g);

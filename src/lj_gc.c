@@ -725,15 +725,7 @@ size_t lj_gc_separateudata(global_State *g, int all)
       markfinalized(o);
       lj_gc2_finreg_udata_queue(g, o);
       *p = *lj_obj_gcwref(o);
-      if (gcref(g->gc.mmudata)) {  /* Link to end of mmudata list. */
-	GCobj *root = gcref(g->gc.mmudata);
-	lj_obj_setgcwr(o, *lj_obj_gcwref(root));
-	setgcref(*lj_obj_gcwref(root), o);
-	setgcref(g->gc.mmudata, o);
-      } else {  /* Create circular list. */
-	lj_obj_setgcw(o, o);
-	setgcref(g->gc.mmudata, o);
-      }
+      lj_gc2_finalizer_enqueue(g, o);
     }
   }
   return m;
@@ -1272,12 +1264,11 @@ static int gc_finalize(lua_State *L)
     lj_gc2_finalizer_leave(g);
     return 0;
   }
-  o = gcnext(gcref(g->gc.mmudata));
-  /* Unchain from list of userdata to be finalized. */
-  if (o == gcref(g->gc.mmudata))
-    setgcrefnull(g->gc.mmudata);
-  else
-    setgcrefr(*lj_obj_gcwref(gcref(g->gc.mmudata)), *lj_obj_gcwref(o));
+  o = lj_gc2_finalizer_dequeue(g);
+  if (o == NULL) {
+    lj_gc2_finalizer_leave(g);
+    return 0;
+  }
 #if LJ_HASFFI
   if (o->gch.gct == ~LJ_TCDATA) {
     TValue key;
@@ -1327,15 +1318,7 @@ void lj_gc_finalize_udata(lua_State *L)
 #if LJ_HASFFI
 static void gc_queue_cdata_finalizer(global_State *g, GCobj *o)
 {
-  if (gcref(g->gc.mmudata)) {
-    GCobj *root = gcref(g->gc.mmudata);
-    lj_obj_setgcwr(o, *lj_obj_gcwref(root));
-    setgcref(*lj_obj_gcwref(root), o);
-    setgcref(g->gc.mmudata, o);
-  } else {
-    lj_obj_setgcw(o, o);
-    setgcref(g->gc.mmudata, o);
-  }
+  lj_gc2_finalizer_enqueue(g, o);
 }
 
 static void gc_separate_cdata_finalizers(global_State *g)

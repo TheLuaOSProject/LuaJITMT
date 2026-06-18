@@ -938,6 +938,8 @@ typedef struct GC2State {
   uint64_t finreg_udata_queued;  /* Userdata finalizers queued by legacy. */
   uint32_t finalizer_active;  /* Finalizer callbacks currently executing. */
   uint32_t finalizer_owner_tid;  /* TG allowed to finish nested finalizer GC. */
+  uint64_t finalizer_queued;  /* Objects published to the GC2 finalizer queue. */
+  uint64_t finalizer_dequeued;  /* Objects popped from the GC2 finalizer queue. */
   uint64_t finalizer_enters;  /* Legacy finalizer callback guard enters. */
   uint64_t finalizer_leaves;  /* Legacy finalizer callback guard leaves. */
   uint64_t finalizer_sweep_blocks;  /* Sweep attempts blocked by finalizers. */
@@ -1224,13 +1226,31 @@ static LJ_AINLINE void setgcrefrel_(GCRef *r, const GCobj *gc)
 {
   la_store64_rel(&r->gcptr64, (uint64_t)(uintptr_t)gc);
 }
+static LJ_AINLINE void setgcrefrrel_(GCRef *r, GCRef v)
+{
+  la_store64_rel(&r->gcptr64, v.gcptr64);
+}
+static LJ_AINLINE void setgcrefnullrel_(GCRef *r)
+{
+  la_store64_rel(&r->gcptr64, 0);
+}
 #else
 static LJ_AINLINE void setgcrefrel_(GCRef *r, const GCobj *gc)
 {
   la_store32_rel(&r->gcptr32, (uint32_t)(uintptr_t)gc);
 }
+static LJ_AINLINE void setgcrefrrel_(GCRef *r, GCRef v)
+{
+  la_store32_rel(&r->gcptr32, v.gcptr32);
+}
+static LJ_AINLINE void setgcrefnullrel_(GCRef *r)
+{
+  la_store32_rel(&r->gcptr32, 0);
+}
 #endif
 #define setgcrefrel(r, gc)	setgcrefrel_(&(r), (gc))
+#define setgcrefrrel(r, v)	setgcrefrrel_(&(r), (v))
+#define setgcrefnullrel(r)	setgcrefnullrel_(&(r))
 #define setgcrefroot(r, gc)	setgcrefrel((r), (gc))
 #define setgcrefmt(r, gc)	setgcrefrel((r), (gc))
 

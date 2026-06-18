@@ -155,6 +155,8 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.finreg_udata_queued, 0);
   la_store32_rlx(&g->gc2.finalizer_active, 0);
   la_store32_rlx(&g->gc2.finalizer_owner_tid, 0);
+  la_store64_rlx(&g->gc2.finalizer_queued, 0);
+  la_store64_rlx(&g->gc2.finalizer_dequeued, 0);
   la_store64_rlx(&g->gc2.finalizer_enters, 0);
   la_store64_rlx(&g->gc2.finalizer_leaves, 0);
   la_store64_rlx(&g->gc2.finalizer_sweep_blocks, 0);
@@ -509,6 +511,46 @@ void lj_gc2_weak_to_sweep(global_State *g)
   (void)lj_gc2_drain_ssb(g);  /* Temporary worker-consume stand-in. */
   (void)lj_tg_reclaim_dead(g);
   lj_gc2_worker_wake(g);  /* 05 section 5.6.3 parked worker scheduler. */
+}
+
+void lj_gc2_finalizer_enqueue(global_State *g, GCobj *o)
+{
+  GCobj *tail;
+  if (!g || !o)
+    return;
+  tail = gcref_acq(g->gc.mmudata);
+  if (tail) {
+    GCRef head;
+    setgcrefr(head, *lj_obj_gcwref(tail));
+    lj_obj_setgcwr(o, head);
+    setgcrefrel(*lj_obj_gcwref(tail), o);
+    setgcrefrel(g->gc.mmudata, o);
+  } else {
+    lj_obj_setgcw(o, o);
+    setgcrefrel(g->gc.mmudata, o);
+  }
+  la_add64_rlx(&g->gc2.finalizer_queued, 1);
+}
+
+GCobj *lj_gc2_finalizer_dequeue(global_State *g)
+{
+  GCobj *tail, *o;
+  if (!g)
+    return NULL;
+  tail = gcref_acq(g->gc.mmudata);
+  if (!tail)
+    return NULL;
+  o = lj_obj_gcw_acq(tail);
+  lj_assertG(o != NULL, "broken gc2 finalizer queue");
+  if (!o)
+    return NULL;
+  if (o == tail)
+    setgcrefnullrel(g->gc.mmudata);
+  else
+    setgcrefrrel(*lj_obj_gcwref(tail), *lj_obj_gcwref(o));
+  lj_obj_setgcwnull(o);
+  la_add64_rlx(&g->gc2.finalizer_dequeued, 1);
+  return o;  /* 05 section 5.8: GC2-owned finalizer queue bridge. */
 }
 
 static uint32_t gc2_finalizer_current_owner(void)

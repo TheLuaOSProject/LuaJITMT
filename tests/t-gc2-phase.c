@@ -310,6 +310,7 @@ int main(void)
   uint64_t worker_weak0, weak_clear_tables0, weak_clear_cleared0;
   uint64_t weak_legacy_fallbacks0;
   uint64_t finalizer_enters0, finalizer_leaves0, finalizer_blocks0;
+  uint64_t finalizer_queued0, finalizer_dequeued0;
   MSize weak_n;
   void *phase_plain, *phase_trav;
   GCArena *phase_plain_a, *phase_trav_a;
@@ -588,8 +589,12 @@ int main(void)
   lua_pop(L, 1);
   finalizer_enters0 = la_load64_acq(&g->gc2.finalizer_enters);
   finalizer_leaves0 = la_load64_acq(&g->gc2.finalizer_leaves);
+  finalizer_queued0 = la_load64_acq(&g->gc2.finalizer_queued);
+  finalizer_dequeued0 = la_load64_acq(&g->gc2.finalizer_dequeued);
   lj_gc_fullgc(L);
   assert(la_load32_acq(&g->gc2.finalizer_active) == 0);
+  assert(la_load64_acq(&g->gc2.finalizer_queued) > finalizer_queued0);
+  assert(la_load64_acq(&g->gc2.finalizer_dequeued) > finalizer_dequeued0);
   assert(la_load64_acq(&g->gc2.finalizer_enters) > finalizer_enters0);
   assert(la_load64_acq(&g->gc2.finalizer_leaves) > finalizer_leaves0);
   assert(la_load64_acq(&g->gc2.finalizer_enters) ==

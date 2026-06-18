@@ -60,6 +60,12 @@ for needle in \
   'lua_close drains alternating cdata/userdata finalizers to fixed point' \
   'lj_gc2_finalizer_pending(global_State *g)' \
   'lj_gc2_finalizer_sweep_pending(global_State *g)' \
+  'lj_gc2_finalizer_enqueue(global_State *g, GCobj *o)' \
+  'lj_gc2_finalizer_dequeue(global_State *g)' \
+  'uint64_t finalizer_queued' \
+  'uint64_t finalizer_dequeued' \
+  'finalizer_queued0 = la_load64_acq(&g->gc2.finalizer_queued)' \
+  'finalizer_dequeued0 = la_load64_acq(&g->gc2.finalizer_dequeued)' \
   'assert(la_load32_acq(&g->gc2.finalizer_owner_tid) ==' \
   'finalizer_enters0 + 1u' \
   'finalizer_leaves0 + 1u' \
@@ -93,7 +99,7 @@ for needle in \
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_gc2.c" "$ROOT/src/lj_gc2.h" \
 	      "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc.h" "$ROOT/tests/t-gc2-phase.c" \
-	      "$ROOT/src/lj_meta.c" "$ROOT/src/lib_ffi.c" \
+	      "$ROOT/src/lj_meta.c" "$ROOT/src/lib_ffi.c" "$ROOT/src/lj_obj.h" \
 	      "$ROOT/tests/t-gc2-traverse.c" \
 	      "$ROOT/tests/t-m8-ffi-weak-newindex.c" \
 	      "$ROOT/tests/t-m8-finalizer-spawn-live.lua" "$ROOT/src/lj_state.c" \
@@ -172,6 +178,29 @@ if awk '
   END { exit bad ? 0 : 1 }
 ' "$ROOT/src/lj_gc.c"; then
   echo "guardrail: cdata finalizer dispatch must route through owned slot helper" >&2
+  exit 1
+fi
+
+if awk '
+  /void lj_gc2_finalizer_enqueue\(global_State \*g, GCobj \*o\)/ {
+    inq = 1
+  }
+  inq && /^}/ {
+    inq = 0
+  }
+  /GCobj \*lj_gc2_finalizer_dequeue\(global_State \*g\)/ {
+    indeq = 1
+  }
+  indeq && /^}/ {
+    indeq = 0
+  }
+  !(inq || indeq) && /setgcref[a-z]*\(g->gc\.mmudata/ {
+    bad = 1
+    print
+  }
+  END { exit bad ? 0 : 1 }
+' "$ROOT/src/lj_gc.c" "$ROOT/src/lj_cdata.c" "$ROOT/src/lj_gc2.c"; then
+  echo "guardrail: finalizer queue publication must route through GC2 helpers" >&2
   exit 1
 fi
 

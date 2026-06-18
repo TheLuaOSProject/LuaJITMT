@@ -68,19 +68,11 @@ GCcdata *lj_cdata_newx_l(lua_State *L, CTState *cts, CTypeID id, CTSize sz,
 void LJ_FASTCALL lj_cdata_free(global_State *g, GCcdata *cd)
 {
   if (LJ_UNLIKELY(lj_obj_gcflags(obj2gco(cd)) & LJ_GC_CDATA_FIN)) {
-    GCobj *root;
     makewhite(g, obj2gco(cd));
     markfinalized(obj2gco(cd));
     lj_gc_arena_markobj(g, obj2gco(cd));
     lj_gc2_finreg_cdata_queue(g, obj2gco(cd));
-    if ((root = gcref(g->gc.mmudata)) != NULL) {
-      lj_obj_setgcwr(obj2gco(cd), *lj_obj_gcwref(root));
-      setgcref(*lj_obj_gcwref(root), obj2gco(cd));
-      setgcref(g->gc.mmudata, obj2gco(cd));
-    } else {
-      lj_obj_setgcw(obj2gco(cd), obj2gco(cd));
-      setgcref(g->gc.mmudata, obj2gco(cd));
-    }
+    lj_gc2_finalizer_enqueue(g, obj2gco(cd));
   } else if (LJ_LIKELY(!cdataisv(cd))) {
     CType *ct = ctype_raw(ctype_ctsG(g), cd->ctypeid);
     CTSize sz = ctype_hassize(ct->info) ? ct->size : CTSIZE_PTR;
