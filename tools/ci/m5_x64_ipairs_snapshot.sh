@@ -19,6 +19,9 @@ assert(n == 2 and sum == 33)
 '
 
 for needle in \
+  'TABARRAY_ASIZE_OFS' \
+  'lea r8, [RB+TAB_COLO_SLOTS]' \
+  'mov TMPRd, dword [RD+TABARRAY_ASIZE_OFS]' \
   'mov r8, [RD]' \
   'cmp r8, LJ_TNIL;  je ->fff_res0' \
   'mov [BASE-8], r8' \
@@ -36,10 +39,11 @@ if ! awk '
   infn && /cmp aword \[RD\], LJ_TNIL/ { bad = 1 }
   infn && /mov RB, \[RD\]/ { bad = 1 }
   infn && /cmp dword TAB:RB->hmask, 0/ { bad = 1 }
+  infn && /cmp RAd, TAB:RB->asize/ { bad = 1 }
   infn && /->fff_res2:/ { exit bad ? 1 : 0 }
   END { if (bad) exit 1 }
 ' "$ROOT/src/vm_x64.dasc"; then
-  echo "guardrail: x64 ipairs_aux must snapshot array slots and check node-header hmask" >&2
+  echo "guardrail: x64 ipairs_aux must snapshot array/header slots and check node-header hmask" >&2
   exit 1
 fi
 

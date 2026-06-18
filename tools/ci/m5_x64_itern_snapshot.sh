@@ -21,6 +21,8 @@ assert(seen.alpha == 11 and seen.beta == 12)
 '
 
 for needle in \
+  'lea r8, [RB+TAB_COLO_SLOTS]' \
+  'mov TMPRd, dword [ITYPE+TABARRAY_ASIZE_OFS]' \
   'mov r8, [ITYPE+RC*8]' \
   'cmp r8, LJ_TNIL; je >4' \
   'mov [BASE+RA*8+8], r8' \

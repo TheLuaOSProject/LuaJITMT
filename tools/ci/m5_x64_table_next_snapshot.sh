@@ -23,6 +23,10 @@ assert(n == 5)
 '
 
 for needle in \
+  'mov r10, NEXT_TAB->array' \
+  'lea NEXT_TMP, [NEXT_TAB+TAB_COLO_SLOTS]' \
+  'mov NEXT_ASIZE, dword [r10+TABARRAY_ASIZE_OFS]' \
+  'mov NEXT_TMP, qword [r10+NEXT_IDX*8]' \
   'mov r8, NEXT_TAB->node' \
   'mov r9d, dword [r8-8]' \
   'mov NEXT_TMP, NODE:NEXT_PTR->val' \
@@ -42,10 +46,11 @@ fi
 
 for reject in \
   'cmp NEXT_IDX, NEXT_TAB->hmask' \
-  'add NODE:NEXT_PTR, NEXT_TAB->node'
+  'add NODE:NEXT_PTR, NEXT_TAB->node' \
+  'mov NEXT_TMP, NEXT_TAB->array'
 do
   if rg -F -n "$reject" "$ROOT/src/vm_x64.dasc"; then
-    echo "guardrail: x64 lj_vm_next must use one node/header hmask pair: $reject" >&2
+    echo "guardrail: x64 lj_vm_next must use one array/header and node/header pair: $reject" >&2
     exit 1
   fi
 done

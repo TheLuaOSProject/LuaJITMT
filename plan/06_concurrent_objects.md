@@ -195,11 +195,18 @@ allocation capacity until the final `AHdr` port. Integer `lj_tab_getint()` /
 `lj_tab_setint()` access now snapshots the array pointer with the legacy
 `asize` mirror and then uses `TabArrayHdr.asize` for separated array
 generations, preserving the colocated-array path until the final `AHdr` port.
+Core C array scanners for clearing, duplication, resize counting,
+traversal/length, bytecode/serialization/parser walks, and legacy/GC2 marking
+now share that snapshot helper instead of independently pairing
+`GCtab.array` with the legacy size mirror.
 On x86-64,
 `getmetatable`'s `__metatable` probe, `ipairs_aux` empty-hash fallback,
 `lj_vm_next` hash traversal, `BC_TGETS_Z`, and `BC_ITERN` hash traversal now
 load the mask from the acquired node header instead of the legacy
-`GCtab.hmask` mirror. `BC_TSETS_Z` string-key stores are currently demoted to
+`GCtab.hmask` mirror. `ipairs_aux`, `lj_vm_next`, and `BC_ITERN` also load
+array bounds from `TabArrayHdr.asize` for separated array generations, with
+the legacy `GCtab.asize` mirror kept as the empty/colocated-array fallback.
+`BC_TSETS_Z` string-key stores are currently demoted to
 `vmeta_tsets`, removing the x64 VM's direct string-key hash-chain store. The
 generic x64 `vmeta_tset` continuation release-stores returned slots through
 `lj_meta_tsettv_pair()` with resolved parent context, but the C-side table

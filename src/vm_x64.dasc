@@ -327,6 +327,8 @@
 #define J_OFS(field)		((int)offsetof(jit_State, field))
 #define TG_OFS_DISPATCH		((int)offsetof(TGState, dispatch))
 #define TG_CB2DISP		((int)offsetof(TGState, dispatch)-(int)offsetof(TGState, cb))
+#define TAB_COLO_SLOTS		((int)sizeof(GCtab))
+#define TABARRAY_ASIZE_OFS	(-(int)sizeof(TabArrayHdr))
 |.define TGPOLL, dword [DISPATCH+DISPATCH_TG(poll)]
 |.define TGMARK, dword [DISPATCH+DISPATCH_TG(mark_active)]
 |.macro load_DISPATCH, lreg
@@ -1519,8 +1521,14 @@ static void build_subroutines(BuildCtx *ctx)
   |  cvtsi2sd xmm0, RAd
   |  movsd qword [BASE-16], xmm0
   |.endif
-  |  cmp RAd, TAB:RB->asize;  jae >2	// Not in array part?
   |  mov RD, TAB:RB->array
+  |  mov TMPRd, TAB:RB->asize
+  |  test TMPRd, TMPRd; jz >3
+  |  lea r8, [RB+TAB_COLO_SLOTS]
+  |  cmp RD, r8; je >3
+  |  mov TMPRd, dword [RD+TABARRAY_ASIZE_OFS]
+  |3:
+  |  cmp RAd, TMPRd;  jae >2		// Not in array part?
   |  lea RD, [RD+RA*8]
   |1:
   |  mov r8, [RD]
@@ -2875,10 +2883,14 @@ static void build_subroutines(BuildCtx *ctx)
   |.if JIT
   |  endbr
   |  mov NEXT_ASIZE, NEXT_TAB->asize
+  |  mov r10, NEXT_TAB->array
+  |  test NEXT_ASIZE, NEXT_ASIZE; jz >1
+  |  lea NEXT_TMP, [NEXT_TAB+TAB_COLO_SLOTS]
+  |  cmp r10, NEXT_TMP; je >1
+  |  mov NEXT_ASIZE, dword [r10+TABARRAY_ASIZE_OFS]
   |1:  // Traverse array part.
   |  cmp NEXT_IDX, NEXT_ASIZE;  jae >5
-  |  mov NEXT_TMP, NEXT_TAB->array
-  |  mov NEXT_TMP, qword [NEXT_TMP+NEXT_IDX*8]
+  |  mov NEXT_TMP, qword [r10+NEXT_IDX*8]
   |  cmp NEXT_TMP, LJ_TNIL;  je >2
   |  lea NEXT_PTR, NEXT_RES_PTR
   |  mov qword [NEXT_PTR], NEXT_TMP
@@ -4485,6 +4497,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov TMPRd, TAB:RB->asize
     |  add PC, 4
     |  mov ITYPE, TAB:RB->array
+    |  test TMPRd, TMPRd; jz >1
+    |  lea r8, [RB+TAB_COLO_SLOTS]
+    |  cmp ITYPE, r8; je >1
+    |  mov TMPRd, dword [ITYPE+TABARRAY_ASIZE_OFS]
     |1:  // Traverse array part.
     |  cmp RCd, TMPRd; jae >5		// Index points after array part?
     |  mov r8, [ITYPE+RC*8]
