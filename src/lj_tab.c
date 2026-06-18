@@ -17,21 +17,7 @@
 
 /* -- Object hashing ------------------------------------------------------ */
 
-/* Hash an arbitrary key and return its anchor position in the hash table. */
-static Node *hashkey(const GCtab *t, cTValue *key)
-{
-  lj_assertX(!tvisint(key), "attempt to hash integer");
-  if (tvisstr(key))
-    return hashstr(t, strV(key));
-  else if (tvisnum(key))
-    return hashnum(t, key);
-  else if (tvisbool(key))
-    return hashmask(t, boolV(key));
-  else
-    return hashgcref(t, key->gcr);
-  /* Only hash 32 bits of lightuserdata on a 64 bit CPU. Good enough? */
-}
-
+/* Hash an arbitrary key against a previously acquired hash vector snapshot. */
 static Node *hashkey_node(Node *node, MSize hmask, cTValue *key)
 {
   lj_assertX(!tvisint(key), "attempt to hash integer");
@@ -761,9 +747,13 @@ void lj_tab_reasize(lua_State *L, GCtab *t, uint32_t nasize)
 cTValue * LJ_FASTCALL lj_tab_getinth(GCtab *t, int32_t key)
 {
   TValue k;
+  Node *node = lj_tab_node_acq(t);
+  MSize hmask = lj_tab_node_hmask_acq(node);
   Node *n;
+  if (hmask == 0)
+    return NULL;
   k.n = (lua_Number)key;
-  n = hashnum(t, &k);
+  n = hashnum_node(node, hmask, &k);
   do {
     TValue nk;
     lj_tv_load_acq(&nk, &n->key);
@@ -775,7 +765,12 @@ cTValue * LJ_FASTCALL lj_tab_getinth(GCtab *t, int32_t key)
 
 cTValue *lj_tab_getstr(GCtab *t, const GCstr *key)
 {
-  Node *n = hashstr(t, key);
+  Node *node = lj_tab_node_acq(t);
+  MSize hmask = lj_tab_node_hmask_acq(node);
+  Node *n;
+  if (hmask == 0)
+    return NULL;
+  n = hashstr_node(node, hmask, key);
   do {
     TValue nk;
     lj_tv_load_acq(&nk, &n->key);
@@ -806,9 +801,15 @@ cTValue *lj_tab_get(lua_State *L, GCtab *t, cTValue *key)
       goto genlookup;  /* Else use the generic lookup. */
     }
   } else if (!tvisnil(key)) {
+    Node *node;
+    MSize hmask;
     Node *n;
   genlookup:
-    n = hashkey(t, key);
+    node = lj_tab_node_acq(t);
+    hmask = lj_tab_node_hmask_acq(node);
+    if (hmask == 0)
+      return niltv(L);
+    n = hashkey_node(node, hmask, key);
     do {
       TValue nk;
       lj_tv_load_acq(&nk, &n->key);
@@ -972,9 +973,13 @@ int lj_tab_try_newkey_chain(lua_State *L, GCtab *t, cTValue *key,
 TValue *lj_tab_setinth(lua_State *L, GCtab *t, int32_t key)
 {
   TValue k;
+  Node *node = lj_tab_node_acq(t);
+  MSize hmask = lj_tab_node_hmask_acq(node);
   Node *n;
   k.n = (lua_Number)key;
-  n = hashnum(t, &k);
+  if (hmask == 0)
+    return lj_tab_newkey(L, t, &k);
+  n = hashnum_node(node, hmask, &k);
   do {
     TValue nk;
     lj_tv_load_acq(&nk, &n->key);
@@ -987,7 +992,14 @@ TValue *lj_tab_setinth(lua_State *L, GCtab *t, int32_t key)
 TValue *lj_tab_setstr(lua_State *L, GCtab *t, const GCstr *key)
 {
   TValue k;
-  Node *n = hashstr(t, key);
+  Node *node = lj_tab_node_acq(t);
+  MSize hmask = lj_tab_node_hmask_acq(node);
+  Node *n;
+  if (hmask == 0) {
+    setstrV(L, &k, key);
+    return lj_tab_newkey(L, t, &k);
+  }
+  n = hashstr_node(node, hmask, key);
   do {
     TValue nk;
     lj_tv_load_acq(&nk, &n->key);
@@ -1017,13 +1029,19 @@ TValue *lj_tab_set(lua_State *L, GCtab *t, cTValue *key)
   } else if (tvisnil(key)) {
     lj_err_msg(L, LJ_ERR_NILIDX);
   }
-  n = hashkey(t, key);
-  do {
-    TValue nk;
-    lj_tv_load_acq(&nk, &n->key);
-    if (lj_obj_equal(&nk, key))
-      return &n->val;
-  } while ((n = lj_tab_nextnode_acq(n)));
+  {
+    Node *node = lj_tab_node_acq(t);
+    MSize hmask = lj_tab_node_hmask_acq(node);
+    if (hmask != 0) {
+      n = hashkey_node(node, hmask, key);
+      do {
+	TValue nk;
+	lj_tv_load_acq(&nk, &n->key);
+	if (lj_obj_equal(&nk, key))
+	  return &n->val;
+      } while ((n = lj_tab_nextnode_acq(n)));
+    }
+  }
   return lj_tab_newkey(L, t, key);
 }
 

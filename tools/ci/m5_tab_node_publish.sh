@@ -29,7 +29,10 @@ for needle in \
   'tab_rehash_hashcount' \
   'tab_rehash_arrayslot' \
   'tab_rehash_slot' \
-  'tab_rehash_insert'
+  'tab_rehash_insert' \
+  'n = hashnum_node(node, hmask, &k)' \
+  'n = hashstr_node(node, hmask, key)' \
+  'n = hashkey_node(node, hmask, key)'
 do
   if ! rg -F -q "$needle" "$ROOT/src"; then
     echo "guardrail: missing table node publication marker: $needle" >&2
@@ -40,6 +43,11 @@ done
 if rg -n 'noderef\(([^)]*->)?node\)|setmref\(([^,]*->)?node' \
     "$ROOT/src" --glob '!lj_obj.h' --glob '!host/*'; then
   echo "guardrail: table node vectors must use lj_tab_node_* helpers" >&2
+  exit 1
+fi
+
+if rg -n 'hash(key|str|num|mask|gcref)\(t[,)]' "$ROOT/src/lj_tab.c"; then
+  echo "guardrail: lj_tab.c hash lookups must use explicit node-header snapshots" >&2
   exit 1
 fi
 
