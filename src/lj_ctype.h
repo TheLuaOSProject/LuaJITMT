@@ -201,6 +201,7 @@ typedef LJ_ALIGN(8) struct CCallback {
   void *mcode;			/* Machine code for callback func. pointers. */
   CTypeID1 *cbid;		/* Callback type table. */
   lua_State **owner;		/* Callback slot owner Lua states. */
+  TValue *func;			/* Callback function slots. */
   MSize sizeid;			/* Size of callback type table. */
 } CCallback;
 
@@ -210,7 +211,7 @@ typedef struct CTState {
   CTypeTab *retiredtab;  /* Retired C type tables awaiting SMR. */
   CTypeID top;		/* Current top of C type table. */
   global_State *g;	/* Global state. */
-  GCtab *miscmap;	/* Callback slots, function metatable, blacklist. */
+  GCtab *miscmap;	/* FFI function metatable/root table. */
   GCRef *metamap;	/* CAS-installed metatables by raw CTypeID. */
   MSize sizemeta;	/* Size of metatable side map. */
   uint64_t *cbblack;	/* Callback-calling C function blacklist set. */

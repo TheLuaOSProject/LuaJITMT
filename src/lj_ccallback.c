@@ -61,6 +61,42 @@ static LJ_AINLINE int callback_owner_clear(lua_State **owner, MSize slot,
 		   LA_ACQ_REL, LA_ACQ);  /* 11.5 callback owner disown. */
 }
 
+static LJ_AINLINE TValue *callback_func_slots(CTState *cts)
+{
+  return (TValue *)la_loadptr_acq((void *const *)&cts->cb.func);
+}
+
+static LJ_AINLINE void callback_func_load(CTState *cts, MSize slot,
+					  TValue *out)
+{
+  TValue *func = callback_func_slots(cts);
+  if (LJ_LIKELY(func != NULL))
+    lj_tv_load_acq(out, &func[slot]);
+  else
+    setnilV(out);
+}
+
+void lj_ccallback_func_store_l(lua_State *L, CTState *cts, MSize slot,
+			       GCfunc *fn)
+{
+  TValue *func = callback_func_slots(cts);
+  TValue tv;
+  if (LJ_UNLIKELY(func == NULL ||
+		  slot >= (MSize)la_load32_acq(&cts->cb.sizeid)))
+    lj_err_caller(L, LJ_ERR_FFI_CBACKOV);
+  setfuncV(L, &tv, fn);
+  copyTVrel(L, &func[slot], &tv);
+  lj_gc_barrierroot(L, &func[slot]);  /* 11.5 callback function side root. */
+}
+
+void lj_ccallback_func_clear(CTState *cts, MSize slot)
+{
+  TValue *func = callback_func_slots(cts);
+  if (LJ_LIKELY(func != NULL &&
+		slot < (MSize)la_load32_acq(&cts->cb.sizeid)))
+    lj_tab_storenilraw(&func[slot]);
+}
+
 #if LJ_OS_NOJIT
 
 /* Callbacks disabled. */
@@ -684,7 +720,7 @@ static void callback_conv_args(CTState *cts, lua_State *L, CCallbackRuntime *cb)
     TValue tv;
     ct = ctype_get(cts, id);
     rid = ctype_cid(ct->info);  /* Return type. x86: +(spadj<<16). */
-    lj_tv_load_acq(&tv, lj_tab_getint(cts->miscmap, (int32_t)slot));
+    callback_func_load(cts, slot, &tv);
     if (tvisfunc(&tv)) {
       fn = funcV(&tv);
       fntp = LJ_TFUNC;
@@ -938,12 +974,18 @@ static CTypeID1 *callback_slots_init_l(lua_State *L, CTState *cts)
     lua_State **owner = lj_mem_newvec(L, CALLBACK_MAX_SLOT, lua_State *);
     memset(owner, 0, CALLBACK_MAX_SLOT*sizeof(lua_State *));
     la_storeptr_rel((void **)&cts->cb.owner, owner);
-    la_store32_rel(&cts->cb.sizeid, CALLBACK_MAX_SLOT);
   }
   if (cts->cb.cbid == NULL) {
     CTypeID1 *cbid = lj_mem_newvec(L, CALLBACK_MAX_SLOT, CTypeID1);
     memset(cbid, 0, CALLBACK_MAX_SLOT*sizeof(CTypeID1));
     la_storeptr_rel((void **)&cts->cb.cbid, cbid);
+  }
+  if (cts->cb.func == NULL) {
+    TValue *func = lj_mem_newvec(L, CALLBACK_MAX_SLOT, TValue);
+    MSize i;
+    for (i = 0; i < CALLBACK_MAX_SLOT; i++)
+      setnilV(&func[i]);
+    la_storeptr_rel((void **)&cts->cb.func, func);
     la_store32_rel(&cts->cb.sizeid, CALLBACK_MAX_SLOT);
   }
   return cts->cb.cbid;
@@ -964,9 +1006,10 @@ static MSize callback_slot_claim_l(lua_State *L, CTState *cts)
 {
   CTypeID1 *cbid = (CTypeID1 *)la_loadptr_acq((void *const *)&cts->cb.cbid);
   lua_State **owner = (lua_State **)la_loadptr_acq((void *const *)&cts->cb.owner);
+  TValue *func = callback_func_slots(cts);
   MSize top, sizeid;
   sizeid = (MSize)la_load32_acq(&cts->cb.sizeid);
-  if (cbid == NULL || owner == NULL || sizeid == 0)
+  if (cbid == NULL || owner == NULL || func == NULL || sizeid == 0)
     lj_err_caller(L, LJ_ERR_FFI_CBACKOV);
   for (top = 0; top < sizeid; top++) {
     if (LJ_LIKELY(callback_cbid_load(cbid, top) == 0 &&
@@ -1023,13 +1066,9 @@ void *lj_ccallback_new_l(lua_State *L, CTState *cts, CType *ct, GCfunc *fn)
   if (ct) {
     MSize slot;
     CTypeID1 *cbid;
-    GCtab *t = cts->miscmap;
-    TValue tv;
     slot = callback_slot_claim_l(L, cts);
     cbid = (CTypeID1 *)la_loadptr_acq((void *const *)&cts->cb.cbid);
-    setfuncV(L, &tv, fn);
-    copyTVrel(L, lj_tab_setint(L, t, (int32_t)slot), &tv);
-    lj_gc_pubtab(L, t);
+    lj_ccallback_func_store_l(L, cts, slot, fn);
     callback_cbid_store(cbid, slot, id);
     return callback_slot2ptr(cts, slot);
   }

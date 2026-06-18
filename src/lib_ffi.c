@@ -500,21 +500,18 @@ static int ffi_callback_set(lua_State *L, GCfunc *fn)
     if (slot < la_load32_acq(&cts->cb.sizeid) &&
 	(cbid = (CTypeID1 *)la_loadptr_acq((void *const *)&cts->cb.cbid)) != NULL &&
 	la_load16_acq(&cbid[slot]) != 0) {
-      GCtab *t = cts->miscmap;
-      TValue *tv = lj_tab_setint(L, t, (int32_t)slot);
       if (fn) {
-	lj_tab_storefunc(L, tv, fn);
-	lj_gc_pubtab(L, t);
+	lj_ccallback_func_store_l(L, cts, slot, fn);
       } else {
 	owner = (lua_State **)la_loadptr_acq((void *const *)&cts->cb.owner);
 	if (owner && la_loadptr_acq((void *const *)&owner[slot]) == NULL) {
 	  /* 11.5 disowned callback free: nil function before cbid release. */
-	  lj_tab_storenil(L, tv);
+	  lj_ccallback_func_clear(cts, slot);
 	  la_store16_rel(&cbid[slot], 0);
 	} else {
 	  /* 11.5 owned callback free: cbid release before owner release. */
 	  la_store16_rel(&cbid[slot], 0);
-	  lj_tab_storenil(L, tv);
+	  lj_ccallback_func_clear(cts, slot);
 	  if (owner)
 	    la_storeptr_rel((void **)&owner[slot], NULL);  /* 11.5 slot reusable. */
 	}
@@ -1051,7 +1048,7 @@ LUALIB_API int luaopen_ffi(lua_State *L)
   CTState *cts = lj_ctype_init(L);
   lj_ccallback_init_l(L, cts);
   settabV(L, L->top++,
-	  (cts->miscmap = lj_tab_new(L, (uint32_t)lj_ccallback_maxslot(), 1)));
+	  (cts->miscmap = lj_tab_new(L, 0, 1)));
   LJ_LIB_REG(L, NULL, ffi_meta);
   /* NOBARRIER: basemt is a GC root. */
   setgcrefroot(basemt_it(G(L), LJ_TCDATA), obj2gco(tabV(L->top-1)));

@@ -50,6 +50,7 @@ static int gc2_finclaim_resize(global_State *g, MSize cap);
 static void gc2_finclaim_reset(global_State *g);
 static int gc2_tab_weak_mode(global_State *g, GCtab *t, GCtab *mt);
 static void *gc2_worker_main(void *arg);
+static void gc2_mark_tv_worker(global_State *g, cTValue *tv);
 
 static uint32_t gc2_flush_and_drain_ssb(global_State *g)
 {
@@ -1427,6 +1428,7 @@ static void gc2_scan_global_roots(global_State *g)
     CTState *cts = ctype_ctsG(g);
     if (cts) {
       CTypeTab *ret;
+      TValue *func;
       lj_gc2_markmem(g, cts);
       lj_gc2_markmem(g, ctype_tabh_acq(cts));
       for (ret = (CTypeTab *)la_loadptr_acq(
@@ -1451,6 +1453,16 @@ static void gc2_scan_global_roots(global_State *g)
       lj_ctype_fin_mark(g, gc2_finreg_markobj, gc2_finreg_markmem);
       lj_gc2_markmem(g, cts->cb.cbid);
       lj_gc2_markmem(g, cts->cb.owner);
+      func = (TValue *)la_loadptr_acq((void *const *)&cts->cb.func);
+      lj_gc2_markmem(g, func);
+      if (func) {
+	MSize i, n = (MSize)la_load32_acq(&cts->cb.sizeid);
+	for (i = 0; i < n; i++) {
+	  TValue tv;
+	  lj_tv_load_acq(&tv, &func[i]);
+	  gc2_mark_tv_worker(g, &tv);
+	}
+      }
     }
   }
 #endif

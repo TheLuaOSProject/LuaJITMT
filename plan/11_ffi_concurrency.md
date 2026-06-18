@@ -12,11 +12,13 @@ GCtab *miscmap; GCRef *metamap; CCallback cb; uint32_t hash[CTHASH_SIZE]; }`
 - `tabh` is the acquire/release-published header for the append-only CType
   records (IDs are stable); `top` is the ticket allocator; `hash[]` are chain
   anchors threaded through CType.next (intra-record links).
-- `miscmap` maps -CTypeID→metatable and callback slots→funcs — an ordinary
-  GCtab (becomes concurrent for free via 06).
+- `miscmap` was the old catch-all GCtab for metatypes, callback slots, and
+  callback blacklist entries.
   Current implementation note: metatables have moved to the CTID-indexed
-  `CTState.metamap` side root; `miscmap` remains for callback slots, the
-  function-pointer metatable, and legacy compatibility.
+  `CTState.metamap` side root, callback function slots live in the
+  `CTState.cb.func` TValue side root, and callback blacklisting uses the
+  fixed `CTState.cbblack` pointer set. `miscmap` remains as a small rooted
+  table for the FFI function-pointer metatable and legacy compatibility.
 - `cb` is scratch for callback setup.
 
 ## 11.2 Lock-free CTState (M7)
@@ -75,7 +77,8 @@ GCtab *miscmap; GCRef *metamap; CCallback cb; uint32_t hash[CTHASH_SIZE]; }`
   Current implementation note: metatypes use a CTState side root
   (`metamap[raw_ctypeid]`) instead of structural `miscmap` negative-key
   insertion. `ffi.metatype()` CAS-publishes the metatable and both collectors
-  scan the side root; `miscmap` remains for callback function slots.
+  scan the side root; `miscmap` remains only for the FFI function-pointer
+  metatable.
 
 ## 11.3 cdata objects
 Allocation: ordinary GC objects from non-traversable arenas (04 §4.2) —
@@ -153,11 +156,13 @@ FINREG/finqueue dispatch lands.
   Current x64/Linux implementation note: runtime callback scratch now lives in
   `TGState`, callback slot arrays are preallocated at `luaopen_ffi()`, setup
   reserves a free slot with an owner-pointer CAS, stores the callback function
-  before release-publishing `cbid`. Owned callback free preserves the original
-  `cbid`→function→owner release order; disowned callback free nils the function
-  before release-clearing `cbid` and performs no owner write after the slot is
-  reusable. Callback mcode is allocated at `luaopen_ffi()` before concurrent
-  callback creation, so the former `misc_token` lazy-init bridge is gone.
+  into `CTState.cb.func[slot]`, then release-publishes `cbid`. Legacy GC and
+  GC2 scan `cb.func` as a CTState side root. Owned callback free preserves the
+  original `cbid`→function→owner release order; disowned callback free nils the
+  function before release-clearing `cbid` and performs no owner write after the
+  slot is reusable. Callback mcode is allocated at `luaopen_ffi()` before
+  concurrent callback creation, so the former `misc_token` lazy-init bridge is
+  gone.
   x64 callback entry spills ABI arguments, selects the current attached TLS TG
   with `lj_ccallback_prepare()`, and uses callback owner slots only for
   lifetime/disown. Callback-calling C functions are blacklisted through a fixed

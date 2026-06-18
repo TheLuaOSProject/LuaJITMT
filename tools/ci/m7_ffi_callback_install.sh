@@ -17,20 +17,30 @@ for needle in \
   'callback_owner_claim(lua_State **owner, MSize slot,' \
   'la_casptr((void **)&owner[slot], &expect, L,' \
   'callback_owner_load(owner, top) == NULL' \
-  'if (cbid == NULL || owner == NULL || sizeid == 0)' \
+  'TValue *func;' \
+  'if (cbid == NULL || owner == NULL || func == NULL || sizeid == 0)' \
   'lj_mem_newvec(L, CALLBACK_MAX_SLOT, CTypeID1)' \
   'la_storeptr_rel((void **)&cts->cb.cbid, cbid)' \
+  'lj_mem_newvec(L, CALLBACK_MAX_SLOT, TValue)' \
+  'setnilV(&func[i])' \
+  'la_storeptr_rel((void **)&cts->cb.func, func)' \
   'la_store32_rel(&cts->cb.sizeid, CALLBACK_MAX_SLOT)' \
   'callback_cbid_load(cbid, top)' \
   'callback_cbid_store(cbid, slot, id)' \
+  'callback_func_load(CTState *cts, MSize slot,' \
+  'callback_func_load(cts, slot, &tv)' \
+  'lj_ccallback_func_store_l(lua_State *L, CTState *cts' \
   'setfuncV(L, &tv, fn)' \
-  'copyTVrel(L, lj_tab_setint(L, t, (int32_t)slot), &tv)' \
-  'lj_gc_pubtab(L, t)' \
-  'lj_tv_load_acq(&tv, lj_tab_getint(cts->miscmap, (int32_t)slot))' \
+  'copyTVrel(L, &func[slot], &tv)' \
+  'lj_gc_barrierroot(L, &func[slot])' \
+  'lj_ccallback_func_clear(CTState *cts, MSize slot)' \
+  'lj_tab_storenilraw(&func[slot])' \
+  'lj_gc_arena_markmem(g, func)' \
+  'lj_gc2_markmem(g, func)' \
   'if (tvisfunc(&tv))' \
   'lj_ccallback_new_l(L, cts' \
   'lj_ccallback_init_l(L, cts)' \
-  'lj_tab_new(L, (uint32_t)lj_ccallback_maxslot(), 1)' \
+  'lj_tab_new(L, 0, 1)' \
   'lj_state_checkstack(L, 1)' \
   'setcdataV(L, L->top++, cd)' \
   'LJLIB_CF(ffi_callback_free)' \
@@ -38,6 +48,8 @@ for needle in \
   'la_loadptr_acq((void *const *)&owner[slot]) == NULL' \
   '11.5 disowned callback free: nil function before cbid release.' \
   '11.5 owned callback free: cbid release before owner release.' \
+  'lj_ccallback_func_store_l(L, cts, slot, fn)' \
+  'lj_ccallback_func_clear(cts, slot)' \
   'la_storeptr_rel((void **)&owner[slot], NULL)'
 do
   if ! rg -F -q "$needle" "$ROOT/src"; then
@@ -48,6 +60,11 @@ done
 
 if rg -n 'lj_ccallback_new\(CTState|callback_slot_new|callback_mcode_new\(CTState|misc_token|lj_ctype_misc_lock|lj_ctype_misc_unlock' "$ROOT/src"; then
   echo "guardrail: callback setup wrappers must stay explicit-L only" >&2
+  exit 1
+fi
+
+if rg -n 'lj_tab_getint\(cts->miscmap, \(int32_t\)slot\)|lj_tab_setint\(L, [^,]*, \(int32_t\)slot\)|lj_tab_new\(L, \(uint32_t\)lj_ccallback_maxslot\(\), 1\)' "$ROOT/src"; then
+  echo "guardrail: callback function slots must stay in the CTState side array, not miscmap" >&2
   exit 1
 fi
 
@@ -65,7 +82,7 @@ if ! awk '
   innew && /^}/ { innew = 0 }
   innew && /callback_mcode_new_l|lj_ctype_misc_lock|lj_ctype_misc_unlock/ { badlazy = 1 }
   innew && /callback_slot_claim_l\(L, cts\)/ { claim = NR }
-  innew && /lj_tab_setint\(L, t, \(int32_t\)slot\)/ { sawset = NR }
+  innew && /lj_ccallback_func_store_l\(L, cts, slot, fn\)/ { sawset = NR }
   innew && /callback_cbid_store\(cbid, slot, id\)/ { publish = NR }
   END { exit slots && mcode && slots < mcode && claim && sawset && publish &&
 	      claim < sawset && sawset < publish && !badlazy ? 0 : 1 }
@@ -79,9 +96,11 @@ if ! awk '
   inslot && /^}/ { inslot = 0 }
   inslot && /callback_slots_init_l/ { badinit = 1 }
   inslot && /for \(top = 0; top < sizeid; top\+\+\)/ { sawfor = 1 }
+  inslot && /TValue \*func = callback_func_slots\(cts\)/ { sawfunc = 1 }
+  inslot && /cbid == NULL \|\| owner == NULL \|\| func == NULL \|\| sizeid == 0/ { sawcheck = 1 }
   inslot && /callback_cbid_load\(cbid, top\) == 0/ { sawcbid = 1 }
   inslot && /callback_owner_claim\(owner, top, L\)/ { sawclaim = 1 }
-  END { exit sawfor && sawcbid && sawclaim && !badinit ? 0 : 1 }
+  END { exit sawfor && sawfunc && sawcheck && sawcbid && sawclaim && !badinit ? 0 : 1 }
 ' "$ROOT/src/lj_ccallback.c"; then
   echo "guardrail: callback slot claim must use owner CAS over the preallocated table" >&2
   exit 1
@@ -92,7 +111,7 @@ if ! awk '
   inset && /^}/ { inset = 0 }
   inset && /lj_ctype_misc_lock\(cts\)/ { badlock = 1 }
   inset && /11\.5 disowned callback free/ { branch = "disowned"; disowned = NR }
-  inset && branch == "disowned" && /lj_tab_storenil\(L, tv\)/ && !disowned_nil {
+  inset && branch == "disowned" && /lj_ccallback_func_clear\(cts, slot\)/ && !disowned_nil {
     disowned_nil = NR
   }
   inset && branch == "disowned" && /la_store16_rel\(&cbid\[slot\], 0\)/ && !disowned_clear {
@@ -102,7 +121,7 @@ if ! awk '
   inset && branch == "owned" && /la_store16_rel\(&cbid\[slot\], 0\)/ && !owned_clear {
     owned_clear = NR
   }
-  inset && branch == "owned" && /lj_tab_storenil\(L, tv\)/ && !owned_nil {
+  inset && branch == "owned" && /lj_ccallback_func_clear\(cts, slot\)/ && !owned_nil {
     owned_nil = NR
   }
   inset && branch == "owned" && /la_storeptr_rel\(\(void \*\*\)&owner\[slot\], NULL\)/ && !owned_owner {

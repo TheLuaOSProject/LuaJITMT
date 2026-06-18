@@ -27,6 +27,9 @@ LJ_FUNC MSize lj_ccallback_maxslot(void);
 LJ_FUNC void lj_ccallback_init_l(lua_State *L, CTState *cts);
 LJ_FUNC void *lj_ccallback_new_l(lua_State *L, CTState *cts, CType *ct,
 				 GCfunc *fn);
+LJ_FUNC void lj_ccallback_func_store_l(lua_State *L, CTState *cts,
+				       MSize slot, GCfunc *fn);
+LJ_FUNC void lj_ccallback_func_clear(CTState *cts, MSize slot);
 LJ_FUNC void lj_ccallback_mcode_free(CTState *cts);
 
 #else

@@ -411,6 +411,7 @@ static void gc2_paranoia_check_rawroots(global_State *g)
       }
       gc2_paranoia_checkmem(g, cts->cb.cbid, "callback ids");
       gc2_paranoia_checkmem(g, cts->cb.owner, "callback owners");
+      gc2_paranoia_checkmem(g, cts->cb.func, "callback functions");
     }
   }
 #endif
@@ -636,6 +637,7 @@ static void gc_mark_gcroot(global_State *g)
     CTState *cts = ctype_ctsG(g);
     if (cts) {
       CTypeTab *ctret;
+      TValue *func;
       lj_gc_arena_markmem(g, cts);
       lj_gc_arena_markmem(g, ctype_tabh_acq(cts));
       for (ctret = (CTypeTab *)la_loadptr_acq(
@@ -661,6 +663,16 @@ static void gc_mark_gcroot(global_State *g)
       gc_mark_finreg_cdata_preclaims(g);
       lj_gc_arena_markmem(g, cts->cb.cbid);
       lj_gc_arena_markmem(g, cts->cb.owner);
+      func = (TValue *)la_loadptr_acq((void *const *)&cts->cb.func);
+      lj_gc_arena_markmem(g, func);
+      if (func) {
+	MSize i, n = (MSize)la_load32_acq(&cts->cb.sizeid);
+	for (i = 0; i < n; i++) {
+	  TValue tv;
+	  lj_tv_load_acq(&tv, &func[i]);
+	  gc_marktv(g, &tv);
+	}
+      }
     }
   }
 #endif
