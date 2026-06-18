@@ -16,6 +16,7 @@
 #include "lualib.h"
 
 #include "lj_obj.h"
+#include "lj_atomic.h"
 #include "lj_gc.h"
 #include "lj_err.h"
 #include "lj_debug.h"
@@ -472,6 +473,79 @@ LJLIB_CF(dofile)
 
 /* -- Base library: GC control -------------------------------------------- */
 
+#define LUA_GCSTATS		(LUA_GCISRUNNING+1)
+
+static void gc_stats_setnum(lua_State *L, GCtab *t, const char *name,
+			    uint64_t n)
+{
+  TValue tv;
+  setnumV(&tv, (lua_Number)n);
+  copyTVrel(L, lj_tab_setstr(L, t, lj_str_newz(L, name)), &tv);
+}
+
+static void gc_stats_setint(lua_State *L, GCtab *t, const char *name,
+			    uint32_t n)
+{
+  TValue tv;
+  setintV(&tv, (int32_t)n);
+  copyTVrel(L, lj_tab_setstr(L, t, lj_str_newz(L, name)), &tv);
+}
+
+static void gc_stats_push(lua_State *L)
+{
+  global_State *g = G(L);
+  GC2State *gc2 = &g->gc2;
+  GCtab *t;
+  lua_createtable(L, 0, 32);
+  t = tabV(L->top - 1);
+  gc_stats_setnum(L, t, "total_bytes", g->gc.total);
+  gc_stats_setnum(L, t, "total_kbytes", g->gc.total >> 10);
+  gc_stats_setint(L, t, "phase", la_load32_acq(&gc2->phase));
+  gc_stats_setnum(L, t, "cycle_requests", la_load64_acq(&gc2->cycle_requests));
+  gc_stats_setnum(L, t, "cycle_starts", la_load64_acq(&gc2->cycle_starts));
+  gc_stats_setnum(L, t, "alloc_since_trigger",
+		  la_load64_acq(&gc2->alloc_since_trigger));
+  gc_stats_setnum(L, t, "trigger_bytes", la_load64_acq(&gc2->trigger_bytes));
+  gc_stats_setnum(L, t, "hard_bytes", la_load64_acq(&gc2->hard_bytes));
+  gc_stats_setnum(L, t, "assist_runs", la_load64_acq(&gc2->assist_runs));
+  gc_stats_setnum(L, t, "assist_grey_drained",
+		  la_load64_acq(&gc2->assist_grey_drained));
+  gc_stats_setnum(L, t, "assist_ssb_converted",
+		  la_load64_acq(&gc2->assist_ssb_converted));
+  gc_stats_setnum(L, t, "assist_weak_drained",
+		  la_load64_acq(&gc2->assist_weak_drained));
+  gc_stats_setnum(L, t, "worker_runs", la_load64_acq(&gc2->worker_runs));
+  gc_stats_setnum(L, t, "worker_grey_drained",
+		  la_load64_acq(&gc2->worker_grey_drained));
+  gc_stats_setnum(L, t, "worker_ssb_converted",
+		  la_load64_acq(&gc2->worker_ssb_converted));
+  gc_stats_setnum(L, t, "worker_weak_drained",
+		  la_load64_acq(&gc2->worker_weak_drained));
+  gc_stats_setnum(L, t, "sweep_owner_runs",
+		  la_load64_acq(&gc2->sweep_owner_runs));
+  gc_stats_setnum(L, t, "sweep_owner_arenas",
+		  la_load64_acq(&gc2->sweep_owner_arenas));
+  gc_stats_setnum(L, t, "sweep_owner_live_cells",
+		  la_load64_acq(&gc2->sweep_owner_live_cells));
+  gc_stats_setnum(L, t, "sweep_live_updates",
+		  la_load64_acq(&gc2->sweep_live_updates));
+  gc_stats_setnum(L, t, "sweep_live_huge_bytes",
+		  la_load64_acq(&gc2->sweep_live_huge_bytes));
+  gc_stats_setnum(L, t, "live_estimate", la_load64_acq(&gc2->live_estimate));
+  gc_stats_setnum(L, t, "weak_clear_tables",
+		  la_load64_acq(&gc2->weak_clear_tables));
+  gc_stats_setnum(L, t, "weak_clear_cleared",
+		  la_load64_acq(&gc2->weak_clear_cleared));
+  gc_stats_setnum(L, t, "weak_legacy_fallbacks",
+		  la_load64_acq(&gc2->weak_legacy_fallbacks));
+  gc_stats_setnum(L, t, "weak_legacy_backfills",
+		  la_load64_acq(&gc2->weak_legacy_backfills));
+  gc_stats_setnum(L, t, "finalizer_queued",
+		  la_load64_acq(&gc2->finalizer_queued));
+  gc_stats_setnum(L, t, "finalizer_dequeued",
+		  la_load64_acq(&gc2->finalizer_dequeued));
+}
+
 LJLIB_CF(gcinfo)
 {
   setintV(L->top++, (int32_t)(G(L)->gc.total >> 10));
@@ -481,10 +555,13 @@ LJLIB_CF(gcinfo)
 LJLIB_CF(collectgarbage)
 {
   int opt = lj_lib_checkopt(L, 1, LUA_GCCOLLECT,  /* ORDER LUA_GC* */
-    "\4stop\7restart\7collect\5count\1\377\4step\10setpause\12setstepmul\1\377\11isrunning");
+    "\4stop\7restart\7collect\5count\1\377\4step\10setpause\12setstepmul\1\377\11isrunning\5stats");
   int32_t data = lj_lib_optint(L, 2, 0);
   if (opt == LUA_GCCOUNT) {
     setnumV(L->top, (lua_Number)G(L)->gc.total/1024.0);
+  } else if (opt == LUA_GCSTATS) {
+    gc_stats_push(L);
+    return 1;
   } else {
     int res = lua_gc(L, opt, data);
     if (opt == LUA_GCSTEP || opt == LUA_GCISRUNNING)

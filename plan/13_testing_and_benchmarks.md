@@ -122,9 +122,11 @@ tab_hash_read-MT shared table, tab_hash_write-MT sharded vs shared,
 alloc-MT (allocator scalability — the headline number for ADR-4),
 string_intern-MT (worst-case shared structure), chan_pingpong (latency),
 chan_throughput, pmap-image-kernel (the 09 §9.11 pmap on a synthetic
-workload). Report ops/sec/thread + total; plot speedup. GC metrics dumped
-via collectgarbage("stats") (add: cycles, max poll-to-ack latency, sweep
-bytes, assist count — wire counters in lj_gc2 from M3 so M9 has data).
+workload). Report ops/sec/thread + total; plot speedup. GC metrics are dumped
+via `collectgarbage("stats")`: current fields include cycle requests/starts,
+allocation trigger/hard-limit bytes, assist work, worker work, owner sweep
+work, weak clearing, finalizer queueing, and live estimates. Max
+poll-to-ack latency still needs a dedicated latency probe.
 
 ## 13.9 CI matrix (final)
 {x64} × {-joff,-jon} × {release, ASAN, TSAN-C, paranoia,

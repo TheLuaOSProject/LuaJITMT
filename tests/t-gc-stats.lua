@@ -1,0 +1,49 @@
+local function assert_number(t, k)
+  assert(type(t[k]) == "number", k)
+end
+
+local before = collectgarbage("stats")
+assert(type(before) == "table")
+assert(type(collectgarbage("count")) == "number")
+assert(type(collectgarbage("isrunning")) == "boolean")
+assert(type(collectgarbage("step", 0)) == "boolean")
+assert_number(before, "total_bytes")
+assert_number(before, "total_kbytes")
+assert_number(before, "phase")
+assert_number(before, "cycle_requests")
+assert_number(before, "cycle_starts")
+assert_number(before, "alloc_since_trigger")
+assert_number(before, "trigger_bytes")
+assert_number(before, "hard_bytes")
+assert_number(before, "assist_runs")
+assert_number(before, "assist_grey_drained")
+assert_number(before, "assist_ssb_converted")
+assert_number(before, "assist_weak_drained")
+assert_number(before, "sweep_owner_runs")
+assert_number(before, "sweep_owner_arenas")
+assert_number(before, "sweep_owner_live_cells")
+assert_number(before, "sweep_live_updates")
+assert_number(before, "sweep_live_huge_bytes")
+assert_number(before, "live_estimate")
+assert_number(before, "weak_clear_tables")
+assert_number(before, "weak_clear_cleared")
+assert_number(before, "weak_legacy_fallbacks")
+assert_number(before, "weak_legacy_backfills")
+assert_number(before, "finalizer_queued")
+assert_number(before, "finalizer_dequeued")
+
+local keep = {}
+for i = 1, 2000 do
+  keep[i] = {i, i + 1, i + 2}
+end
+collectgarbage("collect")
+
+local after = collectgarbage("stats")
+assert(after.total_bytes > 0)
+assert(after.total_kbytes >= 0)
+assert(after.cycle_starts >= before.cycle_starts)
+assert(after.sweep_owner_runs >= before.sweep_owner_runs)
+assert(after.sweep_live_updates >= before.sweep_live_updates)
+assert(after.live_estimate >= 0)
+
+print("t-gc-stats OK")

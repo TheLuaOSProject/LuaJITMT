@@ -17,6 +17,29 @@ end
 
 local NT = tonumber(arg and arg[1]) or th.cpucount()
 local filter = arg and arg[2]
+local gc_stat_keys = {
+  "cycle_starts",
+  "assist_runs",
+  "sweep_owner_runs",
+  "sweep_live_updates",
+  "live_estimate",
+  "weak_clear_tables",
+  "finalizer_queued",
+}
+
+local function print_gc_stats()
+  local ok, stats = pcall(collectgarbage, "stats")
+  if ok and type(stats) == "table" then
+    local out = { "GC stats:" }
+    for i = 1, #gc_stat_keys do
+      local k = gc_stat_keys[i]
+      out[#out+1] = k .. "=" .. tostring(stats[k])
+    end
+    print(table.concat(out, " "))
+  else
+    print("GC stats:", collectgarbage("count"), "KB est.")
+  end
+end
 
 local function run(name, perthread_ops, mkworker, setup)
   if filter and not name:find(filter, 1, true) then return end
@@ -139,4 +162,4 @@ run("gc_churn-MT", 2e6, function(id, _, n)
 end)
 
 print(("-"):rep(72))
-print("GC stats:", collectgarbage("count"), "KB est.")
+print_gc_stats()
