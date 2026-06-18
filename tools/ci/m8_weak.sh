@@ -158,6 +158,9 @@ for needle in \
   'timeout 10s "$ROOT/src/luajit" "$ROOT/tests/t-m8-finalizer-spawn-live.lua"' \
   'GC step completed while finalizer-spawned worker was live' \
   'finalizer-spawned worker can outlive callback' \
+  'worker finalizer notification timed out' \
+  'worker finalizer fired more times than registered' \
+  'finalized_by_thread[tid] == expected_by_thread[tid]' \
   'gc_finalize_cdata_slot_owned(lua_State *L, GCobj *o, cTValue *key)' \
   'lj_state_checkstack(cbL, 2+LJ_FR2+LUA_MINSTACK);' \
   'oldtop = savestack(cbL, cbL->top);' \
@@ -365,6 +368,8 @@ make -C "$ROOT/src" -j"$JOBS" >/dev/null
 "$ROOT/src/luajit" "$ROOT/tests/t-weak-modes.lua"
 timeout 10s "$ROOT/src/luajit" -joff "$ROOT/tests/t-m8-finalizer-spawn-live.lua"
 timeout 10s "$ROOT/src/luajit" "$ROOT/tests/t-m8-finalizer-spawn-live.lua"
+"$ROOT/src/luajit" -joff "$ROOT/tests/t-ffi-gc-finreg.lua" 3 72
+"$ROOT/src/luajit" "$ROOT/tests/t-ffi-gc-finreg.lua" 3 72
 
 out="$TMP/lj_t-gc2-phase_m8"
 "$CC" $CFLAGS -I"$ROOT/src" "$ROOT/tests/t-gc2-phase.c" \
