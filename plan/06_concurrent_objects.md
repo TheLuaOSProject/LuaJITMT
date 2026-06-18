@@ -207,6 +207,9 @@ array header keeps the interim 8-byte slots-prefix shape but now packs capacity
 and reserved state into `TabArrayHdr.acap`: `TABARRAY_ACAP_MASK` preserves the
 plain capacity for existing readers, while `TABARRAY_FLAG_RETIRING` reserves
 the first flag bit for the final §6.3.2/§6.3.5 write/migration protocol.
+`lj_tab_resize()` now sets that bit on the old separated array generation after
+replacement contents are ready and before publishing replacement table state;
+current generations still start with zero flags until their own resize.
 On x86-64,
 `getmetatable`'s `__metatable` probe, `ipairs_aux` empty-hash fallback,
 `lj_vm_next` hash traversal, `BC_TGETS_Z`, and `BC_ITERN` hash traversal now

@@ -86,7 +86,7 @@ int main(void)
   assert(ret != NULL);
   assert(ret->acap == oldacap);
   assert(lj_tab_array_hdr_acap_acq(ret->array) == ret->acap);
-  assert(lj_tab_array_hdr_flags_acq(ret->array) == 0);
+  assert(lj_tab_array_hdr_flags_acq(ret->array) == TABARRAY_FLAG_RETIRING);
   assert(ret->armed == 1);
   retire_epoch = ret->retire_epoch;
   assert(lj_tab_reclaim_retired(g, retire_epoch) == 0);
@@ -117,6 +117,7 @@ int main(void)
   ret = find_retired_array(g, oldarray);
   assert(ret != NULL);
   assert(ret->acap == oldacap);
+  assert(lj_tab_array_hdr_flags_acq(ret->array) == TABARRAY_FLAG_RETIRING);
   retire_epoch = ret->retire_epoch;
   assert(lj_tab_reclaim_retired(g, retire_epoch + 1u) >= 1);
   assert(find_retired_array(g, oldarray) == NULL);
@@ -141,6 +142,7 @@ int main(void)
   ret = find_retired_array(g, oldarray);
   assert(ret != NULL);
   assert(ret->acap == oldacap);
+  assert(lj_tab_array_hdr_flags_acq(ret->array) == TABARRAY_FLAG_RETIRING);
   retire_epoch = ret->retire_epoch;
   assert(lj_tab_reclaim_retired(g, retire_epoch + 1u) >= 1);
   assert(find_retired_array(g, oldarray) == NULL);

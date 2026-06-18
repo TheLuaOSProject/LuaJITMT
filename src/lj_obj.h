@@ -716,6 +716,19 @@ static LJ_AINLINE MSize lj_tab_array_hdr_flags_acq(const TValue *array)
 	 TABARRAY_FLAGS_MASK;
 }
 
+static LJ_AINLINE void lj_tab_array_hdr_flags_or_rel(TValue *array,
+						     MSize flags)
+{
+  uint32_t *word = &lj_tab_array_hdrw(array)->acap;
+  uint32_t old = la_load32_acq(word);
+  uint32_t want;
+  flags &= TABARRAY_FLAGS_MASK;
+  /* 06 section 6.3.2: publish generation state before replacement. */
+  do {
+    want = old | (uint32_t)flags;
+  } while (old != want && !la_cas32(word, &old, want, LA_ACQ_REL, LA_ACQ));
+}
+
 static LJ_AINLINE MSize lj_tab_array_snapshot_acq(const GCtab *t,
 						  TValue **arrayp)
 {

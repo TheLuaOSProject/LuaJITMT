@@ -548,6 +548,8 @@ void lj_tab_resize(lua_State *L, GCtab *t, uint32_t asize, uint32_t hbits)
       }
     }
   }
+  if (oldaret)
+    lj_tab_array_hdr_flags_or_rel(oldarray, TABARRAY_FLAG_RETIRING);
   if (asize > oldasize) {
     if (array != oldarray)
       lj_tab_array_rel(t, array);

@@ -26,6 +26,7 @@ for needle in \
   'TABARRAY_FLAG_RETIRING' \
   'lj_tab_array_hdr_pack_acap' \
   'lj_tab_array_hdr_init' \
+  'lj_tab_array_hdr_flags_or_rel' \
   'lj_tab_array_hdrw' \
   'lj_tab_array_bytes' \
   'lj_tab_array_is_colocated' \
@@ -53,7 +54,8 @@ for needle in \
   'asize = lj_tab_array_snapshot_acq(dict_str, &array)' \
   'asize = lj_tab_array_snapshot_acq(dict_mt, &array)' \
   'lj_tab_array_snapshot_acq(t, &record_array)' \
-  'lj_tv_load_acq(&val, &array[i])'
+  'lj_tv_load_acq(&val, &array[i])' \
+  'lj_tab_array_hdr_flags_or_rel(oldarray, TABARRAY_FLAG_RETIRING)'
 do
   if ! rg -F -q "$needle" "$ROOT/src"; then
     echo "guardrail: missing table array publication marker: $needle" >&2
@@ -64,6 +66,12 @@ done
 if ! rg -F -q 'lj_tab_array_hdr_flags_acq(oldarray) == 0' \
     "$ROOT/tests/t-tab-array-publish.c"; then
   echo "guardrail: table array test must assert zero header flags" >&2
+  exit 1
+fi
+
+if ! rg -F -q 'lj_tab_array_hdr_flags_acq(ret->array) == TABARRAY_FLAG_RETIRING' \
+    "$ROOT/tests/t-tab-array-publish.c"; then
+  echo "guardrail: retired table arrays must carry RETIRING header flags" >&2
   exit 1
 fi
 
