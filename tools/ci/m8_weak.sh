@@ -193,12 +193,15 @@ for needle in \
   'LJ_GC_UDATA_FINREG == LJ_GC_WEAKVAL' \
   'old | LJ_GC_UDATA_FINREG' \
   'void *finreg_udata_head' \
+  'lj_gc2_finreg_udata_register(L, g, obj2gco(ud));' \
   'lj_gc2_finreg_udata_register(lua_State *L, global_State *g,' \
   'GC2-owned userdata FINREG discovery' \
+  'Side-list no-finalizer userdata is done' \
   'lj_gc2_finreg_udata_set(g, o, 1);' \
   'lj_gc2_finreg_udata_set(g, o, 0);' \
-  'finreg_udata_registered) == registered0 + 3u' \
-  'finreg_udata_discovered) == discovered0 + 1u' \
+  'finreg_udata_registered) == registered0 + 4u' \
+  'finreg_udata_discovered) == discovered0 + 2u' \
+  'finreg_udata_fallbacks) == fallbacks0' \
   'sets0 + 4u' \
   'finreg_udata_queued) == queued0 + 2u' \
   'finreg_udata_clears) == clears0 + 4u' \

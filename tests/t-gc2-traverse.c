@@ -2237,6 +2237,7 @@ static void test_finreg_userdata_telemetry(lua_State *L, global_State *g)
   uint64_t registered0 = la_load64_acq(&g->gc2.finreg_udata_registered);
   uint64_t discovered0 = la_load64_acq(&g->gc2.finreg_udata_discovered);
   uint64_t forgets0 = la_load64_acq(&g->gc2.finreg_udata_forgets);
+  uint64_t fallbacks0 = la_load64_acq(&g->gc2.finreg_udata_fallbacks);
 
   lua_settop(L, 0);
   lua_newuserdata(L, 1);
@@ -2261,6 +2262,7 @@ static void test_finreg_userdata_telemetry(lua_State *L, global_State *g)
   assert(la_load64_acq(&g->gc2.finreg_udata_clears) == clears0 + 2u);
   assert(la_load64_acq(&g->gc2.finreg_udata_discovered) ==
 	 discovered0 + 1u);
+  assert(la_load64_acq(&g->gc2.finreg_udata_fallbacks) == fallbacks0);
 
   lua_settop(L, 0);
   lua_newuserdata(L, 1);
@@ -2279,6 +2281,7 @@ static void test_finreg_userdata_telemetry(lua_State *L, global_State *g)
   assert(la_load64_acq(&g->gc2.finreg_udata_clears) == clears0 + 3u);
   assert(la_load64_acq(&g->gc2.finreg_udata_discovered) ==
 	 discovered0 + 1u);
+  assert(la_load64_acq(&g->gc2.finreg_udata_fallbacks) == fallbacks0);
 
   lua_settop(L, 0);
   lua_newuserdata(L, 1);
@@ -2286,7 +2289,7 @@ static void test_finreg_userdata_telemetry(lua_State *L, global_State *g)
   lua_setmetatable(L, -2);
   assert(la_load64_acq(&g->gc2.finreg_udata_sets) == sets0 + 3u);
   assert(la_load64_acq(&g->gc2.finreg_udata_registered) ==
-	 registered0 + 3u);
+	 registered0 + 4u);
   lua_getmetatable(L, -1);
   lua_pushcfunction(L, gc2_empty_finalizer);
   lua_setfield(L, -2, "__gc");
@@ -2297,9 +2300,10 @@ static void test_finreg_userdata_telemetry(lua_State *L, global_State *g)
   assert(la_load64_acq(&g->gc2.finreg_udata_queued) == queued0 + 2u);
   assert(la_load64_acq(&g->gc2.finreg_udata_clears) == clears0 + 4u);
   assert(la_load64_acq(&g->gc2.finreg_udata_registered) ==
-	 registered0 + 3u);
+	 registered0 + 4u);
   assert(la_load64_acq(&g->gc2.finreg_udata_discovered) ==
-	 discovered0 + 1u);
+	 discovered0 + 2u);
+  assert(la_load64_acq(&g->gc2.finreg_udata_fallbacks) == fallbacks0);
 }
 
 static void test_finreg_userdata_inplace_finalizer_behavior(lua_State *L)

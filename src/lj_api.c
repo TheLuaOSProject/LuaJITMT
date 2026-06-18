@@ -1115,9 +1115,10 @@ LUA_API int lua_setmetatable(lua_State *L, int idx)
     setgcrefmt(ud->metatable, obj2gco(mt));
     if (mt)
       lj_gc_pubobjobj(L, ud, mt);
+    if (mt)
+      lj_gc2_finreg_udata_register(L, g, obj2gco(ud));
     if (newfin) {
-      if (lj_gc2_finreg_udata_set(g, obj2gco(ud), 1) > 0)
-	lj_gc2_finreg_udata_register(L, g, obj2gco(ud));
+      (void)lj_gc2_finreg_udata_set(g, obj2gco(ud), 1);
     } else if (oldfin) {
       if (lj_gc2_finreg_udata_set(g, obj2gco(ud), 0) < 0)
 	lj_gc2_finreg_udata_forget(g, obj2gco(ud));

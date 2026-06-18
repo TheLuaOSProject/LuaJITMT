@@ -1944,6 +1944,14 @@ void lj_gc2_finreg_udata_register(lua_State *L, global_State *g, GCobj *o)
   GC2FinRegUDataNode *node, *head;
   if (!L || !g || !o || o->gch.gct != ~LJ_TUDATA)
     return;
+  for (node = (GC2FinRegUDataNode *)la_loadptr_acq(
+	 (void *const *)&g->gc2.finreg_udata_head);
+       node != NULL;
+       node = (GC2FinRegUDataNode *)la_loadptr_acq(
+	 (void *const *)&node->next)) {
+    if (gcref_acq(node->obj) == o)
+      return;
+  }
   node = lj_mem_newt(L, sizeof(GC2FinRegUDataNode), GC2FinRegUDataNode);
   setgcref(node->obj, o);
   do {

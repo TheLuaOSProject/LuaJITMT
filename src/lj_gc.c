@@ -763,10 +763,11 @@ static size_t gc_separateudata_registered(global_State *g, int all)
        node = (GC2FinRegUDataNode *)la_loadptr_acq(
 	 (void *const *)&node->next)) {
     GCobj *o = gcref_acq(node->obj);
+    uint8_t flags;
+    int finreg;
     if (!o)
       continue;
-    if (o->gch.gct != ~LJ_TUDATA ||
-	!(lj_obj_gcflags(o) & LJ_GC_UDATA_FINREG)) {
+    if (o->gch.gct != ~LJ_TUDATA) {
       setgcrefnullrel(node->obj);
       continue;
     }
@@ -776,11 +777,17 @@ static size_t gc_separateudata_registered(global_State *g, int all)
     }
     if (!(iswhite(o) || all))
       continue;
+    flags = lj_obj_gcflags(o);
+    finreg = (flags & LJ_GC_UDATA_FINREG) != 0;
     if (!lj_meta_fasttv(g, tabref_acq(gco2ud(o)->metatable), MM_gc, &mmv)) {
-      lj_gc2_finreg_udata_set(g, o, 0);
+      if (finreg)
+	lj_gc2_finreg_udata_set(g, o, 0);
+      markfinalized(o);  /* Side-list no-finalizer userdata is done. */
       setgcrefnullrel(node->obj);
       continue;
     }
+    if (!finreg)
+      (void)lj_gc2_finreg_udata_set(g, o, 1);
     if (!gc_unlink_udata_object(g, o)) {
       la_add64_rlx(&g->gc2.finreg_udata_fallbacks, 1);
       continue;

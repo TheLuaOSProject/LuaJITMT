@@ -568,7 +568,7 @@ typedef struct TabArrayRetire {
 } TabArrayRetire;
 
 typedef struct GC2FinRegUDataNode {
-  GCRef obj;		/* Userdata object registered for __gc. */
+  GCRef obj;		/* Userdata object tracked for metatable __gc. */
   struct GC2FinRegUDataNode *next;
 } GC2FinRegUDataNode;
 
@@ -956,7 +956,7 @@ typedef struct GC2State {
   uint64_t finreg_udata_sets;  /* Userdata finalizer registrations mirrored. */
   uint64_t finreg_udata_clears;  /* Userdata finalizer clears mirrored. */
   uint64_t finreg_udata_queued;  /* Userdata finalizers queued for dispatch. */
-  void *finreg_udata_head;  /* GC2-owned userdata FINREG side list. */
+  void *finreg_udata_head;  /* GC2-owned userdata metatable side list. */
   uint64_t finreg_udata_registered;  /* Userdata side-list nodes published. */
   uint64_t finreg_udata_discovered;  /* Userdata queued from side list. */
   uint64_t finreg_udata_forgets;  /* Stale userdata side-list refs cleared. */
