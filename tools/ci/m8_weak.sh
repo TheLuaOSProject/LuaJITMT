@@ -57,6 +57,8 @@ for needle in \
   'm8_close_chain_alternating_cdata' \
   'alternating_cdata_finalized == ALTERNATING_CLOSE_CHAIN' \
   'order_cdata_finalized[0] == 3' \
+  'order_cdata_finalized[1] == 2' \
+  'order_cdata_finalized[2] == 1' \
   'lua_close drains alternating cdata/userdata finalizers to fixed point' \
   'lj_gc2_finalizer_pending(global_State *g)' \
   'lj_gc2_finalizer_sweep_pending(global_State *g)' \
@@ -87,7 +89,9 @@ for needle in \
   'gc_queue_cdata_finalizers_pweak(global_State *g)' \
   'P_WEAK cdata finalizer discovery bridge' \
   'uint64_t finreg_cdata_pweak_queued' \
-  'finreg_cdata_pweak_queued) >= pweak1 + 1u' \
+  'finreg_cdata_pweak_queued) == pweak1 + 1u' \
+  'finalizer_dequeued) == finalizerd1 + 1u' \
+  'gc2_cdata_finalized == finalized0 + 1' \
   'LJ_GC_UDATA_FINREG == LJ_GC_WEAKVAL' \
   'old | LJ_GC_UDATA_FINREG' \
   'lj_gc2_finreg_udata_set(g, o, 1);' \
