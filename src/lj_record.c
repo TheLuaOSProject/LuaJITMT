@@ -1507,6 +1507,18 @@ static void rec_idx_array_hdr_guards(jit_State *J, TRef tab, TRef arrayref)
   UNUSED(tab);
 #endif
 }
+
+static TRef rec_idx_array_asize_ref(jit_State *J, GCtab *t, TRef tab,
+				    TValue *record_array, int trace_local)
+{
+  if (!trace_local && rec_idx_tab_array_has_hdr(t, record_array)) {
+    TRef arrayref = emitir(IRT(IR_FLOAD, IRT_PGC), tab, IRFL_TAB_ARRAY);
+    /* M6: shared separated non-array bounds use TabArrayHdr.asize. */
+    rec_idx_array_hdr_guards(J, tab, arrayref);
+    return rec_idx_array_hdr_asize(J, arrayref);
+  }
+  return emitir(IRTI(IR_FLOAD), tab, IRFL_TAB_ASIZE);
+}
 #endif
 
 /* Record indexed key lookup. */
@@ -1536,6 +1548,7 @@ static TRef rec_idx_key(jit_State *J, RecordIndex *ix, IRRef *rbref,
       TRef asizeref;
 #if defined(__linux__) && LJ_TARGET_X64
       TValue *record_array;
+      int trace_local = rec_idx_tab_trace_local(J, ix->tab);
       MSize asize = lj_tab_array_snapshot_acq(t, &record_array);
 #else
       MSize asize = lj_tab_asize_acq(t);
@@ -1543,7 +1556,6 @@ static TRef rec_idx_key(jit_State *J, RecordIndex *ix, IRRef *rbref,
       if ((MSize)k < asize) {  /* Currently an array key? */
 	TRef arrayref;
 #if defined(__linux__) && LJ_TARGET_X64
-	int trace_local = rec_idx_tab_trace_local(J, ix->tab);
 	arrayref = emitir(IRT(IR_FLOAD, IRT_PGC), ix->tab, IRFL_TAB_ARRAY);
 	if (!trace_local && rec_idx_tab_array_has_hdr(t, record_array)) {
 	  /* M6: shared separated AREF pairs slots with TabArrayHdr.asize. */
@@ -1567,7 +1579,12 @@ static TRef rec_idx_key(jit_State *J, RecordIndex *ix, IRRef *rbref,
 #endif
 	return emitir(IRT(IR_AREF, IRT_PGC), arrayref, ikey);
       } else {  /* Currently not in array (may be an array extension)? */
+#if defined(__linux__) && LJ_TARGET_X64
+	asizeref = rec_idx_array_asize_ref(J, t, ix->tab, record_array,
+					   trace_local);
+#else
 	asizeref = emitir(IRTI(IR_FLOAD), ix->tab, IRFL_TAB_ASIZE);
+#endif
 	emitir(IRTGI(IR_ULE), asizeref, ikey);  /* Inv. bounds check. */
 	if (k == 0 && tref_isk(key))
 	  key = lj_ir_knum_zero(J);  /* Canonicalize 0 or +-0.0 to +0.0. */
@@ -1577,9 +1594,21 @@ static TRef rec_idx_key(jit_State *J, RecordIndex *ix, IRRef *rbref,
       /* We can rule out const numbers which failed the integerness test
       ** above. But all other numbers are potential array keys.
       */
-      if (lj_tab_asize_acq(t) == 0) {  /* True sparse tables have an empty array part. */
+#if defined(__linux__) && LJ_TARGET_X64
+      TValue *record_array;
+      MSize asize = lj_tab_array_snapshot_acq(t, &record_array);
+#else
+      MSize asize = lj_tab_asize_acq(t);
+#endif
+      if (asize == 0) {  /* True sparse tables have an empty array part. */
 	/* Guard that the array part stays empty. */
+#if defined(__linux__) && LJ_TARGET_X64
+	int trace_local = rec_idx_tab_trace_local(J, ix->tab);
+	TRef tmp = rec_idx_array_asize_ref(J, t, ix->tab, record_array,
+					   trace_local);
+#else
 	TRef tmp = emitir(IRTI(IR_FLOAD), ix->tab, IRFL_TAB_ASIZE);
+#endif
 	emitir(IRTGI(IR_EQ), tmp, lj_ir_kint(J, 0));
       } else {
 	lj_trace_err(J, LJ_TRERR_NYITMIX);

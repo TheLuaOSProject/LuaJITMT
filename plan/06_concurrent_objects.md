@@ -201,7 +201,8 @@ prep/decode lookups, recorder table traversal type prediction, and legacy/GC2
 marking now share that snapshot helper instead of independently pairing
 `GCtab.array` with the legacy size mirror. Linux/x64 shared-array recording also
 uses the same record-time snapshot to decide whether the current table shape has
-a separated array header.
+a separated array header, and separated shared numeric miss/extension guards now
+load `TabArrayHdr.asize` before continuing to `HREF`.
 On x86-64,
 `getmetatable`'s `__metatable` probe, `ipairs_aux` empty-hash fallback,
 `lj_vm_next` hash traversal, `BC_TGETS_Z`, and `BC_ITERN` hash traversal now
@@ -221,10 +222,11 @@ setter still awaits the original RETIRING/FORWARD/CAS write protocol for
 migration correctness. Regular x64
 dynamic `IR_HREF` lowering also uses the node-header mask instead of
 `GCtab.hmask`; constant-slot HREFK lowering has an interim node-header bounds
-guard before reading its recorded slot, while hash and array table-store
-codegen remains on the original 08/06 plan. Until that trace write protocol
-lands, the recorder rejects both legacy `HSTORE` and `ASTORE` indexed stores
-with the normal NYI-bytecode trace error. `lj_vm_next`
+guard before reading its recorded slot. Linux/x64 helper-backed `ASTORE` and
+`HSTORE` lowering now release-publishes through table-store helpers with parent
+barrier context, including shared table references and numeric `NEWREF` stores;
+the final generated RETIRING/FORWARD/CAS write protocol remains pending.
+`lj_vm_next`
 hash traversal, the `BC_ITERN` array/hash iterator path, and `ipairs_aux` array
 iteration load candidate values into registers before nil decisions and copy
 those same snapshots to their results; `BC_TSETV`/`BC_TSETS`/`BC_TSETB` load

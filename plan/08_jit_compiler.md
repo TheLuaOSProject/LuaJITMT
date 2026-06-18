@@ -448,7 +448,11 @@ scoped-flush target.
    separated-array trace exit before the header load. Separated visible-size
    changes now publish fresh array-header generations, so `TabArrayHdr.asize` is
    immutable after publish; shrink generations preserve stale-reader capacity
-   while clearing hidden tail slots. This is still an `AHdr`-lite bridge, not the
+   while clearing hidden tail slots. The same x64 recorder helper now uses
+   `TabArrayHdr.asize` for separated shared numeric keys that are currently
+   outside the array part before continuing to `HREF`, and for sparse-table
+   empty-array guards, so those miss/extension guards no longer depend only on
+   legacy `TAB_ASIZE`. This is still an `AHdr`-lite bridge, not the
    final table-generation model, because legacy mirrors, C-side mirror readers,
    and helper-backed table stores remain.
    Existing non-nil table-slot stores are

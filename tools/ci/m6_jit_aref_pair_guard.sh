@@ -6,7 +6,8 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 TMP=${TMPDIR:-/tmp}/lj-m6-aref-pair.$$
 TMP_COLO=${TMPDIR:-/tmp}/lj-m6-aref-pair-colo.$$
 TMP_SPLIT=${TMPDIR:-/tmp}/lj-m6-aref-pair-split.$$
-trap 'rm -f "$TMP" "$TMP_COLO" "$TMP_SPLIT"' EXIT
+TMP_MISS=${TMPDIR:-/tmp}/lj-m6-aref-pair-miss.$$
+trap 'rm -f "$TMP" "$TMP_COLO" "$TMP_SPLIT" "$TMP_MISS"' EXIT
 
 make -C "$ROOT/src" >/dev/null
 
@@ -18,9 +19,12 @@ for needle in \
   'rec_idx_tab_array_has_hdr(t, record_array)' \
   'rec_idx_array_hdr_asize(jit_State *J, TRef arrayref)' \
   'rec_idx_array_hdr_guards(jit_State *J, TRef tab, TRef arrayref)' \
+  'rec_idx_array_asize_ref(jit_State *J, GCtab *t, TRef tab,' \
   'emitir(IRTG(IR_NE, IRT_PGC), arrayref, lj_ir_kptr(J, NULL));' \
   'lj_ir_kintpgc(J, sizeof(GCtab))' \
   'M6: shared separated AREF pairs slots with TabArrayHdr.asize.' \
+  'M6: shared separated non-array bounds use TabArrayHdr.asize.' \
+  'asizeref = rec_idx_array_asize_ref(J, t, ix->tab, record_array,' \
   'emitir(IRTI(IR_XLOAD), hdrref, 0);' \
   'M6: legacy shared AREF guards TAB_ARRAY pair stability.' \
   'emitir(IRTG(IR_EQ, IRT_PGC), arrayref2, arrayref);'
@@ -140,6 +144,44 @@ if ! awk '
 ' "$TMP_COLO"; then
   cat "$TMP_COLO" >&2
   echo "guardrail: colocated shared array reads must keep the legacy pair guard" >&2
+  exit 1
+fi
+
+LUA_PATH="$ROOT/src/?.lua;$ROOT/src/jit/?.lua;;" \
+  timeout 20s "$ROOT/src/luajit" -jdump=ir -e '
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    jit.off()
+    local t = {}
+    for i = 1, 128 do t[i] = i end
+    jit.on()
+    local s = 0
+    for i = 1, 80 do
+      local k = 160 + (i % 2)
+      if t[k] == nil then s = s + 1 end
+    end
+    assert(s == 80)
+  ' >"$TMP_MISS" 2>&1
+
+if ! awk '
+  /---- TRACE 1 IR/ { inir = 1; next }
+  /---- TRACE 1 stop/ {
+    done = 1
+    exit !(array >= 2 && hdradd >= 2 && xload >= 2 && asize == 0 &&
+	    ule && href && !aref && xpoll)
+  }
+  inir && /FLOAD .*tab[.]array/ { array++ }
+  inir && / p64 ADD / && /-8/ { hdradd++ }
+  inir && / XLOAD / { xload++ }
+  inir && /FLOAD .*tab[.]asize/ { asize++ }
+  inir && / ULE / { ule = 1 }
+  inir && / HREF / { href = 1 }
+  inir && / AREF / { aref = 1 }
+  inir && / XPOLL / { xpoll = 1 }
+  END { if (!done) exit 1 }
+' "$TMP_MISS"; then
+  cat "$TMP_MISS" >&2
+  echo "guardrail: separated shared out-of-array guards must load bounds from TabArrayHdr" >&2
   exit 1
 fi
 
