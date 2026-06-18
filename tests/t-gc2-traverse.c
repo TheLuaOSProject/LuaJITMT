@@ -2073,6 +2073,10 @@ static int gc2_empty_finalizer(lua_State *L)
 
 static int gc2_udata_finalized;
 static int gc2_cdata_finalized;
+#if LJ_HASFFI
+static int gc2_cdata_order[3];
+static int gc2_cdata_order_count;
+#endif
 
 static int gc2_counting_finalizer(lua_State *L)
 {
@@ -2087,6 +2091,31 @@ static int gc2_cdata_counting_finalizer(lua_State *L)
   gc2_cdata_finalized++;
   return 0;
 }
+
+#if LJ_HASFFI
+static int gc2_cdata_order_finalizer(lua_State *L, int id)
+{
+  UNUSED(L);
+  assert(gc2_cdata_order_count < 3);
+  gc2_cdata_order[gc2_cdata_order_count++] = id;
+  return 0;
+}
+
+static int gc2_cdata_order_finalizer_1(lua_State *L)
+{
+  return gc2_cdata_order_finalizer(L, 1);
+}
+
+static int gc2_cdata_order_finalizer_2(lua_State *L)
+{
+  return gc2_cdata_order_finalizer(L, 2);
+}
+
+static int gc2_cdata_order_finalizer_3(lua_State *L)
+{
+  return gc2_cdata_order_finalizer(L, 3);
+}
+#endif
 
 static void drive_udata_finalizers(lua_State *L)
 {
@@ -2229,6 +2258,8 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   uint64_t clears0 = la_load64_acq(&g->gc2.finreg_cdata_clears);
   uint64_t sets1, clears1, queued1, pweak1, finalizerq1, finalizerd1;
   uint64_t claimed1, dispatched1;
+  uint64_t sets2, clears2, queued2, pweak2, finalizerq2, finalizerd2;
+  uint64_t claimed2, dispatched2;
   int finalized0;
 
   lua_settop(L, 0);
@@ -2284,6 +2315,63 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   assert(la_load64_acq(&g->gc2.finreg_cdata_preclaim_dispatched) ==
 	 dispatched1 + 1u);
   assert(gc2_cdata_finalized == finalized0 + 1);
+
+  sets2 = la_load64_acq(&g->gc2.finreg_cdata_sets);
+  clears2 = la_load64_acq(&g->gc2.finreg_cdata_clears);
+  queued2 = la_load64_acq(&g->gc2.finreg_cdata_queued);
+  pweak2 = la_load64_acq(&g->gc2.finreg_cdata_pweak_queued);
+  finalizerq2 = la_load64_acq(&g->gc2.finalizer_queued);
+  finalizerd2 = la_load64_acq(&g->gc2.finalizer_dequeued);
+  claimed2 = la_load64_acq(&g->gc2.finreg_cdata_pweak_claimed);
+  dispatched2 = la_load64_acq(&g->gc2.finreg_cdata_preclaim_dispatched);
+  gc2_cdata_order_count = 0;
+  lua_pushcfunction(L, gc2_cdata_order_finalizer_1);
+  lua_setglobal(L, "gc2_cdata_order_finalizer_1");
+  lua_pushcfunction(L, gc2_cdata_order_finalizer_2);
+  lua_setglobal(L, "gc2_cdata_order_finalizer_2");
+  lua_pushcfunction(L, gc2_cdata_order_finalizer_3);
+  lua_setglobal(L, "gc2_cdata_order_finalizer_3");
+  assert(luaL_dostring(L,
+    "local ffi = require('ffi')\n"
+    "ffi.cdef('typedef struct { int x; } gc2_order_fin_t;')\n"
+    "do\n"
+    "  local a = ffi.gc(ffi.new('gc2_order_fin_t'), gc2_cdata_order_finalizer_1)\n"
+    "  local b = ffi.gc(ffi.new('gc2_order_fin_t'), gc2_cdata_order_finalizer_2)\n"
+    "  local c = ffi.gc(ffi.new('gc2_order_fin_t'), gc2_cdata_order_finalizer_3)\n"
+    "end\n") ==
+    LUA_OK);
+  assert(la_load64_acq(&g->gc2.finreg_cdata_sets) == sets2 + 3u);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  lua_gc(L, LUA_GCSTOP, 0);
+  assert(la_load64_acq(&g->gc2.finreg_cdata_queued) == queued2 + 3u);
+  assert(la_load64_acq(&g->gc2.finreg_cdata_pweak_queued) == pweak2 + 3u);
+  assert(la_load64_acq(&g->gc2.finreg_cdata_pweak_claimed) == claimed2 + 3u);
+  assert(la_load64_acq(&g->gc2.finalizer_queued) == finalizerq2 + 3u);
+  assert(la_load64_acq(&g->gc2.finalizer_dequeued) == finalizerd2 + 3u);
+  assert(la_load64_acq(&g->gc2.finreg_cdata_preclaim_dispatched) ==
+	 dispatched2 + 3u);
+  assert(la_load64_acq(&g->gc2.finreg_cdata_clears) == clears2 + 3u);
+  assert(gc2_cdata_order_count == 3);
+  assert(gc2_cdata_order[0] == 3);
+  assert(gc2_cdata_order[1] == 2);
+  assert(gc2_cdata_order[2] == 1);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  lua_gc(L, LUA_GCSTOP, 0);
+  assert(la_load64_acq(&g->gc2.finreg_cdata_queued) == queued2 + 3u);
+  assert(la_load64_acq(&g->gc2.finreg_cdata_pweak_claimed) == claimed2 + 3u);
+  assert(la_load64_acq(&g->gc2.finalizer_queued) == finalizerq2 + 3u);
+  assert(la_load64_acq(&g->gc2.finalizer_dequeued) == finalizerd2 + 3u);
+  assert(la_load64_acq(&g->gc2.finreg_cdata_preclaim_dispatched) ==
+	 dispatched2 + 3u);
+  assert(gc2_cdata_order_count == 3);
+  lua_pushnil(L);
+  lua_setglobal(L, "gc2_cdata_order_finalizer_1");
+  lua_pushnil(L);
+  lua_setglobal(L, "gc2_cdata_order_finalizer_2");
+  lua_pushnil(L);
+  lua_setglobal(L, "gc2_cdata_order_finalizer_3");
   lua_pushnil(L);
   lua_setglobal(L, "gc2_cdata_counting_finalizer");
 }

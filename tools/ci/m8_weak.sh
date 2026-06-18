@@ -106,6 +106,11 @@ for needle in \
   'uint64_t finreg_cdata_preclaim_dispatched' \
   'finreg_cdata_pweak_queued) == pweak1 + 1u' \
   'finreg_cdata_pweak_claimed) == claimed1 + 1u' \
+  'finreg_cdata_pweak_queued) == pweak2 + 3u' \
+  'finreg_cdata_pweak_claimed) == claimed2 + 3u' \
+  'gc2_cdata_order[0] == 3' \
+  'gc2_cdata_order[1] == 2' \
+  'gc2_cdata_order[2] == 1' \
   'finalizer_dequeued) == finalizerd1 + 1u' \
   'finreg_cdata_preclaim_dispatched) ==' \
   'gc2_cdata_finalized == finalized0 + 1' \
