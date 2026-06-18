@@ -90,12 +90,18 @@ for needle in \
   'order_cdata_finalized[1] == 2' \
   'order_cdata_finalized[2] == 1' \
   'lua_close drains alternating cdata/userdata finalizers to fixed point' \
+  'lj_gc2_finalizer_queue_pending(global_State *g)' \
   'lj_gc2_finalizer_pending(global_State *g)' \
   'lj_gc2_finalizer_sweep_pending(global_State *g)' \
   'lj_gc2_finalizer_enqueue(global_State *g, GCobj *o)' \
+  'lj_gc2_finalizer_drain(global_State *g)' \
   'lj_gc2_finalizer_dequeue(global_State *g)' \
+  'void *finalizer_mpsc' \
   'uint64_t finalizer_queued' \
   'uint64_t finalizer_dequeued' \
+  'uint64_t finalizer_mpsc_drained' \
+  'la_casptr((void **)&g->gc2.finalizer_mpsc' \
+  'la_xchgptr_acqrel((void **)&g->gc2.finalizer_mpsc' \
   'finalizer_queued0 = la_load64_acq(&g->gc2.finalizer_queued)' \
   'finalizer_dequeued0 = la_load64_acq(&g->gc2.finalizer_dequeued)' \
   'assert(la_load32_acq(&g->gc2.finalizer_owner_tid) ==' \
@@ -154,6 +160,9 @@ for needle in \
   'gc2_cdata_order[1] == 2' \
   'gc2_cdata_order[2] == 1' \
   'finalizer_dequeued) == finalizerd1 + 1u' \
+  'finalizer_mpsc_drained) == mpscd1 + 1u' \
+  'finalizer_mpsc_drained) == mpscd2 + 3u' \
+  'finalizer_mpsc_drained) == mpscd2 + 2u' \
   'finreg_cdata_preclaim_dispatched) ==' \
   'gc2_cdata_finalized == finalized0 + 1' \
   'LJ_GC_UDATA_FINREG == LJ_GC_WEAKVAL' \
@@ -209,7 +218,7 @@ if awk '
   inclose && /lj_vm_cpcall\(L, NULL, NULL, cpfinalize\) == LUA_OK/ {
     incp = 1
   }
-  incp && /gcref\(g->gc\.mmudata\) == NULL/ {
+  incp && /!lj_gc2_finalizer_queue_pending\(g\)/ {
     sawudata = 1
   }
   incp && /!lj_gc_cdata_fin_pending\(g\)/ {
@@ -268,7 +277,13 @@ if awk '
   indeq && /^}/ {
     indeq = 0
   }
-  !(inq || indeq) && /setgcref[a-z]*\(g->gc\.mmudata/ {
+  /void lj_gc2_finalizer_drain\(global_State \*g\)/ {
+    indrain = 1
+  }
+  indrain && /^}/ {
+    indrain = 0
+  }
+  !(inq || indeq || indrain) && /setgcref[a-z]*\(g->gc\.mmudata/ {
     bad = 1
     print
   }

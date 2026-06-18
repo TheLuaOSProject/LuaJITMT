@@ -173,10 +173,12 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.finreg_udata_sets, 0);
   la_store64_rlx(&g->gc2.finreg_udata_clears, 0);
   la_store64_rlx(&g->gc2.finreg_udata_queued, 0);
+  la_storeptr_rlx((void **)&g->gc2.finalizer_mpsc, NULL);
   la_store32_rlx(&g->gc2.finalizer_active, 0);
   la_store32_rlx(&g->gc2.finalizer_owner_tid, 0);
   la_store64_rlx(&g->gc2.finalizer_queued, 0);
   la_store64_rlx(&g->gc2.finalizer_dequeued, 0);
+  la_store64_rlx(&g->gc2.finalizer_mpsc_drained, 0);
   la_store64_rlx(&g->gc2.finalizer_enters, 0);
   la_store64_rlx(&g->gc2.finalizer_leaves, 0);
   la_store64_rlx(&g->gc2.finalizer_sweep_blocks, 0);
@@ -551,21 +553,53 @@ void lj_gc2_weak_to_sweep(global_State *g)
 
 void lj_gc2_finalizer_enqueue(global_State *g, GCobj *o)
 {
-  GCobj *tail;
+  GCobj *head;
   if (!g || !o)
     return;
-  tail = gcref_acq(g->gc.mmudata);
-  if (tail) {
-    GCRef head;
-    setgcrefr(head, *lj_obj_gcwref(tail));
-    lj_obj_setgcwr(o, head);
-    setgcrefrel(*lj_obj_gcwref(tail), o);
-    setgcrefrel(g->gc.mmudata, o);
-  } else {
-    lj_obj_setgcw(o, o);
-    setgcrefrel(g->gc.mmudata, o);
-  }
+  do {
+    head = (GCobj *)la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc);
+    if (head)
+      lj_obj_setgcw(o, head);
+    else
+      lj_obj_setgcwnull(o);
+  } while (!la_casptr((void **)&g->gc2.finalizer_mpsc, (void **)&head, o,
+		      LA_REL, LA_ACQ));
   la_add64_rlx(&g->gc2.finalizer_queued, 1);
+}
+
+void lj_gc2_finalizer_drain(global_State *g)
+{
+  GCobj *stack, *rev = NULL, *newtail = NULL, *oldtail;
+  size_t n = 0;
+  if (!g)
+    return;
+  stack = (GCobj *)la_xchgptr_acqrel((void **)&g->gc2.finalizer_mpsc, NULL);
+  while (stack) {
+    GCobj *next = lj_obj_gcw_acq(stack);
+    if (newtail == NULL)
+      newtail = stack;
+    if (rev)
+      lj_obj_setgcw(stack, rev);
+    else
+      lj_obj_setgcwnull(stack);
+    rev = stack;
+    stack = next;
+    n++;
+  }
+  if (!rev)
+    return;
+  oldtail = gcref_acq(g->gc.mmudata);
+  if (oldtail) {
+    GCRef head;
+    setgcrefr(head, *lj_obj_gcwref(oldtail));
+    lj_obj_setgcwr(newtail, head);
+    setgcrefrel(*lj_obj_gcwref(oldtail), rev);
+    setgcrefrel(g->gc.mmudata, newtail);
+  } else {
+    lj_obj_setgcw(newtail, rev);
+    setgcrefrel(g->gc.mmudata, newtail);
+  }
+  la_add64_rlx(&g->gc2.finalizer_mpsc_drained, n);
 }
 
 GCobj *lj_gc2_finalizer_dequeue(global_State *g)
@@ -574,8 +608,12 @@ GCobj *lj_gc2_finalizer_dequeue(global_State *g)
   if (!g)
     return NULL;
   tail = gcref_acq(g->gc.mmudata);
-  if (!tail)
-    return NULL;
+  if (!tail) {
+    lj_gc2_finalizer_drain(g);
+    tail = gcref_acq(g->gc.mmudata);
+    if (!tail)
+      return NULL;
+  }
   o = lj_obj_gcw_acq(tail);
   lj_assertG(o != NULL, "broken gc2 finalizer queue");
   if (!o)
@@ -670,11 +708,19 @@ static int gc2_finalizer_pending_for_sweep(global_State *g, int owner_ok)
 {
   if (!g)
     return 0;
-  if (gcref_acq(g->gc.mmudata) != NULL)
+  if (lj_gc2_finalizer_queue_pending(g))
     return 1;
   if (la_load32_acq(&g->gc2.finalizer_active) == 0)
     return 0;
   return !(owner_ok && gc2_finalizer_owned_by_current(g));
+}
+
+int lj_gc2_finalizer_queue_pending(global_State *g)
+{
+  if (!g)
+    return 0;
+  return gcref_acq(g->gc.mmudata) != NULL ||
+	 la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) != NULL;
 }
 
 int lj_gc2_finalizer_pending(global_State *g)

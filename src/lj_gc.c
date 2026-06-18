@@ -709,8 +709,10 @@ static void gc_mark_uv(global_State *g)
 /* Mark userdata in mmudata list. */
 static void gc_mark_mmudata(global_State *g)
 {
-  GCobj *root = gcref(g->gc.mmudata);
-  GCobj *u = root;
+  GCobj *root, *u;
+  lj_gc2_finalizer_drain(g);
+  root = gcref(g->gc.mmudata);
+  u = root;
   if (u) {
     do {
       u = gcnext(u);
@@ -1287,6 +1289,7 @@ static int gc_finalize(lua_State *L)
   lj_assertG(lj_tg_jit_base(g) == NULL, "finalizer called on trace");
   if (!lj_gc2_finalizer_try_enter(g))
     return 0;
+  lj_gc2_finalizer_drain(g);
   if (gcref_acq(g->gc.mmudata) == NULL) {
     lj_gc2_finalizer_leave(g);
     return 0;
@@ -1343,9 +1346,14 @@ static int gc_fullgc_deferred_by_finalizer(global_State *g)
 /* Finalize all userdata objects from mmudata list. */
 void lj_gc_finalize_udata(lua_State *L)
 {
-  while (gcref(G(L)->gc.mmudata) != NULL)
+  global_State *g = G(L);
+  for (;;) {
+    lj_gc2_finalizer_drain(g);
+    if (gcref(g->gc.mmudata) == NULL)
+      break;
     if (!gc_finalize(L))
       la_cpu_pause();
+  }
 }
 
 #if LJ_HASFFI
@@ -1762,7 +1770,7 @@ static size_t gc_onestep(lua_State *L)
       (void)gc_arena_finish_sweep_boundary(g, 0);
       if (gc_arena_sweep_pending(g))
 	return GCSWEEPMAX*GCSWEEPCOST;
-      if (gcref(g->gc.mmudata)) {  /* Need any finalizations? */
+      if (lj_gc2_finalizer_queue_pending(g)) {  /* Need finalizations? */
 	g->gc.state = GCSfinalize;
       } else {  /* Otherwise skip this phase to help the JIT. */
 	if (gc2_legacy_sweep_close(g)) {
@@ -1776,7 +1784,7 @@ static size_t gc_onestep(lua_State *L)
     return GCSWEEPMAX*GCSWEEPCOST;
     }
   case GCSfinalize:
-    if (gcref(g->gc.mmudata) != NULL) {
+    if (lj_gc2_finalizer_queue_pending(g)) {
       GCSize old = g->gc.total;
       int finrc;
       if (lj_tg_jit_base(g))  /* Don't call finalizers on trace. */

@@ -2348,9 +2348,9 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
 {
   uint64_t sets0 = la_load64_acq(&g->gc2.finreg_cdata_sets);
   uint64_t clears0 = la_load64_acq(&g->gc2.finreg_cdata_clears);
-  uint64_t sets1, clears1, queued1, pweak1, finalizerq1, finalizerd1;
+  uint64_t sets1, clears1, queued1, pweak1, finalizerq1, finalizerd1, mpscd1;
   uint64_t claimed1, dispatched1;
-  uint64_t sets2, clears2, queued2, pweak2, finalizerq2, finalizerd2;
+  uint64_t sets2, clears2, queued2, pweak2, finalizerq2, finalizerd2, mpscd2;
   uint64_t claimed2, dispatched2;
   uint64_t orderq2, orderclaimed2, orderfallback2;
   int finalized0;
@@ -2373,6 +2373,7 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   pweak1 = la_load64_acq(&g->gc2.finreg_cdata_pweak_queued);
   finalizerq1 = la_load64_acq(&g->gc2.finalizer_queued);
   finalizerd1 = la_load64_acq(&g->gc2.finalizer_dequeued);
+  mpscd1 = la_load64_acq(&g->gc2.finalizer_mpsc_drained);
   claimed1 = la_load64_acq(&g->gc2.finreg_cdata_pweak_claimed);
   dispatched1 = la_load64_acq(&g->gc2.finreg_cdata_preclaim_dispatched);
   finalized0 = gc2_cdata_finalized;
@@ -2394,6 +2395,7 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   assert(la_load64_acq(&g->gc2.finreg_cdata_pweak_claimed) == claimed1 + 1u);
   assert(la_load64_acq(&g->gc2.finalizer_queued) == finalizerq1 + 1u);
   assert(la_load64_acq(&g->gc2.finalizer_dequeued) == finalizerd1 + 1u);
+  assert(la_load64_acq(&g->gc2.finalizer_mpsc_drained) == mpscd1 + 1u);
   assert(la_load64_acq(&g->gc2.finreg_cdata_preclaim_dispatched) ==
 	 dispatched1 + 1u);
   assert(la_load64_acq(&g->gc2.finreg_cdata_clears) == clears1 + 1u);
@@ -2405,6 +2407,7 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   assert(la_load64_acq(&g->gc2.finreg_cdata_pweak_claimed) == claimed1 + 1u);
   assert(la_load64_acq(&g->gc2.finalizer_queued) == finalizerq1 + 1u);
   assert(la_load64_acq(&g->gc2.finalizer_dequeued) == finalizerd1 + 1u);
+  assert(la_load64_acq(&g->gc2.finalizer_mpsc_drained) == mpscd1 + 1u);
   assert(la_load64_acq(&g->gc2.finreg_cdata_preclaim_dispatched) ==
 	 dispatched1 + 1u);
   assert(gc2_cdata_finalized == finalized0 + 1);
@@ -2415,6 +2418,7 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   pweak2 = la_load64_acq(&g->gc2.finreg_cdata_pweak_queued);
   finalizerq2 = la_load64_acq(&g->gc2.finalizer_queued);
   finalizerd2 = la_load64_acq(&g->gc2.finalizer_dequeued);
+  mpscd2 = la_load64_acq(&g->gc2.finalizer_mpsc_drained);
   claimed2 = la_load64_acq(&g->gc2.finreg_cdata_pweak_claimed);
   dispatched2 = la_load64_acq(&g->gc2.finreg_cdata_preclaim_dispatched);
   orderq2 = la_load64_acq(&g->gc2.finreg_cdata_order_queued);
@@ -2445,6 +2449,7 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   assert(la_load64_acq(&g->gc2.finreg_cdata_pweak_claimed) == claimed2 + 3u);
   assert(la_load64_acq(&g->gc2.finalizer_queued) == finalizerq2 + 3u);
   assert(la_load64_acq(&g->gc2.finalizer_dequeued) == finalizerd2 + 3u);
+  assert(la_load64_acq(&g->gc2.finalizer_mpsc_drained) == mpscd2 + 3u);
   assert(la_load64_acq(&g->gc2.finreg_cdata_preclaim_dispatched) ==
 	 dispatched2 + 3u);
   assert(la_load64_acq(&g->gc2.finreg_cdata_order_queued) == orderq2 + 3u);
@@ -2464,6 +2469,7 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   pweak2 = la_load64_acq(&g->gc2.finreg_cdata_pweak_queued);
   finalizerq2 = la_load64_acq(&g->gc2.finalizer_queued);
   finalizerd2 = la_load64_acq(&g->gc2.finalizer_dequeued);
+  mpscd2 = la_load64_acq(&g->gc2.finalizer_mpsc_drained);
   claimed2 = la_load64_acq(&g->gc2.finreg_cdata_pweak_claimed);
   dispatched2 = la_load64_acq(&g->gc2.finreg_cdata_preclaim_dispatched);
   orderq2 = la_load64_acq(&g->gc2.finreg_cdata_order_queued);
@@ -2491,6 +2497,7 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   assert(la_load64_acq(&g->gc2.finreg_cdata_pweak_claimed) == claimed2 + 3u);
   assert(la_load64_acq(&g->gc2.finalizer_queued) == finalizerq2 + 3u);
   assert(la_load64_acq(&g->gc2.finalizer_dequeued) == finalizerd2 + 3u);
+  assert(la_load64_acq(&g->gc2.finalizer_mpsc_drained) == mpscd2 + 3u);
   assert(la_load64_acq(&g->gc2.finreg_cdata_preclaim_dispatched) ==
 	 dispatched2 + 3u);
   assert(la_load64_acq(&g->gc2.finreg_cdata_order_queued) == orderq2 + 3u);
@@ -2510,6 +2517,7 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   pweak2 = la_load64_acq(&g->gc2.finreg_cdata_pweak_queued);
   finalizerq2 = la_load64_acq(&g->gc2.finalizer_queued);
   finalizerd2 = la_load64_acq(&g->gc2.finalizer_dequeued);
+  mpscd2 = la_load64_acq(&g->gc2.finalizer_mpsc_drained);
   claimed2 = la_load64_acq(&g->gc2.finreg_cdata_pweak_claimed);
   dispatched2 = la_load64_acq(&g->gc2.finreg_cdata_preclaim_dispatched);
   orderq2 = la_load64_acq(&g->gc2.finreg_cdata_order_queued);
@@ -2534,6 +2542,7 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   assert(la_load64_acq(&g->gc2.finreg_cdata_pweak_claimed) == claimed2 + 2u);
   assert(la_load64_acq(&g->gc2.finalizer_queued) == finalizerq2 + 2u);
   assert(la_load64_acq(&g->gc2.finalizer_dequeued) == finalizerd2 + 2u);
+  assert(la_load64_acq(&g->gc2.finalizer_mpsc_drained) == mpscd2 + 2u);
   assert(la_load64_acq(&g->gc2.finreg_cdata_preclaim_dispatched) ==
 	 dispatched2 + 2u);
   assert(la_load64_acq(&g->gc2.finreg_cdata_order_queued) == orderq2 + 2u);
@@ -2553,6 +2562,7 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   assert(la_load64_acq(&g->gc2.finreg_cdata_pweak_claimed) == claimed2 + 2u);
   assert(la_load64_acq(&g->gc2.finalizer_queued) == finalizerq2 + 2u);
   assert(la_load64_acq(&g->gc2.finalizer_dequeued) == finalizerd2 + 2u);
+  assert(la_load64_acq(&g->gc2.finalizer_mpsc_drained) == mpscd2 + 2u);
   assert(la_load64_acq(&g->gc2.finreg_cdata_preclaim_dispatched) ==
 	 dispatched2 + 2u);
   assert(gc2_cdata_order_count == 2);
