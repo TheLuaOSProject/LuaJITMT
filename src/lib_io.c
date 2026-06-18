@@ -19,6 +19,7 @@
 #include "lj_obj.h"
 #include "lj_atomic.h"
 #include "lj_gc.h"
+#include "lj_gc2.h"
 #include "lj_err.h"
 #include "lj_buf.h"
 #include "lj_str.h"
@@ -211,6 +212,7 @@ static IOFileUD *io_file_new(lua_State *L)
   GCudata *ud = udataV(L->top-1);
   /* NOBARRIER: The GCudata is new (marked white). */
   setgcrefr(ud->metatable, curr_func(L)->c.env);
+  lj_gc2_finreg_udata_register_mt(L, G(L), ud, tabref_acq(ud->metatable));
   iof->fp = NULL;
   iof->type = IOFILE_TYPE_FILE;
   lj_udata_udtype_rel(ud, UDTYPE_IO_FILE);
@@ -744,6 +746,7 @@ static GCobj *io_std_new(lua_State *L, FILE *fp, const char *name)
   GCudata *ud = udataV(L->top-1);
   /* NOBARRIER: The GCudata is new (marked white). */
   setgcref(ud->metatable, gcV(L->top-3));
+  lj_gc2_finreg_udata_register_mt(L, G(L), ud, tabV(L->top-3));
   iof->fp = fp;
   iof->type = IOFILE_TYPE_STDF;
   lj_udata_udtype_rel(ud, UDTYPE_IO_FILE);

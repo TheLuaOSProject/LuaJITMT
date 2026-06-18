@@ -14,6 +14,7 @@
 
 #if LJ_HASBUFFER
 #include "lj_gc.h"
+#include "lj_gc2.h"
 #include "lj_err.h"
 #include "lj_buf.h"
 #include "lj_str.h"
@@ -318,6 +319,7 @@ LJLIB_CF(buffer_new)
   ud = lj_udata_new(L, sizeof(SBufExt), env);
   /* NOBARRIER: The GCudata is new (marked white). */
   setgcref(ud->metatable, obj2gco(env));
+  lj_gc2_finreg_udata_register_mt(L, G(L), ud, env);
   setudataV(L, L->top++, ud);
   sbx = (SBufExt *)uddata(ud);
   lj_bufx_init(L, sbx);

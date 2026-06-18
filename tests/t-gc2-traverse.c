@@ -2437,6 +2437,78 @@ static void test_finreg_userdata_telemetry(lua_State *L, global_State *g)
 	 rootfallbacks0);
 }
 
+static void test_finreg_internal_userdata_telemetry(lua_State *L,
+						    global_State *g)
+{
+  uint64_t sets0 = la_load64_acq(&g->gc2.finreg_udata_sets);
+  uint64_t clears0 = la_load64_acq(&g->gc2.finreg_udata_clears);
+  uint64_t queued0 = la_load64_acq(&g->gc2.finreg_udata_queued);
+  uint64_t registered0 = la_load64_acq(&g->gc2.finreg_udata_registered);
+  uint64_t discovered0 = la_load64_acq(&g->gc2.finreg_udata_discovered);
+  uint64_t fallbacks0 = la_load64_acq(&g->gc2.finreg_udata_fallbacks);
+  uint64_t rootfallbacks0 =
+    la_load64_acq(&g->gc2.finreg_udata_root_fallbacks);
+  lua_Integer registered, discoverable;
+
+  lua_settop(L, 0);
+  assert(luaL_dostring(L,
+    "local registered, discoverable = 0, 0\n"
+    "do\n"
+    "  local f = assert(io.tmpfile())\n"
+    "  registered = registered + 1\n"
+    "  discoverable = discoverable + 1\n"
+    "end\n"
+    "do\n"
+    "  local ok, buffer = pcall(require, 'buffer')\n"
+    "  if ok and buffer and buffer.new then\n"
+    "    local b = buffer.new()\n"
+    "    registered = registered + 1\n"
+    "    discoverable = discoverable + 1\n"
+    "  end\n"
+    "end\n"
+    "do\n"
+    "  local ok, threading = pcall(require, 'threading')\n"
+    "  if ok and threading and threading.channel then\n"
+    "    local ch = threading.channel(1)\n"
+    "    registered = registered + 1\n"
+    "    discoverable = discoverable + 1\n"
+    "  end\n"
+    "end\n"
+#if LJ_HASFFI
+    "do\n"
+    "  local ok, ffi = pcall(require, 'ffi')\n"
+    "  if ok and ffi and ffi.pin then\n"
+    "    registered = registered + 1 -- ffi.C default namespace.\n"
+    "    local pin = ffi.pin({})\n"
+    "    registered = registered + 1\n"
+    "    discoverable = discoverable + 1\n"
+    "  end\n"
+    "end\n"
+#endif
+    "return registered, discoverable\n") ==
+    LUA_OK);
+  registered = lua_tointeger(L, -2);
+  discoverable = lua_tointeger(L, -1);
+  lua_pop(L, 2);
+  assert(registered >= discoverable);
+  assert(discoverable >= 3);
+  assert(la_load64_acq(&g->gc2.finreg_udata_sets) ==
+	 sets0 + (uint64_t)registered);
+  assert(la_load64_acq(&g->gc2.finreg_udata_registered) ==
+	 registered0 + (uint64_t)registered);
+
+  drive_udata_finalizers(L);
+  assert(la_load64_acq(&g->gc2.finreg_udata_queued) ==
+	 queued0 + (uint64_t)discoverable);
+  assert(la_load64_acq(&g->gc2.finreg_udata_clears) ==
+	 clears0 + (uint64_t)discoverable);
+  assert(la_load64_acq(&g->gc2.finreg_udata_discovered) ==
+	 discovered0 + (uint64_t)discoverable);
+  assert(la_load64_acq(&g->gc2.finreg_udata_fallbacks) == fallbacks0);
+  assert(la_load64_acq(&g->gc2.finreg_udata_root_fallbacks) ==
+	 rootfallbacks0);
+}
+
 static void test_finreg_userdata_inplace_finalizer_behavior(lua_State *L)
 {
   int finalized0;
@@ -2987,6 +3059,7 @@ int main(void)
   test_userdata(L, g);
   test_finreg_userdata_queue_mark(L, g, tg);
   test_finreg_userdata_telemetry(L, g);
+  test_finreg_internal_userdata_telemetry(L, g);
   test_finreg_userdata_inplace_finalizer_behavior(L);
 #if LJ_HASFFI
   test_finreg_cdata_telemetry(L, g);

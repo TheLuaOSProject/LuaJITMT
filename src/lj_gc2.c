@@ -1985,6 +1985,18 @@ void lj_gc2_finreg_udata_register(lua_State *L, global_State *g, GCobj *o)
   la_add64_rlx(&g->gc2.finreg_udata_registered, 1);
 }
 
+void lj_gc2_finreg_udata_register_mt(lua_State *L, global_State *g,
+				     GCudata *ud, GCtab *mt)
+{
+  TValue mmv;
+  if (!L || !g || !ud || !mt)
+    return;
+  if (lj_meta_fasttv(g, mt, MM_gc, &mmv)) {
+    lj_gc2_finreg_udata_register(L, g, obj2gco(ud));
+    (void)lj_gc2_finreg_udata_set(g, obj2gco(ud), 1);
+  }
+}
+
 void lj_gc2_finreg_udata_forget(global_State *g, GCobj *o)
 {
   GC2FinRegUDataNode *node;

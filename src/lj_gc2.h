@@ -96,6 +96,8 @@ LJ_FUNC int lj_gc2_finreg_cdata_preclaim_take(lua_State *L, global_State *g,
 LJ_FUNC int lj_gc2_finreg_udata_set(global_State *g, GCobj *o, int enabled);
 LJ_FUNC void lj_gc2_finreg_udata_register(lua_State *L, global_State *g,
 					  GCobj *o);
+LJ_FUNC void lj_gc2_finreg_udata_register_mt(lua_State *L, global_State *g,
+					     GCudata *ud, GCtab *mt);
 LJ_FUNC void lj_gc2_finreg_udata_forget(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc2_finreg_udata_queue(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc2_finalizer_enqueue(global_State *g, GCobj *o);

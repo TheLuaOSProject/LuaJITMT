@@ -9,6 +9,7 @@
 
 #include "lj_atomic.h"
 #include "lj_gc.h"
+#include "lj_gc2.h"
 #include "lj_err.h"
 #include "lj_tab.h"
 #include "lj_str.h"
@@ -488,6 +489,7 @@ static CLibrary *clib_new(lua_State *L, GCtab *mt)
   cl->cache_head = NULL;
   /* NOBARRIER: The GCudata is new (marked white). */
   setgcref(ud->metatable, obj2gco(mt));
+  lj_gc2_finreg_udata_register_mt(L, G(L), ud, mt);
   lj_udata_udtype_rel(ud, UDTYPE_FFI_CLIB);
   setudataV(L, L->top++, ud);
   return cl;

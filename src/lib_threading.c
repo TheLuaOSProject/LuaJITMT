@@ -184,8 +184,7 @@ static GCudata *threading_new_thread_ud(lua_State *L, GCtab *env)
   setgcref(ud->metatable, obj2gco(env));
   th->ud = ud;
   lj_udata_udtype_rel(ud, UDTYPE_THREAD);
-  lj_gc2_finreg_udata_register(L, g, obj2gco(ud));
-  (void)lj_gc2_finreg_udata_set(g, obj2gco(ud), 1);
+  lj_gc2_finreg_udata_register_mt(L, g, ud, env);
   setudataV(L, L->top++, ud);
   return ud;
 }
@@ -903,6 +902,7 @@ LJLIB_CF(threading_channel)
   ud = lj_udata_new(L, lj_chan_memsize(cap), env);
   /* NOBARRIER: The GCudata is new (marked white). */
   setgcref(ud->metatable, obj2gco(env));
+  lj_gc2_finreg_udata_register_mt(L, G(L), ud, env);
   lj_chan_init((LJChan *)uddata(ud), cap);
   lj_udata_udtype_rel(ud, UDTYPE_CHANNEL);
   setudataV(L, L->top++, ud);
