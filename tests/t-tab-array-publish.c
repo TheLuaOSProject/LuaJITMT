@@ -63,6 +63,7 @@ int main(void)
   assert(lj_tab_array_mem_acq(t) == lj_tab_array_hdrw(oldarray));
   assert(lj_tab_array_hdr_asize_acq(oldarray) == oldasize);
   assert(lj_tab_array_hdr_acap_acq(oldarray) == oldacap);
+  assert(lj_tab_array_hdr_flags_acq(oldarray) == 0);
   snapasize = lj_tab_array_snapshot_acq(t, &snaparray);
   assert(snaparray == oldarray);
   assert(snapasize == oldasize);
@@ -77,6 +78,7 @@ int main(void)
   assert(lj_tab_array_mem_acq(t) == lj_tab_array_hdrw(array));
   assert(lj_tab_array_hdr_asize_acq(array) == oldasize + 32);
   assert(lj_tab_array_hdr_acap_acq(array) == oldasize + 32);
+  assert(lj_tab_array_hdr_flags_acq(array) == 0);
   snapasize = lj_tab_array_snapshot_acq(t, &snaparray);
   assert(snaparray == array);
   assert(snapasize == oldasize + 32);
@@ -84,6 +86,7 @@ int main(void)
   assert(ret != NULL);
   assert(ret->acap == oldacap);
   assert(lj_tab_array_hdr_acap_acq(ret->array) == ret->acap);
+  assert(lj_tab_array_hdr_flags_acq(ret->array) == 0);
   assert(ret->armed == 1);
   retire_epoch = ret->retire_epoch;
   assert(lj_tab_reclaim_retired(g, retire_epoch) == 0);
@@ -107,6 +110,7 @@ int main(void)
   assert(lj_tab_asize_acq(t) == 6);
   assert(lj_tab_array_hdr_asize_acq(array) == 6);
   assert(lj_tab_array_hdr_acap_acq(array) == oldacap);
+  assert(lj_tab_array_hdr_flags_acq(array) == 0);
   snapasize = lj_tab_array_snapshot_acq(t, &snaparray);
   assert(snaparray == array);
   assert(snapasize == 6);
@@ -130,6 +134,7 @@ int main(void)
   assert(lj_tab_asize_acq(t) == 12);
   assert(lj_tab_array_hdr_asize_acq(array) == 12);
   assert(lj_tab_array_hdr_acap_acq(array) == 12);
+  assert(lj_tab_array_hdr_flags_acq(array) == 0);
   snapasize = lj_tab_array_snapshot_acq(t, &snaparray);
   assert(snaparray == array);
   assert(snapasize == 12);
@@ -159,6 +164,7 @@ int main(void)
   assert(lj_tab_array_mem_acq(t) == lj_tab_array_hdrw(array));
   assert(lj_tab_array_hdr_asize_acq(array) == LJ_MAX_COLOSIZE + 24);
   assert(lj_tab_array_hdr_acap_acq(array) == LJ_MAX_COLOSIZE + 24);
+  assert(lj_tab_array_hdr_flags_acq(array) == 0);
   snapasize = lj_tab_array_snapshot_acq(t, &snaparray);
   assert(snaparray == array);
   assert(snapasize == LJ_MAX_COLOSIZE + 24);

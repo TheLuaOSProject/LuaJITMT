@@ -21,14 +21,21 @@ for needle in \
   'lj_tab_asize_acq' \
   'lj_tab_asize_rel' \
   'TabArrayHdr' \
+  'TABARRAY_ACAP_MASK' \
+  'TABARRAY_FLAGS_MASK' \
+  'TABARRAY_FLAG_RETIRING' \
+  'lj_tab_array_hdr_pack_acap' \
+  'lj_tab_array_hdr_init' \
   'lj_tab_array_hdrw' \
   'lj_tab_array_bytes' \
   'lj_tab_array_is_colocated' \
   'lj_tab_array_mem_acq' \
+  'lj_tab_array_hdr_flags_acq' \
   'lj_tab_array_snapshot_acq' \
   'TabArrayRetire' \
   'retired_arrays' \
   'tab_array_new' \
+  'lj_tab_array_hdr_init(hdr, asize, acap)' \
   'tab_array_free' \
   'tab_array_retire_reserve' \
   'tab_array_retire_arm' \
@@ -54,6 +61,12 @@ do
   fi
 done
 
+if ! rg -F -q 'lj_tab_array_hdr_flags_acq(oldarray) == 0' \
+    "$ROOT/tests/t-tab-array-publish.c"; then
+  echo "guardrail: table array test must assert zero header flags" >&2
+  exit 1
+fi
+
 if rg -n 'tvref\([^[:space:]]*->array\)|setmref\([^,]*->array' \
     "$ROOT/src" --glob '!lj_obj.h' --glob '!host/*' --glob '!vm_*.dasc' \
     --glob '!lj_asm_*.h'; then
@@ -76,6 +89,11 @@ fi
 if rg -n 'lj_tab_array_hdr_asize_rel|la_store32_rel\(&lj_tab_array_hdrw' \
     "$ROOT/src"; then
   echo "guardrail: table array header asize must be immutable after publish" >&2
+  exit 1
+fi
+
+if rg -n 'hdr->acap = acap' "$ROOT/src/lj_tab.c"; then
+  echo "guardrail: table array capacity must be packed through header helpers" >&2
   exit 1
 fi
 

@@ -202,7 +202,11 @@ marking now share that snapshot helper instead of independently pairing
 `GCtab.array` with the legacy size mirror. Linux/x64 shared-array recording also
 uses the same record-time snapshot to decide whether the current table shape has
 a separated array header, and separated shared numeric miss/extension guards now
-load `TabArrayHdr.asize` before continuing to `HREF`.
+load `TabArrayHdr.asize` before continuing to `HREF`. The current separated
+array header keeps the interim 8-byte slots-prefix shape but now packs capacity
+and reserved state into `TabArrayHdr.acap`: `TABARRAY_ACAP_MASK` preserves the
+plain capacity for existing readers, while `TABARRAY_FLAG_RETIRING` reserves
+the first flag bit for the final §6.3.2/§6.3.5 write/migration protocol.
 On x86-64,
 `getmetatable`'s `__metatable` probe, `ipairs_aux` empty-hash fallback,
 `lj_vm_next` hash traversal, `BC_TGETS_Z`, and `BC_ITERN` hash traversal now

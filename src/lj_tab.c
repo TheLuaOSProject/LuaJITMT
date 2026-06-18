@@ -74,8 +74,7 @@ static LJ_AINLINE void tab_node_free(global_State *g, Node *node, MSize hmask)
 static LJ_AINLINE TValue *tab_array_new(lua_State *L, MSize asize, MSize acap)
 {
   TabArrayHdr *hdr = (TabArrayHdr *)lj_mem_new(L, lj_tab_array_bytes(acap));
-  hdr->asize = asize;
-  hdr->acap = acap;
+  lj_tab_array_hdr_init(hdr, asize, acap);
   return lj_tab_array_slots(hdr);
 }
 
