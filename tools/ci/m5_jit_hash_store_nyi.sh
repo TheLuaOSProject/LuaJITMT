@@ -67,7 +67,7 @@ if ! awk '
     in_store = 1; saw_nil_gate = saw_hash_nyi = 0
   }
   in_store && /if \(tvisnil\(oldv\)/ { saw_nil_gate = 1 }
-  in_store && /M6: no new\/nil HSTORE bridge/ { saw_hash_nyi = 1 }
+  in_store && /M6: no new HSTORE bridge/ { saw_hash_nyi = 1 }
   in_store && /Convert int to number before storing/ {
     if (!saw_nil_gate || !saw_hash_nyi)
       bad = 1
@@ -76,20 +76,21 @@ if ! awk '
   }
   END { exit checked && !bad ? 0 : 1 }
 ' "$ROOT/src/lj_record.c"; then
-  echo "guardrail: recorder must reject nil/new table stores" >&2
+  echo "guardrail: recorder must reject shape-changing table stores" >&2
   exit 1
 fi
 
-if rg -n 'M6: no new/nil HSTORE bridge' "$ROOT/src/lj_record.c" >/dev/null &&
-   rg -n 'M6: previous-nil in-bounds ASTORE uses the helper bridge' "$ROOT/src/lj_record.c" >/dev/null; then
+if rg -n 'M6: no new HSTORE bridge' "$ROOT/src/lj_record.c" >/dev/null &&
+   rg -n 'M6: previous-nil in-bounds ASTORE/HSTORE uses the helper bridge' "$ROOT/src/lj_record.c" >/dev/null; then
   :
 else
   echo "guardrail: missing table-store NYI marker" >&2
   exit 1
 fi
 
-if rg -n 'M6: no nil ASTORE bridge' "$ROOT/src/lj_record.c" >/dev/null; then
-  echo "guardrail: stale nil-ASTORE NYI marker remains" >&2
+if rg -n -e 'M6: no new/nil HSTORE bridge' \
+    -e 'M6: no nil ASTORE bridge' "$ROOT/src/lj_record.c" >/dev/null; then
+  echo "guardrail: stale table-store NYI marker remains" >&2
   exit 1
 fi
 

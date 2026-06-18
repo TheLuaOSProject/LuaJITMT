@@ -281,9 +281,9 @@ handler — sized LJ_MAX_EXITSTUBGR-compatible; see lj_vmstruct notes.
   table-slot stores on Linux/x64 and lowers them through release-store
   hash/array helpers with the AREF/HREF-derived table parent. The helpers run
   the parent-aware value barrier, and existing weak table stores also call the
-  P_WEAK weak-write bridge. Previous-nil in-bounds array slots are covered;
-  hash nil slots, new keys, and out-of-bounds array growth remain NYI until the
-  full table-write trace protocol below lands.
+  P_WEAK weak-write bridge. Previous-nil in-bounds array slots and existing
+  hash slots whose value is nil are covered; new keys and out-of-bounds array
+  growth remain NYI until the full table-write trace protocol below lands.
 - **Allocation on trace**: TNEW/TDUP/CNEW/SNEW already call into C or use
   inline alloc IR; route them to the TG bump (mirror of 07 §7.5) — the IR
   for inline alloc (lj_asm.c asm_snew/asm_tnew via lj_ir_call → actually
@@ -440,14 +440,15 @@ scoped-flush target.
    design, but it prevents the current shared-array trace from combining an old
    array pointer with a newer size check. Existing non-nil table-slot stores are
    now recorded on Linux/x64 for shared tables as well as PHI/upvalue/escaped
-   table references, plus previous-nil in-bounds array slots, then lowered through
+   table references, plus previous-nil in-bounds array slots and existing
+   nil-value hash slots, then lowered through
    `lj_tab_storetv_forjit_array(parent,dst,src)` or
    `lj_tab_storetv_forjit_hash(parent,dst,src)`. The helpers release-publish
    the TValue and run the GC2 parent-aware value barrier, and the weak-aware
    helper path marks weak keys/values during `P_WEAK`. This is still an interim
-   bridge rather than the final generated-store protocol. New-key insertion,
-   hash nil slots, and out-of-bounds array growth continue to raise the normal
-   NYI-bytecode trace error before `HSTORE` is emitted for the unresolved slot.
+   bridge rather than the final generated-store protocol. New-key insertion and
+   out-of-bounds array growth continue to raise the normal NYI-bytecode trace
+   error before `HSTORE` is emitted for the unresolved slot.
    The final generation-aware trace
    write/barrier protocol remains required before raw generated table stores can
    replace this helper bridge.
