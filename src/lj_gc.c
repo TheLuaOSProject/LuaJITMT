@@ -1373,6 +1373,12 @@ static int gc_cdata_finalizer_candidate_pweak(GCobj *o)
 	 iswhite(o);
 }
 
+static int gc_cdata_finalizer_candidate_close(GCobj *o)
+{
+  return o->gch.gct == ~LJ_TCDATA &&
+	 (lj_obj_gcflags(o) & LJ_GC_CDATA_FIN);
+}
+
 static int gc_preclaim_cdata_finalizer_pweak_slot(lua_State *L,
 						  global_State *g,
 						  GCobj *o, TValue *slot)
@@ -1580,19 +1586,75 @@ static size_t gc_queue_cdata_finalizers_pweak(lua_State *L, global_State *g)
   return n;  /* 05 section 5.8: P_WEAK cdata finalizer discovery bridge. */
 }
 
-static void gc_separate_cdata_finalizers(global_State *g)
+static size_t gc_separate_cdata_finalizers_ordered(global_State *g,
+						   int *fallbackp)
+{
+  CTState *cts = ctype_ctsG(g);
+  FinRegOrderNode *ord;
+  size_t queued = 0;
+  int fallback = 0;
+  if (cts == NULL)
+    return 0;
+  ord = (FinRegOrderNode *)la_loadptr_acq(
+    (void *const *)&cts->fin_order_head);
+  if (ord == NULL)
+    fallback = 1;
+  for (; ord != NULL;
+       ord = (FinRegOrderNode *)la_loadptr_acq((void *const *)&ord->next)) {
+    GCtab *t = (GCtab *)la_loadptr_acq((void *const *)&ord->tab);
+    TValue *slot = (TValue *)la_loadptr_acq((void *const *)&ord->slot);
+    Node *node = (Node *)slot;
+    TValue fin, key;
+    GCobj *o;
+    if (!t || !slot || !gcref_acq(t->metatable))
+      continue;
+    lj_tv_load_acq(&fin, slot);
+    while (lj_cdata_fin_isclaim(&fin)) {
+      la_cpu_pause();
+      lj_tv_load_acq(&fin, slot);
+    }
+    if (tvisnil(&fin))
+      continue;
+    lj_tv_load_acq(&key, &node->key);
+    if (!tviscdata(&key))
+      continue;
+    o = gcV(&key);
+    if (!gc_cdata_finalizer_candidate_close(o))
+      continue;
+    if (!gc_unlink_root_object(g, o)) {
+      fallback = 1;
+      la_add64_rlx(&g->gc2.finreg_cdata_order_fallbacks, 1);
+      continue;
+    }
+    gc_queue_cdata_finalizer(g, o);
+    la_add64_rlx(&g->gc2.finreg_cdata_order_queued, 1);
+    queued++;
+  }
+  if (fallbackp)
+    *fallbackp = fallback;
+  return queued;  /* 05 section 5.8: FINREG ordered close-time cdata scan. */
+}
+
+static void gc_separate_cdata_finalizers_root(global_State *g)
 {
   GCRef *p = &g->gc.root;
   GCobj *o;
   while ((o = gcref(*p)) != NULL) {
-    if (o->gch.gct == ~LJ_TCDATA &&
-	(lj_obj_gcflags(o) & LJ_GC_CDATA_FIN)) {
+    if (gc_cdata_finalizer_candidate_close(o)) {
       setgcrefr(*p, *lj_obj_gcwref(o));
       gc_queue_cdata_finalizer(g, o);
     } else {
       p = lj_obj_gcwref(o);
     }
   }
+}
+
+static void gc_separate_cdata_finalizers(global_State *g)
+{
+  int fallback = 0;
+  (void)gc_separate_cdata_finalizers_ordered(g, &fallback);
+  if (fallback)
+    gc_separate_cdata_finalizers_root(g);
 }
 
 static int gc_cdata_fin_pending_tab(GCtab *t)

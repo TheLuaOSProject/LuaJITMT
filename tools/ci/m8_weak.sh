@@ -140,6 +140,8 @@ for needle in \
   'gc_queue_cdata_finalizers_pweak(lua_State *L, global_State *g)' \
   'gc_preclaim_cdata_finalizers_pweak_finreg(lua_State *L,' \
   'FINREG P_WEAK cdata scan' \
+  'gc_separate_cdata_finalizers_ordered(global_State *g,' \
+  'FINREG ordered close-time cdata scan' \
   'typedef struct FinRegOrderNode' \
   'fin_order_head' \
   'FINREG ordered P_WEAK cdata scan' \
@@ -167,6 +169,8 @@ for needle in \
   'gc2_regorder_fin_t' \
   'gc2_cdata_order[1] == 1' \
   'gc2_rereg_fin_t' \
+  'gc2_close_order_fin_t' \
+  'lj_gc_finalize_cdata(L)' \
   'finreg_cdata_order_queued) == orderq2 + 2u' \
   'gc2_cdata_order[0] == 3' \
   'gc2_cdata_order[1] == 2' \

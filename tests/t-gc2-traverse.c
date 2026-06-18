@@ -2566,6 +2566,41 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   assert(la_load64_acq(&g->gc2.finreg_cdata_preclaim_dispatched) ==
 	 dispatched2 + 2u);
   assert(gc2_cdata_order_count == 2);
+
+  sets2 = la_load64_acq(&g->gc2.finreg_cdata_sets);
+  clears2 = la_load64_acq(&g->gc2.finreg_cdata_clears);
+  pweak2 = la_load64_acq(&g->gc2.finreg_cdata_pweak_queued);
+  finalizerq2 = la_load64_acq(&g->gc2.finalizer_queued);
+  finalizerd2 = la_load64_acq(&g->gc2.finalizer_dequeued);
+  mpscd2 = la_load64_acq(&g->gc2.finalizer_mpsc_drained);
+  orderq2 = la_load64_acq(&g->gc2.finreg_cdata_order_queued);
+  gc2_cdata_order_count = 0;
+  assert(luaL_dostring(L,
+    "local ffi = require('ffi')\n"
+    "ffi.cdef('typedef struct { int x; } gc2_close_order_fin_t;')\n"
+    "gc2_close_keep = {}\n"
+    "gc2_close_keep[1] = ffi.gc(ffi.new('gc2_close_order_fin_t'), gc2_cdata_order_finalizer_1)\n"
+    "gc2_close_keep[2] = ffi.gc(ffi.new('gc2_close_order_fin_t'), gc2_cdata_order_finalizer_2)\n"
+    "gc2_close_keep[3] = ffi.gc(ffi.new('gc2_close_order_fin_t'), gc2_cdata_order_finalizer_3)\n") ==
+    LUA_OK);
+  assert(la_load64_acq(&g->gc2.finreg_cdata_sets) == sets2 + 3u);
+  lj_gc_finalize_cdata(L);
+  assert(lj_gc2_finalizer_queue_pending(g));
+  assert(la_load64_acq(&g->gc2.finreg_cdata_order_queued) == orderq2 + 3u);
+  assert(la_load64_acq(&g->gc2.finreg_cdata_pweak_queued) == pweak2);
+  assert(la_load64_acq(&g->gc2.finalizer_queued) == finalizerq2 + 3u);
+  lj_gc_finalize_udata(L);
+  assert(la_load64_acq(&g->gc2.finalizer_dequeued) == finalizerd2 + 3u);
+  assert(la_load64_acq(&g->gc2.finalizer_mpsc_drained) == mpscd2 + 3u);
+  assert(la_load64_acq(&g->gc2.finreg_cdata_clears) == clears2 + 3u);
+  assert(!lj_gc2_finalizer_queue_pending(g));
+  assert(gc2_cdata_order_count == 3);
+  assert(gc2_cdata_order[0] == 3);
+  assert(gc2_cdata_order[1] == 2);
+  assert(gc2_cdata_order[2] == 1);
+  lua_pushnil(L);
+  lua_setglobal(L, "gc2_close_keep");
+
   lua_pushnil(L);
   lua_setglobal(L, "gc2_cdata_order_finalizer_1");
   lua_pushnil(L);
