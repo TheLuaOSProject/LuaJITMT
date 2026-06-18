@@ -7,14 +7,18 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 make -C "$ROOT/src" >/dev/null
 
 for needle in \
-  'lj_tab_storetv_forjit_pair(lua_State *L, GCtab *parent' \
+  'lj_tab_storetv_forjit_array(lua_State *L, GCtab *parent' \
+  'lj_tab_storetv_forjit_hash(lua_State *L, GCtab *parent' \
   'lj_gc2_barrier_tv_pair(L, obj2gco(parent), dst);  /* M10: traced parent barrier. */' \
-  'IRCALL_lj_tab_storetv_forjit_pair' \
+  'lj_gc2_barrier_weak_write(L, parent, NULL, dst);  /* M8: traced weak-value array write. */' \
+  'lj_gc2_barrier_weak_write(L, parent, &n->key, dst);  /* M8: traced weak hash write. */' \
+  'Node *n = (Node *)dst;  /* Node.val is the first field. */' \
+  'IRCALL_lj_tab_storetv_forjit_array' \
+  'IRCALL_lj_tab_storetv_forjit_hash' \
   'tabref = IR(xref->op1)->op1' \
   'asm_ahstore_forjit(ASMState *as, IRIns *ir)' \
   '#if defined(__linux__) && LJ_TARGET_X64' \
   'IRRef lim = poll_alias_limit(J, xref);' \
-  'M8: weak writes need VM bridge.' \
   'M6: no new/nil HSTORE bridge.' \
   'M6: no nil ASTORE bridge.'
 do
@@ -55,7 +59,7 @@ for i = 1, 200 do
   wk.stable = i
 end
 assert(wk.stable == 200)
-assert(not util.traceinfo(1), "weak-key table store unexpectedly traced")
+assert(util.traceinfo(1), "weak-key existing table store did not trace")
 
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
@@ -64,7 +68,7 @@ for i = 1, 200 do
   wv[1] = i
 end
 assert(wv[1] == 200)
-assert(not util.traceinfo(1), "weak-value table store unexpectedly traced")
+assert(util.traceinfo(1), "weak-value existing table store did not trace")
 
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")

@@ -703,9 +703,9 @@ static void test_jit_table_store_helper_barrier(lua_State *L, global_State *g,
   lua_pop(L, 3);
 }
 
-static void test_jit_weak_table_store_fallback_barrier(lua_State *L,
-						       global_State *g,
-						       TGState *tg)
+static void test_jit_weak_table_store_helper_barrier(lua_State *L,
+						     global_State *g,
+						     TGState *tg)
 {
   GCtab *weak, *key, *val;
   uint64_t weak_keys0, weak_vals0;
@@ -729,6 +729,8 @@ static void test_jit_weak_table_store_fallback_barrier(lua_State *L,
   lua_newtable(L);
   key = tabV(L->top - 1);
   lua_newtable(L);
+  /* Warm the trace with an existing non-nil slot, then overwrite it in P_WEAK. */
+  lua_newtable(L);
   val = tabV(L->top - 1);
 
   lua_pushvalue(L, 1);
@@ -737,14 +739,8 @@ static void test_jit_weak_table_store_fallback_barrier(lua_State *L,
   lua_pushvalue(L, 4);
   lua_pushinteger(L, 100);
   lua_call(L, 4, 0);
-  /* M8: shared weak table store stays interpreted during P_WEAK. */
-  assert(find_trace(g) == NULL);
-
-  lua_pushvalue(L, 2);
-  lua_pushvalue(L, 3);
-  lua_pushnil(L);
-  lua_settable(L, -3);
-  lua_pop(L, 1);
+  /* M8: existing weak table stores trace through a P_WEAK-aware helper. */
+  assert(find_trace(g) != NULL);
 
   lj_gc2_legacy_mark_begin(g);
   assert(lj_gc2_markobj(g, obj2gco(weak)) == 1);
@@ -759,14 +755,77 @@ static void test_jit_weak_table_store_fallback_barrier(lua_State *L,
   lua_pushvalue(L, 1);
   lua_pushvalue(L, 2);
   lua_pushvalue(L, 3);
-  lua_pushvalue(L, 4);
+  lua_pushvalue(L, 5);
   lua_pushinteger(L, 20);
   lua_call(L, 4, 0);
-  assert(find_trace(g) == NULL);
+  assert(find_trace(g) != NULL);
   assert(lj_gc2_ismarked(g, obj2gco(key)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(val)) == 1);
   assert(la_load64_acq(&g->gc2.weak_keys_marked) == weak_keys0 + 1u);
-  assert(la_load64_acq(&g->gc2.weak_values_marked) == weak_vals0);
+  assert(la_load64_acq(&g->gc2.weak_values_marked) == weak_vals0 + 1u);
+  assert(!lj_gc2_ssb_empty(g));
+  flush_and_drain(g, tg);
+  lj_gc2_legacy_cycle_end(g);
+  lua_pop(L, 5);
+}
+
+static void test_jit_weak_array_store_helper_barrier(lua_State *L,
+						     global_State *g,
+						     TGState *tg)
+{
+  GCtab *weak, *oldval, *val;
+  uint64_t weak_keys0, weak_vals0;
+
+  lua_settop(L, 0);
+  assert(luaL_dostring(L,
+    "jit.flush()\n"
+    "jit.opt.start('hotloop=1', 'hotexit=1')\n"
+    "return function(t, v, n)\n"
+    "  for i = 1, n do\n"
+    "    if i > 1 then t[1] = v end\n"
+    "  end\n"
+    "end\n") == LUA_OK);
+  lua_createtable(L, 1, 0);
+  weak = tabV(L->top - 1);
+  lua_newtable(L);
+  lua_pushliteral(L, "__mode");
+  lua_pushliteral(L, "v");
+  lua_settable(L, -3);
+  lua_setmetatable(L, -2);
+  lua_newtable(L);
+  oldval = tabV(L->top - 1);
+  lua_pushvalue(L, 3);
+  lua_rawseti(L, 2, 1);
+  lua_newtable(L);
+  val = tabV(L->top - 1);
+
+  lua_pushvalue(L, 1);
+  lua_pushvalue(L, 2);
+  lua_pushvalue(L, 3);
+  lua_pushinteger(L, 100);
+  lua_call(L, 3, 0);
+  /* M8: existing weak-value array stores trace through the array helper. */
+  assert(find_trace(g) != NULL);
+
+  lj_gc2_legacy_mark_begin(g);
+  assert(lj_gc2_markobj(g, obj2gco(weak)) == 1);
+  flush_and_drain(g, tg);
+  assert(lj_gc2_ismarked(g, obj2gco(weak)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(oldval)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(val)) == 0);
+  weak_keys0 = la_load64_acq(&g->gc2.weak_keys_marked);
+  weak_vals0 = la_load64_acq(&g->gc2.weak_values_marked);
+
+  lj_gc2_legacy_weak_begin(g);
+  lua_pushvalue(L, 1);
+  lua_pushvalue(L, 2);
+  lua_pushvalue(L, 4);
+  lua_pushinteger(L, 20);
+  lua_call(L, 3, 0);
+  assert(find_trace(g) != NULL);
+  assert(lj_gc2_ismarked(g, obj2gco(val)) == 1);
+  assert(la_load64_acq(&g->gc2.weak_keys_marked) == weak_keys0);
+  assert(la_load64_acq(&g->gc2.weak_values_marked) == weak_vals0 + 1u);
   assert(!lj_gc2_ssb_empty(g));
   flush_and_drain(g, tg);
   lj_gc2_legacy_cycle_end(g);
@@ -3459,7 +3518,8 @@ int main(void)
   test_vm_meta_tset_barrier(L, g, tg);
 #if LJ_HASJIT
   test_jit_table_store_helper_barrier(L, g, tg);
-  test_jit_weak_table_store_fallback_barrier(L, g, tg);
+  test_jit_weak_table_store_helper_barrier(L, g, tg);
+  test_jit_weak_array_store_helper_barrier(L, g, tg);
   test_jit_upvalue_barrier(L, g, tg);
   test_jit_current_trace_root(L, g, tg);
   test_jit_tg_executing_trace_root(L, g, tg);

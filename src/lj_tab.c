@@ -1003,10 +1003,21 @@ LJ_FUNCA TValue *lj_tab_storetv(lua_State *L, TValue *dst, cTValue *src)
   return dst;
 }
 
-LJ_FUNCA TValue *lj_tab_storetv_forjit_pair(lua_State *L, GCtab *parent,
-					    TValue *dst, cTValue *src)
+LJ_FUNCA TValue *lj_tab_storetv_forjit_array(lua_State *L, GCtab *parent,
+					     TValue *dst, cTValue *src)
 {
   copyTVrel(L, dst, src);
+  lj_gc2_barrier_weak_write(L, parent, NULL, dst);  /* M8: traced weak-value array write. */
+  lj_gc2_barrier_tv_pair(L, obj2gco(parent), dst);  /* M10: traced parent barrier. */
+  return dst;
+}
+
+LJ_FUNCA TValue *lj_tab_storetv_forjit_hash(lua_State *L, GCtab *parent,
+					    TValue *dst, cTValue *src)
+{
+  Node *n = (Node *)dst;  /* Node.val is the first field. */
+  copyTVrel(L, dst, src);
+  lj_gc2_barrier_weak_write(L, parent, &n->key, dst);  /* M8: traced weak hash write. */
   lj_gc2_barrier_tv_pair(L, obj2gco(parent), dst);  /* M10: traced parent barrier. */
   return dst;
 }

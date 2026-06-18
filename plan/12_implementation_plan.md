@@ -123,9 +123,9 @@ the hot trace performs the first mutable raw-slot promotion with otherwise
 type-stable loop slots. A narrow helper-backed table-store bridge now records
 existing non-nil `ASTORE`/`HSTORE` updates on Linux/x64, including shared,
 PHI-carried, upvalue-carried, and escaped table references, and lowers them
-through `lj_tab_storetv_forjit_pair()`; the original generation-aware table
-write protocol remains pending, so nil/new shape-changing stores and weak table
-stores stay NYI.
+through split hash/array helpers that run the parent-aware value barrier and the
+P_WEAK weak-write bridge; the original generation-aware table write protocol
+remains pending, so nil/new shape-changing stores stay NYI.
 Linux/x64 HREFK recording now avoids the legacy `GCtab.hmask` mirror
 guard and relies on the loaded node pointer plus x64 node-header slot guard;
 empty-hash misses fall through to regular `HREF` instead of the legacy

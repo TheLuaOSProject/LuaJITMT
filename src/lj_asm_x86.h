@@ -1800,7 +1800,8 @@ static void asm_ahuvload(ASMState *as, IRIns *ir)
 
 static void asm_ahstore_forjit(ASMState *as, IRIns *ir)
 {
-  const CCallInfo *ci = &lj_ir_callinfo[IRCALL_lj_tab_storetv_forjit_pair];
+  const CCallInfo *ci = &lj_ir_callinfo[ir->o == IR_ASTORE ?
+    IRCALL_lj_tab_storetv_forjit_array : IRCALL_lj_tab_storetv_forjit_hash];
   IRRef args[4];
   IRIns *xref = IR(ir->op1);
   IRRef tabref;

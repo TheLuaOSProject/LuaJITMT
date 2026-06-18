@@ -1592,26 +1592,6 @@ static int nommstr(jit_State *J, TRef key)
   return 1;  /* CANNOT be a metamethod name. */
 }
 
-static int rec_idx_tab_weak_mode(jit_State *J, GCtab *t, GCtab *mt)
-{
-  int weak = lj_obj_gcflags(obj2gco(t)) & LJ_GC_WEAK;
-  if (weak || !mt)
-    return weak;
-  {
-    TValue modev;
-    cTValue *mode = lj_meta_fasttv(J2G(J), mt, MM_mode, &modev);
-    if (mode && tvisstr(mode)) {
-      const char *modestr = strVdata(mode);
-      int c;
-      while ((c = *modestr++)) {
-	if (c == 'k') weak |= LJ_GC_WEAKKEY;
-	else if (c == 'v') weak |= LJ_GC_WEAKVAL;
-      }
-    }
-  }
-  return weak;
-}
-
 /* Record indexed load/store. */
 TRef lj_record_idx(jit_State *J, RecordIndex *ix)
 {
@@ -1702,8 +1682,6 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
     GCtab *mt = tabref_acq(tabV(&ix->tabv)->metatable);
     int keybarrier = tref_isgcv(ix->key) && !tref_isnil(ix->val);
 #if defined(__linux__) && LJ_TARGET_X64
-    if (rec_idx_tab_weak_mode(J, tabV(&ix->tabv), mt))
-      lj_trace_err_info(J, LJ_TRERR_NYIBC);  /* M8: weak writes need VM bridge. */
     if (tvisnil(oldv)) {
       if (loadop == IR_HLOAD)
 	lj_trace_err_info(J, LJ_TRERR_NYIBC);  /* M6: no new/nil HSTORE bridge. */

@@ -19,8 +19,10 @@ for needle in \
   'test_vm_weak_key_write_barrier' \
   'test_peer_weak_key_write_barrier' \
   'Peer TG performs the P_WEAK table write' \
-  'test_jit_weak_table_store_fallback_barrier' \
-  'shared weak table store stays interpreted during P_WEAK' \
+  'test_jit_weak_table_store_helper_barrier' \
+  'existing weak table stores trace through a P_WEAK-aware helper' \
+  'test_jit_weak_array_store_helper_barrier' \
+  'existing weak-value array stores trace through the array helper' \
   'test_vm_weak_value_hash_key_barrier' \
   'test_vm_weak_value_array_barrier' \
   'test_table_insert_weak_value_array_barrier' \
