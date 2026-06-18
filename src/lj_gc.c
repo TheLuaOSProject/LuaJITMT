@@ -1599,8 +1599,6 @@ static int gc_cdata_finalizer_candidate_close(GCobj *o)
 	 !(lj_obj_gcflags(o) & LJ_GC_FINALIZED);
 }
 
-static int gc_cdata_finreg_pending_scan(CTState *cts);
-
 static int gc_preclaim_cdata_finalizer_pweak_slot(lua_State *L,
 						  global_State *g,
 						  GCobj *o, TValue *slot)
@@ -1680,8 +1678,6 @@ static size_t gc_queue_cdata_finalizers_pweak_ordered(lua_State *L,
   }
   ord = (FinRegOrderNode *)la_loadptr_acq(
     (void *const *)&cts->fin_order_head);
-  if (ord == NULL)
-    fallback = 1;
   for (; ord != NULL;
        ord = (FinRegOrderNode *)la_loadptr_acq((void *const *)&ord->next)) {
     GCtab *t = (GCtab *)la_loadptr_acq((void *const *)&ord->tab);
@@ -1748,51 +1744,6 @@ static size_t gc_queue_cdata_finalizers_pweak_ordered(lua_State *L,
   return preclaimed;  /* 05 section 5.8: FINREG ordered P_WEAK cdata scan. */
 }
 
-static size_t gc_preclaim_cdata_finalizers_pweak_tab(lua_State *L,
-						     global_State *g,
-						     GCtab *t)
-{
-  Node *node = lj_tab_node_acq(t);
-  MSize i, hmask = lj_tab_node_hmask_acq(node);
-  size_t n = 0;
-  for (i = 0; i <= hmask; i++) {
-    TValue val, key;
-    lj_tv_load_acq(&val, &node[i].val);
-    while (lj_cdata_fin_isclaim(&val)) {
-      la_cpu_pause();
-      lj_tv_load_acq(&val, &node[i].val);
-    }
-    if (tvisnil(&val))
-      continue;
-    lj_tv_load_acq(&key, &node[i].key);
-    if (tviscdata(&key)) {
-      GCobj *o = gcV(&key);
-      if (gc_cdata_finalizer_candidate_pweak(o) &&
-	  gc_preclaim_cdata_finalizer_pweak_slot(L, g, o, &node[i].val))
-	n++;
-    }
-  }
-  return n;
-}
-
-static size_t gc_preclaim_cdata_finalizers_pweak_finreg(lua_State *L,
-							global_State *g)
-{
-  CTState *cts = ctype_ctsG(g);
-  FinRegGen *gen;
-  size_t n = 0;
-  if (cts == NULL)
-    return 0;
-  for (gen = (FinRegGen *)la_loadptr_acq((void *const *)&cts->fin_head);
-       gen != NULL;
-       gen = (FinRegGen *)la_loadptr_acq((void *const *)&gen->next)) {
-    GCtab *t = (GCtab *)la_loadptr_acq((void *const *)&gen->tab);
-    if (t && gcref_acq(t->metatable))
-      n += gc_preclaim_cdata_finalizers_pweak_tab(L, g, t);
-  }
-  return n;  /* 05 section 5.8: FINREG P_WEAK cdata scan. */
-}
-
 static size_t gc_queue_cdata_finalizers_pweak(lua_State *L, global_State *g)
 {
   GCRef *p = &g->gc.root;
@@ -1803,13 +1754,6 @@ static size_t gc_queue_cdata_finalizers_pweak(lua_State *L, global_State *g)
   preclaimed = gc_queue_cdata_finalizers_pweak_ordered(L, g, &ordered_queued,
 						       &ordered_fallback);
   n += ordered_queued;
-  if (ordered_fallback && ordered_queued == 0) {
-    CTState *cts = ctype_ctsG(g);
-    if (gc_cdata_finreg_pending_scan(cts))
-      preclaimed += gc_preclaim_cdata_finalizers_pweak_finreg(L, g);
-    else
-      ordered_fallback = 0;
-  }
   if (!ordered_fallback)
     goto done;
   la_add64_rlx(&g->gc2.finreg_cdata_pweak_root_fallbacks, 1);
@@ -1833,19 +1777,15 @@ done:
   return n;  /* 05 section 5.8: P_WEAK cdata finalizer discovery bridge. */
 }
 
-static size_t gc_separate_cdata_finalizers_ordered(global_State *g,
-						   int *fallbackp)
+static size_t gc_separate_cdata_finalizers_ordered(global_State *g)
 {
   CTState *cts = ctype_ctsG(g);
   FinRegOrderNode *ord;
   size_t queued = 0;
-  int fallback = 0;
   if (cts == NULL)
     return 0;
   ord = (FinRegOrderNode *)la_loadptr_acq(
     (void *const *)&cts->fin_order_head);
-  if (ord == NULL)
-    fallback = 1;
   for (; ord != NULL;
        ord = (FinRegOrderNode *)la_loadptr_acq((void *const *)&ord->next)) {
     GCtab *t = (GCtab *)la_loadptr_acq((void *const *)&ord->tab);
@@ -1875,33 +1815,12 @@ static size_t gc_separate_cdata_finalizers_ordered(global_State *g,
     la_add64_rlx(&g->gc2.finreg_cdata_order_queued, 1);
     queued++;
   }
-  if (fallbackp)
-    *fallbackp = fallback;
   return queued;  /* 05 section 5.8: FINREG ordered close-time cdata scan. */
-}
-
-static void gc_separate_cdata_finalizers_root(global_State *g)
-{
-  GCRef *p = &g->gc.root;
-  GCobj *o;
-  while ((o = gcref(*p)) != NULL) {
-    if (gc_cdata_finalizer_candidate_close(o)) {
-      setgcrefr(*p, *lj_obj_gcwref(o));
-      gc_queue_cdata_finalizer(g, o);
-    } else {
-      p = lj_obj_gcwref(o);
-    }
-  }
 }
 
 static void gc_separate_cdata_finalizers(global_State *g)
 {
-  int fallback = 0;
-  (void)gc_separate_cdata_finalizers_ordered(g, &fallback);
-  if (fallback && gc_cdata_finreg_pending_scan(ctype_ctsG(g))) {
-    la_add64_rlx(&g->gc2.finreg_cdata_close_root_fallbacks, 1);
-    gc_separate_cdata_finalizers_root(g);
-  }
+  (void)gc_separate_cdata_finalizers_ordered(g);
 }
 
 static int gc_cdata_fin_pending_ordered(global_State *g, CTState *cts)
@@ -1935,50 +1854,12 @@ static int gc_cdata_fin_pending_ordered(global_State *g, CTState *cts)
   return 0;  /* FINREG ordered close-time cdata pending scan. */
 }
 
-static int gc_cdata_fin_pending_tab(GCtab *t)
-{
-  Node *node = lj_tab_node_acq(t);
-  MSize hmask = lj_tab_node_hmask_acq(node);
-  ptrdiff_t i;
-  for (i = (ptrdiff_t)hmask; i >= 0; i--) {
-    TValue key, val;
-    lj_tv_load_acq(&val, &node[i].val);
-    while (lj_cdata_fin_isclaim(&val)) {
-      la_cpu_pause();
-      lj_tv_load_acq(&val, &node[i].val);
-    }
-    if (!tvisnil(&val)) {
-      lj_tv_load_acq(&key, &node[i].key);
-      if (tviscdata(&key) && gc_cdata_finalizer_candidate_close(gcV(&key)))
-	return 1;
-    }
-  }
-  return 0;
-}
-
-static int gc_cdata_finreg_pending_scan(CTState *cts)
-{
-  FinRegGen *gen;
-  if (cts == NULL)
-    return 0;
-  for (gen = (FinRegGen *)la_loadptr_acq((void *const *)&cts->fin_head);
-       gen != NULL;
-       gen = (FinRegGen *)la_loadptr_acq((void *const *)&gen->next)) {
-    GCtab *t = (GCtab *)la_loadptr_acq((void *const *)&gen->tab);
-    if (t && gcref_acq(t->metatable) && gc_cdata_fin_pending_tab(t))
-      return 1;
-  }
-  return 0;
-}
-
 int lj_gc_cdata_fin_pending(global_State *g)
 {
   CTState *cts = ctype_ctsG(g);
   if (cts == NULL)
     return 0;
-  if (gc_cdata_fin_pending_ordered(g, cts))
-    return 1;
-  return gc_cdata_finreg_pending_scan(cts);
+  return gc_cdata_fin_pending_ordered(g, cts);
 }
 
 /* Finalize all cdata objects from finalizer table. */

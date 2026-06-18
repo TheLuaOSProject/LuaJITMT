@@ -653,8 +653,6 @@ static void gc_stats_push(lua_State *L)
 		  la_load64_acq(&gc2->finreg_cdata_order_fallbacks));
   gc_stats_setnum(L, t, "finreg_cdata_pweak_root_fallbacks",
 		  la_load64_acq(&gc2->finreg_cdata_pweak_root_fallbacks));
-  gc_stats_setnum(L, t, "finreg_cdata_close_root_fallbacks",
-		  la_load64_acq(&gc2->finreg_cdata_close_root_fallbacks));
   gc_stats_setnum(L, t, "finreg_cdata_pending_order_hits",
 		  la_load64_acq(&gc2->finreg_cdata_pending_order_hits));
   gc_stats_setnum(L, t, "finreg_udata_sets",

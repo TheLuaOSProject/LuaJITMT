@@ -25,7 +25,6 @@ for needle in \
   'weak_keys_marked' \
   'finreg_cdata_sweep_queued' \
   'finreg_cdata_pweak_root_fallbacks' \
-  'finreg_cdata_close_root_fallbacks' \
   'finreg_cdata_order_fallbacks' \
   'finreg_udata_registered' \
   'finalizer_queued' \

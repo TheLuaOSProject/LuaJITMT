@@ -240,13 +240,14 @@ for file in "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc2.c"; do
 done
 
 if ! awk '
-  /static int gc_cdata_finreg_pending_scan\(CTState \*cts\)/ { inscan = 1; pendinghead = 0; pendingscan = 0 }
-  inscan && /cts->fin_head/ { pendinghead = 1 }
-  inscan && /gc_cdata_fin_pending_tab\(t\)/ { pendingscan = 1 }
-  inscan && /^}/ { scan = pendinghead && pendingscan; inscan = 0 }
-  /int lj_gc_cdata_fin_pending\(global_State \*g\)/ { inpending = 1; pendingcall = 0 }
-  inpending && /gc_cdata_finreg_pending_scan\(cts\)/ { pendingcall = 1 }
-  inpending && /^}/ { pending = pendingcall; inpending = 0 }
+  /static int gc_cdata_fin_pending_ordered\(global_State \*g, CTState \*cts\)/ { inscan = 1; orderhead = 0; candidate = 0 }
+  inscan && /cts->fin_order_head/ { orderhead = 1 }
+  inscan && /gc_cdata_finalizer_candidate_close\(o\)/ { candidate = 1 }
+  inscan && /^}/ { scan = orderhead && candidate; inscan = 0 }
+  /int lj_gc_cdata_fin_pending\(global_State \*g\)/ { inpending = 1; pendingcall = 0; gencall = 0 }
+  inpending && /gc_cdata_fin_pending_ordered\(g, cts\)/ { pendingcall = 1 }
+  inpending && /gc_cdata_finreg_pending_scan\(cts\)/ { gencall = 1 }
+  inpending && /^}/ { pending = pendingcall && !gencall; inpending = 0 }
   /void lj_gc_finalize_cdata\(lua_State \*L\)/ { indrain = 1; separate = 0 }
   indrain && /gc_separate_cdata_finalizers\(g\)/ { separate = 1 }
   indrain && /^}/ { drain = separate; indrain = 0 }
@@ -256,7 +257,7 @@ if ! awk '
   indisable && /^}/ { disabled = disablehead && disable; indisable = 0 }
   END { exit (scan && pending && drain && disabled) ? 0 : 1 }
 ' "$ROOT/src/lj_gc.c"; then
-  echo "guardrail: close-time cdata finalizer drain must queue cdata and scan/disable every FINREG generation" >&2
+  echo "guardrail: close-time cdata finalizer drain must queue cdata and use ordered FINREG pending discovery" >&2
   exit 1
 fi
 

@@ -176,8 +176,6 @@ for needle in \
   'cbL->top = restorestack(cbL, oldtop);' \
   'lj_ctype_fin_get(L, cts, key, &t)' \
   'gc_queue_cdata_finalizers_pweak(lua_State *L, global_State *g)' \
-  'gc_preclaim_cdata_finalizers_pweak_finreg(lua_State *L,' \
-  'FINREG P_WEAK cdata scan' \
   'gc_separate_cdata_finalizers_ordered(global_State *g,' \
   'FINREG ordered close-time cdata scan' \
   'typedef struct FinRegOrderNode' \
@@ -192,21 +190,16 @@ for needle in \
   'uint64_t finreg_cdata_order_queued' \
   'uint64_t finreg_cdata_order_fallbacks' \
   'uint64_t finreg_cdata_pweak_root_fallbacks' \
-  'uint64_t finreg_cdata_close_root_fallbacks' \
   'uint64_t finreg_cdata_pending_order_hits' \
   'gc_cdata_fin_pending_ordered(global_State *g, CTState *cts)' \
   'FINREG ordered close-time cdata pending scan' \
   'finreg_cdata_pending_order_hits, 0' \
-  'ordered_fallback && ordered_queued == 0' \
   'if (!ordered_fallback)' \
-  'gc_cdata_finreg_pending_scan(CTState *cts)' \
   '!gcref_acq(t->metatable)' \
-  'gcref_acq(t->metatable) && gc_cdata_fin_pending_tab(t)' \
   'ft == t && ft && gcref_acq(ft->metatable)' \
-  'test_finreg_disabled_pending_scan' \
+  'test_finreg_disabled_ordered_pending' \
   'gc2_disabled_pending_fin_t' \
   'collectgarbage('\''collect'\'')' \
-  'finreg_cdata_close_root_fallbacks, 1' \
   'gc_claim_cdata_finalizer_pweak(lua_State *L, global_State *g,' \
   'GCRef obj;' \
   'setgcref(ord->obj, o);' \
@@ -235,7 +228,6 @@ for needle in \
   'finreg_cdata_order_queued) == orderq2 + 3u' \
   'finreg_cdata_order_fallbacks) ==' \
   'finreg_cdata_pweak_root_fallbacks) ==' \
-  'finreg_cdata_close_root_fallbacks) ==' \
   'finreg_cdata_pending_order_hits) == pendingorder2 + 1u' \
   'gc2_regorder_fin_t' \
   'gc2_cdata_order[1] == 1' \
@@ -297,6 +289,12 @@ do
     exit 1
   fi
 done
+
+if rg -n 'gc_preclaim_cdata_finalizers_pweak_finreg|gc_preclaim_cdata_finalizers_pweak_tab|gc_cdata_finreg_pending_scan|gc_cdata_fin_pending_tab|gc_separate_cdata_finalizers_root|ord[[:space:]]*==[[:space:]]*NULL' \
+    "$ROOT/src/lj_gc.c"; then
+  echo "guardrail: FINREG ordered discovery must not retain generation/root pending scans" >&2
+  exit 1
+fi
 
 if awk '
   /static void gc_call_finalizer\(global_State \*g, lua_State \*L,/ {
