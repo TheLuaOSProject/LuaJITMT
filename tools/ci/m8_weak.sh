@@ -48,7 +48,7 @@ for needle in \
   'gc2_weak_paranoia_zero_diff(global_State *g, GCobj *legacy)' \
   'lj_gc2_finalizer_try_enter(global_State *g)' \
   'peer finalizer dispatch backs off' \
-  'gcref_acq(g->gc.mmudata) == NULL' \
+  'void *finalizer_tail' \
   'lj_gc_cdata_fin_pending(global_State *g)' \
   '!lj_gc_cdata_fin_pending(g)' \
   'gc_queue_cdata_finalizer(global_State *g, GCobj *o)' \
@@ -102,6 +102,16 @@ for needle in \
   'uint64_t finalizer_mpsc_drained' \
   'la_casptr((void **)&g->gc2.finalizer_mpsc' \
   'la_xchgptr_acqrel((void **)&g->gc2.finalizer_mpsc' \
+  'la_storeptr_rel((void **)&g->gc2.finalizer_tail' \
+  'gc_mark_finalizers(global_State *g)' \
+  'gc2_mark_finalizer_stack(global_State *g, GCobj *o)' \
+  'gc2_mark_finalizer_ring(global_State *g, GCobj *tail)' \
+  'g->gc2.finalizer_mpsc));' \
+  'g->gc2.finalizer_tail));' \
+  'test_finalizer_consumer_ring' \
+  'la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) != NULL' \
+  'assert(lj_gc2_finalizer_dequeue(g) == a)' \
+  'assert(gcref(g->gc.mmudata) == NULL)' \
   'finalizer_queued0 = la_load64_acq(&g->gc2.finalizer_queued)' \
   'finalizer_dequeued0 = la_load64_acq(&g->gc2.finalizer_dequeued)' \
   'assert(!lj_gc2_finalizer_queue_pending(g))' \

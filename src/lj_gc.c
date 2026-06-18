@@ -338,6 +338,17 @@ static void gc2_paranoia_check_roots(global_State *g)
   GCobj *o;
   for (o = gcref(g->gc.root); o != NULL; o = gcnext(o))
     gc2_paranoia_checkone(g, o);
+  for (o = (GCobj *)la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc);
+       o != NULL; o = lj_obj_gcw_acq(o))
+    gc2_paranoia_checkone(g, o);
+  o = (GCobj *)la_loadptr_acq((void *const *)&g->gc2.finalizer_tail);
+  if (o) {
+    GCobj *root = o;
+    do {
+      o = gcnext(o);
+      gc2_paranoia_checkone(g, o);
+    } while (o != root);
+  }
   o = gcref(g->gc.mmudata);
   if (o) {
     GCobj *root = o;
@@ -706,13 +717,9 @@ static void gc_mark_uv(global_State *g)
   }
 }
 
-/* Mark userdata in mmudata list. */
-static void gc_mark_mmudata(global_State *g)
+static void gc_mark_finalizer_ring(global_State *g, GCobj *root)
 {
-  GCobj *root, *u;
-  lj_gc2_finalizer_drain(g);
-  root = gcref(g->gc.mmudata);
-  u = root;
+  GCobj *u = root;
   if (u) {
     do {
       u = gcnext(u);
@@ -722,7 +729,16 @@ static void gc_mark_mmudata(global_State *g)
   }
 }
 
-/* Separate userdata objects to be finalized to mmudata list. */
+/* Mark userdata/cdata in finalizer queues. */
+static void gc_mark_finalizers(global_State *g)
+{
+  lj_gc2_finalizer_drain(g);
+  gc_mark_finalizer_ring(g, (GCobj *)la_loadptr_acq(
+	(void *const *)&g->gc2.finalizer_tail));
+  gc_mark_finalizer_ring(g, gcref(g->gc.mmudata));
+}
+
+/* Separate userdata objects to be finalized to the GC2 finalizer queue. */
 size_t lj_gc_separateudata(global_State *g, int all)
 {
   size_t m = 0;
@@ -1279,7 +1295,7 @@ static int gc_finalize_cdata_preclaimed(lua_State *L, GCobj *o, cTValue *fin)
 }
 #endif
 
-/* Finalize one userdata or cdata object from the mmudata list. */
+/* Finalize one userdata or cdata object from the GC2 finalizer queue. */
 static int gc_finalize(lua_State *L)
 {
   global_State *g = G(L);
@@ -1290,10 +1306,6 @@ static int gc_finalize(lua_State *L)
   if (!lj_gc2_finalizer_try_enter(g))
     return 0;
   lj_gc2_finalizer_drain(g);
-  if (gcref_acq(g->gc.mmudata) == NULL) {
-    lj_gc2_finalizer_leave(g);
-    return 0;
-  }
   o = lj_gc2_finalizer_dequeue(g);
   if (o == NULL) {
     lj_gc2_finalizer_leave(g);
@@ -1343,13 +1355,13 @@ static int gc_fullgc_deferred_by_finalizer(global_State *g)
 	 la_load32_acq(&g->mt_gc_exclusive) == 0;
 }
 
-/* Finalize all userdata objects from mmudata list. */
+/* Finalize all userdata/cdata objects from the GC2 finalizer queue. */
 void lj_gc_finalize_udata(lua_State *L)
 {
   global_State *g = G(L);
   for (;;) {
     lj_gc2_finalizer_drain(g);
-    if (gcref(g->gc.mmudata) == NULL)
+    if (!lj_gc2_finalizer_queue_pending(g))
       break;
     if (!gc_finalize(L))
       la_cpu_pause();
@@ -1690,7 +1702,7 @@ static void atomic(global_State *g, lua_State *L)
   gc_propagate_gray(g);  /* Propagate it. */
 
   udsize = lj_gc_separateudata(g, 0);  /* Separate userdata to be finalized. */
-  gc_mark_mmudata(g);  /* Mark them. */
+  gc_mark_finalizers(g);  /* Mark them. */
   udsize += gc_propagate_gray(g);  /* And propagate the marks. */
   /* 05 section 5.7.1 legacy atomic fixpoint-round bridge. */
   (void)lj_gc2_mark_complete(g, L, 64, ~(uint32_t)0);

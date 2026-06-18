@@ -174,6 +174,7 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.finreg_udata_clears, 0);
   la_store64_rlx(&g->gc2.finreg_udata_queued, 0);
   la_storeptr_rlx((void **)&g->gc2.finalizer_mpsc, NULL);
+  la_storeptr_rlx((void **)&g->gc2.finalizer_tail, NULL);
   la_store32_rlx(&g->gc2.finalizer_active, 0);
   la_store32_rlx(&g->gc2.finalizer_owner_tid, 0);
   la_store64_rlx(&g->gc2.finalizer_queued, 0);
@@ -588,40 +589,47 @@ void lj_gc2_finalizer_drain(global_State *g)
   }
   if (!rev)
     return;
-  oldtail = gcref_acq(g->gc.mmudata);
+  oldtail = (GCobj *)la_loadptr_acq((void *const *)&g->gc2.finalizer_tail);
   if (oldtail) {
     GCRef head;
     setgcrefr(head, *lj_obj_gcwref(oldtail));
     lj_obj_setgcwr(newtail, head);
     setgcrefrel(*lj_obj_gcwref(oldtail), rev);
-    setgcrefrel(g->gc.mmudata, newtail);
+    la_storeptr_rel((void **)&g->gc2.finalizer_tail, newtail);
   } else {
     lj_obj_setgcw(newtail, rev);
-    setgcrefrel(g->gc.mmudata, newtail);
+    la_storeptr_rel((void **)&g->gc2.finalizer_tail, newtail);
   }
   la_add64_rlx(&g->gc2.finalizer_mpsc_drained, n);
 }
 
 GCobj *lj_gc2_finalizer_dequeue(global_State *g)
 {
-  GCobj *tail, *o;
+  GCobj *tail, *o, *own_tail;
   if (!g)
     return NULL;
-  tail = gcref_acq(g->gc.mmudata);
+  tail = (GCobj *)la_loadptr_acq((void *const *)&g->gc2.finalizer_tail);
   if (!tail) {
     lj_gc2_finalizer_drain(g);
-    tail = gcref_acq(g->gc.mmudata);
+    tail = (GCobj *)la_loadptr_acq((void *const *)&g->gc2.finalizer_tail);
+    if (!tail)
+      tail = gcref_acq(g->gc.mmudata);
     if (!tail)
       return NULL;
   }
+  own_tail = (GCobj *)la_loadptr_acq((void *const *)&g->gc2.finalizer_tail);
   o = lj_obj_gcw_acq(tail);
   lj_assertG(o != NULL, "broken gc2 finalizer queue");
   if (!o)
     return NULL;
-  if (o == tail)
-    setgcrefnullrel(g->gc.mmudata);
-  else
+  if (o == tail) {
+    if (tail == own_tail)
+      la_storeptr_rel((void **)&g->gc2.finalizer_tail, NULL);
+    else
+      setgcrefnullrel(g->gc.mmudata);
+  } else {
     setgcrefrrel(*lj_obj_gcwref(tail), *lj_obj_gcwref(o));
+  }
   lj_obj_setgcwnull(o);
   la_add64_rlx(&g->gc2.finalizer_dequeued, 1);
   return o;  /* 05 section 5.8: GC2-owned finalizer queue bridge. */
@@ -719,7 +727,8 @@ int lj_gc2_finalizer_queue_pending(global_State *g)
 {
   if (!g)
     return 0;
-  return gcref_acq(g->gc.mmudata) != NULL ||
+  return la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) != NULL ||
+	 gcref_acq(g->gc.mmudata) != NULL ||
 	 la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) != NULL;
 }
 
@@ -1112,6 +1121,23 @@ static void gc2_mark_finreg_cdata_preclaims(global_State *g)
 }
 #endif
 
+static void gc2_mark_finalizer_stack(global_State *g, GCobj *o)
+{
+  for (; o != NULL; o = lj_obj_gcw_acq(o))
+    lj_gc2_markobj(g, o);
+}
+
+static void gc2_mark_finalizer_ring(global_State *g, GCobj *tail)
+{
+  GCobj *o = tail;
+  if (!o)
+    return;
+  do {
+    o = lj_obj_gcw_acq(o);
+    lj_gc2_markobj(g, o);
+  } while (o != tail);
+}
+
 static void gc2_scan_global_roots(global_State *g)
 {
   ptrdiff_t i;
@@ -1128,6 +1154,11 @@ static void gc2_scan_global_roots(global_State *g)
     if (o != NULL)
       lj_gc2_markobj(g, o);
   }
+  gc2_mark_finalizer_stack(g, (GCobj *)la_loadptr_acq(
+	(void *const *)&g->gc2.finalizer_mpsc));
+  gc2_mark_finalizer_ring(g, (GCobj *)la_loadptr_acq(
+	(void *const *)&g->gc2.finalizer_tail));
+  gc2_mark_finalizer_ring(g, gcref_acq(g->gc.mmudata));
   {
     LJThreadLive *node;
     for (node = (LJThreadLive *)

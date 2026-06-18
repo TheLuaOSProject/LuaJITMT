@@ -952,6 +952,7 @@ typedef struct GC2State {
   uint64_t finreg_udata_clears;  /* Userdata finalizer clears mirrored. */
   uint64_t finreg_udata_queued;  /* Userdata finalizers queued by legacy. */
   void *finalizer_mpsc;  /* Producer-published finalizer stack. */
+  void *finalizer_tail;  /* Single-consumer finalizer ring tail. */
   uint32_t finalizer_active;  /* Finalizer callbacks currently executing. */
   uint32_t finalizer_owner_tid;  /* TG allowed to finish nested finalizer GC. */
   uint64_t finalizer_queued;  /* Objects published to the GC2 finalizer queue. */

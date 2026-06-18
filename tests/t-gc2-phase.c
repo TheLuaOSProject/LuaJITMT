@@ -72,6 +72,75 @@ static int finalizer_churn(lua_State *L)
   return 0;
 }
 
+static int unlink_root_object(global_State *g, GCobj *target)
+{
+  GCRef *p = &g->gc.root;
+  GCobj *o;
+  while ((o = gcref(*p)) != NULL) {
+    if (o == target) {
+      setgcrefr(*p, *lj_obj_gcwref(o));
+      lj_obj_setgcwnull(o);
+      return 1;
+    }
+    p = lj_obj_gcwref(o);
+  }
+  return 0;
+}
+
+static void relink_root_object(global_State *g, GCobj *o)
+{
+  lj_obj_setgcwr(o, g->gc.root);
+  setgcref(g->gc.root, o);
+}
+
+static void test_finalizer_consumer_ring(lua_State *L, global_State *g)
+{
+  GCobj *a, *b, *c;
+  uint64_t queued0, dequeued0, drained0;
+  lua_settop(L, 0);
+  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) == NULL);
+  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) == NULL);
+  assert(gcref(g->gc.mmudata) == NULL);
+  lua_newtable(L);
+  a = obj2gco(tabV(L->top - 1));
+  lua_newtable(L);
+  b = obj2gco(tabV(L->top - 1));
+  lua_newtable(L);
+  c = obj2gco(tabV(L->top - 1));
+  assert(unlink_root_object(g, a));
+  assert(unlink_root_object(g, b));
+  assert(unlink_root_object(g, c));
+
+  queued0 = la_load64_acq(&g->gc2.finalizer_queued);
+  dequeued0 = la_load64_acq(&g->gc2.finalizer_dequeued);
+  drained0 = la_load64_acq(&g->gc2.finalizer_mpsc_drained);
+  lj_gc2_finalizer_enqueue(g, a);
+  lj_gc2_finalizer_enqueue(g, b);
+  lj_gc2_finalizer_enqueue(g, c);
+  assert(la_load64_acq(&g->gc2.finalizer_queued) == queued0 + 3u);
+  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) != NULL);
+  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) == NULL);
+  assert(gcref(g->gc.mmudata) == NULL);
+
+  lj_gc2_finalizer_drain(g);
+  assert(la_load64_acq(&g->gc2.finalizer_mpsc_drained) == drained0 + 3u);
+  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) == NULL);
+  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) != NULL);
+  assert(gcref(g->gc.mmudata) == NULL);
+  assert(lj_gc2_finalizer_dequeue(g) == a);
+  assert(lj_gc2_finalizer_dequeue(g) == b);
+  assert(lj_gc2_finalizer_dequeue(g) == c);
+  assert(lj_gc2_finalizer_dequeue(g) == NULL);
+  assert(la_load64_acq(&g->gc2.finalizer_dequeued) == dequeued0 + 3u);
+  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) == NULL);
+  assert(gcref(g->gc.mmudata) == NULL);
+
+  relink_root_object(g, c);
+  relink_root_object(g, b);
+  relink_root_object(g, a);
+  lua_settop(L, 0);
+}
+
 static void test_phase_transition_guards(global_State *g, TGState *tg)
 {
   uint64_t mark_to_weak0, weak_to_sweep0;
@@ -331,6 +400,7 @@ int main(void)
   assert(g->gc2.n_threads == 1);
   assert_idle(g, tg);
 
+  test_finalizer_consumer_ring(L, g);
   test_phase_transition_guards(g, tg);
   test_incremental_worker_step(L, g, tg);
   test_incremental_fixpoint_round(L, g);

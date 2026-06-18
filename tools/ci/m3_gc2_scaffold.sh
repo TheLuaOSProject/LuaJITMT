@@ -228,6 +228,9 @@ for needle in \
   'lj_gc2_finalizer_queue_pending(global_State *g)' \
   'lj_gc2_finalizer_pending(global_State *g)' \
   'lj_gc2_finalizer_sweep_pending(global_State *g)' \
+  'void *finalizer_tail' \
+  'gc2_mark_finalizer_stack(global_State *g, GCobj *o)' \
+  'gc2_mark_finalizer_ring(global_State *g, GCobj *tail)' \
   'gc2_sweep_blocked_by_finalizer(global_State *g)' \
   'lj_gc2_sweep_owner_progress(global_State *g, TGState *tg' \
   'la_add64_rlx(&g->gc2.sweep_owner_arenas' \
