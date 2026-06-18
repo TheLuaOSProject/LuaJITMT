@@ -35,7 +35,7 @@ fi
 
 LUA_PATH="$ROOT/src/?.lua;$ROOT/src/jit/?.lua;;" \
   timeout 20s "$ROOT/src/luajit" -jdump=im -e \
-  'jit.opt.start("hotloop=1","hotexit=1"); local t={}; local mts={}; for i=1,80 do mts[i]={} end; for i=1,64 do setmetatable(t, mts[i]) end' \
+  'jit.opt.start("hotloop=1","hotexit=1"); jit.off(); local t={}; local mts={}; for i=1,80 do mts[i]={} end; jit.on(); for i=1,64 do setmetatable(t, mts[i]) end' \
   >"$TBAR_DUMP"
 
 if ! awk '
@@ -62,7 +62,7 @@ fi
 
 LUA_PATH="$ROOT/src/?.lua;$ROOT/src/jit/?.lua;;" \
   timeout 20s "$ROOT/src/luajit" -jdump=im -e \
-  'jit.opt.start("hotloop=1","hotexit=1"); local uv; local vals={}; for i=1,80 do vals[i]={} end; local function f() for i=1,64 do uv=vals[i] end end; f(); assert(uv==vals[64])' \
+  'jit.opt.start("hotloop=1","hotexit=1"); jit.off(); local uv; local vals={}; for i=1,80 do vals[i]={} end; jit.on(); local function f() for i=1,64 do uv=vals[i] end end; f(); assert(uv==vals[64])' \
   >"$OBAR_DUMP"
 
 if ! awk '

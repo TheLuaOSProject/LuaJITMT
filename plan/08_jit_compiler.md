@@ -277,11 +277,12 @@ handler — sized LJ_MAX_EXITSTUBGR-compatible; see lj_vmstruct notes.
   for `XLOAD` forwarding/CSE and `XSTORE` DSE; this advances the current XBAR
   surface. The helper-backed table-store bridge also makes `ASTORE`/`HSTORE`
   DSE stop at `IR_XPOLL`, so a trace poll cannot be crossed while deciding that
-  table stores are redundant. A narrow M6 bridge records existing non-nil
+  table stores are redundant. A narrow M6 bridge records non-shape-changing
   table-slot stores on Linux/x64 and lowers them through release-store
   hash/array helpers with the AREF/HREF-derived table parent. The helpers run
   the parent-aware value barrier, and existing weak table stores also call the
-  P_WEAK weak-write bridge. Shape-changing nil/new stores remain NYI until the
+  P_WEAK weak-write bridge. Previous-nil in-bounds array slots are covered;
+  hash nil slots, new keys, and out-of-bounds array growth remain NYI until the
   full table-write trace protocol below lands.
 - **Allocation on trace**: TNEW/TDUP/CNEW/SNEW already call into C or use
   inline alloc IR; route them to the TG bump (mirror of 07 §7.5) — the IR
@@ -439,14 +440,15 @@ scoped-flush target.
    design, but it prevents the current shared-array trace from combining an old
    array pointer with a newer size check. Existing non-nil table-slot stores are
    now recorded on Linux/x64 for shared tables as well as PHI/upvalue/escaped
-   table references, then lowered through
+   table references, plus previous-nil in-bounds array slots, then lowered through
    `lj_tab_storetv_forjit_array(parent,dst,src)` or
    `lj_tab_storetv_forjit_hash(parent,dst,src)`. The helpers release-publish
    the TValue and run the GC2 parent-aware value barrier, and the weak-aware
    helper path marks weak keys/values during `P_WEAK`. This is still an interim
-   bridge rather than the final generated-store protocol. New-key insertion and
-   nil-slot stores continue to raise the normal NYI-bytecode trace error before
-   `HSTORE` or `ASTORE` is emitted. The final generation-aware trace
+   bridge rather than the final generated-store protocol. New-key insertion,
+   hash nil slots, and out-of-bounds array growth continue to raise the normal
+   NYI-bytecode trace error before `HSTORE` is emitted for the unresolved slot.
+   The final generation-aware trace
    write/barrier protocol remains required before raw generated table stores can
    replace this helper bridge.
 2. **TDUP/TNEW colo**: colo removed (06 §6.2) — recorder paths that

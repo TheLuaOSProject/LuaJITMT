@@ -1,5 +1,5 @@
 #!/bin/sh
-# Guard helper-backed table stores while nil/new stores stay NYI.
+# Guard helper-backed table stores while shape-changing stores stay NYI.
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
@@ -48,23 +48,28 @@ assert(traces() == 0, "new hash table store unexpectedly traced")
 
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
-local an = {}
-for i = 1, 200 do
-  an[i] = i
+local function array_insert(n)
+  local out = { 0 }
+  for i = 1, n do
+    local an = {}
+    an[1] = i
+    out = an
+  end
+  return out
 end
-assert(an[200] == 200)
-assert(traces() == 0, "nil array table store unexpectedly traced")
+local an = array_insert(80)
+assert(an[1] == 80)
+assert(traces() == 0, "fresh array slot table store unexpectedly traced")
 '
 
 if ! awk '
   /} else {  \/\* Indexed store\. \*\// {
-    in_store = 1; saw_nil_gate = saw_hash_nyi = saw_array_nyi = 0
+    in_store = 1; saw_nil_gate = saw_hash_nyi = 0
   }
-  in_store && /if \(tvisnil\(oldv\)\)/ { saw_nil_gate = 1 }
+  in_store && /if \(tvisnil\(oldv\)/ { saw_nil_gate = 1 }
   in_store && /M6: no new\/nil HSTORE bridge/ { saw_hash_nyi = 1 }
-  in_store && /M6: no nil ASTORE bridge/ { saw_array_nyi = 1 }
   in_store && /Convert int to number before storing/ {
-    if (!saw_nil_gate || !saw_hash_nyi || !saw_array_nyi)
+    if (!saw_nil_gate || !saw_hash_nyi)
       bad = 1
     checked = 1
     in_store = 0
@@ -76,10 +81,15 @@ if ! awk '
 fi
 
 if rg -n 'M6: no new/nil HSTORE bridge' "$ROOT/src/lj_record.c" >/dev/null &&
-   rg -n 'M6: no nil ASTORE bridge' "$ROOT/src/lj_record.c" >/dev/null; then
+   rg -n 'M6: previous-nil in-bounds ASTORE uses the helper bridge' "$ROOT/src/lj_record.c" >/dev/null; then
   :
 else
   echo "guardrail: missing table-store NYI marker" >&2
+  exit 1
+fi
+
+if rg -n 'M6: no nil ASTORE bridge' "$ROOT/src/lj_record.c" >/dev/null; then
+  echo "guardrail: stale nil-ASTORE NYI marker remains" >&2
   exit 1
 fi
 

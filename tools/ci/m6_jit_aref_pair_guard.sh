@@ -23,8 +23,10 @@ LUA_PATH="$ROOT/src/?.lua;$ROOT/src/jit/?.lua;;" \
   timeout 20s "$ROOT/src/luajit" -jdump=ir -e '
     jit.flush()
     jit.opt.start("hotloop=1", "hotexit=1")
+    jit.off()
     local t = {}
     for i = 1, 128 do t[i] = i end
+    jit.on()
     local s = 0
     for i = 1, 80 do
       local k = (i % 128) + 1
@@ -57,8 +59,10 @@ LUA_PATH="$ROOT/src/?.lua;$ROOT/src/jit/?.lua;;" \
     local util = require("jit.util")
     jit.flush()
     jit.opt.start("hotloop=1", "hotexit=1")
+    jit.off()
     local t = {}
     for i = 1, 32 do t[i] = i end
+    jit.on()
     local idx = 1
     local function read(n)
       local s = 0
@@ -69,7 +73,9 @@ LUA_PATH="$ROOT/src/?.lua;$ROOT/src/jit/?.lua;;" \
     end
     assert(read(80) == 80)
     assert(util.traceinfo(1), "shared array read did not trace")
+    jit.off()
     for i = 33, 128 do t[i] = i end
+    jit.on()
     idx = 64
     assert(read(80) == 5120)
     assert(util.traceinfo(1), "trace missing after array grow")

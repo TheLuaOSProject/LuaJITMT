@@ -20,7 +20,7 @@ for needle in \
   '#if defined(__linux__) && LJ_TARGET_X64' \
   'IRRef lim = poll_alias_limit(J, xref);' \
   'M6: no new/nil HSTORE bridge.' \
-  'M6: no nil ASTORE bridge.'
+  'M6: previous-nil in-bounds ASTORE uses the helper bridge.'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_tab.c" "$ROOT/src/lj_tab.h" \
       "$ROOT/src/lj_ircall.h" "$ROOT/src/lj_asm_x86.h" \
@@ -51,6 +51,16 @@ for i = 1, 200 do
 end
 assert(a[1] == 200)
 assert(util.traceinfo(1), "shared existing array table store did not trace")
+
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local ahole = { 0, nil, 0 }
+for i = 1, 200 do
+  ahole[2] = i
+  ahole[2] = nil
+end
+assert(ahole[2] == nil)
+assert(util.traceinfo(1), "previous-nil array table store did not trace")
 
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
@@ -166,7 +176,8 @@ assert(util.traceinfo(1), "nested escaped existing table store did not trace")
 
 HASH_IR=$(mktemp "${TMPDIR:-/tmp}/lj-m6-hstore-ir.XXXXXX")
 ARRAY_IR=$(mktemp "${TMPDIR:-/tmp}/lj-m6-astore-ir.XXXXXX")
-trap 'rm -f "$HASH_IR" "$ARRAY_IR"' EXIT HUP INT TERM
+OLD_NIL_ARRAY_IR=$(mktemp "${TMPDIR:-/tmp}/lj-m6-oldnil-astore-ir.XXXXXX")
+trap 'rm -f "$HASH_IR" "$ARRAY_IR" "$OLD_NIL_ARRAY_IR"' EXIT HUP INT TERM
 
 LUA_PATH="$ROOT/src/?.lua;$ROOT/src/jit/?.lua;;" \
   "$ROOT/src/luajit" -jdump=ir -e '
@@ -220,9 +231,30 @@ if ! grep -q 'TDUP' "$ARRAY_IR" || ! grep -q 'ASTORE' "$ARRAY_IR" ||
   exit 1
 fi
 
+LUA_PATH="$ROOT/src/?.lua;$ROOT/src/jit/?.lua;;" \
+  "$ROOT/src/luajit" -jdump=ir -e '
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local util = require("jit.util")
+local a = { 0, nil, 0 }
+for i = 1, 80 do
+  a[2] = i
+  a[2] = nil
+end
+assert(a[2] == nil)
+assert(util.traceinfo(1), "previous-nil array store did not trace")
+' > "$OLD_NIL_ARRAY_IR"
+
+if ! grep -q 'ASTORE' "$OLD_NIL_ARRAY_IR" ||
+   ! grep -q 'XPOLL' "$OLD_NIL_ARRAY_IR"; then
+  echo "guardrail: previous-nil array store must record ASTORE with XPOLL" >&2
+  cat "$OLD_NIL_ARRAY_IR" >&2
+  exit 1
+fi
+
 SHARED_HASH_IR=$(mktemp "${TMPDIR:-/tmp}/lj-m6-shared-hstore-ir.XXXXXX")
 SHARED_ARRAY_IR=$(mktemp "${TMPDIR:-/tmp}/lj-m6-shared-astore-ir.XXXXXX")
-trap 'rm -f "$HASH_IR" "$ARRAY_IR" "$SHARED_HASH_IR" "$SHARED_ARRAY_IR"' EXIT HUP INT TERM
+trap 'rm -f "$HASH_IR" "$ARRAY_IR" "$OLD_NIL_ARRAY_IR" "$SHARED_HASH_IR" "$SHARED_ARRAY_IR"' EXIT HUP INT TERM
 
 LUA_PATH="$ROOT/src/?.lua;$ROOT/src/jit/?.lua;;" \
   "$ROOT/src/luajit" -jdump=ir -e '

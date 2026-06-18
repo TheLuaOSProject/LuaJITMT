@@ -1682,12 +1682,9 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
     GCtab *mt = tabref_acq(tabV(&ix->tabv)->metatable);
     int keybarrier = tref_isgcv(ix->key) && !tref_isnil(ix->val);
 #if defined(__linux__) && LJ_TARGET_X64
-    if (tvisnil(oldv)) {
-      if (loadop == IR_HLOAD)
-	lj_trace_err_info(J, LJ_TRERR_NYIBC);  /* M6: no new/nil HSTORE bridge. */
-      if (loadop == IR_ALOAD)
-	lj_trace_err_info(J, LJ_TRERR_NYIBC);  /* M6: no nil ASTORE bridge. */
-    }
+    if (tvisnil(oldv) && loadop == IR_HLOAD)
+      lj_trace_err_info(J, LJ_TRERR_NYIBC);  /* M6: no new/nil HSTORE bridge. */
+    /* M6: previous-nil in-bounds ASTORE uses the helper bridge. */
 #else
     if (loadop == IR_HLOAD)
       lj_trace_err_info(J, LJ_TRERR_NYIBC);  /* M5: no legacy hash HSTORE. */
