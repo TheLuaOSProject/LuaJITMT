@@ -85,6 +85,10 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.major_cycle_starts, 0);
   la_store64_rlx(&g->gc2.minor_cycle_requests, 0);
   la_store32_rlx(&g->gc2.cycle_minor_requested, 0);
+  la_store32_rlx(&g->gc2.cycle_sweep_minor, 0);
+  la_store32_rlx(&g->gc2.minor_sweep_enabled, 0);
+  la_store64_rlx(&g->gc2.minor_sweep_deferred, 0);
+  la_store64_rlx(&g->gc2.minor_sweep_arenas, 0);
   la_store32_rlx(&g->gc2.force_major, 0);
   la_store64_rlx(&g->gc2.remembered_barriers, 0);
   la_store64_rlx(&g->gc2.remembered_pushed, 0);
@@ -541,12 +545,17 @@ void lj_gc2_legacy_mark_begin(global_State *g)
 {
   TGState *tg = G2TG(g);
   uint32_t leader;
-  uint32_t forced_major, minor_requested, drained;
+  uint32_t forced_major, minor_requested, sweep_minor, drained;
   forced_major = la_xchg32_acqrel(&g->gc2.force_major, 0);
   minor_requested = !forced_major && la_load32_acq(&g->gc2.generational) != 0;
+  sweep_minor = minor_requested &&
+    la_load32_acq(&g->gc2.minor_sweep_enabled) != 0;
   la_store32_rel(&g->gc2.cycle_minor_requested, minor_requested);
+  la_store32_rel(&g->gc2.cycle_sweep_minor, sweep_minor);
   if (minor_requested)
     la_add64_rlx(&g->gc2.minor_cycle_requests, 1);
+  if (minor_requested && !sweep_minor)
+    la_add64_rlx(&g->gc2.minor_sweep_deferred, 1);
   la_add64_rlx(&g->gc2.major_cycle_starts, 1);
   /* Publish MARK before clearing the request token, so late allocators stop. */
   g->gc2.phase = LJ_GC2_MARK;
@@ -878,6 +887,7 @@ uint32_t lj_gc2_sweep_owner_progress(global_State *g, TGState *tg,
 {
   uint32_t n = 0, epoch;
   uint64_t live = 0;
+  int minor;
   if (!g || !tg || limit == 0 || !(tg->tg_flags & TGF_ARENA_INTERNAL))
     return 0;
   if (la_load32_acq(&g->gc2.phase) != LJ_GC2_SWEEP)
@@ -885,10 +895,11 @@ uint32_t lj_gc2_sweep_owner_progress(global_State *g, TGState *tg,
   if (gc2_sweep_blocked_by_finalizer(g))
     return 0;
   epoch = g->gc2.cycle;
+  minor = la_load32_acq(&g->gc2.cycle_sweep_minor) != 0;
   tg->alloc.sweep_epoch = epoch;
   while (n < limit) {
     GCArena *a = lj_arena_sweep_one(&tg->alloc, LJ_ARENAK_TRAVERSABLE,
-				    epoch, 0);
+				    epoch, minor);
     if (!a)
       break;
     live += a->hdr.live_cells;
@@ -898,6 +909,8 @@ uint32_t lj_gc2_sweep_owner_progress(global_State *g, TGState *tg,
     la_add64_rlx(&g->gc2.sweep_owner_runs, 1);
     la_add64_rlx(&g->gc2.sweep_owner_arenas, n);
     la_add64_rlx(&g->gc2.sweep_owner_live_cells, live);
+    if (minor)
+      la_add64_rlx(&g->gc2.minor_sweep_arenas, n);
   }
   return n;
 }

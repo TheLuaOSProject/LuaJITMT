@@ -25,6 +25,7 @@ int main(void)
   uint64_t epoch0;
   uint64_t cycle_requests0, cycle_starts0;
   uint64_t major_starts0, minor_requests0;
+  uint64_t minor_deferred0;
   uint64_t remembered_drained0;
   uint64_t assist_runs0, assist_grey0, assist_ssb0;
   uint64_t assist_weak0;
@@ -44,6 +45,10 @@ int main(void)
   assert(la_load64_acq(&g->gc2.major_cycle_starts) == 0);
   assert(la_load64_acq(&g->gc2.minor_cycle_requests) == 0);
   assert(la_load32_acq(&g->gc2.cycle_minor_requested) == 0);
+  assert(la_load32_acq(&g->gc2.cycle_sweep_minor) == 0);
+  assert(la_load32_acq(&g->gc2.minor_sweep_enabled) == 0);
+  assert(la_load64_acq(&g->gc2.minor_sweep_deferred) == 0);
+  assert(la_load64_acq(&g->gc2.minor_sweep_arenas) == 0);
   assert(la_load32_acq(&g->gc2.force_major) == 0);
   assert(la_load64_acq(&g->gc2.remembered_drained) == 0);
   assert(la_load32_acq(&g->gc2.assist_shift) ==
@@ -126,11 +131,15 @@ int main(void)
   la_store32_rel(&g->gc2.generational, 1);
   major_starts0 = la_load64_acq(&g->gc2.major_cycle_starts);
   minor_requests0 = la_load64_acq(&g->gc2.minor_cycle_requests);
+  minor_deferred0 = la_load64_acq(&g->gc2.minor_sweep_deferred);
   lj_gc2_legacy_mark_begin(g);
   assert(la_load64_acq(&g->gc2.major_cycle_starts) == major_starts0 + 1u);
   assert(la_load64_acq(&g->gc2.minor_cycle_requests) ==
 	 minor_requests0 + 1u);
   assert(la_load32_acq(&g->gc2.cycle_minor_requested) == 1);
+  assert(la_load32_acq(&g->gc2.cycle_sweep_minor) == 0);
+  assert(la_load64_acq(&g->gc2.minor_sweep_deferred) ==
+	 minor_deferred0 + 1u);
   lj_gc2_legacy_cycle_end(g);
 
   major_starts0 = la_load64_acq(&g->gc2.major_cycle_starts);

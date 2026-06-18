@@ -131,6 +131,68 @@ static void test_worker_owned_sweep_direct(void)
   lua_close(L);
 }
 
+static void test_minor_sweep_identity_direct(void)
+{
+  lua_State *L = luaL_newstate();
+  global_State *g;
+  TGState *tg, extra_tg;
+  uint64_t minor_arenas0;
+  uint32_t sweep_cycle;
+  void *dead, *live;
+
+  assert(L != NULL);
+  g = G(L);
+  tg = G2TG(g);
+  assert(tg != NULL);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+
+  lj_tg_init_thread(g, &extra_tg, NULL, 1);
+  extra_tg.tid = tg->tid + 3500u;
+  extra_tg.alloc.owner_tid = extra_tg.tid;
+  extra_tg.cur_L = L;
+  lj_native_enter(&extra_tg);
+  lj_tg_attach(g, &extra_tg);
+  assert(g->gc2.n_threads == 2);
+
+  extra_tg.alloc.alloc_black = 0;
+  dead = lj_arena_alloc(&extra_tg.alloc, &extra_tg.prng, 64,
+			LJ_AF_TRAVERSABLE);
+  extra_tg.alloc.alloc_black = 1;
+  live = lj_arena_alloc(&extra_tg.alloc, &extra_tg.prng, 64,
+			LJ_AF_TRAVERSABLE);
+  extra_tg.alloc.alloc_black = 0;
+  assert(dead != NULL);
+  assert(live != NULL);
+  assert(lj_arena_of(dead) == lj_arena_of(live));
+  assert(ptr_state(dead) == 2);
+  assert(ptr_state(live) == 3);
+
+  g->gc2.cycle++;
+  sweep_cycle = g->gc2.cycle;
+  g->gc2.phase = LJ_GC2_SWEEP;
+  la_store32_rel(&g->gc2.cycle_minor_requested, 1);
+  la_store32_rel(&g->gc2.minor_sweep_enabled, 1);
+  la_store32_rel(&g->gc2.cycle_sweep_minor, 1);
+  lj_arena_alloc_prepare_sweep_kind(&extra_tg.alloc, LJ_ARENAK_TRAVERSABLE);
+  assert(extra_tg.alloc.needsweep[LJ_ARENAK_TRAVERSABLE] != NULL);
+  minor_arenas0 = la_load64_acq(&g->gc2.minor_sweep_arenas);
+  assert(lj_gc2_sweep_owner_progress(g, &extra_tg, 1) == 1u);
+  assert(la_load64_acq(&g->gc2.minor_sweep_arenas) == minor_arenas0 + 1u);
+  assert(ptr_state(dead) == 1);
+  assert(ptr_state(live) == 3);
+  assert(lj_arena_of(live)->hdr.sweep_epoch == sweep_cycle);
+
+  lj_gc2_legacy_cycle_end(g);
+  la_store32_rel(&g->gc2.cycle_minor_requested, 0);
+  la_store32_rel(&g->gc2.cycle_sweep_minor, 0);
+  la_store32_rel(&g->gc2.minor_sweep_enabled, 0);
+  lj_tg_detach(g, &extra_tg);
+  assert(g->gc2.n_threads == 1);
+  assert(lj_tg_reclaim_dead(g) == 1u);
+  lj_tg_fini_thread(g, &extra_tg);
+  lua_close(L);
+}
+
 static void test_boundary_lazy_sweep(void)
 {
   lua_State *L = luaL_newstate();
@@ -687,6 +749,7 @@ int main(void)
   lua_close(L);
   test_sweep_to_idle_worker_active();
   test_worker_owned_sweep_direct();
+  test_minor_sweep_identity_direct();
   test_boundary_lazy_sweep();
   test_boundary_lazy_sweep_extra_tg();
   printf("t-arena-gcsweep OK: traversable runtime sweep bridge verified\n");

@@ -14,9 +14,13 @@ for needle in \
   'LUA_GCINCREMENTAL' \
   'uint32_t generational' \
   'uint32_t cycle_minor_requested' \
+  'uint32_t cycle_sweep_minor' \
+  'uint32_t minor_sweep_enabled' \
   'uint32_t force_major' \
   'uint64_t major_cycle_starts' \
   'uint64_t minor_cycle_requests' \
+  'uint64_t minor_sweep_deferred' \
+  'uint64_t minor_sweep_arenas' \
   'la_store32_rlx(&g->gc2.generational, 0)' \
   'uint64_t remembered_barriers' \
   'uint64_t remembered_pushed' \
@@ -29,7 +33,9 @@ for needle in \
   'gc2_remember_obj(global_State *g, GCobj *o)' \
   'gc2_flush_and_drain_ssb(global_State *g)' \
   'gc_stats_setint(L, t, "generational"' \
+  'gc_stats_setint(L, t, "cycle_sweep_minor"' \
   'minor_cycle_requests' \
+  'minor_sweep_deferred' \
   'remembered_barriers' \
   'remembered_drained' \
   'collectgarbage("generational")' \

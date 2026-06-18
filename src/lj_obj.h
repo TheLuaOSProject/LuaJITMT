@@ -855,6 +855,10 @@ typedef struct GC2State {
   uint64_t major_cycle_starts;  /* Actual major GC2 mark begins. */
   uint64_t minor_cycle_requests;  /* Generational minor requests seen. */
   uint32_t cycle_minor_requested;  /* Current cycle requested minor mode. */
+  uint32_t cycle_sweep_minor;  /* Current cycle uses minor sweep identity. */
+  uint32_t minor_sweep_enabled;  /* Internal gate for minor sweep identity. */
+  uint64_t minor_sweep_deferred;  /* Minor requests kept on major sweep. */
+  uint64_t minor_sweep_arenas;  /* Arenas swept with minor identity. */
   uint32_t force_major;  /* One-shot full-GC major-cycle override. */
   uint64_t remembered_barriers;  /* Idle generational barriers observed. */
   uint64_t remembered_pushed;  /* Idle remembered entries queued. */

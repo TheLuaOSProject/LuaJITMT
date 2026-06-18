@@ -22,6 +22,10 @@ for needle in \
   'la_loadptr_acq((void *const *)&g->gc2.tg_list)' \
   'lj_gc2_worker_drain_progress(g, LJ_GC2_SWEEP_BATCH)' \
   'lj_gc2_sweep_to_idle(g)' \
+  'minor = la_load32_acq(&g->gc2.cycle_sweep_minor) != 0' \
+  'la_add64_rlx(&g->gc2.minor_sweep_arenas, n)' \
+  'test_minor_sweep_identity_direct' \
+  'assert(ptr_state(live) == 3)' \
   '05 section 5.6.3 worker-owned sweep bridge' \
   'assert(lj_gc2_worker_drain(g, 1) == 1u)' \
   'assert(lj_gc2_worker_drain(g, 1) == 0)' \
