@@ -942,6 +942,12 @@ typedef struct GC2State {
   uint64_t finreg_cdata_pweak_claimed;  /* Cdata finalizers claimed in P_WEAK. */
   uint64_t finreg_cdata_preclaim_overflow;  /* Claimed queue full fallbacks. */
   uint64_t finreg_cdata_preclaim_dispatched;  /* Claimed callbacks consumed. */
+  uint64_t finreg_cdata_order_seen;  /* Ordered FINREG nodes inspected. */
+  uint64_t finreg_cdata_order_claimed;  /* Ordered FINREG slots claimed. */
+  uint64_t finreg_cdata_order_unlinked;  /* Ordered cdata unlinked from root. */
+  uint64_t finreg_cdata_order_queued;  /* Ordered cdata queued from FINREG. */
+  uint64_t finreg_cdata_order_tombstones;  /* Dead ordered FINREG records. */
+  uint64_t finreg_cdata_order_fallbacks;  /* Ordered scan fallback cases. */
   uint64_t finreg_udata_sets;  /* Userdata finalizer registrations mirrored. */
   uint64_t finreg_udata_clears;  /* Userdata finalizer clears mirrored. */
   uint64_t finreg_udata_queued;  /* Userdata finalizers queued by legacy. */

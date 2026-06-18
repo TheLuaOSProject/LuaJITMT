@@ -113,6 +113,13 @@ for needle in \
   'gc_queue_cdata_finalizers_pweak(lua_State *L, global_State *g)' \
   'gc_preclaim_cdata_finalizers_pweak_finreg(lua_State *L,' \
   'FINREG P_WEAK cdata scan' \
+  'typedef struct FinRegOrderNode' \
+  'fin_order_head' \
+  'FINREG ordered P_WEAK cdata scan' \
+  'root unlink after ordered FINREG claim' \
+  'queue claimed cdata in FINREG order' \
+  'uint64_t finreg_cdata_order_queued' \
+  'uint64_t finreg_cdata_order_fallbacks' \
   'gc_claim_cdata_finalizer_pweak(lua_State *L, global_State *g,' \
   'gc_marktv(g, &fin);' \
   'lj_gc2_finreg_cdata_preclaim(L, g, o, &fin)' \
@@ -128,6 +135,12 @@ for needle in \
   'finreg_cdata_pweak_claimed) == claimed1 + 1u' \
   'finreg_cdata_pweak_queued) == pweak2 + 3u' \
   'finreg_cdata_pweak_claimed) == claimed2 + 3u' \
+  'finreg_cdata_order_queued) == orderq2 + 3u' \
+  'finreg_cdata_order_fallbacks) ==' \
+  'gc2_regorder_fin_t' \
+  'gc2_cdata_order[1] == 1' \
+  'gc2_rereg_fin_t' \
+  'finreg_cdata_order_queued) == orderq2 + 2u' \
   'gc2_cdata_order[0] == 3' \
   'gc2_cdata_order[1] == 2' \
   'gc2_cdata_order[2] == 1' \

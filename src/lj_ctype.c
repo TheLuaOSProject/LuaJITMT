@@ -202,6 +202,39 @@ static FinRegGen *ctype_fin_gen_new_l(lua_State *L, GCtab *t)
   return gen;
 }
 
+FinRegOrderNode *lj_ctype_fin_order_new(lua_State *L)
+{
+  FinRegOrderNode *ord = lj_mem_newt(L, sizeof(FinRegOrderNode),
+				     FinRegOrderNode);
+  ord->tab = NULL;
+  ord->slot = NULL;
+  ord->next = NULL;
+  return ord;
+}
+
+void lj_ctype_fin_order_free(global_State *g, FinRegOrderNode *ord)
+{
+  if (ord)
+    lj_mem_freet(g, ord);
+}
+
+void lj_ctype_fin_order_publish(CTState *cts, FinRegOrderNode *ord,
+				GCtab *t, TValue *slot)
+{
+  FinRegOrderNode *head;
+  if (!cts || !ord || !t || !slot)
+    return;
+  ord->tab = t;
+  ord->slot = slot;
+  do {
+    head = (FinRegOrderNode *)la_loadptr_acq(
+      (void *const *)&cts->fin_order_head);
+    ord->next = head;
+  } while (!la_casptr((void **)&cts->fin_order_head, (void **)&head, ord,
+		      LA_ACQ_REL, LA_ACQ));
+  /* 11.4 FINREG ordered registration publish. */
+}
+
 GCtab *lj_ctype_fin_head(CTState *cts)
 {
   FinRegGen *gen = (FinRegGen *)la_loadptr_acq(
@@ -317,12 +350,27 @@ void lj_ctype_fin_mark(global_State *g, void (*mark)(global_State *, GCobj *),
     if (t)
       mark(g, obj2gco(t));
   }
+  {
+    FinRegOrderNode *ord;
+    for (ord = (FinRegOrderNode *)la_loadptr_acq(
+	   (void *const *)&cts->fin_order_head);
+	 ord != NULL;
+	 ord = (FinRegOrderNode *)la_loadptr_acq((void *const *)&ord->next))
+      markmem(g, ord);
+  }
 }
 
 void lj_ctype_fin_freetabs(global_State *g, CTState *cts)
 {
   FinRegGen *gen = (FinRegGen *)la_xchgptr_acqrel((void **)&cts->fin_head,
 						  NULL);
+  FinRegOrderNode *ord = (FinRegOrderNode *)la_xchgptr_acqrel(
+    (void **)&cts->fin_order_head, NULL);
+  while (ord) {
+    FinRegOrderNode *next = ord->next;
+    lj_mem_freet(g, ord);
+    ord = next;
+  }
   while (gen) {
     FinRegGen *next = gen->next;
     lj_mem_freet(g, gen);

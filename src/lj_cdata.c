@@ -131,9 +131,9 @@ void lj_cdata_fin_storenil(lua_State *L, TValue *tv)
   copyTVrel(L, tv, &nilv);
 }
 
-static void cdata_fin_store(lua_State *L, global_State *g, GCtab *t,
-			    GCcdata *cd, TValue *tv, TValue *val,
-			    int enabled)
+static void cdata_fin_store(lua_State *L, global_State *g, CTState *cts,
+			    GCtab *t, GCcdata *cd, TValue *tv, TValue *val,
+			    int enabled, FinRegOrderNode **ordp)
 {
   if (enabled) {
     TValue key;
@@ -142,6 +142,10 @@ static void cdata_fin_store(lua_State *L, global_State *g, GCtab *t,
     lj_gc2_barrier_weak_key(L, t, &key);
     lj_obj_addgcflags_atomic(obj2gco(cd), LJ_GC_CDATA_FIN);
     lj_gc2_finreg_cdata_set(g, obj2gco(cd), 1);
+    if (ordp && *ordp) {
+      lj_ctype_fin_order_publish(cts, *ordp, t, tv);
+      *ordp = NULL;
+    }
   } else {
     lj_cdata_fin_storenil(L, tv);
     lj_obj_cleargcflags_atomic(obj2gco(cd), LJ_GC_CDATA_FIN);
@@ -157,6 +161,7 @@ void lj_cdata_setfin(lua_State *L, GCcdata *cd, GCobj *obj, uint32_t it)
   TValue *anchor = L->top;
   GCtab *t;
   TValue *tv, key, val, old;
+  FinRegOrderNode *ord = NULL;
   int enabled = (it != LJ_TNIL);
   if (LJ_UNLIKELY(cts == NULL))
     return;
@@ -169,6 +174,7 @@ void lj_cdata_setfin(lua_State *L, GCcdata *cd, GCobj *obj, uint32_t it)
       L->top = anchor + 2;
     }
     lj_gc_barrierroot(L, &val);
+    ord = lj_ctype_fin_order_new(L);
   } else if (LJ_LIKELY(anchor + 1 < tvref(L->maxstack))) {
     copyTVrel(L, anchor, &key);
     L->top = anchor + 1;
@@ -194,7 +200,7 @@ void lj_cdata_setfin(lua_State *L, GCcdata *cd, GCobj *obj, uint32_t it)
 	  lj_gc2_finreg_cdata_set(g, obj2gco(cd), 0);
 	  goto done;
 	}
-	cdata_fin_store(L, g, t, cd, tv, &val, enabled);
+	cdata_fin_store(L, g, cts, t, cd, tv, &val, enabled, &ord);
 	goto done;
       case -1:
 	continue;  /* Racing insert published the key; claim existing slot. */
@@ -209,7 +215,7 @@ void lj_cdata_setfin(lua_State *L, GCcdata *cd, GCobj *obj, uint32_t it)
 	  lj_gc2_finreg_cdata_set(g, obj2gco(cd), 0);
 	  goto done;
 	}
-	cdata_fin_store(L, g, t, cd, tv, &val, enabled);
+	cdata_fin_store(L, g, cts, t, cd, tv, &val, enabled, &ord);
 	goto done;
       case -1:
 	continue;  /* Racing collision insert published the key. */
@@ -224,7 +230,7 @@ void lj_cdata_setfin(lua_State *L, GCcdata *cd, GCobj *obj, uint32_t it)
 	  lj_gc2_finreg_cdata_set(g, obj2gco(cd), 0);
 	  goto done;
 	}
-	cdata_fin_store(L, g, t, cd, tv, &val, enabled);
+	cdata_fin_store(L, g, cts, t, cd, tv, &val, enabled, &ord);
 	goto done;
       case -1:
 	continue;  /* Racing generation already has this cdata key. */
@@ -239,10 +245,12 @@ void lj_cdata_setfin(lua_State *L, GCcdata *cd, GCobj *obj, uint32_t it)
       lj_gc2_finreg_cdata_set(g, obj2gco(cd), 0);
       goto done;
     }
-    cdata_fin_store(L, g, t, cd, tv, &val, enabled);
+    cdata_fin_store(L, g, cts, t, cd, tv, &val, enabled, &ord);
     goto done;
   }
 done:
+  if (ord)
+    lj_ctype_fin_order_free(g, ord);
   L->top = anchor;
 }
 

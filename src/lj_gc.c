@@ -1394,6 +1394,107 @@ static int gc_claim_cdata_finalizer_pweak(lua_State *L, global_State *g,
   return gc_preclaim_cdata_finalizer_pweak_slot(L, g, o, slot);
 }
 
+static int gc_finreg_preclaim_has_capacity(global_State *g)
+{
+  return g->gc2.finreg_cdata_preclaim_obj &&
+	 g->gc2.finreg_cdata_preclaim_fin &&
+	 g->gc2.finreg_cdata_preclaim_count <
+	   g->gc2.finreg_cdata_preclaim_capacity;
+}
+
+static int gc_unlink_root_object(global_State *g, GCobj *target)
+{
+  GCRef *p = &g->gc.root;
+  GCobj *o;
+  while ((o = gcref(*p)) != NULL) {
+    if (o == target) {
+      setgcrefr(*p, *lj_obj_gcwref(o));
+      return 1;  /* root unlink after ordered FINREG claim. */
+    }
+    p = lj_obj_gcwref(o);
+  }
+  return 0;
+}
+
+static size_t gc_queue_cdata_finalizers_pweak_ordered(lua_State *L,
+						      global_State *g,
+						      size_t *queuedp)
+{
+  CTState *cts = ctype_ctsG(g);
+  FinRegOrderNode *ord;
+  size_t preclaimed = 0, queued = 0;
+  if (cts == NULL)
+    return 0;
+  for (ord = (FinRegOrderNode *)la_loadptr_acq(
+	 (void *const *)&cts->fin_order_head);
+       ord != NULL;
+       ord = (FinRegOrderNode *)la_loadptr_acq((void *const *)&ord->next)) {
+    GCtab *t = (GCtab *)la_loadptr_acq((void *const *)&ord->tab);
+    TValue *slot = (TValue *)la_loadptr_acq((void *const *)&ord->slot);
+    Node *node = (Node *)slot;
+    TValue fin, key;
+    GCobj *o;
+    la_add64_rlx(&g->gc2.finreg_cdata_order_seen, 1);
+    if (!t || !slot || !gcref_acq(t->metatable)) {
+      la_add64_rlx(&g->gc2.finreg_cdata_order_tombstones, 1);
+      continue;
+    }
+    lj_tv_load_acq(&fin, slot);
+    while (lj_cdata_fin_isclaim(&fin)) {
+      la_cpu_pause();
+      lj_tv_load_acq(&fin, slot);
+    }
+    if (tvisnil(&fin)) {
+      la_add64_rlx(&g->gc2.finreg_cdata_order_tombstones, 1);
+      continue;
+    }
+    lj_tv_load_acq(&key, &node->key);
+    if (!tviscdata(&key)) {
+      la_add64_rlx(&g->gc2.finreg_cdata_order_tombstones, 1);
+      continue;
+    }
+    o = gcV(&key);
+    if (!gc_cdata_finalizer_candidate_pweak(o)) {
+      la_add64_rlx(&g->gc2.finreg_cdata_order_tombstones, 1);
+      continue;
+    }
+    if (!lj_cdata_fin_claim_func(slot, &fin)) {
+      la_add64_rlx(&g->gc2.finreg_cdata_order_tombstones, 1);
+      continue;
+    }
+    la_add64_rlx(&g->gc2.finreg_cdata_order_claimed, 1);
+    if (!gc_finreg_preclaim_has_capacity(g)) {
+      copyTVrel(L, slot, &fin);
+      la_add64_rlx(&g->gc2.finreg_cdata_order_fallbacks, 1);
+      continue;
+    }
+    if (!gc_unlink_root_object(g, o)) {
+      copyTVrel(L, slot, &fin);
+      la_add64_rlx(&g->gc2.finreg_cdata_order_fallbacks, 1);
+      continue;
+    }
+    la_add64_rlx(&g->gc2.finreg_cdata_order_unlinked, 1);
+    if (!lj_gc2_finreg_cdata_preclaim(L, g, o, &fin)) {
+      lj_obj_setgcwr(o, g->gc.root);
+      setgcref(g->gc.root, o);
+      copyTVrel(L, slot, &fin);
+      la_add64_rlx(&g->gc2.finreg_cdata_order_fallbacks, 1);
+      continue;
+    }
+    lj_cdata_fin_storenil(L, slot);
+    gc_marktv(g, &fin);
+    markfinalized(o);
+    lj_gc2_finreg_cdata_queue(g, o);
+    lj_gc2_finalizer_enqueue(g, o);  /* queue claimed cdata in FINREG order. */
+    la_add64_rlx(&g->gc2.finreg_cdata_order_queued, 1);
+    preclaimed++;
+    queued++;
+  }
+  if (queuedp)
+    *queuedp += queued;
+  return preclaimed;  /* 05 section 5.8: FINREG ordered P_WEAK cdata scan. */
+}
+
 static size_t gc_preclaim_cdata_finalizers_pweak_tab(lua_State *L,
 						     global_State *g,
 						     GCtab *t)
@@ -1443,9 +1544,12 @@ static size_t gc_queue_cdata_finalizers_pweak(lua_State *L, global_State *g)
 {
   GCRef *p = &g->gc.root;
   GCobj *o;
-  size_t preclaimed;
+  size_t preclaimed, ordered_queued = 0;
   size_t n = 0;
-  preclaimed = gc_preclaim_cdata_finalizers_pweak_finreg(L, g);
+  preclaimed = gc_queue_cdata_finalizers_pweak_ordered(L, g, &ordered_queued);
+  n += ordered_queued;
+  if (ordered_queued == 0)
+    preclaimed += gc_preclaim_cdata_finalizers_pweak_finreg(L, g);
   while ((o = gcref(*p)) != NULL) {
     if (gc_cdata_finalizer_candidate_pweak(o)) {
       preclaimed += gc_claim_cdata_finalizer_pweak(L, g, o);

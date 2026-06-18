@@ -161,6 +161,12 @@ typedef struct FinRegGen {
   struct FinRegGen *next;	/* Older generation, searched after this one. */
 } FinRegGen;
 
+typedef struct FinRegOrderNode {
+  GCtab *tab;			/* FINREG generation containing this slot. */
+  TValue *slot;			/* FINREG value slot for this registration. */
+  struct FinRegOrderNode *next;	/* Older registration, newest-first list. */
+} FinRegOrderNode;
+
 #define CTHASH_SIZE	128	/* Number of hash anchors. */
 #define CTHASH_MASK	(CTHASH_SIZE-1)
 
@@ -215,6 +221,7 @@ typedef struct CTState {
   GCtab *pinmt;		/* ffi.pin() handle metatable/root. */
   uint32_t parse_token;	/* 11.2 cparse mutation token. */
   FinRegGen *fin_head;	/* 11.4 CAS-published FINREG generation list. */
+  FinRegOrderNode *fin_order_head;  /* 11.4 ordered FINREG registrations. */
   uint32_t hash[CTHASH_SIZE];  /* Hash anchors. Low 16 bits hold CTypeID. */
 } CTState;
 
@@ -538,6 +545,10 @@ LJ_FUNC CTypeID lj_ctype_intern_new_l(lua_State *L, CTState *cts,
 LJ_FUNC void lj_ctype_parse_lock(CTState *cts, lua_State *L);
 LJ_FUNC void lj_ctype_parse_unlock(CTState *cts);
 LJ_FUNC GCtab *lj_ctype_fin_head(CTState *cts);
+LJ_FUNC FinRegOrderNode *lj_ctype_fin_order_new(lua_State *L);
+LJ_FUNC void lj_ctype_fin_order_free(global_State *g, FinRegOrderNode *ord);
+LJ_FUNC void lj_ctype_fin_order_publish(CTState *cts, FinRegOrderNode *ord,
+					GCtab *t, TValue *slot);
 LJ_FUNC cTValue *lj_ctype_fin_get(lua_State *L, CTState *cts, cTValue *key,
 				  GCtab **tabp);
 LJ_FUNC int lj_ctype_fin_newgen(lua_State *L, CTState *cts, cTValue *key,
