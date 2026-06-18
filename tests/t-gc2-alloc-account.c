@@ -31,6 +31,7 @@ int main(void)
   uint64_t assist_runs0, assist_grey0, assist_ssb0;
   uint64_t assist_weak0;
   uint64_t weak_clear_tables0, weak_clear_cleared0;
+  TValue vals[2];
   GCtab *parent, *child, *grandchild;
   GCtab *weak, *key, *val;
 
@@ -230,6 +231,16 @@ int main(void)
 	 remembered_filtered0 + 1u);
   assert(la_load64_acq(&g->gc2.remembered_pushed) ==
 	 remembered_pushed0 + 1u);
+  (void)lj_gc2_handshake(g, LJ_GC2_HS_FLUSH_SSB);
+  (void)lj_gc2_drain_ssb(g);
+  remembered_pushed0 = la_load64_acq(&g->gc2.remembered_pushed);
+  remembered_filtered0 = la_load64_acq(&g->gc2.remembered_filtered);
+  settabV(L, &vals[0], grandchild);
+  settabV(L, &vals[1], child);
+  lj_gc2_barrier_tvn_pair_g(g, obj2gco(parent), vals, 2);
+  assert(la_load64_acq(&g->gc2.remembered_pushed) == remembered_pushed0 + 1u);
+  assert(la_load64_acq(&g->gc2.remembered_filtered) ==
+	 remembered_filtered0 + 1u);
   (void)lj_gc2_handshake(g, LJ_GC2_HS_FLUSH_SSB);
   (void)lj_gc2_drain_ssb(g);
   la_store32_rel(&g->gc2.minor_sweep_enabled, 0);

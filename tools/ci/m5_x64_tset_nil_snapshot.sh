@@ -43,7 +43,7 @@ for needle in \
   'jmp ->vm_gc2_barriertv' \
   'jmp ->vm_gc2_barriertvn' \
   'jmp ->vm_gc2_barriertab' \
-  'call extern lj_gc2_barrier_tvn_g'
+  'call extern lj_gc2_barrier_tvn_pair_g'
 do
   if ! rg -F -q "$needle" "$ROOT/src/vm_x64.dasc"; then
     echo "guardrail: missing x64 TSET nil snapshot marker: $needle" >&2

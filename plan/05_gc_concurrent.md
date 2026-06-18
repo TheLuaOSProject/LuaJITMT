@@ -463,11 +463,12 @@ P_WEAK bridge.
 `weak_keys_marked` and `weak_values_marked` expose first-time marks from these
 bridges for follow-up tests. x64 VM single-value array table stores now route
 their GC2 barrier to the stored TValue directly, and `BC_TSETM` routes the
-post-copy destination range through `lj_gc2_barrier_tvn_g()` before the
-existing table-rescan bridge. This keeps constructor batch stores from
-depending on a whole-table rescan for weak-value marking after
-`lj_tab_storetvn()` publishes the slots, while still preserving table/backing
-memory coverage for resized arrays.
+post-copy destination range through `lj_gc2_barrier_tvn_pair_g()` with the
+destination table parent before the existing table-rescan bridge. This keeps
+constructor batch stores from depending on a whole-table rescan for weak-value
+marking after `lj_tab_storetvn()` publishes the slots, while preserving
+table/backing memory coverage for resized arrays and giving generational
+remembered-set filtering parent context.
 P_SWEEP entry handshake: {DISABLE_BARRIER, RESET_ALLOC, FLUSH_SSB(last)}.
   After it: workers sweep global/orphan arenas + huge table (free unmarked
   huge via munmap, deferred one epoch); owners lazy-sweep per 04 §4.6.

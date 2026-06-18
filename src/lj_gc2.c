@@ -2658,6 +2658,25 @@ void lj_gc2_barrier_tvn_g(global_State *g, cTValue *tv, uint32_t n)
   }
 }
 
+void lj_gc2_barrier_tvn_pair_g(global_State *g, GCobj *parent,
+			       cTValue *tv, uint32_t n)
+{
+  uint32_t i;
+  if (!tv)
+    return;
+  if (gc2_barrier_active_g(g)) {
+    for (i = 0; i < n; i++)
+      lj_gc2_barrier_tv_g(g, &tv[i]);
+  } else if (gc2_remember_active_g(g)) {
+    for (i = 0; i < n; i++) {
+      TValue snap;
+      lj_tv_load_acq(&snap, &tv[i]);
+      if (tvisgcv(&snap))
+	gc2_remember_pair(g, parent, gcV(&snap));
+    }
+  }
+}
+
 void lj_gc2_barrier_uv(global_State *g, cTValue *tv)
 {
   lj_gc2_barrier_tv_g(g, tv);
