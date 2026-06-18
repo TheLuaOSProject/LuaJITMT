@@ -132,8 +132,12 @@ for needle in \
   'g->gc2.finalizer_mpsc));' \
   'g->gc2.finalizer_tail));' \
   'test_finalizer_consumer_ring' \
+  'test_finalizer_mpsc_concurrent_producers' \
+  'finalizer_enqueue_worker' \
   'la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) != NULL' \
+  'finalizer_mpsc_drained) ==' \
   'assert(lj_gc2_finalizer_dequeue(g) == a)' \
+  'assert(n == NTOTAL)' \
   'runtime finalizer queues must not use legacy mmudata' \
   'finalizer_queued0 = la_load64_acq(&g->gc2.finalizer_queued)' \
   'finalizer_dequeued0 = la_load64_acq(&g->gc2.finalizer_dequeued)' \

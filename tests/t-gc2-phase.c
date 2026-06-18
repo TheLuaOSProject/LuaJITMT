@@ -41,6 +41,14 @@ typedef struct PeerRelease {
   long delay_ns;
 } PeerRelease;
 
+typedef struct FinalizerProducer {
+  global_State *g;
+  GCobj **objs;
+  int start;
+  int count;
+  pthread_barrier_t *barrier;
+} FinalizerProducer;
+
 static void sleep_ns(long ns)
 {
   struct timespec ts;
@@ -55,6 +63,17 @@ static void *release_worker_active(void *arg)
   PeerRelease *rel = (PeerRelease *)arg;
   sleep_ns(rel->delay_ns);
   la_store32_rel(&rel->g->gc2.worker_active, 0);
+  return NULL;
+}
+
+static void *finalizer_enqueue_worker(void *arg)
+{
+  FinalizerProducer *fp = (FinalizerProducer *)arg;
+  int rc, i;
+  rc = pthread_barrier_wait(fp->barrier);
+  assert(rc == 0 || rc == PTHREAD_BARRIER_SERIAL_THREAD);
+  for (i = 0; i < fp->count; i++)
+    lj_gc2_finalizer_enqueue(fp->g, fp->objs[fp->start + i]);
   return NULL;
 }
 
@@ -134,6 +153,79 @@ static void test_finalizer_consumer_ring(lua_State *L, global_State *g)
   relink_root_object(g, c);
   relink_root_object(g, b);
   relink_root_object(g, a);
+  lua_settop(L, 0);
+}
+
+static void test_finalizer_mpsc_concurrent_producers(lua_State *L,
+						     global_State *g)
+{
+  enum { NPROD = 4, PER_PROD = 24, NTOTAL = NPROD * PER_PROD };
+  GCobj *objs[NTOTAL];
+  uint8_t seen[NTOTAL];
+  pthread_t threads[NPROD];
+  FinalizerProducer prod[NPROD];
+  pthread_barrier_t barrier;
+  uint64_t queued0, dequeued0, drained0;
+  int i, j, n = 0;
+
+  lua_settop(L, 0);
+  lua_gc(L, LUA_GCSTOP, 0);
+  assert(lua_checkstack(L, NTOTAL));
+  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) == NULL);
+  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) == NULL);
+  for (i = 0; i < NTOTAL; i++) {
+    lua_newtable(L);
+    objs[i] = obj2gco(tabV(L->top - 1));
+    seen[i] = 0;
+    assert(unlink_root_object(g, objs[i]));
+  }
+
+  queued0 = la_load64_acq(&g->gc2.finalizer_queued);
+  dequeued0 = la_load64_acq(&g->gc2.finalizer_dequeued);
+  drained0 = la_load64_acq(&g->gc2.finalizer_mpsc_drained);
+  assert(pthread_barrier_init(&barrier, NULL, NPROD) == 0);
+  for (i = 0; i < NPROD; i++) {
+    prod[i].g = g;
+    prod[i].objs = objs;
+    prod[i].start = i * PER_PROD;
+    prod[i].count = PER_PROD;
+    prod[i].barrier = &barrier;
+    assert(pthread_create(&threads[i], NULL, finalizer_enqueue_worker,
+			  &prod[i]) == 0);
+  }
+  for (i = 0; i < NPROD; i++)
+    assert(pthread_join(threads[i], NULL) == 0);
+  assert(pthread_barrier_destroy(&barrier) == 0);
+
+  assert(la_load64_acq(&g->gc2.finalizer_queued) ==
+	 queued0 + (uint64_t)NTOTAL);
+  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) != NULL);
+  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) == NULL);
+
+  lj_gc2_finalizer_drain(g);
+  assert(la_load64_acq(&g->gc2.finalizer_mpsc_drained) ==
+	 drained0 + (uint64_t)NTOTAL);
+  for (;;) {
+    GCobj *o = lj_gc2_finalizer_dequeue(g);
+    if (!o)
+      break;
+    for (i = 0; i < NTOTAL && objs[i] != o; i++)
+      ;
+    assert(i < NTOTAL);
+    assert(seen[i] == 0);
+    seen[i] = 1;
+    n++;
+  }
+  assert(n == NTOTAL);
+  assert(la_load64_acq(&g->gc2.finalizer_dequeued) ==
+	 dequeued0 + (uint64_t)NTOTAL);
+  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) == NULL);
+  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) == NULL);
+  for (i = 0; i < NTOTAL; i++)
+    assert(seen[i] == 1);
+
+  for (j = NTOTAL - 1; j >= 0; j--)
+    relink_root_object(g, objs[j]);
   lua_settop(L, 0);
 }
 
@@ -396,6 +488,7 @@ int main(void)
   assert_idle(g, tg);
 
   test_finalizer_consumer_ring(L, g);
+  test_finalizer_mpsc_concurrent_producers(L, g);
   test_phase_transition_guards(g, tg);
   test_incremental_worker_step(L, g, tg);
   test_incremental_fixpoint_round(L, g);
