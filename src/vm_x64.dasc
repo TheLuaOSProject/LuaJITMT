@@ -4076,10 +4076,17 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ucomisd xmm0, xmm1
     |  jne ->vmeta_tgetv		// Generic numeric key? Use fallback.
     |.endif
-    |  cmp RCd, TAB:RB->asize		// Takes care of unordered, too.
+    |  mov TMPR, TAB:RB->array
+    |  mov ITYPEd, TAB:RB->asize
+    |  test ITYPEd, ITYPEd; jz >3
+    |  lea r8, [RB+TAB_COLO_SLOTS]
+    |  cmp TMPR, r8; je >3
+    |  mov ITYPEd, dword [TMPR+TABARRAY_ASIZE_OFS]
+    |3:
+    |  cmp RCd, ITYPEd			// Takes care of unordered, too.
     |  jae ->vmeta_tgetv		// Not in array part? Use fallback.
     |  shl RCd, 3
-    |  add RC, TAB:RB->array
+    |  add RC, TMPR
     |  // Get array slot.
     |  mov ITYPE, [RC]
     |  cmp ITYPE, LJ_TNIL		// Avoid overwriting RB in fastpath.
@@ -4144,10 +4151,17 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ins_ABC	// RA = dst, RB = table, RC = byte literal
     |  mov TAB:RB, [BASE+RB*8]
     |  checktab TAB:RB, ->vmeta_tgetb
-    |  cmp RCd, TAB:RB->asize
+    |  mov TMPR, TAB:RB->array
+    |  mov ITYPEd, TAB:RB->asize
+    |  test ITYPEd, ITYPEd; jz >3
+    |  lea r8, [RB+TAB_COLO_SLOTS]
+    |  cmp TMPR, r8; je >3
+    |  mov ITYPEd, dword [TMPR+TABARRAY_ASIZE_OFS]
+    |3:
+    |  cmp RCd, ITYPEd
     |  jae ->vmeta_tgetb
     |  shl RCd, 3
-    |  add RC, TAB:RB->array
+    |  add RC, TMPR
     |  // Get array slot.
     |  mov ITYPE, [RC]
     |  cmp ITYPE, LJ_TNIL
@@ -4173,10 +4187,17 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |.else
     |  cvttsd2si RCd, qword [BASE+RC*8]
     |.endif
-    |  cmp RCd, TAB:RB->asize
+    |  mov TMPR, TAB:RB->array
+    |  mov ITYPEd, TAB:RB->asize
+    |  test ITYPEd, ITYPEd; jz >3
+    |  lea r8, [RB+TAB_COLO_SLOTS]
+    |  cmp TMPR, r8; je >3
+    |  mov ITYPEd, dword [TMPR+TABARRAY_ASIZE_OFS]
+    |3:
+    |  cmp RCd, ITYPEd
     |  jae ->vmeta_tgetr		// Not in array part? Use fallback.
     |  shl RCd, 3
-    |  add RC, TAB:RB->array
+    |  add RC, TMPR
     |  // Get array slot.
     |->BC_TGETR_Z:
     |  mov ITYPE, [RC]

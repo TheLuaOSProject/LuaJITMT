@@ -206,6 +206,8 @@ load the mask from the acquired node header instead of the legacy
 `GCtab.hmask` mirror. `ipairs_aux`, `lj_vm_next`, and `BC_ITERN` also load
 array bounds from `TabArrayHdr.asize` for separated array generations, with
 the legacy `GCtab.asize` mirror kept as the empty/colocated-array fallback.
+The same separated-array header bound check now covers x64 `BC_TGETV`,
+`BC_TGETB`, and `BC_TGETR` array fast paths.
 `BC_TSETS_Z` string-key stores are currently demoted to
 `vmeta_tsets`, removing the x64 VM's direct string-key hash-chain store. The
 generic x64 `vmeta_tset` continuation release-stores returned slots through
