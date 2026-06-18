@@ -574,7 +574,8 @@ void lj_gc2_legacy_mark_begin(global_State *g)
     la_add64_rlx(&g->gc2.minor_sweep_deferred, 1);
   if (minor_requested && !roots_minor)
     la_add64_rlx(&g->gc2.minor_roots_deferred, 1);
-  la_add64_rlx(&g->gc2.major_cycle_starts, 1);
+  if (!roots_minor)
+    la_add64_rlx(&g->gc2.major_cycle_starts, 1);
   /* Publish MARK before clearing the request token, so late allocators stop. */
   g->gc2.phase = LJ_GC2_MARK;
   leader = la_xchg32_acqrel(&g->gc2.cycle_leader, 0);

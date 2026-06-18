@@ -45,6 +45,7 @@ for needle in \
   'la_store64_rel(&g->gc2.cycle_alloc_bytes' \
   'la_load64_acq(&g->gc2.minor_survival_base_live)' \
   'la_add64_rlx(&g->gc2.minor_survival_major_requests' \
+  'if (!roots_minor)' \
   'gc2_update_public_minor_gates(global_State *g)' \
   'la_store32_rel(&g->gc2.minor_sweep_enabled, enabled)' \
   'la_store32_rel(&g->gc2.minor_roots_enabled, enabled)' \
