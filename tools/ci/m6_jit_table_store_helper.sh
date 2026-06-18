@@ -16,10 +16,11 @@ for needle in \
   'IRCALL_lj_tab_storetv_forjit_array' \
   'IRCALL_lj_tab_storetv_forjit_hash' \
   'tabref = IR(xref->op1)->op1' \
+  'xref->o == IR_NEWREF' \
   'asm_ahstore_forjit(ASMState *as, IRIns *ir)' \
   '#if defined(__linux__) && LJ_TARGET_X64' \
   'IRRef lim = poll_alias_limit(J, xref);' \
-  'M6: no new HSTORE bridge.' \
+  'M6: no numeric new HSTORE bridge.' \
   'M6: previous-nil in-bounds ASTORE/HSTORE uses the helper bridge.'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_tab.c" "$ROOT/src/lj_tab.h" \
@@ -104,7 +105,7 @@ local function hash_insert(n)
 end
 local hi = hash_insert(80)
 assert(hi.stable == 80)
-assert(not util.traceinfo(1), "trace-local hash insertion unexpectedly traced")
+assert(util.traceinfo(1), "trace-local hash insertion did not trace")
 
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
@@ -186,10 +187,11 @@ assert(util.traceinfo(1), "nested escaped existing table store did not trace")
 '
 
 HASH_IR=$(mktemp "${TMPDIR:-/tmp}/lj-m6-hstore-ir.XXXXXX")
+NEW_HASH_IR=$(mktemp "${TMPDIR:-/tmp}/lj-m6-new-hstore-ir.XXXXXX")
 ARRAY_IR=$(mktemp "${TMPDIR:-/tmp}/lj-m6-astore-ir.XXXXXX")
 OLD_NIL_HASH_IR=$(mktemp "${TMPDIR:-/tmp}/lj-m6-oldnil-hstore-ir.XXXXXX")
 OLD_NIL_ARRAY_IR=$(mktemp "${TMPDIR:-/tmp}/lj-m6-oldnil-astore-ir.XXXXXX")
-trap 'rm -f "$HASH_IR" "$ARRAY_IR" "$OLD_NIL_HASH_IR" "$OLD_NIL_ARRAY_IR"' EXIT HUP INT TERM
+trap 'rm -f "$HASH_IR" "$NEW_HASH_IR" "$ARRAY_IR" "$OLD_NIL_HASH_IR" "$OLD_NIL_ARRAY_IR"' EXIT HUP INT TERM
 
 LUA_PATH="$ROOT/src/?.lua;$ROOT/src/jit/?.lua;;" \
   "$ROOT/src/luajit" -jdump=ir -e '
@@ -214,6 +216,32 @@ if ! grep -q 'TDUP' "$HASH_IR" || ! grep -q 'HSTORE' "$HASH_IR" ||
    ! grep -q 'XPOLL' "$HASH_IR"; then
   echo "guardrail: trace-local hash store must record TDUP/HSTORE with XPOLL" >&2
   cat "$HASH_IR" >&2
+  exit 1
+fi
+
+LUA_PATH="$ROOT/src/?.lua;$ROOT/src/jit/?.lua;;" \
+  "$ROOT/src/luajit" -jdump=ir -e '
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local util = require("jit.util")
+local function run(n)
+  local out = { stable = 0 }
+  for i = 1, n do
+    local t = {}
+    t.stable = i
+    out = t
+  end
+  return out
+end
+local out = run(40)
+assert(out.stable == 40)
+assert(util.traceinfo(1), "trace-local new hash store did not trace")
+' > "$NEW_HASH_IR"
+
+if ! grep -q 'TNEW' "$NEW_HASH_IR" || ! grep -q 'NEWREF' "$NEW_HASH_IR" ||
+   ! grep -q 'HSTORE' "$NEW_HASH_IR" || ! grep -q 'XPOLL' "$NEW_HASH_IR"; then
+  echo "guardrail: trace-local new hash store must record TNEW/NEWREF/HSTORE with XPOLL" >&2
+  cat "$NEW_HASH_IR" >&2
   exit 1
 fi
 
@@ -289,7 +317,7 @@ fi
 
 SHARED_HASH_IR=$(mktemp "${TMPDIR:-/tmp}/lj-m6-shared-hstore-ir.XXXXXX")
 SHARED_ARRAY_IR=$(mktemp "${TMPDIR:-/tmp}/lj-m6-shared-astore-ir.XXXXXX")
-trap 'rm -f "$HASH_IR" "$ARRAY_IR" "$OLD_NIL_HASH_IR" "$OLD_NIL_ARRAY_IR" "$SHARED_HASH_IR" "$SHARED_ARRAY_IR"' EXIT HUP INT TERM
+trap 'rm -f "$HASH_IR" "$NEW_HASH_IR" "$ARRAY_IR" "$OLD_NIL_HASH_IR" "$OLD_NIL_ARRAY_IR" "$SHARED_HASH_IR" "$SHARED_ARRAY_IR"' EXIT HUP INT TERM
 
 LUA_PATH="$ROOT/src/?.lua;$ROOT/src/jit/?.lua;;" \
   "$ROOT/src/luajit" -jdump=ir -e '

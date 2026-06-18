@@ -1,5 +1,5 @@
 #!/bin/sh
-# Guard helper-backed table stores while shape-changing stores stay NYI.
+# Guard helper-backed table stores while numeric new stores stay NYI.
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
@@ -44,7 +44,7 @@ for i = 1, 200 do
   hn["k" .. i] = i
 end
 assert(hn.k200 == 200)
-assert(traces() == 0, "new hash table store unexpectedly traced")
+assert(traces() > 0, "new string hash table store did not trace")
 
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
@@ -67,7 +67,7 @@ if ! awk '
     in_store = 1; saw_nil_gate = saw_hash_nyi = 0
   }
   in_store && /if \(tvisnil\(oldv\)/ { saw_nil_gate = 1 }
-  in_store && /M6: no new HSTORE bridge/ { saw_hash_nyi = 1 }
+  in_store && /M6: no numeric new HSTORE bridge/ { saw_hash_nyi = 1 }
   in_store && /Convert int to number before storing/ {
     if (!saw_nil_gate || !saw_hash_nyi)
       bad = 1
@@ -76,11 +76,11 @@ if ! awk '
   }
   END { exit checked && !bad ? 0 : 1 }
 ' "$ROOT/src/lj_record.c"; then
-  echo "guardrail: recorder must reject shape-changing table stores" >&2
+  echo "guardrail: recorder must reject numeric new table stores" >&2
   exit 1
 fi
 
-if rg -n 'M6: no new HSTORE bridge' "$ROOT/src/lj_record.c" >/dev/null &&
+if rg -n 'M6: no numeric new HSTORE bridge' "$ROOT/src/lj_record.c" >/dev/null &&
    rg -n 'M6: previous-nil in-bounds ASTORE/HSTORE uses the helper bridge' "$ROOT/src/lj_record.c" >/dev/null; then
   :
 else
@@ -89,6 +89,7 @@ else
 fi
 
 if rg -n -e 'M6: no new/nil HSTORE bridge' \
+    -e 'M6: no new HSTORE bridge' \
     -e 'M6: no nil ASTORE bridge' "$ROOT/src/lj_record.c" >/dev/null; then
   echo "guardrail: stale table-store NYI marker remains" >&2
   exit 1

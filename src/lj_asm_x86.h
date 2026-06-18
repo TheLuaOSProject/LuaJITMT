@@ -1807,8 +1807,10 @@ static void asm_ahstore_forjit(ASMState *as, IRIns *ir)
   IRRef tabref;
   if (xref->o == IR_AREF || xref->o == IR_HREFK)
     tabref = IR(xref->op1)->op1;
+  else if (xref->o == IR_NEWREF)
+    tabref = xref->op1;
   else {
-    lj_assertA(xref->o == IR_HREF, "expected trace-local table store ref");
+    lj_assertA(xref->o == IR_HREF, "expected helper-backed table store ref");
     tabref = xref->op1;
   }
   ra_evictset(as, RSET_SCRATCH);
