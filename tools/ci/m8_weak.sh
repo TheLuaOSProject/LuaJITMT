@@ -19,6 +19,8 @@ for needle in \
   'test_vm_weak_key_write_barrier' \
   'test_peer_weak_key_write_barrier' \
   'Peer TG performs the P_WEAK table write' \
+  'test_jit_weak_table_store_fallback_barrier' \
+  'shared weak table store stays interpreted during P_WEAK' \
   'test_vm_weak_value_hash_key_barrier' \
   'test_vm_weak_value_array_barrier' \
   'test_table_insert_weak_value_array_barrier' \

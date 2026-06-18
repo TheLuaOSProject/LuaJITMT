@@ -696,6 +696,76 @@ static void test_jit_table_store_nyi_barrier(lua_State *L, global_State *g,
   lua_pop(L, 3);
 }
 
+static void test_jit_weak_table_store_fallback_barrier(lua_State *L,
+						       global_State *g,
+						       TGState *tg)
+{
+  GCtab *weak, *key, *val;
+  uint64_t weak_keys0, weak_vals0;
+
+  lua_settop(L, 0);
+  assert(luaL_dostring(L,
+    "jit.flush()\n"
+    "jit.opt.start('hotloop=1', 'hotexit=1')\n"
+    "return function(t, k, v, n)\n"
+    "  for i = 1, n do\n"
+    "    if i > 1 then t[k] = v end\n"
+    "  end\n"
+    "end\n") == LUA_OK);
+  lua_newtable(L);
+  weak = tabV(L->top - 1);
+  lua_newtable(L);
+  lua_pushliteral(L, "__mode");
+  lua_pushliteral(L, "k");
+  lua_settable(L, -3);
+  lua_setmetatable(L, -2);
+  lua_newtable(L);
+  key = tabV(L->top - 1);
+  lua_newtable(L);
+  val = tabV(L->top - 1);
+
+  lua_pushvalue(L, 1);
+  lua_pushvalue(L, 2);
+  lua_pushvalue(L, 3);
+  lua_pushvalue(L, 4);
+  lua_pushinteger(L, 100);
+  lua_call(L, 4, 0);
+  /* M8: shared weak table store stays interpreted during P_WEAK. */
+  assert(find_trace(g) == NULL);
+
+  lua_pushvalue(L, 2);
+  lua_pushvalue(L, 3);
+  lua_pushnil(L);
+  lua_settable(L, -3);
+  lua_pop(L, 1);
+
+  lj_gc2_legacy_mark_begin(g);
+  assert(lj_gc2_markobj(g, obj2gco(weak)) == 1);
+  flush_and_drain(g, tg);
+  assert(lj_gc2_ismarked(g, obj2gco(weak)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(key)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(val)) == 0);
+  weak_keys0 = la_load64_acq(&g->gc2.weak_keys_marked);
+  weak_vals0 = la_load64_acq(&g->gc2.weak_values_marked);
+
+  lj_gc2_legacy_weak_begin(g);
+  lua_pushvalue(L, 1);
+  lua_pushvalue(L, 2);
+  lua_pushvalue(L, 3);
+  lua_pushvalue(L, 4);
+  lua_pushinteger(L, 20);
+  lua_call(L, 4, 0);
+  assert(find_trace(g) == NULL);
+  assert(lj_gc2_ismarked(g, obj2gco(key)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(val)) == 1);
+  assert(la_load64_acq(&g->gc2.weak_keys_marked) == weak_keys0 + 1u);
+  assert(la_load64_acq(&g->gc2.weak_values_marked) == weak_vals0);
+  assert(!lj_gc2_ssb_empty(g));
+  flush_and_drain(g, tg);
+  lj_gc2_legacy_cycle_end(g);
+  lua_pop(L, 4);
+}
+
 static void test_jit_upvalue_barrier(lua_State *L, global_State *g,
 				     TGState *tg)
 {
@@ -2740,6 +2810,7 @@ int main(void)
   test_vm_meta_tset_barrier(L, g, tg);
 #if LJ_HASJIT
   test_jit_table_store_nyi_barrier(L, g, tg);
+  test_jit_weak_table_store_fallback_barrier(L, g, tg);
   test_jit_upvalue_barrier(L, g, tg);
   test_jit_current_trace_root(L, g, tg);
   test_jit_tg_executing_trace_root(L, g, tg);
