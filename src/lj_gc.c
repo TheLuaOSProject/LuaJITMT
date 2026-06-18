@@ -1760,11 +1760,11 @@ static size_t gc_separate_cdata_finalizers_ordered(global_State *g,
       continue;
     if (!gc_cdata_finalizer_candidate_close(o))
       continue;
-    if (!gc_unlink_root_object(g, o)) {
-      fallback = 1;
-      la_add64_rlx(&g->gc2.finreg_cdata_order_fallbacks, 1);
-      continue;
-    }
+    /*
+    ** 05 section 5.8: ordered FINREG identity is enough for close-time
+    ** discovery without legacy root membership.
+    */
+    (void)gc_unlink_root_object(g, o);
     gc_queue_cdata_finalizer(g, o);
     la_add64_rlx(&g->gc2.finreg_cdata_order_queued, 1);
     queued++;
