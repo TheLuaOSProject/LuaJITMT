@@ -197,20 +197,25 @@ the original weak-table semantics target while avoiding a larger plan change.
 Paranoia builds now rescan the legacy weak list after a GC2 skip decision and
 fail if any weak slot remains clearable.
 Finalizer dispatch now has a GC2 owner try-claim around legacy
-`mmudata` draining, so peer TGs back off instead of racing the shared finalizer
-list while close-time drains still complete through the blocking wrapper. The
-older `finalizer_token` bridge has been removed. User finalizer callbacks now
-run on the claimed collector caller `lua_State` instead of the shared
-`vmthread(g)` stack; the remaining finalizer bridge is legacy
-`mmudata`/FINREG membership and execution rather than the original planned
-FINREG/finqueue dispatch path. Userdata FINREG membership now has a
-userdata-only bit so in-place `mt.__gc = nil` mutation is cleared at legacy
-separation instead of leaving stale GC2 membership.
+finalizer draining, so peer TGs back off instead of racing the shared finalizer
+state while close-time drains still complete through the blocking wrapper. The
+older `finalizer_token` bridge has been removed, and normal finalizer producers
+publish through the GC2 MPSC/consumer-ring bridge instead of legacy `mmudata`.
+User finalizer callbacks now run on the claimed collector caller `lua_State`
+instead of the shared `vmthread(g)` stack. Userdata FINREG membership now uses a
+GC2 side list for discovery, including in-place metatable finalizer additions
+and manually chain-unlinked userdata. Cdata ordered FINREG discovery covers the
+ordinary P_WEAK and close-time paths, with defensive root/sweep fallbacks still
+retained for missed ordered publication and sweep/free discovery. The broader
+planned FINREG/finqueue dispatch path remains M8 work rather than an M9
+performance cleanup.
 The original "finalizer that spawns a thread" item now has bridge tests for
 spawn+join during explicit-GC finalization and for a worker that outlives the
 callback; the latter defers the full-GC loop back to the mutator instead of
 waiting forever on `mt_live`, and explicit `collectgarbage("step", ...)` no
-longer reports cycle completion while that spawned worker is still live. The
+longer reports cycle completion while that spawned worker is still live. The M8
+gate also runs a reduced `t-ffi-gc-finreg.lua` smoke so worker-created FINREG
+finalizers must fire exactly once under interpreter and default-JIT modes. The
 broader planned async finalizer dispatch path remains M8 work, not an M9
 performance cleanup.
 
