@@ -110,10 +110,12 @@ static void tg_adopt_gc2_phase(global_State *g, TGState *tg)
   uint32_t phase = la_load32_acq(&g->gc2.phase);
   if (phase == LJ_GC2_MARK || phase == LJ_GC2_WEAK) {
     tg->mark_active = 1;
-    tg->alloc.alloc_black = 1;
+    tg->alloc.alloc_black =
+      la_load32_acq(&g->gc2.cycle_sweep_minor) == 0;
   } else if (phase == LJ_GC2_SWEEP) {
     tg->mark_active = 0;
-    tg->alloc.alloc_black = 1;
+    tg->alloc.alloc_black =
+      la_load32_acq(&g->gc2.cycle_sweep_minor) == 0;
   } else {
     tg->mark_active = la_load32_acq(&g->gc2.generational) != 0;
     tg->alloc.alloc_black = 0;

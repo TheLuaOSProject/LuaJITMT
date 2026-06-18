@@ -1098,6 +1098,30 @@ static const GCFreeFunc gc_freefunc[] = {
   (GCFreeFunc)lj_udata_free
 };
 
+uint32_t lj_gc_sweep_gc2_young(global_State *g)
+{
+  GCRef *p = &g->gc.root;
+  GCobj *o;
+  uint32_t n = 0;
+  while ((o = gcref(*p)) != NULL) {
+    int marked = lj_gc2_ismarked(g, o);
+    if (marked == 0) {
+      uint32_t gct = o->gch.gct;
+      if (gct >= (uint32_t)~LJ_TSTR && gct <= (uint32_t)~LJ_TUDATA) {
+	GCFreeFunc fn = gc_freefunc[gct - (uint32_t)~LJ_TSTR];
+	if (fn) {
+	  setgcrefr(*p, *lj_obj_gcwref(o));
+	  fn(g, o);
+	  n++;
+	  continue;
+	}
+      }
+    }
+    p = lj_obj_gcwref(o);
+  }
+  return n;
+}
+
 /* Full sweep of a GC list. */
 #define gc_fullsweep(g, p)	gc_sweep(g, (p), ~(uint32_t)0)
 

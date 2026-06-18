@@ -602,7 +602,9 @@ void lj_gc2_legacy_mark_begin(global_State *g)
   if (!sweep_minor)
     gc2_clear_marks_all(g);
   if (minor_requested) {
-    lj_gc2_handshake(g, LJ_GC2_HS_ENABLE_BARRIER|LJ_GC2_HS_ALLOC_BLACK|
+    uint32_t alloc_action = sweep_minor ? LJ_GC2_HS_ALLOC_WHITE :
+					  LJ_GC2_HS_ALLOC_BLACK;
+    lj_gc2_handshake(g, LJ_GC2_HS_ENABLE_BARRIER|alloc_action|
 		     LJ_GC2_HS_FLUSH_SSB);
     drained = lj_gc2_drain_ssb(g);
     if (drained)
@@ -979,6 +981,8 @@ uint32_t lj_gc2_sweep_owner_progress(global_State *g, TGState *tg,
     return 0;
   epoch = g->gc2.cycle;
   minor = la_load32_acq(&g->gc2.cycle_sweep_minor) != 0;
+  if (minor)
+    (void)lj_gc_sweep_gc2_young(g);
   tg->alloc.sweep_epoch = epoch;
   while (n < limit) {
     GCArena *a = lj_arena_sweep_one(&tg->alloc, LJ_ARENAK_TRAVERSABLE,

@@ -60,6 +60,10 @@ for needle in \
   'lj_gc2_scan_cycle_roots(global_State *g, lua_State *L)' \
   'gc2_scan_pending_roots(global_State *g)' \
   'if (!sweep_minor)' \
+  'sweep_minor ? LJ_GC2_HS_ALLOC_WHITE' \
+  'lj_gc_sweep_gc2_young(global_State *g)' \
+  'tg->alloc.alloc_black =' \
+  'la_load32_acq(&g->gc2.cycle_sweep_minor) == 0' \
   'la_add64_rlx(&g->gc2.major_root_scans' \
   'la_add64_rlx(&g->gc2.minor_root_scans' \
   'lj_gc2_finreg_cdata_preclaim(L, g, obj2gco(preclaim_cd)' \
@@ -85,7 +89,8 @@ for needle in \
   'collectgarbage("incremental")'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lua.h" "$ROOT/src/lj_obj.h" \
-      "$ROOT/src/lj_gc2.h" "$ROOT/src/lj_gc2.c" "$ROOT/src/lj_api.c" \
+      "$ROOT/src/lj_gc.h" "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc2.h" \
+      "$ROOT/src/lj_gc2.c" "$ROOT/src/lj_api.c" \
       "$ROOT/src/lj_meta.h" "$ROOT/src/lj_meta.c" "$ROOT/src/lj_tg.c" \
       "$ROOT/src/lib_base.c" \
       "$ROOT/tests/t-gc-generational-mode.lua" "$ROOT/tests/t-gc-stats.lua" \
