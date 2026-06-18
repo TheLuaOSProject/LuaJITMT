@@ -569,10 +569,10 @@ actual minor execution path stays disabled until minor-cycle roots and precise
 remembered SSB filtering are wired. Minor sweep identity is routed through a
 latched `cycle_sweep_minor` flag and internal off-by-default
 `minor_sweep_enabled` gate, with deferred public minor requests counted until
-root filtering and enablement are safe. Parent-aware table/object and fast
-table-value barriers now use that gate to filter for old-parent/young-child
-remembered pairs, while remaining root/vmeta value-only contexts stay
-conservative until their parent context is explicit.
+root filtering and enablement are safe. Parent-aware table/object, fast
+table-value, and resolved meta-store value barriers now use that gate to filter
+for old-parent/young-child remembered pairs, while remaining root/upvalue
+value-only contexts stay conservative until their parent context is explicit.
 Minor root selection has matching `cycle_roots_minor` /
 `minor_roots_enabled` latches and `minor_roots_deferred` telemetry. The
 `HS_SCAN_ROOTS` bridge routes through a cycle-root selector, but public cycles

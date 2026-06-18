@@ -31,6 +31,8 @@ LJ_FUNC int lj_meta_tailcall(lua_State *L, cTValue *tv);
 /* C helpers for some instructions, called from assembler VM. */
 LJ_FUNCA cTValue *lj_meta_tget(lua_State *L, cTValue *o, cTValue *k);
 LJ_FUNCA TValue *lj_meta_tset(lua_State *L, cTValue *o, cTValue *k);
+LJ_FUNCA TValue *lj_meta_tsettv_pair(lua_State *L, cTValue *o, cTValue *k,
+				     cTValue *v);
 LJ_FUNC TValue *lj_meta_tset_owner(lua_State *L, cTValue *o, cTValue *k,
 				   GCtab **owner);
 LJ_FUNCA TValue *lj_meta_arith(lua_State *L, TValue *ra, cTValue *rb,

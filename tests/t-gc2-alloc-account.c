@@ -12,6 +12,7 @@
 #include "lj_atomic.h"
 #include "lj_gc.h"
 #include "lj_gc2.h"
+#include "lj_meta.h"
 #include "lj_safepoint.h"
 #include "lj_tg.h"
 
@@ -212,8 +213,10 @@ int main(void)
   lua_settop(L, 0);
 
   lj_gc2_set_generational(g, 1);
+  /* Internal remembered tests avoid allocation-triggered major cycles. */
+  la_store32_rel(&g->gc2.force_major, 0);
   la_store32_rel(&g->gc2.minor_sweep_enabled, 1);
-  lua_newtable(L);
+  lua_createtable(L, 1, 0);
   parent = tabV(L->top - 1);
   lua_newtable(L);
   child = tabV(L->top - 1);
@@ -233,6 +236,20 @@ int main(void)
 	 remembered_filtered0 + 1u);
   assert(la_load64_acq(&g->gc2.remembered_pushed) ==
 	 remembered_pushed0 + 1u);
+  (void)lj_gc2_handshake(g, LJ_GC2_HS_FLUSH_SSB);
+  (void)lj_gc2_drain_ssb(g);
+  remembered_pushed0 = la_load64_acq(&g->gc2.remembered_pushed);
+  remembered_filtered0 = la_load64_acq(&g->gc2.remembered_filtered);
+  setintV(&vals[0], 1);
+  settabV(L, &vals[1], grandchild);
+  assert(lj_meta_tsettv_pair(L, L->top - 3, &vals[0], &vals[1]) != NULL);
+  assert(la_load64_acq(&g->gc2.remembered_pushed) == remembered_pushed0 + 2u);
+  settabV(L, &vals[1], child);
+  assert(lj_meta_tsettv_pair(L, L->top - 3, &vals[0], &vals[1]) != NULL);
+  assert(la_load64_acq(&g->gc2.remembered_filtered) ==
+	 remembered_filtered0 + 1u);
+  assert(la_load64_acq(&g->gc2.remembered_pushed) ==
+	 remembered_pushed0 + 3u);
   (void)lj_gc2_handshake(g, LJ_GC2_HS_FLUSH_SSB);
   (void)lj_gc2_drain_ssb(g);
   remembered_pushed0 = la_load64_acq(&g->gc2.remembered_pushed);

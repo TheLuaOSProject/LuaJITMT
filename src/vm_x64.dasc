@@ -947,29 +947,19 @@ static void build_subroutines(BuildCtx *ctx)
   |  movzx RBd, PC_RB			// Reload TValue *t from RB.
   |  lea RB, [BASE+RB*8]
   |2:
+  |  movzx RAd, PC_RA
+  |  lea CARG4, [BASE+RA*8]
   |  mov L:CARG1, SAVE_L
   |  mov L:CARG1->base, BASE		// Caveat: CARG2/CARG3 may be BASE.
   |  mov CARG2, RB
   |  mov CARG3, RC
   |  mov L:RB, L:CARG1
   |  mov SAVE_PC, PC
-  |  call extern lj_meta_tset		// (lua_State *L, TValue *o, TValue *k)
+  |  call extern lj_meta_tsettv_pair	// (lua_State *L, TValue *o, TValue *k, TValue *v)
   |  // TValue * (finished) or NULL (metamethod) returned in eax (RC).
   |  mov BASE, L:RB->base
   |  test RC, RC
   |  jz >3
-  |  // NOBARRIER: lj_meta_tset ensures the table is not black.
-  |  movzx RAd, PC_RA
-  |  mov L:CARG1, SAVE_L
-  |  mov L:CARG1->base, BASE
-  |  mov CARG2, RC
-  |  lea CARG3, [BASE+RA*8]
-  |  mov L:RB, L:CARG1
-  |  call extern lj_tab_storetv		// (lua_State *L, TValue *d, TValue *s)
-  |  mov BASE, L:RB->base
-  |  mov RC, rax
-  |  cmp TGMARK, 0
-  |  jnz ->vm_gc2_barriertv
   |->cont_nop:				// BASE = base, (RC = result)
   |  endbr
   |  ins_next

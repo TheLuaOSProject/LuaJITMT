@@ -198,8 +198,9 @@ load the mask from the acquired node header instead of the legacy
 `GCtab.hmask` mirror. `BC_TSETS_Z` string-key stores are currently demoted to
 `vmeta_tsets`, removing the x64 VM's direct string-key hash-chain store. The
 generic x64 `vmeta_tset` continuation release-stores returned slots through
-`lj_tab_storetv()`, but the C-side table setter still awaits the original
-RETIRING/FORWARD/CAS write protocol for migration correctness. Regular x64
+`lj_meta_tsettv_pair()` with resolved parent context, but the C-side table
+setter still awaits the original RETIRING/FORWARD/CAS write protocol for
+migration correctness. Regular x64
 dynamic `IR_HREF` lowering also uses the node-header mask instead of
 `GCtab.hmask`; constant-slot HREFK lowering has an interim node-header bounds
 guard before reading its recorded slot, while hash and array table-store

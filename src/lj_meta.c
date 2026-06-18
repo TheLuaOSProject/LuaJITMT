@@ -253,6 +253,18 @@ TValue *lj_meta_tset_owner(lua_State *L, cTValue *o, cTValue *k, GCtab **owner)
   return meta_tset(L, o, k, owner);
 }
 
+/* VM helper that resolves the target table, stores the value and barriers it. */
+TValue *lj_meta_tsettv_pair(lua_State *L, cTValue *o, cTValue *k, cTValue *v)
+{
+  GCtab *owner;
+  TValue *dst = meta_tset(L, o, k, &owner);
+  if (dst) {
+    copyTVrel(L, dst, v);
+    lj_gc2_barrier_tv_pair(L, owner ? obj2gco(owner) : NULL, dst);
+  }
+  return dst;
+}
+
 static cTValue *str2num(cTValue *o, TValue *n)
 {
   if (tvisnum(o))

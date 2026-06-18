@@ -38,6 +38,7 @@ for needle in \
   'gc2_remember_pair(global_State *g, GCobj *parent, GCobj *child)' \
   'lj_gc2_barrier_obj_pair(lua_State *L, GCobj *parent, GCobj *child)' \
   'gc2_flush_and_drain_ssb(global_State *g)' \
+  'lj_meta_tsettv_pair(lua_State *L, cTValue *o, cTValue *k' \
   'lj_gc2_scan_minor_roots(global_State *g, lua_State *L)' \
   'lj_gc2_scan_cycle_roots(global_State *g, lua_State *L)' \
   'lj_gc2_force_major(g);  /* First generational cycle establishes old marks. */' \
@@ -57,7 +58,8 @@ for needle in \
 do
   if ! rg -F -q "$needle" "$ROOT/src/lua.h" "$ROOT/src/lj_obj.h" \
       "$ROOT/src/lj_gc2.h" "$ROOT/src/lj_gc2.c" "$ROOT/src/lj_api.c" \
-      "$ROOT/src/lj_tg.c" "$ROOT/src/lib_base.c" \
+      "$ROOT/src/lj_meta.h" "$ROOT/src/lj_meta.c" "$ROOT/src/lj_tg.c" \
+      "$ROOT/src/lib_base.c" \
       "$ROOT/tests/t-gc-generational-mode.lua" "$ROOT/tests/t-gc-stats.lua" \
       "$ROOT/tests/t-gc2-alloc-account.c" "$ROOT/tests/t-gc2-traverse.c"; then
     echo "guardrail: missing M10 generational marker: $needle" >&2

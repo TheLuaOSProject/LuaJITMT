@@ -38,9 +38,10 @@ for needle in \
   'mov r8, [RC]' \
   'cmp r8, LJ_TNIL' \
   'jmp ->vmeta_tsets		// M5: no legacy x64 hash-slot store.' \
+  'call extern lj_meta_tsettv_pair' \
+  '|->vm_gc2_barriertv:' \
   'call extern lj_tab_storetv' \
   'call extern lj_tab_storetvn' \
-  'jmp ->vm_gc2_barriertv' \
   'jmp ->vm_gc2_barriertv_tab' \
   'jmp ->vm_gc2_barriertvn' \
   'jmp ->vm_gc2_barriertab' \
@@ -56,6 +57,7 @@ done
 for reject in \
   'cmp aword [RC], LJ_TNIL' \
   'cmp aword [TMPR], LJ_TNIL' \
+  'call extern lj_meta_tset		// (lua_State *L, TValue *o, TValue *k)' \
   'mov [RC], RB' \
   'mov [RC], ITYPE'
 do
@@ -97,8 +99,11 @@ else
   exit 1
 fi
 
-storetv_count=$(rg -F 'call extern lj_tab_storetv' "$ROOT/src/vm_x64.dasc" | wc -l | tr -d ' ')
-if [ "$storetv_count" -lt 4 ]; then
+storetv_count=$(awk '
+  /call extern lj_tab_storetv[[:space:]]*\/\/ \(lua_State \*L, TValue \*d, TValue \*s\)/ { n++ }
+  END { print n + 0 }
+' "$ROOT/src/vm_x64.dasc")
+if [ "$storetv_count" -ne 3 ]; then
   echo "guardrail: x64 TSET fast paths must publish via lj_tab_storetv" >&2
   exit 1
 fi
