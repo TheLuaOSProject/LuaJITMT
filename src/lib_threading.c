@@ -280,7 +280,10 @@ static int threading_gc_enter(lua_State *L)
     expect = 0;
     (void)la_cas32(&g->mt_active, &expect, 1, LA_ACQ_REL, LA_ACQ);
     if (la_add32_rlx(&g->mt_live, 1) == 0) {
-      lj_gc_mt_threshold_store(g, lj_gc_threshold_load(g));
+      GCSize threshold = lj_gc_threshold_load(g);
+      if (threshold == LJ_MAX_MEM && g->gc.state == GCSfinalize)
+	threshold = lj_gc_mt_threshold_load(g);
+      lj_gc_mt_threshold_store(g, threshold);
       /* M4: no automatic GC while children run. */
       lj_gc_threshold_store(g, LJ_MAX_MEM);
     }

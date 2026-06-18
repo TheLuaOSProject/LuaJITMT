@@ -29,6 +29,8 @@ for needle in \
   'test_ffi_weak_newindex_target_write_barrier' \
   't-m8-ffi-weak-newindex OK' \
   'test_weak_clear_marks_string_slots' \
+  'lj_obj_cleargcflags_atomic(gcV(o), LJ_GC_WHITES);' \
+  'assert(!iswhite(obj2gco(modestr)));' \
   'test_weak_drain_uses_captured_mode' \
   'test_weak_pre_clear_late_write_survives_drain' \
   'P_WEAK late write before weak drain' \
@@ -121,11 +123,14 @@ for needle in \
   'finalizer_leaves0 + 1u' \
   'gc_finalizer_mt_release_exclusive(global_State *g)' \
   'gc_finalizer_mt_reclaim_exclusive(global_State *g)' \
+  'gc_finalizer_restore_threshold(global_State *g, GCSize oldt)' \
   'gc_fullgc_deferred_by_finalizer(global_State *g)' \
   'finrc <= 0' \
   'Keep GCSfinalize open until spawned TG exits.' \
   'finalizer-spawn outlived callback' \
+  'oldt = la_load32_acq(&g->mt_live) != 0 ? lj_gc_mt_threshold_load(g) :' \
   'lj_gc_mt_threshold_store(g, oldt)' \
+  'threshold == LJ_MAX_MEM && g->gc.state == GCSfinalize' \
   'collectgarbage("step", 1000000)' \
   'newproxy(true)' \
   'userdata explicit step' \
@@ -183,8 +188,13 @@ for needle in \
   'gc2_cdata_finalized == finalized0 + 1' \
   'LJ_GC_UDATA_FINREG == LJ_GC_WEAKVAL' \
   'old | LJ_GC_UDATA_FINREG' \
+  'void *finreg_udata_head' \
+  'lj_gc2_finreg_udata_register(lua_State *L, global_State *g,' \
+  'GC2-owned userdata FINREG discovery' \
   'lj_gc2_finreg_udata_set(g, o, 1);' \
   'lj_gc2_finreg_udata_set(g, o, 0);' \
+  'finreg_udata_registered) == registered0 + 3u' \
+  'finreg_udata_discovered) == discovered0 + 1u' \
   'sets0 + 4u' \
   'finreg_udata_queued) == queued0 + 2u' \
   'finreg_udata_clears) == clears0 + 4u' \

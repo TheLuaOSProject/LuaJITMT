@@ -1170,17 +1170,18 @@ static void test_weak_clear_marks_string_slots(lua_State *L, global_State *g,
 					       TGState *tg)
 {
   GCtab *weak, *val;
-  GCstr *keystr;
+  GCstr *keystr, *modestr;
   uint64_t clear_cleared0;
 
   lua_settop(L, 0);
   lua_newtable(L);
   weak = tabV(L->top - 1);
-  lua_newtable(L);
-  lua_pushliteral(L, "__mode");
-  lua_pushliteral(L, "kv");
-  lua_settable(L, -3);
+  lua_pushvalue(L, -1);
   lua_setmetatable(L, -2);
+  lua_pushliteral(L, "__mode");
+  lua_pushfstring(L, "kv gc2 weak mode %p", (void *)weak);
+  modestr = strV(L->top - 1);
+  lua_settable(L, -3);
   lua_newtable(L);
   val = tabV(L->top - 1);
   lua_pushfstring(L, "gc2 weak string key %p", (void *)weak);
@@ -1194,11 +1195,15 @@ static void test_weak_clear_marks_string_slots(lua_State *L, global_State *g,
   flush_and_drain(g, tg);
   assert(lj_gc2_weak_snapshot_count(g) == 1u);
   assert(lj_gc2_ismarked(g, obj2gco(keystr)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(modestr)) == 0);
   assert(lj_gc2_ismarked(g, obj2gco(val)) == 0);
   assert(lj_gc2_weak_drain(g, 1) == 0);
   lj_gc2_legacy_weak_begin(g);
   assert(lj_gc2_weak_drain(g, 1) == 1u);
   assert(lj_gc2_ismarked(g, obj2gco(keystr)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(modestr)) == 1);
+  assert(!iswhite(obj2gco(keystr)));
+  assert(!iswhite(obj2gco(modestr)));
   assert(la_load64_acq(&g->gc2.weak_clear_cleared) == clear_cleared0 + 1u);
   setstrV(L, L->top, keystr);
   L->top++;
@@ -2229,29 +2234,41 @@ static void test_finreg_userdata_telemetry(lua_State *L, global_State *g)
   uint64_t sets0 = la_load64_acq(&g->gc2.finreg_udata_sets);
   uint64_t clears0 = la_load64_acq(&g->gc2.finreg_udata_clears);
   uint64_t queued0 = la_load64_acq(&g->gc2.finreg_udata_queued);
+  uint64_t registered0 = la_load64_acq(&g->gc2.finreg_udata_registered);
+  uint64_t discovered0 = la_load64_acq(&g->gc2.finreg_udata_discovered);
+  uint64_t forgets0 = la_load64_acq(&g->gc2.finreg_udata_forgets);
 
   lua_settop(L, 0);
   lua_newuserdata(L, 1);
   push_udata_finalizer_mt(L);
   lua_setmetatable(L, -2);
   assert(la_load64_acq(&g->gc2.finreg_udata_sets) == sets0 + 1u);
+  assert(la_load64_acq(&g->gc2.finreg_udata_registered) ==
+	 registered0 + 1u);
   lua_pushnil(L);
   lua_setmetatable(L, -2);
   assert(la_load64_acq(&g->gc2.finreg_udata_clears) == clears0 + 1u);
+  assert(la_load64_acq(&g->gc2.finreg_udata_forgets) == forgets0 + 1u);
   push_udata_finalizer_mt(L);
   lua_setmetatable(L, -2);
   assert(la_load64_acq(&g->gc2.finreg_udata_sets) == sets0 + 2u);
+  assert(la_load64_acq(&g->gc2.finreg_udata_registered) ==
+	 registered0 + 2u);
   lua_pop(L, 1);
   lua_gc(L, LUA_GCCOLLECT, 0);
   lua_gc(L, LUA_GCSTOP, 0);
   assert(la_load64_acq(&g->gc2.finreg_udata_queued) == queued0 + 1u);
   assert(la_load64_acq(&g->gc2.finreg_udata_clears) == clears0 + 2u);
+  assert(la_load64_acq(&g->gc2.finreg_udata_discovered) ==
+	 discovered0 + 1u);
 
   lua_settop(L, 0);
   lua_newuserdata(L, 1);
   push_udata_finalizer_mt(L);
   lua_setmetatable(L, -2);
   assert(la_load64_acq(&g->gc2.finreg_udata_sets) == sets0 + 3u);
+  assert(la_load64_acq(&g->gc2.finreg_udata_registered) ==
+	 registered0 + 3u);
   lua_getmetatable(L, -1);
   lua_pushnil(L);
   lua_setfield(L, -2, "__gc");
@@ -2260,12 +2277,16 @@ static void test_finreg_userdata_telemetry(lua_State *L, global_State *g)
   lua_gc(L, LUA_GCSTOP, 0);
   assert(la_load64_acq(&g->gc2.finreg_udata_queued) == queued0 + 1u);
   assert(la_load64_acq(&g->gc2.finreg_udata_clears) == clears0 + 3u);
+  assert(la_load64_acq(&g->gc2.finreg_udata_discovered) ==
+	 discovered0 + 1u);
 
   lua_settop(L, 0);
   lua_newuserdata(L, 1);
   lua_newtable(L);
   lua_setmetatable(L, -2);
   assert(la_load64_acq(&g->gc2.finreg_udata_sets) == sets0 + 3u);
+  assert(la_load64_acq(&g->gc2.finreg_udata_registered) ==
+	 registered0 + 3u);
   lua_getmetatable(L, -1);
   lua_pushcfunction(L, gc2_empty_finalizer);
   lua_setfield(L, -2, "__gc");
@@ -2275,6 +2296,10 @@ static void test_finreg_userdata_telemetry(lua_State *L, global_State *g)
   assert(la_load64_acq(&g->gc2.finreg_udata_sets) == sets0 + 4u);
   assert(la_load64_acq(&g->gc2.finreg_udata_queued) == queued0 + 2u);
   assert(la_load64_acq(&g->gc2.finreg_udata_clears) == clears0 + 4u);
+  assert(la_load64_acq(&g->gc2.finreg_udata_registered) ==
+	 registered0 + 3u);
+  assert(la_load64_acq(&g->gc2.finreg_udata_discovered) ==
+	 discovered0 + 1u);
 }
 
 static void test_finreg_userdata_inplace_finalizer_behavior(lua_State *L)

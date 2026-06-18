@@ -729,10 +729,73 @@ static void gc_mark_finalizers(global_State *g)
 	(void *const *)&g->gc2.finalizer_tail));
 }
 
+static int gc_unlink_udata_object(global_State *g, GCobj *target)
+{
+  GCRef *p = lj_obj_gcwref(obj2gco(mainthread(g)));
+  GCobj *o;
+  while ((o = gcref(*p)) != NULL) {
+    if (o == target) {
+      setgcrefr(*p, *lj_obj_gcwref(o));
+      return 1;
+    }
+    p = lj_obj_gcwref(o);
+  }
+  return 0;
+}
+
+static size_t gc_queue_udata_finalizer(global_State *g, GCobj *o)
+{
+  size_t m = sizeudata(gco2ud(o));
+  markfinalized(o);
+  lj_gc2_finreg_udata_queue(g, o);
+  lj_gc2_finalizer_enqueue(g, o);
+  return m;
+}
+
+static size_t gc_separateudata_registered(global_State *g, int all)
+{
+  GC2FinRegUDataNode *node;
+  TValue mmv;
+  size_t m = 0;
+  for (node = (GC2FinRegUDataNode *)la_loadptr_acq(
+	 (void *const *)&g->gc2.finreg_udata_head);
+       node != NULL;
+       node = (GC2FinRegUDataNode *)la_loadptr_acq(
+	 (void *const *)&node->next)) {
+    GCobj *o = gcref_acq(node->obj);
+    if (!o)
+      continue;
+    if (o->gch.gct != ~LJ_TUDATA ||
+	!(lj_obj_gcflags(o) & LJ_GC_UDATA_FINREG)) {
+      setgcrefnullrel(node->obj);
+      continue;
+    }
+    if (isfinalized(gco2ud(o))) {
+      setgcrefnullrel(node->obj);
+      continue;
+    }
+    if (!(iswhite(o) || all))
+      continue;
+    if (!lj_meta_fasttv(g, tabref_acq(gco2ud(o)->metatable), MM_gc, &mmv)) {
+      lj_gc2_finreg_udata_set(g, o, 0);
+      setgcrefnullrel(node->obj);
+      continue;
+    }
+    if (!gc_unlink_udata_object(g, o)) {
+      la_add64_rlx(&g->gc2.finreg_udata_fallbacks, 1);
+      continue;
+    }
+    setgcrefnullrel(node->obj);
+    la_add64_rlx(&g->gc2.finreg_udata_discovered, 1);
+    m += gc_queue_udata_finalizer(g, o);
+  }
+  return m;  /* 05 section 5.8: GC2-owned userdata FINREG discovery. */
+}
+
 /* Separate userdata objects to be finalized to the GC2 finalizer queue. */
 size_t lj_gc_separateudata(global_State *g, int all)
 {
-  size_t m = 0;
+  size_t m = gc_separateudata_registered(g, all);
   GCRef *p = lj_obj_gcwref(obj2gco(mainthread(g)));
   GCobj *o;
   TValue mmv;
@@ -742,15 +805,15 @@ size_t lj_gc_separateudata(global_State *g, int all)
     } else if (!lj_meta_fasttv(g, tabref_acq(gco2ud(o)->metatable),
 			       MM_gc, &mmv)) {
       markfinalized(o);  /* Done, as there's no __gc metamethod. */
-      lj_gc2_finreg_udata_set(g, o, 0);
+      if (lj_gc2_finreg_udata_set(g, o, 0) < 0)
+	lj_gc2_finreg_udata_forget(g, o);
       p = lj_obj_gcwref(o);
     } else {  /* Otherwise move userdata to be finalized to the GC2 queue. */
-      m += sizeudata(gco2ud(o));
-      lj_gc2_finreg_udata_set(g, o, 1);
-      markfinalized(o);
-      lj_gc2_finreg_udata_queue(g, o);
-      *p = *lj_obj_gcwref(o);
-      lj_gc2_finalizer_enqueue(g, o);
+      GCRef next = *lj_obj_gcwref(o);
+      (void)lj_gc2_finreg_udata_set(g, o, 1);
+      lj_gc2_finreg_udata_forget(g, o);
+      *p = next;  /* Finalizer queue publication reuses the nextgc link. */
+      m += gc_queue_udata_finalizer(g, o);
     }
   }
   return m;
@@ -1189,6 +1252,17 @@ static int gc_finalizer_mt_reclaim_exclusive(global_State *g)
   }
 }
 
+static void gc_finalizer_restore_threshold(global_State *g, GCSize oldt)
+{
+  lj_gc_threshold_store(g, oldt);
+  if (la_load32_acq(&g->mt_live) != 0) {
+    lj_gc_mt_threshold_store(g, oldt);
+    lj_gc_threshold_store(g, LJ_MAX_MEM);
+    if (la_load32_acq(&g->mt_live) == 0)
+      lj_gc_threshold_store(g, oldt);
+  }
+}
+
 static int gc_call_finalizer(global_State *g, lua_State *L,
 			     cTValue *mo, GCobj *o)
 {
@@ -1209,7 +1283,9 @@ static int gc_call_finalizer(global_State *g, lua_State *L,
 	     "gc_call_finalizer must not use shared vmthread callback stack");
   oldL = lj_tg_cur_L(g);
   oldh = hook_save(g);
-  oldt = lj_gc_threshold_load(g);
+  oldt = la_load32_acq(&g->mt_live) != 0 ? lj_gc_mt_threshold_load(g) :
+	 lj_gc_threshold_load(g);
+  lj_gc_mt_threshold_store(g, oldt);
   lj_trace_abort(g);
   hook_entergc(g);  /* Disable hooks and new traces during __gc. */
   if (LJ_HASPROFILE && (oldh & HOOK_PROFILE)) lj_dispatch_update(g, 0);
@@ -1231,10 +1307,7 @@ static int gc_call_finalizer(global_State *g, lua_State *L,
     lj_tg_clearcur_L(g);
   hook_restore(g, oldh);
   if (LJ_HASPROFILE && (oldh & HOOK_PROFILE)) lj_dispatch_update(g, 0);
-  if (la_load32_acq(&g->mt_live) != 0)
-    lj_gc_mt_threshold_store(g, oldt);
-  else
-    lj_gc_threshold_store(g, oldt);  /* Restore GC threshold. */
+  gc_finalizer_restore_threshold(g, oldt);
   if (errcode) {
     TValue tmp;
     copyTV(cbL, &tmp, cbL->top-1);
@@ -1328,7 +1401,8 @@ static int gc_finalize(lua_State *L)
   setgcref(*lj_obj_gcwref(obj2gco(mainthread(g))), o);
   makewhite(g, o);
   lj_gc_arena_markobj(g, o);
-  lj_gc2_finreg_udata_set(g, o, 0);
+  if (lj_gc2_finreg_udata_set(g, o, 0) < 0)
+    lj_gc2_finreg_udata_forget(g, o);
   /* Resolve the __gc metamethod. */
   mo = lj_meta_fasttv(g, tabref_acq(gco2ud(o)->metatable), MM_gc, &motv);
   if (mo && !gc_call_finalizer(g, L, mo, o)) {

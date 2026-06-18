@@ -173,6 +173,11 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.finreg_udata_sets, 0);
   la_store64_rlx(&g->gc2.finreg_udata_clears, 0);
   la_store64_rlx(&g->gc2.finreg_udata_queued, 0);
+  la_storeptr_rlx((void **)&g->gc2.finreg_udata_head, NULL);
+  la_store64_rlx(&g->gc2.finreg_udata_registered, 0);
+  la_store64_rlx(&g->gc2.finreg_udata_discovered, 0);
+  la_store64_rlx(&g->gc2.finreg_udata_forgets, 0);
+  la_store64_rlx(&g->gc2.finreg_udata_fallbacks, 0);
   la_storeptr_rlx((void **)&g->gc2.finalizer_mpsc, NULL);
   la_storeptr_rlx((void **)&g->gc2.finalizer_tail, NULL);
   la_store32_rlx(&g->gc2.finalizer_active, 0);
@@ -228,6 +233,15 @@ void lj_gc2_fini(global_State *g)
     g->gc2.finreg_cdata_preclaim_capacity = 0;
     g->gc2.finreg_cdata_preclaim_head = 0;
     g->gc2.finreg_cdata_preclaim_count = 0;
+  }
+  if (g) {
+    GC2FinRegUDataNode *node = (GC2FinRegUDataNode *)
+      la_xchgptr_acqrel((void **)&g->gc2.finreg_udata_head, NULL);
+    while (node) {
+      GC2FinRegUDataNode *next = node->next;
+      lj_mem_freet(g, node);
+      node = next;
+    }
   }
 }
 
@@ -1526,8 +1540,10 @@ static int gc2_weak_mayclear(global_State *g, cTValue *o, int val,
 {
   if (tvisgcv(o)) {
     if (tvisstr(o)) {
-      if (markstr)
+      if (markstr) {
 	(void)lj_gc2_markobj(g, gcV(o));
+	lj_obj_cleargcflags_atomic(gcV(o), LJ_GC_WHITES);
+      }
       return 0;  /* 05 section 5.8: strings are not weak-cleared. */
     }
     if (lj_gc2_ismarked(g, gcV(o)) == 0) {
@@ -1899,24 +1915,63 @@ int lj_gc2_finreg_cdata_preclaim_take(lua_State *L, global_State *g,
 #endif
 }
 
-void lj_gc2_finreg_udata_set(global_State *g, GCobj *o, int enabled)
+int lj_gc2_finreg_udata_set(global_State *g, GCobj *o, int enabled)
 {
   uint8_t old;
   if (!g || !o || o->gch.gct != ~LJ_TUDATA)
-    return;
+    return 0;
   old = la_load8_acq(lj_obj_gcflags_ref(o));
   for (;;) {
     uint8_t next = enabled ? (uint8_t)(old | LJ_GC_UDATA_FINREG) :
 			     (uint8_t)(old & (uint8_t)~LJ_GC_UDATA_FINREG);
     if (next == old)
-      return;
+      return 0;
     if (la_cas8(lj_obj_gcflags_ref(o), &old, next, LA_ACQ_REL, LA_ACQ))
       break;
   }
-  if (enabled)
+  if (enabled) {
     la_add64_rlx(&g->gc2.finreg_udata_sets, 1);
-  else
+    return 1;
+  } else {
     la_add64_rlx(&g->gc2.finreg_udata_clears, 1);
+    return -1;
+  }
+}
+
+void lj_gc2_finreg_udata_register(lua_State *L, global_State *g, GCobj *o)
+{
+  GC2FinRegUDataNode *node, *head;
+  if (!L || !g || !o || o->gch.gct != ~LJ_TUDATA)
+    return;
+  node = lj_mem_newt(L, sizeof(GC2FinRegUDataNode), GC2FinRegUDataNode);
+  setgcref(node->obj, o);
+  do {
+    head = (GC2FinRegUDataNode *)la_loadptr_acq(
+      (void *const *)&g->gc2.finreg_udata_head);
+    node->next = head;
+  } while (!la_casptr((void **)&g->gc2.finreg_udata_head, (void **)&head,
+		      node, LA_ACQ_REL, LA_ACQ));
+  la_add64_rlx(&g->gc2.finreg_udata_registered, 1);
+}
+
+void lj_gc2_finreg_udata_forget(global_State *g, GCobj *o)
+{
+  GC2FinRegUDataNode *node;
+  int cleared = 0;
+  if (!g || !o || o->gch.gct != ~LJ_TUDATA)
+    return;
+  for (node = (GC2FinRegUDataNode *)la_loadptr_acq(
+	 (void *const *)&g->gc2.finreg_udata_head);
+       node != NULL;
+       node = (GC2FinRegUDataNode *)la_loadptr_acq(
+	 (void *const *)&node->next)) {
+    if (gcref_acq(node->obj) == o) {
+      setgcrefnullrel(node->obj);
+      cleared = 1;
+    }
+  }
+  if (cleared)
+    la_add64_rlx(&g->gc2.finreg_udata_forgets, 1);
 }
 
 void lj_gc2_finreg_udata_queue(global_State *g, GCobj *o)

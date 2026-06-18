@@ -119,7 +119,9 @@ for needle in \
   'lj_gc2_finreg_cdata_set(g, o, 0)' \
   'lj_gc2_finreg_cdata_queue(g, obj2gco(cd))' \
   'lj_gc2_finreg_udata_set(global_State *g, GCobj *o, int enabled)' \
+  'lj_gc2_finreg_udata_register(lua_State *L, global_State *g,' \
   'lj_gc2_finreg_udata_queue(global_State *g, GCobj *o)' \
+  'void *finreg_udata_head' \
   'lj_gc2_finreg_udata_set(g, obj2gco(ud), 1)' \
   'lj_gc2_finreg_udata_set(g, obj2gco(ud), 0)' \
   'lj_gc2_finreg_udata_queue(g, o)' \
