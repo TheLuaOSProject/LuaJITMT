@@ -72,6 +72,10 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.smr_reclaimed, 0);
   la_store64_rlx(&g->gc2.cycle_requests, 0);
   la_store64_rlx(&g->gc2.cycle_starts, 0);
+  la_store64_rlx(&g->gc2.major_cycle_starts, 0);
+  la_store64_rlx(&g->gc2.minor_cycle_requests, 0);
+  la_store32_rlx(&g->gc2.cycle_minor_requested, 0);
+  la_store32_rlx(&g->gc2.force_major, 0);
   la_store64_rlx(&g->gc2.marks_this_round, 0);
   g->gc2.ssb_head = NULL;
   la_store32_rlx(&g->gc2.ssb_published, 0);
@@ -523,6 +527,13 @@ void lj_gc2_legacy_mark_begin(global_State *g)
 {
   TGState *tg = G2TG(g);
   uint32_t leader;
+  uint32_t forced_major, minor_requested;
+  forced_major = la_xchg32_acqrel(&g->gc2.force_major, 0);
+  minor_requested = !forced_major && la_load32_acq(&g->gc2.generational) != 0;
+  la_store32_rel(&g->gc2.cycle_minor_requested, minor_requested);
+  if (minor_requested)
+    la_add64_rlx(&g->gc2.minor_cycle_requests, 1);
+  la_add64_rlx(&g->gc2.major_cycle_starts, 1);
   /* Publish MARK before clearing the request token, so late allocators stop. */
   g->gc2.phase = LJ_GC2_MARK;
   leader = la_xchg32_acqrel(&g->gc2.cycle_leader, 0);
@@ -545,6 +556,12 @@ void lj_gc2_legacy_mark_begin(global_State *g)
   gc2_clear_marks_all(g);
   lj_gc2_handshake(g, LJ_GC2_HS_ENABLE_BARRIER|LJ_GC2_HS_ALLOC_BLACK);
   lj_gc2_worker_wake(g);  /* 05 section 5.6.3 parked worker scheduler. */
+}
+
+void lj_gc2_force_major(global_State *g)
+{
+  if (g)
+    la_store32_rel(&g->gc2.force_major, 1);
 }
 
 void lj_gc2_legacy_weak_begin(global_State *g)

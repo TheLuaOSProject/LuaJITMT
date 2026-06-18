@@ -2112,6 +2112,7 @@ void lj_gc_fullgc(lua_State *L)
   lj_assertG(g->gc.state == GCSfinalize || g->gc.state == GCSpause,
 	     "bad GC state");
   /* Now perform a full GC. */
+  lj_gc2_force_major(g);
   g->gc.state = GCSpause;
   do {
     gc_onestep(L);

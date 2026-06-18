@@ -250,8 +250,10 @@ after minor) zero-diff.
 Current implementation note: the public `collectgarbage("generational")` /
 `collectgarbage("incremental")` mode toggle now drives a passive
 `GC2State.generational` bit and exposes it through `collectgarbage("stats")`.
-The actual minor-cycle root filter, remembered-set SSB mode, minor sweep
-identity wiring, and survival-rate heuristic remain pending.
+Full GC now sets a one-shot major override, and generational mark begins record
+minor-cycle requests through `minor_cycle_requests` while still executing major
+cycles. The actual minor-cycle root filter, remembered-set SSB mode, minor
+sweep identity wiring, and survival-rate heuristic remain pending.
 
 ## 12.1 Per-file change index (cross-check before declaring any milestone done)
 new: lj_atomic.h lj_tg.{h,c} lj_arena.{h,c} lj_gc2.{h,c} lj_gc2_barrier.h

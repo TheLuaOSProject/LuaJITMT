@@ -24,6 +24,7 @@ int main(void)
   uint64_t total;
   uint64_t epoch0;
   uint64_t cycle_requests0, cycle_starts0;
+  uint64_t major_starts0, minor_requests0;
   uint64_t assist_runs0, assist_grey0, assist_ssb0;
   uint64_t assist_weak0;
   uint64_t weak_clear_tables0, weak_clear_cleared0;
@@ -39,6 +40,10 @@ int main(void)
   assert(la_load32_acq(&g->gc2.cycle_leader) == 0);
   assert(la_load64_acq(&g->gc2.cycle_requests) == 0);
   assert(la_load64_acq(&g->gc2.cycle_starts) == 0);
+  assert(la_load64_acq(&g->gc2.major_cycle_starts) == 0);
+  assert(la_load64_acq(&g->gc2.minor_cycle_requests) == 0);
+  assert(la_load32_acq(&g->gc2.cycle_minor_requested) == 0);
+  assert(la_load32_acq(&g->gc2.force_major) == 0);
   assert(la_load32_acq(&g->gc2.assist_shift) ==
 	 lj_gc2_assist_shift_from_stepmul(g->gc.stepmul));
   assert(la_load64_acq(&g->gc2.trigger_bytes) >= LJ_GC2_ACCT_FLUSH);
@@ -98,6 +103,8 @@ int main(void)
   (void)la_xchg64_acqrel(&g->gc2.alloc_since_trigger, 0);
   cycle_requests0 = la_load64_acq(&g->gc2.cycle_requests);
   cycle_starts0 = la_load64_acq(&g->gc2.cycle_starts);
+  major_starts0 = la_load64_acq(&g->gc2.major_cycle_starts);
+  minor_requests0 = la_load64_acq(&g->gc2.minor_cycle_requests);
   lj_gc2_account_alloc(g, tg, LJ_GC2_ACCT_FLUSH);
   assert(la_load64_acq(&tg->local_total) == 0);
   assert(lj_gc_threshold_load(g) == g->gc.total);
@@ -109,7 +116,31 @@ int main(void)
   lj_gc2_legacy_mark_begin(g);
   assert(la_load32_acq(&g->gc2.cycle_leader) == 0);
   assert(la_load64_acq(&g->gc2.cycle_starts) == cycle_starts0 + 1u);
+  assert(la_load64_acq(&g->gc2.major_cycle_starts) == major_starts0 + 1u);
+  assert(la_load64_acq(&g->gc2.minor_cycle_requests) == minor_requests0);
+  assert(la_load32_acq(&g->gc2.cycle_minor_requested) == 0);
   lj_gc2_legacy_cycle_end(g);
+
+  la_store32_rel(&g->gc2.generational, 1);
+  major_starts0 = la_load64_acq(&g->gc2.major_cycle_starts);
+  minor_requests0 = la_load64_acq(&g->gc2.minor_cycle_requests);
+  lj_gc2_legacy_mark_begin(g);
+  assert(la_load64_acq(&g->gc2.major_cycle_starts) == major_starts0 + 1u);
+  assert(la_load64_acq(&g->gc2.minor_cycle_requests) ==
+	 minor_requests0 + 1u);
+  assert(la_load32_acq(&g->gc2.cycle_minor_requested) == 1);
+  lj_gc2_legacy_cycle_end(g);
+
+  major_starts0 = la_load64_acq(&g->gc2.major_cycle_starts);
+  minor_requests0 = la_load64_acq(&g->gc2.minor_cycle_requests);
+  lj_gc2_force_major(g);
+  lj_gc2_legacy_mark_begin(g);
+  assert(la_load64_acq(&g->gc2.major_cycle_starts) == major_starts0 + 1u);
+  assert(la_load64_acq(&g->gc2.minor_cycle_requests) == minor_requests0);
+  assert(la_load32_acq(&g->gc2.cycle_minor_requested) == 0);
+  assert(la_load32_acq(&g->gc2.force_major) == 0);
+  lj_gc2_legacy_cycle_end(g);
+  la_store32_rel(&g->gc2.generational, 0);
 
   lj_gc_threshold_store(g, LJ_MAX_MEM);
   (void)la_xchg64_acqrel(&g->gc2.alloc_since_trigger, 0);

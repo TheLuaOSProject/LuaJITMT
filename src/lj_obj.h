@@ -852,6 +852,10 @@ typedef struct GC2State {
   uint64_t smr_reclaimed;  /* Retired objects freed after a grace period. */
   uint64_t cycle_requests;  /* Allocation-triggered cycle requests. */
   uint64_t cycle_starts;  /* Requested cycles consumed at mark begin. */
+  uint64_t major_cycle_starts;  /* Actual major GC2 mark begins. */
+  uint64_t minor_cycle_requests;  /* Generational minor requests seen. */
+  uint32_t cycle_minor_requested;  /* Current cycle requested minor mode. */
+  uint32_t force_major;  /* One-shot full-GC major-cycle override. */
   uint64_t marks_this_round;  /* New arena/HugeTab marks this round. */
   GC2SSBNode *ssb_head;	/* Published mutator SSB buffers. */
   uint32_t ssb_published;  /* Published SSB node count. */
