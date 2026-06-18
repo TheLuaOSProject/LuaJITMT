@@ -1244,6 +1244,44 @@ static void gc2_mark_finalizer_ring(global_State *g, GCobj *tail)
   } while (o != tail);
 }
 
+static void gc2_scan_tg_roots(global_State *g)
+{
+  TGState *tg;
+  for (tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
+       tg != NULL;
+       tg = (TGState *)la_loadptr_acq((void *const *)&tg->next_tg)) {
+    lua_State *thread_L, *cur_L;
+    lj_gc2_markmem(g, tg->tmpbuf.b);
+    if (la_load8_acq(&tg->tg_flags) & TGF_DEAD)
+      continue;
+    thread_L = (lua_State *)la_loadptr_acq((void *const *)&tg->thread_L);
+    cur_L = (lua_State *)la_loadptr_acq((void *const *)&tg->cur_L);
+    if (thread_L) {
+      lj_gc2_markobj(g, obj2gco(thread_L));  /* 05 section 5.7.4 TG root. */
+      la_add64_rlx(&g->gc2.tg_thread_roots, 1);
+    }
+    if (cur_L && cur_L != thread_L) {
+      lj_gc2_markobj(g, obj2gco(cur_L));  /* 05 section 5.7.4 TG root. */
+      la_add64_rlx(&g->gc2.tg_cur_roots, 1);
+    }
+#if LJ_HASJIT
+    {
+      int32_t vmstate = (int32_t)la_load32_acq((uint32_t *)&tg->vmstate);
+      if (vmstate > 0 && gc2_mark_trace_root(g, (TraceNo)vmstate))
+	la_add64_rlx(&g->gc2.tg_trace_roots, 1);
+    }
+#endif
+  }
+}
+
+#if LJ_HASJIT
+static void gc2_scan_current_trace_root(global_State *g)
+{
+  jit_State *J = G2J(g);
+  gc2_traverse_trace(g, &J->cur);  /* 05 section 5.7.4 current trace root. */
+}
+#endif
+
 static void gc2_scan_global_roots(global_State *g)
 {
   ptrdiff_t i;
@@ -1284,35 +1322,7 @@ static void gc2_scan_global_roots(global_State *g)
   lj_gc2_markmem(g, mref(g->gc.lightudseg, uint32_t));
 #endif
   lj_gc2_markmem(g, g->tmpbuf.b);
-  {
-    TGState *tg;
-    for (tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
-	 tg != NULL;
-	 tg = (TGState *)la_loadptr_acq((void *const *)&tg->next_tg)) {
-      lua_State *thread_L, *cur_L;
-      lj_gc2_markmem(g, tg->tmpbuf.b);
-      if (la_load8_acq(&tg->tg_flags) & TGF_DEAD)
-	continue;
-      thread_L = (lua_State *)
-	la_loadptr_acq((void *const *)&tg->thread_L);
-      cur_L = (lua_State *)la_loadptr_acq((void *const *)&tg->cur_L);
-      if (thread_L) {
-	lj_gc2_markobj(g, obj2gco(thread_L));  /* 05 section 5.7.4 TG root. */
-	la_add64_rlx(&g->gc2.tg_thread_roots, 1);
-      }
-      if (cur_L && cur_L != thread_L) {
-	lj_gc2_markobj(g, obj2gco(cur_L));  /* 05 section 5.7.4 TG root. */
-	la_add64_rlx(&g->gc2.tg_cur_roots, 1);
-      }
-#if LJ_HASJIT
-      {
-	int32_t vmstate = (int32_t)la_load32_acq((uint32_t *)&tg->vmstate);
-	if (vmstate > 0 && gc2_mark_trace_root(g, (TraceNo)vmstate))
-	  la_add64_rlx(&g->gc2.tg_trace_roots, 1);
-      }
-#endif
-    }
-  }
+  gc2_scan_tg_roots(g);
 #if LJ_HASFFI
   {
     CTState *cts = ctype_ctsG(g);
@@ -1350,7 +1360,7 @@ static void gc2_scan_global_roots(global_State *g)
   {
     jit_State *J = G2J(g);
     lj_trace_markvecs(g, 1);
-    gc2_traverse_trace(g, &J->cur);  /* 05 section 5.7.4 current trace root. */
+    gc2_scan_current_trace_root(g);
     lj_mcode_markretired(g, 1);
     lj_gc2_markmem(g, J->irbuf ? J->irbuf + J->irbotlim : NULL);
     lj_gc2_markmem(g, J->snapbuf);
@@ -1365,6 +1375,17 @@ void lj_gc2_scan_roots(global_State *g, lua_State *L)
     return;
   gc2_scan_global_roots(g);
   gc2_scan_thread_roots(g, L);
+}
+
+void lj_gc2_scan_minor_roots(global_State *g, lua_State *L)
+{
+  if (!g || la_load32_acq(&g->gc2.cycle_roots_minor) == 0)
+    return;
+  gc2_scan_tg_roots(g);
+  gc2_scan_thread_roots(g, L);
+#if LJ_HASJIT
+  gc2_scan_current_trace_root(g);
+#endif
 }
 
 static void *gc2_mark_base(GCobj *o);

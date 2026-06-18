@@ -571,7 +571,8 @@ use that gate to filter for old-parent/young-child remembered pairs, while
 value-only contexts stay conservative until their parent context is explicit.
 Minor root selection has matching `cycle_roots_minor` /
 `minor_roots_enabled` latches and `minor_roots_deferred` telemetry, but public
-cycles still use the full root set until the minor root scanner is implemented.
+cycles still use the full root set while the gated `lj_gc2_scan_minor_roots()`
+path is tested separately before public minor roots are enabled.
 
 ## 5.13 Torture & debug
 `collectgarbage("torture",1)`: leader runs continuous back-to-back cycles

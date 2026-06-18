@@ -2098,6 +2098,50 @@ static void test_tg_thread_roots(lua_State *L, global_State *g, TGState *tg)
   lua_pop(L, 2);
 }
 
+static void test_minor_root_scan(lua_State *L, global_State *g, TGState *tg)
+{
+  GCtab *registry_tab, *stack_tab;
+  uint32_t generational0 = la_load32_acq(&g->gc2.generational);
+  uint32_t sweep_gate0 = la_load32_acq(&g->gc2.minor_sweep_enabled);
+  uint32_t roots_gate0 = la_load32_acq(&g->gc2.minor_roots_enabled);
+  UNUSED(tg);
+
+  lua_newtable(L);
+  registry_tab = tabV(L->top - 1);
+  lua_setfield(L, LUA_REGISTRYINDEX, "gc2_minor_root_scan");
+  lua_newtable(L);
+  stack_tab = tabV(L->top - 1);
+
+  la_store32_rel(&g->gc2.generational, 0);
+  la_store32_rel(&g->gc2.minor_sweep_enabled, 1);
+  la_store32_rel(&g->gc2.minor_roots_enabled, 1);
+  lj_gc2_legacy_mark_begin(g);
+  assert(la_load32_acq(&g->gc2.cycle_roots_minor) == 0);
+  lj_gc2_scan_minor_roots(g, L);
+  assert(lj_gc2_ismarked(g, obj2gco(stack_tab)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(registry_tab)) == 0);
+  lj_gc2_legacy_cycle_end(g);
+
+  la_store32_rel(&g->gc2.generational, 1);
+  la_store32_rel(&g->gc2.minor_sweep_enabled, 1);
+  la_store32_rel(&g->gc2.minor_roots_enabled, 1);
+  lj_gc2_legacy_mark_begin(g);
+  assert(la_load32_acq(&g->gc2.cycle_roots_minor) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(stack_tab)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(registry_tab)) == 0);
+  lj_gc2_scan_minor_roots(g, L);
+  assert(lj_gc2_ismarked(g, obj2gco(stack_tab)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(registry_tab)) == 0);
+  la_store32_rel(&g->gc2.generational, generational0);
+  la_store32_rel(&g->gc2.minor_sweep_enabled, sweep_gate0);
+  la_store32_rel(&g->gc2.minor_roots_enabled, roots_gate0);
+  lj_gc2_legacy_cycle_end(g);
+
+  lua_pushnil(L);
+  lua_setfield(L, LUA_REGISTRYINDEX, "gc2_minor_root_scan");
+  lua_pop(L, 1);
+}
+
 static void test_thread(lua_State *L, global_State *g, TGState *tg)
 {
   lua_State *th, *busy, *oldcur;
@@ -3445,6 +3489,7 @@ int main(void)
   test_vm_tsetm_range_barrier(L, g, tg);
   test_closure(L, g, tg);
   test_tg_thread_roots(L, g, tg);
+  test_minor_root_scan(L, g, tg);
   test_thread(L, g, tg);
   test_userdata(L, g);
   test_finreg_userdata_queue_mark(L, g, tg);
