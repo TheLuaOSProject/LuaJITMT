@@ -1192,7 +1192,8 @@ static int gc_call_finalizer(global_State *g, lua_State *L,
   int had_mt_exclusive;
   int continue_gc = 1;
   int errcode;
-  TValue *oldtop, *top;
+  ptrdiff_t oldtop;
+  TValue *top;
   while (!lj_state_tryclaim(cbL, lj_thr_current_id(g), &claim))
     la_cpu_pause();
   lj_assertG(cbL != vmthread(g),
@@ -1204,7 +1205,8 @@ static int gc_call_finalizer(global_State *g, lua_State *L,
   hook_entergc(g);  /* Disable hooks and new traces during __gc. */
   if (LJ_HASPROFILE && (oldh & HOOK_PROFILE)) lj_dispatch_update(g, 0);
   lj_gc_threshold_store(g, LJ_MAX_MEM);  /* Prevent GC steps. */
-  oldtop = cbL->top;
+  lj_state_checkstack(cbL, 2+LJ_FR2+LUA_MINSTACK);
+  oldtop = savestack(cbL, cbL->top);
   top = cbL->top;
   copyTV(cbL, top++, mo);
   if (LJ_FR2) setnilV(top++);
@@ -1227,13 +1229,13 @@ static int gc_call_finalizer(global_State *g, lua_State *L,
   if (errcode) {
     TValue tmp;
     copyTV(cbL, &tmp, cbL->top-1);
-    cbL->top = oldtop;
+    cbL->top = restorestack(cbL, oldtop);
     lj_state_dropclaim(&claim);
     lj_vmevent_send(g, ERRFIN,
       copyTV(V, V->top++, &tmp);
     );
   } else {
-    cbL->top = oldtop;
+    cbL->top = restorestack(cbL, oldtop);
     lj_state_dropclaim(&claim);
   }
   return continue_gc;

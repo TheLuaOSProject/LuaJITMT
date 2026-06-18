@@ -72,6 +72,11 @@ for needle in \
   'm8_close_clear_suppressed_cdata' \
   'ffi.gc(keep.suppressed, nil)' \
   'suppressed_cdata_finalized == 0' \
+  'close_nested_gc_cdata_finalizer' \
+  'close_nested_gc_udata_finalizer' \
+  'run_nested_collect' \
+  'nested_gc_cdata_finalized == 1' \
+  'nested_gc_udata_finalized == 1' \
   'order_cdata_finalized[0] == 3' \
   'order_cdata_finalized[1] == 2' \
   'order_cdata_finalized[2] == 1' \
@@ -101,6 +106,9 @@ for needle in \
   'GC step completed while finalizer-spawned worker was live' \
   'finalizer-spawned worker can outlive callback' \
   'gc_finalize_cdata_slot_owned(lua_State *L, GCobj *o, cTValue *key)' \
+  'lj_state_checkstack(cbL, 2+LJ_FR2+LUA_MINSTACK);' \
+  'oldtop = savestack(cbL, cbL->top);' \
+  'cbL->top = restorestack(cbL, oldtop);' \
   'lj_ctype_fin_get(L, cts, key, &t)' \
   'gc_queue_cdata_finalizers_pweak(lua_State *L, global_State *g)' \
   'gc_preclaim_cdata_finalizers_pweak_finreg(lua_State *L,' \
