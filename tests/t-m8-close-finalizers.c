@@ -17,11 +17,16 @@ static int order_cdata_finalized[3];
 static int order_cdata_count;
 static int growth_triggered;
 static int growth_cdata_finalized;
+static int error_cdata_finalized;
+static int after_error_cdata_finalized;
+static int error_udata_finalized;
+static int after_error_udata_finalized;
 
 static int close_udata_finalizer(lua_State *L);
 static int close_alternating_udata_finalizer(lua_State *L);
 static void push_close_udata(lua_State *L);
 static void push_alternating_udata(lua_State *L);
+static void push_close_udata_with_finalizer(lua_State *L, lua_CFunction fin);
 
 #define ALTERNATING_CLOSE_CHAIN 6
 #define CLOSE_FINREG_GROWTH_BATCH 96
@@ -79,6 +84,20 @@ static int close_growth_cdata_finalizer(lua_State *L)
   return 0;
 }
 
+static int close_error_cdata_finalizer(lua_State *L)
+{
+  error_cdata_finalized++;
+  lua_pushliteral(L, "close cdata finalizer error");
+  return lua_error(L);
+}
+
+static int close_after_error_cdata_finalizer(lua_State *L)
+{
+  (void)L;
+  after_error_cdata_finalized++;
+  return 0;
+}
+
 static int close_udata_finalizer(lua_State *L)
 {
   udata_finalized++;
@@ -90,6 +109,20 @@ static int close_udata_finalizer(lua_State *L)
     lua_setmetatable(L, -2);
     lua_pop(L, 1);
   }
+  return 0;
+}
+
+static int close_error_udata_finalizer(lua_State *L)
+{
+  error_udata_finalized++;
+  lua_pushliteral(L, "close userdata finalizer error");
+  return lua_error(L);
+}
+
+static int close_after_error_udata_finalizer(lua_State *L)
+{
+  (void)L;
+  after_error_udata_finalized++;
   return 0;
 }
 
@@ -114,9 +147,14 @@ static int close_alternating_udata_finalizer(lua_State *L)
 
 static void push_close_udata(lua_State *L)
 {
+  push_close_udata_with_finalizer(L, close_udata_finalizer);
+}
+
+static void push_close_udata_with_finalizer(lua_State *L, lua_CFunction fin)
+{
   lua_newuserdata(L, 1);
   lua_newtable(L);
-  lua_pushcfunction(L, close_udata_finalizer);
+  lua_pushcfunction(L, fin);
   lua_setfield(L, -2, "__gc");
   lua_setmetatable(L, -2);
   lua_pop(L, 1);
@@ -152,6 +190,10 @@ int main(void)
   lua_setglobal(L, "m8_close_growth_trigger_finalizer");
   lua_pushcfunction(L, close_growth_cdata_finalizer);
   lua_setglobal(L, "m8_close_growth_cdata_finalizer");
+  lua_pushcfunction(L, close_error_cdata_finalizer);
+  lua_setglobal(L, "m8_close_error_cdata_finalizer");
+  lua_pushcfunction(L, close_after_error_cdata_finalizer);
+  lua_setglobal(L, "m8_close_after_error_cdata_finalizer");
   assert(luaL_dostring(L,
     "local ffi = require('ffi')\n"
     "ffi.cdef[[\n"
@@ -160,6 +202,7 @@ int main(void)
     "typedef struct { int x; } lj_m8_close_order_fin_t;\n"
     "typedef struct { int x; } lj_m8_close_growth_trigger_fin_t;\n"
     "typedef struct { int x; } lj_m8_close_growth_fin_t;\n"
+    "typedef struct { int x; } lj_m8_close_error_fin_t;\n"
     "]]\n"
     "local keep = {}\n"
     "function m8_close_chain_cdata()\n"
@@ -180,8 +223,12 @@ int main(void)
     "keep.order2 = ffi.gc(ffi.new('lj_m8_close_order_fin_t'), m8_close_order_cdata_finalizer_2)\n"
     "keep.order3 = ffi.gc(ffi.new('lj_m8_close_order_fin_t'), m8_close_order_cdata_finalizer_3)\n"
     "keep.growth = ffi.gc(ffi.new('lj_m8_close_growth_trigger_fin_t'), m8_close_growth_trigger_finalizer)\n"
+    "keep.after_error = ffi.gc(ffi.new('lj_m8_close_error_fin_t'), m8_close_after_error_cdata_finalizer)\n"
+    "keep.error = ffi.gc(ffi.new('lj_m8_close_error_fin_t'), m8_close_error_cdata_finalizer)\n"
     "m8_close_chain_alternating_cdata()\n") == LUA_OK);
   push_close_udata(L);
+  push_close_udata_with_finalizer(L, close_after_error_udata_finalizer);
+  push_close_udata_with_finalizer(L, close_error_udata_finalizer);
 
   lua_close(L);
   assert(cdata_finalized == 4);
@@ -194,6 +241,10 @@ int main(void)
   assert(order_cdata_finalized[2] == 1);
   assert(growth_triggered == 1);
   assert(growth_cdata_finalized == CLOSE_FINREG_GROWTH_BATCH);
+  assert(error_cdata_finalized == 1);
+  assert(after_error_cdata_finalized == 1);
+  assert(error_udata_finalized == 1);
+  assert(after_error_udata_finalized == 1);
   printf("t-m8-close-finalizers OK: lua_close drains alternating cdata/userdata finalizers to fixed point\n");
   return 0;
 }

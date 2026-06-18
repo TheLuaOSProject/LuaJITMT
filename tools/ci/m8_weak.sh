@@ -60,6 +60,12 @@ for needle in \
   'CLOSE_FINREG_GROWTH_BATCH' \
   'm8_close_register_growth_cdata' \
   'growth_cdata_finalized == CLOSE_FINREG_GROWTH_BATCH' \
+  'close_error_cdata_finalizer' \
+  'close_error_udata_finalizer' \
+  'error_cdata_finalized == 1' \
+  'after_error_cdata_finalized == 1' \
+  'error_udata_finalized == 1' \
+  'after_error_udata_finalized == 1' \
   'order_cdata_finalized[0] == 3' \
   'order_cdata_finalized[1] == 2' \
   'order_cdata_finalized[2] == 1' \
