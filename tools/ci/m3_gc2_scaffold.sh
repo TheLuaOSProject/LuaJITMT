@@ -148,6 +148,8 @@ for needle in \
   'lj_gc2_weak_complete(global_State *g, GCobj *legacy' \
   'lj_gc2_weak_to_sweep(global_State *g)' \
   'la_cas32(&g->gc2.phase, &expect, LJ_GC2_SWEEP' \
+  'la_store32_rel(&g->gc2.phase, LJ_GC2_MARK)' \
+  'phase = la_load32_acq(&g->gc2.phase)' \
   'la_xchg64_acqrel(&g->gc2.marks_this_round, 0)' \
   '05 section 5.7.1 scheduler-owned mark completion bridge' \
   'la_add64_rlx(&g->gc2.mark_to_weak' \

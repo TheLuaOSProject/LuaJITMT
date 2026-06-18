@@ -577,7 +577,7 @@ void lj_gc2_legacy_mark_begin(global_State *g)
   if (!roots_minor)
     la_add64_rlx(&g->gc2.major_cycle_starts, 1);
   /* Publish MARK before clearing the request token, so late allocators stop. */
-  g->gc2.phase = LJ_GC2_MARK;
+  la_store32_rel(&g->gc2.phase, LJ_GC2_MARK);
   leader = la_xchg32_acqrel(&g->gc2.cycle_leader, 0);
   if (g->gc2.tg_list == NULL && tg != NULL)
     lj_tg_attach(g, tg);
@@ -1908,7 +1908,7 @@ uint32_t lj_gc2_weak_snapshot_clear(global_State *g, uint32_t limit)
 
 uint32_t lj_gc2_weak_drain(global_State *g, uint32_t limit)
 {
-  if (!g || limit == 0 || g->gc2.phase != LJ_GC2_WEAK)
+  if (!g || limit == 0 || la_load32_acq(&g->gc2.phase) != LJ_GC2_WEAK)
     return 0;
   return lj_gc2_weak_snapshot_clear(g, limit);
 }
@@ -2594,12 +2594,14 @@ int lj_gc2_ssb_empty(global_State *g)
 static int gc2_barrier_active_g(global_State *g)
 {
   TGState *tg;
+  uint32_t phase;
   if (!g)
     return 0;
   tg = G2TG(g);
   if (!tg || !tg->mark_active)
     return 0;
-  if (g->gc2.phase != LJ_GC2_MARK && g->gc2.phase != LJ_GC2_WEAK)
+  phase = la_load32_acq(&g->gc2.phase);
+  if (phase != LJ_GC2_MARK && phase != LJ_GC2_WEAK)
     return 0;
   return 1;
 }
@@ -2929,15 +2931,18 @@ int lj_gc2_markobj(global_State *g, GCobj *o)
     return 0;
   base = gc2_mark_base(o);
   marked = lj_gc2_markmem(g, base);
-  traversable = gc2_mark_base_traversable(g, base);
-  if (marked && (g->gc2.phase == LJ_GC2_MARK || g->gc2.phase == LJ_GC2_WEAK) &&
-      (traversable || o->gch.gct == ~LJ_TUDATA)) {
-    if (traversable) {
-      int pushed = lj_gc2_ssb_push(g, o);  /* 05 section 5.6.1. */
-      lj_assertG(pushed, "gc2 SSB push failed for marked traversable object");
-      UNUSED(pushed);
-    } else {
-      gc2_traverse_udata(g, gco2ud(o));
+  if (marked) {
+    uint32_t phase = la_load32_acq(&g->gc2.phase);
+    traversable = gc2_mark_base_traversable(g, base);
+    if ((phase == LJ_GC2_MARK || phase == LJ_GC2_WEAK) &&
+	(traversable || o->gch.gct == ~LJ_TUDATA)) {
+      if (traversable) {
+	int pushed = lj_gc2_ssb_push(g, o);  /* 05 section 5.6.1. */
+	lj_assertG(pushed, "gc2 SSB push failed for marked traversable object");
+	UNUSED(pushed);
+      } else {
+	gc2_traverse_udata(g, gco2ud(o));
+      }
     }
   }
   return marked;
