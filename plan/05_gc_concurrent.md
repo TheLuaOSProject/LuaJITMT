@@ -411,8 +411,11 @@ so GC2 weak-key/all-weak clearing matches the legacy `gc_mayclear()` predicate
 even though GC2 stack rescans are intentionally more conservative. The helper
 skips legacy `gc_clearweak()` after `lj_gc2_weak_snapshot_covers_legacy()`
 proves the current-cycle snapshot was fully published, fully clear-drained, and
-covers every table in the final legacy `g->gc.weak` list; otherwise the legacy
-pass remains the authoritative fallback for tables not yet covered by GC2.
+covers every table in the final legacy `g->gc.weak` list. When the snapshot is
+complete but misses legacy weak-list entries, the owner backfills those tables
+with the same captured-mode clear predicate before skipping legacy clearing.
+Incomplete, overflowed, or invalid snapshots still fall back to the legacy
+pass.
 String-bearing weak hash slots now follow legacy `gc_mayclear()` semantics in
 the GC2 clear driver: strings are marked but are not themselves weak-cleared,
 while a collectable key/value on the other side can still clear the entry. The

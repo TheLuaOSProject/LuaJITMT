@@ -152,6 +152,10 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.weak_clear_cleared, 0);
   la_store64_rlx(&g->gc2.weak_legacy_skipped, 0);
   la_store64_rlx(&g->gc2.weak_legacy_fallbacks, 0);
+  la_store64_rlx(&g->gc2.weak_legacy_backfills, 0);
+  la_store64_rlx(&g->gc2.weak_legacy_backfill_tables, 0);
+  la_store64_rlx(&g->gc2.weak_legacy_backfill_slots, 0);
+  la_store64_rlx(&g->gc2.weak_legacy_backfill_cleared, 0);
   la_store64_rlx(&g->gc2.finreg_cdata_sets, 0);
   la_store64_rlx(&g->gc2.finreg_cdata_clears, 0);
   la_store64_rlx(&g->gc2.finreg_cdata_queued, 0);
@@ -1742,9 +1746,20 @@ static int gc2_weak_snapshot_complete(global_State *g, uint32_t *pn)
   return 1;
 }
 
+static int gc2_weak_snapshot_has_tab(global_State *g, GCtab *t, uint32_t n)
+{
+  uint32_t i;
+  for (i = 0; i < n; i++) {
+    GCobj *o = gcref(g->gc2.weak_stack[i]);
+    if (o == obj2gco(t))
+      return 1;
+  }
+  return 0;
+}
+
 int lj_gc2_weak_snapshot_covers_legacy(global_State *g, GCobj *legacy)
 {
-  uint32_t i, n;
+  uint32_t n;
   uint64_t legacy_count = 0;
   if (!gc2_weak_snapshot_complete(g, &n))
     return 0;
@@ -1761,17 +1776,42 @@ int lj_gc2_weak_snapshot_covers_legacy(global_State *g, GCobj *legacy)
     if (legacy_count >= (uint64_t)n)
       return 0;  /* Conservative guard against duplicates/corruption. */
     legacy_count++;
-    for (i = 0; i < n; i++) {
-      if (lj_gc2_weak_snapshot_tab(g, i) == t) {
-	found = 1;
-	break;
-      }
-    }
+    found = gc2_weak_snapshot_has_tab(g, t, n);
     if (!found)
       return 0;
     legacy = gcref_acq(t->gclist);
   }
   return 1;  /* 05 section 5.8: GC2-cleared snapshot covers legacy weak list. */
+}
+
+static int gc2_weak_backfill_legacy(global_State *g, GCobj *legacy)
+{
+  uint32_t n;
+  uint64_t tables = 0, slots = 0, cleared = 0;
+  if (!gc2_weak_snapshot_complete(g, &n))
+    return 0;
+  while (legacy) {
+    GCtab *t;
+    uint8_t flags;
+    if (legacy->gch.gct != ~LJ_TTAB)
+      return 0;
+    t = gco2tab(legacy);
+    flags = lj_obj_gcflags(obj2gco(t));
+    if ((flags & LJ_GC_WEAK) == 0)
+      return 0;
+    if (!gc2_weak_snapshot_has_tab(g, t, n)) {
+      gc2_weak_process_tab(g, t, 1, &slots, &cleared);
+      tables++;
+    }
+    legacy = gcref_acq(t->gclist);
+  }
+  if (tables) {
+    la_add64_rlx(&g->gc2.weak_legacy_backfills, 1);
+    la_add64_rlx(&g->gc2.weak_legacy_backfill_tables, tables);
+    la_add64_rlx(&g->gc2.weak_legacy_backfill_slots, slots);
+    la_add64_rlx(&g->gc2.weak_legacy_backfill_cleared, cleared);
+  }
+  return 1;  /* 05 section 5.8: owner-cleared legacy weak snapshot gaps. */
 }
 
 void lj_gc2_weak_legacy_result(global_State *g, int skipped)
@@ -1809,6 +1849,13 @@ int lj_gc2_weak_complete(global_State *g, GCobj *legacy, uint32_t drain_limit)
 #endif
     lj_gc2_weak_legacy_result(g, 1);
     return 1;  /* 05 section 5.8 scheduler-owned weak completion bridge. */
+  }
+  if (gc2_weak_backfill_legacy(g, legacy)) {
+#if LJ_GC2_PARANOIA
+    gc2_weak_paranoia_zero_diff(g, legacy);
+#endif
+    lj_gc2_weak_legacy_result(g, 1);
+    return 1;  /* 05 section 5.8 owner-cleared legacy weak gaps. */
   }
   lj_gc2_weak_legacy_result(g, 0);
   return 0;  /* 05 section 5.8 conditional legacy weak fallback. */

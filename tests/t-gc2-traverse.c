@@ -1145,7 +1145,8 @@ static void test_weak_complete_bridge(lua_State *L, global_State *g,
 {
   GCtab *weak, *key, *val;
   GCtab *missing, *mkey, *mval;
-  uint64_t runs0, progress0, skipped0, fallbacks0;
+  uint64_t runs0, progress0, skipped0, fallbacks0, backfills0;
+  uint64_t backfill_tables0, backfill_cleared0;
   uint64_t clear_tables0, clear_cleared0;
 
   lua_settop(L, 0);
@@ -1190,17 +1191,25 @@ static void test_weak_complete_bridge(lua_State *L, global_State *g,
   runs0 = la_load64_acq(&g->gc2.weak_complete_runs);
   skipped0 = la_load64_acq(&g->gc2.weak_legacy_skipped);
   fallbacks0 = la_load64_acq(&g->gc2.weak_legacy_fallbacks);
-  assert(lj_gc2_weak_complete(g, gcref(g->gc.weak), 1) == 0);
+  backfills0 = la_load64_acq(&g->gc2.weak_legacy_backfills);
+  backfill_tables0 = la_load64_acq(&g->gc2.weak_legacy_backfill_tables);
+  backfill_cleared0 = la_load64_acq(&g->gc2.weak_legacy_backfill_cleared);
+  assert(lj_gc2_weak_complete(g, gcref(g->gc.weak), 1) == 1);
   assert(weak_entry_is_nil(L, weak, key));
+  assert(weak_entry_is_nil(L, missing, mkey));
   assert(la_load64_acq(&g->gc2.weak_complete_runs) == runs0 + 1u);
-  assert(la_load64_acq(&g->gc2.weak_legacy_skipped) == skipped0);
-  assert(la_load64_acq(&g->gc2.weak_legacy_fallbacks) == fallbacks0 + 1u);
+  assert(la_load64_acq(&g->gc2.weak_legacy_skipped) == skipped0 + 1u);
+  assert(la_load64_acq(&g->gc2.weak_legacy_fallbacks) == fallbacks0);
+  assert(la_load64_acq(&g->gc2.weak_legacy_backfills) == backfills0 + 1u);
+  assert(la_load64_acq(&g->gc2.weak_legacy_backfill_tables) ==
+	 backfill_tables0 + 1u);
+  assert(la_load64_acq(&g->gc2.weak_legacy_backfill_cleared) ==
+	 backfill_cleared0 + 1u);
   setgcrefnull(g->gc.weak);
   lj_gc2_legacy_cycle_end(g);
   lua_pop(L, 6);
 
   UNUSED(val);
-  UNUSED(mkey);
   UNUSED(mval);
 }
 

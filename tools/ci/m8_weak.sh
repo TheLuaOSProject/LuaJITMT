@@ -54,6 +54,9 @@ for needle in \
   'weak-table key write' \
   'test_weak_complete_bridge' \
   'lj_gc2_weak_complete(g, gcref(g->gc.weak), 1)' \
+  'gc2_weak_backfill_legacy(global_State *g, GCobj *legacy)' \
+  'weak_legacy_backfills' \
+  'weak_legacy_backfill_tables' \
   'int weak = lj_obj_gcflags(obj2gco(t)) & LJ_GC_WEAK' \
   'capture traversal-time weak mode' \
   'gc2_weak_paranoia_zero_diff(global_State *g, GCobj *legacy)' \

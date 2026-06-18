@@ -183,7 +183,7 @@ and clear/nested-GC behavior, close-time cdata/userdata finalizer drain, and
 focused GC2 weak/barrier paranoia coverage. It also reruns the GC2 phase
 accounting test to assert finalizer owner tracking and enter/leave counter
 balance under the current bridge. The traversal gate now covers
-`lj_gc2_weak_complete()` skip/fallback accounting for the current
+`lj_gc2_weak_complete()` skip/backfill/fallback accounting for the current
 GC2-cleared snapshot bridge, captured traversal-time weak modes across later
 `mt.__mode` mutation in both drain and late-write barriers, and a post-clear
 weak-phase store hook for the original resurrection-race case, including VM
