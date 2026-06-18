@@ -93,6 +93,7 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.remembered_barriers, 0);
   la_store64_rlx(&g->gc2.remembered_pushed, 0);
   la_store64_rlx(&g->gc2.remembered_overflows, 0);
+  la_store64_rlx(&g->gc2.remembered_filtered, 0);
   la_store64_rlx(&g->gc2.remembered_drained, 0);
   la_store64_rlx(&g->gc2.marks_this_round, 0);
   g->gc2.ssb_head = NULL;
@@ -2504,9 +2505,8 @@ static int gc2_remember_active_g(global_State *g)
 
 static void gc2_remember_obj(global_State *g, GCobj *o)
 {
-  if (!g || !o || !gc2_remember_active_g(g))
+  if (!g || !o)
     return;
-  la_add64_rlx(&g->gc2.remembered_barriers, 1);
   if (gc2_ssb_push(g, o, 0)) {
     la_add64_rlx(&g->gc2.remembered_pushed, 1);
   } else {
@@ -2514,6 +2514,29 @@ static void gc2_remember_obj(global_State *g, GCobj *o)
     lj_gc2_force_major(g);
     (void)gc2_request_cycle(g, G2TG(g));
   }
+}
+
+static int gc2_remember_pair_match(global_State *g, GCobj *parent,
+				   GCobj *child)
+{
+  if (la_load32_acq(&g->gc2.minor_sweep_enabled) == 0 || child == NULL)
+    return 1;
+  if (parent && lj_gc2_ismarked(g, parent) <= 0)
+    return 0;
+  return lj_gc2_ismarked(g, child) == 0;
+}
+
+static void gc2_remember_pair(global_State *g, GCobj *parent, GCobj *child)
+{
+  GCobj *root = parent ? parent : child;
+  if (!g || !root || !gc2_remember_active_g(g))
+    return;
+  la_add64_rlx(&g->gc2.remembered_barriers, 1);
+  if (!gc2_remember_pair_match(g, parent, child)) {
+    la_add64_rlx(&g->gc2.remembered_filtered, 1);
+    return;
+  }
+  gc2_remember_obj(g, root);
 }
 
 static int gc2_tab_weak_mode(global_State *g, GCtab *t, GCtab *mt)
@@ -2555,7 +2578,7 @@ void lj_gc2_barrier_tv(lua_State *L, cTValue *tv)
       if (gc2_barrier_active_g(g))
 	lj_gc2_markobj(g, gcV(&snap));
       else
-	gc2_remember_obj(g, gcV(&snap));
+	gc2_remember_pair(g, NULL, gcV(&snap));
     }
   }
 }
@@ -2569,7 +2592,7 @@ void lj_gc2_barrier_tv_g(global_State *g, cTValue *tv)
       if (gc2_barrier_active_g(g))
 	lj_gc2_markobj(g, gcV(&snap));
       else
-	gc2_remember_obj(g, gcV(&snap));
+	gc2_remember_pair(g, NULL, gcV(&snap));
     }
   }
 }
@@ -2587,7 +2610,7 @@ void lj_gc2_barrier_tvn_g(global_State *g, cTValue *tv, uint32_t n)
       TValue snap;
       lj_tv_load_acq(&snap, &tv[i]);
       if (tvisgcv(&snap))
-	gc2_remember_obj(g, gcV(&snap));
+	gc2_remember_pair(g, NULL, gcV(&snap));
     }
   }
 }
@@ -2606,7 +2629,35 @@ void lj_gc2_barrier_obj(lua_State *L, GCobj *o)
   if (gc2_barrier_active_g(g))
     lj_gc2_markobj(g, o);
   else
-    gc2_remember_obj(g, o);
+    gc2_remember_pair(g, NULL, o);
+}
+
+void lj_gc2_barrier_obj_pair(lua_State *L, GCobj *parent, GCobj *child)
+{
+  global_State *g;
+  if (!child || !L)
+    return;
+  g = G(L);
+  if (gc2_barrier_active_g(g))
+    lj_gc2_markobj(g, child);
+  else
+    gc2_remember_pair(g, parent, child);
+}
+
+void lj_gc2_barrier_tv_pair(lua_State *L, GCobj *parent, cTValue *tv)
+{
+  global_State *g;
+  TValue snap;
+  if (L && tv) {
+    lj_tv_load_acq(&snap, tv);
+    if (tvisgcv(&snap)) {
+      g = G(L);
+      if (gc2_barrier_active_g(g))
+	lj_gc2_markobj(g, gcV(&snap));
+      else
+	gc2_remember_pair(g, parent, gcV(&snap));
+    }
+  }
 }
 
 static void gc2_barrier_tab_mark(global_State *g, GCtab *t)
@@ -2631,7 +2682,7 @@ void lj_gc2_barrier_tab_g(global_State *g, GCtab *t)
   if (gc2_barrier_active_g(g))
     gc2_barrier_tab_mark(g, t);
   else
-    gc2_remember_obj(g, obj2gco(t));
+    gc2_remember_pair(g, obj2gco(t), NULL);
 }
 
 void lj_gc2_barrier_tab(lua_State *L, GCtab *t)
@@ -2643,7 +2694,7 @@ void lj_gc2_barrier_tab(lua_State *L, GCtab *t)
   if (gc2_barrier_active_g(g))
     gc2_barrier_tab_mark(g, t);
   else
-    gc2_remember_obj(g, obj2gco(t));
+    gc2_remember_pair(g, obj2gco(t), NULL);
 }
 
 void lj_gc2_barrier_weak_key(lua_State *L, GCtab *t, cTValue *key)

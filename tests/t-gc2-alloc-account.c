@@ -27,6 +27,7 @@ int main(void)
   uint64_t major_starts0, minor_requests0;
   uint64_t minor_deferred0;
   uint64_t remembered_drained0;
+  uint64_t remembered_pushed0, remembered_filtered0;
   uint64_t assist_runs0, assist_grey0, assist_ssb0;
   uint64_t assist_weak0;
   uint64_t weak_clear_tables0, weak_clear_cleared0;
@@ -50,6 +51,7 @@ int main(void)
   assert(la_load64_acq(&g->gc2.minor_sweep_deferred) == 0);
   assert(la_load64_acq(&g->gc2.minor_sweep_arenas) == 0);
   assert(la_load32_acq(&g->gc2.force_major) == 0);
+  assert(la_load64_acq(&g->gc2.remembered_filtered) == 0);
   assert(la_load64_acq(&g->gc2.remembered_drained) == 0);
   assert(la_load32_acq(&g->gc2.assist_shift) ==
 	 lj_gc2_assist_shift_from_stepmul(g->gc.stepmul));
@@ -168,6 +170,32 @@ int main(void)
   assert(la_load64_acq(&g->gc2.remembered_drained) >=
 	 remembered_drained0 + 1u);
   lj_gc2_legacy_cycle_end(g);
+  lj_gc2_set_generational(g, 0);
+  lua_settop(L, 0);
+
+  lj_gc2_set_generational(g, 1);
+  la_store32_rel(&g->gc2.minor_sweep_enabled, 1);
+  lua_newtable(L);
+  parent = tabV(L->top - 1);
+  lua_newtable(L);
+  child = tabV(L->top - 1);
+  lua_newtable(L);
+  grandchild = tabV(L->top - 1);
+  assert(lj_gc2_markobj(g, obj2gco(parent)) == 1);
+  assert(lj_gc2_markobj(g, obj2gco(child)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(grandchild)) == 0);
+  remembered_pushed0 = la_load64_acq(&g->gc2.remembered_pushed);
+  remembered_filtered0 = la_load64_acq(&g->gc2.remembered_filtered);
+  lj_gc2_barrier_obj_pair(L, obj2gco(parent), obj2gco(grandchild));
+  assert(la_load64_acq(&g->gc2.remembered_pushed) == remembered_pushed0 + 1u);
+  lj_gc2_barrier_obj_pair(L, obj2gco(parent), obj2gco(child));
+  assert(la_load64_acq(&g->gc2.remembered_filtered) ==
+	 remembered_filtered0 + 1u);
+  assert(la_load64_acq(&g->gc2.remembered_pushed) ==
+	 remembered_pushed0 + 1u);
+  (void)lj_gc2_handshake(g, LJ_GC2_HS_FLUSH_SSB);
+  (void)lj_gc2_drain_ssb(g);
+  la_store32_rel(&g->gc2.minor_sweep_enabled, 0);
   lj_gc2_set_generational(g, 0);
   lua_settop(L, 0);
 

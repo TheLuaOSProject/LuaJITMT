@@ -116,6 +116,8 @@ LJ_FUNCA void lj_gc2_barrier_tv_g(global_State *g, cTValue *tv);
 LJ_FUNCA void lj_gc2_barrier_tvn_g(global_State *g, cTValue *tv, uint32_t n);
 LJ_FUNC void lj_gc2_barrier_uv(global_State *g, cTValue *tv);
 LJ_FUNC void lj_gc2_barrier_obj(lua_State *L, GCobj *o);
+LJ_FUNC void lj_gc2_barrier_obj_pair(lua_State *L, GCobj *parent, GCobj *child);
+LJ_FUNC void lj_gc2_barrier_tv_pair(lua_State *L, GCobj *parent, cTValue *tv);
 LJ_FUNCA void lj_gc2_barrier_tab_g(global_State *g, GCtab *t);
 LJ_FUNC void lj_gc2_barrier_tab(lua_State *L, GCtab *t);
 LJ_FUNC int lj_gc2_markobj(global_State *g, GCobj *o);

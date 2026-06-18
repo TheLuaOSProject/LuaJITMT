@@ -566,7 +566,9 @@ actual minor execution path stays disabled until minor-cycle roots and precise
 remembered SSB filtering are wired. Minor sweep identity is routed through a
 latched `cycle_sweep_minor` flag and internal off-by-default
 `minor_sweep_enabled` gate, with deferred public minor requests counted until
-root filtering and enablement are safe.
+root filtering and enablement are safe. Parent-aware table/object barriers now
+use that gate to filter for old-parent/young-child remembered pairs, while
+value-only contexts stay conservative until their parent context is explicit.
 
 ## 5.13 Torture & debug
 `collectgarbage("torture",1)`: leader runs continuous back-to-back cycles

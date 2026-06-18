@@ -543,6 +543,8 @@ static void gc_stats_push(lua_State *L)
 		  la_load64_acq(&gc2->remembered_pushed));
   gc_stats_setnum(L, t, "remembered_overflows",
 		  la_load64_acq(&gc2->remembered_overflows));
+  gc_stats_setnum(L, t, "remembered_filtered",
+		  la_load64_acq(&gc2->remembered_filtered));
   gc_stats_setnum(L, t, "remembered_drained",
 		  la_load64_acq(&gc2->remembered_drained));
   gc_stats_setnum(L, t, "poll_ack_samples",

@@ -26,6 +26,7 @@ local gc_stat_keys = {
   "minor_sweep_arenas",
   "remembered_barriers",
   "remembered_drained",
+  "remembered_filtered",
   "remembered_overflows",
   "poll_ack_samples",
   "poll_ack_latency_max_ns",
