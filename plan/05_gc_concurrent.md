@@ -560,8 +560,10 @@ Current bridge: `collectgarbage("generational")` /
 `collectgarbage("incremental")` toggles `GC2State.generational` and exposes the
 mode through `collectgarbage("stats")`. Full GC publishes a one-shot major
 override, and generational allocation-triggered mark begins record minor-cycle
-requests; the actual minor execution path stays disabled until minor-cycle
-roots, remembered SSB filtering, and minor sweep identity are wired.
+requests. Idle generational barriers conservatively queue remembered entries
+into SSB without draining outside a cycle and force a major on overflow; the
+actual minor execution path stays disabled until minor-cycle roots, precise
+remembered SSB filtering, and minor sweep identity are wired.
 
 ## 5.13 Torture & debug
 `collectgarbage("torture",1)`: leader runs continuous back-to-back cycles

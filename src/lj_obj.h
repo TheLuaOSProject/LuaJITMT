@@ -856,6 +856,9 @@ typedef struct GC2State {
   uint64_t minor_cycle_requests;  /* Generational minor requests seen. */
   uint32_t cycle_minor_requested;  /* Current cycle requested minor mode. */
   uint32_t force_major;  /* One-shot full-GC major-cycle override. */
+  uint64_t remembered_barriers;  /* Idle generational barriers observed. */
+  uint64_t remembered_pushed;  /* Idle remembered entries queued. */
+  uint64_t remembered_overflows;  /* Remembered SSB overflows forcing major. */
   uint64_t marks_this_round;  /* New arena/HugeTab marks this round. */
   GC2SSBNode *ssb_head;	/* Published mutator SSB buffers. */
   uint32_t ssb_published;  /* Published SSB node count. */

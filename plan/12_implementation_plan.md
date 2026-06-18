@@ -252,8 +252,10 @@ Current implementation note: the public `collectgarbage("generational")` /
 `GC2State.generational` bit and exposes it through `collectgarbage("stats")`.
 Full GC now sets a one-shot major override, and generational mark begins record
 minor-cycle requests through `minor_cycle_requests` while still executing major
-cycles. The actual minor-cycle root filter, remembered-set SSB mode, minor
-sweep identity wiring, and survival-rate heuristic remain pending.
+cycles. Idle generational barriers conservatively queue remembered entries into
+SSB without draining outside a cycle and force a major on overflow. The precise
+old-to-young filter, minor-cycle root filter, minor sweep identity wiring, and
+survival-rate heuristic remain pending.
 
 ## 12.1 Per-file change index (cross-check before declaring any milestone done)
 new: lj_atomic.h lj_tg.{h,c} lj_arena.{h,c} lj_gc2.{h,c} lj_gc2_barrier.h

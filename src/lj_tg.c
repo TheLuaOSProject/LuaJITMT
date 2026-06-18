@@ -115,7 +115,7 @@ static void tg_adopt_gc2_phase(global_State *g, TGState *tg)
     tg->mark_active = 0;
     tg->alloc.alloc_black = 1;
   } else {
-    tg->mark_active = 0;
+    tg->mark_active = la_load32_acq(&g->gc2.generational) != 0;
     tg->alloc.alloc_black = 0;
   }
 }

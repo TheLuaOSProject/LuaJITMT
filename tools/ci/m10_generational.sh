@@ -18,16 +18,23 @@ for needle in \
   'uint64_t major_cycle_starts' \
   'uint64_t minor_cycle_requests' \
   'la_store32_rlx(&g->gc2.generational, 0)' \
-  'la_store32_rel(&g->gc2.generational, 1)' \
-  'la_store32_rel(&g->gc2.generational, 0)' \
+  'uint64_t remembered_barriers' \
+  'uint64_t remembered_pushed' \
+  'uint64_t remembered_overflows' \
+  'lj_gc2_set_generational(global_State *g, int enabled)' \
+  'la_store32_rel(&g->gc2.generational, want)' \
+  'tg->mark_active = la_load32_acq(&g->gc2.generational) != 0' \
   'lj_gc2_force_major(global_State *g)' \
+  'gc2_remember_obj(global_State *g, GCobj *o)' \
   'gc_stats_setint(L, t, "generational"' \
   'minor_cycle_requests' \
+  'remembered_barriers' \
   'collectgarbage("generational")' \
   'collectgarbage("incremental")'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lua.h" "$ROOT/src/lj_obj.h" \
-      "$ROOT/src/lj_gc2.c" "$ROOT/src/lj_api.c" "$ROOT/src/lib_base.c" \
+      "$ROOT/src/lj_gc2.h" "$ROOT/src/lj_gc2.c" "$ROOT/src/lj_api.c" \
+      "$ROOT/src/lj_tg.c" "$ROOT/src/lib_base.c" \
       "$ROOT/tests/t-gc-generational-mode.lua" "$ROOT/tests/t-gc-stats.lua" \
       "$ROOT/tests/t-gc2-alloc-account.c"; then
     echo "guardrail: missing M10 generational marker: $needle" >&2

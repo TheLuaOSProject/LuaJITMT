@@ -21,6 +21,8 @@ local gc_stat_keys = {
   "cycle_starts",
   "major_cycle_starts",
   "minor_cycle_requests",
+  "remembered_barriers",
+  "remembered_overflows",
   "poll_ack_samples",
   "poll_ack_latency_max_ns",
   "assist_runs",

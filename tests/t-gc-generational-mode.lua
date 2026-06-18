@@ -5,6 +5,9 @@ local function stats_mode()
   assert(type(stats.cycle_minor_requested) == "number")
   assert(type(stats.major_cycle_starts) == "number")
   assert(type(stats.minor_cycle_requests) == "number")
+  assert(type(stats.remembered_barriers) == "number")
+  assert(type(stats.remembered_pushed) == "number")
+  assert(type(stats.remembered_overflows) == "number")
   return stats.generational, stats
 end
 
@@ -24,6 +27,16 @@ local _, after_collect = stats_mode()
 assert(after_collect.cycle_minor_requested == 0)
 assert(after_collect.major_cycle_starts >= before_collect.major_cycle_starts)
 assert(after_collect.minor_cycle_requests == before_collect.minor_cycle_requests)
+
+local _, before_remember = stats_mode()
+local holder = {}
+for i = 1, 64 do
+  holder[i] = {i}
+end
+local _, after_remember = stats_mode()
+assert(after_remember.remembered_barriers > before_remember.remembered_barriers)
+assert(after_remember.remembered_pushed > before_remember.remembered_pushed)
+assert(after_remember.remembered_overflows >= before_remember.remembered_overflows)
 
 assert(collectgarbage("incremental") == "generational")
 assert(stats_mode() == 0)

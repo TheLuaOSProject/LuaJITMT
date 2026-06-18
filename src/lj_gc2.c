@@ -76,6 +76,9 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.minor_cycle_requests, 0);
   la_store32_rlx(&g->gc2.cycle_minor_requested, 0);
   la_store32_rlx(&g->gc2.force_major, 0);
+  la_store64_rlx(&g->gc2.remembered_barriers, 0);
+  la_store64_rlx(&g->gc2.remembered_pushed, 0);
+  la_store64_rlx(&g->gc2.remembered_overflows, 0);
   la_store64_rlx(&g->gc2.marks_this_round, 0);
   g->gc2.ssb_head = NULL;
   la_store32_rlx(&g->gc2.ssb_published, 0);
@@ -564,6 +567,30 @@ void lj_gc2_force_major(global_State *g)
     la_store32_rel(&g->gc2.force_major, 1);
 }
 
+static uint32_t gc2_idle_barrier_actions(global_State *g, int flush_ssb)
+{
+  uint32_t actions = LJ_GC2_HS_ALLOC_WHITE;
+  if (flush_ssb)
+    actions |= LJ_GC2_HS_FLUSH_SSB;
+  if (la_load32_acq(&g->gc2.generational))
+    actions |= LJ_GC2_HS_ENABLE_BARRIER;
+  else
+    actions |= LJ_GC2_HS_DISABLE_BARRIER;
+  return actions;
+}
+
+void lj_gc2_set_generational(global_State *g, int enabled)
+{
+  uint32_t want = enabled ? 1u : 0u;
+  if (!g)
+    return;
+  if (la_load32_acq(&g->gc2.generational) == want)
+    return;
+  la_store32_rel(&g->gc2.generational, want);
+  if (la_load32_acq(&g->gc2.phase) == LJ_GC2_IDLE)
+    lj_gc2_handshake(g, gc2_idle_barrier_actions(g, 0));
+}
+
 void lj_gc2_legacy_weak_begin(global_State *g)
 {
   lj_gc2_mark_to_weak(g);
@@ -908,8 +935,7 @@ void lj_gc2_legacy_preserve_abort(global_State *g)
   phase = la_xchg32_acqrel(&g->gc2.phase, LJ_GC2_IDLE);
   if (phase != LJ_GC2_IDLE)
     la_add64_rlx(&g->gc2.preserve_abort_to_idle, 1);
-  lj_gc2_handshake(g, LJ_GC2_HS_DISABLE_BARRIER|LJ_GC2_HS_ALLOC_WHITE|
-		   LJ_GC2_HS_FLUSH_SSB);
+  lj_gc2_handshake(g, gc2_idle_barrier_actions(g, 1));
   (void)lj_gc2_drain_ssb(g);
   (void)lj_tg_reclaim_dead(g);
 }
@@ -935,8 +961,7 @@ int lj_gc2_sweep_to_idle(global_State *g)
   }
   la_add64_rlx(&g->gc2.sweep_to_idle, 1);
   (void)lj_gc2_sweep_live_aggregate(g);
-  lj_gc2_handshake(g, LJ_GC2_HS_DISABLE_BARRIER|LJ_GC2_HS_ALLOC_WHITE|
-		   LJ_GC2_HS_FLUSH_SSB);
+  lj_gc2_handshake(g, gc2_idle_barrier_actions(g, 1));
   (void)lj_gc2_drain_ssb(g);
   (void)lj_tg_reclaim_dead(g);
   lj_gc2_update_pacing(g);
@@ -955,8 +980,7 @@ void lj_gc2_legacy_cycle_end(global_State *g)
     la_add64_rlx(&g->gc2.sweep_to_idle, 1);
     (void)lj_gc2_sweep_live_aggregate(g);
   }
-  lj_gc2_handshake(g, LJ_GC2_HS_DISABLE_BARRIER|LJ_GC2_HS_ALLOC_WHITE|
-		   LJ_GC2_HS_FLUSH_SSB);
+  lj_gc2_handshake(g, gc2_idle_barrier_actions(g, 1));
   (void)lj_gc2_drain_ssb(g);
   (void)lj_tg_reclaim_dead(g);
   lj_gc2_update_pacing(g);
@@ -2169,7 +2193,7 @@ static void gc2_ssb_publish(global_State *g, GC2SSBNode *node)
   lj_gc2_worker_wake(g);  /* 05 section 5.6.3 parked worker scheduler. */
 }
 
-uint32_t lj_gc2_flush_ssb(global_State *g, TGState *tg)
+static uint32_t gc2_flush_ssb(global_State *g, TGState *tg, int allow_drain)
 {
   GC2SSBNode *node, *fresh;
   GCRef *base, *next;
@@ -2184,12 +2208,12 @@ uint32_t lj_gc2_flush_ssb(global_State *g, TGState *tg)
   if (n == 0)
     return 0;
   fresh = tg->ssb_free;
-  if (!fresh) {
+  if (!fresh && allow_drain) {
     (void)lj_gc2_drain_ssb(g);  /* Temporary scaffold until workers recycle. */
     fresh = tg->ssb_free;
-    if (!fresh)
-      return 0;
   }
+  if (!fresh)
+    return 0;
   tg->ssb_free = fresh->next;
   node = tg->ssb_active;
   node->n = n;
@@ -2200,7 +2224,12 @@ uint32_t lj_gc2_flush_ssb(global_State *g, TGState *tg)
   return n;
 }
 
-int lj_gc2_ssb_push(global_State *g, GCobj *o)
+uint32_t lj_gc2_flush_ssb(global_State *g, TGState *tg)
+{
+  return gc2_flush_ssb(g, tg, 1);
+}
+
+static int gc2_ssb_push(global_State *g, GCobj *o, int allow_drain)
 {
   TGState *tg;
   GCRef *next, *end;
@@ -2214,7 +2243,7 @@ int lj_gc2_ssb_push(global_State *g, GCobj *o)
   if (!next || !end)
     return 0;
   if (next == end) {
-    if (lj_gc2_flush_ssb(g, tg) == 0)
+    if (gc2_flush_ssb(g, tg, allow_drain) == 0)
       return 0;
     next = (GCRef *)la_loadptr_acq((void *const *)&tg->ssb_next);
     end = (GCRef *)la_loadptr_acq((void *const *)&tg->ssb_end);
@@ -2225,6 +2254,11 @@ int lj_gc2_ssb_push(global_State *g, GCobj *o)
   /* 05 section 5.6.2: publish slot before cursor advance. */
   la_storeptr_rel((void **)&tg->ssb_next, next + 1);
   return 1;
+}
+
+int lj_gc2_ssb_push(global_State *g, GCobj *o)
+{
+  return gc2_ssb_push(g, o, 1);
 }
 
 static void gc2_ssb_mark_one(global_State *g, GCobj *o)
@@ -2425,16 +2459,28 @@ static int gc2_barrier_active_g(global_State *g)
   return 1;
 }
 
-static int gc2_barrier_active(lua_State *L, global_State **pg)
+static int gc2_remember_active_g(global_State *g)
 {
-  global_State *g;
-  if (!L)
+  TGState *tg;
+  if (!g || la_load32_acq(&g->gc2.phase) != LJ_GC2_IDLE ||
+      la_load32_acq(&g->gc2.generational) == 0)
     return 0;
-  g = G(L);
-  if (!gc2_barrier_active_g(g))
-    return 0;
-  *pg = g;
-  return 1;
+  tg = G2TG(g);
+  return tg && tg->mark_active;
+}
+
+static void gc2_remember_obj(global_State *g, GCobj *o)
+{
+  if (!g || !o || !gc2_remember_active_g(g))
+    return;
+  la_add64_rlx(&g->gc2.remembered_barriers, 1);
+  if (gc2_ssb_push(g, o, 0)) {
+    la_add64_rlx(&g->gc2.remembered_pushed, 1);
+  } else {
+    la_add64_rlx(&g->gc2.remembered_overflows, 1);
+    lj_gc2_force_major(g);
+    (void)gc2_request_cycle(g, G2TG(g));
+  }
 }
 
 static int gc2_tab_weak_mode(global_State *g, GCtab *t, GCtab *mt)
@@ -2469,10 +2515,15 @@ void lj_gc2_barrier_tv(lua_State *L, cTValue *tv)
 {
   global_State *g;
   TValue snap;
-  if (tv) {
+  if (L && tv) {
     lj_tv_load_acq(&snap, tv);
-    if (tvisgcv(&snap) && gc2_barrier_active(L, &g))
-      lj_gc2_markobj(g, gcV(&snap));
+    if (tvisgcv(&snap)) {
+      g = G(L);
+      if (gc2_barrier_active_g(g))
+	lj_gc2_markobj(g, gcV(&snap));
+      else
+	gc2_remember_obj(g, gcV(&snap));
+    }
   }
 }
 
@@ -2481,18 +2532,31 @@ void lj_gc2_barrier_tv_g(global_State *g, cTValue *tv)
   TValue snap;
   if (tv) {
     lj_tv_load_acq(&snap, tv);
-    if (tvisgcv(&snap) && gc2_barrier_active_g(g))
-      lj_gc2_markobj(g, gcV(&snap));
+    if (tvisgcv(&snap)) {
+      if (gc2_barrier_active_g(g))
+	lj_gc2_markobj(g, gcV(&snap));
+      else
+	gc2_remember_obj(g, gcV(&snap));
+    }
   }
 }
 
 void lj_gc2_barrier_tvn_g(global_State *g, cTValue *tv, uint32_t n)
 {
   uint32_t i;
-  if (!tv || !gc2_barrier_active_g(g))
+  if (!tv)
     return;
-  for (i = 0; i < n; i++)
-    lj_gc2_barrier_tv_g(g, &tv[i]);
+  if (gc2_barrier_active_g(g)) {
+    for (i = 0; i < n; i++)
+      lj_gc2_barrier_tv_g(g, &tv[i]);
+  } else if (gc2_remember_active_g(g)) {
+    for (i = 0; i < n; i++) {
+      TValue snap;
+      lj_tv_load_acq(&snap, &tv[i]);
+      if (tvisgcv(&snap))
+	gc2_remember_obj(g, gcV(&snap));
+    }
+  }
 }
 
 void lj_gc2_barrier_uv(global_State *g, cTValue *tv)
@@ -2503,8 +2567,13 @@ void lj_gc2_barrier_uv(global_State *g, cTValue *tv)
 void lj_gc2_barrier_obj(lua_State *L, GCobj *o)
 {
   global_State *g;
-  if (o && gc2_barrier_active(L, &g))
+  if (!o || !L)
+    return;
+  g = G(L);
+  if (gc2_barrier_active_g(g))
     lj_gc2_markobj(g, o);
+  else
+    gc2_remember_obj(g, o);
 }
 
 static void gc2_barrier_tab_mark(global_State *g, GCtab *t)
@@ -2524,15 +2593,24 @@ static void gc2_barrier_tab_mark(global_State *g, GCtab *t)
 
 void lj_gc2_barrier_tab_g(global_State *g, GCtab *t)
 {
-  if (t && gc2_barrier_active_g(g))
+  if (!t)
+    return;
+  if (gc2_barrier_active_g(g))
     gc2_barrier_tab_mark(g, t);
+  else
+    gc2_remember_obj(g, obj2gco(t));
 }
 
 void lj_gc2_barrier_tab(lua_State *L, GCtab *t)
 {
   global_State *g;
-  if (t && gc2_barrier_active(L, &g))
+  if (!t || !L)
+    return;
+  g = G(L);
+  if (gc2_barrier_active_g(g))
     gc2_barrier_tab_mark(g, t);
+  else
+    gc2_remember_obj(g, obj2gco(t));
 }
 
 void lj_gc2_barrier_weak_key(lua_State *L, GCtab *t, cTValue *key)
