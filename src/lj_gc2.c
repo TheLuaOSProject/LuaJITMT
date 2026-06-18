@@ -2704,6 +2704,7 @@ static int gc2_tab_weak_mode(global_State *g, GCtab *t, GCtab *mt)
   if (mode && tvisstr(mode)) {
     const char *modestr = strVdata(mode);
     int c;
+    (void)lj_gc2_markobj(g, gcV(mode));  /* Weak mode metadata is strong. */
     while ((c = *modestr++)) {
       if (c == 'k') weak |= LJ_GC_WEAKKEY;
       else if (c == 'v') weak |= LJ_GC_WEAKVAL;

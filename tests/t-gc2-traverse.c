@@ -1041,6 +1041,16 @@ static int weak_snapshot_has(global_State *g, GCtab *t)
   return 0;
 }
 
+static void assert_weak_mode_marked(global_State *g, GCtab *t)
+{
+  GCtab *mt = tabref_acq(t->metatable);
+  cTValue *mode;
+  assert(mt != NULL);
+  mode = lj_tab_getstr(mt, mmname_str(g, MM_mode));
+  assert(mode != NULL && tvisstr(mode));
+  assert(lj_gc2_ismarked(g, gcV(mode)) == 1);
+}
+
 static int weak_entry_is_nil(lua_State *L, GCtab *weak, GCtab *key)
 {
   TValue k;
@@ -1315,6 +1325,9 @@ static void test_weak_tables(lua_State *L, global_State *g, TGState *tg)
   assert(lj_gc2_ismarked(g, obj2gco(valk)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(keykv)) == 0);
   assert(lj_gc2_ismarked(g, obj2gco(valkv)) == 0);
+  assert_weak_mode_marked(g, weakv);
+  assert_weak_mode_marked(g, weakk);
+  assert_weak_mode_marked(g, weakkv);
   assert(la_load64_acq(&g->gc2.weak_tables_seen) == seen0 + 3u);
   assert(la_load64_acq(&g->gc2.weak_tables_weakkey) == weakkey0 + 2u);
   assert(la_load64_acq(&g->gc2.weak_tables_weakval) == weakval0 + 2u);
@@ -1413,7 +1426,7 @@ static void test_weak_clear_marks_string_slots(lua_State *L, global_State *g,
   flush_and_drain(g, tg);
   assert(lj_gc2_weak_snapshot_count(g) == 1u);
   assert(lj_gc2_ismarked(g, obj2gco(keystr)) == 0);
-  assert(lj_gc2_ismarked(g, obj2gco(modestr)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(modestr)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(val)) == 0);
   assert(lj_gc2_weak_drain(g, 1) == 0);
   lj_gc2_legacy_weak_begin(g);
