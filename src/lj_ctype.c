@@ -252,6 +252,8 @@ cTValue *lj_ctype_fin_get(lua_State *L, CTState *cts, cTValue *key,
        gen != NULL;
        gen = (FinRegGen *)la_loadptr_acq((void *const *)&gen->next)) {
     GCtab *t = (GCtab *)la_loadptr_acq((void *const *)&gen->tab);
+    if (!t || !gcref_acq(t->metatable))
+      continue;
     cTValue *tv = lj_tab_get(L, t, key);
     if (tv != niltv(L)) {
       *tabp = t;

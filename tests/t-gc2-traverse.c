@@ -3476,6 +3476,10 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
 
 static void test_finreg_disabled_pending_scan(lua_State *L, global_State *g)
 {
+  CTState *cts;
+  TValue key;
+  GCtab *t;
+  cTValue *slot;
   lua_settop(L, 0);
   lua_pushcfunction(L, gc2_cdata_counting_finalizer);
   lua_setglobal(L, "gc2_cdata_counting_finalizer");
@@ -3486,8 +3490,20 @@ static void test_finreg_disabled_pending_scan(lua_State *L, global_State *g)
     "  gc2_cdata_counting_finalizer)\n") ==
     LUA_OK);
   assert(lj_gc_cdata_fin_pending(g));
+  cts = ctype_ctsG(g);
+  assert(cts != NULL);
+  lua_getglobal(L, "gc2_disable_keep");
+  assert(tviscdata(L->top - 1));
+  setcdataV(L, &key, cdataV(L->top - 1));
+  slot = lj_ctype_fin_get(L, cts, &key, &t);
+  assert(slot != niltv(L));
+  assert(t != NULL);
   lj_gc_finalize_cdata_disable(g);
   assert(!lj_gc_cdata_fin_pending(g));
+  slot = lj_ctype_fin_get(L, cts, &key, &t);
+  assert(slot == niltv(L));
+  assert(t == NULL);
+  lua_pop(L, 1);
   assert(luaL_dostring(L,
     "local ffi = require('ffi')\n"
     "ffi.gc(gc2_disable_keep, nil)\n"
