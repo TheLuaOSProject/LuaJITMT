@@ -276,32 +276,9 @@ if awk '
   exit 1
 fi
 
-if awk '
-  /void lj_gc2_finalizer_enqueue\(global_State \*g, GCobj \*o\)/ {
-    inq = 1
-  }
-  inq && /^}/ {
-    inq = 0
-  }
-  /GCobj \*lj_gc2_finalizer_dequeue\(global_State \*g\)/ {
-    indeq = 1
-  }
-  indeq && /^}/ {
-    indeq = 0
-  }
-  /void lj_gc2_finalizer_drain\(global_State \*g\)/ {
-    indrain = 1
-  }
-  indrain && /^}/ {
-    indrain = 0
-  }
-  !(inq || indeq || indrain) && /setgcref[a-z]*\(g->gc\.mmudata/ {
-    bad = 1
-    print
-  }
-  END { exit bad ? 0 : 1 }
-' "$ROOT/src/lj_gc.c" "$ROOT/src/lj_cdata.c" "$ROOT/src/lj_gc2.c"; then
-  echo "guardrail: finalizer queue publication must route through GC2 helpers" >&2
+if rg -n 'g->gc\.mmudata' "$ROOT/src/lj_gc.c" "$ROOT/src/lj_cdata.c" \
+    "$ROOT/src/lj_gc2.c"; then
+  echo "guardrail: runtime finalizer queues must not use legacy mmudata" >&2
   exit 1
 fi
 

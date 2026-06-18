@@ -349,14 +349,6 @@ static void gc2_paranoia_check_roots(global_State *g)
       gc2_paranoia_checkone(g, o);
     } while (o != root);
   }
-  o = gcref(g->gc.mmudata);
-  if (o) {
-    GCobj *root = o;
-    do {
-      o = gcnext(o);
-      gc2_paranoia_checkone(g, o);
-    } while (o != root);
-  }
 }
 
 static void gc2_paranoia_check_rawroots(global_State *g)
@@ -735,7 +727,6 @@ static void gc_mark_finalizers(global_State *g)
   lj_gc2_finalizer_drain(g);
   gc_mark_finalizer_ring(g, (GCobj *)la_loadptr_acq(
 	(void *const *)&g->gc2.finalizer_tail));
-  gc_mark_finalizer_ring(g, gcref(g->gc.mmudata));
 }
 
 /* Separate userdata objects to be finalized to the GC2 finalizer queue. */
@@ -753,7 +744,7 @@ size_t lj_gc_separateudata(global_State *g, int all)
       markfinalized(o);  /* Done, as there's no __gc metamethod. */
       lj_gc2_finreg_udata_set(g, o, 0);
       p = lj_obj_gcwref(o);
-    } else {  /* Otherwise move userdata to be finalized to mmudata list. */
+    } else {  /* Otherwise move userdata to be finalized to the GC2 queue. */
       m += sizeudata(gco2ud(o));
       lj_gc2_finreg_udata_set(g, o, 1);
       markfinalized(o);

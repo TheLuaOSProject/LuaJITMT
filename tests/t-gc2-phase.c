@@ -383,7 +383,6 @@ int main(void)
   MSize weak_n;
   void *phase_plain, *phase_trav;
   GCArena *phase_plain_a, *phase_trav_a;
-  GCRef mmudata0;
   int i, done = 0, saw_mark = 0, saw_sweep = 0;
 
   test_isolated_weak_skip_case("v");
@@ -513,8 +512,8 @@ int main(void)
 	 finalizer_leaves0 + 2u);
   assert(!lj_gc2_finalizer_queue_pending(g));
   assert(!lj_gc2_finalizer_pending(g));
-  setgcrefr(mmudata0, g->gc.mmudata);
-  setgcref(g->gc.mmudata, obj2gco(phase_tab));
+  assert(unlink_root_object(g, obj2gco(phase_tab)));
+  lj_gc2_finalizer_enqueue(g, obj2gco(phase_tab));
   assert(lj_gc2_finalizer_queue_pending(g));
   assert(lj_gc2_finalizer_pending(g));
   assert(lj_gc2_finalizer_sweep_pending(g));
@@ -523,7 +522,8 @@ int main(void)
   assert(la_load64_acq(&g->gc2.sweep_to_idle) == sweep_to_idle0);
   assert(la_load64_acq(&g->gc2.finalizer_sweep_blocks) ==
 	 finalizer_blocks0 + 1u);
-  setgcrefr(g->gc.mmudata, mmudata0);
+  assert(lj_gc2_finalizer_dequeue(g) == obj2gco(phase_tab));
+  relink_root_object(g, obj2gco(phase_tab));
   assert(!lj_gc2_finalizer_queue_pending(g));
   assert(!lj_gc2_finalizer_pending(g));
   assert(!lj_gc2_finalizer_sweep_pending(g));

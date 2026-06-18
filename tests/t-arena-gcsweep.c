@@ -160,7 +160,6 @@ static void test_boundary_lazy_sweep(void)
   assert(lj_gc2_sweep_pending(g));
 
   setgcrefnull(empty);
-  setgcrefnull(g->gc.mmudata);
   setmref(g->gc.sweep, &empty);
   g->gc.state = GCSsweep;
   oldstepmul = g->gc.stepmul;
@@ -241,7 +240,6 @@ static void test_boundary_lazy_sweep_extra_tg(void)
   assert(lj_gc2_sweep_pending(g));
 
   setgcrefnull(empty);
-  setgcrefnull(g->gc.mmudata);
   setmref(g->gc.sweep, &empty);
   g->gc.state = GCSsweep;
   oldstepmul = g->gc.stepmul;
@@ -298,7 +296,6 @@ static void test_sweep_to_idle_worker_active(void)
   g->gc2.phase = LJ_GC2_SWEEP;
   tg->alloc.sweep_epoch = g->gc2.cycle;
   setgcrefnull(empty);
-  setgcrefnull(g->gc.mmudata);
   setmref(g->gc.sweep, &empty);
   g->gc.state = GCSsweep;
   sweep_to_idle0 = la_load64_acq(&g->gc2.sweep_to_idle);

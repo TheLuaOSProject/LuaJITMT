@@ -605,7 +605,7 @@ void lj_gc2_finalizer_drain(global_State *g)
 
 GCobj *lj_gc2_finalizer_dequeue(global_State *g)
 {
-  GCobj *tail, *o, *own_tail;
+  GCobj *tail, *o;
   if (!g)
     return NULL;
   tail = (GCobj *)la_loadptr_acq((void *const *)&g->gc2.finalizer_tail);
@@ -613,20 +613,14 @@ GCobj *lj_gc2_finalizer_dequeue(global_State *g)
     lj_gc2_finalizer_drain(g);
     tail = (GCobj *)la_loadptr_acq((void *const *)&g->gc2.finalizer_tail);
     if (!tail)
-      tail = gcref_acq(g->gc.mmudata);
-    if (!tail)
       return NULL;
   }
-  own_tail = (GCobj *)la_loadptr_acq((void *const *)&g->gc2.finalizer_tail);
   o = lj_obj_gcw_acq(tail);
   lj_assertG(o != NULL, "broken gc2 finalizer queue");
   if (!o)
     return NULL;
   if (o == tail) {
-    if (tail == own_tail)
-      la_storeptr_rel((void **)&g->gc2.finalizer_tail, NULL);
-    else
-      setgcrefnullrel(g->gc.mmudata);
+    la_storeptr_rel((void **)&g->gc2.finalizer_tail, NULL);
   } else {
     setgcrefrrel(*lj_obj_gcwref(tail), *lj_obj_gcwref(o));
   }
@@ -728,7 +722,6 @@ int lj_gc2_finalizer_queue_pending(global_State *g)
   if (!g)
     return 0;
   return la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) != NULL ||
-	 gcref_acq(g->gc.mmudata) != NULL ||
 	 la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) != NULL;
 }
 
@@ -1158,7 +1151,6 @@ static void gc2_scan_global_roots(global_State *g)
 	(void *const *)&g->gc2.finalizer_mpsc));
   gc2_mark_finalizer_ring(g, (GCobj *)la_loadptr_acq(
 	(void *const *)&g->gc2.finalizer_tail));
-  gc2_mark_finalizer_ring(g, gcref_acq(g->gc.mmudata));
   {
     LJThreadLive *node;
     for (node = (LJThreadLive *)
