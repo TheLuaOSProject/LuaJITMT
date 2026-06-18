@@ -17,13 +17,10 @@ for needle in \
   'lj_mcode_init(g);' \
   'lj_mcode_sync_core(J);' \
   'LJ_MCODE_EXEC_STABLE' \
-  'LJ_MCODE_FRESH_AREA' \
-  'mcode_area_has_published(jit_State *J)' \
-  'mcode_allocarea_checked(jit_State *J, size_t sz)' \
   'lj_mcode_freeall(global_State *g)' \
   'mcode_freearea_direct(global_State *g, MCode *area, size_t size)' \
   'lj_mcode_freeall(g);' \
-  'J->szallmcarea + sz > maxmcode' \
+  'J->szallmcarea + sizemcode > maxmcode' \
   'MCode *rw;		/* Writable alias of this area. */' \
   'lj_mcode_area_rw(MCode *area)' \
   'lj_mcode_rx2rw(MCode *area, MCode *rx)' \
@@ -97,6 +94,12 @@ if rg -n 'single-map write view|rw == rx|rw = J->mcarea' "$ROOT/src/lj_mcode.c";
   exit 1
 fi
 
+if rg -n 'LJ_MCODE_FRESH_AREA|mcode_area_has_published|mcode_fresh_size|mcode_allocarea_checked' \
+    "$ROOT/src/lj_mcode.c"; then
+  echo "guardrail: Linux/x64 mcode bridge must not force fresh areas after publication" >&2
+  exit 1
+fi
+
 if rg -n '\*as->mcbot|\*mxp\+\+|\*\(uint64_t \*\)as->mcbot|\*\(void \*\*\)mxp|memcpy\(mxp' \
     "$ROOT/src/lj_emit_x86.h" "$ROOT/src/lj_asm_x86.h"; then
   echo "guardrail: x64 mcode bottom writes must go through lj_mcode_rw helpers" >&2
@@ -147,18 +150,17 @@ fi
 
 if ! awk '
   /MCode \*lj_mcode_reserve\(jit_State \*J, MCode \*\*lim\)/ { infn = 1 }
-  infn && /#ifdef LJ_MCODE_FRESH_AREA/ { fresh = NR }
-  infn && /mcode_area_has_published\(J\)/ { has = NR }
-  infn && /mcode_allocarea_checked\(J, mcode_fresh_size\(J\)\)/ { alloc = NR }
-  infn && /mcode_protect\(J, MCPROT_GEN\)/ && !protect { protect = NR }
-  infn && /#else/ { els = NR }
+  infn && /if \(!J->mcarea\)/ { noarea = NR }
+  infn && /mcode_allocarea\(J, mcode_default_size\(J\)\)/ { alloc = NR }
+  infn && /else/ { els = NR }
+  infn && /mcode_protect\(J, MCPROT_GEN\)/ { protect = NR }
   infn && /^\}/ {
-    exit !(fresh && has && alloc && protect && els &&
-	   fresh < has && has < alloc && alloc < protect && protect < els)
+    exit !(noarea && alloc && els && protect &&
+	   noarea < alloc && alloc < els && els < protect)
   }
   END { if (!infn) exit 1 }
 ' "$ROOT/src/lj_mcode.c"; then
-  echo "guardrail: reserve must allocate a fresh area before reopening published mcode" >&2
+  echo "guardrail: reserve must reopen the current dual-map mcode area for reuse" >&2
   exit 1
 fi
 
@@ -193,6 +195,28 @@ fi
 LUA_PATH="$ROOT/src/?.lua;$ROOT/src/jit/?.lua;;" \
   timeout 20s "$ROOT/src/luajit" -e \
   'jit.opt.start("hotloop=1","hotexit=1"); local s=0; for i=1,80 do s=s+i end; assert(s==3240)'
+
+LUA_PATH="$ROOT/src/?.lua;$ROOT/src/jit/?.lua;;" \
+  timeout 20s "$ROOT/src/luajit" -e '
+    local util = require"jit.util"
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1", "sizemcode=4", "maxmcode=8")
+    local function make(seed)
+      return assert(loadstring(("return function(n) local s=%d; for i=1,n do s=s+i end return s end"):format(seed)))()
+    end
+    for n = 1, 12 do
+      local seed = n * 17
+      local f = make(seed)
+      for _ = 1, 8 do
+	assert(f(32) == seed + 528)
+      end
+    end
+    local live = 0
+    for tr = 1, 40 do
+      if util.traceinfo(tr) then live = live + 1 end
+    end
+    assert(live >= 8, live)
+  '
 
 LUA_PATH="$ROOT/src/?.lua;$ROOT/src/jit/?.lua;;" \
   timeout 30s "$ROOT/src/luajit" "$ROOT/tests/t-jit-mcode-fresh.lua"

@@ -226,14 +226,13 @@ handler — sized LJ_MAX_EXITSTUBGR-compatible; see lj_vmstruct notes.
   `lj_mcode_sync_core()` after `lj_mcode_commit()` and before `trace_save()`
   performs the trace-slot release publication. The later bytecode, exittab,
   root/side-chain, and stitch-link release stores remain after `trace_save()`.
-  Follow-up bridge: Linux/x64 secure builds now keep W^X without
-  reopening published areas. `lj_mcode_reserve()` allocates a fresh
-  unpublished area once the current area contains committed trace bytes, and
-  `lj_mcode_commit()` flips only that fresh area RX before trace-slot,
-  bytecode, exittab, and link publication. Reserve-time fresh allocation also
-  checks `maxmcode`, since the legacy limit check only ran on area exhaustion.
-  Final JIT teardown frees active mcode immediately with `lj_mcode_freeall()`
-  instead of allocating new SMR retirement records after `lj_gc_freeall()`.
+  Follow-up bridge: Linux/x64 secure builds now keep W^X while reusing
+  published mcode areas. `lj_mcode_reserve()` reopens the current area through
+  its RW alias when one exists, new areas are allocated only on normal mcode
+  exhaustion, and `lj_mcode_commit()` preserves RX publication before
+  trace-slot, bytecode, exittab, and link release stores. Final JIT teardown
+  frees active mcode immediately with `lj_mcode_freeall()` instead of
+  allocating new SMR retirement records after `lj_gc_freeall()`.
   The Linux/x64 dual-map write view is now in place: each `MCLink` carries a
   writable alias pointer, mcode areas are backed by memfd and mapped once RX
   and once RW, and area registration/freeing uses RX/RW translation helpers.
@@ -250,9 +249,9 @@ handler — sized LJ_MAX_EXITSTUBGR-compatible; see lj_vmstruct notes.
   `asm_mcode_patch_i32()` for the x64 parent-exit and exit-branch rel32 stores,
   preserving RX-space decoding and the existing `lj_mcode_patch()`
   protection/sync protocol while routing the actual writes through the RW view.
-  The conservative fresh-area behavior remains until M9 cleanup/perf, but the
-  implementation no longer depends on whole-area RW/RX flips for Linux/x64
-  correctness.
+  The M9 cleanup/perf pass removed the temporary fresh-area allocation bridge;
+  the publication guard now rejects those symbols and verifies low-`maxmcode`
+  trace reuse under the dual-map write view.
 
 ## 8.6 GC interaction of running traces
 

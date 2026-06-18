@@ -344,10 +344,9 @@ static void mcode_protect(jit_State *J, int prot)
 
 #if defined(__linux__) && LJ_TARGET_X64
 /* M6 bridge: keep published mcode execute-stable for peer TGs. The Linux/x64
-** path uses a memfd dual-map W^X write view; fresh areas remain until the
-** M9 cleanup/perf pass removes the conservative bridge behavior. */
+** path uses a memfd dual-map W^X write view, so reopening the current area
+** writes through the RW alias without changing the published RX mapping. */
 #define LJ_MCODE_EXEC_STABLE	1
-#define LJ_MCODE_FRESH_AREA	1
 #endif
 
 /* Change protection of MCode area. */
@@ -499,29 +498,6 @@ static void mcode_allocarea(jit_State *J, size_t sz)
   J->mcbot = mcode_register_area(J, J->mcarea, sz, J->mcbot);
 }
 
-#ifdef LJ_MCODE_FRESH_AREA
-static LJ_AINLINE int mcode_area_has_published(jit_State *J)
-{
-  MCode *top = (MCode *)((char *)J->mcarea + J->szmcarea);
-  return J->mctop < top;
-}
-
-static LJ_AINLINE size_t mcode_fresh_size(jit_State *J)
-{
-  size_t sz = LJ_PAGESIZE;
-  size_t maxsz = mcode_default_size(J);
-  return sz < maxsz ? sz : maxsz;
-}
-
-static void mcode_allocarea_checked(jit_State *J, size_t sz)
-{
-  size_t maxmcode = (size_t)J->param[JIT_P_maxmcode] << 10;
-  if (J->szallmcarea + sz > maxmcode)
-    lj_trace_err(J, LJ_TRERR_MCODEAL);
-  mcode_allocarea(J, sz);
-}
-#endif
-
 static void mcode_retired_push(jit_State *J, MCodeRetire *ret)
 {
   MCodeRetire *tail = ret;
@@ -661,17 +637,10 @@ void lj_mcode_markretired(global_State *g, int gc2)
 /* Reserve the remainder of the current MCode area. */
 MCode *lj_mcode_reserve(jit_State *J, MCode **lim)
 {
-#ifdef LJ_MCODE_FRESH_AREA
-  if (!J->mcarea || mcode_area_has_published(J))
-    mcode_allocarea_checked(J, mcode_fresh_size(J));
-  else
-    mcode_protect(J, MCPROT_GEN);
-#else
   if (!J->mcarea)
     mcode_allocarea(J, mcode_default_size(J));
   else
     mcode_protect(J, MCPROT_GEN);
-#endif
   *lim = J->mcbot;
   return J->mctop;
 }

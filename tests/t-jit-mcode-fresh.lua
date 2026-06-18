@@ -76,4 +76,4 @@ for id = 1, nthreads do
   assert(ok == true and worker == id)
 end
 
-print(("t-jit-mcode-fresh OK: %d TGs published traces while main entered old mcode"):format(nthreads))
+print(("t-jit-mcode-reuse OK: %d TGs published traces while main entered shared mcode"):format(nthreads))

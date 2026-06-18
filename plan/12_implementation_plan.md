@@ -138,10 +138,10 @@ The broader array/header FLOAD indirection target remains pending. Linux/x64
 secure builds now use the original M6 dual-map mcode write view: each mcode
 area is memfd-backed, mapped once RX and once RW, `MCLink.rw` carries the
 writable alias, generated-code/unwind writes go through RX/RW translation
-helpers, and teardown unmaps both aliases. The conservative fresh-area bridge
-still allocates a new unpublished area once an area contains committed trace
-bytes; that cleanup/perf reduction is left for M9 rather than changing the M6
-correctness target. Recorder-internal `LJ_TRLINK_RETURN` call-unroll flushes now
+helpers, and teardown unmaps both aliases. The M9 cleanup removed the
+conservative fresh-area bridge; reserve now reuses the current dual-map area
+through its RW alias after publication, and new areas are allocated only on
+normal mcode exhaustion. Recorder-internal `LJ_TRLINK_RETURN` call-unroll flushes now
 use `lj_trace_flushscope()`, sharing the public scoped `HS_EXIT_TRACES` boundary
 and slot-retirement path instead of leaving marked scoped slots behind. Numeric
 side-trace flushes now mark and retire the named side slot through the same
