@@ -1318,6 +1318,33 @@ static void gc2_mark_finalizer_ring(global_State *g, GCobj *tail)
   } while (o != tail);
 }
 
+static void gc2_scan_threading_live_roots(global_State *g)
+{
+  LJThreadLive *node;
+  for (node = (LJThreadLive *)
+	 la_loadptr_acq((void *const *)&g->threading_live);
+       node != NULL;
+       node = (LJThreadLive *)
+	 la_loadptr_acq((void *const *)&node->next)) {
+    GCobj *o = gcref_acq(node->ud);
+    if (o && o->gch.gct == ~LJ_TUDATA &&
+	lj_udata_udtype_acq(gco2ud(o)) == UDTYPE_THREAD)
+      lj_gc2_markobj(g, o);
+  }
+}
+
+static void gc2_scan_pending_roots(global_State *g)
+{
+  gc2_mark_finalizer_stack(g, (GCobj *)la_loadptr_acq(
+	(void *const *)&g->gc2.finalizer_mpsc));
+  gc2_mark_finalizer_ring(g, (GCobj *)la_loadptr_acq(
+	(void *const *)&g->gc2.finalizer_tail));
+  gc2_scan_threading_live_roots(g);
+#if LJ_HASFFI
+  gc2_mark_finreg_cdata_preclaims(g);
+#endif
+}
+
 static void gc2_scan_tg_roots(global_State *g)
 {
   TGState *tg;
@@ -1372,23 +1399,7 @@ static void gc2_scan_global_roots(global_State *g)
     if (o != NULL)
       lj_gc2_markobj(g, o);
   }
-  gc2_mark_finalizer_stack(g, (GCobj *)la_loadptr_acq(
-	(void *const *)&g->gc2.finalizer_mpsc));
-  gc2_mark_finalizer_ring(g, (GCobj *)la_loadptr_acq(
-	(void *const *)&g->gc2.finalizer_tail));
-  {
-    LJThreadLive *node;
-    for (node = (LJThreadLive *)
-	   la_loadptr_acq((void *const *)&g->threading_live);
-	 node != NULL;
-	 node = (LJThreadLive *)
-	   la_loadptr_acq((void *const *)&node->next)) {
-      GCobj *o = gcref_acq(node->ud);
-      if (o && o->gch.gct == ~LJ_TUDATA &&
-	  lj_udata_udtype_acq(gco2ud(o)) == UDTYPE_THREAD)
-	lj_gc2_markobj(g, o);
-    }
-  }
+  gc2_scan_pending_roots(g);
   gc2_mark_fixedstr(g);
   gc2_mark_strtab_mem(g);
   gc2_mark_tab_retired_mem(g);
@@ -1424,7 +1435,6 @@ static void gc2_scan_global_roots(global_State *g)
       if (cts->pinmt)
 	lj_gc2_markobj(g, obj2gco(cts->pinmt));
       lj_ctype_fin_mark(g, gc2_finreg_markobj, gc2_finreg_markmem);
-      gc2_mark_finreg_cdata_preclaims(g);
       lj_gc2_markmem(g, cts->cb.cbid);
       lj_gc2_markmem(g, cts->cb.owner);
     }
@@ -1457,6 +1467,7 @@ void lj_gc2_scan_minor_roots(global_State *g, lua_State *L)
   if (!g || la_load32_acq(&g->gc2.cycle_roots_minor) == 0)
     return;
   la_add64_rlx(&g->gc2.minor_root_scans, 1);
+  gc2_scan_pending_roots(g);
   gc2_scan_tg_roots(g);
   gc2_scan_thread_roots(g, L);
 #if LJ_HASJIT

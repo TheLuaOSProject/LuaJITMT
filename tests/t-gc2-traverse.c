@@ -48,6 +48,9 @@ static void worker_drain_all(global_State *g)
 }
 
 static int weak_snapshot_has(global_State *g, GCtab *t);
+#if LJ_HASFFI
+static int gc2_cdata_counting_finalizer(lua_State *L);
+#endif
 
 static void test_strong_table(lua_State *L, global_State *g, TGState *tg)
 {
@@ -2160,6 +2163,9 @@ static void test_tg_thread_roots(lua_State *L, global_State *g, TGState *tg)
 static void test_minor_root_scan(lua_State *L, global_State *g, TGState *tg)
 {
   GCtab *registry_tab, *stack_tab;
+#if LJ_HASFFI
+  GCcdata *preclaim_cd;
+#endif
   uint32_t generational0 = la_load32_acq(&g->gc2.generational);
   uint32_t sweep_gate0 = la_load32_acq(&g->gc2.minor_sweep_enabled);
   uint32_t roots_gate0 = la_load32_acq(&g->gc2.minor_roots_enabled);
@@ -2171,6 +2177,18 @@ static void test_minor_root_scan(lua_State *L, global_State *g, TGState *tg)
   lua_setfield(L, LUA_REGISTRYINDEX, "gc2_minor_root_scan");
   lua_newtable(L);
   stack_tab = tabV(L->top - 1);
+#if LJ_HASFFI
+  preclaim_cd = lj_cdata_new_(L, CTID_INT32, 4);
+  setcdataV(L, L->top++, preclaim_cd);
+  /* Keep the raw cdata anchored until later FFI tests initialize CTState. */
+  lua_pushvalue(L, -1);
+  lua_setfield(L, LUA_REGISTRYINDEX, "gc2_minor_preclaim_cdata");
+  lua_pushcfunction(L, gc2_cdata_counting_finalizer);
+  assert(lj_gc2_finreg_cdata_preclaim(L, g, obj2gco(preclaim_cd),
+				      L->top - 1));
+  lua_pop(L, 1);
+  lua_pop(L, 1);
+#endif
 
   la_store32_rel(&g->gc2.generational, 0);
   la_store32_rel(&g->gc2.minor_sweep_enabled, 1);
@@ -2184,6 +2202,9 @@ static void test_minor_root_scan(lua_State *L, global_State *g, TGState *tg)
   assert(la_load64_acq(&g->gc2.minor_root_scans) == minor_roots0);
   assert(lj_gc2_ismarked(g, obj2gco(stack_tab)) == 0);
   assert(lj_gc2_ismarked(g, obj2gco(registry_tab)) == 0);
+#if LJ_HASFFI
+  assert(lj_gc2_ismarked(g, obj2gco(preclaim_cd)) == 0);
+#endif
   lj_gc2_legacy_cycle_end(g);
 
   la_store32_rel(&g->gc2.generational, 1);
@@ -2193,6 +2214,9 @@ static void test_minor_root_scan(lua_State *L, global_State *g, TGState *tg)
   assert(la_load32_acq(&g->gc2.cycle_roots_minor) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(stack_tab)) == 0);
   assert(lj_gc2_ismarked(g, obj2gco(registry_tab)) == 0);
+#if LJ_HASFFI
+  assert(lj_gc2_ismarked(g, obj2gco(preclaim_cd)) == 0);
+#endif
   major_roots0 = la_load64_acq(&g->gc2.major_root_scans);
   minor_roots0 = la_load64_acq(&g->gc2.minor_root_scans);
   assert(lj_gc2_handshake(g, LJ_GC2_HS_SCAN_ROOTS) == 1);
@@ -2200,10 +2224,21 @@ static void test_minor_root_scan(lua_State *L, global_State *g, TGState *tg)
   assert(la_load64_acq(&g->gc2.minor_root_scans) > minor_roots0);
   assert(lj_gc2_ismarked(g, obj2gco(stack_tab)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(registry_tab)) == 0);
+#if LJ_HASFFI
+  assert(lj_gc2_ismarked(g, obj2gco(preclaim_cd)) == 1);
+#endif
   la_store32_rel(&g->gc2.generational, generational0);
   la_store32_rel(&g->gc2.minor_sweep_enabled, sweep_gate0);
   la_store32_rel(&g->gc2.minor_roots_enabled, roots_gate0);
   lj_gc2_legacy_cycle_end(g);
+#if LJ_HASFFI
+  {
+    TValue fin;
+    assert(lj_gc2_finreg_cdata_preclaim_take(L, g, obj2gco(preclaim_cd),
+					     &fin));
+    assert(tvisfunc(&fin));
+  }
+#endif
 
   lua_pushnil(L);
   lua_setfield(L, LUA_REGISTRYINDEX, "gc2_minor_root_scan");

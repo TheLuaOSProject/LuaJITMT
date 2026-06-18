@@ -58,8 +58,10 @@ for needle in \
   'lj_meta_tsettv_pair(lua_State *L, cTValue *o, cTValue *k' \
   'lj_gc2_scan_minor_roots(global_State *g, lua_State *L)' \
   'lj_gc2_scan_cycle_roots(global_State *g, lua_State *L)' \
+  'gc2_scan_pending_roots(global_State *g)' \
   'la_add64_rlx(&g->gc2.major_root_scans' \
   'la_add64_rlx(&g->gc2.minor_root_scans' \
+  'lj_gc2_finreg_cdata_preclaim(L, g, obj2gco(preclaim_cd)' \
   'lj_gc2_force_major(g);  /* First generational cycle establishes old marks. */' \
   'lj_gc2_barrier_tv_pair_g(global_State *g, GCobj *parent' \
   'lj_gc2_barrier_tvn_pair_g(global_State *g, GCobj *parent' \
