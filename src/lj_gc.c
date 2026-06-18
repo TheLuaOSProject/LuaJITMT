@@ -1828,7 +1828,7 @@ static int gc_cdata_finreg_pending_scan(CTState *cts)
        gen != NULL;
        gen = (FinRegGen *)la_loadptr_acq((void *const *)&gen->next)) {
     GCtab *t = (GCtab *)la_loadptr_acq((void *const *)&gen->tab);
-    if (t && gc_cdata_fin_pending_tab(t))
+    if (t && gcref_acq(t->metatable) && gc_cdata_fin_pending_tab(t))
       return 1;
   }
   return 0;

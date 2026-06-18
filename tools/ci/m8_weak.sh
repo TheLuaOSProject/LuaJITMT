@@ -200,6 +200,9 @@ for needle in \
   'ordered_fallback && ordered_queued == 0' \
   'if (!ordered_fallback)' \
   'gc_cdata_finreg_pending_scan(CTState *cts)' \
+  'gcref_acq(t->metatable) && gc_cdata_fin_pending_tab(t)' \
+  'test_finreg_disabled_pending_scan' \
+  'gc2_disabled_pending_fin_t' \
   'collectgarbage('\''collect'\'')' \
   'finreg_cdata_close_root_fallbacks, 1' \
   'gc_claim_cdata_finalizer_pweak(lua_State *L, global_State *g,' \

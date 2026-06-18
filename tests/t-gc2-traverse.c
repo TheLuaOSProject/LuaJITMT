@@ -3473,6 +3473,28 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   lua_pushnil(L);
   lua_setglobal(L, "gc2_cdata_counting_finalizer");
 }
+
+static void test_finreg_disabled_pending_scan(lua_State *L, global_State *g)
+{
+  lua_settop(L, 0);
+  lua_pushcfunction(L, gc2_cdata_counting_finalizer);
+  lua_setglobal(L, "gc2_cdata_counting_finalizer");
+  assert(luaL_dostring(L,
+    "local ffi = require('ffi')\n"
+    "ffi.cdef('typedef struct { int x; } gc2_disabled_pending_fin_t;')\n"
+    "gc2_disable_keep = ffi.gc(ffi.new('gc2_disabled_pending_fin_t'),\n"
+    "  gc2_cdata_counting_finalizer)\n") ==
+    LUA_OK);
+  assert(lj_gc_cdata_fin_pending(g));
+  lj_gc_finalize_cdata_disable(g);
+  assert(!lj_gc_cdata_fin_pending(g));
+  assert(luaL_dostring(L,
+    "local ffi = require('ffi')\n"
+    "ffi.gc(gc2_disable_keep, nil)\n"
+    "gc2_disable_keep = nil\n") ==
+    LUA_OK);
+  lua_settop(L, 0);
+}
 #endif
 
 static void test_leaf_ssb(lua_State *L, global_State *g, TGState *tg)
@@ -3561,6 +3583,7 @@ int main(void)
   test_ffi_loaded_weak_value_barrier();
   test_finreg_cdata_telemetry(L, g);
   test_finalizer_spawn_deferred_state(L, g);
+  test_finreg_disabled_pending_scan(L, g);
 #endif
   test_leaf_ssb(L, g, tg);
 
