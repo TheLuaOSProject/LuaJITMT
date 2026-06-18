@@ -84,6 +84,10 @@ for needle in \
   'finalizer-spawned worker can outlive callback' \
   'gc_finalize_cdata_slot_owned(lua_State *L, GCobj *o, cTValue *key)' \
   'lj_ctype_fin_get(L, cts, key, &t)' \
+  'gc_queue_cdata_finalizers_pweak(global_State *g)' \
+  'P_WEAK cdata finalizer discovery bridge' \
+  'uint64_t finreg_cdata_pweak_queued' \
+  'finreg_cdata_pweak_queued) >= pweak1 + 1u' \
   'LJ_GC_UDATA_FINREG == LJ_GC_WEAKVAL' \
   'old | LJ_GC_UDATA_FINREG' \
   'lj_gc2_finreg_udata_set(g, o, 1);' \

@@ -2219,7 +2219,7 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
 {
   uint64_t sets0 = la_load64_acq(&g->gc2.finreg_cdata_sets);
   uint64_t clears0 = la_load64_acq(&g->gc2.finreg_cdata_clears);
-  uint64_t sets1, clears1, queued1;
+  uint64_t sets1, clears1, queued1, pweak1, finalizerq1;
 
   lua_settop(L, 0);
   assert(luaL_dostring(L,
@@ -2234,6 +2234,8 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   sets1 = la_load64_acq(&g->gc2.finreg_cdata_sets);
   clears1 = la_load64_acq(&g->gc2.finreg_cdata_clears);
   queued1 = la_load64_acq(&g->gc2.finreg_cdata_queued);
+  pweak1 = la_load64_acq(&g->gc2.finreg_cdata_pweak_queued);
+  finalizerq1 = la_load64_acq(&g->gc2.finalizer_queued);
   lua_settop(L, 0);
   assert(luaL_dostring(L,
     "local ffi = require('ffi')\n"
@@ -2244,6 +2246,8 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   lua_gc(L, LUA_GCCOLLECT, 0);
   lua_gc(L, LUA_GCSTOP, 0);
   assert(la_load64_acq(&g->gc2.finreg_cdata_queued) >= queued1 + 1u);
+  assert(la_load64_acq(&g->gc2.finreg_cdata_pweak_queued) >= pweak1 + 1u);
+  assert(la_load64_acq(&g->gc2.finalizer_queued) >= finalizerq1 + 1u);
   assert(la_load64_acq(&g->gc2.finreg_cdata_clears) >= clears1 + 1u);
 }
 #endif

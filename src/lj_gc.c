@@ -1321,6 +1321,30 @@ static void gc_queue_cdata_finalizer(global_State *g, GCobj *o)
   lj_gc2_finalizer_enqueue(g, o);
 }
 
+static size_t gc_queue_cdata_finalizers_pweak(global_State *g)
+{
+  GCRef *p = &g->gc.root;
+  GCobj *o;
+  size_t n = 0;
+  while ((o = gcref(*p)) != NULL) {
+    if (o->gch.gct == ~LJ_TCDATA &&
+	(lj_obj_gcflags(o) & LJ_GC_CDATA_FIN) &&
+	!(lj_obj_gcflags(o) & LJ_GC_FINALIZED) &&
+	iswhite(o)) {
+      setgcrefr(*p, *lj_obj_gcwref(o));
+      markfinalized(o);
+      lj_gc2_finreg_cdata_queue(g, o);
+      lj_gc2_finalizer_enqueue(g, o);
+      n++;
+    } else {
+      p = lj_obj_gcwref(o);
+    }
+  }
+  if (n)
+    la_add64_rlx(&g->gc2.finreg_cdata_pweak_queued, n);
+  return n;  /* 05 section 5.8: P_WEAK cdata finalizer discovery bridge. */
+}
+
 static void gc_separate_cdata_finalizers(global_State *g)
 {
   GCRef *p = &g->gc.root;
@@ -1442,6 +1466,9 @@ static void atomic(global_State *g, lua_State *L)
 
   /* All marking done, clear weak tables. */
   lj_gc2_mark_to_weak(g);
+#if LJ_HASFFI
+  (void)gc_queue_cdata_finalizers_pweak(g);
+#endif
   if (!lj_gc2_weak_complete(g, gcref(g->gc.weak), LJ_GC2_WEAK_DRAIN_BATCH))
     gc_clearweak(g, gcref(g->gc.weak));
   lj_gc2_weak_to_sweep(g);
