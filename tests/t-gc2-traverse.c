@@ -2448,14 +2448,17 @@ static void test_finreg_internal_userdata_telemetry(lua_State *L,
   uint64_t fallbacks0 = la_load64_acq(&g->gc2.finreg_udata_fallbacks);
   uint64_t rootfallbacks0 =
     la_load64_acq(&g->gc2.finreg_udata_root_fallbacks);
-  lua_Integer registered, discoverable;
+  lua_Integer registered, immediate, discoverable, lazy;
 
   lua_settop(L, 0);
+  lua_pushcfunction(L, gc2_empty_finalizer);
+  lua_setglobal(L, "gc2_internal_udata_finalizer");
   assert(luaL_dostring(L,
-    "local registered, discoverable = 0, 0\n"
+    "local registered, immediate, discoverable, lazy = 0, 0, 0, 0\n"
     "do\n"
     "  local f = assert(io.tmpfile())\n"
     "  registered = registered + 1\n"
+    "  immediate = immediate + 1\n"
     "  discoverable = discoverable + 1\n"
     "end\n"
     "do\n"
@@ -2463,14 +2466,21 @@ static void test_finreg_internal_userdata_telemetry(lua_State *L,
     "  if ok and buffer and buffer.new then\n"
     "    local b = buffer.new()\n"
     "    registered = registered + 1\n"
+    "    immediate = immediate + 1\n"
     "    discoverable = discoverable + 1\n"
     "  end\n"
     "end\n"
     "do\n"
     "  local ok, threading = pcall(require, 'threading')\n"
-    "  if ok and threading and threading.channel then\n"
+    "  if ok and threading and threading.mutex and threading.channel then\n"
+    "    local m = threading.mutex()\n"
+    "    registered = registered + 1\n"
+    "    debug.getmetatable(m).__gc = gc2_internal_udata_finalizer\n"
+    "    discoverable = discoverable + 1\n"
+    "    lazy = lazy + 1\n"
     "    local ch = threading.channel(1)\n"
     "    registered = registered + 1\n"
+    "    immediate = immediate + 1\n"
     "    discoverable = discoverable + 1\n"
     "  end\n"
     "end\n"
@@ -2479,25 +2489,31 @@ static void test_finreg_internal_userdata_telemetry(lua_State *L,
     "  local ok, ffi = pcall(require, 'ffi')\n"
     "  if ok and ffi and ffi.pin then\n"
     "    registered = registered + 1 -- ffi.C default namespace.\n"
+    "    immediate = immediate + 1\n"
     "    local pin = ffi.pin({})\n"
     "    registered = registered + 1\n"
+    "    immediate = immediate + 1\n"
     "    discoverable = discoverable + 1\n"
     "  end\n"
     "end\n"
 #endif
-    "return registered, discoverable\n") ==
+    "return registered, immediate, discoverable, lazy\n") ==
     LUA_OK);
-  registered = lua_tointeger(L, -2);
-  discoverable = lua_tointeger(L, -1);
-  lua_pop(L, 2);
+  registered = lua_tointeger(L, -4);
+  immediate = lua_tointeger(L, -3);
+  discoverable = lua_tointeger(L, -2);
+  lazy = lua_tointeger(L, -1);
+  lua_pop(L, 4);
   assert(registered >= discoverable);
   assert(discoverable >= 3);
   assert(la_load64_acq(&g->gc2.finreg_udata_sets) ==
-	 sets0 + (uint64_t)registered);
+	 sets0 + (uint64_t)immediate);
   assert(la_load64_acq(&g->gc2.finreg_udata_registered) ==
 	 registered0 + (uint64_t)registered);
 
   drive_udata_finalizers(L);
+  assert(la_load64_acq(&g->gc2.finreg_udata_sets) ==
+	 sets0 + (uint64_t)(immediate + lazy));
   assert(la_load64_acq(&g->gc2.finreg_udata_queued) ==
 	 queued0 + (uint64_t)discoverable);
   assert(la_load64_acq(&g->gc2.finreg_udata_clears) ==
@@ -2507,6 +2523,8 @@ static void test_finreg_internal_userdata_telemetry(lua_State *L,
   assert(la_load64_acq(&g->gc2.finreg_udata_fallbacks) == fallbacks0);
   assert(la_load64_acq(&g->gc2.finreg_udata_root_fallbacks) ==
 	 rootfallbacks0);
+  lua_pushnil(L);
+  lua_setglobal(L, "gc2_internal_udata_finalizer");
 }
 
 static void test_finreg_userdata_inplace_finalizer_behavior(lua_State *L)

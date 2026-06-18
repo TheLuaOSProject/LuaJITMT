@@ -1991,10 +1991,9 @@ void lj_gc2_finreg_udata_register_mt(lua_State *L, global_State *g,
   TValue mmv;
   if (!L || !g || !ud || !mt)
     return;
-  if (lj_meta_fasttv(g, mt, MM_gc, &mmv)) {
-    lj_gc2_finreg_udata_register(L, g, obj2gco(ud));
+  lj_gc2_finreg_udata_register(L, g, obj2gco(ud));
+  if (lj_meta_fasttv(g, mt, MM_gc, &mmv))
     (void)lj_gc2_finreg_udata_set(g, obj2gco(ud), 1);
-  }
 }
 
 void lj_gc2_finreg_udata_forget(global_State *g, GCobj *o)

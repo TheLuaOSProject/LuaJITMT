@@ -874,6 +874,7 @@ LJLIB_CF(threading_mutex)
   LJMutex *m = (LJMutex *)uddata(ud);
   /* NOBARRIER: The GCudata is new (marked white). */
   setgcref(ud->metatable, obj2gco(env));
+  lj_gc2_finreg_udata_register_mt(L, G(L), ud, env);
   m->state = LJ_MUTEX_UNLOCKED;
   lj_udata_udtype_rel(ud, UDTYPE_MUTEX);
   setudataV(L, L->top++, ud);

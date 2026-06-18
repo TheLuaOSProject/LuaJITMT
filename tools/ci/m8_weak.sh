@@ -228,6 +228,8 @@ for needle in \
   'void *finreg_udata_head' \
   'lj_gc2_finreg_udata_register_mt(lua_State *L, global_State *g,' \
   'lj_gc2_finreg_udata_register_mt(L, G(L), ud' \
+  'debug.getmetatable(m).__gc = gc2_internal_udata_finalizer' \
+  'immediate + lazy' \
   'ffi.C default namespace' \
   'lj_gc2_finreg_udata_register(lua_State *L, global_State *g,' \
   'GC2-owned userdata FINREG discovery' \
