@@ -554,9 +554,28 @@ static LJArenaFreeRun **arena_find_run(TGAlloc *alloc, uint32_t k,
   for (b = arena_bin(ncells); b < LJ_ALLOC_NBINS; b++) {
     LJArenaFreeRun **pp = &alloc->bins[k][b];
     while (*pp) {
-      if ((*pp)->len >= ncells)
-	return pp;
-      pp = &(*pp)->next;
+      LJArenaFreeRun *run = *pp;
+      uintptr_t addr = (uintptr_t)run;
+      if (!checkptrGC(run) || (addr & (LJ_CELL_SIZE-1u)) != 0 ||
+	  (addr & LJ_ARENA_MASK) < ((uintptr_t)LJ_AFIRST_CELL << LJ_CELL_SHIFT)) {
+	*pp = NULL;
+	break;
+      }
+      {
+	GCArena *a = lj_arena_of(run);
+	uint32_t start = run->start;
+	uint32_t len = run->len;
+	if (start < LJ_AFIRST_CELL || start >= LJ_ARENA_CELLS || len == 0 ||
+	    len > LJ_ARENA_CELLS - start ||
+	    lj_arena_cellptr(a, start) != (void *)run ||
+	    lj_arena_state(a, start) != 1) {
+	  *pp = run->next;
+	  continue;
+	}
+	if (len >= ncells)
+	  return pp;
+	pp = &run->next;
+      }
     }
   }
   return NULL;

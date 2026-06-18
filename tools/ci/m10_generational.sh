@@ -60,8 +60,8 @@ for needle in \
   'lj_gc2_scan_cycle_roots(global_State *g, lua_State *L)' \
   'gc2_scan_pending_roots(global_State *g)' \
   'if (!sweep_minor)' \
-  'sweep_minor ? LJ_GC2_HS_ALLOC_WHITE' \
-  'lj_gc_sweep_gc2_young(global_State *g)' \
+  'LJ_GC2_HS_ALLOC_WHITE : LJ_GC2_HS_ALLOC_BLACK' \
+  'lj_gc_sweep_gc2_unmarked(global_State *g)' \
   'tg->alloc.alloc_black =' \
   'la_load32_acq(&g->gc2.cycle_sweep_minor) == 0' \
   'la_add64_rlx(&g->gc2.major_root_scans' \

@@ -602,15 +602,14 @@ void lj_gc2_legacy_mark_begin(global_State *g)
   if (!sweep_minor)
     gc2_clear_marks_all(g);
   if (minor_requested) {
-    uint32_t alloc_action = sweep_minor ? LJ_GC2_HS_ALLOC_WHITE :
-					  LJ_GC2_HS_ALLOC_BLACK;
-    lj_gc2_handshake(g, LJ_GC2_HS_ENABLE_BARRIER|alloc_action|
-		     LJ_GC2_HS_FLUSH_SSB);
+    lj_gc2_handshake(g, LJ_GC2_HS_ENABLE_BARRIER|LJ_GC2_HS_ALLOC_BLACK|
+		     LJ_GC2_HS_FLUSH_SSB|LJ_GC2_HS_RESET_ALLOC);
     drained = lj_gc2_drain_ssb(g);
     if (drained)
       la_add64_rlx(&g->gc2.remembered_drained, drained);
   } else {
-    lj_gc2_handshake(g, LJ_GC2_HS_ENABLE_BARRIER|LJ_GC2_HS_ALLOC_BLACK);
+    lj_gc2_handshake(g, LJ_GC2_HS_ENABLE_BARRIER|LJ_GC2_HS_ALLOC_BLACK|
+		     LJ_GC2_HS_RESET_ALLOC);
   }
   lj_gc2_worker_wake(g);  /* 05 section 5.6.3 parked worker scheduler. */
 }
@@ -733,8 +732,9 @@ void lj_gc2_weak_to_sweep(global_State *g)
   if (!la_cas32(&g->gc2.phase, &expect, LJ_GC2_SWEEP, LA_ACQ_REL, LA_ACQ))
     return;
   la_add64_rlx(&g->gc2.weak_to_sweep, 1);
-  lj_gc2_handshake(g, LJ_GC2_HS_DISABLE_BARRIER|LJ_GC2_HS_RESET_ALLOC|
-		   LJ_GC2_HS_FLUSH_SSB);
+  lj_gc2_handshake(g, LJ_GC2_HS_DISABLE_BARRIER|LJ_GC2_HS_FLUSH_SSB|
+		   (la_load32_acq(&g->gc2.cycle_sweep_minor) ?
+		    LJ_GC2_HS_ALLOC_WHITE : LJ_GC2_HS_ALLOC_BLACK));
   (void)lj_gc2_drain_ssb(g);  /* Temporary worker-consume stand-in. */
   (void)lj_tg_reclaim_dead(g);
   lj_gc2_worker_wake(g);  /* 05 section 5.6.3 parked worker scheduler. */
@@ -948,7 +948,7 @@ int lj_gc2_sweep_needs_prepare(global_State *g)
   for (tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
        tg != NULL;
        tg = (TGState *)la_loadptr_acq((void *const *)&tg->next_tg))
-    if (lj_gc2_sweep_tg_ready(tg) && tg->alloc.sweep_epoch != g->gc2.cycle)
+    if (lj_gc2_sweep_tg_ready(tg) && tg->alloc.prepare_epoch != g->gc2.cycle)
       return 1;
   return 0;
 }
@@ -982,14 +982,19 @@ uint32_t lj_gc2_sweep_owner_progress(global_State *g, TGState *tg,
   epoch = g->gc2.cycle;
   minor = la_load32_acq(&g->gc2.cycle_sweep_minor) != 0;
   if (minor)
-    (void)lj_gc_sweep_gc2_young(g);
+    (void)lj_gc_sweep_gc2_unmarked(g);
   tg->alloc.sweep_epoch = epoch;
   while (n < limit) {
-    GCArena *a = lj_arena_sweep_one(&tg->alloc, LJ_ARENAK_TRAVERSABLE,
-				    epoch, minor);
-    if (!a)
-      break;
-    live += a->hdr.live_cells;
+    GCArena *next = tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE];
+    if (next)
+      (void)lj_gc_sweep_gc2_arena_unmarked(g, next);
+    {
+      GCArena *a = lj_arena_sweep_one(&tg->alloc, LJ_ARENAK_TRAVERSABLE,
+				      epoch, minor);
+      if (!a)
+	break;
+      live += a->hdr.live_cells;
+    }
     n++;
   }
   if (n) {
@@ -1158,12 +1163,15 @@ static void gc2_mark_fixedstr(global_State *g)
 static TValue *gc2_stack_scan_top(global_State *g, lua_State *L)
 {
   TValue *frame, *bot = tvref(L->stack);
+  TValue *top = L->top, *ctop = curr_top(L), *max = tvref(L->maxstack);
   for (frame = L->base - 1; frame > bot + LJ_FR2; frame = frame_prev(frame)) {
     GCfunc *fn = frame_func(frame);
     if (!LJ_FR2)
       lj_gc2_markobj(g, obj2gco(fn));
   }
-  return L->top;
+  if (ctop > top)
+    top = ctop;
+  return top > max ? max : top;
 }
 
 static LJ_AINLINE uint8_t *gc2_thread_flagp(lua_State *L)
@@ -2431,7 +2439,11 @@ static void gc2_ssb_mark_one(global_State *g, GCobj *o)
 {
   if (o) {
     void *base = gc2_mark_base(o);
-    (void)lj_gc2_markmem(g, base);
+    int marked = lj_gc2_ismarkedmem(g, base);
+    if (marked < 0 || o->gch.gct == 0)
+      return;
+    if (marked == 0)
+      (void)lj_gc2_markmem(g, base);
     if (gc2_mark_base_traversable(g, base)) {
       int pushed = gc2_grey_push(g, o);
       lj_assertG(pushed, "gc2 grey push failed for SSB object");
@@ -3211,12 +3223,15 @@ static void gc2_traverse_proto(global_State *g, GCproto *pt)
 static TValue *gc2_stack_scan_top_worker(global_State *g, lua_State *L)
 {
   TValue *frame, *bot = tvref(L->stack);
+  TValue *top = L->top, *ctop = curr_top(L), *max = tvref(L->maxstack);
   for (frame = L->base - 1; frame > bot + LJ_FR2; frame = frame_prev(frame)) {
     GCfunc *fn = frame_func(frame);
     if (!LJ_FR2)
       gc2_markobj_worker(g, obj2gco(fn));
   }
-  return L->top;
+  if (ctop > top)
+    top = ctop;
+  return top > max ? max : top;
 }
 
 static int gc2_thread_owner_scans(global_State *g, lua_State *th)

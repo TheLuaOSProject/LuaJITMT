@@ -539,14 +539,14 @@ int main(void)
   assert(lj_gc2_ismarked(g, obj2gco(phase_child)) == 1);
   assert(la_load64_acq(&g->gc2.grey_pushed) == grey_pushed0 + 2u);
   assert(la_load64_acq(&g->gc2.grey_drained) == grey_drained0 + 2u);
-  assert(tg->alloc.bump[LJ_ARENAK_PLAIN].a == NULL);
-  assert(tg->alloc.bump[LJ_ARENAK_TRAVERSABLE].a == NULL);
-  assert(arena_list_contains(tg->alloc.needsweep[LJ_ARENAK_PLAIN],
-			     phase_plain_a));
-  assert(arena_list_contains(tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE],
-			     phase_trav_a));
-  assert((phase_plain_a->hdr.flags & LJ_AF_NEEDSWEEP) != 0);
-  assert((phase_trav_a->hdr.flags & LJ_AF_NEEDSWEEP) != 0);
+  assert(tg->alloc.bump[LJ_ARENAK_PLAIN].a == phase_plain_a);
+  assert(tg->alloc.bump[LJ_ARENAK_TRAVERSABLE].a == phase_trav_a);
+  assert(arena_list_contains(tg->alloc.owned[LJ_ARENAK_PLAIN],
+				     phase_plain_a));
+  assert(arena_list_contains(tg->alloc.owned[LJ_ARENAK_TRAVERSABLE],
+				     phase_trav_a));
+  assert((phase_plain_a->hdr.flags & LJ_AF_NEEDSWEEP) == 0);
+  assert((phase_trav_a->hdr.flags & LJ_AF_NEEDSWEEP) == 0);
   lj_arena_alloc_restore_sweep_kind(&tg->alloc, LJ_ARENAK_TRAVERSABLE);
   lj_arena_alloc_restore_sweep_kind(&tg->alloc, LJ_ARENAK_PLAIN);
   assert(tg->alloc.needsweep[LJ_ARENAK_PLAIN] == NULL);

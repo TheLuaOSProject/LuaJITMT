@@ -141,9 +141,10 @@ static uint32_t gc_arena_finish_sweep_boundary(global_State *g, int drain)
        tg = (TGState *)la_loadptr_acq((void *const *)&tg->next_tg)) {
     /* 05 section 5.8 boundary-lazy traversable sweep bridge. */
     if (lj_gc2_sweep_tg_ready(tg) &&
-	tg->alloc.sweep_epoch != g->gc2.cycle) {
+	tg->alloc.prepare_epoch != g->gc2.cycle) {
       lj_arena_alloc_prepare_sweep_kind(&tg->alloc, LJ_ARENAK_TRAVERSABLE);
       lj_arena_alloc_restore_sweep_kind(&tg->alloc, LJ_ARENAK_PLAIN);
+      tg->alloc.prepare_epoch = g->gc2.cycle;
     }
   }
   do {  /* 05 section 5.6.3 worker-owned sweep bridge. */
@@ -1098,7 +1099,57 @@ static const GCFreeFunc gc_freefunc[] = {
   (GCFreeFunc)lj_udata_free
 };
 
-uint32_t lj_gc_sweep_gc2_young(global_State *g)
+static int gc2_free_unmarked_obj(global_State *g, GCobj *o)
+{
+  uint32_t gct = o->gch.gct;
+  if (gct >= (uint32_t)~LJ_TSTR && gct <= (uint32_t)~LJ_TUDATA) {
+    GCFreeFunc fn = gc_freefunc[gct - (uint32_t)~LJ_TSTR];
+    if (fn) {
+      fn(g, o);
+      o->gch.gct = 0;  /* Body is awaiting bitmap reuse; destructor is done. */
+      return 1;
+    }
+  }
+  return 0;
+}
+
+static int gc2_valid_freeable_obj(GCobj *o)
+{
+  uint32_t gct = o->gch.gct;
+  return gct >= (uint32_t)~LJ_TSTR && gct <= (uint32_t)~LJ_TUDATA &&
+	 gc_freefunc[gct - (uint32_t)~LJ_TSTR] != NULL;
+}
+
+static int gc2_deferred_body_pending(global_State *g, GCobj *o)
+{
+  TGState *tg = G2TG(g);
+  GCArena *a;
+  uint32_t cell;
+  if (!o || !tg || !(tg->tg_flags & TGF_ARENA_INTERNAL) ||
+      g->allocf != lj_arena_allocf)
+    return 0;
+  a = lj_arena_of(o);
+  if (lj_arena_ishuge(a) || !(a->hdr.flags & LJ_AF_TRAVERSABLE))
+    return 0;
+  cell = lj_arena_cellof(o);
+  return cell >= LJ_AFIRST_CELL && cell < LJ_ARENA_CELLS &&
+	 lj_arena_bm_get(a->block, cell);
+}
+
+static void gc2_unlink_root_obj(global_State *g, GCobj *dead)
+{
+  GCRef *p = &g->gc.root;
+  GCobj *o;
+  while ((o = gcref(*p)) != NULL) {
+    if (o == dead) {
+      setgcrefr(*p, *lj_obj_gcwref(o));
+      return;
+    }
+    p = lj_obj_gcwref(o);
+  }
+}
+
+uint32_t lj_gc_sweep_gc2_unmarked(global_State *g)
 {
   GCRef *p = &g->gc.root;
   GCobj *o;
@@ -1106,20 +1157,67 @@ uint32_t lj_gc_sweep_gc2_young(global_State *g)
   while ((o = gcref(*p)) != NULL) {
     int marked = lj_gc2_ismarked(g, o);
     if (marked == 0) {
-      uint32_t gct = o->gch.gct;
-      if (gct >= (uint32_t)~LJ_TSTR && gct <= (uint32_t)~LJ_TUDATA) {
-	GCFreeFunc fn = gc_freefunc[gct - (uint32_t)~LJ_TSTR];
-	if (fn) {
-	  setgcrefr(*p, *lj_obj_gcwref(o));
-	  fn(g, o);
-	  n++;
-	  continue;
-	}
+      if (o->gch.gct == 0) {
+	setgcrefr(*p, *lj_obj_gcwref(o));
+	continue;
+      }
+      if (isdead(g, o) && gc2_free_unmarked_obj(g, o)) {
+	setgcrefr(*p, *lj_obj_gcwref(o));
+	n++;
+	continue;
       }
     }
     p = lj_obj_gcwref(o);
   }
   return n;
+}
+
+static uint32_t gc2_sweep_arena_bodies(global_State *g, GCArena *a,
+				       int unmarked_only)
+{
+  uint32_t i, n = 0;
+  if (!g || !a)
+    return 0;
+  for (i = LJ_AFIRST_CELL; i < LJ_ARENA_CELLS; i++) {
+    if (lj_arena_bm_get(a->block, i) &&
+	(!unmarked_only || !lj_arena_bm_get(a->mark, i))) {
+      GCobj *o = (GCobj *)lj_arena_cellptr(a, i);
+      if (unmarked_only && gc2_valid_freeable_obj(o) && !isdead(g, o)) {
+	lj_arena_bm_set(a->mark, i);
+	continue;
+      }
+      if ((!unmarked_only || isdead(g, o)) && gc2_free_unmarked_obj(g, o)) {
+	gc2_unlink_root_obj(g, o);
+	n++;
+      }
+    }
+  }
+  return n;
+}
+
+uint32_t lj_gc_sweep_gc2_arena_unmarked(global_State *g, GCArena *a)
+{
+  return gc2_sweep_arena_bodies(g, a, 1);
+}
+
+uint32_t lj_gc_sweep_gc2_all_arena_bodies(global_State *g)
+{
+  TGState *tg;
+  uint32_t total = 0;
+  if (!g)
+    return 0;
+  for (tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
+       tg != NULL;
+       tg = (TGState *)la_loadptr_acq((void *const *)&tg->next_tg)) {
+    GCArena *a;
+    if (!lj_gc2_sweep_tg_ready(tg))
+      continue;
+    for (a = tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE]; a; a = a->hdr.next)
+      total += gc2_sweep_arena_bodies(g, a, 0);
+    for (a = tg->alloc.owned[LJ_ARENAK_TRAVERSABLE]; a; a = a->hdr.next)
+      total += gc2_sweep_arena_bodies(g, a, 0);
+  }
+  return total;
 }
 
 /* Full sweep of a GC list. */
@@ -1140,12 +1238,15 @@ static GCRef *gc_sweep(global_State *g, GCRef *p, uint32_t lim)
       makewhite(g, o);  /* Value is alive, change to the current white. */
       p = lj_obj_gcwref(o);
     } else {  /* Otherwise value is dead, free it. */
+      int deferred = gc2_deferred_body_pending(g, o);
       lj_assertG(isdead(g, o) || ow == LJ_GC_SFIXED,
 		 "sweep of unlive object");
       setgcrefr(*p, *lj_obj_gcwref(o));
       if (o == gcref(g->gc.root))
 	setgcrefr(g->gc.root, *lj_obj_gcwref(o));  /* Adjust list anchor. */
       gc_freefunc[o->gch.gct - ~LJ_TSTR](g, o);
+      if (deferred)
+	o->gch.gct = 0;  /* Body is awaiting bitmap reuse; destructor is done. */
     }
   }
   return p;
@@ -1904,6 +2005,7 @@ void lj_gc_freeall(global_State *g)
   if (hdr)
     for (i = hdr->mask; i != ~(MSize)0; i--)  /* Free all string hash chains. */
       gc_sweepstr(g, &hdr->bucket[i]);
+  (void)lj_gc_sweep_gc2_all_arena_bodies(g);
 }
 
 /* -- Collector ----------------------------------------------------------- */
@@ -2004,6 +2106,8 @@ static size_t gc_onestep(lua_State *L)
 	    mask > LJ_MIN_STRTAB*2-1)
 	  lj_str_resize(L, mask >> 1);  /* Shrink string table. */
       }
+      if (arena_prepare && la_load32_acq(&g->gc2.cycle_sweep_minor))
+	(void)lj_gc_sweep_gc2_unmarked(g);
       if (arena_prepare)
 	gc_arena_verify_sweep_boundary(g);
       (void)gc_arena_finish_sweep_boundary(g, 0);

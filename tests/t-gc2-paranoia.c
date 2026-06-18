@@ -10,6 +10,7 @@
 #include "lualib.h"
 
 #include "lj_obj.h"
+#include "lj_atomic.h"
 #include "lj_arena.h"
 #include "lj_gc.h"
 #include "lj_gc2.h"
@@ -37,6 +38,50 @@ static int paranoia_finalizer(lua_State *L)
   if (status != LUA_OK)
     lua_pop(L, 1);
   return 0;
+}
+
+static void run_true_minor_cycle(lua_State *L, global_State *g, TGState *tg)
+{
+  uint32_t swept;
+  lj_gc2_legacy_mark_begin(g);
+  assert(la_load32_acq(&g->gc2.cycle_sweep_minor) == 1);
+  assert(la_load32_acq(&g->gc2.cycle_roots_minor) == 1);
+  lj_gc2_scan_cycle_roots(g, L);
+  assert(lj_gc2_mark_complete(g, L, 64, ~(uint32_t)0) == 1);
+  lj_gc2_legacy_weak_begin(g);
+  assert(lj_gc2_weak_complete(g, gcref(g->gc.weak),
+			      LJ_GC2_WEAK_DRAIN_BATCH) == 1);
+  lj_gc2_legacy_sweep_begin(g);
+  do {
+    swept = lj_gc2_sweep_owner_progress(g, tg, LJ_GC2_SWEEP_BATCH);
+  } while (swept != 0);
+  assert(!lj_gc2_sweep_pending(g));
+  lj_gc2_legacy_cycle_end(g);
+}
+
+static void test_minor_major_paranoia(void)
+{
+  lua_State *L = luaL_newstate();
+  global_State *g;
+  TGState *tg;
+  assert(L != NULL);
+  luaL_openlibs(L);
+  g = G(L);
+  tg = G2TG(g);
+  assert(tg != NULL);
+  lj_gc2_set_generational(g, 1);
+  lj_gc_fullgc(L);
+  assert(la_load32_acq(&g->gc2.minor_sweep_enabled) == 1);
+  assert(la_load32_acq(&g->gc2.minor_roots_enabled) == 1);
+  run_script(L,
+    "_G.__gc2_minor_live = {}\n"
+    "for i = 1, 120 do __gc2_minor_live[i] = {i, 'live'..i} end\n"
+    "for i = 1, 400 do local t = {i, 'dead'..i}; t[3] = {i} end\n");
+  run_true_minor_cycle(L, g, tg);
+  lj_gc_fullgc(L);
+  assert(lj_gc2_paranoia_legacy_diff(g) == 0);
+  lj_gc2_set_generational(g, 0);
+  lua_close(L);
 }
 
 int main(void)
@@ -123,6 +168,7 @@ int main(void)
   assert(lj_tg_reclaim_dead(g) == 1u);
   lj_tg_fini_thread(g, &extra_tg);
   lua_close(L);
+  test_minor_major_paranoia();
 
   printf("t-gc2-paranoia OK: fixpoint oracle and stale-mark diff verified\n");
   return 0;

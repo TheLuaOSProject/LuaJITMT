@@ -8,6 +8,8 @@
 
 #include "lj_obj.h"
 
+typedef struct GCArena GCArena;
+
 /* Garbage collector states. Order matters. */
 enum {
   GCSpause, GCSpropagate, GCSatomic, GCSsweepstring, GCSsweep, GCSfinalize
@@ -59,7 +61,9 @@ LJ_STATIC_ASSERT(LJ_GC_NEEDSCAN == 0x80);
 /* Collector. */
 LJ_FUNC size_t lj_gc_separateudata(global_State *g, int all);
 LJ_FUNC void lj_gc_finalize_udata(lua_State *L);
-LJ_FUNC uint32_t lj_gc_sweep_gc2_young(global_State *g);
+LJ_FUNC uint32_t lj_gc_sweep_gc2_unmarked(global_State *g);
+LJ_FUNC uint32_t lj_gc_sweep_gc2_arena_unmarked(global_State *g, GCArena *a);
+LJ_FUNC uint32_t lj_gc_sweep_gc2_all_arena_bodies(global_State *g);
 #if LJ_HASFFI
 LJ_FUNC void lj_gc_finalize_cdata(lua_State *L);
 LJ_FUNC int lj_gc_cdata_fin_pending(global_State *g);

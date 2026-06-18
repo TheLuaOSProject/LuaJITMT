@@ -291,14 +291,14 @@ static void test_boundary_lazy_sweep_extra_tg(void)
   sweep_cycle = g->gc2.cycle;
   g->gc2.phase = LJ_GC2_SWEEP;
   assert(lj_gc2_handshake(g, LJ_GC2_HS_RESET_ALLOC) == 2);
-  assert(arena_list_contains(extra_tg.alloc.needsweep[LJ_ARENAK_PLAIN],
+  assert(arena_list_contains(extra_tg.alloc.owned[LJ_ARENAK_PLAIN],
 			     extra_plain_a));
   assert(arena_list_contains(extra_tg.alloc.needsweep[LJ_ARENAK_TRAVERSABLE],
 			     extra_trav_a));
-  assert((extra_plain_a->hdr.flags & LJ_AF_NEEDSWEEP) != 0);
+  assert((extra_plain_a->hdr.flags & LJ_AF_NEEDSWEEP) == 0);
   assert((extra_trav_a->hdr.flags & LJ_AF_NEEDSWEEP) != 0);
   seed_traversable_needsweep(&extra_tg, seeded);
-  assert(lj_gc2_sweep_needs_prepare(g));
+  assert(!lj_gc2_sweep_needs_prepare(g));
   assert(lj_gc2_sweep_pending(g));
 
   setgcrefnull(empty);

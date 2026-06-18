@@ -206,8 +206,8 @@ int main(void)
   assert(la_load32_acq(&g->gc2.cycle_sweep_minor) == 1);
   assert(la_load32_acq(&g->gc2.cycle_roots_minor) == 1);
   assert(la_load32_acq(&g->gc2.phase) == LJ_GC2_MARK);
-  assert(tg->alloc.alloc_black == 0);
-  assert_late_attach_color(g, tg, &late_tg, 7000u, 1, 0);
+  assert(tg->alloc.alloc_black == 1);
+  assert_late_attach_color(g, tg, &late_tg, 7000u, 1, 1);
   lua_newtable(L);
   active_child = tabV(L->top - 1);
   assert(lj_gc2_ismarked(g, obj2gco(active_child)) == 0);
@@ -220,10 +220,10 @@ int main(void)
   lj_gc2_legacy_mark_begin(g);
   assert(la_load32_acq(&g->gc2.phase) == LJ_GC2_MARK);
   assert(la_load32_acq(&g->gc2.cycle_sweep_minor) == 1);
-  assert_late_attach_color(g, tg, &late_tg, 7001u, 1, 0);
+  assert_late_attach_color(g, tg, &late_tg, 7001u, 1, 1);
   lj_gc2_legacy_weak_begin(g);
   assert(la_load32_acq(&g->gc2.phase) == LJ_GC2_WEAK);
-  assert_late_attach_color(g, tg, &late_tg, 7002u, 1, 0);
+  assert_late_attach_color(g, tg, &late_tg, 7002u, 1, 1);
   lj_gc2_legacy_sweep_begin(g);
   assert(la_load32_acq(&g->gc2.phase) == LJ_GC2_SWEEP);
   assert(tg->alloc.alloc_black == 0);
@@ -234,6 +234,7 @@ int main(void)
   active_child = tabV(L->top - 1);
   assert(root_contains(g, obj2gco(active_child)));
   lua_pop(L, 1);
+  flipwhite(obj2gco(active_child));  /* Manual GC2 sweep setup mirrors legacy atomic. */
   lj_gc2_legacy_mark_begin(g);
   assert(la_load32_acq(&g->gc2.cycle_sweep_minor) == 1);
   lj_gc2_legacy_weak_begin(g);
@@ -422,10 +423,10 @@ int main(void)
   assert(la_load64_acq(&g->gc2.minor_cycle_requests) ==
 	 minor_requests0 + 1u);
   assert(la_load32_acq(&g->gc2.cycle_roots_minor) == 1);
-  assert(tg->alloc.alloc_black == 0);
+  assert(tg->alloc.alloc_black == 1);
   lua_newtable(L);
   active_child = tabV(L->top - 1);
-  assert(lj_gc2_ismarked(g, obj2gco(active_child)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(active_child)) == 1);
   lj_gc2_barrier_obj_pair(L, obj2gco(parent), obj2gco(active_child));
   assert(lj_gc2_ismarked(g, obj2gco(active_child)) == 1);
   lua_pop(L, 1);

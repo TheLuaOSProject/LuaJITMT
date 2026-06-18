@@ -75,6 +75,7 @@ struct TGAlloc {
   GCArena *owned[LJ_ARENA_NKINDS];
   GCArena *needsweep[LJ_ARENA_NKINDS];
   uint32_t sweep_epoch;
+  uint32_t prepare_epoch;
   uint32_t owner_tid;
   uint8_t alloc_black;
 };
