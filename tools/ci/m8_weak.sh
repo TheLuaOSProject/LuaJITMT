@@ -33,6 +33,7 @@ for needle in \
   'GC2 late weak write mark wins over legacy white' \
   'test_weak_post_clear_resurrection_write' \
   'test_vm_weak_post_clear_existing_key_write' \
+  'weak-kv table kept a one-cycle hash entry' \
   'test_capi_rawset_weak_write_barrier' \
   'C API raw hash weak write' \
   'C API raw array weak write' \

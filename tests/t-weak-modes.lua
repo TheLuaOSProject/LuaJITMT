@@ -76,6 +76,33 @@ do
   assert(observer[1] == nil, "cycle of weak tables kept itself alive")
 end
 
+do
+  local keep = {}
+  local count = 0
+  local dumped = string.dump(assert(loadstring(
+    "return function(x) return x * 3 end"))())
+  for i = 1, 320 do
+    local chunk = assert(loadstring(
+      "local n = " .. i .. " return function(x) return x + n end"))
+    count = count + 1; keep[count] = chunk
+    count = count + 1; keep[count] = chunk()
+    count = count + 1; keep[count] = assert(loadstring(dumped))
+    count = count + 1; keep[count] = assert(loadstring("return " .. i))
+  end
+  for i = 1, count, 4 do keep[i] = nil end
+  for i = 1, 120 do
+    keep[count + i] = { i, i + 1, i + 2 }
+    for j = 4, 40 do keep[count + i][j] = j end
+  end
+  local wkv = setmetatable({}, { __mode = "kv" })
+  do
+    local k, v = {}, {}
+    wkv[k] = v
+  end
+  collectgarbage("collect")
+  assert(npairs(wkv) == 0, "weak-kv table kept a one-cycle hash entry")
+end
+
 if ok_ffi then
   ffi.cdef[[
   typedef struct { int x; } lj_m8_fin_obj_t;

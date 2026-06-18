@@ -910,21 +910,13 @@ static void gc2_mark_fixedstr(global_State *g)
 
 static TValue *gc2_stack_scan_top(global_State *g, lua_State *L)
 {
-  TValue *frame, *top = L->top - 1, *bot = tvref(L->stack);
+  TValue *frame, *bot = tvref(L->stack);
   for (frame = L->base - 1; frame > bot + LJ_FR2; frame = frame_prev(frame)) {
     GCfunc *fn = frame_func(frame);
-    TValue *ftop = frame;
-    if (isluafunc(fn))
-      ftop += funcproto(fn)->framesize;
-    if (ftop > top)
-      top = ftop;
     if (!LJ_FR2)
       lj_gc2_markobj(g, obj2gco(fn));
   }
-  top++;
-  if (top > tvref(L->maxstack))
-    top = tvref(L->maxstack);
-  return top;
+  return L->top;
 }
 
 static LJ_AINLINE uint8_t *gc2_thread_flagp(lua_State *L)
@@ -1511,20 +1503,18 @@ static void gc2_weak_process_tab(global_State *g, GCtab *t, int clear,
   {
     Node *node = lj_tab_node_acq(t);
     MSize i, hmask = lj_tab_node_hmask_acq(node);
-    if (hmask > 0) {
-      for (i = 0; i <= hmask; i++) {
-	Node *n = &node[i];
-	TValue key, val;
-	lj_tv_load_acq(&val, &n->val);
-	if (!tvisnil(&val)) {
-	  lj_tv_load_acq(&key, &n->key);
-	  (*slots)++;
-	  if (gc2_weak_mayclear(g, &key, 0, clear) ||
-	      gc2_weak_mayclear(g, &val, 1, clear)) {
-	    (*clearable)++;
-	    if (clear)
-	      lj_tab_storenilraw(&n->val);
-	  }
+    for (i = 0; i <= hmask; i++) {
+      Node *n = &node[i];
+      TValue key, val;
+      lj_tv_load_acq(&val, &n->val);
+      if (!tvisnil(&val)) {
+	lj_tv_load_acq(&key, &n->key);
+	(*slots)++;
+	if (gc2_weak_mayclear(g, &key, 0, clear) ||
+	    gc2_weak_mayclear(g, &val, 1, clear)) {
+	  (*clearable)++;
+	  if (clear)
+	    lj_tab_storenilraw(&n->val);
 	}
       }
     }
@@ -2647,21 +2637,13 @@ static void gc2_traverse_proto(global_State *g, GCproto *pt)
 
 static TValue *gc2_stack_scan_top_worker(global_State *g, lua_State *L)
 {
-  TValue *frame, *top = L->top - 1, *bot = tvref(L->stack);
+  TValue *frame, *bot = tvref(L->stack);
   for (frame = L->base - 1; frame > bot + LJ_FR2; frame = frame_prev(frame)) {
     GCfunc *fn = frame_func(frame);
-    TValue *ftop = frame;
-    if (isluafunc(fn))
-      ftop += funcproto(fn)->framesize;
-    if (ftop > top)
-      top = ftop;
     if (!LJ_FR2)
       gc2_markobj_worker(g, obj2gco(fn));
   }
-  top++;
-  if (top > tvref(L->maxstack))
-    top = tvref(L->maxstack);
-  return top;
+  return L->top;
 }
 
 static int gc2_thread_owner_scans(global_State *g, lua_State *th)

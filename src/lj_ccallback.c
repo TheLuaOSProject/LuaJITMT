@@ -859,8 +859,7 @@ lua_State * LJ_FASTCALL lj_ccallback_enter(CTState *cts, void *cf,
   if (was_native) {
     if (tg->ffi_call_func != NULL)
       lj_ctype_cb_blacklist(cts, tg->ffi_call_func);
-    la_store8_rlx(&tg->in_native, 0);
-    actions = lj_safepoint_poll(L);
+    actions = lj_native_leave(L);
   }
   callback_conv_args(cts, L, cb);
   callback_frame_push(L, cb, L->base-1, was_native);
