@@ -160,6 +160,10 @@ for needle in \
   'uint64_t finreg_cdata_order_fallbacks' \
   'uint64_t finreg_cdata_pweak_root_fallbacks' \
   'uint64_t finreg_cdata_close_root_fallbacks' \
+  'uint64_t finreg_cdata_pending_order_hits' \
+  'gc_cdata_fin_pending_ordered(global_State *g, CTState *cts)' \
+  'FINREG ordered close-time cdata pending scan' \
+  'finreg_cdata_pending_order_hits, 0' \
   'ordered_fallback && ordered_queued == 0' \
   'if (!ordered_fallback)' \
   'finreg_cdata_close_root_fallbacks, 1' \
@@ -184,6 +188,7 @@ for needle in \
   'finreg_cdata_order_fallbacks) ==' \
   'finreg_cdata_pweak_root_fallbacks) ==' \
   'finreg_cdata_close_root_fallbacks) ==' \
+  'finreg_cdata_pending_order_hits) == pendingorder2 + 1u' \
   'gc2_regorder_fin_t' \
   'gc2_cdata_order[1] == 1' \
   'gc2_rereg_fin_t' \

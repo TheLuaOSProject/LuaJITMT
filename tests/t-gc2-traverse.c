@@ -2460,7 +2460,7 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   uint64_t sets2, clears2, queued2, pweak2, finalizerq2, finalizerd2, mpscd2;
   uint64_t sweepqueued2, claimed2, dispatched2;
   uint64_t orderq2, orderclaimed2, orderfallback2, rootfallback2;
-  uint64_t closerootfallback2;
+  uint64_t closerootfallback2, pendingorder2;
   int finalized0;
 
   lua_settop(L, 0);
@@ -2723,6 +2723,7 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   finalizerd2 = la_load64_acq(&g->gc2.finalizer_dequeued);
   mpscd2 = la_load64_acq(&g->gc2.finalizer_mpsc_drained);
   orderq2 = la_load64_acq(&g->gc2.finreg_cdata_order_queued);
+  pendingorder2 = la_load64_acq(&g->gc2.finreg_cdata_pending_order_hits);
   gc2_cdata_order_count = 0;
   assert(luaL_dostring(L,
     "local ffi = require('ffi')\n"
@@ -2733,6 +2734,9 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
     "gc2_close_keep[3] = ffi.gc(ffi.new('gc2_close_order_fin_t'), gc2_cdata_order_finalizer_3)\n") ==
     LUA_OK);
   assert(la_load64_acq(&g->gc2.finreg_cdata_sets) == sets2 + 3u);
+  assert(lj_gc_cdata_fin_pending(g));
+  assert(la_load64_acq(&g->gc2.finreg_cdata_pending_order_hits) ==
+	 pendingorder2 + 1u);
   lj_gc_finalize_cdata(L);
   assert(lj_gc2_finalizer_queue_pending(g));
   assert(la_load64_acq(&g->gc2.finreg_cdata_order_queued) == orderq2 + 3u);
@@ -2749,6 +2753,7 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   assert(la_load64_acq(&g->gc2.finalizer_mpsc_drained) == mpscd2 + 3u);
   assert(la_load64_acq(&g->gc2.finreg_cdata_clears) == clears2 + 3u);
   assert(!lj_gc2_finalizer_queue_pending(g));
+  assert(!lj_gc_cdata_fin_pending(g));
   assert(gc2_cdata_order_count == 3);
   assert(gc2_cdata_order[0] == 3);
   assert(gc2_cdata_order[1] == 2);

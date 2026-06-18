@@ -1771,6 +1771,39 @@ static void gc_separate_cdata_finalizers(global_State *g)
   }
 }
 
+static int gc_cdata_fin_pending_ordered(global_State *g, CTState *cts)
+{
+  FinRegOrderNode *ord;
+  ord = (FinRegOrderNode *)la_loadptr_acq(
+    (void *const *)&cts->fin_order_head);
+  for (; ord != NULL;
+       ord = (FinRegOrderNode *)la_loadptr_acq((void *const *)&ord->next)) {
+    GCtab *t = (GCtab *)la_loadptr_acq((void *const *)&ord->tab);
+    TValue *slot = (TValue *)la_loadptr_acq((void *const *)&ord->slot);
+    Node *node = (Node *)slot;
+    TValue fin, key;
+    GCobj *o;
+    if (!t || !slot || !gcref_acq(t->metatable))
+      continue;
+    lj_tv_load_acq(&fin, slot);
+    while (lj_cdata_fin_isclaim(&fin)) {
+      la_cpu_pause();
+      lj_tv_load_acq(&fin, slot);
+    }
+    if (tvisnil(&fin))
+      continue;
+    lj_tv_load_acq(&key, &node->key);
+    if (!tviscdata(&key))
+      continue;
+    o = gcV(&key);
+    if (gc_cdata_finalizer_candidate_close(o)) {
+      la_add64_rlx(&g->gc2.finreg_cdata_pending_order_hits, 1);
+      return 1;
+    }
+  }
+  return 0;  /* FINREG ordered close-time cdata pending scan. */
+}
+
 static int gc_cdata_fin_pending_tab(GCtab *t)
 {
   Node *node = lj_tab_node_acq(t);
@@ -1798,6 +1831,8 @@ int lj_gc_cdata_fin_pending(global_State *g)
   FinRegGen *gen;
   if (cts == NULL)
     return 0;
+  if (gc_cdata_fin_pending_ordered(g, cts))
+    return 1;
   for (gen = (FinRegGen *)la_loadptr_acq((void *const *)&cts->fin_head);
        gen != NULL;
        gen = (FinRegGen *)la_loadptr_acq((void *const *)&gen->next)) {
