@@ -8,14 +8,9 @@
 -- real cores (13 §13.2 caveat).
 
 local th = require("threading")
-local clock = os.clock  -- wall clock preferred: use os.time fallback note
+local wall = assert(th.now, "bench_mt.lua requires threading.now()")
 local floor = math.floor
 local getenv = os.getenv
-local function wall()
-  -- os.clock is CPU time; for MT scaling we need wall time.
-  -- M4 adds threading.now() (monotonic); fall back if absent.
-  return th.now and th.now() or os.time()
-end
 
 local NT = tonumber(arg and arg[1]) or th.cpucount()
 local filter = arg and arg[2]

@@ -9,6 +9,7 @@ make -C "$ROOT/src" >/dev/null
 for needle in \
   'LJLIB_CF(threading_now)' \
   'CLOCK_MONOTONIC' \
+  'local wall = assert(th.now, "bench_mt.lua requires threading.now()")' \
   'local scale = tonumber(getenv("BENCH_SCALE")) or 1' \
   'if dt <= 0 then dt = 1e-9 end' \
   'requires an even thread count >= 2' \
@@ -22,6 +23,11 @@ do
     exit 1
   fi
 done
+
+if rg -n 'os[.]clock' "$ROOT/plan/aux/bench/bench_mt.lua"; then
+  echo "guardrail: bench_mt.lua must use monotonic wall time, not CPU time" >&2
+  exit 1
+fi
 
 "$ROOT/src/luajit" "$ROOT/tests/t-threading-api.lua"
 
