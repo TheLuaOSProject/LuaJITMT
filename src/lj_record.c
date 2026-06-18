@@ -1467,25 +1467,6 @@ static int rec_idx_tab_trace_local(jit_State *J, TRef tab)
   return ir->o == IR_TNEW || ir->o == IR_TDUP;
 }
 
-static int rec_idx_tab_store_escaped(jit_State *J, IRRef tabref)
-{
-  IRRef ref;
-  for (ref = (IRRef)(tabref + 1); ref < J->cur.nins; ref++) {
-    IRIns *ir = IR(ref);
-    /* M6 bridge: same-trace heap/upvalue publication makes the table shared. */
-    if (ir->o >= IR_ASTORE && ir->o <= IR_XSTORE && ir->op2 == tabref)
-      return 1;
-  }
-  return 0;
-}
-
-static int rec_idx_store_trace_local(jit_State *J, TRef tab)
-{
-  IRRef tabref = tref_ref(tab);
-  return rec_idx_tab_trace_local(J, tab) &&
-	 !rec_idx_tab_store_escaped(J, tabref);
-}
-
 /* Record indexed key lookup. */
 static TRef rec_idx_key(jit_State *J, RecordIndex *ix, IRRef *rbref,
 			IRType1 *rbguard)
@@ -1611,6 +1592,26 @@ static int nommstr(jit_State *J, TRef key)
   return 1;  /* CANNOT be a metamethod name. */
 }
 
+static int rec_idx_tab_weak_mode(jit_State *J, GCtab *t, GCtab *mt)
+{
+  int weak = lj_obj_gcflags(obj2gco(t)) & LJ_GC_WEAK;
+  if (weak || !mt)
+    return weak;
+  {
+    TValue modev;
+    cTValue *mode = lj_meta_fasttv(J2G(J), mt, MM_mode, &modev);
+    if (mode && tvisstr(mode)) {
+      const char *modestr = strVdata(mode);
+      int c;
+      while ((c = *modestr++)) {
+	if (c == 'k') weak |= LJ_GC_WEAKKEY;
+	else if (c == 'v') weak |= LJ_GC_WEAKVAL;
+      }
+    }
+  }
+  return weak;
+}
+
 /* Record indexed load/store. */
 TRef lj_record_idx(jit_State *J, RecordIndex *ix)
 {
@@ -1701,11 +1702,13 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
     GCtab *mt = tabref_acq(tabV(&ix->tabv)->metatable);
     int keybarrier = tref_isgcv(ix->key) && !tref_isnil(ix->val);
 #if defined(__linux__) && LJ_TARGET_X64
-    if (tvisnil(oldv) || !rec_idx_store_trace_local(J, ix->tab)) {
+    if (rec_idx_tab_weak_mode(J, tabV(&ix->tabv), mt))
+      lj_trace_err_info(J, LJ_TRERR_NYIBC);  /* M8: weak writes need VM bridge. */
+    if (tvisnil(oldv)) {
       if (loadop == IR_HLOAD)
-	lj_trace_err_info(J, LJ_TRERR_NYIBC);  /* M6: no shared/new HSTORE bridge. */
+	lj_trace_err_info(J, LJ_TRERR_NYIBC);  /* M6: no new/nil HSTORE bridge. */
       if (loadop == IR_ALOAD)
-	lj_trace_err_info(J, LJ_TRERR_NYIBC);  /* M6: no shared/nil ASTORE bridge. */
+	lj_trace_err_info(J, LJ_TRERR_NYIBC);  /* M6: no nil ASTORE bridge. */
     }
 #else
     if (loadop == IR_HLOAD)

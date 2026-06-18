@@ -1,5 +1,5 @@
 #!/bin/sh
-# Guard the M6 helper-backed trace-local table store bridge.
+# Guard the M6 helper-backed table store bridge.
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
@@ -13,15 +13,14 @@ for needle in \
   'tabref = IR(xref->op1)->op1' \
   'asm_ahstore_forjit(ASMState *as, IRIns *ir)' \
   '#if defined(__linux__) && LJ_TARGET_X64' \
-  'rec_idx_store_trace_local(jit_State *J, TRef tab)' \
-  'rec_idx_tab_store_escaped(jit_State *J, IRRef tabref)' \
-  'ir->o >= IR_ASTORE && ir->o <= IR_XSTORE && ir->op2 == tabref' \
-  'M6: no shared/new HSTORE bridge.' \
-  'M6: no shared/nil ASTORE bridge.'
+  'IRRef lim = poll_alias_limit(J, xref);' \
+  'M8: weak writes need VM bridge.' \
+  'M6: no new/nil HSTORE bridge.' \
+  'M6: no nil ASTORE bridge.'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_tab.c" "$ROOT/src/lj_tab.h" \
       "$ROOT/src/lj_ircall.h" "$ROOT/src/lj_asm_x86.h" \
-      "$ROOT/src/lj_record.c"; then
+      "$ROOT/src/lj_record.c" "$ROOT/src/lj_opt_mem.c"; then
     echo "guardrail: missing table-store helper marker: $needle" >&2
     exit 1
   fi
@@ -38,7 +37,7 @@ for i = 1, 200 do
   h.stable = i
 end
 assert(h.stable == 200)
-assert(not util.traceinfo(1), "shared hash table store unexpectedly traced")
+assert(util.traceinfo(1), "shared existing hash table store did not trace")
 
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
@@ -47,7 +46,25 @@ for i = 1, 200 do
   a[1] = i
 end
 assert(a[1] == 200)
-assert(not util.traceinfo(1), "shared array table store unexpectedly traced")
+assert(util.traceinfo(1), "shared existing array table store did not trace")
+
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local wk = setmetatable({ stable = 0 }, { __mode = "k" })
+for i = 1, 200 do
+  wk.stable = i
+end
+assert(wk.stable == 200)
+assert(not util.traceinfo(1), "weak-key table store unexpectedly traced")
+
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local wv = setmetatable({ 0 }, { __mode = "v" })
+for i = 1, 200 do
+  wv[1] = i
+end
+assert(wv[1] == 200)
+assert(not util.traceinfo(1), "weak-value table store unexpectedly traced")
 
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
@@ -92,7 +109,7 @@ local function phi_store(n)
   return a.stable + b.stable
 end
 assert(phi_store(80) == 81)
-assert(not util.traceinfo(1), "PHI-carried table store unexpectedly traced")
+assert(util.traceinfo(1), "PHI-carried existing table store did not trace")
 
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
@@ -104,7 +121,7 @@ local function upvalue_store(n)
   return up.stable
 end
 assert(upvalue_store(80) == 80)
-assert(not util.traceinfo(1), "upvalue-carried table store unexpectedly traced")
+assert(util.traceinfo(1), "upvalue-carried existing table store did not trace")
 
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
@@ -121,7 +138,7 @@ local function make_escaped_store()
 end
 local escaped_store = make_escaped_store()
 assert(escaped_store(80) == 80)
-assert(not util.traceinfo(1), "closed-upvalue escaped table store unexpectedly traced")
+assert(util.traceinfo(1), "closed-upvalue escaped existing table store did not trace")
 
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
@@ -140,7 +157,7 @@ local function make_nested_escape()
 end
 local nested_escape = make_nested_escape()
 assert(nested_escape(80) == 80)
-assert(not util.traceinfo(1), "nested escaped table store unexpectedly traced")
+assert(util.traceinfo(1), "nested escaped existing table store did not trace")
 '
 
 HASH_IR=$(mktemp "${TMPDIR:-/tmp}/lj-m6-hstore-ir.XXXXXX")
@@ -196,6 +213,48 @@ if ! grep -q 'TDUP' "$ARRAY_IR" || ! grep -q 'ASTORE' "$ARRAY_IR" ||
    ! grep -q 'XPOLL' "$ARRAY_IR"; then
   echo "guardrail: trace-local array store must record TDUP/ASTORE with XPOLL" >&2
   cat "$ARRAY_IR" >&2
+  exit 1
+fi
+
+SHARED_HASH_IR=$(mktemp "${TMPDIR:-/tmp}/lj-m6-shared-hstore-ir.XXXXXX")
+SHARED_ARRAY_IR=$(mktemp "${TMPDIR:-/tmp}/lj-m6-shared-astore-ir.XXXXXX")
+trap 'rm -f "$HASH_IR" "$ARRAY_IR" "$SHARED_HASH_IR" "$SHARED_ARRAY_IR"' EXIT HUP INT TERM
+
+LUA_PATH="$ROOT/src/?.lua;$ROOT/src/jit/?.lua;;" \
+  "$ROOT/src/luajit" -jdump=ir -e '
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local util = require("jit.util")
+local h = { stable = 0 }
+for i = 1, 80 do
+  h.stable = i
+end
+assert(h.stable == 80)
+assert(util.traceinfo(1), "shared existing hash store did not trace")
+' > "$SHARED_HASH_IR"
+
+if ! grep -q 'HSTORE' "$SHARED_HASH_IR" || ! grep -q 'XPOLL' "$SHARED_HASH_IR"; then
+  echo "guardrail: shared existing hash store must record HSTORE with XPOLL" >&2
+  cat "$SHARED_HASH_IR" >&2
+  exit 1
+fi
+
+LUA_PATH="$ROOT/src/?.lua;$ROOT/src/jit/?.lua;;" \
+  "$ROOT/src/luajit" -jdump=ir -e '
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local util = require("jit.util")
+local a = { 0 }
+for i = 1, 80 do
+  a[1] = i
+end
+assert(a[1] == 80)
+assert(util.traceinfo(1), "shared existing array store did not trace")
+' > "$SHARED_ARRAY_IR"
+
+if ! grep -q 'ASTORE' "$SHARED_ARRAY_IR" || ! grep -q 'XPOLL' "$SHARED_ARRAY_IR"; then
+  echo "guardrail: shared existing array store must record ASTORE with XPOLL" >&2
+  cat "$SHARED_ARRAY_IR" >&2
   exit 1
 fi
 

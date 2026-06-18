@@ -362,8 +362,9 @@ TRef LJ_FASTCALL lj_opt_dse_ahstore(jit_State *J)
   IRRef val = fins->op2;  /* Stored value reference. */
   IRIns *xr = IR(xref);
   IRRef1 *refp = &J->chain[fins->o];
+  IRRef lim = poll_alias_limit(J, xref);
   IRRef ref = *refp;
-  while (ref > xref) {  /* Search for redundant or conflicting stores. */
+  while (ref > lim) {  /* Search for redundant or conflicting stores. */
     IRIns *store = IR(ref);
     switch (aa_ahref(J, xr, IR(store->op1))) {
     case ALIAS_NO:
