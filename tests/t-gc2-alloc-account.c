@@ -226,6 +226,39 @@ int main(void)
   lj_gc2_set_generational(g, 0);
   lua_settop(L, 0);
 
+  lua_newtable(L);
+  parent = tabV(L->top - 1);
+  assert(lj_gc2_markobj(g, obj2gco(parent)) == 1);
+  (void)lj_gc2_flush_ssb(g, tg);
+  (void)lj_gc2_drain_ssb(g);
+  assert(lj_gc2_ssb_empty(g));
+  assert(lj_gc2_ismarked(g, obj2gco(parent)) == 1);
+  lua_newtable(L);
+  child = tabV(L->top - 1);
+  lua_pushvalue(L, -1);
+  lua_rawseti(L, -3, 1);  /* parent[1] = child. */
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 0);
+  lua_pop(L, 2);
+
+  lj_gc2_set_generational(g, 1);
+  la_store32_rel(&g->gc2.minor_sweep_enabled, 1);
+  la_store32_rel(&g->gc2.minor_roots_enabled, 1);
+  remembered_pushed0 = la_load64_acq(&g->gc2.remembered_pushed);
+  remembered_drained0 = la_load64_acq(&g->gc2.remembered_drained);
+  lj_gc2_barrier_obj_pair(L, obj2gco(parent), obj2gco(child));
+  assert(la_load64_acq(&g->gc2.remembered_pushed) == remembered_pushed0 + 1u);
+  lj_gc2_legacy_mark_begin(g);
+  assert(la_load32_acq(&g->gc2.cycle_roots_minor) == 1);
+  assert(la_load64_acq(&g->gc2.remembered_drained) >=
+	 remembered_drained0 + 1u);
+  assert(lj_gc2_ismarked(g, obj2gco(parent)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
+  la_store32_rel(&g->gc2.minor_sweep_enabled, 0);
+  la_store32_rel(&g->gc2.minor_roots_enabled, 0);
+  lj_gc2_set_generational(g, 0);
+  lj_gc2_legacy_cycle_end(g);
+  lua_settop(L, 0);
+
   lj_gc_threshold_store(g, LJ_MAX_MEM);
   (void)la_xchg64_acqrel(&g->gc2.alloc_since_trigger, 0);
   cycle_requests0 = la_load64_acq(&g->gc2.cycle_requests);
