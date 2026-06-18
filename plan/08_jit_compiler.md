@@ -442,9 +442,12 @@ scoped-flush target.
    the recoverable `TabArrayHdr`: the x64 recorder loads `GCtab.array` once,
    derives the header address, `XLOAD`s `TabArrayHdr.asize` for the bounds
    guard, and uses the same slots pointer for `AREF`/`ALOAD`. Colocated shared
-   arrays keep the legacy paired `TAB_ARRAY` equality guard. This is still an
-   `AHdr`-lite bridge, not the final immutable array-generation model, because
-   header `asize` can still change in place for same-vector resize cases.
+   arrays keep the legacy paired `TAB_ARRAY` equality guard. The header path is
+   gated on the currently acquired array pointer so a split-from-colocated
+   publication window does not treat the colocated interior pointer as
+   header-backed. This is still an `AHdr`-lite bridge, not the final immutable
+   array-generation model, because header `asize` can still change in place for
+   same-vector resize cases.
    Existing non-nil table-slot stores are
    now recorded on Linux/x64 for shared tables as well as PHI/upvalue/escaped
    table references, previous-nil in-bounds array slots, existing nil-value

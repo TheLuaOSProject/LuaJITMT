@@ -1468,6 +1468,25 @@ static int rec_idx_tab_trace_local(jit_State *J, TRef tab)
 }
 
 #if defined(__linux__) && LJ_TARGET_X64
+static int rec_idx_tab_array_has_hdr(const GCtab *t, const TValue *array)
+{
+  if (array == NULL)
+    return 0;
+#if LJ_MAX_COLOSIZE != 0
+  if (t->colo > 0)
+    return 0;
+  if (t->colo < 0) {
+    const TValue *coloarray = (const TValue *)(const void *)
+      ((const char *)(const void *)t + sizeof(GCtab));
+    if (array == coloarray)
+      return 0;
+  }
+#else
+  UNUSED(t);
+#endif
+  return 1;
+}
+
 static TRef rec_idx_array_hdr_asize(jit_State *J, TRef arrayref)
 {
   TRef hdrref = emitir(IRT(IR_ADD, IRT_PGC), arrayref,
@@ -1506,8 +1525,9 @@ static TRef rec_idx_key(jit_State *J, RecordIndex *ix, IRRef *rbref,
 	TRef arrayref;
 #if defined(__linux__) && LJ_TARGET_X64
 	int trace_local = rec_idx_tab_trace_local(J, ix->tab);
+	TValue *record_array = lj_tab_array_acq(t);
 	arrayref = emitir(IRT(IR_FLOAD, IRT_PGC), ix->tab, IRFL_TAB_ARRAY);
-	if (!trace_local && lj_tab_array_separated(t)) {
+	if (!trace_local && rec_idx_tab_array_has_hdr(t, record_array)) {
 	  /* M6: shared separated AREF pairs slots with TabArrayHdr.asize. */
 	  asizeref = rec_idx_array_hdr_asize(J, arrayref);
 	  rec_idx_abc(J, asizeref, ikey, asize);

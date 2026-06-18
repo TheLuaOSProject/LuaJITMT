@@ -136,8 +136,11 @@ pair-stability guard that brackets the `TAB_ASIZE` bounds check with two fresh
 `TAB_ARRAY` loads and guards the array pointers equal before `AREF`/`ALOAD`.
 Separated shared array reads now use `TabArrayHdr.asize` loaded through the
 single recorded `GCtab.array` slots pointer; colocated shared arrays keep the
-legacy pair guard. The broader immutable array/header generation model remains
-pending because same-vector header `asize` changes are still allowed. Linux/x64
+legacy pair guard. The header path checks the observed slots pointer so a
+split-from-colocated publication window does not treat colocated storage as a
+header-backed allocation. The broader immutable array/header generation model
+remains pending because same-vector header `asize` changes are still allowed.
+Linux/x64
 secure builds now use the original M6 dual-map mcode write view: each mcode
 area is memfd-backed, mapped once RX and once RW, `MCLink.rw` carries the
 writable alias, generated-code/unwind writes go through RX/RW translation

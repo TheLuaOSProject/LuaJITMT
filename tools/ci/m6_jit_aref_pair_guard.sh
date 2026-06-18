@@ -5,12 +5,16 @@ set -eu
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 TMP=${TMPDIR:-/tmp}/lj-m6-aref-pair.$$
 TMP_COLO=${TMPDIR:-/tmp}/lj-m6-aref-pair-colo.$$
-trap 'rm -f "$TMP" "$TMP_COLO"' EXIT
+TMP_SPLIT=${TMPDIR:-/tmp}/lj-m6-aref-pair-split.$$
+trap 'rm -f "$TMP" "$TMP_COLO" "$TMP_SPLIT"' EXIT
 
 make -C "$ROOT/src" >/dev/null
 
 for needle in \
   'rec_idx_tab_trace_local(jit_State *J, TRef tab)' \
+  'rec_idx_tab_array_has_hdr(const GCtab *t, const TValue *array)' \
+  'array == coloarray' \
+  'rec_idx_tab_array_has_hdr(t, record_array)' \
   'rec_idx_array_hdr_asize(jit_State *J, TRef arrayref)' \
   'M6: shared separated AREF pairs slots with TabArrayHdr.asize.' \
   'emitir(IRTI(IR_XLOAD), hdrref, 0);' \
@@ -58,6 +62,44 @@ if ! awk '
 ' "$TMP"; then
   cat "$TMP" >&2
   echo "guardrail: separated shared array reads must load bounds from TabArrayHdr" >&2
+  exit 1
+fi
+
+LUA_PATH="$ROOT/src/?.lua;$ROOT/src/jit/?.lua;;" \
+  timeout 20s "$ROOT/src/luajit" -jdump=ir -e '
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    jit.off()
+    local t = { 1, 2, 3, 4 }
+    for i = 5, 64 do t[i] = i end
+    jit.on()
+    local s = 0
+    for i = 1, 80 do
+      local k = (i % 64) + 1
+      s = s + (t[k] or 0)
+    end
+    assert(s > 0)
+  ' >"$TMP_SPLIT" 2>&1
+
+if ! awk '
+  /---- TRACE 1 IR/ { inir = 1; next }
+  /---- TRACE 1 stop/ {
+    done = 1
+    exit !(array >= 2 && hdradd >= 2 && xload >= 2 && asize == 0 &&
+	    eq == 0 && aref && aload && xpoll)
+  }
+  inir && /FLOAD .*tab[.]array/ { array++ }
+  inir && / p64 ADD / && /-8/ { hdradd++ }
+  inir && / XLOAD / { xload++ }
+  inir && /FLOAD .*tab[.]asize/ { asize++ }
+  inir && / p64 EQ / { eq++ }
+  inir && / AREF / { aref = 1 }
+  inir && / ALOAD / { aload = 1 }
+  inir && / XPOLL / { xpoll = 1 }
+  END { if (!done) exit 1 }
+' "$TMP_SPLIT"; then
+  cat "$TMP_SPLIT" >&2
+  echo "guardrail: split-from-colocated arrays must use header bounds after publish" >&2
   exit 1
 fi
 
