@@ -461,14 +461,15 @@ of these late writes wins over stale legacy white while `GCSatomic` remains
 open, so queued weak snapshots cannot clear a value that was just rescued by the
 P_WEAK bridge.
 `weak_keys_marked` and `weak_values_marked` expose first-time marks from these
-bridges for follow-up tests. x64 VM single-value array table stores now route
-their GC2 barrier to the stored TValue directly, and `BC_TSETM` routes the
-post-copy destination range through `lj_gc2_barrier_tvn_pair_g()` with the
-destination table parent before the existing table-rescan bridge. This keeps
-constructor batch stores from depending on a whole-table rescan for weak-value
-marking after `lj_tab_storetvn()` publishes the slots, while preserving
-table/backing memory coverage for resized arrays and giving generational
-remembered-set filtering parent context.
+bridges for follow-up tests. x64 VM single-value fast table stores now route
+their GC2 barrier through `lj_gc2_barrier_tv_pair_g()` with the destination
+table parent, and `BC_TSETM` routes the post-copy destination range through
+`lj_gc2_barrier_tvn_pair_g()` with the destination table parent before the
+existing table-rescan bridge. This keeps constructor batch stores from
+depending on a whole-table rescan for weak-value marking after
+`lj_tab_storetvn()` publishes the slots, while preserving table/backing memory
+coverage for resized arrays and giving generational remembered-set filtering
+parent context.
 P_SWEEP entry handshake: {DISABLE_BARRIER, RESET_ALLOC, FLUSH_SSB(last)}.
   After it: workers sweep global/orphan arenas + huge table (free unmarked
   huge via munmap, deferred one epoch); owners lazy-sweep per 04 §4.6.
@@ -568,9 +569,10 @@ actual minor execution path stays disabled until minor-cycle roots and precise
 remembered SSB filtering are wired. Minor sweep identity is routed through a
 latched `cycle_sweep_minor` flag and internal off-by-default
 `minor_sweep_enabled` gate, with deferred public minor requests counted until
-root filtering and enablement are safe. Parent-aware table/object barriers now
-use that gate to filter for old-parent/young-child remembered pairs, while
-value-only contexts stay conservative until their parent context is explicit.
+root filtering and enablement are safe. Parent-aware table/object and fast
+table-value barriers now use that gate to filter for old-parent/young-child
+remembered pairs, while remaining root/vmeta value-only contexts stay
+conservative until their parent context is explicit.
 Minor root selection has matching `cycle_roots_minor` /
 `minor_roots_enabled` latches and `minor_roots_deferred` telemetry. The
 `HS_SCAN_ROOTS` bridge routes through a cycle-root selector, but public cycles

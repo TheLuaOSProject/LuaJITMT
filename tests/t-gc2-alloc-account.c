@@ -224,6 +224,19 @@ int main(void)
   assert(lj_gc2_ismarked(g, obj2gco(grandchild)) == 0);
   remembered_pushed0 = la_load64_acq(&g->gc2.remembered_pushed);
   remembered_filtered0 = la_load64_acq(&g->gc2.remembered_filtered);
+  settabV(L, &vals[0], grandchild);
+  lj_gc2_barrier_tv_pair_g(g, obj2gco(parent), &vals[0]);
+  assert(la_load64_acq(&g->gc2.remembered_pushed) == remembered_pushed0 + 1u);
+  settabV(L, &vals[0], child);
+  lj_gc2_barrier_tv_pair_g(g, obj2gco(parent), &vals[0]);
+  assert(la_load64_acq(&g->gc2.remembered_filtered) ==
+	 remembered_filtered0 + 1u);
+  assert(la_load64_acq(&g->gc2.remembered_pushed) ==
+	 remembered_pushed0 + 1u);
+  (void)lj_gc2_handshake(g, LJ_GC2_HS_FLUSH_SSB);
+  (void)lj_gc2_drain_ssb(g);
+  remembered_pushed0 = la_load64_acq(&g->gc2.remembered_pushed);
+  remembered_filtered0 = la_load64_acq(&g->gc2.remembered_filtered);
   lj_gc2_barrier_obj_pair(L, obj2gco(parent), obj2gco(grandchild));
   assert(la_load64_acq(&g->gc2.remembered_pushed) == remembered_pushed0 + 1u);
   lj_gc2_barrier_obj_pair(L, obj2gco(parent), obj2gco(child));

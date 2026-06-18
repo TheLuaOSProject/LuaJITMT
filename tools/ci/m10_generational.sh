@@ -41,6 +41,7 @@ for needle in \
   'lj_gc2_scan_minor_roots(global_State *g, lua_State *L)' \
   'lj_gc2_scan_cycle_roots(global_State *g, lua_State *L)' \
   'lj_gc2_force_major(g);  /* First generational cycle establishes old marks. */' \
+  'lj_gc2_barrier_tv_pair_g(global_State *g, GCobj *parent' \
   'lj_gc2_barrier_tvn_pair_g(global_State *g, GCobj *parent' \
   'gc_stats_setint(L, t, "generational"' \
   'gc_stats_setint(L, t, "cycle_sweep_minor"' \

@@ -41,8 +41,10 @@ for needle in \
   'call extern lj_tab_storetv' \
   'call extern lj_tab_storetvn' \
   'jmp ->vm_gc2_barriertv' \
+  'jmp ->vm_gc2_barriertv_tab' \
   'jmp ->vm_gc2_barriertvn' \
   'jmp ->vm_gc2_barriertab' \
+  'call extern lj_gc2_barrier_tv_pair_g' \
   'call extern lj_gc2_barrier_tvn_pair_g'
 do
   if ! rg -F -q "$needle" "$ROOT/src/vm_x64.dasc"; then

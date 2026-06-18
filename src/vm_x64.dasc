@@ -441,6 +441,20 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov BASE, RB			// Restore BASE.
   |  ins_next
   |
+  |->vm_gc2_barriertv_tab:
+  |.if not X64WIN
+  |  mov CARG2, TAB:RB
+  |  mov RB, BASE			// Save BASE.
+  |  mov CARG3, RC
+  |.else
+  |  mov CARG3, RC
+  |  xchg CARG2, RB			// Save BASE (CARG2 == BASE).
+  |.endif
+  |  load_G CARG1
+  |  call extern lj_gc2_barrier_tv_pair_g	// (global_State *g, GCobj *parent, cTValue *tv)
+  |  mov BASE, RB			// Restore BASE.
+  |  ins_next
+  |
   |->vm_gc2_barriertvn:
   |  mov RB, BASE			// Save BASE.
   |  mov TMPR, RC			// RC = dst returned by lj_tab_storetvn.
@@ -4219,7 +4233,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  movzx RBd, PC_RB
     |  mov TAB:RB, [BASE+RB*8]
     |  cleartp TAB:RB
-    |  jmp ->vm_gc2_barriertv
+    |  jmp ->vm_gc2_barriertv_tab
     |8:
     |  ins_next
     |
@@ -4277,7 +4291,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  movzx RBd, PC_RB
     |  mov TAB:RB, [BASE+RB*8]
     |  cleartp TAB:RB
-    |  jmp ->vm_gc2_barriertv
+    |  jmp ->vm_gc2_barriertv_tab
     |8:
     |  ins_next
     |
@@ -4324,7 +4338,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  movzx RBd, PC_RB
     |  mov TAB:RB, [BASE+RB*8]
     |  cleartp TAB:RB
-    |  jmp ->vm_gc2_barriertv
+    |  jmp ->vm_gc2_barriertv_tab
     |8:
     |  ins_next
     |

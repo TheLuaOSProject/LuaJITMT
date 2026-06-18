@@ -2706,20 +2706,24 @@ void lj_gc2_barrier_obj_pair(lua_State *L, GCobj *parent, GCobj *child)
     gc2_remember_pair(g, parent, child);
 }
 
-void lj_gc2_barrier_tv_pair(lua_State *L, GCobj *parent, cTValue *tv)
+void lj_gc2_barrier_tv_pair_g(global_State *g, GCobj *parent, cTValue *tv)
 {
-  global_State *g;
   TValue snap;
-  if (L && tv) {
+  if (tv) {
     lj_tv_load_acq(&snap, tv);
     if (tvisgcv(&snap)) {
-      g = G(L);
       if (gc2_barrier_active_g(g))
 	lj_gc2_markobj(g, gcV(&snap));
       else
 	gc2_remember_pair(g, parent, gcV(&snap));
     }
   }
+}
+
+void lj_gc2_barrier_tv_pair(lua_State *L, GCobj *parent, cTValue *tv)
+{
+  if (L)
+    lj_gc2_barrier_tv_pair_g(G(L), parent, tv);
 }
 
 static void gc2_barrier_tab_mark(global_State *g, GCtab *t)
