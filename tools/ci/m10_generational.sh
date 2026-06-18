@@ -40,6 +40,7 @@ for needle in \
   'gc2_flush_and_drain_ssb(global_State *g)' \
   'lj_gc2_scan_minor_roots(global_State *g, lua_State *L)' \
   'lj_gc2_scan_cycle_roots(global_State *g, lua_State *L)' \
+  'lj_gc2_force_major(g);  /* First generational cycle establishes old marks. */' \
   'gc_stats_setint(L, t, "generational"' \
   'gc_stats_setint(L, t, "cycle_sweep_minor"' \
   'gc_stats_setint(L, t, "cycle_roots_minor"' \

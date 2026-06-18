@@ -559,7 +559,8 @@ switch exactly as Pall describes (survival-rate driven). This is M10
 Current bridge: `collectgarbage("generational")` /
 `collectgarbage("incremental")` toggles `GC2State.generational` and exposes the
 mode through `collectgarbage("stats")`. Full GC publishes a one-shot major
-override, and generational allocation-triggered mark begins record minor-cycle
+override. Entering generational mode also publishes a one-shot major baseline
+before later generational allocation-triggered mark begins record minor-cycle
 requests. Idle generational barriers conservatively queue remembered entries
 into SSB without draining outside a cycle and force a major on overflow; the
 actual minor execution path stays disabled until minor-cycle roots and precise

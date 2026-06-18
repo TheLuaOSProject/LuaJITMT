@@ -625,6 +625,10 @@ void lj_gc2_set_generational(global_State *g, int enabled)
   if (la_load32_acq(&g->gc2.generational) == want)
     return;
   la_store32_rel(&g->gc2.generational, want);
+  if (want)
+    lj_gc2_force_major(g);  /* First generational cycle establishes old marks. */
+  else
+    la_store32_rel(&g->gc2.force_major, 0);
   if (la_load32_acq(&g->gc2.phase) == LJ_GC2_IDLE)
     lj_gc2_handshake(g, gc2_idle_barrier_actions(g, 0));
 }
