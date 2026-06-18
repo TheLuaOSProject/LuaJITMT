@@ -202,6 +202,7 @@ for needle in \
   'gc_cdata_finreg_pending_scan(CTState *cts)' \
   '!gcref_acq(t->metatable)' \
   'gcref_acq(t->metatable) && gc_cdata_fin_pending_tab(t)' \
+  'ft == t && ft && gcref_acq(ft->metatable)' \
   'test_finreg_disabled_pending_scan' \
   'gc2_disabled_pending_fin_t' \
   'collectgarbage('\''collect'\'')' \

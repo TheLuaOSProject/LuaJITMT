@@ -3479,6 +3479,7 @@ static void test_finreg_disabled_pending_scan(lua_State *L, global_State *g)
   CTState *cts;
   TValue key;
   GCtab *t;
+  GCtab *fin_tab;
   cTValue *slot;
   lua_settop(L, 0);
   lua_pushcfunction(L, gc2_cdata_counting_finalizer);
@@ -3498,8 +3499,11 @@ static void test_finreg_disabled_pending_scan(lua_State *L, global_State *g)
   slot = lj_ctype_fin_get(L, cts, &key, &t);
   assert(slot != niltv(L));
   assert(t != NULL);
+  assert(lj_ctype_fin_istab(g, t));
+  fin_tab = t;
   lj_gc_finalize_cdata_disable(g);
   assert(!lj_gc_cdata_fin_pending(g));
+  assert(!lj_ctype_fin_istab(g, fin_tab));
   slot = lj_ctype_fin_get(L, cts, &key, &t);
   assert(slot == niltv(L));
   assert(t == NULL);

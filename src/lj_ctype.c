@@ -333,7 +333,8 @@ int lj_ctype_fin_istab(global_State *g, GCtab *t)
   for (gen = (FinRegGen *)la_loadptr_acq((void *const *)&cts->fin_head);
        gen != NULL;
        gen = (FinRegGen *)la_loadptr_acq((void *const *)&gen->next)) {
-    if ((GCtab *)la_loadptr_acq((void *const *)&gen->tab) == t)
+    GCtab *ft = (GCtab *)la_loadptr_acq((void *const *)&gen->tab);
+    if (ft == t && ft && gcref_acq(ft->metatable))
       return 1;
   }
   return 0;
