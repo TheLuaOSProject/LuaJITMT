@@ -934,6 +934,14 @@ typedef struct GC2State {
   uint64_t finreg_cdata_clears;  /* Cdata finalizer clears mirrored. */
   uint64_t finreg_cdata_queued;  /* Cdata finalizers queued by legacy. */
   uint64_t finreg_cdata_pweak_queued;  /* Cdata queued during P_WEAK. */
+  GCRef *finreg_cdata_preclaim_obj;  /* P_WEAK claimed cdata queue objs. */
+  TValue *finreg_cdata_preclaim_fin;  /* P_WEAK claimed finalizer values. */
+  MSize finreg_cdata_preclaim_capacity;  /* Claimed cdata queue slots. */
+  MSize finreg_cdata_preclaim_head;  /* Next claimed cdata record to drain. */
+  MSize finreg_cdata_preclaim_count;  /* One-past-last claimed record. */
+  uint64_t finreg_cdata_pweak_claimed;  /* Cdata finalizers claimed in P_WEAK. */
+  uint64_t finreg_cdata_preclaim_overflow;  /* Claimed queue full fallbacks. */
+  uint64_t finreg_cdata_preclaim_dispatched;  /* Claimed callbacks consumed. */
   uint64_t finreg_udata_sets;  /* Userdata finalizer registrations mirrored. */
   uint64_t finreg_udata_clears;  /* Userdata finalizer clears mirrored. */
   uint64_t finreg_udata_queued;  /* Userdata finalizers queued by legacy. */

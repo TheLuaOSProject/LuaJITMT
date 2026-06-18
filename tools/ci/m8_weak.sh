@@ -86,11 +86,20 @@ for needle in \
   'finalizer-spawned worker can outlive callback' \
   'gc_finalize_cdata_slot_owned(lua_State *L, GCobj *o, cTValue *key)' \
   'lj_ctype_fin_get(L, cts, key, &t)' \
-  'gc_queue_cdata_finalizers_pweak(global_State *g)' \
+  'gc_queue_cdata_finalizers_pweak(lua_State *L, global_State *g)' \
+  'gc_claim_cdata_finalizer_pweak(lua_State *L, global_State *g,' \
+  'lj_gc2_finreg_cdata_preclaim(L, g, o, &fin)' \
+  'lj_gc2_finreg_cdata_preclaim_take(L, g, o, &fin)' \
+  'gc_mark_finreg_cdata_preclaims(global_State *g)' \
+  'gc2_mark_finreg_cdata_preclaims(global_State *g)' \
   'P_WEAK cdata finalizer discovery bridge' \
   'uint64_t finreg_cdata_pweak_queued' \
+  'uint64_t finreg_cdata_pweak_claimed' \
+  'uint64_t finreg_cdata_preclaim_dispatched' \
   'finreg_cdata_pweak_queued) == pweak1 + 1u' \
+  'finreg_cdata_pweak_claimed) == claimed1 + 1u' \
   'finalizer_dequeued) == finalizerd1 + 1u' \
+  'finreg_cdata_preclaim_dispatched) ==' \
   'gc2_cdata_finalized == finalized0 + 1' \
   'LJ_GC_UDATA_FINREG == LJ_GC_WEAKVAL' \
   'old | LJ_GC_UDATA_FINREG' \

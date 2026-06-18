@@ -2228,6 +2228,7 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   uint64_t sets0 = la_load64_acq(&g->gc2.finreg_cdata_sets);
   uint64_t clears0 = la_load64_acq(&g->gc2.finreg_cdata_clears);
   uint64_t sets1, clears1, queued1, pweak1, finalizerq1, finalizerd1;
+  uint64_t claimed1, dispatched1;
   int finalized0;
 
   lua_settop(L, 0);
@@ -2248,6 +2249,8 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   pweak1 = la_load64_acq(&g->gc2.finreg_cdata_pweak_queued);
   finalizerq1 = la_load64_acq(&g->gc2.finalizer_queued);
   finalizerd1 = la_load64_acq(&g->gc2.finalizer_dequeued);
+  claimed1 = la_load64_acq(&g->gc2.finreg_cdata_pweak_claimed);
+  dispatched1 = la_load64_acq(&g->gc2.finreg_cdata_preclaim_dispatched);
   finalized0 = gc2_cdata_finalized;
   lua_settop(L, 0);
   lua_pushcfunction(L, gc2_cdata_counting_finalizer);
@@ -2264,16 +2267,22 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   lua_gc(L, LUA_GCSTOP, 0);
   assert(la_load64_acq(&g->gc2.finreg_cdata_queued) == queued1 + 1u);
   assert(la_load64_acq(&g->gc2.finreg_cdata_pweak_queued) == pweak1 + 1u);
+  assert(la_load64_acq(&g->gc2.finreg_cdata_pweak_claimed) == claimed1 + 1u);
   assert(la_load64_acq(&g->gc2.finalizer_queued) == finalizerq1 + 1u);
   assert(la_load64_acq(&g->gc2.finalizer_dequeued) == finalizerd1 + 1u);
+  assert(la_load64_acq(&g->gc2.finreg_cdata_preclaim_dispatched) ==
+	 dispatched1 + 1u);
   assert(la_load64_acq(&g->gc2.finreg_cdata_clears) == clears1 + 1u);
   assert(gc2_cdata_finalized == finalized0 + 1);
   lua_gc(L, LUA_GCCOLLECT, 0);
   lua_gc(L, LUA_GCCOLLECT, 0);
   lua_gc(L, LUA_GCSTOP, 0);
   assert(la_load64_acq(&g->gc2.finreg_cdata_queued) == queued1 + 1u);
+  assert(la_load64_acq(&g->gc2.finreg_cdata_pweak_claimed) == claimed1 + 1u);
   assert(la_load64_acq(&g->gc2.finalizer_queued) == finalizerq1 + 1u);
   assert(la_load64_acq(&g->gc2.finalizer_dequeued) == finalizerd1 + 1u);
+  assert(la_load64_acq(&g->gc2.finreg_cdata_preclaim_dispatched) ==
+	 dispatched1 + 1u);
   assert(gc2_cdata_finalized == finalized0 + 1);
   lua_pushnil(L);
   lua_setglobal(L, "gc2_cdata_counting_finalizer");

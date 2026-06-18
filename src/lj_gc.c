@@ -558,6 +558,21 @@ static void gc_finreg_markobj(global_State *g, GCobj *o)
   if (iswhite(o))
     gc_mark(g, o);
 }
+
+static void gc_mark_finreg_cdata_preclaims(global_State *g)
+{
+  MSize i, head = g->gc2.finreg_cdata_preclaim_head;
+  MSize count = g->gc2.finreg_cdata_preclaim_count;
+  if (!g->gc2.finreg_cdata_preclaim_obj ||
+      !g->gc2.finreg_cdata_preclaim_fin)
+    return;
+  for (i = head; i < count; i++) {
+    GCobj *o = gcref_acq(g->gc2.finreg_cdata_preclaim_obj[i]);
+    if (o)
+      gc_markobj(g, o);
+    gc_marktv(g, &g->gc2.finreg_cdata_preclaim_fin[i]);
+  }
+}
 #endif
 
 /* Mark GC roots. */
@@ -639,6 +654,7 @@ static void gc_mark_gcroot(global_State *g)
       if (cts->pinmt)
 	gc_markobj(g, cts->pinmt);
       lj_ctype_fin_mark(g, gc_finreg_markobj, lj_gc_arena_markmem);
+      gc_mark_finreg_cdata_preclaims(g);
       lj_gc_arena_markmem(g, cts->cb.cbid);
       lj_gc_arena_markmem(g, cts->cb.owner);
     }
@@ -1248,6 +1264,14 @@ static int gc_finalize_cdata_slot_owned(lua_State *L, GCobj *o, cTValue *key)
   gc_finalize_cdata_clear(g, o);
   return 0;
 }
+
+static int gc_finalize_cdata_preclaimed(lua_State *L, GCobj *o, cTValue *fin)
+{
+  global_State *g = G(L);
+  TValue tmp;
+  copyTV(L, &tmp, fin);
+  return gc_call_finalizer(g, L, &tmp, o) ? 1 : -1;
+}
 #endif
 
 /* Finalize one userdata or cdata object from the mmudata list. */
@@ -1272,14 +1296,20 @@ static int gc_finalize(lua_State *L)
 #if LJ_HASFFI
   if (o->gch.gct == ~LJ_TCDATA) {
     TValue key;
+    TValue fin;
+    int rc;
     /* Add cdata back to the GC list and make it white. */
     lj_obj_setgcwr(o, g->gc.root);
     setgcref(g->gc.root, o);
     makewhite(g, o);
     lj_gc_arena_markobj(g, o);
     /* Resolve finalizer. */
-    setcdataV(L, &key, gco2cd(o));
-    int rc = gc_finalize_cdata_slot_owned(L, o, &key);
+    if (lj_gc2_finreg_cdata_preclaim_take(L, g, o, &fin))
+      rc = gc_finalize_cdata_preclaimed(L, o, &fin);
+    else {
+      setcdataV(L, &key, gco2cd(o));
+      rc = gc_finalize_cdata_slot_owned(L, o, &key);
+    }
     lj_gc2_finalizer_leave(g);
     return rc < 0 ? -1 : 1;
   }
@@ -1321,7 +1351,31 @@ static void gc_queue_cdata_finalizer(global_State *g, GCobj *o)
   lj_gc2_finalizer_enqueue(g, o);
 }
 
-static size_t gc_queue_cdata_finalizers_pweak(global_State *g)
+static int gc_claim_cdata_finalizer_pweak(lua_State *L, global_State *g,
+					  GCobj *o)
+{
+  CTState *cts = ctype_ctsG(g);
+  GCtab *t;
+  TValue key, fin;
+  TValue *slot;
+  if (cts == NULL)
+    return 0;
+  setcdataV(L, &key, gco2cd(o));
+  slot = (TValue *)lj_ctype_fin_get(L, cts, &key, &t);
+  if (slot == niltv(L) || !t || !gcref_acq(t->metatable))
+    return 0;
+  if (!lj_cdata_fin_claim_func(slot, &fin))
+    return 0;
+  if (lj_gc2_finreg_cdata_preclaim(L, g, o, &fin)) {
+    lj_cdata_fin_storenil(L, slot);
+    gc_finalize_cdata_clear(g, o);
+    return 1;
+  }
+  copyTVrel(L, slot, &fin);  /* Side queue full: restore object-only fallback. */
+  return 0;
+}
+
+static size_t gc_queue_cdata_finalizers_pweak(lua_State *L, global_State *g)
 {
   GCRef *p = &g->gc.root;
   GCobj *o;
@@ -1331,6 +1385,7 @@ static size_t gc_queue_cdata_finalizers_pweak(global_State *g)
 	(lj_obj_gcflags(o) & LJ_GC_CDATA_FIN) &&
 	!(lj_obj_gcflags(o) & LJ_GC_FINALIZED) &&
 	iswhite(o)) {
+      (void)gc_claim_cdata_finalizer_pweak(L, g, o);
       setgcrefr(*p, *lj_obj_gcwref(o));
       markfinalized(o);
       lj_gc2_finreg_cdata_queue(g, o);
@@ -1467,7 +1522,7 @@ static void atomic(global_State *g, lua_State *L)
   /* All marking done, clear weak tables. */
   lj_gc2_mark_to_weak(g);
 #if LJ_HASFFI
-  (void)gc_queue_cdata_finalizers_pweak(g);
+  (void)gc_queue_cdata_finalizers_pweak(L, g);
 #endif
   if (!lj_gc2_weak_complete(g, gcref(g->gc.weak), LJ_GC2_WEAK_DRAIN_BATCH))
     gc_clearweak(g, gcref(g->gc.weak));

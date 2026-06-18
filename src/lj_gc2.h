@@ -89,6 +89,10 @@ LJ_FUNC int lj_gc2_weak_snapshot_covers_legacy(global_State *g,
 LJ_FUNC void lj_gc2_weak_legacy_result(global_State *g, int skipped);
 LJ_FUNC void lj_gc2_finreg_cdata_set(global_State *g, GCobj *o, int enabled);
 LJ_FUNC void lj_gc2_finreg_cdata_queue(global_State *g, GCobj *o);
+LJ_FUNC int lj_gc2_finreg_cdata_preclaim(lua_State *L, global_State *g,
+					 GCobj *o, cTValue *fin);
+LJ_FUNC int lj_gc2_finreg_cdata_preclaim_take(lua_State *L, global_State *g,
+					      GCobj *o, TValue *fin);
 LJ_FUNC void lj_gc2_finreg_udata_set(global_State *g, GCobj *o, int enabled);
 LJ_FUNC void lj_gc2_finreg_udata_queue(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc2_finalizer_enqueue(global_State *g, GCobj *o);
