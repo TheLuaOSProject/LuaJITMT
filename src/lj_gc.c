@@ -1610,16 +1610,17 @@ static size_t gc_queue_cdata_finalizers_pweak_ordered(lua_State *L,
       continue;
     }
     la_add64_rlx(&g->gc2.finreg_cdata_order_claimed, 1);
-    if (!gc_unlink_root_object(g, o)) {
-      copyTVrel(L, slot, &fin);
-      fallback = 1;
-      la_add64_rlx(&g->gc2.finreg_cdata_order_fallbacks, 1);
-      continue;
-    }
-    la_add64_rlx(&g->gc2.finreg_cdata_order_unlinked, 1);
+    /*
+    ** 05 section 5.8: ordered FINREG identity is enough for P_WEAK
+    ** discovery without legacy root membership.
+    */
+    if (gc_unlink_root_object(g, o))
+      la_add64_rlx(&g->gc2.finreg_cdata_order_unlinked, 1);
     if (!lj_gc2_finreg_cdata_preclaim(L, g, o, &fin)) {
-      lj_obj_setgcwr(o, g->gc.root);
-      setgcref(g->gc.root, o);
+      if (gcref(g->gc.root) != o) {
+	lj_obj_setgcwr(o, g->gc.root);
+	setgcref(g->gc.root, o);
+      }
       copyTVrel(L, slot, &fin);
       fallback = 1;
       la_add64_rlx(&g->gc2.finreg_cdata_order_fallbacks, 1);

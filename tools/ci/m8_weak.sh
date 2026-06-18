@@ -173,6 +173,8 @@ for needle in \
   'FINREG ordered P_WEAK cdata scan' \
   'root unlink after ordered FINREG claim' \
   'queue claimed cdata in FINREG order' \
+  'ordered FINREG identity is enough for P_WEAK' \
+  'gc2_rootless_order_fin_t' \
   'uint64_t finreg_cdata_order_queued' \
   'uint64_t finreg_cdata_order_fallbacks' \
   'uint64_t finreg_cdata_pweak_root_fallbacks' \
