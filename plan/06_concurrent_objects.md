@@ -207,7 +207,9 @@ load the mask from the acquired node header instead of the legacy
 array bounds from `TabArrayHdr.asize` for separated array generations, with
 the legacy `GCtab.asize` mirror kept as the empty/colocated-array fallback.
 The same separated-array header bound check now covers x64 `BC_TGETV`,
-`BC_TGETB`, and `BC_TGETR` array fast paths.
+`BC_TGETB`, and `BC_TGETR` array read fast paths, plus `BC_TSETV`,
+`BC_TSETB`, `BC_TSETR`, and `BC_TSETM` array write fast paths before their
+release-publishing store helpers.
 `BC_TSETS_Z` string-key stores are currently demoted to
 `vmeta_tsets`, removing the x64 VM's direct string-key hash-chain store. The
 generic x64 `vmeta_tset` continuation release-stores returned slots through
@@ -224,9 +226,12 @@ hash traversal, the `BC_ITERN` array/hash iterator path, and `ipairs_aux` array
 iteration load candidate values into registers before nil decisions and copy
 those same snapshots to their results; `BC_TSETV`/`BC_TSETS`/`BC_TSETB` load
 previous slot values into registers before nil/metamethod decisions. x64
-`BC_TSETM` keeps its constructor fit check and `lj_tab_reasize()` retry, but
-batch-publishes copied result slots through `lj_tab_storetvn()` instead of the
-old raw `mov [array], TValue` loop. C-side runtime/library/parser/serializer
+`BC_TSETV`/`BC_TSETB`/`BC_TSETR` now derive the destination slot from the same
+array pointer whose header supplied the separated-array bound. x64 `BC_TSETM`
+keeps its constructor fit check and `lj_tab_reasize()` retry, performs the fit
+check against `TabArrayHdr.asize` for separated arrays, and batch-publishes
+copied result slots through `lj_tab_storetvn()` instead of the old raw
+`mov [array], TValue` loop. C-side runtime/library/parser/serializer
 table-slot writers converted so far publish values through `lj_tab_store*()`
 helpers or `copyTVrel()` instead of raw `lj_tab_set*()` destination stores;
 rehash/new-key insertion also release-publishes hash keys through

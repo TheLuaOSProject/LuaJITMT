@@ -4224,10 +4224,17 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ucomisd xmm0, xmm1
     |  jne ->vmeta_tsetv		// Generic numeric key? Use fallback.
     |.endif
-    |  cmp RCd, TAB:RB->asize		// Takes care of unordered, too.
+    |  mov TMPR, TAB:RB->array
+    |  mov ITYPEd, TAB:RB->asize
+    |  test ITYPEd, ITYPEd; jz >4
+    |  lea r8, [RB+TAB_COLO_SLOTS]
+    |  cmp TMPR, r8; je >4
+    |  mov ITYPEd, dword [TMPR+TABARRAY_ASIZE_OFS]
+    |4:
+    |  cmp RCd, ITYPEd		// Takes care of unordered, too.
     |  jae ->vmeta_tsetv
     |  shl RCd, 3
-    |  add RC, TAB:RB->array
+    |  add RC, TMPR
     |  mov r8, [RC]
     |  cmp r8, LJ_TNIL
     |  je >3				// Previous value is nil?
@@ -4282,10 +4289,17 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ins_ABC	// RA = src, RB = table, RC = byte literal
     |  mov TAB:RB, [BASE+RB*8]
     |  checktab TAB:RB, ->vmeta_tsetb
-    |  cmp RCd, TAB:RB->asize
+    |  mov TMPR, TAB:RB->array
+    |  mov ITYPEd, TAB:RB->asize
+    |  test ITYPEd, ITYPEd; jz >4
+    |  lea r8, [RB+TAB_COLO_SLOTS]
+    |  cmp TMPR, r8; je >4
+    |  mov ITYPEd, dword [TMPR+TABARRAY_ASIZE_OFS]
+    |4:
+    |  cmp RCd, ITYPEd
     |  jae ->vmeta_tsetb
     |  shl RCd, 3
-    |  add RC, TAB:RB->array
+    |  add RC, TMPR
     |  mov r8, [RC]
     |  cmp r8, LJ_TNIL
     |  je >3				// Previous value is nil?
@@ -4334,10 +4348,17 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  test byte TAB:RB->marked, LJ_GC_BLACK	// isblack(table)
     |  jnz >7
     |2:
-    |  cmp RCd, TAB:RB->asize
+    |  mov TMPR, TAB:RB->array
+    |  mov ITYPEd, TAB:RB->asize
+    |  test ITYPEd, ITYPEd; jz >3
+    |  lea r8, [RB+TAB_COLO_SLOTS]
+    |  cmp TMPR, r8; je >3
+    |  mov ITYPEd, dword [TMPR+TABARRAY_ASIZE_OFS]
+    |3:
+    |  cmp RCd, ITYPEd
     |  jae ->vmeta_tsetr
     |  shl RCd, 3
-    |  add RC, TAB:RB->array
+    |  add RC, TMPR
     |  // Set array slot.
     |->BC_TSETR_Z:
     |  mov L:CARG1, SAVE_L
@@ -4376,11 +4397,18 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  sub RDd, 1
     |  jz >4				// Nothing to copy?
     |  add RDd, TMPRd			// Compute needed size.
-    |  cmp RDd, TAB:RB->asize
+    |  mov ITYPE, TAB:RB->array
+    |  mov r8d, TAB:RB->asize
+    |  test r8d, r8d; jz >3
+    |  lea r9, [RB+TAB_COLO_SLOTS]
+    |  cmp ITYPE, r9; je >3
+    |  mov r8d, dword [ITYPE+TABARRAY_ASIZE_OFS]
+    |3:
+    |  cmp RDd, r8d
     |  ja >5				// Doesn't fit into array part?
     |  sub RDd, TMPRd
     |  shl TMPRd, 3
-    |  add TMPR, TAB:RB->array
+    |  add TMPR, ITYPE
     |  mov ITYPE, RA
     |  mov L:CARG1, SAVE_L
     |  mov L:CARG1->base, BASE

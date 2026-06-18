@@ -32,11 +32,25 @@ local function spread(n)
 end
 local big = { spread(96) }
 assert(#big == 96 and big[1] == 1 and big[96] == 96)
+local s = { spread(96) }
+s[64] = 640
+local kk = 70
+s[kk] = 700
+for i = 80, 82 do s[i] = i * 10 end
+assert(s[64] == 640 and s[70] == 700 and s[82] == 820)
 '
 
 for needle in \
+  'TABARRAY_ASIZE_OFS' \
   'mov r8, [RC]' \
   'cmp r8, LJ_TNIL' \
+  'mov ITYPEd, dword [TMPR+TABARRAY_ASIZE_OFS]' \
+  'cmp RCd, ITYPEd' \
+  'add RC, TMPR' \
+  'mov ITYPE, TAB:RB->array' \
+  'mov r8d, dword [ITYPE+TABARRAY_ASIZE_OFS]' \
+  'cmp RDd, r8d' \
+  'add TMPR, ITYPE' \
   'jmp ->vmeta_tsets		// M5: no legacy x64 hash-slot store.' \
   'call extern lj_meta_tsettv_pair' \
   'call extern lj_tab_storetv' \
@@ -80,14 +94,58 @@ else
 fi
 
 if awk '
-  /case BC_TSETM:/ { in_setm = 1; saw_storetvn = 0; saw_tvn = 0; next }
+  function start() {
+    in_set = 1
+    checked++
+    array = hdr = cmp = add = 0
+  }
+  function finish() {
+    if (!in_set) return
+    if (!array || !hdr || !cmp || !add)
+      bad = 1
+    in_set = 0
+  }
+  /case BC_TSETV:/ { finish(); start(); next }
+  /case BC_TSETB:/ { finish(); start(); next }
+  /case BC_TSETR:/ { finish(); start(); next }
+  in_set && /mov TMPR, TAB:RB->array/ { array = 1 }
+  in_set && /mov ITYPEd, dword \[TMPR\+TABARRAY_ASIZE_OFS\]/ { hdr = 1 }
+  in_set && /cmp RCd, ITYPEd/ { cmp = 1 }
+  in_set && /add RC, TMPR/ { add = 1 }
+  in_set && /cmp RCd, TAB:RB->asize/ { bad = 1 }
+  in_set && /add RC, TAB:RB->array/ { bad = 1 }
+  in_set && /break;/ { finish() }
+  END {
+    finish()
+    exit checked == 3 && !bad ? 0 : 1
+  }
+' "$ROOT/src/vm_x64.dasc"; then
+  :
+else
+  echo "guardrail: x64 TSET array fast paths must bound slots with TabArrayHdr.asize" >&2
+  exit 1
+fi
+
+if awk '
+  /case BC_TSETM:/ {
+    in_setm = 1
+    saw_storetvn = saw_tvn = 0
+    array = hdr = cmp = add = 0
+    next
+  }
+  in_setm && /mov ITYPE, TAB:RB->array/ { array = 1 }
+  in_setm && /mov r8d, dword \[ITYPE\+TABARRAY_ASIZE_OFS\]/ { hdr = 1 }
+  in_setm && /cmp RDd, r8d/ { cmp = 1 }
+  in_setm && /add TMPR, ITYPE/ { add = 1 }
+  in_setm && /cmp RDd, TAB:RB->asize/ { bad = 1 }
+  in_setm && /add TMPR, TAB:RB->array/ { bad = 1 }
   in_setm && /call extern lj_tab_storetvn/ { saw_storetvn = 1 }
   in_setm && /jmp ->vm_gc2_barriertvn/ { saw_tvn = 1 }
   in_setm && /jmp ->vm_gc2_barriertab/ { bad = 1 }
   in_setm && /mov \[TMPR\], ITYPE/ { bad = 1 }
   in_setm && /break;/ {
     checked = 1
-    if (!saw_storetvn || !saw_tvn)
+    if (!array || !hdr || !cmp || !add || !saw_storetvn || !saw_tvn)
       bad = 1
     in_setm = 0
   }
@@ -95,7 +153,7 @@ if awk '
 ' "$ROOT/src/vm_x64.dasc"; then
   :
 else
-  echo "guardrail: x64 TSETM must publish, range-barrier, and table-barrier batch array slots" >&2
+  echo "guardrail: x64 TSETM must header-bound, publish, range-barrier, and table-barrier batch array slots" >&2
   exit 1
 fi
 
