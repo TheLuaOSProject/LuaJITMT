@@ -5,6 +5,7 @@ set -eu
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 
 "$ROOT/tools/ci/m7_ffi_cdef_token.sh"
+"$ROOT/tools/ci/m7_ffi_no_cts_l.sh"
 "$ROOT/tools/ci/m7_ffi_cdef_dup_stack.sh"
 "$ROOT/tools/ci/m7_ffi_cparse_rollback.sh"
 "$ROOT/tools/ci/m7_ffi_ctype_intern_l.sh"

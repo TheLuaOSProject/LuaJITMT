@@ -22,7 +22,7 @@ for needle in \
   'lj_ccallback_unwind(lua_State *L, TValue *cont)' \
   'was_native = (uint8_t)(tg->in_native != 0)' \
   'la_store8_rlx(&tg->in_native, 0)' \
-  'actions = lj_safepoint_poll(L)' \
+  'actions = lj_native_leave(L)' \
   'callback_frame_push(L, cb,' \
   'frame->cont == cont' \
   'callback_frame_top(cb)->was_native = 0' \
