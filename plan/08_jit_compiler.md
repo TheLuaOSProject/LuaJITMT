@@ -276,9 +276,9 @@ handler — sized LJ_MAX_EXITSTUBGR-compatible; see lj_vmstruct notes.
   surface without enabling broad table `ASTORE`/`HSTORE` tracing. A narrow M6
   bridge records non-nil slot stores only for trace-local `TNEW`/`TDUP` tables
   that have not already escaped through a same-trace heap/upvalue store, and
-  lowers them through the release-store `lj_tab_storetv_forjit()` helper; shared
-  and shape-changing table stores remain NYI until the full table-write protocol
-  below lands.
+  lowers them through the release-store `lj_tab_storetv_forjit_pair()` helper
+  with the AREF/HREF-derived table parent; shared and shape-changing table
+  stores remain NYI until the full table-write protocol below lands.
 - **Allocation on trace**: TNEW/TDUP/CNEW/SNEW already call into C or use
   inline alloc IR; route them to the TG bump (mirror of 07 §7.5) — the IR
   for inline alloc (lj_asm.c asm_snew/asm_tnew via lj_ir_call → actually

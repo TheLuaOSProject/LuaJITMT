@@ -98,8 +98,8 @@ LJ_FUNCA TValue *lj_tab_setinth(lua_State *L, GCtab *t, int32_t key);
 LJ_FUNC TValue *lj_tab_setstr(lua_State *L, GCtab *t, const GCstr *key);
 LJ_FUNC TValue *lj_tab_set(lua_State *L, GCtab *t, cTValue *key);
 LJ_FUNCA TValue *lj_tab_storetv(lua_State *L, TValue *dst, cTValue *src);
-LJ_FUNCA TValue *lj_tab_storetv_forjit(lua_State *L, TValue *dst,
-					cTValue *src);
+LJ_FUNCA TValue *lj_tab_storetv_forjit_pair(lua_State *L, GCtab *parent,
+					    TValue *dst, cTValue *src);
 LJ_FUNCA TValue *lj_tab_storetvn(lua_State *L, TValue *dst, cTValue *src,
 				 uint32_t n);
 LJ_FUNC TValue *lj_tab_storenilraw(TValue *dst);

@@ -1800,12 +1800,21 @@ static void asm_ahuvload(ASMState *as, IRIns *ir)
 
 static void asm_ahstore_forjit(ASMState *as, IRIns *ir)
 {
-  const CCallInfo *ci = &lj_ir_callinfo[IRCALL_lj_tab_storetv_forjit];
-  IRRef args[3];
+  const CCallInfo *ci = &lj_ir_callinfo[IRCALL_lj_tab_storetv_forjit_pair];
+  IRRef args[4];
+  IRIns *xref = IR(ir->op1);
+  IRRef tabref;
+  if (xref->o == IR_AREF || xref->o == IR_HREFK)
+    tabref = IR(xref->op1)->op1;
+  else {
+    lj_assertA(xref->o == IR_HREF, "expected trace-local table store ref");
+    tabref = xref->op1;
+  }
   ra_evictset(as, RSET_SCRATCH);
   args[0] = ASMREF_L;     /* lua_State *L */
-  args[1] = ir->op1;      /* TValue *dst  */
-  args[2] = ASMREF_TMP1;  /* cTValue *src */
+  args[1] = tabref;       /* GCtab *parent */
+  args[2] = ir->op1;      /* TValue *dst */
+  args[3] = ASMREF_TMP1;  /* cTValue *src */
   asm_gencall(as, ci, args);
   asm_tvptr(as, ra_releasetmp(as, ASMREF_TMP1), ir->op2, IRTMPREF_IN1);
 }

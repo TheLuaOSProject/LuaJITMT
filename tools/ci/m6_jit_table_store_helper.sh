@@ -7,9 +7,10 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 make -C "$ROOT/src" >/dev/null
 
 for needle in \
-  'lj_tab_storetv_forjit(lua_State *L, TValue *dst, cTValue *src)' \
-  'lj_gc2_barrier_tv(L, dst);  /* M6: traced table store value barrier. */' \
-  'IRCALL_lj_tab_storetv_forjit' \
+  'lj_tab_storetv_forjit_pair(lua_State *L, GCtab *parent' \
+  'lj_gc2_barrier_tv_pair(L, obj2gco(parent), dst);  /* M10: traced parent barrier. */' \
+  'IRCALL_lj_tab_storetv_forjit_pair' \
+  'tabref = IR(xref->op1)->op1' \
   'asm_ahstore_forjit(ASMState *as, IRIns *ir)' \
   '#if defined(__linux__) && LJ_TARGET_X64' \
   'rec_idx_store_trace_local(jit_State *J, TRef tab)' \
