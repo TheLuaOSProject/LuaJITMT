@@ -66,7 +66,8 @@ fi
 
 for needle in \
   'lj_tv_load_acq(&snap, tv)' \
-  'lj_gc2_barrier_uv(g, &snap)' \
+  'GCupval *uv = (GCupval *)((char *)tv - offsetof(GCupval, tv))' \
+  'lj_gc2_barrier_tv_pair_g(g, obj2gco(uv), &snap)' \
   'tviswhite(&snap)' \
   'gcV(&snap)' \
   'lj_tv_load_acq(&tv, &uv->tv)'
@@ -79,7 +80,7 @@ done
 
 if ! awk '
   /void LJ_FASTCALL lj_gc_pubuv/ { infn = 1; next }
-  infn && /lj_gc2_barrier_uv\(g, tv\)|tviswhite\(tv\)|gcV\(tv\)/ {
+  infn && /lj_gc2_barrier_uv\(g,|tviswhite\(tv\)|gcV\(tv\)/ {
     print FILENAME ":" FNR ":" $0; bad = 1
   }
   infn && /^}/ { exit bad ? 1 : 0 }
