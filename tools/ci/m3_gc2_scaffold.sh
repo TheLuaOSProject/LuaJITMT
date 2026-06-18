@@ -84,6 +84,7 @@ for needle in \
   'uint64_t finreg_cdata_sets' \
   'uint64_t finreg_cdata_clears' \
   'uint64_t finreg_cdata_queued' \
+  'uint64_t finreg_cdata_sweep_queued' \
   'uint64_t finreg_udata_sets' \
   'uint64_t finreg_udata_clears' \
   'uint64_t finreg_udata_queued' \

@@ -155,6 +155,7 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.finreg_cdata_sets, 0);
   la_store64_rlx(&g->gc2.finreg_cdata_clears, 0);
   la_store64_rlx(&g->gc2.finreg_cdata_queued, 0);
+  la_store64_rlx(&g->gc2.finreg_cdata_sweep_queued, 0);
   la_store64_rlx(&g->gc2.finreg_cdata_pweak_queued, 0);
   g->gc2.finreg_cdata_preclaim_obj = NULL;
   g->gc2.finreg_cdata_preclaim_fin = NULL;

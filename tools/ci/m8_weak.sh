@@ -170,10 +170,12 @@ for needle in \
   'gc2_mark_finreg_cdata_preclaims(global_State *g)' \
   'P_WEAK cdata finalizer discovery bridge' \
   'uint64_t finreg_cdata_pweak_queued' \
+  'uint64_t finreg_cdata_sweep_queued' \
   'uint64_t finreg_cdata_pweak_claimed' \
   'uint64_t finreg_cdata_preclaim_dispatched' \
   'finreg_cdata_pweak_queued) == pweak1 + 1u' \
   'finreg_cdata_pweak_claimed) == claimed1 + 1u' \
+  'finreg_cdata_sweep_queued) ==' \
   'finreg_cdata_pweak_queued) == pweak2 + 3u' \
   'finreg_cdata_pweak_claimed) == claimed2 + 3u' \
   'finreg_cdata_order_queued) == orderq2 + 3u' \

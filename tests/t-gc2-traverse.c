@@ -2386,9 +2386,9 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   uint64_t sets0 = la_load64_acq(&g->gc2.finreg_cdata_sets);
   uint64_t clears0 = la_load64_acq(&g->gc2.finreg_cdata_clears);
   uint64_t sets1, clears1, queued1, pweak1, finalizerq1, finalizerd1, mpscd1;
-  uint64_t claimed1, dispatched1, rootfallback1;
+  uint64_t sweepqueued1, claimed1, dispatched1, rootfallback1;
   uint64_t sets2, clears2, queued2, pweak2, finalizerq2, finalizerd2, mpscd2;
-  uint64_t claimed2, dispatched2;
+  uint64_t sweepqueued2, claimed2, dispatched2;
   uint64_t orderq2, orderclaimed2, orderfallback2, rootfallback2;
   uint64_t closerootfallback2;
   int finalized0;
@@ -2408,6 +2408,7 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   sets1 = la_load64_acq(&g->gc2.finreg_cdata_sets);
   clears1 = la_load64_acq(&g->gc2.finreg_cdata_clears);
   queued1 = la_load64_acq(&g->gc2.finreg_cdata_queued);
+  sweepqueued1 = la_load64_acq(&g->gc2.finreg_cdata_sweep_queued);
   pweak1 = la_load64_acq(&g->gc2.finreg_cdata_pweak_queued);
   finalizerq1 = la_load64_acq(&g->gc2.finalizer_queued);
   finalizerd1 = la_load64_acq(&g->gc2.finalizer_dequeued);
@@ -2431,6 +2432,8 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   lua_gc(L, LUA_GCCOLLECT, 0);
   lua_gc(L, LUA_GCSTOP, 0);
   assert(la_load64_acq(&g->gc2.finreg_cdata_queued) == queued1 + 1u);
+  assert(la_load64_acq(&g->gc2.finreg_cdata_sweep_queued) ==
+	 sweepqueued1);
   assert(la_load64_acq(&g->gc2.finreg_cdata_pweak_queued) == pweak1 + 1u);
   assert(la_load64_acq(&g->gc2.finreg_cdata_pweak_claimed) == claimed1 + 1u);
   assert(la_load64_acq(&g->gc2.finreg_cdata_pweak_root_fallbacks) ==
@@ -2446,6 +2449,8 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   lua_gc(L, LUA_GCCOLLECT, 0);
   lua_gc(L, LUA_GCSTOP, 0);
   assert(la_load64_acq(&g->gc2.finreg_cdata_queued) == queued1 + 1u);
+  assert(la_load64_acq(&g->gc2.finreg_cdata_sweep_queued) ==
+	 sweepqueued1);
   assert(la_load64_acq(&g->gc2.finreg_cdata_pweak_claimed) == claimed1 + 1u);
   assert(la_load64_acq(&g->gc2.finreg_cdata_pweak_root_fallbacks) ==
 	 rootfallback1);
@@ -2459,6 +2464,7 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   sets2 = la_load64_acq(&g->gc2.finreg_cdata_sets);
   clears2 = la_load64_acq(&g->gc2.finreg_cdata_clears);
   queued2 = la_load64_acq(&g->gc2.finreg_cdata_queued);
+  sweepqueued2 = la_load64_acq(&g->gc2.finreg_cdata_sweep_queued);
   pweak2 = la_load64_acq(&g->gc2.finreg_cdata_pweak_queued);
   finalizerq2 = la_load64_acq(&g->gc2.finalizer_queued);
   finalizerd2 = la_load64_acq(&g->gc2.finalizer_dequeued);
@@ -2491,6 +2497,8 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   lua_gc(L, LUA_GCCOLLECT, 0);
   lua_gc(L, LUA_GCSTOP, 0);
   assert(la_load64_acq(&g->gc2.finreg_cdata_queued) == queued2 + 3u);
+  assert(la_load64_acq(&g->gc2.finreg_cdata_sweep_queued) ==
+	 sweepqueued2);
   assert(la_load64_acq(&g->gc2.finreg_cdata_pweak_queued) == pweak2 + 3u);
   assert(la_load64_acq(&g->gc2.finreg_cdata_pweak_claimed) == claimed2 + 3u);
   assert(la_load64_acq(&g->gc2.finalizer_queued) == finalizerq2 + 3u);
@@ -2514,6 +2522,7 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   sets2 = la_load64_acq(&g->gc2.finreg_cdata_sets);
   clears2 = la_load64_acq(&g->gc2.finreg_cdata_clears);
   queued2 = la_load64_acq(&g->gc2.finreg_cdata_queued);
+  sweepqueued2 = la_load64_acq(&g->gc2.finreg_cdata_sweep_queued);
   pweak2 = la_load64_acq(&g->gc2.finreg_cdata_pweak_queued);
   finalizerq2 = la_load64_acq(&g->gc2.finalizer_queued);
   finalizerd2 = la_load64_acq(&g->gc2.finalizer_dequeued);
@@ -2543,6 +2552,8 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   lua_gc(L, LUA_GCCOLLECT, 0);
   lua_gc(L, LUA_GCSTOP, 0);
   assert(la_load64_acq(&g->gc2.finreg_cdata_queued) == queued2 + 3u);
+  assert(la_load64_acq(&g->gc2.finreg_cdata_sweep_queued) ==
+	 sweepqueued2);
   assert(la_load64_acq(&g->gc2.finreg_cdata_pweak_queued) == pweak2 + 3u);
   assert(la_load64_acq(&g->gc2.finreg_cdata_pweak_claimed) == claimed2 + 3u);
   assert(la_load64_acq(&g->gc2.finalizer_queued) == finalizerq2 + 3u);
@@ -2566,6 +2577,7 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   sets2 = la_load64_acq(&g->gc2.finreg_cdata_sets);
   clears2 = la_load64_acq(&g->gc2.finreg_cdata_clears);
   queued2 = la_load64_acq(&g->gc2.finreg_cdata_queued);
+  sweepqueued2 = la_load64_acq(&g->gc2.finreg_cdata_sweep_queued);
   pweak2 = la_load64_acq(&g->gc2.finreg_cdata_pweak_queued);
   finalizerq2 = la_load64_acq(&g->gc2.finalizer_queued);
   finalizerd2 = la_load64_acq(&g->gc2.finalizer_dequeued);
@@ -2592,6 +2604,8 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   lua_gc(L, LUA_GCCOLLECT, 0);
   lua_gc(L, LUA_GCSTOP, 0);
   assert(la_load64_acq(&g->gc2.finreg_cdata_queued) == queued2 + 2u);
+  assert(la_load64_acq(&g->gc2.finreg_cdata_sweep_queued) ==
+	 sweepqueued2);
   assert(la_load64_acq(&g->gc2.finreg_cdata_pweak_queued) == pweak2 + 2u);
   assert(la_load64_acq(&g->gc2.finreg_cdata_pweak_claimed) == claimed2 + 2u);
   assert(la_load64_acq(&g->gc2.finalizer_queued) == finalizerq2 + 2u);
@@ -2615,6 +2629,8 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   lua_gc(L, LUA_GCCOLLECT, 0);
   lua_gc(L, LUA_GCSTOP, 0);
   assert(la_load64_acq(&g->gc2.finreg_cdata_queued) == queued2 + 2u);
+  assert(la_load64_acq(&g->gc2.finreg_cdata_sweep_queued) ==
+	 sweepqueued2);
   assert(la_load64_acq(&g->gc2.finreg_cdata_pweak_claimed) == claimed2 + 2u);
   assert(la_load64_acq(&g->gc2.finreg_cdata_pweak_root_fallbacks) ==
 	 rootfallback2);
@@ -2627,6 +2643,7 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
 
   sets2 = la_load64_acq(&g->gc2.finreg_cdata_sets);
   clears2 = la_load64_acq(&g->gc2.finreg_cdata_clears);
+  sweepqueued2 = la_load64_acq(&g->gc2.finreg_cdata_sweep_queued);
   pweak2 = la_load64_acq(&g->gc2.finreg_cdata_pweak_queued);
   rootfallback2 =
     la_load64_acq(&g->gc2.finreg_cdata_pweak_root_fallbacks);
@@ -2649,6 +2666,8 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   lj_gc_finalize_cdata(L);
   assert(lj_gc2_finalizer_queue_pending(g));
   assert(la_load64_acq(&g->gc2.finreg_cdata_order_queued) == orderq2 + 3u);
+  assert(la_load64_acq(&g->gc2.finreg_cdata_sweep_queued) ==
+	 sweepqueued2);
   assert(la_load64_acq(&g->gc2.finreg_cdata_pweak_queued) == pweak2);
   assert(la_load64_acq(&g->gc2.finreg_cdata_pweak_root_fallbacks) ==
 	 rootfallback2);

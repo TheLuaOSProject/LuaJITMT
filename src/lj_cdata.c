@@ -71,6 +71,7 @@ void LJ_FASTCALL lj_cdata_free(global_State *g, GCcdata *cd)
     makewhite(g, obj2gco(cd));
     markfinalized(obj2gco(cd));
     lj_gc_arena_markobj(g, obj2gco(cd));
+    la_add64_rlx(&g->gc2.finreg_cdata_sweep_queued, 1);
     lj_gc2_finreg_cdata_queue(g, obj2gco(cd));
     lj_gc2_finalizer_enqueue(g, obj2gco(cd));
   } else if (LJ_LIKELY(!cdataisv(cd))) {
