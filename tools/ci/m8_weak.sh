@@ -79,6 +79,7 @@ for needle in \
   'collectgarbage("step", 1000000)' \
   'newproxy(true)' \
   'userdata explicit step' \
+  'timeout 10s "$ROOT/src/luajit" "$ROOT/tests/t-m8-finalizer-spawn-live.lua"' \
   'GC step completed while finalizer-spawned worker was live' \
   'finalizer-spawned worker can outlive callback' \
   'gc_finalize_cdata_slot_owned(lua_State *L, GCobj *o, cTValue *key)' \
@@ -103,7 +104,7 @@ do
 	      "$ROOT/tests/t-gc2-traverse.c" \
 	      "$ROOT/tests/t-m8-ffi-weak-newindex.c" \
 	      "$ROOT/tests/t-m8-finalizer-spawn-live.lua" "$ROOT/src/lj_state.c" \
-	      "$ROOT/tests/t-m8-close-finalizers.c"; then
+	      "$ROOT/tests/t-m8-close-finalizers.c" "$ROOT/tools/ci/m8_weak.sh"; then
     echo "guardrail: missing M8 weak/finalizer marker: $needle" >&2
     exit 1
   fi
@@ -210,6 +211,7 @@ make -C "$ROOT/src" -j"$JOBS" >/dev/null
 "$ROOT/src/luajit" -joff "$ROOT/tests/t-weak-modes.lua"
 "$ROOT/src/luajit" "$ROOT/tests/t-weak-modes.lua"
 timeout 10s "$ROOT/src/luajit" -joff "$ROOT/tests/t-m8-finalizer-spawn-live.lua"
+timeout 10s "$ROOT/src/luajit" "$ROOT/tests/t-m8-finalizer-spawn-live.lua"
 
 out="$TMP/lj_t-gc2-phase_m8"
 "$CC" $CFLAGS -I"$ROOT/src" "$ROOT/tests/t-gc2-phase.c" \
