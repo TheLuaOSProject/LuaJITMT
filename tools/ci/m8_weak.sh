@@ -179,6 +179,7 @@ for needle in \
   'gc_claim_cdata_finalizer_pweak(lua_State *L, global_State *g,' \
   'gc_marktv(g, &fin);' \
   'lj_gc2_finreg_cdata_preclaim(L, g, o, &fin)' \
+  'gc2_finclaim_next_capacity(cap, count + 1u)' \
   'lj_gc2_finreg_cdata_preclaim_take(L, g, o, &fin)' \
   'dispatch order may differ from FINREG scan' \
   'gc_mark_finreg_cdata_preclaims(global_State *g)' \
@@ -212,6 +213,10 @@ for needle in \
   'finalizer_mpsc_drained) == mpscd2 + 3u' \
   'finalizer_mpsc_drained) == mpscd2 + 2u' \
   'finreg_cdata_preclaim_dispatched) ==' \
+  'gc2_cdata_bulk_finalizer' \
+  'gc2_bulk_fin_t' \
+  'finreg_cdata_preclaim_overflow) == overflow2' \
+  'finreg_cdata_preclaim_capacity >= (MSize)bulk_n' \
   'gc2_cdata_finalized == finalized0 + 1' \
   'LJ_GC_UDATA_FINREG == LJ_GC_WEAKVAL' \
   'old | LJ_GC_UDATA_FINREG' \

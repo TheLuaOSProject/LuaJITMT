@@ -1509,14 +1509,6 @@ static int gc_claim_cdata_finalizer_pweak(lua_State *L, global_State *g,
   return gc_preclaim_cdata_finalizer_pweak_slot(L, g, o, slot);
 }
 
-static int gc_finreg_preclaim_has_capacity(global_State *g)
-{
-  return g->gc2.finreg_cdata_preclaim_obj &&
-	 g->gc2.finreg_cdata_preclaim_fin &&
-	 g->gc2.finreg_cdata_preclaim_count <
-	   g->gc2.finreg_cdata_preclaim_capacity;
-}
-
 static int gc_unlink_root_object(global_State *g, GCobj *target)
 {
   GCRef *p = &g->gc.root;
@@ -1585,12 +1577,6 @@ static size_t gc_queue_cdata_finalizers_pweak_ordered(lua_State *L,
       continue;
     }
     la_add64_rlx(&g->gc2.finreg_cdata_order_claimed, 1);
-    if (!gc_finreg_preclaim_has_capacity(g)) {
-      copyTVrel(L, slot, &fin);
-      fallback = 1;
-      la_add64_rlx(&g->gc2.finreg_cdata_order_fallbacks, 1);
-      continue;
-    }
     if (!gc_unlink_root_object(g, o)) {
       copyTVrel(L, slot, &fin);
       fallback = 1;

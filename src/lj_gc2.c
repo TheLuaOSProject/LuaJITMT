@@ -1862,7 +1862,24 @@ int lj_gc2_finreg_cdata_preclaim(lua_State *L, global_State *g, GCobj *o,
   count = g->gc2.finreg_cdata_preclaim_count;
   cap = g->gc2.finreg_cdata_preclaim_capacity;
   if (!g->gc2.finreg_cdata_preclaim_obj ||
-      !g->gc2.finreg_cdata_preclaim_fin || count >= cap) {
+      !g->gc2.finreg_cdata_preclaim_fin) {
+    if (!gc2_finclaim_resize(g, GC2_FINCLAIM_INIT)) {
+      la_add64_rlx(&g->gc2.finreg_cdata_preclaim_overflow, 1);
+      return 0;
+    }
+    count = g->gc2.finreg_cdata_preclaim_count;
+    cap = g->gc2.finreg_cdata_preclaim_capacity;
+  }
+  if (count >= cap) {
+    MSize ncap = gc2_finclaim_next_capacity(cap, count + 1u);
+    if (ncap <= cap || !gc2_finclaim_resize(g, ncap)) {
+      la_add64_rlx(&g->gc2.finreg_cdata_preclaim_overflow, 1);
+      return 0;
+    }
+    count = g->gc2.finreg_cdata_preclaim_count;
+    cap = g->gc2.finreg_cdata_preclaim_capacity;
+  }
+  if (count >= cap) {
     la_add64_rlx(&g->gc2.finreg_cdata_preclaim_overflow, 1);
     return 0;
   }

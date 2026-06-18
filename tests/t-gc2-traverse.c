@@ -2243,6 +2243,7 @@ static int gc2_cdata_finalized;
 #if LJ_HASFFI
 static int gc2_cdata_order[3];
 static int gc2_cdata_order_count;
+static int gc2_cdata_bulk_finalized;
 #endif
 
 static int gc2_counting_finalizer(lua_State *L)
@@ -2281,6 +2282,13 @@ static int gc2_cdata_order_finalizer_2(lua_State *L)
 static int gc2_cdata_order_finalizer_3(lua_State *L)
 {
   return gc2_cdata_order_finalizer(L, 3);
+}
+
+static int gc2_cdata_bulk_finalizer(lua_State *L)
+{
+  UNUSED(L);
+  gc2_cdata_bulk_finalized++;
+  return 0;
 }
 #endif
 
@@ -2506,7 +2514,9 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   uint64_t sweepqueued2, claimed2, dispatched2;
   uint64_t orderq2, orderclaimed2, orderfallback2, rootfallback2;
   uint64_t closerootfallback2, pendingorder2;
+  uint64_t overflow2;
   int finalized0;
+  const int bulk_n = 160;
 
   lua_settop(L, 0);
   assert(luaL_dostring(L,
@@ -2806,12 +2816,82 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   lua_pushnil(L);
   lua_setglobal(L, "gc2_close_keep");
 
+  sets2 = la_load64_acq(&g->gc2.finreg_cdata_sets);
+  clears2 = la_load64_acq(&g->gc2.finreg_cdata_clears);
+  queued2 = la_load64_acq(&g->gc2.finreg_cdata_queued);
+  sweepqueued2 = la_load64_acq(&g->gc2.finreg_cdata_sweep_queued);
+  pweak2 = la_load64_acq(&g->gc2.finreg_cdata_pweak_queued);
+  finalizerq2 = la_load64_acq(&g->gc2.finalizer_queued);
+  finalizerd2 = la_load64_acq(&g->gc2.finalizer_dequeued);
+  mpscd2 = la_load64_acq(&g->gc2.finalizer_mpsc_drained);
+  claimed2 = la_load64_acq(&g->gc2.finreg_cdata_pweak_claimed);
+  dispatched2 = la_load64_acq(&g->gc2.finreg_cdata_preclaim_dispatched);
+  orderq2 = la_load64_acq(&g->gc2.finreg_cdata_order_queued);
+  orderclaimed2 = la_load64_acq(&g->gc2.finreg_cdata_order_claimed);
+  orderfallback2 = la_load64_acq(&g->gc2.finreg_cdata_order_fallbacks);
+  rootfallback2 =
+    la_load64_acq(&g->gc2.finreg_cdata_pweak_root_fallbacks);
+  overflow2 = la_load64_acq(&g->gc2.finreg_cdata_preclaim_overflow);
+  gc2_cdata_bulk_finalized = 0;
+  lua_pushcfunction(L, gc2_cdata_bulk_finalizer);
+  lua_setglobal(L, "gc2_cdata_bulk_finalizer");
+  lua_pushinteger(L, bulk_n);
+  lua_setglobal(L, "gc2_cdata_bulk_n");
+  assert(luaL_dostring(L,
+    "local ffi = require('ffi')\n"
+    "ffi.cdef('typedef struct { int x; } gc2_bulk_fin_t;')\n"
+    "do\n"
+    "  for i = 1, gc2_cdata_bulk_n do\n"
+    "    ffi.gc(ffi.new('gc2_bulk_fin_t'), gc2_cdata_bulk_finalizer)\n"
+    "  end\n"
+    "end\n") ==
+    LUA_OK);
+  assert(la_load64_acq(&g->gc2.finreg_cdata_sets) ==
+	 sets2 + (uint64_t)bulk_n);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  lua_gc(L, LUA_GCSTOP, 0);
+  assert(la_load64_acq(&g->gc2.finreg_cdata_queued) ==
+	 queued2 + (uint64_t)bulk_n);
+  assert(la_load64_acq(&g->gc2.finreg_cdata_sweep_queued) ==
+	 sweepqueued2);
+  assert(la_load64_acq(&g->gc2.finreg_cdata_pweak_queued) ==
+	 pweak2 + (uint64_t)bulk_n);
+  assert(la_load64_acq(&g->gc2.finreg_cdata_pweak_claimed) ==
+	 claimed2 + (uint64_t)bulk_n);
+  assert(la_load64_acq(&g->gc2.finreg_cdata_preclaim_overflow) ==
+	 overflow2);
+  assert(g->gc2.finreg_cdata_preclaim_capacity >= (MSize)bulk_n);
+  assert(la_load64_acq(&g->gc2.finalizer_queued) ==
+	 finalizerq2 + (uint64_t)bulk_n);
+  assert(la_load64_acq(&g->gc2.finalizer_dequeued) ==
+	 finalizerd2 + (uint64_t)bulk_n);
+  assert(la_load64_acq(&g->gc2.finalizer_mpsc_drained) ==
+	 mpscd2 + (uint64_t)bulk_n);
+  assert(la_load64_acq(&g->gc2.finreg_cdata_preclaim_dispatched) ==
+	 dispatched2 + (uint64_t)bulk_n);
+  assert(la_load64_acq(&g->gc2.finreg_cdata_order_queued) ==
+	 orderq2 + (uint64_t)bulk_n);
+  assert(la_load64_acq(&g->gc2.finreg_cdata_order_claimed) ==
+	 orderclaimed2 + (uint64_t)bulk_n);
+  assert(la_load64_acq(&g->gc2.finreg_cdata_order_fallbacks) ==
+	 orderfallback2);
+  assert(la_load64_acq(&g->gc2.finreg_cdata_pweak_root_fallbacks) ==
+	 rootfallback2);
+  assert(la_load64_acq(&g->gc2.finreg_cdata_clears) ==
+	 clears2 + (uint64_t)bulk_n);
+  assert(gc2_cdata_bulk_finalized == bulk_n);
+
   lua_pushnil(L);
   lua_setglobal(L, "gc2_cdata_order_finalizer_1");
   lua_pushnil(L);
   lua_setglobal(L, "gc2_cdata_order_finalizer_2");
   lua_pushnil(L);
   lua_setglobal(L, "gc2_cdata_order_finalizer_3");
+  lua_pushnil(L);
+  lua_setglobal(L, "gc2_cdata_bulk_finalizer");
+  lua_pushnil(L);
+  lua_setglobal(L, "gc2_cdata_bulk_n");
   lua_pushnil(L);
   lua_setglobal(L, "gc2_cdata_counting_finalizer");
 }
