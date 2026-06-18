@@ -491,6 +491,24 @@ static void gc_stats_setint(lua_State *L, GCtab *t, const char *name,
   copyTVrel(L, lj_tab_setstr(L, t, lj_str_newz(L, name)), &tv);
 }
 
+static void gc_stats_set_latency_buckets(lua_State *L, GCtab *t,
+					 GC2State *gc2)
+{
+  GCtab *bt;
+  TValue tv;
+  uint32_t i;
+  lua_createtable(L, LJ_GC2_HS_LATENCY_BUCKETS, 0);
+  bt = tabV(L->top - 1);
+  for (i = 0; i < LJ_GC2_HS_LATENCY_BUCKETS; i++) {
+    setnumV(&tv, (lua_Number)la_load64_acq(
+      &gc2->hs_ack_latency_buckets[i]));
+    copyTVrel(L, lj_tab_setint(L, bt, (int32_t)i + 1), &tv);
+  }
+  lj_tab_storetab(L, lj_tab_setstr(L, t,
+		   lj_str_newlit(L, "poll_ack_latency_buckets")), bt);
+  L->top--;
+}
+
 static void gc_stats_push(lua_State *L)
 {
   global_State *g = G(L);
@@ -509,6 +527,7 @@ static void gc_stats_push(lua_State *L)
 		  la_load64_acq(&gc2->hs_ack_latency_sum_ns));
   gc_stats_setnum(L, t, "poll_ack_latency_max_ns",
 		  la_load64_acq(&gc2->hs_ack_latency_max_ns));
+  gc_stats_set_latency_buckets(L, t, gc2);
   gc_stats_setnum(L, t, "alloc_since_trigger",
 		  la_load64_acq(&gc2->alloc_since_trigger));
   gc_stats_setnum(L, t, "trigger_bytes", la_load64_acq(&gc2->trigger_bytes));

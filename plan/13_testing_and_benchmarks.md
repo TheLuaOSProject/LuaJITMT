@@ -124,10 +124,10 @@ string_intern-MT (worst-case shared structure), chan_pingpong (latency),
 chan_throughput, pmap-image-kernel (the 09 §9.11 pmap on a synthetic
 workload). Report ops/sec/thread + total; plot speedup. GC metrics are dumped
 via `collectgarbage("stats")`: current fields include cycle requests/starts,
-poll-ack sample/sum/max latency,
+poll-ack sample/sum/max latency plus histogram buckets for approximate P99,
 allocation trigger/hard-limit bytes, assist work, worker work, owner sweep
-work, weak clearing, finalizer queueing, and live estimates. Full P99
-reporting still needs benchmark-side sampling/aggregation.
+work, weak clearing, finalizer queueing, and live estimates. `bench_mt.lua`
+reports per-run poll-ack P99 bucket bounds from histogram deltas.
 
 ## 13.9 CI matrix (final)
 {x64} × {-joff,-jon} × {release, ASAN, TSAN-C, paranoia,

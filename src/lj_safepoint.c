@@ -28,6 +28,14 @@ static uint64_t safepoint_now_ns(void)
   return (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
 }
 
+static uint32_t safepoint_latency_bucket(uint64_t ns)
+{
+  uint32_t bucket = 0;
+  while ((ns >>= 1) != 0 && bucket + 1u < LJ_GC2_HS_LATENCY_BUCKETS)
+    bucket++;
+  return bucket;
+}
+
 static void safepoint_note_ack_latency(global_State *g)
 {
   uint64_t start, now, delta, old;
@@ -42,6 +50,8 @@ static void safepoint_note_ack_latency(global_State *g)
   delta = now - start;
   la_add64_rlx(&g->gc2.hs_ack_latency_samples, 1);
   la_add64_rlx(&g->gc2.hs_ack_latency_sum_ns, delta);
+  la_add64_rlx(&g->gc2.hs_ack_latency_buckets[
+    safepoint_latency_bucket(delta)], 1);
   old = la_load64_acq(&g->gc2.hs_ack_latency_max_ns);
   while (delta > old) {
     uint64_t expect = old;

@@ -831,6 +831,8 @@ typedef struct TabState {
   TabArrayRetire *retired_arrays;  /* Retired array vectors awaiting SMR. */
 } TabState;
 
+#define LJ_GC2_HS_LATENCY_BUCKETS 48
+
 typedef struct TGState TGState;
 typedef struct LJThreadLive LJThreadLive;
 typedef struct GC2SSBNode GC2SSBNode;
@@ -845,6 +847,7 @@ typedef struct GC2State {
   uint64_t hs_ack_latency_samples;  /* Safepoint ack latency samples. */
   uint64_t hs_ack_latency_sum_ns;  /* Total safepoint ack latency. */
   uint64_t hs_ack_latency_max_ns;  /* Max safepoint ack latency. */
+  uint64_t hs_ack_latency_buckets[LJ_GC2_HS_LATENCY_BUCKETS];
   uint64_t smr_reclaim_runs;  /* Retired-object epoch drains with work. */
   uint64_t smr_reclaimed;  /* Retired objects freed after a grace period. */
   uint64_t cycle_requests;  /* Allocation-triggered cycle requests. */

@@ -12,7 +12,10 @@ for needle in \
   'cycle_starts' \
   'poll_ack_samples' \
   'poll_ack_latency_max_ns' \
+  'poll_ack_latency_buckets' \
+  'LJ_GC2_HS_LATENCY_BUCKETS' \
   'safepoint_note_ack_latency(global_State *g)' \
+  'poll_ack_p99_ns' \
   'assist_runs' \
   'sweep_owner_runs' \
   'sweep_live_updates' \
@@ -21,7 +24,8 @@ for needle in \
 do
   if ! rg -F -q "$needle" "$ROOT/src/lib_base.c" \
       "$ROOT/src/lj_obj.h" "$ROOT/src/lj_safepoint.c" \
-      "$ROOT/tests/t-gc-stats.lua" "$ROOT/plan/13_testing_and_benchmarks.md"; then
+      "$ROOT/tests/t-gc-stats.lua" "$ROOT/plan/aux/bench/bench_mt.lua" \
+      "$ROOT/plan/13_testing_and_benchmarks.md"; then
     echo "guardrail: missing GC stats marker: $needle" >&2
     exit 1
   fi

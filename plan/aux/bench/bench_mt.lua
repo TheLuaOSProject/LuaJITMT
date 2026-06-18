@@ -29,14 +29,51 @@ local gc_stat_keys = {
   "finalizer_queued",
 }
 
-local function print_gc_stats()
+local function snapshot_gc_stats()
   local ok, stats = pcall(collectgarbage, "stats")
-  if ok and type(stats) == "table" then
+  if ok and type(stats) == "table" then return stats end
+  return nil
+end
+
+local function bucket_upper_ns(i)
+  local upper = 1
+  for _ = 2, i do upper = upper * 2 + 1 end
+  return upper
+end
+
+local function poll_ack_p99_delta(before, after)
+  local buckets = after and after.poll_ack_latency_buckets
+  if type(buckets) ~= "table" then return nil, 0 end
+  local prev = before and before.poll_ack_latency_buckets or {}
+  local deltas = {}
+  local total = 0
+  for i = 1, #buckets do
+    local d = (tonumber(buckets[i]) or 0) - (tonumber(prev[i]) or 0)
+    if d < 0 then d = 0 end
+    deltas[i] = d
+    total = total + d
+  end
+  if total == 0 then return nil, 0 end
+  local target = math.ceil(total * 0.99)
+  local seen = 0
+  for i = 1, #deltas do
+    seen = seen + deltas[i]
+    if seen >= target then return bucket_upper_ns(i), total end
+  end
+  return bucket_upper_ns(#deltas), total
+end
+
+local function print_gc_stats()
+  local stats = snapshot_gc_stats()
+  if stats then
     local out = { "GC stats:" }
     for i = 1, #gc_stat_keys do
       local k = gc_stat_keys[i]
       out[#out+1] = k .. "=" .. tostring(stats[k])
     end
+    local p99, samples = poll_ack_p99_delta(nil, stats)
+    out[#out+1] = "poll_ack_p99_ns=" .. tostring(p99 or "n/a")
+    out[#out+1] = "poll_ack_p99_samples=" .. tostring(samples)
     print(table.concat(out, " "))
   else
     print("GC stats:", collectgarbage("count"), "KB est.")
@@ -47,6 +84,7 @@ local function run(name, perthread_ops, mkworker, setup)
   if filter and not name:find(filter, 1, true) then return end
   collectgarbage("collect")
   local shared = setup and setup() or nil
+  local gc_before = snapshot_gc_stats()
   local start = th.channel(0)            -- rendezvous: aligned start
   local ts = {}
   for i = 1, NT do
@@ -67,8 +105,11 @@ local function run(name, perthread_ops, mkworker, setup)
   end
   local dt = wall() - t0
   local total_ops = perthread_ops * NT
-  print(string.format("%-22s %2d thr %10.3f s  %12.0f ops/s  %12.0f ops/s/thr  (chk %s)",
-    name, NT, dt, total_ops/dt, total_ops/dt/NT, tostring(sum)))
+  local gc_after = snapshot_gc_stats()
+  local p99, samples = poll_ack_p99_delta(gc_before, gc_after)
+  print(string.format("%-22s %2d thr %10.3f s  %12.0f ops/s  %12.0f ops/s/thr  (chk %s)  poll_ack_p99_ns=%s samples=%d",
+    name, NT, dt, total_ops/dt, total_ops/dt/NT, tostring(sum),
+    tostring(p99 or "n/a"), samples))
 end
 
 -- 1. Embarrassingly parallel arithmetic: ideal-scaling reference line.

@@ -53,6 +53,7 @@ static void *gc2_worker_main(void *arg);
 
 void lj_gc2_init(global_State *g)
 {
+  uint32_t i;
   g->gc2.gcpause_pct = 100;
   g->gc2.assist_shift = lj_gc2_assist_shift_from_stepmul(g->gc.stepmul);
   g->gc2.phase = LJ_GC2_IDLE;
@@ -65,6 +66,8 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.hs_ack_latency_samples, 0);
   la_store64_rlx(&g->gc2.hs_ack_latency_sum_ns, 0);
   la_store64_rlx(&g->gc2.hs_ack_latency_max_ns, 0);
+  for (i = 0; i < LJ_GC2_HS_LATENCY_BUCKETS; i++)
+    la_store64_rlx(&g->gc2.hs_ack_latency_buckets[i], 0);
   la_store64_rlx(&g->gc2.smr_reclaim_runs, 0);
   la_store64_rlx(&g->gc2.smr_reclaimed, 0);
   la_store64_rlx(&g->gc2.cycle_requests, 0);
