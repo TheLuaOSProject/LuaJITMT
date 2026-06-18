@@ -177,6 +177,9 @@ for needle in \
   'if (!ordered_fallback)' \
   'finreg_cdata_close_root_fallbacks, 1' \
   'gc_claim_cdata_finalizer_pweak(lua_State *L, global_State *g,' \
+  'GCRef obj;' \
+  'setgcref(ord->obj, o);' \
+  'gc_order_cdata_object(FinRegOrderNode *ord, GCtab *t,' \
   'gc_marktv(g, &fin);' \
   'lj_gc2_finreg_cdata_preclaim(L, g, o, &fin)' \
   'gc2_finclaim_next_capacity(cap, count + 1u)' \

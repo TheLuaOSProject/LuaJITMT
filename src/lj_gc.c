@@ -1509,6 +1509,23 @@ static int gc_claim_cdata_finalizer_pweak(lua_State *L, global_State *g,
   return gc_preclaim_cdata_finalizer_pweak_slot(L, g, o, slot);
 }
 
+static GCobj *gc_order_cdata_object(FinRegOrderNode *ord, GCtab *t,
+				    TValue *slot)
+{
+  Node *node = (Node *)slot;
+  TValue key;
+  GCobj *o;
+  if (!ord || !t || !slot)
+    return NULL;
+  o = gcref_acq(ord->obj);
+  if (!o || o->gch.gct != ~LJ_TCDATA)
+    return NULL;
+  lj_tv_load_acq(&key, &node->key);
+  if (!tviscdata(&key) || gcV(&key) != o)
+    return NULL;
+  return o;  /* 05 section 5.8: ordered FINREG node owns cdata identity. */
+}
+
 static int gc_unlink_root_object(global_State *g, GCobj *target)
 {
   GCRef *p = &g->gc.root;
@@ -1545,8 +1562,7 @@ static size_t gc_queue_cdata_finalizers_pweak_ordered(lua_State *L,
        ord = (FinRegOrderNode *)la_loadptr_acq((void *const *)&ord->next)) {
     GCtab *t = (GCtab *)la_loadptr_acq((void *const *)&ord->tab);
     TValue *slot = (TValue *)la_loadptr_acq((void *const *)&ord->slot);
-    Node *node = (Node *)slot;
-    TValue fin, key;
+    TValue fin;
     GCobj *o;
     la_add64_rlx(&g->gc2.finreg_cdata_order_seen, 1);
     if (!t || !slot || !gcref_acq(t->metatable)) {
@@ -1562,12 +1578,11 @@ static size_t gc_queue_cdata_finalizers_pweak_ordered(lua_State *L,
       la_add64_rlx(&g->gc2.finreg_cdata_order_tombstones, 1);
       continue;
     }
-    lj_tv_load_acq(&key, &node->key);
-    if (!tviscdata(&key)) {
+    o = gc_order_cdata_object(ord, t, slot);
+    if (!o) {
       la_add64_rlx(&g->gc2.finreg_cdata_order_tombstones, 1);
       continue;
     }
-    o = gcV(&key);
     if (!gc_cdata_finalizer_candidate_pweak(o)) {
       la_add64_rlx(&g->gc2.finreg_cdata_order_tombstones, 1);
       continue;
@@ -1705,8 +1720,7 @@ static size_t gc_separate_cdata_finalizers_ordered(global_State *g,
        ord = (FinRegOrderNode *)la_loadptr_acq((void *const *)&ord->next)) {
     GCtab *t = (GCtab *)la_loadptr_acq((void *const *)&ord->tab);
     TValue *slot = (TValue *)la_loadptr_acq((void *const *)&ord->slot);
-    Node *node = (Node *)slot;
-    TValue fin, key;
+    TValue fin;
     GCobj *o;
     if (!t || !slot || !gcref_acq(t->metatable))
       continue;
@@ -1717,10 +1731,9 @@ static size_t gc_separate_cdata_finalizers_ordered(global_State *g,
     }
     if (tvisnil(&fin))
       continue;
-    lj_tv_load_acq(&key, &node->key);
-    if (!tviscdata(&key))
+    o = gc_order_cdata_object(ord, t, slot);
+    if (!o)
       continue;
-    o = gcV(&key);
     if (!gc_cdata_finalizer_candidate_close(o))
       continue;
     if (!gc_unlink_root_object(g, o)) {
@@ -1770,8 +1783,7 @@ static int gc_cdata_fin_pending_ordered(global_State *g, CTState *cts)
        ord = (FinRegOrderNode *)la_loadptr_acq((void *const *)&ord->next)) {
     GCtab *t = (GCtab *)la_loadptr_acq((void *const *)&ord->tab);
     TValue *slot = (TValue *)la_loadptr_acq((void *const *)&ord->slot);
-    Node *node = (Node *)slot;
-    TValue fin, key;
+    TValue fin;
     GCobj *o;
     if (!t || !slot || !gcref_acq(t->metatable))
       continue;
@@ -1782,10 +1794,9 @@ static int gc_cdata_fin_pending_ordered(global_State *g, CTState *cts)
     }
     if (tvisnil(&fin))
       continue;
-    lj_tv_load_acq(&key, &node->key);
-    if (!tviscdata(&key))
+    o = gc_order_cdata_object(ord, t, slot);
+    if (!o)
       continue;
-    o = gcV(&key);
     if (gc_cdata_finalizer_candidate_close(o)) {
       la_add64_rlx(&g->gc2.finreg_cdata_pending_order_hits, 1);
       return 1;

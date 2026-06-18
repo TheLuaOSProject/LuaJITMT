@@ -144,7 +144,7 @@ static void cdata_fin_store(lua_State *L, global_State *g, CTState *cts,
     lj_obj_addgcflags_atomic(obj2gco(cd), LJ_GC_CDATA_FIN);
     lj_gc2_finreg_cdata_set(g, obj2gco(cd), 1);
     if (ordp && *ordp) {
-      lj_ctype_fin_order_publish(cts, *ordp, t, tv);
+      lj_ctype_fin_order_publish(cts, *ordp, obj2gco(cd), t, tv);
       *ordp = NULL;
     }
   } else {

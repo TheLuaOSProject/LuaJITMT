@@ -162,6 +162,7 @@ typedef struct FinRegGen {
 } FinRegGen;
 
 typedef struct FinRegOrderNode {
+  GCRef obj;			/* Cdata object for this registration. */
   GCtab *tab;			/* FINREG generation containing this slot. */
   TValue *slot;			/* FINREG value slot for this registration. */
   struct FinRegOrderNode *next;	/* Older registration, newest-first list. */
@@ -548,7 +549,7 @@ LJ_FUNC GCtab *lj_ctype_fin_head(CTState *cts);
 LJ_FUNC FinRegOrderNode *lj_ctype_fin_order_new(lua_State *L);
 LJ_FUNC void lj_ctype_fin_order_free(global_State *g, FinRegOrderNode *ord);
 LJ_FUNC void lj_ctype_fin_order_publish(CTState *cts, FinRegOrderNode *ord,
-					GCtab *t, TValue *slot);
+					GCobj *o, GCtab *t, TValue *slot);
 LJ_FUNC cTValue *lj_ctype_fin_get(lua_State *L, CTState *cts, cTValue *key,
 				  GCtab **tabp);
 LJ_FUNC int lj_ctype_fin_newgen(lua_State *L, CTState *cts, cTValue *key,
