@@ -1454,6 +1454,7 @@ void lj_gc_finalize_udata(lua_State *L)
 #if LJ_HASFFI
 static void gc_queue_cdata_finalizer(global_State *g, GCobj *o)
 {
+  markfinalized(o);
   lj_gc2_finalizer_enqueue(g, o);
 }
 
@@ -1468,7 +1469,8 @@ static int gc_cdata_finalizer_candidate_pweak(GCobj *o)
 static int gc_cdata_finalizer_candidate_close(GCobj *o)
 {
   return o->gch.gct == ~LJ_TCDATA &&
-	 (lj_obj_gcflags(o) & LJ_GC_CDATA_FIN);
+	 (lj_obj_gcflags(o) & LJ_GC_CDATA_FIN) &&
+	 !(lj_obj_gcflags(o) & LJ_GC_FINALIZED);
 }
 
 static int gc_preclaim_cdata_finalizer_pweak_slot(lua_State *L,
@@ -1763,8 +1765,10 @@ static void gc_separate_cdata_finalizers(global_State *g)
 {
   int fallback = 0;
   (void)gc_separate_cdata_finalizers_ordered(g, &fallback);
-  if (fallback)
+  if (fallback) {
+    la_add64_rlx(&g->gc2.finreg_cdata_close_root_fallbacks, 1);
     gc_separate_cdata_finalizers_root(g);
+  }
 }
 
 static int gc_cdata_fin_pending_tab(GCtab *t)

@@ -54,6 +54,8 @@ for needle in \
   'lj_gc_cdata_fin_pending(global_State *g)' \
   '!lj_gc_cdata_fin_pending(g)' \
   'gc_queue_cdata_finalizer(global_State *g, GCobj *o)' \
+  'gc_cdata_finalizer_candidate_close(GCobj *o)' \
+  '!(lj_obj_gcflags(o) & LJ_GC_FINALIZED)' \
   'gc_separate_cdata_finalizers(global_State *g)' \
   'lj_gc_finalize_cdata_disable(global_State *g)' \
   'm8_close_chain_cdata' \
@@ -155,8 +157,10 @@ for needle in \
   'uint64_t finreg_cdata_order_queued' \
   'uint64_t finreg_cdata_order_fallbacks' \
   'uint64_t finreg_cdata_pweak_root_fallbacks' \
+  'uint64_t finreg_cdata_close_root_fallbacks' \
   'ordered_fallback && ordered_queued == 0' \
   'if (!ordered_fallback)' \
+  'finreg_cdata_close_root_fallbacks, 1' \
   'gc_claim_cdata_finalizer_pweak(lua_State *L, global_State *g,' \
   'gc_marktv(g, &fin);' \
   'lj_gc2_finreg_cdata_preclaim(L, g, o, &fin)' \
@@ -175,6 +179,7 @@ for needle in \
   'finreg_cdata_order_queued) == orderq2 + 3u' \
   'finreg_cdata_order_fallbacks) ==' \
   'finreg_cdata_pweak_root_fallbacks) ==' \
+  'finreg_cdata_close_root_fallbacks) ==' \
   'gc2_regorder_fin_t' \
   'gc2_cdata_order[1] == 1' \
   'gc2_rereg_fin_t' \

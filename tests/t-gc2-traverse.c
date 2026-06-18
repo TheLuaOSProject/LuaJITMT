@@ -2390,6 +2390,7 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   uint64_t sets2, clears2, queued2, pweak2, finalizerq2, finalizerd2, mpscd2;
   uint64_t claimed2, dispatched2;
   uint64_t orderq2, orderclaimed2, orderfallback2, rootfallback2;
+  uint64_t closerootfallback2;
   int finalized0;
 
   lua_settop(L, 0);
@@ -2629,6 +2630,8 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   pweak2 = la_load64_acq(&g->gc2.finreg_cdata_pweak_queued);
   rootfallback2 =
     la_load64_acq(&g->gc2.finreg_cdata_pweak_root_fallbacks);
+  closerootfallback2 =
+    la_load64_acq(&g->gc2.finreg_cdata_close_root_fallbacks);
   finalizerq2 = la_load64_acq(&g->gc2.finalizer_queued);
   finalizerd2 = la_load64_acq(&g->gc2.finalizer_dequeued);
   mpscd2 = la_load64_acq(&g->gc2.finalizer_mpsc_drained);
@@ -2649,6 +2652,8 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   assert(la_load64_acq(&g->gc2.finreg_cdata_pweak_queued) == pweak2);
   assert(la_load64_acq(&g->gc2.finreg_cdata_pweak_root_fallbacks) ==
 	 rootfallback2);
+  assert(la_load64_acq(&g->gc2.finreg_cdata_close_root_fallbacks) ==
+	 closerootfallback2);
   assert(la_load64_acq(&g->gc2.finalizer_queued) == finalizerq2 + 3u);
   lj_gc_finalize_udata(L);
   assert(la_load64_acq(&g->gc2.finalizer_dequeued) == finalizerd2 + 3u);
