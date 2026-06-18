@@ -1270,6 +1270,7 @@ static int gc_finalize_cdata_preclaimed(lua_State *L, GCobj *o, cTValue *fin)
   global_State *g = G(L);
   TValue tmp;
   copyTV(L, &tmp, fin);
+  gc_finalize_cdata_clear(g, o);
   return gc_call_finalizer(g, L, &tmp, o) ? 1 : -1;
 }
 #endif
@@ -1351,12 +1352,36 @@ static void gc_queue_cdata_finalizer(global_State *g, GCobj *o)
   lj_gc2_finalizer_enqueue(g, o);
 }
 
+static int gc_cdata_finalizer_candidate_pweak(GCobj *o)
+{
+  return o->gch.gct == ~LJ_TCDATA &&
+	 (lj_obj_gcflags(o) & LJ_GC_CDATA_FIN) &&
+	 !(lj_obj_gcflags(o) & LJ_GC_FINALIZED) &&
+	 iswhite(o);
+}
+
+static int gc_preclaim_cdata_finalizer_pweak_slot(lua_State *L,
+						  global_State *g,
+						  GCobj *o, TValue *slot)
+{
+  TValue fin;
+  if (!lj_cdata_fin_claim_func(slot, &fin))
+    return 0;
+  if (lj_gc2_finreg_cdata_preclaim(L, g, o, &fin)) {
+    lj_cdata_fin_storenil(L, slot);
+    gc_marktv(g, &fin);
+    return 1;
+  }
+  copyTVrel(L, slot, &fin);  /* Side queue full: restore object-only fallback. */
+  return 0;
+}
+
 static int gc_claim_cdata_finalizer_pweak(lua_State *L, global_State *g,
 					  GCobj *o)
 {
   CTState *cts = ctype_ctsG(g);
   GCtab *t;
-  TValue key, fin;
+  TValue key;
   TValue *slot;
   if (cts == NULL)
     return 0;
@@ -1364,28 +1389,64 @@ static int gc_claim_cdata_finalizer_pweak(lua_State *L, global_State *g,
   slot = (TValue *)lj_ctype_fin_get(L, cts, &key, &t);
   if (slot == niltv(L) || !t || !gcref_acq(t->metatable))
     return 0;
-  if (!lj_cdata_fin_claim_func(slot, &fin))
-    return 0;
-  if (lj_gc2_finreg_cdata_preclaim(L, g, o, &fin)) {
-    lj_cdata_fin_storenil(L, slot);
-    gc_finalize_cdata_clear(g, o);
-    return 1;
+  return gc_preclaim_cdata_finalizer_pweak_slot(L, g, o, slot);
+}
+
+static size_t gc_preclaim_cdata_finalizers_pweak_tab(lua_State *L,
+						     global_State *g,
+						     GCtab *t)
+{
+  Node *node = lj_tab_node_acq(t);
+  MSize i, hmask = lj_tab_node_hmask_acq(node);
+  size_t n = 0;
+  for (i = 0; i <= hmask; i++) {
+    TValue val, key;
+    lj_tv_load_acq(&val, &node[i].val);
+    while (lj_cdata_fin_isclaim(&val)) {
+      la_cpu_pause();
+      lj_tv_load_acq(&val, &node[i].val);
+    }
+    if (tvisnil(&val))
+      continue;
+    lj_tv_load_acq(&key, &node[i].key);
+    if (tviscdata(&key)) {
+      GCobj *o = gcV(&key);
+      if (gc_cdata_finalizer_candidate_pweak(o) &&
+	  gc_preclaim_cdata_finalizer_pweak_slot(L, g, o, &node[i].val))
+	n++;
+    }
   }
-  copyTVrel(L, slot, &fin);  /* Side queue full: restore object-only fallback. */
-  return 0;
+  return n;
+}
+
+static size_t gc_preclaim_cdata_finalizers_pweak_finreg(lua_State *L,
+							global_State *g)
+{
+  CTState *cts = ctype_ctsG(g);
+  FinRegGen *gen;
+  size_t n = 0;
+  if (cts == NULL)
+    return 0;
+  for (gen = (FinRegGen *)la_loadptr_acq((void *const *)&cts->fin_head);
+       gen != NULL;
+       gen = (FinRegGen *)la_loadptr_acq((void *const *)&gen->next)) {
+    GCtab *t = (GCtab *)la_loadptr_acq((void *const *)&gen->tab);
+    if (t && gcref_acq(t->metatable))
+      n += gc_preclaim_cdata_finalizers_pweak_tab(L, g, t);
+  }
+  return n;  /* 05 section 5.8: FINREG P_WEAK cdata scan. */
 }
 
 static size_t gc_queue_cdata_finalizers_pweak(lua_State *L, global_State *g)
 {
   GCRef *p = &g->gc.root;
   GCobj *o;
+  size_t preclaimed;
   size_t n = 0;
+  preclaimed = gc_preclaim_cdata_finalizers_pweak_finreg(L, g);
   while ((o = gcref(*p)) != NULL) {
-    if (o->gch.gct == ~LJ_TCDATA &&
-	(lj_obj_gcflags(o) & LJ_GC_CDATA_FIN) &&
-	!(lj_obj_gcflags(o) & LJ_GC_FINALIZED) &&
-	iswhite(o)) {
-      (void)gc_claim_cdata_finalizer_pweak(L, g, o);
+    if (gc_cdata_finalizer_candidate_pweak(o)) {
+      preclaimed += gc_claim_cdata_finalizer_pweak(L, g, o);
       setgcrefr(*p, *lj_obj_gcwref(o));
       markfinalized(o);
       lj_gc2_finreg_cdata_queue(g, o);
@@ -1397,6 +1458,8 @@ static size_t gc_queue_cdata_finalizers_pweak(lua_State *L, global_State *g)
   }
   if (n)
     la_add64_rlx(&g->gc2.finreg_cdata_pweak_queued, n);
+  if (preclaimed)
+    (void)gc_propagate_gray(g);
   return n;  /* 05 section 5.8: P_WEAK cdata finalizer discovery bridge. */
 }
 

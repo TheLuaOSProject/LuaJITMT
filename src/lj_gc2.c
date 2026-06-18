@@ -1784,7 +1784,7 @@ int lj_gc2_finreg_cdata_preclaim_take(lua_State *L, global_State *g,
 				      GCobj *o, TValue *fin)
 {
 #if LJ_HASFFI
-  MSize head, count;
+  MSize head, count, i;
   GCobj *claimed;
   if (!L || !g || !o || !fin || o->gch.gct != ~LJ_TCDATA ||
       !g->gc2.finreg_cdata_preclaim_obj ||
@@ -1794,21 +1794,30 @@ int lj_gc2_finreg_cdata_preclaim_take(lua_State *L, global_State *g,
   count = g->gc2.finreg_cdata_preclaim_count;
   if (head >= count)
     return 0;
-  claimed = gcref_acq(g->gc2.finreg_cdata_preclaim_obj[head]);
-  if (claimed != o)
-    return 0;
-  copyTV(L, fin, &g->gc2.finreg_cdata_preclaim_fin[head]);
-  setgcrefnull(g->gc2.finreg_cdata_preclaim_obj[head]);
-  setnilV(&g->gc2.finreg_cdata_preclaim_fin[head]);
-  head++;
+  for (i = head; i < count; i++) {
+    claimed = gcref_acq(g->gc2.finreg_cdata_preclaim_obj[i]);
+    if (claimed != o)
+      continue;
+    copyTV(L, fin, &g->gc2.finreg_cdata_preclaim_fin[i]);
+    setgcrefnull(g->gc2.finreg_cdata_preclaim_obj[i]);
+    setnilV(&g->gc2.finreg_cdata_preclaim_fin[i]);
+    while (head < count &&
+	   gcref_acq(g->gc2.finreg_cdata_preclaim_obj[head]) == NULL)
+      head++;
+    if (head == count) {
+      g->gc2.finreg_cdata_preclaim_head = 0;
+      g->gc2.finreg_cdata_preclaim_count = 0;
+    } else {
+      g->gc2.finreg_cdata_preclaim_head = head;
+    }
+    la_add64_rlx(&g->gc2.finreg_cdata_preclaim_dispatched, 1);
+    return 1;  /* 05 section 5.8: dispatch order may differ from FINREG scan. */
+  }
   if (head == count) {
     g->gc2.finreg_cdata_preclaim_head = 0;
     g->gc2.finreg_cdata_preclaim_count = 0;
-  } else {
-    g->gc2.finreg_cdata_preclaim_head = head;
   }
-  la_add64_rlx(&g->gc2.finreg_cdata_preclaim_dispatched, 1);
-  return 1;
+  return 0;
 #else
   UNUSED(L); UNUSED(g); UNUSED(o); UNUSED(fin);
   return 0;
