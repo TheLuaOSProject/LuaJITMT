@@ -587,9 +587,11 @@ LJLIB_CF(jit_profile_start)
   key.u64 = KEY_PROFILE_THREAD;
   setthreadV(L, &tv, L2);
   copyTVrel(L, lj_tab_set(L, registry, &key), &tv);
+  lj_gc2_barrier_weak_write(L, registry, &key, &tv);
   key.u64 = KEY_PROFILE_FUNC;
   setfuncV(L, &tv, func);
   copyTVrel(L, lj_tab_set(L, registry, &key), &tv);
+  lj_gc2_barrier_weak_write(L, registry, &key, &tv);
   lj_gc_pubtab(L, registry);
   luaJIT_profile_start(L, mode ? strdata(mode) : "",
 		       (luaJIT_profile_callback)jit_profile_callback, L2);

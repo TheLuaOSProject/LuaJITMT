@@ -10,6 +10,7 @@
 #include "lua.h"
 #include "lauxlib.h"
 #include "lualib.h"
+#include "luajit.h"
 
 #include "lj_obj.h"
 #include "lj_atomic.h"
@@ -45,6 +46,8 @@ static void worker_drain_all(global_State *g)
   }
   assert(lj_gc2_ssb_empty(g));
 }
+
+static int weak_snapshot_has(global_State *g, GCtab *t);
 
 static void test_strong_table(lua_State *L, global_State *g, TGState *tg)
 {
@@ -875,6 +878,76 @@ static void test_jit_tg_executing_trace_root(lua_State *L, global_State *g,
   la_store32_rel((uint32_t *)&tg->vmstate, old_vmstate);
   lj_gc2_legacy_cycle_end(g);
   UNUSED(L);
+}
+#endif
+
+#if LJ_HASPROFILE
+static int gc2_profile_callback(lua_State *L)
+{
+  UNUSED(L);
+  return 0;
+}
+
+static void test_jit_profile_registry_weak_barrier(void)
+{
+  TGState *oldtg = lj_thr_get_tg();
+  lua_State *L2 = luaL_newstate();
+  global_State *g2;
+  TGState *tg2;
+  GCtab *reg;
+  GCfunc *cb;
+  uint64_t weak_vals0;
+
+  assert(L2 != NULL);
+  lua_gc(L2, LUA_GCSTOP, 0);
+  lua_pushcfunction(L2, luaopen_base);
+  lua_call(L2, 0, 1);
+  lua_pop(L2, 1);
+  lua_pushcfunction(L2, luaopen_package);
+  lua_call(L2, 0, 1);
+  lua_pop(L2, 1);
+  lua_pushcfunction(L2, luaopen_jit);
+  lua_pushliteral(L2, LUA_JITLIBNAME);
+  lua_call(L2, 1, 1);
+  lua_pop(L2, 1);
+  g2 = G(L2);
+  tg2 = G2TG(g2);
+  assert(tg2 != NULL);
+
+  lua_pushcfunction(L2, gc2_profile_callback);
+  cb = funcV(L2->top - 1);
+  lua_getregistry(L2);
+  reg = tabV(L2->top - 1);
+  lua_newtable(L2);
+  lua_pushliteral(L2, "__mode");
+  lua_pushliteral(L2, "v");
+  lua_settable(L2, -3);
+  lua_setmetatable(L2, -2);
+
+  lj_gc2_legacy_mark_begin(g2);
+  assert(lj_gc2_markobj(g2, obj2gco(reg)) == 1);
+  flush_and_drain(g2, tg2);
+  assert(weak_snapshot_has(g2, reg));
+  assert(lj_gc2_ismarked(g2, obj2gco(cb)) == 0);
+  lua_pop(L2, 1);
+
+  weak_vals0 = la_load64_acq(&g2->gc2.weak_values_marked);
+  lj_gc2_legacy_weak_begin(g2);
+  lua_getglobal(L2, "require");
+  lua_pushliteral(L2, LUA_JITLIBNAME ".profile");
+  lua_call(L2, 1, 1);
+  lua_getfield(L2, -1, "start");
+  lua_pushliteral(L2, "");
+  lua_pushvalue(L2, 1);
+  lua_call(L2, 2, 0);
+  assert(lj_gc2_ismarked(g2, obj2gco(cb)) == 1);
+  while (lj_gc2_weak_drain(g2, 1) != 0)
+    ;
+  assert(la_load64_acq(&g2->gc2.weak_values_marked) > weak_vals0);
+  luaJIT_profile_stop(L2);
+  lj_gc2_legacy_cycle_end(g2);
+  lua_close(L2);
+  lj_thr_set_tg(oldtg);
 }
 #endif
 
@@ -3219,6 +3292,9 @@ int main(void)
   test_jit_upvalue_barrier(L, g, tg);
   test_jit_current_trace_root(L, g, tg);
   test_jit_tg_executing_trace_root(L, g, tg);
+#endif
+#if LJ_HASPROFILE
+  test_jit_profile_registry_weak_barrier();
 #endif
   test_weak_tables(L, g, tg);
   test_weak_snapshot_growth(L, g, tg);
