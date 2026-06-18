@@ -30,6 +30,9 @@ for needle in \
   'lj_meta_tset_owner(L, tv, base+1, &owner)' \
   'test_ffi_weak_newindex_target_write_barrier' \
   't-m8-ffi-weak-newindex OK' \
+  'ffi_register_module(lua_State *L)' \
+  'lj_gc2_barrier_weak_write(L, t, &key, L->top-1);' \
+  'test_ffi_loaded_weak_value_barrier' \
   'test_weak_clear_marks_string_slots' \
   'lj_obj_cleargcflags_atomic(gcV(o), LJ_GC_WHITES);' \
   'assert(!iswhite(obj2gco(modestr)));' \

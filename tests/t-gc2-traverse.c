@@ -2293,6 +2293,53 @@ static int gc2_cdata_bulk_finalizer(lua_State *L)
   gc2_cdata_bulk_finalized++;
   return 0;
 }
+
+static void test_ffi_loaded_weak_value_barrier(void)
+{
+  TGState *oldtg = lj_thr_get_tg();
+  lua_State *L2 = luaL_newstate();
+  global_State *g2;
+  TGState *tg2;
+  GCtab *loaded, *mod;
+  assert(L2 != NULL);
+  lua_gc(L2, LUA_GCSTOP, 0);
+  lua_pushcfunction(L2, luaopen_base);
+  lua_call(L2, 0, 1);
+  lua_pop(L2, 1);
+  lua_pushcfunction(L2, luaopen_package);
+  lua_call(L2, 0, 1);
+  lua_pop(L2, 1);
+  g2 = G(L2);
+  tg2 = G2TG(g2);
+  assert(tg2 != NULL);
+  assert(luaL_dostring(L2,
+    "package.loaded.ffi = nil\n"
+    "setmetatable(package.loaded, { __mode = 'v' })\n") == LUA_OK);
+  lua_getglobal(L2, "package");
+  lua_getfield(L2, -1, "loaded");
+  loaded = tabV(L2->top - 1);
+
+  lj_gc2_legacy_mark_begin(g2);
+  assert(lj_gc2_markobj(g2, obj2gco(loaded)) == 1);
+  flush_and_drain(g2, tg2);
+  assert(lj_gc2_weak_snapshot_count(g2) >= 1u);
+  lua_settop(L2, 0);
+
+  lj_gc2_legacy_weak_begin(g2);
+  lua_pushcfunction(L2, luaopen_ffi);
+  lua_call(L2, 0, 1);
+  mod = tabV(L2->top - 1);
+  assert(lj_gc2_ismarked(g2, obj2gco(mod)) == 1);
+  while (lj_gc2_weak_drain(g2, 1) != 0)
+    ;
+  lua_getglobal(L2, "package");
+  lua_getfield(L2, -1, "loaded");
+  lua_getfield(L2, -1, "ffi");
+  assert(tabV(L2->top - 1) == mod);
+  lj_gc2_legacy_cycle_end(g2);
+  lua_close(L2);
+  lj_thr_set_tg(oldtg);
+}
 #endif
 
 static void test_finalizer_spawn_deferred_state(lua_State *L, global_State *g)
@@ -3143,6 +3190,7 @@ int main(void)
   test_finreg_internal_userdata_telemetry(L, g);
   test_finreg_userdata_inplace_finalizer_behavior(L);
 #if LJ_HASFFI
+  test_ffi_loaded_weak_value_barrier();
   test_finreg_cdata_telemetry(L, g);
   test_finalizer_spawn_deferred_state(L, g);
 #endif

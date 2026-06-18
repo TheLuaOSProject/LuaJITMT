@@ -1037,8 +1037,11 @@ static void ffi_register_module(lua_State *L)
   cTValue *tmp = lj_tab_getstr(tabV(registry(L)), lj_str_newlit(L, "_LOADED"));
   if (tmp && tvistab(tmp)) {
     GCtab *t = tabV(tmp);
-    copyTVrel(L, lj_tab_setstr(L, t, lj_str_newlit(L, LUA_FFILIBNAME)),
-	      L->top-1);
+    GCstr *name = lj_str_newlit(L, LUA_FFILIBNAME);
+    TValue key;
+    setstrV(L, &key, name);
+    copyTVrel(L, lj_tab_setstr(L, t, name), L->top-1);
+    lj_gc2_barrier_weak_write(L, t, &key, L->top-1);
     lj_gc_pubtab(L, t);
   }
 }
