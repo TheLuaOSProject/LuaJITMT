@@ -175,6 +175,8 @@ for needle in \
   'finreg_cdata_pending_order_hits, 0' \
   'ordered_fallback && ordered_queued == 0' \
   'if (!ordered_fallback)' \
+  'gc_cdata_finreg_pending_scan(CTState *cts)' \
+  'collectgarbage('\''collect'\'')' \
   'finreg_cdata_close_root_fallbacks, 1' \
   'gc_claim_cdata_finalizer_pweak(lua_State *L, global_State *g,' \
   'GCRef obj;' \

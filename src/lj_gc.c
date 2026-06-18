@@ -1477,6 +1477,8 @@ static int gc_cdata_finalizer_candidate_close(GCobj *o)
 	 !(lj_obj_gcflags(o) & LJ_GC_FINALIZED);
 }
 
+static int gc_cdata_finreg_pending_scan(CTState *cts);
+
 static int gc_preclaim_cdata_finalizer_pweak_slot(lua_State *L,
 						  global_State *g,
 						  GCobj *o, TValue *slot)
@@ -1678,8 +1680,13 @@ static size_t gc_queue_cdata_finalizers_pweak(lua_State *L, global_State *g)
   preclaimed = gc_queue_cdata_finalizers_pweak_ordered(L, g, &ordered_queued,
 						       &ordered_fallback);
   n += ordered_queued;
-  if (ordered_fallback && ordered_queued == 0)
-    preclaimed += gc_preclaim_cdata_finalizers_pweak_finreg(L, g);
+  if (ordered_fallback && ordered_queued == 0) {
+    CTState *cts = ctype_ctsG(g);
+    if (gc_cdata_finreg_pending_scan(cts))
+      preclaimed += gc_preclaim_cdata_finalizers_pweak_finreg(L, g);
+    else
+      ordered_fallback = 0;
+  }
   if (!ordered_fallback)
     goto done;
   la_add64_rlx(&g->gc2.finreg_cdata_pweak_root_fallbacks, 1);
@@ -1768,7 +1775,7 @@ static void gc_separate_cdata_finalizers(global_State *g)
 {
   int fallback = 0;
   (void)gc_separate_cdata_finalizers_ordered(g, &fallback);
-  if (fallback) {
+  if (fallback && gc_cdata_finreg_pending_scan(ctype_ctsG(g))) {
     la_add64_rlx(&g->gc2.finreg_cdata_close_root_fallbacks, 1);
     gc_separate_cdata_finalizers_root(g);
   }
@@ -1826,14 +1833,11 @@ static int gc_cdata_fin_pending_tab(GCtab *t)
   return 0;
 }
 
-int lj_gc_cdata_fin_pending(global_State *g)
+static int gc_cdata_finreg_pending_scan(CTState *cts)
 {
-  CTState *cts = ctype_ctsG(g);
   FinRegGen *gen;
   if (cts == NULL)
     return 0;
-  if (gc_cdata_fin_pending_ordered(g, cts))
-    return 1;
   for (gen = (FinRegGen *)la_loadptr_acq((void *const *)&cts->fin_head);
        gen != NULL;
        gen = (FinRegGen *)la_loadptr_acq((void *const *)&gen->next)) {
@@ -1842,6 +1846,16 @@ int lj_gc_cdata_fin_pending(global_State *g)
       return 1;
   }
   return 0;
+}
+
+int lj_gc_cdata_fin_pending(global_State *g)
+{
+  CTState *cts = ctype_ctsG(g);
+  if (cts == NULL)
+    return 0;
+  if (gc_cdata_fin_pending_ordered(g, cts))
+    return 1;
+  return gc_cdata_finreg_pending_scan(cts);
 }
 
 /* Finalize all cdata objects from finalizer table. */

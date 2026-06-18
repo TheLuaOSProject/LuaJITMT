@@ -2519,6 +2519,22 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   const int bulk_n = 160;
 
   lua_settop(L, 0);
+  rootfallback1 =
+    la_load64_acq(&g->gc2.finreg_cdata_pweak_root_fallbacks);
+  closerootfallback2 =
+    la_load64_acq(&g->gc2.finreg_cdata_close_root_fallbacks);
+  assert(luaL_dostring(L,
+    "require('ffi')\n"
+    "collectgarbage('collect')\n"
+    "collectgarbage('stop')\n") ==
+    LUA_OK);
+  assert(la_load64_acq(&g->gc2.finreg_cdata_pweak_root_fallbacks) ==
+	 rootfallback1);
+  assert(!lj_gc_cdata_fin_pending(g));
+  lj_gc_finalize_cdata(L);
+  assert(la_load64_acq(&g->gc2.finreg_cdata_close_root_fallbacks) ==
+	 closerootfallback2);
+
   assert(luaL_dostring(L,
     "local ffi = require('ffi')\n"
     "local cd = ffi.gc(ffi.new('char[?]', 8), function() end)\n"
