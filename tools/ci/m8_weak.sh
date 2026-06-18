@@ -68,6 +68,10 @@ for needle in \
   'after_error_cdata_finalized == 1' \
   'error_udata_finalized == 1' \
   'after_error_udata_finalized == 1' \
+  'close_clear_suppressed_cdata_finalizer' \
+  'm8_close_clear_suppressed_cdata' \
+  'ffi.gc(keep.suppressed, nil)' \
+  'suppressed_cdata_finalized == 0' \
   'order_cdata_finalized[0] == 3' \
   'order_cdata_finalized[1] == 2' \
   'order_cdata_finalized[2] == 1' \
