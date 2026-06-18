@@ -862,6 +862,11 @@ typedef struct GC2State {
   uint64_t minor_sweep_deferred;  /* Minor requests kept on major sweep. */
   uint64_t minor_sweep_arenas;  /* Arenas swept with minor identity. */
   uint64_t minor_roots_deferred;  /* Minor requests kept on full roots. */
+  uint64_t minor_survival_base_live;  /* Previous live estimate for survival. */
+  uint64_t minor_survival_bytes;  /* Last estimated young bytes kept by minor. */
+  uint32_t minor_survival_pct;  /* Last minor survival percentage. */
+  uint32_t minor_survival_threshold_pct;  /* Survival pct forcing a major. */
+  uint64_t minor_survival_major_requests;  /* High-survival major requests. */
   uint32_t force_major;  /* One-shot full-GC major-cycle override. */
   uint64_t remembered_barriers;  /* Idle generational barriers observed. */
   uint64_t remembered_pushed;  /* Idle remembered entries queued. */
@@ -886,6 +891,7 @@ typedef struct GC2State {
   uint64_t sweep_to_idle;  /* SWEEP-to-IDLE phase publications. */
   uint64_t preserve_abort_to_idle;  /* Preserve aborts leaving an active phase. */
   uint64_t alloc_since_trigger;  /* Flushed mutator allocation bytes. */
+  uint64_t cycle_alloc_bytes;  /* Flushed allocation bytes at cycle start. */
   uint64_t trigger_bytes;  /* Allocation bytes before next GC2 trigger. */
   uint64_t hard_bytes;	/* Allocation bytes before mutator assists. */
   uint64_t assist_runs;  /* Mutator assist attempts past hard limit. */

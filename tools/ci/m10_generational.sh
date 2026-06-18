@@ -24,6 +24,13 @@ for needle in \
   'uint64_t minor_sweep_deferred' \
   'uint64_t minor_sweep_arenas' \
   'uint64_t minor_roots_deferred' \
+  'uint64_t minor_survival_base_live' \
+  'uint64_t minor_survival_bytes' \
+  'uint32_t minor_survival_pct' \
+  'uint32_t minor_survival_threshold_pct' \
+  'uint64_t minor_survival_major_requests' \
+  'uint64_t cycle_alloc_bytes' \
+  'LJ_GC2_MINOR_SURVIVAL_MAJOR_PCT' \
   'la_store32_rlx(&g->gc2.generational, 0)' \
   'uint64_t remembered_barriers' \
   'uint64_t remembered_pushed' \
@@ -34,6 +41,10 @@ for needle in \
   'la_store32_rel(&g->gc2.generational, want)' \
   'tg->mark_active = la_load32_acq(&g->gc2.generational) != 0' \
   'lj_gc2_force_major(global_State *g)' \
+  'lj_gc2_update_minor_survival_policy(global_State *g, uint64_t live)' \
+  'la_store64_rel(&g->gc2.cycle_alloc_bytes' \
+  'la_load64_acq(&g->gc2.minor_survival_base_live)' \
+  'la_add64_rlx(&g->gc2.minor_survival_major_requests' \
   'gc2_update_public_minor_gates(global_State *g)' \
   'la_store32_rel(&g->gc2.minor_sweep_enabled, enabled)' \
   'la_store32_rel(&g->gc2.minor_roots_enabled, enabled)' \
@@ -53,6 +64,9 @@ for needle in \
   'minor_cycle_requests' \
   'minor_sweep_deferred' \
   'minor_roots_deferred' \
+  'minor_survival_pct' \
+  'minor_survival_major_requests' \
+  'cycle_alloc_bytes' \
   'remembered_barriers' \
   'remembered_filtered' \
   'remembered_drained' \

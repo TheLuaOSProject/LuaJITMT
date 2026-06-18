@@ -35,6 +35,7 @@ enum {
 #define LJ_GC2_WORKER_DRAIN_BATCH	64u
 #define LJ_GC2_WEAK_DRAIN_BATCH		64u
 #define LJ_GC2_SWEEP_BATCH		64u
+#define LJ_GC2_MINOR_SURVIVAL_MAJOR_PCT	80u
 
 LJ_FUNC void lj_gc2_init(global_State *g);
 LJ_FUNC void lj_gc2_fini(global_State *g);
@@ -46,6 +47,7 @@ LJ_FUNC uint32_t lj_gc2_assist(global_State *g, TGState *tg);
 LJ_FUNC void lj_gc2_set_generational(global_State *g, int enabled);
 LJ_FUNC void lj_gc2_legacy_mark_begin(global_State *g);
 LJ_FUNC void lj_gc2_force_major(global_State *g);
+LJ_FUNC void lj_gc2_update_minor_survival_policy(global_State *g, uint64_t live);
 LJ_FUNC void lj_gc2_legacy_weak_begin(global_State *g);
 LJ_FUNC void lj_gc2_legacy_sweep_begin(global_State *g);
 LJ_FUNC void lj_gc2_legacy_preserve_abort(global_State *g);

@@ -92,6 +92,12 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.minor_sweep_deferred, 0);
   la_store64_rlx(&g->gc2.minor_sweep_arenas, 0);
   la_store64_rlx(&g->gc2.minor_roots_deferred, 0);
+  la_store64_rlx(&g->gc2.minor_survival_base_live, 0);
+  la_store64_rlx(&g->gc2.minor_survival_bytes, 0);
+  la_store32_rlx(&g->gc2.minor_survival_pct, 0);
+  la_store32_rlx(&g->gc2.minor_survival_threshold_pct,
+		 LJ_GC2_MINOR_SURVIVAL_MAJOR_PCT);
+  la_store64_rlx(&g->gc2.minor_survival_major_requests, 0);
   la_store32_rlx(&g->gc2.force_major, 0);
   la_store64_rlx(&g->gc2.remembered_barriers, 0);
   la_store64_rlx(&g->gc2.remembered_pushed, 0);
@@ -116,6 +122,7 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.sweep_to_idle, 0);
   la_store64_rlx(&g->gc2.preserve_abort_to_idle, 0);
   g->gc2.alloc_since_trigger = 0;
+  la_store64_rlx(&g->gc2.cycle_alloc_bytes, 0);
   g->gc2.trigger_bytes = 0;
   g->gc2.hard_bytes = 0;
   la_store64_rlx(&g->gc2.assist_runs, 0);
@@ -473,6 +480,8 @@ static void gc2_reset_alloc_trigger(global_State *g)
        tg != NULL;
        tg = (TGState *)la_loadptr_acq((void *const *)&tg->next_tg))
     (void)lj_gc2_flush_alloc(g, tg);
+  la_store64_rel(&g->gc2.cycle_alloc_bytes,
+		 la_load64_acq(&g->gc2.alloc_since_trigger));
   la_store64_rlx(&g->gc2.alloc_since_trigger, 0);  /* 05 section 5.11. */
 }
 
@@ -627,6 +636,48 @@ static void gc2_update_public_minor_gates(global_State *g)
   la_store32_rel(&g->gc2.minor_roots_enabled, enabled);
 }
 
+static uint32_t gc2_ratio_pct(uint64_t num, uint64_t den)
+{
+  if (num == 0 || den == 0)
+    return 0;
+  if (num >= den)
+    return 100;
+  while (num > ~(uint64_t)0 / 100u) {
+    num >>= 1;
+    den = (den + 1u) >> 1;
+    if (den == 0 || num >= den)
+      return 100;
+  }
+  return (uint32_t)((num * 100u) / den);
+}
+
+void lj_gc2_update_minor_survival_policy(global_State *g, uint64_t live)
+{
+  uint64_t base, alloc, survived = 0;
+  uint32_t pct = 0, threshold;
+  int minor;
+  if (!g)
+    return;
+  base = la_load64_acq(&g->gc2.minor_survival_base_live);
+  alloc = la_load64_acq(&g->gc2.cycle_alloc_bytes);
+  minor = la_load32_acq(&g->gc2.cycle_sweep_minor) != 0;
+  if (minor && live > base && alloc != 0) {
+    survived = live - base;
+    pct = gc2_ratio_pct(survived, alloc);
+  }
+  la_store64_rel(&g->gc2.minor_survival_bytes, survived);
+  la_store32_rel(&g->gc2.minor_survival_pct, pct);
+  la_store64_rel(&g->gc2.minor_survival_base_live, live);
+  threshold = la_load32_acq(&g->gc2.minor_survival_threshold_pct);
+  if (threshold == 0)
+    threshold = LJ_GC2_MINOR_SURVIVAL_MAJOR_PCT;
+  if (minor && pct >= threshold &&
+      la_load32_acq(&g->gc2.generational) != 0) {
+    la_add64_rlx(&g->gc2.minor_survival_major_requests, 1);
+    lj_gc2_force_major(g);
+  }
+}
+
 void lj_gc2_set_generational(global_State *g, int enabled)
 {
   uint32_t want = enabled ? 1u : 0u;
@@ -639,6 +690,8 @@ void lj_gc2_set_generational(global_State *g, int enabled)
     lj_gc2_force_major(g);  /* First generational cycle establishes old marks. */
   else {
     la_store32_rel(&g->gc2.force_major, 0);
+    la_store32_rel(&g->gc2.minor_survival_pct, 0);
+    la_store64_rel(&g->gc2.minor_survival_bytes, 0);
     gc2_update_public_minor_gates(g);
   }
   if (la_load32_acq(&g->gc2.phase) == LJ_GC2_IDLE)
@@ -1019,7 +1072,7 @@ int lj_gc2_sweep_to_idle(global_State *g)
     return 0;
   }
   la_add64_rlx(&g->gc2.sweep_to_idle, 1);
-  (void)lj_gc2_sweep_live_aggregate(g);
+  lj_gc2_update_minor_survival_policy(g, lj_gc2_sweep_live_aggregate(g));
   gc2_update_public_minor_gates(g);
   lj_gc2_handshake(g, gc2_idle_barrier_actions(g, 0));
   (void)lj_tg_reclaim_dead(g);
@@ -1038,7 +1091,7 @@ void lj_gc2_legacy_cycle_end(global_State *g)
   phase = la_xchg32_acqrel(&g->gc2.phase, LJ_GC2_IDLE);
   if (phase == LJ_GC2_SWEEP) {
     la_add64_rlx(&g->gc2.sweep_to_idle, 1);
-    (void)lj_gc2_sweep_live_aggregate(g);
+    lj_gc2_update_minor_survival_policy(g, lj_gc2_sweep_live_aggregate(g));
   }
   gc2_update_public_minor_gates(g);
   lj_gc2_handshake(g, gc2_idle_barrier_actions(g, 0));

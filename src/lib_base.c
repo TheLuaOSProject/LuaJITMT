@@ -543,6 +543,16 @@ static void gc_stats_push(lua_State *L)
 		  la_load64_acq(&gc2->minor_sweep_arenas));
   gc_stats_setnum(L, t, "minor_roots_deferred",
 		  la_load64_acq(&gc2->minor_roots_deferred));
+  gc_stats_setnum(L, t, "minor_survival_base_live",
+		  la_load64_acq(&gc2->minor_survival_base_live));
+  gc_stats_setnum(L, t, "minor_survival_bytes",
+		  la_load64_acq(&gc2->minor_survival_bytes));
+  gc_stats_setint(L, t, "minor_survival_pct",
+		  la_load32_acq(&gc2->minor_survival_pct));
+  gc_stats_setint(L, t, "minor_survival_threshold_pct",
+		  la_load32_acq(&gc2->minor_survival_threshold_pct));
+  gc_stats_setnum(L, t, "minor_survival_major_requests",
+		  la_load64_acq(&gc2->minor_survival_major_requests));
   gc_stats_setnum(L, t, "remembered_barriers",
 		  la_load64_acq(&gc2->remembered_barriers));
   gc_stats_setnum(L, t, "remembered_pushed",
@@ -562,6 +572,8 @@ static void gc_stats_push(lua_State *L)
   gc_stats_set_latency_buckets(L, t, gc2);
   gc_stats_setnum(L, t, "alloc_since_trigger",
 		  la_load64_acq(&gc2->alloc_since_trigger));
+  gc_stats_setnum(L, t, "cycle_alloc_bytes",
+		  la_load64_acq(&gc2->cycle_alloc_bytes));
   gc_stats_setnum(L, t, "trigger_bytes", la_load64_acq(&gc2->trigger_bytes));
   gc_stats_setnum(L, t, "hard_bytes", la_load64_acq(&gc2->hard_bytes));
   gc_stats_setnum(L, t, "assist_runs", la_load64_acq(&gc2->assist_runs));
