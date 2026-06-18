@@ -752,13 +752,11 @@ static size_t gc_queue_udata_finalizer(global_State *g, GCobj *o)
   return m;
 }
 
-static size_t gc_separateudata_registered(global_State *g, int all,
-					  int *fallbackp)
+static size_t gc_separateudata_registered(global_State *g, int all)
 {
   GC2FinRegUDataNode *node;
   TValue mmv;
   size_t m = 0;
-  int fallback = 0;
   for (node = (GC2FinRegUDataNode *)la_loadptr_acq(
 	 (void *const *)&g->gc2.finreg_udata_head);
        node != NULL;
@@ -790,51 +788,22 @@ static size_t gc_separateudata_registered(global_State *g, int all,
     }
     if (!finreg)
       (void)lj_gc2_finreg_udata_set(g, o, 1);
-    if (!gc_unlink_udata_object(g, o)) {
-      fallback = 1;
-      la_add64_rlx(&g->gc2.finreg_udata_fallbacks, 1);
-      continue;
-    }
+    /*
+    ** 05 section 5.8: GC2 userdata FINREG identity is enough for
+    ** discovery without legacy userdata-chain membership.
+    */
+    (void)gc_unlink_udata_object(g, o);
     setgcrefnullrel(node->obj);
     la_add64_rlx(&g->gc2.finreg_udata_discovered, 1);
     m += gc_queue_udata_finalizer(g, o);
   }
-  if (fallbackp)
-    *fallbackp = fallback;
   return m;  /* 05 section 5.8: GC2-owned userdata FINREG discovery. */
 }
 
 /* Separate userdata objects to be finalized to the GC2 finalizer queue. */
 size_t lj_gc_separateudata(global_State *g, int all)
 {
-  size_t m;
-  GCRef *p;
-  GCobj *o;
-  TValue mmv;
-  int fallback = 0;
-  m = gc_separateudata_registered(g, all, &fallback);
-  if (!fallback)
-    return m;
-  la_add64_rlx(&g->gc2.finreg_udata_root_fallbacks, 1);
-  p = lj_obj_gcwref(obj2gco(mainthread(g)));
-  while ((o = gcref(*p)) != NULL) {
-    if (!(iswhite(o) || all) || isfinalized(gco2ud(o))) {
-      p = lj_obj_gcwref(o);  /* Nothing to do. */
-    } else if (!lj_meta_fasttv(g, tabref_acq(gco2ud(o)->metatable),
-			       MM_gc, &mmv)) {
-      markfinalized(o);  /* Done, as there's no __gc metamethod. */
-      if (lj_gc2_finreg_udata_set(g, o, 0) < 0)
-	lj_gc2_finreg_udata_forget(g, o);
-      p = lj_obj_gcwref(o);
-    } else {  /* Otherwise move userdata to be finalized to the GC2 queue. */
-      GCRef next = *lj_obj_gcwref(o);
-      (void)lj_gc2_finreg_udata_set(g, o, 1);
-      lj_gc2_finreg_udata_forget(g, o);
-      *p = next;  /* Finalizer queue publication reuses the nextgc link. */
-      m += gc_queue_udata_finalizer(g, o);
-    }
-  }
-  return m;
+  return gc_separateudata_registered(g, all);
 }
 
 /* -- Propagation phase --------------------------------------------------- */

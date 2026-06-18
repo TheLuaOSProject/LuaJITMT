@@ -181,8 +181,6 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.finreg_udata_registered, 0);
   la_store64_rlx(&g->gc2.finreg_udata_discovered, 0);
   la_store64_rlx(&g->gc2.finreg_udata_forgets, 0);
-  la_store64_rlx(&g->gc2.finreg_udata_fallbacks, 0);
-  la_store64_rlx(&g->gc2.finreg_udata_root_fallbacks, 0);
   la_storeptr_rlx((void **)&g->gc2.finalizer_mpsc, NULL);
   la_storeptr_rlx((void **)&g->gc2.finalizer_tail, NULL);
   la_store32_rlx(&g->gc2.finalizer_active, 0);
