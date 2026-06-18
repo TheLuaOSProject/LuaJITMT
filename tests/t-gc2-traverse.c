@@ -19,6 +19,7 @@
 #include "lj_tab.h"
 #include "lj_thr.h"
 #include "lj_tg.h"
+#include "lj_lib.h"
 #if LJ_HASFFI
 #include "lj_cdata.h"
 #endif
@@ -2263,6 +2264,64 @@ static int gc2_cdata_counting_finalizer(lua_State *L)
   return 0;
 }
 
+static void test_lib_register_weak_value_barrier(void)
+{
+  static const uint8_t init[] = {
+    0, 0, 1,
+    LIBINIT_COPY, 2,
+    (uint8_t)(LIBINIT_STRING|4), 's', 'l', 'o', 't',
+    LIBINIT_SET,
+    LIBINIT_END
+  };
+  TGState *oldtg = lj_thr_get_tg();
+  lua_State *L2 = luaL_newstate();
+  global_State *g2;
+  TGState *tg2;
+  GCtab *mod, *val;
+  uint64_t weak_vals0;
+
+  assert(L2 != NULL);
+  lua_gc(L2, LUA_GCSTOP, 0);
+  lua_pushcfunction(L2, luaopen_base);
+  lua_call(L2, 0, 1);
+  lua_pop(L2, 1);
+  lua_pushcfunction(L2, luaopen_package);
+  lua_call(L2, 0, 1);
+  lua_pop(L2, 1);
+  g2 = G(L2);
+  tg2 = G2TG(g2);
+  assert(tg2 != NULL);
+  assert(luaL_dostring(L2,
+    "package.loaded.m8lib = nil\n"
+    "m8lib = setmetatable({}, { __mode = 'v' })\n"
+    "package.loaded.m8lib = m8lib\n") == LUA_OK);
+  lua_newtable(L2);
+  val = tabV(L2->top - 1);
+  lua_getglobal(L2, "m8lib");
+  mod = tabV(L2->top - 1);
+
+  lj_gc2_legacy_mark_begin(g2);
+  assert(lj_gc2_markobj(g2, obj2gco(mod)) == 1);
+  flush_and_drain(g2, tg2);
+  assert(weak_snapshot_has(g2, mod));
+  assert(lj_gc2_ismarked(g2, obj2gco(val)) == 0);
+  lua_pop(L2, 1);
+
+  weak_vals0 = la_load64_acq(&g2->gc2.weak_values_marked);
+  lj_gc2_legacy_weak_begin(g2);
+  lj_lib_register(L2, "m8lib", init, NULL);
+  assert(tabV(L2->top - 1) == mod);
+  assert(lj_gc2_ismarked(g2, obj2gco(val)) == 1);
+  while (lj_gc2_weak_drain(g2, 1) != 0)
+    ;
+  lua_getfield(L2, -1, "slot");
+  assert(tabV(L2->top - 1) == val);
+  assert(la_load64_acq(&g2->gc2.weak_values_marked) == weak_vals0 + 1u);
+  lj_gc2_legacy_cycle_end(g2);
+  lua_close(L2);
+  lj_thr_set_tg(oldtg);
+}
+
 #if LJ_HASFFI
 static int gc2_cdata_order_finalizer(lua_State *L, int id)
 {
@@ -3189,6 +3248,7 @@ int main(void)
   test_finreg_userdata_telemetry(L, g);
   test_finreg_internal_userdata_telemetry(L, g);
   test_finreg_userdata_inplace_finalizer_behavior(L);
+  test_lib_register_weak_value_barrier();
 #if LJ_HASFFI
   test_ffi_loaded_weak_value_barrier();
   test_finreg_cdata_telemetry(L, g);

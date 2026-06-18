@@ -49,6 +49,14 @@ static GCtab *lib_create_table(lua_State *L, const char *libname, int hsize)
   return tabV(L->top-1);
 }
 
+static void lib_weak_write_str(lua_State *L, GCtab *tab, GCstr *key,
+			       cTValue *val)
+{
+  TValue keyv;
+  setstrV(L, &keyv, key);
+  lj_gc2_barrier_weak_write(L, tab, &keyv, val);
+}
+
 static const uint8_t *lib_read_lfunc(lua_State *L, const uint8_t *p, GCtab *tab)
 {
   int len = *p++;
@@ -67,8 +75,12 @@ static const uint8_t *lib_read_lfunc(lua_State *L, const uint8_t *p, GCtab *tab)
   pt = lj_bcread_proto(&ls);
   pt->firstline = ~(BCLine)0;
   fn = lj_func_newL_empty(L, pt, tabref_acq(L->env));
-  /* NOBARRIER: See below for common barrier. */
-  lj_tab_storefunc(L, lj_tab_setstr(L, tab, name), fn);
+  {
+    TValue *slot;
+    /* NOBARRIER: See below for common barrier. */
+    slot = lj_tab_storefunc(L, lj_tab_setstr(L, tab, name), fn);
+    lib_weak_write_str(L, tab, name, slot);
+  }
   return (const uint8_t *)ls.p;
 }
 
@@ -110,9 +122,11 @@ void lj_lib_register(lua_State *L, const char *libname,
       else
 	fn->c.f = *cf++;  /* Get cf or handler from C function table. */
       if (len) {
+	GCstr *key = lj_str_new(L, name, len);
+	TValue *slot;
 	/* NOBARRIER: See above for common barrier. */
-	lj_tab_storefunc(L, lj_tab_setstr(L, tab, lj_str_new(L, name, len)),
-			 fn);
+	slot = lj_tab_storefunc(L, lj_tab_setstr(L, tab, key), fn);
+	lib_weak_write_str(L, tab, key, slot);
       }
       ofn = fn;
     } else {
@@ -124,8 +138,10 @@ void lj_lib_register(lua_State *L, const char *libname,
 	L->top -= 2;
 	if (tvisstr(L->top+1) && strV(L->top+1)->len == 0)
 	  env = tabV(L->top);
-	else  /* NOBARRIER: See above for common barrier. */
+	else {  /* NOBARRIER: See above for common barrier. */
 	  copyTVrel(L, lj_tab_set(L, tab, L->top+1), L->top);
+	  lj_gc2_barrier_weak_write(L, tab, L->top+1, L->top);
+	}
 	break;
       case LIBINIT_NUMBER:
 	memcpy(&L->top->n, p, sizeof(double));
@@ -178,9 +194,11 @@ int lj_lib_postreg(lua_State *L, lua_CFunction cf, int id, const char *name)
 {
   GCfunc *fn = lj_lib_pushcf(L, cf, id);
   GCtab *t = tabref_acq(curr_func(L)->c.env);  /* Reference to parent table. */
+  GCstr *key = lj_str_newz(L, name);
   TValue tv;
   setfuncV(L, &tv, fn);
-  copyTVrel(L, lj_tab_setstr(L, t, lj_str_newz(L, name)), &tv);
+  copyTVrel(L, lj_tab_setstr(L, t, key), &tv);
+  lib_weak_write_str(L, t, key, &tv);
   lj_gc_pubtab(L, t);
   setfuncV(L, L->top++, fn);
   return 1;

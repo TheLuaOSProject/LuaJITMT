@@ -33,6 +33,8 @@ for needle in \
   'ffi_register_module(lua_State *L)' \
   'lj_gc2_barrier_weak_write(L, t, &key, L->top-1);' \
   'test_ffi_loaded_weak_value_barrier' \
+  'lib_weak_write_str(lua_State *L, GCtab *tab' \
+  'test_lib_register_weak_value_barrier' \
   'test_weak_clear_marks_string_slots' \
   'lj_obj_cleargcflags_atomic(gcV(o), LJ_GC_WHITES);' \
   'assert(!iswhite(obj2gco(modestr)));' \
