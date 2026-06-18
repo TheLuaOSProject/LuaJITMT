@@ -902,6 +902,7 @@ typedef struct GC2State {
   uint64_t cycle_starts;  /* Requested cycles consumed at mark begin. */
   uint64_t major_cycle_starts;  /* Actual major GC2 mark begins. */
   uint64_t minor_cycle_requests;  /* Generational minor requests seen. */
+  uint64_t minor_cycle_starts;  /* Actual fully-minor GC2 mark begins. */
   uint32_t cycle_minor_requested;  /* Current cycle requested minor mode. */
   uint32_t cycle_sweep_minor;  /* Current cycle uses minor sweep identity. */
   uint32_t minor_sweep_enabled;  /* Public gate for minor sweep identity. */

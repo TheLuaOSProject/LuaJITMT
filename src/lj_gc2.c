@@ -85,6 +85,7 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.cycle_starts, 0);
   la_store64_rlx(&g->gc2.major_cycle_starts, 0);
   la_store64_rlx(&g->gc2.minor_cycle_requests, 0);
+  la_store64_rlx(&g->gc2.minor_cycle_starts, 0);
   la_store32_rlx(&g->gc2.cycle_minor_requested, 0);
   la_store32_rlx(&g->gc2.cycle_sweep_minor, 0);
   la_store32_rlx(&g->gc2.minor_sweep_enabled, 0);
@@ -576,7 +577,9 @@ void lj_gc2_legacy_mark_begin(global_State *g)
     la_add64_rlx(&g->gc2.minor_sweep_deferred, 1);
   if (minor_requested && !roots_minor)
     la_add64_rlx(&g->gc2.minor_roots_deferred, 1);
-  if (!roots_minor)
+  if (roots_minor)
+    la_add64_rlx(&g->gc2.minor_cycle_starts, 1);
+  else
     la_add64_rlx(&g->gc2.major_cycle_starts, 1);
   /* Publish MARK before clearing the request token, so late allocators stop. */
   la_store32_rel(&g->gc2.phase, LJ_GC2_MARK);

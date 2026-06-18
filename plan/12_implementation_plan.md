@@ -249,10 +249,10 @@ Gate: ≤10% single-thread geomean (stretch 5%); bench_mt scaling ≥6x on
 via poll latency probe) <500µs on the churn bench.
 
 Current implementation note: `collectgarbage("stats")` now returns a
-benchmark-facing table of GC2 counters for cycle starts, allocation pacing,
-poll-ack latency, assist/worker progress, owner sweep progress, weak clearing,
-weak-write marks, FINREG fallback/order counters, finalizer queueing/MPSC
-drains, finalizer-spawn deferrals, and live estimates.
+benchmark-facing table of GC2 counters for cycle starts, requested vs actual
+minor cycles, allocation pacing, poll-ack latency, assist/worker progress, owner
+sweep progress, weak clearing, weak-write marks, FINREG fallback/order counters,
+finalizer queueing/MPSC drains, finalizer-spawn deferrals, and live estimates.
 `plan/aux/bench/bench_mt.lua` prints a stable subset of those fields after a run
 and reports approximate poll-ack P99 latency from histogram deltas.
 
@@ -266,11 +266,12 @@ Current implementation note: the public `collectgarbage("generational")` /
 `collectgarbage("incremental")` mode toggle now drives a passive
 `GC2State.generational` bit and exposes it through `collectgarbage("stats")`.
 Full GC now sets a one-shot major override, and generational mark begins record
-minor-cycle requests through `minor_cycle_requests` while still executing major
-cycles. Idle generational barriers conservatively queue remembered entries into
-SSB without draining outside a cycle and force a major on overflow. Minor sweep
-and root gates turn on after the first forced major baseline. Completed minor
-cycles now estimate young survival from live-estimate growth over sampled cycle
+minor-cycle requests through `minor_cycle_requests`; fully minor starts are
+counted separately by `minor_cycle_starts` once the minor sweep/root gates latch.
+Idle generational barriers conservatively queue remembered entries into SSB
+without draining outside a cycle and force a major on overflow. Minor sweep and
+root gates turn on after the first forced major baseline. Completed minor cycles
+now estimate young survival from live-estimate growth over sampled cycle
 allocation bytes and request a one-shot major at high survival. `bench.lua`
 accepts `BENCH_GC_MODE` and `BENCH_SCALE` for M10 tuning probes; the initial 80
 percent survival threshold leaves short-lived allocation churn on minor cycles

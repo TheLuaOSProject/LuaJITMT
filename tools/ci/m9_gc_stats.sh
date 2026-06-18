@@ -10,6 +10,7 @@ for needle in \
   'collectgarbage("stats")' \
   'static void gc_stats_push(lua_State *L)' \
   'cycle_starts' \
+  'minor_cycle_starts' \
   'poll_ack_samples' \
   'poll_ack_latency_max_ns' \
   'poll_ack_latency_buckets' \

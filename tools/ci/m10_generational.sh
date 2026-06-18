@@ -21,6 +21,7 @@ for needle in \
   'uint32_t force_major' \
   'uint64_t major_cycle_starts' \
   'uint64_t minor_cycle_requests' \
+  'uint64_t minor_cycle_starts' \
   'uint64_t minor_sweep_deferred' \
   'uint64_t minor_sweep_arenas' \
   'uint64_t minor_roots_deferred' \
@@ -47,7 +48,7 @@ for needle in \
   'la_store64_rel(&g->gc2.cycle_alloc_bytes' \
   'la_load64_acq(&g->gc2.minor_survival_base_live)' \
   'la_add64_rlx(&g->gc2.minor_survival_major_requests' \
-  'if (!roots_minor)' \
+  'if (roots_minor)' \
   'gc2_update_public_minor_gates(global_State *g)' \
   'la_store32_rel(&g->gc2.minor_sweep_enabled, enabled)' \
   'la_store32_rel(&g->gc2.minor_roots_enabled, enabled)' \
@@ -75,6 +76,7 @@ for needle in \
   'gc_stats_setint(L, t, "cycle_sweep_minor"' \
   'gc_stats_setint(L, t, "cycle_roots_minor"' \
   'minor_cycle_requests' \
+  'minor_cycle_starts' \
   'minor_sweep_deferred' \
   'minor_roots_deferred' \
   'major_root_scans' \

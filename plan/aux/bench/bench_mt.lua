@@ -25,6 +25,7 @@ local gc_stat_keys = {
   "cycle_starts",
   "major_cycle_starts",
   "minor_cycle_requests",
+  "minor_cycle_starts",
   "cycle_sweep_minor",
   "cycle_roots_minor",
   "minor_sweep_deferred",
