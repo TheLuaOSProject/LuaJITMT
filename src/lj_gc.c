@@ -1826,7 +1826,7 @@ static int gc_cdata_fin_pending_tab(GCtab *t)
     }
     if (!tvisnil(&val)) {
       lj_tv_load_acq(&key, &node[i].key);
-      if (tviscdata(&key) && (lj_obj_gcflags(gcV(&key)) & LJ_GC_CDATA_FIN))
+      if (tviscdata(&key) && gc_cdata_finalizer_candidate_close(gcV(&key)))
 	return 1;
     }
   }

@@ -55,6 +55,7 @@ for needle in \
   'void *finalizer_tail' \
   'lj_gc_cdata_fin_pending(global_State *g)' \
   '!lj_gc_cdata_fin_pending(g)' \
+  'gc_cdata_finalizer_candidate_close(gcV(&key))' \
   'gc_queue_cdata_finalizer(global_State *g, GCobj *o)' \
   'gc_cdata_finalizer_candidate_close(GCobj *o)' \
   '!(lj_obj_gcflags(o) & LJ_GC_FINALIZED)' \

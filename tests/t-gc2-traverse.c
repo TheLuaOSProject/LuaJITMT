@@ -2900,6 +2900,7 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
 	 pendingorder2 + 1u);
   lj_gc_finalize_cdata(L);
   assert(lj_gc2_finalizer_queue_pending(g));
+  assert(!lj_gc_cdata_fin_pending(g));
   assert(la_load64_acq(&g->gc2.finreg_cdata_order_queued) == orderq2 + 3u);
   assert(la_load64_acq(&g->gc2.finreg_cdata_sweep_queued) ==
 	 sweepqueued2);
