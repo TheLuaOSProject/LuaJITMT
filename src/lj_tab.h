@@ -102,6 +102,8 @@ LJ_FUNCA TValue *lj_tab_storetv_forjit_array(lua_State *L, GCtab *parent,
 					     TValue *dst, cTValue *src);
 LJ_FUNCA TValue *lj_tab_storetv_forjit_hash(lua_State *L, GCtab *parent,
 					    TValue *dst, cTValue *src);
+LJ_FUNCA TValue *lj_tab_storetv_forjit_newref(lua_State *L, GCtab *parent,
+					      TValue *dst, cTValue *src);
 LJ_FUNCA TValue *lj_tab_storetvn(lua_State *L, TValue *dst, cTValue *src,
 				 uint32_t n);
 LJ_FUNC TValue *lj_tab_storenilraw(TValue *dst);

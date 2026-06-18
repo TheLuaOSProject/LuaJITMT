@@ -1800,19 +1800,24 @@ static void asm_ahuvload(ASMState *as, IRIns *ir)
 
 static void asm_ahstore_forjit(ASMState *as, IRIns *ir)
 {
-  const CCallInfo *ci = &lj_ir_callinfo[ir->o == IR_ASTORE ?
-    IRCALL_lj_tab_storetv_forjit_array : IRCALL_lj_tab_storetv_forjit_hash];
+  IRCallID id = ir->o == IR_ASTORE ?
+    IRCALL_lj_tab_storetv_forjit_array : IRCALL_lj_tab_storetv_forjit_hash;
+  const CCallInfo *ci;
   IRRef args[4];
   IRIns *xref = IR(ir->op1);
   IRRef tabref;
   if (xref->o == IR_AREF || xref->o == IR_HREFK)
     tabref = IR(xref->op1)->op1;
-  else if (xref->o == IR_NEWREF)
+  else if (xref->o == IR_NEWREF) {
+    IRType1 kt = IR(xref->op2)->t;
     tabref = xref->op1;
-  else {
+    if (irt_isnum(kt) || (LJ_DUALNUM && irt_isinteger(kt)))
+      id = IRCALL_lj_tab_storetv_forjit_newref;
+  } else {
     lj_assertA(xref->o == IR_HREF, "expected helper-backed table store ref");
     tabref = xref->op1;
   }
+  ci = &lj_ir_callinfo[id];
   ra_evictset(as, RSET_SCRATCH);
   args[0] = ASMREF_L;     /* lua_State *L */
   args[1] = tabref;       /* GCtab *parent */

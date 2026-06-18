@@ -1,5 +1,5 @@
 #!/bin/sh
-# Guard helper-backed table stores while numeric new stores stay NYI.
+# Guard helper-backed table stores and stale table-store NYI markers.
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
@@ -59,40 +59,23 @@ local function array_insert(n)
 end
 local an = array_insert(80)
 assert(an[1] == 80)
-assert(traces() == 0, "fresh array slot table store unexpectedly traced")
+assert(traces() > 0, "fresh array slot table store did not trace")
 '
 
-if ! awk '
-  /} else {  \/\* Indexed store\. \*\// {
-    in_store = 1; saw_nil_gate = saw_hash_nyi = 0
-  }
-  in_store && /if \(tvisnil\(oldv\)/ { saw_nil_gate = 1 }
-  in_store && /M6: no numeric new HSTORE bridge/ { saw_hash_nyi = 1 }
-  in_store && /Convert int to number before storing/ {
-    if (!saw_nil_gate || !saw_hash_nyi)
-      bad = 1
-    checked = 1
-    in_store = 0
-  }
-  END { exit checked && !bad ? 0 : 1 }
-' "$ROOT/src/lj_record.c"; then
-  echo "guardrail: recorder must reject numeric new table stores" >&2
-  exit 1
-fi
-
-if rg -n 'M6: no numeric new HSTORE bridge' "$ROOT/src/lj_record.c" >/dev/null &&
+if rg -n 'M6: numeric NEWREF/HSTORE uses the generic returned-slot helper' "$ROOT/src/lj_record.c" >/dev/null &&
    rg -n 'M6: previous-nil in-bounds ASTORE/HSTORE uses the helper bridge' "$ROOT/src/lj_record.c" >/dev/null; then
   :
 else
-  echo "guardrail: missing table-store NYI marker" >&2
+  echo "guardrail: missing table-store bridge marker" >&2
   exit 1
 fi
 
 if rg -n -e 'M6: no new/nil HSTORE bridge' \
     -e 'M6: no new HSTORE bridge' \
+    -e 'M6: no numeric new HSTORE bridge' \
     -e 'M6: no nil ASTORE bridge' "$ROOT/src/lj_record.c" >/dev/null; then
   echo "guardrail: stale table-store NYI marker remains" >&2
   exit 1
 fi
 
-echo "M5 JIT table-store NYI guard passed"
+echo "M5 JIT table-store bridge guard passed"

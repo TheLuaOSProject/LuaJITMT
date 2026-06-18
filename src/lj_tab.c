@@ -1022,6 +1022,15 @@ LJ_FUNCA TValue *lj_tab_storetv_forjit_hash(lua_State *L, GCtab *parent,
   return dst;
 }
 
+LJ_FUNCA TValue *lj_tab_storetv_forjit_newref(lua_State *L, GCtab *parent,
+					      TValue *dst, cTValue *src)
+{
+  copyTVrel(L, dst, src);
+  lj_gc2_barrier_weak_write(L, parent, NULL, dst);  /* M8: traced numeric NEWREF write. */
+  lj_gc2_barrier_tv_pair(L, obj2gco(parent), dst);  /* M10: traced parent barrier. */
+  return dst;
+}
+
 LJ_FUNCA TValue *lj_tab_storetvn(lua_State *L, TValue *dst, cTValue *src,
 				 uint32_t n)
 {

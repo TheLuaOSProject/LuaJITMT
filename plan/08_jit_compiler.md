@@ -277,14 +277,14 @@ handler — sized LJ_MAX_EXITSTUBGR-compatible; see lj_vmstruct notes.
   for `XLOAD` forwarding/CSE and `XSTORE` DSE; this advances the current XBAR
   surface. The helper-backed table-store bridge also makes `ASTORE`/`HSTORE`
   DSE stop at `IR_XPOLL`, so a trace poll cannot be crossed while deciding that
-  table stores are redundant. A narrow M6 bridge records non-shape-changing
-  table-slot stores on Linux/x64 and lowers them through release-store
-  hash/array helpers with the AREF/HREF-derived table parent. The helpers run
-  the parent-aware value barrier, and existing weak table stores also call the
-  P_WEAK weak-write bridge. Previous-nil in-bounds array slots, existing hash
-  slots whose value is nil, and non-numeric new hash keys through `NEWREF` are
-  covered; numeric new keys that may grow or move into the array part remain
-  NYI until the full table-write trace protocol below lands.
+  table stores are redundant. A narrow M6 bridge records table-slot stores on
+  Linux/x64 and lowers them through release-store hash/array helpers with the
+  AREF/HREF-derived table parent. Numeric `NEWREF` stores use a generic
+  returned-slot helper because the slot may be in the array part. The helpers
+  run the parent-aware value barrier, and existing weak table stores also call
+  the P_WEAK weak-write bridge. Previous-nil in-bounds array slots, existing
+  hash slots whose value is nil, non-numeric new hash keys through `NEWREF`, and
+  fresh numeric insertions through `NEWREF` are covered.
 - **Allocation on trace**: TNEW/TDUP/CNEW/SNEW already call into C or use
   inline alloc IR; route them to the TG bump (mirror of 07 §7.5) — the IR
   for inline alloc (lj_asm.c asm_snew/asm_tnew via lj_ir_call → actually
@@ -442,16 +442,15 @@ scoped-flush target.
    array pointer with a newer size check. Existing non-nil table-slot stores are
    now recorded on Linux/x64 for shared tables as well as PHI/upvalue/escaped
    table references, previous-nil in-bounds array slots, existing nil-value
-   hash slots, and non-numeric new hash keys, then lowered through
+   hash slots, non-numeric new hash keys, and fresh numeric insertions, then
+   lowered through
    `lj_tab_storetv_forjit_array(parent,dst,src)` or
-   `lj_tab_storetv_forjit_hash(parent,dst,src)`. The helpers release-publish
-   the TValue and run the GC2 parent-aware value barrier, and the weak-aware
-   helper path marks weak keys/values during `P_WEAK`. This is still an interim
-   bridge rather than the final generated-store protocol. Numeric new-key
-   insertion that may grow or move into the array part continues to raise the
-   normal NYI-bytecode trace error before `HSTORE` is emitted for the
-   unresolved slot.
-   The final generation-aware trace
+   `lj_tab_storetv_forjit_hash(parent,dst,src)`, with numeric `NEWREF` stores
+   using `lj_tab_storetv_forjit_newref(parent,dst,src)` so array-returned slots
+   are not interpreted as hash nodes. The helpers release-publish the TValue and
+   run the GC2 parent-aware value barrier, and the weak-aware helper path marks
+   weak keys/values during `P_WEAK`. This is still an interim bridge rather than
+   the final generated-store protocol. The final generation-aware trace
    write/barrier protocol remains required before raw generated table stores can
    replace this helper bridge.
 2. **TDUP/TNEW colo**: colo removed (06 §6.2) — recorder paths that

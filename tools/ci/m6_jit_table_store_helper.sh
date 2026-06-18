@@ -9,18 +9,22 @@ make -C "$ROOT/src" >/dev/null
 for needle in \
   'lj_tab_storetv_forjit_array(lua_State *L, GCtab *parent' \
   'lj_tab_storetv_forjit_hash(lua_State *L, GCtab *parent' \
+  'lj_tab_storetv_forjit_newref(lua_State *L, GCtab *parent' \
   'lj_gc2_barrier_tv_pair(L, obj2gco(parent), dst);  /* M10: traced parent barrier. */' \
   'lj_gc2_barrier_weak_write(L, parent, NULL, dst);  /* M8: traced weak-value array write. */' \
   'lj_gc2_barrier_weak_write(L, parent, &n->key, dst);  /* M8: traced weak hash write. */' \
+  'lj_gc2_barrier_weak_write(L, parent, NULL, dst);  /* M8: traced numeric NEWREF write. */' \
   'Node *n = (Node *)dst;  /* Node.val is the first field. */' \
   'IRCALL_lj_tab_storetv_forjit_array' \
   'IRCALL_lj_tab_storetv_forjit_hash' \
+  'IRCALL_lj_tab_storetv_forjit_newref' \
   'tabref = IR(xref->op1)->op1' \
   'xref->o == IR_NEWREF' \
+  'id = IRCALL_lj_tab_storetv_forjit_newref' \
   'asm_ahstore_forjit(ASMState *as, IRIns *ir)' \
   '#if defined(__linux__) && LJ_TARGET_X64' \
   'IRRef lim = poll_alias_limit(J, xref);' \
-  'M6: no numeric new HSTORE bridge.' \
+  'M6: numeric NEWREF/HSTORE uses the generic returned-slot helper.' \
   'M6: previous-nil in-bounds ASTORE/HSTORE uses the helper bridge.'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_tab.c" "$ROOT/src/lj_tab.h" \
@@ -120,7 +124,7 @@ local function array_insert(n)
 end
 local ai = array_insert(80)
 assert(ai[1] == 80)
-assert(not util.traceinfo(1), "trace-local array insertion unexpectedly traced")
+assert(util.traceinfo(1), "trace-local array insertion did not trace")
 
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
@@ -189,9 +193,10 @@ assert(util.traceinfo(1), "nested escaped existing table store did not trace")
 HASH_IR=$(mktemp "${TMPDIR:-/tmp}/lj-m6-hstore-ir.XXXXXX")
 NEW_HASH_IR=$(mktemp "${TMPDIR:-/tmp}/lj-m6-new-hstore-ir.XXXXXX")
 ARRAY_IR=$(mktemp "${TMPDIR:-/tmp}/lj-m6-astore-ir.XXXXXX")
+NEW_ARRAY_IR=$(mktemp "${TMPDIR:-/tmp}/lj-m6-new-array-hstore-ir.XXXXXX")
 OLD_NIL_HASH_IR=$(mktemp "${TMPDIR:-/tmp}/lj-m6-oldnil-hstore-ir.XXXXXX")
 OLD_NIL_ARRAY_IR=$(mktemp "${TMPDIR:-/tmp}/lj-m6-oldnil-astore-ir.XXXXXX")
-trap 'rm -f "$HASH_IR" "$NEW_HASH_IR" "$ARRAY_IR" "$OLD_NIL_HASH_IR" "$OLD_NIL_ARRAY_IR"' EXIT HUP INT TERM
+trap 'rm -f "$HASH_IR" "$NEW_HASH_IR" "$ARRAY_IR" "$NEW_ARRAY_IR" "$OLD_NIL_HASH_IR" "$OLD_NIL_ARRAY_IR"' EXIT HUP INT TERM
 
 LUA_PATH="$ROOT/src/?.lua;$ROOT/src/jit/?.lua;;" \
   "$ROOT/src/luajit" -jdump=ir -e '
@@ -299,6 +304,32 @@ LUA_PATH="$ROOT/src/?.lua;$ROOT/src/jit/?.lua;;" \
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
 local util = require("jit.util")
+local function run(n)
+  local out = { 0 }
+  for i = 1, n do
+    local t = {}
+    t[1] = i
+    out = t
+  end
+  return out
+end
+local out = run(40)
+assert(out[1] == 40)
+assert(util.traceinfo(1), "trace-local new numeric store did not trace")
+' > "$NEW_ARRAY_IR"
+
+if ! grep -q 'TNEW' "$NEW_ARRAY_IR" || ! grep -q 'NEWREF' "$NEW_ARRAY_IR" ||
+   ! grep -q 'HSTORE' "$NEW_ARRAY_IR" || ! grep -q 'XPOLL' "$NEW_ARRAY_IR"; then
+  echo "guardrail: trace-local new numeric store must record TNEW/NEWREF/HSTORE with XPOLL" >&2
+  cat "$NEW_ARRAY_IR" >&2
+  exit 1
+fi
+
+LUA_PATH="$ROOT/src/?.lua;$ROOT/src/jit/?.lua;;" \
+  "$ROOT/src/luajit" -jdump=ir -e '
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local util = require("jit.util")
 local a = { 0, nil, 0 }
 for i = 1, 80 do
   a[2] = i
@@ -317,7 +348,7 @@ fi
 
 SHARED_HASH_IR=$(mktemp "${TMPDIR:-/tmp}/lj-m6-shared-hstore-ir.XXXXXX")
 SHARED_ARRAY_IR=$(mktemp "${TMPDIR:-/tmp}/lj-m6-shared-astore-ir.XXXXXX")
-trap 'rm -f "$HASH_IR" "$NEW_HASH_IR" "$ARRAY_IR" "$OLD_NIL_HASH_IR" "$OLD_NIL_ARRAY_IR" "$SHARED_HASH_IR" "$SHARED_ARRAY_IR"' EXIT HUP INT TERM
+trap 'rm -f "$HASH_IR" "$NEW_HASH_IR" "$ARRAY_IR" "$NEW_ARRAY_IR" "$OLD_NIL_HASH_IR" "$OLD_NIL_ARRAY_IR" "$SHARED_HASH_IR" "$SHARED_ARRAY_IR"' EXIT HUP INT TERM
 
 LUA_PATH="$ROOT/src/?.lua;$ROOT/src/jit/?.lua;;" \
   "$ROOT/src/luajit" -jdump=ir -e '
