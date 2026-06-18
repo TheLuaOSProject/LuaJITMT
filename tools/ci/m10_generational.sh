@@ -15,9 +15,9 @@ for needle in \
   'uint32_t generational' \
   'uint32_t cycle_minor_requested' \
   'uint32_t cycle_sweep_minor' \
-  'uint32_t minor_sweep_enabled' \
+  'uint32_t minor_sweep_enabled;  /* Public gate for minor sweep identity. */' \
   'uint32_t cycle_roots_minor' \
-  'uint32_t minor_roots_enabled' \
+  'uint32_t minor_roots_enabled;  /* Public gate for minor root selection. */' \
   'uint32_t force_major' \
   'uint64_t major_cycle_starts' \
   'uint64_t minor_cycle_requests' \
@@ -34,6 +34,9 @@ for needle in \
   'la_store32_rel(&g->gc2.generational, want)' \
   'tg->mark_active = la_load32_acq(&g->gc2.generational) != 0' \
   'lj_gc2_force_major(global_State *g)' \
+  'gc2_update_public_minor_gates(global_State *g)' \
+  'la_store32_rel(&g->gc2.minor_sweep_enabled, enabled)' \
+  'la_store32_rel(&g->gc2.minor_roots_enabled, enabled)' \
   'gc2_remember_obj(global_State *g, GCobj *o)' \
   'gc2_remember_pair(global_State *g, GCobj *parent, GCobj *child)' \
   'lj_gc2_barrier_obj_pair(lua_State *L, GCobj *parent, GCobj *child)' \

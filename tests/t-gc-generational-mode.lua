@@ -31,11 +31,15 @@ assert(collectgarbage("generational") == "generational")
 assert(stats_mode() == 1)
 
 local _, before_collect = stats_mode()
+assert(before_collect.minor_sweep_enabled == 0)
+assert(before_collect.minor_roots_enabled == 0)
 collectgarbage("collect")
 local _, after_collect = stats_mode()
 assert(after_collect.cycle_minor_requested == 0)
 assert(after_collect.cycle_sweep_minor == 0)
 assert(after_collect.cycle_roots_minor == 0)
+assert(after_collect.minor_sweep_enabled == 1)
+assert(after_collect.minor_roots_enabled == 1)
 assert(after_collect.major_cycle_starts >= before_collect.major_cycle_starts)
 assert(after_collect.minor_cycle_requests == before_collect.minor_cycle_requests)
 
@@ -56,6 +60,9 @@ assert(after_remember.minor_roots_deferred >= before_remember.minor_roots_deferr
 
 assert(collectgarbage("incremental") == "generational")
 assert(stats_mode() == 0)
+local _, after_incremental = stats_mode()
+assert(after_incremental.minor_sweep_enabled == 0)
+assert(after_incremental.minor_roots_enabled == 0)
 
 assert(collectgarbage("incremental") == "incremental")
 assert(stats_mode() == 0)

@@ -856,9 +856,9 @@ typedef struct GC2State {
   uint64_t minor_cycle_requests;  /* Generational minor requests seen. */
   uint32_t cycle_minor_requested;  /* Current cycle requested minor mode. */
   uint32_t cycle_sweep_minor;  /* Current cycle uses minor sweep identity. */
-  uint32_t minor_sweep_enabled;  /* Internal gate for minor sweep identity. */
+  uint32_t minor_sweep_enabled;  /* Public gate for minor sweep identity. */
   uint32_t cycle_roots_minor;  /* Current cycle may use minor root set. */
-  uint32_t minor_roots_enabled;  /* Internal gate for minor root selection. */
+  uint32_t minor_roots_enabled;  /* Public gate for minor root selection. */
   uint64_t minor_sweep_deferred;  /* Minor requests kept on major sweep. */
   uint64_t minor_sweep_arenas;  /* Arenas swept with minor identity. */
   uint64_t minor_roots_deferred;  /* Minor requests kept on full roots. */

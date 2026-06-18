@@ -188,6 +188,8 @@ int main(void)
   lj_gc2_set_generational(g, 1);
   assert(la_load32_acq(&g->gc2.generational) == 1);
   assert(la_load32_acq(&g->gc2.force_major) == 1);
+  assert(la_load32_acq(&g->gc2.minor_sweep_enabled) == 0);
+  assert(la_load32_acq(&g->gc2.minor_roots_enabled) == 0);
   assert(tg->mark_active == 1);
   major_starts0 = la_load64_acq(&g->gc2.major_cycle_starts);
   minor_requests0 = la_load64_acq(&g->gc2.minor_cycle_requests);
@@ -197,6 +199,8 @@ int main(void)
   assert(la_load32_acq(&g->gc2.cycle_minor_requested) == 0);
   assert(la_load32_acq(&g->gc2.force_major) == 0);
   lj_gc2_legacy_cycle_end(g);
+  assert(la_load32_acq(&g->gc2.minor_sweep_enabled) == 1);
+  assert(la_load32_acq(&g->gc2.minor_roots_enabled) == 1);
   lua_newtable(L);
   parent = tabV(L->top - 1);
   assert(lj_gc2_ssb_push(g, obj2gco(parent)) == 1);
@@ -210,6 +214,8 @@ int main(void)
 	 remembered_drained0 + 1u);
   lj_gc2_legacy_cycle_end(g);
   lj_gc2_set_generational(g, 0);
+  assert(la_load32_acq(&g->gc2.minor_sweep_enabled) == 0);
+  assert(la_load32_acq(&g->gc2.minor_roots_enabled) == 0);
   lua_settop(L, 0);
 
   lj_gc2_set_generational(g, 1);

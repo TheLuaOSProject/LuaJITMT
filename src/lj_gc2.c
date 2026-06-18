@@ -617,6 +617,16 @@ static uint32_t gc2_idle_barrier_actions(global_State *g, int flush_ssb)
   return actions;
 }
 
+static void gc2_update_public_minor_gates(global_State *g)
+{
+  uint32_t enabled;
+  if (!g)
+    return;
+  enabled = la_load32_acq(&g->gc2.generational) != 0;
+  la_store32_rel(&g->gc2.minor_sweep_enabled, enabled);
+  la_store32_rel(&g->gc2.minor_roots_enabled, enabled);
+}
+
 void lj_gc2_set_generational(global_State *g, int enabled)
 {
   uint32_t want = enabled ? 1u : 0u;
@@ -627,8 +637,10 @@ void lj_gc2_set_generational(global_State *g, int enabled)
   la_store32_rel(&g->gc2.generational, want);
   if (want)
     lj_gc2_force_major(g);  /* First generational cycle establishes old marks. */
-  else
+  else {
     la_store32_rel(&g->gc2.force_major, 0);
+    gc2_update_public_minor_gates(g);
+  }
   if (la_load32_acq(&g->gc2.phase) == LJ_GC2_IDLE)
     lj_gc2_handshake(g, gc2_idle_barrier_actions(g, 0));
 }
@@ -1008,6 +1020,7 @@ int lj_gc2_sweep_to_idle(global_State *g)
   }
   la_add64_rlx(&g->gc2.sweep_to_idle, 1);
   (void)lj_gc2_sweep_live_aggregate(g);
+  gc2_update_public_minor_gates(g);
   lj_gc2_handshake(g, gc2_idle_barrier_actions(g, 0));
   (void)lj_tg_reclaim_dead(g);
   lj_gc2_update_pacing(g);
@@ -1027,6 +1040,7 @@ void lj_gc2_legacy_cycle_end(global_State *g)
     la_add64_rlx(&g->gc2.sweep_to_idle, 1);
     (void)lj_gc2_sweep_live_aggregate(g);
   }
+  gc2_update_public_minor_gates(g);
   lj_gc2_handshake(g, gc2_idle_barrier_actions(g, 0));
   (void)lj_tg_reclaim_dead(g);
   lj_gc2_update_pacing(g);

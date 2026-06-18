@@ -565,19 +565,18 @@ override. Entering generational mode also publishes a one-shot major baseline
 before later generational allocation-triggered mark begins record minor-cycle
 requests. Idle generational barriers conservatively queue remembered entries
 into SSB without draining outside a cycle and force a major on overflow; the
-actual minor execution path stays disabled until minor-cycle roots and precise
-remembered SSB filtering are wired. Minor sweep identity is routed through a
-latched `cycle_sweep_minor` flag and internal off-by-default
-`minor_sweep_enabled` gate, with deferred public minor requests counted until
-root filtering and enablement are safe. Parent-aware table/object, fast
+actual minor execution path stays behind a first-major-baseline gate. Minor
+sweep identity is routed through a latched `cycle_sweep_minor` flag and public
+`minor_sweep_enabled` gate, which turns on with `minor_roots_enabled` after that
+baseline completes. Parent-aware table/object, fast
 table-value, resolved meta-store, and closed-upvalue value barriers now use that
 gate to filter for old-parent/young-child remembered pairs, while remaining
 root value-only contexts stay conservative until their parent context is
 explicit.
 Minor root selection has matching `cycle_roots_minor` /
 `minor_roots_enabled` latches and `minor_roots_deferred` telemetry. The
-`HS_SCAN_ROOTS` bridge routes through a cycle-root selector, but public cycles
-still use the full root set until the internal minor-root gate is enabled.
+`HS_SCAN_ROOTS` bridge routes through a cycle-root selector, so public cycles
+after the baseline can use the minor root scanner.
 
 ## 5.13 Torture & debug
 `collectgarbage("torture",1)`: leader runs continuous back-to-back cycles
