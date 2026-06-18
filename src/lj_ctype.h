@@ -477,16 +477,19 @@ static LJ_AINLINE CType *ctype_get(CTState *cts, CTypeID id)
   return &ctype_tab_acq(cts)[ctype_check(cts, id)];
 }
 
-/* Get C type ID for a C type. */
-#define ctype_typeid(cts, ct)	((CTypeID)((ct) - (cts)->tab))
-
-/* Get child C type. */
-static LJ_AINLINE CType *ctype_child(CTState *cts, CType *ct)
+/* Get child C type ID. */
+static LJ_AINLINE CTypeID ctype_childid(CTState *cts, CType *ct)
 {
   lj_assertCTS(!(ctype_isvoid(ct->info) || ctype_isstruct(ct->info) ||
 	       ctype_isbitfield(ct->info)),
 	       "ctype %08x has no children", ct->info);
-  return ctype_get(cts, ctype_cid(ct->info));
+  return ctype_cid(ct->info);
+}
+
+/* Get child C type. */
+static LJ_AINLINE CType *ctype_child(CTState *cts, CType *ct)
+{
+  return ctype_get(cts, ctype_childid(cts, ct));
 }
 
 /* Get raw type ID for a C type ID. */
@@ -518,10 +521,20 @@ static LJ_AINLINE CType *ctype_raw(CTState *cts, CTypeID id)
 }
 
 /* Get raw type of the child of a C type. */
+static LJ_AINLINE CTypeID ctype_rawchildid(CTState *cts, CType *ct)
+{
+  CTypeID id;
+  do {
+    id = ctype_childid(cts, ct);
+    ct = ctype_get(cts, id);
+  } while (ctype_isattrib(ct->info));
+  return id;
+}
+
+/* Get raw type of the child of a C type. */
 static LJ_AINLINE CType *ctype_rawchild(CTState *cts, CType *ct)
 {
-  do { ct = ctype_child(cts, ct); } while (ctype_isattrib(ct->info));
-  return ct;
+  return ctype_get(cts, ctype_rawchildid(cts, ct));
 }
 
 /* Set the name of a C type table element. */

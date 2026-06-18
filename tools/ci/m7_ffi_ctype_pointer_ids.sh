@@ -12,6 +12,7 @@ for needle in \
   'return ctype_get(cts, ctype_rawrefid(cts, id))' \
   'lj_cdata_index_l(lua_State *L, CTState *cts, GCcdata *cd' \
   'CTypeID *idp' \
+  'ctype_rawchildid(CTState *cts, CType *ct)' \
   'static int ffi_index_meta(lua_State *L, CTState *cts, CTypeID id' \
   'lj_cdata_index_l(L, cts, cdataV(o), o+1, &p, &qual, &id)' \
   'CTypeID id = ctype_rawid(cts, cd->ctypeid)' \
@@ -89,6 +90,11 @@ if rg -n 'ctype_typeid\(' "$ROOT/src/lj_ctype.c" "$ROOT/src/lj_cparse.c" \
     "$ROOT/src/lj_crecord.c" "$ROOT/src/lj_cconv.c" \
     "$ROOT/src/lj_carith.c" "$ROOT/src/lj_cdata.c" "$ROOT/src/lib_ffi.c"; then
   echo "guardrail: x86_64 FFI raw-ID paths must not derive IDs from CType *" >&2
+  exit 1
+fi
+
+if rg -n 'ctype_typeid\(' "$ROOT/src"; then
+  echo "guardrail: ctype table readers must not derive IDs from CType *" >&2
   exit 1
 fi
 

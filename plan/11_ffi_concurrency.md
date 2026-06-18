@@ -26,7 +26,9 @@ GCtab *miscmap; CCallback cb; CTypeID1 hash[CTHASH_SIZE]; }`
   Current implementation note: the published pointer is `CTState.tabh`, a
   `CTypeTab` header carrying `sizetab`, retire metadata, and `tab[]`;
   `cts->tab`/`cts->sizetab` are compatibility mirrors, not the reader
-  correctness boundary.
+  correctness boundary. Code must carry `CTypeID`s (including child/raw-child
+  IDs) instead of recovering IDs by subtracting `CType *` values from those
+  mirrors.
 - **ID allocation = ticket**: original sketch was `id = la_add32(&cts->top,
   n)` then bounds check vs sizetab snapshot → grow loop. Current implementation
   uses a CAS reservation loop instead: acquire `tabh`, grow/publish a bigger
