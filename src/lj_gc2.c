@@ -1388,6 +1388,16 @@ void lj_gc2_scan_minor_roots(global_State *g, lua_State *L)
 #endif
 }
 
+void lj_gc2_scan_cycle_roots(global_State *g, lua_State *L)
+{
+  if (!g)
+    return;
+  if (la_load32_acq(&g->gc2.cycle_roots_minor))
+    lj_gc2_scan_minor_roots(g, L);
+  else
+    lj_gc2_scan_roots(g, L);
+}
+
 static void *gc2_mark_base(GCobj *o);
 static int gc2_mark_base_traversable(global_State *g, void *p);
 static int gc2_grey_push(global_State *g, GCobj *o);
@@ -3343,7 +3353,7 @@ uint32_t lj_gc2_fixpoint_round(global_State *g, lua_State *L, uint32_t limit)
   (void)gc2_worker_drain_budget(g, limit);  /* 05 section 5.7.1 pre-round drain. */
   acked = lj_gc2_handshake(g, LJ_GC2_HS_SCAN_ROOTS|LJ_GC2_HS_FLUSH_SSB);
   if (acked == 0 && L) {
-    lj_gc2_scan_roots(g, L);
+    lj_gc2_scan_cycle_roots(g, L);
     (void)lj_gc2_flush_ssb(g, L2TG(L));
   }
   (void)gc2_worker_drain_budget(g, limit);  /* 05 section 5.7.1 post-root drain. */

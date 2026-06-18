@@ -59,6 +59,7 @@ LJ_FUNC uint32_t lj_gc2_handshake(global_State *g, uint32_t actions);
 LJ_FUNC uint32_t lj_gc2_reclaim_retired(global_State *g, uint64_t epoch);
 LJ_FUNC void lj_gc2_scan_roots(global_State *g, lua_State *L);
 LJ_FUNC void lj_gc2_scan_minor_roots(global_State *g, lua_State *L);
+LJ_FUNC void lj_gc2_scan_cycle_roots(global_State *g, lua_State *L);
 LJ_FUNC int lj_gc2_ssb_push(global_State *g, GCobj *o);
 LJ_FUNC uint32_t lj_gc2_flush_ssb(global_State *g, TGState *tg);
 LJ_FUNC uint32_t lj_gc2_drain_ssb(global_State *g);

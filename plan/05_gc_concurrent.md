@@ -570,9 +570,9 @@ root filtering and enablement are safe. Parent-aware table/object barriers now
 use that gate to filter for old-parent/young-child remembered pairs, while
 value-only contexts stay conservative until their parent context is explicit.
 Minor root selection has matching `cycle_roots_minor` /
-`minor_roots_enabled` latches and `minor_roots_deferred` telemetry, but public
-cycles still use the full root set while the gated `lj_gc2_scan_minor_roots()`
-path is tested separately before public minor roots are enabled.
+`minor_roots_enabled` latches and `minor_roots_deferred` telemetry. The
+`HS_SCAN_ROOTS` bridge routes through a cycle-root selector, but public cycles
+still use the full root set until the internal minor-root gate is enabled.
 
 ## 5.13 Torture & debug
 `collectgarbage("torture",1)`: leader runs continuous back-to-back cycles

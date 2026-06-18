@@ -74,7 +74,7 @@ void lj_safepoint_apply_tg(global_State *g, TGState *tg, uint32_t actions)
     la_store8_rel(&tg->alloc.alloc_black, 0);
   if (actions & LJ_GC2_HS_SCAN_ROOTS) {
     lua_State *L = tg->cur_L;
-    lj_gc2_scan_roots(g, L);  /* 05 section 5.7.1/5.7.2. */
+    lj_gc2_scan_cycle_roots(g, L);  /* 05 section 5.7.1/5.7.2. */
   }
   if (actions & LJ_GC2_HS_FLUSH_SSB)
     lj_gc2_flush_ssb(g, tg);  /* 05 section 5.6.2. */
