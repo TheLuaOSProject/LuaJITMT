@@ -1,16 +1,20 @@
 #!/bin/sh
-# Guard the M6 x64 shared-array AREF pair-stability bridge.
+# Guard the M6 x64 shared-array AREF generation pairing bridges.
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 TMP=${TMPDIR:-/tmp}/lj-m6-aref-pair.$$
-trap 'rm -f "$TMP"' EXIT
+TMP_COLO=${TMPDIR:-/tmp}/lj-m6-aref-pair-colo.$$
+trap 'rm -f "$TMP" "$TMP_COLO"' EXIT
 
 make -C "$ROOT/src" >/dev/null
 
 for needle in \
   'rec_idx_tab_trace_local(jit_State *J, TRef tab)' \
-  'M6: shared AREF guards TAB_ARRAY pair stability until AHdr lands.' \
+  'rec_idx_array_hdr_asize(jit_State *J, TRef arrayref)' \
+  'M6: shared separated AREF pairs slots with TabArrayHdr.asize.' \
+  'emitir(IRTI(IR_XLOAD), hdrref, 0);' \
+  'M6: legacy shared AREF guards TAB_ARRAY pair stability.' \
   'emitir(IRTG(IR_EQ, IRT_PGC), arrayref2, arrayref);'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_record.c"; then
@@ -39,9 +43,12 @@ if ! awk '
   /---- TRACE 1 IR/ { inir = 1; next }
   /---- TRACE 1 stop/ {
     done = 1
-    exit !(array >= 4 && asize >= 2 && eq >= 2 && aref && aload && xpoll)
+    exit !(array >= 2 && hdradd >= 2 && xload >= 2 && asize == 0 &&
+	    eq == 0 && aref && aload && xpoll)
   }
   inir && /FLOAD .*tab[.]array/ { array++ }
+  inir && / p64 ADD / && /-8/ { hdradd++ }
+  inir && / XLOAD / { xload++ }
   inir && /FLOAD .*tab[.]asize/ { asize++ }
   inir && / p64 EQ / { eq++ }
   inir && / AREF / { aref = 1 }
@@ -50,7 +57,43 @@ if ! awk '
   END { if (!done) exit 1 }
 ' "$TMP"; then
   cat "$TMP" >&2
-  echo "guardrail: shared array reads must guard paired TAB_ARRAY loads" >&2
+  echo "guardrail: separated shared array reads must load bounds from TabArrayHdr" >&2
+  exit 1
+fi
+
+LUA_PATH="$ROOT/src/?.lua;$ROOT/src/jit/?.lua;;" \
+  timeout 20s "$ROOT/src/luajit" -jdump=ir -e '
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    jit.off()
+    local t = { 1, 2, 3, 4 }
+    jit.on()
+    local s = 0
+    for i = 1, 80 do
+      local k = (i % 4) + 1
+      s = s + (t[k] or 0)
+    end
+    assert(s > 0)
+  ' >"$TMP_COLO" 2>&1
+
+if ! awk '
+  /---- TRACE 1 IR/ { inir = 1; next }
+  /---- TRACE 1 stop/ {
+    done = 1
+    exit !(array >= 4 && asize >= 2 && eq >= 2 && xload == 0 &&
+	    aref && aload && xpoll)
+  }
+  inir && /FLOAD .*tab[.]array/ { array++ }
+  inir && /FLOAD .*tab[.]asize/ { asize++ }
+  inir && / p64 EQ / { eq++ }
+  inir && / XLOAD / { xload++ }
+  inir && / AREF / { aref = 1 }
+  inir && / ALOAD / { aload = 1 }
+  inir && / XPOLL / { xpoll = 1 }
+  END { if (!done) exit 1 }
+' "$TMP_COLO"; then
+  cat "$TMP_COLO" >&2
+  echo "guardrail: colocated shared array reads must keep the legacy pair guard" >&2
   exit 1
 fi
 
@@ -86,4 +129,4 @@ if ! rg -F -q 'm6_jit_aref_pair_guard.sh' "$ROOT/tools/ci/m6_jit.sh"; then
   exit 1
 fi
 
-echo "M6 JIT shared AREF pair guard passed"
+echo "M6 JIT shared AREF generation-pair guard passed"

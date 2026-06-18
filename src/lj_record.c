@@ -1467,6 +1467,15 @@ static int rec_idx_tab_trace_local(jit_State *J, TRef tab)
   return ir->o == IR_TNEW || ir->o == IR_TDUP;
 }
 
+#if defined(__linux__) && LJ_TARGET_X64
+static TRef rec_idx_array_hdr_asize(jit_State *J, TRef arrayref)
+{
+  TRef hdrref = emitir(IRT(IR_ADD, IRT_PGC), arrayref,
+		       lj_ir_kintpgc(J, -(int32_t)sizeof(TabArrayHdr)));
+  return emitir(IRTI(IR_XLOAD), hdrref, 0);
+}
+#endif
+
 /* Record indexed key lookup. */
 static TRef rec_idx_key(jit_State *J, RecordIndex *ix, IRRef *rbref,
 			IRType1 *rbguard)
@@ -1496,16 +1505,23 @@ static TRef rec_idx_key(jit_State *J, RecordIndex *ix, IRRef *rbref,
       if ((MSize)k < asize) {  /* Currently an array key? */
 	TRef arrayref;
 #if defined(__linux__) && LJ_TARGET_X64
+	int trace_local = rec_idx_tab_trace_local(J, ix->tab);
 	arrayref = emitir(IRT(IR_FLOAD, IRT_PGC), ix->tab, IRFL_TAB_ARRAY);
+	if (!trace_local && lj_tab_array_separated(t)) {
+	  /* M6: shared separated AREF pairs slots with TabArrayHdr.asize. */
+	  asizeref = rec_idx_array_hdr_asize(J, arrayref);
+	  rec_idx_abc(J, asizeref, ikey, asize);
+	} else {
 #endif
-	asizeref = emitir(IRTI(IR_FLOAD), ix->tab, IRFL_TAB_ASIZE);
-	rec_idx_abc(J, asizeref, ikey, asize);
+	  asizeref = emitir(IRTI(IR_FLOAD), ix->tab, IRFL_TAB_ASIZE);
+	  rec_idx_abc(J, asizeref, ikey, asize);
 #if defined(__linux__) && LJ_TARGET_X64
-	if (!rec_idx_tab_trace_local(J, ix->tab)) {
-	  TRef arrayref2 = emitir(IRT(IR_FLOAD, IRT_PGC), ix->tab,
-				  IRFL_TAB_ARRAY);
-	  /* M6: shared AREF guards TAB_ARRAY pair stability until AHdr lands. */
-	  emitir(IRTG(IR_EQ, IRT_PGC), arrayref2, arrayref);
+	  if (!trace_local) {
+	    TRef arrayref2 = emitir(IRT(IR_FLOAD, IRT_PGC), ix->tab,
+				    IRFL_TAB_ARRAY);
+	    /* M6: legacy shared AREF guards TAB_ARRAY pair stability. */
+	    emitir(IRTG(IR_EQ, IRT_PGC), arrayref2, arrayref);
+	  }
 	}
 #else
 	arrayref = emitir(IRT(IR_FLOAD, IRT_PGC), ix->tab, IRFL_TAB_ARRAY);
