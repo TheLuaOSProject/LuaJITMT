@@ -859,6 +859,7 @@ typedef struct GC2State {
   uint64_t remembered_barriers;  /* Idle generational barriers observed. */
   uint64_t remembered_pushed;  /* Idle remembered entries queued. */
   uint64_t remembered_overflows;  /* Remembered SSB overflows forcing major. */
+  uint64_t remembered_drained;  /* Remembered entries consumed by minor starts. */
   uint64_t marks_this_round;  /* New arena/HugeTab marks this round. */
   GC2SSBNode *ssb_head;	/* Published mutator SSB buffers. */
   uint32_t ssb_published;  /* Published SSB node count. */

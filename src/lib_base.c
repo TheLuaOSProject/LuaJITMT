@@ -535,6 +535,8 @@ static void gc_stats_push(lua_State *L)
 		  la_load64_acq(&gc2->remembered_pushed));
   gc_stats_setnum(L, t, "remembered_overflows",
 		  la_load64_acq(&gc2->remembered_overflows));
+  gc_stats_setnum(L, t, "remembered_drained",
+		  la_load64_acq(&gc2->remembered_drained));
   gc_stats_setnum(L, t, "poll_ack_samples",
 		  la_load64_acq(&gc2->hs_ack_latency_samples));
   gc_stats_setnum(L, t, "poll_ack_latency_sum_ns",

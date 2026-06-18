@@ -21,14 +21,17 @@ for needle in \
   'uint64_t remembered_barriers' \
   'uint64_t remembered_pushed' \
   'uint64_t remembered_overflows' \
+  'uint64_t remembered_drained' \
   'lj_gc2_set_generational(global_State *g, int enabled)' \
   'la_store32_rel(&g->gc2.generational, want)' \
   'tg->mark_active = la_load32_acq(&g->gc2.generational) != 0' \
   'lj_gc2_force_major(global_State *g)' \
   'gc2_remember_obj(global_State *g, GCobj *o)' \
+  'gc2_flush_and_drain_ssb(global_State *g)' \
   'gc_stats_setint(L, t, "generational"' \
   'minor_cycle_requests' \
   'remembered_barriers' \
+  'remembered_drained' \
   'collectgarbage("generational")' \
   'collectgarbage("incremental")'
 do

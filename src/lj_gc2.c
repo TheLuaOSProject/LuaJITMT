@@ -51,6 +51,16 @@ static void gc2_finclaim_reset(global_State *g);
 static int gc2_tab_weak_mode(global_State *g, GCtab *t, GCtab *mt);
 static void *gc2_worker_main(void *arg);
 
+static uint32_t gc2_flush_and_drain_ssb(global_State *g)
+{
+  if (!g)
+    return 0;
+  if (la_load32_acq(&g->gc2.phase) == LJ_GC2_IDLE)
+    return 0;
+  (void)lj_gc2_handshake(g, LJ_GC2_HS_FLUSH_SSB);
+  return lj_gc2_drain_ssb(g);
+}
+
 void lj_gc2_init(global_State *g)
 {
   uint32_t i;
@@ -79,6 +89,7 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.remembered_barriers, 0);
   la_store64_rlx(&g->gc2.remembered_pushed, 0);
   la_store64_rlx(&g->gc2.remembered_overflows, 0);
+  la_store64_rlx(&g->gc2.remembered_drained, 0);
   la_store64_rlx(&g->gc2.marks_this_round, 0);
   g->gc2.ssb_head = NULL;
   la_store32_rlx(&g->gc2.ssb_published, 0);
@@ -530,7 +541,7 @@ void lj_gc2_legacy_mark_begin(global_State *g)
 {
   TGState *tg = G2TG(g);
   uint32_t leader;
-  uint32_t forced_major, minor_requested;
+  uint32_t forced_major, minor_requested, drained;
   forced_major = la_xchg32_acqrel(&g->gc2.force_major, 0);
   minor_requested = !forced_major && la_load32_acq(&g->gc2.generational) != 0;
   la_store32_rel(&g->gc2.cycle_minor_requested, minor_requested);
@@ -546,7 +557,8 @@ void lj_gc2_legacy_mark_begin(global_State *g)
   if (leader)
     la_add64_rlx(&g->gc2.cycle_starts, 1);
   la_store64_rlx(&g->gc2.marks_this_round, 0);
-  (void)lj_gc2_drain_ssb(g);  /* Finish prior-cycle scaffold work. */
+  if (!minor_requested)
+    (void)gc2_flush_and_drain_ssb(g);  /* Discard remembered roots for majors. */
   (void)lj_tg_reclaim_dead(g);
   lj_assertG(gc2_grey_empty(g), "gc2 grey deque not empty at mark begin");
   la_store64_rlx(&g->gc2.grey_top, 0);
@@ -557,7 +569,15 @@ void lj_gc2_legacy_mark_begin(global_State *g)
   gc2_finclaim_reset(g);
   gc2_reset_alloc_trigger(g);
   gc2_clear_marks_all(g);
-  lj_gc2_handshake(g, LJ_GC2_HS_ENABLE_BARRIER|LJ_GC2_HS_ALLOC_BLACK);
+  if (minor_requested) {
+    lj_gc2_handshake(g, LJ_GC2_HS_ENABLE_BARRIER|LJ_GC2_HS_ALLOC_BLACK|
+		     LJ_GC2_HS_FLUSH_SSB);
+    drained = lj_gc2_drain_ssb(g);
+    if (drained)
+      la_add64_rlx(&g->gc2.remembered_drained, drained);
+  } else {
+    lj_gc2_handshake(g, LJ_GC2_HS_ENABLE_BARRIER|LJ_GC2_HS_ALLOC_BLACK);
+  }
   lj_gc2_worker_wake(g);  /* 05 section 5.6.3 parked worker scheduler. */
 }
 
@@ -932,11 +952,11 @@ void lj_gc2_legacy_preserve_abort(global_State *g)
   if (!g)
     return;
   la_store32_rel(&g->gc2.cycle_leader, 0);
+  (void)gc2_flush_and_drain_ssb(g);
   phase = la_xchg32_acqrel(&g->gc2.phase, LJ_GC2_IDLE);
   if (phase != LJ_GC2_IDLE)
     la_add64_rlx(&g->gc2.preserve_abort_to_idle, 1);
-  lj_gc2_handshake(g, gc2_idle_barrier_actions(g, 1));
-  (void)lj_gc2_drain_ssb(g);
+  lj_gc2_handshake(g, gc2_idle_barrier_actions(g, 0));
   (void)lj_tg_reclaim_dead(g);
 }
 
@@ -954,6 +974,7 @@ int lj_gc2_sweep_to_idle(global_State *g)
     return 0;
   }
   la_store32_rel(&g->gc2.cycle_leader, 0);
+  (void)gc2_flush_and_drain_ssb(g);
   phase = la_xchg32_acqrel(&g->gc2.phase, LJ_GC2_IDLE);
   if (phase != LJ_GC2_SWEEP) {
     la_store32_rel(&g->gc2.worker_active, 0);
@@ -961,8 +982,7 @@ int lj_gc2_sweep_to_idle(global_State *g)
   }
   la_add64_rlx(&g->gc2.sweep_to_idle, 1);
   (void)lj_gc2_sweep_live_aggregate(g);
-  lj_gc2_handshake(g, gc2_idle_barrier_actions(g, 1));
-  (void)lj_gc2_drain_ssb(g);
+  lj_gc2_handshake(g, gc2_idle_barrier_actions(g, 0));
   (void)lj_tg_reclaim_dead(g);
   lj_gc2_update_pacing(g);
   la_store32_rel(&g->gc2.worker_active, 0);
@@ -975,13 +995,13 @@ void lj_gc2_legacy_cycle_end(global_State *g)
   if (!g)
     return;
   la_store32_rel(&g->gc2.cycle_leader, 0);
+  (void)gc2_flush_and_drain_ssb(g);
   phase = la_xchg32_acqrel(&g->gc2.phase, LJ_GC2_IDLE);
   if (phase == LJ_GC2_SWEEP) {
     la_add64_rlx(&g->gc2.sweep_to_idle, 1);
     (void)lj_gc2_sweep_live_aggregate(g);
   }
-  lj_gc2_handshake(g, gc2_idle_barrier_actions(g, 1));
-  (void)lj_gc2_drain_ssb(g);
+  lj_gc2_handshake(g, gc2_idle_barrier_actions(g, 0));
   (void)lj_tg_reclaim_dead(g);
   lj_gc2_update_pacing(g);
 }

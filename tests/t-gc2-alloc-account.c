@@ -25,6 +25,7 @@ int main(void)
   uint64_t epoch0;
   uint64_t cycle_requests0, cycle_starts0;
   uint64_t major_starts0, minor_requests0;
+  uint64_t remembered_drained0;
   uint64_t assist_runs0, assist_grey0, assist_ssb0;
   uint64_t assist_weak0;
   uint64_t weak_clear_tables0, weak_clear_cleared0;
@@ -44,6 +45,7 @@ int main(void)
   assert(la_load64_acq(&g->gc2.minor_cycle_requests) == 0);
   assert(la_load32_acq(&g->gc2.cycle_minor_requested) == 0);
   assert(la_load32_acq(&g->gc2.force_major) == 0);
+  assert(la_load64_acq(&g->gc2.remembered_drained) == 0);
   assert(la_load32_acq(&g->gc2.assist_shift) ==
 	 lj_gc2_assist_shift_from_stepmul(g->gc.stepmul));
   assert(la_load64_acq(&g->gc2.trigger_bytes) >= LJ_GC2_ACCT_FLUSH);
@@ -140,7 +142,25 @@ int main(void)
   assert(la_load32_acq(&g->gc2.cycle_minor_requested) == 0);
   assert(la_load32_acq(&g->gc2.force_major) == 0);
   lj_gc2_legacy_cycle_end(g);
-  la_store32_rel(&g->gc2.generational, 0);
+
+  lua_settop(L, 0);
+  lj_gc2_set_generational(g, 1);
+  assert(la_load32_acq(&g->gc2.generational) == 1);
+  assert(tg->mark_active == 1);
+  lua_newtable(L);
+  parent = tabV(L->top - 1);
+  assert(lj_gc2_ssb_push(g, obj2gco(parent)) == 1);
+  assert(!lj_gc2_ssb_empty(g));
+  remembered_drained0 = la_load64_acq(&g->gc2.remembered_drained);
+  lj_gc2_legacy_mark_begin(g);
+  assert(la_load32_acq(&g->gc2.cycle_minor_requested) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(parent)) == 1);
+  assert(lj_gc2_ssb_empty(g));
+  assert(la_load64_acq(&g->gc2.remembered_drained) >=
+	 remembered_drained0 + 1u);
+  lj_gc2_legacy_cycle_end(g);
+  lj_gc2_set_generational(g, 0);
+  lua_settop(L, 0);
 
   lj_gc_threshold_store(g, LJ_MAX_MEM);
   (void)la_xchg64_acqrel(&g->gc2.alloc_since_trigger, 0);

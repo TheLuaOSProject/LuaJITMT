@@ -8,6 +8,7 @@ local function stats_mode()
   assert(type(stats.remembered_barriers) == "number")
   assert(type(stats.remembered_pushed) == "number")
   assert(type(stats.remembered_overflows) == "number")
+  assert(type(stats.remembered_drained) == "number")
   return stats.generational, stats
 end
 
@@ -37,6 +38,7 @@ local _, after_remember = stats_mode()
 assert(after_remember.remembered_barriers > before_remember.remembered_barriers)
 assert(after_remember.remembered_pushed > before_remember.remembered_pushed)
 assert(after_remember.remembered_overflows >= before_remember.remembered_overflows)
+assert(after_remember.remembered_drained >= before_remember.remembered_drained)
 
 assert(collectgarbage("incremental") == "generational")
 assert(stats_mode() == 0)
