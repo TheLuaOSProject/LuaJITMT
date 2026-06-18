@@ -205,16 +205,22 @@ if ! awk '
 fi
 
 if ! awk '
-  /static void cdata_fin_store\(lua_State \*L,/ { infn = 1; copied = 0; weak = 0 }
-  infn && /copyTVrel\(L, tv, val\)/ { copied = 1 }
-  infn && copied && /lj_gc2_barrier_weak_key\(L, t, &key\)/ { weak = 1 }
+  /static void cdata_fin_store\(lua_State \*L,/ {
+    infn = 1; order = 0; weak = 0; flag = 0; copied = 0; pubtab = 0
+  }
+  infn && /lj_ctype_fin_order_publish\(cts, \*ordp,/ { order = NR }
+  infn && /lj_gc2_barrier_weak_key\(L, t, &key\)/ { weak = NR }
+  infn && /lj_obj_addgcflags_atomic\(obj2gco\(cd\), LJ_GC_CDATA_FIN\)/ { flag = NR }
+  infn && /copyTVrel\(L, tv, val\)/ { copied = NR }
   infn && /lj_gc_pubtab\(L, t\).*FINREG publish after claim resolution/ {
-    found = copied && weak
+    pubtab = NR
+    found = order && weak && flag && copied &&
+	    order < weak && weak < flag && flag < copied && copied < pubtab
     infn = 0
   }
   END { exit found ? 0 : 1 }
 ' "$ROOT/src/lj_cdata.c"; then
-  echo "guardrail: FINREG table publication must happen after finalizer claim resolution" >&2
+  echo "guardrail: FINREG ordered node must publish before finalizer candidate visibility" >&2
   exit 1
 fi
 

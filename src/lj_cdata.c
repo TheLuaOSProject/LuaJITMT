@@ -138,15 +138,20 @@ static void cdata_fin_store(lua_State *L, global_State *g, CTState *cts,
 {
   if (enabled) {
     TValue key;
-    copyTVrel(L, tv, val);
     setcdataV(L, &key, cd);
-    lj_gc2_barrier_weak_key(L, t, &key);
-    lj_obj_addgcflags_atomic(obj2gco(cd), LJ_GC_CDATA_FIN);
-    lj_gc2_finreg_cdata_set(g, obj2gco(cd), 1);
     if (ordp && *ordp) {
+      /*
+      ** Publish the ordered node while the slot still contains the claim
+      ** sentinel. Ordered FINREG scans wait for claim resolution before the
+      ** cdata can become a visible finalizer candidate.
+      */
       lj_ctype_fin_order_publish(cts, *ordp, obj2gco(cd), t, tv);
       *ordp = NULL;
     }
+    lj_gc2_barrier_weak_key(L, t, &key);
+    lj_obj_addgcflags_atomic(obj2gco(cd), LJ_GC_CDATA_FIN);
+    lj_gc2_finreg_cdata_set(g, obj2gco(cd), 1);
+    copyTVrel(L, tv, val);
   } else {
     lj_cdata_fin_storenil(L, tv);
     lj_obj_cleargcflags_atomic(obj2gco(cd), LJ_GC_CDATA_FIN);
