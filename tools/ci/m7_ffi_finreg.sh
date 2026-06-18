@@ -46,9 +46,11 @@ for needle in \
   'lj_ir_call(J, IRCALL_lj_cdata_setfin, trcd, trobj,' \
   'IRCALL_lj_cdata_setfin' \
   'lj_gc2_finalizer_try_enter(global_State *g)' \
-  'peer finalizer dispatch backs off'
+  'peer finalizer dispatch backs off' \
+  'worker finalizer notification timed out' \
+  'worker finalizer fired more times than registered'
 do
-  if ! rg -F -q "$needle" "$ROOT/src"; then
+  if ! rg -F -q "$needle" "$ROOT/src" "$ROOT/tests/t-ffi-gc-finreg.lua"; then
     echo "guardrail: missing FFI finalizer registry marker: $needle" >&2
     exit 1
   fi

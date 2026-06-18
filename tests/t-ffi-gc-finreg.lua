@@ -13,15 +13,18 @@ collectgarbage("stop")
 
 local ready = th.channel(nthreads)
 local start = th.channel(nthreads)
+local finalized = th.channel(nthreads * iters)
 local workers = {}
 
 for tid = 1, nthreads do
-  workers[tid] = th.spawn(function(ready_ch, start_ch, id, count)
+  workers[tid] = th.spawn(function(ready_ch, start_ch, finalized_ch, id, count)
     local ffi = require"ffi"
     local fin_obj_t = ffi.typeof("lj_m7_fin_obj_t")
     local cleared = 0
 
-    local function fin(_) end
+    local function fin(_)
+      assert(finalized_ch:send(id, 0) == true)
+    end
     local function grow_stack(n)
       if n == 0 then return 0 end
       return 1 + grow_stack(n - 1)
@@ -48,7 +51,7 @@ for tid = 1, nthreads do
 
     local expected = allocate()
     return expected
-  end, ready, start, tid, iters)
+  end, ready, start, finalized, tid, iters)
   local _, ok = ready:recv(10)
   assert(ok == true)
 end
@@ -58,12 +61,37 @@ for _ = 1, nthreads do
 end
 
 local total = 0
+local expected_by_thread = {}
 for tid = 1, nthreads do
   local ok, result = workers[tid]:join(30)
   assert(ok == true, tostring(result))
   assert(type(result) == "number")
+  expected_by_thread[tid] = result
   total = total + result
 end
+
+collectgarbage("restart")
+collectgarbage("collect")
+collectgarbage("collect")
+
+do
+  local finalized_by_thread = {}
+  for _ = 1, total do
+    local id, ok = finalized:recv(10)
+    assert(ok == true, "worker finalizer notification timed out")
+    finalized_by_thread[id] = (finalized_by_thread[id] or 0) + 1
+  end
+  for tid = 1, nthreads do
+    assert(finalized_by_thread[tid] == expected_by_thread[tid],
+           ("worker %d: finalized %d, expected %d"):format(
+             tid, finalized_by_thread[tid] or 0, expected_by_thread[tid]))
+  end
+  local extra, why = finalized:recv(0)
+  assert(extra == nil and why == "timeout",
+         "worker finalizer fired more times than registered")
+end
+
+collectgarbage("stop")
 
 do
   local shared_finalized = 0
