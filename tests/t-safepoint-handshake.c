@@ -710,15 +710,15 @@ int main(void)
   assert(g->gc2.hs_epoch == epoch0 + 1u);
   assert(g->gc2.hs_pending == 0);
   assert(g->gc2.hs_actions == actions);
-  assert(tg->alloc.bump[LJ_ARENAK_PLAIN].a == NULL);
+  assert(tg->alloc.bump[LJ_ARENAK_PLAIN].a != NULL);
   assert(tg->alloc.bump[LJ_ARENAK_TRAVERSABLE].a == NULL);
-  assert(tg->alloc.owned[LJ_ARENAK_PLAIN] == NULL);
-  assert(tg->alloc.owned[LJ_ARENAK_TRAVERSABLE] == NULL);
-  assert(arena_list_contains(tg->alloc.needsweep[LJ_ARENAK_PLAIN],
+  assert(arena_list_contains(tg->alloc.owned[LJ_ARENAK_PLAIN],
 			     plain_reset_a));
+  assert(tg->alloc.owned[LJ_ARENAK_TRAVERSABLE] == NULL);
+  assert(tg->alloc.needsweep[LJ_ARENAK_PLAIN] == NULL);
   assert(arena_list_contains(tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE],
 			     trav_reset_a));
-  assert((plain_reset_a->hdr.flags & LJ_AF_NEEDSWEEP) != 0);
+  assert((plain_reset_a->hdr.flags & LJ_AF_NEEDSWEEP) == 0);
   assert((trav_reset_a->hdr.flags & LJ_AF_NEEDSWEEP) != 0);
   lj_arena_alloc_restore_sweep_kind(&tg->alloc, LJ_ARENAK_TRAVERSABLE);
   lj_arena_alloc_restore_sweep_kind(&tg->alloc, LJ_ARENAK_PLAIN);
