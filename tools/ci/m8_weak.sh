@@ -77,6 +77,15 @@ for needle in \
   'run_nested_collect' \
   'nested_gc_cdata_finalized == 1' \
   'nested_gc_udata_finalized == 1' \
+  'm8_close_probe_shutdown_spawn' \
+  'close_shutdown_spawn_cdata_finalizer' \
+  'close_shutdown_spawn_udata_finalizer' \
+  'VM shutdown in progress' \
+  'shutdown_spawn_cdata_finalized == 1' \
+  'shutdown_spawn_udata_finalized == 1' \
+  'threading_rehome_unstarted_stack(lua_State *L, lua_State *L1,' \
+  'if (la_load32_acq(&G(L)->mt_shutdown) != 0)' \
+  'threading_rehome_unstarted_stack(L, L1, tg);' \
   'order_cdata_finalized[0] == 3' \
   'order_cdata_finalized[1] == 2' \
   'order_cdata_finalized[2] == 1' \
@@ -167,6 +176,7 @@ do
 	      "$ROOT/tests/t-gc2-traverse.c" \
 	      "$ROOT/tests/t-m8-ffi-weak-newindex.c" \
 	      "$ROOT/tests/t-m8-finalizer-spawn-live.lua" "$ROOT/src/lj_state.c" \
+	      "$ROOT/src/lib_threading.c" \
 	      "$ROOT/tests/t-m8-close-finalizers.c" "$ROOT/tools/ci/m8_weak.sh"; then
     echo "guardrail: missing M8 weak/finalizer marker: $needle" >&2
     exit 1

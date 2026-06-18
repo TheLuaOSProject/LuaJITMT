@@ -18,6 +18,7 @@
 
 #include "lj_obj.h"
 #include "lj_atomic.h"
+#include "lj_arena.h"
 #include "lj_chan.h"
 #include "lj_ccallback.h"
 #include "lj_err.h"
@@ -300,6 +301,38 @@ static void threading_gc_leave(global_State *g)
     lj_gc_threshold_store(g, lj_gc_mt_threshold_load(g));
     la_futex_wake(&g->mt_live, INT_MAX);
   }
+}
+
+static void threading_rehome_unstarted_stack(lua_State *L, lua_State *L1,
+					     TGState *tg)
+{
+  global_State *g = G(L);
+  TGState *dst = L2TG(L);
+  TValue *oldst = tvref(L1->stack);
+  TValue *st;
+  ptrdiff_t delta;
+  GCobj *up;
+  MSize stacksize;
+  size_t sz;
+  L1->tg_hint = dst;
+  if (!oldst || !tg || !(tg->tg_flags & TGF_ARENA_INTERNAL) ||
+      g->allocf != lj_arena_allocf)
+    return;
+  if (lj_arena_of(oldst)->hdr.owner_tid != tg->alloc.owner_tid)
+    return;
+  stacksize = L1->stacksize;
+  sz = (size_t)stacksize * sizeof(TValue);
+  st = (TValue *)lj_mem_realloc(L, NULL, 0, (GCSize)sz);
+  memcpy(st, oldst, sz);
+  setmref(L1->stack, st);
+  delta = (char *)st - (char *)oldst;
+  setmref(L1->maxstack, (TValue *)((char *)tvref(L1->maxstack) + delta));
+  L1->base = (TValue *)((char *)L1->base + delta);
+  L1->top = (TValue *)((char *)L1->top + delta);
+  for (up = gcref(L1->openupval); up != NULL; up = gcnext(up))
+    setmref(gco2uv(up)->v, (TValue *)((char *)uvval(gco2uv(up)) + delta));
+  g->gc.total -= (GCSize)sz;
+  (void)lj_arena_allocf(&tg->allocd, oldst, sz, 0);
 }
 
 static void *threading_worker(void *arg)
@@ -681,6 +714,8 @@ static lua_State *threading_spawn_core(lua_State *L, GCtab *env, TValue *base,
   ptrdiff_t i;
   int rc;
 
+  if (la_load32_acq(&G(L)->mt_shutdown) != 0)
+    lj_err_callermsg(L, "VM shutdown in progress");
   lj_state_checkstack(L, 2);
   base = L->base + baseofs;
   L1 = lua_newthread(L);
@@ -716,6 +751,7 @@ static lua_State *threading_spawn_core(lua_State *L, GCtab *env, TValue *base,
 
   if (!threading_gc_enter(L)) {
     threading_live_free_node(G(L), live);
+    threading_rehome_unstarted_stack(L, L1, tg);
     lj_tg_fini_thread(G(L), tg);
     lj_mem_freet(G(L), tg);
     th->tg = NULL;
@@ -726,6 +762,7 @@ static lua_State *threading_spawn_core(lua_State *L, GCtab *env, TValue *base,
   rc = lj_thr_create(&th->thr, threading_worker, th);
   if (rc != 0) {
     threading_live_remove(th);
+    threading_rehome_unstarted_stack(L, L1, tg);
     lj_tg_fini_thread(G(L), tg);
     lj_mem_freet(G(L), tg);
     th->tg = NULL;
