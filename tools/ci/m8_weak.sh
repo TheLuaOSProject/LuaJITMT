@@ -104,6 +104,8 @@ for needle in \
   'la_xchgptr_acqrel((void **)&g->gc2.finalizer_mpsc' \
   'finalizer_queued0 = la_load64_acq(&g->gc2.finalizer_queued)' \
   'finalizer_dequeued0 = la_load64_acq(&g->gc2.finalizer_dequeued)' \
+  'assert(!lj_gc2_finalizer_queue_pending(g))' \
+  'assert(lj_gc2_finalizer_queue_pending(g))' \
   'assert(la_load32_acq(&g->gc2.finalizer_owner_tid) ==' \
   'finalizer_enters0 + 1u' \
   'finalizer_leaves0 + 1u' \

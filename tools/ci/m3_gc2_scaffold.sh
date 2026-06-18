@@ -225,6 +225,7 @@ for needle in \
   'lj_gc2_sweep_needs_prepare(global_State *g)' \
   'lj_gc2_sweep_pending(global_State *g)' \
   'lj_gc2_sweep_to_idle(global_State *g)' \
+  'lj_gc2_finalizer_queue_pending(global_State *g)' \
   'lj_gc2_finalizer_pending(global_State *g)' \
   'lj_gc2_finalizer_sweep_pending(global_State *g)' \
   'gc2_sweep_blocked_by_finalizer(global_State *g)' \
