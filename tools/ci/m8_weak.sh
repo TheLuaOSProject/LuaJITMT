@@ -111,7 +111,7 @@ for needle in \
   'test_finalizer_consumer_ring' \
   'la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) != NULL' \
   'assert(lj_gc2_finalizer_dequeue(g) == a)' \
-  'assert(gcref(g->gc.mmudata) == NULL)' \
+  'runtime finalizer queues must not use legacy mmudata' \
   'finalizer_queued0 = la_load64_acq(&g->gc2.finalizer_queued)' \
   'finalizer_dequeued0 = la_load64_acq(&g->gc2.finalizer_dequeued)' \
   'assert(!lj_gc2_finalizer_queue_pending(g))' \
@@ -276,8 +276,7 @@ if awk '
   exit 1
 fi
 
-if rg -n 'g->gc\.mmudata' "$ROOT/src/lj_gc.c" "$ROOT/src/lj_cdata.c" \
-    "$ROOT/src/lj_gc2.c"; then
+if rg -n 'mmudata' "$ROOT/src"; then
   echo "guardrail: runtime finalizer queues must not use legacy mmudata" >&2
   exit 1
 fi

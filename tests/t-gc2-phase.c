@@ -100,7 +100,6 @@ static void test_finalizer_consumer_ring(lua_State *L, global_State *g)
   lua_settop(L, 0);
   assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) == NULL);
   assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) == NULL);
-  assert(gcref(g->gc.mmudata) == NULL);
   lua_newtable(L);
   a = obj2gco(tabV(L->top - 1));
   lua_newtable(L);
@@ -120,20 +119,17 @@ static void test_finalizer_consumer_ring(lua_State *L, global_State *g)
   assert(la_load64_acq(&g->gc2.finalizer_queued) == queued0 + 3u);
   assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) != NULL);
   assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) == NULL);
-  assert(gcref(g->gc.mmudata) == NULL);
 
   lj_gc2_finalizer_drain(g);
   assert(la_load64_acq(&g->gc2.finalizer_mpsc_drained) == drained0 + 3u);
   assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) == NULL);
   assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) != NULL);
-  assert(gcref(g->gc.mmudata) == NULL);
   assert(lj_gc2_finalizer_dequeue(g) == a);
   assert(lj_gc2_finalizer_dequeue(g) == b);
   assert(lj_gc2_finalizer_dequeue(g) == c);
   assert(lj_gc2_finalizer_dequeue(g) == NULL);
   assert(la_load64_acq(&g->gc2.finalizer_dequeued) == dequeued0 + 3u);
   assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) == NULL);
-  assert(gcref(g->gc.mmudata) == NULL);
 
   relink_root_object(g, c);
   relink_root_object(g, b);
