@@ -14,6 +14,8 @@ for needle in \
   'lj_ctype_fin_newgen(lua_State *L, CTState *cts, cTValue *key,' \
   'ctype_fin_has_claim(CTState *cts, cTValue *claim)' \
   'while (ctype_fin_has_claim(cts, claim))' \
+  'settabV(L, L->top++, t)' \
+  'la_storeptr_rel((void **)&cts->fin_head, gen)' \
   'lj_tab_set(L, t, key);  /* Private generation, unpublished. */' \
   '11.4 FINREG generation CAS publish.' \
   'lj_ctype_fin_istab(global_State *g, GCtab *t)' \
@@ -59,6 +61,11 @@ done
 if rg -n 'fin_token|fin_claims|lj_ctype_fin_lock|lj_ctype_fin_unlock|lj_ctype_fin_claim_|lj_tab_newkey_finreg_grow|TAB_FINREG_CHAIN_RETRY_MAX' \
   "$ROOT/src"; then
   echo "guardrail: removed FINREG token/claim/grow bridge must not reappear" >&2
+  exit 1
+fi
+
+if rg -n 'GCROOT_FFI_FIN|lj_ctype_initfin' "$ROOT/src"; then
+  echo "guardrail: FINREG must not depend on a legacy gcroot bootstrap" >&2
   exit 1
 fi
 
@@ -132,7 +139,7 @@ if awk '
   }
   END { exit bad ? 0 : 1 }
 ' "$ROOT"/src/*.c; then
-  echo "guardrail: lock-free table claim helpers are currently only validated for GCROOT_FFI_FIN" >&2
+  echo "guardrail: lock-free table claim helpers are currently only validated for FINREG generations" >&2
   exit 1
 fi
 
@@ -233,10 +240,13 @@ for file in "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc2.c"; do
 done
 
 if ! awk '
-  /int lj_gc_cdata_fin_pending\(global_State \*g\)/ { inpending = 1; pendinghead = 0; pendingscan = 0 }
-  inpending && /cts->fin_head/ { pendinghead = 1 }
-  inpending && /gc_cdata_fin_pending_tab\(t\)/ { pendingscan = 1 }
-  inpending && /^}/ { pending = pendinghead && pendingscan; inpending = 0 }
+  /static int gc_cdata_finreg_pending_scan\(CTState \*cts\)/ { inscan = 1; pendinghead = 0; pendingscan = 0 }
+  inscan && /cts->fin_head/ { pendinghead = 1 }
+  inscan && /gc_cdata_fin_pending_tab\(t\)/ { pendingscan = 1 }
+  inscan && /^}/ { scan = pendinghead && pendingscan; inscan = 0 }
+  /int lj_gc_cdata_fin_pending\(global_State \*g\)/ { inpending = 1; pendingcall = 0 }
+  inpending && /gc_cdata_finreg_pending_scan\(cts\)/ { pendingcall = 1 }
+  inpending && /^}/ { pending = pendingcall; inpending = 0 }
   /void lj_gc_finalize_cdata\(lua_State \*L\)/ { indrain = 1; separate = 0 }
   indrain && /gc_separate_cdata_finalizers\(g\)/ { separate = 1 }
   indrain && /^}/ { drain = separate; indrain = 0 }
@@ -244,7 +254,7 @@ if ! awk '
   indisable && /cts->fin_head/ { disablehead = 1 }
   indisable && /setgcrefnull\(t->metatable\).*FINREG generations disabled/ { disable = 1 }
   indisable && /^}/ { disabled = disablehead && disable; indisable = 0 }
-  END { exit (pending && drain && disabled) ? 0 : 1 }
+  END { exit (scan && pending && drain && disabled) ? 0 : 1 }
 ' "$ROOT/src/lj_gc.c"; then
   echo "guardrail: close-time cdata finalizer drain must queue cdata and scan/disable every FINREG generation" >&2
   exit 1

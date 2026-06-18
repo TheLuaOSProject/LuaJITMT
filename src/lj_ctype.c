@@ -186,11 +186,14 @@ void lj_ctype_parse_unlock(CTState *cts)
 
 static GCtab *ctype_fin_tab_new_l(lua_State *L, uint32_t hbits)
 {
+  TValue *anchor = L->top;
   GCtab *t = lj_tab_new(L, 0, hbits);
+  settabV(L, L->top++, t);
   setgcref(t->metatable, obj2gco(t));
   lj_tab_storestr(L, lj_tab_setstr(L, t, lj_str_newlit(L, "__mode")),
 		  lj_str_newlit(L, "k"));
   t->nomm = (uint8_t)(~(1u<<MM_mode));
+  L->top = anchor;
   return t;
 }
 
@@ -1226,20 +1229,15 @@ CTState *lj_ctype_init(lua_State *L)
   }
   setmref(G(L)->ctype_state, cts);
   {
-    GCobj *fo = gcref_acq(G(L)->gcroot[GCROOT_FFI_FIN]);
-    if (fo) {
-      FinRegGen *gen = ctype_fin_gen_new_l(L, gco2tab(fo));
-      la_storeptr_rel((void **)&cts->fin_head, gen);
-    }
+    TValue *anchor = L->top;
+    GCtab *t = ctype_fin_tab_new_l(L, 1);
+    FinRegGen *gen;
+    settabV(L, L->top++, t);
+    gen = ctype_fin_gen_new_l(L, t);
+    la_storeptr_rel((void **)&cts->fin_head, gen);
+    L->top = anchor;
   }
   return cts;
-}
-
-/* Create special weak-keyed finalizer table. */
-void lj_ctype_initfin(lua_State *L)
-{
-  GCtab *t = ctype_fin_tab_new_l(L, 1);
-  setgcrefroot(G(L)->gcroot[GCROOT_FFI_FIN], obj2gco(t));
 }
 
 /* Free C type table and state. */

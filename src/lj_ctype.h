@@ -596,7 +596,6 @@ LJ_FUNC GCstr *lj_ctype_repr_complex(lua_State *L, void *sp, CTSize size);
 LJ_FUNC uint32_t lj_ctype_reclaim_retired(global_State *g,
 					  uint64_t completed_epoch);
 LJ_FUNC CTState *lj_ctype_init(lua_State *L);
-LJ_FUNC void lj_ctype_initfin(lua_State *L);
 LJ_FUNC void lj_ctype_freestate(global_State *g);
 
 #endif

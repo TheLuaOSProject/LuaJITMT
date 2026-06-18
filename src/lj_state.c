@@ -240,9 +240,6 @@ static TValue *cpluaopen(lua_State *L, lua_CFunction dummy, void *ud)
   fixstring(lj_err_str(L, LJ_ERR_ERRMEM));  /* Preallocate memory error msg. */
   fixstring(lj_err_str(L, LJ_ERR_ERRERR));  /* Preallocate err in err msg. */
   lj_gc_threshold_store(g, 4*g->gc.total);
-#if LJ_HASFFI
-  lj_ctype_initfin(L);
-#endif
   lj_mcode_init(g);
   lj_trace_initstate(g);
   lj_err_verify();
