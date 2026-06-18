@@ -881,6 +881,7 @@ typedef struct GC2State {
   uint32_t gcpause_pct;	/* GC2 pacing percentage. */
   uint32_t assist_shift;  /* Bounded assist work is 1 << shift. */
   uint32_t assist_active;  /* Nonblocking owner token for mark assists. */
+  uint32_t generational;  /* M10: requested generational mode. */
   GCRef *grey_stack;	/* GC2 grey work deque ring. */
   MSize grey_capacity;	/* Allocated grey deque slots. */
   uint64_t grey_top;	/* Chase-Lev steal-side index. */

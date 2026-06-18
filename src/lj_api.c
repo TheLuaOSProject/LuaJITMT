@@ -1431,6 +1431,14 @@ LUA_API int lua_gc(lua_State *L, int what, int data)
     res = ((la_load32_acq(&g->mt_live) != 0 ? lj_gc_mt_threshold_load(g) :
 	    lj_gc_threshold_load(g)) != LJ_MAX_MEM);
     break;
+  case LUA_GCGENERATIONAL:
+    res = la_load32_acq(&g->gc2.generational) != 0;
+    la_store32_rel(&g->gc2.generational, 1);
+    break;
+  case LUA_GCINCREMENTAL:
+    res = la_load32_acq(&g->gc2.generational) != 0;
+    la_store32_rel(&g->gc2.generational, 0);
+    break;
   default:
     res = -1;  /* Invalid option. */
   }

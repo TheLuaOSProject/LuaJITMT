@@ -247,6 +247,12 @@ remembered-set SSB mode; heuristic switch; collectgarbage("generational")).
 Gate: alloc_tables bench ≥1.5x vs M9 full-cycle mode; paranoia (major
 after minor) zero-diff.
 
+Current implementation note: the public `collectgarbage("generational")` /
+`collectgarbage("incremental")` mode toggle now drives a passive
+`GC2State.generational` bit and exposes it through `collectgarbage("stats")`.
+The actual minor-cycle root filter, remembered-set SSB mode, minor sweep
+identity wiring, and survival-rate heuristic remain pending.
+
 ## 12.1 Per-file change index (cross-check before declaring any milestone done)
 new: lj_atomic.h lj_tg.{h,c} lj_arena.{h,c} lj_gc2.{h,c} lj_gc2_barrier.h
 lj_safepoint.{h,c} lj_thr.{h,c} lj_chan.{h,c} lib_threading.c

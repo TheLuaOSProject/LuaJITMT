@@ -473,7 +473,7 @@ LJLIB_CF(dofile)
 
 /* -- Base library: GC control -------------------------------------------- */
 
-#define LUA_GCSTATS		(LUA_GCISRUNNING+1)
+#define LUA_GCSTATS		(LUA_GCINCREMENTAL+1)
 
 static void gc_stats_setnum(lua_State *L, GCtab *t, const char *name,
 			    uint64_t n)
@@ -519,6 +519,8 @@ static void gc_stats_push(lua_State *L)
   gc_stats_setnum(L, t, "total_bytes", g->gc.total);
   gc_stats_setnum(L, t, "total_kbytes", g->gc.total >> 10);
   gc_stats_setint(L, t, "phase", la_load32_acq(&gc2->phase));
+  gc_stats_setint(L, t, "generational",
+		  la_load32_acq(&gc2->generational));
   gc_stats_setnum(L, t, "cycle_requests", la_load64_acq(&gc2->cycle_requests));
   gc_stats_setnum(L, t, "cycle_starts", la_load64_acq(&gc2->cycle_starts));
   gc_stats_setnum(L, t, "poll_ack_samples",
@@ -580,13 +582,17 @@ LJLIB_CF(gcinfo)
 LJLIB_CF(collectgarbage)
 {
   int opt = lj_lib_checkopt(L, 1, LUA_GCCOLLECT,  /* ORDER LUA_GC* */
-    "\4stop\7restart\7collect\5count\1\377\4step\10setpause\12setstepmul\1\377\11isrunning\5stats");
+    "\4stop\7restart\7collect\5count\1\377\4step\10setpause\12setstepmul\1\377\11isrunning\14generational\13incremental\5stats");
   int32_t data = lj_lib_optint(L, 2, 0);
   if (opt == LUA_GCCOUNT) {
     setnumV(L->top, (lua_Number)G(L)->gc.total/1024.0);
   } else if (opt == LUA_GCSTATS) {
     gc_stats_push(L);
     return 1;
+  } else if (opt == LUA_GCGENERATIONAL || opt == LUA_GCINCREMENTAL) {
+    int res = lua_gc(L, opt, data);
+    setstrV(L, L->top,
+	    lj_str_newz(L, res ? "generational" : "incremental"));
   } else {
     int res = lua_gc(L, opt, data);
     if (opt == LUA_GCSTEP || opt == LUA_GCISRUNNING)

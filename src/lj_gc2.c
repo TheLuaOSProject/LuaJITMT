@@ -99,6 +99,7 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.jit_hard_checks, 0);
   la_store64_rlx(&g->gc2.jit_scoped_slots_retired, 0);
   g->gc2.assist_active = 0;
+  la_store32_rlx(&g->gc2.generational, 0);
   g->gc2.grey_stack = NULL;
   g->gc2.grey_capacity = 0;
   g->gc2.grey_top = 0;

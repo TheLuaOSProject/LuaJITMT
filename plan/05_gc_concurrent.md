@@ -556,6 +556,10 @@ degenerates to "if target arena is OLD and stored obj arena is YOUNG →
 SSB" — i.e., classic card-less remembered set via the same SSB. Heuristic
 switch exactly as Pall describes (survival-rate driven). This is M10
 (post-perf-gate) — land the flag and the sweep identity early, enable late.
+Current bridge: `collectgarbage("generational")` /
+`collectgarbage("incremental")` toggles `GC2State.generational` and exposes the
+mode through `collectgarbage("stats")`; the flag is passive until minor-cycle
+roots, remembered SSB filtering, and minor sweep identity are wired.
 
 ## 5.13 Torture & debug
 `collectgarbage("torture",1)`: leader runs continuous back-to-back cycles
