@@ -2,6 +2,7 @@ local th = require"threading"
 
 assert(type(th) == "table")
 assert(type(th.cpucount) == "function")
+assert(type(th.now) == "function")
 assert(type(th.fence) == "function")
 assert(type(th.sleep) == "function")
 assert(type(th.spawn) == "function")
@@ -12,8 +13,12 @@ assert(type(th.channel) == "function")
 local n = th.cpucount()
 assert(type(n) == "number" and n >= 1)
 
+local t0 = th.now()
+assert(type(t0) == "number")
 assert(th.fence() == nil)
 assert(th.sleep(0) == nil)
+local t1 = th.now()
+assert(type(t1) == "number" and t1 >= t0)
 
 local ch = th.channel(2)
 assert(type(ch) == "userdata")

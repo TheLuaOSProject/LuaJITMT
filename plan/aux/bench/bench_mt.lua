@@ -9,6 +9,8 @@
 
 local th = require("threading")
 local clock = os.clock  -- wall clock preferred: use os.time fallback note
+local floor = math.floor
+local getenv = os.getenv
 local function wall()
   -- os.clock is CPU time; for MT scaling we need wall time.
   -- M4 adds threading.now() (monotonic); fall back if absent.
@@ -17,6 +19,8 @@ end
 
 local NT = tonumber(arg and arg[1]) or th.cpucount()
 local filter = arg and arg[2]
+local scale = tonumber(getenv("BENCH_SCALE")) or 1
+if scale <= 0 then scale = 1 end
 local gc_stat_keys = {
   "cycle_starts",
   "major_cycle_starts",
@@ -100,8 +104,20 @@ local function print_gc_stats()
   end
 end
 
+local function scaled_ops(n)
+  n = floor(n * scale + 0.5)
+  if n < 1 then n = 1 end
+  return n
+end
+
+local function skip(name, why)
+  if filter and not name:find(filter, 1, true) then return end
+  print(string.format("%-22s %2d thr skipped: %s", name, NT, why))
+end
+
 local function run(name, perthread_ops, mkworker, setup)
   if filter and not name:find(filter, 1, true) then return end
+  perthread_ops = scaled_ops(perthread_ops)
   collectgarbage("collect")
   local shared = setup and setup() or nil
   local gc_before = snapshot_gc_stats()
@@ -124,6 +140,7 @@ local function run(name, perthread_ops, mkworker, setup)
     sum = sum + (r or 0)
   end
   local dt = wall() - t0
+  if dt <= 0 then dt = 1e-9 end
   local total_ops = perthread_ops * NT
   local gc_after = snapshot_gc_stats()
   local p99, samples = poll_ack_p99_delta(gc_before, gc_after)
@@ -193,27 +210,35 @@ end, function()
 end)
 
 -- 8. Channel ping-pong: synchronization latency (pairs of threads).
-run("chan_pingpong", 2e5, function(id, sh, n)
-  local a, b = sh[1 + (id-1) % 2], sh[2 - (id-1) % 2]
-  if id % 2 == 1 then
-    for i = 1, n do a:send(i); b:recv() end
-  else
-    for i = 1, n do a:recv(); b:send(i) end
-  end
-  return 0
-end, function() return { th.channel(0), th.channel(0) } end)
+if NT >= 2 and NT % 2 == 0 then
+  run("chan_pingpong", 2e5, function(id, sh, n)
+    local a, b = sh[1], sh[2]
+    if id % 2 == 1 then
+      for i = 1, n do a:send(i); b:recv() end
+    else
+      for i = 1, n do a:recv(); b:send(i) end
+    end
+    return 0
+  end, function() return { th.channel(0), th.channel(0) } end)
+else
+  skip("chan_pingpong", "requires an even thread count >= 2")
+end
 
 -- 9. Channel throughput: MPMC ring under load.
-run("chan_throughput", 1e6, function(id, ch, n)
-  if id % 2 == 1 then
-    for i = 1, n do ch:send(i) end
-  else
-    local s = 0
-    for i = 1, n do s = s + (ch:recv() or 0) end
-    return s
-  end
-  return 0
-end, function() return th.channel(1024) end)
+if NT >= 2 and NT % 2 == 0 then
+  run("chan_throughput", 1e6, function(id, ch, n)
+    if id % 2 == 1 then
+      for i = 1, n do ch:send(i) end
+    else
+      local s = 0
+      for i = 1, n do s = s + (ch:recv() or 0) end
+      return s
+    end
+    return 0
+  end, function() return th.channel(1024) end)
+else
+  skip("chan_throughput", "requires an even thread count >= 2")
+end
 
 -- 10. GC pressure under parallel churn: cycles must overlap mutators.
 run("gc_churn-MT", 2e6, function(id, _, n)

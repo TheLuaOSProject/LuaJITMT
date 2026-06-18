@@ -8,6 +8,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #define lib_threading_c
 #define LUA_LIB
@@ -721,6 +722,19 @@ LJLIB_PUSH(top-4) LJLIB_SET(!)  /* Set environment to thread methods. */
 LJLIB_CF(threading_cpucount)
 {
   setintV(L->top++, (int32_t)lj_thr_cpucount());
+  return 1;
+}
+
+LJLIB_CF(threading_now)
+{
+  struct timespec ts;
+  if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
+    setnilV(L->top++);
+  } else {
+    lua_Number sec = (lua_Number)ts.tv_sec +
+      (lua_Number)ts.tv_nsec / 1000000000.0;
+    setnumV(L->top++, sec);
+  }
   return 1;
 }
 
