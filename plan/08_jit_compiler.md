@@ -72,7 +72,9 @@ current TG's `poll` word. x64 VM slow paths load `global_State *` through
 `dispofs()` has been removed, with far non-MOV operands saving a scratch
 register instead of clobbering `RID_DISPATCH`. `REF_NIL` GG-state FLOADs now
 use absolute/RIP/global-address forms, and the x64 exit patcher recognizes the
-resulting vmstate store patterns instead of scanning for `GG_OFS_TGDISP`.
+resulting vmstate store patterns instead of scanning for `GG_OFS_TGDISP`. The
+dead transitional `GG_OFS_TGDISP`/`GG_G2TGDISP` and
+`TG_DISP2G`/`TG_DISP2J` macros have since been removed from `lj_dispatch.h`.
 Secondary TGs may now acquire the recorder token and enter `BC_JLOOP` mcode
 through their own TG-local dispatch table. Record dispatch itself is localized
 to the token holder's TG table instead of being exposed through the global

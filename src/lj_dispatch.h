@@ -100,16 +100,11 @@ typedef struct GG_State {
 #define G2J(gl)		((gl)->jitp)
 #define L2J(L)		(G(L)->jitp)
 #define J2TG(J)		G2TG(J2G(J))
-#define GG_OFS_TGDISP \
-  (GG_OFS(main_tg) + (int)offsetof(TGState, dispatch))
 #define GG_G2J		(GG_OFS(J) - GG_OFS(g))
 #define GG_G2DISP	(GG_OFS(dispatch) - GG_OFS(g))
-#define GG_G2TGDISP	(GG_OFS_TGDISP - GG_OFS(g))
 #define GG_DISP2G	(GG_OFS(g) - GG_OFS(dispatch))
 #define GG_DISP2J	(GG_OFS(J) - GG_OFS(dispatch))
 #define GG_DISP2HOT	(GG_OFS(hotcount) - GG_OFS(dispatch))
-#define TG_DISP2G	(GG_OFS(g) - GG_OFS_TGDISP)
-#define TG_DISP2J	(GG_OFS(J) - GG_OFS_TGDISP)
 #define GG_DISP2STATIC	(GG_LEN_DDISP*(int)sizeof(ASMFunction))
 #if LJ_HASJIT
 LJ_STATIC_ASSERT(GG_DISP2HOT == TG_DISP2HOT);

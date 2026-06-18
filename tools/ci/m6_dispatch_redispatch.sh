@@ -67,6 +67,12 @@ if rg -n 'GG_G2TGDISP|L:RB->glref.*dispatch|add DISPATCH, GG_G2TGDISP' \
   exit 1
 fi
 
+if rg -n 'GG_OFS_TGDISP|GG_G2TGDISP|TG_DISP2[JG]' \
+    "$ROOT/src/lj_dispatch.h"; then
+  echo "guardrail: transitional TG dispatch offset macros must stay removed" >&2
+  exit 1
+fi
+
 if rg -n 'DISPMODE_REC' "$ROOT/src/lj_dispatch.c"; then
   echo "guardrail: recording dispatch must stay TG-local, not global mode" >&2
   exit 1
