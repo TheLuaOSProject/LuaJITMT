@@ -183,7 +183,7 @@ static void *grey_worker_drain_race_thread(void *arg)
   WorkerDrainRaceCtx *ctx = argt->ctx;
   grey_wait(&ctx->barrier);
   ctx->progress[argt->idx] =
-    lj_gc2_worker_drain_progress(ctx->g, ctx->limit);
+    lj_gc2_worker_drain(ctx->g, ctx->limit);
   return NULL;
 }
 
@@ -426,7 +426,7 @@ static void test_worker_leaf_ssb(lua_State *L, global_State *g, TGState *tg)
   worker_runs0 = la_load64_acq(&g->gc2.worker_runs);
   worker_ssb0 = la_load64_acq(&g->gc2.worker_ssb_converted);
   worker_grey0 = la_load64_acq(&g->gc2.worker_grey_drained);
-  assert(lj_gc2_worker_drain_progress(g, 1) == 1);
+  assert(lj_gc2_worker_drain(g, 1) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(s2)) == 1);
   assert(lj_gc2_ssb_empty(g));
   assert(la_load64_acq(&g->gc2.worker_runs) == worker_runs0 + 1u);
@@ -1377,7 +1377,7 @@ static void test_worker_weak_drain(lua_State *L, global_State *g, TGState *tg)
   assert(la_load64_acq(&g->gc2.weak_clear_cleared) == clear_cleared0 + 1u);
   assert(weak_entry_is_nil(L, weak, key));
   idle0 = la_load64_acq(&g->gc2.worker_idle_declares);
-  assert(lj_gc2_worker_drain_progress(g, 1) == 0);
+  assert(lj_gc2_worker_drain(g, 1) == 0);
   assert(la_load64_acq(&g->gc2.worker_idle_declares) == idle0 + 1u);
   assert(la_load32_acq(&g->gc2.worker_active) == 0);
   lj_gc2_legacy_cycle_end(g);

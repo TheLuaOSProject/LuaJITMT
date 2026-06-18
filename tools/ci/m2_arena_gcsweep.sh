@@ -20,7 +20,7 @@ for needle in \
   'lj_gc2_sweep_pending(global_State *g)' \
   'gc_arena_finish_sweep_boundary(global_State *g, int drain)' \
   'la_loadptr_acq((void *const *)&g->gc2.tg_list)' \
-  'lj_gc2_worker_drain_progress(g, LJ_GC2_SWEEP_BATCH)' \
+  'lj_gc2_worker_drain(g, LJ_GC2_SWEEP_BATCH)' \
   'lj_gc2_sweep_to_idle(g)' \
   'minor = la_load32_acq(&g->gc2.cycle_sweep_minor) != 0' \
   'la_add64_rlx(&g->gc2.minor_sweep_arenas, n)' \

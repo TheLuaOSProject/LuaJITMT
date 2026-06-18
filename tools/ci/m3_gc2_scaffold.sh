@@ -160,10 +160,10 @@ for needle in \
   'LJ_GC2_HS_SCAN_ROOTS|LJ_GC2_HS_FLUSH_SSB' \
   'gc2_traverse_trace(g, &J->cur)' \
   '05 section 5.7.4 current trace root' \
-  'weakdrain = lj_gc2_worker_drain_progress(g, drain_limit)' \
+  'weakdrain = lj_gc2_worker_drain(g, drain_limit)' \
   'la_load32_acq(&g->gc2.worker_active) == 0' \
   '05 section 5.8: peer drain must finish before fallback' \
-  'lj_gc2_worker_drain_progress(g, LJ_GC2_WORKER_DRAIN_BATCH)' \
+  'lj_gc2_worker_drain(g, LJ_GC2_WORKER_DRAIN_BATCH)' \
   '05 section 5.6.3 bounded worker step bridge' \
   'lj_gc2_fixpoint_round(g, L, LJ_GC2_WORKER_DRAIN_BATCH)' \
   '05 section 5.7.1 bounded propagation fixpoint bridge' \
@@ -173,7 +173,6 @@ for needle in \
   'la_add64_rlx(&g->gc2.worker_idle_declares' \
   'la_add64_rlx(&g->gc2.worker_busy_retries' \
   'lj_gc2_worker_drain(g' \
-  'lj_gc2_worker_drain_progress(global_State *g, uint32_t limit)' \
   'lj_gc2_worker_start(global_State *g)' \
   'lj_gc2_worker_stop(global_State *g)' \
   'lj_gc2_worker_wake(global_State *g)' \
@@ -216,12 +215,11 @@ for needle in \
   'la_add64_rlx(&g->gc2.thread_scan_requeues' \
   'la_add64_rlx(&g->gc2.thread_scan_owner_scans' \
   '05 section 5.6.3 total worker progress contract' \
-  'return lj_gc2_worker_drain(g, limit)' \
   'phase != LJ_GC2_MARK && phase != LJ_GC2_WEAK &&' \
   'la_add64_rlx(&g->gc2.mark_complete_peer_waits' \
   'gc2_worker_sweep_progress(global_State *g, uint32_t limit)' \
   'sweep = gc2_worker_sweep_progress(g, limit)' \
-  'lj_gc2_worker_drain_progress(g, LJ_GC2_SWEEP_BATCH)' \
+  'lj_gc2_worker_drain(g, LJ_GC2_SWEEP_BATCH)' \
   '05 section 5.6.3 worker-owned sweep bridge' \
   'weak = lj_gc2_weak_drain(g, limit - work)' \
   'la_add64_rlx(&g->gc2.worker_weak_drained' \

@@ -70,8 +70,6 @@ LJ_FUNC int lj_gc2_worker_start(global_State *g);
 LJ_FUNC void lj_gc2_worker_stop(global_State *g);
 LJ_FUNC void lj_gc2_worker_wake(global_State *g);
 LJ_FUNC uint32_t lj_gc2_worker_drain(global_State *g, uint32_t limit);
-LJ_FUNC uint32_t lj_gc2_worker_drain_progress(global_State *g,
-					      uint32_t limit);
 LJ_FUNC uint32_t lj_gc2_sweep_owner_progress(global_State *g, TGState *tg,
 					     uint32_t limit);
 LJ_FUNC uint32_t lj_gc2_fixpoint_round(global_State *g, lua_State *L,

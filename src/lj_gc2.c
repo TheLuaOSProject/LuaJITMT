@@ -2067,7 +2067,7 @@ int lj_gc2_weak_complete(global_State *g, GCobj *legacy, uint32_t drain_limit)
     return 0;
   la_add64_rlx(&g->gc2.weak_complete_runs, 1);
   for (;;) {
-    weakdrain = lj_gc2_worker_drain_progress(g, drain_limit);
+    weakdrain = lj_gc2_worker_drain(g, drain_limit);
     if (weakdrain) {
       progress += (uint64_t)weakdrain;
       continue;
@@ -3469,16 +3469,11 @@ uint32_t lj_gc2_worker_drain(global_State *g, uint32_t limit)
   return gc2_worker_drain_inner(g, limit, NULL);
 }
 
-uint32_t lj_gc2_worker_drain_progress(global_State *g, uint32_t limit)
-{
-  return lj_gc2_worker_drain(g, limit);
-}
-
 static uint32_t gc2_worker_drain_budget(global_State *g, uint32_t limit)
 {
   uint32_t n = 0;
   while (n < limit && !lj_gc2_ssb_empty(g)) {
-    uint32_t step = lj_gc2_worker_drain_progress(g, limit - n);
+    uint32_t step = lj_gc2_worker_drain(g, limit - n);
     if (step == 0)
       break;
     if (step > limit - n)

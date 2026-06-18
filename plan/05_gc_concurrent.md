@@ -193,19 +193,18 @@ pool, grow-safe per-worker deque ownership, idle declaration, and scheduling
 remain the original target above. The current global grey deque has a temporary
 single-worker ownership token (`worker_active`) around this drain surface, plus
 busy/idle telemetry, so overlapping helper calls do not both act as the staged
-worker owner. `lj_gc2_worker_drain_progress()` exposes the same bounded drain
-surface but returns total progress, including leaf-only SSB conversions that do
-not traverse a grey object, so future idle/fixpoint loops do not need to infer
-progress from telemetry counters. Follow-up bridge: `lj_gc2_worker_drain()`
-now shares that total-progress contract, while `_progress()` remains a
-compatibility alias. During `P_WEAK`, any remaining worker budget can also
-advance `lj_gc2_weak_drain()` through the published weak snapshot, with
-`worker_weak_drained` attributing that bounded work; the full scheduler-owned
-weak drain remains staged. During `P_SWEEP`, the same temporary worker owner
-can spend its budget on bounded traversable arena sweep batches through
-`lj_gc2_sweep_owner_progress()`, after the legacy sweep boundary prepares the
-arena lists and restores plain arenas. This keeps the previous boundary-lazy
-sweep bridge but removes its direct sweep loop from `lj_gc.c`.
+worker owner. `lj_gc2_worker_drain()` returns total progress, including
+leaf-only SSB conversions that do not traverse a grey object, so future
+idle/fixpoint loops do not need to infer progress from telemetry counters.
+The temporary `_progress()` compatibility alias has been removed. During
+`P_WEAK`, any remaining worker budget can also advance `lj_gc2_weak_drain()`
+through the published weak snapshot, with `worker_weak_drained` attributing
+that bounded work; the full scheduler-owned weak drain remains staged. During
+`P_SWEEP`, the same temporary worker owner can spend its budget on bounded
+traversable arena sweep batches through `lj_gc2_sweep_owner_progress()`, after
+the legacy sweep boundary prepares the arena lists and restores plain arenas.
+This keeps the previous boundary-lazy sweep bridge but removes its direct sweep
+loop from `lj_gc.c`.
 
 Current parked-worker delta: the original target remains the full worker pool
 with per-worker Chase-Lev ownership, grow-safe deque migration, steal/idle

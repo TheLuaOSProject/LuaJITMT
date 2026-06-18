@@ -148,7 +148,7 @@ static uint32_t gc_arena_finish_sweep_boundary(global_State *g, int drain)
     }
   }
   do {  /* 05 section 5.6.3 worker-owned sweep bridge. */
-    uint32_t swept = lj_gc2_worker_drain_progress(g, LJ_GC2_SWEEP_BATCH);
+    uint32_t swept = lj_gc2_worker_drain(g, LJ_GC2_SWEEP_BATCH);
     if (swept > ~(uint32_t)0 - total)
       total = ~(uint32_t)0;
     else
@@ -2078,7 +2078,7 @@ static size_t gc_onestep(lua_State *L)
   case GCSpropagate:
     if (gcref(g->gc.gray) != NULL)
       return propagatemark(g);  /* Propagate one gray object. */
-    if (lj_gc2_worker_drain_progress(g, LJ_GC2_WORKER_DRAIN_BATCH) != 0)
+    if (lj_gc2_worker_drain(g, LJ_GC2_WORKER_DRAIN_BATCH) != 0)
       return GCSWEEPCOST;  /* 05 section 5.6.3 bounded worker step bridge. */
     if (la_load32_acq(&g->gc2.phase) == LJ_GC2_MARK &&
 	lj_gc2_fixpoint_round(g, L, LJ_GC2_WORKER_DRAIN_BATCH) == 0)
