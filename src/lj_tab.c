@@ -481,6 +481,9 @@ void lj_tab_resize(lua_State *L, GCtab *t, uint32_t asize, uint32_t hbits)
   uint32_t oldacap = t->acap;
   uint32_t oldhmask = lj_tab_node_hmask_acq(oldnode);
   TValue *array = oldarray;
+  uint32_t newacap = oldacap;
+  int array_changed = asize != oldasize;
+  int newarray = 0;
   MSize newhmask = 0;
   Node *newnode = NULL;
   Node *newfreetop = NULL;
@@ -494,20 +497,33 @@ void lj_tab_resize(lua_State *L, GCtab *t, uint32_t asize, uint32_t hbits)
     if (hbits < needhbits)
       hbits = needhbits;
   }
+  if (asize > oldasize && asize > LJ_MAX_ASIZE)
+    lj_err_msg(L, LJ_ERR_TABOV);
+  if (array_changed) {
+    if (lj_tab_array_separated(t)) {
+      newarray = 1;
+      newacap = asize >= oldasize ? asize : oldacap;
+    } else if (asize > oldacap) {
+      newarray = 1;
+      newacap = asize;
+    }
+  }
+  if (newarray) {
+    uint32_t i;
+    uint32_t copy = oldasize < newacap ? oldasize : newacap;
+    if (lj_tab_array_separated(t) && oldacap > 0)
+      oldaret = tab_array_retire_reserve(L, oldarray, oldacap);
+    array = tab_array_new(L, asize, newacap);
+    for (i = 0; i < copy; i++)
+      lj_tv_load_acq(&array[i], &oldarray[i]);
+    for (i = asize; i < copy; i++)
+      lj_tab_storenilraw(&array[i]);
+    if (LJ_MAX_COLOSIZE != 0 && t->colo > 0)
+      t->colo = (int8_t)(t->colo | 0x80);  /* Mark as separated (colo < 0). */
+    t->acap = newacap;
+  }
   if (asize > oldasize) {  /* Array part grows? */
     uint32_t i;
-    if (asize > LJ_MAX_ASIZE)
-      lj_err_msg(L, LJ_ERR_TABOV);
-    if (asize > oldacap) {
-      if (lj_tab_array_separated(t) && oldacap > 0)
-	oldaret = tab_array_retire_reserve(L, oldarray, oldacap);
-      array = tab_array_new(L, asize, asize);
-      for (i = 0; i < oldasize; i++)
-	lj_tv_load_acq(&array[i], &oldarray[i]);
-      if (LJ_MAX_COLOSIZE != 0 && t->colo > 0)
-	t->colo = (int8_t)(t->colo | 0x80);  /* Mark as separated (colo < 0). */
-      t->acap = asize;
-    }
     for (i = oldasize; i < asize; i++)  /* Clear newly allocated slots. */
       lj_tab_storenilraw(&array[i]);
   }
@@ -548,8 +564,6 @@ void lj_tab_resize(lua_State *L, GCtab *t, uint32_t asize, uint32_t hbits)
     }
   }
   if (asize > oldasize) {
-    if (array && lj_tab_array_separated(t))
-      lj_tab_array_hdr_asize_rel(array, asize);
     if (array != oldarray)
       lj_tab_array_rel(t, array);
     lj_tab_asize_rel(t, asize);
@@ -573,9 +587,11 @@ void lj_tab_resize(lua_State *L, GCtab *t, uint32_t asize, uint32_t hbits)
     }
   }
   if (asize < oldasize) {  /* Array part shrinks? */
-    if (array && lj_tab_array_separated(t))
-      lj_tab_array_hdr_asize_rel(array, asize);
     lj_tab_asize_rel(t, asize);  /* This 'shrinks' even colocated arrays. */
+    if (array != oldarray)
+      lj_tab_array_rel(t, array);
+    if (oldaret)
+      tab_array_retire_arm(G(L), oldaret);
   }
   if (oldhmask > 0)
     lj_assertL(oldret && la_load32_acq(&oldret->armed),

@@ -16,6 +16,9 @@ for needle in \
   'array == coloarray' \
   'rec_idx_tab_array_has_hdr(t, record_array)' \
   'rec_idx_array_hdr_asize(jit_State *J, TRef arrayref)' \
+  'rec_idx_array_hdr_guards(jit_State *J, TRef tab, TRef arrayref)' \
+  'emitir(IRTG(IR_NE, IRT_PGC), arrayref, lj_ir_kptr(J, NULL));' \
+  'lj_ir_kintpgc(J, sizeof(GCtab))' \
   'M6: shared separated AREF pairs slots with TabArrayHdr.asize.' \
   'emitir(IRTI(IR_XLOAD), hdrref, 0);' \
   'M6: legacy shared AREF guards TAB_ARRAY pair stability.' \
@@ -164,6 +167,21 @@ LUA_PATH="$ROOT/src/?.lua;$ROOT/src/jit/?.lua;;" \
     idx = 64
     assert(read(80) == 5120)
     assert(util.traceinfo(1), "trace missing after array grow")
+  '
+
+LUA_PATH="$ROOT/src/?.lua;$ROOT/src/jit/?.lua;;" \
+  timeout 20s "$ROOT/src/luajit" -e '
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    local keep = {}
+    for i = 1, 120 do
+      local t = {}
+      for j = 1, 80 do
+        t[j] = "value-" .. i .. "-" .. j
+      end
+      keep[i] = t
+    end
+    assert(#keep == 120 and keep[120][80] == "value-120-80")
   '
 
 if ! rg -F -q 'm6_jit_aref_pair_guard.sh' "$ROOT/tools/ci/m6_jit.sh"; then

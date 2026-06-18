@@ -443,11 +443,14 @@ scoped-flush target.
    derives the header address, `XLOAD`s `TabArrayHdr.asize` for the bounds
    guard, and uses the same slots pointer for `AREF`/`ALOAD`. Colocated shared
    arrays keep the legacy paired `TAB_ARRAY` equality guard. The header path is
-   gated on the currently acquired array pointer so a split-from-colocated
-   publication window does not treat the colocated interior pointer as
-   header-backed. This is still an `AHdr`-lite bridge, not the final immutable
-   array-generation model, because header `asize` can still change in place for
-   same-vector resize cases.
+   gated on the currently acquired array pointer and guarded at runtime against
+   `NULL` and `tab + sizeof(GCtab)`, so empty or colocated tables that enter a
+   separated-array trace exit before the header load. Separated visible-size
+   changes now publish fresh array-header generations, so `TabArrayHdr.asize` is
+   immutable after publish; shrink generations preserve stale-reader capacity
+   while clearing hidden tail slots. This is still an `AHdr`-lite bridge, not the
+   final table-generation model, because legacy mirrors, C-side mirror readers,
+   and helper-backed table stores remain.
    Existing non-nil table-slot stores are
    now recorded on Linux/x64 for shared tables as well as PHI/upvalue/escaped
    table references, previous-nil in-bounds array slots, existing nil-value

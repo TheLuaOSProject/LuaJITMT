@@ -32,7 +32,6 @@ for needle in \
   'tab_array_retire_arm' \
   'lj_tab_array_rel(t, array)' \
   'lj_tab_asize_rel(t, asize)' \
-  'lj_tab_array_hdr_asize_rel(array, asize)' \
   'lj_tv_load_acq(&val, &array[i])'
 do
   if ! rg -F -q "$needle" "$ROOT/src"; then
@@ -51,6 +50,12 @@ fi
 if rg -n 'lj_mem_realloc(vec)?\([^;]*(array|t->array|oldarray)' \
     "$ROOT/src/lj_tab.c"; then
   echo "guardrail: table resize must retire old arrays, not realloc them" >&2
+  exit 1
+fi
+
+if rg -n 'lj_tab_array_hdr_asize_rel|la_store32_rel\(&lj_tab_array_hdrw' \
+    "$ROOT/src"; then
+  echo "guardrail: table array header asize must be immutable after publish" >&2
   exit 1
 fi
 

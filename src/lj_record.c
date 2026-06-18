@@ -1493,6 +1493,20 @@ static TRef rec_idx_array_hdr_asize(jit_State *J, TRef arrayref)
 		       lj_ir_kintpgc(J, -(int32_t)sizeof(TabArrayHdr)));
   return emitir(IRTI(IR_XLOAD), hdrref, 0);
 }
+
+static void rec_idx_array_hdr_guards(jit_State *J, TRef tab, TRef arrayref)
+{
+  emitir(IRTG(IR_NE, IRT_PGC), arrayref, lj_ir_kptr(J, NULL));
+#if LJ_MAX_COLOSIZE != 0
+  {
+    TRef coloref = emitir(IRT(IR_ADD, IRT_PGC), tab,
+			  lj_ir_kintpgc(J, sizeof(GCtab)));
+    emitir(IRTG(IR_NE, IRT_PGC), arrayref, coloref);
+  }
+#else
+  UNUSED(tab);
+#endif
+}
 #endif
 
 /* Record indexed key lookup. */
@@ -1529,6 +1543,7 @@ static TRef rec_idx_key(jit_State *J, RecordIndex *ix, IRRef *rbref,
 	arrayref = emitir(IRT(IR_FLOAD, IRT_PGC), ix->tab, IRFL_TAB_ARRAY);
 	if (!trace_local && rec_idx_tab_array_has_hdr(t, record_array)) {
 	  /* M6: shared separated AREF pairs slots with TabArrayHdr.asize. */
+	  rec_idx_array_hdr_guards(J, ix->tab, arrayref);
 	  asizeref = rec_idx_array_hdr_asize(J, arrayref);
 	  rec_idx_abc(J, asizeref, ikey, asize);
 	} else {

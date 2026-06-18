@@ -673,11 +673,6 @@ static LJ_AINLINE MSize lj_tab_array_hdr_asize_acq(const TValue *array)
   return (MSize)la_load32_acq(&lj_tab_array_hdr(array)->asize);
 }
 
-static LJ_AINLINE void lj_tab_array_hdr_asize_rel(TValue *array, MSize asize)
-{
-  la_store32_rel(&lj_tab_array_hdrw(array)->asize, (uint32_t)asize);
-}
-
 static LJ_AINLINE MSize lj_tab_array_hdr_acap_acq(const TValue *array)
 {
   return (MSize)la_load32_acq(&lj_tab_array_hdr(array)->acap);

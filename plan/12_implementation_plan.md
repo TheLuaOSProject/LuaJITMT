@@ -138,8 +138,12 @@ Separated shared array reads now use `TabArrayHdr.asize` loaded through the
 single recorded `GCtab.array` slots pointer; colocated shared arrays keep the
 legacy pair guard. The header path checks the observed slots pointer so a
 split-from-colocated publication window does not treat colocated storage as a
-header-backed allocation. The broader immutable array/header generation model
-remains pending because same-vector header `asize` changes are still allowed.
+header-backed allocation, and runtime guards exit for `NULL`/colocated array
+pointers before the header load. Separated visible-size changes now publish
+fresh array-header generations; shrink generations preserve capacity for stale
+mirror readers but nil hidden tail slots. This leaves the broader
+table-generation model pending around legacy mirrors, C-side mirror readers,
+and helper-backed stores.
 Linux/x64
 secure builds now use the original M6 dual-map mcode write view: each mcode
 area is memfd-backed, mapped once RX and once RW, `MCLink.rw` carries the
