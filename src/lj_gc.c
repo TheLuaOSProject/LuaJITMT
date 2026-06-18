@@ -1348,6 +1348,21 @@ static void gc_finalize_cdata_clear(global_State *g, GCobj *o)
   lj_gc2_finreg_cdata_set(g, o, 0);
 }
 
+static int gc_finalize_cdata_claim_preclaimed(global_State *g, GCobj *o)
+{
+  uint8_t old = la_load8_acq(lj_obj_gcflags_ref(o));
+  for (;;) {
+    uint8_t next;
+    if (!(old & LJ_GC_CDATA_FIN))
+      return 0;
+    next = (uint8_t)(old & (uint8_t)~LJ_GC_CDATA_FIN);
+    if (la_cas8(lj_obj_gcflags_ref(o), &old, next, LA_ACQ_REL, LA_ACQ)) {
+      lj_gc2_finreg_cdata_set(g, o, 0);
+      return 1;
+    }
+  }
+}
+
 static int gc_finalize_cdata_slot_owned(lua_State *L, GCobj *o, cTValue *key)
 {
   global_State *g = G(L);
@@ -1371,8 +1386,9 @@ static int gc_finalize_cdata_preclaimed(lua_State *L, GCobj *o, cTValue *fin)
 {
   global_State *g = G(L);
   TValue tmp;
+  if (!gc_finalize_cdata_claim_preclaimed(g, o))
+    return 0;  /* P_WEAK preclaim suppressed by later ffi.gc(cd, nil). */
   copyTV(L, &tmp, fin);
-  gc_finalize_cdata_clear(g, o);
   return gc_call_finalizer(g, L, &tmp, o) ? 1 : -1;
 }
 #endif

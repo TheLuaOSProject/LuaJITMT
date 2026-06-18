@@ -19,6 +19,9 @@
 #include "lj_tab.h"
 #include "lj_thr.h"
 #include "lj_tg.h"
+#if LJ_HASFFI
+#include "lj_cdata.h"
+#endif
 #if LJ_HASJIT
 #include "lj_dispatch.h"
 #include "lj_jit.h"
@@ -2594,6 +2597,20 @@ static void test_finreg_userdata_queue_mark(lua_State *L, global_State *g,
 }
 
 #if LJ_HASFFI
+static int test_unlink_root_object(global_State *g, GCobj *target)
+{
+  GCRef *p = &g->gc.root;
+  GCobj *o;
+  while ((o = gcref(*p)) != NULL) {
+    if (o == target) {
+      setgcrefr(*p, *lj_obj_gcwref(o));
+      return 1;
+    }
+    p = lj_obj_gcwref(o);
+  }
+  return 0;
+}
+
 static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
 {
   uint64_t sets0 = la_load64_acq(&g->gc2.finreg_cdata_sets);
@@ -2691,6 +2708,51 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   assert(la_load64_acq(&g->gc2.finreg_cdata_preclaim_dispatched) ==
 	 dispatched1 + 1u);
   assert(gc2_cdata_finalized == finalized0 + 1);
+
+  sets1 = la_load64_acq(&g->gc2.finreg_cdata_sets);
+  clears1 = la_load64_acq(&g->gc2.finreg_cdata_clears);
+  queued1 = la_load64_acq(&g->gc2.finreg_cdata_queued);
+  finalizerq1 = la_load64_acq(&g->gc2.finalizer_queued);
+  finalizerd1 = la_load64_acq(&g->gc2.finalizer_dequeued);
+  mpscd1 = la_load64_acq(&g->gc2.finalizer_mpsc_drained);
+  claimed1 = la_load64_acq(&g->gc2.finreg_cdata_pweak_claimed);
+  dispatched1 = la_load64_acq(&g->gc2.finreg_cdata_preclaim_dispatched);
+  finalized0 = gc2_cdata_finalized;
+  lua_settop(L, 0);
+  lua_pushcfunction(L, gc2_cdata_counting_finalizer);
+  lua_setglobal(L, "gc2_cdata_counting_finalizer");
+  assert(luaL_dostring(L,
+    "local ffi = require('ffi')\n"
+    "ffi.cdef('typedef struct { int x; } gc2_preclaim_clear_fin_t;')\n"
+    "return ffi.gc(ffi.new('gc2_preclaim_clear_fin_t'), gc2_cdata_counting_finalizer)\n") ==
+    LUA_OK);
+  {
+    GCcdata *cd = cdataV(L->top - 1);
+    GCobj *o = obj2gco(cd);
+    TValue nilv;
+    lua_getglobal(L, "gc2_cdata_counting_finalizer");
+    assert(tvisfunc(L->top - 1));
+    assert(lj_gc2_finreg_cdata_preclaim(L, g, o, L->top - 1));
+    assert(test_unlink_root_object(g, o));
+    markfinalized(o);
+    lj_gc2_finreg_cdata_queue(g, o);
+    lj_gc2_finalizer_enqueue(g, o);
+    setnilV(&nilv);
+    lj_cdata_setfin(L, cd, gcval(&nilv), itype(&nilv));
+  }
+  assert(la_load64_acq(&g->gc2.finreg_cdata_sets) == sets1 + 1u);
+  assert(la_load64_acq(&g->gc2.finreg_cdata_clears) == clears1 + 1u);
+  assert(la_load64_acq(&g->gc2.finreg_cdata_queued) == queued1 + 1u);
+  assert(la_load64_acq(&g->gc2.finreg_cdata_pweak_claimed) == claimed1 + 1u);
+  assert(la_load64_acq(&g->gc2.finalizer_queued) == finalizerq1 + 1u);
+  lj_gc_finalize_udata(L);
+  assert(la_load64_acq(&g->gc2.finalizer_dequeued) == finalizerd1 + 1u);
+  assert(la_load64_acq(&g->gc2.finalizer_mpsc_drained) == mpscd1 + 1u);
+  assert(la_load64_acq(&g->gc2.finreg_cdata_preclaim_dispatched) ==
+	 dispatched1 + 1u);
+  assert(la_load64_acq(&g->gc2.finreg_cdata_clears) == clears1 + 1u);
+  assert(gc2_cdata_finalized == finalized0);
+  lua_settop(L, 0);
 
   sets2 = la_load64_acq(&g->gc2.finreg_cdata_sets);
   clears2 = la_load64_acq(&g->gc2.finreg_cdata_clears);

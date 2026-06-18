@@ -185,6 +185,9 @@ for needle in \
   'gc_order_cdata_object(FinRegOrderNode *ord, GCtab *t,' \
   'gc_marktv(g, &fin);' \
   'lj_gc2_finreg_cdata_preclaim(L, g, o, &fin)' \
+  'gc_finalize_cdata_claim_preclaimed(global_State *g, GCobj *o)' \
+  'P_WEAK preclaim suppressed by later ffi.gc(cd, nil)' \
+  'gc2_preclaim_clear_fin_t' \
   'gc2_finclaim_next_capacity(cap, count + 1u)' \
   'lj_gc2_finreg_cdata_preclaim_take(L, g, o, &fin)' \
   'dispatch order may differ from FINREG scan' \
