@@ -20,6 +20,7 @@ for needle in \
   'retired_nodes' \
   'tab_retire_reserve' \
   'tab_retire_arm' \
+  'lj_tab_node_hdr_flags_or_rel(oldnode, TABNODE_FLAG_RETIRING)' \
   'lj_tab_reclaim_retired' \
   'lj_tab_freeretired' \
   'lj_tab_reclaim_retired(g, epoch)' \
@@ -32,6 +33,12 @@ do
     exit 1
   fi
 done
+
+if ! rg -F -q 'lj_tab_node_hdr_flags_acq(oldnode) == TABNODE_FLAG_RETIRING' \
+    "$ROOT/tests/t-tab-retire.c"; then
+  echo "guardrail: retired table node vectors must carry RETIRING flags" >&2
+  exit 1
+fi
 
 if rg -F -q 'lj_mem_freevec(g, oldnode, oldhmask+1, Node)' "$ROOT/src/lj_tab.c"; then
   echo "guardrail: table resize must retire old node vectors, not free immediately" >&2

@@ -86,9 +86,11 @@ int main(void)
   oldnode = lj_tab_node_acq(t);
   oldhmask = lj_tab_node_hmask_acq(oldnode);
   assert(oldhmask == t->hmask);
+  assert(lj_tab_node_hdr_flags_acq(oldnode) == 0);
   lj_tab_resize(L, t, 8, lj_fls(t->hmask) + 2u);
   assert(lj_tab_node_acq(t) != oldnode);
   assert(lj_tab_node_hmask_acq(oldnode) == oldhmask);
+  assert(lj_tab_node_hdr_flags_acq(oldnode) == TABNODE_FLAG_RETIRING);
   ret = find_retired(g, oldnode);
   assert(ret != NULL);
   assert(ret->hmask == oldhmask);
@@ -105,9 +107,11 @@ int main(void)
   check_int_array(L, t, 6, 888);
 
   oldnode = lj_tab_node_acq(t);
+  assert(lj_tab_node_hdr_flags_acq(oldnode) == 0);
   lj_tab_resize(L, t, 2, 1);
   assert(lj_tab_asize_acq(t) == 2);
   assert(lj_tab_node_acq(t) != oldnode);
+  assert(lj_tab_node_hdr_flags_acq(oldnode) == TABNODE_FLAG_RETIRING);
   assert(find_retired(g, oldnode) != NULL);
   for (i = 0; i < 4; i++)
     check_pair(L, i);

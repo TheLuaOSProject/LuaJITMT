@@ -62,7 +62,7 @@ static LJ_AINLINE Node *tab_node_new(lua_State *L, MSize hmask)
   TabNodeHdr *hdr = (TabNodeHdr *)lj_mem_new(L, lj_tab_node_bytes(hmask));
   Node *node = (Node *)(void *)((char *)(void *)hdr + sizeof(TabNodeHdr));
   hdr->hmask = hmask;
-  hdr->unused = 0;
+  hdr->flags = 0;
   return node;
 }
 
@@ -557,6 +557,8 @@ void lj_tab_resize(lua_State *L, GCtab *t, uint32_t asize, uint32_t hbits)
     if (oldaret)
       tab_array_retire_arm(G(L), oldaret);
   }
+  if (oldret)
+    lj_tab_node_hdr_flags_or_rel(oldnode, TABNODE_FLAG_RETIRING);
   /* Publish the rebuilt hash part. */
   if (hbits) {
     newhpart_publish(t, newnode, newhmask, newfreetop);

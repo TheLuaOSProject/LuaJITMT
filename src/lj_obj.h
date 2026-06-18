@@ -546,8 +546,10 @@ LJ_STATIC_ASSERT(offsetof(Node, val) == 0);
 
 typedef struct TabNodeHdr {
   MSize hmask;		/* Hash mask paired with the following Node vector. */
-  MSize unused;
+  MSize flags;		/* State flags for this node generation. */
 } TabNodeHdr;
+
+#define TABNODE_FLAG_RETIRING	(((MSize)1u) << 31)
 
 LJ_STATIC_ASSERT(sizeof(TabNodeHdr) == 8);
 
@@ -788,6 +790,22 @@ static LJ_AINLINE MSize lj_tab_node_hmask_acq(const Node *node)
 static LJ_AINLINE void lj_tab_node_hmask_set(Node *node, MSize hmask)
 {
   lj_tab_node_hdrw(node)->hmask = hmask;
+}
+
+static LJ_AINLINE MSize lj_tab_node_hdr_flags_acq(const Node *node)
+{
+  return (MSize)la_load32_acq(&lj_tab_node_hdr(node)->flags);
+}
+
+static LJ_AINLINE void lj_tab_node_hdr_flags_or_rel(Node *node, MSize flags)
+{
+  uint32_t *word = &lj_tab_node_hdrw(node)->flags;
+  uint32_t old = la_load32_acq(word);
+  uint32_t want;
+  /* 06 section 6.3.4: publish generation state before replacement. */
+  do {
+    want = old | (uint32_t)flags;
+  } while (old != want && !la_cas32(word, &old, want, LA_ACQ_REL, LA_ACQ));
 }
 
 static LJ_AINLINE MSize lj_tab_hmask_acq(const GCtab *t)

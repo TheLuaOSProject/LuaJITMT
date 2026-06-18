@@ -382,7 +382,7 @@ LUA_API lua_State *lua_newstate(lua_Alloc allocf, void *allocd)
   g->tab.retired_arrays = NULL;
   setnilV(registry(L));
   g->nilnodehdr.hmask = 0;
-  g->nilnodehdr.unused = 0;
+  g->nilnodehdr.flags = 0;
   setnilV(&g->nilnode.val);
   setnilV(&g->nilnode.key);
 #if !LJ_GC64
