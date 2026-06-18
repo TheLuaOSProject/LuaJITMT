@@ -293,8 +293,8 @@ static LJ_AINLINE void clearhpart(GCtab *t)
 /* Clear array part of table. */
 static LJ_AINLINE void clearapart(GCtab *t)
 {
-  uint32_t i, asize = lj_tab_asize_acq(t);
-  TValue *array = lj_tab_array_acq(t);
+  TValue *array;
+  uint32_t i, asize = (uint32_t)lj_tab_array_snapshot_acq(t, &array);
   for (i = 0; i < asize; i++)
     lj_tab_storenilraw(&array[i]);
 }
@@ -387,19 +387,19 @@ GCtab * LJ_FASTCALL lj_tab_new1(lua_State *L, uint32_t ahsize)
 GCtab * LJ_FASTCALL lj_tab_dup(lua_State *L, const GCtab *kt)
 {
   GCtab *t;
+  TValue *karray;
   uint32_t asize, hmask;
   Node *knode = lj_tab_node_acq(kt);
   hmask = lj_tab_node_hmask_acq(knode);
-  t = newtab(L, lj_tab_asize_acq(kt),
-	     hmask > 0 ? lj_fls(hmask)+1 : 0);
-  lj_assertL(lj_tab_asize_acq(kt) == lj_tab_asize_acq(t) &&
+  asize = (uint32_t)lj_tab_array_snapshot_acq(kt, &karray);
+  t = newtab(L, asize, hmask > 0 ? lj_fls(hmask)+1 : 0);
+  asize = (uint32_t)lj_tab_array_snapshot_acq(kt, &karray);
+  lj_assertL(asize == lj_tab_asize_acq(t) &&
 	     hmask == lj_tab_node_hmask_acq(lj_tab_node_acq(t)),
 	     "mismatched size of table and template");
   t->nomm = 0;  /* Keys with metamethod names may be present. */
-  asize = lj_tab_asize_acq(kt);
   if (asize > 0) {
     TValue *array = lj_tab_array_acq(t);
-    TValue *karray = lj_tab_array_acq(kt);
     uint32_t i;
     for (i = 0; i < asize; i++)
       lj_tv_load_acq(&array[i], &karray[i]);
@@ -668,10 +668,9 @@ static uint32_t countint(cTValue *key, uint32_t *bins)
 
 static uint32_t countarray(const GCtab *t, uint32_t *bins)
 {
-  uint32_t na, b, i, asize = lj_tab_asize_acq(t);
   TValue *array;
+  uint32_t na, b, i, asize = (uint32_t)lj_tab_array_snapshot_acq(t, &array);
   if (asize == 0) return 0;
-  array = lj_tab_array_acq(t);
   for (na = i = b = 0; b < LJ_MAX_ABITS; b++) {
     uint32_t n, top = 2u << b;
     if (top >= asize) {
@@ -1178,7 +1177,9 @@ TValue *lj_tab_storeudata(lua_State *L, TValue *dst, GCudata *ud)
 uint32_t LJ_FASTCALL lj_tab_keyindex(GCtab *t, cTValue *key)
 {
   TValue tmp;
-  uint32_t asize = lj_tab_asize_acq(t);
+  TValue *array;
+  uint32_t asize = (uint32_t)lj_tab_array_snapshot_acq(t, &array);
+  UNUSED(array);
   if (tvisint(key)) {
     int32_t k = intV(key);
     if ((uint32_t)k < asize)
@@ -1212,8 +1213,8 @@ uint32_t LJ_FASTCALL lj_tab_keyindex(GCtab *t, cTValue *key)
 int lj_tab_next(GCtab *t, cTValue *key, TValue *o)
 {
   uint32_t idx = lj_tab_keyindex(t, key);  /* Find successor index of key. */
-  uint32_t asize = lj_tab_asize_acq(t);
-  TValue *array = lj_tab_array_acq(t);
+  TValue *array;
+  uint32_t asize = (uint32_t)lj_tab_array_snapshot_acq(t, &array);
   /* First traverse the array part. */
   for (; idx < asize; idx++) {
     TValue val;
@@ -1275,8 +1276,8 @@ LJ_NOINLINE static MSize tab_len_slow(GCtab *t, size_t hi)
 /* Compute table length. Fast path. */
 MSize LJ_FASTCALL lj_tab_len(GCtab *t)
 {
-  TValue *array = lj_tab_array_acq(t);
-  size_t hi = (size_t)lj_tab_asize_acq(t);
+  TValue *array;
+  size_t hi = (size_t)lj_tab_array_snapshot_acq(t, &array);
   if (hi) hi--;
   /* In a growing array the last array element is very likely nil. */
   if (hi > 0 && LJ_LIKELY(lj_tv_isnil_acq(&array[hi]))) {
@@ -1297,8 +1298,8 @@ MSize LJ_FASTCALL lj_tab_len(GCtab *t)
 /* Verify hinted table length or compute it. */
 MSize LJ_FASTCALL lj_tab_len_hint(GCtab *t, size_t hint)
 {
-  size_t asize = (size_t)lj_tab_asize_acq(t);
-  TValue *array = lj_tab_array_acq(t);
+  TValue *array;
+  size_t asize = (size_t)lj_tab_array_snapshot_acq(t, &array);
   if (LJ_LIKELY(hint+1 < asize)) {
     TValue tv, tvnext;
     lj_tv_load_acq(&tv, &array[hint]);

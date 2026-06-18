@@ -177,10 +177,9 @@ static void bcwrite_ktab(BCWriteCtx *ctx, char *p, const GCtab *t)
   Node *hashnode = NULL;
   TValue *array = NULL;
   MSize hmask = 0;
-  MSize asize = lj_tab_asize_acq(t);
+  MSize asize = lj_tab_array_snapshot_acq(t, &array);
   if (asize > 0) {  /* Determine max. length of array part. */
     ptrdiff_t i;
-    array = lj_tab_array_acq(t);
     for (i = (ptrdiff_t)asize-1; i >= 0; i--) {
       TValue val;
       lj_tv_load_acq(&val, &array[i]);

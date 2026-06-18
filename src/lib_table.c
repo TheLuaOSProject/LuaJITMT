@@ -58,8 +58,8 @@ LJLIB_LUA(table_getn) /*
 LJLIB_CF(table_maxn)
 {
   GCtab *t = lj_lib_checktab(L, 1);
-  MSize asize = lj_tab_asize_acq(t);
-  TValue *array = lj_tab_array_acq(t);
+  TValue *array;
+  MSize asize = lj_tab_array_snapshot_acq(t, &array);
   Node *node;
   MSize hmask;
   lua_Number m = 0;

@@ -36,6 +36,12 @@ for needle in \
   'lj_tab_asize_rel(t, asize)' \
   'static LJ_AINLINE cTValue *lj_tab_getint' \
   'static LJ_AINLINE TValue *lj_tab_setint' \
+  'lj_tab_array_snapshot_acq(kt, &karray)' \
+  'uint32_t asize = (uint32_t)lj_tab_array_snapshot_acq(t, &array)' \
+  'size_t hi = (size_t)lj_tab_array_snapshot_acq(t, &array)' \
+  'MSize asize = lj_tab_array_snapshot_acq(t, &array)' \
+  'MSize i, asize = lj_tab_array_snapshot_acq(t, &array)' \
+  'asize = lj_tab_array_snapshot_acq(kt, &array)' \
   'lj_tv_load_acq(&val, &array[i])'
 do
   if ! rg -F -q "$needle" "$ROOT/src"; then

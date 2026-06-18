@@ -1386,15 +1386,15 @@ static void fs_fixup_k(FuncState *fs, GCproto *pt, void *kptr)
   GCtab *kt;
   TValue *array;
   Node *node;
-  MSize i, hmask;
+  MSize i, asize, hmask;
   checklimitgt(fs, fs->nkn, BCMAX_D+1, "constants");
   checklimitgt(fs, fs->nkgc, BCMAX_D+1, "constants");
   setmref(pt->k, kptr);
   pt->sizekn = fs->nkn;
   pt->sizekgc = fs->nkgc;
   kt = fs->kt;
-  array = lj_tab_array_acq(kt);
-  for (i = 0; i < lj_tab_asize_acq(kt); i++) {
+  asize = lj_tab_array_snapshot_acq(kt, &array);
+  for (i = 0; i < asize; i++) {
     TValue val;
     lj_tv_load_acq(&val, &array[i]);
     if (tvhaskslot(&val)) {

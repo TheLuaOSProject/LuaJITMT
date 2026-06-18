@@ -864,8 +864,8 @@ static int gc_traverse_tab(global_State *g, GCtab *t)
   if (weak == LJ_GC_WEAK)  /* Nothing to mark if both keys/values are weak. */
     return 1;
   if (!(weak & LJ_GC_WEAKVAL)) {  /* Mark array part. */
-    MSize i, asize = lj_tab_asize_acq(t);
-    TValue *array = lj_tab_array_acq(t);
+    TValue *array;
+    MSize i, asize = lj_tab_array_snapshot_acq(t, &array);
     for (i = 0; i < asize; i++) {
       TValue val;
       lj_tv_load_acq(&val, &array[i]);
@@ -1315,8 +1315,8 @@ static void gc_clearweak(global_State *g, GCobj *o)
     lj_assertG((lj_obj_gcflags(obj2gco(t)) & LJ_GC_WEAK),
 	       "clear of non-weak table");
     if ((lj_obj_gcflags(obj2gco(t)) & LJ_GC_WEAKVAL)) {
-      MSize i, asize = lj_tab_asize_acq(t);
-      TValue *array = lj_tab_array_acq(t);
+      TValue *array;
+      MSize i, asize = lj_tab_array_snapshot_acq(t, &array);
       for (i = 0; i < asize; i++) {
 	/* Clear array slot when value is about to be collected. */
 	TValue val;

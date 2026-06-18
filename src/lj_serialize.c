@@ -200,12 +200,11 @@ static char *serialize_put(char *w, SBufExt *sbx, cTValue *o)
     const Node *hashnode = NULL;
     uint32_t narray = 0, nhash = 0, one = 2, hmask = 0;
     TValue *array = NULL;
-    MSize asize = lj_tab_asize_acq(t);
+    MSize asize = lj_tab_array_snapshot_acq(t, &array);
     if (sbx->depth <= 0) lj_err_caller(sbufL(sbx), LJ_ERR_BUFFER_DEPTH);
     sbx->depth--;
     if (asize > 0) {  /* Determine max. length of array part. */
       ptrdiff_t i;
-      array = lj_tab_array_acq(t);
       for (i = (ptrdiff_t)asize-1; i >= 0; i--) {
 	TValue val;
 	lj_tv_load_acq(&val, &array[i]);

@@ -1821,8 +1821,8 @@ static void gc2_weak_process_tab(global_State *g, GCtab *t, int clear,
   if (!weak)
     return;
   if (weak & LJ_GC_WEAKVAL) {
-    MSize i, asize = lj_tab_asize_acq(t);
-    TValue *array = lj_tab_array_acq(t);
+    TValue *array;
+    MSize i, asize = lj_tab_array_snapshot_acq(t, &array);
     for (i = 0; i < asize; i++) {
       TValue val;
       lj_tv_load_acq(&val, &array[i]);
@@ -3073,8 +3073,8 @@ static int gc2_traverse_tab(global_State *g, GCtab *t)
   if (weak == LJ_GC_WEAK)
     return weak;
   if (!(weak & LJ_GC_WEAKVAL)) {
-    MSize i, asize = lj_tab_asize_acq(t);
-    TValue *array = lj_tab_array_acq(t);
+    TValue *array;
+    MSize i, asize = lj_tab_array_snapshot_acq(t, &array);
     for (i = 0; i < asize; i++) {
       TValue val;
       lj_tv_load_acq(&val, &array[i]);
