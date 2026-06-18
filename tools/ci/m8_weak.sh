@@ -92,6 +92,10 @@ for needle in \
   'threading_rehome_unstarted_stack(lua_State *L, lua_State *L1,' \
   'if (la_load32_acq(&G(L)->mt_shutdown) != 0)' \
   'threading_rehome_unstarted_stack(L, L1, tg);' \
+  'threading_thread___gc' \
+  'threading_tg_is_registered(global_State *g, TGState *target)' \
+  'lj_tg_fini_thread(g, th->tg);' \
+  'lj_gc2_finreg_udata_register(L, g, obj2gco(ud));' \
   'order_cdata_finalized[0] == 3' \
   'order_cdata_finalized[1] == 2' \
   'order_cdata_finalized[2] == 1' \
@@ -129,6 +133,11 @@ for needle in \
   'gc_finalizer_mt_reclaim_exclusive(global_State *g)' \
   'gc_finalizer_restore_threshold(global_State *g, GCSize oldt)' \
   'gc_fullgc_deferred_by_finalizer(global_State *g)' \
+  'uint64_t finalizer_spawn_deferrals' \
+  'finalizer_spawn_deferrals, 0' \
+  'test_finalizer_spawn_deferred_state' \
+  'gc2_spawn_defer_t' \
+  'finalizer_spawn_deferrals) > deferrals0' \
   'finrc <= 0' \
   'Keep GCSfinalize open until spawned TG exits.' \
   'finalizer-spawn outlived callback' \

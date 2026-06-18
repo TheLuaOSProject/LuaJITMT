@@ -2284,6 +2284,51 @@ static int gc2_cdata_order_finalizer_3(lua_State *L)
 }
 #endif
 
+static void test_finalizer_spawn_deferred_state(lua_State *L, global_State *g)
+{
+  uint64_t deferrals0 = la_load64_acq(&g->gc2.finalizer_spawn_deferrals);
+
+  lua_settop(L, 0);
+  assert(luaL_dostring(L,
+    "local ffi = require('ffi')\n"
+    "local th = require('threading')\n"
+    "ffi.cdef('typedef struct { int x; } gc2_spawn_defer_t;')\n"
+    "gc2_spawn_started = th.channel(1)\n"
+    "gc2_spawn_release = th.channel(1)\n"
+    "gc2_spawn_worker = nil\n"
+    "do\n"
+    "  local cd = ffi.gc(ffi.new('gc2_spawn_defer_t'), function()\n"
+    "    gc2_spawn_worker = th.spawn(function(started, release)\n"
+    "      started:send('started')\n"
+    "      local msg, ok = release:recv(10)\n"
+    "      return ok == true and msg == 'release'\n"
+    "    end, gc2_spawn_started, gc2_spawn_release)\n"
+    "  end)\n"
+    "end\n") == LUA_OK);
+
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  assert(g->gc.state == GCSfinalize);
+  assert(la_load32_acq(&g->mt_live) != 0);
+  assert(la_load32_acq(&g->mt_gc_exclusive) == 0);
+  assert(lj_gc_threshold_load(g) == LJ_MAX_MEM);
+  assert(la_load64_acq(&g->gc2.finalizer_spawn_deferrals) > deferrals0);
+
+  assert(luaL_dostring(L,
+    "local msg, ok = gc2_spawn_started:recv(1)\n"
+    "assert(ok == true and msg == 'started')\n"
+    "assert(gc2_spawn_release:send('release', 1) == true)\n"
+    "local joined, result = gc2_spawn_worker:join(10)\n"
+    "assert(joined == true and result == true, tostring(result))\n"
+    "gc2_spawn_worker = nil\n"
+    "gc2_spawn_started = nil\n"
+    "gc2_spawn_release = nil\n") == LUA_OK);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  assert(la_load32_acq(&g->mt_live) == 0);
+  assert(g->gc.state == GCSpause);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  lua_gc(L, LUA_GCSTOP, 0);
+}
+
 static void drive_udata_finalizers(lua_State *L)
 {
   int i;
@@ -2849,6 +2894,7 @@ int main(void)
   test_finreg_userdata_inplace_finalizer_behavior(L);
 #if LJ_HASFFI
   test_finreg_cdata_telemetry(L, g);
+  test_finalizer_spawn_deferred_state(L, g);
 #endif
   test_leaf_ssb(L, g, tg);
 

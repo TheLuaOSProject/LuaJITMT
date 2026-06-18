@@ -1433,9 +1433,13 @@ static int gc_finalize(lua_State *L)
 
 static int gc_fullgc_deferred_by_finalizer(global_State *g)
 {
-  return g->gc.state == GCSfinalize &&
-	 la_load32_acq(&g->mt_live) != 0 &&
-	 la_load32_acq(&g->mt_gc_exclusive) == 0;
+  if (g->gc.state == GCSfinalize &&
+      la_load32_acq(&g->mt_live) != 0 &&
+      la_load32_acq(&g->mt_gc_exclusive) == 0) {
+    la_add64_rlx(&g->gc2.finalizer_spawn_deferrals, 1);
+    return 1;
+  }
+  return 0;
 }
 
 /* Finalize all userdata/cdata objects from the GC2 finalizer queue. */

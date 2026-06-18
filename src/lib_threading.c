@@ -23,6 +23,7 @@
 #include "lj_ccallback.h"
 #include "lj_err.h"
 #include "lj_gc.h"
+#include "lj_gc2.h"
 #include "lj_lib.h"
 #include "lj_safepoint.h"
 #include "lj_state.h"
@@ -175,6 +176,7 @@ static void threading_state_set_ud(lua_State *L, lua_State *L1, GCudata *ud)
 
 static GCudata *threading_new_thread_ud(lua_State *L, GCtab *env)
 {
+  global_State *g = G(L);
   GCudata *ud = lj_udata_new(L, sizeof(LJThread), env);
   LJThread *th = (LJThread *)uddata(ud);
   memset(th, 0, sizeof(*th));
@@ -182,6 +184,8 @@ static GCudata *threading_new_thread_ud(lua_State *L, GCtab *env)
   setgcref(ud->metatable, obj2gco(env));
   th->ud = ud;
   lj_udata_udtype_rel(ud, UDTYPE_THREAD);
+  lj_gc2_finreg_udata_register(L, g, obj2gco(ud));
+  (void)lj_gc2_finreg_udata_set(g, obj2gco(ud), 1);
   setudataV(L, L->top++, ud);
   return ud;
 }
@@ -394,6 +398,20 @@ static int threading_is_current_thread(lua_State *L, LJThread *th)
   return tg != NULL && tg->thread_ud == th->ud;
 }
 
+static int threading_tg_is_registered(global_State *g, TGState *target)
+{
+  TGState *tg;
+  if (!g || !target)
+    return 0;
+  for (tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
+       tg != NULL;
+       tg = (TGState *)la_loadptr_acq((void *const *)&tg->next_tg)) {
+    if (tg == target)
+      return 1;
+  }
+  return 0;
+}
+
 static LJThread *threading_thread_from_state(lua_State *L, lua_State *child)
 {
   GCobj *o;
@@ -513,6 +531,27 @@ LJLIB_CF(threading_thread___tostring)
   (void)threading_tothread(L);
   lua_pushliteral(L, "threading.thread");
   return 1;
+}
+
+LJLIB_CF(threading_thread___gc)
+{
+  if (L->base < L->top && tvisudata(L->base) &&
+      lj_udata_udtype_acq(udataV(L->base)) == UDTYPE_THREAD) {
+    global_State *g = G(L);
+    LJThread *th = (LJThread *)uddata(udataV(L->base));
+    if (!th->main_thread && th->tg &&
+	la_load32_acq(&th->state) == LJ_THREAD_DONE &&
+	la_load32_acq(&th->joined) != 0) {
+      (void)lj_tg_reclaim_dead(g);
+      if (!threading_tg_is_registered(g, th->tg)) {
+	lj_tg_fini_thread(g, th->tg);
+	lj_mem_freet(g, th->tg);
+	th->tg = NULL;
+	th->L = NULL;
+      }
+    }
+  }
+  return 0;
 }
 
 LJLIB_PUSH("threading.thread") LJLIB_SET(__metatable)

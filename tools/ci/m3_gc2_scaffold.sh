@@ -93,6 +93,7 @@ for needle in \
   'uint64_t finalizer_enters' \
   'uint64_t finalizer_leaves' \
   'uint64_t finalizer_sweep_blocks' \
+  'uint64_t finalizer_spawn_deferrals' \
   'uint64_t weak_keys_marked' \
   'uint64_t weak_values_marked' \
   'gc2_weak_record(global_State *g, GCtab *t)' \

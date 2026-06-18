@@ -193,6 +193,7 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.finalizer_enters, 0);
   la_store64_rlx(&g->gc2.finalizer_leaves, 0);
   la_store64_rlx(&g->gc2.finalizer_sweep_blocks, 0);
+  la_store64_rlx(&g->gc2.finalizer_spawn_deferrals, 0);
   la_store64_rlx(&g->gc2.weak_keys_marked, 0);
   la_store64_rlx(&g->gc2.weak_values_marked, 0);
   g->gc2.tg_list = NULL;
