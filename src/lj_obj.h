@@ -660,10 +660,22 @@ static LJ_AINLINE GCSize lj_tab_array_bytes(MSize acap)
   return (GCSize)sizeof(TabArrayHdr) + (GCSize)acap * (GCSize)sizeof(TValue);
 }
 
+static LJ_AINLINE int lj_tab_array_is_colocated(const GCtab *t,
+						const TValue *array)
+{
+#if LJ_MAX_COLOSIZE != 0
+  return array == (const TValue *)(const void *)
+    ((const char *)(const void *)t + sizeof(GCtab));
+#else
+  UNUSED(t); UNUSED(array);
+  return 0;
+#endif
+}
+
 static LJ_AINLINE void *lj_tab_array_mem_acq(const GCtab *t)
 {
   TValue *array = lj_tab_array_acq(t);
-  if (array && lj_tab_array_separated(t))
+  if (array && !lj_tab_array_is_colocated(t, array))
     return (void *)lj_tab_array_hdrw(array);
   return (void *)array;
 }
@@ -676,6 +688,17 @@ static LJ_AINLINE MSize lj_tab_array_hdr_asize_acq(const TValue *array)
 static LJ_AINLINE MSize lj_tab_array_hdr_acap_acq(const TValue *array)
 {
   return (MSize)la_load32_acq(&lj_tab_array_hdr(array)->acap);
+}
+
+static LJ_AINLINE MSize lj_tab_array_snapshot_acq(const GCtab *t,
+						  TValue **arrayp)
+{
+  MSize asize = lj_tab_asize_acq(t);
+  TValue *array = lj_tab_array_acq(t);
+  if (array && !lj_tab_array_is_colocated(t, array))
+    asize = lj_tab_array_hdr_asize_acq(array);
+  *arrayp = array;
+  return asize;
 }
 
 static LJ_AINLINE Node *lj_tab_node_acq(const GCtab *t)

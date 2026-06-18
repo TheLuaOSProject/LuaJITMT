@@ -23,7 +23,9 @@ for needle in \
   'TabArrayHdr' \
   'lj_tab_array_hdrw' \
   'lj_tab_array_bytes' \
+  'lj_tab_array_is_colocated' \
   'lj_tab_array_mem_acq' \
+  'lj_tab_array_snapshot_acq' \
   'TabArrayRetire' \
   'retired_arrays' \
   'tab_array_new' \
@@ -32,6 +34,8 @@ for needle in \
   'tab_array_retire_arm' \
   'lj_tab_array_rel(t, array)' \
   'lj_tab_asize_rel(t, asize)' \
+  'static LJ_AINLINE cTValue *lj_tab_getint' \
+  'static LJ_AINLINE TValue *lj_tab_setint' \
   'lj_tv_load_acq(&val, &array[i])'
 do
   if ! rg -F -q "$needle" "$ROOT/src"; then
@@ -50,6 +54,12 @@ fi
 if rg -n 'lj_mem_realloc(vec)?\([^;]*(array|t->array|oldarray)' \
     "$ROOT/src/lj_tab.c"; then
   echo "guardrail: table resize must retire old arrays, not realloc them" >&2
+  exit 1
+fi
+
+if rg -n '#define (inarray|arrayslot|lj_tab_getint|lj_tab_setint)' \
+    "$ROOT/src/lj_tab.h"; then
+  echo "guardrail: integer table access must use snapshot inline functions" >&2
   exit 1
 fi
 

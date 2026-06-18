@@ -41,7 +41,9 @@ int main(void)
   global_State *g;
   GCtab *t;
   TValue *oldarray, *array;
+  TValue *snaparray;
   MSize oldasize, oldacap;
+  MSize snapasize;
   uint64_t retire_epoch;
   TabArrayRetire *ret;
   int i;
@@ -61,6 +63,9 @@ int main(void)
   assert(lj_tab_array_mem_acq(t) == lj_tab_array_hdrw(oldarray));
   assert(lj_tab_array_hdr_asize_acq(oldarray) == oldasize);
   assert(lj_tab_array_hdr_acap_acq(oldarray) == oldacap);
+  snapasize = lj_tab_array_snapshot_acq(t, &snaparray);
+  assert(snaparray == oldarray);
+  assert(snapasize == oldasize);
   for (i = 0; i < (int)oldasize; i += 3)
     set_int(L, t, i, i + 1000);
 
@@ -72,6 +77,9 @@ int main(void)
   assert(lj_tab_array_mem_acq(t) == lj_tab_array_hdrw(array));
   assert(lj_tab_array_hdr_asize_acq(array) == oldasize + 32);
   assert(lj_tab_array_hdr_acap_acq(array) == oldasize + 32);
+  snapasize = lj_tab_array_snapshot_acq(t, &snaparray);
+  assert(snaparray == array);
+  assert(snapasize == oldasize + 32);
   ret = find_retired_array(g, oldarray);
   assert(ret != NULL);
   assert(ret->acap == oldacap);
@@ -99,6 +107,9 @@ int main(void)
   assert(lj_tab_asize_acq(t) == 6);
   assert(lj_tab_array_hdr_asize_acq(array) == 6);
   assert(lj_tab_array_hdr_acap_acq(array) == oldacap);
+  snapasize = lj_tab_array_snapshot_acq(t, &snaparray);
+  assert(snaparray == array);
+  assert(snapasize == 6);
   ret = find_retired_array(g, oldarray);
   assert(ret != NULL);
   assert(ret->acap == oldacap);
@@ -119,6 +130,9 @@ int main(void)
   assert(lj_tab_asize_acq(t) == 12);
   assert(lj_tab_array_hdr_asize_acq(array) == 12);
   assert(lj_tab_array_hdr_acap_acq(array) == 12);
+  snapasize = lj_tab_array_snapshot_acq(t, &snaparray);
+  assert(snaparray == array);
+  assert(snapasize == 12);
   ret = find_retired_array(g, oldarray);
   assert(ret != NULL);
   assert(ret->acap == oldacap);
@@ -133,6 +147,9 @@ int main(void)
   assert(t->colo > 0);
   oldarray = lj_tab_array_acq(t);
   oldacap = t->acap;
+  snapasize = lj_tab_array_snapshot_acq(t, &snaparray);
+  assert(snaparray == oldarray);
+  assert(snapasize == lj_tab_asize_acq(t));
   set_int(L, t, 1, 111);
   lj_tab_resize(L, t, LJ_MAX_COLOSIZE + 24, 0);
   assert(t->colo < 0);
@@ -142,6 +159,9 @@ int main(void)
   assert(lj_tab_array_mem_acq(t) == lj_tab_array_hdrw(array));
   assert(lj_tab_array_hdr_asize_acq(array) == LJ_MAX_COLOSIZE + 24);
   assert(lj_tab_array_hdr_acap_acq(array) == LJ_MAX_COLOSIZE + 24);
+  snapasize = lj_tab_array_snapshot_acq(t, &snaparray);
+  assert(snaparray == array);
+  assert(snapasize == LJ_MAX_COLOSIZE + 24);
   assert(find_retired_array(g, oldarray) == NULL);
   assert(get_int(t, 1) == 111);
   assert(oldacap <= LJ_MAX_COLOSIZE);

@@ -533,7 +533,7 @@ static void test_c_table_rescan_barrier(lua_State *L, global_State *g,
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 0);
 
   assert(parent->asize > 0);
-  settabV(L, arrayslot(parent, 0), child);
+  settabV(L, &lj_tab_array_acq(parent)[0], child);
   lj_gc_anybarriert(L, parent);
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 0);
   assert(!lj_gc2_ssb_empty(g));

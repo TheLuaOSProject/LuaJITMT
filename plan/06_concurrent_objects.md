@@ -191,7 +191,11 @@ bytecode-writer, parser, and recorder readers. Legacy `GCtab.array` C readers
 use acquire-loaded pointer/size helpers and snapshot slot values before
 nil/type/copy decisions; array growth initializes slots before release-storing
 the pointer and then `asize`, while shrink keeps the current
-allocation capacity until the final `AHdr` port. On x86-64,
+allocation capacity until the final `AHdr` port. Integer `lj_tab_getint()` /
+`lj_tab_setint()` access now snapshots the array pointer with the legacy
+`asize` mirror and then uses `TabArrayHdr.asize` for separated array
+generations, preserving the colocated-array path until the final `AHdr` port.
+On x86-64,
 `getmetatable`'s `__metatable` probe, `ipairs_aux` empty-hash fallback,
 `lj_vm_next` hash traversal, `BC_TGETS_Z`, and `BC_ITERN` hash traversal now
 load the mask from the acquired node header instead of the legacy

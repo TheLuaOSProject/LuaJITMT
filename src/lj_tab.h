@@ -118,12 +118,19 @@ LJ_FUNC TValue *lj_tab_storeproto(lua_State *L, TValue *dst, GCproto *pt);
 LJ_FUNC TValue *lj_tab_storefunc(lua_State *L, TValue *dst, GCfunc *fn);
 LJ_FUNC TValue *lj_tab_storeudata(lua_State *L, TValue *dst, GCudata *ud);
 
-#define inarray(t, key)		((MSize)(key) < lj_tab_asize_acq((t)))
-#define arrayslot(t, i)		(&lj_tab_array_acq((t))[(i)])
-#define lj_tab_getint(t, key) \
-  (inarray((t), (key)) ? arrayslot((t), (key)) : lj_tab_getinth((t), (key)))
-#define lj_tab_setint(L, t, key) \
-  (inarray((t), (key)) ? arrayslot((t), (key)) : lj_tab_setinth(L, (t), (key)))
+static LJ_AINLINE cTValue *lj_tab_getint(GCtab *t, int32_t key)
+{
+  TValue *array;
+  MSize asize = lj_tab_array_snapshot_acq(t, &array);
+  return (MSize)key < asize ? &array[key] : lj_tab_getinth(t, key);
+}
+
+static LJ_AINLINE TValue *lj_tab_setint(lua_State *L, GCtab *t, int32_t key)
+{
+  TValue *array;
+  MSize asize = lj_tab_array_snapshot_acq(t, &array);
+  return (MSize)key < asize ? &array[key] : lj_tab_setinth(L, t, key);
+}
 
 LJ_FUNC uint32_t LJ_FASTCALL lj_tab_keyindex(GCtab *t, cTValue *key);
 LJ_FUNCA int lj_tab_next(GCtab *t, cTValue *key, TValue *o);
