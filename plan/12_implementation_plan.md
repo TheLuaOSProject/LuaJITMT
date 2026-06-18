@@ -256,8 +256,10 @@ cycles. Idle generational barriers conservatively queue remembered entries into
 SSB without draining outside a cycle and force a major on overflow. Minor sweep
 and root gates turn on after the first forced major baseline. Completed minor
 cycles now estimate young survival from live-estimate growth over sampled cycle
-allocation bytes and request a one-shot major at high survival. Remaining M10
-work is tuning the heuristic against benchmark data.
+allocation bytes and request a one-shot major at high survival. `bench.lua`
+accepts `BENCH_GC_MODE` and `BENCH_SCALE` for M10 tuning probes; the initial 80
+percent survival threshold leaves short-lived allocation churn on minor cycles
+and promotes retained-allocation churn back to major collection.
 
 ## 12.1 Per-file change index (cross-check before declaring any milestone done)
 new: lj_atomic.h lj_tg.{h,c} lj_arena.{h,c} lj_gc2.{h,c} lj_gc2_barrier.h

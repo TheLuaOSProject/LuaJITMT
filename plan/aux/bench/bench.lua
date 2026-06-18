@@ -5,8 +5,14 @@
 -- single-threaded, see 13_testing_and_benchmarks.md).
 
 local clock = os.clock
+local getenv = os.getenv
+local floor = math.floor
 local benches = {}
+local scale = tonumber(getenv("BENCH_SCALE")) or 1
+if scale <= 0 then scale = 1 end
 local function bench(name, iters, fn)
+  iters = floor(iters * scale + 0.5)
+  if iters < 1 then iters = 1 end
   benches[#benches+1] = { name = name, iters = iters, fn = fn }
 end
 
@@ -123,6 +129,10 @@ bench("sbuf_format", 2e6, function(n)
 end)
 
 local filter = arg and arg[1]
+local gc_mode = getenv("BENCH_GC_MODE")
+if gc_mode == "generational" or gc_mode == "incremental" then
+  collectgarbage(gc_mode)
+end
 collectgarbage("collect")
 print(string.format("%-18s %12s %10s", "benchmark", "total_s", "ns/op"))
 for _, b in ipairs(benches) do

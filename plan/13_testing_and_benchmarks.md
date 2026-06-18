@@ -18,6 +18,9 @@ Recorded from the pinned commit, container: 1 vCPU Intel Xeon @2.80 GHz,
 3.9 GiB RAM, gcc 13.3.0, Linux x86-64, default build (GC64 on). Best of 5,
 `aux/bench/bench.lua`. **Single-vCPU machine: these are single-thread
 baselines only; redo scaling runs (bench_mt) on ≥8 real cores.**
+Use `BENCH_GC_MODE=generational|incremental` to pin the GC mode for a run, and
+`BENCH_SCALE=<factor>` for short tuning probes; unset both for canonical
+baseline numbers.
 
 | benchmark | JIT ns/op | interp ns/op |
 |---|---|---|
