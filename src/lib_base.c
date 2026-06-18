@@ -527,6 +527,10 @@ static void gc_stats_push(lua_State *L)
 		  la_load32_acq(&gc2->cycle_sweep_minor));
   gc_stats_setint(L, t, "minor_sweep_enabled",
 		  la_load32_acq(&gc2->minor_sweep_enabled));
+  gc_stats_setint(L, t, "cycle_roots_minor",
+		  la_load32_acq(&gc2->cycle_roots_minor));
+  gc_stats_setint(L, t, "minor_roots_enabled",
+		  la_load32_acq(&gc2->minor_roots_enabled));
   gc_stats_setnum(L, t, "cycle_requests", la_load64_acq(&gc2->cycle_requests));
   gc_stats_setnum(L, t, "cycle_starts", la_load64_acq(&gc2->cycle_starts));
   gc_stats_setnum(L, t, "major_cycle_starts",
@@ -537,6 +541,8 @@ static void gc_stats_push(lua_State *L)
 		  la_load64_acq(&gc2->minor_sweep_deferred));
   gc_stats_setnum(L, t, "minor_sweep_arenas",
 		  la_load64_acq(&gc2->minor_sweep_arenas));
+  gc_stats_setnum(L, t, "minor_roots_deferred",
+		  la_load64_acq(&gc2->minor_roots_deferred));
   gc_stats_setnum(L, t, "remembered_barriers",
 		  la_load64_acq(&gc2->remembered_barriers));
   gc_stats_setnum(L, t, "remembered_pushed",

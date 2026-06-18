@@ -87,8 +87,11 @@ void lj_gc2_init(global_State *g)
   la_store32_rlx(&g->gc2.cycle_minor_requested, 0);
   la_store32_rlx(&g->gc2.cycle_sweep_minor, 0);
   la_store32_rlx(&g->gc2.minor_sweep_enabled, 0);
+  la_store32_rlx(&g->gc2.cycle_roots_minor, 0);
+  la_store32_rlx(&g->gc2.minor_roots_enabled, 0);
   la_store64_rlx(&g->gc2.minor_sweep_deferred, 0);
   la_store64_rlx(&g->gc2.minor_sweep_arenas, 0);
+  la_store64_rlx(&g->gc2.minor_roots_deferred, 0);
   la_store32_rlx(&g->gc2.force_major, 0);
   la_store64_rlx(&g->gc2.remembered_barriers, 0);
   la_store64_rlx(&g->gc2.remembered_pushed, 0);
@@ -546,17 +549,22 @@ void lj_gc2_legacy_mark_begin(global_State *g)
 {
   TGState *tg = G2TG(g);
   uint32_t leader;
-  uint32_t forced_major, minor_requested, sweep_minor, drained;
+  uint32_t forced_major, minor_requested, sweep_minor, roots_minor, drained;
   forced_major = la_xchg32_acqrel(&g->gc2.force_major, 0);
   minor_requested = !forced_major && la_load32_acq(&g->gc2.generational) != 0;
   sweep_minor = minor_requested &&
     la_load32_acq(&g->gc2.minor_sweep_enabled) != 0;
+  roots_minor = sweep_minor &&
+    la_load32_acq(&g->gc2.minor_roots_enabled) != 0;
   la_store32_rel(&g->gc2.cycle_minor_requested, minor_requested);
   la_store32_rel(&g->gc2.cycle_sweep_minor, sweep_minor);
+  la_store32_rel(&g->gc2.cycle_roots_minor, roots_minor);
   if (minor_requested)
     la_add64_rlx(&g->gc2.minor_cycle_requests, 1);
   if (minor_requested && !sweep_minor)
     la_add64_rlx(&g->gc2.minor_sweep_deferred, 1);
+  if (minor_requested && !roots_minor)
+    la_add64_rlx(&g->gc2.minor_roots_deferred, 1);
   la_add64_rlx(&g->gc2.major_cycle_starts, 1);
   /* Publish MARK before clearing the request token, so late allocators stop. */
   g->gc2.phase = LJ_GC2_MARK;

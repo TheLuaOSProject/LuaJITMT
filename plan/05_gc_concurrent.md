@@ -569,6 +569,9 @@ latched `cycle_sweep_minor` flag and internal off-by-default
 root filtering and enablement are safe. Parent-aware table/object barriers now
 use that gate to filter for old-parent/young-child remembered pairs, while
 value-only contexts stay conservative until their parent context is explicit.
+Minor root selection has matching `cycle_roots_minor` /
+`minor_roots_enabled` latches and `minor_roots_deferred` telemetry, but public
+cycles still use the full root set until the minor root scanner is implemented.
 
 ## 5.13 Torture & debug
 `collectgarbage("torture",1)`: leader runs continuous back-to-back cycles
