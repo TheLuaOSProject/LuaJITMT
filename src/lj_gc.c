@@ -1509,16 +1509,23 @@ static int gc_unlink_root_object(global_State *g, GCobj *target)
 
 static size_t gc_queue_cdata_finalizers_pweak_ordered(lua_State *L,
 						      global_State *g,
-						      size_t *queuedp)
+						      size_t *queuedp,
+						      int *fallbackp)
 {
   CTState *cts = ctype_ctsG(g);
   FinRegOrderNode *ord;
   size_t preclaimed = 0, queued = 0;
-  if (cts == NULL)
+  int fallback = 0;
+  if (cts == NULL) {
+    if (fallbackp)
+      *fallbackp = 0;
     return 0;
-  for (ord = (FinRegOrderNode *)la_loadptr_acq(
-	 (void *const *)&cts->fin_order_head);
-       ord != NULL;
+  }
+  ord = (FinRegOrderNode *)la_loadptr_acq(
+    (void *const *)&cts->fin_order_head);
+  if (ord == NULL)
+    fallback = 1;
+  for (; ord != NULL;
        ord = (FinRegOrderNode *)la_loadptr_acq((void *const *)&ord->next)) {
     GCtab *t = (GCtab *)la_loadptr_acq((void *const *)&ord->tab);
     TValue *slot = (TValue *)la_loadptr_acq((void *const *)&ord->slot);
@@ -1556,11 +1563,13 @@ static size_t gc_queue_cdata_finalizers_pweak_ordered(lua_State *L,
     la_add64_rlx(&g->gc2.finreg_cdata_order_claimed, 1);
     if (!gc_finreg_preclaim_has_capacity(g)) {
       copyTVrel(L, slot, &fin);
+      fallback = 1;
       la_add64_rlx(&g->gc2.finreg_cdata_order_fallbacks, 1);
       continue;
     }
     if (!gc_unlink_root_object(g, o)) {
       copyTVrel(L, slot, &fin);
+      fallback = 1;
       la_add64_rlx(&g->gc2.finreg_cdata_order_fallbacks, 1);
       continue;
     }
@@ -1569,6 +1578,7 @@ static size_t gc_queue_cdata_finalizers_pweak_ordered(lua_State *L,
       lj_obj_setgcwr(o, g->gc.root);
       setgcref(g->gc.root, o);
       copyTVrel(L, slot, &fin);
+      fallback = 1;
       la_add64_rlx(&g->gc2.finreg_cdata_order_fallbacks, 1);
       continue;
     }
@@ -1583,6 +1593,8 @@ static size_t gc_queue_cdata_finalizers_pweak_ordered(lua_State *L,
   }
   if (queuedp)
     *queuedp += queued;
+  if (fallbackp)
+    *fallbackp = fallback;
   return preclaimed;  /* 05 section 5.8: FINREG ordered P_WEAK cdata scan. */
 }
 
@@ -1637,10 +1649,15 @@ static size_t gc_queue_cdata_finalizers_pweak(lua_State *L, global_State *g)
   GCobj *o;
   size_t preclaimed, ordered_queued = 0;
   size_t n = 0;
-  preclaimed = gc_queue_cdata_finalizers_pweak_ordered(L, g, &ordered_queued);
+  int ordered_fallback = 0;
+  preclaimed = gc_queue_cdata_finalizers_pweak_ordered(L, g, &ordered_queued,
+						       &ordered_fallback);
   n += ordered_queued;
-  if (ordered_queued == 0)
+  if (ordered_fallback && ordered_queued == 0)
     preclaimed += gc_preclaim_cdata_finalizers_pweak_finreg(L, g);
+  if (!ordered_fallback)
+    goto done;
+  la_add64_rlx(&g->gc2.finreg_cdata_pweak_root_fallbacks, 1);
   while ((o = gcref(*p)) != NULL) {
     if (gc_cdata_finalizer_candidate_pweak(o)) {
       preclaimed += gc_claim_cdata_finalizer_pweak(L, g, o);
@@ -1653,6 +1670,7 @@ static size_t gc_queue_cdata_finalizers_pweak(lua_State *L, global_State *g)
       p = lj_obj_gcwref(o);
     }
   }
+done:
   if (n)
     la_add64_rlx(&g->gc2.finreg_cdata_pweak_queued, n);
   if (preclaimed)

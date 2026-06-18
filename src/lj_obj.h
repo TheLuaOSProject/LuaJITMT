@@ -952,6 +952,7 @@ typedef struct GC2State {
   uint64_t finreg_cdata_order_queued;  /* Ordered cdata queued from FINREG. */
   uint64_t finreg_cdata_order_tombstones;  /* Dead ordered FINREG records. */
   uint64_t finreg_cdata_order_fallbacks;  /* Ordered scan fallback cases. */
+  uint64_t finreg_cdata_pweak_root_fallbacks;  /* P_WEAK root-list fallbacks. */
   uint64_t finreg_udata_sets;  /* Userdata finalizer registrations mirrored. */
   uint64_t finreg_udata_clears;  /* Userdata finalizer clears mirrored. */
   uint64_t finreg_udata_queued;  /* Userdata finalizers queued for dispatch. */

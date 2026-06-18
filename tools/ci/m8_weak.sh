@@ -154,6 +154,9 @@ for needle in \
   'queue claimed cdata in FINREG order' \
   'uint64_t finreg_cdata_order_queued' \
   'uint64_t finreg_cdata_order_fallbacks' \
+  'uint64_t finreg_cdata_pweak_root_fallbacks' \
+  'ordered_fallback && ordered_queued == 0' \
+  'if (!ordered_fallback)' \
   'gc_claim_cdata_finalizer_pweak(lua_State *L, global_State *g,' \
   'gc_marktv(g, &fin);' \
   'lj_gc2_finreg_cdata_preclaim(L, g, o, &fin)' \
@@ -171,6 +174,7 @@ for needle in \
   'finreg_cdata_pweak_claimed) == claimed2 + 3u' \
   'finreg_cdata_order_queued) == orderq2 + 3u' \
   'finreg_cdata_order_fallbacks) ==' \
+  'finreg_cdata_pweak_root_fallbacks) ==' \
   'gc2_regorder_fin_t' \
   'gc2_cdata_order[1] == 1' \
   'gc2_rereg_fin_t' \
