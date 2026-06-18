@@ -598,7 +598,9 @@ void lj_gc2_legacy_mark_begin(global_State *g)
   gc2_weak_reset(g);
   gc2_finclaim_reset(g);
   gc2_reset_alloc_trigger(g);
-  gc2_clear_marks_all(g);
+  /* Minor cycles keep old black marks; remembered SSB entries still traverse. */
+  if (!sweep_minor)
+    gc2_clear_marks_all(g);
   if (minor_requested) {
     lj_gc2_handshake(g, LJ_GC2_HS_ENABLE_BARRIER|LJ_GC2_HS_ALLOC_BLACK|
 		     LJ_GC2_HS_FLUSH_SSB);

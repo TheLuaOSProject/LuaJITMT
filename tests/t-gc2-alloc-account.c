@@ -34,7 +34,7 @@ int main(void)
   uint64_t assist_weak0;
   uint64_t weak_clear_tables0, weak_clear_cleared0;
   TValue vals[2];
-  GCtab *parent, *child, *grandchild;
+  GCtab *parent, *child, *grandchild, *old_survivor;
   GCtab *weak, *key, *val;
 
   assert(L != NULL);
@@ -335,11 +335,15 @@ int main(void)
   assert(lj_gc2_ssb_empty(g));
   assert(lj_gc2_ismarked(g, obj2gco(parent)) == 1);
   lua_newtable(L);
+  old_survivor = tabV(L->top - 1);
+  assert(lj_gc2_markobj(g, obj2gco(old_survivor)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(old_survivor)) == 1);
+  lua_newtable(L);
   child = tabV(L->top - 1);
   lua_pushvalue(L, -1);
-  lua_rawseti(L, -3, 1);  /* parent[1] = child. */
+  lua_rawseti(L, -4, 1);  /* parent[1] = child. */
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 0);
-  lua_pop(L, 2);
+  lua_pop(L, 3);
 
   lj_gc2_set_generational(g, 1);
   la_store32_rel(&g->gc2.force_major, 0);  /* Internal minor test owns age setup. */
@@ -358,6 +362,7 @@ int main(void)
   assert(la_load32_acq(&g->gc2.cycle_roots_minor) == 1);
   assert(la_load64_acq(&g->gc2.remembered_drained) >=
 	 remembered_drained0 + 1u);
+  assert(lj_gc2_ismarked(g, obj2gco(old_survivor)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(parent)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
   la_store32_rel(&g->gc2.minor_sweep_enabled, 0);
