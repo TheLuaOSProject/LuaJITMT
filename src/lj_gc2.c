@@ -92,6 +92,8 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.minor_sweep_deferred, 0);
   la_store64_rlx(&g->gc2.minor_sweep_arenas, 0);
   la_store64_rlx(&g->gc2.minor_roots_deferred, 0);
+  la_store64_rlx(&g->gc2.major_root_scans, 0);
+  la_store64_rlx(&g->gc2.minor_root_scans, 0);
   la_store64_rlx(&g->gc2.minor_survival_base_live, 0);
   la_store64_rlx(&g->gc2.minor_survival_bytes, 0);
   la_store32_rlx(&g->gc2.minor_survival_pct, 0);
@@ -1445,6 +1447,7 @@ void lj_gc2_scan_roots(global_State *g, lua_State *L)
 {
   if (!g)
     return;
+  la_add64_rlx(&g->gc2.major_root_scans, 1);
   gc2_scan_global_roots(g);
   gc2_scan_thread_roots(g, L);
 }
@@ -1453,6 +1456,7 @@ void lj_gc2_scan_minor_roots(global_State *g, lua_State *L)
 {
   if (!g || la_load32_acq(&g->gc2.cycle_roots_minor) == 0)
     return;
+  la_add64_rlx(&g->gc2.minor_root_scans, 1);
   gc2_scan_tg_roots(g);
   gc2_scan_thread_roots(g, L);
 #if LJ_HASJIT

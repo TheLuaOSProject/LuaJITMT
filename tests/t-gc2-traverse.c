@@ -2163,6 +2163,7 @@ static void test_minor_root_scan(lua_State *L, global_State *g, TGState *tg)
   uint32_t generational0 = la_load32_acq(&g->gc2.generational);
   uint32_t sweep_gate0 = la_load32_acq(&g->gc2.minor_sweep_enabled);
   uint32_t roots_gate0 = la_load32_acq(&g->gc2.minor_roots_enabled);
+  uint64_t major_roots0, minor_roots0;
   UNUSED(tg);
 
   lua_newtable(L);
@@ -2176,7 +2177,11 @@ static void test_minor_root_scan(lua_State *L, global_State *g, TGState *tg)
   la_store32_rel(&g->gc2.minor_roots_enabled, 1);
   lj_gc2_legacy_mark_begin(g);
   assert(la_load32_acq(&g->gc2.cycle_roots_minor) == 0);
+  major_roots0 = la_load64_acq(&g->gc2.major_root_scans);
+  minor_roots0 = la_load64_acq(&g->gc2.minor_root_scans);
   lj_gc2_scan_minor_roots(g, L);
+  assert(la_load64_acq(&g->gc2.major_root_scans) == major_roots0);
+  assert(la_load64_acq(&g->gc2.minor_root_scans) == minor_roots0);
   assert(lj_gc2_ismarked(g, obj2gco(stack_tab)) == 0);
   assert(lj_gc2_ismarked(g, obj2gco(registry_tab)) == 0);
   lj_gc2_legacy_cycle_end(g);
@@ -2188,7 +2193,11 @@ static void test_minor_root_scan(lua_State *L, global_State *g, TGState *tg)
   assert(la_load32_acq(&g->gc2.cycle_roots_minor) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(stack_tab)) == 0);
   assert(lj_gc2_ismarked(g, obj2gco(registry_tab)) == 0);
+  major_roots0 = la_load64_acq(&g->gc2.major_root_scans);
+  minor_roots0 = la_load64_acq(&g->gc2.minor_root_scans);
   assert(lj_gc2_handshake(g, LJ_GC2_HS_SCAN_ROOTS) == 1);
+  assert(la_load64_acq(&g->gc2.major_root_scans) == major_roots0);
+  assert(la_load64_acq(&g->gc2.minor_root_scans) > minor_roots0);
   assert(lj_gc2_ismarked(g, obj2gco(stack_tab)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(registry_tab)) == 0);
   la_store32_rel(&g->gc2.generational, generational0);

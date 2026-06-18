@@ -543,6 +543,10 @@ static void gc_stats_push(lua_State *L)
 		  la_load64_acq(&gc2->minor_sweep_arenas));
   gc_stats_setnum(L, t, "minor_roots_deferred",
 		  la_load64_acq(&gc2->minor_roots_deferred));
+  gc_stats_setnum(L, t, "major_root_scans",
+		  la_load64_acq(&gc2->major_root_scans));
+  gc_stats_setnum(L, t, "minor_root_scans",
+		  la_load64_acq(&gc2->minor_root_scans));
   gc_stats_setnum(L, t, "minor_survival_base_live",
 		  la_load64_acq(&gc2->minor_survival_base_live));
   gc_stats_setnum(L, t, "minor_survival_bytes",

@@ -30,6 +30,8 @@ local gc_stat_keys = {
   "minor_sweep_deferred",
   "minor_sweep_arenas",
   "minor_roots_deferred",
+  "major_root_scans",
+  "minor_root_scans",
   "minor_survival_pct",
   "minor_survival_major_requests",
   "cycle_alloc_bytes",

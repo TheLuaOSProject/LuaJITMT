@@ -859,6 +859,8 @@ typedef struct GC2State {
   uint64_t minor_sweep_deferred;  /* Minor requests kept on major sweep. */
   uint64_t minor_sweep_arenas;  /* Arenas swept with minor identity. */
   uint64_t minor_roots_deferred;  /* Minor requests kept on full roots. */
+  uint64_t major_root_scans;  /* Full/global root scans selected. */
+  uint64_t minor_root_scans;  /* Minor root scans selected. */
   uint64_t minor_survival_base_live;  /* Previous live estimate for survival. */
   uint64_t minor_survival_bytes;  /* Last estimated young bytes kept by minor. */
   uint32_t minor_survival_pct;  /* Last minor survival percentage. */

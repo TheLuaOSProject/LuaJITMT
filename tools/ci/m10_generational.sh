@@ -24,6 +24,8 @@ for needle in \
   'uint64_t minor_sweep_deferred' \
   'uint64_t minor_sweep_arenas' \
   'uint64_t minor_roots_deferred' \
+  'uint64_t major_root_scans' \
+  'uint64_t minor_root_scans' \
   'uint64_t minor_survival_base_live' \
   'uint64_t minor_survival_bytes' \
   'uint32_t minor_survival_pct' \
@@ -56,6 +58,8 @@ for needle in \
   'lj_meta_tsettv_pair(lua_State *L, cTValue *o, cTValue *k' \
   'lj_gc2_scan_minor_roots(global_State *g, lua_State *L)' \
   'lj_gc2_scan_cycle_roots(global_State *g, lua_State *L)' \
+  'la_add64_rlx(&g->gc2.major_root_scans' \
+  'la_add64_rlx(&g->gc2.minor_root_scans' \
   'lj_gc2_force_major(g);  /* First generational cycle establishes old marks. */' \
   'lj_gc2_barrier_tv_pair_g(global_State *g, GCobj *parent' \
   'lj_gc2_barrier_tvn_pair_g(global_State *g, GCobj *parent' \
@@ -65,6 +69,8 @@ for needle in \
   'minor_cycle_requests' \
   'minor_sweep_deferred' \
   'minor_roots_deferred' \
+  'major_root_scans' \
+  'minor_root_scans' \
   'minor_survival_pct' \
   'minor_survival_major_requests' \
   'cycle_alloc_bytes' \

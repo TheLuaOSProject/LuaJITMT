@@ -19,6 +19,8 @@ for needle in \
   'assist_runs' \
   'sweep_owner_runs' \
   'sweep_live_updates' \
+  'major_root_scans' \
+  'minor_root_scans' \
   'weak_legacy_backfills' \
   'weak_keys_marked' \
   'finreg_cdata_sweep_queued' \
