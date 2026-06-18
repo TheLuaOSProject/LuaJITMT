@@ -19,6 +19,8 @@ local NT = tonumber(arg and arg[1]) or th.cpucount()
 local filter = arg and arg[2]
 local gc_stat_keys = {
   "cycle_starts",
+  "poll_ack_samples",
+  "poll_ack_latency_max_ns",
   "assist_runs",
   "sweep_owner_runs",
   "sweep_live_updates",

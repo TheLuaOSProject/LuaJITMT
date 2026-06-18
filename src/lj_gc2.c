@@ -61,6 +61,10 @@ void lj_gc2_init(global_State *g)
   g->gc2.hs_epoch = 0;
   g->gc2.hs_pending = 0;
   g->gc2.hs_actions = 0;
+  la_store64_rlx(&g->gc2.hs_signal_ns, 0);
+  la_store64_rlx(&g->gc2.hs_ack_latency_samples, 0);
+  la_store64_rlx(&g->gc2.hs_ack_latency_sum_ns, 0);
+  la_store64_rlx(&g->gc2.hs_ack_latency_max_ns, 0);
   la_store64_rlx(&g->gc2.smr_reclaim_runs, 0);
   la_store64_rlx(&g->gc2.smr_reclaimed, 0);
   la_store64_rlx(&g->gc2.cycle_requests, 0);

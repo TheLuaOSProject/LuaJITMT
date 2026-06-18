@@ -18,6 +18,40 @@
 #include "lj_tg.h"
 #include "lj_trace.h"
 
+#include <time.h>
+
+static uint64_t safepoint_now_ns(void)
+{
+  struct timespec ts;
+  if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0)
+    return 0;
+  return (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
+}
+
+static void safepoint_note_ack_latency(global_State *g)
+{
+  uint64_t start, now, delta, old;
+  if (!g)
+    return;
+  start = la_load64_acq(&g->gc2.hs_signal_ns);
+  if (start == 0)
+    return;
+  now = safepoint_now_ns();
+  if (now < start)
+    return;
+  delta = now - start;
+  la_add64_rlx(&g->gc2.hs_ack_latency_samples, 1);
+  la_add64_rlx(&g->gc2.hs_ack_latency_sum_ns, delta);
+  old = la_load64_acq(&g->gc2.hs_ack_latency_max_ns);
+  while (delta > old) {
+    uint64_t expect = old;
+    if (la_cas64(&g->gc2.hs_ack_latency_max_ns, &expect, delta,
+		 LA_ACQ_REL, LA_ACQ))
+      break;
+    old = expect;
+  }
+}
+
 void lj_safepoint_apply_tg(global_State *g, TGState *tg, uint32_t actions)
 {
   if (actions & LJ_GC2_HS_ENABLE_BARRIER)
@@ -66,6 +100,7 @@ static uint32_t safepoint_ack_tg(global_State *g, TGState *tg)
   if (oldepoch == epoch)
     return 0;
   lj_safepoint_apply_tg(g, tg, actions);
+  safepoint_note_ack_latency(g);  /* 13.8: mutator-observed poll latency. */
   la_store32_rlx(&tg->poll, 0);
   oldpending = la_sub32_acqrel(&g->gc2.hs_pending, 1);  /* 05 section 5.4.2. */
   if (oldpending == 1)
@@ -174,6 +209,7 @@ uint32_t lj_safepoint_handshake(global_State *g, uint32_t actions)
   la_store32_rel(&g->gc2.hs_actions, actions);  /* 05 section 5.4.2. */
   la_store32_rel(&g->gc2.hs_pending, 1);  /* 09 section 9.3 leader sentinel. */
   epoch = la_load64_rlx(&g->gc2.hs_epoch) + 1u;
+  la_store64_rel(&g->gc2.hs_signal_ns, safepoint_now_ns());
   la_store64_rel(&g->gc2.hs_epoch, epoch);  /* 05 section 5.4.2. */
 
   signaled = safepoint_signal_late(g, actions, epoch);

@@ -841,6 +841,10 @@ typedef struct GC2State {
   uint64_t hs_epoch;	/* Soft-handshake generation. */
   uint32_t hs_pending;	/* Outstanding handshake acknowledgements. */
   uint32_t hs_actions;	/* Current LJ_GC2_HS_* action bits. */
+  uint64_t hs_signal_ns;  /* Current handshake publication timestamp. */
+  uint64_t hs_ack_latency_samples;  /* Safepoint ack latency samples. */
+  uint64_t hs_ack_latency_sum_ns;  /* Total safepoint ack latency. */
+  uint64_t hs_ack_latency_max_ns;  /* Max safepoint ack latency. */
   uint64_t smr_reclaim_runs;  /* Retired-object epoch drains with work. */
   uint64_t smr_reclaimed;  /* Retired objects freed after a grace period. */
   uint64_t cycle_requests;  /* Allocation-triggered cycle requests. */

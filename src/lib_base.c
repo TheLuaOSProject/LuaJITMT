@@ -503,6 +503,12 @@ static void gc_stats_push(lua_State *L)
   gc_stats_setint(L, t, "phase", la_load32_acq(&gc2->phase));
   gc_stats_setnum(L, t, "cycle_requests", la_load64_acq(&gc2->cycle_requests));
   gc_stats_setnum(L, t, "cycle_starts", la_load64_acq(&gc2->cycle_starts));
+  gc_stats_setnum(L, t, "poll_ack_samples",
+		  la_load64_acq(&gc2->hs_ack_latency_samples));
+  gc_stats_setnum(L, t, "poll_ack_latency_sum_ns",
+		  la_load64_acq(&gc2->hs_ack_latency_sum_ns));
+  gc_stats_setnum(L, t, "poll_ack_latency_max_ns",
+		  la_load64_acq(&gc2->hs_ack_latency_max_ns));
   gc_stats_setnum(L, t, "alloc_since_trigger",
 		  la_load64_acq(&gc2->alloc_since_trigger));
   gc_stats_setnum(L, t, "trigger_bytes", la_load64_acq(&gc2->trigger_bytes));
