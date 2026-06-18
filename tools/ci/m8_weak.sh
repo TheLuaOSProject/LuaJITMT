@@ -57,6 +57,9 @@ for needle in \
   'ALTERNATING_CLOSE_CHAIN' \
   'm8_close_chain_alternating_cdata' \
   'alternating_cdata_finalized == ALTERNATING_CLOSE_CHAIN' \
+  'CLOSE_FINREG_GROWTH_BATCH' \
+  'm8_close_register_growth_cdata' \
+  'growth_cdata_finalized == CLOSE_FINREG_GROWTH_BATCH' \
   'order_cdata_finalized[0] == 3' \
   'order_cdata_finalized[1] == 2' \
   'order_cdata_finalized[2] == 1' \
