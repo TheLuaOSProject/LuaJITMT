@@ -55,7 +55,7 @@ static int carith_checkarg(lua_State *L, CTState *cts, CDArith *ca)
 	cid = lj_ctype_intern_l(L, cts, CTINFO(CT_PTR, CTALIGN_PTR|id),
 				CTSIZE_PTR);
 	ct = ctype_get(cts, cid);
-	if (i) {  /* cts->tab may have been reallocated. */
+	if (i) {  /* C type table may have been reallocated. */
 	  ca->ct[0] = ctype_get(cts, id0);
 	}
       }

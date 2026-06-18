@@ -6,12 +6,12 @@ type system (`CTState`), the cdata heap objects, the finalizer registry
 classic `lua_CFunction` C modules unsafe-by-default; FFI itself must be
 fully safe.
 
-## 11.1 CTState today (lj_ctype.h:174–183)
-`{ CType *tab; CTypeID top; MSize sizetab; lua_State *L; global_State *g;
-GCtab *miscmap; CCallback cb; CTypeID1 hash[CTHASH_SIZE]; }`
-- `tab` is an append-only array of CType records (IDs are stable);
-  `top`/`sizetab` grow it; `hash[]` are chain anchors threaded through
-  CType.next (intra-record links).
+## 11.1 CTState today
+`{ CTypeTab *tabh; CTypeTab *retiredtab; CTypeID top; global_State *g;
+GCtab *miscmap; GCRef *metamap; CCallback cb; uint32_t hash[CTHASH_SIZE]; }`
+- `tabh` is the acquire/release-published header for the append-only CType
+  records (IDs are stable); `top` is the ticket allocator; `hash[]` are chain
+  anchors threaded through CType.next (intra-record links).
 - `miscmap` maps -CTypeID→metatable and callback slots→funcs — an ordinary
   GCtab (becomes concurrent for free via 06).
   Current implementation note: metatables have moved to the CTID-indexed
@@ -25,10 +25,9 @@ GCtab *miscmap; CCallback cb; CTypeID1 hash[CTHASH_SIZE]; }`
   defer_free old. CType records are immutable once their ID is published.
   Current implementation note: the published pointer is `CTState.tabh`, a
   `CTypeTab` header carrying `sizetab`, retire metadata, and `tab[]`;
-  `cts->tab`/`cts->sizetab` are compatibility mirrors, not the reader
-  correctness boundary. Code must carry `CTypeID`s (including child/raw-child
-  IDs) instead of recovering IDs by subtracting `CType *` values from those
-  mirrors.
+  `CTState` no longer carries `tab`/`sizetab` mirrors. Code must carry
+  `CTypeID`s (including child/raw-child IDs) instead of recovering IDs by
+  subtracting `CType *` values from a table base.
 - **ID allocation = ticket**: original sketch was `id = la_add32(&cts->top,
   n)` then bounds check vs sizetab snapshot → grow loop. Current implementation
   uses a CAS reservation loop instead: acquire `tabh`, grow/publish a bigger

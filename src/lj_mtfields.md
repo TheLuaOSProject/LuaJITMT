@@ -23,4 +23,4 @@ whenever a shared field is introduced or migrated.
 | GCtrace.exittab[i] | retarget word | store rel; loaded by indirect branch in mcode |
 | L->thr_owner | claim word | CAS acq_rel |
 | g->str.tabh | RCU pointer | acq / rel |
-| cts->tab / cts->top | RCU vector + ticket | see 11 §11.2 |
+| cts->tabh / cts->top | RCU vector + ticket | see 11 §11.2 |

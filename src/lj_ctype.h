@@ -207,10 +207,8 @@ typedef LJ_ALIGN(8) struct CCallback {
 /* C type state. */
 typedef struct CTState {
   CTypeTab *tabh;	/* RCU-published C type table header. */
-  CType *tab;		/* C type table. */
   CTypeTab *retiredtab;  /* Retired C type tables awaiting SMR. */
   CTypeID top;		/* Current top of C type table. */
-  MSize sizetab;	/* Size of C type table. */
   global_State *g;	/* Global state. */
   GCtab *miscmap;	/* Callback slots, function metatable, blacklist. */
   GCRef *metamap;	/* CAS-installed metatables by raw CTypeID. */

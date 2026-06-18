@@ -124,7 +124,7 @@ you touch code):
 | GCtrace.exittab[i] | retarget word | store rel; loaded by indirect-branch in mcode |
 | L->thr_owner (new) | claim word | CAS acq_rel |
 | g->str.tab vector ptr (becomes StrTabHdr*) | RCU pointer | acq/rel |
-| cts->tab / cts->top | RCU vector + ticket | 11 §11.2 |
+| cts->tabh / cts->top | RCU vector + ticket | 11 §11.2 |
 
 ## 2.6 lj_atomic.h API (normative summary — full header in aux/)
 

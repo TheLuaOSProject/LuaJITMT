@@ -941,7 +941,7 @@ static void ccall_copy_struct(CCallState *cc, CType *ctr, void *dp, void *sp,
 /* -- Common C call handling ---------------------------------------------- */
 
 /* Infer the destination CTypeID for a vararg argument.
-** Note: may reallocate cts->tab and invalidate CType pointers.
+** Note: may reallocate the C type table and invalidate CType pointers.
 */
 CTypeID lj_ccall_ctid_vararg(lua_State *L, CTState *cts, cTValue *o)
 {
@@ -972,7 +972,7 @@ CTypeID lj_ccall_ctid_vararg(lua_State *L, CTState *cts, cTValue *o)
 }
 
 /* Setup arguments for C call.
-** Note: may reallocate cts->tab and invalidate CType pointers.
+** Note: may reallocate the C type table and invalidate CType pointers.
 */
 static int ccall_set_args(lua_State *L, CTState *cts, CType *ct,
 			  CCallState *cc)

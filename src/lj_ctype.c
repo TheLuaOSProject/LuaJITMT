@@ -627,8 +627,6 @@ static CType *ctype_tab_grow_l(lua_State *L, CTState *cts, CTypeID id)
     memset(newh->tab + osz, 0, (nsz - osz)*sizeof(CType));
     expect = oldh;
     if (la_casptr((void **)&cts->tabh, &expect, newh, LA_ACQ_REL, LA_ACQ)) {
-      cts->tab = newh->tab;  /* Token-held/diagnostic mirror. */
-      cts->sizetab = nsz;
       ctype_tab_retire(cts, oldh);
       return newh->tab;
     }
@@ -1202,8 +1200,6 @@ CTState *lj_ctype_init(lua_State *L)
   CTypeID id;
   memset(cts, 0, sizeof(CTState));
   la_storeptr_rel((void **)&cts->tabh, tabh);
-  cts->tab = ct;
-  cts->sizetab = CTTYPETAB_MIN;
   la_store32_rel(&cts->top, CTTYPEINFO_NUM);
   ctype_metamap_init_l(L, cts);
   ctype_cbblack_init_l(L, cts);

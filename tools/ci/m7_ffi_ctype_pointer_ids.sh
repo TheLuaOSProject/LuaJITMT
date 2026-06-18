@@ -24,7 +24,7 @@ for needle in \
   'cconv_err_conv_l(L, cts, did, sid, s, flags)' \
   'lj_cconv_ct_tv_l(lua_State *L, CTState *cts, CType *d,' \
   'CTypeID did, uint8_t *dp' \
-  'd = ctype_get(cts, did);  /* cts->tab may have been reallocated. */' \
+  'd = ctype_get(cts, did);  /* C type table may have been reallocated. */' \
   'lj_cdata_set_l(L, cts, ct, id' \
   'lj_cconv_ct_tv_l(L, cts, d, did' \
   'lj_cconv_ct_tv_l(L, cts, ctr, rid' \

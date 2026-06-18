@@ -36,6 +36,16 @@ if rg -n 'lj_mem_growvec\(L, cts->tab|lj_mem_freevec\(cts->g, cts->tab|la_storep
   exit 1
 fi
 
+if awk '
+  /typedef struct CTState/ { inside = 1 }
+  inside && /^} CTState;/ { inside = 0 }
+  inside && /(CType \*tab|MSize sizetab)/ { print; bad = 1 }
+  END { exit bad ? 0 : 1 }
+' "$ROOT/src/lj_ctype.h"; then
+  echo "guardrail: CTState must not keep ctype table mirror fields" >&2
+  exit 1
+fi
+
 make -C "$ROOT/src" clean >/dev/null
 make -C "$ROOT/src" -j"$JOBS" XCFLAGS="-DLUAJIT_CTYPE_CHECK_ANCHOR" >/dev/null
 

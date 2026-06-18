@@ -1182,7 +1182,7 @@ static void crec_alloc(jit_State *J, RecordFFData *rd, CTypeID id)
 }
 
 /* Record argument conversions.
-** Note: may reallocate cts->tab and invalidate CType pointers.
+** Note: may reallocate the C type table and invalidate CType pointers.
 */
 static TRef crec_call_args(jit_State *J, RecordFFData *rd,
 			   CTState *cts, CType *ct)
@@ -1642,7 +1642,7 @@ void LJ_FASTCALL recff_cdata_arith(jit_State *J, RecordFFData *rd)
 			       CTSIZE_PTR);
 	ct = ctype_get(cts, id);
 	if (i) {
-	  s[0] = ctype_get(cts, id0);  /* cts->tab may have been reallocated. */
+	  s[0] = ctype_get(cts, id0);  /* C type table may have been reallocated. */
 	}
 	goto ok;
       } else {
