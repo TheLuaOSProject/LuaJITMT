@@ -936,7 +936,7 @@ typedef struct GC2State {
   uint64_t weak_legacy_fallbacks;  /* Legacy weak pass fallback executions. */
   uint64_t finreg_cdata_sets;  /* Cdata finalizer registrations mirrored. */
   uint64_t finreg_cdata_clears;  /* Cdata finalizer clears mirrored. */
-  uint64_t finreg_cdata_queued;  /* Cdata finalizers queued by legacy. */
+  uint64_t finreg_cdata_queued;  /* Cdata finalizers queued from FINREG. */
   uint64_t finreg_cdata_sweep_queued;  /* Cdata queued during sweep/free. */
   uint64_t finreg_cdata_pweak_queued;  /* Cdata queued during P_WEAK. */
   GCRef *finreg_cdata_preclaim_obj;  /* P_WEAK claimed cdata queue objs. */

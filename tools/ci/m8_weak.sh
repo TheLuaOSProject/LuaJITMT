@@ -207,6 +207,7 @@ for needle in \
   'P_WEAK cdata finalizer discovery bridge' \
   'uint64_t finreg_cdata_pweak_queued' \
   'uint64_t finreg_cdata_sweep_queued' \
+  'la_add64_rlx(&g->gc2.finreg_cdata_sweep_queued, 1)' \
   'uint64_t finreg_cdata_pweak_claimed' \
   'uint64_t finreg_cdata_preclaim_dispatched' \
   'finreg_cdata_pweak_queued) == pweak1 + 1u' \
