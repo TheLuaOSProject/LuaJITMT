@@ -17,6 +17,8 @@ for needle in \
   'use captured P_WEAK mode' \
   'test_weak_key_write_barrier' \
   'test_vm_weak_key_write_barrier' \
+  'test_peer_weak_key_write_barrier' \
+  'Peer TG performs the P_WEAK table write' \
   'test_vm_weak_value_hash_key_barrier' \
   'test_vm_weak_value_array_barrier' \
   'test_table_insert_weak_value_array_barrier' \

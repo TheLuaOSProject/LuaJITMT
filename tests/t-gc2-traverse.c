@@ -132,6 +132,12 @@ typedef struct WorkerDrainRaceThread {
   uint32_t idx;
 } WorkerDrainRaceThread;
 
+typedef struct WeakPeerWriteCtx {
+  lua_State *L;
+  pthread_barrier_t barrier;
+  int status;
+} WeakPeerWriteCtx;
+
 static void grey_wait(pthread_barrier_t *barrier)
 {
   int rc = pthread_barrier_wait(barrier);
@@ -168,6 +174,30 @@ static void *grey_worker_drain_race_thread(void *arg)
   grey_wait(&ctx->barrier);
   ctx->progress[argt->idx] =
     lj_gc2_worker_drain_progress(ctx->g, ctx->limit);
+  return NULL;
+}
+
+static void *weak_peer_write_thread(void *arg)
+{
+  WeakPeerWriteCtx *ctx = (WeakPeerWriteCtx *)arg;
+  lua_State *L = ctx->L;
+  grey_wait(&ctx->barrier);
+  if (!luaMT_attach(L)) {
+    ctx->status = 1;
+    return NULL;
+  }
+  lua_pushvalue(L, 1);
+  lua_pushvalue(L, 2);
+  lua_pushvalue(L, 3);
+  lua_pushvalue(L, 4);
+  if (lua_pcall(L, 3, 0, 0) != LUA_OK) {
+    lua_pop(L, 1);
+    luaMT_detach(L);
+    ctx->status = 2;
+    return NULL;
+  }
+  luaMT_detach(L);
+  ctx->status = 0;
   return NULL;
 }
 
@@ -1497,6 +1527,68 @@ static void test_vm_weak_key_write_barrier(lua_State *L, global_State *g,
   lua_pop(L, 4);
 }
 
+static void test_peer_weak_key_write_barrier(lua_State *L, global_State *g,
+					     TGState *tg)
+{
+  lua_State *peer;
+  GCtab *weak, *key, *val;
+  WeakPeerWriteCtx ctx;
+  pthread_t thread;
+  uint64_t weak_keys0, weak_vals0;
+  int i;
+
+  lua_settop(L, 0);
+  assert(luaL_dostring(L,
+    "return function(t, k, v) t[k] = v end\n") == LUA_OK);
+  lua_newtable(L);
+  weak = tabV(L->top - 1);
+  lua_newtable(L);
+  lua_pushliteral(L, "__mode");
+  lua_pushliteral(L, "k");
+  lua_settable(L, -3);
+  lua_setmetatable(L, -2);
+  lua_newtable(L);
+  key = tabV(L->top - 1);
+  lua_newtable(L);
+  val = tabV(L->top - 1);
+  peer = lua_newthread(L);
+  assert(peer != NULL);
+  assert(lua_checkstack(peer, 4));
+  for (i = 1; i <= 4; i++) {
+    lua_pushvalue(L, i);
+    lua_xmove(L, peer, 1);
+  }
+
+  ctx.L = peer;
+  ctx.status = -1;
+  assert(pthread_barrier_init(&ctx.barrier, NULL, 2) == 0);
+  assert(pthread_create(&thread, NULL, weak_peer_write_thread, &ctx) == 0);
+
+  lj_gc2_legacy_mark_begin(g);
+  assert(lj_gc2_markobj(g, obj2gco(weak)) == 1);
+  flush_and_drain(g, tg);
+  assert(lj_gc2_ismarked(g, obj2gco(weak)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(key)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(val)) == 0);
+  weak_keys0 = la_load64_acq(&g->gc2.weak_keys_marked);
+  weak_vals0 = la_load64_acq(&g->gc2.weak_values_marked);
+
+  lj_gc2_legacy_weak_begin(g);
+  grey_wait(&ctx.barrier);  /* Peer TG performs the P_WEAK table write. */
+  assert(pthread_join(thread, NULL) == 0);
+  assert(ctx.status == 0);
+  assert(pthread_barrier_destroy(&ctx.barrier) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(key)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(val)) == 1);
+  assert(la_load64_acq(&g->gc2.weak_keys_marked) == weak_keys0 + 1u);
+  assert(la_load64_acq(&g->gc2.weak_values_marked) == weak_vals0);
+  assert(!lj_gc2_ssb_empty(g));
+  flush_and_drain(g, tg);
+  lj_gc2_legacy_cycle_end(g);
+  lua_settop(peer, 0);
+  lua_pop(L, 5);
+}
+
 static void test_vm_weak_value_hash_key_barrier(lua_State *L, global_State *g,
 						TGState *tg)
 {
@@ -2438,6 +2530,7 @@ int main(void)
   test_capi_rawset_weak_write_barrier(L, g, tg);
   test_weak_key_write_barrier(L, g, tg);
   test_vm_weak_key_write_barrier(L, g, tg);
+  test_peer_weak_key_write_barrier(L, g, tg);
   test_vm_weak_value_hash_key_barrier(L, g, tg);
   test_vm_weak_value_array_barrier(L, g, tg);
   test_table_insert_weak_value_array_barrier(L, g, tg);
