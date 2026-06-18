@@ -257,8 +257,7 @@ SSB without draining outside a cycle and force a major on overflow. Minor sweep
 and root gates turn on after the first forced major baseline. Completed minor
 cycles now estimate young survival from live-estimate growth over sampled cycle
 allocation bytes and request a one-shot major at high survival. Remaining M10
-work is auditing the root value-only barrier contexts and tuning the heuristic
-against benchmark data.
+work is tuning the heuristic against benchmark data.
 
 ## 12.1 Per-file change index (cross-check before declaring any milestone done)
 new: lj_atomic.h lj_tg.{h,c} lj_arena.{h,c} lj_gc2.{h,c} lj_gc2_barrier.h

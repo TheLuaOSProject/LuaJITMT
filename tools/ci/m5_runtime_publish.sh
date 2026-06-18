@@ -14,7 +14,8 @@ for needle in \
   'static LJ_AINLINE void lj_gc_barriertv_' \
   'static LJ_AINLINE void lj_gc_barrierobjtv_' \
   'lj_tv_load_acq(&snap, tv)' \
-  'lj_gc2_barrier_tv(L, &snap)' \
+  'lj_gc2_barrier_tv_pair(L, obj2gco(t), &snap)' \
+  'lj_gc2_barrier_tv_pair(L, p, &snap)' \
   'tviswhite(&snap)' \
   'gcV(&snap)'
 do

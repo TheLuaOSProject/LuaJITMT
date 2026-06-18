@@ -433,14 +433,6 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov BASE, RB			// Restore BASE.
   |  ins_next
   |
-  |->vm_gc2_barriertv:
-  |  mov RB, BASE			// Save BASE.
-  |  mov CARG2, RC
-  |  load_G CARG1
-  |  call extern lj_gc2_barrier_tv_g	// (global_State *g, cTValue *tv)
-  |  mov BASE, RB			// Restore BASE.
-  |  ins_next
-  |
   |->vm_gc2_barriertv_tab:
   |.if not X64WIN
   |  mov CARG2, TAB:RB

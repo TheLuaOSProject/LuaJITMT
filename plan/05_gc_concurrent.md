@@ -570,11 +570,12 @@ sweep identity is routed through a latched `cycle_sweep_minor` flag and public
 `minor_sweep_enabled` gate, which turns on with `minor_roots_enabled` after that
 baseline completes. Parent-aware table/object, fast
 table-value, resolved meta-store, and closed-upvalue value barriers now use that
-gate to filter for old-parent/young-child remembered pairs, while remaining
-root value-only contexts stay conservative until their parent context is
-explicit. Completed minor cycles sample flushed allocation bytes at mark begin,
-estimate young survival from `live_after - previous_live`, and force a one-shot
-major when the default survival threshold is reached.
+gate to filter for old-parent/young-child remembered pairs. The remaining
+parentless TValue barrier users are root-slot wrappers, and the stale x64
+value-only VM helper has been removed. Completed minor cycles sample flushed
+allocation bytes at mark begin, estimate young survival from
+`live_after - previous_live`, and force a one-shot major when the default
+survival threshold is reached.
 Minor root selection has matching `cycle_roots_minor` /
 `minor_roots_enabled` latches and `minor_roots_deferred` telemetry. The
 `HS_SCAN_ROOTS` bridge routes through a cycle-root selector, so public cycles

@@ -39,7 +39,6 @@ for needle in \
   'cmp r8, LJ_TNIL' \
   'jmp ->vmeta_tsets		// M5: no legacy x64 hash-slot store.' \
   'call extern lj_meta_tsettv_pair' \
-  '|->vm_gc2_barriertv:' \
   'call extern lj_tab_storetv' \
   'call extern lj_tab_storetvn' \
   'jmp ->vm_gc2_barriertv_tab' \
@@ -58,6 +57,7 @@ for reject in \
   'cmp aword [RC], LJ_TNIL' \
   'cmp aword [TMPR], LJ_TNIL' \
   'call extern lj_meta_tset		// (lua_State *L, TValue *o, TValue *k)' \
+  'call extern lj_gc2_barrier_tv_g' \
   'mov [RC], RB' \
   'mov [RC], ITYPE'
 do
