@@ -46,8 +46,10 @@ for needle in \
   'la_store64_rlx(&g->gc2.jit_scoped_slots_retired, 0)' \
   'trace_retire(global_State *g, GCtrace *T)' \
   'lj_gc_arena_markmem(g, T)' \
-  'trace_freebody(global_State *g, GCtrace *T)' \
-  'trace_markbody(global_State *g, GCtrace *T, int gc2)' \
+	  'trace_freebody(global_State *g, GCtrace *T)' \
+	  'lj_trace_free_unpublished(global_State *g, GCtrace *T)' \
+	  'lj_trace_free_unpublished(J2G(J), J->curfinal)' \
+	  'trace_markbody(global_State *g, GCtrace *T, int gc2)' \
   'lj_trace_reclaim_retired(global_State *g, uint64_t completed_epoch)' \
   'lj_trace_reclaim_retired(g, epoch)' \
   'lj_gc2_reclaim_retired(g, epoch)' \
@@ -55,7 +57,7 @@ for needle in \
   'lj_trace_markvecs(g, 0)'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_obj.h" "$ROOT/src/lj_jit.h" \
-    "$ROOT/src/lj_trace.c" \
+	    "$ROOT/src/lj_trace.c" "$ROOT/src/lj_asm.c" \
     "$ROOT/src/lj_safepoint.c" "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc2.c"; then
     echo "guardrail: missing trace-vector RCU/SMR bridge: $needle" >&2
     exit 1

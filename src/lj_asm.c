@@ -2621,7 +2621,7 @@ void lj_asm_trace(jit_State *J, GCtrace *T)
     }
 
     /* Otherwise try again with a bigger IR. */
-    lj_trace_free(J2G(J), J->curfinal);
+    lj_trace_free_unpublished(J2G(J), J->curfinal);
     J->curfinal = NULL;  /* In case lj_trace_alloc() OOMs. */
     J->curfinal = lj_trace_alloc(J->L, T);
     as->realign = NULL;

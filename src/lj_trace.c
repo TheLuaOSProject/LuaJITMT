@@ -170,6 +170,11 @@ static void trace_free_immediate(global_State *g, GCtrace *T)
   lj_mem_free(g, T, trace_size(T));
 }
 
+void LJ_FASTCALL lj_trace_free_unpublished(global_State *g, GCtrace *T)
+{
+  trace_free_immediate(g, T);
+}
+
 static LJ_AINLINE int trace_body_retire_ready(GCtrace *T,
 					       uint64_t completed_epoch)
 {
@@ -360,8 +365,24 @@ GCtrace * LJ_FASTCALL lj_trace_alloc(lua_State *L, GCtrace *T)
   T2->nk = T->nk;
   T2->nsnap = T->nsnap;
   T2->nsnapmap = T->nsnapmap;
+  setgcrefnull(T2->startpt);
+  setmref(T2->startpc, NULL);
+  T2->startins = 0;
+  T2->szmcode = 0;
+  T2->mcode = NULL;
   T2->exittab = NULL;
   T2->exitstub = NULL;
+  T2->mcloop = 0;
+  T2->nchild = 0;
+  T2->spadjust = 0;
+  trace_link_rel(T2, 0);
+  T2->root = 0;
+  trace_nextroot_rel(T2, 0);
+  trace_nextside_rel(T2, 0);
+  T2->sinktags = 0;
+  T2->topslot = 0;
+  T2->linktype = 0;
+  T2->unused1 = 0;
   T2->retire_epoch = 0;
   T2->retired_next = NULL;
   memcpy(p, T->ir + T->nk, szins);
@@ -433,6 +454,9 @@ static void trace_save(jit_State *J, GCtrace *T)
 void LJ_FASTCALL lj_trace_free(global_State *g, GCtrace *T)
 {
   jit_State *J = G2J(g);
+  lj_assertG(T->traceno != 0 || gcref(T->startpt) != NULL ||
+	     la_load64_acq(&T->retire_epoch) != 0,
+	     "unpublished trace body retired");
   if (T->traceno) {
     lj_gdbjit_deltrace(J, T);
     if (T->traceno < J->freetrace)

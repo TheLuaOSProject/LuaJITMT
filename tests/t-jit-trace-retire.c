@@ -29,6 +29,7 @@ int main(void)
   lua_State *L = luaL_newstate();
   global_State *g;
   jit_State *J;
+  GCproto *pt;
   GCtrace tmpl, *T;
   static IRIns dummyir[REF_TRUE+1];
   MCode **exittab;
@@ -39,6 +40,8 @@ int main(void)
   g = G(L);
   J = G2J(g);
   assert(J->retiredtraces == NULL);
+  assert(luaL_loadstring(L, "return 1") == 0);
+  pt = funcproto(funcV(L->top - 1));
 
   memset(&tmpl, 0, sizeof(tmpl));
   tmpl.nk = REF_TRUE;
@@ -48,6 +51,12 @@ int main(void)
   tmpl.ir = dummyir;
 
   T = lj_trace_alloc(L, &tmpl);
+  assert(gcref(T->startpt) == NULL);
+  lj_trace_free_unpublished(g, T);
+  assert(J->retiredtraces == NULL);
+
+  T = lj_trace_alloc(L, &tmpl);
+  setgcref(T->startpt, obj2gco(pt));
   exittab = lj_mem_newvec(L, 1, MCode *);
   exittab[0] = NULL;
   T->exittab = exittab;
@@ -70,6 +79,7 @@ int main(void)
   assert(retired_find(J, T) == NULL);
 
   T = lj_trace_alloc(L, &tmpl);
+  setgcref(T->startpt, obj2gco(pt));
   exittab = lj_mem_newvec(L, 1, MCode *);
   exittab[0] = NULL;
   T->exittab = exittab;
@@ -89,6 +99,6 @@ int main(void)
   assert(retired_find(J, T) == NULL);
 
   lua_close(L);
-  printf("t-jit-trace-retire OK: trace bodies and exittabs retire by epoch\n");
+  printf("t-jit-trace-retire OK: trace bodies, scratch bodies, and exittabs retire correctly\n");
   return 0;
 }
