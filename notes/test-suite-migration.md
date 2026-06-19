@@ -303,6 +303,9 @@ Lua test-suite migration notes:
   `m5_tab_array_publish`; their compiled fixtures still run.
 - Removed the M6 aggregate shell-script content check; the Lua aggregate case
   now relies on actually running the M6 cases instead.
+- Removed `m9_bench_regression` script-content checks; it now relies on the
+  comparator accepting pinned-good CSVs, rejecting a generated bad CSV, and
+  comparing a freshly generated baseline.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.

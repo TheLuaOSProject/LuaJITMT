@@ -170,21 +170,6 @@ local function run_bench_regression(t)
   local cur = t:tempname("lj-bench-current")
   local bad = t:tempname("lj-bench-bad")
 
-  t:assert_all_any_contains({
-    t:path("bench", "run_baseline.sh"),
-    t:path("bench", "compare_baseline.sh"),
-    t:path("aux", "bench", "bench.lua")
-  }, {
-    "BENCH_LUA=${BASELINE_BENCH_LUA:-\"$ROOT/aux/bench/bench.lua\"}",
-    "BENCH_SCALE",
-    "BENCH_GC_MODE",
-    "COLUMN=${BENCH_COLUMN:-jit_ns_per_op}",
-    "MAX=${BENCH_GEOMEAN_MAX:-1.10}",
-    "geomean",
-    "PASS: geomean",
-    "FAIL: geomean"
-  })
-
   local compare = shell_quote(t:path("bench", "compare_baseline.sh"))
   run_output_contains(t, compare .. " " .. shell_quote(base) .. " " ..
                          shell_quote(base),
