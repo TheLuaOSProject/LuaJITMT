@@ -1518,8 +1518,8 @@ static void build_subroutines(BuildCtx *ctx)
   |  cvtsi2sd xmm0, RAd
   |  movsd qword [BASE-16], xmm0
   |.endif
-  |  mov RD, TAB:RB->array
   |  mov TMPRd, TAB:RB->asize
+  |  mov RD, TAB:RB->array
   |  test TMPRd, TMPRd; jz >3
   |  lea r8, [RB+TAB_COLO_SLOTS]
   |  cmp RD, r8; je >3
@@ -4135,8 +4135,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ucomisd xmm0, xmm1
     |  jne ->vmeta_tgetv		// Generic numeric key? Use fallback.
     |.endif
-    |  mov TMPR, TAB:RB->array
     |  mov ITYPEd, TAB:RB->asize
+    |  mov TMPR, TAB:RB->array
     |  test ITYPEd, ITYPEd; jz >3
     |  lea r8, [RB+TAB_COLO_SLOTS]
     |  cmp TMPR, r8; je >3
@@ -4216,8 +4216,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ins_ABC	// RA = dst, RB = table, RC = byte literal
     |  mov TAB:RB, [BASE+RB*8]
     |  checktab TAB:RB, ->vmeta_tgetb
-    |  mov TMPR, TAB:RB->array
     |  mov ITYPEd, TAB:RB->asize
+    |  mov TMPR, TAB:RB->array
     |  test ITYPEd, ITYPEd; jz >3
     |  lea r8, [RB+TAB_COLO_SLOTS]
     |  cmp TMPR, r8; je >3
@@ -4255,8 +4255,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |.else
     |  cvttsd2si RCd, qword [BASE+RC*8]
     |.endif
-    |  mov TMPR, TAB:RB->array
     |  mov ITYPEd, TAB:RB->asize
+    |  mov TMPR, TAB:RB->array
     |  test ITYPEd, ITYPEd; jz >3
     |  lea r8, [RB+TAB_COLO_SLOTS]
     |  cmp TMPR, r8; je >3
@@ -4302,8 +4302,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ucomisd xmm0, xmm1
     |  jne ->vmeta_tsetv		// Generic numeric key? Use fallback.
     |.endif
-    |  mov TMPR, TAB:RB->array
     |  mov ITYPEd, TAB:RB->asize
+    |  mov TMPR, TAB:RB->array
     |  test ITYPEd, ITYPEd; jz >4
     |  lea r8, [RB+TAB_COLO_SLOTS]
     |  cmp TMPR, r8; je >4
@@ -4368,8 +4368,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |->BC_TSETB_RETRY:
     |  mov TAB:RB, [BASE+RB*8]
     |  checktab TAB:RB, ->vmeta_tsetb
-    |  mov TMPR, TAB:RB->array
     |  mov ITYPEd, TAB:RB->asize
+    |  mov TMPR, TAB:RB->array
     |  test ITYPEd, ITYPEd; jz >4
     |  lea r8, [RB+TAB_COLO_SLOTS]
     |  cmp TMPR, r8; je >4
@@ -4426,8 +4426,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  cvttsd2si RCd, qword [BASE+RC*8]
     |.endif
     |2:
-    |  mov TMPR, TAB:RB->array
     |  mov ITYPEd, TAB:RB->asize
+    |  mov TMPR, TAB:RB->array
     |  test ITYPEd, ITYPEd; jz >3
     |  lea r8, [RB+TAB_COLO_SLOTS]
     |  cmp TMPR, r8; je >3
@@ -4480,8 +4480,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  sub RDd, 1
     |  jz >4				// Nothing to copy?
     |  add RDd, TMPRd			// Compute needed size.
-    |  mov ITYPE, TAB:RB->array
     |  mov r8d, TAB:RB->asize
+    |  mov ITYPE, TAB:RB->array
     |  test r8d, r8d; jz >3
     |  lea r9, [RB+TAB_COLO_SLOTS]
     |  cmp ITYPE, r9; je >3

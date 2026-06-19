@@ -295,6 +295,10 @@ The same separated-array header bound check now covers x64 `BC_TGETV`,
 release-publishing store helpers. x64 `BC_TSETV`, `BC_TSETB`, and `BC_TSETR`
 now slow-path visible array `LJ_TFORWARD` slots through the C setter bridge
 instead of publishing into the old generation.
+Those x64 array fast paths now take the legacy `GCtab.asize` snapshot before
+loading `GCtab.array`, matching the writer-side publication order that stores
+the array pointer before the size mirror. Separated arrays still replace the
+legacy bound with `TabArrayHdr.asize` after the pointer snapshot.
 `BC_TSETS_Z` string-key stores are currently demoted to
 `vmeta_tsets`, removing the x64 VM's direct string-key hash-chain store. The
 generic x64 `vmeta_tset` continuation release-stores returned slots through

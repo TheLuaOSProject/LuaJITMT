@@ -57,6 +57,7 @@ for needle in \
   'mov r9d, RCd' \
   'mov64 r10, LJ_TFORWARD_BITS' \
   'jmp ->vmeta_tsetr' \
+  'mov ITYPEd, TAB:RB->asize' \
   'mov ITYPEd, dword [TMPR+TABARRAY_ASIZE_OFS]' \
   'cmp RCd, ITYPEd' \
   'add RC, TMPR' \
@@ -70,6 +71,7 @@ for needle in \
   'call extern lj_tab_storetvn' \
   'call extern lj_gc_pubtabtv_vm' \
   'call extern lj_gc_pubtabtvn_vm' \
+  'mov r8d, TAB:RB->asize' \
   '->BC_TSETV_RETRY:' \
   '->BC_TSETB_RETRY:' \
   '->BC_TSETR_RETRY:' \
@@ -122,18 +124,20 @@ if awk '
   function start() {
     in_set = 1
     checked++
-    array = hdr = cmp = add = 0
+    asize = array = hdr = cmp = add = 0
   }
   function finish() {
     if (!in_set) return
-    if (!array || !hdr || !cmp || !add)
+    if (!asize || !array || !hdr || !cmp || !add)
       bad = 1
     in_set = 0
   }
   /case BC_TSETV:/ { finish(); start(); next }
   /case BC_TSETB:/ { finish(); start(); next }
   /case BC_TSETR:/ { finish(); start(); next }
+  in_set && /mov ITYPEd, TAB:RB->asize/ { asize = NR }
   in_set && /mov TMPR, TAB:RB->array/ { array = 1 }
+  in_set && /mov TMPR, TAB:RB->array/ && !asize { bad = 1 }
   in_set && /mov ITYPEd, dword \[TMPR\+TABARRAY_ASIZE_OFS\]/ { hdr = 1 }
   in_set && /cmp RCd, ITYPEd/ { cmp = 1 }
   in_set && /add RC, TMPR/ { add = 1 }
@@ -157,10 +161,12 @@ if awk '
   /case BC_TSETM:/ {
     in_setm = 1
     saw_storetvn = saw_tvn = 0
-    array = hdr = cmp = add = 0
+    asize = array = hdr = cmp = add = 0
     next
   }
+  in_setm && /mov r8d, TAB:RB->asize/ { asize = NR }
   in_setm && /mov ITYPE, TAB:RB->array/ { array = 1 }
+  in_setm && /mov ITYPE, TAB:RB->array/ && !asize { bad = 1 }
   in_setm && /mov r8d, dword \[ITYPE\+TABARRAY_ASIZE_OFS\]/ { hdr = 1 }
   in_setm && /cmp RDd, r8d/ { cmp = 1 }
   in_setm && /add TMPR, ITYPE/ { add = 1 }
@@ -172,7 +178,7 @@ if awk '
   in_setm && /mov \[TMPR\], ITYPE/ { bad = 1 }
   in_setm && /break;/ {
     checked = 1
-    if (!array || !hdr || !cmp || !add || !saw_storetvn || !saw_tvn)
+    if (!asize || !array || !hdr || !cmp || !add || !saw_storetvn || !saw_tvn)
       bad = 1
     in_setm = 0
   }

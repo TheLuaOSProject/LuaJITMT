@@ -29,6 +29,7 @@ assert(t[120] == nil)
 for needle in \
   'TAB_COLO_SLOTS' \
   'TABARRAY_ASIZE_OFS' \
+  'mov ITYPEd, TAB:RB->asize' \
   'mov TMPR, TAB:RB->array' \
   'lea r8, [RB+TAB_COLO_SLOTS]' \
   'mov ITYPEd, dword [TMPR+TABARRAY_ASIZE_OFS]' \
@@ -50,8 +51,10 @@ do
 done
 
 if ! awk '
-  /case BC_TGET[VBR]:/ { in_get = 1; checked++; next }
+  /case BC_TGET[VBR]:/ { in_get = 1; checked++; last_asize = 0; next }
+  in_get && /mov ITYPEd, TAB:RB->asize/ { asize++; last_asize = NR }
   in_get && /mov TMPR, TAB:RB->array/ { array++ }
+  in_get && /mov TMPR, TAB:RB->array/ && !last_asize { bad = 1 }
   in_get && /lea r8, \[RB\+TAB_COLO_SLOTS\]/ { colo++ }
   in_get && /mov ITYPEd, dword \[TMPR\+TABARRAY_ASIZE_OFS\]/ { hdr++ }
   in_get && /cmp RCd, ITYPEd/ { cmp++ }
@@ -61,7 +64,7 @@ if ! awk '
   in_get && /add RC, TAB:RB->array/ { bad = 1 }
   in_get && /break;/ { in_get = 0 }
   END {
-    exit checked == 3 && array == 3 && colo == 3 && hdr == 3 &&
+    exit checked == 3 && asize == 3 && array == 3 && colo == 3 && hdr == 3 &&
 	 cmp == 3 && add == 3 && forward >= 3 && !bad ? 0 : 1
   }
 ' "$ROOT/src/vm_x64.dasc"; then

@@ -27,6 +27,8 @@ assert(n == 2 and sum == 33)
 
 for needle in \
   'TABARRAY_ASIZE_OFS' \
+  'mov TMPRd, TAB:RB->asize' \
+  'mov RD, TAB:RB->array' \
   'lea r8, [RB+TAB_COLO_SLOTS]' \
   'mov TMPRd, dword [RD+TABARRAY_ASIZE_OFS]' \
   'mov r8, [RD]' \
@@ -52,6 +54,8 @@ if ! awk '
   infn && /mov RB, \[RD\]/ { bad = 1 }
   infn && /cmp dword TAB:RB->hmask, 0/ { bad = 1 }
   infn && /cmp RAd, TAB:RB->asize/ { bad = 1 }
+  infn && /mov TMPRd, TAB:RB->asize/ { asize = NR }
+  infn && /mov RD, TAB:RB->array/ && !asize { bad = 1 }
   infn && /mov64 r9, LJ_TFORWARD_BITS/ { forward = 1 }
   infn && /cmp r8, r9/ { forward_cmp = 1 }
   infn && /call extern lj_tab_getint_hop/ { helper = 1 }
