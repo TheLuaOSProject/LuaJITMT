@@ -7,6 +7,7 @@
 #define LUA_CORE
 
 #include "lj_obj.h"
+#include "lj_atomic.h"
 #include "lj_err.h"
 #include "lj_debug.h"
 #include "lj_buf.h"
@@ -473,6 +474,18 @@ LUA_API const char *lua_setlocal(lua_State *L, const lua_Debug *ar, int n)
   return name;
 }
 
+static void debug_activelines_storebool(lua_State *L, GCtab *t, int32_t line)
+{
+  TValue tv, *dst;
+  setboolV(&tv, 1);
+  for (;;) {
+    dst = lj_tab_setint(L, t, line);
+    if (lj_tab_trystoretv_cas(L, dst, &tv) == LJ_TAB_STORE_CAS_OK)
+      return;
+    la_cpu_pause();  /* debug activelines store saw FORWARD after lookup. */
+  }
+}
+
 int lj_debug_getinfo(lua_State *L, const char *what, lj_Debug *ar, int ext)
 {
   int opt_f = 0, opt_L = 0;
@@ -555,6 +568,8 @@ int lj_debug_getinfo(lua_State *L, const char *what, lj_Debug *ar, int ext)
       GCtab *t = lj_tab_new(L, 0, 0);
       GCproto *pt = funcproto(fn);
       const void *lineinfo = proto_lineinfo(pt);
+      settabV(L, L->top, t);
+      incr_top(L);
       if (lineinfo) {
 	BCLine first = pt->firstline;
 	int sz = pt->numline < 256 ? 1 : pt->numline < 65536 ? 2 : 4;
@@ -564,14 +579,14 @@ int lj_debug_getinfo(lua_State *L, const char *what, lj_Debug *ar, int ext)
 	    (sz == 1 ? (BCLine)((const uint8_t *)lineinfo)[i] :
 	     sz == 2 ? (BCLine)((const uint16_t *)lineinfo)[i] :
 	     (BCLine)((const uint32_t *)lineinfo)[i]);
-	  lj_tab_storebool(L, lj_tab_setint(L, t, line), 1);
+	  debug_activelines_storebool(L, t, line);
 	}
       }
-      settabV(L, L->top, t);
+      lj_gc_pubtab(L, t);
     } else {
       setnilV(L->top);
+      incr_top(L);
     }
-    incr_top(L);
   }
   return 1;  /* Ok. */
 }

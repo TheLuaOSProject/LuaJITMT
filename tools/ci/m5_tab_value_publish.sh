@@ -38,6 +38,19 @@ for sn = 0, 32 do
   if snap then break end
 end
 assert(snap and type(snap[0]) == "number" and type(snap[1]) == "number")
+local lines = debug.getinfo(function()
+  local x = 1
+  return x
+end, "L").activelines
+assert(type(lines) == "table")
+local saw_line = false
+for line, active in pairs(lines) do
+  if type(line) == "number" and active == true then
+    saw_line = true
+    break
+  end
+end
+assert(saw_line)
 local t = { 1, 2, 3 }
 t.name = "table-value-publish"
 assert(t[3] == 3 and t.name == "table-value-publish")
@@ -86,6 +99,7 @@ for needle in \
   'setprotofield(L, t, lj_str_newlit(L, "proto"), pt)' \
   'setintptrfield(L, t, lj_str_newlit(L, "addr"), (intptr_t)(void *)fn->c.f)' \
   'setintindex(L, t, 0, (int32_t)snap->ref - REF_BIAS)' \
+  'debug_activelines_storebool(L, t, line)' \
   'lj_tab_storetab(J->L, &node[i].val, tpl)' \
   'lj_tab_storetab(J->L, o, tpl)' \
   'lj_tab_storenil(J->L, &node[i].val)' \
@@ -147,6 +161,12 @@ fi
 if rg -n 'lj_tab_store(int|intptr|proto)\(L, lj_tab_set(str|int)\(L, t' \
     "$ROOT/src/lib_jit.c"; then
   echo "guardrail: jit.util result fields must CAS-publish" >&2
+  exit 1
+fi
+
+if rg -n 'lj_tab_storebool\(L, lj_tab_setint\(L, t, line\), 1\)' \
+    "$ROOT/src/lj_debug.c"; then
+  echo "guardrail: debug activelines table must CAS-publish" >&2
   exit 1
 fi
 
