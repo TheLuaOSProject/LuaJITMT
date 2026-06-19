@@ -699,14 +699,6 @@ static LJ_AINLINE int lj_tab_array_is_colocated(const GCtab *t,
 #endif
 }
 
-static LJ_AINLINE void *lj_tab_array_mem_acq(const GCtab *t)
-{
-  TValue *array = lj_tab_array_acq(t);
-  if (array && !lj_tab_array_is_colocated(t, array))
-    return (void *)lj_tab_array_hdrw(array);
-  return (void *)array;
-}
-
 static LJ_AINLINE MSize lj_tab_array_hdr_asize_acq(const TValue *array)
 {
   return (MSize)la_load32_acq(&lj_tab_array_hdr(array)->asize);
@@ -760,6 +752,15 @@ retry_snapshot:
     asize = lj_tab_array_hdr_asize_acq(array);
   *arrayp = array;
   return asize;
+}
+
+static LJ_AINLINE void *lj_tab_array_mem_acq(const GCtab *t)
+{
+  TValue *array;
+  (void)lj_tab_array_snapshot_acq(t, &array);
+  if (array && !lj_tab_array_is_colocated(t, array))
+    return (void *)lj_tab_array_hdrw(array);
+  return (void *)array;
 }
 
 static LJ_AINLINE Node *lj_tab_node_acq(const GCtab *t)

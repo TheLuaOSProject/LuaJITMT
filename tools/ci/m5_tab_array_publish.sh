@@ -47,6 +47,7 @@ for needle in \
   'static LJ_AINLINE TValue *lj_tab_setint' \
   'retry_snapshot' \
   'lj_tab_array_is_retiring(t, array)' \
+  '(void)lj_tab_array_snapshot_acq(t, &array)' \
   'lj_tab_array_snapshot_acq(kt, &karray)' \
   'uint32_t asize = (uint32_t)lj_tab_array_snapshot_acq(t, &array)' \
   'size_t hi = (size_t)lj_tab_array_snapshot_acq(t, &array)' \
@@ -111,6 +112,26 @@ fi
 
 if rg -n 'hdr->acap = acap' "$ROOT/src/lj_tab.c"; then
   echo "guardrail: table array capacity must be packed through header helpers" >&2
+  exit 1
+fi
+
+if awk '
+  /static LJ_AINLINE void \*lj_tab_array_mem_acq\(const GCtab \*t\)/ {
+    inmem = 1
+    snap = bad = 0
+    next
+  }
+  inmem && /lj_tab_array_snapshot_acq\(t, &array\)/ { snap = 1 }
+  inmem && /lj_tab_array_acq\(t\)/ { bad = 1 }
+  inmem && /^}/ {
+    checked = 1
+    inmem = 0
+  }
+  END { exit checked && snap && !bad ? 0 : 1 }
+' "$ROOT/src/lj_obj.h"; then
+  :
+else
+  echo "guardrail: table array memory roots must use array snapshots" >&2
   exit 1
 fi
 
