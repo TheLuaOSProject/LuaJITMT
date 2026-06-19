@@ -216,11 +216,21 @@ for needle in \
   'gc_finalize_cdata_claim_preclaimed(global_State *g, GCobj *o)' \
   'P_WEAK preclaim suppressed by later ffi.gc(cd, nil)' \
   'gc2_preclaim_clear_fin_t' \
+  'gc2_finclaim_publish(lua_State *L, global_State *g, MSize idx,' \
+  'copyTVrel(L, &g->gc2.finreg_cdata_preclaim_fin[idx], fin);' \
+  'setgcrefrel(g->gc2.finreg_cdata_preclaim_obj[idx], o);' \
+  'finalizer value is visible before object ready marker' \
+  'gc2_finclaim_clear(lua_State *L, global_State *g, MSize idx)' \
+  'setgcrefnullrel(g->gc2.finreg_cdata_preclaim_obj[idx]);' \
+  'gc2_finclaim_copy_slot(lua_State *L, GCRef *newobj, TValue *newfin,' \
+  'lj_tv_load_acq(&fin, &oldfin[src]);' \
   'gc2_finclaim_next_capacity(cap, count + 1u)' \
   'lj_gc2_finreg_cdata_preclaim_take(L, g, o, &fin)' \
+  'lj_tv_load_acq(fin, &g->gc2.finreg_cdata_preclaim_fin[i]);' \
   'dispatch order may differ from FINREG scan' \
   'gc_mark_finreg_cdata_preclaims(global_State *g)' \
   'gc2_mark_finreg_cdata_preclaims(global_State *g)' \
+  'lj_tv_load_acq(&fin, &g->gc2.finreg_cdata_preclaim_fin[i]);' \
   'ordered FINREG P_WEAK cdata discovery' \
   'uint64_t finreg_cdata_pweak_queued' \
   'uint64_t finreg_cdata_sweep_queued' \
@@ -300,6 +310,26 @@ done
 if rg -n 'gc_preclaim_cdata_finalizers_pweak_finreg|gc_preclaim_cdata_finalizers_pweak_tab|gc_cdata_finreg_pending_scan|gc_cdata_fin_pending_tab|gc_separate_cdata_finalizers_root|gc_claim_cdata_finalizer_pweak|finreg_cdata_pweak_root_fallbacks,[[:space:]]*1|ord[[:space:]]*==[[:space:]]*NULL' \
     "$ROOT/src/lj_gc.c"; then
   echo "guardrail: FINREG ordered discovery must not retain generation/root pending scans" >&2
+  exit 1
+fi
+
+if awk '
+  /static void gc2_finclaim_publish\(lua_State \*L, global_State \*g, MSize idx,/ {
+    inpublish = 1
+    sawfin = 0
+  }
+  inpublish && /copyTVrel\(L, &g->gc2.finreg_cdata_preclaim_fin\[idx\], fin\);/ {
+    sawfin = 1
+  }
+  inpublish && /setgcrefrel\(g->gc2.finreg_cdata_preclaim_obj\[idx\], o\);/ && !sawfin {
+    bad = 1
+  }
+  inpublish && /^}/ {
+    inpublish = 0
+  }
+  END { exit bad ? 0 : 1 }
+' "$ROOT/src/lj_gc2.c"; then
+  echo "guardrail: FINREG preclaim must publish finalizer before object marker" >&2
   exit 1
 fi
 

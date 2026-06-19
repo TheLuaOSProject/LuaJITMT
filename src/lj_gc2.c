@@ -1314,9 +1314,12 @@ static void gc2_mark_finreg_cdata_preclaims(global_State *g)
     return;
   for (i = head; i < count; i++) {
     GCobj *o = gcref_acq(g->gc2.finreg_cdata_preclaim_obj[i]);
-    if (o)
+    if (o) {
+      TValue fin;
       lj_gc2_markobj(g, o);
-    gc2_mark_tv(g, &g->gc2.finreg_cdata_preclaim_fin[i]);
+      lj_tv_load_acq(&fin, &g->gc2.finreg_cdata_preclaim_fin[i]);
+      gc2_mark_tv(g, &fin);
+    }
   }
 }
 #endif
@@ -1669,6 +1672,40 @@ static MSize gc2_finclaim_next_capacity(MSize cap, MSize need)
   return n;
 }
 
+static void gc2_finclaim_publish(lua_State *L, global_State *g, MSize idx,
+				 GCobj *o, cTValue *fin)
+{
+  copyTVrel(L, &g->gc2.finreg_cdata_preclaim_fin[idx], fin);
+  setgcrefrel(g->gc2.finreg_cdata_preclaim_obj[idx], o);
+  /* 05 section 5.8: finalizer value is visible before object ready marker. */
+}
+
+static void gc2_finclaim_clear(lua_State *L, global_State *g, MSize idx)
+{
+  TValue nilv;
+  setgcrefnullrel(g->gc2.finreg_cdata_preclaim_obj[idx]);
+  setnilV(&nilv);
+  copyTVrel(L, &g->gc2.finreg_cdata_preclaim_fin[idx], &nilv);
+}
+
+static void gc2_finclaim_copy_slot(lua_State *L, GCRef *newobj, TValue *newfin,
+				   MSize dst, GCRef *oldobj,
+				   TValue *oldfin, MSize src)
+{
+  GCobj *o = gcref_acq(oldobj[src]);
+  if (o) {
+    TValue fin;
+    lj_tv_load_acq(&fin, &oldfin[src]);
+    copyTVrel(L, &newfin[dst], &fin);
+    setgcrefrel(newobj[dst], o);
+  } else {
+    TValue nilv;
+    setnilV(&nilv);
+    copyTVrel(L, &newfin[dst], &nilv);
+    setgcrefnullrel(newobj[dst]);
+  }
+}
+
 static int gc2_finclaim_resize(global_State *g, MSize cap)
 {
   lua_State *L;
@@ -1690,10 +1727,8 @@ static int gc2_finclaim_resize(global_State *g, MSize cap)
     return 0;
   newobj = lj_mem_newvec(L, cap, GCRef);
   newfin = lj_mem_newvec(L, cap, TValue);
-  for (i = 0; i < pending; i++) {
-    newobj[i] = oldobj[head + i];
-    copyTV(L, &newfin[i], &oldfin[head + i]);
-  }
+  for (i = 0; i < pending; i++)
+    gc2_finclaim_copy_slot(L, newobj, newfin, i, oldobj, oldfin, head + i);
   g->gc2.finreg_cdata_preclaim_obj = newobj;
   g->gc2.finreg_cdata_preclaim_fin = newfin;
   g->gc2.finreg_cdata_preclaim_capacity = cap;
@@ -1708,10 +1743,14 @@ static int gc2_finclaim_resize(global_State *g, MSize cap)
 
 static void gc2_finclaim_reset(global_State *g)
 {
+  lua_State *L;
   GCRef *obj;
   TValue *fin;
   MSize head, count, pending, cap, i;
   if (!g)
+    return;
+  L = mainthread(g);
+  if (!L)
     return;
   obj = g->gc2.finreg_cdata_preclaim_obj;
   fin = g->gc2.finreg_cdata_preclaim_fin;
@@ -1724,10 +1763,8 @@ static void gc2_finclaim_reset(global_State *g)
     return;
   }
   if (head != 0 && pending != 0) {
-    for (i = 0; i < pending; i++) {
-      obj[i] = obj[head + i];
-      copyTV(mainthread(g), &fin[i], &fin[head + i]);
-    }
+    for (i = 0; i < pending; i++)
+      gc2_finclaim_copy_slot(L, obj, fin, i, obj, fin, head + i);
   }
   g->gc2.finreg_cdata_preclaim_head = 0;
   g->gc2.finreg_cdata_preclaim_count = pending;
@@ -2183,8 +2220,7 @@ int lj_gc2_finreg_cdata_preclaim(lua_State *L, global_State *g, GCobj *o,
     la_add64_rlx(&g->gc2.finreg_cdata_preclaim_overflow, 1);
     return 0;
   }
-  setgcref(g->gc2.finreg_cdata_preclaim_obj[count], o);
-  copyTV(L, &g->gc2.finreg_cdata_preclaim_fin[count], fin);
+  gc2_finclaim_publish(L, g, count, o, fin);
   g->gc2.finreg_cdata_preclaim_count = count + 1u;
   la_add64_rlx(&g->gc2.finreg_cdata_pweak_claimed, 1);
   return 1;  /* 05 section 5.8: P_WEAK owns claimed cdata finalizer. */
@@ -2212,9 +2248,8 @@ int lj_gc2_finreg_cdata_preclaim_take(lua_State *L, global_State *g,
     claimed = gcref_acq(g->gc2.finreg_cdata_preclaim_obj[i]);
     if (claimed != o)
       continue;
-    copyTV(L, fin, &g->gc2.finreg_cdata_preclaim_fin[i]);
-    setgcrefnull(g->gc2.finreg_cdata_preclaim_obj[i]);
-    setnilV(&g->gc2.finreg_cdata_preclaim_fin[i]);
+    lj_tv_load_acq(fin, &g->gc2.finreg_cdata_preclaim_fin[i]);
+    gc2_finclaim_clear(L, g, i);
     while (head < count &&
 	   gcref_acq(g->gc2.finreg_cdata_preclaim_obj[head]) == NULL)
       head++;

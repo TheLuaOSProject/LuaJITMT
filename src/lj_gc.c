@@ -576,9 +576,12 @@ static void gc_mark_finreg_cdata_preclaims(global_State *g)
     return;
   for (i = head; i < count; i++) {
     GCobj *o = gcref_acq(g->gc2.finreg_cdata_preclaim_obj[i]);
-    if (o)
+    if (o) {
+      TValue fin;
       gc_markobj(g, o);
-    gc_marktv(g, &g->gc2.finreg_cdata_preclaim_fin[i]);
+      lj_tv_load_acq(&fin, &g->gc2.finreg_cdata_preclaim_fin[i]);
+      gc_marktv(g, &fin);
+    }
   }
 }
 #endif
