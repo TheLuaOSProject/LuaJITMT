@@ -910,11 +910,13 @@ static void snap_unsink(lua_State *L, jit_State *J, GCtrace *T, ExitState *ex,
 	  switch (irk->op2) {
 	  case IRFL_TAB_META:
 	    if (T->ir[irs->op2].o == IR_KNULL) {
-	      setgcrefnull(t->metatable);
+	      setgcrefnullrel(t->metatable);
 	    } else {
+	      GCtab *mt;
 	      snap_restoreval(L, J, T, ex, snapno, rfilt, irs->op2, &tmp);
-	      /* NOBARRIER: The table is new (marked white). */
-	      setgcref(t->metatable, obj2gco(tabV(&tmp)));
+	      mt = tabV(&tmp);
+	      setgcrefmt(t->metatable, obj2gco(mt));
+	      lj_gc_pubtabobj(L, t, mt);
 	    }
 	    break;
 	  case IRFL_TAB_NOMM:

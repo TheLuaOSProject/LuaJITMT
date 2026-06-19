@@ -700,6 +700,40 @@ static void test_capi_newindex_target_parent_barrier(lua_State *L,
   lua_pop(L, 5);
 }
 
+#if LJ_HASBUFFER
+static void test_buffer_decode_metatable_barrier(lua_State *L, global_State *g,
+						TGState *tg)
+{
+  GCtab *decoded, *mt;
+
+  lua_settop(L, 0);
+  assert(luaL_dostring(L,
+    "local buffer = require('string.buffer')\n"
+    "local mt = { tag = 'mt' }\n"
+    "local b = buffer.new({ metatable = { mt } })\n"
+    "local encoded = b:reset():encode(setmetatable({ value = 42 }, mt)):get()\n"
+    "return function() return b:set(encoded):decode() end, mt\n") == LUA_OK);
+  mt = tabV(L->top - 1);
+
+  lj_gc2_legacy_mark_begin(g);
+  assert(la_load8_acq(&tg->alloc.alloc_black) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(mt)) == 0);
+
+  lua_pushvalue(L, -2);
+  lua_call(L, 0, 1);
+  decoded = tabV(L->top - 1);
+  assert(lj_gc2_ismarked(g, obj2gco(decoded)) == 1);
+  assert(tabref_acq(decoded->metatable) == mt);
+  assert(lj_gc2_ismarked(g, obj2gco(mt)) == 1);
+  flush_and_drain(g, tg);
+  lj_gc2_legacy_cycle_end(g);
+  lua_pop(L, 3);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  lua_gc(L, LUA_GCSTOP, 0);
+}
+#endif
+
 #if LJ_HASJIT
 static GCtrace *find_trace(global_State *g)
 {
@@ -3659,6 +3693,9 @@ int main(void)
   test_vm_table_barrier(L, g, tg);
   test_vm_meta_tset_barrier(L, g, tg);
   test_capi_newindex_target_parent_barrier(L, g, tg);
+#if LJ_HASBUFFER
+  test_buffer_decode_metatable_barrier(L, g, tg);
+#endif
 #if LJ_HASJIT
   test_jit_table_store_helper_barrier(L, g, tg);
   test_jit_weak_table_store_helper_barrier(L, g, tg);

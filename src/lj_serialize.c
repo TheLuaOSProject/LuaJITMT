@@ -11,6 +11,7 @@
 #if LJ_HASBUFFER
 #include "lj_err.h"
 #include "lj_buf.h"
+#include "lj_gc.h"
 #include "lj_str.h"
 #include "lj_tab.h"
 #include "lj_udata.h"
@@ -463,8 +464,9 @@ static char *serialize_get(char *r, SBufExt *sbx, TValue *o)
       r = serialize_ru124(r, w, &nhash); if (LJ_UNLIKELY(!r)) goto eob;
     }
     t = lj_tab_new(sbufL(sbx), narray, hsize2hbits(nhash));
-    /* NOBARRIER: The table is new (marked white). */
-    setgcref(t->metatable, obj2gco(mt));
+    setgcrefmt(t->metatable, obj2gco(mt));
+    if (mt)
+      lj_gc_pubtabobj(sbufL(sbx), t, mt);
     {
       TValue tv;
       settabV(sbufL(sbx), &tv, t);

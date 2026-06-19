@@ -38,23 +38,63 @@ if [ -n "$hits" ]; then
   exit 1
 fi
 
+raw_runtime_hits=$(rg -n 'setgcref\(t->metatable' \
+  "$ROOT/src/lj_serialize.c" "$ROOT/src/lj_snap.c" || true)
+if [ -n "$raw_runtime_hits" ]; then
+  echo "guardrail: serializer/snapshot metatable publications must use release stores:" >&2
+  echo "$raw_runtime_hits" >&2
+  exit 1
+fi
+
 for needle in \
   '#define tabref_acq(r)' \
   'gcref_acq((r))' \
-  'call extern lj_gc2_barrier_obj_pair'
+  'LJ_FUNCA void lj_gc2_barrier_obj_pair' \
+  'call extern lj_gc2_barrier_obj_pair' \
+  'setgcrefmt(t->metatable, obj2gco(mt));' \
+  'lj_gc_pubtabobj(sbufL(sbx), t, mt);' \
+  'setgcrefnullrel(t->metatable);' \
+  'lj_gc_pubtabobj(L, t, mt);'
 do
-  if ! rg -F -q "$needle" "$ROOT/src/lj_obj.h"; then
-    if ! rg -F -q "$needle" "$ROOT/src/vm_x64.dasc"; then
-      echo "guardrail: missing metatable publication marker: $needle" >&2
-      exit 1
-    fi
-    continue
-  fi
-  if [ "$needle" = 'call extern lj_gc2_barrier_obj_pair' ]; then
-    echo "guardrail: x64 setmetatable barrier marker searched wrong file" >&2
+  if ! rg -F -q "$needle" "$ROOT/src"; then
+    echo "guardrail: missing metatable publication marker: $needle" >&2
     exit 1
   fi
 done
+
+if ! awk '
+  /static char \*serialize_get\(char \*r, SBufExt \*sbx, TValue \*o\)/ {
+    infn = 1
+    next
+  }
+  infn && /t = lj_tab_new\(sbufL\(sbx\), narray, hsize2hbits\(nhash\)\)/ {
+    newtab = NR
+  }
+  infn && /setgcrefmt\(t->metatable, obj2gco\(mt\)\)/ { store = NR }
+  infn && /lj_gc_pubtabobj\(sbufL\(sbx\), t, mt\)/ { barrier = NR }
+  infn && /copyTVrel\(sbufL\(sbx\), o, &tv\)/ { publish = NR }
+  infn && /^}/ { infn = 0 }
+  END { exit newtab && store && barrier && publish &&
+	      newtab < store && store < barrier && barrier < publish ? 0 : 1 }
+' "$ROOT/src/lj_serialize.c"; then
+  echo "guardrail: serializer table metatable must be release-published and barriered before table publication" >&2
+  exit 1
+fi
+
+if ! awk '
+  /case IRFL_TAB_META:/ { incase = 1; next }
+  incase && /setgcrefnullrel\(t->metatable\)/ { nullrel = NR }
+  incase && /setgcrefmt\(t->metatable, obj2gco\(mt\)\)/ { store = NR }
+  incase && /lj_gc_pubtabobj\(L, t, mt\)/ { barrier = NR }
+  incase && /^[[:space:]]*break;/ {
+    ok = nullrel && store && barrier && store < barrier
+    exit ok ? 0 : 1
+  }
+  END { if (!ok) exit 1 }
+' "$ROOT/src/lj_snap.c"; then
+  echo "guardrail: snapshot metatable restore must release-publish null/non-null stores and barrier non-null metatables" >&2
+  exit 1
+fi
 
 if ! awk '
   /[|][.]ffunc_2 setmetatable/ { inff = 1; stored = 0; call = 0; legacy = 0; next }
