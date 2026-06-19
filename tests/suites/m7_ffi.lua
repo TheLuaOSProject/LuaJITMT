@@ -176,31 +176,6 @@ local function assert_callback_install_order(t)
   })
 end
 
-local function assert_callback_runtime_order(t)
-  local threading = t:path("src", "lib_threading.c")
-  local state = t:path("src", "lj_state.c")
-
-  local worker = t:c_block(threading, "static void *threading_worker(void *arg)")
-  assert_text_ordered("threading_worker", worker, {
-    "lj_ccallback_disown_state(L)",
-    "lj_tg_detach(g, tg)"
-  })
-
-  local detach = t:c_block(threading, "void lj_threading_detach(lua_State *L, int disown_callbacks)")
-  assert_text_ordered("lj_threading_detach", detach, {
-    "if (disown_callbacks)",
-    "lj_ccallback_disown_state(L)",
-    "lj_tg_detach(g, tg)"
-  })
-  t:assert_contains(threading, "lj_threading_detach(L, 1)")
-
-  local free = t:c_block(state, "void LJ_FASTCALL lj_state_free(global_State *g, lua_State *L)")
-  assert_text_ordered("lj_state_free", free, {
-    "lj_ccallback_disown_state(L)",
-    "lj_mem_freevec(g, tvref(L->stack)"
-  })
-end
-
 local function assert_finreg_source_guards(t)
   local src = source_files(t)
   local lj_cdata = t:path("src", "lj_cdata.c")
@@ -505,111 +480,8 @@ return function(add)
 
   add({
     name = "m7_ffi_callback_runtime",
-    description = "FFI callback runtime scratch relocation",
+    description = "FFI callback runtime behavior",
     run = function(t)
-      local src = source_files(t)
-      t:assert_all_any_contains(src, {
-        "typedef LJ_ALIGN(8) struct CCallbackRuntime",
-        "lua_State **owner",
-        "CCallbackRuntime cb;",
-        "typedef struct CCallbackFrame",
-        "CCALLBACK_MAX_NEST",
-        "TValue *cont",
-        "uint8_t auto_detach",
-        "CCallbackFrame frame[CCALLBACK_MAX_NEST]",
-        "void *ffi_call_func",
-        "lj_ccallback_enter(CTState *cts, void *cf,",
-        "lj_ccallback_leave(CTState *cts, TValue *o,",
-        "lj_ccallback_unwind(lua_State *L, TValue *cont)",
-        "was_native = (uint8_t)(tg->in_native != 0)",
-        "la_store8_rlx(&tg->in_native, 0)",
-        "actions = lj_native_leave(L)",
-        "callback_frame_push(L, cb,",
-        "frame->cont == cont",
-        "callback_carrier_new_l(lua_State *L)",
-        "carrier->tg_hint = NULL",
-        "callback_owner_barrier_l(L, carrier)",
-        "callback_auto_attach(CTState *cts, MSize slot)",
-        "lj_threading_attach(L)",
-        "lj_threading_detach(L, 0)",
-        "callback_frame_top(cb)->was_native = 0",
-        "callback_frame_pop(cb)",
-        "if (errcode)",
-        "lj_ccallback_unwind(L, frame)",
-        "callback_conv_args(CTState *cts, lua_State *L, CCallbackRuntime *cb)",
-        "callback_conv_result(CTState *cts, lua_State *L, TValue *o,",
-        "lj_ccallback_prepare(CTState *cts, MSize slot)",
-        "Callback carrier TG from current TLS",
-        "callback_owner_claim(owner, top, carrier)",
-        "callback_owner_clear(lua_State **owner, MSize slot,",
-        "lj_ccallback_disown_state(lua_State *L)",
-        "callback_owner_clear(owner, slot, L)",
-        "void *old_ffi_call_func = tg->ffi_call_func",
-        "tg->ffi_call_func = (void *)cc.func",
-        "tg->ffi_call_func = old_ffi_call_func",
-        "tg->ffi_call_func = NULL",
-        "lj_ctype_cb_blacklist(cts, tg->ffi_call_func)",
-        "cb->slot = ~0u",
-        "uint64_t *cbblack",
-        "ctype_cbblack_init_l(lua_State *L, CTState *cts)",
-        "lj_ctype_cb_blacklist(CTState *cts, void *func)",
-        "lj_ctype_cb_isblacklisted(CTState *cts, void *func)",
-        "la_cas64(&tab[slot], &expect, key, LA_ACQ_REL, LA_ACQ)",
-        "la_store32_rel(&cts->cbblack_all, 1)",
-        "lj_ctype_cb_blacklist(cts, (void *)cc.func)",
-        "lj_ctype_cb_isblacklisted(cts,",
-        "lj_gc_arena_markmem(g, cts->cbblack)",
-        "lj_gc2_markmem(g, cts->cbblack)",
-        "call extern lj_ccallback_prepare",
-        "sub rsp, 144",
-        "add rsp, 144",
-        "TG_CB2DISP",
-        "lea KBASE, [DISPATCH+DISPATCH_TG(cb)]",
-        "mov CBACK:KBASE->gpr[0], TMPR",
-        "mov CBACK:KBASE->stack, rax",
-        "mov rax, CBACK:KBASE->gpr[0]",
-        "movsd xmm0, qword CBACK:KBASE->fpr[0]"
-      })
-      assert_no_lines(t, "x64 callback trampoline must not use shared CTState scratch",
-                      { t:path("src", "vm_x64.dasc") }, function(line)
-        return (contains(line, "CTSTATE->cb.") and
-                line_contains_any(line, { "gpr", "fpr", "stack", "slot" })) or
-               contains(line, "mov aword CTSTATE->L")
-      end)
-      assert_no_lines(t, "x64 callback trampoline must not route through slot owner TG",
-                      { t:path("src", "vm_x64.dasc") }, function(line)
-        return (contains(line, "mov TG:KBASE, L:") and contains(line, "->tg_hint")) or
-               contains(line, "mov CBACK:KBASE->L, ITYPE")
-      end)
-      assert_no_lines(t, "C callback runtime must use per-TG callback scratch",
-                      {
-                        t:path("src", "lj_ccallback.c"),
-                        t:path("src", "lj_ccall.c")
-                      }, function(line)
-        return line_contains_any(line, {
-          "cts->cb.gpr",
-          "cts->cb.fpr",
-          "cts->cb.stack",
-          "cts->cb.slot",
-          "cts->cb.was_native"
-        })
-      end)
-      assert_no_lines(t, "callback native state must be per callback frame",
-                      {
-                        t:path("src", "lj_ccallback.c"),
-                        t:path("src", "lj_ctype.h")
-                      }, function(line)
-        return contains(line, "cb->was_native")
-      end)
-      assert_no_lines(t, "callback blacklist must not mutate miscmap structurally",
-                      {
-                        t:path("src", "lj_ccall.c"),
-                        t:path("src", "lj_crecord.c")
-                      }, function(line)
-        return contains(line, "lj_tab_storebool(L, lj_tab_set(L, cts->miscmap") or
-               contains(line, "lj_tab_get(J->L, cts->miscmap, &key)")
-      end)
-      assert_callback_runtime_order(t)
       clean_build(t)
       build_and_run_c(t, t:tmp("lj_t-ffi-callback-nested-native"),
                       "t-ffi-callback-nested-native.c")
@@ -624,7 +496,7 @@ return function(add)
         getenv("LJ_M7_FFI_CBACK_RT_ITERS", "220")
       }, { joff = true })
       t:luajit({ t:path("tests", "stock", "test", "lib", "ffi", "ffi_callback.lua") })
-      print("M7 FFI callback runtime guard passed")
+      print("M7 FFI callback runtime behavior passed")
     end
   })
 

@@ -254,6 +254,9 @@ Lua test-suite migration notes:
 - Converted `m7_ffi_ctype_pointer_ids` to behavior-only coverage through the
   pointer-ID and cdata-set Lua regressions, and removed the now-unused
   `ctype_typeid` source-check helper.
+- Converted `m7_ffi_callback_runtime` to behavior-only coverage through its C
+  callback fixtures, threaded Lua runtime stress, and stock callback test, and
+  removed the now-unused callback runtime source-order helper.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.
