@@ -741,8 +741,6 @@ assert(util.traceinfo(1), "expected loaded CNEW creation trace")
         "(void)lj_trace_flushscope(G2J(g), idx);"
       })
 
-      t:assert_contains(t:path("tests", "t-jit-trace-retire.c"),
-                        "scoped_epoch = la_load64_acq(&g->gc2.hs_epoch) + 1u;")
       t:assert_not_contains(t:path("src", "lj_safepoint.c"),
                             "Temporary single-mutator flush action")
       t:assert_not_contains(t:path("src", "lj_dispatch.c"),
@@ -931,13 +929,6 @@ assert(util.traceinfo(1), "expected loaded CNEW creation trace")
         "lj_tab_asize_acq(t)",
         "lj_tab_array_acq(t)",
         "lj_tab_node_acq(t)"
-      })
-
-      t:assert_all_contains(t:path("tests", "t-tab-array-publish.c"), {
-        "lj_tab_array_hdr_flags_acq(oldarray) == 0",
-        "lj_tab_array_hdr_flags_acq(ret->array) == TABARRAY_FLAG_RETIRING",
-        "lj_tab_array_nextgen_acq(ret->array) == array",
-        "lj_tab_array_is_retiring(t, ret->array)"
       })
 
       assert_no_lines(t, "table arrays must use lj_tab_array_* helpers in C code",

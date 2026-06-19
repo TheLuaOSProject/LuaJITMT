@@ -299,6 +299,8 @@ Lua test-suite migration notes:
   fixture instead of direct table/API/library source inspections.
 - Converted `m5_state_owner` to rely on the compiled foreign-state owner
   behavior fixture instead of direct API/debug/coroutine source inspections.
+- Removed fixture-source self-inspections from `m5_jit_trace_publish` and
+  `m5_tab_array_publish`; their compiled fixtures still run.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.
