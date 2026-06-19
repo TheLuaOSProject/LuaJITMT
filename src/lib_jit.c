@@ -122,6 +122,18 @@ LJLIB_CF(jit_security)
   return 1;
 }
 
+static TValue *jit_attach_event_store(lua_State *L, GCtab *tab, cTValue *key,
+				      cTValue *src)
+{
+  TValue *dst;
+  for (;;) {
+    dst = lj_tab_set(L, tab, key);
+    if (lj_tab_trystoretv_cas(L, dst, src) == LJ_TAB_STORE_CAS_OK)
+      return dst;
+    la_cpu_pause();  /* jit.attach event table saw FORWARD after lookup. */
+  }
+}
+
 LJLIB_CF(jit_attach)
 {
 #ifdef LUAJIT_DISABLE_VMEVENT
@@ -142,7 +154,7 @@ LJLIB_CF(jit_attach)
     while (lua_next(L, -2)) {
       L->top--;
       if (tvisfunc(L->top) && funcV(L->top) == fn) {
-	lj_tab_storenil(L, lj_tab_set(L, tabV(L->top-2), L->top-1));
+	jit_attach_event_store(L, tabV(L->top-2), L->top-1, niltv(L));
       }
     }
   }

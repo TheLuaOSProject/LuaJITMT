@@ -17,6 +17,9 @@ assert(cinfo.addr ~= nil and cinfo.upvalues ~= nil)
 local t = { 1, 2, 3 }
 t.name = "table-value-publish"
 assert(t[3] == 3 and t.name == "table-value-publish")
+local function event_cb() end
+jit.attach(event_cb, "bc")
+jit.attach(event_cb)
 '
 
 for needle in \
@@ -53,6 +56,7 @@ for needle in \
   'slot = lib_storefunc_str(L, tab, name, fn)' \
   'jit_profile_registry_store(L, registry, &key, &tv)' \
   'jit_profile_registry_store(L, registry, &key, niltv(L))' \
+  'jit_attach_event_store(L, tabV(L->top-2), L->top-1, niltv(L))' \
   'lj_tab_storenilraw(&array[i])' \
   'lj_tab_storenilraw(&n->val)' \
   'lj_cdata_fin_storenil(L, tv)' \

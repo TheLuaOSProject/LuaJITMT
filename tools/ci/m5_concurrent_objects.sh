@@ -33,6 +33,7 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 "$ROOT/tools/ci/m5_tmpbuf_tg.sh"
 "$ROOT/tools/ci/m5_threading_alloc.sh"
 "$ROOT/tools/ci/m5_threading_publish.sh"
+"$ROOT/tools/ci/m5_jit_attach_publish.sh"
 "$ROOT/tools/ci/m5_jit_profile_publish.sh"
 "$ROOT/tools/ci/m5_jit_trace_publish.sh"
 "$ROOT/tools/ci/m5_jit_table_fload_mutable.sh"
