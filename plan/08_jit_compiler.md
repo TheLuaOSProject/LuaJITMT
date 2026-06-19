@@ -466,14 +466,16 @@ scoped-flush target.
    table references, previous-nil in-bounds array slots, existing nil-value
    hash slots, non-numeric new hash keys, and fresh numeric insertions, then
    lowered through
-   `lj_tab_storetv_forjit_array(parent,dst,src)` or
-   `lj_tab_storetv_forjit_hash(parent,dst,src)`, with numeric `NEWREF` stores
-   using `lj_tab_storetv_forjit_newref(parent,dst,src)` so array-returned slots
-   are not interpreted as hash nodes. The helpers release-publish the TValue and
-   run the GC2 parent-aware value barrier, and the weak-aware helper path marks
-   weak keys/values during `P_WEAK`. Helper-backed stores resolve visible
-   forwarded destination slots through the published successor generation when
-   the destination belongs to the parent's current array or hash generation.
+   `lj_tab_storetv_forjit_array(parent,dst,src,index)` or
+   `lj_tab_storetv_forjit_hash(parent,dst,src,key)`, with numeric `NEWREF`
+   stores using `lj_tab_storetv_forjit_newref(parent,dst,src,key)` so
+   array-returned slots are not interpreted as hash nodes. The helpers
+   release-publish the TValue and run the GC2 parent-aware value barrier, and
+   the weak-aware helper path marks weak keys/values during `P_WEAK`.
+   Helper-backed stores resolve visible forwarded destination slots through the
+   published successor generation when the destination belongs to the parent's
+   current array or hash generation, and index/key-resolve before CAS if the
+   recorded slot is no longer in the current generation.
    This is still an interim bridge rather than
    the final generated-store protocol. The final generation-aware trace
    write/barrier protocol remains required before raw generated table stores can

@@ -158,10 +158,12 @@ accounting, and table free now derive separated-array capacity from the array
 header snapshot rather than `GCtab.acap`. This leaves the broader
 table-generation model pending around legacy mirrors, remaining owner-side
 C mirror readers, and helper-backed stores.
-Helper-backed Linux/x64 `NEWREF` stores now resolve by key before each CAS
-publication, closing the stale retiring-generation slot case for traced fresh
-hash/array slots while the broader generated RETIRING/FORWARD/CAS write
-protocol remains pending.
+Helper-backed Linux/x64 `ASTORE`/`HSTORE` stores now pass the array index or
+hash key into their helpers and resolve before CAS if the recorded slot is
+outside the current generation; `NEWREF` stores key-resolve before each CAS.
+This closes the stale retiring-generation slot case for helper-backed traced
+table stores while the broader generated RETIRING/FORWARD/CAS write protocol
+remains pending.
 Linux/x64
 secure builds now use the original M6 dual-map mcode write view: each mcode
 area is memfd-backed, mapped once RX and once RW, `MCLink.rw` carries the

@@ -1823,17 +1823,25 @@ static void asm_ahstore_forjit(ASMState *as, IRIns *ir)
   const CCallInfo *ci;
   IRRef args[5];
   IRIns *xref = IR(ir->op1);
-  IRRef tabref;
-  if (xref->o == IR_AREF || xref->o == IR_HREFK)
+  IRRef tabref, keyref;
+  int keyistv = 1;
+  if (xref->o == IR_AREF) {
     tabref = IR(xref->op1)->op1;
-  else if (xref->o == IR_NEWREF) {
+    keyref = xref->op2;
+    keyistv = 0;
+  } else if (xref->o == IR_HREFK) {
+    tabref = IR(xref->op1)->op1;
+    keyref = IR(xref->op2)->op1;
+  } else if (xref->o == IR_NEWREF) {
     IRType1 kt = IR(xref->op2)->t;
     tabref = xref->op1;
+    keyref = xref->op2;
     if (irt_isnum(kt) || (LJ_DUALNUM && irt_isinteger(kt)))
       id = IRCALL_lj_tab_storetv_forjit_newref;
   } else {
     lj_assertA(xref->o == IR_HREF, "expected helper-backed table store ref");
     tabref = xref->op1;
+    keyref = xref->op2;
   }
   ci = &lj_ir_callinfo[id];
   ra_evictset(as, RSET_SCRATCH);
@@ -1841,11 +1849,10 @@ static void asm_ahstore_forjit(ASMState *as, IRIns *ir)
   args[1] = tabref;       /* GCtab *parent */
   args[2] = ir->op1;      /* TValue *dst */
   args[3] = ASMREF_TMP1;  /* cTValue *src */
-  if (id == IRCALL_lj_tab_storetv_forjit_newref)
-    args[4] = ASMREF_TMP2;  /* cTValue *key */
+  args[4] = keyistv ? ASMREF_TMP2 : keyref;  /* cTValue *key or MSize index */
   asm_gencall(as, ci, args);
-  if (id == IRCALL_lj_tab_storetv_forjit_newref)
-    asm_tvptr(as, ra_releasetmp(as, ASMREF_TMP2), xref->op2,
+  if (keyistv)
+    asm_tvptr(as, ra_releasetmp(as, ASMREF_TMP2), keyref,
 	      IRTMPREF_IN1|IRTMPREF_IN2);
   asm_tvptr(as, ra_releasetmp(as, ASMREF_TMP1), ir->op2, IRTMPREF_IN1);
 }

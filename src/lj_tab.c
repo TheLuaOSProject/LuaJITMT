@@ -1594,15 +1594,42 @@ static TValue *tab_forwarded_jit_hash_slot(GCtab *parent, TValue *dst,
   }
 }
 
+static TValue *tab_current_jit_array_slot(lua_State *L, GCtab *parent,
+					  TValue *orig, MSize key)
+{
+  TValue *array;
+  MSize asize, idx;
+  asize = lj_tab_array_snapshot_acq(parent, &array);
+  if (tab_ptr_index((uintptr_t)array, (uintptr_t)orig, sizeof(TValue),
+		    asize, &idx))
+    return tab_forwarded_jit_array_slot(L, parent, orig);
+  return lj_tab_setint(L, parent, (int32_t)key);
+}
+
+static TValue *tab_current_jit_hash_slot(lua_State *L, GCtab *parent,
+					 TValue *orig, cTValue *key,
+					 TValue *keycopy, cTValue **keyp)
+{
+  Node *node;
+  MSize hmask, idx;
+  node = lj_tab_node_snapshot_acq(parent, &hmask);
+  if (tab_ptr_index((uintptr_t)node, (uintptr_t)orig, sizeof(Node),
+		    hmask + 1u, &idx))
+    return tab_forwarded_jit_hash_slot(parent, orig, keycopy, keyp);
+  *keyp = key;
+  return lj_tab_set(L, parent, key);
+}
+
 LJ_FUNCA TValue *lj_tab_storetv_forjit_array(lua_State *L, GCtab *parent,
-					     TValue *dst, cTValue *src)
+					     TValue *dst, cTValue *src,
+					     MSize key)
 {
   TValue *orig = dst;
   for (;;) {
-    dst = tab_forwarded_jit_array_slot(L, parent, orig);
+    dst = tab_current_jit_array_slot(L, parent, orig, key);
     if (lj_tab_trystoretv_cas(L, dst, src) == LJ_TAB_STORE_CAS_OK)
       break;
-    la_cpu_pause();  /* JIT array store saw FORWARD after routing. */
+    la_cpu_pause();  /* JIT array store saw FORWARD after key/current routing. */
   }
   lj_gc2_barrier_weak_write(L, parent, NULL, dst);  /* M8: traced weak-value array write. */
   lj_gc2_barrier_tv_pair(L, obj2gco(parent), dst);  /* M10: traced parent barrier. */
@@ -1610,21 +1637,20 @@ LJ_FUNCA TValue *lj_tab_storetv_forjit_array(lua_State *L, GCtab *parent,
 }
 
 LJ_FUNCA TValue *lj_tab_storetv_forjit_hash(lua_State *L, GCtab *parent,
-					    TValue *dst, cTValue *src)
+					    TValue *dst, cTValue *src,
+					    cTValue *key)
 {
   TValue keycopy;
   TValue *orig = dst;
-  Node *n;
-  cTValue *key;
+  cTValue *barrier_key = key;
   for (;;) {
-    n = (Node *)orig;  /* Node.val is the first field. */
-    key = &n->key;
-    dst = tab_forwarded_jit_hash_slot(parent, orig, &keycopy, &key);
+    dst = tab_current_jit_hash_slot(L, parent, orig, key, &keycopy,
+				    &barrier_key);
     if (lj_tab_trystoretv_cas(L, dst, src) == LJ_TAB_STORE_CAS_OK)
       break;
-    la_cpu_pause();  /* JIT hash store saw FORWARD after routing. */
+    la_cpu_pause();  /* JIT hash store saw FORWARD after key/current routing. */
   }
-  lj_gc2_barrier_weak_write(L, parent, key, dst);  /* M8: traced weak hash write. */
+  lj_gc2_barrier_weak_write(L, parent, barrier_key, dst);  /* M8: traced weak hash write. */
   lj_gc2_barrier_tv_pair(L, obj2gco(parent), dst);  /* M10: traced parent barrier. */
   return dst;
 }
