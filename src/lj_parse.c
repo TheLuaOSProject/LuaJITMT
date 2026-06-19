@@ -1628,7 +1628,8 @@ static GCproto *fs_finish(LexState *ls, BCLine line)
   }
   pt->numparams = fs->numparams;
   pt->framesize = fs->framesize;
-  setgcref(pt->chunkname, obj2gco(ls->chunkname));
+  setgcrefrel(pt->chunkname, obj2gco(ls->chunkname));
+  lj_gc_pubobjobj(L, pt, ls->chunkname);
 
   /* Close potentially uninitialized gap between bc and kgc. */
   *(uint32_t *)((char *)pt + ofsk - sizeof(GCRef)*(fs->nkgc+1)) = 0;

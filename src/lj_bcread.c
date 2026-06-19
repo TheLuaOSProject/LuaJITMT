@@ -246,9 +246,13 @@ static void bcread_kgc(LexState *ls, GCproto *pt, MSize sizekgc)
     if (tp >= BCDUMP_KGC_STR) {
       MSize len = tp - BCDUMP_KGC_STR;
       const char *p = (const char *)bcread_mem(ls, len);
-      setgcref(*kr, obj2gco(lj_str_new(ls->L, p, len)));
+      GCobj *o = obj2gco(lj_str_new(ls->L, p, len));
+      setgcrefrel(*kr, o);
+      lj_gc_pubobjobj(ls->L, pt, o);
     } else if (tp == BCDUMP_KGC_TAB) {
-      setgcref(*kr, obj2gco(bcread_ktab(ls)));
+      GCtab *t = bcread_ktab(ls);
+      setgcrefrel(*kr, obj2gco(t));
+      lj_gc_pubobjobj(ls->L, pt, t);
 #if LJ_HASFFI
     } else if (tp != BCDUMP_KGC_CHILD) {
       CTypeID id = tp == BCDUMP_KGC_COMPLEX ? CTID_COMPLEX_DOUBLE :
@@ -256,21 +260,25 @@ static void bcread_kgc(LexState *ls, GCproto *pt, MSize sizekgc)
       CTSize sz = tp == BCDUMP_KGC_COMPLEX ? 16 : 8;
       GCcdata *cd = lj_cdata_new_(ls->L, id, sz);
       TValue *p = (TValue *)cdataptr(cd);
-      setgcref(*kr, obj2gco(cd));
       p[0].u32.lo = bcread_uleb128(ls);
       p[0].u32.hi = bcread_uleb128(ls);
       if (tp == BCDUMP_KGC_COMPLEX) {
 	p[1].u32.lo = bcread_uleb128(ls);
 	p[1].u32.hi = bcread_uleb128(ls);
       }
+      setgcrefrel(*kr, obj2gco(cd));
+      lj_gc_pubobjobj(ls->L, pt, cd);
 #endif
     } else {
       lua_State *L = ls->L;
+      GCproto *child;
       lj_assertLS(tp == BCDUMP_KGC_CHILD, "bad constant type %d", tp);
       if (L->top <= bcread_oldtop(L, ls))  /* Stack underflow? */
 	bcread_error(ls, LJ_ERR_BCBAD);
       L->top--;
-      setgcref(*kr, obj2gco(protoV(L->top)));
+      child = protoV(L->top);
+      setgcrefrel(*kr, obj2gco(child));
+      lj_gc_pubobjobj(ls->L, pt, child);
     }
   }
 }
@@ -436,7 +444,8 @@ GCproto *lj_bcread_proto(LexState *ls)
   if (bcread_version(ls) == BCDUMP_VERSION_LEGACY)
     proto_setlegacyuv(pt);
   pt->trace = 0;
-  setgcref(pt->chunkname, obj2gco(ls->chunkname));
+  setgcrefrel(pt->chunkname, obj2gco(ls->chunkname));
+  lj_gc_pubobjobj(ls->L, pt, ls->chunkname);
 
   /* Close potentially uninitialized gap between bc and kgc. */
   *(uint32_t *)((char *)pt + ofsk - sizeof(GCRef)*(sizekgc+1)) = 0;

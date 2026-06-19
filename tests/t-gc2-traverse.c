@@ -889,6 +889,37 @@ static void test_lua_closure_constructor_publish_barrier(lua_State *L,
   lua_gc(L, LUA_GCSTOP, 0);
 }
 
+static void test_proto_chunkname_publish_barrier(lua_State *L, global_State *g,
+						 TGState *tg)
+{
+  GCstr *chunkname;
+  GCfunc *fn;
+  GCproto *pt;
+  const char src[] = "return function() return 42 end";
+
+  lua_settop(L, 0);
+  lua_pushliteral(L, "@gc2_proto_chunk");
+  chunkname = strV(L->top - 1);
+
+  lj_gc2_legacy_mark_begin(g);
+  assert(la_load8_acq(&tg->alloc.alloc_black) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(chunkname)) == 0);
+
+  assert(luaL_loadbuffer(L, src, sizeof(src) - 1, strdata(chunkname)) == LUA_OK);
+  fn = funcV(L->top - 1);
+  assert(isluafunc(fn));
+  pt = funcproto(fn);
+  assert(proto_chunkname(pt) == chunkname);
+  assert(lj_gc2_ismarked(g, obj2gco(chunkname)) == 1);
+
+  flush_and_drain(g, tg);
+  lj_gc2_legacy_cycle_end(g);
+  lua_pop(L, 2);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  lua_gc(L, LUA_GCSTOP, 0);
+}
+
 #if LJ_HASBUFFER
 static void test_buffer_decode_metatable_barrier(lua_State *L, global_State *g,
 						TGState *tg)
@@ -3961,6 +3992,7 @@ int main(void)
   test_thread_spawn_constructor_child_barrier(L, g, tg);
   test_cclosure_constructor_publish_barrier(L, g, tg);
   test_lua_closure_constructor_publish_barrier(L, g, tg);
+  test_proto_chunkname_publish_barrier(L, g, tg);
 #if LJ_HASBUFFER
   test_buffer_decode_metatable_barrier(L, g, tg);
   test_buffer_constructor_dict_barrier(L, g, tg);
