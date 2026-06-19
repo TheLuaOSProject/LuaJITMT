@@ -81,6 +81,12 @@ Lua test-suite migration notes:
   - `tools/ci/m5_threading_alloc.sh` -> `m5_threading_alloc`
 - Fifteenth migrated scripts:
   - `tools/ci/m5_strtab_cas.sh` -> `m5_strtab_cas`
+- Sixteenth migrated scripts:
+  - `tools/ci/m3_gc2_paranoia.sh` -> `m3_gc2_paranoia`
+  - `tools/ci/m3_gc2_scaffold.sh` -> `m3_gc2_scaffold`
+  - `tools/ci/m3_gc2_worker_scheduler.sh` -> `m3_gc2_worker_scheduler`
+  - `tools/ci/m3_safepoint_handshake.sh` -> `m3_safepoint_handshake`
+  - `tools/ci/m3_vm_safepoint.sh` -> `m3_vm_safepoint`
 - This first batch covers the main shapes the full migration needs:
   standalone C fixtures linked against selected runtime files, Lua tests under
   the built VM, C fixtures linked against `libluajit.a`, and source-order guard
@@ -125,6 +131,8 @@ Lua test-suite migration notes:
   threading allocator routing smoke.
 - The fifteenth batch migrates the string table CAS/rehash fixtures and
   publication source guards.
+- The sixteenth batch migrates the M3 GC2/safepoint guards into Lua. The
+  paranoia aggregate still preserves the existing stock-test assertion failure.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.
