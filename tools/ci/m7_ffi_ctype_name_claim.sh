@@ -38,13 +38,38 @@ if rg -n 'lj_ctype_addname\(cp->cts' "$ROOT/src/lj_cparse.c"; then
 fi
 
 if ! awk '
+  /static void ffi_typeinfo_storeint\(lua_State \*L,/ { inint = 1; next }
+  inint && /lj_tab_storeint\(L, dst,/ { rawint = 1 }
+  inint && /for \(;;\)/ { intloop = 1 }
+  inint && /setintV\(&tv, val\)/ { intmake = 1 }
+  inint && /lj_tab_setstr\(L, tab, key\)/ { intresolve = 1 }
+  inint && /lj_tab_trystoretv_cas\(L, dst, &tv\) == LJ_TAB_STORE_CAS_OK/ { intcas = 1 }
+  inint && /FFI typeinfo int store saw FORWARD after lookup\./ { intretry = 1 }
+  inint && /^}/ { intok = !rawint && intloop && intmake && intresolve && intcas && intretry; inint = 0 }
+  /static void ffi_typeinfo_storestr\(lua_State \*L,/ { instr = 1; next }
+  instr && /lj_tab_storestr\(L, dst,/ { rawstr = 1 }
+  instr && /for \(;;\)/ { strloop = 1 }
+  instr && /setstrV\(L, &tv, val\)/ { strmake = 1 }
+  instr && /lj_tab_setstr\(L, tab, key\)/ { strresolve = 1 }
+  instr && /lj_tab_trystoretv_cas\(L, dst, &tv\) == LJ_TAB_STORE_CAS_OK/ { strcas = 1 }
+  instr && /FFI typeinfo string store saw FORWARD after lookup\./ { strretry = 1 }
+  instr && /^}/ { strok = !rawstr && strloop && strmake && strresolve && strcas && strretry; instr = 0 }
   /LJLIB_CF\(ffi_typeinfo\)/ { infn = 1 }
   infn && /ctype_isabandoned\(info\)/ { abandoned = NR }
   infn && /lua_createtable\(L, 0, 4\)/ { create = NR }
+  infn && /lj_tab_store(int|str)\(L, lj_tab_setstr/ { raw = 1 }
+  infn && /ffi_typeinfo_storeint\(L, t, lj_str_newlit\(L, "info"\), \(int32_t\)info\)/ { info = NR }
+  infn && /ffi_typeinfo_storeint\(L, t, lj_str_newlit\(L, "size"\), \(int32_t\)size\)/ { size = NR }
+  infn && /ffi_typeinfo_storeint\(L, t, lj_str_newlit\(L, "sib"\), \(int32_t\)sib\)/ { sib = NR }
+  infn && /ffi_typeinfo_storestr\(L, t, lj_str_newlit\(L, "name"\), name\)/ { name = NR }
+  infn && /lj_gc_pubtab\(L, t\)/ { pub = NR }
   infn && /^}/ { infn = 0 }
-  END { exit abandoned && create && abandoned < create ? 0 : 1 }
+  END {
+    exit intok && strok && !raw && abandoned && create && info && size && sib &&
+	 name && pub && abandoned < create && create < info && info < pub ? 0 : 1
+  }
 ' "$ROOT/src/lib_ffi.c"; then
-  echo "guardrail: ffi.typeinfo must hide abandoned ctype holes before allocation" >&2
+  echo "guardrail: ffi.typeinfo must hide abandoned ctypes and CAS-publish result fields" >&2
   exit 1
 fi
 

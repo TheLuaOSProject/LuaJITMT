@@ -67,6 +67,8 @@ for needle in \
   'lj_cdata_fin_storenil(L, tv)' \
   'ffi_loaded_store(L, t, name, L->top-1)' \
   'ffi_miscmap_store(L, cts, &cts->g->strempty, L->top-1)' \
+  'ffi_typeinfo_storeint(L, t, lj_str_newlit(L, "info"), (int32_t)info)' \
+  'ffi_typeinfo_storestr(L, t, lj_str_newlit(L, "name"), name)' \
   'lj_tab_storenilraw(&n->key)' \
   'const_slot_store(o, fs->nkn)' \
   'const_slot_store(o, fs->nkgc)' \

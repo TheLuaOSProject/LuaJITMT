@@ -689,6 +689,32 @@ LJLIB_CF(ffi_typeof)	LJLIB_REC(.)
   return 1;
 }
 
+static void ffi_typeinfo_storeint(lua_State *L, GCtab *tab, GCstr *key,
+				  int32_t val)
+{
+  TValue tv, *dst;
+  setintV(&tv, val);
+  for (;;) {
+    dst = lj_tab_setstr(L, tab, key);
+    if (lj_tab_trystoretv_cas(L, dst, &tv) == LJ_TAB_STORE_CAS_OK)
+      return;
+    la_cpu_pause();  /* FFI typeinfo int store saw FORWARD after lookup. */
+  }
+}
+
+static void ffi_typeinfo_storestr(lua_State *L, GCtab *tab, GCstr *key,
+				  GCstr *val)
+{
+  TValue tv, *dst;
+  setstrV(L, &tv, val);
+  for (;;) {
+    dst = lj_tab_setstr(L, tab, key);
+    if (lj_tab_trystoretv_cas(L, dst, &tv) == LJ_TAB_STORE_CAS_OK)
+      return;
+    la_cpu_pause();  /* FFI typeinfo string store saw FORWARD after lookup. */
+  }
+}
+
 /* Internal and unsupported API. */
 LJLIB_CF(ffi_typeinfo)
 {
@@ -713,18 +739,16 @@ LJLIB_CF(ffi_typeinfo)
     lj_ctype_parse_unlock(cts);
     lua_createtable(L, 0, 4);  /* Increment hash size if fields are added. */
     t = tabV(L->top-1);
-    lj_tab_storeint(L, lj_tab_setstr(L, t, lj_str_newlit(L, "info")),
-		    (int32_t)info);
+    ffi_typeinfo_storeint(L, t, lj_str_newlit(L, "info"), (int32_t)info);
     if (size != CTSIZE_INVALID)
-      lj_tab_storeint(L, lj_tab_setstr(L, t, lj_str_newlit(L, "size")),
-		      (int32_t)size);
+      ffi_typeinfo_storeint(L, t, lj_str_newlit(L, "size"), (int32_t)size);
     if (sib)
-      lj_tab_storeint(L, lj_tab_setstr(L, t, lj_str_newlit(L, "sib")),
-		      (int32_t)sib);
+      ffi_typeinfo_storeint(L, t, lj_str_newlit(L, "sib"), (int32_t)sib);
     if (name) {
       if (isdead(G(L), obj2gco(name))) flipwhite(obj2gco(name));
-      lj_tab_storestr(L, lj_tab_setstr(L, t, lj_str_newlit(L, "name")), name);
+      ffi_typeinfo_storestr(L, t, lj_str_newlit(L, "name"), name);
     }
+    lj_gc_pubtab(L, t);
     lj_gc_check(L);
     return 1;
   }
