@@ -201,8 +201,8 @@ Lua test-suite migration notes:
 - The twenty-first batch migrates the M7 FFI wrappers and aggregate.
 - The twenty-second batch migrates the M8 weak/finalizer semantic gate.
 - The twenty-third batch migrates the remaining M0 matrix,
-  stock-suite runner, M4 TSan driver gate, and M5 aggregate wrapper. The only
-  remaining shell entrypoint is the compatibility launcher for the Lua runner.
+  stock-suite runner, M4 TSan driver gate, and M5 aggregate wrapper. Remaining
+  shell files are compatibility launchers; test logic is owned by Lua.
 - Source-shape-only cases were removed from the runnable suite: M0 guardrails,
   M2 GC header accessor grep, the M5 source publication guards, M5 x64 upvalue
   publication, and M7 no-CTState-L. These should be replaced by behavior tests
