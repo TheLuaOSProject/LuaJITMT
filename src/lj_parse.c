@@ -10,6 +10,7 @@
 #define LUA_CORE
 
 #include "lj_obj.h"
+#include "lj_atomic.h"
 #include "lj_gc.h"
 #include "lj_err.h"
 #include "lj_debug.h"
@@ -246,13 +247,32 @@ static BCReg const_str(FuncState *fs, ExpDesc *e)
 }
 
 /* Anchor string constant to avoid GC. */
+static void parse_keep_storebool(lua_State *L, GCtab *t, cTValue *key)
+{
+  TValue val, old, *dst;
+  setboolV(&val, 1);
+  for (;;) {
+    dst = lj_tab_set(L, t, key);
+    lj_tv_load_acq(&old, dst);
+    if (tvisforward(&old)) {
+      la_cpu_pause();  /* parser anchor store saw FORWARD after lookup. */
+      continue;
+    }
+    if (!tvisnil(&old))
+      return;
+    if (lj_tv_cas(dst, &old, &val))
+      return;
+    la_cpu_pause();
+  }
+}
+
 GCstr *lj_parse_keepstr(LexState *ls, const char *str, size_t len)
 {
-  /* NOBARRIER: the key is new or kept alive. */
   lua_State *L = ls->L;
   GCstr *s = lj_str_new(L, str, len);
-  TValue *tv = lj_tab_setstr(L, ls->fs->kt, s);
-  if (tvisnil(tv)) lj_tab_storebool(L, tv, 1);
+  TValue key;
+  setstrV(L, &key, s);
+  parse_keep_storebool(L, ls->fs->kt, &key);
   lj_gc_check(L);
   return s;
 }
@@ -261,10 +281,9 @@ GCstr *lj_parse_keepstr(LexState *ls, const char *str, size_t len)
 /* Anchor cdata to avoid GC. */
 void lj_parse_keepcdata(LexState *ls, TValue *tv, GCcdata *cd)
 {
-  /* NOBARRIER: the key is new or kept alive. */
   lua_State *L = ls->L;
   setcdataV(L, tv, cd);
-  lj_tab_storebool(L, lj_tab_set(L, ls->fs->kt, tv), 1);
+  parse_keep_storebool(L, ls->fs->kt, tv);
 }
 #endif
 

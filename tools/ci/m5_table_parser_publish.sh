@@ -26,7 +26,9 @@ for needle in \
   'lj_gc_pubobjobj(ls->L, pt, o);' \
   'lj_gc_pubobjobj(ls->L, pt, ls->chunkname);' \
   'copyTVrel(fs->L, v, &tv)' \
-  'lj_gc_pubtab(fs->L, t)'
+  'lj_gc_pubtab(fs->L, t)' \
+  'parse_keep_storebool(L, ls->fs->kt, &key)' \
+  'parse_keep_storebool(L, ls->fs->kt, tv)'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_tab.c" "$ROOT/src/lj_parse.c" \
       "$ROOT/src/lj_bcread.c"; then
@@ -40,6 +42,14 @@ raw_proto_ref_hits=$(rg -n 'setgcref\((pt->chunkname|\*kr)' \
 if [ -n "$raw_proto_ref_hits" ]; then
   echo "guardrail: proto chunkname/KGC refs must use release stores:" >&2
   echo "$raw_proto_ref_hits" >&2
+  exit 1
+fi
+
+parser_anchor_hits=$(rg -n 'lj_tab_storebool\(L, (tv|lj_tab_set\(L, ls->fs->kt)' \
+  "$ROOT/src/lj_parse.c" || true)
+if [ -n "$parser_anchor_hits" ]; then
+  echo "guardrail: parser anchor stores must use nil-only CAS helper:" >&2
+  echo "$parser_anchor_hits" >&2
   exit 1
 fi
 

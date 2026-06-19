@@ -58,6 +58,11 @@ assert(("table-value-publish"):sub(1, 5) == "table")
 local function event_cb() end
 jit.attach(event_cb, "bc")
 jit.attach(event_cb)
+do
+  local ffi = require("ffi")
+  local x = 1LL
+  assert(type(x) == "cdata" and tonumber(x) == 1 and ffi.typeof(x))
+end
 '
 
 for needle in \
@@ -119,7 +124,8 @@ for needle in \
   'lj_tab_storenilraw(&n->key)' \
   'const_slot_store(o, fs->nkn)' \
   'const_slot_store(o, fs->nkgc)' \
-  'lj_tab_storebool(L, tv, 1)' \
+  'parse_keep_storebool(L, ls->fs->kt, &key)' \
+  'parse_keep_storebool(L, ls->fs->kt, tv)' \
   'lj_tab_storetv(ls->L, o, &tv)' \
   'lj_tab_storetv(ls->L, lj_tab_set(ls->L, t, &key), &tv)' \
   'copyTVrel(sbufL(sbx), o, &tv)' \
@@ -188,7 +194,7 @@ if rg -n 'setnilV\(&array\[i\]\)|setnilV\(&n->val\)|setnilV\(tv\)|setnilV\(&node
   exit 1
 fi
 
-if rg -n 'o->u64 = fs->nk|setboolV\(tv, 1\)' "$ROOT/src/lj_parse.c"; then
+if rg -n 'o->u64 = fs->nk|lj_tab_storebool\(L,' "$ROOT/src/lj_parse.c"; then
   echo "guardrail: parser constant table slot markers must release-publish" >&2
   exit 1
 fi
