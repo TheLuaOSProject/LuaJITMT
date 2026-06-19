@@ -4,6 +4,9 @@ set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 JOBS=${JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)}
+CC=${CC:-cc}
+CFLAGS=${CFLAGS:-"-std=gnu99 -O2 -Wall -Wextra -Werror -mcx16"}
+OUT=${TMPDIR:-/tmp}/lj_t-x64-tget-forward
 
 make -C "$ROOT/src" clean >/dev/null
 make -C "$ROOT/src" -j"$JOBS" >/dev/null
@@ -19,6 +22,10 @@ assert(getv(t, 80) == 240)
 assert(t[120] == nil)
 '
 
+"$CC" $CFLAGS -I"$ROOT/src" "$ROOT/tests/t-x64-tget-forward.c" \
+  "$ROOT/src/libluajit.a" -lm -ldl -pthread -o "$OUT"
+"$OUT"
+
 for needle in \
   'TAB_COLO_SLOTS' \
   'TABARRAY_ASIZE_OFS' \
@@ -26,9 +33,17 @@ for needle in \
   'lea r8, [RB+TAB_COLO_SLOTS]' \
   'mov ITYPEd, dword [TMPR+TABARRAY_ASIZE_OFS]' \
   'cmp RCd, ITYPEd' \
-  'add RC, TMPR'
+  'add RC, TMPR' \
+  'mov64 r9, LJ_TFORWARD_BITS' \
+  'je ->vmeta_tgetv' \
+  'je ->vmeta_tgetb' \
+  'mov r9d, RCd' \
+  'mov64 r8, LJ_TFORWARD_BITS' \
+  'jmp ->vmeta_tgetr' \
+  't-x64-tget-forward OK'
 do
-  if ! rg -F -q "$needle" "$ROOT/src/vm_x64.dasc"; then
+  if ! rg -F -q "$needle" "$ROOT/src/vm_x64.dasc" \
+      "$ROOT/tests/t-x64-tget-forward.c"; then
     echo "guardrail: missing x64 TGET array-header marker: $needle" >&2
     exit 1
   fi
@@ -41,15 +56,16 @@ if ! awk '
   in_get && /mov ITYPEd, dword \[TMPR\+TABARRAY_ASIZE_OFS\]/ { hdr++ }
   in_get && /cmp RCd, ITYPEd/ { cmp++ }
   in_get && /add RC, TMPR/ { add++ }
+  in_get && /LJ_TFORWARD_BITS/ { forward++ }
   in_get && /cmp RCd, TAB:RB->asize/ { bad = 1 }
   in_get && /add RC, TAB:RB->array/ { bad = 1 }
   in_get && /break;/ { in_get = 0 }
   END {
     exit checked == 3 && array == 3 && colo == 3 && hdr == 3 &&
-	 cmp == 3 && add == 3 && !bad ? 0 : 1
+	 cmp == 3 && add == 3 && forward >= 3 && !bad ? 0 : 1
   }
 ' "$ROOT/src/vm_x64.dasc"; then
-  echo "guardrail: x64 TGETV/TGETB/TGETR must use array-header bounds" >&2
+  echo "guardrail: x64 TGETV/TGETB/TGETR must use bounds and reject FORWARD" >&2
   exit 1
 fi
 

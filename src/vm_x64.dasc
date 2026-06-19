@@ -4110,6 +4110,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  add RC, TMPR
     |  // Get array slot.
     |  mov ITYPE, [RC]
+    |  mov64 r9, LJ_TFORWARD_BITS
+    |  cmp ITYPE, r9
+    |  je ->vmeta_tgetv
     |  cmp ITYPE, LJ_TNIL		// Avoid overwriting RB in fastpath.
     |  je >2
     |1:
@@ -4185,6 +4188,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  add RC, TMPR
     |  // Get array slot.
     |  mov ITYPE, [RC]
+    |  mov64 r9, LJ_TFORWARD_BITS
+    |  cmp ITYPE, r9
+    |  je ->vmeta_tgetb
     |  cmp ITYPE, LJ_TNIL
     |  je >2
     |1:
@@ -4217,9 +4223,18 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |3:
     |  cmp RCd, ITYPEd
     |  jae ->vmeta_tgetr		// Not in array part? Use fallback.
+    |  mov r9d, RCd
     |  shl RCd, 3
     |  add RC, TMPR
     |  // Get array slot.
+    |  mov ITYPE, [RC]
+    |  mov64 r8, LJ_TFORWARD_BITS
+    |  cmp ITYPE, r8
+    |  jne >4
+    |  mov RCd, r9d
+    |  jmp ->vmeta_tgetr
+    |4:
+    |  jmp ->BC_TGETR2_Z
     |->BC_TGETR_Z:
     |  mov ITYPE, [RC]
     |->BC_TGETR2_Z:

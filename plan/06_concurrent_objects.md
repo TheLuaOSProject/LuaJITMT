@@ -43,7 +43,10 @@ key. Iterator next-generation `LJ_TFORWARD` hops still have to be added at the
 VM fast-path use sites below; C `lj_tab_next()` now resolves visible forwarded
 array/hash slots through the published successor for the current logical key.
 x64 `ipairs_aux` now routes visible forwarded array slots through the exported
-C integer getter wrapper before deciding whether the iterator stops.
+C integer getter wrapper before deciding whether the iterator stops. x64 array
+`BC_TGETV`, `BC_TGETB`, and `BC_TGETR` now send visible forwarded slot
+snapshots to the existing vmeta/C lookup path instead of returning the internal
+sentinel.
 
 ## 6.2 Tables: data structures
 
