@@ -732,8 +732,10 @@ LUA_API void lua_pushcclosure(lua_State *L, lua_CFunction f, int n)
   fn = lj_func_newC(L, (MSize)n, getcurrenv(L));
   fn->c.f = f;
   L->top -= n;
-  while (n--)
-    copyTV(L, &fn->c.upvalue[n], L->top+n);
+  while (n--) {
+    copyTVrel(L, &fn->c.upvalue[n], L->top+n);
+    lj_gc_pubobjtv(L, fn, &fn->c.upvalue[n]);
+  }
   setfuncV(L, L->top, fn);
   lj_assertL(iswhite(obj2gco(fn)), "new GC object is not white");
   incr_top(L);

@@ -196,9 +196,9 @@ GCfunc *lj_func_newC(lua_State *L, MSize nelems, GCtab *env)
   fn->c.gct = ~LJ_TFUNC;
   fn->c.ffid = FF_C;
   fn->c.nupvalues = (uint8_t)nelems;
-  /* NOBARRIER: The GCfunc is new (marked white). */
   setmref(fn->c.pc, &G(L)->bc_cfunc_ext);
-  setgcref(fn->c.env, obj2gco(env));
+  setgcrefrel(fn->c.env, obj2gco(env));
+  lj_gc_pubobjobj(L, fn, env);
   return fn;
 }
 

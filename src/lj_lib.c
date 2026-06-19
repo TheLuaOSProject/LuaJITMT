@@ -100,16 +100,20 @@ void lj_lib_register(lua_State *L, const char *libname,
 
   for (;;) {
     uint32_t tag = *p++;
-    MSize len = tag & LIBINIT_LENMASK;
-    tag &= LIBINIT_TAGMASK;
-    if (tag != LIBINIT_STRING) {
-      const char *name;
-      MSize nuv = (MSize)(L->top - L->base - tpos);
-      GCfunc *fn = lj_func_newC(L, nuv, env);
-      if (nuv) {
-	L->top = L->base + tpos;
-	memcpy(fn->c.upvalue, L->top, sizeof(TValue)*nuv);
-      }
+      MSize len = tag & LIBINIT_LENMASK;
+      tag &= LIBINIT_TAGMASK;
+      if (tag != LIBINIT_STRING) {
+	const char *name;
+	MSize nuv = (MSize)(L->top - L->base - tpos);
+	GCfunc *fn = lj_func_newC(L, nuv, env);
+	if (nuv) {
+	  MSize i;
+	  L->top = L->base + tpos;
+	  for (i = 0; i < nuv; i++) {
+	    copyTVrel(L, &fn->c.upvalue[i], L->top+i);
+	    lj_gc_pubobjtv(L, fn, &fn->c.upvalue[i]);
+	  }
+	}
       fn->c.ffid = (uint8_t)(ffid++);
       name = (const char *)p;
       p += len;
@@ -184,8 +188,8 @@ void lj_lib_prereg(lua_State *L, const char *name, lua_CFunction f, GCtab *env)
 {
   luaL_findtable(L, LUA_REGISTRYINDEX, "_PRELOAD", 4);
   lua_pushcfunction(L, f);
-  /* NOBARRIER: The function is new (marked white). */
-  setgcref(funcV(L->top-1)->c.env, obj2gco(env));
+  setgcrefrel(funcV(L->top-1)->c.env, obj2gco(env));
+  lj_gc_pubobjobj(L, funcV(L->top-1), env);
   lua_setfield(L, -2, name);
   L->top--;
 }

@@ -797,6 +797,55 @@ static void test_thread_spawn_constructor_child_barrier(lua_State *L,
   lua_gc(L, LUA_GCSTOP, 0);
 }
 
+static int gc2_cclosure_return_upvalue(lua_State *L)
+{
+  lua_pushvalue(L, lua_upvalueindex(1));
+  return 1;
+}
+
+static void test_cclosure_constructor_publish_barrier(lua_State *L,
+						      global_State *g,
+						      TGState *tg)
+{
+  GCfunc *fn;
+  GCtab *env, *up;
+  TValue uv;
+
+  lua_settop(L, 0);
+  env = tabref_acq(L->env);
+  assert(env != NULL);
+  lua_newtable(L);
+  up = tabV(L->top - 1);
+
+  lj_gc2_legacy_mark_begin(g);
+  assert(la_load8_acq(&tg->alloc.alloc_black) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(env)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(up)) == 0);
+
+  lua_pushvalue(L, -1);
+  lua_pushcclosure(L, gc2_cclosure_return_upvalue, 1);
+  fn = funcV(L->top - 1);
+  assert(lj_gc2_ismarked(g, obj2gco(fn)) == 1);
+  assert(tabref_acq(fn->c.env) == env);
+  assert(lj_gc2_ismarked(g, obj2gco(env)) == 1);
+  lj_tv_load_acq(&uv, &fn->c.upvalue[0]);
+  assert(tvistab(&uv));
+  assert(tabV(&uv) == up);
+  assert(lj_gc2_ismarked(g, obj2gco(up)) == 1);
+
+  lua_pushvalue(L, -1);
+  lua_call(L, 0, 1);
+  assert(tabV(L->top - 1) == up);
+  lua_pop(L, 1);
+
+  flush_and_drain(g, tg);
+  lj_gc2_legacy_cycle_end(g);
+  lua_pop(L, 2);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  lua_gc(L, LUA_GCSTOP, 0);
+}
+
 #if LJ_HASBUFFER
 static void test_buffer_decode_metatable_barrier(lua_State *L, global_State *g,
 						TGState *tg)
@@ -3867,6 +3916,7 @@ int main(void)
   test_userdata_constructor_publish_barrier(L, g, tg);
   test_thread_constructor_env_barrier(L, g, tg);
   test_thread_spawn_constructor_child_barrier(L, g, tg);
+  test_cclosure_constructor_publish_barrier(L, g, tg);
 #if LJ_HASBUFFER
   test_buffer_decode_metatable_barrier(L, g, tg);
   test_buffer_constructor_dict_barrier(L, g, tg);

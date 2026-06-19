@@ -45,6 +45,15 @@ if ! awk '
 fi
 
 for needle in \
+  'setgcrefrel(fn->c.env, obj2gco(env));' \
+  'lj_gc_pubobjobj(L, fn, env);' \
+  'copyTVrel(L, &fn->c.upvalue[n], L->top+n);' \
+  'lj_gc_pubobjtv(L, fn, &fn->c.upvalue[n]);' \
+  'copyTVrel(L, &fn->c.upvalue[i], L->top+i);' \
+  'lj_gc_pubobjtv(L, fn, &fn->c.upvalue[i]);' \
+  'setgcrefrel(funcV(L->top-1)->c.env, obj2gco(env));' \
+  'lj_gc_pubobjobj(L, funcV(L->top-1), env);' \
+  'test_cclosure_constructor_publish_barrier' \
   'setgcrefrel(fn1->l.uvptr[n1], uv)' \
   'lj_gc_pubobjobj(L, fn1, uv)' \
   'setgcrefrel(*p[0], uv)' \
@@ -52,7 +61,9 @@ for needle in \
   'copyTVrel(L, val, L->top)' \
   'lj_gc_pubobjtv(L, o, L->top)'
 do
-  if ! rg -F -q "$needle" "$ROOT/src/lj_api.c" "$ROOT/src/lib_debug.c"; then
+  if ! rg -F -q "$needle" "$ROOT/src/lj_api.c" "$ROOT/src/lj_func.c" \
+      "$ROOT/src/lj_lib.c" "$ROOT/src/lib_debug.c" \
+      "$ROOT/tests/t-gc2-traverse.c"; then
     echo "guardrail: missing upvalue publication marker: $needle" >&2
     exit 1
   fi
@@ -125,6 +136,12 @@ done
 if rg -n 'gc_marktv\(g, uvval|gc2_mark_tv(_worker)?\(g, uvval|gc_marktv\(g, &fn->c\.upvalue\[i\]\)|gc2_mark_tv_worker\(g, &fn->c\.upvalue\[i\]\)|copyTV\(mainthread\(g\), &uv->tv, uvval\(uv\)\)' \
     "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc2.c"; then
   echo "guardrail: upvalue payloads must use release stores and GC snapshots" >&2
+  exit 1
+fi
+
+if rg -n 'copyTV\(L, &fn->c\.upvalue|memcpy\(fn->c\.upvalue|setgcref\(fn->c\.env|setgcref\(funcV\(L->top-1\)->c\.env' \
+    "$ROOT/src/lj_api.c" "$ROOT/src/lj_func.c" "$ROOT/src/lj_lib.c"; then
+  echo "guardrail: C closure constructor edges must use release stores and barriers" >&2
   exit 1
 fi
 
