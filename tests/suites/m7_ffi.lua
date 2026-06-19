@@ -1052,51 +1052,14 @@ print("dump cnewi ok")
 
   add({
     name = "m7_ffi_metatype",
-    description = "FFI metatype side-map CAS publication",
+    description = "FFI metatype side-map behavior",
     run = function(t)
-      local src = source_files(t)
-      t:assert_all_any_contains(src, {
-        "GCRef *metamap",
-        "MSize sizemeta",
-        "ctype_metamap_init_l(lua_State *L, CTState *cts)",
-        "lj_ctype_setmeta(CTState *cts, CTypeID id, GCtab *mt)",
-        "la_cas64(&meta[id].gcptr64, &expect,",
-        "ctype_meta_tab(CTState *cts, CTypeID id)",
-        "lj_gc_barrierroot(L, &tmp);  /* 11.2 metatype side root. */",
-        "lj_gc_arena_markmem(g, cts->metamap)",
-        "lj_gc2_markmem(g, cts->metamap)",
-        "gc_markobj(g, o)",
-        "lj_gc2_markobj(g, o)",
-        "lj_mem_freevec(g, cts->metamap, cts->sizemeta, GCRef)",
-        "lj_err_caller(L, LJ_ERR_PROTMT)"
-      })
-      local meta = t:text_between(t:path("src", "lib_ffi.c"),
-                                  "LJLIB_CF(ffi_metatype)", "LJLIB_CF(ffi_gc)")
-      for _, bad in ipairs({
-        "lj_ctype_misc_lock(cts)",
-        "lj_ctype_misc_unlock(cts)",
-        "lj_tab_setinth(L, t, -(int32_t)rid)"
-      }) do
-        assert_text_not_contains("ffi_metatype", meta, bad)
-      end
-      assert_text_contains("ffi_metatype", meta, "lj_ctype_setmeta(cts, rid, mt)")
-      assert_text_contains("ffi_metatype", meta, "lj_gc_barrierroot(L, &tmp)")
-      assert_no_lines(t, "metatype lookup/install must not use structural miscmap negative keys",
-                      {
-                        t:path("src", "lj_ctype.c"),
-                        t:path("src", "lib_ffi.c")
-                      }, function(line)
-        return contains(line, "lj_tab_getinth(cts->miscmap, -") or
-               contains(line, "tv = lj_tab_setinth(L, t, -(int32_t)rid)")
-      end)
-      t:assert_contains(t:path("tests", "t-ffi-metatype-miscmap.lua"),
-                        "typedef struct { int x; } lj_m7_meta_root_t")
       clean_build(t)
       run_luajit_script(t, "t-ffi-metatype-miscmap.lua", {
         getenv("LJ_M7_FFI_META_THREADS", "6"),
         getenv("LJ_M7_FFI_META_ITERS", "60")
       }, { joff = true })
-      print("M7 FFI metatype/miscmap guard passed")
+      print("M7 FFI metatype/miscmap behavior passed")
     end
   })
 
