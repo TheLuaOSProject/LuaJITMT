@@ -36,7 +36,7 @@ for needle in \
   'TG_OFS_DISPATCH' \
   'TGPOLL, dword [DISPATCH+DISPATCH_TG(poll)]' \
   'static void dispatch_setrecord' \
-  'rec_owner = J->state != LJ_TRACE_IDLE && lj_jit_token_held(J)' \
+  'rec_owner = lj_trace_state_load(J) != LJ_TRACE_IDLE' \
   'dispatch_setrecord(tg->dispatch, mode)'
 do
   if ! rg -F -q "$needle" "$ROOT/src/vm_x64.dasc" "$ROOT/src/lj_dispatch.c"; then

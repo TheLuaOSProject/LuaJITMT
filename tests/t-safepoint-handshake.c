@@ -24,6 +24,7 @@
 #include "lj_dispatch.h"
 #include "lj_safepoint.h"
 #include "lj_tg.h"
+#include "lj_trace.h"
 
 typedef struct NativeStopReqCtx {
   global_State *g;
@@ -401,16 +402,17 @@ int main(void)
   assert(G2J(g)->cur.traceno == 0);
   assert(G2J(g)->freetrace == 0);
 
-  assert(G2J(g)->state == LJ_TRACE_IDLE);
-  G2J(g)->state = LJ_TRACE_RECORD;
+  assert(lj_trace_state_load(G2J(g)) == LJ_TRACE_IDLE);
+  lj_trace_state_store_active(G2J(g), LJ_TRACE_RECORD);
+  assert(lj_trace_state_load(G2J(g)) == LJ_TRACE_RECORD);
   epoch0 = g->gc2.hs_epoch;
   actions = LJ_GC2_HS_EXIT_TRACES;
   assert(lj_gc2_handshake(g, actions) == 1);
   assert(g->gc2.hs_epoch == epoch0 + 1u);
   assert(g->gc2.hs_pending == 0);
   assert(g->gc2.hs_actions == actions);
-  assert((G2J(g)->state & LJ_TRACE_ACTIVE) == 0);
-  G2J(g)->state = LJ_TRACE_IDLE;
+  assert((lj_trace_state_load(G2J(g)) & LJ_TRACE_ACTIVE) == 0);
+  lj_trace_state_store(G2J(g), LJ_TRACE_IDLE);
 #endif
 
   lua_newtable(L);
@@ -639,19 +641,23 @@ int main(void)
     "publish_stopreq()\n"
     "local ok, err = pcall(function() return worker:join() end)\n"
     "assert(not ok)\n"
-    "assert(tostring(err):find('thread interrupted: VM shutdown', 1, true))\n"
+    "assert(tostring(err):find('thread interrupted: VM shutdown', 1, true), tostring(err))\n"
     "clear_stopreq()\n"
     "local jok, value = worker:join()\n"
     "assert(jok == true and value == 'joined')\n") == LUA_OK);
 
 #if LJ_HASFFI
+#if LJ_HASJIT
+  assert(lj_trace_state_load(G2J(g)) == LJ_TRACE_IDLE);
+  assert(la_load32_acq(&g->jit_token) == 0);
+#endif
   ffi_stopreq_g = g;
   ffi_stopreq_tg = tg;
   lua_pushlightuserdata(L, (void *)ffi_publish_stopreq);
   lua_setglobal(L, "ffi_stopreq_ptr");
   lua_pushlightuserdata(L, (void *)ffi_call_callback_stopreq);
   lua_setglobal(L, "ffi_call_callback_stopreq_ptr");
-  assert(luaL_dostring(L,
+  if (luaL_dostring(L,
     "local ffi = require('ffi')\n"
     "ffi.cdef[[\n"
     "int getpid(void);\n"
@@ -681,7 +687,7 @@ int main(void)
     "local stopreq = ffi.cast('stopreq_t', ffi_stopreq_ptr)\n"
     "local ok, err = pcall(function() return stopreq() end)\n"
     "assert(not ok)\n"
-    "assert(tostring(err):find('thread interrupted: VM shutdown', 1, true))\n"
+    "assert(tostring(err):find('thread interrupted: VM shutdown', 1, true), tostring(err))\n"
     "clear_stopreq()\n"
     "local call_cb_stopreq = ffi.cast('call_cb_stopreq_t', ffi_call_callback_stopreq_ptr)\n"
     "local entered = false\n"
@@ -692,9 +698,19 @@ int main(void)
     "ok, err = pcall(function() return call_cb_stopreq(cb_stopreq) end)\n"
     "assert(not ok)\n"
     "assert(not entered)\n"
-    "assert(tostring(err):find('thread interrupted: VM shutdown', 1, true))\n"
+    "assert(tostring(err):find('thread interrupted: VM shutdown', 1, true), tostring(err))\n"
     "clear_stopreq()\n"
-    "cb_stopreq:free()\n") == LUA_OK);
+    "cb_stopreq:free()\n") != LUA_OK) {
+    fprintf(stderr, "FFI STOPREQ coverage chunk failed: %s "
+	    "(flags=%u poll=%u req=%u pending=%u ack=%llu epoch=%llu)\n",
+	    lua_tostring(L, -1), (unsigned)la_load8_acq(&tg->tg_flags),
+	    (unsigned)la_load32_acq(&tg->poll),
+	    (unsigned)la_load32_acq(&tg->reqmask),
+	    (unsigned)la_load32_acq(&g->gc2.hs_pending),
+	    (unsigned long long)la_load64_acq(&tg->hs_epoch_ack),
+	    (unsigned long long)la_load64_acq(&g->gc2.hs_epoch));
+    assert(0);
+  }
 #endif
 
   plain_reset = lj_arena_alloc(&tg->alloc, &tg->prng, 64, 0);

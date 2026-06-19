@@ -177,7 +177,8 @@ void LJ_FASTCALL lj_dispatch_update(global_State *g, int nolock)
 #if LJ_HASJIT
   jit_State *J = G2J(g);
   TGState *tg = G2TG(g);
-  int rec_owner = J->state != LJ_TRACE_IDLE && lj_jit_token_held(J);
+  int rec_owner = lj_trace_state_load(J) != LJ_TRACE_IDLE &&
+		  lj_jit_token_held(J);
   mode |= (J->flags & JIT_F_ON) ? DISPMODE_JIT : 0;
 #endif
 #if LJ_HASPROFILE
@@ -502,7 +503,7 @@ void LJ_FASTCALL lj_dispatch_ins(lua_State *L, const BCIns *pc)
 #if LJ_HASJIT
   {
     jit_State *J = G2J(g);
-    if (J->state != LJ_TRACE_IDLE && lj_jit_token_held(J)) {
+    if (lj_trace_state_load(J) != LJ_TRACE_IDLE && lj_jit_token_held(J)) {
 #ifdef LUA_USE_ASSERT
       ptrdiff_t delta = L->top - L->base;
 #endif
@@ -576,7 +577,8 @@ ASMFunction LJ_FASTCALL lj_dispatch_call(lua_State *L, const BCIns *pc)
     lj_assertG(L->top - L->base == delta,
 	       "unbalanced stack after hot call");
     goto out;
-  } else if (J->state != LJ_TRACE_IDLE && lj_jit_token_held(J) &&
+  } else if (lj_trace_state_load(J) != LJ_TRACE_IDLE &&
+	     lj_jit_token_held(J) &&
 	     !(g->hookmask & (HOOK_GC|HOOK_VMEVENT))) {
 #ifdef LUA_USE_ASSERT
     ptrdiff_t delta = L->top - L->base;
@@ -603,7 +605,7 @@ out:
   op = bc_op(pc[-1]);  /* Get FUNC* op. */
 #if LJ_HASJIT
   /* Use the non-hotcounting variants if JIT is off or while recording. */
-  if ((!(J->flags & JIT_F_ON) || J->state != LJ_TRACE_IDLE) &&
+  if ((!(J->flags & JIT_F_ON) || lj_trace_state_load(J) != LJ_TRACE_IDLE) &&
       (op == BC_FUNCF || op == BC_FUNCV))
     op = (BCOp)((int)op+(int)BC_IFUNCF-(int)BC_FUNCF);
 #endif

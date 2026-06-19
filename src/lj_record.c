@@ -3254,7 +3254,8 @@ static const BCIns *rec_setup_root(jit_State *J)
     J->maxslot = ra;
     J->bc_extent = (MSize)(-bc_j(pc[1]))*sizeof(BCIns);
     J->bc_min = pc+2 + bc_j(pc[1]);
-    J->state = LJ_TRACE_RECORD_1ST;  /* Record the first ITERN, too. */
+    lj_trace_state_store_active(J, LJ_TRACE_RECORD_1ST);
+    /* Record the first ITERN, too. */
     break;
   case BC_LOOP:
     /* Only check BC range for real loops, but not for "repeat until true". */

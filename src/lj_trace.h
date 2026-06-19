@@ -9,6 +9,7 @@
 #include "lj_obj.h"
 
 #if LJ_HASJIT
+#include "lj_atomic.h"
 #include "lj_jit.h"
 #include "lj_dispatch.h"
 
@@ -36,6 +37,7 @@ LJ_FUNC void lj_trace_flushscope_hs(global_State *g, uint32_t work);
 LJ_FUNC int lj_jit_token_try(jit_State *J);
 LJ_FUNC int lj_jit_token_held(jit_State *J);
 LJ_FUNC void lj_jit_token_release(jit_State *J);
+LJ_FUNC void lj_trace_abort(global_State *g);
 LJ_FUNC void lj_trace_initstate(global_State *g);
 LJ_FUNC void lj_trace_freestate(global_State *g);
 LJ_FUNC uint32_t lj_trace_reclaim_retired(global_State *g,
@@ -65,8 +67,38 @@ LJ_FUNC uintptr_t LJ_FASTCALL lj_trace_unwind(jit_State *J, uintptr_t addr, Exit
 #endif
 
 /* Signal asynchronous abort of trace or end of trace. */
-#define lj_trace_abort(g)	(G2J(g)->state &= ~LJ_TRACE_ACTIVE)
-#define lj_trace_end(J)		(J->state = LJ_TRACE_END)
+static LJ_AINLINE TraceState lj_trace_state_load(jit_State *J)
+{
+  return (TraceState)la_load32_acq((uint32_t *)&J->state);
+}
+
+static LJ_AINLINE void lj_trace_state_store(jit_State *J, TraceState st)
+{
+  la_store32_rel((uint32_t *)&J->state, (uint32_t)st);
+}
+
+static LJ_AINLINE int lj_trace_state_aborted(TraceState st)
+{
+  uint32_t s = (uint32_t)st;
+  return s != (uint32_t)LJ_TRACE_IDLE &&
+	 (s & (uint32_t)LJ_TRACE_ACTIVE) == 0;
+}
+
+static LJ_AINLINE TraceState lj_trace_state_store_active(jit_State *J,
+							 TraceState st)
+{
+  uint32_t old = la_load32_acq((uint32_t *)&J->state);
+  for (;;) {
+    uint32_t next = (uint32_t)st;
+    if (old != (uint32_t)LJ_TRACE_IDLE &&
+	(old & (uint32_t)LJ_TRACE_ACTIVE) == 0)
+      next &= ~(uint32_t)LJ_TRACE_ACTIVE;
+    if (la_cas32((uint32_t *)&J->state, &old, next, LA_ACQ_REL, LA_ACQ))
+      return (TraceState)next;  /* 08 section 8.7: preserve async aborts. */
+  }
+}
+
+#define lj_trace_end(J)		lj_trace_state_store_active((J), LJ_TRACE_END)
 
 #else
 

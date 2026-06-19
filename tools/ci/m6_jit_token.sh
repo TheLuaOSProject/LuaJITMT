@@ -40,7 +40,12 @@ for needle in \
   'tg->jit_exitcode' \
   'J->L = L;' \
   'lj_jit_token_held(J)' \
-  'lj_jit_token_release(J)'
+  'lj_jit_token_release(J)' \
+  'lj_trace_state_load(jit_State *J)' \
+  'lj_trace_state_store(jit_State *J, TraceState st)' \
+  'lj_trace_state_store_active(jit_State *J,' \
+  'void lj_trace_abort(global_State *g)' \
+  'la_cas32((uint32_t *)&J->state, &old, next,'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_obj.h" "$ROOT/src/lj_trace.h" \
       "$ROOT/src/lj_trace.c" "$ROOT/src/lj_dispatch.c" \
@@ -57,6 +62,21 @@ done
 if rg -n 'while .*jit_token|la_futex_wait\(&g->jit_token|la_futex_wait\([^)]*jit_token' \
     "$ROOT/src"; then
   echo "guardrail: recorder token must never block or spin-wait" >&2
+  exit 1
+fi
+
+raw_state=$(rg -n 'J->state|G2J\([^)]*\)->state' "$ROOT/src" "$ROOT/tests" || true)
+bad_state=$(printf '%s\n' "$raw_state" | awk '
+  /src\/lj_trace[.]h:.*la_load32_acq\(\(uint32_t \*\)&J->state\)/ { next }
+  /src\/lj_trace[.]h:.*la_store32_rel\(\(uint32_t \*\)&J->state,/ { next }
+  /src\/lj_trace[.]h:.*la_cas32\(\(uint32_t \*\)&J->state,/ { next }
+  /src\/lj_trace[.]c:.*la_load32_acq\(\(uint32_t \*\)&J->state\)/ { next }
+  /src\/lj_trace[.]c:.*la_cas32\(\(uint32_t \*\)&J->state,/ { next }
+  NF { print }
+')
+if [ -n "$bad_state" ]; then
+  echo "guardrail: jit_State.state must use trace state helpers" >&2
+  echo "$bad_state" >&2
   exit 1
 fi
 
