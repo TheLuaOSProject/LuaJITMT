@@ -68,6 +68,12 @@ huge objects, coroutine stacks).
 Gate: paranoia oracle reports zero diffs across the suite; torture stock
 green; bench (1 thread, GC concurrent) regression ≤10%.
 
+Current implementation note: `collectgarbage("workers", N)` exposes the staged
+one-worker parked GC2 scheduler: missing `N` queries the current count, `N <= 0`
+stops it, and positive `N` starts the current single worker while returning the
+previous count. The full worker pool remains the original M3/M9 scheduler
+target.
+
 ## M4 — Threads exist: spawn/join/channels, JIT OFF (≈2500)
 Tasks: lj_thr (pthread/futex shim), lib_threading + lj_chan per 09
 (channel C unit test chan_stress.c FIRST, 13 §13.6.2); tg attach/detach

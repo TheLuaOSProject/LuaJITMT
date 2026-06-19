@@ -26,6 +26,11 @@ for needle in \
   'lj_gc2_worker_start(global_State *g)' \
   'lj_gc2_worker_stop(global_State *g)' \
   'lj_gc2_worker_wake(global_State *g)' \
+  'LUA_GCWORKERS' \
+  '\5stats\7workers' \
+  'lj_gc2_worker_start(g)' \
+  'lj_gc2_worker_stop(g)' \
+  'collectgarbage("workers", 1)' \
   'lj_gc2_finalizer_pending(global_State *g)' \
   'lj_gc2_finalizer_sweep_pending(global_State *g)' \
   'static void *gc2_worker_main(void *arg)' \
@@ -39,7 +44,8 @@ for needle in \
   'lj_gc2_worker_wake(g);'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_gc2.c" "$ROOT/src/lj_gc2.h" \
-      "$ROOT/src/lj_obj.h" "$ROOT/tests/t-gc2-worker-scheduler.c"; then
+      "$ROOT/src/lj_obj.h" "$ROOT/src/lib_base.c" \
+      "$ROOT/tests/t-gc2-worker-scheduler.c" "$ROOT/tests/t-gc-workers.lua"; then
     echo "guardrail: missing GC2 worker scheduler marker: $needle" >&2
     exit 1
   fi
@@ -49,5 +55,7 @@ out="$TMP/lj_t-gc2-worker-scheduler"
 "$CC" $CFLAGS -I"$ROOT/src" "$ROOT/tests/t-gc2-worker-scheduler.c" \
   "$ROOT/src/libluajit.a" -lm -ldl -pthread -o "$out"
 "$out"
+"$ROOT/src/luajit" -joff "$ROOT/tests/t-gc-workers.lua"
+"$ROOT/src/luajit" "$ROOT/tests/t-gc-workers.lua"
 
 echo "M3 GC2 worker scheduler test passed"

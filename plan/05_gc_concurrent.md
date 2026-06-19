@@ -216,6 +216,10 @@ an `LJ_MT`/`LUAJIT_THREADSAFE` lock gate. Phase transitions and mutator SSB
 publication now wake the parked worker if one has been started, with
 `worker_wakes`, `worker_parks`, and `worker_async_progress` recording the
 bridge behavior until the full scheduler replaces the single-owner token.
+`collectgarbage("workers", N)` exposes that staged lifecycle to Lua: missing
+`N` queries the current worker count, `N <= 0` stops the parked worker, and any
+positive `N` starts the current one-worker scheduler while reporting the
+previous count.
 
 ### 5.6.4 gc2_traverse — per-type tracing
 Port the existing traversal logic, replacing color plumbing:

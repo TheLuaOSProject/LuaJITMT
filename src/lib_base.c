@@ -18,6 +18,7 @@
 #include "lj_obj.h"
 #include "lj_atomic.h"
 #include "lj_gc.h"
+#include "lj_gc2.h"
 #include "lj_err.h"
 #include "lj_debug.h"
 #include "lj_buf.h"
@@ -474,6 +475,7 @@ LJLIB_CF(dofile)
 /* -- Base library: GC control -------------------------------------------- */
 
 #define LUA_GCSTATS		(LUA_GCINCREMENTAL+1)
+#define LUA_GCWORKERS		(LUA_GCSTATS+1)
 
 static TValue *gc_stats_storetv_str(lua_State *L, GCtab *t, const char *name,
 				    cTValue *src)
@@ -732,13 +734,25 @@ LJLIB_CF(gcinfo)
 LJLIB_CF(collectgarbage)
 {
   int opt = lj_lib_checkopt(L, 1, LUA_GCCOLLECT,  /* ORDER LUA_GC* */
-    "\4stop\7restart\7collect\5count\1\377\4step\10setpause\12setstepmul\1\377\11isrunning\14generational\13incremental\5stats");
+    "\4stop\7restart\7collect\5count\1\377\4step\10setpause\12setstepmul\1\377\11isrunning\14generational\13incremental\5stats\7workers");
+  int hasdata = L->base+1 < L->top && !tvisnil(L->base+1);
   int32_t data = lj_lib_optint(L, 2, 0);
   if (opt == LUA_GCCOUNT) {
     setnumV(L->top, (lua_Number)G(L)->gc.total/1024.0);
   } else if (opt == LUA_GCSTATS) {
     gc_stats_push(L);
     return 1;
+  } else if (opt == LUA_GCWORKERS) {
+    global_State *g = G(L);
+    uint32_t old = la_load32_acq(&g->gc2.n_workers);
+    if (hasdata) {
+      if (data <= 0) {
+	lj_gc2_worker_stop(g);
+      } else if (old == 0 && !lj_gc2_worker_start(g)) {
+	lj_err_callermsg(L, "cannot start GC worker");
+      }
+    }
+    setintV(L->top, (int32_t)old);
   } else if (opt == LUA_GCGENERATIONAL || opt == LUA_GCINCREMENTAL) {
     int res = lua_gc(L, opt, data);
     setstrV(L, L->top,
