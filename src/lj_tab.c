@@ -1599,10 +1599,23 @@ static TValue *tab_current_jit_array_slot(lua_State *L, GCtab *parent,
 {
   TValue *array;
   MSize asize, idx;
-  asize = lj_tab_array_snapshot_acq(parent, &array);
+  asize = lj_tab_asize_acq(parent);
+  array = lj_tab_array_acq(parent);
+  if (array && !lj_tab_array_is_colocated(parent, array))
+    asize = lj_tab_array_hdr_asize_acq(array);
   if (tab_ptr_index((uintptr_t)array, (uintptr_t)orig, sizeof(TValue),
-		    asize, &idx))
+			    asize, &idx)) {
+    if (lj_tab_array_is_retiring(parent, array)) {
+      TValue *next = array;
+      MSize nextasize = asize;
+      if (lj_tab_array_forward_hop(parent, &next, &nextasize)) {
+	if (idx < nextasize)
+	  return &next[idx];
+	return lj_tab_setinth(L, parent, (int32_t)key);
+      }
+    }
     return tab_forwarded_jit_array_slot(L, parent, orig);
+  }
   return lj_tab_setint(L, parent, (int32_t)key);
 }
 
@@ -1610,12 +1623,27 @@ static TValue *tab_current_jit_hash_slot(lua_State *L, GCtab *parent,
 					 TValue *orig, cTValue *key,
 					 TValue *keycopy, cTValue **keyp)
 {
-  Node *node;
+  Node *node, *n;
   MSize hmask, idx;
-  node = lj_tab_node_snapshot_acq(parent, &hmask);
+  node = lj_tab_node_acq(parent);
+  hmask = lj_tab_node_hmask_acq(node);
   if (tab_ptr_index((uintptr_t)node, (uintptr_t)orig, sizeof(Node),
-		    hmask + 1u, &idx))
+			    hmask + 1u, &idx)) {
+    if (lj_tab_node_is_retiring(node)) {
+      TValue *slot;
+      n = &node[idx];
+      lj_tv_load_acq(keycopy, &n->key);
+      if (!tab_key_islocked(keycopy) && !tvisnil(keycopy)) {
+	*keyp = keycopy;
+	slot = tab_forwarded_setslot(parent, &node, &hmask, keycopy);
+	if (slot)
+	  return slot;
+      }
+      *keyp = key;
+      return lj_tab_set(L, parent, key);
+    }
     return tab_forwarded_jit_hash_slot(parent, orig, keycopy, keyp);
+  }
   *keyp = key;
   return lj_tab_set(L, parent, key);
 }

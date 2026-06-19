@@ -892,7 +892,7 @@ assert(a[119 % 128] == 119)
     run = function(t)
       t:build({ clean = true, quiet = true })
       build_and_run_c(t, t:tmp("lj_t-jit-forward-store"),
-                      "t-jit-forward-store.c", { build = false })
+                      "t-jit-forward-store.c", { build = false, timeout = "20s" })
       luajit_code(t, table_store_smoke())
 
       local hash_ir = t:tmp("lj-m6-hstore-ir.dump")
