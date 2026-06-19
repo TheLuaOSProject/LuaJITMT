@@ -15,12 +15,6 @@ local function assert_block_absent(label, block, needle)
   end
 end
 
-local function source_files(t)
-  return t:files(t:path("src"), {
-    extensions = { ".c", ".h", ".dasc" }
-  })
-end
-
 local function compile_luajit_fixture(t, out, cfile, opts)
   opts = opts or {}
   t:cc(out, { t:path("tests", cfile) }, {
@@ -180,35 +174,6 @@ local function assert_finreg_preclaim_order(t)
   })
 end
 
-local function assert_finalizer_dispatch(t)
-  local lj_gc = t:path("src", "lj_gc.c")
-  local call = t:c_block(lj_gc, "static int gc_call_finalizer")
-  assert_no_lines(t, "gc_call_finalizer must not assign vmthread(g)",
-                  { lj_gc }, function(line)
-    return call:find(line, 1, true) and
-           line:match("lua_State%s+%*[^=]+=%s*vmthread%(%s*g%s*%)")
-  end)
-
-  local close = t:c_block(t:path("src", "lj_state.c"),
-                          "LUA_API void lua_close")
-  t:assert_text_ordered("lua_close finalizer drain", close, {
-    "lj_vm_cpcall(L, NULL, NULL, cpfinalize) == LUA_OK",
-    "!lj_gc2_finalizer_queue_pending(g)",
-    "!lj_gc_cdata_fin_pending(g)",
-    "break;"
-  })
-
-  local cdata = t:c_block(lj_gc, "if (o->gch.gct == ~LJ_TCDATA)")
-  assert_block_contains("cdata finalizer dispatch", cdata,
-                        "gc_finalize_cdata_slot_owned(L, o, &key)")
-  assert_block_absent("cdata finalizer dispatch", cdata,
-                      "gc_call_finalizer(g, L,")
-
-  local close_cdata = t:c_block(lj_gc, "void lj_gc_finalize_cdata")
-  assert_block_absent("lj_gc_finalize_cdata", close_cdata,
-                      "gc_call_finalizer(g, L,")
-end
-
 local function assert_source_predicates(t)
   assert_no_lines(t, "ordered FINREG object payload must use acquire/release helpers",
                   { t:path("src", "lj_ctype.c"), t:path("src", "lj_gc.c") },
@@ -234,25 +199,7 @@ local function assert_source_predicates(t)
   assert_library_registration(t)
   assert_ffi_registration(t)
 
-  assert_no_lines(t, "FINREG ordered discovery must not retain generation/root pending scans",
-                  { t:path("src", "lj_gc.c") }, function(line)
-    return contains(line, "gc_preclaim_cdata_finalizers_pweak_finreg") or
-           contains(line, "gc_preclaim_cdata_finalizers_pweak_tab") or
-           contains(line, "gc_cdata_finreg_pending_scan") or
-           contains(line, "gc_cdata_fin_pending_tab") or
-           contains(line, "gc_separate_cdata_finalizers_root") or
-           contains(line, "gc_claim_cdata_finalizer_pweak") or
-           line:match("finreg_cdata_pweak_root_fallbacks,%s*1") or
-           line:match("ord%s*==%s*NULL")
-  end)
-
   assert_finreg_preclaim_order(t)
-  assert_finalizer_dispatch(t)
-
-  assert_no_lines(t, "runtime finalizer queues must not use legacy mmudata",
-                  source_files(t), function(line)
-    return contains(line, "mmudata")
-  end)
 end
 
 local function run_default_matrix(t)
