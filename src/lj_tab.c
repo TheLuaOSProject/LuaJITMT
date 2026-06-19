@@ -70,6 +70,18 @@ static LJ_AINLINE int tab_key_retry_once(cTValue *key, int *retry)
   return 0;
 }
 
+static LJ_AINLINE int tab_val_absent(cTValue *val)
+{
+  return tvisnil(val) || tvisforward(val);
+}
+
+static LJ_AINLINE int tab_slot_absent_acq(const TValue *slot)
+{
+  TValue val;
+  lj_tv_load_acq(&val, slot);
+  return tab_val_absent(&val);
+}
+
 static TValue *tab_findkey_or_keylock(Node *anchor, cTValue *key, int *locked)
 {
   Node *n;
@@ -233,7 +245,7 @@ static uint32_t tab_rehash_hashcount(Node *oldnode, MSize oldhmask,
       Node *n = &oldnode[i];
       TValue key, val;
       lj_tv_load_acq(&val, &n->val);
-      if (!tvisnil(&val)) {
+      if (!tab_val_absent(&val)) {
 	uint32_t idx;
 	lj_tv_load_acq(&key, &n->key);
 	if (!tab_rehash_arrayindex(asize, &key, &idx))
@@ -244,7 +256,7 @@ static uint32_t tab_rehash_hashcount(Node *oldnode, MSize oldhmask,
   if (asize < oldasize) {
     uint32_t i;
     for (i = asize; i < oldasize; i++)
-      if (!lj_tv_isnil_acq(&oldarray[i]))
+      if (!tab_slot_absent_acq(&oldarray[i]))
 	count++;
   }
   return count;
@@ -562,7 +574,7 @@ void lj_tab_resize(lua_State *L, GCtab *t, uint32_t asize, uint32_t hbits)
       Node *n = &oldnode[i];
       TValue key, val;
       lj_tv_load_acq(&val, &n->val);
-      if (!tvisnil(&val)) {
+      if (!tab_val_absent(&val)) {
 	TValue *slot;
 	lj_tv_load_acq(&key, &n->key);
 	if (hbits) {
@@ -581,7 +593,7 @@ void lj_tab_resize(lua_State *L, GCtab *t, uint32_t asize, uint32_t hbits)
     for (i = asize; i < oldasize; i++) {
       TValue key, val;
       lj_tv_load_acq(&val, &oldarray[i]);
-      if (!tvisnil(&val)) {
+      if (!tab_val_absent(&val)) {
 	setnumV(&key, (lua_Number)i);
 	copyTVrel(L, tab_rehash_insert(L, newnode, newhmask, &newfreetop, &key),
 		  &val);
@@ -724,7 +736,7 @@ static uint32_t countarray(const GCtab *t, uint32_t *bins)
     for (n = 0; i <= top; i++) {
       TValue val;
       lj_tv_load_acq(&val, &array[i]);
-      if (!tvisnil(&val))
+      if (!tab_val_absent(&val))
 	n++;
     }
     bins[b] += n;
@@ -742,7 +754,7 @@ static uint32_t counthash(const GCtab *t, uint32_t *bins, uint32_t *narray)
     Node *n = &node[i];
     TValue key, val;
     lj_tv_load_acq(&val, &n->val);
-    if (!tvisnil(&val)) {
+    if (!tab_val_absent(&val)) {
       lj_tv_load_acq(&key, &n->key);
       na += countint(&key, bins);
       total++;
@@ -1342,7 +1354,7 @@ int lj_tab_next(GCtab *t, cTValue *key, TValue *o)
   for (; idx < asize; idx++) {
     TValue val;
     lj_tv_load_acq(&val, &array[idx]);
-    if (LJ_LIKELY(!tvisnil(&val))) {
+    if (LJ_LIKELY(!tab_val_absent(&val))) {
       setintV(o, idx);
       o[1] = val;
       return 1;
@@ -1357,13 +1369,13 @@ int lj_tab_next(GCtab *t, cTValue *key, TValue *o)
       Node *n = &node[idx];
       TValue key, val;
       lj_tv_load_acq(&val, &n->val);
-      if (!tvisnil(&val)) {
+      if (!tab_val_absent(&val)) {
 	lj_tv_load_acq(&key, &n->key);
 	if (tab_key_islocked(&key)) {
 	  la_cpu_pause();
 	  lj_tv_load_acq(&val, &n->val);
 	  lj_tv_load_acq(&key, &n->key);
-	  if (tab_key_islocked(&key) || tvisnil(&val))
+	  if (tab_key_islocked(&key) || tab_val_absent(&val))
 	    continue;
 	}
 	o[0] = key;
@@ -1384,12 +1396,12 @@ LJ_NOINLINE static MSize tab_len_slow(GCtab *t, size_t hi)
   size_t lo = hi;
   hi++;
   /* Widening search for an upper bound. */
-  while ((tv = lj_tab_getint(t, (int32_t)hi)) && !lj_tv_isnil_acq(tv)) {
+  while ((tv = lj_tab_getint(t, (int32_t)hi)) && !tab_slot_absent_acq(tv)) {
     lo = hi;
     hi += hi;
     if (hi > (size_t)(0x7fffffff - 2)) {  /* Punt and do a linear search. */
       lo = 1;
-      while ((tv = lj_tab_getint(t, (int32_t)lo)) && !lj_tv_isnil_acq(tv))
+      while ((tv = lj_tab_getint(t, (int32_t)lo)) && !tab_slot_absent_acq(tv))
 	lo++;
       return (MSize)(lo - 1);
     }
@@ -1398,7 +1410,7 @@ LJ_NOINLINE static MSize tab_len_slow(GCtab *t, size_t hi)
   while (hi - lo > 1) {
     size_t mid = (lo+hi) >> 1;
     cTValue *tvb = lj_tab_getint(t, (int32_t)mid);
-    if (tvb && !lj_tv_isnil_acq(tvb)) lo = mid; else hi = mid;
+    if (tvb && !tab_slot_absent_acq(tvb)) lo = mid; else hi = mid;
   }
   return (MSize)lo;
 }
@@ -1411,12 +1423,12 @@ MSize LJ_FASTCALL lj_tab_len(GCtab *t)
   size_t hi = (size_t)lj_tab_array_snapshot_acq(t, &array);
   if (hi) hi--;
   /* In a growing array the last array element is very likely nil. */
-  if (hi > 0 && LJ_LIKELY(lj_tv_isnil_acq(&array[hi]))) {
+  if (hi > 0 && LJ_LIKELY(tab_slot_absent_acq(&array[hi]))) {
     /* Binary search to find a non-nil to nil transition in the array. */
     size_t lo = 0;
     while (hi - lo > 1) {
       size_t mid = (lo+hi) >> 1;
-      if (lj_tv_isnil_acq(&array[mid])) hi = mid; else lo = mid;
+      if (tab_slot_absent_acq(&array[mid])) hi = mid; else lo = mid;
     }
     return (MSize)lo;
   }
@@ -1435,7 +1447,7 @@ MSize LJ_FASTCALL lj_tab_len_hint(GCtab *t, size_t hint)
     TValue tv, tvnext;
     lj_tv_load_acq(&tv, &array[hint]);
     lj_tv_load_acq(&tvnext, &array[hint+1]);
-    if (LJ_LIKELY(!tvisnil(&tv) && tvisnil(&tvnext)))
+    if (LJ_LIKELY(!tab_val_absent(&tv) && tab_val_absent(&tvnext)))
       return (MSize)hint;
   } else if (hint+1 <= asize) {
     MSize hmask;
@@ -1443,7 +1455,7 @@ MSize LJ_FASTCALL lj_tab_len_hint(GCtab *t, size_t hint)
     if (LJ_LIKELY(hmask == 0)) {
       TValue tv;
       lj_tv_load_acq(&tv, &array[hint]);
-      if (!tvisnil(&tv))
+      if (!tab_val_absent(&tv))
 	return (MSize)hint;
     }
   }
