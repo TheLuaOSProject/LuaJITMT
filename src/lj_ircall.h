@@ -266,6 +266,7 @@ typedef struct CCallInfo {
   _(FFI32,	lj_carith_rol64,	2,   N, U64, XA_64|CCI_NOFPRCLOBBER) \
   _(FFI32,	lj_carith_ror64,	2,   N, U64, XA_64|CCI_NOFPRCLOBBER) \
   _(ANY,	lj_func_syncslot_forjit, 4, S, NIL, CCI_L) \
+  _(ANY,	lj_func_storeuv_forjit, 3, S, NIL, CCI_L) \
   _(ANY,	lj_func_promoteuv_forjit, 4, S, PGC, CCI_L|CCI_T) \
   _(ANY,	lj_func_newuvcell_forjit, 3, S, PGC, CCI_L|CCI_T) \
   _(ANY,	lj_func_newL_gc_forjit, 4, A, FUNC, CCI_L|CCI_T) \

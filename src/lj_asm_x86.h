@@ -1827,11 +1827,27 @@ static void asm_ahstore_forjit(ASMState *as, IRIns *ir)
   asm_tvptr(as, ra_releasetmp(as, ASMREF_TMP1), ir->op2, IRTMPREF_IN1);
 }
 
+static void asm_ustore_forjit(ASMState *as, IRIns *ir)
+{
+  const CCallInfo *ci = &lj_ir_callinfo[IRCALL_lj_func_storeuv_forjit];
+  IRRef args[3];
+  ra_evictset(as, RSET_SCRATCH);
+  args[0] = ASMREF_L;     /* lua_State *L */
+  args[1] = ir->op1;      /* TValue *tv */
+  args[2] = ASMREF_TMP1;  /* cTValue *src */
+  asm_gencall(as, ci, args);
+  asm_tvptr(as, ra_releasetmp(as, ASMREF_TMP1), ir->op2, IRTMPREF_IN1);
+}
+
 static void asm_ahustore(ASMState *as, IRIns *ir)
 {
   if (ir->r == RID_SINK)
     return;
 #if defined(__linux__) && LJ_TARGET_X64
+  if (ir->o == IR_USTORE && irt_isgcv(ir->t) && IR(ir->op1)->o == IR_UREFC) {
+    asm_ustore_forjit(as, ir);
+    return;
+  }
   if (ir->o == IR_ASTORE || ir->o == IR_HSTORE) {
     asm_ahstore_forjit(as, ir);
     return;

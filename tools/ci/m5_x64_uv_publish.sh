@@ -33,12 +33,44 @@ fi
 for needle in \
   'call extern lj_gc_pubuv' \
   'IRCALL_lj_gc_pubuv' \
-  'lj_gc_pubuv,'
+  'lj_gc_pubuv,' \
+  'lj_func_storeuv_forjit,' \
+  'IRCALL_lj_func_storeuv_forjit' \
+  'asm_ustore_forjit' \
+  'copyTVrel(L, tv, src);'
 do
-  if ! rg -F -q "$needle" "$ROOT/src/vm_x64.dasc" "$ROOT/src/lj_asm_x86.h" "$ROOT/src/lj_ircall.h"; then
+  if ! rg -F -q "$needle" "$ROOT/src/vm_x64.dasc" \
+      "$ROOT/src/lj_asm_x86.h" "$ROOT/src/lj_ircall.h" \
+      "$ROOT/src/lj_func.c" "$ROOT/src/lj_func.h"; then
     echo "guardrail: missing x64/JIT upvalue publication marker: $needle" >&2
     exit 1
   fi
 done
+
+if ! rg -F -q 'lj_func_storeuv_forjit(lua_State *L, TValue *tv, const TValue *src)' \
+    "$ROOT/src/lj_func.c" "$ROOT/src/lj_func.h"; then
+  echo "guardrail: JIT upvalue store helper must release-copy whole TValues" >&2
+  exit 1
+fi
+
+if ! awk '
+  /static void asm_ahustore\(ASMState \*as, IRIns \*ir\)/ {
+    infn = 1
+    next
+  }
+  infn && /ir->o == IR_USTORE && irt_isgcv\(ir->t\) && IR\(ir->op1\)->o == IR_UREFC/ {
+    cond = NR
+  }
+  infn && /asm_ustore_forjit\(as, ir\)/ { helper = NR }
+  infn && /if \(irt_isnum\(ir->t\)\)/ {
+    raw = NR
+    ok = cond && helper && cond < helper && helper < raw
+    exit ok ? 0 : 1
+  }
+  END { if (!ok) exit 1 }
+' "$ROOT/src/lj_asm_x86.h"; then
+  echo "guardrail: x64 GC-valued UREFC stores must use the release-copy helper before raw stores" >&2
+  exit 1
+fi
 
 echo "M5 x64 upvalue publication guard passed"

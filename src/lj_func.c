@@ -101,6 +101,11 @@ void lj_func_syncslot_forjit(lua_State *L, TValue *base, int32_t slot,
   copyTV(L, base + slot, tv);
 }
 
+void lj_func_storeuv_forjit(lua_State *L, TValue *tv, const TValue *src)
+{
+  copyTVrel(L, tv, src);
+}
+
 GCupval *lj_func_promoteuv_forjit(lua_State *L, TValue *base, int32_t slot,
 				  const TValue *tv)
 {

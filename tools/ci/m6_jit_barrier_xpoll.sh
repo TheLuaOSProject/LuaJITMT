@@ -19,7 +19,8 @@ for needle in \
   'LJ_GC_BLACK' \
   'LJ_GC_WHITES' \
   'M6: split long TBAR sequence for assert red zone' \
-  'M6: split long OBAR sequence for assert red zone'
+  'M6: split long OBAR sequence for assert red zone' \
+  'IRCALL_lj_func_storeuv_forjit'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_opt_fold.c" \
       "$ROOT/src/lj_asm_x86.h"; then
@@ -85,6 +86,16 @@ if ! awk '
   END { if (!done) exit 1 }
 ' "$OBAR_DUMP"; then
   echo "guardrail: post-XPOLL OBAR must lower to legacy tests, poll+mark checks and pubuv call" >&2
+  exit 1
+fi
+
+if ! awk '
+  /->LOOP:/ { loop = 1; next }
+  loop && /lj_func_storeuv_forjit/ { store = 1 }
+  loop && /lj_gc_pubuv/ { done = 1; exit store ? 0 : 1 }
+  END { if (!done) exit 1 }
+' "$OBAR_DUMP"; then
+  echo "guardrail: x64 upvalue USTORE must release-copy before OBAR publication" >&2
   exit 1
 fi
 
