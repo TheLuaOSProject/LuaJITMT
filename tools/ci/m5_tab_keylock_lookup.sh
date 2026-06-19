@@ -18,10 +18,14 @@ timeout 20s "$OUT"
 for needle in \
   'tab_key_islocked(cTValue *key)' \
   'tab_key_retry_once(cTValue *key, int *retry)' \
+  'tab_findkey_or_keylock(Node *anchor, cTValue *key, int *locked)' \
+  'tab_findkey_or_keylock(n, key, &locked)' \
   'if (tab_key_retry_once(&nk, &retry))' \
   'if (tab_key_islocked(&key))' \
+  'if (tab_key_islocked(&fk))' \
   'tviskeylock(&key)' \
-  'tviskeylock(&out[0])'
+  'tviskeylock(&out[0])' \
+  'lj_tab_newkey(L, t, &keyv) == &node[0].val'
 do
   if ! rg -F -q "$needle" "$ROOT/src" "$ROOT/tests/t-tab-keylock-lookup.c"; then
     echo "guardrail: missing table KEYLOCK lookup marker: $needle" >&2

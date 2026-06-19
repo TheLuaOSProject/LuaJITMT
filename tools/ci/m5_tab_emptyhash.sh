@@ -22,8 +22,8 @@ fi
 
 if ! awk '
   /TValue \*lj_tab_newkey/ { infn = 1; next }
-  infn && /Node \*nodebase = lj_tab_node_acq\(t\)/ { nodebase = NR }
-  infn && /MSize hmask = lj_tab_node_hmask_acq\(nodebase\)/ { hmask = NR }
+  infn && /nodebase = lj_tab_node_acq\(t\)/ { nodebase = NR }
+  infn && /hmask = lj_tab_node_hmask_acq\(nodebase\)/ { hmask = NR }
   infn && /if \(hmask == 0\)/ { branch = NR }
   infn && /hashkey_node\(nodebase, hmask, key\)/ && !hash { hash = NR }
   infn && /nodebase != &G\(L\)->nilnode/ { assert_nilnode = 1 }

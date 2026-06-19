@@ -94,6 +94,15 @@ int main(void)
   assert_tabnum(t, anchor, 11);
   assert_tabnum(t, displaced, 22);
   assert(count_next(t) == 2);
+  {
+    TValue keyv;
+    setstrV(L, &keyv, anchor);
+    assert(lj_tab_newkey(L, t, &keyv) == &node[0].val);
+    setstrV(L, &keyv, displaced);
+    assert((cTValue *)lj_tab_newkey(L, t, &keyv) ==
+	   lj_tab_getstr(t, displaced));
+    assert(count_next(t) == 2);
+  }
 
   store_keylock(&node[0]);
   assert(tviskeylock(&node[0].key));

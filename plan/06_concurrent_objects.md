@@ -207,7 +207,10 @@ FINREG traversal wait out that key marker before treating the slot as
 published; this is still scoped to the hidden FINREG generations, not the
 general hash insert protocol above. C hash lookup paths now pause and re-walk
 once when they see `LJ_TKEYLOCK`, setter probes retry directly, and
-`lj_tab_next()` hides a still-locked key from traversal.
+`lj_tab_next()` hides a still-locked key from traversal. The legacy
+`lj_tab_newkey()` helper now defensively rechecks the target collision chain
+and waits on `LJ_TKEYLOCK` before consuming a free node, but freetop allocation
+and cooperative resize/helping are still pending.
 The legacy `GCtab.node` pointer itself is now release-published after vector
 initialization and acquire-loaded by C-side table, GC, serialization,
 bytecode-writer, parser, and recorder readers. Legacy `GCtab.array` C readers
