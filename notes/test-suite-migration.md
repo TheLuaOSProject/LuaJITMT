@@ -246,6 +246,8 @@ Lua test-suite migration notes:
   allocation stress, generated JIT dump checks, and stock FFI regression run.
 - Converted `m3_safepoint_handshake` to rely on the compiled handshake
   fixture instead of checking safepoint/native-call implementation markers.
+- Converted `m7_ffi_cparse_rollback` to behavior-only coverage through its C
+  rollback fixture, Lua reader stress, anchor build, and cdef-token regression.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.

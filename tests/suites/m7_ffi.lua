@@ -1005,89 +1005,8 @@ return function(add)
 
   add({
     name = "m7_ffi_cparse_rollback",
-    description = "FFI cparser rollback without CTState top/hash rewind",
+    description = "FFI cparser rollback behavior",
     run = function(t)
-      local files = source_files(t)
-      files[#files + 1] = t:path("tests", "t-ffi-cparse-rollback-reader.lua")
-      t:assert_all_any_contains(files, {
-        "typedef struct CPRollback CPRollback",
-        "CPRollback *rollback",
-        "CTypeID starttop",
-        "uint8_t newtype",
-        "CPAlloc *newct",
-        "ctype_isabandoned(info)",
-        "cp_rollback_log(CPState *cp, CTypeID id)",
-        "cp_ctype_publish(CPState *cp, CTypeID id, CType *src)",
-        "cp_ctype_setsib(CPState *cp, CTypeID id, CTypeID sib)",
-        "cp_ctype_new(CPState *cp, CType **ctp)",
-        "cp_ctype_intern(CPState *cp, CTInfo info, CTSize size)",
-        "lj_ctype_intern_new_l(cp->L, cp->cts",
-        "cp_ctype_abandon(CPState *cp)",
-        "cp_ctype_publish(cp, rb->id, ct)",
-        "cp_ctype_publish(cp, fieldid, ct)",
-        "for (ca = cp->newct; ca != NULL; ca = ca->next)",
-        "cp_rollback_restore(CPState *cp)",
-        "if (errcode)",
-        "cp_rollback_restore(cp)",
-        "ffi_checkctype_layout_lock(lua_State *L, CTState *cts,",
-        "LJLIB_CF(ffi_new)",
-        "ffi.new waits out parser rollback.",
-        "LJLIB_CF(ffi_typeinfo)",
-        "Snapshot ctype while parser rollback cannot mutate layout.",
-        "layout reader waits out parser rollback",
-        "ffi.new recorder waits out parser rollback",
-        "lj_ctype_parse_unlock(cts);",
-        "direct ctype reader observed failed cdef rollback state",
-        "ffi.typeinfo observed failed cdef rollback state",
-        "ffi.new observed failed cdef rollback state",
-        "cdata __index observed failed cdef rollback state",
-        "cdata __newindex observed failed cdef rollback state",
-        "cdata numeric __index observed failed cdef rollback state",
-        "cdata pointer add observed failed cdef rollback state",
-        "cdata pointer diff observed failed cdef rollback state",
-        "enum string cast observed failed cdef rollback state",
-        "ffi.C observed failed cdef rollback constant",
-        "direct ctype/typeinfo/new/field/numeric/ptrarith/namespace readers wait out rollback",
-        "cdata string-key readers wait out parser rollback",
-        "cdata numeric-key readers wait out parser rollback",
-        "cdata pointer arithmetic readers wait out parser rollback",
-        "enum string readers wait out parser rollback",
-        "ffi.C namespace readers wait out parser rollback",
-        "cdata recorder field reader waits out parser rollback",
-        "cdata recorder numeric-key reader waits out parser rollback",
-        "cdata recorder pointer arithmetic waits out rollback",
-        "recorder enum string reader waits out parser rollback",
-        "recorder ffi.C namespace reader waits out parser rollback",
-        "if (errcode || cp.newtype)",
-        "ctype_top_acq(cp->cts)"
-      })
-      assert_no_lines(t, "cparser rollback must not rewind CTState top/hash",
-                      {
-                        t:path("src", "lj_ctype.h"),
-                        t:path("src", "lj_cparse.c"),
-                        t:path("src", "lj_crecord.c")
-                      }, function(line)
-        return line_contains_any(line, {
-          "LJ_CTYPE_SAVE",
-          "LJ_CTYPE_RESTORE",
-          "memcpy((cts)->hash",
-          "newtop > oldtop",
-          "oldtop = cp.cts->top"
-        })
-      end)
-      assert_parser_allocs_route_through_helpers(t)
-      assert_no_lines(t, "parser sib writes must publish through cp_ctype_setsib",
-                      { t:path("src", "lj_cparse.c") }, function(line)
-        return contains(line, "cp_ctype_mut(cp,") and contains(line, ")->sib")
-      end)
-      local ffi_new = t:c_block(t:path("src", "lib_ffi.c"), "LJLIB_CF(ffi_new)")
-      assert_text_not_contains("ffi_new", ffi_new, "ffi_checkctype(L, cts, NULL)")
-      assert_text_ordered("ffi_new", ffi_new, {
-        "ffi_checkctype_layout_lock(L, cts, NULL)",
-        "11.2: ffi.new waits out parser rollback",
-        "lj_cdata_newx_l(L, cts, id, sz, info)"
-      })
-
       clean_build(t)
       build_and_run_c(t, t:tmp("lj_t-ffi-cparse-rollback"),
                       "t-ffi-cparse-rollback.c", { timeout = "20s" })
@@ -1100,7 +1019,7 @@ return function(add)
       run_luajit_script(t, "t-ffi-cparse-rollback-reader.lua", nil, { joff = true })
       run_luajit_script(t, "t-ffi-cparse-rollback-reader.lua")
       run_luajit_script(t, "t-ffi-cdef-token.lua", { "2", "20" }, { joff = true })
-      print("M7 FFI cparser rollback guard passed")
+      print("M7 FFI cparser rollback behavior passed")
     end
   })
 
