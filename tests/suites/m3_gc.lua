@@ -324,13 +324,6 @@ gc_clearweak(g, gcref(g->gc.weak))
 05 section 5.8 conditional legacy weak fallback
 ]=])
 
-local PARANOIA_MARKERS = lines([=[
-gc_arena_verify_sweep_boundary(global_State *g)
-gc2_paranoia_check_roots(global_State *g)
-gc2_legacy_has_base(global_State *g, void *p)
-for (o = gcref_acq(g->gc.root); o != NULL; o = lj_obj_gcw_acq(o))
-]=])
-
 return function(add)
   local cases = {}
 
@@ -396,7 +389,6 @@ return function(add)
         t:path("src", "lj_gc2.c")
       }
 
-      t:assert_all_any_contains(gc_sources, PARANOIA_MARKERS)
       assert_no_lines(t, "GC2 diagnostic root walks must acquire-load root links",
                       gc_sources, function(line)
         return contains(line,

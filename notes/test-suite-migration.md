@@ -316,6 +316,9 @@ Lua test-suite migration notes:
 - Removed the M3 worker-scheduler source marker check; the case now relies on
   the worker scheduler C fixture plus the Lua `collectgarbage("workers")`
   behavior test.
+- Removed the M3 paranoia marker scan; the case now relies on the paranoia
+  build, oracle fixtures, and stock tests while retaining the diagnostic
+  root-walk acquire-load blacklist.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.
