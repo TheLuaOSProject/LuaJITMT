@@ -14,6 +14,30 @@ local linfo = util.funcinfo(function() return 1 end)
 assert(linfo.proto ~= nil and linfo.upvalues ~= nil)
 local cinfo = util.funcinfo(print)
 assert(cinfo.addr ~= nil and cinfo.upvalues ~= nil)
+jit.flush()
+jit.opt.start("hotloop=1")
+local function hot(n)
+  local s = 0
+  for i = 1, n do s = s + i end
+  return s
+end
+for _ = 1, 5 do hot(20) end
+local traced
+for tr = 1, 32 do
+  local info = util.traceinfo(tr)
+  if info then
+    assert(type(info.nins) == "number" and type(info.linktype) == "string")
+    traced = tr
+    break
+  end
+end
+assert(traced)
+local snap
+for sn = 0, 32 do
+  snap = util.tracesnap(traced, sn)
+  if snap then break end
+end
+assert(snap and type(snap[0]) == "number" and type(snap[1]) == "number")
 local t = { 1, 2, 3 }
 t.name = "table-value-publish"
 assert(t[3] == 3 and t.name == "table-value-publish")
@@ -57,6 +81,11 @@ for needle in \
   'gc_stats_storetv_str(L, t, name, &tv)' \
   'gc_stats_storetv_int(L, bt, (int32_t)i + 1, &tv)' \
   'gc_stats_storetv_str(L, t, "poll_ack_latency_buckets", &tv)' \
+  'jit_util_storetv_str(L, t, lj_str_newz(L, name), &tv)' \
+  'jit_util_storetv_int(L, t, key, &tv)' \
+  'setprotofield(L, t, lj_str_newlit(L, "proto"), pt)' \
+  'setintptrfield(L, t, lj_str_newlit(L, "addr"), (intptr_t)(void *)fn->c.f)' \
+  'setintindex(L, t, 0, (int32_t)snap->ref - REF_BIAS)' \
   'lj_tab_storetab(J->L, &node[i].val, tpl)' \
   'lj_tab_storetab(J->L, o, tpl)' \
   'lj_tab_storenil(J->L, &node[i].val)' \
@@ -112,6 +141,12 @@ fi
 if rg -n 'lj_tab_storeint\(L, lj_tab_setstr\(L, t, strV\(lj_lib_upvalue\(L, 1\)\)\)' \
     "$ROOT/src/lib_table.c"; then
   echo "guardrail: table.pack n field must CAS-publish" >&2
+  exit 1
+fi
+
+if rg -n 'lj_tab_store(int|intptr|proto)\(L, lj_tab_set(str|int)\(L, t' \
+    "$ROOT/src/lib_jit.c"; then
+  echo "guardrail: jit.util result fields must CAS-publish" >&2
   exit 1
 fi
 

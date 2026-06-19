@@ -175,9 +175,57 @@ LJLIB_PUSH(top-2) LJLIB_SET(version)
 
 /* -- Reflection API for Lua functions ------------------------------------ */
 
+static TValue *jit_util_storetv_str(lua_State *L, GCtab *t, GCstr *key,
+				    cTValue *src)
+{
+  TValue *dst;
+  for (;;) {
+    dst = lj_tab_setstr(L, t, key);
+    if (lj_tab_trystoretv_cas(L, dst, src) == LJ_TAB_STORE_CAS_OK)
+      return dst;
+    la_cpu_pause();  /* jit.util string-key store saw FORWARD after lookup. */
+  }
+}
+
+static TValue *jit_util_storetv_int(lua_State *L, GCtab *t, int32_t key,
+				    cTValue *src)
+{
+  TValue *dst;
+  for (;;) {
+    dst = lj_tab_setint(L, t, key);
+    if (lj_tab_trystoretv_cas(L, dst, src) == LJ_TAB_STORE_CAS_OK)
+      return dst;
+    la_cpu_pause();  /* jit.util int-key store saw FORWARD after lookup. */
+  }
+}
+
 static void setintfield(lua_State *L, GCtab *t, const char *name, int32_t val)
 {
-  lj_tab_storeint(L, lj_tab_setstr(L, t, lj_str_newz(L, name)), val);
+  TValue tv;
+  setintV(&tv, val);
+  jit_util_storetv_str(L, t, lj_str_newz(L, name), &tv);
+}
+
+static void setintptrfield(lua_State *L, GCtab *t, GCstr *key, intptr_t val)
+{
+  TValue tv;
+  setintptrV(&tv, val);
+  jit_util_storetv_str(L, t, key, &tv);
+}
+
+static void setprotofield(lua_State *L, GCtab *t, GCstr *key, GCproto *pt)
+{
+  TValue tv;
+  setprotoV(L, &tv, pt);
+  jit_util_storetv_str(L, t, key, &tv);
+  lj_gc_pubtabobj(L, t, pt);
+}
+
+static void setintindex(lua_State *L, GCtab *t, int32_t key, int32_t val)
+{
+  TValue tv;
+  setintV(&tv, val);
+  jit_util_storetv_int(L, t, key, &tv);
 }
 
 /* local info = jit.util.funcinfo(func [,pc]) */
@@ -207,7 +255,8 @@ LJLIB_CF(jit_util_funcinfo)
     lua_setfield(L, -2, "source");
     lj_debug_pushloc(L, pt, pc);
     lua_setfield(L, -2, "loc");
-    lj_tab_storeproto(L, lj_tab_setstr(L, t, lj_str_newlit(L, "proto")), pt);
+    setprotofield(L, t, lj_str_newlit(L, "proto"), pt);
+    lj_gc_pubtab(L, t);
   } else {
     GCfunc *fn = funcV(L->base);
     GCtab *t;
@@ -215,9 +264,9 @@ LJLIB_CF(jit_util_funcinfo)
     t = tabV(L->top-1);
     if (!iscfunc(fn))
       setintfield(L, t, "ffid", fn->c.ffid);
-    lj_tab_storeintptr(L, lj_tab_setstr(L, t, lj_str_newlit(L, "addr")),
-		       (intptr_t)(void *)fn->c.f);
+    setintptrfield(L, t, lj_str_newlit(L, "addr"), (intptr_t)(void *)fn->c.f);
     setintfield(L, t, "upvalues", fn->c.nupvalues);
+    lj_gc_pubtab(L, t);
   }
   return 1;
 }
@@ -306,6 +355,7 @@ LJLIB_CF(jit_util_traceinfo)
     setstrV(L, L->top++, lj_str_newz(L, jit_trlinkname[T->linktype]));
     lua_setfield(L, -2, "linktype");
     /* There are many more fields. Add them only when needed. */
+    lj_gc_pubtab(L, t);
     return 1;
   }
   return 0;
@@ -366,13 +416,12 @@ LJLIB_CF(jit_util_tracesnap)
     GCtab *t;
     lua_createtable(L, nent+2, 0);
     t = tabV(L->top-1);
-    lj_tab_storeint(L, lj_tab_setint(L, t, 0), (int32_t)snap->ref - REF_BIAS);
-    lj_tab_storeint(L, lj_tab_setint(L, t, 1), (int32_t)snap->nslots);
+    setintindex(L, t, 0, (int32_t)snap->ref - REF_BIAS);
+    setintindex(L, t, 1, (int32_t)snap->nslots);
     for (n = 0; n < nent; n++)
-      lj_tab_storeint(L, lj_tab_setint(L, t, (int32_t)(n+2)),
-		      (int32_t)map[n]);
-    lj_tab_storeint(L, lj_tab_setint(L, t, (int32_t)(nent+2)),
-		    (int32_t)SNAP(255, 0, 0));
+      setintindex(L, t, (int32_t)(n+2), (int32_t)map[n]);
+    setintindex(L, t, (int32_t)(nent+2), (int32_t)SNAP(255, 0, 0));
+    lj_gc_pubtab(L, t);
     return 1;
   }
   return 0;
