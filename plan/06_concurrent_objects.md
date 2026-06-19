@@ -39,9 +39,8 @@ visible yet. Resize counting/copying, traversal, and length helpers treat
 exposed or recopied by the current bridge. Integer array getters now hop a
 forwarded separated-array slot through `TabArrayHdr.next_gen`, falling through
 to integer hash lookup when the successor array is too small for a shrink-tail
-key. Iterator next-generation `LJ_TFORWARD` hops still have to be added at the
-VM fast-path use sites below; C `lj_tab_next()` now resolves visible forwarded
-array/hash slots through the published successor for the current logical key.
+key. C `lj_tab_next()` now resolves visible forwarded array/hash slots through
+the published successor for the current logical key.
 x64 `ipairs_aux` now routes visible forwarded array slots through the exported
 C integer getter wrapper before deciding whether the iterator stops. x64 array
 `BC_TGETV`, `BC_TGETB`, and `BC_TGETR` now send visible forwarded slot
@@ -50,6 +49,9 @@ sentinel. x64 `BC_TGETS_Z` does the same for visible forwarded string-key hash
 values. x64 `BC_ITERN` delegates visible forwarded array/hash iterator slots to
 the C `lj_tab_next()` path through a traversal-index helper, so optimized
 `pairs()` loops no longer copy internal forward sentinels into Lua results.
+x64 `lj_vm_next` delegates visible forwarded array/hash iterator slots to the
+same C `lj_tab_next()` resolution path and returns the resolved value/key
+layout expected by JIT-recorded `next()`.
 
 ## 6.2 Tables: data structures
 
@@ -320,18 +322,18 @@ and resize copying is still a non-cooperative legacy-`GCtab` operation. C-side
 table hash getters hop through `TabNodeHdr.next_gen` on a visible
 `LJ_TFORWARD` matched slot, or retry once and report absence if no successor is
 available yet, while resize counting/copying, `next()`, and length helpers
-filter `LJ_TFORWARD` values as absent internal sentinels. This prevents
-synthetic forwarded values from being counted, returned, or recopied before the
-iterator next-generation hops exist. C integer array getters likewise hop
-visible array `LJ_TFORWARD` slots through `TabArrayHdr.next_gen`, including
-falling through to the hash part after a shrink-tail hop. Integer hash lookups
-that observe a forwarded old hash slot also check the successor array after a
-hash-generation hop, covering array growth that migrates the integer key out of
-the hash part. C `lj_tab_next()` resolves visible array and hash
+filter `LJ_TFORWARD` values as absent internal sentinels. C integer array
+getters likewise hop visible array `LJ_TFORWARD` slots through
+`TabArrayHdr.next_gen`, including falling through to the hash part after a
+shrink-tail hop. Integer hash lookups that observe a forwarded old hash slot
+also check the successor array after a hash-generation hop, covering array
+growth that migrates the integer key out of the hash part. C `lj_tab_next()`
+resolves visible array and hash
 `LJ_TFORWARD` slots through the published successor generation for the current
-logical key before falling back to absent filtering. C length helpers follow
-`TabArrayHdr.next_gen` for visible forwarded array slots before deciding whether
-a candidate boundary is absent.
+logical key before falling back to absent filtering, and x64 `BC_ITERN` plus
+`lj_vm_next` delegate visible forwarded iterator slots to that C path. C length
+helpers follow `TabArrayHdr.next_gen` for visible forwarded array slots before
+deciding whether a candidate boundary is absent.
 Publication barriers that receive a `TValue *` snapshot the value before GC2
 marking and legacy `tviswhite()` / `gcV()` checks, so the current release-store
 bridge does not reread a shared destination slot after publication.

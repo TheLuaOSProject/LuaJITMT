@@ -2912,6 +2912,8 @@ static void build_subroutines(BuildCtx *ctx)
   |1:  // Traverse array part.
   |  cmp NEXT_IDX, NEXT_ASIZE;  jae >5
   |  mov NEXT_TMP, qword [r10+NEXT_IDX*8]
+  |  mov64 r11, LJ_TFORWARD_BITS
+  |  cmp NEXT_TMP, r11; je >8
   |  cmp NEXT_TMP, LJ_TNIL;  je >2
   |  lea NEXT_PTR, NEXT_RES_PTR
   |  mov qword [NEXT_PTR], NEXT_TMP
@@ -2928,6 +2930,13 @@ static void build_subroutines(BuildCtx *ctx)
   |  add NEXT_IDX, 1
   |  jmp <1
   |
+  |8:  // Resolve a forwarded array slot in C.
+  |  lea CARG3, NEXT_RES_PTR
+  |  call extern lj_tab_vmnext_forward	// (GCtab *t, uint32_t idx, TValue *out)
+  |  mov NEXT_IDX, RDd
+  |  lea NEXT_PTR, NEXT_RES_PTR
+  |  ret
+  |
   |5:  // Traverse hash part.
   |  sub NEXT_IDX, NEXT_ASIZE
   |6:
@@ -2937,12 +2946,22 @@ static void build_subroutines(BuildCtx *ctx)
   |  imul NEXT_PTRd, NEXT_IDX, #NODE
   |  add NODE:NEXT_PTR, r8
   |  mov NEXT_TMP, NODE:NEXT_PTR->val
+  |  mov64 r11, LJ_TFORWARD_BITS
+  |  cmp NEXT_TMP, r11; je >3
   |  cmp NEXT_TMP, LJ_TNIL; je >7
   |  NEXT_RES_IDXL NEXT_ASIZE+1
   |  ret
   |7:  // Skip holes in hash part.
   |  add NEXT_IDX, 1
   |  jmp <6
+  |
+  |3:  // Resolve a forwarded hash slot in C.
+  |  lea NEXT_IDX, [NEXT_IDX+NEXT_ASIZE]
+  |  lea CARG3, NEXT_RES_PTR
+  |  call extern lj_tab_vmnext_forward	// (GCtab *t, uint32_t idx, TValue *out)
+  |  mov NEXT_IDX, RDd
+  |  lea NEXT_PTR, NEXT_RES_PTR
+  |  ret
   |
   |9:  // End of iteration. Set the key to nil (not the value).
   |  NEXT_RES_IDX NEXT_ASIZE

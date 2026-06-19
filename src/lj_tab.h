@@ -90,6 +90,8 @@ LJ_FUNC cTValue *lj_tab_getstr(GCtab *t, const GCstr *key);
 LJ_FUNCA cTValue *lj_tab_get(lua_State *L, GCtab *t, cTValue *key);
 LJ_FUNCA int32_t LJ_FASTCALL lj_tab_itern_forward(GCtab *t, uint32_t idx,
 						  TValue *ctrl);
+LJ_FUNCA int32_t LJ_FASTCALL lj_tab_vmnext_forward(GCtab *t, uint32_t idx,
+						   TValue *out);
 
 /* Caveat: all setters require a write barrier for the stored value. */
 

@@ -1559,6 +1559,22 @@ int32_t LJ_FASTCALL lj_tab_itern_forward(GCtab *t, uint32_t idx, TValue *ctrl)
   return ok;
 }
 
+int32_t LJ_FASTCALL lj_tab_vmnext_forward(GCtab *t, uint32_t idx, TValue *out)
+{
+  TValue key, kv[2];
+  int ok;
+  key.u32.lo = idx;
+  key.u32.hi = LJ_KEYINDEX;
+  ok = lj_tab_next(t, &key, kv);
+  if (ok == 1) {
+    out[0] = kv[1];
+    out[1] = kv[0];
+    return (int32_t)lj_tab_keyindex(t, &kv[0]);
+  }
+  setnilV(out+1);
+  return ok < 0 ? -1 : 0;
+}
+
 /* -- Table length calculation -------------------------------------------- */
 
 /* Compute table length. Slow path with mixed array/hash lookups. */
