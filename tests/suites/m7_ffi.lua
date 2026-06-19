@@ -435,41 +435,8 @@ return function(add)
 
   add({
     name = "m7_ffi_ctype_hash_publish",
-    description = "FFI ctype hash-head publication",
+    description = "FFI ctype hash-head behavior",
     run = function(t)
-      t:assert_all_any_contains(source_files(t), {
-        "uint32_t hash[CTHASH_SIZE]",
-        "ctype_hash_load(CTState *cts, uint32_t h)",
-        "la_load32_acq(&cts->hash[h])",
-        "ctype_hash_cas(CTState *cts, uint32_t h,",
-        "la_cas32(&cts->hash[h], &old, (uint32_t)newid",
-        "ctype_hash_try_prepend(CTState *cts, uint32_t h, CType *src,",
-        "ctype_hash_prepend(CTState *cts, uint32_t h, CType *src, CTypeID id)",
-        "CTypeID head = ctype_hash_load(cts, h)",
-        "if (id == 0)",
-        "if (dst != src)",
-        "*dst = *src",
-        "dst->next = (CTypeID1)next",
-        "while (!ctype_hash_try_prepend(cts, h, src, id, &head))",
-        "ctype_hash_prepend(cts, h, ct, id)",
-        "ctype_hash_findname(cts,",
-        "ctype_hash_load(cts, ct_hashname(name)), name, tmask)"
-      })
-      assert_no_lines(t, "ctype hash heads must publish through ctype_hash_prepend",
-                      { t:path("src", "lj_ctype.c") }, function(line)
-        return line:find("cts%->hash%[[^%]]+%]%s*=") ~= nil
-      end)
-      assert_no_lines(t, "ctype hash publication must stay CAS-prepend",
-                      { t:path("src", "lj_ctype.c") }, function(line)
-        return contains(line, "ctype_hash_store") or
-               contains(line, "la_store32_rel(&cts->hash")
-      end)
-      assert_no_lines(t, "ctype hash heads must read through ctype_hash_load",
-                      { t:path("src", "lj_ctype.c") }, function(line)
-        return (contains(line, "CTypeID") and contains(line, "=") and
-                contains(line, "cts->hash[")) or
-               (contains(line, "ct->next") and contains(line, "= cts->hash["))
-      end)
       clean_build(t)
       run_luajit_script(t, "t-ffi-cdef-token.lua", {
         getenv("LJ_M7_FFI_CDEF_THREADS", "6"),
@@ -483,36 +450,14 @@ return function(add)
         getenv("LJ_M7_FFI_META_THREADS", "6"),
         getenv("LJ_M7_FFI_META_ITERS", "60")
       }, { joff = true })
-      print("M7 FFI ctype hash publication guard passed")
+      print("M7 FFI ctype hash-head behavior passed")
     end
   })
 
   add({
     name = "m7_ffi_ctype_intern_l",
-    description = "FFI ctype allocation/interning passes active lua_State explicitly",
+    description = "FFI ctype allocation/interning behavior",
     run = function(t)
-      local src = source_files(t)
-      t:assert_all_any_contains(src, {
-        "lj_ctype_new_l(lua_State *L, CTState *cts",
-        "lj_ctype_intern_l(lua_State *L, CTState *cts",
-        "lj_ctype_intern_new_l(lua_State *L, CTState *cts",
-        "lj_ccall_ctid_vararg(lua_State *L, CTState *cts",
-        "lj_ctype_new_l(cp->L, cp->cts",
-        "cp_ctype_intern(cp,",
-        "lj_ctype_intern_l(L, cts",
-        "lj_ctype_intern_l(J->L, cts",
-        "lj_ccall_ctid_vararg(L, cts",
-        "lj_ccall_ctid_vararg(J->L, cts"
-      })
-      assert_no_lines(t, "ctype allocation/interning must not route through CTState L",
-                      src, function(line)
-        return line_contains_any(line, {
-          "cts->L",
-          "parse_L",
-          "lj_ctype_new(",
-          "lj_ctype_intern("
-        })
-      end)
       clean_build(t)
       run_luajit_script(t, "t-ffi-cdef-token.lua", {
         getenv("LJ_M7_FFI_CDEF_THREADS", "6"),
@@ -523,77 +468,14 @@ return function(add)
         getenv("LJ_M7_FFI_SET_ITERS", "320")
       }, { joff = true })
       run_luajit_script(t, "t-ffi-carith-l.lua", nil, { joff = true })
-      print("M7 FFI ctype explicit-L intern guard passed")
+      print("M7 FFI ctype allocation/interning behavior passed")
     end
   })
 
   add({
     name = "m7_ffi_ctype_name_claim",
-    description = "FFI ctype duplicate-name publication",
+    description = "FFI ctype duplicate-name behavior",
     run = function(t)
-      local files = source_files(t)
-      files[#files + 1] = t:path("tests", "t-ffi-ctype-name-claim.c")
-      t:assert_all_any_contains(files, {
-        "ctype_hash_findname(CTState *cts, CTypeID id, GCstr *name,",
-        "lj_ctype_addname_unique(CTState *cts, CType *ct, CTypeID id,",
-        "ctype_hash_findname(cts, head, name, tmask)",
-        "ctype_abandon(cts, id)",
-        "return winner;  /* 11.2 named ctype duplicate winner. */",
-        "return id;  /* 11.2 CAS-prepend named ctype publication. */",
-        "lj_ctype_addname_unique(cp->cts, ct, sid,",
-        "lj_ctype_addname_unique(cp->cts, ct, constid, CPNS_DEFAULT)",
-        "lj_ctype_addname_unique(cp->cts, ct, id, CPNS_DEFAULT)",
-        "force_table_move_after_reserve(lua_State *L, CTState *cts)",
-        "assert(ct3 != ctype_get(cts, id3))",
-        "ffi.typeinfo exposed abandoned ctype",
-        "parser struct tag namespace was shadowed",
-        "parser typedef namespace was shadowed",
-        "parser duplicate enum constant was accepted",
-        "parser duplicate enum loser replaced winner"
-      })
-      assert_no_lines(t, "parser global name publication must use duplicate-aware claim helper",
-                      { t:path("src", "lj_cparse.c") }, function(line)
-        return contains(line, "lj_ctype_addname(cp->cts")
-      end)
-      local lib_ffi = t:path("src", "lib_ffi.c")
-      local storeint = t:c_block(lib_ffi, "static void ffi_typeinfo_storeint(lua_State *L,")
-      assert_text_not_contains("ffi_typeinfo_storeint", storeint, "lj_tab_storeint(L, dst,")
-      for _, needle in ipairs({
-        "for (;;)",
-        "setintV(&tv, val)",
-        "lj_tab_setstr(L, tab, key)",
-        "lj_tab_trystoretv_cas(L, dst, &tv) == LJ_TAB_STORE_CAS_OK",
-        "FFI typeinfo int store saw FORWARD after lookup."
-      }) do
-        assert_text_contains("ffi_typeinfo_storeint", storeint, needle)
-      end
-      local storestr = t:c_block(lib_ffi, "static void ffi_typeinfo_storestr(lua_State *L,")
-      assert_text_not_contains("ffi_typeinfo_storestr", storestr, "lj_tab_storestr(L, dst,")
-      for _, needle in ipairs({
-        "for (;;)",
-        "setstrV(L, &tv, val)",
-        "lj_tab_setstr(L, tab, key)",
-        "lj_tab_trystoretv_cas(L, dst, &tv) == LJ_TAB_STORE_CAS_OK",
-        "FFI typeinfo string store saw FORWARD after lookup."
-      }) do
-        assert_text_contains("ffi_typeinfo_storestr", storestr, needle)
-      end
-      local typeinfo = t:c_block(lib_ffi, "LJLIB_CF(ffi_typeinfo)")
-      assert_text_not_contains("ffi_typeinfo", typeinfo, "lj_tab_storeint(L, lj_tab_setstr")
-      assert_text_not_contains("ffi_typeinfo", typeinfo, "lj_tab_storestr(L, lj_tab_setstr")
-      assert_text_ordered("ffi_typeinfo", typeinfo, {
-        "ctype_isabandoned(info)",
-        "lua_createtable(L, 0, 4)",
-        "ffi_typeinfo_storeint(L, t, lj_str_newlit(L, \"info\"), (int32_t)info)",
-        "lj_gc_pubtab(L, t)"
-      })
-      for _, needle in ipairs({
-        "ffi_typeinfo_storeint(L, t, lj_str_newlit(L, \"size\"), (int32_t)size)",
-        "ffi_typeinfo_storeint(L, t, lj_str_newlit(L, \"sib\"), (int32_t)sib)",
-        "ffi_typeinfo_storestr(L, t, lj_str_newlit(L, \"name\"), name)"
-      }) do
-        assert_text_contains("ffi_typeinfo", typeinfo, needle)
-      end
       clean_build(t)
       build_and_run_c(t, t:tmp("lj_t-ffi-ctype-name-claim"),
                       "t-ffi-ctype-name-claim.c", { timeout = "20s" })
@@ -601,7 +483,7 @@ return function(add)
         getenv("LJ_M7_FFI_CDEF_DUP_ROUNDS", "30"),
         getenv("LJ_M7_FFI_CDEF_DUP_ITERS", "200")
       }, { joff = true })
-      print("M7 FFI ctype name-claim guard passed")
+      print("M7 FFI ctype duplicate-name behavior passed")
     end
   })
 
@@ -623,41 +505,12 @@ return function(add)
 
   add({
     name = "m7_ffi_ctype_tab_retire",
-    description = "FFI ctype-table RCU growth and SMR retirement",
+    description = "FFI ctype-table retirement behavior",
     run = function(t)
-      t:assert_all_any_contains(source_files(t), {
-        "typedef struct CTypeTab",
-        "CTypeTab *tabh",
-        "CTypeTab *retiredtab",
-        "ctype_tabh_acq(CTState *cts)",
-        "ctype_tab_acq(CTState *cts)",
-        "la_loadptr_acq((void *const *)&cts->tabh)",
-        "ctype_tab_grow_l(lua_State *L, CTState *cts, CTypeID id)",
-        "la_casptr((void **)&cts->tabh, &expect, newh",
-        "ctype_tab_retire(cts, oldh)",
-        "lj_ctype_reclaim_retired(global_State *g, uint64_t completed_epoch)",
-        "lj_ctype_reclaim_retired(g, epoch)",
-        "lj_gc2_markmem(g, ctype_tabh_acq(cts))",
-        "lj_gc_arena_markmem(g, ctype_tabh_acq(cts))",
-        "gc2_paranoia_checkmem(g, ctype_tabh_acq(cts), \"ctype table\")"
-      })
-      assert_no_lines(t, "ctype table growth must publish/retire, not realloc/free in place",
-                      { t:path("src", "lj_ctype.c") }, function(line)
-        return line_contains_any(line, {
-          "lj_mem_growvec(L, cts->tab",
-          "lj_mem_freevec(cts->g, cts->tab",
-          "la_storeptr_rel((void **)&cts->tab,"
-        })
-      end)
-      local cts = t:text_between(t:path("src", "lj_ctype.h"),
-                                 "typedef struct CTState", "} CTState;")
-      if contains(cts, "CType *tab") or contains(cts, "MSize sizetab") then
-        error("CTState must not keep ctype table mirror fields")
-      end
       clean_build(t, { xcflags = "-DLUAJIT_CTYPE_CHECK_ANCHOR" })
       build_and_run_c(t, t:tmp("lj_t-ffi-ctype-tab-retire"),
                       "t-ffi-ctype-tab-retire.c", { timeout = "20s" })
-      print("M7 FFI ctype table-retirement guard passed")
+      print("M7 FFI ctype table-retirement behavior passed")
     end
   })
 

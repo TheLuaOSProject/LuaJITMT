@@ -275,6 +275,8 @@ Lua test-suite migration notes:
 - Converted the M7 cdef token and duplicate-stack cases to behavior-only
   coverage through their Lua race regressions, and removed the now-unused line
   counting source helper.
+- Converted the M7 CType hash/intern/name/table-retire cases to behavior-only
+  coverage through their existing Lua regressions and C fixtures.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.
