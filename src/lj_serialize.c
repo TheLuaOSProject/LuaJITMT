@@ -471,8 +471,12 @@ static char *serialize_get(char *r, SBufExt *sbx, TValue *o)
       copyTVrel(sbufL(sbx), o, &tv);
     }
     if (narray) {
-      TValue *oa = lj_tab_array_acq(t) + (tp >= SER_TAG_TAB+4);
-      TValue *oe = lj_tab_array_acq(t) + narray;
+      TValue *array;
+      TValue *oa;
+      TValue *oe;
+      (void)lj_tab_array_snapshot_acq(t, &array);
+      oa = array + (tp >= SER_TAG_TAB+4);
+      oe = array + narray;
       while (oa < oe) r = serialize_get(r, sbx, oa++);
     }
     if (nhash) {

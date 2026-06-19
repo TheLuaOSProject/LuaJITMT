@@ -300,7 +300,9 @@ LJLIB_CF(table_pack)
   /* NOBARRIER: The table is new (marked white). */
   lj_tab_storeint(L, lj_tab_setstr(L, t, strV(lj_lib_upvalue(L, 1))),
 		  (int32_t)n);
-  for (array = lj_tab_array_acq(t) + 1, i = 0; i < n; i++)
+  (void)lj_tab_array_snapshot_acq(t, &array);
+  array++;
+  for (i = 0; i < n; i++)
     lj_tab_storetv(L, &array[i], &base[i]);
   settabV(L, base, t);
   L->top = base+1;

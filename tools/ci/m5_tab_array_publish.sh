@@ -150,6 +150,64 @@ if rg -n 'lj_tab_resize\(L, dict, lj_tab_asize_acq\(dict\)' \
   exit 1
 fi
 
+if awk '
+  /LJLIB_CF\(table_pack\)/ {
+    inpack = 1
+    pack_snap = pack_bad = 0
+    next
+  }
+  inpack && /lj_tab_array_snapshot_acq\(t, &array\)/ { pack_snap = 1 }
+  inpack && /lj_tab_array_acq\(t\)/ { pack_bad = 1 }
+  inpack && /^}/ { pack_checked = 1; inpack = 0 }
+  /static GCtab \*bcread_ktab\(LexState \*ls\)/ {
+    inbcread = 1
+    bcread_snap = bcread_bad = 0
+    next
+  }
+  inbcread && /lj_tab_array_snapshot_acq\(t, &o\)/ { bcread_snap = 1 }
+  inbcread && /lj_tab_array_acq\(t\)/ { bcread_bad = 1 }
+  inbcread && /^}/ { bcread_checked = 1; inbcread = 0 }
+  END {
+    exit pack_checked && pack_snap && !pack_bad &&
+	 bcread_checked && bcread_snap && !bcread_bad ? 0 : 1
+  }
+' "$ROOT/src/lib_table.c" "$ROOT/src/lj_bcread.c"; then
+  :
+else
+  echo "guardrail: private table array fills must use snapshots" >&2
+  exit 1
+fi
+
+if awk '
+  /t = lj_tab_new\(sbufL\(sbx\), narray, hsize2hbits\(nhash\)\)/ {
+    indecode = 1
+    decode_snap = decode_bad = 0
+    next
+  }
+  indecode && /lj_tab_array_snapshot_acq\(t, &array\)/ { decode_snap = 1 }
+  indecode && /lj_tab_array_acq\(t\)/ { decode_bad = 1 }
+  indecode && /if \(nhash\)/ { decode_checked = 1; indecode = 0 }
+  END { exit decode_checked && decode_snap && !decode_bad ? 0 : 1 }
+' "$ROOT/src/lj_serialize.c"; then
+  :
+else
+  echo "guardrail: serializer table decode array fill must use snapshots" >&2
+  exit 1
+fi
+
+if awk '
+  /if \(!t\) \{/ { inctor = 1; next }
+  inctor && /lj_tab_array_snapshot_acq\(t, &array\)/ { ctor_snap = 1 }
+  inctor && /lj_tab_asize_acq\(t\)/ { ctor_bad = 1 }
+  inctor && /lj_gc_check\(fs->L\)/ { ctor_checked = 1; inctor = 0 }
+  END { exit ctor_checked && ctor_snap && !ctor_bad ? 0 : 1 }
+' "$ROOT/src/lj_parse.c"; then
+  :
+else
+  echo "guardrail: parser template array growth checks must use snapshots" >&2
+  exit 1
+fi
+
 if rg -n 'TValue \*record_array = lj_tab_array_acq\(t\)' \
     "$ROOT/src/lj_record.c"; then
   echo "guardrail: recorder array-shape decisions must snapshot array bounds" >&2

@@ -1853,8 +1853,13 @@ static void expr_table(LexState *ls, ExpDesc *e)
     else if (narr > 0x7ff) narr = 0x7ff;
     setbc_d(ip, narr|(hsize2hbits(nhash)<<11));
   } else {
-    if (needarr && lj_tab_asize_acq(t) < narr)
-      lj_tab_reasize(fs->L, t, narr-1);
+    if (needarr) {
+      TValue *array;
+      MSize asize = lj_tab_array_snapshot_acq(t, &array);
+      UNUSED(array);
+      if (asize < narr)
+	lj_tab_reasize(fs->L, t, narr-1);
+    }
     lj_gc_check(fs->L);
   }
 }
