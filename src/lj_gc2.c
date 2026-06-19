@@ -1527,6 +1527,21 @@ static int gc2_grey_push(global_State *g, GCobj *o);
 static uint32_t gc2_drain_grey(global_State *g, uint32_t limit);
 static void gc2_traverse_udata(global_State *g, GCudata *ud);
 
+static LJ_AINLINE void gc2_queue_slot_store_rel(GCRef *slot, GCobj *o)
+{
+  setgcrefrel(*slot, o);
+}
+
+static LJ_AINLINE GCobj *gc2_queue_slot_load_acq(const GCRef *slot)
+{
+  return gcref_acq(*slot);
+}
+
+static LJ_AINLINE void gc2_queue_slot_clear_rel(GCRef *slot)
+{
+  setgcrefnullrel(*slot);
+}
+
 static int gc2_grey_grow(global_State *g)
 {
   GCRef *oldstack = g->gc2.grey_stack;
@@ -1547,8 +1562,13 @@ static int gc2_grey_grow(global_State *g)
   g->gc2.grey_stack = lj_mem_newvec(L, newcap, GCRef);
   if (oldstack && oldcap) {
     MSize i;
-    for (i = 0; i < count; i++)
-      g->gc2.grey_stack[i] = oldstack[(MSize)((top + i) % oldcap)];
+    for (i = 0; i < count; i++) {
+      GCobj *o = gc2_queue_slot_load_acq(&oldstack[(MSize)((top + i) % oldcap)]);
+      if (o)
+	gc2_queue_slot_store_rel(&g->gc2.grey_stack[i], o);
+      else
+	gc2_queue_slot_clear_rel(&g->gc2.grey_stack[i]);
+    }
     lj_mem_freevec(g, oldstack, oldcap, GCRef);
   }
   g->gc2.grey_capacity = newcap;
@@ -1570,8 +1590,8 @@ static int gc2_grey_push(global_State *g, GCobj *o)
     return 0;
   bottom = la_load64_rlx(&g->gc2.grey_bottom);
   cap = g->gc2.grey_capacity;
-  setgcref(g->gc2.grey_stack[(MSize)(bottom % cap)], o);
-  la_fence_rel();  /* 05 section 5.6.3: publish slot before bottom. */
+  gc2_queue_slot_store_rel(&g->gc2.grey_stack[(MSize)(bottom % cap)], o);
+  /* 05 section 5.6.3: slot release-published before bottom. */
   la_store64_rel(&g->gc2.grey_bottom, bottom + 1);
   la_add64_rlx(&g->gc2.grey_pushed, 1);
   return 1;
@@ -1788,7 +1808,7 @@ static void gc2_weak_record(global_State *g, GCtab *t)
   }
   idx = la_add64_rlx(&g->gc2.weak_count, 1);  /* 05 section 5.8 MPSC slot. */
   if (idx < g->gc2.weak_capacity) {
-    setgcref(g->gc2.weak_stack[(MSize)idx], obj2gco(t));
+    gc2_queue_slot_store_rel(&g->gc2.weak_stack[(MSize)idx], obj2gco(t));
     /* 05 section 5.8: publish weak snapshot slot before ready byte. */
     la_store8_rel(&g->gc2.weak_ready[(MSize)idx], 1);
     la_add64_rlx(&g->gc2.weak_tables_queued, 1);
@@ -1818,7 +1838,7 @@ GCtab *lj_gc2_weak_snapshot_tab(global_State *g, uint32_t idx)
   GCobj *o;
   if (!g || !g->gc2.weak_stack || idx >= lj_gc2_weak_snapshot_count(g))
     return NULL;
-  o = gcref(g->gc2.weak_stack[idx]);
+  o = gc2_queue_slot_load_acq(&g->gc2.weak_stack[idx]);
   return (o && o->gch.gct == ~LJ_TTAB) ? gco2tab(o) : NULL;
 }
 
@@ -2029,7 +2049,7 @@ static int gc2_weak_snapshot_has_tab(global_State *g, GCtab *t, uint32_t n)
 {
   uint32_t i;
   for (i = 0; i < n; i++) {
-    GCobj *o = gcref(g->gc2.weak_stack[i]);
+    GCobj *o = gc2_queue_slot_load_acq(&g->gc2.weak_stack[i]);
     if (o == obj2gco(t))
       return 1;
   }
@@ -2377,7 +2397,7 @@ static GCobj *gc2_grey_pop(global_State *g)
   top = la_load64_acq(&g->gc2.grey_top);
   if (top <= bottom) {
     cap = g->gc2.grey_capacity;
-    o = gcref(g->gc2.grey_stack[(MSize)(bottom % cap)]);
+    o = gc2_queue_slot_load_acq(&g->gc2.grey_stack[(MSize)(bottom % cap)]);
     if (top == bottom) {
       uint64_t expect = top;
       if (!la_cas64(&g->gc2.grey_top, &expect, top + 1,
@@ -2406,7 +2426,7 @@ GCobj *lj_gc2_grey_steal(global_State *g)
   if (top >= bottom)
     return NULL;
   cap = g->gc2.grey_capacity;
-  o = gcref(g->gc2.grey_stack[(MSize)(top % cap)]);
+  o = gc2_queue_slot_load_acq(&g->gc2.grey_stack[(MSize)(top % cap)]);
   expect = top;
   if (!la_cas64(&g->gc2.grey_top, &expect, top + 1,
 		LA_SEQ, LA_ACQ))  /* 05 section 5.6.3 steal claim. */
@@ -2493,8 +2513,8 @@ static int gc2_ssb_push(global_State *g, GCobj *o, int allow_drain)
     if (!next || !end || next == end)
       return 0;
   }
-  setgcref(*next, o);
-  /* 05 section 5.6.2: publish slot before cursor advance. */
+  gc2_queue_slot_store_rel(next, o);
+  /* 05 section 5.6.2: slot release-published before cursor advance. */
   la_storeptr_rel((void **)&tg->ssb_next, next + 1);
   return 1;
 }
@@ -2561,8 +2581,8 @@ static LJ_NOINLINE uint32_t gc2_drain_published_ssb_to_grey(global_State *g,
     GC2SSBNode *next = node->next;
     while (node->n > 0 && nitems < limit) {
       GCRef *slot = &node->slot[node->n - 1u];
-      GCobj *o = gcref(*slot);
-      setgcrefnull(*slot);
+      GCobj *o = gc2_queue_slot_load_acq(slot);
+      gc2_queue_slot_clear_rel(slot);
       node->n--;
       gc2_ssb_mark_one(g, o);
       nitems++;
@@ -2599,8 +2619,8 @@ static uint32_t gc2_drain_active_ssb_to_grey(global_State *g, TGState *tg,
     return 0;
   while (n < limit && next > base) {
     GCRef *slot = next - 1;
-    GCobj *o = gcref(*slot);
-    setgcrefnull(*slot);
+    GCobj *o = gc2_queue_slot_load_acq(slot);
+    gc2_queue_slot_clear_rel(slot);
     gc2_ssb_mark_one(g, o);
     next = slot;
     /* 05 section 5.7.1: publish slot processed before cursor retreat. */

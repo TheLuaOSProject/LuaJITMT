@@ -106,6 +106,9 @@ for needle in \
   'lj_gc2_weak_drain(global_State *g, uint32_t limit)' \
   'lj_gc2_weak_snapshot_covers_legacy(global_State *g' \
   'lj_gc2_weak_legacy_result(global_State *g, int skipped)' \
+  'gc2_queue_slot_store_rel(GCRef *slot, GCobj *o)' \
+  'gc2_queue_slot_load_acq(const GCRef *slot)' \
+  'gc2_queue_slot_clear_rel(GCRef *slot)' \
   'la_store8_rel(&g->gc2.weak_ready' \
   'la_load8_acq(&g->gc2.weak_ready' \
   'la_load64_acq(&g->gc2.weak_count)' \
@@ -272,6 +275,12 @@ do
     exit 1
   fi
 done
+
+if rg -n 'setgcref\(g->gc2\.(grey_stack|weak_stack)|setgcref\(\*next|setgcrefnull\(\*slot|gcref\(g->gc2\.(grey_stack|weak_stack)|gcref\(\*slot\)|g->gc2\.grey_stack\[[^]]+\] = oldstack' \
+    "$ROOT/src/lj_gc2.c"; then
+  echo "guardrail: GC2 queue slots must use acquire/release helpers" >&2
+  exit 1
+fi
 
 for name in t-gc2-phase t-gc2-markbits t-gc2-traverse; do
   out="$TMP/lj_${name}"
