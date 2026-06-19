@@ -270,6 +270,8 @@ Lua test-suite migration notes:
   recorder blacklist regression.
 - Converted `m7_ffi_carith_l` to behavior-only coverage through its Lua
   arithmetic/raw conversion regression.
+- Converted the M7 cdata allocation/read/write cases to behavior-only coverage
+  through their threaded Lua regressions.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.

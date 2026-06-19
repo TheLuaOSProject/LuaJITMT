@@ -344,144 +344,40 @@ return function(add)
 
   add({
     name = "m7_ffi_cdata_alloc",
-    description = "concurrent FFI cdata allocation publication",
+    description = "concurrent FFI cdata allocation behavior",
     run = function(t)
-      t:assert_all_any_contains(source_files(t), {
-        "void lj_gc_linkobj(global_State *g, GCobj *o)",
-        "void *lj_mem_newgco_unlinked(lua_State *L, GCSize size)",
-        "la_cas64(&g->gc.root.gcptr64",
-        "la_cas32(&g->gc.root.gcptr32",
-        "lj_mem_newgco_unlinked(L, sizeof(GCcdata) + sz",
-        "lj_gc_linkobj(g, obj2gco(cd))",
-        "lj_gc_linkobj(g, o);  /* CAS-requeue finalized cdata on root list. */",
-        "lj_gc_linkobj(g, o);  /* CAS-publish closed upvalue on root list. */",
-        "lj_gc_linkobj(g, obj2gco(T));  /* CAS-publish root after body init. */",
-        "lj_cdata_new_(L, CTID_CTYPEID, 4)"
-      })
-      assert_no_lines(t, "runtime root-list publication must use lj_gc_linkobj()",
-                      {
-                        t:path("src", "lj_gc.c"),
-                        t:path("src", "lj_trace.c")
-                      }, function(line)
-        return line_contains_any(line, {
-          "setgcref(g->gc.root",
-          "setgcrefp(J2G(J)->gc.root",
-          "lj_obj_setgcwr(o, g->gc.root",
-          "lj_obj_setgcwr(obj2gco(T), J2G(J)->gc.root"
-        })
-      end)
       clean_build(t)
       run_luajit_script(t, "t-ffi-cdata-alloc.lua", {
         getenv("LJ_M7_FFI_CDATA_THREADS", "6"),
         getenv("LJ_M7_FFI_CDATA_ITERS", "400")
       }, { joff = true })
-      print("M7 FFI cdata allocation guard passed")
+      print("M7 FFI cdata allocation behavior passed")
     end
   })
 
   add({
     name = "m7_ffi_cdata_get_l",
-    description = "FFI cdata read paths pass active lua_State explicitly",
+    description = "FFI cdata read behavior",
     run = function(t)
-      local src = source_files(t)
-      t:assert_all_any_contains(src, {
-        "lj_cdata_newref_l(lua_State *L, CTState *cts",
-        "lj_cdata_index_l(lua_State *L, CTState *cts",
-        "lj_cdata_get_l(lua_State *L, CTState *cts",
-        "lj_cconv_tv_ct_l(lua_State *L, CTState *cts",
-        "lj_cconv_tv_bf_l(lua_State *L, CTState *cts",
-        "L2TG(L)->tmptv2",
-        "lj_cdata_index_l(L, cts",
-        "lj_cdata_get_l(L, cts",
-        "lj_cconv_tv_ct_l(L, cts, ct, sid",
-        "lj_cconv_tv_ct_l(L, cts, ctr",
-        "lj_cconv_tv_ct_l(L, cts, cta"
-      })
-      assert_no_lines(t, "active-L FFI conversion call site still uses cts->L wrapper",
-                      {
-                        t:path("src", "lib_ffi.c"),
-                        t:path("src", "lj_ccall.c"),
-                        t:path("src", "lj_ccallback.c")
-                      }, function(line)
-        return contains(line, "lj_cconv_tv_ct(cts")
-      end)
-      assert_no_lines(t, "read-side FFI conversion wrappers must stay explicit-L only",
-                      src, function(line)
-        return line_contains_any(line, {
-          "lj_cdata_newref(CTState",
-          "lj_cdata_index(CTState",
-          "lj_cdata_get(CTState",
-          "lj_cconv_tv_ct(CTState",
-          "lj_cconv_tv_bf(CTState"
-        })
-      end)
       clean_build(t)
       run_luajit_script(t, "t-ffi-cdata-get-l.lua", {
         getenv("LJ_M7_FFI_GET_THREADS", "6"),
         getenv("LJ_M7_FFI_GET_ITERS", "400")
       }, { joff = true })
-      print("M7 FFI cdata explicit-L read guard passed")
+      print("M7 FFI cdata read behavior passed")
     end
   })
 
   add({
     name = "m7_ffi_cdata_set_l",
-    description = "FFI write paths pass active lua_State explicitly",
+    description = "FFI write behavior",
     run = function(t)
-      local src = source_files(t)
-      t:assert_all_any_contains(src, {
-        "lj_cconv_ct_ct_l(lua_State *L, CTState *cts, CType *d,",
-        "CTypeID did, CType *s, CTypeID sid",
-        "lj_cconv_ct_tv_l(lua_State *L, CTState *cts, CType *d,",
-        "CTypeID did, uint8_t *dp",
-        "lj_cconv_bf_tv_l(lua_State *L, CTState *cts",
-        "lj_cconv_ct_init_l(lua_State *L, CTState *cts",
-        "lj_cdata_set_l(lua_State *L, CTState *cts, CType *d, CTypeID did",
-        "cconv_err_convtv_l(lua_State *L",
-        "cconv_err_initov_l(lua_State *L",
-        "lj_cdata_set_l(L, cts, ct, id",
-        "lj_cconv_ct_init_l(L, cts",
-        "lj_cconv_ct_tv_l(L, cts, d, did",
-        "lj_cconv_bf_tv_l(L, cts",
-        "lj_cconv_ct_tv_l(L, cts, ctr, rid",
-        "ccall_struct_arg(cc, L, cts, d, did"
-      })
-      assert_no_lines(t, "write-side FFI conversion wrappers must stay explicit-L only",
-                      src, function(line)
-        return line_contains_any(line, {
-          "lj_cconv_ct_tv(CTState",
-          "lj_cconv_bf_tv(CTState",
-          "lj_cconv_ct_init(CTState",
-          "lj_cdata_set(CTState"
-        })
-      end)
-      assert_no_lines(t, "active-L FFI write call site still uses cts->L wrapper",
-                      {
-                        t:path("src", "lib_ffi.c"),
-                        t:path("src", "lib_base.c"),
-                        t:path("src", "lib_buffer.c"),
-                        t:path("src", "lib_bit.c"),
-                        t:path("src", "lj_ccall.c"),
-                        t:path("src", "lj_ccallback.c"),
-                        t:path("src", "lj_cdata.c"),
-                        t:path("src", "lj_cconv.c")
-                      }, function(line)
-        return line_contains_any(line, {
-          "lj_cconv_ct_tv(cts",
-          "lj_cconv_bf_tv(cts",
-          "lj_cconv_ct_init(cts",
-          "lj_cdata_set(cts"
-        })
-      end)
-      local conv = t:c_block(t:path("src", "lj_cconv.c"),
-                             "void lj_cconv_ct_tv_l(lua_State *L, CTState *cts, CType *d,")
-      assert_text_not_contains("lj_cconv_ct_tv_l", conv, "ctype_typeid(cts, d)")
       clean_build(t)
       run_luajit_script(t, "t-ffi-cdata-set-l.lua", {
         getenv("LJ_M7_FFI_SET_THREADS", "6"),
         getenv("LJ_M7_FFI_SET_ITERS", "320")
       }, { joff = true })
-      print("M7 FFI cdata explicit-L write guard passed")
+      print("M7 FFI cdata write behavior passed")
     end
   })
 
