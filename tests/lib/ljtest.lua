@@ -167,6 +167,13 @@ function Test:assert_not_contains(path, needle)
   end
 end
 
+function Test:assert_not_match(path, pattern, label)
+  local data = read_file(path)
+  if data:find(pattern) then
+    error(path .. ": forbidden pattern present: " .. (label or pattern), 2)
+  end
+end
+
 function Test:assert_ordered(path, needles)
   local data = read_file(path)
   local pos = 1

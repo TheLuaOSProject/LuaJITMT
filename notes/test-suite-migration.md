@@ -14,10 +14,20 @@ Lua test-suite migration notes:
   - `tools/ci/m2_arena_alloc.sh` -> `m2_arena_alloc`
   - `tools/ci/m4_threading_smoke.sh` -> `m4_threading_smoke`
   - `tools/ci/m5_tab_emptyhash.sh` -> `m5_tab_emptyhash`
+- Second migrated scripts:
+  - `tools/ci/m4_threading_litmus.sh` -> `m4_threading_litmus`
+  - `tools/ci/m4_threading_stress.sh` -> `m4_threading_stress`
+  - `tools/ci/m4_threading_upvalue.sh` -> `m4_threading_upvalue`
+  - `tools/ci/m5_math_random_tg.sh` -> `m5_math_random_tg`
+  - `tools/ci/m5_parser_capture_meta.sh` -> `m5_parser_capture_meta`
 - This first batch covers the main shapes the full migration needs:
   standalone C fixtures linked against selected runtime files, Lua tests under
   the built VM, C fixtures linked against `libluajit.a`, and source-order guard
   checks previously written in shell/awk/rg.
+- The second batch adds repeated Lua child-process tests with environment
+  defaults and an assertion-build marker guard. `ljtest.assert_not_match()`
+  exists for exact shell-regex parity where a plain substring check would be
+  weaker, e.g. rejecting `#if%s+LJ_MT`.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.
