@@ -2135,6 +2135,13 @@ void lj_gc_barrierf(global_State *g, GCobj *o, GCobj *v)
     makewhite(g, o);  /* Make it white to avoid the following barrier. */
 }
 
+/* VM-callable table black-to-gray repair. */
+void lj_gc_barrierback_tab_g(global_State *g, GCtab *t)
+{
+  if (g && t && isblack(obj2gco(t)))
+    lj_gc_barrierback(g, t);
+}
+
 /* Publication wrapper for x64 VM table -> object stores. */
 void lj_gc_pubtabobj_vm(lua_State *L, GCtab *t, GCobj *o)
 {

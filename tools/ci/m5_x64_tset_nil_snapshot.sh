@@ -68,6 +68,15 @@ for needle in \
   'call extern lj_meta_tsettv_pair' \
   'call extern lj_tab_storetv' \
   'call extern lj_tab_storetvn' \
+  'call extern lj_gc_barrierback_tab_g' \
+  '->BC_TSETV_RETRY:' \
+  '->BC_TSETB_RETRY:' \
+  '->BC_TSETR_RETRY:' \
+  '->BC_TSETM_RETRY:' \
+  'jmp ->BC_TSETV_RETRY' \
+  'jmp ->BC_TSETB_RETRY' \
+  'jmp ->BC_TSETR_RETRY' \
+  'jmp ->BC_TSETM_RETRY' \
   'jmp ->vm_gc2_barriertv_tab' \
   'jmp ->vm_gc2_barriertvn' \
   'jmp ->vm_gc2_barriertab' \
@@ -75,7 +84,7 @@ for needle in \
   'call extern lj_gc2_barrier_tvn_pair_g' \
   't-x64-tset-forward OK'
 do
-  if ! rg -F -q "$needle" "$ROOT/src/vm_x64.dasc" \
+  if ! rg -F -q -- "$needle" "$ROOT/src/vm_x64.dasc" \
       "$ROOT/tests/t-x64-tset-forward.c"; then
     echo "guardrail: missing x64 TSET nil snapshot marker: $needle" >&2
     exit 1
@@ -87,10 +96,12 @@ for reject in \
   'cmp aword [TMPR], LJ_TNIL' \
   'call extern lj_meta_tset		// (lua_State *L, TValue *o, TValue *k)' \
   'call extern lj_gc2_barrier_tv_g' \
+  '.macro barrierback' \
+  'barrierback TAB:RB' \
   'mov [RC], RB' \
   'mov [RC], ITYPE'
 do
-  if rg -F -n "$reject" "$ROOT/src/vm_x64.dasc"; then
+  if rg -F -n -- "$reject" "$ROOT/src/vm_x64.dasc"; then
     echo "guardrail: x64 TSET nil decisions must load slot snapshots first: $reject" >&2
     exit 1
   fi
@@ -180,6 +191,15 @@ storetv_count=$(awk '
 ' "$ROOT/src/vm_x64.dasc")
 if [ "$storetv_count" -ne 3 ]; then
   echo "guardrail: x64 TSET fast paths must publish via lj_tab_storetv" >&2
+  exit 1
+fi
+
+barrierback_call_count=$(awk '
+  /call extern lj_gc_barrierback_tab_g[[:space:]]*\/\/ \(global_State \*g, GCtab \*t\)/ { n++ }
+  END { print n + 0 }
+' "$ROOT/src/vm_x64.dasc")
+if [ "$barrierback_call_count" -ne 4 ]; then
+  echo "guardrail: x64 TSET black-table repairs must call lj_gc_barrierback_tab_g for V/B/R/M" >&2
   exit 1
 fi
 

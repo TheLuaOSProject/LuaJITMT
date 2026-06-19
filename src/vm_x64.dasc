@@ -398,15 +398,6 @@
 |  sseconst_hi reg, tmp, 43380000
 |.endmacro
 |
-|// Move table write barrier back. Overwrites reg.
-|.macro barrierback, tab, reg
-|  and byte tab->marked, (uint8_t)~LJ_GC_BLACK	// black2gray(tab)
-|  load_G ITYPE
-|  mov reg, GL:ITYPE->gc.grayagain
-|  mov GL:ITYPE->gc.grayagain, tab
-|  mov tab->gclist, reg
-|.endmacro
-|
 |//-----------------------------------------------------------------------
 
 /* Generate subroutines used by opcodes and other parts of the VM. */
@@ -4277,6 +4268,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 
   case BC_TSETV:
     |  ins_ABC	// RA = src, RB = table, RC = key
+    |->BC_TSETV_RETRY:
     |  mov TAB:RB, [BASE+RB*8]
     |  mov RC, [BASE+RC*8]
     |  checktab TAB:RB, ->vmeta_tsetv
@@ -4345,8 +4337,19 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  jmp ->BC_TSETS_Z
     |
     |7:  // Possible table write barrier for the value. Skip valiswhite check.
-    |  barrierback TAB:RB, TMPR
-    |  jmp <2
+    |.if not X64WIN
+    |  mov CARG2, TAB:RB
+    |  mov RB, BASE			// Save BASE.
+    |.else
+    |  xchg CARG2, RB			// Save BASE (CARG2 == BASE).
+    |.endif
+    |  load_G CARG1
+    |  call extern lj_gc_barrierback_tab_g	// (global_State *g, GCtab *t)
+    |  mov BASE, RB			// Restore BASE.
+    |  movzx RAd, PC_RA
+    |  movzx RBd, PC_RB
+    |  movzx RCd, PC_RC
+    |  jmp ->BC_TSETV_RETRY
     break;
   case BC_TSETS:
     |  ins_ABC	// RA = src, RB = table, RC = str const (~)
@@ -4359,6 +4362,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     break;
   case BC_TSETB:
     |  ins_ABC	// RA = src, RB = table, RC = byte literal
+    |->BC_TSETB_RETRY:
     |  mov TAB:RB, [BASE+RB*8]
     |  checktab TAB:RB, ->vmeta_tsetb
     |  mov TMPR, TAB:RB->array
@@ -4408,11 +4412,23 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  jmp <1
     |
     |7:  // Possible table write barrier for the value. Skip valiswhite check.
-    |  barrierback TAB:RB, TMPR
-    |  jmp <2
+    |.if not X64WIN
+    |  mov CARG2, TAB:RB
+    |  mov RB, BASE			// Save BASE.
+    |.else
+    |  xchg CARG2, RB			// Save BASE (CARG2 == BASE).
+    |.endif
+    |  load_G CARG1
+    |  call extern lj_gc_barrierback_tab_g	// (global_State *g, GCtab *t)
+    |  mov BASE, RB			// Restore BASE.
+    |  movzx RAd, PC_RA
+    |  movzx RBd, PC_RB
+    |  movzx RCd, PC_RC
+    |  jmp ->BC_TSETB_RETRY
     break;
   case BC_TSETR:
     |  ins_ABC	// RA = src, RB = table, RC = key
+    |->BC_TSETR_RETRY:
     |  mov TAB:RB, [BASE+RB*8]
     |  cleartp TAB:RB
     |.if DUALNUM
@@ -4461,12 +4477,24 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ins_next
     |
     |7:  // Possible table write barrier for the value. Skip valiswhite check.
-    |  barrierback TAB:RB, TMPR
-    |  jmp <2
+    |.if not X64WIN
+    |  mov CARG2, TAB:RB
+    |  mov RB, BASE			// Save BASE.
+    |.else
+    |  xchg CARG2, RB			// Save BASE (CARG2 == BASE).
+    |.endif
+    |  load_G CARG1
+    |  call extern lj_gc_barrierback_tab_g	// (global_State *g, GCtab *t)
+    |  mov BASE, RB			// Restore BASE.
+    |  movzx RAd, PC_RA
+    |  movzx RBd, PC_RB
+    |  movzx RCd, PC_RC
+    |  jmp ->BC_TSETR_RETRY
     break;
 
   case BC_TSETM:
     |  ins_AD	// RA = base (table at base-1), RD = num const (start index)
+    |->BC_TSETM_RETRY:
     |1:
     |  mov TMPRd, dword [KBASE+RD*8]	// Integer constant is in lo-word.
     |  lea RA, [BASE+RA*8]
@@ -4520,8 +4548,18 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  jmp <1				// Retry.
     |
     |7:  // Possible table write barrier for any value. Skip valiswhite check.
-    |  barrierback TAB:RB, RD
-    |  jmp <2
+    |.if not X64WIN
+    |  mov CARG2, TAB:RB
+    |  mov RB, BASE			// Save BASE.
+    |.else
+    |  xchg CARG2, RB			// Save BASE (CARG2 == BASE).
+    |.endif
+    |  load_G CARG1
+    |  call extern lj_gc_barrierback_tab_g	// (global_State *g, GCtab *t)
+    |  mov BASE, RB			// Restore BASE.
+    |  movzx RAd, PC_RA
+    |  movzx RDd, PC_RD
+    |  jmp ->BC_TSETM_RETRY
     break;
 
   /* -- Calls and vararg handling ----------------------------------------- */
