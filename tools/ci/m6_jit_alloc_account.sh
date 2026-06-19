@@ -45,6 +45,8 @@ for needle in \
   'la_store64_rel(&g->gc2.hard_bytes' \
   'la_cas32(&g->gc2.assist_active' \
   'tg->gc_assist = 1' \
+  'lj_gc_step_top(lua_State *L)' \
+  'call extern lj_gc_step_top' \
   'legacy_step = g->gc.total >= lj_gc_threshold_load(g)' \
   'la_add64_rlx(&g->gc2.assist_runs' \
   'la_add64_rlx(&g->gc2.interp_hard_checks' \
@@ -83,8 +85,8 @@ done
 
 vm_hard_alloc_checks=$(grep -F -c 'GL:ITYPE->gc2.alloc_since_trigger' \
   "$ROOT/src/vm_x64.dasc")
-if [ "$vm_hard_alloc_checks" -lt 2 ]; then
-  echo "guardrail: x64 TNEW/TDUP must check GC2 hard allocation threshold" >&2
+if [ "$vm_hard_alloc_checks" -lt 3 ]; then
+  echo "guardrail: x64 TNEW/TDUP/ffgccheck must check GC2 hard allocation threshold" >&2
   exit 1
 fi
 

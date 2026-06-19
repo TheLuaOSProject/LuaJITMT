@@ -235,6 +235,8 @@ the current legacy VM threshold check branches there, with
 `GC2State.interp_hard_checks` telemetry. `lj_gc_step_fixtop()` now also splits
 GC2-hard and legacy-threshold work, and x64 `BC_TNEW`/`BC_TDUP` branch to that
 slow path when `GC2State.alloc_since_trigger` exceeds `hard_bytes`, even with
-the legacy threshold parked at `LJ_MAX_MEM`. The direct x64
+the legacy threshold parked at `LJ_MAX_MEM`. The x64 fast-function
+`ffgccheck` path has the same GC2 hard-threshold branch and calls
+`lj_gc_step_top()` after publishing its precomputed stack top. The direct x64
 `gc.total`/`gc.threshold` branch remains as the legacy half of this staged entry
 point until §7.5 inline allocation replaces it.

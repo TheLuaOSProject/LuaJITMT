@@ -2092,13 +2092,8 @@ int LJ_FASTCALL lj_gc_step(lua_State *L)
   }
 }
 
-/* Ditto, but fix the stack top first. */
-void LJ_FASTCALL lj_gc_step_fixtop(lua_State *L)
+static void gc_step_assist_top(lua_State *L, global_State *g, int legacy_step)
 {
-  global_State *g = G(L);
-  int legacy_step;
-  if (curr_funcisL(L)) L->top = curr_topL(L);
-  legacy_step = g->gc.total >= lj_gc_threshold_load(g);
   if (la_load64_acq(&g->gc2.alloc_since_trigger) >
       la_load64_acq(&g->gc2.hard_bytes)) {
     la_add64_rlx(&g->gc2.interp_hard_checks, 1);
@@ -2106,6 +2101,21 @@ void LJ_FASTCALL lj_gc_step_fixtop(lua_State *L)
   }
   if (legacy_step)
     lj_gc_step(L);
+}
+
+/* Ditto, but fix the stack top first. */
+void LJ_FASTCALL lj_gc_step_fixtop(lua_State *L)
+{
+  global_State *g = G(L);
+  if (curr_funcisL(L)) L->top = curr_topL(L);
+  gc_step_assist_top(L, g, g->gc.total >= lj_gc_threshold_load(g));
+}
+
+/* Ditto, but use an already fixed stack top. */
+void LJ_FASTCALL lj_gc_step_top(lua_State *L)
+{
+  global_State *g = G(L);
+  gc_step_assist_top(L, g, g->gc.total >= lj_gc_threshold_load(g));
 }
 
 #if LJ_HASJIT

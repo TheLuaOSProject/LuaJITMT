@@ -1253,12 +1253,18 @@ static void build_subroutines(BuildCtx *ctx)
   |  movsd xmm1, qword [BASE+8]
   |.endmacro
   |
-  |// Inlined GC threshold check. Caveat: uses label 1.
+  |// Inlined GC threshold check. Caveat: uses labels 1 and 9.
   |.macro ffgccheck
   |  load_G ITYPE
   |  mov RB, GL:ITYPE->gc.total
   |  cmp RB, GL:ITYPE->gc.threshold
-  |  jb >1
+  |  jb >9
+  |  call ->fff_gcstep
+  |  jmp >1
+  |9:
+  |  mov RB, GL:ITYPE->gc2.alloc_since_trigger
+  |  cmp RB, GL:ITYPE->gc2.hard_bytes
+  |  jbe >1
   |  call ->fff_gcstep
   |1:
   |.endmacro
@@ -1429,7 +1435,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  load_G TMPR
   |  cmp aword [TMPR+GL_OFS(gcroot[GCROOT_BASEMT_NUM])], 0
   |  jne ->fff_fallback
-  |  ffgccheck				// Caveat: uses label 1.
+  |  ffgccheck				// Caveat: uses labels 1 and 9.
   |  mov L:RB, SAVE_L
   |  mov L:RB->base, BASE		// Add frame since C call can throw.
   |  mov SAVE_PC, PC			// Redundant (but a defined value).
@@ -2362,7 +2368,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  lea RD, [BASE+NARGS:RD*8-8]
   |  mov CARG1, L:RB
   |  mov L:RB->top, RD
-  |  call extern lj_gc_step		// (lua_State *L)
+  |  call extern lj_gc_step_top		// (lua_State *L)
   |  mov BASE, L:RB->base
   |  mov RD, L:RB->top
   |  sub RD, BASE

@@ -81,6 +81,7 @@ LJ_FUNC void lj_gc_linkobj_after(GCobj *anchor, GCobj *o);
 LJ_FUNC void *lj_mem_newgco_unlinked(lua_State *L, GCSize size);
 LJ_FUNCA int LJ_FASTCALL lj_gc_step(lua_State *L);
 LJ_FUNCA void LJ_FASTCALL lj_gc_step_fixtop(lua_State *L);
+LJ_FUNCA void LJ_FASTCALL lj_gc_step_top(lua_State *L);
 #if LJ_HASJIT
 LJ_FUNC int LJ_FASTCALL lj_gc_step_jit(global_State *g, MSize steps);
 #endif

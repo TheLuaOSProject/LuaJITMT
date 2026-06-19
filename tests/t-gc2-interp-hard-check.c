@@ -85,6 +85,39 @@ static void test_hard_only_helper(lua_State *L, global_State *g)
   finish_gc2_mark(g);
 }
 
+static void test_hard_only_fastfunc(lua_State *L, global_State *g)
+{
+  uint64_t interp_checks0, assist_runs0;
+  uint8_t legacy_state0;
+
+  load_lua(L,
+    "local x = string.char(65)\n"
+    "assert(x == 'A')\n");
+  legacy_state0 = g->gc.state;
+  arm_gc2_hard_mark(g);
+  interp_checks0 = la_load64_acq(&g->gc2.interp_hard_checks);
+  assist_runs0 = la_load64_acq(&g->gc2.assist_runs);
+
+  call_lua(L);
+
+  if (la_load64_acq(&g->gc2.interp_hard_checks) <= interp_checks0) {
+    fputs("hard-only fast function did not enter the GC2 hard check\n",
+	  stderr);
+    assert(0);
+  }
+  if (la_load64_acq(&g->gc2.assist_runs) <= assist_runs0) {
+    fputs("hard-only fast function did not run the GC2 hard assist\n",
+	  stderr);
+    assert(0);
+  }
+  if (g->gc.state != legacy_state0) {
+    fprintf(stderr, "hard-only fast function moved legacy GC state %u -> %u\n",
+	    (unsigned)legacy_state0, (unsigned)g->gc.state);
+    assert(0);
+  }
+  finish_gc2_mark(g);
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -148,6 +181,7 @@ int main(void)
   }
   finish_gc2_mark(g);
 
+  test_hard_only_fastfunc(L, g);
   test_hard_only_helper(L, g);
   lua_close(L);
   puts("t-gc2-interp-hard-check OK: interpreter hard checks enter GC2 assist");
