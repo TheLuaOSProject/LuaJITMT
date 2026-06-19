@@ -1,4 +1,13 @@
 return function(add)
+  local function build_and_run_c_fixture(t, out, cfile)
+    t:build({ clean = true, quiet = true })
+    t:cc(out, { t:path("tests", cfile) }, {
+      link_luajit = true,
+      libs = { "-lm", "-ldl", "-pthread" }
+    })
+    t:run({ out })
+  end
+
   local function build_and_run(name, script, env)
     add({
       name = name,
@@ -28,6 +37,51 @@ return function(add)
 
       t:build({ clean = true, quiet = true })
       t:luajit({ "-joff", t:path("tests", "t-threading-api.lua") })
+    end
+  })
+
+  add({
+    name = "m4_thr_substrate",
+    description = "focused M4 thread substrate C fixture",
+    run = function(t)
+      build_and_run_c_fixture(t, t:tmp("lj_t-thr-substrate"),
+                              "t-thr-substrate.c")
+      print("M4 thread substrate tests passed")
+    end
+  })
+
+  add({
+    name = "m4_chan_stress",
+    description = "focused M4 channel substrate stress C fixture",
+    run = function(t)
+      build_and_run_c_fixture(t, t:tmp("lj_t-chan-stress"),
+                              "t-chan-stress.c")
+      print("M4 channel stress tests passed")
+    end
+  })
+
+  add({
+    name = "m4_threading_capi",
+    description = "public C threading API fixture and shutdown markers",
+    run = function(t)
+      t:assert_all_any_contains({
+        t:path("src", "lib_threading.c"),
+        t:path("src", "lj_obj.h"),
+        t:path("src", "lj_tg.c"),
+        t:path("tests", "t-threading-capi.c")
+      }, {
+        "mt_shutdown",
+        "la_futex_wait(&g->mt_live",
+        "la_futex_wake(&g->mt_live",
+        "lj_safepoint_ack(thread_L)",
+        "attached thread is not joinable",
+        "lua_close returned before attached thread detached",
+        "luaMT_join rooted table was not preserved"
+      })
+
+      build_and_run_c_fixture(t, t:tmp("lj_t-threading-capi"),
+                              "t-threading-capi.c")
+      print("M4 public C threading API tests passed")
     end
   })
 

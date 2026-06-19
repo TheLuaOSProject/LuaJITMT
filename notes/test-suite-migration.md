@@ -43,6 +43,10 @@ Lua test-suite migration notes:
   - `tools/ci/m5_jit_profile_publish.sh` -> `m5_jit_profile_publish`
   - `tools/ci/m5_table_parser_publish.sh` -> `m5_table_parser_publish`
   - `tools/ci/m5_tmpbuf_tg.sh` -> `m5_tmpbuf_tg`
+- Sixth migrated scripts:
+  - `tools/ci/m4_thr_substrate.sh` -> `m4_thr_substrate`
+  - `tools/ci/m4_chan_stress.sh` -> `m4_chan_stress`
+  - `tools/ci/m4_threading_capi.sh` -> `m4_threading_capi`
 - This first batch covers the main shapes the full migration needs:
   standalone C fixtures linked against selected runtime files, Lua tests under
   the built VM, C fixtures linked against `libluajit.a`, and source-order guard
@@ -63,6 +67,9 @@ Lua test-suite migration notes:
   metamethod snapshot, jit attach/profile CAS, table/parser release-store, and
   per-TG tmpbuf checks. `ljtest.files()` provides deterministic source file
   enumeration for guard suites without shell `rg`/`awk` predicates.
+- The sixth batch migrates the remaining non-TSan M4 C fixtures. These keep the
+  original clean-build/link-against-`libluajit.a` behavior and preserve the C
+  threading API shutdown marker guard in Lua.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.
