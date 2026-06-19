@@ -125,6 +125,9 @@ int main(void)
     "m7_auto_keep_cb = cb\n");
   assert(saved_cb != NULL);
   assert(saved_owner != NULL);
+  dostring(L, "collectgarbage('collect')\ncollectgarbage('collect')\n");
+  assert(slot_owner() == saved_owner);
+  assert(saved_owner->tg_hint == NULL);
 
   ctx.status = 99;
   ctx.result = 0;
