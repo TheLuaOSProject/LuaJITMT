@@ -95,6 +95,44 @@ do
   fi
 done
 
+for needle in \
+  'lj_obj_setgcwrel(GCobj *o, const GCobj *next)' \
+  'lj_uv_next_acq(const GCupval *uv)' \
+  'lj_uv_setnext_rel(GCupval *uv, GCupval *next)'
+do
+  if ! rg -F -q "$needle" "$ROOT/src/lj_obj.h"; then
+    echo "guardrail: missing open-upvalue list publication helper: $needle" >&2
+    exit 1
+  fi
+done
+
+for needle in \
+  'lj_obj_setgcwrel(obj2gco(uv), next);' \
+  'setgcrefrel(*pp, obj2gco(uv));' \
+  'setgcrefrel(L->openupval, lj_obj_gcw_acq(o));' \
+  'lj_uv_setnext_rel(&g->uvhead, uv);' \
+  'gcref_acq(L->openupval)' \
+  'gcref_acq(th->openupval)' \
+  'gcref_acq(J->L->openupval)' \
+  'lj_obj_gcw_acq(up)' \
+  'lj_obj_gcw_acq(uv)'
+do
+  if ! rg -F -q "$needle" "$ROOT/src/lj_func.c" "$ROOT/src/lj_gc.c" \
+      "$ROOT/src/lj_gc2.c" "$ROOT/src/lj_state.c" \
+      "$ROOT/src/lib_threading.c" "$ROOT/src/lj_snap.c"; then
+    echo "guardrail: missing open-upvalue acquire/release marker: $needle" >&2
+    exit 1
+  fi
+done
+
+if rg -n 'gcref\([^)]*openupval|gcnext\((uv|up)\)|uvnext\(|uvprev\(|setgcref\(\*pp|setgcrefr\(L->openupval|setgcref\(g->uvhead|setgcref\(uv->(prev|next)' \
+    "$ROOT/src/lj_func.c" "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc2.c" \
+    "$ROOT/src/lj_state.c" "$ROOT/src/lib_threading.c" \
+    "$ROOT/src/lj_snap.c"; then
+  echo "guardrail: open-upvalue lists must use acquire/release helpers" >&2
+  exit 1
+fi
+
 if ! awk '
   /void LJ_FASTCALL lj_gc_pubuv/ { infn = 1; next }
   infn && /lj_gc2_barrier_uv\(g,|tviswhite\(tv\)|gcV\(tv\)/ {

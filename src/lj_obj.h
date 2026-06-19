@@ -1620,6 +1620,31 @@ static LJ_AINLINE void setgcrefnullrel_(GCRef *r)
 #define setgcrefroot(r, gc)	setgcrefrel((r), (gc))
 #define setgcrefmt(r, gc)	setgcrefrel((r), (gc))
 
+static LJ_AINLINE void lj_obj_setgcwrel(GCobj *o, const GCobj *next)
+{
+  setgcrefrel(o->gch.nextgc, next);
+}
+
+static LJ_AINLINE GCupval *lj_uv_prev_acq(const GCupval *uv)
+{
+  return &gcref_acq(uv->prev)->uv;
+}
+
+static LJ_AINLINE GCupval *lj_uv_next_acq(const GCupval *uv)
+{
+  return &gcref_acq(uv->next)->uv;
+}
+
+static LJ_AINLINE void lj_uv_setprev_rel(GCupval *uv, GCupval *prev)
+{
+  setgcrefrel(uv->prev, obj2gco(prev));
+}
+
+static LJ_AINLINE void lj_uv_setnext_rel(GCupval *uv, GCupval *next)
+{
+  setgcrefrel(uv->next, obj2gco(next));
+}
+
 /* -- TValue getters/setters ---------------------------------------------- */
 
 /* Macros to test types. */

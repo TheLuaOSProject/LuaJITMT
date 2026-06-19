@@ -192,7 +192,8 @@ static void gc_arena_verify_sweep_boundary(global_State *g)
     gc_arena_verify_marked(g, o);
     if (o->gch.gct == ~LJ_TTHREAD) {
       GCobj *uv;
-      for (uv = gcref(gco2th(o)->openupval); uv != NULL; uv = gcnext(uv))
+      for (uv = gcref_acq(gco2th(o)->openupval); uv != NULL;
+	   uv = lj_obj_gcw_acq(uv))
 	gc_arena_verify_marked(g, uv);
     }
   }
@@ -254,7 +255,7 @@ static void gc2_paranoia_checkthread(global_State *g, lua_State *th)
     return;
   gc2_paranoia_checkobj(g, obj2gco(th), "thread");
   gc2_paranoia_checkmem(g, tvref(th->stack), "thread stack");
-  for (uv = gcref(th->openupval); uv != NULL; uv = gcnext(uv))
+  for (uv = gcref_acq(th->openupval); uv != NULL; uv = lj_obj_gcw_acq(uv))
     gc2_paranoia_checkobj(g, uv, "open upvalue");
 }
 
@@ -717,8 +718,10 @@ static void gc_mark_start(global_State *g)
 static void gc_mark_uv(global_State *g)
 {
   GCupval *uv;
-  for (uv = uvnext(&g->uvhead); uv != &g->uvhead; uv = uvnext(uv)) {
-    lj_assertG(uvprev(uvnext(uv)) == uv && uvnext(uvprev(uv)) == uv,
+  for (uv = lj_uv_next_acq(&g->uvhead); uv != &g->uvhead;
+       uv = lj_uv_next_acq(uv)) {
+    lj_assertG(lj_uv_prev_acq(lj_uv_next_acq(uv)) == uv &&
+	       lj_uv_next_acq(lj_uv_prev_acq(uv)) == uv,
 	       "broken upvalue chain");
     if (isgray(obj2gco(uv))) {
       TValue tv;

@@ -356,7 +356,8 @@ static void threading_rehome_unstarted_stack(lua_State *L, lua_State *L1,
   setmref(L1->maxstack, (TValue *)((char *)tvref(L1->maxstack) + delta));
   L1->base = (TValue *)((char *)L1->base + delta);
   L1->top = (TValue *)((char *)L1->top + delta);
-  for (up = gcref(L1->openupval); up != NULL; up = gcnext(up))
+  for (up = gcref_acq(L1->openupval); up != NULL;
+       up = lj_obj_gcw_acq(up))
     setmref(gco2uv(up)->v, (TValue *)((char *)uvval(gco2uv(up)) + delta));
   g->gc.total -= (GCSize)sz;
   (void)lj_arena_allocf(&tg->allocd, oldst, sz, 0);
