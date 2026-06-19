@@ -1362,9 +1362,64 @@ LJ_FUNCA TValue *lj_tab_storetv(lua_State *L, TValue *dst, cTValue *src)
   return dst;
 }
 
+static LJ_AINLINE int tab_ptr_index(uintptr_t base, uintptr_t elem,
+				    size_t elemsz, MSize count, MSize *idx)
+{
+  uintptr_t end = base + (uintptr_t)count * elemsz;
+  if (elem >= base && elem < end && (elem - base) % elemsz == 0) {
+    *idx = (MSize)((elem - base) / elemsz);
+    return 1;
+  }
+  return 0;
+}
+
+static TValue *tab_forwarded_jit_array_slot(lua_State *L, GCtab *parent,
+					    TValue *dst)
+{
+  TValue val, *array;
+  MSize asize, idx;
+  lj_tv_load_acq(&val, dst);
+  if (!tvisforward(&val))
+    return dst;
+  asize = lj_tab_array_snapshot_acq(parent, &array);
+  if (tab_ptr_index((uintptr_t)array, (uintptr_t)dst, sizeof(TValue),
+		    asize, &idx) &&
+      lj_tab_array_forward_hop(parent, &array, &asize)) {
+    if (idx < asize)
+      return &array[idx];
+    return lj_tab_setinth(L, parent, (int32_t)idx);
+  }
+  return dst;
+}
+
+static TValue *tab_forwarded_jit_hash_slot(GCtab *parent, TValue *dst,
+					   TValue *keycopy, cTValue **keyp)
+{
+  TValue val;
+  Node *node, *n;
+  MSize hmask, idx;
+  lj_tv_load_acq(&val, dst);
+  if (!tvisforward(&val))
+    return dst;
+  node = lj_tab_node_snapshot_acq(parent, &hmask);
+  if (!tab_ptr_index((uintptr_t)node, (uintptr_t)dst, sizeof(Node),
+		     hmask + 1u, &idx))
+    return dst;
+  n = &node[idx];
+  lj_tv_load_acq(keycopy, &n->key);
+  if (tab_key_islocked(keycopy) || tvisnil(keycopy))
+    return dst;
+  *keyp = keycopy;
+  {
+    TValue *slot = tab_forwarded_setslot(parent, &node, &hmask, keycopy);
+    return slot ? slot : dst;
+  }
+}
+
 LJ_FUNCA TValue *lj_tab_storetv_forjit_array(lua_State *L, GCtab *parent,
 					     TValue *dst, cTValue *src)
 {
+  dst = tab_forwarded_jit_array_slot(L, parent, dst);
   copyTVrel(L, dst, src);
   lj_gc2_barrier_weak_write(L, parent, NULL, dst);  /* M8: traced weak-value array write. */
   lj_gc2_barrier_tv_pair(L, obj2gco(parent), dst);  /* M10: traced parent barrier. */
@@ -1375,8 +1430,11 @@ LJ_FUNCA TValue *lj_tab_storetv_forjit_hash(lua_State *L, GCtab *parent,
 					    TValue *dst, cTValue *src)
 {
   Node *n = (Node *)dst;  /* Node.val is the first field. */
+  TValue keycopy;
+  cTValue *key = &n->key;
+  dst = tab_forwarded_jit_hash_slot(parent, dst, &keycopy, &key);
   copyTVrel(L, dst, src);
-  lj_gc2_barrier_weak_write(L, parent, &n->key, dst);  /* M8: traced weak hash write. */
+  lj_gc2_barrier_weak_write(L, parent, key, dst);  /* M8: traced weak hash write. */
   lj_gc2_barrier_tv_pair(L, obj2gco(parent), dst);  /* M10: traced parent barrier. */
   return dst;
 }

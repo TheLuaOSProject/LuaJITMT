@@ -281,9 +281,12 @@ handler — sized LJ_MAX_EXITSTUBGR-compatible; see lj_vmstruct notes.
   AREF/HREF-derived table parent. Numeric `NEWREF` stores use a generic
   returned-slot helper because the slot may be in the array part. The helpers
   run the parent-aware value barrier, and existing weak table stores also call
-  the P_WEAK weak-write bridge. Previous-nil in-bounds array slots, existing
-  hash slots whose value is nil, non-numeric new hash keys through `NEWREF`, and
-  fresh numeric insertions through `NEWREF` are covered.
+  the P_WEAK weak-write bridge. When a helper receives a visible
+  `LJ_TFORWARD` destination from the parent's current generation, it resolves
+  the destination through `TabArrayHdr.next_gen` or `TabNodeHdr.next_gen`
+  before publishing. Previous-nil in-bounds array slots, existing hash slots
+  whose value is nil, non-numeric new hash keys through `NEWREF`, and fresh
+  numeric insertions through `NEWREF` are covered.
 - **Allocation on trace**: TNEW/TDUP/CNEW/SNEW already call into C or use
   inline alloc IR; route them to the TG bump (mirror of 07 §7.5) — the IR
   for inline alloc (lj_asm.c asm_snew/asm_tnew via lj_ir_call → actually
@@ -465,7 +468,10 @@ scoped-flush target.
    using `lj_tab_storetv_forjit_newref(parent,dst,src)` so array-returned slots
    are not interpreted as hash nodes. The helpers release-publish the TValue and
    run the GC2 parent-aware value barrier, and the weak-aware helper path marks
-   weak keys/values during `P_WEAK`. This is still an interim bridge rather than
+   weak keys/values during `P_WEAK`. Helper-backed stores resolve visible
+   forwarded destination slots through the published successor generation when
+   the destination belongs to the parent's current array or hash generation.
+   This is still an interim bridge rather than
    the final generated-store protocol. The final generation-aware trace
    write/barrier protocol remains required before raw generated table stores can
    replace this helper bridge.

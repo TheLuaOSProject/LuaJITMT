@@ -3,16 +3,24 @@
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+CC=${CC:-cc}
+CFLAGS=${CFLAGS:-"-std=gnu99 -O2 -Wall -Wextra -Werror -mcx16"}
+OUT=${TMPDIR:-/tmp}/lj_t-jit-forward-store
 
 make -C "$ROOT/src" >/dev/null
 
 for needle in \
+  'tab_ptr_index(uintptr_t base, uintptr_t elem,' \
+  'tab_forwarded_jit_array_slot(lua_State *L, GCtab *parent' \
+  'tab_forwarded_jit_hash_slot(GCtab *parent, TValue *dst,' \
+  'dst = tab_forwarded_jit_array_slot(L, parent, dst);' \
+  'dst = tab_forwarded_jit_hash_slot(parent, dst, &keycopy, &key);' \
   'lj_tab_storetv_forjit_array(lua_State *L, GCtab *parent' \
   'lj_tab_storetv_forjit_hash(lua_State *L, GCtab *parent' \
   'lj_tab_storetv_forjit_newref(lua_State *L, GCtab *parent' \
   'lj_gc2_barrier_tv_pair(L, obj2gco(parent), dst);  /* M10: traced parent barrier. */' \
   'lj_gc2_barrier_weak_write(L, parent, NULL, dst);  /* M8: traced weak-value array write. */' \
-  'lj_gc2_barrier_weak_write(L, parent, &n->key, dst);  /* M8: traced weak hash write. */' \
+  'lj_gc2_barrier_weak_write(L, parent, key, dst);  /* M8: traced weak hash write. */' \
   'lj_gc2_barrier_weak_write(L, parent, NULL, dst);  /* M8: traced numeric NEWREF write. */' \
   'Node *n = (Node *)dst;  /* Node.val is the first field. */' \
   'IRCALL_lj_tab_storetv_forjit_array' \
@@ -25,15 +33,21 @@ for needle in \
   '#if defined(__linux__) && LJ_TARGET_X64' \
   'IRRef lim = poll_alias_limit(J, xref);' \
   'M6: numeric NEWREF/HSTORE uses the generic returned-slot helper.' \
-  'M6: previous-nil in-bounds ASTORE/HSTORE uses the helper bridge.'
+  'M6: previous-nil in-bounds ASTORE/HSTORE uses the helper bridge.' \
+  't-jit-forward-store OK'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_tab.c" "$ROOT/src/lj_tab.h" \
       "$ROOT/src/lj_ircall.h" "$ROOT/src/lj_asm_x86.h" \
-      "$ROOT/src/lj_record.c" "$ROOT/src/lj_opt_mem.c"; then
+      "$ROOT/src/lj_record.c" "$ROOT/src/lj_opt_mem.c" \
+      "$ROOT/tests/t-jit-forward-store.c"; then
     echo "guardrail: missing table-store helper marker: $needle" >&2
     exit 1
   fi
 done
+
+"$CC" $CFLAGS -I"$ROOT/src" "$ROOT/tests/t-jit-forward-store.c" \
+  "$ROOT/src/libluajit.a" -lm -ldl -pthread -o "$OUT"
+"$OUT"
 
 LUA_PATH="$ROOT/src/?.lua;$ROOT/src/jit/?.lua;;" \
   "$ROOT/src/luajit" -e '

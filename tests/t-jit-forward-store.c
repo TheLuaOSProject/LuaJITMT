@@ -1,0 +1,155 @@
+/*
+** Focused guard for helper-backed JIT stores over forwarded table slots.
+*/
+
+#include <assert.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+
+#include "lua.h"
+#include "lauxlib.h"
+#include "lualib.h"
+
+#include "lj_obj.h"
+#include "lj_str.h"
+#include "lj_tab.h"
+
+static void store_forward(TValue *slot)
+{
+  TValue forward;
+  setforwardV(&forward);
+  tv_rawstore_rel(slot, tv_rawload(&forward));
+}
+
+static void assert_forward(cTValue *tv)
+{
+  TValue val;
+  lj_tv_load_acq(&val, tv);
+  assert(tvisforward(&val));
+}
+
+static void assert_i32(cTValue *tv, int32_t want)
+{
+  assert(tv != NULL);
+  assert(tvisnumber(tv));
+  assert((tvisint(tv) ? intV(tv) : (int32_t)numV(tv)) == want);
+}
+
+static void set_int(lua_State *L, GCtab *t, int32_t k, int32_t v)
+{
+  lj_tab_storeint(L, lj_tab_setint(L, t, k), v);
+}
+
+static Node *find_str_node(Node *node, MSize hmask, const GCstr *key)
+{
+  Node *n = hashstr_node(node, hmask, key);
+  do {
+    TValue nk;
+    lj_tv_load_acq(&nk, &n->key);
+    if (tvisstr(&nk) && strV(&nk) == key)
+      return n;
+  } while ((n = lj_tab_nextnode_acq(n)));
+  return NULL;
+}
+
+static void exercise_array_forward_jit(lua_State *L)
+{
+  GCtab *t;
+  TValue *oldarray, *newarray;
+  TValue src;
+  MSize oldasize, newasize, oldacap;
+  int32_t key = 3;
+  MSize i;
+
+  lua_createtable(L, LJ_MAX_COLOSIZE + 16, 0);
+  t = tabV(L->top-1);
+  assert(lj_tab_array_separated(t));
+  oldarray = lj_tab_array_acq(t);
+  oldasize = lj_tab_asize_acq(t);
+  oldacap = t->acap;
+  assert((MSize)key < oldasize);
+  for (i = 0; i < oldasize; i++) {
+    int32_t v = (int32_t)i + 12000;
+    set_int(L, t, (int32_t)i, v);
+    lj_tab_storeint(L, &oldarray[i], v);
+  }
+
+  lj_tab_resize(L, t, (uint32_t)oldasize + 8u, 0);
+  newarray = lj_tab_array_acq(t);
+  newasize = lj_tab_asize_acq(t);
+  assert(newarray != oldarray);
+  assert(lj_tab_array_nextgen_acq(oldarray) == newarray);
+
+  store_forward(&oldarray[key]);
+  la_store32_rel(&lj_tab_array_hdrw(oldarray)->acap,
+		 lj_tab_array_hdr_pack_acap(oldacap, 0));
+  lj_tab_asize_rel(t, oldasize);
+  lj_tab_array_rel(t, oldarray);
+
+  setintV(&src, 200);
+  lj_tab_storetv_forjit_array(L, t, &oldarray[key], &src);
+  assert_forward(&oldarray[key]);
+  assert_i32(&newarray[key], 200);
+
+  lj_tab_array_rel(t, newarray);
+  lj_tab_asize_rel(t, newasize);
+  lj_tab_array_hdr_flags_or_rel(oldarray, TABARRAY_FLAG_RETIRING);
+  lua_pop(L, 1);
+}
+
+static void exercise_hash_forward_jit(lua_State *L)
+{
+  GCtab *t;
+  GCstr *hkey;
+  TValue src;
+  Node *oldnode, *newnode, *oldn, *newn;
+  MSize oldhmask, newhmask;
+
+  lua_createtable(L, 0, 8);
+  t = tabV(L->top-1);
+  hkey = lj_str_new(L, "jit_forward_hash", strlen("jit_forward_hash"));
+  lj_tab_storeint(L, lj_tab_setstr(L, t, hkey), 13000);
+  oldnode = lj_tab_node_acq(t);
+  oldhmask = lj_tab_node_hmask_acq(oldnode);
+  assert(oldhmask > 0);
+  oldn = find_str_node(oldnode, oldhmask, hkey);
+  assert(oldn != NULL);
+
+  lj_tab_resize(L, t, t->asize, lj_fls(oldhmask) + 2u);
+  newnode = lj_tab_node_acq(t);
+  newhmask = lj_tab_node_hmask_acq(newnode);
+  assert(newnode != oldnode);
+  assert(lj_tab_node_nextgen_acq(oldnode) == newnode);
+  newn = find_str_node(newnode, newhmask, hkey);
+  assert(newn != NULL);
+
+  store_forward(&oldn->val);
+  la_store32_rel(&lj_tab_node_hdrw(oldnode)->flags, 0);
+  lj_tab_hmask_rel(t, oldhmask);
+  lj_tab_node_rel(t, oldnode);
+
+  setintV(&src, 200);
+  lj_tab_storetv_forjit_hash(L, t, &oldn->val, &src);
+  assert_forward(&oldn->val);
+  assert_i32(&newn->val, 200);
+
+  lj_tab_node_rel(t, newnode);
+  lj_tab_hmask_rel(t, newhmask);
+  lj_tab_node_hdr_flags_or_rel(oldnode, TABNODE_FLAG_RETIRING);
+  lua_pop(L, 1);
+}
+
+int main(void)
+{
+  lua_State *L = luaL_newstate();
+  assert(L != NULL);
+  luaL_openlibs(L);
+
+  exercise_array_forward_jit(L);
+  exercise_hash_forward_jit(L);
+
+  lua_close(L);
+  printf("t-jit-forward-store OK: helper-backed JIT stores route forwarded slots\n");
+  return 0;
+}

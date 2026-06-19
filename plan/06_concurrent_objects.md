@@ -296,8 +296,11 @@ dynamic `IR_HREF` lowering also uses the node-header mask instead of
 `GCtab.hmask`; constant-slot HREFK lowering has an interim node-header bounds
 guard before reading its recorded slot. Linux/x64 helper-backed `ASTORE` and
 `HSTORE` lowering now release-publishes through table-store helpers with parent
-barrier context, including shared table references and numeric `NEWREF` stores;
-the final generated RETIRING/FORWARD/CAS write protocol remains pending.
+barrier context, including shared table references and numeric `NEWREF` stores,
+and those helpers resolve visible forwarded destinations through successor
+generations when the destination belongs to the parent's current array or hash
+generation; the final generated RETIRING/FORWARD/CAS write protocol remains
+pending.
 `lj_vm_next`
 hash traversal, the `BC_ITERN` array/hash iterator path, and `ipairs_aux` array
 iteration load candidate values into registers before nil decisions and copy
