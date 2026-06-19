@@ -2328,11 +2328,11 @@ void lj_gc2_finreg_udata_register(lua_State *L, global_State *g, GCobj *o)
        node != NULL;
        node = (GC2FinRegUDataNode *)la_loadptr_acq(
 	 (void *const *)&node->next)) {
-    if (gcref_acq(node->obj) == o)
+    if (gc2_finreg_udata_obj_acq(node) == o)
       return;
   }
   node = lj_mem_newt(L, sizeof(GC2FinRegUDataNode), GC2FinRegUDataNode);
-  setgcref(node->obj, o);
+  gc2_finreg_udata_obj_rel(node, o);
   do {
     head = (GC2FinRegUDataNode *)la_loadptr_acq(
       (void *const *)&g->gc2.finreg_udata_head);
@@ -2364,8 +2364,8 @@ void lj_gc2_finreg_udata_forget(global_State *g, GCobj *o)
        node != NULL;
        node = (GC2FinRegUDataNode *)la_loadptr_acq(
 	 (void *const *)&node->next)) {
-    if (gcref_acq(node->obj) == o) {
-      setgcrefnullrel(node->obj);
+    if (gc2_finreg_udata_obj_acq(node) == o) {
+      gc2_finreg_udata_obj_clear(node);
       cleared = 1;
     }
   }

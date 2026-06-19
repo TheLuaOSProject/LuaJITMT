@@ -214,6 +214,9 @@ for needle in \
   'fin_order_obj_acq(FinRegOrderNode *ord)' \
   'fin_order_obj_rel(FinRegOrderNode *ord, GCobj *o)' \
   'fin_order_obj_clear(FinRegOrderNode *ord)' \
+  'gc2_finreg_udata_obj_acq(GC2FinRegUDataNode *node)' \
+  'gc2_finreg_udata_obj_rel(GC2FinRegUDataNode *node,' \
+  'gc2_finreg_udata_obj_clear(GC2FinRegUDataNode *node)' \
   'fin_order_obj_rel(ord, o);' \
   'fin_order_obj_acq(ord)' \
   'gc_order_cdata_object(FinRegOrderNode *ord, GCtab *t,' \
@@ -322,6 +325,12 @@ done
 if rg -n 'setgcref\(ord->obj|setgcrefnull\(ord->obj|gcref_acq\(ord->obj' \
     "$ROOT/src/lj_ctype.c" "$ROOT/src/lj_gc.c"; then
   echo "guardrail: ordered FINREG object payload must use acquire/release helpers" >&2
+  exit 1
+fi
+
+if rg -n 'gcref\(node->obj|gcref_acq\(node->obj|setgcref\(node->obj|setgcrefrel\(node->obj|setgcrefnull\(node->obj|setgcrefnullrel\(node->obj' \
+    "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc2.c"; then
+  echo "guardrail: userdata FINREG object payload must use acquire/release helpers" >&2
   exit 1
 fi
 

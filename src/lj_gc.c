@@ -786,17 +786,17 @@ static size_t gc_separateudata_registered(global_State *g, int all)
        node != NULL;
        node = (GC2FinRegUDataNode *)la_loadptr_acq(
 	 (void *const *)&node->next)) {
-    GCobj *o = gcref_acq(node->obj);
+    GCobj *o = gc2_finreg_udata_obj_acq(node);
     uint8_t flags;
     int finreg;
     if (!o)
       continue;
     if (o->gch.gct != ~LJ_TUDATA) {
-      setgcrefnullrel(node->obj);
+      gc2_finreg_udata_obj_clear(node);
       continue;
     }
     if (isfinalized(gco2ud(o))) {
-      setgcrefnullrel(node->obj);
+      gc2_finreg_udata_obj_clear(node);
       continue;
     }
     if (!(iswhite(o) || all))
@@ -807,7 +807,7 @@ static size_t gc_separateudata_registered(global_State *g, int all)
       if (finreg)
 	lj_gc2_finreg_udata_set(g, o, 0);
       markfinalized(o);  /* Side-list no-finalizer userdata is done. */
-      setgcrefnullrel(node->obj);
+      gc2_finreg_udata_obj_clear(node);
       continue;
     }
     if (!finreg)
@@ -817,7 +817,7 @@ static size_t gc_separateudata_registered(global_State *g, int all)
     ** discovery without legacy userdata-chain membership.
     */
     (void)gc_unlink_udata_object(g, o);
-    setgcrefnullrel(node->obj);
+    gc2_finreg_udata_obj_clear(node);
     la_add64_rlx(&g->gc2.finreg_udata_discovered, 1);
     m += gc_queue_udata_finalizer(g, o);
   }

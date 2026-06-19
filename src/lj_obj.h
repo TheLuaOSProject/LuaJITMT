@@ -1630,6 +1630,22 @@ static LJ_AINLINE void setgcrefnullrel_(GCRef *r)
 #define setgcrefroot(r, gc)	setgcrefrel((r), (gc))
 #define setgcrefmt(r, gc)	setgcrefrel((r), (gc))
 
+static LJ_AINLINE GCobj *gc2_finreg_udata_obj_acq(GC2FinRegUDataNode *node)
+{
+  return gcref_acq(node->obj);
+}
+
+static LJ_AINLINE void gc2_finreg_udata_obj_rel(GC2FinRegUDataNode *node,
+						GCobj *o)
+{
+  setgcrefrel(node->obj, o);
+}
+
+static LJ_AINLINE void gc2_finreg_udata_obj_clear(GC2FinRegUDataNode *node)
+{
+  setgcrefnullrel(node->obj);
+}
+
 static LJ_AINLINE void lj_obj_setgcwrel(GCobj *o, const GCobj *next)
 {
   setgcrefrel(o->gch.nextgc, next);
