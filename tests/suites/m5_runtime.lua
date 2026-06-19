@@ -124,6 +124,48 @@ assert(sum > 0)
 ]]
 end
 
+local function udtype_publish_smoke()
+  return [[
+local ffi = require"ffi"
+ffi.cdef"int puts(const char *);"
+assert(type(ffi.C.puts) == "cdata")
+
+local f = io.tmpfile()
+assert(io.type(f) == "file")
+f:close()
+assert(io.type(f) == "closed file")
+
+local ok, buffer = pcall(require, "string.buffer")
+if ok then
+  for i = 1, 32 do
+    local b = buffer.new(i % 8)
+    collectgarbage("collect")
+    assert(type(b) == "userdata")
+  end
+end
+
+local th = require"threading"
+local m = th.mutex()
+assert(m:trylock() == true)
+assert(m:trylock() == false)
+assert(m:unlock() == nil)
+local ch = th.channel(2)
+assert(ch:send("x") == true)
+local v, okrecv = ch:recv()
+assert(v == "x" and okrecv == true)
+local me = th.current()
+assert(type(me:id()) == "number")
+collectgarbage("collect")
+collectgarbage("collect")
+print("udtype-publish-smoke OK")
+]]
+end
+
+local function assert_ordered_block(t, label, path, start, needles)
+  local block = t:c_block(path, start)
+  t:assert_text_ordered(label, block, needles)
+end
+
 return function(add)
   add({
     name = "m5_buffer_publish",
@@ -255,6 +297,110 @@ return function(add)
         t:assert_not_contains(asm, reject)
       end
       print("M5 JIT HREF node-header hmask guard passed")
+    end
+  })
+
+  add({
+    name = "m5_udtype_publish",
+    description = "userdata type acquire/release publication guard and smoke",
+    run = function(t)
+      t:assert_all_contains(t:path("src", "lj_obj.h"), {
+        "lj_udata_udtype_acq(const GCudata *ud)",
+        "la_load8_acq(&ud->udtype)",
+        "lj_udata_udtype_rel(GCudata *ud, uint8_t udtype)",
+        "la_store8_rel(&ud->udtype, udtype)"
+      })
+
+      assert_no_lines(t, "GCudata.udtype must use acquire/release helpers",
+                      t:files(t:path("src"), {
+                        extensions = { ".c", ".h" }
+                      }), function(line, path)
+        if path == t:path("src", "lj_obj.h") then return false end
+        return contains(line, "->udtype")
+      end)
+
+      assert_ordered_block(t, "buffer_new", t:path("src", "lib_buffer.c"),
+                           "LJLIB_CF(buffer_new)", {
+        "setgcrefmt(ud->metatable, obj2gco(env));",
+        "lj_gc_pubobjobj(L, ud, env);",
+        "lj_bufx_init(L, sbx);",
+        "setgcrefrel(sbx->dict_str, obj2gco(dict_str));",
+        "lj_gc_pubobjobj(L, ud, dict_str);",
+        "setgcrefrel(sbx->dict_mt, obj2gco(dict_mt));",
+        "lj_gc_pubobjobj(L, ud, dict_mt);",
+        "lj_udata_udtype_rel(ud, UDTYPE_BUFFER);",
+        "if (sz > 0) lj_buf_need2((SBuf *)sbx, sz);"
+      })
+
+      assert_ordered_block(t, "threading_new_thread_ud",
+                           t:path("src", "lib_threading.c"),
+                           "static GCudata *threading_new_thread_ud", {
+        "setgcrefmt(ud->metatable, obj2gco(env));",
+        "lj_gc_pubobjobj(L, ud, env);",
+        "th->ud = ud;",
+        "lj_gc2_finreg_udata_register_mt(L, g, ud, env);",
+        "setudataV(L, L->top++, ud);"
+      })
+      assert_ordered_block(t, "threading_publish_thread_state",
+                           t:path("src", "lib_threading.c"),
+                           "static void threading_publish_thread_state", {
+        "lj_thread_state_store_rel(th, L1);",
+        "lj_gc_pubobjobj(L, ud, L1);",
+        "lj_udata_udtype_rel(ud, UDTYPE_THREAD);"
+      })
+      assert_ordered_block(t, "threading_mutex",
+                           t:path("src", "lib_threading.c"),
+                           "LJLIB_CF(threading_mutex)", {
+        "setgcrefmt(ud->metatable, obj2gco(env));",
+        "lj_gc_pubobjobj(L, ud, env);",
+        "m->state = LJ_MUTEX_UNLOCKED;",
+        "lj_udata_udtype_rel(ud, UDTYPE_MUTEX);"
+      })
+      assert_ordered_block(t, "threading_channel",
+                           t:path("src", "lib_threading.c"),
+                           "LJLIB_CF(threading_channel)", {
+        "setgcrefmt(ud->metatable, obj2gco(env));",
+        "lj_gc_pubobjobj(L, ud, env);",
+        "lj_chan_init((LJChan *)uddata(ud), cap);",
+        "lj_udata_udtype_rel(ud, UDTYPE_CHANNEL);"
+      })
+
+      assert_ordered_block(t, "io_file_new", t:path("src", "lib_io.c"),
+                           "static IOFileUD *io_file_new", {
+        "setgcrefmt(ud->metatable, obj2gco(mt));",
+        "lj_gc_pubobjobj(L, ud, mt);",
+        "iof->fp = NULL;",
+        "iof->type = IOFILE_TYPE_FILE;",
+        "lj_udata_udtype_rel(ud, UDTYPE_IO_FILE);"
+      })
+      assert_ordered_block(t, "io_std_new", t:path("src", "lib_io.c"),
+                           "static GCobj *io_std_new", {
+        "setgcrefmt(ud->metatable, obj2gco(mt));",
+        "lj_gc_pubobjobj(L, ud, mt);",
+        "iof->fp = fp;",
+        "iof->type = IOFILE_TYPE_STDF;",
+        "lj_udata_udtype_rel(ud, UDTYPE_IO_FILE);",
+        "lua_setfield(L, -2, name);"
+      })
+      assert_ordered_block(t, "clib_new", t:path("src", "lj_clib.c"),
+                           "static CLibrary *clib_new", {
+        "cl->cache = t;",
+        "setgcrefmt(ud->metatable, obj2gco(mt));",
+        "lj_gc_pubobjobj(L, ud, mt);",
+        "lj_udata_udtype_rel(ud, UDTYPE_FFI_CLIB);"
+      })
+      assert_ordered_block(t, "ffi_pin", t:path("src", "lib_ffi.c"),
+                           "LJLIB_CF(ffi_pin)", {
+        "setgcrefmt(ud->metatable, obj2gco(mt));",
+        "lj_gc_pubobjobj(L, ud, mt);",
+        "copyTVrel(L, (TValue *)uddata(ud), o);",
+        "lj_gc_pubobjtv(L, ud, (TValue *)uddata(ud));",
+        "lj_udata_udtype_rel(ud, UDTYPE_FFI_PIN);"
+      })
+
+      t:build({ quiet = true })
+      t:luajit({ "-joff", "-e", udtype_publish_smoke() })
+      print("M5 userdata type publication guard passed")
     end
   })
 
