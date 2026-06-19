@@ -2044,7 +2044,7 @@ static int gc2_weak_snapshot_complete(global_State *g, uint32_t *pn)
   }
   reserved = la_load64_acq(&g->gc2.weak_count);
   if (reserved > (uint64_t)g->gc2.weak_capacity)
-    return 0;  /* Overflowed this cycle; legacy remains the fallback. */
+    return 0;  /* Overflowed snapshots are handled by the owner-clear bridge. */
   n = lj_gc2_weak_snapshot_count(g);
   if ((uint64_t)n != reserved)
     return 0;  /* Reserved slots must all be published in the ready prefix. */
@@ -2124,6 +2124,37 @@ static int gc2_weak_backfill_legacy(global_State *g, GCobj *legacy)
   return 1;  /* 05 section 5.8: owner-cleared legacy weak snapshot gaps. */
 }
 
+static int gc2_weak_overflow_clear_legacy(global_State *g, GCobj *legacy)
+{
+  uint64_t reserved, tables = 0, slots = 0, cleared = 0;
+  if (!g || la_load32_acq(&g->gc2.phase) != LJ_GC2_WEAK ||
+      !g->gc2.weak_stack || !g->gc2.weak_ready)
+    return 0;
+  reserved = la_load64_acq(&g->gc2.weak_count);
+  if (reserved <= (uint64_t)g->gc2.weak_capacity)
+    return 0;
+  while (legacy) {
+    GCtab *t;
+    uint8_t flags;
+    if (legacy->gch.gct != ~LJ_TTAB)
+      return 0;
+    t = gco2tab(legacy);
+    flags = lj_obj_gcflags(obj2gco(t));
+    if ((flags & LJ_GC_WEAK) == 0)
+      return 0;
+    gc2_weak_process_tab(g, t, 1, &slots, &cleared);
+    tables++;
+    legacy = gcref_acq(t->gclist);
+  }
+  if (tables) {
+    la_add64_rlx(&g->gc2.weak_legacy_backfills, 1);
+    la_add64_rlx(&g->gc2.weak_legacy_backfill_tables, tables);
+    la_add64_rlx(&g->gc2.weak_legacy_backfill_slots, slots);
+    la_add64_rlx(&g->gc2.weak_legacy_backfill_cleared, cleared);
+  }
+  return 1;  /* 05 section 5.8: overflowed weak snapshots stay GC2-owned. */
+}
+
 void lj_gc2_weak_legacy_result(global_State *g, int skipped)
 {
   if (!g)
@@ -2159,6 +2190,13 @@ int lj_gc2_weak_complete(global_State *g, GCobj *legacy, uint32_t drain_limit)
 #endif
     lj_gc2_weak_legacy_result(g, 1);
     return 1;  /* 05 section 5.8 scheduler-owned weak completion bridge. */
+  }
+  if (gc2_weak_overflow_clear_legacy(g, legacy)) {
+#if LJ_GC2_PARANOIA
+    gc2_weak_paranoia_zero_diff(g, legacy);
+#endif
+    lj_gc2_weak_legacy_result(g, 1);
+    return 1;  /* 05 section 5.8 owner-cleared overflow bridge. */
   }
   if (gc2_weak_backfill_legacy(g, legacy)) {
 #if LJ_GC2_PARANOIA
