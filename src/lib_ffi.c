@@ -1042,6 +1042,18 @@ static TValue *ffi_loaded_store(lua_State *L, GCtab *t, GCstr *name,
   }
 }
 
+static TValue *ffi_miscmap_store(lua_State *L, CTState *cts, GCstr *key,
+				 cTValue *src)
+{
+  TValue *dst;
+  for (;;) {
+    dst = lj_tab_setstr(L, cts->miscmap, key);
+    if (lj_tab_trystoretv_cas(L, dst, src) == LJ_TAB_STORE_CAS_OK)
+      return dst;
+    la_cpu_pause();  /* FFI miscmap store saw FORWARD after lookup. */
+  }
+}
+
 /* Register FFI module as loaded. */
 static void ffi_register_module(lua_State *L)
 {
@@ -1068,9 +1080,8 @@ LUALIB_API int luaopen_ffi(lua_State *L)
   setgcrefroot(basemt_it(G(L), LJ_TCDATA), obj2gco(tabV(L->top-1)));
   LJ_LIB_REG(L, NULL, ffi_clib);
   LJ_LIB_REG(L, NULL, ffi_callback);
-  /* NOBARRIER: the key is new and lj_tab_newkey() handles the barrier. */
-  lj_tab_storetab(L, lj_tab_setstr(L, cts->miscmap, &cts->g->strempty),
-		  tabV(L->top-1));
+  ffi_miscmap_store(L, cts, &cts->g->strempty, L->top-1);
+  lj_gc_pubtabobj(L, cts->miscmap, tabV(L->top-1));
   L->top--;
   LJ_LIB_REG(L, NULL, ffi_pin);
   cts->pinmt = tabV(L->top-1);

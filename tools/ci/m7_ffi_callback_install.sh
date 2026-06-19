@@ -38,6 +38,10 @@ for needle in \
   'lj_gc_arena_markmem(g, func)' \
   'lj_gc2_markmem(g, func)' \
   'if (tvisfunc(&tv))' \
+  'ffi_miscmap_store(lua_State *L, CTState *cts, GCstr *key,' \
+  'FFI miscmap store saw FORWARD after lookup.' \
+  'ffi_miscmap_store(L, cts, &cts->g->strempty, L->top-1)' \
+  'lj_gc_pubtabobj(L, cts->miscmap, tabV(L->top-1))' \
   'lj_ccallback_new_l(L, cts' \
   'lj_ccallback_init_l(L, cts)' \
   'lj_tab_new(L, 0, 1)' \
@@ -65,6 +69,32 @@ fi
 
 if rg -n 'lj_tab_getint\(cts->miscmap, \(int32_t\)slot\)|lj_tab_setint\(L, [^,]*, \(int32_t\)slot\)|lj_tab_new\(L, \(uint32_t\)lj_ccallback_maxslot\(\), 1\)' "$ROOT/src"; then
   echo "guardrail: callback function slots must stay in the CTState side array, not miscmap" >&2
+  exit 1
+fi
+
+if ! awk '
+  /static TValue \*ffi_miscmap_store\(lua_State \*L,/ { infn = 1; next }
+  infn && /lj_tab_storetab\(L, dst,/ { raw = 1 }
+  infn && /for \(;;\)/ { loop = 1 }
+  infn && /lj_tab_setstr\(L, cts->miscmap, key\)/ { resolve = 1 }
+  infn && /lj_tab_trystoretv_cas\(L, dst, src\) == LJ_TAB_STORE_CAS_OK/ { cas = 1 }
+  infn && /FFI miscmap store saw FORWARD after lookup\./ { retry = 1 }
+  infn && /^}/ { exit(!raw && loop && resolve && cas && retry ? 0 : 1) }
+  END { if (raw || !loop || !resolve || !cas || !retry) exit 1 }
+' "$ROOT/src/lib_ffi.c"; then
+  echo "guardrail: FFI miscmap helper must CAS-publish and retry forwarded slots" >&2
+  exit 1
+fi
+
+if ! awk '
+  /LUALIB_API int luaopen_ffi\(lua_State \*L\)/ { infn = 1; next }
+  infn && /lj_tab_storetab\(L, lj_tab_setstr\(L, cts->miscmap, &cts->g->strempty\),/ { raw = 1 }
+  infn && /ffi_miscmap_store\(L, cts, &cts->g->strempty, L->top-1\)/ { helper = NR }
+  infn && /lj_gc_pubtabobj\(L, cts->miscmap, tabV\(L->top-1\)\)/ { barrier = NR }
+  infn && /^}/ { exit(!raw && helper && barrier && helper < barrier ? 0 : 1) }
+  END { if (raw || !helper || !barrier || helper > barrier) exit 1 }
+' "$ROOT/src/lib_ffi.c"; then
+  echo "guardrail: luaopen_ffi must CAS-publish miscmap callback table before barrier" >&2
   exit 1
 fi
 
