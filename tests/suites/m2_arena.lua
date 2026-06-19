@@ -27,43 +27,8 @@ end
 
 local function run_luajit_fixture(t, out, cfile, opts)
   opts = opts or {}
-  t:build({ clean = true, quiet = true, xcflags = opts.xcflags })
-  t:cc(out, { t:path("tests", cfile) }, {
-    cflags = opts.cflags,
-    link_luajit = true,
-    libs = { "-lm", "-ldl" }
-  })
-  t:run({ out })
-end
-
-local function gcsweep_markers()
-  return {
-    "gc_arena_sweep_pending(global_State *g)",
-    "lj_gc2_sweep_tg_ready(TGState *tg)",
-    "lj_gc2_sweep_pending(global_State *g)",
-    "gc_arena_finish_sweep_boundary(global_State *g, int drain)",
-    "la_loadptr_acq((void *const *)&g->gc2.tg_list)",
-    "lj_gc2_worker_drain(g, LJ_GC2_SWEEP_BATCH)",
-    "lj_gc2_sweep_to_idle(g)",
-    "minor = la_load32_acq(&g->gc2.cycle_sweep_minor) != 0",
-    "la_add64_rlx(&g->gc2.minor_sweep_arenas, n)",
-    "test_minor_sweep_identity_direct",
-    "assert(ptr_state(live) == 3)",
-    "05 section 5.6.3 worker-owned sweep bridge",
-    "assert(lj_gc2_worker_drain(g, 1) == 1u)",
-    "assert(lj_gc2_worker_drain(g, 1) == 0)",
-    "worker_runs0 = la_load64_acq(&g->gc2.worker_runs)",
-    "lj_arena_alloc_restore_sweep_kind(&extra_tg.alloc, LJ_ARENAK_PLAIN)",
-    "lj_gc2_handshake(g, LJ_GC2_HS_RESET_ALLOC)",
-    "seed_traversable_needsweep(&extra_tg, seeded)",
-    "assert(g->gc.state == GCSsweep)",
-    "assert(extra_tg.alloc.needsweep[LJ_ARENAK_TRAVERSABLE] != NULL)",
-    "arena_list_contains(extra_tg.alloc.owned[LJ_ARENAK_PLAIN]",
-    "arena_list_contains(extra_tg.alloc.owned[LJ_ARENAK_TRAVERSABLE]",
-    "assert(extra_trav_a->hdr.sweep_epoch == sweep_cycle)",
-    "assert(la_load64_acq(&g->gc2.sweep_to_idle) == sweep_to_idle0)",
-    "assert(delta <= LJ_GC2_SWEEP_BATCH)"
-  }
+  opts.pthread = false
+  t:run_luajit_c_fixture(out, cfile, opts)
 end
 
 return function(add)
@@ -166,15 +131,10 @@ return function(add)
 
   register({
     name = "m2_arena_gcsweep",
-    description = "runtime traversable arena sweep bridge C fixture and guards",
+    description = "runtime traversable arena sweep bridge C fixture",
     run = function(t)
       run_luajit_fixture(t, t:tmp("lj_t_arena_gcsweep"),
                          "t-arena-gcsweep.c")
-      t:assert_all_any_contains({
-        t:path("src", "lj_gc.c"),
-        t:path("src", "lj_gc2.c"),
-        t:path("tests", "t-arena-gcsweep.c")
-      }, gcsweep_markers())
     end
   })
 

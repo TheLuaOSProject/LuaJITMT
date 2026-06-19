@@ -223,6 +223,9 @@ Lua test-suite migration notes:
 - Added shared `compile_luajit_c_fixture` and `run_luajit_c_fixture` methods to
   the Lua test harness, then moved the repeated M4, M5 fixture, and M5 table C
   fixture build/link/run boilerplate onto those helpers.
+- Removed the `m2_arena_gcsweep` source-marker list. The case now relies on the
+  runtime arena sweep C fixture itself, and the M2 LuaJIT-linked fixtures share
+  the central C-fixture helper.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.
