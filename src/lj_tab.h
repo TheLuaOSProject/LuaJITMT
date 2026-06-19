@@ -39,8 +39,9 @@ static LJ_AINLINE Node *hashmask_node(Node *n, MSize hmask, uint32_t hash)
 
 static LJ_AINLINE Node *hashmask(const GCtab *t, uint32_t hash)
 {
-  Node *n = lj_tab_node_acq(t);
-  return hashmask_node(n, lj_tab_node_hmask_acq(n), hash);
+  MSize hmask;
+  Node *n = lj_tab_node_snapshot_acq(t, &hmask);
+  return hashmask_node(n, hmask, hash);
 }
 
 /* String IDs are generated when a string is interned. */

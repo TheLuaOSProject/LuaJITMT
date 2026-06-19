@@ -817,6 +817,11 @@ static LJ_AINLINE MSize lj_tab_node_hdr_flags_acq(const Node *node)
   return (MSize)la_load32_acq(&lj_tab_node_hdr(node)->flags);
 }
 
+static LJ_AINLINE int lj_tab_node_is_retiring(const Node *node)
+{
+  return (lj_tab_node_hdr_flags_acq(node) & TABNODE_FLAG_RETIRING) != 0;
+}
+
 static LJ_AINLINE void lj_tab_node_hdr_flags_or_rel(Node *node, MSize flags)
 {
   uint32_t *word = &lj_tab_node_hdrw(node)->flags;
@@ -826,6 +831,22 @@ static LJ_AINLINE void lj_tab_node_hdr_flags_or_rel(Node *node, MSize flags)
   do {
     want = old | (uint32_t)flags;
   } while (old != want && !la_cas32(word, &old, want, LA_ACQ_REL, LA_ACQ));
+}
+
+static LJ_AINLINE Node *lj_tab_node_snapshot_acq(const GCtab *t,
+						 MSize *hmaskp)
+{
+  Node *node;
+  MSize hmask;
+retry_snapshot:
+  node = lj_tab_node_acq(t);
+  hmask = lj_tab_node_hmask_acq(node);
+  if (lj_tab_node_is_retiring(node)) {
+    la_cpu_pause();
+    goto retry_snapshot;
+  }
+  *hmaskp = hmask;
+  return node;
 }
 
 static LJ_AINLINE MSize lj_tab_hmask_acq(const GCtab *t)

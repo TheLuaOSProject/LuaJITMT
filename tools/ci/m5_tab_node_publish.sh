@@ -21,7 +21,8 @@ for needle in \
   'la_load64_acq(&t->node.ptr64)' \
   'la_store64_rel(&t->node.ptr64' \
   'hashmask(const GCtab *t, uint32_t hash)' \
-  'Node *n = lj_tab_node_acq(t)' \
+  'Node *n = lj_tab_node_snapshot_acq(t, &hmask)' \
+  'return hashmask_node(n, hmask, hash)' \
   'lj_tab_node_rel(t, node)' \
   'lj_tab_node_rel(t, &g->nilnode)' \
   'newhpart_alloc' \

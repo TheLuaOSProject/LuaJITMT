@@ -240,8 +240,9 @@ static void gc2_paranoia_checktab(global_State *g, GCtab *t)
   if (t->acap > 0)
     gc2_paranoia_checkmem(g, lj_tab_array_mem_acq(t), "table array");
   {
-    Node *node = lj_tab_node_acq(t);
-    if (lj_tab_node_hmask_acq(node) > 0)
+    MSize hmask;
+    Node *node = lj_tab_node_snapshot_acq(t, &hmask);
+    if (hmask > 0)
       gc2_paranoia_checkmem(g, lj_tab_node_hdrw(node), "table node");
   }
 }
@@ -833,8 +834,9 @@ static int gc_traverse_tab(global_State *g, GCtab *t)
   if (t->acap > 0)
     lj_gc_arena_markmem(g, lj_tab_array_mem_acq(t));
   {
-    Node *node = lj_tab_node_acq(t);
-    if (lj_tab_node_hmask_acq(node) > 0)
+    MSize hmask;
+    Node *node = lj_tab_node_snapshot_acq(t, &hmask);
+    if (hmask > 0)
       lj_gc_arena_markmem(g, lj_tab_node_hdrw(node));
   }
   if (mt)
@@ -873,8 +875,8 @@ static int gc_traverse_tab(global_State *g, GCtab *t)
     }
   }
   {  /* Mark hash part. */
-    Node *node = lj_tab_node_acq(t);
-    MSize i, hmask = lj_tab_node_hmask_acq(node);
+    MSize i, hmask;
+    Node *node = lj_tab_node_snapshot_acq(t, &hmask);
     if (hmask > 0) {
       for (i = 0; i <= hmask; i++) {
 	Node *n = &node[i];
@@ -1048,8 +1050,8 @@ static size_t propagatemark(global_State *g)
   setgcrefr(g->gc.gray, o->gch.gclist);  /* Remove from gray list. */
   if (LJ_LIKELY(gct == ~LJ_TTAB)) {
     GCtab *t = gco2tab(o);
-    Node *node = lj_tab_node_acq(t);
-    MSize hmask = lj_tab_node_hmask_acq(node);
+    MSize hmask;
+    (void)lj_tab_node_snapshot_acq(t, &hmask);
     if (gc_traverse_tab(g, t) > 0)
       black2gray(o);  /* Keep weak tables gray. */
     return (LJ_MAX_COLOSIZE != 0 && t->colo ?
@@ -1335,8 +1337,8 @@ static void gc_clearweak(global_State *g, GCobj *o)
       }
     }
     {
-      Node *node = lj_tab_node_acq(t);
-      MSize i, hmask = lj_tab_node_hmask_acq(node);
+      MSize i, hmask;
+      Node *node = lj_tab_node_snapshot_acq(t, &hmask);
       if (hmask > 0) {
 	for (i = 0; i <= hmask; i++) {
 	  Node *n = &node[i];

@@ -87,14 +87,9 @@ static TValue *tab_findkey_or_keylock(Node *anchor, cTValue *key, int *locked)
   return NULL;
 }
 
-static LJ_AINLINE int tab_node_is_retiring(const Node *node)
-{
-  return (lj_tab_node_hdr_flags_acq(node) & TABNODE_FLAG_RETIRING) != 0;
-}
-
 static LJ_AINLINE int tab_node_retry_if_retiring(const Node *node)
 {
-  if (tab_node_is_retiring(node)) {
+  if (lj_tab_node_is_retiring(node)) {
     la_cpu_pause();
     return 1;
   }
@@ -441,8 +436,9 @@ GCtab * LJ_FASTCALL lj_tab_dup(lua_State *L, const GCtab *kt)
   GCtab *t;
   TValue *karray;
   uint32_t asize, hmask;
-  Node *knode = lj_tab_node_acq(kt);
-  hmask = lj_tab_node_hmask_acq(knode);
+  MSize khmask;
+  Node *knode = lj_tab_node_snapshot_acq(kt, &khmask);
+  hmask = (uint32_t)khmask;
   asize = (uint32_t)lj_tab_array_snapshot_acq(kt, &karray);
   t = newtab(L, asize, hmask > 0 ? lj_fls(hmask)+1 : 0);
   asize = (uint32_t)lj_tab_array_snapshot_acq(kt, &karray);
@@ -748,8 +744,9 @@ static uint32_t countarray(const GCtab *t, uint32_t *bins)
 
 static uint32_t counthash(const GCtab *t, uint32_t *bins, uint32_t *narray)
 {
-  Node *node = lj_tab_node_acq(t);
-  uint32_t total, na, i, hmask = lj_tab_node_hmask_acq(node);
+  MSize hmask;
+  Node *node = lj_tab_node_snapshot_acq(t, &hmask);
+  uint32_t total, na, i;
   for (total = na = 0, i = 0; i <= hmask; i++) {
     Node *n = &node[i];
     TValue key, val;
@@ -792,8 +789,8 @@ static void rehashtab(lua_State *L, GCtab *t, cTValue *ek)
 
 void lj_tab_reasize(lua_State *L, GCtab *t, uint32_t nasize)
 {
-  Node *node = lj_tab_node_acq(t);
-  MSize hmask = lj_tab_node_hmask_acq(node);
+  MSize hmask;
+  (void)lj_tab_node_snapshot_acq(t, &hmask);
   lj_tab_resize(L, t, nasize+1, hmask > 0 ? lj_fls(hmask)+1 : 0);
 }
 
@@ -808,10 +805,7 @@ cTValue * LJ_FASTCALL lj_tab_getinth(GCtab *t, int32_t key)
   int retry = 1;
   k.n = (lua_Number)key;
 retry_lookup:
-  node = lj_tab_node_acq(t);
-  hmask = lj_tab_node_hmask_acq(node);
-  if (tab_node_retry_if_retiring(node))
-    goto retry_lookup;
+  node = lj_tab_node_snapshot_acq(t, &hmask);
   if (hmask == 0)
     return NULL;
   n = hashnum_node(node, hmask, &k);
@@ -833,10 +827,7 @@ cTValue *lj_tab_getstr(GCtab *t, const GCstr *key)
   Node *n;
   int retry = 1;
 retry_lookup:
-  node = lj_tab_node_acq(t);
-  hmask = lj_tab_node_hmask_acq(node);
-  if (tab_node_retry_if_retiring(node))
-    goto retry_lookup;
+  node = lj_tab_node_snapshot_acq(t, &hmask);
   if (hmask == 0)
     return NULL;
   n = hashstr_node(node, hmask, key);
@@ -877,10 +868,7 @@ cTValue *lj_tab_get(lua_State *L, GCtab *t, cTValue *key)
     MSize hmask;
     Node *n;
   genlookup:
-    node = lj_tab_node_acq(t);
-    hmask = lj_tab_node_hmask_acq(node);
-    if (tab_node_retry_if_retiring(node))
-      goto genlookup;
+    node = lj_tab_node_snapshot_acq(t, &hmask);
     if (hmask == 0)
       return niltv(L);
     n = hashkey_node(node, hmask, key);
@@ -1348,10 +1336,7 @@ uint32_t LJ_FASTCALL lj_tab_keyindex(GCtab *t, cTValue *key)
     Node *n;
     int retry = 1;
   retry_lookup:
-    node = lj_tab_node_acq(t);
-    hmask = lj_tab_node_hmask_acq(node);
-    if (tab_node_retry_if_retiring(node))
-      goto retry_lookup;
+    node = lj_tab_node_snapshot_acq(t, &hmask);
     n = hashkey_node(node, hmask, key);
     do {
       TValue nk;
@@ -1387,14 +1372,8 @@ int lj_tab_next(GCtab *t, cTValue *key, TValue *o)
   idx -= asize;
   /* Then traverse the hash part. */
   {
-    Node *node = lj_tab_node_acq(t);
-    uint32_t hmask = lj_tab_node_hmask_acq(node);
-  retry_hash:
-    if (tab_node_retry_if_retiring(node)) {
-      node = lj_tab_node_acq(t);
-      hmask = lj_tab_node_hmask_acq(node);
-      goto retry_hash;
-    }
+    MSize hmask;
+    Node *node = lj_tab_node_snapshot_acq(t, &hmask);
     for (; idx <= hmask; idx++) {
       Node *n = &node[idx];
       TValue key, val;
@@ -1449,6 +1428,7 @@ LJ_NOINLINE static MSize tab_len_slow(GCtab *t, size_t hi)
 MSize LJ_FASTCALL lj_tab_len(GCtab *t)
 {
   TValue *array;
+  MSize hmask;
   size_t hi = (size_t)lj_tab_array_snapshot_acq(t, &array);
   if (hi) hi--;
   /* In a growing array the last array element is very likely nil. */
@@ -1462,8 +1442,8 @@ MSize LJ_FASTCALL lj_tab_len(GCtab *t)
     return (MSize)lo;
   }
   /* Without a hash part, there's an implicit nil after the last element. */
-  return lj_tab_node_hmask_acq(lj_tab_node_acq(t)) ? tab_len_slow(t, hi) :
-						     (MSize)hi;
+  (void)lj_tab_node_snapshot_acq(t, &hmask);
+  return hmask ? tab_len_slow(t, hi) : (MSize)hi;
 }
 
 #if LJ_HASJIT
@@ -1478,12 +1458,15 @@ MSize LJ_FASTCALL lj_tab_len_hint(GCtab *t, size_t hint)
     lj_tv_load_acq(&tvnext, &array[hint+1]);
     if (LJ_LIKELY(!tvisnil(&tv) && tvisnil(&tvnext)))
       return (MSize)hint;
-  } else if (hint+1 <= asize &&
-	     LJ_LIKELY(lj_tab_node_hmask_acq(lj_tab_node_acq(t)) == 0)) {
-    TValue tv;
-    lj_tv_load_acq(&tv, &array[hint]);
-    if (!tvisnil(&tv))
-      return (MSize)hint;
+  } else if (hint+1 <= asize) {
+    MSize hmask;
+    (void)lj_tab_node_snapshot_acq(t, &hmask);
+    if (LJ_LIKELY(hmask == 0)) {
+      TValue tv;
+      lj_tv_load_acq(&tv, &array[hint]);
+      if (!tvisnil(&tv))
+	return (MSize)hint;
+    }
   }
   return lj_tab_len(t);
 }

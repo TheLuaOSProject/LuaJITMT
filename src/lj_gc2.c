@@ -1837,8 +1837,8 @@ static void gc2_weak_process_tab(global_State *g, GCtab *t, int clear,
     }
   }
   {
-    Node *node = lj_tab_node_acq(t);
-    MSize i, hmask = lj_tab_node_hmask_acq(node);
+    MSize i, hmask;
+    Node *node = lj_tab_node_snapshot_acq(t, &hmask);
     for (i = 0; i <= hmask; i++) {
       Node *n = &node[i];
       TValue key, val;
@@ -3064,8 +3064,9 @@ static int gc2_traverse_tab(global_State *g, GCtab *t)
   if (t->acap > 0)
     lj_gc2_markmem(g, lj_tab_array_mem_acq(t));
   {
-    Node *node = lj_tab_node_acq(t);
-    if (lj_tab_node_hmask_acq(node) > 0)
+    MSize hmask;
+    Node *node = lj_tab_node_snapshot_acq(t, &hmask);
+    if (hmask > 0)
       lj_gc2_markmem(g, lj_tab_node_hdrw(node));
   }
   if (mt)
@@ -3082,8 +3083,8 @@ static int gc2_traverse_tab(global_State *g, GCtab *t)
     }
   }
   {
-    Node *node = lj_tab_node_acq(t);
-    MSize i, hmask = lj_tab_node_hmask_acq(node);
+    MSize i, hmask;
+    Node *node = lj_tab_node_snapshot_acq(t, &hmask);
     if (hmask > 0) {
       for (i = 0; i <= hmask; i++) {
 	Node *n = &node[i];

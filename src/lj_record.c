@@ -1347,13 +1347,12 @@ static void rec_idx_bump(jit_State *J, RecordIndex *ix)
     GCtab *tb = tabV(&ix->tabv);
     uint32_t nhbits;
     Node *tb_node;
-    uint32_t tb_hmask;
+    MSize tb_hmask;
     IRIns *ir;
     if (!tvisnil(&ix->keyv))
       (void)lj_tab_set(J->L, tb, &ix->keyv);  /* Grow table right now. */
-    tb_node = lj_tab_node_acq(tb);
-    tb_hmask = lj_tab_node_hmask_acq(tb_node);
-    nhbits = tb_hmask > 0 ? lj_fls(tb_hmask)+1 : 0;
+    tb_node = lj_tab_node_snapshot_acq(tb, &tb_hmask);
+    nhbits = tb_hmask > 0 ? lj_fls((uint32_t)tb_hmask)+1 : 0;
     ir = IR(tref_ref(ix->tab));
     if (ir->o == IR_TNEW) {
       uint32_t ah = bc_d(*pc);
@@ -1374,12 +1373,13 @@ static void rec_idx_bump(jit_State *J, RecordIndex *ix)
       GCtab *tpl = gco2tab(proto_kgc(&gcref(rbc->pt)->pt, ~(ptrdiff_t)bc_d(*pc)));
       uint32_t tb_asize = lj_tab_asize_acq(tb);
       uint32_t tpl_asize = lj_tab_asize_acq(tpl);
-      Node *node = lj_tab_node_acq(tpl);
-      uint32_t tpl_hmask = lj_tab_node_hmask_acq(node);
+      MSize tpl_hmask;
+      Node *node = lj_tab_node_snapshot_acq(tpl, &tpl_hmask);
       /* Grow template table, but preserve keys with nil values. */
       if ((tb_asize > tpl_asize && (1u << nhbits)-1 == tpl_hmask) ||
 	  (tb_asize == tpl_asize && (1u << nhbits)-1 > tpl_hmask)) {
-	uint32_t i, hmask = tpl_hmask, asize;
+	MSize hmask = tpl_hmask;
+	uint32_t i, asize;
 	TValue *array;
 	for (i = 0; i <= hmask; i++) {
 	  TValue key, val;
@@ -1393,8 +1393,7 @@ static void rec_idx_bump(jit_State *J, RecordIndex *ix)
 	  if (tvisnil(o)) lj_tab_storetab(J->L, o, tpl);
 	}
 	lj_tab_resize(J->L, tpl, tb_asize, nhbits);
-	node = lj_tab_node_acq(tpl);
-	hmask = lj_tab_node_hmask_acq(node);
+	node = lj_tab_node_snapshot_acq(tpl, &hmask);
 	for (i = 0; i <= hmask; i++) {
 	  TValue val;
 	  lj_tv_load_acq(&val, &node[i].val);
@@ -1527,8 +1526,8 @@ static TRef rec_idx_key(jit_State *J, RecordIndex *ix, IRRef *rbref,
 {
   TRef key;
   GCtab *t = tabV(&ix->tabv);
-  Node *hrefk_node = lj_tab_node_acq(t);
-  uint32_t hrefk_hmask = lj_tab_node_hmask_acq(hrefk_node);
+  MSize hrefk_hmask;
+  Node *hrefk_node = lj_tab_node_snapshot_acq(t, &hrefk_hmask);
   ix->oldv = lj_tab_get(J->L, t, &ix->keyv);  /* Lookup previous value. */
   *rbref = 0;
   rbguard->irt = 0;
@@ -1631,9 +1630,10 @@ static TRef rec_idx_key(jit_State *J, RecordIndex *ix, IRRef *rbref,
     key = emitir(IRTN(IR_CONV), key, IRCONV_NUM_INT);
   if (tref_isk(key)) {
     /* Optimize lookup of constant hash keys. */
-    Node *cur_node = lj_tab_node_acq(t);
+    MSize cur_hmask;
+    Node *cur_node = lj_tab_node_snapshot_acq(t, &cur_hmask);
     if (hrefk_node == cur_node &&
-	hrefk_hmask == lj_tab_node_hmask_acq(cur_node)) {
+	hrefk_hmask == cur_hmask) {
       uintptr_t oldvaddr = (uintptr_t)(const void *)ix->oldv;
       uintptr_t nodeaddr = (uintptr_t)(const void *)&hrefk_node[0].val;
       GCSize hslot = oldvaddr >= nodeaddr ? (GCSize)(oldvaddr-nodeaddr) :
@@ -1864,8 +1864,8 @@ static IRType rec_next_types(GCtab *t, uint32_t idx)
   }
   idx -= asize;
   {
-    Node *node = lj_tab_node_acq(t);
-    uint32_t hmask = lj_tab_node_hmask_acq(node);
+    MSize hmask;
+    Node *node = lj_tab_node_snapshot_acq(t, &hmask);
     for (; idx <= hmask; idx++) {
       Node *n = &node[idx];
       TValue key, val;

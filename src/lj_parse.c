@@ -1405,8 +1405,7 @@ static void fs_fixup_k(FuncState *fs, GCproto *pt, void *kptr)
 	setnumV(tv, (lua_Number)i);
     }
   }
-  node = lj_tab_node_acq(kt);
-  hmask = lj_tab_node_hmask_acq(node);
+  node = lj_tab_node_snapshot_acq(kt, &hmask);
   for (i = 0; i <= hmask; i++) {
     Node *n = &node[i];
     TValue key, val;

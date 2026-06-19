@@ -126,7 +126,9 @@ static LJ_AINLINE char *serialize_ru124(char *r, char *w, uint32_t *pv)
 /* Prepare string dictionary for use (once). */
 void LJ_FASTCALL lj_serialize_dict_prep_str(lua_State *L, GCtab *dict)
 {
-  if (!lj_tab_node_hmask_acq(lj_tab_node_acq(dict))) {
+  MSize hmask;
+  (void)lj_tab_node_snapshot_acq(dict, &hmask);
+  if (!hmask) {
     /* No hash part means not prepared, yet. */
     MSize i, len = lj_tab_len(dict), asize;
     TValue *array;
@@ -150,7 +152,9 @@ void LJ_FASTCALL lj_serialize_dict_prep_str(lua_State *L, GCtab *dict)
 /* Prepare metatable dictionary for use (once). */
 void LJ_FASTCALL lj_serialize_dict_prep_mt(lua_State *L, GCtab *dict)
 {
-  if (!lj_tab_node_hmask_acq(lj_tab_node_acq(dict))) {
+  MSize hmask;
+  (void)lj_tab_node_snapshot_acq(dict, &hmask);
+  if (!hmask) {
     /* No hash part means not prepared, yet. */
     MSize i, len = lj_tab_len(dict), asize;
     TValue *array;
@@ -212,8 +216,7 @@ static char *serialize_put(char *w, SBufExt *sbx, cTValue *o)
       narray = (uint32_t)(i+1);
       if (narray && lj_tv_isnil_acq(&array[0])) one = 4;
     }
-    hashnode = lj_tab_node_acq(t);
-    hmask = lj_tab_node_hmask_acq(hashnode);
+    hashnode = lj_tab_node_snapshot_acq(t, &hmask);
     if (hmask > 0) {  /* Count number of used hash slots. */
       uint32_t i;
       for (i = 0; i <= hmask; i++)

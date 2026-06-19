@@ -280,8 +280,8 @@ static int ctype_fin_has_claim(CTState *cts, cTValue *claim)
        gen != NULL;
        gen = (FinRegGen *)la_loadptr_acq((void *const *)&gen->next)) {
     GCtab *t = (GCtab *)la_loadptr_acq((void *const *)&gen->tab);
-    Node *node = lj_tab_node_acq(t);
-    MSize i, hmask = lj_tab_node_hmask_acq(node);
+    MSize i, hmask;
+    Node *node = lj_tab_node_snapshot_acq(t, &hmask);
     for (i = 0; i <= hmask; i++) {
       TValue val;
       lj_tv_load_acq(&val, &node[i].val);
@@ -300,11 +300,14 @@ int lj_ctype_fin_newgen(lua_State *L, CTState *cts, cTValue *key,
       (void *const *)&cts->fin_head);
     GCtab *headtab = head ? (GCtab *)la_loadptr_acq(
       (void *const *)&head->tab) : NULL;
-    MSize hmask = headtab ? lj_tab_node_hmask_acq(lj_tab_node_acq(headtab)) : 1;
-    uint32_t hbits = hmask > 0 ? lj_fls((uint32_t)hmask) + 2u : 1u;
+    MSize hmask = 1;
+    uint32_t hbits;
     GCtab *t;
     FinRegGen *gen;
     TValue *tv;
+    if (headtab)
+      (void)lj_tab_node_snapshot_acq(headtab, &hmask);
+    hbits = hmask > 0 ? lj_fls((uint32_t)hmask) + 2u : 1u;
     if (headtab && !gcref_acq(headtab->metatable))
       return 0;
     while (ctype_fin_has_claim(cts, claim))
