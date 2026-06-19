@@ -1,55 +1,10 @@
 local utils = require("suite_utils")
 
 local getenv = utils.getenv
-local contains = utils.contains
-local count_plain = utils.count_plain
 local shell_quote = utils.shell_quote
-local line_contains_any = utils.line_contains_any
-local assert_no_lines = utils.assert_no_lines
-local assert_text_not_contains = utils.assert_text_not_contains
-
-local function source_files(t)
-  return t:files(t:path("src"), {
-    extensions = { ".c", ".h", ".dasc", ".lua", ".S", ".d" }
-  })
-end
-
-local function src_ch_files(t)
-  return t:files(t:path("src"), { extensions = { ".c", ".h" } })
-end
 
 local function lua_path(t)
   return t:path("src", "?.lua") .. ";" .. t:path("src", "jit", "?.lua") .. ";;"
-end
-
-local function assert_text_contains(label, data, needle)
-  if not contains(data, needle) then
-    error(label .. ": missing expected text: " .. needle, 2)
-  end
-end
-
-local function assert_text_ordered(label, data, needles)
-  local pos = 1
-  for i = 1, #needles do
-    local next_pos = data:find(needles[i], pos, true)
-    if not next_pos then
-      error(label .. ": missing expected text: " .. needles[i], 2)
-    end
-    pos = next_pos + #needles[i]
-  end
-end
-
-local function find_plain(data, needle, start)
-  return data:find(needle, start or 1, true)
-end
-
-local function assert_pos_order(label, data, needles)
-  local last = 0
-  for i = 1, #needles do
-    local p = find_plain(data, needles[i], last + 1)
-    if not p then error(label .. ": missing expected text: " .. needles[i], 2) end
-    last = p
-  end
 end
 
 local function build_and_run_c(t, out, cfile, opts)
@@ -82,87 +37,6 @@ local function run_dump_probe(t, dump, script)
               " -jdump=ir -e " .. shell_quote(script) ..
               " >" .. shell_quote(dump)
   t:run(cmd)
-end
-
-local function assert_callback_install_order(t)
-  local ccallback = t:path("src", "lj_ccallback.c")
-  local lib_ffi = t:path("src", "lib_ffi.c")
-
-  local clear = t:c_block(ccallback, "void lj_ccallback_func_clear(CTState *cts, MSize slot)")
-  assert_text_not_contains("callback func clear", clear, "lj_tab_storenilraw(&func[slot])")
-  assert_text_contains("callback func clear", clear, "setnilV(&nilv)")
-  assert_text_contains("callback func clear", clear,
-                       "copyTVrel(mainthread(cts->g), &func[slot], &nilv)")
-
-  local misc = t:c_block(lib_ffi, "static TValue *ffi_miscmap_store(lua_State *L,")
-  assert_text_not_contains("ffi_miscmap_store", misc, "lj_tab_storetab(L, dst,")
-  for _, needle in ipairs({
-    "for (;;)",
-    "lj_tab_setstr(L, cts->miscmap, key)",
-    "lj_tab_trystoretv_cas(L, dst, src) == LJ_TAB_STORE_CAS_OK",
-    "FFI miscmap store saw FORWARD after lookup."
-  }) do
-    assert_text_contains("ffi_miscmap_store", misc, needle)
-  end
-
-  local open = t:c_block(lib_ffi, "LUALIB_API int luaopen_ffi(lua_State *L)")
-  assert_text_not_contains("luaopen_ffi", open,
-                           "lj_tab_storetab(L, lj_tab_setstr(L, cts->miscmap, &cts->g->strempty),")
-  assert_text_ordered("luaopen_ffi", open, {
-    "ffi_miscmap_store(L, cts, &cts->g->strempty, L->top-1)",
-    "lj_gc_pubtabobj(L, cts->miscmap, tabV(L->top-1))"
-  })
-
-  local init = t:c_block(ccallback, "void lj_ccallback_init_l")
-  assert_text_ordered("lj_ccallback_init_l", init, {
-    "callback_slots_init_l(L, cts)",
-    "callback_mcode_new_l(L, cts)"
-  })
-
-  local new = t:c_block(ccallback, "void *lj_ccallback_new_l")
-  assert_no_lines(t, "callback new must not lazily initialize mcode/lock",
-                  { ccallback }, function(line, path, n)
-    return contains(new, line) and
-           (contains(line, "callback_mcode_new_l") or
-            contains(line, "lj_ctype_misc_lock") or
-            contains(line, "lj_ctype_misc_unlock"))
-  end)
-  assert_text_ordered("lj_ccallback_new_l", new, {
-    "callback_slot_claim_l(L, cts)",
-    "lj_ccallback_func_store_l(L, cts, slot, fn)",
-    "callback_cbid_store(cbid, slot, id)"
-  })
-
-  local claim = t:c_block(ccallback, "static MSize callback_slot_claim_l")
-  assert_text_not_contains("callback_slot_claim_l", claim, "callback_slots_init_l")
-  for _, needle in ipairs({
-    "for (top = 0; top < sizeid; top++)",
-    "TValue *func = callback_func_slots(cts)",
-    "cbid == NULL || owner == NULL || func == NULL || sizeid == 0",
-    "callback_cbid_load(cbid, top) == 0"
-  }) do
-    assert_text_contains("callback_slot_claim_l", claim, needle)
-  end
-  assert_text_ordered("callback_slot_claim_l", claim, {
-    "callback_owner_load(owner, top) == NULL",
-    "if (carrier == NULL)",
-    "callback_carrier_new_l(L)",
-    "callback_owner_claim(owner, top, carrier)"
-  })
-
-  local set = t:c_block(lib_ffi, "static int ffi_callback_set")
-  assert_text_not_contains("ffi_callback_set", set, "lj_ctype_misc_lock(cts)")
-  assert_text_ordered("ffi_callback_set disowned", set, {
-    "11.5 disowned callback free",
-    "lj_ccallback_func_clear(cts, slot)",
-    "la_store16_rel(&cbid[slot], 0)"
-  })
-  assert_text_ordered("ffi_callback_set owned", set, {
-    "11.5 owned callback free",
-    "la_store16_rel(&cbid[slot], 0)",
-    "lj_ccallback_func_clear(cts, slot)",
-    "la_storeptr_rel((void **)&owner[slot], NULL)"
-  })
 end
 
 local m7_cases = {
@@ -203,99 +77,14 @@ return function(add)
 
   add({
     name = "m7_ffi_callback_install",
-    description = "FFI callback slot claiming and publish/free ordering",
+    description = "FFI callback slot install behavior",
     run = function(t)
-      local src = source_files(t)
-      t:assert_all_any_contains(src, {
-        "lj_ccallback_new_l(lua_State *L, CTState *cts",
-        "callback_slot_claim_l(lua_State *L, CTState *cts)",
-        "callback_checkfunc(CTState *cts, CType *ct, CTypeID *idp)",
-        "*idp = ctype_rawid(cts, ctype_cid(ct->info))",
-        "callback_mcode_new_l(lua_State *L, CTState *cts)",
-        "callback_mcode_new_l(L, cts);  /* 11.5: mcode read-only after FFI init. */",
-        "lj_ccallback_init_l(lua_State *L, CTState *cts)",
-        "lj_ccallback_maxslot(void)",
-        "callback_owner_claim(lua_State **owner, MSize slot,",
-        "la_casptr((void **)&owner[slot], &expect, L,",
-        "callback_owner_load(owner, top) == NULL",
-        "if (carrier == NULL)",
-        "callback_carrier_new_l(L)",
-        "callback_owner_claim(owner, top, carrier)",
-        "callback_owner_barrier_l(L, carrier)",
-        "11.5 callback carrier side root",
-        "TValue *func;",
-        "if (cbid == NULL || owner == NULL || func == NULL || sizeid == 0)",
-        "lj_mem_newvec(L, CALLBACK_MAX_SLOT, CTypeID1)",
-        "la_storeptr_rel((void **)&cts->cb.cbid, cbid)",
-        "lj_mem_newvec(L, CALLBACK_MAX_SLOT, TValue)",
-        "setnilV(&func[i])",
-        "la_storeptr_rel((void **)&cts->cb.func, func)",
-        "la_store32_rel(&cts->cb.sizeid, CALLBACK_MAX_SLOT)",
-        "callback_cbid_load(cbid, top)",
-        "callback_cbid_store(cbid, slot, id)",
-        "callback_func_load(CTState *cts, MSize slot,",
-        "callback_func_load(cts, slot, &tv)",
-        "lj_ccallback_func_store_l(lua_State *L, CTState *cts",
-        "setfuncV(L, &tv, fn)",
-        "copyTVrel(L, &func[slot], &tv)",
-        "lj_gc_barrierroot(L, &func[slot])",
-        "lj_ccallback_func_clear(CTState *cts, MSize slot)",
-        "setnilV(&nilv)",
-        "copyTVrel(mainthread(cts->g), &func[slot], &nilv)",
-        "lj_gc_arena_markmem(g, func)",
-        "lj_gc2_markmem(g, func)",
-        "gc_markobj(g, obj2gco(th))",
-        "lj_gc2_markobj(g, obj2gco(th))",
-        "if (tvisfunc(&tv))",
-        "ffi_miscmap_store(lua_State *L, CTState *cts, GCstr *key,",
-        "FFI miscmap store saw FORWARD after lookup.",
-        "ffi_miscmap_store(L, cts, &cts->g->strempty, L->top-1)",
-        "lj_gc_pubtabobj(L, cts->miscmap, tabV(L->top-1))",
-        "lj_ccallback_new_l(L, cts",
-        "lj_ccallback_init_l(L, cts)",
-        "lj_tab_new(L, 0, 1)",
-        "lj_state_checkstack(L, 1)",
-        "setcdataV(L, L->top++, cd)",
-        "LJLIB_CF(ffi_callback_free)",
-        "la_store16_rel(&cbid[slot], 0)",
-        "la_loadptr_acq((void *const *)&owner[slot]) == NULL",
-        "11.5 disowned callback free: nil function before cbid release.",
-        "11.5 owned callback free: cbid release before owner release.",
-        "lj_ccallback_func_store_l(L, cts, slot, fn)",
-        "lj_ccallback_func_clear(cts, slot)",
-        "la_storeptr_rel((void **)&owner[slot], NULL)"
-      })
-      assert_no_lines(t, "callback setup wrappers must stay explicit-L only",
-                      src, function(line)
-        return line_contains_any(line, {
-          "lj_ccallback_new(CTState",
-          "callback_slot_new",
-          "callback_mcode_new(CTState",
-          "misc_token",
-          "lj_ctype_misc_lock",
-          "lj_ctype_misc_unlock"
-        })
-      end)
-      assert_no_lines(t, "callback function slots must stay in CTState side array",
-                      src, function(line)
-        return contains(line, "lj_tab_getint(cts->miscmap, (int32_t)slot)") or
-               (contains(line, "lj_tab_setint(L,") and contains(line, "(int32_t)slot)")) or
-               contains(line, "lj_tab_new(L, (uint32_t)lj_ccallback_maxslot(), 1)")
-      end)
-      assert_no_lines(t, "callback slot reuse must not depend on old topid cursor",
-                      {
-                        t:path("src", "lj_ccallback.c"),
-                        t:path("src", "lj_ctype.h")
-                      }, function(line)
-        return contains(line, "cb.topid") or contains(line, "MSize topid")
-      end)
-      assert_callback_install_order(t)
       clean_build(t)
       run_luajit_script(t, "t-ffi-callback-install.lua", {
         getenv("LJ_M7_FFI_CBACK_THREADS", "6"),
         getenv("LJ_M7_FFI_CBACK_ITERS", "64")
       }, { joff = true })
-      print("M7 FFI callback install guard passed")
+      print("M7 FFI callback slot install behavior passed")
     end
   })
 
@@ -643,31 +432,14 @@ print("dump cnewi ok")
 
   add({
     name = "m7_ffi_snap_restore_l",
-    description = "FFI snapshot restore cdata allocation passes active lua_State",
+    description = "FFI snapshot restore cdata allocation behavior",
     run = function(t)
-      t:assert_all_any_contains(source_files(t), {
-        "lj_cdata_newx_l(L, cts, id, sz, info)",
-        "GCcdata *lj_cdata_newx_l(lua_State *L, CTState *cts"
-      })
-      assert_no_lines(t, "cdata allocation wrappers must stay explicit-L only",
-                      {
-                        t:path("src", "lj_cdata.h"),
-                        t:path("src", "lj_cdata.c"),
-                        t:path("src", "lj_snap.c")
-                      }, function(line)
-        return line_contains_any(line, {
-          "lj_cdata_new(CTState",
-          "lj_cdata_newx(CTState",
-          "lj_cdata_new(cts",
-          "lj_cdata_newx(cts"
-        })
-      end)
       clean_build(t)
       run_luajit_script(t, "t-ffi-snap-restore-l.lua", nil, {
         timeout = "20s",
         env = { LUA_PATH = lua_path(t) }
       })
-      print("M7 FFI snapshot restore explicit-L guard passed")
+      print("M7 FFI snapshot restore cdata allocation behavior passed")
     end
   })
 

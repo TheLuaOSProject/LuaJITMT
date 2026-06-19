@@ -277,6 +277,9 @@ Lua test-suite migration notes:
   counting source helper.
 - Converted the M7 CType hash/intern/name/table-retire cases to behavior-only
   coverage through their existing Lua regressions and C fixtures.
+- Converted `m7_ffi_callback_install` and `m7_ffi_snap_restore_l` to
+  behavior-only coverage through their Lua regressions, removing the last M7
+  direct source checks and unused source assertion helpers.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.
