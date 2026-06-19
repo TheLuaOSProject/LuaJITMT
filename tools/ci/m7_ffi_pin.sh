@@ -11,6 +11,8 @@ for needle in \
   'GCtab *pinmt' \
   'LJLIB_MODULE_ffi_pin' \
   'LJLIB_CF(ffi_pin)' \
+  'copyTVrel(L, (TValue *)uddata(ud), o)' \
+  'lj_gc_pubobjtv(L, ud, (TValue *)uddata(ud))' \
   'copyTVrel(L, (TValue *)uddata(ud), &nilv)' \
   'lj_udata_udtype_rel(ud, UDTYPE_FFI_PIN)' \
   'gc_marktv(g, &tv);  /* 11.6 ffi.pin() root. */' \

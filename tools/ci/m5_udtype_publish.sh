@@ -92,6 +92,13 @@ check_order "$ROOT/src/lj_clib.c" 'static CLibrary \*clib_new' \
   'lj_gc_pubobjobj(L, ud, mt);' \
   'lj_udata_udtype_rel(ud, UDTYPE_FFI_CLIB);'
 
+check_order "$ROOT/src/lib_ffi.c" 'LJLIB_CF\(ffi_pin\)' \
+  'setgcrefmt(ud->metatable, obj2gco(mt));' \
+  'lj_gc_pubobjobj(L, ud, mt);' \
+  'copyTVrel(L, (TValue *)uddata(ud), o);' \
+  'lj_gc_pubobjtv(L, ud, (TValue *)uddata(ud));' \
+  'lj_udata_udtype_rel(ud, UDTYPE_FFI_PIN);'
+
 make -C "$ROOT/src" -j"$JOBS" >/dev/null
 
 "$ROOT/src/luajit" -joff -e '

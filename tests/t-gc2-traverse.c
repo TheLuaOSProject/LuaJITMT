@@ -829,6 +829,42 @@ static void test_buffer_constructor_dict_barrier(lua_State *L, global_State *g,
 }
 #endif
 
+#if LJ_HASFFI
+static void test_ffi_pin_constructor_value_barrier(lua_State *L, global_State *g,
+						  TGState *tg)
+{
+  GCtab *payload;
+  GCudata *ud;
+  TValue tv;
+
+  lua_settop(L, 0);
+  assert(luaL_dostring(L,
+    "local ffi = require('ffi')\n"
+    "local payload = { tag = 'pin' }\n"
+    "return function() return ffi.pin(payload) end, payload\n") == LUA_OK);
+  payload = tabV(L->top - 1);
+
+  lj_gc2_legacy_mark_begin(g);
+  assert(la_load8_acq(&tg->alloc.alloc_black) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(payload)) == 0);
+
+  lua_pushvalue(L, -2);
+  lua_call(L, 0, 1);
+  ud = udataV(L->top - 1);
+  assert(lj_udata_udtype_acq(ud) == UDTYPE_FFI_PIN);
+  lj_tv_load_acq(&tv, (TValue *)uddata(ud));
+  assert(tvistab(&tv));
+  assert(tabV(&tv) == payload);
+  assert(lj_gc2_ismarked(g, obj2gco(payload)) == 1);
+  flush_and_drain(g, tg);
+  lj_gc2_legacy_cycle_end(g);
+  lua_pop(L, 3);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  lua_gc(L, LUA_GCSTOP, 0);
+}
+#endif
+
 #if LJ_HASJIT
 static GCtrace *find_trace(global_State *g)
 {
@@ -3837,6 +3873,7 @@ int main(void)
   test_lib_register_weak_value_barrier();
 #if LJ_HASFFI
   test_ffi_loaded_weak_value_barrier();
+  test_ffi_pin_constructor_value_barrier(L, g, tg);
   test_finreg_cdata_telemetry(L, g);
   test_finalizer_spawn_deferred_state(L, g);
   test_finreg_disabled_ordered_pending(L, g);

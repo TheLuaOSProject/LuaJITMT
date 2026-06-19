@@ -984,7 +984,8 @@ LJLIB_CF(ffi_pin)
   setgcrefmt(ud->metatable, obj2gco(mt));
   lj_gc_pubobjobj(L, ud, mt);
   lj_gc2_finreg_udata_register_mt(L, G(L), ud, mt);
-  copyTV(L, (TValue *)uddata(ud), o);
+  copyTVrel(L, (TValue *)uddata(ud), o);
+  lj_gc_pubobjtv(L, ud, (TValue *)uddata(ud));
   lj_udata_udtype_rel(ud, UDTYPE_FFI_PIN);
   setudataV(L, L->top++, ud);
   lj_gc_check(L);
