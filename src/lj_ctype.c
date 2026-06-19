@@ -189,10 +189,11 @@ static GCtab *ctype_fin_tab_new_l(lua_State *L, uint32_t hbits)
   TValue *anchor = L->top;
   GCtab *t = lj_tab_new(L, 0, hbits);
   settabV(L, L->top++, t);
-  setgcref(t->metatable, obj2gco(t));
+  setgcrefmt(t->metatable, obj2gco(t));
   lj_tab_storestr(L, lj_tab_setstr(L, t, lj_str_newlit(L, "__mode")),
 		  lj_str_newlit(L, "k"));
   t->nomm = (uint8_t)(~(1u<<MM_mode));
+  lj_gc_pubtab(L, t);
   L->top = anchor;
   return t;
 }

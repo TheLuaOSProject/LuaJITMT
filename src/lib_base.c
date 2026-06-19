@@ -948,13 +948,13 @@ static void setpc_wrap_aux(lua_State *L, GCfunc *fn)
 
 static void newproxy_weaktable(lua_State *L)
 {
-  /* NOBARRIER: The table is new (marked white). */
   GCtab *t = lj_tab_new(L, 0, 1);
   settabV(L, L->top++, t);
-  setgcref(t->metatable, obj2gco(t));
+  setgcrefmt(t->metatable, obj2gco(t));
   lj_tab_storestr(L, lj_tab_setstr(L, t, lj_str_newlit(L, "__mode")),
 		  lj_str_newlit(L, "kv"));
   t->nomm = (uint8_t)(~(1u<<MM_mode));
+  lj_gc_pubtab(L, t);
 }
 
 LUALIB_API int luaopen_base(lua_State *L)

@@ -39,9 +39,10 @@ if [ -n "$hits" ]; then
 fi
 
 raw_runtime_hits=$(rg -n 'setgcref\(t->metatable' \
-  "$ROOT/src/lj_serialize.c" "$ROOT/src/lj_snap.c" || true)
+  "$ROOT/src/lj_serialize.c" "$ROOT/src/lj_snap.c" \
+  "$ROOT/src/lib_base.c" "$ROOT/src/lj_ctype.c" || true)
 if [ -n "$raw_runtime_hits" ]; then
-  echo "guardrail: serializer/snapshot metatable publications must use release stores:" >&2
+  echo "guardrail: runtime metatable publications must use release stores:" >&2
   echo "$raw_runtime_hits" >&2
   exit 1
 fi
@@ -90,13 +91,52 @@ for needle in \
   'setgcrefrel(sbx->dict_mt, obj2gco(dict_mt));' \
   'lj_gc_pubobjobj(L, ud, dict_str);' \
   'lj_gc_pubobjobj(L, ud, dict_mt);' \
-  'test_buffer_constructor_dict_barrier'
+  'test_buffer_constructor_dict_barrier' \
+  'setgcrefmt(t->metatable, obj2gco(t));' \
+  'test_weak_self_metatable_publish_barrier'
 do
   if ! rg -F -q "$needle" "$ROOT/src" "$ROOT/tests"; then
     echo "guardrail: missing metatable publication marker: $needle" >&2
     exit 1
   fi
 done
+
+if ! awk '
+  /static void newproxy_weaktable\(lua_State \*L\)/ { infn = 1; next }
+  infn && /setgcrefmt\(t->metatable, obj2gco\(t\)\)/ { store = NR }
+  infn && /lj_tab_storestr\(L, lj_tab_setstr/ { mode = NR }
+  infn && /t->nomm =/ { nomm = NR }
+  infn && /lj_gc_pubtab\(L, t\)/ { barrier = NR }
+  infn && /^}/ {
+    ok = store && mode && nomm && barrier &&
+	 store < mode && mode < nomm && nomm < barrier
+    exit ok ? 0 : 1
+  }
+  END { if (!ok) exit 1 }
+' "$ROOT/src/lib_base.c"; then
+  echo "guardrail: newproxy weak table must release-publish self metatable and publish after __mode" >&2
+  exit 1
+fi
+
+if ! awk '
+  /static GCtab \*ctype_fin_tab_new_l\(lua_State \*L, uint32_t hbits\)/ {
+    infn = 1
+    next
+  }
+  infn && /setgcrefmt\(t->metatable, obj2gco\(t\)\)/ { store = NR }
+  infn && /lj_tab_storestr\(L, lj_tab_setstr/ { mode = NR }
+  infn && /t->nomm =/ { nomm = NR }
+  infn && /lj_gc_pubtab\(L, t\)/ { barrier = NR }
+  infn && /^}/ {
+    ok = store && mode && nomm && barrier &&
+	 store < mode && mode < nomm && nomm < barrier
+    exit ok ? 0 : 1
+  }
+  END { if (!ok) exit 1 }
+' "$ROOT/src/lj_ctype.c"; then
+  echo "guardrail: FFI finalizer weak table must release-publish self metatable and publish after __mode" >&2
+  exit 1
+fi
 
 if ! awk '
   /static char \*serialize_get\(char \*r, SBufExt \*sbx, TValue \*o\)/ {
