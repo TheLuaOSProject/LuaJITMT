@@ -6,6 +6,7 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 CC=${CC:-cc}
 CFLAGS=${CFLAGS:-"-std=gnu99 -O2 -Wall -Wextra -Werror -mcx16"}
 OUT=${TMPDIR:-/tmp}/lj_t-gc2-alloc-account
+OUT_INTERP=${TMPDIR:-/tmp}/lj_t-gc2-interp-hard-check
 
 make -C "$ROOT/src" >/dev/null
 
@@ -21,6 +22,7 @@ for needle in \
   'uint64_t assist_ssb_converted' \
   'uint64_t assist_weak_drained' \
   'uint64_t jit_hard_checks' \
+  'uint64_t interp_hard_checks' \
   'uint32_t gcpause_pct' \
   'uint32_t assist_shift' \
   'uint32_t assist_active' \
@@ -44,10 +46,13 @@ for needle in \
   'la_cas32(&g->gc2.assist_active' \
   'tg->gc_assist = 1' \
   'la_add64_rlx(&g->gc2.assist_runs' \
+  'la_add64_rlx(&g->gc2.interp_hard_checks' \
+  'lj_gc2_assist(g, L2TG(L));  /* 05 section 5.11 interpreter assist bridge. */' \
   'la_add64_rlx(&g->gc2.assist_grey_drained' \
   'la_add64_rlx(&g->gc2.assist_ssb_converted' \
   'la_add64_rlx(&g->gc2.assist_weak_drained' \
   'la_store64_rlx(&g->gc2.jit_hard_checks, 0)' \
+  'la_store64_rlx(&g->gc2.interp_hard_checks, 0)' \
   'la_xchg32_acqrel(&g->gc2.cycle_leader, 0)' \
   'gc2_drain_active_ssb_to_grey(global_State *g, TGState *tg' \
   'gc2_drain_published_ssb_to_grey(global_State *g' \
@@ -82,5 +87,9 @@ fi
 "$CC" $CFLAGS -I"$ROOT/src" "$ROOT/tests/t-gc2-alloc-account.c" \
   "$ROOT/src/libluajit.a" -lm -ldl -pthread -o "$OUT"
 timeout 20s "$OUT"
+
+"$CC" $CFLAGS -I"$ROOT/src" "$ROOT/tests/t-gc2-interp-hard-check.c" \
+  "$ROOT/src/libluajit.a" -lm -ldl -pthread -o "$OUT_INTERP"
+timeout 20s "$OUT_INTERP"
 
 echo "M6 JIT allocator accounting guard passed"

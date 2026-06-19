@@ -229,4 +229,8 @@ final cross-VM `wbarrier_tv` macro cleanup; x64 closed `USETx`/`CSET` stores
 already release-copy through `lj_func_storeuv_*_pub()` helpers, and raw/open
 cell stores remain stack-local writes. The old x64 `vm_gc2_barriertab` helper
 label has no remaining VM branch users and is retired; the JIT C-call
-`lj_gc2_barrier_tab_g` path remains separate.
+`lj_gc2_barrier_tab_g` path remains separate. The interpreter allocation slow
+path now also runs the GC2 hard-threshold assist from `lj_gc_step_fixtop()` once
+the current legacy VM threshold check branches there, with
+`GC2State.interp_hard_checks` telemetry. The direct x64 `gc.total`/`gc.threshold`
+branch remains a staged entry point until §7.5 inline allocation replaces it.
