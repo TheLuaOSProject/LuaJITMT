@@ -106,6 +106,11 @@ do
   fi
 done
 
+if ! rg -F -q 'm10_generational.sh' "$ROOT/tools/ci/m9_m10_gc.sh"; then
+  echo "guardrail: m10_generational.sh is not wired into the M9/M10 aggregate" >&2
+  exit 1
+fi
+
 if ! awk '
   /uint32_t lj_gc_sweep_gc2_unmarked\(global_State \*g\)/ { inroot = 1 }
   inroot && /gc_chain_splice\(p, o\)/ { splice = NR }

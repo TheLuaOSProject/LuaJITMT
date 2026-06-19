@@ -53,6 +53,11 @@ do
   fi
 done
 
+if ! rg -F -q 'm9_gc_stats.sh' "$ROOT/tools/ci/m9_m10_gc.sh"; then
+  echo "guardrail: m9_gc_stats.sh is not wired into the M9/M10 aggregate" >&2
+  exit 1
+fi
+
 if rg -n 'copyTVrel\(L, lj_tab_set(str|int)\(L, (t|bt)|lj_tab_storetab\(L, lj_tab_setstr\(L, t,' \
     "$ROOT/src/lib_base.c"; then
   echo "guardrail: GC stats table fields must be CAS-published" >&2

@@ -24,6 +24,11 @@ do
   fi
 done
 
+if ! rg -F -q 'm9_bench_smoke.sh' "$ROOT/tools/ci/m9_m10_gc.sh"; then
+  echo "guardrail: m9_bench_smoke.sh is not wired into the M9/M10 aggregate" >&2
+  exit 1
+fi
+
 if rg -n 'os[.]clock' "$ROOT/plan/aux/bench/bench_mt.lua"; then
   echo "guardrail: bench_mt.lua must use monotonic wall time, not CPU time" >&2
   exit 1

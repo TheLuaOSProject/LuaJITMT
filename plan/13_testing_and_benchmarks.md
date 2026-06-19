@@ -80,6 +80,8 @@ same-trace closed-upvalue and nested heap escapes before a `TNEW`/`TDUP` slot
 update. The M10 generational gate includes a traced helper-backed table-store
 regression that confirms the remembered SSB entry is the old parent table and
 that the next minor cycle marks the young child through that parent.
+`tools/ci/m9_m10_gc.sh` chains the current M9 stats/benchmark smokes with the
+M10 generational guard.
 These are milestone
 guardrails, not the final M9 performance matrix.
 

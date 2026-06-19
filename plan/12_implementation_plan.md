@@ -266,6 +266,8 @@ sweep progress, weak clearing, weak-write marks, FINREG fallback/order counters,
 finalizer queueing/MPSC drains, finalizer-spawn deferrals, and live estimates.
 `plan/aux/bench/bench_mt.lua` prints a stable subset of those fields after a run
 and reports approximate poll-ack P99 latency from histogram deltas.
+`tools/ci/m9_m10_gc.sh` now aggregates the M9 stats smoke, M9 benchmark smoke,
+and M10 generational guard, and each child guard checks that aggregate wiring.
 
 ## M10 — Generational mode (≈800)
 Tasks: 05 §5.12 (minor sweep identity already in arena code from M2;
