@@ -280,6 +280,9 @@ Lua test-suite migration notes:
 - Converted `m7_ffi_callback_install` and `m7_ffi_snap_restore_l` to
   behavior-only coverage through their Lua regressions, removing the last M7
   direct source checks and unused source assertion helpers.
+- Converted the M5 x64 cases, including `m5_x64_tset_nil_snapshot`, to rely on
+  Lua smoke tests and C forward/snapshot fixtures instead of direct
+  `vm_x64.dasc` source inspections.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.
