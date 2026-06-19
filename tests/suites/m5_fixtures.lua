@@ -9,15 +9,6 @@ local function count_matches(data, pattern)
   return count
 end
 
-local function build_and_run_luajit_c(t, out, cfile)
-  t:build({ clean = true, quiet = true })
-  t:cc(out, { t:path("tests", cfile) }, {
-    link_luajit = true,
-    libs = { "-lm", "-ldl", "-pthread" }
-  })
-  t:run({ out })
-end
-
 local function source_and_test_files(t)
   local files = t:files(t:path("src"), {
     extensions = { ".c", ".h", ".dasc" }
@@ -71,8 +62,7 @@ return function(add)
     name = "m5_itype_nan",
     description = "NaN TValue tag C fixture",
     run = function(t)
-      build_and_run_luajit_c(t, t:tmp("lj_t-itype-nan"),
-                             "t-itype-nan.c")
+      t:run_luajit_c_fixture(t:tmp("lj_t-itype-nan"), "t-itype-nan.c")
       print("M5 NaN tag tests passed")
     end
   })
@@ -81,8 +71,8 @@ return function(add)
     name = "m5_itype_sentinel",
     description = "internal table sentinel TValue C fixture and markers",
     run = function(t)
-      build_and_run_luajit_c(t, t:tmp("lj_t-itype-sentinel"),
-                             "t-itype-sentinel.c")
+      t:run_luajit_c_fixture(t:tmp("lj_t-itype-sentinel"),
+                              "t-itype-sentinel.c")
       t:assert_all_contains(t:path("src", "lj_obj.h"), {
         "LJ_LIGHTUD_INTERNAL_SEG",
         "LJ_TFORWARD_BITS",
@@ -101,8 +91,8 @@ return function(add)
     name = "m5_bcdump_compat",
     description = "bytecode dump compatibility C fixture and source guards",
     run = function(t)
-      build_and_run_luajit_c(t, t:tmp("lj_t-bcdump-compat"),
-                             "t-bcdump-compat.c")
+      t:run_luajit_c_fixture(t:tmp("lj_t-bcdump-compat"),
+                              "t-bcdump-compat.c")
       local files = {
         t:path("src", "lj_bcdump.h"),
         t:path("src", "lj_obj.h"),
@@ -137,8 +127,8 @@ return function(add)
     name = "m5_registry_root",
     description = "direct registry root publication C fixture and guard",
     run = function(t)
-      build_and_run_luajit_c(t, t:tmp("lj_t-registry-root"),
-                             "t-registry-root.c")
+      t:run_luajit_c_fixture(t:tmp("lj_t-registry-root"),
+                              "t-registry-root.c")
       local block = t:c_block(t:path("src", "lj_api.c"),
                               "static void copy_slot")
       t:assert_text_ordered("LUA_REGISTRYINDEX write", block, {
@@ -155,8 +145,7 @@ return function(add)
     name = "m5_nomm_cache",
     description = "metatable negative-cache policy C fixture and guards",
     run = function(t)
-      build_and_run_luajit_c(t, t:tmp("lj_t-nomm-cache"),
-                             "t-nomm-cache.c")
+      t:run_luajit_c_fixture(t:tmp("lj_t-nomm-cache"), "t-nomm-cache.c")
       t:assert_not_match(t:path("src", "lj_meta.c"),
                          "%-%>nomm%s*%|=",
                          "->nomm |=")
@@ -187,8 +176,8 @@ return function(add)
     name = "m5_strtab_prep",
     description = "string table representation prep C fixture and guards",
     run = function(t)
-      build_and_run_luajit_c(t, t:tmp("lj_t-strtab-prep"),
-                             "t-strtab-prep.c")
+      t:run_luajit_c_fixture(t:tmp("lj_t-strtab-prep"),
+                              "t-strtab-prep.c")
 
       assert_no_lines(t, "string table users must route through g->str.tabh",
                       source_and_test_files(t), raw_str_tab)
@@ -226,15 +215,9 @@ return function(add)
       local out = t:tmp("lj_t-strtab-cas")
       local out_rehash = t:tmp("lj_t-strtab-rehash")
       t:build({ clean = true, quiet = true })
-      t:cc(out, { t:path("tests", "t-strtab-cas.c") }, {
-        link_luajit = true,
-        libs = { "-lm", "-ldl", "-pthread" }
-      })
+      t:compile_luajit_c_fixture(out, "t-strtab-cas.c")
       t:run({ out }, { timeout = "20s" })
-      t:cc(out_rehash, { t:path("tests", "t-strtab-rehash.c") }, {
-        link_luajit = true,
-        libs = { "-lm", "-ldl", "-pthread" }
-      })
+      t:compile_luajit_c_fixture(out_rehash, "t-strtab-rehash.c")
       t:run({ out_rehash }, { timeout = "20s" })
 
       t:assert_all_any_contains(source_files(t), {

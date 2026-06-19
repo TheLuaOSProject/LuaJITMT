@@ -4,15 +4,6 @@ local contains = utils.contains
 local count_plain = utils.count_plain
 local assert_no_lines = utils.assert_no_lines
 
-local function build_and_run_table_c(t, out, cfile)
-  t:build({ clean = true, quiet = true })
-  t:cc(out, { t:path("tests", cfile) }, {
-    link_luajit = true,
-    libs = { "-lm", "-ldl", "-pthread" }
-  })
-  t:run({ out }, { timeout = "20s" })
-end
-
 local function src_ch_files(t)
   return t:files(t:path("src"), { extensions = { ".c", ".h" } })
 end
@@ -44,14 +35,8 @@ return function(add)
     run = function(t)
       local lj_tab = t:path("src", "lj_tab.c")
 
-      t:build({ clean = true, quiet = true })
-      t:cc(t:tmp("lj_t-tab-emptyhash"), {
-        t:path("tests", "t-tab-emptyhash.c")
-      }, {
-        link_luajit = true,
-        libs = { "-lm", "-ldl", "-pthread" }
-      })
-      t:run({ t:tmp("lj_t-tab-emptyhash") })
+      t:run_luajit_c_fixture(t:tmp("lj_t-tab-emptyhash"),
+                              "t-tab-emptyhash.c")
 
       t:assert_not_contains(lj_tab, "|| hmask == 0")
       t:assert_ordered(lj_tab, {
@@ -68,8 +53,8 @@ return function(add)
     name = "m5_tab_slot_snapshot",
     description = "table hash-node TValue snapshot C fixture and guards",
     run = function(t)
-      build_and_run_table_c(t, t:tmp("lj_t-tab-slot-snapshot"),
-                            "t-tab-slot-snapshot.c")
+      t:run_luajit_c_fixture(t:tmp("lj_t-tab-slot-snapshot"),
+                              "t-tab-slot-snapshot.c", { timeout = "20s" })
 
       t:assert_all_any_contains(src_ch_files(t), {
         "lj_tv_load_acq",
@@ -123,8 +108,8 @@ return function(add)
     name = "m5_tab_keylock_lookup",
     description = "table KEYLOCK lookup filtering C fixture and guards",
     run = function(t)
-      build_and_run_table_c(t, t:tmp("lj_t-tab-keylock-lookup"),
-                            "t-tab-keylock-lookup.c")
+      t:run_luajit_c_fixture(t:tmp("lj_t-tab-keylock-lookup"),
+                              "t-tab-keylock-lookup.c", { timeout = "20s" })
 
       local files = src_ch_files(t)
       files[#files + 1] = t:path("tests", "t-tab-keylock-lookup.c")
@@ -177,8 +162,8 @@ return function(add)
     name = "m5_tab_chain_order",
     description = "stable table-node/hash-chain ordering C fixture and guards",
     run = function(t)
-      build_and_run_table_c(t, t:tmp("lj_t-tab-chain-order"),
-                            "t-tab-chain-order.c")
+      t:run_luajit_c_fixture(t:tmp("lj_t-tab-chain-order"),
+                              "t-tab-chain-order.c", { timeout = "20s" })
 
       t:assert_all_any_contains(src_ch_files(t), {
         "lj_tab_nextnode_acq",
@@ -235,8 +220,8 @@ return function(add)
     name = "m5_tab_node_publish",
     description = "table hash-vector publication C fixture and guards",
     run = function(t)
-      build_and_run_table_c(t, t:tmp("lj_t-tab-node-publish"),
-                            "t-tab-node-publish.c")
+      t:run_luajit_c_fixture(t:tmp("lj_t-tab-node-publish"),
+                              "t-tab-node-publish.c", { timeout = "20s" })
 
       t:assert_all_any_contains(src_ch_files(t), {
         "lj_tab_node_acq",
@@ -303,8 +288,8 @@ return function(add)
     name = "m5_tab_nodehdr",
     description = "table hash-vector header C fixture and guards",
     run = function(t)
-      build_and_run_table_c(t, t:tmp("lj_t-tab-nodehdr"),
-                            "t-tab-nodehdr.c")
+      t:run_luajit_c_fixture(t:tmp("lj_t-tab-nodehdr"),
+                              "t-tab-nodehdr.c", { timeout = "20s" })
 
       t:assert_all_any_contains(src_code_files(t), {
         "typedef struct TabNodeHdr",
@@ -407,8 +392,8 @@ return function(add)
     name = "m5_tab_forward_filter",
     description = "table FORWARD value filtering C fixture and guards",
     run = function(t)
-      build_and_run_table_c(t, t:tmp("lj_t-tab-forward-filter"),
-                            "t-tab-forward-filter.c")
+      t:run_luajit_c_fixture(t:tmp("lj_t-tab-forward-filter"),
+                              "t-tab-forward-filter.c", { timeout = "20s" })
 
       t:assert_all_any_contains({
         t:path("src", "lj_tab.c"),
@@ -530,8 +515,8 @@ return function(add)
     name = "m5_tab_retire",
     description = "table hash-vector retirement C fixture and guards",
     run = function(t)
-      build_and_run_table_c(t, t:tmp("lj_t-tab-retire"),
-                            "t-tab-retire.c")
+      t:run_luajit_c_fixture(t:tmp("lj_t-tab-retire"),
+                              "t-tab-retire.c", { timeout = "20s" })
 
       t:assert_all_any_contains(src_ch_files(t), {
         "TabNodeRetire",

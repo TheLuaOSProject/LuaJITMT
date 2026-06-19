@@ -3,15 +3,6 @@ local utils = require("suite_utils")
 local getenv = utils.getenv
 
 return function(add)
-  local function build_and_run_c_fixture(t, out, cfile)
-    t:build({ clean = true, quiet = true })
-    t:cc(out, { t:path("tests", cfile) }, {
-      link_luajit = true,
-      libs = { "-lm", "-ldl", "-pthread" }
-    })
-    t:run({ out })
-  end
-
   local function build_and_run(name, script, env)
     add({
       name = name,
@@ -36,7 +27,7 @@ return function(add)
     name = "m4_thr_substrate",
     description = "focused M4 thread substrate C fixture",
     run = function(t)
-      build_and_run_c_fixture(t, t:tmp("lj_t-thr-substrate"),
+      t:run_luajit_c_fixture(t:tmp("lj_t-thr-substrate"),
                               "t-thr-substrate.c")
       print("M4 thread substrate tests passed")
     end
@@ -46,7 +37,7 @@ return function(add)
     name = "m4_chan_stress",
     description = "focused M4 channel substrate stress C fixture",
     run = function(t)
-      build_and_run_c_fixture(t, t:tmp("lj_t-chan-stress"),
+      t:run_luajit_c_fixture(t:tmp("lj_t-chan-stress"),
                               "t-chan-stress.c")
       print("M4 channel stress tests passed")
     end
@@ -56,7 +47,7 @@ return function(add)
     name = "m4_threading_capi",
     description = "public C threading API behavior fixture",
     run = function(t)
-      build_and_run_c_fixture(t, t:tmp("lj_t-threading-capi"),
+      t:run_luajit_c_fixture(t:tmp("lj_t-threading-capi"),
                               "t-threading-capi.c")
       print("M4 public C threading API tests passed")
     end

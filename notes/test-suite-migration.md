@@ -220,6 +220,9 @@ Lua test-suite migration notes:
   `m4_threading_capi`, and `m4_threading_shutdown` now rely on their Lua/C
   behavior fixtures instead of reading `src/lib_threading.c`, safepoint sources,
   or x64 VM text.
+- Added shared `compile_luajit_c_fixture` and `run_luajit_c_fixture` methods to
+  the Lua test harness, then moved the repeated M4, M5 fixture, and M5 table C
+  fixture build/link/run boilerplate onto those helpers.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.
