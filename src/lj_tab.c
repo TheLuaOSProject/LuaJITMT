@@ -115,6 +115,36 @@ static LJ_AINLINE cTValue *tab_forwarded_int_arrayslot(GCtab *t, int32_t key)
   return NULL;
 }
 
+static LJ_AINLINE int tab_forwarded_hash_value(GCtab *t, Node **nodep,
+					       MSize *hmaskp, cTValue *key,
+					       TValue *valp)
+{
+  Node *n;
+  if (!tab_node_forward_hop(nodep, hmaskp))
+    return 0;
+  if (tvisnum(key)) {
+    int64_t i64;
+    int32_t k;
+    if (lj_num2int_check(numV(key), i64, k)) {
+      cTValue *tv = lj_tab_getint(t, k);
+      if (tv) {
+	lj_tv_load_acq(valp, tv);
+	return !tab_val_absent(valp);
+      }
+    }
+  }
+  n = hashkey_node(*nodep, *hmaskp, key);
+  do {
+    TValue nk;
+    lj_tv_load_acq(&nk, &n->key);
+    if (lj_obj_equal(&nk, key)) {
+      lj_tv_load_acq(valp, &n->val);
+      return !tab_val_absent(valp);
+    }
+  } while ((n = lj_tab_nextnode_acq(n)));
+  return 0;
+}
+
 static TValue *tab_findkey_or_keylock(Node *anchor, cTValue *key, int *locked)
 {
   Node *n;
@@ -1429,6 +1459,21 @@ int lj_tab_next(GCtab *t, cTValue *key, TValue *o)
   for (; idx < asize; idx++) {
     TValue val;
     lj_tv_load_acq(&val, &array[idx]);
+    if (tvisforward(&val)) {
+      MSize nextasize = asize;
+      TValue *nextarray = array;
+      if (lj_tab_array_forward_hop(t, &nextarray, &nextasize)) {
+	if (idx < nextasize) {
+	  array = nextarray;
+	  asize = (uint32_t)nextasize;
+	  lj_tv_load_acq(&val, &array[idx]);
+	} else {
+	  cTValue *tv = lj_tab_getinth(t, (int32_t)idx);
+	  if (tv)
+	    lj_tv_load_acq(&val, tv);
+	}
+      }
+    }
     if (LJ_LIKELY(!tab_val_absent(&val))) {
       setintV(o, idx);
       o[1] = val;
@@ -1444,6 +1489,19 @@ int lj_tab_next(GCtab *t, cTValue *key, TValue *o)
       Node *n = &node[idx];
       TValue key, val;
       lj_tv_load_acq(&val, &n->val);
+      if (tvisforward(&val)) {
+	lj_tv_load_acq(&key, &n->key);
+	if (!tab_key_islocked(&key)) {
+	  Node *hopnode = node;
+	  MSize hophmask = hmask;
+	  if (tab_forwarded_hash_value(t, &hopnode, &hophmask, &key, &val)) {
+	    o[0] = key;
+	    o[1] = val;
+	    return 1;
+	  }
+	}
+	continue;
+      }
       if (!tab_val_absent(&val)) {
 	lj_tv_load_acq(&key, &n->key);
 	if (tab_key_islocked(&key)) {

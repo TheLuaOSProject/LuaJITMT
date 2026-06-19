@@ -122,6 +122,7 @@ static void exercise_array_forward_hop(lua_State *L)
   lj_tab_asize_rel(t, oldasize);
   lj_tab_array_rel(t, oldarray);
   assert_i32(lj_tab_getint(t, 5), 505);
+  assert(count_next(t) == 1);
 
   lj_tab_array_rel(t, newarray);
   lj_tab_asize_rel(t, newasize);
@@ -199,6 +200,7 @@ static void exercise_hash_forward_hop(lua_State *L)
   assert_i32(lj_tab_getstr(t, hopstr), 101);
   assert_i32(lj_tab_getint(t, 33), 202);
   assert_i32(lj_tab_get(L, t, &lightkey), 303);
+  assert(count_next(t) == 3);
 
   lj_tab_node_rel(t, newnode);
   lj_tab_hmask_rel(t, newhmask);
@@ -249,6 +251,7 @@ static void exercise_hash_to_array_forward_hop(lua_State *L)
   lj_tab_hmask_rel(t, oldhmask);
   lj_tab_node_rel(t, oldnode);
   assert_i32(lj_tab_getint(t, moveint), 707);
+  assert(count_next(t) == 1);
 
   lj_tab_array_rel(t, newarray);
   lj_tab_asize_rel(t, newasize);

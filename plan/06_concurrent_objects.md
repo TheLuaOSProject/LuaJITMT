@@ -40,7 +40,8 @@ exposed or recopied by the current bridge. Integer array getters now hop a
 forwarded separated-array slot through `TabArrayHdr.next_gen`, falling through
 to integer hash lookup when the successor array is too small for a shrink-tail
 key. Iterator next-generation `LJ_TFORWARD` hops still have to be added at the
-table protocol use sites below.
+VM fast-path use sites below; C `lj_tab_next()` now resolves visible forwarded
+array/hash slots through the published successor for the current logical key.
 
 ## 6.2 Tables: data structures
 
@@ -318,7 +319,9 @@ visible array `LJ_TFORWARD` slots through `TabArrayHdr.next_gen`, including
 falling through to the hash part after a shrink-tail hop. Integer hash lookups
 that observe a forwarded old hash slot also check the successor array after a
 hash-generation hop, covering array growth that migrates the integer key out of
-the hash part.
+the hash part. C `lj_tab_next()` resolves visible array and hash
+`LJ_TFORWARD` slots through the published successor generation for the current
+logical key before falling back to absent filtering.
 Publication barriers that receive a `TValue *` snapshot the value before GC2
 marking and legacy `tviswhite()` / `gcV()` checks, so the current release-store
 bridge does not reread a shared destination slot after publication.

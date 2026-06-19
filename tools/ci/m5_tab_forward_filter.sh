@@ -23,6 +23,7 @@ for needle in \
   'tab_node_forward_hop(Node **nodep, MSize *hmaskp)' \
   'lj_tab_node_nextgen_acq(node)' \
   'tab_forwarded_int_arrayslot(GCtab *t, int32_t key)' \
+  'tab_forwarded_hash_value(GCtab *t, Node **nodep,' \
   'lj_tab_array_forward_hop(const GCtab *t, TValue **arrayp,' \
   'lj_tab_array_nextgen_acq(array)' \
   'lj_tab_array_hdr_asize_acq(next)' \
@@ -86,11 +87,13 @@ fi
 
 if ! awk '
   /int lj_tab_next\(GCtab \*t,/ { innext = 1 }
+  innext && /lj_tab_array_forward_hop\(t, &nextarray, &nextasize\)/ { array_hop = 1 }
+  innext && /tab_forwarded_hash_value\(t, &hopnode, &hophmask, &key, &val\)/ { hash_hop = 1 }
   innext && /tab_val_absent\(&val\)/ { next_absent++ }
   innext && /^}/ { innext = 0 }
-  END { exit next_absent >= 2 ? 0 : 1 }
+  END { exit array_hop && hash_hop && next_absent >= 2 ? 0 : 1 }
 ' "$ROOT/src/lj_tab.c"; then
-  echo "guardrail: table next() must filter FORWARD values from array/hash scans" >&2
+  echo "guardrail: table next() must hop/filter FORWARD values from array/hash scans" >&2
   exit 1
 fi
 
