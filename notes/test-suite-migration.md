@@ -326,6 +326,8 @@ Lua test-suite migration notes:
 - Removed the M3 GC2 scaffold marker inventory; the scaffold case now relies
   on its C fixtures and nested behavior gates while retaining the queue-slot
   acquire/release blacklist.
+- Removed unused M5 base-table source-inspection helper functions left behind
+  after the state-owner behavior migration.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.

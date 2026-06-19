@@ -350,31 +350,6 @@ print("jit-trace-publish-smoke OK")
 ]=]
 end
 
-local function check_base_storetab_str(t)
-  local block = t:c_block(t:path("src", "lib_base.c"),
-                          "static void base_storetab_str(lua_State *L,")
-  assert_block_excludes("base_storetab_str", block, {
-    "lj_tab_storetab(L, dst,"
-  })
-  block_has_all("base_storetab_str", block, {
-    "for (;;)",
-    "lj_tab_setstr(L, tab, key)",
-    "lj_tab_trystoretv_cas(L, dst, &tv) == LJ_TAB_STORE_CAS_OK",
-    "base table store saw FORWARD after lookup."
-  })
-end
-
-local function check_luaopen_base(t)
-  local block = t:c_block(t:path("src", "lib_base.c"),
-                          "LUALIB_API int luaopen_base(lua_State *L)")
-  assert_block_excludes("luaopen_base", block, {
-    'lj_tab_storetab(L, lj_tab_setstr(L, env, lj_str_newlit(L, "_G")), env)'
-  })
-  block_has_all("luaopen_base", block, {
-    'base_storetab_str(L, env, lj_str_newlit(L, "_G"), env)'
-  })
-end
-
 return function(add)
   add({
     name = "m5_state_owner",
