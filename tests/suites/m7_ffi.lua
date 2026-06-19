@@ -52,17 +52,6 @@ local function assert_pos_order(label, data, needles)
   end
 end
 
-local function count_line_hits(t, paths, pred)
-  local count = 0
-  for i = 1, #paths do
-    local path = paths[i]
-    for line in (t:read(path) .. "\n"):gmatch("(.-)\n") do
-      if pred(line, path) then count = count + 1 end
-    end
-  end
-  return count
-end
-
 local function build_and_run_c(t, out, cfile, opts)
   opts = opts or {}
   t:cc(out, { t:path("tests", cfile) }, {
@@ -383,69 +372,27 @@ return function(add)
 
   add({
     name = "m7_ffi_cdef_dup_stack",
-    description = "duplicate ffi.cdef/string-ctype stack-growth race guard",
+    description = "duplicate ffi.cdef/string-ctype stack-growth race behavior",
     run = function(t)
-      t:assert_all_any_contains(source_files(t), {
-        "lj_state_rehome_stack(lua_State *L)",
-        "lj_arena_allocf(&tg->allocd, NULL, 0, sz)",
-        "lj_gc2_account_alloc(g, tg, (GCSize)sz)",
-        "lj_mem_freevec(g, oldst, stacksize, TValue)",
-        "LJ_FUNC int lj_state_rehome_stack(lua_State *L)",
-        "if (!lj_state_rehome_stack(L1))",
-        "L1->tg_hint = L2TG(L)"
-      })
-      assert_text_ordered("spawned thread stack must move to worker TG before publication/start",
-                          t:read(t:path("src", "lib_threading.c")), {
-        "lj_tg_init_thread(G(L), tg, L1",
-        "tg->alloc.owner_tid = th->thr.tid",
-        "lj_state_rehome_stack(L1)",
-        "threading_gc_enter(L)",
-        "lj_thr_create(&th->thr"
-      })
-      t:assert_all_contains(t:path("src", "lj_ctype.c"), {
-        "lj_native_enter(L2TG(L))",
-        "lj_native_leave(L)",
-        "lj_safepoint_checkstop(L, actions)"
-      })
       clean_build(t)
       run_luajit_script(t, "t-ffi-cdef-dup-stack.lua", {
         getenv("LJ_M7_FFI_DUP_STACK_ROUNDS", "30"),
         getenv("LJ_M7_FFI_DUP_STACK_ITERS", "200")
       }, { joff = true, timeout = "30s" })
-      print("M7 FFI duplicate cdef stack-growth guard passed")
+      print("M7 FFI duplicate cdef stack-growth behavior passed")
     end
   })
 
   add({
     name = "m7_ffi_cdef_token",
-    description = "parser-driven FFI CTState mutation serialization",
+    description = "parser-driven FFI CTState mutation behavior",
     run = function(t)
-      local src = source_files(t)
-      t:assert_all_any_contains(src, {
-        "uint32_t parse_token",
-        "lj_ctype_parse_lock(CTState *cts, lua_State *L)",
-        "la_cas32(&cts->parse_token, &expect, 1, LA_ACQ_REL, LA_ACQ)",
-        "la_futex_wait(&cts->parse_token, 1, 1000000)",
-        "la_store32_rel(&cts->parse_token, 0)",
-        "la_futex_wake(&cts->parse_token, 1)",
-        "lj_ctype_new_l(cp->L, cp->cts",
-        "cp_ctype_intern(cp,",
-        "lj_ctype_parse_lock(cts, L)",
-        "lj_ctype_parse_lock(cp.cts, L)",
-        "lj_ctype_parse_lock(cp.cts, J->L)"
-      })
-      local count = count_line_hits(t, src, function(line)
-        return contains(line, "lj_cparse(&cp)")
-      end)
-      if count ~= 3 then
-        error("expected exactly 3 lj_cparse(&cp) call sites, found " .. count)
-      end
       clean_build(t)
       run_luajit_script(t, "t-ffi-cdef-token.lua", {
         getenv("LJ_M7_FFI_CDEF_THREADS", "6"),
         getenv("LJ_M7_FFI_CDEF_ITERS", "120")
       }, { joff = true })
-      print("M7 FFI cdef token guard passed")
+      print("M7 FFI cdef token behavior passed")
     end
   })
 

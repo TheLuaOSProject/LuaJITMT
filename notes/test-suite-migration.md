@@ -272,6 +272,9 @@ Lua test-suite migration notes:
   arithmetic/raw conversion regression.
 - Converted the M7 cdata allocation/read/write cases to behavior-only coverage
   through their threaded Lua regressions.
+- Converted the M7 cdef token and duplicate-stack cases to behavior-only
+  coverage through their Lua race regressions, and removed the now-unused line
+  counting source helper.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.
