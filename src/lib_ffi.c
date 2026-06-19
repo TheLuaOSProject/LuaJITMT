@@ -1030,6 +1030,18 @@ LJLIB_PUSH(top-2) LJLIB_SET(arch)
 
 /* ------------------------------------------------------------------------ */
 
+static TValue *ffi_loaded_store(lua_State *L, GCtab *t, GCstr *name,
+				cTValue *src)
+{
+  TValue *dst;
+  for (;;) {
+    dst = lj_tab_setstr(L, t, name);
+    if (lj_tab_trystoretv_cas(L, dst, src) == LJ_TAB_STORE_CAS_OK)
+      return dst;
+    la_cpu_pause();  /* FFI module registry saw FORWARD after lookup. */
+  }
+}
+
 /* Register FFI module as loaded. */
 static void ffi_register_module(lua_State *L)
 {
@@ -1039,7 +1051,7 @@ static void ffi_register_module(lua_State *L)
     GCstr *name = lj_str_newlit(L, LUA_FFILIBNAME);
     TValue key;
     setstrV(L, &key, name);
-    copyTVrel(L, lj_tab_setstr(L, t, name), L->top-1);
+    ffi_loaded_store(L, t, name, L->top-1);
     lj_gc2_barrier_weak_write(L, t, &key, L->top-1);
     lj_gc_pubtab(L, t);
   }

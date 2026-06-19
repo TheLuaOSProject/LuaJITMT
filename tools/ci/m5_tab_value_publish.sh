@@ -56,6 +56,7 @@ for needle in \
   'lj_tab_storenilraw(&array[i])' \
   'lj_tab_storenilraw(&n->val)' \
   'lj_cdata_fin_storenil(L, tv)' \
+  'ffi_loaded_store(L, t, name, L->top-1)' \
   'lj_tab_storenilraw(&n->key)' \
   'const_slot_store(o, fs->nkn)' \
   'const_slot_store(o, fs->nkgc)' \

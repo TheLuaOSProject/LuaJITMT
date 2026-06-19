@@ -35,6 +35,9 @@ for needle in \
   'test_ffi_newindex_target_parent_barrier' \
   't-m8-ffi-weak-newindex OK' \
   'ffi_register_module(lua_State *L)' \
+  'ffi_loaded_store(lua_State *L, GCtab *t, GCstr *name,' \
+  'FFI module registry saw FORWARD after lookup.' \
+  'ffi_loaded_store(L, t, name, L->top-1);' \
   'lj_gc2_barrier_weak_write(L, t, &key, L->top-1);' \
   'test_ffi_loaded_weak_value_barrier' \
   'lib_weak_write_str(lua_State *L, GCtab *tab' \
@@ -306,6 +309,33 @@ do
     exit 1
   fi
 done
+
+if ! awk '
+  /static TValue \*ffi_loaded_store\(lua_State \*L,/ { infn = 1 }
+  infn && /copyTVrel\(L, dst, src\)/ { raw = 1 }
+  infn && /for \(;;\)/ { loop = 1 }
+  infn && /lj_tab_setstr\(L, t, name\)/ { resolve = 1 }
+  infn && /lj_tab_trystoretv_cas\(L, dst, src\) == LJ_TAB_STORE_CAS_OK/ { cas = 1 }
+  infn && /FFI module registry saw FORWARD after lookup\./ { retry = 1 }
+  infn && /^}/ { infn = 0 }
+  END { exit !raw && loop && resolve && cas && retry ? 0 : 1 }
+' "$ROOT/src/lib_ffi.c"; then
+  echo "guardrail: FFI loaded registry store must CAS-publish and retry forwarded slots" >&2
+  exit 1
+fi
+
+if ! awk '
+  /static void ffi_register_module\(lua_State \*L\)/ { infn = 1 }
+  infn && /copyTVrel\(L, lj_tab_setstr\(L, t, name\), L->top-1\)/ { raw = 1 }
+  infn && /ffi_loaded_store\(L, t, name, L->top-1\)/ { helper = 1 }
+  infn && /lj_gc2_barrier_weak_write\(L, t, &key, L->top-1\)/ { weak = 1 }
+  infn && /lj_gc_pubtab\(L, t\)/ { parent = 1 }
+  infn && /^}/ { infn = 0 }
+  END { exit !raw && helper && weak && parent ? 0 : 1 }
+' "$ROOT/src/lib_ffi.c"; then
+  echo "guardrail: FFI module registration must keep weak/parent barriers after CAS store" >&2
+  exit 1
+fi
 
 if rg -n 'gc_preclaim_cdata_finalizers_pweak_finreg|gc_preclaim_cdata_finalizers_pweak_tab|gc_cdata_finreg_pending_scan|gc_cdata_fin_pending_tab|gc_separate_cdata_finalizers_root|gc_claim_cdata_finalizer_pweak|finreg_cdata_pweak_root_fallbacks,[[:space:]]*1|ord[[:space:]]*==[[:space:]]*NULL' \
     "$ROOT/src/lj_gc.c"; then
