@@ -1021,19 +1021,25 @@ LUA_API void lua_settable(lua_State *L, int idx)
   cTValue *t = index2adr_check(L, idx);
   GCtab *owner;
   lj_checkapi_slot(2);
-  o = lj_meta_tset_owner(L, t, L->top-2, &owner);
-  if (o) {
-    TValue *key = L->top-2, *val = L->top-1;
-    copyTVrel(L, o, val);
-    lj_gc2_barrier_weak_write(L, owner, key, val);
-    lj_gc2_barrier_tv_pair(L, obj2gco(owner), o);
-    L->top = key;
-  } else {
-    TValue *base = L->top;
-    copyTV(L, base+2, base-3-2*LJ_FR2);
-    L->top = base+3;
-    lj_vm_call(L, base, 0+1);
-    L->top -= 3+LJ_FR2;
+  for (;;) {
+    o = lj_meta_tset_owner(L, t, L->top-2, &owner);
+    if (o) {
+      TValue *key = L->top-2, *val = L->top-1;
+      if (lj_tab_trystoretv_cas(L, o, val) == LJ_TAB_STORE_CAS_OK) {
+	lj_gc2_barrier_weak_write(L, owner, key, val);
+	lj_gc2_barrier_tv_pair(L, obj2gco(owner), o);
+	L->top = key;
+	return;
+      }
+      la_cpu_pause();  /* C API settable saw FORWARD after lookup. */
+    } else {
+      TValue *base = L->top;
+      copyTV(L, base+2, base-3-2*LJ_FR2);
+      L->top = base+3;
+      lj_vm_call(L, base, 0+1);
+      L->top -= 3+LJ_FR2;
+      return;
+    }
   }
 }
 
@@ -1045,19 +1051,25 @@ LUA_API void lua_setfield(lua_State *L, int idx, const char *k)
   GCtab *owner;
   lj_checkapi_slot(1);
   setstrV(L, &key, lj_str_newz(L, k));
-  o = lj_meta_tset_owner(L, t, &key, &owner);
-  if (o) {
-    TValue *val = L->top-1;
-    copyTVrel(L, o, val);
-    lj_gc2_barrier_weak_write(L, owner, &key, val);
-    lj_gc2_barrier_tv_pair(L, obj2gco(owner), o);
-    L->top = val;
-  } else {
-    TValue *base = L->top;
-    copyTV(L, base+2, base-3-2*LJ_FR2);
-    L->top = base+3;
-    lj_vm_call(L, base, 0+1);
-    L->top -= 2+LJ_FR2;
+  for (;;) {
+    o = lj_meta_tset_owner(L, t, &key, &owner);
+    if (o) {
+      TValue *val = L->top-1;
+      if (lj_tab_trystoretv_cas(L, o, val) == LJ_TAB_STORE_CAS_OK) {
+	lj_gc2_barrier_weak_write(L, owner, &key, val);
+	lj_gc2_barrier_tv_pair(L, obj2gco(owner), o);
+	L->top = val;
+	return;
+      }
+      la_cpu_pause();  /* C API setfield saw FORWARD after lookup. */
+    } else {
+      TValue *base = L->top;
+      copyTV(L, base+2, base-3-2*LJ_FR2);
+      L->top = base+3;
+      lj_vm_call(L, base, 0+1);
+      L->top -= 2+LJ_FR2;
+      return;
+    }
   }
 }
 
@@ -1067,8 +1079,12 @@ LUA_API void lua_rawset(lua_State *L, int idx)
   TValue *dst, *key;
   lj_checkapi_slot(2);
   key = L->top-2;
-  dst = lj_tab_set(L, t, key);
-  copyTVrel(L, dst, key+1);
+  for (;;) {
+    dst = lj_tab_set(L, t, key);
+    if (lj_tab_trystoretv_cas(L, dst, key+1) == LJ_TAB_STORE_CAS_OK)
+      break;
+    la_cpu_pause();  /* C API rawset saw FORWARD after lookup. */
+  }
   lj_gc2_barrier_weak_write(L, t, key, key+1);
   lj_gc_pubtab(L, t);
   L->top = key;
@@ -1080,9 +1096,13 @@ LUA_API void lua_rawseti(lua_State *L, int idx, int n)
   TValue *dst, *src;
   TValue key;
   lj_checkapi_slot(1);
-  dst = lj_tab_setint(L, t, n);
   src = L->top-1;
-  copyTVrel(L, dst, src);
+  for (;;) {
+    dst = lj_tab_setint(L, t, n);
+    if (lj_tab_trystoretv_cas(L, dst, src) == LJ_TAB_STORE_CAS_OK)
+      break;
+    la_cpu_pause();  /* C API rawseti saw FORWARD after lookup. */
+  }
   setintV(&key, n);
   lj_gc2_barrier_weak_write(L, t, &key, src);
   lj_gc_pubtabtv(L, t, dst);

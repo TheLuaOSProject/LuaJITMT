@@ -26,10 +26,22 @@ for needle in \
   'lj_meta_tsettv_pair(lua_State *L, cTValue *o, cTValue *k, cTValue *v)' \
   'lj_tab_trystoretv_cas(L, dst, v) == LJ_TAB_STORE_CAS_OK' \
   'assert(lj_meta_tsettv_pair(L, &L->top[0], &key, &val) == &newarray[k])' \
+  'C API settable saw FORWARD after lookup.' \
+  'C API setfield saw FORWARD after lookup.' \
+  'C API rawset saw FORWARD after lookup.' \
+  'C API rawseti saw FORWARD after lookup.' \
+  'lj_tab_trystoretv_cas(L, o, val) == LJ_TAB_STORE_CAS_OK' \
+  'lj_tab_trystoretv_cas(L, dst, key+1) == LJ_TAB_STORE_CAS_OK' \
+  'lj_tab_trystoretv_cas(L, dst, src) == LJ_TAB_STORE_CAS_OK' \
+  'exercise_capi_rawseti_forward_retry' \
+  'exercise_capi_settable_forward_retry' \
+  'exercise_capi_rawset_forward_retry' \
+  'exercise_capi_setfield_forward_retry' \
   't-tab-cas-store OK'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_tab.c" "$ROOT/src/lj_tab.h" \
-      "$ROOT/src/lj_meta.c" "$ROOT/tests/t-tab-cas-store.c"; then
+      "$ROOT/src/lj_meta.c" "$ROOT/src/lj_api.c" \
+      "$ROOT/tests/t-tab-cas-store.c"; then
     echo "guardrail: missing table CAS store marker: $needle" >&2
     exit 1
   fi
@@ -63,6 +75,70 @@ if ! awk '
   END { exit load && forward && cas && ok && fwd && pause ? 0 : 1 }
 ' "$ROOT/src/lj_tab.c"; then
   echo "guardrail: table CAS helper must acquire-load, CAS, and report FORWARD" >&2
+  exit 1
+fi
+
+if ! awk '
+  /LUA_API void lua_settable\(lua_State \*L,/ { infn = 1 }
+  infn && /copyTVrel\(L, o, val\)/ { raw = 1 }
+  infn && /for \(;;\)/ { loop = 1 }
+  infn && /lj_meta_tset_owner\(L, t, L->top-2, &owner\)/ { resolve = 1 }
+  infn && /lj_tab_trystoretv_cas\(L, o, val\) == LJ_TAB_STORE_CAS_OK/ { cas = 1 }
+  infn && /lj_gc2_barrier_weak_write\(L, owner, key, val\)/ { weak = 1 }
+  infn && /lj_gc2_barrier_tv_pair\(L, obj2gco\(owner\), o\)/ { parent = 1 }
+  infn && /C API settable saw FORWARD after lookup\./ { retry = 1 }
+  infn && /^}/ { infn = 0 }
+  END { exit !raw && loop && resolve && cas && weak && parent && retry ? 0 : 1 }
+' "$ROOT/src/lj_api.c"; then
+  echo "guardrail: lua_settable must CAS-publish and retry forwarded slots" >&2
+  exit 1
+fi
+
+if ! awk '
+  /LUA_API void lua_setfield\(lua_State \*L,/ { infn = 1 }
+  infn && /copyTVrel\(L, o, val\)/ { raw = 1 }
+  infn && /for \(;;\)/ { loop = 1 }
+  infn && /lj_meta_tset_owner\(L, t, &key, &owner\)/ { resolve = 1 }
+  infn && /lj_tab_trystoretv_cas\(L, o, val\) == LJ_TAB_STORE_CAS_OK/ { cas = 1 }
+  infn && /lj_gc2_barrier_weak_write\(L, owner, &key, val\)/ { weak = 1 }
+  infn && /lj_gc2_barrier_tv_pair\(L, obj2gco\(owner\), o\)/ { parent = 1 }
+  infn && /C API setfield saw FORWARD after lookup\./ { retry = 1 }
+  infn && /^}/ { infn = 0 }
+  END { exit !raw && loop && resolve && cas && weak && parent && retry ? 0 : 1 }
+' "$ROOT/src/lj_api.c"; then
+  echo "guardrail: lua_setfield must CAS-publish and retry forwarded slots" >&2
+  exit 1
+fi
+
+if ! awk '
+  /LUA_API void lua_rawset\(lua_State \*L,/ { infn = 1 }
+  infn && /copyTVrel\(L, dst, key\+1\)/ { raw = 1 }
+  infn && /for \(;;\)/ { loop = 1 }
+  infn && /lj_tab_set\(L, t, key\)/ { resolve = 1 }
+  infn && /lj_tab_trystoretv_cas\(L, dst, key\+1\) == LJ_TAB_STORE_CAS_OK/ { cas = 1 }
+  infn && /lj_gc2_barrier_weak_write\(L, t, key, key\+1\)/ { weak = 1 }
+  infn && /lj_gc_pubtab\(L, t\)/ { parent = 1 }
+  infn && /C API rawset saw FORWARD after lookup\./ { retry = 1 }
+  infn && /^}/ { infn = 0 }
+  END { exit !raw && loop && resolve && cas && weak && parent && retry ? 0 : 1 }
+' "$ROOT/src/lj_api.c"; then
+  echo "guardrail: lua_rawset must CAS-publish and retry forwarded slots" >&2
+  exit 1
+fi
+
+if ! awk '
+  /LUA_API void lua_rawseti\(lua_State \*L,/ { infn = 1 }
+  infn && /copyTVrel\(L, dst, src\)/ { raw = 1 }
+  infn && /for \(;;\)/ { loop = 1 }
+  infn && /lj_tab_setint\(L, t, n\)/ { resolve = 1 }
+  infn && /lj_tab_trystoretv_cas\(L, dst, src\) == LJ_TAB_STORE_CAS_OK/ { cas = 1 }
+  infn && /lj_gc2_barrier_weak_write\(L, t, &key, src\)/ { weak = 1 }
+  infn && /lj_gc_pubtabtv\(L, t, dst\)/ { parent = 1 }
+  infn && /C API rawseti saw FORWARD after lookup\./ { retry = 1 }
+  infn && /^}/ { infn = 0 }
+  END { exit !raw && loop && resolve && cas && weak && parent && retry ? 0 : 1 }
+' "$ROOT/src/lj_api.c"; then
+  echo "guardrail: lua_rawseti must CAS-publish and retry forwarded slots" >&2
   exit 1
 fi
 
