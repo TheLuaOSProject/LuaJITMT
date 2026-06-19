@@ -226,6 +226,9 @@ Lua test-suite migration notes:
 - Removed the `m2_arena_gcsweep` source-marker list. The case now relies on the
   runtime arena sweep C fixture itself, and the M2 LuaJIT-linked fixtures share
   the central C-fixture helper.
+- Removed source-marker checks from the M5 sentinel, bytecode dump compatibility,
+  registry root, and nomm-cache fixture cases. Those cases now rely on their C
+  behavior fixtures instead of asserting implementation text in `src/`.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.

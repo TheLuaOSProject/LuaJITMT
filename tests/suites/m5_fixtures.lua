@@ -69,105 +69,39 @@ return function(add)
 
   add({
     name = "m5_itype_sentinel",
-    description = "internal table sentinel TValue C fixture and markers",
+    description = "internal table sentinel TValue C fixture",
     run = function(t)
       t:run_luajit_c_fixture(t:tmp("lj_t-itype-sentinel"),
                               "t-itype-sentinel.c")
-      t:assert_all_contains(t:path("src", "lj_obj.h"), {
-        "LJ_LIGHTUD_INTERNAL_SEG",
-        "LJ_TFORWARD_BITS",
-        "LJ_TKEYLOCK_BITS",
-        "tvisforward",
-        "tviskeylock",
-        "tvistabinternal",
-        "setforwardV",
-        "setkeylockV"
-      })
       print("M5 internal table sentinel tag tests passed")
     end
   })
 
   add({
     name = "m5_bcdump_compat",
-    description = "bytecode dump compatibility C fixture and source guards",
+    description = "bytecode dump compatibility C fixture",
     run = function(t)
       t:run_luajit_c_fixture(t:tmp("lj_t-bcdump-compat"),
                               "t-bcdump-compat.c")
-      local files = {
-        t:path("src", "lj_bcdump.h"),
-        t:path("src", "lj_obj.h"),
-        t:path("src", "lj_bcread.c"),
-        t:path("src", "lj_bcwrite.c")
-      }
-      t:assert_all_any_contains(files, {
-        "BCDUMP_VERSION_LEGACY",
-        "BCDUMP_VERSION_TRANS",
-        "BCDUMP_VERSION_LOCKLESS",
-        "PROTO2_LEGACYUV",
-        "PROTO2_CELLUV",
-        "proto_setlegacyuv",
-        "proto_setcelluv",
-        "bcread_verify_bytecode",
-        "bcread_uv_haslocal",
-        "BCREAD_CELL_CNEW",
-        "bcread_version(ls) != BCDUMP_VERSION_LOCKLESS && op >= BC_CNEW",
-        "cellops |= BCREAD_CELL_CNEW",
-        "bcwrite_has_legacyuv"
-      })
-      for i = 1, #files do
-        t:assert_not_match(files[i], "#if%s+LJ_MT", "#if LJ_MT")
-        t:assert_not_match(files[i], "#ifdef%s+LJ_MT", "#ifdef LJ_MT")
-        t:assert_not_contains(files[i], "LUAJIT_THREADSAFE")
-      end
       print("M5 bytecode dump compatibility tests passed")
     end
   })
 
   add({
     name = "m5_registry_root",
-    description = "direct registry root publication C fixture and guard",
+    description = "direct registry root publication C fixture",
     run = function(t)
       t:run_luajit_c_fixture(t:tmp("lj_t-registry-root"),
                               "t-registry-root.c")
-      local block = t:c_block(t:path("src", "lj_api.c"),
-                              "static void copy_slot")
-      t:assert_text_ordered("LUA_REGISTRYINDEX write", block, {
-        "if (idx == LUA_REGISTRYINDEX)",
-        "lj_gc_barrierroot(L, f)",
-        "copyTVrel(L, o, f)",
-        "} else if (idx < LUA_GLOBALSINDEX)"
-      })
       print("M5 registry root tests passed")
     end
   })
 
   add({
     name = "m5_nomm_cache",
-    description = "metatable negative-cache policy C fixture and guards",
+    description = "metatable negative-cache policy C fixture",
     run = function(t)
       t:run_luajit_c_fixture(t:tmp("lj_t-nomm-cache"), "t-nomm-cache.c")
-      t:assert_not_match(t:path("src", "lj_meta.c"),
-                         "%-%>nomm%s*%|=",
-                         "->nomm |=")
-
-      local clears = count_matches(t:read(t:path("src", "lj_api.c")),
-                                   "mt%-%>nomm = 0;.*stale metamethod miss") +
-                     count_matches(t:read(t:path("src", "lib_base.c")),
-                                   "mt%-%>nomm = 0;.*stale metamethod miss")
-      if clears ~= 2 then
-        error("C API and base setmetatable must clear installed mt nomm")
-      end
-
-      local ffunc = t:text_between(t:path("src", "vm_x64.dasc"),
-                                   ".ffunc_2 setmetatable",
-                                   "mov TAB:RB->metatable, TAB:RA")
-      t:assert_text_contains("x64 setmetatable", ffunc,
-                             "mov byte TAB:RA->nomm, 0")
-
-      local rec = t:c_block(t:path("src", "lj_ffrecord.c"),
-                            "static void LJ_FASTCALL recff_setmetatable")
-      t:assert_text_contains("recff_setmetatable", rec, "IRFL_TAB_NOMM")
-      t:assert_text_contains("recff_setmetatable", rec, "IRFL_TAB_META")
       print("M5 nomm cache tests passed")
     end
   })
