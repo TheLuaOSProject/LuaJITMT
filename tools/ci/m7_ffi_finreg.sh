@@ -36,11 +36,17 @@ for needle in \
   'Missing clear is a no-op; avoid structural insert.' \
   'lj_tab_try_newkey_anchor(lua_State *L, GCtab *t, cTValue *key,' \
   'lj_tab_try_newkey_chain(lua_State *L, GCtab *t, cTValue *key,' \
+  'tab_storekeylockrel(TValue *dst)' \
+  'setkeylockV(&keylock)' \
+  'tviskeylock(&nk)' \
   'Another claimed empty anchor is publishing key.' \
+  'Claimed empty anchor is publishing its key.' \
   'Linked collision insert has not published key.' \
+  'Unlinked free-node key claim is publishing.' \
   '11.4 FINREG collision insert CAS-prepend.' \
   '11.4 FINREG publish after claim resolution.' \
-  'while (ffi_fin && lj_cdata_fin_isclaim(&val))' \
+  'while (lj_cdata_fin_isclaim(&val) || tviskeylock(&key))' \
+  'mark of key lock in non-empty slot' \
   '#include "lj_cdata.h"' \
   'lj_ctype_fin_get(L, cts, &key, &t)' \
   'lj_ctype_fin_get(L, cts, key, &t)' \
@@ -228,7 +234,7 @@ for file in "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc2.c"; do
   if ! awk '
     /static int gc2_traverse_tab\(global_State \*g, GCtab \*t\)/ { infn = 1 }
     /static int gc_traverse_tab\(global_State \*g, GCtab \*t\)/ { infn = 1 }
-    infn && /while \(ffi_fin && lj_cdata_fin_isclaim\(&val\)\)/ { found = 1 }
+    infn && /while \(lj_cdata_fin_isclaim\(&val\) \|\| tviskeylock\(&key\)\)/ { found = 1 }
     infn && /^}/ { infn = 0 }
     END { exit found ? 0 : 1 }
   ' "$file"; then

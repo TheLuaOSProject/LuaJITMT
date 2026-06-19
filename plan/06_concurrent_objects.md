@@ -28,8 +28,10 @@ current x64 bridge represents `LJ_TFORWARD` and `LJ_TKEYLOCK` as raw
 lightuserdata values in reserved segment 255 (`LJ_TFORWARD_BITS` and
 `LJ_TKEYLOCK_BITS`). Public lightuserdata interning never allocates that
 segment, and the values classify as non-GC, non-number table-internal
-sentinels. Reader/writer filtering still has to be added at the table protocol
-use sites below.
+sentinels. FINREG missing-key insertion now uses `LJ_TKEYLOCK` as a transient
+key publication marker while preserving its existing value-slot finalizer claim;
+general table reader/writer filtering still has to be added at the table
+protocol use sites below.
 
 ## 6.2 Tables: data structures
 
@@ -198,6 +200,11 @@ old hash vector is armed only after that rebuilt vector is published. Hash-chain
 walks in the C runtime and serialization paths now use acquire loads, and
 collision inserts initialize a stable free node before release-publishing it
 through the anchor's `next` link; legacy Brent node relocation has been removed.
+The FINREG-specific missing-key insertion bridge now release-stores
+`LJ_TKEYLOCK` into claimed key slots and has FINREG inserters plus legacy/GC2
+FINREG traversal wait out that key marker before treating the slot as
+published; this is still scoped to the hidden FINREG generations, not the
+general hash insert protocol above.
 The legacy `GCtab.node` pointer itself is now release-published after vector
 initialization and acquire-loaded by C-side table, GC, serialization,
 bytecode-writer, parser, and recorder readers. Legacy `GCtab.array` C readers

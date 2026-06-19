@@ -130,6 +130,13 @@ static LJ_AINLINE void tab_storekeyrel(lua_State *L, TValue *dst,
   copyTVrel(L, dst, &k);
 }
 
+static LJ_AINLINE void tab_storekeylockrel(TValue *dst)
+{
+  TValue keylock;
+  setkeylockV(&keylock);
+  tv_rawstore_rel(dst, tv_rawload(&keylock));
+}
+
 static TValue *tab_rehash_insert(lua_State *L, Node *nodebase, MSize hmask,
 				 Node **freetopp, cTValue *key)
 {
@@ -878,6 +885,10 @@ int lj_tab_try_newkey_anchor(lua_State *L, GCtab *t, cTValue *key,
     lj_tv_load_acq(&nk, &n->key);
     if (lj_obj_equal(&nk, key))
       return -1;  /* A racing inserter published the key; retry lookup. */
+    if (tviskeylock(&nk)) {
+      la_cpu_pause();  /* Claimed empty anchor is publishing its key. */
+      continue;
+    }
     if (!tvisnil(&nk))
       return 0;  /* Caller handles collision-chain or resize fallback. */
     lj_tv_load_acq(&nv, &n->val);
@@ -887,6 +898,7 @@ int lj_tab_try_newkey_anchor(lua_State *L, GCtab *t, cTValue *key,
     }
     setnilV(&expect);
     if (lj_tv_cas(&n->val, &expect, claim)) {
+      tab_storekeylockrel(&n->key);
       tab_storekeyrel(L, &n->key, key);
       *slot = &n->val;
       return 1;
@@ -922,7 +934,7 @@ int lj_tab_try_newkey_chain(lua_State *L, GCtab *t, cTValue *key,
 	  tab_release_claimed_free(reserved);
 	return -1;  /* Existing or racing insert for this key; retry lookup. */
       }
-      if (tvisnil(&nk) && tab_val_isclaim(&nv, claim)) {
+      if (tviskeylock(&nk) || (tvisnil(&nk) && tab_val_isclaim(&nv, claim))) {
 	la_cpu_pause();  /* Linked collision insert has not published key. */
 	goto retry;
       }
@@ -936,6 +948,10 @@ int lj_tab_try_newkey_chain(lua_State *L, GCtab *t, cTValue *key,
 	lj_tv_load_acq(&nk, &n->key);
 	if (lj_obj_equal(&nk, key))
 	  return -1;
+	if (tviskeylock(&nk)) {
+	  la_cpu_pause();  /* Unlinked free-node key claim is publishing. */
+	  goto retry;
+	}
 	if (!tvisnil(&nk))
 	  continue;
 	lj_tv_load_acq(&nv, &n->val);
@@ -948,6 +964,7 @@ int lj_tab_try_newkey_chain(lua_State *L, GCtab *t, cTValue *key,
 	}
 	setnilV(&expect);
 	if (lj_tv_cas(&n->val, &expect, claim)) {
+	  tab_storekeylockrel(&n->key);
 	  reserved = n;  /* Claimed free node; not visible until CAS-prepend. */
 	  break;
 	}

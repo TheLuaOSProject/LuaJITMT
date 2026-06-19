@@ -879,16 +879,25 @@ static int gc_traverse_tab(global_State *g, GCtab *t)
       for (i = 0; i <= hmask; i++) {
 	Node *n = &node[i];
 	TValue key, val;
+	int key_loaded = 0;
 	lj_tv_load_acq(&val, &n->val);
 #if LJ_HASFFI
-	while (ffi_fin && lj_cdata_fin_isclaim(&val)) {
-	  la_cpu_pause();
-	  lj_tv_load_acq(&val, &n->val);
+	if (ffi_fin) {
+	  lj_tv_load_acq(&key, &n->key);
+	  key_loaded = 1;
+	  while (lj_cdata_fin_isclaim(&val) || tviskeylock(&key)) {
+	    la_cpu_pause();
+	    lj_tv_load_acq(&val, &n->val);
+	    lj_tv_load_acq(&key, &n->key);
+	  }
 	}
 #endif
 	if (!tvisnil(&val)) {  /* Mark non-empty slot. */
-	  lj_tv_load_acq(&key, &n->key);
+	  if (!key_loaded)
+	    lj_tv_load_acq(&key, &n->key);
 	  lj_assertG(!tvisnil(&key), "mark of nil key in non-empty slot");
+	  lj_assertG(!tviskeylock(&key),
+		     "mark of key lock in non-empty slot");
 	  if (!(weak & LJ_GC_WEAKKEY)) gc_marktv(g, &key);
 	  if (!(weak & LJ_GC_WEAKVAL)) gc_marktv(g, &val);
 	}
