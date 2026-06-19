@@ -119,16 +119,35 @@ LJ_FUNC TValue *lj_tab_storeproto(lua_State *L, TValue *dst, GCproto *pt);
 LJ_FUNC TValue *lj_tab_storefunc(lua_State *L, TValue *dst, GCfunc *fn);
 LJ_FUNC TValue *lj_tab_storeudata(lua_State *L, TValue *dst, GCudata *ud);
 
+static LJ_AINLINE int lj_tab_array_forward_hop(const GCtab *t, TValue **arrayp,
+					       MSize *asizep)
+{
+  TValue *array = *arrayp;
+  TValue *next;
+  if (!array || lj_tab_array_is_colocated(t, array))
+    return 0;
+  next = lj_tab_array_nextgen_acq(array);
+  if (next && next != array && !lj_tab_array_is_colocated(t, next)) {
+    *arrayp = next;
+    *asizep = lj_tab_array_hdr_asize_acq(next);
+    return 1;
+  }
+  return 0;
+}
+
 static LJ_AINLINE cTValue *lj_tab_getint(GCtab *t, int32_t key)
 {
   TValue *array;
   int forward_retry = 1;
 retry_array:
   MSize asize = lj_tab_array_snapshot_acq(t, &array);
+genarray:
   if ((MSize)key < asize) {
     TValue val;
     lj_tv_load_acq(&val, &array[key]);
     if (tvisforward(&val)) {
+      if (lj_tab_array_forward_hop(t, &array, &asize))
+	goto genarray;
       if (forward_retry) {
 	forward_retry = 0;
 	la_cpu_pause();

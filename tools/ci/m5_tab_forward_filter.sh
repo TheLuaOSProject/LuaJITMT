@@ -22,16 +22,22 @@ for needle in \
   'tab_val_forward_retry_once(cTValue *val, int *retry)' \
   'tab_node_forward_hop(Node **nodep, MSize *hmaskp)' \
   'lj_tab_node_nextgen_acq(node)' \
+  'lj_tab_array_forward_hop(const GCtab *t, TValue **arrayp,' \
+  'lj_tab_array_nextgen_acq(array)' \
+  'lj_tab_array_hdr_asize_acq(next)' \
   'tab_val_absent(&val)' \
   'tab_slot_absent_acq(tv)' \
   'tab_slot_absent_acq(&array[hi])' \
   'lj_tab_getint(t, 3) == NULL' \
   'lj_tab_getstr(t, hidden) == NULL' \
+  'exercise_array_forward_hop(L)' \
+  'lj_tab_array_nextgen_acq(oldarray) == newarray' \
   'exercise_hash_forward_hop(L)' \
   'lj_tab_node_nextgen_acq(oldnode) == newnode' \
   't-tab-forward-filter OK'
 do
-  if ! rg -F -q "$needle" "$ROOT/src/lj_tab.c" "$ROOT/tests/t-tab-forward-filter.c"; then
+  if ! rg -F -q "$needle" "$ROOT/src/lj_tab.c" "$ROOT/src/lj_tab.h" \
+      "$ROOT/tests/t-tab-forward-filter.c"; then
     echo "guardrail: missing table FORWARD filtering marker: $needle" >&2
     exit 1
   fi
@@ -44,13 +50,15 @@ fi
 
 if ! awk '
   /static LJ_AINLINE cTValue \*lj_tab_getint\(GCtab \*t,/ { ingetint = 1 }
+  ingetint && /lj_tab_array_forward_hop\(t, &array, &asize\)/ { hop = 1 }
+  ingetint && /goto genarray/ { gen = 1 }
   ingetint && /tvisforward\(&val\)/ { forward = 1 }
   ingetint && /goto retry_array/ { retry = 1 }
   ingetint && /return NULL/ { nullret = 1 }
   ingetint && /^}/ { ingetint = 0 }
-  END { exit forward && retry && nullret ? 0 : 1 }
+  END { exit hop && gen && forward && retry && nullret ? 0 : 1 }
 ' "$ROOT/src/lj_tab.h"; then
-  echo "guardrail: integer array getter must filter FORWARD values" >&2
+  echo "guardrail: integer array getter must hop/filter FORWARD values" >&2
   exit 1
 fi
 

@@ -36,9 +36,11 @@ bounded retry rule below. C hash getters now hop from a matched
 falling back to the earlier one-shot retry/absence behavior if no successor is
 visible yet. Resize counting/copying, traversal, and length helpers treat
 `LJ_TFORWARD` values as absent internal migration markers so they are not
-exposed or recopied by the current bridge. Array and iterator
-next-generation `LJ_TFORWARD` hops still have to be added at the table
-protocol use sites below.
+exposed or recopied by the current bridge. Integer array getters now hop a
+forwarded separated-array slot through `TabArrayHdr.next_gen`, falling through
+to integer hash lookup when the successor array is too small for a shrink-tail
+key. Iterator next-generation `LJ_TFORWARD` hops still have to be added at the
+table protocol use sites below.
 
 ## 6.2 Tables: data structures
 
@@ -253,7 +255,10 @@ replacement contents are ready and before publishing replacement table state;
 current generations still start with zero flags until their own resize.
 `TabArrayHdr.next_gen` is release-published to the replacement separated array
 before the old array is marked retiring, reserving the successor needed by the
-final array `LJ_TFORWARD` hop.
+final array `LJ_TFORWARD` hop. C integer array getters use that successor when
+they observe a forwarded slot in an old separated array generation, and fall
+through to the integer hash lookup if the successor array no longer covers the
+key.
 On x86-64,
 `getmetatable`'s `__metatable` probe, `ipairs_aux` empty-hash fallback,
 `lj_vm_next` hash traversal, `BC_TGETS_Z`, and `BC_ITERN` hash traversal now
@@ -308,7 +313,9 @@ table hash getters hop through `TabNodeHdr.next_gen` on a visible
 available yet, while resize counting/copying, `next()`, and length helpers
 filter `LJ_TFORWARD` values as absent internal sentinels. This prevents
 synthetic forwarded values from being counted, returned, or recopied before the
-array and iterator next-generation hops exist.
+iterator next-generation hops exist. C integer array getters likewise hop
+visible array `LJ_TFORWARD` slots through `TabArrayHdr.next_gen`, including
+falling through to the hash part after a shrink-tail hop.
 Publication barriers that receive a `TValue *` snapshot the value before GC2
 marking and legacy `tviswhite()` / `gcV()` checks, so the current release-store
 bridge does not reread a shared destination slot after publication.

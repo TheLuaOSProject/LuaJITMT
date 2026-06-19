@@ -92,6 +92,66 @@ static TValue *find_key_slot(Node *node, MSize hmask, cTValue *key)
   return NULL;
 }
 
+static void exercise_array_forward_hop(lua_State *L)
+{
+  GCtab *t;
+  TValue *oldarray, *newarray;
+  MSize oldasize, newasize, oldacap;
+  int32_t tail;
+
+  lua_settop(L, 0);
+  lua_createtable(L, LJ_MAX_COLOSIZE + 16, 0);
+  t = tabV(L->top-1);
+  assert(lj_tab_array_separated(t));
+
+  lj_tab_storeint(L, lj_tab_setint(L, t, 5), 505);
+  oldarray = lj_tab_array_acq(t);
+  oldasize = lj_tab_asize_acq(t);
+  oldacap = t->acap;
+  assert(oldasize > 8);
+  lj_tab_resize(L, t, (uint32_t)oldasize + 8u, 0);
+  newarray = lj_tab_array_acq(t);
+  newasize = lj_tab_asize_acq(t);
+  assert(newarray != oldarray);
+  assert(lj_tab_array_nextgen_acq(oldarray) == newarray);
+  assert_i32(lj_tab_getint(t, 5), 505);
+
+  store_forward(&oldarray[5]);
+  la_store32_rel(&lj_tab_array_hdrw(oldarray)->acap,
+		 lj_tab_array_hdr_pack_acap(oldacap, 0));
+  lj_tab_asize_rel(t, oldasize);
+  lj_tab_array_rel(t, oldarray);
+  assert_i32(lj_tab_getint(t, 5), 505);
+
+  lj_tab_array_rel(t, newarray);
+  lj_tab_asize_rel(t, newasize);
+  lj_tab_array_hdr_flags_or_rel(oldarray, TABARRAY_FLAG_RETIRING);
+
+  tail = (int32_t)newasize - 1;
+  lj_tab_storeint(L, lj_tab_setint(L, t, tail), 606);
+  oldarray = lj_tab_array_acq(t);
+  oldasize = lj_tab_asize_acq(t);
+  oldacap = t->acap;
+  lj_tab_resize(L, t, 6, 4);
+  newarray = lj_tab_array_acq(t);
+  newasize = lj_tab_asize_acq(t);
+  assert(newarray != oldarray);
+  assert(newasize == 6);
+  assert(lj_tab_array_nextgen_acq(oldarray) == newarray);
+  assert_i32(lj_tab_getint(t, tail), 606);
+
+  store_forward(&oldarray[tail]);
+  la_store32_rel(&lj_tab_array_hdrw(oldarray)->acap,
+		 lj_tab_array_hdr_pack_acap(oldacap, 0));
+  lj_tab_asize_rel(t, oldasize);
+  lj_tab_array_rel(t, oldarray);
+  assert_i32(lj_tab_getint(t, tail), 606);
+
+  lj_tab_array_rel(t, newarray);
+  lj_tab_asize_rel(t, newasize);
+  lj_tab_array_hdr_flags_or_rel(oldarray, TABARRAY_FLAG_RETIRING);
+}
+
 static void exercise_hash_forward_hop(lua_State *L)
 {
   GCtab *t;
@@ -183,6 +243,7 @@ int main(void)
 
   assert(count_next(t) == 3);
   assert(lj_tab_len(t) == 2);
+  exercise_array_forward_hop(L);
   exercise_hash_forward_hop(L);
 
   lua_close(L);
