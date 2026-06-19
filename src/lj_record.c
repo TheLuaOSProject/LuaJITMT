@@ -1349,6 +1349,7 @@ static void rec_idx_bump(jit_State *J, RecordIndex *ix)
     Node *tb_node;
     MSize tb_hmask;
     IRIns *ir;
+    TValue *array;
     if (!tvisnil(&ix->keyv))
       (void)lj_tab_set(J->L, tb, &ix->keyv);  /* Grow table right now. */
     tb_node = lj_tab_node_snapshot_acq(tb, &tb_hmask);
@@ -1357,7 +1358,8 @@ static void rec_idx_bump(jit_State *J, RecordIndex *ix)
     if (ir->o == IR_TNEW) {
       uint32_t ah = bc_d(*pc);
       uint32_t asize = ah & 0x7ff, hbits = ah >> 11;
-      uint32_t tb_asize = lj_tab_asize_acq(tb);
+      uint32_t tb_asize =
+	(uint32_t)lj_tab_array_snapshot_acq(tb, &array);
       if (nhbits > hbits) hbits = nhbits;
       if (tb_asize > asize) {
 	asize = tb_asize <= 0x7ff ? tb_asize : 0x7ff;
@@ -1371,8 +1373,10 @@ static void rec_idx_bump(jit_State *J, RecordIndex *ix)
       }
     } else if (ir->o == IR_TDUP) {
       GCtab *tpl = gco2tab(proto_kgc(&gcref(rbc->pt)->pt, ~(ptrdiff_t)bc_d(*pc)));
-      uint32_t tb_asize = lj_tab_asize_acq(tb);
-      uint32_t tpl_asize = lj_tab_asize_acq(tpl);
+      uint32_t tb_asize =
+	(uint32_t)lj_tab_array_snapshot_acq(tb, &array);
+      uint32_t tpl_asize =
+	(uint32_t)lj_tab_array_snapshot_acq(tpl, &array);
       MSize tpl_hmask;
       Node *node = lj_tab_node_snapshot_acq(tpl, &tpl_hmask);
       /* Grow template table, but preserve keys with nil values. */
@@ -1402,8 +1406,7 @@ static void rec_idx_bump(jit_State *J, RecordIndex *ix)
 	    lj_tab_storenil(J->L, &node[i].val);
 	}
 	/* The shape of the table may have changed. Clean up array part, too. */
-	asize = lj_tab_asize_acq(tpl);
-	array = lj_tab_array_acq(tpl);
+	asize = (uint32_t)lj_tab_array_snapshot_acq(tpl, &array);
 	for (i = 0; i < asize; i++) {
 	  TValue val;
 	  lj_tv_load_acq(&val, &array[i]);
@@ -1913,7 +1916,9 @@ static void rec_tsetm(jit_State *J, BCReg ra, BCReg rn, int32_t i)
   ix.idxchain = 0;
 #ifdef LUAJIT_ENABLE_TABLE_BUMP
   if ((J->flags & JIT_F_OPT_SINK)) {
-    if (lj_tab_asize_acq(t) < i+rn-ra)
+    TValue *array;
+    MSize asize = lj_tab_array_snapshot_acq(t, &array);
+    if (asize < (MSize)(i+rn-ra))
       lj_tab_reasize(J->L, t, i+rn-ra);
     setnilV(&ix.keyv);
     rec_idx_bump(J, &ix);

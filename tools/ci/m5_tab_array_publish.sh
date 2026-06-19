@@ -58,6 +58,9 @@ for needle in \
   'asize = lj_tab_array_snapshot_acq(dict_str, &array)' \
   'asize = lj_tab_array_snapshot_acq(dict_mt, &array)' \
   'lj_tab_array_snapshot_acq(t, &record_array)' \
+  '(uint32_t)lj_tab_array_snapshot_acq(tb, &array)' \
+  '(uint32_t)lj_tab_array_snapshot_acq(tpl, &array)' \
+  'asize = (uint32_t)lj_tab_array_snapshot_acq(tpl, &array)' \
   'lj_tv_load_acq(&val, &array[i])' \
   'lj_tab_array_hdr_flags_or_rel(oldarray, TABARRAY_FLAG_RETIRING)'
 do
@@ -144,6 +147,43 @@ fi
 if rg -n 'TValue \*record_array = lj_tab_array_acq\(t\)' \
     "$ROOT/src/lj_record.c"; then
   echo "guardrail: recorder array-shape decisions must snapshot array bounds" >&2
+  exit 1
+fi
+
+if awk '
+  /static void rec_idx_bump\(jit_State \*J, RecordIndex \*ix\)/ {
+    inbump = 1
+    snap = bad = 0
+    next
+  }
+  inbump && /lj_tab_array_snapshot_acq\(tb, &array\)/ { snap++ }
+  inbump && /lj_tab_array_snapshot_acq\(tpl, &array\)/ { snap++ }
+  inbump && /lj_tab_asize_acq\((tb|tpl)\)|lj_tab_array_acq\(tpl\)/ {
+    bad = 1
+  }
+  inbump && /^}/ {
+    bump_checked = 1
+    inbump = 0
+  }
+  /static void rec_tsetm\(jit_State \*J, BCReg ra, BCReg rn, int32_t i\)/ {
+    intsetm = 1
+    tsetm_snap = tsetm_bad = 0
+    next
+  }
+  intsetm && /lj_tab_array_snapshot_acq\(t, &array\)/ { tsetm_snap = 1 }
+  intsetm && /lj_tab_asize_acq\(t\)/ { tsetm_bad = 1 }
+  intsetm && /^}/ {
+    tsetm_checked = 1
+    intsetm = 0
+  }
+  END {
+    exit bump_checked && snap >= 3 && !bad &&
+	 tsetm_checked && tsetm_snap && !tsetm_bad ? 0 : 1
+  }
+' "$ROOT/src/lj_record.c"; then
+  :
+else
+  echo "guardrail: recorder table-bump array shape must use snapshots" >&2
   exit 1
 fi
 
