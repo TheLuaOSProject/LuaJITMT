@@ -656,11 +656,13 @@ void LJ_FASTCALL lj_tab_free(global_State *g, GCtab *t)
 /* Resize a table to fit the new array/hash part sizes. */
 void lj_tab_resize(lua_State *L, GCtab *t, uint32_t asize, uint32_t hbits)
 {
-  Node *oldnode = lj_tab_node_acq(t);
-  TValue *oldarray = lj_tab_array_acq(t);
-  uint32_t oldasize = lj_tab_asize_acq(t);
-  uint32_t oldacap = t->acap;
-  uint32_t oldhmask = lj_tab_node_hmask_acq(oldnode);
+  MSize oldhmask;
+  Node *oldnode = lj_tab_node_snapshot_acq(t, &oldhmask);
+  TValue *oldarray;
+  uint32_t oldasize = (uint32_t)lj_tab_array_snapshot_acq(t, &oldarray);
+  int oldarray_separated = oldarray && !lj_tab_array_is_colocated(t, oldarray);
+  uint32_t oldacap = oldarray_separated ?
+    (uint32_t)lj_tab_array_hdr_acap_acq(oldarray) : oldasize;
   TValue *array = oldarray;
   uint32_t newacap = oldacap;
   int array_changed = asize != oldasize;
@@ -681,7 +683,7 @@ void lj_tab_resize(lua_State *L, GCtab *t, uint32_t asize, uint32_t hbits)
   if (asize > oldasize && asize > LJ_MAX_ASIZE)
     lj_err_msg(L, LJ_ERR_TABOV);
   if (array_changed) {
-    if (lj_tab_array_separated(t)) {
+    if (oldarray_separated) {
       newarray = 1;
       newacap = asize >= oldasize ? asize : oldacap;
     } else if (asize > oldacap) {
@@ -692,7 +694,7 @@ void lj_tab_resize(lua_State *L, GCtab *t, uint32_t asize, uint32_t hbits)
   if (newarray) {
     uint32_t i;
     uint32_t copy = oldasize < newacap ? oldasize : newacap;
-    if (lj_tab_array_separated(t) && oldacap > 0)
+    if (oldarray_separated && oldacap > 0)
       oldaret = tab_array_retire_reserve(L, oldarray, oldacap);
     array = tab_array_new(L, asize, newacap);
     for (i = 0; i < copy; i++)

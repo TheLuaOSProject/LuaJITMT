@@ -346,4 +346,29 @@ if ! awk '
   exit 1
 fi
 
+if ! awk '
+  /void lj_tab_resize\(lua_State \*L,/ {
+    inresize = 1
+    snap = cap = bad = 0
+    next
+  }
+  inresize && /oldasize = \(uint32_t\)lj_tab_array_snapshot_acq\(t, &oldarray\)/ {
+    snap = 1
+  }
+  inresize && /oldarray_separated = oldarray && !lj_tab_array_is_colocated\(t, oldarray\)/ {
+    cap = 1
+  }
+  inresize && /lj_tab_array_acq\(t\)|lj_tab_asize_acq\(t\)|oldacap = t->acap|lj_tab_array_separated\(t\)/ {
+    bad = 1
+  }
+  inresize && /^}/ {
+    checked = 1
+    inresize = 0
+  }
+  END { exit checked && snap && cap && !bad ? 0 : 1 }
+' "$ROOT/src/lj_tab.c"; then
+  echo "guardrail: resize must snapshot array generation headers" >&2
+  exit 1
+fi
+
 echo "M5 table array publication tests passed"

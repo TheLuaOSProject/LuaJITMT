@@ -138,4 +138,26 @@ if ! awk '
   exit 1
 fi
 
+if ! awk '
+  /void lj_tab_resize\(lua_State \*L,/ {
+    inresize = 1
+    snap = bad = 0
+    next
+  }
+  inresize && /oldnode = lj_tab_node_snapshot_acq\(t, &oldhmask\)/ {
+    snap = 1
+  }
+  inresize && /lj_tab_node_acq\(t\)|lj_tab_node_hmask_acq\(oldnode\)/ {
+    bad = 1
+  }
+  inresize && /^}/ {
+    checked = 1
+    inresize = 0
+  }
+  END { exit checked && snap && !bad ? 0 : 1 }
+' "$ROOT/src/lj_tab.c"; then
+  echo "guardrail: resize must snapshot node generation headers" >&2
+  exit 1
+fi
+
 echo "M5 table hash-vector header tests passed"
