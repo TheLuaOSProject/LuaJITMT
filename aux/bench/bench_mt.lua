@@ -8,20 +8,122 @@
 -- real cores (13 §13.2 caveat).
 
 local th = require("threading")
-local clock = os.clock  -- wall clock preferred: use os.time fallback note
-local function wall()
-  -- os.clock is CPU time; for MT scaling we need wall time.
-  -- M4 adds threading.now() (monotonic); fall back if absent.
-  return th.now and th.now() or os.time()
-end
+local wall = assert(th.now, "bench_mt.lua requires threading.now()")
+local floor = math.floor
+local getenv = os.getenv
 
 local NT = tonumber(arg and arg[1]) or th.cpucount()
 local filter = arg and arg[2]
+local scale = tonumber(getenv("BENCH_SCALE")) or 1
+if scale <= 0 then scale = 1 end
+local gc_stat_keys = {
+  "cycle_starts",
+  "major_cycle_starts",
+  "minor_cycle_requests",
+  "minor_cycle_starts",
+  "cycle_sweep_minor",
+  "cycle_roots_minor",
+  "minor_sweep_deferred",
+  "minor_sweep_arenas",
+  "minor_roots_deferred",
+  "major_root_scans",
+  "minor_root_scans",
+  "minor_survival_pct",
+  "minor_survival_major_requests",
+  "cycle_alloc_bytes",
+  "remembered_barriers",
+  "remembered_drained",
+  "remembered_filtered",
+  "remembered_overflows",
+  "poll_ack_samples",
+  "poll_ack_latency_max_ns",
+  "assist_runs",
+  "worker_runs",
+  "worker_idle_declares",
+  "worker_busy_retries",
+  "worker_wakes",
+  "worker_parks",
+  "worker_async_progress",
+  "sweep_owner_runs",
+  "sweep_live_updates",
+  "live_estimate",
+  "weak_clear_tables",
+  "weak_keys_marked",
+  "finalizer_queued",
+  "finalizer_mpsc_drained",
+  "finalizer_spawn_deferrals",
+  "finreg_cdata_sweep_queued",
+  "finreg_cdata_pweak_root_fallbacks",
+}
+
+local function snapshot_gc_stats()
+  local ok, stats = pcall(collectgarbage, "stats")
+  if ok and type(stats) == "table" then return stats end
+  return nil
+end
+
+local function bucket_upper_ns(i)
+  local upper = 1
+  for _ = 2, i do upper = upper * 2 + 1 end
+  return upper
+end
+
+local function poll_ack_p99_delta(before, after)
+  local buckets = after and after.poll_ack_latency_buckets
+  if type(buckets) ~= "table" then return nil, 0 end
+  local prev = before and before.poll_ack_latency_buckets or {}
+  local deltas = {}
+  local total = 0
+  for i = 1, #buckets do
+    local d = (tonumber(buckets[i]) or 0) - (tonumber(prev[i]) or 0)
+    if d < 0 then d = 0 end
+    deltas[i] = d
+    total = total + d
+  end
+  if total == 0 then return nil, 0 end
+  local target = math.ceil(total * 0.99)
+  local seen = 0
+  for i = 1, #deltas do
+    seen = seen + deltas[i]
+    if seen >= target then return bucket_upper_ns(i), total end
+  end
+  return bucket_upper_ns(#deltas), total
+end
+
+local function print_gc_stats()
+  local stats = snapshot_gc_stats()
+  if stats then
+    local out = { "GC stats:" }
+    for i = 1, #gc_stat_keys do
+      local k = gc_stat_keys[i]
+      out[#out+1] = k .. "=" .. tostring(stats[k])
+    end
+    local p99, samples = poll_ack_p99_delta(nil, stats)
+    out[#out+1] = "poll_ack_p99_ns=" .. tostring(p99 or "n/a")
+    out[#out+1] = "poll_ack_p99_samples=" .. tostring(samples)
+    print(table.concat(out, " "))
+  else
+    print("GC stats:", collectgarbage("count"), "KB est.")
+  end
+end
+
+local function scaled_ops(n)
+  n = floor(n * scale + 0.5)
+  if n < 1 then n = 1 end
+  return n
+end
+
+local function skip(name, why)
+  if filter and not name:find(filter, 1, true) then return end
+  print(string.format("%-22s %2d thr skipped: %s", name, NT, why))
+end
 
 local function run(name, perthread_ops, mkworker, setup)
   if filter and not name:find(filter, 1, true) then return end
+  perthread_ops = scaled_ops(perthread_ops)
   collectgarbage("collect")
   local shared = setup and setup() or nil
+  local gc_before = snapshot_gc_stats()
   local start = th.channel(0)            -- rendezvous: aligned start
   local ts = {}
   for i = 1, NT do
@@ -41,9 +143,13 @@ local function run(name, perthread_ops, mkworker, setup)
     sum = sum + (r or 0)
   end
   local dt = wall() - t0
+  if dt <= 0 then dt = 1e-9 end
   local total_ops = perthread_ops * NT
-  print(string.format("%-22s %2d thr %10.3f s  %12.0f ops/s  %12.0f ops/s/thr  (chk %s)",
-    name, NT, dt, total_ops/dt, total_ops/dt/NT, tostring(sum)))
+  local gc_after = snapshot_gc_stats()
+  local p99, samples = poll_ack_p99_delta(gc_before, gc_after)
+  print(string.format("%-22s %2d thr %10.3f s  %12.0f ops/s  %12.0f ops/s/thr  (chk %s)  poll_ack_p99_ns=%s samples=%d",
+    name, NT, dt, total_ops/dt, total_ops/dt/NT, tostring(sum),
+    tostring(p99 or "n/a"), samples))
 end
 
 -- 1. Embarrassingly parallel arithmetic: ideal-scaling reference line.
@@ -107,27 +213,35 @@ end, function()
 end)
 
 -- 8. Channel ping-pong: synchronization latency (pairs of threads).
-run("chan_pingpong", 2e5, function(id, sh, n)
-  local a, b = sh[1 + (id-1) % 2], sh[2 - (id-1) % 2]
-  if id % 2 == 1 then
-    for i = 1, n do a:send(i); b:recv() end
-  else
-    for i = 1, n do a:recv(); b:send(i) end
-  end
-  return 0
-end, function() return { th.channel(0), th.channel(0) } end)
+if NT >= 2 and NT % 2 == 0 then
+  run("chan_pingpong", 2e5, function(id, sh, n)
+    local a, b = sh[1], sh[2]
+    if id % 2 == 1 then
+      for i = 1, n do a:send(i); b:recv() end
+    else
+      for i = 1, n do a:recv(); b:send(i) end
+    end
+    return 0
+  end, function() return { th.channel(0), th.channel(0) } end)
+else
+  skip("chan_pingpong", "requires an even thread count >= 2")
+end
 
 -- 9. Channel throughput: MPMC ring under load.
-run("chan_throughput", 1e6, function(id, ch, n)
-  if id % 2 == 1 then
-    for i = 1, n do ch:send(i) end
-  else
-    local s = 0
-    for i = 1, n do s = s + (ch:recv() or 0) end
-    return s
-  end
-  return 0
-end, function() return th.channel(1024) end)
+if NT >= 2 and NT % 2 == 0 then
+  run("chan_throughput", 1e6, function(id, ch, n)
+    if id % 2 == 1 then
+      for i = 1, n do ch:send(i) end
+    else
+      local s = 0
+      for i = 1, n do s = s + (ch:recv() or 0) end
+      return s
+    end
+    return 0
+  end, function() return th.channel(1024) end)
+else
+  skip("chan_throughput", "requires an even thread count >= 2")
+end
 
 -- 10. GC pressure under parallel churn: cycles must overlap mutators.
 run("gc_churn-MT", 2e6, function(id, _, n)
@@ -139,4 +253,4 @@ run("gc_churn-MT", 2e6, function(id, _, n)
 end)
 
 print(("-"):rep(72))
-print("GC stats:", collectgarbage("count"), "KB est.")
+print_gc_stats()

@@ -12,7 +12,7 @@ trap 'rm -f "$CUR" "$BAD"' EXIT HUP INT TERM
 make -C "$ROOT/src" >/dev/null
 
 for needle in \
-  'BENCH_LUA=${BASELINE_BENCH_LUA:-"$ROOT/plan/aux/bench/bench.lua"}' \
+  'BENCH_LUA=${BASELINE_BENCH_LUA:-"$ROOT/aux/bench/bench.lua"}' \
   'BENCH_SCALE' \
   'BENCH_GC_MODE' \
   'COLUMN=${BENCH_COLUMN:-jit_ns_per_op}' \
@@ -22,7 +22,7 @@ for needle in \
   'FAIL: geomean'
 do
   if ! rg -F -q "$needle" "$ROOT/bench/run_baseline.sh" \
-      "$ROOT/bench/compare_baseline.sh" "$ROOT/plan/aux/bench/bench.lua"; then
+      "$ROOT/bench/compare_baseline.sh" "$ROOT/aux/bench/bench.lua"; then
     echo "guardrail: missing M9 benchmark accounting marker: $needle" >&2
     exit 1
   fi

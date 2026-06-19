@@ -4,6 +4,10 @@
 #   ./run.sh baseline <luajit-binary>          # record single-thread CSVs
 #   ./run.sh compare  <old-binary> <new-binary># geomean regression check
 #   ./run.sh scaling  <luajit-mt-binary>       # 1/2/4/8-thread curves (M4+)
+# Environment:
+#   BENCH_SCALE=<factor>       reduce/expand iteration counts in Lua harnesses
+#   BENCH_THREADS="1 2 4 8"    override scaling thread counts
+#   BENCH_FILTER=<substring>   run matching bench_mt.lua cases only
 set -eu
 HERE=$(cd "$(dirname "$0")" && pwd)
 mode=${1:?mode}; shift
@@ -34,9 +38,11 @@ compare)
   ;;
 scaling)
   bin=${1:?binary}
-  for n in 1 2 4 8; do
+  threads=${BENCH_THREADS:-"1 2 4 8"}
+  filter=${BENCH_FILTER:-}
+  for n in $threads; do
     echo "== $n threads =="
-    "$bin" "$HERE/bench_mt.lua" "$n"
+    "$bin" "$HERE/bench_mt.lua" "$n" "$filter"
   done
   ;;
 *) echo "unknown mode $mode" >&2; exit 2 ;;

@@ -46,7 +46,7 @@ for needle in \
 do
   if ! rg -F -q "$needle" "$ROOT/src/lib_base.c" \
       "$ROOT/src/lj_obj.h" "$ROOT/src/lj_safepoint.c" \
-      "$ROOT/tests/t-gc-stats.lua" "$ROOT/plan/aux/bench/bench_mt.lua" \
+      "$ROOT/tests/t-gc-stats.lua" "$ROOT/aux/bench/bench_mt.lua" \
       "$ROOT/plan/13_testing_and_benchmarks.md"; then
     echo "guardrail: missing GC stats marker: $needle" >&2
     exit 1
