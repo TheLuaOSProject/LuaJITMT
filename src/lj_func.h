@@ -22,6 +22,9 @@ LJ_FUNC GCfunc *lj_func_newL_empty(lua_State *L, GCproto *pt, GCtab *env);
 LJ_FUNCA GCfunc *lj_func_newL_gc(lua_State *L, GCproto *pt, GCfuncL *parent);
 LJ_FUNCA void lj_func_syncslot_forjit(lua_State *L, TValue *base,
 				      int32_t slot, const TValue *tv);
+LJ_FUNCA void lj_func_storeuv_pub(lua_State *L, TValue *tv,
+				  const TValue *src);
+LJ_FUNCA void lj_func_storeuvstr_pub(lua_State *L, TValue *tv, GCstr *str);
 LJ_FUNCA void lj_func_storeuv_forjit(lua_State *L, TValue *tv,
 				     const TValue *src);
 LJ_FUNCA GCupval *lj_func_promoteuv_forjit(lua_State *L, TValue *base,

@@ -2160,6 +2160,8 @@ void LJ_FASTCALL lj_gc_pubuv(global_State *g, TValue *tv)
   GCupval *uv = (GCupval *)((char *)tv - offsetof(GCupval, tv));
   TValue snap;
   lj_tv_load_acq(&snap, tv);
+  if (!tvisgcv(&snap))
+    return;
   lj_gc2_barrier_tv_pair_g(g, obj2gco(uv), &snap);
   if ((TV2MARKED(tv) & LJ_GC_BLACK) && tviswhite(&snap)) {
     if (g->gc.state == GCSpropagate || g->gc.state == GCSatomic)

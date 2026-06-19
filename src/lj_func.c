@@ -106,6 +106,19 @@ void lj_func_syncslot_forjit(lua_State *L, TValue *base, int32_t slot,
   copyTV(L, base + slot, tv);
 }
 
+void lj_func_storeuv_pub(lua_State *L, TValue *tv, const TValue *src)
+{
+  copyTVrel(L, tv, src);
+  lj_gc_pubuv(G(L), tv);
+}
+
+void lj_func_storeuvstr_pub(lua_State *L, TValue *tv, GCstr *str)
+{
+  TValue tmp;
+  setstrV(L, &tmp, str);
+  lj_func_storeuv_pub(L, tv, &tmp);
+}
+
 void lj_func_storeuv_forjit(lua_State *L, TValue *tv, const TValue *src)
 {
   copyTVrel(L, tv, src);

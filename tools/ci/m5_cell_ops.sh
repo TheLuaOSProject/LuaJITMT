@@ -39,11 +39,11 @@ done
 
 if ! awk '
   /case BC_CSET:/ { incset = 1 }
-  incset && /call extern lj_gc_pubuv/ { pubuv = 1 }
+  incset && /call extern lj_func_storeuv_pub/ { pubuv = 1 }
   incset && /case BC_USETV:/ { exit(pubuv ? 0 : 1) }
   END { if (!pubuv) exit 1 }
 ' "$ROOT/src/vm_x64.dasc"; then
-  echo "guardrail: BC_CSET must publish closed-cell stores via lj_gc_pubuv" >&2
+  echo "guardrail: BC_CSET must publish closed-cell stores via lj_func_storeuv_pub" >&2
   exit 1
 fi
 
