@@ -107,6 +107,27 @@ if ! awk '
 fi
 
 if ! awk '
+  /static LJ_AINLINE void clearhpart\(GCtab \*t\)/ ||
+  /void LJ_FASTCALL lj_tab_clear\(GCtab \*t\)/ ||
+  /void LJ_FASTCALL lj_tab_free\(global_State \*g, GCtab \*t\)/ {
+    infn = 1
+    snap = bad = 0
+    next
+  }
+  infn && /lj_tab_node_snapshot_acq\(t, &hmask\)/ { snap = 1 }
+  infn && /lj_tab_node_acq\(t\)|lj_tab_node_hmask_acq\(node\)/ { bad = 1 }
+  infn && /^}/ {
+    if (!snap || bad)
+      fail = 1
+    infn = 0
+  }
+  END { exit fail ? 1 : 0 }
+' "$ROOT/src/lj_tab.c"; then
+  echo "guardrail: table clear/free hash readers must use node snapshots" >&2
+  exit 1
+fi
+
+if ! awk '
   /void lj_tab_resize\(lua_State \*L,/ { inresize = 1 }
   inresize && /lj_tab_node_nextgen_rel\(oldnode,/ { nextgen = NR }
   inresize && /lj_tab_node_hdr_flags_or_rel\(oldnode, TABNODE_FLAG_RETIRING\)/ { retiring = NR }

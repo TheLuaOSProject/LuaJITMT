@@ -452,11 +452,9 @@ static void tab_array_retire_arm(global_State *g, TabArrayRetire *ret)
 **    Even state-of-the-art C compilers won't produce good code without this.
 */
 
-/* Clear hash part of table. */
-static LJ_AINLINE void clearhpart(GCtab *t)
+static LJ_AINLINE void clearhpart_node(Node *node, MSize hmask)
 {
-  Node *node = lj_tab_node_acq(t);
-  uint32_t i, hmask = lj_tab_node_hmask_acq(node);
+  MSize i;
   lj_assertX(hmask != 0, "empty hash part");
   for (i = 0; i <= hmask; i++) {
     Node *n = &node[i];
@@ -464,6 +462,14 @@ static LJ_AINLINE void clearhpart(GCtab *t)
     lj_tab_storenilraw(&n->val);
     lj_tab_storenilraw(&n->key);
   }
+}
+
+/* Clear hash part of table. */
+static LJ_AINLINE void clearhpart(GCtab *t)
+{
+  MSize hmask;
+  Node *node = lj_tab_node_snapshot_acq(t, &hmask);
+  clearhpart_node(node, hmask);
 }
 
 /* Clear array part of table. */
@@ -620,11 +626,10 @@ void LJ_FASTCALL lj_tab_clear(GCtab *t)
   Node *node;
   MSize hmask;
   clearapart(t);
-  node = lj_tab_node_acq(t);
-  hmask = lj_tab_node_hmask_acq(node);
+  node = lj_tab_node_snapshot_acq(t, &hmask);
   if (hmask > 0) {
     setfreetop(t, node, &node[hmask+1]);
-    clearhpart(t);
+    clearhpart_node(node, hmask);
     lj_tab_node_freecount_set_rel(node, hmask+1);
   }
 }
@@ -634,8 +639,8 @@ void LJ_FASTCALL lj_tab_free(global_State *g, GCtab *t)
 {
   MSize size = LJ_MAX_COLOSIZE != 0 && t->colo ?
 	       sizetabcolo((uint32_t)t->colo & 0x7f) : sizeof(GCtab);
-  Node *node = lj_tab_node_acq(t);
-  MSize hmask = lj_tab_node_hmask_acq(node);
+  MSize hmask;
+  Node *node = lj_tab_node_snapshot_acq(t, &hmask);
   TValue *array;
   MSize acap = lj_tab_array_separated_snapshot_acq(t, &array);
   if (hmask > 0)
