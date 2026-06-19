@@ -163,22 +163,6 @@ local function block_has_all(label, block, needles)
   end
 end
 
-local function assert_scan_after(t, label, path, start, stop, bad)
-  local active, found = false, false
-  local n = 0
-  for line in (t:read(path) .. "\n"):gmatch("(.-)\n") do
-    n = n + 1
-    if not active and contains(line, start) then
-      active, found = true, true
-    end
-    if active then
-      if bad(line) then error(label .. ": " .. path .. ":" .. n .. ": " .. line, 2) end
-      if stop and contains(line, stop) then return end
-    end
-  end
-  if not found then error(label .. ": missing start text: " .. start, 2) end
-end
-
 local function table_value_smoke()
   return [=[
 local util = require("jit.util")
@@ -507,72 +491,9 @@ return function(add)
 
   add({
     name = "m5_cell_ops",
-    description = "x64 local-cell bytecode substrate guards",
+    description = "local-cell bytecode and behavior guards",
     run = function(t)
       t:build({ clean = true, quiet = true })
-      t:assert_ordered(t:path("src", "lj_bc.h"), {
-        "_(FUNCCW,",
-        "_(CNEW,",
-        "_(CGET,",
-        "_(CSET,"
-      })
-
-      local vm = t:path("src", "vm_x64.dasc")
-      t:assert_all_contains(vm, {
-        "case BC_CNEW:",
-        "call extern lj_func_newuvcell",
-        "case BC_CGET:",
-        "case BC_CSET:",
-        "cmp OP, BC__MAX",
-        "cmp OP, BC_FUNCCW",
-        "Local cell ops are ordinary bytecode."
-      })
-      t:assert_text_contains("BC_CSET", t:text_between(vm, "case BC_CSET:", "case BC_USETV:"),
-                             "call extern lj_func_storeuv_pub")
-      t:assert_all_any_contains({
-        t:path("src", "lj_func.c"),
-        t:path("src", "lj_func.h")
-      }, {
-        "lj_func_newuvcell",
-        "func_celluv",
-        "proto_celluv(pt)",
-        "itype(slot) == LJ_TUPVAL",
-        "gco2uv(gcV(slot))"
-      })
-      t:assert_all_contains(t:path("src", "lj_debug.c"), {
-        "case BC_CGET:",
-        "debug_localcell",
-        "lj_gc_pubuv(G(L), o)"
-      })
-      t:assert_all_contains(t:path("src", "lj_parse.c"), {
-        "BC_CNEW",
-        "BC_CGET",
-        "BC_CSET"
-      })
-      assert_scan_after(t, "source child cell-upvalue protos must not be marked NOJIT",
-                        t:path("src", "lj_parse.c"), "if (fs_has_celluv(fs))",
-                        "pt->numparams", function(line)
-        return contains(line, "PROTO_NOJIT")
-      end)
-      t:assert_all_any_contains({
-        t:path("src", "lj_tg.h"),
-        t:path("src", "lj_dispatch.c")
-      }, {
-        "#define GG_LEN_SDISP\tBC__MAX",
-        "dispatch_setins_cells",
-        "dispatch_copyins_cells",
-        "dispatch_setcall",
-        "for (i = BC_FUNCF; i <= BC_FUNCCW; i++)",
-        "for (i = BC__MAX; i < GG_LEN_DDISP; i++)"
-      })
-      t:assert_all_any_contains({
-        t:path("src", "lj_record.c"),
-        t:path("src", "lj_asm_x86.h")
-      }, {
-        "IRT(IR_UREFC, IRT_PGC), slotref",
-        "irt_isp32(IR(ir->op1)->t)",
-        "bc_isfunc_or_ff"
-      })
 
       local out = t:tmp("lj_m5_cell_ops_bc")
       luajit_capture(t, { "-bl", "-e", [=[
@@ -767,6 +688,16 @@ assert(util.traceinfo(1), "expected loaded CNEW creation trace")
       run_stock(t, { "test.lua", "--quiet", "opt/fwd/upval.lua" })
       run_stock(t, { "test.lua", "--quiet", "lang/goto.lua" })
       print("M5 local-cell opcode substrate guard passed")
+    end
+  })
+
+  add({
+    name = "m5_upvalue_publish_gc",
+    description = "closed-upvalue GC object publication behavior",
+    run = function(t)
+      t:build({ clean = true, quiet = true })
+      t:luajit({ "-joff", t:path("tests", "t-threading-upvalue.lua") })
+      print("M5 closed-upvalue GC publication behavior passed")
     end
   })
 

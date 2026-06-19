@@ -38,6 +38,7 @@ local m5_concurrent_cases = {
   "m5_x64_tset_nil_snapshot",
   "m5_parser_capture_meta",
   "m5_bcdump_compat",
+  "m5_upvalue_publish_gc",
   "m5_cell_ops"
 }
 
