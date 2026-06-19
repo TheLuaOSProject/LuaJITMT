@@ -295,6 +295,8 @@ Lua test-suite migration notes:
   of direct GC/JIT source marker checks.
 - Converted `m6_jit_token` to its C/Lua recorder-token regressions and
   generated XPOLL dump checks instead of direct recorder/x64 source guards.
+- Converted `m5_tab_cas_store` to rely on the compiled CAS/FORWARD behavior
+  fixture instead of direct table/API/library source inspections.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.
