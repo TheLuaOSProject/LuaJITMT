@@ -36,6 +36,14 @@ local function append_argv(parts, argv)
   end
 end
 
+local function append_flags(parts, flags)
+  if type(flags) == "table" then
+    for i = 1, #flags do append(parts, flags[i]) end
+  else
+    append(parts, flags)
+  end
+end
+
 local function read_file(path)
   local f, err = io.open(path, "rb")
   if not f then error(path .. ": " .. err, 2) end
@@ -142,6 +150,7 @@ end
 function Test:cc(output, sources, opts)
   opts = opts or {}
   local parts = { self.compiler, self.cflags }
+  append_flags(parts, opts.cflags)
   append(parts, "-I" .. shell_quote(self:path("src")))
   for i = 1, #sources do
     append(parts, shell_quote(sources[i]))
@@ -176,6 +185,20 @@ end
 function Test:assert_all_contains(path, needles)
   for i = 1, #needles do
     self:assert_contains(path, needles[i])
+  end
+end
+
+function Test:assert_any_contains(paths, needle)
+  for i = 1, #paths do
+    local data = read_file(paths[i])
+    if data:find(needle, 1, true) then return end
+  end
+  error(table.concat(paths, ", ") .. ": missing expected text: " .. needle, 2)
+end
+
+function Test:assert_all_any_contains(paths, needles)
+  for i = 1, #needles do
+    self:assert_any_contains(paths, needles[i])
   end
 end
 

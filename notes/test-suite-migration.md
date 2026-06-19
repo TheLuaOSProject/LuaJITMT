@@ -24,6 +24,18 @@ Lua test-suite migration notes:
   - `tools/ci/m4_threading_api.sh` -> `m4_threading_api`
   - `tools/ci/m4_threading_shutdown.sh` -> `m4_threading_shutdown`
   - `tools/ci/m5_os_reentrant.sh` -> `m5_os_reentrant`
+- Fourth migrated scripts:
+  - `tools/ci/m2_arena_all.sh` -> `m2_arena_all`
+  - `tools/ci/m2_arena_bitmap.sh` -> `m2_arena_bitmap`
+  - `tools/ci/m2_arena_map.sh` -> `m2_arena_map`
+  - `tools/ci/m2_arena_hugetab.sh` -> `m2_arena_hugetab`
+  - `tools/ci/m2_arena_sweep.sh` -> `m2_arena_sweep`
+  - `tools/ci/m2_arena_state.sh` -> `m2_arena_state`
+  - `tools/ci/m2_arena_gcmark.sh` -> `m2_arena_gcmark`
+  - `tools/ci/m2_arena_gcverify.sh` -> `m2_arena_gcverify`
+  - `tools/ci/m2_arena_gcclose.sh` -> `m2_arena_gcclose`
+  - `tools/ci/m2_arena_gcsweep.sh` -> `m2_arena_gcsweep`
+  - `tools/ci/m2_arena_gcphase.sh` -> `m2_arena_gcphase`
 - This first batch covers the main shapes the full migration needs:
   standalone C fixtures linked against selected runtime files, Lua tests under
   the built VM, C fixtures linked against `libluajit.a`, and source-order guard
@@ -36,6 +48,10 @@ Lua test-suite migration notes:
   helpers. These cover cleanup-before-STOPREQ ordering checks, VM safepoint
   marker checks, shutdown marker-file validation, and POSIX `os.*`
   reentrancy guards without shell `awk`/`grep`.
+- The fourth batch turns the focused M2 arena shell scripts into launchers only.
+  `ljtest.cc()` now accepts per-fixture compile flags for assertion fixtures,
+  and `ljtest.assert_all_any_contains()` preserves `rg -F` style source-marker
+  checks across multiple files.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.
