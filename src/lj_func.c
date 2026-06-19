@@ -130,7 +130,8 @@ static GCupval *func_snapshotuv(lua_State *L, const TValue *slot)
   GCupval *uv = (GCupval *)lj_mem_newgco(L, sizeof(GCupval));
   uv->gct = ~LJ_TUPVAL;
   uv->closed = 1;
-  copyTV(L, &uv->tv, slot);
+  copyTVrel(L, &uv->tv, slot);
+  lj_gc_pubobjtv(L, uv, &uv->tv);
   setmref(uv->v, &uv->tv);
   uv->immutable = 0;
   uv->dhash = 0;
@@ -209,9 +210,10 @@ static GCfunc *func_newL(lua_State *L, GCproto *pt, GCtab *env)
   fn->l.gct = ~LJ_TFUNC;
   fn->l.ffid = FF_LUA;
   fn->l.nupvalues = 0;  /* Set to zero until upvalues are initialized. */
-  /* NOBARRIER: Really a setgcref. But the GCfunc is new (marked white). */
   setmref(fn->l.pc, proto_bc(pt));
-  setgcref(fn->l.env, obj2gco(env));
+  lj_gc_pubobjobj(L, fn, pt);
+  setgcrefrel(fn->l.env, obj2gco(env));
+  lj_gc_pubobjobj(L, fn, env);
   /* Saturating 3 bit counter (0..7) for created closures. */
   count = (uint32_t)pt->flags + PROTO_CLCOUNT;
   pt->flags = (uint8_t)(count - ((count >> PROTO_CLC_BITS) & PROTO_CLCOUNT));
@@ -223,13 +225,13 @@ GCfunc *lj_func_newL_empty(lua_State *L, GCproto *pt, GCtab *env)
 {
   GCfunc *fn = func_newL(L, pt, env);
   MSize i, nuv = pt->sizeuv;
-  /* NOBARRIER: The GCfunc is new (marked white). */
   for (i = 0; i < nuv; i++) {
     GCupval *uv = func_newuvclosed(L);
     int32_t v = proto_uv(pt)[i];
     uv->immutable = ((v / PROTO_UV_IMMUTABLE) & 1);
     uv->dhash = (uint32_t)(uintptr_t)pt ^ (v << 24);
-    setgcref(fn->l.uvptr[i], obj2gco(uv));
+    setgcrefrel(fn->l.uvptr[i], obj2gco(uv));
+    lj_gc_pubobjobj(L, fn, uv);
   }
   fn->l.nupvalues = (uint8_t)nuv;
   return fn;
@@ -243,7 +245,6 @@ static GCfunc *func_newL_gc_base(lua_State *L, TValue *base, GCproto *pt,
   GCRef *puv;
   MSize i, nuv;
   fn = func_newL(L, pt, tabref_acq(parent->env));
-  /* NOBARRIER: The GCfunc is new (marked white). */
   puv = parent->uvptr;
   nuv = pt->sizeuv;
   if (base == NULL)
@@ -263,7 +264,8 @@ static GCfunc *func_newL_gc_base(lua_State *L, TValue *base, GCproto *pt,
     } else {
       uv = &gcref(puv[v])->uv;
     }
-    setgcref(fn->l.uvptr[i], obj2gco(uv));
+    setgcrefrel(fn->l.uvptr[i], obj2gco(uv));
+    lj_gc_pubobjobj(L, fn, uv);
   }
   fn->l.nupvalues = (uint8_t)nuv;
   return fn;

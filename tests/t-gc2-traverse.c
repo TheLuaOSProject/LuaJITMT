@@ -846,6 +846,49 @@ static void test_cclosure_constructor_publish_barrier(lua_State *L,
   lua_gc(L, LUA_GCSTOP, 0);
 }
 
+static void test_lua_closure_constructor_publish_barrier(lua_State *L,
+							global_State *g,
+							TGState *tg)
+{
+  GCfunc *fn;
+  GCtab *payload;
+  GCupval *uv;
+
+  lua_settop(L, 0);
+  assert(luaL_dostring(L,
+    "local payload = { tag = 'lua-closure' }\n"
+    "return function() return function() return payload end end, payload\n") ==
+    LUA_OK);
+  payload = tabV(L->top - 1);
+
+  lj_gc2_legacy_mark_begin(g);
+  assert(la_load8_acq(&tg->alloc.alloc_black) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(payload)) == 0);
+
+  lua_pushvalue(L, -2);
+  lua_call(L, 0, 1);
+  fn = funcV(L->top - 1);
+  assert(isluafunc(fn));
+  assert(lj_gc2_ismarked(g, obj2gco(fn)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(funcproto(fn))) == 1);
+  assert(fn->l.nupvalues == 1);
+  uv = &gcref(fn->l.uvptr[0])->uv;
+  assert(lj_gc2_ismarked(g, obj2gco(uv)) == 1);
+  flush_and_drain(g, tg);
+  assert(lj_gc2_ismarked(g, obj2gco(payload)) == 1);
+
+  lua_pushvalue(L, -1);
+  lua_call(L, 0, 1);
+  assert(tabV(L->top - 1) == payload);
+  lua_pop(L, 1);
+
+  lj_gc2_legacy_cycle_end(g);
+  lua_pop(L, 3);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  lua_gc(L, LUA_GCSTOP, 0);
+}
+
 #if LJ_HASBUFFER
 static void test_buffer_decode_metatable_barrier(lua_State *L, global_State *g,
 						TGState *tg)
@@ -3917,6 +3960,7 @@ int main(void)
   test_thread_constructor_env_barrier(L, g, tg);
   test_thread_spawn_constructor_child_barrier(L, g, tg);
   test_cclosure_constructor_publish_barrier(L, g, tg);
+  test_lua_closure_constructor_publish_barrier(L, g, tg);
 #if LJ_HASBUFFER
   test_buffer_decode_metatable_barrier(L, g, tg);
   test_buffer_constructor_dict_barrier(L, g, tg);
