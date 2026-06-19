@@ -309,6 +309,10 @@ Lua test-suite migration notes:
 - Removed broad M9/M10 marker checks for GC stats, benchmark smoke, and
   generational mode; those cases now rely on Lua/C behavior checks while
   retaining source guards for CAS publication and sweep unlink/free ordering.
+- Removed M8 broad marker and fixture-source ordering checks; the weak,
+  FINREG, and finalizer behavior matrix still runs while retaining source
+  guards for memory-order, CAS retry, chain-splice, and finalizer-state
+  invariants that need replacement fixtures.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.
