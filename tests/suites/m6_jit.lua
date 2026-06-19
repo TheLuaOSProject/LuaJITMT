@@ -150,19 +150,6 @@ local function assert_trace1_ir(t, dump, label, pred)
   end
 end
 
-local function assert_marker_set(t, paths, needles, label)
-  for i = 1, #needles do
-    local ok = false
-    for j = 1, #paths do
-      if contains(t:read(paths[j]), needles[i]) then
-        ok = true
-        break
-      end
-    end
-    if not ok then error(label .. ": missing marker: " .. needles[i], 2) end
-  end
-end
-
 local function assert_section_no_lines(t, label, path, start_text, end_text, pred)
   local data = t:text_between(path, start_text, end_text)
   local hits = {}
@@ -241,6 +228,36 @@ local function assert_loop_ir_markers(t, dump, label, markers)
     if not seen[markers[i]] then
       io.stderr:write(data)
       error(label .. ": missing loop marker: " .. markers[i], 2)
+    end
+  end
+end
+
+local function assert_loop_after_xpoll(t, dump, label, markers)
+  local data = t:read(dump)
+  local loop, xpoll = false, false
+  local seen = {}
+  for line in lines(data) do
+    if contains(line, "------ LOOP") then
+      loop = true
+    elseif loop and contains(line, "---- TRACE 1 stop") then
+      break
+    elseif loop then
+      if contains(line, "XPOLL") then xpoll = true end
+      if xpoll then
+        for i = 1, #markers do
+          if contains(line, markers[i]) then seen[markers[i]] = true end
+        end
+      end
+    end
+  end
+  if not xpoll then
+    io.stderr:write(data)
+    error(label .. ": missing loop XPOLL", 2)
+  end
+  for i = 1, #markers do
+    if not seen[markers[i]] then
+      io.stderr:write(data)
+      error(label .. ": missing post-XPOLL marker: " .. markers[i], 2)
     end
   end
 end
@@ -449,7 +466,6 @@ return function(add)
                       { build = false })
 
       local vm = t:path("src", "vm_x64.dasc")
-      t:assert_not_contains(vm, "Secondary TGs interpret until RID_DISPATCH is local")
       assert_no_lines(t, "x64 VM must not derive g/J from fixed DISPATCH offsets",
                       { vm }, function(line)
         return line:match("DISPATCH_[GJ]%(") ~= nil
@@ -469,7 +485,6 @@ return function(add)
         return contains(line, "GG_OFS_TGDISP") or contains(line, "GG_G2TGDISP") or
                contains(line, "TG_DISP2J") or contains(line, "TG_DISP2G")
       end)
-      t:assert_not_contains(t:path("src", "lj_dispatch.c"), "DISPMODE_REC")
       print("M6 dispatch redispatch guard passed")
     end
   })
@@ -835,22 +850,37 @@ assert(uv==vals[64])
     description = "FFI XBAR aliasing respects XPOLL poll regions",
     run = function(t)
       build_default(t)
-      assert_marker_set(t, {
-        t:path("src", "lj_opt_mem.c"),
-        t:path("src", "lj_asm.c"),
-        t:path("src", "lj_opt_fold.c")
-      }, {
-        "static LJ_AINLINE IRRef poll_alias_limit(jit_State *J, IRRef lim)",
-        "J->chain[IR_XBAR] > lim",
-        "J->chain[IR_XPOLL] > lim",
-        "lim = poll_alias_limit(J, lim);",
-        "case IR_NOP: case IR_XBAR:",
-        "LJFOLD(XBAR)"
-      }, "XBAR/XPOLL alias")
-      if count_plain(t:read(t:path("src", "lj_opt_mem.c")),
-                     "lim = poll_alias_limit(J, lim);") < 2 then
-        error("XLOAD forwarding and XSTORE DSE must both honor XPOLL", 2)
-      end
+      local copy_dump = t:tmp("lj-m6-xbar-copy-ir.dump")
+      luajit_dump(t, copy_dump, "-jdump=ir", [=[
+local ffi = require("ffi")
+local dst = ffi.new("uint8_t[512]")
+local src = ffi.new("uint8_t[512]")
+jit.opt.start("hotloop=1", "hotexit=1")
+for i = 1, 80 do ffi.copy(dst, src, 512) end
+]=], { timeout = "20s" })
+      assert_loop_after_xpoll(t, copy_dump, "FFI copy XBAR loop",
+                              { "CALLS  memcpy", "XBAR" })
+
+      local load_dump = t:tmp("lj-m6-xbar-xload-ir.dump")
+      luajit_dump(t, load_dump, "-jdump=ir", [=[
+local ffi = require("ffi")
+local a = ffi.new("int[256]")
+jit.opt.start("hotloop=1", "hotexit=1")
+local s = 0
+for i = 1, 120 do s = s + a[i % 128] end
+assert(s == 0)
+]=], { timeout = "20s" })
+      assert_loop_after_xpoll(t, load_dump, "FFI XLOAD loop", { "XLOAD" })
+
+      local store_dump = t:tmp("lj-m6-xbar-xstore-ir.dump")
+      luajit_dump(t, store_dump, "-jdump=ir", [=[
+local ffi = require("ffi")
+local a = ffi.new("int[256]")
+jit.opt.start("hotloop=1", "hotexit=1")
+for i = 1, 120 do a[i % 128] = i end
+assert(a[119 % 128] == 119)
+]=], { timeout = "20s" })
+      assert_loop_after_xpoll(t, store_dump, "FFI XSTORE loop", { "XSTORE" })
       t:run({ t:path("tools", "ci", "m5_jit_hash_store_nyi.sh") })
       print("M6 JIT XBAR/XPOLL alias guard passed")
     end
@@ -1403,14 +1433,6 @@ assert(type(x)=="table")
                             function(line)
         return raw_index_write(" " .. line, "[^%w_]p") or raw_cast_write(line)
       end)
-
-      local reserve = t:c_block(lj_mcode, "MCode *lj_mcode_reserve(jit_State *J, MCode **lim)")
-      t:assert_text_ordered("lj_mcode_reserve", reserve, {
-        "if (!J->mcarea)",
-        "mcode_allocarea(J, mcode_default_size(J))",
-        "else",
-        "mcode_protect(J, MCPROT_GEN)"
-      })
 
       local stop = t:c_block(t:path("src", "lj_trace.c"), "static void trace_stop(jit_State *J)")
       assert_order_positions("trace_stop", stop, {

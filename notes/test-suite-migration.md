@@ -345,6 +345,10 @@ Lua test-suite migration notes:
 - Removed low-risk M8 finalizer dispatch and legacy FINREG/mmudata source
   scans; the weak/finalizer matrix and GC2 C fixtures cover those behaviors
   while memory-order and CAS publication guards remain.
+- Replaced the M6 XBAR/XPOLL optimizer source marker checks with generated IR
+  dump probes for `ffi.copy`, FFI loads, and FFI stores after loop `XPOLL`;
+  also removed duplicate M6 scaffold-name and reserve-order checks already
+  covered by dispatch and mcode behavior.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.
