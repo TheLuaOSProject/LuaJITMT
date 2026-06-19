@@ -246,6 +246,9 @@ initializes the empty/colocated table shape, nil-clears new array slots, then
 CAS-publishes the table root with `lj_gc_linkobj()`. This removes the
 publish-before-body-init blocker for future `BC_TNEW` inline allocation; the
 empty-table x64 `BC_TNEW` case now branches to the one-argument
-`lj_tab_new0()` helper. The remaining x64 fast path still needs inline legacy
-color setup, root-list publication, and GC2 allocation accounting before it can
-bypass the C helper entirely.
+`lj_tab_new0()` helper. Fresh table arrays use the same publication order as
+resize (`acap` mirror, release array pointer, release `asize` mirror), so a
+concurrent reader does not pair a new size with an unpublished array pointer.
+The remaining x64 fast path still needs inline legacy color setup, root-list
+publication, and GC2 allocation accounting before it can bypass the C helper
+entirely.

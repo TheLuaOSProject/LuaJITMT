@@ -510,6 +510,14 @@ static LJ_AINLINE void tab_publish_new(global_State *g, GCtab *t)
   lj_gc_linkobj(g, obj2gco(t));  /* CAS-publish table after body init. */
 }
 
+static LJ_AINLINE void tab_publish_array(GCtab *t, TValue *array,
+					 uint32_t asize, uint32_t acap)
+{
+  t->acap = acap;
+  lj_tab_array_rel(t, array);
+  lj_tab_asize_rel(t, asize);
+}
+
 /* Create a new table with slots initialized to nil. */
 static GCtab *newtab(lua_State *L, uint32_t asize, uint32_t hbits)
 {
@@ -524,9 +532,7 @@ static GCtab *newtab(lua_State *L, uint32_t asize, uint32_t hbits)
     t->colo = (int8_t)asize;
     array = (TValue *)((char *)t + sizeof(GCtab));
     cleararray(array, asize);
-    lj_tab_array_set(t, array);
-    t->asize = asize;
-    t->acap = asize;
+    tab_publish_array(t, array, asize, asize);
     tab_publish_new(g, t);
   } else {  /* Otherwise separately allocate the array part. */
     t = (GCtab *)lj_mem_newgco_unlinked(L, sizeof(GCtab));
@@ -538,9 +544,7 @@ static GCtab *newtab(lua_State *L, uint32_t asize, uint32_t hbits)
 	lj_err_msg(L, LJ_ERR_TABOV);
       array = tab_array_new(L, asize, asize);
       cleararray(array, asize);
-      lj_tab_array_set(t, array);
-      t->asize = asize;
-      t->acap = asize;
+      tab_publish_array(t, array, asize, asize);
     }
   }
   if (hbits)
