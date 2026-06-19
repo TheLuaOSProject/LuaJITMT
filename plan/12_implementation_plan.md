@@ -132,7 +132,9 @@ slots, previous-nil slots, trace-local new string-key hash slots, and
 trace-local new numeric slots, plus shared, PHI-carried, upvalue-carried,
 escaped, and weak-table references. These lower through split hash/array/newref
 helpers that run the parent-aware value barrier and the P_WEAK weak-write
-bridge; the original generation-aware table write protocol and broader
+bridge; M10 now also pins that traced helper-backed array stores enqueue the
+old parent, not the young value, for idle generational remembered-set draining.
+The original generation-aware table write protocol and broader
 AHdr/NHdr table-generation port remain pending.
 Linux/x64 HREFK recording now avoids the legacy `GCtab.hmask` mirror
 guard and relies on the loaded node pointer plus x64 node-header slot guard;
@@ -284,7 +286,10 @@ now estimate young survival from live-estimate growth over sampled cycle
 allocation bytes and request a one-shot major at high survival. `bench.lua`
 accepts `BENCH_GC_MODE` and `BENCH_SCALE` for M10 tuning probes; the initial 80
 percent survival threshold leaves short-lived allocation churn on minor cycles
-and promotes retained-allocation churn back to major collection.
+and promotes retained-allocation churn back to major collection. The M10 C
+harness now exercises a traced helper-backed table store under idle
+generational mode and verifies the remembered entry is the old parent table
+before the next minor cycle marks the young child.
 
 ## 12.1 Per-file change index (cross-check before declaring any milestone done)
 new: lj_atomic.h lj_tg.{h,c} lj_arena.{h,c} lj_gc2.{h,c} lj_gc2_barrier.h

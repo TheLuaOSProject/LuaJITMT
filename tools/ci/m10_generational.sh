@@ -74,6 +74,8 @@ for needle in \
   'lj_gc2_force_major(g);  /* First generational cycle establishes old marks. */' \
   'lj_gc2_barrier_tv_pair_g(global_State *g, GCobj *parent' \
   'lj_gc2_barrier_tvn_pair_g(global_State *g, GCobj *parent' \
+  'test_jit_generational_table_store_remembered' \
+  'active_ssb_last(tg) == obj2gco(parent)' \
   'gc_stats_setint(L, t, "generational"' \
   'gc_stats_setint(L, t, "cycle_sweep_minor"' \
   'gc_stats_setint(L, t, "cycle_roots_minor"' \
