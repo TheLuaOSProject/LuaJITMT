@@ -541,7 +541,7 @@ static void gc_stats_push(lua_State *L)
   global_State *g = G(L);
   GC2State *gc2 = &g->gc2;
   GCtab *t;
-  lua_createtable(L, 0, 81);
+  lua_createtable(L, 0, 86);
   t = tabV(L->top - 1);
   gc_stats_setnum(L, t, "total_bytes", g->gc.total);
   gc_stats_setnum(L, t, "total_kbytes", g->gc.total >> 10);
