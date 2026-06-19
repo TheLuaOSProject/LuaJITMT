@@ -54,7 +54,6 @@ for needle in \
   '(void)lj_tab_array_snapshot_acq(t, &array)' \
   'lj_tab_array_snapshot_acq(kt, &karray)' \
   'uint32_t asize = (uint32_t)lj_tab_array_snapshot_acq(t, &array)' \
-  'size_t hi = (size_t)lj_tab_array_snapshot_acq(t, &array)' \
   'MSize asize = lj_tab_array_snapshot_acq(t, &array)' \
   'MSize i, asize = lj_tab_array_snapshot_acq(t, &array)' \
   'asize = lj_tab_array_snapshot_acq(kt, &array)' \

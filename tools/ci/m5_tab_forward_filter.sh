@@ -24,14 +24,17 @@ for needle in \
   'lj_tab_node_nextgen_acq(node)' \
   'tab_forwarded_int_arrayslot(GCtab *t, int32_t key)' \
   'tab_forwarded_hash_value(GCtab *t, Node **nodep,' \
+  'tab_array_slot_absent_acq(GCtab *t, TValue **arrayp,' \
   'lj_tab_array_forward_hop(const GCtab *t, TValue **arrayp,' \
   'lj_tab_array_nextgen_acq(array)' \
   'lj_tab_array_hdr_asize_acq(next)' \
   'tab_val_absent(&val)' \
   'tab_slot_absent_acq(tv)' \
-  'tab_slot_absent_acq(&array[hi])' \
+  'tab_array_slot_absent_acq(t, &array, &asize, (MSize)hi)' \
   'lj_tab_getint(t, 3) == NULL' \
   'lj_tab_getstr(t, hidden) == NULL' \
+  'lj_tab_len(t) == 5' \
+  'lj_tab_len_hint(t, 5) == 5' \
   'exercise_array_forward_hop(L)' \
   'lj_tab_array_nextgen_acq(oldarray) == newarray' \
   'exercise_hash_forward_hop(L)' \
@@ -98,14 +101,18 @@ if ! awk '
 fi
 
 if ! awk '
+  /static LJ_AINLINE int tab_array_slot_absent_acq\(GCtab \*t,/ { inhelper = 1 }
+  inhelper && /lj_tab_array_forward_hop\(t, &nextarray, &nextasize\)/ { helper_hop = 1 }
+  inhelper && /tab_val_absent\(&val\)/ { helper_absent = 1 }
+  inhelper && /^}/ { inhelper = 0 }
   /static MSize tab_len_slow\(GCtab \*t,/ { inlen = 1 }
   /MSize LJ_FASTCALL lj_tab_len\(GCtab \*t\)/ { inlen = 1 }
   /MSize LJ_FASTCALL lj_tab_len_hint\(GCtab \*t,/ { inlen = 1 }
-  inlen && /tab_slot_absent_acq|tab_val_absent/ { absent++ }
+  inlen && /tab_slot_absent_acq|tab_val_absent|tab_array_slot_absent_acq/ { absent++ }
   inlen && /^}/ { inlen = 0 }
-  END { exit absent >= 6 ? 0 : 1 }
+  END { exit helper_hop && helper_absent && absent >= 6 ? 0 : 1 }
 ' "$ROOT/src/lj_tab.c"; then
-  echo "guardrail: table length helpers must treat FORWARD as absent" >&2
+  echo "guardrail: table length helpers must hop/filter FORWARD values" >&2
   exit 1
 fi
 

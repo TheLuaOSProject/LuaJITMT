@@ -145,6 +145,25 @@ static LJ_AINLINE int tab_forwarded_hash_value(GCtab *t, Node **nodep,
   return 0;
 }
 
+static LJ_AINLINE int tab_array_slot_absent_acq(GCtab *t, TValue **arrayp,
+						MSize *asizep, MSize idx)
+{
+  TValue val;
+  TValue *array = *arrayp;
+  lj_tv_load_acq(&val, &array[idx]);
+  if (tvisforward(&val)) {
+    MSize nextasize = *asizep;
+    TValue *nextarray = array;
+    if (lj_tab_array_forward_hop(t, &nextarray, &nextasize) &&
+	idx < nextasize) {
+      *arrayp = nextarray;
+      *asizep = nextasize;
+      lj_tv_load_acq(&val, &nextarray[idx]);
+    }
+  }
+  return tab_val_absent(&val);
+}
+
 static TValue *tab_findkey_or_keylock(Node *anchor, cTValue *key, int *locked)
 {
   Node *n;
@@ -1553,15 +1572,20 @@ MSize LJ_FASTCALL lj_tab_len(GCtab *t)
 {
   TValue *array;
   MSize hmask;
-  size_t hi = (size_t)lj_tab_array_snapshot_acq(t, &array);
+  MSize asize = lj_tab_array_snapshot_acq(t, &array);
+  size_t hi = (size_t)asize;
   if (hi) hi--;
   /* In a growing array the last array element is very likely nil. */
-  if (hi > 0 && LJ_LIKELY(tab_slot_absent_acq(&array[hi]))) {
+  if (hi > 0 &&
+      LJ_LIKELY(tab_array_slot_absent_acq(t, &array, &asize, (MSize)hi))) {
     /* Binary search to find a non-nil to nil transition in the array. */
     size_t lo = 0;
     while (hi - lo > 1) {
       size_t mid = (lo+hi) >> 1;
-      if (tab_slot_absent_acq(&array[mid])) hi = mid; else lo = mid;
+      if (tab_array_slot_absent_acq(t, &array, &asize, (MSize)mid))
+	hi = mid;
+      else
+	lo = mid;
     }
     return (MSize)lo;
   }
@@ -1575,20 +1599,18 @@ MSize LJ_FASTCALL lj_tab_len(GCtab *t)
 MSize LJ_FASTCALL lj_tab_len_hint(GCtab *t, size_t hint)
 {
   TValue *array;
-  size_t asize = (size_t)lj_tab_array_snapshot_acq(t, &array);
+  MSize asize = lj_tab_array_snapshot_acq(t, &array);
   if (LJ_LIKELY(hint+1 < asize)) {
-    TValue tv, tvnext;
-    lj_tv_load_acq(&tv, &array[hint]);
-    lj_tv_load_acq(&tvnext, &array[hint+1]);
-    if (LJ_LIKELY(!tab_val_absent(&tv) && tab_val_absent(&tvnext)))
+    int absent = tab_array_slot_absent_acq(t, &array, &asize, (MSize)hint);
+    int nextabsent = tab_array_slot_absent_acq(t, &array, &asize,
+					       (MSize)(hint+1));
+    if (LJ_LIKELY(!absent && nextabsent))
       return (MSize)hint;
   } else if (hint+1 <= asize) {
     MSize hmask;
     (void)lj_tab_node_snapshot_acq(t, &hmask);
     if (LJ_LIKELY(hmask == 0)) {
-      TValue tv;
-      lj_tv_load_acq(&tv, &array[hint]);
-      if (!tab_val_absent(&tv))
+      if (!tab_array_slot_absent_acq(t, &array, &asize, (MSize)hint))
 	return (MSize)hint;
     }
   }

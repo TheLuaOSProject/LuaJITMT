@@ -321,7 +321,9 @@ that observe a forwarded old hash slot also check the successor array after a
 hash-generation hop, covering array growth that migrates the integer key out of
 the hash part. C `lj_tab_next()` resolves visible array and hash
 `LJ_TFORWARD` slots through the published successor generation for the current
-logical key before falling back to absent filtering.
+logical key before falling back to absent filtering. C length helpers follow
+`TabArrayHdr.next_gen` for visible forwarded array slots before deciding whether
+a candidate boundary is absent.
 Publication barriers that receive a `TValue *` snapshot the value before GC2
 marking and legacy `tviswhite()` / `gcV()` checks, so the current release-store
 bridge does not reread a shared destination slot after publication.

@@ -104,6 +104,10 @@ static void exercise_array_forward_hop(lua_State *L)
   t = tabV(L->top-1);
   assert(lj_tab_array_separated(t));
 
+  lj_tab_storeint(L, lj_tab_setint(L, t, 1), 101);
+  lj_tab_storeint(L, lj_tab_setint(L, t, 2), 202);
+  lj_tab_storeint(L, lj_tab_setint(L, t, 3), 303);
+  lj_tab_storeint(L, lj_tab_setint(L, t, 4), 404);
   lj_tab_storeint(L, lj_tab_setint(L, t, 5), 505);
   oldarray = lj_tab_array_acq(t);
   oldasize = lj_tab_asize_acq(t);
@@ -122,7 +126,11 @@ static void exercise_array_forward_hop(lua_State *L)
   lj_tab_asize_rel(t, oldasize);
   lj_tab_array_rel(t, oldarray);
   assert_i32(lj_tab_getint(t, 5), 505);
-  assert(count_next(t) == 1);
+  assert(lj_tab_len(t) == 5);
+#if LJ_HASJIT
+  assert(lj_tab_len_hint(t, 5) == 5);
+#endif
+  assert(count_next(t) == 5);
 
   lj_tab_array_rel(t, newarray);
   lj_tab_asize_rel(t, newasize);
