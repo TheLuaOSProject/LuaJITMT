@@ -122,8 +122,23 @@ LJ_FUNC TValue *lj_tab_storeudata(lua_State *L, TValue *dst, GCudata *ud);
 static LJ_AINLINE cTValue *lj_tab_getint(GCtab *t, int32_t key)
 {
   TValue *array;
+  int forward_retry = 1;
+retry_array:
   MSize asize = lj_tab_array_snapshot_acq(t, &array);
-  return (MSize)key < asize ? &array[key] : lj_tab_getinth(t, key);
+  if ((MSize)key < asize) {
+    TValue val;
+    lj_tv_load_acq(&val, &array[key]);
+    if (tvisforward(&val)) {
+      if (forward_retry) {
+	forward_retry = 0;
+	la_cpu_pause();
+	goto retry_array;
+      }
+      return NULL;
+    }
+    return &array[key];
+  }
+  return lj_tab_getinth(t, key);
 }
 
 static LJ_AINLINE TValue *lj_tab_setint(lua_State *L, GCtab *t, int32_t key)

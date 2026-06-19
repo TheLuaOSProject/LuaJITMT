@@ -19,9 +19,12 @@ for needle in \
   'tab_val_absent(cTValue *val)' \
   'return tvisnil(val) || tvisforward(val)' \
   'tab_slot_absent_acq(const TValue *slot)' \
+  'tab_val_forward_retry_once(cTValue *val, int *retry)' \
   'tab_val_absent(&val)' \
   'tab_slot_absent_acq(tv)' \
   'tab_slot_absent_acq(&array[hi])' \
+  'lj_tab_getint(t, 3) == NULL' \
+  'lj_tab_getstr(t, hidden) == NULL' \
   't-tab-forward-filter OK'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_tab.c" "$ROOT/tests/t-tab-forward-filter.c"; then
@@ -32,6 +35,34 @@ done
 
 if ! rg -F -q 'm5_tab_forward_filter.sh' "$ROOT/tools/ci/m5_concurrent_objects.sh"; then
   echo "guardrail: table FORWARD filtering guard is not wired into M5 aggregate" >&2
+  exit 1
+fi
+
+if ! awk '
+  /static LJ_AINLINE cTValue \*lj_tab_getint\(GCtab \*t,/ { ingetint = 1 }
+  ingetint && /tvisforward\(&val\)/ { forward = 1 }
+  ingetint && /goto retry_array/ { retry = 1 }
+  ingetint && /return NULL/ { nullret = 1 }
+  ingetint && /^}/ { ingetint = 0 }
+  END { exit forward && retry && nullret ? 0 : 1 }
+' "$ROOT/src/lj_tab.h"; then
+  echo "guardrail: integer array getter must filter FORWARD values" >&2
+  exit 1
+fi
+
+if ! awk '
+  /cTValue \* LJ_FASTCALL lj_tab_getinth\(GCtab \*t,/ { ininth = 1 }
+  ininth && /tab_val_forward_retry_once\(&val, &forward_retry\)/ { inth = 1 }
+  ininth && /^}/ { ininth = 0 }
+  /cTValue \*lj_tab_getstr\(GCtab \*t,/ { instr = 1 }
+  instr && /tab_val_forward_retry_once\(&val, &forward_retry\)/ { str = 1 }
+  instr && /^}/ { instr = 0 }
+  /cTValue \*lj_tab_get\(lua_State \*L,/ { ingen = 1 }
+  ingen && /tab_val_forward_retry_once\(&val, &forward_retry\)/ { gen = 1 }
+  ingen && /^}/ { ingen = 0 }
+  END { exit inth && str && gen ? 0 : 1 }
+' "$ROOT/src/lj_tab.c"; then
+  echo "guardrail: hash getters must filter FORWARD values" >&2
   exit 1
 fi
 

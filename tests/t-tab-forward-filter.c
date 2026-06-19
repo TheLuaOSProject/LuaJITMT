@@ -56,6 +56,7 @@ int main(void)
   lj_tab_storeint(L, slot, 33);
   assert(lj_tab_len(t) == 3);
   store_forward(slot);
+  assert(lj_tab_getint(t, 3) == NULL);
   assert(lj_tab_len(t) == 2);
 #if LJ_HASJIT
   assert(lj_tab_len_hint(t, 2) == 2);
@@ -67,6 +68,12 @@ int main(void)
   slot = lj_tab_setstr(L, t, hidden);
   lj_tab_storeint(L, slot, 55);
   store_forward(slot);
+  assert(lj_tab_getstr(t, hidden) == NULL);
+  {
+    TValue key;
+    setstrV(L, &key, hidden);
+    assert(tvisnil(lj_tab_get(L, t, &key)));
+  }
 
   assert(count_next(t) == 3);
   assert(lj_tab_len(t) == 2);

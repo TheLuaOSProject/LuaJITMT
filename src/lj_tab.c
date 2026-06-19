@@ -82,6 +82,16 @@ static LJ_AINLINE int tab_slot_absent_acq(const TValue *slot)
   return tab_val_absent(&val);
 }
 
+static LJ_AINLINE int tab_val_forward_retry_once(cTValue *val, int *retry)
+{
+  if (tvisforward(val) && *retry) {
+    *retry = 0;
+    la_cpu_pause();
+    return 1;
+  }
+  return 0;
+}
+
 static TValue *tab_findkey_or_keylock(Node *anchor, cTValue *key, int *locked)
 {
   Node *n;
@@ -805,7 +815,7 @@ cTValue * LJ_FASTCALL lj_tab_getinth(GCtab *t, int32_t key)
   Node *node;
   MSize hmask;
   Node *n;
-  int retry = 1;
+  int key_retry = 1, forward_retry = 1;
   k.n = (lua_Number)key;
 retry_lookup:
   node = lj_tab_node_snapshot_acq(t, &hmask);
@@ -815,9 +825,16 @@ retry_lookup:
   do {
     TValue nk;
     lj_tv_load_acq(&nk, &n->key);
-    if (tvisnum(&nk) && nk.n == k.n)
+    if (tvisnum(&nk) && nk.n == k.n) {
+      TValue val;
+      lj_tv_load_acq(&val, &n->val);
+      if (tab_val_forward_retry_once(&val, &forward_retry))
+	goto retry_lookup;
+      if (tvisforward(&val))
+	return NULL;
       return &n->val;
-    if (tab_key_retry_once(&nk, &retry))
+    }
+    if (tab_key_retry_once(&nk, &key_retry))
       goto retry_lookup;
   } while ((n = lj_tab_nextnode_acq(n)));
   return NULL;
@@ -828,7 +845,7 @@ cTValue *lj_tab_getstr(GCtab *t, const GCstr *key)
   Node *node;
   MSize hmask;
   Node *n;
-  int retry = 1;
+  int key_retry = 1, forward_retry = 1;
 retry_lookup:
   node = lj_tab_node_snapshot_acq(t, &hmask);
   if (hmask == 0)
@@ -837,9 +854,16 @@ retry_lookup:
   do {
     TValue nk;
     lj_tv_load_acq(&nk, &n->key);
-    if (tvisstr(&nk) && strV(&nk) == key)
+    if (tvisstr(&nk) && strV(&nk) == key) {
+      TValue val;
+      lj_tv_load_acq(&val, &n->val);
+      if (tab_val_forward_retry_once(&val, &forward_retry))
+	goto retry_lookup;
+      if (tvisforward(&val))
+	return NULL;
       return &n->val;
-    if (tab_key_retry_once(&nk, &retry))
+    }
+    if (tab_key_retry_once(&nk, &key_retry))
       goto retry_lookup;
   } while ((n = lj_tab_nextnode_acq(n)));
   return NULL;
@@ -847,7 +871,7 @@ retry_lookup:
 
 cTValue *lj_tab_get(lua_State *L, GCtab *t, cTValue *key)
 {
-  int retry = 1;
+  int key_retry = 1, forward_retry = 1;
   if (tvisstr(key)) {
     cTValue *tv = lj_tab_getstr(t, strV(key));
     if (tv)
@@ -878,9 +902,16 @@ cTValue *lj_tab_get(lua_State *L, GCtab *t, cTValue *key)
     do {
       TValue nk;
       lj_tv_load_acq(&nk, &n->key);
-      if (lj_obj_equal(&nk, key))
+      if (lj_obj_equal(&nk, key)) {
+	TValue val;
+	lj_tv_load_acq(&val, &n->val);
+	if (tab_val_forward_retry_once(&val, &forward_retry))
+	  goto genlookup;
+	if (tvisforward(&val))
+	  return niltv(L);
 	return &n->val;
-      if (tab_key_retry_once(&nk, &retry))
+      }
+      if (tab_key_retry_once(&nk, &key_retry))
 	goto genlookup;
     } while ((n = lj_tab_nextnode_acq(n)));
   }

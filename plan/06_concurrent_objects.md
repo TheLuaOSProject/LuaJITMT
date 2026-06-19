@@ -31,11 +31,12 @@ segment, and the values classify as non-GC, non-number table-internal
 sentinels. FINREG missing-key insertion now uses `LJ_TKEYLOCK` as a transient
 key publication marker while preserving its existing value-slot finalizer claim,
 and the C table hash lookup/traversal bridge now filters `LJ_TKEYLOCK` with the
-bounded retry rule below. C table resize counting/copying, traversal, and
-length helpers now treat `LJ_TFORWARD` values as absent internal migration
-markers so they are not exposed or recopied by the current bridge; the final
-next-generation `LJ_TFORWARD` hop still has to be added at the table protocol
-use sites below.
+bounded retry rule below. C table getters now retry once and then report
+absence when a matched slot still contains `LJ_TFORWARD`; resize
+counting/copying, traversal, and length helpers treat `LJ_TFORWARD` values as
+absent internal migration markers so they are not exposed or recopied by the
+current bridge. The final next-generation `LJ_TFORWARD` hop still has to be
+added at the table protocol use sites below.
 
 ## 6.2 Tables: data structures
 
@@ -294,10 +295,11 @@ the same snapshot helpers. These steps do not replace the legacy resize
 algorithm with the planned lock-free `AHdr`/`NHdr` generation protocol yet;
 the original RETIRING/FORWARD/CAS helper-copy design above remains the target,
 and resize copying is still a non-cooperative legacy-`GCtab` operation. C-side
-table resize counting/copying, `next()`, and length helpers now filter
-`LJ_TFORWARD` values as absent internal sentinels, preventing synthetic
-forwarded values from being counted, returned, or recopied before the full
-next-generation hop exists.
+table getters retry once on a visible `LJ_TFORWARD` matched slot and otherwise
+report absence, while resize counting/copying, `next()`, and length helpers
+filter `LJ_TFORWARD` values as absent internal sentinels. This prevents
+synthetic forwarded values from being counted, returned, or recopied before the
+full next-generation hop exists.
 Publication barriers that receive a `TValue *` snapshot the value before GC2
 marking and legacy `tviswhite()` / `gcV()` checks, so the current release-store
 bridge does not reread a shared destination slot after publication.
