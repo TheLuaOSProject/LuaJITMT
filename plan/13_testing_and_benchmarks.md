@@ -128,9 +128,10 @@ chan_throughput, pmap-image-kernel (the 09 §9.11 pmap on a synthetic
 workload). Report ops/sec/thread + total; plot speedup. GC metrics are dumped
 via `collectgarbage("stats")`: current fields include cycle requests/starts,
 poll-ack sample/sum/max latency plus histogram buckets for approximate P99,
-allocation trigger/hard-limit bytes, assist work, worker work, owner sweep
-work, weak clearing/write marks, FINREG fallback/order counters, finalizer
-queueing/MPSC drains, finalizer-spawn deferrals, and live estimates.
+allocation trigger/hard-limit bytes, assist work, worker work and parked-worker
+scheduler telemetry, owner sweep work, weak clearing/write marks, FINREG
+fallback/order counters, finalizer queueing/MPSC drains, finalizer-spawn
+deferrals, and live estimates.
 `bench_mt.lua` uses `threading.now()` for monotonic wall-clock timings and
 reports per-run poll-ack P99 bucket bounds from histogram deltas.
 Use `BENCH_SCALE=<factor>` for short probes, `BENCH_THREADS="1 2 4 8"` to

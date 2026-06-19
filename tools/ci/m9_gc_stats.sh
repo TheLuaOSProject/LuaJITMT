@@ -23,6 +23,12 @@ for needle in \
   'safepoint_note_ack_latency(global_State *g)' \
   'poll_ack_p99_ns' \
   'assist_runs' \
+  'worker_runs' \
+  'worker_idle_declares' \
+  'worker_busy_retries' \
+  'worker_wakes' \
+  'worker_parks' \
+  'worker_async_progress' \
   'sweep_owner_runs' \
   'sweep_live_updates' \
   'major_root_scans' \
