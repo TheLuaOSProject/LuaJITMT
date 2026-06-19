@@ -17,6 +17,10 @@ for needle in \
   'callback_owner_claim(lua_State **owner, MSize slot,' \
   'la_casptr((void **)&owner[slot], &expect, L,' \
   'callback_owner_load(owner, top) == NULL' \
+  'callback_carrier_new_l(L)' \
+  'callback_owner_claim(owner, top, carrier)' \
+  'callback_owner_barrier_l(L, carrier)' \
+  '11.5 callback carrier side root' \
   'TValue *func;' \
   'if (cbid == NULL || owner == NULL || func == NULL || sizeid == 0)' \
   'lj_mem_newvec(L, CALLBACK_MAX_SLOT, CTypeID1)' \
@@ -142,7 +146,7 @@ if ! awk '
   inslot && /TValue \*func = callback_func_slots\(cts\)/ { sawfunc = 1 }
   inslot && /cbid == NULL \|\| owner == NULL \|\| func == NULL \|\| sizeid == 0/ { sawcheck = 1 }
   inslot && /callback_cbid_load\(cbid, top\) == 0/ { sawcbid = 1 }
-  inslot && /callback_owner_claim\(owner, top, L\)/ { sawclaim = 1 }
+  inslot && /callback_owner_claim\(owner, top, carrier\)/ { sawclaim = 1 }
   END { exit sawfor && sawfunc && sawcheck && sawcbid && sawclaim && !badinit ? 0 : 1 }
 ' "$ROOT/src/lj_ccallback.c"; then
   echo "guardrail: callback slot claim must use owner CAS over the preallocated table" >&2

@@ -163,11 +163,13 @@ FINREG/finqueue dispatch lands.
   slot is reusable. Callback mcode is allocated at `luaopen_ffi()` before
   concurrent callback creation, so the former `misc_token` lazy-init bridge is
   gone.
-  x64 callback entry spills ABI arguments, selects the current attached TLS TG
-  with `lj_ccallback_prepare()`, and uses callback owner slots only for
-  lifetime/disown. Callback-calling C functions are blacklisted through a fixed
-  CTState pointer-key CAS set, not arbitrary `miscmap` keys. Full TLS-less
-  foreign pthread auto-attach remains a separate carrier-lifecycle item.
+  x64 callback entry spills ABI arguments and selects the current attached TLS
+  TG with `lj_ccallback_prepare()`. Callback slot owner entries now hold hidden
+  attachable carrier `lua_State *` roots: attached callers still run through
+  their current TG, while TLS-less foreign pthreads auto-attach the hidden
+  carrier for the callback and auto-detach on normal return or unwind.
+  Callback-calling C functions are blacklisted through a fixed CTState
+  pointer-key CAS set, not arbitrary `miscmap` keys.
 - **errno/GetLastError save** (lj_ccall) is already per-call/TLS — audit.
 
 ## 11.6 Pinning rules for C-held references

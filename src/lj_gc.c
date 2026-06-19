@@ -645,6 +645,7 @@ static void gc_mark_gcroot(global_State *g)
     if (cts) {
       CTypeTab *ctret;
       TValue *func;
+      lua_State **owner;
       lj_gc_arena_markmem(g, cts);
       lj_gc_arena_markmem(g, ctype_tabh_acq(cts));
       for (ctret = (CTypeTab *)la_loadptr_acq(
@@ -669,7 +670,17 @@ static void gc_mark_gcroot(global_State *g)
       lj_ctype_fin_mark(g, gc_finreg_markobj, lj_gc_arena_markmem);
       gc_mark_finreg_cdata_preclaims(g);
       lj_gc_arena_markmem(g, cts->cb.cbid);
-      lj_gc_arena_markmem(g, cts->cb.owner);
+      owner = (lua_State **)la_loadptr_acq((void *const *)&cts->cb.owner);
+      lj_gc_arena_markmem(g, owner);
+      if (owner) {
+	MSize i, n = (MSize)la_load32_acq(&cts->cb.sizeid);
+	for (i = 0; i < n; i++) {
+	  lua_State *th = (lua_State *)la_loadptr_acq(
+	    (void *const *)&owner[i]);
+	  if (th)
+	    gc_markobj(g, obj2gco(th));
+	}
+      }
       func = (TValue *)la_loadptr_acq((void *const *)&cts->cb.func);
       lj_gc_arena_markmem(g, func);
       if (func) {

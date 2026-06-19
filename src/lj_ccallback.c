@@ -61,6 +61,22 @@ static LJ_AINLINE int callback_owner_clear(lua_State **owner, MSize slot,
 		   LA_ACQ_REL, LA_ACQ);  /* 11.5 callback owner disown. */
 }
 
+static lua_State *callback_carrier_new_l(lua_State *L)
+{
+  lua_State *carrier;
+  lj_gc_check(L);
+  carrier = lj_state_new(L);
+  carrier->tg_hint = NULL;  /* Hidden carrier is attached only on demand. */
+  return carrier;
+}
+
+static void callback_owner_barrier_l(lua_State *L, lua_State *carrier)
+{
+  TValue tv;
+  setthreadV(L, &tv, carrier);
+  lj_gc_barrierroot(L, &tv);  /* 11.5 callback carrier side root. */
+}
+
 static LJ_AINLINE TValue *callback_func_slots(CTState *cts)
 {
   return (TValue *)la_loadptr_acq((void *const *)&cts->cb.func);
@@ -638,7 +654,8 @@ void lj_ccallback_mcode_free(CTState *cts)
 #endif
 
 static void callback_frame_push(lua_State *L, CCallbackRuntime *cb,
-				TValue *cont, uint8_t was_native)
+				TValue *cont, uint8_t was_native,
+				uint8_t auto_detach)
 {
   MSize depth = cb->depth;
   if (LJ_UNLIKELY(depth >= CCALLBACK_MAX_NEST))
@@ -646,6 +663,7 @@ static void callback_frame_push(lua_State *L, CCallbackRuntime *cb,
   cb->frame[depth].L = L;
   cb->frame[depth].cont = cont;
   cb->frame[depth].was_native = was_native;
+  cb->frame[depth].auto_detach = auto_detach;
   cb->depth = depth + 1;
 }
 
@@ -666,7 +684,23 @@ static void callback_frame_pop(CCallbackRuntime *cb)
   frame->L = NULL;
   frame->cont = NULL;
   frame->was_native = 0;
+  frame->auto_detach = 0;
   cb->depth = depth;
+}
+
+static int callback_auto_attach(CTState *cts, MSize slot)
+{
+  lua_State **owner;
+  lua_State *L;
+  if (slot >= (MSize)la_load32_acq(&cts->cb.sizeid))
+    return 0;
+  owner = (lua_State **)la_loadptr_acq((void *const *)&cts->cb.owner);
+  if (owner == NULL)
+    return 0;
+  L = callback_owner_load(owner, slot);
+  if (L == NULL || G(L) != cts->g)
+    return 0;
+  return lj_threading_attach(L);
 }
 
 CCallbackRuntime * LJ_FASTCALL lj_ccallback_prepare(CTState *cts, MSize slot)
@@ -674,13 +708,21 @@ CCallbackRuntime * LJ_FASTCALL lj_ccallback_prepare(CTState *cts, MSize slot)
   TGState *tg = lj_thr_get_tg();
   lua_State *L;
   CCallbackRuntime *cb;
+  uint8_t auto_detach = 0;
   if (LJ_UNLIKELY(tg == NULL || tg->gl != cts->g ||
-		  lj_tg_load_cur_L(tg) == NULL))
-    abort();  /* Foreign pthread callback auto-attach is not implemented yet. */
+		  lj_tg_load_cur_L(tg) == NULL)) {
+    if (tg == NULL && callback_auto_attach(cts, slot)) {
+      tg = lj_thr_get_tg();
+      auto_detach = 1;
+    }
+    if (tg == NULL || tg->gl != cts->g || lj_tg_load_cur_L(tg) == NULL)
+      abort();  /* No legal callback carrier for this foreign pthread. */
+  }
   L = lj_tg_load_cur_L(tg);
   cb = &tg->cb;
   cb->L = L;  /* Callback carrier TG from current TLS, not slot owner. */
   cb->slot = slot;
+  cb->auto_detach = auto_detach;
   return cb;
 }
 
@@ -694,8 +736,16 @@ void lj_ccallback_unwind(lua_State *L, TValue *cont)
   cb = &tg->cb;
   tg->ffi_call_func = NULL;
   frame = callback_frame_top(cb);
-  if (frame != NULL && frame->cont == cont)
+  if (frame != NULL && frame->cont == cont) {
+    uint8_t auto_detach = frame->auto_detach;
     callback_frame_pop(cb);
+    cb->auto_detach = 0;
+    if (auto_detach)
+      lj_threading_detach(L, 0);
+  } else if (cb->auto_detach) {
+    cb->auto_detach = 0;
+    lj_threading_detach(L, 0);
+  }
 }
 
 /* Convert and push callback arguments to Lua stack. */
@@ -879,6 +929,7 @@ lua_State * LJ_FASTCALL lj_ccallback_enter(CTState *cts, void *cf,
   global_State *g = cts->g;
   TGState *tg = lj_thr_get_tg();
   uint8_t was_native;
+  uint8_t auto_detach = cb->auto_detach;
   uint32_t actions = 0;
   if (LJ_UNLIKELY(tg == NULL || tg->gl != g || cb != &tg->cb ||
 		  L == NULL || lj_tg_load_cur_L(tg) != L || L2TG(L) != tg))
@@ -902,7 +953,8 @@ lua_State * LJ_FASTCALL lj_ccallback_enter(CTState *cts, void *cf,
     actions = lj_native_leave(L);
   }
   callback_conv_args(cts, L, cb);
-  callback_frame_push(L, cb, L->base-1, was_native);
+  callback_frame_push(L, cb, L->base-1, was_native, auto_detach);
+  cb->auto_detach = 0;
   if (was_native) {
     if (actions & LJ_GC2_HS_STOPREQ) {
       callback_frame_top(cb)->was_native = 0;
@@ -919,6 +971,7 @@ void LJ_FASTCALL lj_ccallback_leave(CTState *cts, TValue *o,
   CCallbackFrame *frame = callback_frame_top(cb);
   lua_State *L = frame ? frame->L : cb->L;
   uint8_t was_native = frame ? frame->was_native : 0;
+  uint8_t auto_detach = frame ? frame->auto_detach : cb->auto_detach;
   TGState *tg = lj_thr_get_tg();
   GCfunc *fn;
   TValue *obase;
@@ -942,8 +995,11 @@ void LJ_FASTCALL lj_ccallback_leave(CTState *cts, TValue *o,
   L->cframe = cframe_prev(L->cframe);
   cb->slot = 0;  /* Blacklist C function that called the callback. */
   callback_frame_pop(cb);
+  cb->auto_detach = 0;
   if (was_native)
     lj_native_enter(tg);
+  if (auto_detach)
+    lj_threading_detach(L, 0);
 }
 
 /* -- C callback management ----------------------------------------------- */
@@ -1011,15 +1067,19 @@ static MSize callback_slot_claim_l(lua_State *L, CTState *cts)
   CTypeID1 *cbid = (CTypeID1 *)la_loadptr_acq((void *const *)&cts->cb.cbid);
   lua_State **owner = (lua_State **)la_loadptr_acq((void *const *)&cts->cb.owner);
   TValue *func = callback_func_slots(cts);
+  lua_State *carrier;
   MSize top, sizeid;
   sizeid = (MSize)la_load32_acq(&cts->cb.sizeid);
   if (cbid == NULL || owner == NULL || func == NULL || sizeid == 0)
     lj_err_caller(L, LJ_ERR_FFI_CBACKOV);
+  carrier = callback_carrier_new_l(L);
   for (top = 0; top < sizeid; top++) {
     if (LJ_LIKELY(callback_cbid_load(cbid, top) == 0 &&
 		  callback_owner_load(owner, top) == NULL &&
-		  callback_owner_claim(owner, top, L)))
+		  callback_owner_claim(owner, top, carrier))) {
+      callback_owner_barrier_l(L, carrier);
       return top;
+    }
   }
 #if CALLBACK_MAX_SLOT
   if (top >= CALLBACK_MAX_SLOT)

@@ -15,6 +15,7 @@ for needle in \
   'typedef struct CCallbackFrame' \
   'CCALLBACK_MAX_NEST' \
   'TValue *cont' \
+  'uint8_t auto_detach' \
   'CCallbackFrame frame[CCALLBACK_MAX_NEST]' \
   'void *ffi_call_func' \
   'lj_ccallback_enter(CTState *cts, void *cf,' \
@@ -25,6 +26,12 @@ for needle in \
   'actions = lj_native_leave(L)' \
   'callback_frame_push(L, cb,' \
   'frame->cont == cont' \
+  'callback_carrier_new_l(lua_State *L)' \
+  'carrier->tg_hint = NULL' \
+  'callback_owner_barrier_l(L, carrier)' \
+  'callback_auto_attach(CTState *cts, MSize slot)' \
+  'lj_threading_attach(L)' \
+  'lj_threading_detach(L, 0)' \
   'callback_frame_top(cb)->was_native = 0' \
   'callback_frame_pop(cb)' \
   'if (errcode)' \
@@ -33,7 +40,7 @@ for needle in \
   'callback_conv_result(CTState *cts, lua_State *L, TValue *o,' \
   'lj_ccallback_prepare(CTState *cts, MSize slot)' \
   'Callback carrier TG from current TLS' \
-  'callback_owner_claim(owner, top, L)' \
+  'callback_owner_claim(owner, top, carrier)' \
   'callback_owner_clear(lua_State **owner, MSize slot,' \
   'lj_ccallback_disown_state(lua_State *L)' \
   'callback_owner_clear(owner, slot, L)' \
@@ -110,13 +117,15 @@ if ! awk '
 fi
 
 if ! awk '
-  /LUA_API void luaMT_detach\(lua_State \*L\)/ { indetach = 1 }
+  /void lj_threading_detach\(lua_State \*L, int disown_callbacks\)/ { indetach = 1 }
+  indetach && /if \(disown_callbacks\)/ { cond = NR }
   indetach && /lj_ccallback_disown_state\(L\)/ { disown = NR }
   indetach && /lj_tg_detach\(g, tg\)/ { detach = NR }
-  indetach && /^}/ { found = disown && detach && disown < detach; indetach = 0 }
+  indetach && /^}/ { found = cond && disown && detach && cond < disown && disown < detach; indetach = 0 }
   END { exit found ? 0 : 1 }
-' "$ROOT/src/lib_threading.c"; then
-  echo "guardrail: C API callback owners must be disowned before TG detach" >&2
+' "$ROOT/src/lib_threading.c" ||
+   ! rg -F -q 'lj_threading_detach(L, 1)' "$ROOT/src/lib_threading.c"; then
+  echo "guardrail: C API callback owners must be disowned before public TG detach" >&2
   exit 1
 fi
 
@@ -146,6 +155,11 @@ out="$TMP/lj_t-ffi-callback-owner-lifetime"
 
 out="$TMP/lj_t-ffi-callback-attached-carrier"
 "$CC" $CFLAGS -I"$ROOT/src" "$ROOT/tests/t-ffi-callback-attached-carrier.c" \
+  "$ROOT/src/libluajit.a" -lm -ldl -pthread -o "$out"
+"$out"
+
+out="$TMP/lj_t-ffi-callback-auto-attach"
+"$CC" $CFLAGS -I"$ROOT/src" "$ROOT/tests/t-ffi-callback-auto-attach.c" \
   "$ROOT/src/libluajit.a" -lm -ldl -pthread -o "$out"
 "$out"
 

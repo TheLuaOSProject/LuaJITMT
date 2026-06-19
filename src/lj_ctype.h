@@ -197,9 +197,10 @@ typedef LJ_ALIGN(8) union FPRCBArg { double d; float f[2]; } FPRCBArg;
 #define CCALLBACK_MAX_NEST	LJ_MAX_XLEVEL
 
 typedef struct CCallbackFrame {
-  lua_State *L;			/* Callback owner Lua state. */
+  lua_State *L;			/* Callback carrier Lua state. */
   TValue *cont;			/* Continuation frame owning this entry. */
   uint8_t was_native;		/* Callback entered from a native region. */
+  uint8_t auto_detach;		/* Scoped foreign-thread auto-attach. */
 } CCallbackFrame;
 
 typedef LJ_ALIGN(8) struct CCallbackRuntime {
@@ -209,6 +210,7 @@ typedef LJ_ALIGN(8) struct CCallbackRuntime {
   lua_State *L;			/* Current callback carrier from the trampoline. */
   MSize slot;			/* Current callback slot. */
   MSize depth;			/* Active callback frames on this TG. */
+  uint8_t auto_detach;		/* Pending scoped attach before frame push. */
   CCallbackFrame frame[CCALLBACK_MAX_NEST];  /* Per-callback return state. */
 } CCallbackRuntime;
 

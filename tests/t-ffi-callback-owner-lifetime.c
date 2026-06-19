@@ -1,5 +1,5 @@
 /*
-** Focused guard for FFI callback owner lifetime on worker detach.
+** Focused guard for FFI callback carrier lifetime on worker detach.
 */
 
 #include <assert.h>
@@ -95,7 +95,7 @@ int main(void)
     "assert(joined[1] == true)\n");
 
   assert(saved_cb != NULL);
-  assert(slot_owner() == NULL);
+  assert(slot_owner() == saved_owner);
   assert(saved_cb(5) == 42);
 
   dostring(L,
@@ -110,6 +110,6 @@ int main(void)
     "collectgarbage('collect')\n");
 
   lua_close(L);
-  printf("t-ffi-callback-owner-lifetime OK: worker-owned callback disowned on detach and freed safely\n");
+  printf("t-ffi-callback-owner-lifetime OK: callback carrier survives creator detach and frees safely\n");
   return 0;
 }

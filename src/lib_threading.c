@@ -980,7 +980,7 @@ LUA_API void luaMT_fence(void)
   lj_thr_fence();
 }
 
-LUA_API int luaMT_attach(lua_State *L)
+int lj_threading_attach(lua_State *L)
 {
   global_State *g;
   TGState *cur, *tg;
@@ -1023,13 +1023,18 @@ LUA_API int luaMT_attach(lua_State *L)
   }
   lj_tg_attach(g, tg);
   if (la_load32_acq(&g->mt_shutdown) != 0) {
-    luaMT_detach(L);
+    lj_threading_detach(L, 1);
     return 0;
   }
   return 1;
 }
 
-LUA_API void luaMT_detach(lua_State *L)
+LUA_API int luaMT_attach(lua_State *L)
+{
+  return lj_threading_attach(L);
+}
+
+void lj_threading_detach(lua_State *L, int disown_callbacks)
 {
   global_State *g;
   TGState *tg;
@@ -1041,7 +1046,8 @@ LUA_API void luaMT_detach(lua_State *L)
   if (!tg || tg == g->main_tg || lj_tg_load_thread_L(tg) != L)
     return;
   tid = tg->tid;
-  lj_ccallback_disown_state(L);
+  if (disown_callbacks)
+    lj_ccallback_disown_state(L);
   lj_tg_detach(g, tg);
   lj_tg_store_cur_L(tg, NULL);
   lj_tg_store_thread_L(tg, NULL);
@@ -1051,6 +1057,11 @@ LUA_API void luaMT_detach(lua_State *L)
   threading_gc_leave(g);
   lj_thr_set_tg(NULL);
   (void)lj_tg_reclaim_dead(g);
+}
+
+LUA_API void luaMT_detach(lua_State *L)
+{
+  lj_threading_detach(L, 1);
 }
 
 #include "lj_libdef.h"

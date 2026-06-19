@@ -1439,6 +1439,7 @@ static void gc2_scan_global_roots(global_State *g)
     if (cts) {
       CTypeTab *ret;
       TValue *func;
+      lua_State **owner;
       lj_gc2_markmem(g, cts);
       lj_gc2_markmem(g, ctype_tabh_acq(cts));
       for (ret = (CTypeTab *)la_loadptr_acq(
@@ -1462,7 +1463,17 @@ static void gc2_scan_global_roots(global_State *g)
 	lj_gc2_markobj(g, obj2gco(cts->pinmt));
       lj_ctype_fin_mark(g, gc2_finreg_markobj, gc2_finreg_markmem);
       lj_gc2_markmem(g, cts->cb.cbid);
-      lj_gc2_markmem(g, cts->cb.owner);
+      owner = (lua_State **)la_loadptr_acq((void *const *)&cts->cb.owner);
+      lj_gc2_markmem(g, owner);
+      if (owner) {
+	MSize i, n = (MSize)la_load32_acq(&cts->cb.sizeid);
+	for (i = 0; i < n; i++) {
+	  lua_State *th = (lua_State *)la_loadptr_acq(
+	    (void *const *)&owner[i]);
+	  if (th)
+	    lj_gc2_markobj(g, obj2gco(th));
+	}
+      }
       func = (TValue *)la_loadptr_acq((void *const *)&cts->cb.func);
       lj_gc2_markmem(g, func);
       if (func) {

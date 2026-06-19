@@ -177,9 +177,8 @@ helper instead of falling back to NYI. The current guard covers direct
 registration, nil clear, metatype registration, and multi-threaded default-JIT
 FINREG stress; the broader final FINREG/finqueue execution design remains M8
 follow-up rather than M9 performance cleanup. x64 callback runtime scratch is
-per attached TG and callback entry now chooses the current TLS carrier instead
-of the callback owner; full TLS-less foreign callback auto-attach remains part
-of the original callbacks-attach target.
+per TG; callback entry chooses the current TLS carrier for attached callers and
+auto-attaches a hidden callback carrier for TLS-less foreign pthread entry.
 
 ## M8 — Weak tables & finalizers, complete semantics (≈1200)
 Tasks: full gc_mayclear rule port (05 §5.8), resurrection-race store hook,
