@@ -321,8 +321,10 @@ before reading its recorded slot. Linux/x64 helper-backed `ASTORE` and
 barrier context, including shared table references and numeric `NEWREF` stores,
 and those helpers resolve visible forwarded destinations through successor
 generations when the destination belongs to the parent's current array or hash
-generation; the final generated RETIRING/FORWARD/CAS write protocol remains
-pending.
+generation. The `NEWREF` helper now key-resolves before every CAS, so a trace
+cannot publish a freshly inserted value into a stale retiring slot that has not
+yet become visibly forwarded. The final generated RETIRING/FORWARD/CAS write
+protocol remains pending.
 `lj_vm_next`
 hash traversal, the `BC_ITERN` array/hash iterator path, and `ipairs_aux` array
 iteration load candidate values into registers before nil decisions and copy

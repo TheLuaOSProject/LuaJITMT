@@ -1634,12 +1634,12 @@ LJ_FUNCA TValue *lj_tab_storetv_forjit_newref(lua_State *L, GCtab *parent,
 					      cTValue *key)
 {
   for (;;) {
+    dst = lj_tab_set(L, parent, key);
     if (lj_tab_trystoretv_cas(L, dst, src) == LJ_TAB_STORE_CAS_OK)
       break;
-    dst = lj_tab_set(L, parent, key);
-    la_cpu_pause();  /* JIT NEWREF store saw FORWARD after returned slot. */
+    la_cpu_pause();  /* JIT NEWREF store saw FORWARD after key resolve. */
   }
-  lj_gc2_barrier_weak_write(L, parent, NULL, dst);  /* M8: traced numeric NEWREF write. */
+  lj_gc2_barrier_weak_write(L, parent, key, dst);  /* M8: traced NEWREF weak write. */
   lj_gc2_barrier_tv_pair(L, obj2gco(parent), dst);  /* M10: traced parent barrier. */
   return dst;
 }
