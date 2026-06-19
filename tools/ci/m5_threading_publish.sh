@@ -23,6 +23,33 @@ if ! awk '
   exit 1
 fi
 
+if ! awk '
+  /static TValue \*threading_storeudata_str\(lua_State \*L,/ { infn = 1; next }
+  infn && /lj_tab_storeudata\(L, dst, ud\)/ { raw = 1 }
+  infn && /for \(;;\)/ { loop = 1 }
+  infn && /setudataV\(L, &tv, ud\)/ { make = 1 }
+  infn && /lj_tab_setstr\(L, env, key\)/ { resolve = 1 }
+  infn && /lj_tab_trystoretv_cas\(L, dst, &tv\) == LJ_TAB_STORE_CAS_OK/ { cas = 1 }
+  infn && /threading env store saw FORWARD after lookup\./ { retry = 1 }
+  infn && /^}/ { exit(!raw && loop && make && resolve && cas && retry ? 0 : 1) }
+  END { if (raw || !loop || !make || !resolve || !cas || !retry) exit 1 }
+' "$ROOT/src/lib_threading.c"; then
+  echo "guardrail: threading env userdata store must CAS-publish and retry forwarded slots" >&2
+  exit 1
+fi
+
+if ! awk '
+  /LJLIB_CF\(threading_current\)/ { infn = 1; next }
+  infn && /lj_tab_storeudata\(L, lj_tab_setstr\(L, env, key\), ud\)/ { raw = 1 }
+  infn && /threading_storeudata_str\(L, env, key, ud\)/ { helper = 1 }
+  infn && /lj_gc_pubtab\(L, env\)/ { pub = 1 }
+  infn && /^}/ { exit(!raw && helper && pub ? 0 : 1) }
+  END { if (raw || !helper || !pub) exit 1 }
+' "$ROOT/src/lib_threading.c"; then
+  echo "guardrail: threading.current must publish main thread userdata through CAS helper" >&2
+  exit 1
+fi
+
 for needle in \
   'gcref_acq(child->mt_thread)' \
   'gcref_acq(L->mt_thread)' \

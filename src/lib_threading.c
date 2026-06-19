@@ -175,6 +175,19 @@ static void threading_state_set_ud(lua_State *L, lua_State *L1, GCudata *ud)
   lj_gc_pubobjobj(L, L1, ud);
 }
 
+static TValue *threading_storeudata_str(lua_State *L, GCtab *env, GCstr *key,
+					GCudata *ud)
+{
+  TValue tv, *dst;
+  setudataV(L, &tv, ud);
+  for (;;) {
+    dst = lj_tab_setstr(L, env, key);
+    if (lj_tab_trystoretv_cas(L, dst, &tv) == LJ_TAB_STORE_CAS_OK)
+      return dst;
+    la_cpu_pause();  /* threading env store saw FORWARD after lookup. */
+  }
+}
+
 static GCudata *threading_new_thread_ud(lua_State *L, GCtab *env)
 {
   global_State *g = G(L);
@@ -875,7 +888,7 @@ LJLIB_CF(threading_current)
       threading_state_set_ud(L, L, ud);
       if (tg)
 	tg->thread_ud = ud;
-      lj_tab_storeudata(L, lj_tab_setstr(L, env, key), ud);
+      threading_storeudata_str(L, env, key, ud);
       lj_gc_pubtab(L, env);
       return 1;
     }
