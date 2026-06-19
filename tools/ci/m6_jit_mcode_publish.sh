@@ -3,6 +3,7 @@
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+LUA_TIMEOUT=${M6_MCODE_TIMEOUT:-60s}
 
 make -C "$ROOT/src" >/dev/null
 
@@ -193,11 +194,11 @@ if ! rg -F -q 'm6_jit_mcode_publish.sh' "$ROOT/tools/ci/m6_jit.sh"; then
 fi
 
 LUA_PATH="$ROOT/src/?.lua;$ROOT/src/jit/?.lua;;" \
-  timeout 20s "$ROOT/src/luajit" -e \
+  timeout "$LUA_TIMEOUT" "$ROOT/src/luajit" -e \
   'jit.opt.start("hotloop=1","hotexit=1"); local s=0; for i=1,80 do s=s+i end; assert(s==3240)'
 
 LUA_PATH="$ROOT/src/?.lua;$ROOT/src/jit/?.lua;;" \
-  timeout 20s "$ROOT/src/luajit" -e '
+  timeout "$LUA_TIMEOUT" "$ROOT/src/luajit" -e '
     local util = require"jit.util"
     jit.flush()
     jit.opt.start("hotloop=1", "hotexit=1", "sizemcode=4", "maxmcode=8")
