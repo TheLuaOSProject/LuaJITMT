@@ -22,6 +22,7 @@ for needle in \
   'tab_val_forward_retry_once(cTValue *val, int *retry)' \
   'tab_node_forward_hop(Node **nodep, MSize *hmaskp)' \
   'lj_tab_node_nextgen_acq(node)' \
+  'tab_forwarded_int_arrayslot(GCtab *t, int32_t key)' \
   'lj_tab_array_forward_hop(const GCtab *t, TValue **arrayp,' \
   'lj_tab_array_nextgen_acq(array)' \
   'lj_tab_array_hdr_asize_acq(next)' \
@@ -33,6 +34,7 @@ for needle in \
   'exercise_array_forward_hop(L)' \
   'lj_tab_array_nextgen_acq(oldarray) == newarray' \
   'exercise_hash_forward_hop(L)' \
+  'exercise_hash_to_array_forward_hop(L)' \
   'lj_tab_node_nextgen_acq(oldnode) == newnode' \
   't-tab-forward-filter OK'
 do
@@ -65,6 +67,7 @@ fi
 if ! awk '
   /cTValue \* LJ_FASTCALL lj_tab_getinth\(GCtab \*t,/ { ininth = 1 }
   ininth && /tab_node_forward_hop\(&node, &hmask\)/ { inth = 1 }
+  ininth && /tab_forwarded_int_arrayslot\(t, key\)/ { inth_array = 1 }
   ininth && /tab_val_forward_retry_once\(&val, &forward_retry\)/ { inth_retry = 1 }
   ininth && /^}/ { ininth = 0 }
   /cTValue \*lj_tab_getstr\(GCtab \*t,/ { instr = 1 }
@@ -75,7 +78,7 @@ if ! awk '
   ingen && /tab_node_forward_hop\(&node, &hmask\)/ { gen = 1 }
   ingen && /tab_val_forward_retry_once\(&val, &forward_retry\)/ { gen_retry = 1 }
   ingen && /^}/ { ingen = 0 }
-  END { exit inth && inth_retry && str && str_retry && gen && gen_retry ? 0 : 1 }
+  END { exit inth && inth_array && inth_retry && str && str_retry && gen && gen_retry ? 0 : 1 }
 ' "$ROOT/src/lj_tab.c"; then
   echo "guardrail: hash getters must hop FORWARD values through next_gen" >&2
   exit 1

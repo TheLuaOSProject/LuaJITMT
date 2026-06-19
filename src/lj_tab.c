@@ -104,6 +104,17 @@ static LJ_AINLINE int tab_node_forward_hop(Node **nodep, MSize *hmaskp)
   return 0;
 }
 
+static LJ_AINLINE cTValue *tab_forwarded_int_arrayslot(GCtab *t, int32_t key)
+{
+  TValue *array;
+  MSize asize = lj_tab_array_snapshot_acq(t, &array);
+  if ((MSize)key < asize)
+    return &array[key];
+  if (lj_tab_array_forward_hop(t, &array, &asize) && (MSize)key < asize)
+    return &array[key];
+  return NULL;
+}
+
 static TValue *tab_findkey_or_keylock(Node *anchor, cTValue *key, int *locked)
 {
   Node *n;
@@ -849,8 +860,12 @@ genlookup:
     if (tvisnum(&nk) && nk.n == k.n) {
       TValue val;
       lj_tv_load_acq(&val, &n->val);
-      if (tvisforward(&val) && tab_node_forward_hop(&node, &hmask))
+      if (tvisforward(&val) && tab_node_forward_hop(&node, &hmask)) {
+	cTValue *tv = tab_forwarded_int_arrayslot(t, key);
+	if (tv)
+	  return tv;
 	goto genlookup;
+      }
       if (tab_val_forward_retry_once(&val, &forward_retry))
 	goto retry_lookup;
       if (tvisforward(&val))

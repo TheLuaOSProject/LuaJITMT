@@ -205,6 +205,59 @@ static void exercise_hash_forward_hop(lua_State *L)
   lj_tab_node_hdr_flags_or_rel(oldnode, TABNODE_FLAG_RETIRING);
 }
 
+static void exercise_hash_to_array_forward_hop(lua_State *L)
+{
+  GCtab *t;
+  TValue *oldarray, *newarray;
+  Node *oldnode, *newnode;
+  MSize oldasize, newasize, oldacap, oldhmask, newhmask;
+  int32_t moveint;
+  TValue *oldnumslot;
+
+  lua_settop(L, 0);
+  lua_createtable(L, LJ_MAX_COLOSIZE + 8, 8);
+  t = tabV(L->top-1);
+  assert(lj_tab_array_separated(t));
+  oldarray = lj_tab_array_acq(t);
+  oldasize = lj_tab_asize_acq(t);
+  oldacap = t->acap;
+  moveint = (int32_t)oldasize + 5;
+
+  lj_tab_storeint(L, lj_tab_setint(L, t, moveint), 707);
+  oldnode = lj_tab_node_acq(t);
+  oldhmask = lj_tab_node_hmask_acq(oldnode);
+  assert(oldhmask > 0);
+  oldnumslot = find_num_slot(oldnode, oldhmask, moveint);
+  assert(oldnumslot != NULL);
+
+  lj_tab_resize(L, t, (uint32_t)oldasize + 16u, lj_fls(oldhmask) + 1u);
+  newarray = lj_tab_array_acq(t);
+  newasize = lj_tab_asize_acq(t);
+  newnode = lj_tab_node_acq(t);
+  newhmask = lj_tab_node_hmask_acq(newnode);
+  assert(newarray != oldarray);
+  assert(lj_tab_array_nextgen_acq(oldarray) == newarray);
+  assert(lj_tab_node_nextgen_acq(oldnode) == newnode);
+  assert_i32(lj_tab_getint(t, moveint), 707);
+
+  store_forward(oldnumslot);
+  la_store32_rel(&lj_tab_array_hdrw(oldarray)->acap,
+		 lj_tab_array_hdr_pack_acap(oldacap, 0));
+  la_store32_rel(&lj_tab_node_hdrw(oldnode)->flags, 0);
+  lj_tab_asize_rel(t, oldasize);
+  lj_tab_array_rel(t, oldarray);
+  lj_tab_hmask_rel(t, oldhmask);
+  lj_tab_node_rel(t, oldnode);
+  assert_i32(lj_tab_getint(t, moveint), 707);
+
+  lj_tab_array_rel(t, newarray);
+  lj_tab_asize_rel(t, newasize);
+  lj_tab_array_hdr_flags_or_rel(oldarray, TABARRAY_FLAG_RETIRING);
+  lj_tab_node_rel(t, newnode);
+  lj_tab_hmask_rel(t, newhmask);
+  lj_tab_node_hdr_flags_or_rel(oldnode, TABNODE_FLAG_RETIRING);
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -245,6 +298,7 @@ int main(void)
   assert(lj_tab_len(t) == 2);
   exercise_array_forward_hop(L);
   exercise_hash_forward_hop(L);
+  exercise_hash_to_array_forward_hop(L);
 
   lua_close(L);
   printf("t-tab-forward-filter OK: FORWARD values stay internal to table scans\n");
