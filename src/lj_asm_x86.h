@@ -1803,7 +1803,7 @@ static void asm_ahstore_forjit(ASMState *as, IRIns *ir)
   IRCallID id = ir->o == IR_ASTORE ?
     IRCALL_lj_tab_storetv_forjit_array : IRCALL_lj_tab_storetv_forjit_hash;
   const CCallInfo *ci;
-  IRRef args[4];
+  IRRef args[5];
   IRIns *xref = IR(ir->op1);
   IRRef tabref;
   if (xref->o == IR_AREF || xref->o == IR_HREFK)
@@ -1823,7 +1823,11 @@ static void asm_ahstore_forjit(ASMState *as, IRIns *ir)
   args[1] = tabref;       /* GCtab *parent */
   args[2] = ir->op1;      /* TValue *dst */
   args[3] = ASMREF_TMP1;  /* cTValue *src */
+  if (id == IRCALL_lj_tab_storetv_forjit_newref)
+    args[4] = ASMREF_TMP2;  /* cTValue *key */
   asm_gencall(as, ci, args);
+  if (id == IRCALL_lj_tab_storetv_forjit_newref)
+    asm_tvptr(as, ra_releasetmp(as, ASMREF_TMP2), xref->op2, IRTMPREF_IN1);
   asm_tvptr(as, ra_releasetmp(as, ASMREF_TMP1), ir->op2, IRTMPREF_IN1);
 }
 

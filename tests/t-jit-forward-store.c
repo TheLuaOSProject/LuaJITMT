@@ -53,6 +53,18 @@ static Node *find_str_node(Node *node, MSize hmask, const GCstr *key)
   return NULL;
 }
 
+static Node *find_num_node(Node *node, MSize hmask, cTValue *key)
+{
+  Node *n = hashnum_node(node, hmask, key);
+  do {
+    TValue nk;
+    lj_tv_load_acq(&nk, &n->key);
+    if (tvisnum(&nk) && nk.n == key->n)
+      return n;
+  } while ((n = lj_tab_nextnode_acq(n)));
+  return NULL;
+}
+
 static void exercise_array_forward_jit(lua_State *L)
 {
   GCtab *t;
@@ -140,6 +152,80 @@ static void exercise_hash_forward_jit(lua_State *L)
   lua_pop(L, 1);
 }
 
+static void exercise_newref_array_forward_jit(lua_State *L)
+{
+  GCtab *t;
+  TValue *oldarray, *newarray;
+  TValue src, keytv;
+  MSize oldasize, newasize;
+  int32_t key = 4;
+  MSize i;
+
+  lua_createtable(L, LJ_MAX_COLOSIZE + 16, 0);
+  t = tabV(L->top-1);
+  assert(lj_tab_array_separated(t));
+  oldarray = lj_tab_array_acq(t);
+  oldasize = lj_tab_asize_acq(t);
+  assert((MSize)key < oldasize);
+  for (i = 0; i < oldasize; i++)
+    set_int(L, t, (int32_t)i, (int32_t)i + 14000);
+
+  lj_tab_resize(L, t, (uint32_t)oldasize + 8u, 0);
+  newarray = lj_tab_array_acq(t);
+  newasize = lj_tab_asize_acq(t);
+  assert(newarray != oldarray);
+  assert(lj_tab_array_nextgen_acq(oldarray) == newarray);
+
+  store_forward(&oldarray[key]);
+  setintV(&src, 300);
+  setnumV(&keytv, (lua_Number)key);
+  lj_tab_storetv_forjit_newref(L, t, &oldarray[key], &src, &keytv);
+  assert_forward(&oldarray[key]);
+  assert_i32(&newarray[key], 300);
+  assert_i32(lj_tab_getint(t, key), 300);
+
+  lj_tab_array_rel(t, newarray);
+  lj_tab_asize_rel(t, newasize);
+  lua_pop(L, 1);
+}
+
+static void exercise_newref_hash_forward_jit(lua_State *L)
+{
+  GCtab *t;
+  TValue src, keytv;
+  Node *oldnode, *newnode, *oldn, *newn;
+  MSize oldhmask, newhmask;
+
+  lua_createtable(L, 0, 8);
+  t = tabV(L->top-1);
+  setnumV(&keytv, (lua_Number)1000000);
+  lj_tab_storeint(L, lj_tab_set(L, t, &keytv), 15000);
+  oldnode = lj_tab_node_acq(t);
+  oldhmask = lj_tab_node_hmask_acq(oldnode);
+  assert(oldhmask > 0);
+  oldn = find_num_node(oldnode, oldhmask, &keytv);
+  assert(oldn != NULL);
+
+  lj_tab_resize(L, t, t->asize, lj_fls(oldhmask) + 2u);
+  newnode = lj_tab_node_acq(t);
+  newhmask = lj_tab_node_hmask_acq(newnode);
+  assert(newnode != oldnode);
+  assert(lj_tab_node_nextgen_acq(oldnode) == newnode);
+  newn = find_num_node(newnode, newhmask, &keytv);
+  assert(newn != NULL);
+
+  store_forward(&oldn->val);
+  setintV(&src, 301);
+  lj_tab_storetv_forjit_newref(L, t, &oldn->val, &src, &keytv);
+  assert_forward(&oldn->val);
+  assert_i32(&newn->val, 301);
+  assert_i32(lj_tab_get(L, t, &keytv), 301);
+
+  lj_tab_node_rel(t, newnode);
+  lj_tab_hmask_rel(t, newhmask);
+  lua_pop(L, 1);
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -148,6 +234,8 @@ int main(void)
 
   exercise_array_forward_jit(L);
   exercise_hash_forward_jit(L);
+  exercise_newref_array_forward_jit(L);
+  exercise_newref_hash_forward_jit(L);
 
   lua_close(L);
   printf("t-jit-forward-store OK: helper-backed JIT stores route forwarded slots\n");

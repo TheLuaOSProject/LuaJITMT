@@ -21,6 +21,9 @@ for needle in \
   'lj_tab_storetv_forjit_array(lua_State *L, GCtab *parent' \
   'lj_tab_storetv_forjit_hash(lua_State *L, GCtab *parent' \
   'lj_tab_storetv_forjit_newref(lua_State *L, GCtab *parent' \
+  'cTValue *key)' \
+  'dst = lj_tab_set(L, parent, key);' \
+  'JIT NEWREF store saw FORWARD after returned slot.' \
   'lj_gc2_barrier_tv_pair(L, obj2gco(parent), dst);  /* M10: traced parent barrier. */' \
   'lj_gc2_barrier_weak_write(L, parent, NULL, dst);  /* M8: traced weak-value array write. */' \
   'lj_gc2_barrier_weak_write(L, parent, key, dst);  /* M8: traced weak hash write. */' \
@@ -32,11 +35,15 @@ for needle in \
   'tabref = IR(xref->op1)->op1' \
   'xref->o == IR_NEWREF' \
   'id = IRCALL_lj_tab_storetv_forjit_newref' \
+  'args[4] = ASMREF_TMP2;  /* cTValue *key */' \
+  'asm_tvptr(as, ra_releasetmp(as, ASMREF_TMP2), xref->op2, IRTMPREF_IN1);' \
   'asm_ahstore_forjit(ASMState *as, IRIns *ir)' \
   '#if defined(__linux__) && LJ_TARGET_X64' \
   'IRRef lim = poll_alias_limit(J, xref);' \
   'M6: numeric NEWREF/HSTORE uses the generic returned-slot helper.' \
   'M6: previous-nil in-bounds ASTORE/HSTORE uses the helper bridge.' \
+  'lj_tab_storetv_forjit_newref(L, t, &oldarray[key], &src, &keytv);' \
+  'lj_tab_storetv_forjit_newref(L, t, &oldn->val, &src, &keytv);' \
   't-jit-forward-store OK'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_tab.c" "$ROOT/src/lj_tab.h" \
@@ -75,6 +82,21 @@ if awk '
   END { exit raw || !route || !cas || !retry ? 0 : 1 }
 ' "$ROOT/src/lj_tab.c"; then
   echo "guardrail: JIT hash table-store helper must CAS-retry late FORWARD" >&2
+  exit 1
+fi
+
+if awk '
+  /lj_tab_storetv_forjit_newref\(lua_State \*L, GCtab \*parent,/ {
+    innewref = 1
+  }
+  innewref && /copyTVrel\(L, dst, src\)/ { raw = 1 }
+  innewref && /lj_tab_trystoretv_cas\(L, dst, src\)/ { cas = 1 }
+  innewref && /dst = lj_tab_set\(L, parent, key\)/ { resolve = 1 }
+  innewref && /JIT NEWREF store saw FORWARD after returned slot/ { retry = 1 }
+  innewref && /^}/ { innewref = 0 }
+  END { exit raw || !cas || !resolve || !retry ? 0 : 1 }
+' "$ROOT/src/lj_tab.c"; then
+  echo "guardrail: JIT NEWREF table-store helper must use key-aware CAS retry" >&2
   exit 1
 fi
 
