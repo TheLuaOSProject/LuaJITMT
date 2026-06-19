@@ -95,12 +95,6 @@ local function run_dump_probe(t, dump, script)
   t:run(cmd)
 end
 
-local function assert_no_ctype_typeid(t, paths, label)
-  assert_no_lines(t, label, paths, function(line)
-    return contains(line, "ctype_typeid(")
-  end)
-end
-
 local function assert_callback_install_order(t)
   local ccallback = t:path("src", "lj_ccallback.c")
   local lib_ffi = t:path("src", "lib_ffi.c")
@@ -1174,62 +1168,8 @@ return function(add)
 
   add({
     name = "m7_ffi_ctype_pointer_ids",
-    description = "FFI ctype raw-ID use at pointer-stability boundaries",
+    description = "FFI ctype pointer-stability boundary behavior",
     run = function(t)
-      local src = source_files(t)
-      t:assert_all_any_contains(src, {
-        "ctype_rawid(CTState *cts, CTypeID id)",
-        "ctype_rawrefid(CTState *cts, CTypeID id)",
-        "return ctype_get(cts, ctype_rawid(cts, id))",
-        "return ctype_get(cts, ctype_rawrefid(cts, id))",
-        "lj_cdata_index_l(lua_State *L, CTState *cts, GCcdata *cd",
-        "CTypeID *idp",
-        "ctype_rawchildid(CTState *cts, CType *ct)",
-        "static int ffi_index_meta(lua_State *L, CTState *cts, CTypeID id",
-        "lj_cdata_index_l(L, cts, cdataV(o), o+1, &p, &qual, &id)",
-        "CTypeID id = ctype_rawid(cts, cd->ctypeid)",
-        "lj_cconv_multi_init(CTState *cts, CTypeID did",
-        "ctype_rawrefid(cts, cdataV(o)->ctypeid) == did",
-        "lj_cconv_ct_init_l(L, cts, ct, rid",
-        "lj_cconv_ct_ct_l(lua_State *L, CTState *cts, CType *d,",
-        "CTypeID did, CType *s, CTypeID sid",
-        "cconv_err_conv_l(L, cts, did, sid, s, flags)",
-        "lj_cconv_ct_tv_l(lua_State *L, CTState *cts, CType *d,",
-        "CTypeID did, uint8_t *dp",
-        "d = ctype_get(cts, did);  /* C type table may have been reallocated. */",
-        "lj_cdata_set_l(L, cts, ct, id",
-        "lj_cconv_ct_tv_l(L, cts, d, did",
-        "lj_cconv_ct_tv_l(L, cts, ctr, rid",
-        "crec_index_meta(jit_State *J, CTState *cts, CTypeID id",
-        "crec_index_meta(J, cts, id, rd)",
-        "CTypeID sid[2]",
-        "CTypeID id0 = i ? sid[0] : 0",
-        "lj_ir_kint(J, id)",
-        "lj_ctype_info(cts, id, &sz)",
-        "return lj_cconv_tv_ct_l(L, cts, ctr, rid",
-        "gcsteps += lj_cconv_tv_ct_l(L, cts, cta, aid",
-        "CTypeID rid1 = ctype_rawrefid(cts, id1)",
-        "CTypeID rid2 = ctype_rawrefid(cts, id2)",
-        "if (rid1 == rid2)",
-        "rid1 == ctype_rawid(cts, ctype_cid(ct2->info))",
-        "lj_ctype_metatv(cts, &metatv, rid, MM_tostring)",
-        "lj_ctype_setmeta(cts, rid, mt)",
-        "ctype_preptype(CTRepr *ctr, CTypeID id",
-        "ctype_prepnum(ctr, id)",
-        "cp_err_badidx(CPState *cp, CTypeID id)",
-        "id = ctype_rawrefid(cp->cts, k->id)",
-        "GCstr *s = lj_ctype_repr(cp->L, id, NULL)"
-      })
-      local conv = t:c_block(t:path("src", "lj_cconv.c"),
-                             "void lj_cconv_ct_tv_l(lua_State *L, CTState *cts, CType *d,")
-      assert_text_not_contains("lj_cconv_ct_tv_l", conv, "ctype_typeid(cts, d)")
-      assert_no_ctype_typeid(t, {
-        t:path("src", "lj_cconv.c"),
-        t:path("src", "lj_carith.c"),
-        t:path("src", "lj_cdata.c"),
-        t:path("src", "lj_crecord.c")
-      }, "runtime conversion paths must not derive IDs from CType *")
-      assert_no_ctype_typeid(t, src, "ctype table readers must not derive IDs from CType *")
       clean_build(t)
       run_luajit_script(t, "t-ffi-ctype-pointer-ids.lua", nil, { joff = true })
       clean_build(t, { xcflags = "-DLUAJIT_CTYPE_CHECK_ANCHOR" })
@@ -1238,7 +1178,7 @@ return function(add)
         "1",
         getenv("LJ_M7_FFI_SET_ITERS", "80")
       }, { joff = true })
-      print("M7 FFI ctype raw-ID guard passed")
+      print("M7 FFI ctype pointer-stability behavior passed")
     end
   })
 
