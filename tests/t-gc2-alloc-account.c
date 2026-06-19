@@ -48,6 +48,99 @@ static int root_contains(global_State *g, GCobj *target)
   return 0;
 }
 
+static GCobj *active_ssb_last(TGState *tg)
+{
+  GCRef *base = (GCRef *)la_loadptr_acq((void *const *)&tg->ssb_base);
+  GCRef *next = (GCRef *)la_loadptr_acq((void *const *)&tg->ssb_next);
+  if (base == NULL || next == NULL || next <= base)
+    return NULL;
+  return gcref_acq(*(next - 1));
+}
+
+static void test_vm_generational_table_store_remembered(lua_State *L,
+							global_State *g,
+							TGState *tg)
+{
+  GCtab *parent, *child;
+  int status;
+  uint64_t major_starts0, minor_requests0, minor_starts0;
+  uint64_t remembered_barriers0, remembered_pushed0, remembered_filtered0;
+  uint64_t remembered_drained0;
+
+  assert(la_load32_acq(&g->gc2.phase) == LJ_GC2_IDLE);
+  lua_settop(L, 0);
+  status = luaL_dostring(L,
+    "return function(t, v)\n"
+    "  t[1] = v\n"
+    "end\n");
+  if (status != LUA_OK)
+    fprintf(stderr, "vm generational setup failed: %s\n",
+	    lua_tostring(L, -1));
+  assert(status == LUA_OK);
+
+  lua_createtable(L, 1, 0);
+  parent = tabV(L->top - 1);
+  lua_newtable(L);
+  child = tabV(L->top - 1);
+  lj_gc2_set_generational(g, 1);
+  assert(la_load32_acq(&g->gc2.force_major) == 1);
+  major_starts0 = la_load64_acq(&g->gc2.major_cycle_starts);
+  minor_requests0 = la_load64_acq(&g->gc2.minor_cycle_requests);
+  minor_starts0 = la_load64_acq(&g->gc2.minor_cycle_starts);
+  lj_gc2_legacy_mark_begin(g);
+  assert(la_load64_acq(&g->gc2.major_cycle_starts) == major_starts0 + 1u);
+  assert(la_load64_acq(&g->gc2.minor_cycle_requests) == minor_requests0);
+  assert(la_load64_acq(&g->gc2.minor_cycle_starts) == minor_starts0);
+  assert(la_load32_acq(&g->gc2.cycle_minor_requested) == 0);
+  assert(lj_gc2_markobj(g, obj2gco(parent)) == 1);
+  (void)lj_gc2_flush_ssb(g, tg);
+  (void)lj_gc2_drain_ssb(g);
+  assert(lj_gc2_ssb_empty(g));
+  assert(lj_gc2_ismarked(g, obj2gco(parent)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 0);
+  lj_gc2_legacy_cycle_end(g);
+  assert(la_load32_acq(&g->gc2.minor_sweep_enabled) == 1);
+  assert(la_load32_acq(&g->gc2.minor_roots_enabled) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 0);
+  assert(lj_gc2_ssb_empty(g));
+
+  remembered_barriers0 = la_load64_acq(&g->gc2.remembered_barriers);
+  remembered_pushed0 = la_load64_acq(&g->gc2.remembered_pushed);
+  remembered_filtered0 = la_load64_acq(&g->gc2.remembered_filtered);
+  lua_pushvalue(L, 1);
+  lua_pushvalue(L, 2);
+  lua_pushvalue(L, 3);
+  lua_call(L, 2, 0);
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 0);
+  lua_pop(L, 1);
+  assert(la_load64_acq(&g->gc2.remembered_barriers) >
+	 remembered_barriers0);
+  assert(la_load64_acq(&g->gc2.remembered_pushed) > remembered_pushed0);
+  assert(la_load64_acq(&g->gc2.remembered_filtered) == remembered_filtered0);
+  assert(active_ssb_last(tg) == obj2gco(parent));
+
+  remembered_drained0 = la_load64_acq(&g->gc2.remembered_drained);
+  major_starts0 = la_load64_acq(&g->gc2.major_cycle_starts);
+  minor_requests0 = la_load64_acq(&g->gc2.minor_cycle_requests);
+  minor_starts0 = la_load64_acq(&g->gc2.minor_cycle_starts);
+  lj_gc2_legacy_mark_begin(g);
+  assert(la_load64_acq(&g->gc2.major_cycle_starts) == major_starts0);
+  assert(la_load64_acq(&g->gc2.minor_cycle_requests) ==
+	 minor_requests0 + 1u);
+  assert(la_load64_acq(&g->gc2.minor_cycle_starts) == minor_starts0 + 1u);
+  assert(la_load32_acq(&g->gc2.cycle_roots_minor) == 1);
+  assert(la_load64_acq(&g->gc2.remembered_drained) >=
+	 remembered_drained0 + 1u);
+  assert(lj_gc2_ismarked(g, obj2gco(parent)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
+  lj_gc2_legacy_cycle_end(g);
+
+  la_store32_rel(&g->gc2.minor_sweep_enabled, 0);
+  la_store32_rel(&g->gc2.minor_roots_enabled, 0);
+  lj_gc2_set_generational(g, 0);
+  lua_settop(L, 0);
+}
+
 #if LJ_HASJIT
 static GCtrace *find_trace(global_State *g)
 {
@@ -59,15 +152,6 @@ static GCtrace *find_trace(global_State *g)
       return T;
   }
   return NULL;
-}
-
-static GCobj *active_ssb_last(TGState *tg)
-{
-  GCRef *base = (GCRef *)la_loadptr_acq((void *const *)&tg->ssb_base);
-  GCRef *next = (GCRef *)la_loadptr_acq((void *const *)&tg->ssb_next);
-  if (base == NULL || next == NULL || next <= base)
-    return NULL;
-  return gcref_acq(*(next - 1));
 }
 
 static void test_jit_generational_table_store_remembered(lua_State *L,
@@ -586,6 +670,8 @@ int main(void)
   lj_gc2_set_generational(g, 0);
   lj_gc2_legacy_cycle_end(g);
   lua_settop(L, 0);
+
+  test_vm_generational_table_store_remembered(L, g, tg);
 
 #if LJ_HASJIT
   test_jit_generational_table_store_remembered(L, g, tg);

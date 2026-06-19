@@ -289,9 +289,9 @@ allocation bytes and request a one-shot major at high survival. `bench.lua`
 accepts `BENCH_GC_MODE` and `BENCH_SCALE` for M10 tuning probes; the initial 80
 percent survival threshold leaves short-lived allocation churn on minor cycles
 and promotes retained-allocation churn back to major collection. The M10 C
-harness now exercises a traced helper-backed table store under idle
-generational mode and verifies the remembered entry is the old parent table
-before the next minor cycle marks the young child.
+harness now exercises both interpreted VM-fast and traced helper-backed table
+stores under idle generational mode and verifies the remembered entry is the old
+parent table before the next minor cycle marks the young child.
 
 ## 12.1 Per-file change index (cross-check before declaring any milestone done)
 new: lj_atomic.h lj_tg.{h,c} lj_arena.{h,c} lj_gc2.{h,c} lj_gc2_barrier.h

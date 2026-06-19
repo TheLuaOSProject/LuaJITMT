@@ -77,9 +77,10 @@ pair-stability, GC-step bridging, mcode publication, public and
 recorder-internal scoped flush handshake coverage, and numeric side-trace
 flush slot-retirement coverage. The table-store helper gate also rejects
 same-trace closed-upvalue and nested heap escapes before a `TNEW`/`TDUP` slot
-update. The M10 generational gate includes a traced helper-backed table-store
-regression that confirms the remembered SSB entry is the old parent table and
-that the next minor cycle marks the young child through that parent.
+update. The M10 generational gate includes interpreted VM-fast and traced
+helper-backed table-store regressions that confirm the remembered SSB entry is
+the old parent table and that the next minor cycle marks the young child
+through that parent.
 `tools/ci/m9_m10_gc.sh` chains the current M9 stats/benchmark smokes with the
 M10 generational guard.
 These are milestone
