@@ -927,6 +927,11 @@ genlookup:
   return NULL;
 }
 
+cTValue * LJ_FASTCALL lj_tab_getint_hop(GCtab *t, int32_t key)
+{
+  return lj_tab_getint(t, key);
+}
+
 cTValue *lj_tab_getstr(GCtab *t, const GCstr *key)
 {
   Node *node;

@@ -42,6 +42,8 @@ to integer hash lookup when the successor array is too small for a shrink-tail
 key. Iterator next-generation `LJ_TFORWARD` hops still have to be added at the
 VM fast-path use sites below; C `lj_tab_next()` now resolves visible forwarded
 array/hash slots through the published successor for the current logical key.
+x64 `ipairs_aux` now routes visible forwarded array slots through the exported
+C integer getter wrapper before deciding whether the iterator stops.
 
 ## 6.2 Tables: data structures
 
