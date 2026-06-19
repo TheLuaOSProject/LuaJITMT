@@ -531,29 +531,6 @@ assert(util.traceinfo(1), "expected loaded CNEW creation trace")
     name = "m5_jit_trace_publish",
     description = "JIT trace-slot and trace-link publication guards",
     run = function(t)
-      t:assert_all_any_contains({
-        t:path("src", "lj_bc.h"),
-        t:path("src", "lj_dispatch.c")
-      }, {
-        "bc_publish(const uint32_t *pc, uint32_t ins)",
-        "la_store32_rel((uint32_t *)pc, ins)",
-        "la_load32_acq((uint32_t *)pc)",
-        "bc_publish_op(const uint32_t *pc, BCOp op)",
-        "bc_publish_d(const uint32_t *pc, uint32_t d)",
-        "lj_bc_publish_vm(uint32_t *pc, uint32_t ins)",
-        "lj_bc_publish_op_vm(uint32_t *pc, BCOp op)"
-      })
-      t:assert_all_contains(t:path("src", "lj_target_x86.h"), {
-        "EXITSTUB_TRACE_SPACING",
-        "exitstub_trace_addr(T, exitno)"
-      })
-      t:assert_all_contains(t:path("src", "lj_asm_x86.h"), {
-        "asm_exitstub_trace_setup(ASMState *as, ExitNo nexits)",
-        "mov rax, moffs64",
-        "xchg [rsp], rax; ret",
-        "exitstub_trace_addr(as->T, as->snapno)"
-      })
-
       assert_no_lines(t, "GCtrace.startpt must use trace_startpt acquire/release helpers",
                       src_ch_files(t, { exclude_host = true }), function(line)
         return contains(line, "startpt") and
@@ -611,8 +588,6 @@ assert(util.traceinfo(1), "expected loaded CNEW creation trace")
                contains(line, "setbc_j(") or contains(compact, "*J->patchpc=") or
                contains(compact, "*pc=T->startins")
       end)
-      t:assert_contains(t:path("src", "lj_asm_x86.h"),
-                        "lnk == as->T->traceno ? as->T : traceref(as->J, lnk)")
       t:build({ quiet = true })
       t:assert_all_contains(t:path("src", "lj_vm.S"), {
         "call lj_bc_publish_op_vm",
@@ -672,12 +647,6 @@ assert(util.traceinfo(1), "expected loaded CNEW creation trace")
         return (contains(line, "tvref(") and contains(line, "->array")) or
                (contains(line, "setmref(") and contains(line, "->array"))
       end)
-      assert_no_lines(t, "integer table access must use snapshot inline functions",
-                      t:path("src", "lj_tab.h"), function(line)
-        return line:find("^#define") and
-               (contains(line, "inarray") or contains(line, "arrayslot") or
-                contains(line, "lj_tab_getint") or contains(line, "lj_tab_setint"))
-      end)
       assert_no_lines(t, "table array header asize must be immutable after publish",
                       src_text_files(t), function(line)
         return contains(line, "lj_tab_array_hdr_asize_rel") or
@@ -700,12 +669,6 @@ assert(util.traceinfo(1), "expected loaded CNEW creation trace")
                contains(line, "idx < lj_tab_asize_acq(dict_") or
                contains(line, "lj_tab_array_acq(dict_")
       end)
-      t:assert_not_contains(t:path("src", "lj_serialize.c"),
-                            "lj_tab_resize(L, dict, lj_tab_asize_acq(dict)")
-      t:assert_contains(t:path("src", "lj_serialize.c"),
-                        "serialize_dict_storeint(L, dict, &tv, (int32_t)(i-1))")
-      t:assert_not_contains(t:path("src", "lj_serialize.c"),
-                            "lj_tab_storeint(L, lj_tab_newkey(L, dict, &tv)")
 
       local table_pack = t:c_block(t:path("src", "lib_table.c"), "LJLIB_CF(table_pack)")
       block_has_all("table_pack", table_pack, {

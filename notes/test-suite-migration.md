@@ -352,6 +352,9 @@ Lua test-suite migration notes:
 - Removed duplicate/low-risk M5 publication source inspections from trace,
   table-array, and table-value guards; kept generated assembler/JIT result
   matching and retained unreplaced MT-safety blacklists.
+- Removed additional M5 exact source inventories for bytecode helper names, x64
+  exitstub scaffolding, table-access macro definitions, and serializer call
+  spelling. The suite keeps generated-result checks plus MT publication guards.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.
