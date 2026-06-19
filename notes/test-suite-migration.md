@@ -313,6 +313,9 @@ Lua test-suite migration notes:
   FINREG, and finalizer behavior matrix still runs while retaining source
   guards for memory-order, CAS retry, chain-splice, and finalizer-state
   invariants that need replacement fixtures.
+- Removed the M3 worker-scheduler source marker check; the case now relies on
+  the worker scheduler C fixture plus the Lua `collectgarbage("workers")`
+  behavior test.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.

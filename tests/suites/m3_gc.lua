@@ -324,40 +324,6 @@ gc_clearweak(g, gcref(g->gc.weak))
 05 section 5.8 conditional legacy weak fallback
 ]=])
 
-local WORKER_SCHEDULER_MARKERS = lines([=[
-void *worker_thread
-uint32_t n_workers
-uint32_t worker_stop
-uint32_t worker_wake
-uint32_t worker_started
-uint32_t worker_exited
-uint64_t worker_wakes
-uint64_t worker_parks
-uint64_t worker_async_progress
-uint32_t finalizer_active
-uint32_t finalizer_owner_tid
-uint64_t finalizer_sweep_blocks
-lj_gc2_worker_start(global_State *g)
-lj_gc2_worker_stop(global_State *g)
-lj_gc2_worker_wake(global_State *g)
-LUA_GCWORKERS
-\5stats\7workers
-lj_gc2_worker_start(g)
-lj_gc2_worker_stop(g)
-collectgarbage("workers", 1)
-lj_gc2_finalizer_pending(global_State *g)
-lj_gc2_finalizer_sweep_pending(global_State *g)
-static void *gc2_worker_main(void *arg)
-la_futex_wait(&g->gc2.worker_wake, wake, -1)
-la_futex_wake(&g->gc2.worker_wake, 1)
-05 section 5.6.3 parked worker scheduler
-assert(lj_gc2_worker_start(g) == 1)
-test_async_sweep_and_stop
-wait_until_marked
-assert(lj_gc2_finalizer_pending(g))
-lj_gc2_worker_wake(g);
-]=])
-
 local PARANOIA_MARKERS = lines([=[
 gc_arena_verify_sweep_boundary(global_State *g)
 gc2_paranoia_check_roots(global_State *g)
@@ -379,15 +345,6 @@ return function(add)
     run = function(t)
       make_clean(t)
       make_default(t, { jobs = false })
-
-      t:assert_all_any_contains({
-        t:path("src", "lj_gc2.c"),
-        t:path("src", "lj_gc2.h"),
-        t:path("src", "lj_obj.h"),
-        t:path("src", "lib_base.c"),
-        t:path("tests", "t-gc2-worker-scheduler.c"),
-        t:path("tests", "t-gc-workers.lua")
-      }, WORKER_SCHEDULER_MARKERS)
 
       compile_luajit_fixture(t, t:tmp("lj_t-gc2-worker-scheduler"),
                              "t-gc2-worker-scheduler.c")
