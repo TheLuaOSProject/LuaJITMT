@@ -1623,7 +1623,7 @@ static GCobj *gc_order_cdata_object(FinRegOrderNode *ord, GCtab *t,
   GCobj *o;
   if (!ord || !t || !slot)
     return NULL;
-  o = gcref_acq(ord->obj);
+  o = fin_order_obj_acq(ord);
   if (!o || o->gch.gct != ~LJ_TCDATA)
     return NULL;
   lj_tv_load_acq(&key, &node->key);

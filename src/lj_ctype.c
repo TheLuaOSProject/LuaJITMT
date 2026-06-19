@@ -222,7 +222,7 @@ FinRegOrderNode *lj_ctype_fin_order_new(lua_State *L)
 {
   FinRegOrderNode *ord = lj_mem_newt(L, sizeof(FinRegOrderNode),
 				     FinRegOrderNode);
-  setgcrefnull(ord->obj);
+  fin_order_obj_clear(ord);
   ord->tab = NULL;
   ord->slot = NULL;
   ord->next = NULL;
@@ -241,7 +241,7 @@ void lj_ctype_fin_order_publish(CTState *cts, FinRegOrderNode *ord,
   FinRegOrderNode *head;
   if (!cts || !ord || !o || !t || !slot)
     return;
-  setgcref(ord->obj, o);
+  fin_order_obj_rel(ord, o);
   ord->tab = t;
   ord->slot = slot;
   do {

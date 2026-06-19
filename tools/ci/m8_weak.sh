@@ -211,7 +211,11 @@ for needle in \
   'gc2_disabled_pending_fin_t' \
   'collectgarbage('\''collect'\'')' \
   'GCRef obj;' \
-  'setgcref(ord->obj, o);' \
+  'fin_order_obj_acq(FinRegOrderNode *ord)' \
+  'fin_order_obj_rel(FinRegOrderNode *ord, GCobj *o)' \
+  'fin_order_obj_clear(FinRegOrderNode *ord)' \
+  'fin_order_obj_rel(ord, o);' \
+  'fin_order_obj_acq(ord)' \
   'gc_order_cdata_object(FinRegOrderNode *ord, GCtab *t,' \
   'gc_marktv(g, &fin);' \
   'lj_gc2_finreg_cdata_preclaim(L, g, o, &fin)' \
@@ -314,6 +318,12 @@ do
     exit 1
   fi
 done
+
+if rg -n 'setgcref\(ord->obj|setgcrefnull\(ord->obj|gcref_acq\(ord->obj' \
+    "$ROOT/src/lj_ctype.c" "$ROOT/src/lj_gc.c"; then
+  echo "guardrail: ordered FINREG object payload must use acquire/release helpers" >&2
+  exit 1
+fi
 
 if ! awk '
   /static TValue \*lib_storefunc_str\(lua_State \*L,/ { infn = 1 }

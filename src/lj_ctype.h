@@ -168,6 +168,21 @@ typedef struct FinRegOrderNode {
   struct FinRegOrderNode *next;	/* Older registration, newest-first list. */
 } FinRegOrderNode;
 
+static LJ_AINLINE GCobj *fin_order_obj_acq(FinRegOrderNode *ord)
+{
+  return gcref_acq(ord->obj);
+}
+
+static LJ_AINLINE void fin_order_obj_rel(FinRegOrderNode *ord, GCobj *o)
+{
+  setgcrefrel(ord->obj, o);
+}
+
+static LJ_AINLINE void fin_order_obj_clear(FinRegOrderNode *ord)
+{
+  setgcrefnullrel(ord->obj);
+}
+
 #define CTHASH_SIZE	128	/* Number of hash anchors. */
 #define CTHASH_MASK	(CTHASH_SIZE-1)
 
