@@ -293,6 +293,8 @@ Lua test-suite migration notes:
 - Converted `m6_jit_alloc_account`, `m6_jit_gc2_readiness`, and
   `m6_jit_gcstep_guard` to C fixture/generated dump behavior coverage instead
   of direct GC/JIT source marker checks.
+- Converted `m6_jit_token` to its C/Lua recorder-token regressions and
+  generated XPOLL dump checks instead of direct recorder/x64 source guards.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.

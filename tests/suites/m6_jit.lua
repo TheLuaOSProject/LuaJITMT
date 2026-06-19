@@ -507,140 +507,10 @@ return function(add)
 
   add({
     name = "m6_jit_token",
-    description = "M6 JIT recorder token and x64 XPOLL scaffold guards",
+    description = "M6 JIT recorder token and x64 XPOLL behavior",
     run = function(t)
       build_default(t)
-      assert_marker_set(t, {
-        t:path("src", "lj_obj.h"),
-        t:path("src", "lj_trace.h"),
-        t:path("src", "lj_trace.c"),
-        t:path("src", "lj_dispatch.c"),
-        t:path("src", "lj_snap.h"),
-        t:path("src", "lj_snap.c"),
-        t:path("src", "lj_tg.h"),
-        t:path("src", "lj_err.c"),
-        t:path("src", "vm_x64.dasc"),
-        t:path("src", "lj_ir.h"),
-        t:path("src", "lj_opt_loop.c"),
-        t:path("src", "lj_asm.c"),
-        t:path("src", "lj_emit_x86.h"),
-        t:path("src", "lj_asm_x86.h"),
-        t:path("src", "lj_record.c")
-      }, {
-        "uint32_t jit_token",
-        "lj_jit_token_try(jit_State *J)",
-        "emit_leatg(as, dest, tmptv)",
-        "DISPATCH_TG(jit_base)",
-        "emit_gettg(as, tmp, gl)",
-        "XPOLL",
-        "emitir_raw(IRTG(IR_XPOLL, IRT_NIL), 0, 0)",
-        "LJ_TRACE_FUNCF_XPOLL_DEPTH",
-        "static void rec_func_xpoll(jit_State *J)",
-        "rec_func_xpoll(J)",
-        "case IR_XPOLL: asm_xpoll(as); break;",
-        "static void asm_xpoll(ASMState *as)",
-        "emit_gmroi(as, XG_ARITHi(XOg_CMP), RID_DISPATCH, DISPATCH_TG(poll), 0)",
-        "static int trace_poll_pending(lua_State *L)",
-        "!trace_poll_pending(L)",
-        "static void emit_pushx",
-        "static void emit_popx",
-        "static int asm_fuseggfref",
-        "static int asm_x86_isvmstate",
-        "la_cas32(&g->jit_token, &expect, tg->tid, LA_ACQ_REL, LA_ACQ)",
-        "void LJ_FASTCALL lj_trace_hot(jit_State *J, const BCIns *pc, lua_State *L)",
-        "lj_snap_restore_exit(jit_State *J, void *exptr, lua_State *L,",
-        "int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr, lua_State *L,",
-        "int jit_exitcode",
-        "G2TG(g)->jit_exitcode",
-        "tg->jit_exitcode",
-        "J->L = L;",
-        "lj_jit_token_held(J)",
-        "lj_jit_token_release(J)",
-        "lj_trace_state_load(jit_State *J)",
-        "lj_trace_state_store(jit_State *J, TraceState st)",
-        "lj_trace_state_store_active(jit_State *J,",
-        "void lj_trace_abort(global_State *g)",
-        "la_cas32((uint32_t *)&J->state, &old, next,"
-      }, "recorder token")
-
-      assert_no_lines(t, "recorder token must never block or spin-wait",
-                      source_code_files(t), function(line)
-        return line:match("while .*jit_token") ~= nil or
-               contains(line, "la_futex_wait(&g->jit_token") or
-               line:match("la_futex_wait%([^%)]*jit_token") ~= nil
-      end)
-
-      local trace_h = t:path("src", "lj_trace.h")
-      local trace_c = t:path("src", "lj_trace.c")
-      assert_no_lines(t, "jit_State.state must use trace state helpers",
-                      source_and_test_files(t), function(line, path)
-        if path == t:path("tests", "suites", "m6_jit.lua") then return false end
-        if not (contains(line, "J->state") or line:match("G2J%([^%)]*%)->state")) then
-          return false
-        end
-        if (path == trace_h or path == trace_c) and
-           (contains(line, "la_load32_acq((uint32_t *)&J->state)") or
-            contains(line, "la_store32_rel((uint32_t *)&J->state,") or
-            contains(line, "la_cas32((uint32_t *)&J->state,")) then
-          return false
-        end
-        return true
-      end)
-
-      assert_no_lines(t, "secondary TGs must be allowed to record and enter x64 traces",
-                      { t:path("src", "lj_trace.c"), t:path("src", "vm_x64.dasc") },
-                      function(line)
-        return contains(line, "tg != g->main_tg") or
-               contains(line, "Temporary until x64 RID_DISPATCH addressing is localized") or
-               contains(line, "Secondary TGs interpret until RID_DISPATCH is local")
-      end)
-      assert_no_lines(t, "fixed TG fields must use DISPATCH_TG symbolic offsets",
-                      { t:path("src", "lj_asm_x86.h"), t:path("src", "lj_emit_x86.h") },
-                      function(line)
-        return line:match("dispofs%(as, &J2TG%(as%->J%)->(jit_base)") or
-               line:match("dispofs%(as, &J2TG%(as%->J%)->(tmptv)") or
-               line:match("dispofs%(as, &J2TG%(as%->J%)->(cur_L)") or
-               line:match("dispofs%(as, &J2TG%(as%->J%)->(gl)")
-      end)
-      assert_no_lines(t, "generic x64 emitter must not use recorder-TG dispatch offsets",
-                      { t:path("src", "lj_asm_x86.h"), t:path("src", "lj_emit_x86.h") },
-                      function(line)
-        return contains(line, "dispofs(") or contains(line, "J2TG(as->J)->dispatch") or
-               contains(line, "uint64_t dispaddr") or contains(line, "GG_OFS_TGDISP")
-      end)
       check_m6_aggregate(t, "m6_jit_token.sh")
-      t:assert_not_contains(t:path("src", "lj_trace.c"), "++snap->count")
-
-      do
-        local vm = t:read(t:path("src", "vm_x64.dasc"))
-        local hotloop, stitch, bad_l, bad_exit, exitpath, winonly = false, false, false, false, false, false
-        for line in lines(vm) do
-          if contains(line, "->vm_hotloop:") then hotloop = true end
-          if contains(line, "->vm_callhook:") then hotloop = false end
-          if contains(line, "Stitch a new trace to the previous trace") then stitch = true end
-          if contains(line, "call extern lj_dispatch_stitch") then stitch = false end
-          if (hotloop or stitch) and contains(line, "DISPATCH_J(L)") then bad_l = true end
-          if stitch and contains(line, "DISPATCH_J(exitno)") then bad_exit = true end
-
-          if contains(line, "->vm_exit_handler:") then exitpath = true end
-          if contains(line, "->vm_exit_interp:") then exitpath = false end
-          if exitpath and contains(line, "|.if X64WIN") then winonly = true end
-          if winonly and (contains(line, "|.else") or contains(line, "|.endif")) then
-            winonly = false
-          end
-          if exitpath and not winonly and
-             (contains(line, "DISPATCH_J(L)") or contains(line, "DISPATCH_J(parent)") or
-              contains(line, "DISPATCH_J(exitno)")) then
-            error("x64/POSIX trace exit restore state must stay call-local before side-token acquisition", 2)
-          end
-        end
-        if bad_l then
-          error("x64 hotloop/stitch must not write J->L before token acquisition", 2)
-        end
-        if bad_exit then
-          error("x64 stitch must not write J->exitno before token acquisition", 2)
-        end
-      end
 
       build_and_run_c(t, t:tmp("lj_t-jit-token"), "t-jit-token.c",
                       { build = false, timeout = "20s" })
@@ -683,7 +553,7 @@ assert(s==2720)
       if count_match(d, x64_cmp_poll_pattern()) < 4 then
         error("FUNCF-depth IR_XPOLL must lower to TG poll checks", 2)
       end
-      print("M6 JIT recorder token guard passed")
+      print("M6 JIT recorder token behavior passed")
     end
   })
 
