@@ -574,6 +574,10 @@ typedef struct TabNodeRetire {
 typedef struct TabArrayHdr {
   MSize asize;		/* Visible array size paired with the slots vector. */
   MSize acap;		/* Capacity plus high-bit state flags. */
+  MRef next_gen;	/* Replacement array during/after retirement. */
+#if !LJ_GC64
+  MSize reserved;	/* Keep slots aligned after the header. */
+#endif
 } TabArrayHdr;
 
 #define TABARRAY_ACAP_BITS	28
@@ -581,7 +585,7 @@ typedef struct TabArrayHdr {
 #define TABARRAY_FLAGS_MASK	((MSize)~TABARRAY_ACAP_MASK)
 #define TABARRAY_FLAG_RETIRING	(((MSize)1u) << 31)
 
-LJ_STATIC_ASSERT(sizeof(TabArrayHdr) == 8);
+LJ_STATIC_ASSERT(sizeof(TabArrayHdr) == 16);
 LJ_STATIC_ASSERT(LJ_MAX_ASIZE <= TABARRAY_ACAP_MASK);
 LJ_STATIC_ASSERT((TABARRAY_FLAG_RETIRING & TABARRAY_ACAP_MASK) == 0);
 
@@ -689,6 +693,10 @@ static LJ_AINLINE void lj_tab_array_hdr_init(TabArrayHdr *hdr, MSize asize,
 {
   hdr->asize = asize;
   hdr->acap = lj_tab_array_hdr_pack_acap(acap, 0);
+  setmref(hdr->next_gen, NULL);
+#if !LJ_GC64
+  hdr->reserved = 0;
+#endif
 }
 
 static LJ_AINLINE int lj_tab_array_is_colocated(const GCtab *t,
@@ -718,6 +726,29 @@ static LJ_AINLINE MSize lj_tab_array_hdr_flags_acq(const TValue *array)
 {
   return (MSize)la_load32_acq(&lj_tab_array_hdr(array)->acap) &
 	 TABARRAY_FLAGS_MASK;
+}
+
+static LJ_AINLINE TValue *lj_tab_array_nextgen_acq(const TValue *array)
+{
+#if LJ_GC64
+  return (TValue *)(void *)(uintptr_t)
+    la_load64_acq(&lj_tab_array_hdr(array)->next_gen.ptr64);
+#else
+  return (TValue *)(void *)(uintptr_t)
+    la_load32_acq(&lj_tab_array_hdr(array)->next_gen.ptr32);
+#endif
+}
+
+static LJ_AINLINE void lj_tab_array_nextgen_rel(TValue *array,
+						const TValue *next)
+{
+#if LJ_GC64
+  la_store64_rel(&lj_tab_array_hdrw(array)->next_gen.ptr64,
+		 (uint64_t)(uintptr_t)(const void *)next);
+#else
+  la_store32_rel(&lj_tab_array_hdrw(array)->next_gen.ptr32,
+		 (uint32_t)(uintptr_t)(const void *)next);
+#endif
 }
 
 static LJ_AINLINE int lj_tab_array_is_retiring(const GCtab *t,

@@ -59,7 +59,7 @@ if ! awk '
 	    eq == 0 && aref && aload && xpoll)
   }
   inir && /FLOAD .*tab[.]array/ { array++ }
-  inir && / p64 ADD / && /-8/ { hdradd++ }
+  inir && / p64 ADD / && /-16/ { hdradd++ }
   inir && / XLOAD / { xload++ }
   inir && /FLOAD .*tab[.]asize/ { asize++ }
   inir && / p64 EQ / { eq++ }
@@ -97,7 +97,7 @@ if ! awk '
 	    eq == 0 && aref && aload && xpoll)
   }
   inir && /FLOAD .*tab[.]array/ { array++ }
-  inir && / p64 ADD / && /-8/ { hdradd++ }
+  inir && / p64 ADD / && /-16/ { hdradd++ }
   inir && / XLOAD / { xload++ }
   inir && /FLOAD .*tab[.]asize/ { asize++ }
   inir && / p64 EQ / { eq++ }
@@ -171,7 +171,7 @@ if ! awk '
 	    ule && href && !aref && xpoll)
   }
   inir && /FLOAD .*tab[.]array/ { array++ }
-  inir && / p64 ADD / && /-8/ { hdradd++ }
+  inir && / p64 ADD / && /-16/ { hdradd++ }
   inir && / XLOAD / { xload++ }
   inir && /FLOAD .*tab[.]asize/ { asize++ }
   inir && / ULE / { ule = 1 }

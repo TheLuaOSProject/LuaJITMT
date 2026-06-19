@@ -21,11 +21,15 @@ for needle in \
   'lj_tab_asize_acq' \
   'lj_tab_asize_rel' \
   'TabArrayHdr' \
+  'LJ_STATIC_ASSERT(sizeof(TabArrayHdr) == 16)' \
   'TABARRAY_ACAP_MASK' \
   'TABARRAY_FLAGS_MASK' \
   'TABARRAY_FLAG_RETIRING' \
   'lj_tab_array_hdr_pack_acap' \
   'lj_tab_array_hdr_init' \
+  'setmref(hdr->next_gen, NULL)' \
+  'lj_tab_array_nextgen_acq' \
+  'lj_tab_array_nextgen_rel' \
   'lj_tab_array_hdr_flags_or_rel' \
   'lj_tab_array_hdrw' \
   'lj_tab_array_bytes' \
@@ -82,6 +86,12 @@ if ! rg -F -q 'lj_tab_array_hdr_flags_acq(ret->array) == TABARRAY_FLAG_RETIRING'
   exit 1
 fi
 
+if ! rg -F -q 'lj_tab_array_nextgen_acq(ret->array) == array' \
+    "$ROOT/tests/t-tab-array-publish.c"; then
+  echo "guardrail: retired table arrays must point at replacement generation" >&2
+  exit 1
+fi
+
 if ! rg -F -q 'lj_tab_array_is_retiring(t, ret->array)' \
     "$ROOT/tests/t-tab-array-publish.c"; then
   echo "guardrail: retired table arrays must be detected by integer access helper predicate" >&2
@@ -107,7 +117,7 @@ if rg -n '#define (inarray|arrayslot|lj_tab_getint|lj_tab_setint)' \
   exit 1
 fi
 
-if rg -n 'lj_tab_array_hdr_asize_rel|la_store32_rel\(&lj_tab_array_hdrw' \
+if rg -n 'lj_tab_array_hdr_asize_rel|la_store32_rel\(&lj_tab_array_hdrw\([^)]*\)->(asize|acap)' \
     "$ROOT/src"; then
   echo "guardrail: table array header asize must be immutable after publish" >&2
   exit 1
@@ -269,6 +279,17 @@ if awk '
   :
 else
   echo "guardrail: recorder next() type scan must use array snapshots" >&2
+  exit 1
+fi
+
+if ! awk '
+  /void lj_tab_resize\(lua_State \*L,/ { inresize = 1 }
+  inresize && /lj_tab_array_nextgen_rel\(oldarray, array\)/ { nextgen = NR }
+  inresize && /lj_tab_array_hdr_flags_or_rel\(oldarray, TABARRAY_FLAG_RETIRING\)/ { retiring = NR }
+  inresize && /^}/ { inresize = 0 }
+  END { exit nextgen && retiring && nextgen < retiring ? 0 : 1 }
+' "$ROOT/src/lj_tab.c"; then
+  echo "guardrail: resize must publish retired array next_gen before RETIRING" >&2
   exit 1
 fi
 

@@ -251,6 +251,9 @@ the first flag bit for the final §6.3.2/§6.3.5 write/migration protocol.
 `lj_tab_resize()` now sets that bit on the old separated array generation after
 replacement contents are ready and before publishing replacement table state;
 current generations still start with zero flags until their own resize.
+`TabArrayHdr.next_gen` is release-published to the replacement separated array
+before the old array is marked retiring, reserving the successor needed by the
+final array `LJ_TFORWARD` hop.
 On x86-64,
 `getmetatable`'s `__metatable` probe, `ipairs_aux` empty-hash fallback,
 `lj_vm_next` hash traversal, `BC_TGETS_Z`, and `BC_ITERN` hash traversal now
