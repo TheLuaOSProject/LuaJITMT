@@ -339,6 +339,9 @@ Lua test-suite migration notes:
 - Removed broad M5 table-value positive source inventory; the standalone value
   case now runs both its Lua behavior smoke and the CAS/table.insert forward
   retry C fixture while retaining unreplaced MT-safety blacklists.
+- Removed the broad M6 dispatch positive marker basket; the dispatch case now
+  relies on the C safepoint-handshake fixture while keeping TG-local dispatch
+  negative guards that still need replacement behavior.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.

@@ -448,21 +448,6 @@ return function(add)
                       "t-safepoint-handshake.c",
                       { build = false })
 
-      assert_marker_set(t, {
-        t:path("src", "vm_x64.dasc"),
-        t:path("src", "lj_dispatch.c")
-      }, {
-        "load_G TMPR",
-        "mov dword GL:TMPR->vmstate",
-        "load_J CARG1",
-        "load_DISPATCH RB",
-        "TG_OFS_DISPATCH",
-        "TGPOLL, dword [DISPATCH+DISPATCH_TG(poll)]",
-        "static void dispatch_setrecord",
-        "rec_owner = lj_trace_state_load(J) != LJ_TRACE_IDLE",
-        "dispatch_setrecord(tg->dispatch, mode)"
-      }, "x64 dispatch localization")
-
       local vm = t:path("src", "vm_x64.dasc")
       t:assert_not_contains(vm, "Secondary TGs interpret until RID_DISPATCH is local")
       assert_no_lines(t, "x64 VM must not derive g/J from fixed DISPATCH offsets",
