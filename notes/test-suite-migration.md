@@ -55,6 +55,11 @@ Lua test-suite migration notes:
   - `tools/ci/m5_registry_root.sh` -> `m5_registry_root`
   - `tools/ci/m5_nomm_cache.sh` -> `m5_nomm_cache`
   - `tools/ci/m5_strtab_prep.sh` -> `m5_strtab_prep`
+- Eighth migrated scripts:
+  - `tools/ci/m2_gc_header_accessors.sh` -> `m2_gc_header_accessors`
+  - `tools/ci/m5_buffer_publish.sh` -> `m5_buffer_publish`
+  - `tools/ci/m5_ctype_name_publish.sh` -> `m5_ctype_name_publish`
+  - `tools/ci/m5_jit_hash_store_nyi.sh` -> `m5_jit_hash_store_nyi`
 - This first batch covers the main shapes the full migration needs:
   standalone C fixtures linked against selected runtime files, Lua tests under
   the built VM, C fixtures linked against `libluajit.a`, and source-order guard
@@ -81,6 +86,9 @@ Lua test-suite migration notes:
 - The seventh batch migrates small M5 runtime/table fixtures and their source
   guards. `ljtest.cc()` can now opt out of default flags and `-I src` for
   standalone models that intentionally do not link LuaJIT.
+- The eighth batch migrates the M2 GC-header accessor guard plus focused M5
+  runtime smoke wrappers for string.buffer publication, CType.name publication,
+  and JIT table-store bridge coverage.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.

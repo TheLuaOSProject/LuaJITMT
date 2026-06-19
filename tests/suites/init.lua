@@ -1,5 +1,6 @@
 local suites = {
   require("m2_arena"),
+  require("m2_gc"),
   require("m4_threading"),
   require("m5_fixtures"),
   require("m5_guards"),

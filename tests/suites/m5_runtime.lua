@@ -1,4 +1,197 @@
+local function contains(s, needle)
+  return s:find(needle, 1, true) ~= nil
+end
+
+local function assert_no_lines(t, label, paths, pred)
+  local hits = {}
+  for i = 1, #paths do
+    local path = paths[i]
+    local n = 0
+    for line in (t:read(path) .. "\n"):gmatch("(.-)\n") do
+      n = n + 1
+      if pred(line, path, n) then
+        hits[#hits + 1] = path .. ":" .. n .. ": " .. line
+      end
+    end
+  end
+  if #hits > 0 then
+    error(label .. ":\n" .. table.concat(hits, "\n"), 2)
+  end
+end
+
+local function ctype_name_smoke()
+  return [=[
+local ffi = require"ffi"
+for i = 1, 40 do
+  ffi.cdef(([[typedef struct { int a; double b; } lj_ctype_name_s_%d;
+typedef enum { LJ_CTYPE_NAME_E_%d = %d } lj_ctype_name_e_%d;]]):format(i, i, i, i))
+  local ct = ffi.typeof(("lj_ctype_name_s_%d"):format(i))
+  local x = ct(i, i + 0.5)
+  assert(x.a == i and x.b == i + 0.5)
+  local et = ffi.typeof(("lj_ctype_name_e_%d"):format(i))
+  assert(tonumber(et(i)) == i)
+  collectgarbage("collect")
+end
+local mt = ffi.metatype("struct { int x; }", {
+  __index = { value = function(self) return self.x end }
+})
+assert(mt(7):value() == 7)
+print("ctype-name-publish-smoke OK")
+]=]
+end
+
+local function jit_hash_store_smoke()
+  return [[
+local util = require("jit.util")
+
+local function traces()
+  local n = 0
+  for i = 1, 200 do
+    if util.traceinfo(i) then n = n + 1 end
+  end
+  return n
+end
+
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local h = { stable = 0 }
+for i = 1, 200 do
+  h.stable = i
+end
+assert(h.stable == 200)
+assert(traces() > 0, "existing hash table store did not trace")
+
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local a = { 0 }
+for i = 1, 200 do
+  a[1] = i
+end
+assert(a[1] == 200)
+assert(traces() > 0, "existing array table store did not trace")
+
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local hn = {}
+for i = 1, 200 do
+  hn["k" .. i] = i
+end
+assert(hn.k200 == 200)
+assert(traces() > 0, "new string hash table store did not trace")
+
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local function array_insert(n)
+  local out = { 0 }
+  for i = 1, n do
+    local an = {}
+    an[1] = i
+    out = an
+  end
+  return out
+end
+local an = array_insert(80)
+assert(an[1] == 80)
+assert(traces() > 0, "fresh array slot table store did not trace")
+]]
+end
+
 return function(add)
+  add({
+    name = "m5_buffer_publish",
+    description = "string.buffer acquire/release publication and thread smoke",
+    run = function(t)
+      t:build({ quiet = true })
+
+      local lj_buf_h = t:read(t:path("src", "lj_buf.h"))
+      if not (contains(lj_buf_h, "la_loadptr_acq") or
+              contains(lj_buf_h, "la_storeptr_rel") or
+              contains(lj_buf_h, "lj_bufx_data_acq")) then
+        error("lj_buf.h must expose acquire/release buffer accessors")
+      end
+
+      assert_no_lines(t, "shared string.buffer users must use lj_buf accessors",
+                      {
+                        t:path("src", "lib_buffer.c"),
+                        t:path("src", "lib_base.c"),
+                        t:path("src", "lj_meta.c"),
+                        t:path("src", "lj_serialize.c"),
+                        t:path("src", "lj_cconv.c")
+                      }, function(line)
+        return contains(line, "sbx->r") or contains(line, "sbx->w") or
+               contains(line, "sbx->b") or contains(line, "sbx->e")
+      end)
+
+      t:assert_contains(t:path("tools", "ci", "m5_concurrent_objects.sh"),
+                        "m5_buffer_publish.sh")
+      t:luajit({ "-joff", t:path("tests", "t-buffer-thread-safety.lua") })
+      t:luajit({ "-jon", t:path("tests", "t-buffer-thread-safety.lua") })
+      print("M5 string.buffer publication guard passed")
+    end
+  })
+
+  add({
+    name = "m5_ctype_name_publish",
+    description = "CType.name acquire/release publication guard and smoke test",
+    run = function(t)
+      t:assert_all_contains(t:path("src", "lj_ctype.h"), {
+        "ctype_name_acq(const CType *ct)",
+        "gcref_acq(ct->name)",
+        "setgcrefrel(ct->name, obj2gco(s))",
+        "ctype_clearname(CType *ct)",
+        "setgcrefnullrel(ct->name)"
+      })
+
+      assert_no_lines(t, "CType.name readers/writers must use helpers",
+                      {
+                        t:path("src", "lj_ctype.h"),
+                        t:path("src", "lj_ctype.c"),
+                        t:path("src", "lj_cparse.c"),
+                        t:path("src", "lj_cconv.c"),
+                        t:path("src", "lj_clib.c"),
+                        t:path("src", "lj_crecord.c"),
+                        t:path("src", "lib_ffi.c")
+                      }, function(line)
+        return (contains(line, "gcref(") and contains(line, "->name")) or
+               contains(line, "gcref(ct->name") or
+               (contains(line, "setgcref(") and contains(line, "->name")) or
+               contains(line, "setgcref(ct->name") or
+               contains(line, "setgcrefnull(ct->name") or
+               (contains(line, "gco2str(gcref(") and contains(line, "->name"))
+      end)
+
+      t:assert_contains(t:path("tools", "ci", "m5_concurrent_objects.sh"),
+                        "m5_ctype_name_publish.sh")
+      t:build({ quiet = true })
+      t:luajit({ "-joff", "-e", ctype_name_smoke() })
+      print("M5 CType.name publication guard passed")
+    end
+  })
+
+  add({
+    name = "m5_jit_hash_store_nyi",
+    description = "JIT table-store bridge smoke and stale NYI guards",
+    run = function(t)
+      t:build({ clean = true, quiet = true })
+      t:luajit({ "-e", jit_hash_store_smoke() })
+
+      local record = t:path("src", "lj_record.c")
+      t:assert_contains(record,
+                        "M6: numeric NEWREF/HSTORE uses the generic returned-slot helper")
+      t:assert_contains(record,
+                        "M6: previous-nil in-bounds ASTORE/HSTORE uses the helper bridge")
+      for _, needle in ipairs({
+        "M6: no new/nil HSTORE bridge",
+        "M6: no new HSTORE bridge",
+        "M6: no numeric new HSTORE bridge",
+        "M6: no nil ASTORE bridge"
+      }) do
+        t:assert_not_contains(record, needle)
+      end
+      print("M5 JIT table-store bridge guard passed")
+    end
+  })
+
   add({
     name = "m5_math_random_tg",
     description = "per-TG math.random regression test",
