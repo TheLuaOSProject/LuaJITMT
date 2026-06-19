@@ -3667,7 +3667,7 @@ static int gc2_legacy_liveobj(GCobj *o)
 static int gc2_legacy_has_base(global_State *g, void *p)
 {
   GCobj *o;
-  for (o = gcref(g->gc.root); o != NULL; o = gcnext(o)) {
+  for (o = gcref_acq(g->gc.root); o != NULL; o = lj_obj_gcw_acq(o)) {
     if (gc2_legacy_liveobj(o) && gc2_mark_base(o) == p)
       return 1;
     if (o->gch.gct == ~LJ_TTHREAD) {

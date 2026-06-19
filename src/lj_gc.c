@@ -188,7 +188,7 @@ static void gc_arena_verify_sweep_boundary(global_State *g)
       la_load32_acq(&g->gc2.phase) != LJ_GC2_SWEEP ||
       lj_gc2_finalizer_sweep_pending(g))
     return;
-  for (o = gcref(g->gc.root); o != NULL; o = gcnext(o)) {
+  for (o = gcref_acq(g->gc.root); o != NULL; o = lj_obj_gcw_acq(o)) {
     gc_arena_verify_marked(g, o);
     if (o->gch.gct == ~LJ_TTHREAD) {
       GCobj *uv;
@@ -340,7 +340,7 @@ static void gc2_paranoia_check_strtab(global_State *g)
 static void gc2_paranoia_check_roots(global_State *g)
 {
   GCobj *o;
-  for (o = gcref(g->gc.root); o != NULL; o = gcnext(o))
+  for (o = gcref_acq(g->gc.root); o != NULL; o = lj_obj_gcw_acq(o))
     gc2_paranoia_checkone(g, o);
   for (o = (GCobj *)la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc);
        o != NULL; o = lj_obj_gcw_acq(o))
