@@ -54,6 +54,13 @@ if [ -n "$raw_udata_hits" ]; then
   exit 1
 fi
 
+raw_thread_env_hits=$(rg -n 'setgcrefr?\(L1->env' "$ROOT/src" || true)
+if [ -n "$raw_thread_env_hits" ]; then
+  echo "guardrail: new-thread env publication must use release stores:" >&2
+  echo "$raw_thread_env_hits" >&2
+  exit 1
+fi
+
 for needle in \
   '#define tabref_acq(r)' \
   'gcref_acq((r))' \
@@ -68,7 +75,10 @@ for needle in \
   'setgcrefmt(ud->metatable, obj2gco(mt));' \
   'lj_gc_pubobjobj(L, ud, env);' \
   'lj_gc_pubobjobj(L, ud, mt);' \
-  'test_userdata_constructor_publish_barrier'
+  'test_userdata_constructor_publish_barrier' \
+  'setgcrefrrel(L1->env, L->env);' \
+  'lj_gc_pubobjobj(L, L1, env);' \
+  'test_thread_constructor_env_barrier'
 do
   if ! rg -F -q "$needle" "$ROOT/src" "$ROOT/tests"; then
     echo "guardrail: missing metatable publication marker: $needle" >&2

@@ -469,11 +469,15 @@ lua_State *lj_state_new(lua_State *L)
   L1->thr_owner = 0;
   L1->scan_epoch = 0;
   L1->scan_dirty_epoch = 0;
-  /* NOBARRIER: The lua_State is new (marked white). */
-  setgcrefnull(L1->openupval);
-  setgcrefnull(L1->mt_thread);
+  setgcrefnullrel(L1->openupval);
+  setgcrefnullrel(L1->mt_thread);
   setmrefr(L1->glref, L->glref);
-  setgcrefr(L1->env, L->env);
+  setgcrefrrel(L1->env, L->env);
+  {
+    GCtab *env = tabref_acq(L1->env);
+    if (env)
+      lj_gc_pubobjobj(L, L1, env);
+  }
   stack_init(L1, L);  /* init stack */
   lj_assertL(iswhite(obj2gco(L1)), "new thread object is not white");
   return L1;

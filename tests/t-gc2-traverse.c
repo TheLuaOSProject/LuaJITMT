@@ -19,6 +19,7 @@
 #include "lj_str.h"
 #include "lj_tab.h"
 #include "lj_udata.h"
+#include "lj_state.h"
 #include "lj_thr.h"
 #include "lj_tg.h"
 #include "lj_lib.h"
@@ -731,6 +732,28 @@ static void test_userdata_constructor_publish_barrier(lua_State *L,
   flush_and_drain(g, tg);
   lj_gc2_legacy_cycle_end(g);
   lua_pop(L, 3);
+}
+
+static void test_thread_constructor_env_barrier(lua_State *L, global_State *g,
+						TGState *tg)
+{
+  GCtab *env = tabref_acq(L->env);
+  lua_State *L1;
+
+  lua_settop(L, 0);
+  assert(env != NULL);
+  lj_gc2_legacy_mark_begin(g);
+  assert(la_load8_acq(&tg->alloc.alloc_black) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(env)) == 0);
+
+  L1 = lj_state_new(L);
+  assert(lj_gc2_ismarked(g, obj2gco(L1)) == 1);
+  assert(tabref_acq(L1->env) == env);
+  assert(lj_gc2_ismarked(g, obj2gco(env)) == 1);
+  setthreadV(L, L->top++, L1);
+  flush_and_drain(g, tg);
+  lj_gc2_legacy_cycle_end(g);
+  lua_pop(L, 1);
 }
 
 #if LJ_HASBUFFER
@@ -3727,6 +3750,7 @@ int main(void)
   test_vm_meta_tset_barrier(L, g, tg);
   test_capi_newindex_target_parent_barrier(L, g, tg);
   test_userdata_constructor_publish_barrier(L, g, tg);
+  test_thread_constructor_env_barrier(L, g, tg);
 #if LJ_HASBUFFER
   test_buffer_decode_metatable_barrier(L, g, tg);
 #endif
