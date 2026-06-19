@@ -119,6 +119,20 @@ void lj_func_storeuvstr_pub(lua_State *L, TValue *tv, GCstr *str)
   lj_func_storeuv_pub(L, tv, &tmp);
 }
 
+void lj_func_storeuvnum_pub(lua_State *L, TValue *tv, const lua_Number *np)
+{
+  TValue tmp;
+  setnumV(&tmp, *np);
+  lj_func_storeuv_pub(L, tv, &tmp);
+}
+
+void lj_func_storeuvpri_pub(lua_State *L, TValue *tv, uint32_t pri)
+{
+  TValue tmp;
+  setpriV(&tmp, ~pri);
+  lj_func_storeuv_pub(L, tv, &tmp);
+}
+
 void lj_func_storeuv_forjit(lua_State *L, TValue *tv, const TValue *src)
 {
   copyTVrel(L, tv, src);

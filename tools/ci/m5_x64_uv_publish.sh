@@ -34,8 +34,15 @@ fi
 for needle in \
   'call extern lj_func_storeuv_pub' \
   'call extern lj_func_storeuvstr_pub' \
+  'call extern lj_func_storeuvnum_pub' \
+  'call extern lj_func_storeuvpri_pub' \
   'lj_func_storeuv_pub(lua_State *L, TValue *tv, const TValue *src)' \
   'lj_func_storeuvstr_pub(lua_State *L, TValue *tv, GCstr *str)' \
+  'lj_func_storeuvnum_pub(lua_State *L, TValue *tv, const lua_Number *np)' \
+  'lj_func_storeuvpri_pub(lua_State *L, TValue *tv, uint32_t pri)' \
+  'setnumV(&tmp, *np);' \
+  'setpriV(&tmp, ~pri);' \
+  'lj_func_storeuv_pub(L, tv, &tmp);' \
   'IRCALL_lj_gc_pubuv' \
   'lj_gc_pubuv,' \
   'lj_func_storeuv_forjit,' \
@@ -77,6 +84,24 @@ storeuvstr_vm_count=$(awk '
 ' "$ROOT/src/vm_x64.dasc")
 if [ "$storeuvstr_vm_count" -ne 1 ]; then
   echo "guardrail: x64 USETS closed-cell stores must use lj_func_storeuvstr_pub" >&2
+  exit 1
+fi
+
+storeuvnum_vm_count=$(awk '
+  /call extern lj_func_storeuvnum_pub[[:space:]]*\/\/ \(lua_State \*L, TValue \*tv, const lua_Number \*np\)/ { n++ }
+  END { print n + 0 }
+' "$ROOT/src/vm_x64.dasc")
+if [ "$storeuvnum_vm_count" -ne 1 ]; then
+  echo "guardrail: x64 USETN closed-cell stores must use lj_func_storeuvnum_pub" >&2
+  exit 1
+fi
+
+storeuvpri_vm_count=$(awk '
+  /call extern lj_func_storeuvpri_pub[[:space:]]*\/\/ \(lua_State \*L, TValue \*tv, uint32_t pri\)/ { n++ }
+  END { print n + 0 }
+' "$ROOT/src/vm_x64.dasc")
+if [ "$storeuvpri_vm_count" -ne 1 ]; then
+  echo "guardrail: x64 USETP closed-cell stores must use lj_func_storeuvpri_pub" >&2
   exit 1
 fi
 

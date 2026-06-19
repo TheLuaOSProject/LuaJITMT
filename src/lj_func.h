@@ -25,6 +25,10 @@ LJ_FUNCA void lj_func_syncslot_forjit(lua_State *L, TValue *base,
 LJ_FUNCA void lj_func_storeuv_pub(lua_State *L, TValue *tv,
 				  const TValue *src);
 LJ_FUNCA void lj_func_storeuvstr_pub(lua_State *L, TValue *tv, GCstr *str);
+LJ_FUNCA void lj_func_storeuvnum_pub(lua_State *L, TValue *tv,
+				     const lua_Number *np);
+LJ_FUNCA void lj_func_storeuvpri_pub(lua_State *L, TValue *tv,
+				     uint32_t pri);
 LJ_FUNCA void lj_func_storeuv_forjit(lua_State *L, TValue *tv,
 				     const TValue *src);
 LJ_FUNCA GCupval *lj_func_promoteuv_forjit(lua_State *L, TValue *base,

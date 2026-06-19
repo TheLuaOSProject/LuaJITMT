@@ -3945,10 +3945,27 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ins_AD	// RA = upvalue #, RD = num const
     |  mov LFUNC:RB, [BASE-16]
     |  cleartp LFUNC:RB
-    |  movsd xmm0, qword [KBASE+RD*8]
     |  mov UPVAL:RB, [LFUNC:RB+RA*8+offsetof(GCfuncL, uvptr)]
-    |  mov RA, UPVAL:RB->v
-    |  movsd qword [RA], xmm0
+    |  cmp byte UPVAL:RB->closed, 0
+    |  mov RB, UPVAL:RB->v
+    |  jz >1
+    |  mov L:CARG1, SAVE_L
+    |  mov L:CARG1->base, BASE
+    |.if X64WIN
+    |  lea CARG3, [KBASE+RD*8]
+    |  mov CARG2, RB
+    |.else
+    |  mov CARG2, RB
+    |  lea CARG3, [KBASE+RD*8]
+    |.endif
+    |  mov L:RB, L:CARG1
+    |  call extern lj_func_storeuvnum_pub	// (lua_State *L, TValue *tv, const lua_Number *np)
+    |  mov BASE, L:RB->base
+    |  ins_next
+    |
+    |1:
+    |  movsd xmm0, qword [KBASE+RD*8]
+    |  movsd qword [RB], xmm0
     |  ins_next
     break;
   case BC_USETP:
@@ -3956,10 +3973,27 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov LFUNC:RB, [BASE-16]
     |  cleartp LFUNC:RB
     |  mov UPVAL:RB, [LFUNC:RB+RA*8+offsetof(GCfuncL, uvptr)]
+    |  cmp byte UPVAL:RB->closed, 0
+    |  mov RB, UPVAL:RB->v
+    |  jz >1
+    |  mov L:CARG1, SAVE_L
+    |  mov L:CARG1->base, BASE
+    |.if X64WIN
+    |  mov CARG3d, RDd
+    |  mov CARG2, RB
+    |.else
+    |  mov CARG2, RB
+    |  mov CARG3d, RDd
+    |.endif
+    |  mov L:RB, L:CARG1
+    |  call extern lj_func_storeuvpri_pub	// (lua_State *L, TValue *tv, uint32_t pri)
+    |  mov BASE, L:RB->base
+    |  ins_next
+    |
+    |1:
     |  shl RD, 47
     |  not RD
-    |  mov RA, UPVAL:RB->v
-    |  mov [RA], RD
+    |  mov [RB], RD
     |  ins_next
     break;
   case BC_UCLO:
