@@ -46,6 +46,14 @@ if [ -n "$raw_runtime_hits" ]; then
   exit 1
 fi
 
+raw_udata_hits=$(rg -n 'setgcrefr?\(ud->metatable|setgcref\(ud->env' \
+  "$ROOT/src" || true)
+if [ -n "$raw_udata_hits" ]; then
+  echo "guardrail: userdata constructor env/metatable publications must use release stores:" >&2
+  echo "$raw_udata_hits" >&2
+  exit 1
+fi
+
 for needle in \
   '#define tabref_acq(r)' \
   'gcref_acq((r))' \
@@ -54,9 +62,15 @@ for needle in \
   'setgcrefmt(t->metatable, obj2gco(mt));' \
   'lj_gc_pubtabobj(sbufL(sbx), t, mt);' \
   'setgcrefnullrel(t->metatable);' \
-  'lj_gc_pubtabobj(L, t, mt);'
+  'lj_gc_pubtabobj(L, t, mt);' \
+  'setgcrefrel(ud->env, obj2gco(env));' \
+  'setgcrefmt(ud->metatable, obj2gco(env));' \
+  'setgcrefmt(ud->metatable, obj2gco(mt));' \
+  'lj_gc_pubobjobj(L, ud, env);' \
+  'lj_gc_pubobjobj(L, ud, mt);' \
+  'test_userdata_constructor_publish_barrier'
 do
-  if ! rg -F -q "$needle" "$ROOT/src"; then
+  if ! rg -F -q "$needle" "$ROOT/src" "$ROOT/tests"; then
     echo "guardrail: missing metatable publication marker: $needle" >&2
     exit 1
   fi

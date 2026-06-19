@@ -43,6 +43,8 @@ check_order() {
 }
 
 check_order "$ROOT/src/lib_buffer.c" 'LJLIB_CF\(buffer_new\)' \
+  'setgcrefmt(ud->metatable, obj2gco(env));' \
+  'lj_gc_pubobjobj(L, ud, env);' \
   'lj_bufx_init(L, sbx);' \
   'setgcref(sbx->dict_str, obj2gco(dict_str));' \
   'setgcref(sbx->dict_mt, obj2gco(dict_mt));' \
@@ -50,28 +52,33 @@ check_order "$ROOT/src/lib_buffer.c" 'LJLIB_CF\(buffer_new\)' \
   'if (sz > 0) lj_buf_need2((SBuf *)sbx, sz);'
 
 check_order "$ROOT/src/lib_threading.c" 'static GCudata \*threading_new_thread_ud' \
-  'setgcref(ud->metatable, obj2gco(env));' \
+  'setgcrefmt(ud->metatable, obj2gco(env));' \
+  'lj_gc_pubobjobj(L, ud, env);' \
   'th->ud = ud;' \
   'lj_udata_udtype_rel(ud, UDTYPE_THREAD);'
 
 check_order "$ROOT/src/lib_threading.c" 'LJLIB_CF\(threading_mutex\)' \
-  'setgcref(ud->metatable, obj2gco(env));' \
+  'setgcrefmt(ud->metatable, obj2gco(env));' \
+  'lj_gc_pubobjobj(L, ud, env);' \
   'm->state = LJ_MUTEX_UNLOCKED;' \
   'lj_udata_udtype_rel(ud, UDTYPE_MUTEX);'
 
 check_order "$ROOT/src/lib_threading.c" 'LJLIB_CF\(threading_channel\)' \
-  'setgcref(ud->metatable, obj2gco(env));' \
+  'setgcrefmt(ud->metatable, obj2gco(env));' \
+  'lj_gc_pubobjobj(L, ud, env);' \
   'lj_chan_init((LJChan *)uddata(ud), cap);' \
   'lj_udata_udtype_rel(ud, UDTYPE_CHANNEL);'
 
 check_order "$ROOT/src/lib_io.c" 'static IOFileUD \*io_file_new' \
-  'setgcrefr(ud->metatable, curr_func(L)->c.env);' \
+  'setgcrefmt(ud->metatable, obj2gco(mt));' \
+  'lj_gc_pubobjobj(L, ud, mt);' \
   'iof->fp = NULL;' \
   'iof->type = IOFILE_TYPE_FILE;' \
   'lj_udata_udtype_rel(ud, UDTYPE_IO_FILE);'
 
 check_order "$ROOT/src/lib_io.c" 'static GCobj \*io_std_new' \
-  'setgcref(ud->metatable, gcV(L->top-3));' \
+  'setgcrefmt(ud->metatable, obj2gco(mt));' \
+  'lj_gc_pubobjobj(L, ud, mt);' \
   'iof->fp = fp;' \
   'iof->type = IOFILE_TYPE_STDF;' \
   'lj_udata_udtype_rel(ud, UDTYPE_IO_FILE);' \
@@ -79,7 +86,8 @@ check_order "$ROOT/src/lib_io.c" 'static GCobj \*io_std_new' \
 
 check_order "$ROOT/src/lj_clib.c" 'static CLibrary \*clib_new' \
   'cl->cache = t;' \
-  'setgcref(ud->metatable, obj2gco(mt));' \
+  'setgcrefmt(ud->metatable, obj2gco(mt));' \
+  'lj_gc_pubobjobj(L, ud, mt);' \
   'lj_udata_udtype_rel(ud, UDTYPE_FFI_CLIB);'
 
 make -C "$ROOT/src" -j"$JOBS" >/dev/null

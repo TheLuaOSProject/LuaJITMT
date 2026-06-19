@@ -317,8 +317,8 @@ LJLIB_CF(buffer_new)
   }
   env = tabref_acq(curr_func(L)->c.env);
   ud = lj_udata_new(L, sizeof(SBufExt), env);
-  /* NOBARRIER: The GCudata is new (marked white). */
-  setgcref(ud->metatable, obj2gco(env));
+  setgcrefmt(ud->metatable, obj2gco(env));
+  lj_gc_pubobjobj(L, ud, env);
   lj_gc2_finreg_udata_register_mt(L, G(L), ud, env);
   setudataV(L, L->top++, ud);
   sbx = (SBufExt *)uddata(ud);

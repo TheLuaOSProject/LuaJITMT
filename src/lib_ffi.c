@@ -981,8 +981,8 @@ LJLIB_CF(ffi_pin)
   CTState *cts = ctype_cts(L);
   GCtab *mt = cts->pinmt;
   GCudata *ud = lj_udata_new(L, sizeof(TValue), mt);
-  /* NOBARRIER: The GCudata is new (marked white). */
-  setgcref(ud->metatable, obj2gco(mt));
+  setgcrefmt(ud->metatable, obj2gco(mt));
+  lj_gc_pubobjobj(L, ud, mt);
   lj_gc2_finreg_udata_register_mt(L, G(L), ud, mt);
   copyTV(L, (TValue *)uddata(ud), o);
   lj_udata_udtype_rel(ud, UDTYPE_FFI_PIN);

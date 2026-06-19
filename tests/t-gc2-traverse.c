@@ -18,6 +18,7 @@
 #include "lj_gc2.h"
 #include "lj_str.h"
 #include "lj_tab.h"
+#include "lj_udata.h"
 #include "lj_thr.h"
 #include "lj_tg.h"
 #include "lj_lib.h"
@@ -698,6 +699,38 @@ static void test_capi_newindex_target_parent_barrier(lua_State *L,
 
   lj_gc2_legacy_cycle_end(g);
   lua_pop(L, 5);
+}
+
+static void test_userdata_constructor_publish_barrier(lua_State *L,
+						      global_State *g,
+						      TGState *tg)
+{
+  GCtab *env, *mt;
+  GCudata *ud;
+
+  lua_settop(L, 0);
+  lua_newtable(L);
+  env = tabV(L->top - 1);
+  lua_newtable(L);
+  mt = tabV(L->top - 1);
+
+  lj_gc2_legacy_mark_begin(g);
+  assert(la_load8_acq(&tg->alloc.alloc_black) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(env)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(mt)) == 0);
+
+  ud = lj_udata_new(L, 1, env);
+  assert(lj_gc2_ismarked(g, obj2gco(ud)) == 1);
+  assert(tabref_acq(ud->env) == env);
+  assert(lj_gc2_ismarked(g, obj2gco(env)) == 1);
+  setgcrefmt(ud->metatable, obj2gco(mt));
+  lj_gc_pubobjobj(L, ud, mt);
+  assert(tabref_acq(ud->metatable) == mt);
+  assert(lj_gc2_ismarked(g, obj2gco(mt)) == 1);
+  setudataV(L, L->top++, ud);
+  flush_and_drain(g, tg);
+  lj_gc2_legacy_cycle_end(g);
+  lua_pop(L, 3);
 }
 
 #if LJ_HASBUFFER
@@ -3693,6 +3726,7 @@ int main(void)
   test_vm_table_barrier(L, g, tg);
   test_vm_meta_tset_barrier(L, g, tg);
   test_capi_newindex_target_parent_barrier(L, g, tg);
+  test_userdata_constructor_publish_barrier(L, g, tg);
 #if LJ_HASBUFFER
   test_buffer_decode_metatable_barrier(L, g, tg);
 #endif

@@ -210,9 +210,12 @@ static IOFileUD *io_file_new(lua_State *L)
 {
   IOFileUD *iof = (IOFileUD *)lua_newuserdata(L, sizeof(IOFileUD));
   GCudata *ud = udataV(L->top-1);
-  /* NOBARRIER: The GCudata is new (marked white). */
-  setgcrefr(ud->metatable, curr_func(L)->c.env);
-  lj_gc2_finreg_udata_register_mt(L, G(L), ud, tabref_acq(ud->metatable));
+  {
+    GCtab *mt = tabref_acq(curr_func(L)->c.env);
+    setgcrefmt(ud->metatable, obj2gco(mt));
+    lj_gc_pubobjobj(L, ud, mt);
+    lj_gc2_finreg_udata_register_mt(L, G(L), ud, mt);
+  }
   iof->fp = NULL;
   iof->type = IOFILE_TYPE_FILE;
   lj_udata_udtype_rel(ud, UDTYPE_IO_FILE);
@@ -744,9 +747,12 @@ static GCobj *io_std_new(lua_State *L, FILE *fp, const char *name)
 {
   IOFileUD *iof = (IOFileUD *)lua_newuserdata(L, sizeof(IOFileUD));
   GCudata *ud = udataV(L->top-1);
-  /* NOBARRIER: The GCudata is new (marked white). */
-  setgcref(ud->metatable, gcV(L->top-3));
-  lj_gc2_finreg_udata_register_mt(L, G(L), ud, tabV(L->top-3));
+  {
+    GCtab *mt = tabV(L->top-3);
+    setgcrefmt(ud->metatable, obj2gco(mt));
+    lj_gc_pubobjobj(L, ud, mt);
+    lj_gc2_finreg_udata_register_mt(L, G(L), ud, mt);
+  }
   iof->fp = fp;
   iof->type = IOFILE_TYPE_STDF;
   lj_udata_udtype_rel(ud, UDTYPE_IO_FILE);

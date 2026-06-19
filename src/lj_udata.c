@@ -21,9 +21,10 @@ GCudata *lj_udata_new(lua_State *L, MSize sz, GCtab *env)
   newwhite(g, ud);  /* Not finalized. */
   ud->gct = ~LJ_TUDATA;
   ud->len = sz;
-  /* NOBARRIER: The GCudata is new (marked white). */
-  setgcrefnull(ud->metatable);
-  setgcref(ud->env, obj2gco(env));
+  setgcrefnullrel(ud->metatable);
+  setgcrefrel(ud->env, obj2gco(env));
+  if (env)
+    lj_gc_pubobjobj(L, ud, env);
   lj_udata_udtype_rel(ud, UDTYPE_USERDATA);
   /* Chain to userdata list (after main thread). */
   lj_obj_setgcwr(obj2gco(ud), *lj_obj_gcwref(obj2gco(mainthread(g))));
