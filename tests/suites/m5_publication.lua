@@ -1,0 +1,2476 @@
+local function contains(s, needle)
+  return s:find(needle, 1, true) ~= nil
+end
+
+local function quote(s)
+  s = tostring(s)
+  return "'" .. s:gsub("'", "'\\''") .. "'"
+end
+
+local function count_plain(s, needle)
+  local count, pos = 0, 1
+  while true do
+    local first, last = s:find(needle, pos, true)
+    if not first then return count end
+    count = count + 1
+    pos = last + 1
+  end
+end
+
+local function escape_pattern(s)
+  return (s:gsub("([^%w_])", "%%%1"))
+end
+
+local function has_ident(s, ident)
+  return s:find("%f[%w_]" .. escape_pattern(ident) .. "%f[^%w_]") ~= nil
+end
+
+local function append(dst, src)
+  for i = 1, #src do dst[#dst + 1] = src[i] end
+  return dst
+end
+
+local function basename(path)
+  return path:match("([^/]+)$") or path
+end
+
+local function filter_files(files, pred)
+  local out = {}
+  for i = 1, #files do
+    if pred(files[i]) then out[#out + 1] = files[i] end
+  end
+  return out
+end
+
+local function src_files(t, extensions, opts)
+  opts = opts or {}
+  local files = t:files(t:path("src"), { extensions = extensions })
+  return filter_files(files, function(path)
+    local b = basename(path)
+    if b == "lj_bcdef.h" or b == "lj_ffdef.h" or b == "lj_libdef.h" or
+       b == "lj_recdef.h" or b == "lj_folddef.h" or b == "luajit.h" or
+       b == "lj_vm.S" or (b == "vmdef.lua" and contains(path, "/src/jit/")) then
+      return false
+    end
+    if opts.exclude_host and contains(path, "/host/") then return false end
+    if opts.exclude_vm and basename(path):match("^vm_.*%.dasc$") then return false end
+    if opts.exclude_asm and basename(path):match("^lj_asm_.*%.h$") then return false end
+    if opts.exclude_names then
+      for i = 1, #opts.exclude_names do
+        if b == opts.exclude_names[i] then return false end
+      end
+    end
+    return true
+  end)
+end
+
+local function src_ch_files(t, opts)
+  return src_files(t, { ".c", ".h" }, opts)
+end
+
+local function src_ch_dasc_files(t, opts)
+  return src_files(t, { ".c", ".h", ".dasc" }, opts)
+end
+
+local function src_text_files(t, opts)
+  return src_files(t, { ".c", ".h", ".dasc", ".lua", ".S", ".hpp", ".txt", ".md" }, opts)
+end
+
+local function test_text_files(t)
+  return filter_files(t:files(t:path("tests"), {
+    extensions = { ".c", ".h", ".lua" }
+  }), function(path)
+    return not contains(path, "/tests/suites/")
+  end)
+end
+
+local function assert_text_not_contains(label, data, needle)
+  if contains(data, needle) then
+    error(label .. ": forbidden text present: " .. needle, 2)
+  end
+end
+
+local function assert_text_all_contains(t, label, data, needles)
+  for i = 1, #needles do
+    t:assert_text_contains(label, data, needles[i])
+  end
+end
+
+local function assert_block_contains(t, label, path, start, needles)
+  local block = t:c_block(path, start)
+  assert_text_all_contains(t, label, block, needles)
+  return block
+end
+
+local function assert_block_excludes(label, block, rejects)
+  for i = 1, #rejects do
+    assert_text_not_contains(label, block, rejects[i])
+  end
+end
+
+local function find_pos(label, data, needle)
+  local p = data:find(needle, 1, true)
+  if not p then error(label .. ": missing expected text: " .. needle, 2) end
+  return p
+end
+
+local function assert_before(label, data, a, b)
+  local pa = find_pos(label, data, a)
+  local pb = find_pos(label, data, b)
+  if pa >= pb then
+    error(label .. ": expected `" .. a .. "` before `" .. b .. "`", 2)
+  end
+end
+
+local function as_list(paths)
+  if type(paths) == "string" then return { paths } end
+  return paths
+end
+
+local function assert_no_lines(t, label, paths, pred)
+  local hits = {}
+  paths = as_list(paths)
+  for i = 1, #paths do
+    local path = paths[i]
+    local n = 0
+    for line in (t:read(path) .. "\n"):gmatch("(.-)\n") do
+      n = n + 1
+      if pred(line, path, n) then
+        hits[#hits + 1] = path .. ":" .. n .. ": " .. line
+      end
+    end
+  end
+  if #hits > 0 then
+    error(label .. ":\n" .. table.concat(hits, "\n"), 2)
+  end
+end
+
+local legacy_barriers = {
+  "lj_gc_objbarrier",
+  "lj_gc_objbarriert",
+  "lj_gc_anybarriert",
+  "lj_gc_barrieruv",
+  "lj_gc_barriert",
+  "lj_gc_barrier"
+}
+
+local function is_legacy_barrier(line)
+  for i = 1, #legacy_barriers do
+    if has_ident(line, legacy_barriers[i]) then return true end
+  end
+  return false
+end
+
+local function assert_no_legacy_barriers(t, label, paths)
+  assert_no_lines(t, label, paths, is_legacy_barrier)
+end
+
+local function assert_block_no_legacy(t, label, path, start)
+  local block = t:c_block(path, start)
+  for line in (block .. "\n"):gmatch("(.-)\n") do
+    if is_legacy_barrier(line) then
+      error(label .. ": legacy barrier present: " .. line, 2)
+    end
+  end
+end
+
+local function lua_path_guard(t)
+  return t:path("src", "?.lua") .. ";" .. t:path("src", "jit", "?.lua") .. ";;"
+end
+
+local function run_luajit(t, args)
+  t:luajit(args, { env = { LUA_PATH = lua_path_guard(t) } })
+end
+
+local function luajit_capture(t, args, out)
+  local parts = { "LUA_PATH=" .. quote(lua_path_guard(t)), quote(t:path("src", "luajit")) }
+  for i = 1, #args do parts[#parts + 1] = quote(args[i]) end
+  t:run(table.concat(parts, " ") .. " >" .. quote(out))
+end
+
+local function run_stock(t, args)
+  local parts = {
+    "cd " .. quote(t:path("tests", "stock", "test")),
+    "LUA_PATH=" .. quote(lua_path_guard(t)) .. " " .. quote(t:path("src", "luajit"))
+  }
+  for i = 1, #args do parts[2] = parts[2] .. " " .. quote(args[i]) end
+  t:run(parts[1] .. " && " .. parts[2])
+end
+
+local function build_and_run_c(t, out, cfile, opts)
+  opts = opts or {}
+  t:cc(out, { t:path("tests", cfile) }, {
+    link_luajit = true,
+    libs = { "-lm", "-ldl", "-pthread" }
+  })
+  t:run({ out }, { timeout = opts.timeout })
+end
+
+local function block_has_all(label, block, needles)
+  for i = 1, #needles do
+    if not contains(block, needles[i]) then
+      error(label .. ": missing expected text: " .. needles[i], 2)
+    end
+  end
+end
+
+local function assert_scan_after(t, label, path, start, stop, bad)
+  local active, found = false, false
+  local n = 0
+  for line in (t:read(path) .. "\n"):gmatch("(.-)\n") do
+    n = n + 1
+    if not active and contains(line, start) then
+      active, found = true, true
+    end
+    if active then
+      if bad(line) then error(label .. ": " .. path .. ":" .. n .. ": " .. line, 2) end
+      if stop and contains(line, stop) then return end
+    end
+  end
+  if not found then error(label .. ": missing start text: " .. start, 2) end
+end
+
+local function table_value_smoke()
+  return [=[
+local util = require("jit.util")
+local linfo = util.funcinfo(function() return 1 end)
+assert(linfo.proto ~= nil and linfo.upvalues ~= nil)
+local cinfo = util.funcinfo(print)
+assert(cinfo.addr ~= nil and cinfo.upvalues ~= nil)
+jit.flush()
+jit.opt.start("hotloop=1")
+local function hot(n)
+  local s = 0
+  for i = 1, n do s = s + i end
+  return s
+end
+for _ = 1, 5 do hot(20) end
+local traced
+for tr = 1, 32 do
+  local info = util.traceinfo(tr)
+  if info then
+    assert(type(info.nins) == "number" and type(info.linktype) == "string")
+    traced = tr
+    break
+  end
+end
+assert(traced)
+local snap
+for sn = 0, 32 do
+  snap = util.tracesnap(traced, sn)
+  if snap then break end
+end
+assert(snap and type(snap[0]) == "number" and type(snap[1]) == "number")
+local lines = debug.getinfo(function()
+  local x = 1
+  return x
+end, "L").activelines
+assert(type(lines) == "table")
+local saw_line = false
+for line, active in pairs(lines) do
+  if type(line) == "number" and active == true then
+    saw_line = true
+    break
+  end
+end
+assert(saw_line)
+local t = { 1, 2, 3 }
+t.name = "table-value-publish"
+assert(t[3] == 3 and t.name == "table-value-publish")
+assert(("table-value-publish"):sub(1, 5) == "table")
+local function event_cb() end
+jit.attach(event_cb, "bc")
+jit.attach(event_cb)
+do
+  local ffi = require("ffi")
+  local x = 1LL
+  assert(type(x) == "cdata" and tonumber(x) == 1 and ffi.typeof(x))
+end
+do
+  local buffer = require("string.buffer")
+  local mt = {}
+  local dict = { "key", "hello", "key", false }
+  local dict_mt = { mt, mt, false }
+  local b = buffer.new({ dict = dict, metatable = dict_mt })
+  b:encode(setmetatable({ key = "hello" }, mt))
+  local out = b:decode()
+  assert(out.key == "hello" and getmetatable(out) == mt)
+end
+]=]
+end
+
+local function tset_nil_smoke()
+  return [=[
+local mt = {
+  __newindex = function(t, k, v) rawset(t, "hit", tostring(k) .. ":" .. tostring(v)) end
+}
+local t = setmetatable({ a = 1 }, mt)
+t.a = 2
+assert(t.a == 2 and t.hit == nil)
+t.b = 3
+assert(t.hit == "b:3")
+local a = { 1, 2 }
+a[1] = 10
+local k = 2
+a[k] = 20
+assert(a[1] == 10 and a[2] == 20)
+local function many() return 1, 2, 3 end
+local m = { many() }
+assert(m[1] == 1 and m[2] == 2 and m[3] == 3)
+local function spread(n)
+  local r = {}
+  for i = 1, n do r[i] = i end
+  return unpack(r, 1, n)
+end
+local big = { spread(96) }
+assert(#big == 96 and big[1] == 1 and big[96] == 96)
+local s = { spread(96) }
+s[64] = 640
+local kk = 70
+s[kk] = 700
+for i = 80, 82 do s[i] = i * 10 end
+assert(s[64] == 640 and s[70] == 700 and s[82] == 820)
+]=]
+end
+
+local function jit_trace_publish_smoke()
+  return [=[
+local util = require"jit.util"
+local function tracecount()
+  local n = 0
+  for i = 1, 200 do
+    if util.traceinfo(i) then n = n + 1 end
+  end
+  return n
+end
+jit.off(tracecount, true)
+
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local function f(n)
+  local s = 0
+  for i = 1, n do s = s + i end
+  return s
+end
+for _ = 1, 40 do
+  assert(f(200) == 20100)
+end
+assert(tracecount() > 0, "no root trace was published")
+jit.flush()
+assert(tracecount() == 0, "trace slots were not cleared")
+
+jit.flush()
+jit.opt.start("hotloop=1")
+local function f1(a)
+  if a > 0 then
+    local b = f1(a - 1)
+    return function()
+      if type(b) == "function" then return a + b() end
+      return a + b
+    end
+  end
+  return a
+end
+local function f2(a) return f1(a)() end
+for _ = 1, 41 do
+  assert(f2(4) + f2(4) == 20)
+end
+
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local function side(n, flip)
+  local s = 0
+  for i = 1, n do
+    if flip and i % 3 == 0 then s = s + i else s = s - 1 end
+  end
+  return s
+end
+local function expect(n, flip)
+  local s = 0
+  for i = 1, n do
+    if flip and i % 3 == 0 then s = s + i else s = s - 1 end
+  end
+  return s
+end
+for _ = 1, 60 do
+  assert(side(90, false) == expect(90, false))
+end
+local before = tracecount()
+for _ = 1, 120 do
+  assert(side(90, true) == expect(90, true))
+end
+assert(tracecount() > before, "no side trace was published")
+local after_side = tracecount()
+for _ = 1, 120 do
+  assert(side(90, true) == expect(90, true))
+end
+assert(util.traceinfo(1), "missing root trace 1")
+jit.flush(1)
+assert(not util.traceinfo(1), "scoped root flush did not clear root slot")
+assert(tracecount() < after_side, "scoped root flush did not retire any slots")
+jit.flush()
+assert(tracecount() == 0, "full flush after scoped root flush left traces")
+for _ = 1, 20 do
+  assert(side(90, true) == expect(90, true))
+end
+print("jit-trace-publish-smoke OK")
+]=]
+end
+
+local function check_base_storetab_str(t)
+  local block = t:c_block(t:path("src", "lib_base.c"),
+                          "static void base_storetab_str(lua_State *L,")
+  assert_block_excludes("base_storetab_str", block, {
+    "lj_tab_storetab(L, dst,"
+  })
+  block_has_all("base_storetab_str", block, {
+    "for (;;)",
+    "lj_tab_setstr(L, tab, key)",
+    "lj_tab_trystoretv_cas(L, dst, &tv) == LJ_TAB_STORE_CAS_OK",
+    "base table store saw FORWARD after lookup."
+  })
+end
+
+local function check_luaopen_base(t)
+  local block = t:c_block(t:path("src", "lib_base.c"),
+                          "LUALIB_API int luaopen_base(lua_State *L)")
+  assert_block_excludes("luaopen_base", block, {
+    'lj_tab_storetab(L, lj_tab_setstr(L, env, lj_str_newlit(L, "_G")), env)'
+  })
+  block_has_all("luaopen_base", block, {
+    'base_storetab_str(L, env, lj_str_newlit(L, "_G"), env)'
+  })
+end
+
+local function check_state_claim_block(t, label, path, start, needles)
+  local block = t:c_block(path, start)
+  block_has_all(label, block, needles)
+end
+
+return function(add)
+  add({
+    name = "m5_runtime_publish",
+    description = "runtime publication wrapper guards",
+    run = function(t)
+      local lj_gc_h = t:path("src", "lj_gc.h")
+      t:assert_contains(lj_gc_h, "lj_gc_pubtabobj")
+      t:assert_all_contains(lj_gc_h, {
+        "static LJ_AINLINE void lj_gc_barriertv_",
+        "static LJ_AINLINE void lj_gc_barrierobjtv_",
+        "lj_tv_load_acq(&snap, tv)",
+        "lj_gc2_barrier_tv_pair(L, obj2gco(t), &snap)",
+        "lj_gc2_barrier_tv_pair(L, p, &snap)",
+        "tviswhite(&snap)",
+        "gcV(&snap)"
+      })
+
+      local active = false
+      assert_no_lines(t, "publication wrappers must not inspect caller TValue slots directly",
+                      lj_gc_h, function(line)
+        if line:find("^#define lj_gc_") and
+           (contains(line, "lj_gc_barriert(") or contains(line, "lj_gc_barrier(") or
+            contains(line, "lj_gc_pubtabtv(") or contains(line, "lj_gc_pubobjtv(")) then
+          active = true
+          return false
+        end
+        if active and line:find("^#define") then active = false end
+        return active and (contains(line, "lj_gc2_barrier_tv((L), (tv))") or
+                           contains(line, "tviswhite(tv)") or
+                           contains(line, "gcV(tv)"))
+      end)
+
+      assert_no_legacy_barriers(t, "converted runtime files must use M5 publication wrappers", {
+        t:path("src", "lib_base.c"),
+        t:path("src", "lib_buffer.c"),
+        t:path("src", "lib_ffi.c"),
+        t:path("src", "lib_table.c"),
+        t:path("src", "lj_buf.c"),
+        t:path("src", "lj_ccallback.c"),
+        t:path("src", "lj_cdata.c"),
+        t:path("src", "lj_clib.c"),
+        t:path("src", "lj_lib.c"),
+        t:path("src", "lj_meta.c")
+      })
+
+      for _, fn in ipairs({
+        "LUALIB_API int luaL_newmetatable",
+        "LUA_API void lua_rawset(",
+        "LUA_API void lua_rawseti",
+        "LUA_API int lua_setmetatable",
+        "LUA_API int lua_setfenv"
+      }) do
+        assert_block_no_legacy(t, "converted lj_api.c publication function regressed: " .. fn,
+                               t:path("src", "lj_api.c"), fn)
+      end
+      t:assert_contains(t:path("src", "lj_api.c"), "lj_gc_pubobjtv(L, fn, f)")
+      check_base_storetab_str(t)
+      check_luaopen_base(t)
+
+      local top_c = src_files(t, ".c", { })
+      top_c = filter_files(top_c, function(path)
+        return not contains(path:sub(#t:path("src") + 2), "/") and
+               basename(path) ~= "lj_gc.c"
+      end)
+      assert_no_legacy_barriers(t, "legacy barrier call sites regressed outside lj_gc.c", top_c)
+      print("M5 runtime publication guard passed")
+    end
+  })
+
+  add({
+    name = "m5_state_owner",
+    description = "lua_State owner claim guards",
+    run = function(t)
+      t:build({ clean = true, quiet = true })
+      build_and_run_c(t, t:tmp("lj_t-state-owner"), "t-state-owner.c")
+
+      local lj_api = t:path("src", "lj_api.c")
+      if count_plain(t:read(lj_api), "lj_state_tryclaim(") < 2 then
+        error("lua_xmove must claim both foreign states")
+      end
+
+      check_state_claim_block(t, "lua_status", lj_api, "LUA_API int lua_status", {
+        "lj_state_tryclaim(L",
+        "lj_state_dropclaim(&claim)"
+      })
+      check_state_claim_block(t, "lua_getfenv", lj_api, "LUA_API void lua_getfenv", {
+        "tvisthread(o)",
+        "lj_state_tryclaim(L1",
+        "lj_state_dropclaim(&claim)"
+      })
+      check_state_claim_block(t, "lua_setfenv", lj_api, "LUA_API int lua_setfenv", {
+        "tvisthread(o)",
+        "lj_state_tryclaim(L1",
+        "lj_state_dropclaim(&claim)"
+      })
+      check_state_claim_block(t, "lua_resume", lj_api, "LUA_API int lua_resume", {
+        "lj_state_tryclaim(L",
+        "lj_vm_resume",
+        "lj_state_dropclaim(&claim)"
+      })
+
+      local lib_base = t:path("src", "lib_base.c")
+      check_state_claim_block(t, "coroutine.status", lib_base,
+                              "LJLIB_CF(coroutine_status)", {
+        "lj_state_tryclaim(co",
+        "lj_state_dropclaim(&claim)"
+      })
+      check_state_claim_block(t, "ffh_resume", lib_base,
+                              "static int ffh_resume(lua_State *L, lua_State *co, int wrap)", {
+        "lj_state_tryclaim(co",
+        "thread busy",
+        "lj_state_dropclaim(&claim)"
+      })
+      check_state_claim_block(t, "lj_ffh_coroutine_claim", lib_base,
+                              "lua_State *LJ_FASTCALL lj_ffh_coroutine_claim", {
+        "lj_state_tryclaim(co",
+        "return NULL",
+        "claim.release"
+      })
+
+      local macro = t:text_between(t:path("src", "vm_x64.dasc"),
+                                   ".macro coroutine_resume_wrap", ".endmacro")
+      block_has_all("coroutine_resume_wrap", macro, {
+        "mov TMP1d, NARGS:RDd",
+        "call extern lj_ffh_coroutine_claim",
+        "mov NARGS:RDd, TMP1d",
+        "mov CARG1, TMP1",
+        "and CARG1, -2",
+        "mov CARG2, TMP1",
+        "call extern lj_ffh_coroutine_wrap_err",
+        "DISPATCH_TG(stack_dirty_epoch)",
+        "->thr_owner, 0"
+      })
+
+      local lib_debug = t:path("src", "lib_debug.c")
+      check_state_claim_block(t, "debug_claimthread", lib_debug,
+                              "static void debug_claimthread", {
+        "lj_state_tryclaim(L1",
+        "thread busy"
+      })
+      for _, fn in ipairs({ "debug_getinfo", "debug_getlocal", "debug_setlocal" }) do
+        check_state_claim_block(t, fn, lib_debug, "LJLIB_CF(" .. fn .. ")", {
+          "debug_claimthread(L, L1",
+          "lj_state_dropclaim(&claim)"
+        })
+      end
+
+      local lj_debug = t:path("src", "lj_debug.c")
+      for _, fn in ipairs({ "lua_getlocal", "lua_setlocal", "lua_getinfo", "lua_getstack" }) do
+        check_state_claim_block(t, fn, lj_debug, fn .. "(", {
+          "lj_state_tryclaim(L",
+          "lj_state_dropclaim(&claim)"
+        })
+      end
+      check_state_claim_block(t, "luaL_traceback", lj_debug,
+                              "LUALIB_API void luaL_traceback", {
+        "lj_state_tryclaim(L1",
+        "lj_state_dropclaim(&claim)"
+      })
+      check_state_claim_block(t, "luaJIT_profile_dumpstack",
+                              t:path("src", "lj_profile.c"),
+                              "LUA_API const char *luaJIT_profile_dumpstack", {
+        "lj_state_tryclaim(L",
+        "lj_debug_dumpstack(L",
+        "lj_state_dropclaim(&claim)"
+      })
+      check_state_claim_block(t, "jit_profile_callback",
+                              t:path("src", "lib_jit.c"),
+                              "static void jit_profile_callback", {
+        "lj_state_tryclaim(L2",
+        "lua_pcall(L2",
+        "lj_state_dropclaim(&claim)"
+      })
+      print("M5 lua_State owner tests passed")
+    end
+  })
+
+  add({
+    name = "m5_cell_ops",
+    description = "x64 local-cell bytecode substrate guards",
+    run = function(t)
+      t:build({ clean = true, quiet = true })
+      t:assert_ordered(t:path("src", "lj_bc.h"), {
+        "_(FUNCCW,",
+        "_(CNEW,",
+        "_(CGET,",
+        "_(CSET,"
+      })
+
+      local vm = t:path("src", "vm_x64.dasc")
+      t:assert_all_contains(vm, {
+        "case BC_CNEW:",
+        "call extern lj_func_newuvcell",
+        "case BC_CGET:",
+        "case BC_CSET:",
+        "cmp OP, BC__MAX",
+        "cmp OP, BC_FUNCCW",
+        "Local cell ops are ordinary bytecode."
+      })
+      t:assert_text_contains("BC_CSET", t:text_between(vm, "case BC_CSET:", "case BC_USETV:"),
+                             "call extern lj_func_storeuv_pub")
+      t:assert_all_any_contains({
+        t:path("src", "lj_func.c"),
+        t:path("src", "lj_func.h")
+      }, {
+        "lj_func_newuvcell",
+        "func_celluv",
+        "proto_celluv(pt)",
+        "itype(slot) == LJ_TUPVAL",
+        "gco2uv(gcV(slot))"
+      })
+      t:assert_all_contains(t:path("src", "lj_debug.c"), {
+        "case BC_CGET:",
+        "debug_localcell",
+        "lj_gc_pubuv(G(L), o)"
+      })
+      t:assert_all_contains(t:path("src", "lj_parse.c"), {
+        "BC_CNEW",
+        "BC_CGET",
+        "BC_CSET"
+      })
+      assert_scan_after(t, "source child cell-upvalue protos must not be marked NOJIT",
+                        t:path("src", "lj_parse.c"), "if (fs_has_celluv(fs))",
+                        "pt->numparams", function(line)
+        return contains(line, "PROTO_NOJIT")
+      end)
+      t:assert_all_any_contains({
+        t:path("src", "lj_tg.h"),
+        t:path("src", "lj_dispatch.c")
+      }, {
+        "#define GG_LEN_SDISP\tBC__MAX",
+        "dispatch_setins_cells",
+        "dispatch_copyins_cells",
+        "dispatch_setcall",
+        "for (i = BC_FUNCF; i <= BC_FUNCCW; i++)",
+        "for (i = BC__MAX; i < GG_LEN_DDISP; i++)"
+      })
+      t:assert_all_any_contains({
+        t:path("src", "lj_record.c"),
+        t:path("src", "lj_asm_x86.h")
+      }, {
+        "IRT(IR_UREFC, IRT_PGC), slotref",
+        "irt_isp32(IR(ir->op1)->t)",
+        "bc_isfunc_or_ff"
+      })
+
+      local out = t:tmp("lj_m5_cell_ops_bc")
+      luajit_capture(t, { "-bl", "-e", [=[
+local x = 0
+local function f()
+  x = x + 1
+  return x
+end
+x = 7
+local function g()
+  local y = 1
+  return function()
+    y = y + 1
+    return y
+  end
+end
+return f, g, x
+]=] }, out)
+      local bc = t:read(out)
+      if not (contains(bc, "CGET") or contains(bc, "CSET")) then
+        error("captured local parser output must contain CGET/CSET")
+      end
+      luajit_capture(t, { "-bl", "-e", [=[
+local function f()
+  return f
+end
+return f
+]=] }, out)
+      bc = t:read(out)
+      if not (contains(bc, "CNEW") and contains(bc, "CSET")) then
+        error("self-captured local function must use CNEW/CSET")
+      end
+      t:remove(out)
+
+      run_luajit(t, { "-e", [=[
+local dumped = string.dump(function()
+  local x = 0
+  return function()
+    x = x + 1
+    return x
+  end
+end)
+local outer = assert(loadstring(dumped))
+local inner = outer()
+assert(inner() == 1 and inner() == 2)
+]=] })
+      run_luajit(t, { "-e", [=[
+jit.flush()
+jit.opt.start("hotloop=1")
+local util = require"jit.util"
+local function run(n)
+  local x = 0
+  local function touch() return x end
+  for i = 1, n do x = x + 1 end
+  return x, touch
+end
+local v, f = run(200)
+assert(v == 200 and f() == 200)
+assert(util.traceinfo(1), "expected traced CGET/CSET owner loop")
+local v2, f2 = run(20)
+assert(v2 == 20 and f2() == 20)
+]=] })
+      run_luajit(t, { "-e", [=[
+local util = require"jit.util"
+local pool = { "even", "odd" }
+jit.flush()
+jit.opt.start("hotloop=1")
+local function run(n)
+  local x = pool[1]
+  local function get() return x end
+  for i = 1, n do x = pool[(i % 2) + 1] end
+  return get()
+end
+assert(run(200) == pool[1])
+assert(util.traceinfo(1), "expected traced GC-valued CSET owner loop")
+collectgarbage()
+assert(run(20) == pool[1])
+]=] })
+      run_luajit(t, { "-e", [=[
+jit.flush()
+jit.opt.start("hotloop=1")
+local util = require"jit.util"
+local src = function(n)
+  local x = 0
+  local function touch() return x end
+  for i = 1, n do x = x + 1 end
+  return x, touch
+end
+local run = assert(loadstring(string.dump(src)))
+local v, f = run(200)
+assert(v == 200 and f() == 200)
+assert(util.traceinfo(1), "expected loaded owner CGET/CSET trace")
+local v2, f2 = run(20)
+assert(v2 == 20 and f2() == 20)
+]=] })
+      run_luajit(t, { "-e", [=[
+jit.flush()
+jit.opt.start("hotloop=1")
+local util = require"jit.util"
+local function make(seed)
+  local x = seed
+  return function()
+    x = x + 1
+    return x
+  end
+end
+local function run(seed, n)
+  local f = make(seed)
+  local last
+  for i = 1, n do last = f() end
+  return last, f
+end
+local v, f = run(0, 200)
+assert(v == 200 and f() == 201)
+assert(util.traceinfo(1), "expected traced child numeric upvalue loop")
+local v2, f2 = run(1000, 30)
+assert(v2 == 1030 and f2() == 1031)
+assert(f() == 202)
+]=] })
+      run_luajit(t, { "-e", [=[
+local util = require"jit.util"
+local pool = { "even", "odd" }
+jit.flush()
+jit.opt.start("hotloop=1")
+local function make(seed)
+  local n = seed
+  local x = pool[1]
+  return function()
+    n = n + 1
+    x = pool[(n % 2) + 1]
+    return n, x
+  end
+end
+local function run(seed, n)
+  local f = make(seed)
+  local last, lastx
+  for i = 1, n do last, lastx = f() end
+  return last, lastx, f
+end
+local v, xv, f = run(0, 200)
+local fv, fx = f()
+assert(v == 200 and xv == pool[1] and fv == 201 and fx == pool[2])
+assert(util.traceinfo(1), "expected traced child GC upvalue loop")
+collectgarbage()
+local v2, xv2, f2 = run(1000, 30)
+local f2v, f2x = f2()
+local fv2, fx2 = f()
+assert(v2 == 1030 and xv2 == pool[1] and f2v == 1031 and f2x == pool[2])
+assert(fv2 == 202 and fx2 == pool[1])
+]=] })
+      run_luajit(t, { "-e", [=[
+jit.flush()
+jit.opt.start("hotloop=1")
+local util = require"jit.util"
+local src = function(seed, n)
+  local x = seed
+  local function bump()
+    x = x + 1
+    return x
+  end
+  local last
+  for i = 1, n do last = bump() end
+  return last, bump
+end
+local run = assert(loadstring(string.dump(src)))
+local v, f = run(0, 200)
+assert(v == 200 and f() == 201)
+assert(util.traceinfo(1), "expected loaded child upvalue trace")
+local v2, f2 = run(1000, 30)
+assert(v2 == 1030 and f2() == 1031)
+assert(f() == 202)
+]=] })
+      run_luajit(t, { "-e", [=[
+jit.flush()
+jit.opt.start("hotloop=1")
+local util = require"jit.util"
+local src = function(n)
+  local keep
+  for i = 1, n do
+    local function f() return f end
+    keep = f
+  end
+  return keep
+end
+local run = assert(loadstring(string.dump(src)))
+local f = run(30)
+assert(f() == f)
+assert(util.traceinfo(1), "expected loaded CNEW creation trace")
+]=] })
+      run_stock(t, { "test.lua", "--quiet", "lang/upvalue" })
+      run_stock(t, { "misc/uclo.lua" })
+      run_stock(t, { "test.lua", "--quiet", "opt/fwd/upval.lua" })
+      run_stock(t, { "test.lua", "--quiet", "lang/goto.lua" })
+      print("M5 local-cell opcode substrate guard passed")
+    end
+  })
+
+  add({
+    name = "m5_jit_trace_publish",
+    description = "JIT trace-slot and trace-link publication guards",
+    run = function(t)
+      local vm = t:path("src", "vm_x64.dasc")
+      t:assert_all_any_contains({
+        t:path("src", "lj_jit.h"),
+        t:path("src", "lj_ir.h")
+      }, {
+        "LJ_TRACE_PENDING",
+        "traceref_fromgco(GCobj *o)",
+        "TraceVec *tracev",
+        "TraceVec *retiredtracev",
+        "TraceVec *tv = tracevec_acq(J)",
+        "gcref_acq(tv->slot[(n)])",
+        "traceslot_pending(J, n)",
+        "traceslot_publish(J, n, T)",
+        "traceslot_clear(J, n)",
+        "traceno16_acq(const uint16_t *p)",
+        "trace_link_acq(T)",
+        "trace_nextroot_acq(T)",
+        "trace_nextside_acq(T)",
+        "proto_trace_acq(pt)",
+        "MCode **exittab",
+        "trace_exittarget_acq(T, exitno)",
+        "trace_exittarget_rel(T, exitno, target)",
+        "trace_startptgco_acq(GCtrace *T)",
+        "trace_startpt_acq(GCtrace *T)",
+        "trace_startpt_rel(GCtrace *T, GCproto *pt)",
+        "trace_startpt_clear(GCtrace *T)",
+        "ir_iskgc_acq(const IRIns *ir)",
+        "ir_kgc_load_acq(const IRIns *ir)",
+        "ir_kgc_store_rel(IRIns *ir, GCobj *o)",
+        "ir_kgc_publish(IRIns *ir, GCobj *o, IRType t)"
+      })
+      t:assert_all_any_contains({
+        t:path("src", "lj_obj.h"),
+        t:path("src", "lj_jit.h"),
+        t:path("src", "lj_trace.c"),
+        t:path("src", "lj_asm.c"),
+        t:path("src", "lj_safepoint.c"),
+        t:path("src", "lj_gc.c"),
+        t:path("src", "lj_gc2.c")
+      }, {
+        "tracevec_new(lua_State *L, MSize sizetrace)",
+        "tracevec_publish(J, newtv)",
+        "tracevec_retire(J, oldtv)",
+        "GCtrace *retiredtraces",
+        "uint64_t retire_epoch",
+        "struct GCtrace *retired_next",
+        "uint64_t jit_scoped_slots_retired",
+        "la_store64_rlx(&g->gc2.jit_scoped_slots_retired, 0)",
+        "trace_retire(global_State *g, GCtrace *T)",
+        "lj_gc_arena_markmem(g, T)",
+        "trace_freebody(global_State *g, GCtrace *T)",
+        "lj_trace_free_unpublished(global_State *g, GCtrace *T)",
+        "lj_trace_free_unpublished(J2G(J), J->curfinal)",
+        "trace_markbody(global_State *g, GCtrace *T, int gc2)",
+        "lj_trace_reclaim_retired(global_State *g, uint64_t completed_epoch)",
+        "lj_trace_reclaim_retired(g, epoch)",
+        "lj_gc2_reclaim_retired(g, epoch)",
+        "lj_trace_markvecs(g, 1)",
+        "lj_trace_markvecs(g, 0)"
+      })
+      t:assert_all_any_contains({
+        t:path("src", "lj_jit.h"),
+        t:path("src", "lj_mcode.c"),
+        t:path("src", "lj_safepoint.c"),
+        t:path("src", "lj_trace.c"),
+        t:path("src", "lj_gc.c"),
+        t:path("src", "lj_gc2.c")
+      }, {
+        "typedef struct MCodeRetire",
+        "MCodeRetire *retiredmcode",
+        "MCodeRetire *ret = lj_mem_newt(J->L, sizeof(MCodeRetire), MCodeRetire)",
+        "mcode_retired_push(jit_State *J, MCodeRetire *ret)",
+        "lj_mcode_reclaim_retired(global_State *g, uint64_t completed_epoch)",
+        "lj_mcode_reclaim_retired(g, epoch)",
+        "lj_gc2_reclaim_retired(g, epoch)",
+        "lj_mcode_freeretired(g)",
+        "lj_mcode_markretired(g, 1)",
+        "lj_mcode_markretired(g, 0)"
+      })
+      t:assert_all_any_contains({
+        t:path("src", "lj_bc.h"),
+        t:path("src", "lj_dispatch.c")
+      }, {
+        "bc_publish(const uint32_t *pc, uint32_t ins)",
+        "la_store32_rel((uint32_t *)pc, ins)",
+        "la_load32_acq((uint32_t *)pc)",
+        "bc_publish_op(const uint32_t *pc, BCOp op)",
+        "bc_publish_d(const uint32_t *pc, uint32_t d)",
+        "lj_bc_publish_vm(uint32_t *pc, uint32_t ins)",
+        "lj_bc_publish_op_vm(uint32_t *pc, BCOp op)"
+      })
+      t:assert_all_contains(t:path("src", "lj_target_x86.h"), {
+        "EXITSTUB_TRACE_SPACING",
+        "exitstub_trace_addr(T, exitno)"
+      })
+      t:assert_all_contains(t:path("src", "lj_asm_x86.h"), {
+        "asm_exitstub_trace_setup(ASMState *as, ExitNo nexits)",
+        "mov rax, moffs64",
+        "xchg [rsp], rax; ret",
+        "exitstub_trace_addr(as->T, as->snapno)"
+      })
+      t:assert_all_any_contains({
+        t:path("src", "lj_trace.c"),
+        t:path("src", "lj_safepoint.c")
+      }, {
+        "trace_exittab_reset(jit_State *J, GCtrace *T)",
+        "trace_exittab_resetroot(J, T->traceno)",
+        "trace_exittab_reset(J, T);",
+        "lj_trace_flushall_hs(lua_State *L)",
+        "lj_trace_flushscope_hs(global_State *g, uint32_t work)",
+        "if (work != 0)",
+        "lj_gc2_handshake(g, LJ_GC2_HS_EXIT_TRACES|LJ_GC2_HS_FLUSHJ)",
+        "lj_trace_flushall(mainthread(g));  /* 08 section 8.7 leader action. */"
+      })
+      t:assert_all_any_contains({
+        t:path("src", "lj_trace.c"),
+        t:path("src", "lj_dispatch.c")
+      }, {
+        "LJ_TRACE_SCOPE_FLUSHING",
+        "static uint32_t trace_flushroot(jit_State *J, GCtrace *T, int scoped)",
+        "uint32_t lj_trace_flush(jit_State *J, TraceNo traceno)",
+        "uint32_t lj_trace_flushproto(global_State *g, GCproto *pt)",
+        "la_store64_rel(&T->retire_epoch, LJ_TRACE_SCOPE_FLUSHING)",
+        "trace_scope_clear_slot(J, i, T, epoch);",
+        "lj_trace_flushscope_retire(global_State *g, uint64_t epoch)",
+        "uint32_t lj_trace_flushscope(jit_State *J, TraceNo traceno)",
+        "root && root->traceno == T->root",
+        "T->traceno = 0;  /* Scoped slot retired after HS_EXIT_TRACES grace. */",
+        "epoch = la_load64_acq(&T->retire_epoch)",
+        "epoch == 0 || epoch == LJ_TRACE_SCOPE_FLUSHING",
+        "la_store64_rel(&T->retire_epoch, epoch)",
+        "la_add64_rlx(&g->gc2.jit_scoped_slots_retired, retired)",
+        "return (mode & LUAJIT_MODE_FLUSH) ? flushed : flushed + 1u;",
+        "return trace_flushroot(J, T, 1);",
+        "flushed += setptmode(g, pt, mode);",
+        "lj_trace_flushscope_hs(g, flushed);",
+        "(void)lj_trace_flushscope(G2J(g), idx);"
+      })
+
+      t:assert_contains(t:path("tests", "t-jit-trace-retire.c"),
+                        "scoped_epoch = la_load64_acq(&g->gc2.hs_epoch) + 1u;")
+      t:assert_not_contains(t:path("src", "lj_safepoint.c"),
+                            "Temporary single-mutator flush action")
+      t:assert_not_contains(t:path("src", "lj_dispatch.c"),
+                            "lj_gc2_handshake(g, LJ_GC2_HS_EXIT_TRACES);")
+      assert_no_lines(t, "GCtrace.startpt must use trace_startpt acquire/release helpers",
+                      src_ch_files(t, { exclude_host = true }), function(line)
+        return contains(line, "startpt") and
+               (contains(line, "gcref(") or contains(line, "setgcref(") or
+                contains(line, "setgcrefnull("))
+      end)
+      assert_no_lines(t, "IR KGC constants must publish through release helpers", {
+        t:path("src", "lj_ir.c"),
+        t:path("src", "lj_asm.c")
+      }, function(line)
+        return contains(line, "setgcref(ir[LJ_GC64].gcr") or
+               contains(line, "setgcref(IR(as->J->ktrace)[LJ_GC64].gcr") or
+               contains(line, "IR(as->J->ktrace)->o = IR_KGC")
+      end)
+      assert_no_lines(t, "GC trace traversal must acquire-snapshot IR KGC constants", {
+        t:path("src", "lj_trace.c"),
+        t:path("src", "lj_gc.c"),
+        t:path("src", "lj_gc2.c")
+      }, function(line)
+        return contains(line, "ir->o == IR_KGC") or contains(line, "ir_kgc(ir)")
+      end)
+      assert_no_lines(t, "public full flush callers must route through HS_FLUSHJ", {
+        t:path("src", "lj_api.c"),
+        t:path("src", "lj_dispatch.c"),
+        t:path("src", "lj_profile.c")
+      }, function(line)
+        return contains(line, "lj_trace_flushall(L)")
+      end)
+      assert_no_lines(t, "J->trace slots must use acquire/release trace helpers", {
+        t:path("src", "lj_trace.c"),
+        t:path("src", "lj_jit.h")
+      }, function(line)
+        return contains(line, "setgcrefp(J->trace") or
+               contains(line, "setgcrefnull(J->trace") or
+               contains(line, "gcref(J->trace")
+      end)
+      assert_no_lines(t, "trace vectors must use TraceVec RCU helpers, not raw slot vectors",
+                      append(src_text_files(t), test_text_files(t)), function(line)
+        return contains(line, "lj_mem_growvec(J->L, J->trace") or
+               contains(line, "lj_mem_freevec(g, J->trace") or
+               contains(line, "gcref(J->trace")
+      end)
+      assert_no_lines(t, "shared trace-number fields must use acquire/release helpers", {
+        t:path("src", "lj_trace.c"),
+        t:path("src", "lj_gc.c"),
+        t:path("src", "lj_gc2.c"),
+        t:path("src", "lib_jit.c"),
+        t:path("src", "lj_bcwrite.c")
+      }, function(line)
+        return line:find("pt%->trace%f[^%w_]") ~= nil or
+               line:find("%->link%f[^%w_]") ~= nil or
+               line:find("%->nextroot%f[^%w_]") ~= nil or
+               line:find("%->nextside%f[^%w_]") ~= nil
+      end)
+      assert_no_lines(t, "live bytecode patches must use full-word release publication", {
+        t:path("src", "lj_trace.c"),
+        t:path("src", "lj_record.c"),
+        t:path("src", "lj_dispatch.c")
+      }, function(line)
+        local compact = line:gsub("%s+", "")
+        return contains(line, "setbc_op(") or contains(line, "setbc_d(") or
+               contains(line, "setbc_j(") or contains(compact, "*J->patchpc=") or
+               contains(compact, "*pc=T->startins")
+      end)
+      assert_no_lines(t, "x64 live bytecode patches must use full-word publication helpers",
+                      vm, function(line)
+        return contains(line, "mov PC_OP,") or contains(line, "mov byte [PC]") or
+               contains(line, "mov dword [PC]")
+      end)
+      t:assert_all_contains(vm, {
+        "call extern lj_bc_publish_op_vm",
+        "call extern lj_bc_publish_vm"
+      })
+      t:assert_not_contains(t:path("src", "lj_trace.c"), "lj_asm_patchexit(J, parent")
+      local trace_stop = t:c_block(t:path("src", "lj_trace.c"),
+                                   "static void trace_stop(jit_State *J)")
+      local commit = find_pos("trace_stop", trace_stop, "lj_mcode_commit(J, J->cur.mcode)")
+      local save = find_pos("trace_stop", trace_stop, "trace_save(J, T)")
+      if not (commit < save and
+              save < find_pos("trace_stop", trace_stop, "bc_publish(patchpc, patchins)") and
+              save < find_pos("trace_stop", trace_stop, "trace_exittarget_rel(parent, J->exitno, T->mcode)") and
+              save < find_pos("trace_stop", trace_stop, "trace_link_rel(parent, traceno)")) then
+        error("trace_stop must publish final trace before bytecode/exit/link go-signals")
+      end
+      t:assert_contains(t:path("src", "lj_asm_x86.h"),
+                        "lnk == as->T->traceno ? as->T : traceref(as->J, lnk)")
+      t:assert_contains(t:path("tools", "ci", "m5_concurrent_objects.sh"),
+                        "m5_jit_trace_publish.sh")
+
+      t:build({ quiet = true })
+      build_and_run_c(t, t:tmp("lj_t-jit-tracevec"), "t-jit-tracevec.c",
+                      { timeout = "20s" })
+      build_and_run_c(t, t:tmp("lj_t-jit-mcode-retire"), "t-jit-mcode-retire.c",
+                      { timeout = "20s" })
+      build_and_run_c(t, t:tmp("lj_t-jit-trace-retire"), "t-jit-trace-retire.c",
+                      { timeout = "20s" })
+      run_luajit(t, { "-e", jit_trace_publish_smoke() })
+      print("M5 JIT trace publication guard passed")
+    end
+  })
+
+  add({
+    name = "m5_metatable_publish",
+    description = "runtime metatable release-publication guards",
+    run = function(t)
+      local lj_api = t:path("src", "lj_api.c")
+      local lib_base = t:path("src", "lib_base.c")
+      assert_block_excludes("lua_setmetatable", t:c_block(lj_api, "LUA_API int lua_setmetatable("), {
+        "setgcref("
+      })
+      assert_block_excludes("setmetatable", t:c_block(lib_base, "LJLIB_ASM(setmetatable)"), {
+        "setgcref("
+      })
+      assert_no_lines(t, "runtime metatable publications must use release stores", {
+        t:path("src", "lj_serialize.c"),
+        t:path("src", "lj_snap.c"),
+        lib_base,
+        t:path("src", "lj_ctype.c")
+      }, function(line)
+        return contains(line, "setgcref(t->metatable")
+      end)
+      assert_no_lines(t, "userdata constructor env/metatable publications must use release stores",
+                      src_text_files(t), function(line)
+        return contains(line, "setgcref(ud->metatable") or
+               contains(line, "setgcrefr(ud->metatable") or
+               contains(line, "setgcref(ud->env")
+      end)
+      assert_no_lines(t, "new-thread env publication must use release stores",
+                      src_text_files(t), function(line)
+        return contains(line, "setgcref(L1->env") or contains(line, "setgcrefr(L1->env")
+      end)
+      assert_no_lines(t, "SBuf dictionary publications must use release stores",
+                      src_text_files(t), function(line)
+        return contains(line, "setgcref(sbx->dict_str") or
+               contains(line, "setgcref(sbx->dict_mt")
+      end)
+
+      t:assert_all_any_contains(append(src_text_files(t), test_text_files(t)), {
+        "#define tabref_acq(r)",
+        "gcref_acq((r))",
+        "LJ_FUNCA void lj_gc2_barrier_obj_pair",
+        "LJ_FUNCA void lj_gc_pubtabobj_vm",
+        "call extern lj_gc_pubtabobj_vm",
+        "setgcrefmt(t->metatable, obj2gco(mt));",
+        "lj_gc_pubtabobj(sbufL(sbx), t, mt);",
+        "setgcrefnullrel(t->metatable);",
+        "lj_gc_pubtabobj(L, t, mt);",
+        "setgcrefrel(ud->env, obj2gco(env));",
+        "setgcrefmt(ud->metatable, obj2gco(env));",
+        "setgcrefmt(ud->metatable, obj2gco(mt));",
+        "lj_gc_pubobjobj(L, ud, env);",
+        "lj_gc_pubobjobj(L, ud, mt);",
+        "test_userdata_constructor_publish_barrier",
+        "setgcrefrrel(L1->env, L->env);",
+        "lj_gc_pubobjobj(L, L1, env);",
+        "test_thread_constructor_env_barrier",
+        "setgcrefrel(sbx->dict_str, obj2gco(dict_str));",
+        "setgcrefrel(sbx->dict_mt, obj2gco(dict_mt));",
+        "lj_gc_pubobjobj(L, ud, dict_str);",
+        "lj_gc_pubobjobj(L, ud, dict_mt);",
+        "test_buffer_constructor_dict_barrier",
+        "setgcrefmt(t->metatable, obj2gco(t));",
+        "test_weak_self_metatable_publish_barrier"
+      })
+
+      local base_storestr = t:c_block(lib_base, "static void base_storestr_str(lua_State *L,")
+      assert_block_excludes("base_storestr_str", base_storestr, { "lj_tab_storestr(L, dst," })
+      block_has_all("base_storestr_str", base_storestr, {
+        "for (;;)",
+        "setstrV(L, &tv, val)",
+        "lj_tab_setstr(L, tab, key)",
+        "lj_tab_trystoretv_cas(L, dst, &tv) == LJ_TAB_STORE_CAS_OK",
+        "base string store saw FORWARD after lookup."
+      })
+      local newproxy = t:c_block(lib_base, "static void newproxy_weaktable(lua_State *L)")
+      assert_block_excludes("newproxy_weaktable", newproxy, { "lj_tab_storestr(L, lj_tab_setstr" })
+      t:assert_text_ordered("newproxy_weaktable", newproxy, {
+        "setgcrefmt(t->metatable, obj2gco(t))",
+        'base_storestr_str(L, t, lj_str_newlit(L, "__mode"), lj_str_newlit(L, "kv"))',
+        "t->nomm =",
+        "lj_gc_pubtab(L, t)"
+      })
+
+      local lj_ctype = t:path("src", "lj_ctype.c")
+      local ctype_storestr = t:c_block(lj_ctype, "static void ctype_storestr_str(lua_State *L,")
+      assert_block_excludes("ctype_storestr_str", ctype_storestr, { "lj_tab_storestr(L, dst," })
+      block_has_all("ctype_storestr_str", ctype_storestr, {
+        "for (;;)",
+        "setstrV(L, &tv, val)",
+        "lj_tab_setstr(L, tab, key)",
+        "lj_tab_trystoretv_cas(L, dst, &tv) == LJ_TAB_STORE_CAS_OK",
+        "ctype string store saw FORWARD after lookup."
+      })
+      local ctype_fin = t:c_block(lj_ctype,
+                                  "static GCtab *ctype_fin_tab_new_l(lua_State *L, uint32_t hbits)")
+      assert_block_excludes("ctype_fin_tab_new_l", ctype_fin, { "lj_tab_storestr(L, lj_tab_setstr" })
+      t:assert_text_ordered("ctype_fin_tab_new_l", ctype_fin, {
+        "setgcrefmt(t->metatable, obj2gco(t))",
+        'ctype_storestr_str(L, t, lj_str_newlit(L, "__mode"), lj_str_newlit(L, "k"))',
+        "t->nomm =",
+        "lj_gc_pubtab(L, t)"
+      })
+
+      local lib_string = t:path("src", "lib_string.c")
+      local string_store = t:c_block(lib_string, "static void string_storetab_str(lua_State *L,")
+      assert_block_excludes("string_storetab_str", string_store, { "lj_tab_storetab(L, dst," })
+      block_has_all("string_storetab_str", string_store, {
+        "for (;;)",
+        "lj_tab_setstr(L, tab, key)",
+        "lj_tab_trystoretv_cas(L, dst, &tv) == LJ_TAB_STORE_CAS_OK",
+        "string metatable store saw FORWARD after lookup."
+      })
+      local open_string = t:c_block(lib_string, "LUALIB_API int luaopen_string(lua_State *L)")
+      assert_block_excludes("luaopen_string", open_string, {
+        "lj_tab_storetab(L, lj_tab_setstr(L, mt, mmname_str(g, MM_index)),"
+      })
+      t:assert_text_ordered("luaopen_string", open_string, {
+        "strtab = tabV(L->top-1)",
+        "settabV(L, L->top++, mt)",
+        "string_storetab_str(L, mt, mmname_str(g, MM_index), strtab)",
+        "mt->nomm =",
+        "lj_gc_pubtabobj(L, mt, strtab)",
+        "setgcrefroot(basemt_it(g, LJ_TSTR), obj2gco(mt))",
+        "L->top--"
+      })
+
+      local serialize_get = t:c_block(t:path("src", "lj_serialize.c"),
+                                      "static char *serialize_get(char *r, SBufExt *sbx, TValue *o)")
+      t:assert_text_ordered("serialize_get", serialize_get, {
+        "t = lj_tab_new(sbufL(sbx), narray, hsize2hbits(nhash))",
+        "setgcrefmt(t->metatable, obj2gco(mt))",
+        "lj_gc_pubtabobj(sbufL(sbx), t, mt)",
+        "copyTVrel(sbufL(sbx), o, &tv)"
+      })
+
+      local snap_meta = t:text_between(t:path("src", "lj_snap.c"),
+                                       "case IRFL_TAB_META:", "break;")
+      block_has_all("IRFL_TAB_META", snap_meta, {
+        "setgcrefnullrel(t->metatable)",
+        "setgcrefmt(t->metatable, obj2gco(mt))",
+        "lj_gc_pubtabobj(L, t, mt)"
+      })
+      assert_before("IRFL_TAB_META", snap_meta,
+                    "setgcrefmt(t->metatable, obj2gco(mt))",
+                    "lj_gc_pubtabobj(L, t, mt)")
+
+      local setmt = t:text_between(t:path("src", "vm_x64.dasc"),
+                                   "|.ffunc_2 setmetatable", "|.ffunc_2 rawget")
+      t:assert_text_ordered("setmetatable fast path", setmt, {
+        "mov TAB:RB->metatable, TAB:RA",
+        "cleartp CARG2",
+        "call extern lj_gc_pubtabobj_vm"
+      })
+      assert_text_not_contains("setmetatable fast path", setmt, "barrierback TAB:RB, RC")
+
+      local tabref_targets = {
+        "basemt_obj", "t->metatable", "gco2ud(o)->metatable", "gco2ud(o)->env",
+        "mainthread(g)->env", "L->env", "L1->env", "th->env", "ud->metatable",
+        "ud->env", "fn->c.env", "fn->l.env", "funcV(o)->c.env",
+        "udataV(o)->env", "curr_func(L)->c.env", "parent->env",
+        "J->fn->l.env", "sbx->dict"
+      }
+      local gcref_targets = { "sbx->cowref", "sbx->dict_str", "sbx->dict_mt", "t->metatable" }
+      assert_no_lines(t, "shared metatable/env readers must use acquire helpers", {
+        t:path("src", "lj_gc.c"),
+        t:path("src", "lj_gc2.c"),
+        t:path("src", "lj_meta.c"),
+        t:path("src", "lj_serialize.c"),
+        t:path("src", "lib_ffi.c"),
+        t:path("src", "lj_cdata.c"),
+        t:path("src", "lib_threading.c"),
+        lj_api,
+        lib_base,
+        t:path("src", "lib_debug.c"),
+        t:path("src", "lib_buffer.c"),
+        t:path("src", "lib_jit.c"),
+        t:path("src", "lj_lib.c"),
+        t:path("src", "lj_load.c"),
+        t:path("src", "lj_func.c"),
+        t:path("src", "lj_record.c"),
+        t:path("src", "lj_ffrecord.c")
+      }, function(line)
+        if contains(line, "tabref(") then
+          if contains(line, "tabV(") and contains(line, "->metatable") then return true end
+          if contains(line, "udataV(") and contains(line, "->metatable") then return true end
+          for i = 1, #tabref_targets do
+            if contains(line, tabref_targets[i]) then return true end
+          end
+        end
+        if contains(line, "gcref(") then
+          for i = 1, #gcref_targets do
+            if contains(line, gcref_targets[i]) then return true end
+          end
+        end
+        return false
+      end)
+      assert_no_lines(t, "current-thread env replacement must use release stores", {
+        lj_api,
+        lib_base
+      }, function(line)
+        return contains(line, "setgcref(L->env")
+      end)
+      print("M5 metatable publication guard passed")
+    end
+  })
+
+  add({
+    name = "m5_tab_array_publish",
+    description = "table array publication and retirement guards",
+    run = function(t)
+      t:build({ clean = true, quiet = true })
+      build_and_run_c(t, t:tmp("lj_t-tab-array-publish"),
+                      "t-tab-array-publish.c", { timeout = "20s" })
+
+      t:assert_all_any_contains(src_text_files(t), {
+        "lj_tab_array_acq",
+        "lj_tab_array_rel",
+        "lj_tab_asize_acq",
+        "lj_tab_asize_rel",
+        "TabArrayHdr",
+        "LJ_STATIC_ASSERT(sizeof(TabArrayHdr) == 16)",
+        "TABARRAY_ACAP_MASK",
+        "TABARRAY_FLAGS_MASK",
+        "TABARRAY_FLAG_RETIRING",
+        "lj_tab_array_hdr_pack_acap",
+        "lj_tab_array_hdr_init",
+        "setmref(hdr->next_gen, NULL)",
+        "lj_tab_array_nextgen_acq",
+        "lj_tab_array_nextgen_rel",
+        "lj_tab_array_hdr_flags_or_rel",
+        "lj_tab_array_hdrw",
+        "lj_tab_array_bytes",
+        "lj_tab_array_is_colocated",
+        "lj_tab_array_mem_acq",
+        "lj_tab_array_hdr_flags_acq",
+        "lj_tab_array_is_retiring",
+        "lj_tab_array_snapshot_acq",
+        "lj_tab_array_separated_snapshot_acq",
+        "lj_tab_array_separated_acap_acq",
+        "TabArrayRetire",
+        "retired_arrays",
+        "tab_array_new",
+        "lj_tab_array_hdr_init(hdr, asize, acap)",
+        "tab_array_free",
+        "tab_array_retire_reserve",
+        "tab_array_retire_arm",
+        "lj_tab_array_rel(t, array)",
+        "lj_tab_asize_rel(t, asize)",
+        "static LJ_AINLINE cTValue *lj_tab_getint",
+        "static LJ_AINLINE TValue *lj_tab_setint",
+        "retry_snapshot",
+        "lj_tab_array_is_retiring(t, array)",
+        "(void)lj_tab_array_snapshot_acq(t, &array)",
+        "lj_tab_array_snapshot_acq(kt, &karray)",
+        "uint32_t asize = (uint32_t)lj_tab_array_snapshot_acq(t, &array)",
+        "MSize asize = lj_tab_array_snapshot_acq(t, &array)",
+        "MSize i, asize = lj_tab_array_snapshot_acq(t, &array)",
+        "asize = lj_tab_array_snapshot_acq(kt, &array)",
+        "asize = lj_tab_array_snapshot_acq(dict, &array)",
+        "asize = lj_tab_array_snapshot_acq(dict_str, &array)",
+        "asize = lj_tab_array_snapshot_acq(dict_mt, &array)",
+        "lj_tab_array_snapshot_acq(t, &record_array)",
+        "(uint32_t)lj_tab_array_snapshot_acq(tb, &array)",
+        "(uint32_t)lj_tab_array_snapshot_acq(tpl, &array)",
+        "asize = (uint32_t)lj_tab_array_snapshot_acq(tpl, &array)",
+        "lj_tv_load_acq(&val, &array[i])",
+        "lj_tab_array_hdr_flags_or_rel(oldarray, TABARRAY_FLAG_RETIRING)"
+      })
+
+      assert_no_lines(t, "GC table array readers must not gate on GCtab.acap", {
+        t:path("src", "lj_gc.c"),
+        t:path("src", "lj_gc2.c")
+      }, function(line)
+        return contains(line, "t->acap") or contains(line, "->acap > 0")
+      end)
+
+      local lj_tab = t:path("src", "lj_tab.c")
+      local tab_free = t:c_block(lj_tab, "void LJ_FASTCALL lj_tab_free(global_State *g, GCtab *t)")
+      block_has_all("lj_tab_free", tab_free, {
+        "lj_tab_array_separated_snapshot_acq(t, &array)"
+      })
+      assert_block_excludes("lj_tab_free", tab_free, { "t->acap", "lj_tab_array_acq(t)" })
+
+      local tab_dup = t:c_block(lj_tab, "GCtab * LJ_FASTCALL lj_tab_dup(lua_State *L, const GCtab *kt)")
+      block_has_all("lj_tab_dup", tab_dup, {
+        "lj_tab_array_snapshot_acq(t, &array)",
+        "lj_tab_node_snapshot_acq(t, &thmask)"
+      })
+      assert_block_excludes("lj_tab_dup", tab_dup, {
+        "lj_tab_asize_acq(t)",
+        "lj_tab_array_acq(t)",
+        "lj_tab_node_acq(t)"
+      })
+
+      t:assert_all_contains(t:path("tests", "t-tab-array-publish.c"), {
+        "lj_tab_array_hdr_flags_acq(oldarray) == 0",
+        "lj_tab_array_hdr_flags_acq(ret->array) == TABARRAY_FLAG_RETIRING",
+        "lj_tab_array_nextgen_acq(ret->array) == array",
+        "lj_tab_array_is_retiring(t, ret->array)"
+      })
+
+      assert_no_lines(t, "table arrays must use lj_tab_array_* helpers in C code",
+                      src_text_files(t, {
+                        exclude_host = true,
+                        exclude_vm = true,
+                        exclude_asm = true,
+                        exclude_names = { "lj_obj.h" }
+                      }), function(line)
+        return (contains(line, "tvref(") and contains(line, "->array")) or
+               (contains(line, "setmref(") and contains(line, "->array"))
+      end)
+      assert_no_lines(t, "table resize must retire old arrays, not realloc them",
+                      lj_tab, function(line)
+        return (contains(line, "lj_mem_realloc(") or contains(line, "lj_mem_reallocvec(")) and
+               (contains(line, "array") or contains(line, "t->array") or contains(line, "oldarray"))
+      end)
+      assert_no_lines(t, "integer table access must use snapshot inline functions",
+                      t:path("src", "lj_tab.h"), function(line)
+        return line:find("^#define") and
+               (contains(line, "inarray") or contains(line, "arrayslot") or
+                contains(line, "lj_tab_getint") or contains(line, "lj_tab_setint"))
+      end)
+      assert_no_lines(t, "table array header asize must be immutable after publish",
+                      src_text_files(t), function(line)
+        return contains(line, "lj_tab_array_hdr_asize_rel") or
+               (contains(line, "la_store32_rel(&lj_tab_array_hdrw") and
+                (contains(line, "->asize") or contains(line, "->acap")))
+      end)
+      t:assert_not_contains(lj_tab, "hdr->acap = acap")
+
+      local array_mem = t:c_block(t:path("src", "lj_obj.h"),
+                                  "static LJ_AINLINE void *lj_tab_array_mem_acq(const GCtab *t)")
+      block_has_all("lj_tab_array_mem_acq", array_mem, {
+        "lj_tab_array_snapshot_acq(t, &array)"
+      })
+      assert_block_excludes("lj_tab_array_mem_acq", array_mem, { "lj_tab_array_acq(t)" })
+
+      assert_no_lines(t, "serializer dictionary array reads must use array snapshots",
+                      t:path("src", "lj_serialize.c"), function(line)
+        return contains(line, "asize = lj_tab_asize_acq(dict)") or
+               contains(line, "array = lj_tab_array_acq(dict)") or
+               contains(line, "idx < lj_tab_asize_acq(dict_") or
+               contains(line, "lj_tab_array_acq(dict_")
+      end)
+      t:assert_not_contains(t:path("src", "lj_serialize.c"),
+                            "lj_tab_resize(L, dict, lj_tab_asize_acq(dict)")
+      t:assert_contains(t:path("src", "lj_serialize.c"),
+                        "serialize_dict_storeint(L, dict, &tv, (int32_t)(i-1))")
+      t:assert_not_contains(t:path("src", "lj_serialize.c"),
+                            "lj_tab_storeint(L, lj_tab_newkey(L, dict, &tv)")
+
+      local table_pack = t:c_block(t:path("src", "lib_table.c"), "LJLIB_CF(table_pack)")
+      block_has_all("table_pack", table_pack, {
+        "lj_tab_array_snapshot_acq(t, &array)",
+        "table_pack_storeint_str(L, t, strV(lj_lib_upvalue(L, 1)),",
+        "lj_gc_pubtab(L, t)"
+      })
+      assert_block_excludes("table_pack", table_pack, { "lj_tab_array_acq(t)" })
+      local bcread = t:c_block(t:path("src", "lj_bcread.c"),
+                               "static GCtab *bcread_ktab(LexState *ls)")
+      block_has_all("bcread_ktab", bcread, { "lj_tab_array_snapshot_acq(t, &o)" })
+      assert_block_excludes("bcread_ktab", bcread, { "lj_tab_array_acq(t)" })
+
+      local decode = t:text_between(t:path("src", "lj_serialize.c"),
+                                    "t = lj_tab_new(sbufL(sbx), narray, hsize2hbits(nhash))",
+                                    "if (nhash)")
+      block_has_all("serializer table decode", decode, { "lj_tab_array_snapshot_acq(t, &array)" })
+      assert_block_excludes("serializer table decode", decode, { "lj_tab_array_acq(t)" })
+
+      local parse_ctor = t:text_between(t:path("src", "lj_parse.c"), "if (!t) {",
+                                        "lj_gc_check(fs->L)")
+      block_has_all("parser template constructor", parse_ctor, {
+        "lj_tab_array_snapshot_acq(t, &array)"
+      })
+      assert_block_excludes("parser template constructor", parse_ctor, { "lj_tab_asize_acq(t)" })
+
+      t:assert_not_contains(t:path("src", "lj_record.c"),
+                            "TValue *record_array = lj_tab_array_acq(t)")
+      t:assert_not_contains(t:path("src", "lj_record.c"), "lj_tab_asize_acq(t)")
+      local rec_bump = t:c_block(t:path("src", "lj_record.c"),
+                                 "static void rec_idx_bump(jit_State *J, RecordIndex *ix)")
+      if count_plain(rec_bump, "lj_tab_array_snapshot_acq(tb, &array)") +
+         count_plain(rec_bump, "lj_tab_array_snapshot_acq(tpl, &array)") < 3 then
+        error("rec_idx_bump must snapshot table-bump array shape")
+      end
+      assert_block_excludes("rec_idx_bump", rec_bump, {
+        "lj_tab_asize_acq(tb)",
+        "lj_tab_asize_acq(tpl)",
+        "lj_tab_array_acq(tpl)"
+      })
+      local rec_tsetm = t:c_block(t:path("src", "lj_record.c"),
+                                  "static void rec_tsetm(jit_State *J, BCReg ra, BCReg rn, int32_t i)")
+      block_has_all("rec_tsetm", rec_tsetm, { "lj_tab_array_snapshot_acq(t, &array)" })
+      assert_block_excludes("rec_tsetm", rec_tsetm, { "lj_tab_asize_acq(t)" })
+      local rec_next = t:c_block(t:path("src", "lj_record.c"),
+                                 "static IRType rec_next_types(GCtab *t, uint32_t idx)")
+      block_has_all("rec_next_types", rec_next, { "lj_tab_array_snapshot_acq(t, &array)" })
+      assert_block_excludes("rec_next_types", rec_next, {
+        "lj_tab_asize_acq(t)",
+        "lj_tab_array_acq(t)"
+      })
+
+      local resize = t:c_block(lj_tab, "void lj_tab_resize(lua_State *L,")
+      assert_before("lj_tab_resize", resize,
+                    "lj_tab_array_nextgen_rel(oldarray, array)",
+                    "lj_tab_array_hdr_flags_or_rel(oldarray, TABARRAY_FLAG_RETIRING)")
+      block_has_all("lj_tab_resize", resize, {
+        "oldasize = (uint32_t)lj_tab_array_snapshot_acq(t, &oldarray)",
+        "oldarray_separated = oldarray && !lj_tab_array_is_colocated(t, oldarray)"
+      })
+      assert_block_excludes("lj_tab_resize", resize, {
+        "lj_tab_array_acq(t)",
+        "lj_tab_asize_acq(t)",
+        "oldacap = t->acap",
+        "lj_tab_array_separated(t)"
+      })
+      print("M5 table array publication tests passed")
+    end
+  })
+
+  add({
+    name = "m5_tab_cas_store",
+    description = "table CAS store guards",
+    run = function(t)
+      t:build({ clean = true, quiet = true })
+      build_and_run_c(t, t:tmp("lj_t-tab-cas-store"),
+                      "t-tab-cas-store.c", { timeout = "20s" })
+
+      t:assert_all_any_contains({
+        t:path("src", "lj_tab.c"),
+        t:path("src", "lj_tab.h"),
+        t:path("src", "lj_meta.c"),
+        t:path("src", "lj_api.c"),
+        t:path("src", "lib_table.c"),
+        t:path("tests", "t-tab-cas-store.c")
+      }, {
+        "LJ_TAB_STORE_CAS_OK",
+        "LJ_TAB_STORE_CAS_FORWARD",
+        "lj_tab_trystoretv_cas(lua_State *L, TValue *dst, cTValue *src)",
+        "lj_tv_load_acq(&old, dst)",
+        "if (tvisforward(&old))",
+        "lj_tv_cas(dst, &old, src)",
+        "la_cpu_pause();  /* Slot became FORWARD after lookup; re-resolve it. */",
+        "lj_meta_tsettv_pair(lua_State *L, cTValue *o, cTValue *k, cTValue *v)",
+        "lj_tab_trystoretv_cas(L, dst, v) == LJ_TAB_STORE_CAS_OK",
+        "assert(lj_meta_tsettv_pair(L, &L->top[0], &key, &val) == &newarray[k])",
+        "C API settable saw FORWARD after lookup.",
+        "C API setfield saw FORWARD after lookup.",
+        "C API rawset saw FORWARD after lookup.",
+        "C API rawseti saw FORWARD after lookup.",
+        "luaL_newmetatable saw FORWARD after lookup.",
+        "luaL_newmetatable store raced with FORWARD.",
+        "lj_tab_trystoretv_cas(L, o, val) == LJ_TAB_STORE_CAS_OK",
+        "lj_tab_trystoretv_cas(L, dst, key+1) == LJ_TAB_STORE_CAS_OK",
+        "lj_tab_trystoretv_cas(L, dst, src) == LJ_TAB_STORE_CAS_OK",
+        "lj_tv_cas(tv, &expect, &tmp)",
+        "table_insert_shift_store(lua_State *L, GCtab *t, int32_t i)",
+        "table.insert shift saw FORWARD after lookup.",
+        "table_insert_value_store(lua_State *L, GCtab *t, int32_t i,",
+        "table.insert value saw FORWARD after lookup.",
+        "exercise_table_insert_forward_retry",
+        "exercise_capi_rawseti_forward_retry",
+        "exercise_capi_settable_forward_retry",
+        "exercise_capi_rawset_forward_retry",
+        "exercise_capi_setfield_forward_retry",
+        "exercise_luaL_newmetatable_forward_retry",
+        "t-tab-cas-store OK"
+      })
+
+      local lj_meta = t:path("src", "lj_meta.c")
+      local pair = t:c_block(lj_meta, "TValue *lj_meta_tsettv_pair(lua_State *L,")
+      assert_block_excludes("lj_meta_tsettv_pair", pair, { "copyTVrel(L, dst, v)" })
+      block_has_all("lj_meta_tsettv_pair", pair, {
+        "for (;;)",
+        "meta_tset(L, o, k, &owner)",
+        "lj_tab_trystoretv_cas(L, dst, v)",
+        "LJ_TAB_STORE_CAS_OK",
+        "lj_gc2_barrier_tv_pair(L, owner ? obj2gco(owner) : NULL, v)",
+        "la_cpu_pause();  /* Slot became FORWARD after lookup; re-resolve it. */"
+      })
+
+      local trystore = t:c_block(t:path("src", "lj_tab.c"),
+                                 "int lj_tab_trystoretv_cas(lua_State *L,")
+      block_has_all("lj_tab_trystoretv_cas", trystore, {
+        "lj_tv_load_acq(&old, dst)",
+        "tvisforward(&old)",
+        "lj_tv_cas(dst, &old, src)",
+        "LJ_TAB_STORE_CAS_OK",
+        "LJ_TAB_STORE_CAS_FORWARD",
+        "la_cpu_pause()"
+      })
+
+      local lib_table = t:path("src", "lib_table.c")
+      local shift = t:c_block(lib_table, "static void table_insert_shift_store(lua_State *L,")
+      assert_block_excludes("table_insert_shift_store", shift, {
+        "lj_tab_storetv(L, dst, &val)",
+        "lj_tab_storenil(L, dst)"
+      })
+      block_has_all("table_insert_shift_store", shift, {
+        "for (;;)",
+        "lj_tab_setint(L, t, i)",
+        "lj_tab_getint(t, i-1)",
+        "lj_tab_trystoretv_cas(L, dst, &val) == LJ_TAB_STORE_CAS_OK",
+        "lj_gc2_barrier_weak_write(L, t, &key, &val)",
+        "table.insert shift saw FORWARD after lookup."
+      })
+      local value = t:c_block(lib_table, "static TValue *table_insert_value_store(lua_State *L,")
+      assert_block_excludes("table_insert_value_store", value, { "copyTVrel(L, dst, src)" })
+      block_has_all("table_insert_value_store", value, {
+        "for (;;)",
+        "lj_tab_setint(L, t, i)",
+        "lj_tab_trystoretv_cas(L, dst, src) == LJ_TAB_STORE_CAS_OK",
+        "table.insert value saw FORWARD after lookup."
+      })
+      local insert = t:c_block(lib_table, "LJLIB_CF(table_insert)")
+      assert_block_excludes("table_insert", insert, {
+        "copyTVrel(L, dst, L->top-1)",
+        "lj_tab_storetv(L, dst, &val)",
+        "lj_tab_storenil(L, dst)"
+      })
+      block_has_all("table_insert", insert, {
+        "table_insert_shift_store(L, t, i)",
+        "table_insert_value_store(L, t, i, L->top-1)",
+        "lj_gc_pubtabtv(L, t, dst)"
+      })
+
+      local lj_api = t:path("src", "lj_api.c")
+      local newmt = t:c_block(lj_api, "LUALIB_API int luaL_newmetatable(lua_State *L,")
+      assert_block_excludes("luaL_newmetatable", newmt, { "copyTVrel(L, tv, &tmp)" })
+      block_has_all("luaL_newmetatable", newmt, {
+        "for (;;)",
+        "lj_tab_setstr(L, regt, key)",
+        "lj_tv_load_acq(&old, tv)",
+        "luaL_newmetatable saw FORWARD after lookup.",
+        "lj_tv_cas(tv, &expect, &tmp)",
+        "luaL_newmetatable store raced with FORWARD.",
+        "copyTV(L, L->top++, &expect)",
+        "copyTV(L, L->top++, &old)",
+        "lj_gc_pubtab(L, regt)"
+      })
+      local settable = t:c_block(lj_api, "LUA_API void lua_settable(lua_State *L,")
+      assert_block_excludes("lua_settable", settable, { "copyTVrel(L, o, val)" })
+      block_has_all("lua_settable", settable, {
+        "for (;;)",
+        "lj_meta_tset_owner(L, t, L->top-2, &owner)",
+        "lj_tab_trystoretv_cas(L, o, val) == LJ_TAB_STORE_CAS_OK",
+        "lj_gc2_barrier_weak_write(L, owner, key, val)",
+        "lj_gc2_barrier_tv_pair(L, obj2gco(owner), o)",
+        "C API settable saw FORWARD after lookup."
+      })
+      local setfield = t:c_block(lj_api, "LUA_API void lua_setfield(lua_State *L,")
+      assert_block_excludes("lua_setfield", setfield, { "copyTVrel(L, o, val)" })
+      block_has_all("lua_setfield", setfield, {
+        "for (;;)",
+        "lj_meta_tset_owner(L, t, &key, &owner)",
+        "lj_tab_trystoretv_cas(L, o, val) == LJ_TAB_STORE_CAS_OK",
+        "lj_gc2_barrier_weak_write(L, owner, &key, val)",
+        "lj_gc2_barrier_tv_pair(L, obj2gco(owner), o)",
+        "C API setfield saw FORWARD after lookup."
+      })
+      local rawset = t:c_block(lj_api, "LUA_API void lua_rawset(lua_State *L,")
+      assert_block_excludes("lua_rawset", rawset, { "copyTVrel(L, dst, key+1)" })
+      block_has_all("lua_rawset", rawset, {
+        "for (;;)",
+        "lj_tab_set(L, t, key)",
+        "lj_tab_trystoretv_cas(L, dst, key+1) == LJ_TAB_STORE_CAS_OK",
+        "lj_gc2_barrier_weak_write(L, t, key, key+1)",
+        "lj_gc_pubtab(L, t)",
+        "C API rawset saw FORWARD after lookup."
+      })
+      local rawseti = t:c_block(lj_api, "LUA_API void lua_rawseti(lua_State *L,")
+      assert_block_excludes("lua_rawseti", rawseti, { "copyTVrel(L, dst, src)" })
+      block_has_all("lua_rawseti", rawseti, {
+        "for (;;)",
+        "lj_tab_setint(L, t, n)",
+        "lj_tab_trystoretv_cas(L, dst, src) == LJ_TAB_STORE_CAS_OK",
+        "lj_gc2_barrier_weak_write(L, t, &key, src)",
+        "lj_gc_pubtabtv(L, t, dst)",
+        "C API rawseti saw FORWARD after lookup."
+      })
+      t:assert_contains(t:path("tools", "ci", "m5_concurrent_objects.sh"),
+                        "m5_tab_cas_store.sh")
+      print("M5 table CAS store tests passed")
+    end
+  })
+
+  add({
+    name = "m5_tab_value_publish",
+    description = "C-side table value release-publication guards",
+    run = function(t)
+      t:build({ clean = true, quiet = true })
+      run_luajit(t, { "-e", table_value_smoke() })
+
+      t:assert_all_any_contains(src_text_files(t), {
+        "lj_tab_storetv",
+        "lj_tab_storenil",
+        "lj_tab_storebool",
+        "lj_tab_storeint",
+        "lj_tab_storeintptr",
+        "lj_tab_storestr",
+        "lj_tab_storetab",
+        "lj_tab_storethread",
+        "lj_tab_storeproto",
+        "lj_tab_storefunc",
+        "lj_tab_storeudata",
+        "lj_tab_storetvn",
+        "lj_tab_storenilraw",
+        "tab_storekeyrel",
+        "copyTVrel(L, dst, src)",
+        "copyTVrel(L, &dst[i], &src[i])",
+        "copyTVrel(L, dst, &k)",
+        "copyTVrel(L, slot, &val)",
+        "copyTVrel(L, tab_rehash_insert(L, newnode, newhmask, &newfreetop, &key),",
+        "lib_storetv_key(L, tab, L->top+1, L->top)",
+        "copyTVrel(L, o, f)",
+        "table_insert_shift_store(L, t, i)",
+        "table_insert_value_store(L, t, i, L->top-1)",
+        "table_pack_storeint_str(L, t, strV(lj_lib_upvalue(L, 1)), (int32_t)n)",
+        "lj_tab_trystoretv_cas(L, dst, &val) == LJ_TAB_STORE_CAS_OK",
+        "lj_tab_storetv(L, &array[i], &base[i])",
+        'base_storestr_str(L, t, lj_str_newlit(L, "__mode"), lj_str_newlit(L, "kv"))',
+        'base_storetab_str(L, env, lj_str_newlit(L, "_G"), env)',
+        "string_storetab_str(L, mt, mmname_str(g, MM_index), strtab)",
+        'ctype_storestr_str(L, t, lj_str_newlit(L, "__mode"), lj_str_newlit(L, "k"))',
+        "gc_stats_storetv_str(L, t, name, &tv)",
+        "gc_stats_storetv_int(L, bt, (int32_t)i + 1, &tv)",
+        'gc_stats_storetv_str(L, t, "poll_ack_latency_buckets", &tv)',
+        "jit_util_storetv_str(L, t, lj_str_newz(L, name), &tv)",
+        "jit_util_storetv_int(L, t, key, &tv)",
+        'setprotofield(L, t, lj_str_newlit(L, "proto"), pt)',
+        'setintptrfield(L, t, lj_str_newlit(L, "addr"), (intptr_t)(void *)fn->c.f)',
+        "setintindex(L, t, 0, (int32_t)snap->ref - REF_BIAS)",
+        "debug_activelines_storebool(L, t, line)",
+        "rec_rbchash_ref_acq(RBCHashEntry *rbc)",
+        "rec_rbchash_pc_acq(RBCHashEntry *rbc)",
+        "rec_rbchash_pt_acq(RBCHashEntry *rbc)",
+        "rec_rbchash_publish(jit_State *J, TRef tr, const BCIns *pc)",
+        "setmrefrel(rbc->pc, pc)",
+        "setgcrefrel(rbc->pt, obj2gco(J->pt))",
+        "la_store32_rel(&rbc->ref, tref_ref(tr))",
+        "rec_rbchash_publish(J, tr, J->pc)",
+        "rec_rbchash_publish(J, rc, pc)",
+        "rec_template_mark_nil(J, tpl, &key)",
+        "rec_template_mark_nil(J, tpl, &ix->keyv)",
+        "lj_tab_storenil(J->L, &node[i].val)",
+        "lj_tab_storenil(J->L, &array[i])",
+        "copyTVrel(L, o, base+2)",
+        "slot = lib_storefunc_str(L, tab, name, fn)",
+        "jit_profile_registry_store(L, registry, &key, &tv)",
+        "jit_profile_registry_store(L, registry, &key, niltv(L))",
+        "jit_attach_event_store(L, tabV(L->top-2), L->top-1, niltv(L))",
+        "lj_tab_storenilraw(&array[i])",
+        "lj_tab_storenilraw(&n->val)",
+        "lj_cdata_fin_storenil(L, tv)",
+        "ffi_loaded_store(L, t, name, L->top-1)",
+        "ffi_miscmap_store(L, cts, &cts->g->strempty, L->top-1)",
+        'ffi_typeinfo_storeint(L, t, lj_str_newlit(L, "info"), (int32_t)info)',
+        'ffi_typeinfo_storestr(L, t, lj_str_newlit(L, "name"), name)',
+        "lj_tab_storenilraw(&n->key)",
+        "const_slot_store(o, fs->nkn)",
+        "const_slot_store(o, fs->nkgc)",
+        "parse_keep_storebool(L, ls->fs->kt, &key)",
+        "parse_keep_storebool(L, ls->fs->kt, tv)",
+        "lj_tab_storetv(ls->L, o, &tv)",
+        "lj_tab_storetv(ls->L, lj_tab_set(ls->L, t, &key), &tv)",
+        "copyTVrel(sbufL(sbx), o, &tv)",
+        "settabV(sbufL(sbx), &tv, t)",
+        "copyTVrel(L, o, &tv)",
+        "lj_tab_storetv(L, val, &tmp)",
+        "serialize_dict_storeint(L, dict, &tv, (int32_t)(i-1))"
+      })
+
+      assert_no_lines(t, "raw table slot stores must use lj_tab_store* or copyTVrel",
+                      src_text_files(t, { exclude_host = true }), function(line)
+        return (line:find("set[%w_]*V%(") and contains(line, "lj_tab_set")) or
+               (contains(line, "lj_tab_set") and contains(line, ")->u64")) or
+               (contains(line, "lj_tab_newkey") and contains(line, ")->u64")) or
+               (contains(line, "copyTV(") and contains(line, "lj_tab_set"))
+      end)
+      assert_no_lines(t, "table rehash/new-key publication must use release key/value stores",
+                      t:path("src", "lj_tab.c"), function(line)
+        return contains(line, "copyTV(L, slot") or
+               contains(line, "copyTV(L, tab_rehash_insert") or
+               contains(line, "copyTV(L, &freenode->key") or
+               contains(line, "copyTV(L, &n->key") or
+               contains(line, "node->key.u64 = 0") or
+               contains(line, "n->key.u64 = 0")
+      end)
+      assert_no_lines(t, "API/table library direct table slot stores must release-publish", {
+        t:path("src", "lj_api.c"),
+        t:path("src", "lib_table.c")
+      }, function(line)
+        return contains(line, "copyTV(L, o, L->top+1)") or
+               contains(line, "copyTV(L, o, --L->top)") or
+               contains(line, "copyTV(L, dst, &val)") or
+               contains(line, "setnilV(dst)") or
+               contains(line, "copyTV(L, &array[i], &base[i])")
+      end)
+      t:assert_not_contains(t:path("src", "lib_table.c"),
+                            "lj_tab_storeint(L, lj_tab_setstr(L, t, strV(lj_lib_upvalue(L, 1)))")
+      assert_no_lines(t, "jit.util result fields must CAS-publish",
+                      t:path("src", "lib_jit.c"), function(line)
+        return (contains(line, "lj_tab_storeint(L, lj_tab_setstr(L, t") or
+                contains(line, "lj_tab_storeint(L, lj_tab_setint(L, t") or
+                contains(line, "lj_tab_storeintptr(L, lj_tab_setstr(L, t") or
+                contains(line, "lj_tab_storeintptr(L, lj_tab_setint(L, t") or
+                contains(line, "lj_tab_storeproto(L, lj_tab_setstr(L, t") or
+                contains(line, "lj_tab_storeproto(L, lj_tab_setint(L, t"))
+      end)
+      t:assert_not_contains(t:path("src", "lj_debug.c"),
+                            "lj_tab_storebool(L, lj_tab_setint(L, t, line), 1)")
+      assert_no_lines(t, "recorder template table markers must release-publish",
+                      t:path("src", "lj_record.c"), function(line)
+        return contains(line, "settabV(J->L, &node[i].val, tpl)") or
+               contains(line, "settabV(J->L, &array[i], tpl)") or
+               contains(line, "settabV(J->L, o, tpl)") or
+               contains(line, "lj_tab_storetab(J->L, &node[i].val, tpl)") or
+               contains(line, "lj_tab_storetab(J->L, o, tpl)") or
+               contains(line, "setnilV(&node[i].val)") or
+               contains(line, "setnilV(&array[i])")
+      end)
+      assert_no_lines(t, "recorder table-bump rollback cache must use acquire/release helpers",
+                      t:path("src", "lj_record.c"), function(line)
+        return contains(line, "J->rbchash[") and contains(line, ".ref = tref_ref") or
+               contains(line, "setmref(J->rbchash") or
+               contains(line, "setgcref(J->rbchash") or
+               contains(line, "mref(rbc->pc") or
+               contains(line, "gcref(rbc->pt")
+      end)
+      assert_no_lines(t, "FFI/clib table aliases must release-publish", {
+        t:path("src", "lib_ffi.c"),
+        t:path("src", "lj_clib.c")
+      }, function(line)
+        return contains(line, "copyTV(L, o, base+2)") or
+               contains(line, "setnilV(tv)") or contains(line, "setnumV(tv,") or
+               contains(line, "setintV(tv,")
+      end)
+      assert_no_lines(t, "shared table clearing must release-publish nil", {
+        t:path("src", "lj_tab.c"),
+        t:path("src", "lj_gc.c")
+      }, function(line)
+        return contains(line, "setnilV(&array[i])") or
+               contains(line, "setnilV(&n->val)") or contains(line, "setnilV(tv)") or
+               contains(line, "setnilV(&node[i].val)")
+      end)
+      assert_no_lines(t, "parser constant table slot markers must release-publish",
+                      t:path("src", "lj_parse.c"), function(line)
+        return contains(line, "o->u64 = fs->nk") or contains(line, "lj_tab_storebool(L,")
+      end)
+      assert_no_lines(t, "bytecode template table slots must release-publish",
+                      t:path("src", "lj_bcread.c"), function(line)
+        return contains(line, "bcread_ktabk(ls, o, NULL)") or
+               contains(line, "bcread_ktabk(ls, lj_tab_set(ls->L, t, &key), t)")
+      end)
+      assert_no_lines(t, "serializer decode outputs must release-publish",
+                      t:path("src", "lj_serialize.c"), function(line)
+        return contains(line, "copyTV(sbufL(sbx), o, &tv)") or
+               contains(line, "settabV(sbufL(sbx), o, t)") or
+               contains(line, "setstrV(sbufL(sbx), o,") or
+               contains(line, "setintV(o,") or contains(line, "setpriV(o,") or
+               contains(line, "setcdataV(sbufL(sbx), o,") or
+               contains(line, "setrawlightudV(o,")
+      end)
+      t:assert_not_contains(t:path("src", "lj_serialize.c"),
+                            "lj_tab_storeint(L, lj_tab_newkey(L, dict, &tv)")
+      assert_no_lines(t, "snapshot table restore slots must release-publish",
+                      t:path("src", "lj_snap.c"), function(line)
+        return contains(line, "settabV(J->L, o, t)") or
+               contains(line, "snap_restoreval(J, T, ex, snapno, rfilt, irs->op2, val)") or
+               contains(line, "val->u32.hi")
+      end)
+      print("M5 table value publication guard passed")
+    end
+  })
+
+  add({
+    name = "m5_threading_publish",
+    description = "threading publication store and barrier migration guards",
+    run = function(t)
+      local lib_threading = t:path("src", "lib_threading.c")
+      assert_no_legacy_barriers(t, "lib_threading must use M5 publication wrappers",
+                                lib_threading)
+
+      block_has_all("threading_state_set_ud",
+                    t:c_block(lib_threading, "static void threading_state_set_ud"), {
+        "setgcrefrel(L1->mt_thread",
+        "lj_gc_pubobjobj(L, L1, ud)"
+      })
+      local storeud = t:c_block(lib_threading,
+                                "static TValue *threading_storeudata_str(lua_State *L,")
+      assert_block_excludes("threading_storeudata_str", storeud, {
+        "lj_tab_storeudata(L, dst, ud)"
+      })
+      block_has_all("threading_storeudata_str", storeud, {
+        "for (;;)",
+        "setudataV(L, &tv, ud)",
+        "lj_tab_setstr(L, env, key)",
+        "lj_tab_trystoretv_cas(L, dst, &tv) == LJ_TAB_STORE_CAS_OK",
+        "threading env store saw FORWARD after lookup."
+      })
+      local current = t:c_block(lib_threading, "LJLIB_CF(threading_current)")
+      assert_block_excludes("threading_current", current, {
+        "lj_tab_storeudata(L, lj_tab_setstr(L, env, key), ud)"
+      })
+      block_has_all("threading_current", current, {
+        "threading_storeudata_str(L, env, key, ud)",
+        "lj_gc_pubtab(L, env)"
+      })
+
+      t:assert_all_any_contains({
+        lib_threading,
+        t:path("src", "lj_gc.c"),
+        t:path("src", "lj_gc2.c")
+      }, {
+        "gcref_acq(child->mt_thread)",
+        "gcref_acq(L->mt_thread)",
+        "mt = gcref_acq(th->mt_thread)",
+        "gcref_acq(g->gcroot[GCROOT_THREADING_ENV])"
+      })
+      assert_no_lines(t, "mt_thread readers must use gcref_acq", {
+        lib_threading,
+        t:path("src", "lj_gc.c"),
+        t:path("src", "lj_gc2.c")
+      }, function(line)
+        return contains(line, "gcref(") and contains(line, "mt_thread")
+      end)
+      assert_no_lines(t, "threading root readers must use gcref_acq",
+                      lib_threading, function(line)
+        return contains(line, "gcref(g->gcroot[GCROOT_THREADING_ENV])")
+      end)
+      assert_no_lines(t, "live thread registry must not use the old shared GCtab root", {
+        lib_threading,
+        t:path("src", "lj_obj.h"),
+        t:path("src", "lj_thr.h")
+      }, function(line)
+        return contains(line, "THREADING_THREADS_KEY") or
+               contains(line, "threading_live_table") or
+               contains(line, "threading_live_root") or
+               contains(line, "lj_tab_next(live") or
+               contains(line, "lj_tab_set(L, live") or
+               contains(line, "lj_tab_storethread(L, lj_tab_set(L, live") or
+               has_ident(line, "GCROOT_THREADING")
+      end)
+
+      t:assert_all_any_contains({
+        lib_threading,
+        t:path("src", "lj_obj.h"),
+        t:path("src", "lj_thr.h"),
+        t:path("src", "lj_tg.h"),
+        t:path("tests", "t-gc2-traverse.c")
+      }, {
+        "static LJ_AINLINE lua_State *lj_tg_load_cur_L(TGState *tg)",
+        "static LJ_AINLINE void lj_tg_store_cur_L(TGState *tg, lua_State *L)",
+        "static LJ_AINLINE lua_State *lj_tg_load_thread_L(TGState *tg)",
+        "static LJ_AINLINE void lj_tg_store_thread_L(TGState *tg, lua_State *L)",
+        "static LJ_AINLINE TValue *lj_tg_load_jit_base(TGState *tg)",
+        "static LJ_AINLINE void lj_tg_store_jit_base(TGState *tg, TValue *base)",
+        "la_loadptr_acq((void *const *)&tg->cur_L)",
+        "la_storeptr_rel((void **)&tg->cur_L, L)",
+        "la_loadptr_acq((void *const *)&tg->thread_L)",
+        "la_storeptr_rel((void **)&tg->thread_L, L)",
+        "la_loadptr_acq((void *const *)&tg->jit_base)",
+        "la_storeptr_rel((void **)&tg->jit_base, base)",
+        "gcref_acq(g->cur_L)",
+        "setgcrefrel(g->cur_L, obj2gco(L))",
+        "setgcrefnullrel(g->cur_L)",
+        "mref_acq(g->jit_base, TValue)",
+        "setmrefrel(g->jit_base, base)",
+        "lj_thread_state_load_acq(const LJThread *th)",
+        "lj_thread_state_store_rel(LJThread *th, lua_State *L)",
+        "threading_publish_thread_state(lua_State *L, GCudata *ud,",
+        "threading_publish_thread_state(L, ud, th, L1)",
+        "threading_publish_thread_state(L, ud, th, L)",
+        "test_thread_spawn_constructor_child_barrier",
+        "LJThreadLive *threading_live",
+        "struct LJThreadLive",
+        "LJThreadLive *live_node",
+        "threading_live_new(lua_State *L, GCudata *ud)",
+        "threading_live_publish(global_State *g, LJThread *th,",
+        "la_casptr((void **)&g->threading_live",
+        "la_xchgptr_acqrel((void **)&g->threading_live",
+        "la_storeptr_rel((void **)&th->live_node, NULL)",
+        "setgcrefrel(node->ud, obj2gco(ud))",
+        "setgcrefrel(node->ud, NULL)",
+        "lj_gc_barrierroot(L, &tv)"
+      })
+      assert_no_lines(t, "TG root/mirror fields must use lj_tg acquire/release helpers",
+                      src_ch_files(t, { exclude_host = true, exclude_names = { "lj_tg.h" } }),
+                      function(line)
+        return contains(line, "tg->cur_L") or contains(line, "tg->thread_L") or
+               contains(line, "tg->jit_base")
+      end)
+      assert_no_lines(t, "transitional TG mirrors must use acquire/release reference helpers",
+                      src_ch_files(t, { exclude_host = true }), function(line)
+        return contains(line, "setgcref(g->cur_L") or
+               contains(line, "setgcrefnull(g->cur_L") or
+               contains(line, "setmref(g->jit_base") or
+               contains(line, "tvref(g->jit_base") or
+               contains(line, "mref(g->jit_base")
+      end)
+      for _, file in ipairs({ t:path("src", "lj_gc.c"), t:path("src", "lj_gc2.c") }) do
+        t:assert_all_contains(file, { "g->threading_live", "gcref_acq(node->ud)" })
+      end
+      assert_no_lines(t, "LJThread child-state pointer must use acquire/release helpers", {
+        lib_threading,
+        t:path("src", "lj_gc.c"),
+        t:path("src", "lj_gc2.c")
+      }, function(line)
+        return contains(line, "th->L")
+      end)
+
+      t:assert_all_any_contains({
+        t:path("src", "lj_gc.h"),
+        t:path("src", "lj_obj.h"),
+        lib_threading,
+        t:path("src", "lj_api.c")
+      }, {
+        "lj_gc_threshold_load(global_State *g)",
+        "lj_gc_threshold_store(global_State *g, GCSize threshold)",
+        "lj_gc_mt_threshold_load(global_State *g)",
+        "lj_gc_mt_threshold_store(global_State *g,",
+        "lj_gc_mt_threshold_store(g, threshold)",
+        "lj_gc_threshold_store(g, lj_gc_mt_threshold_load(g))",
+        "api_gc_setlogical(global_State *g, GCSize threshold)",
+        "if (la_load32_acq(&g->mt_live) == 0)",
+        "lj_gc_threshold_store(g, threshold)",
+        "uint32_t mt_gc_exclusive",
+        "api_gc_enterexclusive(global_State *g)",
+        "la_cas32(&g->mt_gc_exclusive",
+        "la_store32_rel(&g->mt_gc_exclusive, 0)",
+        "la_futex_wake(&g->mt_gc_exclusive, INT_MAX)",
+        "while ((exclusive = la_load32_acq(&g->mt_gc_exclusive)) != 0)",
+        "la_futex_wait(&g->mt_gc_exclusive, exclusive",
+        "if (la_load32_acq(&g->mt_gc_exclusive) == 0)"
+      })
+      assert_no_lines(t, "C-side GC threshold access must use atomic helpers",
+                      src_ch_files(t, { exclude_host = true }), function(line, path)
+        if not (contains(line, "gc.threshold") or contains(line, "mt_gc_threshold")) then
+          return false
+        end
+        local b = basename(path)
+        return not (b == "lj_gc.h" or b == "lj_obj.h" or
+                    b:match("^lj_asm_.*%.h$") or
+                    contains(line, "offsetof(global_State, gc.threshold)"))
+      end)
+
+      block_has_all("threading_channel_send",
+                    t:c_block(lib_threading, "LJLIB_CF(threading_channel_send)"), {
+        "lj_gc_pubobjtv(L, ud, tv)",
+        "lj_chan_send_timeout"
+      })
+      local recv = t:c_block(lib_threading, "LJLIB_CF(threading_channel_recv)")
+      block_has_all("threading_channel_recv", recv, {
+        "setnilV(&out)",
+        "lj_chan_recv_timeout_gc(L, ch, &out, ns)",
+        "threading_push_recv(L, rc, &out)"
+      })
+      assert_block_excludes("threading_channel_recv", recv, {
+        "lj_chan_recv_timeout(L, ch, &out"
+      })
+      t:assert_all_contains(t:path("src", "lj_chan.c"), {
+        "chan_storetv_rel(slot, tv)",
+        "chan_loadtv_acq(out, slot)",
+        "chan_cleartv_rel(slot)",
+        "tv_rawstore_rel(out, tv_rawload_acq(&slot->tv))",
+        "lj_gc_barrierroot(L, out)",
+        "lj_chan_recv_timeout_gc"
+      })
+      assert_no_lines(t, "channel payload slots must use atomic TValue helpers",
+                      t:path("src", "lj_chan.c"), function(line)
+        return contains(line, "slot->tv = *tv") or contains(line, "*out = slot->tv") or
+               contains(line, "setnilV(&slot->tv)")
+      end)
+      assert_no_lines(t, "channel recv must use GC-aware atomic receive helpers", {
+        t:path("src", "lj_chan.c"),
+        lib_threading
+      }, function(line)
+        return contains(line, "out->u64 = tv_rawload_acq") or
+               contains(line, "lj_chan_recv_timeout(L, ch, &out")
+      end)
+      for _, file in ipairs({ t:path("src", "lj_gc.c"), t:path("src", "lj_gc2.c") }) do
+        t:assert_contains(file, "lj_tv_load_acq(&tv, &ch->slot[i].tv)")
+      end
+      assert_no_lines(t, "GC channel traversal must not mark shared slots directly", {
+        t:path("src", "lj_gc.c"),
+        t:path("src", "lj_gc2.c")
+      }, function(line)
+        return contains(line, "gc_marktv(g, &ch->slot[i].tv)") or
+               contains(line, "gc2_mark_tv_worker(g, &ch->slot[i].tv)")
+      end)
+      local gc_thread = t:c_block(t:path("src", "lj_gc.c"), "static void gc_traverse_thread")
+      block_has_all("gc_traverse_thread", gc_thread, {
+        "lj_tv_load_acq(&tv, o)",
+        "gc_marktv(g, &tv)"
+      })
+      assert_block_excludes("gc_traverse_thread", gc_thread, { "gc_marktv(g, o)" })
+      for _, fn in ipairs({ "gc2_scan_thread_stack", "gc2_traverse_thread" }) do
+        local block = t:c_block(t:path("src", "lj_gc2.c"), "static void " .. fn)
+        block_has_all(fn, block, { "lj_tv_load_acq(&tv, o)" })
+        if not (contains(block, "gc2_mark_tv(g, &tv)") or
+                contains(block, "gc2_mark_tv_worker(g, &tv)")) then
+          error(fn .. ": missing snapshot mark")
+        end
+        if contains(block, "gc2_mark_tv(g, o)") or
+           contains(block, "gc2_mark_tv_worker(g, o)") then
+          error(fn .. ": must not mark shared stack slots directly")
+        end
+      end
+      print("M5 threading publication guard passed")
+    end
+  })
+
+  add({
+    name = "m5_upvalue_publish",
+    description = "upvalue publication wrapper guards",
+    run = function(t)
+      local lj_api = t:path("src", "lj_api.c")
+      local lib_debug = t:path("src", "lib_debug.c")
+      for _, fn in ipairs({
+        "LUA_API void lua_upvaluejoin",
+        "LUA_API const char *lua_setupvalue"
+      }) do
+        assert_block_no_legacy(t, "converted lj_api.c upvalue function regressed: " .. fn,
+                               lj_api, fn)
+      end
+      assert_block_no_legacy(t, "debug.upvaluejoin must use M5 publication wrappers",
+                             lib_debug, "LJLIB_CF(debug_upvaluejoin)")
+      local copy_slot = t:c_block(lj_api, "static void copy_slot")
+      block_has_all("copy_slot", copy_slot, {
+        "idx < LUA_GLOBALSINDEX",
+        "copyTVrel(L, o, f)",
+        "lj_gc_pubobjtv(L, curr_func(L), f)"
+      })
+      assert_block_excludes("copy_slot", copy_slot, {
+        "lj_gc_barrier(L, curr_func(L), f)"
+      })
+
+      t:assert_all_any_contains({
+        lj_api,
+        t:path("src", "lj_func.c"),
+        t:path("src", "lj_lib.c"),
+        lib_debug,
+        t:path("tests", "t-gc2-traverse.c")
+      }, {
+        "setgcrefrel(fn->c.env, obj2gco(env));",
+        "lj_gc_pubobjobj(L, fn, env);",
+        "copyTVrel(L, &fn->c.upvalue[n], L->top+n);",
+        "lj_gc_pubobjtv(L, fn, &fn->c.upvalue[n]);",
+        "copyTVrel(L, &fn->c.upvalue[i], L->top+i);",
+        "lj_gc_pubobjtv(L, fn, &fn->c.upvalue[i]);",
+        "copyTVrel(L, &uv->tv, slot);",
+        "lj_gc_pubobjtv(L, uv, &uv->tv);",
+        "lj_gc_pubobjobj(L, fn, pt);",
+        "setgcrefrel(fn->l.env, obj2gco(env));",
+        "setgcrefrel(fn->l.uvptr[i], obj2gco(uv));",
+        "setgcrefrel(funcV(L->top-1)->c.env, obj2gco(env));",
+        "lj_gc_pubobjobj(L, funcV(L->top-1), env);",
+        "test_cclosure_constructor_publish_barrier",
+        "test_lua_closure_constructor_publish_barrier",
+        "setgcrefrel(fn1->l.uvptr[n1], uv)",
+        "lj_gc_pubobjobj(L, fn1, uv)",
+        "setgcrefrel(*p[0], uv)",
+        "lj_gc_pubobjobj(L, fn[0], uv)",
+        "copyTVrel(L, val, L->top)",
+        "lj_gc_pubobjtv(L, o, L->top)"
+      })
+      t:assert_contains(t:path("src", "lj_gc.c"),
+                        "copyTVrel(mainthread(g), &uv->tv, uvval(uv))")
+      t:assert_all_contains(t:path("src", "lj_gc.c"), {
+        "lj_tv_load_acq(&snap, tv)",
+        "GCupval *uv = (GCupval *)((char *)tv - offsetof(GCupval, tv))",
+        "lj_gc2_barrier_tv_pair_g(g, obj2gco(uv), &snap)",
+        "tviswhite(&snap)",
+        "gcV(&snap)",
+        "lj_tv_load_acq(&tv, &uv->tv)"
+      })
+      t:assert_all_contains(t:path("src", "lj_obj.h"), {
+        "lj_obj_setgcwrel(GCobj *o, const GCobj *next)",
+        "lj_uv_next_acq(const GCupval *uv)",
+        "lj_uv_setnext_rel(GCupval *uv, GCupval *next)",
+        "func_uvptr_acq(const GCfuncL *fn, uint32_t idx)",
+        "func_uv_acq(const GCfuncL *fn, uint32_t idx)"
+      })
+      t:assert_all_any_contains({
+        t:path("src", "lj_func.c"),
+        t:path("src", "lj_gc.c"),
+        t:path("src", "lj_gc2.c"),
+        t:path("src", "lj_state.c"),
+        t:path("src", "lib_threading.c"),
+        t:path("src", "lj_snap.c"),
+        lj_api,
+        lib_debug,
+        t:path("src", "lj_record.c"),
+        t:path("src", "lj_asm_x86.h")
+      }, {
+        "lj_obj_setgcwrel(obj2gco(uv), next);",
+        "setgcrefrel(*pp, obj2gco(uv));",
+        "setgcrefrel(L->openupval, lj_obj_gcw_acq(o));",
+        "lj_uv_setnext_rel(&g->uvhead, uv);",
+        "gcref_acq(L->openupval)",
+        "gcref_acq(th->openupval)",
+        "gcref_acq(J->L->openupval)",
+        "lj_obj_gcw_acq(up)",
+        "lj_obj_gcw_acq(uv)",
+        "func_uvptr_acq(&fn2->l, (uint32_t)n2)",
+        "GCobj *uv = gcref_acq(*p[1]);",
+        "func_uv_acq(parent, v)",
+        "func_uv_acq(&J->fn->l, uv)",
+        "func_uvptr_acq(&fn->l, (ir->op2 >> 8))"
+      })
+      assert_no_lines(t, "open-upvalue lists must use acquire/release helpers", {
+        t:path("src", "lj_func.c"),
+        t:path("src", "lj_gc.c"),
+        t:path("src", "lj_gc2.c"),
+        t:path("src", "lj_state.c"),
+        t:path("src", "lib_threading.c"),
+        t:path("src", "lj_snap.c")
+      }, function(line)
+        return (contains(line, "gcref(") and contains(line, "openupval")) or
+               contains(line, "gcnext(uv)") or contains(line, "gcnext(up)") or
+               contains(line, "uvnext(") or contains(line, "uvprev(") or
+               contains(line, "setgcref(*pp") or
+               contains(line, "setgcrefr(L->openupval") or
+               contains(line, "setgcref(g->uvhead") or
+               contains(line, "setgcref(uv->prev") or
+               contains(line, "setgcref(uv->next")
+      end)
+      assert_no_lines(t, "Lua closure uvptr consumers must acquire-load published refs", {
+        lj_api,
+        lib_debug,
+        t:path("src", "lj_debug.c"),
+        t:path("src", "lj_gc.c"),
+        t:path("src", "lj_gc2.c"),
+        t:path("src", "lj_record.c"),
+        t:path("src", "lj_opt_fold.c"),
+        t:path("src", "lj_asm_x86.h"),
+        t:path("src", "lj_func.c")
+      }, function(line)
+        return (contains(line, "uvptr") and
+                (contains(line, "gcref(") or contains(line, "&gcref("))) or
+               contains(line, "gcref(*p[1])")
+      end)
+      assert_block_excludes("lj_gc_pubuv",
+                            t:c_block(t:path("src", "lj_gc.c"),
+                                      "void LJ_FASTCALL lj_gc_pubuv"), {
+        "lj_gc2_barrier_uv(g,",
+        "tviswhite(tv)",
+        "gcV(tv)"
+      })
+      assert_block_excludes("lj_gc_closeuv",
+                            t:c_block(t:path("src", "lj_gc.c"), "void lj_gc_closeuv"), {
+        "tviswhite(&uv->tv)",
+        "gcV(&uv->tv)"
+      })
+      local io_iter = t:c_block(t:path("src", "lib_io.c"), "static int io_file_iter")
+      block_has_all("io_file_iter", io_iter, {
+        "lj_tv_load_acq(L->top+i, &fn->c.upvalue[1+i])"
+      })
+      assert_block_excludes("io_file_iter", io_iter, {
+        "memcpy(L->top, &fn->c.upvalue[1]"
+      })
+      for _, file in ipairs({ t:path("src", "lj_gc.c"), t:path("src", "lj_gc2.c") }) do
+        t:assert_all_contains(file, {
+          "lj_tv_load_acq(&tv, uvval",
+          "lj_tv_load_acq(&tv, &fn->c.upvalue[i])"
+        })
+      end
+      assert_no_lines(t, "upvalue payloads must use release stores and GC snapshots", {
+        t:path("src", "lj_gc.c"),
+        t:path("src", "lj_gc2.c")
+      }, function(line)
+        return contains(line, "gc_marktv(g, uvval") or
+               contains(line, "gc2_mark_tv(g, uvval") or
+               contains(line, "gc2_mark_tv_worker(g, uvval") or
+               contains(line, "gc_marktv(g, &fn->c.upvalue[i])") or
+               contains(line, "gc2_mark_tv_worker(g, &fn->c.upvalue[i])") or
+               contains(line, "copyTV(mainthread(g), &uv->tv, uvval(uv))")
+      end)
+      assert_no_lines(t, "C closure constructor edges must use release stores and barriers", {
+        lj_api,
+        t:path("src", "lj_func.c"),
+        t:path("src", "lj_lib.c")
+      }, function(line)
+        return contains(line, "copyTV(L, &fn->c.upvalue") or
+               contains(line, "copyTV(L, &uv->tv") or
+               contains(line, "memcpy(fn->c.upvalue") or
+               contains(line, "setgcref(fn->c.env") or
+               contains(line, "setgcref(fn->l.env") or
+               contains(line, "setgcref(fn->l.uvptr") or
+               contains(line, "setgcref(funcV(L->top-1)->c.env")
+      end)
+      local top_c = src_files(t, ".c", {})
+      top_c = filter_files(top_c, function(path)
+        return not contains(path:sub(#t:path("src") + 2), "/") and
+               basename(path) ~= "lj_gc.c"
+      end)
+      assert_no_legacy_barriers(t, "legacy barrier call sites regressed outside lj_gc.c", top_c)
+      print("M5 upvalue publication guard passed")
+    end
+  })
+
+  add({
+    name = "m5_x64_tset_nil_snapshot",
+    description = "x64 TSET previous-value nil-decision snapshot guard",
+    run = function(t)
+      t:build({ clean = true, quiet = true })
+      run_luajit(t, { "-joff", "-e", tset_nil_smoke() })
+      build_and_run_c(t, t:tmp("lj_t-x64-tset-forward"), "t-x64-tset-forward.c")
+
+      local vm = t:path("src", "vm_x64.dasc")
+      t:assert_all_any_contains({
+        vm,
+        t:path("tests", "t-x64-tset-forward.c")
+      }, {
+        "TABARRAY_ASIZE_OFS",
+        "mov r8, [RC]",
+        "cmp r8, LJ_TNIL",
+        "mov64 r9, LJ_TFORWARD_BITS",
+        "je ->vmeta_tsetv",
+        "je ->vmeta_tsetb",
+        "mov r9d, RCd",
+        "mov64 r10, LJ_TFORWARD_BITS",
+        "jmp ->vmeta_tsetr",
+        "mov ITYPEd, TAB:RB->asize",
+        "mov ITYPEd, dword [TMPR+TABARRAY_ASIZE_OFS]",
+        "cmp RCd, ITYPEd",
+        "add RC, TMPR",
+        "mov ITYPE, TAB:RB->array",
+        "mov r8d, dword [ITYPE+TABARRAY_ASIZE_OFS]",
+        "cmp RDd, r8d",
+        "add TMPR, ITYPE",
+        "jmp ->vmeta_tsets\t\t// M5: no legacy x64 hash-slot store.",
+        "call extern lj_meta_tsettv_pair",
+        "call extern lj_tab_storetv",
+        "call extern lj_tab_storetvn",
+        "call extern lj_gc_pubtabtv_vm",
+        "call extern lj_gc_pubtabtvn_vm",
+        "mov r8d, TAB:RB->asize",
+        "->BC_TSETV_RETRY:",
+        "->BC_TSETB_RETRY:",
+        "->BC_TSETR_RETRY:",
+        "->BC_TSETM_RETRY:",
+        "jmp ->vm_gc2_barriertv_tab",
+        "jmp ->vm_gc2_barriertvn",
+        "t-x64-tset-forward OK"
+      })
+      t:assert_not_contains(vm, "->vm_gc2_barriertab:")
+      for _, reject in ipairs({
+        "cmp aword [RC], LJ_TNIL",
+        "cmp aword [TMPR], LJ_TNIL",
+        "call extern lj_meta_tset\t\t// (lua_State *L, TValue *o, TValue *k)",
+        "call extern lj_gc2_barrier_tv_g",
+        ".macro barrierback",
+        "barrierback TAB:RB",
+        "mov [RC], RB",
+        "mov [RC], ITYPE"
+      }) do
+        t:assert_not_contains(vm, reject)
+      end
+      local tsets = t:text_between(vm, "|->BC_TSETS_Z:", "jmp ->vmeta_tsets")
+      assert_text_not_contains("BC_TSETS_Z", tsets, "mov [TMPR], ITYPE")
+
+      local function check_tset_case(label, block, slow)
+        t:assert_text_ordered(label, block, {
+          "mov ITYPEd, TAB:RB->asize",
+          "mov TMPR, TAB:RB->array",
+          "mov ITYPEd, dword [TMPR+TABARRAY_ASIZE_OFS]",
+          "cmp RCd, ITYPEd",
+          "add RC, TMPR"
+        })
+        block_has_all(label, block, { "LJ_TFORWARD_BITS", slow })
+        assert_block_excludes(label, block, {
+          "cmp RCd, TAB:RB->asize",
+          "add RC, TAB:RB->array"
+        })
+      end
+      check_tset_case("BC_TSETV", t:text_between(vm, "case BC_TSETV:", "case BC_TSETB:"),
+                      "->vmeta_tsetv")
+      check_tset_case("BC_TSETB", t:text_between(vm, "case BC_TSETB:", "case BC_TSETR:"),
+                      "->vmeta_tsetb")
+      check_tset_case("BC_TSETR", t:text_between(vm, "case BC_TSETR:", "case BC_TSETM:"),
+                      "->vmeta_tsetr")
+
+      local setm = t:text_between(vm, "case BC_TSETM:", "break;")
+      t:assert_text_ordered("BC_TSETM", setm, {
+        "mov r8d, TAB:RB->asize",
+        "mov ITYPE, TAB:RB->array",
+        "mov r8d, dword [ITYPE+TABARRAY_ASIZE_OFS]",
+        "cmp RDd, r8d",
+        "add TMPR, ITYPE"
+      })
+      block_has_all("BC_TSETM", setm, {
+        "call extern lj_tab_storetvn",
+        "jmp ->vm_gc2_barriertvn"
+      })
+      assert_block_excludes("BC_TSETM", setm, {
+        "cmp RDd, TAB:RB->asize",
+        "add TMPR, TAB:RB->array",
+        "jmp ->vm_gc2_barriertab",
+        "mov [TMPR], ITYPE"
+      })
+
+      local storetv_count, barrierback_count, pubtabtv_count, pubtabtvn_count = 0, 0, 0, 0
+      for line in (t:read(vm) .. "\n"):gmatch("(.-)\n") do
+        if contains(line, "call extern lj_tab_storetv\t// (lua_State *L, TValue *d, TValue *s)") then
+          storetv_count = storetv_count + 1
+        end
+        if contains(line, "call extern lj_gc_barrierback_tab_g") and
+           contains(line, "(global_State *g, GCtab *t)") then
+          barrierback_count = barrierback_count + 1
+        end
+        if contains(line, "call extern lj_gc_pubtabtv_vm") and
+           contains(line, "(lua_State *L, GCtab *t, cTValue *tv)") then
+          pubtabtv_count = pubtabtv_count + 1
+        end
+        if contains(line, "call extern lj_gc_pubtabtvn_vm") and
+           contains(line, "(lua_State *L, GCtab *t, cTValue *tv, uint32_t n)") then
+          pubtabtvn_count = pubtabtvn_count + 1
+        end
+      end
+      if storetv_count ~= 3 then
+        error("x64 TSET fast paths must publish via lj_tab_storetv")
+      end
+      if barrierback_count ~= 0 then
+        error("x64 TSET fast paths must not use pre-store barrierback repairs")
+      end
+      if pubtabtv_count ~= 1 then
+        error("x64 TSET value stores must use the post-store VM value publication helper")
+      end
+      if pubtabtvn_count ~= 1 then
+        error("x64 TSETM range stores must use the post-store VM range publication helper")
+      end
+      print("M5 x64 TSET nil snapshot guard passed")
+    end
+  })
+end

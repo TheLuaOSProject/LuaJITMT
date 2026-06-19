@@ -20,7 +20,10 @@ local function detect_jobs()
     local n = p:read("*l")
     p:close()
     n = tonumber(n)
-    if n and n > 0 then return tostring(n) end
+    if n and n > 0 then
+      if n > 2 then n = 2 end
+      return tostring(n)
+    end
   end
   return "2"
 end

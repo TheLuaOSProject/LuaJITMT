@@ -101,6 +101,34 @@ Lua test-suite migration notes:
   - `tools/ci/m9_bench_regression.sh` -> `m9_bench_regression`
   - `tools/ci/m10_generational.sh` -> `m10_generational`
   - `tools/ci/m9_m10_gc.sh` -> `m9_m10_gc`
+- Nineteenth migrated scripts:
+  - `tools/ci/m5_runtime_publish.sh` -> `m5_runtime_publish`
+  - `tools/ci/m5_state_owner.sh` -> `m5_state_owner`
+  - `tools/ci/m5_cell_ops.sh` -> `m5_cell_ops`
+  - `tools/ci/m5_jit_trace_publish.sh` -> `m5_jit_trace_publish`
+  - `tools/ci/m5_metatable_publish.sh` -> `m5_metatable_publish`
+  - `tools/ci/m5_tab_array_publish.sh` -> `m5_tab_array_publish`
+  - `tools/ci/m5_tab_cas_store.sh` -> `m5_tab_cas_store`
+  - `tools/ci/m5_tab_value_publish.sh` -> `m5_tab_value_publish`
+  - `tools/ci/m5_threading_publish.sh` -> `m5_threading_publish`
+  - `tools/ci/m5_upvalue_publish.sh` -> `m5_upvalue_publish`
+  - `tools/ci/m5_x64_tset_nil_snapshot.sh` -> `m5_x64_tset_nil_snapshot`
+- Twentieth migrated scripts:
+  - `tools/ci/m6_dispatch_redispatch.sh` -> `m6_dispatch_redispatch`
+  - `tools/ci/m6_jit_token.sh` -> `m6_jit_token`
+  - `tools/ci/m6_jit_cell_ops.sh` -> `m6_jit_cell_ops`
+  - `tools/ci/m6_jit_barrier_xpoll.sh` -> `m6_jit_barrier_xpoll`
+  - `tools/ci/m6_jit_xbar_xpoll.sh` -> `m6_jit_xbar_xpoll`
+  - `tools/ci/m6_jit_table_store_helper.sh` -> `m6_jit_table_store_helper`
+  - `tools/ci/m6_jit_aref_pair_guard.sh` -> `m6_jit_aref_pair_guard`
+  - `tools/ci/m6_jit_hrefk_nodehdr.sh` -> `m6_jit_hrefk_nodehdr`
+  - `tools/ci/m6_jit_href_nodehdr.sh` -> `m6_jit_href_nodehdr`
+  - `tools/ci/m6_jit_alloc_account.sh` -> `m6_jit_alloc_account`
+  - `tools/ci/m6_jit_gc2_readiness.sh` -> `m6_jit_gc2_readiness`
+  - `tools/ci/m6_jit_gcstep_guard.sh` -> `m6_jit_gcstep_guard`
+  - `tools/ci/m6_jit_mcode_publish.sh` -> `m6_jit_mcode_publish`
+  - `tools/ci/m6_jit_flush_hs.sh` -> `m6_jit_flush_hs`
+  - `tools/ci/m6_jit.sh` -> `m6_jit`
 - This first batch covers the main shapes the full migration needs:
   standalone C fixtures linked against selected runtime files, Lua tests under
   the built VM, C fixtures linked against `libluajit.a`, and source-order guard
@@ -152,6 +180,10 @@ Lua test-suite migration notes:
 - The eighteenth batch migrates the benchmark/GC telemetry wrappers and the
   M9/M10 aggregate. The focused benchmark-regression wrapper remains the
   authoritative expensive CSV generation check.
+- The nineteenth batch migrates the remaining focused M5 publication and
+  local-cell/x64 TSET guards into a dedicated Lua suite.
+- The twentieth batch migrates the M6 JIT scaffold wrappers and aggregate,
+  keeping the aggregate as Lua orchestration over the focused cases.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.

@@ -5,9 +5,11 @@ local suites = {
   require("m4_threading"),
   require("m5_fixtures"),
   require("m5_guards"),
+  require("m5_publication"),
   require("m5_tables"),
   require("m5_runtime"),
   require("m5_x64"),
+  require("m6_jit"),
   require("m9_m10_gc")
 }
 
