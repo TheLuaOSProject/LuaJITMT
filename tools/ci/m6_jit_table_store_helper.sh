@@ -36,7 +36,9 @@ for needle in \
   'xref->o == IR_NEWREF' \
   'id = IRCALL_lj_tab_storetv_forjit_newref' \
   'args[4] = ASMREF_TMP2;  /* cTValue *key */' \
-  'asm_tvptr(as, ra_releasetmp(as, ASMREF_TMP2), xref->op2, IRTMPREF_IN1);' \
+  'IRTMPREF_IN2' \
+  'emit_leatg(as, dest, tmptv2);' \
+  'IRTMPREF_IN1|IRTMPREF_IN2' \
   'asm_ahstore_forjit(ASMState *as, IRIns *ir)' \
   '#if defined(__linux__) && LJ_TARGET_X64' \
   'IRRef lim = poll_alias_limit(J, xref);' \
@@ -393,6 +395,21 @@ if ! grep -q 'TNEW' "$NEW_ARRAY_IR" || ! grep -q 'NEWREF' "$NEW_ARRAY_IR" ||
   cat "$NEW_ARRAY_IR" >&2
   exit 1
 fi
+
+LUA_PATH="$ROOT/src/?.lua;$ROOT/src/jit/?.lua;;" \
+  "$ROOT/src/luajit" -e '
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local util = require("jit.util")
+local t = {}
+for k in pairs(package) do
+  local s = tostring(k)
+  t[#t+1] = s
+  assert(t[#t] == s and type(t[#t]) == "string",
+	 "numeric NEWREF helper crossed src/key TValue temps")
+end
+assert(util.traceinfo(1), "numeric NEWREF append did not trace")
+'
 
 LUA_PATH="$ROOT/src/?.lua;$ROOT/src/jit/?.lua;;" \
   "$ROOT/src/luajit" -jdump=ir -e '

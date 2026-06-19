@@ -229,6 +229,7 @@ IRFLDEF(FLENUM)
 #define IRTMPREF_IN1		0x01	/* First input value. */
 #define IRTMPREF_OUT1		0x02	/* First output value. */
 #define IRTMPREF_OUT2		0x04	/* Second output value. */
+#define IRTMPREF_IN2		0x08	/* Second input value. */
 
 /* SLOAD mode bits, stored in op2. */
 #define IRSLOAD_PARENT		0x01	/* Coalesce with parent trace. */

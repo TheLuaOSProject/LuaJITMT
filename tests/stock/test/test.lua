@@ -401,6 +401,9 @@ local function execute_plan(plan, opts)
   end
 end
 
+-- Keep the runner loop interpreted; individual test functions still record.
+if jit then jit.off(execute_plan) end
+
 local opts = parse_args{...}
 if not opts then
   return

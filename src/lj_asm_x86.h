@@ -1194,7 +1194,7 @@ static void asm_strto(ASMState *as, IRIns *ir)
 /* Get pointer to TValue. */
 static void asm_tvptr(ASMState *as, Reg dest, IRRef ref, MSize mode)
 {
-  if ((mode & IRTMPREF_IN1)) {
+  if ((mode & (IRTMPREF_IN1|IRTMPREF_IN2))) {
     IRIns *ir = IR(ref);
     if (irt_isnum(ir->t)) {
       if (irref_isk(ref) && !(mode & IRTMPREF_OUT1)) {
@@ -1233,7 +1233,10 @@ static void asm_tvptr(ASMState *as, Reg dest, IRRef ref, MSize mode)
 #endif
     }
   }
-  emit_leatg(as, dest, tmptv);  /* tg->tmptv holds the TValue(s). */
+  if (mode & IRTMPREF_IN2)
+    emit_leatg(as, dest, tmptv2);
+  else
+    emit_leatg(as, dest, tmptv);
 }
 
 static void asm_aref(ASMState *as, IRIns *ir)
@@ -1827,7 +1830,8 @@ static void asm_ahstore_forjit(ASMState *as, IRIns *ir)
     args[4] = ASMREF_TMP2;  /* cTValue *key */
   asm_gencall(as, ci, args);
   if (id == IRCALL_lj_tab_storetv_forjit_newref)
-    asm_tvptr(as, ra_releasetmp(as, ASMREF_TMP2), xref->op2, IRTMPREF_IN1);
+    asm_tvptr(as, ra_releasetmp(as, ASMREF_TMP2), xref->op2,
+	      IRTMPREF_IN1|IRTMPREF_IN2);
   asm_tvptr(as, ra_releasetmp(as, ASMREF_TMP1), ir->op2, IRTMPREF_IN1);
 }
 
