@@ -4150,6 +4150,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  jne >4
     |  // Get node value.
     |  mov ITYPE, NODE:TMPR->val
+    |  mov64 r9, LJ_TFORWARD_BITS
+    |  cmp ITYPE, r9
+    |  je ->vmeta_tgets
     |  cmp ITYPE, LJ_TNIL
     |  je >5				// Key found, but nil value?
     |2:

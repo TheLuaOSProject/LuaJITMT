@@ -46,7 +46,8 @@ x64 `ipairs_aux` now routes visible forwarded array slots through the exported
 C integer getter wrapper before deciding whether the iterator stops. x64 array
 `BC_TGETV`, `BC_TGETB`, and `BC_TGETR` now send visible forwarded slot
 snapshots to the existing vmeta/C lookup path instead of returning the internal
-sentinel.
+sentinel. x64 `BC_TGETS_Z` does the same for visible forwarded string-key hash
+values.
 
 ## 6.2 Tables: data structures
 
