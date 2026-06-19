@@ -383,6 +383,10 @@ LUA_API lua_State *lua_newstate(lua_Alloc allocf, void *allocd)
   setnilV(registry(L));
   g->nilnodehdr.hmask = 0;
   g->nilnodehdr.flags = 0;
+  setmref(g->nilnodehdr.next_gen, NULL);
+#if !LJ_GC64
+  g->nilnodehdr.reserved = 0;
+#endif
   setnilV(&g->nilnode.val);
   setnilV(&g->nilnode.key);
 #if !LJ_GC64

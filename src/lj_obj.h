@@ -553,11 +553,15 @@ LJ_STATIC_ASSERT(offsetof(Node, val) == 0);
 typedef struct TabNodeHdr {
   MSize hmask;		/* Hash mask paired with the following Node vector. */
   MSize flags;		/* State flags for this node generation. */
+  MRef next_gen;	/* Replacement generation during/after retirement. */
+#if !LJ_GC64
+  MSize reserved;	/* Keep Node[0] aligned after the header. */
+#endif
 } TabNodeHdr;
 
 #define TABNODE_FLAG_RETIRING	(((MSize)1u) << 31)
 
-LJ_STATIC_ASSERT(sizeof(TabNodeHdr) == 8);
+LJ_STATIC_ASSERT(sizeof(TabNodeHdr) == 16);
 
 typedef struct TabNodeRetire {
   Node *node;		/* Retired hash vector, owned only when armed. */
@@ -816,6 +820,28 @@ static LJ_AINLINE void lj_tab_node_hmask_set(Node *node, MSize hmask)
 static LJ_AINLINE MSize lj_tab_node_hdr_flags_acq(const Node *node)
 {
   return (MSize)la_load32_acq(&lj_tab_node_hdr(node)->flags);
+}
+
+static LJ_AINLINE Node *lj_tab_node_nextgen_acq(const Node *node)
+{
+#if LJ_GC64
+  return (Node *)(void *)(uintptr_t)
+    la_load64_acq(&lj_tab_node_hdr(node)->next_gen.ptr64);
+#else
+  return (Node *)(void *)(uintptr_t)
+    la_load32_acq(&lj_tab_node_hdr(node)->next_gen.ptr32);
+#endif
+}
+
+static LJ_AINLINE void lj_tab_node_nextgen_rel(Node *node, const Node *next)
+{
+#if LJ_GC64
+  la_store64_rel(&lj_tab_node_hdrw(node)->next_gen.ptr64,
+		 (uint64_t)(uintptr_t)(const void *)next);
+#else
+  la_store32_rel(&lj_tab_node_hdrw(node)->next_gen.ptr32,
+		 (uint32_t)(uintptr_t)(const void *)next);
+#endif
 }
 
 static LJ_AINLINE int lj_tab_node_is_retiring(const Node *node)

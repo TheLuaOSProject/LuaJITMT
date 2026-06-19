@@ -26,7 +26,7 @@ for needle in \
   'cmp r8, LJ_TNIL;  je ->fff_res0' \
   'mov [BASE-8], r8' \
   'mov r8, TAB:RB->node' \
-  'cmp dword [r8-8], 0; je ->fff_res0'
+  'cmp dword [r8+TABNODE_HMASK_OFS], 0; je ->fff_res0'
 do
   if ! rg -F -q "$needle" "$ROOT/src/vm_x64.dasc"; then
     echo "guardrail: missing x64 ipairs_aux snapshot marker: $needle" >&2

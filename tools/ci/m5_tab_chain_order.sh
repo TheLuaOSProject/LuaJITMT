@@ -33,7 +33,7 @@ do
 done
 
 if rg -n 'nextnode\(|setmref\([^,]+->next|setmrefr\([^,]+->next|noderef\([^[:cntrl:]]*->next' \
-    "$ROOT/src/lj_tab.c" "$ROOT/src/lj_serialize.c"; then
+    "$ROOT/src/lj_tab.c" "$ROOT/src/lj_serialize.c" | rg -v 'next_gen'; then
   echo "guardrail: table hash-chain walks/stores must use ordered helpers" >&2
   exit 1
 fi

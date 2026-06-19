@@ -22,7 +22,7 @@ assert(sum == 200 * 17)
 for needle in \
   '|->BC_TGETS_Z:' \
   '|  mov r8, TAB:RB->node' \
-  '|  mov TMPRd, dword [r8-8]' \
+  '|  mov TMPRd, dword [r8+TABNODE_HMASK_OFS]' \
   '|  add NODE:TMPR, r8' \
   '|->BC_TSETS_Z:' \
   '|  jmp ->vmeta_tsets		// M5: no legacy x64 hash-slot store.'
@@ -36,7 +36,7 @@ done
 if ! awk '
   /[|]->BC_TGETS_Z:/ { in_get = 1; saw_node = saw_hmask = 0 }
   in_get && /mov r8, TAB:RB->node/ { saw_node = 1 }
-  in_get && /mov TMPRd, dword \[r8-8\]/ { saw_hmask = 1; if (!saw_node) bad = 1 }
+  in_get && /mov TMPRd, dword \[r8\+TABNODE_HMASK_OFS\]/ { saw_hmask = 1; if (!saw_node) bad = 1 }
   in_get && /TAB:RB->hmask/ { bad = 1 }
   in_get && /settp ITYPE, STR:RC, LJ_TSTR/ { in_get = 0 }
   /[|]->BC_TSETS_Z:/ { in_set = 1; checked_set = 1; next }

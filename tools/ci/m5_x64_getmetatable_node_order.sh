@@ -19,7 +19,7 @@ assert(type(getmetatable(u)) == "table")
 for needle in \
   '|.ffunc_1 getmetatable' \
   '|  mov r8, TAB:RB->node' \
-  '|  mov RAd, dword [r8-8]' \
+  '|  mov RAd, dword [r8+TABNODE_HMASK_OFS]' \
   '|  add NODE:RA, r8'
 do
   if ! rg -F -q "$needle" "$ROOT/src/vm_x64.dasc"; then
@@ -31,7 +31,7 @@ done
 if ! awk '
   /[|][.]ffunc_1 getmetatable/ { infn = 1; saw_node = 0 }
   infn && /mov r8, TAB:RB->node/ { saw_node = 1 }
-  infn && /mov RAd, dword \[r8-8\]/ { if (!saw_node) bad = 1 }
+  infn && /mov RAd, dword \[r8\+TABNODE_HMASK_OFS\]/ { if (!saw_node) bad = 1 }
   infn && /TAB:RB->hmask/ { bad = 1 }
   infn && /[|][.]ffunc_2 setmetatable/ { infn = 0 }
   END { exit bad ? 1 : 0 }

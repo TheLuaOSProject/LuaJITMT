@@ -186,8 +186,11 @@ compatibility mirror, but C-side hash-vector readers derive the real mask from
 the acquired node header. The node header's second word now carries generation
 flags: fresh node vectors and the shared nilnode start at zero, and
 `lj_tab_resize()` sets `TABNODE_FLAG_RETIRING` on an old hash generation after
-rebuild/routing is complete and before publishing replacement hash state. The
-shared nilnode has a matching embedded header.
+rebuild/routing is complete and before publishing replacement hash state.
+`TabNodeHdr.next_gen` is release-published to the replacement hash vector or
+shared nilnode before the old generation is marked retiring, reserving the
+target needed by the final `LJ_TFORWARD` hop. The shared nilnode has a matching
+embedded header with no successor.
 The landed intermediate slices keep the shared nilnode read-only for first hash
 inserts and retire old headered hash vectors plus separated legacy array
 vectors from `lj_tab_resize()` behind the completed safepoint epoch before

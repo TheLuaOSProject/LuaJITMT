@@ -17,9 +17,12 @@ timeout 20s "$OUT"
 
 for needle in \
   'typedef struct TabNodeHdr' \
+  'LJ_STATIC_ASSERT(sizeof(TabNodeHdr) == 16)' \
   'TABNODE_FLAG_RETIRING' \
   'lj_tab_node_hmask_acq' \
   'lj_tab_node_hdr_flags_acq' \
+  'lj_tab_node_nextgen_acq' \
+  'lj_tab_node_nextgen_rel' \
   'lj_tab_node_hdr_flags_or_rel' \
   'lj_tab_node_is_retiring' \
   'lj_tab_node_snapshot_acq' \
@@ -29,7 +32,9 @@ for needle in \
   'offsetof(global_State, nilnode)' \
   'tab_node_new' \
   'hdr->flags = 0' \
+  'setmref(hdr->next_gen, NULL)' \
   'g->nilnodehdr.flags = 0' \
+  'setmref(g->nilnodehdr.next_gen, NULL)' \
   'tab_node_free'
 do
   if ! rg -F -q "$needle" "$ROOT/src"; then
@@ -41,6 +46,12 @@ done
 if ! rg -F -q 'lj_tab_node_hdr_flags_acq(oldnode) == TABNODE_FLAG_RETIRING' \
     "$ROOT/tests/t-tab-nodehdr.c"; then
   echo "guardrail: node-header test must assert retired node flags" >&2
+  exit 1
+fi
+
+if ! rg -F -q 'lj_tab_node_nextgen_acq(oldnode) == newnode' \
+    "$ROOT/tests/t-tab-nodehdr.c"; then
+  echo "guardrail: node-header test must assert retired node next_gen" >&2
   exit 1
 fi
 
@@ -82,6 +93,17 @@ if ! awk '
   END { exit newkey && anchor && chain && seti && sets && set ? 0 : 1 }
 ' "$ROOT/src/lj_tab.c"; then
   echo "guardrail: table write probes must enter through node snapshots" >&2
+  exit 1
+fi
+
+if ! awk '
+  /void lj_tab_resize\(lua_State \*L,/ { inresize = 1 }
+  inresize && /lj_tab_node_nextgen_rel\(oldnode,/ { nextgen = NR }
+  inresize && /lj_tab_node_hdr_flags_or_rel\(oldnode, TABNODE_FLAG_RETIRING\)/ { retiring = NR }
+  inresize && /^}/ { inresize = 0 }
+  END { exit nextgen && retiring && nextgen < retiring ? 0 : 1 }
+' "$ROOT/src/lj_tab.c"; then
+  echo "guardrail: resize must publish retired node next_gen before RETIRING" >&2
   exit 1
 fi
 

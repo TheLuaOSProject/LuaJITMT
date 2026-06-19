@@ -28,7 +28,7 @@ for needle in \
   'mov NEXT_ASIZE, dword [r10+TABARRAY_ASIZE_OFS]' \
   'mov NEXT_TMP, qword [r10+NEXT_IDX*8]' \
   'mov r8, NEXT_TAB->node' \
-  'mov r9d, dword [r8-8]' \
+  'mov r9d, dword [r8+TABNODE_HMASK_OFS]' \
   'mov NEXT_TMP, NODE:NEXT_PTR->val' \
   'cmp NEXT_TMP, LJ_TNIL; je >7'
 do

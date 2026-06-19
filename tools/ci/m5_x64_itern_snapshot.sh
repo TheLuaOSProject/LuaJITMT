@@ -27,7 +27,7 @@ for needle in \
   'cmp r8, LJ_TNIL; je >4' \
   'mov [BASE+RA*8+8], r8' \
   'mov r8, TAB:RB->node' \
-  'mov r9d, dword [r8-8]' \
+  'mov r9d, dword [r8+TABNODE_HMASK_OFS]' \
   'mov r8, NODE:ITYPE->val' \
   'cmp r8, LJ_TNIL; je >7' \
   'mov r9, NODE:ITYPE->key' \
