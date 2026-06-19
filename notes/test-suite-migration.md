@@ -336,6 +336,9 @@ Lua test-suite migration notes:
 - Removed broad M5 table-array positive source inventory and the old-array
   realloc blacklist; the array publication C fixture covers pointer
   replacement, retire-list state, nextgen links, epoch reclaim, and values.
+- Removed broad M5 table-value positive source inventory; the standalone value
+  case now runs both its Lua behavior smoke and the CAS/table.insert forward
+  retry C fixture while retaining unreplaced MT-safety blacklists.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.
