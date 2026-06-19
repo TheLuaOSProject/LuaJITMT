@@ -301,6 +301,9 @@ for needle in \
   'gc_chain_splice(GCRef *p, GCobj *o)' \
   'LA_ACQ_REL, LA_ACQ);' \
   'gc_chain_splice(p, o)' \
+  'lj_gc_linkobj_after(GCobj *anchor, GCobj *o)' \
+  'lj_gc_linkobj_after(obj2gco(mainthread(g)), obj2gco(ud));' \
+  'lj_gc_linkobj_after(obj2gco(mainthread(g)), o);' \
   'test_finreg_internal_userdata_telemetry' \
   'finreg_udata_registered) == registered0 + 4u' \
   'finreg_udata_discovered) == discovered0 + 2u' \
@@ -321,6 +324,7 @@ do
 	      "$ROOT/tests/t-m8-ffi-weak-newindex.c" \
 	      "$ROOT/tests/t-m8-finalizer-spawn-live.lua" "$ROOT/src/lj_state.c" \
 	      "$ROOT/src/lib_threading.c" \
+	      "$ROOT/src/lj_udata.c" \
 	      "$ROOT/tests/t-m8-close-finalizers.c" "$ROOT/tools/ci/m8_weak.sh"; then
     echo "guardrail: missing M8 weak/finalizer marker: $needle" >&2
     exit 1
@@ -361,6 +365,23 @@ if ! awk '
   END { exit bad ? 1 : 0 }
 ' "$ROOT/src/lj_gc.c"; then
   echo "guardrail: finalizer legacy-list unlinks must acquire-load and CAS-splice" >&2
+  exit 1
+fi
+
+if rg -n 'setgcref\(\*lj_obj_gcwref\(obj2gco\(mainthread\(g\)\)\)|lj_obj_setgcwr\(obj2gco\(ud\), \*lj_obj_gcwref\(obj2gco\(mainthread\(g\)\)\)|lj_obj_setgcwr\(o, \*lj_obj_gcwref\(obj2gco\(mainthread\(g\)\)\)' \
+    "$ROOT/src/lj_gc.c" "$ROOT/src/lj_udata.c"; then
+  echo "guardrail: userdata chain publications must use lj_gc_linkobj_after()" >&2
+  exit 1
+fi
+
+if ! awk '
+  /void lj_gc_linkobj_after\(GCobj \*anchor, GCobj \*o\)/ { infn = 1 }
+  infn && /gcref_acq\(\*p\)/ { acq = 1 }
+  infn && /la_cas(32|64)\(&p->gcptr/ { cas = 1 }
+  infn && /^}/ { found = acq && cas; infn = 0 }
+  END { exit found ? 0 : 1 }
+' "$ROOT/src/lj_gc.c"; then
+  echo "guardrail: userdata chain publication helper must CAS-insert after anchor" >&2
   exit 1
 fi
 

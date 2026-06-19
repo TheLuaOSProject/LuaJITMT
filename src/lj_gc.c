@@ -1588,8 +1588,7 @@ static int gc_finalize(lua_State *L)
   }
 #endif
   /* Add userdata back to the main userdata list and make it white. */
-  lj_obj_setgcwr(o, *lj_obj_gcwref(obj2gco(mainthread(g))));
-  setgcref(*lj_obj_gcwref(obj2gco(mainthread(g))), o);
+  lj_gc_linkobj_after(obj2gco(mainthread(g)), o);
   makewhite(g, o);
   lj_gc_arena_markobj(g, o);
   if (lj_gc2_finreg_udata_set(g, o, 0) < 0)
@@ -2331,6 +2330,44 @@ void lj_gc_linkobj(global_State *g, GCobj *o)
     lj_obj_setgcwr(o, next);
   } while (!la_cas32(&g->gc.root.gcptr32, &head,
 		     (uint32_t)(uintptr_t)&o->gch, LA_REL, LA_ACQ));  /* M7 publish. */
+#endif
+}
+
+void lj_gc_linkobj_after(GCobj *anchor, GCobj *o)
+{
+  GCRef *p;
+  GCobj *head;
+  if (!anchor || !o)
+    return;
+  p = lj_obj_gcwref(anchor);
+#if LJ_GC64
+  {
+    uint64_t expect;
+    do {
+      head = gcref_acq(*p);
+      if (head)
+	lj_obj_setgcw(o, head);
+      else
+	lj_obj_setgcwnull(o);
+      expect = head ? (uint64_t)(uintptr_t)&head->gch : 0;
+    } while (!la_cas64(&p->gcptr64, &expect,
+		       (uint64_t)(uintptr_t)&o->gch,
+		       LA_REL, LA_ACQ));
+  }
+#else
+  {
+    uint32_t expect;
+    do {
+      head = gcref_acq(*p);
+      if (head)
+	lj_obj_setgcw(o, head);
+      else
+	lj_obj_setgcwnull(o);
+      expect = head ? (uint32_t)(uintptr_t)&head->gch : 0;
+    } while (!la_cas32(&p->gcptr32, &expect,
+		       (uint32_t)(uintptr_t)&o->gch,
+		       LA_REL, LA_ACQ));
+  }
 #endif
 }
 
