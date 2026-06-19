@@ -3,6 +3,7 @@
 */
 
 #include <assert.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -37,6 +38,111 @@ static int count_next(GCtab *t)
 static GCstr *newstr(lua_State *L, const char *s)
 {
   return lj_str_new(L, s, strlen(s));
+}
+
+static int32_t tv_i32(cTValue *tv)
+{
+  assert(tv != NULL);
+  assert(tvisnumber(tv));
+  return tvisint(tv) ? intV(tv) : (int32_t)numV(tv);
+}
+
+static void assert_i32(cTValue *tv, int32_t want)
+{
+  assert(tv_i32(tv) == want);
+}
+
+static TValue *find_str_slot(Node *node, MSize hmask, const GCstr *key)
+{
+  Node *n = hashstr_node(node, hmask, key);
+  do {
+    TValue nk;
+    lj_tv_load_acq(&nk, &n->key);
+    if (tvisstr(&nk) && strV(&nk) == key)
+      return &n->val;
+  } while ((n = lj_tab_nextnode_acq(n)));
+  return NULL;
+}
+
+static TValue *find_num_slot(Node *node, MSize hmask, int32_t key)
+{
+  TValue k;
+  Node *n;
+  k.n = (lua_Number)key;
+  n = hashnum_node(node, hmask, &k);
+  do {
+    TValue nk;
+    lj_tv_load_acq(&nk, &n->key);
+    if (tvisnum(&nk) && nk.n == k.n)
+      return &n->val;
+  } while ((n = lj_tab_nextnode_acq(n)));
+  return NULL;
+}
+
+static TValue *find_key_slot(Node *node, MSize hmask, cTValue *key)
+{
+  MSize i;
+  for (i = 0; i <= hmask; i++) {
+    Node *n = &node[i];
+    TValue nk;
+    lj_tv_load_acq(&nk, &n->key);
+    if (lj_obj_equal(&nk, key))
+      return &n->val;
+  }
+  return NULL;
+}
+
+static void exercise_hash_forward_hop(lua_State *L)
+{
+  GCtab *t;
+  GCstr *hopstr = newstr(L, "tab-forward-hop-string");
+  TValue lightkey;
+  Node *oldnode, *newnode;
+  MSize oldhmask, newhmask;
+  TValue *oldstrslot, *oldnumslot, *oldkeyslot;
+
+  lua_settop(L, 0);
+  lua_createtable(L, 4, 8);
+  t = tabV(L->top-1);
+  setrawlightudV(&lightkey, (void *)(uintptr_t)0x12345);
+
+  lj_tab_storeint(L, lj_tab_setstr(L, t, hopstr), 101);
+  lj_tab_storeint(L, lj_tab_setint(L, t, 33), 202);
+  lj_tab_storeint(L, lj_tab_set(L, t, &lightkey), 303);
+
+  oldnode = lj_tab_node_acq(t);
+  oldhmask = lj_tab_node_hmask_acq(oldnode);
+  assert(oldhmask > 0);
+  oldstrslot = find_str_slot(oldnode, oldhmask, hopstr);
+  oldnumslot = find_num_slot(oldnode, oldhmask, 33);
+  oldkeyslot = find_key_slot(oldnode, oldhmask, &lightkey);
+  assert(oldstrslot != NULL);
+  assert(oldnumslot != NULL);
+  assert(oldkeyslot != NULL);
+
+  lj_tab_resize(L, t, t->asize, lj_fls(oldhmask) + 2u);
+  newnode = lj_tab_node_acq(t);
+  newhmask = lj_tab_node_hmask_acq(newnode);
+  assert(newnode != oldnode);
+  assert(lj_tab_node_nextgen_acq(oldnode) == newnode);
+  assert_i32(lj_tab_getstr(t, hopstr), 101);
+  assert_i32(lj_tab_getint(t, 33), 202);
+  assert_i32(lj_tab_get(L, t, &lightkey), 303);
+
+  store_forward(oldstrslot);
+  store_forward(oldnumslot);
+  store_forward(oldkeyslot);
+
+  la_store32_rel(&lj_tab_node_hdrw(oldnode)->flags, 0);
+  lj_tab_hmask_rel(t, oldhmask);
+  lj_tab_node_rel(t, oldnode);
+  assert_i32(lj_tab_getstr(t, hopstr), 101);
+  assert_i32(lj_tab_getint(t, 33), 202);
+  assert_i32(lj_tab_get(L, t, &lightkey), 303);
+
+  lj_tab_node_rel(t, newnode);
+  lj_tab_hmask_rel(t, newhmask);
+  lj_tab_node_hdr_flags_or_rel(oldnode, TABNODE_FLAG_RETIRING);
 }
 
 int main(void)
@@ -77,6 +183,7 @@ int main(void)
 
   assert(count_next(t) == 3);
   assert(lj_tab_len(t) == 2);
+  exercise_hash_forward_hop(L);
 
   lua_close(L);
   printf("t-tab-forward-filter OK: FORWARD values stay internal to table scans\n");

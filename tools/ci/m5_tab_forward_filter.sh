@@ -20,11 +20,15 @@ for needle in \
   'return tvisnil(val) || tvisforward(val)' \
   'tab_slot_absent_acq(const TValue *slot)' \
   'tab_val_forward_retry_once(cTValue *val, int *retry)' \
+  'tab_node_forward_hop(Node **nodep, MSize *hmaskp)' \
+  'lj_tab_node_nextgen_acq(node)' \
   'tab_val_absent(&val)' \
   'tab_slot_absent_acq(tv)' \
   'tab_slot_absent_acq(&array[hi])' \
   'lj_tab_getint(t, 3) == NULL' \
   'lj_tab_getstr(t, hidden) == NULL' \
+  'exercise_hash_forward_hop(L)' \
+  'lj_tab_node_nextgen_acq(oldnode) == newnode' \
   't-tab-forward-filter OK'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_tab.c" "$ROOT/tests/t-tab-forward-filter.c"; then
@@ -52,17 +56,20 @@ fi
 
 if ! awk '
   /cTValue \* LJ_FASTCALL lj_tab_getinth\(GCtab \*t,/ { ininth = 1 }
-  ininth && /tab_val_forward_retry_once\(&val, &forward_retry\)/ { inth = 1 }
+  ininth && /tab_node_forward_hop\(&node, &hmask\)/ { inth = 1 }
+  ininth && /tab_val_forward_retry_once\(&val, &forward_retry\)/ { inth_retry = 1 }
   ininth && /^}/ { ininth = 0 }
   /cTValue \*lj_tab_getstr\(GCtab \*t,/ { instr = 1 }
-  instr && /tab_val_forward_retry_once\(&val, &forward_retry\)/ { str = 1 }
+  instr && /tab_node_forward_hop\(&node, &hmask\)/ { str = 1 }
+  instr && /tab_val_forward_retry_once\(&val, &forward_retry\)/ { str_retry = 1 }
   instr && /^}/ { instr = 0 }
   /cTValue \*lj_tab_get\(lua_State \*L,/ { ingen = 1 }
-  ingen && /tab_val_forward_retry_once\(&val, &forward_retry\)/ { gen = 1 }
+  ingen && /tab_node_forward_hop\(&node, &hmask\)/ { gen = 1 }
+  ingen && /tab_val_forward_retry_once\(&val, &forward_retry\)/ { gen_retry = 1 }
   ingen && /^}/ { ingen = 0 }
-  END { exit inth && str && gen ? 0 : 1 }
+  END { exit inth && inth_retry && str && str_retry && gen && gen_retry ? 0 : 1 }
 ' "$ROOT/src/lj_tab.c"; then
-  echo "guardrail: hash getters must filter FORWARD values" >&2
+  echo "guardrail: hash getters must hop FORWARD values through next_gen" >&2
   exit 1
 fi
 

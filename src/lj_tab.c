@@ -92,6 +92,18 @@ static LJ_AINLINE int tab_val_forward_retry_once(cTValue *val, int *retry)
   return 0;
 }
 
+static LJ_AINLINE int tab_node_forward_hop(Node **nodep, MSize *hmaskp)
+{
+  Node *node = *nodep;
+  Node *next = lj_tab_node_nextgen_acq(node);
+  if (next && next != node) {
+    *nodep = next;
+    *hmaskp = lj_tab_node_hmask_acq(next);
+    return 1;
+  }
+  return 0;
+}
+
 static TValue *tab_findkey_or_keylock(Node *anchor, cTValue *key, int *locked)
 {
   Node *n;
@@ -825,6 +837,7 @@ cTValue * LJ_FASTCALL lj_tab_getinth(GCtab *t, int32_t key)
   k.n = (lua_Number)key;
 retry_lookup:
   node = lj_tab_node_snapshot_acq(t, &hmask);
+genlookup:
   if (hmask == 0)
     return NULL;
   n = hashnum_node(node, hmask, &k);
@@ -834,6 +847,8 @@ retry_lookup:
     if (tvisnum(&nk) && nk.n == k.n) {
       TValue val;
       lj_tv_load_acq(&val, &n->val);
+      if (tvisforward(&val) && tab_node_forward_hop(&node, &hmask))
+	goto genlookup;
       if (tab_val_forward_retry_once(&val, &forward_retry))
 	goto retry_lookup;
       if (tvisforward(&val))
@@ -854,6 +869,7 @@ cTValue *lj_tab_getstr(GCtab *t, const GCstr *key)
   int key_retry = 1, forward_retry = 1;
 retry_lookup:
   node = lj_tab_node_snapshot_acq(t, &hmask);
+genlookup:
   if (hmask == 0)
     return NULL;
   n = hashstr_node(node, hmask, key);
@@ -863,6 +879,8 @@ retry_lookup:
     if (tvisstr(&nk) && strV(&nk) == key) {
       TValue val;
       lj_tv_load_acq(&val, &n->val);
+      if (tvisforward(&val) && tab_node_forward_hop(&node, &hmask))
+	goto genlookup;
       if (tab_val_forward_retry_once(&val, &forward_retry))
 	goto retry_lookup;
       if (tvisforward(&val))
@@ -894,14 +912,15 @@ cTValue *lj_tab_get(lua_State *L, GCtab *t, cTValue *key)
       if (tv)
 	return tv;
     } else {
-      goto genlookup;  /* Else use the generic lookup. */
+      goto retry_lookup;  /* Else use the generic lookup. */
     }
   } else if (!tvisnil(key)) {
     Node *node;
     MSize hmask;
     Node *n;
-  genlookup:
+  retry_lookup:
     node = lj_tab_node_snapshot_acq(t, &hmask);
+  genlookup:
     if (hmask == 0)
       return niltv(L);
     n = hashkey_node(node, hmask, key);
@@ -911,14 +930,16 @@ cTValue *lj_tab_get(lua_State *L, GCtab *t, cTValue *key)
       if (lj_obj_equal(&nk, key)) {
 	TValue val;
 	lj_tv_load_acq(&val, &n->val);
-	if (tab_val_forward_retry_once(&val, &forward_retry))
+	if (tvisforward(&val) && tab_node_forward_hop(&node, &hmask))
 	  goto genlookup;
+	if (tab_val_forward_retry_once(&val, &forward_retry))
+	  goto retry_lookup;
 	if (tvisforward(&val))
 	  return niltv(L);
 	return &n->val;
       }
       if (tab_key_retry_once(&nk, &key_retry))
-	goto genlookup;
+	goto retry_lookup;
     } while ((n = lj_tab_nextnode_acq(n)));
   }
   return niltv(L);
