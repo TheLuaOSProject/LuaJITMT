@@ -563,27 +563,31 @@ GCtab * LJ_FASTCALL lj_tab_new1(lua_State *L, uint32_t ahsize)
 GCtab * LJ_FASTCALL lj_tab_dup(lua_State *L, const GCtab *kt)
 {
   GCtab *t;
-  TValue *karray;
+  TValue *array, *karray;
+  Node *node, *knode;
   uint32_t asize, hmask;
-  MSize khmask;
-  Node *knode = lj_tab_node_snapshot_acq(kt, &khmask);
+  MSize khmask, thmask, tasize;
+  knode = lj_tab_node_snapshot_acq(kt, &khmask);
   hmask = (uint32_t)khmask;
   asize = (uint32_t)lj_tab_array_snapshot_acq(kt, &karray);
   t = newtab(L, asize, hmask > 0 ? lj_fls(hmask)+1 : 0);
+  knode = lj_tab_node_snapshot_acq(kt, &khmask);
   asize = (uint32_t)lj_tab_array_snapshot_acq(kt, &karray);
-  lj_assertL(asize == lj_tab_asize_acq(t) &&
-	     hmask == lj_tab_node_hmask_acq(lj_tab_node_acq(t)),
+  tasize = lj_tab_array_snapshot_acq(t, &array);
+  node = lj_tab_node_snapshot_acq(t, &thmask);
+  UNUSED(tasize);
+  lj_assertL(hmask == (uint32_t)khmask &&
+	     asize == (uint32_t)tasize &&
+	     hmask == (uint32_t)thmask,
 	     "mismatched size of table and template");
   t->nomm = 0;  /* Keys with metamethod names may be present. */
   if (asize > 0) {
-    TValue *array = lj_tab_array_acq(t);
     uint32_t i;
     for (i = 0; i < asize; i++)
       lj_tv_load_acq(&array[i], &karray[i]);
   }
   if (hmask > 0) {
     uint32_t i;
-    Node *node = lj_tab_node_acq(t);
     ptrdiff_t d = (char *)node - (char *)knode;
     MSize freecount = 0;
     setfreetop(t, node, (Node *)((char *)getfreetop(kt, knode) + d));

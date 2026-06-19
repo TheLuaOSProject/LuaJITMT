@@ -95,6 +95,24 @@ if ! awk '
   exit 1
 fi
 
+if ! awk '
+  /GCtab \* LJ_FASTCALL lj_tab_dup\(lua_State \*L, const GCtab \*kt\)/ {
+    infn = 1
+    array_snap = node_snap = bad = 0
+    next
+  }
+  infn && /lj_tab_array_snapshot_acq\(t, &array\)/ { array_snap = 1 }
+  infn && /lj_tab_node_snapshot_acq\(t, &thmask\)/ { node_snap = 1 }
+  infn && /lj_tab_asize_acq\(t\)|lj_tab_array_acq\(t\)|lj_tab_node_acq\(t\)/ {
+    bad = 1
+  }
+  infn && /^}/ { checked = 1; infn = 0 }
+  END { exit checked && array_snap && node_snap && !bad ? 0 : 1 }
+' "$ROOT/src/lj_tab.c"; then
+  echo "guardrail: table duplicate target headers must use snapshots" >&2
+  exit 1
+fi
+
 if ! rg -F -q 'lj_tab_array_hdr_flags_acq(oldarray) == 0' \
     "$ROOT/tests/t-tab-array-publish.c"; then
   echo "guardrail: table array test must assert zero header flags" >&2
