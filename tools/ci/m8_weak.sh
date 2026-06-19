@@ -217,6 +217,9 @@ for needle in \
   'gc2_finreg_udata_obj_acq(GC2FinRegUDataNode *node)' \
   'gc2_finreg_udata_obj_rel(GC2FinRegUDataNode *node,' \
   'gc2_finreg_udata_obj_clear(GC2FinRegUDataNode *node)' \
+  'gc2_finreg_cdata_preclaim_ready(global_State *g)' \
+  'gc2_finreg_cdata_preclaim_obj_acq(global_State *g,' \
+  'gc2_finreg_cdata_preclaim_fin_acq(global_State *g,' \
   'fin_order_obj_rel(ord, o);' \
   'fin_order_obj_acq(ord)' \
   'gc_order_cdata_object(FinRegOrderNode *ord, GCtab *t,' \
@@ -241,11 +244,11 @@ for needle in \
   'lj_tv_load_acq(&fin, &oldfin[src]);' \
   'gc2_finclaim_next_capacity(cap, count + 1u)' \
   'lj_gc2_finreg_cdata_preclaim_take(L, g, o, &fin)' \
-  'lj_tv_load_acq(fin, &g->gc2.finreg_cdata_preclaim_fin[i]);' \
+  'gc2_finreg_cdata_preclaim_fin_acq(g, i, fin)' \
   'dispatch order may differ from FINREG scan' \
   'gc_mark_finreg_cdata_preclaims(global_State *g)' \
   'gc2_mark_finreg_cdata_preclaims(global_State *g)' \
-  'lj_tv_load_acq(&fin, &g->gc2.finreg_cdata_preclaim_fin[i]);' \
+  'gc2_finreg_cdata_preclaim_fin_acq(g, i, &fin)' \
   'ordered FINREG P_WEAK cdata discovery' \
   'uint64_t finreg_cdata_pweak_queued' \
   'uint64_t finreg_cdata_sweep_queued' \
@@ -340,6 +343,32 @@ fi
 if rg -n 'gcref\(node->obj|gcref_acq\(node->obj|setgcref\(node->obj|setgcrefrel\(node->obj|setgcrefnull\(node->obj|setgcrefnullrel\(node->obj' \
     "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc2.c"; then
   echo "guardrail: userdata FINREG object payload must use acquire/release helpers" >&2
+  exit 1
+fi
+
+if ! awk '
+  /static void gc_mark_finreg_cdata_preclaims\(global_State \*g\)/ ||
+  /static void gc2_mark_finreg_cdata_preclaims\(global_State \*g\)/ ||
+  /int lj_gc2_finreg_cdata_preclaim_take\(lua_State \*L, global_State \*g,/ {
+    infn = 1
+    ready = obj = fin = bad = 0
+    next
+  }
+  infn && /gc2_finreg_cdata_preclaim_ready\(g\)/ { ready = 1 }
+  infn && /gc2_finreg_cdata_preclaim_obj_acq\(g, (i|head)\)/ { obj = 1 }
+  infn && /gc2_finreg_cdata_preclaim_fin_acq\(g, i, (&fin|fin)\)/ { fin = 1 }
+  infn && /gcref_acq\(g->gc2\.finreg_cdata_preclaim_obj\[[^]]+\]\)/ { bad = 1 }
+  infn && /lj_tv_load_acq\([^,]+, &g->gc2\.finreg_cdata_preclaim_fin\[[^]]+\]\)/ {
+    bad = 1
+  }
+  infn && /^}/ {
+    if (!ready || !obj || !fin || bad)
+      fail = 1
+    infn = 0
+  }
+  END { exit fail ? 1 : 0 }
+' "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc2.c"; then
+  echo "guardrail: cdata FINREG preclaim consumers must use slot load helpers" >&2
   exit 1
 fi
 

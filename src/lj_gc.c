@@ -573,15 +573,14 @@ static void gc_mark_finreg_cdata_preclaims(global_State *g)
 {
   MSize i, head = g->gc2.finreg_cdata_preclaim_head;
   MSize count = g->gc2.finreg_cdata_preclaim_count;
-  if (!g->gc2.finreg_cdata_preclaim_obj ||
-      !g->gc2.finreg_cdata_preclaim_fin)
+  if (!gc2_finreg_cdata_preclaim_ready(g))
     return;
   for (i = head; i < count; i++) {
-    GCobj *o = gcref_acq(g->gc2.finreg_cdata_preclaim_obj[i]);
+    GCobj *o = gc2_finreg_cdata_preclaim_obj_acq(g, i);
     if (o) {
       TValue fin;
       gc_markobj(g, o);
-      lj_tv_load_acq(&fin, &g->gc2.finreg_cdata_preclaim_fin[i]);
+      gc2_finreg_cdata_preclaim_fin_acq(g, i, &fin);
       gc_marktv(g, &fin);
     }
   }

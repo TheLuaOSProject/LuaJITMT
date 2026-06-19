@@ -1735,6 +1735,24 @@ static LJ_AINLINE void lj_tv_load_acq(TValue *dst, const TValue *src)
   dst->u64 = tv_rawload_acq(src);
 }
 
+static LJ_AINLINE int gc2_finreg_cdata_preclaim_ready(global_State *g)
+{
+  return g->gc2.finreg_cdata_preclaim_obj != NULL &&
+	 g->gc2.finreg_cdata_preclaim_fin != NULL;
+}
+
+static LJ_AINLINE GCobj *gc2_finreg_cdata_preclaim_obj_acq(global_State *g,
+							   MSize i)
+{
+  return gcref_acq(g->gc2.finreg_cdata_preclaim_obj[i]);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_preclaim_fin_acq(global_State *g,
+							 MSize i, TValue *fin)
+{
+  lj_tv_load_acq(fin, &g->gc2.finreg_cdata_preclaim_fin[i]);
+}
+
 static LJ_AINLINE int lj_tv_isnil_acq(const TValue *src)
 {
   TValue tv;

@@ -1311,15 +1311,14 @@ static void gc2_mark_finreg_cdata_preclaims(global_State *g)
 {
   MSize i, head = g->gc2.finreg_cdata_preclaim_head;
   MSize count = g->gc2.finreg_cdata_preclaim_count;
-  if (!g->gc2.finreg_cdata_preclaim_obj ||
-      !g->gc2.finreg_cdata_preclaim_fin)
+  if (!gc2_finreg_cdata_preclaim_ready(g))
     return;
   for (i = head; i < count; i++) {
-    GCobj *o = gcref_acq(g->gc2.finreg_cdata_preclaim_obj[i]);
+    GCobj *o = gc2_finreg_cdata_preclaim_obj_acq(g, i);
     if (o) {
       TValue fin;
       lj_gc2_markobj(g, o);
-      lj_tv_load_acq(&fin, &g->gc2.finreg_cdata_preclaim_fin[i]);
+      gc2_finreg_cdata_preclaim_fin_acq(g, i, &fin);
       gc2_mark_tv(g, &fin);
     }
   }
@@ -2270,21 +2269,20 @@ int lj_gc2_finreg_cdata_preclaim_take(lua_State *L, global_State *g,
   MSize head, count, i;
   GCobj *claimed;
   if (!L || !g || !o || !fin || o->gch.gct != ~LJ_TCDATA ||
-      !g->gc2.finreg_cdata_preclaim_obj ||
-      !g->gc2.finreg_cdata_preclaim_fin)
+      !gc2_finreg_cdata_preclaim_ready(g))
     return 0;
   head = g->gc2.finreg_cdata_preclaim_head;
   count = g->gc2.finreg_cdata_preclaim_count;
   if (head >= count)
     return 0;
   for (i = head; i < count; i++) {
-    claimed = gcref_acq(g->gc2.finreg_cdata_preclaim_obj[i]);
+    claimed = gc2_finreg_cdata_preclaim_obj_acq(g, i);
     if (claimed != o)
       continue;
-    lj_tv_load_acq(fin, &g->gc2.finreg_cdata_preclaim_fin[i]);
+    gc2_finreg_cdata_preclaim_fin_acq(g, i, fin);
     gc2_finclaim_clear(L, g, i);
     while (head < count &&
-	   gcref_acq(g->gc2.finreg_cdata_preclaim_obj[head]) == NULL)
+	   gc2_finreg_cdata_preclaim_obj_acq(g, head) == NULL)
       head++;
     if (head == count) {
       g->gc2.finreg_cdata_preclaim_head = 0;
