@@ -106,6 +106,22 @@ assert(traces() > 0, "fresh array slot table store did not trace")
 ]]
 end
 
+local function jit_table_fload_mutable_smoke()
+  return [[
+jit.opt.start("hotloop=1")
+local sum = 0
+local t = {}
+for i = 1, 80 do t[i] = i end
+for r = 1, 200 do
+  if r == 75 then
+    for i = 81, 180 do t[i] = i end
+  end
+  sum = sum + (t[(r % 180) + 1] or 0)
+end
+assert(sum > 0)
+]]
+end
+
 local function jit_href_node_order_smoke()
   return [[
 jit.opt.start("hotloop=1")
@@ -271,6 +287,38 @@ return function(add)
         t:assert_not_contains(record, needle)
       end
       print("M5 JIT table-store bridge guard passed")
+    end
+  })
+
+  add({
+    name = "m5_jit_table_fload_mutable",
+    description = "JIT table field FLOAD mutability guard",
+    run = function(t)
+      local fold = t:path("src", "lj_opt_fold.c")
+      t:build({ clean = true, quiet = true })
+      t:luajit({ "-e", jit_table_fload_mutable_smoke() })
+
+      t:assert_not_contains(fold, "LJFOLDF(fload_tab_ah)")
+      t:assert_all_contains(fold, {
+        "LJFOLDF(href_ah)",
+        "LJFOLD(FLOAD any IRFL_TAB_ARRAY)",
+        "LJFOLD(FLOAD any IRFL_TAB_NODE)",
+        "LJFOLD(FLOAD any IRFL_TAB_ASIZE)",
+        "LJFOLD(FLOAD any IRFL_TAB_HMASK)",
+        "LJFOLDF(fload_tab_mut)",
+        "lj_tab_array_snapshot_acq(t, &array)",
+        "lj_tab_node_snapshot_acq(t, &hmask)"
+      })
+
+      assert_no_lines(t, "TDUP FLOAD folds must snapshot template table headers",
+                      { fold }, function(line)
+        return contains(line, "ir_ktab(IR(fleft->op1))->asize") or
+               contains(line, "ir_ktab(IR(fleft->op1))->hmask")
+      end)
+
+      local block = t:c_block(fold, "LJFOLDF(fload_tab_mut)")
+      t:assert_text_contains("fload_tab_mut", block, "return EMITFOLD;")
+      print("M5 JIT table FLOAD mutability guard passed")
     end
   })
 
@@ -457,6 +505,62 @@ return function(add)
       t:build({ quiet = true })
       t:luajit({ "-joff", "-e", udtype_publish_smoke() })
       print("M5 userdata type publication guard passed")
+    end
+  })
+
+  add({
+    name = "m5_threading_alloc",
+    description = "per-TG allocator routing guard under spawned Lua threads",
+    run = function(t)
+      t:build({ clean = true, quiet = true })
+
+      t:assert_all_any_contains({
+        t:path("src", "lj_gc.c"),
+        t:path("src", "lj_arena.c"),
+        t:path("src", "lj_arena.h"),
+        t:path("src", "lj_tg.c"),
+        t:path("src", "lj_tg.h")
+      }, {
+        "gc_arena_allocd_for_new",
+        "gc_arena_allocd_for_ptr",
+        "lj_tg_find_owner",
+        "lj_arena_allocd_alloc(gc_arena_allocd_for_new(L)",
+        "p ? gc_arena_allocd_for_ptr(g, p)",
+        "owner_tid"
+      })
+      t:assert_all_contains(t:path("src", "lj_tg.c"), {
+        "tg->tg_flags & TGF_ARENA_INTERNAL",
+        "tg_transfer_dead_alloc",
+        "lj_arena_alloc_transfer",
+        "lj_arena_hugetab_transfer"
+      })
+      t:assert_all_any_contains({
+        t:path("src", "lj_arena.c"),
+        t:path("src", "lj_arena.h")
+      }, {
+        "lj_arena_alloc_transfer",
+        "lj_arena_hugetab_transfer"
+      })
+      t:assert_all_contains(t:path("src", "lj_gc2.c"), {
+        "gc2_tg_for_mem",
+        "gc2_clear_marks_all",
+        "lj_tg_find_owner(g, owner_tid)"
+      })
+      t:assert_all_any_contains({
+        t:path("src", "lib_threading.c"),
+        t:path("src", "lj_tg.c")
+      }, {
+        "threading_arena_internal",
+        "tg->alloc.owner_tid ="
+      })
+
+      t:luajit({
+        "-joff",
+        t:path("tests", "t-threading-alloc.lua"),
+        "4",
+        "6000"
+      }, { timeout = "20s" })
+      print("M5 threading allocator routing tests passed")
     end
   })
 
