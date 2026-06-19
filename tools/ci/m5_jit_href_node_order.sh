@@ -25,10 +25,13 @@ assert(sum > 0)
 '
 
 for needle in \
+  'TABNODE_HMASK_OFS' \
+  'TABNODE_FLAGS_OFS' \
+  'emit_rmro(as, XO_GROUP3, XOg_TEST, node, TABNODE_FLAGS_OFS);' \
   'Reg idx;' \
   'idx = ra_scratch(as, iallow);' \
   'emit_rr(as, XO_ARITH(XOg_ADD), dest|REX_GC64, idx);' \
-  'emit_rmro(as, XO_MOV, idx, dest, -(int32_t)sizeof(TabNodeHdr));' \
+  'emit_rmro(as, XO_MOV, idx, dest, TABNODE_HMASK_OFS);' \
   'emit_rmro(as, XO_ARITH(XOg_AND), idx, dest,' \
   'emit_rmro(as, XO_MOV, dest|REX_GC64, tab, offsetof(GCtab, node));'
 do
@@ -37,6 +40,13 @@ do
     exit 1
   fi
 done
+
+HREF_RETIRING_GUARDS=$(rg -F 'asm_tabnode_retiring_guard(as, dest);' \
+  "$ROOT/src/lj_asm_x86.h" | wc -l | tr -d ' ')
+if [ "$HREF_RETIRING_GUARDS" -lt 2 ]; then
+  echo "guardrail: dynamic HREF must guard both node-load paths against retiring generations" >&2
+  exit 1
+fi
 
 for reject in \
   'emit_rmro(as, XO_ARITH(XOg_ADD), dest|REX_GC64, tab, offsetof(GCtab,node))' \

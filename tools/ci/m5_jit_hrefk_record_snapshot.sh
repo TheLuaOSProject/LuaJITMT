@@ -29,8 +29,10 @@ for needle in \
   'uintptr_t nodeaddr = (uintptr_t)(const void *)&hrefk_node[0].val' \
   'lj_ir_kint(J, (int32_t)hrefk_hmask)' \
   "Guard HREFK's constant slot against a newer, smaller node generation." \
+  "Guard HREFK's loaded node against a retiring hash generation." \
   'asm_guardcc(as, CC_B);' \
-  'emit_gmroi(as, XG_ARITHi(XOg_CMP), node, -(int32_t)sizeof(TabNodeHdr),'
+  'emit_gmroi(as, XG_ARITHi(XOg_CMP), node, TABNODE_HMASK_OFS,' \
+  'asm_tabnode_retiring_guard(as, node);'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_record.c" "$ROOT/src/lj_asm_x86.h"; then
     echo "guardrail: missing HREFK recorder snapshot marker: $needle" >&2

@@ -414,12 +414,14 @@ scoped-flush target.
    IMPLEMENT the latter.
    Current implementation note: `GCtab.hmask` is only a compatibility mirror
    after the landed `TabNodeHdr` slice, while C readers and regular x64
-   dynamic `IR_HREF` lowering use the node header. The original JIT target
-   above remains pending for the final generation-aware HREFK guard model and
+   dynamic `IR_HREF` lowering use the node header. Current Linux/x64 JIT hash
+   readers also test `TABNODE_FLAG_RETIRING` before consuming a loaded hash
+   generation. The original JIT target above remains pending for final
    HSTORE/write codegen; current Linux/x64 HREFK recording loads the current
-   node pointer and relies on the x64 node-header slot-bounds guard before
-   reading `node[slot].key`, instead of recording a legacy `GCtab.hmask` mirror
-   equality guard. Do not treat the mirror as the final correctness source.
+   node pointer and relies on the x64 node-header retiring and slot-bounds
+   guards before reading `node[slot].key`, instead of recording a legacy
+   `GCtab.hmask` mirror equality guard. Do not treat the mirror as the final
+   correctness source.
    Current implementation status: before the full `AHdr`/`NHdr` reshape, the
    legacy `GCtab` table-field `FLOAD`s for array/node/asize/hmask are emitted
    as fresh loads instead of being CSE'd under the old "no corresponding
@@ -429,8 +431,9 @@ scoped-flush target.
    the legacy node base before pairing it with a separately computed hmask
    index from the loaded node header, so trace hash lookups do not combine a
    fresh hmask with an older node pointer during the current publish/retire
-   phase. The M6 guard suite now covers both dynamic `HREF` and constant-key
-   `HREFK` node-header pairing. Constant-key `HREFK`
+   phase, and they exit if the paired header is already retiring. The M6 guard
+   suite now covers both dynamic `HREF` and constant-key `HREFK` node-header
+   pairing and retiring-generation checks. Constant-key `HREFK`
    recording snapshots the legacy node/hmask shape around `lj_tab_get()` and
    falls back to regular `HREF` if the shape changes while recording. x64
    empty-hash misses also fall through to regular `HREF` instead of recording

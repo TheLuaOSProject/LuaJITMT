@@ -313,8 +313,10 @@ protocol for migration correctness. The x64 VM hash readers that consume
 `TABNODE_FLAG_RETIRING` and leave the fast path instead of traversing a retired
 hash generation. Regular x64
 dynamic `IR_HREF` lowering also uses the node-header mask instead of
-`GCtab.hmask`; constant-slot HREFK lowering has an interim node-header bounds
-guard before reading its recorded slot. Linux/x64 helper-backed `ASTORE` and
+`GCtab.hmask`, and x64 `IR_HREF`/`IR_HREFK` lowering exits on
+`TABNODE_FLAG_RETIRING` before traversing a retiring hash generation;
+constant-slot HREFK lowering also has an interim node-header bounds guard
+before reading its recorded slot. Linux/x64 helper-backed `ASTORE` and
 `HSTORE` lowering now release-publishes through table-store helpers with parent
 barrier context, including shared table references and numeric `NEWREF` stores,
 and those helpers resolve visible forwarded destinations through successor

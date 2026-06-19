@@ -8,7 +8,9 @@ make -C "$ROOT/src" >/dev/null
 
 for needle in \
   'x64 HREFK guards the constant slot against the loaded node header' \
-  'emit_gmroi(as, XG_ARITHi(XOg_CMP), node, -(int32_t)sizeof(TabNodeHdr)' \
+  'Guard HREFK'"'"'s loaded node against a retiring hash generation.' \
+  'asm_tabnode_retiring_guard(as, node);' \
+  'emit_gmroi(as, XG_ARITHi(XOg_CMP), node, TABNODE_HMASK_OFS' \
   '#if !(defined(__linux__) && LJ_TARGET_X64)'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_record.c" "$ROOT/src/lj_asm_x86.h"; then

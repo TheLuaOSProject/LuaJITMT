@@ -8,7 +8,11 @@ trap 'rm -f "$TMP"' EXIT
 
 for needle in \
   'M6: dynamic HREF masks against the loaded node header, not GCtab.hmask.' \
+  'M6: JIT hash readers leave retiring hash generations like the VM.' \
+  'asm_tabnode_retiring_guard(as, dest);' \
   'emit_rmro(as, XO_MOV, dest|REX_GC64, tab, offsetof(GCtab, node));' \
+  'TABNODE_HMASK_OFS' \
+  'TABNODE_FLAG_RETIRING' \
   '-(int32_t)sizeof(TabNodeHdr)'
 do
   if ! rg -F -q -- "$needle" "$ROOT/src/lj_asm_x86.h"; then
@@ -16,6 +20,13 @@ do
     exit 1
   fi
 done
+
+HREF_RETIRING_GUARDS=$(rg -F 'asm_tabnode_retiring_guard(as, dest);' \
+  "$ROOT/src/lj_asm_x86.h" | wc -l | tr -d ' ')
+if [ "$HREF_RETIRING_GUARDS" -lt 2 ]; then
+  echo "guardrail: dynamic HREF must guard both node-load paths against retiring generations" >&2
+  exit 1
+fi
 
 if ! rg -F -q 'M6: empty-hash misses fall through to HREF so x64 uses TabNodeHdr.hmask.' \
     "$ROOT/src/lj_record.c"; then
