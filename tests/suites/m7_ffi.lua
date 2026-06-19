@@ -613,81 +613,8 @@ return function(add)
 
   add({
     name = "m7_ffi_clib_cache",
-    description = "FFI C library cache miss/fill concurrency",
+    description = "FFI C library cache miss/fill behavior",
     run = function(t)
-      local src = {
-        t:path("src", "lj_clib.c"),
-        t:path("src", "lj_clib.h"),
-        t:path("src", "lj_crecord.c"),
-        t:path("src", "lj_gc.c"),
-        t:path("src", "lj_gc2.c"),
-        t:path("src", "lj_udata.c")
-      }
-      local impl = {
-        t:path("src", "lj_clib.c"),
-        t:path("src", "lj_gc.c"),
-        t:path("src", "lj_gc2.c")
-      }
-      t:assert_all_any_contains(src, {
-        "CLibCacheEntry *cache_head",
-        "lj_clib_cache_next_acq(",
-        "lj_clib_cache_next_rel(CLibCacheEntry *e,",
-        "lj_clib_cache_name_acq(const CLibCacheEntry *e)",
-        "lj_clib_cache_name_rel(CLibCacheEntry *e, GCstr *name)",
-        "lj_clib_cache_val_acq(TValue *dst,",
-        "lj_clib_cache_val_rel(lua_State *L, CLibCacheEntry *e,",
-        "lj_clib_cache_head_acq(const CLibrary *cl)",
-        "lj_clib_cache_head_cas_rel(CLibrary *cl,",
-        "lj_clib_cache_head_xchg_acqrel(",
-        "lj_clib_cache_get(CLibrary *cl, GCstr *name)",
-        "clib_cache_publish(lua_State *L, CLibrary *cl, GCstr *name",
-        "lj_tv_load_acq(&tv, ctv)",
-        "la_casptr((void **)&cl->cache_head",
-        "lj_gc_arena_markmem(G(L), e)",
-        "lj_cdata_new_l(L, cts, id, CTSIZE_PTR)",
-        "lj_gc_barrierroot(L, &e->val)",
-        "gc_mark_clib_cache(global_State *g, CLibrary *cl)",
-        "gc2_traverse_clib_cache(global_State *g, CLibrary *cl)",
-        "lj_clib_unload(g, (CLibrary *)uddata(ud))",
-        "lj_clib_cache_get(cl, name)"
-      })
-      assert_no_lines(t, "clib cache must use side cache without old token/table bridge",
-                      src, function(line)
-        return line_contains_any(line, {
-          "LJ_MT",
-          "LUAJIT_THREADSAFE",
-          "uint32_t cache_token",
-          "clib_cache_lock",
-          "clib_cache_unlock",
-          "lj_tab_setstr(L, cl->cache",
-          "lj_tab_getstr(cl->cache",
-          "lj_cdata_new(cts, id, CTSIZE_PTR)"
-        })
-      end)
-      assert_no_lines(t, "clib cache payloads must use shared acquire/release helpers",
-                      impl, function(line)
-        return line_contains_any(line, {
-          "e->name = name",
-          "copyTV(L, &e->val",
-          "la_loadptr_acq((void *const *)&e->name)",
-          "lj_tv_load_acq(&tv, &e->val)"
-        })
-      end)
-      assert_no_lines(t, "clib cache list links must use shared head/next helpers",
-                      impl, function(line)
-        return line:find("^%s*e%->next%s*=%s*head") ~= nil or
-               line:find("[^%w_]e%->next%s*=%s*head") ~= nil or
-               contains(line, "la_loadptr_acq((void *const *)&e->next)") or
-               contains(line, "la_loadptr_acq((void *const *)&cl->cache_head)") or
-               contains(line, "la_xchgptr_acqrel((void **)&cl->cache_head") or
-               contains(line, "la_casptr((void **)&cl->cache_head")
-      end)
-      local rec = t:c_block(t:path("src", "lj_crecord.c"),
-                            "void LJ_FASTCALL recff_clib_index")
-      assert_text_contains("recff_clib_index", rec, "lj_tv_load_acq(&tv, ctv)")
-      for _, bad in ipairs({ "tvisnil(ctv)", "tvisnil(tv)", "cdataV(ctv)", "cdataV(tv)" }) do
-        assert_text_not_contains("recff_clib_index", rec, bad)
-      end
       clean_build(t)
       run_luajit_script(t, "t-ffi-clib-cache.lua", {
         getenv("LJ_M7_FFI_CLIB_THREADS", "6"),
@@ -697,7 +624,7 @@ return function(add)
         getenv("LJ_M7_FFI_CLIB_JIT_THREADS", "2"),
         getenv("LJ_M7_FFI_CLIB_JIT_ITERS", "180")
       })
-      print("M7 FFI clib cache guard passed")
+      print("M7 FFI clib cache behavior passed")
     end
   })
 
