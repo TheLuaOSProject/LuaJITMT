@@ -290,6 +290,9 @@ Lua test-suite migration notes:
   removing their direct JIT source marker checks.
 - Converted `m6_jit_table_store_helper` to rely on its C forward-store fixture,
   Lua smoke, and generated IR checks instead of direct helper source markers.
+- Converted `m6_jit_alloc_account`, `m6_jit_gc2_readiness`, and
+  `m6_jit_gcstep_guard` to C fixture/generated dump behavior coverage instead
+  of direct GC/JIT source marker checks.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.

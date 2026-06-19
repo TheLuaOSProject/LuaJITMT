@@ -1417,146 +1417,23 @@ assert(seen == 80)
 
   add({
     name = "m6_jit_alloc_account",
-    description = "M6 allocator accounting bridge for JIT GCSTEP removal",
+    description = "M6 allocator accounting behavior",
     run = function(t)
       build_default(t)
-      assert_marker_set(t, {
-        t:path("src", "lj_atomic.h"),
-        t:path("src", "lj_obj.h"),
-        t:path("src", "lj_gc.h"),
-        t:path("src", "lj_gc2.h"),
-        t:path("src", "lj_gc2.c"),
-        t:path("src", "lj_gc.c"),
-        t:path("src", "lj_safepoint.c"),
-        t:path("src", "lj_tg.c"),
-        t:path("src", "lj_tg.h"),
-        t:path("src", "lj_api.c"),
-        t:path("src", "vm_x64.dasc")
-      }, {
-        "uint64_t alloc_since_trigger",
-        "uint64_t trigger_bytes",
-        "uint64_t hard_bytes",
-        "uint32_t cycle_leader",
-        "uint64_t cycle_requests",
-        "uint64_t cycle_starts",
-        "uint64_t assist_runs",
-        "uint64_t assist_grey_drained",
-        "uint64_t assist_ssb_converted",
-        "uint64_t assist_weak_drained",
-        "uint64_t jit_hard_checks",
-        "uint64_t interp_hard_checks",
-        "uint32_t gcpause_pct",
-        "uint32_t assist_shift",
-        "uint32_t assist_active",
-        "uint64_t local_total",
-        "LJ_GC2_ACCT_FLUSH",
-        "la_xchg64_acqrel",
-        "int lj_gc_should_step(global_State *g)",
-        "la_load64_acq(&g->gc2.alloc_since_trigger) >",
-        "lj_gc2_account_alloc(global_State *g, TGState *tg, GCSize bytes)",
-        "lj_gc2_flush_alloc(global_State *g, TGState *tg)",
-        "lj_gc2_update_pacing(global_State *g)",
-        "lj_gc2_assist_shift_from_stepmul(uint32_t stepmul)",
-        "lj_gc2_assist(global_State *g, TGState *tg)",
-        "static int gc2_request_cycle(global_State *g, TGState *tg)",
-        "static void gc2_maybe_trigger_cycle(global_State *g, TGState *tg)",
-        "la_cas32(&g->gc2.cycle_leader",
-        "la_add64_rlx(&g->gc2.cycle_requests",
-        "la_add64_rlx(&g->gc2.cycle_starts",
-        "lj_gc_threshold_load(g) == LJ_MAX_MEM",
-        "lj_gc_threshold_store(g, g->gc.total)",
-        "la_store64_rel(&g->gc2.trigger_bytes",
-        "la_store64_rel(&g->gc2.hard_bytes",
-        "la_cas32(&g->gc2.assist_active",
-        "tg->gc_assist = 1",
-        "lj_gc_step_top(lua_State *L)",
-        "call extern lj_gc_step_top",
-        "lj_gc_step_top(L)",
-        "legacy_step = g->gc.total >= lj_gc_threshold_load(g)",
-        "la_add64_rlx(&g->gc2.assist_runs",
-        "la_add64_rlx(&g->gc2.interp_hard_checks",
-        "lj_gc2_assist(g, L2TG(L));  /* 05 section 5.11 interpreter assist bridge. */",
-        "if (legacy_step)",
-        "la_add64_rlx(&g->gc2.assist_grey_drained",
-        "la_add64_rlx(&g->gc2.assist_ssb_converted",
-        "la_add64_rlx(&g->gc2.assist_weak_drained",
-        "la_store64_rlx(&g->gc2.jit_hard_checks, 0)",
-        "la_store64_rlx(&g->gc2.interp_hard_checks, 0)",
-        "la_xchg32_acqrel(&g->gc2.cycle_leader, 0)",
-        "gc2_drain_active_ssb_to_grey(global_State *g, TGState *tg",
-        "gc2_drain_published_ssb_to_grey(global_State *g",
-        "gc2_drain_grey(g, left)",
-        "lj_gc2_weak_drain(g, limit - work)",
-        "05 section 5.11",
-        "static void gc2_reset_alloc_trigger(global_State *g)",
-        "la_add64_rlx(&tg->local_total",
-        "la_add64_rlx(&g->gc2.alloc_since_trigger",
-        "la_store64_rlx(&g->gc2.alloc_since_trigger, 0)",
-        "lj_gc2_account_alloc(g, L2TG(L), nsz - osz)",
-        "lj_gc2_account_alloc(g, L2TG(L), size)",
-        "lj_gc2_flush_alloc(g, tg);  /* 04 section 4.8 safepoint flush. */",
-        "lj_gc2_flush_alloc(g, tg);  /* 04 section 4.8 detach accounting. */",
-        "la_store32_rel(&g->gc2.gcpause_pct",
-        "la_store32_rel(&g->gc2.assist_shift"
-      }, "allocator accounting")
-      if count_plain(t:read(t:path("src", "vm_x64.dasc")),
-                     "GL:ITYPE->gc2.alloc_since_trigger") < 3 then
-        error("x64 TNEW/TDUP/ffgccheck must check GC2 hard allocation threshold", 2)
-      end
       check_m6_aggregate(t, "m6_jit_alloc_account.sh")
       build_and_run_c(t, t:tmp("lj_t-gc2-alloc-account"),
                       "t-gc2-alloc-account.c", { build = false, timeout = "20s" })
       build_and_run_c(t, t:tmp("lj_t-gc2-interp-hard-check"),
                       "t-gc2-interp-hard-check.c", { build = false, timeout = "20s" })
-      print("M6 JIT allocator accounting guard passed")
+      print("M6 JIT allocator accounting behavior passed")
     end
   })
 
   add({
     name = "m6_jit_gc2_readiness",
-    description = "GC2 allocation-pacing readiness while JIT GCSTEP is live",
+    description = "GC2 allocation-pacing readiness behavior",
     run = function(t)
       build_default(t)
-      assert_marker_set(t, {
-        t:path("src", "lj_gc2.c"),
-        t:path("src", "lj_gc2.h"),
-        t:path("src", "lj_gc.c"),
-        t:path("src", "lj_gc.h"),
-        t:path("src", "lj_obj.h"),
-        t:path("src", "lj_ir.h"),
-        t:path("src", "lj_ircall.h"),
-        t:path("src", "lj_snap.c"),
-        t:path("src", "lj_asm.c"),
-        t:path("src", "lj_asm_x86.h")
-      }, {
-        "uint32_t cycle_leader",
-        "uint64_t cycle_requests",
-        "uint64_t cycle_starts",
-        "uint64_t jit_hard_checks",
-        "static int gc2_request_cycle(global_State *g, TGState *tg)",
-        "static void gc2_maybe_trigger_cycle(global_State *g, TGState *tg)",
-        "la_cas32(&g->gc2.cycle_leader",
-        "la_add64_rlx(&g->gc2.cycle_requests",
-        "la_add64_rlx(&g->gc2.cycle_starts",
-        "lj_gc_threshold_load(g) == LJ_MAX_MEM",
-        "lj_gc_threshold_store(g, g->gc.total)",
-        "lj_gc2_assist(global_State *g, TGState *tg)",
-        "lj_gc2_assist(g, L2TG(L));  /* 05 section 5.11 trace-side assist bridge. */",
-        "legacy_step = g->gc.total >= lj_gc_threshold_load(g)",
-        "la_add64_rlx(&g->gc2.jit_hard_checks",
-        "la_cas32(&g->gc2.assist_active",
-        "gc2_drain_active_ssb_to_grey(global_State *g, TGState *tg",
-        "gc2_drain_published_ssb_to_grey(global_State *g",
-        "emit_getgl(as, tmp, gc2.alloc_since_trigger)",
-        "emit_opgl(as, XO_ARITH(XOg_CMP), tmp|REX_GC64, gc2.hard_bytes)",
-        "checkmclim(as);  /* M6: split trace-head GC check after snapshot prep. */",
-        "checkmclim(as);  /* M6: start long GC check sequence on a fresh red zone. */",
-        "checkmclim(as);  /* M6: split long GC check sequence for assert red zone. */",
-        "checkmclim(as);  /* M6: split GC2-hard and legacy GC threshold tests. */",
-        "lj_gc_step_jit",
-        "IR_GCSTEP",
-        "asm_gc_check"
-      }, "GC2/JIT pacing readiness")
       build_and_run_c(t, t:tmp("lj_t-gc2-jit-hard-check"),
                       "t-gc2-jit-hard-check.c", { build = false, timeout = "20s" })
 
@@ -1591,30 +1468,15 @@ assert(x=="abc")
 ]=], { timeout = "20s" })
       assert_dump_all_contains(t, snew, { "SNEW", "XPOLL" }, "SNEW readiness")
       check_m6_aggregate(t, "m6_jit_gc2_readiness.sh")
-      print("M6 JIT GC2 readiness guard passed")
+      print("M6 JIT GC2 readiness behavior passed")
     end
   })
 
   add({
     name = "m6_jit_gcstep_guard",
-    description = "legacy JIT GC-step pacing guard",
+    description = "legacy JIT GC-step pacing behavior",
     run = function(t)
       build_default(t)
-      assert_marker_set(t, {
-        t:path("src", "lj_gc.c"),
-        t:path("src", "lj_gc.h"),
-        t:path("src", "lj_ir.h"),
-        t:path("src", "lj_ircall.h"),
-        t:path("src", "lj_snap.c"),
-        t:path("src", "lj_asm.c"),
-        t:path("src", "lj_asm_x86.h")
-      }, {
-        "lj_gc_step_jit",
-        "IR_GCSTEP",
-        "asm_gcstep",
-        "asm_gc_check",
-        "as->gcsteps++"
-      }, "JIT GC-step pacing")
       local dump = t:tmp("lj_t-jit-gcstep.dump")
       luajit_dump(t, dump, "-jdump=ir", [=[
 jit.opt.start("hotloop=1","hotexit=1")
@@ -1626,7 +1488,7 @@ assert(type(x)=="table")
       luajit_file(t, t:path("tests", "stock", "test", "misc", "gcstep.lua"),
                   { timeout = "20s" })
       check_m6_aggregate(t, "m6_jit_gcstep_guard.sh")
-      print("M6 JIT GC-step guard passed")
+      print("M6 JIT GC-step behavior passed")
     end
   })
 
