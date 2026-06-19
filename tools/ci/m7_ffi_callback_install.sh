@@ -42,6 +42,8 @@ for needle in \
   'copyTVrel(mainthread(cts->g), &func[slot], &nilv)' \
   'lj_gc_arena_markmem(g, func)' \
   'lj_gc2_markmem(g, func)' \
+  'gc_markobj(g, obj2gco(th))' \
+  'lj_gc2_markobj(g, obj2gco(th))' \
   'if (tvisfunc(&tv))' \
   'ffi_miscmap_store(lua_State *L, CTState *cts, GCstr *key,' \
   'FFI miscmap store saw FORWARD after lookup.' \
