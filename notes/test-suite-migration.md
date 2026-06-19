@@ -2,7 +2,7 @@ Lua test-suite migration notes:
 
 - Added `tools/test.lua` plus `tests/lib/ljtest.lua` as the Lua-owned test
   runner/framework. The framework owns command execution, VM builds, C fixture
-  compilation, LuaJIT invocation, and source guard assertions.
+  compilation, and LuaJIT invocation.
 - Test definitions live under `tests/suites/*.lua`; C files remain fixtures.
   The migration target is to make `tools/ci/*.sh` compatibility launchers only,
   with all test logic in Lua.
@@ -36,13 +36,8 @@ Lua test-suite migration notes:
   - `tools/ci/m2_arena_gcclose.sh` -> `m2_arena_gcclose`
   - `tools/ci/m2_arena_gcsweep.sh` -> `m2_arena_gcsweep`
   - `tools/ci/m2_arena_gcphase.sh` -> `m2_arena_gcphase`
-- Fifth migrated scripts:
-  - `tools/ci/m5_gcroot_publish.sh` -> `m5_gcroot_publish`
-  - `tools/ci/m5_meta_snapshot.sh` -> `m5_meta_snapshot`
-  - `tools/ci/m5_jit_attach_publish.sh` -> `m5_jit_attach_publish`
-  - `tools/ci/m5_jit_profile_publish.sh` -> `m5_jit_profile_publish`
-  - `tools/ci/m5_table_parser_publish.sh` -> `m5_table_parser_publish`
-  - `tools/ci/m5_tmpbuf_tg.sh` -> `m5_tmpbuf_tg`
+- Fifth batch was later removed from the runnable suite because it only
+  asserted source-file shape, not behavior.
 - Sixth migrated scripts:
   - `tools/ci/m4_thr_substrate.sh` -> `m4_thr_substrate`
   - `tools/ci/m4_chan_stress.sh` -> `m4_chan_stress`
@@ -56,7 +51,6 @@ Lua test-suite migration notes:
   - `tools/ci/m5_nomm_cache.sh` -> `m5_nomm_cache`
   - `tools/ci/m5_strtab_prep.sh` -> `m5_strtab_prep`
 - Eighth migrated scripts:
-  - `tools/ci/m2_gc_header_accessors.sh` -> `m2_gc_header_accessors`
   - `tools/ci/m5_buffer_publish.sh` -> `m5_buffer_publish`
   - `tools/ci/m5_ctype_name_publish.sh` -> `m5_ctype_name_publish`
   - `tools/ci/m5_jit_hash_store_nyi.sh` -> `m5_jit_hash_store_nyi`
@@ -64,7 +58,6 @@ Lua test-suite migration notes:
   - `tools/ci/m5_tab_slot_snapshot.sh` -> `m5_tab_slot_snapshot`
   - `tools/ci/m5_tab_keylock_lookup.sh` -> `m5_tab_keylock_lookup`
 - Tenth migrated scripts:
-  - `tools/ci/m5_tab_alloc_publish.sh` -> `m5_tab_alloc_publish`
   - `tools/ci/m5_jit_href_node_order.sh` -> `m5_jit_href_node_order`
 - Eleventh migrated scripts:
   - `tools/ci/m5_tab_chain_order.sh` -> `m5_tab_chain_order`
@@ -94,7 +87,6 @@ Lua test-suite migration notes:
   - `tools/ci/m5_x64_table_next_snapshot.sh` -> `m5_x64_table_next_snapshot`
   - `tools/ci/m5_x64_tget_array_header.sh` -> `m5_x64_tget_array_header`
   - `tools/ci/m5_x64_tgets_node_order.sh` -> `m5_x64_tgets_node_order`
-  - `tools/ci/m5_x64_uv_publish.sh` -> `m5_x64_uv_publish`
 - Eighteenth migrated scripts:
   - `tools/ci/m9_gc_stats.sh` -> `m9_gc_stats`
   - `tools/ci/m9_bench_smoke.sh` -> `m9_bench_smoke`
@@ -102,16 +94,12 @@ Lua test-suite migration notes:
   - `tools/ci/m10_generational.sh` -> `m10_generational`
   - `tools/ci/m9_m10_gc.sh` -> `m9_m10_gc`
 - Nineteenth migrated scripts:
-  - `tools/ci/m5_runtime_publish.sh` -> `m5_runtime_publish`
   - `tools/ci/m5_state_owner.sh` -> `m5_state_owner`
   - `tools/ci/m5_cell_ops.sh` -> `m5_cell_ops`
   - `tools/ci/m5_jit_trace_publish.sh` -> `m5_jit_trace_publish`
-  - `tools/ci/m5_metatable_publish.sh` -> `m5_metatable_publish`
   - `tools/ci/m5_tab_array_publish.sh` -> `m5_tab_array_publish`
   - `tools/ci/m5_tab_cas_store.sh` -> `m5_tab_cas_store`
   - `tools/ci/m5_tab_value_publish.sh` -> `m5_tab_value_publish`
-  - `tools/ci/m5_threading_publish.sh` -> `m5_threading_publish`
-  - `tools/ci/m5_upvalue_publish.sh` -> `m5_upvalue_publish`
   - `tools/ci/m5_x64_tset_nil_snapshot.sh` -> `m5_x64_tset_nil_snapshot`
 - Twentieth migrated scripts:
   - `tools/ci/m6_dispatch_redispatch.sh` -> `m6_dispatch_redispatch`
@@ -131,7 +119,6 @@ Lua test-suite migration notes:
   - `tools/ci/m6_jit.sh` -> `m6_jit`
 - Twenty-first migrated scripts:
   - `tools/ci/m7_ffi_cdef_token.sh` -> `m7_ffi_cdef_token`
-  - `tools/ci/m7_ffi_no_cts_l.sh` -> `m7_ffi_no_cts_l`
   - `tools/ci/m7_ffi_cdef_dup_stack.sh` -> `m7_ffi_cdef_dup_stack`
   - `tools/ci/m7_ffi_cparse_rollback.sh` -> `m7_ffi_cparse_rollback`
   - `tools/ci/m7_ffi_ctype_intern_l.sh` -> `m7_ffi_ctype_intern_l`
@@ -213,6 +200,13 @@ Lua test-suite migration notes:
   keeping the aggregate as Lua orchestration over the focused cases.
 - The twenty-first batch migrates the M7 FFI wrappers and aggregate.
 - The twenty-second batch migrates the M8 weak/finalizer semantic gate.
+- The twenty-third batch migrates the remaining M0 matrix,
+  stock-suite runner, M4 TSan driver gate, and M5 aggregate wrapper. The only
+  remaining shell entrypoint is the compatibility launcher for the Lua runner.
+- Source-shape-only cases were removed from the runnable suite: M0 guardrails,
+  M2 GC header accessor grep, the M5 source publication guards, M5 x64 upvalue
+  publication, and M7 no-CTState-L. These should be replaced by behavior tests
+  or C/Lua fixtures if the invariant is important.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.

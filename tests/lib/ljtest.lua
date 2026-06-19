@@ -1,32 +1,14 @@
+local utils = require("suite_utils")
+
 local M = {}
 
 local Test = {}
 Test.__index = Test
 
-local function getenv(name, default)
-  local v = os.getenv(name)
-  if v == nil or v == "" then return default end
-  return v
-end
-
-local function shell_quote(s)
-  s = tostring(s)
-  return "'" .. s:gsub("'", "'\\''") .. "'"
-end
-
-local function detect_jobs()
-  local p = io.popen("getconf _NPROCESSORS_ONLN 2>/dev/null")
-  if p then
-    local n = p:read("*l")
-    p:close()
-    n = tonumber(n)
-    if n and n > 0 then
-      if n > 2 then n = 2 end
-      return tostring(n)
-    end
-  end
-  return "2"
-end
+local getenv = utils.getenv
+local shell_quote = utils.shell_quote
+local read_file = utils.read_file
+local has_extension = utils.has_extension
 
 local function append(parts, value)
   if value == nil or value == "" then return end
@@ -47,32 +29,12 @@ local function append_flags(parts, flags)
   end
 end
 
-local function read_file(path)
-  local f, err = io.open(path, "rb")
-  if not f then error(path .. ": " .. err, 2) end
-  local data = f:read("*a")
-  f:close()
-  return data
-end
-
-local function has_extension(path, extensions)
-  if not extensions then return true end
-  if type(extensions) == "string" then
-    return path:sub(-#extensions) == extensions
-  end
-  for i = 1, #extensions do
-    local ext = extensions[i]
-    if path:sub(-#ext) == ext then return true end
-  end
-  return false
-end
-
 function M.new(root)
   local self = {
     root = root,
     compiler = getenv("CC", "cc"),
     cflags = getenv("CFLAGS", "-std=gnu99 -O2 -Wall -Wextra -Werror -mcx16"),
-    jobs = getenv("JOBS", getenv("MAKE_JOBS", detect_jobs())),
+    jobs = getenv("JOBS", getenv("MAKE_JOBS", utils.detect_jobs())),
     tmpdir = getenv("TMPDIR", "/tmp")
   }
   return setmetatable(self, Test)

@@ -422,7 +422,6 @@ end
 
 local m7_cases = {
   "m7_ffi_cdef_token",
-  "m7_ffi_no_cts_l",
   "m7_ffi_cdef_dup_stack",
   "m7_ffi_cparse_rollback",
   "m7_ffi_ctype_intern_l",
@@ -1694,47 +1693,6 @@ print("dump cnewi ok")
         getenv("LJ_M7_FFI_META_ITERS", "60")
       }, { joff = true })
       print("M7 FFI metatype/miscmap guard passed")
-    end
-  })
-
-  add({
-    name = "m7_ffi_no_cts_l",
-    description = "CTState does not regain a shared lua_State carrier",
-    run = function(t)
-      local src = source_files(t)
-      assert_no_lines(t, "CTState must not carry or dereference a shared lua_State",
-                      src, function(line)
-        return contains(line, "cts->L")
-      end)
-      local cts = t:text_between(t:path("src", "lj_ctype.h"),
-                                 "typedef struct CTState", "} CTState;")
-      if contains(cts, "lua_State") and contains(cts, "*L") then
-        error("CTState must not embed lua_State *L")
-      end
-      t:assert_all_any_contains(src, {
-        "global_State *g;\t/* Global state. */",
-        "mref_acq((g)->ctype_state, CTState)",
-        "setmrefrel(G(L)->ctype_state, cts)",
-        "lj_ctype_ctsG_acq(global_State *g)",
-        "call extern lj_ctype_ctsG_acq",
-        "cp.L = L",
-        "cp.L = J->L"
-      })
-      local c_files = {}
-      for _, path in ipairs(src_ch_files(t)) do
-        if not contains(path, "/host/") then c_files[#c_files + 1] = path end
-      end
-      assert_no_lines(t, "C-side CTState global pointer must use acquire/release MRef helpers",
-                      c_files, function(line)
-        return (contains(line, "mref(") or contains(line, "setmref(")) and
-               contains(line, "ctype_state")
-      end)
-      assert_no_lines(t, "x64 VM CTState readers must acquire through lj_ctype_ctsG_acq",
-                      { t:path("src", "vm_x64.dasc") }, function(line)
-        return (contains(line, "GL:") and contains(line, "->ctype_state")) or
-               contains(line, "DISPATCH_GL(ctype_state)")
-      end)
-      print("M7 FFI no shared CTState lua_State guard passed")
     end
   })
 

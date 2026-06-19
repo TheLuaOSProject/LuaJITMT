@@ -717,7 +717,6 @@ return function(add)
       run_case(cases, t, "m3_vm_safepoint")
       run_case(cases, t, "m3_gc2_paranoia")
       run_lua_test(t, "m2_arena_all")
-      run_lua_test(t, "m2_gc_header_accessors")
 
       make_clean(t)
       make_default(t, { jobs = false })

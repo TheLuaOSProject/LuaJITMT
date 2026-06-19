@@ -1,3 +1,9 @@
+local function getenv(name, default)
+  local v = os.getenv(name)
+  if v == nil or v == "" then return default end
+  return v
+end
+
 return function(add)
   local function build_and_run_c_fixture(t, out, cfile)
     t:build({ clean = true, quiet = true })
@@ -150,4 +156,49 @@ return function(add)
   })
 
   build_and_run("m4_threading_upvalue", "t-threading-upvalue.lua")
+
+  add({
+    name = "m4_tsan_drivers",
+    description = "M4 C unit drivers under ThreadSanitizer",
+    run = function(t)
+      local cflags = getenv("CFLAGS",
+        "-std=gnu99 -O1 -g -Wall -Wextra -Wno-tsan -mcx16 " ..
+        "-fsanitize=thread -fno-omit-frame-pointer")
+      local target_cflags = getenv("TARGET_TSAN_CFLAGS",
+        "-O1 -g -Wno-tsan -fsanitize=thread -fno-omit-frame-pointer")
+      local target_ldflags = getenv("TARGET_TSAN_LDFLAGS",
+        "-fsanitize=thread")
+      local tsan_options = getenv("TSAN_OPTIONS",
+        "halt_on_error=1 second_deadlock_stack=1")
+
+      t:make({ "clean" }, { quiet = true, jobs = false })
+      t:make({
+        "TARGET_CFLAGS=" .. target_cflags,
+        "TARGET_LDFLAGS=" .. target_ldflags,
+        "TARGET_SHLDFLAGS=" .. target_ldflags
+      }, { quiet = true })
+
+      local env = { TSAN_OPTIONS = tsan_options }
+      local thr_out = t:tmp("lj_t-thr-substrate-tsan")
+      local chan_out = t:tmp("lj_t-chan-stress-tsan")
+
+      t:cc(thr_out, { t:path("tests", "t-thr-substrate.c") }, {
+        default_cflags = false,
+        cflags = cflags,
+        link_luajit = true,
+        libs = { "-lm", "-ldl", "-pthread" }
+      })
+      t:run({ thr_out }, { env = env })
+
+      t:cc(chan_out, { t:path("tests", "t-chan-stress.c") }, {
+        default_cflags = false,
+        cflags = cflags,
+        link_luajit = true,
+        libs = { "-lm", "-ldl", "-pthread" }
+      })
+      t:run({ chan_out }, { env = env })
+
+      print("M4 TSAN driver tests passed")
+    end
+  })
 end

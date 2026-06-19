@@ -14,7 +14,7 @@ local function sorted_names()
 end
 
 local function usage()
-  io.stderr:write("usage: lua tools/test.lua [--list] <test> [<test> ...]\n")
+  io.stderr:write("usage: lua tools/test.lua [--list] <test> [<test> ...] [-- <args> ...]\n")
   io.stderr:write("available tests:\n")
   local names = sorted_names()
   for i = 1, #names do
@@ -36,9 +36,32 @@ if #arg == 0 then
   os.exit(2)
 end
 
-local t = ljtest.new(root)
+local names = {}
+local passthrough = {}
+local in_passthrough = false
 for i = 1, #arg do
-  local name = arg[i]
+  if in_passthrough then
+    passthrough[#passthrough + 1] = arg[i]
+  elseif arg[i] == "--" then
+    in_passthrough = true
+  else
+    names[#names + 1] = arg[i]
+  end
+end
+
+if #names == 0 then
+  usage()
+  os.exit(2)
+end
+
+if #passthrough > 0 and #names ~= 1 then
+  io.stderr:write("passthrough args require exactly one test\n")
+  os.exit(2)
+end
+
+local t = ljtest.new(root)
+for i = 1, #names do
+  local name = names[i]
   local test = tests[name]
   if not test then
     io.stderr:write("unknown test: " .. name .. "\n")
@@ -46,6 +69,6 @@ for i = 1, #arg do
     os.exit(2)
   end
   io.stderr:write("== " .. name .. " ==\n")
-  test.run(t)
+  test.run(t, passthrough)
   io.stderr:write("ok " .. name .. "\n")
 end

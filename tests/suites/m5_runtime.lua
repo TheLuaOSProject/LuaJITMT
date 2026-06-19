@@ -220,8 +220,6 @@ return function(add)
                contains(line, "sbx->b") or contains(line, "sbx->e")
       end)
 
-      t:assert_contains(t:path("tools", "ci", "m5_concurrent_objects.sh"),
-                        "m5_buffer_publish.sh")
       t:luajit({ "-joff", t:path("tests", "t-buffer-thread-safety.lua") })
       t:luajit({ "-jon", t:path("tests", "t-buffer-thread-safety.lua") })
       print("M5 string.buffer publication guard passed")
@@ -258,8 +256,6 @@ return function(add)
                (contains(line, "gco2str(gcref(") and contains(line, "->name"))
       end)
 
-      t:assert_contains(t:path("tools", "ci", "m5_concurrent_objects.sh"),
-                        "m5_ctype_name_publish.sh")
       t:build({ quiet = true })
       t:luajit({ "-joff", "-e", ctype_name_smoke() })
       print("M5 CType.name publication guard passed")
