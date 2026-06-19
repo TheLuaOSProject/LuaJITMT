@@ -52,7 +52,7 @@ static uint32_t call_vm_next(GCtab *t, uint32_t idx, TValue *val, TValue *key)
 {
   uint64_t valu, keyu;
   uint32_t next;
-  __asm__ __volatile__(
+  __asm__(
     "subq $32, %%rsp\n\t"
     "movq %[tab], %%rdi\n\t"
     "movl %k[start], %%esi\n\t"

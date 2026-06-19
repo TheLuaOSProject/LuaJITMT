@@ -23,6 +23,7 @@ for needle in \
   'tab_node_forward_hop(Node **nodep, MSize *hmaskp)' \
   'lj_tab_node_nextgen_acq(node)' \
   'tab_forwarded_int_arrayslot(GCtab *t, int32_t key)' \
+  'tab_forwarded_setslot(GCtab *t, Node **nodep, MSize *hmaskp,' \
   'tab_forwarded_hash_value(GCtab *t, Node **nodep,' \
   'tab_array_slot_absent_acq(GCtab *t, TValue **arrayp,' \
   'lj_tab_array_forward_hop(const GCtab *t, TValue **arrayp,' \
@@ -37,8 +38,12 @@ for needle in \
   'lj_tab_len_hint(t, 5) == 5' \
   'exercise_array_forward_hop(L)' \
   'lj_tab_array_nextgen_acq(oldarray) == newarray' \
+  'lj_tab_storeint(L, lj_tab_setint(L, t, 5), 909)' \
   'exercise_hash_forward_hop(L)' \
+  'lj_tab_storeint(L, lj_tab_setstr(L, t, hopstr), 404)' \
+  'lj_tab_storeint(L, lj_tab_set(L, t, &lightkey), 606)' \
   'exercise_hash_to_array_forward_hop(L)' \
+  'assert_i32(&newarray[moveint], 909)' \
   'lj_tab_node_nextgen_acq(oldnode) == newnode' \
   't-tab-forward-filter OK'
 do
@@ -69,6 +74,20 @@ if ! awk '
 fi
 
 if ! awk '
+  /static LJ_AINLINE TValue \*lj_tab_setint\(lua_State \*L,/ { insetint = 1 }
+  insetint && /tvisforward\(&val\)/ { forward = 1 }
+  insetint && /lj_tab_array_forward_hop\(t, &array, &asize\)/ { hop = 1 }
+  insetint && /goto genarray/ { gen = 1 }
+  insetint && /goto retry_array/ { retry = 1 }
+  insetint && /return lj_tab_setinth\(L, t, key\)/ { inth = 1 }
+  insetint && /^}/ { insetint = 0 }
+  END { exit forward && hop && gen && retry && inth ? 0 : 1 }
+' "$ROOT/src/lj_tab.h"; then
+  echo "guardrail: integer array setter must route FORWARD slots through next_gen" >&2
+  exit 1
+fi
+
+if ! awk '
   /cTValue \* LJ_FASTCALL lj_tab_getinth\(GCtab \*t,/ { ininth = 1 }
   ininth && /tab_node_forward_hop\(&node, &hmask\)/ { inth = 1 }
   ininth && /tab_forwarded_int_arrayslot\(t, key\)/ { inth_array = 1 }
@@ -85,6 +104,25 @@ if ! awk '
   END { exit inth && inth_array && inth_retry && str && str_retry && gen && gen_retry ? 0 : 1 }
 ' "$ROOT/src/lj_tab.c"; then
   echo "guardrail: hash getters must hop FORWARD values through next_gen" >&2
+  exit 1
+fi
+
+if ! awk '
+  /TValue \*lj_tab_setinth\(lua_State \*L,/ { ininth = 1 }
+  ininth && /tab_forwarded_setslot\(t, &node, &hmask, &k\)/ { inth = 1 }
+  ininth && /tab_val_forward_retry_once\(&val, &forward_retry\)/ { inth_retry = 1 }
+  ininth && /^}/ { ininth = 0 }
+  /TValue \*lj_tab_setstr\(lua_State \*L,/ { instr = 1 }
+  instr && /tab_forwarded_setslot\(t, &node, &hmask, &k\)/ { str = 1 }
+  instr && /tab_val_forward_retry_once\(&val, &forward_retry\)/ { str_retry = 1 }
+  instr && /^}/ { instr = 0 }
+  /TValue \*lj_tab_set\(lua_State \*L,/ { ingen = 1 }
+  ingen && /tab_forwarded_setslot\(t, &node, &hmask, key\)/ { gen = 1 }
+  ingen && /tab_val_forward_retry_once\(&val, &forward_retry\)/ { gen_retry = 1 }
+  ingen && /^}/ { ingen = 0 }
+  END { exit inth && inth_retry && str && str_retry && gen && gen_retry ? 0 : 1 }
+' "$ROOT/src/lj_tab.c"; then
+  echo "guardrail: hash setters must route FORWARD values through next_gen" >&2
   exit 1
 fi
 

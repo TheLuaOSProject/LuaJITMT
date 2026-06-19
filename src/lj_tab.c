@@ -104,7 +104,7 @@ static LJ_AINLINE int tab_node_forward_hop(Node **nodep, MSize *hmaskp)
   return 0;
 }
 
-static LJ_AINLINE cTValue *tab_forwarded_int_arrayslot(GCtab *t, int32_t key)
+static LJ_AINLINE TValue *tab_forwarded_int_arrayslot(GCtab *t, int32_t key)
 {
   TValue *array;
   MSize asize = lj_tab_array_snapshot_acq(t, &array);
@@ -143,6 +143,35 @@ static LJ_AINLINE int tab_forwarded_hash_value(GCtab *t, Node **nodep,
     }
   } while ((n = lj_tab_nextnode_acq(n)));
   return 0;
+}
+
+static TValue *tab_forwarded_setslot(GCtab *t, Node **nodep, MSize *hmaskp,
+				     cTValue *key)
+{
+  Node *n;
+  if (!tab_node_forward_hop(nodep, hmaskp))
+    return NULL;
+  if (tvisnum(key)) {
+    int64_t i64;
+    int32_t k;
+    if (lj_num2int_check(numV(key), i64, k)) {
+      TValue *slot = tab_forwarded_int_arrayslot(t, k);
+      if (slot)
+	return slot;
+    }
+  }
+  if (*hmaskp == 0)
+    return NULL;
+  n = hashkey_node(*nodep, *hmaskp, key);
+  do {
+    TValue nk;
+    lj_tv_load_acq(&nk, &n->key);
+    if (lj_obj_equal(&nk, key))
+      return &n->val;
+    if (tab_key_islocked(&nk))
+      return NULL;
+  } while ((n = lj_tab_nextnode_acq(n)));
+  return NULL;
 }
 
 static LJ_AINLINE int tab_array_slot_absent_acq(GCtab *t, TValue **arrayp,
@@ -1215,6 +1244,7 @@ TValue *lj_tab_setinth(lua_State *L, GCtab *t, int32_t key)
   Node *node;
   MSize hmask;
   Node *n;
+  int key_retry = 1, forward_retry = 1;
   k.n = (lua_Number)key;
 retry_lookup:
   node = lj_tab_node_snapshot_acq(t, &hmask);
@@ -1224,12 +1254,20 @@ retry_lookup:
   do {
     TValue nk;
     lj_tv_load_acq(&nk, &n->key);
-    if (tvisnum(&nk) && nk.n == k.n)
+    if (tvisnum(&nk) && nk.n == k.n) {
+      TValue val;
+      lj_tv_load_acq(&val, &n->val);
+      if (tvisforward(&val)) {
+	TValue *slot = tab_forwarded_setslot(t, &node, &hmask, &k);
+	if (slot)
+	  return slot;
+	if (tab_val_forward_retry_once(&val, &forward_retry))
+	  goto retry_lookup;
+      }
       return &n->val;
-    if (tab_key_islocked(&nk)) {
-      la_cpu_pause();
-      goto retry_lookup;
     }
+    if (tab_key_retry_once(&nk, &key_retry))
+      goto retry_lookup;
   } while ((n = lj_tab_nextnode_acq(n)));
   return lj_tab_newkey(L, t, &k);
 }
@@ -1240,24 +1278,31 @@ TValue *lj_tab_setstr(lua_State *L, GCtab *t, const GCstr *key)
   Node *node;
   MSize hmask;
   Node *n;
+  int key_retry = 1, forward_retry = 1;
+  setstrV(L, &k, key);
 retry_lookup:
   node = lj_tab_node_snapshot_acq(t, &hmask);
-  if (hmask == 0) {
-    setstrV(L, &k, key);
+  if (hmask == 0)
     return lj_tab_newkey(L, t, &k);
-  }
   n = hashstr_node(node, hmask, key);
   do {
     TValue nk;
     lj_tv_load_acq(&nk, &n->key);
-    if (tvisstr(&nk) && strV(&nk) == key)
+    if (tvisstr(&nk) && strV(&nk) == key) {
+      TValue val;
+      lj_tv_load_acq(&val, &n->val);
+      if (tvisforward(&val)) {
+	TValue *slot = tab_forwarded_setslot(t, &node, &hmask, &k);
+	if (slot)
+	  return slot;
+	if (tab_val_forward_retry_once(&val, &forward_retry))
+	  goto retry_lookup;
+      }
       return &n->val;
-    if (tab_key_islocked(&nk)) {
-      la_cpu_pause();
-      goto retry_lookup;
     }
+    if (tab_key_retry_once(&nk, &key_retry))
+      goto retry_lookup;
   } while ((n = lj_tab_nextnode_acq(n)));
-  setstrV(L, &k, key);
   return lj_tab_newkey(L, t, &k);
 }
 
@@ -1283,6 +1328,7 @@ TValue *lj_tab_set(lua_State *L, GCtab *t, cTValue *key)
   {
     Node *node;
     MSize hmask;
+    int key_retry = 1, forward_retry = 1;
   retry_lookup:
     node = lj_tab_node_snapshot_acq(t, &hmask);
     if (hmask != 0) {
@@ -1290,12 +1336,20 @@ TValue *lj_tab_set(lua_State *L, GCtab *t, cTValue *key)
       do {
 	TValue nk;
 	lj_tv_load_acq(&nk, &n->key);
-	if (lj_obj_equal(&nk, key))
+	if (lj_obj_equal(&nk, key)) {
+	  TValue val;
+	  lj_tv_load_acq(&val, &n->val);
+	  if (tvisforward(&val)) {
+	    TValue *slot = tab_forwarded_setslot(t, &node, &hmask, key);
+	    if (slot)
+	      return slot;
+	    if (tab_val_forward_retry_once(&val, &forward_retry))
+	      goto retry_lookup;
+	  }
 	  return &n->val;
-	if (tab_key_islocked(&nk)) {
-	  la_cpu_pause();
-	  goto retry_lookup;
 	}
+	if (tab_key_retry_once(&nk, &key_retry))
+	  goto retry_lookup;
       } while ((n = lj_tab_nextnode_acq(n)));
     }
   }

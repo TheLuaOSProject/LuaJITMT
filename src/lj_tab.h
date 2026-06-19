@@ -168,8 +168,27 @@ genarray:
 static LJ_AINLINE TValue *lj_tab_setint(lua_State *L, GCtab *t, int32_t key)
 {
   TValue *array;
-  MSize asize = lj_tab_array_snapshot_acq(t, &array);
-  return (MSize)key < asize ? &array[key] : lj_tab_setinth(L, t, key);
+  int forward_retry = 1;
+retry_array:
+  {
+    MSize asize = lj_tab_array_snapshot_acq(t, &array);
+  genarray:
+    if ((MSize)key < asize) {
+      TValue val;
+      lj_tv_load_acq(&val, &array[key]);
+      if (tvisforward(&val)) {
+	if (lj_tab_array_forward_hop(t, &array, &asize))
+	  goto genarray;
+	if (forward_retry) {
+	  forward_retry = 0;
+	  la_cpu_pause();
+	  goto retry_array;
+	}
+      }
+      return &array[key];
+    }
+  }
+  return lj_tab_setinth(L, t, key);
 }
 
 LJ_FUNC uint32_t LJ_FASTCALL lj_tab_keyindex(GCtab *t, cTValue *key);

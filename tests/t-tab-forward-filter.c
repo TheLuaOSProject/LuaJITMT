@@ -52,6 +52,13 @@ static void assert_i32(cTValue *tv, int32_t want)
   assert(tv_i32(tv) == want);
 }
 
+static void assert_forward(cTValue *tv)
+{
+  TValue val;
+  lj_tv_load_acq(&val, tv);
+  assert(tvisforward(&val));
+}
+
 static TValue *find_str_slot(Node *node, MSize hmask, const GCstr *key)
 {
   Node *n = hashstr_node(node, hmask, key);
@@ -131,6 +138,10 @@ static void exercise_array_forward_hop(lua_State *L)
   assert(lj_tab_len_hint(t, 5) == 5);
 #endif
   assert(count_next(t) == 5);
+  lj_tab_storeint(L, lj_tab_setint(L, t, 5), 909);
+  assert_forward(&oldarray[5]);
+  assert_i32(&newarray[5], 909);
+  assert_i32(lj_tab_getint(t, 5), 909);
 
   lj_tab_array_rel(t, newarray);
   lj_tab_asize_rel(t, newasize);
@@ -155,6 +166,9 @@ static void exercise_array_forward_hop(lua_State *L)
   lj_tab_asize_rel(t, oldasize);
   lj_tab_array_rel(t, oldarray);
   assert_i32(lj_tab_getint(t, tail), 606);
+  lj_tab_storeint(L, lj_tab_setint(L, t, tail), 808);
+  assert_forward(&oldarray[tail]);
+  assert_i32(lj_tab_getint(t, tail), 808);
 
   lj_tab_array_rel(t, newarray);
   lj_tab_asize_rel(t, newasize);
@@ -209,6 +223,18 @@ static void exercise_hash_forward_hop(lua_State *L)
   assert_i32(lj_tab_getint(t, 33), 202);
   assert_i32(lj_tab_get(L, t, &lightkey), 303);
   assert(count_next(t) == 3);
+  lj_tab_storeint(L, lj_tab_setstr(L, t, hopstr), 404);
+  lj_tab_storeint(L, lj_tab_setint(L, t, 33), 505);
+  lj_tab_storeint(L, lj_tab_set(L, t, &lightkey), 606);
+  assert_forward(oldstrslot);
+  assert_forward(oldnumslot);
+  assert_forward(oldkeyslot);
+  assert_i32(find_str_slot(newnode, newhmask, hopstr), 404);
+  assert_i32(find_num_slot(newnode, newhmask, 33), 505);
+  assert_i32(find_key_slot(newnode, newhmask, &lightkey), 606);
+  assert_i32(lj_tab_getstr(t, hopstr), 404);
+  assert_i32(lj_tab_getint(t, 33), 505);
+  assert_i32(lj_tab_get(L, t, &lightkey), 606);
 
   lj_tab_node_rel(t, newnode);
   lj_tab_hmask_rel(t, newhmask);
@@ -259,6 +285,10 @@ static void exercise_hash_to_array_forward_hop(lua_State *L)
   lj_tab_hmask_rel(t, oldhmask);
   lj_tab_node_rel(t, oldnode);
   assert_i32(lj_tab_getint(t, moveint), 707);
+  lj_tab_storeint(L, lj_tab_setint(L, t, moveint), 909);
+  assert_forward(oldnumslot);
+  assert_i32(&newarray[moveint], 909);
+  assert_i32(lj_tab_getint(t, moveint), 909);
   assert(count_next(t) == 1);
 
   lj_tab_array_rel(t, newarray);
