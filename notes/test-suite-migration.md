@@ -349,6 +349,9 @@ Lua test-suite migration notes:
   dump probes for `ffi.copy`, FFI loads, and FFI stores after loop `XPOLL`;
   also removed duplicate M6 scaffold-name and reserve-order checks already
   covered by dispatch and mcode behavior.
+- Removed duplicate/low-risk M5 publication source inspections from trace,
+  table-array, and table-value guards; kept generated assembler/JIT result
+  matching and retained unreplaced MT-safety blacklists.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.

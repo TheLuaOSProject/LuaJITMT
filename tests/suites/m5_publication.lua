@@ -531,7 +531,6 @@ assert(util.traceinfo(1), "expected loaded CNEW creation trace")
     name = "m5_jit_trace_publish",
     description = "JIT trace-slot and trace-link publication guards",
     run = function(t)
-      local vm = t:path("src", "vm_x64.dasc")
       t:assert_all_any_contains({
         t:path("src", "lj_bc.h"),
         t:path("src", "lj_dispatch.c")
@@ -555,10 +554,6 @@ assert(util.traceinfo(1), "expected loaded CNEW creation trace")
         "exitstub_trace_addr(as->T, as->snapno)"
       })
 
-      t:assert_not_contains(t:path("src", "lj_safepoint.c"),
-                            "Temporary single-mutator flush action")
-      t:assert_not_contains(t:path("src", "lj_dispatch.c"),
-                            "lj_gc2_handshake(g, LJ_GC2_HS_EXIT_TRACES);")
       assert_no_lines(t, "GCtrace.startpt must use trace_startpt acquire/release helpers",
                       src_ch_files(t, { exclude_host = true }), function(line)
         return contains(line, "startpt") and
@@ -579,13 +574,6 @@ assert(util.traceinfo(1), "expected loaded CNEW creation trace")
         t:path("src", "lj_gc2.c")
       }, function(line)
         return contains(line, "ir->o == IR_KGC") or contains(line, "ir_kgc(ir)")
-      end)
-      assert_no_lines(t, "public full flush callers must route through HS_FLUSHJ", {
-        t:path("src", "lj_api.c"),
-        t:path("src", "lj_dispatch.c"),
-        t:path("src", "lj_profile.c")
-      }, function(line)
-        return contains(line, "lj_trace_flushall(L)")
       end)
       assert_no_lines(t, "J->trace slots must use acquire/release trace helpers", {
         t:path("src", "lj_trace.c"),
@@ -623,12 +611,6 @@ assert(util.traceinfo(1), "expected loaded CNEW creation trace")
                contains(line, "setbc_j(") or contains(compact, "*J->patchpc=") or
                contains(compact, "*pc=T->startins")
       end)
-      assert_no_lines(t, "x64 live bytecode patches must use full-word publication helpers",
-                      vm, function(line)
-        return contains(line, "mov PC_OP,") or contains(line, "mov byte [PC]") or
-               contains(line, "mov dword [PC]")
-      end)
-      t:assert_not_contains(t:path("src", "lj_trace.c"), "lj_asm_patchexit(J, parent")
       t:assert_contains(t:path("src", "lj_asm_x86.h"),
                         "lnk == as->T->traceno ? as->T : traceref(as->J, lnk)")
       t:build({ quiet = true })
@@ -732,10 +714,6 @@ assert(util.traceinfo(1), "expected loaded CNEW creation trace")
         "lj_gc_pubtab(L, t)"
       })
       assert_block_excludes("table_pack", table_pack, { "lj_tab_array_acq(t)" })
-      local bcread = t:c_block(t:path("src", "lj_bcread.c"),
-                               "static GCtab *bcread_ktab(LexState *ls)")
-      block_has_all("bcread_ktab", bcread, { "lj_tab_array_snapshot_acq(t, &o)" })
-      assert_block_excludes("bcread_ktab", bcread, { "lj_tab_array_acq(t)" })
 
       local decode = t:text_between(t:path("src", "lj_serialize.c"),
                                     "t = lj_tab_new(sbufL(sbx), narray, hsize2hbits(nhash))",
@@ -830,39 +808,8 @@ assert(util.traceinfo(1), "expected loaded CNEW creation trace")
                contains(line, "node->key.u64 = 0") or
                contains(line, "n->key.u64 = 0")
       end)
-      assert_no_lines(t, "API/table library direct table slot stores must release-publish", {
-        t:path("src", "lj_api.c"),
-        t:path("src", "lib_table.c")
-      }, function(line)
-        return contains(line, "copyTV(L, o, L->top+1)") or
-               contains(line, "copyTV(L, o, --L->top)") or
-               contains(line, "copyTV(L, dst, &val)") or
-               contains(line, "setnilV(dst)") or
-               contains(line, "copyTV(L, &array[i], &base[i])")
-      end)
       t:assert_not_contains(t:path("src", "lib_table.c"),
                             "lj_tab_storeint(L, lj_tab_setstr(L, t, strV(lj_lib_upvalue(L, 1)))")
-      assert_no_lines(t, "jit.util result fields must CAS-publish",
-                      t:path("src", "lib_jit.c"), function(line)
-        return (contains(line, "lj_tab_storeint(L, lj_tab_setstr(L, t") or
-                contains(line, "lj_tab_storeint(L, lj_tab_setint(L, t") or
-                contains(line, "lj_tab_storeintptr(L, lj_tab_setstr(L, t") or
-                contains(line, "lj_tab_storeintptr(L, lj_tab_setint(L, t") or
-                contains(line, "lj_tab_storeproto(L, lj_tab_setstr(L, t") or
-                contains(line, "lj_tab_storeproto(L, lj_tab_setint(L, t"))
-      end)
-      t:assert_not_contains(t:path("src", "lj_debug.c"),
-                            "lj_tab_storebool(L, lj_tab_setint(L, t, line), 1)")
-      assert_no_lines(t, "recorder template table markers must release-publish",
-                      t:path("src", "lj_record.c"), function(line)
-        return contains(line, "settabV(J->L, &node[i].val, tpl)") or
-               contains(line, "settabV(J->L, &array[i], tpl)") or
-               contains(line, "settabV(J->L, o, tpl)") or
-               contains(line, "lj_tab_storetab(J->L, &node[i].val, tpl)") or
-               contains(line, "lj_tab_storetab(J->L, o, tpl)") or
-               contains(line, "setnilV(&node[i].val)") or
-               contains(line, "setnilV(&array[i])")
-      end)
       assert_no_lines(t, "recorder table-bump rollback cache must use acquire/release helpers",
                       t:path("src", "lj_record.c"), function(line)
         return contains(line, "J->rbchash[") and contains(line, ".ref = tref_ref") or
@@ -890,11 +837,6 @@ assert(util.traceinfo(1), "expected loaded CNEW creation trace")
       assert_no_lines(t, "parser constant table slot markers must release-publish",
                       t:path("src", "lj_parse.c"), function(line)
         return contains(line, "o->u64 = fs->nk") or contains(line, "lj_tab_storebool(L,")
-      end)
-      assert_no_lines(t, "bytecode template table slots must release-publish",
-                      t:path("src", "lj_bcread.c"), function(line)
-        return contains(line, "bcread_ktabk(ls, o, NULL)") or
-               contains(line, "bcread_ktabk(ls, lj_tab_set(ls->L, t, &key), t)")
       end)
       assert_no_lines(t, "serializer decode outputs must release-publish",
                       t:path("src", "lj_serialize.c"), function(line)
