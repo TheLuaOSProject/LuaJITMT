@@ -323,6 +323,9 @@ Lua test-suite migration notes:
   redispatch, mcode publication, and flush handshakes; retained source guards
   for x64 TG dispatch, XBAR/XPOLL aliasing, W^X/raw mcode writes, publish
   order, and flush caller routing until replacement fixtures exist.
+- Removed the M3 GC2 scaffold marker inventory; the scaffold case now relies
+  on its C fixtures and nested behavior gates while retaining the queue-slot
+  acquire/release blacklist.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.
