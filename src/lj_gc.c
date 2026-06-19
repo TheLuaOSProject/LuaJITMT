@@ -1543,8 +1543,7 @@ static int gc_finalize(lua_State *L)
     TValue fin;
     int rc;
     /* Add cdata back to the GC list and make it white. */
-    lj_obj_setgcwr(o, g->gc.root);
-    setgcref(g->gc.root, o);
+    lj_gc_linkobj(g, o);  /* CAS-requeue finalized cdata on root list. */
     makewhite(g, o);
     lj_gc_arena_markobj(g, o);
     /* Resolve finalizer. */
@@ -2164,8 +2163,7 @@ void lj_gc_closeuv(global_State *g, GCupval *uv)
   copyTVrel(mainthread(g), &uv->tv, uvval(uv));
   setmref(uv->v, &uv->tv);
   uv->closed = 1;
-  lj_obj_setgcwr(o, g->gc.root);
-  setgcref(g->gc.root, o);
+  lj_gc_linkobj(g, o);  /* CAS-publish closed upvalue on root list. */
   if (isgray(o)) {  /* A closed upvalue is never gray, so fix this. */
     if (g->gc.state == GCSpropagate || g->gc.state == GCSatomic) {
       TValue tv;

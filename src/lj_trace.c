@@ -430,10 +430,9 @@ static void trace_save(jit_State *J, GCtrace *T)
   size_t sztr = ((sizeof(GCtrace)+7)&~7);
   size_t szins = (J->cur.nins-J->cur.nk)*sizeof(IRIns);
   char *p = (char *)T + sztr;
+  global_State *g = J2G(J);
   memcpy(T, &J->cur, sizeof(GCtrace));
-  lj_obj_setgcwr(obj2gco(T), J2G(J)->gc.root);
-  setgcrefp(J2G(J)->gc.root, T);
-  newwhite(J2G(J), T);
+  newwhite(g, T);
   T->gct = ~LJ_TTRACE;
   T->ir = (IRIns *)p - J->cur.nk;  /* The IR has already been copied above. */
 #if LJ_ABI_PAUTH
@@ -446,8 +445,9 @@ static void trace_save(jit_State *J, GCtrace *T)
   J->cur.exittab = NULL;
   J->cur.exitstub = NULL;
   J->curfinal = NULL;
+  lj_gc_linkobj(g, obj2gco(T));  /* CAS-publish root after body init. */
   traceslot_publish(J, T->traceno, T);
-  lj_gc_barriertrace(J2G(J), T->traceno);
+  lj_gc_barriertrace(g, T->traceno);
   lj_gdbjit_addtrace(J, T);
 #ifdef LUAJIT_USE_PERFTOOLS
   perftools_addtrace(T);
