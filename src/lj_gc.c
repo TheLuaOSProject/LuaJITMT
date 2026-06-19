@@ -1612,38 +1612,6 @@ static int gc_cdata_finalizer_candidate_close(GCobj *o)
 	 !(lj_obj_gcflags(o) & LJ_GC_FINALIZED);
 }
 
-static int gc_preclaim_cdata_finalizer_pweak_slot(lua_State *L,
-						  global_State *g,
-						  GCobj *o, TValue *slot)
-{
-  TValue fin;
-  if (!lj_cdata_fin_claim_func(slot, &fin))
-    return 0;
-  if (lj_gc2_finreg_cdata_preclaim(L, g, o, &fin)) {
-    lj_cdata_fin_storenil(L, slot);
-    gc_marktv(g, &fin);
-    return 1;
-  }
-  copyTVrel(L, slot, &fin);  /* Side queue full: restore object-only fallback. */
-  return 0;
-}
-
-static int gc_claim_cdata_finalizer_pweak(lua_State *L, global_State *g,
-					  GCobj *o)
-{
-  CTState *cts = ctype_ctsG(g);
-  GCtab *t;
-  TValue key;
-  TValue *slot;
-  if (cts == NULL)
-    return 0;
-  setcdataV(L, &key, gco2cd(o));
-  slot = (TValue *)lj_ctype_fin_get(L, cts, &key, &t);
-  if (slot == niltv(L) || !t || !gcref_acq(t->metatable))
-    return 0;
-  return gc_preclaim_cdata_finalizer_pweak_slot(L, g, o, slot);
-}
-
 static GCobj *gc_order_cdata_object(FinRegOrderNode *ord, GCtab *t,
 				    TValue *slot)
 {
@@ -1677,18 +1645,13 @@ static int gc_unlink_root_object(global_State *g, GCobj *target)
 
 static size_t gc_queue_cdata_finalizers_pweak_ordered(lua_State *L,
 						      global_State *g,
-						      size_t *queuedp,
-						      int *fallbackp)
+						      size_t *queuedp)
 {
   CTState *cts = ctype_ctsG(g);
   FinRegOrderNode *ord;
-  size_t preclaimed = 0, queued = 0;
-  int fallback = 0;
-  if (cts == NULL) {
-    if (fallbackp)
-      *fallbackp = 0;
+  size_t marked = 0, queued = 0;
+  if (cts == NULL)
     return 0;
-  }
   ord = (FinRegOrderNode *)la_loadptr_acq(
     (void *const *)&cts->fin_order_head);
   for (; ord != NULL;
@@ -1732,13 +1695,15 @@ static size_t gc_queue_cdata_finalizers_pweak_ordered(lua_State *L,
     if (gc_unlink_root_object(g, o))
       la_add64_rlx(&g->gc2.finreg_cdata_order_unlinked, 1);
     if (!lj_gc2_finreg_cdata_preclaim(L, g, o, &fin)) {
-      if (gcref(g->gc.root) != o) {
-	lj_obj_setgcwr(o, g->gc.root);
-	setgcref(g->gc.root, o);
-      }
       copyTVrel(L, slot, &fin);
-      fallback = 1;
+      gc_marktv(g, &fin);
+      markfinalized(o);
+      lj_gc2_finreg_cdata_queue(g, o);
+      lj_gc2_finalizer_enqueue(g, o);
       la_add64_rlx(&g->gc2.finreg_cdata_order_fallbacks, 1);
+      la_add64_rlx(&g->gc2.finreg_cdata_order_queued, 1);
+      marked++;
+      queued++;
       continue;
     }
     lj_cdata_fin_storenil(L, slot);
@@ -1747,47 +1712,25 @@ static size_t gc_queue_cdata_finalizers_pweak_ordered(lua_State *L,
     lj_gc2_finreg_cdata_queue(g, o);
     lj_gc2_finalizer_enqueue(g, o);  /* queue claimed cdata in FINREG order. */
     la_add64_rlx(&g->gc2.finreg_cdata_order_queued, 1);
-    preclaimed++;
+    marked++;
     queued++;
   }
   if (queuedp)
     *queuedp += queued;
-  if (fallbackp)
-    *fallbackp = fallback;
-  return preclaimed;  /* 05 section 5.8: FINREG ordered P_WEAK cdata scan. */
+  return marked;  /* 05 section 5.8: FINREG ordered P_WEAK cdata scan. */
 }
 
 static size_t gc_queue_cdata_finalizers_pweak(lua_State *L, global_State *g)
 {
-  GCRef *p = &g->gc.root;
-  GCobj *o;
-  size_t preclaimed, ordered_queued = 0;
+  size_t marked, ordered_queued = 0;
   size_t n = 0;
-  int ordered_fallback = 0;
-  preclaimed = gc_queue_cdata_finalizers_pweak_ordered(L, g, &ordered_queued,
-						       &ordered_fallback);
+  marked = gc_queue_cdata_finalizers_pweak_ordered(L, g, &ordered_queued);
   n += ordered_queued;
-  if (!ordered_fallback)
-    goto done;
-  la_add64_rlx(&g->gc2.finreg_cdata_pweak_root_fallbacks, 1);
-  while ((o = gcref(*p)) != NULL) {
-    if (gc_cdata_finalizer_candidate_pweak(o)) {
-      preclaimed += gc_claim_cdata_finalizer_pweak(L, g, o);
-      setgcrefr(*p, *lj_obj_gcwref(o));
-      markfinalized(o);
-      lj_gc2_finreg_cdata_queue(g, o);
-      lj_gc2_finalizer_enqueue(g, o);
-      n++;
-    } else {
-      p = lj_obj_gcwref(o);
-    }
-  }
-done:
   if (n)
     la_add64_rlx(&g->gc2.finreg_cdata_pweak_queued, n);
-  if (preclaimed)
+  if (marked)
     (void)gc_propagate_gray(g);
-  return n;  /* 05 section 5.8: P_WEAK cdata finalizer discovery bridge. */
+  return n;  /* 05 section 5.8: ordered FINREG P_WEAK cdata discovery. */
 }
 
 static size_t gc_separate_cdata_finalizers_ordered(global_State *g)

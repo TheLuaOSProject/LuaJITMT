@@ -222,6 +222,9 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.finreg_cdata_order_fallbacks, 0);
   la_store64_rlx(&g->gc2.finreg_cdata_pweak_root_fallbacks, 0);
   la_store64_rlx(&g->gc2.finreg_cdata_pending_order_hits, 0);
+#if defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
+  g->gc2.finreg_cdata_preclaim_test_fail = 0;
+#endif
   la_store64_rlx(&g->gc2.finreg_udata_sets, 0);
   la_store64_rlx(&g->gc2.finreg_udata_clears, 0);
   la_store64_rlx(&g->gc2.finreg_udata_queued, 0);
@@ -2134,6 +2137,14 @@ void lj_gc2_finreg_cdata_queue(global_State *g, GCobj *o)
 #endif
 }
 
+#if defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
+void lj_gc2_test_finreg_cdata_preclaim_fail(global_State *g, uint32_t n)
+{
+  if (g)
+    g->gc2.finreg_cdata_preclaim_test_fail = n;
+}
+#endif
+
 int lj_gc2_finreg_cdata_preclaim(lua_State *L, global_State *g, GCobj *o,
 				 cTValue *fin)
 {
@@ -2141,6 +2152,13 @@ int lj_gc2_finreg_cdata_preclaim(lua_State *L, global_State *g, GCobj *o,
   MSize count, cap;
   if (!L || !g || !o || !fin || o->gch.gct != ~LJ_TCDATA)
     return 0;
+#if defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
+  if (g->gc2.finreg_cdata_preclaim_test_fail) {
+    g->gc2.finreg_cdata_preclaim_test_fail--;
+    la_add64_rlx(&g->gc2.finreg_cdata_preclaim_overflow, 1);
+    return 0;  /* Test-only side-vector failure injection. */
+  }
+#endif
   count = g->gc2.finreg_cdata_preclaim_count;
   cap = g->gc2.finreg_cdata_preclaim_capacity;
   if (!g->gc2.finreg_cdata_preclaim_obj ||

@@ -197,18 +197,22 @@ for needle in \
   'gc_cdata_fin_pending_ordered(global_State *g, CTState *cts)' \
   'FINREG ordered close-time cdata pending scan' \
   'finreg_cdata_pending_order_hits, 0' \
-  'if (!ordered_fallback)' \
   '!gcref_acq(t->metatable)' \
   'ft == t && ft && gcref_acq(ft->metatable)' \
   'test_finreg_disabled_ordered_pending' \
   'gc2_disabled_pending_fin_t' \
   'collectgarbage('\''collect'\'')' \
-  'gc_claim_cdata_finalizer_pweak(lua_State *L, global_State *g,' \
   'GCRef obj;' \
   'setgcref(ord->obj, o);' \
   'gc_order_cdata_object(FinRegOrderNode *ord, GCtab *t,' \
   'gc_marktv(g, &fin);' \
   'lj_gc2_finreg_cdata_preclaim(L, g, o, &fin)' \
+  'lj_gc2_test_finreg_cdata_preclaim_fail(global_State *g,' \
+  'Test-only side-vector failure injection.' \
+  'gc2_order_fail_fin_t' \
+  'finreg_cdata_preclaim_overflow) == overflow2 + 1u' \
+  'finreg_cdata_pweak_claimed) == claimed2 + 2u' \
+  'finreg_cdata_order_fallbacks) == orderfallback2 + 1u' \
   'gc_finalize_cdata_claim_preclaimed(global_State *g, GCobj *o)' \
   'P_WEAK preclaim suppressed by later ffi.gc(cd, nil)' \
   'gc2_preclaim_clear_fin_t' \
@@ -217,7 +221,7 @@ for needle in \
   'dispatch order may differ from FINREG scan' \
   'gc_mark_finreg_cdata_preclaims(global_State *g)' \
   'gc2_mark_finreg_cdata_preclaims(global_State *g)' \
-  'P_WEAK cdata finalizer discovery bridge' \
+  'ordered FINREG P_WEAK cdata discovery' \
   'uint64_t finreg_cdata_pweak_queued' \
   'uint64_t finreg_cdata_sweep_queued' \
   'la_add64_rlx(&g->gc2.finreg_cdata_sweep_queued, 1)' \
@@ -293,7 +297,7 @@ do
   fi
 done
 
-if rg -n 'gc_preclaim_cdata_finalizers_pweak_finreg|gc_preclaim_cdata_finalizers_pweak_tab|gc_cdata_finreg_pending_scan|gc_cdata_fin_pending_tab|gc_separate_cdata_finalizers_root|ord[[:space:]]*==[[:space:]]*NULL' \
+if rg -n 'gc_preclaim_cdata_finalizers_pweak_finreg|gc_preclaim_cdata_finalizers_pweak_tab|gc_cdata_finreg_pending_scan|gc_cdata_fin_pending_tab|gc_separate_cdata_finalizers_root|gc_claim_cdata_finalizer_pweak|finreg_cdata_pweak_root_fallbacks,[[:space:]]*1|ord[[:space:]]*==[[:space:]]*NULL' \
     "$ROOT/src/lj_gc.c"; then
   echo "guardrail: FINREG ordered discovery must not retain generation/root pending scans" >&2
   exit 1

@@ -219,10 +219,11 @@ instead of the shared `vmthread(g)` stack. Userdata FINREG membership now uses a
 GC2 side list for discovery, including in-place metatable finalizer additions
 and manually chain-unlinked userdata. Cdata ordered FINREG discovery covers the
 ordinary P_WEAK and close-time paths. The M9 cleanup removed close-time
-generation-table pending/discovery scans; P_WEAK still keeps the root fallback
-for preclaim side-vector failure, and sweep/free discovery keeps its defensive
-missed-publication queue. The broader planned FINREG/finqueue dispatch path
-remains M8 work rather than an M9 performance cleanup.
+generation-table pending/discovery scans; P_WEAK preclaim side-vector failure
+now restores and queues the same ordered object without a legacy root-list
+walk, and sweep/free discovery keeps its defensive missed-publication queue.
+The broader planned FINREG/finqueue dispatch path remains M8 work rather than
+an M9 performance cleanup.
 The original "finalizer that spawns a thread" item now has bridge tests for
 spawn+join during explicit-GC finalization and for a worker that outlives the
 callback; the latter defers the full-GC loop back to the mutator instead of

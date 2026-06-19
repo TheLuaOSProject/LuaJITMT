@@ -97,6 +97,10 @@ LJ_FUNC int lj_gc2_finreg_cdata_preclaim(lua_State *L, global_State *g,
 					 GCobj *o, cTValue *fin);
 LJ_FUNC int lj_gc2_finreg_cdata_preclaim_take(lua_State *L, global_State *g,
 					      GCobj *o, TValue *fin);
+#if defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
+LJ_FUNC void lj_gc2_test_finreg_cdata_preclaim_fail(global_State *g,
+						    uint32_t n);
+#endif
 LJ_FUNC int lj_gc2_finreg_udata_set(global_State *g, GCobj *o, int enabled);
 LJ_FUNC void lj_gc2_finreg_udata_register(lua_State *L, global_State *g,
 					  GCobj *o);
