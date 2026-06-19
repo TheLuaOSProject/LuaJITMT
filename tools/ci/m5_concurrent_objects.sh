@@ -14,6 +14,7 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 "$ROOT/tools/ci/m5_tab_slot_snapshot.sh"
 "$ROOT/tools/ci/m5_tab_keylock_lookup.sh"
 "$ROOT/tools/ci/m5_tab_forward_filter.sh"
+"$ROOT/tools/ci/m5_tab_cas_store.sh"
 "$ROOT/tools/ci/m5_tab_value_publish.sh"
 "$ROOT/tools/ci/m5_strtab_prep.sh"
 "$ROOT/tools/ci/m5_strtab_cas.sh"

@@ -298,9 +298,12 @@ instead of publishing into the old generation.
 `BC_TSETS_Z` string-key stores are currently demoted to
 `vmeta_tsets`, removing the x64 VM's direct string-key hash-chain store. The
 generic x64 `vmeta_tset` continuation release-stores returned slots through
-`lj_meta_tsettv_pair()` with resolved parent context, but the C-side table
-setter still awaits the original RETIRING/FORWARD/CAS write protocol for
-migration correctness. Regular x64
+`lj_meta_tsettv_pair()` with resolved parent context. That helper now
+CAS-publishes the resolved slot and retries `meta_tset()` if the slot became
+`LJ_TFORWARD` after lookup but before publication, so the VM/meta slow store
+does not erase a migration sentinel. The broader C-side table setter and JIT
+helpers still await the original flag-gated RETIRING/FORWARD/CAS write
+protocol for migration correctness. Regular x64
 dynamic `IR_HREF` lowering also uses the node-header mask instead of
 `GCtab.hmask`; constant-slot HREFK lowering has an interim node-header bounds
 guard before reading its recorded slot. Linux/x64 helper-backed `ASTORE` and

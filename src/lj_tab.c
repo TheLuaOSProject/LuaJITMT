@@ -1492,6 +1492,20 @@ LJ_FUNCA TValue *lj_tab_storetv(lua_State *L, TValue *dst, cTValue *src)
   return dst;
 }
 
+LJ_FUNCA int lj_tab_trystoretv_cas(lua_State *L, TValue *dst, cTValue *src)
+{
+  TValue old;
+  UNUSED(L);
+  for (;;) {
+    lj_tv_load_acq(&old, dst);
+    if (tvisforward(&old))
+      return LJ_TAB_STORE_CAS_FORWARD;
+    if (lj_tv_cas(dst, &old, src))
+      return LJ_TAB_STORE_CAS_OK;  /* 06 section 6.3.2: CAS-published store. */
+    la_cpu_pause();
+  }
+}
+
 static LJ_AINLINE int tab_ptr_index(uintptr_t base, uintptr_t elem,
 				    size_t elemsz, MSize count, MSize *idx)
 {
