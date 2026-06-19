@@ -655,61 +655,6 @@ assert(util.traceinfo(1), "expected loaded CNEW creation trace")
       build_and_run_c(t, t:tmp("lj_t-tab-array-publish"),
                       "t-tab-array-publish.c", { timeout = "20s" })
 
-      t:assert_all_any_contains(src_text_files(t), {
-        "lj_tab_array_acq",
-        "lj_tab_array_rel",
-        "lj_tab_asize_acq",
-        "lj_tab_asize_rel",
-        "TabArrayHdr",
-        "LJ_STATIC_ASSERT(sizeof(TabArrayHdr) == 16)",
-        "TABARRAY_ACAP_MASK",
-        "TABARRAY_FLAGS_MASK",
-        "TABARRAY_FLAG_RETIRING",
-        "lj_tab_array_hdr_pack_acap",
-        "lj_tab_array_hdr_init",
-        "setmref(hdr->next_gen, NULL)",
-        "lj_tab_array_nextgen_acq",
-        "lj_tab_array_nextgen_rel",
-        "lj_tab_array_hdr_flags_or_rel",
-        "lj_tab_array_hdrw",
-        "lj_tab_array_bytes",
-        "lj_tab_array_is_colocated",
-        "lj_tab_array_mem_acq",
-        "lj_tab_array_hdr_flags_acq",
-        "lj_tab_array_is_retiring",
-        "lj_tab_array_snapshot_acq",
-        "lj_tab_array_separated_snapshot_acq",
-        "lj_tab_array_separated_acap_acq",
-        "TabArrayRetire",
-        "retired_arrays",
-        "tab_array_new",
-        "lj_tab_array_hdr_init(hdr, asize, acap)",
-        "tab_array_free",
-        "tab_array_retire_reserve",
-        "tab_array_retire_arm",
-        "lj_tab_array_rel(t, array)",
-        "lj_tab_asize_rel(t, asize)",
-        "static LJ_AINLINE cTValue *lj_tab_getint",
-        "static LJ_AINLINE TValue *lj_tab_setint",
-        "retry_snapshot",
-        "lj_tab_array_is_retiring(t, array)",
-        "(void)lj_tab_array_snapshot_acq(t, &array)",
-        "lj_tab_array_snapshot_acq(kt, &karray)",
-        "uint32_t asize = (uint32_t)lj_tab_array_snapshot_acq(t, &array)",
-        "MSize asize = lj_tab_array_snapshot_acq(t, &array)",
-        "MSize i, asize = lj_tab_array_snapshot_acq(t, &array)",
-        "asize = lj_tab_array_snapshot_acq(kt, &array)",
-        "asize = lj_tab_array_snapshot_acq(dict, &array)",
-        "asize = lj_tab_array_snapshot_acq(dict_str, &array)",
-        "asize = lj_tab_array_snapshot_acq(dict_mt, &array)",
-        "lj_tab_array_snapshot_acq(t, &record_array)",
-        "(uint32_t)lj_tab_array_snapshot_acq(tb, &array)",
-        "(uint32_t)lj_tab_array_snapshot_acq(tpl, &array)",
-        "asize = (uint32_t)lj_tab_array_snapshot_acq(tpl, &array)",
-        "lj_tv_load_acq(&val, &array[i])",
-        "lj_tab_array_hdr_flags_or_rel(oldarray, TABARRAY_FLAG_RETIRING)"
-      })
-
       assert_no_lines(t, "GC table array readers must not gate on GCtab.acap", {
         t:path("src", "lj_gc.c"),
         t:path("src", "lj_gc2.c")
@@ -744,11 +689,6 @@ assert(util.traceinfo(1), "expected loaded CNEW creation trace")
                       }), function(line)
         return (contains(line, "tvref(") and contains(line, "->array")) or
                (contains(line, "setmref(") and contains(line, "->array"))
-      end)
-      assert_no_lines(t, "table resize must retire old arrays, not realloc them",
-                      lj_tab, function(line)
-        return (contains(line, "lj_mem_realloc(") or contains(line, "lj_mem_reallocvec(")) and
-               (contains(line, "array") or contains(line, "t->array") or contains(line, "oldarray"))
       end)
       assert_no_lines(t, "integer table access must use snapshot inline functions",
                       t:path("src", "lj_tab.h"), function(line)
