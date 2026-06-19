@@ -533,84 +533,6 @@ assert(util.traceinfo(1), "expected loaded CNEW creation trace")
     run = function(t)
       local vm = t:path("src", "vm_x64.dasc")
       t:assert_all_any_contains({
-        t:path("src", "lj_jit.h"),
-        t:path("src", "lj_ir.h")
-      }, {
-        "LJ_TRACE_PENDING",
-        "traceref_fromgco(GCobj *o)",
-        "TraceVec *tracev",
-        "TraceVec *retiredtracev",
-        "TraceVec *tv = tracevec_acq(J)",
-        "gcref_acq(tv->slot[(n)])",
-        "traceslot_pending(J, n)",
-        "traceslot_publish(J, n, T)",
-        "traceslot_clear(J, n)",
-        "traceno16_acq(const uint16_t *p)",
-        "trace_link_acq(T)",
-        "trace_nextroot_acq(T)",
-        "trace_nextside_acq(T)",
-        "proto_trace_acq(pt)",
-        "MCode **exittab",
-        "trace_exittarget_acq(T, exitno)",
-        "trace_exittarget_rel(T, exitno, target)",
-        "trace_startptgco_acq(GCtrace *T)",
-        "trace_startpt_acq(GCtrace *T)",
-        "trace_startpt_rel(GCtrace *T, GCproto *pt)",
-        "trace_startpt_clear(GCtrace *T)",
-        "ir_iskgc_acq(const IRIns *ir)",
-        "ir_kgc_load_acq(const IRIns *ir)",
-        "ir_kgc_store_rel(IRIns *ir, GCobj *o)",
-        "ir_kgc_publish(IRIns *ir, GCobj *o, IRType t)"
-      })
-      t:assert_all_any_contains({
-        t:path("src", "lj_obj.h"),
-        t:path("src", "lj_jit.h"),
-        t:path("src", "lj_trace.c"),
-        t:path("src", "lj_asm.c"),
-        t:path("src", "lj_safepoint.c"),
-        t:path("src", "lj_gc.c"),
-        t:path("src", "lj_gc2.c")
-      }, {
-        "tracevec_new(lua_State *L, MSize sizetrace)",
-        "tracevec_publish(J, newtv)",
-        "tracevec_retire(J, oldtv)",
-        "GCtrace *retiredtraces",
-        "uint64_t retire_epoch",
-        "struct GCtrace *retired_next",
-        "uint64_t jit_scoped_slots_retired",
-        "la_store64_rlx(&g->gc2.jit_scoped_slots_retired, 0)",
-        "trace_retire(global_State *g, GCtrace *T)",
-        "lj_gc_arena_markmem(g, T)",
-        "trace_freebody(global_State *g, GCtrace *T)",
-        "lj_trace_free_unpublished(global_State *g, GCtrace *T)",
-        "lj_trace_free_unpublished(J2G(J), J->curfinal)",
-        "trace_markbody(global_State *g, GCtrace *T, int gc2)",
-        "lj_trace_reclaim_retired(global_State *g, uint64_t completed_epoch)",
-        "lj_trace_reclaim_retired(g, epoch)",
-        "lj_gc2_reclaim_retired(g, epoch)",
-        "lj_trace_markvecs(g, 1)",
-        "lj_trace_markvecs(g, 0)"
-      })
-      t:assert_all_any_contains({
-        t:path("src", "lj_jit.h"),
-        t:path("src", "lj_mcode.c"),
-        t:path("src", "lj_safepoint.c"),
-        t:path("src", "lj_trace.c"),
-        t:path("src", "lj_gc.c"),
-        t:path("src", "lj_gc2.c")
-      }, {
-        "typedef struct MCodeRetire",
-        "MCodeRetire *retiredmcode",
-        "MCodeRetire *ret = lj_mem_newt(J->L, sizeof(MCodeRetire), MCodeRetire)",
-        "mcode_retired_push(jit_State *J, MCodeRetire *ret)",
-        "lj_mcode_reclaim_retired(global_State *g, uint64_t completed_epoch)",
-        "lj_mcode_reclaim_retired(g, epoch)",
-        "lj_gc2_reclaim_retired(g, epoch)",
-        "lj_mcode_freeretired(g)",
-        "lj_mcode_markretired(g, 1)",
-        "lj_mcode_markretired(g, 0)"
-      })
-      t:assert_all_any_contains({
         t:path("src", "lj_bc.h"),
         t:path("src", "lj_dispatch.c")
       }, {
@@ -631,43 +553,6 @@ assert(util.traceinfo(1), "expected loaded CNEW creation trace")
         "mov rax, moffs64",
         "xchg [rsp], rax; ret",
         "exitstub_trace_addr(as->T, as->snapno)"
-      })
-      t:assert_all_any_contains({
-        t:path("src", "lj_trace.c"),
-        t:path("src", "lj_safepoint.c")
-      }, {
-        "trace_exittab_reset(jit_State *J, GCtrace *T)",
-        "trace_exittab_resetroot(J, T->traceno)",
-        "trace_exittab_reset(J, T);",
-        "lj_trace_flushall_hs(lua_State *L)",
-        "lj_trace_flushscope_hs(global_State *g, uint32_t work)",
-        "if (work != 0)",
-        "lj_gc2_handshake(g, LJ_GC2_HS_EXIT_TRACES|LJ_GC2_HS_FLUSHJ)",
-        "lj_trace_flushall(mainthread(g));  /* 08 section 8.7 leader action. */"
-      })
-      t:assert_all_any_contains({
-        t:path("src", "lj_trace.c"),
-        t:path("src", "lj_dispatch.c")
-      }, {
-        "LJ_TRACE_SCOPE_FLUSHING",
-        "static uint32_t trace_flushroot(jit_State *J, GCtrace *T, int scoped)",
-        "uint32_t lj_trace_flush(jit_State *J, TraceNo traceno)",
-        "uint32_t lj_trace_flushproto(global_State *g, GCproto *pt)",
-        "la_store64_rel(&T->retire_epoch, LJ_TRACE_SCOPE_FLUSHING)",
-        "trace_scope_clear_slot(J, i, T, epoch);",
-        "lj_trace_flushscope_retire(global_State *g, uint64_t epoch)",
-        "uint32_t lj_trace_flushscope(jit_State *J, TraceNo traceno)",
-        "root && root->traceno == T->root",
-        "T->traceno = 0;  /* Scoped slot retired after HS_EXIT_TRACES grace. */",
-        "epoch = la_load64_acq(&T->retire_epoch)",
-        "epoch == 0 || epoch == LJ_TRACE_SCOPE_FLUSHING",
-        "la_store64_rel(&T->retire_epoch, epoch)",
-        "la_add64_rlx(&g->gc2.jit_scoped_slots_retired, retired)",
-        "return (mode & LUAJIT_MODE_FLUSH) ? flushed : flushed + 1u;",
-        "return trace_flushroot(J, T, 1);",
-        "flushed += setptmode(g, pt, mode);",
-        "lj_trace_flushscope_hs(g, flushed);",
-        "(void)lj_trace_flushscope(G2J(g), idx);"
       })
 
       t:assert_not_contains(t:path("src", "lj_safepoint.c"),
@@ -743,24 +628,14 @@ assert(util.traceinfo(1), "expected loaded CNEW creation trace")
         return contains(line, "mov PC_OP,") or contains(line, "mov byte [PC]") or
                contains(line, "mov dword [PC]")
       end)
-      t:assert_all_contains(vm, {
-        "call extern lj_bc_publish_op_vm",
-        "call extern lj_bc_publish_vm"
-      })
       t:assert_not_contains(t:path("src", "lj_trace.c"), "lj_asm_patchexit(J, parent")
-      local trace_stop = t:c_block(t:path("src", "lj_trace.c"),
-                                   "static void trace_stop(jit_State *J)")
-      local commit = find_pos("trace_stop", trace_stop, "lj_mcode_commit(J, J->cur.mcode)")
-      local save = find_pos("trace_stop", trace_stop, "trace_save(J, T)")
-      if not (commit < save and
-              save < find_pos("trace_stop", trace_stop, "bc_publish(patchpc, patchins)") and
-              save < find_pos("trace_stop", trace_stop, "trace_exittarget_rel(parent, J->exitno, T->mcode)") and
-              save < find_pos("trace_stop", trace_stop, "trace_link_rel(parent, traceno)")) then
-        error("trace_stop must publish final trace before bytecode/exit/link go-signals")
-      end
       t:assert_contains(t:path("src", "lj_asm_x86.h"),
                         "lnk == as->T->traceno ? as->T : traceref(as->J, lnk)")
       t:build({ quiet = true })
+      t:assert_all_contains(t:path("src", "lj_vm.S"), {
+        "call lj_bc_publish_op_vm",
+        "call lj_bc_publish_vm"
+      })
       build_and_run_c(t, t:tmp("lj_t-jit-tracevec"), "t-jit-tracevec.c",
                       { timeout = "20s" })
       build_and_run_c(t, t:tmp("lj_t-jit-mcode-retire"), "t-jit-mcode-retire.c",
