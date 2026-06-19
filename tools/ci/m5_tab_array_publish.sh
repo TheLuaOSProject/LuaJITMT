@@ -277,6 +277,11 @@ if rg -n 'TValue \*record_array = lj_tab_array_acq\(t\)' \
   exit 1
 fi
 
+if rg -n 'lj_tab_asize_acq\(t\)' "$ROOT/src/lj_record.c"; then
+  echo "guardrail: recorder table array bounds must use array snapshots" >&2
+  exit 1
+fi
+
 if awk '
   /static void rec_idx_bump\(jit_State \*J, RecordIndex \*ix\)/ {
     inbump = 1

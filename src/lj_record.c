@@ -1598,12 +1598,12 @@ static TRef rec_idx_key(jit_State *J, RecordIndex *ix, IRRef *rbref,
     if ((MSize)k < LJ_MAX_ASIZE) {  /* Potential array key? */
       TRef ikey = lj_opt_narrow_index(J, key);
       TRef asizeref;
-#if defined(__linux__) && LJ_TARGET_X64
       TValue *record_array;
-      int trace_local = rec_idx_tab_trace_local(J, ix->tab);
       MSize asize = lj_tab_array_snapshot_acq(t, &record_array);
+#if defined(__linux__) && LJ_TARGET_X64
+      int trace_local = rec_idx_tab_trace_local(J, ix->tab);
 #else
-      MSize asize = lj_tab_asize_acq(t);
+      UNUSED(record_array);
 #endif
       if ((MSize)k < asize) {  /* Currently an array key? */
 	TRef arrayref;
@@ -1646,20 +1646,17 @@ static TRef rec_idx_key(jit_State *J, RecordIndex *ix, IRRef *rbref,
       /* We can rule out const numbers which failed the integerness test
       ** above. But all other numbers are potential array keys.
       */
-#if defined(__linux__) && LJ_TARGET_X64
       TValue *record_array;
       MSize asize = lj_tab_array_snapshot_acq(t, &record_array);
-#else
-      MSize asize = lj_tab_asize_acq(t);
-#endif
       if (asize == 0) {  /* True sparse tables have an empty array part. */
 	/* Guard that the array part stays empty. */
+	TRef tmp;
 #if defined(__linux__) && LJ_TARGET_X64
 	int trace_local = rec_idx_tab_trace_local(J, ix->tab);
-	TRef tmp = rec_idx_array_asize_ref(J, t, ix->tab, record_array,
-					   trace_local);
+	tmp = rec_idx_array_asize_ref(J, t, ix->tab, record_array, trace_local);
 #else
-	TRef tmp = emitir(IRTI(IR_FLOAD), ix->tab, IRFL_TAB_ASIZE);
+	UNUSED(record_array);
+	tmp = emitir(IRTI(IR_FLOAD), ix->tab, IRFL_TAB_ASIZE);
 #endif
 	emitir(IRTGI(IR_EQ), tmp, lj_ir_kint(J, 0));
       } else {
