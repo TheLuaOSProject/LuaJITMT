@@ -475,12 +475,37 @@ LJLIB_CF(dofile)
 
 #define LUA_GCSTATS		(LUA_GCINCREMENTAL+1)
 
+static TValue *gc_stats_storetv_str(lua_State *L, GCtab *t, const char *name,
+				    cTValue *src)
+{
+  GCstr *key = lj_str_newz(L, name);
+  TValue *dst;
+  for (;;) {
+    dst = lj_tab_setstr(L, t, key);
+    if (lj_tab_trystoretv_cas(L, dst, src) == LJ_TAB_STORE_CAS_OK)
+      return dst;
+    la_cpu_pause();  /* GC stats string store saw FORWARD after lookup. */
+  }
+}
+
+static TValue *gc_stats_storetv_int(lua_State *L, GCtab *t, int32_t key,
+				    cTValue *src)
+{
+  TValue *dst;
+  for (;;) {
+    dst = lj_tab_setint(L, t, key);
+    if (lj_tab_trystoretv_cas(L, dst, src) == LJ_TAB_STORE_CAS_OK)
+      return dst;
+    la_cpu_pause();  /* GC stats int store saw FORWARD after lookup. */
+  }
+}
+
 static void gc_stats_setnum(lua_State *L, GCtab *t, const char *name,
 			    uint64_t n)
 {
   TValue tv;
   setnumV(&tv, (lua_Number)n);
-  copyTVrel(L, lj_tab_setstr(L, t, lj_str_newz(L, name)), &tv);
+  gc_stats_storetv_str(L, t, name, &tv);
 }
 
 static void gc_stats_setint(lua_State *L, GCtab *t, const char *name,
@@ -488,7 +513,7 @@ static void gc_stats_setint(lua_State *L, GCtab *t, const char *name,
 {
   TValue tv;
   setintV(&tv, (int32_t)n);
-  copyTVrel(L, lj_tab_setstr(L, t, lj_str_newz(L, name)), &tv);
+  gc_stats_storetv_str(L, t, name, &tv);
 }
 
 static void gc_stats_set_latency_buckets(lua_State *L, GCtab *t,
@@ -502,10 +527,12 @@ static void gc_stats_set_latency_buckets(lua_State *L, GCtab *t,
   for (i = 0; i < LJ_GC2_HS_LATENCY_BUCKETS; i++) {
     setnumV(&tv, (lua_Number)la_load64_acq(
       &gc2->hs_ack_latency_buckets[i]));
-    copyTVrel(L, lj_tab_setint(L, bt, (int32_t)i + 1), &tv);
+    gc_stats_storetv_int(L, bt, (int32_t)i + 1, &tv);
   }
-  lj_tab_storetab(L, lj_tab_setstr(L, t,
-		   lj_str_newlit(L, "poll_ack_latency_buckets")), bt);
+  lj_gc_pubtab(L, bt);
+  settabV(L, &tv, bt);
+  gc_stats_storetv_str(L, t, "poll_ack_latency_buckets", &tv);
+  lj_gc_pubtabobj(L, t, bt);
   L->top--;
 }
 
@@ -683,6 +710,7 @@ static void gc_stats_push(lua_State *L)
 		  la_load64_acq(&gc2->finalizer_sweep_blocks));
   gc_stats_setnum(L, t, "finalizer_spawn_deferrals",
 		  la_load64_acq(&gc2->finalizer_spawn_deferrals));
+  lj_gc_pubtab(L, t);
 }
 
 LJLIB_CF(gcinfo)

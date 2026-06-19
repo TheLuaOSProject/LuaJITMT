@@ -53,6 +53,9 @@ for needle in \
   'base_storetab_str(L, env, lj_str_newlit(L, "_G"), env)' \
   'string_storetab_str(L, mt, mmname_str(g, MM_index), strtab)' \
   'ctype_storestr_str(L, t, lj_str_newlit(L, "__mode"), lj_str_newlit(L, "k"))' \
+  'gc_stats_storetv_str(L, t, name, &tv)' \
+  'gc_stats_storetv_int(L, bt, (int32_t)i + 1, &tv)' \
+  'gc_stats_storetv_str(L, t, "poll_ack_latency_buckets", &tv)' \
   'lj_tab_storetab(J->L, &node[i].val, tpl)' \
   'lj_tab_storetab(J->L, o, tpl)' \
   'lj_tab_storenil(J->L, &node[i].val)' \

@@ -9,6 +9,11 @@ make -C "$ROOT/src" >/dev/null
 for needle in \
   'collectgarbage("stats")' \
   'static void gc_stats_push(lua_State *L)' \
+  'static TValue *gc_stats_storetv_str(lua_State *L, GCtab *t, const char *name,' \
+  'static TValue *gc_stats_storetv_int(lua_State *L, GCtab *t, int32_t key,' \
+  'gc_stats_storetv_str(L, t, "poll_ack_latency_buckets", &tv)' \
+  'lj_gc_pubtabobj(L, t, bt)' \
+  'lj_gc_pubtab(L, t)' \
   'cycle_starts' \
   'minor_cycle_starts' \
   'poll_ack_samples' \
@@ -40,6 +45,12 @@ do
     exit 1
   fi
 done
+
+if rg -n 'copyTVrel\(L, lj_tab_set(str|int)\(L, (t|bt)|lj_tab_storetab\(L, lj_tab_setstr\(L, t,' \
+    "$ROOT/src/lib_base.c"; then
+  echo "guardrail: GC stats table fields must be CAS-published" >&2
+  exit 1
+fi
 
 "$ROOT/src/luajit" -joff "$ROOT/tests/t-gc-stats.lua"
 "$ROOT/src/luajit" "$ROOT/tests/t-gc-stats.lua"
