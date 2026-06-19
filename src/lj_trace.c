@@ -186,6 +186,7 @@ static LJ_AINLINE int trace_body_retire_ready(GCtrace *T,
 static void trace_markbody(global_State *g, GCtrace *T, int gc2)
 {
   IRRef ref;
+  GCobj *startpt;
   if (gc2) lj_gc2_markmem(g, T); else lj_gc_arena_markmem(g, T);
   if (T->exittab) {
     if (gc2) lj_gc2_markmem(g, T->exittab);
@@ -200,9 +201,10 @@ static void trace_markbody(global_State *g, GCtrace *T, int gc2)
     if (irt_is64(ir->t) && ir->o != IR_KNULL)
       ref++;
   }
-  if (gcref(T->startpt)) {
-    if (gc2) lj_gc2_markobj(g, gcref(T->startpt));
-    else lj_gc_arena_markobj(g, gcref(T->startpt));
+  startpt = trace_startptgco_acq(T);
+  if (startpt) {
+    if (gc2) lj_gc2_markobj(g, startpt);
+    else lj_gc_arena_markobj(g, startpt);
   }
 }
 
@@ -324,7 +326,7 @@ static TraceNo trace_findfree(jit_State *J)
 static void perftools_addtrace(GCtrace *T)
 {
   static FILE *fp;
-  GCproto *pt = &gcref(T->startpt)->pt;
+  GCproto *pt = trace_startpt_acq(T);
   const BCIns *startpc = mref(T->startpc, const BCIns);
   const char *name = proto_chunknamestr(pt);
   BCLine lineno;
@@ -365,7 +367,7 @@ GCtrace * LJ_FASTCALL lj_trace_alloc(lua_State *L, GCtrace *T)
   T2->nk = T->nk;
   T2->nsnap = T->nsnap;
   T2->nsnapmap = T->nsnapmap;
-  setgcrefnull(T2->startpt);
+  trace_startpt_clear(T2);
   setmref(T2->startpc, NULL);
   T2->startins = 0;
   T2->szmcode = 0;
@@ -454,7 +456,7 @@ static void trace_save(jit_State *J, GCtrace *T)
 void LJ_FASTCALL lj_trace_free(global_State *g, GCtrace *T)
 {
   jit_State *J = G2J(g);
-  lj_assertG(T->traceno != 0 || gcref(T->startpt) != NULL ||
+  lj_assertG(T->traceno != 0 || trace_startptgco_acq(T) != NULL ||
 	     la_load64_acq(&T->retire_epoch) != 0,
 	     "unpublished trace body retired");
   if (T->traceno) {
@@ -521,12 +523,15 @@ static void trace_unpatch(jit_State *J, GCtrace *T)
 /* Flush a root trace. Returns 1 iff trace-exit publication changed. */
 static uint32_t trace_flushroot(jit_State *J, GCtrace *T, int scoped)
 {
-  GCproto *pt = &gcref(T->startpt)->pt;
-  TraceNo head = proto_trace_acq(pt);
+  GCproto *pt = trace_startpt_acq(T);
+  TraceNo head;
   TraceNo nextroot = trace_nextroot_acq(T);
   uint32_t retargeted = 1;
   lj_assertJ(T->root == 0, "not a root trace");
   lj_assertJ(pt != NULL, "trace has no prototype");
+  if (LJ_UNLIKELY(pt == NULL))
+    return 0;
+  head = proto_trace_acq(pt);
   trace_exittab_resetroot(J, T->traceno);
   if (scoped)
     la_store64_rel(&T->retire_epoch, LJ_TRACE_SCOPE_FLUSHING);
@@ -940,7 +945,7 @@ static void trace_start(jit_State *J)
   lj_resetsplit(J);
   J->retryrec = 0;
   J->ktrace = 0;
-  setgcref(J->cur.startpt, obj2gco(J->pt));
+  trace_startpt_rel(&J->cur, J->pt);
 
   lj_vmevent_send_(J2G(J), TRACE,
     TValue savetv = J2TG(J)->tmptv;
@@ -975,7 +980,7 @@ static void trace_stop(jit_State *J)
 {
   BCIns *pc = mref(J->cur.startpc, BCIns);
   BCOp op = bc_op(J->cur.startins);
-  GCproto *pt = &gcref(J->cur.startpt)->pt;
+  GCproto *pt = trace_startpt_acq(&J->cur);
   TraceNo traceno = J->cur.traceno;
   GCtrace *T = J->curfinal;
   BCIns *patchpc = NULL;
@@ -1115,7 +1120,7 @@ static int trace_abort(jit_State *J)
       if (e == LJ_TRERR_RETRY)
 	hotcount_setg(J2G(J), startpc+1, 1);  /* Immediate retry. */
       else
-	penalty_pc(J, &gcref(J->cur.startpt)->pt, startpc, e);
+	penalty_pc(J, trace_startpt_acq(&J->cur), startpc, e);
     } else {
       GCtrace *T = traceref(J, J->exitno);
       if (T)

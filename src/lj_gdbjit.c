@@ -773,7 +773,7 @@ static void gdbjit_newentry(lua_State *L, GDBJITctx *ctx)
 void lj_gdbjit_addtrace(jit_State *J, GCtrace *T)
 {
   GDBJITctx ctx;
-  GCproto *pt = &gcref(T->startpt)->pt;
+  GCproto *pt = trace_startpt_acq(T);
   TraceNo parent = T->ir[REF_BASE].op1;
   const BCIns *startpc = mref(T->startpc, const BCIns);
   ctx.T = T;

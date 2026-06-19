@@ -27,7 +27,11 @@ for needle in \
   'proto_trace_acq(pt)' \
   'MCode **exittab' \
   'trace_exittarget_acq(T, exitno)' \
-  'trace_exittarget_rel(T, exitno, target)'
+  'trace_exittarget_rel(T, exitno, target)' \
+  'trace_startptgco_acq(GCtrace *T)' \
+  'trace_startpt_acq(GCtrace *T)' \
+  'trace_startpt_rel(GCtrace *T, GCproto *pt)' \
+  'trace_startpt_clear(GCtrace *T)'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_jit.h"; then
     echo "guardrail: missing trace publication helper: $needle" >&2
@@ -174,6 +178,15 @@ fi
 
 if rg -F -q 'lj_gc2_handshake(g, LJ_GC2_HS_EXIT_TRACES);' "$ROOT/src/lj_dispatch.c"; then
   echo "guardrail: public scoped trace flushes must use count-aware scope helper" >&2
+  exit 1
+fi
+
+hits=$(rg -n -g '*.c' -g '*.h' -g '!**/host/*' -- \
+  'gcref\([^)]*startpt|setgcref\([^)]*startpt|setgcrefnull\([^)]*startpt' \
+  "$ROOT/src" || true)
+if [ -n "$hits" ]; then
+  echo "guardrail: GCtrace.startpt must use trace_startpt acquire/release helpers:" >&2
+  echo "$hits" >&2
   exit 1
 fi
 

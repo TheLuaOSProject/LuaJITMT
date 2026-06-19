@@ -3284,7 +3284,7 @@ static void gc2_traverse_trace(global_State *g, GCtrace *T)
   gc2_marktrace_worker(g, trace_link_acq(T));
   gc2_marktrace_worker(g, trace_nextroot_acq(T));
   gc2_marktrace_worker(g, trace_nextside_acq(T));
-  gc2_markobj_worker(g, gcref(T->startpt));
+  gc2_markobj_worker(g, trace_startptgco_acq(T));
 }
 #endif
 

@@ -1933,7 +1933,7 @@ static void asm_head_root(ASMState *as)
   as->T->spadjust = (uint16_t)spadj;
   emit_spsub(as, spadj);
   /* Root traces assume a checked stack for the starting proto. */
-  as->T->topslot = gcref(as->T->startpt)->pt.framesize;
+  as->T->topslot = trace_startpt_acq(as->T)->framesize;
 }
 
 /* Head of a side trace.

@@ -344,6 +344,26 @@ static LJ_AINLINE void traceno16_rel(uint16_t *p, TraceNo traceno)
   ((MCode *)la_loadptr_acq((void *const *)&(T)->exittab[(exitno)]))
 #define trace_exittarget_rel(T, exitno, target) \
   la_storeptr_rel((void **)&(T)->exittab[(exitno)], (void *)(target))
+static LJ_AINLINE GCobj *trace_startptgco_acq(GCtrace *T)
+{
+  return gcref_acq(T->startpt);
+}
+
+static LJ_AINLINE GCproto *trace_startpt_acq(GCtrace *T)
+{
+  GCobj *o = trace_startptgco_acq(T);
+  return o ? gco2pt(o) : NULL;
+}
+
+static LJ_AINLINE void trace_startpt_rel(GCtrace *T, GCproto *pt)
+{
+  setgcrefrel(T->startpt, obj2gco(pt));
+}
+
+static LJ_AINLINE void trace_startpt_clear(GCtrace *T)
+{
+  setgcrefnullrel(T->startpt);
+}
 
 LJ_STATIC_ASSERT(offsetof(GChead, gclist) == offsetof(GCtrace, gclist));
 

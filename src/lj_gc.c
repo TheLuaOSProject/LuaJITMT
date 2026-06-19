@@ -976,7 +976,7 @@ static void gc_traverse_trace(global_State *g, GCtrace *T)
     if (nextroot) gc_marktrace(g, nextroot);
     if (nextside) gc_marktrace(g, nextside);
   }
-  gc_markobj(g, gcref(T->startpt));
+  gc_markobj(g, trace_startptgco_acq(T));
 }
 
 /* The current trace is a GC root while not anchored in the prototype (yet). */
