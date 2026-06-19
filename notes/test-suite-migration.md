@@ -87,6 +87,14 @@ Lua test-suite migration notes:
   - `tools/ci/m3_gc2_worker_scheduler.sh` -> `m3_gc2_worker_scheduler`
   - `tools/ci/m3_safepoint_handshake.sh` -> `m3_safepoint_handshake`
   - `tools/ci/m3_vm_safepoint.sh` -> `m3_vm_safepoint`
+- Seventeenth migrated scripts:
+  - `tools/ci/m5_x64_getmetatable_node_order.sh` -> `m5_x64_getmetatable_node_order`
+  - `tools/ci/m5_x64_ipairs_snapshot.sh` -> `m5_x64_ipairs_snapshot`
+  - `tools/ci/m5_x64_itern_snapshot.sh` -> `m5_x64_itern_snapshot`
+  - `tools/ci/m5_x64_table_next_snapshot.sh` -> `m5_x64_table_next_snapshot`
+  - `tools/ci/m5_x64_tget_array_header.sh` -> `m5_x64_tget_array_header`
+  - `tools/ci/m5_x64_tgets_node_order.sh` -> `m5_x64_tgets_node_order`
+  - `tools/ci/m5_x64_uv_publish.sh` -> `m5_x64_uv_publish`
 - This first batch covers the main shapes the full migration needs:
   standalone C fixtures linked against selected runtime files, Lua tests under
   the built VM, C fixtures linked against `libluajit.a`, and source-order guard
@@ -133,6 +141,8 @@ Lua test-suite migration notes:
   publication source guards.
 - The sixteenth batch migrates the M3 GC2/safepoint guards into Lua. The
   paranoia aggregate still preserves the existing stock-test assertion failure.
+- The seventeenth batch migrates the focused x64 snapshot/publication guards,
+  leaving the larger TSET nil-snapshot guard for a dedicated pass.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.
