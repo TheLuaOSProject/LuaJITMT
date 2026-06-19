@@ -266,6 +266,8 @@ Lua test-suite migration notes:
   metatype/miscmap Lua regression.
 - Converted `m7_ffi_clib_cache` to behavior-only coverage through the threaded
   interpreter and JIT C-library cache regressions.
+- Converted `m7_ffi_blocking` to behavior-only coverage through its Lua
+  recorder blacklist regression.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.

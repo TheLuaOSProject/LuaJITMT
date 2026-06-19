@@ -204,34 +204,11 @@ local m7_cases = {
 return function(add)
   add({
     name = "m7_ffi_blocking",
-    description = "FFI blocking recorder blacklist guard",
+    description = "FFI blocking recorder blacklist behavior",
     run = function(t)
-      local src = {
-        t:path("src", "lib_ffi.c"),
-        t:path("src", "lj_ctype.c"),
-        t:path("src", "lj_crecord.c")
-      }
-      t:assert_all_any_contains(src, {
-        "LJLIB_CF(ffi_blocking)",
-        "ctype_isfunc(ct->info)",
-        "lj_ctype_cb_blacklist(cts, cdata_getptr(cdataptr(cd), sz))",
-        "lj_trace_flushall_hs(L)",
-        "lj_ctype_cb_isblacklisted(cts,",
-        "lj_trace_err(J, LJ_TRERR_BLACKL)"
-      })
-      assert_no_lines(t, "ffi.blocking must reuse pointer blacklist",
-                      src, function(line)
-        return line_contains_any(line, {
-          "blocking_token",
-          "ffi_blocking_lock",
-          "ffi_blocking_unlock",
-          "LJ_MT",
-          "LUAJIT_THREADSAFE"
-        }) or (contains(line, "lj_udata_new(") and contains(line, "blocking"))
-      end)
       clean_build(t)
       run_luajit_script(t, "t-ffi-blocking.lua")
-      print("M7 ffi.blocking guard passed")
+      print("M7 ffi.blocking behavior passed")
     end
   })
 
