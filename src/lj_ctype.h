@@ -442,7 +442,7 @@ CDSDEF(CDSFLAG)
 
 /* -- C type management --------------------------------------------------- */
 
-#define ctype_ctsG(g)		(mref((g)->ctype_state, CTState))
+#define ctype_ctsG(g)		(mref_acq((g)->ctype_state, CTState))
 
 /* Get C type state. */
 static LJ_AINLINE CTState *ctype_cts(lua_State *L)

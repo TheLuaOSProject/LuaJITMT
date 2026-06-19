@@ -24,6 +24,8 @@ fi
 
 for needle in \
   'global_State *g;	/* Global state. */' \
+  'mref_acq((g)->ctype_state, CTState)' \
+  'setmrefrel(G(L)->ctype_state, cts)' \
   'cp.L = L' \
   'cp.L = J->L'
 do
@@ -32,5 +34,11 @@ do
     exit 1
   fi
 done
+
+if rg -n 'mref\([^)]*ctype_state|setmref\([^)]*ctype_state' \
+    "$ROOT/src" -g '*.c' -g '*.h' -g '!**/host/*'; then
+  echo "guardrail: C-side CTState global pointer must use acquire/release MRef helpers" >&2
+  exit 1
+fi
 
 echo "M7 FFI no shared CTState lua_State guard passed"

@@ -1243,7 +1243,7 @@ CTState *lj_ctype_init(lua_State *L)
       if (!ctype_isenum(info)) ctype_addtype(cts, ct, id);
     }
   }
-  setmref(G(L)->ctype_state, cts);
+  setmrefrel(G(L)->ctype_state, cts);  /* 11.2 CTState global publish. */
   {
     TValue *anchor = L->top;
     GCtab *t = ctype_fin_tab_new_l(L, 1);
