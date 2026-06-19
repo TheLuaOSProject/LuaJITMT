@@ -10,6 +10,8 @@ local suites = {
   require("m5_runtime"),
   require("m5_x64"),
   require("m6_jit"),
+  require("m7_ffi"),
+  require("m8_weak"),
   require("m9_m10_gc")
 }
 

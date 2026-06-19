@@ -129,6 +129,33 @@ Lua test-suite migration notes:
   - `tools/ci/m6_jit_mcode_publish.sh` -> `m6_jit_mcode_publish`
   - `tools/ci/m6_jit_flush_hs.sh` -> `m6_jit_flush_hs`
   - `tools/ci/m6_jit.sh` -> `m6_jit`
+- Twenty-first migrated scripts:
+  - `tools/ci/m7_ffi_cdef_token.sh` -> `m7_ffi_cdef_token`
+  - `tools/ci/m7_ffi_no_cts_l.sh` -> `m7_ffi_no_cts_l`
+  - `tools/ci/m7_ffi_cdef_dup_stack.sh` -> `m7_ffi_cdef_dup_stack`
+  - `tools/ci/m7_ffi_cparse_rollback.sh` -> `m7_ffi_cparse_rollback`
+  - `tools/ci/m7_ffi_ctype_intern_l.sh` -> `m7_ffi_ctype_intern_l`
+  - `tools/ci/m7_ffi_ctype_hash_publish.sh` -> `m7_ffi_ctype_hash_publish`
+  - `tools/ci/m7_ffi_ctype_tab_retire.sh` -> `m7_ffi_ctype_tab_retire`
+  - `tools/ci/m7_ffi_ctype_ticket_intern.sh` -> `m7_ffi_ctype_ticket_intern`
+  - `tools/ci/m7_ffi_ctype_name_claim.sh` -> `m7_ffi_ctype_name_claim`
+  - `tools/ci/m7_ffi_ctype_pointer_ids.sh` -> `m7_ffi_ctype_pointer_ids`
+  - `tools/ci/m7_ffi_cdata_alloc.sh` -> `m7_ffi_cdata_alloc`
+  - `tools/ci/m7_ffi_jit_cnew.sh` -> `m7_ffi_jit_cnew`
+  - `tools/ci/m7_ffi_snap_restore_l.sh` -> `m7_ffi_snap_restore_l`
+  - `tools/ci/m7_ffi_finreg.sh` -> `m7_ffi_finreg`
+  - `tools/ci/m7_ffi_pin.sh` -> `m7_ffi_pin`
+  - `tools/ci/m7_ffi_metatype.sh` -> `m7_ffi_metatype`
+  - `tools/ci/m7_ffi_cdata_get_l.sh` -> `m7_ffi_cdata_get_l`
+  - `tools/ci/m7_ffi_cdata_set_l.sh` -> `m7_ffi_cdata_set_l`
+  - `tools/ci/m7_ffi_carith_l.sh` -> `m7_ffi_carith_l`
+  - `tools/ci/m7_ffi_clib_cache.sh` -> `m7_ffi_clib_cache`
+  - `tools/ci/m7_ffi_callback_install.sh` -> `m7_ffi_callback_install`
+  - `tools/ci/m7_ffi_callback_runtime.sh` -> `m7_ffi_callback_runtime`
+  - `tools/ci/m7_ffi_blocking.sh` -> `m7_ffi_blocking`
+  - `tools/ci/m7_ffi.sh` -> `m7_ffi`
+- Twenty-second migrated scripts:
+  - `tools/ci/m8_weak.sh` -> `m8_weak`
 - This first batch covers the main shapes the full migration needs:
   standalone C fixtures linked against selected runtime files, Lua tests under
   the built VM, C fixtures linked against `libluajit.a`, and source-order guard
@@ -184,6 +211,8 @@ Lua test-suite migration notes:
   local-cell/x64 TSET guards into a dedicated Lua suite.
 - The twentieth batch migrates the M6 JIT scaffold wrappers and aggregate,
   keeping the aggregate as Lua orchestration over the focused cases.
+- The twenty-first batch migrates the M7 FFI wrappers and aggregate.
+- The twenty-second batch migrates the M8 weak/finalizer semantic gate.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.
