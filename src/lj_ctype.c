@@ -1210,6 +1210,11 @@ static void ctype_freeretired(global_State *g, CTState *cts)
   }
 }
 
+CTState *LJ_FASTCALL lj_ctype_ctsG_acq(global_State *g)
+{
+  return ctype_ctsG(g);
+}
+
 /* -- C type state -------------------------------------------------------- */
 
 /* Initialize C type table and state. */

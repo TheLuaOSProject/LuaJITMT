@@ -26,6 +26,8 @@ for needle in \
   'global_State *g;	/* Global state. */' \
   'mref_acq((g)->ctype_state, CTState)' \
   'setmrefrel(G(L)->ctype_state, cts)' \
+  'lj_ctype_ctsG_acq(global_State *g)' \
+  'call extern lj_ctype_ctsG_acq' \
   'cp.L = L' \
   'cp.L = J->L'
 do
@@ -38,6 +40,12 @@ done
 if rg -n 'mref\([^)]*ctype_state|setmref\([^)]*ctype_state' \
     "$ROOT/src" -g '*.c' -g '*.h' -g '!**/host/*'; then
   echo "guardrail: C-side CTState global pointer must use acquire/release MRef helpers" >&2
+  exit 1
+fi
+
+if rg -n 'GL:[^ ]*->ctype_state|DISPATCH_GL\(ctype_state\)' \
+    "$ROOT/src/vm_x64.dasc"; then
+  echo "guardrail: x64 VM CTState readers must acquire through lj_ctype_ctsG_acq" >&2
   exit 1
 fi
 

@@ -2991,7 +2991,6 @@ static void build_subroutines(BuildCtx *ctx)
 |.if FFI
 |.type CTSTATE, CTState, PC
 |  saveregs_	// ebp/rbp already saved. ebp now holds global_State *.
-|  mov CTSTATE, GL:ebp->ctype_state
 |  movzx eax, ax
 |  sub rsp, 144		// Includes Win64 helper-call shadow space.
 |  mov aword [rsp+32], CARG1
@@ -3014,8 +3013,12 @@ static void build_subroutines(BuildCtx *ctx)
 |  movsd qword [rsp+128], xmm6
 |  movsd qword [rsp+136], xmm7
 |.endif
+|  mov KBASEd, eax
+|  mov CARG1, rbp
+|  call extern lj_ctype_ctsG_acq	// (global_State *g)
+|  mov CTSTATE, rax
 |  mov CARG1, CTSTATE
-|  mov CARG2d, eax
+|  mov CARG2d, KBASEd
 |  call extern lj_ccallback_prepare
 |  mov KBASE, rax
 |  mov TMPR, aword [rsp+32]
@@ -3076,16 +3079,18 @@ static void build_subroutines(BuildCtx *ctx)
 |  ins_callt
   |.endif
   |
-  |->cont_ffi_callback:			// Return from FFI callback.
+|->cont_ffi_callback:			// Return from FFI callback.
 |.if FFI
 |  mov L:RA, SAVE_L
-|  load_G TMPR
-|  mov CTSTATE, GL:TMPR->ctype_state
-|  lea KBASE, [DISPATCH+DISPATCH_TG(cb)]
 |  mov L:RA->base, BASE
 |  mov L:RA->top, RB
+|  mov RB, RC			// Save callback result across helper call.
+|  load_G CARG1
+|  call extern lj_ctype_ctsG_acq	// (global_State *g)
+|  mov CTSTATE, rax
+|  lea KBASE, [DISPATCH+DISPATCH_TG(cb)]
 |  mov CARG1, CTSTATE
-|  mov CARG2, RC
+|  mov CARG2, RB
 |  mov CARG3, KBASE
 |  call extern lj_ccallback_leave	// (CTState *cts, TValue *o, CCallbackRuntime *cb)
 |  mov rax, CBACK:KBASE->gpr[0]
