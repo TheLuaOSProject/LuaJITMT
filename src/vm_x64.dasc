@@ -4592,6 +4592,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |1:  // Traverse array part.
     |  cmp RCd, TMPRd; jae >5		// Index points after array part?
     |  mov r8, [ITYPE+RC*8]
+    |  mov64 r9, LJ_TFORWARD_BITS
+    |  cmp r8, r9; je >8
     |  cmp r8, LJ_TNIL; je >4
     |.if not DUALNUM
     |  cvtsi2sd xmm0, RCd
@@ -4619,6 +4621,24 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  add RCd, 1
     |  jmp <1
     |
+    |8:  // Resolve a forwarded array slot in C.
+    |  mov ITYPE, BASE
+    |.if X64WIN
+    |  lea CARG3, [ITYPE+RA*8-8]
+    |  mov CARG1, TAB:RB
+    |  mov CARG2d, RCd
+    |.else
+    |  mov CARG1, TAB:RB
+    |  mov CARG2d, RCd
+    |  lea CARG3, [ITYPE+RA*8-8]
+    |.endif
+    |  mov RB, ITYPE
+    |  call extern lj_tab_itern_forward	// (GCtab *t, uint32_t idx, TValue *ctrl)
+    |  mov BASE, RB
+    |  test RDd, RDd
+    |  jg <2
+    |  jmp <3
+    |
     |5:  // Traverse hash part.
     |  sub RCd, TMPRd
     |6:
@@ -4628,6 +4648,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  imul ITYPEd, RCd, #NODE
     |  add NODE:ITYPE, r8
     |  mov r8, NODE:ITYPE->val
+    |  mov64 r9, LJ_TFORWARD_BITS
+    |  cmp r8, r9; je >9
     |  cmp r8, LJ_TNIL; je >7
     |  lea TMPRd, [RCd+TMPRd+1]
     |  // Copy key and value from hash slot.
@@ -4640,6 +4662,24 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |7:  // Skip holes in hash part.
     |  add RCd, 1
     |  jmp <6
+    |
+    |9:  // Resolve a forwarded hash slot in C.
+    |  mov ITYPE, BASE
+    |.if X64WIN
+    |  lea CARG3, [ITYPE+RA*8-8]
+    |  mov CARG1, TAB:RB
+    |  lea CARG2d, [RCd+TMPRd]
+    |.else
+    |  mov CARG1, TAB:RB
+    |  lea CARG2d, [RCd+TMPRd]
+    |  lea CARG3, [ITYPE+RA*8-8]
+    |.endif
+    |  mov RB, ITYPE
+    |  call extern lj_tab_itern_forward	// (GCtab *t, uint32_t idx, TValue *ctrl)
+    |  mov BASE, RB
+    |  test RDd, RDd
+    |  jg <2
+    |  jmp <3
     break;
 
   case BC_ISNEXT:

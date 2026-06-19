@@ -47,7 +47,9 @@ C integer getter wrapper before deciding whether the iterator stops. x64 array
 `BC_TGETV`, `BC_TGETB`, and `BC_TGETR` now send visible forwarded slot
 snapshots to the existing vmeta/C lookup path instead of returning the internal
 sentinel. x64 `BC_TGETS_Z` does the same for visible forwarded string-key hash
-values.
+values. x64 `BC_ITERN` delegates visible forwarded array/hash iterator slots to
+the C `lj_tab_next()` path through a traversal-index helper, so optimized
+`pairs()` loops no longer copy internal forward sentinels into Lua results.
 
 ## 6.2 Tables: data structures
 

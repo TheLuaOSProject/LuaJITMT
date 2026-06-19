@@ -1544,6 +1544,21 @@ int lj_tab_next(GCtab *t, cTValue *key, TValue *o)
   return (int32_t)idx < 0 ? -1 : 0;  /* Invalid key or end of traversal. */
 }
 
+int32_t LJ_FASTCALL lj_tab_itern_forward(GCtab *t, uint32_t idx, TValue *ctrl)
+{
+  TValue key;
+  int ok;
+  key.u32.lo = idx;
+  key.u32.hi = LJ_KEYINDEX;
+  ok = lj_tab_next(t, &key, ctrl+1);
+  if (ok == 1) {
+    uint32_t next = lj_tab_keyindex(t, ctrl+1);
+    ctrl->u32.lo = next;
+    ctrl->u32.hi = LJ_KEYINDEX;
+  }
+  return ok;
+}
+
 /* -- Table length calculation -------------------------------------------- */
 
 /* Compute table length. Slow path with mixed array/hash lookups. */
