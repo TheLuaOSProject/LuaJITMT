@@ -16,6 +16,8 @@
 
 #define lj_str_hashhead(r) \
   ((GCobj *)(void *)(gcrefu((r)) & ~(uintptr_t)LJ_STRHASH_LINKMASK))
+#define lj_str_hashhead_u(u) \
+  ((GCobj *)(void *)((u) & ~(uintptr_t)LJ_STRHASH_LINKMASK))
 #define lj_str_hashflags(r)	(gcrefu((r)) & LJ_STRHASH_LINKMASK)
 #define lj_str_hashsecondary(r)	(gcrefu((r)) & LJ_STRHASH_SECONDARY)
 #define lj_str_buckets(g)	((g)->str.tabh->bucket)
@@ -25,6 +27,46 @@
    (((GCSize)(mask) + 1u) * (GCSize)sizeof(GCRef)))
 #define lj_str_tabbytes(tabh) \
   ((tabh) ? lj_str_tabsize((tabh)->mask) : (GCSize)0)
+
+static LJ_AINLINE uintptr_t lj_str_ref_load_acq(const GCRef *r)
+{
+#if LJ_GC64
+  return (uintptr_t)la_load64_acq(&r->gcptr64);
+#else
+  return (uintptr_t)la_load32_acq(&r->gcptr32);
+#endif
+}
+
+static LJ_AINLINE void lj_str_ref_store_rel(GCRef *r, uintptr_t u)
+{
+#if LJ_GC64
+  la_store64_rel(&r->gcptr64, (uint64_t)u);
+#else
+  la_store32_rel(&r->gcptr32, (uint32_t)u);
+#endif
+}
+
+static LJ_AINLINE GCobj *lj_str_hashhead_acq(const GCRef *r)
+{
+  return lj_str_hashhead_u(lj_str_ref_load_acq(r));
+}
+
+static LJ_AINLINE GCobj *lj_str_next_acq(const GCobj *o)
+{
+  return lj_obj_gcw_acq((GCobj *)o);
+}
+
+static LJ_AINLINE void lj_str_next_store_rel(GCobj *o, uintptr_t next)
+{
+  lj_str_ref_store_rel(lj_obj_gcwref(o),
+		       next & ~(uintptr_t)LJ_STRHASH_LINKMASK);
+}
+
+static LJ_AINLINE void lj_str_bucket_store_rel(GCRef *r, GCobj *o,
+					       uintptr_t flags)
+{
+  lj_str_ref_store_rel(r, (uintptr_t)o | (flags & LJ_STRHASH_SECONDARY));
+}
 
 /* String helpers. */
 LJ_FUNC int32_t LJ_FASTCALL lj_str_cmp(GCstr *a, GCstr *b);

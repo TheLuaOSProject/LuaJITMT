@@ -331,7 +331,8 @@ static void gc2_paranoia_check_strtab(global_State *g)
   strtab = hdr->bucket;
   for (i = 0; i <= hdr->mask; i++) {
     GCobj *o;
-    for (o = lj_str_hashhead(strtab[i]); o != NULL; o = gcnext(o))
+    for (o = lj_str_hashhead_acq(&strtab[i]); o != NULL;
+	 o = lj_str_next_acq(o))
       gc2_paranoia_checkobj(g, o, "string");
   }
 }
@@ -599,7 +600,8 @@ static void gc_mark_fixedstr(global_State *g)
   strtab = hdr->bucket;
   for (i = 0; i <= hdr->mask; i++) {
     GCobj *o;
-    for (o = lj_str_hashhead(strtab[i]); o != NULL; o = gcnext(o))
+    for (o = lj_str_hashhead_acq(&strtab[i]); o != NULL;
+	 o = lj_str_next_acq(o))
       if (lj_obj_gcflags(o) & (LJ_GC_FIXED|LJ_GC_SFIXED))
 	lj_gc_arena_markobj(g, o);
   }
@@ -1288,12 +1290,12 @@ static void gc_sweepstr(global_State *g, GCRef *chain)
 {
   /* Mask with other white and LJ_GC_FIXED. Or LJ_GC_SFIXED on shutdown. */
   int ow = otherwhite(g);
-  uintptr_t u = gcrefu(*chain);
+  uintptr_t u = lj_str_ref_load_acq(chain);
   GCRef q;
   GCRef *p = &q;
   GCobj *o;
-  setgcrefp(q, (u & ~(uintptr_t)LJ_STRHASH_LINKMASK));
-  while ((o = gcref(*p)) != NULL) {
+  lj_str_ref_store_rel(&q, u & ~(uintptr_t)LJ_STRHASH_LINKMASK);
+  while ((o = gcref_acq(*p)) != NULL) {
     if (((lj_obj_gcflags(o) ^ LJ_GC_WHITES) & ow)) {  /* Black or current white? */
       lj_assertG(!isdead(g, o) || (lj_obj_gcflags(o) & LJ_GC_FIXED),
 		 "sweep of undead string");
@@ -1302,11 +1304,12 @@ static void gc_sweepstr(global_State *g, GCRef *chain)
     } else {  /* Otherwise string is dead, free it. */
       lj_assertG(isdead(g, o) || ow == LJ_GC_SFIXED,
 		 "sweep of unlive string");
-      setgcrefr(*p, *lj_obj_gcwref(o));
+      lj_str_ref_store_rel(p, (uintptr_t)lj_str_next_acq(o));
       lj_str_free(g, gco2str(o));
     }
   }
-  setgcrefp(*chain, (gcrefu(q) | (u & LJ_STRHASH_SECONDARY)));
+  lj_str_ref_store_rel(chain,
+		       lj_str_ref_load_acq(&q) | (u & LJ_STRHASH_SECONDARY));
 }
 
 /* Check whether we can clear a key or a value slot from a table. */

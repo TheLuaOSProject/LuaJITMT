@@ -1160,7 +1160,8 @@ static void gc2_mark_fixedstr(global_State *g)
   strtab = hdr->bucket;
   for (i = 0; i <= hdr->mask; i++) {
     GCobj *o;
-    for (o = lj_str_hashhead(strtab[i]); o != NULL; o = gcnext(o))
+    for (o = lj_str_hashhead_acq(&strtab[i]); o != NULL;
+	 o = lj_str_next_acq(o))
       if (lj_obj_gcflags(o) & (LJ_GC_FIXED|LJ_GC_SFIXED))
 	lj_gc2_markobj(g, o);
   }

@@ -127,24 +127,6 @@ static LJ_NOINLINE StrHash hash_dense(uint64_t seed, StrHash h,
 #define LJ_STRTAB_RESIZE	((MSize)0x80000000u)
 #define LJ_STRTAB_ACTIVE_MASK	(~LJ_STRTAB_RESIZE)
 
-static LJ_AINLINE uintptr_t strref_load_acq(const GCRef *r)
-{
-#if LJ_GC64
-  return (uintptr_t)la_load64_acq(&r->gcptr64);
-#else
-  return (uintptr_t)la_load32_acq(&r->gcptr32);
-#endif
-}
-
-static LJ_AINLINE void strref_store_rel(GCRef *r, uintptr_t u)
-{
-#if LJ_GC64
-  la_store64_rel(&r->gcptr64, (uint64_t)u);
-#else
-  la_store32_rel(&r->gcptr32, (uint32_t)u);
-#endif
-}
-
 static LJ_AINLINE int strref_cas_rel(GCRef *r, uintptr_t *expect, uintptr_t want)
 {
 #if LJ_GC64
@@ -158,11 +140,6 @@ static LJ_AINLINE int strref_cas_rel(GCRef *r, uintptr_t *expect, uintptr_t want
   *expect = (uintptr_t)exp;
   return ok;
 #endif
-}
-
-static LJ_AINLINE GCobj *strref_hashhead(uintptr_t u)
-{
-  return (GCobj *)(void *)(u & ~(uintptr_t)LJ_STRHASH_LINKMASK);
 }
 
 static void strtab_retired_push(global_State *g, StrTabHdr *hdr)
@@ -265,22 +242,23 @@ void lj_str_resize(lua_State *L, MSize newmask)
     int newsecond = 0;
     /* Compute primary chain lengths. */
     for (i = oldmask; i != ~(MSize)0; i--) {
-      GCobj *o = lj_str_hashhead(oldtab[i]);
+      GCobj *o = lj_str_hashhead_acq(&oldtab[i]);
       while (o) {
 	GCstr *s = gco2str(o);
 	MSize hash = s->hashalg ? hash_sparse(g->str.seed, strdata(s), s->len) :
 				  s->hash;
 	hash &= newmask;
-	setgcrefp(newtab[hash], gcrefu(newtab[hash]) + 1);
-	o = gcnext(o);
+	lj_str_ref_store_rel(&newtab[hash],
+			     lj_str_ref_load_acq(&newtab[hash]) + 1u);
+	o = lj_str_next_acq(o);
       }
     }
     /* Mark secondary chains. */
     for (i = newmask; i != ~(MSize)0; i--) {
-      int secondary = gcrefu(newtab[i]) > LJ_STR_MAXCOLL;
+      int secondary = lj_str_ref_load_acq(&newtab[i]) > LJ_STR_MAXCOLL;
       newsecond |= secondary;
-      setgcrefp(newtab[i],
-		(void *)(secondary ? LJ_STRHASH_SECONDARY : (uintptr_t)0));
+      lj_str_ref_store_rel(&newtab[i],
+			   secondary ? LJ_STRHASH_SECONDARY : (uintptr_t)0);
     }
     g->str.second = newsecond;
   }
@@ -288,28 +266,28 @@ void lj_str_resize(lua_State *L, MSize newmask)
 
   /* Reinsert all strings from the old table into the new table. */
   for (i = oldmask; i != ~(MSize)0; i--) {
-    GCobj *o = lj_str_hashhead(oldtab[i]);
+    GCobj *o = lj_str_hashhead_acq(&oldtab[i]);
     while (o) {
-      GCobj *next = gcnext(o);
+      GCobj *next = lj_str_next_acq(o);
       GCstr *s = gco2str(o);
       MSize hash = s->hash;
 #if LUAJIT_SECURITY_STRHASH
       uintptr_t u;
       if (LJ_LIKELY(!s->hashalg)) {  /* String hashed with primary hash. */
 	hash &= newmask;
-	u = gcrefu(newtab[hash]);
+	u = lj_str_ref_load_acq(&newtab[hash]);
 	if (LJ_UNLIKELY(u & LJ_STRHASH_SECONDARY)) {  /* Switch string to secondary hash. */
 	  s->hash = hash = hash_dense(g->str.seed, s->hash, strdata(s), s->len);
 	  s->hashalg = 1;
 	  hash &= newmask;
-	  u = gcrefu(newtab[hash]);
+	  u = lj_str_ref_load_acq(&newtab[hash]);
 	}
       } else {  /* String hashed with secondary hash. */
 	MSize shash = hash_sparse(g->str.seed, strdata(s), s->len);
-	u = gcrefu(newtab[shash & newmask]);
+	u = lj_str_ref_load_acq(&newtab[shash & newmask]);
 	if (u & LJ_STRHASH_SECONDARY) {
 	  hash &= newmask;
-	  u = gcrefu(newtab[hash]);
+	  u = lj_str_ref_load_acq(&newtab[hash]);
 	} else {  /* Revert string back to primary hash. */
 	  s->hash = shash;
 	  s->hashalg = 0;
@@ -317,13 +295,14 @@ void lj_str_resize(lua_State *L, MSize newmask)
 	}
       }
       /* NOBARRIER: The string table is a GC root. */
-      setgcrefp(*lj_obj_gcwref(o), (u & ~(uintptr_t)LJ_STRHASH_LINKMASK));
-      setgcrefp(newtab[hash], ((uintptr_t)o | (u & LJ_STRHASH_SECONDARY)));
+      lj_str_next_store_rel(o, u);
+      lj_str_bucket_store_rel(&newtab[hash], o, u);
 #else
       hash &= newmask;
+      u = lj_str_ref_load_acq(&newtab[hash]);
       /* NOBARRIER: The string table is a GC root. */
-      setgcrefr(*lj_obj_gcwref(o), newtab[hash]);
-      setgcref(newtab[hash], o);
+      lj_str_next_store_rel(o, u);
+      lj_str_bucket_store_rel(&newtab[hash], o, 0);
 #endif
       o = next;
     }
@@ -355,12 +334,12 @@ static LJ_NOINLINE GCstr *lj_str_rehash_chain(lua_State *L, StrHash hashc,
   }
   strtab = hdr->bucket;
   strmask = hdr->mask;
-  o = lj_str_hashhead(strtab[hashc & strmask]);
-  setgcrefp(strtab[hashc & strmask], (void *)LJ_STRHASH_SECONDARY);
+  o = lj_str_hashhead_acq(&strtab[hashc & strmask]);
+  lj_str_ref_store_rel(&strtab[hashc & strmask], LJ_STRHASH_SECONDARY);
   g->str.second = 1;
   while (o) {
     uintptr_t u;
-    GCobj *next = gcnext(o);
+    GCobj *next = lj_str_next_acq(o);
     GCstr *s = gco2str(o);
     StrHash hash;
     if (ow) {  /* Must sweep while rechaining. */
@@ -384,9 +363,9 @@ static LJ_NOINLINE GCstr *lj_str_rehash_chain(lua_State *L, StrHash hashc,
     }
     /* Rechain. */
     hash &= strmask;
-    u = gcrefu(strtab[hash]);
-    setgcrefp(*lj_obj_gcwref(o), (u & ~(uintptr_t)LJ_STRHASH_LINKMASK));
-    setgcrefp(strtab[hash], ((uintptr_t)o | (u & LJ_STRHASH_SECONDARY)));
+    u = lj_str_ref_load_acq(&strtab[hash]);
+    lj_str_next_store_rel(o, u);
+    lj_str_bucket_store_rel(&strtab[hash], o, u);
     o = next;
   }
   strtab_release(hdr);
@@ -440,14 +419,14 @@ GCstr *lj_str_new(lua_State *L, const char *str, size_t lenx)
       strtab = hdr->bucket;
       hashalg = 0;
       hash = hash_sparse(g->str.seed, str, len);
-      u = strref_load_acq(&strtab[hash & mask]);
-      o = strref_hashhead(u);
+      u = lj_str_ref_load_acq(&strtab[hash & mask]);
+      o = lj_str_hashhead_u(u);
 #if LUAJIT_SECURITY_STRHASH
       if (LJ_UNLIKELY(u & LJ_STRHASH_SECONDARY)) {
 	hashalg = 1;
 	hash = hash_dense(g->str.seed, hash, str, len);
-	u = strref_load_acq(&strtab[hash & mask]);
-	o = strref_hashhead(u);
+	u = lj_str_ref_load_acq(&strtab[hash & mask]);
+	o = lj_str_hashhead_u(u);
       }
 #endif
       while (o != NULL) {
@@ -466,7 +445,7 @@ GCstr *lj_str_new(lua_State *L, const char *str, size_t lenx)
 	  coll++;
 	}
 	coll++;
-	o = gcnext(o);
+	o = lj_str_next_acq(o);
       }
 #if LUAJIT_SECURITY_STRHASH
       /* Rehash chain if there are too many collisions. */
@@ -488,8 +467,8 @@ GCstr *lj_str_new(lua_State *L, const char *str, size_t lenx)
       for (;;) {
 	GCRef *head = &strtab[hash & mask];
 	uintptr_t want;
-	u = strref_load_acq(head);  /* 06 section 6.5 bucket snapshot. */
-	o = strref_hashhead(u);
+	u = lj_str_ref_load_acq(head);  /* 06 section 6.5 bucket snapshot. */
+	o = lj_str_hashhead_u(u);
 	while (o != NULL) {
 	  GCstr *sx = gco2str(o);
 	  if (sx->hash == hash && sx->len == len &&
@@ -502,10 +481,9 @@ GCstr *lj_str_new(lua_State *L, const char *str, size_t lenx)
 	    lj_mem_free(g, news, lj_str_size(news->len));
 	    return sx;
 	  }
-	  o = gcnext(o);
+	  o = lj_str_next_acq(o);
 	}
-	setgcrefp(*lj_obj_gcwref(obj2gco(news)),
-		  (void *)(u & ~(uintptr_t)LJ_STRHASH_LINKMASK));
+	lj_str_next_store_rel(obj2gco(news), u);
 	want = (uintptr_t)news | (u & LJ_STRHASH_SECONDARY);
 	if (strref_cas_rel(head, &u, want)) {  /* 06 section 6.5 intern linearization. */
 	  MSize n = la_add32_rlx(&g->str.num, 1) + 1u;

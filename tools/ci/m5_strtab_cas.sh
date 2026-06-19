@@ -43,6 +43,12 @@ for needle in \
   'while (la_load32_acq(&hdr->resize) & LJ_STRTAB_ACTIVE_MASK)' \
   'strtab_claim(hdr)' \
   'strtab_release(hdr)' \
+  'lj_str_ref_load_acq' \
+  'lj_str_ref_store_rel' \
+  'lj_str_hashhead_acq' \
+  'lj_str_next_acq' \
+  'lj_str_next_store_rel' \
+  'lj_str_bucket_store_rel' \
   'strref_cas_rel' \
   'la_storeptr_rel((void **)&g->str.tabh' \
   'la_add32_rlx(&g->str.num' \
@@ -58,6 +64,17 @@ done
 
 if rg -F -q 'lj_mem_free(g, oldhdr' "$ROOT/src/lj_str.c"; then
   echo "guardrail: string table resize must retire old headers, not free them immediately" >&2
+  exit 1
+fi
+
+if rg -n 'setgcrefp\(|setgcrefr\(|setgcref\(newtab|lj_str_hashhead\((oldtab|strtab)|gcnext\(o\)|gcrefu\((newtab|strtab|\*chain|q)' \
+    "$ROOT/src/lj_str.c"; then
+  echo "guardrail: string table chains must use acquire/release helpers" >&2
+  exit 1
+fi
+
+if rg -n 'lj_str_hashhead\(strtab' "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc2.c"; then
+  echo "guardrail: GC string-table scans must acquire bucket heads" >&2
   exit 1
 fi
 
