@@ -1492,20 +1492,9 @@ assert(#keep == 120 and keep[120][80] == "value-120-80")
 
   add({
     name = "m6_jit_hrefk_nodehdr",
-    description = "M6 x64 HREFK node-header slot guard bridge",
+    description = "M6 x64 HREFK node-header behavior",
     run = function(t)
       build_default(t)
-      assert_marker_set(t, {
-        t:path("src", "lj_record.c"),
-        t:path("src", "lj_asm_x86.h")
-      }, {
-        "x64 HREFK guards the constant slot against the loaded node header",
-        "Guard HREFK's loaded node against a retiring hash generation.",
-        "asm_tabnode_retiring_guard(as, node);",
-        "emit_gmroi(as, XG_ARITHi(XOg_CMP), node, TABNODE_HMASK_OFS",
-        "#if !(defined(__linux__) && LJ_TARGET_X64)"
-      }, "HREFK node-header")
-
       local dump = t:tmp("lj-m6-hrefk-ir.dump")
       luajit_dump(t, dump, "-jdump=ir", [=[
 jit.flush()
@@ -1540,37 +1529,14 @@ end
 t.foo = 7
 assert(run(80) == 560)
 ]=])
-      print("M6 JIT HREFK node-header guard passed")
+      print("M6 JIT HREFK node-header behavior passed")
     end
   })
 
   add({
     name = "m6_jit_href_nodehdr",
-    description = "M6 x64 dynamic HREF node-header hmask pairing",
+    description = "M6 x64 dynamic HREF node-header behavior",
     run = function(t)
-      assert_marker_set(t, { t:path("src", "lj_asm_x86.h") }, {
-        "M6: dynamic HREF masks against the loaded node header, not GCtab.hmask.",
-        "M6: JIT hash readers leave retiring hash generations like the VM.",
-        "asm_tabnode_retiring_guard(as, dest);",
-        "emit_rmro(as, XO_MOV, dest|REX_GC64, tab, offsetof(GCtab, node));",
-        "TABNODE_HMASK_OFS",
-        "TABNODE_FLAG_RETIRING",
-        "-(int32_t)sizeof(TabNodeHdr)"
-      }, "dynamic HREF node-header")
-      if count_plain(t:read(t:path("src", "lj_asm_x86.h")),
-                     "asm_tabnode_retiring_guard(as, dest);") < 2 then
-        error("dynamic HREF must guard both node-load paths against retiring generations", 2)
-      end
-      t:assert_contains(t:path("src", "lj_record.c"),
-                        "M6: empty-hash misses fall through to HREF so x64 uses TabNodeHdr.hmask.")
-      assert_section_no_lines(t, "dynamic HREF must not use GCtab.hmask as its hmask source",
-                              t:path("src", "lj_asm_x86.h"),
-                              "static void asm_href(ASMState *as, IRIns *ir, IROp merge)",
-                              "static void asm_hrefk(ASMState *as, IRIns *ir)",
-                              function(line)
-        return contains(line, "offsetof(GCtab, hmask)") or contains(line, "IRFL_TAB_HMASK")
-      end)
-
       local dump = t:tmp("lj-m6-href-nodehdr.dump")
       luajit_dump(t, dump, "-jdump=ir", [=[
 jit.opt.start("hotloop=1", "hotexit=1")
@@ -1605,7 +1571,7 @@ assert(seen == 80)
                        "x64 empty-hash miss must fall through to HREF without tab.hmask",
                        function(st) return st.href and not st.hrefk and not st.hmask end)
       check_m6_aggregate(t, "m6_jit_href_nodehdr.sh")
-      print("M6 JIT dynamic HREF node-header guard passed")
+      print("M6 JIT dynamic HREF node-header behavior passed")
     end
   })
 

@@ -283,6 +283,8 @@ Lua test-suite migration notes:
 - Converted the M5 x64 cases, including `m5_x64_tset_nil_snapshot`, to rely on
   Lua smoke tests and C forward/snapshot fixtures instead of direct
   `vm_x64.dasc` source inspections.
+- Converted `m6_jit_hrefk_nodehdr` and `m6_jit_href_nodehdr` to generated
+  IR/runtime behavior coverage instead of direct JIT source marker checks.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.
