@@ -93,8 +93,11 @@ void lj_ccallback_func_clear(CTState *cts, MSize slot)
 {
   TValue *func = callback_func_slots(cts);
   if (LJ_LIKELY(func != NULL &&
-		slot < (MSize)la_load32_acq(&cts->cb.sizeid)))
-    lj_tab_storenilraw(&func[slot]);
+		slot < (MSize)la_load32_acq(&cts->cb.sizeid))) {
+    TValue nilv;
+    setnilV(&nilv);
+    copyTVrel(mainthread(cts->g), &func[slot], &nilv);
+  }
 }
 
 #if LJ_OS_NOJIT

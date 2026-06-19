@@ -34,7 +34,8 @@ for needle in \
   'copyTVrel(L, &func[slot], &tv)' \
   'lj_gc_barrierroot(L, &func[slot])' \
   'lj_ccallback_func_clear(CTState *cts, MSize slot)' \
-  'lj_tab_storenilraw(&func[slot])' \
+  'setnilV(&nilv)' \
+  'copyTVrel(mainthread(cts->g), &func[slot], &nilv)' \
   'lj_gc_arena_markmem(g, func)' \
   'lj_gc2_markmem(g, func)' \
   'if (tvisfunc(&tv))' \
@@ -69,6 +70,18 @@ fi
 
 if rg -n 'lj_tab_getint\(cts->miscmap, \(int32_t\)slot\)|lj_tab_setint\(L, [^,]*, \(int32_t\)slot\)|lj_tab_new\(L, \(uint32_t\)lj_ccallback_maxslot\(\), 1\)' "$ROOT/src"; then
   echo "guardrail: callback function slots must stay in the CTState side array, not miscmap" >&2
+  exit 1
+fi
+
+if ! awk '
+  /void lj_ccallback_func_clear\(CTState \*cts, MSize slot\)/ { infn = 1 }
+  infn && /lj_tab_storenilraw\(&func\[slot\]\)/ { raw = 1 }
+  infn && /setnilV\(&nilv\)/ { nilv = 1 }
+  infn && /copyTVrel\(mainthread\(cts->g\), &func\[slot\], &nilv\)/ { rel = 1 }
+  infn && /^}/ { infn = 0 }
+  END { exit !raw && nilv && rel ? 0 : 1 }
+' "$ROOT/src/lj_ccallback.c"; then
+  echo "guardrail: callback function side-slot clear must release-publish nil" >&2
   exit 1
 fi
 
