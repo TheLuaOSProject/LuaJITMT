@@ -237,6 +237,8 @@ Lua test-suite migration notes:
   prep and CAS cases. The suite now relies on the string-table C fixtures for
   layout, marker-bit, resize/retire, duplicate-intern, and secondary-rehash
   behavior.
+- Converted the M5 table suite to rely on its compiled C behavior fixtures
+  instead of checking implementation markers in `src/` or fixture source text.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.
