@@ -9,6 +9,38 @@ return function(add)
   })
 
   add({
+    name = "m5_os_reentrant",
+    description = "POSIX os.date/tmpname reentrancy and setlocale guard",
+    run = function(t)
+      local lib_os = t:path("src", "lib_os.c")
+      local date_block = t:text_between(lib_os, "LJLIB_CF(os_date)",
+                                        "LJLIB_CF(os_time)")
+      t:assert_text_contains("os_date", date_block, "gmtime_r")
+      t:assert_text_contains("os_date", date_block, "localtime_r")
+
+      local tmpname_block = t:c_block(lib_os, "static int os_native_mkstemp")
+      t:assert_text_contains("os_native_mkstemp", tmpname_block, "mkstemp")
+
+      local setlocale_block = t:text_between(lib_os, "LJLIB_CF(os_setlocale)",
+                                             "#include \"lj_libdef.h\"")
+      t:assert_text_contains("os_setlocale", setlocale_block,
+                             "la_load32_acq(&G(L)->mt_active)")
+      t:assert_text_contains("os_setlocale", setlocale_block,
+                             "os.setlocale mutation disabled after threading activation")
+      t:assert_text_contains("os_setlocale", setlocale_block,
+                             "setlocale(opt, str)")
+
+      t:build({ clean = true, quiet = true })
+      t:luajit({ "-joff", t:path("tests", "t-os-reentrant.lua") }, {
+        env = {
+          LJ_M5_OS_THREADS = os.getenv("LJ_M5_OS_THREADS") or "8",
+          LJ_M5_OS_ITERS = os.getenv("LJ_M5_OS_ITERS") or "200"
+        }
+      })
+    end
+  })
+
+  add({
     name = "m5_parser_capture_meta",
     description = "parser captured-local metadata and source cell emission guard",
     run = function(t)
