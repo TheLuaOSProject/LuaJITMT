@@ -303,6 +303,12 @@ typedef const TValue cTValue;
 /* To stay within 47 bits, lightuserdata is segmented. */
 #define LJ_LIGHTUD_BITS_SEG	8
 #define LJ_LIGHTUD_BITS_LO	(47 - LJ_LIGHTUD_BITS_SEG)
+#define LJ_LIGHTUD_INTERNAL_SEG	(((uint64_t)1 << LJ_LIGHTUD_BITS_SEG) - 1u)
+#define LJ_LIGHTUD_INTERNAL_BASE \
+  ((((uint64_t)LJ_TLIGHTUD) << 47) | \
+   (LJ_LIGHTUD_INTERNAL_SEG << LJ_LIGHTUD_BITS_LO))
+#define LJ_TFORWARD_BITS	(LJ_LIGHTUD_INTERNAL_BASE | 1u)
+#define LJ_TKEYLOCK_BITS	(LJ_LIGHTUD_INTERNAL_BASE | 2u)
 #endif
 
 /* -- String object ------------------------------------------------------- */
@@ -1467,6 +1473,14 @@ static LJ_AINLINE void setgcrefnullrel_(GCRef *r)
 #else
 #define tvislightud(o)	(itype(o) == LJ_TLIGHTUD)
 #endif
+#if LJ_64
+#define tvisforward(o)	((o)->u64 == LJ_TFORWARD_BITS)
+#define tviskeylock(o)	((o)->u64 == LJ_TKEYLOCK_BITS)
+#else
+#define tvisforward(o)	0
+#define tviskeylock(o)	0
+#endif
+#define tvistabinternal(o)	(tvisforward(o) || tviskeylock(o))
 #define tvisstr(o)	(itype(o) == LJ_TSTR)
 #define tvisfunc(o)	(itype(o) == LJ_TFUNC)
 #define tvisthread(o)	(itype(o) == LJ_TTHREAD)
@@ -1588,6 +1602,24 @@ static LJ_AINLINE void setrawlightudV(TValue *o, void *p)
   o->u64 = (uint64_t)p | (((uint64_t)0xffff) << 48);
 #else
   setgcrefp(o->gcr, p); setitype(o, LJ_TLIGHTUD);
+#endif
+}
+
+static LJ_AINLINE void setforwardV(TValue *o)
+{
+#if LJ_64
+  tv_rawstore(o, LJ_TFORWARD_BITS);
+#else
+  setnilV(o);
+#endif
+}
+
+static LJ_AINLINE void setkeylockV(TValue *o)
+{
+#if LJ_64
+  tv_rawstore(o, LJ_TKEYLOCK_BITS);
+#else
+  setnilV(o);
 #endif
 }
 

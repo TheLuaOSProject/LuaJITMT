@@ -16,6 +16,7 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 "$ROOT/tools/ci/m5_strtab_prep.sh"
 "$ROOT/tools/ci/m5_strtab_cas.sh"
 "$ROOT/tools/ci/m5_itype_nan.sh"
+"$ROOT/tools/ci/m5_itype_sentinel.sh"
 "$ROOT/tools/ci/m5_math_random_tg.sh"
 "$ROOT/tools/ci/m5_gcroot_publish.sh"
 "$ROOT/tools/ci/m5_metatable_publish.sh"

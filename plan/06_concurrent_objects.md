@@ -22,6 +22,15 @@ prints all tag comparisons; the model file embeds the chosen constants).
 These tags appear only inside Node.val / Node.key / array slots during
 migration windows and are filtered by every read path below.
 
+Current implementation note: the direct `~14u`/`~15u` itype-space approach was
+rejected because it disturbed canonical NaN classification on x86-64. The
+current x64 bridge represents `LJ_TFORWARD` and `LJ_TKEYLOCK` as raw
+lightuserdata values in reserved segment 255 (`LJ_TFORWARD_BITS` and
+`LJ_TKEYLOCK_BITS`). Public lightuserdata interning never allocates that
+segment, and the values classify as non-GC, non-number table-internal
+sentinels. Reader/writer filtering still has to be added at the table protocol
+use sites below.
+
 ## 6.2 Tables: data structures
 
 GCtab (lj_obj.h:498–511) is reshaped for the lockless runtime:
