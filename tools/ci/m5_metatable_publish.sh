@@ -40,13 +40,33 @@ fi
 
 for needle in \
   '#define tabref_acq(r)' \
-  'gcref_acq((r))'
+  'gcref_acq((r))' \
+  'call extern lj_gc2_barrier_obj_pair'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_obj.h"; then
-    echo "guardrail: shared metatable/env readers must acquire-load: $needle" >&2
+    if ! rg -F -q "$needle" "$ROOT/src/vm_x64.dasc"; then
+      echo "guardrail: missing metatable publication marker: $needle" >&2
+      exit 1
+    fi
+    continue
+  fi
+  if [ "$needle" = 'call extern lj_gc2_barrier_obj_pair' ]; then
+    echo "guardrail: x64 setmetatable barrier marker searched wrong file" >&2
     exit 1
   fi
 done
+
+if ! awk '
+  /[|][.]ffunc_2 setmetatable/ { inff = 1; stored = 0; call = 0; legacy = 0; next }
+  inff && /mov TAB:RB->metatable, TAB:RA/ { stored = NR }
+  inff && /call extern lj_gc2_barrier_obj_pair/ { call = NR }
+  inff && /barrierback TAB:RB, RC/ { legacy = NR }
+  inff && /[|][.]ffunc_2 rawget/ { inff = 0 }
+  END { exit stored && call && legacy && stored < call && call < legacy ? 0 : 1 }
+' "$ROOT/src/vm_x64.dasc"; then
+  echo "guardrail: x64 setmetatable fast path must publish GC2 object-pair barrier before legacy repair" >&2
+  exit 1
+fi
 
 reader_hits=$(rg -n '\btabref\((tabV\([^)]*\)->metatable|udataV\([^)]*\)->metatable|basemt_obj|t->metatable|gco2ud\(o\)->metatable|gco2ud\(o\)->env|mainthread\(g\)->env|L->env|L1->env|th->env|ud->metatable|ud->env|fn->[cl]\.env|funcV\(o\)->c\.env|udataV\(o\)->env|curr_func\(L\)->c\.env|parent->env|J->fn->l\.env|sbx->dict)|\bgcref\((sbx->cowref|sbx->dict_str|sbx->dict_mt|t->metatable)' \
   "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc2.c" "$ROOT/src/lj_meta.c" \

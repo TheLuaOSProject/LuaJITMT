@@ -218,3 +218,8 @@ non-x86-64 dasc work until the x86-64 Linux runtime is green.
       TSETM/USETx/CSET
 - [ ] BC_TNEW slow-path label still reachable for asize>0 templates
 - [ ] interp-only build (`-joff`) passes the stock suite
+
+Current x64 bridge note: the base-library `setmetatable` fast path now
+publishes the table -> metatable edge through `lj_gc2_barrier_obj_pair()` before
+the legacy black-table repair. The broader 7.4 replacement of x64
+`barrierback` with the final `wbarrier_tv` macro remains open.
