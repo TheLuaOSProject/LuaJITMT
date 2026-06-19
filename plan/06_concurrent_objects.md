@@ -283,7 +283,9 @@ the legacy `GCtab.asize` mirror kept as the empty/colocated-array fallback.
 The same separated-array header bound check now covers x64 `BC_TGETV`,
 `BC_TGETB`, and `BC_TGETR` array read fast paths, plus `BC_TSETV`,
 `BC_TSETB`, `BC_TSETR`, and `BC_TSETM` array write fast paths before their
-release-publishing store helpers.
+release-publishing store helpers. x64 `BC_TSETV`, `BC_TSETB`, and `BC_TSETR`
+now slow-path visible array `LJ_TFORWARD` slots through the C setter bridge
+instead of publishing into the old generation.
 `BC_TSETS_Z` string-key stores are currently demoted to
 `vmeta_tsets`, removing the x64 VM's direct string-key hash-chain store. The
 generic x64 `vmeta_tset` continuation release-stores returned slots through
@@ -300,7 +302,8 @@ the final generated RETIRING/FORWARD/CAS write protocol remains pending.
 hash traversal, the `BC_ITERN` array/hash iterator path, and `ipairs_aux` array
 iteration load candidate values into registers before nil decisions and copy
 those same snapshots to their results; `BC_TSETV`/`BC_TSETS`/`BC_TSETB` load
-previous slot values into registers before nil/metamethod decisions. x64
+previous slot values into registers before nil/metamethod decisions and the
+array paths reject forwarded snapshots before stores. x64
 `BC_TSETV`/`BC_TSETB`/`BC_TSETR` now derive the destination slot from the same
 array pointer whose header supplied the separated-array bound. x64 `BC_TSETM`
 keeps its constructor fit check and `lj_tab_reasize()` retry, performs the fit

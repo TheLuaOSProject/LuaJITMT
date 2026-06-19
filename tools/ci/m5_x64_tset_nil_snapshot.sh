@@ -4,6 +4,9 @@ set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 JOBS=${JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)}
+CC=${CC:-cc}
+CFLAGS=${CFLAGS:-"-std=gnu99 -O2 -Wall -Wextra -Werror -mcx16"}
+OUT=${TMPDIR:-/tmp}/lj_t-x64-tset-forward
 
 make -C "$ROOT/src" clean >/dev/null
 make -C "$ROOT/src" -j"$JOBS" >/dev/null
@@ -40,10 +43,20 @@ for i = 80, 82 do s[i] = i * 10 end
 assert(s[64] == 640 and s[70] == 700 and s[82] == 820)
 '
 
+"$CC" $CFLAGS -I"$ROOT/src" "$ROOT/tests/t-x64-tset-forward.c" \
+  "$ROOT/src/libluajit.a" -lm -ldl -pthread -o "$OUT"
+"$OUT"
+
 for needle in \
   'TABARRAY_ASIZE_OFS' \
   'mov r8, [RC]' \
   'cmp r8, LJ_TNIL' \
+  'mov64 r9, LJ_TFORWARD_BITS' \
+  'je ->vmeta_tsetv' \
+  'je ->vmeta_tsetb' \
+  'mov r9d, RCd' \
+  'mov64 r10, LJ_TFORWARD_BITS' \
+  'jmp ->vmeta_tsetr' \
   'mov ITYPEd, dword [TMPR+TABARRAY_ASIZE_OFS]' \
   'cmp RCd, ITYPEd' \
   'add RC, TMPR' \
@@ -59,9 +72,11 @@ for needle in \
   'jmp ->vm_gc2_barriertvn' \
   'jmp ->vm_gc2_barriertab' \
   'call extern lj_gc2_barrier_tv_pair_g' \
-  'call extern lj_gc2_barrier_tvn_pair_g'
+  'call extern lj_gc2_barrier_tvn_pair_g' \
+  't-x64-tset-forward OK'
 do
-  if ! rg -F -q "$needle" "$ROOT/src/vm_x64.dasc"; then
+  if ! rg -F -q "$needle" "$ROOT/src/vm_x64.dasc" \
+      "$ROOT/tests/t-x64-tset-forward.c"; then
     echo "guardrail: missing x64 TSET nil snapshot marker: $needle" >&2
     exit 1
   fi
@@ -112,17 +127,19 @@ if awk '
   in_set && /mov ITYPEd, dword \[TMPR\+TABARRAY_ASIZE_OFS\]/ { hdr = 1 }
   in_set && /cmp RCd, ITYPEd/ { cmp = 1 }
   in_set && /add RC, TMPR/ { add = 1 }
+  in_set && /LJ_TFORWARD_BITS/ { forward++ }
+  in_set && /->vmeta_tset[vbr]/ { slow++ }
   in_set && /cmp RCd, TAB:RB->asize/ { bad = 1 }
   in_set && /add RC, TAB:RB->array/ { bad = 1 }
   in_set && /break;/ { finish() }
   END {
     finish()
-    exit checked == 3 && !bad ? 0 : 1
+    exit checked == 3 && forward >= 3 && slow >= 3 && !bad ? 0 : 1
   }
 ' "$ROOT/src/vm_x64.dasc"; then
   :
 else
-  echo "guardrail: x64 TSET array fast paths must bound slots with TabArrayHdr.asize" >&2
+  echo "guardrail: x64 TSET array fast paths must bound slots and slow-path FORWARD values" >&2
   exit 1
 fi
 

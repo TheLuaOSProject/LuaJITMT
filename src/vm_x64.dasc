@@ -4294,6 +4294,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  shl RCd, 3
     |  add RC, TMPR
     |  mov r8, [RC]
+    |  mov64 r9, LJ_TFORWARD_BITS
+    |  cmp r8, r9
+    |  je ->vmeta_tsetv
     |  cmp r8, LJ_TNIL
     |  je >3				// Previous value is nil?
     |1:
@@ -4359,6 +4362,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  shl RCd, 3
     |  add RC, TMPR
     |  mov r8, [RC]
+    |  mov64 r9, LJ_TFORWARD_BITS
+    |  cmp r8, r9
+    |  je ->vmeta_tsetb
     |  cmp r8, LJ_TNIL
     |  je >3				// Previous value is nil?
     |1:
@@ -4413,11 +4419,18 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  cmp TMPR, r8; je >3
     |  mov ITYPEd, dword [TMPR+TABARRAY_ASIZE_OFS]
     |3:
+    |  mov r9d, RCd
     |  cmp RCd, ITYPEd
     |  jae ->vmeta_tsetr
     |  shl RCd, 3
     |  add RC, TMPR
+    |  mov r8, [RC]
+    |  mov64 r10, LJ_TFORWARD_BITS
+    |  cmp r8, r10; jne >4
+    |  mov RCd, r9d
+    |  jmp ->vmeta_tsetr
     |  // Set array slot.
+    |4:
     |->BC_TSETR_Z:
     |  mov L:CARG1, SAVE_L
     |  mov L:CARG1->base, BASE
