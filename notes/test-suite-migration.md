@@ -285,6 +285,9 @@ Lua test-suite migration notes:
   `vm_x64.dasc` source inspections.
 - Converted `m6_jit_hrefk_nodehdr` and `m6_jit_href_nodehdr` to generated
   IR/runtime behavior coverage instead of direct JIT source marker checks.
+- Converted `m6_jit_cell_ops`, `m6_jit_barrier_xpoll`, and
+  `m6_jit_aref_pair_guard` to generated dump/runtime behavior coverage,
+  removing their direct JIT source marker checks.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.

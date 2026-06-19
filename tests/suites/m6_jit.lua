@@ -689,44 +689,9 @@ assert(s==2720)
 
   add({
     name = "m6_jit_cell_ops",
-    description = "M6 local-cell JIT recording guards",
+    description = "M6 local-cell JIT recording behavior",
     run = function(t)
-      assert_marker_set(t, {
-        t:path("src", "lj_record.c"),
-        t:path("src", "lj_ircall.h"),
-        t:path("src", "lj_func.c"),
-        t:path("src", "lj_func.h"),
-        t:path("src", "lj_asm_x86.h"),
-        t:path("src", "lj_bcread.c")
-      }, {
-        "case BC_CGET:",
-        "case BC_CSET:",
-        "rec_celluv(jit_State *J",
-        "IRT(IR_UREFC, IRT_PGC), slotref",
-        "emitir(IRTG(IR_ULOAD",
-        "emitir(IRT(IR_USTORE",
-        "emitir(IRT(IR_OBAR",
-        "case BC_CNEW:",
-        "case BC_FNEW:",
-        "rec_fnew_celluv(jit_State *J",
-        "rec_fnew_promoted_slots(jit_State *J",
-        "rec_celluv_promote_pending(J)",
-        "IRCALL_lj_func_newuvcell_forjit",
-        "IRCALL_lj_func_newL_gc_forjit",
-        "IRCALL_lj_func_syncslot_forjit",
-        "IRCALL_lj_func_promoteuv_forjit",
-        "lj_func_newuvcell_forjit",
-        "lj_func_newL_gc_forjit",
-        "lj_func_syncslot_forjit",
-        "lj_func_promoteuv_forjit",
-        "IRSLOAD_INHERIT",
-        "irt_isp32(IR(ir->op1)->t)",
-        "IR(ir->op1)->o == IR_SLOAD",
-        "emit_shifti(as, XOg_SHR|REX_64",
-        "irt_type(IR(ir->op1)->t) == IRT_PGC",
-        "cellops |= BCREAD_CELL_CNEW"
-      }, "local-cell JIT")
-
+      build_default(t)
       local dump = t:tmp("lj_m6_jit_cell_ops.dump")
       luajit_dump(t, dump, "-jdump=i", [=[
 jit.opt.start("hotloop=1", "hotexit=1")
@@ -965,32 +930,15 @@ local self, fx = f()
 assert(self == f and fx == 30 and x == 30)
 assert(util.traceinfo(1), "post-FNEW promoted local update should trace")
 ]=])
-      print("M6 JIT local-cell guard passed")
+      print("M6 JIT local-cell behavior passed")
     end
   })
 
   add({
     name = "m6_jit_barrier_xpoll",
-    description = "x64 trace barriers across XPOLL poll regions",
+    description = "x64 trace barrier behavior across XPOLL poll regions",
     run = function(t)
       build_default(t)
-      assert_marker_set(t, {
-        t:path("src", "lj_opt_fold.c"),
-        t:path("src", "lj_asm_x86.h")
-      }, {
-        "xpoll_barrier(J, ref)",
-        "trace_barrier(J, ref)",
-        "trace_barrier(J, tref_ref(tr))",
-        "fins->op1 < J->chain[IR_XPOLL]",
-        "DISPATCH_TG(mark_active)",
-        "IRCALL_lj_gc2_barrier_tab_g",
-        "IRCALL_lj_gc_pubuv",
-        "LJ_GC_BLACK",
-        "LJ_GC_WHITES",
-        "M6: split long TBAR sequence for assert red zone",
-        "M6: split long OBAR sequence for assert red zone",
-        "IRCALL_lj_func_storeuv_forjit"
-      }, "XPOLL barrier")
       check_m6_aggregate(t, "m6_jit_barrier_xpoll.sh")
 
       local tbar = t:tmp("lj_t-jit-tbar-xpoll.dump")
@@ -1043,7 +991,7 @@ assert(uv==vals[64])
       if not store_before then
         error("x64 upvalue USTORE must release-copy before OBAR publication", 2)
       end
-      print("M6 JIT XPOLL barrier guard passed")
+      print("M6 JIT XPOLL barrier behavior passed")
     end
   })
 
@@ -1338,28 +1286,9 @@ assert(util.traceinfo(1), "shared existing array store did not trace")
 
   add({
     name = "m6_jit_aref_pair_guard",
-    description = "M6 x64 shared-array AREF generation-pair guards",
+    description = "M6 x64 shared-array AREF generation-pair behavior",
     run = function(t)
       build_default(t)
-      assert_marker_set(t, { t:path("src", "lj_record.c") }, {
-        "rec_idx_tab_trace_local(jit_State *J, TRef tab)",
-        "rec_idx_tab_array_has_hdr(const GCtab *t, const TValue *array)",
-        "array == coloarray",
-        "lj_tab_array_snapshot_acq(t, &record_array)",
-        "rec_idx_tab_array_has_hdr(t, record_array)",
-        "rec_idx_array_hdr_asize(jit_State *J, TRef arrayref)",
-        "rec_idx_array_hdr_guards(jit_State *J, TRef tab, TRef arrayref)",
-        "rec_idx_array_asize_ref(jit_State *J, GCtab *t, TRef tab,",
-        "emitir(IRTG(IR_NE, IRT_PGC), arrayref, lj_ir_kptr(J, NULL));",
-        "lj_ir_kintpgc(J, sizeof(GCtab))",
-        "M6: shared separated AREF pairs slots with TabArrayHdr.asize.",
-        "M6: shared separated non-array bounds use TabArrayHdr.asize.",
-        "asizeref = rec_idx_array_asize_ref(J, t, ix->tab, record_array,",
-        "emitir(IRTI(IR_XLOAD), hdrref, 0);",
-        "M6: legacy shared AREF guards TAB_ARRAY pair stability.",
-        "emitir(IRTG(IR_EQ, IRT_PGC), arrayref2, arrayref);"
-      }, "shared AREF pair")
-
       local dump = t:tmp("lj-m6-aref-pair.dump")
       luajit_dump(t, dump, "-jdump=ir", [=[
 jit.flush()
@@ -1486,7 +1415,7 @@ end
 assert(#keep == 120 and keep[120][80] == "value-120-80")
 ]=], { timeout = "20s" })
       check_m6_aggregate(t, "m6_jit_aref_pair_guard.sh")
-      print("M6 JIT shared AREF generation-pair guard passed")
+      print("M6 JIT shared AREF generation-pair behavior passed")
     end
   })
 
