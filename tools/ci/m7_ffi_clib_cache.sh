@@ -15,6 +15,7 @@ for needle in \
   'lj_clib_cache_val_rel(lua_State *L, CLibCacheEntry *e,' \
   'lj_clib_cache_get(CLibrary *cl, GCstr *name)' \
   'clib_cache_publish(lua_State *L, CLibrary *cl, GCstr *name' \
+  'lj_tv_load_acq(&tv, ctv)' \
   'la_casptr((void **)&cl->cache_head' \
   'lj_gc_arena_markmem(G(L), e)' \
   'lj_cdata_new_l(L, cts, id, CTSIZE_PTR)' \
@@ -42,10 +43,24 @@ if rg -n 'e->name = name|copyTV\(L, &e->val|la_loadptr_acq\(\(void \*const \*\)&
   exit 1
 fi
 
+if ! awk '
+  /void LJ_FASTCALL recff_clib_index/ { infn = 1; seen = 1 }
+  infn && /lj_tv_load_acq\(&tv, ctv\)/ { snap = 1 }
+  infn && /tvisnil\(ctv\)|tvisnil\(tv\)|cdataV\(ctv\)|cdataV\(tv\)/ { raw = 1 }
+  infn && /^}/ { exit(seen && snap && !raw ? 0 : 1) }
+  END { if (!seen) exit 1 }
+' "$ROOT/src/lj_crecord.c"; then
+  echo "guardrail: recorder clib cache hits must acquire-snapshot cached TValue" >&2
+  exit 1
+fi
+
 make -C "$ROOT/src" clean >/dev/null
 make -C "$ROOT/src" -j"$JOBS" >/dev/null
 
 "$ROOT/src/luajit" -joff "$ROOT/tests/t-ffi-clib-cache.lua" \
   "${LJ_M7_FFI_CLIB_THREADS:-6}" "${LJ_M7_FFI_CLIB_ITERS:-300}"
+
+"$ROOT/src/luajit" "$ROOT/tests/t-ffi-clib-cache.lua" \
+  "${LJ_M7_FFI_CLIB_JIT_THREADS:-2}" "${LJ_M7_FFI_CLIB_JIT_ITERS:-180}"
 
 echo "M7 FFI clib cache guard passed"

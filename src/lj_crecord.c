@@ -1737,13 +1737,16 @@ void LJ_FASTCALL recff_clib_index(jit_State *J, RecordFFData *rd)
     GCstr *name = strV(&rd->argv[1]);
     CType *ct;
     CTypeID id;
-    cTValue *tv = lj_clib_cache_get(cl, name);
+    cTValue *ctv = lj_clib_cache_get(cl, name);
+    TValue tv;
     rd->nres = rd->data;
     lj_ctype_parse_lock(cts, J->L);
     /* 11.2: recorder ffi.C namespace reader waits out parser rollback. */
     id = lj_ctype_getname(cts, &ct, name, CLNS_INDEX);
     lj_ctype_parse_unlock(cts);
-    if (id && tv && !tvisnil(tv)) {
+    if (ctv)
+      lj_tv_load_acq(&tv, ctv);
+    if (id && ctv && !tvisnil(&tv)) {
       /* Specialize to the symbol name and make the result a constant. */
       emitir(IRTG(IR_EQ, IRT_STR), J->base[1], lj_ir_kstr(J, name));
       if (ctype_isconstval(ct->info)) {
@@ -1754,7 +1757,7 @@ void LJ_FASTCALL recff_clib_index(jit_State *J, RecordFFData *rd)
 	  J->base[0] = lj_ir_kint(J, (int32_t)ct->size);
       } else if (ctype_isextern(ct->info)) {
 	CTypeID sid = ctype_cid(ct->info);
-	void *sp = *(void **)cdataptr(cdataV(tv));
+	void *sp = *(void **)cdataptr(cdataV(&tv));
 	TRef ptr;
 	ct = ctype_raw(cts, sid);
 	if (LJ_64 && !checkptr32(sp))
@@ -1768,7 +1771,7 @@ void LJ_FASTCALL recff_clib_index(jit_State *J, RecordFFData *rd)
 	  crec_ct_tv(J, ct, ptr, J->base[2], &rd->argv[2]);
 	}
       } else {
-	J->base[0] = lj_ir_kgc(J, obj2gco(cdataV(tv)), IRT_CDATA);
+	J->base[0] = lj_ir_kgc(J, obj2gco(cdataV(&tv)), IRT_CDATA);
       }
     } else {
       lj_trace_err(J, LJ_TRERR_NOCACHE);
