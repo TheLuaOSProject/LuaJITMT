@@ -22,18 +22,16 @@ fi
 
 if ! awk '
   /TValue \*lj_tab_newkey/ { infn = 1; next }
-  infn && /nodebase = lj_tab_node_acq\(t\)/ { nodebase = NR }
-  infn && /hmask = lj_tab_node_hmask_acq\(nodebase\)/ { hmask = NR }
+  infn && /nodebase = lj_tab_node_snapshot_acq\(t, &hmask\)/ { snapshot = NR }
   infn && /if \(hmask == 0\)/ { branch = NR }
   infn && /hashkey_node\(nodebase, hmask, key\)/ && !hash { hash = NR }
   infn && /nodebase != &G\(L\)->nilnode/ { assert_nilnode = 1 }
   infn && /^}/ {
-    exit(nodebase && hmask && branch && hash &&
-	 nodebase < hmask && hmask < branch && branch < hash &&
+    exit(snapshot && branch && hash && snapshot < branch && branch < hash &&
 	 assert_nilnode ? 0 : 1)
   }
   END {
-    if (!nodebase || !hmask || !branch || !hash || branch > hash ||
+    if (!snapshot || !branch || !hash || snapshot > branch || branch > hash ||
 	!assert_nilnode) exit 1
   }
 ' "$ROOT/src/lj_tab.c"; then

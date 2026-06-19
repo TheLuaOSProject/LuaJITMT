@@ -214,8 +214,8 @@ and cooperative resize/helping are still pending. The shared C array snapshot
 helper now retries when a selected separated array generation is marked
 `TABARRAY_FLAG_RETIRING`. Shared C hash readers that only need a node/mask pair
 now use `lj_tab_node_snapshot_acq()`, which reacquires when the selected node
-generation is marked `TABNODE_FLAG_RETIRING`; write-side set/new-key probes
-keep explicit local retry checks before mutating a hash generation. These are
+generation is marked `TABNODE_FLAG_RETIRING`; write-side set/new-key/FINREG
+claim probes now use the same helper before mutating a hash generation. These are
 flag-consumption bridges before the final `LJ_TFORWARD` copy/hop protocol.
 The legacy `GCtab.node` pointer itself is now release-published after vector
 initialization and acquire-loaded by C-side table, GC, serialization,

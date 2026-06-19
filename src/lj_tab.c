@@ -87,15 +87,6 @@ static TValue *tab_findkey_or_keylock(Node *anchor, cTValue *key, int *locked)
   return NULL;
 }
 
-static LJ_AINLINE int tab_node_retry_if_retiring(const Node *node)
-{
-  if (lj_tab_node_is_retiring(node)) {
-    la_cpu_pause();
-    return 1;
-  }
-  return 0;
-}
-
 /* -- Table creation and destruction -------------------------------------- */
 
 static LJ_AINLINE Node *tab_node_new(lua_State *L, MSize hmask)
@@ -893,10 +884,7 @@ TValue *lj_tab_newkey(lua_State *L, GCtab *t, cTValue *key)
   MSize hmask;
   Node *n;
 retry_insert:
-  nodebase = lj_tab_node_acq(t);
-  hmask = lj_tab_node_hmask_acq(nodebase);
-  if (tab_node_retry_if_retiring(nodebase))
-    goto retry_insert;
+  nodebase = lj_tab_node_snapshot_acq(t, &hmask);
   if (hmask == 0) {
     rehashtab(L, t, key);
     return lj_tab_set(L, t, key);
@@ -965,8 +953,8 @@ retry_insert:
 int lj_tab_try_newkey_anchor(lua_State *L, GCtab *t, cTValue *key,
 			     cTValue *claim, TValue **slot)
 {
-  Node *nodebase = lj_tab_node_acq(t);
-  MSize hmask = lj_tab_node_hmask_acq(nodebase);
+  MSize hmask;
+  Node *nodebase = lj_tab_node_snapshot_acq(t, &hmask);
   Node *n;
   if (hmask == 0)
     return 0;
@@ -1007,8 +995,8 @@ static void tab_release_claimed_free(Node *n)
 int lj_tab_try_newkey_chain(lua_State *L, GCtab *t, cTValue *key,
 			    cTValue *claim, TValue **slot)
 {
-  Node *nodebase = lj_tab_node_acq(t);
-  MSize hmask = lj_tab_node_hmask_acq(nodebase);
+  MSize hmask;
+  Node *nodebase = lj_tab_node_snapshot_acq(t, &hmask);
   Node *anchor, *reserved = NULL;
   if (hmask == 0)
     return 0;
@@ -1088,10 +1076,7 @@ TValue *lj_tab_setinth(lua_State *L, GCtab *t, int32_t key)
   Node *n;
   k.n = (lua_Number)key;
 retry_lookup:
-  node = lj_tab_node_acq(t);
-  hmask = lj_tab_node_hmask_acq(node);
-  if (tab_node_retry_if_retiring(node))
-    goto retry_lookup;
+  node = lj_tab_node_snapshot_acq(t, &hmask);
   if (hmask == 0)
     return lj_tab_newkey(L, t, &k);
   n = hashnum_node(node, hmask, &k);
@@ -1115,10 +1100,7 @@ TValue *lj_tab_setstr(lua_State *L, GCtab *t, const GCstr *key)
   MSize hmask;
   Node *n;
 retry_lookup:
-  node = lj_tab_node_acq(t);
-  hmask = lj_tab_node_hmask_acq(node);
-  if (tab_node_retry_if_retiring(node))
-    goto retry_lookup;
+  node = lj_tab_node_snapshot_acq(t, &hmask);
   if (hmask == 0) {
     setstrV(L, &k, key);
     return lj_tab_newkey(L, t, &k);
@@ -1161,10 +1143,7 @@ TValue *lj_tab_set(lua_State *L, GCtab *t, cTValue *key)
     Node *node;
     MSize hmask;
   retry_lookup:
-    node = lj_tab_node_acq(t);
-    hmask = lj_tab_node_hmask_acq(node);
-    if (tab_node_retry_if_retiring(node))
-      goto retry_lookup;
+    node = lj_tab_node_snapshot_acq(t, &hmask);
     if (hmask != 0) {
       n = hashkey_node(node, hmask, key);
       do {

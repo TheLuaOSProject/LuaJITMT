@@ -173,6 +173,19 @@ if awk '
   exit 1
 fi
 
+if ! awk '
+  /int lj_tab_try_newkey_anchor\(lua_State \*L,/ { inanchor = 1 }
+  inanchor && /lj_tab_node_snapshot_acq\(t, &hmask\)/ { anchor = 1 }
+  inanchor && /^}/ { inanchor = 0 }
+  /int lj_tab_try_newkey_chain\(lua_State \*L,/ { inchain = 1 }
+  inchain && /lj_tab_node_snapshot_acq\(t, &hmask\)/ { chain = 1 }
+  inchain && /^}/ { inchain = 0 }
+  END { exit anchor && chain ? 0 : 1 }
+' "$ROOT/src/lj_tab.c"; then
+  echo "guardrail: FINREG new-key helpers must snapshot current node generation" >&2
+  exit 1
+fi
+
 if awk '
   /int lj_tab_try_newkey_chain\(lua_State \*L,/ { infn = 1 }
   infn && /lj_tab_newkey\(L, t|lj_tab_set\(L, t|rehashtab\(L, t|lj_tab_resize|setfreetop\(/ {

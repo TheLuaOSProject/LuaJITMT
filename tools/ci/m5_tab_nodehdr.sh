@@ -23,7 +23,6 @@ for needle in \
   'lj_tab_node_hdr_flags_or_rel' \
   'lj_tab_node_is_retiring' \
   'lj_tab_node_snapshot_acq' \
-  'tab_node_retry_if_retiring' \
   'lj_tab_node_hdrw' \
   'lj_tab_node_bytes' \
   'TabNodeHdr nilnodehdr' \
@@ -53,6 +52,36 @@ fi
 if rg -n 'lj_mem_freevec\(g, [^,]*node|lj_mem_newvec\(L, [^,]*, Node\)' \
     "$ROOT/src/lj_tab.c"; then
   echo "guardrail: table node vectors must allocate/free with TabNodeHdr base" >&2
+  exit 1
+fi
+
+if rg -F -n 'tab_node_retry_if_retiring' "$ROOT/src"; then
+  echo "guardrail: table node retiring retry must be centralized in lj_tab_node_snapshot_acq" >&2
+  exit 1
+fi
+
+if ! awk '
+  /TValue \*lj_tab_newkey\(lua_State \*L,/ { innewkey = 1; next }
+  innewkey && /lj_tab_node_snapshot_acq\(t, &hmask\)/ { newkey = 1 }
+  innewkey && /^}/ { innewkey = 0 }
+  /int lj_tab_try_newkey_anchor\(lua_State \*L,/ { inanchor = 1; next }
+  inanchor && /lj_tab_node_snapshot_acq\(t, &hmask\)/ { anchor = 1 }
+  inanchor && /^}/ { inanchor = 0 }
+  /int lj_tab_try_newkey_chain\(lua_State \*L,/ { inchain = 1; next }
+  inchain && /lj_tab_node_snapshot_acq\(t, &hmask\)/ { chain = 1 }
+  inchain && /^}/ { inchain = 0 }
+  /TValue \*lj_tab_setinth\(lua_State \*L,/ { inseti = 1; next }
+  inseti && /lj_tab_node_snapshot_acq\(t, &hmask\)/ { seti = 1 }
+  inseti && /^}/ { inseti = 0 }
+  /TValue \*lj_tab_setstr\(lua_State \*L,/ { insets = 1; next }
+  insets && /lj_tab_node_snapshot_acq\(t, &hmask\)/ { sets = 1 }
+  insets && /^}/ { insets = 0 }
+  /TValue \*lj_tab_set\(lua_State \*L,/ { inset = 1; next }
+  inset && /lj_tab_node_snapshot_acq\(t, &hmask\)/ { set = 1 }
+  inset && /^}/ { inset = 0 }
+  END { exit newkey && anchor && chain && seti && sets && set ? 0 : 1 }
+' "$ROOT/src/lj_tab.c"; then
+  echo "guardrail: table write probes must enter through node snapshots" >&2
   exit 1
 fi
 
