@@ -645,6 +645,61 @@ static void test_vm_meta_tset_barrier(lua_State *L, global_State *g,
   lua_pop(L, 4);
 }
 
+static void test_capi_newindex_target_parent_barrier(lua_State *L,
+						     global_State *g,
+						     TGState *tg)
+{
+  GCtab *target, *proxy, *key, *child_settable, *child_setfield;
+
+  lua_settop(L, 0);
+  lua_newtable(L);
+  target = tabV(L->top - 1);
+  lua_newtable(L);
+  proxy = tabV(L->top - 1);
+  lua_newtable(L);
+  lua_pushliteral(L, "__newindex");
+  lua_pushvalue(L, 1);
+  lua_settable(L, -3);
+  lua_setmetatable(L, 2);
+  lua_newtable(L);
+  key = tabV(L->top - 1);
+  lua_newtable(L);
+  child_settable = tabV(L->top - 1);
+  lua_newtable(L);
+  child_setfield = tabV(L->top - 1);
+
+  lj_gc2_legacy_mark_begin(g);
+  assert(lj_gc2_markobj(g, obj2gco(target)) == 1);
+  assert(lj_gc2_markobj(g, obj2gco(proxy)) == 1);
+  flush_and_drain(g, tg);
+  assert(lj_gc2_ismarked(g, obj2gco(key)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(child_settable)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(child_setfield)) == 0);
+
+  lua_pushvalue(L, 3);
+  lua_pushvalue(L, 4);
+  lua_settable(L, 2);
+  assert(lj_gc2_ismarked(g, obj2gco(child_settable)) == 1);
+
+  lua_pushvalue(L, 5);
+  lua_setfield(L, 2, "field");
+  assert(lj_gc2_ismarked(g, obj2gco(child_setfield)) == 1);
+  assert(!lj_gc2_ssb_empty(g));
+  flush_and_drain(g, tg);
+  assert(lj_gc2_ismarked(g, obj2gco(key)) == 1);
+
+  lua_pushvalue(L, 3);
+  lua_gettable(L, 1);
+  assert(tvistab(L->top - 1) && tabV(L->top - 1) == child_settable);
+  lua_pop(L, 1);
+  lua_getfield(L, 1, "field");
+  assert(tvistab(L->top - 1) && tabV(L->top - 1) == child_setfield);
+  lua_pop(L, 1);
+
+  lj_gc2_legacy_cycle_end(g);
+  lua_pop(L, 5);
+}
+
 #if LJ_HASJIT
 static GCtrace *find_trace(global_State *g)
 {
@@ -3603,6 +3658,7 @@ int main(void)
   test_vm_upvalue_barrier(L, g, tg);
   test_vm_table_barrier(L, g, tg);
   test_vm_meta_tset_barrier(L, g, tg);
+  test_capi_newindex_target_parent_barrier(L, g, tg);
 #if LJ_HASJIT
   test_jit_table_store_helper_barrier(L, g, tg);
   test_jit_weak_table_store_helper_barrier(L, g, tg);

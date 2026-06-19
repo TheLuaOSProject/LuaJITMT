@@ -66,6 +66,45 @@ static void test_ffi_weak_newindex_target_write_barrier(lua_State *L,
 
   lj_gc2_legacy_cycle_end(g);
 }
+
+static void test_ffi_newindex_target_parent_barrier(lua_State *L,
+						    global_State *g,
+						    TGState *tg)
+{
+  GCtab *target, *val;
+
+  lua_settop(L, 0);
+  assert(luaL_dostring(L,
+    "local ffi = require('ffi')\n"
+    "ffi.cdef[[struct lj_m8_ffi_parent_newindex { int x; };]]\n"
+    "local target = {}\n"
+    "local ct = ffi.metatype('struct lj_m8_ffi_parent_newindex',\n"
+    "  { __newindex = target })\n"
+    "local obj = ct()\n"
+    "local val = {}\n"
+    "return target, obj, val, function(o, v) o.child = v end\n") == LUA_OK);
+  target = tabV(L->top - 4);
+  val = tabV(L->top - 2);
+
+  lj_gc2_legacy_mark_begin(g);
+  assert(lj_gc2_markobj(g, obj2gco(target)) == 1);
+  flush_and_drain(g, tg);
+  assert(lj_gc2_ismarked(g, obj2gco(val)) == 0);
+
+  lua_pushvalue(L, 4);
+  lua_pushvalue(L, 2);
+  lua_pushvalue(L, 3);
+  lua_call(L, 2, 0);
+  assert(lj_gc2_ismarked(g, obj2gco(val)) == 1);
+  assert(!lj_gc2_ssb_empty(g));
+  flush_and_drain(g, tg);
+
+  lua_getfield(L, 1, "child");
+  assert(tvistab(L->top - 1) && tabV(L->top - 1) == val);
+  lua_pop(L, 1);
+
+  lj_gc2_legacy_cycle_end(g);
+}
 #endif
 
 int main(void)
@@ -83,6 +122,7 @@ int main(void)
   assert(tg != NULL);
 
   test_ffi_weak_newindex_target_write_barrier(L, g, tg);
+  test_ffi_newindex_target_parent_barrier(L, g, tg);
   lua_close(L);
   printf("t-m8-ffi-weak-newindex OK: cdata __newindex weak target barrier verified\n");
 #else

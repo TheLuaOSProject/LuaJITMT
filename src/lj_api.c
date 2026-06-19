@@ -1021,10 +1021,10 @@ LUA_API void lua_settable(lua_State *L, int idx)
   lj_checkapi_slot(2);
   o = lj_meta_tset_owner(L, t, L->top-2, &owner);
   if (o) {
-    /* NOBARRIER: lj_meta_tset ensures the table is not black. */
     TValue *key = L->top-2, *val = L->top-1;
     copyTVrel(L, o, val);
     lj_gc2_barrier_weak_write(L, owner, key, val);
+    lj_gc2_barrier_tv_pair(L, obj2gco(owner), o);
     L->top = key;
   } else {
     TValue *base = L->top;
@@ -1045,10 +1045,10 @@ LUA_API void lua_setfield(lua_State *L, int idx, const char *k)
   setstrV(L, &key, lj_str_newz(L, k));
   o = lj_meta_tset_owner(L, t, &key, &owner);
   if (o) {
-    /* NOBARRIER: lj_meta_tset ensures the table is not black. */
     TValue *val = L->top-1;
     copyTVrel(L, o, val);
     lj_gc2_barrier_weak_write(L, owner, &key, val);
+    lj_gc2_barrier_tv_pair(L, obj2gco(owner), o);
     L->top = val;
   } else {
     TValue *base = L->top;

@@ -29,8 +29,10 @@ for needle in \
   'table.insert weak-value array write' \
   'lj_meta_tset_owner(lua_State *L, cTValue *o, cTValue *k,' \
   'test_capi_weak_newindex_target_write_barrier' \
+  'test_capi_newindex_target_parent_barrier' \
   'lj_meta_tset_owner(L, tv, base+1, &owner)' \
   'test_ffi_weak_newindex_target_write_barrier' \
+  'test_ffi_newindex_target_parent_barrier' \
   't-m8-ffi-weak-newindex OK' \
   'ffi_register_module(lua_State *L)' \
   'lj_gc2_barrier_weak_write(L, t, &key, L->top-1);' \
@@ -39,6 +41,7 @@ for needle in \
   'test_lib_register_weak_value_barrier' \
   'test_jit_profile_registry_weak_barrier' \
   'lj_gc2_barrier_weak_write(L, registry, &key, &tv);' \
+  'lj_gc2_barrier_tv_pair(L, obj2gco(owner), o);' \
   'test_weak_clear_marks_string_slots' \
   'lj_obj_cleargcflags_atomic(gcV(o), LJ_GC_WHITES);' \
   'assert(!iswhite(obj2gco(modestr)));' \

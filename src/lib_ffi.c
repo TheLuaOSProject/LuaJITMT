@@ -181,6 +181,7 @@ static int ffi_index_meta(lua_State *L, CTState *cts, CTypeID id, MMS mm)
       if (o) {
 	copyTVrel(L, o, base+2);
 	lj_gc2_barrier_weak_write(L, owner, base+1, base+2);
+	lj_gc2_barrier_tv_pair(L, obj2gco(owner), o);
 	return 0;
       }
     }
