@@ -238,4 +238,158 @@ return function(add)
       print("M5 table allocation publication guard passed")
     end
   })
+
+  add({
+    name = "m5_tab_chain_order",
+    description = "stable table-node/hash-chain ordering C fixture and guards",
+    run = function(t)
+      build_and_run_table_c(t, t:tmp("lj_t-tab-chain-order"),
+                            "t-tab-chain-order.c")
+
+      t:assert_all_any_contains(src_ch_files(t), {
+        "lj_tab_nextnode_acq",
+        "lj_tab_nextnode_rel",
+        "la_load64_acq(&n->next.ptr64)",
+        "la_store64_rel(&n->next.ptr64",
+        "Nodes are never moved within a hash generation",
+        "lj_tab_nextnode_rel(n, freenode)",
+        "tab_storekeyrel(L, &freenode->key, key)",
+        "return &freenode->val",
+        "lj_tab_nextnode_acq(n)",
+        "LJ_TAB_MAXCHAIN",
+        "tab_rehash_chain_overflow",
+        "chainlen >= LJ_TAB_MAXCHAIN"
+      })
+      t:assert_all_contains(t:path("tests", "t-tab-chain-order.c"), {
+        "exercise_chainlen_resize(L)",
+        "chain_len(&node[0]) == 8",
+        "lj_tab_node_hmask_acq(node) > oldhmask"
+      })
+
+      local newkey = t:c_block(t:path("src", "lj_tab.c"),
+                               "TValue *lj_tab_newkey")
+      if count_plain(newkey, "tab_findkey_or_keylock(n, key, &locked, &chainlen)") < 2 or
+         count_plain(newkey, "chainlen >= LJ_TAB_MAXCHAIN") < 2 or
+         count_plain(newkey, "tab_rehash_chain_overflow(L, t, key, hmask)") < 2 then
+        error("new-key collision insertion must grow on max chain length")
+      end
+
+      assert_no_lines(t, "table hash-chain walks/stores must use ordered helpers",
+                      {
+                        t:path("src", "lj_tab.c"),
+                        t:path("src", "lj_serialize.c")
+                      }, function(line)
+        if contains(line, "next_gen") then return false end
+        return contains(line, "nextnode(") or
+               (contains(line, "setmref(") and contains(line, "->next")) or
+               (contains(line, "setmrefr(") and contains(line, "->next")) or
+               (contains(line, "noderef(") and contains(line, "->next"))
+      end)
+
+      assert_no_lines(t, "table insertion must not move existing hash nodes",
+                      { t:path("src", "lj_tab.c") }, function(line)
+        return contains(line, "freenode->val = n->val") or
+               contains(line, "freenode->key = n->key") or
+               contains(line, "Colliding node not the main node") or
+               contains(line, "Use Brent")
+      end)
+      print("M5 stable table-node/hash-chain ordering tests passed")
+    end
+  })
+
+  add({
+    name = "m5_tab_node_publish",
+    description = "table hash-vector publication C fixture and guards",
+    run = function(t)
+      build_and_run_table_c(t, t:tmp("lj_t-tab-node-publish"),
+                            "t-tab-node-publish.c")
+
+      t:assert_all_any_contains(src_ch_files(t), {
+        "lj_tab_node_acq",
+        "lj_tab_node_rel",
+        "la_load64_acq(&t->node.ptr64)",
+        "la_store64_rel(&t->node.ptr64",
+        "hashmask(const GCtab *t, uint32_t hash)",
+        "Node *n = lj_tab_node_snapshot_acq(t, &hmask)",
+        "return hashmask_node(n, hmask, hash)",
+        "lj_tab_node_rel(t, node)",
+        "lj_tab_node_rel(t, &g->nilnode)",
+        "newhpart_alloc",
+        "newhpart_publish",
+        "tab_rehash_hashcount",
+        "tab_rehash_arrayslot",
+        "tab_rehash_slot",
+        "tab_rehash_insert",
+        "n = hashnum_node(node, hmask, &k)",
+        "n = hashstr_node(node, hmask, key)",
+        "n = hashkey_node(node, hmask, key)"
+      })
+
+      assert_no_lines(t, "table node vectors must use lj_tab_node_* helpers",
+                      src_ch_files(t), function(line, path)
+        if path == t:path("src", "lj_obj.h") or
+           contains(path, "/src/host/") then return false end
+        return (contains(line, "noderef(") and
+                (contains(line, "->node") or contains(line, "(node"))) or
+               (contains(line, "setmref(") and
+                (contains(line, "->node") or contains(line, "(node")))
+      end)
+
+      assert_no_lines(t, "lj_tab.c hash lookups must use explicit node-header snapshots",
+                      { t:path("src", "lj_tab.c") }, function(line)
+        return contains(line, "hashkey(t") or
+               contains(line, "hashstr(t") or
+               contains(line, "hashnum(t") or
+               contains(line, "hashmask(t") or
+               contains(line, "hashgcref(t")
+      end)
+
+      local resize = t:c_block(t:path("src", "lj_tab.c"),
+                               "void lj_tab_resize")
+      for _, needle in ipairs({
+        "newhpart(L, t, hbits)",
+        "lj_tab_setint(L, t,",
+        "lj_tab_setinth(L, t,"
+      }) do
+        if contains(resize, needle) then
+          error("resize must rebuild hash vectors before publication: " .. needle)
+        end
+      end
+      t:assert_text_ordered("lj_tab_resize", resize, {
+        "tab_rehash_hashcount(oldnode, oldhmask, oldarray,",
+        "tab_rehash_slot(L, array, asize, newnode, newhmask,",
+        "newhpart_publish(t, newnode, newhmask, newfreetop)",
+        "tab_retire_arm(G(L), oldret)"
+      })
+      print("M5 table hash-vector publication tests passed")
+    end
+  })
+
+  add({
+    name = "m5_tab_retire",
+    description = "table hash-vector retirement C fixture and guards",
+    run = function(t)
+      build_and_run_table_c(t, t:tmp("lj_t-tab-retire"),
+                            "t-tab-retire.c")
+
+      t:assert_all_any_contains(src_ch_files(t), {
+        "TabNodeRetire",
+        "retired_nodes",
+        "tab_retire_reserve",
+        "tab_retire_arm",
+        "lj_tab_node_hdr_flags_or_rel(oldnode, TABNODE_FLAG_RETIRING)",
+        "lj_tab_reclaim_retired",
+        "lj_tab_freeretired",
+        "lj_tab_reclaim_retired(g, epoch)",
+        "lj_gc2_reclaim_retired(g, epoch)",
+        "gc_mark_tab_retired_mem",
+        "gc2_mark_tab_retired_mem"
+      })
+      t:assert_contains(t:path("tests", "t-tab-retire.c"),
+                        "lj_tab_node_hdr_flags_acq(oldnode) == TABNODE_FLAG_RETIRING")
+      t:assert_not_contains(t:path("src", "lj_tab.c"),
+                            "lj_mem_freevec(g, oldnode, oldhmask+1, Node)")
+      print("M5 table hash-vector retirement tests passed")
+    end
+  })
 end
