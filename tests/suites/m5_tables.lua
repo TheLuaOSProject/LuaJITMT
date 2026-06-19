@@ -42,6 +42,26 @@ local function src_ch_files(t)
   return t:files(t:path("src"), { extensions = { ".c", ".h" } })
 end
 
+local function src_code_files(t)
+  return t:files(t:path("src"), { extensions = { ".c", ".h", ".dasc" } })
+end
+
+local function assert_block_contains(t, label, path, start, needles)
+  local block = t:c_block(path, start)
+  for i = 1, #needles do
+    t:assert_text_contains(label, block, needles[i])
+  end
+  return block
+end
+
+local function assert_block_excludes(t, label, block, rejects)
+  for i = 1, #rejects do
+    if contains(block, rejects[i]) then
+      error(label .. ": forbidden text present: " .. rejects[i], 2)
+    end
+  end
+end
+
 return function(add)
   add({
     name = "m5_tab_emptyhash",
@@ -362,6 +382,236 @@ return function(add)
         "tab_retire_arm(G(L), oldret)"
       })
       print("M5 table hash-vector publication tests passed")
+    end
+  })
+
+  add({
+    name = "m5_tab_nodehdr",
+    description = "table hash-vector header C fixture and guards",
+    run = function(t)
+      build_and_run_table_c(t, t:tmp("lj_t-tab-nodehdr"),
+                            "t-tab-nodehdr.c")
+
+      t:assert_all_any_contains(src_code_files(t), {
+        "typedef struct TabNodeHdr",
+        "LJ_STATIC_ASSERT(sizeof(TabNodeHdr) == 16)",
+        "TABNODE_FREECOUNT_MASK",
+        "TABNODE_FLAG_RETIRING",
+        "lj_tab_node_hmask_acq",
+        "lj_tab_node_hdr_flags_acq",
+        "lj_tab_node_freecount_acq",
+        "lj_tab_node_free_reserve",
+        "lj_tab_node_free_release",
+        "lj_tab_node_nextgen_acq",
+        "lj_tab_node_nextgen_rel",
+        "lj_tab_node_hdr_flags_or_rel",
+        "lj_tab_node_is_retiring",
+        "lj_tab_node_snapshot_acq",
+        "lj_tab_node_hdrw",
+        "lj_tab_node_bytes",
+        "TabNodeHdr nilnodehdr",
+        "offsetof(global_State, nilnode)",
+        "tab_node_new",
+        "hdr->flags = (hmask + 1u) & TABNODE_FREECOUNT_MASK",
+        "setmref(hdr->next_gen, NULL)",
+        "g->nilnodehdr.flags = 0",
+        "setmref(g->nilnodehdr.next_gen, NULL)",
+        "tab_node_free"
+      })
+
+      t:assert_all_contains(t:path("tests", "t-tab-nodehdr.c"), {
+        "lj_tab_node_hdr_flags_acq(oldnode) == TABNODE_FLAG_RETIRING",
+        "lj_tab_node_freecount_acq(newnode) == newhmask + 1u - 5u",
+        "lj_tab_node_nextgen_acq(oldnode) == newnode"
+      })
+
+      assert_no_lines(t, "table node header state must use flags, not unused",
+                      src_code_files(t), function(line)
+        return contains(line, "nilnodehdr.unused") or
+               contains(line, "hdr->unused") or
+               contains(line, ".unused = 0")
+      end)
+
+      assert_no_lines(t, "table node vectors must allocate/free with TabNodeHdr base",
+                      { t:path("src", "lj_tab.c") }, function(line)
+        return line:find("lj_mem_freevec%(g, [^,]*node") ~= nil or
+               line:find("lj_mem_newvec%(L, [^,]*, Node") ~= nil
+      end)
+
+      assert_no_lines(t, "table node retiring retry must be centralized in lj_tab_node_snapshot_acq",
+                      src_code_files(t), function(line)
+        return contains(line, "tab_node_retry_if_retiring")
+      end)
+
+      local lj_tab = t:path("src", "lj_tab.c")
+      for _, spec in ipairs({
+        { "lj_tab_newkey", "TValue *lj_tab_newkey" },
+        { "lj_tab_try_newkey_anchor", "int lj_tab_try_newkey_anchor" },
+        { "lj_tab_try_newkey_chain", "int lj_tab_try_newkey_chain" },
+        { "lj_tab_setinth", "TValue *lj_tab_setinth" },
+        { "lj_tab_setstr", "TValue *lj_tab_setstr" },
+        { "lj_tab_set", "TValue *lj_tab_set(lua_State *L," }
+      }) do
+        assert_block_contains(t, spec[1], lj_tab, spec[2], {
+          "lj_tab_node_snapshot_acq(t, &hmask)"
+        })
+      end
+
+      for _, spec in ipairs({
+        { "clearhpart", "static LJ_AINLINE void clearhpart(GCtab *t)" },
+        { "lj_tab_clear", "void LJ_FASTCALL lj_tab_clear" },
+        { "lj_tab_free", "void LJ_FASTCALL lj_tab_free" }
+      }) do
+        local block = assert_block_contains(t, spec[1], lj_tab, spec[2], {
+          "lj_tab_node_snapshot_acq(t, &hmask)"
+        })
+        assert_block_excludes(t, spec[1], block, {
+          "lj_tab_node_acq(t)",
+          "lj_tab_node_hmask_acq(node)"
+        })
+      end
+
+      t:assert_text_ordered("lj_tab_resize", t:c_block(lj_tab,
+                            "void lj_tab_resize"), {
+        "lj_tab_node_nextgen_rel(oldnode,",
+        "lj_tab_node_hdr_flags_or_rel(oldnode, TABNODE_FLAG_RETIRING)"
+      })
+
+      local resize = assert_block_contains(t, "lj_tab_resize", lj_tab,
+                                           "void lj_tab_resize", {
+        "oldnode = lj_tab_node_snapshot_acq(t, &oldhmask)"
+      })
+      assert_block_excludes(t, "lj_tab_resize", resize, {
+        "lj_tab_node_acq(t)",
+        "lj_tab_node_hmask_acq(oldnode)"
+      })
+      print("M5 table hash-vector header tests passed")
+    end
+  })
+
+  add({
+    name = "m5_tab_forward_filter",
+    description = "table FORWARD value filtering C fixture and guards",
+    run = function(t)
+      build_and_run_table_c(t, t:tmp("lj_t-tab-forward-filter"),
+                            "t-tab-forward-filter.c")
+
+      t:assert_all_any_contains({
+        t:path("src", "lj_tab.c"),
+        t:path("src", "lj_tab.h"),
+        t:path("tests", "t-tab-forward-filter.c")
+      }, {
+        "tab_val_absent(cTValue *val)",
+        "return tvisnil(val) || tvisforward(val)",
+        "tab_slot_absent_acq(const TValue *slot)",
+        "tab_val_forward_retry_once(cTValue *val, int *retry)",
+        "tab_node_forward_hop(Node **nodep, MSize *hmaskp)",
+        "lj_tab_node_nextgen_acq(node)",
+        "tab_forwarded_int_arrayslot(GCtab *t, int32_t key)",
+        "tab_forwarded_setslot(GCtab *t, Node **nodep, MSize *hmaskp,",
+        "tab_forwarded_hash_value(GCtab *t, Node **nodep,",
+        "tab_array_slot_absent_acq(GCtab *t, TValue **arrayp,",
+        "lj_tab_array_forward_hop(const GCtab *t, TValue **arrayp,",
+        "lj_tab_array_nextgen_acq(array)",
+        "lj_tab_array_hdr_asize_acq(next)",
+        "tab_val_absent(&val)",
+        "tab_slot_absent_acq(tv)",
+        "tab_array_slot_absent_acq(t, &array, &asize, (MSize)hi)",
+        "lj_tab_getint(t, 3) == NULL",
+        "lj_tab_getstr(t, hidden) == NULL",
+        "lj_tab_len(t) == 5",
+        "lj_tab_len_hint(t, 5) == 5",
+        "exercise_array_forward_hop(L)",
+        "lj_tab_array_nextgen_acq(oldarray) == newarray",
+        "lj_tab_storeint(L, lj_tab_setint(L, t, 5), 909)",
+        "exercise_hash_forward_hop(L)",
+        "lj_tab_storeint(L, lj_tab_setstr(L, t, hopstr), 404)",
+        "lj_tab_storeint(L, lj_tab_set(L, t, &lightkey), 606)",
+        "exercise_hash_to_array_forward_hop(L)",
+        "assert_i32(&newarray[moveint], 909)",
+        "lj_tab_node_nextgen_acq(oldnode) == newnode",
+        "t-tab-forward-filter OK"
+      })
+      t:assert_contains(t:path("tools", "ci", "m5_concurrent_objects.sh"),
+                        "m5_tab_forward_filter.sh")
+
+      local lj_tab_h = t:path("src", "lj_tab.h")
+      assert_block_contains(t, "lj_tab_getint", lj_tab_h,
+                            "static LJ_AINLINE cTValue *lj_tab_getint", {
+        "lj_tab_array_forward_hop(t, &array, &asize)",
+        "goto genarray",
+        "tvisforward(&val)",
+        "goto retry_array",
+        "return NULL"
+      })
+      assert_block_contains(t, "lj_tab_setint", lj_tab_h,
+                            "static LJ_AINLINE TValue *lj_tab_setint", {
+        "tvisforward(&val)",
+        "lj_tab_array_forward_hop(t, &array, &asize)",
+        "goto genarray",
+        "goto retry_array",
+        "return lj_tab_setinth(L, t, key)"
+      })
+
+      local lj_tab = t:path("src", "lj_tab.c")
+      assert_block_contains(t, "lj_tab_getinth", lj_tab,
+                            "cTValue * LJ_FASTCALL lj_tab_getinth", {
+        "tab_node_forward_hop(&node, &hmask)",
+        "tab_forwarded_int_arrayslot(t, key)",
+        "tab_val_forward_retry_once(&val, &forward_retry)"
+      })
+      assert_block_contains(t, "lj_tab_getstr", lj_tab,
+                            "cTValue *lj_tab_getstr", {
+        "tab_node_forward_hop(&node, &hmask)",
+        "tab_val_forward_retry_once(&val, &forward_retry)"
+      })
+      assert_block_contains(t, "lj_tab_get", lj_tab,
+                            "cTValue *lj_tab_get(lua_State *L,", {
+        "tab_node_forward_hop(&node, &hmask)",
+        "tab_val_forward_retry_once(&val, &forward_retry)"
+      })
+      assert_block_contains(t, "lj_tab_setinth", lj_tab,
+                            "TValue *lj_tab_setinth", {
+        "tab_forwarded_setslot(t, &node, &hmask, &k)",
+        "tab_val_forward_retry_once(&val, &forward_retry)"
+      })
+      assert_block_contains(t, "lj_tab_setstr", lj_tab,
+                            "TValue *lj_tab_setstr", {
+        "tab_forwarded_setslot(t, &node, &hmask, &k)",
+        "tab_val_forward_retry_once(&val, &forward_retry)"
+      })
+      assert_block_contains(t, "lj_tab_set", lj_tab,
+                            "TValue *lj_tab_set(lua_State *L,", {
+        "tab_forwarded_setslot(t, &node, &hmask, key)",
+        "tab_val_forward_retry_once(&val, &forward_retry)"
+      })
+
+      local next_block = assert_block_contains(t, "lj_tab_next", lj_tab,
+                                               "int lj_tab_next", {
+        "lj_tab_array_forward_hop(t, &nextarray, &nextasize)",
+        "tab_forwarded_hash_value(t, &hopnode, &hophmask, &key, &val)"
+      })
+      if count_plain(next_block, "tab_val_absent(&val)") < 2 then
+        error("lj_tab_next: expected array and hash FORWARD absence checks")
+      end
+
+      local absent_block = assert_block_contains(t, "tab_array_slot_absent_acq",
+                                                 lj_tab,
+                                                 "static LJ_AINLINE int tab_array_slot_absent_acq", {
+        "lj_tab_array_forward_hop(t, &nextarray, &nextasize)",
+        "tab_val_absent(&val)"
+      })
+      local len_blocks = absent_block ..
+        t:c_block(lj_tab, "static MSize tab_len_slow") ..
+        t:c_block(lj_tab, "MSize LJ_FASTCALL lj_tab_len") ..
+        t:c_block(lj_tab, "MSize LJ_FASTCALL lj_tab_len_hint")
+      local absent_checks = count_plain(len_blocks, "tab_slot_absent_acq") +
+        count_plain(len_blocks, "tab_val_absent") +
+        count_plain(len_blocks, "tab_array_slot_absent_acq")
+      if absent_checks < 6 then
+        error("table length helpers must hop/filter FORWARD values")
+      end
+      print("M5 table FORWARD filtering tests passed")
     end
   })
 

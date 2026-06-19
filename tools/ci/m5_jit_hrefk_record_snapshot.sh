@@ -1,59 +1,6 @@
 #!/bin/sh
-# Guard recorder-side HREFK slot selection against table shape races.
+# Run the Lua-defined M5 JIT HREFK recorder snapshot guard.
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
-JOBS=${JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)}
-
-make -C "$ROOT/src" clean >/dev/null
-make -C "$ROOT/src" -j"$JOBS" >/dev/null
-
-"$ROOT/src/luajit" -e '
-jit.opt.start("hotloop=1")
-local t = { stable_key = 17, other = 23 }
-local sum = 0
-for i = 1, 800 do
-  sum = sum + t.stable_key
-end
-assert(sum == 800 * 17)
-'
-
-for needle in \
-  'tb_node = lj_tab_node_snapshot_acq(tb, &tb_hmask);' \
-  'Node *node = lj_tab_node_snapshot_acq(tpl, &tpl_hmask);' \
-  'Node *hrefk_node = lj_tab_node_snapshot_acq(t, &hrefk_hmask);' \
-  'Node *cur_node = lj_tab_node_snapshot_acq(t, &cur_hmask);' \
-  'hrefk_node == cur_node &&' \
-  'hrefk_hmask == cur_hmask' \
-  'uintptr_t oldvaddr = (uintptr_t)(const void *)ix->oldv;' \
-  'uintptr_t nodeaddr = (uintptr_t)(const void *)&hrefk_node[0].val' \
-  'lj_ir_kint(J, (int32_t)hrefk_hmask)' \
-  "Guard HREFK's constant slot against a newer, smaller node generation." \
-  "Guard HREFK's loaded node against a retiring hash generation." \
-  'asm_guardcc(as, CC_B);' \
-  'emit_gmroi(as, XG_ARITHi(XOg_CMP), node, TABNODE_HMASK_OFS,' \
-  'asm_tabnode_retiring_guard(as, node);'
-do
-  if ! rg -F -q "$needle" "$ROOT/src/lj_record.c" "$ROOT/src/lj_asm_x86.h"; then
-    echo "guardrail: missing HREFK recorder snapshot marker: $needle" >&2
-    exit 1
-  fi
-done
-
-for reject in \
-  'nhbits = tb->hmask > 0' \
-  'tpl->hmask' \
-  '(char *)&lj_tab_node_acq(t)[0].val' \
-  'Node *hrefk_node = lj_tab_node_acq(t);' \
-  'Node *cur_node = lj_tab_node_acq(t);' \
-  'hrefk_hmask == lj_tab_node_hmask_acq(cur_node)' \
-  'hrefk_hmask == t->hmask' \
-  'lj_ir_kint(J, (int32_t)t->hmask)'
-do
-  if rg -F -n "$reject" "$ROOT/src/lj_record.c"; then
-    echo "guardrail: HREFK recorder slot selection must use the stable node/hmask snapshot: $reject" >&2
-    exit 1
-  fi
-done
-
-echo "M5 JIT HREFK recorder snapshot guard passed"
+exec "$ROOT/tools/ci/lua_test.sh" m5_jit_hrefk_record_snapshot

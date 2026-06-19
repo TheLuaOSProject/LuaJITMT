@@ -72,6 +72,10 @@ Lua test-suite migration notes:
   - `tools/ci/m5_tab_retire.sh` -> `m5_tab_retire`
 - Twelfth migrated scripts:
   - `tools/ci/m5_udtype_publish.sh` -> `m5_udtype_publish`
+- Thirteenth migrated scripts:
+  - `tools/ci/m5_jit_hrefk_record_snapshot.sh` -> `m5_jit_hrefk_record_snapshot`
+  - `tools/ci/m5_tab_forward_filter.sh` -> `m5_tab_forward_filter`
+  - `tools/ci/m5_tab_nodehdr.sh` -> `m5_tab_nodehdr`
 - This first batch covers the main shapes the full migration needs:
   standalone C fixtures linked against selected runtime files, Lua tests under
   the built VM, C fixtures linked against `libluajit.a`, and source-order guard
@@ -110,6 +114,8 @@ Lua test-suite migration notes:
   publication, and hash-vector retirement fixtures with their source guards.
 - The twelfth batch migrates the userdata type acquire/release publication
   guard, including constructor order checks and the Lua smoke test.
+- The thirteenth batch migrates the HREFK recorder snapshot guard plus table
+  node-header and FORWARD-value filtering fixtures.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.

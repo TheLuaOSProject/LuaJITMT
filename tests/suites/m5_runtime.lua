@@ -124,6 +124,18 @@ assert(sum > 0)
 ]]
 end
 
+local function jit_hrefk_record_snapshot_smoke()
+  return [[
+jit.opt.start("hotloop=1")
+local t = { stable_key = 17, other = 23 }
+local sum = 0
+for i = 1, 800 do
+  sum = sum + t.stable_key
+end
+assert(sum == 800 * 17)
+]]
+end
+
 local function udtype_publish_smoke()
   return [[
 local ffi = require"ffi"
@@ -297,6 +309,50 @@ return function(add)
         t:assert_not_contains(asm, reject)
       end
       print("M5 JIT HREF node-header hmask guard passed")
+    end
+  })
+
+  add({
+    name = "m5_jit_hrefk_record_snapshot",
+    description = "JIT HREFK recorder table shape snapshot guard",
+    run = function(t)
+      t:build({ clean = true, quiet = true })
+      t:luajit({ "-e", jit_hrefk_record_snapshot_smoke() })
+
+      t:assert_all_any_contains({
+        t:path("src", "lj_record.c"),
+        t:path("src", "lj_asm_x86.h")
+      }, {
+        "tb_node = lj_tab_node_snapshot_acq(tb, &tb_hmask);",
+        "Node *node = lj_tab_node_snapshot_acq(tpl, &tpl_hmask);",
+        "Node *hrefk_node = lj_tab_node_snapshot_acq(t, &hrefk_hmask);",
+        "Node *cur_node = lj_tab_node_snapshot_acq(t, &cur_hmask);",
+        "hrefk_node == cur_node &&",
+        "hrefk_hmask == cur_hmask",
+        "uintptr_t oldvaddr = (uintptr_t)(const void *)ix->oldv;",
+        "uintptr_t nodeaddr = (uintptr_t)(const void *)&hrefk_node[0].val",
+        "lj_ir_kint(J, (int32_t)hrefk_hmask)",
+        "Guard HREFK's constant slot against a newer, smaller node generation.",
+        "Guard HREFK's loaded node against a retiring hash generation.",
+        "asm_guardcc(as, CC_B);",
+        "emit_gmroi(as, XG_ARITHi(XOg_CMP), node, TABNODE_HMASK_OFS,",
+        "asm_tabnode_retiring_guard(as, node);"
+      })
+
+      local record = t:path("src", "lj_record.c")
+      for _, reject in ipairs({
+        "nhbits = tb->hmask > 0",
+        "tpl->hmask",
+        "(char *)&lj_tab_node_acq(t)[0].val",
+        "Node *hrefk_node = lj_tab_node_acq(t);",
+        "Node *cur_node = lj_tab_node_acq(t);",
+        "hrefk_hmask == lj_tab_node_hmask_acq(cur_node)",
+        "hrefk_hmask == t->hmask",
+        "lj_ir_kint(J, (int32_t)t->hmask)"
+      }) do
+        t:assert_not_contains(record, reject)
+      end
+      print("M5 JIT HREFK recorder snapshot guard passed")
     end
   })
 
