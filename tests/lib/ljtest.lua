@@ -182,9 +182,12 @@ end
 
 function Test:cc(output, sources, opts)
   opts = opts or {}
-  local parts = { self.compiler, self.cflags }
+  local parts = { self.compiler }
+  if opts.default_cflags ~= false then append(parts, self.cflags) end
   append_flags(parts, opts.cflags)
-  append(parts, "-I" .. shell_quote(self:path("src")))
+  if opts.include_src ~= false then
+    append(parts, "-I" .. shell_quote(self:path("src")))
+  end
   for i = 1, #sources do
     append(parts, shell_quote(sources[i]))
   end
