@@ -55,6 +55,41 @@ static void store_strkey(lua_State *L, Node *n, GCstr *s)
   copyTVrel(L, &n->key, &key);
 }
 
+static int count_next(GCtab *t);
+
+static void exercise_tombstone_anchor_insert(lua_State *L)
+{
+  GCtab *t;
+  GCstr *anchor, *displaced, *replacement;
+  Node *node;
+  uint32_t seq = 0;
+
+  lua_settop(L, 0);
+  lua_createtable(L, 0, 8);
+  t = tabV(L->top-1);
+  assert(t->hmask == 7);
+
+  anchor = find_sid_bucket(L, t->hmask, 0, &seq);
+  displaced = find_sid_bucket(L, t->hmask, 0, &seq);
+  replacement = find_sid_bucket(L, t->hmask, 0, &seq);
+
+  setstrint(L, t, anchor, 11);
+  setstrint(L, t, displaced, 22);
+  node = lj_tab_node_acq(t);
+  assert(strV(&node[0].key) == anchor);
+  assert(lj_tab_nextnode_acq(&node[0]) != NULL);
+  lj_tab_storenil(L, &node[0].val);
+  assert(tvisnil(lj_tab_getstr(t, anchor)));
+
+  setstrint(L, t, replacement, 33);
+  assert(tvisstr(&node[0].key) && strV(&node[0].key) == anchor);
+  assert(tvisnil(&node[0].val));
+  assert(tvisnil(lj_tab_getstr(t, anchor)));
+  assert_tabnum(t, displaced, 22);
+  assert_tabnum(t, replacement, 33);
+  assert(count_next(t) == 2);
+}
+
 static int count_next(GCtab *t)
 {
   TValue key, out[2];
@@ -114,6 +149,7 @@ int main(void)
   assert_tabnum(t, anchor, 11);
   assert_tabnum(t, displaced, 22);
   assert(count_next(t) == 2);
+  exercise_tombstone_anchor_insert(L);
 
   lua_close(L);
   printf("t-tab-keylock-lookup OK: KEYLOCK is filtered from table reads\n");

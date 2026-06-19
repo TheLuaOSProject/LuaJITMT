@@ -1047,6 +1047,23 @@ cTValue *lj_tab_get(lua_State *L, GCtab *t, cTValue *key)
 
 /* -- Table setters ------------------------------------------------------- */
 
+static int tab_try_claim_nil_key(TValue *dst)
+{
+  TValue expect, keylock;
+  setnilV(&expect);
+  setkeylockV(&keylock);
+  if (lj_tv_cas(dst, &expect, &keylock))
+    return 1;
+  return tviskeylock(&expect) ? -1 : 0;
+}
+
+static void tab_release_claimed_free(Node *n)
+{
+  lj_tab_nextnode_set(n, NULL);
+  lj_tab_storenilraw(&n->key);
+  lj_tab_storenilraw(&n->val);
+}
+
 /* Insert new key. Nodes are never moved within a hash generation. */
 TValue *lj_tab_newkey(lua_State *L, GCtab *t, cTValue *key)
 {
@@ -1070,7 +1087,31 @@ retry_insert:
       goto retry_insert;
     }
   }
-  if (!lj_tv_isnil_acq(&n->val)) {
+  {
+    TValue nk, nv;
+    lj_tv_load_acq(&nk, &n->key);
+    if (tab_key_islocked(&nk)) {
+      la_cpu_pause();
+      goto retry_insert;
+    }
+    lj_tv_load_acq(&nv, &n->val);
+    if (tvisnil(&nk) && tvisnil(&nv)) {
+      int claimed = tab_try_claim_nil_key(&n->key);
+      if (claimed < 0) {
+	la_cpu_pause();
+	goto retry_insert;
+      }
+      if (claimed == 1) {
+	tab_storekeyrel(L, &n->key, key);
+	lj_gc2_barrier_weak_key(L, t, key);
+	lj_gc_pubtab(L, t);
+	lj_assertL(lj_tv_isnil_acq(&n->val), "new hash slot is not empty");
+	return &n->val;
+      }
+      goto retry_insert;
+    }
+  }
+  {
     Node *freenode = getfreetop(t, nodebase);
     lj_assertL(nodebase != &G(L)->nilnode, "insert into fallback hash");
     lj_assertL(freenode >= nodebase && freenode <= nodebase+hmask+1,
@@ -1088,16 +1129,26 @@ retry_insert:
 	  la_cpu_pause();
 	  goto retry_insert;
 	}
-	if (tvisnil(&fk))
-	  break;
+	if (tvisnil(&fk) && lj_tv_isnil_acq(&freenode->val)) {
+	  int claimed = tab_try_claim_nil_key(&freenode->key);
+	  if (claimed < 0) {
+	    la_cpu_pause();
+	    goto retry_insert;
+	  }
+	  if (claimed == 1)
+	    break;
+	}
       }
     } while (1);
     {
       int locked;
       TValue *slot = tab_findkey_or_keylock(n, key, &locked);
-      if (slot)
+      if (slot) {
+	tab_release_claimed_free(freenode);
 	return slot;
+      }
       if (locked) {
+	tab_release_claimed_free(freenode);
 	la_cpu_pause();
 	goto retry_insert;
       }
@@ -1113,11 +1164,6 @@ retry_insert:
     lj_tab_nextnode_rel(n, freenode);
     return &freenode->val;
   }
-  tab_storekeyrel(L, &n->key, key);
-  lj_gc2_barrier_weak_key(L, t, key);
-  lj_gc_pubtab(L, t);
-  lj_assertL(lj_tv_isnil_acq(&n->val), "new hash slot is not empty");
-  return &n->val;
 }
 
 int lj_tab_try_newkey_anchor(lua_State *L, GCtab *t, cTValue *key,
@@ -1153,13 +1199,6 @@ int lj_tab_try_newkey_anchor(lua_State *L, GCtab *t, cTValue *key,
       return 1;
     }
   }
-}
-
-static void tab_release_claimed_free(Node *n)
-{
-  lj_tab_nextnode_set(n, NULL);
-  lj_tab_storenilraw(&n->key);
-  lj_tab_storenilraw(&n->val);
 }
 
 int lj_tab_try_newkey_chain(lua_State *L, GCtab *t, cTValue *key,

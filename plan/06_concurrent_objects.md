@@ -234,9 +234,11 @@ general hash insert protocol above. C hash lookup paths now pause and re-walk
 once when they see `LJ_TKEYLOCK`, setter probes retry directly, and
 `lj_tab_next()` hides a still-locked key from traversal. The legacy
 `lj_tab_newkey()` helper now defensively rechecks the target collision chain
-and waits on `LJ_TKEYLOCK` before consuming a free node, but freetop allocation
-and cooperative resize/helping are still pending. The shared C array snapshot
-helper now retries when a selected separated array generation is marked
+and waits on `LJ_TKEYLOCK`; general new-key insertion KEYLOCK-claims nil
+anchor/free-node keys before publishing and avoids overwriting non-nil
+tombstone anchor keys. Atomic freecount/free-node ownership and cooperative
+resize/helping are still pending. The shared C array snapshot helper now
+retries when a selected separated array generation is marked
 `TABARRAY_FLAG_RETIRING`. Shared C hash readers that only need a node/mask pair
 now use `lj_tab_node_snapshot_acq()`, which reacquires when the selected node
 generation is marked `TABNODE_FLAG_RETIRING`; write-side set/new-key/FINREG
