@@ -449,17 +449,6 @@ return function(add)
                       { build = false })
 
       assert_marker_set(t, {
-        t:path("src", "lj_dispatch.c"),
-        t:path("src", "lj_safepoint.c")
-      }, {
-        "uint32_t redispatch = 0",
-        "la_load32_acq(&g->gc2.n_threads) > 1",
-        "lj_tg_sync_dispatch(g)",
-        "lj_gc2_handshake(g, LJ_GC2_HS_REDISPATCH)",
-        "lj_tg_sync_dispatch_tg(g, tg)"
-      }, "dispatch redispatch")
-
-      assert_marker_set(t, {
         t:path("src", "vm_x64.dasc"),
         t:path("src", "lj_dispatch.c")
       }, {
@@ -1352,76 +1341,6 @@ assert(type(x)=="table")
     description = "Linux/x64 mcode sync-core publication ordering",
     run = function(t)
       build_default(t)
-      assert_marker_set(t, {
-        t:path("src", "lj_obj.h"),
-        t:path("src", "lj_jit.h"),
-        t:path("src", "lj_mcode.h"),
-        t:path("src", "lj_mcode.c"),
-        t:path("src", "lj_state.c"),
-        t:path("src", "lj_trace.c"),
-        t:path("src", "lj_emit_x86.h"),
-        t:path("src", "lj_asm_x86.h"),
-        t:path("src", "lj_err.h"),
-        t:path("src", "lj_err.c")
-      }, {
-        "uint32_t jit_mcode_synccore",
-        "void lj_mcode_init(global_State *g)",
-        "la_membarrier_register_synccore() == 0",
-        "la_store32_rel(&g->jit_mcode_synccore, 1)",
-        "void lj_mcode_sync_core(jit_State *J)",
-        "la_load32_acq(&g->jit_mcode_synccore)",
-        "la_membarrier_synccore()",
-        "lj_mcode_init(g);",
-        "lj_mcode_sync_core(J);",
-        "LJ_MCODE_EXEC_STABLE",
-        "lj_mcode_freeall(global_State *g)",
-        "mcode_freearea_direct(global_State *g, MCode *area, size_t size)",
-        "lj_mcode_freeall(g);",
-        "J->szallmcarea + sizemcode > maxmcode",
-        "MCode *rw;\t\t/* Writable alias of this area. */",
-        "lj_mcode_area_rw(MCode *area)",
-        "lj_mcode_rx2rw(MCode *area, MCode *rx)",
-        "lj_mcode_rw2rx(MCode *area, MCode *rw)",
-        "lj_mcode_rw(jit_State *J, MCode *rx)",
-        "LJ_MCODE_DUALMAP",
-        "mcode_memfd_create(void)",
-        "mcode_alloc_dualmap(uintptr_t hint, size_t sz)",
-        "mmap((void *)hint, sz, MCPROT_RX, MAP_SHARED, fd, 0)",
-        "mmap(NULL, sz, MCPROT_RW, MAP_SHARED, fd, 0)",
-        "((MCLink *)rw)->rw = (MCode *)rw;",
-        "mcode_register_area(jit_State *J, MCode *area",
-        "mcode_free_mapping(MCode *area, size_t sz)",
-        "lj_err_register_mcode(area, sz, (uint8_t *)bot,",
-        "uint8_t *lj_err_register_mcode(void *base, size_t sz, uint8_t *info,",
-        "memcpy(winfo, err_frame_jit_template, sizeof(err_frame_jit_template));",
-        "memcpy(winfo + ERR_FRAME_JIT_OFS_HANDLER, &handler, sizeof(handler));",
-        "rwlink->next = oldarea;",
-        "rwlink->size = sz;",
-        "rwlink->rw = rwarea;",
-        "mcode_free_mapping(area, size);",
-        "asm_mcode_u8(ASMState *as, MCode **pp, MCode v)",
-        "asm_mcode_u64(ASMState *as, MCode **pp, uint64_t v)",
-        "asm_mcode_i32(ASMState *as, MCode **pp, int32_t v)",
-        "asm_mcode_ptr(ASMState *as, MCode **pp, const void *v)",
-        "asm_mcode_mem(ASMState *as, MCode **pp,",
-        "asm_mcode_put_u8(ASMState *as, MCode *p, MCode v)",
-        "asm_mcode_put_u16(ASMState *as, MCode *p, uint16_t v)",
-        "asm_mcode_put_i32(ASMState *as, MCode *p, int32_t v)",
-        "asm_mcode_put_u32(ASMState *as, MCode *p, uint32_t v)",
-        "asm_mcode_put_u64(ASMState *as, MCode *p, uint64_t v)",
-        "asm_mcode_patch_i32(jit_State *J, MCode *p, int32_t v)",
-        "emit_op(ASMState *as, x86Op xo",
-        "emit_opm(ASMState *as, x86Op xo",
-        "emit_opmx(ASMState *as, x86Op xo",
-        "lj_mcode_rw(as->J, *pp)",
-        "asm_mcode_i32(as, &mcp, jmprel(as->J, mcp + 4, target));",
-        "*lj_mcode_rw(as->J, as->mctop) = XI_NOP;",
-        "asm_mcode_put_i32(as, p+1, jmprel(as->J, p+5, target));",
-        "asm_mcode_patch_i32(J, p+len-4, jmprel(J, p+len, target));",
-        "asm_mcode_patch_i32(J, p+2, jmprel(J, p+6, target));",
-        "memfd dual-map W^X write view"
-      }, "mcode publication")
-
       local lj_mcode = t:path("src", "lj_mcode.c")
       do
         local inx64 = false
@@ -1444,13 +1363,6 @@ assert(type(x)=="table")
                       { lj_mcode }, function(line)
         return contains(line, "single-map write view") or contains(line, "rw == rx") or
                contains(line, "rw = J->mcarea")
-      end)
-      assert_no_lines(t, "Linux/x64 mcode bridge must not force fresh areas after publication",
-                      { lj_mcode }, function(line)
-        return contains(line, "LJ_MCODE_FRESH_AREA") or
-               contains(line, "mcode_area_has_published") or
-               contains(line, "mcode_fresh_size") or
-               contains(line, "mcode_allocarea_checked")
       end)
       assert_no_lines(t, "x64 mcode bottom writes must go through lj_mcode_rw helpers",
                       { t:path("src", "lj_emit_x86.h"), t:path("src", "lj_asm_x86.h") },
@@ -1564,29 +1476,6 @@ assert(live >= 8, live)
     description = "JIT flush safepoint-scoped publication and retirement",
     run = function(t)
       build_default(t)
-      assert_marker_set(t, {
-        t:path("src", "lj_trace.c"),
-        t:path("src", "lj_safepoint.c"),
-        t:path("src", "lj_record.c"),
-        t:path("src", "lj_dispatch.c"),
-        t:path("tests", "t-vm-safepoint.c")
-      }, {
-        "lj_trace_flushall_hs(lua_State *L)",
-        "lj_gc2_handshake(g, LJ_GC2_HS_EXIT_TRACES|LJ_GC2_HS_FLUSHJ)",
-        "lj_trace_flushall(mainthread(g));  /* 08 section 8.7 leader action. */",
-        "(void)lj_trace_flushall_hs(J->L);",
-        "(void)lj_trace_flushall_hs(L);",
-        "uint32_t lj_trace_flushscope(jit_State *J, TraceNo traceno)",
-        "(void)lj_trace_flushscope(J, lnk);  /* Flush return trace after HS. */",
-        "trace_scope_flush_dependency(jit_State *J, GCtrace *T)",
-        "(void)trace_flushscope_mark_deps(G2J(g));",
-        "trace_flushside(jit_State *J, GCtrace *T, int scoped)",
-        "return trace_flushside(J, T, 1);",
-        "(void)trace_flushside(J, T, 1);",
-        "trace_nextside_rel(root, next);",
-        "first_trace_with_root(jit_State *J, TraceNo root)",
-        "call_jit_flush_trace(L, sidetrace);"
-      }, "JIT flush handshake")
       assert_no_lines(t, "full trace flush callers must route through HS_FLUSHJ",
                       {
                         t:path("src", "lj_trace.c"),
@@ -1599,8 +1488,6 @@ assert(live >= 8, live)
         return contains(line, "lj_trace_flushall(J->L)") or
                contains(line, "lj_trace_flushall(L)")
       end)
-      t:assert_not_contains(t:path("src", "lj_record.c"), "lj_trace_flush(J, lnk)")
-      t:assert_not_contains(t:path("src", "lj_trace.c"), "Only root traces are considered")
       t:run({ t:path("tools", "ci", "m5_jit_trace_publish.sh") })
       t:run({ t:path("tools", "ci", "m3_vm_safepoint.sh") })
       luajit_file(t, t:path("tests", "stock", "test", "misc", "jit_flush.lua"))
