@@ -24,13 +24,39 @@ for needle in \
   'lj_tab_nextnode_rel(n, freenode)' \
   'tab_storekeyrel(L, &freenode->key, key)' \
   'return &freenode->val' \
-  'lj_tab_nextnode_acq(n)'
+  'lj_tab_nextnode_acq(n)' \
+  'LJ_TAB_MAXCHAIN' \
+  'tab_rehash_chain_overflow' \
+  'chainlen >= LJ_TAB_MAXCHAIN'
 do
   if ! rg -F -q "$needle" "$ROOT/src"; then
     echo "guardrail: missing table chain ordering marker: $needle" >&2
     exit 1
   fi
 done
+
+for needle in \
+  'exercise_chainlen_resize(L)' \
+  'chain_len(&node[0]) == 8' \
+  'lj_tab_node_hmask_acq(node) > oldhmask'
+do
+  if ! rg -F -q "$needle" "$ROOT/tests/t-tab-chain-order.c"; then
+    echo "guardrail: missing table chain-length test marker: $needle" >&2
+    exit 1
+  fi
+done
+
+if ! awk '
+  /TValue \*lj_tab_newkey\(lua_State \*L,/ { innewkey = 1 }
+  innewkey && /tab_findkey_or_keylock\(n, key, &locked, &chainlen\)/ { find++ }
+  innewkey && /chainlen >= LJ_TAB_MAXCHAIN/ { threshold++ }
+  innewkey && /tab_rehash_chain_overflow\(L, t, key, hmask\)/ { grow++ }
+  innewkey && /^}/ { innewkey = 0 }
+  END { exit find >= 2 && threshold >= 2 && grow >= 2 ? 0 : 1 }
+' "$ROOT/src/lj_tab.c"; then
+  echo "guardrail: new-key collision insertion must grow on max chain length" >&2
+  exit 1
+fi
 
 if rg -n 'nextnode\(|setmref\([^,]+->next|setmrefr\([^,]+->next|noderef\([^[:cntrl:]]*->next' \
     "$ROOT/src/lj_tab.c" "$ROOT/src/lj_serialize.c" | rg -v 'next_gen'; then

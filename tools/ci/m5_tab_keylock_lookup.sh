@@ -23,8 +23,8 @@ for needle in \
   'lj_tab_node_free_release(Node *node)' \
   'lj_tab_node_freecount_acq(const Node *node)' \
   'tab_claim_free_node_scan(Node *nodebase, MSize hmask,' \
-  'tab_findkey_or_keylock(Node *anchor, cTValue *key, int *locked)' \
-  'tab_findkey_or_keylock(n, key, &locked)' \
+  'tab_findkey_or_keylock(Node *anchor, cTValue *key, int *locked,' \
+  'tab_findkey_or_keylock(n, key, &locked, &chainlen)' \
   'lj_tab_node_free_reserve(nodebase)' \
   'tab_try_claim_nil_key(&n->key)' \
   'tab_claim_free_node_scan(nodebase, hmask, n, &locked)' \

@@ -15,6 +15,8 @@
 #include "lj_err.h"
 #include "lj_tab.h"
 
+#define LJ_TAB_MAXCHAIN		8u
+
 /* -- Object hashing ------------------------------------------------------ */
 
 /* Hash an arbitrary key against a previously acquired hash vector snapshot. */
@@ -193,20 +195,27 @@ static LJ_AINLINE int tab_array_slot_absent_acq(GCtab *t, TValue **arrayp,
   return tab_val_absent(&val);
 }
 
-static TValue *tab_findkey_or_keylock(Node *anchor, cTValue *key, int *locked)
+static TValue *tab_findkey_or_keylock(Node *anchor, cTValue *key, int *locked,
+				      MSize *chainlen)
 {
   Node *n;
+  MSize len = 0;
   *locked = 0;
   for (n = anchor; n != NULL; n = lj_tab_nextnode_acq(n)) {
     TValue nk;
+    len++;
     lj_tv_load_acq(&nk, &n->key);
-    if (lj_obj_equal(&nk, key))
+    if (lj_obj_equal(&nk, key)) {
+      *chainlen = len;
       return &n->val;
+    }
     if (tab_key_islocked(&nk)) {
+      *chainlen = len;
       *locked = 1;
       return NULL;
     }
   }
+  *chainlen = len;
   return NULL;
 }
 
@@ -918,6 +927,19 @@ static void rehashtab(lua_State *L, GCtab *t, cTValue *ek)
   lj_tab_resize(L, t, asize, hsize2hbits(total));
 }
 
+static void tab_rehash_chain_overflow(lua_State *L, GCtab *t, cTValue *ek,
+				      MSize oldhmask)
+{
+  uint32_t growhbits = oldhmask > 0 ? lj_fls((uint32_t)oldhmask) + 2u : 1u;
+  MSize hmask;
+  TValue *array;
+  rehashtab(L, t, ek);
+  (void)lj_tab_node_snapshot_acq(t, &hmask);
+  if (hmask <= oldhmask)
+    lj_tab_resize(L, t, (uint32_t)lj_tab_array_snapshot_acq(t, &array),
+		  growhbits);
+}
+
 void lj_tab_reasize(lua_State *L, GCtab *t, uint32_t nasize)
 {
   MSize hmask;
@@ -1126,12 +1148,17 @@ retry_insert:
   n = hashkey_node(nodebase, hmask, key);
   {
     int locked;
-    TValue *slot = tab_findkey_or_keylock(n, key, &locked);
+    MSize chainlen;
+    TValue *slot = tab_findkey_or_keylock(n, key, &locked, &chainlen);
     if (slot)
       return slot;
     if (locked) {
       la_cpu_pause();
       goto retry_insert;
+    }
+    if (chainlen >= LJ_TAB_MAXCHAIN) {
+      tab_rehash_chain_overflow(L, t, key, hmask);
+      return lj_tab_set(L, t, key);
     }
   }
   {
@@ -1184,7 +1211,8 @@ retry_insert:
       return lj_tab_set(L, t, key);
     }
     {
-      TValue *slot = tab_findkey_or_keylock(n, key, &locked);
+      MSize chainlen;
+      TValue *slot = tab_findkey_or_keylock(n, key, &locked, &chainlen);
       if (slot) {
 	tab_release_claimed_free(nodebase, freenode);
 	return slot;
@@ -1193,6 +1221,11 @@ retry_insert:
 	tab_release_claimed_free(nodebase, freenode);
 	la_cpu_pause();
 	goto retry_insert;
+      }
+      if (chainlen >= LJ_TAB_MAXCHAIN) {
+	tab_release_claimed_free(nodebase, freenode);
+	tab_rehash_chain_overflow(L, t, key, hmask);
+	return lj_tab_set(L, t, key);
       }
     }
     lj_assertL(freenode != &G(L)->nilnode, "store to fallback hash");

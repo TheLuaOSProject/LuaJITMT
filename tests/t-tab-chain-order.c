@@ -40,6 +40,46 @@ static void assert_tabnum(GCtab *t, GCstr *s, int32_t v)
   assert((int32_t)numV(tv) == v);
 }
 
+static MSize chain_len(Node *n)
+{
+  MSize len = 0;
+  for (; n != NULL; n = lj_tab_nextnode_acq(n))
+    len++;
+  return len;
+}
+
+static void exercise_chainlen_resize(lua_State *L)
+{
+  GCtab *t;
+  GCstr *keys[9];
+  Node *node;
+  MSize oldhmask;
+  uint32_t seq = 0;
+  int i;
+
+  lua_settop(L, 0);
+  lua_createtable(L, 0, 32);
+  t = tabV(L->top-1);
+  assert(t->hmask == 31);
+
+  for (i = 0; i < 9; i++)
+    keys[i] = find_sid_bucket(L, t->hmask, 0, &seq);
+
+  for (i = 0; i < 8; i++)
+    setstrint(L, t, keys[i], 100 + i);
+
+  node = lj_tab_node_acq(t);
+  oldhmask = lj_tab_node_hmask_acq(node);
+  assert(oldhmask == 31);
+  assert(chain_len(&node[0]) == 8);
+
+  setstrint(L, t, keys[8], 108);
+  node = lj_tab_node_acq(t);
+  assert(lj_tab_node_hmask_acq(node) > oldhmask);
+  for (i = 0; i < 9; i++)
+    assert_tabnum(t, keys[i], 100 + i);
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -79,6 +119,8 @@ int main(void)
   assert_tabnum(t, anchor0, 11);
   assert_tabnum(t, displaced, 22);
   assert_tabnum(t, anchor_main, 77);
+
+  exercise_chainlen_resize(L);
 
   lua_close(L);
   printf("t-tab-chain-order OK: stable nodes and release-published links\n");

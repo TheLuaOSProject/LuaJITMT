@@ -240,8 +240,10 @@ tombstone anchor keys. Collision insertion uses a bounded linear CAS scan
 instead of mutating the legacy `freetop` cursor in `lj_tab_newkey()`.
 `TabNodeHdr` now packs an atomic free-node counter into the low bits of its
 state word, and shared `lj_tab_newkey()` plus FINREG insertion reserve/release
-that counter around anchor/free-node claims. Cooperative resize/helping is
-still pending. The
+that counter around anchor/free-node claims. Anchored collision insertion also
+triggers a hash rebuild/grow when the observed chain has reached
+`LJ_TAB_MAXCHAIN`, so the bridge now covers the plan's freecount-empty and
+chain-too-long resize triggers. Cooperative resize/helping is still pending. The
 shared C array snapshot helper now retries when a selected separated array
 generation is marked
 `TABARRAY_FLAG_RETIRING`. Shared C hash readers that only need a node/mask pair
