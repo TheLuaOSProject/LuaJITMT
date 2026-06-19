@@ -85,6 +85,11 @@ do
   fi
 done
 
+if rg -F -q -- '->vm_gc2_barriertab:' "$ROOT/src/vm_x64.dasc"; then
+  echo "guardrail: dead x64 VM table-barrier label must stay retired" >&2
+  exit 1
+fi
+
 for reject in \
   'cmp aword [RC], LJ_TNIL' \
   'cmp aword [TMPR], LJ_TNIL' \

@@ -225,5 +225,8 @@ the legacy black-table repair. The x64 `TSETV`, `TSETB`, `TSETR`, and `TSETM`
 fast array/range stores now publish slots first and route post-store checks
 through VM helpers that combine parent-aware GC2 barriers with legacy
 incremental black-table repair. The broader 7.4 replacement remains open for the
-remaining `USETx`/`CSET` barrier surfaces and final cross-VM `wbarrier_tv` macro
-cleanup.
+final cross-VM `wbarrier_tv` macro cleanup; x64 closed `USETx`/`CSET` stores
+already release-copy through `lj_func_storeuv_*_pub()` helpers, and raw/open
+cell stores remain stack-local writes. The old x64 `vm_gc2_barriertab` helper
+label has no remaining VM branch users and is retired; the JIT C-call
+`lj_gc2_barrier_tab_g` path remains separate.
