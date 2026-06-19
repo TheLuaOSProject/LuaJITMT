@@ -11,6 +11,7 @@
 #include "lualib.h"
 
 #include "lj_obj.h"
+#include "lj_atomic.h"
 #include "lj_gc.h"
 #include "lj_err.h"
 #include "lj_debug.h"
@@ -548,6 +549,18 @@ LJLIB_CF(jit_opt_start)
 #define KEY_PROFILE_THREAD	(U64x(81000000,00000000)|'t')
 #define KEY_PROFILE_FUNC	(U64x(81000000,00000000)|'f')
 
+static TValue *jit_profile_registry_store(lua_State *L, GCtab *registry,
+					  cTValue *key, cTValue *tv)
+{
+  TValue *dst;
+  for (;;) {
+    dst = lj_tab_set(L, registry, key);
+    if (lj_tab_trystoretv_cas(L, dst, tv) == LJ_TAB_STORE_CAS_OK)
+      return dst;
+    la_cpu_pause();  /* jit.profile registry saw FORWARD after lookup. */
+  }
+}
+
 static void jit_profile_callback(lua_State *L2, lua_State *L, int samples,
 				 int vmstate)
 {
@@ -586,11 +599,11 @@ LJLIB_CF(jit_profile_start)
   /* Anchor thread and function in registry. */
   key.u64 = KEY_PROFILE_THREAD;
   setthreadV(L, &tv, L2);
-  copyTVrel(L, lj_tab_set(L, registry, &key), &tv);
+  jit_profile_registry_store(L, registry, &key, &tv);
   lj_gc2_barrier_weak_write(L, registry, &key, &tv);
   key.u64 = KEY_PROFILE_FUNC;
   setfuncV(L, &tv, func);
-  copyTVrel(L, lj_tab_set(L, registry, &key), &tv);
+  jit_profile_registry_store(L, registry, &key, &tv);
   lj_gc2_barrier_weak_write(L, registry, &key, &tv);
   lj_gc_pubtab(L, registry);
   luaJIT_profile_start(L, mode ? strdata(mode) : "",
@@ -606,9 +619,9 @@ LJLIB_CF(jit_profile_stop)
   luaJIT_profile_stop(L);
   registry = tabV(registry(L));
   key.u64 = KEY_PROFILE_THREAD;
-  lj_tab_storenil(L, lj_tab_set(L, registry, &key));
+  jit_profile_registry_store(L, registry, &key, niltv(L));
   key.u64 = KEY_PROFILE_FUNC;
-  lj_tab_storenil(L, lj_tab_set(L, registry, &key));
+  jit_profile_registry_store(L, registry, &key, niltv(L));
   lj_gc_pubtab(L, registry);
   return 0;
 }

@@ -51,8 +51,8 @@ for needle in \
   'lj_tab_storenil(J->L, &array[i])' \
   'copyTVrel(L, o, base+2)' \
   'slot = lj_tab_storefunc(L, lj_tab_setstr(L, tab, name), fn)' \
-  'lj_tab_storenil(L, lj_tab_set(L, registry, &key))' \
-  'copyTVrel(L, lj_tab_set(L, registry, &key), &tv)' \
+  'jit_profile_registry_store(L, registry, &key, &tv)' \
+  'jit_profile_registry_store(L, registry, &key, niltv(L))' \
   'lj_tab_storenilraw(&array[i])' \
   'lj_tab_storenilraw(&n->val)' \
   'lj_cdata_fin_storenil(L, tv)' \
