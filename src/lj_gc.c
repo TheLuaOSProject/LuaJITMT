@@ -932,7 +932,7 @@ static void gc_traverse_func(global_State *g, GCfunc *fn)
 	       "function upvalues out of range");
     gc_markobj(g, funcproto(fn));
     for (i = 0; i < fn->l.nupvalues; i++)  /* Mark Lua function upvalues. */
-      gc_markobj(g, &gcref(fn->l.uvptr[i])->uv);
+      gc_markobj(g, func_uv_acq(&fn->l, i));
   } else {
     uint32_t i;
     for (i = 0; i < fn->c.nupvalues; i++) {  /* Mark C function upvalues. */

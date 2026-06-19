@@ -239,7 +239,7 @@ const char *lj_debug_uvnamev(cTValue *o, uint32_t idx, TValue **tvp, GCobj **op)
     if (isluafunc(fn)) {
       GCproto *pt = funcproto(fn);
       if (idx < pt->sizeuv) {
-	GCobj *uvo = gcref(fn->l.uvptr[idx]);
+	GCobj *uvo = func_uvptr_acq(&fn->l, idx);
 	*tvp = uvval(&uvo->uv);
 	*op = uvo;
 	return lj_debug_uvname(pt, idx);

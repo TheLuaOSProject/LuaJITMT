@@ -271,7 +271,7 @@ static void asm_fuseahuref(ASMState *as, IRRef ref, RegSet allow)
       if (irref_isk(ir->op1)) {
 	GCupval *uv = IR(ir->op1)->o == IR_KPTR ?
 		      (GCupval *)ir_kptr(IR(ir->op1)) :
-		      &gcref(ir_kfunc(IR(ir->op1))->l.uvptr[(ir->op2 >> 8)])->uv;
+		      func_uv_acq(&ir_kfunc(IR(ir->op1))->l, (ir->op2 >> 8));
 #if LJ_GC64
 	const void *tv = &uv->tv;
 	if (checki32((intptr_t)tv)) {
@@ -1534,7 +1534,7 @@ static void asm_uref(ASMState *as, IRIns *ir)
     emit_rmro(as, XO_LEA, dest|REX_GC64, uv, offsetof(GCupval, tv));
   } else if (irref_isk(ir->op1) && !guarded) {
     GCfunc *fn = ir_kfunc(IR(ir->op1));
-    MRef *v = &gcref(fn->l.uvptr[(ir->op2 >> 8)])->uv.v;
+    MRef *v = &func_uv_acq(&fn->l, (ir->op2 >> 8))->v;
     emit_rma(as, XO_MOV, dest|REX_GC64, v);
   } else {
     Reg uv = ra_scratch(as, RSET_GPR);
@@ -1552,7 +1552,7 @@ static void asm_uref(ASMState *as, IRIns *ir)
       emit_loada(as, uv, uvp);
     } else if (irref_isk(ir->op1)) {
       GCfunc *fn = ir_kfunc(IR(ir->op1));
-      GCobj *o = gcref(fn->l.uvptr[(ir->op2 >> 8)]);
+      GCobj *o = func_uvptr_acq(&fn->l, (ir->op2 >> 8));
       emit_loada(as, uv, o);
     } else {
       emit_rmro(as, XO_MOV, uv|REX_GC64, ra_alloc1(as, ir->op1, RSET_GPR),

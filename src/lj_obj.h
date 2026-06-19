@@ -1508,6 +1508,16 @@ static LJ_AINLINE void lj_obj_setgcwnull(GCobj *o)
   setgcrefnull(o->gch.nextgc);
 }
 
+static LJ_AINLINE GCobj *func_uvptr_acq(const GCfuncL *fn, uint32_t idx)
+{
+  return gcref_acq(fn->uvptr[idx]);
+}
+
+static LJ_AINLINE GCupval *func_uv_acq(const GCfuncL *fn, uint32_t idx)
+{
+  return &func_uvptr_acq(fn, idx)->uv;
+}
+
 static LJ_AINLINE uint8_t lj_obj_gcflags(const GCobj *o)
 {
   return o->gch.marked;

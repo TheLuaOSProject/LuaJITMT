@@ -98,7 +98,9 @@ done
 for needle in \
   'lj_obj_setgcwrel(GCobj *o, const GCobj *next)' \
   'lj_uv_next_acq(const GCupval *uv)' \
-  'lj_uv_setnext_rel(GCupval *uv, GCupval *next)'
+  'lj_uv_setnext_rel(GCupval *uv, GCupval *next)' \
+  'func_uvptr_acq(const GCfuncL *fn, uint32_t idx)' \
+  'func_uv_acq(const GCfuncL *fn, uint32_t idx)'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_obj.h"; then
     echo "guardrail: missing open-upvalue list publication helper: $needle" >&2
@@ -115,11 +117,17 @@ for needle in \
   'gcref_acq(th->openupval)' \
   'gcref_acq(J->L->openupval)' \
   'lj_obj_gcw_acq(up)' \
-  'lj_obj_gcw_acq(uv)'
+  'lj_obj_gcw_acq(uv)' \
+  'func_uvptr_acq(&fn2->l, (uint32_t)n2)' \
+  'GCobj *uv = gcref_acq(*p[1]);' \
+  'func_uv_acq(&J->fn->l, uv)' \
+  'func_uvptr_acq(&fn->l, (ir->op2 >> 8))'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_func.c" "$ROOT/src/lj_gc.c" \
       "$ROOT/src/lj_gc2.c" "$ROOT/src/lj_state.c" \
-      "$ROOT/src/lib_threading.c" "$ROOT/src/lj_snap.c"; then
+      "$ROOT/src/lib_threading.c" "$ROOT/src/lj_snap.c" \
+      "$ROOT/src/lj_api.c" "$ROOT/src/lib_debug.c" \
+      "$ROOT/src/lj_record.c" "$ROOT/src/lj_asm_x86.h"; then
     echo "guardrail: missing open-upvalue acquire/release marker: $needle" >&2
     exit 1
   fi
@@ -130,6 +138,14 @@ if rg -n 'gcref\([^)]*openupval|gcnext\((uv|up)\)|uvnext\(|uvprev\(|setgcref\(\*
     "$ROOT/src/lj_state.c" "$ROOT/src/lib_threading.c" \
     "$ROOT/src/lj_snap.c"; then
   echo "guardrail: open-upvalue lists must use acquire/release helpers" >&2
+  exit 1
+fi
+
+if rg -n 'gcref\([^)]*uvptr|&gcref\([^)]*uvptr|gcref\(\*p\[1\]\)' \
+    "$ROOT/src/lj_api.c" "$ROOT/src/lib_debug.c" "$ROOT/src/lj_debug.c" \
+    "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc2.c" "$ROOT/src/lj_record.c" \
+    "$ROOT/src/lj_opt_fold.c" "$ROOT/src/lj_asm_x86.h"; then
+  echo "guardrail: Lua closure uvptr consumers must acquire-load published refs" >&2
   exit 1
 fi
 

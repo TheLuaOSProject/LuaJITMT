@@ -994,7 +994,7 @@ LUA_API void *lua_upvalueid(lua_State *L, int idx, int n)
   GCfunc *fn = funcV(index2adr(L, idx));
   n--;
   lj_checkapi((uint32_t)n < fn->l.nupvalues, "bad upvalue %d", n);
-  return isluafunc(fn) ? (void *)gcref(fn->l.uvptr[n]) :
+  return isluafunc(fn) ? (void *)func_uvptr_acq(&fn->l, (uint32_t)n) :
 			 (void *)&fn->c.upvalue[n];
 }
 
@@ -1008,7 +1008,7 @@ LUA_API void lua_upvaluejoin(lua_State *L, int idx1, int n1, int idx2, int n2)
   lj_checkapi((uint32_t)n1 < fn1->l.nupvalues, "bad upvalue %d", n1+1);
   lj_checkapi((uint32_t)n2 < fn2->l.nupvalues, "bad upvalue %d", n2+1);
   {
-    GCobj *uv = gcref(fn2->l.uvptr[n2]);
+    GCobj *uv = func_uvptr_acq(&fn2->l, (uint32_t)n2);
     setgcrefrel(fn1->l.uvptr[n1], uv);
     lj_gc_pubobjobj(L, fn1, uv);
   }

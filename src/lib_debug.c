@@ -277,7 +277,8 @@ LJLIB_CF(debug_upvalueid)
   int32_t n = lj_lib_checkint(L, 2) - 1;
   if ((uint32_t)n >= fn->l.nupvalues)
     lj_err_arg(L, 2, LJ_ERR_IDXRNG);
-  lua_pushlightuserdata(L, isluafunc(fn) ? (void *)gcref(fn->l.uvptr[n]) :
+  lua_pushlightuserdata(L, isluafunc(fn) ?
+					   (void *)func_uvptr_acq(&fn->l, (uint32_t)n) :
 					   (void *)&fn->c.upvalue[n]);
   return 1;
 }
@@ -298,7 +299,7 @@ LJLIB_CF(debug_upvaluejoin)
     p[i] = &fn[i]->l.uvptr[n];
   }
   {
-    GCobj *uv = gcref(*p[1]);
+    GCobj *uv = gcref_acq(*p[1]);
     setgcrefrel(*p[0], uv);
     lj_gc_pubobjobj(L, fn[0], uv);
   }

@@ -3279,7 +3279,7 @@ static void gc2_traverse_func(global_State *g, GCfunc *fn)
 	       "function upvalues out of range");
     gc2_markobj_worker(g, obj2gco(funcproto(fn)));
     for (i = 0; i < fn->l.nupvalues; i++)
-      gc2_markobj_worker(g, obj2gco(&gcref(fn->l.uvptr[i])->uv));
+      gc2_markobj_worker(g, obj2gco(func_uv_acq(&fn->l, i)));
   } else {
     uint32_t i;
     for (i = 0; i < fn->c.nupvalues; i++) {
