@@ -564,6 +564,11 @@ GCtab *lj_tab_new(lua_State *L, uint32_t asize, uint32_t hbits)
   return newtab(L, asize, hbits);
 }
 
+GCtab * LJ_FASTCALL lj_tab_new0(lua_State *L)
+{
+  return newtab(L, 0, 0);
+}
+
 /* The API of this function conforms to lua_createtable(). */
 GCtab *lj_tab_new_ah(lua_State *L, uint32_t a, uint32_t h)
 {

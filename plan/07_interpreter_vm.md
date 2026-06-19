@@ -245,5 +245,7 @@ half of this staged entry point until §7.5 inline allocation replaces it.
 initializes the empty/colocated table shape, nil-clears new array slots, then
 CAS-publishes the table root with `lj_gc_linkobj()`. This removes the
 publish-before-body-init blocker for future `BC_TNEW` inline allocation; the
-remaining x64 fast path still needs inline legacy color setup, root-list
-publication, and GC2 allocation accounting before it can bypass the C helper.
+empty-table x64 `BC_TNEW` case now branches to the one-argument
+`lj_tab_new0()` helper. The remaining x64 fast path still needs inline legacy
+color setup, root-list publication, and GC2 allocation accounting before it can
+bypass the C helper entirely.

@@ -4039,6 +4039,12 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  cmp RA, GL:ITYPE->gc2.hard_bytes
     |  ja >5
     |1:
+    |  test RDd, RDd
+    |  jnz >6
+    |  mov L:CARG1, L:RB
+    |  call extern lj_tab_new0  // (lua_State *L)
+    |  jmp >4
+    |6:
     |  mov CARG3d, RDd
     |  and RDd, 0x7ff
     |  shr CARG3d, 11
@@ -4049,6 +4055,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov CARG2d, RDd
     |  call extern lj_tab_new  // (lua_State *L, int32_t asize, uint32_t hbits)
     |  // Table * returned in eax (RC).
+    |4:
     |  mov BASE, L:RB->base
     |  movzx RAd, PC_RA
     |  settp TAB:RC, LJ_TTAB
