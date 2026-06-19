@@ -95,6 +95,12 @@ Lua test-suite migration notes:
   - `tools/ci/m5_x64_tget_array_header.sh` -> `m5_x64_tget_array_header`
   - `tools/ci/m5_x64_tgets_node_order.sh` -> `m5_x64_tgets_node_order`
   - `tools/ci/m5_x64_uv_publish.sh` -> `m5_x64_uv_publish`
+- Eighteenth migrated scripts:
+  - `tools/ci/m9_gc_stats.sh` -> `m9_gc_stats`
+  - `tools/ci/m9_bench_smoke.sh` -> `m9_bench_smoke`
+  - `tools/ci/m9_bench_regression.sh` -> `m9_bench_regression`
+  - `tools/ci/m10_generational.sh` -> `m10_generational`
+  - `tools/ci/m9_m10_gc.sh` -> `m9_m10_gc`
 - This first batch covers the main shapes the full migration needs:
   standalone C fixtures linked against selected runtime files, Lua tests under
   the built VM, C fixtures linked against `libluajit.a`, and source-order guard
@@ -143,6 +149,9 @@ Lua test-suite migration notes:
   paranoia aggregate still preserves the existing stock-test assertion failure.
 - The seventeenth batch migrates the focused x64 snapshot/publication guards,
   leaving the larger TSET nil-snapshot guard for a dedicated pass.
+- The eighteenth batch migrates the benchmark/GC telemetry wrappers and the
+  M9/M10 aggregate. The focused benchmark-regression wrapper remains the
+  authoritative expensive CSV generation check.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.

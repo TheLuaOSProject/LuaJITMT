@@ -7,7 +7,8 @@ local suites = {
   require("m5_guards"),
   require("m5_tables"),
   require("m5_runtime"),
-  require("m5_x64")
+  require("m5_x64"),
+  require("m9_m10_gc")
 }
 
 local tests = {}
