@@ -232,5 +232,9 @@ label has no remaining VM branch users and is retired; the JIT C-call
 `lj_gc2_barrier_tab_g` path remains separate. The interpreter allocation slow
 path now also runs the GC2 hard-threshold assist from `lj_gc_step_fixtop()` once
 the current legacy VM threshold check branches there, with
-`GC2State.interp_hard_checks` telemetry. The direct x64 `gc.total`/`gc.threshold`
-branch remains a staged entry point until §7.5 inline allocation replaces it.
+`GC2State.interp_hard_checks` telemetry. `lj_gc_step_fixtop()` now also splits
+GC2-hard and legacy-threshold work, and x64 `BC_TNEW`/`BC_TDUP` branch to that
+slow path when `GC2State.alloc_since_trigger` exceeds `hard_bytes`, even with
+the legacy threshold parked at `LJ_MAX_MEM`. The direct x64
+`gc.total`/`gc.threshold` branch remains as the legacy half of this staged entry
+point until §7.5 inline allocation replaces it.

@@ -4029,6 +4029,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  cmp RA, GL:ITYPE->gc.threshold
     |  mov SAVE_PC, PC
     |  jae >5
+    |  mov RA, GL:ITYPE->gc2.alloc_since_trigger
+    |  cmp RA, GL:ITYPE->gc2.hard_bytes
+    |  ja >5
     |1:
     |  mov CARG3d, RDd
     |  and RDd, 0x7ff
@@ -4063,6 +4066,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  cmp RA, GL:ITYPE->gc.threshold
     |  mov L:RB->base, BASE
     |  jae >3
+    |  mov RA, GL:ITYPE->gc2.alloc_since_trigger
+    |  cmp RA, GL:ITYPE->gc2.hard_bytes
+    |  ja >3
     |2:
     |  mov TAB:CARG2, [KBASE+RD*8]	// Caveat: CARG2 == BASE
     |  mov L:CARG1, L:RB		// Caveat: CARG1 == RA

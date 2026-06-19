@@ -2096,13 +2096,16 @@ int LJ_FASTCALL lj_gc_step(lua_State *L)
 void LJ_FASTCALL lj_gc_step_fixtop(lua_State *L)
 {
   global_State *g = G(L);
+  int legacy_step;
   if (curr_funcisL(L)) L->top = curr_topL(L);
+  legacy_step = g->gc.total >= lj_gc_threshold_load(g);
   if (la_load64_acq(&g->gc2.alloc_since_trigger) >
       la_load64_acq(&g->gc2.hard_bytes)) {
     la_add64_rlx(&g->gc2.interp_hard_checks, 1);
     lj_gc2_assist(g, L2TG(L));  /* 05 section 5.11 interpreter assist bridge. */
   }
-  lj_gc_step(L);
+  if (legacy_step)
+    lj_gc_step(L);
 }
 
 #if LJ_HASJIT

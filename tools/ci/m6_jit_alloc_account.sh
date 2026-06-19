@@ -45,9 +45,11 @@ for needle in \
   'la_store64_rel(&g->gc2.hard_bytes' \
   'la_cas32(&g->gc2.assist_active' \
   'tg->gc_assist = 1' \
+  'legacy_step = g->gc.total >= lj_gc_threshold_load(g)' \
   'la_add64_rlx(&g->gc2.assist_runs' \
   'la_add64_rlx(&g->gc2.interp_hard_checks' \
   'lj_gc2_assist(g, L2TG(L));  /* 05 section 5.11 interpreter assist bridge. */' \
+  'if (legacy_step)' \
   'la_add64_rlx(&g->gc2.assist_grey_drained' \
   'la_add64_rlx(&g->gc2.assist_ssb_converted' \
   'la_add64_rlx(&g->gc2.assist_weak_drained' \
@@ -73,11 +75,18 @@ do
   if ! rg -F -q "$needle" "$ROOT/src/lj_atomic.h" "$ROOT/src/lj_obj.h" \
       "$ROOT/src/lj_gc2.h" "$ROOT/src/lj_gc2.c" "$ROOT/src/lj_gc.c" \
       "$ROOT/src/lj_safepoint.c" "$ROOT/src/lj_tg.c" "$ROOT/src/lj_tg.h" \
-      "$ROOT/src/lj_api.c"; then
+      "$ROOT/src/lj_api.c" "$ROOT/src/vm_x64.dasc"; then
     echo "guardrail: missing allocator accounting marker: $needle" >&2
     exit 1
   fi
 done
+
+vm_hard_alloc_checks=$(grep -F -c 'GL:ITYPE->gc2.alloc_since_trigger' \
+  "$ROOT/src/vm_x64.dasc")
+if [ "$vm_hard_alloc_checks" -lt 2 ]; then
+  echo "guardrail: x64 TNEW/TDUP must check GC2 hard allocation threshold" >&2
+  exit 1
+fi
 
 if ! rg -F -q 'm6_jit_alloc_account.sh' "$ROOT/tools/ci/m6_jit.sh"; then
   echo "guardrail: m6_jit_alloc_account.sh is not wired into the M6 aggregate" >&2
