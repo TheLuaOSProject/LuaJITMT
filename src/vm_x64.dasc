@@ -4752,13 +4752,22 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |1:
     |  ins_next
     |5:  // Despecialize bytecode if any of the checks fail.
-    |  mov PC_OP, BC_JMP
+    |  mov RB, BASE			// Save BASE.
+    |  lea CARG1, [PC-4]
+    |  mov CARG2d, BC_JMP
+    |  call extern lj_bc_publish_op_vm	// (uint32_t *pc, BCOp op)
+    |  mov BASE, RB			// Restore BASE.
+    |  movzx RDd, PC_RD
     |  branchPC RD
     |.if JIT
     |  cmp byte [PC], BC_ITERN
     |  jne >6
     |.endif
-    |  mov byte [PC], BC_ITERC
+    |  mov RB, BASE			// Save BASE.
+    |  mov CARG1, PC
+    |  mov CARG2d, BC_ITERC
+    |  call extern lj_bc_publish_op_vm	// (uint32_t *pc, BCOp op)
+    |  mov BASE, RB			// Restore BASE.
     |  jmp <1
     |.if JIT
     |6:  // Unpatch JLOOP.
@@ -4768,7 +4777,11 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov TRACE:RA, [RA+RC*8]
     |  mov eax, TRACE:RA->startins
     |  mov al, BC_ITERC
-    |  mov dword [PC], eax
+    |  mov RB, BASE			// Save BASE.
+    |  mov CARG1, PC
+    |  mov CARG2d, eax
+    |  call extern lj_bc_publish_vm	// (uint32_t *pc, uint32_t ins)
+    |  mov BASE, RB			// Restore BASE.
     |  jmp <1
     |.endif
     break;

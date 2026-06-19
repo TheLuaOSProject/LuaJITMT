@@ -38,6 +38,16 @@
 /* Bump GG_NUM_ASMFF in lj_dispatch.h as needed. Ugly. */
 LJ_STATIC_ASSERT(GG_NUM_ASMFF == FF_NUM_ASMFUNC);
 
+void LJ_FASTCALL lj_bc_publish_vm(uint32_t *pc, uint32_t ins)
+{
+  bc_publish(pc, ins);
+}
+
+void LJ_FASTCALL lj_bc_publish_op_vm(uint32_t *pc, BCOp op)
+{
+  bc_publish_op(pc, op);
+}
+
 /* -- Dispatch table management ------------------------------------------- */
 
 #if LJ_TARGET_MIPS

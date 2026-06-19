@@ -95,10 +95,13 @@ done
 for needle in \
   'bc_publish(const uint32_t *pc, uint32_t ins)' \
   'la_store32_rel((uint32_t *)pc, ins)' \
+  'la_load32_acq((uint32_t *)pc)' \
   'bc_publish_op(const uint32_t *pc, BCOp op)' \
-  'bc_publish_d(const uint32_t *pc, uint32_t d)'
+  'bc_publish_d(const uint32_t *pc, uint32_t d)' \
+  'lj_bc_publish_vm(uint32_t *pc, uint32_t ins)' \
+  'lj_bc_publish_op_vm(uint32_t *pc, BCOp op)'
 do
-  if ! rg -F -q "$needle" "$ROOT/src/lj_bc.h"; then
+  if ! rg -F -q "$needle" "$ROOT/src/lj_bc.h" "$ROOT/src/lj_dispatch.c"; then
     echo "guardrail: missing bytecode publication helper: $needle" >&2
     exit 1
   fi
@@ -250,6 +253,23 @@ if [ -n "$hits" ]; then
   echo "$hits" >&2
   exit 1
 fi
+
+hits=$(rg -n -- 'mov PC_OP,|mov (byte|dword) \[PC\]' "$ROOT/src/vm_x64.dasc" || true)
+if [ -n "$hits" ]; then
+  echo "guardrail: x64 live bytecode patches must use full-word publication helpers:" >&2
+  echo "$hits" >&2
+  exit 1
+fi
+
+for needle in \
+  'call extern lj_bc_publish_op_vm' \
+  'call extern lj_bc_publish_vm'
+do
+  if ! rg -F -q "$needle" "$ROOT/src/vm_x64.dasc"; then
+    echo "guardrail: missing x64 bytecode publication call: $needle" >&2
+    exit 1
+  fi
+done
 
 hits=$(rg -n -- 'lj_asm_patchexit\(J, parent' "$ROOT/src/lj_trace.c" || true)
 if [ -n "$hits" ]; then

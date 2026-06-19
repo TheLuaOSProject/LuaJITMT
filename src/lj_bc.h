@@ -244,17 +244,20 @@ static LJ_AINLINE void bc_publish(const uint32_t *pc, uint32_t ins)
 
 static LJ_AINLINE void bc_publish_op(const uint32_t *pc, BCOp op)
 {
-  uint32_t ins = *pc;
+  uint32_t ins = la_load32_acq((uint32_t *)pc);
   setbc_op(&ins, op);
   bc_publish(pc, ins);
 }
 
 static LJ_AINLINE void bc_publish_d(const uint32_t *pc, uint32_t d)
 {
-  uint32_t ins = *pc;
+  uint32_t ins = la_load32_acq((uint32_t *)pc);
   setbc_d(&ins, d);
   bc_publish(pc, ins);
 }
+
+LJ_FUNCA void LJ_FASTCALL lj_bc_publish_vm(uint32_t *pc, uint32_t ins);
+LJ_FUNCA void LJ_FASTCALL lj_bc_publish_op_vm(uint32_t *pc, BCOp op);
 
 /* This solves a circular dependency problem, change as needed. */
 #define FF_next_N	4
