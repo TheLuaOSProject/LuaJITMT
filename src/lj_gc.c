@@ -757,9 +757,9 @@ static int gc_unlink_udata_object(global_State *g, GCobj *target)
 {
   GCRef *p = lj_obj_gcwref(obj2gco(mainthread(g)));
   GCobj *o;
-  while ((o = gcref(*p)) != NULL) {
+  while ((o = gcref_acq(*p)) != NULL) {
     if (o == target) {
-      setgcrefr(*p, *lj_obj_gcwref(o));
+      setgcrefrrel(*p, *lj_obj_gcwref(o));
       return 1;
     }
     p = lj_obj_gcwref(o);
@@ -1641,9 +1641,9 @@ static int gc_unlink_root_object(global_State *g, GCobj *target)
 {
   GCRef *p = &g->gc.root;
   GCobj *o;
-  while ((o = gcref(*p)) != NULL) {
+  while ((o = gcref_acq(*p)) != NULL) {
     if (o == target) {
-      setgcrefr(*p, *lj_obj_gcwref(o));
+      setgcrefrrel(*p, *lj_obj_gcwref(o));
       return 1;  /* root unlink after ordered FINREG claim. */
     }
     p = lj_obj_gcwref(o);
