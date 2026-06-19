@@ -102,39 +102,63 @@ do
 done
 
 if ! awk '
+  /static void base_storestr_str\(lua_State \*L,/ { inhelper = 1; next }
+  inhelper && /lj_tab_storestr\(L, dst,/ { raw = 1 }
+  inhelper && /for \(;;\)/ { loop = 1 }
+  inhelper && /setstrV\(L, &tv, val\)/ { make = 1 }
+  inhelper && /lj_tab_setstr\(L, tab, key\)/ { resolve = 1 }
+  inhelper && /lj_tab_trystoretv_cas\(L, dst, &tv\) == LJ_TAB_STORE_CAS_OK/ { cas = 1 }
+  inhelper && /base string store saw FORWARD after lookup\./ { retry = 1 }
+  inhelper && /^}/ {
+    helper_ok = !raw && loop && make && resolve && cas && retry
+    inhelper = 0
+  }
   /static void newproxy_weaktable\(lua_State \*L\)/ { infn = 1; next }
   infn && /setgcrefmt\(t->metatable, obj2gco\(t\)\)/ { store = NR }
-  infn && /lj_tab_storestr\(L, lj_tab_setstr/ { mode = NR }
+  infn && /lj_tab_storestr\(L, lj_tab_setstr/ { rawmode = 1 }
+  infn && /base_storestr_str\(L, t, lj_str_newlit\(L, "__mode"\), lj_str_newlit\(L, "kv"\)\)/ { mode = NR }
   infn && /t->nomm =/ { nomm = NR }
   infn && /lj_gc_pubtab\(L, t\)/ { barrier = NR }
   infn && /^}/ {
-    ok = store && mode && nomm && barrier &&
+    ok = helper_ok && !rawmode && store && mode && nomm && barrier &&
 	 store < mode && mode < nomm && nomm < barrier
     exit ok ? 0 : 1
   }
   END { if (!ok) exit 1 }
 ' "$ROOT/src/lib_base.c"; then
-  echo "guardrail: newproxy weak table must release-publish self metatable and publish after __mode" >&2
+  echo "guardrail: newproxy weak table must CAS-publish __mode and publish after it" >&2
   exit 1
 fi
 
 if ! awk '
+  /static void ctype_storestr_str\(lua_State \*L,/ { inhelper = 1; next }
+  inhelper && /lj_tab_storestr\(L, dst,/ { raw = 1 }
+  inhelper && /for \(;;\)/ { loop = 1 }
+  inhelper && /setstrV\(L, &tv, val\)/ { make = 1 }
+  inhelper && /lj_tab_setstr\(L, tab, key\)/ { resolve = 1 }
+  inhelper && /lj_tab_trystoretv_cas\(L, dst, &tv\) == LJ_TAB_STORE_CAS_OK/ { cas = 1 }
+  inhelper && /ctype string store saw FORWARD after lookup\./ { retry = 1 }
+  inhelper && /^}/ {
+    helper_ok = !raw && loop && make && resolve && cas && retry
+    inhelper = 0
+  }
   /static GCtab \*ctype_fin_tab_new_l\(lua_State \*L, uint32_t hbits\)/ {
     infn = 1
     next
   }
   infn && /setgcrefmt\(t->metatable, obj2gco\(t\)\)/ { store = NR }
-  infn && /lj_tab_storestr\(L, lj_tab_setstr/ { mode = NR }
+  infn && /lj_tab_storestr\(L, lj_tab_setstr/ { rawmode = 1 }
+  infn && /ctype_storestr_str\(L, t, lj_str_newlit\(L, "__mode"\), lj_str_newlit\(L, "k"\)\)/ { mode = NR }
   infn && /t->nomm =/ { nomm = NR }
   infn && /lj_gc_pubtab\(L, t\)/ { barrier = NR }
   infn && /^}/ {
-    ok = store && mode && nomm && barrier &&
+    ok = helper_ok && !rawmode && store && mode && nomm && barrier &&
 	 store < mode && mode < nomm && nomm < barrier
     exit ok ? 0 : 1
   }
   END { if (!ok) exit 1 }
 ' "$ROOT/src/lj_ctype.c"; then
-  echo "guardrail: FFI finalizer weak table must release-publish self metatable and publish after __mode" >&2
+  echo "guardrail: FFI finalizer weak table must CAS-publish __mode and publish after it" >&2
   exit 1
 fi
 

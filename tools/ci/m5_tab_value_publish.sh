@@ -49,8 +49,10 @@ for needle in \
   'table_insert_value_store(L, t, i, L->top-1)' \
   'lj_tab_trystoretv_cas(L, dst, &val) == LJ_TAB_STORE_CAS_OK' \
   'lj_tab_storetv(L, &array[i], &base[i])' \
+  'base_storestr_str(L, t, lj_str_newlit(L, "__mode"), lj_str_newlit(L, "kv"))' \
   'base_storetab_str(L, env, lj_str_newlit(L, "_G"), env)' \
   'string_storetab_str(L, mt, mmname_str(g, MM_index), strtab)' \
+  'ctype_storestr_str(L, t, lj_str_newlit(L, "__mode"), lj_str_newlit(L, "k"))' \
   'lj_tab_storetab(J->L, &node[i].val, tpl)' \
   'lj_tab_storetab(J->L, o, tpl)' \
   'lj_tab_storenil(J->L, &node[i].val)' \

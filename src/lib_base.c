@@ -946,13 +946,24 @@ static void setpc_wrap_aux(lua_State *L, GCfunc *fn)
 
 /* ------------------------------------------------------------------------ */
 
+static void base_storestr_str(lua_State *L, GCtab *tab, GCstr *key, GCstr *val)
+{
+  TValue tv, *dst;
+  setstrV(L, &tv, val);
+  for (;;) {
+    dst = lj_tab_setstr(L, tab, key);
+    if (lj_tab_trystoretv_cas(L, dst, &tv) == LJ_TAB_STORE_CAS_OK)
+      return;
+    la_cpu_pause();  /* base string store saw FORWARD after lookup. */
+  }
+}
+
 static void newproxy_weaktable(lua_State *L)
 {
   GCtab *t = lj_tab_new(L, 0, 1);
   settabV(L, L->top++, t);
   setgcrefmt(t->metatable, obj2gco(t));
-  lj_tab_storestr(L, lj_tab_setstr(L, t, lj_str_newlit(L, "__mode")),
-		  lj_str_newlit(L, "kv"));
+  base_storestr_str(L, t, lj_str_newlit(L, "__mode"), lj_str_newlit(L, "kv"));
   t->nomm = (uint8_t)(~(1u<<MM_mode));
   lj_gc_pubtab(L, t);
 }

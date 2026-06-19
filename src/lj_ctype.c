@@ -184,14 +184,26 @@ void lj_ctype_parse_unlock(CTState *cts)
 #endif
 }
 
+static void ctype_storestr_str(lua_State *L, GCtab *tab, GCstr *key,
+			       GCstr *val)
+{
+  TValue tv, *dst;
+  setstrV(L, &tv, val);
+  for (;;) {
+    dst = lj_tab_setstr(L, tab, key);
+    if (lj_tab_trystoretv_cas(L, dst, &tv) == LJ_TAB_STORE_CAS_OK)
+      return;
+    la_cpu_pause();  /* ctype string store saw FORWARD after lookup. */
+  }
+}
+
 static GCtab *ctype_fin_tab_new_l(lua_State *L, uint32_t hbits)
 {
   TValue *anchor = L->top;
   GCtab *t = lj_tab_new(L, 0, hbits);
   settabV(L, L->top++, t);
   setgcrefmt(t->metatable, obj2gco(t));
-  lj_tab_storestr(L, lj_tab_setstr(L, t, lj_str_newlit(L, "__mode")),
-		  lj_str_newlit(L, "k"));
+  ctype_storestr_str(L, t, lj_str_newlit(L, "__mode"), lj_str_newlit(L, "k"));
   t->nomm = (uint8_t)(~(1u<<MM_mode));
   lj_gc_pubtab(L, t);
   L->top = anchor;
