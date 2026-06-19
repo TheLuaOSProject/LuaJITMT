@@ -13,8 +13,11 @@ for needle in \
   'tab_ptr_index(uintptr_t base, uintptr_t elem,' \
   'tab_forwarded_jit_array_slot(lua_State *L, GCtab *parent' \
   'tab_forwarded_jit_hash_slot(GCtab *parent, TValue *dst,' \
-  'dst = tab_forwarded_jit_array_slot(L, parent, dst);' \
-  'dst = tab_forwarded_jit_hash_slot(parent, dst, &keycopy, &key);' \
+  'dst = tab_forwarded_jit_array_slot(L, parent, orig);' \
+  'dst = tab_forwarded_jit_hash_slot(parent, orig, &keycopy, &key);' \
+  'lj_tab_trystoretv_cas(L, dst, src) == LJ_TAB_STORE_CAS_OK' \
+  'JIT array store saw FORWARD after routing.' \
+  'JIT hash store saw FORWARD after routing.' \
   'lj_tab_storetv_forjit_array(lua_State *L, GCtab *parent' \
   'lj_tab_storetv_forjit_hash(lua_State *L, GCtab *parent' \
   'lj_tab_storetv_forjit_newref(lua_State *L, GCtab *parent' \
@@ -22,7 +25,7 @@ for needle in \
   'lj_gc2_barrier_weak_write(L, parent, NULL, dst);  /* M8: traced weak-value array write. */' \
   'lj_gc2_barrier_weak_write(L, parent, key, dst);  /* M8: traced weak hash write. */' \
   'lj_gc2_barrier_weak_write(L, parent, NULL, dst);  /* M8: traced numeric NEWREF write. */' \
-  'Node *n = (Node *)dst;  /* Node.val is the first field. */' \
+  'n = (Node *)orig;  /* Node.val is the first field. */' \
   'IRCALL_lj_tab_storetv_forjit_array' \
   'IRCALL_lj_tab_storetv_forjit_hash' \
   'IRCALL_lj_tab_storetv_forjit_newref' \
@@ -44,6 +47,36 @@ do
     exit 1
   fi
 done
+
+if awk '
+  /lj_tab_storetv_forjit_array\(lua_State \*L, GCtab \*parent,/ {
+    inarray = 1
+  }
+  inarray && /copyTVrel\(L, dst, src\)/ { raw = 1 }
+  inarray && /tab_forwarded_jit_array_slot\(L, parent, orig\)/ { route = 1 }
+  inarray && /lj_tab_trystoretv_cas\(L, dst, src\)/ { cas = 1 }
+  inarray && /JIT array store saw FORWARD after routing/ { retry = 1 }
+  inarray && /^}/ { inarray = 0 }
+  END { exit raw || !route || !cas || !retry ? 0 : 1 }
+' "$ROOT/src/lj_tab.c"; then
+  echo "guardrail: JIT array table-store helper must CAS-retry late FORWARD" >&2
+  exit 1
+fi
+
+if awk '
+  /lj_tab_storetv_forjit_hash\(lua_State \*L, GCtab \*parent,/ {
+    inhash = 1
+  }
+  inhash && /copyTVrel\(L, dst, src\)/ { raw = 1 }
+  inhash && /tab_forwarded_jit_hash_slot\(parent, orig, &keycopy, &key\)/ { route = 1 }
+  inhash && /lj_tab_trystoretv_cas\(L, dst, src\)/ { cas = 1 }
+  inhash && /JIT hash store saw FORWARD after routing/ { retry = 1 }
+  inhash && /^}/ { inhash = 0 }
+  END { exit raw || !route || !cas || !retry ? 0 : 1 }
+' "$ROOT/src/lj_tab.c"; then
+  echo "guardrail: JIT hash table-store helper must CAS-retry late FORWARD" >&2
+  exit 1
+fi
 
 "$CC" $CFLAGS -I"$ROOT/src" "$ROOT/tests/t-jit-forward-store.c" \
   "$ROOT/src/libluajit.a" -lm -ldl -pthread -o "$OUT"

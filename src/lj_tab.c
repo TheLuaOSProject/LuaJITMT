@@ -1563,8 +1563,13 @@ static TValue *tab_forwarded_jit_hash_slot(GCtab *parent, TValue *dst,
 LJ_FUNCA TValue *lj_tab_storetv_forjit_array(lua_State *L, GCtab *parent,
 					     TValue *dst, cTValue *src)
 {
-  dst = tab_forwarded_jit_array_slot(L, parent, dst);
-  copyTVrel(L, dst, src);
+  TValue *orig = dst;
+  for (;;) {
+    dst = tab_forwarded_jit_array_slot(L, parent, orig);
+    if (lj_tab_trystoretv_cas(L, dst, src) == LJ_TAB_STORE_CAS_OK)
+      break;
+    la_cpu_pause();  /* JIT array store saw FORWARD after routing. */
+  }
   lj_gc2_barrier_weak_write(L, parent, NULL, dst);  /* M8: traced weak-value array write. */
   lj_gc2_barrier_tv_pair(L, obj2gco(parent), dst);  /* M10: traced parent barrier. */
   return dst;
@@ -1573,11 +1578,18 @@ LJ_FUNCA TValue *lj_tab_storetv_forjit_array(lua_State *L, GCtab *parent,
 LJ_FUNCA TValue *lj_tab_storetv_forjit_hash(lua_State *L, GCtab *parent,
 					    TValue *dst, cTValue *src)
 {
-  Node *n = (Node *)dst;  /* Node.val is the first field. */
   TValue keycopy;
-  cTValue *key = &n->key;
-  dst = tab_forwarded_jit_hash_slot(parent, dst, &keycopy, &key);
-  copyTVrel(L, dst, src);
+  TValue *orig = dst;
+  Node *n;
+  cTValue *key;
+  for (;;) {
+    n = (Node *)orig;  /* Node.val is the first field. */
+    key = &n->key;
+    dst = tab_forwarded_jit_hash_slot(parent, orig, &keycopy, &key);
+    if (lj_tab_trystoretv_cas(L, dst, src) == LJ_TAB_STORE_CAS_OK)
+      break;
+    la_cpu_pause();  /* JIT hash store saw FORWARD after routing. */
+  }
   lj_gc2_barrier_weak_write(L, parent, key, dst);  /* M8: traced weak hash write. */
   lj_gc2_barrier_tv_pair(L, obj2gco(parent), dst);  /* M10: traced parent barrier. */
   return dst;
