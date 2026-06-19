@@ -1378,8 +1378,8 @@ static void gc2_scan_tg_roots(global_State *g)
     lj_gc2_markmem(g, tg->tmpbuf.b);
     if (la_load8_acq(&tg->tg_flags) & TGF_DEAD)
       continue;
-    thread_L = (lua_State *)la_loadptr_acq((void *const *)&tg->thread_L);
-    cur_L = (lua_State *)la_loadptr_acq((void *const *)&tg->cur_L);
+    thread_L = lj_tg_load_thread_L(tg);
+    cur_L = lj_tg_load_cur_L(tg);
     if (thread_L) {
       lj_gc2_markobj(g, obj2gco(thread_L));  /* 05 section 5.7.4 TG root. */
       la_add64_rlx(&g->gc2.tg_thread_roots, 1);

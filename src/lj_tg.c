@@ -33,8 +33,8 @@ static void tg_init_ssb(TGState *tg)
 static void tg_init_common(global_State *g, TGState *tg, lua_State *L)
 {
   tg->gl = g;
-  tg->cur_L = L;
-  tg->thread_L = L;
+  lj_tg_store_cur_L(tg, L);
+  lj_tg_store_thread_L(tg, L);
   tg->vmstate = ~LJ_VMST_INTERP;
   tg->prng = g->prng;
   tg_init_ssb(tg);
@@ -156,11 +156,13 @@ void lj_tg_attach(global_State *g, TGState *tg)
 void lj_tg_detach(global_State *g, TGState *tg)
 {
   uint8_t oldflags;
+  lua_State *thread_L;
   if (!g || !tg)
     return;
-  if (tg->thread_L &&
+  thread_L = lj_tg_load_thread_L(tg);
+  if (thread_L &&
       (la_load32_acq(&tg->reqmask) != 0 || la_load32_acq(&tg->poll) != 0))
-    (void)lj_safepoint_ack(tg->thread_L);  /* Leaving TG owns its ack. */
+    (void)lj_safepoint_ack(thread_L);  /* Leaving TG owns its ack. */
   (void)lj_gc2_flush_ssb(g, tg);  /* 09 section 9.3 detach publishes SSB. */
   (void)lj_gc2_flush_alloc(g, tg);  /* 04 section 4.8 detach accounting. */
   la_fence_rel();

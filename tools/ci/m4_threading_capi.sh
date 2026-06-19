@@ -12,7 +12,7 @@ for needle in \
   'mt_shutdown' \
   'la_futex_wait(&g->mt_live' \
   'la_futex_wake(&g->mt_live' \
-  'lj_safepoint_ack(tg->thread_L)' \
+  'lj_safepoint_ack(thread_L)' \
   'attached thread is not joinable' \
   'lua_close returned before attached thread detached' \
   'luaMT_join rooted table was not preserved'

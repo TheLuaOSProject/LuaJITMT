@@ -198,8 +198,8 @@ for needle in \
   'la_add64_rlx(&tg->stack_dirty_epoch' \
   'la_add64_rlx(&g->gc2.thread_scan_needscan' \
   'la_add64_rlx(&g->gc2.thread_scan_owner_needscans' \
-  'la_loadptr_acq((void *const *)&tg->thread_L)' \
-  'la_loadptr_acq((void *const *)&tg->cur_L)' \
+  'lj_tg_load_thread_L(tg)' \
+  'lj_tg_load_cur_L(tg)' \
   'la_add64_rlx(&g->gc2.tg_thread_roots' \
   'la_add64_rlx(&g->gc2.tg_cur_roots' \
   'int32_t vmstate' \

@@ -671,9 +671,10 @@ CCallbackRuntime * LJ_FASTCALL lj_ccallback_prepare(CTState *cts, MSize slot)
   TGState *tg = lj_thr_get_tg();
   lua_State *L;
   CCallbackRuntime *cb;
-  if (LJ_UNLIKELY(tg == NULL || tg->gl != cts->g || tg->cur_L == NULL))
+  if (LJ_UNLIKELY(tg == NULL || tg->gl != cts->g ||
+		  lj_tg_load_cur_L(tg) == NULL))
     abort();  /* Foreign pthread callback auto-attach is not implemented yet. */
-  L = tg->cur_L;
+  L = lj_tg_load_cur_L(tg);
   cb = &tg->cb;
   cb->L = L;  /* Callback carrier TG from current TLS, not slot owner. */
   cb->slot = slot;
@@ -877,7 +878,7 @@ lua_State * LJ_FASTCALL lj_ccallback_enter(CTState *cts, void *cf,
   uint8_t was_native;
   uint32_t actions = 0;
   if (LJ_UNLIKELY(tg == NULL || tg->gl != g || cb != &tg->cb ||
-		  L == NULL || tg->cur_L != L || L2TG(L) != tg))
+		  L == NULL || lj_tg_load_cur_L(tg) != L || L2TG(L) != tg))
     abort();
   if (lj_tg_jit_base(g)) {
     setstrV(L, L->top++, lj_err_str(L, LJ_ERR_FFI_BADCBACK));

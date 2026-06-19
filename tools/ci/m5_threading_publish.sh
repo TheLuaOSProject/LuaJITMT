@@ -83,6 +83,23 @@ if [ -n "$live_table_hits" ]; then
 fi
 
 for needle in \
+  'static LJ_AINLINE lua_State *lj_tg_load_cur_L(TGState *tg)' \
+  'static LJ_AINLINE void lj_tg_store_cur_L(TGState *tg, lua_State *L)' \
+  'static LJ_AINLINE lua_State *lj_tg_load_thread_L(TGState *tg)' \
+  'static LJ_AINLINE void lj_tg_store_thread_L(TGState *tg, lua_State *L)' \
+  'static LJ_AINLINE TValue *lj_tg_load_jit_base(TGState *tg)' \
+  'static LJ_AINLINE void lj_tg_store_jit_base(TGState *tg, TValue *base)' \
+  'la_loadptr_acq((void *const *)&tg->cur_L)' \
+  'la_storeptr_rel((void **)&tg->cur_L, L)' \
+  'la_loadptr_acq((void *const *)&tg->thread_L)' \
+  'la_storeptr_rel((void **)&tg->thread_L, L)' \
+  'la_loadptr_acq((void *const *)&tg->jit_base)' \
+  'la_storeptr_rel((void **)&tg->jit_base, base)' \
+  'gcref_acq(g->cur_L)' \
+  'setgcrefrel(g->cur_L, obj2gco(L))' \
+  'setgcrefnullrel(g->cur_L)' \
+  'mref_acq(g->jit_base, TValue)' \
+  'setmrefrel(g->jit_base, base)' \
   'lj_thread_state_load_acq(const LJThread *th)' \
   'lj_thread_state_store_rel(LJThread *th, lua_State *L)' \
   'threading_publish_thread_state(lua_State *L, GCudata *ud,' \
@@ -102,12 +119,29 @@ for needle in \
   'lj_gc_barrierroot(L, &tv)'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lib_threading.c" \
-      "$ROOT/src/lj_obj.h" "$ROOT/src/lj_thr.h" \
+      "$ROOT/src/lj_obj.h" "$ROOT/src/lj_thr.h" "$ROOT/src/lj_tg.h" \
       "$ROOT/tests/t-gc2-traverse.c"; then
     echo "guardrail: live thread registry must use native lockless roots: $needle" >&2
     exit 1
   fi
 done
+
+tg_raw_hits=$(rg -n 'tg->(cur_L|thread_L|jit_base)' \
+  "$ROOT/src" -g '*.c' -g '*.h' -g '!**/host/*' -g '!lj_tg.h' || true)
+if [ -n "$tg_raw_hits" ]; then
+  echo "guardrail: TG root/mirror fields must use lj_tg acquire/release helpers:" >&2
+  echo "$tg_raw_hits" >&2
+  exit 1
+fi
+
+mirror_raw_hits=$(rg -n \
+  'setgcref\(g->cur_L|setgcrefnull\(g->cur_L|setmref\(g->jit_base|tvref\(g->jit_base\)|mref\(g->jit_base' \
+  "$ROOT/src" -g '*.c' -g '*.h' -g '!**/host/*' || true)
+if [ -n "$mirror_raw_hits" ]; then
+  echo "guardrail: transitional TG mirrors must use acquire/release reference helpers:" >&2
+  echo "$mirror_raw_hits" >&2
+  exit 1
+fi
 
 for file in "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc2.c"; do
   for needle in 'g->threading_live' 'gcref_acq(node->ud)'; do

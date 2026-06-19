@@ -35,6 +35,7 @@ typedef struct MRef {
 
 #if LJ_GC64
 #define mref(r, t)	((t *)(void *)(r).ptr64)
+#define mref_acq(r, t)	((t *)(void *)(uintptr_t)la_load64_acq(&(r).ptr64))
 #define mrefu(r)	((r).ptr64)
 
 #define setmref(r, p)	((r).ptr64 = (uint64_t)(void *)(p))
@@ -42,12 +43,26 @@ typedef struct MRef {
 #define setmrefr(r, v)	((r).ptr64 = (v).ptr64)
 #else
 #define mref(r, t)	((t *)(void *)(uintptr_t)(r).ptr32)
+#define mref_acq(r, t)	((t *)(void *)(uintptr_t)la_load32_acq(&(r).ptr32))
 #define mrefu(r)	((r).ptr32)
 
 #define setmref(r, p)	((r).ptr32 = (uint32_t)(uintptr_t)(void *)(p))
 #define setmrefu(r, u)	((r).ptr32 = (uint32_t)(u))
 #define setmrefr(r, v)	((r).ptr32 = (v).ptr32)
 #endif
+
+#if LJ_GC64
+static LJ_AINLINE void setmrefrel_(MRef *r, const void *p)
+{
+  la_store64_rel(&r->ptr64, (uint64_t)(uintptr_t)p);
+}
+#else
+static LJ_AINLINE void setmrefrel_(MRef *r, const void *p)
+{
+  la_store32_rel(&r->ptr32, (uint32_t)(uintptr_t)p);
+}
+#endif
+#define setmrefrel(r, p)	setmrefrel_(&(r), (const void *)(p))
 
 /* -- GC object references ------------------------------------------------ */
 

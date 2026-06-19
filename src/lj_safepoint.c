@@ -73,7 +73,7 @@ void lj_safepoint_apply_tg(global_State *g, TGState *tg, uint32_t actions)
   if (actions & LJ_GC2_HS_ALLOC_WHITE)
     la_store8_rel(&tg->alloc.alloc_black, 0);
   if (actions & LJ_GC2_HS_SCAN_ROOTS) {
-    lua_State *L = tg->cur_L;
+    lua_State *L = lj_tg_load_cur_L(tg);
     lj_gc2_scan_cycle_roots(g, L);  /* 05 section 5.7.1/5.7.2. */
   }
   if (actions & LJ_GC2_HS_FLUSH_SSB)
@@ -205,7 +205,7 @@ static void safepoint_ack_native(global_State *g)
     lua_State *L;
     if (la_load8_acq(&tg->tg_flags) & TGF_DEAD)  /* 05 section 5.4.1. */
       continue;
-    L = (lua_State *)la_loadptr_acq((void *const *)&tg->cur_L);
+    L = lj_tg_load_cur_L(tg);
     if (tg == self)
       safepoint_ack_tg(g, tg);  /* Leader self-ack is a real poll. */
     else if (la_load8_acq(&tg->in_native) && L)

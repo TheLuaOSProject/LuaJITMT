@@ -91,44 +91,77 @@ struct TGState {
 
 LJ_STATIC_ASSERT(sizeof(((GC2SSBNode *)0)->slot) == TG_GC2_SSB_BYTES);
 
+static LJ_AINLINE lua_State *lj_tg_load_cur_L(TGState *tg)
+{
+  return (lua_State *)la_loadptr_acq((void *const *)&tg->cur_L);
+}
+
+static LJ_AINLINE void lj_tg_store_cur_L(TGState *tg, lua_State *L)
+{
+  la_storeptr_rel((void **)&tg->cur_L, L);  /* 05 section 5.7.4 TG root. */
+}
+
+static LJ_AINLINE lua_State *lj_tg_load_thread_L(TGState *tg)
+{
+  return (lua_State *)la_loadptr_acq((void *const *)&tg->thread_L);
+}
+
+static LJ_AINLINE void lj_tg_store_thread_L(TGState *tg, lua_State *L)
+{
+  la_storeptr_rel((void **)&tg->thread_L, L);  /* 05 section 5.7.4 TG root. */
+}
+
+static LJ_AINLINE TValue *lj_tg_load_jit_base(TGState *tg)
+{
+  return (TValue *)la_loadptr_acq((void *const *)&tg->jit_base);
+}
+
+static LJ_AINLINE void lj_tg_store_jit_base(TGState *tg, TValue *base)
+{
+  la_storeptr_rel((void **)&tg->jit_base, base);  /* 08 section 8.7 exit root. */
+}
+
 static LJ_AINLINE lua_State *lj_tg_cur_L(global_State *g)
 {
   TGState *tg = lj_thr_get_tg();
   if (tg)
-    return tg->cur_L;
-  return gcref(g->cur_L) ? gco2th(gcref(g->cur_L)) : NULL;
+    return lj_tg_load_cur_L(tg);
+  {
+    GCobj *o = gcref_acq(g->cur_L);
+    return o ? gco2th(o) : NULL;
+  }
 }
 
 static LJ_AINLINE void lj_tg_setcur_L(global_State *g, lua_State *L)
 {
   TGState *tg = G2TG(g);
   if (tg)
-    tg->cur_L = L;
-  setgcref(g->cur_L, obj2gco(L));  /* Transitional mirror for VM asm. */
+    lj_tg_store_cur_L(tg, L);
+  setgcrefrel(g->cur_L, obj2gco(L));  /* Transitional mirror for VM asm. */
 }
 
 static LJ_AINLINE void lj_tg_clearcur_L(global_State *g)
 {
   TGState *tg = G2TG(g);
   if (tg)
-    tg->cur_L = NULL;
-  setgcrefnull(g->cur_L);  /* Transitional mirror for VM asm. */
+    lj_tg_store_cur_L(tg, NULL);
+  setgcrefnullrel(g->cur_L);  /* Transitional mirror for VM asm. */
 }
 
 static LJ_AINLINE TValue *lj_tg_jit_base(global_State *g)
 {
   TGState *tg = lj_thr_get_tg();
   if (tg)
-    return tg->jit_base;
-  return tvref(g->jit_base);  /* Transitional mirror for VM asm writes. */
+    return lj_tg_load_jit_base(tg);
+  return mref_acq(g->jit_base, TValue);  /* Transitional mirror for VM asm writes. */
 }
 
 static LJ_AINLINE void lj_tg_setjit_base(global_State *g, TValue *base)
 {
   TGState *tg = G2TG(g);
   if (tg)
-    tg->jit_base = base;
-  setmref(g->jit_base, base);  /* Transitional mirror for VM asm. */
+    lj_tg_store_jit_base(tg, base);
+  setmrefrel(g->jit_base, base);  /* Transitional mirror for VM asm. */
 }
 
 #define TG_DISP2HOT	(-(int)(HOTCOUNT_SIZE*sizeof(HotCount)))

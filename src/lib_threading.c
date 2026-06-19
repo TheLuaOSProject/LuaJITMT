@@ -384,8 +384,8 @@ static void *threading_worker(void *arg)
     threading_wake_thread(th);
     return NULL;
   }
-  tg->cur_L = L;
-  tg->thread_L = L;
+  lj_tg_store_cur_L(tg, L);
+  lj_tg_store_thread_L(tg, L);
   tg->thread_ud = th->ud;
   lj_tg_attach(g, tg);
 
@@ -401,8 +401,8 @@ static void *threading_worker(void *arg)
   lj_ccallback_disown_state(L);
   lj_state_release(L, tid);
   lj_tg_detach(g, tg);
-  tg->cur_L = NULL;
-  tg->thread_L = NULL;
+  lj_tg_store_cur_L(tg, NULL);
+  lj_tg_store_thread_L(tg, NULL);
   tg->thread_ud = NULL;
   lj_thr_set_tg(NULL);
   threading_gc_leave(g);
@@ -990,7 +990,7 @@ LUA_API int luaMT_attach(lua_State *L)
   g = G(L);
   cur = lj_thr_get_tg();
   if (cur)
-    return cur->thread_L == L;
+    return lj_tg_load_thread_L(cur) == L;
   if (L == mainthread(g))
     return 0;
   tid = lj_thr_newid();
@@ -1006,8 +1006,8 @@ LUA_API int luaMT_attach(lua_State *L)
   tg->alloc.owner_tid = tid;
   L->tg_hint = tg;
   lj_thr_set_tg(tg);
-  tg->cur_L = L;
-  tg->thread_L = L;
+  lj_tg_store_cur_L(tg, L);
+  lj_tg_store_thread_L(tg, L);
   o = gcref_acq(L->mt_thread);
   if (o && o->gch.gct == ~LJ_TUDATA &&
       lj_udata_udtype_acq(gco2ud(o)) == UDTYPE_THREAD)
@@ -1037,13 +1037,13 @@ LUA_API void luaMT_detach(lua_State *L)
     return;
   g = G(L);
   tg = lj_thr_get_tg();
-  if (!tg || tg == g->main_tg || tg->thread_L != L)
+  if (!tg || tg == g->main_tg || lj_tg_load_thread_L(tg) != L)
     return;
   tid = tg->tid;
   lj_ccallback_disown_state(L);
   lj_tg_detach(g, tg);
-  tg->cur_L = NULL;
-  tg->thread_L = NULL;
+  lj_tg_store_cur_L(tg, NULL);
+  lj_tg_store_thread_L(tg, NULL);
   tg->thread_ud = NULL;
   L->tg_hint = NULL;
   lj_state_release(L, tid);
