@@ -283,10 +283,9 @@ static void gc2_paranoia_check_udata(global_State *g, GCudata *ud)
   if (udtype == UDTYPE_FFI_CLIB) {
     CLibrary *cl = (CLibrary *)uddata(ud);
     CLibCacheEntry *e;
-    for (e = (CLibCacheEntry *)la_loadptr_acq(
-	   (void *const *)&cl->cache_head);
+    for (e = lj_clib_cache_head_acq(cl);
 	 e != NULL;
-	 e = (CLibCacheEntry *)la_loadptr_acq((void *const *)&e->next)) {
+	 e = lj_clib_cache_next_acq(e)) {
       GCstr *name = lj_clib_cache_name_acq(e);
       TValue tv;
       gc2_paranoia_checkmem(g, e, "FFI CLibrary cache entry");
@@ -474,10 +473,9 @@ static void gc_mark(global_State *g, GCobj *o);
 static void gc_mark_clib_cache(global_State *g, CLibrary *cl)
 {
   CLibCacheEntry *e;
-  for (e = (CLibCacheEntry *)la_loadptr_acq(
-	 (void *const *)&cl->cache_head);
+  for (e = lj_clib_cache_head_acq(cl);
        e != NULL;
-       e = (CLibCacheEntry *)la_loadptr_acq((void *const *)&e->next)) {
+       e = lj_clib_cache_next_acq(e)) {
     GCstr *name = lj_clib_cache_name_acq(e);
     TValue tv;
     lj_gc_arena_markmem(g, e);

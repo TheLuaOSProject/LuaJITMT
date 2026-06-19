@@ -317,7 +317,7 @@ static CLibCacheEntry *clib_cache_find(CLibCacheEntry *head, GCstr *name)
 {
   CLibCacheEntry *e;
   for (e = head; e != NULL;
-       e = (CLibCacheEntry *)la_loadptr_acq((void *const *)&e->next)) {
+       e = lj_clib_cache_next_acq(e)) {
     if (lj_clib_cache_name_acq(e) == name)
       return e;
   }
@@ -326,8 +326,7 @@ static CLibCacheEntry *clib_cache_find(CLibCacheEntry *head, GCstr *name)
 
 cTValue *lj_clib_cache_get(CLibrary *cl, GCstr *name)
 {
-  CLibCacheEntry *head = (CLibCacheEntry *)la_loadptr_acq(
-    (void *const *)&cl->cache_head);
+  CLibCacheEntry *head = lj_clib_cache_head_acq(cl);
   CLibCacheEntry *e = clib_cache_find(head, name);
   return e ? (cTValue *)&e->val : NULL;
 }
@@ -344,17 +343,16 @@ static TValue *clib_cache_publish(lua_State *L, CLibrary *cl, GCstr *name,
   lj_clib_cache_name_rel(e, name);
   lj_clib_cache_val_rel(L, e, val);
   for (;;) {
-    CLibCacheEntry *head = (CLibCacheEntry *)la_loadptr_acq(
-      (void *const *)&cl->cache_head);
+    CLibCacheEntry *head = lj_clib_cache_head_acq(cl);
     CLibCacheEntry *old = clib_cache_find(head, name);
-    void *expect;
+    CLibCacheEntry *expect;
     if (old) {
       lj_mem_freet(G(L), e);
       return &old->val;
     }
-    e->next = head;
+    lj_clib_cache_next_rel(e, head);
     expect = head;
-    if (la_casptr((void **)&cl->cache_head, &expect, e, LA_REL, LA_ACQ)) {
+    if (lj_clib_cache_head_cas_rel(cl, &expect, e)) {
       lj_gc_arena_markmem(G(L), e);  /* 11.7 side-entry publish barrier. */
       lj_gc_barrierroot(L, &key);  /* Publish-race barrier, see 11.7. */
       lj_gc_barrierroot(L, &e->val);
@@ -366,11 +364,9 @@ static TValue *clib_cache_publish(lua_State *L, CLibrary *cl, GCstr *name,
 
 static void clib_cache_free(global_State *g, CLibrary *cl)
 {
-  CLibCacheEntry *e = (CLibCacheEntry *)la_xchgptr_acqrel(
-    (void **)&cl->cache_head, NULL);
+  CLibCacheEntry *e = lj_clib_cache_head_xchg_acqrel(cl, NULL);
   while (e) {
-    CLibCacheEntry *next = (CLibCacheEntry *)la_loadptr_acq(
-      (void *const *)&e->next);
+    CLibCacheEntry *next = lj_clib_cache_next_acq(e);
     lj_mem_freet(g, e);
     e = next;
   }

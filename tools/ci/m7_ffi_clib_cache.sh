@@ -9,10 +9,15 @@ SRC_IMPL="$ROOT/src/lj_clib.c $ROOT/src/lj_gc.c $ROOT/src/lj_gc2.c"
 
 for needle in \
   'CLibCacheEntry *cache_head' \
+  'lj_clib_cache_next_acq(' \
+  'lj_clib_cache_next_rel(CLibCacheEntry *e,' \
   'lj_clib_cache_name_acq(const CLibCacheEntry *e)' \
   'lj_clib_cache_name_rel(CLibCacheEntry *e, GCstr *name)' \
   'lj_clib_cache_val_acq(TValue *dst,' \
   'lj_clib_cache_val_rel(lua_State *L, CLibCacheEntry *e,' \
+  'lj_clib_cache_head_acq(const CLibrary *cl)' \
+  'lj_clib_cache_head_cas_rel(CLibrary *cl,' \
+  'lj_clib_cache_head_xchg_acqrel(' \
   'lj_clib_cache_get(CLibrary *cl, GCstr *name)' \
   'clib_cache_publish(lua_State *L, CLibrary *cl, GCstr *name' \
   'lj_tv_load_acq(&tv, ctv)' \
@@ -40,6 +45,12 @@ fi
 if rg -n 'e->name = name|copyTV\(L, &e->val|la_loadptr_acq\(\(void \*const \*\)&e->name\)|lj_tv_load_acq\(&tv, &e->val\)' \
   $SRC_IMPL; then
   echo "guardrail: clib cache payloads must use the shared acquire/release helpers" >&2
+  exit 1
+fi
+
+if rg -n '(^|[^[:alnum:]_])e->next = head|la_loadptr_acq\(\(void \*const \*\)&e->next\)|la_loadptr_acq\(\(void \*const \*\)&cl->cache_head\)|la_xchgptr_acqrel\(\(void \*\*\)&cl->cache_head|la_casptr\(\(void \*\*\)&cl->cache_head' \
+  $SRC_IMPL; then
+  echo "guardrail: clib cache list links must use the shared head/next helpers" >&2
   exit 1
 fi
 

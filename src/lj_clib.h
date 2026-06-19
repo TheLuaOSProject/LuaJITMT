@@ -19,6 +19,18 @@ typedef struct CLibCacheEntry {
   TValue val;
 } CLibCacheEntry;
 
+static LJ_AINLINE CLibCacheEntry *lj_clib_cache_next_acq(
+  const CLibCacheEntry *e)
+{
+  return (CLibCacheEntry *)la_loadptr_acq((void *const *)&e->next);
+}
+
+static LJ_AINLINE void lj_clib_cache_next_rel(CLibCacheEntry *e,
+					      CLibCacheEntry *next)
+{
+  la_storeptr_rel((void **)&e->next, (void *)next);
+}
+
 static LJ_AINLINE GCstr *lj_clib_cache_name_acq(const CLibCacheEntry *e)
 {
   return (GCstr *)la_loadptr_acq((void *const *)&e->name);
@@ -47,6 +59,28 @@ typedef struct CLibrary {
   GCtab *cache;		/* Legacy env anchor; miss cache lives in cache_head. */
   CLibCacheEntry *cache_head;	/* 11.7 side cache, CAS-prepended. */
 } CLibrary;
+
+static LJ_AINLINE CLibCacheEntry *lj_clib_cache_head_acq(const CLibrary *cl)
+{
+  return (CLibCacheEntry *)la_loadptr_acq((void *const *)&cl->cache_head);
+}
+
+static LJ_AINLINE int lj_clib_cache_head_cas_rel(CLibrary *cl,
+						 CLibCacheEntry **expect,
+						 CLibCacheEntry *entry)
+{
+  void *old = (void *)*expect;
+  int ok = la_casptr((void **)&cl->cache_head, &old, entry, LA_REL, LA_ACQ);
+  if (!ok)
+    *expect = (CLibCacheEntry *)old;
+  return ok;
+}
+
+static LJ_AINLINE CLibCacheEntry *lj_clib_cache_head_xchg_acqrel(
+  CLibrary *cl, CLibCacheEntry *head)
+{
+  return (CLibCacheEntry *)la_xchgptr_acqrel((void **)&cl->cache_head, head);
+}
 
 LJ_FUNC cTValue *lj_clib_cache_get(CLibrary *cl, GCstr *name);
 LJ_FUNC TValue *lj_clib_index(lua_State *L, CLibrary *cl, GCstr *name);
