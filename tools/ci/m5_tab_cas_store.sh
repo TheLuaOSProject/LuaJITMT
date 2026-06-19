@@ -30,9 +30,12 @@ for needle in \
   'C API setfield saw FORWARD after lookup.' \
   'C API rawset saw FORWARD after lookup.' \
   'C API rawseti saw FORWARD after lookup.' \
+  'luaL_newmetatable saw FORWARD after lookup.' \
+  'luaL_newmetatable store raced with FORWARD.' \
   'lj_tab_trystoretv_cas(L, o, val) == LJ_TAB_STORE_CAS_OK' \
   'lj_tab_trystoretv_cas(L, dst, key+1) == LJ_TAB_STORE_CAS_OK' \
   'lj_tab_trystoretv_cas(L, dst, src) == LJ_TAB_STORE_CAS_OK' \
+  'lj_tv_cas(tv, &expect, &tmp)' \
   'table_insert_shift_store(lua_State *L, GCtab *t, int32_t i)' \
   'table.insert shift saw FORWARD after lookup.' \
   'table_insert_value_store(lua_State *L, GCtab *t, int32_t i,' \
@@ -42,6 +45,7 @@ for needle in \
   'exercise_capi_settable_forward_retry' \
   'exercise_capi_rawset_forward_retry' \
   'exercise_capi_setfield_forward_retry' \
+  'exercise_luaL_newmetatable_forward_retry' \
   't-tab-cas-store OK'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_tab.c" "$ROOT/src/lj_tab.h" \
@@ -127,6 +131,25 @@ if ! awk '
   END { exit !raw && shift && value && parent ? 0 : 1 }
 ' "$ROOT/src/lib_table.c"; then
   echo "guardrail: table.insert must route stores through CAS helpers" >&2
+  exit 1
+fi
+
+if ! awk '
+  /LUALIB_API int luaL_newmetatable\(lua_State \*L,/ { infn = 1 }
+  infn && /copyTVrel\(L, tv, &tmp\)/ { raw = 1 }
+  infn && /for \(;;\)/ { loop = 1 }
+  infn && /lj_tab_setstr\(L, regt, key\)/ { resolve = 1 }
+  infn && /lj_tv_load_acq\(&old, tv\)/ { load = 1 }
+  infn && /luaL_newmetatable saw FORWARD after lookup\./ { retry = 1 }
+  infn && /lj_tv_cas\(tv, &expect, &tmp\)/ { casnil = 1 }
+  infn && /luaL_newmetatable store raced with FORWARD\./ { casretry = 1 }
+  infn && /copyTV\(L, L->top\+\+, &expect\)/ { winner = 1 }
+  infn && /copyTV\(L, L->top\+\+, &old\)/ { existing = 1 }
+  infn && /lj_gc_pubtab\(L, regt\)/ { parent = 1 }
+  infn && /^}/ { infn = 0 }
+  END { exit !raw && loop && resolve && load && retry && casnil && casretry && winner && existing && parent ? 0 : 1 }
+' "$ROOT/src/lj_api.c"; then
+  echo "guardrail: luaL_newmetatable must nil-CAS publish and retry forwarded registry slots" >&2
   exit 1
 fi
 

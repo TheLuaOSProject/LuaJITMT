@@ -362,6 +362,46 @@ static void exercise_table_insert_forward_retry(lua_State *L)
   lj_tab_array_hdr_flags_or_rel(oldarray, TABARRAY_FLAG_RETIRING);
 }
 
+static void exercise_luaL_newmetatable_forward_retry(lua_State *L)
+{
+  GCtab *reg = tabV(registry(L));
+  const char *name = "capi_newmetatable_forward";
+  GCstr *key = lj_str_newz(L, name);
+  Node *oldnode, *newnode, *oldn, *newn;
+  MSize oldhmask, newhmask;
+  TValue nv;
+
+  lua_settop(L, 0);
+  lj_tab_storeint(L, lj_tab_setstr(L, reg, key), 9100);
+  oldnode = lj_tab_node_acq(reg);
+  oldhmask = lj_tab_node_hmask_acq(oldnode);
+  oldn = find_str_node(oldnode, oldhmask, key);
+  assert(oldn != NULL);
+
+  lj_tab_resize(L, reg, reg->asize, lj_fls(oldhmask) + 2u);
+  newnode = lj_tab_node_acq(reg);
+  newhmask = lj_tab_node_hmask_acq(newnode);
+  assert(newnode != oldnode);
+  newn = find_str_node(newnode, newhmask, key);
+  assert(newn != NULL);
+  lj_tab_storenilraw(&newn->val);
+  store_forward(&oldn->val);
+  la_store32_rel(&lj_tab_node_hdrw(oldnode)->flags, 0);
+  lj_tab_hmask_rel(reg, oldhmask);
+  lj_tab_node_rel(reg, oldnode);
+
+  assert(luaL_newmetatable(L, name) == 1);
+  assert_forward(&oldn->val);
+  lj_tv_load_acq(&nv, &newn->val);
+  assert(tvistab(&nv));
+  assert(tabV(&nv) == tabV(L->top-1));
+
+  lj_tab_node_rel(reg, newnode);
+  lj_tab_hmask_rel(reg, newhmask);
+  lj_tab_node_hdr_flags_or_rel(oldnode, TABNODE_FLAG_RETIRING);
+  lua_pop(L, 1);
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -375,6 +415,7 @@ int main(void)
   exercise_capi_rawset_forward_retry(L);
   exercise_capi_setfield_forward_retry(L);
   exercise_table_insert_forward_retry(L);
+  exercise_luaL_newmetatable_forward_retry(L);
 
   lua_close(L);
   printf("t-tab-cas-store OK: CAS table stores preserve FORWARD slots\n");

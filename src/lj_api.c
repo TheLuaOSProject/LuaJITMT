@@ -766,18 +766,38 @@ LUA_API void lua_createtable(lua_State *L, int narray, int nrec)
 LUALIB_API int luaL_newmetatable(lua_State *L, const char *tname)
 {
   GCtab *regt = tabV(registry(L));
-  TValue *tv = lj_tab_setstr(L, regt, lj_str_newz(L, tname));
-  if (tvisnil(tv)) {
-    GCtab *mt = lj_tab_new(L, 0, 1);
-    TValue tmp;
-    settabV(L, &tmp, mt);
-    copyTVrel(L, tv, &tmp);
-    settabV(L, L->top++, mt);
-    lj_gc_pubtab(L, regt);
-    return 1;
-  } else {
-    copyTV(L, L->top++, tv);
-    return 0;
+  GCstr *key = lj_str_newz(L, tname);
+  for (;;) {
+    TValue *tv = lj_tab_setstr(L, regt, key);
+    TValue old;
+    lj_tv_load_acq(&old, tv);
+    if (tvisforward(&old)) {
+      la_cpu_pause();  /* luaL_newmetatable saw FORWARD after lookup. */
+      continue;
+    }
+    if (tvisnil(&old)) {
+      GCtab *mt = lj_tab_new(L, 0, 1);
+      TValue tmp, expect = old;
+      settabV(L, &tmp, mt);
+      if (lj_tv_cas(tv, &expect, &tmp)) {
+	settabV(L, L->top++, mt);
+	lj_gc_pubtab(L, regt);
+	return 1;
+      }
+      if (tvisforward(&expect)) {
+	la_cpu_pause();  /* luaL_newmetatable store raced with FORWARD. */
+	continue;
+      }
+      if (tvisnil(&expect)) {
+	la_cpu_pause();
+	continue;
+      }
+      copyTV(L, L->top++, &expect);
+      return 0;
+    } else {
+      copyTV(L, L->top++, &old);
+      return 0;
+    }
   }
 }
 
