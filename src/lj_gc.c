@@ -287,12 +287,12 @@ static void gc2_paranoia_check_udata(global_State *g, GCudata *ud)
 	   (void *const *)&cl->cache_head);
 	 e != NULL;
 	 e = (CLibCacheEntry *)la_loadptr_acq((void *const *)&e->next)) {
-      GCstr *name = (GCstr *)la_loadptr_acq((void *const *)&e->name);
+      GCstr *name = lj_clib_cache_name_acq(e);
       TValue tv;
       gc2_paranoia_checkmem(g, e, "FFI CLibrary cache entry");
       if (name)
 	gc2_paranoia_checkobj(g, obj2gco(name), "FFI CLibrary cache key");
-      lj_tv_load_acq(&tv, &e->val);
+      lj_clib_cache_val_acq(&tv, e);
       if (tvisgcv(&tv))
 	gc2_paranoia_checkobj(g, gcV(&tv), "FFI CLibrary cache value");
     }
@@ -478,12 +478,12 @@ static void gc_mark_clib_cache(global_State *g, CLibrary *cl)
 	 (void *const *)&cl->cache_head);
        e != NULL;
        e = (CLibCacheEntry *)la_loadptr_acq((void *const *)&e->next)) {
-    GCstr *name = (GCstr *)la_loadptr_acq((void *const *)&e->name);
+    GCstr *name = lj_clib_cache_name_acq(e);
     TValue tv;
     lj_gc_arena_markmem(g, e);
     if (name)
       gc_mark_str(g, name);
-    lj_tv_load_acq(&tv, &e->val);
+    lj_clib_cache_val_acq(&tv, e);
     gc_marktv(g, &tv);
   }
 }

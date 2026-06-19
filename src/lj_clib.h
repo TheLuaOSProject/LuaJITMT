@@ -19,6 +19,28 @@ typedef struct CLibCacheEntry {
   TValue val;
 } CLibCacheEntry;
 
+static LJ_AINLINE GCstr *lj_clib_cache_name_acq(const CLibCacheEntry *e)
+{
+  return (GCstr *)la_loadptr_acq((void *const *)&e->name);
+}
+
+static LJ_AINLINE void lj_clib_cache_name_rel(CLibCacheEntry *e, GCstr *name)
+{
+  la_storeptr_rel((void **)&e->name, (void *)name);
+}
+
+static LJ_AINLINE void lj_clib_cache_val_acq(TValue *dst,
+					     const CLibCacheEntry *e)
+{
+  lj_tv_load_acq(dst, &e->val);
+}
+
+static LJ_AINLINE void lj_clib_cache_val_rel(lua_State *L, CLibCacheEntry *e,
+					     cTValue *val)
+{
+  copyTVrel(L, &e->val, val);
+}
+
 /* C library namespace. */
 typedef struct CLibrary {
   void *handle;		/* Opaque handle for dynamic library loader. */

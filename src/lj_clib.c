@@ -318,7 +318,7 @@ static CLibCacheEntry *clib_cache_find(CLibCacheEntry *head, GCstr *name)
   CLibCacheEntry *e;
   for (e = head; e != NULL;
        e = (CLibCacheEntry *)la_loadptr_acq((void *const *)&e->next)) {
-    if ((GCstr *)la_loadptr_acq((void *const *)&e->name) == name)
+    if (lj_clib_cache_name_acq(e) == name)
       return e;
   }
   return NULL;
@@ -341,8 +341,8 @@ static TValue *clib_cache_publish(lua_State *L, CLibrary *cl, GCstr *name,
   lj_gc_barrierroot(L, &key);  /* 11.7 CLibrary side-cache key. */
   lj_gc_barrierroot(L, val);  /* 11.7 CLibrary side-cache value. */
   e = lj_mem_newt(L, sizeof(CLibCacheEntry), CLibCacheEntry);
-  e->name = name;
-  copyTV(L, &e->val, val);
+  lj_clib_cache_name_rel(e, name);
+  lj_clib_cache_val_rel(L, e, val);
   for (;;) {
     CLibCacheEntry *head = (CLibCacheEntry *)la_loadptr_acq(
       (void *const *)&cl->cache_head);

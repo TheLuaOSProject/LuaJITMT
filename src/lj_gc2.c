@@ -3200,12 +3200,12 @@ static void gc2_traverse_clib_cache(global_State *g, CLibrary *cl)
 	 (void *const *)&cl->cache_head);
        e != NULL;
        e = (CLibCacheEntry *)la_loadptr_acq((void *const *)&e->next)) {
-    GCstr *name = (GCstr *)la_loadptr_acq((void *const *)&e->name);
+    GCstr *name = lj_clib_cache_name_acq(e);
     TValue tv;
     lj_gc2_markmem(g, e);
     if (name)
       gc2_markobj_worker(g, obj2gco(name));
-    lj_tv_load_acq(&tv, &e->val);
+    lj_clib_cache_val_acq(&tv, e);
     gc2_mark_tv_worker(g, &tv);
   }
 }
