@@ -41,6 +41,11 @@ for needle in \
   'lj_gc2_barrier_weak_write(L, t, &key, L->top-1);' \
   'test_ffi_loaded_weak_value_barrier' \
   'lib_weak_write_str(lua_State *L, GCtab *tab' \
+  'lib_storefunc_str(lua_State *L, GCtab *tab, GCstr *key,' \
+  'Library string store saw FORWARD after lookup.' \
+  'lib_storetv_key(lua_State *L, GCtab *tab, cTValue *key,' \
+  'Library generic store saw FORWARD after lookup.' \
+  'lib_storetv_key(L, tab, L->top+1, L->top);' \
   'test_lib_register_weak_value_barrier' \
   'test_jit_profile_registry_weak_barrier' \
   'lj_gc2_barrier_weak_write(L, registry, &key, &tv);' \
@@ -309,6 +314,62 @@ do
     exit 1
   fi
 done
+
+if ! awk '
+  /static TValue \*lib_storefunc_str\(lua_State \*L,/ { infn = 1 }
+  infn && /lj_tab_storefunc\(L, dst, fn\)/ { raw = 1 }
+  infn && /for \(;;\)/ { loop = 1 }
+  infn && /setfuncV\(L, &tv, fn\)/ { make = 1 }
+  infn && /lj_tab_setstr\(L, tab, key\)/ { resolve = 1 }
+  infn && /lj_tab_trystoretv_cas\(L, dst, &tv\) == LJ_TAB_STORE_CAS_OK/ { cas = 1 }
+  infn && /Library string store saw FORWARD after lookup\./ { retry = 1 }
+  infn && /^}/ { infn = 0 }
+  END { exit !raw && loop && make && resolve && cas && retry ? 0 : 1 }
+' "$ROOT/src/lj_lib.c"; then
+  echo "guardrail: library string registration stores must CAS-publish and retry forwarded slots" >&2
+  exit 1
+fi
+
+if ! awk '
+  /static TValue \*lib_storetv_key\(lua_State \*L,/ { infn = 1 }
+  infn && /copyTVrel\(L, dst, val\)/ { raw = 1 }
+  infn && /for \(;;\)/ { loop = 1 }
+  infn && /lj_tab_set\(L, tab, key\)/ { resolve = 1 }
+  infn && /lj_tab_trystoretv_cas\(L, dst, val\) == LJ_TAB_STORE_CAS_OK/ { cas = 1 }
+  infn && /Library generic store saw FORWARD after lookup\./ { retry = 1 }
+  infn && /^}/ { infn = 0 }
+  END { exit !raw && loop && resolve && cas && retry ? 0 : 1 }
+' "$ROOT/src/lj_lib.c"; then
+  echo "guardrail: library generic registration stores must CAS-publish and retry forwarded slots" >&2
+  exit 1
+fi
+
+if ! awk '
+  /static const uint8_t \*lib_read_lfunc\(lua_State \*L,/ { infn = 1 }
+  infn && /lj_tab_storefunc\(L, lj_tab_setstr\(L, tab, name\), fn\)/ { raw = 1 }
+  infn && /lib_storefunc_str\(L, tab, name, fn\)/ { helper = 1 }
+  infn && /lib_weak_write_str\(L, tab, name, slot\)/ { weak = 1 }
+  infn && /^}/ { infn = 0 }
+  END { exit !raw && helper && weak ? 0 : 1 }
+' "$ROOT/src/lj_lib.c"; then
+  echo "guardrail: Lua library function registration must use CAS helper before weak barrier" >&2
+  exit 1
+fi
+
+if ! awk '
+  /void lj_lib_register\(lua_State \*L,/ { infn = 1 }
+  infn && /lj_tab_storefunc\(L, lj_tab_setstr\(L, tab,/ { raw = 1 }
+  infn && /copyTVrel\(L, lj_tab_set\(L, tab, L->top\+1\), L->top\)/ { raw = 1 }
+  infn && /lib_storefunc_str\(L, tab, key, fn\)/ { cfunc = 1 }
+  infn && /lib_storetv_key\(L, tab, L->top\+1, L->top\)/ { generic = 1 }
+  infn && /lj_gc2_barrier_weak_write\(L, tab, L->top\+1, L->top\)/ { weak = 1 }
+  infn && /lib_weak_write_str\(L, tab, key, slot\)/ { weakstr = 1 }
+  infn && /^}/ { infn = 0 }
+  END { exit !raw && cfunc && generic && weak && weakstr ? 0 : 1 }
+' "$ROOT/src/lj_lib.c"; then
+  echo "guardrail: generic library registration must use CAS helpers before weak barriers" >&2
+  exit 1
+fi
 
 if ! awk '
   /static TValue \*ffi_loaded_store\(lua_State \*L,/ { infn = 1 }

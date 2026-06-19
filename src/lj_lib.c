@@ -9,6 +9,7 @@
 #include "lauxlib.h"
 
 #include "lj_obj.h"
+#include "lj_atomic.h"
 #include "lj_gc.h"
 #include "lj_err.h"
 #include "lj_str.h"
@@ -57,6 +58,31 @@ static void lib_weak_write_str(lua_State *L, GCtab *tab, GCstr *key,
   lj_gc2_barrier_weak_write(L, tab, &keyv, val);
 }
 
+static TValue *lib_storefunc_str(lua_State *L, GCtab *tab, GCstr *key,
+				 GCfunc *fn)
+{
+  TValue tv, *dst;
+  setfuncV(L, &tv, fn);
+  for (;;) {
+    dst = lj_tab_setstr(L, tab, key);
+    if (lj_tab_trystoretv_cas(L, dst, &tv) == LJ_TAB_STORE_CAS_OK)
+      return dst;
+    la_cpu_pause();  /* Library string store saw FORWARD after lookup. */
+  }
+}
+
+static TValue *lib_storetv_key(lua_State *L, GCtab *tab, cTValue *key,
+			       cTValue *val)
+{
+  TValue *dst;
+  for (;;) {
+    dst = lj_tab_set(L, tab, key);
+    if (lj_tab_trystoretv_cas(L, dst, val) == LJ_TAB_STORE_CAS_OK)
+      return dst;
+    la_cpu_pause();  /* Library generic store saw FORWARD after lookup. */
+  }
+}
+
 static const uint8_t *lib_read_lfunc(lua_State *L, const uint8_t *p, GCtab *tab)
 {
   int len = *p++;
@@ -78,7 +104,7 @@ static const uint8_t *lib_read_lfunc(lua_State *L, const uint8_t *p, GCtab *tab)
   {
     TValue *slot;
     /* NOBARRIER: See below for common barrier. */
-    slot = lj_tab_storefunc(L, lj_tab_setstr(L, tab, name), fn);
+    slot = lib_storefunc_str(L, tab, name, fn);
     lib_weak_write_str(L, tab, name, slot);
   }
   return (const uint8_t *)ls.p;
@@ -129,7 +155,7 @@ void lj_lib_register(lua_State *L, const char *libname,
 	GCstr *key = lj_str_new(L, name, len);
 	TValue *slot;
 	/* NOBARRIER: See above for common barrier. */
-	slot = lj_tab_storefunc(L, lj_tab_setstr(L, tab, key), fn);
+	slot = lib_storefunc_str(L, tab, key, fn);
 	lib_weak_write_str(L, tab, key, slot);
       }
       ofn = fn;
@@ -143,7 +169,7 @@ void lj_lib_register(lua_State *L, const char *libname,
 	if (tvisstr(L->top+1) && strV(L->top+1)->len == 0)
 	  env = tabV(L->top);
 	else {  /* NOBARRIER: See above for common barrier. */
-	  copyTVrel(L, lj_tab_set(L, tab, L->top+1), L->top);
+	  lib_storetv_key(L, tab, L->top+1, L->top);
 	  lj_gc2_barrier_weak_write(L, tab, L->top+1, L->top);
 	}
 	break;
@@ -199,10 +225,8 @@ int lj_lib_postreg(lua_State *L, lua_CFunction cf, int id, const char *name)
   GCfunc *fn = lj_lib_pushcf(L, cf, id);
   GCtab *t = tabref_acq(curr_func(L)->c.env);  /* Reference to parent table. */
   GCstr *key = lj_str_newz(L, name);
-  TValue tv;
-  setfuncV(L, &tv, fn);
-  copyTVrel(L, lj_tab_setstr(L, t, key), &tv);
-  lib_weak_write_str(L, t, key, &tv);
+  TValue *slot = lib_storefunc_str(L, t, key, fn);
+  lib_weak_write_str(L, t, key, slot);
   lj_gc_pubtab(L, t);
   setfuncV(L, L->top++, fn);
   return 1;

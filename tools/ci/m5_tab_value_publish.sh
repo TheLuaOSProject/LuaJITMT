@@ -39,7 +39,7 @@ for needle in \
   'copyTVrel(L, dst, &k)' \
   'copyTVrel(L, slot, &val)' \
   'copyTVrel(L, tab_rehash_insert(L, newnode, newhmask, &newfreetop, &key),' \
-  'copyTVrel(L, lj_tab_set(L, tab, L->top+1), L->top)' \
+  'lib_storetv_key(L, tab, L->top+1, L->top)' \
   'copyTVrel(L, o, f)' \
   'table_insert_shift_store(L, t, i)' \
   'table_insert_value_store(L, t, i, L->top-1)' \
@@ -50,7 +50,7 @@ for needle in \
   'lj_tab_storenil(J->L, &node[i].val)' \
   'lj_tab_storenil(J->L, &array[i])' \
   'copyTVrel(L, o, base+2)' \
-  'slot = lj_tab_storefunc(L, lj_tab_setstr(L, tab, name), fn)' \
+  'slot = lib_storefunc_str(L, tab, name, fn)' \
   'jit_profile_registry_store(L, registry, &key, &tv)' \
   'jit_profile_registry_store(L, registry, &key, niltv(L))' \
   'lj_tab_storenilraw(&array[i])' \
