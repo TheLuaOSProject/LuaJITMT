@@ -9,6 +9,7 @@
 
 #include "lua.h"
 #include "lauxlib.h"
+#include "lualib.h"
 
 #include "lj_meta.h"
 #include "lj_obj.h"
@@ -307,10 +308,65 @@ static void exercise_capi_setfield_forward_retry(lua_State *L)
   lj_tab_node_hdr_flags_or_rel(oldnode, TABNODE_FLAG_RETIRING);
 }
 
+static void call_table_insert(lua_State *L, int32_t pos, int32_t val)
+{
+  lua_getglobal(L, "table");
+  lua_getfield(L, -1, "insert");
+  lua_remove(L, -2);
+  lua_pushvalue(L, -2);
+  lua_pushinteger(L, pos);
+  lua_pushinteger(L, val);
+  lua_call(L, 3, 0);
+}
+
+static void exercise_table_insert_forward_retry(lua_State *L)
+{
+  GCtab *t;
+  TValue *oldarray, *newarray;
+  MSize oldasize, newasize, oldacap;
+  int32_t pos = 3;
+  MSize i;
+
+  lua_settop(L, 0);
+  lua_createtable(L, LJ_MAX_COLOSIZE + 16, 0);
+  t = tabV(L->top-1);
+  assert(lj_tab_array_separated(t));
+  oldarray = lj_tab_array_acq(t);
+  oldasize = lj_tab_asize_acq(t);
+  oldacap = t->acap;
+  assert(oldasize > 6);
+  for (i = 1; i <= 5; i++)
+    lj_tab_storeint(L, lj_tab_setint(L, t, (int32_t)i), (int32_t)i + 4000);
+
+  lj_tab_resize(L, t, (uint32_t)oldasize + 8u, 0);
+  newarray = lj_tab_array_acq(t);
+  newasize = lj_tab_asize_acq(t);
+  assert(newarray != oldarray);
+  for (i = (MSize)pos; i <= 6; i++)
+    store_forward(&oldarray[i]);
+  la_store32_rel(&lj_tab_array_hdrw(oldarray)->acap,
+		 lj_tab_array_hdr_pack_acap(oldacap, 0));
+  lj_tab_asize_rel(t, oldasize);
+  lj_tab_array_rel(t, oldarray);
+
+  call_table_insert(L, pos, 9090);
+  for (i = (MSize)pos; i <= 6; i++)
+    assert_forward(&oldarray[i]);
+  assert_i32(&newarray[3], 9090);
+  assert_i32(&newarray[4], 4003);
+  assert_i32(&newarray[5], 4004);
+  assert_i32(&newarray[6], 4005);
+
+  lj_tab_array_rel(t, newarray);
+  lj_tab_asize_rel(t, newasize);
+  lj_tab_array_hdr_flags_or_rel(oldarray, TABARRAY_FLAG_RETIRING);
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
   assert(L != NULL);
+  luaL_openlibs(L);
 
   exercise_direct_cas(L);
   exercise_meta_forward_retry(L);
@@ -318,6 +374,7 @@ int main(void)
   exercise_capi_settable_forward_retry(L);
   exercise_capi_rawset_forward_retry(L);
   exercise_capi_setfield_forward_retry(L);
+  exercise_table_insert_forward_retry(L);
 
   lua_close(L);
   printf("t-tab-cas-store OK: CAS table stores preserve FORWARD slots\n");

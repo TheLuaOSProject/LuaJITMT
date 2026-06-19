@@ -33,6 +33,11 @@ for needle in \
   'lj_tab_trystoretv_cas(L, o, val) == LJ_TAB_STORE_CAS_OK' \
   'lj_tab_trystoretv_cas(L, dst, key+1) == LJ_TAB_STORE_CAS_OK' \
   'lj_tab_trystoretv_cas(L, dst, src) == LJ_TAB_STORE_CAS_OK' \
+  'table_insert_shift_store(lua_State *L, GCtab *t, int32_t i)' \
+  'table.insert shift saw FORWARD after lookup.' \
+  'table_insert_value_store(lua_State *L, GCtab *t, int32_t i,' \
+  'table.insert value saw FORWARD after lookup.' \
+  'exercise_table_insert_forward_retry' \
   'exercise_capi_rawseti_forward_retry' \
   'exercise_capi_settable_forward_retry' \
   'exercise_capi_rawset_forward_retry' \
@@ -41,6 +46,7 @@ for needle in \
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_tab.c" "$ROOT/src/lj_tab.h" \
       "$ROOT/src/lj_meta.c" "$ROOT/src/lj_api.c" \
+      "$ROOT/src/lib_table.c" \
       "$ROOT/tests/t-tab-cas-store.c"; then
     echo "guardrail: missing table CAS store marker: $needle" >&2
     exit 1
@@ -75,6 +81,52 @@ if ! awk '
   END { exit load && forward && cas && ok && fwd && pause ? 0 : 1 }
 ' "$ROOT/src/lj_tab.c"; then
   echo "guardrail: table CAS helper must acquire-load, CAS, and report FORWARD" >&2
+  exit 1
+fi
+
+if ! awk '
+  /static void table_insert_shift_store\(lua_State \*L,/ { infn = 1 }
+  infn && /lj_tab_storetv\(L, dst, &val\)/ { raw = 1 }
+  infn && /lj_tab_storenil\(L, dst\)/ { raw = 1 }
+  infn && /for \(;;\)/ { loop = 1 }
+  infn && /lj_tab_setint\(L, t, i\)/ { resolve = 1 }
+  infn && /lj_tab_getint\(t, i-1\)/ { loadsrc = 1 }
+  infn && /lj_tab_trystoretv_cas\(L, dst, &val\) == LJ_TAB_STORE_CAS_OK/ { cas = 1 }
+  infn && /lj_gc2_barrier_weak_write\(L, t, &key, &val\)/ { weak = 1 }
+  infn && /table\.insert shift saw FORWARD after lookup\./ { retry = 1 }
+  infn && /^}/ { infn = 0 }
+  END { exit !raw && loop && resolve && loadsrc && cas && weak && retry ? 0 : 1 }
+' "$ROOT/src/lib_table.c"; then
+  echo "guardrail: table.insert shift stores must CAS-publish and retry forwarded slots" >&2
+  exit 1
+fi
+
+if ! awk '
+  /static TValue \*table_insert_value_store\(lua_State \*L,/ { infn = 1 }
+  infn && /copyTVrel\(L, dst, src\)/ { raw = 1 }
+  infn && /for \(;;\)/ { loop = 1 }
+  infn && /lj_tab_setint\(L, t, i\)/ { resolve = 1 }
+  infn && /lj_tab_trystoretv_cas\(L, dst, src\) == LJ_TAB_STORE_CAS_OK/ { cas = 1 }
+  infn && /table\.insert value saw FORWARD after lookup\./ { retry = 1 }
+  infn && /^}/ { infn = 0 }
+  END { exit !raw && loop && resolve && cas && retry ? 0 : 1 }
+' "$ROOT/src/lib_table.c"; then
+  echo "guardrail: table.insert value stores must CAS-publish and retry forwarded slots" >&2
+  exit 1
+fi
+
+if ! awk '
+  /LJLIB_CF\(table_insert\)/ { infn = 1 }
+  infn && /copyTVrel\(L, dst, L->top-1\)/ { raw = 1 }
+  infn && /lj_tab_storetv\(L, dst, &val\)/ { raw = 1 }
+  infn && /lj_tab_storenil\(L, dst\)/ { raw = 1 }
+  infn && /table_insert_shift_store\(L, t, i\)/ { shift = 1 }
+  infn && /table_insert_value_store\(L, t, i, L->top-1\)/ { value = 1 }
+  infn && /lj_gc_pubtabtv\(L, t, dst\)/ { parent = 1 }
+  infn && /^}/ { infn = 0 }
+  END { exit !raw && shift && value && parent ? 0 : 1 }
+' "$ROOT/src/lib_table.c"; then
+  echo "guardrail: table.insert must route stores through CAS helpers" >&2
   exit 1
 fi
 

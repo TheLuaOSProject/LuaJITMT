@@ -14,6 +14,7 @@
 #include "lualib.h"
 
 #include "lj_obj.h"
+#include "lj_atomic.h"
 #include "lj_gc.h"
 #include "lj_gc2.h"
 #include "lj_err.h"
@@ -25,6 +26,41 @@
 /* ------------------------------------------------------------------------ */
 
 #define LJLIB_MODULE_table
+
+static void table_insert_shift_store(lua_State *L, GCtab *t, int32_t i)
+{
+  for (;;) {
+    TValue *dst = lj_tab_setint(L, t, i);
+    cTValue *src = lj_tab_getint(t, i-1);
+    TValue val;
+    int have_src = src != NULL;
+    if (have_src)
+      lj_tv_load_acq(&val, src);
+    else
+      setnilV(&val);
+    if (lj_tab_trystoretv_cas(L, dst, &val) == LJ_TAB_STORE_CAS_OK) {
+      if (have_src) {
+	TValue key;
+	setintV(&key, i);
+	lj_gc2_barrier_weak_write(L, t, &key, &val);
+      }
+      return;
+    }
+    la_cpu_pause();  /* table.insert shift saw FORWARD after lookup. */
+  }
+}
+
+static TValue *table_insert_value_store(lua_State *L, GCtab *t, int32_t i,
+					cTValue *src)
+{
+  TValue *dst;
+  for (;;) {
+    dst = lj_tab_setint(L, t, i);
+    if (lj_tab_trystoretv_cas(L, dst, src) == LJ_TAB_STORE_CAS_OK)
+      return dst;
+    la_cpu_pause();  /* table.insert value saw FORWARD after lookup. */
+  }
+}
 
 LJLIB_LUA(table_foreachi) /*
   function(t, f)
@@ -97,27 +133,13 @@ LJLIB_CF(table_insert)		LJLIB_REC(.)
     if (nargs != 3*sizeof(TValue))
       lj_err_caller(L, LJ_ERR_TABINS);
     /* Shifted weak-table writes still need the P_WEAK bridge. */
-    for (n = lj_lib_checkint(L, 2); i > n; i--) {
-      /* The set may invalidate the get pointer, so need to do it first! */
-      TValue *dst = lj_tab_setint(L, t, i);
-      cTValue *src = lj_tab_getint(t, i-1);
-      if (src) {
-	TValue val;
-	TValue key;
-	lj_tv_load_acq(&val, src);
-	lj_tab_storetv(L, dst, &val);
-	setintV(&key, i);
-	lj_gc2_barrier_weak_write(L, t, &key, &val);
-      } else {
-	lj_tab_storenil(L, dst);
-      }
-    }
+    for (n = lj_lib_checkint(L, 2); i > n; i--)
+      table_insert_shift_store(L, t, i);
     i = n;
   }
   {
-    TValue *dst = lj_tab_setint(L, t, i);
+    TValue *dst = table_insert_value_store(L, t, i, L->top-1);
     TValue key;
-    copyTVrel(L, dst, L->top-1);  /* Set new value. */
     setintV(&key, i);
     lj_gc2_barrier_weak_write(L, t, &key, L->top-1);
     lj_gc_pubtabtv(L, t, dst);
