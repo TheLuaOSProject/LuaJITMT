@@ -747,8 +747,15 @@ static LJ_AINLINE void lj_tab_array_hdr_flags_or_rel(TValue *array,
 static LJ_AINLINE MSize lj_tab_array_snapshot_acq(const GCtab *t,
 						  TValue **arrayp)
 {
-  MSize asize = lj_tab_asize_acq(t);
-  TValue *array = lj_tab_array_acq(t);
+  MSize asize;
+  TValue *array;
+retry_snapshot:
+  asize = lj_tab_asize_acq(t);
+  array = lj_tab_array_acq(t);
+  if (lj_tab_array_is_retiring(t, array)) {
+    la_cpu_pause();
+    goto retry_snapshot;
+  }
   if (array && !lj_tab_array_is_colocated(t, array))
     asize = lj_tab_array_hdr_asize_acq(array);
   *arrayp = array;

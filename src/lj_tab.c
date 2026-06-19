@@ -1328,13 +1328,7 @@ uint32_t LJ_FASTCALL lj_tab_keyindex(GCtab *t, cTValue *key)
 {
   TValue tmp;
   TValue *array;
-  uint32_t asize;
-retry_array:
-  asize = (uint32_t)lj_tab_array_snapshot_acq(t, &array);
-  if (lj_tab_array_is_retiring(t, array)) {
-    la_cpu_pause();
-    goto retry_array;
-  }
+  uint32_t asize = (uint32_t)lj_tab_array_snapshot_acq(t, &array);
   UNUSED(array);
   if (tvisint(key)) {
     int32_t k = intV(key);
@@ -1379,13 +1373,7 @@ int lj_tab_next(GCtab *t, cTValue *key, TValue *o)
 {
   uint32_t idx = lj_tab_keyindex(t, key);  /* Find successor index of key. */
   TValue *array;
-  uint32_t asize;
-retry_array:
-  asize = (uint32_t)lj_tab_array_snapshot_acq(t, &array);
-  if (lj_tab_array_is_retiring(t, array)) {
-    la_cpu_pause();
-    goto retry_array;
-  }
+  uint32_t asize = (uint32_t)lj_tab_array_snapshot_acq(t, &array);
   /* First traverse the array part. */
   for (; idx < asize; idx++) {
     TValue val;
@@ -1461,13 +1449,7 @@ LJ_NOINLINE static MSize tab_len_slow(GCtab *t, size_t hi)
 MSize LJ_FASTCALL lj_tab_len(GCtab *t)
 {
   TValue *array;
-  size_t hi;
-retry_array:
-  hi = (size_t)lj_tab_array_snapshot_acq(t, &array);
-  if (lj_tab_array_is_retiring(t, array)) {
-    la_cpu_pause();
-    goto retry_array;
-  }
+  size_t hi = (size_t)lj_tab_array_snapshot_acq(t, &array);
   if (hi) hi--;
   /* In a growing array the last array element is very likely nil. */
   if (hi > 0 && LJ_LIKELY(lj_tv_isnil_acq(&array[hi]))) {

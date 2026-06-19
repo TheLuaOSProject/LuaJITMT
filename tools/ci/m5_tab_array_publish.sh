@@ -45,11 +45,11 @@ for needle in \
   'lj_tab_asize_rel(t, asize)' \
   'static LJ_AINLINE cTValue *lj_tab_getint' \
   'static LJ_AINLINE TValue *lj_tab_setint' \
-  'goto retry_array' \
+  'retry_snapshot' \
   'lj_tab_array_is_retiring(t, array)' \
   'lj_tab_array_snapshot_acq(kt, &karray)' \
   'uint32_t asize = (uint32_t)lj_tab_array_snapshot_acq(t, &array)' \
-  'hi = (size_t)lj_tab_array_snapshot_acq(t, &array)' \
+  'size_t hi = (size_t)lj_tab_array_snapshot_acq(t, &array)' \
   'MSize asize = lj_tab_array_snapshot_acq(t, &array)' \
   'MSize i, asize = lj_tab_array_snapshot_acq(t, &array)' \
   'asize = lj_tab_array_snapshot_acq(kt, &array)' \
