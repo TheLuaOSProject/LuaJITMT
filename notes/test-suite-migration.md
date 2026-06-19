@@ -36,6 +36,13 @@ Lua test-suite migration notes:
   - `tools/ci/m2_arena_gcclose.sh` -> `m2_arena_gcclose`
   - `tools/ci/m2_arena_gcsweep.sh` -> `m2_arena_gcsweep`
   - `tools/ci/m2_arena_gcphase.sh` -> `m2_arena_gcphase`
+- Fifth migrated scripts:
+  - `tools/ci/m5_gcroot_publish.sh` -> `m5_gcroot_publish`
+  - `tools/ci/m5_meta_snapshot.sh` -> `m5_meta_snapshot`
+  - `tools/ci/m5_jit_attach_publish.sh` -> `m5_jit_attach_publish`
+  - `tools/ci/m5_jit_profile_publish.sh` -> `m5_jit_profile_publish`
+  - `tools/ci/m5_table_parser_publish.sh` -> `m5_table_parser_publish`
+  - `tools/ci/m5_tmpbuf_tg.sh` -> `m5_tmpbuf_tg`
 - This first batch covers the main shapes the full migration needs:
   standalone C fixtures linked against selected runtime files, Lua tests under
   the built VM, C fixtures linked against `libluajit.a`, and source-order guard
@@ -52,6 +59,10 @@ Lua test-suite migration notes:
   `ljtest.cc()` now accepts per-fixture compile flags for assertion fixtures,
   and `ljtest.assert_all_any_contains()` preserves `rg -F` style source-marker
   checks across multiple files.
+- The fifth batch adds Lua source-scanning guard predicates for M5 publication,
+  metamethod snapshot, jit attach/profile CAS, table/parser release-store, and
+  per-TG tmpbuf checks. `ljtest.files()` provides deterministic source file
+  enumeration for guard suites without shell `rg`/`awk` predicates.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.
