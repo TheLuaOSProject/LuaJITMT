@@ -33,13 +33,21 @@ for needle in \
   'LJFOLD(FLOAD any IRFL_TAB_NODE)' \
   'LJFOLD(FLOAD any IRFL_TAB_ASIZE)' \
   'LJFOLD(FLOAD any IRFL_TAB_HMASK)' \
-  'LJFOLDF(fload_tab_mut)'
+  'LJFOLDF(fload_tab_mut)' \
+  'lj_tab_array_snapshot_acq(t, &array)' \
+  'lj_tab_node_snapshot_acq(t, &hmask)'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_opt_fold.c"; then
     echo "guardrail: missing mutable table FLOAD marker: $needle" >&2
     exit 1
   fi
 done
+
+if rg -n 'ir_ktab\(IR\(fleft->op1\)\)->(asize|hmask)' \
+    "$ROOT/src/lj_opt_fold.c"; then
+  echo "guardrail: TDUP FLOAD folds must snapshot template table headers" >&2
+  exit 1
+fi
 
 if ! awk '
   /LJFOLDF\(fload_tab_mut\)/ { infn = 1; next }

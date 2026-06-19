@@ -2261,16 +2261,23 @@ LJFOLDF(fload_tab_tnew_hmask)
 LJFOLD(FLOAD TDUP IRFL_TAB_ASIZE)
 LJFOLDF(fload_tab_tdup_asize)
 {
-  if (LJ_LIKELY(J->flags & JIT_F_OPT_FOLD) && lj_opt_fwd_tptr(J, fins->op1))
-    return INTFOLD((int32_t)ir_ktab(IR(fleft->op1))->asize);
+  if (LJ_LIKELY(J->flags & JIT_F_OPT_FOLD) && lj_opt_fwd_tptr(J, fins->op1)) {
+    TValue *array;
+    GCtab *t = ir_ktab(IR(fleft->op1));
+    return INTFOLD((int32_t)lj_tab_array_snapshot_acq(t, &array));
+  }
   return NEXTFOLD;
 }
 
 LJFOLD(FLOAD TDUP IRFL_TAB_HMASK)
 LJFOLDF(fload_tab_tdup_hmask)
 {
-  if (LJ_LIKELY(J->flags & JIT_F_OPT_FOLD) && lj_opt_fwd_tptr(J, fins->op1))
-    return INTFOLD((int32_t)ir_ktab(IR(fleft->op1))->hmask);
+  if (LJ_LIKELY(J->flags & JIT_F_OPT_FOLD) && lj_opt_fwd_tptr(J, fins->op1)) {
+    MSize hmask;
+    GCtab *t = ir_ktab(IR(fleft->op1));
+    (void)lj_tab_node_snapshot_acq(t, &hmask);
+    return INTFOLD((int32_t)hmask);
+  }
   return NEXTFOLD;
 }
 
