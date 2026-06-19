@@ -244,6 +244,8 @@ Lua test-suite migration notes:
   allocator, OS, and parser checks.
 - Removed `m7_ffi_jit_cnew` source/assembly text guards while keeping its
   allocation stress, generated JIT dump checks, and stock FFI regression run.
+- Converted `m3_safepoint_handshake` to rely on the compiled handshake
+  fixture instead of checking safepoint/native-call implementation markers.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.
