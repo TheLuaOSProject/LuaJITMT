@@ -328,6 +328,8 @@ Lua test-suite migration notes:
   acquire/release blacklist.
 - Removed unused M5 base-table source-inspection helper functions left behind
   after the state-owner behavior migration.
+- Removed additional unused M5 source-inspection helper functions that no
+  longer back any active test cases.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.

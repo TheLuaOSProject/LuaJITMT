@@ -3,7 +3,6 @@ local utils = require("suite_utils")
 local contains = utils.contains
 local quote = utils.shell_quote
 local count_plain = utils.count_plain
-local has_ident = utils.has_ident
 local append = utils.append_list
 local assert_text_not_contains = utils.assert_text_not_contains
 local assert_no_lines = utils.assert_no_lines
@@ -46,10 +45,6 @@ local function src_ch_files(t, opts)
   return src_files(t, { ".c", ".h" }, opts)
 end
 
-local function src_ch_dasc_files(t, opts)
-  return src_files(t, { ".c", ".h", ".dasc" }, opts)
-end
-
 local function src_text_files(t, opts)
   return src_files(t, { ".c", ".h", ".dasc", ".lua", ".S", ".hpp", ".txt", ".md" }, opts)
 end
@@ -60,18 +55,6 @@ local function test_text_files(t)
   }), function(path)
     return not contains(path, "/tests/suites/")
   end)
-end
-
-local function assert_text_all_contains(t, label, data, needles)
-  for i = 1, #needles do
-    t:assert_text_contains(label, data, needles[i])
-  end
-end
-
-local function assert_block_contains(t, label, path, start, needles)
-  local block = t:c_block(path, start)
-  assert_text_all_contains(t, label, block, needles)
-  return block
 end
 
 local function assert_block_excludes(label, block, rejects)
@@ -91,35 +74,6 @@ local function assert_before(label, data, a, b)
   local pb = find_pos(label, data, b)
   if pa >= pb then
     error(label .. ": expected `" .. a .. "` before `" .. b .. "`", 2)
-  end
-end
-
-local legacy_barriers = {
-  "lj_gc_objbarrier",
-  "lj_gc_objbarriert",
-  "lj_gc_anybarriert",
-  "lj_gc_barrieruv",
-  "lj_gc_barriert",
-  "lj_gc_barrier"
-}
-
-local function is_legacy_barrier(line)
-  for i = 1, #legacy_barriers do
-    if has_ident(line, legacy_barriers[i]) then return true end
-  end
-  return false
-end
-
-local function assert_no_legacy_barriers(t, label, paths)
-  assert_no_lines(t, label, paths, is_legacy_barrier)
-end
-
-local function assert_block_no_legacy(t, label, path, start)
-  local block = t:c_block(path, start)
-  for line in (block .. "\n"):gmatch("(.-)\n") do
-    if is_legacy_barrier(line) then
-      error(label .. ": legacy barrier present: " .. line, 2)
-    end
   end
 end
 
