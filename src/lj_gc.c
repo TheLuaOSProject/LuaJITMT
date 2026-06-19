@@ -743,6 +743,24 @@ static void gc_mark_finalizer_ring(global_State *g, GCobj *root)
   }
 }
 
+static int gc_chain_splice(GCRef *p, GCobj *o)
+{
+  GCobj *next = lj_obj_gcw_acq(o);
+  GCRef oldref, nextref;
+  setgcref(oldref, o);
+  if (next)
+    setgcref(nextref, next);
+  else
+    setgcrefnull(nextref);
+#if LJ_GC64
+  return la_cas64(&p->gcptr64, &oldref.gcptr64, nextref.gcptr64,
+		  LA_ACQ_REL, LA_ACQ);
+#else
+  return la_cas32(&p->gcptr32, &oldref.gcptr32, nextref.gcptr32,
+		  LA_ACQ_REL, LA_ACQ);
+#endif
+}
+
 /* Mark userdata/cdata in finalizer queues. */
 static void gc_mark_finalizers(global_State *g)
 {
@@ -757,8 +775,10 @@ static int gc_unlink_udata_object(global_State *g, GCobj *target)
   GCobj *o;
   while ((o = gcref_acq(*p)) != NULL) {
     if (o == target) {
-      setgcrefrrel(*p, *lj_obj_gcwref(o));
-      return 1;
+      if (gc_chain_splice(p, o))
+	return 1;
+      la_cpu_pause();
+      continue;
     }
     p = lj_obj_gcwref(o);
   }
@@ -1171,10 +1191,12 @@ static void gc2_unlink_root_obj(global_State *g, GCobj *dead)
 {
   GCRef *p = &g->gc.root;
   GCobj *o;
-  while ((o = gcref(*p)) != NULL) {
+  while ((o = gcref_acq(*p)) != NULL) {
     if (o == dead) {
-      setgcrefr(*p, *lj_obj_gcwref(o));
-      return;
+      if (gc_chain_splice(p, o))
+	return;
+      la_cpu_pause();
+      continue;
     }
     p = lj_obj_gcwref(o);
   }
@@ -1185,15 +1207,23 @@ uint32_t lj_gc_sweep_gc2_unmarked(global_State *g)
   GCRef *p = &g->gc.root;
   GCobj *o;
   uint32_t n = 0;
-  while ((o = gcref(*p)) != NULL) {
+  while ((o = gcref_acq(*p)) != NULL) {
     int marked = lj_gc2_ismarked(g, o);
     if (marked == 0) {
       if (o->gch.gct == 0) {
-	setgcrefr(*p, *lj_obj_gcwref(o));
+	if (!gc_chain_splice(p, o)) {
+	  la_cpu_pause();
+	  continue;
+	}
 	continue;
       }
-      if (isdead(g, o) && gc2_free_unmarked_obj(g, o)) {
-	setgcrefr(*p, *lj_obj_gcwref(o));
+      if (isdead(g, o) && gc2_valid_freeable_obj(o)) {
+	if (!gc_chain_splice(p, o)) {
+	  la_cpu_pause();
+	  continue;
+	}
+	if (!gc2_free_unmarked_obj(g, o))
+	  continue;
 	n++;
 	continue;
       }
@@ -1217,8 +1247,10 @@ static uint32_t gc2_sweep_arena_bodies(global_State *g, GCArena *a,
 	lj_arena_bm_set(a->mark, i);
 	continue;
       }
-      if ((!unmarked_only || isdead(g, o)) && gc2_free_unmarked_obj(g, o)) {
+      if ((!unmarked_only || isdead(g, o)) && gc2_valid_freeable_obj(o)) {
 	gc2_unlink_root_obj(g, o);
+	if (!gc2_free_unmarked_obj(g, o))
+	  continue;
 	n++;
       }
     }
@@ -1641,8 +1673,10 @@ static int gc_unlink_root_object(global_State *g, GCobj *target)
   GCobj *o;
   while ((o = gcref_acq(*p)) != NULL) {
     if (o == target) {
-      setgcrefrrel(*p, *lj_obj_gcwref(o));
-      return 1;  /* root unlink after ordered FINREG claim. */
+      if (gc_chain_splice(p, o))
+	return 1;  /* root unlink after ordered FINREG claim. */
+      la_cpu_pause();
+      continue;
     }
     p = lj_obj_gcwref(o);
   }

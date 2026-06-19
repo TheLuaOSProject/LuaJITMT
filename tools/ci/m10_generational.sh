@@ -63,6 +63,8 @@ for needle in \
   'if (!sweep_minor)' \
   'LJ_GC2_HS_ALLOC_WHITE : LJ_GC2_HS_ALLOC_BLACK' \
   'lj_gc_sweep_gc2_unmarked(global_State *g)' \
+  'gc_chain_splice(p, o)' \
+  'gc2_unlink_root_obj(g, o);' \
   'tg->alloc.alloc_black =' \
   'la_load32_acq(&g->gc2.cycle_sweep_minor) == 0' \
   'la_add64_rlx(&g->gc2.major_root_scans' \
@@ -101,6 +103,21 @@ do
     exit 1
   fi
 done
+
+if ! awk '
+  /uint32_t lj_gc_sweep_gc2_unmarked\(global_State \*g\)/ { inroot = 1 }
+  inroot && /gc_chain_splice\(p, o\)/ { splice = NR }
+  inroot && /gc2_free_unmarked_obj\(g, o\)/ { free = NR }
+  inroot && /^}/ { rootok = splice && free && splice < free; inroot = 0 }
+  /static uint32_t gc2_sweep_arena_bodies\(global_State \*g,/ { inarena = 1 }
+  inarena && /gc2_unlink_root_obj\(g, o\)/ { unlink = NR }
+  inarena && /gc2_free_unmarked_obj\(g, o\)/ { afree = NR }
+  inarena && /^}/ { arenaok = unlink && afree && unlink < afree; inarena = 0 }
+  END { exit rootok && arenaok ? 0 : 1 }
+' "$ROOT/src/lj_gc.c"; then
+  echo "guardrail: GC2 sweep must unlink root-list objects before free/finalizer enqueue" >&2
+  exit 1
+fi
 
 "$ROOT/src/luajit" -joff "$ROOT/tests/t-gc-generational-mode.lua"
 "$ROOT/src/luajit" "$ROOT/tests/t-gc-generational-mode.lua"

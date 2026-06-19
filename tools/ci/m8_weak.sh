@@ -298,7 +298,9 @@ for needle in \
   'lj_gc2_finreg_udata_set(g, o, 0);' \
   'gc_unlink_udata_object(global_State *g, GCobj *target)' \
   'gc_unlink_root_object(global_State *g, GCobj *target)' \
-  'setgcrefrrel(*p, *lj_obj_gcwref(o));' \
+  'gc_chain_splice(GCRef *p, GCobj *o)' \
+  'LA_ACQ_REL, LA_ACQ);' \
+  'gc_chain_splice(p, o)' \
   'test_finreg_internal_userdata_telemetry' \
   'finreg_udata_registered) == registered0 + 4u' \
   'finreg_udata_discovered) == discovered0 + 2u' \
@@ -338,24 +340,27 @@ if rg -n 'gcref\(node->obj|gcref_acq\(node->obj|setgcref\(node->obj|setgcrefrel\
 fi
 
 if ! awk '
+  /static int gc_chain_splice\(GCRef \*p, GCobj \*o\)/ { insplice = 1 }
+  insplice && /la_cas(32|64)\(&p->gcptr/ { cas = 1 }
+  insplice && /^}/ { insplice = 0 }
   /static int gc_unlink_udata_object\(global_State \*g, GCobj \*target\)/ ||
   /static int gc_unlink_root_object\(global_State \*g, GCobj \*target\)/ {
     infn = 1
     acq = 0
-    rel = 0
+    splice = 0
     raw = 0
   }
   infn && /gcref_acq\(\*p\)/ { acq = 1 }
-  infn && /setgcrefrrel\(\*p, \*lj_obj_gcwref\(o\)\)/ { rel = 1 }
-  infn && /setgcrefr\(\*p, \*lj_obj_gcwref\(o\)\)/ { raw = 1 }
+  infn && /gc_chain_splice\(p, o\)/ { splice = 1 }
+  infn && /setgcrefr(rel)?\(\*p, \*lj_obj_gcwref\(o\)\)/ { raw = 1 }
   infn && /^}/ {
-    if (!acq || !rel || raw)
+    if (!cas || !acq || !splice || raw)
       bad = 1
     infn = 0
   }
   END { exit bad ? 1 : 0 }
 ' "$ROOT/src/lj_gc.c"; then
-  echo "guardrail: finalizer legacy-list unlinks must acquire-load and release-splice" >&2
+  echo "guardrail: finalizer legacy-list unlinks must acquire-load and CAS-splice" >&2
   exit 1
 fi
 
