@@ -1341,6 +1341,30 @@ static void rec_mm_comp_cdata(jit_State *J, RecordIndex *ix, int op, MMS mm)
 
 #ifdef LUAJIT_ENABLE_TABLE_BUMP
 /* Bump table allocations in bytecode when they grow during recording. */
+static IRRef rec_rbchash_ref_acq(RBCHashEntry *rbc)
+{
+  return (IRRef)la_load32_acq(&rbc->ref);
+}
+
+static const BCIns *rec_rbchash_pc_acq(RBCHashEntry *rbc)
+{
+  return mref_acq(rbc->pc, const BCIns);
+}
+
+static GCproto *rec_rbchash_pt_acq(RBCHashEntry *rbc)
+{
+  GCobj *o = gcref_acq(rbc->pt);
+  return o ? gco2pt(o) : NULL;
+}
+
+static void rec_rbchash_publish(jit_State *J, TRef tr, const BCIns *pc)
+{
+  RBCHashEntry *rbc = &J->rbchash[(tr & (RBCHASH_SLOTS-1))];
+  setmrefrel(rbc->pc, pc);
+  setgcrefrel(rbc->pt, obj2gco(J->pt));
+  la_store32_rel(&rbc->ref, tref_ref(tr));  /* Recorder table-bump cache. */
+}
+
 static void rec_template_mark_nil(jit_State *J, GCtab *tpl, cTValue *key)
 {
   TValue marker, old, *dst;
@@ -1363,8 +1387,8 @@ static void rec_template_mark_nil(jit_State *J, GCtab *tpl, cTValue *key)
 static void rec_idx_bump(jit_State *J, RecordIndex *ix)
 {
   RBCHashEntry *rbc = &J->rbchash[(ix->tab & (RBCHASH_SLOTS-1))];
-  if (tref_ref(ix->tab) == rbc->ref) {
-    const BCIns *pc = mref(rbc->pc, const BCIns);
+  if (tref_ref(ix->tab) == rec_rbchash_ref_acq(rbc)) {
+    const BCIns *pc = rec_rbchash_pc_acq(rbc);
     GCtab *tb = tabV(&ix->tabv);
     uint32_t nhbits;
     Node *tb_node;
@@ -1393,7 +1417,12 @@ static void rec_idx_bump(jit_State *J, RecordIndex *ix)
 	J->retryrec = 1;  /* Abort the trace at the end of recording. */
       }
     } else if (ir->o == IR_TDUP) {
-      GCtab *tpl = gco2tab(proto_kgc(&gcref(rbc->pt)->pt, ~(ptrdiff_t)bc_d(*pc)));
+      GCproto *rbcpt = rec_rbchash_pt_acq(rbc);
+      GCtab *tpl;
+      lj_assertJ(rbcpt != NULL, "missing table-bump prototype");
+      if (LJ_UNLIKELY(rbcpt == NULL))
+	return;
+      tpl = gco2tab(proto_kgc(rbcpt, ~(ptrdiff_t)bc_d(*pc)));
       uint32_t tb_asize =
 	(uint32_t)lj_tab_array_snapshot_acq(tb, &array);
       uint32_t tpl_asize =
@@ -2534,9 +2563,7 @@ static TRef rec_tnew(jit_State *J, uint32_t ah)
   if (asize == 0x7ff) asize = 0x801;
   tr = emitir(IRTG(IR_TNEW, IRT_TAB), asize, hbits);
 #ifdef LUAJIT_ENABLE_TABLE_BUMP
-  J->rbchash[(tr & (RBCHASH_SLOTS-1))].ref = tref_ref(tr);
-  setmref(J->rbchash[(tr & (RBCHASH_SLOTS-1))].pc, J->pc);
-  setgcref(J->rbchash[(tr & (RBCHASH_SLOTS-1))].pt, obj2gco(J->pt));
+  rec_rbchash_publish(J, tr, J->pc);
 #endif
   return tr;
 }
@@ -3037,9 +3064,7 @@ void lj_record_ins(jit_State *J)
     rc = emitir(IRTG(IR_TDUP, IRT_TAB),
 		lj_ir_ktab(J, gco2tab(proto_kgc(J->pt, ~(ptrdiff_t)rc))), 0);
 #ifdef LUAJIT_ENABLE_TABLE_BUMP
-    J->rbchash[(rc & (RBCHASH_SLOTS-1))].ref = tref_ref(rc);
-    setmref(J->rbchash[(rc & (RBCHASH_SLOTS-1))].pc, pc);
-    setgcref(J->rbchash[(rc & (RBCHASH_SLOTS-1))].pt, obj2gco(J->pt));
+    rec_rbchash_publish(J, rc, pc);
 #endif
     break;
 
