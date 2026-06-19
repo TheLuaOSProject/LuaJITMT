@@ -44,9 +44,9 @@ int main(void)
 {
   lua_State *L = luaL_newstate();
   GCtab *t;
-  GCstr *anchor0, *displaced, *anchor7;
-  Node *node;
-  Node *main7next;
+  GCstr *anchor0, *displaced, *anchor_main;
+  Node *node, *displaced_node;
+  Node *mainnext;
   uint32_t seq = 0;
 
   assert(L != NULL);
@@ -56,25 +56,29 @@ int main(void)
 
   anchor0 = find_sid_bucket(L, t->hmask, 0, &seq);
   displaced = find_sid_bucket(L, t->hmask, 0, &seq);
-  anchor7 = find_sid_bucket(L, t->hmask, 7, &seq);
-  assert(anchor0 != displaced && anchor0 != anchor7 && displaced != anchor7);
+  assert(anchor0 != displaced);
 
   setstrint(L, t, anchor0, 11);
   setstrint(L, t, displaced, 22);
   node = noderef(t->node);
   assert(strV(&node[0].key) == anchor0);
-  assert(strV(&node[7].key) == displaced);
+  displaced_node = lj_tab_nextnode_acq(&node[0]);
+  assert(displaced_node != NULL);
+  assert(strV(&displaced_node->key) == displaced);
 
-  setstrint(L, t, anchor7, 77);
+  anchor_main = find_sid_bucket(L, t->hmask,
+				(uint32_t)(displaced_node - node), &seq);
+  assert(anchor_main != anchor0 && anchor_main != displaced);
+  setstrint(L, t, anchor_main, 77);
   node = noderef(t->node);
-  assert(lj_tab_nextnode_acq(&node[0]) == &node[7]);
-  assert(strV(&node[7].key) == displaced);
-  main7next = lj_tab_nextnode_acq(&node[7]);
-  assert(main7next != NULL);
-  assert(strV(&main7next->key) == anchor7);
+  assert(lj_tab_nextnode_acq(&node[0]) == displaced_node);
+  assert(strV(&displaced_node->key) == displaced);
+  mainnext = lj_tab_nextnode_acq(displaced_node);
+  assert(mainnext != NULL);
+  assert(strV(&mainnext->key) == anchor_main);
   assert_tabnum(t, anchor0, 11);
   assert_tabnum(t, displaced, 22);
-  assert_tabnum(t, anchor7, 77);
+  assert_tabnum(t, anchor_main, 77);
 
   lua_close(L);
   printf("t-tab-chain-order OK: stable nodes and release-published links\n");

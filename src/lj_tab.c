@@ -1064,6 +1064,34 @@ static void tab_release_claimed_free(Node *n)
   lj_tab_storenilraw(&n->val);
 }
 
+static Node *tab_claim_free_node_scan(Node *nodebase, MSize hmask,
+				      const Node *anchor, int *locked)
+{
+  MSize start = (MSize)(anchor - nodebase);
+  MSize i;
+  *locked = 0;
+  for (i = 1; i <= hmask; i++) {
+    MSize idx = (start + i) & hmask;
+    Node *n = &nodebase[idx];
+    TValue nk;
+    lj_tv_load_acq(&nk, &n->key);
+    if (tab_key_islocked(&nk)) {
+      *locked = 1;
+      return NULL;
+    }
+    if (tvisnil(&nk) && lj_tv_isnil_acq(&n->val)) {
+      int claimed = tab_try_claim_nil_key(&n->key);
+      if (claimed < 0) {
+	*locked = 1;
+	return NULL;
+      }
+      if (claimed == 1)
+	return n;
+    }
+  }
+  return NULL;
+}
+
 /* Insert new key. Nodes are never moved within a hash generation. */
 TValue *lj_tab_newkey(lua_State *L, GCtab *t, cTValue *key)
 {
@@ -1112,36 +1140,18 @@ retry_insert:
     }
   }
   {
-    Node *freenode = getfreetop(t, nodebase);
+    int locked;
+    Node *freenode = tab_claim_free_node_scan(nodebase, hmask, n, &locked);
     lj_assertL(nodebase != &G(L)->nilnode, "insert into fallback hash");
-    lj_assertL(freenode >= nodebase && freenode <= nodebase+hmask+1,
-	       "bad freenode");
-    do {
-      if (freenode == nodebase) {  /* No free node found? */
-	rehashtab(L, t, key);  /* Rehash table. */
-	return lj_tab_set(L, t, key);  /* Retry key insertion. */
+    if (!freenode) {
+      if (locked) {
+	la_cpu_pause();
+	goto retry_insert;
       }
-      --freenode;
-      {
-	TValue fk;
-	lj_tv_load_acq(&fk, &freenode->key);
-	if (tab_key_islocked(&fk)) {
-	  la_cpu_pause();
-	  goto retry_insert;
-	}
-	if (tvisnil(&fk) && lj_tv_isnil_acq(&freenode->val)) {
-	  int claimed = tab_try_claim_nil_key(&freenode->key);
-	  if (claimed < 0) {
-	    la_cpu_pause();
-	    goto retry_insert;
-	  }
-	  if (claimed == 1)
-	    break;
-	}
-      }
-    } while (1);
+      rehashtab(L, t, key);
+      return lj_tab_set(L, t, key);
+    }
     {
-      int locked;
       TValue *slot = tab_findkey_or_keylock(n, key, &locked);
       if (slot) {
 	tab_release_claimed_free(freenode);
@@ -1153,7 +1163,6 @@ retry_insert:
 	goto retry_insert;
       }
     }
-    setfreetop(t, nodebase, freenode);
     lj_assertL(freenode != &G(L)->nilnode, "store to fallback hash");
     lj_tab_nextnode_set(freenode, lj_tab_nextnode_acq(n));
     tab_storekeyrel(L, &freenode->key, key);

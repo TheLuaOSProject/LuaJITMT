@@ -61,7 +61,7 @@ static void exercise_tombstone_anchor_insert(lua_State *L)
 {
   GCtab *t;
   GCstr *anchor, *displaced, *replacement;
-  Node *node;
+  Node *node, *freetop0;
   uint32_t seq = 0;
 
   lua_settop(L, 0);
@@ -80,8 +80,10 @@ static void exercise_tombstone_anchor_insert(lua_State *L)
   assert(lj_tab_nextnode_acq(&node[0]) != NULL);
   lj_tab_storenil(L, &node[0].val);
   assert(tvisnil(lj_tab_getstr(t, anchor)));
+  freetop0 = getfreetop(t, node);
 
   setstrint(L, t, replacement, 33);
+  assert(getfreetop(t, node) == freetop0);
   assert(tvisstr(&node[0].key) && strV(&node[0].key) == anchor);
   assert(tvisnil(&node[0].val));
   assert(tvisnil(lj_tab_getstr(t, anchor)));

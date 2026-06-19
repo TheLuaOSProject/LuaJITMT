@@ -19,19 +19,21 @@ for needle in \
   'tab_key_islocked(cTValue *key)' \
   'tab_key_retry_once(cTValue *key, int *retry)' \
   'tab_try_claim_nil_key(TValue *dst)' \
+  'tab_claim_free_node_scan(Node *nodebase, MSize hmask,' \
   'tab_findkey_or_keylock(Node *anchor, cTValue *key, int *locked)' \
   'tab_findkey_or_keylock(n, key, &locked)' \
   'tab_try_claim_nil_key(&n->key)' \
-  'tab_try_claim_nil_key(&freenode->key)' \
+  'tab_claim_free_node_scan(nodebase, hmask, n, &locked)' \
   'tab_release_claimed_free(freenode)' \
   'if (tab_key_retry_once(&nk, &retry))' \
   'if (tab_key_islocked(&key))' \
-  'if (tab_key_islocked(&fk))' \
+  'if (tab_key_islocked(&nk))' \
   'tviskeylock(&key)' \
   'tviskeylock(&out[0])' \
   'lj_tab_newkey(L, t, &keyv) == &node[0].val' \
   'exercise_tombstone_anchor_insert(L)' \
   'strV(&node[0].key) == anchor' \
+  'getfreetop(t, node) == freetop0' \
   'assert_tabnum(t, replacement, 33)'
 do
   if ! rg -F -q "$needle" "$ROOT/src" "$ROOT/tests/t-tab-keylock-lookup.c"; then
@@ -43,14 +45,15 @@ done
 if ! awk '
   /TValue \*lj_tab_newkey\(lua_State \*L,/ { innewkey = 1 }
   innewkey && /tab_try_claim_nil_key\(&n->key\)/ { anchor = 1 }
-  innewkey && /tab_try_claim_nil_key\(&freenode->key\)/ { free = 1 }
+  innewkey && /tab_claim_free_node_scan\(nodebase, hmask, n, &locked\)/ { free = 1 }
   innewkey && /tab_release_claimed_free\(freenode\)/ { release++ }
   innewkey && /tab_storekeyrel\(L, &n->key, key\)/ { anchorpub = 1 }
   innewkey && /tab_storekeyrel\(L, &freenode->key, key\)/ { freepub = 1 }
+  innewkey && /setfreetop\(t, nodebase, freenode\)/ { bad = 1 }
   innewkey && /^}/ { innewkey = 0 }
-  END { exit anchor && free && release >= 2 && anchorpub && freepub ? 0 : 1 }
+  END { exit anchor && free && release >= 2 && anchorpub && freepub && !bad ? 0 : 1 }
 ' "$ROOT/src/lj_tab.c"; then
-  echo "guardrail: lj_tab_newkey must KEYLOCK-claim nil anchor/free keys before publication" >&2
+  echo "guardrail: lj_tab_newkey must KEYLOCK-claim nil anchor/free keys without freetop mutation" >&2
   exit 1
 fi
 
