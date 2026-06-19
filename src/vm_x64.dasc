@@ -1383,27 +1383,22 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov TAB:RB->metatable, TAB:RA
   |  mov PC, [BASE-8]
   |  mov [BASE-16], TAB:TMPR			// Return original table.
-  |  // GC2 parent/child barrier for the table -> metatable edge.
+  |  // Publish the table -> metatable edge.
   |.if not X64WIN
   |  mov RB, BASE			// Save BASE.
   |  mov CARG1, SAVE_L
   |  mov CARG2, TAB:TMPR
+  |  cleartp CARG2
   |  mov CARG3, TAB:RA
   |.else
   |  mov RB, BASE			// Save BASE.
   |  mov CARG3, TAB:RA
   |  mov CARG2, TAB:TMPR
+  |  cleartp CARG2
   |  mov CARG1, SAVE_L
   |.endif
-  |  call extern lj_gc2_barrier_obj_pair	// (lua_State *L, GCobj *parent, GCobj *child)
+  |  call extern lj_gc_pubtabobj_vm	// (lua_State *L, GCtab *t, GCobj *o)
   |  mov BASE, RB			// Restore BASE.
-  |  mov TAB:RB, [BASE]
-  |  cleartp TAB:RB
-  |  test byte TAB:RB->marked, LJ_GC_BLACK	// isblack(table)
-  |  jz >1
-  |  // Possible write barrier. Table is black, but skip iswhite(mt) check.
-  |  barrierback TAB:RB, RC
-  |1:
   |  jmp ->fff_res1
   |
   |.ffunc_2 rawget

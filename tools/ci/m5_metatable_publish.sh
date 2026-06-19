@@ -73,7 +73,8 @@ for needle in \
   '#define tabref_acq(r)' \
   'gcref_acq((r))' \
   'LJ_FUNCA void lj_gc2_barrier_obj_pair' \
-  'call extern lj_gc2_barrier_obj_pair' \
+  'LJ_FUNCA void lj_gc_pubtabobj_vm' \
+  'call extern lj_gc_pubtabobj_vm' \
   'setgcrefmt(t->metatable, obj2gco(mt));' \
   'lj_gc_pubtabobj(sbufL(sbx), t, mt);' \
   'setgcrefnullrel(t->metatable);' \
@@ -229,14 +230,15 @@ if ! awk '
 fi
 
 if ! awk '
-  /[|][.]ffunc_2 setmetatable/ { inff = 1; stored = 0; call = 0; legacy = 0; next }
+  /[|][.]ffunc_2 setmetatable/ { inff = 1; stored = 0; untag = 0; call = 0; legacy = 0; next }
   inff && /mov TAB:RB->metatable, TAB:RA/ { stored = NR }
-  inff && /call extern lj_gc2_barrier_obj_pair/ { call = NR }
+  inff && /cleartp CARG2/ { untag = NR }
+  inff && /call extern lj_gc_pubtabobj_vm/ { call = NR }
   inff && /barrierback TAB:RB, RC/ { legacy = NR }
   inff && /[|][.]ffunc_2 rawget/ { inff = 0 }
-  END { exit stored && call && legacy && stored < call && call < legacy ? 0 : 1 }
+  END { exit stored && untag && call && !legacy && stored < untag && untag < call ? 0 : 1 }
 ' "$ROOT/src/vm_x64.dasc"; then
-  echo "guardrail: x64 setmetatable fast path must publish GC2 object-pair barrier before legacy repair" >&2
+  echo "guardrail: x64 setmetatable fast path must untag and publish through VM table-object helper" >&2
   exit 1
 fi
 

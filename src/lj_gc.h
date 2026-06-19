@@ -232,6 +232,7 @@ static LJ_AINLINE void lj_gc_barrierobjtv_(lua_State *L, GCobj *p,
   { lj_gc2_barrier_obj_pair((L), obj2gco(p), obj2gco(o)); \
     if (iswhite(obj2gco(o)) && isblack(obj2gco(p))) \
       lj_gc_barrierf(G(L), obj2gco(p), obj2gco(o)); }
+LJ_FUNCA void lj_gc_pubtabobj_vm(lua_State *L, GCtab *t, GCobj *o);
 LJ_FUNCA void LJ_FASTCALL lj_gc_pubuv(global_State *g, TValue *tv);
 
 /* Allocator. */
