@@ -114,7 +114,7 @@ static uint32_t safepoint_ack_tg(global_State *g, TGState *tg)
     return 0;
   lj_safepoint_apply_tg(g, tg, actions);
   safepoint_note_ack_latency(g);  /* 13.8: mutator-observed poll latency. */
-  la_store32_rlx(&tg->poll, 0);
+  la_store32_rel(&tg->poll, 0);
   oldpending = la_sub32_acqrel(&g->gc2.hs_pending, 1);  /* 05 section 5.4.2. */
   if (oldpending == 1)
     la_futex_wake(&g->gc2.hs_pending, 1);

@@ -62,6 +62,14 @@ static int tg_list_contains(TGState *tg, TGState *needle)
   return 0;
 }
 
+static void wait_late_remote_ack(TGState *tg)
+{
+  while ((la_load8_acq(&tg->tg_flags) & TGF_STOPREQ) == 0)
+    la_cpu_pause();
+  while (la_load32_acq(&tg->poll) != 0)
+    la_cpu_pause();
+}
+
 static void *worker_main(void *arg)
 {
   ThrCtx *ctx = (ThrCtx *)arg;
@@ -195,8 +203,7 @@ int main(void)
   late_tg.cur_L = late_L;
   lj_native_enter(&late_tg);
   attach_without_catchup(g, &late_tg);
-  while ((la_load8_acq(&late_tg.tg_flags) & TGF_STOPREQ) == 0)
-    la_cpu_pause();
+  wait_late_remote_ack(&late_tg);
   assert(la_load64_acq(&late_tg.hs_epoch_ack) == g->gc2.hs_epoch);
   assert(la_load8_acq(&late_tg.alloc.alloc_black) == 1);
   assert(la_load32_acq(&late_tg.poll) == 0);
