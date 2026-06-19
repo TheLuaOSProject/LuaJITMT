@@ -139,6 +139,38 @@ if ! awk '
 fi
 
 if ! awk '
+  /static void string_storetab_str\(lua_State \*L,/ { inhelper = 1; next }
+  inhelper && /lj_tab_storetab\(L, dst,/ { raw = 1 }
+  inhelper && /for \(;;\)/ { loop = 1 }
+  inhelper && /lj_tab_setstr\(L, tab, key\)/ { resolve = 1 }
+  inhelper && /lj_tab_trystoretv_cas\(L, dst, &tv\) == LJ_TAB_STORE_CAS_OK/ { cas = 1 }
+  inhelper && /string metatable store saw FORWARD after lookup\./ { retry = 1 }
+  inhelper && /^}/ {
+    helper_ok = !raw && loop && resolve && cas && retry
+    inhelper = 0
+  }
+  /LUALIB_API int luaopen_string\(lua_State \*L\)/ { infn = 1; next }
+  infn && /lj_tab_storetab\(L, lj_tab_setstr\(L, mt, mmname_str\(g, MM_index\)\),/ { direct = 1 }
+  infn && /strtab = tabV\(L->top-1\)/ { strtab = NR }
+  infn && /settabV\(L, L->top\+\+, mt\)/ { root = NR }
+  infn && /string_storetab_str\(L, mt, mmname_str\(g, MM_index\), strtab\)/ { store = NR }
+  infn && /mt->nomm =/ { nomm = NR }
+  infn && /lj_gc_pubtabobj\(L, mt, strtab\)/ { barrier = NR }
+  infn && /setgcrefroot\(basemt_it\(g, LJ_TSTR\), obj2gco\(mt\)\)/ { publish = NR }
+  infn && /L->top--/ { pop = NR }
+  infn && /^}/ {
+    open_ok = !direct && strtab && root && store && nomm && barrier && publish &&
+	      pop && strtab < root && root < store && store < nomm &&
+	      nomm < barrier && barrier < publish && publish < pop
+    infn = 0
+  }
+  END { exit helper_ok && open_ok ? 0 : 1 }
+' "$ROOT/src/lib_string.c"; then
+  echo "guardrail: string metatable must CAS-fill __index and publish root after initialization" >&2
+  exit 1
+fi
+
+if ! awk '
   /static char \*serialize_get\(char \*r, SBufExt \*sbx, TValue \*o\)/ {
     infn = 1
     next

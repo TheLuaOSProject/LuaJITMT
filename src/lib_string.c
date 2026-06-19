@@ -14,6 +14,7 @@
 #include "lualib.h"
 
 #include "lj_obj.h"
+#include "lj_atomic.h"
 #include "lj_gc.h"
 #include "lj_err.h"
 #include "lj_buf.h"
@@ -671,20 +672,37 @@ LJLIB_CF(string_format)		LJLIB_REC(.)
 
 #include "lj_libdef.h"
 
+static void string_storetab_str(lua_State *L, GCtab *tab, GCstr *key,
+				GCtab *val)
+{
+  TValue tv, *dst;
+  settabV(L, &tv, val);
+  for (;;) {
+    dst = lj_tab_setstr(L, tab, key);
+    if (lj_tab_trystoretv_cas(L, dst, &tv) == LJ_TAB_STORE_CAS_OK)
+      return;
+    la_cpu_pause();  /* string metatable store saw FORWARD after lookup. */
+  }
+}
+
 LUALIB_API int luaopen_string(lua_State *L)
 {
-  GCtab *mt;
+  GCtab *mt, *strtab;
   global_State *g;
   LJ_LIB_REG(L, LUA_STRLIBNAME, string);
+  strtab = tabV(L->top-1);
+  lj_state_checkstack(L, 1);
   mt = lj_tab_new(L, 0, 1);
-  /* NOBARRIER: basemt is a GC root. */
+  settabV(L, L->top++, mt);
   g = G(L);
-  setgcrefroot(basemt_it(g, LJ_TSTR), obj2gco(mt));
-  lj_tab_storetab(L, lj_tab_setstr(L, mt, mmname_str(g, MM_index)),
-		  tabV(L->top-1));
+  string_storetab_str(L, mt, mmname_str(g, MM_index), strtab);
   mt->nomm = (uint8_t)(~(1u<<MM_index));
+  lj_gc_pubtabobj(L, mt, strtab);
+  /* NOBARRIER: basemt is a GC root. */
+  setgcrefroot(basemt_it(g, LJ_TSTR), obj2gco(mt));
+  L->top--;
 #if LJ_HASBUFFER
-  lj_lib_prereg(L, LUA_STRLIBNAME ".buffer", luaopen_string_buffer, tabV(L->top-1));
+  lj_lib_prereg(L, LUA_STRLIBNAME ".buffer", luaopen_string_buffer, strtab);
 #endif
   return 1;
 }

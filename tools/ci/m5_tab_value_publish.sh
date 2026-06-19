@@ -17,6 +17,7 @@ assert(cinfo.addr ~= nil and cinfo.upvalues ~= nil)
 local t = { 1, 2, 3 }
 t.name = "table-value-publish"
 assert(t[3] == 3 and t.name == "table-value-publish")
+assert(("table-value-publish"):sub(1, 5) == "table")
 local function event_cb() end
 jit.attach(event_cb, "bc")
 jit.attach(event_cb)
@@ -49,6 +50,7 @@ for needle in \
   'lj_tab_trystoretv_cas(L, dst, &val) == LJ_TAB_STORE_CAS_OK' \
   'lj_tab_storetv(L, &array[i], &base[i])' \
   'base_storetab_str(L, env, lj_str_newlit(L, "_G"), env)' \
+  'string_storetab_str(L, mt, mmname_str(g, MM_index), strtab)' \
   'lj_tab_storetab(J->L, &node[i].val, tpl)' \
   'lj_tab_storetab(J->L, o, tpl)' \
   'lj_tab_storenil(J->L, &node[i].val)' \
