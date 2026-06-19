@@ -115,8 +115,8 @@ for needle in \
   'setintptrfield(L, t, lj_str_newlit(L, "addr"), (intptr_t)(void *)fn->c.f)' \
   'setintindex(L, t, 0, (int32_t)snap->ref - REF_BIAS)' \
   'debug_activelines_storebool(L, t, line)' \
-  'lj_tab_storetab(J->L, &node[i].val, tpl)' \
-  'lj_tab_storetab(J->L, o, tpl)' \
+  'rec_template_mark_nil(J, tpl, &key)' \
+  'rec_template_mark_nil(J, tpl, &ix->keyv)' \
   'lj_tab_storenil(J->L, &node[i].val)' \
   'lj_tab_storenil(J->L, &array[i])' \
   'copyTVrel(L, o, base+2)' \
@@ -186,7 +186,7 @@ if rg -n 'lj_tab_storebool\(L, lj_tab_setint\(L, t, line\), 1\)' \
   exit 1
 fi
 
-if rg -n 'settabV\(J->L, &(node\[i\]\.val|array\[i\]), tpl\)|settabV\(J->L, o, tpl\)|setnilV\(&(node\[i\]\.val|array\[i\])\)' \
+if rg -n 'settabV\(J->L, &(node\[i\]\.val|array\[i\]), tpl\)|settabV\(J->L, o, tpl\)|lj_tab_storetab\(J->L, (&node\[i\]\.val|o), tpl\)|setnilV\(&(node\[i\]\.val|array\[i\])\)' \
     "$ROOT/src/lj_record.c"; then
   echo "guardrail: recorder template table markers must release-publish" >&2
   exit 1

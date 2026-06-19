@@ -7,10 +7,12 @@
 #define LUA_CORE
 
 #include "lj_obj.h"
+#include "lj_atomic.h"
 
 #if LJ_HASJIT
 
 #include "lj_err.h"
+#include "lj_gc.h"
 #include "lj_str.h"
 #include "lj_tab.h"
 #include "lj_meta.h"
@@ -1339,6 +1341,25 @@ static void rec_mm_comp_cdata(jit_State *J, RecordIndex *ix, int op, MMS mm)
 
 #ifdef LUAJIT_ENABLE_TABLE_BUMP
 /* Bump table allocations in bytecode when they grow during recording. */
+static void rec_template_mark_nil(jit_State *J, GCtab *tpl, cTValue *key)
+{
+  TValue marker, old, *dst;
+  settabV(J->L, &marker, tpl);
+  for (;;) {
+    dst = lj_tab_set(J->L, tpl, key);
+    lj_tv_load_acq(&old, dst);
+    if (tvisforward(&old)) {
+      la_cpu_pause();  /* recorder template marker saw FORWARD after lookup. */
+      continue;
+    }
+    if (!tvisnil(&old))
+      return;
+    if (lj_tv_cas(dst, &old, &marker))
+      return;
+    la_cpu_pause();
+  }
+}
+
 static void rec_idx_bump(jit_State *J, RecordIndex *ix)
 {
   RBCHashEntry *rbc = &J->rbchash[(ix->tab & (RBCHASH_SLOTS-1))];
@@ -1390,12 +1411,12 @@ static void rec_idx_bump(jit_State *J, RecordIndex *ix)
 	  lj_tv_load_acq(&key, &node[i].key);
 	  lj_tv_load_acq(&val, &node[i].val);
 	  if (!tvisnil(&key) && tvisnil(&val))
-	    lj_tab_storetab(J->L, &node[i].val, tpl);
+	    rec_template_mark_nil(J, tpl, &key);
 	}
 	if (!tvisnil(&ix->keyv) && tref_isk(ix->key)) {
-	  TValue *o = lj_tab_set(J->L, tpl, &ix->keyv);
-	  if (tvisnil(o)) lj_tab_storetab(J->L, o, tpl);
+	  rec_template_mark_nil(J, tpl, &ix->keyv);
 	}
+	lj_gc_pubtab(J->L, tpl);
 	lj_tab_resize(J->L, tpl, tb_asize, nhbits);
 	node = lj_tab_node_snapshot_acq(tpl, &hmask);
 	for (i = 0; i <= hmask; i++) {
