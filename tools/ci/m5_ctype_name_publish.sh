@@ -8,7 +8,9 @@ JOBS=${JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)}
 for needle in \
   'ctype_name_acq(const CType *ct)' \
   'gcref_acq(ct->name)' \
-  'setgcrefrel(ct->name, obj2gco(s))'
+  'setgcrefrel(ct->name, obj2gco(s))' \
+  'ctype_clearname(CType *ct)' \
+  'setgcrefnullrel(ct->name)'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_ctype.h"; then
     echo "guardrail: missing CType.name acquire/release helper: $needle" >&2
@@ -17,7 +19,7 @@ do
 done
 
 hits=$(rg -n --glob '*.c' --glob '*.h' -- \
-  'gcref\([^)]*->name|gcref\(ct->name|setgcref\([^)]*->name|setgcref\(ct->name|gco2str\(gcref\([^)]*->name' \
+  'gcref\([^)]*->name|gcref\(ct->name|setgcref\([^)]*->name|setgcref\(ct->name|setgcrefnull\(ct->name|gco2str\(gcref\([^)]*->name' \
   "$ROOT/src/lj_ctype.h" \
   "$ROOT/src/lj_ctype.c" \
   "$ROOT/src/lj_cparse.c" \

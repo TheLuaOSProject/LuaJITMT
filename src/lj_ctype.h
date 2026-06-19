@@ -559,6 +559,11 @@ static LJ_AINLINE void ctype_setname(CType *ct, GCstr *s)
   setgcrefrel(ct->name, obj2gco(s));
 }
 
+static LJ_AINLINE void ctype_clearname(CType *ct)
+{
+  setgcrefnullrel(ct->name);
+}
+
 static LJ_AINLINE GCstr *ctype_name_acq(const CType *ct)
 {
   GCobj *o = gcref_acq(ct->name);

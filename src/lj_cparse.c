@@ -486,7 +486,7 @@ static void cp_ctype_abandon(CPState *cp)
     ct->info = CTINFO(CT_ATTRIB, CTATTRIB(CTA_BAD));
     ct->size = 0;
     ct->sib = 0;
-    setgcrefnull(ct->name);
+    ctype_clearname(ct);
     /* Keep ct->next so hash walkers can skip through abandoned entries. */
     cp_ctype_publish(cp, id, ct);
   }
@@ -498,7 +498,7 @@ static void cp_ctype_abandon_id(CPState *cp, CTypeID id)
   ct->info = CTINFO(CT_ATTRIB, CTATTRIB(CTA_BAD));
   ct->size = 0;
   ct->sib = 0;
-  setgcrefnull(ct->name);
+  ctype_clearname(ct);
   /* Keep ct->next so hash walkers can skip through abandoned entries. */
   cp_ctype_publish(cp, id, ct);
 }

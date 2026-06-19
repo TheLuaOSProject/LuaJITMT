@@ -582,7 +582,7 @@ static void ctype_abandon(CTState *cts, CTypeID id)
   ct->info = CTINFO(CT_ATTRIB, CTATTRIB(CTA_BAD));
   ct->size = 0;
   ct->sib = 0;
-  setgcrefnull(ct->name);
+  ctype_clearname(ct);
   /* Keep ct->next so hash walkers can skip through abandoned entries. */
 }
 
@@ -684,7 +684,7 @@ CTypeID lj_ctype_new_l(lua_State *L, CTState *cts, CType **ctp)
   ct->size = 0;
   ct->sib = 0;
   ct->next = 0;
-  setgcrefnull(ct->name);
+  ctype_clearname(ct);
   return id;
 }
 
@@ -704,7 +704,7 @@ static CTypeID ctype_intern_l(lua_State *L, CTState *cts, CTInfo info,
     ct->size = size;
     ct->sib = 0;
     ct->next = 0;
-    setgcrefnull(ct->name);
+    ctype_clearname(ct);
     head = ctype_hash_load(cts, h);
     for (;;) {
       CTypeID winner = ctype_hash_findtype(cts, head, info, size);
@@ -1238,7 +1238,7 @@ CTState *lj_ctype_init(lua_State *L)
       name += len+1;
       lj_ctype_addname(cts, ct, id);
     } else {
-      setgcrefnull(ct->name);
+      ctype_clearname(ct);
       ct->next = 0;
       if (!ctype_isenum(info)) ctype_addtype(cts, ct, id);
     }
