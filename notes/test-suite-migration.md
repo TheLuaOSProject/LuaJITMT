@@ -301,6 +301,8 @@ Lua test-suite migration notes:
   behavior fixture instead of direct API/debug/coroutine source inspections.
 - Removed fixture-source self-inspections from `m5_jit_trace_publish` and
   `m5_tab_array_publish`; their compiled fixtures still run.
+- Removed the M6 aggregate shell-script content check; the Lua aggregate case
+  now relies on actually running the M6 cases instead.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.

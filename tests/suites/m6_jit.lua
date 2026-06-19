@@ -282,10 +282,6 @@ local m6_cases = {
   "m6_jit_flush_hs"
 }
 
-local function check_m6_aggregate(t)
-  t:assert_contains(t:path("tools", "ci", "m6_jit.sh"), "m6_jit")
-end
-
 local function table_store_smoke()
   return [=[
 local util = require("jit.util")
@@ -500,7 +496,6 @@ return function(add)
                contains(line, "TG_DISP2J") or contains(line, "TG_DISP2G")
       end)
       t:assert_not_contains(t:path("src", "lj_dispatch.c"), "DISPMODE_REC")
-      check_m6_aggregate(t, "m6_dispatch_redispatch.sh")
       print("M6 dispatch redispatch guard passed")
     end
   })
@@ -510,8 +505,6 @@ return function(add)
     description = "M6 JIT recorder token and x64 XPOLL behavior",
     run = function(t)
       build_default(t)
-      check_m6_aggregate(t, "m6_jit_token.sh")
-
       build_and_run_c(t, t:tmp("lj_t-jit-token"), "t-jit-token.c",
                       { build = false, timeout = "20s" })
       luajit_file(t, t:path("tests", "t-jit-secondary.lua"), { timeout = "20s" })
@@ -809,8 +802,6 @@ assert(util.traceinfo(1), "post-FNEW promoted local update should trace")
     description = "x64 trace barrier behavior across XPOLL poll regions",
     run = function(t)
       build_default(t)
-      check_m6_aggregate(t, "m6_jit_barrier_xpoll.sh")
-
       local tbar = t:tmp("lj_t-jit-tbar-xpoll.dump")
       luajit_dump(t, tbar, "-jdump=im", [=[
 jit.opt.start("hotloop=1","hotexit=1")
@@ -886,7 +877,6 @@ assert(uv==vals[64])
                      "lim = poll_alias_limit(J, lim);") < 2 then
         error("XLOAD forwarding and XSTORE DSE must both honor XPOLL", 2)
       end
-      check_m6_aggregate(t, "m6_jit_xbar_xpoll.sh")
       t:run({ t:path("tools", "ci", "m5_jit_hash_store_nyi.sh") })
       print("M6 JIT XBAR/XPOLL alias guard passed")
     end
@@ -1195,7 +1185,6 @@ for i = 1, 120 do
 end
 assert(#keep == 120 and keep[120][80] == "value-120-80")
 ]=], { timeout = "20s" })
-      check_m6_aggregate(t, "m6_jit_aref_pair_guard.sh")
       print("M6 JIT shared AREF generation-pair behavior passed")
     end
   })
@@ -1280,7 +1269,6 @@ assert(seen == 80)
       assert_trace1_ir(t, dump,
                        "x64 empty-hash miss must fall through to HREF without tab.hmask",
                        function(st) return st.href and not st.hrefk and not st.hmask end)
-      check_m6_aggregate(t, "m6_jit_href_nodehdr.sh")
       print("M6 JIT dynamic HREF node-header behavior passed")
     end
   })
@@ -1290,7 +1278,6 @@ assert(seen == 80)
     description = "M6 allocator accounting behavior",
     run = function(t)
       build_default(t)
-      check_m6_aggregate(t, "m6_jit_alloc_account.sh")
       build_and_run_c(t, t:tmp("lj_t-gc2-alloc-account"),
                       "t-gc2-alloc-account.c", { build = false, timeout = "20s" })
       build_and_run_c(t, t:tmp("lj_t-gc2-interp-hard-check"),
@@ -1337,7 +1324,6 @@ for i=1,100 do x=string.sub(s,1,3) end
 assert(x=="abc")
 ]=], { timeout = "20s" })
       assert_dump_all_contains(t, snew, { "SNEW", "XPOLL" }, "SNEW readiness")
-      check_m6_aggregate(t, "m6_jit_gc2_readiness.sh")
       print("M6 JIT GC2 readiness behavior passed")
     end
   })
@@ -1357,7 +1343,6 @@ assert(type(x)=="table")
       assert_dump_contains(t, dump, "GCSTEP", "sunk allocation replay")
       luajit_file(t, t:path("tests", "stock", "test", "misc", "gcstep.lua"),
                   { timeout = "20s" })
-      check_m6_aggregate(t, "m6_jit_gcstep_guard.sh")
       print("M6 JIT GC-step behavior passed")
     end
   })
@@ -1541,8 +1526,6 @@ assert(type(x)=="table")
         "trace_nextside_rel(root, traceno)",
         "trace_link_rel(parent, traceno)"
       })
-      check_m6_aggregate(t, "m6_jit_mcode_publish.sh")
-
       local timeout = os.getenv("M6_MCODE_TIMEOUT") or "60s"
       luajit_code(t, [=[
 jit.opt.start("hotloop=1","hotexit=1")
@@ -1618,7 +1601,6 @@ assert(live >= 8, live)
       end)
       t:assert_not_contains(t:path("src", "lj_record.c"), "lj_trace_flush(J, lnk)")
       t:assert_not_contains(t:path("src", "lj_trace.c"), "Only root traces are considered")
-      check_m6_aggregate(t, "m6_jit_flush_hs.sh")
       t:run({ t:path("tools", "ci", "m5_jit_trace_publish.sh") })
       t:run({ t:path("tools", "ci", "m3_vm_safepoint.sh") })
       luajit_file(t, t:path("tests", "stock", "test", "misc", "jit_flush.lua"))
