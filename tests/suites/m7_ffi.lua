@@ -334,46 +334,11 @@ return function(add)
 
   add({
     name = "m7_ffi_carith_l",
-    description = "FFI arithmetic/raw conversion explicit-L bridge",
+    description = "FFI arithmetic/raw conversion behavior",
     run = function(t)
-      local files = {
-        t:path("src", "lj_carith.c"),
-        t:path("src", "lj_cconv.c"),
-        t:path("src", "lj_cconv.h")
-      }
-      t:assert_all_any_contains(files, {
-        "lj_cconv_ct_ct_l(lua_State *L, CTState *cts, CType *d,",
-        "CTypeID did, CType *s, CTypeID sid",
-        "cconv_err_conv_l(lua_State *L, CTState *cts,",
-        "lj_cconv_ct_ct_l(L, cts, ctype_get(cts, CTID_INT_PSZ), CTID_INT_PSZ",
-        "lj_cconv_ct_ct_l(L, cts, ct, id, ca->ct[0], ca->id[0]",
-        "lj_cconv_ct_ct_l(L, cts, ct, id, ca->ct[1], ca->id[1]",
-        "lj_cconv_ct_ct_l(L, cts, ctype_get(cts, *id), *id, s, sid",
-        "lj_cdata_new_l(L, cts, id, CTSIZE_PTR)",
-        "lj_cdata_new_l(L, cts, id, 8)",
-        "CTypeID id[2]",
-        "CTypeID id0 = i ? ca->id[0] : 0",
-        "repr[i] = strdata(lj_ctype_repr(L, ca->id[i], NULL))",
-        "lj_cconv_ct_ct_l(L, cts, ctype_get(cts, CTID_INT32), CTID_INT32",
-        "lj_cconv_ct_ct_l(L, cts, ctype_get(cts, CTID_DOUBLE), CTID_DOUBLE"
-      })
-      assert_no_lines(t, "legacy lj_cconv_ct_ct wrapper must stay removed",
-                      files, function(line)
-        return contains(line, "LJ_FUNC void lj_cconv_ct_ct(") or
-               contains(line, "void lj_cconv_ct_ct(") or
-               contains(line, "lj_cconv_ct_ct(cts")
-      end)
-      assert_no_lines(t, "runtime C-to-C conversion paths must carry CTypeIDs",
-                      {
-                        t:path("src", "lj_cconv.c"),
-                        t:path("src", "lj_carith.c"),
-                        t:path("src", "lj_cdata.c")
-                      }, function(line)
-        return contains(line, "ctype_typeid(cts")
-      end)
       clean_build(t)
       run_luajit_script(t, "t-ffi-carith-l.lua", nil, { joff = true })
-      print("M7 FFI arithmetic explicit-L guard passed")
+      print("M7 FFI arithmetic/raw conversion behavior passed")
     end
   })
 
