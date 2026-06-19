@@ -323,8 +323,12 @@ LJLIB_CF(buffer_new)
   setudataV(L, L->top++, ud);
   sbx = (SBufExt *)uddata(ud);
   lj_bufx_init(L, sbx);
-  setgcref(sbx->dict_str, obj2gco(dict_str));
-  setgcref(sbx->dict_mt, obj2gco(dict_mt));
+  setgcrefrel(sbx->dict_str, obj2gco(dict_str));
+  if (dict_str)
+    lj_gc_pubobjobj(L, ud, dict_str);
+  setgcrefrel(sbx->dict_mt, obj2gco(dict_mt));
+  if (dict_mt)
+    lj_gc_pubobjobj(L, ud, dict_mt);
   lj_udata_udtype_rel(ud, UDTYPE_BUFFER);
   if (sz > 0) lj_buf_need2((SBuf *)sbx, sz);
   lj_gc_check(L);

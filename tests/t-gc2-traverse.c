@@ -16,6 +16,7 @@
 #include "lj_atomic.h"
 #include "lj_gc.h"
 #include "lj_gc2.h"
+#include "lj_buf.h"
 #include "lj_str.h"
 #include "lj_tab.h"
 #include "lj_udata.h"
@@ -784,6 +785,44 @@ static void test_buffer_decode_metatable_barrier(lua_State *L, global_State *g,
   flush_and_drain(g, tg);
   lj_gc2_legacy_cycle_end(g);
   lua_pop(L, 3);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  lua_gc(L, LUA_GCSTOP, 0);
+}
+
+static void test_buffer_constructor_dict_barrier(lua_State *L, global_State *g,
+						 TGState *tg)
+{
+  GCtab *dict_str, *dict_mt;
+  GCudata *ud;
+  SBufExt *sbx;
+
+  lua_settop(L, 0);
+  assert(luaL_dostring(L,
+    "local buffer = require('string.buffer')\n"
+    "local dict_str = { 'alpha' }\n"
+    "local dict_mt = { { tag = 'mt' } }\n"
+    "return function() return buffer.new({ dict = dict_str, metatable = dict_mt }) end,\n"
+    "       dict_str, dict_mt\n") == LUA_OK);
+  dict_str = tabV(L->top - 2);
+  dict_mt = tabV(L->top - 1);
+
+  lj_gc2_legacy_mark_begin(g);
+  assert(la_load8_acq(&tg->alloc.alloc_black) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(dict_str)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(dict_mt)) == 0);
+
+  lua_pushvalue(L, -3);
+  lua_call(L, 0, 1);
+  ud = udataV(L->top - 1);
+  sbx = (SBufExt *)uddata(ud);
+  assert(tabref_acq(sbx->dict_str) == dict_str);
+  assert(tabref_acq(sbx->dict_mt) == dict_mt);
+  assert(lj_gc2_ismarked(g, obj2gco(dict_str)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(dict_mt)) == 1);
+  flush_and_drain(g, tg);
+  lj_gc2_legacy_cycle_end(g);
+  lua_pop(L, 4);
   lua_gc(L, LUA_GCCOLLECT, 0);
   lua_gc(L, LUA_GCCOLLECT, 0);
   lua_gc(L, LUA_GCSTOP, 0);
@@ -3753,6 +3792,7 @@ int main(void)
   test_thread_constructor_env_barrier(L, g, tg);
 #if LJ_HASBUFFER
   test_buffer_decode_metatable_barrier(L, g, tg);
+  test_buffer_constructor_dict_barrier(L, g, tg);
 #endif
 #if LJ_HASJIT
   test_jit_table_store_helper_barrier(L, g, tg);
