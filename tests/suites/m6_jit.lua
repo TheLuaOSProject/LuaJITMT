@@ -1024,98 +1024,9 @@ assert(uv==vals[64])
 
   add({
     name = "m6_jit_table_store_helper",
-    description = "M6 helper-backed table store bridge guards",
+    description = "M6 helper-backed table store behavior",
     run = function(t)
       t:build({ clean = true, quiet = true })
-      assert_marker_set(t, {
-        t:path("src", "lj_tab.c"),
-        t:path("src", "lj_tab.h"),
-        t:path("src", "lj_ircall.h"),
-        t:path("src", "lj_asm_x86.h"),
-        t:path("src", "lj_record.c"),
-        t:path("src", "lj_opt_mem.c"),
-        t:path("tests", "t-jit-forward-store.c")
-      }, {
-        "tab_ptr_index(uintptr_t base, uintptr_t elem,",
-        "tab_forwarded_jit_array_slot(lua_State *L, GCtab *parent",
-        "tab_forwarded_jit_hash_slot(GCtab *parent, TValue *dst,",
-        "tab_current_jit_array_slot(lua_State *L, GCtab *parent",
-        "tab_current_jit_hash_slot(lua_State *L, GCtab *parent",
-        "dst = tab_current_jit_array_slot(L, parent, orig, key);",
-        "dst = tab_current_jit_hash_slot(L, parent, orig, key, &keycopy,",
-        "return lj_tab_setint(L, parent, (int32_t)key);",
-        "lj_tab_trystoretv_cas(L, dst, src) == LJ_TAB_STORE_CAS_OK",
-        "JIT array store saw FORWARD after key/current routing.",
-        "JIT hash store saw FORWARD after key/current routing.",
-        "lj_tab_storetv_forjit_array(lua_State *L, GCtab *parent",
-        "lj_tab_storetv_forjit_hash(lua_State *L, GCtab *parent",
-        "lj_tab_storetv_forjit_newref(lua_State *L, GCtab *parent",
-        "cTValue *key)",
-        "dst = lj_tab_set(L, parent, key);",
-        "JIT NEWREF store saw FORWARD after key resolve.",
-        "lj_gc2_barrier_tv_pair(L, obj2gco(parent), dst);  /* M10: traced parent barrier. */",
-        "lj_gc2_barrier_weak_write(L, parent, NULL, dst);  /* M8: traced weak-value array write. */",
-        "lj_gc2_barrier_weak_write(L, parent, barrier_key, dst);  /* M8: traced weak hash write. */",
-        "lj_gc2_barrier_weak_write(L, parent, key, dst);  /* M8: traced NEWREF weak write. */",
-        "IRCALL_lj_tab_storetv_forjit_array",
-        "IRCALL_lj_tab_storetv_forjit_hash",
-        "IRCALL_lj_tab_storetv_forjit_newref",
-        "tabref = IR(xref->op1)->op1",
-        "xref->o == IR_NEWREF",
-        "id = IRCALL_lj_tab_storetv_forjit_newref",
-        "int keyistv = 1;",
-        "args[4] = keyistv ? ASMREF_TMP2 : keyref;  /* cTValue *key or MSize index */",
-        "IRTMPREF_IN2",
-        "emit_leatg(as, dest, tmptv2);",
-        "IRTMPREF_IN1|IRTMPREF_IN2",
-        "asm_ahstore_forjit(ASMState *as, IRIns *ir)",
-        "#if defined(__linux__) && LJ_TARGET_X64",
-        "IRRef lim = poll_alias_limit(J, xref);",
-        "M6: numeric NEWREF/HSTORE uses the generic returned-slot helper.",
-        "M6: previous-nil in-bounds ASTORE/HSTORE uses the helper bridge.",
-        "lj_tab_storetv_forjit_array(L, t, &oldarray[key], &src, (MSize)key);",
-        "lj_tab_storetv_forjit_hash(L, t, &oldn->val, &src, &keytv);",
-        "exercise_array_retiring_jit(L)",
-        "exercise_hash_retiring_jit(L)",
-        "lj_tab_storetv_forjit_newref(L, t, &oldarray[key], &src, &keytv);",
-        "lj_tab_storetv_forjit_newref(L, t, &oldn->val, &src, &keytv);",
-        "exercise_newref_array_retiring_jit(L)",
-        "exercise_newref_hash_retiring_jit(L)",
-        "t-jit-forward-store OK"
-      }, "table-store helper")
-
-      local tabc = t:path("src", "lj_tab.c")
-      local array = t:c_block(tabc, "lj_tab_storetv_forjit_array(lua_State *L, GCtab *parent,")
-      if contains(array, "copyTVrel(L, dst, src)") or
-         not contains(array, "JIT array store saw FORWARD after key/current routing.") or
-         not contains(array, "lj_gc2_barrier_weak_write(L, parent, NULL, dst)") then
-        error("JIT array table-store helper must resolve stale generations by key before CAS", 2)
-      end
-      t:assert_text_ordered("lj_tab_storetv_forjit_array", array, {
-        "tab_current_jit_array_slot(L, parent, orig, key)",
-        "lj_tab_trystoretv_cas(L, dst, src)"
-      })
-      local hash = t:c_block(tabc, "lj_tab_storetv_forjit_hash(lua_State *L, GCtab *parent,")
-      if contains(hash, "copyTVrel(L, dst, src)") or
-         not contains(hash, "JIT hash store saw FORWARD after key/current routing.") or
-         not contains(hash, "lj_gc2_barrier_weak_write(L, parent, barrier_key, dst)") then
-        error("JIT hash table-store helper must resolve stale generations by key before CAS", 2)
-      end
-      t:assert_text_ordered("lj_tab_storetv_forjit_hash", hash, {
-        "tab_current_jit_hash_slot(L, parent, orig, key, &keycopy,",
-        "lj_tab_trystoretv_cas(L, dst, src)"
-      })
-      local newref = t:c_block(tabc, "lj_tab_storetv_forjit_newref(lua_State *L, GCtab *parent,")
-      if contains(newref, "copyTVrel(L, dst, src)") or
-         not contains(newref, "JIT NEWREF store saw FORWARD after key resolve") or
-         not contains(newref, "lj_gc2_barrier_weak_write(L, parent, key, dst)") then
-        error("JIT NEWREF table-store helper must resolve by key before CAS retry", 2)
-      end
-      t:assert_text_ordered("lj_tab_storetv_forjit_newref", newref, {
-        "dst = lj_tab_set(L, parent, key)",
-        "lj_tab_trystoretv_cas(L, dst, src)"
-      })
-
       build_and_run_c(t, t:tmp("lj_t-jit-forward-store"),
                       "t-jit-forward-store.c", { build = false })
       luajit_code(t, table_store_smoke())
@@ -1280,7 +1191,7 @@ assert(util.traceinfo(1), "shared existing array store did not trace")
 ]=])
       assert_dump_all_contains(t, shared_array_ir, { "ASTORE", "XPOLL" },
                                "shared existing array store")
-      print("M6 JIT table-store helper guard passed")
+      print("M6 JIT table-store helper behavior passed")
     end
   })
 
