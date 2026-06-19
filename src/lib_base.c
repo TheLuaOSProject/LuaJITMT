@@ -957,11 +957,23 @@ static void newproxy_weaktable(lua_State *L)
   lj_gc_pubtab(L, t);
 }
 
+static void base_storetab_str(lua_State *L, GCtab *tab, GCstr *key, GCtab *val)
+{
+  TValue tv, *dst;
+  settabV(L, &tv, val);
+  for (;;) {
+    dst = lj_tab_setstr(L, tab, key);
+    if (lj_tab_trystoretv_cas(L, dst, &tv) == LJ_TAB_STORE_CAS_OK)
+      return;
+    la_cpu_pause();  /* base table store saw FORWARD after lookup. */
+  }
+}
+
 LUALIB_API int luaopen_base(lua_State *L)
 {
   /* NOBARRIER: Table and value are the same. */
   GCtab *env = tabref_acq(L->env);
-  lj_tab_storetab(L, lj_tab_setstr(L, env, lj_str_newlit(L, "_G")), env);
+  base_storetab_str(L, env, lj_str_newlit(L, "_G"), env);
   lua_pushliteral(L, LUA_VERSION);  /* top-3. */
   newproxy_weaktable(L);  /* top-2. */
   LJ_LIB_REG(L, "_G", base);

@@ -86,6 +86,31 @@ if ! rg -q 'lj_gc_pubobjtv\(L, fn, f\)' "$ROOT/src/lj_api.c"; then
   exit 1
 fi
 
+if ! awk '
+  /static void base_storetab_str\(lua_State \*L,/ { infn = 1; next }
+  infn && /lj_tab_storetab\(L, dst,/ { raw = 1 }
+  infn && /for \(;;\)/ { loop = 1 }
+  infn && /lj_tab_setstr\(L, tab, key\)/ { resolve = 1 }
+  infn && /lj_tab_trystoretv_cas\(L, dst, &tv\) == LJ_TAB_STORE_CAS_OK/ { cas = 1 }
+  infn && /base table store saw FORWARD after lookup\./ { retry = 1 }
+  infn && /^}/ { exit(!raw && loop && resolve && cas && retry ? 0 : 1) }
+  END { if (raw || !loop || !resolve || !cas || !retry) exit 1 }
+' "$ROOT/src/lib_base.c"; then
+  echo "guardrail: base string table helper must CAS-publish and retry forwarded slots" >&2
+  exit 1
+fi
+
+if ! awk '
+  /LUALIB_API int luaopen_base\(lua_State \*L\)/ { infn = 1; next }
+  infn && /lj_tab_storetab\(L, lj_tab_setstr\(L, env, lj_str_newlit\(L, "_G"\)\), env\)/ { raw = 1 }
+  infn && /base_storetab_str\(L, env, lj_str_newlit\(L, "_G"\), env\)/ { cas = 1 }
+  infn && /^}/ { exit(!raw && cas ? 0 : 1) }
+  END { if (raw || !cas) exit 1 }
+' "$ROOT/src/lib_base.c"; then
+  echo "guardrail: luaopen_base must CAS-publish _G into the environment" >&2
+  exit 1
+fi
+
 legacy_all=$(rg -n "$LEGACY\\b" "$ROOT/src"/*.c | grep -v "$ROOT/src/lj_gc.c" || true)
 legacy_count=$(printf '%s\n' "$legacy_all" | sed '/^$/d' | wc -l | tr -d ' ')
 if [ "$legacy_count" -ne 0 ]; then
