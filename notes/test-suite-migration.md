@@ -242,6 +242,8 @@ Lua test-suite migration notes:
 - Converted the M5 runtime suite to behavior-only smoke/regression tests,
   removing source-text guards around buffer, CType, JIT table, userdata,
   allocator, OS, and parser checks.
+- Removed `m7_ffi_jit_cnew` source/assembly text guards while keeping its
+  allocation stress, generated JIT dump checks, and stock FFI regression run.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.

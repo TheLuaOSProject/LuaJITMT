@@ -1528,25 +1528,8 @@ return function(add)
 
   add({
     name = "m7_ffi_jit_cnew",
-    description = "x64 JIT CNEW/CNEWI cdata publication",
+    description = "x64 JIT CNEW/CNEWI cdata publication behavior",
     run = function(t)
-      t:assert_all_any_contains(source_files(t), {
-        "GCcdata *lj_cdata_new_forjit(lua_State *L, CTypeID id, CTSize sz)",
-        "lj_cdata_new_forjit,",
-        "IRCALL_lj_cdata_new_forjit",
-        "args[1] = ir->op1;      /* CTypeID id   */",
-        "emit_loadi(as, ra_releasetmp(as, ASMREF_TMP1), (int32_t)sz);",
-        "lj_cdata_new_forjit needs 3 args"
-      })
-      local asm = t:c_block(t:path("src", "lj_asm_x86.h"),
-                            "static void asm_cnew(ASMState *as, IRIns *ir)")
-      for _, bad in ipairs({
-        "IRCALL_lj_mem_newgco",
-        "offsetof(GCcdata, marked)",
-        "~LJ_TCDATA<<8"
-      }) do
-        assert_text_not_contains("asm_cnew", asm, bad)
-      end
       clean_build(t)
       run_luajit_script(t, "t-ffi-jit-cnew-alloc.lua", nil, {
         timeout = "20s",
@@ -1597,7 +1580,7 @@ print("dump cnewi ok")
             " && LUA_PATH=" .. shell_quote(lua_path(t)) ..
             " timeout 20s " .. shell_quote(t:path("src", "luajit")) ..
             " test.lua --quiet 340 341 358)")
-      print("M7 FFI JIT CNEW allocation guard passed")
+      print("M7 FFI JIT CNEW allocation behavior passed")
     end
   })
 
