@@ -297,6 +297,8 @@ Lua test-suite migration notes:
   generated XPOLL dump checks instead of direct recorder/x64 source guards.
 - Converted `m5_tab_cas_store` to rely on the compiled CAS/FORWARD behavior
   fixture instead of direct table/API/library source inspections.
+- Converted `m5_state_owner` to rely on the compiled foreign-state owner
+  behavior fixture instead of direct API/debug/coroutine source inspections.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.

@@ -375,117 +375,14 @@ local function check_luaopen_base(t)
   })
 end
 
-local function check_state_claim_block(t, label, path, start, needles)
-  local block = t:c_block(path, start)
-  block_has_all(label, block, needles)
-end
-
 return function(add)
   add({
     name = "m5_state_owner",
-    description = "lua_State owner claim guards",
+    description = "lua_State owner claim behavior",
     run = function(t)
       t:build({ clean = true, quiet = true })
       build_and_run_c(t, t:tmp("lj_t-state-owner"), "t-state-owner.c")
-
-      local lj_api = t:path("src", "lj_api.c")
-      if count_plain(t:read(lj_api), "lj_state_tryclaim(") < 2 then
-        error("lua_xmove must claim both foreign states")
-      end
-
-      check_state_claim_block(t, "lua_status", lj_api, "LUA_API int lua_status", {
-        "lj_state_tryclaim(L",
-        "lj_state_dropclaim(&claim)"
-      })
-      check_state_claim_block(t, "lua_getfenv", lj_api, "LUA_API void lua_getfenv", {
-        "tvisthread(o)",
-        "lj_state_tryclaim(L1",
-        "lj_state_dropclaim(&claim)"
-      })
-      check_state_claim_block(t, "lua_setfenv", lj_api, "LUA_API int lua_setfenv", {
-        "tvisthread(o)",
-        "lj_state_tryclaim(L1",
-        "lj_state_dropclaim(&claim)"
-      })
-      check_state_claim_block(t, "lua_resume", lj_api, "LUA_API int lua_resume", {
-        "lj_state_tryclaim(L",
-        "lj_vm_resume",
-        "lj_state_dropclaim(&claim)"
-      })
-
-      local lib_base = t:path("src", "lib_base.c")
-      check_state_claim_block(t, "coroutine.status", lib_base,
-                              "LJLIB_CF(coroutine_status)", {
-        "lj_state_tryclaim(co",
-        "lj_state_dropclaim(&claim)"
-      })
-      check_state_claim_block(t, "ffh_resume", lib_base,
-                              "static int ffh_resume(lua_State *L, lua_State *co, int wrap)", {
-        "lj_state_tryclaim(co",
-        "thread busy",
-        "lj_state_dropclaim(&claim)"
-      })
-      check_state_claim_block(t, "lj_ffh_coroutine_claim", lib_base,
-                              "lua_State *LJ_FASTCALL lj_ffh_coroutine_claim", {
-        "lj_state_tryclaim(co",
-        "return NULL",
-        "claim.release"
-      })
-
-      local macro = t:text_between(t:path("src", "vm_x64.dasc"),
-                                   ".macro coroutine_resume_wrap", ".endmacro")
-      block_has_all("coroutine_resume_wrap", macro, {
-        "mov TMP1d, NARGS:RDd",
-        "call extern lj_ffh_coroutine_claim",
-        "mov NARGS:RDd, TMP1d",
-        "mov CARG1, TMP1",
-        "and CARG1, -2",
-        "mov CARG2, TMP1",
-        "call extern lj_ffh_coroutine_wrap_err",
-        "DISPATCH_TG(stack_dirty_epoch)",
-        "->thr_owner, 0"
-      })
-
-      local lib_debug = t:path("src", "lib_debug.c")
-      check_state_claim_block(t, "debug_claimthread", lib_debug,
-                              "static void debug_claimthread", {
-        "lj_state_tryclaim(L1",
-        "thread busy"
-      })
-      for _, fn in ipairs({ "debug_getinfo", "debug_getlocal", "debug_setlocal" }) do
-        check_state_claim_block(t, fn, lib_debug, "LJLIB_CF(" .. fn .. ")", {
-          "debug_claimthread(L, L1",
-          "lj_state_dropclaim(&claim)"
-        })
-      end
-
-      local lj_debug = t:path("src", "lj_debug.c")
-      for _, fn in ipairs({ "lua_getlocal", "lua_setlocal", "lua_getinfo", "lua_getstack" }) do
-        check_state_claim_block(t, fn, lj_debug, fn .. "(", {
-          "lj_state_tryclaim(L",
-          "lj_state_dropclaim(&claim)"
-        })
-      end
-      check_state_claim_block(t, "luaL_traceback", lj_debug,
-                              "LUALIB_API void luaL_traceback", {
-        "lj_state_tryclaim(L1",
-        "lj_state_dropclaim(&claim)"
-      })
-      check_state_claim_block(t, "luaJIT_profile_dumpstack",
-                              t:path("src", "lj_profile.c"),
-                              "LUA_API const char *luaJIT_profile_dumpstack", {
-        "lj_state_tryclaim(L",
-        "lj_debug_dumpstack(L",
-        "lj_state_dropclaim(&claim)"
-      })
-      check_state_claim_block(t, "jit_profile_callback",
-                              t:path("src", "lib_jit.c"),
-                              "static void jit_profile_callback", {
-        "lj_state_tryclaim(L2",
-        "lua_pcall(L2",
-        "lj_state_dropclaim(&claim)"
-      })
-      print("M5 lua_State owner tests passed")
+      print("M5 lua_State owner behavior passed")
     end
   })
 
