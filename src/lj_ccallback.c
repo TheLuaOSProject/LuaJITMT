@@ -1067,18 +1067,20 @@ static MSize callback_slot_claim_l(lua_State *L, CTState *cts)
   CTypeID1 *cbid = (CTypeID1 *)la_loadptr_acq((void *const *)&cts->cb.cbid);
   lua_State **owner = (lua_State **)la_loadptr_acq((void *const *)&cts->cb.owner);
   TValue *func = callback_func_slots(cts);
-  lua_State *carrier;
+  lua_State *carrier = NULL;
   MSize top, sizeid;
   sizeid = (MSize)la_load32_acq(&cts->cb.sizeid);
   if (cbid == NULL || owner == NULL || func == NULL || sizeid == 0)
     lj_err_caller(L, LJ_ERR_FFI_CBACKOV);
-  carrier = callback_carrier_new_l(L);
   for (top = 0; top < sizeid; top++) {
     if (LJ_LIKELY(callback_cbid_load(cbid, top) == 0 &&
-		  callback_owner_load(owner, top) == NULL &&
-		  callback_owner_claim(owner, top, carrier))) {
-      callback_owner_barrier_l(L, carrier);
-      return top;
+		  callback_owner_load(owner, top) == NULL)) {
+      if (carrier == NULL)
+	carrier = callback_carrier_new_l(L);
+      if (LJ_LIKELY(callback_owner_claim(owner, top, carrier))) {
+	callback_owner_barrier_l(L, carrier);
+	return top;
+      }
     }
   }
 #if CALLBACK_MAX_SLOT

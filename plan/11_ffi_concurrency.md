@@ -155,9 +155,10 @@ FINREG/finqueue dispatch lands.
   implementation does not use that bridge.
   Current x64/Linux implementation note: runtime callback scratch now lives in
   `TGState`, callback slot arrays are preallocated at `luaopen_ffi()`, setup
-  reserves a free slot with an owner-pointer CAS, stores the callback function
-  into `CTState.cb.func[slot]`, then release-publishes `cbid`. Legacy GC and
-  GC2 scan `cb.func` as a CTState side root. Owned callback free preserves the
+  reserves a free slot with an owner-pointer CAS, lazily creates a hidden
+  carrier only after a free slot is observed, stores the callback function into
+  `CTState.cb.func[slot]`, then release-publishes `cbid`. Legacy GC and GC2
+  scan `cb.func` as a CTState side root. Owned callback free preserves the
   original `cbid`→function→owner release order; disowned callback free nils the
   function before release-clearing `cbid` and performs no owner write after the
   slot is reusable. Callback mcode is allocated at `luaopen_ffi()` before

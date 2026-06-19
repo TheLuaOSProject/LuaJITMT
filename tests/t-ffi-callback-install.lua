@@ -1,4 +1,9 @@
 local th = require"threading"
+local ffi = require"ffi"
+
+ffi.cdef[[
+typedef int (*lj_m7_cback_install_t)(int);
+]]
 
 local nthreads = tonumber((arg and arg[1]) or os.getenv("LJ_M7_FFI_CBACK_THREADS")) or 6
 local iters = tonumber((arg and arg[2]) or os.getenv("LJ_M7_FFI_CBACK_ITERS")) or 64
@@ -50,6 +55,29 @@ for tid = 1, nthreads do
   assert(type(result) == "number")
   total = total + result
   workers[tid] = nil
+end
+
+do
+  local held = {}
+  local function cb(x)
+    return x + 1
+  end
+
+  for i = 1, 10000 do
+    local ok, res = pcall(ffi.cast, "lj_m7_cback_install_t", cb)
+    if not ok then
+      assert(tostring(res):match("too many callbacks"), tostring(res))
+      break
+    end
+    held[i] = res
+  end
+  assert(#held > 0)
+  assert(#held < 10000)
+
+  for i = 1, #held do
+    held[i]:free()
+    held[i] = nil
+  end
 end
 
 collectgarbage("restart")

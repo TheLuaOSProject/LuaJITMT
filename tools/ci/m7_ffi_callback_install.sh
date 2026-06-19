@@ -17,6 +17,7 @@ for needle in \
   'callback_owner_claim(lua_State **owner, MSize slot,' \
   'la_casptr((void **)&owner[slot], &expect, L,' \
   'callback_owner_load(owner, top) == NULL' \
+  'if (carrier == NULL)' \
   'callback_carrier_new_l(L)' \
   'callback_owner_claim(owner, top, carrier)' \
   'callback_owner_barrier_l(L, carrier)' \
@@ -148,8 +149,15 @@ if ! awk '
   inslot && /TValue \*func = callback_func_slots\(cts\)/ { sawfunc = 1 }
   inslot && /cbid == NULL \|\| owner == NULL \|\| func == NULL \|\| sizeid == 0/ { sawcheck = 1 }
   inslot && /callback_cbid_load\(cbid, top\) == 0/ { sawcbid = 1 }
-  inslot && /callback_owner_claim\(owner, top, carrier\)/ { sawclaim = 1 }
-  END { exit sawfor && sawfunc && sawcheck && sawcbid && sawclaim && !badinit ? 0 : 1 }
+  inslot && /callback_owner_load\(owner, top\) == NULL/ { sawowner = NR }
+  inslot && /if \(carrier == NULL\)/ { sawlazy = NR }
+  inslot && /callback_carrier_new_l\(L\)/ { sawnew = NR }
+  inslot && /callback_owner_claim\(owner, top, carrier\)/ { sawclaim = NR }
+  END {
+    exit sawfor && sawfunc && sawcheck && sawcbid && sawowner && sawlazy &&
+      sawnew && sawclaim && sawowner < sawlazy && sawlazy < sawnew &&
+      sawnew < sawclaim && !badinit ? 0 : 1
+  }
 ' "$ROOT/src/lj_ccallback.c"; then
   echo "guardrail: callback slot claim must use owner CAS over the preallocated table" >&2
   exit 1

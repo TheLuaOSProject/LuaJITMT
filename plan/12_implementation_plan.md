@@ -179,6 +179,9 @@ FINREG stress; the broader final FINREG/finqueue execution design remains M8
 follow-up rather than M9 performance cleanup. x64 callback runtime scratch is
 per TG; callback entry chooses the current TLS carrier for attached callers and
 auto-attaches a hidden callback carrier for TLS-less foreign pthread entry.
+Callback slot claiming creates that hidden carrier only after observing a free
+owner slot, so slot-table overflow stays on the existing error path without
+allocating an unclaimable carrier.
 
 ## M8 — Weak tables & finalizers, complete semantics (≈1200)
 Tasks: full gc_mayclear rule port (05 §5.8), resurrection-race store hook,
