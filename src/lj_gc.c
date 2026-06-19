@@ -540,8 +540,9 @@ static void gc_mark(global_State *g, GCobj *o)
     }
     if (udtype == UDTYPE_THREAD) {
       LJThread *th = (LJThread *)uddata(ud);
-      if (th->L)
-	gc_markobj(g, obj2gco(th->L));  /* 09 section 9.2 child stack. */
+      lua_State *child = lj_thread_state_load_acq(th);
+      if (child)
+	gc_markobj(g, obj2gco(child));  /* 09 section 9.2 child stack. */
     }
   } else if (LJ_UNLIKELY(gct == ~LJ_TUPVAL)) {
     GCupval *uv = gco2uv(o);

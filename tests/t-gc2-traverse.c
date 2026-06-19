@@ -757,6 +757,46 @@ static void test_thread_constructor_env_barrier(lua_State *L, global_State *g,
   lua_pop(L, 1);
 }
 
+static void test_thread_spawn_constructor_child_barrier(lua_State *L,
+						       global_State *g,
+						       TGState *tg)
+{
+  GCudata *ud;
+  LJThread *th;
+  lua_State *child;
+
+  lua_settop(L, 0);
+  assert(luaL_dostring(L,
+    "local threading = require('threading')\n"
+    "return function() return threading.spawn(function() return true end) end\n") ==
+    LUA_OK);
+
+  lj_gc2_legacy_mark_begin(g);
+  assert(la_load8_acq(&tg->alloc.alloc_black) == 1);
+
+  lua_pushvalue(L, -1);
+  lua_call(L, 0, 1);
+  ud = udataV(L->top - 1);
+  assert(lj_udata_udtype_acq(ud) == UDTYPE_THREAD);
+  th = (LJThread *)uddata(ud);
+  child = lj_thread_state_load_acq(th);
+  assert(child != NULL);
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
+
+  lua_getfield(L, -1, "join");
+  lua_pushvalue(L, -2);
+  lua_call(L, 1, 1);
+  assert(tvistruecond(L->top - 1));
+  lua_pop(L, 1);
+
+  flush_and_drain(g, tg);
+  lj_gc2_legacy_cycle_end(g);
+  lua_pop(L, 2);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  lua_gc(L, LUA_GCSTOP, 0);
+}
+
 #if LJ_HASBUFFER
 static void test_buffer_decode_metatable_barrier(lua_State *L, global_State *g,
 						TGState *tg)
@@ -3826,6 +3866,7 @@ int main(void)
   test_capi_newindex_target_parent_barrier(L, g, tg);
   test_userdata_constructor_publish_barrier(L, g, tg);
   test_thread_constructor_env_barrier(L, g, tg);
+  test_thread_spawn_constructor_child_barrier(L, g, tg);
 #if LJ_HASBUFFER
   test_buffer_decode_metatable_barrier(L, g, tg);
   test_buffer_constructor_dict_barrier(L, g, tg);

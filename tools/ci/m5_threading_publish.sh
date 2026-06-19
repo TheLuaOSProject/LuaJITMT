@@ -56,6 +56,12 @@ if [ -n "$live_table_hits" ]; then
 fi
 
 for needle in \
+  'lj_thread_state_load_acq(const LJThread *th)' \
+  'lj_thread_state_store_rel(LJThread *th, lua_State *L)' \
+  'threading_publish_thread_state(lua_State *L, GCudata *ud,' \
+  'threading_publish_thread_state(L, ud, th, L1)' \
+  'threading_publish_thread_state(L, ud, th, L)' \
+  'test_thread_spawn_constructor_child_barrier' \
   'LJThreadLive *threading_live' \
   'struct LJThreadLive' \
   'LJThreadLive *live_node' \
@@ -69,7 +75,8 @@ for needle in \
   'lj_gc_barrierroot(L, &tv)'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lib_threading.c" \
-      "$ROOT/src/lj_obj.h" "$ROOT/src/lj_thr.h"; then
+      "$ROOT/src/lj_obj.h" "$ROOT/src/lj_thr.h" \
+      "$ROOT/tests/t-gc2-traverse.c"; then
     echo "guardrail: live thread registry must use native lockless roots: $needle" >&2
     exit 1
   fi
@@ -83,6 +90,14 @@ for file in "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc2.c"; do
     fi
   done
 done
+
+raw_thread_l_hits=$(rg -n -- 'th->L' "$ROOT/src/lib_threading.c" \
+  "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc2.c" || true)
+if [ -n "$raw_thread_l_hits" ]; then
+  echo "guardrail: LJThread child-state pointer must use acquire/release helpers:" >&2
+  echo "$raw_thread_l_hits" >&2
+  exit 1
+fi
 
 for needle in \
   'lj_gc_threshold_load(global_State *g)' \

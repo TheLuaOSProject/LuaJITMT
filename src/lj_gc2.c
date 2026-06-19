@@ -3180,8 +3180,9 @@ static void gc2_traverse_udata(global_State *g, GCudata *ud)
   }
   if (udtype == UDTYPE_THREAD) {
     LJThread *th = (LJThread *)uddata(ud);
-    if (th->L)
-      gc2_markobj_worker(g, obj2gco(th->L));  /* 09 section 9.2. */
+    lua_State *child = lj_thread_state_load_acq(th);
+    if (child)
+      gc2_markobj_worker(g, obj2gco(child));  /* 09 section 9.2. */
   }
 }
 

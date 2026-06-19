@@ -9,6 +9,7 @@
 #include <pthread.h>
 #include <stdint.h>
 
+#include "lj_atomic.h"
 #include "lj_obj.h"
 
 typedef void *(*LJThrFunc)(void *);
@@ -47,6 +48,16 @@ typedef struct LJThread {
   uint32_t nresults;
   uint32_t main_thread;
 } LJThread;
+
+static LJ_AINLINE lua_State *lj_thread_state_load_acq(const LJThread *th)
+{
+  return (lua_State *)la_loadptr_acq((void *const *)&th->L);
+}
+
+static LJ_AINLINE void lj_thread_state_store_rel(LJThread *th, lua_State *L)
+{
+  la_storeptr_rel((void **)&th->L, (void *)L);
+}
 
 LJ_FUNC int lj_thr_create(LJThr *thr, LJThrFunc func, void *arg);
 LJ_FUNC int lj_thr_join(LJThr *thr, void **ret);

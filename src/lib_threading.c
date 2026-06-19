@@ -184,10 +184,17 @@ static GCudata *threading_new_thread_ud(lua_State *L, GCtab *env)
   setgcrefmt(ud->metatable, obj2gco(env));
   lj_gc_pubobjobj(L, ud, env);
   th->ud = ud;
-  lj_udata_udtype_rel(ud, UDTYPE_THREAD);
   lj_gc2_finreg_udata_register_mt(L, g, ud, env);
   setudataV(L, L->top++, ud);
   return ud;
+}
+
+static void threading_publish_thread_state(lua_State *L, GCudata *ud,
+					   LJThread *th, lua_State *L1)
+{
+  lj_thread_state_store_rel(th, L1);
+  lj_gc_pubobjobj(L, ud, L1);
+  lj_udata_udtype_rel(ud, UDTYPE_THREAD);
 }
 
 static int64_t threading_timeout_ns(lua_State *L, int narg, int has_default,
@@ -249,7 +256,7 @@ void lj_threading_shutdown(lua_State *L)
     if (!ud)
       continue;
     th = (LJThread *)uddata(ud);
-    if (th->main_thread || th->L == NULL)
+    if (th->main_thread || lj_thread_state_load_acq(th) == NULL)
       continue;
     while (la_load32_acq(&th->state) != LJ_THREAD_DONE) {
       uint32_t futex = la_load32_acq(&th->futex);
@@ -345,7 +352,7 @@ static void threading_rehome_unstarted_stack(lua_State *L, lua_State *L1,
 static void *threading_worker(void *arg)
 {
   LJThread *th = (LJThread *)arg;
-  lua_State *L = th->L;
+  lua_State *L = lj_thread_state_load_acq(th);
   TGState *tg = th->tg;
   global_State *g = G(L);
   uint32_t tid = lj_thr_id(&th->thr);
@@ -422,7 +429,7 @@ static LJThread *threading_thread_from_state(lua_State *L, lua_State *child)
     GCudata *ud = gco2ud(o);
     if (lj_udata_udtype_acq(ud) == UDTYPE_THREAD) {
       LJThread *th = (LJThread *)uddata(ud);
-      if (th->L == child)
+      if (lj_thread_state_load_acq(th) == child)
 	return th;
     }
   }
@@ -485,11 +492,12 @@ static int threading_join_core(lua_State *L, LJThread *th, int has_timeout,
   {
     uint32_t tid = lj_thr_current_id(G(L));
     uint32_t i;
-    while (!lj_state_claim(th->L, tid))
+    lua_State *child = lj_thread_state_load_acq(th);
+    while (!lj_state_claim(child, tid))
       la_cpu_pause();
     for (i = 0; i < th->nresults; i++)
-      copyTV(L, L->top++, th->L->base + i);
-    lj_state_release(th->L, tid);
+      copyTV(L, L->top++, child->base + i);
+    lj_state_release(child, tid);
   }
   if (remove_live) {
     threading_live_remove(th);
@@ -547,7 +555,7 @@ LJLIB_CF(threading_thread___gc)
 	lj_tg_fini_thread(g, th->tg);
 	lj_mem_freet(g, th->tg);
 	th->tg = NULL;
-	th->L = NULL;
+	lj_thread_state_store_rel(th, NULL);
       }
     }
   }
@@ -785,7 +793,7 @@ static lua_State *threading_spawn_core(lua_State *L, GCtab *env, TValue *base,
   threading_state_set_ud(L, L1, ud);
   th = (LJThread *)uddata(ud);
   tg = lj_mem_newt(L, sizeof(TGState), TGState);
-  th->L = L1;
+  threading_publish_thread_state(L, ud, th, L1);
   th->tg = tg;
   th->state = LJ_THREAD_RUNNING;
   th->nargs = (uint32_t)nargs;
@@ -859,7 +867,7 @@ LJLIB_CF(threading_current)
       LJThread *th;
       ud = threading_new_thread_ud(L, env);
       th = (LJThread *)uddata(ud);
-      th->L = L;
+      threading_publish_thread_state(L, ud, th, L);
       th->tg = tg;
       th->state = LJ_THREAD_RUNNING;
       th->main_thread = (L == mainthread(G(L)));

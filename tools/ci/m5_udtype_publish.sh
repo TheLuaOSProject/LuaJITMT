@@ -57,6 +57,12 @@ check_order "$ROOT/src/lib_threading.c" 'static GCudata \*threading_new_thread_u
   'setgcrefmt(ud->metatable, obj2gco(env));' \
   'lj_gc_pubobjobj(L, ud, env);' \
   'th->ud = ud;' \
+  'lj_gc2_finreg_udata_register_mt(L, g, ud, env);' \
+  'setudataV(L, L->top++, ud);'
+
+check_order "$ROOT/src/lib_threading.c" 'static void threading_publish_thread_state' \
+  'lj_thread_state_store_rel(th, L1);' \
+  'lj_gc_pubobjobj(L, ud, L1);' \
   'lj_udata_udtype_rel(ud, UDTYPE_THREAD);'
 
 check_order "$ROOT/src/lib_threading.c" 'LJLIB_CF\(threading_mutex\)' \
