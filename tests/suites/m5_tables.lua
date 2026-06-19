@@ -179,4 +179,63 @@ return function(add)
       print("M5 table KEYLOCK lookup filtering tests passed")
     end
   })
+
+  add({
+    name = "m5_tab_alloc_publish",
+    description = "table allocation root publication source guards",
+    run = function(t)
+      local files = { t:path("src", "lj_tab.c"), t:path("src", "lj_tab.h") }
+      t:assert_all_any_contains(files, {
+        "static LJ_AINLINE void tab_init_empty(global_State *g, GCtab *t)",
+        "static LJ_AINLINE void tab_publish_new(global_State *g, GCtab *t)",
+        "static LJ_AINLINE void tab_publish_array(GCtab *t, TValue *array,",
+        "GCtab * LJ_FASTCALL lj_tab_new0(lua_State *L)",
+        "lj_mem_newgco_unlinked(L, sizetabcolo(asize))",
+        "lj_mem_newgco_unlinked(L, sizeof(GCtab))",
+        "tab_init_empty(g, t)",
+        "cleararray(array, asize)",
+        "tab_publish_array(t, array, asize, asize)",
+        "newwhite(g, t)",
+        "lj_gc_linkobj(g, obj2gco(t));  /* CAS-publish table after body init. */"
+      })
+
+      local publish = t:c_block(t:path("src", "lj_tab.c"),
+                                "static LJ_AINLINE void tab_publish_array")
+      t:assert_text_ordered("tab_publish_array", publish, {
+        "t->acap = acap",
+        "lj_tab_array_rel(t, array)",
+        "lj_tab_asize_rel(t, asize)"
+      })
+
+      local newtab = t:c_block(t:path("src", "lj_tab.c"),
+                               "static GCtab *newtab")
+      for _, needle in ipairs({
+        "lj_tab_array_set(t, array)",
+        "t->asize = asize",
+        "t->acap = asize"
+      }) do
+        if contains(newtab, needle) then
+          error("newtab must release-publish fresh arrays instead of raw metadata stores: " .. needle)
+        end
+      end
+      t:assert_text_ordered("newtab", newtab, {
+        "tab_publish_new(g, t)",
+        "newhpart(L, t, hbits)"
+      })
+
+      t:assert_all_any_contains({
+        t:path("src", "lj_dispatch.h"),
+        t:path("src", "vm_x64.dasc")
+      }, {
+        "_(lj_tab_new) _(lj_tab_new0)",
+        "call extern lj_tab_new0  // (lua_State *L)"
+      })
+
+      t:assert_not_contains(t:path("src", "lj_tab.c"),
+                            "lj_mem_newgco(L, sizetabcolo(asize))")
+      t:assert_not_contains(t:path("src", "lj_tab.c"),
+                            "lj_mem_newobj(L, GCtab)")
+      print("M5 table allocation publication guard passed")
+    end
+  })
 end

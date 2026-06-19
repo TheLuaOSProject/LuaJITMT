@@ -2,6 +2,16 @@ local function contains(s, needle)
   return s:find(needle, 1, true) ~= nil
 end
 
+local function count_plain(s, needle)
+  local count, pos = 0, 1
+  while true do
+    local first, last = s:find(needle, pos, true)
+    if not first then return count end
+    count = count + 1
+    pos = last + 1
+  end
+end
+
 local function assert_no_lines(t, label, paths, pred)
   local hits = {}
   for i = 1, #paths do
@@ -93,6 +103,24 @@ end
 local an = array_insert(80)
 assert(an[1] == 80)
 assert(traces() > 0, "fresh array slot table store did not trace")
+]]
+end
+
+local function jit_href_node_order_smoke()
+  return [[
+jit.opt.start("hotloop=1")
+local t, keys = {}, {}
+for i = 1, 128 do
+  local k = "dyn" .. i
+  keys[i] = k
+  t[k] = i
+end
+local sum = 0
+for i = 1, 800 do
+  local k = keys[(i % 128) + 1]
+  sum = sum + (t[k] or 0)
+end
+assert(sum > 0)
 ]]
 end
 
@@ -189,6 +217,44 @@ return function(add)
         t:assert_not_contains(record, needle)
       end
       print("M5 JIT table-store bridge guard passed")
+    end
+  })
+
+  add({
+    name = "m5_jit_href_node_order",
+    description = "x64 JIT HREF table node/hmask load ordering guard",
+    run = function(t)
+      t:build({ clean = true, quiet = true })
+      t:luajit({ "-e", jit_href_node_order_smoke() })
+
+      local asm = t:path("src", "lj_asm_x86.h")
+      t:assert_all_contains(asm, {
+        "TABNODE_HMASK_OFS",
+        "TABNODE_FLAGS_OFS",
+        "emit_rmro(as, XO_GROUP3, XOg_TEST, node, TABNODE_FLAGS_OFS);",
+        "Reg idx;",
+        "idx = ra_scratch(as, iallow);",
+        "emit_rr(as, XO_ARITH(XOg_ADD), dest|REX_GC64, idx);",
+        "emit_rmro(as, XO_MOV, idx, dest, TABNODE_HMASK_OFS);",
+        "emit_rmro(as, XO_ARITH(XOg_AND), idx, dest,",
+        "emit_rmro(as, XO_MOV, dest|REX_GC64, tab, offsetof(GCtab, node));"
+      })
+
+      local data = t:read(asm)
+      if count_plain(data, "asm_tabnode_retiring_guard(as, dest);") < 2 then
+        error("dynamic HREF must guard both node-load paths against retiring generations")
+      end
+
+      for _, reject in ipairs({
+        "emit_rmro(as, XO_ARITH(XOg_ADD), dest|REX_GC64, tab, offsetof(GCtab,node))",
+        "emit_rmro(as, XO_MOV, dest, tab, offsetof(GCtab, hmask))",
+        "offsetof(GCtab, hmask)",
+        "emit_rmro(as, XO_ARITH(XOg_AND), dest, tab, offsetof(GCtab, hmask))",
+        "emit_rmro(as, XO_ARITH(XOg_AND), dest, key, offsetof(GCstr, sid))"
+      }) do
+        t:assert_not_contains(asm, reject)
+      end
+      print("M5 JIT HREF node-header hmask guard passed")
     end
   })
 

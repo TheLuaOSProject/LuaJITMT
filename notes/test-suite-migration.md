@@ -63,6 +63,9 @@ Lua test-suite migration notes:
 - Ninth migrated scripts:
   - `tools/ci/m5_tab_slot_snapshot.sh` -> `m5_tab_slot_snapshot`
   - `tools/ci/m5_tab_keylock_lookup.sh` -> `m5_tab_keylock_lookup`
+- Tenth migrated scripts:
+  - `tools/ci/m5_tab_alloc_publish.sh` -> `m5_tab_alloc_publish`
+  - `tools/ci/m5_jit_href_node_order.sh` -> `m5_jit_href_node_order`
 - This first batch covers the main shapes the full migration needs:
   standalone C fixtures linked against selected runtime files, Lua tests under
   the built VM, C fixtures linked against `libluajit.a`, and source-order guard
@@ -95,6 +98,8 @@ Lua test-suite migration notes:
 - The ninth batch migrates two focused M5 table hash-node fixtures while
   preserving the timeout-wrapped C fixture runs and source guard predicates for
   slot snapshots and KEYLOCK free-node reservation.
+- The tenth batch migrates table allocation publication guardrails and the x64
+  JIT HREF node-header hmask smoke/marker guard.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.
