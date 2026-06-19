@@ -63,6 +63,16 @@ do
   local x = 1LL
   assert(type(x) == "cdata" and tonumber(x) == 1 and ffi.typeof(x))
 end
+do
+  local buffer = require("string.buffer")
+  local mt = {}
+  local dict = { "key", "hello", "key", false }
+  local dict_mt = { mt, mt, false }
+  local b = buffer.new({ dict = dict, metatable = dict_mt })
+  b:encode(setmetatable({ key = "hello" }, mt))
+  local out = b:decode()
+  assert(out.key == "hello" and getmetatable(out) == mt)
+end
 '
 
 for needle in \
@@ -132,7 +142,7 @@ for needle in \
   'settabV(sbufL(sbx), &tv, t)' \
   'copyTVrel(L, o, &tv)' \
   'lj_tab_storetv(L, val, &tmp)' \
-  'lj_tab_storeint(L, lj_tab_newkey(L, dict, &tv), (int32_t)(i-1))'
+  'serialize_dict_storeint(L, dict, &tv, (int32_t)(i-1))'
 do
   if ! rg -F -q "$needle" "$ROOT/src"; then
     echo "guardrail: missing table value publication marker: $needle" >&2
@@ -208,6 +218,12 @@ fi
 if rg -n 'copyTV\(sbufL\(sbx\), o, &tv\)|settabV\(sbufL\(sbx\), o, t\)|setstrV\(sbufL\(sbx\), o,|setintV\(o,|setpriV\(o,|setcdataV\(sbufL\(sbx\), o,|setrawlightudV\(o,' \
     "$ROOT/src/lj_serialize.c"; then
   echo "guardrail: serializer decode outputs must release-publish" >&2
+  exit 1
+fi
+
+if rg -n 'lj_tab_storeint\(L, lj_tab_newkey\(L, dict, &tv\)' \
+    "$ROOT/src/lj_serialize.c"; then
+  echo "guardrail: serializer dictionary indexes must use nil-only CAS helper" >&2
   exit 1
 fi
 

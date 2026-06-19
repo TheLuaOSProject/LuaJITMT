@@ -7,6 +7,7 @@
 #define LUA_CORE
 
 #include "lj_obj.h"
+#include "lj_atomic.h"
 
 #if LJ_HASBUFFER
 #include "lj_err.h"
@@ -124,6 +125,26 @@ static LJ_AINLINE char *serialize_ru124(char *r, char *w, uint32_t *pv)
   return NULL;
 }
 
+static void serialize_dict_storeint(lua_State *L, GCtab *dict, cTValue *key,
+				    int32_t idx)
+{
+  TValue val, old, *dst;
+  setintV(&val, idx);
+  for (;;) {
+    dst = lj_tab_set(L, dict, key);
+    lj_tv_load_acq(&old, dst);
+    if (tvisforward(&old)) {
+      la_cpu_pause();  /* serializer dictionary saw FORWARD after lookup. */
+      continue;
+    }
+    if (!tvisnil(&old))
+      return;
+    if (lj_tv_cas(dst, &old, &val))
+      return;
+    la_cpu_pause();
+  }
+}
+
 /* Prepare string dictionary for use (once). */
 void LJ_FASTCALL lj_serialize_dict_prep_str(lua_State *L, GCtab *dict)
 {
@@ -142,12 +163,13 @@ void LJ_FASTCALL lj_serialize_dict_prep_str(lua_State *L, GCtab *dict)
       lj_tv_load_acq(&tv, &array[i]);
       if (tvisstr(&tv)) {
 	if (!lj_tab_getstr(dict, strV(&tv))) {  /* Ignore dups. */
-	  lj_tab_storeint(L, lj_tab_newkey(L, dict, &tv), (int32_t)(i-1));
+	  serialize_dict_storeint(L, dict, &tv, (int32_t)(i-1));
 	}
       } else if (!tvisfalse(&tv)) {
 	lj_err_caller(L, LJ_ERR_BUFFER_BADOPT);
       }
     }
+    lj_gc_pubtab(L, dict);
   }
 }
 
@@ -169,12 +191,13 @@ void LJ_FASTCALL lj_serialize_dict_prep_mt(lua_State *L, GCtab *dict)
       lj_tv_load_acq(&tv, &array[i]);
       if (tvistab(&tv)) {
 	if (lj_tv_isnil_acq(lj_tab_get(L, dict, &tv))) {  /* Ignore dups. */
-	  lj_tab_storeint(L, lj_tab_newkey(L, dict, &tv), (int32_t)(i-1));
+	  serialize_dict_storeint(L, dict, &tv, (int32_t)(i-1));
 	}
       } else if (!tvisfalse(&tv)) {
 	lj_err_caller(L, LJ_ERR_BUFFER_BADOPT);
       }
     }
+    lj_gc_pubtab(L, dict);
   }
 }
 

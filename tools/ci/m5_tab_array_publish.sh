@@ -159,6 +159,18 @@ if rg -n 'lj_tab_resize\(L, dict, lj_tab_asize_acq\(dict\)' \
   exit 1
 fi
 
+if ! rg -F -q 'serialize_dict_storeint(L, dict, &tv, (int32_t)(i-1))' \
+    "$ROOT/src/lj_serialize.c"; then
+  echo "guardrail: serializer dictionary prep must CAS-publish indexes" >&2
+  exit 1
+fi
+
+if rg -n 'lj_tab_storeint\(L, lj_tab_newkey\(L, dict, &tv\)' \
+    "$ROOT/src/lj_serialize.c"; then
+  echo "guardrail: serializer dictionary prep must not direct-store indexes" >&2
+  exit 1
+fi
+
 if awk '
   /LJLIB_CF\(table_pack\)/ {
     inpack = 1
