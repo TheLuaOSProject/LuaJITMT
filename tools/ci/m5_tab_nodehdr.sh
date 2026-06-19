@@ -18,9 +18,13 @@ timeout 20s "$OUT"
 for needle in \
   'typedef struct TabNodeHdr' \
   'LJ_STATIC_ASSERT(sizeof(TabNodeHdr) == 16)' \
+  'TABNODE_FREECOUNT_MASK' \
   'TABNODE_FLAG_RETIRING' \
   'lj_tab_node_hmask_acq' \
   'lj_tab_node_hdr_flags_acq' \
+  'lj_tab_node_freecount_acq' \
+  'lj_tab_node_free_reserve' \
+  'lj_tab_node_free_release' \
   'lj_tab_node_nextgen_acq' \
   'lj_tab_node_nextgen_rel' \
   'lj_tab_node_hdr_flags_or_rel' \
@@ -31,7 +35,7 @@ for needle in \
   'TabNodeHdr nilnodehdr' \
   'offsetof(global_State, nilnode)' \
   'tab_node_new' \
-  'hdr->flags = 0' \
+  'hdr->flags = (hmask + 1u) & TABNODE_FREECOUNT_MASK' \
   'setmref(hdr->next_gen, NULL)' \
   'g->nilnodehdr.flags = 0' \
   'setmref(g->nilnodehdr.next_gen, NULL)' \
@@ -46,6 +50,12 @@ done
 if ! rg -F -q 'lj_tab_node_hdr_flags_acq(oldnode) == TABNODE_FLAG_RETIRING' \
     "$ROOT/tests/t-tab-nodehdr.c"; then
   echo "guardrail: node-header test must assert retired node flags" >&2
+  exit 1
+fi
+
+if ! rg -F -q 'lj_tab_node_freecount_acq(newnode) == newhmask + 1u - 5u' \
+    "$ROOT/tests/t-tab-nodehdr.c"; then
+  echo "guardrail: node-header test must assert rebuilt node freecount" >&2
   exit 1
 fi
 

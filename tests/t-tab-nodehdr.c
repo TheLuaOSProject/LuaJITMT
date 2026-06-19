@@ -43,6 +43,7 @@ int main(void)
   nilnode = &G(L)->nilnode;
   assert(lj_tab_node_hmask_acq(nilnode) == 0);
   assert(lj_tab_node_hdr_flags_acq(nilnode) == 0);
+  assert(lj_tab_node_freecount_acq(nilnode) == 0);
   assert(lj_tab_node_nextgen_acq(nilnode) == NULL);
 
   lua_createtable(L, 0, 2);
@@ -52,6 +53,7 @@ int main(void)
   assert(oldnode != nilnode);
   assert(oldhmask == t->hmask);
   assert(lj_tab_node_hdr_flags_acq(oldnode) == 0);
+  assert(lj_tab_node_freecount_acq(oldnode) == oldhmask + 1u);
   assert(lj_tab_node_nextgen_acq(oldnode) == NULL);
 
   for (i = 0; i < 5; i++)
@@ -62,6 +64,7 @@ int main(void)
   assert(oldnode != nilnode);
   assert(oldhmask == t->hmask);
   assert(lj_tab_node_hdr_flags_acq(oldnode) == 0);
+  assert(lj_tab_node_freecount_acq(oldnode) <= oldhmask + 1u);
   assert(lj_tab_node_nextgen_acq(oldnode) == NULL);
 
   lj_tab_resize(L, t, t->asize, lj_fls(t->hmask) + 4u);
@@ -74,6 +77,7 @@ int main(void)
   assert(newhmask == t->hmask);
   assert(newhmask > oldhmask);
   assert(lj_tab_node_hdr_flags_acq(newnode) == 0);
+  assert(lj_tab_node_freecount_acq(newnode) == newhmask + 1u - 5u);
   assert(lj_tab_node_nextgen_acq(newnode) == NULL);
 
   for (i = 0; i < 5; i++)
@@ -85,6 +89,7 @@ int main(void)
   assert(lj_tab_node_acq(t) != nilnode);
   oldnode = lj_tab_node_acq(t);
   assert(lj_tab_node_hdr_flags_acq(oldnode) == 0);
+  assert(lj_tab_node_freecount_acq(oldnode) == lj_tab_node_hmask_acq(oldnode) + 1u);
   assert(lj_tab_node_nextgen_acq(oldnode) == NULL);
   lj_tab_resize(L, t, t->asize, 0);
   assert(lj_tab_node_acq(t) == nilnode);
@@ -92,6 +97,7 @@ int main(void)
   assert(lj_tab_node_hdr_flags_acq(oldnode) == TABNODE_FLAG_RETIRING);
   assert(lj_tab_node_nextgen_acq(oldnode) == nilnode);
   assert(lj_tab_node_hdr_flags_acq(nilnode) == 0);
+  assert(lj_tab_node_freecount_acq(nilnode) == 0);
   assert(lj_tab_node_nextgen_acq(nilnode) == NULL);
   assert(t->hmask == 0);
 

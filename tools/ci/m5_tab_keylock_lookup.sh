@@ -19,12 +19,18 @@ for needle in \
   'tab_key_islocked(cTValue *key)' \
   'tab_key_retry_once(cTValue *key, int *retry)' \
   'tab_try_claim_nil_key(TValue *dst)' \
+  'lj_tab_node_free_reserve(Node *node)' \
+  'lj_tab_node_free_release(Node *node)' \
+  'lj_tab_node_freecount_acq(const Node *node)' \
   'tab_claim_free_node_scan(Node *nodebase, MSize hmask,' \
   'tab_findkey_or_keylock(Node *anchor, cTValue *key, int *locked)' \
   'tab_findkey_or_keylock(n, key, &locked)' \
+  'lj_tab_node_free_reserve(nodebase)' \
   'tab_try_claim_nil_key(&n->key)' \
   'tab_claim_free_node_scan(nodebase, hmask, n, &locked)' \
-  'tab_release_claimed_free(freenode)' \
+  'tab_release_claimed_free(nodebase, freenode)' \
+  'lj_tab_node_freecount_acq(node) == freecount0' \
+  'lj_tab_node_freecount_acq(node) == freecount0 - 1u' \
   'if (tab_key_retry_once(&nk, &retry))' \
   'if (tab_key_islocked(&key))' \
   'if (tab_key_islocked(&nk))' \
@@ -44,16 +50,19 @@ done
 
 if ! awk '
   /TValue \*lj_tab_newkey\(lua_State \*L,/ { innewkey = 1 }
+  innewkey && /lj_tab_node_free_reserve\(nodebase\)/ { reserve++ }
   innewkey && /tab_try_claim_nil_key\(&n->key\)/ { anchor = 1 }
   innewkey && /tab_claim_free_node_scan\(nodebase, hmask, n, &locked\)/ { free = 1 }
-  innewkey && /tab_release_claimed_free\(freenode\)/ { release++ }
+  innewkey && /tab_release_claimed_free\(nodebase, freenode\)/ { release++ }
+  innewkey && /lj_tab_node_free_release\(nodebase\)/ { frel++ }
   innewkey && /tab_storekeyrel\(L, &n->key, key\)/ { anchorpub = 1 }
   innewkey && /tab_storekeyrel\(L, &freenode->key, key\)/ { freepub = 1 }
   innewkey && /setfreetop\(t, nodebase, freenode\)/ { bad = 1 }
   innewkey && /^}/ { innewkey = 0 }
-  END { exit anchor && free && release >= 2 && anchorpub && freepub && !bad ? 0 : 1 }
+  END { exit reserve >= 1 && anchor && free && release >= 2 && frel >= 2 &&
+	anchorpub && freepub && !bad ? 0 : 1 }
 ' "$ROOT/src/lj_tab.c"; then
-  echo "guardrail: lj_tab_newkey must KEYLOCK-claim nil anchor/free keys without freetop mutation" >&2
+  echo "guardrail: lj_tab_newkey must reserve freecount, KEYLOCK-claim nil keys, and avoid freetop mutation" >&2
   exit 1
 fi
 

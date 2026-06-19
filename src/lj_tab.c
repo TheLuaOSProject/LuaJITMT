@@ -217,7 +217,7 @@ static LJ_AINLINE Node *tab_node_new(lua_State *L, MSize hmask)
   TabNodeHdr *hdr = (TabNodeHdr *)lj_mem_new(L, lj_tab_node_bytes(hmask));
   Node *node = (Node *)(void *)((char *)(void *)hdr + sizeof(TabNodeHdr));
   hdr->hmask = hmask;
-  hdr->flags = 0;
+  hdr->flags = (hmask + 1u) & TABNODE_FREECOUNT_MASK;
   setmref(hdr->next_gen, NULL);
 #if !LJ_GC64
   hdr->reserved = 0;
@@ -301,6 +301,8 @@ static TValue *tab_rehash_insert(lua_State *L, Node *nodebase, MSize hmask,
 {
   /* Destination belongs to an unpublished replacement hash vector. */
   Node *n = hashkey_node(nodebase, hmask, key);
+  if (lj_tab_node_free_reserve(nodebase) != 1)
+    lj_assertL(0, "no free node during rehash");
   if (!lj_tv_isnil_acq(&n->val)) {
     Node *freenode = *freetopp;
     do {
@@ -574,6 +576,7 @@ GCtab * LJ_FASTCALL lj_tab_dup(lua_State *L, const GCtab *kt)
     uint32_t i;
     Node *node = lj_tab_node_acq(t);
     ptrdiff_t d = (char *)node - (char *)knode;
+    MSize freecount = 0;
     setfreetop(t, node, (Node *)((char *)getfreetop(kt, knode) + d));
     for (i = 0; i <= hmask; i++) {
       Node *kn = &knode[i];
@@ -585,10 +588,15 @@ GCtab * LJ_FASTCALL lj_tab_dup(lua_State *L, const GCtab *kt)
       lj_tv_load_acq(&key, &kn->key);
       /* Private duplicate table construction; not shared publication. */
       n->val = val; n->key = key;
-      if (tvistab(&n->val))  /* Replace nil value marker. */
+      if (tvistab(&val)) {  /* Replace nil value marker. */
 	lj_tab_storenilraw(&n->val);
+	setnilV(&val);
+      }
+      if (tvisnil(&key) && tvisnil(&val))
+	freecount++;
       lj_tab_nextnode_set(n, next == NULL ? next : (Node *)((char *)next + d));
     }
+    lj_tab_node_freecount_set_rel(node, freecount);
   }
   return t;
 }
@@ -604,6 +612,7 @@ void LJ_FASTCALL lj_tab_clear(GCtab *t)
   if (hmask > 0) {
     setfreetop(t, node, &node[hmask+1]);
     clearhpart(t);
+    lj_tab_node_freecount_set_rel(node, hmask+1);
   }
 }
 
@@ -1057,11 +1066,12 @@ static int tab_try_claim_nil_key(TValue *dst)
   return tviskeylock(&expect) ? -1 : 0;
 }
 
-static void tab_release_claimed_free(Node *n)
+static void tab_release_claimed_free(Node *nodebase, Node *n)
 {
   lj_tab_nextnode_set(n, NULL);
   lj_tab_storenilraw(&n->key);
   lj_tab_storenilraw(&n->val);
+  lj_tab_node_free_release(nodebase);
 }
 
 static Node *tab_claim_free_node_scan(Node *nodebase, MSize hmask,
@@ -1069,19 +1079,27 @@ static Node *tab_claim_free_node_scan(Node *nodebase, MSize hmask,
 {
   MSize start = (MSize)(anchor - nodebase);
   MSize i;
+  int reserved = lj_tab_node_free_reserve(nodebase);
   *locked = 0;
+  if (reserved <= 0) {
+    if (reserved < 0)
+      *locked = 1;
+    return NULL;
+  }
   for (i = 1; i <= hmask; i++) {
     MSize idx = (start + i) & hmask;
     Node *n = &nodebase[idx];
     TValue nk;
     lj_tv_load_acq(&nk, &n->key);
     if (tab_key_islocked(&nk)) {
+      lj_tab_node_free_release(nodebase);
       *locked = 1;
       return NULL;
     }
     if (tvisnil(&nk) && lj_tv_isnil_acq(&n->val)) {
       int claimed = tab_try_claim_nil_key(&n->key);
       if (claimed < 0) {
+	lj_tab_node_free_release(nodebase);
 	*locked = 1;
 	return NULL;
       }
@@ -1089,6 +1107,7 @@ static Node *tab_claim_free_node_scan(Node *nodebase, MSize hmask,
 	return n;
     }
   }
+  lj_tab_node_free_release(nodebase);
   return NULL;
 }
 
@@ -1124,17 +1143,30 @@ retry_insert:
     }
     lj_tv_load_acq(&nv, &n->val);
     if (tvisnil(&nk) && tvisnil(&nv)) {
-      int claimed = tab_try_claim_nil_key(&n->key);
-      if (claimed < 0) {
+      int reserved = lj_tab_node_free_reserve(nodebase);
+      if (reserved < 0) {
 	la_cpu_pause();
 	goto retry_insert;
       }
-      if (claimed == 1) {
-	tab_storekeyrel(L, &n->key, key);
-	lj_gc2_barrier_weak_key(L, t, key);
-	lj_gc_pubtab(L, t);
-	lj_assertL(lj_tv_isnil_acq(&n->val), "new hash slot is not empty");
-	return &n->val;
+      if (reserved == 0) {
+	rehashtab(L, t, key);
+	return lj_tab_set(L, t, key);
+      }
+      {
+	int claimed = tab_try_claim_nil_key(&n->key);
+	if (claimed < 0) {
+	  lj_tab_node_free_release(nodebase);
+	  la_cpu_pause();
+	  goto retry_insert;
+	}
+	if (claimed == 1) {
+	  tab_storekeyrel(L, &n->key, key);
+	  lj_gc2_barrier_weak_key(L, t, key);
+	  lj_gc_pubtab(L, t);
+	  lj_assertL(lj_tv_isnil_acq(&n->val), "new hash slot is not empty");
+	  return &n->val;
+	}
+	lj_tab_node_free_release(nodebase);
       }
       goto retry_insert;
     }
@@ -1154,11 +1186,11 @@ retry_insert:
     {
       TValue *slot = tab_findkey_or_keylock(n, key, &locked);
       if (slot) {
-	tab_release_claimed_free(freenode);
+	tab_release_claimed_free(nodebase, freenode);
 	return slot;
       }
       if (locked) {
-	tab_release_claimed_free(freenode);
+	tab_release_claimed_free(nodebase, freenode);
 	la_cpu_pause();
 	goto retry_insert;
       }
@@ -1200,6 +1232,11 @@ int lj_tab_try_newkey_anchor(lua_State *L, GCtab *t, cTValue *key,
       la_cpu_pause();  /* Another claimed empty anchor is publishing key. */
       continue;
     }
+    {
+      int reserved = lj_tab_node_free_reserve(nodebase);
+      if (reserved <= 0)
+	return 0;
+    }
     setnilV(&expect);
     if (lj_tv_cas(&n->val, &expect, claim)) {
       tab_storekeylockrel(&n->key);
@@ -1207,6 +1244,7 @@ int lj_tab_try_newkey_anchor(lua_State *L, GCtab *t, cTValue *key,
       *slot = &n->val;
       return 1;
     }
+    lj_tab_node_free_release(nodebase);
   }
 }
 
@@ -1228,7 +1266,7 @@ int lj_tab_try_newkey_chain(lua_State *L, GCtab *t, cTValue *key,
       lj_tv_load_acq(&nk, &n->key);
       if (lj_obj_equal(&nk, key)) {
 	if (reserved)
-	  tab_release_claimed_free(reserved);
+	  tab_release_claimed_free(nodebase, reserved);
 	return -1;  /* Existing or racing insert for this key; retry lookup. */
       }
       if (tviskeylock(&nk) || (tvisnil(&nk) && tab_val_isclaim(&nv, claim))) {
@@ -1237,6 +1275,9 @@ int lj_tab_try_newkey_chain(lua_State *L, GCtab *t, cTValue *key,
       }
     }
     if (!reserved) {
+      int reserve = lj_tab_node_free_reserve(nodebase);
+      if (reserve <= 0)
+	return 0;
       for (i = 0; i <= hmask; i++) {
 	TValue nk, nv, expect;
 	n = &nodebase[i];
@@ -1244,10 +1285,10 @@ int lj_tab_try_newkey_chain(lua_State *L, GCtab *t, cTValue *key,
 	  continue;
 	lj_tv_load_acq(&nk, &n->key);
 	if (lj_obj_equal(&nk, key))
-	  return -1;
+	  goto found_existing;
 	if (tviskeylock(&nk)) {
 	  la_cpu_pause();  /* Unlinked free-node key claim is publishing. */
-	  goto retry;
+	  goto release_retry;
 	}
 	if (!tvisnil(&nk))
 	  continue;
@@ -1255,7 +1296,7 @@ int lj_tab_try_newkey_chain(lua_State *L, GCtab *t, cTValue *key,
 	if (!tvisnil(&nv)) {
 	  if (tab_val_isclaim(&nv, claim)) {
 	    la_cpu_pause();  /* Unlinked free-node claim is still publishing. */
-	    goto retry;
+	    goto release_retry;
 	  }
 	  continue;
 	}
@@ -1266,12 +1307,14 @@ int lj_tab_try_newkey_chain(lua_State *L, GCtab *t, cTValue *key,
 	  break;
 	}
       }
-      if (!reserved)
+      if (!reserved) {
+	lj_tab_node_free_release(nodebase);
 	return 0;  /* No free node in this hash generation: resize fallback. */
+      }
       continue;  /* Re-scan chain before publishing the claimed node. */
     }
     if (LJ_UNLIKELY(anchor == NULL)) {
-      tab_release_claimed_free(reserved);
+      tab_release_claimed_free(nodebase, reserved);
       return 0;
     }
     n = lj_tab_nextnode_acq(anchor);
@@ -1283,6 +1326,12 @@ int lj_tab_try_newkey_chain(lua_State *L, GCtab *t, cTValue *key,
     }
   retry:
     continue;
+  release_retry:
+    lj_tab_node_free_release(nodebase);
+    continue;
+  found_existing:
+    lj_tab_node_free_release(nodebase);
+    return -1;
   }
 }
 

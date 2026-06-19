@@ -237,8 +237,11 @@ once when they see `LJ_TKEYLOCK`, setter probes retry directly, and
 and waits on `LJ_TKEYLOCK`; general new-key insertion KEYLOCK-claims nil
 anchor/free-node keys before publishing and avoids overwriting non-nil
 tombstone anchor keys. Collision insertion uses a bounded linear CAS scan
-instead of mutating the legacy `freetop` cursor in `lj_tab_newkey()`. Atomic
-freecount accounting and cooperative resize/helping are still pending. The
+instead of mutating the legacy `freetop` cursor in `lj_tab_newkey()`.
+`TabNodeHdr` now packs an atomic free-node counter into the low bits of its
+state word, and shared `lj_tab_newkey()` plus FINREG insertion reserve/release
+that counter around anchor/free-node claims. Cooperative resize/helping is
+still pending. The
 shared C array snapshot helper now retries when a selected separated array
 generation is marked
 `TABARRAY_FLAG_RETIRING`. Shared C hash readers that only need a node/mask pair

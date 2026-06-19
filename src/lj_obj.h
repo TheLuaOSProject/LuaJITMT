@@ -552,16 +552,20 @@ LJ_STATIC_ASSERT(offsetof(Node, val) == 0);
 
 typedef struct TabNodeHdr {
   MSize hmask;		/* Hash mask paired with the following Node vector. */
-  MSize flags;		/* State flags for this node generation. */
+  MSize flags;		/* Low bits: freecount. High bits: state flags. */
   MRef next_gen;	/* Replacement generation during/after retirement. */
 #if !LJ_GC64
   MSize reserved;	/* Keep Node[0] aligned after the header. */
 #endif
 } TabNodeHdr;
 
+#define TABNODE_FREECOUNT_BITS	31
+#define TABNODE_FREECOUNT_MASK	((((MSize)1u) << TABNODE_FREECOUNT_BITS) - 1u)
+#define TABNODE_FLAGS_MASK	((MSize)~TABNODE_FREECOUNT_MASK)
 #define TABNODE_FLAG_RETIRING	(((MSize)1u) << 31)
 
 LJ_STATIC_ASSERT(sizeof(TabNodeHdr) == 16);
+LJ_STATIC_ASSERT(((MSize)1u << LJ_MAX_HBITS) <= TABNODE_FREECOUNT_MASK);
 
 typedef struct TabNodeRetire {
   Node *node;		/* Retired hash vector, owned only when armed. */
@@ -850,7 +854,56 @@ static LJ_AINLINE void lj_tab_node_hmask_set(Node *node, MSize hmask)
 
 static LJ_AINLINE MSize lj_tab_node_hdr_flags_acq(const Node *node)
 {
-  return (MSize)la_load32_acq(&lj_tab_node_hdr(node)->flags);
+  return (MSize)la_load32_acq(&lj_tab_node_hdr(node)->flags) &
+	 TABNODE_FLAGS_MASK;
+}
+
+static LJ_AINLINE MSize lj_tab_node_freecount_acq(const Node *node)
+{
+  return (MSize)la_load32_acq(&lj_tab_node_hdr(node)->flags) &
+	 TABNODE_FREECOUNT_MASK;
+}
+
+static LJ_AINLINE void lj_tab_node_freecount_set_rel(Node *node,
+						     MSize freecount)
+{
+  uint32_t *word = &lj_tab_node_hdrw(node)->flags;
+  uint32_t old = la_load32_acq(word);
+  uint32_t want;
+  freecount &= TABNODE_FREECOUNT_MASK;
+  /* 06 section 6.3.4: keep freecount atomic with generation flags. */
+  do {
+    want = (old & (uint32_t)TABNODE_FLAGS_MASK) | (uint32_t)freecount;
+  } while (old != want && !la_cas32(word, &old, want, LA_ACQ_REL, LA_ACQ));
+}
+
+static LJ_AINLINE int lj_tab_node_free_reserve(Node *node)
+{
+  uint32_t *word = &lj_tab_node_hdrw(node)->flags;
+  uint32_t old = la_load32_acq(word);
+  for (;;) {
+    uint32_t count = old & (uint32_t)TABNODE_FREECOUNT_MASK;
+    if (old & (uint32_t)TABNODE_FLAG_RETIRING)
+      return -1;
+    if (count == 0)
+      return 0;
+    if (la_cas32(word, &old, (old & (uint32_t)TABNODE_FLAGS_MASK) |
+		 (count - 1u), LA_ACQ_REL, LA_ACQ))
+      return 1;
+  }
+}
+
+static LJ_AINLINE void lj_tab_node_free_release(Node *node)
+{
+  uint32_t *word = &lj_tab_node_hdrw(node)->flags;
+  uint32_t old = la_load32_acq(word);
+  uint32_t want;
+  /* 06 section 6.3.4: return an abandoned key-claim reservation. */
+  do {
+    uint32_t count = old & (uint32_t)TABNODE_FREECOUNT_MASK;
+    want = (old & (uint32_t)TABNODE_FLAGS_MASK) |
+	   ((count + 1u) & (uint32_t)TABNODE_FREECOUNT_MASK);
+  } while (!la_cas32(word, &old, want, LA_ACQ_REL, LA_ACQ));
 }
 
 static LJ_AINLINE Node *lj_tab_node_nextgen_acq(const Node *node)
@@ -885,6 +938,7 @@ static LJ_AINLINE void lj_tab_node_hdr_flags_or_rel(Node *node, MSize flags)
   uint32_t *word = &lj_tab_node_hdrw(node)->flags;
   uint32_t old = la_load32_acq(word);
   uint32_t want;
+  flags &= TABNODE_FLAGS_MASK;
   /* 06 section 6.3.4: publish generation state before replacement. */
   do {
     want = old | (uint32_t)flags;
