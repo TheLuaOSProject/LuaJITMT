@@ -37,6 +37,9 @@ for needle in \
   'mov64 r11, LJ_TFORWARD_BITS' \
   'call extern lj_tab_vmnext_forward' \
   'mov r8, NEXT_TAB->node' \
+  'mov r9d, dword [r8+TABNODE_FLAGS_OFS]' \
+  'test r9d, TABNODE_FLAG_RETIRING' \
+  'jnz >3' \
   'mov r9d, dword [r8+TABNODE_HMASK_OFS]' \
   'mov NEXT_TMP, NODE:NEXT_PTR->val' \
   'cmp NEXT_TMP, LJ_TNIL; je >7' \
@@ -51,10 +54,14 @@ done
 
 if ! awk '
   /->vm_next:/ { innext = 1 }
+  innext && /mov r9d, dword \[r8\+TABNODE_FLAGS_OFS\]/ { flags++ }
+  innext && /test r9d, TABNODE_FLAG_RETIRING/ { retire_test++ }
+  innext && /jnz >3/ { retire_branch++ }
   innext && /mov64 r11, LJ_TFORWARD_BITS/ { forward++ }
   innext && /call extern lj_tab_vmnext_forward/ { helper++ }
   innext && /->vm_next_1:/ { innext = 0 }
-  END { exit forward >= 2 && helper >= 2 ? 0 : 1 }
+  END { exit flags && retire_test && retire_branch &&
+	       forward >= 2 && helper >= 2 ? 0 : 1 }
 ' "$ROOT/src/vm_x64.dasc"; then
   echo "guardrail: x64 lj_vm_next must resolve forwarded array/hash slots in C" >&2
   exit 1

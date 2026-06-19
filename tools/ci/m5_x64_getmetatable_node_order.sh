@@ -19,6 +19,9 @@ assert(type(getmetatable(u)) == "table")
 for needle in \
   '|.ffunc_1 getmetatable' \
   '|  mov r8, TAB:RB->node' \
+  '|  mov r9d, dword [r8+TABNODE_FLAGS_OFS]' \
+  '|  test r9d, TABNODE_FLAG_RETIRING' \
+  '|  jnz ->fff_fallback' \
   '|  mov RAd, dword [r8+TABNODE_HMASK_OFS]' \
   '|  add NODE:RA, r8'
 do
@@ -31,10 +34,13 @@ done
 if ! awk '
   /[|][.]ffunc_1 getmetatable/ { infn = 1; saw_node = 0 }
   infn && /mov r8, TAB:RB->node/ { saw_node = 1 }
+  infn && /mov r9d, dword \[r8\+TABNODE_FLAGS_OFS\]/ { saw_flags = 1; if (!saw_node) bad = 1 }
+  infn && /test r9d, TABNODE_FLAG_RETIRING/ { saw_test = 1; if (!saw_flags) bad = 1 }
+  infn && /jnz ->fff_fallback/ { saw_retire = 1; if (!saw_test) bad = 1 }
   infn && /mov RAd, dword \[r8\+TABNODE_HMASK_OFS\]/ { if (!saw_node) bad = 1 }
   infn && /TAB:RB->hmask/ { bad = 1 }
   infn && /[|][.]ffunc_2 setmetatable/ { infn = 0 }
-  END { exit bad ? 1 : 0 }
+  END { exit bad || !saw_retire ? 1 : 0 }
 ' "$ROOT/src/vm_x64.dasc"; then
   echo "guardrail: x64 getmetatable must load hmask from the node header" >&2
   exit 1

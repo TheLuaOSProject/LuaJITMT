@@ -36,6 +36,9 @@ for needle in \
   'cmp r8, LJ_TNIL; je >4' \
   'mov [BASE+RA*8+8], r8' \
   'mov r8, TAB:RB->node' \
+  'mov r9d, dword [r8+TABNODE_FLAGS_OFS]' \
+  'test r9d, TABNODE_FLAG_RETIRING' \
+  'jnz >9' \
   'mov r9d, dword [r8+TABNODE_HMASK_OFS]' \
   'mov r8, NODE:ITYPE->val' \
   'cmp r8, LJ_TNIL; je >7' \
@@ -52,10 +55,14 @@ done
 
 if ! awk '
   /case BC_ITERN:/ { initern = 1 }
+  initern && /mov r9d, dword \[r8\+TABNODE_FLAGS_OFS\]/ { flags++ }
+  initern && /test r9d, TABNODE_FLAG_RETIRING/ { retire_test++ }
+  initern && /jnz >9/ { retire_branch++ }
   initern && /mov64 r9, LJ_TFORWARD_BITS/ { forward++ }
   initern && /call extern lj_tab_itern_forward/ { helper++ }
   initern && /case BC_ISNEXT:/ { initern = 0 }
-  END { exit forward >= 2 && helper >= 2 ? 0 : 1 }
+  END { exit flags && retire_test && retire_branch &&
+	       forward >= 2 && helper >= 2 ? 0 : 1 }
 ' "$ROOT/src/vm_x64.dasc"; then
   echo "guardrail: x64 BC_ITERN must resolve forwarded array/hash slots in C" >&2
   exit 1

@@ -307,7 +307,11 @@ CAS-publishes the resolved slot and retries `meta_tset()` if the slot became
 `LJ_TFORWARD` after lookup but before publication, so the VM/meta slow store
 does not erase a migration sentinel. The broader C-side table setter and JIT
 helpers still await the original flag-gated RETIRING/FORWARD/CAS write
-protocol for migration correctness. Regular x64
+protocol for migration correctness. The x64 VM hash readers that consume
+`TabNodeHdr.hmask` (`getmetatable`, `ipairs_aux`'s hash fallback,
+`lj_vm_next`, `BC_TGETS_Z`, and `BC_ITERN`) now test
+`TABNODE_FLAG_RETIRING` and leave the fast path instead of traversing a retired
+hash generation. Regular x64
 dynamic `IR_HREF` lowering also uses the node-header mask instead of
 `GCtab.hmask`; constant-slot HREFK lowering has an interim node-header bounds
 guard before reading its recorded slot. Linux/x64 helper-backed `ASTORE` and

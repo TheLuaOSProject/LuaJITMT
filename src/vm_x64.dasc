@@ -330,6 +330,7 @@
 #define TAB_COLO_SLOTS		((int)sizeof(GCtab))
 #define TABARRAY_ASIZE_OFS	(-(int)sizeof(TabArrayHdr))
 #define TABNODE_HMASK_OFS	(-(int)sizeof(TabNodeHdr))
+#define TABNODE_FLAGS_OFS	(TABNODE_HMASK_OFS + (int)offsetof(TabNodeHdr, flags))
 |.define TGPOLL, dword [DISPATCH+DISPATCH_TG(poll)]
 |.define TGMARK, dword [DISPATCH+DISPATCH_TG(mark_active)]
 |.macro load_DISPATCH, lreg
@@ -1326,6 +1327,9 @@ static void build_subroutines(BuildCtx *ctx)
   |  load_G TMPR
   |  mov STR:RC, [TMPR+GL_OFS(gcroot)+8*(GCROOT_MMNAME+MM_metatable)]
   |  mov r8, TAB:RB->node
+  |  mov r9d, dword [r8+TABNODE_FLAGS_OFS]
+  |  test r9d, TABNODE_FLAG_RETIRING
+  |  jnz ->fff_fallback
   |  mov RAd, dword [r8+TABNODE_HMASK_OFS]
   |  and RAd, STR:RC->sid
   |  settp STR:RC, LJ_TSTR
@@ -1557,7 +1561,11 @@ static void build_subroutines(BuildCtx *ctx)
   |  jmp ->fff_res
   |2:  // Check for empty hash part first. Otherwise call C function.
   |  mov r8, TAB:RB->node
+  |  mov r9d, dword [r8+TABNODE_FLAGS_OFS]
+  |  test r9d, TABNODE_FLAG_RETIRING
+  |  jnz >5
   |  cmp dword [r8+TABNODE_HMASK_OFS], 0; je ->fff_res0
+  |5:
   |.if X64WIN
   |  mov TMPR, BASE
   |  mov CARG2d, RAd
@@ -2937,6 +2945,9 @@ static void build_subroutines(BuildCtx *ctx)
   |  sub NEXT_IDX, NEXT_ASIZE
   |6:
   |  mov r8, NEXT_TAB->node
+  |  mov r9d, dword [r8+TABNODE_FLAGS_OFS]
+  |  test r9d, TABNODE_FLAG_RETIRING
+  |  jnz >3
   |  mov r9d, dword [r8+TABNODE_HMASK_OFS]
   |  cmp NEXT_IDX, r9d; ja >9
   |  imul NEXT_PTRd, NEXT_IDX, #NODE
@@ -4178,6 +4189,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  checktab TAB:RB, ->vmeta_tgets
     |->BC_TGETS_Z:	// RB = GCtab *, RC = GCstr *
     |  mov r8, TAB:RB->node
+    |  mov r9d, dword [r8+TABNODE_FLAGS_OFS]
+    |  test r9d, TABNODE_FLAG_RETIRING
+    |  jnz ->vmeta_tgets
     |  mov TMPRd, dword [r8+TABNODE_HMASK_OFS]
     |  and TMPRd, STR:RC->sid
     |  imul TMPRd, #NODE
@@ -4689,6 +4703,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  sub RCd, TMPRd
     |6:
     |  mov r8, TAB:RB->node
+    |  mov r9d, dword [r8+TABNODE_FLAGS_OFS]
+    |  test r9d, TABNODE_FLAG_RETIRING
+    |  jnz >9
     |  mov r9d, dword [r8+TABNODE_HMASK_OFS]
     |  cmp RCd, r9d; ja <3	// End of iteration? Branch to ITERL+1.
     |  imul ITYPEd, RCd, #NODE

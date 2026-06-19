@@ -29,6 +29,9 @@ assert(sum == 200 * 17)
 for needle in \
   '|->BC_TGETS_Z:' \
   '|  mov r8, TAB:RB->node' \
+  '|  mov r9d, dword [r8+TABNODE_FLAGS_OFS]' \
+  '|  test r9d, TABNODE_FLAG_RETIRING' \
+  '|  jnz ->vmeta_tgets' \
   '|  mov TMPRd, dword [r8+TABNODE_HMASK_OFS]' \
   '|  add NODE:TMPR, r8' \
   '|  mov64 r9, LJ_TFORWARD_BITS' \
@@ -48,6 +51,9 @@ done
 if ! awk '
   /[|]->BC_TGETS_Z:/ { in_get = 1; saw_node = saw_hmask = 0 }
   in_get && /mov r8, TAB:RB->node/ { saw_node = 1 }
+  in_get && /mov r9d, dword \[r8\+TABNODE_FLAGS_OFS\]/ { saw_flags = 1; if (!saw_node) bad = 1 }
+  in_get && /test r9d, TABNODE_FLAG_RETIRING/ { saw_test = 1; if (!saw_flags) bad = 1 }
+  in_get && /jnz ->vmeta_tgets/ { saw_retire = 1; if (!saw_test) bad = 1 }
   in_get && /mov TMPRd, dword \[r8\+TABNODE_HMASK_OFS\]/ { saw_hmask = 1; if (!saw_node) bad = 1 }
   in_get && /mov64 r9, LJ_TFORWARD_BITS/ { forward = 1 }
   in_get && /cmp ITYPE, r9/ { forward_cmp = 1 }
@@ -57,7 +63,8 @@ if ! awk '
   /[|]->BC_TSETS_Z:/ { in_set = 1; checked_set = 1; next }
   in_set && /jmp ->vmeta_tsets/ { in_set = 0 }
   in_set && /mov \[TMPR\], ITYPE/ { bad = 1 }
-  END { if (!checked_set || in_set || !forward || !forward_cmp || !forward_branch) bad = 1; exit bad ? 1 : 0 }
+  END { if (!checked_set || in_set || !saw_retire ||
+	    !forward || !forward_cmp || !forward_branch) bad = 1; exit bad ? 1 : 0 }
 ' "$ROOT/src/vm_x64.dasc"; then
   echo "guardrail: x64 TGETS must use node headers, reject FORWARD, and TSETS must slow-path" >&2
   exit 1

@@ -39,6 +39,9 @@ for needle in \
   't-x64-ipairs-forward OK' \
   'mov [BASE-8], r8' \
   'mov r8, TAB:RB->node' \
+  'mov r9d, dword [r8+TABNODE_FLAGS_OFS]' \
+  'test r9d, TABNODE_FLAG_RETIRING' \
+  'jnz >5' \
   'cmp dword [r8+TABNODE_HMASK_OFS], 0; je ->fff_res0'
 do
   if ! rg -F -q "$needle" "$ROOT/src/vm_x64.dasc" \
@@ -56,11 +59,15 @@ if ! awk '
   infn && /cmp RAd, TAB:RB->asize/ { bad = 1 }
   infn && /mov TMPRd, TAB:RB->asize/ { asize = NR }
   infn && /mov RD, TAB:RB->array/ && !asize { bad = 1 }
+  infn && /mov r9d, dword \[r8\+TABNODE_FLAGS_OFS\]/ { flags = 1 }
+  infn && /test r9d, TABNODE_FLAG_RETIRING/ { retire_test = 1 }
+  infn && /jnz >5/ { retire_branch = 1 }
   infn && /mov64 r9, LJ_TFORWARD_BITS/ { forward = 1 }
   infn && /cmp r8, r9/ { forward_cmp = 1 }
   infn && /call extern lj_tab_getint_hop/ { helper = 1 }
-  infn && /->fff_res2:/ { exit bad ? 1 : 0 }
-  END { if (bad || !forward || !forward_cmp || !helper) exit 1 }
+  infn && /[|][.]ffunc_1 ipairs/ { infn = 0 }
+  END { if (bad || !flags || !retire_test || !retire_branch ||
+	    !forward || !forward_cmp || !helper) exit 1 }
 ' "$ROOT/src/vm_x64.dasc"; then
   echo "guardrail: x64 ipairs_aux must snapshot slots and resolve FORWARD values" >&2
   exit 1
