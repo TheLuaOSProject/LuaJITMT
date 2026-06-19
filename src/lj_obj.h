@@ -724,6 +724,13 @@ static LJ_AINLINE MSize lj_tab_array_hdr_flags_acq(const TValue *array)
 	 TABARRAY_FLAGS_MASK;
 }
 
+static LJ_AINLINE int lj_tab_array_is_retiring(const GCtab *t,
+					       const TValue *array)
+{
+  return array && !lj_tab_array_is_colocated(t, array) &&
+	 ((lj_tab_array_hdr_flags_acq(array) & TABARRAY_FLAG_RETIRING) != 0);
+}
+
 static LJ_AINLINE void lj_tab_array_hdr_flags_or_rel(TValue *array,
 						     MSize flags)
 {

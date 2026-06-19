@@ -32,6 +32,7 @@ for needle in \
   'lj_tab_array_is_colocated' \
   'lj_tab_array_mem_acq' \
   'lj_tab_array_hdr_flags_acq' \
+  'lj_tab_array_is_retiring' \
   'lj_tab_array_snapshot_acq' \
   'TabArrayRetire' \
   'retired_arrays' \
@@ -44,9 +45,11 @@ for needle in \
   'lj_tab_asize_rel(t, asize)' \
   'static LJ_AINLINE cTValue *lj_tab_getint' \
   'static LJ_AINLINE TValue *lj_tab_setint' \
+  'goto retry_array' \
+  'lj_tab_array_is_retiring(t, array)' \
   'lj_tab_array_snapshot_acq(kt, &karray)' \
   'uint32_t asize = (uint32_t)lj_tab_array_snapshot_acq(t, &array)' \
-  'size_t hi = (size_t)lj_tab_array_snapshot_acq(t, &array)' \
+  'hi = (size_t)lj_tab_array_snapshot_acq(t, &array)' \
   'MSize asize = lj_tab_array_snapshot_acq(t, &array)' \
   'MSize i, asize = lj_tab_array_snapshot_acq(t, &array)' \
   'asize = lj_tab_array_snapshot_acq(kt, &array)' \
@@ -72,6 +75,12 @@ fi
 if ! rg -F -q 'lj_tab_array_hdr_flags_acq(ret->array) == TABARRAY_FLAG_RETIRING' \
     "$ROOT/tests/t-tab-array-publish.c"; then
   echo "guardrail: retired table arrays must carry RETIRING header flags" >&2
+  exit 1
+fi
+
+if ! rg -F -q 'lj_tab_array_is_retiring(t, ret->array)' \
+    "$ROOT/tests/t-tab-array-publish.c"; then
+  echo "guardrail: retired table arrays must be detected by integer access helper predicate" >&2
   exit 1
 fi
 

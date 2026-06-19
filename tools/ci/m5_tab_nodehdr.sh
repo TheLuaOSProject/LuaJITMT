@@ -21,6 +21,8 @@ for needle in \
   'lj_tab_node_hmask_acq' \
   'lj_tab_node_hdr_flags_acq' \
   'lj_tab_node_hdr_flags_or_rel' \
+  'tab_node_is_retiring' \
+  'tab_node_retry_if_retiring' \
   'lj_tab_node_hdrw' \
   'lj_tab_node_bytes' \
   'TabNodeHdr nilnodehdr' \

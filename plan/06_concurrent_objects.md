@@ -210,7 +210,12 @@ once when they see `LJ_TKEYLOCK`, setter probes retry directly, and
 `lj_tab_next()` hides a still-locked key from traversal. The legacy
 `lj_tab_newkey()` helper now defensively rechecks the target collision chain
 and waits on `LJ_TKEYLOCK` before consuming a free node, but freetop allocation
-and cooperative resize/helping are still pending.
+and cooperative resize/helping are still pending. The C integer array helpers
+plus array-backed `keyindex`/`next`/length helpers now retry when a selected
+separated array generation is marked `TABARRAY_FLAG_RETIRING`, and C hash
+lookup/set/new-key/next paths retry when their acquired node generation is
+marked `TABNODE_FLAG_RETIRING`; these are flag-consumption bridges before the
+final `LJ_TFORWARD` copy/hop protocol.
 The legacy `GCtab.node` pointer itself is now release-published after vector
 initialization and acquire-loaded by C-side table, GC, serialization,
 bytecode-writer, parser, and recorder readers. Legacy `GCtab.array` C readers
