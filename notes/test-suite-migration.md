@@ -248,6 +248,9 @@ Lua test-suite migration notes:
   fixture instead of checking safepoint/native-call implementation markers.
 - Converted `m7_ffi_cparse_rollback` to behavior-only coverage through its C
   rollback fixture, Lua reader stress, anchor build, and cdef-token regression.
+- Converted `m7_ffi_ctype_ticket_intern` to behavior-only coverage through its
+  C ticket fixture and threaded Lua intern-race test, and removed the now-unused
+  parser allocation source-check helper.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.

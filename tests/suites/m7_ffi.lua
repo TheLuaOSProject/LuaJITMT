@@ -52,16 +52,6 @@ local function assert_pos_order(label, data, needles)
   end
 end
 
-local function assert_occurs_only_in_block(t, path, start, needle, label)
-  local data = t:read(path)
-  local block = t:c_block(path, start)
-  local total = count_plain(data, needle)
-  local inside = count_plain(block, needle)
-  if total ~= inside then
-    error((label or path) .. ": forbidden text outside helper: " .. needle, 2)
-  end
-end
-
 local function count_line_hits(t, paths, pred)
   local count = 0
   for i = 1, #paths do
@@ -109,19 +99,6 @@ local function assert_no_ctype_typeid(t, paths, label)
   assert_no_lines(t, label, paths, function(line)
     return contains(line, "ctype_typeid(")
   end)
-end
-
-local function assert_parser_allocs_route_through_helpers(t)
-  local path = t:path("src", "lj_cparse.c")
-  assert_occurs_only_in_block(t, path, "cp_ctype_new(CPState *cp, CType **ctp)",
-                              "lj_ctype_new_l(cp->L, cp->cts",
-                              "parser ctype allocations")
-  assert_occurs_only_in_block(t, path, "cp_ctype_intern(CPState *cp, CTInfo info, CTSize size)",
-                              "lj_ctype_intern_l(cp->L, cp->cts",
-                              "parser ctype intern allocations")
-  assert_occurs_only_in_block(t, path, "cp_ctype_intern(CPState *cp, CTInfo info, CTSize size)",
-                              "lj_ctype_intern_new_l(cp->L, cp->cts",
-                              "parser ctype intern allocations")
 end
 
 local function assert_callback_install_order(t)
@@ -1307,34 +1284,8 @@ return function(add)
 
   add({
     name = "m7_ffi_ctype_ticket_intern",
-    description = "FFI ctype ticket allocation and duplicate-aware interning",
+    description = "FFI ctype ticket allocation and duplicate-aware interning behavior",
     run = function(t)
-      t:assert_all_any_contains(source_files(t), {
-        "CTypeTab *tabh",
-        "ctype_top_acq(CTState *cts)",
-        "ctype_top_reserve_l(lua_State *L, CTState *cts, CType **ctp)",
-        "la_cas32(&cts->top, &expect, id+1u, LA_ACQ_REL, LA_ACQ)",
-        "ctype_hash_findtype(CTState *cts, CTypeID id, CTInfo info,",
-        "ctype_hash_try_prepend(CTState *cts, uint32_t h, CType *src,",
-        "ctype_abandon(cts, id)",
-        "lj_ctype_intern_new_l(lua_State *L, CTState *cts",
-        "if (newp) *newp = 1",
-        "cp_ctype_intern(CPState *cp, CTInfo info, CTSize size)",
-        "cp_ctype_publish(CPState *cp, CTypeID id, CType *src)",
-        "lj_cdata_newref_l(lua_State *L, CTState *cts, const void *p,",
-        "lj_ctype_intern_l(L, cts, CTINFO_REF(id), CTSIZE_PTR)"
-      })
-      assert_no_lines(t, "ctype top must advance through ticket reservation",
-                      {
-                        t:path("src", "lj_ctype.c"),
-                        t:path("src", "lj_cparse.c")
-                      }, function(line)
-        return contains(line, "cts->top =") or
-               contains(line, "cts->top++") or
-               contains(line, "++cts->top") or
-               contains(line, "id = cts->top")
-      end)
-      assert_parser_allocs_route_through_helpers(t)
       clean_build(t)
       build_and_run_c(t, t:tmp("lj_t-ffi-ctype-ticket-intern"),
                       "t-ffi-ctype-ticket-intern.c", { timeout = "20s" })
@@ -1343,7 +1294,7 @@ return function(add)
         getenv("LJ_M7_FFI_INTERN_SHAPES", "48"),
         getenv("LJ_M7_FFI_INTERN_ROUNDS", "4")
       }, { joff = true })
-      print("M7 FFI ctype ticket/intern guard passed")
+      print("M7 FFI ctype ticket/intern behavior passed")
     end
   })
 
