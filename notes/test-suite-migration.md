@@ -260,6 +260,8 @@ Lua test-suite migration notes:
 - Converted `m7_ffi_finreg` to behavior-only coverage through threaded
   finalizer runs, the trace finalizer fixture, and a generated IR dump check;
   removed the now-unused FINREG source guard helper.
+- Converted `m7_ffi_pin` to behavior-only coverage through the threaded
+  `ffi.pin` Lua regression.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.

@@ -1102,46 +1102,14 @@ print("dump cnewi ok")
 
   add({
     name = "m7_ffi_pin",
-    description = "ffi.pin root publication and release",
+    description = "ffi.pin root publication and release behavior",
     run = function(t)
-      local src = {
-        t:path("src", "lib_ffi.c"),
-        t:path("src", "lj_ctype.h"),
-        t:path("src", "lj_gc.c"),
-        t:path("src", "lj_gc2.c"),
-        t:path("src", "lj_obj.h")
-      }
-      t:assert_all_any_contains(src, {
-        "UDTYPE_FFI_PIN",
-        "GCtab *pinmt",
-        "LJLIB_MODULE_ffi_pin",
-        "LJLIB_CF(ffi_pin)",
-        "copyTVrel(L, (TValue *)uddata(ud), o)",
-        "lj_gc_pubobjtv(L, ud, (TValue *)uddata(ud))",
-        "copyTVrel(L, (TValue *)uddata(ud), &nilv)",
-        "lj_udata_udtype_rel(ud, UDTYPE_FFI_PIN)",
-        "gc_marktv(g, &tv);  /* 11.6 ffi.pin() root. */",
-        "gc2_mark_tv_worker(g, &tv);  /* 11.6 ffi.pin() root. */",
-        "gc_markobj(g, cts->pinmt)",
-        "lj_gc2_markobj(g, obj2gco(cts->pinmt))"
-      })
-      assert_no_lines(t, "ffi.pin must use userdata-held root without token/registry mutation",
-                      src, function(line)
-        return line_contains_any(line, {
-          "pin_token",
-          "ffi_pin_lock",
-          "ffi_pin_unlock",
-          "GCROOT_FFI_PIN"
-        }) or
-        (contains(line, "ffi_pin") and
-         (contains(line, "registry") or contains(line, "lj_tab_set")))
-      end)
       clean_build(t)
       run_luajit_script(t, "t-ffi-pin.lua", {
         getenv("LJ_M7_FFI_PIN_THREADS", "4"),
         getenv("LJ_M7_FFI_PIN_ITERS", "80")
       }, { joff = true })
-      print("M7 ffi.pin guard passed")
+      print("M7 ffi.pin behavior passed")
     end
   })
 
