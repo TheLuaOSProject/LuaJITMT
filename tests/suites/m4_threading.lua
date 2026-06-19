@@ -25,20 +25,8 @@ return function(add)
 
   add({
     name = "m4_threading_api",
-    description = "Lua-visible threading API smoke test and join cleanup guard",
+    description = "Lua-visible threading API behavior test",
     run = function(t)
-      local block = t:c_block(t:path("src", "lib_threading.c"),
-                              "static int threading_join_core")
-      t:assert_text_contains("threading_join_core", block,
-                             "join_actions = lj_native_leave(L)")
-      t:assert_text_ordered("threading_join_core", block, {
-        "lj_state_checkstack(L, th->nresults + 1u)",
-        "lua_State *child = lj_thread_state_load_acq(th)",
-        "copyTV(L, L->top++, child->base + i)",
-        "threading_live_remove(th)",
-        "lj_safepoint_checkstop(L, join_actions)"
-      })
-
       t:build({ clean = true, quiet = true })
       t:luajit({ "-joff", t:path("tests", "t-threading-api.lua") })
     end
@@ -66,23 +54,8 @@ return function(add)
 
   add({
     name = "m4_threading_capi",
-    description = "public C threading API fixture and shutdown markers",
+    description = "public C threading API behavior fixture",
     run = function(t)
-      t:assert_all_any_contains({
-        t:path("src", "lib_threading.c"),
-        t:path("src", "lj_obj.h"),
-        t:path("src", "lj_tg.c"),
-        t:path("tests", "t-threading-capi.c")
-      }, {
-        "mt_shutdown",
-        "la_futex_wait(&g->mt_live",
-        "la_futex_wake(&g->mt_live",
-        "lj_safepoint_ack(thread_L)",
-        "attached thread is not joinable",
-        "lua_close returned before attached thread detached",
-        "luaMT_join rooted table was not preserved"
-      })
-
       build_and_run_c_fixture(t, t:tmp("lj_t-threading-capi"),
                               "t-threading-capi.c")
       print("M4 public C threading API tests passed")
@@ -93,20 +66,6 @@ return function(add)
     name = "m4_threading_shutdown",
     description = "VM shutdown interrupts unjoined parked and CPU-bound threads",
     run = function(t)
-      local vm_safepoints = table.concat({
-        t:read(t:path("src", "lj_safepoint.c")),
-        t:read(t:path("src", "lj_safepoint.h")),
-        t:read(t:path("src", "vm_x64.dasc"))
-      }, "\n")
-      for _, needle in ipairs({
-        "lj_safepoint_ack_check",
-        "call extern lj_safepoint_ack_check",
-        "TGPOLL, dword [DISPATCH+DISPATCH_TG(poll)]",
-        "cmp TGPOLL, 0"
-      }) do
-        t:assert_text_contains("VM safepoint sources", vm_safepoints, needle)
-      end
-
       local marker = t:tempname("m4-shutdown")
       local spin_marker = t:tempname("m4-shutdown-spin")
       t:remove(marker)

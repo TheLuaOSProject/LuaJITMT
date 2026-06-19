@@ -216,6 +216,10 @@ Lua test-suite migration notes:
   closed-upvalue publication source guards. It stores fresh GC objects through
   closed upvalues in interpreter, threaded, and hot JIT paths, forces GC/GC2,
   and proves the stored values remain reachable without scanning `src/`.
+- Removed the remaining M4 threading source-marker checks. `m4_threading_api`,
+  `m4_threading_capi`, and `m4_threading_shutdown` now rely on their Lua/C
+  behavior fixtures instead of reading `src/lib_threading.c`, safepoint sources,
+  or x64 VM text.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.
