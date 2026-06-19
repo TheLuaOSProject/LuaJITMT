@@ -233,6 +233,10 @@ Lua test-suite migration notes:
   bytecode listings, benchmark output, and other artifacts produced by running
   the VM can keep targeted assertions; the cleanup target is direct inspection
   of implementation text under `src/`.
+- Removed the remaining M5 fixture-suite source inspections from the string-table
+  prep and CAS cases. The suite now relies on the string-table C fixtures for
+  layout, marker-bit, resize/retire, duplicate-intern, and secondary-rehash
+  behavior.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.
