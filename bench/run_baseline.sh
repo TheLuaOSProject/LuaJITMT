@@ -6,9 +6,14 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 BIN=${1:-"$ROOT/src/luajit"}
 HOST=${BASELINE_HOST:-$(hostname | tr -c 'A-Za-z0-9_.-' '_')}
 OUT=${BASELINE_OUT:-"$ROOT/bench/baseline_${HOST}.csv"}
+BENCH_LUA=${BASELINE_BENCH_LUA:-"$ROOT/plan/aux/bench/bench.lua"}
 
 if [ ! -x "$BIN" ]; then
   echo "baseline: LuaJIT binary is not executable: $BIN" >&2
+  exit 2
+fi
+if [ ! -f "$BENCH_LUA" ]; then
+  echo "baseline: benchmark harness not found: $BENCH_LUA" >&2
   exit 2
 fi
 
@@ -16,8 +21,8 @@ jit_tmp=$(mktemp)
 interp_tmp=$(mktemp)
 trap 'rm -f "$jit_tmp" "$interp_tmp"' EXIT HUP INT TERM
 
-"$BIN" "$ROOT/aux/bench/bench.lua" > "$jit_tmp"
-"$BIN" -joff "$ROOT/aux/bench/bench.lua" > "$interp_tmp"
+"$BIN" "$BENCH_LUA" > "$jit_tmp"
+"$BIN" -joff "$BENCH_LUA" > "$interp_tmp"
 
 awk '
   FILENAME == ARGV[1] && FNR > 1 {
