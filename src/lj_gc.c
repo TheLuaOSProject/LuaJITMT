@@ -235,11 +235,13 @@ static void gc2_paranoia_checkobj(global_State *g, GCobj *o, const char *what)
 
 static void gc2_paranoia_checktab(global_State *g, GCtab *t)
 {
+  void *arraymem;
   if (!gc2_paranoia_liveobj(obj2gco(t)))
     return;
   gc2_paranoia_checkobj(g, obj2gco(t), "table");
-  if (t->acap > 0)
-    gc2_paranoia_checkmem(g, lj_tab_array_mem_acq(t), "table array");
+  arraymem = lj_tab_array_mem_acq(t);
+  if (arraymem)
+    gc2_paranoia_checkmem(g, arraymem, "table array");
   {
     MSize hmask;
     Node *node = lj_tab_node_snapshot_acq(t, &hmask);
@@ -866,11 +868,13 @@ static int gc_traverse_tab(global_State *g, GCtab *t)
 {
   int weak = 0;
   int ffi_fin = 0;
+  void *arraymem;
   TValue modev;
   cTValue *mode;
   GCtab *mt = tabref_acq(t->metatable);
-  if (t->acap > 0)
-    lj_gc_arena_markmem(g, lj_tab_array_mem_acq(t));
+  arraymem = lj_tab_array_mem_acq(t);
+  if (arraymem)
+    lj_gc_arena_markmem(g, arraymem);
   {
     MSize hmask;
     Node *node = lj_tab_node_snapshot_acq(t, &hmask);
@@ -1088,14 +1092,14 @@ static size_t propagatemark(global_State *g)
   setgcrefr(g->gc.gray, o->gch.gclist);  /* Remove from gray list. */
   if (LJ_LIKELY(gct == ~LJ_TTAB)) {
     GCtab *t = gco2tab(o);
+    MSize acap = lj_tab_array_separated_acap_acq(t);
     MSize hmask;
     (void)lj_tab_node_snapshot_acq(t, &hmask);
     if (gc_traverse_tab(g, t) > 0)
       black2gray(o);  /* Keep weak tables gray. */
     return (LJ_MAX_COLOSIZE != 0 && t->colo ?
 	    sizetabcolo((uint32_t)t->colo & 0x7f) : sizeof(GCtab)) +
-	   (t->acap && (LJ_MAX_COLOSIZE == 0 || t->colo <= 0) ?
-	    lj_tab_array_bytes(t->acap) : 0) +
+	   (acap ? lj_tab_array_bytes(acap) : 0) +
 	   (hmask ? lj_tab_node_bytes(hmask) : 0);
   } else if (LJ_LIKELY(gct == ~LJ_TFUNC)) {
     GCfunc *fn = gco2func(o);

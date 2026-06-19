@@ -38,6 +38,8 @@ for needle in \
   'lj_tab_array_hdr_flags_acq' \
   'lj_tab_array_is_retiring' \
   'lj_tab_array_snapshot_acq' \
+  'lj_tab_array_separated_snapshot_acq' \
+  'lj_tab_array_separated_acap_acq' \
   'TabArrayRetire' \
   'retired_arrays' \
   'tab_array_new' \
@@ -72,6 +74,26 @@ do
     exit 1
   fi
 done
+
+if rg -n -- 't->acap|->acap > 0' "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc2.c"; then
+  echo "guardrail: GC table array readers must not gate on GCtab.acap" >&2
+  exit 1
+fi
+
+if ! awk '
+  /void LJ_FASTCALL lj_tab_free\(global_State \*g, GCtab \*t\)/ {
+    infn = 1
+    snap = raw = 0
+    next
+  }
+  infn && /lj_tab_array_separated_snapshot_acq\(t, &array\)/ { snap = 1 }
+  infn && /t->acap|lj_tab_array_acq\(t\)/ { raw = 1 }
+  infn && /^}/ { checked = 1; infn = 0 }
+  END { exit checked && snap && !raw ? 0 : 1 }
+' "$ROOT/src/lj_tab.c"; then
+  echo "guardrail: table free must derive separated array capacity from the array header" >&2
+  exit 1
+fi
 
 if ! rg -F -q 'lj_tab_array_hdr_flags_acq(oldarray) == 0' \
     "$ROOT/tests/t-tab-array-publish.c"; then

@@ -817,6 +817,28 @@ static LJ_AINLINE void *lj_tab_array_mem_acq(const GCtab *t)
   return (void *)array;
 }
 
+static LJ_AINLINE MSize lj_tab_array_separated_snapshot_acq(const GCtab *t,
+							    TValue **arrayp)
+{
+  TValue *array;
+retry_snapshot:
+  array = lj_tab_array_acq(t);
+  if (lj_tab_array_is_retiring(t, array)) {
+    la_cpu_pause();
+    goto retry_snapshot;
+  }
+  *arrayp = array;
+  if (array && !lj_tab_array_is_colocated(t, array))
+    return lj_tab_array_hdr_acap_acq(array);
+  return 0;
+}
+
+static LJ_AINLINE MSize lj_tab_array_separated_acap_acq(const GCtab *t)
+{
+  TValue *array;
+  return lj_tab_array_separated_snapshot_acq(t, &array);
+}
+
 static LJ_AINLINE Node *lj_tab_node_acq(const GCtab *t)
 {
 #if LJ_GC64

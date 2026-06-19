@@ -632,10 +632,12 @@ void LJ_FASTCALL lj_tab_free(global_State *g, GCtab *t)
 	       sizetabcolo((uint32_t)t->colo & 0x7f) : sizeof(GCtab);
   Node *node = lj_tab_node_acq(t);
   MSize hmask = lj_tab_node_hmask_acq(node);
+  TValue *array;
+  MSize acap = lj_tab_array_separated_snapshot_acq(t, &array);
   if (hmask > 0)
     tab_node_free(g, node, hmask);
-  if (t->acap > 0 && lj_tab_array_separated(t))
-    tab_array_free(g, lj_tab_array_acq(t), t->acap);
+  if (acap > 0)
+    tab_array_free(g, array, acap);
   if (!lj_mem_freegco_defer(g, t, size))
     lj_mem_free(g, t, size);
 }

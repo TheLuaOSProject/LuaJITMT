@@ -3146,9 +3146,11 @@ static int gc2_traverse_tab(global_State *g, GCtab *t)
   GCtab *mt = tabref_acq(t->metatable);
   int weak = gc2_tab_weak_mode(g, t, mt);
   int ffi_fin = gc2_tab_is_ffi_fin(g, t);
+  void *arraymem;
   gc2_note_weak_table(g, t, weak);  /* 05 section 5.8 discovery scaffold. */
-  if (t->acap > 0)
-    lj_gc2_markmem(g, lj_tab_array_mem_acq(t));
+  arraymem = lj_tab_array_mem_acq(t);
+  if (arraymem)
+    lj_gc2_markmem(g, arraymem);
   {
     MSize hmask;
     Node *node = lj_tab_node_snapshot_acq(t, &hmask);
