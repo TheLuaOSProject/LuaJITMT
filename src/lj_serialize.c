@@ -133,7 +133,8 @@ void LJ_FASTCALL lj_serialize_dict_prep_str(lua_State *L, GCtab *dict)
     MSize i, len = lj_tab_len(dict), asize;
     TValue *array;
     if (!len) return;
-    lj_tab_resize(L, dict, lj_tab_asize_acq(dict), hsize2hbits(len));
+    asize = lj_tab_array_snapshot_acq(dict, &array);
+    lj_tab_resize(L, dict, asize, hsize2hbits(len));
     asize = lj_tab_array_snapshot_acq(dict, &array);
     for (i = 1; i <= len && i < asize; i++) {
       TValue tv;
@@ -159,7 +160,8 @@ void LJ_FASTCALL lj_serialize_dict_prep_mt(lua_State *L, GCtab *dict)
     MSize i, len = lj_tab_len(dict), asize;
     TValue *array;
     if (!len) return;
-    lj_tab_resize(L, dict, lj_tab_asize_acq(dict), hsize2hbits(len));
+    asize = lj_tab_array_snapshot_acq(dict, &array);
+    lj_tab_resize(L, dict, asize, hsize2hbits(len));
     asize = lj_tab_array_snapshot_acq(dict, &array);
     for (i = 1; i <= len && i < asize; i++) {
       TValue tv;

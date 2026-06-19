@@ -144,6 +144,12 @@ if rg -n 'asize = lj_tab_asize_acq\(dict\)|array = lj_tab_array_acq\(dict\)|idx 
   exit 1
 fi
 
+if rg -n 'lj_tab_resize\(L, dict, lj_tab_asize_acq\(dict\)' \
+    "$ROOT/src/lj_serialize.c"; then
+  echo "guardrail: serializer dictionary resize must preserve snapshot array size" >&2
+  exit 1
+fi
+
 if rg -n 'TValue \*record_array = lj_tab_array_acq\(t\)' \
     "$ROOT/src/lj_record.c"; then
   echo "guardrail: recorder array-shape decisions must snapshot array bounds" >&2
