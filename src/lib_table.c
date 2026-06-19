@@ -314,20 +314,33 @@ LJLIB_CF(table_sort)
 
 #if LJ_52
 LJLIB_PUSH("n")
+
+static void table_pack_storeint_str(lua_State *L, GCtab *t, GCstr *key,
+				    int32_t val)
+{
+  TValue tv, *dst;
+  setintV(&tv, val);
+  for (;;) {
+    dst = lj_tab_setstr(L, t, key);
+    if (lj_tab_trystoretv_cas(L, dst, &tv) == LJ_TAB_STORE_CAS_OK)
+      return;
+    la_cpu_pause();  /* table.pack "n" store saw FORWARD after lookup. */
+  }
+}
+
 LJLIB_CF(table_pack)
 {
   TValue *array, *base = L->base;
   MSize i, n = (uint32_t)(L->top - base);
   GCtab *t = lj_tab_new(L, n ? n+1 : 0, 1);
-  /* NOBARRIER: The table is new (marked white). */
-  lj_tab_storeint(L, lj_tab_setstr(L, t, strV(lj_lib_upvalue(L, 1))),
-		  (int32_t)n);
+  table_pack_storeint_str(L, t, strV(lj_lib_upvalue(L, 1)), (int32_t)n);
   (void)lj_tab_array_snapshot_acq(t, &array);
   array++;
   for (i = 0; i < n; i++)
     lj_tab_storetv(L, &array[i], &base[i]);
   settabV(L, base, t);
   L->top = base+1;
+  lj_gc_pubtab(L, t);
   lj_gc_check(L);
   return 1;
 }

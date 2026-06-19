@@ -47,6 +47,7 @@ for needle in \
   'copyTVrel(L, o, f)' \
   'table_insert_shift_store(L, t, i)' \
   'table_insert_value_store(L, t, i, L->top-1)' \
+  'table_pack_storeint_str(L, t, strV(lj_lib_upvalue(L, 1)), (int32_t)n)' \
   'lj_tab_trystoretv_cas(L, dst, &val) == LJ_TAB_STORE_CAS_OK' \
   'lj_tab_storetv(L, &array[i], &base[i])' \
   'base_storestr_str(L, t, lj_str_newlit(L, "__mode"), lj_str_newlit(L, "kv"))' \
@@ -105,6 +106,12 @@ fi
 if rg -n 'copyTV\(L, o, L->top\+1\)|copyTV\(L, o, --L->top\)|copyTV\(L, dst, &val\)|setnilV\(dst\)|copyTV\(L, &array\[i\], &base\[i\]\)' \
     "$ROOT/src/lj_api.c" "$ROOT/src/lib_table.c"; then
   echo "guardrail: API/table library direct table slot stores must release-publish" >&2
+  exit 1
+fi
+
+if rg -n 'lj_tab_storeint\(L, lj_tab_setstr\(L, t, strV\(lj_lib_upvalue\(L, 1\)\)\)' \
+    "$ROOT/src/lib_table.c"; then
+  echo "guardrail: table.pack n field must CAS-publish" >&2
   exit 1
 fi
 

@@ -162,10 +162,12 @@ fi
 if awk '
   /LJLIB_CF\(table_pack\)/ {
     inpack = 1
-    pack_snap = pack_bad = 0
+    pack_snap = pack_n = pack_pub = pack_bad = 0
     next
   }
   inpack && /lj_tab_array_snapshot_acq\(t, &array\)/ { pack_snap = 1 }
+  inpack && /table_pack_storeint_str\(L, t, strV\(lj_lib_upvalue\(L, 1\)\),/ { pack_n = 1 }
+  inpack && /lj_gc_pubtab\(L, t\)/ { pack_pub = 1 }
   inpack && /lj_tab_array_acq\(t\)/ { pack_bad = 1 }
   inpack && /^}/ { pack_checked = 1; inpack = 0 }
   /static GCtab \*bcread_ktab\(LexState \*ls\)/ {
@@ -177,7 +179,7 @@ if awk '
   inbcread && /lj_tab_array_acq\(t\)/ { bcread_bad = 1 }
   inbcread && /^}/ { bcread_checked = 1; inbcread = 0 }
   END {
-    exit pack_checked && pack_snap && !pack_bad &&
+    exit pack_checked && pack_snap && pack_n && pack_pub && !pack_bad &&
 	 bcread_checked && bcread_snap && !bcread_bad ? 0 : 1
   }
 ' "$ROOT/src/lib_table.c" "$ROOT/src/lj_bcread.c"; then
