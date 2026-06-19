@@ -257,6 +257,9 @@ Lua test-suite migration notes:
 - Converted `m7_ffi_callback_runtime` to behavior-only coverage through its C
   callback fixtures, threaded Lua runtime stress, and stock callback test, and
   removed the now-unused callback runtime source-order helper.
+- Converted `m7_ffi_finreg` to behavior-only coverage through threaded
+  finalizer runs, the trace finalizer fixture, and a generated IR dump check;
+  removed the now-unused FINREG source guard helper.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.
