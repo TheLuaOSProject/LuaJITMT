@@ -79,6 +79,8 @@ Lua test-suite migration notes:
 - Fourteenth migrated scripts:
   - `tools/ci/m5_jit_table_fload_mutable.sh` -> `m5_jit_table_fload_mutable`
   - `tools/ci/m5_threading_alloc.sh` -> `m5_threading_alloc`
+- Fifteenth migrated scripts:
+  - `tools/ci/m5_strtab_cas.sh` -> `m5_strtab_cas`
 - This first batch covers the main shapes the full migration needs:
   standalone C fixtures linked against selected runtime files, Lua tests under
   the built VM, C fixtures linked against `libluajit.a`, and source-order guard
@@ -121,6 +123,8 @@ Lua test-suite migration notes:
   node-header and FORWARD-value filtering fixtures.
 - The fourteenth batch migrates the mutable table FLOAD guard and per-TG
   threading allocator routing smoke.
+- The fifteenth batch migrates the string table CAS/rehash fixtures and
+  publication source guards.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.

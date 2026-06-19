@@ -51,6 +51,12 @@ local function source_and_test_files(t)
   return files
 end
 
+local function source_files(t)
+  return t:files(t:path("src"), {
+    extensions = { ".c", ".h", ".dasc" }
+  })
+end
+
 local function raw_str_tab(line)
   local pos = 1
   local token = "str" .. ".tab"
@@ -231,6 +237,113 @@ return function(add)
                contains(line, "(uintptr_t)1)")
       end)
       print("M5 string table representation prep tests passed")
+    end
+  })
+
+  add({
+    name = "m5_strtab_cas",
+    description = "string table CAS publication fixtures and guards",
+    run = function(t)
+      local out = t:tmp("lj_t-strtab-cas")
+      local out_rehash = t:tmp("lj_t-strtab-rehash")
+      t:build({ clean = true, quiet = true })
+      t:cc(out, { t:path("tests", "t-strtab-cas.c") }, {
+        link_luajit = true,
+        libs = { "-lm", "-ldl", "-pthread" }
+      })
+      t:run({ out }, { timeout = "20s" })
+      t:cc(out_rehash, { t:path("tests", "t-strtab-rehash.c") }, {
+        link_luajit = true,
+        libs = { "-lm", "-ldl", "-pthread" }
+      })
+      t:run({ out_rehash }, { timeout = "20s" })
+
+      t:assert_all_any_contains(source_files(t), {
+        "LJ_STRTAB_RESIZE",
+        "strtab_enter",
+        "strtab_leave",
+        "strtab_claim",
+        "strtab_release",
+        "strtab_retire",
+        "retired_next",
+        "retire_epoch",
+        "g->str.retired",
+        "lj_str_reclaim_retired",
+        "lj_gc2_reclaim_retired",
+        "la_xchgptr_acqrel((void **)&g->str.retired",
+        "la_load64_acq(&hdr->retire_epoch) < completed_epoch",
+        "lj_str_reclaim_retired(g, epoch)",
+        "lj_gc2_reclaim_retired(g, epoch)",
+        "smr_reclaimed",
+        "gc_mark_strtab_mem",
+        "gc2_mark_strtab_mem",
+        "LJ_STRTAB_ACTIVE_MASK",
+        "state | LJ_STRTAB_RESIZE",
+        "while (la_load32_acq(&hdr->resize) & LJ_STRTAB_ACTIVE_MASK)",
+        "strtab_claim(hdr)",
+        "strtab_release(hdr)",
+        "lj_str_ref_load_acq",
+        "lj_str_ref_store_rel",
+        "lj_str_hashhead_acq",
+        "lj_str_next_acq",
+        "lj_str_next_store_rel",
+        "lj_str_bucket_store_rel",
+        "strref_cas_rel",
+        "la_storeptr_rel((void **)&g->str.tabh",
+        "la_add32_rlx(&g->str.num",
+        "la_sub32_acqrel(&g->str.num",
+        "la_load32_acq(&g->str.num)",
+        "la_add32_rlx(&g->str.id"
+      })
+
+      local lj_str = t:path("src", "lj_str.c")
+      t:assert_not_contains(lj_str, "lj_mem_free(g, oldhdr")
+      assert_no_lines(t, "string table chains must use acquire/release helpers",
+                      { lj_str }, function(line)
+        return line:find("setgcrefp%(") ~= nil or
+               line:find("setgcrefr%(") ~= nil or
+               contains(line, "setgcref(newtab") or
+               contains(line, "lj_str_hashhead(oldtab") or
+               contains(line, "lj_str_hashhead(strtab") or
+               contains(line, "gcnext(o)") or
+               contains(line, "gcrefu(newtab") or
+               contains(line, "gcrefu(strtab") or
+               contains(line, "gcrefu(*chain") or
+               contains(line, "gcrefu(q)")
+      end)
+
+      assert_no_lines(t, "GC string-table scans must acquire bucket heads",
+                      {
+                        t:path("src", "lj_gc.c"),
+                        t:path("src", "lj_gc2.c")
+                      }, function(line)
+        return contains(line, "lj_str_hashhead(strtab")
+      end)
+
+      local free_count = count_matches(t:read(lj_str),
+                                       "lj_mem_free%(g, hdr, lj_str_tabbytes%(hdr%)%)")
+      if free_count ~= 3 then
+        error("retired string table headers should only be freed by reclaim and state close")
+      end
+
+      assert_no_lines(t, "string count must use atomic add/sub/load helpers",
+                      { lj_str, t:path("src", "lj_gc.c") }, function(line)
+        return contains(line, "g->str.num--") or
+               contains(line, "++g->str.num") or
+               contains(line, "if (g->str.num") or
+               contains(line, "g->str.num <=") or
+               contains(line, "g->str.num +=")
+      end)
+
+      assert_no_lines(t, "string IDs must not mutate global id/reseed state in allocation",
+                      { lj_str }, function(line)
+        return contains(line, "g->str.id++") or
+               contains(line, "++g->str.id") or
+               contains(line, "g->str.id =") or
+               contains(line, "g->str.idreseed") or
+               contains(line, "idreseed--")
+      end)
+      print("M5 string table CAS publication tests passed")
     end
   })
 end
