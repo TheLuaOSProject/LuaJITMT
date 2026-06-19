@@ -2176,8 +2176,9 @@ static void asm_tail_link(ASMState *as)
   emit_addptr(as, RID_BASE, 8*(int32_t)baseslot);
 
   if (as->J->ktrace) {  /* Patch ktrace slot with the final GCtrace pointer. */
-    setgcref(IR(as->J->ktrace)[LJ_GC64].gcr, obj2gco(as->J->curfinal));
-    IR(as->J->ktrace)->o = IR_KGC;
+    IRIns *ir = IR(as->J->ktrace);
+    ir_kgc_store_rel(ir, obj2gco(as->J->curfinal));
+    la_store8_rel((uint8_t *)&ir->o, IR_KGC);  /* 05 section 5.7.4 trace root. */
   }
 
   /* Sync the interpreter state with the on-trace state. */

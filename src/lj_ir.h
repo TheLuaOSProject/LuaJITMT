@@ -590,6 +590,25 @@ typedef union IRIns {
 #define ir_ktab(ir)	(gco2tab(ir_kgc((ir))))
 #define ir_kfunc(ir)	(gco2func(ir_kgc((ir))))
 #define ir_kcdata(ir)	(gco2cd(ir_kgc((ir))))
+static LJ_AINLINE int ir_iskgc_acq(const IRIns *ir)
+{
+  return la_load8_acq((const uint8_t *)&ir->o) == IR_KGC;
+}
+static LJ_AINLINE GCobj *ir_kgc_load_acq(const IRIns *ir)
+{
+  return gcref_acq(ir[LJ_GC64].gcr);
+}
+static LJ_AINLINE void ir_kgc_store_rel(IRIns *ir, GCobj *o)
+{
+  setgcrefrel(ir[LJ_GC64].gcr, o);
+}
+static LJ_AINLINE void ir_kgc_publish(IRIns *ir, GCobj *o, IRType t)
+{
+  ir->op12 = 0;
+  ir_kgc_store_rel(ir, o);
+  ir->t.irt = (uint8_t)t;
+  la_store8_rel((uint8_t *)&ir->o, IR_KGC);  /* 05 section 5.7.4 trace root. */
+}
 #define ir_knum(ir)	check_exp((ir)->o == IR_KNUM, &(ir)[1].tv)
 #define ir_kint64(ir)	check_exp((ir)->o == IR_KINT64, &(ir)[1].tv)
 #define ir_k64(ir)	check_exp(ir_isk64(ir), &(ir)[1].tv)

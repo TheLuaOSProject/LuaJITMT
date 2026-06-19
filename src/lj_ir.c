@@ -275,10 +275,7 @@ TRef lj_ir_kgc(jit_State *J, GCobj *o, IRType t)
   ref = ir_nextkgc(J);
   ir = IR(ref);
   /* NOBARRIER: Current trace is a GC root. */
-  ir->op12 = 0;
-  setgcref(ir[LJ_GC64].gcr, o);
-  ir->t.irt = (uint8_t)t;
-  ir->o = IR_KGC;
+  ir_kgc_publish(ir, o, t);
   ir->prev = J->chain[IR_KGC];
   J->chain[IR_KGC] = (IRRef1)ref;
 found:

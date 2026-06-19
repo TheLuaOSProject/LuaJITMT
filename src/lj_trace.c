@@ -194,9 +194,10 @@ static void trace_markbody(global_State *g, GCtrace *T, int gc2)
   }
   for (ref = T->nk; ref < REF_TRUE; ref++) {
     IRIns *ir = &T->ir[ref];
-    if (ir->o == IR_KGC) {
-      if (gc2) lj_gc2_markobj(g, ir_kgc(ir));
-      else lj_gc_arena_markobj(g, ir_kgc(ir));
+    if (ir_iskgc_acq(ir)) {
+      GCobj *o = ir_kgc_load_acq(ir);
+      if (gc2) lj_gc2_markobj(g, o);
+      else lj_gc_arena_markobj(g, o);
     }
     if (irt_is64(ir->t) && ir->o != IR_KNULL)
       ref++;

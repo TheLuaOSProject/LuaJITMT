@@ -31,9 +31,13 @@ for needle in \
   'trace_startptgco_acq(GCtrace *T)' \
   'trace_startpt_acq(GCtrace *T)' \
   'trace_startpt_rel(GCtrace *T, GCproto *pt)' \
-  'trace_startpt_clear(GCtrace *T)'
+  'trace_startpt_clear(GCtrace *T)' \
+  'ir_iskgc_acq(const IRIns *ir)' \
+  'ir_kgc_load_acq(const IRIns *ir)' \
+  'ir_kgc_store_rel(IRIns *ir, GCobj *o)' \
+  'ir_kgc_publish(IRIns *ir, GCobj *o, IRType t)'
 do
-  if ! rg -F -q "$needle" "$ROOT/src/lj_jit.h"; then
+  if ! rg -F -q "$needle" "$ROOT/src/lj_jit.h" "$ROOT/src/lj_ir.h"; then
     echo "guardrail: missing trace publication helper: $needle" >&2
     exit 1
   fi
@@ -186,6 +190,22 @@ hits=$(rg -n -g '*.c' -g '*.h' -g '!**/host/*' -- \
   "$ROOT/src" || true)
 if [ -n "$hits" ]; then
   echo "guardrail: GCtrace.startpt must use trace_startpt acquire/release helpers:" >&2
+  echo "$hits" >&2
+  exit 1
+fi
+
+hits=$(rg -n -- 'setgcref\(ir\[LJ_GC64\]\.gcr|setgcref\(IR\(as->J->ktrace\)\[LJ_GC64\]\.gcr|IR\(as->J->ktrace\)->o = IR_KGC' \
+  "$ROOT/src/lj_ir.c" "$ROOT/src/lj_asm.c" || true)
+if [ -n "$hits" ]; then
+  echo "guardrail: IR KGC constants must publish through release helpers:" >&2
+  echo "$hits" >&2
+  exit 1
+fi
+
+hits=$(rg -n -- 'ir->o == IR_KGC|ir_kgc\(ir\)' \
+  "$ROOT/src/lj_trace.c" "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc2.c" || true)
+if [ -n "$hits" ]; then
+  echo "guardrail: GC trace traversal must acquire-snapshot IR KGC constants:" >&2
   echo "$hits" >&2
   exit 1
 fi

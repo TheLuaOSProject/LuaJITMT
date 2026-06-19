@@ -3276,8 +3276,8 @@ static void gc2_traverse_trace(global_State *g, GCtrace *T)
     return;
   for (ref = T->nk; ref < REF_TRUE; ref++) {
     IRIns *ir = &T->ir[ref];
-    if (ir->o == IR_KGC)
-      gc2_markobj_worker(g, ir_kgc(ir));
+    if (ir_iskgc_acq(ir))
+      gc2_markobj_worker(g, ir_kgc_load_acq(ir));
     if (irt_is64(ir->t) && ir->o != IR_KNULL)
       ref++;
   }
