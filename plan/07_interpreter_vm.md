@@ -221,5 +221,9 @@ non-x86-64 dasc work until the x86-64 Linux runtime is green.
 
 Current x64 bridge note: the base-library `setmetatable` fast path now
 publishes the table -> metatable edge through `lj_gc2_barrier_obj_pair()` before
-the legacy black-table repair. The broader 7.4 replacement of x64
-`barrierback` with the final `wbarrier_tv` macro remains open.
+the legacy black-table repair. The x64 `TSETV`, `TSETB`, `TSETR`, and `TSETM`
+fast array/range stores now publish slots first and route post-store checks
+through VM helpers that combine parent-aware GC2 barriers with legacy
+incremental black-table repair. The broader 7.4 replacement remains open for the
+remaining `USETx`/`CSET` barrier surfaces and final cross-VM `wbarrier_tv` macro
+cleanup.

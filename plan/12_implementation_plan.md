@@ -134,6 +134,10 @@ escaped, and weak-table references. These lower through split hash/array/newref
 helpers that run the parent-aware value barrier and the P_WEAK weak-write
 bridge; M10 now also pins that traced helper-backed array stores enqueue the
 old parent, not the young value, for idle generational remembered-set draining.
+The x64 VM `TSETV`/`TSETB`/`TSETR`/`TSETM` fast array/range stores now use
+post-store publication helpers instead of pre-store black-table repair retry
+branches, preserving the `TSETM` table barrier while the stored value snapshot
+drives GC2 and legacy repair.
 The original generation-aware table write protocol and broader
 AHdr/NHdr table-generation port remain pending.
 Linux/x64 HREFK recording now avoids the legacy `GCtab.hmask` mirror

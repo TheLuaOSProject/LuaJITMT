@@ -432,12 +432,15 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov CARG2, TAB:RB
   |  mov RB, BASE			// Save BASE.
   |  mov CARG3, RC
+  |  mov CARG1, SAVE_L
   |.else
+  |  mov TMPR, BASE			// Save BASE before using CARG2.
   |  mov CARG3, RC
-  |  xchg CARG2, RB			// Save BASE (CARG2 == BASE).
+  |  mov CARG2, TAB:RB
+  |  mov CARG1, SAVE_L
+  |  mov RB, TMPR
   |.endif
-  |  load_G CARG1
-  |  call extern lj_gc2_barrier_tv_pair_g	// (global_State *g, GCobj *parent, cTValue *tv)
+  |  call extern lj_gc_pubtabtv_vm	// (lua_State *L, GCtab *t, cTValue *tv)
   |  mov BASE, RB			// Restore BASE.
   |  ins_next
   |
@@ -452,13 +455,10 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov CARG2, TAB:RC
   |  mov CARG3, TMPR
   |  mov CARG4d, ITYPEd
-  |  load_G CARG1
-  |  call extern lj_gc2_barrier_tvn_pair_g	// (global_State *g, GCobj *parent, cTValue *tv, uint32_t n)
+  |  mov CARG1, SAVE_L
+  |  call extern lj_gc_pubtabtvn_vm	// (lua_State *L, GCtab *t, cTValue *tv, uint32_t n)
   |  mov BASE, RB			// Restore BASE.
-  |  movzx RAd, PC_RA
-  |  mov TAB:RB, [BASE+RA*8-8]
-  |  cleartp TAB:RB
-  |  jmp ->vm_gc2_barriertab
+  |  ins_next
   |
   |//-----------------------------------------------------------------------
   |//-- Return handling ----------------------------------------------------
@@ -4313,8 +4313,6 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  cmp r8, LJ_TNIL
     |  je >3				// Previous value is nil?
     |1:
-    |  test byte TAB:RB->marked, LJ_GC_BLACK	// isblack(table)
-    |  jnz >7
     |2:  // Set array slot.
     |  mov L:CARG1, SAVE_L
     |  mov L:CARG1->base, BASE
@@ -4324,11 +4322,13 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  call extern lj_tab_storetv	// (lua_State *L, TValue *d, TValue *s)
     |  mov BASE, L:RB->base
     |  mov RC, rax
-    |  cmp TGMARK, 0
-    |  jz >8
     |  movzx RBd, PC_RB
     |  mov TAB:RB, [BASE+RB*8]
     |  cleartp TAB:RB
+    |  cmp TGMARK, 0
+    |  jnz ->vm_gc2_barriertv_tab
+    |  test byte TAB:RB->marked, LJ_GC_BLACK	// isblack(table)
+    |  jz >8
     |  jmp ->vm_gc2_barriertv_tab
     |8:
     |  ins_next
@@ -4346,20 +4346,6 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  cleartp STR:RC
     |  jmp ->BC_TSETS_Z
     |
-    |7:  // Possible table write barrier for the value. Skip valiswhite check.
-    |.if not X64WIN
-    |  mov CARG2, TAB:RB
-    |  mov RB, BASE			// Save BASE.
-    |.else
-    |  xchg CARG2, RB			// Save BASE (CARG2 == BASE).
-    |.endif
-    |  load_G CARG1
-    |  call extern lj_gc_barrierback_tab_g	// (global_State *g, GCtab *t)
-    |  mov BASE, RB			// Restore BASE.
-    |  movzx RAd, PC_RA
-    |  movzx RBd, PC_RB
-    |  movzx RCd, PC_RC
-    |  jmp ->BC_TSETV_RETRY
     break;
   case BC_TSETS:
     |  ins_ABC	// RA = src, RB = table, RC = str const (~)
@@ -4393,8 +4379,6 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  cmp r8, LJ_TNIL
     |  je >3				// Previous value is nil?
     |1:
-    |  test byte TAB:RB->marked, LJ_GC_BLACK	// isblack(table)
-    |  jnz >7
     |2:	 // Set array slot.
     |  mov L:CARG1, SAVE_L
     |  mov L:CARG1->base, BASE
@@ -4404,11 +4388,13 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  call extern lj_tab_storetv	// (lua_State *L, TValue *d, TValue *s)
     |  mov BASE, L:RB->base
     |  mov RC, rax
-    |  cmp TGMARK, 0
-    |  jz >8
     |  movzx RBd, PC_RB
     |  mov TAB:RB, [BASE+RB*8]
     |  cleartp TAB:RB
+    |  cmp TGMARK, 0
+    |  jnz ->vm_gc2_barriertv_tab
+    |  test byte TAB:RB->marked, LJ_GC_BLACK	// isblack(table)
+    |  jz >8
     |  jmp ->vm_gc2_barriertv_tab
     |8:
     |  ins_next
@@ -4421,20 +4407,6 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  jz ->vmeta_tsetb			// 'no __newindex' flag NOT set: check.
     |  jmp <1
     |
-    |7:  // Possible table write barrier for the value. Skip valiswhite check.
-    |.if not X64WIN
-    |  mov CARG2, TAB:RB
-    |  mov RB, BASE			// Save BASE.
-    |.else
-    |  xchg CARG2, RB			// Save BASE (CARG2 == BASE).
-    |.endif
-    |  load_G CARG1
-    |  call extern lj_gc_barrierback_tab_g	// (global_State *g, GCtab *t)
-    |  mov BASE, RB			// Restore BASE.
-    |  movzx RAd, PC_RA
-    |  movzx RBd, PC_RB
-    |  movzx RCd, PC_RC
-    |  jmp ->BC_TSETB_RETRY
     break;
   case BC_TSETR:
     |  ins_ABC	// RA = src, RB = table, RC = key
@@ -4446,8 +4418,6 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |.else
     |  cvttsd2si RCd, qword [BASE+RC*8]
     |.endif
-    |  test byte TAB:RB->marked, LJ_GC_BLACK	// isblack(table)
-    |  jnz >7
     |2:
     |  mov TMPR, TAB:RB->array
     |  mov ITYPEd, TAB:RB->asize
@@ -4477,29 +4447,17 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  call extern lj_tab_storetv	// (lua_State *L, TValue *d, TValue *s)
     |  mov BASE, L:RB->base
     |  mov RC, rax
-    |  cmp TGMARK, 0
-    |  jz >8
     |  movzx RBd, PC_RB
     |  mov TAB:RB, [BASE+RB*8]
     |  cleartp TAB:RB
+    |  cmp TGMARK, 0
+    |  jnz ->vm_gc2_barriertv_tab
+    |  test byte TAB:RB->marked, LJ_GC_BLACK	// isblack(table)
+    |  jz >8
     |  jmp ->vm_gc2_barriertv_tab
     |8:
     |  ins_next
     |
-    |7:  // Possible table write barrier for the value. Skip valiswhite check.
-    |.if not X64WIN
-    |  mov CARG2, TAB:RB
-    |  mov RB, BASE			// Save BASE.
-    |.else
-    |  xchg CARG2, RB			// Save BASE (CARG2 == BASE).
-    |.endif
-    |  load_G CARG1
-    |  call extern lj_gc_barrierback_tab_g	// (global_State *g, GCtab *t)
-    |  mov BASE, RB			// Restore BASE.
-    |  movzx RAd, PC_RA
-    |  movzx RBd, PC_RB
-    |  movzx RCd, PC_RC
-    |  jmp ->BC_TSETR_RETRY
     break;
 
   case BC_TSETM:
@@ -4510,8 +4468,6 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  lea RA, [BASE+RA*8]
     |  mov TAB:RB, [RA-8]		// Guaranteed to be a table.
     |  cleartp TAB:RB
-    |  test byte TAB:RB->marked, LJ_GC_BLACK	// isblack(table)
-    |  jnz >7
     |2:
     |  mov RDd, MULTRES
     |  sub RDd, 1
@@ -4538,7 +4494,12 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov L:RB, L:CARG1
     |  call extern lj_tab_storetvn	// (lua_State *L, TValue *d, TValue *s, uint32_t n)
     |  mov BASE, L:RB->base
+    |  movzx RAd, PC_RA
+    |  mov TAB:RB, [BASE+RA*8-8]
+    |  cleartp TAB:RB
     |  cmp TGMARK, 0
+    |  jnz ->vm_gc2_barriertvn
+    |  test byte TAB:RB->marked, LJ_GC_BLACK	// isblack(table)
     |  jz >4
     |  jmp ->vm_gc2_barriertvn
     |4:
@@ -4557,19 +4518,6 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  movzx RDd, PC_RD			// Restore RD.
     |  jmp <1				// Retry.
     |
-    |7:  // Possible table write barrier for any value. Skip valiswhite check.
-    |.if not X64WIN
-    |  mov CARG2, TAB:RB
-    |  mov RB, BASE			// Save BASE.
-    |.else
-    |  xchg CARG2, RB			// Save BASE (CARG2 == BASE).
-    |.endif
-    |  load_G CARG1
-    |  call extern lj_gc_barrierback_tab_g	// (global_State *g, GCtab *t)
-    |  mov BASE, RB			// Restore BASE.
-    |  movzx RAd, PC_RA
-    |  movzx RDd, PC_RD
-    |  jmp ->BC_TSETM_RETRY
     break;
 
   /* -- Calls and vararg handling ----------------------------------------- */

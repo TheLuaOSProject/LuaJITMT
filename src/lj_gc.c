@@ -2196,6 +2196,36 @@ void lj_gc_pubtabobj_vm(lua_State *L, GCtab *t, GCobj *o)
     lj_gc_barrierback(G(L), t);
 }
 
+/* Publication wrapper for x64 VM table -> TValue stores. */
+void lj_gc_pubtabtv_vm(lua_State *L, GCtab *t, cTValue *tv)
+{
+  if (!L || !t || !tv)
+    return;
+  lj_gc_barriertv_(L, t, tv);
+}
+
+/* Publication wrapper for x64 VM table range stores. */
+void lj_gc_pubtabtvn_vm(lua_State *L, GCtab *t, cTValue *tv, uint32_t n)
+{
+  global_State *g;
+  uint32_t i;
+  if (!L || !t || !tv || n == 0)
+    return;
+  g = G(L);
+  lj_gc2_barrier_tvn_pair_g(g, obj2gco(t), tv, n);
+  lj_gc2_barrier_tab(L, t);  /* Preserve the previous TSETM table barrier. */
+  if (!isblack(obj2gco(t)))
+    return;
+  for (i = 0; i < n; i++) {
+    TValue snap;
+    lj_tv_load_acq(&snap, &tv[i]);
+    if (tviswhite(&snap)) {
+      lj_gc_barrierback(g, t);
+      return;
+    }
+  }
+}
+
 /* Publication wrapper for closed-upvalue TValue stores. Pass &uv->tv. */
 void LJ_FASTCALL lj_gc_pubuv(global_State *g, TValue *tv)
 {

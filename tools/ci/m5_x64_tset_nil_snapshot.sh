@@ -68,20 +68,14 @@ for needle in \
   'call extern lj_meta_tsettv_pair' \
   'call extern lj_tab_storetv' \
   'call extern lj_tab_storetvn' \
-  'call extern lj_gc_barrierback_tab_g' \
+  'call extern lj_gc_pubtabtv_vm' \
+  'call extern lj_gc_pubtabtvn_vm' \
   '->BC_TSETV_RETRY:' \
   '->BC_TSETB_RETRY:' \
   '->BC_TSETR_RETRY:' \
   '->BC_TSETM_RETRY:' \
-  'jmp ->BC_TSETV_RETRY' \
-  'jmp ->BC_TSETB_RETRY' \
-  'jmp ->BC_TSETR_RETRY' \
-  'jmp ->BC_TSETM_RETRY' \
   'jmp ->vm_gc2_barriertv_tab' \
   'jmp ->vm_gc2_barriertvn' \
-  'jmp ->vm_gc2_barriertab' \
-  'call extern lj_gc2_barrier_tv_pair_g' \
-  'call extern lj_gc2_barrier_tvn_pair_g' \
   't-x64-tset-forward OK'
 do
   if ! rg -F -q -- "$needle" "$ROOT/src/vm_x64.dasc" \
@@ -198,8 +192,26 @@ barrierback_call_count=$(awk '
   /call extern lj_gc_barrierback_tab_g[[:space:]]*\/\/ \(global_State \*g, GCtab \*t\)/ { n++ }
   END { print n + 0 }
 ' "$ROOT/src/vm_x64.dasc")
-if [ "$barrierback_call_count" -ne 4 ]; then
-  echo "guardrail: x64 TSET black-table repairs must call lj_gc_barrierback_tab_g for V/B/R/M" >&2
+if [ "$barrierback_call_count" -ne 0 ]; then
+  echo "guardrail: x64 TSET fast paths must not use pre-store barrierback repairs" >&2
+  exit 1
+fi
+
+pubtabtv_call_count=$(awk '
+  /call extern lj_gc_pubtabtv_vm[[:space:]]*\/\/ \(lua_State \*L, GCtab \*t, cTValue \*tv\)/ { n++ }
+  END { print n + 0 }
+' "$ROOT/src/vm_x64.dasc")
+if [ "$pubtabtv_call_count" -ne 1 ]; then
+  echo "guardrail: x64 TSET value stores must use the post-store VM value publication helper" >&2
+  exit 1
+fi
+
+pubtabtvn_call_count=$(awk '
+  /call extern lj_gc_pubtabtvn_vm[[:space:]]*\/\/ \(lua_State \*L, GCtab \*t, cTValue \*tv, uint32_t n\)/ { n++ }
+  END { print n + 0 }
+' "$ROOT/src/vm_x64.dasc")
+if [ "$pubtabtvn_call_count" -ne 1 ]; then
+  echo "guardrail: x64 TSETM range stores must use the post-store VM range publication helper" >&2
   exit 1
 fi
 
