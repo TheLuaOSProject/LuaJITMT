@@ -120,6 +120,7 @@ for needle in \
   'lj_obj_gcw_acq(uv)' \
   'func_uvptr_acq(&fn2->l, (uint32_t)n2)' \
   'GCobj *uv = gcref_acq(*p[1]);' \
+  'func_uv_acq(parent, v)' \
   'func_uv_acq(&J->fn->l, uv)' \
   'func_uvptr_acq(&fn->l, (ir->op2 >> 8))'
 do
@@ -144,7 +145,8 @@ fi
 if rg -n 'gcref\([^)]*uvptr|&gcref\([^)]*uvptr|gcref\(\*p\[1\]\)' \
     "$ROOT/src/lj_api.c" "$ROOT/src/lib_debug.c" "$ROOT/src/lj_debug.c" \
     "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc2.c" "$ROOT/src/lj_record.c" \
-    "$ROOT/src/lj_opt_fold.c" "$ROOT/src/lj_asm_x86.h"; then
+    "$ROOT/src/lj_opt_fold.c" "$ROOT/src/lj_asm_x86.h" \
+    "$ROOT/src/lj_func.c"; then
   echo "guardrail: Lua closure uvptr consumers must acquire-load published refs" >&2
   exit 1
 fi

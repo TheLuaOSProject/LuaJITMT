@@ -253,10 +253,8 @@ static GCfunc *func_newL_gc_base(lua_State *L, TValue *base, GCproto *pt,
 				 GCfuncL *parent)
 {
   GCfunc *fn;
-  GCRef *puv;
   MSize i, nuv;
   fn = func_newL(L, pt, tabref_acq(parent->env));
-  puv = parent->uvptr;
   nuv = pt->sizeuv;
   if (base == NULL)
     base = L->base;
@@ -273,7 +271,7 @@ static GCfunc *func_newL_gc_base(lua_State *L, TValue *base, GCproto *pt,
 	func_uvmeta(uv, parent, v);
       }
     } else {
-      uv = &gcref(puv[v])->uv;
+      uv = func_uv_acq(parent, v);
     }
     setgcrefrel(fn->l.uvptr[i], obj2gco(uv));
     lj_gc_pubobjobj(L, fn, uv);
