@@ -1,47 +1,15 @@
-local function contains(s, needle)
-  return s:find(needle, 1, true) ~= nil
-end
+local utils = require("suite_utils")
 
-local function shell_quote(s)
-  s = tostring(s)
-  return "'" .. s:gsub("'", "'\\''") .. "'"
-end
-
-local function count_plain(s, needle)
-  local count, pos = 0, 1
-  while true do
-    local first, last = s:find(needle, pos, true)
-    if not first then return count end
-    count = count + 1
-    pos = last + 1
-  end
-end
+local contains = utils.contains
+local shell_quote = utils.shell_quote
+local count_plain = utils.count_plain
+local lines = utils.iter_lines
+local assert_no_lines = utils.assert_no_lines
 
 local function count_match(s, pattern)
   local count = 0
   for _ in s:gmatch(pattern) do count = count + 1 end
   return count
-end
-
-local function lines(data)
-  return (data .. "\n"):gmatch("(.-)\n")
-end
-
-local function assert_no_lines(t, label, paths, pred)
-  local hits = {}
-  for i = 1, #paths do
-    local path = paths[i]
-    local n = 0
-    for line in lines(t:read(path)) do
-      n = n + 1
-      if pred(line, path, n) then
-        hits[#hits + 1] = path .. ":" .. n .. ": " .. line
-      end
-    end
-  end
-  if #hits > 0 then
-    error(label .. ":\n" .. table.concat(hits, "\n"), 2)
-  end
 end
 
 local function source_code_files(t)

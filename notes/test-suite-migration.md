@@ -207,6 +207,16 @@ Lua test-suite migration notes:
   M2 GC header accessor grep, the M5 source publication guards, M5 x64 upvalue
   publication, and M7 no-CTState-L. These should be replaced by behavior tests
   or C/Lua fixtures if the invariant is important.
+- Shared suite helpers now live in `tests/lib/suite_utils.lua`. The migrated
+  suites use that module for shell quoting, environment defaults, substring
+  scans, plain occurrence counts, line iteration, identifier checks, list
+  append, and common "no matching lines" source predicates instead of carrying
+  per-suite copies.
+- Follow-up behavior-test priority from the source-shape removal audit:
+  replace the deleted closed-upvalue publication guards with a behavior fixture
+  that stores fresh GC objects through closed upvalues in interpreter and hot
+  x64/JIT paths, forces GC/GC2 collection, and proves the stored values remain
+  reachable without scanning `src/`.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.

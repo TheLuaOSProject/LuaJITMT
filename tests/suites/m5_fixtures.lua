@@ -1,28 +1,7 @@
-local function contains(s, needle)
-  return s:find(needle, 1, true) ~= nil
-end
+local utils = require("suite_utils")
 
-local function line_hits(t, paths, pred)
-  local hits = {}
-  for i = 1, #paths do
-    local path = paths[i]
-    local n = 0
-    for line in (t:read(path) .. "\n"):gmatch("(.-)\n") do
-      n = n + 1
-      if pred(line, path, n) then
-        hits[#hits + 1] = path .. ":" .. n .. ": " .. line
-      end
-    end
-  end
-  return hits
-end
-
-local function assert_no_lines(t, label, paths, pred)
-  local hits = line_hits(t, paths, pred)
-  if #hits > 0 then
-    error(label .. ":\n" .. table.concat(hits, "\n"), 2)
-  end
-end
+local contains = utils.contains
+local assert_no_lines = utils.assert_no_lines
 
 local function count_matches(data, pattern)
   local count = 0

@@ -1,28 +1,8 @@
-local function contains(s, needle)
-  return s:find(needle, 1, true) ~= nil
-end
+local utils = require("suite_utils")
 
-local function shell_quote(s)
-  s = tostring(s)
-  return "'" .. s:gsub("'", "'\\''") .. "'"
-end
-
-local function assert_no_lines(t, label, paths, pred)
-  local hits = {}
-  for i = 1, #paths do
-    local path = paths[i]
-    local n = 0
-    for line in (t:read(path) .. "\n"):gmatch("(.-)\n") do
-      n = n + 1
-      if pred(line, path, n) then
-        hits[#hits + 1] = path .. ":" .. n .. ": " .. line
-      end
-    end
-  end
-  if #hits > 0 then
-    error(label .. ":\n" .. table.concat(hits, "\n"), 2)
-  end
-end
+local contains = utils.contains
+local shell_quote = utils.shell_quote
+local assert_no_lines = utils.assert_no_lines
 
 local function write_bad_benchmark_csv(t, base, bad)
   local out = assert(io.open(bad, "wb"))

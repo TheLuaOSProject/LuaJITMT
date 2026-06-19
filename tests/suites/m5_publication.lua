@@ -1,34 +1,12 @@
-local function contains(s, needle)
-  return s:find(needle, 1, true) ~= nil
-end
+local utils = require("suite_utils")
 
-local function quote(s)
-  s = tostring(s)
-  return "'" .. s:gsub("'", "'\\''") .. "'"
-end
-
-local function count_plain(s, needle)
-  local count, pos = 0, 1
-  while true do
-    local first, last = s:find(needle, pos, true)
-    if not first then return count end
-    count = count + 1
-    pos = last + 1
-  end
-end
-
-local function escape_pattern(s)
-  return (s:gsub("([^%w_])", "%%%1"))
-end
-
-local function has_ident(s, ident)
-  return s:find("%f[%w_]" .. escape_pattern(ident) .. "%f[^%w_]") ~= nil
-end
-
-local function append(dst, src)
-  for i = 1, #src do dst[#dst + 1] = src[i] end
-  return dst
-end
+local contains = utils.contains
+local quote = utils.shell_quote
+local count_plain = utils.count_plain
+local has_ident = utils.has_ident
+local append = utils.append_list
+local assert_text_not_contains = utils.assert_text_not_contains
+local assert_no_lines = utils.assert_no_lines
 
 local function basename(path)
   return path:match("([^/]+)$") or path
@@ -84,12 +62,6 @@ local function test_text_files(t)
   end)
 end
 
-local function assert_text_not_contains(label, data, needle)
-  if contains(data, needle) then
-    error(label .. ": forbidden text present: " .. needle, 2)
-  end
-end
-
 local function assert_text_all_contains(t, label, data, needles)
   for i = 1, #needles do
     t:assert_text_contains(label, data, needles[i])
@@ -119,29 +91,6 @@ local function assert_before(label, data, a, b)
   local pb = find_pos(label, data, b)
   if pa >= pb then
     error(label .. ": expected `" .. a .. "` before `" .. b .. "`", 2)
-  end
-end
-
-local function as_list(paths)
-  if type(paths) == "string" then return { paths } end
-  return paths
-end
-
-local function assert_no_lines(t, label, paths, pred)
-  local hits = {}
-  paths = as_list(paths)
-  for i = 1, #paths do
-    local path = paths[i]
-    local n = 0
-    for line in (t:read(path) .. "\n"):gmatch("(.-)\n") do
-      n = n + 1
-      if pred(line, path, n) then
-        hits[#hits + 1] = path .. ":" .. n .. ": " .. line
-      end
-    end
-  end
-  if #hits > 0 then
-    error(label .. ":\n" .. table.concat(hits, "\n"), 2)
   end
 end
 

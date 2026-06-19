@@ -1,27 +1,12 @@
-local function getenv(name, default)
-  local v = os.getenv(name)
-  if v == nil or v == "" then return default end
-  return v
-end
+local utils = require("suite_utils")
 
-local function contains(s, needle)
-  return s:find(needle, 1, true) ~= nil
-end
-
-local function count_plain(s, needle)
-  local count, pos = 0, 1
-  while true do
-    local first, last = s:find(needle, pos, true)
-    if not first then return count end
-    count = count + 1
-    pos = last + 1
-  end
-end
-
-local function shell_quote(s)
-  s = tostring(s)
-  return "'" .. s:gsub("'", "'\\''") .. "'"
-end
+local getenv = utils.getenv
+local contains = utils.contains
+local count_plain = utils.count_plain
+local shell_quote = utils.shell_quote
+local line_contains_any = utils.line_contains_any
+local assert_no_lines = utils.assert_no_lines
+local assert_text_not_contains = utils.assert_text_not_contains
 
 local function source_files(t)
   return t:files(t:path("src"), {
@@ -35,36 +20,6 @@ end
 
 local function lua_path(t)
   return t:path("src", "?.lua") .. ";" .. t:path("src", "jit", "?.lua") .. ";;"
-end
-
-local function line_contains_any(line, needles)
-  for i = 1, #needles do
-    if contains(line, needles[i]) then return true end
-  end
-  return false
-end
-
-local function assert_no_lines(t, label, paths, pred)
-  local hits = {}
-  for i = 1, #paths do
-    local path = paths[i]
-    local n = 0
-    for line in (t:read(path) .. "\n"):gmatch("(.-)\n") do
-      n = n + 1
-      if pred(line, path, n) then
-        hits[#hits + 1] = path .. ":" .. n .. ": " .. line
-      end
-    end
-  end
-  if #hits > 0 then
-    error(label .. ":\n" .. table.concat(hits, "\n"), 2)
-  end
-end
-
-local function assert_text_not_contains(label, data, needle)
-  if contains(data, needle) then
-    error(label .. ": forbidden text present: " .. needle, 2)
-  end
 end
 
 local function assert_text_contains(label, data, needle)

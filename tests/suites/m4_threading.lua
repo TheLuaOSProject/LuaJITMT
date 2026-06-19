@@ -1,8 +1,6 @@
-local function getenv(name, default)
-  local v = os.getenv(name)
-  if v == nil or v == "" then return default end
-  return v
-end
+local utils = require("suite_utils")
+
+local getenv = utils.getenv
 
 return function(add)
   local function build_and_run_c_fixture(t, out, cfile)

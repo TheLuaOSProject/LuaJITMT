@@ -1,9 +1,6 @@
 local utils = require("suite_utils")
 
-local function quote(s)
-  return utils.shell_quote(s)
-end
-
+local quote = utils.shell_quote
 local function stock_lua_path(t)
   return utils.lua_path(t.root)
 end
