@@ -85,6 +85,36 @@ static void test_hard_only_helper(lua_State *L, global_State *g)
   finish_gc2_mark(g);
 }
 
+static void test_hard_only_c_check(lua_State *L, global_State *g)
+{
+  uint64_t interp_checks0, assist_runs0;
+  uint8_t legacy_state0;
+
+  legacy_state0 = g->gc.state;
+  arm_gc2_hard_mark(g);
+  interp_checks0 = la_load64_acq(&g->gc2.interp_hard_checks);
+  assist_runs0 = la_load64_acq(&g->gc2.assist_runs);
+
+  lj_gc_check(L);
+
+  if (la_load64_acq(&g->gc2.interp_hard_checks) <= interp_checks0) {
+    fputs("hard-only C lj_gc_check did not enter the GC2 hard check\n",
+	  stderr);
+    assert(0);
+  }
+  if (la_load64_acq(&g->gc2.assist_runs) <= assist_runs0) {
+    fputs("hard-only C lj_gc_check did not run the GC2 hard assist\n",
+	  stderr);
+    assert(0);
+  }
+  if (g->gc.state != legacy_state0) {
+    fprintf(stderr, "hard-only C lj_gc_check moved legacy GC state %u -> %u\n",
+	    (unsigned)legacy_state0, (unsigned)g->gc.state);
+    assert(0);
+  }
+  finish_gc2_mark(g);
+}
+
 static void test_hard_only_fastfunc(lua_State *L, global_State *g)
 {
   uint64_t interp_checks0, assist_runs0;
@@ -183,6 +213,7 @@ int main(void)
 
   test_hard_only_fastfunc(L, g);
   test_hard_only_helper(L, g);
+  test_hard_only_c_check(L, g);
   lua_close(L);
   puts("t-gc2-interp-hard-check OK: interpreter hard checks enter GC2 assist");
   return 0;

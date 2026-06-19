@@ -29,6 +29,8 @@ for needle in \
   'uint64_t local_total' \
   'LJ_GC2_ACCT_FLUSH' \
   'la_xchg64_acqrel' \
+  'int lj_gc_should_step(global_State *g)' \
+  'la_load64_acq(&g->gc2.alloc_since_trigger) >' \
   'lj_gc2_account_alloc(global_State *g, TGState *tg, GCSize bytes)' \
   'lj_gc2_flush_alloc(global_State *g, TGState *tg)' \
   'lj_gc2_update_pacing(global_State *g)' \
@@ -47,6 +49,7 @@ for needle in \
   'tg->gc_assist = 1' \
   'lj_gc_step_top(lua_State *L)' \
   'call extern lj_gc_step_top' \
+  'lj_gc_step_top(L)' \
   'legacy_step = g->gc.total >= lj_gc_threshold_load(g)' \
   'la_add64_rlx(&g->gc2.assist_runs' \
   'la_add64_rlx(&g->gc2.interp_hard_checks' \
@@ -75,7 +78,7 @@ for needle in \
   'la_store32_rel(&g->gc2.assist_shift'
 do
   if ! rg -F -q "$needle" "$ROOT/src/lj_atomic.h" "$ROOT/src/lj_obj.h" \
-      "$ROOT/src/lj_gc2.h" "$ROOT/src/lj_gc2.c" "$ROOT/src/lj_gc.c" \
+      "$ROOT/src/lj_gc.h" "$ROOT/src/lj_gc2.h" "$ROOT/src/lj_gc2.c" "$ROOT/src/lj_gc.c" \
       "$ROOT/src/lj_safepoint.c" "$ROOT/src/lj_tg.c" "$ROOT/src/lj_tg.h" \
       "$ROOT/src/lj_api.c" "$ROOT/src/vm_x64.dasc"; then
     echo "guardrail: missing allocator accounting marker: $needle" >&2

@@ -126,12 +126,19 @@ static LJ_AINLINE void lj_gc_mt_threshold_store(global_State *g,
   lj_gcsize_store_rel(&g->mt_gc_threshold, threshold);
 }
 
-/* GC check: drive collector forward if the GC threshold has been reached. */
+static LJ_AINLINE int lj_gc_should_step(global_State *g)
+{
+  return g->gc.total >= lj_gc_threshold_load(g) ||
+	 la_load64_acq(&g->gc2.alloc_since_trigger) >
+	 la_load64_acq(&g->gc2.hard_bytes);
+}
+
+/* GC check: drive collector forward if legacy or GC2 pacing asks for work. */
 #define lj_gc_check(L) \
-  { if (LJ_UNLIKELY(G(L)->gc.total >= lj_gc_threshold_load(G(L)))) \
-      lj_gc_step(L); }
+  { if (LJ_UNLIKELY(lj_gc_should_step(G(L)))) \
+      lj_gc_step_top(L); }
 #define lj_gc_check_fixtop(L) \
-  { if (LJ_UNLIKELY(G(L)->gc.total >= lj_gc_threshold_load(G(L)))) \
+  { if (LJ_UNLIKELY(lj_gc_should_step(G(L)))) \
       lj_gc_step_fixtop(L); }
 
 /* Write barriers. */
