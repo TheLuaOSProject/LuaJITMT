@@ -473,56 +473,72 @@ static LJ_AINLINE void clearhpart(GCtab *t)
 }
 
 /* Clear array part of table. */
-static LJ_AINLINE void clearapart(GCtab *t)
+static LJ_AINLINE void cleararray(TValue *array, uint32_t asize)
 {
-  TValue *array;
-  uint32_t i, asize = (uint32_t)lj_tab_array_snapshot_acq(t, &array);
+  uint32_t i;
   for (i = 0; i < asize; i++)
     lj_tab_storenilraw(&array[i]);
 }
 
-/* Create a new table. Note: the slots are not initialized (yet). */
+static LJ_AINLINE void clearapart(GCtab *t)
+{
+  TValue *array;
+  uint32_t asize = (uint32_t)lj_tab_array_snapshot_acq(t, &array);
+  cleararray(array, asize);
+}
+
+static LJ_AINLINE void tab_init_empty(global_State *g, GCtab *t)
+{
+  Node *nilnode = &g->nilnode;
+  t->gct = ~LJ_TTAB;
+  t->nomm = (uint8_t)~0;
+  t->colo = 0;
+  lj_tab_array_set(t, NULL);
+  setgcrefnull(t->metatable);
+  t->asize = 0;
+  t->acap = 0;
+  t->hmask = 0;
+  lj_tab_node_set(t, nilnode);
+#if LJ_GC64
+  setmref(t->freetop, nilnode);
+#endif
+}
+
+static LJ_AINLINE void tab_publish_new(global_State *g, GCtab *t)
+{
+  newwhite(g, t);
+  lj_gc_linkobj(g, obj2gco(t));  /* CAS-publish table after body init. */
+}
+
+/* Create a new table with slots initialized to nil. */
 static GCtab *newtab(lua_State *L, uint32_t asize, uint32_t hbits)
 {
+  global_State *g = G(L);
   GCtab *t;
   /* First try to colocate the array part. */
   if (LJ_MAX_COLOSIZE != 0 && asize > 0 && asize <= LJ_MAX_COLOSIZE) {
-    Node *nilnode;
+    TValue *array;
     lj_assertL((sizeof(GCtab) & 7) == 0, "bad GCtab size");
-    t = (GCtab *)lj_mem_newgco(L, sizetabcolo(asize));
-    t->gct = ~LJ_TTAB;
-    t->nomm = (uint8_t)~0;
+    t = (GCtab *)lj_mem_newgco_unlinked(L, sizetabcolo(asize));
+    tab_init_empty(g, t);
     t->colo = (int8_t)asize;
-    lj_tab_array_set(t, (TValue *)((char *)t + sizeof(GCtab)));
-    setgcrefnull(t->metatable);
+    array = (TValue *)((char *)t + sizeof(GCtab));
+    cleararray(array, asize);
+    lj_tab_array_set(t, array);
     t->asize = asize;
     t->acap = asize;
-    t->hmask = 0;
-    nilnode = &G(L)->nilnode;
-    lj_tab_node_set(t, nilnode);
-#if LJ_GC64
-    setmref(t->freetop, nilnode);
-#endif
+    tab_publish_new(g, t);
   } else {  /* Otherwise separately allocate the array part. */
-    Node *nilnode;
-    t = lj_mem_newobj(L, GCtab);
-    t->gct = ~LJ_TTAB;
-    t->nomm = (uint8_t)~0;
-    t->colo = 0;
-    lj_tab_array_set(t, NULL);
-    setgcrefnull(t->metatable);
-    t->asize = 0;  /* In case the array allocation fails. */
-    t->acap = 0;
-    t->hmask = 0;
-    nilnode = &G(L)->nilnode;
-    lj_tab_node_set(t, nilnode);
-#if LJ_GC64
-    setmref(t->freetop, nilnode);
-#endif
+    t = (GCtab *)lj_mem_newgco_unlinked(L, sizeof(GCtab));
+    tab_init_empty(g, t);
+    tab_publish_new(g, t);
     if (asize > 0) {
+      TValue *array;
       if (asize > LJ_MAX_ASIZE)
 	lj_err_msg(L, LJ_ERR_TABOV);
-      lj_tab_array_set(t, tab_array_new(L, asize, asize));
+      array = tab_array_new(L, asize, asize);
+      cleararray(array, asize);
+      lj_tab_array_set(t, array);
       t->asize = asize;
       t->acap = asize;
     }
@@ -545,9 +561,7 @@ static GCtab *newtab(lua_State *L, uint32_t asize, uint32_t hbits)
 */
 GCtab *lj_tab_new(lua_State *L, uint32_t asize, uint32_t hbits)
 {
-  GCtab *t = newtab(L, asize, hbits);
-  clearapart(t);
-  return t;
+  return newtab(L, asize, hbits);
 }
 
 /* The API of this function conforms to lua_createtable(). */
@@ -559,9 +573,7 @@ GCtab *lj_tab_new_ah(lua_State *L, uint32_t a, uint32_t h)
 #if LJ_HASJIT
 GCtab * LJ_FASTCALL lj_tab_new1(lua_State *L, uint32_t ahsize)
 {
-  GCtab *t = newtab(L, ahsize & 0xffffff, ahsize >> 24);
-  clearapart(t);
-  return t;
+  return newtab(L, ahsize & 0xffffff, ahsize >> 24);
 }
 #endif
 

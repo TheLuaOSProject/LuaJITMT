@@ -10,6 +10,7 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 "$ROOT/tools/ci/m5_tab_retire.sh"
 "$ROOT/tools/ci/m5_tab_chain_order.sh"
 "$ROOT/tools/ci/m5_tab_node_publish.sh"
+"$ROOT/tools/ci/m5_tab_alloc_publish.sh"
 "$ROOT/tools/ci/m5_tab_array_publish.sh"
 "$ROOT/tools/ci/m5_tab_slot_snapshot.sh"
 "$ROOT/tools/ci/m5_tab_keylock_lookup.sh"

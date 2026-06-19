@@ -241,3 +241,9 @@ the legacy threshold parked at `LJ_MAX_MEM`. The x64 fast-function
 allocation checks use the same `lj_gc_should_step()` predicate and split
 helpers. The direct x64 `gc.total`/`gc.threshold` branch remains as the legacy
 half of this staged entry point until §7.5 inline allocation replaces it.
+`lj_tab_new()` now constructs `GCtab` bodies from unlinked raw GC storage,
+initializes the empty/colocated table shape, nil-clears new array slots, then
+CAS-publishes the table root with `lj_gc_linkobj()`. This removes the
+publish-before-body-init blocker for future `BC_TNEW` inline allocation; the
+remaining x64 fast path still needs inline legacy color setup, root-list
+publication, and GC2 allocation accounting before it can bypass the C helper.
