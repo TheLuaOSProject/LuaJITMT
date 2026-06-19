@@ -271,7 +271,8 @@ static void gc2_paranoia_check_udata(global_State *g, GCudata *ud)
   if (LJ_HASBUFFER && udtype == UDTYPE_BUFFER) {
     SBufExt *sbx = (SBufExt *)uddata(ud);
     if (!sbufiscoworborrow(sbx))
-      gc2_paranoia_checkmem(g, sbx->b, "buffer userdata data");
+      gc2_paranoia_checkmem(g, lj_buf_bptr_acq((SBuf *)sbx),
+			     "buffer userdata data");
   }
 #if LJ_HASFFI
   if (udtype == UDTYPE_FFI_PIN) {
@@ -520,7 +521,7 @@ static void gc_mark(global_State *g, GCobj *o)
       SBufExt *sbx = (SBufExt *)uddata(ud);
       GCobj *ref;
       if (!sbufiscoworborrow(sbx))
-	lj_gc_arena_markmem(g, sbx->b);
+	lj_gc_arena_markmem(g, lj_buf_bptr_acq((SBuf *)sbx));
       ref = gcref_acq(sbx->cowref);
       if (sbufiscow(sbx) && ref)
 	gc_markobj(g, ref);

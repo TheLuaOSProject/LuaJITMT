@@ -667,8 +667,11 @@ void lj_cconv_ct_tv_l(lua_State *L, CTState *cts, CType *d,
     tmpptr = uddata(ud);
     if (udtype == UDTYPE_IO_FILE)
       tmpptr = *(void **)tmpptr;
-    else if (udtype == UDTYPE_BUFFER)
-      tmpptr = ((SBufExt *)tmpptr)->r;
+    else if (udtype == UDTYPE_BUFFER) {
+      MSize len;
+      tmpptr = (void *)lj_bufx_data_acq((SBufExt *)tmpptr, &len);
+      UNUSED(len);
+    }
   } else if (tvislightud(o)) {
     tmpptr = lightudV(cts->g, o);
   } else if (tvisfunc(o)) {

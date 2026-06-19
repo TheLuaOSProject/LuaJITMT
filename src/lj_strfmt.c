@@ -169,8 +169,7 @@ const char *lj_strfmt_wstrnum(lua_State *L, cTValue *o, MSize *lenp)
     return strVdata(o);
   } else if (tvisbuf(o)) {
     SBufExt *sbx = bufV(o);
-    *lenp = sbufxlen(sbx);
-    return sbx->r ? sbx->r : "";
+    return lj_bufx_data_acq(sbx, lenp);
   } else if (tvisint(o)) {
     sb = lj_strfmt_putint(lj_buf_tmp_(L), intV(o));
   } else if (tvisnum(o)) {
@@ -179,7 +178,7 @@ const char *lj_strfmt_wstrnum(lua_State *L, cTValue *o, MSize *lenp)
     return NULL;
   }
   *lenp = sbuflen(sb);
-  return sb->b;
+  return lj_buf_bptr_acq(sb);
 }
 
 /* -- Unformatted conversions to buffer ----------------------------------- */
@@ -187,7 +186,7 @@ const char *lj_strfmt_wstrnum(lua_State *L, cTValue *o, MSize *lenp)
 /* Add integer to buffer. */
 SBuf * LJ_FASTCALL lj_strfmt_putint(SBuf *sb, int32_t k)
 {
-  sb->w = lj_strfmt_wint(lj_buf_more(sb, STRFMT_MAXBUF_INT), k);
+  lj_buf_wptr_rel(sb, lj_strfmt_wint(lj_buf_more(sb, STRFMT_MAXBUF_INT), k));
   return sb;
 }
 
@@ -201,7 +200,7 @@ SBuf * LJ_FASTCALL lj_strfmt_putnum(SBuf *sb, cTValue *o)
 
 SBuf * LJ_FASTCALL lj_strfmt_putptr(SBuf *sb, const void *v)
 {
-  sb->w = lj_strfmt_wptr(lj_buf_more(sb, STRFMT_MAXBUF_PTR), v);
+  lj_buf_wptr_rel(sb, lj_strfmt_wptr(lj_buf_more(sb, STRFMT_MAXBUF_PTR), v));
   return sb;
 }
 
@@ -227,7 +226,7 @@ static SBuf *strfmt_putquotedlen(SBuf *sb, const char *s, MSize len)
       c += '0';
     }
     *w++ = (char)c;
-    sb->w = w;
+    lj_buf_wptr_rel(sb, w);
   }
   lj_buf_putb(sb, '"');
   return sb;
@@ -250,7 +249,7 @@ SBuf *lj_strfmt_putfchar(SBuf *sb, SFormat sf, int32_t c)
   if ((sf & STRFMT_F_LEFT)) *w++ = (char)c;
   while (width-- > 1) *w++ = ' ';
   if (!(sf & STRFMT_F_LEFT)) *w++ = (char)c;
-  sb->w = w;
+  lj_buf_wptr_rel(sb, w);
   return sb;
 }
 
@@ -264,7 +263,7 @@ static SBuf *strfmt_putfstrlen(SBuf *sb, SFormat sf, const char *s, MSize len)
   if ((sf & STRFMT_F_LEFT)) w = lj_buf_wmem(w, s, len);
   while (width-- > len) *w++ = ' ';
   if (!(sf & STRFMT_F_LEFT)) w = lj_buf_wmem(w, s, len);
-  sb->w = w;
+  lj_buf_wptr_rel(sb, w);
   return sb;
 }
 
@@ -344,7 +343,7 @@ SBuf *lj_strfmt_putfxint(SBuf *sb, SFormat sf, uint64_t k)
     while (width-- > pprec) *w++ = ' ';
 
   lj_assertX(need == (MSize)(w - ws), "miscalculated format size");
-  sb->w = w;
+  lj_buf_wptr_rel(sb, w);
   return sb;
 }
 
@@ -447,8 +446,7 @@ int lj_strfmt_putarg(lua_State *L, SBuf *sb, int arg, int retry)
 	} else if (tvisbuf(o)) {
 	  SBufExt *sbx = bufV(o);
 	  if (sbx == (SBufExt *)sb) lj_err_arg(L, arg+1, LJ_ERR_BUFFER_SELF);
-	  len = sbufxlen(sbx);
-	  s = sbx->r;
+	  s = lj_bufx_data_acq(sbx, &len);
 #endif
 	} else {
 	  GCstr *str = lj_strfmt_obj(L, o);

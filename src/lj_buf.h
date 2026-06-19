@@ -33,11 +33,147 @@ typedef struct SBufExt {
   int depth;		/* Remaining recursion depth. */
 } SBufExt;
 
-#define sbufsz(sb)		((MSize)((sb)->e - (sb)->b))
-#define sbuflen(sb)		((MSize)((sb)->w - (sb)->b))
-#define sbufleft(sb)		((MSize)((sb)->e - (sb)->w))
-#define sbufxlen(sbx)		((MSize)((sbx)->w - (sbx)->r))
-#define sbufxslack(sbx)		((MSize)((sbx)->r - (sbx)->b))
+static LJ_AINLINE char *lj_buf_ptr_load_acq(char *const *p)
+{
+  /* 06 section 6.6: shared string.buffer pointer snapshot. */
+  return (char *)la_loadptr_acq((void *const *)(const void *)p);
+}
+
+static LJ_AINLINE void lj_buf_ptr_store_rel(char **p, char *v)
+{
+  /* 06 section 6.6: publish string.buffer pointer/length change. */
+  la_storeptr_rel((void **)(void *)p, v);
+}
+
+static LJ_AINLINE char *lj_buf_bptr_acq(const SBuf *sb)
+{
+  return lj_buf_ptr_load_acq(&sb->b);
+}
+
+static LJ_AINLINE char *lj_buf_wptr_acq(const SBuf *sb)
+{
+  return lj_buf_ptr_load_acq(&sb->w);
+}
+
+static LJ_AINLINE char *lj_buf_eptr_acq(const SBuf *sb)
+{
+  return lj_buf_ptr_load_acq(&sb->e);
+}
+
+static LJ_AINLINE char *lj_buf_rptr_acq(const SBufExt *sbx)
+{
+  return lj_buf_ptr_load_acq((char *const *)&sbx->r);
+}
+
+static LJ_AINLINE void lj_buf_bptr_rel(SBuf *sb, char *p)
+{
+  lj_buf_ptr_store_rel(&sb->b, p);
+}
+
+static LJ_AINLINE void lj_buf_wptr_rel(SBuf *sb, char *p)
+{
+  lj_buf_ptr_store_rel(&sb->w, p);
+}
+
+static LJ_AINLINE void lj_buf_eptr_rel(SBuf *sb, char *p)
+{
+  lj_buf_ptr_store_rel(&sb->e, p);
+}
+
+static LJ_AINLINE void lj_buf_rptr_rel(SBufExt *sbx, char *p)
+{
+  lj_buf_ptr_store_rel(&sbx->r, p);
+}
+
+static LJ_AINLINE int lj_buf_ptr_range(char *p, char *b, char *e)
+{
+  uintptr_t up = (uintptr_t)(void *)p;
+  uintptr_t ub = (uintptr_t)(void *)b;
+  uintptr_t ue = (uintptr_t)(void *)e;
+  return ub <= ue && ub <= up && up <= ue;
+}
+
+static LJ_AINLINE void lj_buf_bounds_rel(SBuf *sb, char *b, char *w, char *e)
+{
+  lj_buf_bptr_rel(sb, b);
+  lj_buf_eptr_rel(sb, e);
+  lj_buf_wptr_rel(sb, w);
+}
+
+static LJ_AINLINE MSize lj_buf_size_acq(const SBuf *sb)
+{
+  char *b = lj_buf_bptr_acq(sb);
+  char *e = lj_buf_eptr_acq(sb);
+  uintptr_t ub = (uintptr_t)(void *)b;
+  uintptr_t ue = (uintptr_t)(void *)e;
+  return ub <= ue ? (MSize)(ue - ub) : 0;
+}
+
+static LJ_AINLINE MSize lj_buf_len_acq(const SBuf *sb)
+{
+  char *b = lj_buf_bptr_acq(sb);
+  char *e = lj_buf_eptr_acq(sb);
+  char *w = lj_buf_wptr_acq(sb);
+  uintptr_t ub = (uintptr_t)(void *)b;
+  uintptr_t uw = (uintptr_t)(void *)w;
+  return lj_buf_ptr_range(w, b, e) ? (MSize)(uw - ub) : 0;
+}
+
+static LJ_AINLINE MSize lj_buf_left_acq(const SBuf *sb)
+{
+  char *b = lj_buf_bptr_acq(sb);
+  char *e = lj_buf_eptr_acq(sb);
+  char *w = lj_buf_wptr_acq(sb);
+  uintptr_t uw = (uintptr_t)(void *)w;
+  uintptr_t ue = (uintptr_t)(void *)e;
+  UNUSED(b);
+  return lj_buf_ptr_range(w, b, e) ? (MSize)(ue - uw) : 0;
+}
+
+static LJ_AINLINE MSize lj_bufx_len_acq(const SBufExt *sbx)
+{
+  char *b = lj_buf_bptr_acq((const SBuf *)sbx);
+  char *e = lj_buf_eptr_acq((const SBuf *)sbx);
+  char *r = lj_buf_rptr_acq(sbx);
+  char *w = lj_buf_wptr_acq((const SBuf *)sbx);
+  uintptr_t ur = (uintptr_t)(void *)r;
+  uintptr_t uw = (uintptr_t)(void *)w;
+  return lj_buf_ptr_range(r, b, e) && lj_buf_ptr_range(w, b, e) && ur <= uw ?
+	 (MSize)(uw - ur) : 0;
+}
+
+static LJ_AINLINE MSize lj_bufx_slack_acq(const SBufExt *sbx)
+{
+  char *b = lj_buf_bptr_acq((const SBuf *)sbx);
+  char *e = lj_buf_eptr_acq((const SBuf *)sbx);
+  char *r = lj_buf_rptr_acq(sbx);
+  uintptr_t ub = (uintptr_t)(void *)b;
+  uintptr_t ur = (uintptr_t)(void *)r;
+  return lj_buf_ptr_range(r, b, e) ? (MSize)(ur - ub) : 0;
+}
+
+static LJ_AINLINE const char *lj_bufx_data_acq(const SBufExt *sbx,
+					       MSize *lenp)
+{
+  char *b = lj_buf_bptr_acq((const SBuf *)sbx);
+  char *e = lj_buf_eptr_acq((const SBuf *)sbx);
+  char *r = lj_buf_rptr_acq(sbx);
+  char *w = lj_buf_wptr_acq((const SBuf *)sbx);
+  uintptr_t ur = (uintptr_t)(void *)r;
+  uintptr_t uw = (uintptr_t)(void *)w;
+  if (lj_buf_ptr_range(r, b, e) && lj_buf_ptr_range(w, b, e) && ur <= uw) {
+    *lenp = (MSize)(uw - ur);
+    return r ? r : "";
+  }
+  *lenp = 0;
+  return "";
+}
+
+#define sbufsz(sb)		lj_buf_size_acq((const SBuf *)(sb))
+#define sbuflen(sb)		lj_buf_len_acq((const SBuf *)(sb))
+#define sbufleft(sb)		lj_buf_left_acq((const SBuf *)(sb))
+#define sbufxlen(sbx)		lj_bufx_len_acq((const SBufExt *)(sbx))
+#define sbufxslack(sbx)		lj_bufx_slack_acq((const SBufExt *)(sbx))
 
 #define SBUF_MASK_FLAG		(7)
 #define SBUF_MASK_L		(~(GCSize)SBUF_MASK_FLAG)
@@ -76,12 +212,12 @@ LJ_FUNC char * LJ_FASTCALL lj_buf_tmp(lua_State *L, MSize sz);
 static LJ_AINLINE void lj_buf_init(lua_State *L, SBuf *sb)
 {
   setsbufL(sb, L);
-  sb->w = sb->e = sb->b = NULL;
+  lj_buf_bounds_rel(sb, NULL, NULL, NULL);
 }
 
 static LJ_AINLINE void lj_buf_reset(SBuf *sb)
 {
-  sb->w = sb->b;
+  lj_buf_wptr_rel(sb, lj_buf_bptr_acq(sb));
 }
 
 static LJ_AINLINE SBuf *lj_buf_tmp_(lua_State *L)
@@ -95,21 +231,21 @@ static LJ_AINLINE SBuf *lj_buf_tmp_(lua_State *L)
 static LJ_AINLINE void lj_buf_free(global_State *g, SBuf *sb)
 {
   lj_assertG(!sbufisext(sb), "bad free of SBufExt");
-  lj_mem_free(g, sb->b, sbufsz(sb));
+  lj_mem_free(g, lj_buf_bptr_acq(sb), sbufsz(sb));
 }
 
 static LJ_AINLINE char *lj_buf_need(SBuf *sb, MSize sz)
 {
   if (LJ_UNLIKELY(sz > sbufsz(sb)))
     return lj_buf_need2(sb, sz);
-  return sb->b;
+  return lj_buf_bptr_acq(sb);
 }
 
 static LJ_AINLINE char *lj_buf_more(SBuf *sb, MSize sz)
 {
   if (LJ_UNLIKELY(sz > sbufleft(sb)))
     return lj_buf_more2(sb, sz);
-  return sb->w;
+  return lj_buf_wptr_acq(sb);
 }
 
 /* Extended buffer management */
@@ -121,18 +257,22 @@ static LJ_AINLINE void lj_bufx_init(lua_State *L, SBufExt *sbx)
 
 static LJ_AINLINE void lj_bufx_set_borrow(lua_State *L, SBufExt *sbx, SBuf *sb)
 {
+  char *b = lj_buf_bptr_acq(sb);
+  char *e = lj_buf_eptr_acq(sb);
   setsbufXL(sbx, L, SBUF_FLAG_EXT | SBUF_FLAG_BORROW);
   setmref(sbx->bsb, sb);
-  sbx->r = sbx->w = sbx->b = sb->b;
-  sbx->e = sb->e;
+  lj_buf_rptr_rel(sbx, b);
+  lj_buf_bounds_rel((SBuf *)sbx, b, b, e);
 }
 
 static LJ_AINLINE void lj_bufx_set_cow(lua_State *L, SBufExt *sbx,
 				       const char *p, MSize len)
 {
+  char *b = (char *)p;
+  char *e = (char *)p + len;
   setsbufXL(sbx, L, SBUF_FLAG_EXT | SBUF_FLAG_COW);
-  sbx->r = sbx->b = (char *)p;
-  sbx->w = sbx->e = (char *)p + len;
+  lj_buf_rptr_rel(sbx, b);
+  lj_buf_bounds_rel((SBuf *)sbx, b, e, e);
 }
 
 static LJ_AINLINE void lj_bufx_reset(SBufExt *sbx)
@@ -140,17 +280,24 @@ static LJ_AINLINE void lj_bufx_reset(SBufExt *sbx)
   if (sbufiscow(sbx)) {
     setmrefu(sbx->L, (mrefu(sbx->L) & ~(GCSize)SBUF_FLAG_COW));
     setgcrefnull(sbx->cowref);
-    sbx->b = sbx->e = NULL;
+    lj_buf_bptr_rel((SBuf *)sbx, NULL);
+    lj_buf_eptr_rel((SBuf *)sbx, NULL);
   }
-  sbx->r = sbx->w = sbx->b;
+  {
+    char *b = lj_buf_bptr_acq((SBuf *)sbx);
+    lj_buf_rptr_rel(sbx, b);
+    lj_buf_wptr_rel((SBuf *)sbx, b);
+  }
 }
 
 static LJ_AINLINE void lj_bufx_free(lua_State *L, SBufExt *sbx)
 {
-  if (!sbufiscoworborrow(sbx)) lj_mem_free(G(L), sbx->b, sbufsz(sbx));
+  if (!sbufiscoworborrow(sbx))
+    lj_mem_free(G(L), lj_buf_bptr_acq((SBuf *)sbx), sbufsz(sbx));
   setsbufXL(sbx, L, SBUF_FLAG_EXT);
   setgcrefnull(sbx->cowref);
-  sbx->r = sbx->w = sbx->b = sbx->e = NULL;
+  lj_buf_rptr_rel(sbx, NULL);
+  lj_buf_bounds_rel((SBuf *)sbx, NULL, NULL, NULL);
 }
 
 #if LJ_HASBUFFER && LJ_HASJIT
@@ -176,7 +323,7 @@ static LJ_AINLINE void lj_buf_putb(SBuf *sb, int c)
 {
   char *w = lj_buf_more(sb, 1);
   *w++ = (char)c;
-  sb->w = w;
+  lj_buf_wptr_rel(sb, w);
 }
 
 /* High-level buffer put operations */
@@ -194,7 +341,7 @@ LJ_FUNC uint32_t LJ_FASTCALL lj_buf_ruleb128(const char **pp);
 
 static LJ_AINLINE GCstr *lj_buf_str(lua_State *L, SBuf *sb)
 {
-  return lj_str_new(L, sb->b, sbuflen(sb));
+  return lj_str_new(L, lj_buf_bptr_acq(sb), sbuflen(sb));
 }
 
 #endif

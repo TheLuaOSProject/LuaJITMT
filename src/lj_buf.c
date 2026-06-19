@@ -19,32 +19,31 @@
 static void buf_grow(SBuf *sb, MSize sz)
 {
   MSize osz = sbufsz(sb), len = sbuflen(sb), nsz = osz;
+  char *oldb = lj_buf_bptr_acq(sb);
   char *b;
   GCSize flag;
   if (nsz < LJ_MIN_SBUF) nsz = LJ_MIN_SBUF;
   while (nsz < sz) nsz += nsz;
   flag = sbufflag(sb);
   if ((flag & SBUF_FLAG_COW)) {  /* Copy-on-write semantics. */
-    lj_assertG_(G(sbufL(sb)), sb->w == sb->e, "bad SBuf COW");
+    lj_assertG_(G(sbufL(sb)), lj_buf_wptr_acq(sb) == lj_buf_eptr_acq(sb),
+		"bad SBuf COW");
     b = (char *)lj_mem_new(sbufL(sb), nsz);
     setsbufflag(sb, flag & ~(GCSize)SBUF_FLAG_COW);
     setgcrefnull(sbufX(sb)->cowref);
-    memcpy(b, sb->b, osz);
+    memcpy(b, oldb, osz);
   } else {
-    b = (char *)lj_mem_realloc(sbufL(sb), sb->b, osz, nsz);
+    b = (char *)lj_mem_realloc(sbufL(sb), oldb, osz, nsz);
   }
   if ((flag & SBUF_FLAG_EXT)) {
-    sbufX(sb)->r = sbufX(sb)->r - sb->b + b;  /* Adjust read pointer, too. */
+    char *oldr = lj_buf_rptr_acq(sbufX(sb));
+    lj_buf_rptr_rel(sbufX(sb), oldb ? oldr - oldb + b : b);
   }
   /* Adjust buffer pointers. */
-  sb->b = b;
-  sb->w = b + len;
-  sb->e = b + nsz;
+  lj_buf_bounds_rel(sb, b, b + len, b + nsz);
   if ((flag & SBUF_FLAG_BORROW)) {  /* Adjust borrowed buffer pointers. */
     SBuf *bsb = mref(sbufX(sb)->bsb, SBuf);
-    bsb->b = b;
-    bsb->w = b + len;
-    bsb->e = b + nsz;
+    lj_buf_bounds_rel(bsb, b, b + len, b + nsz);
   }
 }
 
@@ -54,7 +53,7 @@ LJ_NOINLINE char *LJ_FASTCALL lj_buf_need2(SBuf *sb, MSize sz)
   if (LJ_UNLIKELY(sz > LJ_MAX_BUF))
     lj_err_mem(sbufL(sb));
   buf_grow(sb, sz);
-  return sb->b;
+  return lj_buf_bptr_acq(sb);
 }
 
 LJ_NOINLINE char *LJ_FASTCALL lj_buf_more2(SBuf *sb, MSize sz)
@@ -69,12 +68,16 @@ LJ_NOINLINE char *LJ_FASTCALL lj_buf_more2(SBuf *sb, MSize sz)
     } else if (sbufiscow(sb) || sbufxslack(sbx) < (sbufsz(sbx) >> 3)) {
       /* Also grow to avoid excessive compactions, if slack < size/8. */
       buf_grow((SBuf *)sbx, sbuflen(sbx) + sz);  /* Not sbufxlen! */
-      return sbx->w;
+      return lj_buf_wptr_acq((SBuf *)sbx);
     }
-    if (sbx->r != sbx->b) {  /* Compact by moving down. */
-      memmove(sbx->b, sbx->r, len);
-      sbx->r = sbx->b;
-      sbx->w = sbx->b + len;
+    {
+      char *b = lj_buf_bptr_acq((SBuf *)sbx);
+      char *r = lj_buf_rptr_acq(sbx);
+      if (r != b) {  /* Compact by moving down. */
+	memmove(b, r, len);
+	lj_buf_rptr_rel(sbx, b);
+	lj_buf_wptr_rel((SBuf *)sbx, b + len);
+      }
       lj_assertG_(G(sbufL(sbx)), len + sz <= sbufsz(sbx), "bad SBuf compact");
     }
   } else {
@@ -84,17 +87,17 @@ LJ_NOINLINE char *LJ_FASTCALL lj_buf_more2(SBuf *sb, MSize sz)
       lj_err_mem(sbufL(sb));
     buf_grow(sb, len + sz);
   }
-  return sb->w;
+  return lj_buf_wptr_acq(sb);
 }
 
 void LJ_FASTCALL lj_buf_shrink(lua_State *L, SBuf *sb)
 {
-  char *b = sb->b;
-  MSize osz = (MSize)(sb->e - b);
+  char *b = lj_buf_bptr_acq(sb);
+  MSize osz = sbufsz(sb);
   if (osz > 2*LJ_MIN_SBUF) {
     b = lj_mem_realloc(L, b, osz, (osz >> 1));
-    sb->w = sb->b = b;  /* Not supposed to keep data across shrinks. */
-    sb->e = b + (osz >> 1);
+    /* Not supposed to keep data across shrinks. */
+    lj_buf_bounds_rel(sb, b, b, b + (osz >> 1));
   }
   lj_assertG_(G(sbufL(sb)), !sbufisext(sb), "YAGNI shrink SBufExt");
 }
@@ -131,7 +134,7 @@ SBuf *lj_buf_putmem(SBuf *sb, const void *q, MSize len)
 {
   char *w = lj_buf_more(sb, len);
   w = lj_buf_wmem(w, q, len);
-  sb->w = w;
+  lj_buf_wptr_rel(sb, w);
   return sb;
 }
 
@@ -140,16 +143,16 @@ static LJ_NOINLINE SBuf * LJ_FASTCALL lj_buf_putchar2(SBuf *sb, int c)
 {
   char *w = lj_buf_more2(sb, 1);
   *w++ = (char)c;
-  sb->w = w;
+  lj_buf_wptr_rel(sb, w);
   return sb;
 }
 
 SBuf * LJ_FASTCALL lj_buf_putchar(SBuf *sb, int c)
 {
-  char *w = sb->w;
-  if (LJ_LIKELY(w < sb->e)) {
+  char *w = lj_buf_wptr_acq(sb);
+  if (LJ_LIKELY(w < lj_buf_eptr_acq(sb))) {
     *w++ = (char)c;
-    sb->w = w;
+    lj_buf_wptr_rel(sb, w);
     return sb;
   }
   return lj_buf_putchar2(sb, c);
@@ -161,7 +164,7 @@ SBuf * LJ_FASTCALL lj_buf_putstr(SBuf *sb, GCstr *s)
   MSize len = s->len;
   char *w = lj_buf_more(sb, len);
   w = lj_buf_wmem(w, strdata(s), len);
-  sb->w = w;
+  lj_buf_wptr_rel(sb, w);
   return sb;
 }
 
@@ -174,7 +177,7 @@ SBuf * LJ_FASTCALL lj_buf_putstr_reverse(SBuf *sb, GCstr *s)
   const char *q = strdata(s)+len-1;
   while (w < e)
     *w++ = *q--;
-  sb->w = w;
+  lj_buf_wptr_rel(sb, w);
   return sb;
 }
 
@@ -192,7 +195,7 @@ SBuf * LJ_FASTCALL lj_buf_putstr_lower(SBuf *sb, GCstr *s)
     *w = c;
 #endif
   }
-  sb->w = w;
+  lj_buf_wptr_rel(sb, w);
   return sb;
 }
 
@@ -210,7 +213,7 @@ SBuf * LJ_FASTCALL lj_buf_putstr_upper(SBuf *sb, GCstr *s)
     *w = c;
 #endif
   }
-  sb->w = w;
+  lj_buf_wptr_rel(sb, w);
   return sb;
 }
 
@@ -233,7 +236,7 @@ SBuf *lj_buf_putstr_rep(SBuf *sb, GCstr *s, int32_t rep)
 	do { *w++ = *q++; } while (q < e);
       } while (--rep > 0);
     }
-    sb->w = w;
+    lj_buf_wptr_rel(sb, w);
   }
   return sb;
 }
@@ -248,7 +251,7 @@ SBuf *lj_buf_puttab(SBuf *sb, GCtab *t, GCstr *sep, int32_t i, int32_t e)
       char *w;
       if (!o) {
       badtype:  /* Error: bad element type. */
-	sb->w = (char *)(intptr_t)i;  /* Store failing index. */
+	lj_buf_wptr_rel(sb, (char *)(intptr_t)i);  /* Store failing index. */
 	return NULL;
       }
       lj_tv_load_acq(&tv, o);
@@ -263,11 +266,11 @@ SBuf *lj_buf_puttab(SBuf *sb, GCtab *t, GCstr *sep, int32_t i, int32_t e)
 	goto badtype;
       }
       if (i++ == e) {
-	sb->w = w;
+	lj_buf_wptr_rel(sb, w);
 	break;
       }
       if (seplen) w = lj_buf_wmem(w, strdata(sep), seplen);
-      sb->w = w;
+      lj_buf_wptr_rel(sb, w);
     }
   }
   return sb;
@@ -277,7 +280,7 @@ SBuf *lj_buf_puttab(SBuf *sb, GCtab *t, GCstr *sep, int32_t i, int32_t e)
 
 GCstr * LJ_FASTCALL lj_buf_tostr(SBuf *sb)
 {
-  return lj_str_new(sbufL(sb), sb->b, sbuflen(sb));
+  return lj_str_new(sbufL(sb), lj_buf_bptr_acq(sb), sbuflen(sb));
 }
 
 /* Concatenate two strings. */

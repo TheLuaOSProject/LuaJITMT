@@ -614,7 +614,7 @@ static char *lj_strfmt_wfnum(SBuf *sb, SFormat sf, lua_Number n, char *p)
 /* Add formatted floating-point number to buffer. */
 SBuf *lj_strfmt_putfnum(SBuf *sb, SFormat sf, lua_Number n)
 {
-  sb->w = lj_strfmt_wfnum(sb, sf, n, NULL);
+  lj_buf_wptr_rel(sb, lj_strfmt_wfnum(sb, sf, n, NULL));
   return sb;
 }
 
@@ -627,4 +627,3 @@ GCstr * LJ_FASTCALL lj_strfmt_num(lua_State *L, cTValue *o)
   MSize len = (MSize)(lj_strfmt_wfnum(NULL, STRFMT_G14, o->n, buf) - buf);
   return lj_str_new(L, buf, len);
 }
-

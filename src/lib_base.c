@@ -436,8 +436,7 @@ LJLIB_CF(load)
     MSize len;
     if (tvisbuf(L->base)) {
       SBufExt *sbx = bufV(L->base);
-      s = sbx->r;
-      len = sbufxlen(sbx);
+      s = lj_bufx_data_acq(sbx, &len);
       if (!name) name = &G(L)->strempty;  /* Buffers are not NUL-terminated. */
     } else {
       GCstr *str = lj_lib_checkstr(L, 1);

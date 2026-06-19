@@ -62,8 +62,9 @@ LJ_STATIC_ASSERT((SER_TAG_TAB & 7) == 0);
 
 static LJ_AINLINE char *serialize_more(char *w, SBufExt *sbx, MSize sz)
 {
-  if (LJ_UNLIKELY(sz > (MSize)(sbx->e - w))) {
-    sbx->w = w;
+  char *e = lj_buf_eptr_acq((SBuf *)sbx);
+  if (LJ_UNLIKELY(sz > (MSize)(e - w))) {
+    lj_buf_wptr_rel((SBuf *)sbx, w);
     w = lj_buf_more2((SBuf *)sbx, sz);
   }
   return w;
@@ -401,7 +402,7 @@ static char *serialize_put(char *w, SBufExt *sbx, cTValue *o)
 /* Get serialized object from buffer. */
 static char *serialize_get(char *r, SBufExt *sbx, TValue *o)
 {
-  char *w = sbx->w;
+  char *w = lj_buf_wptr_acq((SBuf *)sbx);
   uint32_t tp;
   r = serialize_ru124(r, w, &tp); if (LJ_UNLIKELY(!r)) goto eob;
   if (LJ_LIKELY(tp >= SER_TAG_STR)) {
@@ -578,8 +579,9 @@ eob:
 /* Encode to buffer. */
 SBufExt * LJ_FASTCALL lj_serialize_put(SBufExt *sbx, cTValue *o)
 {
+  char *w = lj_buf_wptr_acq((SBuf *)sbx);
   sbx->depth = LJ_SERIALIZE_DEPTH;
-  sbx->w = serialize_put(sbx->w, sbx, o);
+  lj_buf_wptr_rel((SBuf *)sbx, serialize_put(w, sbx, o));
   return sbx;
 }
 
@@ -587,7 +589,7 @@ SBufExt * LJ_FASTCALL lj_serialize_put(SBufExt *sbx, cTValue *o)
 char * LJ_FASTCALL lj_serialize_get(SBufExt *sbx, TValue *o)
 {
   sbx->depth = LJ_SERIALIZE_DEPTH;
-  return serialize_get(sbx->r, sbx, o);
+  return serialize_get(lj_buf_rptr_acq(sbx), sbx, o);
 }
 
 /* Stand-alone encoding, borrowing from global temporary buffer. */
@@ -598,8 +600,9 @@ GCstr * LJ_FASTCALL lj_serialize_encode(lua_State *L, cTValue *o)
   memset(&sbx, 0, sizeof(SBufExt));
   lj_bufx_set_borrow(L, &sbx, &L2TG(L)->tmpbuf);
   sbx.depth = LJ_SERIALIZE_DEPTH;
-  w = serialize_put(sbx.w, &sbx, o);
-  return lj_str_new(L, sbx.b, (size_t)(w - sbx.b));
+  w = serialize_put(lj_buf_wptr_acq((SBuf *)&sbx), &sbx, o);
+  return lj_str_new(L, lj_buf_bptr_acq((SBuf *)&sbx),
+		    (size_t)(w - lj_buf_bptr_acq((SBuf *)&sbx)));
 }
 
 /* Stand-alone decoding, copy-on-write from string. */
@@ -611,8 +614,9 @@ void lj_serialize_decode(lua_State *L, TValue *o, GCstr *str)
   lj_bufx_set_cow(L, &sbx, strdata(str), str->len);
   /* No need to set sbx.cowref here. */
   sbx.depth = LJ_SERIALIZE_DEPTH;
-  r = serialize_get(sbx.r, &sbx, o);
-  if (r != sbx.w) lj_err_caller(L, LJ_ERR_BUFFER_LEFTOV);
+  r = serialize_get(lj_buf_rptr_acq(&sbx), &sbx, o);
+  if (r != lj_buf_wptr_acq((SBuf *)&sbx))
+    lj_err_caller(L, LJ_ERR_BUFFER_LEFTOV);
 }
 
 #if LJ_HASJIT
@@ -620,7 +624,8 @@ void lj_serialize_decode(lua_State *L, TValue *o, GCstr *str)
 LJ_FUNC MSize LJ_FASTCALL lj_serialize_peektype(SBufExt *sbx)
 {
   uint32_t tp;
-  if (serialize_ru124(sbx->r, sbx->w, &tp)) {
+  if (serialize_ru124(lj_buf_rptr_acq(sbx),
+		      lj_buf_wptr_acq((SBuf *)sbx), &tp)) {
     /* This must match the handling of all tags in the decoder above. */
     switch (tp) {
     case SER_TAG_NIL: return IRT_NIL;

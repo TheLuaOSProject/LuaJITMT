@@ -367,7 +367,9 @@ TValue *lj_meta_cat(lua_State *L, TValue *top, int left)
 	  lj_buf_putmem(sb, strdata(s), len);
 	} else if (tvisbuf(o)) {
 	  SBufExt *sbx = bufV(o);
-	  lj_buf_putmem(sb, sbx->r, sbufxlen(sbx));
+	  MSize len;
+	  const char *p = lj_bufx_data_acq(sbx, &len);
+	  lj_buf_putmem(sb, p, len);
 	} else if (tvisint(o)) {
 	  lj_strfmt_putint(sb, intV(o));
 	} else {

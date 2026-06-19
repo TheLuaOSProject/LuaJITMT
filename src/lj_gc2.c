@@ -3244,7 +3244,7 @@ static void gc2_traverse_udata(global_State *g, GCudata *ud)
     SBufExt *sbx = (SBufExt *)uddata(ud);
     GCobj *ref;
     if (!sbufiscoworborrow(sbx))
-      lj_gc2_markmem(g, sbx->b);
+      lj_gc2_markmem(g, lj_buf_bptr_acq((SBuf *)sbx));
     ref = gcref_acq(sbx->cowref);
     if (sbufiscow(sbx) && ref)
       gc2_markobj_worker(g, ref);

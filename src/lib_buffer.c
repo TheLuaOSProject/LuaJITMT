@@ -76,11 +76,13 @@ LJLIB_CF(buffer_method_skip)		LJLIB_REC(.)
   MSize n = (MSize)lj_lib_checkintrange(L, 2, 0, LJ_MAX_BUF);
   MSize len = sbufxlen(sbx);
   if (n < len) {
-    sbx->r += n;
+    lj_buf_rptr_rel(sbx, lj_buf_rptr_acq(sbx) + n);
   } else if (sbufiscow(sbx)) {
-    sbx->r = sbx->w;
+    lj_buf_rptr_rel(sbx, lj_buf_wptr_acq((SBuf *)sbx));
   } else {
-    sbx->r = sbx->w = sbx->b;
+    char *b = lj_buf_bptr_acq((SBuf *)sbx);
+    lj_buf_rptr_rel(sbx, b);
+    lj_buf_wptr_rel((SBuf *)sbx, b);
   }
   L->top = L->base+1;  /* Chain buffer object. */
   return 1;
@@ -130,8 +132,11 @@ LJLIB_CF(buffer_method_put)		LJLIB_REC(.)
       lj_strfmt_putfnum((SBuf *)sbx, STRFMT_G14, numV(o));
     } else if (tvisbuf(o)) {
       SBufExt *sbx2 = bufV(o);
+      MSize len;
+      const char *p;
       if (sbx2 == sbx) lj_err_arg(L, (int)(arg+1), LJ_ERR_BUFFER_SELF);
-      lj_buf_putmem((SBuf *)sbx, sbx2->r, sbufxlen(sbx2));
+      p = lj_bufx_data_acq(sbx2, &len);
+      lj_buf_putmem((SBuf *)sbx, p, len);
     } else if (!mo &&
 	       !tvisnil(mo = lj_meta_lookuptv(L, &motv, o, MM_tostring))) {
       /* Call __tostring metamethod inline. */
@@ -173,12 +178,18 @@ LJLIB_CF(buffer_method_get)		LJLIB_REC(.)
     TValue *o = &L->base[arg];
     MSize n = tvisnil(o) ? LJ_MAX_BUF :
 	      (MSize) lj_lib_checkintrange(L, (int)(arg+1), 0, LJ_MAX_BUF);
-    MSize len = sbufxlen(sbx);
+    MSize len;
+    const char *p = lj_bufx_data_acq(sbx, &len);
     if (n > len) n = len;
-    setstrV(L, o, lj_str_new(L, sbx->r, n));
-    sbx->r += n;
+    setstrV(L, o, lj_str_new(L, p, n));
+    lj_buf_rptr_rel(sbx, (char *)p + n);
   }
-  if (sbx->r == sbx->w && !sbufiscow(sbx)) sbx->r = sbx->w = sbx->b;
+  if (lj_buf_rptr_acq(sbx) == lj_buf_wptr_acq((SBuf *)sbx) &&
+      !sbufiscow(sbx)) {
+    char *b = lj_buf_bptr_acq((SBuf *)sbx);
+    lj_buf_rptr_rel(sbx, b);
+    lj_buf_wptr_rel((SBuf *)sbx, b);
+  }
   lj_gc_check(L);
   return (int)(narg-1);
 }
@@ -210,7 +221,7 @@ LJLIB_CF(buffer_method_reserve)		LJLIB_REC(.)
   lj_buf_more((SBuf *)sbx, sz);
   ctype_loadffi(L);
   cd = lj_cdata_new_(L, CTID_P_UINT8, CTSIZE_PTR);
-  *(void **)cdataptr(cd) = sbx->w;
+  *(void **)cdataptr(cd) = lj_buf_wptr_acq((SBuf *)sbx);
   setcdataV(L, L->top++, cd);
   setintV(L->top++, sbufleft(sbx));
   return 2;
@@ -221,7 +232,7 @@ LJLIB_CF(buffer_method_commit)		LJLIB_REC(.)
   SBufExt *sbx = buffer_tobuf(L);
   MSize len = (MSize)lj_lib_checkintrange(L, 2, 0, LJ_MAX_BUF);
   if (len > sbufleft(sbx)) lj_err_arg(L, 2, LJ_ERR_NUMRNG);
-  sbx->w += len;
+  lj_buf_wptr_rel((SBuf *)sbx, lj_buf_wptr_acq((SBuf *)sbx) + len);
   L->top = L->base+1;  /* Chain buffer object. */
   return 1;
 }
@@ -230,11 +241,13 @@ LJLIB_CF(buffer_method_ref)		LJLIB_REC(.)
 {
   SBufExt *sbx = buffer_tobuf(L);
   GCcdata *cd;
+  MSize len;
+  const char *p = lj_bufx_data_acq(sbx, &len);
   ctype_loadffi(L);
   cd = lj_cdata_new_(L, CTID_P_UINT8, CTSIZE_PTR);
-  *(void **)cdataptr(cd) = sbx->r;
+  *(void **)cdataptr(cd) = (void *)p;
   setcdataV(L, L->top++, cd);
-  setintV(L->top++, sbufxlen(sbx));
+  setintV(L->top++, len);
   return 2;
 }
 #endif
@@ -253,7 +266,7 @@ LJLIB_CF(buffer_method_decode)		LJLIB_REC(.)
 {
   SBufExt *sbx = buffer_tobufw(L);
   setnilV(L->top++);
-  sbx->r = lj_serialize_get(sbx, L->top-1);
+  lj_buf_rptr_rel(sbx, lj_serialize_get(sbx, L->top-1));
   lj_gc_check(L);
   return 1;
 }
@@ -268,7 +281,9 @@ LJLIB_CF(buffer_method___gc)
 LJLIB_CF(buffer_method___tostring)	LJLIB_REC(.)
 {
   SBufExt *sbx = buffer_tobuf(L);
-  setstrV(L, L->top-1, lj_str_new(L, sbx->r, sbufxlen(sbx)));
+  MSize len;
+  const char *p = lj_bufx_data_acq(sbx, &len);
+  setstrV(L, L->top-1, lj_str_new(L, p, len));
   lj_gc_check(L);
   return 1;
 }
