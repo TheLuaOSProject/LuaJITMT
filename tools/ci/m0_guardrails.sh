@@ -64,6 +64,14 @@ else
   echo "guardrail: legacy lj_gc_barrier call sites currently detected: $barrier_count"
 fi
 
+x64_dispatch_gl_gc_hits=$(grep -n 'DISPATCH_GL(gc\.' \
+  "$ROOT/src/vm_x64.dasc" "$ROOT/src/lj_asm_x86.h" 2>/dev/null || true)
+if [ -n "$x64_dispatch_gl_gc_hits" ]; then
+  echo "guardrail: x86-64 VM/JIT must not load legacy gc fields via DISPATCH_GL:" >&2
+  echo "$x64_dispatch_gl_gc_hits" >&2
+  fail=1
+fi
+
 if [ "$fail" -ne 0 ]; then
   exit 1
 fi
