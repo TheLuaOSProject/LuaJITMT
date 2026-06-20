@@ -71,6 +71,14 @@ function M.assert_text_any_contains(label, data, needles, what)
   error(label .. ": missing any " .. what .. ": " .. table.concat(needles, ", "), 2)
 end
 
+local function assert_not_source_file(path)
+  local p = tostring(path)
+  if p:match("^src/") or p:match("/src/") or
+     p:match("^tests/t%-.*%.[ch]$") or p:match("/tests/t%-.*%.[ch]$") then
+    error("source-file content assertions are not behavior tests: " .. p, 3)
+  end
+end
+
 function M.assert_text_contains_count(label, data, needle, mincount, what)
   what = what or "text"
   local n = M.count_plain(data, needle)
@@ -92,21 +100,25 @@ function M.assert_text_match_count(label, data, pattern, mincount, what)
 end
 
 function M.assert_file_contains(t, path, needle, label)
+  assert_not_source_file(path)
   label = label or path
   M.assert_text_contains(label, t:read(path), needle, "file text")
 end
 
 function M.assert_file_match(t, path, pattern, label)
+  assert_not_source_file(path)
   label = label or path
   M.assert_text_match(label, t:read(path), pattern, "file pattern")
 end
 
 function M.assert_file_all_contains(t, path, needles, label)
+  assert_not_source_file(path)
   label = label or path
   M.assert_text_all_contains(label, t:read(path), needles, "file text")
 end
 
 function M.assert_file_any_contains(t, path, needles, label)
+  assert_not_source_file(path)
   label = label or path
   return M.assert_text_any_contains(label, t:read(path), needles, "file text")
 end
