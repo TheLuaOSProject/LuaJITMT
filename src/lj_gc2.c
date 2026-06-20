@@ -225,6 +225,9 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.finreg_cdata_pending_order_hits, 0);
 #if defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
   g->gc2.finreg_cdata_preclaim_test_fail = 0;
+  la_store32_rlx(&g->gc2.finreg_cdata_preclaim_publish_pause, 0);
+  la_store32_rlx(&g->gc2.finreg_cdata_preclaim_publish_paused, 0);
+  la_store32_rlx(&g->gc2.finreg_cdata_preclaim_publish_release, 0);
 #endif
   la_store64_rlx(&g->gc2.finreg_udata_sets, 0);
   la_store64_rlx(&g->gc2.finreg_udata_clears, 0);
@@ -1746,6 +1749,14 @@ static void gc2_finclaim_publish(lua_State *L, global_State *g, MSize idx,
 				 GCobj *o, cTValue *fin)
 {
   copyTVrel(L, &g->gc2.finreg_cdata_preclaim_fin[idx], fin);
+#if defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
+  if (la_xchg32_acqrel(&g->gc2.finreg_cdata_preclaim_publish_pause, 0) != 0) {
+    la_store32_rel(&g->gc2.finreg_cdata_preclaim_publish_paused, 1);
+    while (la_load32_acq(&g->gc2.finreg_cdata_preclaim_publish_release) == 0)
+      la_cpu_pause();
+    la_store32_rel(&g->gc2.finreg_cdata_preclaim_publish_paused, 0);
+  }
+#endif
   setgcrefrel(g->gc2.finreg_cdata_preclaim_obj[idx], o);
   /* 05 section 5.8: finalizer value is visible before object ready marker. */
 }
@@ -2287,6 +2298,15 @@ void lj_gc2_test_finreg_cdata_preclaim_fail(global_State *g, uint32_t n)
 {
   if (g)
     g->gc2.finreg_cdata_preclaim_test_fail = n;
+}
+
+void lj_gc2_test_finreg_cdata_preclaim_publish_pause(global_State *g)
+{
+  if (!g)
+    return;
+  la_store32_rel(&g->gc2.finreg_cdata_preclaim_publish_release, 0);
+  la_store32_rel(&g->gc2.finreg_cdata_preclaim_publish_paused, 0);
+  la_store32_rel(&g->gc2.finreg_cdata_preclaim_publish_pause, 1);
 }
 
 void lj_gc2_test_finalizer_drain_pause(global_State *g)

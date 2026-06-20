@@ -1313,6 +1313,9 @@ typedef struct GC2State {
   uint64_t finreg_cdata_pending_order_hits;  /* Ordered pending positives. */
 #if defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
   uint32_t finreg_cdata_preclaim_test_fail;  /* Test-only preclaim failures. */
+  uint32_t finreg_cdata_preclaim_publish_pause;
+  uint32_t finreg_cdata_preclaim_publish_paused;
+  uint32_t finreg_cdata_preclaim_publish_release;
 #endif
   uint64_t finreg_udata_sets;  /* Userdata finalizer registrations mirrored. */
   uint64_t finreg_udata_clears;  /* Userdata finalizer clears mirrored. */
