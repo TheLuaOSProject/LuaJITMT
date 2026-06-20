@@ -18,6 +18,7 @@
 
 #include "lj_obj.h"
 #include "lj_err.h"
+#include "lj_safepoint.h"
 #include "lj_state.h"
 #include "lj_trace.h"
 #include "lj_lib.h"
@@ -320,13 +321,20 @@ static int panic(lua_State *L)
 }
 
 #ifndef LUAJIT_DISABLE_VMEVENT
-static int error_finalizer(lua_State *L)
+static void aux_finalizer_error_report(lua_State *L, const char *s)
 {
-  const char *s = lua_tostring(L, -1);
+  lj_native_enter(L2TG(L));
   fputs("ERROR in finalizer: ", stderr);
   fputs(s ? s : "?", stderr);
   fputc('\n', stderr);
   fflush(stderr);
+  (void)lj_native_leave(L);
+}
+
+static int error_finalizer(lua_State *L)
+{
+  const char *s = lua_tostring(L, -1);
+  aux_finalizer_error_report(L, s);
   return 0;
 }
 #endif
@@ -398,4 +406,3 @@ LUA_API lua_State *lua_newstate(lua_Alloc f, void *ud)
 #endif
 
 #endif
-
