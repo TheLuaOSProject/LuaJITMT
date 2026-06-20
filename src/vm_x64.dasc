@@ -2444,7 +2444,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  test RDL, LUA_MASKLINE|LUA_MASKCOUNT
   |  jz >1
   |  load_G ITYPE
-  |  dec dword GL:ITYPE->hookcount
+  |  lock; dec dword GL:ITYPE->hookcount
   |  jmp >1
   |.endif
   |
@@ -2466,7 +2466,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  test RDL, LUA_MASKLINE|LUA_MASKCOUNT
   |  jz >5
   |  load_G ITYPE
-  |  dec dword GL:ITYPE->hookcount
+  |  lock; dec dword GL:ITYPE->hookcount
   |  jz >1
   |  test RDL, LUA_MASKLINE
   |  jz >5

@@ -421,8 +421,8 @@ LUA_API int lua_sethook(lua_State *L, lua_Hook func, int mask, int count)
   global_State *g = G(L);
   mask &= HOOK_EVENTMASK;
   if (func == NULL || mask == 0) { mask = 0; func = NULL; }  /* Consistency. */
-  g->hookf = func;
-  g->hookcount = g->hookcstart = (int32_t)count;
+  hookf_store(g, func);
+  hookcount_setstart(g, (int32_t)count);
   hookmask_setevents(g, (uint8_t)mask);
   lj_trace_abort(g);  /* Abort recording on any hook change. */
   lj_dispatch_update(g, 0);
@@ -431,7 +431,7 @@ LUA_API int lua_sethook(lua_State *L, lua_Hook func, int mask, int count)
 
 LUA_API lua_Hook lua_gethook(lua_State *L)
 {
-  return G(L)->hookf;
+  return hookf_load(G(L));
 }
 
 LUA_API int lua_gethookmask(lua_State *L)
@@ -441,14 +441,14 @@ LUA_API int lua_gethookmask(lua_State *L)
 
 LUA_API int lua_gethookcount(lua_State *L)
 {
-  return (int)G(L)->hookcstart;
+  return (int)hookcstart_load(G(L));
 }
 
 /* Call a hook. */
 static void callhook(lua_State *L, int event, BCLine line)
 {
   global_State *g = G(L);
-  lua_Hook hookf = g->hookf;
+  lua_Hook hookf = hookf_load(g);
   if (hookf && !hook_active(g)) {
     lua_Debug ar;
     lj_trace_abort(g);  /* Abort recording on any hook call. */
@@ -520,8 +520,8 @@ void LJ_FASTCALL lj_dispatch_ins(lua_State *L, const BCIns *pc)
   }
 #endif
   hookmask = hookmask_load(g);
-  if ((hookmask & LUA_MASKCOUNT) && g->hookcount == 0) {
-    g->hookcount = g->hookcstart;
+  if ((hookmask & LUA_MASKCOUNT) && hookcount_load(g) <= 0) {
+    hookcount_reset(g);
     callhook(L, LUA_HOOKCOUNT, -1);
     L->top = L->base + slots;  /* Fix top again. */
   }

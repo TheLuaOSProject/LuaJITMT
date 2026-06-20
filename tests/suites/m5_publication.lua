@@ -239,6 +239,43 @@ print("hookmask-atomic-smoke OK")
 ]=]
 end
 
+local function hook_state_atomic_smoke()
+  return [=[
+local first_hits = 0
+local second_hits = 0
+
+local function second(ev)
+  assert(ev == "count")
+  second_hits = second_hits + 1
+end
+
+local function first(ev)
+  assert(ev == "count")
+  first_hits = first_hits + 1
+  debug.sethook(second, "", 3)
+  local fn, mask, count = debug.gethook()
+  assert(fn == second, "hook function did not update")
+  assert(mask == "", "count-only mask should not expose event bits")
+  assert(count == 3, "hook count start did not update")
+end
+
+debug.sethook(first, "", 1)
+local sum = 0
+for i = 1, 80 do
+  sum = sum + i
+end
+assert(sum == 3240)
+debug.sethook()
+
+assert(first_hits == 1, "first hook should run once before replacement")
+assert(second_hits > 0, "replacement count hook did not run")
+local fn, mask, count = debug.gethook()
+assert(fn == nil and mask == "" and count == 0, "hook clear did not publish")
+
+print("hook-state-atomic-smoke OK")
+]=]
+end
+
 local function proto_kgc_acq_smoke()
   return [=[
 local util = require("jit.util")
@@ -408,6 +445,16 @@ return function(add)
       t:build({ quiet = true })
       run_luajit(t, { "-e", hookmask_atomic_smoke() })
       print("M5 hookmask atomic helper behavior passed")
+    end
+  })
+
+  add({
+    name = "m5_hook_state_atomic",
+    description = "global hook function/count atomic helper behavior",
+    run = function(t)
+      t:build({ quiet = true })
+      run_luajit(t, { "-e", hook_state_atomic_smoke() })
+      print("M5 hook function/count atomic helper behavior passed")
     end
   })
 
