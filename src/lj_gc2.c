@@ -220,6 +220,7 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.finreg_cdata_order_claimed, 0);
   la_store64_rlx(&g->gc2.finreg_cdata_order_unlinked, 0);
   la_store64_rlx(&g->gc2.finreg_cdata_order_queued, 0);
+  la_store64_rlx(&g->gc2.finreg_cdata_order_retired, 0);
   la_store64_rlx(&g->gc2.finreg_cdata_order_tombstones, 0);
   la_store64_rlx(&g->gc2.finreg_cdata_order_fallbacks, 0);
   la_store64_rlx(&g->gc2.finreg_cdata_pending_order_hits, 0);

@@ -1318,6 +1318,7 @@ typedef struct GC2State {
   uint64_t finreg_cdata_order_claimed;  /* Ordered FINREG slots claimed. */
   uint64_t finreg_cdata_order_unlinked;  /* Ordered cdata unlinked from root. */
   uint64_t finreg_cdata_order_queued;  /* Ordered cdata queued from FINREG. */
+  uint64_t finreg_cdata_order_retired;  /* Ordered FINREG nodes retired. */
   uint64_t finreg_cdata_order_tombstones;  /* Dead ordered FINREG records. */
   uint64_t finreg_cdata_order_fallbacks;  /* Ordered scan fallback cases. */
   uint64_t finreg_cdata_pending_order_hits;  /* Ordered pending positives. */

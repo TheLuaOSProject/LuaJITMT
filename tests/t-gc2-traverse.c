@@ -3600,6 +3600,64 @@ static void test_finreg_cdata_preclaim_publish_order(lua_State *L,
 }
 #endif
 
+static uint32_t finreg_cdata_order_active_refs(global_State *g, GCobj *target)
+{
+  CTState *cts = ctype_ctsG(g);
+  FinRegOrderNode *ord;
+  uint32_t n = 0;
+  if (!cts)
+    return 0;
+  for (ord = (FinRegOrderNode *)la_loadptr_acq(
+	 (void *const *)&cts->fin_order_head);
+       ord != NULL;
+       ord = fin_order_next_acq(ord))
+    n += fin_order_active_acq(ord) == 1 && fin_order_obj_acq(ord) == target;
+  return n;
+}
+
+static void test_finreg_cdata_order_active_retire(lua_State *L, global_State *g)
+{
+  GCobj *live, *cleared;
+  uint64_t queued0, retired0;
+
+  lua_settop(L, 0);
+  lua_pushcfunction(L, gc2_cdata_counting_finalizer);
+  lua_setglobal(L, "gc2_cdata_counting_finalizer");
+  assert(luaL_dostring(L,
+    "local ffi = require('ffi')\n"
+    "return ffi.gc(ffi.new('char[?]', 8), gc2_cdata_counting_finalizer)\n") ==
+    LUA_OK);
+  live = obj2gco(cdataV(L->top - 1));
+  assert(finreg_cdata_order_active_refs(g, live) == 1u);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  lua_gc(L, LUA_GCSTOP, 0);
+  assert(finreg_cdata_order_active_refs(g, live) == 1u);
+
+  queued0 = la_load64_acq(&g->gc2.finreg_cdata_order_queued);
+  retired0 = la_load64_acq(&g->gc2.finreg_cdata_order_retired);
+  lua_pop(L, 1);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  lua_gc(L, LUA_GCSTOP, 0);
+  assert(finreg_cdata_order_active_refs(g, live) == 0);
+  assert(la_load64_acq(&g->gc2.finreg_cdata_order_queued) == queued0 + 1u);
+  assert(la_load64_acq(&g->gc2.finreg_cdata_order_retired) >= retired0 + 1u);
+
+  lua_settop(L, 0);
+  assert(luaL_dostring(L,
+    "local ffi = require('ffi')\n"
+    "local cd = ffi.gc(ffi.new('char[?]', 8), gc2_cdata_counting_finalizer)\n"
+    "ffi.gc(cd, nil)\n"
+    "return cd\n") == LUA_OK);
+  cleared = obj2gco(cdataV(L->top - 1));
+  assert(finreg_cdata_order_active_refs(g, cleared) == 1u);
+  retired0 = la_load64_acq(&g->gc2.finreg_cdata_order_retired);
+  assert(!lj_gc_cdata_fin_pending(g));
+  assert(finreg_cdata_order_active_refs(g, cleared) == 0);
+  assert(la_load64_acq(&g->gc2.finreg_cdata_order_retired) >= retired0 + 1u);
+  lua_settop(L, 0);
+}
+
 static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
 {
   uint64_t sets0 = la_load64_acq(&g->gc2.finreg_cdata_sets);
@@ -4312,6 +4370,7 @@ int main(void)
 #if defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
   test_finreg_cdata_preclaim_publish_order(L, g);
 #endif
+  test_finreg_cdata_order_active_retire(L, g);
   test_finreg_cdata_telemetry(L, g);
   test_finalizer_spawn_deferred_state(L, g);
   test_finreg_disabled_ordered_pending(L, g);

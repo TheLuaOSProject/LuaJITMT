@@ -17,6 +17,13 @@ if hits=$(grep -nE -- 'ord[[:space:]]*->[[:space:]]*(obj|tab|slot)' \
   printf '%s\n' 'raw FINREG ordered-node payload access is forbidden; use fin_order_* helpers' >&2
   exit 1
 fi
+if hits=$(grep -nE -- 'ord[[:space:]]*->[[:space:]]*(retired_next|active)' \
+    "$ROOT/src/lj_ctype.c" \
+    "$ROOT/src/lj_gc.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw FINREG ordered-node retire state access is forbidden; use fin_order_* helpers' >&2
+  exit 1
+fi
 if hits=$(grep -nE -- '(makewhite|markfinalized|lj_gc_arena_markobj|lj_gc2_finreg_cdata_queue|lj_gc2_finalizer_enqueue)[(].*obj2gco[(]cd[)]' \
     "$ROOT/src/lj_cdata.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2

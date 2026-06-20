@@ -693,6 +693,8 @@ static void gc_stats_push(lua_State *L)
 		  la_load64_acq(&gc2->finreg_cdata_order_unlinked));
   gc_stats_setnum(L, t, "finreg_cdata_order_queued",
 		  la_load64_acq(&gc2->finreg_cdata_order_queued));
+  gc_stats_setnum(L, t, "finreg_cdata_order_retired",
+		  la_load64_acq(&gc2->finreg_cdata_order_retired));
   gc_stats_setnum(L, t, "finreg_cdata_order_tombstones",
 		  la_load64_acq(&gc2->finreg_cdata_order_tombstones));
   gc_stats_setnum(L, t, "finreg_cdata_order_fallbacks",

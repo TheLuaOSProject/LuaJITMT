@@ -1768,21 +1768,28 @@ static size_t gc_queue_cdata_finalizers_pweak_ordered(lua_State *L,
 						      size_t *queuedp)
 {
   CTState *cts = ctype_ctsG(g);
-  FinRegOrderNode *ord;
+  FinRegOrderNode *prev, *ord;
   size_t marked = 0, queued = 0;
   if (cts == NULL)
     return 0;
+  prev = NULL;
   ord = (FinRegOrderNode *)la_loadptr_acq(
     (void *const *)&cts->fin_order_head);
-  for (; ord != NULL;
-       ord = fin_order_next_acq(ord)) {
+  while (ord != NULL) {
+    FinRegOrderNode *next = fin_order_next_acq(ord);
     GCtab *t = fin_order_tab_acq(ord);
     TValue *slot = fin_order_slot_acq(ord);
     TValue fin;
     GCobj *o;
+    if (fin_order_active_acq(ord) != 1) {
+      ord = next;
+      continue;
+    }
     la_add64_rlx(&g->gc2.finreg_cdata_order_seen, 1);
     if (!t || !slot || !gcref_acq(t->metatable)) {
       la_add64_rlx(&g->gc2.finreg_cdata_order_tombstones, 1);
+      (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
+      ord = next;
       continue;
     }
     lj_tv_load_acq(&fin, slot);
@@ -1792,19 +1799,33 @@ static size_t gc_queue_cdata_finalizers_pweak_ordered(lua_State *L,
     }
     if (tvisnil(&fin)) {
       la_add64_rlx(&g->gc2.finreg_cdata_order_tombstones, 1);
+      (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
+      ord = next;
       continue;
     }
     o = gc_order_cdata_object(ord, t, slot);
     if (!o) {
       la_add64_rlx(&g->gc2.finreg_cdata_order_tombstones, 1);
+      (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
+      ord = next;
       continue;
     }
     if (!gc_cdata_finalizer_candidate_pweak(o)) {
-      la_add64_rlx(&g->gc2.finreg_cdata_order_tombstones, 1);
+      if (!(lj_obj_gcflags(o) & LJ_GC_CDATA_FIN) ||
+	  (lj_obj_gcflags(o) & LJ_GC_FINALIZED)) {
+	la_add64_rlx(&g->gc2.finreg_cdata_order_tombstones, 1);
+	(void)lj_ctype_fin_order_retire(cts, prev, ord, next);
+	ord = next;
+	continue;
+      }
+      prev = ord;
+      ord = next;
       continue;
     }
     if (!lj_cdata_fin_claim_func(slot, &fin)) {
       la_add64_rlx(&g->gc2.finreg_cdata_order_tombstones, 1);
+      (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
+      ord = next;
       continue;
     }
     la_add64_rlx(&g->gc2.finreg_cdata_order_claimed, 1);
@@ -1822,8 +1843,10 @@ static size_t gc_queue_cdata_finalizers_pweak_ordered(lua_State *L,
       lj_gc2_finalizer_enqueue(g, o);
       la_add64_rlx(&g->gc2.finreg_cdata_order_fallbacks, 1);
       la_add64_rlx(&g->gc2.finreg_cdata_order_queued, 1);
+      (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
       marked++;
       queued++;
+      ord = next;
       continue;
     }
     lj_cdata_fin_storenil(L, slot);
@@ -1832,8 +1855,10 @@ static size_t gc_queue_cdata_finalizers_pweak_ordered(lua_State *L,
     lj_gc2_finreg_cdata_queue(g, o);
     lj_gc2_finalizer_enqueue(g, o);  /* queue claimed cdata in FINREG order. */
     la_add64_rlx(&g->gc2.finreg_cdata_order_queued, 1);
+    (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
     marked++;
     queued++;
+    ord = next;
   }
   if (queuedp)
     *queuedp += queued;
@@ -1856,32 +1881,55 @@ static size_t gc_queue_cdata_finalizers_pweak(lua_State *L, global_State *g)
 static size_t gc_separate_cdata_finalizers_ordered(global_State *g)
 {
   CTState *cts = ctype_ctsG(g);
-  FinRegOrderNode *ord;
+  FinRegOrderNode *prev, *ord;
   size_t queued = 0;
   if (cts == NULL)
     return 0;
+  prev = NULL;
   ord = (FinRegOrderNode *)la_loadptr_acq(
     (void *const *)&cts->fin_order_head);
-  for (; ord != NULL;
-       ord = fin_order_next_acq(ord)) {
+  while (ord != NULL) {
+    FinRegOrderNode *next = fin_order_next_acq(ord);
     GCtab *t = fin_order_tab_acq(ord);
     TValue *slot = fin_order_slot_acq(ord);
     TValue fin;
     GCobj *o;
-    if (!t || !slot || !gcref_acq(t->metatable))
+    if (fin_order_active_acq(ord) != 1) {
+      ord = next;
       continue;
+    }
+    if (!t || !slot || !gcref_acq(t->metatable)) {
+      (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
+      ord = next;
+      continue;
+    }
     lj_tv_load_acq(&fin, slot);
     while (lj_cdata_fin_isclaim(&fin)) {
       la_cpu_pause();
       lj_tv_load_acq(&fin, slot);
     }
-    if (tvisnil(&fin))
+    if (tvisnil(&fin)) {
+      (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
+      ord = next;
       continue;
+    }
     o = gc_order_cdata_object(ord, t, slot);
-    if (!o)
+    if (!o) {
+      (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
+      ord = next;
       continue;
-    if (!gc_cdata_finalizer_candidate_close(o))
+    }
+    if (!gc_cdata_finalizer_candidate_close(o)) {
+      if (!(lj_obj_gcflags(o) & LJ_GC_CDATA_FIN) ||
+	  (lj_obj_gcflags(o) & LJ_GC_FINALIZED)) {
+	(void)lj_ctype_fin_order_retire(cts, prev, ord, next);
+	ord = next;
+	continue;
+      }
+      prev = ord;
+      ord = next;
       continue;
+    }
     /*
     ** 05 section 5.8: ordered FINREG identity is enough for close-time
     ** discovery without legacy root membership.
@@ -1890,6 +1938,8 @@ static size_t gc_separate_cdata_finalizers_ordered(global_State *g)
     gc_queue_cdata_finalizer(g, o);
     la_add64_rlx(&g->gc2.finreg_cdata_order_queued, 1);
     queued++;
+    (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
+    ord = next;
   }
   return queued;  /* 05 section 5.8: FINREG ordered close-time cdata scan. */
 }
@@ -1901,31 +1951,53 @@ static void gc_separate_cdata_finalizers(global_State *g)
 
 static int gc_cdata_fin_pending_ordered(global_State *g, CTState *cts)
 {
-  FinRegOrderNode *ord;
+  FinRegOrderNode *prev, *ord;
+  prev = NULL;
   ord = (FinRegOrderNode *)la_loadptr_acq(
     (void *const *)&cts->fin_order_head);
-  for (; ord != NULL;
-       ord = fin_order_next_acq(ord)) {
+  while (ord != NULL) {
+    FinRegOrderNode *next = fin_order_next_acq(ord);
     GCtab *t = fin_order_tab_acq(ord);
     TValue *slot = fin_order_slot_acq(ord);
     TValue fin;
     GCobj *o;
-    if (!t || !slot || !gcref_acq(t->metatable))
+    if (fin_order_active_acq(ord) != 1) {
+      ord = next;
       continue;
+    }
+    if (!t || !slot || !gcref_acq(t->metatable)) {
+      (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
+      ord = next;
+      continue;
+    }
     lj_tv_load_acq(&fin, slot);
     while (lj_cdata_fin_isclaim(&fin)) {
       la_cpu_pause();
       lj_tv_load_acq(&fin, slot);
     }
-    if (tvisnil(&fin))
+    if (tvisnil(&fin)) {
+      (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
+      ord = next;
       continue;
+    }
     o = gc_order_cdata_object(ord, t, slot);
-    if (!o)
+    if (!o) {
+      (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
+      ord = next;
       continue;
+    }
     if (gc_cdata_finalizer_candidate_close(o)) {
       la_add64_rlx(&g->gc2.finreg_cdata_pending_order_hits, 1);
       return 1;
     }
+    if (!(lj_obj_gcflags(o) & LJ_GC_CDATA_FIN) ||
+	(lj_obj_gcflags(o) & LJ_GC_FINALIZED)) {
+      (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
+      ord = next;
+      continue;
+    }
+    prev = ord;
+    ord = next;
   }
   return 0;  /* FINREG ordered close-time cdata pending scan. */
 }

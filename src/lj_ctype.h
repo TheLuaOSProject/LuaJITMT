@@ -187,6 +187,8 @@ typedef struct FinRegOrderNode {
   GCtab *tab;			/* FINREG generation containing this slot. */
   TValue *slot;			/* FINREG value slot for this registration. */
   struct FinRegOrderNode *next;	/* Older registration, newest-first list. */
+  struct FinRegOrderNode *retired_next;
+  uint32_t active;		/* 1 active, 2 retiring, 0 retired. */
 } FinRegOrderNode;
 
 static LJ_AINLINE FinRegGen *fin_gen_next_acq(const FinRegGen *gen)
@@ -209,6 +211,44 @@ static LJ_AINLINE void fin_order_next_rel(FinRegOrderNode *ord,
 					  FinRegOrderNode *next)
 {
   la_storeptr_rel((void **)&ord->next, next);
+}
+
+static LJ_AINLINE int fin_order_next_cas(FinRegOrderNode *ord,
+					 FinRegOrderNode **oldp,
+					 FinRegOrderNode *next)
+{
+  return la_casptr((void **)&ord->next, (void **)oldp, next,
+		   LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE FinRegOrderNode *
+fin_order_retired_next_acq(const FinRegOrderNode *ord)
+{
+  return (FinRegOrderNode *)la_loadptr_acq(
+    (void *const *)&ord->retired_next);
+}
+
+static LJ_AINLINE void fin_order_retired_next_rel(FinRegOrderNode *ord,
+						  FinRegOrderNode *next)
+{
+  la_storeptr_rel((void **)&ord->retired_next, next);
+}
+
+static LJ_AINLINE uint32_t fin_order_active_acq(const FinRegOrderNode *ord)
+{
+  return la_load32_acq(&ord->active);
+}
+
+static LJ_AINLINE void fin_order_active_rel(FinRegOrderNode *ord,
+					    uint32_t active)
+{
+  la_store32_rel(&ord->active, active);
+}
+
+static LJ_AINLINE int fin_order_active_retiring(FinRegOrderNode *ord)
+{
+  uint32_t old = 1;
+  return la_cas32(&ord->active, &old, 2, LA_ACQ_REL, LA_ACQ);
 }
 
 static LJ_AINLINE GCobj *fin_order_obj_acq(FinRegOrderNode *ord)
@@ -302,6 +342,7 @@ typedef struct CTState {
   uint32_t parse_token;	/* 11.2 cparse mutation sequence: even free, odd held. */
   FinRegGen *fin_head;	/* 11.4 CAS-published FINREG generation list. */
   FinRegOrderNode *fin_order_head;  /* 11.4 ordered FINREG registrations. */
+  FinRegOrderNode *fin_order_retired;  /* Retired ordered FINREG nodes. */
   uint32_t hash[CTHASH_SIZE];  /* Hash anchors. Low 16 bits hold CTypeID. */
 } CTState;
 
@@ -651,6 +692,9 @@ LJ_FUNC FinRegOrderNode *lj_ctype_fin_order_new(lua_State *L);
 LJ_FUNC void lj_ctype_fin_order_free(global_State *g, FinRegOrderNode *ord);
 LJ_FUNC void lj_ctype_fin_order_publish(CTState *cts, FinRegOrderNode *ord,
 					GCobj *o, GCtab *t, TValue *slot);
+LJ_FUNC int lj_ctype_fin_order_retire(CTState *cts, FinRegOrderNode *prev,
+				      FinRegOrderNode *ord,
+				      FinRegOrderNode *next);
 LJ_FUNC cTValue *lj_ctype_fin_get(lua_State *L, CTState *cts, cTValue *key,
 				  GCtab **tabp);
 LJ_FUNC int lj_ctype_fin_newgen(lua_State *L, CTState *cts, cTValue *key,

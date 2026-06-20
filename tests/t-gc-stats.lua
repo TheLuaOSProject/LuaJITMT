@@ -33,6 +33,7 @@ local finreg_stats = {
   "finreg_cdata_order_claimed",
   "finreg_cdata_order_unlinked",
   "finreg_cdata_order_queued",
+  "finreg_cdata_order_retired",
   "finreg_cdata_order_tombstones",
   "finreg_cdata_order_fallbacks",
   "finreg_cdata_pending_order_hits",

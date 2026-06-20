@@ -262,6 +262,8 @@ FinRegOrderNode *lj_ctype_fin_order_new(lua_State *L)
   fin_order_tab_rel(ord, NULL);
   fin_order_slot_rel(ord, NULL);
   fin_order_next_rel(ord, NULL);
+  fin_order_retired_next_rel(ord, NULL);
+  fin_order_active_rel(ord, 0);
   return ord;
 }
 
@@ -280,6 +282,7 @@ void lj_ctype_fin_order_publish(CTState *cts, FinRegOrderNode *ord,
   fin_order_obj_rel(ord, o);
   fin_order_tab_rel(ord, t);
   fin_order_slot_rel(ord, slot);
+  fin_order_active_rel(ord, 1);
   do {
     head = (FinRegOrderNode *)la_loadptr_acq(
       (void *const *)&cts->fin_order_head);
@@ -287,6 +290,37 @@ void lj_ctype_fin_order_publish(CTState *cts, FinRegOrderNode *ord,
   } while (!la_casptr((void **)&cts->fin_order_head, (void **)&head, ord,
 		      LA_ACQ_REL, LA_ACQ));
   /* 11.4 FINREG ordered registration publish. */
+}
+
+int lj_ctype_fin_order_retire(CTState *cts, FinRegOrderNode *prev,
+			      FinRegOrderNode *ord, FinRegOrderNode *next)
+{
+  FinRegOrderNode *head, *expect;
+  global_State *g;
+  if (!cts || !ord)
+    return 0;
+  if (!fin_order_active_retiring(ord))
+    return 1;
+  do {
+    head = (FinRegOrderNode *)la_loadptr_acq(
+      (void *const *)&cts->fin_order_retired);
+    fin_order_retired_next_rel(ord, head);
+  } while (!la_casptr((void **)&cts->fin_order_retired, (void **)&head, ord,
+		      LA_ACQ_REL, LA_ACQ));
+  g = cts->g;
+  if (g)
+    la_add64_rlx(&g->gc2.finreg_cdata_order_retired, 1);
+  fin_order_active_rel(ord, 0);
+  if (prev) {
+    expect = ord;
+    if (fin_order_active_acq(prev) == 1)
+      (void)fin_order_next_cas(prev, &expect, next);
+  } else {
+    expect = ord;
+    (void)la_casptr((void **)&cts->fin_order_head, (void **)&expect, next,
+		    LA_ACQ_REL, LA_ACQ);
+  }
+  return 1;  /* 11.4 ordered FINREG logical retire plus best-effort splice. */
 }
 
 GCtab *lj_ctype_fin_head(CTState *cts)
@@ -415,7 +449,14 @@ void lj_ctype_fin_mark(global_State *g, void (*mark)(global_State *, GCobj *),
     for (ord = (FinRegOrderNode *)la_loadptr_acq(
 	   (void *const *)&cts->fin_order_head);
 	 ord != NULL;
-	 ord = fin_order_next_acq(ord))
+	 ord = fin_order_next_acq(ord)) {
+      if (fin_order_active_acq(ord) != 0)
+	markmem(g, ord);
+    }
+    for (ord = (FinRegOrderNode *)la_loadptr_acq(
+	   (void *const *)&cts->fin_order_retired);
+	 ord != NULL;
+	 ord = fin_order_retired_next_acq(ord))
       markmem(g, ord);
   }
 }
@@ -428,6 +469,14 @@ void lj_ctype_fin_freetabs(global_State *g, CTState *cts)
     (void **)&cts->fin_order_head, NULL);
   while (ord) {
     FinRegOrderNode *next = fin_order_next_acq(ord);
+    if (fin_order_active_acq(ord) != 0)
+      lj_mem_freet(g, ord);
+    ord = next;
+  }
+  ord = (FinRegOrderNode *)la_xchgptr_acqrel(
+    (void **)&cts->fin_order_retired, NULL);
+  while (ord) {
+    FinRegOrderNode *next = fin_order_retired_next_acq(ord);
     lj_mem_freet(g, ord);
     ord = next;
   }
