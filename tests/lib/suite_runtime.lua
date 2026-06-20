@@ -300,4 +300,24 @@ function M.add_luajit_c_fixture_cases(add, specs)
   end
 end
 
+function M.add_luajit_script_cases(add, specs)
+  for i = 1, #specs do
+    local spec = specs[i]
+    local name = spec.name
+    local description = spec.description
+    local script = spec.script
+    local args = spec.args
+    local opts = spec.opts
+    local message = spec.message
+    add({
+      name = name,
+      description = description or (script .. " under the built VM"),
+      run = function(t)
+        M.build_and_run_luajit_script(t, script, args, copy_opts(opts))
+        if message then print(message) end
+      end
+    })
+  end
+end
+
 return M

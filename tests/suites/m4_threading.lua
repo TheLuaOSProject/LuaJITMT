@@ -5,24 +5,13 @@ local getenv = utils.getenv
 local compile_and_run_sources = runtime.compile_and_run_sources
 
 return function(add)
-  local function build_and_run(name, script, env)
-    add({
-      name = name,
-      description = script .. " under the built VM",
-      run = function(t)
-        runtime.build_and_run_luajit_script(t, script, nil,
-          { joff = true, env = env })
-      end
-    })
-  end
-
-  add({
-    name = "m4_threading_api",
-    description = "Lua-visible threading API behavior test",
-    run = function(t)
-      runtime.build_and_run_luajit_script(t, "t-threading-api.lua",
-        nil, { joff = true })
-    end
+  runtime.add_luajit_script_cases(add, {
+    {
+      name = "m4_threading_api",
+      description = "Lua-visible threading API behavior test",
+      script = "t-threading-api.lua",
+      opts = { joff = true }
+    }
   })
 
   runtime.add_luajit_c_fixture_cases(add, {
@@ -75,28 +64,45 @@ return function(add)
     end
   })
 
-  add({
-    name = "m4_threading_smoke",
-    description = "pure-compute threading smoke test under the built VM",
-    run = function(t)
-      runtime.build_and_run_luajit_script(t, "t-mt-smoke.lua", nil, {
+  runtime.add_luajit_script_cases(add, {
+    {
+      name = "m4_threading_smoke",
+      description = "pure-compute threading smoke test under the built VM",
+      script = "t-mt-smoke.lua",
+      opts = {
         joff = true,
         env = {
           LJ_M4_MT_SMOKE_THREADS = getenv("LJ_M4_MT_SMOKE_THREADS", "8")
         }
-      })
-    end
+      }
+    },
+    {
+      name = "m4_threading_litmus",
+      script = "t-mt-litmus.lua",
+      opts = {
+        joff = true,
+        env = {
+          LJ_M4_LITMUS_REPS = getenv("LJ_M4_LITMUS_REPS", "100")
+        }
+      }
+    },
+    {
+      name = "m4_threading_stress",
+      script = "t-threading-stress.lua",
+      opts = {
+        joff = true,
+        env = {
+          LJ_M4_THREAD_STRESS_REPS =
+            getenv("LJ_M4_THREAD_STRESS_REPS", "1000")
+        }
+      }
+    },
+    {
+      name = "m4_threading_upvalue",
+      script = "t-threading-upvalue.lua",
+      opts = { joff = true }
+    }
   })
-
-  build_and_run("m4_threading_litmus", "t-mt-litmus.lua", {
-    LJ_M4_LITMUS_REPS = getenv("LJ_M4_LITMUS_REPS", "100")
-  })
-
-  build_and_run("m4_threading_stress", "t-threading-stress.lua", {
-    LJ_M4_THREAD_STRESS_REPS = getenv("LJ_M4_THREAD_STRESS_REPS", "1000")
-  })
-
-  build_and_run("m4_threading_upvalue", "t-threading-upvalue.lua")
 
   add({
     name = "m4_tsan_drivers",
