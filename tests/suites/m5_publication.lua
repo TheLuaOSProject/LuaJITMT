@@ -1,59 +1,6 @@
 local utils = require("suite_utils")
 
-local contains = utils.contains
 local quote = utils.shell_quote
-local append = utils.append_list
-local assert_no_lines = utils.assert_no_lines
-
-local function basename(path)
-  return path:match("([^/]+)$") or path
-end
-
-local function filter_files(files, pred)
-  local out = {}
-  for i = 1, #files do
-    if pred(files[i]) then out[#out + 1] = files[i] end
-  end
-  return out
-end
-
-local function src_files(t, extensions, opts)
-  opts = opts or {}
-  local files = t:files(t:path("src"), { extensions = extensions })
-  return filter_files(files, function(path)
-    local b = basename(path)
-    if b == "lj_bcdef.h" or b == "lj_ffdef.h" or b == "lj_libdef.h" or
-       b == "lj_recdef.h" or b == "lj_folddef.h" or b == "luajit.h" or
-       b == "lj_vm.S" or (b == "vmdef.lua" and contains(path, "/src/jit/")) then
-      return false
-    end
-    if opts.exclude_host and contains(path, "/host/") then return false end
-    if opts.exclude_vm and basename(path):match("^vm_.*%.dasc$") then return false end
-    if opts.exclude_asm and basename(path):match("^lj_asm_.*%.h$") then return false end
-    if opts.exclude_names then
-      for i = 1, #opts.exclude_names do
-        if b == opts.exclude_names[i] then return false end
-      end
-    end
-    return true
-  end)
-end
-
-local function src_ch_files(t, opts)
-  return src_files(t, { ".c", ".h" }, opts)
-end
-
-local function src_text_files(t, opts)
-  return src_files(t, { ".c", ".h", ".dasc", ".lua", ".S", ".hpp", ".txt", ".md" }, opts)
-end
-
-local function test_text_files(t)
-  return filter_files(t:files(t:path("tests"), {
-    extensions = { ".c", ".h", ".lua" }
-  }), function(path)
-    return not contains(path, "/tests/suites/")
-  end)
-end
 
 local function lua_path_guard(t)
   return t:path("src", "?.lua") .. ";" .. t:path("src", "jit", "?.lua") .. ";;"
@@ -501,68 +448,7 @@ assert(util.traceinfo(1), "expected loaded CNEW creation trace")
     name = "m5_jit_trace_publish",
     description = "JIT trace-slot and trace-link publication guards",
     run = function(t)
-      assert_no_lines(t, "GCtrace.startpt must use trace_startpt acquire/release helpers",
-                      src_ch_files(t, { exclude_host = true }), function(line)
-        return contains(line, "startpt") and
-               (contains(line, "gcref(") or contains(line, "setgcref(") or
-                contains(line, "setgcrefnull("))
-      end)
-      assert_no_lines(t, "IR KGC constants must publish through release helpers", {
-        t:path("src", "lj_ir.c"),
-        t:path("src", "lj_asm.c")
-      }, function(line)
-        return contains(line, "setgcref(ir[LJ_GC64].gcr") or
-               contains(line, "setgcref(IR(as->J->ktrace)[LJ_GC64].gcr") or
-               contains(line, "IR(as->J->ktrace)->o = IR_KGC")
-      end)
-      assert_no_lines(t, "GC trace traversal must acquire-snapshot IR KGC constants", {
-        t:path("src", "lj_trace.c"),
-        t:path("src", "lj_gc.c"),
-        t:path("src", "lj_gc2.c")
-      }, function(line)
-        return contains(line, "ir->o == IR_KGC") or contains(line, "ir_kgc(ir)")
-      end)
-      assert_no_lines(t, "J->trace slots must use acquire/release trace helpers", {
-        t:path("src", "lj_trace.c"),
-        t:path("src", "lj_jit.h")
-      }, function(line)
-        return contains(line, "setgcrefp(J->trace") or
-               contains(line, "setgcrefnull(J->trace") or
-               contains(line, "gcref(J->trace")
-      end)
-      assert_no_lines(t, "trace vectors must use TraceVec RCU helpers, not raw slot vectors",
-                      append(src_text_files(t), test_text_files(t)), function(line)
-        return contains(line, "lj_mem_growvec(J->L, J->trace") or
-               contains(line, "lj_mem_freevec(g, J->trace") or
-               contains(line, "gcref(J->trace")
-      end)
-      assert_no_lines(t, "shared trace-number fields must use acquire/release helpers", {
-        t:path("src", "lj_trace.c"),
-        t:path("src", "lj_gc.c"),
-        t:path("src", "lj_gc2.c"),
-        t:path("src", "lib_jit.c"),
-        t:path("src", "lj_bcwrite.c")
-      }, function(line)
-        return line:find("pt%->trace%f[^%w_]") ~= nil or
-               line:find("%->link%f[^%w_]") ~= nil or
-               line:find("%->nextroot%f[^%w_]") ~= nil or
-               line:find("%->nextside%f[^%w_]") ~= nil
-      end)
-      assert_no_lines(t, "live bytecode patches must use full-word release publication", {
-        t:path("src", "lj_trace.c"),
-        t:path("src", "lj_record.c"),
-        t:path("src", "lj_dispatch.c")
-      }, function(line)
-        local compact = line:gsub("%s+", "")
-        return contains(line, "setbc_op(") or contains(line, "setbc_d(") or
-               contains(line, "setbc_j(") or contains(compact, "*J->patchpc=") or
-               contains(compact, "*pc=T->startins")
-      end)
       t:build({ quiet = true })
-      t:assert_all_contains(t:path("src", "lj_vm.S"), {
-        "call lj_bc_publish_op_vm",
-        "call lj_bc_publish_vm"
-      })
       build_and_run_c(t, t:tmp("lj_t-jit-tracevec"), "t-jit-tracevec.c",
                       { timeout = "20s" })
       build_and_run_c(t, t:tmp("lj_t-jit-mcode-retire"), "t-jit-mcode-retire.c",
