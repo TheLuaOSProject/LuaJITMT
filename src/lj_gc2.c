@@ -3506,7 +3506,7 @@ static void gc2_traverse_proto(global_State *g, GCproto *pt)
   ptrdiff_t i;
   gc2_markobj_worker(g, obj2gco(proto_chunkname(pt)));
   for (i = -(ptrdiff_t)pt->sizekgc; i < 0; i++)
-    gc2_markobj_worker(g, proto_kgc(pt, i));
+    gc2_markobj_worker(g, proto_kgc_acq(pt, i));
 #if LJ_HASJIT
   gc2_marktrace_worker(g, proto_trace_acq(pt));
 #endif

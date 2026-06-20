@@ -188,6 +188,48 @@ print("jit-trace-publish-smoke OK")
 ]=]
 end
 
+local function proto_kgc_acq_smoke()
+  return [=[
+local util = require("jit.util")
+
+local function parent(t)
+  local function child()
+    return "proto-kgc-acq-child"
+  end
+  return t.proto_kgc_acq_marker, child
+end
+
+local saw_string = false
+local saw_child = false
+for i = -64, 64 do
+  local k = util.funck(parent, i)
+  if k == "proto_kgc_acq_marker" then saw_string = true end
+  if type(k) == "proto" then saw_child = true end
+end
+assert(saw_string, "jit.util.funck did not expose string KGC")
+assert(saw_child, "jit.util.funck did not expose child proto KGC")
+
+local function field_name()
+  local t = {}
+  return t.proto_kgc_acq_marker + 1
+end
+local ok, err = pcall(field_name)
+assert(not ok and tostring(err):match("field 'proto_kgc_acq_marker'"),
+       tostring(err))
+
+local function global_name()
+  return proto_kgc_acq_global_missing + 1
+end
+ok, err = pcall(global_name)
+assert(not ok and tostring(err):match("global 'proto_kgc_acq_global_missing'"),
+       tostring(err))
+
+jit.off(parent, true)
+jit.on(parent, true)
+print("proto-kgc-acq-smoke OK")
+]=]
+end
+
 return function(add)
   add({
     name = "m5_state_owner",
@@ -237,6 +279,16 @@ return function(add)
       }, { timeout = "20s" })
       run_luajit(t, { "-e", jit_trace_publish_smoke() })
       print("M5 JIT trace publication guard passed")
+    end
+  })
+
+  add({
+    name = "m5_proto_kgc_acq",
+    description = "prototype KGC acquire-reader behavior",
+    run = function(t)
+      t:build({ quiet = true })
+      run_luajit(t, { "-e", proto_kgc_acq_smoke() })
+      print("M5 prototype KGC acquire-reader behavior passed")
     end
   })
 

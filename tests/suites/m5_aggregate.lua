@@ -27,6 +27,7 @@ local m5_concurrent_cases = {
   "m5_buffer_publish",
   "m5_threading_alloc",
   "m5_jit_trace_publish",
+  "m5_proto_kgc_acq",
   "m5_jit_table_fload_mutable",
   "m5_jit_hash_store_nyi",
   "m5_jit_href_node_order",

@@ -440,7 +440,8 @@ TValue * LJ_FASTCALL lj_meta_equal_cd(lua_State *L, BCIns ins)
     o2 = &L->base[bc_d(ins)];
     if (!tviscdata(o1mm)) o1mm = o2;
   } else if (op == BC_ISEQS) {
-    setstrV(L, &tv, gco2str(proto_kgc(curr_proto(L), ~(ptrdiff_t)bc_d(ins))));
+    setstrV(L, &tv,
+	    gco2str(proto_kgc_acq(curr_proto(L), ~(ptrdiff_t)bc_d(ins))));
     o2 = &tv;
   } else if (op == BC_ISEQN) {
     o2 = &mref(curr_proto(L)->k, cTValue)[bc_d(ins)];

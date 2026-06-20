@@ -317,7 +317,7 @@ static uint32_t setptmode_all(global_State *g, GCproto *pt, int mode)
   ptrdiff_t i;
   if (!(pt->flags & PROTO_CHILD)) return 0;
   for (i = -(ptrdiff_t)pt->sizekgc; i < 0; i++) {
-    GCobj *o = proto_kgc(pt, i);
+    GCobj *o = proto_kgc_acq(pt, i);
     if (o->gch.gct == ~LJ_TPROTO) {
       flushed += setptmode(g, gco2pt(o), mode);
       flushed += setptmode_all(g, gco2pt(o), mode);
