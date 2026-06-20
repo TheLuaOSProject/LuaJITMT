@@ -10,6 +10,7 @@ local lua_path = runtime.lua_path
 local build_and_run_c = build.compile_and_run_c
 local clean_build = build.clean_build
 local luajit_dump_file = runtime.luajit_dump_file
+local luajit_code = runtime.luajit_code
 local luajit_file = runtime.luajit_file
 local run_luajit_script = runtime.luajit_script
 local run_ir_dump_probe = jitutils.run_ir_dump_probe
@@ -34,10 +35,23 @@ local m7_cases = {
   "m7_ffi_cdata_set_l",
   "m7_ffi_carith_l",
   "m7_ffi_clib_cache",
+  "m7_ffi_clib_ldscript",
   "m7_ffi_callback_install",
   "m7_ffi_callback_runtime",
   "m7_ffi_blocking"
 }
+
+local function build_clib_ldscript_fixture(t)
+  local so = t:tmp("lj_t-ffi-clib-ldscript-real.so")
+  local script = t:tmp("lj_t-ffi-clib-ldscript.so")
+  t:run(t.compiler .. " -shared -fPIC -O2 -Wall -Wextra -Werror " ..
+        shell_quote(t:path("tests", "t-ffi-clib-ldscript-lib.c")) ..
+        " -o " .. shell_quote(so), { quiet = true })
+  local f = assert(io.open(script, "w"))
+  f:write("/* GNU ld script\nINPUT(", so, ")\n")
+  f:close()
+  return script
+end
 
 return function(add)
   add({
@@ -175,6 +189,24 @@ return function(add)
         getenv("LJ_M7_FFI_CLIB_JIT_ITERS", "180")
       })
       print("M7 FFI clib cache behavior passed")
+    end
+  })
+
+  add({
+    name = "m7_ffi_clib_ldscript",
+    description = "FFI C library GNU ld-script resolution behavior",
+    run = function(t)
+      clean_build(t)
+      local script = build_clib_ldscript_fixture(t)
+      luajit_code(t, [[
+local ffi = require("ffi")
+ffi.cdef("int lj_clib_ldscript_value(void);")
+local cl = ffi.load(assert(os.getenv("LJ_M7_FFI_LDSCRIPT")))
+assert(cl.lj_clib_ldscript_value() == 42)
+]], {
+        env = { LJ_M7_FFI_LDSCRIPT = script }
+      })
+      print("M7 FFI clib ld-script behavior passed")
     end
   })
 

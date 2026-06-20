@@ -96,28 +96,6 @@ static const char *clib_check_lds(lua_State *L, const char *buf)
   return NULL;
 }
 
-/* Quick and dirty solution to resolve shared library name from ld script. */
-static const char *clib_resolve_lds(lua_State *L, const char *name)
-{
-  FILE *fp = fopen(name, "r");
-  const char *p = NULL;
-  if (fp) {
-    char buf[256];
-    if (fgets(buf, sizeof(buf), fp)) {
-      if (!strncmp(buf, "/* GNU ld script", 16)) {  /* ld script magic? */
-	while (fgets(buf, sizeof(buf), fp)) {  /* Check all lines. */
-	  p = clib_check_lds(L, buf);
-	  if (p) break;
-	}
-      } else {  /* Otherwise check only the first line. */
-	p = clib_check_lds(L, buf);
-      }
-    }
-    fclose(fp);
-  }
-  return p;
-}
-
 static int clib_had_stopreq(lua_State *L)
 {
   TGState *tg = L2TG(L);
@@ -130,6 +108,76 @@ static int clib_fresh_stopreq(lua_State *L, uint32_t actions,
   TGState *tg = L2TG(L);
   return (actions & LJ_GC2_HS_STOPREQ) ||
     (!had_stopreq && tg && (la_load8_acq(&tg->tg_flags) & TGF_STOPREQ));
+}
+
+static FILE *clib_native_fopen(lua_State *L, const char *name,
+			       uint32_t *actionsp)
+{
+  FILE *fp;
+  lj_native_enter(L2TG(L));
+  fp = fopen(name, "r");
+  *actionsp = lj_native_leave(L);
+  return fp;
+}
+
+static char *clib_native_fgets(lua_State *L, char *buf, int size, FILE *fp,
+			       uint32_t *actionsp)
+{
+  char *p;
+  lj_native_enter(L2TG(L));
+  p = fgets(buf, size, fp);
+  *actionsp = lj_native_leave(L);
+  return p;
+}
+
+static uint32_t clib_native_fclose(lua_State *L, FILE *fp)
+{
+  uint32_t actions;
+  lj_native_enter(L2TG(L));
+  (void)fclose(fp);
+  actions = lj_native_leave(L);
+  return actions;
+}
+
+static void clib_lds_checkstop(lua_State *L, FILE *fp, uint32_t actions)
+{
+  if ((actions & LJ_GC2_HS_STOPREQ) ||
+      (L2TG(L) && (la_load8_acq(&L2TG(L)->tg_flags) & TGF_STOPREQ))) {
+    uint32_t close_actions = clib_native_fclose(L, fp);
+    lj_safepoint_checkstop(L, actions | close_actions);
+  }
+}
+
+/* Quick and dirty solution to resolve shared library name from ld script. */
+static const char *clib_resolve_lds(lua_State *L, const char *name)
+{
+  uint32_t actions;
+  int had_stopreq = clib_had_stopreq(L);
+  FILE *fp = clib_native_fopen(L, name, &actions);
+  const char *p = NULL;
+  if (fp && clib_fresh_stopreq(L, actions, had_stopreq)) {
+    uint32_t close_actions = clib_native_fclose(L, fp);
+    lj_safepoint_checkstop(L, actions | close_actions);
+  }
+  lj_safepoint_checkstop(L, actions);
+  if (fp) {
+    char buf[256];
+    if (clib_native_fgets(L, buf, sizeof(buf), fp, &actions)) {
+      clib_lds_checkstop(L, fp, actions);
+      if (!strncmp(buf, "/* GNU ld script", 16)) {  /* ld script magic? */
+	while (clib_native_fgets(L, buf, sizeof(buf), fp, &actions)) {
+	  clib_lds_checkstop(L, fp, actions);  /* Check all lines. */
+	  p = clib_check_lds(L, buf);
+	  if (p) break;
+	}
+      } else {  /* Otherwise check only the first line. */
+	p = clib_check_lds(L, buf);
+      }
+    }
+    actions = clib_native_fclose(L, fp);
+    lj_safepoint_checkstop(L, actions);
+  }
+  return p;
 }
 
 static void *clib_native_dlopen(lua_State *L, const char *name, int flags,
