@@ -1378,6 +1378,7 @@ static void test_jit_profile_registry_weak_barrier(void)
   g2 = G(L2);
   tg2 = G2TG(g2);
   assert(tg2 != NULL);
+  lj_thr_set_tg(tg2);
 
   lua_pushcfunction(L2, gc2_profile_callback);
   cb = funcV(L2->top - 1);
@@ -3045,6 +3046,7 @@ static void test_lib_register_weak_value_barrier(void)
   g2 = G(L2);
   tg2 = G2TG(g2);
   assert(tg2 != NULL);
+  lj_thr_set_tg(tg2);
   assert(luaL_dostring(L2,
     "package.loaded.m8lib = nil\n"
     "m8lib = setmetatable({}, { __mode = 'v' })\n"
@@ -3125,6 +3127,7 @@ static void test_ffi_loaded_weak_value_barrier(void)
   g2 = G(L2);
   tg2 = G2TG(g2);
   assert(tg2 != NULL);
+  lj_thr_set_tg(tg2);
   assert(luaL_dostring(L2,
     "package.loaded.ffi = nil\n"
     "setmetatable(package.loaded, { __mode = 'v' })\n") == LUA_OK);
