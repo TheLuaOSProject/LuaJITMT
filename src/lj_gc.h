@@ -74,6 +74,7 @@ LJ_FUNC void lj_gc_finalize_cdata_disable(global_State *g);
 #define lj_gc_finalize_cdata_disable(g)	UNUSED(g)
 #endif
 LJ_FUNC void lj_gc_freeall(global_State *g);
+LJ_FUNC void lj_gc_clearweak_legacy(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc_arena_markobj(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc_arena_markmem(global_State *g, void *p);
 LJ_FUNC void lj_gc_linkobj(global_State *g, GCobj *o);

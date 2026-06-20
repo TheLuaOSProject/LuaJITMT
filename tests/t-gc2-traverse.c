@@ -1468,6 +1468,36 @@ static void legacy_weak_link(global_State *g, GCtab *t, int weak)
   setgcref(g->gc.weak, obj2gco(t));
 }
 
+static Node *install_hmask0_node(lua_State *L, GCtab *t, GCtab *key, GCtab *val)
+{
+  GCSize size = lj_tab_node_bytes(0);
+  TabNodeHdr *hdr = (TabNodeHdr *)lj_mem_new(L, size);
+  Node *node = (Node *)(void *)((char *)(void *)hdr + sizeof(TabNodeHdr));
+  hdr->hmask = 0;
+  hdr->flags = 0;
+  setmref(hdr->next_gen, NULL);
+#if !LJ_GC64
+  hdr->reserved = 0;
+#endif
+  lj_tab_nextnode_set(node, NULL);
+  settabV(L, &node->key, key);
+  settabV(L, &node->val, val);
+  lj_tab_node_rel(t, node);
+  lj_tab_hmask_rel(t, 0);
+  setfreetop(t, node, node);
+  return node;
+}
+
+static void restore_hmask0_node(global_State *g, GCtab *t, Node *node)
+{
+  setnilV(&node->key);
+  setnilV(&node->val);
+  lj_tab_node_rel(t, &g->nilnode);
+  lj_tab_hmask_rel(t, 0);
+  setfreetop(t, &g->nilnode, &g->nilnode);
+  lj_mem_free(g, lj_tab_node_hdrw(node), lj_tab_node_bytes(0));
+}
+
 static void make_weak_table_batch(lua_State *L, MSize n)
 {
   MSize i;
@@ -1719,6 +1749,52 @@ static void test_weak_complete_bridge(lua_State *L, global_State *g,
 
   UNUSED(val);
   UNUSED(mval);
+}
+
+static void test_weak_legacy_fallback_hmask0(lua_State *L, global_State *g,
+					     TGState *tg)
+{
+  GCtab *weak, *key, *val;
+  Node *node;
+  uint64_t fallbacks0;
+
+  lua_settop(L, 0);
+  lua_newtable(L);
+  weak = tabV(L->top - 1);
+  lua_newtable(L);
+  key = tabV(L->top - 1);
+  lua_newtable(L);
+  val = tabV(L->top - 1);
+  node = install_hmask0_node(L, weak, key, val);
+  assert(!tvisnil(&node->val));
+
+  lj_gc2_legacy_mark_begin(g);
+  assert(g->gc2.weak_stack != NULL);
+  assert(g->gc2.weak_ready != NULL);
+  assert(g->gc2.weak_capacity > 0);
+  makewhite(g, obj2gco(key));
+  makewhite(g, obj2gco(val));
+
+  setgcrefnull(g->gc.weak);
+  legacy_weak_link(g, weak, LJ_GC_WEAKVAL);
+  lj_gc2_legacy_weak_begin(g);
+  la_store64_rlx(&g->gc2.weak_count, 1);
+  la_store8_rlx(&g->gc2.weak_ready[0], 0);
+
+  fallbacks0 = la_load64_acq(&g->gc2.weak_legacy_fallbacks);
+  assert(lj_gc2_weak_complete(g, gcref(g->gc.weak), 1) == 0);
+  assert(la_load64_acq(&g->gc2.weak_legacy_fallbacks) == fallbacks0 + 1u);
+  assert(!tvisnil(&node->val));
+  lj_gc_clearweak_legacy(g, gcref(g->gc.weak));
+  assert(tvisnil(&node->val));
+
+  setgcrefnull(g->gc.weak);
+  restore_hmask0_node(g, weak, node);
+  lj_gc2_legacy_cycle_end(g);
+  assert(g->gc2.phase == LJ_GC2_IDLE);
+  assert(tg->mark_active == 0);
+  assert(tg->alloc.alloc_black == 0);
+  lua_pop(L, 3);
 }
 
 static void test_weak_tables(lua_State *L, global_State *g, TGState *tg)
@@ -4172,6 +4248,7 @@ int main(void)
   test_weak_self_metatable_publish_barrier(L, g, tg);
   test_weak_snapshot_legacy_coverage(L, g, tg);
   test_weak_complete_bridge(L, g, tg);
+  test_weak_legacy_fallback_hmask0(L, g, tg);
   test_weak_clear_marks_string_slots(L, g, tg);
   test_weak_drain_uses_captured_mode(L, g, tg);
   test_weak_pre_clear_late_write_survives_drain(L, g, tg);

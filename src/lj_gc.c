@@ -1376,7 +1376,7 @@ static int gc_mayclear(global_State *g, cTValue *o, int val)
 }
 
 /* Clear collected entries from weak tables. */
-static void gc_clearweak(global_State *g, GCobj *o)
+void lj_gc_clearweak_legacy(global_State *g, GCobj *o)
 {
   while (o) {
     GCtab *t = gco2tab(o);
@@ -1396,17 +1396,15 @@ static void gc_clearweak(global_State *g, GCobj *o)
     {
       MSize i, hmask;
       Node *node = lj_tab_node_snapshot_acq(t, &hmask);
-      if (hmask > 0) {
-	for (i = 0; i <= hmask; i++) {
-	  Node *n = &node[i];
-	  TValue key, val;
-	  /* Clear hash slot when key or value is about to be collected. */
-	  lj_tv_load_acq(&val, &n->val);
-	  if (!tvisnil(&val)) {
-	    lj_tv_load_acq(&key, &n->key);
-	    if (gc_mayclear(g, &key, 0) || gc_mayclear(g, &val, 1))
-	      lj_tab_storenilraw(&n->val);
-	  }
+      for (i = 0; i <= hmask; i++) {
+	Node *n = &node[i];
+	TValue key, val;
+	/* Clear hash slot when key or value is about to be collected. */
+	lj_tv_load_acq(&val, &n->val);
+	if (!tvisnil(&val)) {
+	  lj_tv_load_acq(&key, &n->key);
+	  if (gc_mayclear(g, &key, 0) || gc_mayclear(g, &val, 1))
+	    lj_tab_storenilraw(&n->val);
 	}
       }
     }
@@ -1948,7 +1946,7 @@ static void atomic(global_State *g, lua_State *L)
   (void)gc_queue_cdata_finalizers_pweak(L, g);
 #endif
   if (!lj_gc2_weak_complete(g, gcref(g->gc.weak), LJ_GC2_WEAK_DRAIN_BATCH))
-    gc_clearweak(g, gcref(g->gc.weak));
+    lj_gc_clearweak_legacy(g, gcref(g->gc.weak));
   lj_gc2_weak_to_sweep(g);
 
   lj_buf_shrink(L, &G2TG(g)->tmpbuf);  /* Shrink temp buffer. */
