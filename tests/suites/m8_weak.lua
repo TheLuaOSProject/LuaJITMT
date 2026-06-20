@@ -1,11 +1,4 @@
-local function compile_luajit_fixture(t, out, cfile, opts)
-  opts = opts or {}
-  t:cc(out, { t:path("tests", cfile) }, {
-    cflags = opts.cflags,
-    link_luajit = true,
-    libs = { "-lm", "-ldl", "-pthread" }
-  })
-end
+local runtime = require("suite_runtime")
 
 local function run_c_fixtures(t, suffix, cflags)
   for _, name in ipairs({
@@ -16,8 +9,7 @@ local function run_c_fixtures(t, suffix, cflags)
     "t-m8-finalizer-state"
   }) do
     local out = t:tmp("lj_" .. name .. suffix)
-    compile_luajit_fixture(t, out, name .. ".c", { cflags = cflags })
-    t:run({ out })
+    runtime.compile_and_run_c(t, out, name .. ".c", { cflags = cflags })
   end
 end
 
