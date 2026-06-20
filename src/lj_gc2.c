@@ -1129,7 +1129,7 @@ uint32_t lj_gc2_sweep_owner_progress(global_State *g, TGState *tg,
 static uint64_t gc2_sweep_live_cells(GCArena *a, uint32_t epoch)
 {
   uint64_t cells = 0;
-  for (; a != NULL; a = a->hdr.next)
+  for (; a != NULL; a = lj_arena_next_acq(a))
     if (a->hdr.sweep_epoch == epoch)
       cells += a->hdr.live_cells;
   return cells;
@@ -3940,10 +3940,10 @@ uint32_t lj_gc2_paranoia_legacy_diff(global_State *g)
     if ((flags & (TGF_DEAD|TGF_ARENA_INTERNAL)) != TGF_ARENA_INTERNAL)
       continue;
     for (a = tg->alloc.owned[LJ_ARENAK_TRAVERSABLE];
-	 a != NULL; a = a->hdr.next)
+	 a != NULL; a = lj_arena_next_acq(a))
       bad += gc2_paranoia_scan_arena(g, a);
     for (a = tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE]; a != NULL;
-	 a = a->hdr.next)
+	 a = lj_arena_next_acq(a))
       bad += gc2_paranoia_scan_arena(g, a);
   }
   return bad;

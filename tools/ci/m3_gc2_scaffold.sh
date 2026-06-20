@@ -27,4 +27,19 @@ check_raw_finreg_udata_next "src/lj_gc2.c:lj_gc2_finreg_udata_register" \
 check_raw_finreg_udata_next "src/lj_gc2.c:lj_gc2_finreg_udata_forget" \
   "$ROOT/src/lj_gc2.c" "void lj_gc2_finreg_udata_forget"
 
+if hits=$(grep -nE -- '->[[:space:]]*hdr[.]next|hdr[.]next[[:space:]]*=' \
+    "$ROOT/src/lj_arena.c" \
+    "$ROOT/src/lj_gc.c" \
+    "$ROOT/src/lj_gc2.c" \
+    "$ROOT/tests/t-arena-alloc.c" \
+    "$ROOT/tests/t-arena-gcsweep.c" \
+    "$ROOT/tests/t-arena-map.c" \
+    "$ROOT/tests/t-gc2-phase.c" \
+    "$ROOT/tests/t-gc2-worker-scheduler.c" \
+    "$ROOT/tests/t-safepoint-handshake.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw GCArena hdr.next access is forbidden; use lj_arena_next_* helpers' >&2
+  exit 1
+fi
+
 exec "$ROOT/tools/ci/lua_test.sh" m3_gc2_scaffold

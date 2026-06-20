@@ -589,7 +589,7 @@ static void arena_clear_bins(TGAlloc *alloc, uint32_t k)
 static void arena_unmap_list(GCArena *a)
 {
   while (a) {
-    GCArena *next = a->hdr.next;
+    GCArena *next = lj_arena_next_acq(a);
     lj_arena_unmap(a);
     a = next;
   }
@@ -676,7 +676,7 @@ void lj_arena_alloc_fini(TGAlloc *alloc)
 
 static void arena_clear_marks_list(GCArena *a)
 {
-  for (; a != NULL; a = a->hdr.next) {
+  for (; a != NULL; a = lj_arena_next_acq(a)) {
     uint32_t w;
     for (w = 0; w < LJ_ARENA_WORDS; w++)
       a->mark[w] &= ~a->block[w];
@@ -697,7 +697,7 @@ void lj_arena_alloc_rebuild_free_kind(TGAlloc *alloc, uint32_t k)
   if (k < LJ_ARENA_NKINDS) {
     GCArena *a;
     arena_clear_bins(alloc, k);
-    for (a = alloc->owned[k]; a != NULL; a = a->hdr.next) {
+    for (a = alloc->owned[k]; a != NULL; a = lj_arena_next_acq(a)) {
       ArenaRebuildFree rf;
       rf.alloc = alloc;
       rf.a = a;
@@ -730,9 +730,9 @@ void lj_arena_alloc_prepare_sweep_kind(TGAlloc *alloc, uint32_t k)
   alloc->bump[k].end = 0;
   arena_clear_bins(alloc, k);
   while (a) {
-    GCArena *next = a->hdr.next;
+    GCArena *next = lj_arena_next_acq(a);
     a->hdr.flags |= LJ_AF_NEEDSWEEP;
-    a->hdr.next = alloc->needsweep[k];
+    lj_arena_next_rel(a, alloc->needsweep[k]);
     alloc->needsweep[k] = a;
     a = next;
   }
@@ -753,9 +753,9 @@ void lj_arena_alloc_restore_sweep_kind(TGAlloc *alloc, uint32_t k)
   a = alloc->needsweep[k];
   alloc->needsweep[k] = NULL;
   while (a) {
-    GCArena *next = a->hdr.next;
+    GCArena *next = lj_arena_next_acq(a);
     a->hdr.flags &= ~LJ_AF_NEEDSWEEP;
-    a->hdr.next = alloc->owned[k];
+    lj_arena_next_rel(a, alloc->owned[k]);
     alloc->owned[k] = a;
     a = next;
   }
@@ -780,8 +780,8 @@ GCArena *lj_arena_sweep_one(TGAlloc *alloc, uint32_t kind, uint32_t epoch,
   a = alloc->needsweep[kind];
   if (!a)
     return NULL;
-  alloc->needsweep[kind] = a->hdr.next;
-  a->hdr.next = NULL;
+  alloc->needsweep[kind] = lj_arena_next_acq(a);
+  lj_arena_next_rel(a, NULL);
   lj_arena_sweep_words(a, minor);
   lj_arena_scan_free_runs(a, arena_find_largest_run, &lr);
   if (lr.len >= LJ_BUMP_MIN)
@@ -798,7 +798,7 @@ GCArena *lj_arena_sweep_one(TGAlloc *alloc, uint32_t kind, uint32_t epoch,
   a->hdr.live_cells = arena_count_live_cells(a);
   a->hdr.sweep_epoch = epoch;
   a->hdr.flags &= ~LJ_AF_NEEDSWEEP;
-  a->hdr.next = alloc->owned[kind];
+  lj_arena_next_rel(a, alloc->owned[kind]);
   alloc->owned[kind] = a;
   return a;
 }
@@ -808,9 +808,9 @@ static uint32_t arena_transfer_list(GCArena **dstp, GCArena *a,
 {
   uint32_t n = 0;
   while (a) {
-    GCArena *next = a->hdr.next;
+    GCArena *next = lj_arena_next_acq(a);
     a->hdr.owner_tid = owner_tid;
-    a->hdr.next = *dstp;
+    lj_arena_next_rel(a, *dstp);
     *dstp = a;
     a = next;
     n++;
@@ -852,7 +852,7 @@ static GCArena *arena_alloc_fresh(TGAlloc *alloc, PRNGState *rs,
   if (!a)
     return NULL;
   a->hdr.owner_tid = alloc->owner_tid;
-  a->hdr.next = alloc->owned[k];
+  lj_arena_next_rel(a, alloc->owned[k]);
   alloc->owned[k] = a;
   alloc->bump[k].a = a;
   alloc->bump[k].cell = LJ_AFIRST_CELL;

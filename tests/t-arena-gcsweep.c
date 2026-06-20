@@ -30,7 +30,7 @@ static int arena_list_contains(GCArena *a, GCArena *needle)
   while (a) {
     if (a == needle)
       return 1;
-    a = a->hdr.next;
+    a = lj_arena_next_acq(a);
   }
   return 0;
 }
@@ -49,7 +49,7 @@ static void seed_traversable_needsweep(TGState *tg, uint32_t n)
     assert(a != NULL);
     a->hdr.owner_tid = tg->alloc.owner_tid;
     a->hdr.flags |= LJ_AF_NEEDSWEEP;
-    a->hdr.next = tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE];
+    lj_arena_next_rel(a, tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE]);
     tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE] = a;
   }
 }

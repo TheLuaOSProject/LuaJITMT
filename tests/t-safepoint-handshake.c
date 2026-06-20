@@ -417,7 +417,7 @@ static int arena_list_contains(GCArena *a, GCArena *needle)
   while (a) {
     if (a == needle)
       return 1;
-    a = a->hdr.next;
+    a = lj_arena_next_acq(a);
   }
   return 0;
 }

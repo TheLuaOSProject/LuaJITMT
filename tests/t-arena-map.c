@@ -35,7 +35,7 @@ int main(void)
 	   LJ_AFIRST_CELL);
     assert(a->hdr.flags == flags);
     assert(a->hdr.owner_tid == 0);
-    assert(a->hdr.next == NULL);
+    assert(lj_arena_next_acq(a) == NULL);
     assert(a->hdr.live_cells == 0);
     for (j = 0; j < LJ_ARENA_WORDS; j++) {
       assert(a->block[j] == 0);

@@ -26,7 +26,7 @@ static uint32_t count_owned(TGAlloc *alloc, uint32_t kind)
     assert(((uintptr_t)a & LJ_ARENA_MASK) == 0);
     assert(checkptrGC(a));
     n++;
-    a = a->hdr.next;
+    a = lj_arena_next_acq(a);
   }
   return n;
 }

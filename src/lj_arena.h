@@ -7,6 +7,7 @@
 #define _LJ_ARENA_H
 
 #include "lj_def.h"
+#include "lj_atomic.h"
 
 #define LJ_ARENA_SHIFT		16
 #define LJ_ARENA_SIZE		((uint32_t)1u << LJ_ARENA_SHIFT)
@@ -56,6 +57,16 @@ struct GCArena {
   uint64_t block[LJ_ARENA_WORDS];
   uint64_t mark[LJ_ARENA_WORDS];
 };
+
+static LJ_AINLINE GCArena *lj_arena_next_acq(const GCArena *a)
+{
+  return (GCArena *)la_loadptr_acq((void *const *)&a->hdr.next);
+}
+
+static LJ_AINLINE void lj_arena_next_rel(GCArena *a, GCArena *next)
+{
+  la_storeptr_rel((void **)&a->hdr.next, next);
+}
 
 struct LJArenaFreeRun {
   LJArenaFreeRun *next;

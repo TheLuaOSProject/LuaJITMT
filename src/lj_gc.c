@@ -1304,9 +1304,11 @@ uint32_t lj_gc_sweep_gc2_all_arena_bodies(global_State *g)
     GCArena *a;
     if (!lj_gc2_sweep_tg_ready(tg))
       continue;
-    for (a = tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE]; a; a = a->hdr.next)
+    for (a = tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE]; a;
+	 a = lj_arena_next_acq(a))
       total += gc2_sweep_arena_bodies(g, a, 0);
-    for (a = tg->alloc.owned[LJ_ARENAK_TRAVERSABLE]; a; a = a->hdr.next)
+    for (a = tg->alloc.owned[LJ_ARENAK_TRAVERSABLE]; a;
+	 a = lj_arena_next_acq(a))
       total += gc2_sweep_arena_bodies(g, a, 0);
   }
   return total;
