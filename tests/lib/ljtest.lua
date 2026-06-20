@@ -9,7 +9,6 @@ local getenv = utils.getenv
 local shell_quote = utils.shell_quote
 local read_file = utils.read_file
 local has_extension = utils.has_extension
-local luajit_fixture_libs = utils.luajit_fixture_libs
 
 local function append(parts, value)
   if value == nil or value == "" then return end
@@ -28,12 +27,6 @@ local function append_flags(parts, flags)
   else
     append(parts, flags)
   end
-end
-
-local function fixture_sources(self, cfile, opts)
-  if opts and opts.sources then return opts.sources end
-  if type(cfile) == "table" then return cfile end
-  return { self:path("tests", cfile) }
 end
 
 function M.new(root)
@@ -174,36 +167,6 @@ function Test:cc(output, sources, opts)
   end
   append(parts, "-o " .. shell_quote(output))
   self:run(table.concat(parts, " "), { quiet = opts.quiet })
-end
-
-function Test:compile_luajit_c_fixture(output, cfile, opts)
-  opts = opts or {}
-  self:cc(output, fixture_sources(self, cfile, opts), {
-    cflags = opts.cflags,
-    default_cflags = opts.default_cflags,
-    include_src = opts.include_src,
-    link_luajit = opts.link_luajit ~= false,
-    objects = opts.objects,
-    libs = luajit_fixture_libs(opts),
-    quiet = opts.quiet
-  })
-end
-
-function Test:run_luajit_c_fixture(output, cfile, opts)
-  opts = opts or {}
-  if opts.build ~= false then
-    self:build({
-      clean = opts.clean ~= false,
-      quiet = opts.quiet ~= false,
-      xcflags = opts.xcflags
-    })
-  end
-  self:compile_luajit_c_fixture(output, cfile, opts)
-  self:run({ output }, {
-    env = opts.env,
-    timeout = opts.timeout,
-    quiet = opts.quiet
-  })
 end
 
 function Test:luajit(args, opts)

@@ -1,4 +1,8 @@
 local utils = require("suite_utils")
+local runtime = require("suite_runtime")
+
+local build_and_run_c = runtime.build_and_run_c
+local compile_and_run_sources = runtime.compile_and_run_sources
 
 local M2_ORDER = {
   "m2_arena_bitmap",
@@ -23,14 +27,18 @@ local function arena_sources(t, cfile)
 end
 
 local function run_standalone_fixture(t, out, cfile)
-  t:cc(out, arena_sources(t, cfile))
-  t:run({ out })
+  compile_and_run_sources(t, out, arena_sources(t, cfile), {
+    link_luajit = false,
+    libs = {}
+  })
 end
 
 local function run_luajit_fixture(t, out, cfile, opts)
   opts = opts or {}
   opts.pthread = false
-  t:run_luajit_c_fixture(out, cfile, opts)
+  if opts.clean == nil then opts.clean = true end
+  if opts.quiet == nil then opts.quiet = true end
+  build_and_run_c(t, out, cfile, opts)
 end
 
 return function(add)

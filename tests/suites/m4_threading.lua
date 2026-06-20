@@ -2,6 +2,7 @@ local utils = require("suite_utils")
 local runtime = require("suite_runtime")
 
 local getenv = utils.getenv
+local compile_and_run_sources = runtime.compile_and_run_sources
 
 return function(add)
   local function build_and_run(name, script, env)
@@ -122,21 +123,25 @@ return function(add)
       local thr_out = t:tmp("lj_t-thr-substrate-tsan")
       local chan_out = t:tmp("lj_t-chan-stress-tsan")
 
-      t:cc(thr_out, { t:path("tests", "t-thr-substrate.c") }, {
+      compile_and_run_sources(t, thr_out, {
+        t:path("tests", "t-thr-substrate.c")
+      }, {
         default_cflags = false,
         cflags = cflags,
         link_luajit = true,
-        libs = { "-lm", "-ldl", "-pthread" }
+        libs = { "-lm", "-ldl", "-pthread" },
+        env = env
       })
-      t:run({ thr_out }, { env = env })
 
-      t:cc(chan_out, { t:path("tests", "t-chan-stress.c") }, {
+      compile_and_run_sources(t, chan_out, {
+        t:path("tests", "t-chan-stress.c")
+      }, {
         default_cflags = false,
         cflags = cflags,
         link_luajit = true,
-        libs = { "-lm", "-ldl", "-pthread" }
+        libs = { "-lm", "-ldl", "-pthread" },
+        env = env
       })
-      t:run({ chan_out }, { env = env })
 
       print("M4 TSAN driver tests passed")
     end

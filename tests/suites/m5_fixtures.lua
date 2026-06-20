@@ -1,18 +1,21 @@
 local runtime = require("suite_runtime")
 
+local compile_and_run_c = runtime.compile_and_run_c
+local compile_and_run_sources = runtime.compile_and_run_sources
+
 return function(add)
   add({
     name = "m5_nbtab_model",
     description = "concurrent table protocol standalone C model",
     run = function(t)
-      t:cc(t:tmp("lj_t-nbtab-model"), {
-        t:path("tests", "t-nbtab-model.c")
-      }, {
+      compile_and_run_sources(t, t:tmp("lj_t-nbtab-model"),
+        { t:path("tests", "t-nbtab-model.c") }, {
         default_cflags = false,
         include_src = false,
+        link_luajit = false,
+        libs = {},
         cflags = "-std=gnu11 -O2 -Wall -Wextra -Werror -pthread -mcx16"
       })
-      t:run({ t:tmp("lj_t-nbtab-model") })
       print("M5 nbtab model tests passed")
     end
   })
@@ -69,10 +72,9 @@ return function(add)
       local out = t:tmp("lj_t-strtab-cas")
       local out_rehash = t:tmp("lj_t-strtab-rehash")
       t:build({ clean = true, quiet = true })
-      t:compile_luajit_c_fixture(out, "t-strtab-cas.c")
-      t:run({ out }, { timeout = "20s" })
-      t:compile_luajit_c_fixture(out_rehash, "t-strtab-rehash.c")
-      t:run({ out_rehash }, { timeout = "20s" })
+      compile_and_run_c(t, out, "t-strtab-cas.c", { timeout = "20s" })
+      compile_and_run_c(t, out_rehash, "t-strtab-rehash.c",
+                        { timeout = "20s" })
       print("M5 string table CAS publication tests passed")
     end
   })

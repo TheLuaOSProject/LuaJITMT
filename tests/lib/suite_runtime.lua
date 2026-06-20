@@ -263,7 +263,10 @@ function M.add_luajit_c_fixture_cases(add, specs)
       name = name,
       description = description,
       run = function(t)
-        t:run_luajit_c_fixture(t:tmp(output), cfile, opts)
+        local runopts = copy_opts(opts)
+        if runopts.clean == nil then runopts.clean = true end
+        if runopts.quiet == nil then runopts.quiet = true end
+        M.build_and_run_c(t, t:tmp(output), cfile, runopts)
         if message then print(message) end
       end
     })

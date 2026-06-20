@@ -473,8 +473,8 @@ assert(util.traceinfo(1), "expected loaded CNEW creation trace")
     run = function(t)
       t:build({ clean = true, quiet = true })
       run_luajit(t, { "-joff", "-e", tset_nil_smoke() })
-      t:run_luajit_c_fixture(t:tmp("lj_t-x64-tset-forward"),
-                             "t-x64-tset-forward.c", { build = false })
+      build_and_run_c(t, t:tmp("lj_t-x64-tset-forward"),
+                      "t-x64-tset-forward.c")
       print("M5 x64 TSET previous-value nil behavior passed")
     end
   })
