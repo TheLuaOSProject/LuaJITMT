@@ -1570,7 +1570,7 @@ int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr)
   int exitcode = J->exitcode;
 #endif
   TValue exiterr;
-  const BCIns *pc, *retpc;
+  const BCIns *pc;
   void *cf;
   GCtrace *T;
 
@@ -1642,18 +1642,19 @@ int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr)
     return (int)((BCReg)(L->top - L->base) + 1 - bc_a(*pc) - bc_d(*pc));
   case BC_TSETM:
     return (int)((BCReg)(L->top - L->base) + 1 - bc_a(*pc));
-  case BC_JLOOP:
-    retpc = &traceref(J, bc_d(*pc))->startins;
-    if (bc_isret(bc_op(*retpc)) || bc_op(*retpc) == BC_ITERN) {
+  case BC_JLOOP: {
+    BCIns startins = trace_startins_acq(traceref(J, bc_d(*pc)));
+    if (bc_isret(bc_op(startins)) || bc_op(startins) == BC_ITERN) {
       /* Dispatch to original ins to ensure forward progress. */
       if (lj_trace_state_load(J) != LJ_TRACE_RECORD) return -17;
       /* Unpatch bytecode when recording. */
       J->patchins = *pc;
       J->patchpc = (BCIns *)pc;
-      bc_publish(J->patchpc, *retpc);
+      bc_publish(J->patchpc, startins);
       J->bcskip = 1;
     }
     return 0;
+  }
   default:
     if (bc_isfunc_or_ff(bc_op(*pc)))
       return (int)((BCReg)(L->top - L->base) + 1);
