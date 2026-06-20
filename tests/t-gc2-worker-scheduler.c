@@ -61,6 +61,21 @@ static int wait_u64_at_least(uint64_t *p, uint64_t target)
   return 0;
 }
 
+static lua_State *finalizer_expected_L;
+static int finalizer_count;
+static int finalizer_order[3];
+
+static int scheduler_udata_finalizer(lua_State *L)
+{
+  int *id = (int *)lua_touserdata(L, 1);
+  assert(L == finalizer_expected_L);
+  assert(id != NULL);
+  assert(*id >= 1 && *id <= 3);
+  assert(finalizer_count < 3);
+  finalizer_order[finalizer_count++] = *id;
+  return 0;
+}
+
 static int arena_list_contains(GCArena *a, GCArena *needle)
 {
   while (a) {
@@ -176,6 +191,63 @@ static void test_worker_finalizer_mpsc_drain(lua_State *L, global_State *g)
   relink_root_object(g, b);
   relink_root_object(g, a);
   lua_settop(L, 0);
+}
+
+static void push_scheduler_udata(lua_State *L, int id)
+{
+  int *slot = (int *)lua_newuserdata(L, sizeof(int));
+  *slot = id;
+  lua_newtable(L);
+  lua_pushcfunction(L, scheduler_udata_finalizer);
+  lua_setfield(L, -2, "__gc");
+  lua_setmetatable(L, -2);
+}
+
+static void test_worker_real_finalizer_dispatch(lua_State *L, global_State *g)
+{
+  uint64_t queued0, drained0, dequeued0, async0;
+  size_t separated;
+
+  lua_settop(L, 0);
+  finalizer_expected_L = L;
+  finalizer_count = 0;
+  finalizer_order[0] = finalizer_order[1] = finalizer_order[2] = 0;
+
+  assert(la_load32_acq(&g->gc2.n_workers) == 2);
+  assert(la_load32_acq(&g->gc2.phase) == LJ_GC2_IDLE);
+  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) == NULL);
+  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) == NULL);
+
+  push_scheduler_udata(L, 1);
+  push_scheduler_udata(L, 2);
+  push_scheduler_udata(L, 3);
+
+  queued0 = la_load64_acq(&g->gc2.finalizer_queued);
+  drained0 = la_load64_acq(&g->gc2.finalizer_mpsc_drained);
+  dequeued0 = la_load64_acq(&g->gc2.finalizer_dequeued);
+  async0 = la_load64_acq(&g->gc2.worker_async_progress);
+
+  separated = lj_gc_separateudata(g, 1);
+  assert(separated >= 3u);
+  assert(la_load64_acq(&g->gc2.finalizer_queued) == queued0 + 3u);
+  assert(wait_u64_at_least(&g->gc2.finalizer_mpsc_drained, drained0 + 3u));
+  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) == NULL);
+  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) != NULL);
+  assert(wait_u64_at_least(&g->gc2.worker_async_progress, async0 + 3u));
+
+  lj_gc_finalize_udata(L);
+  assert(la_load64_acq(&g->gc2.finalizer_dequeued) == dequeued0 + 3u);
+  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) == NULL);
+  assert(finalizer_count == 3);
+  assert(finalizer_order[0] == 3);
+  assert(finalizer_order[1] == 2);
+  assert(finalizer_order[2] == 1);
+
+  lua_settop(L, 0);
+  lj_gc_separateudata(g, 1);
+  lj_gc_finalize_udata(L);
+  assert(finalizer_count == 3);
+  finalizer_expected_L = NULL;
 }
 
 static void test_finalizer_owner_leave_rewakes_worker(lua_State *L,
@@ -406,7 +478,6 @@ int main(void)
 
   assert(L != NULL);
   lua_gc(L, LUA_GCSTOP, 0);
-  luaL_openlibs(L);
   g = G(L);
   tg = G2TG(g);
   assert(tg != NULL);
@@ -419,12 +490,13 @@ int main(void)
 
   test_two_worker_contention(g);
   test_worker_finalizer_mpsc_drain(L, g);
+  test_worker_real_finalizer_dispatch(L, g);
   test_finalizer_owner_leave_rewakes_worker(L, g);
   test_async_mark(L, g, tg);
   test_async_weak(L, g, tg);
   test_async_sweep_and_stop(L, g, tg);
 
   lua_close(L);
-  printf("t-gc2-worker-scheduler OK: parked worker wake/drain verified\n");
+  printf("t-gc2-worker-scheduler OK: parked worker wake/drain/finalizer handoff verified\n");
   return 0;
 }
