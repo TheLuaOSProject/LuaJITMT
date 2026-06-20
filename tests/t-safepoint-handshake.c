@@ -38,6 +38,15 @@ typedef struct NativeStopReqCtx {
 
 static NativeStopReqCtx native_stopreq_ctx;
 
+typedef struct PrintStopReqCtx {
+  global_State *g;
+  TGState *tg;
+  pthread_t thread;
+  int fd;
+  int err;
+  uint32_t done;
+} PrintStopReqCtx;
+
 static void publish_manual(global_State *g, TGState *tg, uint32_t actions)
 {
   uint64_t epoch = la_load64_rlx(&g->gc2.hs_epoch) + 1u;
@@ -189,6 +198,102 @@ static int join_native_stopreq_c(lua_State *L)
 static int join_fifo_stopreq_c(lua_State *L)
 {
   return join_native_stopreq_c(L);
+}
+
+static int assert_not_native_c(lua_State *L);
+
+static void *print_stopreq_thread(void *arg)
+{
+  PrintStopReqCtx *ctx = (PrintStopReqCtx *)arg;
+  struct timespec delay;
+  char buf[4096];
+  int i;
+  delay.tv_sec = 0;
+  delay.tv_nsec = 1000000;
+  for (i = 0; i < 1000 &&
+       la_load8_acq(&ctx->tg->in_native) == 0; i++)
+    (void)nanosleep(&delay, NULL);
+  publish_manual(ctx->g, ctx->tg, LJ_GC2_HS_STOPREQ);
+  while (la_load32_acq(&ctx->done) == 0) {
+    ssize_t n = read(ctx->fd, buf, sizeof(buf));
+    if (n > 0)
+      continue;
+    if (n == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+      (void)nanosleep(&delay, NULL);
+      continue;
+    }
+    if (n == 0) {
+      (void)nanosleep(&delay, NULL);
+      continue;
+    }
+    ctx->err = errno;
+    break;
+  }
+  return NULL;
+}
+
+static void fill_pipe_until_full(int fd)
+{
+  char buf[4096];
+  int flags = fcntl(fd, F_GETFL, 0);
+  assert(flags != -1);
+  memset(buf, 'p', sizeof(buf));
+  assert(fcntl(fd, F_SETFL, flags | O_NONBLOCK) == 0);
+  for (;;) {
+    ssize_t n = write(fd, buf, sizeof(buf));
+    if (n == -1) {
+      assert(errno == EAGAIN || errno == EWOULDBLOCK);
+      break;
+    }
+    assert(n > 0);
+  }
+  assert(fcntl(fd, F_SETFL, flags & ~O_NONBLOCK) == 0);
+}
+
+static void test_print_stopreq(lua_State *L)
+{
+  global_State *g = G(L);
+  TGState *tg = G2TG(g);
+  PrintStopReqCtx ctx;
+  int pipefd[2];
+  int saved_stdout;
+  int flags;
+  int err;
+  int status;
+  assert(tg != NULL);
+  assert(pipe(pipefd) == 0);
+  fill_pipe_until_full(pipefd[1]);
+  flags = fcntl(pipefd[0], F_GETFL, 0);
+  assert(flags != -1);
+  assert(fcntl(pipefd[0], F_SETFL, flags | O_NONBLOCK) == 0);
+  assert(fflush(stdout) == 0);
+  saved_stdout = dup(STDOUT_FILENO);
+  assert(saved_stdout != -1);
+  assert(dup2(pipefd[1], STDOUT_FILENO) != -1);
+  (void)setvbuf(stdout, NULL, _IONBF, 0);
+
+  memset(&ctx, 0, sizeof(ctx));
+  ctx.g = g;
+  ctx.tg = tg;
+  ctx.fd = pipefd[0];
+  err = pthread_create(&ctx.thread, NULL, print_stopreq_thread, &ctx);
+  assert(err == 0);
+  status = luaL_dostring(L, "print(string.rep('x', 4 * 1024 * 1024))");
+  la_store32_rel(&ctx.done, 1);
+  err = pthread_join(ctx.thread, NULL);
+  assert(err == 0);
+  assert(dup2(saved_stdout, STDOUT_FILENO) != -1);
+  close(saved_stdout);
+  close(pipefd[0]);
+  close(pipefd[1]);
+  clearerr(stdout);
+  assert(ctx.err == 0);
+  assert(status != LUA_OK);
+  assert(strstr(lua_tostring(L, -1),
+		"thread interrupted: VM shutdown") != NULL);
+  lua_pop(L, 1);
+  clear_stopreq_c(L);
+  assert_not_native_c(L);
 }
 
 static int assert_not_native_c(lua_State *L)
@@ -648,6 +753,8 @@ int main(void)
 	    lua_tostring(L, -1));
     assert(0);
   }
+
+  test_print_stopreq(L);
 
   assert(luaL_dostring(L,
     "local th = require('threading')\n"

@@ -28,6 +28,7 @@
 #include "lj_state.h"
 #include "lj_frame.h"
 #include "lj_thr.h"
+#include "lj_safepoint.h"
 #if LJ_HASFFI
 #include "lj_ctype.h"
 #include "lj_cconv.h"
@@ -797,6 +798,22 @@ LJLIB_CF(newproxy)
 }
 
 LJLIB_PUSH("tostring")
+
+static void print_native_write(lua_State *L, const char *str, size_t size)
+{
+  if (size == 0)
+    return;
+  lj_native_enter(L2TG(L));
+  (void)fwrite(str, 1, size, stdout);
+  lj_safepoint_checkstop(L, lj_native_leave(L));
+}
+
+static void print_native_char(lua_State *L, int c)
+{
+  char ch = (char)c;
+  print_native_write(L, &ch, 1);
+}
+
 LJLIB_CF(print)
 {
   ptrdiff_t i, nargs = L->top - L->base;
@@ -830,10 +847,10 @@ LJLIB_CF(print)
       L->top--;
     }
     if (i)
-      putchar('\t');
-    fwrite(str, 1, size, stdout);
+      print_native_char(L, '\t');
+    print_native_write(L, str, size);
   }
-  putchar('\n');
+  print_native_char(L, '\n');
   return 0;
 }
 
