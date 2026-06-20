@@ -36,6 +36,7 @@ local m7_cases = {
   "m7_ffi_carith_l",
   "m7_ffi_clib_cache",
   "m7_ffi_clib_ldscript",
+  "m7_ffi_nested_state",
   "m7_ffi_callback_install",
   "m7_ffi_callback_runtime",
   "m7_ffi_blocking"
@@ -207,6 +208,16 @@ assert(cl.lj_clib_ldscript_value() == 42)
         env = { LJ_M7_FFI_LDSCRIPT = script }
       })
       print("M7 FFI clib ld-script behavior passed")
+    end
+  })
+
+  add({
+    name = "m7_ffi_nested_state",
+    description = "FFI Lua/C API nested lua_State lifecycle behavior",
+    run = function(t)
+      clean_build(t)
+      run_luajit_script(t, "t-ffi-nested-state.lua")
+      print("M7 FFI nested lua_State lifecycle behavior passed")
     end
   })
 

@@ -123,7 +123,7 @@ static LJ_AINLINE void lj_tg_store_jit_base(TGState *tg, TValue *base)
 
 static LJ_AINLINE lua_State *lj_tg_cur_L(global_State *g)
 {
-  TGState *tg = lj_thr_get_tg();
+  TGState *tg = G2TG(g);
   if (tg)
     return lj_tg_load_cur_L(tg);
   {
@@ -150,7 +150,7 @@ static LJ_AINLINE void lj_tg_clearcur_L(global_State *g)
 
 static LJ_AINLINE TValue *lj_tg_jit_base(global_State *g)
 {
-  TGState *tg = lj_thr_get_tg();
+  TGState *tg = G2TG(g);
   if (tg)
     return lj_tg_load_jit_base(tg);
   return mref_acq(g->jit_base, TValue);  /* Transitional mirror for VM asm writes. */

@@ -71,7 +71,9 @@ TGState *lj_thr_get_tg(void)
 TGState *lj_thr_get_tg_fallback(global_State *g)
 {
   TGState *tg = lj_tls_tg;
-  return tg ? tg : (g ? g->main_tg : NULL);
+  if (!g)
+    return tg;
+  return tg && tg->gl == g ? tg : g->main_tg;
 }
 
 int lj_state_claim(lua_State *L, uint32_t tid)

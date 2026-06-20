@@ -266,6 +266,8 @@ static void close_state(lua_State *L)
   lj_str_freetab(g);
   lj_tab_freeretired(g);
   lj_gc2_fini(g);
+  if (lj_thr_get_tg() == g->main_tg)
+    lj_thr_set_tg(NULL);
   if (arena_alloc && g->main_tg)
     lj_buf_free(g, &g->main_tg->tmpbuf);
   else
