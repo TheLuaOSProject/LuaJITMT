@@ -91,6 +91,17 @@ struct TGState {
 
 LJ_STATIC_ASSERT(sizeof(((GC2SSBNode *)0)->slot) == TG_GC2_SSB_BYTES);
 
+static LJ_AINLINE GC2SSBNode *lj_gc2_ssb_next_acq(const GC2SSBNode *node)
+{
+  return (GC2SSBNode *)la_loadptr_acq((void *const *)&node->next);
+}
+
+static LJ_AINLINE void lj_gc2_ssb_next_rel(GC2SSBNode *node,
+					   GC2SSBNode *next)
+{
+  la_storeptr_rel((void **)&node->next, next);
+}
+
 static LJ_AINLINE TGState *lj_tg_next_acq(const TGState *tg)
 {
   return (TGState *)la_loadptr_acq((void *const *)&tg->next_tg);

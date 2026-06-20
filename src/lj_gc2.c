@@ -2623,7 +2623,7 @@ GCobj *lj_gc2_grey_steal(global_State *g)
 
 static void gc2_ssb_activate(TGState *tg, GC2SSBNode *node)
 {
-  node->next = NULL;
+  lj_gc2_ssb_next_rel(node, NULL);
   node->n = 0;
   tg->ssb_active = node;
   /* 05 section 5.6.2: publish active SSB cursor reset. */
@@ -2637,7 +2637,7 @@ static void gc2_ssb_publish(global_State *g, GC2SSBNode *node)
 {
   void *head = la_loadptr_acq((void *const *)&g->gc2.ssb_head);
   do {
-    node->next = (GC2SSBNode *)head;
+    lj_gc2_ssb_next_rel(node, (GC2SSBNode *)head);
   } while (!la_casptr((void **)&g->gc2.ssb_head, &head, node,
 		      LA_ACQ_REL, LA_ACQ));  /* 05 section 5.6.2 MPSC stack. */
   lj_gc2_worker_wake(g);  /* 05 section 5.6.3 parked worker scheduler. */
@@ -2664,7 +2664,7 @@ static uint32_t gc2_flush_ssb(global_State *g, TGState *tg, int allow_drain)
   }
   if (!fresh)
     return 0;
-  tg->ssb_free = fresh->next;
+  tg->ssb_free = lj_gc2_ssb_next_acq(fresh);
   node = tg->ssb_active;
   node->n = n;
   gc2_ssb_publish(g, node);
@@ -2733,25 +2733,25 @@ static void gc2_ssb_recycle_node(GC2SSBNode *node)
   TGState *owner = node->owner;
   node->n = 0;
   if (owner) {
-    node->next = owner->ssb_free;
+    lj_gc2_ssb_next_rel(node, owner->ssb_free);
     owner->ssb_free = node;
   } else {
-    node->next = NULL;
+    lj_gc2_ssb_next_rel(node, NULL);
   }
 }
 
 static void gc2_ssb_publish_list(global_State *g, GC2SSBNode *head)
 {
-  GC2SSBNode *tail;
+  GC2SSBNode *tail, *next;
   void *oldhead;
   if (!g || !head)
     return;
   tail = head;
-  while (tail->next)
-    tail = tail->next;
+  while ((next = lj_gc2_ssb_next_acq(tail)) != NULL)
+    tail = next;
   oldhead = la_loadptr_acq((void *const *)&g->gc2.ssb_head);
   do {
-    tail->next = (GC2SSBNode *)oldhead;
+    lj_gc2_ssb_next_rel(tail, (GC2SSBNode *)oldhead);
   } while (!la_casptr((void **)&g->gc2.ssb_head, &oldhead, head,
 		      LA_ACQ_REL, LA_ACQ));  /* 05 section 5.6.2 partial drain. */
 }
@@ -2765,7 +2765,7 @@ static LJ_NOINLINE uint32_t gc2_drain_published_ssb_to_grey(global_State *g,
     return 0;
   node = (GC2SSBNode *)la_xchgptr_acqrel((void **)&g->gc2.ssb_head, NULL);
   while (node && nitems < limit) {
-    GC2SSBNode *next = node->next;
+    GC2SSBNode *next = lj_gc2_ssb_next_acq(node);
     while (node->n > 0 && nitems < limit) {
       GCRef *slot = &node->slot[node->n - 1u];
       GCobj *o = gc2_queue_slot_load_acq(slot);
@@ -2779,7 +2779,7 @@ static LJ_NOINLINE uint32_t gc2_drain_published_ssb_to_grey(global_State *g,
       gc2_ssb_recycle_node(node);
       node = next;
     } else {
-      node->next = next;
+      lj_gc2_ssb_next_rel(node, next);
       break;
     }
   }
