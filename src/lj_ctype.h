@@ -516,6 +516,84 @@ static LJ_AINLINE int ctype_cbblack_slot_cas(uint64_t *tab, MSize slot,
   return la_cas64(&tab[slot], oldp, key, LA_ACQ_REL, LA_ACQ);
 }
 
+static LJ_AINLINE CTypeID1 *ctype_cb_cbid_acq(const CTState *cts)
+{
+  return (CTypeID1 *)la_loadptr_acq((void *const *)&cts->cb.cbid);
+}
+
+static LJ_AINLINE void ctype_cb_cbid_rel(CTState *cts, CTypeID1 *cbid)
+{
+  la_storeptr_rel((void **)&cts->cb.cbid, cbid);
+}
+
+static LJ_AINLINE lua_State **ctype_cb_owner_acq(const CTState *cts)
+{
+  return (lua_State **)la_loadptr_acq((void *const *)&cts->cb.owner);
+}
+
+static LJ_AINLINE void ctype_cb_owner_rel(CTState *cts, lua_State **owner)
+{
+  la_storeptr_rel((void **)&cts->cb.owner, owner);
+}
+
+static LJ_AINLINE TValue *ctype_cb_func_acq(const CTState *cts)
+{
+  return (TValue *)la_loadptr_acq((void *const *)&cts->cb.func);
+}
+
+static LJ_AINLINE void ctype_cb_func_rel(CTState *cts, TValue *func)
+{
+  la_storeptr_rel((void **)&cts->cb.func, func);
+}
+
+static LJ_AINLINE MSize ctype_cb_sizeid_acq(const CTState *cts)
+{
+  return (MSize)la_load32_acq(&cts->cb.sizeid);
+}
+
+static LJ_AINLINE void ctype_cb_sizeid_rel(CTState *cts, MSize sizeid)
+{
+  la_store32_rel(&cts->cb.sizeid, sizeid);
+}
+
+static LJ_AINLINE CTypeID1 ctype_cb_cbid_slot_acq(const CTypeID1 *cbid,
+						  MSize slot)
+{
+  return (CTypeID1)la_load16_acq(&cbid[slot]);
+}
+
+static LJ_AINLINE void ctype_cb_cbid_slot_rel(CTypeID1 *cbid, MSize slot,
+					      CTypeID id)
+{
+  la_store16_rel(&cbid[slot], (CTypeID1)id);
+}
+
+static LJ_AINLINE lua_State *ctype_cb_owner_slot_acq(lua_State **owner,
+						     MSize slot)
+{
+  return (lua_State *)la_loadptr_acq((void *const *)&owner[slot]);
+}
+
+static LJ_AINLINE void ctype_cb_owner_slot_rel(lua_State **owner, MSize slot,
+					       lua_State *L)
+{
+  la_storeptr_rel((void **)&owner[slot], L);
+}
+
+static LJ_AINLINE int ctype_cb_owner_slot_claim(lua_State **owner, MSize slot,
+						lua_State *L)
+{
+  void *expect = NULL;
+  return la_casptr((void **)&owner[slot], &expect, L, LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE int ctype_cb_owner_slot_clear(lua_State **owner, MSize slot,
+						lua_State *L)
+{
+  void *expect = L;
+  return la_casptr((void **)&owner[slot], &expect, NULL, LA_ACQ_REL, LA_ACQ);
+}
+
 #define CTINFO(ct, flags)	(((CTInfo)(ct) << CTSHIFT_NUM) + (flags))
 #define CTALIGN(al)		((CTSize)(al) << CTSHIFT_ALIGN)
 #define CTATTRIB(at)		((CTInfo)(at) << CTSHIFT_ATTRIB)

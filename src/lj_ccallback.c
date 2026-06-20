@@ -31,34 +31,32 @@
 
 static LJ_AINLINE CTypeID1 callback_cbid_load(CTypeID1 *cbid, MSize slot)
 {
-  return (CTypeID1)la_load16_acq(&cbid[slot]);  /* 11.5 callback slot publish. */
+  return ctype_cb_cbid_slot_acq(cbid, slot);  /* 11.5 callback slot publish. */
 }
 
 static LJ_AINLINE void callback_cbid_store(CTypeID1 *cbid, MSize slot,
 					   CTypeID id)
 {
-  la_store16_rel(&cbid[slot], (CTypeID1)id);  /* 11.5 callback slot publish. */
+  ctype_cb_cbid_slot_rel(cbid, slot, id);  /* 11.5 callback slot publish. */
 }
 
 static LJ_AINLINE lua_State *callback_owner_load(lua_State **owner, MSize slot)
 {
-  return (lua_State *)la_loadptr_acq((void *const *)&owner[slot]);
+  return ctype_cb_owner_slot_acq(owner, slot);
 }
 
 static LJ_AINLINE int callback_owner_claim(lua_State **owner, MSize slot,
 					   lua_State *L)
 {
-  void *expect = NULL;
-  return la_casptr((void **)&owner[slot], &expect, L,
-		   LA_ACQ_REL, LA_ACQ);  /* 11.5 callback slot owner claim. */
+  return ctype_cb_owner_slot_claim(owner, slot,
+				   L);  /* 11.5 callback slot owner claim. */
 }
 
 static LJ_AINLINE int callback_owner_clear(lua_State **owner, MSize slot,
 					   lua_State *L)
 {
-  void *expect = L;
-  return la_casptr((void **)&owner[slot], &expect, NULL,
-		   LA_ACQ_REL, LA_ACQ);  /* 11.5 callback owner disown. */
+  return ctype_cb_owner_slot_clear(owner, slot,
+				   L);  /* 11.5 callback owner disown. */
 }
 
 static lua_State *callback_carrier_new_l(lua_State *L)
@@ -79,7 +77,7 @@ static void callback_owner_barrier_l(lua_State *L, lua_State *carrier)
 
 static LJ_AINLINE TValue *callback_func_slots(CTState *cts)
 {
-  return (TValue *)la_loadptr_acq((void *const *)&cts->cb.func);
+  return ctype_cb_func_acq(cts);
 }
 
 static LJ_AINLINE void callback_func_load(CTState *cts, MSize slot,
@@ -98,7 +96,7 @@ void lj_ccallback_func_store_l(lua_State *L, CTState *cts, MSize slot,
   TValue *func = callback_func_slots(cts);
   TValue tv;
   if (LJ_UNLIKELY(func == NULL ||
-		  slot >= (MSize)la_load32_acq(&cts->cb.sizeid)))
+		  slot >= ctype_cb_sizeid_acq(cts)))
     lj_err_caller(L, LJ_ERR_FFI_CBACKOV);
   setfuncV(L, &tv, fn);
   copyTVrel(L, &func[slot], &tv);
@@ -109,7 +107,7 @@ void lj_ccallback_func_clear(CTState *cts, MSize slot)
 {
   TValue *func = callback_func_slots(cts);
   if (LJ_LIKELY(func != NULL &&
-		slot < (MSize)la_load32_acq(&cts->cb.sizeid))) {
+		slot < ctype_cb_sizeid_acq(cts))) {
     TValue nilv;
     setnilV(&nilv);
     copyTVrel(mainthread_acq(cts->g), &func[slot], &nilv);
@@ -692,9 +690,9 @@ static int callback_auto_attach(CTState *cts, MSize slot)
 {
   lua_State **owner;
   lua_State *L;
-  if (slot >= (MSize)la_load32_acq(&cts->cb.sizeid))
+  if (slot >= ctype_cb_sizeid_acq(cts))
     return 0;
-  owner = (lua_State **)la_loadptr_acq((void *const *)&cts->cb.owner);
+  owner = ctype_cb_owner_acq(cts);
   if (owner == NULL)
     return 0;
   L = callback_owner_load(owner, slot);
@@ -768,8 +766,8 @@ static void callback_conv_args(CTState *cts, lua_State *L, CCallbackRuntime *cb)
 #endif
 #endif
 
-  if (slot < la_load32_acq(&cts->cb.sizeid) &&
-      (cbid = (CTypeID1 *)la_loadptr_acq((void *const *)&cts->cb.cbid)) != NULL &&
+  if (slot < ctype_cb_sizeid_acq(cts) &&
+      (cbid = ctype_cb_cbid_acq(cts)) != NULL &&
       (id = callback_cbid_load(cbid, slot)) != 0) {
     TValue tv;
     ct = ctype_get(cts, id);
@@ -1019,8 +1017,8 @@ void lj_ccallback_disown_state(lua_State *L)
   cts = ctype_ctsG(G(L));
   if (cts == NULL)
     return;
-  owner = (lua_State **)la_loadptr_acq((void *const *)&cts->cb.owner);
-  sizeid = (MSize)la_load32_acq(&cts->cb.sizeid);
+  owner = ctype_cb_owner_acq(cts);
+  sizeid = ctype_cb_sizeid_acq(cts);
   if (owner == NULL || sizeid == 0)
     return;
   for (slot = 0; slot < sizeid; slot++)
@@ -1030,25 +1028,25 @@ void lj_ccallback_disown_state(lua_State *L)
 
 static CTypeID1 *callback_slots_init_l(lua_State *L, CTState *cts)
 {
-  if (cts->cb.owner == NULL) {
+  if (ctype_cb_owner_acq(cts) == NULL) {
     lua_State **owner = lj_mem_newvec(L, CALLBACK_MAX_SLOT, lua_State *);
     memset(owner, 0, CALLBACK_MAX_SLOT*sizeof(lua_State *));
-    la_storeptr_rel((void **)&cts->cb.owner, owner);
+    ctype_cb_owner_rel(cts, owner);
   }
-  if (cts->cb.cbid == NULL) {
+  if (ctype_cb_cbid_acq(cts) == NULL) {
     CTypeID1 *cbid = lj_mem_newvec(L, CALLBACK_MAX_SLOT, CTypeID1);
     memset(cbid, 0, CALLBACK_MAX_SLOT*sizeof(CTypeID1));
-    la_storeptr_rel((void **)&cts->cb.cbid, cbid);
+    ctype_cb_cbid_rel(cts, cbid);
   }
-  if (cts->cb.func == NULL) {
+  if (ctype_cb_func_acq(cts) == NULL) {
     TValue *func = lj_mem_newvec(L, CALLBACK_MAX_SLOT, TValue);
     MSize i;
     for (i = 0; i < CALLBACK_MAX_SLOT; i++)
       setnilV(&func[i]);
-    la_storeptr_rel((void **)&cts->cb.func, func);
-    la_store32_rel(&cts->cb.sizeid, CALLBACK_MAX_SLOT);
+    ctype_cb_func_rel(cts, func);
+    ctype_cb_sizeid_rel(cts, CALLBACK_MAX_SLOT);
   }
-  return cts->cb.cbid;
+  return ctype_cb_cbid_acq(cts);
 }
 
 void lj_ccallback_init_l(lua_State *L, CTState *cts)
@@ -1064,12 +1062,12 @@ void lj_ccallback_init_l(lua_State *L, CTState *cts)
 /* Get an unused slot in the callback slot table. */
 static MSize callback_slot_claim_l(lua_State *L, CTState *cts)
 {
-  CTypeID1 *cbid = (CTypeID1 *)la_loadptr_acq((void *const *)&cts->cb.cbid);
-  lua_State **owner = (lua_State **)la_loadptr_acq((void *const *)&cts->cb.owner);
+  CTypeID1 *cbid = ctype_cb_cbid_acq(cts);
+  lua_State **owner = ctype_cb_owner_acq(cts);
   TValue *func = callback_func_slots(cts);
   lua_State *carrier = NULL;
   MSize top, sizeid;
-  sizeid = (MSize)la_load32_acq(&cts->cb.sizeid);
+  sizeid = ctype_cb_sizeid_acq(cts);
   if (cbid == NULL || owner == NULL || func == NULL || sizeid == 0)
     lj_err_caller(L, LJ_ERR_FFI_CBACKOV);
   for (top = 0; top < sizeid; top++) {
@@ -1133,7 +1131,7 @@ void *lj_ccallback_new_l(lua_State *L, CTState *cts, CType *ct, GCfunc *fn)
     MSize slot;
     CTypeID1 *cbid;
     slot = callback_slot_claim_l(L, cts);
-    cbid = (CTypeID1 *)la_loadptr_acq((void *const *)&cts->cb.cbid);
+    cbid = ctype_cb_cbid_acq(cts);
     lj_ccallback_func_store_l(L, cts, slot, fn);
     callback_cbid_store(cbid, slot, id);
     return callback_slot2ptr(cts, slot);

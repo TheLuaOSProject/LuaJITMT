@@ -1582,22 +1582,21 @@ static void gc2_scan_global_roots(global_State *g)
       if (cts->pinmt)
 	lj_gc2_markobj(g, obj2gco(cts->pinmt));
       lj_ctype_fin_mark(g, gc2_finreg_markobj, gc2_finreg_markmem);
-      lj_gc2_markmem(g, cts->cb.cbid);
-      owner = (lua_State **)la_loadptr_acq((void *const *)&cts->cb.owner);
+      lj_gc2_markmem(g, ctype_cb_cbid_acq(cts));
+      owner = ctype_cb_owner_acq(cts);
       lj_gc2_markmem(g, owner);
       if (owner) {
-	MSize i, n = (MSize)la_load32_acq(&cts->cb.sizeid);
+	MSize i, n = ctype_cb_sizeid_acq(cts);
 	for (i = 0; i < n; i++) {
-	  lua_State *th = (lua_State *)la_loadptr_acq(
-	    (void *const *)&owner[i]);
+	  lua_State *th = ctype_cb_owner_slot_acq(owner, i);
 	  if (th)
 	    lj_gc2_markobj(g, obj2gco(th));
 	}
       }
-      func = (TValue *)la_loadptr_acq((void *const *)&cts->cb.func);
+      func = ctype_cb_func_acq(cts);
       lj_gc2_markmem(g, func);
       if (func) {
-	MSize i, n = (MSize)la_load32_acq(&cts->cb.sizeid);
+	MSize i, n = ctype_cb_sizeid_acq(cts);
 	for (i = 0; i < n; i++) {
 	  TValue tv;
 	  lj_tv_load_acq(&tv, &func[i]);

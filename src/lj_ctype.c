@@ -1714,9 +1714,12 @@ void lj_ctype_freestate(global_State *g)
 		   ctype_metamap_size_acq(cts), GCRef);
     lj_mem_freevec(g, ctype_cbblack_acq(cts),
 		   ctype_cbblack_size_acq(cts), uint64_t);
-    lj_mem_freevec(g, cts->cb.cbid, cts->cb.sizeid, CTypeID1);
-    lj_mem_freevec(g, cts->cb.owner, cts->cb.sizeid, lua_State *);
-    lj_mem_freevec(g, cts->cb.func, cts->cb.sizeid, TValue);
+    lj_mem_freevec(g, ctype_cb_cbid_acq(cts), ctype_cb_sizeid_acq(cts),
+		   CTypeID1);
+    lj_mem_freevec(g, ctype_cb_owner_acq(cts), ctype_cb_sizeid_acq(cts),
+		   lua_State *);
+    lj_mem_freevec(g, ctype_cb_func_acq(cts), ctype_cb_sizeid_acq(cts),
+		   TValue);
     lj_mem_freet(g, cts);
   }
 }

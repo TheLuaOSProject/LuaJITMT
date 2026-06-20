@@ -525,23 +525,23 @@ static int ffi_callback_set(lua_State *L, GCfunc *fn)
     MSize slot = lj_ccallback_ptr2slot(cts, *(void **)cdataptr(cd));
     CTypeID1 *cbid = NULL;
     lua_State **owner = NULL;
-    if (slot < la_load32_acq(&cts->cb.sizeid) &&
-	(cbid = (CTypeID1 *)la_loadptr_acq((void *const *)&cts->cb.cbid)) != NULL &&
-	la_load16_acq(&cbid[slot]) != 0) {
+    if (slot < ctype_cb_sizeid_acq(cts) &&
+	(cbid = ctype_cb_cbid_acq(cts)) != NULL &&
+	ctype_cb_cbid_slot_acq(cbid, slot) != 0) {
       if (fn) {
 	lj_ccallback_func_store_l(L, cts, slot, fn);
       } else {
-	owner = (lua_State **)la_loadptr_acq((void *const *)&cts->cb.owner);
-	if (owner && la_loadptr_acq((void *const *)&owner[slot]) == NULL) {
+	owner = ctype_cb_owner_acq(cts);
+	if (owner && ctype_cb_owner_slot_acq(owner, slot) == NULL) {
 	  /* 11.5 disowned callback free: nil function before cbid release. */
 	  lj_ccallback_func_clear(cts, slot);
-	  la_store16_rel(&cbid[slot], 0);
+	  ctype_cb_cbid_slot_rel(cbid, slot, 0);
 	} else {
 	  /* 11.5 owned callback free: cbid release before owner release. */
-	  la_store16_rel(&cbid[slot], 0);
+	  ctype_cb_cbid_slot_rel(cbid, slot, 0);
 	  lj_ccallback_func_clear(cts, slot);
 	  if (owner)
-	    la_storeptr_rel((void **)&owner[slot], NULL);  /* 11.5 slot reusable. */
+	    ctype_cb_owner_slot_rel(owner, slot, NULL);  /* 11.5 slot reusable. */
 	}
       }
       return 0;

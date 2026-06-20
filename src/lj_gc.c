@@ -424,9 +424,9 @@ static void gc2_paranoia_check_rawroots(global_State *g)
 	   ctret = ctype_tab_retired_next_acq(ctret)) {
 	gc2_paranoia_checkmem(g, ctret, "retired ctype table");
       }
-      gc2_paranoia_checkmem(g, cts->cb.cbid, "callback ids");
-      gc2_paranoia_checkmem(g, cts->cb.owner, "callback owners");
-      gc2_paranoia_checkmem(g, cts->cb.func, "callback functions");
+      gc2_paranoia_checkmem(g, ctype_cb_cbid_acq(cts), "callback ids");
+      gc2_paranoia_checkmem(g, ctype_cb_owner_acq(cts), "callback owners");
+      gc2_paranoia_checkmem(g, ctype_cb_func_acq(cts), "callback functions");
     }
   }
 #endif
@@ -682,22 +682,21 @@ static void gc_mark_gcroot(global_State *g)
 	gc_markobj(g, cts->pinmt);
       lj_ctype_fin_mark(g, gc_finreg_markobj, lj_gc_arena_markmem);
       gc_mark_finreg_cdata_preclaims(g);
-      lj_gc_arena_markmem(g, cts->cb.cbid);
-      owner = (lua_State **)la_loadptr_acq((void *const *)&cts->cb.owner);
+      lj_gc_arena_markmem(g, ctype_cb_cbid_acq(cts));
+      owner = ctype_cb_owner_acq(cts);
       lj_gc_arena_markmem(g, owner);
       if (owner) {
-	MSize i, n = (MSize)la_load32_acq(&cts->cb.sizeid);
+	MSize i, n = ctype_cb_sizeid_acq(cts);
 	for (i = 0; i < n; i++) {
-	  lua_State *th = (lua_State *)la_loadptr_acq(
-	    (void *const *)&owner[i]);
+	  lua_State *th = ctype_cb_owner_slot_acq(owner, i);
 	  if (th)
 	    gc_markobj(g, obj2gco(th));
 	}
       }
-      func = (TValue *)la_loadptr_acq((void *const *)&cts->cb.func);
+      func = ctype_cb_func_acq(cts);
       lj_gc_arena_markmem(g, func);
       if (func) {
-	MSize i, n = (MSize)la_load32_acq(&cts->cb.sizeid);
+	MSize i, n = ctype_cb_sizeid_acq(cts);
 	for (i = 0; i < n; i++) {
 	  TValue tv;
 	  lj_tv_load_acq(&tv, &func[i]);
