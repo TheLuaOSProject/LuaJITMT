@@ -10,4 +10,7 @@ if hits=$(grep -nE -- '(^|[^[:alnum:]_])(eo|head|prev|next).*(->[[:space:]]*entr
 fi
 
 make -C "$ROOT/src" clean
-make -C "$ROOT/src" XCFLAGS="${XCFLAGS:-} -DLUAJIT_USE_GDBJIT"
+status=0
+make -C "$ROOT/src" XCFLAGS="${XCFLAGS:-} -DLUAJIT_USE_GDBJIT" || status=$?
+make -C "$ROOT/src" clean
+exit "$status"
