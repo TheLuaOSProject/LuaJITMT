@@ -100,26 +100,6 @@ void lj_trace_err_info(jit_State *J, TraceError e)
 ** are copied to a new (compact) GCtrace object.
 */
 
-static LJ_AINLINE TraceVec *tracevec_retired_next_acq(const TraceVec *tv)
-{
-  return (TraceVec *)la_loadptr_acq((void *const *)&tv->retired_next);
-}
-
-static LJ_AINLINE void tracevec_retired_next_rel(TraceVec *tv, TraceVec *next)
-{
-  la_storeptr_rel((void **)&tv->retired_next, next);
-}
-
-static LJ_AINLINE GCtrace *trace_retired_next_acq(const GCtrace *T)
-{
-  return (GCtrace *)la_loadptr_acq((void *const *)&T->retired_next);
-}
-
-static LJ_AINLINE void trace_retired_next_rel(GCtrace *T, GCtrace *next)
-{
-  la_storeptr_rel((void **)&T->retired_next, next);
-}
-
 static TraceVec *tracevec_new(lua_State *L, MSize sizetrace)
 {
   TraceVec *tv = (TraceVec *)lj_mem_new(L, tracevec_size(sizetrace));

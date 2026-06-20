@@ -387,6 +387,26 @@ static LJ_AINLINE GCtrace *traceref_fromgco(GCobj *o)
   ((TraceVec *)la_loadptr_acq((void *const *)&(J)->tracev))
 #define tracevec_rel(J, tv) \
   la_storeptr_rel((void **)&(J)->tracev, (tv))
+static LJ_AINLINE TraceVec *tracevec_retired_next_acq(const TraceVec *tv)
+{
+  return (TraceVec *)la_loadptr_acq((void *const *)&tv->retired_next);
+}
+
+static LJ_AINLINE void tracevec_retired_next_rel(TraceVec *tv, TraceVec *next)
+{
+  la_storeptr_rel((void **)&tv->retired_next, next);
+}
+
+static LJ_AINLINE GCtrace *trace_retired_next_acq(const GCtrace *T)
+{
+  return (GCtrace *)la_loadptr_acq((void *const *)&T->retired_next);
+}
+
+static LJ_AINLINE void trace_retired_next_rel(GCtrace *T, GCtrace *next)
+{
+  la_storeptr_rel((void **)&T->retired_next, next);
+}
+
 #define traceslot_ref_acq(J, n) \
   (&tracevec_acq((J))->slot[(n)])
 #define traceslot_pending(J, n) \
