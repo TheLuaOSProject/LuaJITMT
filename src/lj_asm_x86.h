@@ -3430,11 +3430,13 @@ static int asm_x86_isvmstate(MCode *p, MCode *prev, uint32_t ilen,
 /* Patch exit jumps of existing machine code to a new target. */
 void lj_asm_patchexit(jit_State *J, GCtrace *T, ExitNo exitno, MCode *target)
 {
-  MCode *p = T->mcode;
-  MCode *mcarea = lj_mcode_patch(J, p, 0);
-  MSize len = T->szmcode;
+  MCode *mcode = trace_mcode_acq(T);
+  MCode *p = mcode;
+  MCode *mcarea = lj_mcode_patch(J, mcode, 0);
+  MSize len = trace_szmcode_acq(T);
+  TraceNo traceno = trace_traceno_acq(T);
   MCode *px = exitstub_addr(J, exitno) - 6;
-  MCode *pe = p+len-6;
+  MCode *pe = mcode+len-6;
   MCode *pgc = NULL;
 #if LJ_GC64
   const void *statep = (const void *)&J2G(J)->vmstate;
@@ -3451,7 +3453,7 @@ void lj_asm_patchexit(jit_State *J, GCtrace *T, ExitNo exitno, MCode *target)
     for (; p < pe; ) {
       uint32_t ilen = asm_x86_inslen(p);
       if (asm_x86_isvmstate(p, prev, ilen, prevlen, statep,
-			    (int32_t)T->traceno))
+			    (int32_t)traceno))
 	break;
       prev = p;
       prevlen = ilen;
@@ -3479,6 +3481,6 @@ void lj_asm_patchexit(jit_State *J, GCtrace *T, ExitNo exitno, MCode *target)
       pgc = p+5;  /* Do not patch GC check exit. */
     }
   }
-  lj_mcode_sync(T->mcode, T->mcode + T->szmcode);
+  lj_mcode_sync(mcode, mcode + len);
   lj_mcode_patch(J, mcarea, 1);
 }
