@@ -279,7 +279,7 @@ static LJ_AINLINE void lj_bufx_reset(SBufExt *sbx)
 {
   if (sbufiscow(sbx)) {
     setmrefu(sbx->L, (mrefu(sbx->L) & ~(GCSize)SBUF_FLAG_COW));
-    setgcrefnull(sbx->cowref);
+    setgcrefnullrel(sbx->cowref);
     lj_buf_bptr_rel((SBuf *)sbx, NULL);
     lj_buf_eptr_rel((SBuf *)sbx, NULL);
   }
@@ -295,7 +295,7 @@ static LJ_AINLINE void lj_bufx_free(lua_State *L, SBufExt *sbx)
   if (!sbufiscoworborrow(sbx))
     lj_mem_free(G(L), lj_buf_bptr_acq((SBuf *)sbx), sbufsz(sbx));
   setsbufXL(sbx, L, SBUF_FLAG_EXT);
-  setgcrefnull(sbx->cowref);
+  setgcrefnullrel(sbx->cowref);
   lj_buf_rptr_rel(sbx, NULL);
   lj_buf_bounds_rel((SBuf *)sbx, NULL, NULL, NULL);
 }

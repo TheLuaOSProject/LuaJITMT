@@ -30,7 +30,7 @@ static void buf_grow(SBuf *sb, MSize sz)
 		"bad SBuf COW");
     b = (char *)lj_mem_new(sbufL(sb), nsz);
     setsbufflag(sb, flag & ~(GCSize)SBUF_FLAG_COW);
-    setgcrefnull(sbufX(sb)->cowref);
+    setgcrefnullrel(sbufX(sb)->cowref);
     memcpy(b, oldb, osz);
   } else {
     b = (char *)lj_mem_realloc(sbufL(sb), oldb, osz, nsz);
