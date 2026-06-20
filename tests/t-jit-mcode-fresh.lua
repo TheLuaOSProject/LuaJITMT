@@ -1,4 +1,5 @@
 local th = require"threading"
+local harness = require"thread_harness"
 
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1", "sizemcode=4", "maxmcode=2048")
@@ -18,8 +19,7 @@ for _ = 1, 20 do
   assert(hot(240) == 28920)
 end
 
-local ready = th.channel(nthreads)
-local start = th.channel(nthreads)
+local ready, start = harness.channels(nthreads)
 local done = th.channel(nthreads)
 local workers = {}
 
@@ -52,14 +52,8 @@ for id = 1, nthreads do
   end, ready, start, done, id, rounds)
 end
 
-for _ = 1, nthreads do
-  local _, ok = ready:recv(10)
-  assert(ok == true)
-end
-
-for _ = 1, nthreads do
-  assert(start:send("go", 10) == true)
-end
+harness.wait_ready(ready, nthreads)
+harness.release_start(start, nthreads)
 
 local finished = 0
 while finished < nthreads do
@@ -71,9 +65,8 @@ while finished < nthreads do
   end
 end
 
-for id = 1, nthreads do
-  local ok, worker = workers[id]:join()
-  assert(ok == true and worker == id)
-end
+harness.join_each(workers, function(worker, id)
+  assert(worker == id)
+end)
 
 print(("t-jit-mcode-reuse OK: %d TGs published traces while main entered shared mcode"):format(nthreads))

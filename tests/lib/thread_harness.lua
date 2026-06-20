@@ -27,24 +27,27 @@ function M.release_start(start, nthreads, timeout)
 end
 
 function M.join_all(workers, timeout)
-  timeout = timeout or 30
-  for i = 1, #workers do
-    local ok, result = workers[i]:join(timeout)
-    assert(ok == true, tostring(result))
+  M.join_each(workers, function(result)
     assert(result == true)
-  end
+  end, timeout)
 end
 
 function M.join_count(workers, timeout)
   local total = 0
+  M.join_each(workers, function(result)
+    assert(type(result) == "number")
+    total = total + result
+  end, timeout)
+  return total
+end
+
+function M.join_each(workers, check, timeout)
   timeout = timeout or 30
   for i = 1, #workers do
     local ok, result = workers[i]:join(timeout)
     assert(ok == true, tostring(result))
-    assert(type(result) == "number")
-    total = total + result
+    if check then check(result, i) end
   end
-  return total
 end
 
 function M.fullgc(n)

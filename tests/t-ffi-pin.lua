@@ -65,11 +65,11 @@ end
 do
   local ok, th = pcall(require, "threading")
   if ok then
-    local nthreads = tonumber((arg and arg[1]) or os.getenv("LJ_M7_FFI_PIN_THREADS")) or 4
-    local iters = tonumber((arg and arg[2]) or os.getenv("LJ_M7_FFI_PIN_ITERS")) or 80
+    local harness = require"thread_harness"
+    local nthreads = harness.arg_number(1, "LJ_M7_FFI_PIN_THREADS", 4)
+    local iters = harness.arg_number(2, "LJ_M7_FFI_PIN_ITERS", 80)
     if nthreads > 0 and iters > 0 then
-      local ready = th.channel(nthreads)
-      local start = th.channel(nthreads)
+      local ready, start = harness.channels(nthreads)
       local workers = {}
 
       for tid = 1, nthreads do
@@ -109,20 +109,11 @@ do
 	  end
 	  return count
 	end, ready, start, tid, iters)
-	local _, is_ready = ready:recv(10)
-	assert(is_ready == true)
+	harness.wait_ready(ready, 1)
       end
 
-      for _ = 1, nthreads do
-	assert(start:send("go", 10) == true)
-      end
-
-      local total = 0
-      for tid = 1, nthreads do
-	local joined, result = workers[tid]:join(30)
-	assert(joined == true, tostring(result))
-	total = total + result
-      end
+      harness.release_start(start, nthreads)
+      local total = harness.join_count(workers)
       assert(total == nthreads * iters)
     end
   end
