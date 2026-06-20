@@ -364,11 +364,53 @@ static int lj_cf_package_unloadlib(lua_State *L)
 
 /* ------------------------------------------------------------------------ */
 
-static int readable(const char *filename)
+static int pkg_had_stopreq(lua_State *L)
 {
-  FILE *f = fopen(filename, "r");  /* try to open file */
-  if (f == NULL) return 0;  /* open failed */
-  fclose(f);
+  TGState *tg = L2TG(L);
+  return tg && (la_load8_acq(&tg->tg_flags) & TGF_STOPREQ);
+}
+
+static int pkg_fresh_stopreq(lua_State *L, uint32_t actions, int had_stopreq)
+{
+  TGState *tg = L2TG(L);
+  return (actions & LJ_GC2_HS_STOPREQ) ||
+    (!had_stopreq && tg && (la_load8_acq(&tg->tg_flags) & TGF_STOPREQ));
+}
+
+static FILE *pkg_native_fopen(lua_State *L, const char *filename,
+			      uint32_t *actionsp)
+{
+  FILE *f;
+  lj_native_enter(L2TG(L));
+  f = fopen(filename, "r");
+  *actionsp = lj_native_leave(L);
+  return f;
+}
+
+static uint32_t pkg_native_fclose(lua_State *L, FILE *f)
+{
+  uint32_t actions;
+  lj_native_enter(L2TG(L));
+  (void)fclose(f);
+  actions = lj_native_leave(L);
+  return actions;
+}
+
+static int readable(lua_State *L, const char *filename)
+{
+  uint32_t actions;
+  int had_stopreq = pkg_had_stopreq(L);
+  FILE *f = pkg_native_fopen(L, filename, &actions);  /* Try to open file. */
+  if (f == NULL) {
+    lj_safepoint_checkstop(L, actions);
+    return 0;  /* open failed */
+  }
+  if (pkg_fresh_stopreq(L, actions, had_stopreq)) {
+    uint32_t close_actions = pkg_native_fclose(L, f);
+    lj_safepoint_checkstop(L, actions | close_actions);
+  }
+  actions = pkg_native_fclose(L, f);
+  lj_safepoint_checkstop(L, actions);
   return 1;
 }
 
@@ -395,7 +437,7 @@ static const char *searchpath (lua_State *L, const char *name,
     const char *filename = luaL_gsub(L, lua_tostring(L, -1),
 				     LUA_PATH_MARK, name);
     lua_remove(L, -2);  /* remove path template */
-    if (readable(filename))  /* does file exist and is readable? */
+    if (readable(L, filename))  /* does file exist and is readable? */
       return filename;  /* return that file name */
     lua_pushfstring(L, "\n\tno file " LUA_QS, filename);
     lua_remove(L, -2);  /* remove file name */
