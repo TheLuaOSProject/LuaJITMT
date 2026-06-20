@@ -18,6 +18,8 @@
 #include "luajit.h"
 
 #include "lj_arch.h"
+#include "lj_safepoint.h"
+#include "lj_tg.h"
 
 #if LJ_TARGET_POSIX
 #include <unistd.h>
@@ -56,6 +58,53 @@ static lua_State *globalL = NULL;
 static const char *progname = LUA_PROGNAME;
 static char *empty_argv[2] = { NULL, NULL };
 
+/* -- Native-state stdio wrappers ---------------------------------------- */
+
+static void frontend_fwrite(lua_State *L, const void *p, size_t size,
+			    size_t n, FILE *fp)
+{
+  if (L) {
+    lj_native_enter(L2TG(L));
+    (void)fwrite(p, size, n, fp);
+    lj_safepoint_checkstop(L, lj_native_leave(L));
+  } else {
+    (void)fwrite(p, size, n, fp);
+  }
+}
+
+static void frontend_fputs(lua_State *L, const char *s, FILE *fp)
+{
+  frontend_fwrite(L, s, 1, strlen(s), fp);
+}
+
+static void frontend_fputc(lua_State *L, int c, FILE *fp)
+{
+  char ch = (char)c;
+  frontend_fwrite(L, &ch, 1, 1, fp);
+}
+
+static void frontend_fflush(lua_State *L, FILE *fp)
+{
+  if (L) {
+    lj_native_enter(L2TG(L));
+    (void)fflush(fp);
+    lj_safepoint_checkstop(L, lj_native_leave(L));
+  } else {
+    (void)fflush(fp);
+  }
+}
+
+static char *frontend_fgets(lua_State *L, char *buf, int size, FILE *fp)
+{
+  char *p;
+  if (!L)
+    return fgets(buf, size, fp);
+  lj_native_enter(L2TG(L));
+  p = fgets(buf, size, fp);
+  lj_safepoint_checkstop(L, lj_native_leave(L));
+  return p;
+}
+
 #if !LJ_TARGET_CONSOLE
 static void lstop(lua_State *L, lua_Debug *ar)
 {
@@ -75,11 +124,11 @@ static void laction(int i)
 }
 #endif
 
-static void print_usage(void)
+static void print_usage(lua_State *L)
 {
-  fputs("usage: ", stderr);
-  fputs(progname, stderr);
-  fputs(" [options]... [script [args]...].\n"
+  frontend_fputs(L, "usage: ", stderr);
+  frontend_fputs(L, progname, stderr);
+  frontend_fputs(L, " [options]... [script [args]...].\n"
   "Available options are:\n"
   "  -e chunk  Execute string " LUA_QL("chunk") ".\n"
   "  -l name   Require library " LUA_QL("name") ".\n"
@@ -91,7 +140,7 @@ static void print_usage(void)
   "  -E        Ignore environment variables.\n"
   "  --        Stop handling options.\n"
   "  -         Execute stdin and stop handling options.\n", stderr);
-  fflush(stderr);
+  frontend_fflush(L, stderr);
 }
 
 static void l_message(const char *msg)
@@ -101,7 +150,30 @@ static void l_message(const char *msg)
   fflush(stderr);
 }
 
+static void l_message_l(lua_State *L, const char *msg)
+{
+  if (progname) {
+    frontend_fputs(L, progname, stderr);
+    frontend_fputc(L, ':', stderr);
+    frontend_fputc(L, ' ', stderr);
+  }
+  frontend_fputs(L, msg, stderr);
+  frontend_fputc(L, '\n', stderr);
+  frontend_fflush(L, stderr);
+}
+
 static int report(lua_State *L, int status)
+{
+  if (status && !lua_isnil(L, -1)) {
+    const char *msg = lua_tostring(L, -1);
+    if (msg == NULL) msg = "(error object is not a string)";
+    l_message_l(L, msg);
+    lua_pop(L, 1);
+  }
+  return status;
+}
+
+static int report_raw(lua_State *L, int status)
 {
   if (status && !lua_isnil(L, -1)) {
     const char *msg = lua_tostring(L, -1);
@@ -144,9 +216,10 @@ static int docall(lua_State *L, int narg, int clear)
   return status;
 }
 
-static void print_version(void)
+static void print_version(lua_State *L)
 {
-  fputs(LUAJIT_VERSION " -- " LUAJIT_COPYRIGHT ". " LUAJIT_URL "\n", stdout);
+  frontend_fputs(L, LUAJIT_VERSION " -- " LUAJIT_COPYRIGHT ". " LUAJIT_URL "\n",
+		 stdout);
 }
 
 static void print_jit_status(lua_State *L)
@@ -160,12 +233,12 @@ static void print_jit_status(lua_State *L)
   lua_remove(L, -2);
   n = lua_gettop(L);
   lua_call(L, 0, LUA_MULTRET);
-  fputs(lua_toboolean(L, n) ? "JIT: ON" : "JIT: OFF", stdout);
+  frontend_fputs(L, lua_toboolean(L, n) ? "JIT: ON" : "JIT: OFF", stdout);
   for (n++; (s = lua_tostring(L, n)); n++) {
-    putc(' ', stdout);
-    fputs(s, stdout);
+    frontend_fputc(L, ' ', stdout);
+    frontend_fputs(L, s, stdout);
   }
-  putc('\n', stdout);
+  frontend_fputc(L, '\n', stdout);
   lua_settop(L, 0);  /* clear stack */
 }
 
@@ -205,8 +278,8 @@ static void write_prompt(lua_State *L, int firstline)
   lua_getfield(L, LUA_GLOBALSINDEX, firstline ? "_PROMPT" : "_PROMPT2");
   p = lua_tostring(L, -1);
   if (p == NULL) p = firstline ? LUA_PROMPT : LUA_PROMPT2;
-  fputs(p, stdout);
-  fflush(stdout);
+  frontend_fputs(L, p, stdout);
+  frontend_fflush(L, stdout);
   lua_pop(L, 1);  /* remove global */
 }
 
@@ -228,7 +301,7 @@ static int pushline(lua_State *L, int firstline)
 {
   char buf[LUA_MAXINPUT];
   write_prompt(L, firstline);
-  if (fgets(buf, LUA_MAXINPUT, stdin)) {
+  if (frontend_fgets(L, buf, LUA_MAXINPUT, stdin)) {
     size_t len = strlen(buf);
     if (len > 0 && buf[len-1] == '\n')
       buf[len-1] = '\0';
@@ -272,13 +345,13 @@ static void dotty(lua_State *L)
       lua_getglobal(L, "print");
       lua_insert(L, 1);
       if (lua_pcall(L, lua_gettop(L)-1, 0, 0) != 0)
-	l_message(lua_pushfstring(L, "error calling " LUA_QL("print") " (%s)",
-				  lua_tostring(L, -1)));
+	l_message_l(L, lua_pushfstring(L, "error calling " LUA_QL("print") " (%s)",
+				       lua_tostring(L, -1)));
     }
   }
   lua_settop(L, 0);  /* clear stack */
-  fputs("\n", stdout);
-  fflush(stdout);
+  frontend_fputc(L, '\n', stdout);
+  frontend_fflush(L, stdout);
   progname = oldprogname;
 }
 
@@ -325,7 +398,7 @@ static int loadjitmodule(lua_State *L)
   lua_getfield(L, -1, "start");
   if (lua_isnil(L, -1)) {
   nomodule:
-    l_message("unknown luaJIT command or jit.* modules not installed");
+    l_message_l(L, "unknown luaJIT command or jit.* modules not installed");
     return 1;
   }
   lua_remove(L, -2);  /* Drop module table. */
@@ -534,7 +607,7 @@ static int pmain(lua_State *L)
 
   argn = collectargs(argv, &flags);
   if (argn < 0) {  /* Invalid args? */
-    print_usage();
+    print_usage(L);
     s->status = 1;
     return 0;
   }
@@ -556,7 +629,7 @@ static int pmain(lua_State *L)
     if (s->status != LUA_OK) return 0;
   }
 
-  if ((flags & FLAGS_VERSION)) print_version();
+  if ((flags & FLAGS_VERSION)) print_version(L);
 
   s->status = runargs(L, argv, argn);
   if (s->status != LUA_OK) return 0;
@@ -571,7 +644,7 @@ static int pmain(lua_State *L)
     dotty(L);
   } else if (s->argc == argn && !(flags & (FLAGS_EXEC|FLAGS_VERSION))) {
     if (lua_stdin_is_tty()) {
-      print_version();
+      print_version(L);
       print_jit_status(L);
       dotty(L);
     } else {
@@ -594,8 +667,7 @@ int main(int argc, char **argv)
   smain.argc = argc;
   smain.argv = argv;
   status = lua_cpcall(L, pmain, NULL);
-  report(L, status);
+  report_raw(L, status);
   lua_close(L);
   return (status || smain.status > 0) ? EXIT_FAILURE : EXIT_SUCCESS;
 }
-
