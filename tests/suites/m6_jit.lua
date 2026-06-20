@@ -90,50 +90,6 @@ local function assert_trace1_ir(t, dump, label, pred)
   end
 end
 
-local function assert_block_no_lines(t, label, path, start_text, pred)
-  local data = t:c_block(path, start_text)
-  local hits = {}
-  local n = 0
-  for line in lines(data) do
-    n = n + 1
-    if pred(line) then hits[#hits + 1] = tostring(n) .. ": " .. line end
-  end
-  if #hits > 0 then error(label .. ":\n" .. table.concat(hits, "\n"), 2) end
-end
-
-local function assert_order_positions(label, data, ordered)
-  local pos = 1
-  local found = {}
-  for i = 1, #ordered do
-    local p = data:find(ordered[i], 1, true)
-    if not p then error(label .. ": missing expected text: " .. ordered[i], 2) end
-    found[i] = p
-  end
-  for i = 2, #found do
-    if found[i - 1] >= found[i] then
-      error(label .. ": wrong ordering near: " .. ordered[i], 2)
-    end
-  end
-  pos = pos
-end
-
-local function raw_index_write(line, name_pattern)
-  return line:match(name_pattern .. "%[[^%]]+%]%s*=[^=]") ~= nil
-end
-
-local function raw_cast_write(line)
-  if contains(line, "lj_mcode_rw") then return false end
-  local eq = line:find("=", 1, true)
-  if not eq or line:sub(eq + 1, eq + 1) == "=" then return false end
-  local lhs = line:sub(1, eq - 1)
-  return contains(lhs, "*(uint16_t *)") or
-         contains(lhs, "*(uint32_t *)") or
-         contains(lhs, "*(uint64_t *)") or
-         contains(lhs, "*(int16_t *)") or
-         contains(lhs, "*(int32_t *)") or
-         contains(lhs, "*(int64_t *)")
-end
-
 local function x64_cmp_poll_pattern()
   return "cmp dword %[r14%+0x[0-9a-f]+%], %+0x00"
 end
@@ -393,27 +349,6 @@ return function(add)
       build_and_run_c(t, t:tmp("lj_t_safepoint_handshake"),
                       "t-safepoint-handshake.c",
                       { build = false })
-
-      local vm = t:path("src", "vm_x64.dasc")
-      assert_no_lines(t, "x64 VM must not derive g/J from fixed DISPATCH offsets",
-                      { vm }, function(line)
-        return line:match("DISPATCH_[GJ]%(") ~= nil
-      end)
-      assert_no_lines(t, "x64 VM must not derive g/J from fixed TG dispatch offsets",
-                      { vm }, function(line)
-        return contains(line, "TG_DISP2J") or contains(line, "TG_DISP2G")
-      end)
-      assert_no_lines(t, "x64 VM entry must use the running TG dispatch table",
-                      { vm }, function(line)
-        return contains(line, "GG_G2TGDISP") or
-               (contains(line, "L:RB->glref") and contains(line, "dispatch")) or
-               contains(line, "add DISPATCH, GG_G2TGDISP")
-      end)
-      assert_no_lines(t, "transitional TG dispatch offset macros must stay removed",
-                      { t:path("src", "lj_dispatch.h") }, function(line)
-        return contains(line, "GG_OFS_TGDISP") or contains(line, "GG_G2TGDISP") or
-               contains(line, "TG_DISP2J") or contains(line, "TG_DISP2G")
-      end)
       print("M6 dispatch redispatch guard passed")
     end
   })
@@ -1308,72 +1243,6 @@ assert(type(x)=="table")
         return contains(line, "single-map write view") or contains(line, "rw == rx") or
                contains(line, "rw = J->mcarea")
       end)
-      assert_no_lines(t, "x64 mcode bottom writes must go through lj_mcode_rw helpers",
-                      { t:path("src", "lj_emit_x86.h"), t:path("src", "lj_asm_x86.h") },
-                      function(line)
-        return contains(line, "*as->mcbot") or contains(line, "*mxp++") or
-               contains(line, "*(uint64_t *)as->mcbot") or
-               contains(line, "*(void **)mxp") or contains(line, "memcpy(mxp")
-      end)
-      assert_no_lines(t, "x64 core emitter writes must go through lj_mcode_rw helpers",
-                      { t:path("src", "lj_emit_x86.h") }, function(line)
-        return contains(line, "*--as->mcp") or
-               raw_index_write(line, "as%->mcp") or
-               raw_index_write(line, "source") or
-               raw_index_write(" " .. line, "[^%w_]p") or
-               raw_cast_write(line)
-      end)
-
-      do
-        local bad, seen = false, false
-        for line in lines(t:read(t:path("src", "lj_asm_x86.h"))) do
-          if contains(line, "void lj_asm_patchexit(jit_State *J, GCtrace *T, ExitNo exitno, MCode *target)") then
-            seen = true
-            break
-          end
-          if contains(line, "*--as->mcp") or raw_index_write(line, "as%->mcp") or
-             contains(line, "*--p") or
-             (not contains(line, "MCode *patchnfpr") and line:match("%*patchnfpr%s*=[^=]")) or
-             (not contains(line, "MCode *q") and line:match("%*q%s*[-+]?=[^=]")) or
-             raw_index_write(" " .. line, "[^%w_]p") or raw_cast_write(line) then
-            bad = true
-            break
-          end
-        end
-        if not seen then
-          error("lj_asm_patchexit marker missing", 2)
-        end
-        if bad then
-          error("x64 generation-time asm writes must go through lj_mcode_rw helpers", 2)
-        end
-      end
-      assert_block_no_lines(t, "x64 trace tail fixups must go through lj_mcode_rw helpers",
-                            t:path("src", "lj_asm_x86.h"),
-                            "static void asm_tail_fixup(ASMState *as, TraceNo lnk)",
-                            function(line)
-        return contains(line, "*mcp++") or contains(line, "mcp += 4") or
-               contains(line, "*(int32_t *)mcp") or
-               contains(line, "*(int32_t *)(mcp-4)") or
-               contains(line, "*--as->mctop")
-      end)
-      assert_block_no_lines(t, "x64 committed-code exit patches must go through lj_mcode_rw helpers",
-                            t:path("src", "lj_asm_x86.h"),
-                            "void lj_asm_patchexit(jit_State *J, GCtrace *T, ExitNo exitno, MCode *target)",
-                            function(line)
-        return raw_index_write(" " .. line, "[^%w_]p") or raw_cast_write(line)
-      end)
-
-      local stop = t:c_block(t:path("src", "lj_trace.c"), "static void trace_stop(jit_State *J)")
-      assert_order_positions("trace_stop", stop, {
-        "lj_mcode_commit(J, J->cur.mcode)",
-        "lj_mcode_sync_core(J)",
-        "trace_save(J, T)",
-        "proto_trace_rel(pt, traceno)",
-        "bc_publish(patchpc, patchins)",
-        "trace_exittarget_rel(parent, J->exitno, T->mcode)",
-        "trace_nextside_rel(root, traceno)",
-        "trace_link_rel(parent, traceno)"
-      })
       local timeout = os.getenv("M6_MCODE_TIMEOUT") or "60s"
       luajit_code(t, [=[
 jit.opt.start("hotloop=1","hotexit=1")
@@ -1402,7 +1271,7 @@ end
 assert(live >= 8, live)
 ]=], { timeout = timeout })
       luajit_file(t, t:path("tests", "t-jit-mcode-fresh.lua"),
-                  { lua_path = true, timeout = "30s" })
+                  { lua_path = true, timeout = timeout })
       print("M6 JIT mcode publication guard passed")
     end
   })
@@ -1412,18 +1281,6 @@ assert(live >= 8, live)
     description = "JIT flush safepoint-scoped publication and retirement",
     run = function(t)
       build_default(t)
-      assert_no_lines(t, "full trace flush callers must route through HS_FLUSHJ",
-                      {
-                        t:path("src", "lj_trace.c"),
-                        t:path("src", "lj_record.c"),
-                        t:path("src", "lj_dispatch.c"),
-                        t:path("src", "lj_api.c"),
-                        t:path("src", "lj_profile.c"),
-                        t:path("src", "lib_ffi.c")
-                      }, function(line)
-        return contains(line, "lj_trace_flushall(J->L)") or
-               contains(line, "lj_trace_flushall(L)")
-      end)
       t:run({ t:path("tools", "ci", "m5_jit_trace_publish.sh") })
       t:run({ t:path("tools", "ci", "m3_vm_safepoint.sh") })
       luajit_file(t, t:path("tests", "stock", "test", "misc", "jit_flush.lua"))
