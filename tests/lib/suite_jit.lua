@@ -143,6 +143,23 @@ function M.run_ir_dump_probe(t, dump, script, opts)
     stderr = opts.stderr == nil and false or opts.stderr,
     quiet = opts.quiet
   })
+  return dump
+end
+
+function M.ir_dump_probe(t, name, script, opts)
+  return M.run_ir_dump_probe(t, t:tmp(name), script, opts)
+end
+
+function M.assert_ir_dump_probe_contains(t, name, script, needle, label, opts)
+  local dump = M.ir_dump_probe(t, name, script, opts)
+  utils.assert_dump_contains(t, dump, needle, label)
+  return dump
+end
+
+function M.assert_ir_dump_probe_all_contains(t, name, script, needles, label, opts)
+  local dump = M.ir_dump_probe(t, name, script, opts)
+  utils.assert_dump_all_contains(t, dump, needles, label)
+  return dump
 end
 
 return M

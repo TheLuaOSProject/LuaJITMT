@@ -9,12 +9,14 @@ local count_match = utils.count_match
 local lines = utils.iter_lines
 local assert_dump_contains = utils.assert_dump_contains
 local assert_dump_match = utils.assert_dump_match
-local assert_dump_all_contains = utils.assert_dump_all_contains
 local assert_trace1_ir = jitutils.assert_trace1_ir
 local x64_cmp_poll_pattern = jitutils.x64_cmp_poll_pattern
 local assert_loop_ir_markers = jitutils.assert_loop_ir_markers
 local assert_loop_after_xpoll = jitutils.assert_loop_after_xpoll
 local assert_call_after_loop_polls = jitutils.assert_call_after_loop_polls
+local run_ir_dump_probe = jitutils.run_ir_dump_probe
+local assert_ir_dump_probe_contains = jitutils.assert_ir_dump_probe_contains
+local assert_ir_dump_probe_all_contains = jitutils.assert_ir_dump_probe_all_contains
 local luajit_code = runtime.luajit_code
 local luajit_file = runtime.luajit_file
 local luajit_dump = runtime.luajit_dump
@@ -570,35 +572,35 @@ assert(uv==vals[64])
     run = function(t)
       build_default(t)
       local copy_dump = t:tmp("lj-m6-xbar-copy-ir.dump")
-      luajit_dump(t, copy_dump, "-jdump=ir", [=[
+      run_ir_dump_probe(t, copy_dump, [=[
 local ffi = require("ffi")
 local dst = ffi.new("uint8_t[512]")
 local src = ffi.new("uint8_t[512]")
 jit.opt.start("hotloop=1", "hotexit=1")
 for i = 1, 80 do ffi.copy(dst, src, 512) end
-]=], { timeout = "20s" })
+]=])
       assert_loop_after_xpoll(t, copy_dump, "FFI copy XBAR loop",
                               { "CALLS  memcpy", "XBAR" })
 
       local load_dump = t:tmp("lj-m6-xbar-xload-ir.dump")
-      luajit_dump(t, load_dump, "-jdump=ir", [=[
+      run_ir_dump_probe(t, load_dump, [=[
 local ffi = require("ffi")
 local a = ffi.new("int[256]")
 jit.opt.start("hotloop=1", "hotexit=1")
 local s = 0
 for i = 1, 120 do s = s + a[i % 128] end
 assert(s == 0)
-]=], { timeout = "20s" })
+]=])
       assert_loop_after_xpoll(t, load_dump, "FFI XLOAD loop", { "XLOAD" })
 
       local store_dump = t:tmp("lj-m6-xbar-xstore-ir.dump")
-      luajit_dump(t, store_dump, "-jdump=ir", [=[
+      run_ir_dump_probe(t, store_dump, [=[
 local ffi = require("ffi")
 local a = ffi.new("int[256]")
 jit.opt.start("hotloop=1", "hotexit=1")
 for i = 1, 120 do a[i % 128] = i end
 assert(a[119 % 128] == 119)
-]=], { timeout = "20s" })
+]=])
       assert_loop_after_xpoll(t, store_dump, "FFI XSTORE loop", { "XSTORE" })
       run_lua_test_case(t, "m5_jit_hash_store_nyi")
       print("M6 JIT XBAR/XPOLL alias guard passed")
@@ -614,8 +616,7 @@ assert(a[119 % 128] == 119)
                       "t-jit-forward-store.c", { build = false, timeout = "20s" })
       luajit_code(t, table_store_smoke())
 
-      local hash_ir = t:tmp("lj-m6-hstore-ir.dump")
-      luajit_dump(t, hash_ir, "-jdump=ir", [=[
+      assert_ir_dump_probe_all_contains(t, "lj-m6-hstore-ir.dump", [=[
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1", "-sink")
 local util = require("jit.util")
@@ -631,12 +632,9 @@ end
 local out = run(40)
 assert(out.stable == 40)
 assert(util.traceinfo(1), "trace-local hash store did not trace")
-]=])
-      assert_dump_all_contains(t, hash_ir, { "TDUP", "HSTORE", "XPOLL" },
-                               "trace-local hash store")
+]=], { "TDUP", "HSTORE", "XPOLL" }, "trace-local hash store")
 
-      local new_hash_ir = t:tmp("lj-m6-new-hstore-ir.dump")
-      luajit_dump(t, new_hash_ir, "-jdump=ir", [=[
+      assert_ir_dump_probe_all_contains(t, "lj-m6-new-hstore-ir.dump", [=[
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
 local util = require("jit.util")
@@ -652,12 +650,9 @@ end
 local out = run(40)
 assert(out.stable == 40)
 assert(util.traceinfo(1), "trace-local new hash store did not trace")
-]=])
-      assert_dump_all_contains(t, new_hash_ir, { "TNEW", "NEWREF", "HSTORE", "XPOLL" },
-                               "trace-local new hash store")
+]=], { "TNEW", "NEWREF", "HSTORE", "XPOLL" }, "trace-local new hash store")
 
-      local old_nil_hash_ir = t:tmp("lj-m6-oldnil-hstore-ir.dump")
-      luajit_dump(t, old_nil_hash_ir, "-jdump=ir", [=[
+      assert_ir_dump_probe_all_contains(t, "lj-m6-oldnil-hstore-ir.dump", [=[
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
 local util = require("jit.util")
@@ -669,12 +664,9 @@ for i = 1, 80 do
 end
 assert(h.stable == nil)
 assert(util.traceinfo(1), "previous-nil hash store did not trace")
-]=])
-      assert_dump_all_contains(t, old_nil_hash_ir, { "HSTORE", "TBAR", "XPOLL" },
-                               "previous-nil hash store")
+]=], { "HSTORE", "TBAR", "XPOLL" }, "previous-nil hash store")
 
-      local array_ir = t:tmp("lj-m6-astore-ir.dump")
-      luajit_dump(t, array_ir, "-jdump=ir", [=[
+      assert_ir_dump_probe_all_contains(t, "lj-m6-astore-ir.dump", [=[
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1", "-sink")
 local util = require("jit.util")
@@ -690,12 +682,9 @@ end
 local out = run(40)
 assert(out[1] == 40)
 assert(util.traceinfo(1), "trace-local array store did not trace")
-]=])
-      assert_dump_all_contains(t, array_ir, { "TDUP", "ASTORE", "XPOLL" },
-                               "trace-local array store")
+]=], { "TDUP", "ASTORE", "XPOLL" }, "trace-local array store")
 
-      local new_array_ir = t:tmp("lj-m6-new-array-hstore-ir.dump")
-      luajit_dump(t, new_array_ir, "-jdump=ir", [=[
+      assert_ir_dump_probe_all_contains(t, "lj-m6-new-array-hstore-ir.dump", [=[
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
 local util = require("jit.util")
@@ -711,8 +700,7 @@ end
 local out = run(40)
 assert(out[1] == 40)
 assert(util.traceinfo(1), "trace-local new numeric store did not trace")
-]=])
-      assert_dump_all_contains(t, new_array_ir, { "TNEW", "NEWREF", "HSTORE", "XPOLL" },
+]=], { "TNEW", "NEWREF", "HSTORE", "XPOLL" },
                                "trace-local new numeric store")
 
       luajit_code(t, [=[
@@ -729,8 +717,7 @@ end
 assert(util.traceinfo(1), "numeric NEWREF append did not trace")
 ]=])
 
-      local old_nil_array_ir = t:tmp("lj-m6-oldnil-astore-ir.dump")
-      luajit_dump(t, old_nil_array_ir, "-jdump=ir", [=[
+      assert_ir_dump_probe_all_contains(t, "lj-m6-oldnil-astore-ir.dump", [=[
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
 local util = require("jit.util")
@@ -741,12 +728,9 @@ for i = 1, 80 do
 end
 assert(a[2] == nil)
 assert(util.traceinfo(1), "previous-nil array store did not trace")
-]=])
-      assert_dump_all_contains(t, old_nil_array_ir, { "ASTORE", "XPOLL" },
-                               "previous-nil array store")
+]=], { "ASTORE", "XPOLL" }, "previous-nil array store")
 
-      local shared_hash_ir = t:tmp("lj-m6-shared-hstore-ir.dump")
-      luajit_dump(t, shared_hash_ir, "-jdump=ir", [=[
+      assert_ir_dump_probe_all_contains(t, "lj-m6-shared-hstore-ir.dump", [=[
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
 local util = require("jit.util")
@@ -756,12 +740,9 @@ for i = 1, 80 do
 end
 assert(h.stable == 80)
 assert(util.traceinfo(1), "shared existing hash store did not trace")
-]=])
-      assert_dump_all_contains(t, shared_hash_ir, { "HSTORE", "XPOLL" },
-                               "shared existing hash store")
+]=], { "HSTORE", "XPOLL" }, "shared existing hash store")
 
-      local shared_array_ir = t:tmp("lj-m6-shared-astore-ir.dump")
-      luajit_dump(t, shared_array_ir, "-jdump=ir", [=[
+      assert_ir_dump_probe_all_contains(t, "lj-m6-shared-astore-ir.dump", [=[
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
 local util = require("jit.util")
@@ -771,9 +752,7 @@ for i = 1, 80 do
 end
 assert(a[1] == 80)
 assert(util.traceinfo(1), "shared existing array store did not trace")
-]=])
-      assert_dump_all_contains(t, shared_array_ir, { "ASTORE", "XPOLL" },
-                               "shared existing array store")
+]=], { "ASTORE", "XPOLL" }, "shared existing array store")
       print("M6 JIT table-store helper behavior passed")
     end
   })
@@ -1017,17 +996,14 @@ assert(seen == 80)
       build_and_run_c(t, t:tmp("lj_t-gc2-jit-hard-check"),
                       "t-gc2-jit-hard-check.c", { build = false, timeout = "20s" })
 
-      local tnew = t:tmp("lj_t-jit-gc2-readiness-tnew.dump")
-      luajit_dump(t, tnew, "-jdump=ir", [=[
+      assert_ir_dump_probe_all_contains(t, "lj_t-jit-gc2-readiness-tnew.dump", [=[
 jit.opt.start("hotloop=1","hotexit=1")
 local x
 for i=1,100 do x={} end
 assert(type(x)=="table")
-]=], { timeout = "20s" })
-      assert_dump_all_contains(t, tnew, { "TNEW", "XPOLL", "GCSTEP" }, "TNEW readiness")
+]=], { "TNEW", "XPOLL", "GCSTEP" }, "TNEW readiness")
 
-      local cnew = t:tmp("lj_t-jit-gc2-readiness-cnew.dump")
-      luajit_dump(t, cnew, "-jdump=ir", [=[
+      assert_ir_dump_probe_all_contains(t, "lj_t-jit-gc2-readiness-cnew.dump", [=[
 local ffi=require("ffi")
 ffi.cdef("typedef struct { int x; } lj_gc2_dump_cnew_t;")
 local ct=ffi.typeof("lj_gc2_dump_cnew_t")
@@ -1035,18 +1011,15 @@ jit.opt.start("hotloop=1","hotexit=1","-sink")
 local x
 for i=1,100 do x=ct(i) end
 assert(x.x==100)
-]=], { timeout = "20s" })
-      assert_dump_all_contains(t, cnew, { "CNEW", "XPOLL" }, "CNEW readiness")
+]=], { "CNEW", "XPOLL" }, "CNEW readiness")
 
-      local snew = t:tmp("lj_t-jit-gc2-readiness-snew.dump")
-      luajit_dump(t, snew, "-jdump=ir", [=[
+      assert_ir_dump_probe_all_contains(t, "lj_t-jit-gc2-readiness-snew.dump", [=[
 jit.opt.start("hotloop=1","hotexit=1","-sink")
 local s="abcdef"
 local x
 for i=1,100 do x=string.sub(s,1,3) end
 assert(x=="abc")
-]=], { timeout = "20s" })
-      assert_dump_all_contains(t, snew, { "SNEW", "XPOLL" }, "SNEW readiness")
+]=], { "SNEW", "XPOLL" }, "SNEW readiness")
       print("M6 JIT GC2 readiness behavior passed")
     end
   })
@@ -1056,14 +1029,12 @@ assert(x=="abc")
     description = "legacy JIT GC-step pacing behavior",
     run = function(t)
       build_default(t)
-      local dump = t:tmp("lj_t-jit-gcstep.dump")
-      luajit_dump(t, dump, "-jdump=ir", [=[
+      assert_ir_dump_probe_contains(t, "lj_t-jit-gcstep.dump", [=[
 jit.opt.start("hotloop=1","hotexit=1")
 local x
 for i=1,100 do x={} end
 assert(type(x)=="table")
-]=], { timeout = "20s" })
-      assert_dump_contains(t, dump, "GCSTEP", "sunk allocation replay")
+]=], "GCSTEP", "sunk allocation replay")
       luajit_file(t, t:path("tests", "stock", "test", "misc", "gcstep.lua"),
                   { timeout = "20s" })
       print("M6 JIT GC-step behavior passed")
