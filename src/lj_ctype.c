@@ -238,7 +238,7 @@ static GCtab *ctype_fin_tab_new_l(lua_State *L, uint32_t hbits)
   TValue *anchor = L->top;
   GCtab *t = lj_tab_new(L, 0, hbits);
   settabV(L, L->top++, t);
-  setgcrefmt(t->metatable, obj2gco(t));
+  fin_gen_tab_enable_rel(t);
   ctype_storestr_str(L, t, lj_str_newlit(L, "__mode"), lj_str_newlit(L, "k"));
   t->nomm = (uint8_t)(~(1u<<MM_mode));
   lj_gc_pubtab(L, t);
@@ -332,7 +332,7 @@ cTValue *lj_ctype_fin_get(lua_State *L, CTState *cts, cTValue *key,
        gen != NULL;
        gen = fin_gen_next_acq(gen)) {
     GCtab *t = fin_gen_tab_acq(gen);
-    if (!t || !gcref_acq(t->metatable))
+    if (!t || !fin_gen_tab_enabled_acq(t))
       continue;
     cTValue *tv = lj_tab_get(L, t, key);
     if (tv != niltv(L)) {
@@ -383,7 +383,7 @@ int lj_ctype_fin_newgen(lua_State *L, CTState *cts, cTValue *key,
     if (headtab)
       (void)lj_tab_node_snapshot_acq(headtab, &hmask);
     hbits = hmask > 0 ? lj_fls((uint32_t)hmask) + 2u : 1u;
-    if (headtab && !gcref_acq(headtab->metatable))
+    if (headtab && !fin_gen_tab_enabled_acq(headtab))
       return 0;
     while (ctype_fin_has_claim(cts, claim))
       la_cpu_pause();
@@ -414,7 +414,7 @@ int lj_ctype_fin_istab(global_State *g, GCtab *t)
        gen != NULL;
        gen = fin_gen_next_acq(gen)) {
     GCtab *ft = fin_gen_tab_acq(gen);
-    if (ft == t && ft && gcref_acq(ft->metatable))
+    if (ft == t && ft && fin_gen_tab_enabled_acq(ft))
       return 1;
   }
   return 0;

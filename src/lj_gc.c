@@ -1785,7 +1785,7 @@ static size_t gc_queue_cdata_finalizers_pweak_ordered(lua_State *L,
       continue;
     }
     la_add64_rlx(&g->gc2.finreg_cdata_order_seen, 1);
-    if (!t || !slot || !gcref_acq(t->metatable)) {
+    if (!t || !slot || !fin_gen_tab_enabled_acq(t)) {
       la_add64_rlx(&g->gc2.finreg_cdata_order_tombstones, 1);
       (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
       ord = next;
@@ -1896,7 +1896,7 @@ static size_t gc_separate_cdata_finalizers_ordered(global_State *g)
       ord = next;
       continue;
     }
-    if (!t || !slot || !gcref_acq(t->metatable)) {
+    if (!t || !slot || !fin_gen_tab_enabled_acq(t)) {
       (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
       ord = next;
       continue;
@@ -1962,7 +1962,7 @@ static int gc_cdata_fin_pending_ordered(global_State *g, CTState *cts)
       ord = next;
       continue;
     }
-    if (!t || !slot || !gcref_acq(t->metatable)) {
+    if (!t || !slot || !fin_gen_tab_enabled_acq(t)) {
       (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
       ord = next;
       continue;

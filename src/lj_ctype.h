@@ -201,6 +201,16 @@ static LJ_AINLINE void fin_gen_tab_rel(FinRegGen *gen, GCtab *tab)
   la_storeptr_rel((void **)&gen->tab, tab);
 }
 
+static LJ_AINLINE void fin_gen_tab_enable_rel(GCtab *tab)
+{
+  setgcrefmt(tab->metatable, obj2gco(tab));
+}
+
+static LJ_AINLINE int fin_gen_tab_enabled_acq(const GCtab *tab)
+{
+  return gcref_acq(tab->metatable) != NULL;
+}
+
 static LJ_AINLINE void fin_gen_tab_disable_rel(GCtab *tab)
 {
   setgcrefnullrel(tab->metatable);
