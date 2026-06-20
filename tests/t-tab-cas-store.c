@@ -374,6 +374,51 @@ static void exercise_tsetm_helper_forward_retry(lua_State *L)
   lj_tab_array_hdr_flags_or_rel(oldarray, TABARRAY_FLAG_RETIRING);
 }
 
+static void exercise_tsetm_helper_current_retiring(lua_State *L)
+{
+  GCtab *t;
+  TValue *oldarray, *newarray;
+  TValue src[3], oldval;
+  MSize oldasize, newasize;
+  int32_t start = 5;
+  MSize i;
+
+  lua_settop(L, 0);
+  lua_createtable(L, LJ_MAX_COLOSIZE + 16, 0);
+  t = tabV(L->top-1);
+  assert(lj_tab_array_separated(t));
+  oldarray = lj_tab_array_acq(t);
+  oldasize = lj_tab_asize_acq(t);
+  assert((MSize)(start + 2) < oldasize);
+  for (i = 0; i < oldasize; i++)
+    lj_tab_storeint(L, lj_tab_setint(L, t, (int32_t)i), (int32_t)i + 7000);
+
+  lj_tab_resize(L, t, (uint32_t)oldasize + 8u, 0);
+  newarray = lj_tab_array_acq(t);
+  newasize = lj_tab_asize_acq(t);
+  assert(newarray != oldarray);
+  assert(lj_tab_array_nextgen_acq(oldarray) == newarray);
+  assert(lj_tab_array_is_retiring(t, oldarray));
+
+  lj_tab_array_rel(t, oldarray);
+  lj_tab_asize_rel(t, oldasize);
+
+  setintV(&src[0], 8181);
+  setintV(&src[1], 8282);
+  setintV(&src[2], 8383);
+  lj_tab_storetvn_forvm_array(L, t, (uint32_t)start, src, 3);
+  for (i = 0; i < 3; i++) {
+    lj_tv_load_acq(&oldval, &oldarray[start + i]);
+    tabfwd_assert_i32(&oldval, start + (int32_t)i + 7000);
+  }
+  tabfwd_assert_i32(&newarray[start], 8181);
+  tabfwd_assert_i32(&newarray[start + 1], 8282);
+  tabfwd_assert_i32(&newarray[start + 2], 8383);
+
+  lj_tab_array_rel(t, newarray);
+  lj_tab_asize_rel(t, newasize);
+}
+
 static void exercise_tsetm_helper_post_barrier(lua_State *L)
 {
   global_State *g = G(L);
@@ -465,6 +510,7 @@ int main(void)
   exercise_capi_setfield_forward_retry(L);
   exercise_table_insert_forward_retry(L);
   exercise_tsetm_helper_forward_retry(L);
+  exercise_tsetm_helper_current_retiring(L);
   exercise_tsetm_helper_post_barrier(L);
   exercise_luaL_newmetatable_forward_retry(L);
 

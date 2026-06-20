@@ -1732,13 +1732,37 @@ static int tab_tsetm_barrier_needed(lua_State *L, GCtab *parent)
   return (tg && la_load32_acq(&tg->mark_active)) || isblack(obj2gco(parent));
 }
 
+static TValue *tab_current_vm_array_key_slot(lua_State *L, GCtab *parent,
+					     MSize key)
+{
+  TValue *array;
+  MSize asize;
+  asize = lj_tab_asize_acq(parent);
+  array = lj_tab_array_acq(parent);
+  if (array && !lj_tab_array_is_colocated(parent, array)) {
+    asize = lj_tab_array_hdr_asize_acq(array);
+    if (lj_tab_array_is_retiring(parent, array)) {
+      TValue *next = array;
+      MSize nextasize = asize;
+      if (lj_tab_array_forward_hop(parent, &next, &nextasize)) {
+	if (key < nextasize)
+	  return &next[key];
+	return lj_tab_setinth(L, parent, (int32_t)key);
+      }
+    }
+  }
+  if (array && key < asize)
+    return tab_current_jit_array_slot(L, parent, &array[key], key);
+  return lj_tab_setint(L, parent, (int32_t)key);
+}
+
 static void tab_tsetm_barrier_range(lua_State *L, GCtab *parent, uint32_t start,
 				    uint32_t n)
 {
   global_State *g = G(L);
   uint32_t i;
   for (i = 0; i < n; i++) {
-    TValue *dst = lj_tab_setint(L, parent, (int32_t)(start + i));
+    TValue *dst = tab_current_vm_array_key_slot(L, parent, (MSize)(start + i));
     lj_gc2_barrier_tv_pair_g(g, obj2gco(parent), dst);
   }
   lj_gc2_barrier_tab(L, parent);  /* Preserve the previous TSETM table barrier. */
@@ -1746,7 +1770,7 @@ static void tab_tsetm_barrier_range(lua_State *L, GCtab *parent, uint32_t start,
     return;
   for (i = 0; i < n; i++) {
     TValue snap;
-    TValue *dst = lj_tab_setint(L, parent, (int32_t)(start + i));
+    TValue *dst = tab_current_vm_array_key_slot(L, parent, (MSize)(start + i));
     lj_tv_load_acq(&snap, dst);
     if (tviswhite(&snap)) {
       lj_gc_barrierback(g, parent);
@@ -1765,7 +1789,7 @@ LJ_FUNCA void lj_tab_storetvn_forvm_array(lua_State *L, GCtab *parent,
   for (i = 0; i < n; i++) {
     TValue *dst;
     for (;;) {
-      dst = lj_tab_setint(L, parent, (int32_t)(start + i));
+      dst = tab_current_vm_array_key_slot(L, parent, (MSize)(start + i));
       if (lj_tab_trystoretv_cas(L, dst, &src[i]) == LJ_TAB_STORE_CAS_OK)
 	break;
       la_cpu_pause();  /* VM TSETM saw FORWARD after range-fit routing. */
