@@ -1690,6 +1690,18 @@ static LJ_AINLINE void gc2_finreg_udata_obj_clear(GC2FinRegUDataNode *node)
   setgcrefnullrel(node->obj);
 }
 
+static LJ_AINLINE GC2FinRegUDataNode *
+gc2_finreg_udata_next_acq(const GC2FinRegUDataNode *node)
+{
+  return (GC2FinRegUDataNode *)la_loadptr_acq((void *const *)&node->next);
+}
+
+static LJ_AINLINE void gc2_finreg_udata_next_rel(GC2FinRegUDataNode *node,
+						 GC2FinRegUDataNode *next)
+{
+  la_storeptr_rel((void **)&node->next, next);
+}
+
 static LJ_AINLINE void lj_obj_setgcwrel(GCobj *o, const GCobj *next)
 {
   setgcrefrel(o->gch.nextgc, next);

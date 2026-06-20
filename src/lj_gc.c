@@ -826,8 +826,7 @@ static size_t gc_separateudata_registered(global_State *g, int all)
   for (node = (GC2FinRegUDataNode *)la_loadptr_acq(
 	 (void *const *)&g->gc2.finreg_udata_head);
        node != NULL;
-       node = (GC2FinRegUDataNode *)la_loadptr_acq(
-	 (void *const *)&node->next)) {
+       node = gc2_finreg_udata_next_acq(node)) {
     GCobj *o = gc2_finreg_udata_obj_acq(node);
     uint8_t flags;
     int finreg;

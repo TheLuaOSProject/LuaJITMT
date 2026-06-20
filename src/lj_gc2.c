@@ -302,7 +302,7 @@ void lj_gc2_fini(global_State *g)
     GC2FinRegUDataNode *node = (GC2FinRegUDataNode *)
       la_xchgptr_acqrel((void **)&g->gc2.finreg_udata_head, NULL);
     while (node) {
-      GC2FinRegUDataNode *next = node->next;
+      GC2FinRegUDataNode *next = gc2_finreg_udata_next_acq(node);
       lj_mem_freet(g, node);
       node = next;
     }
@@ -2516,8 +2516,7 @@ void lj_gc2_finreg_udata_register(lua_State *L, global_State *g, GCobj *o)
   for (node = (GC2FinRegUDataNode *)la_loadptr_acq(
 	 (void *const *)&g->gc2.finreg_udata_head);
        node != NULL;
-       node = (GC2FinRegUDataNode *)la_loadptr_acq(
-	 (void *const *)&node->next)) {
+       node = gc2_finreg_udata_next_acq(node)) {
     if (gc2_finreg_udata_obj_acq(node) == o)
       return;
   }
@@ -2526,7 +2525,7 @@ void lj_gc2_finreg_udata_register(lua_State *L, global_State *g, GCobj *o)
   do {
     head = (GC2FinRegUDataNode *)la_loadptr_acq(
       (void *const *)&g->gc2.finreg_udata_head);
-    node->next = head;
+    gc2_finreg_udata_next_rel(node, head);
   } while (!la_casptr((void **)&g->gc2.finreg_udata_head, (void **)&head,
 		      node, LA_ACQ_REL, LA_ACQ));
   la_add64_rlx(&g->gc2.finreg_udata_registered, 1);
@@ -2552,8 +2551,7 @@ void lj_gc2_finreg_udata_forget(global_State *g, GCobj *o)
   for (node = (GC2FinRegUDataNode *)la_loadptr_acq(
 	 (void *const *)&g->gc2.finreg_udata_head);
        node != NULL;
-       node = (GC2FinRegUDataNode *)la_loadptr_acq(
-	 (void *const *)&node->next)) {
+       node = gc2_finreg_udata_next_acq(node)) {
     if (gc2_finreg_udata_obj_acq(node) == o) {
       gc2_finreg_udata_obj_clear(node);
       cleared = 1;
