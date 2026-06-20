@@ -2,7 +2,9 @@
 
 - Added x64 DASC helper macros for table pointer/size reads:
   `x64_vm_tab_node_acq`, `x64_vm_tab_array_acq`,
-  `x64_vm_tab_asize_acq`, and `x64_vm_node_next_acq`.
+  `x64_vm_tab_asize_acq`, `x64_vm_tab_array_asize_acq`,
+  `x64_vm_tab_node_flags_acq`, `x64_vm_tab_node_hmask_acq`, and
+  `x64_vm_node_next_acq`.
 - Routed x64 VM fast-path table array/node and hash-chain link loads through
   those macros. On x86-64 this still lowers to the same `mov`, but the source
   now names the acquire-load contract used by the C helpers.
@@ -14,6 +16,9 @@
 - Follow-up: legacy `GCtab.asize` fallback loads in x64 table fast paths now
   use `x64_vm_tab_asize_acq`; the source guard rejects raw `->asize` loads
   outside the helper macro.
+- Follow-up: x64 table fast paths now load `TabArrayHdr.asize` and
+  `TabNodeHdr.flags/hmask` through named acquire helpers. The guard rejects
+  direct `TABARRAY_ASIZE_OFS`/`TABNODE_*_OFS` loads outside those macro bodies.
 - Validation:
   `tools/ci/m5_x64_table_next_snapshot.sh`,
   `tools/ci/lua_test.sh m5_x64_tget_array_header m5_x64_tgets_node_order m5_x64_getmetatable_node_order m5_x64_ipairs_snapshot m5_x64_itern_snapshot`,

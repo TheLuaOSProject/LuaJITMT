@@ -354,6 +354,15 @@
 |.macro x64_vm_tab_asize_acq, dst, tab
 |  mov dst, tab->asize		// x64_vm_tab_asize_acq: TSO acquire load.
 |.endmacro
+|.macro x64_vm_tab_array_asize_acq, dst, array
+|  mov dst, dword [array+TABARRAY_ASIZE_OFS]	// x64_vm_tab_array_asize_acq: TSO acquire load.
+|.endmacro
+|.macro x64_vm_tab_node_flags_acq, dst, node
+|  mov dst, dword [node+TABNODE_FLAGS_OFS]	// x64_vm_tab_node_flags_acq: TSO acquire load.
+|.endmacro
+|.macro x64_vm_tab_node_hmask_acq, dst, node
+|  mov dst, dword [node+TABNODE_HMASK_OFS]	// x64_vm_tab_node_hmask_acq: TSO acquire load.
+|.endmacro
 |.macro x64_vm_node_next_acq, dst, node
 |  mov dst, node->next		// x64_vm_node_next_acq: TSO acquire load.
 |.endmacro
@@ -1359,10 +1368,10 @@ static void build_subroutines(BuildCtx *ctx)
   |  load_G TMPR
   |  x64_vm_gcroot_acq STR:RC, TMPR, (GCROOT_MMNAME+MM_metatable)
   |  x64_vm_tab_node_acq r8, TAB:RB
-  |  mov r9d, dword [r8+TABNODE_FLAGS_OFS]
+  |  x64_vm_tab_node_flags_acq r9d, r8
   |  test r9d, TABNODE_FLAG_RETIRING
   |  jnz ->fff_fallback
-  |  mov RAd, dword [r8+TABNODE_HMASK_OFS]
+  |  x64_vm_tab_node_hmask_acq RAd, r8
   |  and RAd, STR:RC->sid
   |  settp STR:RC, LJ_TSTR
   |  imul RAd, #NODE
@@ -1558,7 +1567,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  test RD, RD; jz >3
   |  lea r8, [RB+TAB_COLO_SLOTS]
   |  cmp RD, r8; je >3
-  |  mov TMPRd, dword [RD+TABARRAY_ASIZE_OFS]
+  |  x64_vm_tab_array_asize_acq TMPRd, RD
   |3:
   |  cmp RAd, TMPRd;  jae >2		// Not in array part?
   |  lea RD, [RD+RA*8]
@@ -1592,10 +1601,11 @@ static void build_subroutines(BuildCtx *ctx)
   |  jmp ->fff_res
   |2:  // Check for empty hash part first. Otherwise call C function.
   |  x64_vm_tab_node_acq r8, TAB:RB
-  |  mov r9d, dword [r8+TABNODE_FLAGS_OFS]
+  |  x64_vm_tab_node_flags_acq r9d, r8
   |  test r9d, TABNODE_FLAG_RETIRING
   |  jnz >5
-  |  cmp dword [r8+TABNODE_HMASK_OFS], 0; je ->fff_res0
+  |  x64_vm_tab_node_hmask_acq r9d, r8
+  |  test r9d, r9d; je ->fff_res0
   |5:
   |.if X64WIN
   |  mov TMPR, BASE
@@ -2943,7 +2953,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  test r10, r10; jz >1
   |  lea NEXT_TMP, [NEXT_TAB+TAB_COLO_SLOTS]
   |  cmp r10, NEXT_TMP; je >1
-  |  mov NEXT_ASIZE, dword [r10+TABARRAY_ASIZE_OFS]
+  |  x64_vm_tab_array_asize_acq NEXT_ASIZE, r10
   |1:  // Traverse array part.
   |  cmp NEXT_IDX, NEXT_ASIZE;  jae >5
   |  mov NEXT_TMP, qword [r10+NEXT_IDX*8]
@@ -2976,10 +2986,10 @@ static void build_subroutines(BuildCtx *ctx)
   |  sub NEXT_IDX, NEXT_ASIZE
   |6:
   |  x64_vm_tab_node_acq r8, NEXT_TAB
-  |  mov r9d, dword [r8+TABNODE_FLAGS_OFS]
+  |  x64_vm_tab_node_flags_acq r9d, r8
   |  test r9d, TABNODE_FLAG_RETIRING
   |  jnz >3
-  |  mov r9d, dword [r8+TABNODE_HMASK_OFS]
+  |  x64_vm_tab_node_hmask_acq r9d, r8
   |  cmp NEXT_IDX, r9d; ja >9
   |  imul NEXT_PTRd, NEXT_IDX, #NODE
   |  add NODE:NEXT_PTR, r8
@@ -4182,7 +4192,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  test TMPR, TMPR; jz >3
     |  lea r8, [RB+TAB_COLO_SLOTS]
     |  cmp TMPR, r8; je >3
-    |  mov ITYPEd, dword [TMPR+TABARRAY_ASIZE_OFS]
+    |  x64_vm_tab_array_asize_acq ITYPEd, TMPR
     |3:
     |  cmp RCd, ITYPEd			// Takes care of unordered, too.
     |  jae ->vmeta_tgetv		// Not in array part? Use fallback.
@@ -4220,10 +4230,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  checktab TAB:RB, ->vmeta_tgets
     |->BC_TGETS_Z:	// RB = GCtab *, RC = GCstr *
     |  x64_vm_tab_node_acq r8, TAB:RB
-    |  mov r9d, dword [r8+TABNODE_FLAGS_OFS]
+    |  x64_vm_tab_node_flags_acq r9d, r8
     |  test r9d, TABNODE_FLAG_RETIRING
     |  jnz ->vmeta_tgets
-    |  mov TMPRd, dword [r8+TABNODE_HMASK_OFS]
+    |  x64_vm_tab_node_hmask_acq TMPRd, r8
     |  and TMPRd, STR:RC->sid
     |  imul TMPRd, #NODE
     |  add NODE:TMPR, r8
@@ -4266,7 +4276,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  test TMPR, TMPR; jz >3
     |  lea r8, [RB+TAB_COLO_SLOTS]
     |  cmp TMPR, r8; je >3
-    |  mov ITYPEd, dword [TMPR+TABARRAY_ASIZE_OFS]
+    |  x64_vm_tab_array_asize_acq ITYPEd, TMPR
     |3:
     |  cmp RCd, ITYPEd
     |  jae ->vmeta_tgetb
@@ -4305,7 +4315,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  test TMPR, TMPR; jz >3
     |  lea r8, [RB+TAB_COLO_SLOTS]
     |  cmp TMPR, r8; je >3
-    |  mov ITYPEd, dword [TMPR+TABARRAY_ASIZE_OFS]
+    |  x64_vm_tab_array_asize_acq ITYPEd, TMPR
     |3:
     |  cmp RCd, ITYPEd
     |  jae ->vmeta_tgetr		// Not in array part? Use fallback.
@@ -4352,7 +4362,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  test TMPR, TMPR; jz >4
     |  lea r8, [RB+TAB_COLO_SLOTS]
     |  cmp TMPR, r8; je >4
-    |  mov ITYPEd, dword [TMPR+TABARRAY_ASIZE_OFS]
+    |  x64_vm_tab_array_asize_acq ITYPEd, TMPR
     |4:
     |  cmp RCd, ITYPEd		// Takes care of unordered, too.
     |  jae ->vmeta_tsetv
@@ -4432,7 +4442,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  test TMPR, TMPR; jz >4
     |  lea r8, [RB+TAB_COLO_SLOTS]
     |  cmp TMPR, r8; je >4
-    |  mov ITYPEd, dword [TMPR+TABARRAY_ASIZE_OFS]
+    |  x64_vm_tab_array_asize_acq ITYPEd, TMPR
     |4:
     |  cmp RCd, ITYPEd
     |  jae ->vmeta_tsetb
@@ -4504,7 +4514,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  test TMPR, TMPR; jz >3
     |  lea r8, [RB+TAB_COLO_SLOTS]
     |  cmp TMPR, r8; je >3
-    |  mov ITYPEd, dword [TMPR+TABARRAY_ASIZE_OFS]
+    |  x64_vm_tab_array_asize_acq ITYPEd, TMPR
     |3:
     |  mov r9d, RCd
     |  mov TMP1d, r9d
@@ -4604,7 +4614,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  test ITYPE, ITYPE; jz >3
     |  lea r9, [RB+TAB_COLO_SLOTS]
     |  cmp ITYPE, r9; je >3
-    |  mov r8d, dword [ITYPE+TABARRAY_ASIZE_OFS]
+    |  x64_vm_tab_array_asize_acq r8d, ITYPE
     |3:
     |  cmp RDd, r8d
     |  ja >5				// Doesn't fit into array part?
@@ -4745,7 +4755,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  test ITYPE, ITYPE; jz >1
     |  lea r8, [RB+TAB_COLO_SLOTS]
     |  cmp ITYPE, r8; je >1
-    |  mov TMPRd, dword [ITYPE+TABARRAY_ASIZE_OFS]
+    |  x64_vm_tab_array_asize_acq TMPRd, ITYPE
     |1:  // Traverse array part.
     |  cmp RCd, TMPRd; jae >5		// Index points after array part?
     |  mov r8, [ITYPE+RC*8]
@@ -4800,10 +4810,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  sub RCd, TMPRd
     |6:
     |  x64_vm_tab_node_acq r8, TAB:RB
-    |  mov r9d, dword [r8+TABNODE_FLAGS_OFS]
+    |  x64_vm_tab_node_flags_acq r9d, r8
     |  test r9d, TABNODE_FLAG_RETIRING
     |  jnz >9
-    |  mov r9d, dword [r8+TABNODE_HMASK_OFS]
+    |  x64_vm_tab_node_hmask_acq r9d, r8
     |  cmp RCd, r9d; ja <3	// End of iteration? Branch to ITERL+1.
     |  imul ITYPEd, RCd, #NODE
     |  add NODE:ITYPE, r8
