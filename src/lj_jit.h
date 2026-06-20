@@ -775,7 +775,6 @@ typedef struct jit_State {
   TraceVec *tracev;	/* RCU-published trace vector. */
   TraceVec *retiredtracev;  /* Retired trace vectors awaiting SMR. */
   GCtrace *retiredtraces;  /* Retired trace bodies awaiting SMR. */
-  GCRef *trace;		/* Token-held trace slot mirror. */
   TraceNo freetrace;	/* Start of scan for next free trace. */
   MSize sizetrace;	/* Token-held trace vector size mirror. */
   IRRef1 ktrace;	/* Reference to KGC with GCtrace. */

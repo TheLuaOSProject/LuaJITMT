@@ -117,7 +117,6 @@ static void tracevec_free(global_State *g, TraceVec *tv)
 
 static void tracevec_publish(jit_State *J, TraceVec *tv)
 {
-  J->trace = tv->slot;
   trace_sizetrace_rel(J, tv->sizetrace);
   tracevec_rel(J, tv);
 }
@@ -910,7 +909,6 @@ void lj_trace_freestate(global_State *g)
   {
     TraceVec *tv = tracevec_acq(J);
     if (tv) {
-      J->trace = NULL;
       trace_sizetrace_rel(J, 0);
       tracevec_rel(J, NULL);
       tracevec_free(g, tv);

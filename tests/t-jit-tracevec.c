@@ -57,7 +57,6 @@ int main(void)
   oldtv = tracevec_acq(J);
   assert(oldtv != NULL);
   assert(oldtv->sizetrace == 3);
-  assert(J->trace == oldtv->slot);
   assert(trace_sizetrace_acq(J) == oldtv->sizetrace);
   assert(J->retiredtracev == NULL);
 
@@ -80,7 +79,6 @@ int main(void)
   assert(newtv != NULL);
   assert(newtv != oldtv);
   assert(newtv->sizetrace == 21);
-  assert(J->trace == newtv->slot);
   assert(trace_sizetrace_acq(J) == newtv->sizetrace);
   assert(retired_has(J, oldtv));
 
