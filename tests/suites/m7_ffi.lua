@@ -23,6 +23,7 @@ local m7_cases = {
   "m7_ffi_cdef_token",
   "m7_ffi_cdef_dup_stack",
   "m7_ffi_cparse_rollback",
+  "m7_ffi_typeinfo_snapshot",
   "m7_ffi_ctype_intern_l",
   "m7_ffi_ctype_hash_publish",
   "m7_ffi_ctype_tab_retire",
@@ -239,6 +240,18 @@ assert(cl.lj_clib_ldscript_value() == 42)
       run_luajit_script(t, "t-ffi-cparse-rollback-reader.lua")
       run_luajit_script(t, "t-ffi-cdef-token.lua", { "2", "20" }, { joff = true })
       print("M7 FFI cparser rollback behavior passed")
+    end
+  })
+
+  add({
+    name = "m7_ffi_typeinfo_snapshot",
+    description = "FFI typeinfo ctype snapshot behavior",
+    run = function(t)
+      clean_build(t)
+      build_and_run_c(t, t:tmp("lj_t-ffi-typeinfo-snapshot"),
+                      "t-ffi-typeinfo-snapshot.c", { timeout = "20s" })
+      run_luajit_script(t, "t-ffi-cparse-rollback-reader.lua", nil, { joff = true })
+      print("M7 FFI typeinfo snapshot behavior passed")
     end
   })
 

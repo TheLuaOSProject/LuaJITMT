@@ -157,15 +157,19 @@ CTKWDEF(CTKWNAMEDEF)
 void lj_ctype_parse_lock(CTState *cts, lua_State *L)
 {
   for (;;) {
-    uint32_t expect = 0;
-    if (la_cas32(&cts->parse_token, &expect, 1, LA_ACQ_REL, LA_ACQ)) {
-      return;  /* 11.2: acquire the cparse CTState mutation token. */
+    uint32_t seq = la_load32_acq(&cts->parse_token);
+    if ((seq & 1u) == 0) {
+      uint32_t expect = seq;
+      if (la_cas32(&cts->parse_token, &expect, seq + 1u,
+		   LA_ACQ_REL, LA_ACQ))
+	return;  /* 11.2: acquire the cparse CTState mutation sequence. */
+      continue;
     }
 #if defined(__linux__)
     {
       uint32_t actions;
       lj_native_enter(L2TG(L));
-      (void)la_futex_wait(&cts->parse_token, 1, 1000000);
+      (void)la_futex_wait(&cts->parse_token, seq, 1000000);
       actions = lj_native_leave(L);
       lj_safepoint_checkstop(L, actions);  /* 11.2: cdef may park. */
     }
@@ -178,10 +182,42 @@ void lj_ctype_parse_lock(CTState *cts, lua_State *L)
 
 void lj_ctype_parse_unlock(CTState *cts)
 {
-  la_store32_rel(&cts->parse_token, 0);  /* 11.2: publish parser mutations. */
+  uint32_t seq = la_load32_acq(&cts->parse_token);
+  lj_assertCTS((seq & 1u) != 0, "cparse mutation sequence not held");
+  la_store32_rel(&cts->parse_token, seq + 1u);  /* 11.2: publish parser mutations. */
 #if defined(__linux__)
   (void)la_futex_wake(&cts->parse_token, 1);  /* 11.2: wake next cparse waiter. */
 #endif
+}
+
+int lj_ctype_snapshot(CTState *cts, CTypeID id, CType *out)
+{
+  uint32_t seq0, seq1;
+  CTypeTab *tabh;
+  CType *ct;
+  GCobj *name;
+
+  if (id == 0)
+    return 0;
+  seq0 = la_load32_acq(&cts->parse_token);
+  if (seq0 & 1u)
+    return -1;  /* Active parser rollback window: use the locked reader. */
+  if (id >= ctype_top_acq(cts))
+    return 0;
+  tabh = ctype_tabh_acq(cts);
+  if ((MSize)id >= tabh->sizetab)
+    return -1;  /* Table/top snapshot raced a grow; retry under the lock. */
+  ct = &tabh->tab[id];
+  out->info = la_load32_acq(&ct->info);
+  out->size = la_load32_acq(&ct->size);
+  out->sib = (CTypeID1)la_load16_acq(&ct->sib);
+  out->next = (CTypeID1)la_load16_acq(&ct->next);
+  name = gcref_acq(ct->name);
+  setgcrefp(out->name, name);
+  seq1 = la_load32_acq(&cts->parse_token);
+  if (seq0 != seq1 || (seq1 & 1u))
+    return -1;  /* Parser overlapped the copy; retry under the lock. */
+  return !ctype_isabandoned(out->info);
 }
 
 static void ctype_storestr_str(lua_State *L, GCtab *tab, GCstr *key,

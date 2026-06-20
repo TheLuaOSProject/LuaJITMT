@@ -236,7 +236,7 @@ typedef struct CTState {
   uint32_t cbblack_all;	/* Conservative blacklist overflow flag. */
   CCallback cb;		/* Temporary callback state. */
   GCtab *pinmt;		/* ffi.pin() handle metatable/root. */
-  uint32_t parse_token;	/* 11.2 cparse mutation token. */
+  uint32_t parse_token;	/* 11.2 cparse mutation sequence: even free, odd held. */
   FinRegGen *fin_head;	/* 11.4 CAS-published FINREG generation list. */
   FinRegOrderNode *fin_order_head;  /* 11.4 ordered FINREG registrations. */
   uint32_t hash[CTHASH_SIZE];  /* Hash anchors. Low 16 bits hold CTypeID. */
@@ -577,6 +577,7 @@ LJ_FUNC CTypeID lj_ctype_intern_l(lua_State *L, CTState *cts, CTInfo info,
 				  CTSize size);
 LJ_FUNC CTypeID lj_ctype_intern_new_l(lua_State *L, CTState *cts,
 				      CTInfo info, CTSize size, int *newp);
+LJ_FUNC int lj_ctype_snapshot(CTState *cts, CTypeID id, CType *out);
 LJ_FUNC void lj_ctype_parse_lock(CTState *cts, lua_State *L);
 LJ_FUNC void lj_ctype_parse_unlock(CTState *cts);
 LJ_FUNC GCtab *lj_ctype_fin_head(CTState *cts);

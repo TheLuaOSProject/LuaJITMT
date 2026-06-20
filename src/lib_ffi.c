@@ -715,28 +715,44 @@ static void ffi_typeinfo_storestr(lua_State *L, GCtab *tab, GCstr *key,
   }
 }
 
+static int ffi_typeinfo_snapshot_locked(CTState *cts, CTypeID id, CType *out)
+{
+  CType *ct;
+  GCobj *name;
+  if (!(id > 0 && id < ctype_top_acq(cts)))
+    return 0;
+  ct = ctype_get(cts, id);
+  out->info = la_load32_acq(&ct->info);
+  out->size = la_load32_acq(&ct->size);
+  out->sib = (CTypeID1)la_load16_acq(&ct->sib);
+  out->next = (CTypeID1)la_load16_acq(&ct->next);
+  name = gcref_acq(ct->name);
+  setgcrefp(out->name, name);
+  return !ctype_isabandoned(out->info);
+}
+
 /* Internal and unsupported API. */
 LJLIB_CF(ffi_typeinfo)
 {
   CTState *cts = ctype_cts(L);
   CTypeID id = (CTypeID)ffi_checkint(L, 1);
+  CType snap;
   CTInfo info;
   CTSize size;
   CTypeID sib;
   GCstr *name;
-  lj_ctype_parse_lock(cts, L);
-  if (id > 0 && id < ctype_top_acq(cts)) {
-    CType *ct = ctype_get(cts, id);
-    GCtab *t;  /* Snapshot ctype while parser rollback cannot mutate layout. */
-    info = ct->info;
-    if (ctype_isabandoned(info)) {
-      lj_ctype_parse_unlock(cts);
-      return 0;
-    }
-    size = ct->size;
-    sib = ct->sib;
-    name = ctype_name_acq(ct);
+  int ok = lj_ctype_snapshot(cts, id, &snap);
+  if (ok < 0) {
+    lj_ctype_parse_lock(cts, L);
+    ok = ffi_typeinfo_snapshot_locked(cts, id, &snap);
     lj_ctype_parse_unlock(cts);
+  }
+  if (ok > 0) {
+    GCtab *t;
+    info = snap.info;
+    size = snap.size;
+    sib = snap.sib;
+    name = ctype_name_acq(&snap);
     lua_createtable(L, 0, 4);  /* Increment hash size if fields are added. */
     t = tabV(L->top-1);
     ffi_typeinfo_storeint(L, t, lj_str_newlit(L, "info"), (int32_t)info);
@@ -752,7 +768,6 @@ LJLIB_CF(ffi_typeinfo)
     lj_gc_check(L);
     return 1;
   }
-  lj_ctype_parse_unlock(cts);
   return 0;
 }
 
