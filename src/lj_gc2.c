@@ -882,9 +882,8 @@ void lj_gc2_finalizer_drain_owned(global_State *g)
   }
 #endif
   if (oldtail) {
-    GCRef head;
-    setgcrefr(head, *lj_obj_gcwref(oldtail));
-    lj_obj_setgcwrrel(newtail, head);
+    GCobj *head = lj_obj_gcw_acq(oldtail);
+    lj_obj_setgcwrel(newtail, head);
     setgcrefrel(*lj_obj_gcwref(oldtail), rev);
     la_storeptr_rel((void **)&g->gc2.finalizer_tail, newtail);
   } else {
