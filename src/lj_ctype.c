@@ -477,39 +477,27 @@ static GCRef *ctype_metamap_init_l(lua_State *L, CTState *cts)
 {
   GCRef *meta = lj_mem_newvec(L, CTID_MAX, GCRef);
   memset(meta, 0, CTID_MAX*sizeof(GCRef));
-  la_storeptr_rel((void **)&cts->metamap, meta);
-  la_store32_rel(&cts->sizemeta, CTID_MAX);
+  ctype_metamap_rel(cts, meta);
+  ctype_metamap_size_rel(cts, CTID_MAX);
   return meta;
 }
 
 static LJ_AINLINE GCtab *ctype_meta_tab(CTState *cts, CTypeID id)
 {
-  GCRef *meta = (GCRef *)la_loadptr_acq((void *const *)&cts->metamap);
-  MSize sizemeta = (MSize)la_load32_acq(&cts->sizemeta);
+  GCRef *meta = ctype_metamap_acq(cts);
+  MSize sizemeta = ctype_metamap_size_acq(cts);
   if (LJ_UNLIKELY(meta == NULL || (MSize)id >= sizemeta))
     return NULL;
-  return (GCtab *)gcref_acq(meta[id]);
+  return (GCtab *)ctype_metamap_obj_acq(meta, (MSize)id);
 }
 
 int lj_ctype_setmeta(CTState *cts, CTypeID id, GCtab *mt)
 {
-  GCRef *meta = (GCRef *)la_loadptr_acq((void *const *)&cts->metamap);
-  MSize sizemeta = (MSize)la_load32_acq(&cts->sizemeta);
+  GCRef *meta = ctype_metamap_acq(cts);
+  MSize sizemeta = ctype_metamap_size_acq(cts);
   if (LJ_UNLIKELY(meta == NULL || (MSize)id >= sizemeta))
     return 0;
-#if LJ_GC64
-  {
-    uint64_t expect = 0;
-    return la_cas64(&meta[id].gcptr64, &expect,
-		    (uint64_t)(uintptr_t)obj2gco(mt), LA_ACQ_REL, LA_ACQ);
-  }
-#else
-  {
-    uint32_t expect = 0;
-    return la_cas32(&meta[id].gcptr32, &expect,
-		    (uint32_t)(uintptr_t)obj2gco(mt), LA_ACQ_REL, LA_ACQ);
-  }
-#endif
+  return ctype_metamap_obj_cas(meta, (MSize)id, mt);
 }
 
 static uint64_t *ctype_cbblack_init_l(lua_State *L, CTState *cts)
@@ -1722,7 +1710,8 @@ void lj_ctype_freestate(global_State *g)
     lj_ctype_fin_freetabs(g, cts);
     ctype_freeretired(g, cts);
     ctype_tab_free(g, ctype_tabh_acq(cts));
-    lj_mem_freevec(g, cts->metamap, cts->sizemeta, GCRef);
+    lj_mem_freevec(g, ctype_metamap_acq(cts),
+		   ctype_metamap_size_acq(cts), GCRef);
     lj_mem_freevec(g, cts->cbblack, cts->sizecbblack, uint64_t);
     lj_mem_freevec(g, cts->cb.cbid, cts->cb.sizeid, CTypeID1);
     lj_mem_freevec(g, cts->cb.owner, cts->cb.sizeid, lua_State *);

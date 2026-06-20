@@ -436,6 +436,44 @@ fin_order_retired_xchg_acqrel(CTState *cts, FinRegOrderNode *ord)
     (void **)&cts->fin_order_retired, ord);
 }
 
+static LJ_AINLINE GCRef *ctype_metamap_acq(const CTState *cts)
+{
+  return (GCRef *)la_loadptr_acq((void *const *)&cts->metamap);
+}
+
+static LJ_AINLINE void ctype_metamap_rel(CTState *cts, GCRef *meta)
+{
+  la_storeptr_rel((void **)&cts->metamap, meta);
+}
+
+static LJ_AINLINE MSize ctype_metamap_size_acq(const CTState *cts)
+{
+  return (MSize)la_load32_acq(&cts->sizemeta);
+}
+
+static LJ_AINLINE void ctype_metamap_size_rel(CTState *cts, MSize size)
+{
+  la_store32_rel(&cts->sizemeta, size);
+}
+
+static LJ_AINLINE GCobj *ctype_metamap_obj_acq(const GCRef *meta, MSize id)
+{
+  return gcref_acq(meta[id]);
+}
+
+static LJ_AINLINE int ctype_metamap_obj_cas(GCRef *meta, MSize id, GCtab *mt)
+{
+#if LJ_GC64
+  uint64_t expect = 0;
+  return la_cas64(&meta[id].gcptr64, &expect,
+		  (uint64_t)(uintptr_t)obj2gco(mt), LA_ACQ_REL, LA_ACQ);
+#else
+  uint32_t expect = 0;
+  return la_cas32(&meta[id].gcptr32, &expect,
+		  (uint32_t)(uintptr_t)obj2gco(mt), LA_ACQ_REL, LA_ACQ);
+#endif
+}
+
 #define CTINFO(ct, flags)	(((CTInfo)(ct) << CTSHIFT_NUM) + (flags))
 #define CTALIGN(al)		((CTSize)(al) << CTSHIFT_ALIGN)
 #define CTATTRIB(at)		((CTInfo)(at) << CTSHIFT_ATTRIB)

@@ -1557,6 +1557,7 @@ static void gc2_scan_global_roots(global_State *g)
     CTState *cts = ctype_ctsG(g);
     if (cts) {
       CTypeTab *ret;
+      GCRef *meta = ctype_metamap_acq(cts);
       TValue *func;
       lua_State **owner;
       lj_gc2_markmem(g, cts);
@@ -1567,12 +1568,12 @@ static void gc2_scan_global_roots(global_State *g)
 	   ret = ctype_tab_retired_next_acq(ret)) {
 	lj_gc2_markmem(g, ret);
       }
-      lj_gc2_markmem(g, cts->metamap);
+      lj_gc2_markmem(g, meta);
       lj_gc2_markmem(g, cts->cbblack);
-      if (cts->metamap) {
-	MSize i, n = (MSize)la_load32_acq(&cts->sizemeta);
+      if (meta) {
+	MSize i, n = ctype_metamap_size_acq(cts);
 	for (i = 0; i < n; i++) {
-	  GCobj *o = gcref_acq(cts->metamap[i]);
+	  GCobj *o = ctype_metamap_obj_acq(meta, i);
 	  if (o)
 	    lj_gc2_markobj(g, o);
 	}
