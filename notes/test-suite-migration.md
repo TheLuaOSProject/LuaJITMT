@@ -145,24 +145,16 @@ Lua test-suite migration notes:
   - `tools/ci/m8_weak.sh` -> `m8_weak`
 - This first batch covers the main shapes the full migration needs:
   standalone C fixtures linked against selected runtime files, Lua tests under
-  the built VM, C fixtures linked against `libluajit.a`, and source-order guard
-  checks previously written in shell/awk/rg.
+  the built VM, C fixtures linked against `libluajit.a`, and generated-result
+  checks previously written in shell pipelines.
 - The second batch adds repeated Lua child-process tests with environment
-  defaults and an assertion-build marker guard. `ljtest.assert_not_match()`
-  exists for exact shell-regex parity where a plain substring check would be
-  weaker, e.g. rejecting `#if%s+LJ_MT`.
-- The third batch adds reusable source range/block helpers and temporary-file
-  helpers. These cover cleanup-before-STOPREQ ordering checks, VM safepoint
-  marker checks, shutdown marker-file validation, and POSIX `os.*`
-  reentrancy guards without shell `awk`/`grep`.
+  defaults and assertion-build coverage.
+- The third batch adds temporary-file helpers for shutdown marker-file
+  validation and POSIX `os.*` reentrancy guards without shell `awk`/`grep`.
 - The fourth batch turns the focused M2 arena shell scripts into launchers only.
-  `ljtest.cc()` now accepts per-fixture compile flags for assertion fixtures,
-  and `ljtest.assert_all_any_contains()` preserves `rg -F` style source-marker
-  checks across multiple files.
-- The fifth batch adds Lua source-scanning guard predicates for M5 publication,
-  metamethod snapshot, jit attach/profile CAS, table/parser release-store, and
-  per-TG tmpbuf checks. `ljtest.files()` provides deterministic source file
-  enumeration for guard suites without shell `rg`/`awk` predicates.
+  `ljtest.cc()` now accepts per-fixture compile flags for assertion fixtures.
+- The fifth batch was later retired from the runnable suite because it was
+  source-shape coverage rather than behavior coverage.
 - The sixth batch migrates the remaining non-TSan M4 C fixtures. These keep the
   original clean-build/link-against-`libluajit.a` behavior and preserve the C
   threading API shutdown marker guard in Lua.
@@ -204,9 +196,8 @@ Lua test-suite migration notes:
   stock-suite runner, M4 TSan driver gate, and M5 aggregate wrapper. Remaining
   shell files are compatibility launchers; test logic is owned by Lua.
 - Current cleanup status: runnable suite files under `tests/suites/` no longer
-  directly inspect implementation text under `src/`. The source-predicate helper
-  definitions still exist in `tests/lib/` for historical utility, but active
-  suite coverage should be behavior-first.
+  directly inspect implementation text under `src/`, and the old
+  source-predicate helper surface has been removed from `tests/lib/`.
 - Result-artifact matching remains valid behavior coverage. Generated JIT
   dumps, bytecode listings, benchmark output, and C/Lua fixture output can keep
   targeted assertions because they are produced by running the VM.
@@ -219,8 +210,8 @@ Lua test-suite migration notes:
   or C/Lua fixtures if the invariant is important.
 - Shared suite helpers now live in `tests/lib/suite_utils.lua`. The migrated
   suites use that module for shell quoting, environment defaults, substring
-  scans, plain occurrence counts, line iteration, identifier checks, list
-  append, and common "no matching lines" source predicates instead of carrying
+  scans, plain/pattern occurrence counts, dump assertions, command-output
+  assertions, list append, and aggregate case registration instead of carrying
   per-suite copies.
 - Added `m5_upvalue_publish_gc` as a behavior replacement for the deleted
   closed-upvalue publication source guards. It stores fresh GC objects through

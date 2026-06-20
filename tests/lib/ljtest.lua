@@ -234,46 +234,6 @@ function Test:assert_all_contains(path, needles)
   end
 end
 
-function Test:assert_any_contains(paths, needle)
-  for i = 1, #paths do
-    local data = read_file(paths[i])
-    if data:find(needle, 1, true) then return end
-  end
-  error(table.concat(paths, ", ") .. ": missing expected text: " .. needle, 2)
-end
-
-function Test:assert_all_any_contains(paths, needles)
-  for i = 1, #needles do
-    self:assert_any_contains(paths, needles[i])
-  end
-end
-
-function Test:assert_not_contains(path, needle)
-  local data = read_file(path)
-  if data:find(needle, 1, true) then
-    error(path .. ": forbidden text present: " .. needle, 2)
-  end
-end
-
-function Test:assert_not_match(path, pattern, label)
-  local data = read_file(path)
-  if data:find(pattern) then
-    error(path .. ": forbidden pattern present: " .. (label or pattern), 2)
-  end
-end
-
-function Test:assert_ordered(path, needles)
-  local data = read_file(path)
-  local pos = 1
-  for i = 1, #needles do
-    local next_pos = data:find(needles[i], pos, true)
-    if not next_pos then
-      error(path .. ": missing expected text: " .. needles[i], 2)
-    end
-    pos = next_pos + #needles[i]
-  end
-end
-
 function Test:assert_text_contains(label, data, needle)
   if not data:find(needle, 1, true) then
     error(label .. ": missing expected text: " .. needle, 2)
@@ -289,36 +249,6 @@ function Test:assert_text_ordered(label, data, needles)
     end
     pos = next_pos + #needles[i]
   end
-end
-
-function Test:text_between(path, first, last)
-  local data = read_file(path)
-  local s = data:find(first, 1, true)
-  if not s then error(path .. ": missing start text: " .. first, 2) end
-  local e = data:find(last, s + #first, true)
-  if not e then error(path .. ": missing end text: " .. last, 2) end
-  return data:sub(s, e - 1)
-end
-
-function Test:c_block(path, first)
-  local data = read_file(path)
-  local s = data:find(first, 1, true)
-  if not s then error(path .. ": missing block start: " .. first, 2) end
-  local open = data:find("{", s, true)
-  if not open then error(path .. ": block has no opening brace: " .. first, 2) end
-  local depth = 0
-  local i = open
-  while i <= #data do
-    local ch = data:sub(i, i)
-    if ch == "{" then
-      depth = depth + 1
-    elseif ch == "}" then
-      depth = depth - 1
-      if depth == 0 then return data:sub(s, i) end
-    end
-    i = i + 1
-  end
-  error(path .. ": unterminated block: " .. first, 2)
 end
 
 return M

@@ -43,55 +43,6 @@ function M.iter_lines(s)
   return (s .. "\n"):gmatch("(.-)\n")
 end
 
-function M.as_list(v)
-  if type(v) == "string" then return { v } end
-  return v
-end
-
-function M.line_hits(t, paths, pred)
-  local hits = {}
-  paths = M.as_list(paths)
-  for i = 1, #paths do
-    local path = paths[i]
-    local n = 0
-    for line in M.iter_lines(t:read(path)) do
-      n = n + 1
-      if pred(line, path, n) then
-        hits[#hits + 1] = path .. ":" .. n .. ": " .. line
-      end
-    end
-  end
-  return hits
-end
-
-function M.assert_no_lines(t, label, paths, pred)
-  local hits = M.line_hits(t, paths, pred)
-  if #hits > 0 then
-    error(label .. ":\n" .. table.concat(hits, "\n"), 2)
-  end
-end
-
-function M.escape_pattern(s)
-  return (s:gsub("([^%w_])", "%%%1"))
-end
-
-function M.has_ident(s, ident)
-  return s:find("%f[%w_]" .. M.escape_pattern(ident) .. "%f[^%w_]") ~= nil
-end
-
-function M.line_contains_any(line, needles)
-  for i = 1, #needles do
-    if M.contains(line, needles[i]) then return true end
-  end
-  return false
-end
-
-function M.assert_text_not_contains(label, data, needle)
-  if M.contains(data, needle) then
-    error(label .. ": forbidden text present: " .. needle, 2)
-  end
-end
-
 function M.assert_dump_contains(t, dump, needle, label)
   local data = t:read(dump)
   label = label or dump
