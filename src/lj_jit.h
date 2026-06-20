@@ -466,6 +466,11 @@ static LJ_AINLINE MSize trace_spadjust_acq(const GCtrace *T)
   return (MSize)la_load16_acq(&T->spadjust);
 }
 
+static LJ_AINLINE MSize trace_topslot_acq(const GCtrace *T)
+{
+  return (MSize)la_load8_acq(&T->topslot);
+}
+
 static LJ_AINLINE MSize trace_nchild_acq(const GCtrace *T)
 {
   return (MSize)la_load16_acq(&T->nchild);

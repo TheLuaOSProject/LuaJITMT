@@ -3210,8 +3210,14 @@ static void asm_tail_fixup(ASMState *as, TraceNo lnk)
     }
   }
   /* Emit exit branch. */
-  target = lnk ? (lnk == as->T->traceno ? as->T : traceref(as->J, lnk))->mcode :
-		  (MCode *)(void *)lj_vm_exit_interp;
+  if (lnk) {
+    if (lnk == as->T->traceno)
+      target = as->T->mcode;
+    else
+      target = trace_mcode_acq(traceref(as->J, lnk));
+  } else {
+    target = (MCode *)(void *)lj_vm_exit_interp;
+  }
   if (lnk || jmprel_ok(mcp + 5, target)) {  /* Direct jump. */
     asm_mcode_u8(as, &mcp, XI_JMP);
     asm_mcode_i32(as, &mcp, jmprel(as->J, mcp + 4, target));

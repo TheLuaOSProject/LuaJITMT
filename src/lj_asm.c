@@ -1951,13 +1951,15 @@ static void asm_head_side(ASMState *as)
   RegSet live = RSET_EMPTY;  /* Live parent registers. */
   RegSet pallow = RSET_GPR;  /* Registers needed by the parent stack check. */
   Reg pbase;
-  IRIns *irp = &as->parent->ir[REF_BASE];  /* Parent base. */
+  IRIns *irp = &trace_ir_acq(as->parent)[REF_BASE];  /* Parent base. */
+  MSize parent_topslot = trace_topslot_acq(as->parent);
+  int32_t parent_spadjust = (int32_t)trace_spadjust_acq(as->parent);
   int32_t spadj, spdelta;
   int pass2 = 0;
   int pass3 = 0;
   IRRef i;
 
-  if (as->snapno && as->topslot > as->parent->topslot) {
+  if (as->snapno && as->topslot > parent_topslot) {
     /* Force snap #0 alloc to prevent register overwrite in stack check. */
     asm_snap_alloc(as, 0);
   }
@@ -2000,9 +2002,9 @@ static void asm_head_side(ASMState *as)
 
   /* Calculate stack frame adjustment. */
   spadj = asm_stack_adjust(as);
-  spdelta = spadj - (int32_t)as->parent->spadjust;
+  spdelta = spadj - parent_spadjust;
   if (spdelta < 0) {  /* Don't shrink the stack frame. */
-    spadj = (int32_t)as->parent->spadjust;
+    spadj = parent_spadjust;
     spdelta = 0;
   }
   as->T->spadjust = (uint16_t)spadj;
@@ -2102,7 +2104,7 @@ static void asm_head_side(ASMState *as)
   }
 
   /* Inherit top stack slot already checked by parent trace. */
-  as->T->topslot = as->parent->topslot;
+  as->T->topslot = (uint8_t)parent_topslot;
   if (as->topslot > as->T->topslot) {  /* Need to check for higher slot? */
 #ifdef EXITSTATE_CHECKEXIT
     /* Highest exit + 1 indicates stack check. */
