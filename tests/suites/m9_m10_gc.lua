@@ -40,14 +40,14 @@ local function build_and_run_alloc_account(t)
 end
 
 local function run_gc_stats(t)
-  t:build({ quiet = true })
+  t:build({ clean = true, quiet = true })
 
   run_luajit_script_jit_modes(t, "t-gc-stats.lua")
   print("M9 GC stats guard passed")
 end
 
 local function run_bench_smoke(t)
-  t:build({ quiet = true })
+  t:build({ clean = true, quiet = true })
 
   luajit_script(t, "t-threading-api.lua")
 
@@ -69,7 +69,7 @@ local function run_bench_smoke(t)
 end
 
 local function run_bench_regression(t)
-  t:build({ quiet = true })
+  t:build({ clean = true, quiet = true })
 
   local base = t:path("bench", "baseline_372b369b9afd_.csv")
   local compare = shell_quote(t:path("bench", "compare_baseline.sh"))
@@ -95,7 +95,7 @@ local function run_bench_regression(t)
 end
 
 local function run_generational(t)
-  t:build({ quiet = true })
+  t:build({ clean = true, quiet = true })
 
   run_luajit_script_jit_modes(t, "t-gc-generational-mode.lua")
   build_and_run_alloc_account(t)
