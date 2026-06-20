@@ -833,7 +833,7 @@ void lj_gdbjit_addtrace(jit_State *J, GCtrace *T)
   lj_assertJ(startpc >= proto_bc(pt) && startpc < proto_bc(pt) + pt->sizebc,
 	     "start PC out of range");
   ctx.lineno = lj_debug_line(pt, proto_bcpos(pt, startpc));
-  ctx.filename = proto_chunknamestr(pt);
+  ctx.filename = proto_chunknamestr_acq(pt);
   if (*ctx.filename == '@' || *ctx.filename == '=')
     ctx.filename++;
   else

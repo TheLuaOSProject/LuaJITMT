@@ -372,7 +372,7 @@ void lj_debug_addloc(lua_State *L, const char *msg,
       if (line >= 0) {
 	GCproto *pt = funcproto(fn);
 	char buf[LUA_IDSIZE];
-	lj_debug_shortname(buf, proto_chunkname(pt), pt->firstline);
+	lj_debug_shortname(buf, proto_chunkname_acq(pt), pt->firstline);
 	lj_strfmt_pushf(L, "%s:%d: %s", buf, line, msg);
 	return;
       }
@@ -384,7 +384,7 @@ void lj_debug_addloc(lua_State *L, const char *msg,
 /* Push location string for a bytecode position to Lua stack. */
 void lj_debug_pushloc(lua_State *L, GCproto *pt, BCPos pc)
 {
-  GCstr *name = proto_chunkname(pt);
+  GCstr *name = proto_chunkname_acq(pt);
   const char *s = strdata(name);
   MSize i, len = name->len;
   BCLine line = lj_debug_line(pt, pc);
@@ -515,7 +515,7 @@ int lj_debug_getinfo(lua_State *L, const char *what, lj_Debug *ar, int ext)
       if (isluafunc(fn)) {
 	GCproto *pt = funcproto(fn);
 	BCLine firstline = pt->firstline;
-	GCstr *name = proto_chunkname(pt);
+	GCstr *name = proto_chunkname_acq(pt);
 	ar->source = strdata(name);
 	lj_debug_shortname(ar->short_src, name, pt->firstline);
 	ar->linedefined = (int)firstline;
@@ -625,7 +625,7 @@ LUA_API int lua_getstack(lua_State *L, int level, lua_Debug *ar)
 /* Put the chunkname into a buffer. */
 static int debug_putchunkname(SBuf *sb, GCproto *pt, int pathstrip)
 {
-  GCstr *name = proto_chunkname(pt);
+  GCstr *name = proto_chunkname_acq(pt);
   const char *p = strdata(name);
   if (pt->firstline == ~(BCLine)0) {
     lj_buf_putmem(sb, "[builtin:", 9);

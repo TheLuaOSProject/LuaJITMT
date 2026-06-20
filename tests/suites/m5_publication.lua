@@ -230,6 +230,37 @@ print("proto-kgc-acq-smoke OK")
 ]=]
 end
 
+local function proto_chunkname_acq_smoke()
+  return [=[
+local util = require("jit.util")
+
+local src = [[
+return function()
+  local t = {}
+  return t.proto_chunkname_acq_field + 1
+end
+]]
+local fn = assert(loadstring(src, "@proto_chunkname_acq_src"))()
+local jinfo = util.funcinfo(fn)
+assert(jinfo.source == "@proto_chunkname_acq_src", tostring(jinfo.source))
+local dinfo = debug.getinfo(fn, "S")
+assert(dinfo.source == "@proto_chunkname_acq_src", tostring(dinfo.source))
+local ok, err = pcall(fn)
+assert(not ok and tostring(err):match("proto_chunkname_acq_src"),
+       tostring(err))
+
+local dumped = string.dump(fn)
+local fn2 = assert(loadstring(dumped))
+dinfo = debug.getinfo(fn2, "S")
+assert(dinfo.source == "@proto_chunkname_acq_src", tostring(dinfo.source))
+
+jit.flush()
+jit.opt.start("hotloop=1")
+for _ = 1, 8 do pcall(fn2) end
+print("proto-chunkname-acq-smoke OK")
+]=]
+end
+
 return function(add)
   add({
     name = "m5_state_owner",
@@ -289,6 +320,16 @@ return function(add)
       t:build({ quiet = true })
       run_luajit(t, { "-e", proto_kgc_acq_smoke() })
       print("M5 prototype KGC acquire-reader behavior passed")
+    end
+  })
+
+  add({
+    name = "m5_proto_chunkname_acq",
+    description = "prototype chunkname acquire-reader behavior",
+    run = function(t)
+      t:build({ quiet = true })
+      run_luajit(t, { "-e", proto_chunkname_acq_smoke() })
+      print("M5 prototype chunkname acquire-reader behavior passed")
     end
   })
 

@@ -441,7 +441,7 @@ static void bcwrite_proto(BCWriteCtx *ctx, GCproto *pt)
 /* Write header of bytecode dump. */
 static void bcwrite_header(BCWriteCtx *ctx)
 {
-  GCstr *chunkname = proto_chunkname(ctx->pt);
+  GCstr *chunkname = proto_chunkname_acq(ctx->pt);
   const char *name = strdata(chunkname);
   MSize len = chunkname->len;
   char *p = lj_buf_need(&ctx->sb, 5+5+len);

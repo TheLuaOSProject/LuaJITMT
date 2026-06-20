@@ -929,7 +929,7 @@ static void test_proto_chunkname_publish_barrier(lua_State *L, global_State *g,
   fn = funcV(L->top - 1);
   assert(isluafunc(fn));
   pt = funcproto(fn);
-  assert(proto_chunkname(pt) == chunkname);
+  assert(proto_chunkname_acq(pt) == chunkname);
   assert(lj_gc2_ismarked(g, obj2gco(chunkname)) == 1);
 
   flush_and_drain(g, tg);

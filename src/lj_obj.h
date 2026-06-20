@@ -496,7 +496,9 @@ typedef struct GCproto {
 #define proto_uv(pt)		(mref((pt)->uv, uint16_t))
 
 #define proto_chunkname(pt)	(strref((pt)->chunkname))
+#define proto_chunkname_acq(pt)	(strref_acq((pt)->chunkname))
 #define proto_chunknamestr(pt)	(strdata(proto_chunkname((pt))))
+#define proto_chunknamestr_acq(pt)	(strdata(proto_chunkname_acq((pt))))
 #define proto_lineinfo(pt)	(mref((pt)->lineinfo, const void))
 #define proto_uvinfo(pt)	(mref((pt)->uvinfo, const uint8_t))
 #define proto_varinfo(pt)	(mref((pt)->varinfo, const uint8_t))

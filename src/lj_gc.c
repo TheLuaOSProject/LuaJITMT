@@ -1038,7 +1038,7 @@ static void gc_traverse_trace(global_State *g, GCtrace *T)
 static void gc_traverse_proto(global_State *g, GCproto *pt)
 {
   ptrdiff_t i;
-  gc_mark_str(g, proto_chunkname(pt));
+  gc_mark_str(g, proto_chunkname_acq(pt));
   for (i = -(ptrdiff_t)pt->sizekgc; i < 0; i++)  /* Mark collectable consts. */
     gc_markobj(g, proto_kgc_acq(pt, i));
 #if LJ_HASJIT

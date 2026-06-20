@@ -376,7 +376,7 @@ static void perftools_addtrace(jit_State *J, GCtrace *T)
   MCode *mcode = trace_mcode_acq(T);
   MSize szmcode = trace_szmcode_acq(T);
   TraceNo traceno = trace_traceno_acq(T);
-  const char *name = proto_chunknamestr(pt);
+  const char *name = proto_chunknamestr_acq(pt);
   BCLine lineno;
   if (name[0] == '@' || name[0] == '=')
     name++;
