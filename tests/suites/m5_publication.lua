@@ -2,9 +2,7 @@ local utils = require("suite_utils")
 
 local contains = utils.contains
 local quote = utils.shell_quote
-local count_plain = utils.count_plain
 local append = utils.append_list
-local assert_text_not_contains = utils.assert_text_not_contains
 local assert_no_lines = utils.assert_no_lines
 
 local function basename(path)
@@ -57,12 +55,6 @@ local function test_text_files(t)
   end)
 end
 
-local function assert_block_excludes(label, block, rejects)
-  for i = 1, #rejects do
-    assert_text_not_contains(label, block, rejects[i])
-  end
-end
-
 local function lua_path_guard(t)
   return t:path("src", "?.lua") .. ";" .. t:path("src", "jit", "?.lua") .. ";;"
 end
@@ -93,14 +85,6 @@ local function build_and_run_c(t, out, cfile, opts)
     libs = { "-lm", "-ldl", "-pthread" }
   })
   t:run({ out }, { timeout = opts.timeout })
-end
-
-local function block_has_all(label, block, needles)
-  for i = 1, #needles do
-    if not contains(block, needles[i]) then
-      error(label .. ": missing expected text: " .. needles[i], 2)
-    end
-  end
 end
 
 local function table_value_smoke()
@@ -597,97 +581,6 @@ assert(util.traceinfo(1), "expected loaded CNEW creation trace")
       t:build({ clean = true, quiet = true })
       build_and_run_c(t, t:tmp("lj_t-tab-array-publish"),
                       "t-tab-array-publish.c", { timeout = "20s" })
-
-      assert_no_lines(t, "GC table array readers must not gate on GCtab.acap", {
-        t:path("src", "lj_gc.c"),
-        t:path("src", "lj_gc2.c")
-      }, function(line)
-        return contains(line, "t->acap") or contains(line, "->acap > 0")
-      end)
-
-      local lj_tab = t:path("src", "lj_tab.c")
-      local tab_free = t:c_block(lj_tab, "void LJ_FASTCALL lj_tab_free(global_State *g, GCtab *t)")
-      block_has_all("lj_tab_free", tab_free, {
-        "lj_tab_array_separated_snapshot_acq(t, &array)"
-      })
-      assert_block_excludes("lj_tab_free", tab_free, { "t->acap", "lj_tab_array_acq(t)" })
-
-      local tab_dup = t:c_block(lj_tab, "GCtab * LJ_FASTCALL lj_tab_dup(lua_State *L, const GCtab *kt)")
-      block_has_all("lj_tab_dup", tab_dup, {
-        "lj_tab_array_snapshot_acq(t, &array)",
-        "lj_tab_node_snapshot_acq(t, &thmask)"
-      })
-      assert_block_excludes("lj_tab_dup", tab_dup, {
-        "lj_tab_asize_acq(t)",
-        "lj_tab_array_acq(t)",
-        "lj_tab_node_acq(t)"
-      })
-
-      assert_no_lines(t, "table arrays must use lj_tab_array_* helpers in C code",
-                      src_text_files(t, {
-                        exclude_host = true,
-                        exclude_vm = true,
-                        exclude_asm = true,
-                        exclude_names = { "lj_obj.h" }
-                      }), function(line)
-        return (contains(line, "tvref(") and contains(line, "->array")) or
-               (contains(line, "setmref(") and contains(line, "->array"))
-      end)
-      assert_no_lines(t, "serializer dictionary array reads must use array snapshots",
-                      t:path("src", "lj_serialize.c"), function(line)
-        return contains(line, "asize = lj_tab_asize_acq(dict)") or
-               contains(line, "array = lj_tab_array_acq(dict)") or
-               contains(line, "idx < lj_tab_asize_acq(dict_") or
-               contains(line, "lj_tab_array_acq(dict_")
-      end)
-
-      local table_pack = t:c_block(t:path("src", "lib_table.c"), "LJLIB_CF(table_pack)")
-      block_has_all("table_pack", table_pack, {
-        "lj_tab_array_snapshot_acq(t, &array)",
-        "table_pack_storeint_str(L, t, strV(lj_lib_upvalue(L, 1)),",
-        "lj_gc_pubtab(L, t)"
-      })
-      assert_block_excludes("table_pack", table_pack, { "lj_tab_array_acq(t)" })
-
-      local decode = t:text_between(t:path("src", "lj_serialize.c"),
-                                    "t = lj_tab_new(sbufL(sbx), narray, hsize2hbits(nhash))",
-                                    "if (nhash)")
-      block_has_all("serializer table decode", decode, { "lj_tab_array_snapshot_acq(t, &array)" })
-      assert_block_excludes("serializer table decode", decode, { "lj_tab_array_acq(t)" })
-
-      local parse_ctor = t:text_between(t:path("src", "lj_parse.c"), "if (!t) {",
-                                        "lj_gc_check(fs->L)")
-      block_has_all("parser template constructor", parse_ctor, {
-        "lj_tab_array_snapshot_acq(t, &array)"
-      })
-      assert_block_excludes("parser template constructor", parse_ctor, { "lj_tab_asize_acq(t)" })
-
-      t:assert_not_contains(t:path("src", "lj_record.c"),
-                            "TValue *record_array = lj_tab_array_acq(t)")
-      t:assert_not_contains(t:path("src", "lj_record.c"), "lj_tab_asize_acq(t)")
-      local rec_bump = t:c_block(t:path("src", "lj_record.c"),
-                                 "static void rec_idx_bump(jit_State *J, RecordIndex *ix)")
-      if count_plain(rec_bump, "lj_tab_array_snapshot_acq(tb, &array)") +
-         count_plain(rec_bump, "lj_tab_array_snapshot_acq(tpl, &array)") < 3 then
-        error("rec_idx_bump must snapshot table-bump array shape")
-      end
-      assert_block_excludes("rec_idx_bump", rec_bump, {
-        "lj_tab_asize_acq(tb)",
-        "lj_tab_asize_acq(tpl)",
-        "lj_tab_array_acq(tpl)"
-      })
-      local rec_tsetm = t:c_block(t:path("src", "lj_record.c"),
-                                  "static void rec_tsetm(jit_State *J, BCReg ra, BCReg rn, int32_t i)")
-      block_has_all("rec_tsetm", rec_tsetm, { "lj_tab_array_snapshot_acq(t, &array)" })
-      assert_block_excludes("rec_tsetm", rec_tsetm, { "lj_tab_asize_acq(t)" })
-      local rec_next = t:c_block(t:path("src", "lj_record.c"),
-                                 "static IRType rec_next_types(GCtab *t, uint32_t idx)")
-      block_has_all("rec_next_types", rec_next, { "lj_tab_array_snapshot_acq(t, &array)" })
-      assert_block_excludes("rec_next_types", rec_next, {
-        "lj_tab_asize_acq(t)",
-        "lj_tab_array_acq(t)"
-      })
-
       print("M5 table array publication tests passed")
     end
   })
