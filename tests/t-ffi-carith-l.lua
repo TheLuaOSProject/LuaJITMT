@@ -1,12 +1,12 @@
 local th = require"threading"
+local harness = require"thread_harness"
 
-local nthreads = tonumber(os.getenv("LJ_M7_FFI_CARITH_THREADS")) or 6
-local iters = tonumber(os.getenv("LJ_M7_FFI_CARITH_ITERS")) or 320
+local nthreads = harness.arg_number(1, "LJ_M7_FFI_CARITH_THREADS", 6)
+local iters = harness.arg_number(2, "LJ_M7_FFI_CARITH_ITERS", 320)
 
 collectgarbage("stop")
 
-local ready = th.channel(nthreads)
-local start = th.channel(nthreads)
+local ready, start = harness.channels(nthreads)
 local workers = {}
 
 for tid = 1, nthreads do
@@ -60,24 +60,13 @@ for tid = 1, nthreads do
 
     return count
   end, ready, start, tid, iters)
-  local _, ok = ready:recv(10)
-  assert(ok == true)
+  harness.wait_ready(ready, 1)
 end
 
-for _ = 1, nthreads do
-  assert(start:send("go", 10) == true)
-end
-
-local total = 0
-for tid = 1, nthreads do
-  local ok, result = workers[tid]:join(30)
-  assert(ok == true, tostring(result))
-  assert(type(result) == "number")
-  total = total + result
-end
+harness.release_start(start, nthreads)
+local total = harness.join_count(workers)
 
 collectgarbage("restart")
-collectgarbage("collect")
-collectgarbage("collect")
+harness.fullgc()
 
 print(("t-ffi-carith-l OK: %d threads, %d iterations"):format(nthreads, total))

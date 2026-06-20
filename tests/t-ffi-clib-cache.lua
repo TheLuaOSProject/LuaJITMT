@@ -1,8 +1,9 @@
 local th = require"threading"
 local ffi = require"ffi"
+local harness = require"thread_harness"
 
-local nthreads = tonumber((arg and arg[1]) or os.getenv("LJ_M7_FFI_CLIB_THREADS")) or 6
-local iters = tonumber((arg and arg[2]) or os.getenv("LJ_M7_FFI_CLIB_ITERS")) or 300
+local nthreads = harness.arg_number(1, "LJ_M7_FFI_CLIB_THREADS", 6)
+local iters = harness.arg_number(2, "LJ_M7_FFI_CLIB_ITERS", 300)
 
 ffi.cdef[[
 int abs(int);
@@ -19,8 +20,7 @@ enum { LJ_M7_CLIB_CONST = 73 };
 
 collectgarbage("stop")
 
-local ready = th.channel(nthreads)
-local start = th.channel(nthreads)
+local ready, start = harness.channels(nthreads)
 local workers = {}
 
 for tid = 1, nthreads do
@@ -54,26 +54,14 @@ for tid = 1, nthreads do
 
     return count
   end, ready, start, tid, iters)
-  local _, ok = ready:recv(10)
-  assert(ok == true)
+  harness.wait_ready(ready, 1)
 end
 
-for _ = 1, nthreads do
-  assert(start:send("go", 10) == true)
-end
-
-local total = 0
-for tid = 1, nthreads do
-  local ok, result = workers[tid]:join(30)
-  assert(ok == true, tostring(result))
-  assert(type(result) == "number")
-  total = total + result
-  workers[tid] = nil
-end
+harness.release_start(start, nthreads)
+local total = harness.join_count(workers)
 
 collectgarbage("restart")
-collectgarbage("collect")
-collectgarbage("collect")
+harness.fullgc()
 
 assert(ffi.C.abs(-77) == 77)
 assert(tonumber(ffi.C.strlen("cache-root")) == 10)

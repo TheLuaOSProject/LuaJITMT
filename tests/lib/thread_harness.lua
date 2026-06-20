@@ -35,6 +35,18 @@ function M.join_all(workers, timeout)
   end
 end
 
+function M.join_count(workers, timeout)
+  local total = 0
+  timeout = timeout or 30
+  for i = 1, #workers do
+    local ok, result = workers[i]:join(timeout)
+    assert(ok == true, tostring(result))
+    assert(type(result) == "number")
+    total = total + result
+  end
+  return total
+end
+
 function M.fullgc(n)
   n = n or 2
   for _ = 1, n do
