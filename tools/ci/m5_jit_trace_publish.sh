@@ -25,4 +25,12 @@ if hits=$(grep -nE -- '(^|[^[:alnum:]_])(ret|tail|mcret)[[:space:]]*->[[:space:]
   printf '%s\n' 'raw MCodeRetire next-link access is forbidden; use mcode_retired_next_* helpers' >&2
   exit 1
 fi
+if hits=$(grep -nE -- '->[[:space:]]*retired_next' \
+    "$ROOT/src/lj_trace.c" \
+    "$ROOT/tests/t-jit-trace-retire.c" \
+    "$ROOT/tests/t-jit-tracevec.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw JIT retired trace next-link access is forbidden; use trace*_retired_next_* helpers' >&2
+  exit 1
+fi
 exec "$ROOT/tools/ci/lua_test.sh" m5_jit_trace_publish

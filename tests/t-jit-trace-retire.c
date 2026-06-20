@@ -18,7 +18,7 @@
 static GCtrace *retired_find(jit_State *J, GCtrace *needle)
 {
   GCtrace *T;
-  for (T = J->retiredtraces; T != NULL; T = T->retired_next)
+  for (T = J->retiredtraces; T != NULL; T = trace_retired_next_acq(T))
     if (T == needle)
       return T;
   return NULL;

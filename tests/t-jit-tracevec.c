@@ -18,7 +18,7 @@
 static int retired_has(jit_State *J, TraceVec *needle)
 {
   TraceVec *tv;
-  for (tv = J->retiredtracev; tv != NULL; tv = tv->retired_next)
+  for (tv = J->retiredtracev; tv != NULL; tv = tracevec_retired_next_acq(tv))
     if (tv == needle)
       return 1;
   return 0;
