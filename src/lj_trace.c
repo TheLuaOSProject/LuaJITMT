@@ -463,7 +463,7 @@ static void trace_exittab_resetroot(jit_State *J, TraceNo rootno)
   TraceNo i;
   for (i = 1; i < J->sizetrace; i++) {
     GCtrace *T = traceref(J, i);
-    if (T && (T->traceno == rootno || T->root == rootno))
+    if (T && (trace_traceno_acq(T) == rootno || trace_root_acq(T) == rootno))
       trace_exittab_reset(J, T);
   }
 }
@@ -501,14 +501,15 @@ static void trace_save(jit_State *J, GCtrace *T)
 void LJ_FASTCALL lj_trace_free(global_State *g, GCtrace *T)
 {
   jit_State *J = G2J(g);
-  lj_assertG(T->traceno != 0 || trace_startptgco_acq(T) != NULL ||
+  TraceNo traceno = trace_traceno_acq(T);
+  lj_assertG(traceno != 0 || trace_startptgco_acq(T) != NULL ||
 	     la_load64_acq(&T->retire_epoch) != 0,
 	     "unpublished trace body retired");
-  if (T->traceno) {
+  if (traceno) {
     lj_gdbjit_deltrace(J, T);
-    if (T->traceno < J->freetrace)
-      J->freetrace = T->traceno;
-    traceslot_clear(J, T->traceno);
+    if (traceno < J->freetrace)
+      J->freetrace = traceno;
+    traceslot_clear(J, traceno);
   }
   if (g->gc.currentwhite & LJ_GC_SFIXED) {
     trace_free_immediate(g, T);
@@ -569,19 +570,20 @@ static void trace_unpatch(jit_State *J, GCtrace *T)
 static uint32_t trace_flushroot(jit_State *J, GCtrace *T, int scoped)
 {
   GCproto *pt = trace_startpt_acq(T);
+  TraceNo traceno = trace_traceno_acq(T);
   TraceNo head;
   TraceNo nextroot = trace_nextroot_acq(T);
   uint32_t retargeted = 1;
-  lj_assertJ(T->root == 0, "not a root trace");
+  lj_assertJ(trace_root_acq(T) == 0, "not a root trace");
   lj_assertJ(pt != NULL, "trace has no prototype");
   if (LJ_UNLIKELY(pt == NULL))
     return 0;
   head = proto_trace_acq(pt);
-  trace_exittab_resetroot(J, T->traceno);
+  trace_exittab_resetroot(J, traceno);
   if (scoped)
     la_store64_rel(&T->retire_epoch, LJ_TRACE_SCOPE_FLUSHING);
   /* Unlink root trace from chain anchored in prototype. */
-  if (head == T->traceno) {  /* Trace is first in chain. Easy. */
+  if (head == traceno) {  /* Trace is first in chain. Easy. */
     proto_trace_rel(pt, nextroot);
 unpatch:
     /* Unpatch modified bytecode only if the trace has not been flushed. */
@@ -593,7 +595,7 @@ unpatch:
       TraceNo next;
       for (next = trace_nextroot_acq(T2); next;
 	   next = T2 ? trace_nextroot_acq(T2) : 0) {
-	if (next == T->traceno) {
+	if (next == traceno) {
 	  trace_nextroot_rel(T2, nextroot);  /* Unlink from chain. */
 	  goto unpatch;
 	}
@@ -608,7 +610,7 @@ static int trace_scope_flushing(jit_State *J, TraceNo traceno)
 {
   if (traceno > 0 && traceno < J->sizetrace) {
     GCtrace *T = traceref(J, traceno);
-    return T && T->traceno == traceno &&
+    return T && trace_traceno_acq(T) == traceno &&
 	   la_load64_acq(&T->retire_epoch) == LJ_TRACE_SCOPE_FLUSHING;
   }
   return 0;
@@ -616,14 +618,14 @@ static int trace_scope_flushing(jit_State *J, TraceNo traceno)
 
 static uint32_t trace_flushside(jit_State *J, GCtrace *T, int scoped)
 {
-  IRIns *base = &T->ir[REF_BASE];
+  IRIns *base = &trace_ir_acq(T)[REF_BASE];
   TraceNo parentno = (TraceNo)base->op1;
   GCtrace *parent = traceref(J, parentno);
   ExitNo exitno = (ExitNo)base->op2;
-  lj_assertJ(T->root != 0, "not a side trace");
+  lj_assertJ(trace_root_acq(T) != 0, "not a side trace");
   trace_exittab_reset(J, T);
-  if (parent && parent->traceno == parentno &&
-      parent->exittab && exitno < parent->nsnap)
+  if (parent && trace_traceno_acq(parent) == parentno &&
+      trace_exittab_acq(parent) && exitno < trace_nsnap_acq(parent))
     trace_exittarget_rel(parent, exitno, exitstub_addr(J, exitno));
   if (scoped)
     la_store64_rel(&T->retire_epoch, LJ_TRACE_SCOPE_FLUSHING);
@@ -633,11 +635,12 @@ static uint32_t trace_flushside(jit_State *J, GCtrace *T, int scoped)
 static int trace_scope_flush_dependency(jit_State *J, GCtrace *T)
 {
   TraceNo link = trace_link_acq(T);
+  TraceNo root = trace_root_acq(T);
   if (trace_scope_flushing(J, link))
     return 1;
-  if (T->root != 0) {
-    TraceNo parent = (TraceNo)T->ir[REF_BASE].op1;
-    if (trace_scope_flushing(J, T->root) ||
+  if (root != 0) {
+    TraceNo parent = (TraceNo)trace_ir_acq(T)[REF_BASE].op1;
+    if (trace_scope_flushing(J, root) ||
 	trace_scope_flushing(J, parent))
       return 1;
   }
@@ -652,10 +655,10 @@ static uint32_t trace_flushscope_mark_deps(jit_State *J)
     changed = 0;
     for (i = 1; i < J->sizetrace; i++) {
       GCtrace *T = traceref(J, i);
-      if (T && T->traceno == i &&
+      if (T && trace_traceno_acq(T) == i &&
 	  la_load64_acq(&T->retire_epoch) != LJ_TRACE_SCOPE_FLUSHING &&
 	  trace_scope_flush_dependency(J, T)) {
-	if (T->root == 0) {
+	if (trace_root_acq(T) == 0) {
 	  if (!trace_flushroot(J, T, 1))
 	    continue;
 	} else {
@@ -674,8 +677,8 @@ uint32_t lj_trace_flush(jit_State *J, TraceNo traceno)
 {
   if (traceno > 0 && traceno < J->sizetrace) {
     GCtrace *T = traceref(J, traceno);
-    if (T && T->traceno == traceno) {
-      if (T->root == 0)
+    if (T && trace_traceno_acq(T) == traceno) {
+      if (trace_root_acq(T) == 0)
 	return trace_flushroot(J, T, 1);
       return trace_flushside(J, T, 1);
     }
@@ -702,9 +705,10 @@ uint32_t lj_trace_flushproto(global_State *g, GCproto *pt)
 static void trace_scope_clear_slot(jit_State *J, TraceNo traceno, GCtrace *T,
 				   uint64_t epoch)
 {
-  if (T->root != 0) {
-    GCtrace *root = traceref(J, T->root);
-    if (root && root->traceno == T->root) {
+  TraceNo rootno = trace_root_acq(T);
+  if (rootno != 0) {
+    GCtrace *root = traceref(J, rootno);
+    if (root && trace_traceno_acq(root) == rootno) {
       TraceNo next = trace_nextside_acq(T);
       TraceNo head = trace_nextside_acq(root);
       if (head == traceno) {
@@ -727,7 +731,7 @@ static void trace_scope_clear_slot(jit_State *J, TraceNo traceno, GCtrace *T,
     }
   }
   lj_gdbjit_deltrace(J, T);
-  T->traceno = 0;  /* Scoped slot retired after HS_EXIT_TRACES grace. */
+  trace_traceno_rel(T, 0);  /* Scoped slot retired after HS_EXIT_TRACES grace. */
   trace_link_rel(T, 0);
   trace_nextroot_rel(T, 0);
   trace_nextside_rel(T, 0);
@@ -744,10 +748,11 @@ static uint32_t lj_trace_flushscope_retire(global_State *g, uint64_t epoch)
   uint32_t retired = 0;
   for (i = 1; i < J->sizetrace; i++) {
     GCtrace *T = traceref(J, i);
-    if (T && T->root != 0 && T->traceno == i) {
-      GCtrace *root = traceref(J, T->root);
+    if (T && trace_root_acq(T) != 0 && trace_traceno_acq(T) == i) {
+      TraceNo rootno = trace_root_acq(T);
+      GCtrace *root = traceref(J, rootno);
       if (la_load64_acq(&T->retire_epoch) == LJ_TRACE_SCOPE_FLUSHING ||
-	  (root && root->traceno == T->root &&
+	  (root && trace_traceno_acq(root) == rootno &&
 	   la_load64_acq(&root->retire_epoch) == LJ_TRACE_SCOPE_FLUSHING)) {
 	trace_scope_clear_slot(J, i, T, epoch);
 	retired++;
@@ -756,7 +761,7 @@ static uint32_t lj_trace_flushscope_retire(global_State *g, uint64_t epoch)
   }
   for (i = 1; i < J->sizetrace; i++) {
     GCtrace *T = traceref(J, i);
-    if (T && T->root == 0 && T->traceno == i &&
+    if (T && trace_root_acq(T) == 0 && trace_traceno_acq(T) == i &&
 	la_load64_acq(&T->retire_epoch) == LJ_TRACE_SCOPE_FLUSHING) {
       trace_scope_clear_slot(J, i, T, epoch);
       retired++;
@@ -778,10 +783,10 @@ int lj_trace_flushall(lua_State *L)
     GCtrace *T = traceref(J, i);
     if (T) {
       trace_exittab_reset(J, T);
-      if (T->root == 0)
+      if (trace_root_acq(T) == 0)
 	trace_flushroot(J, T, 0);
       lj_gdbjit_deltrace(J, T);
-      T->traceno = 0;  /* Blacklist the link for cont_stitch. */
+      trace_traceno_rel(T, 0);  /* Blacklist the link for cont_stitch. */
       trace_link_rel(T, 0);
       traceslot_clear(J, i);
     }
