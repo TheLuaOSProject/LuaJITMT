@@ -179,6 +179,28 @@ typedef struct FinRegOrderNode {
   struct FinRegOrderNode *next;	/* Older registration, newest-first list. */
 } FinRegOrderNode;
 
+static LJ_AINLINE FinRegGen *fin_gen_next_acq(const FinRegGen *gen)
+{
+  return (FinRegGen *)la_loadptr_acq((void *const *)&gen->next);
+}
+
+static LJ_AINLINE void fin_gen_next_rel(FinRegGen *gen, FinRegGen *next)
+{
+  la_storeptr_rel((void **)&gen->next, next);
+}
+
+static LJ_AINLINE FinRegOrderNode *
+fin_order_next_acq(const FinRegOrderNode *ord)
+{
+  return (FinRegOrderNode *)la_loadptr_acq((void *const *)&ord->next);
+}
+
+static LJ_AINLINE void fin_order_next_rel(FinRegOrderNode *ord,
+					  FinRegOrderNode *next)
+{
+  la_storeptr_rel((void **)&ord->next, next);
+}
+
 static LJ_AINLINE GCobj *fin_order_obj_acq(FinRegOrderNode *ord)
 {
   return gcref_acq(ord->obj);

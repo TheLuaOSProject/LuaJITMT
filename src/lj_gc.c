@@ -1730,7 +1730,7 @@ static size_t gc_queue_cdata_finalizers_pweak_ordered(lua_State *L,
   ord = (FinRegOrderNode *)la_loadptr_acq(
     (void *const *)&cts->fin_order_head);
   for (; ord != NULL;
-       ord = (FinRegOrderNode *)la_loadptr_acq((void *const *)&ord->next)) {
+       ord = fin_order_next_acq(ord)) {
     GCtab *t = (GCtab *)la_loadptr_acq((void *const *)&ord->tab);
     TValue *slot = (TValue *)la_loadptr_acq((void *const *)&ord->slot);
     TValue fin;
@@ -1818,7 +1818,7 @@ static size_t gc_separate_cdata_finalizers_ordered(global_State *g)
   ord = (FinRegOrderNode *)la_loadptr_acq(
     (void *const *)&cts->fin_order_head);
   for (; ord != NULL;
-       ord = (FinRegOrderNode *)la_loadptr_acq((void *const *)&ord->next)) {
+       ord = fin_order_next_acq(ord)) {
     GCtab *t = (GCtab *)la_loadptr_acq((void *const *)&ord->tab);
     TValue *slot = (TValue *)la_loadptr_acq((void *const *)&ord->slot);
     TValue fin;
@@ -1860,7 +1860,7 @@ static int gc_cdata_fin_pending_ordered(global_State *g, CTState *cts)
   ord = (FinRegOrderNode *)la_loadptr_acq(
     (void *const *)&cts->fin_order_head);
   for (; ord != NULL;
-       ord = (FinRegOrderNode *)la_loadptr_acq((void *const *)&ord->next)) {
+       ord = fin_order_next_acq(ord)) {
     GCtab *t = (GCtab *)la_loadptr_acq((void *const *)&ord->tab);
     TValue *slot = (TValue *)la_loadptr_acq((void *const *)&ord->slot);
     TValue fin;
@@ -1909,7 +1909,7 @@ void lj_gc_finalize_cdata_disable(global_State *g)
     return;
   for (gen = (FinRegGen *)la_loadptr_acq((void *const *)&cts->fin_head);
        gen != NULL;
-       gen = (FinRegGen *)la_loadptr_acq((void *const *)&gen->next)) {
+       gen = fin_gen_next_acq(gen)) {
     GCtab *t = (GCtab *)la_loadptr_acq((void *const *)&gen->tab);
     if (t)
       setgcrefnullrel(t->metatable);  /* Disable FINREG generation. */
