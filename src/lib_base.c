@@ -650,6 +650,8 @@ static void gc_stats_push(lua_State *L)
 		  la_load64_acq(&gc2->weak_clear_tables));
   gc_stats_setnum(L, t, "weak_clear_cleared",
 		  la_load64_acq(&gc2->weak_clear_cleared));
+  gc_stats_setnum(L, t, "weak_legacy_skipped",
+		  la_load64_acq(&gc2->weak_legacy_skipped));
   gc_stats_setnum(L, t, "weak_legacy_fallbacks",
 		  la_load64_acq(&gc2->weak_legacy_fallbacks));
   gc_stats_setnum(L, t, "weak_legacy_backfills",
