@@ -1416,19 +1416,29 @@ static void trace_hotside(jit_State *J, const BCIns *pc, lua_State *L,
   uint8_t count;
   if (!(J2G(J)->hookmask & (HOOK_GC|HOOK_VMEVENT)) &&
       isluafunc(curr_func(L))) {
-    count = (uint8_t)snap_count_acq(snap);
-    if (count == SNAPCOUNT_DONE)
-      return;
-    if ((uint32_t)count + 1u < hotexit) {
-      snap_count_rel(snap, count + 1u);
-      return;
+    for (;;) {
+      count = (uint8_t)snap_count_acq(snap);
+      if (count == SNAPCOUNT_DONE)
+	return;
+      if ((uint32_t)count + 1u >= hotexit)
+	break;
+      if (snap_count_cas_acqrel(snap, &count, count + 1u))
+	return;
     }
     if (lj_trace_state_load(J) != LJ_TRACE_IDLE)
       return;
     if (!lj_jit_token_try(J))
       return;
-    if (count < SNAPCOUNT_DONE-1)
-      snap_count_rel(snap, count + 1u);
+    for (;;) {
+      count = (uint8_t)snap_count_acq(snap);
+      if (count == SNAPCOUNT_DONE) {
+	lj_jit_token_release(J);
+	return;
+      }
+      if (count >= SNAPCOUNT_DONE-1 ||
+	  snap_count_cas_acqrel(snap, &count, count + 1u))
+	break;
+    }
     J->L = L;
     J->parent = parent;
     J->exitno = exitno;

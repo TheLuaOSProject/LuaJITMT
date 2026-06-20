@@ -4,6 +4,7 @@
 
 #include <assert.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "lua.h"
 #include "lauxlib.h"
@@ -26,6 +27,25 @@ int main(void)
 
   g = G(L);
   assert(la_load32_acq(&g->jit_token) == 0);
+
+  {
+    SnapShot snap;
+    uint8_t count;
+    memset(&snap, 0, sizeof(snap));
+
+    count = 0;
+    assert(snap_count_cas_acqrel(&snap, &count, 1) != 0);
+    assert(count == 0);
+    assert(snap_count_acq(&snap) == 1);
+
+    count = 0;
+    assert(snap_count_cas_acqrel(&snap, &count, 2) == 0);
+    assert(count == 1);
+    assert(snap_count_acq(&snap) == 1);
+
+    snap_count_rel(&snap, SNAPCOUNT_DONE);
+    assert(snap_count_acq(&snap) == SNAPCOUNT_DONE);
+  }
 
 #if LJ_TARGET_X64 && !LJ_ABI_WIN
   {

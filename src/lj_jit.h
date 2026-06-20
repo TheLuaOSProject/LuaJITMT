@@ -280,6 +280,12 @@ static LJ_AINLINE void snap_count_rel(SnapShot *snap, MSize count)
   la_store8_rel(&snap->count, (uint8_t)count);
 }
 
+static LJ_AINLINE int snap_count_cas_acqrel(SnapShot *snap, uint8_t *count,
+					    MSize next)
+{
+  return la_cas8(&snap->count, count, (uint8_t)next, LA_ACQ_REL, LA_ACQ);
+}
+
 static LJ_AINLINE SnapEntry snapentry_acq(const SnapEntry *entry)
 {
   return (SnapEntry)la_load32_acq(entry);
