@@ -183,14 +183,14 @@ function M.run_stock(t, args, opts)
   if opts.check_executable then
     t:run({ "test", "-x", bin }, { quiet = true })
   end
-  local parts = {
-    "cd " .. shell_quote(t:path("tests", "stock", "test")),
-    "LUA_PATH=" .. shell_quote(M.lua_path(t)) .. " "
-  }
-  if opts.timeout then parts[2] = parts[2] .. "timeout " .. shell_quote(opts.timeout) .. " " end
-  parts[2] = parts[2] .. shell_quote(bin)
-  for i = 1, #args do parts[2] = parts[2] .. " " .. shell_quote(args[i]) end
-  t:run(parts[1] .. " && " .. parts[2], { quiet = opts.quiet })
+  local argv = { bin }
+  for i = 1, #args do argv[#argv + 1] = args[i] end
+  t:run(argv, {
+    cwd = t:path("tests", "stock", "test"),
+    env = { LUA_PATH = M.lua_path(t) },
+    quiet = opts.quiet,
+    timeout = opts.timeout
+  })
 end
 
 function M.run_stock_cli(t, args, opts)

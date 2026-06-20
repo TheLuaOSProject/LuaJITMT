@@ -110,6 +110,9 @@ function Test:run(cmd, opts)
     append(parts, cmd)
   end
   local full = table.concat(parts, " ")
+  if opts.cwd then
+    full = "cd " .. shell_quote(opts.cwd) .. " && " .. full
+  end
   if not opts.quiet then
     io.stderr:write("+ " .. full .. "\n")
   end
