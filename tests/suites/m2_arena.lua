@@ -156,7 +156,7 @@ return function(add)
     name = "m2_arena_all",
     description = "all focused M2 arena scaffold tests",
     run = function(t)
-      utils.run_registered_cases(cases, t, M2_ORDER)
+      utils.run_cases(cases, t, M2_ORDER)
       print("M2 arena focused tests passed")
     end
   })

@@ -95,15 +95,17 @@ function M.case_registry(add)
   return cases, register
 end
 
-function M.run_registered_case(cases, t, name)
+function M.run_case(cases, t, name, args)
+  local test = cases[name]
+  if not test then error("unknown test: " .. tostring(name), 2) end
   io.stderr:write("== " .. name .. " ==\n")
-  cases[name].run(t)
+  test.run(t, args or {})
   io.stderr:write("ok " .. name .. "\n")
 end
 
-function M.run_registered_cases(cases, t, names)
+function M.run_cases(cases, t, names)
   for i = 1, #names do
-    M.run_registered_case(cases, t, names[i])
+    M.run_case(cases, t, names[i])
   end
 end
 

@@ -4,6 +4,7 @@ package.path = root .. "/tests/lib/?.lua;" ..
                package.path
 
 local ljtest = require("ljtest")
+local utils = require("suite_utils")
 local tests = require("init")
 
 local function sorted_names()
@@ -62,13 +63,10 @@ end
 local t = ljtest.new(root)
 for i = 1, #names do
   local name = names[i]
-  local test = tests[name]
-  if not test then
+  if not tests[name] then
     io.stderr:write("unknown test: " .. name .. "\n")
     usage()
     os.exit(2)
   end
-  io.stderr:write("== " .. name .. " ==\n")
-  test.run(t, passthrough)
-  io.stderr:write("ok " .. name .. "\n")
+  utils.run_case(tests, t, name, passthrough)
 end

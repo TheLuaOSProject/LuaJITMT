@@ -97,10 +97,10 @@ return function(add)
         "t-gc2-traverse"
       })
 
-      utils.run_registered_case(cases, t, "m3_gc2_worker_scheduler")
-      utils.run_registered_case(cases, t, "m3_safepoint_handshake")
-      utils.run_registered_case(cases, t, "m3_vm_safepoint")
-      utils.run_registered_case(cases, t, "m3_gc2_paranoia")
+      utils.run_case(cases, t, "m3_gc2_worker_scheduler")
+      utils.run_case(cases, t, "m3_safepoint_handshake")
+      utils.run_case(cases, t, "m3_vm_safepoint")
+      utils.run_case(cases, t, "m3_gc2_paranoia")
       runtime.run_lua_test_case(t, "m2_arena_all")
 
       make_clean(t)
