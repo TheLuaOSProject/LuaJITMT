@@ -777,9 +777,11 @@ static int gc_chain_splice(GCRef *p, GCobj *o)
 /* Mark userdata/cdata in finalizer queues. */
 static void gc_mark_finalizers(global_State *g)
 {
-  lj_gc2_finalizer_drain(g);
+  lj_gc2_finalizer_enter(g);
+  lj_gc2_finalizer_drain_owned(g);
   gc_mark_finalizer_ring(g, (GCobj *)la_loadptr_acq(
 	(void *const *)&g->gc2.finalizer_tail));
+  lj_gc2_finalizer_leave(g);
 }
 
 static int gc_unlink_udata_object(global_State *g, GCobj *target)
@@ -1576,8 +1578,8 @@ static int gc_finalize(lua_State *L)
   lj_assertG(lj_tg_jit_base(g) == NULL, "finalizer called on trace");
   if (!lj_gc2_finalizer_try_enter(g))
     return 0;
-  lj_gc2_finalizer_drain(g);
-  o = lj_gc2_finalizer_dequeue(g);
+  lj_gc2_finalizer_drain_owned(g);
+  o = lj_gc2_finalizer_dequeue_owned(g);
   if (o == NULL) {
     lj_gc2_finalizer_leave(g);
     return 0;

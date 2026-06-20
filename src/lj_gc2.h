@@ -99,7 +99,8 @@ LJ_FUNC int lj_gc2_finreg_cdata_preclaim_take(lua_State *L, global_State *g,
 					      GCobj *o, TValue *fin);
 #if defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
 LJ_FUNC void lj_gc2_test_finreg_cdata_preclaim_fail(global_State *g,
-						    uint32_t n);
+							    uint32_t n);
+LJ_FUNC void lj_gc2_test_finalizer_drain_pause(global_State *g);
 #endif
 LJ_FUNC int lj_gc2_finreg_udata_set(global_State *g, GCobj *o, int enabled);
 LJ_FUNC void lj_gc2_finreg_udata_register(lua_State *L, global_State *g,
@@ -109,7 +110,9 @@ LJ_FUNC void lj_gc2_finreg_udata_register_mt(lua_State *L, global_State *g,
 LJ_FUNC void lj_gc2_finreg_udata_forget(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc2_finreg_udata_queue(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc2_finalizer_enqueue(global_State *g, GCobj *o);
+LJ_FUNC void lj_gc2_finalizer_drain_owned(global_State *g);
 LJ_FUNC void lj_gc2_finalizer_drain(global_State *g);
+LJ_FUNC GCobj *lj_gc2_finalizer_dequeue_owned(global_State *g);
 LJ_FUNC GCobj *lj_gc2_finalizer_dequeue(global_State *g);
 LJ_FUNC int lj_gc2_finalizer_try_enter(global_State *g);
 LJ_FUNC void lj_gc2_finalizer_enter(global_State *g);

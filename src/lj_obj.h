@@ -1332,6 +1332,11 @@ typedef struct GC2State {
   uint64_t finalizer_leaves;  /* Legacy finalizer callback guard leaves. */
   uint64_t finalizer_sweep_blocks;  /* Sweep attempts blocked by finalizers. */
   uint64_t finalizer_spawn_deferrals;  /* Live spawned TG kept finalize open. */
+#if defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
+  uint32_t finalizer_drain_test_pause;  /* Test hook: pause one drain splice. */
+  uint32_t finalizer_drain_test_paused;
+  uint32_t finalizer_drain_test_release;
+#endif
   uint64_t weak_keys_marked;  /* P_WEAK write barriers marking keys. */
   uint64_t weak_values_marked;  /* P_WEAK write barriers marking values. */
   TGState *tg_list;	/* Registered per-thread state blocks. */

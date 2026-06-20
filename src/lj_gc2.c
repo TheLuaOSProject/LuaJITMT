@@ -244,6 +244,11 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.finalizer_leaves, 0);
   la_store64_rlx(&g->gc2.finalizer_sweep_blocks, 0);
   la_store64_rlx(&g->gc2.finalizer_spawn_deferrals, 0);
+#if defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
+  la_store32_rlx(&g->gc2.finalizer_drain_test_pause, 0);
+  la_store32_rlx(&g->gc2.finalizer_drain_test_paused, 0);
+  la_store32_rlx(&g->gc2.finalizer_drain_test_release, 0);
+#endif
   la_store64_rlx(&g->gc2.weak_keys_marked, 0);
   la_store64_rlx(&g->gc2.weak_values_marked, 0);
   g->gc2.tg_list = NULL;
@@ -747,6 +752,26 @@ void lj_gc2_weak_to_sweep(global_State *g)
   lj_gc2_worker_wake(g);  /* 05 section 5.6.3 parked worker scheduler. */
 }
 
+static uint32_t gc2_finalizer_current_owner(void)
+{
+  TGState *tg = lj_thr_get_tg();
+  uint32_t tid = tg ? la_load32_acq(&tg->tid) : 0;
+  return tid != 0 ? tid : ~(uint32_t)0;
+}
+
+static int gc2_finalizer_owned_by_current(global_State *g)
+{
+  TGState *tg;
+  uint32_t owner;
+  if (!g)
+    return 0;
+  owner = la_load32_acq(&g->gc2.finalizer_owner_tid);
+  if (owner == 0)
+    return 0;
+  tg = lj_thr_get_tg();
+  return owner == (tg ? la_load32_acq(&tg->tid) : ~(uint32_t)0);
+}
+
 void lj_gc2_finalizer_enqueue(global_State *g, GCobj *o)
 {
   GCobj *head;
@@ -763,12 +788,14 @@ void lj_gc2_finalizer_enqueue(global_State *g, GCobj *o)
   la_add64_rlx(&g->gc2.finalizer_queued, 1);
 }
 
-void lj_gc2_finalizer_drain(global_State *g)
+void lj_gc2_finalizer_drain_owned(global_State *g)
 {
   GCobj *stack, *rev = NULL, *newtail = NULL, *oldtail;
   size_t n = 0;
   if (!g)
     return;
+  lj_assertG(gc2_finalizer_owned_by_current(g),
+	     "gc2 finalizer drain requires owner");
   stack = (GCobj *)la_xchgptr_acqrel((void **)&g->gc2.finalizer_mpsc, NULL);
   while (stack) {
     GCobj *next = lj_obj_gcw_acq(stack);
@@ -785,6 +812,14 @@ void lj_gc2_finalizer_drain(global_State *g)
   if (!rev)
     return;
   oldtail = (GCobj *)la_loadptr_acq((void *const *)&g->gc2.finalizer_tail);
+#if defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
+  if (la_xchg32_acqrel(&g->gc2.finalizer_drain_test_pause, 0) != 0) {
+    la_store32_rel(&g->gc2.finalizer_drain_test_paused, 1);
+    while (la_load32_acq(&g->gc2.finalizer_drain_test_release) == 0)
+      la_cpu_pause();
+    la_store32_rel(&g->gc2.finalizer_drain_test_paused, 0);
+  }
+#endif
   if (oldtail) {
     GCRef head;
     setgcrefr(head, *lj_obj_gcwref(oldtail));
@@ -798,14 +833,25 @@ void lj_gc2_finalizer_drain(global_State *g)
   la_add64_rlx(&g->gc2.finalizer_mpsc_drained, n);
 }
 
-GCobj *lj_gc2_finalizer_dequeue(global_State *g)
+void lj_gc2_finalizer_drain(global_State *g)
+{
+  if (!g)
+    return;
+  lj_gc2_finalizer_enter(g);
+  lj_gc2_finalizer_drain_owned(g);
+  lj_gc2_finalizer_leave(g);
+}
+
+GCobj *lj_gc2_finalizer_dequeue_owned(global_State *g)
 {
   GCobj *tail, *o;
   if (!g)
     return NULL;
+  lj_assertG(gc2_finalizer_owned_by_current(g),
+	     "gc2 finalizer dequeue requires owner");
   tail = (GCobj *)la_loadptr_acq((void *const *)&g->gc2.finalizer_tail);
   if (!tail) {
-    lj_gc2_finalizer_drain(g);
+    lj_gc2_finalizer_drain_owned(g);
     tail = (GCobj *)la_loadptr_acq((void *const *)&g->gc2.finalizer_tail);
     if (!tail)
       return NULL;
@@ -824,11 +870,15 @@ GCobj *lj_gc2_finalizer_dequeue(global_State *g)
   return o;  /* 05 section 5.8: GC2-owned finalizer queue bridge. */
 }
 
-static uint32_t gc2_finalizer_current_owner(void)
+GCobj *lj_gc2_finalizer_dequeue(global_State *g)
 {
-  TGState *tg = lj_thr_get_tg();
-  uint32_t tid = tg ? la_load32_acq(&tg->tid) : 0;
-  return tid != 0 ? tid : ~(uint32_t)0;
+  GCobj *o;
+  if (!g)
+    return NULL;
+  lj_gc2_finalizer_enter(g);
+  o = lj_gc2_finalizer_dequeue_owned(g);
+  lj_gc2_finalizer_leave(g);
+  return o;
 }
 
 int lj_gc2_finalizer_try_enter(global_State *g)
@@ -886,19 +936,6 @@ void lj_gc2_finalizer_leave(global_State *g)
     return;
   }
   la_add64_rlx(&g->gc2.finalizer_leaves, 1);
-}
-
-static int gc2_finalizer_owned_by_current(global_State *g)
-{
-  TGState *tg;
-  uint32_t owner;
-  if (!g)
-    return 0;
-  owner = la_load32_acq(&g->gc2.finalizer_owner_tid);
-  if (owner == 0)
-    return 0;
-  tg = lj_thr_get_tg();
-  return owner == (tg ? la_load32_acq(&tg->tid) : ~(uint32_t)0);
 }
 
 static int gc2_finalizer_pending_for_sweep(global_State *g, int owner_ok)
@@ -2250,6 +2287,15 @@ void lj_gc2_test_finreg_cdata_preclaim_fail(global_State *g, uint32_t n)
 {
   if (g)
     g->gc2.finreg_cdata_preclaim_test_fail = n;
+}
+
+void lj_gc2_test_finalizer_drain_pause(global_State *g)
+{
+  if (!g)
+    return;
+  la_store32_rel(&g->gc2.finalizer_drain_test_release, 0);
+  la_store32_rel(&g->gc2.finalizer_drain_test_paused, 0);
+  la_store32_rel(&g->gc2.finalizer_drain_test_pause, 1);
 }
 #endif
 
