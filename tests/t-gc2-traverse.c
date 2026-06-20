@@ -3232,6 +3232,75 @@ static int test_unlink_udata_object(global_State *g, GCobj *target)
   return 0;
 }
 
+static uint32_t finreg_udata_active_nodes(global_State *g)
+{
+  GC2FinRegUDataNode *node;
+  uint32_t n = 0;
+  for (node = (GC2FinRegUDataNode *)la_loadptr_acq(
+	 (void *const *)&g->gc2.finreg_udata_head);
+       node != NULL;
+       node = gc2_finreg_udata_next_acq(node))
+    n += gc2_finreg_udata_active_acq(node) != 0;
+  return n;
+}
+
+static uint32_t finreg_udata_active_refs(global_State *g, GCobj *target)
+{
+  GC2FinRegUDataNode *node;
+  uint32_t n = 0;
+  for (node = (GC2FinRegUDataNode *)la_loadptr_acq(
+	 (void *const *)&g->gc2.finreg_udata_head);
+       node != NULL;
+       node = gc2_finreg_udata_next_acq(node))
+    n += gc2_finreg_udata_active_acq(node) &&
+	 gc2_finreg_udata_obj_acq(node) == target;
+  return n;
+}
+
+static void test_finreg_userdata_active_unlink(lua_State *L, global_State *g)
+{
+  uint32_t active0;
+  uint64_t registered0, retired0, queued0;
+  GCobj *o;
+
+  lua_settop(L, 0);
+  active0 = finreg_udata_active_nodes(g);
+  registered0 = la_load64_acq(&g->gc2.finreg_udata_registered);
+  retired0 = la_load64_acq(&g->gc2.finreg_udata_retired_nodes);
+  queued0 = la_load64_acq(&g->gc2.finreg_udata_queued);
+
+  lua_newuserdata(L, 1);
+  o = obj2gco(udataV(L->top - 1));
+  push_udata_finalizer_mt(L);
+  lua_setmetatable(L, -2);
+  assert(finreg_udata_active_nodes(g) == active0 + 1u);
+  assert(finreg_udata_active_refs(g, o) == 1u);
+  assert(la_load64_acq(&g->gc2.finreg_udata_registered) ==
+	 registered0 + 1u);
+
+  lua_pushnil(L);
+  lua_setmetatable(L, -2);
+  assert(finreg_udata_active_nodes(g) == active0);
+  assert(finreg_udata_active_refs(g, o) == 0);
+  assert(la_load64_acq(&g->gc2.finreg_udata_retired_nodes) ==
+	 retired0 + 1u);
+
+  push_udata_finalizer_mt(L);
+  lua_setmetatable(L, -2);
+  assert(finreg_udata_active_nodes(g) == active0 + 1u);
+  assert(finreg_udata_active_refs(g, o) == 1u);
+  assert(la_load64_acq(&g->gc2.finreg_udata_registered) ==
+	 registered0 + 2u);
+
+  lua_pop(L, 1);
+  drive_udata_finalizers(L);
+  assert(finreg_udata_active_nodes(g) <= active0);
+  assert(finreg_udata_active_refs(g, o) == 0);
+  assert(la_load64_acq(&g->gc2.finreg_udata_retired_nodes) >=
+	 retired0 + 2u);
+  assert(la_load64_acq(&g->gc2.finreg_udata_queued) == queued0 + 1u);
+}
+
 static void test_finreg_userdata_telemetry(lua_State *L, global_State *g)
 {
   uint64_t sets0 = la_load64_acq(&g->gc2.finreg_udata_sets);
@@ -4232,6 +4301,7 @@ int main(void)
   test_thread(L, g, tg);
   test_userdata(L, g);
   test_finreg_userdata_queue_mark(L, g, tg);
+  test_finreg_userdata_active_unlink(L, g);
   test_finreg_userdata_telemetry(L, g);
   test_finreg_internal_userdata_telemetry(L, g);
   test_finreg_userdata_inplace_finalizer_behavior(L);

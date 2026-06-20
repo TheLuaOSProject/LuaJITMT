@@ -233,7 +233,9 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.finreg_udata_clears, 0);
   la_store64_rlx(&g->gc2.finreg_udata_queued, 0);
   la_storeptr_rlx((void **)&g->gc2.finreg_udata_head, NULL);
+  la_storeptr_rlx((void **)&g->gc2.finreg_udata_retired, NULL);
   la_store64_rlx(&g->gc2.finreg_udata_registered, 0);
+  la_store64_rlx(&g->gc2.finreg_udata_retired_nodes, 0);
   la_store64_rlx(&g->gc2.finreg_udata_discovered, 0);
   la_store64_rlx(&g->gc2.finreg_udata_forgets, 0);
   la_storeptr_rlx((void **)&g->gc2.finalizer_mpsc, NULL);
@@ -303,6 +305,14 @@ void lj_gc2_fini(global_State *g)
       la_xchgptr_acqrel((void **)&g->gc2.finreg_udata_head, NULL);
     while (node) {
       GC2FinRegUDataNode *next = gc2_finreg_udata_next_acq(node);
+      if (gc2_finreg_udata_active_acq(node))
+	lj_mem_freet(g, node);
+      node = next;
+    }
+    node = (GC2FinRegUDataNode *)la_xchgptr_acqrel(
+      (void **)&g->gc2.finreg_udata_retired, NULL);
+    while (node) {
+      GC2FinRegUDataNode *next = gc2_finreg_udata_retired_next_acq(node);
       lj_mem_freet(g, node);
       node = next;
     }
@@ -2510,11 +2520,14 @@ void lj_gc2_finreg_udata_register(lua_State *L, global_State *g, GCobj *o)
 	 (void *const *)&g->gc2.finreg_udata_head);
        node != NULL;
        node = gc2_finreg_udata_next_acq(node)) {
-    if (gc2_finreg_udata_obj_acq(node) == o)
+    if (gc2_finreg_udata_active_acq(node) &&
+	gc2_finreg_udata_obj_acq(node) == o)
       return;
   }
   node = lj_mem_newt(L, sizeof(GC2FinRegUDataNode), GC2FinRegUDataNode);
   gc2_finreg_udata_obj_rel(node, o);
+  gc2_finreg_udata_retired_next_rel(node, NULL);
+  gc2_finreg_udata_active_rel(node, 1);
   do {
     head = (GC2FinRegUDataNode *)la_loadptr_acq(
       (void *const *)&g->gc2.finreg_udata_head);
@@ -2535,20 +2548,76 @@ void lj_gc2_finreg_udata_register_mt(lua_State *L, global_State *g,
     (void)lj_gc2_finreg_udata_set(g, obj2gco(ud), 1);
 }
 
+static int gc2_finreg_udata_retire(global_State *g,
+				   GC2FinRegUDataNode *node)
+{
+  GC2FinRegUDataNode *head;
+  if (!g || !node)
+    return 0;
+  lj_assertG(gc2_finreg_udata_obj_acq(node) == NULL,
+	     "retiring live userdata FINREG node");
+  if (!gc2_finreg_udata_active_retire(node))
+    return 0;
+  do {
+    head = (GC2FinRegUDataNode *)la_loadptr_acq(
+      (void *const *)&g->gc2.finreg_udata_retired);
+    gc2_finreg_udata_retired_next_rel(node, head);
+  } while (!la_casptr((void **)&g->gc2.finreg_udata_retired, (void **)&head,
+		      node, LA_ACQ_REL, LA_ACQ));
+  la_add64_rlx(&g->gc2.finreg_udata_retired_nodes, 1);
+  return 1;
+}
+
+int lj_gc2_finreg_udata_unlink(global_State *g, GC2FinRegUDataNode *prev,
+			       GC2FinRegUDataNode *node,
+			       GC2FinRegUDataNode *next)
+{
+  GC2FinRegUDataNode *expect;
+  if (!g || !node)
+    return 0;
+  if (!gc2_finreg_udata_retire(g, node))
+    return 1;
+  if (prev) {
+    expect = node;
+    if (gc2_finreg_udata_active_acq(prev))
+      (void)gc2_finreg_udata_next_cas(prev, &expect, next);
+  } else {
+    expect = node;
+    (void)la_casptr((void **)&g->gc2.finreg_udata_head, (void **)&expect,
+		    next, LA_ACQ_REL, LA_ACQ);
+  }
+  return 1;  /* 05 section 5.8: logical retire plus best-effort CAS unlink. */
+}
+
 void lj_gc2_finreg_udata_forget(global_State *g, GCobj *o)
 {
-  GC2FinRegUDataNode *node;
+  GC2FinRegUDataNode *prev, *node;
   int cleared = 0;
   if (!g || !o || o->gch.gct != ~LJ_TUDATA)
     return;
-  for (node = (GC2FinRegUDataNode *)la_loadptr_acq(
-	 (void *const *)&g->gc2.finreg_udata_head);
-       node != NULL;
-       node = gc2_finreg_udata_next_acq(node)) {
+  prev = NULL;
+  node = (GC2FinRegUDataNode *)la_loadptr_acq(
+    (void *const *)&g->gc2.finreg_udata_head);
+  while (node) {
+    GC2FinRegUDataNode *next = gc2_finreg_udata_next_acq(node);
+    if (!gc2_finreg_udata_active_acq(node)) {
+      node = next;
+      continue;
+    }
     if (gc2_finreg_udata_obj_acq(node) == o) {
       gc2_finreg_udata_obj_clear(node);
       cleared = 1;
+      if (lj_gc2_finreg_udata_unlink(g, prev, node, next)) {
+	node = next;
+	continue;
+      }
+      prev = NULL;
+      node = (GC2FinRegUDataNode *)la_loadptr_acq(
+	(void *const *)&g->gc2.finreg_udata_head);
+      continue;
     }
+    prev = node;
+    node = next;
   }
   if (cleared)
     la_add64_rlx(&g->gc2.finreg_udata_forgets, 1);

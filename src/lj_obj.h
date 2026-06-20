@@ -627,6 +627,8 @@ typedef struct TabArrayRetire {
 typedef struct GC2FinRegUDataNode {
   GCRef obj;		/* Userdata object tracked for metatable __gc. */
   struct GC2FinRegUDataNode *next;
+  struct GC2FinRegUDataNode *retired_next;
+  uint32_t active;	/* Node is still part of active discovery set. */
 } GC2FinRegUDataNode;
 
 typedef struct GCtab {
@@ -1329,7 +1331,9 @@ typedef struct GC2State {
   uint64_t finreg_udata_clears;  /* Userdata finalizer clears mirrored. */
   uint64_t finreg_udata_queued;  /* Userdata finalizers queued for dispatch. */
   void *finreg_udata_head;  /* GC2-owned userdata metatable side list. */
+  void *finreg_udata_retired;  /* Unlinked nodes retained until teardown. */
   uint64_t finreg_udata_registered;  /* Userdata side-list nodes published. */
+  uint64_t finreg_udata_retired_nodes;  /* Userdata side-list nodes unlinked. */
   uint64_t finreg_udata_discovered;  /* Userdata queued from side list. */
   uint64_t finreg_udata_forgets;  /* Stale userdata side-list refs cleared. */
   void *finalizer_mpsc;  /* Producer-published finalizer stack. */
@@ -1790,6 +1794,24 @@ static LJ_AINLINE void gc2_finreg_udata_obj_clear(GC2FinRegUDataNode *node)
   setgcrefnullrel(node->obj);
 }
 
+static LJ_AINLINE uint32_t
+gc2_finreg_udata_active_acq(const GC2FinRegUDataNode *node)
+{
+  return la_load32_acq(&node->active);
+}
+
+static LJ_AINLINE void gc2_finreg_udata_active_rel(GC2FinRegUDataNode *node,
+						   uint32_t active)
+{
+  la_store32_rel(&node->active, active);
+}
+
+static LJ_AINLINE int gc2_finreg_udata_active_retire(GC2FinRegUDataNode *node)
+{
+  uint32_t old = 1;
+  return la_cas32(&node->active, &old, 0, LA_ACQ_REL, LA_ACQ);
+}
+
 static LJ_AINLINE GC2FinRegUDataNode *
 gc2_finreg_udata_next_acq(const GC2FinRegUDataNode *node)
 {
@@ -1800,6 +1822,28 @@ static LJ_AINLINE void gc2_finreg_udata_next_rel(GC2FinRegUDataNode *node,
 						 GC2FinRegUDataNode *next)
 {
   la_storeptr_rel((void **)&node->next, next);
+}
+
+static LJ_AINLINE int gc2_finreg_udata_next_cas(GC2FinRegUDataNode *node,
+						GC2FinRegUDataNode **oldp,
+						GC2FinRegUDataNode *next)
+{
+  return la_casptr((void **)&node->next, (void **)oldp, next,
+		   LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE GC2FinRegUDataNode *
+gc2_finreg_udata_retired_next_acq(const GC2FinRegUDataNode *node)
+{
+  return (GC2FinRegUDataNode *)la_loadptr_acq(
+    (void *const *)&node->retired_next);
+}
+
+static LJ_AINLINE void
+gc2_finreg_udata_retired_next_rel(GC2FinRegUDataNode *node,
+				  GC2FinRegUDataNode *next)
+{
+  la_storeptr_rel((void **)&node->retired_next, next);
 }
 
 static LJ_AINLINE void lj_obj_setgcwrel(GCobj *o, const GCobj *next)

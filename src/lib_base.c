@@ -707,6 +707,8 @@ static void gc_stats_push(lua_State *L)
 		  la_load64_acq(&gc2->finreg_udata_queued));
   gc_stats_setnum(L, t, "finreg_udata_registered",
 		  la_load64_acq(&gc2->finreg_udata_registered));
+  gc_stats_setnum(L, t, "finreg_udata_retired_nodes",
+		  la_load64_acq(&gc2->finreg_udata_retired_nodes));
   gc_stats_setnum(L, t, "finreg_udata_discovered",
 		  la_load64_acq(&gc2->finreg_udata_discovered));
   gc_stats_setnum(L, t, "finreg_udata_forgets",

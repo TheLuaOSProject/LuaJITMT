@@ -820,28 +820,58 @@ static size_t gc_queue_udata_finalizer(global_State *g, GCobj *o)
 
 static size_t gc_separateudata_registered(global_State *g, int all)
 {
-  GC2FinRegUDataNode *node;
+  GC2FinRegUDataNode *prev, *node;
   TValue mmv;
   size_t m = 0;
-  for (node = (GC2FinRegUDataNode *)la_loadptr_acq(
-	 (void *const *)&g->gc2.finreg_udata_head);
-       node != NULL;
-       node = gc2_finreg_udata_next_acq(node)) {
+  prev = NULL;
+  node = (GC2FinRegUDataNode *)la_loadptr_acq(
+    (void *const *)&g->gc2.finreg_udata_head);
+  while (node) {
+    GC2FinRegUDataNode *next = gc2_finreg_udata_next_acq(node);
     GCobj *o = gc2_finreg_udata_obj_acq(node);
     uint8_t flags;
     int finreg;
-    if (!o)
+    if (!gc2_finreg_udata_active_acq(node)) {
+      node = next;
       continue;
+    }
+    if (!o) {
+      if (lj_gc2_finreg_udata_unlink(g, prev, node, next)) {
+	node = next;
+	continue;
+      }
+      prev = NULL;
+      node = (GC2FinRegUDataNode *)la_loadptr_acq(
+	(void *const *)&g->gc2.finreg_udata_head);
+      continue;
+    }
     if (o->gch.gct != ~LJ_TUDATA) {
       gc2_finreg_udata_obj_clear(node);
+      if (lj_gc2_finreg_udata_unlink(g, prev, node, next)) {
+	node = next;
+	continue;
+      }
+      prev = NULL;
+      node = (GC2FinRegUDataNode *)la_loadptr_acq(
+	(void *const *)&g->gc2.finreg_udata_head);
       continue;
     }
     if (isfinalized(gco2ud(o))) {
       gc2_finreg_udata_obj_clear(node);
+      if (lj_gc2_finreg_udata_unlink(g, prev, node, next)) {
+	node = next;
+	continue;
+      }
+      prev = NULL;
+      node = (GC2FinRegUDataNode *)la_loadptr_acq(
+	(void *const *)&g->gc2.finreg_udata_head);
       continue;
     }
-    if (!(iswhite(o) || all))
+    if (!(iswhite(o) || all)) {
+      prev = node;
+      node = next;
       continue;
+    }
     flags = lj_obj_gcflags(o);
     finreg = (flags & LJ_GC_UDATA_FINREG) != 0;
     if (!lj_meta_fasttv(g, tabref_acq(gco2ud(o)->metatable), MM_gc, &mmv)) {
@@ -849,6 +879,13 @@ static size_t gc_separateudata_registered(global_State *g, int all)
 	lj_gc2_finreg_udata_set(g, o, 0);
       markfinalized(o);  /* Side-list no-finalizer userdata is done. */
       gc2_finreg_udata_obj_clear(node);
+      if (lj_gc2_finreg_udata_unlink(g, prev, node, next)) {
+	node = next;
+	continue;
+      }
+      prev = NULL;
+      node = (GC2FinRegUDataNode *)la_loadptr_acq(
+	(void *const *)&g->gc2.finreg_udata_head);
       continue;
     }
     if (!finreg)
@@ -861,6 +898,13 @@ static size_t gc_separateudata_registered(global_State *g, int all)
     gc2_finreg_udata_obj_clear(node);
     la_add64_rlx(&g->gc2.finreg_udata_discovered, 1);
     m += gc_queue_udata_finalizer(g, o);
+    if (lj_gc2_finreg_udata_unlink(g, prev, node, next)) {
+      node = next;
+      continue;
+    }
+    prev = NULL;
+    node = (GC2FinRegUDataNode *)la_loadptr_acq(
+      (void *const *)&g->gc2.finreg_udata_head);
   }
   return m;  /* 05 section 5.8: GC2-owned userdata FINREG discovery. */
 }

@@ -40,6 +40,7 @@ local finreg_stats = {
   "finreg_udata_clears",
   "finreg_udata_queued",
   "finreg_udata_registered",
+  "finreg_udata_retired_nodes",
   "finreg_udata_discovered",
   "finreg_udata_forgets",
   "finalizer_mpsc_drained",
