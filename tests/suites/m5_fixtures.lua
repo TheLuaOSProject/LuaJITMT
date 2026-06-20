@@ -1,7 +1,8 @@
+local build = require("suite_build")
 local runtime = require("suite_runtime")
 
-local compile_and_run_c = runtime.compile_and_run_c
-local compile_and_run_sources = runtime.compile_and_run_sources
+local compile_and_run_c = build.compile_and_run_c
+local compile_and_run_sources = build.compile_and_run_sources
 
 return function(add)
   add({

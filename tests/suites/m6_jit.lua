@@ -1,4 +1,5 @@
 local utils = require("suite_utils")
+local build = require("suite_build")
 local runtime = require("suite_runtime")
 local jitutils = require("suite_jit")
 
@@ -17,8 +18,8 @@ local assert_call_after_loop_polls = jitutils.assert_call_after_loop_polls
 local luajit_code = runtime.luajit_code
 local luajit_file = runtime.luajit_file
 local luajit_dump = runtime.luajit_dump
-local build_default = runtime.build_default
-local build_and_run_c = runtime.build_and_run_c
+local build_default = build.build_default
+local build_and_run_c = build.build_and_run_c
 local run_lua_test_case = runtime.run_lua_test_case
 
 local m6_cases = {

@@ -1,3 +1,4 @@
+local build = require("suite_build")
 local runtime = require("suite_runtime")
 
 local luajit_script = runtime.luajit_script
@@ -17,7 +18,7 @@ local function run_default_matrix(t)
   run_luajit_script_jit_modes(t, "t-m8-finalizer-spawn-live.lua", nil,
                               { timeout = "10s" })
   run_luajit_script_jit_modes(t, "t-ffi-gc-finreg.lua", { "3", "72" })
-  runtime.run_c_fixtures(t, M8_C_FIXTURES, { output_suffix = "_m8" })
+  build.run_c_fixtures(t, M8_C_FIXTURES, { output_suffix = "_m8" })
 end
 
 local function run_paranoia_matrix(t)
@@ -30,7 +31,7 @@ local function run_paranoia_matrix(t)
       LJ_M8_FINALIZER_SPAWN = "0"
     }
   })
-  runtime.run_c_fixtures(t, M8_C_FIXTURES, {
+  build.run_c_fixtures(t, M8_C_FIXTURES, {
     output_suffix = "_m8_paranoia",
     cflags = xcflags
   })

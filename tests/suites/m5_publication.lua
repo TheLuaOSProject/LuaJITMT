@@ -1,11 +1,12 @@
 local utils = require("suite_utils")
+local build = require("suite_build")
 local runtime = require("suite_runtime")
 
 local contains = utils.contains
 local run_luajit = runtime.luajit
 local luajit_capture = runtime.capture_luajit
 local run_stock = runtime.run_stock
-local build_and_run_c = runtime.compile_and_run_c
+local build_and_run_c = build.compile_and_run_c
 local build_and_run_luajit_script = runtime.build_and_run_luajit_script
 
 local function table_value_smoke()

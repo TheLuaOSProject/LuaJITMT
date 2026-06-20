@@ -1,10 +1,11 @@
 local utils = require("suite_utils")
+local build = require("suite_build")
 local runtime = require("suite_runtime")
 
-local make_clean = runtime.make_clean
-local make_default = runtime.build_default
-local compile_and_run_c = runtime.compile_and_run_c
-local run_c_fixtures = runtime.run_c_fixtures
+local make_clean = build.make_clean
+local make_default = build.build_default
+local compile_and_run_c = build.compile_and_run_c
+local run_c_fixtures = build.run_c_fixtures
 local run_lua_test_case = runtime.run_lua_test_case
 local run_luajit_script_jit_modes = runtime.run_luajit_script_jit_modes
 

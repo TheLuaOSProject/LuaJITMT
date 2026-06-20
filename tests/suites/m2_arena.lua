@@ -1,8 +1,9 @@
 local utils = require("suite_utils")
+local build = require("suite_build")
 local runtime = require("suite_runtime")
 
-local build_and_run_c = runtime.build_and_run_c
-local compile_and_run_sources = runtime.compile_and_run_sources
+local build_and_run_c = build.build_and_run_c
+local compile_and_run_sources = build.compile_and_run_sources
 
 local M2_ORDER = {
   "m2_arena_bitmap",

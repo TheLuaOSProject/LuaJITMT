@@ -1,8 +1,9 @@
 local utils = require("suite_utils")
+local build = require("suite_build")
 local runtime = require("suite_runtime")
 
 local getenv = utils.getenv
-local compile_and_run_sources = runtime.compile_and_run_sources
+local compile_and_run_sources = build.compile_and_run_sources
 
 return function(add)
   runtime.add_luajit_script_cases(add, {

@@ -1,4 +1,5 @@
 local utils = require("suite_utils")
+local build = require("suite_build")
 local runtime = require("suite_runtime")
 local jitutils = require("suite_jit")
 
@@ -6,8 +7,8 @@ local getenv = utils.getenv
 local shell_quote = utils.shell_quote
 local assert_dump_contains = utils.assert_dump_contains
 local lua_path = runtime.lua_path
-local build_and_run_c = runtime.compile_and_run_c
-local clean_build = runtime.clean_build
+local build_and_run_c = build.compile_and_run_c
+local clean_build = build.clean_build
 local luajit_dump_file = runtime.luajit_dump_file
 local luajit_file = runtime.luajit_file
 local run_luajit_script = runtime.luajit_script

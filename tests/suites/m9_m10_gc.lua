@@ -1,4 +1,5 @@
 local utils = require("suite_utils")
+local build = require("suite_build")
 local runtime = require("suite_runtime")
 
 local shell_quote = utils.shell_quote
@@ -6,7 +7,7 @@ local command_succeeded = utils.command_succeeded
 local capture_command = utils.capture_command
 local assert_command_output_contains = utils.assert_command_output_contains
 local assert_command_output_all_contains = utils.assert_command_output_all_contains
-local compile_and_run_c = runtime.compile_and_run_c
+local compile_and_run_c = build.compile_and_run_c
 local luajit_script = runtime.luajit_script
 local run_luajit_script_jit_modes = runtime.run_luajit_script_jit_modes
 

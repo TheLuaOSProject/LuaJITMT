@@ -1,7 +1,8 @@
+local build = require("suite_build")
 local runtime = require("suite_runtime")
 
 local build_and_run_luajit_code = runtime.build_and_run_luajit_code
-local compile_and_run_c = runtime.compile_and_run_c
+local compile_and_run_c = build.compile_and_run_c
 
 local function tget_array_header_smoke()
   return [[
