@@ -118,7 +118,7 @@ static void tracevec_free(global_State *g, TraceVec *tv)
 static void tracevec_publish(jit_State *J, TraceVec *tv)
 {
   J->trace = tv->slot;
-  J->sizetrace = tv->sizetrace;
+  trace_sizetrace_rel(J, tv->sizetrace);
   la_storeptr_rel((void **)&J->tracev, tv);
 }
 
@@ -315,13 +315,13 @@ static TraceNo trace_findfree(jit_State *J)
   TraceVec *oldtv, *newtv;
   if (J->freetrace == 0)
     J->freetrace = 1;
-  for (; J->freetrace < J->sizetrace; J->freetrace++)
+  for (; J->freetrace < trace_sizetrace_acq(J); J->freetrace++)
     if (traceref(J, J->freetrace) == NULL)
       return J->freetrace++;
   /* Need to grow trace array. */
   lim = (MSize)J->param[JIT_P_maxtrace] + 1;
   if (lim < 2) lim = 2; else if (lim > 65535) lim = 65535;
-  osz = J->sizetrace;
+  osz = trace_sizetrace_acq(J);
   if (osz >= lim)
     return 0;  /* Too many traces. */
   oldtv = J->tracev;
@@ -466,7 +466,8 @@ static void trace_exittab_reset(jit_State *J, GCtrace *T)
 static void trace_exittab_resetroot(jit_State *J, TraceNo rootno)
 {
   TraceNo i;
-  for (i = 1; i < J->sizetrace; i++) {
+  MSize sizetrace = trace_sizetrace_acq(J);
+  for (i = 1; i < sizetrace; i++) {
     GCtrace *T = traceref(J, i);
     if (T && (trace_traceno_acq(T) == rootno || trace_root_acq(T) == rootno))
       trace_exittab_reset(J, T);
@@ -614,7 +615,7 @@ unpatch:
 
 static int trace_scope_flushing(jit_State *J, TraceNo traceno)
 {
-  if (traceno > 0 && traceno < J->sizetrace) {
+  if (traceno > 0 && traceno < trace_sizetrace_acq(J)) {
     GCtrace *T = traceref(J, traceno);
     return T && trace_traceno_acq(T) == traceno &&
 	   la_load64_acq(&T->retire_epoch) == LJ_TRACE_SCOPE_FLUSHING;
@@ -659,8 +660,9 @@ static uint32_t trace_flushscope_mark_deps(jit_State *J)
   uint32_t marked = 0, changed;
   do {
     TraceNo i;
+    MSize sizetrace = trace_sizetrace_acq(J);
     changed = 0;
-    for (i = 1; i < J->sizetrace; i++) {
+    for (i = 1; i < sizetrace; i++) {
       GCtrace *T = traceref(J, i);
       if (T && trace_traceno_acq(T) == i &&
 	  la_load64_acq(&T->retire_epoch) != LJ_TRACE_SCOPE_FLUSHING &&
@@ -682,7 +684,7 @@ static uint32_t trace_flushscope_mark_deps(jit_State *J)
 /* Flush a root or side trace. Returns non-zero iff scoped work was marked. */
 uint32_t lj_trace_flush(jit_State *J, TraceNo traceno)
 {
-  if (traceno > 0 && traceno < J->sizetrace) {
+  if (traceno > 0 && traceno < trace_sizetrace_acq(J)) {
     GCtrace *T = traceref(J, traceno);
     if (T && trace_traceno_acq(T) == traceno) {
       if (trace_root_acq(T) == 0)
@@ -751,7 +753,8 @@ static uint32_t lj_trace_flushscope_retire(global_State *g, uint64_t epoch)
   jit_State *J = G2J(g);
   TraceNo i;
   uint32_t retired = 0;
-  for (i = 1; i < J->sizetrace; i++) {
+  MSize sizetrace = trace_sizetrace_acq(J);
+  for (i = 1; i < sizetrace; i++) {
     GCtrace *T = traceref(J, i);
     if (T && trace_root_acq(T) != 0 && trace_traceno_acq(T) == i) {
       TraceNo rootno = trace_root_acq(T);
@@ -764,7 +767,7 @@ static uint32_t lj_trace_flushscope_retire(global_State *g, uint64_t epoch)
       }
     }
   }
-  for (i = 1; i < J->sizetrace; i++) {
+  for (i = 1; i < sizetrace; i++) {
     GCtrace *T = traceref(J, i);
     if (T && trace_root_acq(T) == 0 && trace_traceno_acq(T) == i &&
 	la_load64_acq(&T->retire_epoch) == LJ_TRACE_SCOPE_FLUSHING) {
@@ -784,7 +787,7 @@ int lj_trace_flushall(lua_State *L)
   ptrdiff_t i;
   if ((J2G(J)->hookmask & HOOK_GC))
     return 1;
-  for (i = (ptrdiff_t)J->sizetrace-1; i > 0; i--) {
+  for (i = (ptrdiff_t)trace_sizetrace_acq(J)-1; i > 0; i--) {
     GCtrace *T = traceref(J, i);
     if (T) {
       trace_exittab_reset(J, T);
@@ -895,7 +898,8 @@ void lj_trace_freestate(global_State *g)
 #ifdef LUA_USE_ASSERT
   {  /* This assumes all traces have already been freed. */
     ptrdiff_t i;
-    for (i = 1; i < (ptrdiff_t)J->sizetrace; i++)
+    ptrdiff_t sizetrace = (ptrdiff_t)trace_sizetrace_acq(J);
+    for (i = 1; i < sizetrace; i++)
       lj_assertG(i == (ptrdiff_t)J->cur.traceno || traceref(J, i) == NULL,
 		 "trace still allocated");
   }
@@ -1533,7 +1537,8 @@ static void trace_exit_regs(lua_State *V, ExitState *ex)
 static TraceNo trace_exit_find(jit_State *J, MCode *pc)
 {
   TraceNo traceno;
-  for (traceno = 1; traceno < J->sizetrace; traceno++) {
+  MSize sizetrace = trace_sizetrace_acq(J);
+  for (traceno = 1; traceno < sizetrace; traceno++) {
     GCtrace *T = traceref(J, traceno);
     if (T) {
       MCode *mcode = trace_mcode_acq(T);

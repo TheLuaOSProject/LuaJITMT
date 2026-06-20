@@ -811,6 +811,16 @@ typedef struct jit_State {
 #endif
 } jit_State;
 
+static LJ_AINLINE MSize trace_sizetrace_acq(const jit_State *J)
+{
+  return (MSize)la_load32_acq(&J->sizetrace);
+}
+
+static LJ_AINLINE void trace_sizetrace_rel(jit_State *J, MSize sizetrace)
+{
+  la_store32_rel(&J->sizetrace, sizetrace);
+}
+
 static LJ_AINLINE GCtrace *traceref(jit_State *J, TraceNo n)
 {
   TraceVec *tv = tracevec_acq(J);

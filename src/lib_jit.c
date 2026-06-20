@@ -329,7 +329,7 @@ static GCtrace *jit_checktrace(lua_State *L)
 {
   TraceNo tr = (TraceNo)lj_lib_checkint(L, 1);
   jit_State *J = L2J(L);
-  if (tr > 0 && tr < J->sizetrace)
+  if (tr > 0 && tr < trace_sizetrace_acq(J))
     return traceref(J, tr);
   return NULL;
 }

@@ -58,7 +58,7 @@ int main(void)
   assert(oldtv != NULL);
   assert(oldtv->sizetrace == 3);
   assert(J->trace == oldtv->slot);
-  assert(J->sizetrace == oldtv->sizetrace);
+  assert(trace_sizetrace_acq(J) == oldtv->sizetrace);
   assert(J->retiredtracev == NULL);
 
   ljt_lua_dostring(L,
@@ -81,7 +81,7 @@ int main(void)
   assert(newtv != oldtv);
   assert(newtv->sizetrace == 21);
   assert(J->trace == newtv->slot);
-  assert(J->sizetrace == newtv->sizetrace);
+  assert(trace_sizetrace_acq(J) == newtv->sizetrace);
   assert(retired_has(J, oldtv));
 
   epoch = oldtv->retire_epoch;
