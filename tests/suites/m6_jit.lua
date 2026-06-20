@@ -219,7 +219,8 @@ return function(add)
       build_default(t)
       build_and_run_c(t, t:tmp("lj_t-jit-token"), "t-jit-token.c",
                       { build = false, timeout = "20s" })
-      luajit_file(t, t:path("tests", "t-jit-secondary.lua"), { timeout = "20s" })
+      luajit_file(t, t:path("tests", "t-jit-secondary.lua"),
+                  { lua_path = true, timeout = "20s" })
 
       local dump = t:tmp("lj_t-jit-xpoll.dump")
       luajit_dump(t, dump, "-jdump=im", [=[

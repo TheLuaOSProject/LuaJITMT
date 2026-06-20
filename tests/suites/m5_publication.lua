@@ -114,14 +114,7 @@ end
 local function jit_trace_publish_smoke()
   return [=[
 local util = require"jit.util"
-local function tracecount()
-  local n = 0
-  for i = 1, 200 do
-    if util.traceinfo(i) then n = n + 1 end
-  end
-  return n
-end
-jit.off(tracecount, true)
+local trace_count = require"jit_harness".trace_count
 
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
@@ -133,9 +126,9 @@ end
 for _ = 1, 40 do
   assert(f(200) == 20100)
 end
-assert(tracecount() > 0, "no root trace was published")
+assert(trace_count(200) > 0, "no root trace was published")
 jit.flush()
-assert(tracecount() == 0, "trace slots were not cleared")
+assert(trace_count(200) == 0, "trace slots were not cleared")
 
 jit.flush()
 jit.opt.start("hotloop=1")
@@ -173,21 +166,21 @@ end
 for _ = 1, 60 do
   assert(side(90, false) == expect(90, false))
 end
-local before = tracecount()
+local before = trace_count(200)
 for _ = 1, 120 do
   assert(side(90, true) == expect(90, true))
 end
-assert(tracecount() > before, "no side trace was published")
-local after_side = tracecount()
+assert(trace_count(200) > before, "no side trace was published")
+local after_side = trace_count(200)
 for _ = 1, 120 do
   assert(side(90, true) == expect(90, true))
 end
 assert(util.traceinfo(1), "missing root trace 1")
 jit.flush(1)
 assert(not util.traceinfo(1), "scoped root flush did not clear root slot")
-assert(tracecount() < after_side, "scoped root flush did not retire any slots")
+assert(trace_count(200) < after_side, "scoped root flush did not retire any slots")
 jit.flush()
-assert(tracecount() == 0, "full flush after scoped root flush left traces")
+assert(trace_count(200) == 0, "full flush after scoped root flush left traces")
 for _ = 1, 20 do
   assert(side(90, true) == expect(90, true))
 end

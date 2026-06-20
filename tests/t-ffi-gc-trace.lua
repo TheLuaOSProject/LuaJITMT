@@ -1,5 +1,5 @@
 local ffi = require"ffi"
-local util = require"jit.util"
+local trace_count = require"jit_harness".trace_count
 
 ffi.cdef[[
 typedef struct { int x; } lj_m7_fin_trace_t;
@@ -8,15 +8,6 @@ typedef struct { int x; } lj_m7_fin_trace_mt_t;
 
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1", "-sink")
-
-local function tracecount()
-  local n = 0
-  for i = 1, 64 do
-    if util.traceinfo(i) then n = n + 1 end
-  end
-  return n
-end
-jit.off(tracecount, true)
 
 local trace_t = ffi.typeof("lj_m7_fin_trace_t")
 local direct_finalized = 0
@@ -64,7 +55,7 @@ for _ = 1, rounds do direct_loop(n) end
 for _ = 1, rounds do clear_loop(n) end
 for _ = 1, rounds do metatype_loop(n) end
 
-local traces = tracecount()
+local traces = trace_count(64)
 assert(traces >= 3, "expected ffi.gc recorder traces")
 
 collectgarbage("restart")

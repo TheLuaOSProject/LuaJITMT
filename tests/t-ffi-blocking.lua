@@ -1,19 +1,10 @@
 local ffi = require"ffi"
-local util = require"jit.util"
+local trace_count = require"jit_harness".trace_count
 
 ffi.cdef[[
 int abs(int);
 int getpid(void);
 ]]
-
-local function trace_count()
-  local n = 0
-  for i = 1, 32 do
-    if util.traceinfo(i) then n = n + 1 end
-  end
-  return n
-end
-jit.off(trace_count, true)
 
 local abs = ffi.C.abs
 

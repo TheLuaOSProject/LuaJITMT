@@ -27,15 +27,7 @@ end
 
 local function jit_hash_store_smoke()
   return [[
-local util = require("jit.util")
-
-local function traces()
-  local n = 0
-  for i = 1, 200 do
-    if util.traceinfo(i) then n = n + 1 end
-  end
-  return n
-end
+local trace_count = require("jit_harness").trace_count
 
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
@@ -44,7 +36,7 @@ for i = 1, 200 do
   h.stable = i
 end
 assert(h.stable == 200)
-assert(traces() > 0, "existing hash table store did not trace")
+assert(trace_count(200) > 0, "existing hash table store did not trace")
 
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
@@ -53,7 +45,7 @@ for i = 1, 200 do
   a[1] = i
 end
 assert(a[1] == 200)
-assert(traces() > 0, "existing array table store did not trace")
+assert(trace_count(200) > 0, "existing array table store did not trace")
 
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
@@ -62,7 +54,7 @@ for i = 1, 200 do
   hn["k" .. i] = i
 end
 assert(hn.k200 == 200)
-assert(traces() > 0, "new string hash table store did not trace")
+assert(trace_count(200) > 0, "new string hash table store did not trace")
 
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
@@ -77,7 +69,7 @@ local function array_insert(n)
 end
 local an = array_insert(80)
 assert(an[1] == 80)
-assert(traces() > 0, "fresh array slot table store did not trace")
+assert(trace_count(200) > 0, "fresh array slot table store did not trace")
 ]]
 end
 

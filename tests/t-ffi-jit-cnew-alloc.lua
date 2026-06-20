@@ -6,20 +6,11 @@ typedef struct { int x; double y; } lj_m7_jit_cnew_alloc_t;
 ]]
 
 local worker = th.spawn(function()
-  local util = require"jit.util"
   local ffi = require"ffi"
+  local trace_count = require"jit_harness".trace_count
 
   jit.flush()
   jit.opt.start("hotloop=1", "hotexit=1", "-sink")
-
-  local function tracecount()
-    local n = 0
-    for i = 1, 64 do
-      if util.traceinfo(i) then n = n + 1 end
-    end
-    return n
-  end
-  jit.off(tracecount, true)
 
   local struct_t = ffi.typeof("lj_m7_jit_cnew_alloc_t")
   local int64_t = ffi.typeof("int64_t")
@@ -38,7 +29,7 @@ local worker = th.spawn(function()
     assert(make(80) == 6480)
   end
 
-  local traces = tracecount()
+  local traces = trace_count(64)
   assert(traces > 0)
   collectgarbage("collect")
   collectgarbage("collect")
