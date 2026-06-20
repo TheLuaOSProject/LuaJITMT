@@ -166,6 +166,7 @@ static void test_worker_finalizer_mpsc_drain(lua_State *L, global_State *g)
   assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) != NULL);
   assert(la_load64_acq(&g->gc2.worker_runs) > runs0);
   assert(wait_u64_at_least(&g->gc2.worker_async_progress, async0 + 2u));
+  assert(la_load32_acq(&g->gc2.worker_active) == 0);
 
   assert(lj_gc2_finalizer_dequeue(g) == a);
   assert(lj_gc2_finalizer_dequeue(g) == b);
@@ -175,6 +176,52 @@ static void test_worker_finalizer_mpsc_drain(lua_State *L, global_State *g)
   relink_root_object(g, b);
   relink_root_object(g, a);
   lua_settop(L, 0);
+}
+
+static void test_finalizer_owner_leave_rewakes_worker(lua_State *L,
+						      global_State *g)
+{
+  GCobj *a, *b;
+  uint64_t drained0, parks0, wakes0;
+
+  assert(lj_gc2_workers_set(g, 1) == 1);
+  assert(la_load32_acq(&g->gc2.n_workers) == 1);
+  lua_settop(L, 0);
+  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) == NULL);
+  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) == NULL);
+
+  lua_newtable(L);
+  a = obj2gco(tabV(L->top - 1));
+  lua_newtable(L);
+  b = obj2gco(tabV(L->top - 1));
+  assert(unlink_root_object(g, a));
+  assert(unlink_root_object(g, b));
+
+  drained0 = la_load64_acq(&g->gc2.finalizer_mpsc_drained);
+  parks0 = la_load64_acq(&g->gc2.worker_parks);
+  wakes0 = la_load64_acq(&g->gc2.worker_wakes);
+  lj_gc2_finalizer_enter(g);
+  lj_gc2_finalizer_enqueue(g, a);
+  lj_gc2_finalizer_enqueue(g, b);
+  assert(wait_u64_at_least(&g->gc2.worker_parks, parks0 + 1u));
+  assert(la_load64_acq(&g->gc2.finalizer_mpsc_drained) == drained0);
+  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) != NULL);
+  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) == NULL);
+  lj_gc2_finalizer_leave(g);
+  assert(wait_u64_at_least(&g->gc2.worker_wakes, wakes0 + 2u));
+  assert(wait_u64_at_least(&g->gc2.finalizer_mpsc_drained, drained0 + 2u));
+  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) == NULL);
+  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) != NULL);
+
+  assert(lj_gc2_finalizer_dequeue(g) == a);
+  assert(lj_gc2_finalizer_dequeue(g) == b);
+  assert(lj_gc2_finalizer_dequeue(g) == NULL);
+  relink_root_object(g, b);
+  relink_root_object(g, a);
+  lua_settop(L, 0);
+
+  assert(lj_gc2_workers_set(g, 2) == 1);
+  assert(la_load32_acq(&g->gc2.n_workers) == 2);
 }
 
 static void test_async_mark(lua_State *L, global_State *g, TGState *tg)
@@ -372,6 +419,7 @@ int main(void)
 
   test_two_worker_contention(g);
   test_worker_finalizer_mpsc_drain(L, g);
+  test_finalizer_owner_leave_rewakes_worker(L, g);
   test_async_mark(L, g, tg);
   test_async_weak(L, g, tg);
   test_async_sweep_and_stop(L, g, tg);

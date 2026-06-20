@@ -971,6 +971,7 @@ void lj_gc2_finalizer_enter(global_State *g)
 void lj_gc2_finalizer_leave(global_State *g)
 {
   uint32_t old;
+  int wake_worker = 0;
   if (!g)
     return;
   for (;;) {
@@ -984,6 +985,8 @@ void lj_gc2_finalizer_leave(global_State *g)
 		   LA_ACQ_REL, LA_ACQ)) {
 	la_store32_rel(&g->gc2.finalizer_owner_tid, 0);
 	la_store32_rel(&g->gc2.finalizer_active, 0);
+	wake_worker =
+	  la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) != NULL;
 	break;  /* 05 section 5.8: close finalizer owner after last leave. */
       }
       continue;
@@ -997,6 +1000,8 @@ void lj_gc2_finalizer_leave(global_State *g)
       break;  /* 05 section 5.8: nested owner leave. */
   }
   la_add64_rlx(&g->gc2.finalizer_leaves, 1);
+  if (wake_worker)
+    lj_gc2_worker_wake(g);  /* 05 section 5.8: owner release exposes work. */
 }
 
 static int gc2_finalizer_pending_for_sweep(global_State *g, int owner_ok)
@@ -3658,16 +3663,29 @@ static uint32_t gc2_worker_progress_add(uint32_t a, uint32_t b)
 
 static uint32_t gc2_worker_finalizer_drain(global_State *g, uint32_t limit)
 {
+  uint32_t expect = 0;
   uint64_t before, after, delta;
-  if (!g || limit == 0 ||
+  if (!g || limit == 0 || la_load32_acq(&g->gc2.phase) != LJ_GC2_IDLE ||
       la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) == NULL)
     return 0;
-  if (!lj_gc2_finalizer_try_enter(g))
+  if (!la_cas32(&g->gc2.worker_active, &expect, 1, LA_ACQ_REL, LA_ACQ)) {
+    la_add64_rlx(&g->gc2.worker_busy_retries, 1);
     return 0;
+  }
+  if (la_load32_acq(&g->gc2.phase) != LJ_GC2_IDLE ||
+      la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) == NULL) {
+    la_store32_rel(&g->gc2.worker_active, 0);
+    return 0;
+  }
+  if (!lj_gc2_finalizer_try_enter(g)) {
+    la_store32_rel(&g->gc2.worker_active, 0);
+    return 0;
+  }
   before = la_load64_acq(&g->gc2.finalizer_mpsc_drained);
   lj_gc2_finalizer_drain_owned(g);
   after = la_load64_acq(&g->gc2.finalizer_mpsc_drained);
   lj_gc2_finalizer_leave(g);
+  la_store32_rel(&g->gc2.worker_active, 0);
   delta = after - before;
   return delta > ~(uint32_t)0 ? ~(uint32_t)0 : (uint32_t)delta;
 }
