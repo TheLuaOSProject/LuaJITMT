@@ -177,6 +177,16 @@ typedef struct MCLink {
   MCode *rw;		/* Writable alias of this area. */
 } MCLink;
 
+static LJ_AINLINE MCode *mcode_area_next_acq(const MCode *area)
+{
+  return (MCode *)la_loadptr_acq((void *const *)&((const MCLink *)area)->next);
+}
+
+static LJ_AINLINE void mcode_area_next_rel(MCode *area, MCode *next)
+{
+  la_storeptr_rel((void **)&((MCLink *)area)->next, next);
+}
+
 typedef struct MCodeRetire {
   MCode *area;		/* Retired mcode area. */
   size_t size;		/* Size of retired area. */

@@ -54,7 +54,7 @@ static LJ_AINLINE MCode *lj_mcode_rw(jit_State *J, MCode *rx)
     size_t sz = ((MCLink *)area)->size;
     if (rx >= area && rx < (MCode *)((char *)area + sz))
       return lj_mcode_rx2rw(area, rx);
-    area = ((MCLink *)area)->next;
+    area = mcode_area_next_acq(area);
   }
   return rx;
 }

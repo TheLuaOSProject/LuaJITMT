@@ -491,7 +491,7 @@ static void mcode_allocarea(jit_State *J, size_t sz)
   rwarea = J->mcarea;
 #endif
   rwlink = (MCLink *)rwarea;
-  rwlink->next = oldarea;
+  mcode_area_next_rel(rwarea, oldarea);
   rwlink->size = sz;
   rwlink->rw = rwarea;
   J->szallmcarea += sz;
@@ -546,7 +546,7 @@ void lj_mcode_free(jit_State *J)
     return;
   epoch = la_load64_acq(&J2G(J)->gc2.hs_epoch);
   while (mc) {
-    MCode *next = ((MCLink *)mc)->next;
+    MCode *next = mcode_area_next_acq(mc);
     MCodeRetire *ret = lj_mem_newt(J->L, sizeof(MCodeRetire), MCodeRetire);
     ret->area = mc;
     ret->size = ((MCLink *)mc)->size;
@@ -574,7 +574,7 @@ void lj_mcode_freeall(global_State *g)
   J = G2J(g);
   mc = J->mcarea;
   while (mc) {
-    MCode *next = ((MCLink *)mc)->next;
+    MCode *next = mcode_area_next_acq(mc);
     mcode_freearea_direct(g, mc, ((MCLink *)mc)->size);
     mc = next;
   }
@@ -681,7 +681,7 @@ MCode *lj_mcode_patch(jit_State *J, MCode *ptr, int finish)
     }
     /* Otherwise search through the list of MCode areas. */
     for (;;) {
-      base = (uintptr_t)(((MCLink *)base)->next);
+      base = (uintptr_t)mcode_area_next_acq((MCode *)base);
       lj_assertJ(base != 0, "broken MCode area chain");
       if (addr >= base && addr < base + ((MCLink *)base)->size) {
 	mcode_setprot(J, (MCode *)base, ((MCLink *)base)->size, MCPROT_GEN);
