@@ -516,6 +516,16 @@ static LJ_AINLINE int ctype_cbblack_slot_cas(uint64_t *tab, MSize slot,
   return la_cas64(&tab[slot], oldp, key, LA_ACQ_REL, LA_ACQ);
 }
 
+static LJ_AINLINE void *ctype_cb_mcode_acq(const CTState *cts)
+{
+  return la_loadptr_acq((void *const *)&cts->cb.mcode);
+}
+
+static LJ_AINLINE void ctype_cb_mcode_rel(CTState *cts, void *mcode)
+{
+  la_storeptr_rel((void **)&cts->cb.mcode, mcode);
+}
+
 static LJ_AINLINE CTypeID1 *ctype_cb_cbid_acq(const CTState *cts)
 {
   return (CTypeID1 *)la_loadptr_acq((void *const *)&cts->cb.cbid);

@@ -192,13 +192,14 @@ static MSize CALLBACK_OFS2SLOT(MSize ofs)
 /* Convert callback slot number to callback function pointer. */
 static void *callback_slot2ptr(CTState *cts, MSize slot)
 {
-  return (uint8_t *)cts->cb.mcode + CALLBACK_SLOT2OFS(slot);
+  return (uint8_t *)ctype_cb_mcode_acq(cts) + CALLBACK_SLOT2OFS(slot);
 }
 
 /* Convert callback function pointer to slot number. */
 MSize lj_ccallback_ptr2slot(CTState *cts, void *p)
 {
-  uintptr_t ofs = (uintptr_t)((uint8_t *)p -(uint8_t *)cts->cb.mcode);
+  uint8_t *mcode = (uint8_t *)ctype_cb_mcode_acq(cts);
+  uintptr_t ofs = (uintptr_t)((uint8_t *)p - mcode);
   if (ofs < CALLBACK_MCODE_SIZE) {
     MSize slot = CALLBACK_OFS2SLOT((MSize)ofs);
     if (CALLBACK_SLOT2OFS(slot) == (MSize)ofs)
@@ -428,14 +429,14 @@ static void callback_mcode_new_l(lua_State *L, CTState *cts)
   mprotect(p, sz, (PROT_READ|PROT_EXEC));
 #endif
 #endif
-  la_storeptr_rel((void **)&cts->cb.mcode, p);  /* 11.5 publish mcode. */
+  ctype_cb_mcode_rel(cts, p);  /* 11.5 publish mcode. */
 }
 
 /* Free area for callback function pointers. */
 void lj_ccallback_mcode_free(CTState *cts)
 {
   size_t sz = (size_t)CALLBACK_MCODE_SIZE;
-  void *p = cts->cb.mcode;
+  void *p = ctype_cb_mcode_acq(cts);
   if (p == NULL) return;
 #if LJ_TARGET_WINDOWS
   VirtualFree(p, 0, MEM_RELEASE);
