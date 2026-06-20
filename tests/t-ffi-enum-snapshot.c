@@ -44,6 +44,7 @@ int main(void)
     "local ct = lj_m7_enum_snapshot_ct\n"
     "for i = 1, 100 do\n"
     "  assert(tonumber(ffi.cast(ct, 'LJ_M7_ENUM_B')) == 7)\n"
+    "  assert(tonumber(ffi.cast(ct, 5)) == 5)\n"
     "end\n");
   seq1 = parse_seq(cts);
   assert(seq1 == seq0);

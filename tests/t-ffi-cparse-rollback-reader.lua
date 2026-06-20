@@ -101,6 +101,11 @@ race_failed_cdef("enumcast", function()
 	 "enum string cast observed failed cdef rollback state")
 end, bad_enum_cdef_source)
 
+race_failed_cdef("enumcastnum", function()
+  assert(not pcall(ffi.cast, enum_ct, 17),
+	 "enum numeric cast observed failed cdef rollback state")
+end, bad_enum_cdef_source)
+
 race_failed_cdef("ffic", function()
   assert(not pcall(function() return ffi.C.lj_m7_rollback_tmp_const end),
 	 "ffi.C observed failed cdef rollback constant")
@@ -123,6 +128,8 @@ assert(not pcall(function() return q - p end),
        "failed cdef left cdata pointer diff able to size incomplete struct")
 assert(not pcall(ffi.cast, enum_ct, "LJ_M7_ROLLBACK_ENUM_TMP"),
        "failed cdef left enum string cast able to see rolled-back constant")
+assert(not pcall(ffi.cast, enum_ct, 17),
+       "failed cdef left enum numeric cast able to use rolled-back layout")
 assert(not pcall(function() return ffi.C.lj_m7_rollback_tmp_const end),
        "failed cdef left ffi.C able to see rolled-back constant")
 

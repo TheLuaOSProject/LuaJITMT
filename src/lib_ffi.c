@@ -708,10 +708,32 @@ got_layout:
 LJLIB_CF(ffi_cast)	LJLIB_REC(ffi_new)
 {
   CTState *cts = ctype_cts(L);
-  CTypeID id = ffi_checkctype(L, cts, NULL);
-  CType *d = ctype_raw(cts, id);
+  CTypeID id, rid;
+  CType dsnap, *d;
+  CTInfo info;
+  CTSize sz;
   TValue *o = lj_lib_checkany(L, 2);
   ptrdiff_t ofs = o - L->base;
+  int isstr;
+  id = ffi_checkctype_noparse(L, NULL, &isstr);
+  if (!isstr) {
+    int ok = lj_ctype_info_snapshot(cts, id, &info, &sz, &rid, &dsnap);
+    if (ok > 0) {
+      d = &dsnap;
+      goto got_type;
+    } else if (ok == 0) {
+      lj_err_arg(L, 1, LJ_ERR_FFI_INVTYPE);
+    }
+    lj_ctype_parse_lock(cts, L);
+    rid = ctype_rawid(cts, id);
+    d = ctype_get(cts, rid);
+    lj_ctype_parse_unlock(cts);
+    goto got_type;
+  }
+  id = ffi_checkctype(L, cts, NULL);
+  rid = ctype_rawid(cts, id);
+  d = ctype_get(cts, rid);
+got_type:
   L->top = o+1;  /* Make sure this is the last item on the stack. */
   lj_state_checkstack(L, 1);
   o = L->base + ofs;
@@ -720,8 +742,7 @@ LJLIB_CF(ffi_cast)	LJLIB_REC(ffi_new)
   if (!(tviscdata(o) && cdataV(o)->ctypeid == id)) {
     GCcdata *cd = lj_cdata_new_l(L, cts, id, d->size);
     setcdataV(L, L->top++, cd);  /* Anchor across callback allocation. */
-    lj_cconv_ct_tv_l(L, cts, d, ctype_rawid(cts, id), cdataptr(cd), o,
-		     CCF_CAST);
+    lj_cconv_ct_tv_l(L, cts, d, rid, cdataptr(cd), o, CCF_CAST);
     L->top = o+1;
     setcdataV(L, o, cd);
     lj_gc_check(L);
