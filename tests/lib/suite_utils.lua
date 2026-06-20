@@ -43,26 +43,42 @@ function M.iter_lines(s)
   return (s .. "\n"):gmatch("(.-)\n")
 end
 
+function M.assert_text_contains(label, data, needle, what)
+  what = what or "text"
+  if not M.contains(data, needle) then
+    error(label .. ": missing " .. what .. ": " .. needle, 2)
+  end
+end
+
+function M.assert_text_match(label, data, pattern, what)
+  what = what or "pattern"
+  if not data:match(pattern) then
+    error(label .. ": missing " .. what .. ": " .. pattern, 2)
+  end
+end
+
+function M.assert_text_all_contains(label, data, needles, what)
+  for i = 1, #needles do
+    M.assert_text_contains(label, data, needles[i], what)
+  end
+end
+
 function M.assert_dump_contains(t, dump, needle, label)
   local data = t:read(dump)
   label = label or dump
-  if not M.contains(data, needle) then
-    error(label .. ": missing dump text: " .. needle, 2)
-  end
+  M.assert_text_contains(label, data, needle, "dump text")
 end
 
 function M.assert_dump_match(t, dump, pattern, label)
   local data = t:read(dump)
   label = label or dump
-  if not data:match(pattern) then
-    error(label .. ": missing dump pattern: " .. pattern, 2)
-  end
+  M.assert_text_match(label, data, pattern, "dump pattern")
 end
 
 function M.assert_dump_all_contains(t, dump, needles, label)
-  for i = 1, #needles do
-    M.assert_dump_contains(t, dump, needles[i], label)
-  end
+  local data = t:read(dump)
+  label = label or dump
+  M.assert_text_all_contains(label, data, needles, "dump text")
 end
 
 function M.append_list(dst, src)

@@ -221,34 +221,4 @@ function Test:luajit(args, opts)
   self:run(argv, opts)
 end
 
-function Test:assert_contains(path, needle)
-  local data = read_file(path)
-  if not data:find(needle, 1, true) then
-    error(path .. ": missing expected text: " .. needle, 2)
-  end
-end
-
-function Test:assert_all_contains(path, needles)
-  for i = 1, #needles do
-    self:assert_contains(path, needles[i])
-  end
-end
-
-function Test:assert_text_contains(label, data, needle)
-  if not data:find(needle, 1, true) then
-    error(label .. ": missing expected text: " .. needle, 2)
-  end
-end
-
-function Test:assert_text_ordered(label, data, needles)
-  local pos = 1
-  for i = 1, #needles do
-    local next_pos = data:find(needles[i], pos, true)
-    if not next_pos then
-      error(label .. ": missing expected text: " .. needles[i], 2)
-    end
-    pos = next_pos + #needles[i]
-  end
-end
-
 return M

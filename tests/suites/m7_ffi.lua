@@ -1,20 +1,16 @@
 local utils = require("suite_utils")
 local runtime = require("suite_runtime")
+local jitutils = require("suite_jit")
 
 local getenv = utils.getenv
 local shell_quote = utils.shell_quote
+local assert_dump_contains = utils.assert_dump_contains
 local lua_path = runtime.lua_path
 local build_and_run_c = runtime.compile_and_run_c
 local clean_build = runtime.clean_build
 local luajit_dump_file = runtime.luajit_dump_file
 local run_luajit_script = runtime.luajit_script
-
-local function run_dump_probe(t, dump, script)
-  runtime.luajit_dump(t, dump, "-jdump=ir", script, {
-    timeout = "20s",
-    stderr = false
-  })
-end
+local run_ir_dump_probe = jitutils.run_ir_dump_probe
 
 local m7_cases = {
   "m7_ffi_cdef_token",
@@ -319,7 +315,7 @@ return function(add)
         timeout = "20s",
         stderr = false
       })
-      t:assert_contains(dump, "lj_cdata_setfin")
+      assert_dump_contains(t, dump, "lj_cdata_setfin", "FFI finalizer trace")
       print("M7 FFI finalizer registry behavior passed")
     end
   })
@@ -336,7 +332,7 @@ return function(add)
 
       local dump = t:tmp("lj_t-ffi-jit-cnew.dump")
       local dumpi = t:tmp("lj_t-ffi-jit-cnewi.dump")
-      run_dump_probe(t, dump, [[
+      run_ir_dump_probe(t, dump, [[
 local ffi = require"ffi"
 ffi.cdef"typedef struct { int x; double y; } lj_m7_jit_dump_t;"
 jit.flush()
@@ -355,7 +351,7 @@ end
 for _ = 1, 30 do assert(make(80) == 6480) end
 print("dump cnew ok")
 ]])
-      run_dump_probe(t, dumpi, [[
+      run_ir_dump_probe(t, dumpi, [[
 local ffi = require"ffi"
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1", "-sink")
@@ -368,10 +364,10 @@ end
 for _ = 1, 30 do assert(tonumber(make(80)) == 80) end
 print("dump cnewi ok")
 ]])
-      t:assert_contains(dump, "CNEW")
-      t:assert_contains(dumpi, "CNEWI")
-      t:assert_contains(dump, "dump cnew ok")
-      t:assert_contains(dumpi, "dump cnewi ok")
+      assert_dump_contains(t, dump, "CNEW", "CNEW trace")
+      assert_dump_contains(t, dumpi, "CNEWI", "CNEWI trace")
+      assert_dump_contains(t, dump, "dump cnew ok", "CNEW probe")
+      assert_dump_contains(t, dumpi, "dump cnewi ok", "CNEWI probe")
 
       clean_build(t, { xcflags = "-DLUA_USE_ASSERT -DLJ_GC2_PARANOIA=1" })
       t:run("(cd " .. shell_quote(t:path("tests", "stock", "test")) ..
