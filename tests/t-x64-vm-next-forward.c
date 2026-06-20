@@ -86,6 +86,15 @@ static void exercise_array_forward(lua_State *L)
   lj_tab_array_rel(t, newarray);
   lj_tab_asize_rel(t, newasize);
   lj_tab_array_hdr_flags_or_rel(oldarray, TABARRAY_FLAG_RETIRING);
+  lj_tab_asize_rel(t, 0);
+  next = call_vm_next(t, (uint32_t)target, &val, &key);
+  assert(next != (uint32_t)-1);
+  assert(tvisnumber(&val));
+  assert((tvisint(&val) ? intV(&val) : (int32_t)numV(&val)) ==
+	 target + 7100);
+  assert(!tvistabinternal(&val));
+  assert(!tvistabinternal(&key));
+  lj_tab_asize_rel(t, newasize);
   lua_pop(L, 1);
 }
 

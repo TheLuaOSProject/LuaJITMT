@@ -16,6 +16,13 @@
 
 #include "lib/tab_forward_helpers.h"
 
+static const char itern_forward_array_src[] =
+  "local seen = false\n"
+  "for k, v in pairs(itern_forward_array_t) do\n"
+  "  if v == itern_forward_array_value then seen = true end\n"
+  "end\n"
+  "assert(seen, 'missing array successor value')\n";
+
 static void exercise_array_forward(lua_State *L)
 {
   GCtab *t;
@@ -40,12 +47,7 @@ static void exercise_array_forward(lua_State *L)
   lua_setglobal(L, "itern_forward_array_t");
   lua_pushinteger(L, target + 5100);
   lua_setglobal(L, "itern_forward_array_value");
-  tabfwd_load_lua(L,
-    "local seen = false\n"
-    "for k, v in pairs(itern_forward_array_t) do\n"
-    "  if v == itern_forward_array_value then seen = true end\n"
-    "end\n"
-    "assert(seen, 'missing array successor value')\n");
+  tabfwd_load_lua(L, itern_forward_array_src);
 
   lj_tab_resize(L, t, (uint32_t)oldasize + 8u, 0);
   newarray = lj_tab_array_acq(t);
@@ -64,6 +66,10 @@ static void exercise_array_forward(lua_State *L)
   lj_tab_array_rel(t, newarray);
   lj_tab_asize_rel(t, newasize);
   lj_tab_array_hdr_flags_or_rel(oldarray, TABARRAY_FLAG_RETIRING);
+  lj_tab_asize_rel(t, 0);
+  tabfwd_load_lua(L, itern_forward_array_src);
+  tabfwd_run_loaded(L);
+  lj_tab_asize_rel(t, newasize);
 }
 
 static void exercise_hash_forward(lua_State *L)

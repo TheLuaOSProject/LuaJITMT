@@ -14,6 +14,15 @@
 
 #include "lib/tab_forward_helpers.h"
 
+static const char tget_forward_src[] =
+  "local t = tget_forward_t\n"
+  "local k = tget_forward_key\n"
+  "local want = tget_forward_value\n"
+  "local function getv(a, key) return a[key] end\n"
+  "assert(t[3] == want, type(t[3]))\n"
+  "assert(t[k] == want, type(t[k]))\n"
+  "assert(getv(t, k) == want, type(getv(t, k)))\n";
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -45,14 +54,7 @@ int main(void)
   lua_setglobal(L, "tget_forward_key");
   lua_pushinteger(L, target + 3000);
   lua_setglobal(L, "tget_forward_value");
-  tabfwd_load_lua(L,
-    "local t = tget_forward_t\n"
-    "local k = tget_forward_key\n"
-    "local want = tget_forward_value\n"
-    "local function getv(a, key) return a[key] end\n"
-    "assert(t[3] == want, type(t[3]))\n"
-    "assert(t[k] == want, type(t[k]))\n"
-    "assert(getv(t, k) == want, type(getv(t, k)))\n");
+  tabfwd_load_lua(L, tget_forward_src);
 
   lj_tab_resize(L, t, (uint32_t)oldasize + 8u, 0);
   assert(tabfwd_get_i32(t, target) == target + 3000);
@@ -72,6 +74,10 @@ int main(void)
   lj_tab_array_rel(t, newarray);
   lj_tab_asize_rel(t, newasize);
   lj_tab_array_hdr_flags_or_rel(oldarray, TABARRAY_FLAG_RETIRING);
+  lj_tab_asize_rel(t, 0);
+  tabfwd_load_lua(L, tget_forward_src);
+  tabfwd_run_loaded(L);
+  lj_tab_asize_rel(t, newasize);
 
   lua_close(L);
   printf("t-x64-tget-forward OK: TGET fast paths resolve forwarded array slots\n");

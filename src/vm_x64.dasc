@@ -1525,7 +1525,7 @@ static void build_subroutines(BuildCtx *ctx)
   |.endif
   |  mov TMPRd, TAB:RB->asize
   |  mov RD, TAB:RB->array
-  |  test TMPRd, TMPRd; jz >3
+  |  test RD, RD; jz >3
   |  lea r8, [RB+TAB_COLO_SLOTS]
   |  cmp RD, r8; je >3
   |  mov TMPRd, dword [RD+TABARRAY_ASIZE_OFS]
@@ -2910,7 +2910,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  endbr
   |  mov NEXT_ASIZE, NEXT_TAB->asize
   |  mov r10, NEXT_TAB->array
-  |  test NEXT_ASIZE, NEXT_ASIZE; jz >1
+  |  test r10, r10; jz >1
   |  lea NEXT_TMP, [NEXT_TAB+TAB_COLO_SLOTS]
   |  cmp r10, NEXT_TMP; je >1
   |  mov NEXT_ASIZE, dword [r10+TABARRAY_ASIZE_OFS]
@@ -4149,7 +4149,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |.endif
     |  mov ITYPEd, TAB:RB->asize
     |  mov TMPR, TAB:RB->array
-    |  test ITYPEd, ITYPEd; jz >3
+    |  test TMPR, TMPR; jz >3
     |  lea r8, [RB+TAB_COLO_SLOTS]
     |  cmp TMPR, r8; je >3
     |  mov ITYPEd, dword [TMPR+TABARRAY_ASIZE_OFS]
@@ -4233,7 +4233,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  checktab TAB:RB, ->vmeta_tgetb
     |  mov ITYPEd, TAB:RB->asize
     |  mov TMPR, TAB:RB->array
-    |  test ITYPEd, ITYPEd; jz >3
+    |  test TMPR, TMPR; jz >3
     |  lea r8, [RB+TAB_COLO_SLOTS]
     |  cmp TMPR, r8; je >3
     |  mov ITYPEd, dword [TMPR+TABARRAY_ASIZE_OFS]
@@ -4272,7 +4272,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |.endif
     |  mov ITYPEd, TAB:RB->asize
     |  mov TMPR, TAB:RB->array
-    |  test ITYPEd, ITYPEd; jz >3
+    |  test TMPR, TMPR; jz >3
     |  lea r8, [RB+TAB_COLO_SLOTS]
     |  cmp TMPR, r8; je >3
     |  mov ITYPEd, dword [TMPR+TABARRAY_ASIZE_OFS]
@@ -4319,7 +4319,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |.endif
     |  mov ITYPEd, TAB:RB->asize
     |  mov TMPR, TAB:RB->array
-    |  test ITYPEd, ITYPEd; jz >4
+    |  test TMPR, TMPR; jz >4
     |  lea r8, [RB+TAB_COLO_SLOTS]
     |  cmp TMPR, r8; je >4
     |  mov ITYPEd, dword [TMPR+TABARRAY_ASIZE_OFS]
@@ -4399,7 +4399,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  checktab TAB:RB, ->vmeta_tsetb
     |  mov ITYPEd, TAB:RB->asize
     |  mov TMPR, TAB:RB->array
-    |  test ITYPEd, ITYPEd; jz >4
+    |  test TMPR, TMPR; jz >4
     |  lea r8, [RB+TAB_COLO_SLOTS]
     |  cmp TMPR, r8; je >4
     |  mov ITYPEd, dword [TMPR+TABARRAY_ASIZE_OFS]
@@ -4471,7 +4471,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |2:
     |  mov ITYPEd, TAB:RB->asize
     |  mov TMPR, TAB:RB->array
-    |  test ITYPEd, ITYPEd; jz >3
+    |  test TMPR, TMPR; jz >3
     |  lea r8, [RB+TAB_COLO_SLOTS]
     |  cmp TMPR, r8; je >3
     |  mov ITYPEd, dword [TMPR+TABARRAY_ASIZE_OFS]
@@ -4571,7 +4571,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  add RDd, TMPRd			// Compute needed size.
     |  mov r8d, TAB:RB->asize
     |  mov ITYPE, TAB:RB->array
-    |  test r8d, r8d; jz >3
+    |  test ITYPE, ITYPE; jz >3
     |  lea r9, [RB+TAB_COLO_SLOTS]
     |  cmp ITYPE, r9; je >3
     |  mov r8d, dword [ITYPE+TABARRAY_ASIZE_OFS]
@@ -4712,7 +4712,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov TMPRd, TAB:RB->asize
     |  add PC, 4
     |  mov ITYPE, TAB:RB->array
-    |  test TMPRd, TMPRd; jz >1
+    |  test ITYPE, ITYPE; jz >1
     |  lea r8, [RB+TAB_COLO_SLOTS]
     |  cmp ITYPE, r8; je >1
     |  mov TMPRd, dword [ITYPE+TABARRAY_ASIZE_OFS]

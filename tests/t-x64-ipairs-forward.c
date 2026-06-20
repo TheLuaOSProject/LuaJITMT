@@ -14,6 +14,16 @@
 
 #include "lib/tab_forward_helpers.h"
 
+static const char ipairs_forward_src[] =
+  "local n, seen, v3 = 0, false, nil\n"
+  "for i, v in ipairs(ipairs_forward_t) do\n"
+  "  n = n + 1\n"
+  "  if i == 3 then v3 = v end\n"
+  "  if v == ipairs_forward_value then seen = true end\n"
+  "end\n"
+  "assert(v3 == ipairs_forward_value, type(v3))\n"
+  "assert(n > 0 and seen, tostring(n)..':'..tostring(seen))\n";
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -45,15 +55,7 @@ int main(void)
   lua_setglobal(L, "ipairs_forward_t");
   lua_pushinteger(L, target + 1000);
   lua_setglobal(L, "ipairs_forward_value");
-  tabfwd_load_lua(L,
-    "local n, seen, v3 = 0, false, nil\n"
-    "for i, v in ipairs(ipairs_forward_t) do\n"
-    "  n = n + 1\n"
-    "  if i == 3 then v3 = v end\n"
-    "  if v == ipairs_forward_value then seen = true end\n"
-    "end\n"
-    "assert(v3 == ipairs_forward_value, type(v3))\n"
-    "assert(n > 0 and seen, tostring(n)..':'..tostring(seen))\n");
+  tabfwd_load_lua(L, ipairs_forward_src);
 
   lj_tab_resize(L, t, (uint32_t)oldasize + 8u, 0);
   assert(tabfwd_get_i32(t, 0) == 1000);
@@ -83,6 +85,10 @@ int main(void)
   lj_tab_array_rel(t, newarray);
   lj_tab_asize_rel(t, newasize);
   lj_tab_array_hdr_flags_or_rel(oldarray, TABARRAY_FLAG_RETIRING);
+  lj_tab_asize_rel(t, 0);
+  tabfwd_load_lua(L, ipairs_forward_src);
+  tabfwd_run_loaded(L);
+  lj_tab_asize_rel(t, newasize);
 
   lua_close(L);
   printf("t-x64-ipairs-forward OK: ipairs_aux resolves forwarded array slots\n");
