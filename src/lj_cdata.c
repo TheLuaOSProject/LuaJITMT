@@ -306,14 +306,16 @@ collect_attrib:
   integer_key:
     if (ctype_ispointer(ct->info)) {
       CTSize sz;
-      if (!locked) {
-	/* 11.2: cdata numeric-key readers wait out parser rollback. */
+      int ok = lj_ctype_size_snapshot(cts, ctype_cid(ct->info), &sz);
+      if (ok < 0) {
 	lj_ctype_parse_lock(cts, L);
-	locked = 1;
-      }
-      sz = lj_ctype_size(cts, ctype_cid(ct->info));  /* Element size. */
-      if (sz == CTSIZE_INVALID) {
+	/* 11.2: cdata numeric-key readers wait out parser rollback. */
+	sz = lj_ctype_size(cts, ctype_cid(ct->info));  /* Element size. */
 	lj_ctype_parse_unlock(cts);
+      } else if (ok == 0) {
+	sz = CTSIZE_INVALID;
+      }
+      if (sz == CTSIZE_INVALID) {
 	lj_err_caller(L, LJ_ERR_FFI_INVSIZE);
       }
       if (ctype_isptr(ct->info)) {
@@ -323,8 +325,6 @@ collect_attrib:
 	*qual |= CTF_CONST;  /* Valarray elements are constant. */
       }
       *pp = p + idx*(int32_t)sz;
-      if (locked)
-	lj_ctype_parse_unlock(cts);
       return ct;
     }
   } else if (tviscdata(key)) {  /* Integer cdata key. */

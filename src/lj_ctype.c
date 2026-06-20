@@ -874,6 +874,47 @@ CTSize lj_ctype_size(CTState *cts, CTypeID id)
   return ctype_hassize(ct->info) ? ct->size : CTSIZE_INVALID;
 }
 
+/* Sequence-checked size snapshot for stable non-parser ctype readers. */
+int lj_ctype_size_snapshot(CTState *cts, CTypeID id, CTSize *szp)
+{
+  uint32_t seq0 = la_load32_acq(&cts->parse_token);
+  CTypeTab *tabh;
+  CTypeID top;
+  MSize budget;
+  if (seq0 & 1u)
+    return -1;
+  if (id == 0)
+    return 0;
+  top = ctype_top_acq(cts);
+  if (id >= top)
+    return 0;
+  tabh = ctype_tabh_acq(cts);
+  if ((MSize)id >= tabh->sizetab)
+    return -1;
+  budget = top ? (MSize)top * 2u : 1u;
+  for (;;) {
+    CType *ct;
+    CTInfo info;
+    CTSize size;
+    if (id == 0 || id >= top || (MSize)id >= tabh->sizetab)
+      return -1;
+    if (budget-- == 0)
+      return -1;
+    ct = &tabh->tab[id];
+    info = la_load32_acq(&ct->info);
+    size = la_load32_acq(&ct->size);
+    if (ctype_isabandoned(info))
+      return 0;
+    if (!ctype_isattrib(info)) {
+      uint32_t seq1;
+      *szp = ctype_hassize(info) ? size : CTSIZE_INVALID;
+      seq1 = la_load32_acq(&cts->parse_token);
+      return (seq0 == seq1 && !(seq1 & 1u)) ? 1 : -1;
+    }
+    id = ctype_cid(info);
+  }
+}
+
 /* Get size for a variable-length C type. Does NOT support other C types. */
 CTSize lj_ctype_vlsize(CTState *cts, CType *ct, CTSize nelem)
 {

@@ -252,6 +252,8 @@ assert(cl.lj_clib_ldscript_value() == 42)
                       "t-ffi-typeinfo-snapshot.c", { timeout = "20s" })
       build_and_run_c(t, t:tmp("lj_t-ffi-layout-snapshot"),
                       "t-ffi-layout-snapshot.c", { timeout = "20s" })
+      build_and_run_c(t, t:tmp("lj_t-ffi-element-size-snapshot"),
+                      "t-ffi-element-size-snapshot.c", { timeout = "20s" })
       run_luajit_script(t, "t-ffi-cparse-rollback-reader.lua", nil, { joff = true })
       print("M7 FFI typeinfo snapshot behavior passed")
     end

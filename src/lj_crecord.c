@@ -849,12 +849,19 @@ again:
       CTSize sz;
       CTInfo pinfo;
   integer_key:
-      lj_ctype_parse_lock(cts, J->L);
-      /* 11.2: cdata recorder numeric-key reader waits out parser rollback. */
       pinfo = ct->info;
       sid = ctype_cid(pinfo);
-      sz = lj_ctype_size(cts, sid);
-      lj_ctype_parse_unlock(cts);
+      {
+	int ok = lj_ctype_size_snapshot(cts, sid, &sz);
+	if (ok < 0) {
+	  lj_ctype_parse_lock(cts, J->L);
+	  /* 11.2: cdata recorder numeric-key reader waits out parser rollback. */
+	  sz = lj_ctype_size(cts, sid);
+	  lj_ctype_parse_unlock(cts);
+	} else if (ok == 0) {
+	  sz = CTSIZE_INVALID;
+	}
+      }
       if (sz == CTSIZE_INVALID)
 	lj_trace_err(J, LJ_TRERR_BADTYPE);
       if ((pinfo & CTF_COMPLEX))
@@ -1498,10 +1505,15 @@ static TRef crec_arith_ptr(jit_State *J, TRef *sp, CType **s, MMS mm)
       if (mm == MM_sub) {  /* Pointer difference. */
 	TRef tr;
 	CTSize sz;
-	lj_ctype_parse_lock(cts, J->L);
-	/* 11.2: cdata recorder pointer arithmetic waits out rollback. */
-	sz = lj_ctype_size(cts, ctype_cid(ctp->info));
-	lj_ctype_parse_unlock(cts);
+	int ok = lj_ctype_size_snapshot(cts, ctype_cid(ctp->info), &sz);
+	if (ok < 0) {
+	  lj_ctype_parse_lock(cts, J->L);
+	  /* 11.2: cdata recorder pointer arithmetic waits out rollback. */
+	  sz = lj_ctype_size(cts, ctype_cid(ctp->info));
+	  lj_ctype_parse_unlock(cts);
+	} else if (ok == 0) {
+	  sz = CTSIZE_INVALID;
+	}
 	if (sz == 0 || sz == CTSIZE_INVALID || (sz & (sz-1)) != 0)
 	  return 0;  /* NYI: integer division. */
 	tr = emitir(IRT(IR_SUB, IRT_INTP), sp[0], sp[1]);
@@ -1532,10 +1544,15 @@ static TRef crec_arith_ptr(jit_State *J, TRef *sp, CType **s, MMS mm)
     IRType t = tref_type(tr);
     CTSize sz;
     CTypeID id;
-    lj_ctype_parse_lock(cts, J->L);
-    /* 11.2: cdata recorder pointer arithmetic waits out rollback. */
-    sz = lj_ctype_size(cts, ctype_cid(ctp->info));
-    lj_ctype_parse_unlock(cts);
+    int ok = lj_ctype_size_snapshot(cts, ctype_cid(ctp->info), &sz);
+    if (ok < 0) {
+      lj_ctype_parse_lock(cts, J->L);
+      /* 11.2: cdata recorder pointer arithmetic waits out rollback. */
+      sz = lj_ctype_size(cts, ctype_cid(ctp->info));
+      lj_ctype_parse_unlock(cts);
+    } else if (ok == 0) {
+      sz = CTSIZE_INVALID;
+    }
     if (sz == CTSIZE_INVALID)
       return 0;
 #if LJ_64
