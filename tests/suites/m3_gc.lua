@@ -5,6 +5,7 @@ local make_clean = runtime.make_clean
 local make_default = runtime.build_default
 local compile_and_run_c = runtime.compile_and_run_c
 local run_c_fixtures = runtime.run_c_fixtures
+local run_lua_test_case = runtime.run_lua_test_case
 local run_luajit_script_jit_modes = runtime.run_luajit_script_jit_modes
 
 return function(add)
@@ -108,7 +109,7 @@ return function(add)
       make_clean(t)
       t:make({ "amalg" }, { quiet = true, jobs = false })
 
-      t:run({ t:path("tools", "ci", "m0_matrix.sh") })
+      run_lua_test_case(t, "m0_matrix")
       print("M3 GC2 scaffold tests passed")
     end
   })

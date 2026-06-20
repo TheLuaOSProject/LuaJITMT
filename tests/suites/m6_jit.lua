@@ -19,6 +19,7 @@ local luajit_file = runtime.luajit_file
 local luajit_dump = runtime.luajit_dump
 local build_default = runtime.build_default
 local build_and_run_c = runtime.build_and_run_c
+local run_lua_test_case = runtime.run_lua_test_case
 
 local m6_cases = {
   "m6_dispatch_redispatch",
@@ -598,7 +599,7 @@ for i = 1, 120 do a[i % 128] = i end
 assert(a[119 % 128] == 119)
 ]=], { timeout = "20s" })
       assert_loop_after_xpoll(t, store_dump, "FFI XSTORE loop", { "XSTORE" })
-      t:run({ t:path("tools", "ci", "m5_jit_hash_store_nyi.sh") })
+      run_lua_test_case(t, "m5_jit_hash_store_nyi")
       print("M6 JIT XBAR/XPOLL alias guard passed")
     end
   })
@@ -1114,8 +1115,8 @@ assert(live >= 8, live)
     description = "JIT flush safepoint-scoped publication and retirement",
     run = function(t)
       build_default(t)
-      t:run({ t:path("tools", "ci", "m5_jit_trace_publish.sh") })
-      t:run({ t:path("tools", "ci", "m3_vm_safepoint.sh") })
+      run_lua_test_case(t, "m5_jit_trace_publish")
+      run_lua_test_case(t, "m3_vm_safepoint")
       luajit_file(t, t:path("tests", "stock", "test", "misc", "jit_flush.lua"))
       print("M6 JIT flush handshake guard passed")
     end
