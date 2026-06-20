@@ -109,6 +109,26 @@ static CTypeID ffi_checkctype_layout_lock(lua_State *L, CTState *cts,
   return id;  /* 11.2: layout reader waits out parser rollback. */
 }
 
+static CTypeID ffi_checkctype_noparse(lua_State *L, TValue *param, int *isstr)
+{
+  TValue *o = L->base;
+  if (!(o < L->top)) {
+  err_argtype:
+    lj_err_argtype(L, 1, "C type");
+  }
+  if (tvisstr(o)) {
+    *isstr = 1;
+    return 0;
+  } else {
+    GCcdata *cd;
+    *isstr = 0;
+    if (!tviscdata(o)) goto err_argtype;
+    if (param && param < L->top) lj_err_arg(L, 1, LJ_ERR_FFI_NUMPARAM);
+    cd = cdataV(o);
+    return cd->ctypeid == CTID_CTYPEID ? *(CTypeID *)cdataptr(cd) : cd->ctypeid;
+  }
+}
+
 /* Check argument for C data and return it. */
 static GCcdata *ffi_checkcdata(lua_State *L, int narg)
 {
@@ -803,6 +823,263 @@ LJLIB_CF(ffi_istype)	LJLIB_REC(.)
   return 1;
 }
 
+typedef struct FFILayoutSnap {
+  CTState *cts;
+  CTypeTab *tabh;
+  CTypeID top;
+  uint32_t seq;
+  MSize budget;
+} FFILayoutSnap;
+
+static int ffi_layout_begin(CTState *cts, FFILayoutSnap *ls)
+{
+  uint32_t seq = la_load32_acq(&cts->parse_token);
+  if (seq & 1u)
+    return -1;
+  ls->cts = cts;
+  ls->top = ctype_top_acq(cts);
+  ls->tabh = ctype_tabh_acq(cts);
+  ls->seq = seq;
+  ls->budget = ls->top ? (MSize)ls->top * 2u : 1u;
+  return 1;
+}
+
+static int ffi_layout_end(FFILayoutSnap *ls)
+{
+  uint32_t seq = la_load32_acq(&ls->cts->parse_token);
+  return (seq == ls->seq && !(seq & 1u)) ? 1 : -1;
+}
+
+static int ffi_layout_get(FFILayoutSnap *ls, CTypeID id, CType *out)
+{
+  CType *ct;
+  GCobj *name;
+  if (id == 0 || id >= ls->top || (MSize)id >= ls->tabh->sizetab)
+    return 0;
+  if (ls->budget-- == 0)
+    return -1;
+  ct = &ls->tabh->tab[id];
+  out->info = la_load32_acq(&ct->info);
+  out->size = la_load32_acq(&ct->size);
+  out->sib = (CTypeID1)la_load16_acq(&ct->sib);
+  out->next = (CTypeID1)la_load16_acq(&ct->next);
+  name = gcref_acq(ct->name);
+  setgcrefp(out->name, name);
+  return ctype_isabandoned(out->info) ? 0 : 1;
+}
+
+static int ffi_layout_rawref(FFILayoutSnap *ls, CTypeID id, CType *out)
+{
+  int ok;
+  for (;;) {
+    ok = ffi_layout_get(ls, id, out);
+    if (ok <= 0)
+      return ok;
+    if (!(ctype_isattrib(out->info) || ctype_isref(out->info)))
+      return 1;
+    id = ctype_cid(out->info);
+  }
+}
+
+static int ffi_layout_raw(FFILayoutSnap *ls, CTypeID id, CType *out)
+{
+  int ok;
+  for (;;) {
+    ok = ffi_layout_get(ls, id, out);
+    if (ok <= 0)
+      return ok;
+    if (!ctype_isattrib(out->info))
+      return 1;
+    id = ctype_cid(out->info);
+  }
+}
+
+static int ffi_layout_rawchild(FFILayoutSnap *ls, const CType *ct, CType *out)
+{
+  CTypeID id = ctype_cid(ct->info);
+  int ok;
+  do {
+    ok = ffi_layout_get(ls, id, out);
+    if (ok <= 0)
+      return ok;
+    if (!ctype_isattrib(out->info))
+      return 1;
+    id = ctype_cid(out->info);
+  } while (1);
+}
+
+static int ffi_layout_info_raw(FFILayoutSnap *ls, CTypeID id,
+			       CTInfo *infop, CTSize *szp)
+{
+  CTInfo qual = 0;
+  CType ct;
+  int ok = ffi_layout_get(ls, id, &ct);
+  if (ok <= 0)
+    return ok;
+  if (ctype_isref(ct.info)) {
+    id = ctype_cid(ct.info);
+    ok = ffi_layout_get(ls, id, &ct);
+    if (ok <= 0)
+      return ok;
+  }
+  for (;;) {
+    CTInfo info = ct.info;
+    if (ctype_isenum(info)) {
+      /* Follow child. Need to look at its attributes, too. */
+    } else if (ctype_isattrib(info)) {
+      if (ctype_isxattrib(info, CTA_QUAL))
+	qual |= ct.size;
+      else if (ctype_isxattrib(info, CTA_ALIGN) && !(qual & CTFP_ALIGNED))
+	qual |= CTFP_ALIGNED + CTALIGN(ct.size);
+    } else {
+      if (!(qual & CTFP_ALIGNED)) qual |= (info & CTF_ALIGN);
+      qual |= (info & ~(CTF_ALIGN|CTMASK_CID));
+      *infop = qual;
+      *szp = ctype_isfunc(info) ? CTSIZE_INVALID : ct.size;
+      return 1;
+    }
+    ok = ffi_layout_get(ls, ctype_cid(info), &ct);
+    if (ok <= 0)
+      return ok;
+  }
+}
+
+static int ffi_layout_vlsize(FFILayoutSnap *ls, const CType *ct,
+			     CTSize nelem, CTSize *szp)
+{
+  CType cur = *ct, elem;
+  uint64_t xsz = 0;
+  int ok;
+  if (ctype_isstruct(cur.info)) {
+    CTypeID arrid = 0, fid = cur.sib;
+    xsz = cur.size;
+    while (fid) {
+      ok = ffi_layout_get(ls, fid, &cur);
+      if (ok <= 0)
+	return ok;
+      if (ctype_type(cur.info) == CT_FIELD)
+	arrid = ctype_cid(cur.info);
+      fid = cur.sib;
+    }
+    if (arrid == 0)
+      return 0;
+    ok = ffi_layout_raw(ls, arrid, &cur);
+    if (ok <= 0)
+      return ok;
+  }
+  if (!ctype_isvlarray(cur.info))
+    return 0;
+  ok = ffi_layout_rawchild(ls, &cur, &elem);
+  if (ok <= 0)
+    return ok;
+  if (!ctype_hassize(elem.info))
+    return 0;
+  xsz += (uint64_t)elem.size * nelem;
+  *szp = xsz < 0x80000000u ? (CTSize)xsz : CTSIZE_INVALID;
+  return 1;
+}
+
+static int ffi_layout_sizeof_snapshot(CTState *cts, CTypeID id, CTSize nelem,
+				      int hasnelem, CTSize *szp, int *neednelem)
+{
+  FFILayoutSnap ls;
+  CType ct;
+  int ok = ffi_layout_begin(cts, &ls);
+  if (ok < 0)
+    return -1;
+  ok = ffi_layout_rawref(&ls, id, &ct);
+  if (ok > 0) {
+    if (ctype_isvltype(ct.info)) {
+      if (!hasnelem) {
+	*neednelem = 1;
+      } else {
+	ok = ffi_layout_vlsize(&ls, &ct, nelem, szp);
+      }
+    } else {
+      *neednelem = 0;
+      *szp = ctype_hassize(ct.info) ? ct.size : CTSIZE_INVALID;
+    }
+  }
+  if (ok >= 0 && ffi_layout_end(&ls) < 0)
+    return -1;
+  return ok;
+}
+
+static int ffi_layout_alignof_snapshot(CTState *cts, CTypeID id, CTSize *alignp)
+{
+  FFILayoutSnap ls;
+  CTInfo info;
+  CTSize sz;
+  int ok = ffi_layout_begin(cts, &ls);
+  if (ok < 0)
+    return -1;
+  ok = ffi_layout_info_raw(&ls, id, &info, &sz);
+  if (ok > 0)
+    *alignp = (CTSize)1u << ctype_align(info);
+  if (ok >= 0 && ffi_layout_end(&ls) < 0)
+    return -1;
+  return ok;
+}
+
+static int ffi_layout_getfield(FFILayoutSnap *ls, const CType *root,
+			       GCstr *name, CTSize *ofs, CType *out)
+{
+  CType ct = *root;
+  CTypeID sid = ct.sib;
+  while (sid) {
+    int ok = ffi_layout_get(ls, sid, &ct);
+    if (ok <= 0)
+      return ok;
+    if (ctype_name_acq(&ct) == name) {
+      *ofs = ct.size;
+      *out = ct;
+      return 1;
+    }
+    if (ctype_isxattrib(ct.info, CTA_SUBTYPE)) {
+      CType cct, fct;
+      CTSize subofs;
+      ok = ffi_layout_get(ls, ctype_cid(ct.info), &cct);
+      if (ok <= 0)
+	return ok;
+      while (ctype_isattrib(cct.info)) {
+	ok = ffi_layout_get(ls, ctype_cid(cct.info), &cct);
+	if (ok <= 0)
+	  return ok;
+      }
+      ok = ffi_layout_getfield(ls, &cct, name, &subofs, &fct);
+      if (ok != 0) {
+	if (ok > 0) {
+	  *ofs = subofs + ct.size;
+	  *out = fct;
+	}
+	return ok;
+      }
+    }
+    sid = ct.sib;
+  }
+  return 0;
+}
+
+static int ffi_layout_offsetof_snapshot(CTState *cts, CTypeID id, GCstr *name,
+					CTSize *ofs, CType *out)
+{
+  FFILayoutSnap ls;
+  CType ct;
+  int ok = ffi_layout_begin(cts, &ls);
+  if (ok < 0)
+    return -1;
+  ok = ffi_layout_rawref(&ls, id, &ct);
+  if (ok > 0) {
+    if (ctype_isstruct(ct.info) && ct.size != CTSIZE_INVALID)
+      ok = ffi_layout_getfield(&ls, &ct, name, ofs, out);
+    else
+      ok = 0;
+  }
+  if (ok >= 0 && ffi_layout_end(&ls) < 0)
+    return -1;
+  return ok;
+}
+
 LJLIB_CF(ffi_sizeof)	LJLIB_REC(ffi_xof FF_ffi_sizeof)
 {
   CTState *cts = ctype_cts(L);
@@ -811,6 +1088,27 @@ LJLIB_CF(ffi_sizeof)	LJLIB_REC(ffi_xof FF_ffi_sizeof)
   if (LJ_UNLIKELY(tviscdata(L->base) && cdataisv(cdataV(L->base)))) {
     sz = cdatavlen(cdataV(L->base));
   } else {
+    int isstr, neednelem = 0;
+    id = ffi_checkctype_noparse(L, NULL, &isstr);
+    if (!isstr) {
+      int ok = ffi_layout_sizeof_snapshot(cts, id, 0, 0, &sz, &neednelem);
+      if (ok > 0 && neednelem) {
+	CTSize nelem = (CTSize)ffi_checkint(L, 2);
+	neednelem = 0;
+	ok = ffi_layout_sizeof_snapshot(cts, id, nelem, 1, &sz, &neednelem);
+      }
+      if (ok > 0) {
+	if (LJ_UNLIKELY(sz == CTSIZE_INVALID)) {
+	  setnilV(L->top-1);
+	  return 1;
+	}
+	goto got_size;
+      }
+      if (ok == 0) {
+	setnilV(L->top-1);
+	return 1;
+      }
+    }
     id = ffi_checkctype_layout_lock(L, cts, NULL);
     /* 11.2: keep layout reads atomic against failed parser rollback. */
     CType *ct = lj_ctype_rawref(cts, id);
@@ -831,6 +1129,7 @@ LJLIB_CF(ffi_sizeof)	LJLIB_REC(ffi_xof FF_ffi_sizeof)
       return 1;
     }
   }
+got_size:
   setintV(L->top-1, (int32_t)sz);
   return 1;
 }
@@ -838,21 +1137,55 @@ LJLIB_CF(ffi_sizeof)	LJLIB_REC(ffi_xof FF_ffi_sizeof)
 LJLIB_CF(ffi_alignof)	LJLIB_REC(ffi_xof FF_ffi_alignof)
 {
   CTState *cts = ctype_cts(L);
-  CTypeID id = ffi_checkctype_layout_lock(L, cts, NULL);
-  CTSize sz = 0;
-  CTInfo info = lj_ctype_info_raw(cts, id, &sz);
-  lj_ctype_parse_unlock(cts);
-  setintV(L->top-1, 1 << ctype_align(info));
+  CTypeID id;
+  CTSize align;
+  int isstr;
+  id = ffi_checkctype_noparse(L, NULL, &isstr);
+  if (!isstr) {
+    int ok = ffi_layout_alignof_snapshot(cts, id, &align);
+    if (ok > 0) {
+      setintV(L->top-1, (int32_t)align);
+      return 1;
+    }
+  }
+  id = ffi_checkctype_layout_lock(L, cts, NULL);
+  {
+    CTSize sz = 0;
+    CTInfo info = lj_ctype_info_raw(cts, id, &sz);
+    lj_ctype_parse_unlock(cts);
+    setintV(L->top-1, 1 << ctype_align(info));
+  }
   return 1;
 }
 
 LJLIB_CF(ffi_offsetof)	LJLIB_REC(ffi_xof FF_ffi_offsetof)
 {
   CTState *cts = ctype_cts(L);
-  CTypeID id = ffi_checkctype(L, cts, NULL);
-  GCstr *name = lj_lib_checkstr(L, 2);
+  CTypeID id;
+  GCstr *name;
   CType *ct;
   CTSize ofs;
+  int isstr;
+  id = ffi_checkctype_noparse(L, NULL, &isstr);
+  if (isstr)
+    id = ffi_checkctype(L, cts, NULL);
+  name = lj_lib_checkstr(L, 2);
+  if (!isstr) {
+    CType snap;
+    int ok = ffi_layout_offsetof_snapshot(cts, id, name, &ofs, &snap);
+    if (ok > 0) {
+      setintV(L->top-1, ofs);
+      if (ctype_isfield(snap.info)) {
+	return 1;
+      } else if (ctype_isbitfield(snap.info)) {
+	setintV(L->top++, ctype_bitpos(snap.info));
+	setintV(L->top++, ctype_bitbsz(snap.info));
+	return 3;
+      }
+    } else if (ok == 0) {
+      return 0;
+    }
+  }
   lj_ctype_parse_lock(cts, L);
   ct = lj_ctype_rawref(cts, id);
   if (ctype_isstruct(ct->info) && ct->size != CTSIZE_INVALID) {
