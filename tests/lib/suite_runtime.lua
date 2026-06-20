@@ -29,7 +29,7 @@ local function append_jit_mode(argv, opts)
 end
 
 function M.lua_path(t)
-  return utils.lua_path(t.root)
+  return t:path("tests", "lib", "?.lua") .. ";" .. utils.lua_path(t.root)
 end
 
 function M.lua_path_env(t, env)
@@ -73,7 +73,11 @@ function M.luajit_script(t, script, args, opts)
   append_jit_mode(argv, opts)
   argv[#argv + 1] = t:path("tests", script)
   for i = 1, #args do argv[#argv + 1] = args[i] end
-  t:luajit(argv, { timeout = opts.timeout, env = opts.env, quiet = opts.quiet })
+  t:luajit(argv, {
+    timeout = opts.timeout,
+    env = opts.lua_path == false and opts.env or M.lua_path_env(t, opts.env),
+    quiet = opts.quiet
+  })
 end
 
 function M.build_and_run_luajit_code(t, code, opts)
