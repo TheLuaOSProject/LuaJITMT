@@ -385,12 +385,14 @@ static LJ_AINLINE GCtrace *traceref_fromgco(GCobj *o)
 }
 #define tracevec_acq(J) \
   ((TraceVec *)la_loadptr_acq((void *const *)&(J)->tracev))
+#define traceslot_ref_acq(J, n) \
+  (&tracevec_acq((J))->slot[(n)])
 #define traceslot_pending(J, n) \
-  setgcrefrel((J)->trace[(n)], (const GCobj *)LJ_TRACE_PENDING)
+  setgcrefrel(*traceslot_ref_acq((J), (n)), (const GCobj *)LJ_TRACE_PENDING)
 #define traceslot_publish(J, n, T) \
-  setgcrefrel((J)->trace[(n)], obj2gco((T)))
+  setgcrefrel(*traceslot_ref_acq((J), (n)), obj2gco((T)))
 #define traceslot_clear(J, n) \
-  setgcrefrel((J)->trace[(n)], NULL)
+  setgcrefrel(*traceslot_ref_acq((J), (n)), NULL)
 static LJ_AINLINE TraceNo traceno16_acq(const uint16_t *p)
 {
   return (TraceNo)la_load16_acq(p);
