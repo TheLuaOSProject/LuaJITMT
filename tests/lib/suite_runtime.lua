@@ -201,6 +201,17 @@ function M.build_and_run_c(t, out, cfile, opts)
   M.compile_and_run_c(t, out, cfile, opts)
 end
 
+function M.run_c_fixtures(t, names, opts)
+  opts = opts or {}
+  local prefix = opts.output_prefix or "lj_"
+  local suffix = opts.output_suffix or ""
+  for i = 1, #names do
+    local name = names[i]
+    M.compile_and_run_c(t, t:tmp(prefix .. name .. suffix),
+                        name .. ".c", opts)
+  end
+end
+
 function M.add_luajit_c_fixture_cases(add, specs)
   for i = 1, #specs do
     local spec = specs[i]

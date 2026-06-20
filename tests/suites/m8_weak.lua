@@ -1,17 +1,12 @@
 local runtime = require("suite_runtime")
 
-local function run_c_fixtures(t, suffix, cflags)
-  for _, name in ipairs({
-    "t-gc2-phase",
-    "t-gc2-traverse",
-    "t-m8-ffi-weak-newindex",
-    "t-m8-close-finalizers",
-    "t-m8-finalizer-state"
-  }) do
-    local out = t:tmp("lj_" .. name .. suffix)
-    runtime.compile_and_run_c(t, out, name .. ".c", { cflags = cflags })
-  end
-end
+local M8_C_FIXTURES = {
+  "t-gc2-phase",
+  "t-gc2-traverse",
+  "t-m8-ffi-weak-newindex",
+  "t-m8-close-finalizers",
+  "t-m8-finalizer-state"
+}
 
 local function run_default_matrix(t)
   t:build({ clean = true, quiet = true })
@@ -23,7 +18,7 @@ local function run_default_matrix(t)
             { timeout = "10s" })
   t:luajit({ "-joff", t:path("tests", "t-ffi-gc-finreg.lua"), "3", "72" })
   t:luajit({ t:path("tests", "t-ffi-gc-finreg.lua"), "3", "72" })
-  run_c_fixtures(t, "_m8")
+  runtime.run_c_fixtures(t, M8_C_FIXTURES, { output_suffix = "_m8" })
 end
 
 local function run_paranoia_matrix(t)
@@ -35,7 +30,10 @@ local function run_paranoia_matrix(t)
       LJ_M8_FINALIZER_SPAWN = "0"
     }
   })
-  run_c_fixtures(t, "_m8_paranoia", xcflags)
+  runtime.run_c_fixtures(t, M8_C_FIXTURES, {
+    output_suffix = "_m8_paranoia",
+    cflags = xcflags
+  })
 end
 
 return function(add)

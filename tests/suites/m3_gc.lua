@@ -4,6 +4,7 @@ local runtime = require("suite_runtime")
 local make_clean = runtime.make_clean
 local make_default = runtime.build_default
 local compile_and_run_c = runtime.compile_and_run_c
+local run_c_fixtures = runtime.run_c_fixtures
 
 return function(add)
   local cases, register = utils.case_registry(add)
@@ -61,17 +62,15 @@ return function(add)
       make_default(t, {
         args = { "XCFLAGS=-DLUA_USE_ASSERT -DLJ_GC2_PARANOIA=1" }
       })
-      for _, name in ipairs({
+      run_c_fixtures(t, {
         "t-gc2-paranoia",
         "t-gc2-phase",
         "t-gc2-markbits",
         "t-gc2-traverse"
-      }) do
-        local out = t:tmp("lj_" .. name .. "_paranoia")
-        compile_and_run_c(t, out, name .. ".c", {
-          cflags = "-DLUA_USE_ASSERT -DLJ_GC2_PARANOIA=1"
-        })
-      end
+      }, {
+        output_suffix = "_paranoia",
+        cflags = "-DLUA_USE_ASSERT -DLJ_GC2_PARANOIA=1"
+      })
       runtime.run_stock(t, { "test.lua", "--quiet" })
 
       make_clean(t)
@@ -92,14 +91,11 @@ return function(add)
       make_clean(t)
       make_default(t, { jobs = false })
 
-      for _, name in ipairs({
+      run_c_fixtures(t, {
         "t-gc2-phase",
         "t-gc2-markbits",
         "t-gc2-traverse"
-      }) do
-        local out = t:tmp("lj_" .. name)
-        compile_and_run_c(t, out, name .. ".c")
-      end
+      })
 
       utils.run_registered_case(cases, t, "m3_gc2_worker_scheduler")
       utils.run_registered_case(cases, t, "m3_safepoint_handshake")
