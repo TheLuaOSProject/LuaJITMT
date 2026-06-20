@@ -581,6 +581,15 @@ typedef union IRIns {
   TValue tv;		/* TValue constant (overlaps entire slot). */
 } IRIns;
 
+LJ_STATIC_ASSERT(sizeof(IRIns) == sizeof(uint64_t));
+
+static LJ_AINLINE IRIns ir_load_acq(const IRIns *ir)
+{
+  IRIns snap;
+  snap.tv.u64 = tv_rawload_acq(&ir->tv);
+  return snap;
+}
+
 #define ir_isk64(ir) \
   ((ir)->o == IR_KNUM || (ir)->o == IR_KINT64 || \
    (LJ_GC64 && \
