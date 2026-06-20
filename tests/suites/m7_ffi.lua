@@ -1,42 +1,18 @@
 local utils = require("suite_utils")
+local runtime = require("suite_runtime")
 
 local getenv = utils.getenv
 local shell_quote = utils.shell_quote
-
-local function lua_path(t)
-  return t:path("src", "?.lua") .. ";" .. t:path("src", "jit", "?.lua") .. ";;"
-end
-
-local function build_and_run_c(t, out, cfile, opts)
-  opts = opts or {}
-  t:cc(out, { t:path("tests", cfile) }, {
-    link_luajit = true,
-    libs = { "-lm", "-ldl", "-pthread" }
-  })
-  t:run({ out }, { timeout = opts.timeout })
-end
-
-local function clean_build(t, opts)
-  opts = opts or {}
-  t:build({ clean = true, quiet = true, xcflags = opts.xcflags })
-end
-
-local function run_luajit_script(t, script, args, opts)
-  args = args or {}
-  opts = opts or {}
-  local argv = {}
-  if opts.joff then argv[#argv + 1] = "-joff" end
-  argv[#argv + 1] = t:path("tests", script)
-  for i = 1, #args do argv[#argv + 1] = args[i] end
-  t:luajit(argv, { timeout = opts.timeout, env = opts.env })
-end
+local lua_path = runtime.lua_path
+local build_and_run_c = runtime.compile_and_run_c
+local clean_build = runtime.clean_build
+local run_luajit_script = runtime.luajit_script
 
 local function run_dump_probe(t, dump, script)
-  local cmd = "LUA_PATH=" .. shell_quote(lua_path(t)) .. " " ..
-              "timeout 20s " .. shell_quote(t:path("src", "luajit")) ..
-              " -jdump=ir -e " .. shell_quote(script) ..
-              " >" .. shell_quote(dump)
-  t:run(cmd)
+  runtime.luajit_dump(t, dump, "-jdump=ir", script, {
+    timeout = "20s",
+    stderr = false
+  })
 end
 
 local m7_cases = {

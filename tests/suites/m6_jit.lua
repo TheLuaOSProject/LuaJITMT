@@ -1,66 +1,20 @@
 local utils = require("suite_utils")
+local runtime = require("suite_runtime")
 
 local contains = utils.contains
-local shell_quote = utils.shell_quote
 local count_plain = utils.count_plain
 local lines = utils.iter_lines
 local assert_no_lines = utils.assert_no_lines
+local luajit_code = runtime.luajit_code
+local luajit_file = runtime.luajit_file
+local luajit_dump = runtime.luajit_dump
+local build_default = runtime.build_default
+local build_and_run_c = runtime.build_and_run_c
 
 local function count_match(s, pattern)
   local count = 0
   for _ in s:gmatch(pattern) do count = count + 1 end
   return count
-end
-
-local function lua_path(t)
-  return t:path("src", "?.lua") .. ";" .. t:path("src", "jit", "?.lua") .. ";;"
-end
-
-local function luajit_code(t, code, opts)
-  opts = opts or {}
-  t:luajit({ "-e", code }, {
-    env = { LUA_PATH = lua_path(t) },
-    timeout = opts.timeout
-  })
-end
-
-local function luajit_file(t, file, opts)
-  opts = opts or {}
-  t:luajit({ file }, {
-    env = opts.lua_path and { LUA_PATH = lua_path(t) } or nil,
-    timeout = opts.timeout
-  })
-end
-
-local function luajit_dump(t, dump, dumpopt, code, opts)
-  opts = opts or {}
-  local parts = { "LUA_PATH=" .. shell_quote(lua_path(t)) }
-  if opts.timeout then parts[#parts + 1] = "timeout " .. shell_quote(opts.timeout) end
-  parts[#parts + 1] = shell_quote(t:path("src", "luajit"))
-  parts[#parts + 1] = shell_quote(dumpopt)
-  parts[#parts + 1] = "-e " .. shell_quote(code)
-  t:run(table.concat(parts, " ") .. " >" .. shell_quote(dump) .. " 2>&1",
-        { quiet = opts.quiet })
-end
-
-local function build_default(t)
-  t:make(nil, { quiet = true, jobs = false })
-end
-
-local function build_and_run_c(t, out, cfile, opts)
-  opts = opts or {}
-  if opts.build ~= false then
-    if opts.clean then
-      t:build({ clean = true, quiet = true })
-    else
-      build_default(t)
-    end
-  end
-  t:cc(out, { t:path("tests", cfile) }, {
-    link_luajit = true,
-    libs = { "-lm", "-ldl", "-pthread" }
-  })
-  t:run({ out }, { timeout = opts.timeout })
 end
 
 local function assert_dump_contains(t, dump, needle, label)
