@@ -1,4 +1,5 @@
 local th = require"threading"
+local harness = require"thread_harness"
 
 local nthread = tonumber(arg and arg[1]) or 4
 local niter = tonumber(arg and arg[2]) or 6000
@@ -20,11 +21,9 @@ for id = 1, nthread do
   end, id, niter)
 end
 
-for id = 1, nthread do
-  local ok, total = threads[id]:join()
-  assert(ok == true)
+harness.join_each(threads, function(total)
   assert(total > niter)
-end
+end)
 
 do
   local t = th.spawn(function()
@@ -37,8 +36,7 @@ do
   assert(#s == 20000)
 end
 
-collectgarbage("collect")
-collectgarbage("collect")
+harness.fullgc()
 
 print(("t-threading-alloc OK: %d workers x %d concat/intern ops"):format(
   nthread, niter))

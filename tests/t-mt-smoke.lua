@@ -1,4 +1,5 @@
 local th = require"threading"
+local harness = require"thread_harness"
 
 local max_threads = tonumber(os.getenv("LJ_M4_MT_SMOKE_THREADS") or "")
 if not max_threads then
@@ -26,14 +27,12 @@ for nthreads = 1, max_threads do
       return worker, compute(worker, n)
     end, i, iters)
   end
-  for i = 1, nthreads do
-    local ok, worker, result = threads[i]:join()
-    assert(ok == true)
+  harness.join_each(threads, function(worker, i, result)
     assert(worker == i)
     assert(result == expect[i])
     assert(threads[i]:running() == false)
-  end
-  collectgarbage("collect")
+  end)
+  harness.fullgc(1)
 end
 
 print(("t-mt-smoke OK: 1..%d pure-compute thread sets"):format(max_threads))

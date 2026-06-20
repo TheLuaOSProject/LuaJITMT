@@ -1,4 +1,5 @@
 local th = require"threading"
+local harness = require"thread_harness"
 
 local nthreads = tonumber(os.getenv("LJ_M5_OS_THREADS") or "4")
 local iters = tonumber(os.getenv("LJ_M5_OS_ITERS") or "80")
@@ -42,13 +43,10 @@ for id = 1, nthreads do
   end, id, iters)
 end
 
-for id = 1, nthreads do
-  local worker = workers[id]
-  local ok, worker_id, n = worker:join()
-  assert(ok == true)
+harness.join_each(workers, function(worker_id, id, n)
   assert(worker_id == id)
   assert(n == iters)
-end
+end)
 
 local current_locale = os.setlocale(nil, "all")
 assert(current_locale == nil or type(current_locale) == "string")

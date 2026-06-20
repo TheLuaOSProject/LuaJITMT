@@ -44,9 +44,10 @@ end
 function M.join_each(workers, check, timeout)
   timeout = timeout or 30
   for i = 1, #workers do
-    local ok, result = workers[i]:join(timeout)
+    local joined = { workers[i]:join(timeout) }
+    local ok, result = joined[1], joined[2]
     assert(ok == true, tostring(result))
-    if check then check(result, i) end
+    if check then check(result, i, unpack(joined, 3)) end
   end
 end
 
