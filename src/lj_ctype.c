@@ -284,11 +284,9 @@ void lj_ctype_fin_order_publish(CTState *cts, FinRegOrderNode *ord,
   fin_order_slot_rel(ord, slot);
   fin_order_active_rel(ord, 1);
   do {
-    head = (FinRegOrderNode *)la_loadptr_acq(
-      (void *const *)&cts->fin_order_head);
+    head = fin_order_head_acq(cts);
     fin_order_next_rel(ord, head);
-  } while (!la_casptr((void **)&cts->fin_order_head, (void **)&head, ord,
-		      LA_ACQ_REL, LA_ACQ));
+  } while (!fin_order_head_cas(cts, &head, ord));
   /* 11.4 FINREG ordered registration publish. */
 }
 
@@ -302,11 +300,9 @@ int lj_ctype_fin_order_retire(CTState *cts, FinRegOrderNode *prev,
   if (!fin_order_active_retiring(ord))
     return 1;
   do {
-    head = (FinRegOrderNode *)la_loadptr_acq(
-      (void *const *)&cts->fin_order_retired);
+    head = fin_order_retired_acq(cts);
     fin_order_retired_next_rel(ord, head);
-  } while (!la_casptr((void **)&cts->fin_order_retired, (void **)&head, ord,
-		      LA_ACQ_REL, LA_ACQ));
+  } while (!fin_order_retired_cas(cts, &head, ord));
   g = cts->g;
   if (g)
     la_add64_rlx(&g->gc2.finreg_cdata_order_retired, 1);
@@ -317,16 +313,14 @@ int lj_ctype_fin_order_retire(CTState *cts, FinRegOrderNode *prev,
       (void)fin_order_next_cas(prev, &expect, next);
   } else {
     expect = ord;
-    (void)la_casptr((void **)&cts->fin_order_head, (void **)&expect, next,
-		    LA_ACQ_REL, LA_ACQ);
+    (void)fin_order_head_cas(cts, &expect, next);
   }
   return 1;  /* 11.4 ordered FINREG logical retire plus best-effort splice. */
 }
 
 GCtab *lj_ctype_fin_head(CTState *cts)
 {
-  FinRegGen *gen = (FinRegGen *)la_loadptr_acq(
-    (void *const *)&cts->fin_head);
+  FinRegGen *gen = fin_gen_head_acq(cts);
   return gen ? fin_gen_tab_acq(gen) : NULL;
 }
 
@@ -334,7 +328,7 @@ cTValue *lj_ctype_fin_get(lua_State *L, CTState *cts, cTValue *key,
 			  GCtab **tabp)
 {
   FinRegGen *gen;
-  for (gen = (FinRegGen *)la_loadptr_acq((void *const *)&cts->fin_head);
+  for (gen = fin_gen_head_acq(cts);
        gen != NULL;
        gen = fin_gen_next_acq(gen)) {
     GCtab *t = fin_gen_tab_acq(gen);
@@ -359,7 +353,7 @@ static int ctype_fin_any_key(CTState *cts, lua_State *L, cTValue *key)
 static int ctype_fin_has_claim(CTState *cts, cTValue *claim)
 {
   FinRegGen *gen;
-  for (gen = (FinRegGen *)la_loadptr_acq((void *const *)&cts->fin_head);
+  for (gen = fin_gen_head_acq(cts);
        gen != NULL;
        gen = fin_gen_next_acq(gen)) {
     GCtab *t = fin_gen_tab_acq(gen);
@@ -379,8 +373,7 @@ int lj_ctype_fin_newgen(lua_State *L, CTState *cts, cTValue *key,
 			cTValue *claim, GCtab **tabp, TValue **slot)
 {
   for (;;) {
-    FinRegGen *head = (FinRegGen *)la_loadptr_acq(
-      (void *const *)&cts->fin_head);
+    FinRegGen *head = fin_gen_head_acq(cts);
     GCtab *headtab = head ? fin_gen_tab_acq(head) : NULL;
     MSize hmask = 1;
     uint32_t hbits;
@@ -401,8 +394,7 @@ int lj_ctype_fin_newgen(lua_State *L, CTState *cts, cTValue *key,
     tv = lj_tab_set(L, t, key);  /* Private generation, unpublished. */
     copyTVrel(L, tv, claim);
     fin_gen_next_rel(gen, head);
-    if (la_casptr((void **)&cts->fin_head, (void **)&head, gen,
-		  LA_ACQ_REL, LA_ACQ)) {
+    if (fin_gen_head_cas(cts, &head, gen)) {
       *tabp = t;
       *slot = tv;
       return 1;  /* 11.4 FINREG generation CAS publish. */
@@ -418,7 +410,7 @@ int lj_ctype_fin_istab(global_State *g, GCtab *t)
   FinRegGen *gen;
   if (!cts)
     return 0;
-  for (gen = (FinRegGen *)la_loadptr_acq((void *const *)&cts->fin_head);
+  for (gen = fin_gen_head_acq(cts);
        gen != NULL;
        gen = fin_gen_next_acq(gen)) {
     GCtab *ft = fin_gen_tab_acq(gen);
@@ -435,7 +427,7 @@ void lj_ctype_fin_mark(global_State *g, void (*mark)(global_State *, GCobj *),
   FinRegGen *gen;
   if (!cts)
     return;
-  for (gen = (FinRegGen *)la_loadptr_acq((void *const *)&cts->fin_head);
+  for (gen = fin_gen_head_acq(cts);
        gen != NULL;
        gen = fin_gen_next_acq(gen)) {
     GCtab *t = fin_gen_tab_acq(gen);
@@ -445,15 +437,13 @@ void lj_ctype_fin_mark(global_State *g, void (*mark)(global_State *, GCobj *),
   }
   {
     FinRegOrderNode *ord;
-    for (ord = (FinRegOrderNode *)la_loadptr_acq(
-	   (void *const *)&cts->fin_order_head);
+    for (ord = fin_order_head_acq(cts);
 	 ord != NULL;
 	 ord = fin_order_next_acq(ord)) {
       if (fin_order_active_acq(ord) != 0)
 	markmem(g, ord);
     }
-    for (ord = (FinRegOrderNode *)la_loadptr_acq(
-	   (void *const *)&cts->fin_order_retired);
+    for (ord = fin_order_retired_acq(cts);
 	 ord != NULL;
 	 ord = fin_order_retired_next_acq(ord))
       markmem(g, ord);
@@ -462,18 +452,15 @@ void lj_ctype_fin_mark(global_State *g, void (*mark)(global_State *, GCobj *),
 
 void lj_ctype_fin_freetabs(global_State *g, CTState *cts)
 {
-  FinRegGen *gen = (FinRegGen *)la_xchgptr_acqrel((void **)&cts->fin_head,
-						  NULL);
-  FinRegOrderNode *ord = (FinRegOrderNode *)la_xchgptr_acqrel(
-    (void **)&cts->fin_order_head, NULL);
+  FinRegGen *gen = fin_gen_head_xchg_acqrel(cts, NULL);
+  FinRegOrderNode *ord = fin_order_head_xchg_acqrel(cts, NULL);
   while (ord) {
     FinRegOrderNode *next = fin_order_next_acq(ord);
     if (fin_order_active_acq(ord) != 0)
       lj_mem_freet(g, ord);
     ord = next;
   }
-  ord = (FinRegOrderNode *)la_xchgptr_acqrel(
-    (void **)&cts->fin_order_retired, NULL);
+  ord = fin_order_retired_xchg_acqrel(cts, NULL);
   while (ord) {
     FinRegOrderNode *next = fin_order_retired_next_acq(ord);
     lj_mem_freet(g, ord);
@@ -1720,7 +1707,7 @@ CTState *lj_ctype_init(lua_State *L)
     FinRegGen *gen;
     settabV(L, L->top++, t);
     gen = ctype_fin_gen_new_l(L, t);
-    la_storeptr_rel((void **)&cts->fin_head, gen);
+    fin_gen_head_rel(cts, gen);
     L->top = anchor;
   }
   return cts;

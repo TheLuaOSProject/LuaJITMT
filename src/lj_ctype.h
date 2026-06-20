@@ -361,6 +361,71 @@ typedef struct CTState {
   uint32_t hash[CTHASH_SIZE];  /* Hash anchors. Low 16 bits hold CTypeID. */
 } CTState;
 
+static LJ_AINLINE FinRegGen *fin_gen_head_acq(const CTState *cts)
+{
+  return (FinRegGen *)la_loadptr_acq((void *const *)&cts->fin_head);
+}
+
+static LJ_AINLINE void fin_gen_head_rel(CTState *cts, FinRegGen *gen)
+{
+  la_storeptr_rel((void **)&cts->fin_head, gen);
+}
+
+static LJ_AINLINE int fin_gen_head_cas(CTState *cts, FinRegGen **oldp,
+				       FinRegGen *gen)
+{
+  return la_casptr((void **)&cts->fin_head, (void **)oldp, gen,
+		   LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE FinRegGen *fin_gen_head_xchg_acqrel(CTState *cts,
+						      FinRegGen *gen)
+{
+  return (FinRegGen *)la_xchgptr_acqrel((void **)&cts->fin_head, gen);
+}
+
+static LJ_AINLINE FinRegOrderNode *fin_order_head_acq(const CTState *cts)
+{
+  return (FinRegOrderNode *)la_loadptr_acq(
+    (void *const *)&cts->fin_order_head);
+}
+
+static LJ_AINLINE int fin_order_head_cas(CTState *cts,
+					 FinRegOrderNode **oldp,
+					 FinRegOrderNode *ord)
+{
+  return la_casptr((void **)&cts->fin_order_head, (void **)oldp, ord,
+		   LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE FinRegOrderNode *
+fin_order_head_xchg_acqrel(CTState *cts, FinRegOrderNode *ord)
+{
+  return (FinRegOrderNode *)la_xchgptr_acqrel(
+    (void **)&cts->fin_order_head, ord);
+}
+
+static LJ_AINLINE FinRegOrderNode *fin_order_retired_acq(const CTState *cts)
+{
+  return (FinRegOrderNode *)la_loadptr_acq(
+    (void *const *)&cts->fin_order_retired);
+}
+
+static LJ_AINLINE int fin_order_retired_cas(CTState *cts,
+					    FinRegOrderNode **oldp,
+					    FinRegOrderNode *ord)
+{
+  return la_casptr((void **)&cts->fin_order_retired, (void **)oldp, ord,
+		   LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE FinRegOrderNode *
+fin_order_retired_xchg_acqrel(CTState *cts, FinRegOrderNode *ord)
+{
+  return (FinRegOrderNode *)la_xchgptr_acqrel(
+    (void **)&cts->fin_order_retired, ord);
+}
+
 #define CTINFO(ct, flags)	(((CTInfo)(ct) << CTSHIFT_NUM) + (flags))
 #define CTALIGN(al)		((CTSize)(al) << CTSHIFT_ALIGN)
 #define CTATTRIB(at)		((CTInfo)(at) << CTSHIFT_ATTRIB)

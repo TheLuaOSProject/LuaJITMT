@@ -1773,8 +1773,7 @@ static size_t gc_queue_cdata_finalizers_pweak_ordered(lua_State *L,
   if (cts == NULL)
     return 0;
   prev = NULL;
-  ord = (FinRegOrderNode *)la_loadptr_acq(
-    (void *const *)&cts->fin_order_head);
+  ord = fin_order_head_acq(cts);
   while (ord != NULL) {
     FinRegOrderNode *next = fin_order_next_acq(ord);
     GCtab *t = fin_order_tab_acq(ord);
@@ -1886,8 +1885,7 @@ static size_t gc_separate_cdata_finalizers_ordered(global_State *g)
   if (cts == NULL)
     return 0;
   prev = NULL;
-  ord = (FinRegOrderNode *)la_loadptr_acq(
-    (void *const *)&cts->fin_order_head);
+  ord = fin_order_head_acq(cts);
   while (ord != NULL) {
     FinRegOrderNode *next = fin_order_next_acq(ord);
     GCtab *t = fin_order_tab_acq(ord);
@@ -1953,8 +1951,7 @@ static int gc_cdata_fin_pending_ordered(global_State *g, CTState *cts)
 {
   FinRegOrderNode *prev, *ord;
   prev = NULL;
-  ord = (FinRegOrderNode *)la_loadptr_acq(
-    (void *const *)&cts->fin_order_head);
+  ord = fin_order_head_acq(cts);
   while (ord != NULL) {
     FinRegOrderNode *next = fin_order_next_acq(ord);
     GCtab *t = fin_order_tab_acq(ord);
@@ -2024,7 +2021,7 @@ void lj_gc_finalize_cdata_disable(global_State *g)
   FinRegGen *gen;
   if (cts == NULL)
     return;
-  for (gen = (FinRegGen *)la_loadptr_acq((void *const *)&cts->fin_head);
+  for (gen = fin_gen_head_acq(cts);
        gen != NULL;
        gen = fin_gen_next_acq(gen)) {
     GCtab *t = fin_gen_tab_acq(gen);
