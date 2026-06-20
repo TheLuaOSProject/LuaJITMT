@@ -16,4 +16,11 @@ if hits=$(sed -n '/static void gc_mark_threading_live/,/^}/p' \
   printf '%s\n' 'raw LJThreadLive GC next-link traversal is forbidden; use lj_thread_live_next_acq' >&2
   exit 1
 fi
+if hits=$(sed -n '/static void gc2_scan_threading_live_roots/,/^}/p' \
+    "$ROOT/src/lj_gc2.c" | grep -nE -- 'node[[:space:]]*->[[:space:]]*next' || true); \
+    [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw LJThreadLive GC2 next-link traversal is forbidden; use lj_thread_live_next_acq' >&2
+  exit 1
+fi
 exec "$ROOT/tools/ci/lua_test.sh" m4_threading_shutdown
