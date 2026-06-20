@@ -31,7 +31,7 @@ static void check_strtab(global_State *g)
 
   bucket = lj_str_buckets(g);
   for (i = 0; i <= g->str.mask; i++) {
-    uintptr_t u = gcrefu(bucket[i]);
+    uintptr_t u = lj_str_ref_load_acq(&bucket[i]);
     GCobj *head = lj_str_hashhead(bucket[i]);
     assert((u & LJ_STRHASH_DEAD) == 0);
     assert((u & LJ_STRHASH_LINKMASK) == lj_str_hashflags(bucket[i]));

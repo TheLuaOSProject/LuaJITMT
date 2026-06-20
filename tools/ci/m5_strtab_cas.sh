@@ -13,4 +13,12 @@ if hits=$(grep -nE -- '->[[:space:]]*retired_next' \
   printf '%s\n' 'raw StrTabHdr retired_next access is forbidden; use lj_str_retired_next_* helpers' >&2
   exit 1
 fi
+if hits=$(grep -nE -- 'gcrefu[[:space:]]*[(]' \
+    "$ROOT/src/lj_str.h" \
+    "$ROOT/tests/t-strtab-prep.c" \
+    "$ROOT/tests/t-strtab-rehash.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw string-table GCRef metadata reads are forbidden; use lj_str_ref_load_acq() helpers' >&2
+  exit 1
+fi
 exec "$ROOT/tools/ci/lua_test.sh" m5_strtab_cas

@@ -14,12 +14,8 @@
 #define LJ_STRHASH_SECONDARY	((uintptr_t)2)
 #define LJ_STRHASH_LINKMASK	(LJ_STRHASH_DEAD|LJ_STRHASH_SECONDARY)
 
-#define lj_str_hashhead(r) \
-  ((GCobj *)(void *)(gcrefu((r)) & ~(uintptr_t)LJ_STRHASH_LINKMASK))
 #define lj_str_hashhead_u(u) \
   ((GCobj *)(void *)((u) & ~(uintptr_t)LJ_STRHASH_LINKMASK))
-#define lj_str_hashflags(r)	(gcrefu((r)) & LJ_STRHASH_LINKMASK)
-#define lj_str_hashsecondary(r)	(gcrefu((r)) & LJ_STRHASH_SECONDARY)
 #define lj_str_buckets(g)	((g)->str.tabh->bucket)
 #define lj_str_tabsize(mask) \
   ((mask) == ~(MSize)0 ? (GCSize)0 : \
@@ -61,6 +57,20 @@ static LJ_AINLINE GCobj *lj_str_hashhead_acq(const GCRef *r)
 {
   return lj_str_hashhead_u(lj_str_ref_load_acq(r));
 }
+
+static LJ_AINLINE uintptr_t lj_str_hashflags_acq(const GCRef *r)
+{
+  return lj_str_ref_load_acq(r) & LJ_STRHASH_LINKMASK;
+}
+
+static LJ_AINLINE uintptr_t lj_str_hashsecondary_acq(const GCRef *r)
+{
+  return lj_str_ref_load_acq(r) & LJ_STRHASH_SECONDARY;
+}
+
+#define lj_str_hashhead(r)		lj_str_hashhead_acq(&(r))
+#define lj_str_hashflags(r)		lj_str_hashflags_acq(&(r))
+#define lj_str_hashsecondary(r)		lj_str_hashsecondary_acq(&(r))
 
 static LJ_AINLINE GCobj *lj_str_next_acq(const GCobj *o)
 {
