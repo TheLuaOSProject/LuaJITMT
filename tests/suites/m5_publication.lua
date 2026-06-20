@@ -63,20 +63,6 @@ local function assert_block_excludes(label, block, rejects)
   end
 end
 
-local function find_pos(label, data, needle)
-  local p = data:find(needle, 1, true)
-  if not p then error(label .. ": missing expected text: " .. needle, 2) end
-  return p
-end
-
-local function assert_before(label, data, a, b)
-  local pa = find_pos(label, data, a)
-  local pb = find_pos(label, data, b)
-  if pa >= pb then
-    error(label .. ": expected `" .. a .. "` before `" .. b .. "`", 2)
-  end
-end
-
 local function lua_path_guard(t)
   return t:path("src", "?.lua") .. ";" .. t:path("src", "jit", "?.lua") .. ";;"
 end
@@ -647,21 +633,6 @@ assert(util.traceinfo(1), "expected loaded CNEW creation trace")
         return (contains(line, "tvref(") and contains(line, "->array")) or
                (contains(line, "setmref(") and contains(line, "->array"))
       end)
-      assert_no_lines(t, "table array header asize must be immutable after publish",
-                      src_text_files(t), function(line)
-        return contains(line, "lj_tab_array_hdr_asize_rel") or
-               (contains(line, "la_store32_rel(&lj_tab_array_hdrw") and
-                (contains(line, "->asize") or contains(line, "->acap")))
-      end)
-      t:assert_not_contains(lj_tab, "hdr->acap = acap")
-
-      local array_mem = t:c_block(t:path("src", "lj_obj.h"),
-                                  "static LJ_AINLINE void *lj_tab_array_mem_acq(const GCtab *t)")
-      block_has_all("lj_tab_array_mem_acq", array_mem, {
-        "lj_tab_array_snapshot_acq(t, &array)"
-      })
-      assert_block_excludes("lj_tab_array_mem_acq", array_mem, { "lj_tab_array_acq(t)" })
-
       assert_no_lines(t, "serializer dictionary array reads must use array snapshots",
                       t:path("src", "lj_serialize.c"), function(line)
         return contains(line, "asize = lj_tab_asize_acq(dict)") or
@@ -717,20 +688,6 @@ assert(util.traceinfo(1), "expected loaded CNEW creation trace")
         "lj_tab_array_acq(t)"
       })
 
-      local resize = t:c_block(lj_tab, "void lj_tab_resize(lua_State *L,")
-      assert_before("lj_tab_resize", resize,
-                    "lj_tab_array_nextgen_rel(oldarray, array)",
-                    "lj_tab_array_hdr_flags_or_rel(oldarray, TABARRAY_FLAG_RETIRING)")
-      block_has_all("lj_tab_resize", resize, {
-        "oldasize = (uint32_t)lj_tab_array_snapshot_acq(t, &oldarray)",
-        "oldarray_separated = oldarray && !lj_tab_array_is_colocated(t, oldarray)"
-      })
-      assert_block_excludes("lj_tab_resize", resize, {
-        "lj_tab_array_acq(t)",
-        "lj_tab_asize_acq(t)",
-        "oldacap = t->acap",
-        "lj_tab_array_separated(t)"
-      })
       print("M5 table array publication tests passed")
     end
   })

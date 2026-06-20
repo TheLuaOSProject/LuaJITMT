@@ -12,20 +12,6 @@ local function count_match(s, pattern)
   return count
 end
 
-local function source_code_files(t)
-  return t:files(t:path("src"), { extensions = { ".c", ".h", ".dasc" } })
-end
-
-local function source_and_test_files(t)
-  local files = source_code_files(t)
-  local tests = t:files(t:path("tests"), {
-    extensions = { ".c", ".h", ".lua" }
-  })
-  for i = 1, #tests do files[#files + 1] = tests[i] end
-  table.sort(files)
-  return files
-end
-
 local function lua_path(t)
   return t:path("src", "?.lua") .. ";" .. t:path("src", "jit", "?.lua") .. ";;"
 end
@@ -148,17 +134,6 @@ local function assert_trace1_ir(t, dump, label, pred)
     io.stderr:write(t:read(dump))
     error(label, 2)
   end
-end
-
-local function assert_section_no_lines(t, label, path, start_text, end_text, pred)
-  local data = t:text_between(path, start_text, end_text)
-  local hits = {}
-  local n = 0
-  for line in lines(data) do
-    n = n + 1
-    if pred(line) then hits[#hits + 1] = tostring(n) .. ": " .. line end
-  end
-  if #hits > 0 then error(label .. ":\n" .. table.concat(hits, "\n"), 2) end
 end
 
 local function assert_block_no_lines(t, label, path, start_text, pred)
