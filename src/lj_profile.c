@@ -77,7 +77,7 @@ typedef struct ProfileState {
 #elif LJ_PROFILE_PTHREAD
   pthread_mutex_t lock;		/* g->hookmask update lock. */
   pthread_t thread;		/* Timer thread. */
-  int abort;			/* Abort timer thread. */
+  uint32_t abort;		/* Abort timer thread. */
 #elif LJ_PROFILE_WTHREAD
 #if LJ_TARGET_WINDOWS
   HINSTANCE wmm;		/* WinMM library handle. */
@@ -86,7 +86,7 @@ typedef struct ProfileState {
 #endif
   CRITICAL_SECTION lock;	/* g->hookmask update lock. */
   HANDLE thread;		/* Timer thread. */
-  int abort;			/* Abort timer thread. */
+  uint32_t abort;		/* Abort timer thread. */
 #endif
 } ProfileState;
 
@@ -248,7 +248,7 @@ static void *profile_thread(ProfileState *ps)
 #else
     nanosleep(&ts, NULL);
 #endif
-    if (ps->abort) break;
+    if (la_load32_acq(&ps->abort)) break;
     profile_trigger(ps);
   }
   return NULL;
@@ -258,14 +258,14 @@ static void *profile_thread(ProfileState *ps)
 static void profile_timer_start(ProfileState *ps)
 {
   pthread_mutex_init(&ps->lock, 0);
-  ps->abort = 0;
+  la_store32_rel(&ps->abort, 0);
   pthread_create(&ps->thread, NULL, (void *(*)(void *))profile_thread, ps);
 }
 
 /* Stop profiling timer thread. */
 static void profile_timer_stop(ProfileState *ps)
 {
-  ps->abort = 1;
+  la_store32_rel(&ps->abort, 1);
   pthread_join(ps->thread, NULL);
   pthread_mutex_destroy(&ps->lock);
 }
@@ -282,7 +282,7 @@ static DWORD WINAPI profile_thread(void *psx)
 #endif
   while (1) {
     Sleep(interval);
-    if (ps->abort) break;
+    if (la_load32_acq(&ps->abort)) break;
     profile_trigger(ps);
   }
 #if LJ_TARGET_WINDOWS && !LJ_TARGET_UWP
@@ -308,14 +308,14 @@ static void profile_timer_start(ProfileState *ps)
   }
 #endif
   InitializeCriticalSection(&ps->lock);
-  ps->abort = 0;
+  la_store32_rel(&ps->abort, 0);
   ps->thread = CreateThread(NULL, 0, profile_thread, ps, 0, NULL);
 }
 
 /* Stop profiling timer thread. */
 static void profile_timer_stop(ProfileState *ps)
 {
-  ps->abort = 1;
+  la_store32_rel(&ps->abort, 1);
   WaitForSingleObject(ps->thread, INFINITE);
   DeleteCriticalSection(&ps->lock);
 }
