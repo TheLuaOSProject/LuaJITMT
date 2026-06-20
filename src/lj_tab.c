@@ -1665,6 +1665,21 @@ LJ_FUNCA TValue *lj_tab_storetv_forjit_array(lua_State *L, GCtab *parent,
   return dst;
 }
 
+LJ_FUNCA TValue *lj_tab_storetv_forvm_array(lua_State *L, GCtab *parent,
+					    TValue *dst, cTValue *src,
+					    MSize key)
+{
+  TValue *orig = dst;
+  /* The x64 VM runs its existing table barrier sequence after this helper. */
+  for (;;) {
+    dst = tab_current_jit_array_slot(L, parent, orig, key);
+    if (lj_tab_trystoretv_cas(L, dst, src) == LJ_TAB_STORE_CAS_OK)
+      break;
+    la_cpu_pause();  /* VM array store saw FORWARD after fast-path check. */
+  }
+  return dst;
+}
+
 LJ_FUNCA TValue *lj_tab_storetv_forjit_hash(lua_State *L, GCtab *parent,
 					    TValue *dst, cTValue *src,
 					    cTValue *key)

@@ -73,7 +73,9 @@ int main(void)
   TValue *oldarray, *newarray;
   MSize oldasize, newasize, oldacap;
   int32_t key_b = 3, key_v = 4, key_r = 5;
+  int32_t key_helper = 6;
   int32_t val_b = 9103, val_v = 9104, val_r = 9105;
+  int32_t val_helper = 9106;
   MSize i;
 
   assert(L != NULL);
@@ -87,6 +89,7 @@ int main(void)
   oldasize = lj_tab_asize_acq(t);
   oldacap = t->acap;
   assert((MSize)key_r < oldasize);
+  assert((MSize)key_helper < oldasize);
   for (i = 0; i < oldasize; i++) {
     int32_t v = (int32_t)i + 6000;
     set_int(L, t, (int32_t)i, v);
@@ -139,11 +142,22 @@ int main(void)
   assert_i32(&newarray[key_v], val_v);
   assert_i32(&newarray[key_r], val_r);
 
+  {
+    TValue src;
+    TValue *stored;
+    setintV(&src, val_helper);
+    lj_tab_array_hdr_flags_or_rel(oldarray, TABARRAY_FLAG_RETIRING);
+    stored = lj_tab_storetv_forvm_array(L, t, &oldarray[key_helper], &src,
+					(MSize)key_helper);
+    assert(stored == &newarray[key_helper]);
+    assert_i32(&oldarray[key_helper], key_helper + 6000);
+    assert_i32(&newarray[key_helper], val_helper);
+  }
+
   lj_tab_array_rel(t, newarray);
   lj_tab_asize_rel(t, newasize);
-  lj_tab_array_hdr_flags_or_rel(oldarray, TABARRAY_FLAG_RETIRING);
 
   lua_close(L);
-  printf("t-x64-tset-forward OK: TSET fast paths slow-path forwarded slots\n");
+  printf("t-x64-tset-forward OK: TSET fast paths reroute forwarded slots\n");
   return 0;
 }

@@ -4325,22 +4325,36 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |4:
     |  cmp RCd, ITYPEd		// Takes care of unordered, too.
     |  jae ->vmeta_tsetv
+    |  mov r9d, RCd
     |  shl RCd, 3
     |  add RC, TMPR
     |  mov r8, [RC]
-    |  mov64 r9, LJ_TFORWARD_BITS
-    |  cmp r8, r9
+    |  mov64 r10, LJ_TFORWARD_BITS
+    |  cmp r8, r10
     |  je ->vmeta_tsetv
     |  cmp r8, LJ_TNIL
     |  je >3				// Previous value is nil?
     |1:
     |2:  // Set array slot.
+    |.if X64WIN
+    |  mov ARG5d, r9d
+    |  lea CARG4, [BASE+RA*8]
+    |  mov CARG3, RC
     |  mov L:CARG1, SAVE_L
     |  mov L:CARG1->base, BASE
-    |  mov CARG2, RC
-    |  lea CARG3, [BASE+RA*8]
+    |  mov CARG2, TAB:RB
     |  mov L:RB, L:CARG1
-    |  call extern lj_tab_storetv	// (lua_State *L, TValue *d, TValue *s)
+    |.else
+    |  mov L:CARG1, SAVE_L
+    |  mov L:CARG1->base, BASE
+    |  mov CARG2, TAB:RB
+    |  lea CARG4, [BASE+RA*8]
+    |  mov CARG3, RC
+    |  mov CARG5d, r9d
+    |  mov L:RB, L:CARG1
+    |.endif
+    |  mov SAVE_PC, PC
+    |  call extern lj_tab_storetv_forvm_array	// (lua_State *L, GCtab *t, TValue *d, TValue *s, MSize key)
     |  mov BASE, L:RB->base
     |  mov RC, rax
     |  movzx RBd, PC_RB
@@ -4391,22 +4405,36 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |4:
     |  cmp RCd, ITYPEd
     |  jae ->vmeta_tsetb
+    |  mov r9d, RCd
     |  shl RCd, 3
     |  add RC, TMPR
     |  mov r8, [RC]
-    |  mov64 r9, LJ_TFORWARD_BITS
-    |  cmp r8, r9
+    |  mov64 r10, LJ_TFORWARD_BITS
+    |  cmp r8, r10
     |  je ->vmeta_tsetb
     |  cmp r8, LJ_TNIL
     |  je >3				// Previous value is nil?
     |1:
     |2:	 // Set array slot.
+    |.if X64WIN
+    |  mov ARG5d, r9d
+    |  lea CARG4, [BASE+RA*8]
+    |  mov CARG3, RC
     |  mov L:CARG1, SAVE_L
     |  mov L:CARG1->base, BASE
-    |  mov CARG2, RC
-    |  lea CARG3, [BASE+RA*8]
+    |  mov CARG2, TAB:RB
     |  mov L:RB, L:CARG1
-    |  call extern lj_tab_storetv	// (lua_State *L, TValue *d, TValue *s)
+    |.else
+    |  mov L:CARG1, SAVE_L
+    |  mov L:CARG1->base, BASE
+    |  mov CARG2, TAB:RB
+    |  lea CARG4, [BASE+RA*8]
+    |  mov CARG3, RC
+    |  mov CARG5d, r9d
+    |  mov L:RB, L:CARG1
+    |.endif
+    |  mov SAVE_PC, PC
+    |  call extern lj_tab_storetv_forvm_array	// (lua_State *L, GCtab *t, TValue *d, TValue *s, MSize key)
     |  mov BASE, L:RB->base
     |  mov RC, rax
     |  movzx RBd, PC_RB
@@ -4459,6 +4487,38 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  jmp ->vmeta_tsetr
     |  // Set array slot.
     |4:
+    |.if X64WIN
+    |  mov ARG5d, r9d
+    |  lea CARG4, [BASE+RA*8]
+    |  mov CARG3, RC
+    |  mov L:CARG1, SAVE_L
+    |  mov L:CARG1->base, BASE
+    |  mov CARG2, TAB:RB
+    |  mov L:RB, L:CARG1
+    |.else
+    |  mov L:CARG1, SAVE_L
+    |  mov L:CARG1->base, BASE
+    |  mov CARG2, TAB:RB
+    |  lea CARG4, [BASE+RA*8]
+    |  mov CARG3, RC
+    |  mov CARG5d, r9d
+    |  mov L:RB, L:CARG1
+    |.endif
+    |  mov SAVE_PC, PC
+    |  call extern lj_tab_storetv_forvm_array	// (lua_State *L, GCtab *t, TValue *d, TValue *s, MSize key)
+    |  mov BASE, L:RB->base
+    |  mov RC, rax
+    |  movzx RBd, PC_RB
+    |  mov TAB:RB, [BASE+RB*8]
+    |  cleartp TAB:RB
+    |  cmp TGMARK, 0
+    |  jnz ->vm_gc2_barriertv_tab
+    |  test byte TAB:RB->marked, LJ_GC_BLACK	// isblack(table)
+    |  jz >8
+    |  jmp ->vm_gc2_barriertv_tab
+    |8:
+    |  ins_next
+    |
     |->BC_TSETR_Z:
     |  mov L:CARG1, SAVE_L
     |  mov L:CARG1->base, BASE
