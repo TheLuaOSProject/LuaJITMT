@@ -385,6 +385,8 @@ static LJ_AINLINE GCtrace *traceref_fromgco(GCobj *o)
 }
 #define tracevec_acq(J) \
   ((TraceVec *)la_loadptr_acq((void *const *)&(J)->tracev))
+#define tracevec_rel(J, tv) \
+  la_storeptr_rel((void **)&(J)->tracev, (tv))
 #define traceslot_ref_acq(J, n) \
   (&tracevec_acq((J))->slot[(n)])
 #define traceslot_pending(J, n) \

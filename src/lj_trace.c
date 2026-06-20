@@ -119,7 +119,7 @@ static void tracevec_publish(jit_State *J, TraceVec *tv)
 {
   J->trace = tv->slot;
   trace_sizetrace_rel(J, tv->sizetrace);
-  la_storeptr_rel((void **)&J->tracev, tv);
+  tracevec_rel(J, tv);
 }
 
 static void tracevec_retired_push(jit_State *J, TraceVec *tv)
@@ -907,8 +907,15 @@ void lj_trace_freestate(global_State *g)
   lj_mem_freevec(g, J->snapmapbuf, J->sizesnapmap, SnapEntry);
   lj_mem_freevec(g, J->snapbuf, J->sizesnap, SnapShot);
   lj_mem_freevec(g, J->irbuf + J->irbotlim, J->irtoplim - J->irbotlim, IRIns);
-  if (J->tracev)
-    tracevec_free(g, J->tracev);
+  {
+    TraceVec *tv = tracevec_acq(J);
+    if (tv) {
+      J->trace = NULL;
+      trace_sizetrace_rel(J, 0);
+      tracevec_rel(J, NULL);
+      tracevec_free(g, tv);
+    }
+  }
   lj_trace_freeretired(g);
   lj_mcode_freeall(g);
 }
