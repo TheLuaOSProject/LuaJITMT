@@ -2029,7 +2029,7 @@ static size_t gc_onestep(lua_State *L)
     setmref(g->gc.sweep, gc_sweep(g, mref(g->gc.sweep, GCRef), GCSWEEPMAX));
     lj_assertG(old >= g->gc.total, "sweep increased memory");
     g->gc.estimate -= old - g->gc.total;
-    if (gcref(*mref(g->gc.sweep, GCRef)) == NULL) {
+    if (gcref_acq(*mref(g->gc.sweep, GCRef)) == NULL) {
       int arena_prepare = gc_arena_sweep_needs_prepare(g);
       if (!gc_arena_sweep_pending(g) || arena_prepare) {
 	StrTabHdr *hdr = (StrTabHdr *)la_loadptr_acq(
