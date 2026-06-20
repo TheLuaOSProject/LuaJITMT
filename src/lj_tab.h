@@ -56,14 +56,16 @@ static LJ_AINLINE Node *hashmask(const GCtab *t, uint32_t hash)
 #define hashnum(t, o)		hashlohi((t), (o)->u32.lo, ((o)->u32.hi << 1))
 #if LJ_GC64
 #define hashgcref_node(n, hmask, r) \
-  hashlohi_node((n), (hmask), (uint32_t)gcrefu(r), \
-		(uint32_t)(gcrefu(r) >> 32))
+  hashlohi_node((n), (hmask), (uint32_t)gcrefu_acq(r), \
+		(uint32_t)(gcrefu_acq(r) >> 32))
 #define hashgcref(t, r) \
-  hashlohi((t), (uint32_t)gcrefu(r), (uint32_t)(gcrefu(r) >> 32))
+  hashlohi((t), (uint32_t)gcrefu_acq(r), \
+	   (uint32_t)(gcrefu_acq(r) >> 32))
 #else
 #define hashgcref_node(n, hmask, r) \
-  hashlohi_node((n), (hmask), gcrefu(r), gcrefu(r) + HASH_BIAS)
-#define hashgcref(t, r)		hashlohi((t), gcrefu(r), gcrefu(r) + HASH_BIAS)
+  hashlohi_node((n), (hmask), gcrefu_acq(r), gcrefu_acq(r) + HASH_BIAS)
+#define hashgcref(t, r) \
+  hashlohi((t), gcrefu_acq(r), gcrefu_acq(r) + HASH_BIAS)
 #endif
 
 #define hsize2hbits(s)	((s) ? ((s)==1 ? 1 : 1+lj_fls((uint32_t)((s)-1))) : 0)

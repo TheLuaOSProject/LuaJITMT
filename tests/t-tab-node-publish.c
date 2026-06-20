@@ -41,6 +41,22 @@ static void check_pair(lua_State *L, int i)
   lua_pop(L, 1);
 }
 
+static void check_gc_key(lua_State *L)
+{
+  int tabidx;
+  lua_settop(L, 0);
+  lua_createtable(L, 0, 1);  /* target table */
+  tabidx = lua_gettop(L);
+  lua_newtable(L);  /* collectable key */
+  lua_pushvalue(L, -1);
+  lua_pushliteral(L, "gc-key-value");
+  lua_rawset(L, tabidx);
+  lua_pushvalue(L, -1);
+  lua_rawget(L, tabidx);
+  assert(strcmp(lua_tostring(L, -1), "gc-key-value") == 0);
+  lua_pop(L, 1);
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -78,6 +94,8 @@ int main(void)
   assert(t->hmask == 0);
   assert(lj_tab_node_acq(t) == &G(L)->nilnode);
   assert(lj_tab_node_hmask_acq(lj_tab_node_acq(t)) == 0);
+
+  check_gc_key(L);
 
   lua_close(L);
   printf("t-tab-node-publish OK: table node vectors publish with acquire/release helpers\n");

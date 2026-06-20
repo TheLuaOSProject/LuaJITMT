@@ -84,6 +84,7 @@ typedef struct GCRef {
 #define gcref_acq(r)	((GCobj *)(uintptr_t)la_load64_acq(&(r).gcptr64))
 #define gcrefp(r, t)	((t *)(void *)(r).gcptr64)
 #define gcrefu(r)	((r).gcptr64)
+#define gcrefu_acq(r)	(la_load64_acq(&(r).gcptr64))
 #define gcrefeq(r1, r2)	((r1).gcptr64 == (r2).gcptr64)
 
 #define setgcref(r, gc)	((r).gcptr64 = (uint64_t)&(gc)->gch)
@@ -97,6 +98,7 @@ typedef struct GCRef {
 #define gcref_acq(r)	((GCobj *)(uintptr_t)la_load32_acq(&(r).gcptr32))
 #define gcrefp(r, t)	((t *)(void *)(uintptr_t)(r).gcptr32)
 #define gcrefu(r)	((r).gcptr32)
+#define gcrefu_acq(r)	(la_load32_acq(&(r).gcptr32))
 #define gcrefeq(r1, r2)	((r1).gcptr32 == (r2).gcptr32)
 
 #define setgcref(r, gc)	((r).gcptr32 = (uint32_t)(uintptr_t)&(gc)->gch)
