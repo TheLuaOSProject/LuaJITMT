@@ -100,12 +100,32 @@ void lj_trace_err_info(jit_State *J, TraceError e)
 ** are copied to a new (compact) GCtrace object.
 */
 
+static LJ_AINLINE TraceVec *tracevec_retired_next_acq(const TraceVec *tv)
+{
+  return (TraceVec *)la_loadptr_acq((void *const *)&tv->retired_next);
+}
+
+static LJ_AINLINE void tracevec_retired_next_rel(TraceVec *tv, TraceVec *next)
+{
+  la_storeptr_rel((void **)&tv->retired_next, next);
+}
+
+static LJ_AINLINE GCtrace *trace_retired_next_acq(const GCtrace *T)
+{
+  return (GCtrace *)la_loadptr_acq((void *const *)&T->retired_next);
+}
+
+static LJ_AINLINE void trace_retired_next_rel(GCtrace *T, GCtrace *next)
+{
+  la_storeptr_rel((void **)&T->retired_next, next);
+}
+
 static TraceVec *tracevec_new(lua_State *L, MSize sizetrace)
 {
   TraceVec *tv = (TraceVec *)lj_mem_new(L, tracevec_size(sizetrace));
   tv->sizetrace = sizetrace;
   tv->retire_epoch = 0;
-  tv->retired_next = NULL;
+  tracevec_retired_next_rel(tv, NULL);
   memset(tv->slot, 0, sizetrace*sizeof(GCRef));
   return tv;
 }
@@ -125,7 +145,7 @@ static void tracevec_retired_push(jit_State *J, TraceVec *tv)
 {
   void *head = la_loadptr_acq((void *const *)&J->retiredtracev);
   do {
-    tv->retired_next = (TraceVec *)head;
+    tracevec_retired_next_rel(tv, (TraceVec *)head);
   } while (!la_casptr((void **)&J->retiredtracev, &head, tv,
 		      LA_ACQ_REL, LA_ACQ));  /* 08 section 8.3 RCU retire. */
 }
@@ -154,7 +174,7 @@ static void trace_retired_push(jit_State *J, GCtrace *T)
 {
   void *head = la_loadptr_acq((void *const *)&J->retiredtraces);
   do {
-    T->retired_next = (GCtrace *)head;
+    trace_retired_next_rel(T, (GCtrace *)head);
   } while (!la_casptr((void **)&J->retiredtraces, &head, T,
 		      LA_ACQ_REL, LA_ACQ));  /* 08 section 8.7 trace SMR. */
 }
@@ -166,7 +186,7 @@ static void trace_retire(global_State *g, GCtrace *T)
   if (epoch == 0 || epoch == LJ_TRACE_SCOPE_FLUSHING)
     epoch = la_load64_acq(&g->gc2.hs_epoch);
   la_store64_rel(&T->retire_epoch, epoch);
-  T->retired_next = NULL;
+  trace_retired_next_rel(T, NULL);
   lj_gc_arena_markmem(g, T);
   {
     MCode **exittab = trace_exittab_acq(T);
@@ -244,8 +264,8 @@ uint32_t lj_trace_reclaim_retired(global_State *g, uint64_t completed_epoch)
   J = G2J(g);
   tv = (TraceVec *)la_xchgptr_acqrel((void **)&J->retiredtracev, NULL);
   while (tv) {
-    TraceVec *next = tv->retired_next;
-    tv->retired_next = NULL;
+    TraceVec *next = tracevec_retired_next_acq(tv);
+    tracevec_retired_next_rel(tv, NULL);
     if (la_load64_acq(&tv->retire_epoch) < completed_epoch) {
       tracevec_free(g, tv);
       reclaimed++;
@@ -256,8 +276,8 @@ uint32_t lj_trace_reclaim_retired(global_State *g, uint64_t completed_epoch)
   }
   rt = (GCtrace *)la_xchgptr_acqrel((void **)&J->retiredtraces, NULL);
   while (rt) {
-    GCtrace *next = rt->retired_next;
-    rt->retired_next = NULL;
+    GCtrace *next = trace_retired_next_acq(rt);
+    trace_retired_next_rel(rt, NULL);
     if (trace_body_retire_ready(rt, completed_epoch)) {
       trace_freebody(g, rt);
       reclaimed++;
@@ -276,13 +296,13 @@ void lj_trace_freeretired(global_State *g)
 					       NULL);
   GCtrace *rt;
   while (tv) {
-    TraceVec *next = tv->retired_next;
+    TraceVec *next = tracevec_retired_next_acq(tv);
     tracevec_free(g, tv);
     tv = next;
   }
   rt = (GCtrace *)la_xchgptr_acqrel((void **)&J->retiredtraces, NULL);
   while (rt) {
-    GCtrace *next = rt->retired_next;
+    GCtrace *next = trace_retired_next_acq(rt);
     trace_freebody(g, rt);
     rt = next;
   }
@@ -298,12 +318,12 @@ void lj_trace_markvecs(global_State *g, int gc2)
   }
   for (tv = (TraceVec *)la_loadptr_acq((void *const *)&J->retiredtracev);
        tv != NULL;
-       tv = (TraceVec *)la_loadptr_acq((void *const *)&tv->retired_next)) {
+       tv = tracevec_retired_next_acq(tv)) {
     if (gc2) lj_gc2_markmem(g, tv); else lj_gc_arena_markmem(g, tv);
   }
   for (rt = (GCtrace *)la_loadptr_acq((void *const *)&J->retiredtraces);
        rt != NULL;
-       rt = (GCtrace *)la_loadptr_acq((void *const *)&rt->retired_next))
+       rt = trace_retired_next_acq(rt))
     trace_markbody(g, rt, gc2);
 }
 
@@ -434,7 +454,7 @@ GCtrace * LJ_FASTCALL lj_trace_alloc(lua_State *L, GCtrace *T)
   T2->linktype = 0;
   T2->unused1 = 0;
   T2->retire_epoch = 0;
-  T2->retired_next = NULL;
+  trace_retired_next_rel(T2, NULL);
   memcpy(p, T->ir + T->nk, szins);
   return T2;
 }
