@@ -343,8 +343,10 @@ static char *bcwrite_bytecode(BCWriteCtx *ctx, char *p, GCproto *pt)
       } else if (op == BC_JFORL || op == BC_JITERL || op == BC_JLOOP) {
 	BCReg rd = q[LJ_ENDIAN_SELECT(2, 1)] + (q[LJ_ENDIAN_SELECT(3, 0)] << 8);
 	GCtrace *T = traceref(J, rd);
-	if (T)
-	  memcpy(q, &T->startins, 4);
+	if (T) {
+	  BCIns startins = trace_startins_acq(T);
+	  memcpy(q, &startins, 4);
+	}
       }
     }
   }

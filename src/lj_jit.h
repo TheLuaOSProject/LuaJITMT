@@ -428,6 +428,21 @@ static LJ_AINLINE MSize trace_mcloop_acq(const GCtrace *T)
   return (MSize)la_load32_acq(&T->mcloop);
 }
 
+static LJ_AINLINE const BCIns *trace_startpc_acq(const GCtrace *T)
+{
+  return mref_acq(T->startpc, const BCIns);
+}
+
+static LJ_AINLINE BCIns trace_startins_acq(const GCtrace *T)
+{
+  return (BCIns)la_load32_acq(&T->startins);
+}
+
+static LJ_AINLINE MSize trace_spadjust_acq(const GCtrace *T)
+{
+  return (MSize)la_load16_acq(&T->spadjust);
+}
+
 static LJ_AINLINE SnapShot *trace_snap_acq(const GCtrace *T)
 {
   return (SnapShot *)la_loadptr_acq((void *const *)&T->snap);
@@ -462,6 +477,18 @@ static LJ_AINLINE void trace_startpt_clear(GCtrace *T)
 {
   setgcrefnullrel(T->startpt);
 }
+
+#ifdef LUAJIT_USE_GDBJIT
+static LJ_AINLINE void *trace_gdbjit_entry_acq(const GCtrace *T)
+{
+  return la_loadptr_acq((void *const *)&T->gdbjit_entry);
+}
+
+static LJ_AINLINE void trace_gdbjit_entry_rel(GCtrace *T, void *entry)
+{
+  la_storeptr_rel((void **)&T->gdbjit_entry, entry);
+}
+#endif
 
 LJ_STATIC_ASSERT(offsetof(GChead, gclist) == offsetof(GCtrace, gclist));
 

@@ -109,7 +109,7 @@ static BCPos debug_framepc(lua_State *L, GCfunc *fn, cTValue *nextframe)
   if (pos > pt->sizebc) {  /* Undo the effects of lj_trace_exit for JLOOP. */
     if (bc_isret(bc_op(ins[-1]))) {
       GCtrace *T = (GCtrace *)((char *)(ins-1) - offsetof(GCtrace, startins));
-      pos = proto_bcpos(pt, mref(T->startpc, const BCIns));
+      pos = proto_bcpos(pt, trace_startpc_acq(T));
     } else {
       pos = NO_BCPOS;  /* Punt in case of stack overflow for stitched trace. */
     }

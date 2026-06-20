@@ -358,12 +358,13 @@ static FILE *perftools_native_fopen(lua_State *L, const char *fname)
   return fp;
 }
 
-static void perftools_native_fprintf(lua_State *L, FILE *fp, GCtrace *T,
+static void perftools_native_fprintf(lua_State *L, FILE *fp, uintptr_t mcode,
+				     MSize szmcode, TraceNo traceno,
 				     const char *name, BCLine lineno)
 {
   lj_native_enter(L2TG(L));
   fprintf(fp, "%lx %x TRACE_%d::%s:%u\n",
-	  (long)T->mcode, T->szmcode, T->traceno, name, lineno);
+	  (long)mcode, szmcode, traceno, name, lineno);
   (void)lj_native_leave(L);
 }
 
@@ -372,7 +373,10 @@ static void perftools_addtrace(jit_State *J, GCtrace *T)
   static FILE *fp;
   lua_State *L = J->L;
   GCproto *pt = trace_startpt_acq(T);
-  const BCIns *startpc = mref(T->startpc, const BCIns);
+  const BCIns *startpc = trace_startpc_acq(T);
+  MCode *mcode = trace_mcode_acq(T);
+  MSize szmcode = trace_szmcode_acq(T);
+  TraceNo traceno = trace_traceno_acq(T);
   const char *name = proto_chunknamestr(pt);
   BCLine lineno;
   if (name[0] == '@' || name[0] == '=')
@@ -388,7 +392,8 @@ static void perftools_addtrace(jit_State *J, GCtrace *T)
     if (!(fp = perftools_native_fopen(L, fname))) return;
     setlinebuf(fp);
   }
-  perftools_native_fprintf(L, fp, T, name, lineno);
+  perftools_native_fprintf(L, fp, (uintptr_t)mcode, szmcode, traceno,
+			   name, lineno);
 }
 #endif
 
@@ -538,16 +543,17 @@ void lj_trace_reenableproto(GCproto *pt)
 /* Unpatch the bytecode modified by a root trace. */
 static void trace_unpatch(jit_State *J, GCtrace *T)
 {
-  BCOp op = bc_op(T->startins);
-  BCIns *pc = mref(T->startpc, BCIns);
+  BCIns startins = trace_startins_acq(T);
+  BCOp op = bc_op(startins);
+  BCIns *pc = (BCIns *)trace_startpc_acq(T);
   UNUSED(J);
   if (op == BC_JMP)
     return;  /* No need to unpatch branches in parent traces (yet). */
   switch (bc_op(*pc)) {
   case BC_JFORL:
     lj_assertJ(traceref(J, bc_d(*pc)) == T, "JFORL references other trace");
-    bc_publish(pc, T->startins);
-    pc += bc_j(T->startins);
+    bc_publish(pc, startins);
+    pc += bc_j(startins);
     lj_assertJ(bc_op(*pc) == BC_JFORI, "FORL does not point to JFORI");
     bc_publish_op(pc, BC_FORI);
     break;
@@ -555,11 +561,11 @@ static void trace_unpatch(jit_State *J, GCtrace *T)
   case BC_JLOOP:
     lj_assertJ(op == BC_ITERL || op == BC_ITERN || op == BC_LOOP ||
 	       bc_isret(op), "bad original bytecode %d", op);
-    bc_publish(pc, T->startins);
+    bc_publish(pc, startins);
     break;
   case BC_JFUNCF:
     lj_assertJ(op == BC_FUNCF, "bad original bytecode %d", op);
-    bc_publish(pc, T->startins);
+    bc_publish(pc, startins);
     break;
   default:  /* Already unpatched. */
     break;

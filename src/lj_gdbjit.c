@@ -512,7 +512,7 @@ static void LJ_FASTCALL gdbjit_symtab(GDBJITctx *ctx)
 
   sym = &ctx->obj.sym[GDBJIT_SYM_FUNC];
   sym->name = gdbjit_strz(ctx, "TRACE_"); ctx->p--;
-  gdbjit_catnum(ctx, ctx->T->traceno); *ctx->p++ = '\0';
+  gdbjit_catnum(ctx, trace_traceno_acq(ctx->T)); *ctx->p++ = '\0';
   sym->sectidx = GDBJIT_SECT_text;
   sym->value = 0;
   sym->size = ctx->szmcode;
@@ -753,7 +753,7 @@ static void gdbjit_newentry(lua_State *L, GDBJITctx *ctx)
   GDBJITentryobj *eo = lj_mem_newt(L, sz, GDBJITentryobj);
   memcpy(&eo->obj, &ctx->obj, ctx->objsize);  /* Copy ELF object. */
   eo->sz = sz;
-  ctx->T->gdbjit_entry = (void *)eo;
+  trace_gdbjit_entry_rel(ctx->T, (void *)eo);
   /* Link new entry to chain and register it. */
   eo->entry.prev_entry = NULL;
   gdbjit_lock_acquire();
@@ -774,14 +774,16 @@ void lj_gdbjit_addtrace(jit_State *J, GCtrace *T)
 {
   GDBJITctx ctx;
   GCproto *pt = trace_startpt_acq(T);
-  TraceNo parent = T->ir[REF_BASE].op1;
-  const BCIns *startpc = mref(T->startpc, const BCIns);
+  IRIns base = ir_load_acq(&trace_ir_acq(T)[REF_BASE]);
+  TraceNo parent = base.op1;
+  GCtrace *parentT = parent ? traceref(J, parent) : NULL;
+  const BCIns *startpc = trace_startpc_acq(T);
   ctx.T = T;
-  ctx.mcaddr = (uintptr_t)T->mcode;
-  ctx.szmcode = T->szmcode;
+  ctx.mcaddr = (uintptr_t)trace_mcode_acq(T);
+  ctx.szmcode = trace_szmcode_acq(T);
   ctx.spadjp = CFRAME_SIZE_JIT +
-	       (MSize)(parent ? traceref(J, parent)->spadjust : 0);
-  ctx.spadj = CFRAME_SIZE_JIT + T->spadjust;
+	       (MSize)(parentT ? trace_spadjust_acq(parentT) : 0);
+  ctx.spadj = CFRAME_SIZE_JIT + trace_spadjust_acq(T);
   lj_assertJ(startpc >= proto_bc(pt) && startpc < proto_bc(pt) + pt->sizebc,
 	     "start PC out of range");
   ctx.lineno = lj_debug_line(pt, proto_bcpos(pt, startpc));
@@ -797,7 +799,7 @@ void lj_gdbjit_addtrace(jit_State *J, GCtrace *T)
 /* Delete debug info for trace and notify GDB. */
 void lj_gdbjit_deltrace(jit_State *J, GCtrace *T)
 {
-  GDBJITentryobj *eo = (GDBJITentryobj *)T->gdbjit_entry;
+  GDBJITentryobj *eo = (GDBJITentryobj *)trace_gdbjit_entry_acq(T);
   if (eo) {
     gdbjit_lock_acquire();
     if (eo->entry.prev_entry)
