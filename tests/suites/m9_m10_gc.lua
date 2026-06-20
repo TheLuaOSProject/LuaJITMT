@@ -80,7 +80,7 @@ local function run_bench_smoke(t)
   assert_command_output_contains(
     "BENCH_SCALE=0.0001 BENCH_THREADS='1 2' BENCH_FILTER=arith-MT " ..
       shell_quote(t:path("aux", "bench", "run.sh")) .. " scaling " .. luajit,
-    "GC stats:")
+    "weak_legacy_skipped=")
   print("M9 benchmark smoke guard passed")
 end
 
