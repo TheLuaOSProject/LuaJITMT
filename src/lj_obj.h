@@ -1682,6 +1682,16 @@ static LJ_AINLINE void lj_obj_setgcwrel(GCobj *o, const GCobj *next)
   setgcrefrel(o->gch.nextgc, next);
 }
 
+static LJ_AINLINE void lj_obj_setgcwrrel(GCobj *o, GCRef next)
+{
+  setgcrefrrel(o->gch.nextgc, next);
+}
+
+static LJ_AINLINE void lj_obj_setgcwnullrel(GCobj *o)
+{
+  setgcrefnullrel(o->gch.nextgc);
+}
+
 static LJ_AINLINE GCupval *lj_uv_prev_acq(const GCupval *uv)
 {
   return &gcref_acq(uv->prev)->uv;

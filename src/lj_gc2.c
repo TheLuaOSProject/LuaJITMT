@@ -837,9 +837,9 @@ void lj_gc2_finalizer_enqueue(global_State *g, GCobj *o)
   do {
     head = (GCobj *)la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc);
     if (head)
-      lj_obj_setgcw(o, head);
+      lj_obj_setgcwrel(o, head);
     else
-      lj_obj_setgcwnull(o);
+      lj_obj_setgcwnullrel(o);
   } while (!la_casptr((void **)&g->gc2.finalizer_mpsc, (void **)&head, o,
 		      LA_REL, LA_ACQ));
   la_add64_rlx(&g->gc2.finalizer_queued, 1);
@@ -861,9 +861,9 @@ void lj_gc2_finalizer_drain_owned(global_State *g)
     if (newtail == NULL)
       newtail = stack;
     if (rev)
-      lj_obj_setgcw(stack, rev);
+      lj_obj_setgcwrel(stack, rev);
     else
-      lj_obj_setgcwnull(stack);
+      lj_obj_setgcwnullrel(stack);
     rev = stack;
     stack = next;
     n++;
@@ -882,11 +882,11 @@ void lj_gc2_finalizer_drain_owned(global_State *g)
   if (oldtail) {
     GCRef head;
     setgcrefr(head, *lj_obj_gcwref(oldtail));
-    lj_obj_setgcwr(newtail, head);
+    lj_obj_setgcwrrel(newtail, head);
     setgcrefrel(*lj_obj_gcwref(oldtail), rev);
     la_storeptr_rel((void **)&g->gc2.finalizer_tail, newtail);
   } else {
-    lj_obj_setgcw(newtail, rev);
+    lj_obj_setgcwrel(newtail, rev);
     la_storeptr_rel((void **)&g->gc2.finalizer_tail, newtail);
   }
   la_add64_rlx(&g->gc2.finalizer_mpsc_drained, n);
@@ -924,7 +924,7 @@ GCobj *lj_gc2_finalizer_dequeue_owned(global_State *g)
   } else {
     setgcrefrrel(*lj_obj_gcwref(tail), *lj_obj_gcwref(o));
   }
-  lj_obj_setgcwnull(o);
+  lj_obj_setgcwnullrel(o);
   la_add64_rlx(&g->gc2.finalizer_dequeued, 1);
   return o;  /* 05 section 5.8: GC2-owned finalizer queue bridge. */
 }
