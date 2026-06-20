@@ -18,6 +18,7 @@
 #include "lj_err.h"
 #include "lj_debug.h"
 #include "lj_thr.h"
+#include "lj_safepoint.h"
 #include "lj_lib.h"
 
 /* ------------------------------------------------------------------------ */
@@ -409,19 +410,35 @@ LJLIB_CF(debug_gethook)
 
 /* ------------------------------------------------------------------------ */
 
+static void debug_native_fputs(lua_State *L, const char *s, FILE *fp)
+{
+  lj_native_enter(L2TG(L));
+  (void)fputs(s, fp);
+  lj_safepoint_checkstop(L, lj_native_leave(L));
+}
+
+static char *debug_native_fgets(lua_State *L, char *buf, int size, FILE *fp)
+{
+  char *p;
+  lj_native_enter(L2TG(L));
+  p = fgets(buf, size, fp);
+  lj_safepoint_checkstop(L, lj_native_leave(L));
+  return p;
+}
+
 LJLIB_CF(debug_debug)
 {
   for (;;) {
     char buffer[250];
-    fputs("lua_debug> ", stderr);
-    if (fgets(buffer, sizeof(buffer), stdin) == 0 ||
+    debug_native_fputs(L, "lua_debug> ", stderr);
+    if (debug_native_fgets(L, buffer, sizeof(buffer), stdin) == 0 ||
 	strcmp(buffer, "cont\n") == 0)
       return 0;
     if (luaL_loadbuffer(L, buffer, strlen(buffer), "=(debug command)") ||
 	lua_pcall(L, 0, 0, 0)) {
       const char *s = lua_tostring(L, -1);
-      fputs(s ? s : "(error object is not a string)", stderr);
-      fputs("\n", stderr);
+      debug_native_fputs(L, s ? s : "(error object is not a string)", stderr);
+      debug_native_fputs(L, "\n", stderr);
     }
     lua_settop(L, 0);  /* remove eventual returns */
   }

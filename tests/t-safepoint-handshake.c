@@ -47,6 +47,14 @@ typedef struct PrintStopReqCtx {
   uint32_t done;
 } PrintStopReqCtx;
 
+typedef struct InputStopReqCtx {
+  global_State *g;
+  TGState *tg;
+  pthread_t thread;
+  int fd;
+  int err;
+} InputStopReqCtx;
+
 static void publish_manual(global_State *g, TGState *tg, uint32_t actions)
 {
   uint64_t epoch = la_load64_rlx(&g->gc2.hs_epoch) + 1u;
@@ -232,6 +240,25 @@ static void *print_stopreq_thread(void *arg)
   return NULL;
 }
 
+static void *input_stopreq_thread(void *arg)
+{
+  InputStopReqCtx *ctx = (InputStopReqCtx *)arg;
+  struct timespec delay;
+  const char msg[] = "cont\n";
+  ssize_t n;
+  int i;
+  delay.tv_sec = 0;
+  delay.tv_nsec = 1000000;
+  for (i = 0; i < 1000 &&
+       la_load8_acq(&ctx->tg->in_native) == 0; i++)
+    (void)nanosleep(&delay, NULL);
+  publish_manual(ctx->g, ctx->tg, LJ_GC2_HS_STOPREQ);
+  n = write(ctx->fd, msg, sizeof(msg) - 1u);
+  if (n != (ssize_t)(sizeof(msg) - 1u))
+    ctx->err = n == -1 ? errno : EIO;
+  return NULL;
+}
+
 static void fill_pipe_until_full(int fd)
 {
   char buf[4096];
@@ -287,6 +314,43 @@ static void test_print_stopreq(lua_State *L)
   close(pipefd[0]);
   close(pipefd[1]);
   clearerr(stdout);
+  assert(ctx.err == 0);
+  assert(status != LUA_OK);
+  assert(strstr(lua_tostring(L, -1),
+		"thread interrupted: VM shutdown") != NULL);
+  lua_pop(L, 1);
+  clear_stopreq_c(L);
+  assert_not_native_c(L);
+}
+
+static void test_debug_debug_stopreq(lua_State *L)
+{
+  global_State *g = G(L);
+  TGState *tg = G2TG(g);
+  InputStopReqCtx ctx;
+  int pipefd[2];
+  int saved_stdin;
+  int err;
+  int status;
+  assert(tg != NULL);
+  assert(pipe(pipefd) == 0);
+  saved_stdin = dup(STDIN_FILENO);
+  assert(saved_stdin != -1);
+  assert(dup2(pipefd[0], STDIN_FILENO) != -1);
+
+  memset(&ctx, 0, sizeof(ctx));
+  ctx.g = g;
+  ctx.tg = tg;
+  ctx.fd = pipefd[1];
+  err = pthread_create(&ctx.thread, NULL, input_stopreq_thread, &ctx);
+  assert(err == 0);
+  status = luaL_dostring(L, "debug.debug()");
+  err = pthread_join(ctx.thread, NULL);
+  assert(err == 0);
+  assert(dup2(saved_stdin, STDIN_FILENO) != -1);
+  close(saved_stdin);
+  close(pipefd[0]);
+  close(pipefd[1]);
   assert(ctx.err == 0);
   assert(status != LUA_OK);
   assert(strstr(lua_tostring(L, -1),
@@ -755,6 +819,7 @@ int main(void)
   }
 
   test_print_stopreq(L);
+  test_debug_debug_stopreq(L);
 
   assert(luaL_dostring(L,
     "local th = require('threading')\n"
