@@ -719,16 +719,22 @@ static void trace_scope_clear_slot(jit_State *J, TraceNo traceno, GCtrace *T,
       TraceNo head = trace_nextside_acq(root);
       if (head == traceno) {
 	trace_nextside_rel(root, next);
-	if (root->nchild > 0)
-	  root->nchild--;
+	{
+	  MSize nchild = trace_nchild_acq(root);
+	  if (nchild > 0)
+	    trace_nchild_rel(root, nchild - 1);
+	}
       } else if (head != 0) {
 	GCtrace *prev = traceref(J, head);
 	while (prev) {
 	  TraceNo prevnext = trace_nextside_acq(prev);
 	  if (prevnext == traceno) {
 	    trace_nextside_rel(prev, next);
-	    if (root->nchild > 0)
-	      root->nchild--;
+	    {
+	      MSize nchild = trace_nchild_acq(root);
+	      if (nchild > 0)
+		trace_nchild_rel(root, nchild - 1);
+	    }
 	    break;
 	  }
 	  prev = prevnext ? traceref(J, prevnext) : NULL;
@@ -1044,6 +1050,7 @@ static void trace_stop(jit_State *J)
   GCtrace *parent = NULL;
   GCtrace *root = NULL;
   SnapShot *snap = NULL;
+  MSize topslot;
   int addroot = 0;
 
   switch (op) {
@@ -1073,7 +1080,7 @@ static void trace_stop(jit_State *J)
     root = traceref(J, J->cur.root);
     lj_assertJ(parent != NULL && root != NULL, "missing parent/root trace");
     /* Avoid compiling a side trace twice (stack resizing uses parent exit). */
-    snap = &parent->snap[J->exitno];
+    snap = &trace_snap_acq(parent)[J->exitno];
     J->cur.nextside = (TraceNo1)trace_nextside_acq(root);
     break;
   case BC_CALLM:
@@ -1110,11 +1117,12 @@ static void trace_stop(jit_State *J)
       bc_publish(patchpc, patchins);
     break;
   case BC_JMP:
-    lj_assertJ(parent->exittab != NULL, "missing parent exit table");
-    trace_exittarget_rel(parent, J->exitno, T->mcode);
-    snap->count = SNAPCOUNT_DONE;
-    if (T->topslot > snap->topslot) snap->topslot = T->topslot;
-    root->nchild++;
+    lj_assertJ(trace_exittab_acq(parent) != NULL, "missing parent exit table");
+    trace_exittarget_rel(parent, J->exitno, trace_mcode_acq(T));
+    snap_count_rel(snap, SNAPCOUNT_DONE);
+    topslot = trace_topslot_acq(T);
+    if (topslot > snap_topslot_acq(snap)) snap_topslot_rel(snap, topslot);
+    trace_nchild_rel(root, trace_nchild_acq(root) + 1);
     trace_nextside_rel(root, traceno);
     break;
   case BC_CALLM:
@@ -1401,16 +1409,17 @@ void LJ_FASTCALL lj_trace_hot(jit_State *J, const BCIns *pc)
 static void trace_hotside(jit_State *J, const BCIns *pc, lua_State *L,
 			  TraceNo parent, ExitNo exitno)
 {
-  SnapShot *snap = &traceref(J, parent)->snap[exitno];
+  GCtrace *parentT = traceref(J, parent);
+  SnapShot *snap = &trace_snap_acq(parentT)[exitno];
   uint32_t hotexit = J->param[JIT_P_hotexit];
   uint8_t count;
   if (!(J2G(J)->hookmask & (HOOK_GC|HOOK_VMEVENT)) &&
       isluafunc(curr_func(L))) {
-    count = snap->count;
+    count = (uint8_t)snap_count_acq(snap);
     if (count == SNAPCOUNT_DONE)
       return;
     if ((uint32_t)count + 1u < hotexit) {
-      snap->count = (uint8_t)(count + 1u);
+      snap_count_rel(snap, count + 1u);
       return;
     }
     if (lj_trace_state_load(J) != LJ_TRACE_IDLE)
@@ -1418,7 +1427,7 @@ static void trace_hotside(jit_State *J, const BCIns *pc, lua_State *L,
     if (!lj_jit_token_try(J))
       return;
     if (count < SNAPCOUNT_DONE-1)
-      snap->count = (uint8_t)(count + 1u);
+      snap_count_rel(snap, count + 1u);
     J->L = L;
     J->parent = parent;
     J->exitno = exitno;

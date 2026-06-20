@@ -255,6 +255,11 @@ static LJ_AINLINE MSize snap_topslot_acq(const SnapShot *snap)
   return (MSize)la_load8_acq(&snap->topslot);
 }
 
+static LJ_AINLINE void snap_topslot_rel(SnapShot *snap, MSize topslot)
+{
+  la_store8_rel(&snap->topslot, (uint8_t)topslot);
+}
+
 static LJ_AINLINE MSize snap_mcofs_acq(const SnapShot *snap)
 {
   return (MSize)la_load16_acq(&snap->mcofs);
@@ -268,6 +273,11 @@ static LJ_AINLINE MSize snap_nent_acq(const SnapShot *snap)
 static LJ_AINLINE MSize snap_count_acq(const SnapShot *snap)
 {
   return (MSize)la_load8_acq(&snap->count);
+}
+
+static LJ_AINLINE void snap_count_rel(SnapShot *snap, MSize count)
+{
+  la_store8_rel(&snap->count, (uint8_t)count);
 }
 
 static LJ_AINLINE SnapEntry snapentry_acq(const SnapEntry *entry)
@@ -476,6 +486,11 @@ static LJ_AINLINE MSize trace_nchild_acq(const GCtrace *T)
   return (MSize)la_load16_acq(&T->nchild);
 }
 
+static LJ_AINLINE void trace_nchild_rel(GCtrace *T, MSize nchild)
+{
+  la_store16_rel(&T->nchild, (uint16_t)nchild);
+}
+
 static LJ_AINLINE SnapShot *trace_snap_acq(const GCtrace *T)
 {
   return (SnapShot *)la_loadptr_acq((void *const *)&T->snap);
@@ -487,9 +502,9 @@ static LJ_AINLINE SnapEntry *trace_snapmap_acq(const GCtrace *T)
 }
 
 #define trace_exittarget_acq(T, exitno) \
-  ((MCode *)la_loadptr_acq((void *const *)&(T)->exittab[(exitno)]))
+  ((MCode *)la_loadptr_acq((void *const *)&trace_exittab_acq((T))[(exitno)]))
 #define trace_exittarget_rel(T, exitno, target) \
-  la_storeptr_rel((void **)&(T)->exittab[(exitno)], (void *)(target))
+  la_storeptr_rel((void **)&trace_exittab_acq((T))[(exitno)], (void *)(target))
 static LJ_AINLINE GCobj *trace_startptgco_acq(GCtrace *T)
 {
   return gcref_acq(T->startpt);
