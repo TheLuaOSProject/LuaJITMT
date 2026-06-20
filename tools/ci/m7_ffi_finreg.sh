@@ -10,6 +10,13 @@ if hits=$(grep -nE -- '(^|[^[:alnum:]_])(gen|ord)[[:space:]]*->[[:space:]]*next'
   printf '%s\n' 'raw FINREG next-link access is forbidden; use fin_*_next_* helpers' >&2
   exit 1
 fi
+if hits=$(grep -nE -- '(^|[^[:alnum:]_])(gen|head)[[:space:]]*->[[:space:]]*tab|&[[:space:]]*(gen|head)[[:space:]]*->[[:space:]]*tab' \
+    "$ROOT/src/lj_ctype.c" \
+    "$ROOT/src/lj_gc.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw FINREG generation table access is forbidden; use fin_gen_tab_* helpers' >&2
+  exit 1
+fi
 if hits=$(grep -nE -- 'ord[[:space:]]*->[[:space:]]*(obj|tab|slot)' \
     "$ROOT/src/lj_ctype.c" \
     "$ROOT/src/lj_gc.c" || true); [ -n "$hits" ]; then

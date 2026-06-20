@@ -2027,9 +2027,9 @@ void lj_gc_finalize_cdata_disable(global_State *g)
   for (gen = (FinRegGen *)la_loadptr_acq((void *const *)&cts->fin_head);
        gen != NULL;
        gen = fin_gen_next_acq(gen)) {
-    GCtab *t = (GCtab *)la_loadptr_acq((void *const *)&gen->tab);
+    GCtab *t = fin_gen_tab_acq(gen);
     if (t)
-      setgcrefnullrel(t->metatable);  /* Disable FINREG generation. */
+      fin_gen_tab_disable_rel(t);  /* Disable FINREG generation. */
   }
 }
 #endif

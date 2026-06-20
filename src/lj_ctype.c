@@ -249,7 +249,7 @@ static GCtab *ctype_fin_tab_new_l(lua_State *L, uint32_t hbits)
 static FinRegGen *ctype_fin_gen_new_l(lua_State *L, GCtab *t)
 {
   FinRegGen *gen = lj_mem_newt(L, sizeof(FinRegGen), FinRegGen);
-  gen->tab = t;
+  fin_gen_tab_rel(gen, t);
   fin_gen_next_rel(gen, NULL);
   return gen;
 }
@@ -327,7 +327,7 @@ GCtab *lj_ctype_fin_head(CTState *cts)
 {
   FinRegGen *gen = (FinRegGen *)la_loadptr_acq(
     (void *const *)&cts->fin_head);
-  return gen ? (GCtab *)la_loadptr_acq((void *const *)&gen->tab) : NULL;
+  return gen ? fin_gen_tab_acq(gen) : NULL;
 }
 
 cTValue *lj_ctype_fin_get(lua_State *L, CTState *cts, cTValue *key,
@@ -337,7 +337,7 @@ cTValue *lj_ctype_fin_get(lua_State *L, CTState *cts, cTValue *key,
   for (gen = (FinRegGen *)la_loadptr_acq((void *const *)&cts->fin_head);
        gen != NULL;
        gen = fin_gen_next_acq(gen)) {
-    GCtab *t = (GCtab *)la_loadptr_acq((void *const *)&gen->tab);
+    GCtab *t = fin_gen_tab_acq(gen);
     if (!t || !gcref_acq(t->metatable))
       continue;
     cTValue *tv = lj_tab_get(L, t, key);
@@ -362,7 +362,7 @@ static int ctype_fin_has_claim(CTState *cts, cTValue *claim)
   for (gen = (FinRegGen *)la_loadptr_acq((void *const *)&cts->fin_head);
        gen != NULL;
        gen = fin_gen_next_acq(gen)) {
-    GCtab *t = (GCtab *)la_loadptr_acq((void *const *)&gen->tab);
+    GCtab *t = fin_gen_tab_acq(gen);
     MSize i, hmask;
     Node *node = lj_tab_node_snapshot_acq(t, &hmask);
     for (i = 0; i <= hmask; i++) {
@@ -381,8 +381,7 @@ int lj_ctype_fin_newgen(lua_State *L, CTState *cts, cTValue *key,
   for (;;) {
     FinRegGen *head = (FinRegGen *)la_loadptr_acq(
       (void *const *)&cts->fin_head);
-    GCtab *headtab = head ? (GCtab *)la_loadptr_acq(
-      (void *const *)&head->tab) : NULL;
+    GCtab *headtab = head ? fin_gen_tab_acq(head) : NULL;
     MSize hmask = 1;
     uint32_t hbits;
     GCtab *t;
@@ -422,7 +421,7 @@ int lj_ctype_fin_istab(global_State *g, GCtab *t)
   for (gen = (FinRegGen *)la_loadptr_acq((void *const *)&cts->fin_head);
        gen != NULL;
        gen = fin_gen_next_acq(gen)) {
-    GCtab *ft = (GCtab *)la_loadptr_acq((void *const *)&gen->tab);
+    GCtab *ft = fin_gen_tab_acq(gen);
     if (ft == t && ft && gcref_acq(ft->metatable))
       return 1;
   }
@@ -439,7 +438,7 @@ void lj_ctype_fin_mark(global_State *g, void (*mark)(global_State *, GCobj *),
   for (gen = (FinRegGen *)la_loadptr_acq((void *const *)&cts->fin_head);
        gen != NULL;
        gen = fin_gen_next_acq(gen)) {
-    GCtab *t = (GCtab *)la_loadptr_acq((void *const *)&gen->tab);
+    GCtab *t = fin_gen_tab_acq(gen);
     markmem(g, gen);
     if (t)
       mark(g, obj2gco(t));

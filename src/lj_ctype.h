@@ -191,6 +191,21 @@ typedef struct FinRegOrderNode {
   uint32_t active;		/* 1 active, 2 retiring, 0 retired. */
 } FinRegOrderNode;
 
+static LJ_AINLINE GCtab *fin_gen_tab_acq(const FinRegGen *gen)
+{
+  return (GCtab *)la_loadptr_acq((void *const *)&gen->tab);
+}
+
+static LJ_AINLINE void fin_gen_tab_rel(FinRegGen *gen, GCtab *tab)
+{
+  la_storeptr_rel((void **)&gen->tab, tab);
+}
+
+static LJ_AINLINE void fin_gen_tab_disable_rel(GCtab *tab)
+{
+  setgcrefnullrel(tab->metatable);
+}
+
 static LJ_AINLINE FinRegGen *fin_gen_next_acq(const FinRegGen *gen)
 {
   return (FinRegGen *)la_loadptr_acq((void *const *)&gen->next);
