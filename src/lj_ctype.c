@@ -1079,6 +1079,65 @@ int lj_ctype_ptrstruct_snapshot(CTState *cts, CTypeID id, CTypeID *cidp)
   return 0;
 }
 
+/* Sequence-checked type info/raw-type snapshot for stable layout readers. */
+int lj_ctype_info_snapshot(CTState *cts, CTypeID id, CTInfo *infop,
+			   CTSize *szp, CTypeID *ridp, CType *rawp)
+{
+  uint32_t seq0 = la_load32_acq(&cts->parse_token);
+  CTypeTab *tabh;
+  CTypeID top;
+  MSize budget;
+  CType ct;
+  CTInfo qual = 0;
+  if (seq0 & 1u)
+    return -1;
+  top = ctype_top_acq(cts);
+  tabh = ctype_tabh_acq(cts);
+  budget = top ? (MSize)top * 4u : 1u;
+  if (rawp || ridp) {
+    CTypeID rid = id;
+    for (;;) {
+      if (budget-- == 0)
+	return -1;
+      if (!ctype_snapshot_copy(tabh, top, rid, &ct))
+	return 0;
+      if (!ctype_isattrib(ct.info)) {
+	if (ridp)
+	  *ridp = rid;
+	if (rawp)
+	  *rawp = ct;
+	break;
+      }
+      rid = ctype_cid(ct.info);
+    }
+  }
+  for (;;) {
+    CTInfo info;
+    if (budget-- == 0)
+      return -1;
+    if (!ctype_snapshot_copy(tabh, top, id, &ct))
+      return 0;
+    info = ct.info;
+    if (ctype_isenum(info)) {
+      /* Follow child. Need to look at its attributes, too. */
+    } else if (ctype_isattrib(info)) {
+      if (ctype_isxattrib(info, CTA_QUAL))
+	qual |= ct.size;
+      else if (ctype_isxattrib(info, CTA_ALIGN) && !(qual & CTFP_ALIGNED))
+	qual |= CTFP_ALIGNED + CTALIGN(ct.size);
+    } else {
+      uint32_t seq1;
+      if (!(qual & CTFP_ALIGNED)) qual |= (info & CTF_ALIGN);
+      qual |= (info & ~(CTF_ALIGN|CTMASK_CID));
+      *infop = qual;
+      *szp = ctype_isfunc(info) ? CTSIZE_INVALID : ct.size;
+      seq1 = la_load32_acq(&cts->parse_token);
+      return (seq0 == seq1 && !(seq1 & 1u)) ? 1 : -1;
+    }
+    id = ctype_cid(info);
+  }
+}
+
 /* -- C type information -------------------------------------------------- */
 
 /* Follow references and get raw type for a C type ID. */

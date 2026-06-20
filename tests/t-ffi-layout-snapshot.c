@@ -52,6 +52,11 @@ int main(void)
     "  local ofs, bitpos, bitsz = ffi.offsetof(lj_m7_layout_bits_ct, 'b')\n"
     "  assert(ofs == 4 and bitpos == 0 and bitsz == 5)\n"
     "  assert(ffi.sizeof(lj_m7_layout_vla_ct, 7) == 28)\n"
+    "  local obj = ffi.new(lj_m7_layout_snapshot_ct, { a = i, b = i + 0.5 })\n"
+    "  assert(obj.a == i and obj.b == i + 0.5)\n"
+    "  local arr = ffi.new(lj_m7_layout_vla_ct, 7)\n"
+    "  arr[6] = i\n"
+    "  assert(ffi.sizeof(arr) == 28 and arr[6] == i)\n"
     "end\n");
   seq1 = parse_seq(cts);
   assert(seq1 == seq0);

@@ -1070,15 +1070,26 @@ static void crec_alloc(jit_State *J, RecordFFData *rd, CTypeID id)
   CTState *cts = ctype_ctsG(J2G(J));
   CTSize sz;
   CTInfo info;
-  CType *d;
+  CType dsnap, *d;
+  CTypeID rid;
   TRef trcd, trid = lj_ir_kint(J, id);
   cTValue *fin;
   TValue fintv;
-  lj_ctype_parse_lock(cts, J->L);
-  /* 11.2: ffi.new recorder waits out parser rollback. */
-  info = lj_ctype_info(cts, id, &sz);
-  d = ctype_raw(cts, id);
-  lj_ctype_parse_unlock(cts);
+  {
+    int ok = lj_ctype_info_snapshot(cts, id, &info, &sz, &rid, &dsnap);
+    if (ok < 0) {
+      lj_ctype_parse_lock(cts, J->L);
+      /* 11.2: ffi.new recorder waits out parser rollback. */
+      info = lj_ctype_info(cts, id, &sz);
+      rid = ctype_rawid(cts, id);
+      d = ctype_get(cts, rid);
+      lj_ctype_parse_unlock(cts);
+    } else {
+      if (!ok)
+	lj_trace_err(J, LJ_TRERR_BADTYPE);
+      d = &dsnap;
+    }
+  }
   if (sz == CTSIZE_INVALID)
     lj_trace_err(J, LJ_TRERR_BADTYPE);
   /* Use special instruction to box pointer or 32/64 bit integer. */
@@ -1118,7 +1129,7 @@ static void crec_alloc(jit_State *J, RecordFFData *rd, CTypeID id)
       if (align < CT_MEMALIGN) align = CT_MEMALIGN;
       crec_fill(J, dp, trsz, lj_ir_kint(J, 0), (1u << align));
     } else if (J->base[1] && !J->base[2] &&
-	!lj_cconv_multi_init(cts, ctype_rawid(cts, id), d, &rd->argv[1])) {
+		!lj_cconv_multi_init(cts, rid, d, &rd->argv[1])) {
       goto single_init;
     } else if (ctype_isarray(d->info)) {
       CType *dc = ctype_rawchild(cts, d);  /* Array element type. */

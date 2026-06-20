@@ -129,6 +129,11 @@ static CTypeID ffi_checkctype_noparse(lua_State *L, TValue *param, int *isstr)
   }
 }
 
+static int ffi_new_layout_snapshot(CTState *cts, CTypeID id, CTSize nelem,
+				   int hasnelem, CTypeID *ridp,
+				   CTInfo *infop, CTSize *szp,
+				   int *neednelem);
+
 /* Check argument for C data and return it. */
 static GCcdata *ffi_checkcdata(lua_State *L, int narg)
 {
@@ -634,14 +639,35 @@ LJLIB_CF(ffi_cdef)
 LJLIB_CF(ffi_new)	LJLIB_REC(.)
 {
   CTState *cts = ctype_cts(L);
-  CTypeID id = ffi_checkctype_layout_lock(L, cts, NULL);
-  CTypeID rid = ctype_rawid(cts, id);
-  CType *ct = ctype_get(cts, rid);
-  CTSize sz;
-  CTInfo info = lj_ctype_info(cts, id, &sz);
+  CTypeID id, rid;
+  CType *ct;
+  CTSize sz = CTSIZE_INVALID;
+  CTInfo info = 0;
   MSize ofs = 1;
   TValue *o;
   GCcdata *cd;
+  int isstr, neednelem = 0;
+  id = ffi_checkctype_noparse(L, NULL, &isstr);
+  if (!isstr) {
+    int ok = ffi_new_layout_snapshot(cts, id, 0, 0, &rid, &info, &sz,
+				     &neednelem);
+    if (ok > 0 && neednelem) {
+      CTSize nelem = (CTSize)ffi_checkint(L, 2);
+      ofs = 2;
+      ok = ffi_new_layout_snapshot(cts, id, nelem, 1, &rid, &info, &sz,
+				   &neednelem);
+    }
+    if (ok > 0)
+      goto got_layout;
+    if (ok == 0) {
+      sz = CTSIZE_INVALID;
+      goto got_layout;  /* Invalid/abandoned ID: report as invalid size. */
+    }
+  }
+  id = ffi_checkctype_layout_lock(L, cts, NULL);
+  rid = ctype_rawid(cts, id);
+  ct = ctype_get(cts, rid);
+  info = lj_ctype_info(cts, id, &sz);
   if ((info & CTF_VLA)) {
     CTSize nelem;
     lj_ctype_parse_unlock(cts);
@@ -658,6 +684,9 @@ LJLIB_CF(ffi_new)	LJLIB_REC(.)
     lj_err_arg(L, 1, LJ_ERR_FFI_INVSIZE);
   }
   lj_ctype_parse_unlock(cts);  /* 11.2: ffi.new waits out parser rollback. */
+got_layout:
+  if (sz == CTSIZE_INVALID)
+    lj_err_arg(L, 1, LJ_ERR_FFI_INVSIZE);
   o = L->base + ofs;
   cd = lj_cdata_newx_l(L, cts, id, sz, info);
   setcdataV(L, o-1, cd);  /* Anchor the uninitialized cdata. */
@@ -883,6 +912,22 @@ static int ffi_layout_rawref(FFILayoutSnap *ls, CTypeID id, CType *out)
   }
 }
 
+static int ffi_layout_rawid(FFILayoutSnap *ls, CTypeID id, CTypeID *ridp,
+			    CType *out)
+{
+  int ok;
+  for (;;) {
+    ok = ffi_layout_get(ls, id, out);
+    if (ok <= 0)
+      return ok;
+    if (!ctype_isattrib(out->info)) {
+      *ridp = id;
+      return 1;
+    }
+    id = ctype_cid(out->info);
+  }
+}
+
 static int ffi_layout_raw(FFILayoutSnap *ls, CTypeID id, CType *out)
 {
   int ok;
@@ -908,6 +953,36 @@ static int ffi_layout_rawchild(FFILayoutSnap *ls, const CType *ct, CType *out)
       return 1;
     id = ctype_cid(out->info);
   } while (1);
+}
+
+static int ffi_layout_info(FFILayoutSnap *ls, CTypeID id,
+			   CTInfo *infop, CTSize *szp)
+{
+  CTInfo qual = 0;
+  CType ct;
+  int ok = ffi_layout_get(ls, id, &ct);
+  if (ok <= 0)
+    return ok;
+  for (;;) {
+    CTInfo info = ct.info;
+    if (ctype_isenum(info)) {
+      /* Follow child. Need to look at its attributes, too. */
+    } else if (ctype_isattrib(info)) {
+      if (ctype_isxattrib(info, CTA_QUAL))
+	qual |= ct.size;
+      else if (ctype_isxattrib(info, CTA_ALIGN) && !(qual & CTFP_ALIGNED))
+	qual |= CTFP_ALIGNED + CTALIGN(ct.size);
+    } else {
+      if (!(qual & CTFP_ALIGNED)) qual |= (info & CTF_ALIGN);
+      qual |= (info & ~(CTF_ALIGN|CTMASK_CID));
+      *infop = qual;
+      *szp = ctype_isfunc(info) ? CTSIZE_INVALID : ct.size;
+      return 1;
+    }
+    ok = ffi_layout_get(ls, ctype_cid(info), &ct);
+    if (ok <= 0)
+      return ok;
+  }
 }
 
 static int ffi_layout_info_raw(FFILayoutSnap *ls, CTypeID id,
@@ -979,6 +1054,37 @@ static int ffi_layout_vlsize(FFILayoutSnap *ls, const CType *ct,
   xsz += (uint64_t)elem.size * nelem;
   *szp = xsz < 0x80000000u ? (CTSize)xsz : CTSIZE_INVALID;
   return 1;
+}
+
+static int ffi_new_layout_snapshot(CTState *cts, CTypeID id, CTSize nelem,
+				   int hasnelem, CTypeID *ridp,
+				   CTInfo *infop, CTSize *szp,
+				   int *neednelem)
+{
+  FFILayoutSnap ls;
+  CType raw;
+  int ok = ffi_layout_begin(cts, &ls);
+  if (ok < 0)
+    return -1;
+  ok = ffi_layout_rawid(&ls, id, ridp, &raw);
+  if (ok > 0) {
+    ok = ffi_layout_info(&ls, id, infop, szp);
+    if (ok > 0) {
+      if ((*infop & CTF_VLA)) {
+	if (!hasnelem) {
+	  *neednelem = 1;
+	} else {
+	  *neednelem = 0;
+	  ok = ffi_layout_vlsize(&ls, &raw, nelem, szp);
+	}
+      } else {
+	*neednelem = 0;
+      }
+    }
+  }
+  if (ok >= 0 && ffi_layout_end(&ls) < 0)
+    return -1;
+  return ok;
 }
 
 static int ffi_layout_sizeof_snapshot(CTState *cts, CTypeID id, CTSize nelem,

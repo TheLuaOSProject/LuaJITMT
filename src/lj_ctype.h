@@ -616,6 +616,9 @@ LJ_FUNC int lj_ctype_ptrstruct_snapshot(CTState *cts, CTypeID id,
 					CTypeID *cidp);
 LJ_FUNC CType *lj_ctype_rawref(CTState *cts, CTypeID id);
 LJ_FUNC CTSize lj_ctype_size(CTState *cts, CTypeID id);
+LJ_FUNC int lj_ctype_info_snapshot(CTState *cts, CTypeID id,
+				   CTInfo *infop, CTSize *szp,
+				   CTypeID *ridp, CType *rawp);
 LJ_FUNC int lj_ctype_size_snapshot(CTState *cts, CTypeID id, CTSize *szp);
 LJ_FUNC int lj_ctype_getname_snapshot(CTState *cts, GCstr *name,
 				      uint32_t tmask, CTypeID *idp,
