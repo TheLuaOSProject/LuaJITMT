@@ -15,6 +15,7 @@
 #include "lj_gc2.h"
 #include "lj_meta.h"
 #include "lj_safepoint.h"
+#include "lj_tab.h"
 #include "lj_thr.h"
 #include "lj_tg.h"
 #if LJ_HASJIT
@@ -55,6 +56,62 @@ static GCobj *active_ssb_last(TGState *tg)
   if (base == NULL || next == NULL || next <= base)
     return NULL;
   return gcref_acq(*(next - 1));
+}
+
+static void test_public_minor_skips_legacy_registry_roots(lua_State *L,
+							  global_State *g,
+							  TGState *tg)
+{
+  GCtab *registry, *reg_only;
+  TValue key, val, nilv;
+  MSize old_stepmul = g->gc.stepmul;
+  uint64_t major0, minor_req0, minor_start0;
+  int i;
+
+  UNUSED(tg);
+  lua_settop(L, 0);
+  registry = tabV(&g->registrytv);
+  setintV(&key, -0x51f00d);
+  setnilV(&nilv);
+  copyTVrel(L, lj_tab_set(L, registry, &key), &nilv);
+
+  lj_gc2_set_generational(g, 1);
+  lj_gc_fullgc(L);  /* Forced-major baseline enables minor gates. */
+  assert(g->gc.state == GCSpause);
+  assert(la_load32_acq(&g->gc2.phase) == LJ_GC2_IDLE);
+  assert(la_load32_acq(&g->gc2.minor_sweep_enabled) == 1);
+  assert(la_load32_acq(&g->gc2.minor_roots_enabled) == 1);
+  assert(lj_gc2_ssb_empty(g));
+
+  lua_newtable(L);
+  reg_only = tabV(L->top - 1);
+  settabV(L, &val, reg_only);
+  copyTVrel(L, lj_tab_set(L, registry, &key), &val);
+  lua_pop(L, 1);
+  assert(lj_gc2_ismarked(g, obj2gco(reg_only)) == 0);
+  assert(lj_gc2_ssb_empty(g));
+
+  major0 = la_load64_acq(&g->gc2.major_cycle_starts);
+  minor_req0 = la_load64_acq(&g->gc2.minor_cycle_requests);
+  minor_start0 = la_load64_acq(&g->gc2.minor_cycle_starts);
+  g->gc.stepmul = 1;
+  la_store32_rel(&g->gc2.assist_shift, lj_gc2_assist_shift_from_stepmul(1));
+  (void)lj_gc_step(L);
+  for (i = 0; i < 10000 && g->gc.state == GCSpropagate; i++)
+    (void)lj_gc_step(L);
+  assert(la_load64_acq(&g->gc2.major_cycle_starts) == major0);
+  assert(la_load64_acq(&g->gc2.minor_cycle_requests) == minor_req0 + 1u);
+  assert(la_load64_acq(&g->gc2.minor_cycle_starts) == minor_start0 + 1u);
+  assert(la_load32_acq(&g->gc2.cycle_roots_minor) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(reg_only)) == 0);
+
+  copyTVrel(L, lj_tab_set(L, registry, &key), &nilv);
+  g->gc.stepmul = old_stepmul;
+  la_store32_rel(&g->gc2.assist_shift,
+		 lj_gc2_assist_shift_from_stepmul((uint32_t)old_stepmul));
+  lj_gc_fullgc(L);
+  lj_gc2_set_generational(g, 0);
+  lua_settop(L, 0);
 }
 
 static void test_vm_generational_table_store_remembered(lua_State *L,
@@ -670,6 +727,8 @@ int main(void)
   lj_gc2_set_generational(g, 0);
   lj_gc2_legacy_cycle_end(g);
   lua_settop(L, 0);
+
+  test_public_minor_skips_legacy_registry_roots(L, g, tg);
 
   test_vm_generational_table_store_remembered(L, g, tg);
 

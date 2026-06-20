@@ -57,14 +57,22 @@
 
 /* -- Mark phase ---------------------------------------------------------- */
 
+static LJ_AINLINE int gc2_suppress_legacy_mark(global_State *g)
+{
+  return la_load32_acq(&g->gc2.phase) == LJ_GC2_MARK &&
+	 la_load32_acq(&g->gc2.cycle_roots_minor) != 0;
+}
+
 void lj_gc_arena_markobj(global_State *g, GCobj *o)
 {
-  lj_gc2_markobj(g, o);
+  if (!gc2_suppress_legacy_mark(g))
+    lj_gc2_markobj(g, o);
 }
 
 void lj_gc_arena_markmem(global_State *g, void *p)
 {
-  (void)lj_gc2_markmem(g, p);
+  if (!gc2_suppress_legacy_mark(g))
+    (void)lj_gc2_markmem(g, p);
 }
 
 static void gc_mark_strtab_mem(global_State *g)
@@ -447,6 +455,8 @@ static void gc2_paranoia_check_rawroots(global_State *g)
 
 static void gc2_paranoia_check_fixpoint(global_State *g)
 {
+  if (la_load32_acq(&g->gc2.cycle_roots_minor))
+    return;
   gc2_paranoia_check_roots(g);
   gc2_paranoia_check_strtab(g);
   gc2_paranoia_check_rawroots(g);
