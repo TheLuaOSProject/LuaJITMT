@@ -4,6 +4,12 @@ local M = {}
 
 local shell_quote = utils.shell_quote
 
+local function luajit_bin(t, bin)
+  bin = bin or t:path("src", "luajit")
+  if bin:sub(1, 1) == "/" then return bin end
+  return t:path(bin)
+end
+
 local function copy_env(env)
   local out = {}
   if env then
@@ -79,17 +85,46 @@ end
 function M.run_stock(t, args, opts)
   args = args or {}
   opts = opts or {}
+  local bin = luajit_bin(t, opts.bin)
+  if opts.check_executable then
+    t:run({ "test", "-x", bin }, { quiet = true })
+  end
   local parts = {
     "cd " .. shell_quote(t:path("tests", "stock", "test")),
-    "LUA_PATH=" .. shell_quote(M.lua_path(t)) .. " " ..
-      shell_quote(t:path("src", "luajit"))
+    "LUA_PATH=" .. shell_quote(M.lua_path(t)) .. " "
   }
+  if opts.timeout then parts[2] = parts[2] .. "timeout " .. shell_quote(opts.timeout) .. " " end
+  parts[2] = parts[2] .. shell_quote(bin)
   for i = 1, #args do parts[2] = parts[2] .. " " .. shell_quote(args[i]) end
   t:run(parts[1] .. " && " .. parts[2], { quiet = opts.quiet })
 end
 
-function M.build_default(t)
-  t:make(nil, { quiet = true, jobs = false })
+function M.run_stock_cli(t, args, opts)
+  args = args or {}
+  opts = opts or {}
+  local bin = args[1] or opts.bin
+  local stock_args = { "test.lua" }
+  for i = 2, #args do stock_args[#stock_args + 1] = args[i] end
+  local runopts = copy_env(opts)
+  runopts.bin = bin
+  if runopts.check_executable == nil then runopts.check_executable = true end
+  M.run_stock(t, stock_args, runopts)
+end
+
+function M.make_clean(t, opts)
+  opts = opts or {}
+  local quiet = opts.quiet
+  if quiet == nil then quiet = true end
+  t:make({ "clean" }, { quiet = quiet, jobs = false })
+end
+
+function M.build_default(t, opts)
+  opts = opts or {}
+  local quiet = opts.quiet
+  if quiet == nil then quiet = true end
+  local jobs = opts.jobs
+  if jobs == nil then jobs = false end
+  t:make(opts.args, { quiet = quiet, jobs = jobs })
 end
 
 function M.clean_build(t, opts)

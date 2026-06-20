@@ -1,38 +1,11 @@
-local function make_clean(t)
-  t:make({ "clean" }, { quiet = true, jobs = false })
-end
+local runtime = require("suite_runtime")
 
-local function make_default(t, opts)
-  opts = opts or {}
-  t:make(opts.args, { quiet = true, jobs = opts.jobs })
-end
-
-local function compile_luajit_fixture(t, out, cfile, opts)
-  opts = opts or {}
-  local libs = { "-lm", "-ldl" }
-  if opts.pthread ~= false then
-    libs[#libs + 1] = opts.pthread or "-pthread"
-  end
-  t:cc(out, { t:path("tests", cfile) }, {
-    cflags = opts.cflags,
-    link_luajit = true,
-    libs = libs
-  })
-end
+local make_clean = runtime.make_clean
+local make_default = runtime.build_default
+local compile_and_run_c = runtime.compile_and_run_c
 
 local function run_lua_test(t, name)
   t:run({ t:path("tools", "ci", "lua_test.sh"), name })
-end
-
-local function run_stock_tests(t, ...)
-  local argv = {
-    t:path("tools", "ci", "run_stock_tests.sh"),
-    t:path("src", "luajit")
-  }
-  for i = 1, select("#", ...) do
-    argv[#argv + 1] = select(i, ...)
-  end
-  t:run(argv)
 end
 
 local function run_case(cases, t, name)
@@ -56,9 +29,8 @@ return function(add)
       make_clean(t)
       make_default(t, { jobs = false })
 
-      compile_luajit_fixture(t, t:tmp("lj_t-gc2-worker-scheduler"),
-                             "t-gc2-worker-scheduler.c")
-      t:run({ t:tmp("lj_t-gc2-worker-scheduler") })
+      compile_and_run_c(t, t:tmp("lj_t-gc2-worker-scheduler"),
+                        "t-gc2-worker-scheduler.c")
       t:luajit({ "-joff", t:path("tests", "t-gc-workers.lua") })
       t:luajit({ t:path("tests", "t-gc-workers.lua") })
 
@@ -74,12 +46,11 @@ return function(add)
 
       make_clean(t)
       make_default(t)
-      compile_luajit_fixture(t, t:tmp("lj_t_safepoint_handshake"),
-                             "t-safepoint-handshake.c", {
+      compile_and_run_c(t, t:tmp("lj_t_safepoint_handshake"),
+                        "t-safepoint-handshake.c", {
         cflags = pthread,
         pthread = pthread
       })
-      t:run({ t:tmp("lj_t_safepoint_handshake") })
 
       print("M3 safepoint handshake tests passed")
     end
@@ -91,9 +62,8 @@ return function(add)
     run = function(t)
       make_clean(t)
       make_default(t)
-      compile_luajit_fixture(t, t:tmp("lj_t_vm_safepoint"),
-                             "t-vm-safepoint.c")
-      t:run({ t:tmp("lj_t_vm_safepoint") }, { timeout = "20s" })
+      compile_and_run_c(t, t:tmp("lj_t_vm_safepoint"),
+                        "t-vm-safepoint.c", { timeout = "20s" })
     end
   })
 
@@ -112,12 +82,11 @@ return function(add)
         "t-gc2-traverse"
       }) do
         local out = t:tmp("lj_" .. name .. "_paranoia")
-        compile_luajit_fixture(t, out, name .. ".c", {
+        compile_and_run_c(t, out, name .. ".c", {
           cflags = "-DLUA_USE_ASSERT -DLJ_GC2_PARANOIA=1"
         })
-        t:run({ out })
       end
-      run_stock_tests(t, "--quiet")
+      runtime.run_stock(t, { "test.lua", "--quiet" })
 
       make_clean(t)
       make_default(t, {
@@ -126,7 +95,7 @@ return function(add)
           "XCFLAGS=-DLUA_USE_ASSERT -DLJ_GC2_PARANOIA=1 -DLUAJIT_DISABLE_JIT"
         }
       })
-      run_stock_tests(t, "--quiet", "-jit")
+      runtime.run_stock(t, { "test.lua", "--quiet", "-jit" })
     end
   })
 
@@ -143,8 +112,7 @@ return function(add)
         "t-gc2-traverse"
       }) do
         local out = t:tmp("lj_" .. name)
-        compile_luajit_fixture(t, out, name .. ".c")
-        t:run({ out })
+        compile_and_run_c(t, out, name .. ".c")
       end
 
       run_case(cases, t, "m3_gc2_worker_scheduler")
