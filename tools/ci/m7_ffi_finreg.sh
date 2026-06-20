@@ -30,6 +30,12 @@ if hits=$(grep -nE -- '(makewhite|markfinalized|lj_gc_arena_markobj|lj_gc2_finre
   printf '%s\n' 'cdata sweep/free must not rescue finalizers; FINREG discovery owns finalizer queueing' >&2
   exit 1
 fi
+if hits=$(grep -nE -- '(setgcrefnullrel|setgcrefrel)[(](g->gc2[.]finreg_cdata_preclaim_obj\[[^]]+\]|newobj\[[^]]+\])|gcref_acq[(]oldobj\[[^]]+\][)]' \
+    "$ROOT/src/lj_gc2.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw FINREG preclaim object-slot access is forbidden; use gc2_queue_slot_* helpers' >&2
+  exit 1
+fi
 "$ROOT/tools/ci/lua_test.sh" m7_ffi_finreg
 cc -std=gnu99 -O2 -Wall -Wextra -Werror -mcx16 -I"$ROOT/src" \
   "$ROOT/tests/t-ffi-finreg-free-invariant.c" "$ROOT/src/libluajit.a" \

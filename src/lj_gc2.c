@@ -1838,14 +1838,14 @@ static void gc2_finclaim_publish(lua_State *L, global_State *g, MSize idx,
     la_store32_rel(&g->gc2.finreg_cdata_preclaim_publish_paused, 0);
   }
 #endif
-  setgcrefrel(g->gc2.finreg_cdata_preclaim_obj[idx], o);
+  gc2_queue_slot_store_rel(&g->gc2.finreg_cdata_preclaim_obj[idx], o);
   /* 05 section 5.8: finalizer value is visible before object ready marker. */
 }
 
 static void gc2_finclaim_clear(lua_State *L, global_State *g, MSize idx)
 {
   TValue nilv;
-  setgcrefnullrel(g->gc2.finreg_cdata_preclaim_obj[idx]);
+  gc2_queue_slot_clear_rel(&g->gc2.finreg_cdata_preclaim_obj[idx]);
   setnilV(&nilv);
   copyTVrel(L, &g->gc2.finreg_cdata_preclaim_fin[idx], &nilv);
 }
@@ -1854,17 +1854,17 @@ static void gc2_finclaim_copy_slot(lua_State *L, GCRef *newobj, TValue *newfin,
 				   MSize dst, GCRef *oldobj,
 				   TValue *oldfin, MSize src)
 {
-  GCobj *o = gcref_acq(oldobj[src]);
+  GCobj *o = gc2_queue_slot_load_acq(&oldobj[src]);
   if (o) {
     TValue fin;
     lj_tv_load_acq(&fin, &oldfin[src]);
     copyTVrel(L, &newfin[dst], &fin);
-    setgcrefrel(newobj[dst], o);
+    gc2_queue_slot_store_rel(&newobj[dst], o);
   } else {
     TValue nilv;
     setnilV(&nilv);
     copyTVrel(L, &newfin[dst], &nilv);
-    setgcrefnullrel(newobj[dst]);
+    gc2_queue_slot_clear_rel(&newobj[dst]);
   }
 }
 
