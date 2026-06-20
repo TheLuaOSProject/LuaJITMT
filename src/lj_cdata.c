@@ -64,17 +64,18 @@ GCcdata *lj_cdata_newx_l(lua_State *L, CTState *cts, CTypeID id, CTSize sz,
     return lj_cdata_newv(L, id, sz, ctype_align(info));
 }
 
+static LJ_NORET LJ_NOINLINE void cdata_free_finalizer_invariant(global_State *g)
+{
+  la_add64_rlx(&g->gc2.finreg_cdata_sweep_queued, 1);
+  lj_assertG_(g, 0, "cdata finalizer reached sweep/free outside FINREG");
+  abort();
+}
+
 /* Free a C data object. */
 void LJ_FASTCALL lj_cdata_free(global_State *g, GCcdata *cd)
 {
   if (LJ_UNLIKELY(lj_obj_gcflags(obj2gco(cd)) & LJ_GC_CDATA_FIN)) {
-    lj_assertG(0, "unpublished cdata finalizer reached sweep/free");
-    makewhite(g, obj2gco(cd));
-    markfinalized(obj2gco(cd));
-    lj_gc_arena_markobj(g, obj2gco(cd));
-    la_add64_rlx(&g->gc2.finreg_cdata_sweep_queued, 1);
-    lj_gc2_finreg_cdata_queue(g, obj2gco(cd));
-    lj_gc2_finalizer_enqueue(g, obj2gco(cd));
+    cdata_free_finalizer_invariant(g);
   } else if (LJ_LIKELY(!cdataisv(cd))) {
     CType *ct = ctype_raw(ctype_ctsG(g), cd->ctypeid);
     CTSize sz = ctype_hassize(ct->info) ? ct->size : CTSIZE_PTR;
