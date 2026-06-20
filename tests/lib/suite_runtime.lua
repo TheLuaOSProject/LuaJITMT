@@ -73,6 +73,20 @@ function M.luajit_dump(t, dump, dumpopt, code, opts)
   t:run(table.concat(parts, " ") .. redirect, { quiet = opts.quiet })
 end
 
+function M.luajit_dump_file(t, dump, dumpopt, file, args, opts)
+  args = args or {}
+  opts = opts or {}
+  local parts = { "LUA_PATH=" .. shell_quote(M.lua_path(t)) }
+  if opts.timeout then parts[#parts + 1] = "timeout " .. shell_quote(opts.timeout) end
+  parts[#parts + 1] = shell_quote(t:path("src", "luajit"))
+  parts[#parts + 1] = shell_quote(dumpopt)
+  parts[#parts + 1] = shell_quote(file)
+  for i = 1, #args do parts[#parts + 1] = shell_quote(args[i]) end
+  local redirect = " >" .. shell_quote(dump)
+  if opts.stderr ~= false then redirect = redirect .. " 2>&1" end
+  t:run(table.concat(parts, " ") .. redirect, { quiet = opts.quiet })
+end
+
 function M.capture_luajit(t, args, out, opts)
   opts = opts or {}
   local parts = { "LUA_PATH=" .. shell_quote(M.lua_path(t)),

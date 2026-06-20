@@ -25,6 +25,12 @@ function M.count_plain(s, needle)
   end
 end
 
+function M.count_match(s, pattern)
+  local count = 0
+  for _ in s:gmatch(pattern) do count = count + 1 end
+  return count
+end
+
 function M.lines(s)
   local out = {}
   for line in (s .. "\n"):gmatch("(.-)\n") do
@@ -83,6 +89,28 @@ end
 function M.assert_text_not_contains(label, data, needle)
   if M.contains(data, needle) then
     error(label .. ": forbidden text present: " .. needle, 2)
+  end
+end
+
+function M.assert_dump_contains(t, dump, needle, label)
+  local data = t:read(dump)
+  label = label or dump
+  if not M.contains(data, needle) then
+    error(label .. ": missing dump text: " .. needle, 2)
+  end
+end
+
+function M.assert_dump_match(t, dump, pattern, label)
+  local data = t:read(dump)
+  label = label or dump
+  if not data:match(pattern) then
+    error(label .. ": missing dump pattern: " .. pattern, 2)
+  end
+end
+
+function M.assert_dump_all_contains(t, dump, needles, label)
+  for i = 1, #needles do
+    M.assert_dump_contains(t, dump, needles[i], label)
   end
 end
 

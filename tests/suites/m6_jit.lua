@@ -3,38 +3,16 @@ local runtime = require("suite_runtime")
 
 local contains = utils.contains
 local count_plain = utils.count_plain
+local count_match = utils.count_match
 local lines = utils.iter_lines
+local assert_dump_contains = utils.assert_dump_contains
+local assert_dump_match = utils.assert_dump_match
+local assert_dump_all_contains = utils.assert_dump_all_contains
 local luajit_code = runtime.luajit_code
 local luajit_file = runtime.luajit_file
 local luajit_dump = runtime.luajit_dump
 local build_default = runtime.build_default
 local build_and_run_c = runtime.build_and_run_c
-
-local function count_match(s, pattern)
-  local count = 0
-  for _ in s:gmatch(pattern) do count = count + 1 end
-  return count
-end
-
-local function assert_dump_contains(t, dump, needle, label)
-  local data = t:read(dump)
-  if not contains(data, needle) then
-    error(label .. ": missing dump text: " .. needle, 2)
-  end
-end
-
-local function assert_dump_match(t, dump, pattern, label)
-  local data = t:read(dump)
-  if not data:match(pattern) then
-    error(label .. ": missing dump pattern: " .. pattern, 2)
-  end
-end
-
-local function assert_dump_all_contains(t, dump, needles, label)
-  for i = 1, #needles do
-    assert_dump_contains(t, dump, needles[i], label)
-  end
-end
 
 local function trace1_ir_state(t, dump)
   local st = {

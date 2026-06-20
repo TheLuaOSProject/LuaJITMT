@@ -6,6 +6,7 @@ local shell_quote = utils.shell_quote
 local lua_path = runtime.lua_path
 local build_and_run_c = runtime.compile_and_run_c
 local clean_build = runtime.clean_build
+local luajit_dump_file = runtime.luajit_dump_file
 local run_luajit_script = runtime.luajit_script
 
 local function run_dump_probe(t, dump, script)
@@ -313,10 +314,11 @@ return function(add)
         env = { LUA_PATH = lua_path(t) }
       })
       local dump = t:tmp("lj_t-ffi-gc-trace.dump")
-      t:run("LUA_PATH=" .. shell_quote(lua_path(t)) .. " timeout 20s " ..
-            shell_quote(t:path("src", "luajit")) .. " -jdump=ir " ..
-            shell_quote(t:path("tests", "t-ffi-gc-trace.lua")) ..
-            " >" .. shell_quote(dump))
+      luajit_dump_file(t, dump, "-jdump=ir",
+                        t:path("tests", "t-ffi-gc-trace.lua"), nil, {
+        timeout = "20s",
+        stderr = false
+      })
       t:assert_contains(dump, "lj_cdata_setfin")
       print("M7 FFI finalizer registry behavior passed")
     end
