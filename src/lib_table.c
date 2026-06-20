@@ -91,6 +91,32 @@ LJLIB_LUA(table_getn) /*
   end
 */
 
+static int table_maxn_visible(cTValue *tv)
+{
+  return tv != NULL && !tvisnil(tv) && !tvistabinternal(tv);
+}
+
+static int table_maxn_array_visible(GCtab *t, int32_t idx, TValue *slot)
+{
+  TValue val;
+  lj_tv_load_acq(&val, slot);
+  if (!tvisforward(&val))
+    return table_maxn_visible(&val);
+  return table_maxn_visible(lj_tab_getint(t, idx));
+}
+
+static int table_maxn_hash_visible(lua_State *L, GCtab *t, TValue *key,
+				   TValue *slot)
+{
+  TValue val;
+  lj_tv_load_acq(&val, slot);
+  if (!tvisforward(&val))
+    return table_maxn_visible(&val);
+  if (tviskeylock(key))
+    return 0;
+  return table_maxn_visible(lj_tab_get(L, t, key));
+}
+
 LJLIB_CF(table_maxn)
 {
   GCtab *t = lj_lib_checktab(L, 1);
@@ -101,23 +127,18 @@ LJLIB_CF(table_maxn)
   lua_Number m = 0;
   ptrdiff_t i;
   for (i = (ptrdiff_t)asize - 1; i >= 0; i--) {
-    TValue val;
-    lj_tv_load_acq(&val, &array[i]);
-    if (!tvisnil(&val)) {
+    if (table_maxn_array_visible(t, (int32_t)i, &array[i])) {
       m = (lua_Number)(int32_t)i;
       break;
     }
   }
   node = lj_tab_node_snapshot_acq(t, &hmask);
   for (i = (ptrdiff_t)hmask; i >= 0; i--) {
-    TValue key, val;
-    lj_tv_load_acq(&val, &node[i].val);
-    if (!tvisnil(&val)) {
-      lj_tv_load_acq(&key, &node[i].key);
-      if (tvisnumber(&key)) {
-	lua_Number n = numberVnum(&key);
-	if (n > m) m = n;
-      }
+    TValue key;
+    lj_tv_load_acq(&key, &node[i].key);
+    if (tvisnumber(&key) && table_maxn_hash_visible(L, t, &key, &node[i].val)) {
+      lua_Number n = numberVnum(&key);
+      if (n > m) m = n;
     }
   }
   setnumV(L->top-1, m);

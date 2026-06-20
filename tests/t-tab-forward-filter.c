@@ -9,12 +9,28 @@
 
 #include "lua.h"
 #include "lauxlib.h"
+#include "lualib.h"
 
 #include "lj_obj.h"
 #include "lj_str.h"
 #include "lj_tab.h"
 
 #include "lib/tab_forward_helpers.h"
+
+static lua_Number tabfwd_table_maxn(lua_State *L, int idx)
+{
+  int top = lua_gettop(L);
+  lua_Number n;
+  if (idx < 0)
+    idx = top + idx + 1;
+  lua_getglobal(L, "table");
+  lua_getfield(L, -1, "maxn");
+  lua_pushvalue(L, idx);
+  assert(lua_pcall(L, 1, 1, 0) == 0);
+  n = lua_tonumber(L, -1);
+  lua_settop(L, top);
+  return n;
+}
 
 static void exercise_array_forward_hop(lua_State *L)
 {
@@ -51,6 +67,7 @@ static void exercise_array_forward_hop(lua_State *L)
   lj_tab_array_rel(t, oldarray);
   tabfwd_assert_i32(lj_tab_getint(t, 5), 505);
   assert(lj_tab_len(t) == 5);
+  assert(tabfwd_table_maxn(L, -1) == 5);
 #if LJ_HASJIT
   assert(lj_tab_len_hint(t, 5) == 5);
 #endif
@@ -83,6 +100,7 @@ static void exercise_array_forward_hop(lua_State *L)
   lj_tab_asize_rel(t, oldasize);
   lj_tab_array_rel(t, oldarray);
   tabfwd_assert_i32(lj_tab_getint(t, tail), 606);
+  assert(tabfwd_table_maxn(L, -1) == (lua_Number)tail);
   lj_tab_storeint(L, lj_tab_setint(L, t, tail), 808);
   tabfwd_assert_forward(&oldarray[tail]);
   tabfwd_assert_i32(lj_tab_getint(t, tail), 808);
@@ -139,6 +157,7 @@ static void exercise_hash_forward_hop(lua_State *L)
   tabfwd_assert_i32(lj_tab_getstr(t, hopstr), 101);
   tabfwd_assert_i32(lj_tab_getint(t, 33), 202);
   tabfwd_assert_i32(lj_tab_get(L, t, &lightkey), 303);
+  assert(tabfwd_table_maxn(L, -1) == 33);
   assert(tabfwd_count_next_visible(t) == 3);
   lj_tab_storeint(L, lj_tab_setstr(L, t, hopstr), 404);
   lj_tab_storeint(L, lj_tab_setint(L, t, 33), 505);
@@ -202,6 +221,7 @@ static void exercise_hash_to_array_forward_hop(lua_State *L)
   lj_tab_hmask_rel(t, oldhmask);
   lj_tab_node_rel(t, oldnode);
   tabfwd_assert_i32(lj_tab_getint(t, moveint), 707);
+  assert(tabfwd_table_maxn(L, -1) == (lua_Number)moveint);
   lj_tab_storeint(L, lj_tab_setint(L, t, moveint), 909);
   tabfwd_assert_forward(oldnumslot);
   tabfwd_assert_i32(&newarray[moveint], 909);
@@ -224,6 +244,7 @@ int main(void)
   TValue *slot;
 
   assert(L != NULL);
+  luaL_openlibs(L);
   lua_createtable(L, 4, 4);
   t = tabV(L->top-1);
 
@@ -235,6 +256,7 @@ int main(void)
   tabfwd_store_forward(slot);
   assert(lj_tab_getint(t, 3) == NULL);
   assert(lj_tab_len(t) == 2);
+  assert(tabfwd_table_maxn(L, -1) == 2);
 #if LJ_HASJIT
   assert(lj_tab_len_hint(t, 2) == 2);
 #endif
