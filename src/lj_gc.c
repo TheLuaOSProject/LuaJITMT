@@ -1732,8 +1732,8 @@ static size_t gc_queue_cdata_finalizers_pweak_ordered(lua_State *L,
     (void *const *)&cts->fin_order_head);
   for (; ord != NULL;
        ord = fin_order_next_acq(ord)) {
-    GCtab *t = (GCtab *)la_loadptr_acq((void *const *)&ord->tab);
-    TValue *slot = (TValue *)la_loadptr_acq((void *const *)&ord->slot);
+    GCtab *t = fin_order_tab_acq(ord);
+    TValue *slot = fin_order_slot_acq(ord);
     TValue fin;
     GCobj *o;
     la_add64_rlx(&g->gc2.finreg_cdata_order_seen, 1);
@@ -1820,8 +1820,8 @@ static size_t gc_separate_cdata_finalizers_ordered(global_State *g)
     (void *const *)&cts->fin_order_head);
   for (; ord != NULL;
        ord = fin_order_next_acq(ord)) {
-    GCtab *t = (GCtab *)la_loadptr_acq((void *const *)&ord->tab);
-    TValue *slot = (TValue *)la_loadptr_acq((void *const *)&ord->slot);
+    GCtab *t = fin_order_tab_acq(ord);
+    TValue *slot = fin_order_slot_acq(ord);
     TValue fin;
     GCobj *o;
     if (!t || !slot || !gcref_acq(t->metatable))
@@ -1862,8 +1862,8 @@ static int gc_cdata_fin_pending_ordered(global_State *g, CTState *cts)
     (void *const *)&cts->fin_order_head);
   for (; ord != NULL;
        ord = fin_order_next_acq(ord)) {
-    GCtab *t = (GCtab *)la_loadptr_acq((void *const *)&ord->tab);
-    TValue *slot = (TValue *)la_loadptr_acq((void *const *)&ord->slot);
+    GCtab *t = fin_order_tab_acq(ord);
+    TValue *slot = fin_order_slot_acq(ord);
     TValue fin;
     GCobj *o;
     if (!t || !slot || !gcref_acq(t->metatable))

@@ -226,6 +226,26 @@ static LJ_AINLINE void fin_order_obj_clear(FinRegOrderNode *ord)
   setgcrefnullrel(ord->obj);
 }
 
+static LJ_AINLINE GCtab *fin_order_tab_acq(const FinRegOrderNode *ord)
+{
+  return (GCtab *)la_loadptr_acq((void *const *)&ord->tab);
+}
+
+static LJ_AINLINE void fin_order_tab_rel(FinRegOrderNode *ord, GCtab *tab)
+{
+  la_storeptr_rel((void **)&ord->tab, tab);
+}
+
+static LJ_AINLINE TValue *fin_order_slot_acq(const FinRegOrderNode *ord)
+{
+  return (TValue *)la_loadptr_acq((void *const *)&ord->slot);
+}
+
+static LJ_AINLINE void fin_order_slot_rel(FinRegOrderNode *ord, TValue *slot)
+{
+  la_storeptr_rel((void **)&ord->slot, slot);
+}
+
 #define CTHASH_SIZE	128	/* Number of hash anchors. */
 #define CTHASH_MASK	(CTHASH_SIZE-1)
 
