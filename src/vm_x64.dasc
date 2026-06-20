@@ -955,6 +955,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  jmp ->vm_call_dispatch_f
   |
   |->vmeta_tsetr:
+  |  mov TMP1d, RCd
   |.if X64WIN
   |  mov L:CARG1, SAVE_L
   |  mov CARG3d, RCd
@@ -4476,6 +4477,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov ITYPEd, dword [TMPR+TABARRAY_ASIZE_OFS]
     |3:
     |  mov r9d, RCd
+    |  mov TMP1d, r9d
     |  cmp RCd, ITYPEd
     |  jae ->vmeta_tsetr
     |  shl RCd, 3
@@ -4520,12 +4522,25 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ins_next
     |
     |->BC_TSETR_Z:
+    |.if X64WIN
+    |  mov ARG5d, TMP1d
+    |  lea CARG4, [BASE+RA*8]
+    |  mov CARG3, RC
     |  mov L:CARG1, SAVE_L
     |  mov L:CARG1->base, BASE
-    |  mov CARG2, RC
-    |  lea CARG3, [BASE+RA*8]
+    |  mov CARG2, TAB:RB
     |  mov L:RB, L:CARG1
-    |  call extern lj_tab_storetv	// (lua_State *L, TValue *d, TValue *s)
+    |.else
+    |  mov L:CARG1, SAVE_L
+    |  mov L:CARG1->base, BASE
+    |  mov CARG2, TAB:RB
+    |  lea CARG4, [BASE+RA*8]
+    |  mov CARG3, RC
+    |  mov CARG5d, TMP1d
+    |  mov L:RB, L:CARG1
+    |.endif
+    |  mov SAVE_PC, PC
+    |  call extern lj_tab_storetv_forvm_array	// (lua_State *L, GCtab *t, TValue *d, TValue *s, MSize key)
     |  mov BASE, L:RB->base
     |  mov RC, rax
     |  movzx RBd, PC_RB
