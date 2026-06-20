@@ -59,6 +59,15 @@ static FILE *io_native_fopen(lua_State *L, const char *fname,
   return fp;
 }
 
+static int io_native_fclose(lua_State *L, FILE *fp, uint32_t *actionsp)
+{
+  int ok;
+  lj_native_enter(L2TG(L));
+  ok = fclose(fp);
+  *actionsp = lj_native_leave(L);
+  return ok;
+}
+
 static int io_fresh_stopreq(lua_State *L, uint32_t actions, int had_stopreq)
 {
   TGState *tg = L2TG(L);
@@ -78,21 +87,14 @@ static void io_fopen_checkstop(lua_State *L, IOFileUD *iof, uint32_t actions,
   int stopreq = io_fresh_stopreq(L, actions, had_stopreq);
   if (stopreq) {
     if (iof->fp != NULL) {
+      uint32_t close_actions;
       FILE *fp = iof->fp;
       iof->fp = NULL;
-      (void)fclose(fp);
+      (void)io_native_fclose(L, fp, &close_actions);
+      actions |= close_actions;
     }
     lj_safepoint_checkstop(L, actions);
   }
-}
-
-static int io_native_fclose(lua_State *L, FILE *fp, uint32_t *actionsp)
-{
-  int ok;
-  lj_native_enter(L2TG(L));
-  ok = fclose(fp);
-  *actionsp = lj_native_leave(L);
-  return ok;
 }
 
 static int io_native_fflush(lua_State *L, FILE *fp)
@@ -656,9 +658,11 @@ LJLIB_CF(io_tmpfile)
   actions = lj_native_leave(L);
   if (iof->fp != NULL && ((actions & LJ_GC2_HS_STOPREQ) ||
       (tg && (la_load8_acq(&tg->tg_flags) & TGF_STOPREQ)))) {
+    uint32_t close_actions;
     FILE *fp = iof->fp;
     iof->fp = NULL;
-    (void)fclose(fp);
+    (void)io_native_fclose(L, fp, &close_actions);
+    actions |= close_actions;
   }
   lj_safepoint_checkstop(L, actions);
 #endif

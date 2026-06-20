@@ -41,12 +41,21 @@
 
 /* -- Native-state wrappers ---------------------------------------------- */
 
-static int os_native_remove(lua_State *L, const char *filename)
+static int os_native_remove_action(lua_State *L, const char *filename,
+				   uint32_t *actionsp)
 {
   int ok;
   lj_native_enter(L2TG(L));
   ok = remove(filename);
-  lj_safepoint_checkstop(L, lj_native_leave(L));
+  *actionsp = lj_native_leave(L);
+  return ok;
+}
+
+static int os_native_remove(lua_State *L, const char *filename)
+{
+  uint32_t actions;
+  int ok = os_native_remove_action(L, filename, &actions);
+  lj_safepoint_checkstop(L, actions);
   return ok;
 }
 
@@ -73,8 +82,11 @@ static int os_native_mkstemp(lua_State *L, char *buf)
     close(fd);
   actions = lj_native_leave(L);
   if (fd != -1 && ((actions & LJ_GC2_HS_STOPREQ) ||
-      (tg && (la_load8_acq(&tg->tg_flags) & TGF_STOPREQ))))
-    (void)remove(buf);
+      (tg && (la_load8_acq(&tg->tg_flags) & TGF_STOPREQ)))) {
+    uint32_t remove_actions;
+    (void)os_native_remove_action(L, buf, &remove_actions);
+    actions |= remove_actions;
+  }
   lj_safepoint_checkstop(L, actions);
   return fd;
 }
