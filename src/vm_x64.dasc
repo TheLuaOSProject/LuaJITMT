@@ -348,6 +348,18 @@
 |.macro x64_vm_hookmask_acq, dst, g
 |  movzx dst, byte GL:g->hookmask	// x64_vm_hookmask_acq: TSO acquire load.
 |.endmacro
+|.macro x64_vm_gc_total_acq, dst, g
+|  mov dst, GL:g->gc.total		// x64_vm_gc_total_acq: TSO acquire load.
+|.endmacro
+|.macro x64_vm_gc_threshold_acq, dst, g
+|  mov dst, GL:g->gc.threshold		// x64_vm_gc_threshold_acq: TSO acquire load.
+|.endmacro
+|.macro x64_vm_gc2_alloc_since_acq, dst, g
+|  mov dst, GL:g->gc2.alloc_since_trigger	// x64_vm_gc2_alloc_since_acq.
+|.endmacro
+|.macro x64_vm_gc2_hard_bytes_acq, dst, g
+|  mov dst, GL:g->gc2.hard_bytes	// x64_vm_gc2_hard_bytes_acq.
+|.endmacro
 |.macro x64_vm_tab_node_acq, dst, tab
 |  mov dst, tab->node		// x64_vm_tab_node_acq: TSO acquire load.
 |.endmacro
@@ -1301,14 +1313,16 @@ static void build_subroutines(BuildCtx *ctx)
   |// Inlined GC threshold check. Caveat: uses labels 1 and 9.
   |.macro ffgccheck
   |  load_G ITYPE
-  |  mov RB, GL:ITYPE->gc.total
-  |  cmp RB, GL:ITYPE->gc.threshold
+  |  x64_vm_gc_total_acq RB, ITYPE
+  |  x64_vm_gc_threshold_acq TMPR, ITYPE
+  |  cmp RB, TMPR
   |  jb >9
   |  call ->fff_gcstep
   |  jmp >1
   |9:
-  |  mov RB, GL:ITYPE->gc2.alloc_since_trigger
-  |  cmp RB, GL:ITYPE->gc2.hard_bytes
+  |  x64_vm_gc2_alloc_since_acq RB, ITYPE
+  |  x64_vm_gc2_hard_bytes_acq TMPR, ITYPE
+  |  cmp RB, TMPR
   |  jbe >1
   |  call ->fff_gcstep
   |1:
@@ -4086,12 +4100,14 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov L:RB, SAVE_L
     |  mov L:RB->base, BASE
     |  load_G ITYPE
-    |  mov RA, GL:ITYPE->gc.total
-    |  cmp RA, GL:ITYPE->gc.threshold
+    |  x64_vm_gc_total_acq RA, ITYPE
+    |  x64_vm_gc_threshold_acq TMPR, ITYPE
+    |  cmp RA, TMPR
     |  mov SAVE_PC, PC
     |  jae >5
-    |  mov RA, GL:ITYPE->gc2.alloc_since_trigger
-    |  cmp RA, GL:ITYPE->gc2.hard_bytes
+    |  x64_vm_gc2_alloc_since_acq RA, ITYPE
+    |  x64_vm_gc2_hard_bytes_acq TMPR, ITYPE
+    |  cmp RA, TMPR
     |  ja >5
     |1:
     |  test RDd, RDd
@@ -4129,13 +4145,15 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ins_AND	// RA = dst, RD = table const (~) (holding template table)
     |  mov L:RB, SAVE_L
     |  load_G ITYPE
-    |  mov RA, GL:ITYPE->gc.total
+    |  x64_vm_gc_total_acq RA, ITYPE
     |  mov SAVE_PC, PC
-    |  cmp RA, GL:ITYPE->gc.threshold
+    |  x64_vm_gc_threshold_acq TMPR, ITYPE
+    |  cmp RA, TMPR
     |  mov L:RB->base, BASE
     |  jae >3
-    |  mov RA, GL:ITYPE->gc2.alloc_since_trigger
-    |  cmp RA, GL:ITYPE->gc2.hard_bytes
+    |  x64_vm_gc2_alloc_since_acq RA, ITYPE
+    |  x64_vm_gc2_hard_bytes_acq TMPR, ITYPE
+    |  cmp RA, TMPR
     |  ja >3
     |2:
     |  mov TAB:CARG2, [KBASE+RD*8]	// Caveat: CARG2 == BASE

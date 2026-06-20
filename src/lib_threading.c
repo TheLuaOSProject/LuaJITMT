@@ -358,7 +358,7 @@ static void threading_rehome_unstarted_stack(lua_State *L, lua_State *L1,
   for (up = gcref_acq(L1->openupval); up != NULL;
        up = lj_obj_gcw_acq(up))
     setmref(gco2uv(up)->v, (TValue *)((char *)uvval(gco2uv(up)) + delta));
-  g->gc.total -= (GCSize)sz;
+  lj_gc_total_sub(g, (GCSize)sz);
   (void)lj_arena_allocf(&tg->allocd, oldst, sz, 0);
 }
 

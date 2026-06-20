@@ -473,7 +473,7 @@ static int gc2_request_cycle(global_State *g, TGState *tg)
   if (!la_cas32(&g->gc2.cycle_leader, &expect, tid, LA_ACQ_REL, LA_ACQ))
     return 0;  /* 05 section 5.11 nonblocking cycle-request token. */
   la_add64_rlx(&g->gc2.cycle_requests, 1);  /* 05 section 5.11 telemetry. */
-  lj_gc_threshold_store(g, g->gc.total);  /* Legacy cycle-driver bridge. */
+  lj_gc_threshold_store(g, lj_gc_total_load(g));  /* Legacy cycle-driver bridge. */
   return 1;
 }
 
@@ -518,7 +518,7 @@ void lj_gc2_update_pacing(global_State *g)
   uint32_t pct;
   if (!g)
     return;
-  legacy_live = g->gc.estimate ? g->gc.estimate : g->gc.total;
+  legacy_live = g->gc.estimate ? g->gc.estimate : lj_gc_total_load(g);
   gc2_live = la_load64_acq(&g->gc2.live_estimate);
   live = gc2_live > legacy_live ? gc2_live : legacy_live;
   if (live < LJ_GC2_ACCT_FLUSH)

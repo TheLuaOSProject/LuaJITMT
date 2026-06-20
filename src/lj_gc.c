@@ -1978,7 +1978,7 @@ static void atomic(global_State *g, lua_State *L)
   g->gc.currentwhite = (uint8_t)otherwhite(g);  /* Flip current white. */
   g->strempty.marked = g->gc.currentwhite;
   setmref(g->gc.sweep, &g->gc.root);
-  g->gc.estimate = g->gc.total - (GCSize)udsize;  /* Initial estimate. */
+  g->gc.estimate = lj_gc_total_load(g) - (GCSize)udsize;  /* Initial estimate. */
 }
 
 #if LJ_HASJIT
@@ -2022,21 +2022,27 @@ static size_t gc_onestep(lua_State *L)
     g->gc.sweepstr = 0;
     return 0;
   case GCSsweepstring: {
-    GCSize old = g->gc.total;
+    GCSize old = lj_gc_total_load(g);
     StrTabHdr *hdr = (StrTabHdr *)la_loadptr_acq((void *const *)&g->str.tabh);
     if (hdr)
       gc_sweepstr(g, &hdr->bucket[g->gc.sweepstr++]);  /* Sweep one chain. */
     if (!hdr || g->gc.sweepstr > hdr->mask)
       g->gc.state = GCSsweep;  /* All string hash chains sweeped. */
-    lj_assertG(old >= g->gc.total, "sweep increased memory");
-    g->gc.estimate -= old - g->gc.total;
+    {
+      GCSize total = lj_gc_total_load(g);
+      lj_assertG(old >= total, "sweep increased memory");
+      g->gc.estimate -= old - total;
+    }
     return GCSWEEPCOST;
     }
   case GCSsweep: {
-    GCSize old = g->gc.total;
+    GCSize old = lj_gc_total_load(g);
     setmref(g->gc.sweep, gc_sweep(g, mref(g->gc.sweep, GCRef), GCSWEEPMAX));
-    lj_assertG(old >= g->gc.total, "sweep increased memory");
-    g->gc.estimate -= old - g->gc.total;
+    {
+      GCSize total = lj_gc_total_load(g);
+      lj_assertG(old >= total, "sweep increased memory");
+      g->gc.estimate -= old - total;
+    }
     if (gcref_acq(*mref(g->gc.sweep, GCRef)) == NULL) {
       int arena_prepare = gc_arena_sweep_needs_prepare(g);
       if (!gc_arena_sweep_pending(g) || arena_prepare) {
@@ -2069,15 +2075,18 @@ static size_t gc_onestep(lua_State *L)
     }
   case GCSfinalize:
     if (lj_gc2_finalizer_queue_pending(g)) {
-      GCSize old = g->gc.total;
+      GCSize old = lj_gc_total_load(g);
       int finrc;
       if (lj_tg_jit_base(g))  /* Don't call finalizers on trace. */
 	return LJ_MAX_MEM;
       finrc = gc_finalize(L);  /* Finalize one userdata/cdata object. */
       if (finrc <= 0)  /* Busy owner or deferred finalizer-spawn reclaim. */
 	return LJ_MAX_MEM;
-      if (old >= g->gc.total && g->gc.estimate > old - g->gc.total)
-	g->gc.estimate -= old - g->gc.total;
+      {
+	GCSize total = lj_gc_total_load(g);
+	if (old >= total && g->gc.estimate > old - total)
+	  g->gc.estimate -= old - total;
+      }
       if (g->gc.estimate > GCFINALIZECOST)
 	g->gc.estimate -= GCFINALIZECOST;
       return GCFINALIZECOST;
@@ -2108,8 +2117,9 @@ int LJ_FASTCALL lj_gc_step(lua_State *L)
     lim = LJ_MAX_MEM;
   {
     GCSize threshold = lj_gc_threshold_load(g);
-    if (g->gc.total > threshold)
-      g->gc.debt += g->gc.total - threshold;
+    GCSize total = lj_gc_total_load(g);
+    if (total > threshold)
+      g->gc.debt += total - threshold;
   }
   do {
     lim -= (GCSize)gc_onestep(L);
@@ -2120,12 +2130,12 @@ int LJ_FASTCALL lj_gc_step(lua_State *L)
     }
   } while (sizeof(lim) == 8 ? ((int64_t)lim > 0) : ((int32_t)lim > 0));
   if (g->gc.debt < GCSTEPSIZE) {
-    lj_gc_threshold_store(g, g->gc.total + GCSTEPSIZE);
+    lj_gc_threshold_store(g, lj_gc_total_load(g) + GCSTEPSIZE);
     g->vmstate = ostate;
     return -1;
   } else {
     g->gc.debt -= GCSTEPSIZE;
-    lj_gc_threshold_store(g, g->gc.total);
+    lj_gc_threshold_store(g, lj_gc_total_load(g));
     g->vmstate = ostate;
     return 0;
   }
@@ -2147,14 +2157,14 @@ void LJ_FASTCALL lj_gc_step_fixtop(lua_State *L)
 {
   global_State *g = G(L);
   if (curr_funcisL(L)) L->top = curr_topL(L);
-  gc_step_assist_top(L, g, g->gc.total >= lj_gc_threshold_load(g));
+  gc_step_assist_top(L, g, lj_gc_total_load(g) >= lj_gc_threshold_load(g));
 }
 
 /* Ditto, but use an already fixed stack top. */
 void LJ_FASTCALL lj_gc_step_top(lua_State *L)
 {
   global_State *g = G(L);
-  gc_step_assist_top(L, g, g->gc.total >= lj_gc_threshold_load(g));
+  gc_step_assist_top(L, g, lj_gc_total_load(g) >= lj_gc_threshold_load(g));
 }
 
 #if LJ_HASJIT
@@ -2165,7 +2175,7 @@ int LJ_FASTCALL lj_gc_step_jit(global_State *g, MSize steps)
   int legacy_step, hard_step;
   L->base = lj_tg_jit_base(g);
   L->top = curr_topL(L);
-  legacy_step = g->gc.total >= lj_gc_threshold_load(g);
+  legacy_step = lj_gc_total_load(g) >= lj_gc_threshold_load(g);
   hard_step = la_load64_acq(&g->gc2.alloc_since_trigger) >
 	      la_load64_acq(&g->gc2.hard_bytes);
   if (hard_step) {
@@ -2384,7 +2394,7 @@ void *lj_mem_realloc(lua_State *L, void *p, GCSize osz, GCSize nsz)
   lj_assertG((nsz == 0) == (p == NULL), "allocf API violation");
   lj_assertG(checkptrGC(p),
 	     "allocated memory address %p outside required range", p);
-  g->gc.total = (g->gc.total - osz) + nsz;
+  lj_gc_total_adjust(g, osz, nsz);
   if (nsz > osz)
     lj_gc2_account_alloc(g, L2TG(L), nsz - osz);  /* 04 section 4.8. */
   return p;
@@ -2404,7 +2414,7 @@ void *lj_mem_newgco_raw(lua_State *L, GCSize size, uint32_t flags)
     lj_err_mem(L);
   lj_assertG(checkptrGC(o),
 	     "allocated memory address %p outside required range", o);
-  g->gc.total += size;
+  lj_gc_total_add(g, size);
   lj_gc2_account_alloc(g, L2TG(L), size);  /* 04 section 4.8. */
   return o;
 }
@@ -2487,7 +2497,7 @@ void * LJ_FASTCALL lj_mem_newgco(lua_State *L, GCSize size)
 
 void lj_mem_free(global_State *g, void *p, size_t osize)
 {
-  g->gc.total -= (GCSize)osize;
+  lj_gc_total_sub(g, (GCSize)osize);
   if (g->allocf == lj_arena_allocf) {
     LJArenaAllocD *ad = gc_arena_allocd_for_ptr(g, p);
     (void)lj_arena_allocf(ad, p, osize, 0);
@@ -2525,6 +2535,6 @@ int lj_mem_freegco_defer(global_State *g, void *p, GCSize osize)
   if (cell < LJ_AFIRST_CELL || cell >= LJ_ARENA_CELLS ||
       !lj_arena_bm_get(a->block, cell))
     return 0;
-  g->gc.total -= osize;
+  lj_gc_total_sub(g, osize);
   return 1;
 }

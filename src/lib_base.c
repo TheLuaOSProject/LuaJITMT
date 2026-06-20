@@ -545,8 +545,11 @@ static void gc_stats_push(lua_State *L)
   GCtab *t;
   lua_createtable(L, 0, 86);
   t = tabV(L->top - 1);
-  gc_stats_setnum(L, t, "total_bytes", g->gc.total);
-  gc_stats_setnum(L, t, "total_kbytes", g->gc.total >> 10);
+  {
+    GCSize total = lj_gc_total_load(g);
+    gc_stats_setnum(L, t, "total_bytes", total);
+    gc_stats_setnum(L, t, "total_kbytes", total >> 10);
+  }
   gc_stats_setint(L, t, "phase", la_load32_acq(&gc2->phase));
   gc_stats_setint(L, t, "generational",
 		  la_load32_acq(&gc2->generational));
@@ -727,7 +730,7 @@ static void gc_stats_push(lua_State *L)
 
 LJLIB_CF(gcinfo)
 {
-  setintV(L->top++, (int32_t)(G(L)->gc.total >> 10));
+  setintV(L->top++, (int32_t)(lj_gc_total_load(G(L)) >> 10));
   return 1;
 }
 
@@ -738,7 +741,7 @@ LJLIB_CF(collectgarbage)
   int hasdata = L->base+1 < L->top && !tvisnil(L->base+1);
   int32_t data = lj_lib_optint(L, 2, 0);
   if (opt == LUA_GCCOUNT) {
-    setnumV(L->top, (lua_Number)G(L)->gc.total/1024.0);
+    setnumV(L->top, (lua_Number)lj_gc_total_load(G(L))/1024.0);
   } else if (opt == LUA_GCSTATS) {
     gc_stats_push(L);
     return 1;

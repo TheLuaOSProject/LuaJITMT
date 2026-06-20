@@ -1429,8 +1429,10 @@ LUA_API int lua_gc(lua_State *L, int what, int data)
     api_gc_setlogical(g, LJ_MAX_MEM);
     break;
   case LUA_GCRESTART:
-    api_gc_setlogical(g, data == -1 ?
-      (g->gc.total/100)*g->gc.pause : g->gc.total);
+    {
+      GCSize total = lj_gc_total_load(g);
+      api_gc_setlogical(g, data == -1 ? (total/100)*g->gc.pause : total);
+    }
     break;
   case LUA_GCCOLLECT:
     if (api_gc_enterexclusive(g)) {
@@ -1439,17 +1441,19 @@ LUA_API int lua_gc(lua_State *L, int what, int data)
     }
     break;
   case LUA_GCCOUNT:
-    res = (int)(g->gc.total >> 10);
+    res = (int)(lj_gc_total_load(g) >> 10);
     break;
   case LUA_GCCOUNTB:
-    res = (int)(g->gc.total & 0x3ff);
+    res = (int)(lj_gc_total_load(g) & 0x3ff);
     break;
   case LUA_GCSTEP: {
     GCSize a = (GCSize)data << 10;
+    GCSize total;
     if (!api_gc_enterexclusive(g))
       break;  /* M4: explicit steps wait for the real concurrent GC. */
-    lj_gc_threshold_store(g, (a <= g->gc.total) ? (g->gc.total - a) : 0);
-    while (g->gc.total >= lj_gc_threshold_load(g))
+    total = lj_gc_total_load(g);
+    lj_gc_threshold_store(g, (a <= total) ? (total - a) : 0);
+    while (lj_gc_total_load(g) >= lj_gc_threshold_load(g))
       if (lj_gc_step(L) > 0) {
 	res = 1;
 	break;

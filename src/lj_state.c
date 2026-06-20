@@ -111,7 +111,7 @@ int lj_state_rehome_stack(lua_State *L)
   if (st == NULL)
     return 0;
   memcpy(st, oldst, sz);
-  g->gc.total += (GCSize)sz;
+  lj_gc_total_add(g, (GCSize)sz);
   lj_gc2_account_alloc(g, tg, (GCSize)sz);  /* 04 section 4.8 worker stack. */
   setmref(L->stack, st);
   delta = (char *)st - (char *)oldst;
@@ -241,7 +241,7 @@ static TValue *cpluaopen(lua_State *L, lua_CFunction dummy, void *ud)
   lj_lex_init(L);
   fixstring(lj_err_str(L, LJ_ERR_ERRMEM));  /* Preallocate memory error msg. */
   fixstring(lj_err_str(L, LJ_ERR_ERRERR));  /* Preallocate err in err msg. */
-  lj_gc_threshold_store(g, 4*g->gc.total);
+  lj_gc_threshold_store(g, 4*lj_gc_total_load(g));
   lj_mcode_init(g);
   lj_trace_initstate(g);
   lj_err_verify();
@@ -280,9 +280,9 @@ static void close_state(lua_State *L)
     lj_mem_freevec(g, mref(g->gc.lightudseg, uint32_t), segnum, uint32_t);
   }
 #endif
-  lj_assertG(g->gc.total == sizeof(GG_State),
+  lj_assertG(lj_gc_total_load(g) == sizeof(GG_State),
 	     "memory leak of %lld bytes",
-	     (long long)(g->gc.total - sizeof(GG_State)));
+	     (long long)(lj_gc_total_load(g) - sizeof(GG_State)));
   if (arena_alloc) {
     GG_State *GG = G2GG(g);
     int gghuge = lj_arena_ishuge(lj_arena_of(GG));
@@ -400,7 +400,7 @@ LUA_API lua_State *lua_newstate(lua_Alloc allocf, void *allocd)
   g->gc.state = GCSpause;
   setgcrefroot(g->gc.root, obj2gco(L));
   setmref(g->gc.sweep, &g->gc.root);
-  g->gc.total = sizeof(GG_State);
+  lj_gc_total_store(g, sizeof(GG_State));
   g->gc.pause = LUAI_GCPAUSE;
   g->gc.stepmul = LUAI_GCMUL;
   lj_dispatch_init((GG_State *)L);

@@ -106,6 +106,45 @@ static LJ_AINLINE void lj_gcsize_store_rel(GCSize *p, GCSize v)
 #endif
 }
 
+static LJ_AINLINE GCSize lj_gc_total_load(global_State *g)
+{
+  return lj_gcsize_load_acq(&g->gc.total);  /* 04 section 4.8 accounting. */
+}
+
+static LJ_AINLINE void lj_gc_total_store(global_State *g, GCSize total)
+{
+  lj_gcsize_store_rel(&g->gc.total, total);  /* 04 section 4.8 accounting. */
+}
+
+static LJ_AINLINE void lj_gc_total_add(global_State *g, GCSize bytes)
+{
+#if LJ_GC64
+  (void)__atomic_fetch_add(&g->gc.total, bytes, LA_RLX);
+#else
+  (void)__atomic_fetch_add(&g->gc.total, (uint32_t)bytes, LA_RLX);
+#endif
+  /* 04 section 4.8 accounting: atomicity matters, ordering is counter-only. */
+}
+
+static LJ_AINLINE void lj_gc_total_sub(global_State *g, GCSize bytes)
+{
+#if LJ_GC64
+  (void)__atomic_fetch_sub(&g->gc.total, bytes, LA_RLX);
+#else
+  (void)__atomic_fetch_sub(&g->gc.total, (uint32_t)bytes, LA_RLX);
+#endif
+  /* 04 section 4.8 accounting: atomicity matters, ordering is counter-only. */
+}
+
+static LJ_AINLINE void lj_gc_total_adjust(global_State *g, GCSize osz,
+					  GCSize nsz)
+{
+  if (nsz >= osz)
+    lj_gc_total_add(g, nsz - osz);
+  else
+    lj_gc_total_sub(g, osz - nsz);
+}
+
 static LJ_AINLINE GCSize lj_gc_threshold_load(global_State *g)
 {
   return lj_gcsize_load_acq(&g->gc.threshold);
@@ -129,7 +168,7 @@ static LJ_AINLINE void lj_gc_mt_threshold_store(global_State *g,
 
 static LJ_AINLINE int lj_gc_should_step(global_State *g)
 {
-  return g->gc.total >= lj_gc_threshold_load(g) ||
+  return lj_gc_total_load(g) >= lj_gc_threshold_load(g) ||
 	 la_load64_acq(&g->gc2.alloc_since_trigger) >
 	 la_load64_acq(&g->gc2.hard_bytes);
 }

@@ -29,6 +29,7 @@ local m5_concurrent_cases = {
   "m5_jit_trace_publish",
   "m5_hookmask_atomic",
   "m5_hook_state_atomic",
+  "m5_gc_total_atomic",
   "m5_proto_kgc_acq",
   "m5_proto_chunkname_acq",
   "m5_proto_knum_acq",

@@ -276,6 +276,48 @@ print("hook-state-atomic-smoke OK")
 ]=]
 end
 
+local function gc_total_atomic_smoke()
+  return [=[
+local th = require"threading"
+
+local function stats_total()
+  local stats = collectgarbage("stats")
+  assert(type(stats.total_bytes) == "number", "missing total_bytes")
+  assert(type(stats.total_kbytes) == "number", "missing total_kbytes")
+  assert(stats.total_bytes >= stats.total_kbytes * 1024)
+  return stats.total_bytes
+end
+
+local before = stats_total()
+local workers = {}
+for id = 1, 4 do
+  workers[id] = th.spawn(function(worker)
+    local keep = {}
+    for i = 1, 1500 do
+      keep[i] = { worker, i, tostring(i) }
+    end
+    collectgarbage("collect")
+    return #keep, collectgarbage("stats").total_bytes
+  end, id)
+end
+
+local total = 0
+for id = 1, 4 do
+  local ok, n, worker_total = workers[id]:join(30)
+  assert(ok == true, "worker failed")
+  assert(n == 1500, "worker allocation count mismatch")
+  assert(type(worker_total) == "number" and worker_total > 0)
+  total = total + n
+end
+
+collectgarbage("collect")
+local after = stats_total()
+assert(total == 6000 and before > 0 and after > 0)
+
+print("gc-total-atomic-smoke OK")
+]=]
+end
+
 local function proto_kgc_acq_smoke()
   return [=[
 local util = require("jit.util")
@@ -455,6 +497,18 @@ return function(add)
       t:build({ quiet = true })
       run_luajit(t, { "-e", hook_state_atomic_smoke() })
       print("M5 hook function/count atomic helper behavior passed")
+    end
+  })
+
+  add({
+    name = "m5_gc_total_atomic",
+    description = "GC total atomic accounting helper behavior",
+    run = function(t)
+      t:build({ quiet = true })
+      build_and_run_c(t, t:tmp("lj_t_gc_total_atomic"),
+                      "t-gc-total-atomic.c", { build = false })
+      run_luajit(t, { "-e", gc_total_atomic_smoke() })
+      print("M5 GC total atomic accounting behavior passed")
     end
   })
 
