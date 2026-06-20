@@ -1,37 +1,44 @@
 local utils = require("suite_utils")
 local build = require("suite_build")
 local runtime = require("suite_runtime")
+local bench_csv = require("bench_csv")
 
 local shell_quote = utils.shell_quote
 local capture_command = utils.capture_command
 local assert_command_output_contains = utils.assert_command_output_contains
 local assert_command_output_all_contains = utils.assert_command_output_all_contains
-local assert_command_fails = utils.assert_command_fails
 local write_file = utils.write_file
 local with_temp_paths = utils.with_temp_paths
 local compile_and_run_c = build.compile_and_run_c
 local luajit_script = runtime.luajit_script
 local run_luajit_script_jit_modes = runtime.run_luajit_script_jit_modes
 
-local function write_bad_benchmark_csv(t, base, bad)
+local function rewrite_benchmark_csv(data, fn)
+  local parsed = bench_csv.parse_csv(data)
   local rows = {}
-  local n = 0
-  for line in (t:read(base) .. "\n"):gmatch("(.-)\n") do
-    if line ~= "" then
-      n = n + 1
-      if n == 1 then
-        rows[#rows + 1] = line
-      else
-        local cols = {}
-        for col in (line .. ","):gmatch("(.-),") do
-          cols[#cols + 1] = col
-        end
-        cols[3] = ("%.2f"):format(assert(tonumber(cols[3])) * 2)
-        rows[#rows + 1] = table.concat(cols, ",")
-      end
-    end
+  for i = 1, #parsed.rows do
+    local cols = {}
+    for j = 1, #parsed.rows[i].cols do cols[j] = parsed.rows[i].cols[j] end
+    local replacement = fn(cols, i)
+    if replacement ~= false then rows[#rows + 1] = replacement or cols end
   end
-  write_file(bad, table.concat(rows, "\n") .. "\n")
+  return bench_csv.encode_csv(parsed.header.cols, rows)
+end
+
+local function assert_compare_ok(label, result)
+  if result.ok then return end
+  error(label .. " failed unexpectedly:\n" .. bench_csv.format_compare(result), 2)
+end
+
+local function assert_compare_error(label, result, needle)
+  if result.ok then
+    error(label .. " passed unexpectedly:\n" .. bench_csv.format_compare(result), 2)
+  end
+  for i = 1, #result.errors do
+    if result.errors[i]:find(needle, 1, true) then return end
+  end
+  error(label .. " missing error " .. needle .. ":\n" ..
+        bench_csv.format_compare(result), 2)
 end
 
 local function write_mini_benchmark(t, path)
@@ -80,27 +87,50 @@ local function run_bench_regression(t)
   t:build({ clean = true, quiet = true })
 
   local base = t:path("bench", "baseline_372b369b9afd_.csv")
-  local compare = shell_quote(t:path("bench", "compare_baseline.sh"))
-  assert_command_output_contains(compare .. " " .. shell_quote(base) .. " " ..
-                                   shell_quote(base),
-                                 "PASS: geomean 1.000000 <= 1.100000")
+  local base_csv = t:read(base)
+  assert_compare_ok("pinned baseline self-compare",
+                    bench_csv.compare(base_csv, base_csv))
 
-  with_temp_paths(t, { "lj-bench-current", "lj-bench-bad", "lj-bench-mini.lua" },
-    function(cur, bad, mini)
-      write_bad_benchmark_csv(t, base, bad)
+  local bad_csv = rewrite_benchmark_csv(base_csv, function(cols)
+    cols[3] = ("%.2f"):format(assert(tonumber(cols[3])) * 2)
+    return cols
+  end)
+  assert_compare_error("geomean regression",
+                       bench_csv.compare(base_csv, bad_csv),
+                       "FAIL: geomean")
+
+  local missing_csv = rewrite_benchmark_csv(base_csv, function(cols, i)
+    if i == 1 then return false end
+    return cols
+  end)
+  assert_compare_error("missing current benchmark",
+                       bench_csv.compare(base_csv, missing_csv),
+                       "current is missing benchmark")
+
+  local extra_csv = base_csv .. "extra_case,0.0010,1.00,0.0010,1.00\n"
+  assert_compare_error("extra current benchmark",
+                       bench_csv.compare(base_csv, extra_csv),
+                       "current has no pinned baseline")
+
+  local zero_csv = rewrite_benchmark_csv(base_csv, function(cols, i)
+    if i == 1 then cols[3] = "0" end
+    return cols
+  end)
+  assert_compare_error("non-positive current benchmark",
+                       bench_csv.compare(base_csv, zero_csv),
+                       "non-positive benchmark value")
+
+  with_temp_paths(t, { "lj-bench-mini.lua" },
+    function(mini)
+      local luajit = shell_quote(t:path("src", "luajit"))
       write_mini_benchmark(t, mini)
-      local bad_cmd = compare .. " " .. shell_quote(base) .. " " ..
-                        shell_quote(bad) .. " >/dev/null 2>&1"
-      assert_command_fails(bad_cmd)
-
-      capture_command("BASELINE_BENCH_LUA=" .. shell_quote(mini) ..
-                      " BASELINE_OUT=" .. shell_quote(cur) ..
-                      " " .. shell_quote(t:path("bench", "run_baseline.sh")) ..
-                      " " .. shell_quote(t:path("src", "luajit")),
-                      { timeout = "20s" })
-      assert_command_output_contains(compare .. " " .. shell_quote(cur) .. " " ..
-                                       shell_quote(cur),
-                                     "PASS: geomean 1.000000 <= 1.100000")
+      local jit_out = capture_command(luajit .. " " .. shell_quote(mini),
+                                      { timeout = "20s" })
+      local interp_out = capture_command(luajit .. " -joff " .. shell_quote(mini),
+                                         { timeout = "20s" })
+      local mini_csv = bench_csv.baseline_csv_from_text(jit_out, interp_out)
+      assert_compare_ok("generated mini benchmark self-compare",
+                        bench_csv.compare(mini_csv, mini_csv))
     end)
   print("M9 benchmark regression accounting guard passed")
 end
