@@ -449,7 +449,7 @@ static TRef snap_replay_const(jit_State *J, IRIns *ir)
   switch ((IROp)ir->o) {
   case IR_KPRI: return TREF_PRI(irt_type(ir->t));
   case IR_KINT: return lj_ir_kint(J, ir->i);
-  case IR_KGC: return lj_ir_kgc(J, ir_kgc(ir), irt_t(ir->t));
+  case IR_KGC: return lj_ir_kgc(J, ir_kgc_acq(ir), irt_t(ir->t));
   case IR_KNUM: case IR_KINT64:
     return lj_ir_k64(J, (IROp)ir->o, ir_k64(ir)->u64);
   case IR_KPTR: return lj_ir_kptr(J, ir_kptr(ir));  /* Continuation. */

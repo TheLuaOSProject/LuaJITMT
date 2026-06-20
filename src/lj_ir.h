@@ -599,6 +599,13 @@ static LJ_AINLINE GCobj *ir_kgc_load_acq(const IRIns *ir)
 {
   return gcref_acq(ir[LJ_GC64].gcr);
 }
+static LJ_AINLINE GCobj *ir_kgc_acq(const IRIns *ir)
+{
+  int isk = ir_iskgc_acq(ir);
+  lj_assertX(isk, "IR KGC constant expected");
+  UNUSED(isk);
+  return ir_kgc_load_acq(ir);
+}
 static LJ_AINLINE void ir_kgc_store_rel(IRIns *ir, GCobj *o)
 {
   setgcrefrel(ir[LJ_GC64].gcr, o);

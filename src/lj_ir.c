@@ -374,7 +374,7 @@ void lj_ir_kvalue(lua_State *L, TValue *tv, const IRIns *ir)
   switch (ir->o) {
   case IR_KPRI: setpriV(tv, irt_toitype(ir->t)); break;
   case IR_KINT: setintV(tv, ir->i); break;
-  case IR_KGC: setgcV(L, tv, ir_kgc(ir), irt_toitype(ir->t)); break;
+  case IR_KGC: setgcV(L, tv, ir_kgc_acq(ir), irt_toitype(ir->t)); break;
   case IR_KPTR: case IR_KKPTR:
     setnumV(tv, (lua_Number)(uintptr_t)ir_kptr(ir));
     break;
