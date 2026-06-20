@@ -39,7 +39,8 @@ local m6_cases = {
   "m6_jit_gc2_readiness",
   "m6_jit_gcstep_guard",
   "m6_jit_mcode_publish",
-  "m6_jit_flush_hs"
+  "m6_jit_flush_hs",
+  "m6_jit_perftools_native"
 }
 
 local function table_store_smoke()
@@ -1087,6 +1088,28 @@ assert(live >= 8, live)
       run_lua_test_case(t, "m3_vm_safepoint")
       luajit_file(t, t:path("tests", "stock", "test", "misc", "jit_flush.lua"))
       print("M6 JIT flush handshake guard passed")
+    end
+  })
+
+  add({
+    name = "m6_jit_perftools_native",
+    description = "Linux perf-map writer native-state STOPREQ behavior",
+    run = function(t)
+      local ok, err = pcall(function()
+        t:build({
+          clean = true,
+          quiet = true,
+          xcflags = "-DLUAJIT_USE_PERFTOOLS"
+        })
+        build_and_run_c(t, t:tmp("lj_t-jit-perftools-native"),
+                        "t-jit-perftools-native.c", {
+          build = false,
+          timeout = "30s"
+        })
+      end)
+      t:build({ clean = true, quiet = true })
+      if not ok then error(err, 0) end
+      print("M6 JIT perf-map native-state STOPREQ behavior passed")
     end
   })
 

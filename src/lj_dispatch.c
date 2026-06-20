@@ -21,6 +21,7 @@
 #include "lj_strfmt.h"
 #include "lj_atomic.h"
 #include "lj_gc2.h"
+#include "lj_safepoint.h"
 #if LJ_HASJIT
 #include "lj_jit.h"
 #endif
@@ -509,6 +510,8 @@ void LJ_FASTCALL lj_dispatch_ins(lua_State *L, const BCIns *pc)
 #endif
       J->L = L;
       lj_trace_ins(J, pc-1);  /* The interpreter bytecode PC is offset by 1. */
+      if (lj_trace_state_load(J) == LJ_TRACE_IDLE || !lj_jit_token_held(J))
+	lj_safepoint_checkstop(L, 0);
       lj_assertG(L->top - L->base == delta,
 		 "unbalanced stack after tracing of instruction");
     }

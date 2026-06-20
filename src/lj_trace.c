@@ -29,6 +29,7 @@
 #include "lj_gdbjit.h"
 #include "lj_record.h"
 #include "lj_asm.h"
+#include "lj_safepoint.h"
 #include "lj_dispatch.h"
 #include "lj_vm.h"
 #include "lj_vmevent.h"
@@ -336,9 +337,28 @@ static TraceNo trace_findfree(jit_State *J)
 #include <stdio.h>
 #include <unistd.h>
 
-static void perftools_addtrace(GCtrace *T)
+static FILE *perftools_native_fopen(lua_State *L, const char *fname)
+{
+  FILE *fp;
+  lj_native_enter(L2TG(L));
+  fp = fopen(fname, "w");
+  (void)lj_native_leave(L);
+  return fp;
+}
+
+static void perftools_native_fprintf(lua_State *L, FILE *fp, GCtrace *T,
+				     const char *name, BCLine lineno)
+{
+  lj_native_enter(L2TG(L));
+  fprintf(fp, "%lx %x TRACE_%d::%s:%u\n",
+	  (long)T->mcode, T->szmcode, T->traceno, name, lineno);
+  (void)lj_native_leave(L);
+}
+
+static void perftools_addtrace(jit_State *J, GCtrace *T)
 {
   static FILE *fp;
+  lua_State *L = J->L;
   GCproto *pt = trace_startpt_acq(T);
   const BCIns *startpc = mref(T->startpc, const BCIns);
   const char *name = proto_chunknamestr(pt);
@@ -353,11 +373,10 @@ static void perftools_addtrace(GCtrace *T)
   if (!fp) {
     char fname[40];
     sprintf(fname, "/tmp/perf-%d.map", getpid());
-    if (!(fp = fopen(fname, "w"))) return;
+    if (!(fp = perftools_native_fopen(L, fname))) return;
     setlinebuf(fp);
   }
-  fprintf(fp, "%lx %x TRACE_%d::%s:%u\n",
-	  (long)T->mcode, T->szmcode, T->traceno, name, lineno);
+  perftools_native_fprintf(L, fp, T, name, lineno);
 }
 #endif
 
@@ -462,7 +481,7 @@ static void trace_save(jit_State *J, GCtrace *T)
   lj_gc_barriertrace(g, T->traceno);
   lj_gdbjit_addtrace(J, T);
 #ifdef LUAJIT_USE_PERFTOOLS
-  perftools_addtrace(T);
+  perftools_addtrace(J, T);
 #endif
 }
 
