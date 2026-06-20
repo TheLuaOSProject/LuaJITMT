@@ -14,6 +14,7 @@
 #include "lj_gc.h"
 #include "lj_err.h"
 #include "lj_tab.h"
+#include "lj_tg.h"
 
 #define LJ_TAB_MAXCHAIN		8u
 
@@ -1705,6 +1706,58 @@ LJ_FUNCA TValue *lj_tab_storetvn(lua_State *L, TValue *dst, cTValue *src,
   for (i = 0; i < n; i++)
     copyTVrel(L, &dst[i], &src[i]);
   return dst;
+}
+
+static int tab_tsetm_barrier_needed(lua_State *L, GCtab *parent)
+{
+  TGState *tg;
+  if (!L || !parent)
+    return 0;
+  tg = L2TG(L);
+  return (tg && la_load32_acq(&tg->mark_active)) || isblack(obj2gco(parent));
+}
+
+static void tab_tsetm_barrier_range(lua_State *L, GCtab *parent, uint32_t start,
+				    uint32_t n)
+{
+  global_State *g = G(L);
+  uint32_t i;
+  for (i = 0; i < n; i++) {
+    TValue *dst = lj_tab_setint(L, parent, (int32_t)(start + i));
+    lj_gc2_barrier_tv_pair_g(g, obj2gco(parent), dst);
+  }
+  lj_gc2_barrier_tab(L, parent);  /* Preserve the previous TSETM table barrier. */
+  if (!isblack(obj2gco(parent)))
+    return;
+  for (i = 0; i < n; i++) {
+    TValue snap;
+    TValue *dst = lj_tab_setint(L, parent, (int32_t)(start + i));
+    lj_tv_load_acq(&snap, dst);
+    if (tviswhite(&snap)) {
+      lj_gc_barrierback(g, parent);
+      return;
+    }
+  }
+}
+
+LJ_FUNCA void lj_tab_storetvn_forvm_array(lua_State *L, GCtab *parent,
+					  uint32_t start, cTValue *src,
+					  uint32_t n)
+{
+  uint32_t i;
+  if (!L || !parent || !src || n == 0)
+    return;
+  for (i = 0; i < n; i++) {
+    TValue *dst;
+    for (;;) {
+      dst = lj_tab_setint(L, parent, (int32_t)(start + i));
+      if (lj_tab_trystoretv_cas(L, dst, &src[i]) == LJ_TAB_STORE_CAS_OK)
+	break;
+      la_cpu_pause();  /* VM TSETM saw FORWARD after range-fit routing. */
+    }
+  }
+  if (tab_tsetm_barrier_needed(L, parent))
+    tab_tsetm_barrier_range(L, parent, start, n);
 }
 
 TValue *lj_tab_storenilraw(TValue *dst)

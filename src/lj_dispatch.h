@@ -58,7 +58,7 @@ extern double __divdf3(double a, double b);
   _(lj_tab_getint_hop) _(lj_tab_len) \
   _(lj_tab_new) _(lj_tab_new0) _(lj_tab_newkey) _(lj_tab_next) _(lj_tab_reasize) \
   _(lj_tab_setinth) _(lj_tab_itern_forward) _(lj_tab_vmnext_forward) \
-  _(lj_tab_storetv) _(lj_tab_storetvn) \
+  _(lj_tab_storetv) _(lj_tab_storetvn) _(lj_tab_storetvn_forvm_array) \
   _(lj_buf_putstr_reverse) _(lj_buf_putstr_lower) _(lj_buf_putstr_upper) \
   _(lj_buf_tostr) \
   JITGOTDEF(_) FFIGOTDEF(_) SFGOTDEF(_)

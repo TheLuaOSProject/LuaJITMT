@@ -119,6 +119,9 @@ LJ_FUNCA TValue *lj_tab_storetv_forjit_newref(lua_State *L, GCtab *parent,
 					      cTValue *key);
 LJ_FUNCA TValue *lj_tab_storetvn(lua_State *L, TValue *dst, cTValue *src,
 				 uint32_t n);
+LJ_FUNCA void lj_tab_storetvn_forvm_array(lua_State *L, GCtab *parent,
+					  uint32_t start, cTValue *src,
+					  uint32_t n);
 LJ_FUNC TValue *lj_tab_storenilraw(TValue *dst);
 LJ_FUNC TValue *lj_tab_storenil(lua_State *L, TValue *dst);
 LJ_FUNC TValue *lj_tab_storebool(lua_State *L, TValue *dst, int b);

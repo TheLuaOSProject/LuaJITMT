@@ -4504,26 +4504,18 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  cmp RDd, r8d
     |  ja >5				// Doesn't fit into array part?
     |  sub RDd, TMPRd
-    |  shl TMPRd, 3
-    |  add TMPR, ITYPE
     |  mov ITYPE, RA
     |  mov L:CARG1, SAVE_L
     |  mov L:CARG1->base, BASE
-    |  mov CARG2, TMPR
-    |  mov CARG3, ITYPE
-    |  mov CARG4d, RDd
+    |  mov CARG2, TAB:RB
+    |  mov CARG3d, TMPRd
+    |  mov CARG4, ITYPE
+    |  mov CARG5d, RDd
     |  mov L:RB, L:CARG1
-    |  call extern lj_tab_storetvn	// (lua_State *L, TValue *d, TValue *s, uint32_t n)
+    |  mov SAVE_PC, PC
+    |  call extern lj_tab_storetvn_forvm_array	// (lua_State *L, GCtab *t, uint32_t start, TValue *s, uint32_t n)
     |  mov BASE, L:RB->base
-    |  movzx RAd, PC_RA
-    |  mov TAB:RB, [BASE+RA*8-8]
-    |  cleartp TAB:RB
-    |  cmp TGMARK, 0
-    |  jnz ->vm_gc2_barriertvn
-    |  test byte TAB:RB->marked, LJ_GC_BLACK	// isblack(table)
-    |  jz >4
-    |  jmp ->vm_gc2_barriertvn
-    |4:
+|4:
     |  ins_next
     |
     |5:  // Need to resize array part.

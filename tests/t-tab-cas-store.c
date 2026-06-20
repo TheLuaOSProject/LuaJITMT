@@ -12,10 +12,12 @@
 #include "lualib.h"
 
 #include "lj_meta.h"
+#include "lj_gc2.h"
 #include "lj_obj.h"
 #include "lj_str.h"
 #include "lj_state.h"
 #include "lj_tab.h"
+#include "lj_tg.h"
 
 #define WRITER_ITERS 40000
 
@@ -362,6 +364,89 @@ static void exercise_table_insert_forward_retry(lua_State *L)
   lj_tab_array_hdr_flags_or_rel(oldarray, TABARRAY_FLAG_RETIRING);
 }
 
+static void exercise_tsetm_helper_forward_retry(lua_State *L)
+{
+  GCtab *t;
+  TValue *oldarray, *newarray;
+  TValue src[3];
+  MSize oldasize, newasize, oldacap;
+  int32_t start = 4;
+  MSize i;
+
+  lua_settop(L, 0);
+  lua_createtable(L, LJ_MAX_COLOSIZE + 16, 0);
+  t = tabV(L->top-1);
+  assert(lj_tab_array_separated(t));
+  oldarray = lj_tab_array_acq(t);
+  oldasize = lj_tab_asize_acq(t);
+  oldacap = t->acap;
+  assert((MSize)(start + 2) < oldasize);
+  for (i = 0; i < oldasize; i++)
+    lj_tab_storeint(L, lj_tab_setint(L, t, (int32_t)i), (int32_t)i + 5000);
+
+  lj_tab_resize(L, t, (uint32_t)oldasize + 8u, 0);
+  newarray = lj_tab_array_acq(t);
+  newasize = lj_tab_asize_acq(t);
+  assert(newarray != oldarray);
+  for (i = 0; i < 3; i++)
+    store_forward(&oldarray[start + i]);
+  la_store32_rel(&lj_tab_array_hdrw(oldarray)->acap,
+		 lj_tab_array_hdr_pack_acap(oldacap, 0));
+  lj_tab_asize_rel(t, oldasize);
+  lj_tab_array_rel(t, oldarray);
+
+  setintV(&src[0], 6161);
+  setintV(&src[1], 6262);
+  setintV(&src[2], 6363);
+  lj_tab_storetvn_forvm_array(L, t, (uint32_t)start, src, 3);
+  for (i = 0; i < 3; i++)
+    assert_forward(&oldarray[start + i]);
+  assert_i32(&newarray[start], 6161);
+  assert_i32(&newarray[start + 1], 6262);
+  assert_i32(&newarray[start + 2], 6363);
+
+  lj_tab_array_rel(t, newarray);
+  lj_tab_asize_rel(t, newasize);
+  lj_tab_array_hdr_flags_or_rel(oldarray, TABARRAY_FLAG_RETIRING);
+}
+
+static void exercise_tsetm_helper_post_barrier(lua_State *L)
+{
+  global_State *g = G(L);
+  TGState *tg = L2TG(L);
+  TValue src[2];
+  GCtab *t;
+  uint32_t old_mark_active, old_phase, old_generational, old_minor_sweep;
+  uint64_t remembered0;
+
+  assert(tg != NULL);
+  old_mark_active = la_load32_acq(&tg->mark_active);
+  old_phase = la_load32_acq(&g->gc2.phase);
+  old_generational = la_load32_acq(&g->gc2.generational);
+  old_minor_sweep = la_load32_acq(&g->gc2.minor_sweep_enabled);
+
+  lua_settop(L, 0);
+  lua_createtable(L, LJ_MAX_COLOSIZE + 16, 0);
+  t = tabV(L->top-1);
+  setintV(&src[0], 7171);
+  setintV(&src[1], 7272);
+
+  la_store32_rel(&g->gc2.phase, LJ_GC2_IDLE);
+  la_store32_rel(&g->gc2.generational, 1);
+  la_store32_rel(&g->gc2.minor_sweep_enabled, 1);
+  la_store32_rel(&tg->mark_active, 1);
+  remembered0 = la_load64_acq(&g->gc2.remembered_barriers);
+  lj_tab_storetvn_forvm_array(L, t, 4, src, 2);
+  assert(la_load64_acq(&g->gc2.remembered_barriers) > remembered0);
+  assert_i32(lj_tab_getint(t, 4), 7171);
+  assert_i32(lj_tab_getint(t, 5), 7272);
+
+  la_store32_rel(&tg->mark_active, old_mark_active);
+  la_store32_rel(&g->gc2.phase, old_phase);
+  la_store32_rel(&g->gc2.generational, old_generational);
+  la_store32_rel(&g->gc2.minor_sweep_enabled, old_minor_sweep);
+}
+
 static void exercise_luaL_newmetatable_forward_retry(lua_State *L)
 {
   GCtab *reg = tabV(registry(L));
@@ -415,6 +500,8 @@ int main(void)
   exercise_capi_rawset_forward_retry(L);
   exercise_capi_setfield_forward_retry(L);
   exercise_table_insert_forward_retry(L);
+  exercise_tsetm_helper_forward_retry(L);
+  exercise_tsetm_helper_post_barrier(L);
   exercise_luaL_newmetatable_forward_retry(L);
 
   lua_close(L);
