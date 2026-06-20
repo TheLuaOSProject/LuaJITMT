@@ -109,6 +109,13 @@ char * LJ_FASTCALL lj_buf_tmp(lua_State *L, MSize sz)
   return lj_buf_need(sb, sz);
 }
 
+#if LJ_HASJIT
+SBuf * LJ_FASTCALL lj_buf_tmp_reset(lua_State *L)
+{
+  return lj_buf_tmp_(L);
+}
+#endif
+
 #if LJ_HASBUFFER && LJ_HASJIT
 void lj_bufx_set(SBufExt *sbx, const char *p, MSize len, GCobj *ref)
 {

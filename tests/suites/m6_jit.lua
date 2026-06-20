@@ -41,6 +41,7 @@ local m6_cases = {
   "m6_jit_gcstep_guard",
   "m6_jit_mcode_publish",
   "m6_jit_flush_hs",
+  "m6_jit_tmpbuf_thread_format",
   "m6_jit_perftools_native"
 }
 
@@ -197,6 +198,40 @@ end
 local nested_escape = make_nested_escape()
 assert(nested_escape(80) == 80)
 assert(util.traceinfo(1), "nested escaped existing table store did not trace")
+]=]
+end
+
+local function jit_tmpbuf_thread_format_smoke()
+  return [=[
+local th = require"threading"
+
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+
+local workers = {}
+for id = 1, 4 do
+  workers[id] = th.spawn(function(worker)
+    jit.opt.start("hotloop=1", "hotexit=1")
+    local keep = {}
+    for i = 1, 2000 do
+      local s = ("gc2-pacing-%d-%d"):format(worker, i)
+      local expect = "gc2-pacing-" .. worker .. "-" .. i
+      assert(s == expect, "format result changed across tmpbuf reuse")
+      keep[i] = s
+    end
+    return #keep, keep[1], keep[#keep]
+  end, id)
+end
+
+for id = 1, 4 do
+  local ok, n, first, last = workers[id]:join(30)
+  assert(ok == true, "worker failed")
+  assert(n == 2000, "worker format count mismatch")
+  assert(first == ("gc2-pacing-%d-1"):format(id), "first format mismatch")
+  assert(last == ("gc2-pacing-%d-2000"):format(id), "last format mismatch")
+end
+
+print("jit-tmpbuf-thread-format-smoke OK")
 ]=]
 end
 
@@ -656,6 +691,16 @@ end
 assert(#keep == 120 and keep[120][80] == "value-120-80")
 ]=], { timeout = "20s" })
       print("M6 JIT shared AREF generation-pair behavior passed")
+    end
+  })
+
+  add({
+    name = "m6_jit_tmpbuf_thread_format",
+    description = "M6 JIT uses the running TG tmpbuf for threaded string.format traces",
+    run = function(t)
+      build_default(t)
+      luajit_code(t, jit_tmpbuf_thread_format_smoke(), { timeout = "30s" })
+      print("M6 JIT threaded string.format tmpbuf smoke passed")
     end
   })
 

@@ -2600,8 +2600,11 @@ static TValue *rec_mm_concat_cp(lua_State *L, lua_CFunction dummy, void *ud)
 	break;
     }
     xbase = ++trp;
-    tr = hdr = emitir(IRT(IR_BUFHDR, IRT_PGC),
-			      lj_ir_kptr(J, &J2TG(J)->tmpbuf), IRBUFHDR_RESET);
+    {
+      TRef trl = emitir(IRT(IR_LREF, IRT_THREAD), 0, 0);
+      TRef trsb = lj_ir_call(J, IRCALL_lj_buf_tmp_reset, trl);
+      tr = hdr = emitir(IRT(IR_BUFHDR, IRT_PGC), trsb, IRBUFHDR_RESET);
+    }
     do {
       tr = emitir(IRTG(IR_BUFPUT, IRT_PGC), tr, *trp++);
     } while (trp <= top);

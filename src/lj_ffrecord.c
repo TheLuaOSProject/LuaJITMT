@@ -194,11 +194,13 @@ static void LJ_FASTCALL recff_nyi(jit_State *J, RecordFFData *rd)
 /* Must stop the trace for classic C functions with arbitrary side-effects. */
 #define recff_c		recff_nyi
 
-/* Emit BUFHDR for the global temporary buffer. */
+/* Emit BUFHDR for the running thread group's temporary buffer. */
 static TRef recff_bufhdr(jit_State *J)
 {
+  TRef trl = emitir(IRT(IR_LREF, IRT_THREAD), 0, 0);
+  TRef trsb = lj_ir_call(J, IRCALL_lj_buf_tmp_reset, trl);
   return emitir(IRT(IR_BUFHDR, IRT_PGC),
-		lj_ir_kptr(J, &J2TG(J)->tmpbuf), IRBUFHDR_RESET);
+		trsb, IRBUFHDR_RESET);
 }
 
 /* Emit TMPREF. */

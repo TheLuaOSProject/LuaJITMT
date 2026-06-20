@@ -175,6 +175,7 @@ typedef struct CCallInfo {
   _(ANY,	lj_buf_putstr_upper,	2,  FL, PGC, CCI_T) \
   _(ANY,	lj_buf_putstr_rep,	3,   L, PGC, CCI_T) \
   _(ANY,	lj_buf_puttab,		5,   L, PGC, CCI_T) \
+  _(ANY,	lj_buf_tmp_reset,	1,  FS, PGC, 0) \
   _(BUFFER,	lj_bufx_set,		4,   S, NIL, 0) \
   _(BUFFFI,	lj_bufx_more,		2,  FS, INT, CCI_T) \
   _(BUFFER,	lj_serialize_put,	2,  FS, PGC, CCI_T) \
