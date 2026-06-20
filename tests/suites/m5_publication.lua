@@ -318,6 +318,52 @@ print("gc-total-atomic-smoke OK")
 ]=]
 end
 
+local function gc2_pacing_atomic_smoke()
+  return [=[
+local th = require"threading"
+
+local function pacing_stats()
+  local stats = collectgarbage("stats")
+  for _, name in ipairs({
+    "alloc_since_trigger", "cycle_alloc_bytes", "trigger_bytes", "hard_bytes"
+  }) do
+    assert(type(stats[name]) == "number", "missing " .. name)
+    assert(stats[name] >= 0, "negative " .. name)
+  end
+  assert(stats.trigger_bytes > 0, "missing GC2 trigger pacing")
+  assert(stats.hard_bytes >= stats.trigger_bytes, "hard limit below trigger")
+  return stats
+end
+
+local before = pacing_stats()
+local workers = {}
+for id = 1, 4 do
+  workers[id] = th.spawn(function(worker)
+    local keep = {}
+    for i = 1, 500 do
+      keep[i] = { worker, i, tostring(i) }
+    end
+    return #keep, collectgarbage("stats").alloc_since_trigger
+  end, id)
+end
+
+local total = 0
+for id = 1, 4 do
+  local ok, n, alloc = workers[id]:join(30)
+  assert(ok == true, "worker failed")
+  assert(n == 500, "worker allocation count mismatch")
+  assert(type(alloc) == "number" and alloc >= 0)
+  total = total + n
+end
+
+local after = pacing_stats()
+assert(total == 2000)
+assert(after.hard_bytes >= before.trigger_bytes)
+
+print("gc2-pacing-atomic-smoke OK")
+]=]
+end
+
 local function proto_kgc_acq_smoke()
   return [=[
 local util = require("jit.util")
@@ -509,6 +555,18 @@ return function(add)
                       "t-gc-total-atomic.c", { build = false })
       run_luajit(t, { "-e", gc_total_atomic_smoke() })
       print("M5 GC total atomic accounting behavior passed")
+    end
+  })
+
+  add({
+    name = "m5_gc2_pacing_atomic",
+    description = "GC2 pacing counter atomic helper behavior",
+    run = function(t)
+      t:build({ quiet = true })
+      build_and_run_c(t, t:tmp("lj_t_gc2_pacing_atomic"),
+                      "t-gc2-pacing-atomic.c", { build = false })
+      run_luajit(t, { "-e", gc2_pacing_atomic_smoke() })
+      print("M5 GC2 pacing counter atomic helper behavior passed")
     end
   })
 

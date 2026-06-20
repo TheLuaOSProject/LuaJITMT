@@ -125,10 +125,10 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.weak_to_sweep, 0);
   la_store64_rlx(&g->gc2.sweep_to_idle, 0);
   la_store64_rlx(&g->gc2.preserve_abort_to_idle, 0);
-  g->gc2.alloc_since_trigger = 0;
-  la_store64_rlx(&g->gc2.cycle_alloc_bytes, 0);
-  g->gc2.trigger_bytes = 0;
-  g->gc2.hard_bytes = 0;
+  lj_gc2_alloc_since_store(g, 0);
+  lj_gc2_cycle_alloc_store(g, 0);
+  lj_gc2_trigger_store(g, 0);
+  lj_gc2_hard_store(g, 0);
   la_store64_rlx(&g->gc2.assist_runs, 0);
   la_store64_rlx(&g->gc2.assist_grey_drained, 0);
   la_store64_rlx(&g->gc2.assist_ssb_converted, 0);
@@ -456,7 +456,7 @@ uint64_t lj_gc2_flush_alloc(global_State *g, TGState *tg)
     return 0;
   bytes = la_xchg64_acqrel(&tg->local_total, 0);  /* 04 section 4.8. */
   if (bytes != 0)
-    la_add64_rlx(&g->gc2.alloc_since_trigger, bytes);  /* 05 section 5.11. */
+    lj_gc2_alloc_since_add(g, bytes);  /* 05 section 5.11. */
   return bytes;
 }
 
@@ -481,8 +481,8 @@ static void gc2_maybe_trigger_cycle(global_State *g, TGState *tg)
 {
   if (la_load32_acq(&g->gc2.phase) != LJ_GC2_IDLE)
     return;
-  if (la_load64_acq(&g->gc2.alloc_since_trigger) <=
-      la_load64_acq(&g->gc2.trigger_bytes))  /* 05 section 5.11 trigger. */
+  if (lj_gc2_alloc_since_load(g) <=
+      lj_gc2_trigger_load(g))  /* 05 section 5.11 trigger. */
     return;
   (void)gc2_request_cycle(g, tg);
 }
@@ -496,8 +496,7 @@ void lj_gc2_account_alloc(global_State *g, TGState *tg, GCSize bytes)
   if (old + (uint64_t)bytes < old || old + (uint64_t)bytes >= LJ_GC2_ACCT_FLUSH)
     (void)lj_gc2_flush_alloc(g, tg);
   gc2_maybe_trigger_cycle(g, tg);
-  if (la_load64_acq(&g->gc2.alloc_since_trigger) >
-      la_load64_acq(&g->gc2.hard_bytes))  /* 05 section 5.11 hard limit. */
+  if (lj_gc2_hard_limit_reached(g))  /* 05 section 5.11 hard limit. */
     (void)lj_gc2_assist(g, tg);
 }
 
@@ -531,8 +530,8 @@ void lj_gc2_update_pacing(global_State *g)
   if (trigger < LJ_GC2_ACCT_FLUSH)
     trigger = LJ_GC2_ACCT_FLUSH;
   hard = trigger > ~(uint64_t)0 / 2u ? ~(uint64_t)0 : trigger * 2u;
-  la_store64_rel(&g->gc2.trigger_bytes, trigger);  /* 05 section 5.11. */
-  la_store64_rel(&g->gc2.hard_bytes, hard);  /* 05 section 5.11. */
+  lj_gc2_trigger_store(g, trigger);  /* 05 section 5.11. */
+  lj_gc2_hard_store(g, hard);  /* 05 section 5.11. */
 }
 
 static void gc2_reset_alloc_trigger(global_State *g)
@@ -542,9 +541,7 @@ static void gc2_reset_alloc_trigger(global_State *g)
        tg != NULL;
        tg = lj_tg_next_acq(tg))
     (void)lj_gc2_flush_alloc(g, tg);
-  la_store64_rel(&g->gc2.cycle_alloc_bytes,
-		 la_load64_acq(&g->gc2.alloc_since_trigger));
-  la_store64_rlx(&g->gc2.alloc_since_trigger, 0);  /* 05 section 5.11. */
+  lj_gc2_cycle_alloc_store(g, lj_gc2_alloc_since_xchg(g, 0));
 }
 
 static TGState *gc2_tg_for_mem(global_State *g, const void *p)
@@ -727,7 +724,7 @@ void lj_gc2_update_minor_survival_policy(global_State *g, uint64_t live)
   if (!g)
     return;
   base = la_load64_acq(&g->gc2.minor_survival_base_live);
-  alloc = la_load64_acq(&g->gc2.cycle_alloc_bytes);
+  alloc = lj_gc2_cycle_alloc_load(g);
   minor = la_load32_acq(&g->gc2.cycle_sweep_minor) != 0;
   if (minor && live > base && alloc != 0) {
     survived = live - base;
@@ -2835,8 +2832,7 @@ uint32_t lj_gc2_assist(global_State *g, TGState *tg)
   phase = la_load32_acq(&g->gc2.phase);
   if (phase != LJ_GC2_MARK && phase != LJ_GC2_WEAK)
     return 0;
-  if (la_load64_acq(&g->gc2.alloc_since_trigger) <=
-      la_load64_acq(&g->gc2.hard_bytes))
+  if (!lj_gc2_hard_limit_reached(g))
     return 0;
   if (!la_cas32(&g->gc2.assist_active, &expect, 1, LA_ACQ_REL, LA_ACQ))
     return 0;  /* Current global grey deque has one owner side. */

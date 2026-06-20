@@ -166,11 +166,69 @@ static LJ_AINLINE void lj_gc_mt_threshold_store(global_State *g,
   lj_gcsize_store_rel(&g->mt_gc_threshold, threshold);
 }
 
+static LJ_AINLINE uint64_t lj_gc2_alloc_since_load(global_State *g)
+{
+  return la_load64_acq(&g->gc2.alloc_since_trigger);
+}
+
+static LJ_AINLINE void lj_gc2_alloc_since_store(global_State *g,
+						uint64_t bytes)
+{
+  la_store64_rel(&g->gc2.alloc_since_trigger, bytes);
+}
+
+static LJ_AINLINE uint64_t lj_gc2_alloc_since_add(global_State *g,
+						  uint64_t bytes)
+{
+  return la_add64_rlx(&g->gc2.alloc_since_trigger, bytes);
+}
+
+static LJ_AINLINE uint64_t lj_gc2_alloc_since_xchg(global_State *g,
+						   uint64_t bytes)
+{
+  return la_xchg64_acqrel(&g->gc2.alloc_since_trigger, bytes);
+}
+
+static LJ_AINLINE uint64_t lj_gc2_cycle_alloc_load(global_State *g)
+{
+  return la_load64_acq(&g->gc2.cycle_alloc_bytes);
+}
+
+static LJ_AINLINE void lj_gc2_cycle_alloc_store(global_State *g,
+						uint64_t bytes)
+{
+  la_store64_rel(&g->gc2.cycle_alloc_bytes, bytes);
+}
+
+static LJ_AINLINE uint64_t lj_gc2_trigger_load(global_State *g)
+{
+  return la_load64_acq(&g->gc2.trigger_bytes);
+}
+
+static LJ_AINLINE void lj_gc2_trigger_store(global_State *g, uint64_t bytes)
+{
+  la_store64_rel(&g->gc2.trigger_bytes, bytes);
+}
+
+static LJ_AINLINE uint64_t lj_gc2_hard_load(global_State *g)
+{
+  return la_load64_acq(&g->gc2.hard_bytes);
+}
+
+static LJ_AINLINE void lj_gc2_hard_store(global_State *g, uint64_t bytes)
+{
+  la_store64_rel(&g->gc2.hard_bytes, bytes);
+}
+
+static LJ_AINLINE int lj_gc2_hard_limit_reached(global_State *g)
+{
+  return lj_gc2_alloc_since_load(g) > lj_gc2_hard_load(g);
+}
+
 static LJ_AINLINE int lj_gc_should_step(global_State *g)
 {
   return lj_gc_total_load(g) >= lj_gc_threshold_load(g) ||
-	 la_load64_acq(&g->gc2.alloc_since_trigger) >
-	 la_load64_acq(&g->gc2.hard_bytes);
+	 lj_gc2_hard_limit_reached(g);
 }
 
 static LJ_AINLINE GCobj *lj_gc_list_head_acq(const GCRef *head)

@@ -609,11 +609,11 @@ static void gc_stats_push(lua_State *L)
 		  la_load64_acq(&gc2->hs_ack_latency_max_ns));
   gc_stats_set_latency_buckets(L, t, gc2);
   gc_stats_setnum(L, t, "alloc_since_trigger",
-		  la_load64_acq(&gc2->alloc_since_trigger));
+		  lj_gc2_alloc_since_load(g));
   gc_stats_setnum(L, t, "cycle_alloc_bytes",
-		  la_load64_acq(&gc2->cycle_alloc_bytes));
-  gc_stats_setnum(L, t, "trigger_bytes", la_load64_acq(&gc2->trigger_bytes));
-  gc_stats_setnum(L, t, "hard_bytes", la_load64_acq(&gc2->hard_bytes));
+		  lj_gc2_cycle_alloc_load(g));
+  gc_stats_setnum(L, t, "trigger_bytes", lj_gc2_trigger_load(g));
+  gc_stats_setnum(L, t, "hard_bytes", lj_gc2_hard_load(g));
   gc_stats_setnum(L, t, "assist_runs", la_load64_acq(&gc2->assist_runs));
   gc_stats_setnum(L, t, "assist_grey_drained",
 		  la_load64_acq(&gc2->assist_grey_drained));
