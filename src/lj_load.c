@@ -14,14 +14,17 @@
 
 #include "lj_obj.h"
 #include "lj_gc.h"
+#include "lj_atomic.h"
 #include "lj_err.h"
 #include "lj_buf.h"
 #include "lj_func.h"
 #include "lj_frame.h"
 #include "lj_vm.h"
+#include "lj_safepoint.h"
 #include "lj_lex.h"
 #include "lj_bcdump.h"
 #include "lj_parse.h"
+#include "lj_tg.h"
 
 /* -- Load Lua source code and bytecode ----------------------------------- */
 
@@ -83,15 +86,65 @@ LUA_API int lua_load(lua_State *L, lua_Reader reader, void *data,
 
 typedef struct FileReaderCtx {
   FILE *fp;
+  uint32_t actions;
+  int stop;
   char buf[LUAL_BUFFERSIZE];
 } FileReaderCtx;
+
+static int load_had_stopreq(lua_State *L)
+{
+  TGState *tg = L2TG(L);
+  return tg && (la_load8_acq(&tg->tg_flags) & TGF_STOPREQ);
+}
+
+static int load_fresh_stopreq(lua_State *L, uint32_t actions, int had_stopreq)
+{
+  TGState *tg = L2TG(L);
+  return (actions & LJ_GC2_HS_STOPREQ) ||
+    (!had_stopreq && tg && (la_load8_acq(&tg->tg_flags) & TGF_STOPREQ));
+}
+
+static FILE *load_native_fopen(lua_State *L, const char *filename,
+			       uint32_t *actionsp)
+{
+  FILE *fp;
+  lj_native_enter(L2TG(L));
+  fp = fopen(filename, "rb");
+  *actionsp = lj_native_leave(L);
+  return fp;
+}
+
+static size_t load_native_fread(lua_State *L, void *buf, size_t size,
+				FILE *fp, uint32_t *actionsp)
+{
+  size_t n;
+  lj_native_enter(L2TG(L));
+  n = fread(buf, 1, size, fp);
+  *actionsp = lj_native_leave(L);
+  return n;
+}
+
+static int load_native_fclose(lua_State *L, FILE *fp, uint32_t *actionsp)
+{
+  int ok;
+  lj_native_enter(L2TG(L));
+  ok = fclose(fp);
+  *actionsp = lj_native_leave(L);
+  return ok;
+}
 
 static const char *reader_file(lua_State *L, void *ud, size_t *size)
 {
   FileReaderCtx *ctx = (FileReaderCtx *)ud;
-  UNUSED(L);
-  if (feof(ctx->fp)) return NULL;
-  *size = fread(ctx->buf, 1, sizeof(ctx->buf), ctx->fp);
+  uint32_t actions;
+  if (ctx->stop || feof(ctx->fp)) return NULL;
+  *size = load_native_fread(L, ctx->buf, sizeof(ctx->buf), ctx->fp, &actions);
+  ctx->actions |= actions;
+  if ((actions & LJ_GC2_HS_STOPREQ) || load_had_stopreq(L)) {
+    ctx->stop = 1;
+    *size = 0;
+    return NULL;
+  }
   return *size > 0 ? ctx->buf : NULL;
 }
 
@@ -102,13 +155,23 @@ LUALIB_API int luaL_loadfilex(lua_State *L, const char *filename,
   int status;
   const char *chunkname;
   int err = 0;
+  ctx.actions = 0;
+  ctx.stop = 0;
   if (filename) {
+    uint32_t actions;
+    int had_stopreq = load_had_stopreq(L);
     chunkname = lua_pushfstring(L, "@%s", filename);
-    ctx.fp = fopen(filename, "rb");
+    ctx.fp = load_native_fopen(L, filename, &actions);
     if (ctx.fp == NULL) {
       L->top--;
+      lj_safepoint_checkstop(L, actions);
       lua_pushfstring(L, "cannot open %s: %s", filename, strerror(errno));
       return LUA_ERRFILE;
+    }
+    if (load_fresh_stopreq(L, actions, had_stopreq)) {
+      uint32_t close_actions;
+      (void)load_native_fclose(L, ctx.fp, &close_actions);
+      lj_safepoint_checkstop(L, actions | close_actions);
     }
   } else {
     ctx.fp = stdin;
@@ -117,10 +180,13 @@ LUALIB_API int luaL_loadfilex(lua_State *L, const char *filename,
   status = lua_loadx(L, reader_file, &ctx, chunkname, mode);
   if (ferror(ctx.fp)) err = errno;
   if (filename) {
-    fclose(ctx.fp);
+    uint32_t actions;
+    (void)load_native_fclose(L, ctx.fp, &actions);
+    ctx.actions |= actions;
     L->top--;
     copyTV(L, L->top-1, L->top);
   }
+  lj_safepoint_checkstop(L, ctx.actions);
   if (err) {
     const char *fname = filename ? filename : "stdin";
     L->top--;

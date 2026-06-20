@@ -611,6 +611,8 @@ int main(void)
     "f:close()\n"
     "expect_fopen_stopreq(function(fifo) return io.open(fifo, 'r') end)\n"
     "expect_fopen_stopreq(function(fifo) return io.lines(fifo) end)\n"
+    "expect_fopen_stopreq(function(fifo) return loadfile(fifo) end)\n"
+    "expect_fopen_stopreq(function(fifo) return dofile(fifo) end)\n"
     "f = assert(io.open(p, 'r'))\n"
     "expect_stopreq(function() return f:read('*n') end)\n"
     "f:seek('set', 0)\n"
