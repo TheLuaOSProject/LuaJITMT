@@ -417,16 +417,21 @@ collect_attrib:
   }
   if (ctype_isptr(ct->info)) {  /* Automatically perform '->'. */
     CTypeID cid;
+    int ptrstruct;
     int ok = locked ? 1 : lj_ctype_ptrstruct_snapshot(cts, id, &cid);
     if (ok < 0) {
       locked = 1;
       goto retry_locked;
     }
-    if (locked)
+    if (locked) {
       cid = ctype_rawid(cts, ctype_cid(ct->info));
-    if (ok && ctype_isstruct(ctype_get(cts, cid)->info)) {
+      ptrstruct = ctype_isstruct(ctype_get(cts, cid)->info);
+    } else {
+      ptrstruct = ok > 0;
+    }
+    if (ptrstruct) {
       p = (uint8_t *)cdata_getptr(p, ct->size);
-      id = ctype_cid(ct->info);
+      id = cid;
       ct = ctype_get(cts, id);
       goto collect_attrib;
     }
