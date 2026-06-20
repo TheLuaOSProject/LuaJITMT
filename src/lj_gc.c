@@ -1133,9 +1133,13 @@ static size_t propagatemark(global_State *g)
   } else {
 #if LJ_HASJIT
     GCtrace *T = gco2trace(o);
+    IRRef nins, nk;
     gc_traverse_trace(g, T);
-    return ((sizeof(GCtrace)+7)&~7) + (T->nins-T->nk)*sizeof(IRIns) +
-	   T->nsnap*sizeof(SnapShot) + T->nsnapmap*sizeof(SnapEntry);
+    nins = trace_nins_acq(T);
+    nk = trace_nk_acq(T);
+    return ((sizeof(GCtrace)+7)&~7) + (nins-nk)*sizeof(IRIns) +
+	   trace_nsnap_acq(T)*sizeof(SnapShot) +
+	   trace_nsnapmap_acq(T)*sizeof(SnapEntry);
 #else
     lj_assertG(0, "bad GC type %d", gct);
     return 0;

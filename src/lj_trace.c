@@ -143,9 +143,12 @@ static void trace_exittab_free(global_State *g, GCtrace *T);
 
 static GCSize trace_size(GCtrace *T)
 {
+  IRRef nins = trace_nins_acq(T);
+  IRRef nk = trace_nk_acq(T);
   return (GCSize)(((sizeof(GCtrace)+7)&~7) +
-    (T->nins-T->nk)*sizeof(IRIns) +
-    T->nsnap*sizeof(SnapShot) + T->nsnapmap*sizeof(SnapEntry));
+    (nins-nk)*sizeof(IRIns) +
+    trace_nsnap_acq(T)*sizeof(SnapShot) +
+    trace_nsnapmap_acq(T)*sizeof(SnapEntry));
 }
 
 static void trace_retired_push(jit_State *J, GCtrace *T)
@@ -166,8 +169,11 @@ static void trace_retire(global_State *g, GCtrace *T)
   la_store64_rel(&T->retire_epoch, epoch);
   T->retired_next = NULL;
   lj_gc_arena_markmem(g, T);
-  if (T->exittab)
-    lj_gc_arena_markmem(g, T->exittab);
+  {
+    MCode **exittab = trace_exittab_acq(T);
+    if (exittab)
+      lj_gc_arena_markmem(g, exittab);
+  }
   trace_retired_push(J, T);
 }
 
@@ -202,9 +208,12 @@ static void trace_markbody(global_State *g, GCtrace *T, int gc2)
   IRRef ref;
   GCobj *startpt;
   if (gc2) lj_gc2_markmem(g, T); else lj_gc_arena_markmem(g, T);
-  if (T->exittab) {
-    if (gc2) lj_gc2_markmem(g, T->exittab);
-    else lj_gc_arena_markmem(g, T->exittab);
+  {
+    MCode **exittab = trace_exittab_acq(T);
+    if (exittab) {
+      if (gc2) lj_gc2_markmem(g, exittab);
+      else lj_gc_arena_markmem(g, exittab);
+    }
   }
   irbase = trace_ir_acq(T);
   for (ref = trace_nk_acq(T); ref < REF_TRUE; ref++) {
@@ -428,8 +437,9 @@ GCtrace * LJ_FASTCALL lj_trace_alloc(lua_State *L, GCtrace *T)
 
 static void trace_exittab_free(global_State *g, GCtrace *T)
 {
-  if (T->exittab) {
-    lj_mem_freevec(g, T->exittab, T->nsnap, MCode *);
+  MCode **exittab = trace_exittab_acq(T);
+  if (exittab) {
+    lj_mem_freevec(g, exittab, trace_nsnap_acq(T), MCode *);
     T->exittab = NULL;
   }
   T->exitstub = NULL;
@@ -439,9 +449,9 @@ static void trace_exittab_reset(jit_State *J, GCtrace *T)
 {
 #if LJ_64 && defined(EXITSTUBS_PER_GROUP)
   ExitNo i;
-  if (T->exittab == NULL)
+  if (trace_exittab_acq(T) == NULL)
     return;
-  for (i = 0; i < T->nsnap; i++)
+  for (i = 0; i < trace_nsnap_acq(T); i++)
     trace_exittarget_rel(T, i, exitstub_addr(J, i));
 #else
   UNUSED(J); UNUSED(T);
