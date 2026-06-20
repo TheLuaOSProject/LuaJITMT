@@ -1,29 +1,6 @@
 local M = {}
 local checks = require("suite_assert")
 
-M.contains = checks.contains
-M.count_plain = checks.count_plain
-M.count_match = checks.count_match
-M.lines = checks.lines
-M.iter_lines = checks.iter_lines
-M.assert_text_contains = checks.assert_text_contains
-M.assert_text_match = checks.assert_text_match
-M.assert_text_all_contains = checks.assert_text_all_contains
-M.assert_text_any_contains = checks.assert_text_any_contains
-M.assert_text_contains_count = checks.assert_text_contains_count
-M.assert_text_match_count = checks.assert_text_match_count
-M.assert_file_contains = checks.assert_file_contains
-M.assert_file_match = checks.assert_file_match
-M.assert_file_all_contains = checks.assert_file_all_contains
-M.assert_file_any_contains = checks.assert_file_any_contains
-M.assert_dump_contains = checks.assert_dump_contains
-M.assert_dump_match = checks.assert_dump_match
-M.assert_dump_all_contains = checks.assert_dump_all_contains
-M.assert_dump_contains_count = checks.assert_dump_contains_count
-M.assert_dump_match_count = checks.assert_dump_match_count
-M.is_source_file_content_path = checks.is_source_file_content_path
-M.assert_not_source_file_content = checks.assert_not_source_file_content
-
 function M.getenv(name, default)
   local v = os.getenv(name)
   if v == nil or v == "" then return default end
@@ -151,13 +128,13 @@ end
 
 function M.assert_command_output_contains(cmd, needle, opts)
   local out = M.capture_command(cmd, opts)
-  M.assert_text_contains(cmd, out, needle, "command output")
+  checks.assert_text_contains(cmd, out, needle, "command output")
   return out
 end
 
 function M.assert_command_output_all_contains(cmd, needles, opts)
   local out = M.capture_command(cmd, opts)
-  M.assert_text_all_contains(cmd, out, needles, "command output")
+  checks.assert_text_all_contains(cmd, out, needles, "command output")
   return out
 end
 
