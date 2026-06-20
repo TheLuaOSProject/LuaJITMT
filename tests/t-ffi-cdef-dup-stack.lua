@@ -1,8 +1,9 @@
 local th = require"threading"
 local ffi = require"ffi"
+local harness = require"thread_harness"
 
-local rounds = tonumber((arg and arg[1]) or os.getenv("LJ_M7_FFI_DUP_STACK_ROUNDS")) or 30
-local iters = tonumber((arg and arg[2]) or os.getenv("LJ_M7_FFI_DUP_STACK_ITERS")) or 200
+local rounds = harness.arg_number(1, "LJ_M7_FFI_DUP_STACK_ROUNDS", 30)
+local iters = harness.arg_number(2, "LJ_M7_FFI_DUP_STACK_ITERS", 200)
 local nthreads = 2
 
 collectgarbage("stop")
@@ -10,8 +11,7 @@ collectgarbage("stop")
 local function run_case(round, kind, decl, cname, expected_size)
   ffi.cdef(decl)
 
-  local ready = th.channel(nthreads)
-  local start = th.channel(nthreads)
+  local ready, start = harness.channels(nthreads)
   local workers = {}
 
   for tid = 1, nthreads do
@@ -61,18 +61,9 @@ local function run_case(round, kind, decl, cname, expected_size)
     end, ready, start, tid, iters, cname, decl, expected_size)
   end
 
-  for i = 1, nthreads do
-    local _, ok = ready:recv(10)
-    assert(ok == true, "ready timeout in " .. kind .. " round " .. round)
-  end
-  for _ = 1, nthreads do
-    assert(start:send("go", 10) == true)
-  end
-  for tid = 1, nthreads do
-    local ok, result = workers[tid]:join(30)
-    assert(ok == true, tostring(result))
-    assert(result == true)
-  end
+  harness.wait_ready(ready, nthreads, 10, kind .. " round " .. round)
+  harness.release_start(start, nthreads)
+  harness.join_all(workers)
 end
 
 for round = 1, rounds do
@@ -89,7 +80,7 @@ for round = 1, rounds do
 end
 
 collectgarbage("restart")
-collectgarbage("collect")
+harness.fullgc(1)
 
 print(("t-ffi-cdef-dup-stack OK: %d rounds x %d iterations"):format(
   rounds, iters))

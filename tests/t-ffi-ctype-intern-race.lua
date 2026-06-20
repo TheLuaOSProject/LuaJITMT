@@ -1,9 +1,10 @@
 local th = require"threading"
 local ffi = require"ffi"
+local harness = require"thread_harness"
 
-local nthreads = tonumber((arg and arg[1]) or os.getenv("LJ_M7_FFI_INTERN_THREADS")) or 6
-local nshapes = tonumber((arg and arg[2]) or os.getenv("LJ_M7_FFI_INTERN_SHAPES")) or 48
-local rounds = tonumber((arg and arg[3]) or os.getenv("LJ_M7_FFI_INTERN_ROUNDS")) or 4
+local nthreads = harness.arg_number(1, "LJ_M7_FFI_INTERN_THREADS", 6)
+local nshapes = harness.arg_number(2, "LJ_M7_FFI_INTERN_SHAPES", 48)
+local rounds = harness.arg_number(3, "LJ_M7_FFI_INTERN_ROUNDS", 4)
 
 collectgarbage("stop")
 
@@ -21,8 +22,7 @@ typedef struct {
   ffi.cdef(table.concat(decls, "\n"))
 end
 
-local ready = th.channel(nthreads)
-local start = th.channel(nthreads)
+local ready, start = harness.channels(nthreads)
 local workers = {}
 
 for tid = 1, nthreads do
@@ -71,26 +71,12 @@ for tid = 1, nthreads do
   end, ready, start, tid, nshapes, rounds)
 end
 
-for _ = 1, nthreads do
-  local _, ok = ready:recv(10)
-  assert(ok == true)
-end
-
-for _ = 1, nthreads do
-  assert(start:send("go", 10) == true)
-end
-
-local total = 0
-for tid = 1, nthreads do
-  local ok, result = workers[tid]:join(30)
-  assert(ok == true, tostring(result))
-  assert(type(result) == "number")
-  total = total + result
-end
+harness.wait_ready(ready, nthreads)
+harness.release_start(start, nthreads)
+local total = harness.join_count(workers)
 
 collectgarbage("restart")
-collectgarbage("collect")
-collectgarbage("collect")
+harness.fullgc()
 
 print(("t-ffi-ctype-intern-race OK: %d threads, %d fresh shapes, %d ref reads"):format(
   nthreads, nshapes, total * 2))

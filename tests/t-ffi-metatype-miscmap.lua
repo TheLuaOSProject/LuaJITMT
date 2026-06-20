@@ -1,8 +1,9 @@
 local th = require"threading"
 local ffi = require"ffi"
+local harness = require"thread_harness"
 
-local nthreads = tonumber((arg and arg[1]) or os.getenv("LJ_M7_FFI_META_THREADS")) or 6
-local iters = tonumber((arg and arg[2]) or os.getenv("LJ_M7_FFI_META_ITERS")) or 60
+local nthreads = harness.arg_number(1, "LJ_M7_FFI_META_THREADS", 6)
+local iters = harness.arg_number(2, "LJ_M7_FFI_META_ITERS", 60)
 
 ffi.cdef[[
 typedef struct { int x; } lj_m7_meta_shared_t;
@@ -14,8 +15,7 @@ for tid = 1, nthreads do
   end
 end
 
-local ready = th.channel(nthreads)
-local start = th.channel(nthreads)
+local ready, start = harness.channels(nthreads)
 local workers = {}
 
 for tid = 1, nthreads do
@@ -56,14 +56,8 @@ for tid = 1, nthreads do
   end, ready, start, tid, iters)
 end
 
-for _ = 1, nthreads do
-  local _, ok = ready:recv(10)
-  assert(ok == true)
-end
-
-for _ = 1, nthreads do
-  assert(start:send("go", 10) == true)
-end
+harness.wait_ready(ready, nthreads)
+harness.release_start(start, nthreads)
 
 local shared_winners = 0
 local unique_total = 0
@@ -89,13 +83,11 @@ do
   }
   local ct = ffi.metatype("lj_m7_meta_root_t", mt)
   mt = nil
-  collectgarbage("collect")
-  collectgarbage("collect")
+  harness.fullgc()
   assert(ct(35):get() == 42)
 end
 
-collectgarbage("collect")
-collectgarbage("collect")
+harness.fullgc()
 
 print(("t-ffi-metatype-miscmap OK: %d threads, %d unique metatypes"):format(
   nthreads, unique_total))

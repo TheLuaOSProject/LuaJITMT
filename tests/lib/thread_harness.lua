@@ -11,11 +11,11 @@ function M.channels(nthreads)
   return th.channel(nthreads), th.channel(nthreads)
 end
 
-function M.wait_ready(ready, nthreads, timeout)
+function M.wait_ready(ready, nthreads, timeout, label)
   timeout = timeout or 10
   for _ = 1, nthreads do
     local _, ok = ready:recv(timeout)
-    assert(ok == true)
+    assert(ok == true, label and ("ready timeout: " .. label) or nil)
   end
 end
 
