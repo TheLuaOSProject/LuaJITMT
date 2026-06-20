@@ -203,6 +203,16 @@ Lua test-suite migration notes:
 - The twenty-third batch migrates the remaining M0 matrix,
   stock-suite runner, M4 TSan driver gate, and M5 aggregate wrapper. Remaining
   shell files are compatibility launchers; test logic is owned by Lua.
+- Current cleanup status: runnable suite files under `tests/suites/` no longer
+  directly inspect implementation text under `src/`. The source-predicate helper
+  definitions still exist in `tests/lib/` for historical utility, but active
+  suite coverage should be behavior-first.
+- Result-artifact matching remains valid behavior coverage. Generated JIT
+  dumps, bytecode listings, benchmark output, and C/Lua fixture output can keep
+  targeted assertions because they are produced by running the VM.
+- Shared generic utilities live in `tests/lib/suite_utils.lua`; shared VM,
+  stock-suite, JIT-dump, and C-fixture build/run helpers live in
+  `tests/lib/suite_runtime.lua`.
 - Source-shape-only cases were removed from the runnable suite: M0 guardrails,
   M2 GC header accessor grep, the M5 source publication guards, M5 x64 upvalue
   publication, and M7 no-CTState-L. These should be replaced by behavior tests
@@ -307,68 +317,60 @@ Lua test-suite migration notes:
   comparator accepting pinned-good CSVs, rejecting a generated bad CSV, and
   comparing a freshly generated baseline.
 - Removed broad M9/M10 marker checks for GC stats, benchmark smoke, and
-  generational mode; those cases now rely on Lua/C behavior checks while
-  retaining source guards for CAS publication and sweep unlink/free ordering.
+  generational mode; those cases now rely on Lua/C behavior checks.
 - Removed M8 broad marker and fixture-source ordering checks; the weak,
-  FINREG, and finalizer behavior matrix still runs while retaining source
-  guards for memory-order, CAS retry, chain-splice, and finalizer-state
-  invariants that need replacement fixtures.
+  FINREG, and finalizer behavior matrix still runs through behavior fixtures.
 - Removed the M3 worker-scheduler source marker check; the case now relies on
   the worker scheduler C fixture plus the Lua `collectgarbage("workers")`
   behavior test.
 - Removed the M3 paranoia marker scan; the case now relies on the paranoia
-  build, oracle fixtures, and stock tests while retaining the diagnostic
-  root-walk acquire-load blacklist.
+  build, oracle fixtures, and stock tests.
 - Removed low-risk M6 positive source marker baskets from dispatch
-  redispatch, mcode publication, and flush handshakes; retained source guards
-  for x64 TG dispatch, XBAR/XPOLL aliasing, W^X/raw mcode writes, publish
-  order, and flush caller routing until replacement fixtures exist.
+  redispatch, mcode publication, and flush handshakes; replacement coverage now
+  uses C fixtures, runtime probes, and generated dump/result checks.
 - Removed the M3 GC2 scaffold marker inventory; the scaffold case now relies
-  on its C fixtures and nested behavior gates while retaining the queue-slot
-  acquire/release blacklist.
+  on its C fixtures and nested behavior gates.
 - Removed unused M5 base-table source-inspection helper functions left behind
   after the state-owner behavior migration.
 - Removed additional unused M5 source-inspection helper functions that no
   longer back any active test cases.
 - Removed broad M5 JIT trace positive source-inventory checks; the case now
-  relies on trace/mcode C fixtures, the Lua trace publish smoke, retained MT
-  safety blacklists, and generated `lj_vm.S` bytecode publication calls.
+  relies on trace/mcode C fixtures, the Lua trace publish smoke, and generated
+  assembler/JIT result checks.
 - Removed broad M5 table-array positive source inventory and the old-array
   realloc blacklist; the array publication C fixture covers pointer
   replacement, retire-list state, nextgen links, epoch reclaim, and values.
 - Removed broad M5 table-value positive source inventory; the standalone value
   case now runs both its Lua behavior smoke and the CAS/table.insert forward
-  retry C fixture while retaining unreplaced MT-safety blacklists.
+  retry C fixture.
 - Removed the broad M6 dispatch positive marker basket; the dispatch case now
-  relies on the C safepoint-handshake fixture while keeping TG-local dispatch
-  negative guards that still need replacement behavior.
+  relies on the C safepoint-handshake fixture.
 - Removed low-risk M8 finalizer dispatch and legacy FINREG/mmudata source
   scans; the weak/finalizer matrix and GC2 C fixtures cover those behaviors
-  while memory-order and CAS publication guards remain.
+  without direct source inspection.
 - Replaced the M6 XBAR/XPOLL optimizer source marker checks with generated IR
   dump probes for `ffi.copy`, FFI loads, and FFI stores after loop `XPOLL`;
   also removed duplicate M6 scaffold-name and reserve-order checks already
   covered by dispatch and mcode behavior.
 - Removed duplicate/low-risk M5 publication source inspections from trace,
   table-array, and table-value guards; kept generated assembler/JIT result
-  matching and retained unreplaced MT-safety blacklists.
+  matching.
 - Removed additional M5 exact source inventories for bytecode helper names, x64
   exitstub scaffolding, table-access macro definitions, and serializer call
   spelling. The suite keeps generated-result checks plus MT publication guards.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.
-- Long-term runner case types should include marker guards, Lua subprocess
-  tests, C fixtures, stock-suite aliases, benchmark gates, and aggregates.
+- Long-term runner case types should include Lua subprocess tests, C fixtures,
+  stock-suite aliases, benchmark gates, generated-output checks, and aggregates.
   Profile-changing builds need named serial profiles such as default, assert,
   paranoia, no-JIT, ctype-anchor, and TSan.
 
-Next good batches:
+Current follow-up:
 
-- M2 arena remaining scripts are low-risk because they mostly compile one C
-  fixture plus a small fixed source set.
-- M4 threading wrappers are mostly LuaJIT invocations after a clean build and
-  are good candidates after adding per-test environment defaults.
-- M5 table/string guard scripts are good once the framework has reusable
-  marker helpers for "must contain", "must not contain", and ordered source
-  snippets.
+- Keep new tests behavior-first. Direct `src/` source predicates should stay out
+  of runnable suites unless a future migration explicitly replaces them with a
+  stronger runtime fixture.
+- Build-owning tests should remain serial unless the Lua runner grows a shared
+  build cache/lock. Existing compatibility gates can still run `make clean`, so
+  parallel validation can race `host/buildvm` or `libluajit.a` creation.
