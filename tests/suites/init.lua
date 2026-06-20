@@ -20,6 +20,7 @@ local tests = {}
 local function add(test)
   assert(type(test.name) == "string" and test.name ~= "", "test needs a name")
   assert(type(test.run) == "function", test.name .. " needs a run function")
+  assert(tests[test.name] == nil, "duplicate test: " .. test.name)
   tests[test.name] = test
 end
 
