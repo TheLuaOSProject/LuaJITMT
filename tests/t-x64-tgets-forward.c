@@ -14,44 +14,7 @@
 #include "lj_str.h"
 #include "lj_tab.h"
 
-static void store_forward(TValue *slot)
-{
-  TValue forward;
-  setforwardV(&forward);
-  tv_rawstore_rel(slot, tv_rawload(&forward));
-}
-
-static TValue *find_str_slot(Node *node, MSize hmask, const GCstr *key)
-{
-  Node *n = hashstr_node(node, hmask, key);
-  do {
-    TValue nk;
-    lj_tv_load_acq(&nk, &n->key);
-    if (tvisstr(&nk) && strV(&nk) == key)
-      return &n->val;
-  } while ((n = lj_tab_nextnode_acq(n)));
-  return NULL;
-}
-
-static void load_lua(lua_State *L, const char *src)
-{
-  int status = luaL_loadstring(L, src);
-  if (status != 0) {
-    const char *msg = lua_tostring(L, -1);
-    fprintf(stderr, "%s\n", msg ? msg : "luaL_loadstring failed");
-  }
-  assert(status == 0);
-}
-
-static void run_loaded(lua_State *L)
-{
-  int status = lua_pcall(L, 0, 0, 0);
-  if (status != 0) {
-    const char *msg = lua_tostring(L, -1);
-    fprintf(stderr, "%s\n", msg ? msg : "lua_pcall failed");
-  }
-  assert(status == 0);
-}
+#include "lib/tab_forward_helpers.h"
 
 int main(void)
 {
@@ -74,11 +37,11 @@ int main(void)
   oldnode = lj_tab_node_acq(t);
   oldhmask = lj_tab_node_hmask_acq(oldnode);
   assert(oldhmask > 0);
-  oldslot = find_str_slot(oldnode, oldhmask, key);
+  oldslot = tabfwd_find_str_slot(oldnode, oldhmask, key);
   assert(oldslot != NULL);
 
   lua_setglobal(L, "tgets_forward_t");
-  load_lua(L,
+  tabfwd_load_lua(L,
     "local t = tgets_forward_t\n"
     "assert(t.tgets_forward_field == 4242, type(t.tgets_forward_field))\n");
 
@@ -89,11 +52,11 @@ int main(void)
   assert(lj_tab_node_nextgen_acq(oldnode) == newnode);
   assert(lj_tab_getstr(t, key) != NULL);
 
-  store_forward(oldslot);
+  tabfwd_store_forward(oldslot);
   la_store32_rel(&lj_tab_node_hdrw(oldnode)->flags, 0);
   lj_tab_hmask_rel(t, oldhmask);
   lj_tab_node_rel(t, oldnode);
-  run_loaded(L);
+  tabfwd_run_loaded(L);
 
   lj_tab_node_rel(t, newnode);
   lj_tab_hmask_rel(t, newhmask);

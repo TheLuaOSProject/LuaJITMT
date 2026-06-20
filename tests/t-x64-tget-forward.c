@@ -12,45 +12,7 @@
 #include "lj_obj.h"
 #include "lj_tab.h"
 
-static void store_forward(TValue *slot)
-{
-  TValue forward;
-  setforwardV(&forward);
-  tv_rawstore_rel(slot, tv_rawload(&forward));
-}
-
-static void set_int(lua_State *L, GCtab *t, int32_t k, int32_t v)
-{
-  lj_tab_storeint(L, lj_tab_setint(L, t, k), v);
-}
-
-static int32_t get_i32(GCtab *t, int32_t k)
-{
-  cTValue *tv = lj_tab_getint(t, k);
-  assert(tv != NULL);
-  assert(tvisnumber(tv));
-  return tvisint(tv) ? intV(tv) : (int32_t)numV(tv);
-}
-
-static void load_lua(lua_State *L, const char *src)
-{
-  int status = luaL_loadstring(L, src);
-  if (status != 0) {
-    const char *msg = lua_tostring(L, -1);
-    fprintf(stderr, "%s\n", msg ? msg : "luaL_loadstring failed");
-  }
-  assert(status == 0);
-}
-
-static void run_loaded(lua_State *L)
-{
-  int status = lua_pcall(L, 0, 0, 0);
-  if (status != 0) {
-    const char *msg = lua_tostring(L, -1);
-    fprintf(stderr, "%s\n", msg ? msg : "lua_pcall failed");
-  }
-  assert(status == 0);
-}
+#include "lib/tab_forward_helpers.h"
 
 int main(void)
 {
@@ -74,16 +36,16 @@ int main(void)
   assert((MSize)target < oldasize);
   for (i = 0; i < oldasize; i++) {
     int32_t v = (int32_t)i + 3000;
-    set_int(L, t, (int32_t)i, v);
+    tabfwd_set_int(L, t, (int32_t)i, v);
     lj_tab_storeint(L, &oldarray[i], v);
   }
-  assert(get_i32(t, target) == target + 3000);
+  assert(tabfwd_get_i32(t, target) == target + 3000);
   lua_setglobal(L, "tget_forward_t");
   lua_pushinteger(L, target);
   lua_setglobal(L, "tget_forward_key");
   lua_pushinteger(L, target + 3000);
   lua_setglobal(L, "tget_forward_value");
-  load_lua(L,
+  tabfwd_load_lua(L,
     "local t = tget_forward_t\n"
     "local k = tget_forward_key\n"
     "local want = tget_forward_value\n"
@@ -93,19 +55,19 @@ int main(void)
     "assert(getv(t, k) == want, type(getv(t, k)))\n");
 
   lj_tab_resize(L, t, (uint32_t)oldasize + 8u, 0);
-  assert(get_i32(t, target) == target + 3000);
+  assert(tabfwd_get_i32(t, target) == target + 3000);
   newarray = lj_tab_array_acq(t);
   newasize = lj_tab_asize_acq(t);
   assert(newarray != oldarray);
   assert(lj_tab_array_nextgen_acq(oldarray) == newarray);
 
-  store_forward(&oldarray[target]);
+  tabfwd_store_forward(&oldarray[target]);
   la_store32_rel(&lj_tab_array_hdrw(oldarray)->acap,
 		 lj_tab_array_hdr_pack_acap(oldacap, 0));
   lj_tab_asize_rel(t, oldasize);
   lj_tab_array_rel(t, oldarray);
-  assert(get_i32(t, target) == target + 3000);
-  run_loaded(L);
+  assert(tabfwd_get_i32(t, target) == target + 3000);
+  tabfwd_run_loaded(L);
 
   lj_tab_array_rel(t, newarray);
   lj_tab_asize_rel(t, newasize);

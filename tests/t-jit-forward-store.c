@@ -15,55 +15,7 @@
 #include "lj_str.h"
 #include "lj_tab.h"
 
-static void store_forward(TValue *slot)
-{
-  TValue forward;
-  setforwardV(&forward);
-  tv_rawstore_rel(slot, tv_rawload(&forward));
-}
-
-static void assert_forward(cTValue *tv)
-{
-  TValue val;
-  lj_tv_load_acq(&val, tv);
-  assert(tvisforward(&val));
-}
-
-static void assert_i32(cTValue *tv, int32_t want)
-{
-  assert(tv != NULL);
-  assert(tvisnumber(tv));
-  assert((tvisint(tv) ? intV(tv) : (int32_t)numV(tv)) == want);
-}
-
-static void set_int(lua_State *L, GCtab *t, int32_t k, int32_t v)
-{
-  lj_tab_storeint(L, lj_tab_setint(L, t, k), v);
-}
-
-static Node *find_str_node(Node *node, MSize hmask, const GCstr *key)
-{
-  Node *n = hashstr_node(node, hmask, key);
-  do {
-    TValue nk;
-    lj_tv_load_acq(&nk, &n->key);
-    if (tvisstr(&nk) && strV(&nk) == key)
-      return n;
-  } while ((n = lj_tab_nextnode_acq(n)));
-  return NULL;
-}
-
-static Node *find_num_node(Node *node, MSize hmask, cTValue *key)
-{
-  Node *n = hashnum_node(node, hmask, key);
-  do {
-    TValue nk;
-    lj_tv_load_acq(&nk, &n->key);
-    if (tvisnum(&nk) && nk.n == key->n)
-      return n;
-  } while ((n = lj_tab_nextnode_acq(n)));
-  return NULL;
-}
+#include "lib/tab_forward_helpers.h"
 
 static void exercise_array_forward_jit(lua_State *L)
 {
@@ -83,7 +35,7 @@ static void exercise_array_forward_jit(lua_State *L)
   assert((MSize)key < oldasize);
   for (i = 0; i < oldasize; i++) {
     int32_t v = (int32_t)i + 12000;
-    set_int(L, t, (int32_t)i, v);
+    tabfwd_set_int(L, t, (int32_t)i, v);
     lj_tab_storeint(L, &oldarray[i], v);
   }
 
@@ -93,7 +45,7 @@ static void exercise_array_forward_jit(lua_State *L)
   assert(newarray != oldarray);
   assert(lj_tab_array_nextgen_acq(oldarray) == newarray);
 
-  store_forward(&oldarray[key]);
+  tabfwd_store_forward(&oldarray[key]);
   la_store32_rel(&lj_tab_array_hdrw(oldarray)->acap,
 		 lj_tab_array_hdr_pack_acap(oldacap, 0));
   lj_tab_asize_rel(t, oldasize);
@@ -101,8 +53,8 @@ static void exercise_array_forward_jit(lua_State *L)
 
   setintV(&src, 200);
   lj_tab_storetv_forjit_array(L, t, &oldarray[key], &src, (MSize)key);
-  assert_forward(&oldarray[key]);
-  assert_i32(&newarray[key], 200);
+  tabfwd_assert_forward(&oldarray[key]);
+  tabfwd_assert_i32(&newarray[key], 200);
 
   lj_tab_array_rel(t, newarray);
   lj_tab_asize_rel(t, newasize);
@@ -124,8 +76,8 @@ static void exercise_array_retiring_jit(lua_State *L)
   oldarray = lj_tab_array_acq(t);
   oldasize = lj_tab_asize_acq(t);
   assert((MSize)key < oldasize);
-  set_int(L, t, key, 16000);
-  assert_i32(&oldarray[key], 16000);
+  tabfwd_set_int(L, t, key, 16000);
+  tabfwd_assert_i32(&oldarray[key], 16000);
 
   lj_tab_resize(L, t, (uint32_t)oldasize + 8u, 0);
   newarray = lj_tab_array_acq(t);
@@ -137,9 +89,9 @@ static void exercise_array_retiring_jit(lua_State *L)
   setintV(&src, 201);
   lj_tab_storetv_forjit_array(L, t, &oldarray[key], &src, (MSize)key);
   lj_tv_load_acq(&oldval, &oldarray[key]);
-  assert_i32(&oldval, 16000);
-  assert_i32(&newarray[key], 201);
-  assert_i32(lj_tab_getint(t, key), 201);
+  tabfwd_assert_i32(&oldval, 16000);
+  tabfwd_assert_i32(&newarray[key], 201);
+  tabfwd_assert_i32(lj_tab_getint(t, key), 201);
 
   lj_tab_array_rel(t, newarray);
   lj_tab_asize_rel(t, newasize);
@@ -160,8 +112,8 @@ static void exercise_array_current_retiring_jit(lua_State *L)
   oldarray = lj_tab_array_acq(t);
   oldasize = lj_tab_asize_acq(t);
   assert((MSize)key < oldasize);
-  set_int(L, t, key, 18000);
-  assert_i32(&oldarray[key], 18000);
+  tabfwd_set_int(L, t, key, 18000);
+  tabfwd_assert_i32(&oldarray[key], 18000);
 
   lj_tab_resize(L, t, (uint32_t)oldasize + 8u, 0);
   newarray = lj_tab_array_acq(t);
@@ -175,12 +127,12 @@ static void exercise_array_current_retiring_jit(lua_State *L)
   setintV(&src, 204);
   lj_tab_storetv_forjit_array(L, t, &oldarray[key], &src, (MSize)key);
   lj_tv_load_acq(&oldval, &oldarray[key]);
-  assert_i32(&oldval, 18000);
+  tabfwd_assert_i32(&oldval, 18000);
 
   lj_tab_array_rel(t, newarray);
   lj_tab_asize_rel(t, newasize);
-  assert_i32(&newarray[key], 204);
-  assert_i32(lj_tab_getint(t, key), 204);
+  tabfwd_assert_i32(&newarray[key], 204);
+  tabfwd_assert_i32(lj_tab_getint(t, key), 204);
 
   lua_pop(L, 1);
 }
@@ -200,7 +152,7 @@ static void exercise_hash_forward_jit(lua_State *L)
   oldnode = lj_tab_node_acq(t);
   oldhmask = lj_tab_node_hmask_acq(oldnode);
   assert(oldhmask > 0);
-  oldn = find_str_node(oldnode, oldhmask, hkey);
+  oldn = tabfwd_find_str_node(oldnode, oldhmask, hkey);
   assert(oldn != NULL);
 
   lj_tab_resize(L, t, t->asize, lj_fls(oldhmask) + 2u);
@@ -208,10 +160,10 @@ static void exercise_hash_forward_jit(lua_State *L)
   newhmask = lj_tab_node_hmask_acq(newnode);
   assert(newnode != oldnode);
   assert(lj_tab_node_nextgen_acq(oldnode) == newnode);
-  newn = find_str_node(newnode, newhmask, hkey);
+  newn = tabfwd_find_str_node(newnode, newhmask, hkey);
   assert(newn != NULL);
 
-  store_forward(&oldn->val);
+  tabfwd_store_forward(&oldn->val);
   la_store32_rel(&lj_tab_node_hdrw(oldnode)->flags, 0);
   lj_tab_hmask_rel(t, oldhmask);
   lj_tab_node_rel(t, oldnode);
@@ -219,8 +171,8 @@ static void exercise_hash_forward_jit(lua_State *L)
   setintV(&src, 200);
   setstrV(L, &keytv, hkey);
   lj_tab_storetv_forjit_hash(L, t, &oldn->val, &src, &keytv);
-  assert_forward(&oldn->val);
-  assert_i32(&newn->val, 200);
+  tabfwd_assert_forward(&oldn->val);
+  tabfwd_assert_i32(&newn->val, 200);
 
   lj_tab_node_rel(t, newnode);
   lj_tab_hmask_rel(t, newhmask);
@@ -243,7 +195,7 @@ static void exercise_hash_retiring_jit(lua_State *L)
   oldnode = lj_tab_node_acq(t);
   oldhmask = lj_tab_node_hmask_acq(oldnode);
   assert(oldhmask > 0);
-  oldn = find_str_node(oldnode, oldhmask, hkey);
+  oldn = tabfwd_find_str_node(oldnode, oldhmask, hkey);
   assert(oldn != NULL);
 
   lj_tab_resize(L, t, t->asize, lj_fls(oldhmask) + 2u);
@@ -255,8 +207,8 @@ static void exercise_hash_retiring_jit(lua_State *L)
   setstrV(L, &keytv, hkey);
   lj_tab_storetv_forjit_hash(L, t, &oldn->val, &src, &keytv);
   lj_tv_load_acq(&oldval, &oldn->val);
-  assert_i32(&oldval, 17000);
-  assert_i32(lj_tab_getstr(t, hkey), 202);
+  tabfwd_assert_i32(&oldval, 17000);
+  tabfwd_assert_i32(lj_tab_getstr(t, hkey), 202);
 
   lua_pop(L, 1);
 }
@@ -277,7 +229,7 @@ static void exercise_hash_current_retiring_jit(lua_State *L)
   oldnode = lj_tab_node_acq(t);
   oldhmask = lj_tab_node_hmask_acq(oldnode);
   assert(oldhmask > 0);
-  oldn = find_str_node(oldnode, oldhmask, hkey);
+  oldn = tabfwd_find_str_node(oldnode, oldhmask, hkey);
   assert(oldn != NULL);
 
   lj_tab_resize(L, t, t->asize, lj_fls(oldhmask) + 2u);
@@ -286,7 +238,7 @@ static void exercise_hash_current_retiring_jit(lua_State *L)
   assert(newnode != oldnode);
   assert(lj_tab_node_nextgen_acq(oldnode) == newnode);
   assert(lj_tab_node_is_retiring(oldnode));
-  newn = find_str_node(newnode, newhmask, hkey);
+  newn = tabfwd_find_str_node(newnode, newhmask, hkey);
   assert(newn != NULL);
 
   lj_tab_node_rel(t, oldnode);
@@ -295,12 +247,12 @@ static void exercise_hash_current_retiring_jit(lua_State *L)
   setstrV(L, &keytv, hkey);
   lj_tab_storetv_forjit_hash(L, t, &oldn->val, &src, &keytv);
   lj_tv_load_acq(&oldval, &oldn->val);
-  assert_i32(&oldval, 19000);
+  tabfwd_assert_i32(&oldval, 19000);
 
   lj_tab_node_rel(t, newnode);
   lj_tab_hmask_rel(t, newhmask);
-  assert_i32(&newn->val, 205);
-  assert_i32(lj_tab_getstr(t, hkey), 205);
+  tabfwd_assert_i32(&newn->val, 205);
+  tabfwd_assert_i32(lj_tab_getstr(t, hkey), 205);
 
   lua_pop(L, 1);
 }
@@ -321,7 +273,7 @@ static void exercise_newref_array_forward_jit(lua_State *L)
   oldasize = lj_tab_asize_acq(t);
   assert((MSize)key < oldasize);
   for (i = 0; i < oldasize; i++)
-    set_int(L, t, (int32_t)i, (int32_t)i + 14000);
+    tabfwd_set_int(L, t, (int32_t)i, (int32_t)i + 14000);
 
   lj_tab_resize(L, t, (uint32_t)oldasize + 8u, 0);
   newarray = lj_tab_array_acq(t);
@@ -329,13 +281,13 @@ static void exercise_newref_array_forward_jit(lua_State *L)
   assert(newarray != oldarray);
   assert(lj_tab_array_nextgen_acq(oldarray) == newarray);
 
-  store_forward(&oldarray[key]);
+  tabfwd_store_forward(&oldarray[key]);
   setintV(&src, 300);
   setnumV(&keytv, (lua_Number)key);
   lj_tab_storetv_forjit_newref(L, t, &oldarray[key], &src, &keytv);
-  assert_forward(&oldarray[key]);
-  assert_i32(&newarray[key], 300);
-  assert_i32(lj_tab_getint(t, key), 300);
+  tabfwd_assert_forward(&oldarray[key]);
+  tabfwd_assert_i32(&newarray[key], 300);
+  tabfwd_assert_i32(lj_tab_getint(t, key), 300);
 
   lj_tab_array_rel(t, newarray);
   lj_tab_asize_rel(t, newasize);
@@ -371,8 +323,8 @@ static void exercise_newref_array_retiring_jit(lua_State *L)
   lj_tab_storetv_forjit_newref(L, t, &oldarray[key], &src, &keytv);
   lj_tv_load_acq(&oldval, &oldarray[key]);
   assert(tvisnil(&oldval));
-  assert_i32(&newarray[key], 302);
-  assert_i32(lj_tab_getint(t, key), 302);
+  tabfwd_assert_i32(&newarray[key], 302);
+  tabfwd_assert_i32(lj_tab_getint(t, key), 302);
 
   lj_tab_array_rel(t, newarray);
   lj_tab_asize_rel(t, newasize);
@@ -393,7 +345,7 @@ static void exercise_newref_hash_forward_jit(lua_State *L)
   oldnode = lj_tab_node_acq(t);
   oldhmask = lj_tab_node_hmask_acq(oldnode);
   assert(oldhmask > 0);
-  oldn = find_num_node(oldnode, oldhmask, &keytv);
+  oldn = tabfwd_find_num_node(oldnode, oldhmask, &keytv);
   assert(oldn != NULL);
 
   lj_tab_resize(L, t, t->asize, lj_fls(oldhmask) + 2u);
@@ -401,15 +353,15 @@ static void exercise_newref_hash_forward_jit(lua_State *L)
   newhmask = lj_tab_node_hmask_acq(newnode);
   assert(newnode != oldnode);
   assert(lj_tab_node_nextgen_acq(oldnode) == newnode);
-  newn = find_num_node(newnode, newhmask, &keytv);
+  newn = tabfwd_find_num_node(newnode, newhmask, &keytv);
   assert(newn != NULL);
 
-  store_forward(&oldn->val);
+  tabfwd_store_forward(&oldn->val);
   setintV(&src, 301);
   lj_tab_storetv_forjit_newref(L, t, &oldn->val, &src, &keytv);
-  assert_forward(&oldn->val);
-  assert_i32(&newn->val, 301);
-  assert_i32(lj_tab_get(L, t, &keytv), 301);
+  tabfwd_assert_forward(&oldn->val);
+  tabfwd_assert_i32(&newn->val, 301);
+  tabfwd_assert_i32(lj_tab_get(L, t, &keytv), 301);
 
   lj_tab_node_rel(t, newnode);
   lj_tab_hmask_rel(t, newhmask);
@@ -430,7 +382,7 @@ static void exercise_newref_hash_retiring_jit(lua_State *L)
   oldnode = lj_tab_node_acq(t);
   oldhmask = lj_tab_node_hmask_acq(oldnode);
   assert(oldhmask > 0);
-  oldn = find_num_node(oldnode, oldhmask, &keytv);
+  oldn = tabfwd_find_num_node(oldnode, oldhmask, &keytv);
   assert(oldn != NULL);
   lj_tv_load_acq(&oldval, &oldn->val);
   assert(tvisnil(&oldval));
@@ -444,7 +396,7 @@ static void exercise_newref_hash_retiring_jit(lua_State *L)
   lj_tab_storetv_forjit_newref(L, t, &oldn->val, &src, &keytv);
   lj_tv_load_acq(&oldval, &oldn->val);
   assert(tvisnil(&oldval));
-  assert_i32(lj_tab_get(L, t, &keytv), 303);
+  tabfwd_assert_i32(lj_tab_get(L, t, &keytv), 303);
 
   lua_pop(L, 1);
 }

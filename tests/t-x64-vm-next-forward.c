@@ -16,37 +16,7 @@
 #include "lj_tab.h"
 #include "lj_vm.h"
 
-static void store_forward(TValue *slot)
-{
-  TValue forward;
-  setforwardV(&forward);
-  tv_rawstore_rel(slot, tv_rawload(&forward));
-}
-
-static void set_int(lua_State *L, GCtab *t, int32_t k, int32_t v)
-{
-  lj_tab_storeint(L, lj_tab_setint(L, t, k), v);
-}
-
-static int32_t get_i32(GCtab *t, int32_t k)
-{
-  cTValue *tv = lj_tab_getint(t, k);
-  assert(tv != NULL);
-  assert(tvisnumber(tv));
-  return tvisint(tv) ? intV(tv) : (int32_t)numV(tv);
-}
-
-static Node *find_str_node(Node *node, MSize hmask, const GCstr *key)
-{
-  Node *n = hashstr_node(node, hmask, key);
-  do {
-    TValue nk;
-    lj_tv_load_acq(&nk, &n->key);
-    if (tvisstr(&nk) && strV(&nk) == key)
-      return n;
-  } while ((n = lj_tab_nextnode_acq(n)));
-  return NULL;
-}
+#include "lib/tab_forward_helpers.h"
 
 static uint32_t call_vm_next(GCtab *t, uint32_t idx, TValue *val, TValue *key)
 {
@@ -89,10 +59,10 @@ static void exercise_array_forward(lua_State *L)
   assert((MSize)target < oldasize);
   for (i = 0; i < oldasize; i++) {
     int32_t v = (int32_t)i + 7100;
-    set_int(L, t, (int32_t)i, v);
+    tabfwd_set_int(L, t, (int32_t)i, v);
     lj_tab_storeint(L, &oldarray[i], v);
   }
-  assert(get_i32(t, target) == target + 7100);
+  assert(tabfwd_get_i32(t, target) == target + 7100);
 
   lj_tab_resize(L, t, (uint32_t)oldasize + 8u, 0);
   newarray = lj_tab_array_acq(t);
@@ -100,7 +70,7 @@ static void exercise_array_forward(lua_State *L)
   assert(newarray != oldarray);
   assert(lj_tab_array_nextgen_acq(oldarray) == newarray);
 
-  store_forward(&oldarray[target]);
+  tabfwd_store_forward(&oldarray[target]);
   la_store32_rel(&lj_tab_array_hdrw(oldarray)->acap,
 		 lj_tab_array_hdr_pack_acap(oldacap, 0));
   lj_tab_asize_rel(t, oldasize);
@@ -136,7 +106,7 @@ static void exercise_hash_forward(lua_State *L)
   oldnode = lj_tab_node_acq(t);
   oldhmask = lj_tab_node_hmask_acq(oldnode);
   assert(oldhmask > 0);
-  oldn = find_str_node(oldnode, oldhmask, hkey);
+  oldn = tabfwd_find_str_node(oldnode, oldhmask, hkey);
   assert(oldn != NULL);
 
   lj_tab_resize(L, t, t->asize, lj_fls(oldhmask) + 2u);
@@ -145,7 +115,7 @@ static void exercise_hash_forward(lua_State *L)
   assert(newnode != oldnode);
   assert(lj_tab_node_nextgen_acq(oldnode) == newnode);
 
-  store_forward(&oldn->val);
+  tabfwd_store_forward(&oldn->val);
   la_store32_rel(&lj_tab_node_hdrw(oldnode)->flags, 0);
   lj_tab_hmask_rel(t, oldhmask);
   lj_tab_node_rel(t, oldnode);

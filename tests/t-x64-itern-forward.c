@@ -14,57 +14,7 @@
 #include "lj_str.h"
 #include "lj_tab.h"
 
-static void store_forward(TValue *slot)
-{
-  TValue forward;
-  setforwardV(&forward);
-  tv_rawstore_rel(slot, tv_rawload(&forward));
-}
-
-static void set_int(lua_State *L, GCtab *t, int32_t k, int32_t v)
-{
-  lj_tab_storeint(L, lj_tab_setint(L, t, k), v);
-}
-
-static int32_t get_i32(GCtab *t, int32_t k)
-{
-  cTValue *tv = lj_tab_getint(t, k);
-  assert(tv != NULL);
-  assert(tvisnumber(tv));
-  return tvisint(tv) ? intV(tv) : (int32_t)numV(tv);
-}
-
-static TValue *find_str_slot(Node *node, MSize hmask, const GCstr *key)
-{
-  Node *n = hashstr_node(node, hmask, key);
-  do {
-    TValue nk;
-    lj_tv_load_acq(&nk, &n->key);
-    if (tvisstr(&nk) && strV(&nk) == key)
-      return &n->val;
-  } while ((n = lj_tab_nextnode_acq(n)));
-  return NULL;
-}
-
-static void load_lua(lua_State *L, const char *src)
-{
-  int status = luaL_loadstring(L, src);
-  if (status != 0) {
-    const char *msg = lua_tostring(L, -1);
-    fprintf(stderr, "%s\n", msg ? msg : "luaL_loadstring failed");
-  }
-  assert(status == 0);
-}
-
-static void run_loaded(lua_State *L)
-{
-  int status = lua_pcall(L, 0, 0, 0);
-  if (status != 0) {
-    const char *msg = lua_tostring(L, -1);
-    fprintf(stderr, "%s\n", msg ? msg : "lua_pcall failed");
-  }
-  assert(status == 0);
-}
+#include "lib/tab_forward_helpers.h"
 
 static void exercise_array_forward(lua_State *L)
 {
@@ -83,14 +33,14 @@ static void exercise_array_forward(lua_State *L)
   assert((MSize)target < oldasize);
   for (i = 0; i < oldasize; i++) {
     int32_t v = (int32_t)i + 5100;
-    set_int(L, t, (int32_t)i, v);
+    tabfwd_set_int(L, t, (int32_t)i, v);
     lj_tab_storeint(L, &oldarray[i], v);
   }
-  assert(get_i32(t, target) == target + 5100);
+  assert(tabfwd_get_i32(t, target) == target + 5100);
   lua_setglobal(L, "itern_forward_array_t");
   lua_pushinteger(L, target + 5100);
   lua_setglobal(L, "itern_forward_array_value");
-  load_lua(L,
+  tabfwd_load_lua(L,
     "local seen = false\n"
     "for k, v in pairs(itern_forward_array_t) do\n"
     "  if v == itern_forward_array_value then seen = true end\n"
@@ -103,13 +53,13 @@ static void exercise_array_forward(lua_State *L)
   assert(newarray != oldarray);
   assert(lj_tab_array_nextgen_acq(oldarray) == newarray);
 
-  store_forward(&oldarray[target]);
+  tabfwd_store_forward(&oldarray[target]);
   la_store32_rel(&lj_tab_array_hdrw(oldarray)->acap,
 		 lj_tab_array_hdr_pack_acap(oldacap, 0));
   lj_tab_asize_rel(t, oldasize);
   lj_tab_array_rel(t, oldarray);
-  assert(get_i32(t, target) == target + 5100);
-  run_loaded(L);
+  assert(tabfwd_get_i32(t, target) == target + 5100);
+  tabfwd_run_loaded(L);
 
   lj_tab_array_rel(t, newarray);
   lj_tab_asize_rel(t, newasize);
@@ -132,10 +82,10 @@ static void exercise_hash_forward(lua_State *L)
   oldnode = lj_tab_node_acq(t);
   oldhmask = lj_tab_node_hmask_acq(oldnode);
   assert(oldhmask > 0);
-  oldslot = find_str_slot(oldnode, oldhmask, key);
+  oldslot = tabfwd_find_str_slot(oldnode, oldhmask, key);
   assert(oldslot != NULL);
   lua_setglobal(L, "itern_forward_hash_t");
-  load_lua(L,
+  tabfwd_load_lua(L,
     "local seen = false\n"
     "for k, v in pairs(itern_forward_hash_t) do\n"
     "  if k == 'itern_forward_field' and v == 6262 then seen = true end\n"
@@ -148,11 +98,11 @@ static void exercise_hash_forward(lua_State *L)
   assert(newnode != oldnode);
   assert(lj_tab_node_nextgen_acq(oldnode) == newnode);
 
-  store_forward(oldslot);
+  tabfwd_store_forward(oldslot);
   la_store32_rel(&lj_tab_node_hdrw(oldnode)->flags, 0);
   lj_tab_hmask_rel(t, oldhmask);
   lj_tab_node_rel(t, oldnode);
-  run_loaded(L);
+  tabfwd_run_loaded(L);
 
   lj_tab_node_rel(t, newnode);
   lj_tab_hmask_rel(t, newhmask);

@@ -12,59 +12,7 @@
 #include "lj_obj.h"
 #include "lj_tab.h"
 
-static void store_forward(TValue *slot)
-{
-  TValue forward;
-  setforwardV(&forward);
-  tv_rawstore_rel(slot, tv_rawload(&forward));
-}
-
-static void assert_forward(cTValue *tv)
-{
-  TValue val;
-  lj_tv_load_acq(&val, tv);
-  assert(tvisforward(&val));
-}
-
-static void set_int(lua_State *L, GCtab *t, int32_t k, int32_t v)
-{
-  lj_tab_storeint(L, lj_tab_setint(L, t, k), v);
-}
-
-static int32_t get_i32(GCtab *t, int32_t k)
-{
-  cTValue *tv = lj_tab_getint(t, k);
-  assert(tv != NULL);
-  assert(tvisnumber(tv));
-  return tvisint(tv) ? intV(tv) : (int32_t)numV(tv);
-}
-
-static void assert_i32(cTValue *tv, int32_t want)
-{
-  assert(tv != NULL);
-  assert(tvisnumber(tv));
-  assert((tvisint(tv) ? intV(tv) : (int32_t)numV(tv)) == want);
-}
-
-static void load_lua(lua_State *L, const char *src)
-{
-  int status = luaL_loadstring(L, src);
-  if (status != 0) {
-    const char *msg = lua_tostring(L, -1);
-    fprintf(stderr, "%s\n", msg ? msg : "luaL_loadstring failed");
-  }
-  assert(status == 0);
-}
-
-static void run_loaded(lua_State *L)
-{
-  int status = lua_pcall(L, 0, 0, 0);
-  if (status != 0) {
-    const char *msg = lua_tostring(L, -1);
-    fprintf(stderr, "%s\n", msg ? msg : "lua_pcall failed");
-  }
-  assert(status == 0);
-}
+#include "lib/tab_forward_helpers.h"
 
 int main(void)
 {
@@ -92,7 +40,7 @@ int main(void)
   assert((MSize)key_helper < oldasize);
   for (i = 0; i < oldasize; i++) {
     int32_t v = (int32_t)i + 6000;
-    set_int(L, t, (int32_t)i, v);
+    tabfwd_set_int(L, t, (int32_t)i, v);
     lj_tab_storeint(L, &oldarray[i], v);
   }
   lua_setglobal(L, "tset_forward_t");
@@ -106,7 +54,7 @@ int main(void)
   lua_setglobal(L, "tset_forward_vvalue");
   lua_pushinteger(L, val_r);
   lua_setglobal(L, "tset_forward_rvalue");
-  load_lua(L,
+  tabfwd_load_lua(L,
     "local t = tset_forward_t\n"
     "local kv = tset_forward_vkey\n"
     "local kr = tset_forward_rkey\n"
@@ -119,28 +67,28 @@ int main(void)
   newasize = lj_tab_asize_acq(t);
   assert(newarray != oldarray);
   assert(lj_tab_array_nextgen_acq(oldarray) == newarray);
-  assert(get_i32(t, key_b) == key_b + 6000);
-  assert(get_i32(t, key_v) == key_v + 6000);
-  assert(get_i32(t, key_r) == key_r + 6000);
+  assert(tabfwd_get_i32(t, key_b) == key_b + 6000);
+  assert(tabfwd_get_i32(t, key_v) == key_v + 6000);
+  assert(tabfwd_get_i32(t, key_r) == key_r + 6000);
 
-  store_forward(&oldarray[key_b]);
-  store_forward(&oldarray[key_v]);
-  store_forward(&oldarray[key_r]);
+  tabfwd_store_forward(&oldarray[key_b]);
+  tabfwd_store_forward(&oldarray[key_v]);
+  tabfwd_store_forward(&oldarray[key_r]);
   la_store32_rel(&lj_tab_array_hdrw(oldarray)->acap,
 		 lj_tab_array_hdr_pack_acap(oldacap, 0));
   lj_tab_asize_rel(t, oldasize);
   lj_tab_array_rel(t, oldarray);
-  run_loaded(L);
+  tabfwd_run_loaded(L);
 
-  assert_forward(&oldarray[key_b]);
-  assert_forward(&oldarray[key_v]);
-  assert_forward(&oldarray[key_r]);
-  assert(get_i32(t, key_b) == val_b);
-  assert(get_i32(t, key_v) == val_v);
-  assert(get_i32(t, key_r) == val_r);
-  assert_i32(&newarray[key_b], val_b);
-  assert_i32(&newarray[key_v], val_v);
-  assert_i32(&newarray[key_r], val_r);
+  tabfwd_assert_forward(&oldarray[key_b]);
+  tabfwd_assert_forward(&oldarray[key_v]);
+  tabfwd_assert_forward(&oldarray[key_r]);
+  assert(tabfwd_get_i32(t, key_b) == val_b);
+  assert(tabfwd_get_i32(t, key_v) == val_v);
+  assert(tabfwd_get_i32(t, key_r) == val_r);
+  tabfwd_assert_i32(&newarray[key_b], val_b);
+  tabfwd_assert_i32(&newarray[key_v], val_v);
+  tabfwd_assert_i32(&newarray[key_r], val_r);
 
   {
     TValue src;
@@ -150,8 +98,8 @@ int main(void)
     stored = lj_tab_storetv_forvm_array(L, t, &oldarray[key_helper], &src,
 					(MSize)key_helper);
     assert(stored == &newarray[key_helper]);
-    assert_i32(&oldarray[key_helper], key_helper + 6000);
-    assert_i32(&newarray[key_helper], val_helper);
+    tabfwd_assert_i32(&oldarray[key_helper], key_helper + 6000);
+    tabfwd_assert_i32(&newarray[key_helper], val_helper);
   }
 
   lj_tab_array_rel(t, newarray);
