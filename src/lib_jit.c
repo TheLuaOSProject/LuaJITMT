@@ -341,12 +341,6 @@ static const char *const jit_trlinkname[] = {
 };
 
 #if defined(exitstub_trace_addr)
-typedef struct TraceMCodeView {
-  MCode *mcode;
-  MSize szmcode;
-  MCode *exitstub;
-} TraceMCodeView;
-
 static LJ_AINLINE MCode *jit_traceexitstub_addr_acq(const GCtrace *T,
 						    ExitNo exitno)
 {

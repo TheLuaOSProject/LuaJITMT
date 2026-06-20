@@ -1449,7 +1449,7 @@ struct lua_State {
 
 #define G(L)			(mref(L->glref, global_State))
 LJ_FUNC TGState *lj_thr_get_tg(void);
-LJ_FUNC TGState *lj_thr_get_tg_fallback(global_State *g);
+LJ_FUNCA TGState *lj_thr_get_tg_fallback(global_State *g);
 #define G2TG(gl)		(lj_thr_get_tg_fallback((gl)))
 #define L2TG(L)			((L)->tg_hint ? (L)->tg_hint : G2TG(G(L)))
 #define registry(L)		(&G(L)->registrytv)

@@ -483,6 +483,12 @@ static LJ_AINLINE MCode *trace_mcode_acq(const GCtrace *T)
   return (MCode *)la_loadptr_acq((void *const *)&T->mcode);
 }
 
+typedef struct TraceMCodeView {
+  MCode *mcode;
+  MSize szmcode;
+  MCode *exitstub;
+} TraceMCodeView;
+
 static LJ_AINLINE MCode *trace_exitstub_acq(const GCtrace *T)
 {
   return (MCode *)la_loadptr_acq((void *const *)&T->exitstub);

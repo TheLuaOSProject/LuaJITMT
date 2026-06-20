@@ -1676,12 +1676,6 @@ int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr)
 
 #if LJ_UNWIND_JIT
 #ifdef exitstub_trace_addr
-typedef struct TraceMCodeView {
-  MCode *mcode;
-  MSize szmcode;
-  MCode *exitstub;
-} TraceMCodeView;
-
 static LJ_AINLINE uintptr_t trace_unwind_exitstub_addr_acq(GCtrace *T,
 							   ExitNo exitno)
 {
