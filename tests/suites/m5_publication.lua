@@ -261,6 +261,43 @@ print("proto-chunkname-acq-smoke OK")
 ]=]
 end
 
+local function proto_knum_acq_smoke()
+  return [=[
+local util = require("jit.util")
+local ffi = require("ffi")
+
+local function numeric_constants()
+  return 123.25, -9876.5
+end
+
+local saw_a = false
+local saw_b = false
+for i = 0, 16 do
+  local k = util.funck(numeric_constants, i)
+  if k == 123.25 then saw_a = true end
+  if k == -9876.5 then saw_b = true end
+end
+assert(saw_a and saw_b, "jit.util.funck did not expose numeric constants")
+
+local dumped = string.dump(numeric_constants)
+local loaded = assert(loadstring(dumped))
+local a, b = loaded()
+assert(a == 123.25 and b == -9876.5)
+
+local ct = ffi.metatype("struct { int x; }", {
+  __eq = function(lhs, rhs)
+    if type(rhs) == "number" then return rhs == 123.25 end
+    return lhs.x == rhs.x
+  end
+})
+local c = ct(1)
+assert(c == 123.25)
+assert(not (c == 124.25))
+
+print("proto-knum-acq-smoke OK")
+]=]
+end
+
 return function(add)
   add({
     name = "m5_state_owner",
@@ -330,6 +367,16 @@ return function(add)
       t:build({ quiet = true })
       run_luajit(t, { "-e", proto_chunkname_acq_smoke() })
       print("M5 prototype chunkname acquire-reader behavior passed")
+    end
+  })
+
+  add({
+    name = "m5_proto_knum_acq",
+    description = "prototype numeric constant acquire-reader behavior",
+    run = function(t)
+      t:build({ quiet = true })
+      run_luajit(t, { "-e", proto_knum_acq_smoke() })
+      print("M5 prototype numeric constant acquire-reader behavior passed")
     end
   })
 

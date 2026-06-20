@@ -292,10 +292,12 @@ static void bcwrite_kgc(BCWriteCtx *ctx, GCproto *pt)
 static void bcwrite_knum(BCWriteCtx *ctx, GCproto *pt)
 {
   MSize i, sizekn = pt->sizekn;
-  cTValue *o = mref(pt->k, TValue);
   char *p = lj_buf_more(&ctx->sb, 10*sizekn);
-  for (i = 0; i < sizekn; i++, o++) {
+  for (i = 0; i < sizekn; i++) {
+    TValue tv;
+    cTValue *o = &tv;
     int32_t k;
+    proto_knumtv_load_acq(&tv, pt, i);
     if (tvisint(o)) {
       k = intV(o);
       goto save_int;

@@ -444,7 +444,8 @@ TValue * LJ_FASTCALL lj_meta_equal_cd(lua_State *L, BCIns ins)
 	    gco2str(proto_kgc_acq(curr_proto(L), ~(ptrdiff_t)bc_d(ins))));
     o2 = &tv;
   } else if (op == BC_ISEQN) {
-    o2 = &mref(curr_proto(L)->k, cTValue)[bc_d(ins)];
+    proto_knumtv_load_acq(&tv, curr_proto(L), bc_d(ins));
+    o2 = &tv;
   } else {
     lj_assertL(op == BC_ISEQP, "bad bytecode op %d", op);
     setpriV(&tv, ~bc_d(ins));

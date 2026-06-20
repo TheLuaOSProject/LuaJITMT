@@ -295,7 +295,7 @@ LJLIB_CF(jit_util_funck)
   ptrdiff_t idx = (ptrdiff_t)lj_lib_checkint(L, 2);
   if (idx >= 0) {
     if (idx < (ptrdiff_t)pt->sizekn) {
-      copyTV(L, L->top-1, proto_knumtv(pt, idx));
+      proto_knumtv_load_acq(L->top-1, pt, (MSize)idx);
       return 1;
     }
   } else {

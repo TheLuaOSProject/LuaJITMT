@@ -1784,6 +1784,14 @@ static LJ_AINLINE void lj_tv_load_acq(TValue *dst, const TValue *src)
   dst->u64 = tv_rawload_acq(src);
 }
 
+static LJ_AINLINE void proto_knumtv_load_acq(TValue *dst, const GCproto *pt,
+					     MSize idx)
+{
+  lj_assertX((uintptr_t)idx < (uintptr_t)pt->sizekn,
+	     "bad prototype numeric constant index");
+  lj_tv_load_acq(dst, &mref(pt->k, TValue)[idx]);
+}
+
 static LJ_AINLINE int gc2_finreg_cdata_preclaim_ready(global_State *g)
 {
   return g->gc2.finreg_cdata_preclaim_obj != NULL &&
