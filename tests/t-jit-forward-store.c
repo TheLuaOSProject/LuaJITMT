@@ -17,6 +17,23 @@
 
 #include "lib/tab_forward_helpers.h"
 
+#ifdef LJ_TAB_TEST_HELPERS
+LJ_FUNCA TValue *lj_tab_test_storetv_forjit_array_observed(lua_State *L,
+							   GCtab *parent,
+							   TValue *array,
+							   MSize asize,
+							   TValue *dst,
+							   cTValue *src,
+							   MSize key);
+
+LJ_FUNCA TValue *lj_tab_test_storetv_forjit_hash_observed(lua_State *L,
+							  GCtab *parent,
+							  Node *node,
+							  MSize hmask,
+							  TValue *dst,
+							  cTValue *src);
+#endif
+
 static void exercise_array_forward_jit(lua_State *L)
 {
   GCtab *t;
@@ -137,6 +154,48 @@ static void exercise_array_current_retiring_jit(lua_State *L)
   lua_pop(L, 1);
 }
 
+#ifdef LJ_TAB_TEST_HELPERS
+static void exercise_array_retiring_observed_jit(lua_State *L)
+{
+  GCtab *t;
+  TValue *oldarray, *newarray;
+  TValue src, oldval;
+  TValue *slot;
+  MSize oldasize, newasize;
+  int32_t key = 8;
+
+  lua_createtable(L, LJ_MAX_COLOSIZE + 16, 0);
+  t = tabV(L->top-1);
+  assert(lj_tab_array_separated(t));
+  oldarray = lj_tab_array_acq(t);
+  oldasize = lj_tab_asize_acq(t);
+  assert((MSize)key < oldasize);
+  tabfwd_set_int(L, t, key, 18100);
+  tabfwd_assert_i32(&oldarray[key], 18100);
+
+  lj_tab_resize(L, t, (uint32_t)oldasize + 8u, 0);
+  newarray = lj_tab_array_acq(t);
+  newasize = lj_tab_asize_acq(t);
+  assert(newarray != oldarray);
+  assert(lj_tab_array_nextgen_acq(oldarray) == newarray);
+  assert(lj_tab_array_is_retiring(t, oldarray));
+
+  setintV(&src, 207);
+  slot = lj_tab_test_storetv_forjit_array_observed(L, t, oldarray,
+						   oldasize, &oldarray[key],
+						   &src, (MSize)key);
+  assert(slot == &newarray[key]);
+  lj_tv_load_acq(&oldval, &oldarray[key]);
+  tabfwd_assert_i32(&oldval, 18100);
+  tabfwd_assert_i32(&newarray[key], 207);
+  tabfwd_assert_i32(lj_tab_getint(t, key), 207);
+
+  lj_tab_array_rel(t, newarray);
+  lj_tab_asize_rel(t, newasize);
+  lua_pop(L, 1);
+}
+#endif
+
 static void exercise_hash_forward_jit(lua_State *L)
 {
   GCtab *t;
@@ -179,6 +238,90 @@ static void exercise_hash_forward_jit(lua_State *L)
   lj_tab_node_hdr_flags_or_rel(oldnode, TABNODE_FLAG_RETIRING);
   lua_pop(L, 1);
 }
+
+#ifdef LJ_TAB_TEST_HELPERS
+static void exercise_hash_forward_observed_jit(lua_State *L)
+{
+  GCtab *t;
+  GCstr *hkey;
+  TValue src;
+  TValue *slot;
+  Node *oldnode, *newnode, *oldn, *newn;
+  MSize oldhmask, newhmask;
+
+  lua_createtable(L, 0, 8);
+  t = tabV(L->top-1);
+  hkey = lj_str_new(L, "jit_forward_observed_hash",
+		    strlen("jit_forward_observed_hash"));
+  lj_tab_storeint(L, lj_tab_setstr(L, t, hkey), 13100);
+  oldnode = lj_tab_node_acq(t);
+  oldhmask = lj_tab_node_hmask_acq(oldnode);
+  assert(oldhmask > 0);
+  oldn = tabfwd_find_str_node(oldnode, oldhmask, hkey);
+  assert(oldn != NULL);
+
+  lj_tab_resize(L, t, t->asize, lj_fls(oldhmask) + 2u);
+  newnode = lj_tab_node_acq(t);
+  newhmask = lj_tab_node_hmask_acq(newnode);
+  assert(newnode != oldnode);
+  assert(lj_tab_node_nextgen_acq(oldnode) == newnode);
+  assert(lj_tab_node_is_retiring(oldnode));
+  newn = tabfwd_find_str_node(newnode, newhmask, hkey);
+  assert(newn != NULL);
+
+  tabfwd_store_forward(&oldn->val);
+  setintV(&src, 206);
+  slot = lj_tab_test_storetv_forjit_hash_observed(L, t, oldnode, oldhmask,
+						  &oldn->val, &src);
+  assert(slot == &newn->val);
+  tabfwd_assert_forward(&oldn->val);
+  tabfwd_assert_i32(&newn->val, 206);
+  tabfwd_assert_i32(lj_tab_getstr(t, hkey), 206);
+
+  lua_pop(L, 1);
+}
+
+static void exercise_hash_retiring_observed_jit(lua_State *L)
+{
+  GCtab *t;
+  GCstr *hkey;
+  TValue src, oldval;
+  TValue *slot;
+  Node *oldnode, *newnode, *oldn, *newn;
+  MSize oldhmask, newhmask;
+
+  lua_createtable(L, 0, 8);
+  t = tabV(L->top-1);
+  hkey = lj_str_new(L, "jit_retiring_observed_hash",
+		    strlen("jit_retiring_observed_hash"));
+  lj_tab_storeint(L, lj_tab_setstr(L, t, hkey), 19100);
+  oldnode = lj_tab_node_acq(t);
+  oldhmask = lj_tab_node_hmask_acq(oldnode);
+  assert(oldhmask > 0);
+  oldn = tabfwd_find_str_node(oldnode, oldhmask, hkey);
+  assert(oldn != NULL);
+
+  lj_tab_resize(L, t, t->asize, lj_fls(oldhmask) + 2u);
+  newnode = lj_tab_node_acq(t);
+  newhmask = lj_tab_node_hmask_acq(newnode);
+  assert(newnode != oldnode);
+  assert(lj_tab_node_nextgen_acq(oldnode) == newnode);
+  assert(lj_tab_node_is_retiring(oldnode));
+  newn = tabfwd_find_str_node(newnode, newhmask, hkey);
+  assert(newn != NULL);
+
+  setintV(&src, 208);
+  slot = lj_tab_test_storetv_forjit_hash_observed(L, t, oldnode, oldhmask,
+						  &oldn->val, &src);
+  assert(slot == &newn->val);
+  lj_tv_load_acq(&oldval, &oldn->val);
+  tabfwd_assert_i32(&oldval, 19100);
+  tabfwd_assert_i32(&newn->val, 208);
+  tabfwd_assert_i32(lj_tab_getstr(t, hkey), 208);
+
+  lua_pop(L, 1);
+}
+#endif
 
 static void exercise_hash_retiring_jit(lua_State *L)
 {
@@ -410,7 +553,14 @@ int main(void)
   exercise_array_forward_jit(L);
   exercise_array_retiring_jit(L);
   exercise_array_current_retiring_jit(L);
+#ifdef LJ_TAB_TEST_HELPERS
+  exercise_array_retiring_observed_jit(L);
+#endif
   exercise_hash_forward_jit(L);
+#ifdef LJ_TAB_TEST_HELPERS
+  exercise_hash_forward_observed_jit(L);
+  exercise_hash_retiring_observed_jit(L);
+#endif
   exercise_hash_retiring_jit(L);
   exercise_hash_current_retiring_jit(L);
   exercise_newref_array_forward_jit(L);

@@ -375,9 +375,13 @@ assert(a[119 % 128] == 119)
     name = "m6_jit_table_store_helper",
     description = "M6 helper-backed table store behavior",
     run = function(t)
-      t:build({ clean = true, quiet = true })
+      t:build({ clean = true, quiet = true, xcflags = "-DLJ_TAB_TEST_HELPERS" })
       build_and_run_c(t, t:tmp("lj_t-jit-forward-store"),
-                      "t-jit-forward-store.c", { build = false, timeout = "20s" })
+                      "t-jit-forward-store.c", {
+                        build = false,
+                        cflags = "-DLJ_TAB_TEST_HELPERS",
+                        timeout = "20s"
+                      })
       luajit_code(t, table_store_smoke())
 
       assert_ir_dump_probe_all_contains(t, "lj-m6-hstore-ir.dump", [=[
