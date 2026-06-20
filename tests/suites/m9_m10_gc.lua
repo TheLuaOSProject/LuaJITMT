@@ -1,6 +1,9 @@
 local utils = require("suite_utils")
 
 local shell_quote = utils.shell_quote
+local command_succeeded = utils.command_succeeded
+local run_output_contains = utils.run_output_contains
+local run_output_contains_all = utils.run_output_contains_all
 
 local function write_bad_benchmark_csv(t, base, bad)
   local out = assert(io.open(bad, "wb"))
@@ -21,23 +24,6 @@ local function write_bad_benchmark_csv(t, base, bad)
     end
   end
   out:close()
-end
-
-local function command_succeeded(cmd)
-  local ok, _, code = os.execute(cmd)
-  if type(ok) == "number" then return ok == 0 end
-  return ok == true and (code == nil or code == 0)
-end
-
-local function run_output_contains(t, cmd, needle)
-  t:run(cmd .. " | rg -F " .. shell_quote(needle) .. " >/dev/null")
-end
-
-local function run_output_contains_all(t, cmd, needles)
-  for i = 1, #needles do
-    cmd = cmd .. " | rg -F " .. shell_quote(needles[i])
-  end
-  t:run(cmd .. " >/dev/null")
 end
 
 local function build_and_run_alloc_account(t)

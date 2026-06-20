@@ -131,10 +131,25 @@ function M.detect_jobs()
   return "2"
 end
 
-function M.command_ok(cmd)
-  local ok, _, code = os.execute(cmd .. " >/dev/null 2>&1")
+function M.command_succeeded(cmd)
+  local ok, _, code = os.execute(cmd)
   if type(ok) == "number" then return ok == 0 end
   return ok == true and (code == nil or code == 0)
+end
+
+function M.command_ok(cmd)
+  return M.command_succeeded(cmd .. " >/dev/null 2>&1")
+end
+
+function M.run_output_contains(t, cmd, needle)
+  t:run(cmd .. " | rg -F " .. M.shell_quote(needle) .. " >/dev/null")
+end
+
+function M.run_output_contains_all(t, cmd, needles)
+  for i = 1, #needles do
+    cmd = cmd .. " | rg -F " .. M.shell_quote(needles[i])
+  end
+  t:run(cmd .. " >/dev/null")
 end
 
 function M.capture_lines(cmd)
