@@ -250,6 +250,11 @@ static LJ_AINLINE MSize snap_nslots_acq(const SnapShot *snap)
   return (MSize)la_load8_acq(&snap->nslots);
 }
 
+static LJ_AINLINE MSize snap_topslot_acq(const SnapShot *snap)
+{
+  return (MSize)la_load8_acq(&snap->topslot);
+}
+
 static LJ_AINLINE MSize snap_mcofs_acq(const SnapShot *snap)
 {
   return (MSize)la_load16_acq(&snap->mcofs);
@@ -268,6 +273,19 @@ static LJ_AINLINE MSize snap_count_acq(const SnapShot *snap)
 static LJ_AINLINE SnapEntry snapentry_acq(const SnapEntry *entry)
 {
   return (SnapEntry)la_load32_acq(entry);
+}
+
+static LJ_AINLINE const BCIns *snap_pc_acq(SnapEntry *sn)
+{
+#if LJ_FR2
+  SnapEntry pcraw[2];
+  pcraw[0] = snapentry_acq(&sn[0]);
+  pcraw[1] = snapentry_acq(&sn[1]);
+  return snap_pc(pcraw);
+#else
+  SnapEntry pcraw = snapentry_acq(sn);
+  return snap_pc(&pcraw);
+#endif
 }
 
 /* Snapshot and exit numbers. */
@@ -508,6 +526,15 @@ static LJ_AINLINE MSize snap_nextofs(GCtrace *T, SnapShot *snap)
     return T->nsnapmap;
   else
     return (snap+1)->mapofs;
+}
+
+static LJ_AINLINE MSize snap_nextofs_acq(const GCtrace *T, SnapShot *snap)
+{
+  SnapShot *snapbase = trace_snap_acq(T);
+  if (snap+1 == &snapbase[trace_nsnap_acq(T)])
+    return trace_nsnapmap_acq(T);
+  else
+    return snap_mapofs_acq(snap+1);
 }
 
 /* Round-robin penalty cache for bytecodes leading to aborted traces. */
