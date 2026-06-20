@@ -163,13 +163,13 @@ function M.capture_luajit(t, args, out, opts)
 end
 
 function M.run_lua_test_case(t, name, opts)
-  t:run({ t:path("tools", "ci", "lua_test.sh"), name }, opts)
+  utils.run_case(require("init"), t, name)
 end
 
 function M.run_lua_test_cases(t, names, opts)
-  local cmd = { t:path("tools", "ci", "lua_test.sh") }
-  for i = 1, #names do cmd[#cmd + 1] = names[i] end
-  t:run(cmd, opts)
+  for i = 1, #names do
+    M.run_lua_test_case(t, names[i])
+  end
 end
 
 function M.run_stock(t, args, opts)
