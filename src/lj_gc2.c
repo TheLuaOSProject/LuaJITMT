@@ -801,9 +801,18 @@ void lj_gc2_weak_to_sweep(global_State *g)
   lj_gc2_worker_wake(g);  /* 05 section 5.6.3 parked worker scheduler. */
 }
 
-static uint32_t gc2_finalizer_current_owner(void)
+static TGState *gc2_finalizer_current_tg(global_State *g)
 {
   TGState *tg = lj_thr_get_tg();
+  if (!g || !tg || tg->gl == g)
+    return tg;
+  /* Missing TLS can be an unattached helper; only stale TLS can fallback. */
+  return g->main_tg;
+}
+
+static uint32_t gc2_finalizer_current_owner(global_State *g)
+{
+  TGState *tg = gc2_finalizer_current_tg(g);
   uint32_t tid = tg ? la_load32_acq(&tg->tid) : 0;
   return tid != 0 ? tid : ~(uint32_t)0;
 }
@@ -817,7 +826,7 @@ static int gc2_finalizer_owned_by_current(global_State *g)
   owner = la_load32_acq(&g->gc2.finalizer_owner_tid);
   if (owner == 0)
     return 0;
-  tg = lj_thr_get_tg();
+  tg = gc2_finalizer_current_tg(g);
   return owner == (tg ? la_load32_acq(&tg->tid) : ~(uint32_t)0);
 }
 
@@ -937,7 +946,7 @@ int lj_gc2_finalizer_try_enter(global_State *g)
   uint32_t owner, old;
   if (!g)
     return 0;
-  owner = gc2_finalizer_current_owner();
+  owner = gc2_finalizer_current_owner(g);
   for (;;) {
     old = la_load32_acq(&g->gc2.finalizer_active);
     if (old != 0) {

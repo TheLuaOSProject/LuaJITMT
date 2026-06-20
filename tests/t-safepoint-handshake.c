@@ -24,6 +24,7 @@
 #include "lj_dispatch.h"
 #include "lj_safepoint.h"
 #include "lj_tg.h"
+#include "lj_thr.h"
 #include "lj_trace.h"
 
 typedef struct NativeStopReqCtx {
@@ -438,6 +439,52 @@ static void assert_attach_phase(lua_State *L, global_State *g, TGState *main_tg,
   lj_tg_fini_thread(g, &phase_tg);
 }
 
+static void test_multistate_public_api_gc(lua_State *L1)
+{
+  TGState *tg1 = G2TG(G(L1));
+  lua_State *L2;
+  global_State *g2;
+  TGState *tg2;
+  uint64_t epoch0;
+  uint32_t actions;
+
+  assert(lj_thr_get_tg() == tg1);
+  L2 = luaL_newstate();
+  assert(L2 != NULL);
+  assert(lj_thr_get_tg() == tg1);
+
+  g2 = G(L2);
+  tg2 = G2TG(g2);
+  assert(tg2 != NULL);
+  assert(tg2 != tg1);
+  assert(g2->gc2.tg_list == tg2);
+
+  epoch0 = g2->gc2.hs_epoch;
+  actions = LJ_GC2_HS_ENABLE_BARRIER|LJ_GC2_HS_ALLOC_BLACK;
+  assert(lj_gc2_handshake(g2, actions) == 1);
+  assert(g2->gc2.hs_epoch == epoch0 + 1u);
+  assert(g2->gc2.hs_pending == 0);
+  assert(tg2->poll == 0);
+  assert(tg2->reqmask == 0);
+  assert(tg2->hs_epoch_ack == g2->gc2.hs_epoch);
+
+  assert(lj_gc2_finalizer_try_enter(g2));
+  assert(la_load32_acq(&g2->gc2.finalizer_owner_tid) ==
+	 la_load32_acq(&tg2->tid));
+  lj_gc2_finalizer_leave(g2);
+  assert(la_load32_acq(&g2->gc2.finalizer_owner_tid) == 0);
+
+  luaL_openlibs(L2);
+  assert(luaL_dostring(L2,
+    "local hold = {}\n"
+    "for i=1,20000 do hold[i] = {i, tostring(i)} end\n"
+    "collectgarbage('collect')\n") == LUA_OK);
+  lua_gc(L2, LUA_GCCOLLECT, 0);
+  assert(lj_thr_get_tg() == tg1);
+  lua_close(L2);
+  assert(lj_thr_get_tg() == tg1);
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -506,6 +553,7 @@ int main(void)
   assert_attach_phase(L, g, tg, LJ_GC2_MARK, 1, 1);
   assert_attach_phase(L, g, tg, LJ_GC2_WEAK, 1, 1);
   assert_attach_phase(L, g, tg, LJ_GC2_SWEEP, 0, 1);
+  test_multistate_public_api_gc(L);
 
   epoch0 = g->gc2.hs_epoch;
   ack_samples0 = la_load64_acq(&g->gc2.hs_ack_latency_samples);
