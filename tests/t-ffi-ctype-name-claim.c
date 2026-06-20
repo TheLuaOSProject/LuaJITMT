@@ -23,7 +23,7 @@ static CTypeID new_named(CTState *cts, lua_State *L, CTInfo info, CTSize size,
   ct->info = info;
   ct->size = size;
   ct->sib = 0;
-  ct->next = 0;
+  ctype_next_rel(ct, 0);
   ctype_setname(ct, name);
   return id;
 }
@@ -38,7 +38,7 @@ static void force_table_move_after_reserve(lua_State *L, CTState *cts)
     ct->info = CTINFO(CT_ATTRIB, CTATTRIB(CTA_BAD));
     ct->size = 0;
     ct->sib = 0;
-    ct->next = 0;
+    ctype_next_rel(ct, 0);
     setgcrefnull(ct->name);
     assert(id != 0);
     assert(++guard < CTID_MAX);

@@ -149,6 +149,16 @@ typedef struct CType {
   GCRef name;		/* Element name (GCstr). */
 } CType;
 
+static LJ_AINLINE CTypeID ctype_next_acq(const CType *ct)
+{
+  return (CTypeID)la_load16_acq(&ct->next);  /* 11.2: ctype hash-chain link. */
+}
+
+static LJ_AINLINE void ctype_next_rel(CType *ct, CTypeID next)
+{
+  la_store16_rel(&ct->next, (CTypeID1)next);  /* 11.2: ctype hash-chain link. */
+}
+
 typedef struct CTypeTab {
   MSize sizetab;		/* Number of C type table slots. */
   uint64_t retire_epoch;	/* Safepoint epoch when retired. */

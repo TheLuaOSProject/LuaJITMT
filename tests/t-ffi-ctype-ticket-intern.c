@@ -36,7 +36,7 @@ int main(void)
   basect->info = CTINFO(CT_STRUCT, CTALIGN(2));
   basect->size = 4;
   basect->sib = 0;
-  basect->next = 0;
+  ctype_next_rel(basect, 0);
   setgcrefnull(basect->name);
   assert(ctype_top_acq(cts) == top0 + 1u);
 

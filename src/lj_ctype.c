@@ -211,7 +211,7 @@ int lj_ctype_snapshot(CTState *cts, CTypeID id, CType *out)
   out->info = la_load32_acq(&ct->info);
   out->size = la_load32_acq(&ct->size);
   out->sib = (CTypeID1)la_load16_acq(&ct->sib);
-  out->next = (CTypeID1)la_load16_acq(&ct->next);
+  out->next = (CTypeID1)ctype_next_acq(ct);
   name = gcref_acq(ct->name);
   setgcrefp(out->name, name);
   seq1 = la_load32_acq(&cts->parse_token);
@@ -566,7 +566,7 @@ static void ctype_hash_setnext(CTState *cts, CType *src, CTypeID id,
     dst = ctype_get(cts, id);
     if (dst != src)
       *dst = *src;
-    dst->next = (CTypeID1)next;
+    ctype_next_rel(dst, next);
     tab = ctype_tab_acq(cts);
   } while (dst != &tab[id]);
 }
@@ -606,7 +606,7 @@ static CTypeID ctype_hash_findtype(CTState *cts, CTypeID id, CTInfo info,
     CType *ct = ctype_get(cts, id);
     if (!ctype_isabandoned(ct->info) && ct->info == info && ct->size == size)
       return id;
-    id = ct->next;
+    id = ctype_next_acq(ct);
   }
   return 0;
 }
@@ -619,7 +619,7 @@ static CTypeID ctype_hash_findname(CTState *cts, CTypeID id, GCstr *name,
     if (!ctype_isabandoned(ct->info) && ctype_name_acq(ct) == name &&
 	((tmask >> ctype_type(ct->info)) & 1))
       return id;
-    id = ct->next;
+    id = ctype_next_acq(ct);
   }
   return 0;
 }
@@ -734,7 +734,7 @@ CTypeID lj_ctype_new_l(lua_State *L, CTState *cts, CType **ctp)
   ct->info = 0;
   ct->size = 0;
   ct->sib = 0;
-  ct->next = 0;
+  ctype_next_rel(ct, 0);
   ctype_clearname(ct);
   return id;
 }
@@ -754,7 +754,7 @@ static CTypeID ctype_intern_l(lua_State *L, CTState *cts, CTInfo info,
     ct->info = info;
     ct->size = size;
     ct->sib = 0;
-    ct->next = 0;
+    ctype_next_rel(ct, 0);
     ctype_clearname(ct);
     head = ctype_hash_load(cts, h);
     for (;;) {
@@ -859,7 +859,7 @@ int lj_ctype_getname_snapshot(CTState *cts, GCstr *name, uint32_t tmask,
     info = la_load32_acq(&ct->info);
     size = la_load32_acq(&ct->size);
     sib = (CTypeID)la_load16_acq(&ct->sib);
-    next = (CTypeID)la_load16_acq(&ct->next);
+    next = ctype_next_acq(ct);
     gco = gcref_acq(ct->name);
     if (!ctype_isabandoned(info) && gco == obj2gco(name) &&
 	((tmask >> ctype_type(info)) & 1)) {
@@ -940,7 +940,7 @@ static int ctype_snapshot_copy(CTypeTab *tabh, CTypeID top, CTypeID id,
   out->info = la_load32_acq(&ct->info);
   out->size = la_load32_acq(&ct->size);
   out->sib = (CTypeID1)la_load16_acq(&ct->sib);
-  out->next = (CTypeID1)la_load16_acq(&ct->next);
+  out->next = (CTypeID1)ctype_next_acq(ct);
   gco = gcref_acq(ct->name);
   setgcrefp(out->name, gco);
   return !ctype_isabandoned(out->info);
@@ -1661,7 +1661,7 @@ CTState *lj_ctype_init(lua_State *L)
       lj_ctype_addname(cts, ct, id);
     } else {
       ctype_clearname(ct);
-      ct->next = 0;
+      ctype_next_rel(ct, 0);
       if (!ctype_isenum(info)) ctype_addtype(cts, ct, id);
     }
   }
