@@ -452,9 +452,19 @@ static LJ_AINLINE MCode *trace_exitstub_acq(const GCtrace *T)
   return (MCode *)la_loadptr_acq((void *const *)&T->exitstub);
 }
 
+static LJ_AINLINE void trace_exitstub_rel(GCtrace *T, MCode *exitstub)
+{
+  la_storeptr_rel((void **)&T->exitstub, exitstub);
+}
+
 static LJ_AINLINE MCode **trace_exittab_acq(const GCtrace *T)
 {
   return (MCode **)la_loadptr_acq((void *const *)&T->exittab);
+}
+
+static LJ_AINLINE void trace_exittab_rel(GCtrace *T, MCode **exittab)
+{
+  la_storeptr_rel((void **)&T->exittab, exittab);
 }
 
 static LJ_AINLINE MSize trace_szmcode_acq(const GCtrace *T)

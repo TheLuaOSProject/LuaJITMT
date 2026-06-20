@@ -444,10 +444,10 @@ static void trace_exittab_free(global_State *g, GCtrace *T)
 {
   MCode **exittab = trace_exittab_acq(T);
   if (exittab) {
+    trace_exittab_rel(T, NULL);
     lj_mem_freevec(g, exittab, trace_nsnap_acq(T), MCode *);
-    T->exittab = NULL;
   }
-  T->exitstub = NULL;
+  trace_exitstub_rel(T, NULL);
 }
 
 static void trace_exittab_reset(jit_State *J, GCtrace *T)
