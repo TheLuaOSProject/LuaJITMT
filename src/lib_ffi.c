@@ -843,33 +843,235 @@ LJLIB_CF(ffi_typeinfo)
   return 0;
 }
 
+typedef struct FFITypeCmpSnap {
+  CTState *cts;
+  CTypeTab *tabh;
+  CTypeID top;
+  uint32_t seq;
+  MSize budget;
+} FFITypeCmpSnap;
+
+static int ffi_typecmp_begin(CTState *cts, FFITypeCmpSnap *ts)
+{
+  uint32_t seq = la_load32_acq(&cts->parse_token);
+  if (seq & 1u)
+    return -1;
+  ts->cts = cts;
+  ts->top = ctype_top_acq(cts);
+  ts->tabh = ctype_tabh_acq(cts);
+  ts->seq = seq;
+  ts->budget = ts->top ? (MSize)ts->top * 6u : 1u;
+  return 1;
+}
+
+static int ffi_typecmp_end(FFITypeCmpSnap *ts)
+{
+  uint32_t seq = la_load32_acq(&ts->cts->parse_token);
+  return (seq == ts->seq && !(seq & 1u)) ? 1 : -1;
+}
+
+static int ffi_typecmp_get(FFITypeCmpSnap *ts, CTypeID id, CType *out)
+{
+  CType *ct;
+  CTInfo info;
+  if (id == 0 || id >= ts->top)
+    return 0;
+  if ((MSize)id >= ts->tabh->sizetab)
+    return -1;
+  if (ts->budget-- == 0)
+    return -1;
+  ct = &ts->tabh->tab[id];
+  info = la_load32_acq(&ct->info);
+  out->info = info;
+  out->size = la_load32_acq(&ct->size);
+  out->sib = (CTypeID1)la_load16_acq(&ct->sib);
+  out->next = (CTypeID1)la_load16_acq(&ct->next);
+  setgcrefnull(out->name);
+  return !ctype_isabandoned(info);
+}
+
+static int ffi_typecmp_rawid(FFITypeCmpSnap *ts, CTypeID id, CTypeID *ridp,
+			     CType *out)
+{
+  int ok;
+  for (;;) {
+    ok = ffi_typecmp_get(ts, id, out);
+    if (ok <= 0)
+      return ok;
+    if (!ctype_isattrib(out->info)) {
+      *ridp = id;
+      return 1;
+    }
+    id = ctype_cid(out->info);
+  }
+}
+
+static int ffi_typecmp_rawrefid(FFITypeCmpSnap *ts, CTypeID id, CTypeID *ridp,
+				CType *out)
+{
+  int ok = ffi_typecmp_get(ts, id, out);
+  if (ok <= 0)
+    return ok;
+  if (ctype_isref(out->info))
+    id = ctype_cid(out->info);
+  return ffi_typecmp_rawid(ts, id, ridp, out);
+}
+
+static int ffi_typecmp_childqual(FFITypeCmpSnap *ts, const CType *root,
+				 CTypeID *idp, CType *out, CTInfo *qualp)
+{
+  CTypeID id = ctype_cid(root->info);
+  int ok;
+  for (;;) {
+    ok = ffi_typecmp_get(ts, id, out);
+    if (ok <= 0)
+      return ok;
+    if (ctype_isattrib(out->info)) {
+      if (ctype_attrib(out->info) == CTA_QUAL)
+	*qualp |= out->size;
+    } else if (!ctype_isenum(out->info)) {
+      *qualp |= (out->info & CTF_QUAL);
+      *idp = id;
+      return 1;
+    }
+    id = ctype_cid(out->info);
+  }
+}
+
+static int ffi_typecmp_compatptr(FFITypeCmpSnap *ts, CTypeID did,
+				 const CType *d0, CTypeID sid,
+				 const CType *s0, CTInfo flags, int *bp)
+{
+  CType d = *d0, s = *s0;
+  if (!((flags & CCF_CAST) || did == sid)) {
+    CTInfo dqual = 0, squal = 0;
+    int ok = ffi_typecmp_childqual(ts, &d, &did, &d, &dqual);
+    if (ok <= 0)
+      return ok;
+    if (!ctype_isstruct(s.info)) {
+      ok = ffi_typecmp_childqual(ts, &s, &sid, &s, &squal);
+      if (ok <= 0)
+	return ok;
+    }
+    if ((flags & CCF_SAME)) {
+      if (dqual != squal) {
+	*bp = 0;
+	return 1;
+      }
+    } else if (!(flags & CCF_IGNQUAL)) {
+      if ((dqual & squal) != squal) {
+	*bp = 0;
+	return 1;
+      }
+      if (ctype_isvoid(d.info) || ctype_isvoid(s.info)) {
+	*bp = 1;
+	return 1;
+      }
+    }
+    if (ctype_type(d.info) != ctype_type(s.info) || d.size != s.size) {
+      *bp = 0;
+      return 1;
+    }
+    if (ctype_isnum(d.info)) {
+      *bp = ((d.info ^ s.info) & (CTF_BOOL|CTF_FP)) == 0;
+      return 1;
+    } else if (ctype_ispointer(d.info)) {
+      return ffi_typecmp_compatptr(ts, did, &d, sid, &s,
+				   flags|CCF_SAME, bp);
+    } else if (ctype_isstruct(d.info)) {
+      *bp = did == sid;
+      return 1;
+    }
+  }
+  *bp = 1;
+  return 1;
+}
+
+static int ffi_istype_raw(CTState *cts, CTypeID id1, CTypeID id2)
+{
+  CTypeID rid1 = ctype_rawrefid(cts, id1);
+  CTypeID rid2 = ctype_rawrefid(cts, id2);
+  CType *ct1 = ctype_get(cts, rid1);
+  CType *ct2 = ctype_get(cts, rid2);
+  if (rid1 == rid2) {
+    return 1;
+  } else if (ctype_type(ct1->info) == ctype_type(ct2->info) &&
+	     ct1->size == ct2->size) {
+    if (ctype_ispointer(ct1->info))
+      return lj_cconv_compatptr(cts, ct1, ct2, CCF_IGNQUAL);
+    else if (ctype_isnum(ct1->info) || ctype_isvoid(ct1->info))
+      return ((ct1->info ^ ct2->info) & ~(CTF_QUAL|CTF_LONG)) == 0;
+  } else if (ctype_isstruct(ct1->info) && ctype_isptr(ct2->info) &&
+	     rid1 == ctype_rawid(cts, ctype_cid(ct2->info))) {
+    return 1;
+  }
+  return 0;
+}
+
+static int ffi_istype_snapshot(CTState *cts, CTypeID id1, CTypeID id2, int *bp)
+{
+  FFITypeCmpSnap ts;
+  CType ct1, ct2, child;
+  CTypeID rid1, rid2, cid;
+  int ok = ffi_typecmp_begin(cts, &ts);
+  int b = 0;
+  if (ok < 0)
+    return -1;
+  ok = ffi_typecmp_rawrefid(&ts, id1, &rid1, &ct1);
+  if (ok > 0)
+    ok = ffi_typecmp_rawrefid(&ts, id2, &rid2, &ct2);
+  if (ok > 0) {
+    if (rid1 == rid2) {
+      b = 1;
+    } else if (ctype_type(ct1.info) == ctype_type(ct2.info) &&
+	       ct1.size == ct2.size) {
+      if (ctype_ispointer(ct1.info)) {
+	ok = ffi_typecmp_compatptr(&ts, rid1, &ct1, rid2, &ct2,
+				   CCF_IGNQUAL, &b);
+      } else if (ctype_isnum(ct1.info) || ctype_isvoid(ct1.info)) {
+	b = ((ct1.info ^ ct2.info) & ~(CTF_QUAL|CTF_LONG)) == 0;
+      }
+    } else if (ctype_isstruct(ct1.info) && ctype_isptr(ct2.info)) {
+      ok = ffi_typecmp_rawid(&ts, ctype_cid(ct2.info), &cid, &child);
+      if (ok > 0 && rid1 == cid)
+	b = 1;
+    }
+  } else if (ok == 0) {
+    b = 0;
+  }
+  if (ok >= 0 && ffi_typecmp_end(&ts) < 0)
+    return -1;
+  if (ok < 0)
+    return -1;
+  *bp = b;
+  return 1;
+}
+
 LJLIB_CF(ffi_istype)	LJLIB_REC(.)
 {
   CTState *cts = ctype_cts(L);
-  CTypeID id1 = ffi_checkctype(L, cts, NULL);
   TValue *o = lj_lib_checkany(L, 2);
+  CTypeID id1;
   int b = 0;
+  int isstr;
+  id1 = ffi_checkctype_noparse(L, NULL, &isstr);
   if (tviscdata(o)) {
     GCcdata *cd = cdataV(o);
     CTypeID id2 = cd->ctypeid == CTID_CTYPEID ? *(CTypeID *)cdataptr(cd) :
 						cd->ctypeid;
-    CTypeID rid1 = ctype_rawrefid(cts, id1);
-    CTypeID rid2 = ctype_rawrefid(cts, id2);
-    CType *ct1 = ctype_get(cts, rid1);
-    CType *ct2 = ctype_get(cts, rid2);
-    if (rid1 == rid2) {
-      b = 1;
-    } else if (ctype_type(ct1->info) == ctype_type(ct2->info) &&
-	       ct1->size == ct2->size) {
-      if (ctype_ispointer(ct1->info))
-	b = lj_cconv_compatptr(cts, ct1, ct2, CCF_IGNQUAL);
-      else if (ctype_isnum(ct1->info) || ctype_isvoid(ct1->info))
-	b = (((ct1->info ^ ct2->info) & ~(CTF_QUAL|CTF_LONG)) == 0);
-    } else if (ctype_isstruct(ct1->info) && ctype_isptr(ct2->info) &&
-	       rid1 == ctype_rawid(cts, ctype_cid(ct2->info))) {
-      b = 1;
+    if (!isstr) {
+      int ok = ffi_istype_snapshot(cts, id1, id2, &b);
+      if (ok >= 0)
+	goto done;
     }
+    id1 = ffi_checkctype_layout_lock(L, cts, NULL);
+    b = ffi_istype_raw(cts, id1, id2);
+    lj_ctype_parse_unlock(cts);
+  } else if (isstr) {
+    id1 = ffi_checkctype_layout_lock(L, cts, NULL);
+    lj_ctype_parse_unlock(cts);
   }
+done:
   setboolV(L->top-1, b);
   setboolV(&L2TG(L)->tmptv2, b);  /* Remember for trace recorder. */
   return 1;
