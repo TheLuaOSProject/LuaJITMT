@@ -146,6 +146,49 @@ GDBJITdesc __jit_debug_descriptor = {
   1, GDBJIT_NOACTION, NULL, NULL
 };
 
+static LJ_AINLINE GDBJITentry *gdbjit_entry_next_acq(const GDBJITentry *entry)
+{
+  return (GDBJITentry *)la_loadptr_acq((void *const *)&entry->next_entry);
+}
+
+static LJ_AINLINE void gdbjit_entry_next_rel(GDBJITentry *entry,
+					     GDBJITentry *next)
+{
+  la_storeptr_rel((void **)&entry->next_entry, next);
+}
+
+static LJ_AINLINE GDBJITentry *gdbjit_entry_prev_acq(const GDBJITentry *entry)
+{
+  return (GDBJITentry *)la_loadptr_acq((void *const *)&entry->prev_entry);
+}
+
+static LJ_AINLINE void gdbjit_entry_prev_rel(GDBJITentry *entry,
+					     GDBJITentry *prev)
+{
+  la_storeptr_rel((void **)&entry->prev_entry, prev);
+}
+
+static LJ_AINLINE GDBJITentry *gdbjit_desc_first_acq(void)
+{
+  return (GDBJITentry *)la_loadptr_acq((void *const *)
+				       &__jit_debug_descriptor.first_entry);
+}
+
+static LJ_AINLINE void gdbjit_desc_first_rel(GDBJITentry *entry)
+{
+  la_storeptr_rel((void **)&__jit_debug_descriptor.first_entry, entry);
+}
+
+static LJ_AINLINE void gdbjit_desc_relevant_rel(GDBJITentry *entry)
+{
+  la_storeptr_rel((void **)&__jit_debug_descriptor.relevant_entry, entry);
+}
+
+static LJ_AINLINE void gdbjit_desc_action_rel(uint32_t action)
+{
+  la_store32_rel(&__jit_debug_descriptor.action_flag, action);
+}
+
 /* GDB sets a breakpoint at this function. */
 void LJ_NOINLINE __jit_debug_register_code()
 {
@@ -755,16 +798,19 @@ static void gdbjit_newentry(lua_State *L, GDBJITctx *ctx)
   eo->sz = sz;
   trace_gdbjit_entry_rel(ctx->T, (void *)eo);
   /* Link new entry to chain and register it. */
-  eo->entry.prev_entry = NULL;
   gdbjit_lock_acquire();
-  eo->entry.next_entry = __jit_debug_descriptor.first_entry;
-  if (eo->entry.next_entry)
-    eo->entry.next_entry->prev_entry = &eo->entry;
+  {
+    GDBJITentry *head = gdbjit_desc_first_acq();
+    gdbjit_entry_prev_rel(&eo->entry, NULL);
+    gdbjit_entry_next_rel(&eo->entry, head);
+    if (head)
+      gdbjit_entry_prev_rel(head, &eo->entry);
+  }
   eo->entry.symfile_addr = (const char *)&eo->obj;
   eo->entry.symfile_size = ctx->objsize;
-  __jit_debug_descriptor.first_entry = &eo->entry;
-  __jit_debug_descriptor.relevant_entry = &eo->entry;
-  __jit_debug_descriptor.action_flag = GDBJIT_REGISTER;
+  gdbjit_desc_first_rel(&eo->entry);
+  gdbjit_desc_relevant_rel(&eo->entry);
+  gdbjit_desc_action_rel(GDBJIT_REGISTER);
   __jit_debug_register_code();
   gdbjit_lock_release();
 }
@@ -802,14 +848,18 @@ void lj_gdbjit_deltrace(jit_State *J, GCtrace *T)
   GDBJITentryobj *eo = (GDBJITentryobj *)trace_gdbjit_entry_acq(T);
   if (eo) {
     gdbjit_lock_acquire();
-    if (eo->entry.prev_entry)
-      eo->entry.prev_entry->next_entry = eo->entry.next_entry;
-    else
-      __jit_debug_descriptor.first_entry = eo->entry.next_entry;
-    if (eo->entry.next_entry)
-      eo->entry.next_entry->prev_entry = eo->entry.prev_entry;
-    __jit_debug_descriptor.relevant_entry = &eo->entry;
-    __jit_debug_descriptor.action_flag = GDBJIT_UNREGISTER;
+    {
+      GDBJITentry *prev = gdbjit_entry_prev_acq(&eo->entry);
+      GDBJITentry *next = gdbjit_entry_next_acq(&eo->entry);
+      if (prev)
+	gdbjit_entry_next_rel(prev, next);
+      else
+	gdbjit_desc_first_rel(next);
+      if (next)
+	gdbjit_entry_prev_rel(next, prev);
+    }
+    gdbjit_desc_relevant_rel(&eo->entry);
+    gdbjit_desc_action_rel(GDBJIT_UNREGISTER);
     __jit_debug_register_code();
     gdbjit_lock_release();
     lj_mem_free(J2G(J), eo, eo->sz);
