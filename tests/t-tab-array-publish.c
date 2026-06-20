@@ -14,7 +14,10 @@
 static TabArrayRetire *find_retired_array(global_State *g, TValue *array)
 {
   TabArrayRetire *ret;
-  for (ret = g->tab.retired_arrays; ret != NULL; ret = ret->next)
+  for (ret = (TabArrayRetire *)la_loadptr_acq(
+	 (void *const *)&g->tab.retired_arrays);
+       ret != NULL;
+       ret = lj_tab_array_retired_next_acq(ret))
     if (ret->array == array)
       return ret;
   return NULL;
@@ -50,7 +53,7 @@ int main(void)
 
   assert(L != NULL);
   g = G(L);
-  assert(g->tab.retired_arrays == NULL);
+  assert(la_loadptr_acq((void *const *)&g->tab.retired_arrays) == NULL);
 
   lua_createtable(L, LJ_MAX_COLOSIZE + 8, 0);
   t = tabV(L->top-1);

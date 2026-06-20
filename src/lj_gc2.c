@@ -594,7 +594,7 @@ static void gc2_mark_tab_retired_mem(global_State *g)
   for (ret = (TabNodeRetire *)la_loadptr_acq(
 	 (void *const *)&g->tab.retired_nodes);
        ret != NULL;
-       ret = (TabNodeRetire *)la_loadptr_acq((void *const *)&ret->next)) {
+       ret = lj_tab_node_retired_next_acq(ret)) {
     lj_gc2_markmem(g, ret);
     if (la_load32_acq(&ret->armed))
       lj_gc2_markmem(g, lj_tab_node_hdrw(ret->node));

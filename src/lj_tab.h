@@ -68,6 +68,30 @@ static LJ_AINLINE Node *hashmask(const GCtab *t, uint32_t hash)
 
 #define hsize2hbits(s)	((s) ? ((s)==1 ? 1 : 1+lj_fls((uint32_t)((s)-1))) : 0)
 
+static LJ_AINLINE TabNodeRetire *
+lj_tab_node_retired_next_acq(const TabNodeRetire *ret)
+{
+  return (TabNodeRetire *)la_loadptr_acq((void *const *)&ret->next);
+}
+
+static LJ_AINLINE void lj_tab_node_retired_next_rel(TabNodeRetire *ret,
+						    TabNodeRetire *next)
+{
+  la_storeptr_rel((void **)&ret->next, next);
+}
+
+static LJ_AINLINE TabArrayRetire *
+lj_tab_array_retired_next_acq(const TabArrayRetire *ret)
+{
+  return (TabArrayRetire *)la_loadptr_acq((void *const *)&ret->next);
+}
+
+static LJ_AINLINE void lj_tab_array_retired_next_rel(TabArrayRetire *ret,
+						     TabArrayRetire *next)
+{
+  la_storeptr_rel((void **)&ret->next, next);
+}
+
 LJ_FUNCA GCtab *lj_tab_new(lua_State *L, uint32_t asize, uint32_t hbits);
 LJ_FUNCA GCtab * LJ_FASTCALL lj_tab_new0(lua_State *L);
 LJ_FUNC GCtab *lj_tab_new_ah(lua_State *L, uint32_t a, uint32_t h);

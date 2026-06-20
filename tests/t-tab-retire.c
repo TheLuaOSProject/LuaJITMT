@@ -15,7 +15,10 @@
 static TabNodeRetire *find_retired(global_State *g, Node *node)
 {
   TabNodeRetire *ret;
-  for (ret = g->tab.retired_nodes; ret != NULL; ret = ret->next)
+  for (ret = (TabNodeRetire *)la_loadptr_acq(
+	 (void *const *)&g->tab.retired_nodes);
+       ret != NULL;
+       ret = lj_tab_node_retired_next_acq(ret))
     if (ret->node == node)
       return ret;
   return NULL;
@@ -74,7 +77,7 @@ int main(void)
 
   assert(L != NULL);
   g = G(L);
-  assert(g->tab.retired_nodes == NULL);
+  assert(la_loadptr_acq((void *const *)&g->tab.retired_nodes) == NULL);
 
   lua_createtable(L, 0, 8);
   t = tabV(L->top-1);
