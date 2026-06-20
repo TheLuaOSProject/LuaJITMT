@@ -112,7 +112,7 @@ void lj_ccallback_func_clear(CTState *cts, MSize slot)
 		slot < (MSize)la_load32_acq(&cts->cb.sizeid))) {
     TValue nilv;
     setnilV(&nilv);
-    copyTVrel(mainthread(cts->g), &func[slot], &nilv);
+    copyTVrel(mainthread_acq(cts->g), &func[slot], &nilv);
   }
 }
 

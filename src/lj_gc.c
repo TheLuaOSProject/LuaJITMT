@@ -720,17 +720,19 @@ static void gc_mark_gcroot(global_State *g)
 /* Start a GC cycle and mark the root set. */
 static void gc_mark_start(global_State *g)
 {
+  lua_State *mainL = mainthread_acq(g);
+  lua_State *vmL = vmthread_acq(g);
   lj_gc2_legacy_mark_begin(g);
   lj_gc_list_clear_rel(&g->gc.gray);
   lj_gc_list_clear_rel(&g->gc.grayagain);
   lj_gc_list_clear_rel(&g->gc.weak);
-  gc_markobj(g, mainthread(g));
+  gc_markobj(g, mainL);
   {
-    GCtab *env = tabref_acq(mainthread(g)->env);
+    GCtab *env = tabref_acq(mainL->env);
     if (env)
       gc_markobj(g, env);
   }
-  gc_markobj(g, vmthread(g));
+  gc_markobj(g, vmL);
   gc_marktv(g, &g->registrytv);
   gc_mark_gcroot(g);
   g->gc.state = GCSpropagate;
@@ -795,7 +797,7 @@ static void gc_mark_finalizers(global_State *g)
 
 static int gc_unlink_udata_object(global_State *g, GCobj *target)
 {
-  GCRef *p = lj_obj_gcwref(obj2gco(mainthread(g)));
+  GCRef *p = lj_obj_gcwref(obj2gco(mainthread_acq(g)));
   GCobj *o;
   while ((o = gcref_acq(*p)) != NULL) {
     if (o == target) {
@@ -1484,7 +1486,7 @@ static int gc_call_finalizer(global_State *g, lua_State *L,
   TValue *top;
   while (!lj_state_tryclaim(cbL, lj_thr_current_id(g), &claim))
     la_cpu_pause();
-  lj_assertG(cbL != vmthread(g),
+  lj_assertG(cbL != vmthread_acq(g),
 	     "gc_call_finalizer must not use shared vmthread callback stack");
   oldL = lj_tg_cur_L(g);
   oldh = hook_save(g);
@@ -1617,7 +1619,7 @@ static int gc_finalize(lua_State *L)
   }
 #endif
   /* Add userdata back to the main userdata list and make it white. */
-  lj_gc_linkobj_after(obj2gco(mainthread(g)), o);
+  lj_gc_linkobj_after(obj2gco(mainthread_acq(g)), o);
   makewhite(g, o);
   lj_gc_arena_markobj(g, o);
   if (lj_gc2_finreg_udata_set(g, o, 0) < 0)
@@ -1936,7 +1938,7 @@ static void atomic(global_State *g, lua_State *L)
   gc_propagate_gray(g);  /* Propagate any left-overs. */
 
   lj_gc_list_move_rel(&g->gc.gray, &g->gc.weak);  /* Empty weak tables. */
-  lj_assertG(!iswhite(obj2gco(mainthread(g))), "main thread turned white");
+  lj_assertG(!iswhite(obj2gco(mainthread_acq(g))), "main thread turned white");
   gc_markobj(g, L);  /* Mark running thread. */
   gc_traverse_curtrace(g);  /* Traverse current trace. */
   gc_mark_gcroot(g);  /* Mark GC roots (again). */
@@ -2306,7 +2308,7 @@ void lj_gc_closeuv(global_State *g, GCupval *uv)
 {
   GCobj *o = obj2gco(uv);
   /* Copy stack slot to upvalue itself and point to the copy. */
-  copyTVrel(mainthread(g), &uv->tv, uvval(uv));
+  copyTVrel(mainthread_acq(g), &uv->tv, uvval(uv));
   setmref(uv->v, &uv->tv);
   uv->closed = 1;
   lj_gc_linkobj(g, o);  /* CAS-publish closed upvalue on root list. */

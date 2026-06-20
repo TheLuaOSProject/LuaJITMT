@@ -872,7 +872,7 @@ LJLIB_CF(threading_current)
   if (!ud) {
     GCstr *key = lj_str_newlit(L, THREADING_MAIN_KEY);
     cTValue *tv = lj_tab_getstr(env, key);
-    if (L != mainthread(G(L)))
+    if (L != mainthread_acq(G(L)))
       lj_err_callermsg(L, "attached thread is not joinable");
     if (tv && tvisudata(tv) &&
 	lj_udata_udtype_acq(udataV(tv)) == UDTYPE_THREAD) {
@@ -884,7 +884,7 @@ LJLIB_CF(threading_current)
       threading_publish_thread_state(L, ud, th, L);
       th->tg = tg;
       th->state = LJ_THREAD_RUNNING;
-      th->main_thread = (L == mainthread(G(L)));
+      th->main_thread = (L == mainthread_acq(G(L)));
       th->thr.tid = tg ? tg->tid : 0;
       threading_state_set_ud(L, L, ud);
       if (tg)
@@ -992,7 +992,7 @@ int lj_threading_attach(lua_State *L)
   cur = lj_thr_get_tg();
   if (cur)
     return lj_tg_load_thread_L(cur) == L;
-  if (L == mainthread(g))
+  if (L == mainthread_acq(g))
     return 0;
   tid = lj_thr_newid();
   if (!lj_state_claim(L, tid))

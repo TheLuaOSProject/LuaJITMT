@@ -1522,14 +1522,16 @@ static void gc2_scan_current_trace_root(global_State *g)
 
 static void gc2_scan_global_roots(global_State *g)
 {
+  lua_State *mainL = mainthread_acq(g);
+  lua_State *vmL = vmthread_acq(g);
   ptrdiff_t i;
-  lj_gc2_markobj(g, obj2gco(mainthread(g)));
+  lj_gc2_markobj(g, obj2gco(mainL));
   {
-    GCtab *env = tabref_acq(mainthread(g)->env);
+    GCtab *env = tabref_acq(mainL->env);
     if (env)
       lj_gc2_markobj(g, obj2gco(env));
   }
-  lj_gc2_markobj(g, obj2gco(vmthread(g)));
+  lj_gc2_markobj(g, obj2gco(vmL));
   gc2_mark_tv(g, &g->registrytv);
   for (i = 0; i < GCROOT_MAX; i++) {
     GCobj *o = gcref_acq(g->gcroot[i]);
@@ -1765,7 +1767,7 @@ static int gc2_weak_resize(global_State *g, MSize cap)
   MSize oldcap;
   if (!g || cap == 0)
     return 0;
-  L = mainthread(g);
+  L = mainthread_acq(g);
   if (!L)
     return 0;
   oldstack = g->gc2.weak_stack;
@@ -1870,7 +1872,7 @@ static int gc2_finclaim_resize(global_State *g, MSize cap)
   MSize oldcap, head, count, pending, i;
   if (!g || cap == 0)
     return 0;
-  L = mainthread(g);
+  L = mainthread_acq(g);
   if (!L)
     return 0;
   oldobj = g->gc2.finreg_cdata_preclaim_obj;
@@ -1905,7 +1907,7 @@ static void gc2_finclaim_reset(global_State *g)
   MSize head, count, pending, cap, i;
   if (!g)
     return;
-  L = mainthread(g);
+  L = mainthread_acq(g);
   if (!L)
     return;
   obj = g->gc2.finreg_cdata_preclaim_obj;

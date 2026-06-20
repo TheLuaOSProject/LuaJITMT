@@ -805,7 +805,7 @@ LUA_API int lua_pushthread(lua_State *L)
 {
   setthreadV(L, L->top, L);
   incr_top(L);
-  return (mainthread(G(L)) == L);
+  return (mainthread_acq(G(L)) == L);
 }
 
 LUA_API lua_State *lua_newthread(lua_State *L)

@@ -429,7 +429,7 @@ static TValue *cpfinalize(lua_State *L, lua_CFunction dummy, void *ud)
 LUA_API void lua_close(lua_State *L)
 {
   global_State *g = G(L);
-  L = mainthread(g);  /* Only the main thread can be closed. */
+  L = mainthread_acq(g);  /* Only the main thread can be closed. */
 #if LJ_HASPROFILE
   luaJIT_profile_stop(L);
 #endif
@@ -489,7 +489,7 @@ lua_State *lj_state_new(lua_State *L)
 
 void LJ_FASTCALL lj_state_free(global_State *g, lua_State *L)
 {
-  lj_assertG(L != mainthread(g), "free of main thread");
+  lj_assertG(L != mainthread_acq(g), "free of main thread");
 #if LJ_HASFFI
   lj_ccallback_disown_state(L);
 #endif

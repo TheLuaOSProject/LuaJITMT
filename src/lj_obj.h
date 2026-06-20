@@ -1629,6 +1629,18 @@ LJ_STATIC_ASSERT(((int)offsetof(GCupval, marked) -
 /* Macro to convert any collectable object into a GCobj pointer. */
 #define obj2gco(v)	((GCobj *)(v))
 
+static LJ_AINLINE lua_State *mainthread_acq(global_State *g)
+{
+  GCobj *o = gcref_acq(g->mainthref);
+  return o ? gco2th(o) : NULL;
+}
+
+static LJ_AINLINE lua_State *vmthread_acq(global_State *g)
+{
+  GCobj *o = gcref_acq(g->vmthref);
+  return o ? gco2th(o) : NULL;
+}
+
 #if LJ_GC64
 static LJ_AINLINE void setgcrefrel_(GCRef *r, const GCobj *gc)
 {
