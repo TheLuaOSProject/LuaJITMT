@@ -789,6 +789,8 @@ void lj_gc2_finalizer_enqueue(global_State *g, GCobj *o)
   } while (!la_casptr((void **)&g->gc2.finalizer_mpsc, (void **)&head, o,
 		      LA_REL, LA_ACQ));
   la_add64_rlx(&g->gc2.finalizer_queued, 1);
+  if (head == NULL)
+    lj_gc2_worker_wake(g);  /* 05 section 5.8: finalizer work became visible. */
 }
 
 void lj_gc2_finalizer_drain_owned(global_State *g)

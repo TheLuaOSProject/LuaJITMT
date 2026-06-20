@@ -132,7 +132,7 @@ static void relink_root_object(global_State *g, GCobj *o)
 static void test_finalizer_consumer_ring(lua_State *L, global_State *g)
 {
   GCobj *a, *b, *c;
-  uint64_t queued0, dequeued0, drained0;
+  uint64_t queued0, dequeued0, drained0, wakes0;
   lua_settop(L, 0);
   assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) == NULL);
   assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) == NULL);
@@ -149,10 +149,14 @@ static void test_finalizer_consumer_ring(lua_State *L, global_State *g)
   queued0 = la_load64_acq(&g->gc2.finalizer_queued);
   dequeued0 = la_load64_acq(&g->gc2.finalizer_dequeued);
   drained0 = la_load64_acq(&g->gc2.finalizer_mpsc_drained);
+  assert(lj_gc2_worker_start(g) == 1);
+  wakes0 = la_load64_acq(&g->gc2.worker_wakes);
   lj_gc2_finalizer_enqueue(g, a);
   lj_gc2_finalizer_enqueue(g, b);
   lj_gc2_finalizer_enqueue(g, c);
   assert(la_load64_acq(&g->gc2.finalizer_queued) == queued0 + 3u);
+  assert(la_load64_acq(&g->gc2.worker_wakes) == wakes0 + 1u);
+  lj_gc2_worker_stop(g);
   assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) != NULL);
   assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) == NULL);
 
