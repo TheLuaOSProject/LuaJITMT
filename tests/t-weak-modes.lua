@@ -1,12 +1,7 @@
 local ok_ffi, ffi = pcall(require, "ffi")
 local ok_th, th = pcall(require, "threading")
 local harness = require"thread_harness"
-
-local function fullgc(n)
-  for _ = 1, n or 2 do
-    collectgarbage("collect")
-  end
-end
+local fullgc = harness.fullgc
 
 local function npairs(t)
   local n = 0

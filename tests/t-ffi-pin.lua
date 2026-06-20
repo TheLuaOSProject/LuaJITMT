@@ -1,15 +1,12 @@
 local ffi = require"ffi"
+local harness = require"thread_harness"
 
 ffi.cdef[[
 typedef struct { int x; } lj_m7_pin_obj_t;
 ]]
 
 local pin_obj_t = ffi.typeof("lj_m7_pin_obj_t")
-
-local function fullgc()
-  collectgarbage("collect")
-  collectgarbage("collect")
-end
+local fullgc = harness.fullgc
 
 do
   local weak = setmetatable({}, { __mode = "v" })
@@ -65,7 +62,6 @@ end
 do
   local ok, th = pcall(require, "threading")
   if ok then
-    local harness = require"thread_harness"
     local nthreads = harness.arg_number(1, "LJ_M7_FFI_PIN_THREADS", 4)
     local iters = harness.arg_number(2, "LJ_M7_FFI_PIN_ITERS", 80)
     if nthreads > 0 and iters > 0 then
@@ -77,11 +73,7 @@ do
 	  local ffi = require"ffi"
 	  pcall(ffi.cdef, [[typedef struct { int x; } lj_m7_pin_obj_t;]])
 	  local pin_obj_t = ffi.typeof("lj_m7_pin_obj_t")
-
-	  local function fullgc()
-	    collectgarbage("collect")
-	    collectgarbage("collect")
-	  end
+	  local fullgc = require"thread_harness".fullgc
 
 	  local function table_pin_once(i)
 	    local weak = setmetatable({}, { __mode = "v" })

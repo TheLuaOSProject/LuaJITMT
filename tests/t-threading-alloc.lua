@@ -1,8 +1,8 @@
 local th = require"threading"
 local harness = require"thread_harness"
 
-local nthread = tonumber(arg and arg[1]) or 4
-local niter = tonumber(arg and arg[2]) or 6000
+local nthread = harness.arg_number(1, "LJ_M5_THREAD_ALLOC_THREADS", 4)
+local niter = harness.arg_number(2, "LJ_M5_THREAD_ALLOC_ITERS", 6000)
 local threads = {}
 
 for id = 1, nthread do
