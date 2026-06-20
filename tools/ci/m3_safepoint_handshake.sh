@@ -8,7 +8,9 @@ if hits=$(grep -nE -- '->[[:space:]]*next_tg|&[[:alnum:]_]+->[[:space:]]*next_tg
     "$ROOT/src/lj_gc2.c" \
     "$ROOT/src/lj_safepoint.c" \
     "$ROOT/src/lib_threading.c" \
-    "$ROOT/src/lj_tg.c" || true); [ -n "$hits" ]; then
+    "$ROOT/src/lj_tg.c" \
+    "$ROOT/tests/t-thr-substrate.c" \
+    "$ROOT/tests/t-safepoint-handshake.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
   printf '%s\n' 'raw TGState next_tg access is forbidden; use lj_tg_next_* helpers' >&2
   exit 1

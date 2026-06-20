@@ -46,7 +46,7 @@ static void attach_without_catchup(global_State *g, TGState *tg)
   void *head;
   do {
     head = la_loadptr_acq((void *const *)&g->gc2.tg_list);
-    tg->next_tg = (TGState *)head;
+    lj_tg_next_rel(tg, (TGState *)head);
   } while (!la_casptr((void **)&g->gc2.tg_list, &head, tg,
 		      LA_ACQ_REL, LA_ACQ));
   la_add32_rlx(&g->gc2.n_threads, 1);
@@ -57,7 +57,7 @@ static int tg_list_contains(TGState *tg, TGState *needle)
   while (tg) {
     if (tg == needle)
       return 1;
-    tg = tg->next_tg;
+    tg = lj_tg_next_acq(tg);
   }
   return 0;
 }
@@ -113,6 +113,8 @@ int main(void)
   LJThr thr;
   ThrCtx ctx = {0};
   ThrCtx catch = {0};
+  lua_State *hold_L;
+  TGState hold_tg;
   lua_State *late_L;
   TGState late_tg;
   HandshakeCtx hs = {0};
@@ -178,8 +180,13 @@ int main(void)
 
   hs.g = g;
   hs.actions = LJ_GC2_HS_ALLOC_BLACK|LJ_GC2_HS_STOPREQ;
-  /* Hold the leader handshake open on the main TG. */
-  la_storeptr_rel((void **)&tg->cur_L, NULL);
+  hold_L = lua_newthread(L);
+  assert(hold_L != NULL);
+  lj_tg_init_thread(g, &hold_tg, hold_L, 0);
+  lj_native_enter(&hold_tg);
+  lj_tg_attach(g, &hold_tg);
+  /* Hold the leader handshake open on a remote native TG. */
+  lj_tg_store_cur_L(&hold_tg, NULL);
   epoch0 = la_load64_acq(&g->gc2.hs_epoch);
   assert(pthread_create(&hs_thread, NULL, handshake_main, &hs) == 0);
   while (la_load64_acq(&g->gc2.hs_epoch) == epoch0)
@@ -209,17 +216,22 @@ int main(void)
   assert(la_load32_acq(&late_tg.poll) == 0);
   assert(la_load32_acq(&late_tg.reqmask) == 0);
 
-  la_storeptr_rel((void **)&tg->cur_L, L);
-  assert(lj_safepoint_ack(L) == hs.actions);
+  lj_tg_store_cur_L(&hold_tg, hold_L);
+  assert(lj_safepoint_ack(hold_L) == hs.actions);
   assert(pthread_join(hs_thread, NULL) == 0);
-  assert(hs.signaled == 2u);
+  assert(hs.signaled == 3u);
   assert(g->gc2.hs_pending == 0);
   assert(la_load64_acq(&catch.tg.hs_epoch_ack) == g->gc2.hs_epoch);
   assert(la_load64_acq(&late_tg.hs_epoch_ack) == g->gc2.hs_epoch);
+  assert(la_load64_acq(&hold_tg.hs_epoch_ack) == g->gc2.hs_epoch);
 
   lj_tg_detach(g, &late_tg);
   assert(lj_tg_reclaim_dead(g) == 0u);
   lj_tg_fini_thread(g, &late_tg);
+  lua_pop(L, 1);
+
+  lj_tg_detach(g, &hold_tg);
+  lj_tg_fini_thread(g, &hold_tg);
   lua_pop(L, 1);
 
   la_store32_rel(&catch.release, 1);
@@ -227,9 +239,10 @@ int main(void)
   assert(ret == (void *)(uintptr_t)0x4a);
   assert(la_load32_acq(&catch.detached) == 1u);
   assert(la_load32_acq(&g->gc2.n_threads) == 1u);
-  assert(lj_tg_reclaim_dead(g) == 2u);
+  assert(lj_tg_reclaim_dead(g) == 3u);
   assert(!tg_list_contains(g->gc2.tg_list, &catch.tg));
   assert(!tg_list_contains(g->gc2.tg_list, &late_tg));
+  assert(!tg_list_contains(g->gc2.tg_list, &hold_tg));
   lua_pop(L, 1);
 
   lj_thr_set_tg(NULL);

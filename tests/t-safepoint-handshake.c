@@ -427,7 +427,7 @@ static int tg_list_contains(TGState *tg, TGState *needle)
   while (tg) {
     if (tg == needle)
       return 1;
-    tg = tg->next_tg;
+    tg = lj_tg_next_acq(tg);
   }
   return 0;
 }
