@@ -1,8 +1,9 @@
 local th = require"threading"
 local ffi = require"ffi"
+local harness = require"thread_harness"
 
-local nthreads = tonumber((arg and arg[1]) or os.getenv("LJ_M7_FFI_FIN_THREADS")) or 6
-local iters = tonumber((arg and arg[2]) or os.getenv("LJ_M7_FFI_FIN_ITERS")) or 240
+local nthreads = harness.arg_number(1, "LJ_M7_FFI_FIN_THREADS", 6)
+local iters = harness.arg_number(2, "LJ_M7_FFI_FIN_ITERS", 240)
 
 ffi.cdef[[
 typedef struct { uint8_t bytes[32]; } lj_m7_fin_obj_t;
@@ -11,8 +12,7 @@ local fin_obj_t = ffi.typeof("lj_m7_fin_obj_t")
 
 collectgarbage("stop")
 
-local ready = th.channel(nthreads)
-local start = th.channel(nthreads)
+local ready, start = harness.channels(nthreads)
 local finalized = th.channel(nthreads * iters)
 local workers = {}
 
@@ -52,27 +52,21 @@ for tid = 1, nthreads do
     local expected = allocate()
     return expected
   end, ready, start, finalized, tid, iters)
-  local _, ok = ready:recv(10)
-  assert(ok == true)
+  harness.wait_ready(ready, 1)
 end
 
-for _ = 1, nthreads do
-  assert(start:send("go", 10) == true)
-end
+harness.release_start(start, nthreads)
 
 local total = 0
 local expected_by_thread = {}
-for tid = 1, nthreads do
-  local ok, result = workers[tid]:join(30)
-  assert(ok == true, tostring(result))
+harness.join_each(workers, function(result, tid)
   assert(type(result) == "number")
   expected_by_thread[tid] = result
   total = total + result
-end
+end)
 
 collectgarbage("restart")
-collectgarbage("collect")
-collectgarbage("collect")
+harness.fullgc()
 
 do
   local finalized_by_thread = {}
@@ -96,8 +90,7 @@ collectgarbage("stop")
 do
   local shared_finalized = 0
   local shared = ffi.gc(fin_obj_t(), function(_) end)
-  local race_ready = th.channel(nthreads)
-  local race_start = th.channel(nthreads)
+  local race_ready, race_start = harness.channels(nthreads)
   local race_workers = {}
   local race_iters = math.max(16, math.floor(iters / 2))
 
@@ -116,35 +109,27 @@ do
       end
       return count
     end, race_ready, race_start, shared, tid, race_iters)
-    local _, ok = race_ready:recv(10)
-    assert(ok == true)
+    harness.wait_ready(race_ready, 1)
   end
 
-  for _ = 1, nthreads do
-    assert(race_start:send("go", 10) == true)
-  end
-
-  for tid = 1, nthreads do
-    local ok, result = race_workers[tid]:join(30)
-    assert(ok == true, tostring(result))
+  harness.release_start(race_start, nthreads)
+  harness.join_each(race_workers, function(result)
     assert(result == race_iters)
-  end
+  end)
 
   ffi.gc(shared, function(_)
     shared_finalized = shared_finalized + 1
   end)
   shared = nil
   collectgarbage("restart")
-  collectgarbage("collect")
-  collectgarbage("collect")
+  harness.fullgc()
   assert(shared_finalized == 1,
 	 ("shared cdata race: finalized %d, expected 1"):format(shared_finalized))
   collectgarbage("stop")
 end
 
 collectgarbage("restart")
-collectgarbage("collect")
-collectgarbage("collect")
+harness.fullgc()
 
 do
   local finalized = 0
@@ -166,8 +151,7 @@ do
     return iters - cleared
   end
   local expected = allocate()
-  collectgarbage("collect")
-  collectgarbage("collect")
+  harness.fullgc()
   assert(finalized == expected,
          ("main: finalized %d, expected %d"):format(finalized, expected))
 end
@@ -180,8 +164,7 @@ do
   end
   local cd = ffi.gc(fin_obj_t(), fin)
   cd = nil
-  collectgarbage("collect")
-  collectgarbage("collect")
+  harness.fullgc()
   assert(finalized == 1,
          ("nested finalizer GC: finalized %d, expected 1"):format(finalized))
 end
