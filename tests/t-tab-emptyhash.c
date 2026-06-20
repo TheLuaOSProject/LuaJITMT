@@ -20,7 +20,7 @@ static void assert_nilnode_clean(lua_State *L)
   assert(lj_tab_node_hmask_acq(nilnode) == 0);
   assert(tvisnil(&nilnode->key));
   assert(tvisnil(&nilnode->val));
-  assert(nextnode(nilnode) == NULL);
+  assert(lj_tab_nextnode_acq(nilnode) == NULL);
 }
 
 static GCtab *new_empty_table(lua_State *L)
