@@ -440,16 +440,16 @@ LJLIB_CF(jit_util_tracesnap)
   GCtrace *T = jit_checktrace(L);
   SnapNo sn = (SnapNo)lj_lib_checkint(L, 2);
   if (T && sn < trace_nsnap_acq(T)) {
-    SnapShot *snap = &T->snap[sn];
-    SnapEntry *map = &T->snapmap[snap->mapofs];
-    MSize n, nent = snap->nent;
+    SnapShot *snap = &trace_snap_acq(T)[sn];
+    SnapEntry *map = &trace_snapmap_acq(T)[snap_mapofs_acq(snap)];
+    MSize n, nent = snap_nent_acq(snap);
     GCtab *t;
     lua_createtable(L, nent+2, 0);
     t = tabV(L->top-1);
-    setintindex(L, t, 0, (int32_t)snap->ref - REF_BIAS);
-    setintindex(L, t, 1, (int32_t)snap->nslots);
+    setintindex(L, t, 0, (int32_t)snap_ref_acq(snap) - REF_BIAS);
+    setintindex(L, t, 1, (int32_t)snap_nslots_acq(snap));
     for (n = 0; n < nent; n++)
-      setintindex(L, t, (int32_t)(n+2), (int32_t)map[n]);
+      setintindex(L, t, (int32_t)(n+2), (int32_t)snapentry_acq(&map[n]));
     setintindex(L, t, (int32_t)(nent+2), (int32_t)SNAP(255, 0, 0));
     lj_gc_pubtab(L, t);
     return 1;

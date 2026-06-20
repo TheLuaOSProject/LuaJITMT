@@ -235,6 +235,31 @@ static LJ_AINLINE const BCIns *snap_pc(SnapEntry *sn)
 #endif
 }
 
+static LJ_AINLINE MSize snap_mapofs_acq(const SnapShot *snap)
+{
+  return (MSize)la_load32_acq(&snap->mapofs);
+}
+
+static LJ_AINLINE IRRef snap_ref_acq(const SnapShot *snap)
+{
+  return (IRRef)la_load16_acq(&snap->ref);
+}
+
+static LJ_AINLINE MSize snap_nslots_acq(const SnapShot *snap)
+{
+  return (MSize)la_load8_acq(&snap->nslots);
+}
+
+static LJ_AINLINE MSize snap_nent_acq(const SnapShot *snap)
+{
+  return (MSize)la_load8_acq(&snap->nent);
+}
+
+static LJ_AINLINE SnapEntry snapentry_acq(const SnapEntry *entry)
+{
+  return (SnapEntry)la_load32_acq(entry);
+}
+
 /* Snapshot and exit numbers. */
 typedef uint32_t SnapNo;
 typedef uint32_t ExitNo;
@@ -379,6 +404,16 @@ static LJ_AINLINE MSize trace_szmcode_acq(const GCtrace *T)
 static LJ_AINLINE MSize trace_mcloop_acq(const GCtrace *T)
 {
   return (MSize)la_load32_acq(&T->mcloop);
+}
+
+static LJ_AINLINE SnapShot *trace_snap_acq(const GCtrace *T)
+{
+  return (SnapShot *)la_loadptr_acq((void *const *)&T->snap);
+}
+
+static LJ_AINLINE SnapEntry *trace_snapmap_acq(const GCtrace *T)
+{
+  return (SnapEntry *)la_loadptr_acq((void *const *)&T->snapmap);
 }
 
 #define trace_exittarget_acq(T, exitno) \
