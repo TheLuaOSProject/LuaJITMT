@@ -351,6 +351,7 @@ typedef struct GCstr {
 } GCstr;
 
 #define strref(r)	(&gcref((r))->str)
+#define strref_acq(r)	(&gcref_acq((r))->str)
 #define strdata(s)	((const char *)((s)+1))
 #define strdatawr(s)	((char *)((s)+1))
 #define strVdata(o)	strdata(strV(o))
@@ -1101,7 +1102,7 @@ typedef enum {
 
 #define basemt_it(g, it)	((g)->gcroot[GCROOT_BASEMT+~(it)])
 #define basemt_obj(g, o)	((g)->gcroot[GCROOT_BASEMT+itypemap(o)])
-#define mmname_str(g, mm)	(strref((g)->gcroot[GCROOT_MMNAME+(mm)]))
+#define mmname_str(g, mm)	(strref_acq((g)->gcroot[GCROOT_MMNAME+(mm)]))
 
 /* Garbage collector state. */
 typedef struct GCState {
