@@ -747,7 +747,7 @@ LJLIB_CF(collectgarbage)
     if (hasdata) {
       if (data <= 0) {
 	lj_gc2_worker_stop(g);
-      } else if (old == 0 && !lj_gc2_worker_start(g)) {
+      } else if (!lj_gc2_workers_set(g, (uint32_t)data)) {
 	lj_err_callermsg(L, "cannot start GC worker");
       }
     }

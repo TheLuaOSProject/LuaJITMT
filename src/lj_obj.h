@@ -1150,6 +1150,7 @@ typedef struct TabState {
 } TabState;
 
 #define LJ_GC2_HS_LATENCY_BUCKETS 48
+#define LJ_GC2_WORKER_MAX 2
 
 typedef struct TGState TGState;
 typedef struct LJThreadLive LJThreadLive;
@@ -1232,13 +1233,13 @@ typedef struct GC2State {
   uint64_t grey_bottom;	/* Chase-Lev owner-side index. */
   uint64_t grey_pushed;	/* Grey entries scheduled from SSB/traversal. */
   uint64_t grey_drained;  /* Grey entries popped for traversal. */
-  void *worker_thread;  /* Opaque LJThr* for staged parked GC worker. */
+  void *worker_thread[LJ_GC2_WORKER_MAX];  /* Opaque LJThr* parked workers. */
   uint32_t n_workers;	/* Parked GC workers started for this state. */
   uint32_t worker_stop;  /* Request parked worker shutdown. */
   uint32_t worker_wake;  /* Futex word for worker wakeups. */
-  uint32_t worker_started;  /* Worker has entered its loop. */
-  uint32_t worker_exited;  /* Worker has left its loop. */
-  uint32_t worker_active;  /* Temporary single worker-drain owner token. */
+  uint32_t worker_started;  /* Workers that have entered their loops. */
+  uint32_t worker_exited;  /* Workers that have left their loops. */
+  uint32_t worker_active;  /* Temporary single drain owner token. */
   uint64_t worker_runs;  /* Non-owner worker drain attempts with work. */
   uint64_t worker_grey_drained;  /* Grey objects traced by workers. */
   uint64_t worker_ssb_converted;  /* SSB entries converted by workers. */

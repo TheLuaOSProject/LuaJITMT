@@ -50,6 +50,17 @@ static int wait_ssb_empty(global_State *g)
   return 0;
 }
 
+static int wait_u64_at_least(uint64_t *p, uint64_t target)
+{
+  int i;
+  for (i = 0; i < 1000; i++) {
+    if (la_load64_acq(p) >= target)
+      return 1;
+    sleep_ns(1000000L);
+  }
+  return 0;
+}
+
 static int arena_list_contains(GCArena *a, GCArena *needle)
 {
   while (a) {
@@ -84,6 +95,26 @@ static int weak_entry_is_nil(lua_State *L, GCtab *weak, GCtab *key)
   TValue k;
   settabV(L, &k, key);
   return tvisnil(lj_tab_get(L, weak, &k));
+}
+
+static void test_two_worker_contention(global_State *g)
+{
+  uint64_t busy0, parks0, wakes0;
+
+  assert(la_load32_acq(&g->gc2.n_workers) == 2);
+  parks0 = la_load64_acq(&g->gc2.worker_parks);
+  if (parks0 < 2u)
+    assert(wait_u64_at_least(&g->gc2.worker_parks, 2u));
+
+  busy0 = la_load64_acq(&g->gc2.worker_busy_retries);
+  wakes0 = la_load64_acq(&g->gc2.worker_wakes);
+  la_store32_rel(&g->gc2.worker_active, 1);
+  la_store32_rel(&g->gc2.phase, LJ_GC2_MARK);
+  lj_gc2_worker_wake(g);
+  assert(la_load64_acq(&g->gc2.worker_wakes) > wakes0);
+  assert(wait_u64_at_least(&g->gc2.worker_busy_retries, busy0 + 2u));
+  la_store32_rel(&g->gc2.phase, LJ_GC2_IDLE);
+  la_store32_rel(&g->gc2.worker_active, 0);
 }
 
 static void test_async_mark(lua_State *L, global_State *g, TGState *tg)
@@ -244,9 +275,10 @@ static void test_async_sweep_and_stop(lua_State *L, global_State *g,
   assert(!lj_gc2_sweep_pending(g));
 
   lj_gc2_worker_stop(g);
-  assert(g->gc2.worker_thread == NULL);
+  assert(g->gc2.worker_thread[0] == NULL);
+  assert(g->gc2.worker_thread[1] == NULL);
   assert(la_load32_acq(&g->gc2.n_workers) == 0);
-  assert(la_load32_acq(&g->gc2.worker_exited) == 1);
+  assert(la_load32_acq(&g->gc2.worker_exited) == 2);
 
   lj_arena_alloc_restore_sweep_kind(&extra_tg.alloc, LJ_ARENAK_TRAVERSABLE);
   /* Synthetic boundary: main TG had no prepared work. */
@@ -272,11 +304,13 @@ int main(void)
   tg = G2TG(g);
   assert(tg != NULL);
 
-  assert(lj_gc2_worker_start(g) == 1);
-  assert(g->gc2.worker_thread != NULL);
-  assert(la_load32_acq(&g->gc2.n_workers) == 1);
-  assert(la_load32_acq(&g->gc2.worker_started) == 1);
+  assert(lj_gc2_workers_set(g, 2) == 1);
+  assert(g->gc2.worker_thread[0] != NULL);
+  assert(g->gc2.worker_thread[1] != NULL);
+  assert(la_load32_acq(&g->gc2.n_workers) == 2);
+  assert(la_load32_acq(&g->gc2.worker_started) == 2);
 
+  test_two_worker_contention(g);
   test_async_mark(L, g, tg);
   test_async_weak(L, g, tg);
   test_async_sweep_and_stop(L, g, tg);
