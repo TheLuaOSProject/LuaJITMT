@@ -3656,15 +3656,39 @@ static uint32_t gc2_worker_progress_add(uint32_t a, uint32_t b)
   return b > ~(uint32_t)0 - a ? ~(uint32_t)0 : a + b;
 }
 
+static uint32_t gc2_worker_finalizer_drain(global_State *g, uint32_t limit)
+{
+  uint64_t before, after, delta;
+  if (!g || limit == 0 ||
+      la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) == NULL)
+    return 0;
+  if (!lj_gc2_finalizer_try_enter(g))
+    return 0;
+  before = la_load64_acq(&g->gc2.finalizer_mpsc_drained);
+  lj_gc2_finalizer_drain_owned(g);
+  after = la_load64_acq(&g->gc2.finalizer_mpsc_drained);
+  lj_gc2_finalizer_leave(g);
+  delta = after - before;
+  return delta > ~(uint32_t)0 ? ~(uint32_t)0 : (uint32_t)delta;
+}
+
 static uint32_t gc2_worker_drain_inner(global_State *g, uint32_t limit,
 				       uint32_t *progress)
 {
   uint32_t phase, expect = 0, n = 0, converted = 0, weak = 0, sweep = 0;
+  uint32_t finalizer = 0;
   uint32_t total;
   if (progress)
     *progress = 0;
   if (!g || limit == 0)
     return 0;
+  finalizer = gc2_worker_finalizer_drain(g, limit);
+  if (finalizer) {
+    la_add64_rlx(&g->gc2.worker_runs, 1);
+    if (progress)
+      *progress = finalizer;
+    return finalizer;  /* 05 section 5.8: worker drains finalizer queue work. */
+  }
   phase = la_load32_acq(&g->gc2.phase);
   if (phase != LJ_GC2_MARK && phase != LJ_GC2_WEAK &&
       phase != LJ_GC2_SWEEP)
