@@ -1,38 +1,11 @@
 local utils = require("suite_utils")
+local runtime = require("suite_runtime")
 
-local quote = utils.shell_quote
-
-local function lua_path_guard(t)
-  return t:path("src", "?.lua") .. ";" .. t:path("src", "jit", "?.lua") .. ";;"
-end
-
-local function run_luajit(t, args)
-  t:luajit(args, { env = { LUA_PATH = lua_path_guard(t) } })
-end
-
-local function luajit_capture(t, args, out)
-  local parts = { "LUA_PATH=" .. quote(lua_path_guard(t)), quote(t:path("src", "luajit")) }
-  for i = 1, #args do parts[#parts + 1] = quote(args[i]) end
-  t:run(table.concat(parts, " ") .. " >" .. quote(out))
-end
-
-local function run_stock(t, args)
-  local parts = {
-    "cd " .. quote(t:path("tests", "stock", "test")),
-    "LUA_PATH=" .. quote(lua_path_guard(t)) .. " " .. quote(t:path("src", "luajit"))
-  }
-  for i = 1, #args do parts[2] = parts[2] .. " " .. quote(args[i]) end
-  t:run(parts[1] .. " && " .. parts[2])
-end
-
-local function build_and_run_c(t, out, cfile, opts)
-  opts = opts or {}
-  t:cc(out, { t:path("tests", cfile) }, {
-    link_luajit = true,
-    libs = { "-lm", "-ldl", "-pthread" }
-  })
-  t:run({ out }, { timeout = opts.timeout })
-end
+local contains = utils.contains
+local run_luajit = runtime.luajit
+local luajit_capture = runtime.capture_luajit
+local run_stock = runtime.run_stock
+local build_and_run_c = runtime.compile_and_run_c
 
 local function table_value_smoke()
   return [=[

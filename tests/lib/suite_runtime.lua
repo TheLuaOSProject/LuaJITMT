@@ -76,6 +76,18 @@ function M.capture_luajit(t, args, out, opts)
         { quiet = opts.quiet })
 end
 
+function M.run_stock(t, args, opts)
+  args = args or {}
+  opts = opts or {}
+  local parts = {
+    "cd " .. shell_quote(t:path("tests", "stock", "test")),
+    "LUA_PATH=" .. shell_quote(M.lua_path(t)) .. " " ..
+      shell_quote(t:path("src", "luajit"))
+  }
+  for i = 1, #args do parts[2] = parts[2] .. " " .. shell_quote(args[i]) end
+  t:run(parts[1] .. " && " .. parts[2], { quiet = opts.quiet })
+end
+
 function M.build_default(t)
   t:make(nil, { quiet = true, jobs = false })
 end
