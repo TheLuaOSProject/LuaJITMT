@@ -9,4 +9,10 @@ if hits=$(grep -nE -- '(^|[^[:alnum:]_])(node|tail|fresh)[[:space:]]*->[[:space:
   printf '%s\n' 'raw GC2 SSB next-link access is forbidden; use lj_gc2_ssb_next_* helpers' >&2
   exit 1
 fi
+if hits=$(grep -nE -- 'ssb_node\[[^]]+\][.]next' \
+    "$ROOT/src/lj_tg.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw embedded GC2 SSB next-link init is forbidden; use lj_gc2_ssb_next_* helpers' >&2
+  exit 1
+fi
 exec "$ROOT/tools/ci/lua_test.sh" m3_gc2_worker_scheduler

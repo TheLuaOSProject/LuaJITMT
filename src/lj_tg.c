@@ -18,10 +18,10 @@
 static void tg_init_ssb(TGState *tg)
 {
   tg->ssb_node[0].owner = tg;
-  tg->ssb_node[0].next = NULL;
+  lj_gc2_ssb_next_rel(&tg->ssb_node[0], NULL);
   tg->ssb_node[0].n = 0;
   tg->ssb_node[1].owner = tg;
-  tg->ssb_node[1].next = NULL;
+  lj_gc2_ssb_next_rel(&tg->ssb_node[1], NULL);
   tg->ssb_node[1].n = 0;
   tg->ssb_active = &tg->ssb_node[0];
   tg->ssb_free = &tg->ssb_node[1];
