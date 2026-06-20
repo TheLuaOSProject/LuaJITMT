@@ -681,11 +681,11 @@ static void ctype_tab_free(global_State *g, CTypeTab *tabh)
 
 static void ctype_tab_retired_push(CTState *cts, CTypeTab *ret)
 {
-  void *head = la_loadptr_acq((void *const *)&cts->retiredtab);
+  CTypeTab *head = ctype_retiredtab_acq(cts);
   do {
-    ctype_tab_retired_next_rel(ret, (CTypeTab *)head);
-  } while (!la_casptr((void **)&cts->retiredtab, &head, ret,
-		      LA_ACQ_REL, LA_ACQ));  /* 11.2 CTState table SMR. */
+    ctype_tab_retired_next_rel(ret, head);
+  } while (!ctype_retiredtab_cas(cts, &head,
+				 ret));  /* 11.2 CTState table SMR. */
 }
 
 static void ctype_tab_retire(CTState *cts, CTypeTab *ret)
@@ -1624,7 +1624,7 @@ uint32_t lj_ctype_reclaim_retired(global_State *g, uint64_t completed_epoch)
   uint32_t reclaimed = 0;
   if (!cts || completed_epoch == 0)
     return 0;
-  ret = (CTypeTab *)la_xchgptr_acqrel((void **)&cts->retiredtab, NULL);
+  ret = ctype_retiredtab_xchg_acqrel(cts, NULL);
   while (ret) {
     CTypeTab *next = ctype_tab_retired_next_acq(ret);
     ctype_tab_retired_next_rel(ret, NULL);
@@ -1641,8 +1641,7 @@ uint32_t lj_ctype_reclaim_retired(global_State *g, uint64_t completed_epoch)
 
 static void ctype_freeretired(global_State *g, CTState *cts)
 {
-  CTypeTab *ret = (CTypeTab *)la_xchgptr_acqrel((void **)&cts->retiredtab,
-						NULL);
+  CTypeTab *ret = ctype_retiredtab_xchg_acqrel(cts, NULL);
   while (ret) {
     CTypeTab *next = ctype_tab_retired_next_acq(ret);
     ctype_tab_free(g, ret);

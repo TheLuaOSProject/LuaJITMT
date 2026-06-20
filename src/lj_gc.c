@@ -421,8 +421,7 @@ static void gc2_paranoia_check_rawroots(global_State *g)
 	if (pinmt)
 	  gc2_paranoia_checkobj(g, obj2gco(pinmt), "FFI pin metatable");
       }
-      for (ctret = (CTypeTab *)la_loadptr_acq(
-	     (void *const *)&cts->retiredtab);
+      for (ctret = ctype_retiredtab_acq(cts);
 	   ctret != NULL;
 	   ctret = ctype_tab_retired_next_acq(ctret)) {
 	gc2_paranoia_checkmem(g, ctret, "retired ctype table");
@@ -665,8 +664,7 @@ static void gc_mark_gcroot(global_State *g)
       lua_State **owner;
       lj_gc_arena_markmem(g, cts);
       lj_gc_arena_markmem(g, ctype_tabh_acq(cts));
-      for (ctret = (CTypeTab *)la_loadptr_acq(
-	     (void *const *)&cts->retiredtab);
+      for (ctret = ctype_retiredtab_acq(cts);
 	   ctret != NULL;
 	   ctret = ctype_tab_retired_next_acq(ctret)) {
 	lj_gc_arena_markmem(g, ctret);

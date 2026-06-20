@@ -863,6 +863,24 @@ static LJ_AINLINE CTypeTab *ctype_tabh_acq(CTState *cts)
   return (CTypeTab *)la_loadptr_acq((void *const *)&cts->tabh);
 }
 
+static LJ_AINLINE CTypeTab *ctype_retiredtab_acq(const CTState *cts)
+{
+  return (CTypeTab *)la_loadptr_acq((void *const *)&cts->retiredtab);
+}
+
+static LJ_AINLINE int ctype_retiredtab_cas(CTState *cts, CTypeTab **oldp,
+					   CTypeTab *tabh)
+{
+  return la_casptr((void **)&cts->retiredtab, (void **)oldp, tabh,
+		   LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE CTypeTab *ctype_retiredtab_xchg_acqrel(CTState *cts,
+							 CTypeTab *tabh)
+{
+  return (CTypeTab *)la_xchgptr_acqrel((void **)&cts->retiredtab, tabh);
+}
+
 /* Acquire current C type table. */
 static LJ_AINLINE CType *ctype_tab_acq(CTState *cts)
 {

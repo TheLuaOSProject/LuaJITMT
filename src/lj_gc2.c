@@ -1563,8 +1563,7 @@ static void gc2_scan_global_roots(global_State *g)
       lua_State **owner;
       lj_gc2_markmem(g, cts);
       lj_gc2_markmem(g, ctype_tabh_acq(cts));
-      for (ret = (CTypeTab *)la_loadptr_acq(
-	     (void *const *)&cts->retiredtab);
+      for (ret = ctype_retiredtab_acq(cts);
 	   ret != NULL;
 	   ret = ctype_tab_retired_next_acq(ret)) {
 	lj_gc2_markmem(g, ret);
