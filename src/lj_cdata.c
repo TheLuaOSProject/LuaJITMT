@@ -68,6 +68,7 @@ GCcdata *lj_cdata_newx_l(lua_State *L, CTState *cts, CTypeID id, CTSize sz,
 void LJ_FASTCALL lj_cdata_free(global_State *g, GCcdata *cd)
 {
   if (LJ_UNLIKELY(lj_obj_gcflags(obj2gco(cd)) & LJ_GC_CDATA_FIN)) {
+    lj_assertG(0, "unpublished cdata finalizer reached sweep/free");
     makewhite(g, obj2gco(cd));
     markfinalized(obj2gco(cd));
     lj_gc_arena_markobj(g, obj2gco(cd));

@@ -3543,6 +3543,7 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   uint64_t orderq2, orderclaimed2, orderfallback2;
   uint64_t pendingorder2;
   uint64_t overflow2;
+  uint64_t sweepqueued0;
   int finalized0;
   const int bulk_n = 160;
 
@@ -3554,6 +3555,7 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
     LUA_OK);
   assert(!lj_gc_cdata_fin_pending(g));
   lj_gc_finalize_cdata(L);
+  sweepqueued0 = la_load64_acq(&g->gc2.finreg_cdata_sweep_queued);
 
   assert(luaL_dostring(L,
     "local ffi = require('ffi')\n"
@@ -4092,6 +4094,8 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   lua_setglobal(L, "gc2_cdata_bulk_n");
   lua_pushnil(L);
   lua_setglobal(L, "gc2_cdata_counting_finalizer");
+  assert(la_load64_acq(&g->gc2.finreg_cdata_sweep_queued) ==
+	 sweepqueued0);
 }
 
 static void test_finreg_disabled_ordered_pending(lua_State *L, global_State *g)
