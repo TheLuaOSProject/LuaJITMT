@@ -2,4 +2,4 @@
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
-exec "$ROOT/tools/ci/lua_test.sh" run_stock_tests -- "$@"
+exec "$ROOT/tools/ci/lua_test.sh" m5_upvalue_publish_gc
