@@ -1517,8 +1517,12 @@ static TraceNo trace_exit_find(jit_State *J, MCode *pc)
   TraceNo traceno;
   for (traceno = 1; traceno < J->sizetrace; traceno++) {
     GCtrace *T = traceref(J, traceno);
-    if (T && pc >= T->mcode && pc < (MCode *)((char *)T->mcode + T->szmcode))
-      return traceno;
+    if (T) {
+      MCode *mcode = trace_mcode_acq(T);
+      MSize szmcode = trace_szmcode_acq(T);
+      if (mcode && pc >= mcode && pc < (MCode *)((char *)mcode + szmcode))
+	return traceno;
+    }
   }
   lj_assertJ(0, "bad exit pc");
   return 0;
@@ -1571,14 +1575,16 @@ int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr)
 #endif
   T = traceref(J, parent); UNUSED(T);
 #ifdef EXITSTATE_CHECKEXIT
-  if (exitno == T->nsnap) {  /* Treat stack check like a parent exit. */
-    lj_assertJ(T->root != 0, "stack check in root trace");
-    exitno = T->ir[REF_BASE].op2;
-    parent = T->ir[REF_BASE].op1;
+  if (exitno == trace_nsnap_acq(T)) {  /* Treat stack check like a parent exit. */
+    IRIns base = ir_load_acq(&trace_ir_acq(T)[REF_BASE]);
+    lj_assertJ(trace_root_acq(T) != 0, "stack check in root trace");
+    exitno = base.op2;
+    parent = base.op1;
     T = traceref(J, parent);
   }
 #endif
-  lj_assertJ(T != NULL && exitno < T->nsnap, "bad trace or exit number");
+  lj_assertJ(T != NULL && exitno < trace_nsnap_acq(T),
+	     "bad trace or exit number");
   exd.J = J;
   exd.L = L;
   exd.exptr = exptr;
@@ -1640,6 +1646,30 @@ int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr)
 }
 
 #if LJ_UNWIND_JIT
+#ifdef exitstub_trace_addr
+typedef struct TraceMCodeView {
+  MCode *mcode;
+  MSize szmcode;
+  MCode *exitstub;
+} TraceMCodeView;
+
+static LJ_AINLINE uintptr_t trace_unwind_exitstub_addr_acq(GCtrace *T,
+							   ExitNo exitno)
+{
+  TraceMCodeView tv;
+  tv.mcode = trace_mcode_acq(T);
+  tv.szmcode = trace_szmcode_acq(T);
+  tv.exitstub = trace_exitstub_acq(T);
+  if (tv.mcode == NULL)
+    return 0;
+#if LJ_TARGET_X86ORX64 && LJ_64
+  if (tv.exitstub == NULL)
+    return 0;
+#endif
+  return (uintptr_t)exitstub_trace_addr(&tv, exitno);
+}
+#endif
+
 /* Given an mcode address determine trace exit address for unwinding. */
 uintptr_t LJ_FASTCALL lj_trace_unwind(jit_State *J, uintptr_t addr, ExitNo *ep)
 {
@@ -1652,23 +1682,26 @@ uintptr_t LJ_FASTCALL lj_trace_unwind(jit_State *J, uintptr_t addr, ExitNo *ep)
   TraceNo traceno = trace_exit_find(J, (MCode *)addr);
 #endif
   GCtrace *T = traceref(J, traceno);
-  if (T
+  MCode *mcode = T ? trace_mcode_acq(T) : NULL;
+  MSize szmcode = T ? trace_szmcode_acq(T) : 0;
+  if (T && mcode
 #if EXITTRACE_VMSTATE
-      && addr >= (uintptr_t)T->mcode && addr < (uintptr_t)T->mcode + T->szmcode
+      && addr >= (uintptr_t)mcode &&
+      addr < (uintptr_t)mcode + szmcode
 #endif
      ) {
-    SnapShot *snap = T->snap;
-    SnapNo lo = 0, exitno = T->nsnap;
-    uintptr_t ofs = (uintptr_t)((MCode *)addr - T->mcode);  /* MCode units! */
+    SnapShot *snap = trace_snap_acq(T);
+    SnapNo lo = 0, exitno = trace_nsnap_acq(T);
+    uintptr_t ofs = (uintptr_t)((MCode *)addr - mcode);  /* MCode units! */
     /* Rightmost binary search for mcode offset to determine exit number. */
     do {
       SnapNo mid = (lo+exitno) >> 1;
-      if (ofs < snap[mid].mcofs) exitno = mid; else lo = mid + 1;
+      if (ofs < snap_mcofs_acq(&snap[mid])) exitno = mid; else lo = mid + 1;
     } while (lo < exitno);
     exitno--;
     *ep = exitno;
 #ifdef exitstub_trace_addr
-    return (uintptr_t)exitstub_trace_addr(T, exitno);
+    return trace_unwind_exitstub_addr_acq(T, exitno);
 #elif defined(EXITSTUBS_PER_GROUP)
     return (uintptr_t)exitstub_addr(J, exitno);
 #endif

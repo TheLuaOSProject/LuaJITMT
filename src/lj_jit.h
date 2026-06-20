@@ -250,6 +250,11 @@ static LJ_AINLINE MSize snap_nslots_acq(const SnapShot *snap)
   return (MSize)la_load8_acq(&snap->nslots);
 }
 
+static LJ_AINLINE MSize snap_mcofs_acq(const SnapShot *snap)
+{
+  return (MSize)la_load16_acq(&snap->mcofs);
+}
+
 static LJ_AINLINE MSize snap_nent_acq(const SnapShot *snap)
 {
   return (MSize)la_load8_acq(&snap->nent);
