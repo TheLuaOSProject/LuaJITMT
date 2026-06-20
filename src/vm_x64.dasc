@@ -345,6 +345,9 @@
 |  load_G reg
 |  mov reg, [reg+GL_OFS(jitp)]
 |.endmacro
+|.macro x64_vm_hookmask_acq, dst, g
+|  movzx dst, byte GL:g->hookmask	// x64_vm_hookmask_acq: TSO acquire load.
+|.endmacro
 |.macro x64_vm_tab_node_acq, dst, tab
 |  mov dst, tab->node		// x64_vm_tab_node_acq: TSO acquire load.
 |.endmacro
@@ -1660,7 +1663,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov PCd, 16+FRAME_PCALL
   |1:
   |  load_G RB
-  |  movzx RBd, byte GL:RB->hookmask
+  |  x64_vm_hookmask_acq RBd, RB
   |  shr RB, HOOK_ACTIVE_SHIFT
   |  and RB, 1
   |  add PC, RB				// Remember active hook before pcall.
@@ -2435,7 +2438,7 @@ static void build_subroutines(BuildCtx *ctx)
   |.if JIT
   |  endbr
   |  load_G RD
-  |  movzx RDd, byte GL:RD->hookmask
+  |  x64_vm_hookmask_acq RDd, RD
   |  test RDL, HOOK_VMEVENT		// No recording while in vmevent.
   |  jnz >5
   |  // Decrement the hookcount for consistency, but always do the call.
@@ -2451,7 +2454,7 @@ static void build_subroutines(BuildCtx *ctx)
   |->vm_rethook:			// Dispatch target for return hooks.
   |  endbr
   |  load_G RD
-  |  movzx RDd, byte GL:RD->hookmask
+  |  x64_vm_hookmask_acq RDd, RD
   |  test RDL, HOOK_ACTIVE		// Hook already active?
   |  jnz >5
   |  jmp >1
@@ -2459,7 +2462,7 @@ static void build_subroutines(BuildCtx *ctx)
   |->vm_inshook:			// Dispatch target for instr/line hooks.
   |  endbr
   |  load_G RD
-  |  movzx RDd, byte GL:RD->hookmask
+  |  x64_vm_hookmask_acq RDd, RD
   |  test RDL, HOOK_ACTIVE		// Hook already active?
   |  jnz >5
   |
