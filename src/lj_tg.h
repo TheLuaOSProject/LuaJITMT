@@ -91,6 +91,16 @@ struct TGState {
 
 LJ_STATIC_ASSERT(sizeof(((GC2SSBNode *)0)->slot) == TG_GC2_SSB_BYTES);
 
+static LJ_AINLINE TGState *lj_tg_next_acq(const TGState *tg)
+{
+  return (TGState *)la_loadptr_acq((void *const *)&tg->next_tg);
+}
+
+static LJ_AINLINE void lj_tg_next_rel(TGState *tg, TGState *next)
+{
+  la_storeptr_rel((void **)&tg->next_tg, next);
+}
+
 static LJ_AINLINE lua_State *lj_tg_load_cur_L(TGState *tg)
 {
   return (lua_State *)la_loadptr_acq((void *const *)&tg->cur_L);

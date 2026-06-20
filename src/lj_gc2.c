@@ -540,7 +540,7 @@ static void gc2_reset_alloc_trigger(global_State *g)
   TGState *tg;
   for (tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
        tg != NULL;
-       tg = (TGState *)la_loadptr_acq((void *const *)&tg->next_tg))
+       tg = lj_tg_next_acq(tg))
     (void)lj_gc2_flush_alloc(g, tg);
   la_store64_rel(&g->gc2.cycle_alloc_bytes,
 		 la_load64_acq(&g->gc2.alloc_since_trigger));
@@ -572,7 +572,7 @@ static void gc2_clear_marks_all(global_State *g)
   TGState *tg;
   for (tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
        tg != NULL;
-       tg = (TGState *)la_loadptr_acq((void *const *)&tg->next_tg))
+       tg = lj_tg_next_acq(tg))
     gc2_clear_marks(tg);
 }
 
@@ -1066,7 +1066,7 @@ int lj_gc2_sweep_needs_prepare(global_State *g)
     return 0;
   for (tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
        tg != NULL;
-       tg = (TGState *)la_loadptr_acq((void *const *)&tg->next_tg))
+       tg = lj_tg_next_acq(tg))
     if (lj_gc2_sweep_tg_ready(tg) && tg->alloc.prepare_epoch != g->gc2.cycle)
       return 1;
   return 0;
@@ -1079,7 +1079,7 @@ int lj_gc2_sweep_pending(global_State *g)
     return 0;
   for (tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
        tg != NULL;
-       tg = (TGState *)la_loadptr_acq((void *const *)&tg->next_tg))
+       tg = lj_tg_next_acq(tg))
     if (lj_gc2_sweep_tg_ready(tg) &&
 	tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE] != NULL)
       return 1;
@@ -1150,7 +1150,7 @@ uint64_t lj_gc2_sweep_live_aggregate(global_State *g)
   epoch = g->gc2.cycle;
   for (tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
        tg != NULL;
-       tg = (TGState *)la_loadptr_acq((void *const *)&tg->next_tg)) {
+       tg = lj_tg_next_acq(tg)) {
     uint8_t flags = la_load8_acq(&tg->tg_flags);
     if ((flags & (TGF_DEAD|TGF_ARENA_INTERNAL)) != TGF_ARENA_INTERNAL)
       continue;
@@ -1486,7 +1486,7 @@ static void gc2_scan_tg_roots(global_State *g)
   TGState *tg;
   for (tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
        tg != NULL;
-       tg = (TGState *)la_loadptr_acq((void *const *)&tg->next_tg)) {
+       tg = lj_tg_next_acq(tg)) {
     lua_State *thread_L, *cur_L;
     lj_gc2_markmem(g, tg->tmpbuf.b);
     if (la_load8_acq(&tg->tg_flags) & TGF_DEAD)
@@ -2888,7 +2888,7 @@ int lj_gc2_ssb_empty(global_State *g)
     return 0;
   for (tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
        tg != NULL;
-       tg = (TGState *)la_loadptr_acq((void *const *)&tg->next_tg)) {
+       tg = lj_tg_next_acq(tg)) {
     GCRef *next, *base;
     if (la_load8_acq(&tg->tg_flags) & TGF_DEAD)
       continue;
@@ -3660,7 +3660,7 @@ static uint32_t gc2_worker_sweep_progress(global_State *g, uint32_t limit)
     return 0;
   for (tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
        tg != NULL && n < limit;
-       tg = (TGState *)la_loadptr_acq((void *const *)&tg->next_tg)) {
+       tg = lj_tg_next_acq(tg)) {
     uint8_t flags = la_load8_acq(&tg->tg_flags);
     if ((flags & (TGF_DEAD|TGF_ARENA_INTERNAL)) != TGF_ARENA_INTERNAL)
       continue;
@@ -3935,7 +3935,7 @@ uint32_t lj_gc2_paranoia_legacy_diff(global_State *g)
     return 0;
   for (tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
        tg != NULL;
-       tg = (TGState *)la_loadptr_acq((void *const *)&tg->next_tg)) {
+       tg = lj_tg_next_acq(tg)) {
     uint8_t flags = la_load8_acq(&tg->tg_flags);
     if ((flags & (TGF_DEAD|TGF_ARENA_INTERNAL)) != TGF_ARENA_INTERNAL)
       continue;

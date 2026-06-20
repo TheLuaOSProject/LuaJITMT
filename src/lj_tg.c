@@ -148,7 +148,7 @@ void lj_tg_attach(global_State *g, TGState *tg)
   tg->tg_flags &= (uint8_t)~TGF_DEAD;
   do {
     head = la_loadptr_acq((void *const *)&g->gc2.tg_list);  /* 05 section 5.4.1. */
-    tg->next_tg = (TGState *)head;
+    lj_tg_next_rel(tg, (TGState *)head);
   } while (!la_casptr((void **)&g->gc2.tg_list, &head, tg,
 		      LA_ACQ_REL, LA_ACQ));  /* 05 section 5.4.1 CAS-prepend. */
   la_add32_rlx(&g->gc2.n_threads, 1);  /* Live TG count; list keeps dead nodes. */
@@ -213,7 +213,7 @@ restart:
   prev = NULL;
   tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
   while (tg != NULL) {
-    TGState *next = (TGState *)la_loadptr_acq((void *const *)&tg->next_tg);
+    TGState *next = lj_tg_next_acq(tg);
     if (la_load8_acq(&tg->tg_flags) & TGF_DEAD) {
       if (!tg_transfer_dead_alloc(g, tg)) {
 	prev = tg;  /* Keep owner lookup live until allocator transfer succeeds. */
@@ -221,14 +221,14 @@ restart:
 	continue;
       }
       if (prev) {
-	la_storeptr_rel((void **)&prev->next_tg, next);
+	lj_tg_next_rel(prev, next);
       } else {
 	void *expect = tg;
 	if (!la_casptr((void **)&g->gc2.tg_list, &expect, next,
 		       LA_ACQ_REL, LA_ACQ))
 	  goto restart;
       }
-      la_storeptr_rel((void **)&tg->next_tg, NULL);
+      lj_tg_next_rel(tg, NULL);
       reclaimed++;
       tg = next;
       continue;
@@ -246,7 +246,7 @@ TGState *lj_tg_find_owner(global_State *g, uint32_t owner_tid)
     return NULL;
   for (tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
        tg != NULL;
-       tg = (TGState *)la_loadptr_acq((void *const *)&tg->next_tg)) {
+       tg = lj_tg_next_acq(tg)) {
     if (la_load32_acq(&tg->tid) == owner_tid)
       return tg;
   }
