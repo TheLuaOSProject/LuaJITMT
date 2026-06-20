@@ -4,7 +4,6 @@
 
 #include <assert.h>
 #include <stdio.h>
-#include <string.h>
 
 #include "lua.h"
 #include "lauxlib.h"
@@ -41,16 +40,19 @@ int main(void)
   {
     TGState secondary;
     TGState *saved_tg = lj_thr_get_tg();
-    memset(&secondary, 0, sizeof(secondary));
     assert(g->main_tg != NULL);
+    lj_tg_init_thread(g, &secondary, NULL, 0);
     secondary.tid = g->main_tg->tid == 0x7ffffffeu ? 0x7ffffffdu : 0x7ffffffeu;
+    secondary.alloc.owner_tid = secondary.tid;
     lj_thr_set_tg(&secondary);
+    assert(G2TG(g) == &secondary);
     assert(lj_jit_token_try(g->jitp) != 0);
     assert(la_load32_acq(&g->jit_token) == secondary.tid);
     assert(lj_jit_token_held(g->jitp) != 0);
     lj_jit_token_release(g->jitp);
     assert(la_load32_acq(&g->jit_token) == 0);
     lj_thr_set_tg(saved_tg);
+    lj_tg_fini_thread(g, &secondary);
   }
 #endif
 
