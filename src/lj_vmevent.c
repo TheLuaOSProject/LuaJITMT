@@ -13,6 +13,7 @@
 #include "lj_tab.h"
 #include "lj_state.h"
 #include "lj_dispatch.h"
+#include "lj_safepoint.h"
 #include "lj_vm.h"
 #include "lj_vmevent.h"
 
@@ -40,12 +41,24 @@ ptrdiff_t lj_vmevent_prepare(lua_State *L, VMEvent ev)
   return 0;
 }
 
+static uint32_t vmevent_report_failure(lua_State *L)
+{
+  uint32_t actions;
+  lj_native_enter(L2TG(L));
+  fputs("VM handler failed: ", stderr);
+  fputs(tvisstr(L->top) ? strVdata(L->top) : "?", stderr);
+  fputc('\n', stderr);
+  actions = lj_native_leave(L);
+  return actions;
+}
+
 void lj_vmevent_call(lua_State *L, ptrdiff_t argbase)
 {
   global_State *g = G(L);
   lua_State *oldL = lj_tg_cur_L(g);
   uint8_t oldmask = g->vmevmask;
   uint8_t oldh = hook_save(g);
+  uint32_t actions = 0;
   int status;
   g->vmevmask = 0;  /* Disable all events. */
   hook_vmevent(g);
@@ -53,9 +66,7 @@ void lj_vmevent_call(lua_State *L, ptrdiff_t argbase)
   if (LJ_UNLIKELY(status)) {
     /* Really shouldn't use stderr here, but where else to complain? */
     L->top--;
-    fputs("VM handler failed: ", stderr);
-    fputs(tvisstr(L->top) ? strVdata(L->top) : "?", stderr);
-    fputc('\n', stderr);
+    actions = vmevent_report_failure(L);
   }
   lj_tg_setcur_L(g, oldL);
 #if LJ_HASJIT
@@ -64,4 +75,6 @@ void lj_vmevent_call(lua_State *L, ptrdiff_t argbase)
   hook_restore(g, oldh);
   if (g->vmevmask != VMEVENT_NOCACHE)
     g->vmevmask = oldmask;  /* Restore event mask, but not if not modified. */
+  if (LJ_UNLIKELY(status))
+    lj_safepoint_checkstop(L, actions);
 }

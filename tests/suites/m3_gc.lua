@@ -1,4 +1,5 @@
 local utils = require("suite_utils")
+local checks = require("suite_assert")
 local build = require("suite_build")
 local runtime = require("suite_runtime")
 
@@ -7,6 +8,7 @@ local make_default = build.build_default
 local compile_and_run_c = build.compile_and_run_c
 local run_c_fixtures = build.run_c_fixtures
 local build_shared_library = build.build_shared_library
+local capture_luajit = runtime.capture_luajit
 local run_lua_test_case = runtime.run_lua_test_case
 local run_luajit_script_jit_modes = runtime.run_luajit_script_jit_modes
 
@@ -18,11 +20,22 @@ end
 local m3_scaffold_deps = {
   "m3_gc2_worker_scheduler",
   "m3_safepoint_handshake",
+  "m3_vmevent_native_stdio",
   "m3_vm_safepoint",
   "m3_gc2_paranoia",
   "m2_arena_all",
   "m0_matrix"
 }
+
+local function vmevent_native_stdio_smoke()
+  return [=[
+jit.attach(function()
+  error("vmevent native stdio smoke")
+end, "bc")
+local f = assert(loadstring("return 1"))
+assert(f() == 1)
+]=]
+end
 
 return function(add)
   local cases, register = utils.case_registry(add)
@@ -59,6 +72,23 @@ return function(add)
       })
 
       print("M3 safepoint handshake tests passed")
+    end
+  })
+
+  register({
+    name = "m3_vmevent_native_stdio",
+    description = "VM-event failure reporting uses native stdio boundary",
+    run = function(t)
+      local out = t:tmp("lj_m3_vmevent_native_stdio.out")
+      t:build({ quiet = true })
+      capture_luajit(t, { "-e", vmevent_native_stdio_smoke() }, out, {
+        stderr_to_stdout = true
+      })
+      checks.assert_file_all_contains(t, out, {
+        "VM handler failed: ",
+        "vmevent native stdio smoke"
+      }, "VM-event native stdio output")
+      print("M3 VM-event native stdio behavior passed")
     end
   })
 
