@@ -386,6 +386,11 @@ static LJ_AINLINE TraceLink trace_linktype_acq(const GCtrace *T)
   return (TraceLink)la_load8_acq(&T->linktype);
 }
 
+static LJ_AINLINE IRIns *trace_ir_acq(const GCtrace *T)
+{
+  return (IRIns *)la_loadptr_acq((void *const *)&T->ir);
+}
+
 static LJ_AINLINE MCode *trace_mcode_acq(const GCtrace *T)
 {
   return (MCode *)la_loadptr_acq((void *const *)&T->mcode);

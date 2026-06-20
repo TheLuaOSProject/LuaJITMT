@@ -395,7 +395,7 @@ LJLIB_CF(jit_util_traceir)
   GCtrace *T = jit_checktrace(L);
   IRRef ref = (IRRef)lj_lib_checkint(L, 2) + REF_BIAS;
   if (T && ref >= REF_BIAS && ref < trace_nins_acq(T)) {
-    IRIns ir = ir_load_acq(&T->ir[ref]);
+    IRIns ir = ir_load_acq(&trace_ir_acq(T)[ref]);
     int32_t m = lj_ir_mode[ir.o];
     setintV(L->top-2, m);
     setintV(L->top-1, ir.ot);
@@ -413,12 +413,13 @@ LJLIB_CF(jit_util_tracek)
   GCtrace *T = jit_checktrace(L);
   IRRef ref = (IRRef)lj_lib_checkint(L, 2) + REF_BIAS;
   if (T && ref >= trace_nk_acq(T) && ref < REF_BIAS) {
-    IRIns *ir = &T->ir[ref];
+    IRIns *irbase = trace_ir_acq(T);
+    IRIns *ir = &irbase[ref];
     IRIns irs = ir_load_acq(ir);
     int32_t slot = -1;
     if (irs.o == IR_KSLOT) {
       slot = irs.op2;
-      ir = &T->ir[irs.op1];
+      ir = &irbase[irs.op1];
       irs = ir_load_acq(ir);
     }
 #if LJ_HASFFI
