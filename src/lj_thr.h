@@ -34,6 +34,18 @@ struct LJThreadLive {
   GCRef ud;
 };
 
+static LJ_AINLINE LJThreadLive *
+lj_thread_live_next_acq(const LJThreadLive *node)
+{
+  return (LJThreadLive *)la_loadptr_acq((void *const *)&node->next);
+}
+
+static LJ_AINLINE void lj_thread_live_next_rel(LJThreadLive *node,
+					       LJThreadLive *next)
+{
+  la_storeptr_rel((void **)&node->next, next);
+}
+
 typedef struct LJThread {
   LJThr thr;
   lua_State *L;

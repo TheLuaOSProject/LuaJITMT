@@ -70,7 +70,7 @@ static LJThreadLive *threading_live_new(lua_State *L, GCudata *ud)
 {
   LJThreadLive *node = lj_mem_newt(L, sizeof(LJThreadLive), LJThreadLive);
   TValue tv;
-  node->next = NULL;
+  lj_thread_live_next_rel(node, NULL);
   setgcrefrel(node->ud, obj2gco(ud));
   setudataV(L, &tv, ud);
   lj_gc_barrierroot(L, &tv);  /* 09 section 9.2: native live root. */
@@ -83,7 +83,7 @@ static void threading_live_publish(global_State *g, LJThread *th,
   void *head;
   do {
     head = la_loadptr_acq((void *const *)&g->threading_live);
-    node->next = (LJThreadLive *)head;
+    lj_thread_live_next_rel(node, (LJThreadLive *)head);
   } while (!la_casptr((void **)&g->threading_live, &head, node,
 		      LA_ACQ_REL, LA_ACQ));
   la_storeptr_rel((void **)&th->live_node, node);
@@ -114,8 +114,7 @@ static void threading_live_free_all(global_State *g)
   LJThreadLive *node = (LJThreadLive *)
     la_xchgptr_acqrel((void **)&g->threading_live, NULL);
   while (node) {
-    LJThreadLive *next = (LJThreadLive *)
-      la_loadptr_acq((void *const *)&node->next);
+    LJThreadLive *next = lj_thread_live_next_acq(node);
     lj_mem_freet(g, node);
     node = next;
   }
@@ -264,7 +263,7 @@ void lj_threading_shutdown(lua_State *L)
     }
   }
   for (node = threading_live_head(g); node != NULL;
-       node = (LJThreadLive *)la_loadptr_acq((void *const *)&node->next)) {
+       node = lj_thread_live_next_acq(node)) {
     GCudata *ud = threading_live_ud(node);
     if (!ud)
       continue;

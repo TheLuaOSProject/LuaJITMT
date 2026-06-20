@@ -620,7 +620,7 @@ static void gc_mark_threading_live(global_State *g)
   LJThreadLive *node;
   for (node = (LJThreadLive *)la_loadptr_acq((void *const *)&g->threading_live);
        node != NULL;
-       node = (LJThreadLive *)la_loadptr_acq((void *const *)&node->next)) {
+       node = lj_thread_live_next_acq(node)) {
     GCobj *o = gcref_acq(node->ud);
     if (o && o->gch.gct == ~LJ_TUDATA &&
 	lj_udata_udtype_acq(gco2ud(o)) == UDTYPE_THREAD)
