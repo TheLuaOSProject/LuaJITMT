@@ -1121,13 +1121,14 @@ static int trace_abort(jit_State *J)
   }
   if (tvisnumber(L->top-1))
     e = (TraceError)numberVint(L->top-1);
+  /* MCODELM retries rebuild per-trace exit stubs in a fresh mcode area. */
+  trace_exittab_free(J2G(J), &J->cur);
   if (e == LJ_TRERR_MCODELM) {
     L->top--;  /* Remove error object */
     if (lj_trace_state_aborted(lj_trace_state_store_active(J, LJ_TRACE_ASM)))
       return 0;
     return 1;  /* Retry ASM with new MCode area. */
   }
-  trace_exittab_free(J2G(J), &J->cur);
   /* Penalize or blacklist starting bytecode instruction. */
   if (J->parent == 0 && !bc_isret(bc_op(J->cur.startins))) {
     if (J->exitno == 0) {
