@@ -175,6 +175,7 @@ void LJ_FASTCALL lj_dispatch_update(global_State *g, int nolock)
   uint32_t redispatch = 0;
   uint8_t oldmode = g->dispatchmode;
   uint8_t mode = 0;
+  uint8_t hookmask = hookmask_load(g);
 #if LJ_HASJIT
   jit_State *J = G2J(g);
   TGState *tg = G2TG(g);
@@ -183,11 +184,11 @@ void LJ_FASTCALL lj_dispatch_update(global_State *g, int nolock)
   mode |= (J->flags & JIT_F_ON) ? DISPMODE_JIT : 0;
 #endif
 #if LJ_HASPROFILE
-  mode |= (g->hookmask & HOOK_PROFILE) ? (DISPMODE_PROF|DISPMODE_INS) : 0;
+  mode |= (hookmask & HOOK_PROFILE) ? (DISPMODE_PROF|DISPMODE_INS) : 0;
 #endif
-  mode |= (g->hookmask & (LUA_MASKLINE|LUA_MASKCOUNT)) ? DISPMODE_INS : 0;
-  mode |= (g->hookmask & LUA_MASKCALL) ? DISPMODE_CALL : 0;
-  mode |= (g->hookmask & LUA_MASKRET) ? DISPMODE_RET : 0;
+  mode |= (hookmask & (LUA_MASKLINE|LUA_MASKCOUNT)) ? DISPMODE_INS : 0;
+  mode |= (hookmask & LUA_MASKCALL) ? DISPMODE_CALL : 0;
+  mode |= (hookmask & LUA_MASKRET) ? DISPMODE_RET : 0;
   if (oldmode != mode) {  /* Mode changed? */
     ASMFunction *disp = G2GG(g)->dispatch;
     ASMFunction f_forl, f_iterl, f_itern, f_loop, f_funcf, f_funcv;
@@ -334,7 +335,7 @@ int luaJIT_setmode(lua_State *L, int idx, int mode)
   int mm = mode & LUAJIT_MODE_MASK;
   lj_trace_abort(g);  /* Abort recording on any state change. */
   /* Avoid pulling the rug from under our own feet. */
-  if ((g->hookmask & HOOK_GC))
+  if ((hookmask_load(g) & HOOK_GC))
     lj_err_caller(L, LJ_ERR_NOGCMM);
   switch (mm) {
 #if LJ_HASJIT
@@ -422,7 +423,7 @@ LUA_API int lua_sethook(lua_State *L, lua_Hook func, int mask, int count)
   if (func == NULL || mask == 0) { mask = 0; func = NULL; }  /* Consistency. */
   g->hookf = func;
   g->hookcount = g->hookcstart = (int32_t)count;
-  g->hookmask = (uint8_t)((g->hookmask & ~HOOK_EVENTMASK) | mask);
+  hookmask_setevents(g, (uint8_t)mask);
   lj_trace_abort(g);  /* Abort recording on any hook change. */
   lj_dispatch_update(g, 0);
   return 1;
@@ -435,7 +436,7 @@ LUA_API lua_Hook lua_gethook(lua_State *L)
 
 LUA_API int lua_gethookmask(lua_State *L)
 {
-  return G(L)->hookmask & HOOK_EVENTMASK;
+  return hookmask_load(G(L)) & HOOK_EVENTMASK;
 }
 
 LUA_API int lua_gethookcount(lua_State *L)
@@ -497,6 +498,7 @@ void LJ_FASTCALL lj_dispatch_ins(lua_State *L, const BCIns *pc)
   void *cf = cframe_raw(L->cframe);
   const BCIns *oldpc = cframe_pc(cf);
   global_State *g = G(L);
+  uint8_t hookmask;
   BCReg slots;
   setcframe_pc(cf, pc);
   slots = cur_topslot(pt, pc, cframe_multres_n(cf));
@@ -517,12 +519,14 @@ void LJ_FASTCALL lj_dispatch_ins(lua_State *L, const BCIns *pc)
     }
   }
 #endif
-  if ((g->hookmask & LUA_MASKCOUNT) && g->hookcount == 0) {
+  hookmask = hookmask_load(g);
+  if ((hookmask & LUA_MASKCOUNT) && g->hookcount == 0) {
     g->hookcount = g->hookcstart;
     callhook(L, LUA_HOOKCOUNT, -1);
     L->top = L->base + slots;  /* Fix top again. */
   }
-  if ((g->hookmask & LUA_MASKLINE)) {
+  hookmask = hookmask_load(g);
+  if ((hookmask & LUA_MASKLINE)) {
     BCPos npc = proto_bcpos(pt, pc) - 1;
     BCPos opc = proto_bcpos(pt, oldpc) - 1;
     BCLine line = lj_debug_line(pt, npc);
@@ -531,7 +535,8 @@ void LJ_FASTCALL lj_dispatch_ins(lua_State *L, const BCIns *pc)
       L->top = L->base + slots;  /* Fix top again. */
     }
   }
-  if ((g->hookmask & LUA_MASKRET) && bc_isret(bc_op(pc[-1])))
+  hookmask = hookmask_load(g);
+  if ((hookmask & LUA_MASKRET) && bc_isret(bc_op(pc[-1])))
     callhook(L, LUA_HOOKRET, -1);
   ERRNO_RESTORE
 }
@@ -564,6 +569,7 @@ ASMFunction LJ_FASTCALL lj_dispatch_call(lua_State *L, const BCIns *pc)
 #if LJ_HASJIT
   jit_State *J = G2J(g);
 #endif
+  uint8_t hookmask;
   int missing = call_init(L, fn);
 #if LJ_HASJIT
   if ((uintptr_t)pc & 1) {  /* Marker for hot call. */
@@ -582,7 +588,7 @@ ASMFunction LJ_FASTCALL lj_dispatch_call(lua_State *L, const BCIns *pc)
     goto out;
   } else if (lj_trace_state_load(J) != LJ_TRACE_IDLE &&
 	     lj_jit_token_held(J) &&
-	     !(g->hookmask & (HOOK_GC|HOOK_VMEVENT))) {
+	     !(hookmask_load(g) & (HOOK_GC|HOOK_VMEVENT))) {
 #ifdef LUA_USE_ASSERT
     ptrdiff_t delta = L->top - L->base;
 #endif
@@ -593,7 +599,8 @@ ASMFunction LJ_FASTCALL lj_dispatch_call(lua_State *L, const BCIns *pc)
 	       "unbalanced stack after hot instruction");
   }
 #endif
-  if ((g->hookmask & LUA_MASKCALL)) {
+  hookmask = hookmask_load(g);
+  if ((hookmask & LUA_MASKCALL)) {
     int i;
     for (i = 0; i < missing; i++)  /* Add missing parameters. */
       setnilV(L->top++);
@@ -625,7 +632,7 @@ void LJ_FASTCALL lj_dispatch_stitch(jit_State *J, const BCIns *pc, lua_State *L,
 void LJ_FASTCALL lj_dispatch_stitch(jit_State *J, const BCIns *pc)
 #endif
 {
-  if (!(J2G(J)->hookmask & HOOK_VMEVENT)) {
+  if (!(hookmask_load(J2G(J)) & HOOK_VMEVENT)) {
     ERRNO_SAVE
 #if !LJ_TARGET_X64
     lua_State *L = J->L;

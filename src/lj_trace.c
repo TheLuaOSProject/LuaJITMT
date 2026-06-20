@@ -784,7 +784,7 @@ int lj_trace_flushall(lua_State *L)
 {
   jit_State *J = L2J(L);
   ptrdiff_t i;
-  if ((J2G(J)->hookmask & HOOK_GC))
+  if ((hookmask_load(J2G(J)) & HOOK_GC))
     return 1;
   for (i = (ptrdiff_t)trace_sizetrace_acq(J)-1; i > 0; i--) {
     GCtrace *T = traceref(J, i);
@@ -815,7 +815,7 @@ int lj_trace_flushall(lua_State *L)
 int lj_trace_flushall_hs(lua_State *L)
 {
   global_State *g = G(L);
-  if ((g->hookmask & HOOK_GC))
+  if ((hookmask_load(g) & HOOK_GC))
     return 1;
   (void)lj_gc2_handshake(g, LJ_GC2_HS_EXIT_TRACES|LJ_GC2_HS_FLUSHJ);
   return 0;
@@ -986,7 +986,7 @@ static void trace_start(jit_State *J)
   /* Get a new trace number. */
   traceno = trace_findfree(J);
   if (LJ_UNLIKELY(traceno == 0)) {  /* No free trace? */
-    lj_assertJ((J2G(J)->hookmask & HOOK_GC) == 0,
+    lj_assertJ((hookmask_load(J2G(J)) & HOOK_GC) == 0,
 	       "recorder called from GC hook");
     (void)lj_trace_flushall_hs(J->L);
     lj_trace_state_store(J, LJ_TRACE_IDLE);  /* Silently ignored. */
@@ -1391,7 +1391,7 @@ void LJ_FASTCALL lj_trace_hot(jit_State *J, const BCIns *pc)
   hotcount_setg(J2G(J), pc, J->param[JIT_P_hotloop]*HOTCOUNT_LOOP);
   /* Only start a new trace if not recording or inside __gc call or vmevent. */
   if (lj_trace_state_load(J) == LJ_TRACE_IDLE &&
-      !(J2G(J)->hookmask & (HOOK_GC|HOOK_VMEVENT)) &&
+      !(hookmask_load(J2G(J)) & (HOOK_GC|HOOK_VMEVENT)) &&
       lj_jit_token_try(J)) {
 #if LJ_TARGET_X64
     J->L = L;
@@ -1415,7 +1415,7 @@ static void trace_hotside(jit_State *J, const BCIns *pc, lua_State *L,
   SnapShot *snap = &trace_snap_acq(parentT)[exitno];
   uint32_t hotexit = J->param[JIT_P_hotexit];
   uint8_t count;
-  if (!(J2G(J)->hookmask & (HOOK_GC|HOOK_VMEVENT)) &&
+  if (!(hookmask_load(J2G(J)) & (HOOK_GC|HOOK_VMEVENT)) &&
       isluafunc(curr_func(L))) {
     for (;;) {
       count = (uint8_t)snap_count_acq(snap);
@@ -1468,7 +1468,7 @@ void LJ_FASTCALL lj_trace_stitch(jit_State *J, const BCIns *pc)
 {
   /* Only start a new trace if not recording or inside __gc call or vmevent. */
   if (lj_trace_state_load(J) == LJ_TRACE_IDLE &&
-      !(J2G(J)->hookmask & (HOOK_GC|HOOK_VMEVENT)) &&
+      !(hookmask_load(J2G(J)) & (HOOK_GC|HOOK_VMEVENT)) &&
       lj_jit_token_try(J)) {
 #if LJ_TARGET_X64
     J->L = L;
@@ -1624,7 +1624,7 @@ int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr)
 
   if (exitcode) copyTV(L, L->top++, &exiterr);  /* Anchor the error object. */
 
-  if (!(LJ_HASPROFILE && (G(L)->hookmask & HOOK_PROFILE)))
+  if (!(LJ_HASPROFILE && (hookmask_load(G(L)) & HOOK_PROFILE)))
     lj_vmevent_send(G(L), TEXIT,
       lj_state_checkstack(V, 4+RID_NUM_GPR+RID_NUM_FPR+LUA_MINSTACK);
       setintV(V->top++, parent);
@@ -1637,10 +1637,10 @@ int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr)
   setcframe_pc(cf, pc);
   if (exitcode) {
     return -exitcode;
-  } else if (LJ_HASPROFILE && (G(L)->hookmask & HOOK_PROFILE)) {
+  } else if (LJ_HASPROFILE && (hookmask_load(G(L)) & HOOK_PROFILE)) {
     /* Just exit to interpreter. */
   } else if (G(L)->gc.state == GCSatomic || G(L)->gc.state == GCSfinalize) {
-    if (!(G(L)->hookmask & HOOK_GC))
+    if (!(hookmask_load(G(L)) & HOOK_GC))
       lj_gc_step(L);  /* Exited because of GC: drive GC forward. */
   } else if ((J->flags & JIT_F_ON) && !trace_poll_pending(L)) {
     trace_hotside(J, pc, L, parent, exitno);

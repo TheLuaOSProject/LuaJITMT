@@ -75,7 +75,7 @@ typedef struct ProfileState {
 #if LJ_PROFILE_SIGPROF
   struct sigaction oldsa;	/* Previous SIGPROF state. */
 #elif LJ_PROFILE_PTHREAD
-  pthread_mutex_t lock;		/* g->hookmask update lock. */
+  pthread_mutex_t lock;		/* Hook-mask update lock. */
   pthread_t thread;		/* Timer thread. */
   uint32_t abort;		/* Abort timer thread. */
 #elif LJ_PROFILE_WTHREAD
@@ -84,7 +84,7 @@ typedef struct ProfileState {
   WMM_TPFUNC wmm_tbp;		/* WinMM timeBeginPeriod function. */
   WMM_TPFUNC wmm_tep;		/* WinMM timeEndPeriod function. */
 #endif
-  CRITICAL_SECTION lock;	/* g->hookmask update lock. */
+  CRITICAL_SECTION lock;	/* Hook-mask update lock. */
   HANDLE thread;		/* Timer thread. */
   uint32_t abort;		/* Abort timer thread. */
 #endif
@@ -155,18 +155,18 @@ void LJ_FASTCALL lj_profile_interpreter(lua_State *L)
   global_State *g = G(L);
   uint8_t mask;
   profile_lock(ps);
-  mask = (g->hookmask & ~HOOK_PROFILE);
+  mask = (uint8_t)(hookmask_load(g) & (uint8_t)~HOOK_PROFILE);
   if (!(mask & HOOK_VMEVENT)) {
     int samples = ps->samples;
     ps->samples = 0;
-    g->hookmask = HOOK_VMEVENT;
+    hookmask_store(g, HOOK_VMEVENT);
     lj_dispatch_update(g, 1);
     profile_unlock(ps);
     ps->cb(ps->data, L, samples, ps->vmstate);  /* Invoke user callback. */
     profile_lock(ps);
-    mask |= (g->hookmask & HOOK_PROFILE);
+    mask |= (uint8_t)(hookmask_load(g) & HOOK_PROFILE);
   }
-  g->hookmask = mask;
+  hookmask_store(g, mask);
   lj_dispatch_update(g, 1);
   profile_unlock(ps);
 }
@@ -175,17 +175,16 @@ void LJ_FASTCALL lj_profile_interpreter(lua_State *L)
 static void profile_trigger(ProfileState *ps)
 {
   global_State *g = ps->g;
-  uint8_t mask;
   profile_lock(ps);
   ps->samples++;  /* Always increment number of samples. */
-  mask = g->hookmask;
-  if (!(mask & (HOOK_PROFILE|HOOK_VMEVENT|HOOK_GC))) {  /* Set profile hook. */
+  /* Set profile hook. */
+  if (hookmask_set_if_clear(g, HOOK_PROFILE|HOOK_VMEVENT|HOOK_GC,
+			    HOOK_PROFILE)) {
     int st = g->vmstate;
     ps->vmstate = st >= 0 ? 'N' :
 		  st == ~LJ_VMST_INTERP ? 'I' :
 		  st == ~LJ_VMST_C ? 'C' :
 		  st == ~LJ_VMST_GC ? 'G' : 'J';
-    g->hookmask = (mask | HOOK_PROFILE);
     lj_dispatch_update(g, 1);
   }
   profile_unlock(ps);
@@ -369,7 +368,7 @@ LUA_API void luaJIT_profile_stop(lua_State *L)
   global_State *g = ps->g;
   if (G(L) == g) {  /* Only stop profiler if started by this VM. */
     profile_timer_stop(ps);
-    g->hookmask &= ~HOOK_PROFILE;
+    hookmask_update(g, HOOK_PROFILE, 0);
     lj_dispatch_update(g, 0);
 #if LJ_HASJIT
     G2J(g)->prof_mode = 0;

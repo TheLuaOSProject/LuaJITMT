@@ -188,6 +188,57 @@ print("jit-trace-publish-smoke OK")
 ]=]
 end
 
+local function hookmask_atomic_smoke()
+  return [=[
+local hits = { count = 0, line = 0, call = 0, ["return"] = 0 }
+local phase = 0
+
+local function hook(ev)
+  hits[ev] = (hits[ev] or 0) + 1
+  if ev == "count" and phase == 0 then
+    phase = 1
+    debug.sethook(hook, "crl", 0)
+    local fn, mask, count = debug.gethook()
+    assert(fn == hook, "hook function was not preserved")
+    assert(mask:find("c", 1, true), "call hook bit missing")
+    assert(mask:find("r", 1, true), "return hook bit missing")
+    assert(mask:find("l", 1, true), "line hook bit missing")
+    assert(count == 0, "count hook was not disabled")
+  end
+end
+
+local function inner(n)
+  local s = 0
+  for i = 1, n do
+    s = s + i
+  end
+  return s
+end
+
+debug.sethook(hook, "", 1)
+assert(inner(12) == 78)
+assert(inner(12) == 78)
+debug.sethook()
+assert(hits.count == 1, "count hook did not transition once")
+assert(hits.line > 0, "line hook did not run after mask update")
+assert(hits.call > 0, "call hook did not run after mask update")
+assert(hits["return"] > 0, "return hook did not run after mask update")
+
+local ok, profile = pcall(require, "jit.profile")
+if ok then
+  profile.start("i1", function() end)
+  local s = 0
+  for i = 1, 200000 do
+    s = s + i
+  end
+  profile.stop()
+  assert(s > 0)
+end
+
+print("hookmask-atomic-smoke OK")
+]=]
+end
+
 local function proto_kgc_acq_smoke()
   return [=[
 local util = require("jit.util")
@@ -347,6 +398,16 @@ return function(add)
       }, { timeout = "20s" })
       run_luajit(t, { "-e", jit_trace_publish_smoke() })
       print("M5 JIT trace publication guard passed")
+    end
+  })
+
+  add({
+    name = "m5_hookmask_atomic",
+    description = "global hookmask atomic helper behavior",
+    run = function(t)
+      t:build({ quiet = true })
+      run_luajit(t, { "-e", hookmask_atomic_smoke() })
+      print("M5 hookmask atomic helper behavior passed")
     end
   })
 

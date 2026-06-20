@@ -1422,15 +1422,68 @@ LJ_STATIC_ASSERT(offsetof(global_State, nilnode) ==
 #define HOOK_VMEVENT		0x20
 #define HOOK_GC			0x40
 #define HOOK_PROFILE		0x80
-#define hook_active(g)		((g)->hookmask & HOOK_ACTIVE)
-#define hook_enter(g)		((g)->hookmask |= HOOK_ACTIVE)
+
+static LJ_AINLINE uint8_t hookmask_load(global_State *g)
+{
+  return la_load8_acq(&g->hookmask);  /* 03 section 3.6 global hooks. */
+}
+
+static LJ_AINLINE void hookmask_store(global_State *g, uint8_t mask)
+{
+  la_store8_rel(&g->hookmask, mask);  /* 03 section 3.6 global hooks. */
+}
+
+static LJ_AINLINE uint8_t hookmask_update(global_State *g, uint8_t clear,
+					  uint8_t set)
+{
+  uint8_t old = hookmask_load(g);
+  for (;;) {
+    uint8_t next = (uint8_t)((old & (uint8_t)~clear) | set);
+    if (la_cas8(&g->hookmask, &old, next, LA_ACQ_REL, LA_ACQ))
+      return next;  /* 03 section 3.6 global hooks. */
+  }
+}
+
+static LJ_AINLINE int hookmask_set_if_clear(global_State *g, uint8_t blocked,
+					    uint8_t set)
+{
+  uint8_t old = hookmask_load(g);
+  for (;;) {
+    uint8_t next;
+    if ((old & blocked))
+      return 0;
+    next = (uint8_t)(old | set);
+    if (la_cas8(&g->hookmask, &old, next, LA_ACQ_REL, LA_ACQ))
+      return 1;  /* 03 section 3.6 global hooks. */
+  }
+}
+
+static LJ_AINLINE uint8_t hookmask_setevents(global_State *g, uint8_t mask)
+{
+  return hookmask_update(g, HOOK_EVENTMASK, (uint8_t)(mask & HOOK_EVENTMASK));
+}
+
+static LJ_AINLINE uint8_t hookmask_restore_(global_State *g, uint8_t h)
+{
+  uint8_t old = hookmask_load(g);
+  h &= (uint8_t)~HOOK_EVENTMASK;
+  for (;;) {
+    uint8_t next = (uint8_t)((old & HOOK_EVENTMASK) | h);
+    if (la_cas8(&g->hookmask, &old, next, LA_ACQ_REL, LA_ACQ))
+      return next;  /* 03 section 3.6 global hooks. */
+  }
+}
+
+#define hook_active(g)		(hookmask_load((g)) & HOOK_ACTIVE)
+#define hook_enter(g)		((void)hookmask_update((g), 0, HOOK_ACTIVE))
 #define hook_entergc(g) \
-  ((g)->hookmask = ((g)->hookmask | (HOOK_ACTIVE|HOOK_GC)) & ~HOOK_PROFILE)
-#define hook_vmevent(g)		((g)->hookmask |= (HOOK_ACTIVE|HOOK_VMEVENT))
-#define hook_leave(g)		((g)->hookmask &= ~HOOK_ACTIVE)
-#define hook_save(g)		((g)->hookmask & ~HOOK_EVENTMASK)
+  ((void)hookmask_update((g), HOOK_PROFILE, HOOK_ACTIVE|HOOK_GC))
+#define hook_vmevent(g) \
+  ((void)hookmask_update((g), 0, HOOK_ACTIVE|HOOK_VMEVENT))
+#define hook_leave(g)		((void)hookmask_update((g), HOOK_ACTIVE, 0))
+#define hook_save(g)		(hookmask_load((g)) & (uint8_t)~HOOK_EVENTMASK)
 #define hook_restore(g, h) \
-  ((g)->hookmask = ((g)->hookmask & HOOK_EVENTMASK) | (h))
+  ((void)hookmask_restore_((g), (h)))
 
 /* Per-thread state object. */
 struct lua_State {
