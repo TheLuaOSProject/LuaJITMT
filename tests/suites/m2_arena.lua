@@ -156,6 +156,7 @@ return function(add)
   add({
     name = "m2_arena_all",
     description = "all focused M2 arena scaffold tests",
+    deps = M2_ORDER,
     run = function(t)
       utils.run_cases(cases, t, M2_ORDER)
       print("M2 arena focused tests passed")

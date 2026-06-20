@@ -469,6 +469,7 @@ print("dump cnewi ok")
   add({
     name = "m7_ffi",
     description = "M7 FFI aggregate concurrency gates",
+    deps = m7_cases,
     run = function(t)
       runtime.run_lua_test_cases(t, m7_cases)
       print("M7 FFI gates passed")

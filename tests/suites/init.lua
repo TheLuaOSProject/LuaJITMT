@@ -24,8 +24,29 @@ local function add(test)
   tests[test.name] = test
 end
 
+local function validate_deps(test)
+  local deps = test.deps
+  if deps == nil then return end
+  assert(type(deps) == "table", test.name .. " deps must be a table")
+  local seen = {}
+  for i = 1, #deps do
+    local dep = deps[i]
+    assert(type(dep) == "string" and dep ~= "",
+           test.name .. " dependency " .. i .. " must be a name")
+    assert(dep ~= test.name, test.name .. " cannot depend on itself")
+    assert(not seen[dep], test.name .. " has duplicate dependency: " .. dep)
+    seen[dep] = true
+    assert(tests[dep] ~= nil,
+           test.name .. " depends on unknown test: " .. dep)
+  end
+end
+
 for i = 1, #suites do
   suites[i](add)
+end
+
+for _, test in pairs(tests) do
+  validate_deps(test)
 end
 
 return tests

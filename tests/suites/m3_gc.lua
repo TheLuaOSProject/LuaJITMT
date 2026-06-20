@@ -15,6 +15,15 @@ local function build_loadlib_stopreq_so(t)
                               "t-loadlib-stopreq-lib.c")
 end
 
+local m3_scaffold_deps = {
+  "m3_gc2_worker_scheduler",
+  "m3_safepoint_handshake",
+  "m3_vm_safepoint",
+  "m3_gc2_paranoia",
+  "m2_arena_all",
+  "m0_matrix"
+}
+
 return function(add)
   local cases, register = utils.case_registry(add)
 
@@ -97,6 +106,7 @@ return function(add)
   register({
     name = "m3_gc2_scaffold",
     description = "focused M3 GC2 scaffold tests and dependent gates",
+    deps = m3_scaffold_deps,
     run = function(t)
       make_clean(t)
       make_default(t, { jobs = false })

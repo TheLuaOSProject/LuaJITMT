@@ -881,6 +881,7 @@ assert(live >= 8, live)
   add({
     name = "m6_jit",
     description = "M6 JIT aggregate scaffold gates",
+    deps = m6_cases,
     run = function(t)
       runtime.run_lua_test_cases(t, m6_cases)
       print("M6 JIT scaffold tests passed")

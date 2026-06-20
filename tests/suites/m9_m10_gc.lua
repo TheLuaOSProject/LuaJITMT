@@ -102,6 +102,13 @@ local function run_generational(t)
   print("M10 generational mode guard passed")
 end
 
+local m9_m10_deps = {
+  "m9_gc_stats",
+  "m9_bench_smoke",
+  "m9_bench_regression",
+  "m10_generational"
+}
+
 return function(add)
   add({
     name = "m9_gc_stats",
@@ -130,6 +137,7 @@ return function(add)
   add({
     name = "m9_m10_gc",
     description = "M9/M10 aggregate telemetry and generational gates",
+    deps = m9_m10_deps,
     run = function(t)
       run_gc_stats(t)
       run_bench_smoke(t)

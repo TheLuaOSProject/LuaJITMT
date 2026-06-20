@@ -48,6 +48,7 @@ return function(add)
   add({
     name = "m5_concurrent_objects",
     description = "M5 concurrent-object aggregate scaffold gates",
+    deps = m5_concurrent_cases,
     run = function(t)
       runtime.run_lua_test_cases(t, m5_concurrent_cases)
       print("M5 concurrent-object scaffold tests passed")
