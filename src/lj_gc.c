@@ -1317,9 +1317,10 @@ static GCRef *gc_sweep(global_State *g, GCRef *p, uint32_t lim)
   GCobj *o;
   while ((o = gcref_acq(*p)) != NULL && lim-- > 0) {
     if (LJ_UNLIKELY(o->gch.gct == 0)) {
-      setgcrefr(*p, *lj_obj_gcwref(o));
-      if (o == gcref_acq(g->gc.root))
-	setgcrefr(g->gc.root, *lj_obj_gcwref(o));
+      if (!gc_chain_splice(p, o)) {
+	la_cpu_pause();
+	continue;
+      }
       continue;  /* Body destructor already ran via GC2 arena sweep. */
     }
     if (o->gch.gct == ~LJ_TTHREAD)  /* Need to sweep open upvalues, too. */
@@ -1333,9 +1334,10 @@ static GCRef *gc_sweep(global_State *g, GCRef *p, uint32_t lim)
       int deferred = gc2_deferred_body_pending(g, o);
       lj_assertG(isdead(g, o) || ow == LJ_GC_SFIXED,
 		 "sweep of unlive object");
-      setgcrefr(*p, *lj_obj_gcwref(o));
-      if (o == gcref_acq(g->gc.root))
-	setgcrefr(g->gc.root, *lj_obj_gcwref(o));  /* Adjust list anchor. */
+      if (!gc_chain_splice(p, o)) {
+	la_cpu_pause();
+	continue;
+      }
       gc_freefunc[o->gch.gct - ~LJ_TSTR](g, o);
       if (deferred)
 	o->gch.gct = 0;  /* Body is awaiting bitmap reuse; destructor is done. */
