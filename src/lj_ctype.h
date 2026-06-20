@@ -436,6 +436,16 @@ fin_order_retired_xchg_acqrel(CTState *cts, FinRegOrderNode *ord)
     (void **)&cts->fin_order_retired, ord);
 }
 
+static LJ_AINLINE GCtab *ctype_miscmap_acq(const CTState *cts)
+{
+  return (GCtab *)la_loadptr_acq((void *const *)&cts->miscmap);
+}
+
+static LJ_AINLINE void ctype_miscmap_rel(CTState *cts, GCtab *miscmap)
+{
+  la_storeptr_rel((void **)&cts->miscmap, miscmap);
+}
+
 static LJ_AINLINE GCRef *ctype_metamap_acq(const CTState *cts)
 {
   return (GCRef *)la_loadptr_acq((void *const *)&cts->metamap);

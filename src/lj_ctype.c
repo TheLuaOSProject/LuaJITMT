@@ -1332,7 +1332,7 @@ cTValue *lj_ctype_meta(CTState *cts, CTypeID id, MMS mm)
   }
   if (ctype_isptr(ct->info) &&
       ctype_isfunc(ctype_get(cts, ctype_cid(ct->info))->info))
-    tv = lj_tab_getstr(cts->miscmap, &cts->g->strempty);
+    tv = lj_tab_getstr(ctype_miscmap_acq(cts), &cts->g->strempty);
   else {
     GCtab *mt = ctype_meta_tab(cts, id);
     tv = mt ? lj_tab_getstr(mt, mmname_str(cts->g, mm)) : NULL;
@@ -1355,7 +1355,7 @@ cTValue *lj_ctype_metatv(CTState *cts, TValue *out, CTypeID id, MMS mm)
   }
   if (ctype_isptr(ct->info) &&
       ctype_isfunc(ctype_get(cts, ctype_cid(ct->info))->info))
-    tv = lj_tab_getstr(cts->miscmap, &cts->g->strempty);
+    tv = lj_tab_getstr(ctype_miscmap_acq(cts), &cts->g->strempty);
   else {
     GCtab *mt = ctype_meta_tab(cts, id);
     if (mt) {

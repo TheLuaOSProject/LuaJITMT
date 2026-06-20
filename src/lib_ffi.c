@@ -1748,9 +1748,10 @@ static TValue *ffi_loaded_store(lua_State *L, GCtab *t, GCstr *name,
 static TValue *ffi_miscmap_store(lua_State *L, CTState *cts, GCstr *key,
 				 cTValue *src)
 {
+  GCtab *miscmap = ctype_miscmap_acq(cts);
   TValue *dst;
   for (;;) {
-    dst = lj_tab_setstr(L, cts->miscmap, key);
+    dst = lj_tab_setstr(L, miscmap, key);
     if (lj_tab_trystoretv_cas(L, dst, src) == LJ_TAB_STORE_CAS_OK)
       return dst;
     la_cpu_pause();  /* FFI miscmap store saw FORWARD after lookup. */
@@ -1775,16 +1776,18 @@ static void ffi_register_module(lua_State *L)
 LUALIB_API int luaopen_ffi(lua_State *L)
 {
   CTState *cts = lj_ctype_init(L);
+  GCtab *miscmap;
   lj_ccallback_init_l(L, cts);
-  settabV(L, L->top++,
-	  (cts->miscmap = lj_tab_new(L, 0, 1)));
+  miscmap = lj_tab_new(L, 0, 1);
+  ctype_miscmap_rel(cts, miscmap);
+  settabV(L, L->top++, miscmap);
   LJ_LIB_REG(L, NULL, ffi_meta);
   /* NOBARRIER: basemt is a GC root. */
   setgcrefroot(basemt_it(G(L), LJ_TCDATA), obj2gco(tabV(L->top-1)));
   LJ_LIB_REG(L, NULL, ffi_clib);
   LJ_LIB_REG(L, NULL, ffi_callback);
   ffi_miscmap_store(L, cts, &cts->g->strempty, L->top-1);
-  lj_gc_pubtabobj(L, cts->miscmap, tabV(L->top-1));
+  lj_gc_pubtabobj(L, miscmap, tabV(L->top-1));
   L->top--;
   LJ_LIB_REG(L, NULL, ffi_pin);
   cts->pinmt = tabV(L->top-1);
