@@ -1958,6 +1958,18 @@ static void atomic(global_State *g, lua_State *L)
   g->gc.estimate = g->gc.total - (GCSize)udsize;  /* Initial estimate. */
 }
 
+#if LJ_HASJIT
+static int gc_jit_defer_fixpoint(global_State *g)
+{
+  return lj_tg_jit_base(g) != NULL &&
+	 g->gc.state == GCSpropagate &&
+	 gcref(g->gc.gray) == NULL &&
+	 la_load32_acq(&g->gc2.phase) == LJ_GC2_MARK;
+}
+#else
+#define gc_jit_defer_fixpoint(g)	0
+#endif
+
 /* GC state machine. Returns a cost estimate for each step performed. */
 static size_t gc_onestep(lua_State *L)
 {
@@ -1971,9 +1983,12 @@ static size_t gc_onestep(lua_State *L)
       return propagatemark(g);  /* Propagate one gray object. */
     if (lj_gc2_worker_drain(g, LJ_GC2_WORKER_DRAIN_BATCH) != 0)
       return GCSWEEPCOST;  /* 05 section 5.6.3 bounded worker step bridge. */
-    if (la_load32_acq(&g->gc2.phase) == LJ_GC2_MARK &&
-	lj_gc2_fixpoint_round(g, L, LJ_GC2_WORKER_DRAIN_BATCH) == 0)
-      return GCSWEEPCOST;  /* 05 section 5.7.1 bounded propagation fixpoint bridge. */
+    if (la_load32_acq(&g->gc2.phase) == LJ_GC2_MARK) {
+      if (gc_jit_defer_fixpoint(g))
+	return LJ_MAX_MEM;  /* Root handshakes are run after trace exit. */
+      if (lj_gc2_fixpoint_round(g, L, LJ_GC2_WORKER_DRAIN_BATCH) == 0)
+	return GCSWEEPCOST;  /* 05 section 5.7.1 bounded propagation fixpoint bridge. */
+    }
     g->gc.state = GCSatomic;  /* End of mark phase. */
     return 0;
   case GCSatomic:
@@ -2130,15 +2145,17 @@ int LJ_FASTCALL lj_gc_step_jit(global_State *g, MSize steps)
   legacy_step = g->gc.total >= lj_gc_threshold_load(g);
   hard_step = la_load64_acq(&g->gc2.alloc_since_trigger) >
 	      la_load64_acq(&g->gc2.hard_bytes);
-  if (hard_step)
+  if (hard_step) {
     la_add64_rlx(&g->gc2.jit_hard_checks, 1);
-  lj_gc2_assist(g, L2TG(L));  /* 05 section 5.11 trace-side assist bridge. */
+    lj_gc2_assist(g, L2TG(L));  /* 05 section 5.11 trace-side assist bridge. */
+  }
   if (legacy_step) {
     while (steps-- > 0 && lj_gc_step(L) == 0)
       ;
   }
   /* Return 1 to force a trace exit. */
-  return (G(L)->gc.state == GCSatomic || G(L)->gc.state == GCSfinalize);
+  return gc_jit_defer_fixpoint(g) ||
+	 (G(L)->gc.state == GCSatomic || G(L)->gc.state == GCSfinalize);
 }
 #endif
 

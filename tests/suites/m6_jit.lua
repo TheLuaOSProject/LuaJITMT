@@ -801,6 +801,30 @@ assert(type(x)=="table")
 ]=], "GCSTEP", "sunk allocation replay")
       luajit_file(t, t:path("tests", "stock", "test", "misc", "gcstep.lua"),
                   { timeout = "20s" })
+      luajit_code(t, [=[
+local clock = os.clock
+local function run(n)
+  local s = 0
+  for i = 1, n do
+    local x = i
+    local f = function()
+      x = x + 1
+      return x
+    end
+    s = s + f()
+  end
+  return s
+end
+local best = math.huge
+for _ = 1, 5 do
+  collectgarbage("collect")
+  local t0 = clock()
+  assert(run(5000) == 12507500)
+  local dt = clock() - t0
+  if dt < best then best = dt end
+end
+assert(best >= 0)
+]=], { timeout = "10s" })
       print("M6 JIT GC-step behavior passed")
     end
   })
