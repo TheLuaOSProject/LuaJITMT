@@ -8,6 +8,7 @@ local shell_quote = utils.shell_quote
 local assert_dump_contains = utils.assert_dump_contains
 local lua_path = runtime.lua_path
 local build_and_run_c = build.compile_and_run_c
+local run_c_fixture_specs = build.run_c_fixture_specs
 local build_shared_library = build.build_shared_library
 local write_ld_script = build.write_ld_script
 local clean_build = build.clean_build
@@ -80,14 +81,16 @@ return function(add)
     description = "FFI callback runtime behavior",
     run = function(t)
       clean_build(t)
-      build_and_run_c(t, t:tmp("lj_t-ffi-callback-nested-native"),
-                      "t-ffi-callback-nested-native.c")
-      build_and_run_c(t, t:tmp("lj_t-ffi-callback-owner-lifetime"),
-                      "t-ffi-callback-owner-lifetime.c")
-      build_and_run_c(t, t:tmp("lj_t-ffi-callback-attached-carrier"),
-                      "t-ffi-callback-attached-carrier.c")
-      build_and_run_c(t, t:tmp("lj_t-ffi-callback-auto-attach"),
-                      "t-ffi-callback-auto-attach.c")
+      run_c_fixture_specs(t, {
+        { output = "lj_t-ffi-callback-nested-native",
+          cfile = "t-ffi-callback-nested-native.c" },
+        { output = "lj_t-ffi-callback-owner-lifetime",
+          cfile = "t-ffi-callback-owner-lifetime.c" },
+        { output = "lj_t-ffi-callback-attached-carrier",
+          cfile = "t-ffi-callback-attached-carrier.c" },
+        { output = "lj_t-ffi-callback-auto-attach",
+          cfile = "t-ffi-callback-auto-attach.c" }
+      })
       run_luajit_script(t, "t-ffi-callback-runtime.lua", {
         getenv("LJ_M7_FFI_CBACK_RT_THREADS", "6"),
         getenv("LJ_M7_FFI_CBACK_RT_ITERS", "220")

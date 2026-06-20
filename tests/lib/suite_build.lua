@@ -1,4 +1,5 @@
 local utils = require("suite_utils")
+local optutils = require("suite_opts")
 
 local M = {}
 
@@ -71,6 +72,17 @@ function M.run_c_fixtures(t, names, opts)
     local name = names[i]
     M.compile_and_run_c(t, t:tmp(prefix .. name .. suffix),
                         name .. ".c", opts)
+  end
+end
+
+function M.run_c_fixture_specs(t, specs, common_opts)
+  common_opts = common_opts or {}
+  for i = 1, #specs do
+    local spec = specs[i]
+    local opts = optutils.with(common_opts, spec.opts)
+    local cfile = spec.cfile or (spec.name .. ".c")
+    local output = spec.output or ("lj_" .. cfile:gsub("[.]c$", ""))
+    M.compile_and_run_c(t, t:tmp(output), cfile, opts)
   end
 end
 

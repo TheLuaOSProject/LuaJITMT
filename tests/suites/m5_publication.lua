@@ -8,6 +8,7 @@ local run_luajit = runtime.luajit
 local luajit_capture = runtime.capture_luajit
 local run_stock = runtime.run_stock
 local build_and_run_c = build.compile_and_run_c
+local run_c_fixture_specs = build.run_c_fixture_specs
 local build_and_run_luajit_script = runtime.build_and_run_luajit_script
 
 local function table_value_smoke()
@@ -423,12 +424,11 @@ assert(util.traceinfo(1), "expected loaded CNEW creation trace")
     description = "JIT trace-slot and trace-link publication guards",
     run = function(t)
       t:build({ quiet = true })
-      build_and_run_c(t, t:tmp("lj_t-jit-tracevec"), "t-jit-tracevec.c",
-                      { timeout = "20s" })
-      build_and_run_c(t, t:tmp("lj_t-jit-mcode-retire"), "t-jit-mcode-retire.c",
-                      { timeout = "20s" })
-      build_and_run_c(t, t:tmp("lj_t-jit-trace-retire"), "t-jit-trace-retire.c",
-                      { timeout = "20s" })
+      run_c_fixture_specs(t, {
+        { output = "lj_t-jit-tracevec", cfile = "t-jit-tracevec.c" },
+        { output = "lj_t-jit-mcode-retire", cfile = "t-jit-mcode-retire.c" },
+        { output = "lj_t-jit-trace-retire", cfile = "t-jit-trace-retire.c" }
+      }, { timeout = "20s" })
       run_luajit(t, { "-e", jit_trace_publish_smoke() })
       print("M5 JIT trace publication guard passed")
     end
