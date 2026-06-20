@@ -50,6 +50,8 @@ LA_INLINE int la_cas32(uint32_t *p,uint32_t *exp,uint32_t des,int mo_s,int mo_f)
 {return __atomic_compare_exchange_n(p,exp,des,0,mo_s,mo_f);}
 LA_INLINE int la_cas8(uint8_t *p,uint8_t *exp,uint8_t des,int mo_s,int mo_f)
 {return __atomic_compare_exchange_n(p,exp,des,0,mo_s,mo_f);}
+LA_INLINE int la_cas16(uint16_t *p,uint16_t *exp,uint16_t des,int mo_s,int mo_f)
+{return __atomic_compare_exchange_n(p,exp,des,0,mo_s,mo_f);}
 LA_INLINE int la_cas64(uint64_t *p,uint64_t *exp,uint64_t des,int mo_s,int mo_f)
 {return __atomic_compare_exchange_n(p,exp,des,0,mo_s,mo_f);}
 LA_INLINE int la_casptr(void **p,void **exp,void *des,int mo_s,int mo_f)

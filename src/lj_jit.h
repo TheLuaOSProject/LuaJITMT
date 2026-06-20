@@ -497,6 +497,30 @@ static LJ_AINLINE void trace_nchild_rel(GCtrace *T, MSize nchild)
   la_store16_rel(&T->nchild, (uint16_t)nchild);
 }
 
+static LJ_AINLINE int trace_nchild_cas_acqrel(GCtrace *T, uint16_t *nchild,
+					      MSize next)
+{
+  return la_cas16(&T->nchild, nchild, (uint16_t)next, LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE void trace_nchild_inc_acqrel(GCtrace *T)
+{
+  uint16_t nchild;
+  do {
+    nchild = (uint16_t)trace_nchild_acq(T);
+  } while (!trace_nchild_cas_acqrel(T, &nchild, nchild + 1u));
+}
+
+static LJ_AINLINE void trace_nchild_dec_acqrel(GCtrace *T)
+{
+  uint16_t nchild;
+  do {
+    nchild = (uint16_t)trace_nchild_acq(T);
+    if (nchild == 0)
+      return;
+  } while (!trace_nchild_cas_acqrel(T, &nchild, nchild - 1u));
+}
+
 static LJ_AINLINE SnapShot *trace_snap_acq(const GCtrace *T)
 {
   return (SnapShot *)la_loadptr_acq((void *const *)&T->snap);

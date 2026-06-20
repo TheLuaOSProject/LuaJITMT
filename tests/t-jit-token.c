@@ -29,9 +29,18 @@ int main(void)
   assert(la_load32_acq(&g->jit_token) == 0);
 
   {
+    GCtrace trace;
     SnapShot snap;
     uint8_t count;
+    memset(&trace, 0, sizeof(trace));
     memset(&snap, 0, sizeof(snap));
+
+    trace_nchild_inc_acqrel(&trace);
+    assert(trace_nchild_acq(&trace) == 1);
+    trace_nchild_dec_acqrel(&trace);
+    assert(trace_nchild_acq(&trace) == 0);
+    trace_nchild_dec_acqrel(&trace);
+    assert(trace_nchild_acq(&trace) == 0);
 
     count = 0;
     assert(snap_count_cas_acqrel(&snap, &count, 1) != 0);

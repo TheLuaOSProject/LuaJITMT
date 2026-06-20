@@ -550,7 +550,7 @@ int main(void)
     UNUSED(exitno);
     UNUSED(sidetarget);
     side_count0 = count_traces_with_root(J, 1);
-    nchild0 = root->nchild;
+    nchild0 = (uint16_t)trace_nchild_acq(root);
     assert(side_count0 > 0);
     assert(nchild0 > 0);
     epoch0 = g->gc2.hs_epoch;
@@ -564,7 +564,7 @@ int main(void)
     assert(root->traceno == 1);
     side_count1 = count_traces_with_root(J, 1);
     assert(side_count1 < side_count0);
-    assert(root->nchild < nchild0);
+    assert(trace_nchild_acq(root) < nchild0);
     assert(count_scope_flushing_traces(J) == 0);
     assert(la_load64_acq(&g->gc2.jit_scoped_slots_retired) >
 	   scoped_slots0);

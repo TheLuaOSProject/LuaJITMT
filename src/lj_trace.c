@@ -720,22 +720,14 @@ static void trace_scope_clear_slot(jit_State *J, TraceNo traceno, GCtrace *T,
       TraceNo head = trace_nextside_acq(root);
       if (head == traceno) {
 	trace_nextside_rel(root, next);
-	{
-	  MSize nchild = trace_nchild_acq(root);
-	  if (nchild > 0)
-	    trace_nchild_rel(root, nchild - 1);
-	}
+	trace_nchild_dec_acqrel(root);
       } else if (head != 0) {
 	GCtrace *prev = traceref(J, head);
 	while (prev) {
 	  TraceNo prevnext = trace_nextside_acq(prev);
 	  if (prevnext == traceno) {
 	    trace_nextside_rel(prev, next);
-	    {
-	      MSize nchild = trace_nchild_acq(root);
-	      if (nchild > 0)
-		trace_nchild_rel(root, nchild - 1);
-	    }
+	    trace_nchild_dec_acqrel(root);
 	    break;
 	  }
 	  prev = prevnext ? traceref(J, prevnext) : NULL;
@@ -1123,7 +1115,7 @@ static void trace_stop(jit_State *J)
     snap_count_rel(snap, SNAPCOUNT_DONE);
     topslot = trace_topslot_acq(T);
     if (topslot > snap_topslot_acq(snap)) snap_topslot_rel(snap, topslot);
-    trace_nchild_rel(root, trace_nchild_acq(root) + 1);
+    trace_nchild_inc_acqrel(root);
     trace_nextside_rel(root, traceno);
     break;
   case BC_CALLM:
