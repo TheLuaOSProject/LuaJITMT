@@ -1424,7 +1424,7 @@ void lj_gc_clearweak_legacy(global_State *g, GCobj *o)
 	}
       }
     }
-    o = gcref(t->gclist);
+    o = gcref_acq(t->gclist);
   }
 }
 
@@ -1961,8 +1961,11 @@ static void atomic(global_State *g, lua_State *L)
 #if LJ_HASFFI
   (void)gc_queue_cdata_finalizers_pweak(L, g);
 #endif
-  if (!lj_gc2_weak_complete(g, gcref(g->gc.weak), LJ_GC2_WEAK_DRAIN_BATCH))
-    lj_gc_clearweak_legacy(g, gcref(g->gc.weak));
+  {
+    GCobj *weak = gcref_acq(g->gc.weak);
+    if (!lj_gc2_weak_complete(g, weak, LJ_GC2_WEAK_DRAIN_BATCH))
+      lj_gc_clearweak_legacy(g, weak);
+  }
   lj_gc2_weak_to_sweep(g);
 
   lj_buf_shrink(L, &G2TG(g)->tmpbuf);  /* Shrink temp buffer. */
