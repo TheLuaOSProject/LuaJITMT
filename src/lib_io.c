@@ -647,24 +647,26 @@ LJLIB_CF(io_popen)
 
 LJLIB_CF(io_tmpfile)
 {
-  IOFileUD *iof = io_file_new(L);
+  IOFileUD *iof;
 #if LJ_TARGET_PS3 || LJ_TARGET_PS4 || LJ_TARGET_PS5 || LJ_TARGET_PSVITA || LJ_TARGET_NX
+  iof = io_file_new(L);
   iof->fp = NULL; errno = ENOSYS;
 #else
   TGState *tg = L2TG(L);
+  int had_stopreq = tg && (la_load8_acq(&tg->tg_flags) & TGF_STOPREQ);
   uint32_t actions;
+  iof = io_file_new(L);
   lj_native_enter(tg);
   iof->fp = tmpfile();
   actions = lj_native_leave(L);
-  if (iof->fp != NULL && ((actions & LJ_GC2_HS_STOPREQ) ||
-      (tg && (la_load8_acq(&tg->tg_flags) & TGF_STOPREQ)))) {
+  if (iof->fp != NULL && io_fresh_stopreq(L, actions, had_stopreq)) {
     uint32_t close_actions;
     FILE *fp = iof->fp;
     iof->fp = NULL;
     (void)io_native_fclose(L, fp, &close_actions);
     actions |= close_actions;
   }
-  lj_safepoint_checkstop(L, actions);
+  io_checkstop_fresh(L, actions, had_stopreq);
 #endif
   return iof->fp != NULL ? 1 : luaL_fileresult(L, 0, NULL);
 }

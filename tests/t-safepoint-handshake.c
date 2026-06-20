@@ -84,6 +84,14 @@ static int publish_stopreq_c(lua_State *L)
   return 0;
 }
 
+static int mark_sticky_stopreq_c(lua_State *L)
+{
+  TGState *tg = G2TG(G(L));
+  assert(tg != NULL);
+  la_or8_rlx(&tg->tg_flags, TGF_STOPREQ);
+  return 0;
+}
+
 static int assert_acked_alloc_white_c(lua_State *L)
 {
   global_State *g = G(L);
@@ -370,6 +378,18 @@ static int assert_not_native_c(lua_State *L)
   return 0;
 }
 
+static int assert_no_stopreq_c(lua_State *L)
+{
+  global_State *g = G(L);
+  TGState *tg = G2TG(g);
+  assert(tg != NULL);
+  assert(g->gc2.hs_pending == 0);
+  assert(tg->poll == 0);
+  assert(tg->reqmask == 0);
+  assert((la_load8_acq(&tg->tg_flags) & TGF_STOPREQ) == 0);
+  return 0;
+}
+
 #if LJ_HASFFI
 static global_State *ffi_stopreq_g;
 static TGState *ffi_stopreq_tg;
@@ -511,6 +531,8 @@ int main(void)
   lua_setglobal(L, "publish_alloc_white");
   lua_pushcfunction(L, publish_stopreq_c);
   lua_setglobal(L, "publish_stopreq");
+  lua_pushcfunction(L, mark_sticky_stopreq_c);
+  lua_setglobal(L, "mark_sticky_stopreq");
   lua_pushcfunction(L, assert_acked_alloc_white_c);
   lua_setglobal(L, "assert_acked_alloc_white");
   lua_pushcfunction(L, assert_acked_c);
@@ -519,6 +541,8 @@ int main(void)
   lua_setglobal(L, "clear_stopreq");
   lua_pushcfunction(L, assert_not_native_c);
   lua_setglobal(L, "assert_not_native");
+  lua_pushcfunction(L, assert_no_stopreq_c);
+  lua_setglobal(L, "assert_no_stopreq");
   lua_pushcfunction(L, mkfifo_test_c);
   lua_setglobal(L, "mkfifo_test");
   lua_pushcfunction(L, start_fifo_stopreq_c);
@@ -777,6 +801,16 @@ int main(void)
     "  assert(not ok, 'expected STOPREQ case ' .. stopreq_case)\n"
     "  assert(tostring(err):find('thread interrupted: VM shutdown', 1, true))\n"
     "  clear_stopreq()\n"
+    "  assert_no_stopreq()\n"
+    "end\n"
+    "local function expect_sticky_ok(fn, cleanup)\n"
+    "  stopreq_case = stopreq_case + 1\n"
+    "  mark_sticky_stopreq()\n"
+    "  local ok, res = pcall(fn)\n"
+    "  assert(ok, 'unexpected sticky STOPREQ interruption case ' .. stopreq_case .. ': ' .. tostring(res))\n"
+    "  clear_stopreq()\n"
+    "  if cleanup then cleanup(res) end\n"
+    "  assert_no_stopreq()\n"
     "end\n"
     "local function expect_fopen_stopreq(fn)\n"
     "  stopreq_case = stopreq_case + 1\n"
@@ -789,6 +823,7 @@ int main(void)
     "  assert(not ok, 'expected STOPREQ case ' .. stopreq_case)\n"
     "  assert(tostring(err):find('thread interrupted: VM shutdown', 1, true))\n"
     "  clear_stopreq()\n"
+    "  assert_no_stopreq()\n"
     "  os.remove(fifo)\n"
     "end\n"
     "local function expect_native_stopreq(fn)\n"
@@ -799,6 +834,7 @@ int main(void)
     "  assert(not ok, 'expected STOPREQ case ' .. stopreq_case)\n"
     "  assert(tostring(err):find('thread interrupted: VM shutdown', 1, true))\n"
     "  clear_stopreq()\n"
+    "  assert_no_stopreq()\n"
     "end\n"
     "local function expect_loadlib_stopreq()\n"
     "  local so = os.getenv('LJ_LOADLIB_STOPREQ_SO')\n"
@@ -824,6 +860,8 @@ int main(void)
     "expect_stopreq(function() return os.execute(':') end)\n"
     "expect_stopreq(function() return os.tmpname() end)\n"
     "expect_stopreq(function() return io.tmpfile() end)\n"
+    "expect_sticky_ok(function() return os.tmpname() end, function(name) os.remove(name) end)\n"
+    "expect_sticky_ok(function() return io.tmpfile() end, function(file) file:close() end)\n"
     "p = os.tmpname()\n"
     "f = assert(io.open(p, 'w'))\n"
     "f:write('z')\n"
