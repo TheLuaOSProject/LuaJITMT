@@ -501,14 +501,15 @@ static void mcode_allocarea(jit_State *J, size_t sz)
 static void mcode_retired_push(jit_State *J, MCodeRetire *ret)
 {
   MCodeRetire *tail = ret;
+  MCodeRetire *next;
   void *head;
   if (!ret)
     return;
-  while (tail->next != NULL)
-    tail = tail->next;
+  while ((next = mcode_retired_next_acq(tail)) != NULL)
+    tail = next;
   head = la_loadptr_acq((void *const *)&J->retiredmcode);
   do {
-    tail->next = (MCodeRetire *)head;
+    mcode_retired_next_rel(tail, (MCodeRetire *)head);
   } while (!la_casptr((void **)&J->retiredmcode, &head, ret,
 		      LA_ACQ_REL, LA_ACQ));  /* 08 section 8.7 mcode SMR. */
 }
@@ -539,7 +540,7 @@ static LJ_AINLINE int mcode_retire_ready(MCodeRetire *ret,
 void lj_mcode_free(jit_State *J)
 {
   MCode *mc = J->mcarea;
-  MCodeRetire *retired = NULL, **retired_tail = &retired;
+  MCodeRetire *retired = NULL, *retired_tail = NULL;
   uint64_t epoch;
   if (!mc)
     return;
@@ -550,9 +551,12 @@ void lj_mcode_free(jit_State *J)
     ret->area = mc;
     ret->size = ((MCLink *)mc)->size;
     ret->retire_epoch = epoch;
-    ret->next = NULL;
-    *retired_tail = ret;
-    retired_tail = &ret->next;
+    mcode_retired_next_rel(ret, NULL);
+    if (retired_tail)
+      mcode_retired_next_rel(retired_tail, ret);
+    else
+      retired = ret;
+    retired_tail = ret;
     mc = next;
   }
   J->mcarea = NULL;
@@ -590,8 +594,8 @@ uint32_t lj_mcode_reclaim_retired(global_State *g, uint64_t completed_epoch)
   J = G2J(g);
   ret = (MCodeRetire *)la_xchgptr_acqrel((void **)&J->retiredmcode, NULL);
   while (ret) {
-    MCodeRetire *next = ret->next;
-    ret->next = NULL;
+    MCodeRetire *next = mcode_retired_next_acq(ret);
+    mcode_retired_next_rel(ret, NULL);
     if (mcode_retire_ready(ret, completed_epoch)) {
       mcode_freearea(g, ret);
       reclaimed++;
@@ -612,7 +616,7 @@ void lj_mcode_freeretired(global_State *g)
   J = G2J(g);
   ret = (MCodeRetire *)la_xchgptr_acqrel((void **)&J->retiredmcode, NULL);
   while (ret) {
-    MCodeRetire *next = ret->next;
+    MCodeRetire *next = mcode_retired_next_acq(ret);
     mcode_freearea(g, ret);
     ret = next;
   }
@@ -627,7 +631,7 @@ void lj_mcode_markretired(global_State *g, int gc2)
   J = G2J(g);
   for (ret = (MCodeRetire *)la_loadptr_acq((void *const *)&J->retiredmcode);
        ret != NULL;
-       ret = (MCodeRetire *)la_loadptr_acq((void *const *)&ret->next)) {
+       ret = mcode_retired_next_acq(ret)) {
     if (gc2) lj_gc2_markmem(g, ret); else lj_gc_arena_markmem(g, ret);
   }
 }

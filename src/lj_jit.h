@@ -184,6 +184,18 @@ typedef struct MCodeRetire {
   struct MCodeRetire *next;  /* Retired area records. */
 } MCodeRetire;
 
+static LJ_AINLINE MCodeRetire *
+mcode_retired_next_acq(const MCodeRetire *ret)
+{
+  return (MCodeRetire *)la_loadptr_acq((void *const *)&ret->next);
+}
+
+static LJ_AINLINE void mcode_retired_next_rel(MCodeRetire *ret,
+					      MCodeRetire *next)
+{
+  la_storeptr_rel((void **)&ret->next, next);
+}
+
 #define LJ_FLUSH_EPOCHS		2u
 
 /* Stack snapshot header. */
