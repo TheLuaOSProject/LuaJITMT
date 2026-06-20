@@ -17,22 +17,13 @@
 #include "lj_thr.h"
 #include "lj_target.h"
 
-static void dostring(lua_State *L, const char *src)
-{
-  if (luaL_dostring(L, src) != LUA_OK) {
-    const char *err = lua_tostring(L, -1);
-    fprintf(stderr, "lua error: %s\n", err ? err : "(non-string)");
-    assert(0);
-  }
-}
+#include "lib/lua_fixture_helpers.h"
 
 int main(void)
 {
-  lua_State *L = luaL_newstate();
+  lua_State *L = ljt_lua_newstate_openlibs();
   global_State *g;
 
-  assert(L != NULL);
-  luaL_openlibs(L);
   g = G(L);
   assert(la_load32_acq(&g->jit_token) == 0);
 
@@ -56,7 +47,7 @@ int main(void)
   }
 #endif
 
-  dostring(L,
+  ljt_lua_dostring(L,
     "local util = require'jit.util'\n"
     "jit.flush()\n"
     "jit.opt.start('hotloop=1', 'hotexit=1')\n"
@@ -75,9 +66,9 @@ int main(void)
     "assert(tracecount() > 0, 'expected token-owned recording')\n");
   assert(la_load32_acq(&g->jit_token) == 0);
 
-  dostring(L, "jit.flush()");
+  ljt_lua_dostring(L, "jit.flush()");
   la_store32_rel(&g->jit_token, 0x7fffffffu);
-  dostring(L,
+  ljt_lua_dostring(L,
     "local util = require'jit.util'\n"
     "jit.opt.start('hotloop=1', 'hotexit=1')\n"
     "local function tracecount()\n"
@@ -96,7 +87,7 @@ int main(void)
   assert(la_load32_acq(&g->jit_token) == 0x7fffffffu);
 
   la_store32_rel(&g->jit_token, 0);
-  dostring(L,
+  ljt_lua_dostring(L,
     "local util = require'jit.util'\n"
     "jit.opt.start('hotloop=1', 'hotexit=1')\n"
     "local function tracecount()\n"

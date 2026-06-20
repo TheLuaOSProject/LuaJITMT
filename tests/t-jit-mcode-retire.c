@@ -14,6 +14,8 @@
 #include "lj_mcode.h"
 #include "lj_trace.h"
 
+#include "lib/lua_fixture_helpers.h"
+
 static MCodeRetire *retired_find(jit_State *J, MCode *needle)
 {
   MCodeRetire *ret;
@@ -23,18 +25,9 @@ static MCodeRetire *retired_find(jit_State *J, MCode *needle)
   return NULL;
 }
 
-static void dostring(lua_State *L, const char *src)
-{
-  if (luaL_dostring(L, src) != LUA_OK) {
-    const char *err = lua_tostring(L, -1);
-    fprintf(stderr, "lua error: %s\n", err ? err : "(non-string)");
-    assert(0);
-  }
-}
-
 int main(void)
 {
-  lua_State *L = luaL_newstate();
+  lua_State *L = ljt_lua_newstate_openlibs();
   global_State *g;
   jit_State *J;
   MCode *oldmc;
@@ -42,13 +35,11 @@ int main(void)
   size_t szall;
   uint64_t epoch;
 
-  assert(L != NULL);
-  luaL_openlibs(L);
   g = G(L);
   J = G2J(g);
   assert(J->retiredmcode == NULL);
 
-  dostring(L,
+  ljt_lua_dostring(L,
     "jit.flush()\n"
     "jit.opt.start('hotloop=1', 'hotexit=1')\n"
     "local function f(n)\n"

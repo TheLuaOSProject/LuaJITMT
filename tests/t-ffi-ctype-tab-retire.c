@@ -12,6 +12,8 @@
 #include "lj_obj.h"
 #include "lj_ctype.h"
 
+#include "lib/lua_fixture_helpers.h"
+
 static CTypeTab *find_retired(CTState *cts, CTypeTab *tabh)
 {
   CTypeTab *ret;
@@ -21,36 +23,25 @@ static CTypeTab *find_retired(CTState *cts, CTypeTab *tabh)
   return NULL;
 }
 
-static void dostring(lua_State *L, const char *src)
-{
-  if (luaL_dostring(L, src) != LUA_OK) {
-    const char *err = lua_tostring(L, -1);
-    fprintf(stderr, "lua error: %s\n", err ? err : "(non-string)");
-    assert(0);
-  }
-}
-
 int main(void)
 {
-  lua_State *L = luaL_newstate();
+  lua_State *L = ljt_lua_newstate_openlibs();
   global_State *g;
   CTState *cts;
   CTypeTab *oldh, *newh;
   CTypeTab *ret;
   uint64_t retire_epoch;
 
-  assert(L != NULL);
-  luaL_openlibs(L);
   g = G(L);
 
-  dostring(L, "local ffi = require('ffi')");
+  ljt_lua_dostring(L, "local ffi = require('ffi')");
   cts = ctype_ctsG(g);
   assert(cts != NULL);
   oldh = ctype_tabh_acq(cts);
   assert(oldh != NULL);
   assert(cts->retiredtab == NULL);
 
-  dostring(L,
+  ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"
     "ffi.typeof('struct { int m7_ctype_tab_retire; }')\n");
 

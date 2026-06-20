@@ -13,14 +13,7 @@
 #include "lj_str.h"
 #include "lj_ctype.h"
 
-static void dostring(lua_State *L, const char *src)
-{
-  if (luaL_dostring(L, src) != LUA_OK) {
-    const char *err = lua_tostring(L, -1);
-    fprintf(stderr, "lua error: %s\n", err ? err : "(non-string)");
-    assert(0);
-  }
-}
+#include "lib/lua_fixture_helpers.h"
 
 static CTypeID new_named(CTState *cts, lua_State *L, CTInfo info, CTSize size,
 			 GCstr *name, CType **ctp)
@@ -54,7 +47,7 @@ static void force_table_move_after_reserve(lua_State *L, CTState *cts)
 
 int main(void)
 {
-  lua_State *L = luaL_newstate();
+  lua_State *L = ljt_lua_newstate_openlibs();
   global_State *g;
   CTState *cts;
   GCstr *name;
@@ -63,11 +56,9 @@ int main(void)
   const uint32_t default_ns = (1u << CT_TYPEDEF);
   const uint32_t struct_ns = (1u << CT_STRUCT);
 
-  assert(L != NULL);
-  luaL_openlibs(L);
   g = G(L);
 
-  dostring(L, "local ffi = require('ffi')");
+  ljt_lua_dostring(L, "local ffi = require('ffi')");
   cts = ctype_ctsG(g);
   assert(cts != NULL);
 
@@ -86,7 +77,7 @@ int main(void)
   assert(lj_ctype_getname(cts, &found, name, default_ns) == id1);
   lua_pushinteger(L, (lua_Integer)id2);
   lua_setglobal(L, "lj_m7_name_claim_loser_id");
-  dostring(L,
+  ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"
     "assert(ffi.typeinfo(lj_m7_name_claim_loser_id) == nil,\n"
     "       'ffi.typeinfo exposed abandoned ctype')\n");
@@ -99,7 +90,7 @@ int main(void)
   assert(lj_ctype_getname(cts, &found, name, struct_ns) == id3);
   assert(lj_ctype_getname(cts, &found, name, default_ns) == id1);
 
-  dostring(L,
+  ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"
     "ffi.cdef[[\n"
     "struct lj_m7_parser_name_claim { double x; };\n"

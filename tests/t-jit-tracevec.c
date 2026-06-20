@@ -13,6 +13,8 @@
 #include "lj_jit.h"
 #include "lj_trace.h"
 
+#include "lib/lua_fixture_helpers.h"
+
 static int retired_has(jit_State *J, TraceVec *needle)
 {
   TraceVec *tv;
@@ -22,31 +24,20 @@ static int retired_has(jit_State *J, TraceVec *needle)
   return 0;
 }
 
-static void dostring(lua_State *L, const char *src)
-{
-  if (luaL_dostring(L, src) != LUA_OK) {
-    const char *err = lua_tostring(L, -1);
-    fprintf(stderr, "lua error: %s\n", err ? err : "(non-string)");
-    assert(0);
-  }
-}
-
 int main(void)
 {
-  lua_State *L = luaL_newstate();
+  lua_State *L = ljt_lua_newstate_openlibs();
   global_State *g;
   jit_State *J;
   TraceVec *oldtv, *newtv;
   uint64_t epoch;
 
-  assert(L != NULL);
-  luaL_openlibs(L);
   g = G(L);
   J = G2J(g);
   assert(J->tracev == NULL);
   assert(J->retiredtracev == NULL);
 
-  dostring(L,
+  ljt_lua_dostring(L,
     "local util = require'jit.util'\n"
     "local function tracecount()\n"
     "  local n = 0\n"
@@ -70,7 +61,7 @@ int main(void)
   assert(J->sizetrace == oldtv->sizetrace);
   assert(J->retiredtracev == NULL);
 
-  dostring(L,
+  ljt_lua_dostring(L,
     "local util = require'jit.util'\n"
     "local function tracecount()\n"
     "  local n = 0\n"

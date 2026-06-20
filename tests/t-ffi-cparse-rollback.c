@@ -12,32 +12,23 @@
 #include "lj_obj.h"
 #include "lj_ctype.h"
 
-static void dostring(lua_State *L, const char *src)
-{
-  if (luaL_dostring(L, src) != LUA_OK) {
-    const char *err = lua_tostring(L, -1);
-    fprintf(stderr, "lua error: %s\n", err ? err : "(non-string)");
-    assert(0);
-  }
-}
+#include "lib/lua_fixture_helpers.h"
 
 int main(void)
 {
-  lua_State *L = luaL_newstate();
+  lua_State *L = ljt_lua_newstate_openlibs();
   global_State *g;
   CTState *cts;
   CTypeID top0, top1;
 
-  assert(L != NULL);
-  luaL_openlibs(L);
   g = G(L);
 
-  dostring(L, "require('ffi')");
+  ljt_lua_dostring(L, "require('ffi')");
   cts = ctype_ctsG(g);
   assert(cts != NULL);
   top0 = ctype_top_acq(cts);
 
-  dostring(L,
+  ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"
     "local ok = pcall(ffi.cdef, 'struct m7_badrollback { int x; ')\n"
     "assert(not ok)\n");
@@ -45,7 +36,7 @@ int main(void)
   top1 = ctype_top_acq(cts);
   assert(top1 > top0);
 
-  dostring(L,
+  ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"
     "ffi.cdef('struct m7_badrollback;')\n"
     "assert(ffi.typeof('struct m7_badrollback *'))\n"
