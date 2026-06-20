@@ -15,13 +15,7 @@
 #include "lj_obj.h"
 #include "lj_thr.h"
 
-static void check_lua_ok(lua_State *L, int status, const char *what)
-{
-  if (status != LUA_OK) {
-    fprintf(stderr, "%s: %s\n", what, lua_tostring(L, -1));
-    assert(status == LUA_OK);
-  }
-}
+#include "lib/lua_fixture_helpers.h"
 
 static void expect_thread_busy(lua_State *L, lua_CFunction fn,
 			       const char *what)
@@ -396,14 +390,14 @@ int main(void)
   check_resume_unowned(L);
   check_coroutine_resume_unowned(L);
   check_coroutine_wrap_unowned(L);
-  check_lua_ok(L, luaL_dostring(L,
+  ljt_lua_assert_ok(L, luaL_dostring(L,
     "local co = coroutine.create(function() return 92 end)\n"
     "local ok, v = coroutine.resume(co)\n"
     "assert(ok and v == 92)\n"
     "local f = coroutine.wrap(function() return 93 end)\n"
     "assert(f() == 93)\n"),
     "Lua-created coroutine resume/wrap smoke");
-  check_lua_ok(L, luaL_dostring(L,
+  ljt_lua_assert_ok(L, luaL_dostring(L,
     "local co = coroutine.create(function()\n"
     "  local x = 41\n"
     "  coroutine.yield('pause')\n"
@@ -445,7 +439,7 @@ int main(void)
 		     "busy jit.profile.dumpstack");
 #endif
   expect_thread_busy(L, busy_coroutine_status, "busy coroutine.status");
-  check_lua_ok(L, luaL_dostring(L,
+  ljt_lua_assert_ok(L, luaL_dostring(L,
     "local co = coroutine.create(function() coroutine.yield(1) end)\n"
     "assert(coroutine.status(co) == 'suspended')\n"),
     "coroutine.status smoke");

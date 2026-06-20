@@ -13,13 +13,7 @@
 #include "lj_obj.h"
 #include "lj_meta.h"
 
-static void assert_lua_ok(lua_State *L, int status, const char *what)
-{
-  if (status != LUA_OK) {
-    fprintf(stderr, "%s: %s\n", what, lua_tostring(L, -1));
-    assert(status == LUA_OK);
-  }
-}
+#include "lib/lua_fixture_helpers.h"
 
 static GCtab *new_table(lua_State *L)
 {
@@ -93,7 +87,8 @@ int main(void)
   check_c_api_setmetatable_clears_nomm(L);
   check_base_setmetatable_clears_nomm(L);
   check_missing_index_does_not_set_nomm(L);
-  assert_lua_ok(L, luaL_dostring(L, "local t = {}; return #t"), "len smoke");
+  ljt_lua_assert_ok(L, luaL_dostring(L, "local t = {}; return #t"),
+		    "len smoke");
   lua_close(L);
   printf("t-nomm-cache OK: runtime misses do not set nomm bits\n");
   return 0;

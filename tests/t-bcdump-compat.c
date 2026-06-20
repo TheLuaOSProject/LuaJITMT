@@ -15,6 +15,8 @@
 #include "lj_bc.h"
 #include "lj_bcdump.h"
 
+#include "lib/lua_fixture_helpers.h"
+
 typedef struct DumpBuf {
   char *p;
   size_t n;
@@ -62,14 +64,6 @@ static void dump_copy(DumpBuf *dst, const DumpBuf *src)
   }
   memcpy(dst->p, src->p, src->n);
   dst->n = src->n;
-}
-
-static void assert_lua_ok(lua_State *L, int status, const char *what)
-{
-  if (status != LUA_OK) {
-    fprintf(stderr, "%s: %s\n", what, lua_tostring(L, -1));
-    assert(status == LUA_OK);
-  }
 }
 
 static uint32_t read_uleb(const DumpBuf *b, size_t *ofs)
@@ -148,7 +142,7 @@ static GCproto *top_proto(lua_State *L)
 static void compile_to_dump(lua_State *L, const char *src, DumpBuf *b)
 {
   dump_reset(b);
-  assert_lua_ok(L, luaL_loadstring(L, src), "luaL_loadstring");
+  ljt_lua_assert_ok(L, luaL_loadstring(L, src), "luaL_loadstring");
   assert(lj_bcwrite(L, top_proto(L), dump_writer, b, BCDUMP_F_STRIP) == 0);
   assert(b->n > 5);
   assert((uint8_t)b->p[3] == BCDUMP_VERSION_LOCKLESS);
@@ -184,24 +178,24 @@ int main(void)
   compile_to_dump(L, "return 42", &base);
   assert((uint8_t)base.p[3] == BCDUMP_VERSION_LOCKLESS);
 
-  assert_lua_ok(L, load_dump(L, &base), "load v4 dump");
-  assert_lua_ok(L, lua_pcall(L, 0, 1, 0), "pcall v4 dump");
+  ljt_lua_assert_ok(L, load_dump(L, &base), "load v4 dump");
+  ljt_lua_assert_ok(L, lua_pcall(L, 0, 1, 0), "pcall v4 dump");
   assert(lua_tointeger(L, -1) == 42);
   lua_pop(L, 1);
 
   dump_copy(&mod, &base);
   mod.p[3] = BCDUMP_VERSION_TRANS;
-  assert_lua_ok(L, load_dump(L, &mod), "load patched v3 dump");
-  assert_lua_ok(L, lua_pcall(L, 0, 1, 0), "pcall patched v3 dump");
+  ljt_lua_assert_ok(L, load_dump(L, &mod), "load patched v3 dump");
+  ljt_lua_assert_ok(L, lua_pcall(L, 0, 1, 0), "pcall patched v3 dump");
   assert(lua_tointeger(L, -1) == 42);
   lua_pop(L, 1);
 
   dump_copy(&mod, &base);
   mod.p[3] = BCDUMP_VERSION_LEGACY;
-  assert_lua_ok(L, load_dump(L, &mod), "load patched v2 dump");
+  ljt_lua_assert_ok(L, load_dump(L, &mod), "load patched v2 dump");
   dump_reset(&redump);
   assert(lua_dump(L, dump_writer, &redump) != 0);
-  assert_lua_ok(L, lua_pcall(L, 0, 1, 0), "pcall patched v2 dump");
+  ljt_lua_assert_ok(L, lua_pcall(L, 0, 1, 0), "pcall patched v2 dump");
   assert(lua_tointeger(L, -1) == 42);
   lua_pop(L, 1);
 
@@ -242,14 +236,14 @@ int main(void)
 
   compile_to_dump(L, "local x=0; local function g() return x end; "
 		   "x=x+1; return x,g", &base);
-  assert_lua_ok(L, load_dump(L, &base), "load v4 CGET/CSET dump");
+  ljt_lua_assert_ok(L, load_dump(L, &base), "load v4 CGET/CSET dump");
   assert((top_proto(L)->flags & PROTO_NOJIT) == 0);
   lua_pop(L, 1);
 
   compile_to_dump(L, "local keep; for i=1,2 do "
 		   "local function f() return f end; keep=f end; return keep",
 		   &base);
-  assert_lua_ok(L, load_dump(L, &base), "load v4 CNEW dump");
+  ljt_lua_assert_ok(L, load_dump(L, &base), "load v4 CNEW dump");
   assert((top_proto(L)->flags & PROTO_NOJIT) == 0);
   lua_pop(L, 1);
 

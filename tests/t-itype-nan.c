@@ -12,13 +12,7 @@
 
 #include "lj_obj.h"
 
-static void assert_lua_ok(lua_State *L, int status, const char *what)
-{
-  if (status != LUA_OK) {
-    fprintf(stderr, "%s: %s\n", what, lua_tostring(L, -1));
-    assert(status == LUA_OK);
-  }
-}
+#include "lib/lua_fixture_helpers.h"
 
 static void assert_nan_number(double n)
 {
@@ -57,12 +51,12 @@ int main(void)
   assert_nan_number(lua_tonumber(L, -1));
   lua_pop(L, 1);
 
-  assert_lua_ok(L, luaL_loadstring(L,
+  ljt_lua_assert_ok(L, luaL_loadstring(L,
     "local a = 0/0\n"
     "local b = tonumber('nan')\n"
     "return a, b, type(a), type(b), a ~= a, b ~= b\n"),
     "luaL_loadstring");
-  assert_lua_ok(L, lua_pcall(L, 0, 6, 0), "lua_pcall");
+  ljt_lua_assert_ok(L, lua_pcall(L, 0, 6, 0), "lua_pcall");
 
   assert(lua_type(L, 1) == LUA_TNUMBER);
   assert(lua_type(L, 2) == LUA_TNUMBER);

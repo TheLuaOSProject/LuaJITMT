@@ -19,6 +19,13 @@ static inline void ljt_lua_fail(lua_State *L, const char *what)
   assert(0);
 }
 
+static inline void ljt_lua_assert_ok(lua_State *L, int status,
+				     const char *what)
+{
+  if (status != LUA_OK)
+    ljt_lua_fail(L, what ? what : "lua status");
+}
+
 static inline lua_State *ljt_lua_newstate_openlibs(void)
 {
   lua_State *L = luaL_newstate();
@@ -29,21 +36,19 @@ static inline lua_State *ljt_lua_newstate_openlibs(void)
 
 static inline void ljt_lua_dostring(lua_State *L, const char *src)
 {
-  if (luaL_dostring(L, src) != 0)
-    ljt_lua_fail(L, "lua error");
+  ljt_lua_assert_ok(L, luaL_dostring(L, src), "lua error");
 }
 
 static inline void ljt_lua_loadstring(lua_State *L, const char *src)
 {
-  if (luaL_loadstring(L, src) != 0)
-    ljt_lua_fail(L, "luaL_loadstring");
+  ljt_lua_assert_ok(L, luaL_loadstring(L, src), "luaL_loadstring");
 }
 
 static inline void ljt_lua_pcall(lua_State *L, int nargs, int nresults,
 				 const char *what)
 {
-  if (lua_pcall(L, nargs, nresults, 0) != 0)
-    ljt_lua_fail(L, what ? what : "lua_pcall");
+  ljt_lua_assert_ok(L, lua_pcall(L, nargs, nresults, 0),
+		    what ? what : "lua_pcall");
 }
 
 #endif
