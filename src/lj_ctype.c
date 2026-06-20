@@ -831,6 +831,76 @@ CTypeID lj_ctype_getname(CTState *cts, CType **ctp, GCstr *name, uint32_t tmask)
   return 0;
 }
 
+/* Sequence-checked named ctype lookup for stable non-parser readers. */
+int lj_ctype_getname_snapshot(CTState *cts, GCstr *name, uint32_t tmask,
+			      CTypeID *idp, CType *out, GCstr **redirp)
+{
+  uint32_t seq0 = la_load32_acq(&cts->parse_token);
+  CTypeTab *tabh;
+  CTypeID top, id;
+  MSize budget;
+  if (seq0 & 1u)
+    return -1;
+  top = ctype_top_acq(cts);
+  tabh = ctype_tabh_acq(cts);
+  id = ctype_hash_load(cts, ct_hashname(name));
+  budget = top ? (MSize)top * 2u : 1u;
+  while (id) {
+    CType *ct;
+    CTInfo info;
+    CTSize size;
+    CTypeID sib, next;
+    GCobj *gco;
+    if (id >= top || (MSize)id >= tabh->sizetab)
+      return -1;
+    if (budget-- == 0)
+      return -1;
+    ct = &tabh->tab[id];
+    info = la_load32_acq(&ct->info);
+    size = la_load32_acq(&ct->size);
+    sib = (CTypeID)la_load16_acq(&ct->sib);
+    next = (CTypeID)la_load16_acq(&ct->next);
+    gco = gcref_acq(ct->name);
+    if (!ctype_isabandoned(info) && gco == obj2gco(name) &&
+	((tmask >> ctype_type(info)) & 1)) {
+      GCstr *redir = name;
+      uint32_t seq1;
+      if (redirp && sib) {
+	CType *rt;
+	CTInfo rinfo;
+	GCobj *rgco;
+	if (sib >= top || (MSize)sib >= tabh->sizetab)
+	  return -1;
+	rt = &tabh->tab[sib];
+	rinfo = la_load32_acq(&rt->info);
+	rgco = gcref_acq(rt->name);
+	if (ctype_isabandoned(rinfo))
+	  return 0;
+	if (ctype_isxattrib(rinfo, CTA_REDIR)) {
+	  if (rgco == NULL)
+	    return -1;
+	  redir = gco2str(rgco);
+	}
+      }
+      out->info = info;
+      out->size = size;
+      out->sib = (CTypeID1)sib;
+      out->next = (CTypeID1)next;
+      setgcrefp(out->name, gco);
+      *idp = id;
+      if (redirp)
+	*redirp = redir;
+      seq1 = la_load32_acq(&cts->parse_token);
+      return (seq0 == seq1 && !(seq1 & 1u)) ? 1 : -1;
+    }
+    id = next;
+  }
+  {
+    uint32_t seq1 = la_load32_acq(&cts->parse_token);
+    return (seq0 == seq1 && !(seq1 & 1u)) ? 0 : -1;
+  }
+}
+
 /* Get a struct/union/enum/function field by name. */
 CType *lj_ctype_getfieldq(CTState *cts, CType *ct, GCstr *name, CTSize *ofs,
 			  CTInfo *qual)

@@ -515,17 +515,17 @@ static CTSize clib_func_argsize(CTState *cts, CType *ct)
 #endif
 
 /* Get redirected or mangled external symbol. */
-static const char *clib_extsym(CTState *cts, CType *ct, GCstr *name)
+static GCstr *clib_extsym(CTState *cts, CType *ct, GCstr *name)
 {
   if (ct->sib) {
     CType *ctf = ctype_get(cts, ct->sib);
     GCstr *redir = ctype_name_acq(ctf);
     if (ctype_isxattrib(ctf->info, CTA_REDIR)) {
       lj_assertCTS(redir != NULL, "missing redirected symbol name");
-      return strdata(redir);
+      return redir;
     }
   }
-  return strdata(name);
+  return name;
 }
 
 /* Index a C library by name. */
@@ -536,14 +536,24 @@ TValue *lj_clib_index(lua_State *L, CLibrary *cl, GCstr *name)
     return (TValue *)ctv;
   {
     CTState *cts = ctype_cts(L);
-    CType *ct;
+    CType snap, *ct = &snap;
     CTypeID id;
+    GCstr *symname = name;
     TValue tmp, *tv, *anchor;
-    lj_ctype_parse_lock(cts, L);
-    /* 11.2: ffi.C namespace readers wait out parser rollback. */
-    id = lj_ctype_getname(cts, &ct, name, CLNS_INDEX);
-    if (!id) {
+    int ok = lj_ctype_getname_snapshot(cts, name, CLNS_INDEX, &id, &snap,
+				       &symname);
+    if (ok < 0) {
+      lj_ctype_parse_lock(cts, L);
+      /* 11.2: ffi.C namespace readers wait out parser rollback. */
+      id = lj_ctype_getname(cts, &ct, name, CLNS_INDEX);
+      if (!id) {
+	lj_ctype_parse_unlock(cts);
+	lj_err_callerv(L, LJ_ERR_FFI_NODECL, strdata(name));
+      }
+      if (!ctype_isconstval(ct->info))
+	symname = clib_extsym(cts, ct, name);
       lj_ctype_parse_unlock(cts);
+    } else if (!ok) {
       lj_err_callerv(L, LJ_ERR_FFI_NODECL, strdata(name));
     }
     if (ctype_isconstval(ct->info)) {
@@ -555,10 +565,8 @@ TValue *lj_clib_index(lua_State *L, CLibrary *cl, GCstr *name)
       } else {
 	setintV(&tmp, (int32_t)ct->size);
       }
-      lj_ctype_parse_unlock(cts);
     } else {
-      lj_ctype_parse_unlock(cts);
-      const char *sym = clib_extsym(cts, ct, name);
+      const char *sym = strdata(symname);
 #if LJ_TARGET_WINDOWS
       DWORD oldwerr = GetLastError();
 #endif

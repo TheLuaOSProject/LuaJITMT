@@ -1773,15 +1773,21 @@ void LJ_FASTCALL recff_clib_index(jit_State *J, RecordFFData *rd)
       lj_udata_udtype_acq(udataV(&rd->argv[0])) == UDTYPE_FFI_CLIB) {
     CLibrary *cl = (CLibrary *)uddata(udataV(&rd->argv[0]));
     GCstr *name = strV(&rd->argv[1]);
-    CType *ct;
+    CType snap, *ct = &snap;
     CTypeID id;
     cTValue *ctv = lj_clib_cache_get(cl, name);
     TValue tv;
+    int ok;
     rd->nres = rd->data;
-    lj_ctype_parse_lock(cts, J->L);
-    /* 11.2: recorder ffi.C namespace reader waits out parser rollback. */
-    id = lj_ctype_getname(cts, &ct, name, CLNS_INDEX);
-    lj_ctype_parse_unlock(cts);
+    ok = lj_ctype_getname_snapshot(cts, name, CLNS_INDEX, &id, &snap, NULL);
+    if (ok < 0) {
+      lj_ctype_parse_lock(cts, J->L);
+      /* 11.2: recorder ffi.C namespace reader waits out parser rollback. */
+      id = lj_ctype_getname(cts, &ct, name, CLNS_INDEX);
+      lj_ctype_parse_unlock(cts);
+    } else if (!ok) {
+      id = 0;
+    }
     if (ctv)
       lj_tv_load_acq(&tv, ctv);
     if (id && ctv && !tvisnil(&tv)) {
