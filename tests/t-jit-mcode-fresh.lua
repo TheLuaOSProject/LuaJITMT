@@ -4,8 +4,8 @@ local harness = require"thread_harness"
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1", "sizemcode=4", "maxmcode=2048")
 
-local nthreads = tonumber(os.getenv("LJ_M6_MCODE_FRESH_THREADS") or "4")
-local rounds = tonumber(os.getenv("LJ_M6_MCODE_FRESH_ROUNDS") or "24")
+local nthreads = harness.env_number("LJ_M6_MCODE_FRESH_THREADS", 4)
+local rounds = harness.env_number("LJ_M6_MCODE_FRESH_ROUNDS", 24)
 
 local function hot(n)
   local s = 0

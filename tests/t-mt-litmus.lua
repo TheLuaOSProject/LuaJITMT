@@ -1,6 +1,7 @@
 local th = require"threading"
+local harness = require"thread_harness"
 
-local reps = tonumber(os.getenv("LJ_M4_LITMUS_REPS") or "100")
+local reps = harness.env_number("LJ_M4_LITMUS_REPS", 100)
 
 for _ = 1, reps do
   do

@@ -1,8 +1,8 @@
 local th = require"threading"
 local harness = require"thread_harness"
 
-local nthreads = tonumber(os.getenv("LJ_M5_OS_THREADS") or "4")
-local iters = tonumber(os.getenv("LJ_M5_OS_ITERS") or "80")
+local nthreads = harness.env_number("LJ_M5_OS_THREADS", 4)
+local iters = harness.env_number("LJ_M5_OS_ITERS", 80)
 
 local function check_date(id, i)
   local t = 1609459200 + id * 1000 + i

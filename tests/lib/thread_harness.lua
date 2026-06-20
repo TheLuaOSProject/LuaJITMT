@@ -6,6 +6,19 @@ function M.arg_number(index, envname, default)
   return tonumber(v) or default
 end
 
+function M.env_number(envname, default)
+  return tonumber(os.getenv(envname)) or default
+end
+
+function M.grow_stack(n)
+  if n == 0 then return 0 end
+  return 1 + M.grow_stack(n - 1)
+end
+
+function M.assert_stack_grows(n)
+  assert(pcall(M.grow_stack, n or 96))
+end
+
 function M.channels(nthreads)
   local th = require("threading")
   return th.channel(nthreads), th.channel(nthreads)

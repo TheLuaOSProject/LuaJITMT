@@ -1,6 +1,7 @@
 local th = require"threading"
+local harness = require"thread_harness"
 
-local reps = tonumber(os.getenv("LJ_M4_THREAD_STRESS_REPS") or "1000")
+local reps = harness.env_number("LJ_M4_THREAD_STRESS_REPS", 1000)
 
 for i = 1, reps do
   local t = th.spawn(function(a, b)

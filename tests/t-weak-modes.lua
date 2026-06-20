@@ -1,5 +1,6 @@
 local ok_ffi, ffi = pcall(require, "ffi")
 local ok_th, th = pcall(require, "threading")
+local harness = require"thread_harness"
 
 local function fullgc(n)
   for _ = 1, n or 2 do
@@ -176,10 +177,11 @@ do
   assert(fired == 0, "Lua 5.1 table __gc unexpectedly ran")
 end
 
-if ok_th and tonumber(os.getenv("LJ_M8_WEAK_RACE_ITERS") or "512") > 0 then
+local weak_race_iters = harness.env_number("LJ_M8_WEAK_RACE_ITERS", 512)
+if ok_th and weak_race_iters > 0 then
   local stop = th.channel(1)
   local wt = setmetatable({}, { __mode = "v" })
-  local n = tonumber(os.getenv("LJ_M8_WEAK_RACE_ITERS") or "512")
+  local n = weak_race_iters
   local worker = th.spawn(function(tbl, stop_ch, count)
     for i = 1, count do
       tbl[(i % 64) + 1] = { i }

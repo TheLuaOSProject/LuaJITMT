@@ -22,11 +22,7 @@ for tid = 1, nthreads do
   workers[tid] = th.spawn(function(ready_ch, start_ch, id, count)
     local ffi = require"ffi"
     local shared_ok = 0
-    local function grow_stack(n)
-      if n == 0 then return 0 end
-      return 1 + grow_stack(n - 1)
-    end
-    assert(pcall(grow_stack, 96))
+    require"thread_harness".assert_stack_grows(96)
 
     ready_ch:send(id)
     local token, ok = start_ch:recv(10)

@@ -26,12 +26,7 @@ for tid = 1, nthreads do
     local int_cb_t = ffi.typeof("lj_m7_cback_runtime_int_t")
     local fp_cb_t = ffi.typeof("lj_m7_cback_runtime_fp_t")
     local cmp_cb_t = ffi.typeof("lj_m7_cback_runtime_cmp_t")
-
-    local function grow_stack(n)
-      if n == 0 then return 0 end
-      return 1 + grow_stack(n - 1)
-    end
-    assert(pcall(grow_stack, 96))
+    require"thread_harness".assert_stack_grows(96)
 
     local int_cb = ffi.cast(int_cb_t, function(a, b, c, d, e, f, g, h, i, j)
       return a + b + c + d + e + f + g + h + i + j + id

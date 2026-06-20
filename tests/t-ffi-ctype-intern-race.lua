@@ -33,12 +33,7 @@ for tid = 1, nthreads do
     for i = 1, shapes do
       outer[i] = ffi.typeof(("lj_m7_intern_outer_%d_t"):format(i))
     end
-
-    local function grow_stack(n)
-      if n == 0 then return 0 end
-      return 1 + grow_stack(n - 1)
-    end
-    assert(pcall(grow_stack, 96))
+    require"thread_harness".assert_stack_grows(96)
 
     ready_ch:send(id)
     local token, ok = start_ch:recv(10)
