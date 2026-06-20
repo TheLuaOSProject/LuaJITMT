@@ -28,6 +28,17 @@
 #define lj_str_tabbytes(tabh) \
   ((tabh) ? lj_str_tabsize((tabh)->mask) : (GCSize)0)
 
+static LJ_AINLINE StrTabHdr *lj_str_retired_next_acq(const StrTabHdr *hdr)
+{
+  return (StrTabHdr *)la_loadptr_acq((void *const *)&hdr->retired_next);
+}
+
+static LJ_AINLINE void lj_str_retired_next_rel(StrTabHdr *hdr,
+					       StrTabHdr *next)
+{
+  la_storeptr_rel((void **)&hdr->retired_next, next);
+}
+
 static LJ_AINLINE uintptr_t lj_str_ref_load_acq(const GCRef *r)
 {
 #if LJ_GC64

@@ -146,7 +146,7 @@ static void strtab_retired_push(global_State *g, StrTabHdr *hdr)
 {
   void *head = la_loadptr_acq((void *const *)&g->str.retired);
   do {
-    hdr->retired_next = (StrTabHdr *)head;
+    lj_str_retired_next_rel(hdr, (StrTabHdr *)head);
   } while (!la_casptr((void **)&g->str.retired, &head, hdr,
 		      LA_ACQ_REL, LA_ACQ));  /* 06 section 6.5 RCU retire. */
 }
@@ -524,8 +524,8 @@ uint32_t lj_str_reclaim_retired(global_State *g, uint64_t completed_epoch)
     return 0;
   hdr = (StrTabHdr *)la_xchgptr_acqrel((void **)&g->str.retired, NULL);
   while (hdr) {
-    StrTabHdr *next = hdr->retired_next;
-    hdr->retired_next = NULL;
+    StrTabHdr *next = lj_str_retired_next_acq(hdr);
+    lj_str_retired_next_rel(hdr, NULL);
     if (la_load64_acq(&hdr->retire_epoch) < completed_epoch) {
       lj_mem_free(g, hdr, lj_str_tabbytes(hdr));
       reclaimed++;
@@ -547,7 +547,7 @@ void lj_str_freetab(global_State *g)
   hdr = (StrTabHdr *)la_loadptr_acq((void *const *)&g->str.retired);
   g->str.retired = NULL;
   while (hdr) {
-    StrTabHdr *next = hdr->retired_next;
+    StrTabHdr *next = lj_str_retired_next_acq(hdr);
     lj_mem_free(g, hdr, lj_str_tabbytes(hdr));
     hdr = next;
   }

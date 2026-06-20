@@ -25,7 +25,7 @@ static void check_strtab(global_State *g)
   assert(g->str.tabh->resize == 0);
   assert(g->str.tabh->copy_cursor == 0);
   assert(g->str.tabh->retire_epoch == 0);
-  assert(g->str.tabh->retired_next == NULL);
+  assert(lj_str_retired_next_acq(g->str.tabh) == NULL);
   assert(((uintptr_t)lj_str_buckets(g) & (sizeof(GCRef)-1u)) == 0);
   assert(offsetof(StrTabHdr, bucket) < lj_str_tabsize(g->str.mask));
 

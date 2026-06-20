@@ -584,7 +584,7 @@ static void gc2_mark_strtab_mem(global_State *g)
     lj_gc2_markmem(g, hdr);
   for (hdr = (StrTabHdr *)la_loadptr_acq((void *const *)&g->str.retired);
        hdr != NULL;
-       hdr = (StrTabHdr *)la_loadptr_acq((void *const *)&hdr->retired_next))
+       hdr = lj_str_retired_next_acq(hdr))
     lj_gc2_markmem(g, hdr);
 }
 

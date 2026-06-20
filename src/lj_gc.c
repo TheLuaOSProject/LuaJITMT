@@ -83,7 +83,7 @@ static void gc_mark_strtab_mem(global_State *g)
     lj_gc_arena_markmem(g, hdr);
   for (hdr = (StrTabHdr *)la_loadptr_acq((void *const *)&g->str.retired);
        hdr != NULL;
-       hdr = (StrTabHdr *)la_loadptr_acq((void *const *)&hdr->retired_next))
+       hdr = lj_str_retired_next_acq(hdr))
     lj_gc_arena_markmem(g, hdr);
 }
 
@@ -375,7 +375,7 @@ static void gc2_paranoia_check_rawroots(global_State *g)
     gc2_paranoia_checkmem(g, hdr, "string table");
   for (hdr = (StrTabHdr *)la_loadptr_acq((void *const *)&g->str.retired);
        hdr != NULL;
-       hdr = (StrTabHdr *)la_loadptr_acq((void *const *)&hdr->retired_next))
+       hdr = lj_str_retired_next_acq(hdr))
     gc2_paranoia_checkmem(g, hdr, "retired string table");
   for (ret = (TabNodeRetire *)la_loadptr_acq(
 	 (void *const *)&g->tab.retired_nodes);

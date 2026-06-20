@@ -54,8 +54,8 @@ int main(void)
   assert(g->str.tabh != hdr);
   assert(g->str.mask == wantmask);
   assert(g->str.tabh->resize == 0);
-  assert(g->str.retired == hdr);
-  assert(hdr->retired_next == NULL);
+  assert(la_loadptr_acq((void *const *)&g->str.retired) == hdr);
+  assert(lj_str_retired_next_acq(hdr) == NULL);
   retire_epoch = g->gc2.hs_epoch;
   assert(hdr->retire_epoch == retire_epoch);
   smr_runs0 = la_load64_acq(&g->gc2.smr_reclaim_runs);
@@ -63,7 +63,7 @@ int main(void)
   assert(lj_gc2_reclaim_retired(g, retire_epoch) == 0);
   assert(la_load64_acq(&g->gc2.smr_reclaim_runs) == smr_runs0);
   assert(la_load64_acq(&g->gc2.smr_reclaimed) == smr_reclaimed0);
-  assert(g->str.retired == hdr);
+  assert(la_loadptr_acq((void *const *)&g->str.retired) == hdr);
   assert(lj_str_new(L, "m5-strtab-cas-same",
 		    strlen("m5-strtab-cas-same")) == s1);
 
@@ -75,7 +75,7 @@ int main(void)
   assert(g->str.tabh->resize == 0);
   (void)lj_gc2_handshake(g, LJ_GC2_HS_FLUSH_SSB);
   assert(g->gc2.hs_epoch > retire_epoch);
-  assert(g->str.retired == NULL);
+  assert(la_loadptr_acq((void *const *)&g->str.retired) == NULL);
   assert(la_load64_acq(&g->gc2.smr_reclaim_runs) > smr_runs0);
   assert(la_load64_acq(&g->gc2.smr_reclaimed) >= smr_reclaimed0 + 1u);
 
