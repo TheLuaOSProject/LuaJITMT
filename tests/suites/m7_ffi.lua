@@ -8,6 +8,8 @@ local shell_quote = utils.shell_quote
 local assert_dump_contains = utils.assert_dump_contains
 local lua_path = runtime.lua_path
 local build_and_run_c = build.compile_and_run_c
+local build_shared_library = build.build_shared_library
+local write_ld_script = build.write_ld_script
 local clean_build = build.clean_build
 local luajit_dump_file = runtime.luajit_dump_file
 local luajit_code = runtime.luajit_code
@@ -43,15 +45,10 @@ local m7_cases = {
 }
 
 local function build_clib_ldscript_fixture(t)
-  local so = t:tmp("lj_t-ffi-clib-ldscript-real.so")
   local script = t:tmp("lj_t-ffi-clib-ldscript.so")
-  t:run(t.compiler .. " -shared -fPIC -O2 -Wall -Wextra -Werror " ..
-        shell_quote(t:path("tests", "t-ffi-clib-ldscript-lib.c")) ..
-        " -o " .. shell_quote(so), { quiet = true })
-  local f = assert(io.open(script, "w"))
-  f:write("/* GNU ld script\nINPUT(", so, ")\n")
-  f:close()
-  return script
+  local so = build_shared_library(t, t:tmp("lj_t-ffi-clib-ldscript-real.so"),
+                                  "t-ffi-clib-ldscript-lib.c")
+  return write_ld_script(script, so)
 end
 
 return function(add)

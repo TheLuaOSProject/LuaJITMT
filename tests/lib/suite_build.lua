@@ -3,6 +3,7 @@ local utils = require("suite_utils")
 local M = {}
 
 local luajit_fixture_libs = utils.luajit_fixture_libs
+local shell_quote = utils.shell_quote
 
 function M.make_clean(t, opts)
   opts = opts or {}
@@ -71,6 +72,24 @@ function M.run_c_fixtures(t, names, opts)
     M.compile_and_run_c(t, t:tmp(prefix .. name .. suffix),
                         name .. ".c", opts)
   end
+end
+
+function M.build_shared_library(t, out, cfile, opts)
+  opts = opts or {}
+  local cflags = opts.cflags or "-O2 -Wall -Wextra -Werror"
+  local sources = opts.sources or
+    (type(cfile) == "table" and cfile or { t:path("tests", cfile) })
+  local parts = { t.compiler, "-shared", "-fPIC", cflags }
+  for i = 1, #sources do parts[#parts + 1] = shell_quote(sources[i]) end
+  parts[#parts + 1] = "-o"
+  parts[#parts + 1] = shell_quote(out)
+  t:run(table.concat(parts, " "), { quiet = opts.quiet ~= false })
+  return out
+end
+
+function M.write_ld_script(path, inputs)
+  if type(inputs) == "table" then inputs = table.concat(inputs, " ") end
+  return utils.write_file(path, "/* GNU ld script\nINPUT(" .. inputs .. ")\n")
 end
 
 return M

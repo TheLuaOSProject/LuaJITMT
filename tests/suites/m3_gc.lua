@@ -6,16 +6,13 @@ local make_clean = build.make_clean
 local make_default = build.build_default
 local compile_and_run_c = build.compile_and_run_c
 local run_c_fixtures = build.run_c_fixtures
+local build_shared_library = build.build_shared_library
 local run_lua_test_case = runtime.run_lua_test_case
 local run_luajit_script_jit_modes = runtime.run_luajit_script_jit_modes
-local shell_quote = utils.shell_quote
 
 local function build_loadlib_stopreq_so(t)
-  local out = t:tmp("lj_t-loadlib-stopreq.so")
-  t:run(t.compiler .. " -shared -fPIC -O2 -Wall -Wextra -Werror " ..
-        shell_quote(t:path("tests", "t-loadlib-stopreq-lib.c")) ..
-        " -o " .. shell_quote(out), { quiet = true })
-  return out
+  return build_shared_library(t, t:tmp("lj_t-loadlib-stopreq.so"),
+                              "t-loadlib-stopreq-lib.c")
 end
 
 return function(add)

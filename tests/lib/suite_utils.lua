@@ -117,6 +117,15 @@ function M.read_file(path)
   return data
 end
 
+function M.write_file(path, data, mode)
+  local f, err = io.open(path, mode or "wb")
+  if not f then error(path .. ": " .. err, 2) end
+  local ok, werr = f:write(data)
+  f:close()
+  if not ok then error(path .. ": " .. tostring(werr), 2) end
+  return path
+end
+
 function M.file_exists(path)
   local f = io.open(path, "rb")
   if f then f:close(); return true end
