@@ -4,7 +4,6 @@ local runtime = require("suite_runtime")
 local contains = utils.contains
 local count_plain = utils.count_plain
 local lines = utils.iter_lines
-local assert_no_lines = utils.assert_no_lines
 local luajit_code = runtime.luajit_code
 local luajit_file = runtime.luajit_file
 local luajit_dump = runtime.luajit_dump
@@ -1220,29 +1219,9 @@ assert(type(x)=="table")
     description = "Linux/x64 mcode sync-core publication ordering",
     run = function(t)
       build_default(t)
-      local lj_mcode = t:path("src", "lj_mcode.c")
-      do
-        local inx64 = false
-        for line in lines(t:read(lj_mcode)) do
-          if contains(line, "#if defined(__linux__) && LJ_TARGET_X64") then
-            inx64 = true
-          elseif inx64 and contains(line, "#endif") then
-            inx64 = false
-          elseif inx64 and contains(line, "MCPROT_RWX") then
-            error("secure Linux/x64 mcode bridge must not fall back to RWX", 2)
-          end
-        end
-      end
-      assert_no_lines(t, "mcode publication bridge must not be hidden behind LJ_MT",
-                      { lj_mcode }, function(line)
-        return line:match("#if%s+LJ_MT") or line:match("#ifdef%s+LJ_MT") or
-               contains(line, "LUAJIT_THREADSAFE")
-      end)
-      assert_no_lines(t, "Linux/x64 mcode bridge must not retain the single-map scaffold",
-                      { lj_mcode }, function(line)
-        return contains(line, "single-map write view") or contains(line, "rw == rx") or
-               contains(line, "rw = J->mcarea")
-      end)
+      build_and_run_c(t, t:tmp("lj_t-jit-mcode-prot"),
+                      "t-jit-mcode-prot.c",
+                      { build = false, timeout = "20s" })
       local timeout = os.getenv("M6_MCODE_TIMEOUT") or "60s"
       luajit_code(t, [=[
 jit.opt.start("hotloop=1","hotexit=1")
