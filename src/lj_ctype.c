@@ -535,6 +535,18 @@ static void ctype_hash_setnext(CTState *cts, CType *src, CTypeID id,
   } while (dst != &tab[id]);
 }
 
+static CType *ctype_publish_current(CTState *cts, CTypeID id, CType *src)
+{
+  CType *tab, *dst;
+  do {
+    dst = ctype_get(cts, id);
+    if (dst != src)
+      *dst = *src;
+    tab = ctype_tab_acq(cts);
+  } while (dst != &tab[id]);
+  return dst;
+}
+
 static int ctype_hash_try_prepend(CTState *cts, uint32_t h, CType *src,
 				  CTypeID id, CTypeID *head)
 {
@@ -578,12 +590,15 @@ static CTypeID ctype_hash_findname(CTState *cts, CTypeID id, GCstr *name,
 
 static void ctype_abandon(CTState *cts, CTypeID id)
 {
-  CType *ct = ctype_get(cts, id);
-  ct->info = CTINFO(CT_ATTRIB, CTATTRIB(CTA_BAD));
-  ct->size = 0;
-  ct->sib = 0;
-  ctype_clearname(ct);
+  CType tmp = *ctype_get(cts, id);
+  tmp.info = CTINFO(CT_ATTRIB, CTATTRIB(CTA_BAD));
+  tmp.size = 0;
+  tmp.sib = 0;
+  ctype_clearname(&tmp);
   /* Keep ct->next so hash walkers can skip through abandoned entries. */
+  ctype_publish_current(cts, id, &tmp);
+  lj_assertCTS(ctype_isabandoned(ctype_get(cts, id)->info),
+	       "abandoned ctype not visible in current table");
 }
 
 static GCSize ctype_tab_size(MSize sizetab)

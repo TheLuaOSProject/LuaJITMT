@@ -51,8 +51,8 @@ int main(void)
   global_State *g;
   CTState *cts;
   GCstr *name;
-  CType *ct1, *ct2, *ct3, *found;
-  CTypeID id1, id2, id3, winner;
+  CType *ct1, *ct2, *ct3, *ct4, *found;
+  CTypeID id1, id2, id3, id4, winner;
   const uint32_t default_ns = (1u << CT_TYPEDEF);
   const uint32_t struct_ns = (1u << CT_STRUCT);
 
@@ -106,6 +106,20 @@ int main(void)
     "  'parser duplicate enum constant was accepted')\n"
     "assert(ffi.C.LJ_M7_PARSER_DUP_CONST == 11,\n"
     "       'parser duplicate enum loser replaced winner')\n");
+
+  id4 = new_named(cts, L, CTINFO(CT_TYPEDEF, CTID_INT32), 0, name, &ct4);
+  force_table_move_after_reserve(L, cts);
+  assert(ct4 != ctype_get(cts, id4));
+  winner = lj_ctype_addname_unique(cts, ct4, id4, default_ns);
+  assert(winner == id1);
+  assert(ctype_isabandoned(ctype_get(cts, id4)->info));
+  assert(lj_ctype_getname(cts, &found, name, default_ns) == id1);
+  lua_pushinteger(L, (lua_Integer)id4);
+  lua_setglobal(L, "lj_m7_name_claim_moved_loser_id");
+  ljt_lua_dostring(L,
+    "local ffi = require('ffi')\n"
+    "assert(ffi.typeinfo(lj_m7_name_claim_moved_loser_id) == nil,\n"
+    "       'ffi.typeinfo exposed moved abandoned ctype')\n");
 
   lua_close(L);
   printf("t-ffi-ctype-name-claim OK: duplicate names pick one winner and abandon losers\n");
