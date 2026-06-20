@@ -3485,14 +3485,17 @@ static void gc2_traverse_func(global_State *g, GCfunc *fn)
 #if LJ_HASJIT
 static void gc2_traverse_trace(global_State *g, GCtrace *T)
 {
+  IRIns *irbase;
   IRRef ref;
-  if (T->traceno == 0)
+  if (trace_traceno_acq(T) == 0)
     return;
-  for (ref = T->nk; ref < REF_TRUE; ref++) {
-    IRIns *ir = &T->ir[ref];
-    if (ir_iskgc_acq(ir))
+  irbase = trace_ir_acq(T);
+  for (ref = trace_nk_acq(T); ref < REF_TRUE; ref++) {
+    IRIns *ir = &irbase[ref];
+    IRIns irs = ir_load_acq(ir);
+    if (irs.o == IR_KGC)
       gc2_markobj_worker(g, ir_kgc_load_acq(ir));
-    if (irt_is64(ir->t) && ir->o != IR_KNULL)
+    if (irt_is64(irs.t) && irs.o != IR_KNULL)
       ref++;
   }
   gc2_marktrace_worker(g, trace_link_acq(T));

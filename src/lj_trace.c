@@ -198,6 +198,7 @@ static LJ_AINLINE int trace_body_retire_ready(GCtrace *T,
 
 static void trace_markbody(global_State *g, GCtrace *T, int gc2)
 {
+  IRIns *irbase;
   IRRef ref;
   GCobj *startpt;
   if (gc2) lj_gc2_markmem(g, T); else lj_gc_arena_markmem(g, T);
@@ -205,14 +206,16 @@ static void trace_markbody(global_State *g, GCtrace *T, int gc2)
     if (gc2) lj_gc2_markmem(g, T->exittab);
     else lj_gc_arena_markmem(g, T->exittab);
   }
-  for (ref = T->nk; ref < REF_TRUE; ref++) {
-    IRIns *ir = &T->ir[ref];
-    if (ir_iskgc_acq(ir)) {
+  irbase = trace_ir_acq(T);
+  for (ref = trace_nk_acq(T); ref < REF_TRUE; ref++) {
+    IRIns *ir = &irbase[ref];
+    IRIns irs = ir_load_acq(ir);
+    if (irs.o == IR_KGC) {
       GCobj *o = ir_kgc_load_acq(ir);
       if (gc2) lj_gc2_markobj(g, o);
       else lj_gc_arena_markobj(g, o);
     }
-    if (irt_is64(ir->t) && ir->o != IR_KNULL)
+    if (irt_is64(irs.t) && irs.o != IR_KNULL)
       ref++;
   }
   startpt = trace_startptgco_acq(T);
