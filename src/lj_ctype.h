@@ -474,6 +474,48 @@ static LJ_AINLINE int ctype_metamap_obj_cas(GCRef *meta, MSize id, GCtab *mt)
 #endif
 }
 
+static LJ_AINLINE uint64_t *ctype_cbblack_acq(const CTState *cts)
+{
+  return (uint64_t *)la_loadptr_acq((void *const *)&cts->cbblack);
+}
+
+static LJ_AINLINE void ctype_cbblack_rel(CTState *cts, uint64_t *tab)
+{
+  la_storeptr_rel((void **)&cts->cbblack, tab);
+}
+
+static LJ_AINLINE MSize ctype_cbblack_size_acq(const CTState *cts)
+{
+  return (MSize)la_load32_acq(&cts->sizecbblack);
+}
+
+static LJ_AINLINE void ctype_cbblack_size_rel(CTState *cts, MSize size)
+{
+  la_store32_rel(&cts->sizecbblack, size);
+}
+
+static LJ_AINLINE uint32_t ctype_cbblack_all_acq(const CTState *cts)
+{
+  return la_load32_acq(&cts->cbblack_all);
+}
+
+static LJ_AINLINE void ctype_cbblack_all_rel(CTState *cts, uint32_t all)
+{
+  la_store32_rel(&cts->cbblack_all, all);
+}
+
+static LJ_AINLINE uint64_t ctype_cbblack_slot_acq(const uint64_t *tab,
+						  MSize slot)
+{
+  return la_load64_acq(&tab[slot]);
+}
+
+static LJ_AINLINE int ctype_cbblack_slot_cas(uint64_t *tab, MSize slot,
+					     uint64_t *oldp, uint64_t key)
+{
+  return la_cas64(&tab[slot], oldp, key, LA_ACQ_REL, LA_ACQ);
+}
+
 #define CTINFO(ct, flags)	(((CTInfo)(ct) << CTSHIFT_NUM) + (flags))
 #define CTALIGN(al)		((CTSize)(al) << CTSHIFT_ALIGN)
 #define CTATTRIB(at)		((CTInfo)(at) << CTSHIFT_ATTRIB)

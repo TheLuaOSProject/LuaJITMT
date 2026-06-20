@@ -504,8 +504,8 @@ static uint64_t *ctype_cbblack_init_l(lua_State *L, CTState *cts)
 {
   uint64_t *tab = lj_mem_newvec(L, CTCBBLACK_SIZE, uint64_t);
   memset(tab, 0, CTCBBLACK_SIZE*sizeof(uint64_t));
-  la_storeptr_rel((void **)&cts->cbblack, tab);
-  la_store32_rel(&cts->sizecbblack, CTCBBLACK_SIZE);
+  ctype_cbblack_rel(cts, tab);
+  ctype_cbblack_size_rel(cts, CTCBBLACK_SIZE);
   return tab;
 }
 
@@ -522,42 +522,42 @@ static LJ_AINLINE MSize ctype_cbblack_hash(uint64_t key, MSize mask)
 void lj_ctype_cb_blacklist(CTState *cts, void *func)
 {
   uint64_t key = ctype_cbblack_key(func);
-  uint64_t *tab = (uint64_t *)la_loadptr_acq((void *const *)&cts->cbblack);
-  MSize size = (MSize)la_load32_acq(&cts->sizecbblack);
+  uint64_t *tab = ctype_cbblack_acq(cts);
+  MSize size = ctype_cbblack_size_acq(cts);
   MSize i, mask;
   if (LJ_UNLIKELY(tab == NULL || size == 0)) {
-    la_store32_rel(&cts->cbblack_all, 1);
+    ctype_cbblack_all_rel(cts, 1);
     return;
   }
   mask = size - 1u;
   for (i = 0; i < size; i++) {
     MSize slot = (ctype_cbblack_hash(key, mask) + i) & mask;
-    uint64_t cur = la_load64_acq(&tab[slot]);
+    uint64_t cur = ctype_cbblack_slot_acq(tab, slot);
     if (cur == key)
       return;
     if (cur == 0) {
       uint64_t expect = 0;
-      if (la_cas64(&tab[slot], &expect, key, LA_ACQ_REL, LA_ACQ))
+      if (ctype_cbblack_slot_cas(tab, slot, &expect, key))
 	return;  /* 11.5 callback blacklist CAS publish. */
     }
   }
-  la_store32_rel(&cts->cbblack_all, 1);  /* Full set: blacklist all. */
+  ctype_cbblack_all_rel(cts, 1);  /* Full set: blacklist all. */
 }
 
 int lj_ctype_cb_isblacklisted(CTState *cts, void *func)
 {
   uint64_t key = ctype_cbblack_key(func);
-  uint64_t *tab = (uint64_t *)la_loadptr_acq((void *const *)&cts->cbblack);
-  MSize size = (MSize)la_load32_acq(&cts->sizecbblack);
+  uint64_t *tab = ctype_cbblack_acq(cts);
+  MSize size = ctype_cbblack_size_acq(cts);
   MSize i, mask;
-  if (la_load32_acq(&cts->cbblack_all))
+  if (ctype_cbblack_all_acq(cts))
     return 1;
   if (LJ_UNLIKELY(tab == NULL || size == 0))
     return 0;
   mask = size - 1u;
   for (i = 0; i < size; i++) {
     MSize slot = (ctype_cbblack_hash(key, mask) + i) & mask;
-    uint64_t cur = la_load64_acq(&tab[slot]);
+    uint64_t cur = ctype_cbblack_slot_acq(tab, slot);
     if (cur == key)
       return 1;
     if (cur == 0)
@@ -1712,7 +1712,8 @@ void lj_ctype_freestate(global_State *g)
     ctype_tab_free(g, ctype_tabh_acq(cts));
     lj_mem_freevec(g, ctype_metamap_acq(cts),
 		   ctype_metamap_size_acq(cts), GCRef);
-    lj_mem_freevec(g, cts->cbblack, cts->sizecbblack, uint64_t);
+    lj_mem_freevec(g, ctype_cbblack_acq(cts),
+		   ctype_cbblack_size_acq(cts), uint64_t);
     lj_mem_freevec(g, cts->cb.cbid, cts->cb.sizeid, CTypeID1);
     lj_mem_freevec(g, cts->cb.owner, cts->cb.sizeid, lua_State *);
     lj_mem_freevec(g, cts->cb.func, cts->cb.sizeid, TValue);

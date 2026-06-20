@@ -411,10 +411,11 @@ static void gc2_paranoia_check_rawroots(global_State *g)
     if (cts) {
       CTypeTab *ctret;
       GCRef *meta = ctype_metamap_acq(cts);
+      uint64_t *cbblack = ctype_cbblack_acq(cts);
       gc2_paranoia_checkmem(g, cts, "ctype state");
       gc2_paranoia_checkmem(g, ctype_tabh_acq(cts), "ctype table");
       gc2_paranoia_checkmem(g, meta, "ctype metatype side map");
-      gc2_paranoia_checkmem(g, cts->cbblack, "ctype callback blacklist");
+      gc2_paranoia_checkmem(g, cbblack, "ctype callback blacklist");
       if (cts->pinmt)
 	gc2_paranoia_checkobj(g, obj2gco(cts->pinmt), "FFI pin metatable");
       for (ctret = (CTypeTab *)la_loadptr_acq(
@@ -656,6 +657,7 @@ static void gc_mark_gcroot(global_State *g)
     if (cts) {
       CTypeTab *ctret;
       GCRef *meta = ctype_metamap_acq(cts);
+      uint64_t *cbblack = ctype_cbblack_acq(cts);
       TValue *func;
       lua_State **owner;
       lj_gc_arena_markmem(g, cts);
@@ -667,7 +669,7 @@ static void gc_mark_gcroot(global_State *g)
 	lj_gc_arena_markmem(g, ctret);
       }
       lj_gc_arena_markmem(g, meta);
-      lj_gc_arena_markmem(g, cts->cbblack);
+      lj_gc_arena_markmem(g, cbblack);
       if (meta) {
 	MSize i, n = ctype_metamap_size_acq(cts);
 	for (i = 0; i < n; i++) {
