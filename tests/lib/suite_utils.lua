@@ -160,6 +160,18 @@ function M.file_exists(path)
   return false
 end
 
+function M.with_temp_paths(t, prefixes, fn)
+  local paths = {}
+  for i = 1, #prefixes do
+    paths[i] = t:tempname(prefixes[i])
+    t:remove(paths[i])
+  end
+  local results = { pcall(fn, unpack(paths)) }
+  for i = 1, #paths do t:remove(paths[i]) end
+  if not results[1] then error(results[2], 0) end
+  return unpack(results, 2)
+end
+
 function M.has_extension(path, extensions)
   if not extensions then return true end
   if type(extensions) == "string" then

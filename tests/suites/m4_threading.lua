@@ -5,6 +5,7 @@ local runtime = require("suite_runtime")
 local getenv = utils.getenv
 local assert_file_contains = utils.assert_file_contains
 local assert_file_match = utils.assert_file_match
+local with_temp_paths = utils.with_temp_paths
 local compile_and_run_sources = build.compile_and_run_sources
 
 return function(add)
@@ -45,22 +46,20 @@ return function(add)
     name = "m4_threading_shutdown",
     description = "VM shutdown interrupts unjoined parked and CPU-bound threads",
     run = function(t)
-      local marker = t:tempname("m4-shutdown")
-      local spin_marker = t:tempname("m4-shutdown-spin")
-      t:remove(marker)
-      t:remove(spin_marker)
-      runtime.build_and_run_luajit_script(t, "t-threading-shutdown.lua", {
-        marker,
-        spin_marker
-      }, { joff = true })
+      with_temp_paths(t, { "m4-shutdown", "m4-shutdown-spin" },
+        function(marker, spin_marker)
+          runtime.build_and_run_luajit_script(t, "t-threading-shutdown.lua", {
+            marker,
+            spin_marker
+          }, { joff = true })
 
-      for _, path in ipairs({ marker, spin_marker }) do
-        assert_file_match(t, path, "^false\n",
-                          "shutdown marker first line")
-        assert_file_contains(t, path, "thread interrupted: VM shutdown",
-                             "shutdown interruption marker")
-        t:remove(path)
-      end
+          for _, path in ipairs({ marker, spin_marker }) do
+            assert_file_match(t, path, "^false\n",
+                              "shutdown marker first line")
+            assert_file_contains(t, path, "thread interrupted: VM shutdown",
+                                 "shutdown interruption marker")
+          end
+        end)
     end
   })
 

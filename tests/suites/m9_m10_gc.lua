@@ -8,6 +8,7 @@ local assert_command_output_contains = utils.assert_command_output_contains
 local assert_command_output_all_contains = utils.assert_command_output_all_contains
 local assert_command_fails = utils.assert_command_fails
 local write_file = utils.write_file
+local with_temp_paths = utils.with_temp_paths
 local compile_and_run_c = build.compile_and_run_c
 local luajit_script = runtime.luajit_script
 local run_luajit_script_jit_modes = runtime.run_luajit_script_jit_modes
@@ -71,27 +72,25 @@ local function run_bench_regression(t)
   t:build({ quiet = true })
 
   local base = t:path("bench", "baseline_372b369b9afd_.csv")
-  local cur = t:tempname("lj-bench-current")
-  local bad = t:tempname("lj-bench-bad")
-
   local compare = shell_quote(t:path("bench", "compare_baseline.sh"))
   assert_command_output_contains(compare .. " " .. shell_quote(base) .. " " ..
                                    shell_quote(base),
                                  "PASS: geomean 1.000000 <= 1.100000")
 
-  write_bad_benchmark_csv(t, base, bad)
-  local bad_cmd = compare .. " " .. shell_quote(base) .. " " ..
-                    shell_quote(bad) .. " >/dev/null 2>&1"
-  assert_command_fails(bad_cmd)
+  with_temp_paths(t, { "lj-bench-current", "lj-bench-bad" },
+    function(cur, bad)
+      write_bad_benchmark_csv(t, base, bad)
+      local bad_cmd = compare .. " " .. shell_quote(base) .. " " ..
+                        shell_quote(bad) .. " >/dev/null 2>&1"
+      assert_command_fails(bad_cmd)
 
-  capture_command("BENCH_SCALE=0.001 BASELINE_OUT=" .. shell_quote(cur) ..
-                  " " .. shell_quote(t:path("bench", "run_baseline.sh")) ..
-                  " " .. shell_quote(t:path("src", "luajit")))
-  assert_command_output_contains(compare .. " " .. shell_quote(cur) .. " " ..
-                                   shell_quote(cur),
-                                 "PASS: geomean 1.000000 <= 1.100000")
-  t:remove(cur)
-  t:remove(bad)
+      capture_command("BENCH_SCALE=0.001 BASELINE_OUT=" .. shell_quote(cur) ..
+                      " " .. shell_quote(t:path("bench", "run_baseline.sh")) ..
+                      " " .. shell_quote(t:path("src", "luajit")))
+      assert_command_output_contains(compare .. " " .. shell_quote(cur) .. " " ..
+                                       shell_quote(cur),
+                                     "PASS: geomean 1.000000 <= 1.100000")
+    end)
   print("M9 benchmark regression accounting guard passed")
 end
 
