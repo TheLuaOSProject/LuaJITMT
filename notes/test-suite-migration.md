@@ -202,8 +202,8 @@ Lua test-suite migration notes:
   dumps, bytecode listings, benchmark output, and C/Lua fixture output can keep
   targeted assertions because they are produced by running the VM.
 - Shared generic utilities live in `tests/lib/suite_utils.lua`; shared VM,
-  stock-suite, JIT-dump, and C-fixture build/run helpers live in
-  `tests/lib/suite_runtime.lua`.
+  stock-suite, JIT-dump, Lua-script build/run, aggregate-suite, and C-fixture
+  case/batch helpers live in `tests/lib/suite_runtime.lua`.
 - Source-shape-only cases were removed from the runnable suite: M0 guardrails,
   M2 GC header accessor grep, the M5 source publication guards, M5 x64 upvalue
   publication, and M7 no-CTState-L. These should be replaced by behavior tests
@@ -213,6 +213,10 @@ Lua test-suite migration notes:
   scans, plain/pattern occurrence counts, dump assertions, command-output
   assertions, list append, and aggregate case registration instead of carrying
   per-suite copies.
+- Shared runtime helpers now cover stock-suite execution, generated JIT-dump
+  capture, child Lua test-script execution, nested aggregate suite execution,
+  C fixture case registration, and repeated C fixture batches. M3/M4/M5/M6/M7
+  and M8 suites use those helpers for common runner mechanics.
 - Added `m5_upvalue_publish_gc` as a behavior replacement for the deleted
   closed-upvalue publication source guards. It stores fresh GC objects through
   closed upvalues in interpreter, threaded, and hot JIT paths, forces GC/GC2,
