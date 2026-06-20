@@ -1559,8 +1559,7 @@ static void gc2_scan_global_roots(global_State *g)
       for (ret = (CTypeTab *)la_loadptr_acq(
 	     (void *const *)&cts->retiredtab);
 	   ret != NULL;
-	   ret = (CTypeTab *)la_loadptr_acq(
-	     (void *const *)&ret->retired_next)) {
+	   ret = ctype_tab_retired_next_acq(ret)) {
 	lj_gc2_markmem(g, ret);
       }
       lj_gc2_markmem(g, cts->metamap);

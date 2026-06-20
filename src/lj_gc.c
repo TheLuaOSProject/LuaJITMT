@@ -419,8 +419,7 @@ static void gc2_paranoia_check_rawroots(global_State *g)
       for (ctret = (CTypeTab *)la_loadptr_acq(
 	     (void *const *)&cts->retiredtab);
 	   ctret != NULL;
-	   ctret = (CTypeTab *)la_loadptr_acq(
-	     (void *const *)&ctret->retired_next)) {
+	   ctret = ctype_tab_retired_next_acq(ctret)) {
 	gc2_paranoia_checkmem(g, ctret, "retired ctype table");
       }
       gc2_paranoia_checkmem(g, cts->cb.cbid, "callback ids");
@@ -662,8 +661,7 @@ static void gc_mark_gcroot(global_State *g)
       for (ctret = (CTypeTab *)la_loadptr_acq(
 	     (void *const *)&cts->retiredtab);
 	   ctret != NULL;
-	   ctret = (CTypeTab *)la_loadptr_acq(
-	     (void *const *)&ctret->retired_next)) {
+	   ctret = ctype_tab_retired_next_acq(ctret)) {
 	lj_gc_arena_markmem(g, ctret);
       }
       lj_gc_arena_markmem(g, cts->metamap);

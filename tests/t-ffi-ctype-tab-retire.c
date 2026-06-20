@@ -17,7 +17,9 @@
 static CTypeTab *find_retired(CTState *cts, CTypeTab *tabh)
 {
   CTypeTab *ret;
-  for (ret = cts->retiredtab; ret != NULL; ret = ret->retired_next)
+  for (ret = (CTypeTab *)la_loadptr_acq((void *const *)&cts->retiredtab);
+       ret != NULL;
+       ret = ctype_tab_retired_next_acq(ret))
     if (ret == tabh)
       return ret;
   return NULL;
@@ -39,7 +41,7 @@ int main(void)
   assert(cts != NULL);
   oldh = ctype_tabh_acq(cts);
   assert(oldh != NULL);
-  assert(cts->retiredtab == NULL);
+  assert(la_loadptr_acq((void *const *)&cts->retiredtab) == NULL);
 
   ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"

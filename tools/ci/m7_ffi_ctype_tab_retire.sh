@@ -3,4 +3,18 @@
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+if hits=$(grep -RInE -- '->[[:space:]]*retired_next' \
+    "$ROOT/src/lj_ctype.c" \
+    "$ROOT/tests/t-ffi-ctype-tab-retire.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw CTypeTab retired_next access is forbidden; use ctype_tab_retired_next_* helpers' >&2
+  exit 1
+fi
+if hits=$(grep -nE -- '(ctret|ret)[[:space:]]*->[[:space:]]*retired_next' \
+    "$ROOT/src/lj_gc.c" \
+    "$ROOT/src/lj_gc2.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw GC CTypeTab retired_next traversal is forbidden; use ctype_tab_retired_next_acq' >&2
+  exit 1
+fi
 exec "$ROOT/tools/ci/lua_test.sh" m7_ffi_ctype_tab_retire

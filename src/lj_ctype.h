@@ -156,6 +156,17 @@ typedef struct CTypeTab {
   CType tab[1];			/* C type table slots. */
 } CTypeTab;
 
+static LJ_AINLINE CTypeTab *ctype_tab_retired_next_acq(const CTypeTab *tabh)
+{
+  return (CTypeTab *)la_loadptr_acq((void *const *)&tabh->retired_next);
+}
+
+static LJ_AINLINE void ctype_tab_retired_next_rel(CTypeTab *tabh,
+						  CTypeTab *next)
+{
+  la_storeptr_rel((void **)&tabh->retired_next, next);
+}
+
 typedef struct FinRegGen {
   GCtab *tab;			/* One hash-only FINREG table generation. */
   struct FinRegGen *next;	/* Older generation, searched after this one. */
