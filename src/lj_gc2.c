@@ -925,18 +925,28 @@ void lj_gc2_finalizer_leave(global_State *g)
   uint32_t old;
   if (!g)
     return;
-  old = la_load32_acq(&g->gc2.finalizer_active);
-  lj_assertG(old != 0, "gc2 finalizer active underflow");
-  if (old == 0)
-    return;
-  if (old == 1)
-    la_store32_rel(&g->gc2.finalizer_owner_tid, 0);
-  old = la_sub32_acqrel(&g->gc2.finalizer_active, 1);  /* 05 section 5.8. */
-  lj_assertG(old != 0, "gc2 finalizer active underflow");
-  if (old == 0) {
-    la_store32_rel(&g->gc2.finalizer_active, 0);
-    la_store32_rel(&g->gc2.finalizer_owner_tid, 0);
-    return;
+  for (;;) {
+    old = la_load32_acq(&g->gc2.finalizer_active);
+    lj_assertG(old != 0, "gc2 finalizer active underflow");
+    if (old == 0)
+      return;
+    if (old == 1) {
+      uint32_t expect = 1;
+      if (la_cas32(&g->gc2.finalizer_active, &expect, ~(uint32_t)0,
+		   LA_ACQ_REL, LA_ACQ)) {
+	la_store32_rel(&g->gc2.finalizer_owner_tid, 0);
+	la_store32_rel(&g->gc2.finalizer_active, 0);
+	break;  /* 05 section 5.8: close finalizer owner after last leave. */
+      }
+      continue;
+    }
+    if (old == ~(uint32_t)0) {
+      la_cpu_pause();
+      continue;
+    }
+    if (la_cas32(&g->gc2.finalizer_active, &old, old - 1,
+		 LA_ACQ_REL, LA_ACQ))
+      break;  /* 05 section 5.8: nested owner leave. */
   }
   la_add64_rlx(&g->gc2.finalizer_leaves, 1);
 }
