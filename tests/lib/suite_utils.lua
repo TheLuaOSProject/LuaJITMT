@@ -157,15 +157,31 @@ function M.command_ok(cmd)
   return M.command_succeeded(cmd .. " >/dev/null 2>&1")
 end
 
-function M.run_output_contains(t, cmd, needle)
-  t:run(cmd .. " | rg -F " .. M.shell_quote(needle) .. " >/dev/null")
+function M.capture_command(cmd, opts)
+  opts = opts or {}
+  local full = cmd
+  if opts.stderr then full = full .. " 2>&1" end
+  local p, err = io.popen(full)
+  if not p then error("command failed to start: " .. tostring(err), 2) end
+  local out = p:read("*a")
+  local ok, why, code = p:close()
+  if not ok then
+    error("command failed (" .. tostring(code or why or ok) .. "): " ..
+          full .. "\n" .. out, 2)
+  end
+  return out
 end
 
-function M.run_output_contains_all(t, cmd, needles)
-  for i = 1, #needles do
-    cmd = cmd .. " | rg -F " .. M.shell_quote(needles[i])
-  end
-  t:run(cmd .. " >/dev/null")
+function M.assert_command_output_contains(cmd, needle, opts)
+  local out = M.capture_command(cmd, opts)
+  M.assert_text_contains(cmd, out, needle, "command output")
+  return out
+end
+
+function M.assert_command_output_all_contains(cmd, needles, opts)
+  local out = M.capture_command(cmd, opts)
+  M.assert_text_all_contains(cmd, out, needles, "command output")
+  return out
 end
 
 function M.capture_lines(cmd)

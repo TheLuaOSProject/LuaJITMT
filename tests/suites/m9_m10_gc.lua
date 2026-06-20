@@ -3,8 +3,9 @@ local runtime = require("suite_runtime")
 
 local shell_quote = utils.shell_quote
 local command_succeeded = utils.command_succeeded
-local run_output_contains = utils.run_output_contains
-local run_output_contains_all = utils.run_output_contains_all
+local capture_command = utils.capture_command
+local assert_command_output_contains = utils.assert_command_output_contains
+local assert_command_output_all_contains = utils.assert_command_output_all_contains
 local compile_and_run_c = runtime.compile_and_run_c
 local run_luajit_script_jit_modes = runtime.run_luajit_script_jit_modes
 
@@ -48,15 +49,15 @@ local function run_bench_smoke(t)
 
   local luajit = shell_quote(t:path("src", "luajit"))
   local bench_mt = shell_quote(t:path("aux", "bench", "bench_mt.lua"))
-  run_output_contains_all(t,
+  assert_command_output_all_contains(
     "BENCH_SCALE=0.0001 " .. luajit .. " " .. bench_mt ..
       " 1 chan_pingpong",
     { "chan_pingpong", "skipped: requires an even thread count >= 2" })
-  run_output_contains_all(t,
+  assert_command_output_all_contains(
     "BENCH_SCALE=0.0001 " .. luajit .. " " .. bench_mt ..
       " 2 chan_pingpong",
     { "chan_pingpong", "ops/s" })
-  run_output_contains(t,
+  assert_command_output_contains(
     "BENCH_SCALE=0.0001 BENCH_THREADS='1 2' BENCH_FILTER=arith-MT " ..
       shell_quote(t:path("aux", "bench", "run.sh")) .. " scaling " .. luajit,
     "GC stats:")
@@ -71,9 +72,9 @@ local function run_bench_regression(t)
   local bad = t:tempname("lj-bench-bad")
 
   local compare = shell_quote(t:path("bench", "compare_baseline.sh"))
-  run_output_contains(t, compare .. " " .. shell_quote(base) .. " " ..
-                         shell_quote(base),
-                      "PASS: geomean 1.000000 <= 1.100000")
+  assert_command_output_contains(compare .. " " .. shell_quote(base) .. " " ..
+                                   shell_quote(base),
+                                 "PASS: geomean 1.000000 <= 1.100000")
 
   write_bad_benchmark_csv(t, base, bad)
   local bad_cmd = compare .. " " .. shell_quote(base) .. " " ..
@@ -82,12 +83,12 @@ local function run_bench_regression(t)
     error("benchmark regression checker accepted a known bad CSV")
   end
 
-  t:run("BENCH_SCALE=0.001 BASELINE_OUT=" .. shell_quote(cur) .. " " ..
-        shell_quote(t:path("bench", "run_baseline.sh")) .. " " ..
-        shell_quote(t:path("src", "luajit")) .. " >/dev/null")
-  run_output_contains(t, compare .. " " .. shell_quote(cur) .. " " ..
-                         shell_quote(cur),
-                      "PASS: geomean 1.000000 <= 1.100000")
+  capture_command("BENCH_SCALE=0.001 BASELINE_OUT=" .. shell_quote(cur) ..
+                  " " .. shell_quote(t:path("bench", "run_baseline.sh")) ..
+                  " " .. shell_quote(t:path("src", "luajit")))
+  assert_command_output_contains(compare .. " " .. shell_quote(cur) .. " " ..
+                                   shell_quote(cur),
+                                 "PASS: geomean 1.000000 <= 1.100000")
   t:remove(cur)
   t:remove(bad)
   print("M9 benchmark regression accounting guard passed")
