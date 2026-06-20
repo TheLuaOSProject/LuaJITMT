@@ -361,6 +361,26 @@ static LJ_AINLINE TraceLink trace_linktype_acq(const GCtrace *T)
   return (TraceLink)la_load8_acq(&T->linktype);
 }
 
+static LJ_AINLINE MCode *trace_mcode_acq(const GCtrace *T)
+{
+  return (MCode *)la_loadptr_acq((void *const *)&T->mcode);
+}
+
+static LJ_AINLINE MCode *trace_exitstub_acq(const GCtrace *T)
+{
+  return (MCode *)la_loadptr_acq((void *const *)&T->exitstub);
+}
+
+static LJ_AINLINE MSize trace_szmcode_acq(const GCtrace *T)
+{
+  return (MSize)la_load32_acq(&T->szmcode);
+}
+
+static LJ_AINLINE MSize trace_mcloop_acq(const GCtrace *T)
+{
+  return (MSize)la_load32_acq(&T->mcloop);
+}
+
 #define trace_exittarget_acq(T, exitno) \
   ((MCode *)la_loadptr_acq((void *const *)&(T)->exittab[(exitno)]))
 #define trace_exittarget_rel(T, exitno, target) \

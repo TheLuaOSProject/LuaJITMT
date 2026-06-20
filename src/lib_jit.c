@@ -340,6 +340,30 @@ static const char *const jit_trlinkname[] = {
   "interpreter", "return", "stitch"
 };
 
+#if defined(exitstub_trace_addr)
+typedef struct TraceMCodeView {
+  MCode *mcode;
+  MSize szmcode;
+  MCode *exitstub;
+} TraceMCodeView;
+
+static LJ_AINLINE MCode *jit_traceexitstub_addr_acq(const GCtrace *T,
+						    ExitNo exitno)
+{
+  TraceMCodeView tv;
+  tv.mcode = trace_mcode_acq(T);
+  tv.szmcode = trace_szmcode_acq(T);
+  tv.exitstub = trace_exitstub_acq(T);
+  if (tv.mcode == NULL)
+    return NULL;
+#if LJ_TARGET_X86ORX64 && LJ_64
+  if (tv.exitstub == NULL)
+    return NULL;
+#endif
+  return exitstub_trace_addr(&tv, exitno);
+}
+#endif
+
 /* local info = jit.util.traceinfo(tr) */
 LJLIB_CF(jit_util_traceinfo)
 {
@@ -437,11 +461,15 @@ LJLIB_CF(jit_util_tracesnap)
 LJLIB_CF(jit_util_tracemc)
 {
   GCtrace *T = jit_checktrace(L);
-  if (T && T->mcode != NULL) {
-    setstrV(L, L->top-1, lj_str_new(L, (const char *)T->mcode, T->szmcode));
-    setintptrV(L->top++, (intptr_t)(void *)T->mcode);
-    setintV(L->top++, T->mcloop);
-    return 3;
+  if (T) {
+    MCode *mcode = trace_mcode_acq(T);
+    if (mcode != NULL) {
+      setstrV(L, L->top-1,
+	      lj_str_new(L, (const char *)mcode, trace_szmcode_acq(T)));
+      setintptrV(L->top++, (intptr_t)(void *)mcode);
+      setintV(L->top++, trace_mcloop_acq(T));
+      return 3;
+    }
   }
   return 0;
 }
@@ -461,9 +489,12 @@ LJLIB_CF(jit_util_traceexitstub)
       if (trace_root_acq(T) != 0)
 	maxexit++;
 #endif
-      if (T->mcode != NULL && exitno < maxexit) {
-	setintptrV(L->top-1, (intptr_t)(void *)exitstub_trace_addr(T, exitno));
-	return 1;
+      if (exitno < maxexit) {
+	MCode *addr = jit_traceexitstub_addr_acq(T, exitno);
+	if (addr != NULL) {
+	  setintptrV(L->top-1, (intptr_t)(void *)addr);
+	  return 1;
+	}
       }
     }
   }
