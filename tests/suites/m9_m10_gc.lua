@@ -2,6 +2,7 @@ local utils = require("suite_utils")
 local build = require("suite_build")
 local runtime = require("suite_runtime")
 local bench_csv = require("bench_csv")
+local bench_driver = require("bench_driver")
 
 local shell_quote = utils.shell_quote
 local capture_command = utils.capture_command
@@ -133,14 +134,21 @@ local function run_bench_regression(t)
                         bench_csv.compare(mini_csv, mini_csv))
       assert_compare_ok("generated mini raw benchmark self-compare",
                         bench_csv.compare_bench_text(jit_out, jit_out))
+      assert_compare_ok("direct Lua driver binary self-compare",
+                        bench_driver.compare_bins(t:path("src", "luajit"),
+                                                  t:path("src", "luajit"),
+                                                  mini,
+                                                  { timeout = "20s" }))
     end)
 
   with_temp_paths(t, {
     "lj-bench-mini.lua",
     "lj-bench-jit.txt",
     "lj-bench-interp.txt",
-    "lj-bench-baseline.csv"
-  }, function(mini, jit_txt, interp_txt, out_csv)
+    "lj-bench-baseline.csv",
+    "lj-bench-aux-jit.csv",
+    "lj-bench-aux-interp.csv"
+  }, function(mini, jit_txt, interp_txt, out_csv, aux_jit_csv, aux_interp_csv)
     local luajit = shell_quote(t:path("src", "luajit"))
     local lua_path = "LUA_PATH=" .. shell_quote(runtime.lua_path(t))
     local cli = shell_quote(t:path("bench", "bench_csv_cli.lua"))
@@ -169,6 +177,25 @@ local function run_bench_regression(t)
                                           shell_quote(jit_txt),
                                         { timeout = "20s", stderr = true })
     assert(cli_compare:find("PASS: geomean", 1, true))
+
+    local cli_run = capture_command(lua_path .. " " .. luajit .. " " ..
+                                      cli .. " run-baseline " ..
+                                      luajit .. " " .. shell_quote(mini) ..
+                                      " " .. shell_quote(out_csv),
+                                    { timeout = "20s", stderr = true })
+    assert(cli_run:find("wrote " .. out_csv, 1, true))
+    assert_compare_ok("benchmark CLI run-baseline self-compare",
+                      bench_csv.compare(t:read(out_csv), t:read(out_csv)))
+
+    local cli_aux = capture_command(lua_path .. " " .. luajit .. " " ..
+                                      cli .. " aux-baseline " ..
+                                      luajit .. " " .. shell_quote(mini) ..
+                                      " " .. shell_quote(aux_jit_csv) ..
+                                      " " .. shell_quote(aux_interp_csv),
+                                    { timeout = "20s", stderr = true })
+    assert(cli_aux:find("wrote baseline CSVs", 1, true))
+    assert(t:read(aux_jit_csv):find("jit_ns_per_op", 1, true))
+    assert(t:read(aux_interp_csv):find("interp_ns_per_op", 1, true))
 
     capture_command("BASELINE_BENCH_LUA=" .. shell_quote(mini) ..
                     " BASELINE_OUT=" .. shell_quote(out_csv) .. " " ..
