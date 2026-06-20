@@ -359,7 +359,7 @@ static void gc2_paranoia_check_roots(global_State *g)
   if (o) {
     GCobj *root = o;
     do {
-      o = gcnext(o);
+      o = lj_obj_gcw_acq(o);
       gc2_paranoia_checkone(g, o);
     } while (o != root);
   }
@@ -760,7 +760,7 @@ static void gc_mark_finalizer_ring(global_State *g, GCobj *root)
   GCobj *u = root;
   if (u) {
     do {
-      u = gcnext(u);
+      u = lj_obj_gcw_acq(u);
       makewhite(g, u);  /* Could be from previous GC. */
       gc_mark(g, u);
     } while (u != root);
