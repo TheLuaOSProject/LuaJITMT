@@ -1,4 +1,5 @@
 local utils = require("suite_utils")
+local optutils = require("suite_opts")
 
 local M = {}
 
@@ -9,22 +10,6 @@ local function luajit_bin(t, bin)
   bin = bin or t:path("src", "luajit")
   if bin:sub(1, 1) == "/" then return bin end
   return t:path(bin)
-end
-
-local function copy_env(env)
-  local out = {}
-  if env then
-    for k, v in pairs(env) do out[k] = v end
-  end
-  return out
-end
-
-local function copy_opts(opts)
-  local out = {}
-  if opts then
-    for k, v in pairs(opts) do out[k] = v end
-  end
-  return out
 end
 
 local function append_jit_mode(argv, opts)
@@ -40,7 +25,7 @@ function M.lua_path(t)
 end
 
 function M.lua_path_env(t, env)
-  local out = copy_env(env)
+  local out = optutils.copy(env)
   out.LUA_PATH = M.lua_path(t)
   return out
 end
@@ -112,8 +97,8 @@ function M.build_and_run_luajit_script(t, script, args, opts)
 end
 
 function M.run_luajit_script_jit_modes(t, script, args, opts)
-  local joff_opts = copy_opts(opts)
-  local jit_opts = copy_opts(opts)
+  local joff_opts = optutils.copy(opts)
+  local jit_opts = optutils.copy(opts)
   joff_opts.joff = true
   jit_opts.joff = false
   M.luajit_script(t, script, args, joff_opts)
@@ -202,7 +187,7 @@ function M.run_stock_cli(t, args, opts)
   local bin = args[1] or opts.bin
   local stock_args = { "test.lua" }
   for i = 2, #args do stock_args[#stock_args + 1] = args[i] end
-  local runopts = copy_env(opts)
+  local runopts = optutils.copy(opts)
   runopts.bin = bin
   if runopts.check_executable == nil then runopts.check_executable = true end
   M.run_stock(t, stock_args, runopts)
@@ -290,7 +275,7 @@ function M.add_luajit_c_fixture_cases(add, specs)
       name = name,
       description = description,
       run = function(t)
-        local runopts = copy_opts(opts)
+        local runopts = optutils.copy(opts)
         if runopts.clean == nil then runopts.clean = true end
         if runopts.quiet == nil then runopts.quiet = true end
         M.build_and_run_c(t, t:tmp(output), cfile, runopts)
@@ -313,7 +298,7 @@ function M.add_luajit_script_cases(add, specs)
       name = name,
       description = description or (script .. " under the built VM"),
       run = function(t)
-        M.build_and_run_luajit_script(t, script, args, copy_opts(opts))
+        M.build_and_run_luajit_script(t, script, args, optutils.copy(opts))
         if message then print(message) end
       end
     })
