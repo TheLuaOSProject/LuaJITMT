@@ -62,8 +62,15 @@ end
 
 function M.is_source_file_content_path(path)
   local p = tostring(path)
-  return p:match("^src/") or p:match("/src/") or
-         p:match("^tests/t%-.*%.[ch]$") or p:match("/tests/t%-.*%.[ch]$")
+  local source_ext = p:match("%.lua$") or p:match("%.c$") or
+                     p:match("%.h$") or p:match("%.sh$") or
+                     p:match("%.dasc$") or p:match("%.inc$")
+  if p:match("^src/") or p:match("/src/") then return true end
+  if not source_ext then return false end
+  return p:match("^tests/") or p:match("/tests/") or
+         p:match("^tools/") or p:match("/tools/") or
+         p:match("^aux/") or p:match("/aux/") or
+         p:match("^bench/") or p:match("/bench/")
 end
 
 function M.assert_not_source_file_content(path, level)

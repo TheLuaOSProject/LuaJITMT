@@ -196,9 +196,17 @@ end
 function M.run_stock_cli(t, args, opts)
   args = args or {}
   opts = opts or {}
-  local bin = args[1] or opts.bin
+  local bin = opts.bin
+  local arg_start = 1
+  if args[1] then
+    local candidate = luajit_bin(t, args[1])
+    if utils.command_succeeded("test -x " .. shell_quote(candidate)) then
+      bin = args[1]
+      arg_start = 2
+    end
+  end
   local stock_args = { "test.lua" }
-  for i = 2, #args do stock_args[#stock_args + 1] = args[i] end
+  for i = arg_start, #args do stock_args[#stock_args + 1] = args[i] end
   local runopts = optutils.copy(opts)
   runopts.bin = bin
   if runopts.check_executable == nil then runopts.check_executable = true end

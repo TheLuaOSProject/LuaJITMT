@@ -115,6 +115,10 @@ function M.capture_command(cmd, opts)
   opts = opts or {}
   local full = cmd
   if opts.stderr then full = full .. " 2>&1" end
+  if opts.timeout then
+    full = "timeout " .. M.shell_quote(opts.timeout) .. " sh -c " ..
+           M.shell_quote(full)
+  end
   local p, err = io.popen(full)
   if not p then error("command failed to start: " .. tostring(err), 2) end
   local out = p:read("*a")

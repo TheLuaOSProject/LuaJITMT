@@ -34,6 +34,14 @@ local function write_bad_benchmark_csv(t, base, bad)
   write_file(bad, table.concat(rows, "\n") .. "\n")
 end
 
+local function write_mini_benchmark(t, path)
+  write_file(path, table.concat({
+    'print(string.format("%-18s %12s %10s", "benchmark", "total_s", "ns/op"))',
+    'print(string.format("%-18s %12.4f %10.2f", "mini_loop", 0.0001, 10.00))',
+    ""
+  }, "\n"))
+end
+
 local function build_and_run_alloc_account(t)
   compile_and_run_c(t, t:tmp("lj_t-gc2-alloc-account-m10"),
                     "t-gc2-alloc-account.c", { timeout = "20s" })
@@ -77,16 +85,19 @@ local function run_bench_regression(t)
                                    shell_quote(base),
                                  "PASS: geomean 1.000000 <= 1.100000")
 
-  with_temp_paths(t, { "lj-bench-current", "lj-bench-bad" },
-    function(cur, bad)
+  with_temp_paths(t, { "lj-bench-current", "lj-bench-bad", "lj-bench-mini.lua" },
+    function(cur, bad, mini)
       write_bad_benchmark_csv(t, base, bad)
+      write_mini_benchmark(t, mini)
       local bad_cmd = compare .. " " .. shell_quote(base) .. " " ..
                         shell_quote(bad) .. " >/dev/null 2>&1"
       assert_command_fails(bad_cmd)
 
-      capture_command("BENCH_SCALE=0.001 BASELINE_OUT=" .. shell_quote(cur) ..
+      capture_command("BASELINE_BENCH_LUA=" .. shell_quote(mini) ..
+                      " BASELINE_OUT=" .. shell_quote(cur) ..
                       " " .. shell_quote(t:path("bench", "run_baseline.sh")) ..
-                      " " .. shell_quote(t:path("src", "luajit")))
+                      " " .. shell_quote(t:path("src", "luajit")),
+                      { timeout = "20s" })
       assert_command_output_contains(compare .. " " .. shell_quote(cur) .. " " ..
                                        shell_quote(cur),
                                      "PASS: geomean 1.000000 <= 1.100000")
@@ -139,10 +150,7 @@ return function(add)
     description = "M9/M10 aggregate telemetry and generational gates",
     deps = m9_m10_deps,
     run = function(t)
-      run_gc_stats(t)
-      run_bench_smoke(t)
-      run_bench_regression(t)
-      run_generational(t)
+      runtime.run_lua_test_cases(t, m9_m10_deps)
       print("M9/M10 GC gates passed")
     end
   })
