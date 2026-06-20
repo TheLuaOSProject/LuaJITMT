@@ -10,31 +10,66 @@
 #   BENCH_FILTER=<substring>   run matching bench_mt.lua cases only
 set -eu
 HERE=$(cd "$(dirname "$0")" && pwd)
+ROOT=$(cd "$HERE/../.." && pwd)
 mode=${1:?mode}; shift
 
-geomean_gate() {
-  # stdin: lines "name old_ns new_ns"; gate: geomean(new/old) <= 1.10
-  awk '{ r=$3/$2; s+=log(r); n++; printf "  %-18s %8.2f -> %8.2f  (%.3fx)\n",$1,$2,$3,r }
-       END { g=exp(s/n); printf "geomean: %.4fx  ", g;
-             if (g<=1.10) print "PASS (<=1.10)"; else { print "FAIL (>1.10)"; exit 1 } }'
+bench_lua() {
+  lua_bin=${BENCH_LUA:-${LUA:-}}
+  if [ -z "$lua_bin" ]; then
+    if [ -x "$ROOT/src/luajit" ]; then
+      lua_bin=$ROOT/src/luajit
+    elif command -v lua >/dev/null 2>&1; then
+      lua_bin=lua
+    else
+      echo "benchmark: no Lua interpreter found" >&2
+      exit 2
+    fi
+  fi
+  LUA_PATH="$ROOT/tests/lib/?.lua;$ROOT/src/?.lua;$ROOT/src/jit/?.lua;;" \
+    "$lua_bin" "$ROOT/bench/bench_csv_cli.lua" "$@"
 }
 
-bench_ns() { # $1=binary $2=jitflag -> "name ns" lines
-  "$1" $2 "$HERE/bench.lua" | awk 'NR>1 { print $1, $3 }'
+bench_text() {
+  bin=$1
+  jitflag=$2
+  filter=${BENCH_FILTER:-}
+  if [ -n "$jitflag" ]; then
+    if [ -n "$filter" ]; then
+      "$bin" "$jitflag" "$HERE/bench.lua" "$filter"
+    else
+      "$bin" "$jitflag" "$HERE/bench.lua"
+    fi
+  else
+    if [ -n "$filter" ]; then
+      "$bin" "$HERE/bench.lua" "$filter"
+    else
+      "$bin" "$HERE/bench.lua"
+    fi
+  fi
 }
 
 case "$mode" in
 baseline)
   bin=${1:?binary}
-  bench_ns "$bin" ""      > "$HERE/baseline_jit_$(hostname).csv"
-  bench_ns "$bin" "-joff" > "$HERE/baseline_interp_$(hostname).csv"
+  jit_tmp=$(mktemp)
+  interp_tmp=$(mktemp)
+  trap 'rm -f "$jit_tmp" "$interp_tmp"' EXIT HUP INT TERM
+  bench_text "$bin" "" > "$jit_tmp"
+  bench_text "$bin" "-joff" > "$interp_tmp"
+  bench_lua ns-csv "$jit_tmp" jit_ns_per_op \
+    > "$HERE/baseline_jit_$(hostname).csv"
+  bench_lua ns-csv "$interp_tmp" interp_ns_per_op \
+    > "$HERE/baseline_interp_$(hostname).csv"
   echo "wrote baseline CSVs for $(hostname)"
   ;;
 compare)
   old=${1:?old}; new=${2:?new}
-  bench_ns "$old" "" > /tmp/_old.$$; bench_ns "$new" "" > /tmp/_new.$$
-  join /tmp/_old.$$ /tmp/_new.$$ | geomean_gate
-  rm -f /tmp/_old.$$ /tmp/_new.$$
+  old_tmp=$(mktemp)
+  new_tmp=$(mktemp)
+  trap 'rm -f "$old_tmp" "$new_tmp"' EXIT HUP INT TERM
+  bench_text "$old" "" > "$old_tmp"
+  bench_text "$new" "" > "$new_tmp"
+  bench_lua compare-bench-text "$old_tmp" "$new_tmp"
   ;;
 scaling)
   bin=${1:?binary}

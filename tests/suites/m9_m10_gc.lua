@@ -131,7 +131,64 @@ local function run_bench_regression(t)
       local mini_csv = bench_csv.baseline_csv_from_text(jit_out, interp_out)
       assert_compare_ok("generated mini benchmark self-compare",
                         bench_csv.compare(mini_csv, mini_csv))
+      assert_compare_ok("generated mini raw benchmark self-compare",
+                        bench_csv.compare_bench_text(jit_out, jit_out))
     end)
+
+  with_temp_paths(t, {
+    "lj-bench-mini.lua",
+    "lj-bench-jit.txt",
+    "lj-bench-interp.txt",
+    "lj-bench-baseline.csv"
+  }, function(mini, jit_txt, interp_txt, out_csv)
+    local luajit = shell_quote(t:path("src", "luajit"))
+    local lua_path = "LUA_PATH=" .. shell_quote(runtime.lua_path(t))
+    local cli = shell_quote(t:path("bench", "bench_csv_cli.lua"))
+    local run_baseline = shell_quote(t:path("bench", "run_baseline.sh"))
+    local compare_baseline = shell_quote(t:path("bench", "compare_baseline.sh"))
+    local aux_run = shell_quote(t:path("aux", "bench", "run.sh"))
+
+    write_mini_benchmark(t, mini)
+    write_file(jit_txt, capture_command(luajit .. " " .. shell_quote(mini),
+                                        { timeout = "20s" }))
+    write_file(interp_txt,
+               capture_command(luajit .. " -joff " .. shell_quote(mini),
+                               { timeout = "20s" }))
+
+    local cli_csv = capture_command(lua_path .. " " .. luajit .. " " ..
+                                      cli .. " baseline-csv " ..
+                                      shell_quote(jit_txt) .. " " ..
+                                      shell_quote(interp_txt),
+                                    { timeout = "20s", stderr = true })
+    assert_compare_ok("benchmark CLI baseline self-compare",
+                      bench_csv.compare(cli_csv, cli_csv))
+
+    local cli_compare = capture_command(lua_path .. " " .. luajit .. " " ..
+                                          cli .. " compare-bench-text " ..
+                                          shell_quote(jit_txt) .. " " ..
+                                          shell_quote(jit_txt),
+                                        { timeout = "20s", stderr = true })
+    assert(cli_compare:find("PASS: geomean", 1, true))
+
+    capture_command("BASELINE_BENCH_LUA=" .. shell_quote(mini) ..
+                    " BASELINE_OUT=" .. shell_quote(out_csv) .. " " ..
+                    run_baseline .. " " .. luajit,
+                    { timeout = "20s", stderr = true })
+    assert_compare_ok("run_baseline shell output self-compare",
+                      bench_csv.compare(t:read(out_csv), t:read(out_csv)))
+
+    local compare_out = capture_command(compare_baseline .. " " ..
+                                          shell_quote(out_csv) .. " " ..
+                                          shell_quote(out_csv),
+                                        { timeout = "20s", stderr = true })
+    assert(compare_out:find("PASS: geomean", 1, true))
+
+    local aux_compare = capture_command(
+      "BENCH_SCALE=0.0001 BENCH_FILTER=arith_loop BENCH_GEOMEAN_MAX=1000 " ..
+        aux_run .. " compare " .. luajit .. " " .. luajit,
+      { timeout = "20s", stderr = true })
+    assert(aux_compare:find("geomean", 1, true))
+  end)
   print("M9 benchmark regression accounting guard passed")
 end
 

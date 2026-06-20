@@ -103,6 +103,26 @@ function M.baseline_csv_from_text(jit_text, interp_text)
   }, M.baseline_rows_from_text(jit_text, interp_text))
 end
 
+function M.ns_rows_from_text(data)
+  local parsed = M.parse_bench_text(data)
+  local rows = {}
+  for i = 1, #parsed.rows do
+    local row = parsed.rows[i]
+    rows[#rows + 1] = {
+      row.name,
+      ("%.2f"):format(row.ns_per_op)
+    }
+  end
+  return rows
+end
+
+function M.ns_csv_from_text(data, column)
+  return M.encode_csv({
+    "benchmark",
+    column or "jit_ns_per_op"
+  }, M.ns_rows_from_text(data))
+end
+
 function M.compare(base_csv, current_csv, opts)
   opts = opts or {}
   local column = opts.column or "jit_ns_per_op"
@@ -169,6 +189,13 @@ function M.compare(base_csv, current_csv, opts)
       ("FAIL: geomean %.6f > %.6f"):format(result.geomean, max)
   end
   return result
+end
+
+function M.compare_bench_text(base_text, current_text, opts)
+  opts = opts or {}
+  local column = opts.column or "jit_ns_per_op"
+  return M.compare(M.ns_csv_from_text(base_text, column),
+                   M.ns_csv_from_text(current_text, column), opts)
 end
 
 function M.format_compare(result)
