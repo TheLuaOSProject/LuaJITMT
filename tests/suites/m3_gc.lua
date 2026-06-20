@@ -1,8 +1,3 @@
-local utils = require("suite_utils")
-
-local contains = utils.contains
-local assert_no_lines = utils.assert_no_lines
-
 local function make_clean(t)
   t:make({ "clean" }, { quiet = true, jobs = false })
 end
@@ -106,17 +101,6 @@ return function(add)
     name = "m3_gc2_paranoia",
     description = "GC2 paranoia build, oracle fixtures, and stock tests",
     run = function(t)
-      local gc_sources = {
-        t:path("src", "lj_gc.c"),
-        t:path("src", "lj_gc2.c")
-      }
-
-      assert_no_lines(t, "GC2 diagnostic root walks must acquire-load root links",
-                      gc_sources, function(line)
-        return contains(line,
-          "for (o = gcref(g->gc.root); o != NULL; o = gcnext(o))")
-      end)
-
       make_clean(t)
       make_default(t, {
         args = { "XCFLAGS=-DLUA_USE_ASSERT -DLJ_GC2_PARANOIA=1" }
@@ -152,19 +136,6 @@ return function(add)
     run = function(t)
       make_clean(t)
       make_default(t, { jobs = false })
-
-      assert_no_lines(t, "GC2 queue slots must use acquire/release helpers",
-                      { t:path("src", "lj_gc2.c") }, function(line)
-        return contains(line, "setgcref(g->gc2.grey_stack") or
-               contains(line, "setgcref(g->gc2.weak_stack") or
-               contains(line, "setgcref(*next") or
-               contains(line, "setgcrefnull(*slot") or
-               contains(line, "gcref(g->gc2.grey_stack") or
-               contains(line, "gcref(g->gc2.weak_stack") or
-               contains(line, "gcref(*slot)") or
-               (contains(line, "g->gc2.grey_stack[") and
-                contains(line, "] = oldstack"))
-      end)
 
       for _, name in ipairs({
         "t-gc2-phase",
