@@ -22,6 +22,7 @@ local luajit_code = runtime.luajit_code
 local luajit_file = runtime.luajit_file
 local luajit_dump = runtime.luajit_dump
 local build_default = build.build_default
+local clean_build = build.clean_build
 local build_and_run_c = build.build_and_run_c
 local run_lua_test_case = runtime.run_lua_test_case
 
@@ -808,7 +809,7 @@ assert(type(x)=="table")
     name = "m6_jit_mcode_publish",
     description = "Linux/x64 mcode sync-core publication ordering",
     run = function(t)
-      build_default(t)
+      clean_build(t)
       build_and_run_c(t, t:tmp("lj_t-jit-mcode-prot"),
                       "t-jit-mcode-prot.c",
                       { build = false, timeout = "20s" })
