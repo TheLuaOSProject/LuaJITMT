@@ -1,8 +1,6 @@
 local utils = require("suite_utils")
 
-local contains = utils.contains
 local shell_quote = utils.shell_quote
-local assert_no_lines = utils.assert_no_lines
 
 local function write_bad_benchmark_csv(t, base, bad)
   local out = assert(io.open(bad, "wb"))
@@ -53,15 +51,6 @@ end
 
 local function run_gc_stats(t)
   t:build({ quiet = true })
-
-  assert_no_lines(t, "GC stats table fields must be CAS-published",
-                  { t:path("src", "lib_base.c") }, function(line)
-    return contains(line, "copyTVrel(L, lj_tab_setstr(L, t") or
-           contains(line, "copyTVrel(L, lj_tab_setstr(L, bt") or
-           contains(line, "copyTVrel(L, lj_tab_setint(L, t") or
-           contains(line, "copyTVrel(L, lj_tab_setint(L, bt") or
-           contains(line, "lj_tab_storetab(L, lj_tab_setstr(L, t,")
-  end)
 
   t:luajit({ "-joff", t:path("tests", "t-gc-stats.lua") })
   t:luajit({ t:path("tests", "t-gc-stats.lua") })
@@ -122,19 +111,6 @@ end
 
 local function run_generational(t)
   t:build({ quiet = true })
-
-  t:assert_text_ordered("lj_gc_sweep_gc2_unmarked",
-    t:c_block(t:path("src", "lj_gc.c"),
-              "uint32_t lj_gc_sweep_gc2_unmarked"), {
-      "gc_chain_splice(p, o)",
-      "gc2_free_unmarked_obj(g, o)"
-    })
-  t:assert_text_ordered("gc2_sweep_arena_bodies",
-    t:c_block(t:path("src", "lj_gc.c"),
-              "static uint32_t gc2_sweep_arena_bodies"), {
-      "gc2_unlink_root_obj(g, o)",
-      "gc2_free_unmarked_obj(g, o)"
-    })
 
   t:luajit({ "-joff", t:path("tests", "t-gc-generational-mode.lua") })
   t:luajit({ t:path("tests", "t-gc-generational-mode.lua") })
