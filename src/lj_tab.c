@@ -63,6 +63,11 @@ static LJ_AINLINE int tab_key_islocked(cTValue *key)
   return tviskeylock(key);
 }
 
+static LJ_AINLINE int tab_hash_key_hidden(cTValue *key)
+{
+  return tvisnil(key) || tab_key_islocked(key);
+}
+
 static LJ_AINLINE int tab_key_retry_once(cTValue *key, int *retry)
 {
   if (tab_key_islocked(key) && *retry) {
@@ -375,6 +380,8 @@ static uint32_t tab_rehash_hashcount(Node *oldnode, MSize oldhmask,
       if (!tab_val_absent(&val)) {
 	uint32_t idx;
 	lj_tv_load_acq(&key, &n->key);
+	if (tab_hash_key_hidden(&key))
+	  continue;
 	if (!tab_rehash_arrayindex(asize, &key, &idx))
 	  count++;
       }
@@ -745,6 +752,8 @@ void lj_tab_resize(lua_State *L, GCtab *t, uint32_t asize, uint32_t hbits)
       if (!tab_val_absent(&val)) {
 	TValue *slot;
 	lj_tv_load_acq(&key, &n->key);
+	if (tab_hash_key_hidden(&key))
+	  continue;
 	if (hbits) {
 	  slot = tab_rehash_slot(L, array, asize, newnode, newhmask,
 				 &newfreetop, &key);
@@ -928,8 +937,10 @@ static uint32_t counthash(const GCtab *t, uint32_t *bins, uint32_t *narray)
     lj_tv_load_acq(&val, &n->val);
     if (!tab_val_absent(&val)) {
       lj_tv_load_acq(&key, &n->key);
-      na += countint(&key, bins);
-      total++;
+      if (!tab_hash_key_hidden(&key)) {
+	na += countint(&key, bins);
+	total++;
+      }
     }
   }
   *narray += na;
@@ -1969,7 +1980,7 @@ int lj_tab_next(GCtab *t, cTValue *key, TValue *o)
       lj_tv_load_acq(&val, &n->val);
       if (tvisforward(&val)) {
 	lj_tv_load_acq(&key, &n->key);
-	if (!tab_key_islocked(&key)) {
+	if (!tab_hash_key_hidden(&key)) {
 	  Node *hopnode = node;
 	  MSize hophmask = hmask;
 	  if (tab_forwarded_hash_value(t, &hopnode, &hophmask, &key, &val)) {
@@ -1982,11 +1993,11 @@ int lj_tab_next(GCtab *t, cTValue *key, TValue *o)
       }
       if (!tab_val_absent(&val)) {
 	lj_tv_load_acq(&key, &n->key);
-	if (tab_key_islocked(&key)) {
+	if (tab_hash_key_hidden(&key)) {
 	  la_cpu_pause();
 	  lj_tv_load_acq(&val, &n->val);
 	  lj_tv_load_acq(&key, &n->key);
-	  if (tab_key_islocked(&key) || tab_val_absent(&val))
+	  if (tab_hash_key_hidden(&key) || tab_val_absent(&val))
 	    continue;
 	}
 	o[0] = key;

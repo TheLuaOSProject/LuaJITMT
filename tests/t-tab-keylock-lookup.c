@@ -29,6 +29,33 @@ static void store_strkey(lua_State *L, Node *n, GCstr *s)
   copyTVrel(L, &n->key, &key);
 }
 
+static void assert_next_empty(GCtab *t)
+{
+  TValue key, out[2];
+  setnilV(&key);
+  assert(lj_tab_next(t, &key, out) == 0);
+}
+
+static void exercise_unpublished_nil_key_value(lua_State *L)
+{
+  GCtab *t;
+  Node *node;
+
+  lua_settop(L, 0);
+  lua_createtable(L, 0, 8);
+  t = tabV(L->top-1);
+  assert(t->hmask == 7);
+  node = lj_tab_node_acq(t);
+
+  lj_tab_storeint(L, &node[0].val, 1234);
+  assert(tvisnil(&node[0].key));
+  assert_next_empty(t);
+
+  lj_tab_resize(L, t, 0, 0);
+  assert(t->hmask == 0);
+  assert_next_empty(t);
+}
+
 static void exercise_tombstone_anchor_insert(lua_State *L)
 {
   GCtab *t;
@@ -122,9 +149,10 @@ int main(void)
   tabfwd_assert_str_i32(t, anchor, 11);
   tabfwd_assert_str_i32(t, displaced, 22);
   assert(tabfwd_count_next_visible(t) == 2);
+  exercise_unpublished_nil_key_value(L);
   exercise_tombstone_anchor_insert(L);
 
   lua_close(L);
-  printf("t-tab-keylock-lookup OK: KEYLOCK is filtered from table reads\n");
+  printf("t-tab-keylock-lookup OK: unpublished keys are filtered from table reads\n");
   return 0;
 }
