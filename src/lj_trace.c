@@ -624,10 +624,10 @@ static int trace_scope_flushing(jit_State *J, TraceNo traceno)
 
 static uint32_t trace_flushside(jit_State *J, GCtrace *T, int scoped)
 {
-  IRIns *base = &trace_ir_acq(T)[REF_BASE];
-  TraceNo parentno = (TraceNo)base->op1;
+  IRIns base = ir_load_acq(&trace_ir_acq(T)[REF_BASE]);
+  TraceNo parentno = (TraceNo)base.op1;
   GCtrace *parent = traceref(J, parentno);
-  ExitNo exitno = (ExitNo)base->op2;
+  ExitNo exitno = (ExitNo)base.op2;
   lj_assertJ(trace_root_acq(T) != 0, "not a side trace");
   trace_exittab_reset(J, T);
   if (parent && trace_traceno_acq(parent) == parentno &&
@@ -645,7 +645,8 @@ static int trace_scope_flush_dependency(jit_State *J, GCtrace *T)
   if (trace_scope_flushing(J, link))
     return 1;
   if (root != 0) {
-    TraceNo parent = (TraceNo)trace_ir_acq(T)[REF_BASE].op1;
+    IRIns base = ir_load_acq(&trace_ir_acq(T)[REF_BASE]);
+    TraceNo parent = (TraceNo)base.op1;
     if (trace_scope_flushing(J, root) ||
 	trace_scope_flushing(J, parent))
       return 1;
