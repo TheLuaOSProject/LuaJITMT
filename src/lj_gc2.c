@@ -250,6 +250,7 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.finalizer_leaves, 0);
   la_store64_rlx(&g->gc2.finalizer_sweep_blocks, 0);
   la_store64_rlx(&g->gc2.finalizer_spawn_deferrals, 0);
+  la_store64_rlx(&g->gc2.finalizer_spawn_release_wakes, 0);
 #if defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
   la_store32_rlx(&g->gc2.finalizer_drain_test_pause, 0);
   la_store32_rlx(&g->gc2.finalizer_drain_test_paused, 0);

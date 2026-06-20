@@ -3161,6 +3161,8 @@ static void test_ffi_loaded_weak_value_barrier(void)
 static void test_finalizer_spawn_deferred_state(lua_State *L, global_State *g)
 {
   uint64_t deferrals0 = la_load64_acq(&g->gc2.finalizer_spawn_deferrals);
+  uint64_t releasewakes0 =
+    la_load64_acq(&g->gc2.finalizer_spawn_release_wakes);
 
   lua_settop(L, 0);
   assert(luaL_dostring(L,
@@ -3196,8 +3198,10 @@ static void test_finalizer_spawn_deferred_state(lua_State *L, global_State *g)
     "gc2_spawn_worker = nil\n"
     "gc2_spawn_started = nil\n"
     "gc2_spawn_release = nil\n") == LUA_OK);
-  lua_gc(L, LUA_GCCOLLECT, 0);
   assert(la_load32_acq(&g->mt_live) == 0);
+  assert(la_load64_acq(&g->gc2.finalizer_spawn_release_wakes) >
+	 releasewakes0);
+  lua_gc(L, LUA_GCCOLLECT, 0);
   assert(g->gc.state == GCSpause);
   lua_gc(L, LUA_GCCOLLECT, 0);
   lua_gc(L, LUA_GCSTOP, 0);

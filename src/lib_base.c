@@ -729,6 +729,8 @@ static void gc_stats_push(lua_State *L)
 		  la_load64_acq(&gc2->finalizer_sweep_blocks));
   gc_stats_setnum(L, t, "finalizer_spawn_deferrals",
 		  la_load64_acq(&gc2->finalizer_spawn_deferrals));
+  gc_stats_setnum(L, t, "finalizer_spawn_release_wakes",
+		  la_load64_acq(&gc2->finalizer_spawn_release_wakes));
   lj_gc_pubtab(L, t);
 }
 

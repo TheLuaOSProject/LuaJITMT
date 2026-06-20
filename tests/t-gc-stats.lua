@@ -49,6 +49,7 @@ local finreg_stats = {
   "finalizer_leaves",
   "finalizer_sweep_blocks",
   "finalizer_spawn_deferrals",
+  "finalizer_spawn_release_wakes",
 }
 
 local before = collectgarbage("stats")
