@@ -1310,6 +1310,12 @@ static GCRef *gc_sweep(global_State *g, GCRef *p, uint32_t lim)
   int ow = otherwhite(g);
   GCobj *o;
   while ((o = gcref(*p)) != NULL && lim-- > 0) {
+    if (LJ_UNLIKELY(o->gch.gct == 0)) {
+      setgcrefr(*p, *lj_obj_gcwref(o));
+      if (o == gcref(g->gc.root))
+	setgcrefr(g->gc.root, *lj_obj_gcwref(o));
+      continue;  /* Body destructor already ran via GC2 arena sweep. */
+    }
     if (o->gch.gct == ~LJ_TTHREAD)  /* Need to sweep open upvalues, too. */
       gc_fullsweep(g, &gco2th(o)->openupval);
     if (((lj_obj_gcflags(o) ^ LJ_GC_WHITES) & ow)) {  /* Black or current white? */
