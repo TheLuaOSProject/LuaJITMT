@@ -5,10 +5,6 @@ local make_clean = runtime.make_clean
 local make_default = runtime.build_default
 local compile_and_run_c = runtime.compile_and_run_c
 
-local function run_lua_test(t, name)
-  t:run({ t:path("tools", "ci", "lua_test.sh"), name })
-end
-
 return function(add)
   local cases, register = utils.case_registry(add)
 
@@ -109,7 +105,7 @@ return function(add)
       utils.run_registered_case(cases, t, "m3_safepoint_handshake")
       utils.run_registered_case(cases, t, "m3_vm_safepoint")
       utils.run_registered_case(cases, t, "m3_gc2_paranoia")
-      run_lua_test(t, "m2_arena_all")
+      runtime.run_lua_test_case(t, "m2_arena_all")
 
       make_clean(t)
       make_default(t, { jobs = false })

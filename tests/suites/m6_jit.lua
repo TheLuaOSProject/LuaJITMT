@@ -1249,9 +1249,7 @@ assert(live >= 8, live)
     name = "m6_jit",
     description = "M6 JIT aggregate scaffold gates",
     run = function(t)
-      local cmd = { t:path("tools", "ci", "lua_test.sh") }
-      for i = 1, #m6_cases do cmd[#cmd + 1] = m6_cases[i] end
-      t:run(cmd)
+      runtime.run_lua_test_cases(t, m6_cases)
       print("M6 JIT scaffold tests passed")
     end
   })

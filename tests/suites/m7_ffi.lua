@@ -425,9 +425,7 @@ print("dump cnewi ok")
     name = "m7_ffi",
     description = "M7 FFI aggregate concurrency gates",
     run = function(t)
-      local cmd = { t:path("tools", "ci", "lua_test.sh") }
-      for i = 1, #m7_cases do cmd[#cmd + 1] = m7_cases[i] end
-      t:run(cmd)
+      runtime.run_lua_test_cases(t, m7_cases)
       print("M7 FFI gates passed")
     end
   })

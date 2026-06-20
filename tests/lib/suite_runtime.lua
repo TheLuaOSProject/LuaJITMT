@@ -110,6 +110,16 @@ function M.capture_luajit(t, args, out, opts)
         { quiet = opts.quiet })
 end
 
+function M.run_lua_test_case(t, name, opts)
+  t:run({ t:path("tools", "ci", "lua_test.sh"), name }, opts)
+end
+
+function M.run_lua_test_cases(t, names, opts)
+  local cmd = { t:path("tools", "ci", "lua_test.sh") }
+  for i = 1, #names do cmd[#cmd + 1] = names[i] end
+  t:run(cmd, opts)
+end
+
 function M.run_stock(t, args, opts)
   args = args or {}
   opts = opts or {}

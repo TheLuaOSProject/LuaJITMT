@@ -1,3 +1,5 @@
+local runtime = require("suite_runtime")
+
 local m5_concurrent_cases = {
   "m5_nbtab_model",
   "m5_tab_emptyhash",
@@ -47,11 +49,7 @@ return function(add)
     name = "m5_concurrent_objects",
     description = "M5 concurrent-object aggregate scaffold gates",
     run = function(t)
-      local cmd = { t:path("tools", "ci", "lua_test.sh") }
-      for i = 1, #m5_concurrent_cases do
-        cmd[#cmd + 1] = m5_concurrent_cases[i]
-      end
-      t:run(cmd)
+      runtime.run_lua_test_cases(t, m5_concurrent_cases)
       print("M5 concurrent-object scaffold tests passed")
     end
   })
