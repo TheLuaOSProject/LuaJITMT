@@ -266,14 +266,18 @@ done:
 /* Index C data by a TValue. Return CType, pointer and resolved container ID. */
 CType *lj_cdata_index_l(lua_State *L, CTState *cts, GCcdata *cd,
 			cTValue *key, uint8_t **pp, CTInfo *qual,
-			CTypeID *idp)
+			CType *snap, CTypeID *idp)
 {
-  uint8_t *p = (uint8_t *)cdataptr(cd);
-  CTypeID id = cd->ctypeid;
+  uint8_t *p;
+  CTypeID id;
   CType *ct;
   ptrdiff_t idx;
-  int locked = tvisstr(key);
+  int locked = 0;
 
+retry_locked:
+  p = (uint8_t *)cdataptr(cd);
+  id = cd->ctypeid;
+  *qual = 0;
   if (locked) {
     /* 11.2: cdata string-key readers wait out parser rollback. */
     lj_ctype_parse_lock(cts, L);
@@ -345,10 +349,22 @@ collect_attrib:
     GCstr *name = strV(key);
     if (ctype_isstruct(ct->info)) {
       CTSize ofs;
-      CType *fct = lj_ctype_getfieldq(cts, ct, name, &ofs, qual);
+      CType *fct;
+      if (!locked) {
+	int ok = lj_ctype_getfieldq_snapshot(cts, ct, name, &ofs, qual,
+					     snap);
+	if (ok < 0) {
+	  locked = 1;
+	  goto retry_locked;
+	}
+	fct = ok ? snap : NULL;
+      } else {
+	fct = lj_ctype_getfieldq(cts, ct, name, &ofs, qual);
+      }
       if (fct) {
 	*pp = p + ofs;
-	lj_ctype_parse_unlock(cts);  /* 11.2: cdata field reader fence. */
+	if (locked)
+	  lj_ctype_parse_unlock(cts);  /* 11.2: cdata field reader fence. */
 	return fct;
       }
     } else if (ctype_iscomplex(ct->info)) {
@@ -356,11 +372,13 @@ collect_attrib:
 	*qual |= CTF_CONST;  /* Complex fields are constant. */
 	if (strdata(name)[0] == 'r' && strdata(name)[1] == 'e') {
 	  *pp = p;
-	  lj_ctype_parse_unlock(cts);
+	  if (locked)
+	    lj_ctype_parse_unlock(cts);
 	  return ct;
 	} else if (strdata(name)[0] == 'i' && strdata(name)[1] == 'm') {
 	  *pp = p + (ct->size >> 1);
-	  lj_ctype_parse_unlock(cts);
+	  if (locked)
+	    lj_ctype_parse_unlock(cts);
 	  return ct;
 	}
       }
@@ -374,9 +392,21 @@ collect_attrib:
       }
       if (ctype_isstruct(sct->info)) {
 	CTSize ofs;
-	CType *fct = lj_ctype_getfield(cts, sct, name, &ofs);
+	CType *fct;
+	if (!locked) {
+	  int ok = lj_ctype_getfieldq_snapshot(cts, sct, name, &ofs, NULL,
+					       snap);
+	  if (ok < 0) {
+	    locked = 1;
+	    goto retry_locked;
+	  }
+	  fct = ok ? snap : NULL;
+	} else {
+	  fct = lj_ctype_getfield(cts, sct, name, &ofs);
+	}
 	if (fct && ctype_isconstval(fct->info)) {
-	  lj_ctype_parse_unlock(cts);
+	  if (locked)
+	    lj_ctype_parse_unlock(cts);
 	  return fct;
 	}
       }
@@ -385,8 +415,15 @@ collect_attrib:
     }
   }
   if (ctype_isptr(ct->info)) {  /* Automatically perform '->'. */
-    CTypeID cid = ctype_rawid(cts, ctype_cid(ct->info));
-    if (ctype_isstruct(ctype_get(cts, cid)->info)) {
+    CTypeID cid;
+    int ok = locked ? 1 : lj_ctype_ptrstruct_snapshot(cts, id, &cid);
+    if (ok < 0) {
+      locked = 1;
+      goto retry_locked;
+    }
+    if (locked)
+      cid = ctype_rawid(cts, ctype_cid(ct->info));
+    if (ok && ctype_isstruct(ctype_get(cts, cid)->info)) {
       p = (uint8_t *)cdata_getptr(p, ct->size);
       id = ctype_cid(ct->info);
       ct = ctype_get(cts, id);

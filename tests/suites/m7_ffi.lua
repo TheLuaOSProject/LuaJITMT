@@ -252,6 +252,8 @@ assert(cl.lj_clib_ldscript_value() == 42)
                       "t-ffi-typeinfo-snapshot.c", { timeout = "20s" })
       build_and_run_c(t, t:tmp("lj_t-ffi-layout-snapshot"),
                       "t-ffi-layout-snapshot.c", { timeout = "20s" })
+      build_and_run_c(t, t:tmp("lj_t-ffi-field-snapshot"),
+                      "t-ffi-field-snapshot.c", { timeout = "20s" })
       build_and_run_c(t, t:tmp("lj_t-ffi-element-size-snapshot"),
                       "t-ffi-element-size-snapshot.c", { timeout = "20s" })
       build_and_run_c(t, t:tmp("lj_t-ffi-enum-snapshot"),

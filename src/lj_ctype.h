@@ -609,6 +609,11 @@ LJ_FUNC CType *lj_ctype_getfieldq(CTState *cts, CType *ct, GCstr *name,
 				  CTSize *ofs, CTInfo *qual);
 #define lj_ctype_getfield(cts, ct, name, ofs) \
   lj_ctype_getfieldq((cts), (ct), (name), (ofs), NULL)
+LJ_FUNC int lj_ctype_getfieldq_snapshot(CTState *cts, const CType *ct,
+					GCstr *name, CTSize *ofsp,
+					CTInfo *qualp, CType *out);
+LJ_FUNC int lj_ctype_ptrstruct_snapshot(CTState *cts, CTypeID id,
+					CTypeID *cidp);
 LJ_FUNC CType *lj_ctype_rawref(CTState *cts, CTypeID id);
 LJ_FUNC CTSize lj_ctype_size(CTState *cts, CTypeID id);
 LJ_FUNC int lj_ctype_size_snapshot(CTState *cts, CTypeID id, CTSize *szp);

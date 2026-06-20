@@ -216,12 +216,13 @@ LJLIB_CF(ffi_meta___index)	LJLIB_REC(cdata_index 0)
   CTState *cts = ctype_cts(L);
   CTInfo qual = 0;
   CTypeID id = 0;
+  CType snap;
   CType *ct;
   uint8_t *p;
   TValue *o = L->base;
   if (!(o+1 < L->top && tviscdata(o)))  /* Also checks for presence of key. */
     lj_err_argt(L, 1, LUA_TCDATA);
-  ct = lj_cdata_index_l(L, cts, cdataV(o), o+1, &p, &qual, &id);
+  ct = lj_cdata_index_l(L, cts, cdataV(o), o+1, &p, &qual, &snap, &id);
   if ((qual & 1))
     return ffi_index_meta(L, cts, id, MM_index);
   if (lj_cdata_get_l(L, cts, ct, L->top-1, p))
@@ -234,12 +235,13 @@ LJLIB_CF(ffi_meta___newindex)	LJLIB_REC(cdata_index 1)
   CTState *cts = ctype_cts(L);
   CTInfo qual = 0;
   CTypeID id = 0;
+  CType snap;
   CType *ct;
   uint8_t *p;
   TValue *o = L->base;
   if (!(o+2 < L->top && tviscdata(o)))  /* Also checks for key and value. */
     lj_err_argt(L, 1, LUA_TCDATA);
-  ct = lj_cdata_index_l(L, cts, cdataV(o), o+1, &p, &qual, &id);
+  ct = lj_cdata_index_l(L, cts, cdataV(o), o+1, &p, &qual, &snap, &id);
   if ((qual & 1)) {
     if ((qual & CTF_CONST))
       lj_err_caller(L, LJ_ERR_FFI_WRCONST);

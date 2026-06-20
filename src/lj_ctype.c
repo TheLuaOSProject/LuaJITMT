@@ -929,6 +929,156 @@ CType *lj_ctype_getfieldq(CTState *cts, CType *ct, GCstr *name, CTSize *ofs,
   return NULL;  /* Not found. */
 }
 
+static int ctype_snapshot_copy(CTypeTab *tabh, CTypeID top, CTypeID id,
+			       CType *out)
+{
+  CType *ct;
+  GCobj *gco;
+  if (id == 0 || id >= top || (MSize)id >= tabh->sizetab)
+    return 0;
+  ct = &tabh->tab[id];
+  out->info = la_load32_acq(&ct->info);
+  out->size = la_load32_acq(&ct->size);
+  out->sib = (CTypeID1)la_load16_acq(&ct->sib);
+  out->next = (CTypeID1)la_load16_acq(&ct->next);
+  gco = gcref_acq(ct->name);
+  setgcrefp(out->name, gco);
+  return !ctype_isabandoned(out->info);
+}
+
+static int ctype_getfieldq_snapshot_rec(CTypeTab *tabh, CTypeID top,
+					CTypeID sib, GCstr *name,
+					CTSize baseofs, CTInfo basequal,
+					CTSize *ofsp, CTInfo *qualp,
+					CType *out, MSize *budget)
+{
+  while (sib) {
+    CType *ct;
+    CTInfo info;
+    CTSize size;
+    CTypeID child, next;
+    GCobj *gco;
+    if (sib >= top || (MSize)sib >= tabh->sizetab)
+      return -1;
+    if ((*budget)-- == 0)
+      return -1;
+    ct = &tabh->tab[sib];
+    info = la_load32_acq(&ct->info);
+    size = la_load32_acq(&ct->size);
+    child = ctype_cid(info);
+    next = (CTypeID)la_load16_acq(&ct->sib);
+    gco = gcref_acq(ct->name);
+    if (ctype_isabandoned(info))
+      return 0;
+    if (gco == obj2gco(name)) {
+      if (!ctype_snapshot_copy(tabh, top, sib, out))
+	return 0;
+      *ofsp = baseofs + size;
+      if (qualp)
+	*qualp |= basequal;
+      return 1;
+    }
+    if (ctype_isxattrib(info, CTA_SUBTYPE)) {
+      CTInfo q = basequal;
+      CTypeID cid = child;
+      CType cct;
+      int ok;
+      for (;;) {
+	if (cid >= top || (MSize)cid >= tabh->sizetab)
+	  return -1;
+	if ((*budget)-- == 0)
+	  return -1;
+	if (!ctype_snapshot_copy(tabh, top, cid, &cct))
+	  return 0;
+	if (!ctype_isattrib(cct.info))
+	  break;
+	if (ctype_attrib(cct.info) == CTA_QUAL)
+	  q |= cct.size;
+	cid = ctype_cid(cct.info);
+      }
+      ok = ctype_getfieldq_snapshot_rec(tabh, top, cct.sib, name,
+					baseofs + size, q, ofsp, qualp, out,
+					budget);
+      if (ok)
+	return ok;
+    }
+    sib = next;
+  }
+  return 0;
+}
+
+/* Sequence-checked struct/union field lookup for stable readers. */
+int lj_ctype_getfieldq_snapshot(CTState *cts, const CType *root,
+				GCstr *name, CTSize *ofsp, CTInfo *qualp,
+				CType *out)
+{
+  uint32_t seq0 = la_load32_acq(&cts->parse_token);
+  CTypeTab *tabh;
+  CTypeID top, sib;
+  CTInfo info;
+  MSize budget;
+  int ok;
+  if (seq0 & 1u)
+    return -1;
+  info = la_load32_acq(&root->info);
+  if (!ctype_isstruct(info))
+    return 0;
+  sib = (CTypeID)la_load16_acq(&root->sib);
+  top = ctype_top_acq(cts);
+  tabh = ctype_tabh_acq(cts);
+  budget = top ? (MSize)top * 4u : 1u;
+  ok = ctype_getfieldq_snapshot_rec(tabh, top, sib, name, 0, 0, ofsp,
+				    qualp, out, &budget);
+  if (ok >= 0) {
+    uint32_t seq1 = la_load32_acq(&cts->parse_token);
+    ok = (seq0 == seq1 && !(seq1 & 1u)) ? ok : -1;
+  }
+  return ok;
+}
+
+/* Sequence-checked pointer-to-struct test for stable auto-deref readers. */
+int lj_ctype_ptrstruct_snapshot(CTState *cts, CTypeID id, CTypeID *cidp)
+{
+  uint32_t seq0 = la_load32_acq(&cts->parse_token);
+  CTypeTab *tabh;
+  CTypeID top;
+  MSize budget;
+  CType ct;
+  if (seq0 & 1u)
+    return -1;
+  top = ctype_top_acq(cts);
+  tabh = ctype_tabh_acq(cts);
+  budget = top ? (MSize)top * 2u : 1u;
+  if (id == 0 || id >= top || (MSize)id >= tabh->sizetab)
+    return -1;
+  if (!ctype_snapshot_copy(tabh, top, id, &ct))
+    return 0;
+  if (!ctype_isptr(ct.info))
+    return 0;
+  id = ctype_cid(ct.info);
+  for (;;) {
+    if (id == 0 || id >= top || (MSize)id >= tabh->sizetab)
+      return -1;
+    if (budget-- == 0)
+      return -1;
+    if (!ctype_snapshot_copy(tabh, top, id, &ct))
+      return 0;
+    if (!ctype_isattrib(ct.info))
+      break;
+    id = ctype_cid(ct.info);
+  }
+  {
+    uint32_t seq1 = la_load32_acq(&cts->parse_token);
+    if (seq0 != seq1 || (seq1 & 1u))
+      return -1;
+  }
+  if (ctype_isstruct(ct.info)) {
+    *cidp = id;
+    return 1;
+  }
+  return 0;
+}
+
 /* -- C type information -------------------------------------------------- */
 
 /* Follow references and get raw type for a C type ID. */

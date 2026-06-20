@@ -919,16 +919,32 @@ again:
     CTSize csize, fofs = 0, fsize = 0;
     CTypeID fid = 0;
     int found = 0;
+    CType fsnap;
     if (cd && cd->ctypeid == CTID_CTYPEID) {
       id = ctype_rawid(cts, crec_constructor(J, cd, ptr));
     }
-    lj_ctype_parse_lock(cts, J->L);
-    /* 11.2: cdata recorder field reader waits out parser rollback. */
     ct = ctype_get(cts, id);
     cinfo = ct->info;
     csize = ct->size;
     if (ctype_isstruct(cinfo)) {
-      CType *fct = lj_ctype_getfield(cts, ct, name, &fofs);
+      CType *fct;
+      int ok = lj_ctype_getfieldq_snapshot(cts, ct, name, &fofs, NULL,
+					   &fsnap);
+      if (ok < 0) {
+	lj_ctype_parse_lock(cts, J->L);
+	/* 11.2: cdata recorder field reader waits out parser rollback. */
+	ct = ctype_get(cts, id);
+	cinfo = ct->info;
+	csize = ct->size;
+	if (ctype_isstruct(cinfo)) {
+	  fct = lj_ctype_getfield(cts, ct, name, &fofs);
+	} else {
+	  fct = NULL;
+	}
+	lj_ctype_parse_unlock(cts);
+      } else {
+	fct = ok ? &fsnap : NULL;
+      }
       found = fct != NULL;
       if (found) {
 	finfo = fct->info;
@@ -938,7 +954,6 @@ again:
 	  childinfo = ctype_child(cts, fct)->info;
       }
     }
-    lj_ctype_parse_unlock(cts);
     if (ctype_isstruct(cinfo)) {
       if (found) {
 	ofs += (ptrdiff_t)fofs;
@@ -978,13 +993,18 @@ again:
     if (tref_isstr(idx)) {
       CTypeID cid = 0;
       int ptrstruct = 0;
-      lj_ctype_parse_lock(cts, J->L);
-      ct = ctype_get(cts, id);
-      if (ctype_isptr(ct->info)) {  /* Automatically perform '->'. */
-	cid = ctype_rawid(cts, ctype_cid(ct->info));
-	ptrstruct = ctype_isstruct(ctype_get(cts, cid)->info);
+      int ok = lj_ctype_ptrstruct_snapshot(cts, id, &cid);
+      if (ok < 0) {
+	lj_ctype_parse_lock(cts, J->L);
+	ct = ctype_get(cts, id);
+	if (ctype_isptr(ct->info)) {  /* Automatically perform '->'. */
+	  cid = ctype_rawid(cts, ctype_cid(ct->info));
+	  ptrstruct = ctype_isstruct(ctype_get(cts, cid)->info);
+	}
+	lj_ctype_parse_unlock(cts);
+      } else {
+	ptrstruct = ok > 0;
       }
-      lj_ctype_parse_unlock(cts);
       if (ptrstruct) {
 	id = cid;
 	cd = NULL;
