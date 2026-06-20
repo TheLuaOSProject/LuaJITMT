@@ -1435,12 +1435,6 @@ static void gc2_mark_finreg_cdata_preclaims(global_State *g)
 }
 #endif
 
-static void gc2_mark_finalizer_stack(global_State *g, GCobj *o)
-{
-  for (; o != NULL; o = lj_obj_gcw_acq(o))
-    lj_gc2_markobj(g, o);
-}
-
 static void gc2_mark_finalizer_ring(global_State *g, GCobj *tail)
 {
   GCobj *o = tail;
@@ -1468,10 +1462,13 @@ static void gc2_scan_threading_live_roots(global_State *g)
 
 static void gc2_scan_pending_roots(global_State *g)
 {
-  gc2_mark_finalizer_stack(g, (GCobj *)la_loadptr_acq(
-	(void *const *)&g->gc2.finalizer_mpsc));
+  if (!g)
+    return;
+  lj_gc2_finalizer_enter(g);
+  lj_gc2_finalizer_drain_owned(g);
   gc2_mark_finalizer_ring(g, (GCobj *)la_loadptr_acq(
 	(void *const *)&g->gc2.finalizer_tail));
+  lj_gc2_finalizer_leave(g);
   gc2_scan_threading_live_roots(g);
 #if LJ_HASFFI
   gc2_mark_finreg_cdata_preclaims(g);

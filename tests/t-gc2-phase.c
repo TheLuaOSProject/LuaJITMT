@@ -92,6 +92,14 @@ static void *finalizer_drain_worker(void *arg)
   la_store32_rel(&fd->finished, 1);
   return NULL;
 }
+
+static void *finalizer_drain_release_worker(void *arg)
+{
+  PeerRelease *rel = (PeerRelease *)arg;
+  sleep_ns(rel->delay_ns);
+  la_store32_rel(&rel->g->gc2.finalizer_drain_test_release, 1);
+  return NULL;
+}
 #endif
 
 static int finalizer_churn(lua_State *L)
@@ -247,6 +255,57 @@ static void test_finalizer_drain_concurrent_consumers(lua_State *L,
   relink_root_object(g, b);
   relink_root_object(g, a);
   lua_settop(L, 0);
+}
+
+static void test_finalizer_scan_waits_for_drain(lua_State *L, global_State *g)
+{
+  FinalizerDrainer fd = {0};
+  PeerRelease rel;
+  pthread_t drain_thread, release_thread;
+  GCobj *a, *o;
+  uint64_t drained0;
+
+  lua_settop(L, 0);
+  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) == NULL);
+  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) == NULL);
+  lua_newtable(L);
+  a = obj2gco(tabV(L->top - 1));
+  assert(unlink_root_object(g, a));
+  lua_pop(L, 1);
+
+  lj_gc2_legacy_mark_begin(g);
+  assert(g->gc2.phase == LJ_GC2_MARK);
+  assert(lj_gc2_ismarked(g, a) == 0);
+
+  drained0 = la_load64_acq(&g->gc2.finalizer_mpsc_drained);
+  lj_gc2_test_finalizer_drain_pause(g);
+  lj_gc2_finalizer_enqueue(g, a);
+  fd.g = g;
+  assert(pthread_create(&drain_thread, NULL, finalizer_drain_worker, &fd) == 0);
+  while (la_load32_acq(&g->gc2.finalizer_drain_test_paused) == 0)
+    la_cpu_pause();
+  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) == NULL);
+  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) == NULL);
+  assert(la_load64_acq(&g->gc2.finalizer_mpsc_drained) == drained0);
+  assert(lj_gc2_ismarked(g, a) == 0);
+
+  rel.g = g;
+  rel.delay_ns = 1000000L;
+  assert(pthread_create(&release_thread, NULL, finalizer_drain_release_worker,
+			&rel) == 0);
+  lj_gc2_scan_roots(g, L);
+  assert(pthread_join(release_thread, NULL) == 0);
+  assert(pthread_join(drain_thread, NULL) == 0);
+  assert(la_load32_acq(&fd.finished) == 1);
+  assert(la_load64_acq(&g->gc2.finalizer_mpsc_drained) == drained0 + 1u);
+  assert(lj_gc2_ismarked(g, a) == 1);
+
+  o = lj_gc2_finalizer_dequeue(g);
+  assert(o == a);
+  assert(lj_gc2_finalizer_dequeue(g) == NULL);
+  relink_root_object(g, a);
+  lj_gc2_legacy_preserve_abort(g);
+  assert(g->gc2.phase == LJ_GC2_IDLE);
 }
 #endif
 
@@ -586,6 +645,7 @@ int main(void)
   test_finalizer_consumer_ring(L, g);
 #if defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
   test_finalizer_drain_concurrent_consumers(L, g);
+  test_finalizer_scan_waits_for_drain(L, g);
 #endif
   test_finalizer_mpsc_concurrent_producers(L, g);
   test_phase_transition_guards(g, tg);

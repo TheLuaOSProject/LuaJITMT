@@ -352,9 +352,8 @@ static void gc2_paranoia_check_roots(global_State *g)
   GCobj *o;
   for (o = gcref_acq(g->gc.root); o != NULL; o = lj_obj_gcw_acq(o))
     gc2_paranoia_checkone(g, o);
-  for (o = (GCobj *)la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc);
-       o != NULL; o = lj_obj_gcw_acq(o))
-    gc2_paranoia_checkone(g, o);
+  lj_gc2_finalizer_enter(g);
+  lj_gc2_finalizer_drain_owned(g);
   o = (GCobj *)la_loadptr_acq((void *const *)&g->gc2.finalizer_tail);
   if (o) {
     GCobj *root = o;
@@ -363,6 +362,7 @@ static void gc2_paranoia_check_roots(global_State *g)
       gc2_paranoia_checkone(g, o);
     } while (o != root);
   }
+  lj_gc2_finalizer_leave(g);
 }
 
 static void gc2_paranoia_check_rawroots(global_State *g)
