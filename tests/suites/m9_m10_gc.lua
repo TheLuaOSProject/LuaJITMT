@@ -1,9 +1,12 @@
 local utils = require("suite_utils")
+local runtime = require("suite_runtime")
 
 local shell_quote = utils.shell_quote
 local command_succeeded = utils.command_succeeded
 local run_output_contains = utils.run_output_contains
 local run_output_contains_all = utils.run_output_contains_all
+local compile_and_run_c = runtime.compile_and_run_c
+local run_luajit_script_jit_modes = runtime.run_luajit_script_jit_modes
 
 local function write_bad_benchmark_csv(t, base, bad)
   local out = assert(io.open(bad, "wb"))
@@ -27,19 +30,14 @@ local function write_bad_benchmark_csv(t, base, bad)
 end
 
 local function build_and_run_alloc_account(t)
-  local out = t:tmp("lj_t-gc2-alloc-account-m10")
-  t:cc(out, { t:path("tests", "t-gc2-alloc-account.c") }, {
-    link_luajit = true,
-    libs = { "-lm", "-ldl", "-pthread" }
-  })
-  t:run({ out }, { timeout = "20s" })
+  compile_and_run_c(t, t:tmp("lj_t-gc2-alloc-account-m10"),
+                    "t-gc2-alloc-account.c", { timeout = "20s" })
 end
 
 local function run_gc_stats(t)
   t:build({ quiet = true })
 
-  t:luajit({ "-joff", t:path("tests", "t-gc-stats.lua") })
-  t:luajit({ t:path("tests", "t-gc-stats.lua") })
+  run_luajit_script_jit_modes(t, "t-gc-stats.lua")
   print("M9 GC stats guard passed")
 end
 
@@ -98,8 +96,7 @@ end
 local function run_generational(t)
   t:build({ quiet = true })
 
-  t:luajit({ "-joff", t:path("tests", "t-gc-generational-mode.lua") })
-  t:luajit({ t:path("tests", "t-gc-generational-mode.lua") })
+  run_luajit_script_jit_modes(t, "t-gc-generational-mode.lua")
   build_and_run_alloc_account(t)
   print("M10 generational mode guard passed")
 end

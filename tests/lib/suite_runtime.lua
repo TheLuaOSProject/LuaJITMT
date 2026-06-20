@@ -3,6 +3,7 @@ local utils = require("suite_utils")
 local M = {}
 
 local shell_quote = utils.shell_quote
+local luajit_fixture_libs = utils.luajit_fixture_libs
 
 local function luajit_bin(t, bin)
   bin = bin or t:path("src", "luajit")
@@ -14,6 +15,14 @@ local function copy_env(env)
   local out = {}
   if env then
     for k, v in pairs(env) do out[k] = v end
+  end
+  return out
+end
+
+local function copy_opts(opts)
+  local out = {}
+  if opts then
+    for k, v in pairs(opts) do out[k] = v end
   end
   return out
 end
@@ -73,6 +82,29 @@ function M.build_and_run_luajit_script(t, script, args, opts)
     })
   end
   M.luajit_script(t, script, args, opts)
+end
+
+function M.run_luajit_script_jit_modes(t, script, args, opts)
+  local joff_opts = copy_opts(opts)
+  local jit_opts = copy_opts(opts)
+  joff_opts.joff = true
+  jit_opts.joff = false
+  M.luajit_script(t, script, args, joff_opts)
+  M.luajit_script(t, script, args, jit_opts)
+end
+
+function M.build_and_run_luajit_script_jit_modes(t, script, args, opts)
+  opts = opts or {}
+  if opts.build ~= false then
+    local build_quiet = opts.build_quiet
+    if build_quiet == nil then build_quiet = true end
+    t:build({
+      clean = opts.clean ~= false,
+      quiet = build_quiet,
+      xcflags = opts.xcflags
+    })
+  end
+  M.run_luajit_script_jit_modes(t, script, args, opts)
 end
 
 function M.luajit_dump(t, dump, dumpopt, code, opts)
@@ -172,14 +204,20 @@ end
 
 function M.compile_and_run_c(t, out, cfile, opts)
   opts = opts or {}
-  t:compile_luajit_c_fixture(out, cfile, {
+  local sources = opts.sources or
+    (type(cfile) == "table" and cfile or { t:path("tests", cfile) })
+  M.compile_and_run_sources(t, out, sources, opts)
+end
+
+function M.compile_and_run_sources(t, out, sources, opts)
+  opts = opts or {}
+  t:cc(out, sources, {
     cflags = opts.cflags,
     default_cflags = opts.default_cflags,
     include_src = opts.include_src,
-    link_luajit = opts.link_luajit,
+    link_luajit = opts.link_luajit ~= false,
     objects = opts.objects,
-    libs = opts.libs,
-    pthread = opts.pthread,
+    libs = luajit_fixture_libs(opts),
     quiet = opts.quiet
   })
   t:run({ out }, {

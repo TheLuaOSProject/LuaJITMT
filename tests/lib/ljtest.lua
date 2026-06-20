@@ -9,6 +9,7 @@ local getenv = utils.getenv
 local shell_quote = utils.shell_quote
 local read_file = utils.read_file
 local has_extension = utils.has_extension
+local luajit_fixture_libs = utils.luajit_fixture_libs
 
 local function append(parts, value)
   if value == nil or value == "" then return end
@@ -33,15 +34,6 @@ local function fixture_sources(self, cfile, opts)
   if opts and opts.sources then return opts.sources end
   if type(cfile) == "table" then return cfile end
   return { self:path("tests", cfile) }
-end
-
-local function luajit_fixture_libs(opts)
-  if opts and opts.libs then return opts.libs end
-  local libs = { "-lm", "-ldl" }
-  if not opts or opts.pthread ~= false then
-    libs[#libs + 1] = opts and opts.pthread or "-pthread"
-  end
-  return libs
 end
 
 function M.new(root)

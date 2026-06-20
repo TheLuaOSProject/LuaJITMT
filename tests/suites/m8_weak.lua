@@ -1,5 +1,7 @@
 local runtime = require("suite_runtime")
 
+local run_luajit_script_jit_modes = runtime.run_luajit_script_jit_modes
+
 local M8_C_FIXTURES = {
   "t-gc2-phase",
   "t-gc2-traverse",
@@ -10,14 +12,10 @@ local M8_C_FIXTURES = {
 
 local function run_default_matrix(t)
   t:build({ clean = true, quiet = true })
-  t:luajit({ "-joff", t:path("tests", "t-weak-modes.lua") })
-  t:luajit({ t:path("tests", "t-weak-modes.lua") })
-  t:luajit({ "-joff", t:path("tests", "t-m8-finalizer-spawn-live.lua") },
-            { timeout = "10s" })
-  t:luajit({ t:path("tests", "t-m8-finalizer-spawn-live.lua") },
-            { timeout = "10s" })
-  t:luajit({ "-joff", t:path("tests", "t-ffi-gc-finreg.lua"), "3", "72" })
-  t:luajit({ t:path("tests", "t-ffi-gc-finreg.lua"), "3", "72" })
+  run_luajit_script_jit_modes(t, "t-weak-modes.lua")
+  run_luajit_script_jit_modes(t, "t-m8-finalizer-spawn-live.lua", nil,
+                              { timeout = "10s" })
+  run_luajit_script_jit_modes(t, "t-ffi-gc-finreg.lua", { "3", "72" })
   runtime.run_c_fixtures(t, M8_C_FIXTURES, { output_suffix = "_m8" })
 end
 

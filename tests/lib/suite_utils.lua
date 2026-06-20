@@ -184,4 +184,13 @@ function M.lua_path(root)
   return root .. "/src/?.lua;" .. root .. "/src/jit/?.lua;;"
 end
 
+function M.luajit_fixture_libs(opts)
+  if opts and opts.libs then return opts.libs end
+  local libs = { "-lm", "-ldl" }
+  if not opts or opts.pthread ~= false then
+    libs[#libs + 1] = opts and opts.pthread or "-pthread"
+  end
+  return libs
+end
+
 return M
