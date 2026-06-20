@@ -354,6 +354,24 @@
 |.macro x64_vm_node_next_acq, dst, node
 |  mov dst, node->next		// x64_vm_node_next_acq: TSO acquire load.
 |.endmacro
+|.macro x64_vm_gcref_acq, dst, ref
+|  mov dst, ref			// x64_vm_gcref_acq: TSO acquire load.
+|.endmacro
+|.macro x64_vm_gcref_cmpzero, ref, target
+|  cmp aword ref, 0; jne target	// x64_vm_gcref_cmpzero.
+|.endmacro
+|.macro x64_vm_gcref_rel, ref, src
+|  mov ref, src			// x64_vm_gcref_rel: TSO release store.
+|.endmacro
+|.macro x64_vm_gcroot_acq, dst, g, idx
+|  mov dst, [g+GL_OFS(gcroot)+8*(idx)]	// x64_vm_gcroot_acq.
+|.endmacro
+|.macro x64_vm_gcroot_cmpzero, g, idx, target
+|  cmp aword [g+GL_OFS(gcroot)+8*(idx)], 0; jne target  // x64_vm_gcroot_cmpzero.
+|.endmacro
+|.macro x64_vm_basemt_acq, dst, g, itype
+|  mov dst, [g+itype*8+GL_OFS(gcroot[GCROOT_BASEMT])]	// x64_vm_basemt_acq.
+|.endmacro
 |
 |.macro branchPC, reg
 |  lea PC, [PC+reg*4-BCBIAS_J*4]
@@ -1328,7 +1346,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov PC, [BASE-8]
   |  checktab TAB:RB, >6
   |1:  // Field metatable must be at same offset for GCtab and GCudata!
-  |  mov TAB:RB, TAB:RB->metatable
+  |  x64_vm_gcref_acq TAB:RB, TAB:RB->metatable
   |2:
   |  test TAB:RB, TAB:RB
   |  mov aword [BASE-16], LJ_TNIL
@@ -1336,7 +1354,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  settp TAB:RC, TAB:RB, LJ_TTAB
   |  mov [BASE-16], TAB:RC		// Store metatable as default result.
   |  load_G TMPR
-  |  mov STR:RC, [TMPR+GL_OFS(gcroot)+8*(GCROOT_MMNAME+MM_metatable)]
+  |  x64_vm_gcroot_acq STR:RC, TMPR, (GCROOT_MMNAME+MM_metatable)
   |  x64_vm_tab_node_acq r8, TAB:RB
   |  mov r9d, dword [r8+TABNODE_FLAGS_OFS]
   |  test r9d, TABNODE_FLAG_RETIRING
@@ -1367,7 +1385,7 @@ static void build_subroutines(BuildCtx *ctx)
   |7:
   |  not ITYPEd
   |  load_G TMPR
-  |  mov TAB:RB, [TMPR+ITYPE*8+GL_OFS(gcroot[GCROOT_BASEMT])]
+  |  x64_vm_basemt_acq TAB:RB, TMPR, ITYPE
   |  jmp <2
   |
   |.ffunc_2 setmetatable
@@ -1375,15 +1393,15 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov TAB:TMPR, TAB:RB
   |  checktab TAB:RB, ->fff_fallback
   |  // Fast path: no mt for table yet and not clearing the mt.
-  |  cmp aword TAB:RB->metatable, 0; jne ->fff_fallback
+  |  x64_vm_gcref_cmpzero TAB:RB->metatable, ->fff_fallback
   |  mov TAB:RA, [BASE+8]
   |  checktab TAB:RA, ->fff_fallback
   |  mov byte TAB:RA->nomm, 0		// Clear metamethod miss cache.
   |  // Release store on x86-64 TSO.
-  |  mov TAB:RB->metatable, TAB:RA
+  |  x64_vm_gcref_rel TAB:RB->metatable, TAB:RA
   |  mov PC, [BASE-8]
   |  mov [BASE-16], TAB:TMPR			// Return original table.
-  |  // Publish the table -> metatable edge.
+  |  // Publish the table metatable edge.
   |.if not X64WIN
   |  mov RB, BASE			// Save BASE.
   |  mov CARG1, SAVE_L
@@ -1448,8 +1466,7 @@ static void build_subroutines(BuildCtx *ctx)
   |3:  // Handle numbers inline, unless a number base metatable is present.
   |  cmp ITYPEd, LJ_TISNUM;  ja ->fff_fallback_1
   |  load_G TMPR
-  |  cmp aword [TMPR+GL_OFS(gcroot[GCROOT_BASEMT_NUM])], 0
-  |  jne ->fff_fallback
+  |  x64_vm_gcroot_cmpzero TMPR, GCROOT_BASEMT_NUM, ->fff_fallback
   |  ffgccheck				// Caveat: uses labels 1 and 9.
   |  mov L:RB, SAVE_L
   |  mov L:RB->base, BASE		// Add frame since C call can throw.
@@ -1501,7 +1518,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov TMPR, TAB:RB
   |  checktab TAB:RB, ->fff_fallback
 #if LJ_52
-  |  cmp aword TAB:RB->metatable, 0; jne ->fff_fallback
+  |  x64_vm_gcref_cmpzero TAB:RB->metatable, ->fff_fallback
 #endif
   |  mov CFUNC:RD, [BASE-16]
   |  cleartp CFUNC:RD
@@ -1601,7 +1618,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov TMPR, TAB:RB
   |  checktab TAB:RB, ->fff_fallback
 #if LJ_52
-  |  cmp aword TAB:RB->metatable, 0; jne ->fff_fallback
+  |  x64_vm_gcref_cmpzero TAB:RB->metatable, ->fff_fallback
 #endif
   |  mov CFUNC:RD, [BASE-16]
   |  cleartp CFUNC:RD
@@ -3383,7 +3400,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
       |  // Different tables or userdatas. Need to check __eq metamethod.
       |  // Field metatable must be at same offset for GCtab and GCudata!
       |  cleartp TAB:RA
-      |  mov TAB:RB, TAB:RA->metatable
+      |  x64_vm_gcref_acq TAB:RB, TAB:RA->metatable
       |  test TAB:RB, TAB:RB
       |  jz <2				// No metatable?
       |  test byte TAB:RB->nomm, 1<<MM_eq
@@ -3604,7 +3621,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  cmp ITYPEd, LJ_TTAB; jne ->vmeta_len
     |  mov TAB:CARG1, TAB:RD
 #if LJ_52
-    |  mov TAB:RB, TAB:RD->metatable
+    |  x64_vm_gcref_acq TAB:RB, TAB:RD->metatable
     |  cmp TAB:RB, 0
     |  jnz >9
     |3:
@@ -4126,7 +4143,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ins_AND	// RA = dst, RD = str const (~)
     |  mov LFUNC:RB, [BASE-16]
     |  cleartp LFUNC:RB
-    |  mov TAB:RB, LFUNC:RB->env
+    |  x64_vm_gcref_acq TAB:RB, LFUNC:RB->env
     |  mov STR:RC, [KBASE+RD*8]
     |  jmp ->BC_TGETS_Z
     break;
@@ -4134,7 +4151,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ins_AND	// RA = src, RD = str const (~)
     |  mov LFUNC:RB, [BASE-16]
     |  cleartp LFUNC:RB
-    |  mov TAB:RB, LFUNC:RB->env
+    |  x64_vm_gcref_acq TAB:RB, LFUNC:RB->env
     |  mov STR:RC, [KBASE+RD*8]
     |  jmp ->BC_TSETS_Z
     break;
@@ -4180,7 +4197,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ins_next
     |
     |2:  // Check for __index if table value is nil.
-    |  mov TAB:TMPR, TAB:RB->metatable
+    |  x64_vm_gcref_acq TAB:TMPR, TAB:RB->metatable
     |  test TAB:TMPR, TAB:TMPR
     |  jz <1
     |  test byte TAB:TMPR->nomm, 1<<MM_index
@@ -4230,7 +4247,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov ITYPE, LJ_TNIL
     |
     |5:  // Check for __index if table value is nil.
-    |  mov TAB:TMPR, TAB:RB->metatable
+    |  x64_vm_gcref_acq TAB:TMPR, TAB:RB->metatable
     |  test TAB:TMPR, TAB:TMPR
     |  jz <2				// No metatable: done.
     |  test byte TAB:TMPR->nomm, 1<<MM_index
@@ -4264,7 +4281,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ins_next
     |
     |2:  // Check for __index if table value is nil.
-    |  mov TAB:TMPR, TAB:RB->metatable
+    |  x64_vm_gcref_acq TAB:TMPR, TAB:RB->metatable
     |  test TAB:TMPR, TAB:TMPR
     |  jz <1
     |  test byte TAB:TMPR->nomm, 1<<MM_index
@@ -4380,7 +4397,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ins_next
     |
     |3:  // Check for __newindex if previous value is nil.
-    |  mov TAB:TMPR, TAB:RB->metatable
+    |  x64_vm_gcref_acq TAB:TMPR, TAB:RB->metatable
     |  test TAB:TMPR, TAB:TMPR
     |  jz <1
     |  test byte TAB:TMPR->nomm, 1<<MM_newindex
@@ -4460,7 +4477,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ins_next
     |
     |3:  // Check for __newindex if previous value is nil.
-    |  mov TAB:TMPR, TAB:RB->metatable
+    |  x64_vm_gcref_acq TAB:TMPR, TAB:RB->metatable
     |  test TAB:TMPR, TAB:TMPR
     |  jz <1
     |  test byte TAB:TMPR->nomm, 1<<MM_newindex

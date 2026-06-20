@@ -37,6 +37,15 @@ local t = setmetatable({}, { __metatable = token })
 assert(getmetatable(t) == token)
 local u = setmetatable({}, {})
 assert(type(getmetatable(u)) == "table")
+local v = {}
+local mt = { tag = "plain" }
+assert(setmetatable(v, mt) == v)
+assert(getmetatable(v) == mt)
+x64_vm_gcref_edge = nil
+x64_vm_gcref_edge = 41
+assert(x64_vm_gcref_edge == 41 and _G.x64_vm_gcref_edge == 41)
+_G.x64_vm_gcref_edge = nil
+assert(type(tostring(12.5)) == "string")
 ]]
 end
 
