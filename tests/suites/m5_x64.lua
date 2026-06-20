@@ -1,7 +1,7 @@
 local runtime = require("suite_runtime")
 
+local build_and_run_luajit_code = runtime.build_and_run_luajit_code
 local compile_and_run_c = runtime.compile_and_run_c
-local run_luajit = runtime.luajit
 
 local function tget_array_header_smoke()
   return [[
@@ -86,8 +86,8 @@ return function(add)
     name = "m5_x64_getmetatable_node_order",
     description = "x64 getmetatable behavior",
     run = function(t)
-      t:build({ clean = true, quiet = true })
-      run_luajit(t, { "-joff", "-e", getmetatable_node_order_smoke() })
+      build_and_run_luajit_code(t, getmetatable_node_order_smoke(),
+                                { joff = true })
       print("M5 x64 getmetatable behavior passed")
     end
   })
@@ -96,8 +96,7 @@ return function(add)
     name = "m5_x64_tget_array_header",
     description = "x64 TGET array bounds and FORWARD behavior",
     run = function(t)
-      t:build({ clean = true, quiet = true })
-      run_luajit(t, { "-joff", "-e", tget_array_header_smoke() })
+      build_and_run_luajit_code(t, tget_array_header_smoke(), { joff = true })
       compile_and_run_c(t, t:tmp("lj_t-x64-tget-forward"),
                         "t-x64-tget-forward.c")
       print("M5 x64 TGET array bounds and FORWARD behavior passed")
@@ -108,8 +107,7 @@ return function(add)
     name = "m5_x64_tgets_node_order",
     description = "x64 TGETS/TSETS FORWARD behavior",
     run = function(t)
-      t:build({ clean = true, quiet = true })
-      run_luajit(t, { "-joff", "-e", tgets_node_order_smoke() })
+      build_and_run_luajit_code(t, tgets_node_order_smoke(), { joff = true })
       compile_and_run_c(t, t:tmp("lj_t-x64-tgets-forward"),
                         "t-x64-tgets-forward.c")
       print("M5 x64 TGETS/TSETS FORWARD behavior passed")
@@ -120,8 +118,7 @@ return function(add)
     name = "m5_x64_ipairs_snapshot",
     description = "x64 ipairs_aux array/hash FORWARD behavior",
     run = function(t)
-      t:build({ clean = true, quiet = true })
-      run_luajit(t, { "-joff", "-e", ipairs_snapshot_smoke() })
+      build_and_run_luajit_code(t, ipairs_snapshot_smoke(), { joff = true })
       compile_and_run_c(t, t:tmp("lj_t-x64-ipairs-forward"),
                         "t-x64-ipairs-forward.c")
       print("M5 x64 ipairs_aux array/hash FORWARD behavior passed")
@@ -132,8 +129,7 @@ return function(add)
     name = "m5_x64_itern_snapshot",
     description = "x64 BC_ITERN array/hash FORWARD behavior",
     run = function(t)
-      t:build({ clean = true, quiet = true })
-      run_luajit(t, { "-joff", "-e", itern_snapshot_smoke() })
+      build_and_run_luajit_code(t, itern_snapshot_smoke(), { joff = true })
       compile_and_run_c(t, t:tmp("lj_t-x64-itern-forward"),
                         "t-x64-itern-forward.c")
       print("M5 x64 BC_ITERN array/hash FORWARD behavior passed")
@@ -144,8 +140,7 @@ return function(add)
     name = "m5_x64_table_next_snapshot",
     description = "x64 lj_vm_next array/hash FORWARD behavior",
     run = function(t)
-      t:build({ clean = true, quiet = true })
-      run_luajit(t, { "-e", table_next_snapshot_smoke() })
+      build_and_run_luajit_code(t, table_next_snapshot_smoke())
       compile_and_run_c(t, t:tmp("lj_t-x64-vm-next-forward"),
                         "t-x64-vm-next-forward.c")
       print("M5 x64 lj_vm_next array/hash FORWARD behavior passed")

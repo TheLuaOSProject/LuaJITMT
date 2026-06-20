@@ -27,6 +27,14 @@ local function copy_opts(opts)
   return out
 end
 
+local function append_jit_mode(argv, opts)
+  if opts.joff then
+    argv[#argv + 1] = "-joff"
+  elseif opts.jon then
+    argv[#argv + 1] = "-jon"
+  end
+end
+
 function M.lua_path(t)
   return utils.lua_path(t.root)
 end
@@ -47,7 +55,12 @@ function M.luajit(t, args, opts)
 end
 
 function M.luajit_code(t, code, opts)
-  M.luajit(t, { "-e", code }, opts)
+  opts = opts or {}
+  local argv = {}
+  append_jit_mode(argv, opts)
+  argv[#argv + 1] = "-e"
+  argv[#argv + 1] = code
+  M.luajit(t, argv, opts)
 end
 
 function M.luajit_file(t, file, opts)
@@ -64,10 +77,24 @@ function M.luajit_script(t, script, args, opts)
   args = args or {}
   opts = opts or {}
   local argv = {}
-  if opts.joff then argv[#argv + 1] = "-joff" end
+  append_jit_mode(argv, opts)
   argv[#argv + 1] = t:path("tests", script)
   for i = 1, #args do argv[#argv + 1] = args[i] end
   t:luajit(argv, { timeout = opts.timeout, env = opts.env, quiet = opts.quiet })
+end
+
+function M.build_and_run_luajit_code(t, code, opts)
+  opts = opts or {}
+  if opts.build ~= false then
+    local build_quiet = opts.build_quiet
+    if build_quiet == nil then build_quiet = true end
+    t:build({
+      clean = opts.clean ~= false,
+      quiet = build_quiet,
+      xcflags = opts.xcflags
+    })
+  end
+  M.luajit_code(t, code, opts)
 end
 
 function M.build_and_run_luajit_script(t, script, args, opts)

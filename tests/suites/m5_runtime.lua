@@ -1,3 +1,9 @@
+local runtime = require("suite_runtime")
+
+local build_and_run_luajit_code = runtime.build_and_run_luajit_code
+local build_and_run_luajit_script = runtime.build_and_run_luajit_script
+local luajit_script = runtime.luajit_script
+
 local function ctype_name_smoke()
   return [=[
 local ffi = require"ffi"
@@ -164,8 +170,8 @@ return function(add)
     description = "string.buffer publication thread smoke",
     run = function(t)
       t:build({ quiet = true })
-      t:luajit({ "-joff", t:path("tests", "t-buffer-thread-safety.lua") })
-      t:luajit({ "-jon", t:path("tests", "t-buffer-thread-safety.lua") })
+      luajit_script(t, "t-buffer-thread-safety.lua", nil, { joff = true })
+      luajit_script(t, "t-buffer-thread-safety.lua", nil, { jon = true })
       print("M5 string.buffer publication smoke passed")
     end
   })
@@ -174,8 +180,10 @@ return function(add)
     name = "m5_ctype_name_publish",
     description = "CType.name publication smoke test",
     run = function(t)
-      t:build({ quiet = true })
-      t:luajit({ "-joff", "-e", ctype_name_smoke() })
+      build_and_run_luajit_code(t, ctype_name_smoke(), {
+        clean = false,
+        joff = true
+      })
       print("M5 CType.name publication smoke passed")
     end
   })
@@ -184,8 +192,7 @@ return function(add)
     name = "m5_jit_hash_store_nyi",
     description = "JIT table-store bridge smoke",
     run = function(t)
-      t:build({ clean = true, quiet = true })
-      t:luajit({ "-e", jit_hash_store_smoke() })
+      build_and_run_luajit_code(t, jit_hash_store_smoke())
       print("M5 JIT table-store bridge smoke passed")
     end
   })
@@ -194,8 +201,7 @@ return function(add)
     name = "m5_jit_table_fload_mutable",
     description = "JIT table field FLOAD mutability smoke",
     run = function(t)
-      t:build({ clean = true, quiet = true })
-      t:luajit({ "-e", jit_table_fload_mutable_smoke() })
+      build_and_run_luajit_code(t, jit_table_fload_mutable_smoke())
       print("M5 JIT table FLOAD mutability smoke passed")
     end
   })
@@ -204,8 +210,7 @@ return function(add)
     name = "m5_jit_href_node_order",
     description = "x64 JIT HREF table node/hmask load ordering smoke",
     run = function(t)
-      t:build({ clean = true, quiet = true })
-      t:luajit({ "-e", jit_href_node_order_smoke() })
+      build_and_run_luajit_code(t, jit_href_node_order_smoke())
       print("M5 JIT HREF node-header hmask smoke passed")
     end
   })
@@ -214,8 +219,7 @@ return function(add)
     name = "m5_jit_hrefk_record_snapshot",
     description = "JIT HREFK recorder table shape snapshot smoke",
     run = function(t)
-      t:build({ clean = true, quiet = true })
-      t:luajit({ "-e", jit_hrefk_record_snapshot_smoke() })
+      build_and_run_luajit_code(t, jit_hrefk_record_snapshot_smoke())
       print("M5 JIT HREFK recorder snapshot smoke passed")
     end
   })
@@ -224,8 +228,10 @@ return function(add)
     name = "m5_udtype_publish",
     description = "userdata type publication smoke",
     run = function(t)
-      t:build({ quiet = true })
-      t:luajit({ "-joff", "-e", udtype_publish_smoke() })
+      build_and_run_luajit_code(t, udtype_publish_smoke(), {
+        clean = false,
+        joff = true
+      })
       print("M5 userdata type publication smoke passed")
     end
   })
@@ -234,13 +240,8 @@ return function(add)
     name = "m5_threading_alloc",
     description = "per-TG allocator routing under spawned Lua threads",
     run = function(t)
-      t:build({ clean = true, quiet = true })
-      t:luajit({
-        "-joff",
-        t:path("tests", "t-threading-alloc.lua"),
-        "4",
-        "6000"
-      }, { timeout = "20s" })
+      build_and_run_luajit_script(t, "t-threading-alloc.lua",
+        { "4", "6000" }, { joff = true, timeout = "20s" })
       print("M5 threading allocator routing tests passed")
     end
   })
@@ -249,8 +250,8 @@ return function(add)
     name = "m5_math_random_tg",
     description = "per-TG math.random regression test",
     run = function(t)
-      t:build({ clean = true, quiet = true })
-      t:luajit({ "-joff", t:path("tests", "t-math-random-tg.lua") })
+      build_and_run_luajit_script(t, "t-math-random-tg.lua", nil,
+        { joff = true })
     end
   })
 
@@ -258,8 +259,8 @@ return function(add)
     name = "m5_os_reentrant",
     description = "POSIX os.date/tmpname reentrancy and setlocale behavior",
     run = function(t)
-      t:build({ clean = true, quiet = true })
-      t:luajit({ "-joff", t:path("tests", "t-os-reentrant.lua") }, {
+      build_and_run_luajit_script(t, "t-os-reentrant.lua", nil, {
+        joff = true,
         env = {
           LJ_M5_OS_THREADS = os.getenv("LJ_M5_OS_THREADS") or "8",
           LJ_M5_OS_ITERS = os.getenv("LJ_M5_OS_ITERS") or "200"
@@ -272,8 +273,8 @@ return function(add)
     name = "m5_parser_capture_meta",
     description = "parser captured-local metadata behavior",
     run = function(t)
-      t:build({ clean = true, quiet = true, xcflags = "-DLUA_USE_ASSERT" })
-      t:luajit({ t:path("tests", "t-parser-capture-meta.lua") })
+      build_and_run_luajit_script(t, "t-parser-capture-meta.lua", nil,
+        { xcflags = "-DLUA_USE_ASSERT" })
     end
   })
 end
