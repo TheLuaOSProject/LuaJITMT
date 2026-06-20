@@ -234,7 +234,7 @@ static void bcwrite_kgc(BCWriteCtx *ctx, GCproto *pt)
   MSize i, sizekgc = pt->sizekgc;
   GCRef *kr = mref(pt->k, GCRef) - (ptrdiff_t)sizekgc;
   for (i = 0; i < sizekgc; i++, kr++) {
-    GCobj *o = gcref(*kr);
+    GCobj *o = gcref_acq(*kr);
     MSize tp, need = 1;
     char *p;
     /* Determine constant type and needed size. */
@@ -361,7 +361,7 @@ static int bcwrite_has_legacyuv(GCproto *pt)
     ptrdiff_t i, n = pt->sizekgc;
     GCRef *kr = mref(pt->k, GCRef) - 1;
     for (i = 0; i < n; i++, kr--) {
-      GCobj *o = gcref(*kr);
+      GCobj *o = gcref_acq(*kr);
       if (o->gch.gct == ~LJ_TPROTO && bcwrite_has_legacyuv(gco2pt(o)))
 	return 1;
     }
@@ -380,7 +380,7 @@ static void bcwrite_proto(BCWriteCtx *ctx, GCproto *pt)
     ptrdiff_t i, n = pt->sizekgc;
     GCRef *kr = mref(pt->k, GCRef) - 1;
     for (i = 0; i < n; i++, kr--) {
-      GCobj *o = gcref(*kr);
+      GCobj *o = gcref_acq(*kr);
       if (o->gch.gct == ~LJ_TPROTO)
 	bcwrite_proto(ctx, gco2pt(o));
     }

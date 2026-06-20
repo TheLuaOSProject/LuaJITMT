@@ -324,7 +324,7 @@ static void snap_useuv(GCproto *pt, uint8_t *udf)
     ptrdiff_t i, j, n = pt->sizekgc;
     GCRef *kr = mref(pt->k, GCRef) - 1;
     for (i = 0; i < n; i++, kr--) {
-      GCobj *o = gcref(*kr);
+      GCobj *o = gcref_acq(*kr);
       if (o->gch.gct == ~LJ_TPROTO) {
 	for (j = 0; j < gco2pt(o)->sizeuv; j++) {
 	  uint32_t v = proto_uv(gco2pt(o))[j];
