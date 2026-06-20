@@ -324,6 +324,7 @@ void lj_gc2_worker_wake(global_State *g)
 
 static int gc2_worker_start_count(global_State *g, uint32_t n)
 {
+  GCobj *mainobj;
   lua_State *L;
   uint32_t i;
   int rc, wait;
@@ -333,7 +334,8 @@ static int gc2_worker_start_count(global_State *g, uint32_t n)
     n = LJ_GC2_WORKER_MAX;
   if (la_load32_acq(&g->gc2.n_workers) != 0)
     return 1;
-  L = gcref(g->mainthref) ? mainthread(g) : NULL;
+  mainobj = gcref_acq(g->mainthref);
+  L = mainobj ? &mainobj->th : NULL;
   if (!L)
     return 0;
   la_store32_rel(&g->gc2.worker_stop, 0);
@@ -1673,8 +1675,11 @@ static int gc2_grey_grow(global_State *g)
   uint64_t bottom = la_load64_rlx(&g->gc2.grey_bottom);
   MSize count = bottom > top ? (MSize)(bottom - top) : 0;
   lua_State *L = lj_tg_cur_L(g);
-  if (!L && gcref(g->mainthref))
-    L = mainthread(g);
+  if (!L) {
+    GCobj *mainobj = gcref_acq(g->mainthref);
+    if (mainobj)
+      L = &mainobj->th;
+  }
   if (!L || oldcap >= GC2_GREY_LIMIT)
     return 0;
   if (newcap < oldcap || newcap > GC2_GREY_LIMIT)
