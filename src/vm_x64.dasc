@@ -351,6 +351,9 @@
 |.macro x64_vm_tab_array_acq, dst, tab
 |  mov dst, tab->array		// x64_vm_tab_array_acq: TSO acquire load.
 |.endmacro
+|.macro x64_vm_tab_asize_acq, dst, tab
+|  mov dst, tab->asize		// x64_vm_tab_asize_acq: TSO acquire load.
+|.endmacro
 |.macro x64_vm_node_next_acq, dst, node
 |  mov dst, node->next		// x64_vm_node_next_acq: TSO acquire load.
 |.endmacro
@@ -1550,7 +1553,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  cvtsi2sd xmm0, RAd
   |  movsd qword [BASE-16], xmm0
   |.endif
-  |  mov TMPRd, TAB:RB->asize
+  |  x64_vm_tab_asize_acq TMPRd, TAB:RB
   |  x64_vm_tab_array_acq RD, TAB:RB
   |  test RD, RD; jz >3
   |  lea r8, [RB+TAB_COLO_SLOTS]
@@ -2935,7 +2938,7 @@ static void build_subroutines(BuildCtx *ctx)
   |->vm_next:
   |.if JIT
   |  endbr
-  |  mov NEXT_ASIZE, NEXT_TAB->asize
+  |  x64_vm_tab_asize_acq NEXT_ASIZE, NEXT_TAB
   |  x64_vm_tab_array_acq r10, NEXT_TAB
   |  test r10, r10; jz >1
   |  lea NEXT_TMP, [NEXT_TAB+TAB_COLO_SLOTS]
@@ -4174,7 +4177,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ucomisd xmm0, xmm1
     |  jne ->vmeta_tgetv		// Generic numeric key? Use fallback.
     |.endif
-    |  mov ITYPEd, TAB:RB->asize
+    |  x64_vm_tab_asize_acq ITYPEd, TAB:RB
     |  x64_vm_tab_array_acq TMPR, TAB:RB
     |  test TMPR, TMPR; jz >3
     |  lea r8, [RB+TAB_COLO_SLOTS]
@@ -4258,7 +4261,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ins_ABC	// RA = dst, RB = table, RC = byte literal
     |  mov TAB:RB, [BASE+RB*8]
     |  checktab TAB:RB, ->vmeta_tgetb
-    |  mov ITYPEd, TAB:RB->asize
+    |  x64_vm_tab_asize_acq ITYPEd, TAB:RB
     |  x64_vm_tab_array_acq TMPR, TAB:RB
     |  test TMPR, TMPR; jz >3
     |  lea r8, [RB+TAB_COLO_SLOTS]
@@ -4297,7 +4300,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |.else
     |  cvttsd2si RCd, qword [BASE+RC*8]
     |.endif
-    |  mov ITYPEd, TAB:RB->asize
+    |  x64_vm_tab_asize_acq ITYPEd, TAB:RB
     |  x64_vm_tab_array_acq TMPR, TAB:RB
     |  test TMPR, TMPR; jz >3
     |  lea r8, [RB+TAB_COLO_SLOTS]
@@ -4344,7 +4347,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ucomisd xmm0, xmm1
     |  jne ->vmeta_tsetv		// Generic numeric key? Use fallback.
     |.endif
-    |  mov ITYPEd, TAB:RB->asize
+    |  x64_vm_tab_asize_acq ITYPEd, TAB:RB
     |  x64_vm_tab_array_acq TMPR, TAB:RB
     |  test TMPR, TMPR; jz >4
     |  lea r8, [RB+TAB_COLO_SLOTS]
@@ -4424,7 +4427,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |->BC_TSETB_RETRY:
     |  mov TAB:RB, [BASE+RB*8]
     |  checktab TAB:RB, ->vmeta_tsetb
-    |  mov ITYPEd, TAB:RB->asize
+    |  x64_vm_tab_asize_acq ITYPEd, TAB:RB
     |  x64_vm_tab_array_acq TMPR, TAB:RB
     |  test TMPR, TMPR; jz >4
     |  lea r8, [RB+TAB_COLO_SLOTS]
@@ -4496,7 +4499,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  cvttsd2si RCd, qword [BASE+RC*8]
     |.endif
     |2:
-    |  mov ITYPEd, TAB:RB->asize
+    |  x64_vm_tab_asize_acq ITYPEd, TAB:RB
     |  x64_vm_tab_array_acq TMPR, TAB:RB
     |  test TMPR, TMPR; jz >3
     |  lea r8, [RB+TAB_COLO_SLOTS]
@@ -4596,7 +4599,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  sub RDd, 1
     |  jz >4				// Nothing to copy?
     |  add RDd, TMPRd			// Compute needed size.
-    |  mov r8d, TAB:RB->asize
+    |  x64_vm_tab_asize_acq r8d, TAB:RB
     |  x64_vm_tab_array_acq ITYPE, TAB:RB
     |  test ITYPE, ITYPE; jz >3
     |  lea r9, [RB+TAB_COLO_SLOTS]
@@ -4736,7 +4739,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov TAB:RB, [BASE+RA*8-16]
     |  cleartp TAB:RB
     |  mov RCd, [BASE+RA*8-8]		// Get index from control var.
-    |  mov TMPRd, TAB:RB->asize
+    |  x64_vm_tab_asize_acq TMPRd, TAB:RB
     |  add PC, 4
     |  x64_vm_tab_array_acq ITYPE, TAB:RB
     |  test ITYPE, ITYPE; jz >1
