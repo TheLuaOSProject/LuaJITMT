@@ -4,13 +4,14 @@ local runtime = require("suite_runtime")
 local jitutils = require("suite_jit")
 
 local contains = utils.contains
-local count_plain = utils.count_plain
-local count_match = utils.count_match
 local lines = utils.iter_lines
 local assert_dump_contains = utils.assert_dump_contains
 local assert_dump_match = utils.assert_dump_match
+local assert_dump_contains_count = utils.assert_dump_contains_count
+local assert_dump_match_count = utils.assert_dump_match_count
 local assert_trace1_ir = jitutils.assert_trace1_ir
 local x64_cmp_poll_pattern = jitutils.x64_cmp_poll_pattern
+local assert_x64_loop_poll_count = jitutils.assert_x64_loop_poll_count
 local assert_loop_ir_markers = jitutils.assert_loop_ir_markers
 local assert_loop_after_xpoll = jitutils.assert_loop_after_xpoll
 local assert_call_after_loop_polls = jitutils.assert_call_after_loop_polls
@@ -227,10 +228,8 @@ for i=1,64 do s=s+i end
 assert(s==2080.0)
 ]=], { timeout = "20s" })
       assert_dump_contains(t, dump, "XPOLL", "x64 loop trace")
-      local d = t:read(dump)
-      if not contains(d, "->LOOP:") or not d:match(x64_cmp_poll_pattern()) then
-        error("x64 IR_XPOLL must lower to a TG poll at the loop label", 2)
-      end
+      assert_x64_loop_poll_count(t, dump,
+        "x64 IR_XPOLL must lower to a TG poll at the loop label", 1)
 
       local funcf_dump = t:tmp("lj_t-jit-xpoll-funcf.dump")
       luajit_dump(t, funcf_dump, "-jdump=im", [=[
@@ -249,13 +248,10 @@ local s=0
 for i=1,64 do s=s+f1(i) end
 assert(s==2720)
 ]=], { timeout = "20s" })
-      d = t:read(funcf_dump)
-      if count_plain(d, "XPOLL") < 4 then
-        error("deep inlined FUNCF traces must materialize depth XPOLL", 2)
-      end
-      if count_match(d, x64_cmp_poll_pattern()) < 4 then
-        error("FUNCF-depth IR_XPOLL must lower to TG poll checks", 2)
-      end
+      assert_dump_contains_count(t, funcf_dump, "XPOLL", 4,
+                                 "deep inlined FUNCF traces")
+      assert_dump_match_count(t, funcf_dump, x64_cmp_poll_pattern(), 4,
+                              "FUNCF-depth IR_XPOLL lowering")
       print("M6 JIT recorder token behavior passed")
     end
   })

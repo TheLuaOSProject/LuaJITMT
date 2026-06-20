@@ -71,6 +71,26 @@ function M.assert_text_any_contains(label, data, needles, what)
   error(label .. ": missing any " .. what .. ": " .. table.concat(needles, ", "), 2)
 end
 
+function M.assert_text_contains_count(label, data, needle, mincount, what)
+  what = what or "text"
+  local n = M.count_plain(data, needle)
+  if n < mincount then
+    error(label .. ": expected at least " .. mincount .. " " .. what ..
+          " occurrences of " .. needle .. ", saw " .. n, 2)
+  end
+  return n
+end
+
+function M.assert_text_match_count(label, data, pattern, mincount, what)
+  what = what or "pattern"
+  local n = M.count_match(data, pattern)
+  if n < mincount then
+    error(label .. ": expected at least " .. mincount .. " " .. what ..
+          " matches for " .. pattern .. ", saw " .. n, 2)
+  end
+  return n
+end
+
 function M.assert_file_contains(t, path, needle, label)
   label = label or path
   M.assert_text_contains(label, t:read(path), needle, "file text")
@@ -107,6 +127,18 @@ function M.assert_dump_all_contains(t, dump, needles, label)
   local data = t:read(dump)
   label = label or dump
   M.assert_text_all_contains(label, data, needles, "dump text")
+end
+
+function M.assert_dump_contains_count(t, dump, needle, mincount, label)
+  local data = t:read(dump)
+  label = label or dump
+  return M.assert_text_contains_count(label, data, needle, mincount, "dump text")
+end
+
+function M.assert_dump_match_count(t, dump, pattern, mincount, label)
+  local data = t:read(dump)
+  label = label or dump
+  return M.assert_text_match_count(label, data, pattern, mincount, "dump pattern")
 end
 
 function M.append_list(dst, src)

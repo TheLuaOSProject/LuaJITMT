@@ -63,6 +63,19 @@ function M.x64_cmp_poll_pattern()
   return "cmp dword %[r14%+0x[0-9a-f]+%], %+0x00"
 end
 
+function M.assert_x64_loop_poll_count(t, dump, label, mincmp)
+  local data = t:read(dump)
+  local loop, cmp = false, 0
+  for line in lines(data) do
+    if contains(line, "->LOOP:") then loop = true end
+    if loop and line:match(M.x64_cmp_poll_pattern()) then cmp = cmp + 1 end
+  end
+  if not loop or cmp < mincmp then
+    io.stderr:write(data)
+    error(label, 2)
+  end
+end
+
 function M.assert_loop_ir_markers(t, dump, label, markers)
   local data = t:read(dump)
   local loop = false
