@@ -260,6 +260,11 @@ static LJ_AINLINE MSize snap_nent_acq(const SnapShot *snap)
   return (MSize)la_load8_acq(&snap->nent);
 }
 
+static LJ_AINLINE MSize snap_count_acq(const SnapShot *snap)
+{
+  return (MSize)la_load8_acq(&snap->count);
+}
+
 static LJ_AINLINE SnapEntry snapentry_acq(const SnapEntry *entry)
 {
   return (SnapEntry)la_load32_acq(entry);
@@ -441,6 +446,11 @@ static LJ_AINLINE BCIns trace_startins_acq(const GCtrace *T)
 static LJ_AINLINE MSize trace_spadjust_acq(const GCtrace *T)
 {
   return (MSize)la_load16_acq(&T->spadjust);
+}
+
+static LJ_AINLINE MSize trace_nchild_acq(const GCtrace *T)
+{
+  return (MSize)la_load16_acq(&T->nchild);
 }
 
 static LJ_AINLINE SnapShot *trace_snap_acq(const GCtrace *T)

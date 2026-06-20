@@ -2412,15 +2412,18 @@ static void rec_func_lua(jit_State *J)
 static void rec_func_jit(jit_State *J, TraceNo lnk)
 {
   GCtrace *T;
+  TraceLink linktype;
   rec_func_setup(J);
   T = traceref(J, lnk);
-  if (T->linktype == LJ_TRLINK_RETURN) {  /* Trace returns to interpreter? */
+  linktype = trace_linktype_acq(T);
+  if (linktype == LJ_TRLINK_RETURN) {  /* Trace returns to interpreter? */
+    BCIns startins = trace_startins_acq(T);
     rec_func_xpoll(J);
     check_call_unroll(J, lnk);
     /* Temporarily unpatch JFUNC* to continue recording across function. */
     J->patchins = *J->pc;
     J->patchpc = (BCIns *)J->pc;
-    bc_publish(J->patchpc, T->startins);
+    bc_publish(J->patchpc, startins);
     return;
   }
   J->instunroll = 0;  /* Cannot continue across a compiled function. */
@@ -3140,15 +3143,24 @@ void lj_record_ins(jit_State *J)
     break;
 
   case BC_JFORL:
-    rec_loop_jit(J, rc, rec_for(J, pc+bc_j(traceref(J, rc)->startins), 1));
+    {
+      BCIns startins = trace_startins_acq(traceref(J, rc));
+      rec_loop_jit(J, rc, rec_for(J, pc+bc_j(startins), 1));
+    }
     break;
   case BC_JITERL:
-    rec_loop_jit(J, rc, rec_iterl(J, traceref(J, rc)->startins));
+    {
+      BCIns startins = trace_startins_acq(traceref(J, rc));
+      rec_loop_jit(J, rc, rec_iterl(J, startins));
+    }
     break;
   case BC_JLOOP:
-    rec_loop_jit(J, rc, rec_loop(J, ra,
-				 !bc_isret(bc_op(traceref(J, rc)->startins)) &&
-				 bc_op(traceref(J, rc)->startins) != BC_ITERN));
+    {
+      BCIns startins = trace_startins_acq(traceref(J, rc));
+      rec_loop_jit(J, rc, rec_loop(J, ra,
+				   !bc_isret(bc_op(startins)) &&
+				   bc_op(startins) != BC_ITERN));
+    }
     break;
 
   case BC_IFORL:
@@ -3336,11 +3348,13 @@ void lj_record_setup(jit_State *J)
   setmref(J->cur.startpc, J->pc);
   if (J->parent) {  /* Side trace. */
     GCtrace *T = traceref(J, J->parent);
-    TraceNo root = T->root ? T->root : J->parent;
+    SnapShot *snap = trace_snap_acq(T);
+    TraceNo root = trace_root_acq(T);
+    root = root ? root : J->parent;
     J->cur.root = (uint16_t)root;
     J->cur.startins = BCINS_AD(BC_JMP, 0, 0);
     /* Check whether we could at least potentially form an extra loop. */
-    if (J->exitno == 0 && T->snap[0].nent == 0) {
+    if (J->exitno == 0 && snap_nent_acq(&snap[0]) == 0) {
       /* We can narrow a FORL for some side traces, too. */
       if (J->pc > proto_bc(J->pt) && bc_op(J->pc[-1]) == BC_JFORI &&
 	  bc_d(J->pc[bc_j(J->pc[-1])-1]) == root) {
@@ -3353,11 +3367,12 @@ void lj_record_setup(jit_State *J)
     }
     lj_snap_replay(J, T);
   sidecheck:
-    if ((traceref(J, J->cur.root)->nchild >= J->param[JIT_P_maxside] ||
-	 T->snap[J->exitno].count >= J->param[JIT_P_hotexit] +
-				     J->param[JIT_P_tryside])) {
+    if ((trace_nchild_acq(traceref(J, J->cur.root)) >=
+	 J->param[JIT_P_maxside] ||
+	 snap_count_acq(&snap[J->exitno]) >= J->param[JIT_P_hotexit] +
+					 J->param[JIT_P_tryside])) {
       if (bc_op(*J->pc) == BC_JLOOP) {
-	BCIns startins = traceref(J, bc_d(*J->pc))->startins;
+	BCIns startins = trace_startins_acq(traceref(J, bc_d(*J->pc)));
 	if (bc_op(startins) == BC_ITERN)
 	  rec_itern(J, bc_a(startins), bc_b(startins));
       }
