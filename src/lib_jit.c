@@ -346,13 +346,17 @@ LJLIB_CF(jit_util_traceinfo)
   GCtrace *T = jit_checktrace(L);
   if (T) {
     GCtab *t;
+    IRRef nins = trace_nins_acq(T);
+    IRRef nk = trace_nk_acq(T);
+    SnapNo nsnap = trace_nsnap_acq(T);
+    TraceLink linktype = trace_linktype_acq(T);
     lua_createtable(L, 0, 8);  /* Increment hash size if fields are added. */
     t = tabV(L->top-1);
-    setintfield(L, t, "nins", (int32_t)T->nins - REF_BIAS - 1);
-    setintfield(L, t, "nk", REF_BIAS - (int32_t)T->nk);
+    setintfield(L, t, "nins", (int32_t)nins - REF_BIAS - 1);
+    setintfield(L, t, "nk", REF_BIAS - (int32_t)nk);
     setintfield(L, t, "link", (int32_t)trace_link_acq(T));
-    setintfield(L, t, "nexit", T->nsnap);
-    setstrV(L, L->top++, lj_str_newz(L, jit_trlinkname[T->linktype]));
+    setintfield(L, t, "nexit", (int32_t)nsnap);
+    setstrV(L, L->top++, lj_str_newz(L, jit_trlinkname[linktype]));
     lua_setfield(L, -2, "linktype");
     /* There are many more fields. Add them only when needed. */
     lj_gc_pubtab(L, t);
@@ -366,7 +370,7 @@ LJLIB_CF(jit_util_traceir)
 {
   GCtrace *T = jit_checktrace(L);
   IRRef ref = (IRRef)lj_lib_checkint(L, 2) + REF_BIAS;
-  if (T && ref >= REF_BIAS && ref < T->nins) {
+  if (T && ref >= REF_BIAS && ref < trace_nins_acq(T)) {
     IRIns *ir = &T->ir[ref];
     int32_t m = lj_ir_mode[ir->o];
     setintV(L->top-2, m);
@@ -384,7 +388,7 @@ LJLIB_CF(jit_util_tracek)
 {
   GCtrace *T = jit_checktrace(L);
   IRRef ref = (IRRef)lj_lib_checkint(L, 2) + REF_BIAS;
-  if (T && ref >= T->nk && ref < REF_BIAS) {
+  if (T && ref >= trace_nk_acq(T) && ref < REF_BIAS) {
     IRIns *ir = &T->ir[ref];
     int32_t slot = -1;
     if (ir->o == IR_KSLOT) {
@@ -409,7 +413,7 @@ LJLIB_CF(jit_util_tracesnap)
 {
   GCtrace *T = jit_checktrace(L);
   SnapNo sn = (SnapNo)lj_lib_checkint(L, 2);
-  if (T && sn < T->nsnap) {
+  if (T && sn < trace_nsnap_acq(T)) {
     SnapShot *snap = &T->snap[sn];
     SnapEntry *map = &T->snapmap[snap->mapofs];
     MSize n, nent = snap->nent;
@@ -449,9 +453,11 @@ LJLIB_CF(jit_util_traceexitstub)
     ExitNo exitno = (ExitNo)lj_lib_checkint(L, 2);
     if (T) {
 #ifdef EXITSTUBS_PER_GROUP
-      ExitNo maxexit = T->nsnap;
+      ExitNo maxexit = trace_nsnap_acq(T);
 #else
-      ExitNo maxexit = T->root ? T->nsnap+1 : T->nsnap;
+      ExitNo maxexit = trace_nsnap_acq(T);
+      if (trace_root_acq(T) != 0)
+	maxexit++;
 #endif
       if (T->mcode != NULL && exitno < maxexit) {
 	setintptrV(L->top-1, (intptr_t)(void *)exitstub_trace_addr(T, exitno));

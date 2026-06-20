@@ -336,10 +336,31 @@ static LJ_AINLINE void traceno16_rel(uint16_t *p, TraceNo traceno)
 #define proto_trace_rel(pt, tr)	traceno16_rel(&(pt)->trace, (tr))
 #define trace_link_acq(T)	traceno16_acq(&(T)->link)
 #define trace_link_rel(T, tr)	traceno16_rel(&(T)->link, (tr))
+#define trace_root_acq(T)	traceno16_acq(&(T)->root)
 #define trace_nextroot_acq(T)	traceno16_acq(&(T)->nextroot)
 #define trace_nextroot_rel(T, tr)	traceno16_rel(&(T)->nextroot, (tr))
 #define trace_nextside_acq(T)	traceno16_acq(&(T)->nextside)
 #define trace_nextside_rel(T, tr)	traceno16_rel(&(T)->nextside, (tr))
+static LJ_AINLINE IRRef trace_nins_acq(const GCtrace *T)
+{
+  return (IRRef)la_load32_acq(&T->nins);
+}
+
+static LJ_AINLINE IRRef trace_nk_acq(const GCtrace *T)
+{
+  return (IRRef)la_load32_acq(&T->nk);
+}
+
+static LJ_AINLINE SnapNo trace_nsnap_acq(const GCtrace *T)
+{
+  return (SnapNo)la_load16_acq(&T->nsnap);
+}
+
+static LJ_AINLINE TraceLink trace_linktype_acq(const GCtrace *T)
+{
+  return (TraceLink)la_load8_acq(&T->linktype);
+}
+
 #define trace_exittarget_acq(T, exitno) \
   ((MCode *)la_loadptr_acq((void *const *)&(T)->exittab[(exitno)]))
 #define trace_exittarget_rel(T, exitno, target) \
