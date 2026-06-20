@@ -63,6 +63,34 @@ function M.assert_text_all_contains(label, data, needles, what)
   end
 end
 
+function M.assert_text_any_contains(label, data, needles, what)
+  what = what or "text"
+  for i = 1, #needles do
+    if M.contains(data, needles[i]) then return needles[i] end
+  end
+  error(label .. ": missing any " .. what .. ": " .. table.concat(needles, ", "), 2)
+end
+
+function M.assert_file_contains(t, path, needle, label)
+  label = label or path
+  M.assert_text_contains(label, t:read(path), needle, "file text")
+end
+
+function M.assert_file_match(t, path, pattern, label)
+  label = label or path
+  M.assert_text_match(label, t:read(path), pattern, "file pattern")
+end
+
+function M.assert_file_all_contains(t, path, needles, label)
+  label = label or path
+  M.assert_text_all_contains(label, t:read(path), needles, "file text")
+end
+
+function M.assert_file_any_contains(t, path, needles, label)
+  label = label or path
+  return M.assert_text_any_contains(label, t:read(path), needles, "file text")
+end
+
 function M.assert_dump_contains(t, dump, needle, label)
   local data = t:read(dump)
   label = label or dump
@@ -193,6 +221,12 @@ function M.assert_command_output_all_contains(cmd, needles, opts)
   local out = M.capture_command(cmd, opts)
   M.assert_text_all_contains(cmd, out, needles, "command output")
   return out
+end
+
+function M.assert_command_fails(cmd)
+  if M.command_succeeded(cmd) then
+    error("command unexpectedly succeeded: " .. cmd, 2)
+  end
 end
 
 function M.capture_lines(cmd)

@@ -2,7 +2,8 @@ local utils = require("suite_utils")
 local build = require("suite_build")
 local runtime = require("suite_runtime")
 
-local contains = utils.contains
+local assert_text_any_contains = utils.assert_text_any_contains
+local assert_text_all_contains = utils.assert_text_all_contains
 local run_luajit = runtime.luajit
 local luajit_capture = runtime.capture_luajit
 local run_stock = runtime.run_stock
@@ -231,9 +232,8 @@ end
 return f, g, x
 ]=] }, out)
       local bc = t:read(out)
-      if not (contains(bc, "CGET") or contains(bc, "CSET")) then
-        error("captured local parser output must contain CGET/CSET")
-      end
+      assert_text_any_contains("captured local parser output", bc,
+                               { "CGET", "CSET" }, "bytecode marker")
       luajit_capture(t, { "-bl", "-e", [=[
 local function f()
   return f
@@ -241,9 +241,8 @@ end
 return f
 ]=] }, out)
       bc = t:read(out)
-      if not (contains(bc, "CNEW") and contains(bc, "CSET")) then
-        error("self-captured local function must use CNEW/CSET")
-      end
+      assert_text_all_contains("self-captured local function", bc,
+                               { "CNEW", "CSET" }, "bytecode marker")
       t:remove(out)
 
       run_luajit(t, { "-e", [=[

@@ -3,33 +3,34 @@ local build = require("suite_build")
 local runtime = require("suite_runtime")
 
 local shell_quote = utils.shell_quote
-local command_succeeded = utils.command_succeeded
 local capture_command = utils.capture_command
 local assert_command_output_contains = utils.assert_command_output_contains
 local assert_command_output_all_contains = utils.assert_command_output_all_contains
+local assert_command_fails = utils.assert_command_fails
+local write_file = utils.write_file
 local compile_and_run_c = build.compile_and_run_c
 local luajit_script = runtime.luajit_script
 local run_luajit_script_jit_modes = runtime.run_luajit_script_jit_modes
 
 local function write_bad_benchmark_csv(t, base, bad)
-  local out = assert(io.open(bad, "wb"))
+  local rows = {}
   local n = 0
   for line in (t:read(base) .. "\n"):gmatch("(.-)\n") do
     if line ~= "" then
       n = n + 1
       if n == 1 then
-        out:write(line, "\n")
+        rows[#rows + 1] = line
       else
         local cols = {}
         for col in (line .. ","):gmatch("(.-),") do
           cols[#cols + 1] = col
         end
         cols[3] = ("%.2f"):format(assert(tonumber(cols[3])) * 2)
-        out:write(table.concat(cols, ","), "\n")
+        rows[#rows + 1] = table.concat(cols, ",")
       end
     end
   end
-  out:close()
+  write_file(bad, table.concat(rows, "\n") .. "\n")
 end
 
 local function build_and_run_alloc_account(t)
@@ -81,9 +82,7 @@ local function run_bench_regression(t)
   write_bad_benchmark_csv(t, base, bad)
   local bad_cmd = compare .. " " .. shell_quote(base) .. " " ..
                     shell_quote(bad) .. " >/dev/null 2>&1"
-  if command_succeeded(bad_cmd) then
-    error("benchmark regression checker accepted a known bad CSV")
-  end
+  assert_command_fails(bad_cmd)
 
   capture_command("BENCH_SCALE=0.001 BASELINE_OUT=" .. shell_quote(cur) ..
                   " " .. shell_quote(t:path("bench", "run_baseline.sh")) ..
