@@ -5,7 +5,6 @@ local runtime = require("suite_runtime")
 local jitutils = require("suite_jit")
 
 local getenv = utils.getenv
-local shell_quote = utils.shell_quote
 local assert_dump_contains = checks.assert_dump_contains
 local lua_path = runtime.lua_path
 local build_and_run_c = build.compile_and_run_c
@@ -17,6 +16,7 @@ local luajit_dump_file = runtime.luajit_dump_file
 local luajit_code = runtime.luajit_code
 local luajit_file = runtime.luajit_file
 local run_luajit_script = runtime.luajit_script
+local run_stock = runtime.run_stock
 local run_ir_dump_probe = jitutils.run_ir_dump_probe
 
 local m7_cases = {
@@ -417,10 +417,12 @@ print("dump cnewi ok")
       assert_dump_contains(t, dumpi, "dump cnewi ok", "CNEWI probe")
 
       clean_build(t, { xcflags = "-DLUA_USE_ASSERT -DLJ_GC2_PARANOIA=1" })
-      t:run("(cd " .. shell_quote(t:path("tests", "stock", "test")) ..
-            " && LUA_PATH=" .. shell_quote(lua_path(t)) ..
-            " timeout 20s " .. shell_quote(t:path("src", "luajit")) ..
-            " test.lua --quiet 340 341 358)")
+      run_stock(t, { "test.lua", "--quiet", "lib/ffi/jit_struct.lua" }, {
+        timeout = "20s"
+      })
+      run_stock(t, { "test.lua", "--quiet", "lib/ffi/type_punning.lua" }, {
+        timeout = "20s"
+      })
       print("M7 FFI JIT CNEW allocation behavior passed")
     end
   })
