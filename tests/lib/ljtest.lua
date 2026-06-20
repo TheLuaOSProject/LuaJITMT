@@ -110,6 +110,14 @@ function Test:run(cmd, opts)
     append(parts, cmd)
   end
   local full = table.concat(parts, " ")
+  if opts.stdout then
+    full = full .. " >" .. shell_quote(opts.stdout)
+  end
+  if opts.stderr_to_stdout then
+    full = full .. " 2>&1"
+  elseif opts.stderr then
+    full = full .. " 2>" .. shell_quote(opts.stderr)
+  end
   if opts.cwd then
     full = "cd " .. shell_quote(opts.cwd) .. " && " .. full
   end

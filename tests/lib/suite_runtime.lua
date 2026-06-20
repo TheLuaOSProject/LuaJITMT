@@ -133,37 +133,40 @@ end
 
 function M.luajit_dump(t, dump, dumpopt, code, opts)
   opts = opts or {}
-  local parts = { "LUA_PATH=" .. shell_quote(M.lua_path(t)) }
-  if opts.timeout then parts[#parts + 1] = "timeout " .. shell_quote(opts.timeout) end
-  parts[#parts + 1] = shell_quote(t:path("src", "luajit"))
-  parts[#parts + 1] = shell_quote(dumpopt)
-  parts[#parts + 1] = "-e " .. shell_quote(code)
-  local redirect = " >" .. shell_quote(dump)
-  if opts.stderr ~= false then redirect = redirect .. " 2>&1" end
-  t:run(table.concat(parts, " ") .. redirect, { quiet = opts.quiet })
+  t:run({ t:path("src", "luajit"), dumpopt, "-e", code }, {
+    env = M.lua_path_env(t, opts.env),
+    timeout = opts.timeout,
+    stdout = dump,
+    stderr_to_stdout = opts.stderr ~= false,
+    quiet = opts.quiet
+  })
 end
 
 function M.luajit_dump_file(t, dump, dumpopt, file, args, opts)
   args = args or {}
   opts = opts or {}
-  local parts = { "LUA_PATH=" .. shell_quote(M.lua_path(t)) }
-  if opts.timeout then parts[#parts + 1] = "timeout " .. shell_quote(opts.timeout) end
-  parts[#parts + 1] = shell_quote(t:path("src", "luajit"))
-  parts[#parts + 1] = shell_quote(dumpopt)
-  parts[#parts + 1] = shell_quote(file)
-  for i = 1, #args do parts[#parts + 1] = shell_quote(args[i]) end
-  local redirect = " >" .. shell_quote(dump)
-  if opts.stderr ~= false then redirect = redirect .. " 2>&1" end
-  t:run(table.concat(parts, " ") .. redirect, { quiet = opts.quiet })
+  local argv = { t:path("src", "luajit"), dumpopt, file }
+  for i = 1, #args do argv[#argv + 1] = args[i] end
+  t:run(argv, {
+    env = M.lua_path_env(t, opts.env),
+    timeout = opts.timeout,
+    stdout = dump,
+    stderr_to_stdout = opts.stderr ~= false,
+    quiet = opts.quiet
+  })
 end
 
 function M.capture_luajit(t, args, out, opts)
   opts = opts or {}
-  local parts = { "LUA_PATH=" .. shell_quote(M.lua_path(t)),
-                  shell_quote(t:path("src", "luajit")) }
-  for i = 1, #args do parts[#parts + 1] = shell_quote(args[i]) end
-  t:run(table.concat(parts, " ") .. " >" .. shell_quote(out),
-        { quiet = opts.quiet })
+  local argv = { t:path("src", "luajit") }
+  for i = 1, #args do argv[#argv + 1] = args[i] end
+  t:run(argv, {
+    env = M.lua_path_env(t, opts.env),
+    timeout = opts.timeout,
+    stdout = out,
+    stderr_to_stdout = opts.stderr_to_stdout,
+    quiet = opts.quiet
+  })
 end
 
 function M.run_lua_test_case(t, name, opts)
