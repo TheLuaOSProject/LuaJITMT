@@ -983,7 +983,7 @@ LUA_API const char *lua_getupvalue(lua_State *L, int idx, int n)
   GCobj *o;
   const char *name = lj_debug_uvnamev(index2adr(L, idx), (uint32_t)(n-1), &val, &o);
   if (name) {
-    copyTV(L, L->top, val);
+    lj_tv_load_acq(L->top, val);
     incr_top(L);
   }
   return name;
