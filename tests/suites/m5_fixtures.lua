@@ -1,3 +1,5 @@
+local runtime = require("suite_runtime")
+
 return function(add)
   add({
     name = "m5_nbtab_model",
@@ -15,62 +17,49 @@ return function(add)
     end
   })
 
-  add({
-    name = "m5_itype_nan",
-    description = "NaN TValue tag C fixture",
-    run = function(t)
-      t:run_luajit_c_fixture(t:tmp("lj_t-itype-nan"), "t-itype-nan.c")
-      print("M5 NaN tag tests passed")
-    end
-  })
-
-  add({
-    name = "m5_itype_sentinel",
-    description = "internal table sentinel TValue C fixture",
-    run = function(t)
-      t:run_luajit_c_fixture(t:tmp("lj_t-itype-sentinel"),
-                              "t-itype-sentinel.c")
-      print("M5 internal table sentinel tag tests passed")
-    end
-  })
-
-  add({
-    name = "m5_bcdump_compat",
-    description = "bytecode dump compatibility C fixture",
-    run = function(t)
-      t:run_luajit_c_fixture(t:tmp("lj_t-bcdump-compat"),
-                              "t-bcdump-compat.c")
-      print("M5 bytecode dump compatibility tests passed")
-    end
-  })
-
-  add({
-    name = "m5_registry_root",
-    description = "direct registry root publication C fixture",
-    run = function(t)
-      t:run_luajit_c_fixture(t:tmp("lj_t-registry-root"),
-                              "t-registry-root.c")
-      print("M5 registry root tests passed")
-    end
-  })
-
-  add({
-    name = "m5_nomm_cache",
-    description = "metatable negative-cache policy C fixture",
-    run = function(t)
-      t:run_luajit_c_fixture(t:tmp("lj_t-nomm-cache"), "t-nomm-cache.c")
-      print("M5 nomm cache tests passed")
-    end
-  })
-
-  add({
-    name = "m5_strtab_prep",
-    description = "string table representation prep C fixture",
-    run = function(t)
-      t:run_luajit_c_fixture(t:tmp("lj_t-strtab-prep"),
-                              "t-strtab-prep.c")
-      print("M5 string table representation prep tests passed")
-    end
+  runtime.add_luajit_c_fixture_cases(add, {
+    {
+      name = "m5_itype_nan",
+      description = "NaN TValue tag C fixture",
+      output = "lj_t-itype-nan",
+      cfile = "t-itype-nan.c",
+      message = "M5 NaN tag tests passed"
+    },
+    {
+      name = "m5_itype_sentinel",
+      description = "internal table sentinel TValue C fixture",
+      output = "lj_t-itype-sentinel",
+      cfile = "t-itype-sentinel.c",
+      message = "M5 internal table sentinel tag tests passed"
+    },
+    {
+      name = "m5_bcdump_compat",
+      description = "bytecode dump compatibility C fixture",
+      output = "lj_t-bcdump-compat",
+      cfile = "t-bcdump-compat.c",
+      message = "M5 bytecode dump compatibility tests passed"
+    },
+    {
+      name = "m5_registry_root",
+      description = "direct registry root publication C fixture",
+      output = "lj_t-registry-root",
+      cfile = "t-registry-root.c",
+      message = "M5 registry root tests passed"
+    },
+    {
+      name = "m5_nomm_cache",
+      description = "metatable negative-cache policy C fixture",
+      output = "lj_t-nomm-cache",
+      cfile = "t-nomm-cache.c",
+      message = "M5 nomm cache tests passed"
+    },
+    {
+      name = "m5_strtab_prep",
+      description = "string table representation prep C fixture",
+      output = "lj_t-strtab-prep",
+      cfile = "t-strtab-prep.c",
+      message = "M5 string table representation prep tests passed"
+    }
   })
 
   add({

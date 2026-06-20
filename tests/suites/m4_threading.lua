@@ -24,34 +24,28 @@ return function(add)
     end
   })
 
-  add({
-    name = "m4_thr_substrate",
-    description = "focused M4 thread substrate C fixture",
-    run = function(t)
-      t:run_luajit_c_fixture(t:tmp("lj_t-thr-substrate"),
-                              "t-thr-substrate.c")
-      print("M4 thread substrate tests passed")
-    end
-  })
-
-  add({
-    name = "m4_chan_stress",
-    description = "focused M4 channel substrate stress C fixture",
-    run = function(t)
-      t:run_luajit_c_fixture(t:tmp("lj_t-chan-stress"),
-                              "t-chan-stress.c")
-      print("M4 channel stress tests passed")
-    end
-  })
-
-  add({
-    name = "m4_threading_capi",
-    description = "public C threading API behavior fixture",
-    run = function(t)
-      t:run_luajit_c_fixture(t:tmp("lj_t-threading-capi"),
-                              "t-threading-capi.c")
-      print("M4 public C threading API tests passed")
-    end
+  runtime.add_luajit_c_fixture_cases(add, {
+    {
+      name = "m4_thr_substrate",
+      description = "focused M4 thread substrate C fixture",
+      output = "lj_t-thr-substrate",
+      cfile = "t-thr-substrate.c",
+      message = "M4 thread substrate tests passed"
+    },
+    {
+      name = "m4_chan_stress",
+      description = "focused M4 channel substrate stress C fixture",
+      output = "lj_t-chan-stress",
+      cfile = "t-chan-stress.c",
+      message = "M4 channel stress tests passed"
+    },
+    {
+      name = "m4_threading_capi",
+      description = "public C threading API behavior fixture",
+      output = "lj_t-threading-capi",
+      cfile = "t-threading-capi.c",
+      message = "M4 public C threading API tests passed"
+    }
   })
 
   add({

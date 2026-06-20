@@ -201,4 +201,24 @@ function M.build_and_run_c(t, out, cfile, opts)
   M.compile_and_run_c(t, out, cfile, opts)
 end
 
+function M.add_luajit_c_fixture_cases(add, specs)
+  for i = 1, #specs do
+    local spec = specs[i]
+    local name = spec.name
+    local description = spec.description
+    local output = spec.output
+    local cfile = spec.cfile
+    local opts = spec.opts
+    local message = spec.message
+    add({
+      name = name,
+      description = description,
+      run = function(t)
+        t:run_luajit_c_fixture(t:tmp(output), cfile, opts)
+        if message then print(message) end
+      end
+    })
+  end
+end
+
 return M
