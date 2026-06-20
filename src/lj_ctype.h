@@ -446,6 +446,16 @@ static LJ_AINLINE void ctype_miscmap_rel(CTState *cts, GCtab *miscmap)
   la_storeptr_rel((void **)&cts->miscmap, miscmap);
 }
 
+static LJ_AINLINE GCtab *ctype_pinmt_acq(const CTState *cts)
+{
+  return (GCtab *)la_loadptr_acq((void *const *)&cts->pinmt);
+}
+
+static LJ_AINLINE void ctype_pinmt_rel(CTState *cts, GCtab *pinmt)
+{
+  la_storeptr_rel((void **)&cts->pinmt, pinmt);
+}
+
 static LJ_AINLINE GCRef *ctype_metamap_acq(const CTState *cts)
 {
   return (GCRef *)la_loadptr_acq((void *const *)&cts->metamap);

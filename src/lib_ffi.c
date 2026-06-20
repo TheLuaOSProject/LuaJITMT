@@ -1682,7 +1682,7 @@ LJLIB_CF(ffi_pin)
 {
   TValue *o = lj_lib_checkany(L, 1);
   CTState *cts = ctype_cts(L);
-  GCtab *mt = cts->pinmt;
+  GCtab *mt = ctype_pinmt_acq(cts);
   GCudata *ud = lj_udata_new(L, sizeof(TValue), mt);
   setgcrefmt(ud->metatable, obj2gco(mt));
   lj_gc_pubobjobj(L, ud, mt);
@@ -1790,7 +1790,7 @@ LUALIB_API int luaopen_ffi(lua_State *L)
   lj_gc_pubtabobj(L, miscmap, tabV(L->top-1));
   L->top--;
   LJ_LIB_REG(L, NULL, ffi_pin);
-  cts->pinmt = tabV(L->top-1);
+  ctype_pinmt_rel(cts, tabV(L->top-1));
   L->top--;
   lj_clib_default(L, tabV(L->top-1));  /* Create ffi.C default namespace. */
   lua_pushliteral(L, LJ_OS_NAME);

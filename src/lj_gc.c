@@ -416,8 +416,11 @@ static void gc2_paranoia_check_rawroots(global_State *g)
       gc2_paranoia_checkmem(g, ctype_tabh_acq(cts), "ctype table");
       gc2_paranoia_checkmem(g, meta, "ctype metatype side map");
       gc2_paranoia_checkmem(g, cbblack, "ctype callback blacklist");
-      if (cts->pinmt)
-	gc2_paranoia_checkobj(g, obj2gco(cts->pinmt), "FFI pin metatable");
+      {
+	GCtab *pinmt = ctype_pinmt_acq(cts);
+	if (pinmt)
+	  gc2_paranoia_checkobj(g, obj2gco(pinmt), "FFI pin metatable");
+      }
       for (ctret = (CTypeTab *)la_loadptr_acq(
 	     (void *const *)&cts->retiredtab);
 	   ctret != NULL;
@@ -678,8 +681,11 @@ static void gc_mark_gcroot(global_State *g)
 	    gc_markobj(g, o);
 	}
       }
-      if (cts->pinmt)
-	gc_markobj(g, cts->pinmt);
+      {
+	GCtab *pinmt = ctype_pinmt_acq(cts);
+	if (pinmt)
+	  gc_markobj(g, pinmt);
+      }
       lj_ctype_fin_mark(g, gc_finreg_markobj, lj_gc_arena_markmem);
       gc_mark_finreg_cdata_preclaims(g);
       lj_gc_arena_markmem(g, ctype_cb_cbid_acq(cts));

@@ -1579,8 +1579,11 @@ static void gc2_scan_global_roots(global_State *g)
 	    lj_gc2_markobj(g, o);
 	}
       }
-      if (cts->pinmt)
-	lj_gc2_markobj(g, obj2gco(cts->pinmt));
+      {
+	GCtab *pinmt = ctype_pinmt_acq(cts);
+	if (pinmt)
+	  lj_gc2_markobj(g, obj2gco(pinmt));
+      }
       lj_ctype_fin_mark(g, gc2_finreg_markobj, gc2_finreg_markmem);
       lj_gc2_markmem(g, ctype_cb_cbid_acq(cts));
       owner = ctype_cb_owner_acq(cts);
