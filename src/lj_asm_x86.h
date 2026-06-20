@@ -1253,12 +1253,19 @@ static void asm_aref(ASMState *as, IRIns *ir)
 #define TABNODE_FLAGS_OFS \
   (TABNODE_HMASK_OFS + (int32_t)offsetof(TabNodeHdr, flags))
 
+static LJ_AINLINE void asm_href_tab_node_flags_test_acq(ASMState *as,
+							Reg node,
+							int32_t flags)
+{
+  emit_i32(as, flags);
+  emit_rmro(as, XO_GROUP3, XOg_TEST, node, TABNODE_FLAGS_OFS);  /* asm_href_tab_node_flags_test_acq */
+}
+
 static void asm_tabnode_retiring_guard(ASMState *as, Reg node)
 {
   /* M6: JIT hash readers leave retiring hash generations like the VM. */
   asm_guardcc(as, CC_NE);
-  emit_i32(as, (int32_t)TABNODE_FLAG_RETIRING);
-  emit_rmro(as, XO_GROUP3, XOg_TEST, node, TABNODE_FLAGS_OFS);
+  asm_href_tab_node_flags_test_acq(as, node, (int32_t)TABNODE_FLAG_RETIRING);
 }
 
 static LJ_AINLINE void asm_href_node_next_acq(ASMState *as, Reg dst, Reg node)
@@ -1271,6 +1278,24 @@ static LJ_AINLINE void asm_href_tab_node_acq(ASMState *as, Reg dst, Reg tab)
 {
   emit_rmro(as, XO_MOV, dst|REX_GC64, tab,
 	    offsetof(GCtab, node));  /* asm_href_tab_node_acq */
+}
+
+static LJ_AINLINE void asm_href_tab_node_hmask_load_acq(ASMState *as,
+							Reg dst, Reg node)
+{
+  emit_rmro(as, XO_MOV, dst, node, TABNODE_HMASK_OFS);  /* asm_href_tab_node_hmask_load_acq */
+}
+
+static LJ_AINLINE void asm_href_tab_node_hmask_and_acq(ASMState *as,
+						       Reg dst, Reg node)
+{
+  emit_rmro(as, XO_ARITH(XOg_AND), dst, node, TABNODE_HMASK_OFS);  /* asm_href_tab_node_hmask_and_acq */
+}
+
+static LJ_AINLINE void asm_href_tab_node_hmask_cmpi_acq(ASMState *as,
+							Reg node, int32_t imm)
+{
+  emit_gmroi(as, XG_ARITHi(XOg_CMP), node, TABNODE_HMASK_OFS, imm);  /* asm_href_tab_node_hmask_cmpi_acq */
 }
 
 /* Inlined hash lookup. Specialized for key type and for const keys.
@@ -1402,12 +1427,12 @@ static void asm_href(ASMState *as, IRIns *ir, IROp merge)
     emit_rmrxo(as, XO_LEA, idx, idx, idx, XM_SCALE2, 0);
     if (isk) {
       emit_gri(as, XG_ARITHi(XOg_AND), idx, (int32_t)khash);
-      emit_rmro(as, XO_MOV, idx, dest, TABNODE_HMASK_OFS);
+      asm_href_tab_node_hmask_load_acq(as, idx, dest);
     } else if (irt_isstr(kt)) {
       emit_rmro(as, XO_ARITH(XOg_AND), idx, key, offsetof(GCstr, sid));
-      emit_rmro(as, XO_MOV, idx, dest, TABNODE_HMASK_OFS);
+      asm_href_tab_node_hmask_load_acq(as, idx, dest);
     } else {  /* Must match with hashrot() in lj_tab.c. */
-      emit_rmro(as, XO_ARITH(XOg_AND), idx, dest, TABNODE_HMASK_OFS);
+      asm_href_tab_node_hmask_and_acq(as, idx, dest);
       emit_rr(as, XO_ARITH(XOg_SUB), idx, tmp);
       emit_shifti(as, XOg_ROL, tmp, HASH_ROT3);
       emit_rr(as, XO_ARITH(XOg_XOR), idx, tmp);
@@ -1524,8 +1549,7 @@ static void asm_hrefk(ASMState *as, IRIns *ir)
 #endif
   /* Guard HREFK's constant slot against a newer, smaller node generation. */
   asm_guardcc(as, CC_B);
-  emit_gmroi(as, XG_ARITHi(XOg_CMP), node, TABNODE_HMASK_OFS,
-	     (int32_t)kslot->op2);
+  asm_href_tab_node_hmask_cmpi_acq(as, node, (int32_t)kslot->op2);
   /* Guard HREFK's loaded node against a retiring hash generation. */
   asm_tabnode_retiring_guard(as, node);
 }
