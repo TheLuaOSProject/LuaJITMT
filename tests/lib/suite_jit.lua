@@ -1,10 +1,10 @@
 local runtime = require("suite_runtime")
-local utils = require("suite_utils")
+local checks = require("suite_assert")
 
 local M = {}
 
-local contains = utils.contains
-local lines = utils.iter_lines
+local contains = checks.contains
+local lines = checks.iter_lines
 
 function M.trace1_ir_state(t, dump)
   local st = {
@@ -165,13 +165,13 @@ end
 
 function M.assert_ir_dump_probe_contains(t, name, script, needle, label, opts)
   local dump = M.ir_dump_probe(t, name, script, opts)
-  utils.assert_dump_contains(t, dump, needle, label)
+  checks.assert_dump_contains(t, dump, needle, label)
   return dump
 end
 
 function M.assert_ir_dump_probe_all_contains(t, name, script, needles, label, opts)
   local dump = M.ir_dump_probe(t, name, script, opts)
-  utils.assert_dump_all_contains(t, dump, needles, label)
+  checks.assert_dump_all_contains(t, dump, needles, label)
   return dump
 end
 

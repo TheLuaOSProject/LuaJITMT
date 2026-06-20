@@ -9,6 +9,7 @@ local getenv = utils.getenv
 local shell_quote = utils.shell_quote
 local read_file = utils.read_file
 local has_extension = utils.has_extension
+local assert_not_source_file_content = utils.assert_not_source_file_content
 
 local function append(parts, value)
   if value == nil or value == "" then return end
@@ -53,6 +54,7 @@ function Test:tmp(name)
 end
 
 function Test:read(path)
+  assert_not_source_file_content(path, 2)
   return read_file(path)
 end
 

@@ -1,10 +1,11 @@
 local utils = require("suite_utils")
+local checks = require("suite_assert")
 local build = require("suite_build")
 local runtime = require("suite_runtime")
 
 local getenv = utils.getenv
-local assert_file_contains = utils.assert_file_contains
-local assert_file_match = utils.assert_file_match
+local assert_file_contains = checks.assert_file_contains
+local assert_file_match = checks.assert_file_match
 local with_temp_paths = utils.with_temp_paths
 local compile_and_run_sources = build.compile_and_run_sources
 

@@ -1,11 +1,12 @@
 local utils = require("suite_utils")
+local checks = require("suite_assert")
 local build = require("suite_build")
 local runtime = require("suite_runtime")
 local jitutils = require("suite_jit")
 
 local getenv = utils.getenv
 local shell_quote = utils.shell_quote
-local assert_dump_contains = utils.assert_dump_contains
+local assert_dump_contains = checks.assert_dump_contains
 local lua_path = runtime.lua_path
 local build_and_run_c = build.compile_and_run_c
 local run_c_fixture_specs = build.run_c_fixture_specs

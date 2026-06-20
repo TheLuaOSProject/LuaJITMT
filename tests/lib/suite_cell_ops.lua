@@ -1,13 +1,13 @@
-local utils = require("suite_utils")
+local checks = require("suite_assert")
 local runtime = require("suite_runtime")
 local probes = require("local_cell_probes")
 
 local M = {}
 
-local assert_text_any_contains = utils.assert_text_any_contains
-local assert_text_all_contains = utils.assert_text_all_contains
-local assert_dump_contains = utils.assert_dump_contains
-local assert_dump_match = utils.assert_dump_match
+local assert_text_any_contains = checks.assert_text_any_contains
+local assert_text_all_contains = checks.assert_text_all_contains
+local assert_dump_contains = checks.assert_dump_contains
+local assert_dump_match = checks.assert_dump_match
 local luajit = runtime.luajit
 local luajit_code = runtime.luajit_code
 local luajit_capture = runtime.capture_luajit
