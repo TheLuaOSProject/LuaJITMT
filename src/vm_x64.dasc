@@ -325,6 +325,7 @@
 |// Assumes DISPATCH is relative to TGState.dispatch.
 #define GL_OFS(field)		((int)offsetof(global_State, field))
 #define J_OFS(field)		((int)offsetof(jit_State, field))
+#define TRACEV_SLOT_OFS		((int)offsetof(TraceVec, slot))
 #define TG_OFS_DISPATCH		((int)offsetof(TGState, dispatch))
 #define TG_CB2DISP		((int)offsetof(TGState, dispatch)-(int)offsetof(TGState, cb))
 #define TAB_COLO_SLOTS		((int)sizeof(GCtab))
@@ -2729,8 +2730,8 @@ static void build_subroutines(BuildCtx *ctx)
   |
   |5:  // Dispatch to static entry of original ins replaced by BC_JLOOP.
   |  load_J RA
-  |  mov RA, [RA+J_OFS(trace)]
-  |  mov TRACE:RA, [RA+RD*8]
+  |  mov RA, [RA+J_OFS(tracev)]
+  |  mov TRACE:RA, [RA+RD*8+TRACEV_SLOT_OFS]
   |  mov RCd, TRACE:RA->startins
   |  movzx RAd, RCH
   |  movzx OP, RCL
@@ -4845,9 +4846,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |.if JIT
     |6:  // Unpatch JLOOP.
     |  load_J RA
-    |  mov RA, [RA+J_OFS(trace)]
+    |  mov RA, [RA+J_OFS(tracev)]
     |  movzx RCd, word [PC+2]
-    |  mov TRACE:RA, [RA+RC*8]
+    |  mov TRACE:RA, [RA+RC*8+TRACEV_SLOT_OFS]
     |  mov eax, TRACE:RA->startins
     |  mov al, BC_ITERC
     |  mov RB, BASE			// Save BASE.
@@ -5235,8 +5236,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ins_AD	// RA = base (ignored), RD = traceno
     |  mov L:RB, SAVE_L
     |  load_J RA
-    |  mov RA, [RA+J_OFS(trace)]
-    |  mov TRACE:RD, [RA+RD*8]
+    |  mov RA, [RA+J_OFS(tracev)]
+    |  mov TRACE:RD, [RA+RD*8+TRACEV_SLOT_OFS]
     |  mov RD, TRACE:RD->mcode
     |  mov [DISPATCH+DISPATCH_TG(jit_base)], BASE
     |  mov [DISPATCH+DISPATCH_TG(tmpbuf.L)], L:RB
@@ -5267,8 +5268,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |
     |5:  // Dispatch to static entry of original ins replaced by BC_JLOOP.
     |  load_J RA
-    |  mov RA, [RA+J_OFS(trace)]
-    |  mov TRACE:RD, [RA+RD*8]
+    |  mov RA, [RA+J_OFS(tracev)]
+    |  mov TRACE:RD, [RA+RD*8+TRACEV_SLOT_OFS]
     |  mov RCd, TRACE:RD->startins
     |  movzx RAd, RCH
     |  movzx OP, RCL
