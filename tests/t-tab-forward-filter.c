@@ -16,20 +16,6 @@
 
 #include "lib/tab_forward_helpers.h"
 
-static int count_next(GCtab *t)
-{
-  TValue key, out[2];
-  int count = 0;
-  setnilV(&key);
-  while (lj_tab_next(t, &key, out) == 1) {
-    assert(!tvistabinternal(&out[0]));
-    assert(!tvistabinternal(&out[1]));
-    key = out[0];
-    count++;
-  }
-  return count;
-}
-
 static void exercise_array_forward_hop(lua_State *L)
 {
   GCtab *t;
@@ -68,7 +54,7 @@ static void exercise_array_forward_hop(lua_State *L)
 #if LJ_HASJIT
   assert(lj_tab_len_hint(t, 5) == 5);
 #endif
-  assert(count_next(t) == 5);
+  assert(tabfwd_count_next_visible(t) == 5);
   lj_tab_storeint(L, lj_tab_setint(L, t, 5), 909);
   tabfwd_assert_forward(&oldarray[5]);
   tabfwd_assert_i32(&newarray[5], 909);
@@ -153,7 +139,7 @@ static void exercise_hash_forward_hop(lua_State *L)
   tabfwd_assert_i32(lj_tab_getstr(t, hopstr), 101);
   tabfwd_assert_i32(lj_tab_getint(t, 33), 202);
   tabfwd_assert_i32(lj_tab_get(L, t, &lightkey), 303);
-  assert(count_next(t) == 3);
+  assert(tabfwd_count_next_visible(t) == 3);
   lj_tab_storeint(L, lj_tab_setstr(L, t, hopstr), 404);
   lj_tab_storeint(L, lj_tab_setint(L, t, 33), 505);
   lj_tab_storeint(L, lj_tab_set(L, t, &lightkey), 606);
@@ -220,7 +206,7 @@ static void exercise_hash_to_array_forward_hop(lua_State *L)
   tabfwd_assert_forward(oldnumslot);
   tabfwd_assert_i32(&newarray[moveint], 909);
   tabfwd_assert_i32(lj_tab_getint(t, moveint), 909);
-  assert(count_next(t) == 1);
+  assert(tabfwd_count_next_visible(t) == 1);
 
   lj_tab_array_rel(t, newarray);
   lj_tab_asize_rel(t, newasize);
@@ -266,7 +252,7 @@ int main(void)
     assert(tvisnil(lj_tab_get(L, t, &key)));
   }
 
-  assert(count_next(t) == 3);
+  assert(tabfwd_count_next_visible(t) == 3);
   assert(lj_tab_len(t) == 2);
   exercise_array_forward_hop(L);
   exercise_hash_forward_hop(L);

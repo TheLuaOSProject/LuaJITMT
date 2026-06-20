@@ -13,33 +13,7 @@
 #include "lj_str.h"
 #include "lj_tab.h"
 
-static GCstr *find_sid_bucket(lua_State *L, uint32_t mask, uint32_t bucket,
-			      uint32_t *seq)
-{
-  for (;;) {
-    char buf[64];
-    GCstr *s;
-    snprintf(buf, sizeof(buf), "tab-keylock-lookup-%u-%08x",
-	     bucket, (*seq)++);
-    s = lj_str_new(L, buf, strlen(buf));
-    if (((uint32_t)s->sid & mask) == bucket)
-      return s;
-  }
-}
-
-static void setstrint(lua_State *L, GCtab *t, GCstr *s, int32_t v)
-{
-  TValue *slot = lj_tab_setstr(L, t, s);
-  setintV(slot, v);
-}
-
-static void assert_tabnum(GCtab *t, GCstr *s, int32_t v)
-{
-  cTValue *tv = lj_tab_getstr(t, s);
-  assert(tv != NULL);
-  assert(tvisnumber(tv));
-  assert((int32_t)numV(tv) == v);
-}
+#include "lib/tab_forward_helpers.h"
 
 static void store_keylock(Node *n)
 {
@@ -55,8 +29,6 @@ static void store_strkey(lua_State *L, Node *n, GCstr *s)
   copyTVrel(L, &n->key, &key);
 }
 
-static int count_next(GCtab *t);
-
 static void exercise_tombstone_anchor_insert(lua_State *L)
 {
   GCtab *t;
@@ -70,12 +42,15 @@ static void exercise_tombstone_anchor_insert(lua_State *L)
   t = tabV(L->top-1);
   assert(t->hmask == 7);
 
-  anchor = find_sid_bucket(L, t->hmask, 0, &seq);
-  displaced = find_sid_bucket(L, t->hmask, 0, &seq);
-  replacement = find_sid_bucket(L, t->hmask, 0, &seq);
+  anchor = tabfwd_find_sid_bucket(L, "tab-keylock-lookup", t->hmask, 0,
+				  &seq);
+  displaced = tabfwd_find_sid_bucket(L, "tab-keylock-lookup", t->hmask, 0,
+				     &seq);
+  replacement = tabfwd_find_sid_bucket(L, "tab-keylock-lookup", t->hmask, 0,
+				       &seq);
 
-  setstrint(L, t, anchor, 11);
-  setstrint(L, t, displaced, 22);
+  tabfwd_set_str_i32(L, t, anchor, 11);
+  tabfwd_set_str_i32(L, t, displaced, 22);
   node = lj_tab_node_acq(t);
   assert(strV(&node[0].key) == anchor);
   assert(lj_tab_nextnode_acq(&node[0]) != NULL);
@@ -85,29 +60,15 @@ static void exercise_tombstone_anchor_insert(lua_State *L)
   freecount0 = lj_tab_node_freecount_acq(node);
   assert(freecount0 > 0);
 
-  setstrint(L, t, replacement, 33);
+  tabfwd_set_str_i32(L, t, replacement, 33);
   assert(getfreetop(t, node) == freetop0);
   assert(lj_tab_node_freecount_acq(node) == freecount0 - 1u);
   assert(tvisstr(&node[0].key) && strV(&node[0].key) == anchor);
   assert(tvisnil(&node[0].val));
   assert(tvisnil(lj_tab_getstr(t, anchor)));
-  assert_tabnum(t, displaced, 22);
-  assert_tabnum(t, replacement, 33);
-  assert(count_next(t) == 2);
-}
-
-static int count_next(GCtab *t)
-{
-  TValue key, out[2];
-  int count = 0;
-  setnilV(&key);
-  while (lj_tab_next(t, &key, out) == 1) {
-    assert(!tviskeylock(&out[0]));
-    assert(!tvisnil(&out[1]));
-    key = out[0];
-    count++;
-  }
-  return count;
+  tabfwd_assert_str_i32(t, displaced, 22);
+  tabfwd_assert_str_i32(t, replacement, 33);
+  assert(tabfwd_count_next_visible(t) == 2);
 }
 
 int main(void)
@@ -124,19 +85,21 @@ int main(void)
   t = tabV(L->top-1);
   assert(t->hmask == 7);
 
-  anchor = find_sid_bucket(L, t->hmask, 0, &seq);
-  displaced = find_sid_bucket(L, t->hmask, 0, &seq);
+  anchor = tabfwd_find_sid_bucket(L, "tab-keylock-lookup", t->hmask, 0,
+				  &seq);
+  displaced = tabfwd_find_sid_bucket(L, "tab-keylock-lookup", t->hmask, 0,
+				     &seq);
   assert(anchor != displaced);
 
-  setstrint(L, t, anchor, 11);
-  setstrint(L, t, displaced, 22);
+  tabfwd_set_str_i32(L, t, anchor, 11);
+  tabfwd_set_str_i32(L, t, displaced, 22);
   node = lj_tab_node_acq(t);
   assert(strV(&node[0].key) == anchor);
   assert(lj_tab_nextnode_acq(&node[0]) != NULL);
   assert(lj_tab_node_freecount_acq(node) == (MSize)t->hmask + 1u - 2u);
-  assert_tabnum(t, anchor, 11);
-  assert_tabnum(t, displaced, 22);
-  assert(count_next(t) == 2);
+  tabfwd_assert_str_i32(t, anchor, 11);
+  tabfwd_assert_str_i32(t, displaced, 22);
+  assert(tabfwd_count_next_visible(t) == 2);
   {
     TValue keyv;
     freecount0 = lj_tab_node_freecount_acq(node);
@@ -146,19 +109,19 @@ int main(void)
     assert((cTValue *)lj_tab_newkey(L, t, &keyv) ==
 	   lj_tab_getstr(t, displaced));
     assert(lj_tab_node_freecount_acq(node) == freecount0);
-    assert(count_next(t) == 2);
+    assert(tabfwd_count_next_visible(t) == 2);
   }
 
   store_keylock(&node[0]);
   assert(tviskeylock(&node[0].key));
   assert(lj_tab_getstr(t, anchor) == NULL);
-  assert_tabnum(t, displaced, 22);
-  assert(count_next(t) == 1);
+  tabfwd_assert_str_i32(t, displaced, 22);
+  assert(tabfwd_count_next_visible(t) == 1);
 
   store_strkey(L, &node[0], anchor);
-  assert_tabnum(t, anchor, 11);
-  assert_tabnum(t, displaced, 22);
-  assert(count_next(t) == 2);
+  tabfwd_assert_str_i32(t, anchor, 11);
+  tabfwd_assert_str_i32(t, displaced, 22);
+  assert(tabfwd_count_next_visible(t) == 2);
   exercise_tombstone_anchor_insert(L);
 
   lua_close(L);

@@ -59,6 +59,63 @@ static LJ_AINLINE GCstr *tabfwd_newstr(lua_State *L, const char *s)
   return lj_str_new(L, s, strlen(s));
 }
 
+static LJ_AINLINE GCstr *tabfwd_find_sid_bucket(lua_State *L,
+						const char *prefix,
+						uint32_t mask,
+						uint32_t bucket,
+						uint32_t *seq)
+{
+  for (;;) {
+    char buf[128];
+    int n = snprintf(buf, sizeof(buf), "%s-%u-%08x",
+		     prefix, bucket, (*seq)++);
+    GCstr *s;
+    assert(n > 0 && n < (int)sizeof(buf));
+    s = tabfwd_newstr(L, buf);
+    if (((uint32_t)s->sid & mask) == bucket)
+      return s;
+  }
+}
+
+static LJ_AINLINE void tabfwd_set_str_i32(lua_State *L, GCtab *t,
+					  GCstr *s, int32_t v)
+{
+  lj_tab_storeint(L, lj_tab_setstr(L, t, s), v);
+}
+
+static LJ_AINLINE void tabfwd_assert_str_i32(GCtab *t, GCstr *s, int32_t want)
+{
+  cTValue *tv = lj_tab_getstr(t, s);
+  assert(tv != NULL);
+  tabfwd_assert_i32(tv, want);
+}
+
+static LJ_AINLINE void tabfwd_set_cstr_i32(lua_State *L, GCtab *t,
+					   const char *key, int32_t v)
+{
+  tabfwd_set_str_i32(L, t, tabfwd_newstr(L, key), v);
+}
+
+static LJ_AINLINE void tabfwd_assert_cstr_i32(lua_State *L, GCtab *t,
+					      const char *key, int32_t want)
+{
+  tabfwd_assert_str_i32(t, tabfwd_newstr(L, key), want);
+}
+
+static LJ_AINLINE int tabfwd_count_next_visible(GCtab *t)
+{
+  TValue key, out[2];
+  int count = 0;
+  setnilV(&key);
+  while (lj_tab_next(t, &key, out) == 1) {
+    assert(!tvistabinternal(&out[0]));
+    assert(!tvistabinternal(&out[1]));
+    key = out[0];
+    count++;
+  }
+  return count;
+}
+
 static LJ_AINLINE Node *tabfwd_find_str_node(Node *node, MSize hmask,
 					     const GCstr *key)
 {
