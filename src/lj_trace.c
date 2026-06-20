@@ -324,7 +324,7 @@ static TraceNo trace_findfree(jit_State *J)
   osz = trace_sizetrace_acq(J);
   if (osz >= lim)
     return 0;  /* Too many traces. */
-  oldtv = J->tracev;
+  oldtv = tracevec_acq(J);
   newtv = tracevec_new(J->L, lim);
   if (oldtv)
     memcpy(newtv->slot, oldtv->slot, osz*sizeof(GCRef));
