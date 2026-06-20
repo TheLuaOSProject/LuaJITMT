@@ -134,6 +134,45 @@ static LJ_AINLINE int lj_gc_should_step(global_State *g)
 	 la_load64_acq(&g->gc2.hard_bytes);
 }
 
+static LJ_AINLINE GCobj *lj_gc_list_head_acq(const GCRef *head)
+{
+  return gcref_acq(*head);
+}
+
+static LJ_AINLINE void lj_gc_list_clear_rel(GCRef *head)
+{
+  setgcrefnullrel(*head);
+}
+
+static LJ_AINLINE void lj_gc_list_push_rel(GCRef *head, GCobj *o)
+{
+  GCobj *next = lj_gc_list_head_acq(head);
+  if (next)
+    setgcrefrel(o->gch.gclist, next);
+  else
+    setgcrefnullrel(o->gch.gclist);
+  setgcrefrel(*head, o);
+}
+
+static LJ_AINLINE void lj_gc_list_pop_head_rel(GCRef *head, GCobj *o)
+{
+  GCobj *next = gcref_acq(o->gch.gclist);
+  if (next)
+    setgcrefrel(*head, next);
+  else
+    setgcrefnullrel(*head);
+}
+
+static LJ_AINLINE void lj_gc_list_move_rel(GCRef *dst, GCRef *src)
+{
+  GCobj *head = lj_gc_list_head_acq(src);
+  if (head)
+    setgcrefrel(*dst, head);
+  else
+    setgcrefnullrel(*dst);
+  lj_gc_list_clear_rel(src);
+}
+
 /* GC check: drive collector forward if legacy or GC2 pacing asks for work. */
 #define lj_gc_check(L) \
   { if (LJ_UNLIKELY(lj_gc_should_step(G(L)))) \
@@ -177,8 +216,7 @@ static LJ_AINLINE void lj_gc_barrierback(global_State *g, GCtab *t)
   lj_assertG(g->gc.state != GCSfinalize && g->gc.state != GCSpause,
 	     "bad GC state");
   black2gray(o);
-  setgcrefr(t->gclist, g->gc.grayagain);
-  setgcref(g->gc.grayagain, o);
+  lj_gc_list_push_rel(&g->gc.grayagain, o);
 }
 
 static LJ_AINLINE void lj_gc_barriertv_(lua_State *L, GCtab *t, cTValue *tv)

@@ -568,8 +568,7 @@ static void gc_mark(global_State *g, GCobj *o)
     lj_assertG(gct == ~LJ_TFUNC || gct == ~LJ_TTAB ||
 	       gct == ~LJ_TTHREAD || gct == ~LJ_TPROTO || gct == ~LJ_TTRACE,
 	       "bad GC type %d", gct);
-    setgcrefr(o->gch.gclist, g->gc.gray);
-    setgcref(g->gc.gray, o);
+    lj_gc_list_push_rel(&g->gc.gray, o);
   }
 }
 
@@ -722,9 +721,9 @@ static void gc_mark_gcroot(global_State *g)
 static void gc_mark_start(global_State *g)
 {
   lj_gc2_legacy_mark_begin(g);
-  setgcrefnull(g->gc.gray);
-  setgcrefnull(g->gc.grayagain);
-  setgcrefnull(g->gc.weak);
+  lj_gc_list_clear_rel(&g->gc.gray);
+  lj_gc_list_clear_rel(&g->gc.grayagain);
+  lj_gc_list_clear_rel(&g->gc.weak);
   gc_markobj(g, mainthread(g));
   {
     GCtab *env = tabref_acq(mainthread(g)->env);
@@ -912,8 +911,7 @@ static int gc_traverse_tab(global_State *g, GCtab *t)
 #endif
       {
 	lj_obj_masksetgcflags(obj2gco(t), LJ_GC_WEAK, weak);
-	setgcrefr(t->gclist, g->gc.weak);
-	setgcref(g->gc.weak, obj2gco(t));
+	lj_gc_list_push_rel(&g->gc.weak, obj2gco(t));
       }
     }
   }
@@ -1001,8 +999,7 @@ static void gc_marktrace(global_State *g, TraceNo traceno)
   if (iswhite(o)) {
     lj_gc_arena_markobj(g, o);
     white2gray(o);
-    setgcrefr(o->gch.gclist, g->gc.gray);
-    setgcref(g->gc.gray, o);
+    lj_gc_list_push_rel(&g->gc.gray, o);
   }
 }
 
@@ -1097,11 +1094,11 @@ static void gc_traverse_thread(global_State *g, lua_State *th)
 /* Propagate one gray object. Traverse it and turn it black. */
 static size_t propagatemark(global_State *g)
 {
-  GCobj *o = gcref(g->gc.gray);
+  GCobj *o = lj_gc_list_head_acq(&g->gc.gray);
   int gct = o->gch.gct;
   lj_assertG(isgray(o), "propagation of non-gray object");
   gray2black(o);
-  setgcrefr(g->gc.gray, o->gch.gclist);  /* Remove from gray list. */
+  lj_gc_list_pop_head_rel(&g->gc.gray, o);  /* Remove from gray list. */
   if (LJ_LIKELY(gct == ~LJ_TTAB)) {
     GCtab *t = gco2tab(o);
     MSize acap = lj_tab_array_separated_acap_acq(t);
@@ -1124,8 +1121,7 @@ static size_t propagatemark(global_State *g)
     return pt->sizept;
   } else if (LJ_LIKELY(gct == ~LJ_TTHREAD)) {
     lua_State *th = gco2th(o);
-    setgcrefr(th->gclist, g->gc.grayagain);
-    setgcref(g->gc.grayagain, o);
+    lj_gc_list_push_rel(&g->gc.grayagain, o);
     black2gray(o);  /* Threads are never black. */
     gc_traverse_thread(g, th);
     return sizeof(lua_State) + sizeof(TValue) * th->stacksize;
@@ -1146,7 +1142,7 @@ static size_t propagatemark(global_State *g)
 static size_t gc_propagate_gray(global_State *g)
 {
   size_t m = 0;
-  while (gcref(g->gc.gray) != NULL)
+  while (lj_gc_list_head_acq(&g->gc.gray) != NULL)
     m += propagatemark(g);
   return m;
 }
@@ -1937,16 +1933,14 @@ static void atomic(global_State *g, lua_State *L)
   gc_mark_uv(g);  /* Need to remark open upvalues (the thread may be dead). */
   gc_propagate_gray(g);  /* Propagate any left-overs. */
 
-  setgcrefr(g->gc.gray, g->gc.weak);  /* Empty the list of weak tables. */
-  setgcrefnull(g->gc.weak);
+  lj_gc_list_move_rel(&g->gc.gray, &g->gc.weak);  /* Empty weak tables. */
   lj_assertG(!iswhite(obj2gco(mainthread(g))), "main thread turned white");
   gc_markobj(g, L);  /* Mark running thread. */
   gc_traverse_curtrace(g);  /* Traverse current trace. */
   gc_mark_gcroot(g);  /* Mark GC roots (again). */
   gc_propagate_gray(g);  /* Propagate all of the above. */
 
-  setgcrefr(g->gc.gray, g->gc.grayagain);  /* Empty the 2nd chance list. */
-  setgcrefnull(g->gc.grayagain);
+  lj_gc_list_move_rel(&g->gc.gray, &g->gc.grayagain);  /* Empty 2nd chance. */
   gc_propagate_gray(g);  /* Propagate it. */
 
   udsize = lj_gc_separateudata(g, 0);  /* Separate userdata to be finalized. */
@@ -1962,7 +1956,7 @@ static void atomic(global_State *g, lua_State *L)
   (void)gc_queue_cdata_finalizers_pweak(L, g);
 #endif
   {
-    GCobj *weak = gcref_acq(g->gc.weak);
+    GCobj *weak = lj_gc_list_head_acq(&g->gc.weak);
     if (!lj_gc2_weak_complete(g, weak, LJ_GC2_WEAK_DRAIN_BATCH))
       lj_gc_clearweak_legacy(g, weak);
   }
@@ -1982,7 +1976,7 @@ static int gc_jit_defer_fixpoint(global_State *g)
 {
   return lj_tg_jit_base(g) != NULL &&
 	 g->gc.state == GCSpropagate &&
-	 gcref(g->gc.gray) == NULL &&
+	 lj_gc_list_head_acq(&g->gc.gray) == NULL &&
 	 la_load32_acq(&g->gc2.phase) == LJ_GC2_MARK;
 }
 #else
@@ -1998,7 +1992,7 @@ static size_t gc_onestep(lua_State *L)
     gc_mark_start(g);  /* Start a new GC cycle by marking all GC roots. */
     return 0;
   case GCSpropagate:
-    if (gcref(g->gc.gray) != NULL)
+    if (lj_gc_list_head_acq(&g->gc.gray) != NULL)
       return propagatemark(g);  /* Propagate one gray object. */
     if (lj_gc2_worker_drain(g, LJ_GC2_WORKER_DRAIN_BATCH) != 0)
       return GCSWEEPCOST;  /* 05 section 5.6.3 bounded worker step bridge. */
@@ -2187,9 +2181,9 @@ void lj_gc_fullgc(lua_State *L)
   if (g->gc.state <= GCSatomic) {  /* Caught somewhere in the middle. */
     lj_gc2_legacy_preserve_abort(g);
     setmref(g->gc.sweep, &g->gc.root);  /* Sweep everything (preserving it). */
-    setgcrefnull(g->gc.gray);  /* Reset lists from partial propagation. */
-    setgcrefnull(g->gc.grayagain);
-    setgcrefnull(g->gc.weak);
+    lj_gc_list_clear_rel(&g->gc.gray);  /* Reset partial propagation lists. */
+    lj_gc_list_clear_rel(&g->gc.grayagain);
+    lj_gc_list_clear_rel(&g->gc.weak);
     g->gc.state = GCSsweepstring;  /* Fast forward to the sweep phase. */
     g->gc.sweepstr = 0;
   }
