@@ -26,6 +26,7 @@ typedef struct CDArith {
   uint8_t *p[2];
   CType *ct[2];
   CTypeID id[2];
+  CTSize enumval[2];
 } CDArith;
 
 /* Check arguments for arithmetic metamethods. */
@@ -87,20 +88,32 @@ static int carith_checkarg(lua_State *L, CTState *cts, CDArith *ca)
       ca->p[i] = (uint8_t *)strVdata(o);
       ok = 0;
       if (ctype_isenum(ct->info)) {
-	CTSize ofs;
-	CType *cct;
-	lj_ctype_parse_lock(cts, L);
-	/* 11.2: enum string readers wait out parser rollback. */
-	cct = lj_ctype_getfield(cts, ct, strV(o), &ofs);
-	if (cct && ctype_isconstval(cct->info)) {
-	  cid = ctype_cid(cct->info);
-	  ca->ct[i] = ctype_child(cts, cct);
+	CTSize val;
+	CTypeID ecid;
+	int snap = lj_ctype_enumconst_snapshot(cts, ct, strV(o), &val, &ecid);
+	if (snap < 0) {
+	  CTSize ofs;
+	  CType *cct;
+	  lj_ctype_parse_lock(cts, L);
+	  /* 11.2: enum string readers wait out parser rollback. */
+	  cct = lj_ctype_getfield(cts, ct, strV(o), &ofs);
+	  if (cct && ctype_isconstval(cct->info)) {
+	    ecid = ctype_cid(cct->info);
+	    val = cct->size;
+	    snap = 1;
+	  } else {
+	    snap = 0;
+	  }
+	  lj_ctype_parse_unlock(cts);
+	}
+	if (snap > 0) {
+	  cid = ecid;
+	  ca->enumval[i] = val;
+	  ca->ct[i] = ctype_get(cts, cid);
 	  ca->id[i] = cid;
-	  ca->p[i] = (uint8_t *)&cct->size;  /* Assumes ct does not grow. */
+	  ca->p[i] = (uint8_t *)&ca->enumval[i];
 	  ok = 1;
-	  lj_ctype_parse_unlock(cts);
 	} else {
-	  lj_ctype_parse_unlock(cts);
 	  ca->ct[1-i] = ct;  /* Use enum to improve error message. */
 	  ca->id[1-i] = cid;
 	  ca->p[1-i] = NULL;

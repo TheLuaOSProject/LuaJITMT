@@ -915,6 +915,52 @@ int lj_ctype_size_snapshot(CTState *cts, CTypeID id, CTSize *szp)
   }
 }
 
+/* Sequence-checked enum string constant lookup for stable readers. */
+int lj_ctype_enumconst_snapshot(CTState *cts, const CType *root,
+				GCstr *name, CTSize *valp, CTypeID *cidp)
+{
+  uint32_t seq0 = la_load32_acq(&cts->parse_token);
+  CTypeTab *tabh;
+  CTypeID top, id;
+  MSize budget;
+  if (seq0 & 1u)
+    return -1;
+  if (!ctype_isenum(la_load32_acq(&root->info)))
+    return 0;
+  id = (CTypeID)la_load16_acq(&root->sib);
+  top = ctype_top_acq(cts);
+  tabh = ctype_tabh_acq(cts);
+  budget = top ? (MSize)top * 2u : 1u;
+  while (id) {
+    CType *ct;
+    CTInfo info;
+    CTSize size;
+    GCobj *gco;
+    if (id >= top || (MSize)id >= tabh->sizetab)
+      return -1;
+    if (budget-- == 0)
+      return -1;
+    ct = &tabh->tab[id];
+    info = la_load32_acq(&ct->info);
+    size = la_load32_acq(&ct->size);
+    gco = gcref_acq(ct->name);
+    if (ctype_isabandoned(info))
+      return 0;
+    if (gco == obj2gco(name) && ctype_isconstval(info)) {
+      uint32_t seq1;
+      *valp = size;
+      *cidp = ctype_cid(info);
+      seq1 = la_load32_acq(&cts->parse_token);
+      return (seq0 == seq1 && !(seq1 & 1u)) ? 1 : -1;
+    }
+    id = (CTypeID)la_load16_acq(&ct->sib);
+  }
+  {
+    uint32_t seq1 = la_load32_acq(&cts->parse_token);
+    return (seq0 == seq1 && !(seq1 & 1u)) ? 0 : -1;
+  }
+}
+
 /* Get size for a variable-length C type. Does NOT support other C types. */
 CTSize lj_ctype_vlsize(CTState *cts, CType *ct, CTSize nelem)
 {

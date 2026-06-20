@@ -642,22 +642,32 @@ static TRef crec_ct_tv(jit_State *J, CType *d, TRef dp, TRef sp, cTValue *sval)
   } else if (tref_isstr(sp)) {
     if (ctype_isenum(d->info)) {  /* Match string against enum constant. */
       GCstr *str = strV(sval);
-      CTSize ofs;
-      CType *cct;
-      lj_ctype_parse_lock(cts, J->L);
-      /* 11.2: recorder enum string reader waits out parser rollback. */
-      cct = lj_ctype_getfield(cts, d, str, &ofs);
-      if (cct && ctype_isconstval(cct->info)) {
-	sid = ctype_cid(cct->info);
+      CTSize val;
+      CTypeID ecid;
+      int ok = lj_ctype_enumconst_snapshot(cts, d, str, &val, &ecid);
+      if (ok < 0) {
+	CTSize ofs;
+	CType *cct;
+	lj_ctype_parse_lock(cts, J->L);
+	/* 11.2: recorder enum string reader waits out parser rollback. */
+	cct = lj_ctype_getfield(cts, d, str, &ofs);
+	if (cct && ctype_isconstval(cct->info)) {
+	  val = cct->size;
+	  ecid = ctype_cid(cct->info);
+	  ok = 1;
+	} else {
+	  ok = 0;
+	}
+	lj_ctype_parse_unlock(cts);
       }
-      lj_ctype_parse_unlock(cts);
       /* Specialize to the name of the enum constant. */
       emitir(IRTG(IR_EQ, IRT_STR), sp, lj_ir_kstr(J, str));
-      if (cct && ctype_isconstval(cct->info)) {
-	lj_assertJ(ctype_child(cts, cct)->size == 4,
+      if (ok > 0) {
+	sid = ecid;
+	lj_assertJ(ctype_get(cts, sid)->size == 4,
 		   "only 32 bit const supported");  /* NYI */
-	svisnz = (void *)(intptr_t)(ofs != 0);
-	sp = lj_ir_kint(J, (int32_t)ofs);
+	svisnz = (void *)(intptr_t)(val != 0);
+	sp = lj_ir_kint(J, (int32_t)val);
       }  /* else: interpreter will throw. */
     } else if (ctype_isrefarray(d->info)) {  /* Copy string to array. */
       lj_trace_err(J, LJ_TRERR_BADTYPE);  /* NYI */
@@ -1692,19 +1702,30 @@ void LJ_FASTCALL recff_cdata_arith(jit_State *J, RecordFFData *rd)
       ct = ctype_get(cts, id);
       if (ctype_isenum(ct->info)) {  /* Match string against enum constant. */
 	GCstr *str = strV(&rd->argv[i]);
-	CTSize ofs;
-	CType *cct;
-	lj_ctype_parse_lock(cts, J->L);
-	/* 11.2: recorder enum string reader waits out parser rollback. */
-	cct = lj_ctype_getfield(cts, ct, str, &ofs);
-	if (cct && ctype_isconstval(cct->info))
-	  id = ctype_cid(cct->info);
-	lj_ctype_parse_unlock(cts);
-	if (cct && ctype_isconstval(cct->info)) {
+	CTSize val;
+	CTypeID ecid;
+	int ok = lj_ctype_enumconst_snapshot(cts, ct, str, &val, &ecid);
+	if (ok < 0) {
+	  CTSize ofs;
+	  CType *cct;
+	  lj_ctype_parse_lock(cts, J->L);
+	  /* 11.2: recorder enum string reader waits out parser rollback. */
+	  cct = lj_ctype_getfield(cts, ct, str, &ofs);
+	  if (cct && ctype_isconstval(cct->info)) {
+	    val = cct->size;
+	    ecid = ctype_cid(cct->info);
+	    ok = 1;
+	  } else {
+	    ok = 0;
+	  }
+	  lj_ctype_parse_unlock(cts);
+	}
+	if (ok > 0) {
+	  id = ecid;
 	  /* Specialize to the name of the enum constant. */
 	  emitir(IRTG(IR_EQ, IRT_STR), tr, lj_ir_kstr(J, str));
 	  ct = ctype_get(cts, id);
-	  tr = lj_ir_kint(J, (int32_t)ofs);
+	  tr = lj_ir_kint(J, (int32_t)val);
 	} else {  /* Interpreter will throw or return false. */
 	  lj_trace_err(J, LJ_TRERR_BADTYPE);
 	}

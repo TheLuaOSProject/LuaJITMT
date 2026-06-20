@@ -578,6 +578,9 @@ LJ_FUNC CTypeID lj_ctype_intern_l(lua_State *L, CTState *cts, CTInfo info,
 LJ_FUNC CTypeID lj_ctype_intern_new_l(lua_State *L, CTState *cts,
 				      CTInfo info, CTSize size, int *newp);
 LJ_FUNC int lj_ctype_snapshot(CTState *cts, CTypeID id, CType *out);
+LJ_FUNC int lj_ctype_enumconst_snapshot(CTState *cts, const CType *ct,
+					GCstr *name, CTSize *valp,
+					CTypeID *cidp);
 LJ_FUNC void lj_ctype_parse_lock(CTState *cts, lua_State *L);
 LJ_FUNC void lj_ctype_parse_unlock(CTState *cts);
 LJ_FUNC GCtab *lj_ctype_fin_head(CTState *cts);
