@@ -5,6 +5,7 @@ local make_clean = runtime.make_clean
 local make_default = runtime.build_default
 local compile_and_run_c = runtime.compile_and_run_c
 local run_c_fixtures = runtime.run_c_fixtures
+local run_luajit_script_jit_modes = runtime.run_luajit_script_jit_modes
 
 return function(add)
   local cases, register = utils.case_registry(add)
@@ -18,8 +19,7 @@ return function(add)
 
       compile_and_run_c(t, t:tmp("lj_t-gc2-worker-scheduler"),
                         "t-gc2-worker-scheduler.c")
-      t:luajit({ "-joff", t:path("tests", "t-gc-workers.lua") })
-      t:luajit({ t:path("tests", "t-gc-workers.lua") })
+      run_luajit_script_jit_modes(t, "t-gc-workers.lua")
 
       print("M3 GC2 worker scheduler test passed")
     end

@@ -7,6 +7,7 @@ local capture_command = utils.capture_command
 local assert_command_output_contains = utils.assert_command_output_contains
 local assert_command_output_all_contains = utils.assert_command_output_all_contains
 local compile_and_run_c = runtime.compile_and_run_c
+local luajit_script = runtime.luajit_script
 local run_luajit_script_jit_modes = runtime.run_luajit_script_jit_modes
 
 local function write_bad_benchmark_csv(t, base, bad)
@@ -45,7 +46,7 @@ end
 local function run_bench_smoke(t)
   t:build({ quiet = true })
 
-  t:luajit({ t:path("tests", "t-threading-api.lua") })
+  luajit_script(t, "t-threading-api.lua")
 
   local luajit = shell_quote(t:path("src", "luajit"))
   local bench_mt = shell_quote(t:path("aux", "bench", "bench_mt.lua"))

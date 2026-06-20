@@ -1,5 +1,6 @@
 local runtime = require("suite_runtime")
 
+local luajit_script = runtime.luajit_script
 local run_luajit_script_jit_modes = runtime.run_luajit_script_jit_modes
 
 local M8_C_FIXTURES = {
@@ -22,7 +23,8 @@ end
 local function run_paranoia_matrix(t)
   local xcflags = "-DLUA_USE_ASSERT -DLJ_GC2_PARANOIA=1"
   t:build({ clean = true, quiet = true, xcflags = xcflags })
-  t:luajit({ "-joff", t:path("tests", "t-weak-modes.lua") }, {
+  luajit_script(t, "t-weak-modes.lua", nil, {
+    joff = true,
     env = {
       LJ_M8_WEAK_RACE_ITERS = "0",
       LJ_M8_FINALIZER_SPAWN = "0"

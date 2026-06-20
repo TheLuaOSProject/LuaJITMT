@@ -9,6 +9,7 @@ local lua_path = runtime.lua_path
 local build_and_run_c = runtime.compile_and_run_c
 local clean_build = runtime.clean_build
 local luajit_dump_file = runtime.luajit_dump_file
+local luajit_file = runtime.luajit_file
 local run_luajit_script = runtime.luajit_script
 local run_ir_dump_probe = jitutils.run_ir_dump_probe
 
@@ -78,7 +79,8 @@ return function(add)
         getenv("LJ_M7_FFI_CBACK_RT_THREADS", "6"),
         getenv("LJ_M7_FFI_CBACK_RT_ITERS", "220")
       }, { joff = true })
-      t:luajit({ t:path("tests", "stock", "test", "lib", "ffi", "ffi_callback.lua") })
+      luajit_file(t, t:path("tests", "stock", "test", "lib", "ffi",
+                            "ffi_callback.lua"))
       print("M7 FFI callback runtime behavior passed")
     end
   })

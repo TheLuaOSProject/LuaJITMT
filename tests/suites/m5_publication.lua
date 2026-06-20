@@ -6,6 +6,7 @@ local run_luajit = runtime.luajit
 local luajit_capture = runtime.capture_luajit
 local run_stock = runtime.run_stock
 local build_and_run_c = runtime.compile_and_run_c
+local build_and_run_luajit_script = runtime.build_and_run_luajit_script
 
 local function table_value_smoke()
   return [=[
@@ -411,8 +412,8 @@ assert(util.traceinfo(1), "expected loaded CNEW creation trace")
     name = "m5_upvalue_publish_gc",
     description = "closed-upvalue GC object publication behavior",
     run = function(t)
-      t:build({ clean = true, quiet = true })
-      t:luajit({ "-joff", t:path("tests", "t-threading-upvalue.lua") })
+      build_and_run_luajit_script(t, "t-threading-upvalue.lua", nil,
+                                  { joff = true })
       print("M5 closed-upvalue GC publication behavior passed")
     end
   })

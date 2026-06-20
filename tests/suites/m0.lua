@@ -11,7 +11,7 @@ local function run_m0_combo(t, name, xcflags, stock_tags)
     check_executable = true
   })
 
-  t:luajit({ "-e", "require'ffi'; assert(2^31 == 2147483648)" })
+  runtime.luajit_code(t, "require'ffi'; assert(2^31 == 2147483648)")
 end
 
 return function(add)
