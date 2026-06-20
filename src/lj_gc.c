@@ -1905,7 +1905,7 @@ void lj_gc_finalize_cdata_disable(global_State *g)
        gen = (FinRegGen *)la_loadptr_acq((void *const *)&gen->next)) {
     GCtab *t = (GCtab *)la_loadptr_acq((void *const *)&gen->tab);
     if (t)
-      setgcrefnull(t->metatable);  /* Mark all FINREG generations disabled. */
+      setgcrefnullrel(t->metatable);  /* Disable FINREG generation. */
   }
 }
 #endif
