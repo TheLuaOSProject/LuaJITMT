@@ -1261,6 +1261,18 @@ static void asm_tabnode_retiring_guard(ASMState *as, Reg node)
   emit_rmro(as, XO_GROUP3, XOg_TEST, node, TABNODE_FLAGS_OFS);
 }
 
+static LJ_AINLINE void asm_href_node_next_acq(ASMState *as, Reg dst, Reg node)
+{
+  emit_rmro(as, XO_MOV, dst|REX_GC64, node,
+	    offsetof(Node, next));  /* asm_href_node_next_acq */
+}
+
+static LJ_AINLINE void asm_href_tab_node_acq(ASMState *as, Reg dst, Reg tab)
+{
+  emit_rmro(as, XO_MOV, dst|REX_GC64, tab,
+	    offsetof(GCtab, node));  /* asm_href_tab_node_acq */
+}
+
 /* Inlined hash lookup. Specialized for key type and for const keys.
 ** The equivalent C code is:
 **   Node *n = hashkey(t, key);
@@ -1299,7 +1311,7 @@ static void asm_href(ASMState *as, IRIns *ir, IROp merge)
   /* Follow hash chain until the end. */
   l_loop = emit_sjcc_label(as, CC_NZ);
   emit_rr(as, XO_TEST, dest|REX_GC64, dest);
-  emit_rmro(as, XO_MOV, dest|REX_GC64, dest, offsetof(Node, next));
+  asm_href_node_next_acq(as, dest, dest);
   l_next = emit_label(as);
 
   /* Type and value comparison. */
@@ -1378,7 +1390,7 @@ static void asm_href(ASMState *as, IRIns *ir, IROp merge)
   khash = isk ? ir_khash(as, irkey) : 1;
   if (khash == 0) {
     asm_tabnode_retiring_guard(as, dest);
-    emit_rmro(as, XO_MOV, dest|REX_GC64, tab, offsetof(GCtab, node));
+    asm_href_tab_node_acq(as, dest, tab);
   } else {
     RegSet iallow = allow;
     Reg idx;
@@ -1431,7 +1443,7 @@ static void asm_href(ASMState *as, IRIns *ir, IROp merge)
       }
     }
     asm_tabnode_retiring_guard(as, dest);
-    emit_rmro(as, XO_MOV, dest|REX_GC64, tab, offsetof(GCtab, node));
+    asm_href_tab_node_acq(as, dest, tab);
   }
 }
 
