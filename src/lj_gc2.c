@@ -222,7 +222,6 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.finreg_cdata_order_queued, 0);
   la_store64_rlx(&g->gc2.finreg_cdata_order_tombstones, 0);
   la_store64_rlx(&g->gc2.finreg_cdata_order_fallbacks, 0);
-  la_store64_rlx(&g->gc2.finreg_cdata_pweak_root_fallbacks, 0);
   la_store64_rlx(&g->gc2.finreg_cdata_pending_order_hits, 0);
 #if defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
   g->gc2.finreg_cdata_preclaim_test_fail = 0;

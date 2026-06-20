@@ -1310,7 +1310,6 @@ typedef struct GC2State {
   uint64_t finreg_cdata_order_queued;  /* Ordered cdata queued from FINREG. */
   uint64_t finreg_cdata_order_tombstones;  /* Dead ordered FINREG records. */
   uint64_t finreg_cdata_order_fallbacks;  /* Ordered scan fallback cases. */
-  uint64_t finreg_cdata_pweak_root_fallbacks;  /* P_WEAK root-list fallbacks. */
   uint64_t finreg_cdata_pending_order_hits;  /* Ordered pending positives. */
 #if defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
   uint32_t finreg_cdata_preclaim_test_fail;  /* Test-only preclaim failures. */

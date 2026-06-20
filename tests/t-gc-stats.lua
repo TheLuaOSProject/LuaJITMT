@@ -35,7 +35,6 @@ local finreg_stats = {
   "finreg_cdata_order_queued",
   "finreg_cdata_order_tombstones",
   "finreg_cdata_order_fallbacks",
-  "finreg_cdata_pweak_root_fallbacks",
   "finreg_cdata_pending_order_hits",
   "finreg_udata_sets",
   "finreg_udata_clears",
