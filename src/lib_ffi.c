@@ -479,7 +479,7 @@ LJLIB_CF(ffi_clib___gc)
   TValue *o = L->base;
   if (o < L->top && tvisudata(o) &&
       lj_udata_udtype_acq(udataV(o)) == UDTYPE_FFI_CLIB)
-    lj_clib_unload(G(L), (CLibrary *)uddata(udataV(o)));
+    lj_clib_unload(L, G(L), (CLibrary *)uddata(udataV(o)));
   return 0;
 }
 

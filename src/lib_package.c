@@ -14,8 +14,11 @@
 #include "lualib.h"
 
 #include "lj_obj.h"
+#include "lj_atomic.h"
 #include "lj_err.h"
 #include "lj_lib.h"
+#include "lj_safepoint.h"
+#include "lj_tg.h"
 
 /* ------------------------------------------------------------------------ */
 
@@ -36,33 +39,92 @@
 
 #include <dlfcn.h>
 
-static void ll_unloadlib(void *lib)
+static int ll_had_stopreq(lua_State *L)
 {
-  dlclose(lib);
+  TGState *tg = L2TG(L);
+  return tg && (la_load8_acq(&tg->tg_flags) & TGF_STOPREQ);
+}
+
+static int ll_fresh_stopreq(lua_State *L, uint32_t actions, int had_stopreq)
+{
+  TGState *tg = L2TG(L);
+  return (actions & LJ_GC2_HS_STOPREQ) ||
+    (!had_stopreq && tg && (la_load8_acq(&tg->tg_flags) & TGF_STOPREQ));
+}
+
+static void *ll_native_dlopen(lua_State *L, const char *path, int flags,
+			      uint32_t *actionsp)
+{
+  void *lib;
+  lj_native_enter(L2TG(L));
+  lib = dlopen(path, flags);
+  *actionsp = lj_native_leave(L);
+  return lib;
+}
+
+static uint32_t ll_unloadlib(lua_State *L, void *lib)
+{
+  uint32_t actions;
+  lj_native_enter(L2TG(L));
+  (void)dlclose(lib);
+  actions = lj_native_leave(L);
+  return actions;
+}
+
+static void *ll_native_dlsym(lua_State *L, void *lib, const char *sym,
+			     uint32_t *actionsp)
+{
+  void *p;
+  lj_native_enter(L2TG(L));
+  p = dlsym(lib, sym);
+  *actionsp = lj_native_leave(L);
+  return p;
 }
 
 static void *ll_load(lua_State *L, const char *path, int gl)
 {
-  void *lib = dlopen(path, RTLD_NOW | (gl ? RTLD_GLOBAL : RTLD_LOCAL));
-  if (lib == NULL) lua_pushstring(L, dlerror());
+  uint32_t actions;
+  int had_stopreq = ll_had_stopreq(L);
+  void *lib = ll_native_dlopen(L, path,
+    RTLD_NOW | (gl ? RTLD_GLOBAL : RTLD_LOCAL), &actions);
+  if (lib == NULL) {
+    const char *err = dlerror();
+    lj_safepoint_checkstop(L, actions);
+    lua_pushstring(L, err);
+  } else if (ll_fresh_stopreq(L, actions, had_stopreq)) {
+    uint32_t close_actions = ll_unloadlib(L, lib);
+    lj_safepoint_checkstop(L, actions | close_actions);
+  }
   return lib;
 }
 
 static lua_CFunction ll_sym(lua_State *L, void *lib, const char *sym)
 {
-  lua_CFunction f = (lua_CFunction)dlsym(lib, sym);
-  if (f == NULL) lua_pushstring(L, dlerror());
+  uint32_t actions;
+  lua_CFunction f = (lua_CFunction)ll_native_dlsym(L, lib, sym, &actions);
+  if (f == NULL) {
+    const char *err = dlerror();
+    lj_safepoint_checkstop(L, actions);
+    lua_pushstring(L, err);
+  } else {
+    lj_safepoint_checkstop(L, actions);
+  }
   return f;
 }
 
-static const char *ll_bcsym(void *lib, const char *sym)
+static const char *ll_bcsym(lua_State *L, void *lib, const char *sym)
 {
+  uint32_t actions;
 #if defined(RTLD_DEFAULT) && !defined(NO_RTLD_DEFAULT)
   if (lib == NULL) lib = RTLD_DEFAULT;
 #elif LJ_TARGET_OSX || LJ_TARGET_BSD
   if (lib == NULL) lib = (void *)(intptr_t)-2;
 #endif
-  return (const char *)dlsym(lib, sym);
+  {
+    const char *p = (const char *)ll_native_dlsym(L, lib, sym, &actions);
+    lj_safepoint_checkstop(L, actions);
+    return p;
+  }
 }
 
 #elif LJ_TARGET_WINDOWS
@@ -126,9 +188,13 @@ static void pusherror(lua_State *L)
     lua_pushfstring(L, "system error %d\n", error);
 }
 
-static void ll_unloadlib(void *lib)
+static uint32_t ll_unloadlib(lua_State *L, void *lib)
 {
+  uint32_t actions;
+  lj_native_enter(L2TG(L));
   FreeLibrary((HINSTANCE)lib);
+  actions = lj_native_leave(L);
+  return actions;
 }
 
 static void *ll_load(lua_State *L, const char *path, int gl)
@@ -150,8 +216,9 @@ static lua_CFunction ll_sym(lua_State *L, void *lib, const char *sym)
 EXTERN_C IMAGE_DOS_HEADER __ImageBase;
 #endif
 
-static const char *ll_bcsym(void *lib, const char *sym)
+static const char *ll_bcsym(lua_State *L, void *lib, const char *sym)
 {
+  UNUSED(L);
   if (lib) {
     return (const char *)GetProcAddress((HINSTANCE)lib, sym);
   } else {
@@ -175,9 +242,10 @@ static const char *ll_bcsym(void *lib, const char *sym)
 
 #define DLMSG	"dynamic libraries not enabled; no support for target OS"
 
-static void ll_unloadlib(void *lib)
+static uint32_t ll_unloadlib(lua_State *L, void *lib)
 {
-  UNUSED(lib);
+  UNUSED(L); UNUSED(lib);
+  return 0;
 }
 
 static void *ll_load(lua_State *L, const char *path, int gl)
@@ -194,9 +262,9 @@ static lua_CFunction ll_sym(lua_State *L, void *lib, const char *sym)
   return NULL;
 }
 
-static const char *ll_bcsym(void *lib, const char *sym)
+static const char *ll_bcsym(lua_State *L, void *lib, const char *sym)
 {
-  UNUSED(lib); UNUSED(sym);
+  UNUSED(L); UNUSED(lib); UNUSED(sym);
   return NULL;
 }
 
@@ -257,7 +325,7 @@ static int ll_loadfunc(lua_State *L, const char *path, const char *name, int r)
       return 0;
     }
     if (!r) {
-      const char *bcdata = ll_bcsym(*reg, mksymname(L, name, SYMPREFIX_BC));
+      const char *bcdata = ll_bcsym(L, *reg, mksymname(L, name, SYMPREFIX_BC));
       lua_pop(L, 1);
       if (bcdata) {
 	if (luaL_loadbuffer(L, bcdata, ~(size_t)0, name) != 0)
@@ -287,8 +355,10 @@ static int lj_cf_package_loadlib(lua_State *L)
 static int lj_cf_package_unloadlib(lua_State *L)
 {
   void **lib = (void **)luaL_checkudata(L, 1, "_LOADLIB");
-  if (*lib) ll_unloadlib(*lib);
+  uint32_t actions = 0;
+  if (*lib) actions = ll_unloadlib(L, *lib);
   *lib = NULL;  /* mark library as closed */
+  lj_safepoint_checkstop(L, actions);
   return 0;
 }
 
@@ -416,7 +486,7 @@ static int lj_cf_package_loader_preload(lua_State *L)
   lua_getfield(L, -1, name);
   if (lua_isnil(L, -1)) {  /* Not found? */
     const char *bcname = mksymname(L, name, SYMPREFIX_BC);
-    const char *bcdata = ll_bcsym(NULL, bcname);
+    const char *bcdata = ll_bcsym(L, NULL, bcname);
     if (bcdata == NULL || luaL_loadbuffer(L, bcdata, ~(size_t)0, name) != 0)
       lua_pushfstring(L, "\n\tno field package.preload['%s']", name);
   }
@@ -625,4 +695,3 @@ LUALIB_API int luaopen_package(lua_State *L)
   lua_pop(L, 1);
   return 1;
 }
-

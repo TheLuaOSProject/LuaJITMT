@@ -583,6 +583,15 @@ int main(void)
     "  assert(tostring(err):find('thread interrupted: VM shutdown', 1, true))\n"
     "  clear_stopreq()\n"
     "end\n"
+    "local function expect_loadlib_stopreq()\n"
+    "  local so = os.getenv('LJ_LOADLIB_STOPREQ_SO')\n"
+    "  if not so or so == '' then return end\n"
+    "  expect_native_stopreq(function()\n"
+    "    return package.loadlib(so, 'luaopen_lj_loadlib_stopreq')\n"
+    "  end)\n"
+    "  local ffi = require('ffi')\n"
+    "  expect_native_stopreq(function() return ffi.load(so) end)\n"
+    "end\n"
     "local p = os.tmpname()\n"
     "local q = p .. '.stopreq'\n"
     "local f = assert(io.open(p, 'w'))\n"
@@ -630,6 +639,7 @@ int main(void)
     "local big = string.rep('w', 4 * 1024 * 1024)\n"
     "expect_native_stopreq(function() return write_pipe:write(big) end)\n"
     "write_pipe:close()\n"
+    "expect_loadlib_stopreq()\n"
     "os.remove(p)\n") != LUA_OK) {
     fprintf(stderr, "STOPREQ coverage chunk failed: %s\n",
 	    lua_tostring(L, -1));

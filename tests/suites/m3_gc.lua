@@ -8,6 +8,15 @@ local compile_and_run_c = build.compile_and_run_c
 local run_c_fixtures = build.run_c_fixtures
 local run_lua_test_case = runtime.run_lua_test_case
 local run_luajit_script_jit_modes = runtime.run_luajit_script_jit_modes
+local shell_quote = utils.shell_quote
+
+local function build_loadlib_stopreq_so(t)
+  local out = t:tmp("lj_t-loadlib-stopreq.so")
+  t:run(t.compiler .. " -shared -fPIC -O2 -Wall -Wextra -Werror " ..
+        shell_quote(t:path("tests", "t-loadlib-stopreq-lib.c")) ..
+        " -o " .. shell_quote(out), { quiet = true })
+  return out
+end
 
 return function(add)
   local cases, register = utils.case_registry(add)
@@ -32,13 +41,15 @@ return function(add)
     description = "C-level safepoint handshake fixture",
     run = function(t)
       local pthread = os.getenv("PTHREAD") or "-pthread"
+      local loadlib_so = build_loadlib_stopreq_so(t)
 
       make_clean(t)
       make_default(t)
       compile_and_run_c(t, t:tmp("lj_t_safepoint_handshake"),
                         "t-safepoint-handshake.c", {
         cflags = pthread,
-        pthread = pthread
+        pthread = pthread,
+        env = { LJ_LOADLIB_STOPREQ_SO = loadlib_so }
       })
 
       print("M3 safepoint handshake tests passed")

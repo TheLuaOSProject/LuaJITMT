@@ -35,7 +35,7 @@ void LJ_FASTCALL lj_udata_free(global_State *g, GCudata *ud)
 {
 #if LJ_HASFFI
   if (lj_udata_udtype_acq(ud) == UDTYPE_FFI_CLIB)
-    lj_clib_unload(g, (CLibrary *)uddata(ud));
+    lj_clib_unload(NULL, g, (CLibrary *)uddata(ud));
 #endif
   lj_mem_free(g, ud, sizeudata(ud));
 }

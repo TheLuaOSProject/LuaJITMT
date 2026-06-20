@@ -11,6 +11,7 @@
 #include "lj_gc.h"
 #include "lj_gc2.h"
 #include "lj_err.h"
+#include "lj_safepoint.h"
 #include "lj_tab.h"
 #include "lj_str.h"
 #include "lj_udata.h"
@@ -20,6 +21,7 @@
 #include "lj_cdata.h"
 #include "lj_clib.h"
 #include "lj_strfmt.h"
+#include "lj_tg.h"
 
 /* -- OS-specific functions ----------------------------------------------- */
 
@@ -116,33 +118,100 @@ static const char *clib_resolve_lds(lua_State *L, const char *name)
   return p;
 }
 
+static int clib_had_stopreq(lua_State *L)
+{
+  TGState *tg = L2TG(L);
+  return tg && (la_load8_acq(&tg->tg_flags) & TGF_STOPREQ);
+}
+
+static int clib_fresh_stopreq(lua_State *L, uint32_t actions,
+			      int had_stopreq)
+{
+  TGState *tg = L2TG(L);
+  return (actions & LJ_GC2_HS_STOPREQ) ||
+    (!had_stopreq && tg && (la_load8_acq(&tg->tg_flags) & TGF_STOPREQ));
+}
+
+static void *clib_native_dlopen(lua_State *L, const char *name, int flags,
+				uint32_t *actionsp)
+{
+  void *h;
+  lj_native_enter(L2TG(L));
+  h = dlopen(name, flags);
+  *actionsp = lj_native_leave(L);
+  return h;
+}
+
+static uint32_t clib_native_dlclose(lua_State *L, void *handle)
+{
+  uint32_t actions;
+  if (!L) {
+    (void)dlclose(handle);
+    return 0;
+  }
+  lj_native_enter(L2TG(L));
+  (void)dlclose(handle);
+  actions = lj_native_leave(L);
+  return actions;
+}
+
+static void *clib_native_dlsym(lua_State *L, void *handle, const char *name,
+			       uint32_t *actionsp)
+{
+  void *p;
+  lj_native_enter(L2TG(L));
+  p = dlsym(handle, name);
+  *actionsp = lj_native_leave(L);
+  return p;
+}
+
 static void *clib_loadlib(lua_State *L, const char *name, int global)
 {
-  void *h = dlopen(clib_extname(L, name),
-		   RTLD_LAZY | (global?RTLD_GLOBAL:RTLD_LOCAL));
+  uint32_t actions;
+  int had_stopreq = clib_had_stopreq(L);
+  void *h = clib_native_dlopen(L, clib_extname(L, name),
+			       RTLD_LAZY | (global?RTLD_GLOBAL:RTLD_LOCAL),
+			       &actions);
   if (!h) {
     const char *e, *err = dlerror();
+    lj_safepoint_checkstop(L, actions);
     if (err && *err == '/' && (e = strchr(err, ':')) &&
 	(name = clib_resolve_lds(L, strdata(lj_str_new(L, err, e-err))))) {
-      h = dlopen(name, RTLD_LAZY | (global?RTLD_GLOBAL:RTLD_LOCAL));
-      if (h) return h;
+      had_stopreq = clib_had_stopreq(L);
+      h = clib_native_dlopen(L, name,
+			     RTLD_LAZY | (global?RTLD_GLOBAL:RTLD_LOCAL),
+			     &actions);
+      if (h) {
+	if (clib_fresh_stopreq(L, actions, had_stopreq)) {
+	  uint32_t close_actions = clib_native_dlclose(L, h);
+	  lj_safepoint_checkstop(L, actions | close_actions);
+	}
+	return h;
+      }
       err = dlerror();
+      lj_safepoint_checkstop(L, actions);
     }
     if (!err) err = "dlopen failed";
     lj_err_callermsg(L, err);
+  } else if (clib_fresh_stopreq(L, actions, had_stopreq)) {
+    uint32_t close_actions = clib_native_dlclose(L, h);
+    lj_safepoint_checkstop(L, actions | close_actions);
   }
   return h;
 }
 
-static void clib_unloadlib(CLibrary *cl)
+static uint32_t clib_unloadlib(lua_State *L, CLibrary *cl)
 {
   if (cl->handle && cl->handle != CLIB_DEFHANDLE)
-    dlclose(cl->handle);
+    return clib_native_dlclose(L, cl->handle);
+  return 0;
 }
 
-static void *clib_getsym(CLibrary *cl, const char *name)
+static void *clib_getsym(lua_State *L, CLibrary *cl, const char *name)
 {
-  void *p = dlsym(cl->handle, name);
+  uint32_t actions;
+  void *p = clib_native_dlsym(L, cl->handle, name, &actions);
+  lj_safepoint_checkstop(L, actions);
   return p;
 }
 
@@ -221,8 +290,9 @@ static void *clib_loadlib(lua_State *L, const char *name, int global)
   return h;
 }
 
-static void clib_unloadlib(CLibrary *cl)
+static uint32_t clib_unloadlib(lua_State *L, CLibrary *cl)
 {
+  uint32_t actions = 0;
   if (cl->handle == CLIB_DEFHANDLE) {
 #if !LJ_TARGET_UWP
     MSize i;
@@ -230,22 +300,28 @@ static void clib_unloadlib(CLibrary *cl)
       void *h = clib_def_handle[i];
       if (h) {
 	clib_def_handle[i] = NULL;
+	if (L) lj_native_enter(L2TG(L));
 	FreeLibrary((HINSTANCE)h);
+	if (L) actions |= lj_native_leave(L);
       }
     }
 #endif
   } else if (cl->handle) {
+    if (L) lj_native_enter(L2TG(L));
     FreeLibrary((HINSTANCE)cl->handle);
+    if (L) actions |= lj_native_leave(L);
   }
+  return actions;
 }
 
 #if LJ_TARGET_UWP
 EXTERN_C IMAGE_DOS_HEADER __ImageBase;
 #endif
 
-static void *clib_getsym(CLibrary *cl, const char *name)
+static void *clib_getsym(lua_State *L, CLibrary *cl, const char *name)
 {
   void *p = NULL;
+  UNUSED(L);
   if (cl->handle == CLIB_DEFHANDLE) {  /* Search default libraries. */
     MSize i;
     for (i = 0; i < CLIB_HANDLE_MAX; i++) {
@@ -298,14 +374,15 @@ static void *clib_loadlib(lua_State *L, const char *name, int global)
   return NULL;
 }
 
-static void clib_unloadlib(CLibrary *cl)
+static uint32_t clib_unloadlib(lua_State *L, CLibrary *cl)
 {
-  UNUSED(cl);
+  UNUSED(L); UNUSED(cl);
+  return 0;
 }
 
-static void *clib_getsym(CLibrary *cl, const char *name)
+static void *clib_getsym(lua_State *L, CLibrary *cl, const char *name)
 {
-  UNUSED(cl); UNUSED(name);
+  UNUSED(L); UNUSED(cl); UNUSED(name);
   return NULL;
 }
 
@@ -437,7 +514,7 @@ TValue *lj_clib_index(lua_State *L, CLibrary *cl, GCstr *name)
 #if LJ_TARGET_WINDOWS
       DWORD oldwerr = GetLastError();
 #endif
-      void *p = clib_getsym(cl, sym);
+      void *p = clib_getsym(L, cl, sym);
       GCcdata *cd;
       lj_assertCTS(ctype_isfunc(ct->info) || ctype_isextern(ct->info),
 		   "unexpected ctype %08x in clib", ct->info);
@@ -451,7 +528,7 @@ TValue *lj_clib_index(lua_State *L, CLibrary *cl, GCstr *name)
 			       cconv == CTCC_FASTCALL ? "@%s@%d" : "_%s@%d",
 			       sym, sz);
 	  L->top--;
-	  p = clib_getsym(cl, symd);
+	  p = clib_getsym(L, cl, symd);
 	}
       }
 #endif
@@ -500,11 +577,14 @@ void lj_clib_load(lua_State *L, GCtab *mt, GCstr *name, int global)
 }
 
 /* Unload a C library. */
-void lj_clib_unload(global_State *g, CLibrary *cl)
+void lj_clib_unload(lua_State *L, global_State *g, CLibrary *cl)
 {
+  uint32_t actions;
   clib_cache_free(g, cl);
-  clib_unloadlib(cl);
+  actions = clib_unloadlib(L, cl);
   cl->handle = NULL;
+  if (L)
+    lj_safepoint_checkstop(L, actions);
 }
 
 /* Create the default C library object. */
