@@ -14,14 +14,7 @@
 #include "lj_gc.h"
 #include "lj_gc2.h"
 
-static void run_lua(lua_State *L, const char *src)
-{
-  if (luaL_loadstring(L, src) != 0 || lua_pcall(L, 0, 0, 0) != 0) {
-    fputs(lua_tostring(L, -1), stderr);
-    fputc('\n', stderr);
-    assert(0);
-  }
-}
+#include "lib/lua_fixture_helpers.h"
 
 static void run_hard_alloc_trace(lua_State *L, global_State *g,
 				 const char *name, const char *src)
@@ -37,7 +30,7 @@ static void run_hard_alloc_trace(lua_State *L, global_State *g,
   jit_checks0 = la_load64_acq(&g->gc2.jit_hard_checks);
   assist_runs0 = la_load64_acq(&g->gc2.assist_runs);
 
-  run_lua(L, src);
+  ljt_lua_dostring(L, src);
 
   if (la_load64_acq(&g->gc2.jit_hard_checks) <= jit_checks0) {
     fprintf(stderr, "%s did not enter the x64 GC2 hard check\n", name);
@@ -66,7 +59,7 @@ int main(void)
   assert(g != NULL);
   assert(la_load64_acq(&g->gc2.jit_hard_checks) == 0);
 
-  run_lua(L,
+  ljt_lua_dostring(L,
     "assert(jit and jit.status())\n"
     "jit.opt.start('hotloop=1','hotexit=1','-sink')\n"
     "local x\n"

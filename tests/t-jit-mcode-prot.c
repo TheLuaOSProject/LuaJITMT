@@ -16,6 +16,8 @@
 #include "lj_mcode.h"
 #include "lj_trace.h"
 
+#include "lib/lua_fixture_helpers.h"
+
 #if defined(__linux__) && LJ_TARGET_X64 && LUAJIT_SECURITY_MCODE != 0
 typedef struct MapEntry {
   uintptr_t start;
@@ -69,22 +71,13 @@ static void assert_no_wx_mcode_map(uintptr_t rx, uintptr_t rw, size_t size)
 }
 #endif
 
-static void dostring(lua_State *L, const char *src)
-{
-  if (luaL_dostring(L, src) != LUA_OK) {
-    const char *err = lua_tostring(L, -1);
-    fprintf(stderr, "lua error: %s\n", err ? err : "(non-string)");
-    assert(0);
-  }
-}
-
 int main(void)
 {
   lua_State *L = luaL_newstate();
   assert(L != NULL);
   luaL_openlibs(L);
 
-  dostring(L,
+  ljt_lua_dostring(L,
     "jit.flush()\n"
     "jit.opt.start('hotloop=1', 'hotexit=1')\n"
     "local function f(n)\n"

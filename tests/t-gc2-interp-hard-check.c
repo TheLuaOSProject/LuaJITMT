@@ -14,32 +14,7 @@
 #include "lj_gc.h"
 #include "lj_gc2.h"
 
-static void run_lua(lua_State *L, const char *src)
-{
-  if (luaL_loadstring(L, src) != 0 || lua_pcall(L, 0, 0, 0) != 0) {
-    fputs(lua_tostring(L, -1), stderr);
-    fputc('\n', stderr);
-    assert(0);
-  }
-}
-
-static void load_lua(lua_State *L, const char *src)
-{
-  if (luaL_loadstring(L, src) != 0) {
-    fputs(lua_tostring(L, -1), stderr);
-    fputc('\n', stderr);
-    assert(0);
-  }
-}
-
-static void call_lua(lua_State *L)
-{
-  if (lua_pcall(L, 0, 0, 0) != 0) {
-    fputs(lua_tostring(L, -1), stderr);
-    fputc('\n', stderr);
-    assert(0);
-  }
-}
+#include "lib/lua_fixture_helpers.h"
 
 static void arm_gc2_hard_mark(global_State *g)
 {
@@ -120,7 +95,7 @@ static void test_hard_only_fastfunc(lua_State *L, global_State *g)
   uint64_t interp_checks0, assist_runs0;
   uint8_t legacy_state0;
 
-  load_lua(L,
+  ljt_lua_loadstring(L,
     "local x = string.char(65)\n"
     "assert(x == 'A')\n");
   legacy_state0 = g->gc.state;
@@ -128,7 +103,7 @@ static void test_hard_only_fastfunc(lua_State *L, global_State *g)
   interp_checks0 = la_load64_acq(&g->gc2.interp_hard_checks);
   assist_runs0 = la_load64_acq(&g->gc2.assist_runs);
 
-  call_lua(L);
+  ljt_lua_pcall(L, 0, 0, "lua_pcall");
 
   if (la_load64_acq(&g->gc2.interp_hard_checks) <= interp_checks0) {
     fputs("hard-only fast function did not enter the GC2 hard check\n",
@@ -161,8 +136,8 @@ int main(void)
   assert(g != NULL);
   assert(la_load64_acq(&g->gc2.interp_hard_checks) == 0);
 
-  run_lua(L, "if jit then jit.off() end\n");
-  load_lua(L,
+  ljt_lua_dostring(L, "if jit then jit.off() end\n");
+  ljt_lua_loadstring(L,
     "local x = {}\n"
     "assert(type(x) == 'table')\n");
 
@@ -171,7 +146,7 @@ int main(void)
   assist_runs0 = la_load64_acq(&g->gc2.assist_runs);
 
   lj_gc_threshold_store(g, g->gc.total);
-  call_lua(L);
+  ljt_lua_pcall(L, 0, 0, "lua_pcall");
 
   if (la_load64_acq(&g->gc2.interp_hard_checks) <= interp_checks0) {
     fputs("interpreted TNEW did not enter the GC2 hard check\n", stderr);
@@ -184,7 +159,7 @@ int main(void)
 
   finish_gc2_mark(g);
 
-  load_lua(L,
+  ljt_lua_loadstring(L,
     "local x = {}\n"
     "assert(type(x) == 'table')\n");
   legacy_state0 = g->gc.state;
@@ -192,7 +167,7 @@ int main(void)
   interp_checks0 = la_load64_acq(&g->gc2.interp_hard_checks);
   assist_runs0 = la_load64_acq(&g->gc2.assist_runs);
 
-  call_lua(L);
+  ljt_lua_pcall(L, 0, 0, "lua_pcall");
 
   if (la_load64_acq(&g->gc2.interp_hard_checks) <= interp_checks0) {
     fputs("interpreted hard-only TNEW did not enter the GC2 hard check\n",

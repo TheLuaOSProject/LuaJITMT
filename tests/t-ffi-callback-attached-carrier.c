@@ -15,6 +15,8 @@
 #include "lj_tg.h"
 #include "lj_thr.h"
 
+#include "lib/lua_fixture_helpers.h"
+
 typedef int (*CarrierCallback)(int, int, int, int, int,
 			       int, int, int, int, int);
 
@@ -64,15 +66,6 @@ static void *attached_worker(void *arg)
   return NULL;
 }
 
-static void dostring(lua_State *L, const char *src)
-{
-  if (luaL_dostring(L, src) != LUA_OK) {
-    const char *err = lua_tostring(L, -1);
-    fprintf(stderr, "lua error: %s\n", err ? err : "(non-string)");
-    assert(0);
-  }
-}
-
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -87,7 +80,7 @@ int main(void)
   lua_pushlightuserdata(L, (void *)capture_cb);
   lua_setglobal(L, "lj_m7_capture_attached_cb");
 
-  dostring(L,
+  ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"
     "ffi.cdef[[\n"
     "typedef int (*lj_m7_carrier_cb_t)(int, int, int, int, int,\n"
@@ -120,7 +113,7 @@ int main(void)
   assert(ctx.depth == 0);
   assert(context_checks == 1);
 
-  dostring(L,
+  ljt_lua_dostring(L,
     "m7_attached_keep_cb:free()\n"
     "m7_attached_keep_cb = nil\n"
     "collectgarbage('collect')\n");

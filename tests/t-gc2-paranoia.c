@@ -17,18 +17,11 @@
 #include "lj_safepoint.h"
 #include "lj_tg.h"
 
+#include "lib/lua_fixture_helpers.h"
+
 #if !LJ_GC2_PARANOIA
 #error "t-gc2-paranoia requires -DLJ_GC2_PARANOIA=1"
 #endif
-
-static void run_script(lua_State *L, const char *src)
-{
-  if (luaL_dostring(L, src) != LUA_OK) {
-    const char *msg = lua_tostring(L, -1);
-    fprintf(stderr, "%s\n", msg ? msg : "lua error");
-    abort();
-  }
-}
 
 static int paranoia_finalizer(lua_State *L)
 {
@@ -73,7 +66,7 @@ static void test_minor_major_paranoia(void)
   lj_gc_fullgc(L);
   assert(la_load32_acq(&g->gc2.minor_sweep_enabled) == 1);
   assert(la_load32_acq(&g->gc2.minor_roots_enabled) == 1);
-  run_script(L,
+  ljt_lua_dostring(L,
     "_G.__gc2_minor_live = {}\n"
     "for i = 1, 120 do __gc2_minor_live[i] = {i, 'live'..i} end\n"
     "for i = 1, 400 do local t = {i, 'dead'..i}; t[3] = {i} end\n");
@@ -98,7 +91,7 @@ int main(void)
   assert(tg != NULL);
   assert((tg->tg_flags & TGF_ARENA_INTERNAL) != 0);
 
-  run_script(L,
+  ljt_lua_dostring(L,
     "local keep = {}\n"
     "for i = 1, 600 do\n"
     "  local t = {}\n"

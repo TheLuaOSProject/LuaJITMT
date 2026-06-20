@@ -17,6 +17,8 @@
 #include "lj_tg.h"
 #include "lj_thr.h"
 
+#include "lib/lua_fixture_helpers.h"
+
 typedef int (*AutoCallback)(int, int, int, int, int,
 			    int, int, int, int, int);
 
@@ -84,15 +86,6 @@ static void *foreign_worker(void *arg)
   return NULL;
 }
 
-static void dostring(lua_State *L, const char *src)
-{
-  if (luaL_dostring(L, src) != LUA_OK) {
-    const char *err = lua_tostring(L, -1);
-    fprintf(stderr, "lua error: %s\n", err ? err : "(non-string)");
-    assert(0);
-  }
-}
-
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -107,7 +100,7 @@ int main(void)
   lua_pushlightuserdata(L, (void *)capture_cb);
   lua_setglobal(L, "lj_m7_capture_auto_cb");
 
-  dostring(L,
+  ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"
     "ffi.cdef[[\n"
     "typedef int (*lj_m7_auto_cb_t)(int, int, int, int, int,\n"
@@ -125,7 +118,7 @@ int main(void)
     "m7_auto_keep_cb = cb\n");
   assert(saved_cb != NULL);
   assert(saved_owner != NULL);
-  dostring(L, "collectgarbage('collect')\ncollectgarbage('collect')\n");
+  ljt_lua_dostring(L, "collectgarbage('collect')\ncollectgarbage('collect')\n");
   assert(slot_owner() == saved_owner);
   assert(saved_owner->tg_hint == NULL);
 
@@ -142,7 +135,7 @@ int main(void)
   assert(context_checks == 1);
   assert(slot_owner() == saved_owner);
 
-  dostring(L,
+  ljt_lua_dostring(L,
     "m7_auto_keep_cb:free()\n"
     "m7_auto_keep_cb = nil\n"
     "collectgarbage('collect')\n");

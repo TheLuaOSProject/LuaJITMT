@@ -14,6 +14,8 @@
 #include "lj_ctype.h"
 #include "lj_ccallback.h"
 
+#include "lib/lua_fixture_helpers.h"
+
 typedef int (*OwnerCallback)(int);
 
 static lua_State *mainL;
@@ -46,15 +48,6 @@ static void capture_cb(OwnerCallback cb)
   assert(saved_owner != mainL);
 }
 
-static void dostring(lua_State *L, const char *src)
-{
-  if (luaL_dostring(L, src) != LUA_OK) {
-    const char *err = lua_tostring(L, -1);
-    fprintf(stderr, "lua error: %s\n", err ? err : "(non-string)");
-    assert(0);
-  }
-}
-
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -65,7 +58,7 @@ int main(void)
   lua_pushlightuserdata(L, (void *)capture_cb);
   lua_setglobal(L, "lj_m7_capture_cb");
 
-  dostring(L,
+  ljt_lua_dostring(L,
     "local threading = require('threading')\n"
     "local ffi = require('ffi')\n"
     "ffi.cdef[[\n"
@@ -98,7 +91,7 @@ int main(void)
   assert(slot_owner() == saved_owner);
   assert(saved_cb(5) == 42);
 
-  dostring(L,
+  ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"
     "m7_owner_keep_cb:free()\n"
     "m7_owner_keep_cb = ffi.cast('lj_m7_owner_cb_t', function(x)\n"

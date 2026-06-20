@@ -13,6 +13,8 @@
 #include "lj_ctype.h"
 #include "lj_tg.h"
 
+#include "lib/lua_fixture_helpers.h"
+
 typedef void (*NestedCallback)(void);
 typedef int (*IntCallback)(void);
 
@@ -47,15 +49,6 @@ static void outer_call(NestedCallback cb)
   outer_saw_native = test_tg != NULL && test_tg->in_native != 0;
 }
 
-static void dostring(lua_State *L, const char *src)
-{
-  if (luaL_dostring(L, src) != LUA_OK) {
-    const char *err = lua_tostring(L, -1);
-    fprintf(stderr, "lua error: %s\n", err ? err : "(non-string)");
-    assert(0);
-  }
-}
-
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -75,7 +68,7 @@ int main(void)
   lua_pushlightuserdata(L, (void *)int_call);
   lua_setglobal(L, "lj_m7_int_call");
 
-  dostring(L,
+  ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"
     "ffi.cdef[[\n"
     "typedef void (*lj_m7_nested_cb_t)(void);\n"
@@ -101,7 +94,7 @@ int main(void)
   assert(outer_saw_native == 1);
   assert(test_tg->cb.depth == 0);
 
-  dostring(L,
+  ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"
     "local call_bad = ffi.cast('lj_m7_call_cb_t', lj_m7_error_call)\n"
     "local bad_body = ffi.cast('lj_m7_nested_cb_t', function()\n"
@@ -115,7 +108,7 @@ int main(void)
   assert(test_tg->in_native == 0);
   assert(lj_ctype_cb_isblacklisted(ctype_cts(L), (void *)error_call));
 
-  dostring(L,
+  ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"
     "local call_dead = ffi.cast('lj_m7_call_cb_t', lj_m7_dead_call)\n"
     "local dead = ffi.cast('lj_m7_nested_cb_t', function() end)\n"
@@ -127,7 +120,7 @@ int main(void)
   assert(test_tg->in_native == 0);
   assert(lj_ctype_cb_isblacklisted(ctype_cts(L), (void *)dead_call));
 
-  dostring(L,
+  ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"
     "local call_bad = ffi.cast('lj_m7_call_int_cb_t', lj_m7_int_call)\n"
     "local bad_result = ffi.cast('lj_m7_int_cb_t', function()\n"
