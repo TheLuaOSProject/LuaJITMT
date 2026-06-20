@@ -119,6 +119,27 @@ function M.append_list(dst, src)
   return dst
 end
 
+function M.case_registry(add)
+  local cases = {}
+  local function register(test)
+    cases[test.name] = test
+    add(test)
+  end
+  return cases, register
+end
+
+function M.run_registered_case(cases, t, name)
+  io.stderr:write("== " .. name .. " ==\n")
+  cases[name].run(t)
+  io.stderr:write("ok " .. name .. "\n")
+end
+
+function M.run_registered_cases(cases, t, names)
+  for i = 1, #names do
+    M.run_registered_case(cases, t, names[i])
+  end
+end
+
 function M.read_file(path)
   local f, err = io.open(path, "rb")
   if not f then error(path .. ": " .. err, 2) end

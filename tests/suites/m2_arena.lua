@@ -1,3 +1,5 @@
+local utils = require("suite_utils")
+
 local M2_ORDER = {
   "m2_arena_bitmap",
   "m2_arena_map",
@@ -32,12 +34,7 @@ local function run_luajit_fixture(t, out, cfile, opts)
 end
 
 return function(add)
-  local cases = {}
-
-  local function register(test)
-    cases[test.name] = test
-    add(test)
-  end
+  local cases, register = utils.case_registry(add)
 
   register({
     name = "m2_arena_bitmap",
@@ -151,12 +148,7 @@ return function(add)
     name = "m2_arena_all",
     description = "all focused M2 arena scaffold tests",
     run = function(t)
-      for i = 1, #M2_ORDER do
-        local name = M2_ORDER[i]
-        io.stderr:write("== " .. name .. " ==\n")
-        cases[name].run(t)
-        io.stderr:write("ok " .. name .. "\n")
-      end
+      utils.run_registered_cases(cases, t, M2_ORDER)
       print("M2 arena focused tests passed")
     end
   })

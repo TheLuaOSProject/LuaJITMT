@@ -1,3 +1,4 @@
+local utils = require("suite_utils")
 local runtime = require("suite_runtime")
 
 local make_clean = runtime.make_clean
@@ -8,19 +9,8 @@ local function run_lua_test(t, name)
   t:run({ t:path("tools", "ci", "lua_test.sh"), name })
 end
 
-local function run_case(cases, t, name)
-  io.stderr:write("== " .. name .. " ==\n")
-  cases[name].run(t)
-  io.stderr:write("ok " .. name .. "\n")
-end
-
 return function(add)
-  local cases = {}
-
-  local function register(test)
-    cases[test.name] = test
-    add(test)
-  end
+  local cases, register = utils.case_registry(add)
 
   register({
     name = "m3_gc2_worker_scheduler",
@@ -115,10 +105,10 @@ return function(add)
         compile_and_run_c(t, out, name .. ".c")
       end
 
-      run_case(cases, t, "m3_gc2_worker_scheduler")
-      run_case(cases, t, "m3_safepoint_handshake")
-      run_case(cases, t, "m3_vm_safepoint")
-      run_case(cases, t, "m3_gc2_paranoia")
+      utils.run_registered_case(cases, t, "m3_gc2_worker_scheduler")
+      utils.run_registered_case(cases, t, "m3_safepoint_handshake")
+      utils.run_registered_case(cases, t, "m3_vm_safepoint")
+      utils.run_registered_case(cases, t, "m3_gc2_paranoia")
       run_lua_test(t, "m2_arena_all")
 
       make_clean(t)
