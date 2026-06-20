@@ -61,6 +61,20 @@ function M.luajit_script(t, script, args, opts)
   t:luajit(argv, { timeout = opts.timeout, env = opts.env, quiet = opts.quiet })
 end
 
+function M.build_and_run_luajit_script(t, script, args, opts)
+  opts = opts or {}
+  if opts.build ~= false then
+    local build_quiet = opts.build_quiet
+    if build_quiet == nil then build_quiet = true end
+    t:build({
+      clean = opts.clean ~= false,
+      quiet = build_quiet,
+      xcflags = opts.xcflags
+    })
+  end
+  M.luajit_script(t, script, args, opts)
+end
+
 function M.luajit_dump(t, dump, dumpopt, code, opts)
   opts = opts or {}
   local parts = { "LUA_PATH=" .. shell_quote(M.lua_path(t)) }

@@ -1,4 +1,5 @@
 local utils = require("suite_utils")
+local runtime = require("suite_runtime")
 
 local getenv = utils.getenv
 
@@ -8,8 +9,8 @@ return function(add)
       name = name,
       description = script .. " under the built VM",
       run = function(t)
-        t:build({ clean = true, quiet = true })
-        t:luajit({ "-joff", t:path("tests", script) }, { env = env })
+        runtime.build_and_run_luajit_script(t, script, nil,
+          { joff = true, env = env })
       end
     })
   end
@@ -18,8 +19,8 @@ return function(add)
     name = "m4_threading_api",
     description = "Lua-visible threading API behavior test",
     run = function(t)
-      t:build({ clean = true, quiet = true })
-      t:luajit({ "-joff", t:path("tests", "t-threading-api.lua") })
+      runtime.build_and_run_luajit_script(t, "t-threading-api.lua",
+        nil, { joff = true })
     end
   })
 
@@ -61,13 +62,10 @@ return function(add)
       local spin_marker = t:tempname("m4-shutdown-spin")
       t:remove(marker)
       t:remove(spin_marker)
-      t:build({ clean = true, quiet = true })
-      t:luajit({
-        "-joff",
-        t:path("tests", "t-threading-shutdown.lua"),
+      runtime.build_and_run_luajit_script(t, "t-threading-shutdown.lua", {
         marker,
         spin_marker
-      })
+      }, { joff = true })
 
       for _, path in ipairs({ marker, spin_marker }) do
         local data = t:read(path)
@@ -86,21 +84,21 @@ return function(add)
     name = "m4_threading_smoke",
     description = "pure-compute threading smoke test under the built VM",
     run = function(t)
-      t:build({ clean = true, quiet = true })
-      t:luajit({ "-joff", t:path("tests", "t-mt-smoke.lua") }, {
+      runtime.build_and_run_luajit_script(t, "t-mt-smoke.lua", nil, {
+        joff = true,
         env = {
-          LJ_M4_MT_SMOKE_THREADS = os.getenv("LJ_M4_MT_SMOKE_THREADS") or "8"
+          LJ_M4_MT_SMOKE_THREADS = getenv("LJ_M4_MT_SMOKE_THREADS", "8")
         }
       })
     end
   })
 
   build_and_run("m4_threading_litmus", "t-mt-litmus.lua", {
-    LJ_M4_LITMUS_REPS = os.getenv("LJ_M4_LITMUS_REPS") or "100"
+    LJ_M4_LITMUS_REPS = getenv("LJ_M4_LITMUS_REPS", "100")
   })
 
   build_and_run("m4_threading_stress", "t-threading-stress.lua", {
-    LJ_M4_THREAD_STRESS_REPS = os.getenv("LJ_M4_THREAD_STRESS_REPS") or "1000"
+    LJ_M4_THREAD_STRESS_REPS = getenv("LJ_M4_THREAD_STRESS_REPS", "1000")
   })
 
   build_and_run("m4_threading_upvalue", "t-threading-upvalue.lua")
