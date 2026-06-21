@@ -535,7 +535,9 @@ static int ffi_callback_set(lua_State *L, GCfunc *fn)
   GCcdata *cd = ffi_checkcdata(L, 1);
   CTState *cts = ctype_cts(L);
   CType *ct = ctype_raw(cts, cd->ctypeid);
-  if (ctype_isptr(ct->info) && (LJ_32 || ct->size == 8)) {
+  CTInfo info = ctype_info_acq(ct);
+  CTSize size = ctype_size_acq(ct);
+  if (ctype_isptr(info) && (LJ_32 || size == 8)) {
     MSize slot = lj_ccallback_ptr2slot(cts, *(void **)cdataptr(cd));
     CTypeID1 *cbid = NULL;
     lua_State **owner = NULL;
