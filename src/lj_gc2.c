@@ -69,7 +69,7 @@ void lj_gc2_init(global_State *g)
   gc2_assist_shift_store_rlx(g,
     lj_gc2_assist_shift_from_stepmul(g->gc.stepmul));
   gc2_phase_store_rlx(g, LJ_GC2_IDLE);
-  g->gc2.cycle = 0;
+  gc2_cycle_store_rlx(g, 0);
   gc2_cycle_leader_store_rlx(g, 0);
   gc2_hs_epoch_store_rlx(g, 0);
   gc2_hs_pending_store_rlx(g, 0);
@@ -655,7 +655,7 @@ void lj_gc2_legacy_mark_begin(global_State *g)
   leader = gc2_cycle_leader_xchg_acqrel(g, 0);
   if (gc2_tg_list_acq(g) == NULL && tg != NULL)
     lj_tg_attach(g, tg);
-  g->gc2.cycle++;
+  (void)gc2_cycle_inc_acqrel(g);
   if (leader)
     la_add64_rlx(&g->gc2.cycle_starts, 1);
   la_store64_rlx(&g->gc2.marks_this_round, 0);
@@ -1066,12 +1066,14 @@ int lj_gc2_sweep_tg_ready(TGState *tg)
 int lj_gc2_sweep_needs_prepare(global_State *g)
 {
   TGState *tg;
+  uint32_t cycle;
   if (!g || gc2_phase_acq(g) != LJ_GC2_SWEEP)
     return 0;
+  cycle = gc2_cycle_acq(g);
   for (tg = gc2_tg_list_acq(g);
        tg != NULL;
        tg = lj_tg_next_acq(tg))
-    if (lj_gc2_sweep_tg_ready(tg) && tg->alloc.prepare_epoch != g->gc2.cycle)
+    if (lj_gc2_sweep_tg_ready(tg) && tg->alloc.prepare_epoch != cycle)
       return 1;
   return 0;
 }
@@ -1102,7 +1104,7 @@ uint32_t lj_gc2_sweep_owner_progress(global_State *g, TGState *tg,
     return 0;
   if (gc2_sweep_blocked_by_finalizer(g))
     return 0;
-  epoch = g->gc2.cycle;
+  epoch = gc2_cycle_acq(g);
   minor = gc2_cycle_sweep_minor_acq(g) != 0;
   if (minor)
     (void)lj_gc_sweep_gc2_unmarked(g);
@@ -1151,7 +1153,7 @@ uint64_t lj_gc2_sweep_live_aggregate(global_State *g)
   uint32_t epoch;
   if (!g)
     return 0;
-  epoch = g->gc2.cycle;
+  epoch = gc2_cycle_acq(g);
   for (tg = gc2_tg_list_acq(g);
        tg != NULL;
        tg = lj_tg_next_acq(tg)) {
@@ -1346,8 +1348,10 @@ static void gc2_scan_thread_stack(global_State *g, lua_State *L)
   TValue *o, *top;
   TValue tv;
   uint64_t dirty_epoch;
+  uint32_t cycle;
   if (!L || tvref(L->stack) == NULL)
     return;
+  cycle = gc2_cycle_acq(g);
   lj_gc2_markobj(g, obj2gco(L));
   lj_gc2_markmem(g, tvref(L->stack));
   top = gc2_stack_scan_top(g, L);
@@ -1374,7 +1378,7 @@ static void gc2_scan_thread_stack(global_State *g, lua_State *L)
   }
   dirty_epoch = gc2_thread_owner_dirty(g, L, NULL);
   la_store64_rel(&L->scan_dirty_epoch, dirty_epoch);
-  la_store64_rel(&L->scan_epoch, g->gc2.cycle);
+  la_store64_rel(&L->scan_epoch, cycle);
   gc2_thread_clear_needscan(L);
 }
 
@@ -3591,13 +3595,15 @@ static int gc2_thread_owner_scans(global_State *g, lua_State *th)
 {
   TGState *tg;
   uint64_t scan_epoch, scanned_dirty, owner_dirty;
+  uint32_t cycle;
   if (!g || !th)
     return 0;
   owner_dirty = gc2_thread_owner_dirty(g, th, &tg);
   if (!tg)
     return 0;
+  cycle = gc2_cycle_acq(g);
   scan_epoch = la_load64_acq(&th->scan_epoch);
-  if (scan_epoch != g->gc2.cycle)
+  if (scan_epoch != cycle)
     return 0;
   scanned_dirty = la_load64_acq(&th->scan_dirty_epoch);
   if (scanned_dirty != owner_dirty) {
@@ -3626,6 +3632,7 @@ static void gc2_traverse_thread(global_State *g, lua_State *th)
   GCobj *mt, *uv;
   TValue *o, *top;
   TValue tv;
+  uint32_t cycle;
   if (!th || tvref(th->stack) == NULL)
     return;
   if (!lj_state_gcscan_claim(th, &claim)) {
@@ -3643,6 +3650,7 @@ static void gc2_traverse_thread(global_State *g, lua_State *th)
     }
     return;  /* 05 section 5.7.2: owner scan or retry preserves work. */
   }
+  cycle = gc2_cycle_acq(g);
   la_add64_rlx(&g->gc2.thread_scan_claims, 1);
   lj_gc2_markmem(g, tvref(th->stack));
   top = gc2_stack_scan_top_worker(g, th);
@@ -3668,7 +3676,7 @@ static void gc2_traverse_thread(global_State *g, lua_State *th)
     }
   }
   la_store64_rel(&th->scan_dirty_epoch, 0);
-  la_store64_rel(&th->scan_epoch, g->gc2.cycle);
+  la_store64_rel(&th->scan_epoch, cycle);
   gc2_thread_clear_needscan(th);
   lj_state_dropclaim(&claim);
 }

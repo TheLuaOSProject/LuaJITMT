@@ -1774,6 +1774,25 @@ static LJ_AINLINE uint32_t gc2_phase_xchg_acqrel(global_State *g,
   return la_xchg32_acqrel(&g->gc2.phase, phase);
 }
 
+static LJ_AINLINE uint32_t gc2_cycle_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.cycle);
+}
+
+static LJ_AINLINE void gc2_cycle_store_rlx(global_State *g, uint32_t cycle)
+{
+  la_store32_rlx(&g->gc2.cycle, cycle);
+}
+
+static LJ_AINLINE uint32_t gc2_cycle_inc_acqrel(global_State *g)
+{
+  uint32_t old = gc2_cycle_acq(g), next;
+  do {
+    next = old + 1u;
+  } while (!la_cas32(&g->gc2.cycle, &old, next, LA_ACQ_REL, LA_ACQ));
+  return next;
+}
+
 static LJ_AINLINE void gc2_cycle_leader_store_rlx(global_State *g,
 						  uint32_t leader)
 {

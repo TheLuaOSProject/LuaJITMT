@@ -81,7 +81,7 @@ void lj_safepoint_apply_tg(global_State *g, TGState *tg, uint32_t actions)
       (tg->tg_flags & TGF_ARENA_INTERNAL)) {
     lj_arena_alloc_prepare_sweep_kind(&tg->alloc, LJ_ARENAK_TRAVERSABLE);
     lj_arena_alloc_restore_sweep_kind(&tg->alloc, LJ_ARENAK_PLAIN);
-    tg->alloc.prepare_epoch = g->gc2.cycle;
+    tg->alloc.prepare_epoch = gc2_cycle_acq(g);
   }
   if (actions & LJ_GC2_HS_REDISPATCH)
     lj_tg_sync_dispatch_tg(g, tg);  /* 03 section 3.6, 07 section 7.3. */

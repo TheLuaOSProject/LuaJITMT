@@ -140,19 +140,21 @@ static uint32_t gc_arena_finish_sweep_boundary(global_State *g, int drain)
 {
   TGState *tg;
   uint32_t total = 0;
+  uint32_t cycle;
   if (!gc_arena_sweep_ready(g)) {
     gc_arena_rebuild_free(g);
     return 0;
   }
+  cycle = gc2_cycle_acq(g);
   for (tg = gc2_tg_list_acq(g);
        tg != NULL;
        tg = lj_tg_next_acq(tg)) {
     /* 05 section 5.8 boundary-lazy traversable sweep bridge. */
     if (lj_gc2_sweep_tg_ready(tg) &&
-	tg->alloc.prepare_epoch != g->gc2.cycle) {
+	tg->alloc.prepare_epoch != cycle) {
       lj_arena_alloc_prepare_sweep_kind(&tg->alloc, LJ_ARENAK_TRAVERSABLE);
       lj_arena_alloc_restore_sweep_kind(&tg->alloc, LJ_ARENAK_PLAIN);
-      tg->alloc.prepare_epoch = g->gc2.cycle;
+      tg->alloc.prepare_epoch = cycle;
     }
   }
   do {  /* 05 section 5.6.3 worker-owned sweep bridge. */
