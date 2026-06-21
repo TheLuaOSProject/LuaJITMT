@@ -1424,18 +1424,18 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
   CTState *cts = ctype_ctsG(J2G(J));
   CTypeID id = ctype_rawid(cts, cd->ctypeid);
   CType *ct = ctype_get(cts, id);
-  CTInfo info;
+  CTInfo info = ctype_info_acq(ct);
   IRType tp = IRT_PTR;
-  if (ctype_isptr(ct->info)) {
-    tp = (LJ_64 && ct->size == 8) ? IRT_P64 : IRT_P32;
-    id = ctype_rawid(cts, ctype_cid(ct->info));
+  if (ctype_isptr(info)) {
+    tp = (LJ_64 && ctype_size_acq(ct) == 8) ? IRT_P64 : IRT_P32;
+    id = ctype_rawid(cts, ctype_cid(info));
     ct = ctype_get(cts, id);
+    info = ctype_info_acq(ct);  /* crec_call_args may invalidate ct pointer. */
   }
-  info = ct->info;  /* crec_call_args may invalidate ct pointer. */
   if (ctype_isfunc(info)) {
     TRef func = emitir(IRT(IR_FLOAD, tp), J->base[0], IRFL_CDATA_PTR);
     CType *ctr = ctype_rawchild(cts, ct);
-    CTInfo ctr_info = ctr->info;  /* crec_call_args may invalidate ctr. */
+    CTInfo ctr_info = ctype_info_acq(ctr);  /* crec_call_args may invalidate ctr. */
     IRType t = crec_ct2irt(cts, ctr);
     TRef tr;
     /* Check for blacklisted C functions that might call a callback. */
