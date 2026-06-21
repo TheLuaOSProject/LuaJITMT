@@ -97,14 +97,14 @@ static uint32_t safepoint_ack_tg(global_State *g, TGState *tg)
   uint32_t actions, oldpending;
   if (!g || !tg)
     return 0;
-  actions = la_xchg32_acqrel(&tg->reqmask, 0);  /* 05 section 5.4.2. */
+  actions = lj_tg_reqmask_xchg_acqrel(tg, 0);  /* 05 section 5.4.2. */
   if (actions == 0)
     return 0;
   epoch = gc2_hs_epoch_acq(g);  /* 05 section 5.4.2 epoch. */
-  oldepoch = la_load64_acq(&tg->hs_epoch_ack);
+  oldepoch = lj_tg_hs_epoch_ack_acq(tg);
   while (oldepoch != epoch) {
     uint64_t expect = oldepoch;
-    if (la_cas64(&tg->hs_epoch_ack, &expect, epoch, LA_ACQ_REL, LA_ACQ))
+    if (lj_tg_hs_epoch_ack_cas(tg, &expect, epoch))
       break;  /* This thread owns the ack for the epoch. */
     oldepoch = expect;
   }
@@ -112,7 +112,7 @@ static uint32_t safepoint_ack_tg(global_State *g, TGState *tg)
     return 0;
   lj_safepoint_apply_tg(g, tg, actions);
   safepoint_note_ack_latency(g);  /* 13.8: mutator-observed poll latency. */
-  la_store32_rel(&tg->poll, 0);
+  lj_tg_poll_rel(tg, 0);
   oldpending = gc2_hs_pending_sub_acqrel(g, 1);  /* 05 section 5.4.2. */
   if (oldpending == 1)
     gc2_hs_pending_futex_wake(g, 1);
@@ -130,7 +130,7 @@ uint32_t lj_safepoint_poll(lua_State *L)
   if (!L)
     return 0;
   tg = L2TG(L);
-  if (!tg || la_load32_acq(&tg->poll) == 0)  /* 05 section 5.4.2 poll. */
+  if (!tg || lj_tg_poll_acq(tg) == 0)  /* 05 section 5.4.2 poll. */
     return 0;
   return lj_safepoint_ack(L);
 }
@@ -181,14 +181,14 @@ static uint32_t safepoint_signal_late(global_State *g, uint32_t actions,
        tg = lj_tg_next_acq(tg)) {
     if (la_load8_acq(&tg->tg_flags) & TGF_DEAD)  /* 05 section 5.4.1. */
       continue;
-    if (la_load64_acq(&tg->hs_epoch_ack) == epoch)
+    if (lj_tg_hs_epoch_ack_acq(tg) == epoch)
       continue;  /* 09 section 9.3: attach self-caught this epoch. */
-    if (la_load32_acq(&tg->reqmask) != 0 || la_load32_acq(&tg->poll) != 0)
+    if (lj_tg_reqmask_acq(tg) != 0 || lj_tg_poll_acq(tg) != 0)
       continue;  /* Already counted by this handshake. */
     (void)gc2_hs_pending_add_rlx(g, 1);
     signaled++;
-    la_store32_rel(&tg->reqmask, actions);  /* 05 section 5.4.2. */
-    la_store32_rel(&tg->poll, 1);  /* 05 section 5.4.2 signal word. */
+    lj_tg_reqmask_rel(tg, actions);  /* 05 section 5.4.2. */
+    lj_tg_poll_rel(tg, 1);  /* 05 section 5.4.2 signal word. */
   }
   return signaled;
 }

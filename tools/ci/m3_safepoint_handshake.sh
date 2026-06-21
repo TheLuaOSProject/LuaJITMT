@@ -15,6 +15,13 @@ if hits=$(grep -nE -- '->[[:space:]]*next_tg|&[[:alnum:]_]+->[[:space:]]*next_tg
   printf '%s\n' 'raw TGState next_tg access is forbidden; use lj_tg_next_* helpers' >&2
   exit 1
 fi
+if hits=$(grep -nE -- '->[[:space:]]*(poll|reqmask|hs_epoch_ack)([^[:alnum:]_]|$)|&[[:space:]]*[^)]*->[[:space:]]*(poll|reqmask|hs_epoch_ack)([^[:alnum:]_]|$)' \
+    "$ROOT/src/lj_safepoint.c" \
+    "$ROOT/src/lj_tg.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw TG safepoint mirror access is forbidden; use lj_tg_* safepoint helpers' >&2
+  exit 1
+fi
 if hits=$(grep -nE -- '->[[:space:]]*gc2[.](tg_list|n_threads)([^[:alnum:]_]|$)|gc2[[:space:]]*->[[:space:]]*(tg_list|n_threads)([^[:alnum:]_]|$)' \
     "$ROOT/src/lj_gc.c" \
     "$ROOT/src/lj_gc2.c" \

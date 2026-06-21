@@ -127,12 +127,12 @@ static void tg_attach_catchup(global_State *g, TGState *tg)
   uint64_t epoch = gc2_hs_epoch_acq(g);
   uint32_t pending = gc2_hs_pending_acq(g);
   uint32_t actions = pending ? gc2_hs_actions_acq(g) : 0;
-  tg->hs_epoch_ack = epoch;
+  lj_tg_hs_epoch_ack_store_rlx(tg, epoch);
   if (actions) {
     lj_safepoint_apply_tg(g, tg, actions);
-    la_store32_rel(&tg->reqmask, 0);
-    la_store32_rel(&tg->poll, 0);
-    la_store64_rel(&tg->hs_epoch_ack, epoch);  /* 09 section 9.3 self-ack. */
+    lj_tg_reqmask_rel(tg, 0);
+    lj_tg_poll_rel(tg, 0);
+    lj_tg_hs_epoch_ack_rel(tg, epoch);  /* 09 section 9.3 self-ack. */
   }
 }
 
@@ -141,8 +141,8 @@ void lj_tg_attach(global_State *g, TGState *tg)
   TGState *head;
   if (!g || !tg)
     return;
-  tg->poll = 0;
-  tg->reqmask = 0;
+  lj_tg_poll_store_rlx(tg, 0);
+  lj_tg_reqmask_store_rlx(tg, 0);
   tg_adopt_gc2_phase(g, tg);  /* 09 section 9.3 attach catch-up scaffold. */
   tg_attach_catchup(g, tg);
   tg->tg_flags &= (uint8_t)~TGF_DEAD;
@@ -161,7 +161,7 @@ void lj_tg_detach(global_State *g, TGState *tg)
     return;
   thread_L = lj_tg_load_thread_L(tg);
   if (thread_L &&
-      (la_load32_acq(&tg->reqmask) != 0 || la_load32_acq(&tg->poll) != 0))
+      (lj_tg_reqmask_acq(tg) != 0 || lj_tg_poll_acq(tg) != 0))
     (void)lj_safepoint_ack(thread_L);  /* Leaving TG owns its ack. */
   (void)lj_gc2_flush_ssb(g, tg);  /* 09 section 9.3 detach publishes SSB. */
   (void)lj_gc2_flush_alloc(g, tg);  /* 04 section 4.8 detach accounting. */
@@ -169,8 +169,8 @@ void lj_tg_detach(global_State *g, TGState *tg)
   oldflags = la_or8_rlx(&tg->tg_flags, TGF_DEAD);  /* 05 section 5.4.1. */
   if (!(oldflags & TGF_DEAD))
     (void)gc2_n_threads_sub_acqrel(g, 1);
-  la_store32_rel(&tg->reqmask, 0);
-  la_store32_rel(&tg->poll, 0);
+  lj_tg_reqmask_rel(tg, 0);
+  lj_tg_poll_rel(tg, 0);
   la_store8_rlx(&tg->in_native, 0);
 #if LJ_HASFFI
   tg->ffi_call_func = NULL;

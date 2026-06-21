@@ -112,6 +112,64 @@ static LJ_AINLINE void lj_tg_next_rel(TGState *tg, TGState *next)
   la_storeptr_rel((void **)&tg->next_tg, next);
 }
 
+static LJ_AINLINE uint32_t lj_tg_poll_acq(const TGState *tg)
+{
+  return la_load32_acq(&tg->poll);
+}
+
+static LJ_AINLINE void lj_tg_poll_store_rlx(TGState *tg, uint32_t poll)
+{
+  la_store32_rlx(&tg->poll, poll);
+}
+
+static LJ_AINLINE void lj_tg_poll_rel(TGState *tg, uint32_t poll)
+{
+  la_store32_rel(&tg->poll, poll);
+}
+
+static LJ_AINLINE uint32_t lj_tg_reqmask_acq(const TGState *tg)
+{
+  return la_load32_acq(&tg->reqmask);
+}
+
+static LJ_AINLINE void lj_tg_reqmask_store_rlx(TGState *tg, uint32_t reqmask)
+{
+  la_store32_rlx(&tg->reqmask, reqmask);
+}
+
+static LJ_AINLINE void lj_tg_reqmask_rel(TGState *tg, uint32_t reqmask)
+{
+  la_store32_rel(&tg->reqmask, reqmask);
+}
+
+static LJ_AINLINE uint32_t lj_tg_reqmask_xchg_acqrel(TGState *tg,
+						     uint32_t reqmask)
+{
+  return la_xchg32_acqrel(&tg->reqmask, reqmask);
+}
+
+static LJ_AINLINE uint64_t lj_tg_hs_epoch_ack_acq(const TGState *tg)
+{
+  return la_load64_acq(&tg->hs_epoch_ack);
+}
+
+static LJ_AINLINE void lj_tg_hs_epoch_ack_store_rlx(TGState *tg,
+						    uint64_t epoch)
+{
+  la_store64_rlx(&tg->hs_epoch_ack, epoch);
+}
+
+static LJ_AINLINE void lj_tg_hs_epoch_ack_rel(TGState *tg, uint64_t epoch)
+{
+  la_store64_rel(&tg->hs_epoch_ack, epoch);
+}
+
+static LJ_AINLINE int lj_tg_hs_epoch_ack_cas(TGState *tg, uint64_t *oldp,
+					     uint64_t epoch)
+{
+  return la_cas64(&tg->hs_epoch_ack, oldp, epoch, LA_ACQ_REL, LA_ACQ);
+}
+
 static LJ_AINLINE lua_State *lj_tg_load_cur_L(TGState *tg)
 {
   return (lua_State *)la_loadptr_acq((void *const *)&tg->cur_L);

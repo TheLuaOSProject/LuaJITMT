@@ -13,9 +13,9 @@ field-specific helper accessors:
 
 Runtime users in `lj_safepoint.c`, `lj_tg.c`, `lj_gc2.c`, and
 `collectgarbage("stats")` now call helper accessors instead of spelling ad hoc
-atomics or futex operations against those `GC2State` words. TG-local
-`reqmask`, `poll`, and `hs_epoch_ack` remain intentionally outside this slice;
-they need a separate per-thread mirror helper surface.
+atomics or futex operations against those `GC2State` words. A follow-up
+TG-local mirror helper slice routes `reqmask`, `poll`, and `hs_epoch_ack`
+through `lj_tg_*` safepoint helpers.
 
 `tools/ci/m3_safepoint_handshake.sh` rejects future raw production access to
 the global GC2 handshake fields while leaving the helper bodies as the single
