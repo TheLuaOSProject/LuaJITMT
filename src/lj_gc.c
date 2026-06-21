@@ -900,7 +900,7 @@ static size_t gc_separateudata_registered(global_State *g, int all)
     */
     (void)gc_unlink_udata_object(g, o);
     gc2_finreg_udata_obj_clear(node);
-    la_add64_rlx(&g->gc2.finreg_udata_discovered, 1);
+    gc2_finreg_udata_discovered_add(g, 1);
     m += gc_queue_udata_finalizer(g, o);
     if (lj_gc2_finreg_udata_unlink(g, prev, node, next)) {
       node = next;

@@ -700,19 +700,19 @@ static void gc_stats_push(lua_State *L)
   gc_stats_setnum(L, t, "finreg_cdata_pending_order_hits",
 		  la_load64_acq(&gc2->finreg_cdata_pending_order_hits));
   gc_stats_setnum(L, t, "finreg_udata_sets",
-		  la_load64_acq(&gc2->finreg_udata_sets));
+		  gc2_finreg_udata_sets_acq(g));
   gc_stats_setnum(L, t, "finreg_udata_clears",
-		  la_load64_acq(&gc2->finreg_udata_clears));
+		  gc2_finreg_udata_clears_acq(g));
   gc_stats_setnum(L, t, "finreg_udata_queued",
-		  la_load64_acq(&gc2->finreg_udata_queued));
+		  gc2_finreg_udata_queued_acq(g));
   gc_stats_setnum(L, t, "finreg_udata_registered",
-		  la_load64_acq(&gc2->finreg_udata_registered));
+		  gc2_finreg_udata_registered_acq(g));
   gc_stats_setnum(L, t, "finreg_udata_retired_nodes",
-		  la_load64_acq(&gc2->finreg_udata_retired_nodes));
+		  gc2_finreg_udata_retired_nodes_acq(g));
   gc_stats_setnum(L, t, "finreg_udata_discovered",
-		  la_load64_acq(&gc2->finreg_udata_discovered));
+		  gc2_finreg_udata_discovered_acq(g));
   gc_stats_setnum(L, t, "finreg_udata_forgets",
-		  la_load64_acq(&gc2->finreg_udata_forgets));
+		  gc2_finreg_udata_forgets_acq(g));
   gc_stats_setnum(L, t, "finalizer_queued",
 		  la_load64_acq(&gc2->finalizer_queued));
   gc_stats_setnum(L, t, "finalizer_dequeued",

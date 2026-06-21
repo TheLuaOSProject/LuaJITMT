@@ -231,15 +231,15 @@ void lj_gc2_init(global_State *g)
   la_store32_rlx(&g->gc2.finreg_cdata_preclaim_publish_paused, 0);
   la_store32_rlx(&g->gc2.finreg_cdata_preclaim_publish_release, 0);
 #endif
-  la_store64_rlx(&g->gc2.finreg_udata_sets, 0);
-  la_store64_rlx(&g->gc2.finreg_udata_clears, 0);
-  la_store64_rlx(&g->gc2.finreg_udata_queued, 0);
+  gc2_finreg_udata_sets_store_rlx(g, 0);
+  gc2_finreg_udata_clears_store_rlx(g, 0);
+  gc2_finreg_udata_queued_store_rlx(g, 0);
   gc2_finreg_udata_head_store_rlx(g, NULL);
   gc2_finreg_udata_retired_store_rlx(g, NULL);
-  la_store64_rlx(&g->gc2.finreg_udata_registered, 0);
-  la_store64_rlx(&g->gc2.finreg_udata_retired_nodes, 0);
-  la_store64_rlx(&g->gc2.finreg_udata_discovered, 0);
-  la_store64_rlx(&g->gc2.finreg_udata_forgets, 0);
+  gc2_finreg_udata_registered_store_rlx(g, 0);
+  gc2_finreg_udata_retired_nodes_store_rlx(g, 0);
+  gc2_finreg_udata_discovered_store_rlx(g, 0);
+  gc2_finreg_udata_forgets_store_rlx(g, 0);
   gc2_finalizer_mpsc_store_rlx(g, NULL);
   gc2_finalizer_tail_store_rlx(g, NULL);
   gc2_finalizer_active_store_rlx(g, 0);
@@ -2578,10 +2578,10 @@ int lj_gc2_finreg_udata_set(global_State *g, GCobj *o, int enabled)
       break;
   }
   if (enabled) {
-    la_add64_rlx(&g->gc2.finreg_udata_sets, 1);
+    gc2_finreg_udata_sets_add(g, 1);
     return 1;
   } else {
-    la_add64_rlx(&g->gc2.finreg_udata_clears, 1);
+    gc2_finreg_udata_clears_add(g, 1);
     return -1;
   }
 }
@@ -2606,7 +2606,7 @@ void lj_gc2_finreg_udata_register(lua_State *L, global_State *g, GCobj *o)
     head = gc2_finreg_udata_head_acq(g);
     gc2_finreg_udata_next_rel(node, head);
   } while (!gc2_finreg_udata_head_cas(g, &head, node));
-  la_add64_rlx(&g->gc2.finreg_udata_registered, 1);
+  gc2_finreg_udata_registered_add(g, 1);
 }
 
 void lj_gc2_finreg_udata_register_mt(lua_State *L, global_State *g,
@@ -2634,7 +2634,7 @@ static int gc2_finreg_udata_retire(global_State *g,
     head = gc2_finreg_udata_retired_acq(g);
     gc2_finreg_udata_retired_next_rel(node, head);
   } while (!gc2_finreg_udata_retired_cas(g, &head, node));
-  la_add64_rlx(&g->gc2.finreg_udata_retired_nodes, 1);
+  gc2_finreg_udata_retired_nodes_add(g, 1);
   return 1;
 }
 
@@ -2687,7 +2687,7 @@ void lj_gc2_finreg_udata_forget(global_State *g, GCobj *o)
     node = next;
   }
   if (cleared)
-    la_add64_rlx(&g->gc2.finreg_udata_forgets, 1);
+    gc2_finreg_udata_forgets_add(g, 1);
 }
 
 void lj_gc2_finreg_udata_queue(global_State *g, GCobj *o)
@@ -2695,7 +2695,7 @@ void lj_gc2_finreg_udata_queue(global_State *g, GCobj *o)
   if (!g || !o || o->gch.gct != ~LJ_TUDATA)
     return;
   gc2_finreg_queue_mark(g, o);
-  la_add64_rlx(&g->gc2.finreg_udata_queued, 1);
+  gc2_finreg_udata_queued_add(g, 1);
 }
 
 static GCobj *gc2_grey_pop(global_State *g)

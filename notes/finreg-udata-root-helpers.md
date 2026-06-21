@@ -25,6 +25,8 @@ surface and rejects raw production access to `finreg_udata_head` and
 
 ## Follow-Up
 
-The side-list remains append-only plus logical retirement. A later slice can
-decide whether to add epoch-based reclamation before teardown, but the root
-publication and CAS contract is now centralized.
+Follow-up counter helper work now routes userdata FINREG telemetry through
+`gc2_finreg_udata_*()` helpers too. The side-list remains append-only plus
+logical retirement. A later slice can decide whether to add epoch-based
+reclamation before teardown, but the root publication and CAS contract is now
+centralized.

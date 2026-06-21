@@ -2964,6 +2964,122 @@ static LJ_AINLINE void setgcrefnullrel_(GCRef *r)
 #define setgcrefroot(r, gc)	setgcrefrel((r), (gc))
 #define setgcrefmt(r, gc)	setgcrefrel((r), (gc))
 
+static LJ_AINLINE uint64_t gc2_finreg_udata_sets_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.finreg_udata_sets);
+}
+
+static LJ_AINLINE void gc2_finreg_udata_sets_store_rlx(global_State *g,
+						       uint64_t n)
+{
+  la_store64_rlx(&g->gc2.finreg_udata_sets, n);
+}
+
+static LJ_AINLINE void gc2_finreg_udata_sets_add(global_State *g, uint64_t n)
+{
+  la_add64_rlx(&g->gc2.finreg_udata_sets, n);
+}
+
+static LJ_AINLINE uint64_t gc2_finreg_udata_clears_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.finreg_udata_clears);
+}
+
+static LJ_AINLINE void gc2_finreg_udata_clears_store_rlx(global_State *g,
+							 uint64_t n)
+{
+  la_store64_rlx(&g->gc2.finreg_udata_clears, n);
+}
+
+static LJ_AINLINE void gc2_finreg_udata_clears_add(global_State *g, uint64_t n)
+{
+  la_add64_rlx(&g->gc2.finreg_udata_clears, n);
+}
+
+static LJ_AINLINE uint64_t gc2_finreg_udata_queued_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.finreg_udata_queued);
+}
+
+static LJ_AINLINE void gc2_finreg_udata_queued_store_rlx(global_State *g,
+							 uint64_t n)
+{
+  la_store64_rlx(&g->gc2.finreg_udata_queued, n);
+}
+
+static LJ_AINLINE void gc2_finreg_udata_queued_add(global_State *g, uint64_t n)
+{
+  la_add64_rlx(&g->gc2.finreg_udata_queued, n);
+}
+
+static LJ_AINLINE uint64_t gc2_finreg_udata_registered_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.finreg_udata_registered);
+}
+
+static LJ_AINLINE void gc2_finreg_udata_registered_store_rlx(global_State *g,
+							     uint64_t n)
+{
+  la_store64_rlx(&g->gc2.finreg_udata_registered, n);
+}
+
+static LJ_AINLINE void gc2_finreg_udata_registered_add(global_State *g,
+						       uint64_t n)
+{
+  la_add64_rlx(&g->gc2.finreg_udata_registered, n);
+}
+
+static LJ_AINLINE uint64_t gc2_finreg_udata_retired_nodes_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.finreg_udata_retired_nodes);
+}
+
+static LJ_AINLINE void
+gc2_finreg_udata_retired_nodes_store_rlx(global_State *g, uint64_t n)
+{
+  la_store64_rlx(&g->gc2.finreg_udata_retired_nodes, n);
+}
+
+static LJ_AINLINE void gc2_finreg_udata_retired_nodes_add(global_State *g,
+							  uint64_t n)
+{
+  la_add64_rlx(&g->gc2.finreg_udata_retired_nodes, n);
+}
+
+static LJ_AINLINE uint64_t gc2_finreg_udata_discovered_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.finreg_udata_discovered);
+}
+
+static LJ_AINLINE void gc2_finreg_udata_discovered_store_rlx(global_State *g,
+							     uint64_t n)
+{
+  la_store64_rlx(&g->gc2.finreg_udata_discovered, n);
+}
+
+static LJ_AINLINE void gc2_finreg_udata_discovered_add(global_State *g,
+						       uint64_t n)
+{
+  la_add64_rlx(&g->gc2.finreg_udata_discovered, n);
+}
+
+static LJ_AINLINE uint64_t gc2_finreg_udata_forgets_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.finreg_udata_forgets);
+}
+
+static LJ_AINLINE void gc2_finreg_udata_forgets_store_rlx(global_State *g,
+							  uint64_t n)
+{
+  la_store64_rlx(&g->gc2.finreg_udata_forgets, n);
+}
+
+static LJ_AINLINE void gc2_finreg_udata_forgets_add(global_State *g,
+						    uint64_t n)
+{
+  la_add64_rlx(&g->gc2.finreg_udata_forgets, n);
+}
+
 static LJ_AINLINE GC2FinRegUDataNode *
 gc2_finreg_udata_head_acq(global_State *g)
 {
