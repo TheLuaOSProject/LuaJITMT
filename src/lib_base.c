@@ -643,10 +643,10 @@ static void gc_stats_push(lua_State *L)
   gc_stats_setnum(L, t, "sweep_owner_live_cells",
 		  la_load64_acq(&gc2->sweep_owner_live_cells));
   gc_stats_setnum(L, t, "sweep_live_updates",
-		  la_load64_acq(&gc2->sweep_live_updates));
+		  gc2_sweep_live_updates_acq(g));
   gc_stats_setnum(L, t, "sweep_live_huge_bytes",
-		  la_load64_acq(&gc2->sweep_live_huge_bytes));
-  gc_stats_setnum(L, t, "live_estimate", la_load64_acq(&gc2->live_estimate));
+		  gc2_sweep_live_huge_bytes_acq(g));
+  gc_stats_setnum(L, t, "live_estimate", gc2_live_estimate_acq(g));
   gc_stats_setnum(L, t, "weak_clear_tables",
 		  la_load64_acq(&gc2->weak_clear_tables));
   gc_stats_setnum(L, t, "weak_clear_cleared",

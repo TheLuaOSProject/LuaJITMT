@@ -175,9 +175,9 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.sweep_owner_runs, 0);
   la_store64_rlx(&g->gc2.sweep_owner_arenas, 0);
   la_store64_rlx(&g->gc2.sweep_owner_live_cells, 0);
-  la_store64_rlx(&g->gc2.sweep_live_updates, 0);
-  la_store64_rlx(&g->gc2.sweep_live_huge_bytes, 0);
-  la_store64_rlx(&g->gc2.live_estimate, 0);
+  gc2_sweep_live_updates_store_rlx(g, 0);
+  gc2_sweep_live_huge_bytes_store_rlx(g, 0);
+  gc2_live_estimate_store_rlx(g, 0);
   g->gc2.weak_stack = NULL;
   g->gc2.weak_ready = NULL;
   g->gc2.weak_capacity = 0;
@@ -531,7 +531,7 @@ void lj_gc2_update_pacing(global_State *g)
   if (!g)
     return;
   legacy_live = g->gc.estimate ? g->gc.estimate : lj_gc_total_load(g);
-  gc2_live = la_load64_acq(&g->gc2.live_estimate);
+  gc2_live = gc2_live_estimate_acq(g);
   live = gc2_live > legacy_live ? gc2_live : legacy_live;
   if (live < LJ_GC2_ACCT_FLUSH)
     live = LJ_GC2_ACCT_FLUSH;
@@ -1170,9 +1170,9 @@ uint64_t lj_gc2_sweep_live_aggregate(global_State *g)
   bytes = cells > (~(uint64_t)0 >> LJ_CELL_SHIFT) ?
 	  ~(uint64_t)0 : cells << LJ_CELL_SHIFT;
   bytes = gc2_saturating_add64(bytes, huge_bytes);
-  la_store64_rel(&g->gc2.sweep_live_huge_bytes, huge_bytes);
-  la_store64_rel(&g->gc2.live_estimate, bytes);
-  la_add64_rlx(&g->gc2.sweep_live_updates, 1);
+  gc2_sweep_live_huge_bytes_rel(g, huge_bytes);
+  gc2_live_estimate_rel(g, bytes);
+  gc2_sweep_live_updates_add(g, 1);
   return bytes;
 }
 

@@ -2173,6 +2173,56 @@ static LJ_AINLINE void gc2_minor_survival_threshold_pct_store_rlx(
   la_store32_rlx(&g->gc2.minor_survival_threshold_pct, pct);
 }
 
+static LJ_AINLINE uint64_t gc2_sweep_live_updates_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.sweep_live_updates);
+}
+
+static LJ_AINLINE void gc2_sweep_live_updates_store_rlx(global_State *g,
+							uint64_t n)
+{
+  la_store64_rlx(&g->gc2.sweep_live_updates, n);
+}
+
+static LJ_AINLINE void gc2_sweep_live_updates_add(global_State *g,
+						  uint64_t n)
+{
+  la_add64_rlx(&g->gc2.sweep_live_updates, n);
+}
+
+static LJ_AINLINE uint64_t gc2_sweep_live_huge_bytes_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.sweep_live_huge_bytes);
+}
+
+static LJ_AINLINE void gc2_sweep_live_huge_bytes_store_rlx(global_State *g,
+							   uint64_t bytes)
+{
+  la_store64_rlx(&g->gc2.sweep_live_huge_bytes, bytes);
+}
+
+static LJ_AINLINE void gc2_sweep_live_huge_bytes_rel(global_State *g,
+						     uint64_t bytes)
+{
+  la_store64_rel(&g->gc2.sweep_live_huge_bytes, bytes);
+}
+
+static LJ_AINLINE uint64_t gc2_live_estimate_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.live_estimate);
+}
+
+static LJ_AINLINE void gc2_live_estimate_store_rlx(global_State *g,
+						   uint64_t bytes)
+{
+  la_store64_rlx(&g->gc2.live_estimate, bytes);
+}
+
+static LJ_AINLINE void gc2_live_estimate_rel(global_State *g, uint64_t bytes)
+{
+  la_store64_rel(&g->gc2.live_estimate, bytes);
+}
+
 static LJ_AINLINE uint32_t gc2_n_workers_acq(global_State *g)
 {
   return la_load32_acq(&g->gc2.n_workers);
