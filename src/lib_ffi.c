@@ -311,7 +311,10 @@ LJLIB_CF(ffi_meta___call)	LJLIB_REC(cdata_call)
   }
   /* Handle ctype __call/__new metamethod. */
   ct = ctype_raw(cts, id);
-  if (ctype_isptr(ct->info)) id = ctype_cid(ct->info);
+  {
+    CTInfo info = ctype_info_acq(ct);
+    if (ctype_isptr(info)) id = ctype_cid(info);
+  }
   tv = lj_ctype_metatv(cts, &metatv, id, mm);
   if (tv)
     return lj_meta_tailcall(L, tv);
@@ -369,30 +372,35 @@ LJLIB_CF(ffi_meta___tostring)
     CTState *cts = ctype_cts(L);
     CTypeID rid = ctype_rawid(cts, id);
     CType *ct = ctype_get(cts, rid);
-    if (ctype_isref(ct->info)) {
+    CTInfo info = ctype_info_acq(ct);
+    CTSize size = ctype_size_acq(ct);
+    if (ctype_isref(info)) {
       p = *(void **)p;
-      rid = ctype_rawid(cts, ctype_cid(ct->info));
+      rid = ctype_rawid(cts, ctype_cid(info));
       ct = ctype_get(cts, rid);
+      info = ctype_info_acq(ct);
+      size = ctype_size_acq(ct);
     }
-    if (ctype_iscomplex(ct->info)) {
-      setstrV(L, L->top-1, lj_ctype_repr_complex(L, cdataptr(cd), ct->size));
+    if (ctype_iscomplex(info)) {
+      setstrV(L, L->top-1, lj_ctype_repr_complex(L, cdataptr(cd), size));
       goto checkgc;
-    } else if (ct->size == 8 && ctype_isinteger(ct->info)) {
+    } else if (size == 8 && ctype_isinteger(info)) {
       setstrV(L, L->top-1, lj_ctype_repr_int64(L, *(uint64_t *)cdataptr(cd),
-					       (ct->info & CTF_UNSIGNED)));
+					       (info & CTF_UNSIGNED)));
       goto checkgc;
-    } else if (ctype_isfunc(ct->info)) {
+    } else if (ctype_isfunc(info)) {
       p = *(void **)p;
-    } else if (ctype_isenum(ct->info)) {
+    } else if (ctype_isenum(info)) {
       msg = "cdata<%s>: %d";
       p = (void *)(uintptr_t)*(uint32_t *)p;
     } else {
-      if (ctype_isptr(ct->info)) {
-	p = cdata_getptr(p, ct->size);
-	rid = ctype_rawid(cts, ctype_cid(ct->info));
+      if (ctype_isptr(info)) {
+	p = cdata_getptr(p, size);
+	rid = ctype_rawid(cts, ctype_cid(info));
 	ct = ctype_get(cts, rid);
+	info = ctype_info_acq(ct);
       }
-      if (ctype_isstruct(ct->info) || ctype_isvector(ct->info)) {
+      if (ctype_isstruct(info) || ctype_isvector(info)) {
 	/* Handle ctype __tostring metamethod. */
 	TValue metatv;
 	cTValue *tv = lj_ctype_metatv(cts, &metatv, rid, MM_tostring);
@@ -414,7 +422,10 @@ static int ffi_pairs(lua_State *L, MMS mm)
   CType *ct = ctype_raw(cts, id);
   TValue metatv;
   cTValue *tv;
-  if (ctype_isptr(ct->info)) id = ctype_cid(ct->info);
+  {
+    CTInfo info = ctype_info_acq(ct);
+    if (ctype_isptr(info)) id = ctype_cid(info);
+  }
   tv = lj_ctype_metatv(cts, &metatv, id, mm);
   if (!tv)
     lj_err_callerv(L, LJ_ERR_FFI_BADMM, strdata(lj_ctype_repr(L, id, NULL)),
