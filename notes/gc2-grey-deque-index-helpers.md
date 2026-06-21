@@ -26,7 +26,9 @@ while these helpers protect the shared deque index protocol.
 
 ## Follow-Up
 
-`grey_stack` and `grey_capacity` are still direct owner-side fields. A later
-slice should decide whether to keep them owner-quiesced by invariant or add a
-published pointer/capacity helper/retirement scheme before allowing thieves to
-race deque growth.
+Follow-up vector helper work routes `grey_stack` and `grey_capacity` through
+`gc2_grey_stack_*()` and `gc2_grey_capacity_*()` helpers and extends the same
+M3 guard to reject raw production access. Deque growth is still intentionally
+owner-quiesced under the current single-worker bridge; a later scheduler slice
+must add a retirement/epoch scheme before allowing steals to race vector
+replacement.

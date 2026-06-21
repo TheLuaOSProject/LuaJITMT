@@ -1793,6 +1793,36 @@ static LJ_AINLINE uint32_t gc2_cycle_inc_acqrel(global_State *g)
   return next;
 }
 
+static LJ_AINLINE GCRef *gc2_grey_stack_acq(global_State *g)
+{
+  return (GCRef *)la_loadptr_acq((void *const *)&g->gc2.grey_stack);
+}
+
+static LJ_AINLINE void gc2_grey_stack_store_rlx(global_State *g, GCRef *stack)
+{
+  la_storeptr_rlx((void **)&g->gc2.grey_stack, stack);
+}
+
+static LJ_AINLINE void gc2_grey_stack_rel(global_State *g, GCRef *stack)
+{
+  la_storeptr_rel((void **)&g->gc2.grey_stack, stack);
+}
+
+static LJ_AINLINE MSize gc2_grey_capacity_acq(global_State *g)
+{
+  return (MSize)la_load32_acq(&g->gc2.grey_capacity);
+}
+
+static LJ_AINLINE void gc2_grey_capacity_store_rlx(global_State *g, MSize cap)
+{
+  la_store32_rlx(&g->gc2.grey_capacity, (uint32_t)cap);
+}
+
+static LJ_AINLINE void gc2_grey_capacity_rel(global_State *g, MSize cap)
+{
+  la_store32_rel(&g->gc2.grey_capacity, (uint32_t)cap);
+}
+
 static LJ_AINLINE uint64_t gc2_grey_top_acq(global_State *g)
 {
   return la_load64_acq(&g->gc2.grey_top);

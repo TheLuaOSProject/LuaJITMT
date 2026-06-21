@@ -139,8 +139,8 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.jit_scoped_slots_retired, 0);
   gc2_assist_active_store_rlx(g, 0);
   gc2_generational_store_rlx(g, 0);
-  g->gc2.grey_stack = NULL;
-  g->gc2.grey_capacity = 0;
+  gc2_grey_stack_store_rlx(g, NULL);
+  gc2_grey_capacity_store_rlx(g, 0);
   gc2_grey_top_store_rlx(g, 0);
   gc2_grey_bottom_store_rlx(g, 0);
   la_store64_rlx(&g->gc2.grey_pushed, 0);
@@ -269,12 +269,15 @@ void lj_gc2_fini(global_State *g)
 {
   lj_gc2_worker_stop(g);
   (void)lj_tg_reclaim_dead(g);
-  if (g && g->gc2.grey_stack) {
-    lj_mem_freevec(g, g->gc2.grey_stack, g->gc2.grey_capacity, GCRef);
-    g->gc2.grey_stack = NULL;
-    g->gc2.grey_capacity = 0;
-    gc2_grey_top_store_rlx(g, 0);
-    gc2_grey_bottom_store_rlx(g, 0);
+  if (g) {
+    GCRef *grey_stack = gc2_grey_stack_acq(g);
+    if (grey_stack) {
+      lj_mem_freevec(g, grey_stack, gc2_grey_capacity_acq(g), GCRef);
+      gc2_grey_stack_store_rlx(g, NULL);
+      gc2_grey_capacity_store_rlx(g, 0);
+      gc2_grey_top_store_rlx(g, 0);
+      gc2_grey_bottom_store_rlx(g, 0);
+    }
   }
   if (g) {
     GCRef *weak_stack = gc2_weak_stack_acq(g);
@@ -638,9 +641,12 @@ static int gc2_mark_trace_root(global_State *g, TraceNo traceno)
 
 void lj_gc2_legacy_mark_begin(global_State *g)
 {
-  TGState *tg = G2TG(g);
+  TGState *tg;
   uint32_t leader;
   uint32_t forced_major, minor_requested, sweep_minor, roots_minor, drained;
+  if (!g)
+    return;
+  tg = G2TG(g);
   forced_major = gc2_force_major_xchg_acqrel(g, 0);
   minor_requested = !forced_major && gc2_generational_acq(g) != 0;
   sweep_minor = minor_requested &&
@@ -675,7 +681,7 @@ void lj_gc2_legacy_mark_begin(global_State *g)
   lj_assertG(gc2_grey_empty(g), "gc2 grey deque not empty at mark begin");
   gc2_grey_top_store_rlx(g, 0);
   gc2_grey_bottom_store_rlx(g, 0);
-  if (g->gc2.grey_capacity == 0)
+  if (gc2_grey_capacity_acq(g) == 0)
     (void)gc2_grey_grow(g);
   gc2_weak_reset(g);
   gc2_finclaim_reset(g);
@@ -1685,8 +1691,9 @@ static LJ_AINLINE void gc2_queue_slot_clear_rel(GCRef *slot)
 
 static int gc2_grey_grow(global_State *g)
 {
-  GCRef *oldstack = g->gc2.grey_stack;
-  MSize oldcap = g->gc2.grey_capacity;
+  GCRef *oldstack = gc2_grey_stack_acq(g);
+  GCRef *newstack;
+  MSize oldcap = gc2_grey_capacity_acq(g);
   MSize newcap = oldcap ? oldcap << 1 : GC2_GREY_INIT;
   uint64_t top = gc2_grey_top_acq(g);
   uint64_t bottom = gc2_grey_bottom_rlx(g);
@@ -1703,38 +1710,44 @@ static int gc2_grey_grow(global_State *g)
     newcap = GC2_GREY_LIMIT;
   if (newcap <= oldcap || count > newcap)
     return 0;
-  g->gc2.grey_stack = lj_mem_newvec(L, newcap, GCRef);
+  newstack = lj_mem_newvec(L, newcap, GCRef);
   if (oldstack && oldcap) {
     MSize i;
     for (i = 0; i < count; i++) {
       GCobj *o = gc2_queue_slot_load_acq(&oldstack[(MSize)((top + i) % oldcap)]);
       if (o)
-	gc2_queue_slot_store_rel(&g->gc2.grey_stack[i], o);
+	gc2_queue_slot_store_rel(&newstack[i], o);
       else
-	gc2_queue_slot_clear_rel(&g->gc2.grey_stack[i]);
+	gc2_queue_slot_clear_rel(&newstack[i]);
     }
-    lj_mem_freevec(g, oldstack, oldcap, GCRef);
   }
-  g->gc2.grey_capacity = newcap;
+  gc2_grey_stack_rel(g, newstack);
+  gc2_grey_capacity_rel(g, newcap);
   gc2_grey_top_store_rlx(g, 0);
   gc2_grey_bottom_store_rlx(g, count);
+  if (oldstack)
+    lj_mem_freevec(g, oldstack, oldcap, GCRef);
   return 1;
 }
 
 static int gc2_grey_push(global_State *g, GCobj *o)
 {
+  GCRef *stack;
   uint64_t top, bottom;
   MSize cap;
   if (!g || !o)
     return 0;
   bottom = gc2_grey_bottom_rlx(g);
   top = gc2_grey_top_acq(g);
-  cap = g->gc2.grey_capacity;
+  cap = gc2_grey_capacity_acq(g);
   if ((cap == 0 || bottom - top >= cap) && !gc2_grey_grow(g))
     return 0;
   bottom = gc2_grey_bottom_rlx(g);
-  cap = g->gc2.grey_capacity;
-  gc2_queue_slot_store_rel(&g->gc2.grey_stack[(MSize)(bottom % cap)], o);
+  cap = gc2_grey_capacity_acq(g);
+  stack = gc2_grey_stack_acq(g);
+  if (!stack || cap == 0)
+    return 0;
+  gc2_queue_slot_store_rel(&stack[(MSize)(bottom % cap)], o);
   /* 05 section 5.6.3: slot release-published before bottom. */
   gc2_grey_bottom_rel(g, bottom + 1);
   la_add64_rlx(&g->gc2.grey_pushed, 1);
@@ -2696,10 +2709,15 @@ void lj_gc2_finreg_udata_queue(global_State *g, GCobj *o)
 
 static GCobj *gc2_grey_pop(global_State *g)
 {
+  GCRef *stack;
   uint64_t top, bottom;
   GCobj *o;
   MSize cap;
-  if (!g || !g->gc2.grey_stack || g->gc2.grey_capacity == 0)
+  if (!g)
+    return NULL;
+  stack = gc2_grey_stack_acq(g);
+  cap = gc2_grey_capacity_acq(g);
+  if (!stack || cap == 0)
     return NULL;
   bottom = gc2_grey_bottom_rlx(g);
   if (bottom == 0)
@@ -2709,8 +2727,7 @@ static GCobj *gc2_grey_pop(global_State *g)
   la_fence_seq();  /* Chase-Lev owner pop: order bottom before top load. */
   top = gc2_grey_top_acq(g);
   if (top <= bottom) {
-    cap = g->gc2.grey_capacity;
-    o = gc2_queue_slot_load_acq(&g->gc2.grey_stack[(MSize)(bottom % cap)]);
+    o = gc2_queue_slot_load_acq(&stack[(MSize)(bottom % cap)]);
     if (top == bottom) {
       uint64_t expect = top;
       /* 05 section 5.6.3: single item is claimed through top. */
@@ -2727,10 +2744,15 @@ static GCobj *gc2_grey_pop(global_State *g)
 
 GCobj *lj_gc2_grey_steal(global_State *g)
 {
+  GCRef *stack;
   uint64_t top, bottom, expect;
   GCobj *o;
   MSize cap;
-  if (!g || !g->gc2.grey_stack || g->gc2.grey_capacity == 0)
+  if (!g)
+    return NULL;
+  stack = gc2_grey_stack_acq(g);
+  cap = gc2_grey_capacity_acq(g);
+  if (!stack || cap == 0)
     return NULL;
   /* 05 section 5.6.3: non-owner steal; deque growth is owner-quiesced. */
   top = gc2_grey_top_acq(g);
@@ -2738,8 +2760,7 @@ GCobj *lj_gc2_grey_steal(global_State *g)
   bottom = gc2_grey_bottom_acq(g);
   if (top >= bottom)
     return NULL;
-  cap = g->gc2.grey_capacity;
-  o = gc2_queue_slot_load_acq(&g->gc2.grey_stack[(MSize)(top % cap)]);
+  o = gc2_queue_slot_load_acq(&stack[(MSize)(top % cap)]);
   expect = top;
   /* 05 section 5.6.3: steal claim linearizes through top. */
   if (!gc2_grey_top_cas(g, &expect, top + 1))
