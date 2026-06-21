@@ -582,7 +582,8 @@ static TRef crec_tv_ct(jit_State *J, CType *s, CTypeID sid, TRef sp)
 {
   CTState *cts = ctype_ctsG(J2G(J));
   IRType t = crec_ct2irt(cts, s);
-  CTInfo sinfo = s->info;
+  CTInfo sinfo = ctype_info_acq(s);
+  CTSize ssize = ctype_size_acq(s);
   if (ctype_isnum(sinfo)) {
     TRef tr;
     if (t == IRT_CDATA)
@@ -606,7 +607,7 @@ static TRef crec_tv_ct(jit_State *J, CType *s, CTypeID sid, TRef sp)
   } else if (ctype_isrefarray(sinfo) || ctype_isstruct(sinfo)) {
     sid = lj_ctype_intern_l(J->L, cts, CTINFO_REF(sid), CTSIZE_PTR);
   } else if (ctype_iscomplex(sinfo)) {  /* Unbox/box complex. */
-    ptrdiff_t esz = (ptrdiff_t)(s->size >> 1);
+    ptrdiff_t esz = (ptrdiff_t)(ssize >> 1);
     TRef ptr, tr1, tr2, dp;
     dp = emitir(IRTG(IR_CNEW, IRT_CDATA), lj_ir_kint(J, sid), TREF_NIL);
     tr1 = emitir(IRT(IR_XLOAD, t), sp, 0);

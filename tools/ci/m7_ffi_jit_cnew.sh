@@ -30,4 +30,13 @@ if hits=$(awk '
   printf '%s\n' 'raw CType info/size reads are forbidden in JIT C-to-C conversion helpers; use ctype_info_acq() or ctype_size_acq()' >&2
   exit 1
 fi
+if hits=$(awk '
+  /^static TRef crec_tv_ct\(/ { in_fn = 1 }
+  in_fn && /->[[:space:]]*(info|size)([^[:alnum:]_]|$)/ { print FNR ":" $0 }
+  in_fn && /^}/ { in_fn = 0 }
+' "$ROOT/src/lj_crecord.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw CType info/size reads are forbidden in JIT C-to-TValue load helpers; use ctype_info_acq() or ctype_size_acq()' >&2
+  exit 1
+fi
 exec "$ROOT/tools/ci/lua_test.sh" m7_ffi_jit_cnew
