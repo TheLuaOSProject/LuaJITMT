@@ -794,8 +794,8 @@ static int ffi_typeinfo_snapshot_locked(CTState *cts, CTypeID id, CType *out)
   if (!(id > 0 && id < ctype_top_acq(cts)))
     return 0;
   ct = ctype_get(cts, id);
-  out->info = la_load32_acq(&ct->info);
-  out->size = la_load32_acq(&ct->size);
+  out->info = ctype_info_acq(ct);
+  out->size = ctype_size_acq(ct);
   out->sib = (CTypeID1)ctype_sib_acq(ct);
   out->next = (CTypeID1)ctype_next_acq(ct);
   name = ctype_nameobj_acq(ct);
@@ -881,9 +881,9 @@ static int ffi_typecmp_get(FFITypeCmpSnap *ts, CTypeID id, CType *out)
   if (ts->budget-- == 0)
     return -1;
   ct = ctype_tab_slot(ts->tabh, id);
-  info = la_load32_acq(&ct->info);
+  info = ctype_info_acq(ct);
   out->info = info;
-  out->size = la_load32_acq(&ct->size);
+  out->size = ctype_size_acq(ct);
   out->sib = (CTypeID1)ctype_sib_acq(ct);
   out->next = (CTypeID1)ctype_next_acq(ct);
   setgcrefnull(out->name);
@@ -1114,8 +1114,8 @@ static int ffi_layout_get(FFILayoutSnap *ls, CTypeID id, CType *out)
   if (ls->budget-- == 0)
     return -1;
   ct = ctype_tab_slot(ls->tabh, id);
-  out->info = la_load32_acq(&ct->info);
-  out->size = la_load32_acq(&ct->size);
+  out->info = ctype_info_acq(ct);
+  out->size = ctype_size_acq(ct);
   out->sib = (CTypeID1)ctype_sib_acq(ct);
   out->next = (CTypeID1)ctype_next_acq(ct);
   name = ctype_nameobj_acq(ct);

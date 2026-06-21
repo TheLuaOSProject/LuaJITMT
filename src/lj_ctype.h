@@ -149,6 +149,16 @@ typedef struct CType {
   GCRef name;		/* Element name (GCstr). */
 } CType;
 
+static LJ_AINLINE CTInfo ctype_info_acq(const CType *ct)
+{
+  return la_load32_acq(&ct->info);  /* 11.2: ctype record payload. */
+}
+
+static LJ_AINLINE CTSize ctype_size_acq(const CType *ct)
+{
+  return la_load32_acq(&ct->size);  /* 11.2: ctype record payload. */
+}
+
 static LJ_AINLINE CTypeID ctype_next_acq(const CType *ct)
 {
   return (CTypeID)la_load16_acq(&ct->next);  /* 11.2: ctype hash-chain link. */

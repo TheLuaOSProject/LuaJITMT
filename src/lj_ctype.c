@@ -207,8 +207,8 @@ int lj_ctype_snapshot(CTState *cts, CTypeID id, CType *out)
   if ((MSize)id >= ctype_tab_sizetab_acq(tabh))
     return -1;  /* Table/top snapshot raced a grow; retry under the lock. */
   ct = ctype_tab_slot(tabh, id);
-  out->info = la_load32_acq(&ct->info);
-  out->size = la_load32_acq(&ct->size);
+  out->info = ctype_info_acq(ct);
+  out->size = ctype_size_acq(ct);
   out->sib = (CTypeID1)ctype_sib_acq(ct);
   out->next = (CTypeID1)ctype_next_acq(ct);
   name = ctype_nameobj_acq(ct);
@@ -875,8 +875,8 @@ int lj_ctype_getname_snapshot(CTState *cts, GCstr *name, uint32_t tmask,
     if (budget-- == 0)
       return -1;
     ct = ctype_tab_slot(tabh, id);
-    info = la_load32_acq(&ct->info);
-    size = la_load32_acq(&ct->size);
+    info = ctype_info_acq(ct);
+    size = ctype_size_acq(ct);
     sib = ctype_sib_acq(ct);
     next = ctype_next_acq(ct);
     gco = ctype_nameobj_acq(ct);
@@ -891,7 +891,7 @@ int lj_ctype_getname_snapshot(CTState *cts, GCstr *name, uint32_t tmask,
 	if (sib >= top || (MSize)sib >= ctype_tab_sizetab_acq(tabh))
 	  return -1;
 	rt = ctype_tab_slot(tabh, sib);
-	rinfo = la_load32_acq(&rt->info);
+	rinfo = ctype_info_acq(rt);
 	rgco = ctype_nameobj_acq(rt);
 	if (ctype_isabandoned(rinfo))
 	  return 0;
@@ -959,8 +959,8 @@ static int ctype_snapshot_copy(CTypeTab *tabh, CTypeID top, CTypeID id,
   if (id == 0 || id >= top || (MSize)id >= ctype_tab_sizetab_acq(tabh))
     return 0;
   ct = ctype_tab_slot(tabh, id);
-  out->info = la_load32_acq(&ct->info);
-  out->size = la_load32_acq(&ct->size);
+  out->info = ctype_info_acq(ct);
+  out->size = ctype_size_acq(ct);
   out->sib = (CTypeID1)ctype_sib_acq(ct);
   out->next = (CTypeID1)ctype_next_acq(ct);
   gco = ctype_nameobj_acq(ct);
@@ -985,8 +985,8 @@ static int ctype_getfieldq_snapshot_rec(CTypeTab *tabh, CTypeID top,
     if ((*budget)-- == 0)
       return -1;
     ct = ctype_tab_slot(tabh, sib);
-    info = la_load32_acq(&ct->info);
-    size = la_load32_acq(&ct->size);
+    info = ctype_info_acq(ct);
+    size = ctype_size_acq(ct);
     child = ctype_cid(info);
     next = ctype_sib_acq(ct);
     gco = ctype_nameobj_acq(ct);
@@ -1042,7 +1042,7 @@ int lj_ctype_getfieldq_snapshot(CTState *cts, const CType *root,
   int ok;
   if (seq0 & 1u)
     return -1;
-  info = la_load32_acq(&root->info);
+  info = ctype_info_acq(root);
   if (!ctype_isstruct(info))
     return 0;
   sib = ctype_sib_acq(root);
@@ -1202,8 +1202,8 @@ int lj_ctype_size_snapshot(CTState *cts, CTypeID id, CTSize *szp)
     if (budget-- == 0)
       return -1;
     ct = ctype_tab_slot(tabh, id);
-    info = la_load32_acq(&ct->info);
-    size = la_load32_acq(&ct->size);
+    info = ctype_info_acq(ct);
+    size = ctype_size_acq(ct);
     if (ctype_isabandoned(info))
       return 0;
     if (!ctype_isattrib(info)) {
@@ -1226,7 +1226,7 @@ int lj_ctype_enumconst_snapshot(CTState *cts, const CType *root,
   MSize budget;
   if (seq0 & 1u)
     return -1;
-  if (!ctype_isenum(la_load32_acq(&root->info)))
+  if (!ctype_isenum(ctype_info_acq(root)))
     return 0;
   id = ctype_sib_acq(root);
   top = ctype_top_acq(cts);
@@ -1242,8 +1242,8 @@ int lj_ctype_enumconst_snapshot(CTState *cts, const CType *root,
     if (budget-- == 0)
       return -1;
     ct = ctype_tab_slot(tabh, id);
-    info = la_load32_acq(&ct->info);
-    size = la_load32_acq(&ct->size);
+    info = ctype_info_acq(ct);
+    size = ctype_size_acq(ct);
     gco = ctype_nameobj_acq(ct);
     if (ctype_isabandoned(info))
       return 0;
