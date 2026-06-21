@@ -59,7 +59,7 @@
 
 static LJ_AINLINE int gc2_suppress_legacy_mark(global_State *g)
 {
-  return la_load32_acq(&g->gc2.phase) == LJ_GC2_MARK &&
+  return gc2_phase_acq(g) == LJ_GC2_MARK &&
 	 la_load32_acq(&g->gc2.cycle_roots_minor) != 0;
 }
 
@@ -118,7 +118,7 @@ static void gc_arena_rebuild_free(global_State *g)
 
 static int gc_arena_sweep_ready(global_State *g)
 {
-  return la_load32_acq(&g->gc2.phase) == LJ_GC2_SWEEP &&
+  return gc2_phase_acq(g) == LJ_GC2_SWEEP &&
 	 !lj_gc2_finalizer_sweep_pending(g);
 }
 
@@ -169,7 +169,7 @@ static uint32_t gc_arena_finish_sweep_boundary(global_State *g, int drain)
 
 static int gc2_legacy_sweep_close(global_State *g)
 {
-  if (la_load32_acq(&g->gc2.phase) == LJ_GC2_SWEEP)
+  if (gc2_phase_acq(g) == LJ_GC2_SWEEP)
     return lj_gc2_sweep_to_idle(g);
   lj_gc2_legacy_cycle_end(g);  /* Preserving full-GC fast-forward sweep. */
   return 1;
@@ -193,7 +193,7 @@ static void gc_arena_verify_sweep_boundary(global_State *g)
   TGState *tg = G2TG(g);
   GCobj *o;
   if (!tg || !(tg->tg_flags & TGF_ARENA_INTERNAL) ||
-      la_load32_acq(&g->gc2.phase) != LJ_GC2_SWEEP ||
+      gc2_phase_acq(g) != LJ_GC2_SWEEP ||
       lj_gc2_finalizer_sweep_pending(g))
     return;
   for (o = gcref_acq(g->gc.root); o != NULL; o = lj_obj_gcw_acq(o)) {
@@ -2106,7 +2106,7 @@ static int gc_jit_defer_fixpoint(global_State *g)
   return lj_tg_jit_base(g) != NULL &&
 	 g->gc.state == GCSpropagate &&
 	 lj_gc_list_head_acq(&g->gc.gray) == NULL &&
-	 la_load32_acq(&g->gc2.phase) == LJ_GC2_MARK;
+	 gc2_phase_acq(g) == LJ_GC2_MARK;
 }
 #else
 #define gc_jit_defer_fixpoint(g)	0
@@ -2125,7 +2125,7 @@ static size_t gc_onestep(lua_State *L)
       return propagatemark(g);  /* Propagate one gray object. */
     if (lj_gc2_worker_drain(g, LJ_GC2_WORKER_DRAIN_BATCH) != 0)
       return GCSWEEPCOST;  /* 05 section 5.6.3 bounded worker step bridge. */
-    if (la_load32_acq(&g->gc2.phase) == LJ_GC2_MARK) {
+    if (gc2_phase_acq(g) == LJ_GC2_MARK) {
       if (gc_jit_defer_fixpoint(g))
 	return LJ_MAX_MEM;  /* Root handshakes are run after trace exit. */
       if (lj_gc2_fixpoint_round(g, L, LJ_GC2_WORKER_DRAIN_BATCH) == 0)

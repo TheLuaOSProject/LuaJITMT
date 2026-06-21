@@ -54,4 +54,12 @@ if hits=$(grep -nE -- '->[[:space:]]*gc2[.](n_workers|worker_stop|worker_wake|wo
   printf '%s\n' 'raw GC2 worker lifecycle state access is forbidden; use gc2_worker_* lifecycle helpers' >&2
   exit 1
 fi
+if hits=$(grep -nE -- '->[[:space:]]*gc2[.]phase|&[[:space:]]*[^)]*->[[:space:]]*gc2[.]phase' \
+    "$ROOT/src/lj_gc.c" \
+    "$ROOT/src/lj_gc2.c" \
+    "$ROOT/src/lj_tg.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw GC2 phase access is forbidden; use gc2_phase_* helpers' >&2
+  exit 1
+fi
 exec "$ROOT/tools/ci/lua_test.sh" m3_gc2_worker_scheduler

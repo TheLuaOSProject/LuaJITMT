@@ -56,7 +56,7 @@ static uint32_t gc2_flush_and_drain_ssb(global_State *g)
 {
   if (!g)
     return 0;
-  if (la_load32_acq(&g->gc2.phase) == LJ_GC2_IDLE)
+  if (gc2_phase_acq(g) == LJ_GC2_IDLE)
     return 0;
   (void)lj_gc2_handshake(g, LJ_GC2_HS_FLUSH_SSB);
   return lj_gc2_drain_ssb(g);
@@ -68,7 +68,7 @@ void lj_gc2_init(global_State *g)
   g->gc2.gcpause_pct = 100;
   gc2_assist_shift_store_rlx(g,
     lj_gc2_assist_shift_from_stepmul(g->gc.stepmul));
-  g->gc2.phase = LJ_GC2_IDLE;
+  gc2_phase_store_rlx(g, LJ_GC2_IDLE);
   g->gc2.cycle = 0;
   gc2_cycle_leader_store_rlx(g, 0);
   g->gc2.hs_epoch = 0;
@@ -479,7 +479,7 @@ static int gc2_request_cycle(global_State *g, TGState *tg)
   uint32_t tid = tg ? la_load32_acq(&tg->tid) : 0;
   if (tid == 0)
     return 0;
-  if (la_load32_acq(&g->gc2.phase) != LJ_GC2_IDLE)
+  if (gc2_phase_acq(g) != LJ_GC2_IDLE)
     return 0;
   if (lj_gc_threshold_load(g) == LJ_MAX_MEM)
     return 0;  /* Honor collectgarbage("stop"). */
@@ -492,7 +492,7 @@ static int gc2_request_cycle(global_State *g, TGState *tg)
 
 static void gc2_maybe_trigger_cycle(global_State *g, TGState *tg)
 {
-  if (la_load32_acq(&g->gc2.phase) != LJ_GC2_IDLE)
+  if (gc2_phase_acq(g) != LJ_GC2_IDLE)
     return;
   if (lj_gc2_alloc_since_load(g) <=
       lj_gc2_trigger_load(g))  /* 05 section 5.11 trigger. */
@@ -651,7 +651,7 @@ void lj_gc2_legacy_mark_begin(global_State *g)
   else
     la_add64_rlx(&g->gc2.major_cycle_starts, 1);
   /* Publish MARK before clearing the request token, so late allocators stop. */
-  la_store32_rel(&g->gc2.phase, LJ_GC2_MARK);
+  gc2_phase_rel(g, LJ_GC2_MARK);
   leader = gc2_cycle_leader_xchg_acqrel(g, 0);
   if (g->gc2.tg_list == NULL && tg != NULL)
     lj_tg_attach(g, tg);
@@ -772,7 +772,7 @@ void lj_gc2_set_generational(global_State *g, int enabled)
     la_store64_rel(&g->gc2.minor_survival_bytes, 0);
     gc2_update_public_minor_gates(g);
   }
-  if (la_load32_acq(&g->gc2.phase) == LJ_GC2_IDLE)
+  if (gc2_phase_acq(g) == LJ_GC2_IDLE)
     lj_gc2_handshake(g, gc2_idle_barrier_actions(g, 0));
 }
 
@@ -784,8 +784,7 @@ void lj_gc2_legacy_weak_begin(global_State *g)
 void lj_gc2_mark_to_weak(global_State *g)
 {
   uint32_t expect = LJ_GC2_MARK;
-  if (!g || !la_cas32(&g->gc2.phase, &expect, LJ_GC2_WEAK,
-		      LA_ACQ_REL, LA_ACQ))
+  if (!g || !gc2_phase_cas(g, &expect, LJ_GC2_WEAK))
     return;
   la_add64_rlx(&g->gc2.mark_to_weak, 1);
   lj_gc2_worker_wake(g);  /* 05 section 5.6.3 parked worker scheduler. */
@@ -801,7 +800,7 @@ void lj_gc2_weak_to_sweep(global_State *g)
   uint32_t expect = LJ_GC2_WEAK;
   if (!g)
     return;
-  if (!la_cas32(&g->gc2.phase, &expect, LJ_GC2_SWEEP, LA_ACQ_REL, LA_ACQ))
+  if (!gc2_phase_cas(g, &expect, LJ_GC2_SWEEP))
     return;
   la_add64_rlx(&g->gc2.weak_to_sweep, 1);
   lj_gc2_handshake(g, LJ_GC2_HS_DISABLE_BARRIER|LJ_GC2_HS_FLUSH_SSB|
@@ -1067,7 +1066,7 @@ int lj_gc2_sweep_tg_ready(TGState *tg)
 int lj_gc2_sweep_needs_prepare(global_State *g)
 {
   TGState *tg;
-  if (!g || la_load32_acq(&g->gc2.phase) != LJ_GC2_SWEEP)
+  if (!g || gc2_phase_acq(g) != LJ_GC2_SWEEP)
     return 0;
   for (tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
        tg != NULL;
@@ -1080,7 +1079,7 @@ int lj_gc2_sweep_needs_prepare(global_State *g)
 int lj_gc2_sweep_pending(global_State *g)
 {
   TGState *tg;
-  if (!g || la_load32_acq(&g->gc2.phase) != LJ_GC2_SWEEP)
+  if (!g || gc2_phase_acq(g) != LJ_GC2_SWEEP)
     return 0;
   for (tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
        tg != NULL;
@@ -1099,7 +1098,7 @@ uint32_t lj_gc2_sweep_owner_progress(global_State *g, TGState *tg,
   int minor;
   if (!g || !tg || limit == 0 || !(tg->tg_flags & TGF_ARENA_INTERNAL))
     return 0;
-  if (la_load32_acq(&g->gc2.phase) != LJ_GC2_SWEEP)
+  if (gc2_phase_acq(g) != LJ_GC2_SWEEP)
     return 0;
   if (gc2_sweep_blocked_by_finalizer(g))
     return 0;
@@ -1182,7 +1181,7 @@ void lj_gc2_legacy_preserve_abort(global_State *g)
     return;
   gc2_cycle_leader_rel(g, 0);
   (void)gc2_flush_and_drain_ssb(g);
-  phase = la_xchg32_acqrel(&g->gc2.phase, LJ_GC2_IDLE);
+  phase = gc2_phase_xchg_acqrel(g, LJ_GC2_IDLE);
   if (phase != LJ_GC2_IDLE)
     la_add64_rlx(&g->gc2.preserve_abort_to_idle, 1);
   lj_gc2_handshake(g, gc2_idle_barrier_actions(g, 0));
@@ -1196,7 +1195,7 @@ int lj_gc2_sweep_to_idle(global_State *g)
     return 0;
   if (!gc2_worker_active_cas(g, &expect, 1))
     return 0;  /* 05 section 5.8 scheduler close waits for worker owner. */
-  phase = la_load32_acq(&g->gc2.phase);
+  phase = gc2_phase_acq(g);
   if (phase != LJ_GC2_SWEEP || gc2_sweep_blocked_by_finalizer(g) ||
       lj_gc2_sweep_needs_prepare(g) || lj_gc2_sweep_pending(g)) {
     gc2_worker_active_rel(g, 0);
@@ -1204,7 +1203,7 @@ int lj_gc2_sweep_to_idle(global_State *g)
   }
   gc2_cycle_leader_rel(g, 0);
   (void)gc2_flush_and_drain_ssb(g);
-  phase = la_xchg32_acqrel(&g->gc2.phase, LJ_GC2_IDLE);
+  phase = gc2_phase_xchg_acqrel(g, LJ_GC2_IDLE);
   if (phase != LJ_GC2_SWEEP) {
     gc2_worker_active_rel(g, 0);
     return 0;
@@ -1226,7 +1225,7 @@ void lj_gc2_legacy_cycle_end(global_State *g)
     return;
   gc2_cycle_leader_rel(g, 0);
   (void)gc2_flush_and_drain_ssb(g);
-  phase = la_xchg32_acqrel(&g->gc2.phase, LJ_GC2_IDLE);
+  phase = gc2_phase_xchg_acqrel(g, LJ_GC2_IDLE);
   if (phase == LJ_GC2_SWEEP) {
     la_add64_rlx(&g->gc2.sweep_to_idle, 1);
     lj_gc2_update_minor_survival_policy(g, lj_gc2_sweep_live_aggregate(g));
@@ -2151,7 +2150,7 @@ uint32_t lj_gc2_weak_snapshot_clear(global_State *g, uint32_t limit)
 
 uint32_t lj_gc2_weak_drain(global_State *g, uint32_t limit)
 {
-  if (!g || limit == 0 || la_load32_acq(&g->gc2.phase) != LJ_GC2_WEAK)
+  if (!g || limit == 0 || gc2_phase_acq(g) != LJ_GC2_WEAK)
     return 0;
   return lj_gc2_weak_snapshot_clear(g, limit);
 }
@@ -2162,7 +2161,7 @@ static int gc2_weak_snapshot_complete(global_State *g, uint32_t *pn)
   uint32_t n;
   if (!g)
     return 0;
-  if (la_load32_acq(&g->gc2.phase) != LJ_GC2_WEAK)
+  if (gc2_phase_acq(g) != LJ_GC2_WEAK)
     return 0;
   if (!g->gc2.weak_stack || !g->gc2.weak_ready) {
     if (pn)
@@ -2254,7 +2253,7 @@ static int gc2_weak_backfill_legacy(global_State *g, GCobj *legacy)
 static int gc2_weak_overflow_clear_legacy(global_State *g, GCobj *legacy)
 {
   uint64_t reserved, tables = 0, slots = 0, cleared = 0;
-  if (!g || la_load32_acq(&g->gc2.phase) != LJ_GC2_WEAK ||
+  if (!g || gc2_phase_acq(g) != LJ_GC2_WEAK ||
       !g->gc2.weak_stack || !g->gc2.weak_ready)
     return 0;
   reserved = la_load64_acq(&g->gc2.weak_count);
@@ -2296,7 +2295,7 @@ int lj_gc2_weak_complete(global_State *g, GCobj *legacy, uint32_t drain_limit)
 {
   uint32_t weakdrain;
   uint64_t progress = 0;
-  if (!g || drain_limit == 0 || la_load32_acq(&g->gc2.phase) != LJ_GC2_WEAK)
+  if (!g || drain_limit == 0 || gc2_phase_acq(g) != LJ_GC2_WEAK)
     return 0;
   la_add64_rlx(&g->gc2.weak_complete_runs, 1);
   for (;;) {
@@ -2355,7 +2354,7 @@ static void gc2_finreg_queue_mark(global_State *g, GCobj *o)
   uint32_t phase;
   if (!g || !o)
     return;
-  phase = la_load32_acq(&g->gc2.phase);
+  phase = gc2_phase_acq(g);
   if (phase == LJ_GC2_MARK || phase == LJ_GC2_WEAK)
     (void)lj_gc2_markobj(g, o);  /* 05 section 5.8 FINREG resurrection. */
 }
@@ -2895,7 +2894,7 @@ uint32_t lj_gc2_assist(global_State *g, TGState *tg)
   uint32_t phase, shift, limit, expect = 0, n = 0, converted = 0, weak = 0;
   if (!g || !tg || tg->gc_assist)
     return 0;
-  phase = la_load32_acq(&g->gc2.phase);
+  phase = gc2_phase_acq(g);
   if (phase != LJ_GC2_MARK && phase != LJ_GC2_WEAK)
     return 0;
   if (!lj_gc2_hard_limit_reached(g))
@@ -2971,7 +2970,7 @@ static int gc2_barrier_active_g(global_State *g)
   tg = G2TG(g);
   if (!tg || !tg->mark_active)
     return 0;
-  phase = la_load32_acq(&g->gc2.phase);
+  phase = gc2_phase_acq(g);
   if (phase != LJ_GC2_MARK && phase != LJ_GC2_WEAK)
     return 0;
   return 1;
@@ -2980,7 +2979,7 @@ static int gc2_barrier_active_g(global_State *g)
 static int gc2_remember_active_g(global_State *g)
 {
   TGState *tg;
-  if (!g || la_load32_acq(&g->gc2.phase) != LJ_GC2_IDLE ||
+  if (!g || gc2_phase_acq(g) != LJ_GC2_IDLE ||
       la_load32_acq(&g->gc2.generational) == 0)
     return 0;
   tg = G2TG(g);
@@ -3212,7 +3211,7 @@ void lj_gc2_barrier_weak_key(lua_State *L, GCtab *t, cTValue *key)
   if (!L || !t || !key || !tvisgcv(key))
     return;
   g = G(L);
-  if (la_load32_acq(&g->gc2.phase) != LJ_GC2_WEAK)
+  if (gc2_phase_acq(g) != LJ_GC2_WEAK)
     return;
   weak = gc2_tab_weak_barrier_mode(g, t);
   /* 05 section 5.8 weak-table key write. */
@@ -3227,7 +3226,7 @@ void lj_gc2_barrier_weak_write(lua_State *L, GCtab *t, cTValue *key,
   if (!L || !t)
     return;
   g = G(L);
-  if (la_load32_acq(&g->gc2.phase) != LJ_GC2_WEAK)
+  if (gc2_phase_acq(g) != LJ_GC2_WEAK)
     return;
   if (gc2_tab_weak_barrier_mode(g, t) == 0)
     return;
@@ -3304,7 +3303,7 @@ int lj_gc2_markobj(global_State *g, GCobj *o)
   base = gc2_mark_base(o);
   marked = lj_gc2_markmem(g, base);
   if (marked) {
-    uint32_t phase = la_load32_acq(&g->gc2.phase);
+    uint32_t phase = gc2_phase_acq(g);
     traversable = gc2_mark_base_traversable(g, base);
     if ((phase == LJ_GC2_MARK || phase == LJ_GC2_WEAK) &&
 	(traversable || o->gch.gct == ~LJ_TUDATA)) {
@@ -3740,14 +3739,14 @@ static uint32_t gc2_worker_finalizer_drain(global_State *g, uint32_t limit)
 {
   uint32_t expect = 0;
   uint64_t before, after, delta;
-  if (!g || limit == 0 || la_load32_acq(&g->gc2.phase) != LJ_GC2_IDLE ||
+  if (!g || limit == 0 || gc2_phase_acq(g) != LJ_GC2_IDLE ||
       gc2_finalizer_mpsc_acq(g) == NULL)
     return 0;
   if (!gc2_worker_active_cas(g, &expect, 1)) {
     la_add64_rlx(&g->gc2.worker_busy_retries, 1);
     return 0;
   }
-  if (la_load32_acq(&g->gc2.phase) != LJ_GC2_IDLE ||
+  if (gc2_phase_acq(g) != LJ_GC2_IDLE ||
       gc2_finalizer_mpsc_acq(g) == NULL) {
     gc2_worker_active_rel(g, 0);
     return 0;
@@ -3782,7 +3781,7 @@ static uint32_t gc2_worker_drain_inner(global_State *g, uint32_t limit,
       *progress = finalizer;
     return finalizer;  /* 05 section 5.8: worker drains finalizer queue work. */
   }
-  phase = la_load32_acq(&g->gc2.phase);
+  phase = gc2_phase_acq(g);
   if (phase != LJ_GC2_MARK && phase != LJ_GC2_WEAK &&
       phase != LJ_GC2_SWEEP)
     return 0;
@@ -3790,7 +3789,7 @@ static uint32_t gc2_worker_drain_inner(global_State *g, uint32_t limit,
     la_add64_rlx(&g->gc2.worker_busy_retries, 1);
     return 0;  /* 05 section 5.6.3 temporary single-worker bridge. */
   }
-  phase = la_load32_acq(&g->gc2.phase);
+  phase = gc2_phase_acq(g);
   if (phase != LJ_GC2_MARK && phase != LJ_GC2_WEAK &&
       phase != LJ_GC2_SWEEP) {
     gc2_worker_active_rel(g, 0);
@@ -3869,7 +3868,7 @@ uint32_t lj_gc2_fixpoint_round(global_State *g, lua_State *L, uint32_t limit)
   uint32_t phase, acked, fixpoint;
   if (!g || limit == 0)
     return 0;
-  phase = la_load32_acq(&g->gc2.phase);
+  phase = gc2_phase_acq(g);
   if (phase != LJ_GC2_MARK)
     return 0;
   (void)la_xchg64_acqrel(&g->gc2.marks_this_round, 0);
@@ -3904,7 +3903,7 @@ uint32_t lj_gc2_mark_complete(global_State *g, lua_State *L,
 			      uint32_t max_rounds, uint32_t limit)
 {
   uint32_t hit;
-  if (!g || la_load32_acq(&g->gc2.phase) != LJ_GC2_MARK)
+  if (!g || gc2_phase_acq(g) != LJ_GC2_MARK)
     return 0;
   la_add64_rlx(&g->gc2.mark_complete_runs, 1);
   for (;;) {

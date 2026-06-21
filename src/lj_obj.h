@@ -1747,6 +1747,33 @@ static LJ_AINLINE lua_State *vmthread_acq(global_State *g)
   return o ? gco2th(o) : NULL;
 }
 
+static LJ_AINLINE uint32_t gc2_phase_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.phase);
+}
+
+static LJ_AINLINE void gc2_phase_store_rlx(global_State *g, uint32_t phase)
+{
+  la_store32_rlx(&g->gc2.phase, phase);
+}
+
+static LJ_AINLINE void gc2_phase_rel(global_State *g, uint32_t phase)
+{
+  la_store32_rel(&g->gc2.phase, phase);
+}
+
+static LJ_AINLINE int gc2_phase_cas(global_State *g, uint32_t *oldp,
+				    uint32_t phase)
+{
+  return la_cas32(&g->gc2.phase, oldp, phase, LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE uint32_t gc2_phase_xchg_acqrel(global_State *g,
+						 uint32_t phase)
+{
+  return la_xchg32_acqrel(&g->gc2.phase, phase);
+}
+
 static LJ_AINLINE void gc2_cycle_leader_store_rlx(global_State *g,
 						  uint32_t leader)
 {

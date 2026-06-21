@@ -108,7 +108,7 @@ void lj_tg_fini_thread(global_State *g, TGState *tg)
 
 static void tg_adopt_gc2_phase(global_State *g, TGState *tg)
 {
-  uint32_t phase = la_load32_acq(&g->gc2.phase);
+  uint32_t phase = gc2_phase_acq(g);
   if (phase == LJ_GC2_MARK || phase == LJ_GC2_WEAK) {
     tg->mark_active = 1;
     tg->alloc.alloc_black = 1;
