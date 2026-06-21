@@ -134,8 +134,8 @@ void lj_cconv_ct_ct_l(lua_State *L, CTState *cts, CType *d, CTypeID did,
 		      CType *s, CTypeID sid, uint8_t *dp, uint8_t *sp,
 		      CTInfo flags)
 {
-  CTSize dsize = d->size, ssize = s->size;
-  CTInfo dinfo = d->info, sinfo = s->info;
+  CTSize dsize = ctype_size_acq(d), ssize = ctype_size_acq(s);
+  CTInfo dinfo = ctype_info_acq(d), sinfo = ctype_info_acq(s);
   void *tmpptr;
 
   lj_assertCTS(!ctype_isenum(dinfo) && !ctype_isenum(sinfo),
@@ -228,10 +228,10 @@ void lj_cconv_ct_ct_l(lua_State *L, CTState *cts, CType *d, CTypeID did,
     break;
     }
   case CCX(I, C):
-    sid = ctype_cid(s->info);
+    sid = ctype_cid(sinfo);
     s = ctype_get(cts, sid);
-    sinfo = s->info;
-    ssize = s->size;
+    sinfo = ctype_info_acq(s);
+    ssize = ctype_size_acq(s);
     goto conv_I_F;  /* Just convert re. */
   case CCX(I, P):
     if (!(flags & CCF_CAST)) goto err_conv;
@@ -293,37 +293,39 @@ void lj_cconv_ct_ct_l(lua_State *L, CTState *cts, CType *d, CTypeID did,
     break;
     }
   case CCX(F, C):
-    sid = ctype_cid(s->info);
+    sid = ctype_cid(sinfo);
     s = ctype_get(cts, sid);
-    sinfo = s->info;
-    ssize = s->size;
+    sinfo = ctype_info_acq(s);
+    ssize = ctype_size_acq(s);
     goto conv_F_F;  /* Ignore im, and convert from re. */
 
   /* Destination is a complex number. */
   case CCX(C, I):
-    did = ctype_cid(d->info);
+    did = ctype_cid(dinfo);
     d = ctype_get(cts, did);
-    dinfo = d->info;
-    dsize = d->size;
+    dinfo = ctype_info_acq(d);
+    dsize = ctype_size_acq(d);
     memset(dp + dsize, 0, dsize);  /* Clear im. */
     goto conv_F_I;  /* Convert to re. */
   case CCX(C, F):
-    did = ctype_cid(d->info);
+    did = ctype_cid(dinfo);
     d = ctype_get(cts, did);
-    dinfo = d->info;
-    dsize = d->size;
+    dinfo = ctype_info_acq(d);
+    dsize = ctype_size_acq(d);
     memset(dp + dsize, 0, dsize);  /* Clear im. */
     goto conv_F_F;  /* Convert to re. */
 
   case CCX(C, C):
     if (dsize != ssize) {  /* Different types: convert re/im separately. */
-      CTypeID dcid = ctype_cid(d->info);
-      CTypeID scid = ctype_cid(s->info);
+      CTypeID dcid = ctype_cid(dinfo);
+      CTypeID scid = ctype_cid(sinfo);
       CType *dc = ctype_get(cts, dcid);
       CType *sc = ctype_get(cts, scid);
+      CTSize dcsize = ctype_size_acq(dc);
+      CTSize scsize = ctype_size_acq(sc);
       lj_cconv_ct_ct_l(L, cts, dc, dcid, sc, scid, dp, sp, flags);
       lj_cconv_ct_ct_l(L, cts, dc, dcid, sc, scid,
-		       dp + dc->size, sp + sc->size, flags);
+		       dp + dcsize, sp + scsize, flags);
       return;
     }
     goto copyval;  /* Otherwise this is easy. */
@@ -332,13 +334,13 @@ void lj_cconv_ct_ct_l(lua_State *L, CTState *cts, CType *d, CTypeID did,
   case CCX(V, I):
   case CCX(V, F):
   case CCX(V, C): {
-    CTypeID dcid = ctype_cid(d->info);
+    CTypeID dcid = ctype_cid(dinfo);
     CType *dc = ctype_get(cts, dcid);
     CTSize esize;
     /* First convert the scalar to the first element. */
     lj_cconv_ct_ct_l(L, cts, dc, dcid, s, sid, dp, sp, flags);
     /* Then replicate it to the other elements (splat). */
-    for (sp = dp, esize = dc->size; dsize > esize; dsize -= esize) {
+    for (sp = dp, esize = ctype_size_acq(dc); dsize > esize; dsize -= esize) {
       dp += esize;
       memcpy(dp, sp, esize);
     }
@@ -375,14 +377,14 @@ void lj_cconv_ct_ct_l(lua_State *L, CTState *cts, CType *d, CTypeID did,
 
   /* Destination is an array. */
   case CCX(A, A):
-    if ((flags & CCF_CAST) || (d->info & CTF_VLA) || dsize != ssize ||
-	d->size == CTSIZE_INVALID || !lj_cconv_compatptr(cts, d, s, flags))
+    if ((flags & CCF_CAST) || (dinfo & CTF_VLA) || dsize != ssize ||
+	dsize == CTSIZE_INVALID || !lj_cconv_compatptr(cts, d, s, flags))
       goto err_conv;
     goto copyval;
 
   /* Destination is a struct/union. */
   case CCX(S, S):
-    if ((flags & CCF_CAST) || (d->info & CTF_VLA) || d != s)
+    if ((flags & CCF_CAST) || (dinfo & CTF_VLA) || d != s)
       goto err_conv;  /* Must be exact same type. */
 copyval:  /* Copy value. */
     lj_assertCTS(dsize == ssize, "value copy with different sizes");
