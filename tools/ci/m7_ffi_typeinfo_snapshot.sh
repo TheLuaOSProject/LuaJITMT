@@ -116,6 +116,16 @@ if hits=$(awk '
   exit 1
 fi
 if hits=$(awk '
+  /^static int ffi_layout_getfield\(/ ||
+  /^static int ffi_layout_offsetof_snapshot\(/ { in_fn = 1 }
+  /^LJLIB_CF\(ffi_sizeof\)/ { in_fn = 0 }
+  in_fn && /(^|[^[:alnum:]_])(ct|cct)\.(info|size|sib)([^[:alnum:]_]|$)/ { print FNR ":" $0 }
+' "$ROOT/src/lib_ffi.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw local CType info/size/sibling reads are forbidden in FFI field layout snapshots; use CType helper loads' >&2
+  exit 1
+fi
+if hits=$(awk '
   /^void LJ_FASTCALL recff_ffi_fill\(/ ||
   /^void LJ_FASTCALL recff_ffi_xof\(/ ||
   /^static CTypeID crec_bit64_type\(/ ||

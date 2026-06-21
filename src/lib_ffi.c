@@ -1412,37 +1412,46 @@ static int ffi_layout_getfield(FFILayoutSnap *ls, const CType *root,
 			       GCstr *name, CTSize *ofs, CType *out)
 {
   CType ct = *root;
-  CTypeID sid = ct.sib;
+  CTypeID sid = ctype_sib_acq(&ct);
   while (sid) {
     int ok = ffi_layout_get(ls, sid, &ct);
+    CTInfo info;
+    CTSize size;
+    CTypeID sib;
     if (ok <= 0)
       return ok;
+    info = ctype_info_acq(&ct);
+    size = ctype_size_acq(&ct);
+    sib = ctype_sib_acq(&ct);
     if (ctype_name_acq(&ct) == name) {
-      *ofs = ct.size;
+      *ofs = size;
       *out = ct;
       return 1;
     }
-    if (ctype_isxattrib(ct.info, CTA_SUBTYPE)) {
+    if (ctype_isxattrib(info, CTA_SUBTYPE)) {
       CType cct, fct;
       CTSize subofs;
-      ok = ffi_layout_get(ls, ctype_cid(ct.info), &cct);
+      CTInfo cinfo;
+      ok = ffi_layout_get(ls, ctype_cid(info), &cct);
       if (ok <= 0)
 	return ok;
-      while (ctype_isattrib(cct.info)) {
-	ok = ffi_layout_get(ls, ctype_cid(cct.info), &cct);
+      cinfo = ctype_info_acq(&cct);
+      while (ctype_isattrib(cinfo)) {
+	ok = ffi_layout_get(ls, ctype_cid(cinfo), &cct);
 	if (ok <= 0)
 	  return ok;
+	cinfo = ctype_info_acq(&cct);
       }
       ok = ffi_layout_getfield(ls, &cct, name, &subofs, &fct);
       if (ok != 0) {
 	if (ok > 0) {
-	  *ofs = subofs + ct.size;
+	  *ofs = subofs + size;
 	  *out = fct;
 	}
 	return ok;
       }
     }
-    sid = ct.sib;
+    sid = sib;
   }
   return 0;
 }
@@ -1457,7 +1466,9 @@ static int ffi_layout_offsetof_snapshot(CTState *cts, CTypeID id, GCstr *name,
     return -1;
   ok = ffi_layout_rawref(&ls, id, &ct);
   if (ok > 0) {
-    if (ctype_isstruct(ct.info) && ct.size != CTSIZE_INVALID)
+    CTInfo info = ctype_info_acq(&ct);
+    CTSize size = ctype_size_acq(&ct);
+    if (ctype_isstruct(info) && size != CTSIZE_INVALID)
       ok = ffi_layout_getfield(&ls, &ct, name, ofs, out);
     else
       ok = 0;
