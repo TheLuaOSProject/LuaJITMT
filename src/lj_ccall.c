@@ -639,18 +639,20 @@ static int ccall_classify_struct(CTState *cts, CType *ct, int *rcl, CTSize ofs);
 /* Classify a C type. */
 static void ccall_classify_ct(CTState *cts, CType *ct, int *rcl, CTSize ofs)
 {
-  if (ctype_isarray(ct->info)) {
+  CTInfo info = ctype_info_acq(ct);
+  CTSize size = ctype_size_acq(ct);
+  if (ctype_isarray(info)) {
     CType *cct = ctype_rawchild(cts, ct);
-    CTSize eofs, esz = cct->size, asz = ct->size;
+    CTSize eofs, esz = ctype_size_acq(cct), asz = size;
     for (eofs = 0; eofs < asz; eofs += esz)
       ccall_classify_ct(cts, cct, rcl, ofs+eofs);
-  } else if (ctype_isstruct(ct->info)) {
+  } else if (ctype_isstruct(info)) {
     ccall_classify_struct(cts, ct, rcl, ofs);
   } else {
-    int cl = ctype_isfp(ct->info) ? CCALL_RCL_SSE : CCALL_RCL_INT;
-    lj_assertCTS(ctype_hassize(ct->info),
-		 "classify ctype %08x without size", ct->info);
-    if ((ofs & (ct->size-1))) cl = CCALL_RCL_MEM;  /* Unaligned. */
+    int cl = ctype_isfp(info) ? CCALL_RCL_SSE : CCALL_RCL_INT;
+    lj_assertCTS(ctype_hassize(info),
+		 "classify ctype %08x without size", info);
+    if ((ofs & (size-1))) cl = CCALL_RCL_MEM;  /* Unaligned. */
     rcl[(ofs >= 8)] |= cl;
   }
 }
@@ -658,16 +660,20 @@ static void ccall_classify_ct(CTState *cts, CType *ct, int *rcl, CTSize ofs)
 /* Recursively classify a struct based on its fields. */
 static int ccall_classify_struct(CTState *cts, CType *ct, int *rcl, CTSize ofs)
 {
-  if (ct->size > 16) return CCALL_RCL_MEM;  /* Too big, gets memory class. */
-  while (ct->sib) {
+  CTypeID fid;
+  if (ctype_size_acq(ct) > 16) return CCALL_RCL_MEM;  /* Too big. */
+  for (fid = ctype_sib_acq(ct); fid; ) {
+    CTInfo info;
     CTSize fofs;
-    ct = ctype_get(cts, ct->sib);
-    fofs = ofs+ct->size;
-    if (ctype_isfield(ct->info))
+    ct = ctype_get(cts, fid);
+    info = ctype_info_acq(ct);
+    fid = ctype_sib_acq(ct);
+    fofs = ofs+ctype_size_acq(ct);
+    if (ctype_isfield(info))
       ccall_classify_ct(cts, ctype_rawchild(cts, ct), rcl, fofs);
-    else if (ctype_isbitfield(ct->info) && ctype_bitbsz(ct->info))
+    else if (ctype_isbitfield(info) && ctype_bitbsz(info))
       rcl[(fofs >= 8)] |= CCALL_RCL_INT;  /* NYI: unaligned bitfields? */
-    else if (ctype_isxattrib(ct->info, CTA_SUBTYPE))
+    else if (ctype_isxattrib(info, CTA_SUBTYPE))
       ccall_classify_struct(cts, ctype_rawchild(cts, ct), rcl, fofs);
   }
   return ((rcl[0]|rcl[1]) & CCALL_RCL_MEM);  /* Memory class? */
@@ -705,7 +711,7 @@ static int ccall_struct_arg(CCallState *cc, lua_State *L, CTState *cts,
   if (ccall_struct_reg(cc, cts, dp, rcl)) {
     /* Register overflow? Pass on stack. */
     MSize nsp = cc->nsp, sz = rcl[1] ? 2*CTSIZE_PTR : CTSIZE_PTR;
-    MSize align = (1u << ctype_align(d->info)) - 1;
+    MSize align = (1u << ctype_align(ctype_info_acq(d))) - 1;
     if (nsp + sz > CCALL_SIZE_STACK)
       return 1;  /* Too many arguments. */
     if (CCALL_ALIGN_STACKARG && align > CTSIZE_PTR-1)
@@ -935,7 +941,7 @@ static void ccall_copy_struct(CCallState *cc, CType *ctr, void *dp, void *sp,
 
 #ifndef ccall_struct_align
 /* Alignment of pass-by-value structs. */
-#define ccall_struct_align(cts, ct, id)	((ct)->info & CTF_ALIGN)
+#define ccall_struct_align(cts, ct, id)	(ctype_info_acq((ct)) & CTF_ALIGN)
 #endif
 
 /* -- Common C call handling ---------------------------------------------- */
