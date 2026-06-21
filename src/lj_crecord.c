@@ -100,24 +100,30 @@ static CTypeID argv2ctype(jit_State *J, TRef tr, cTValue *o)
 /* Convert CType to IRType (if possible). */
 static IRType crec_ct2irt(CTState *cts, CType *ct)
 {
-  if (ctype_isenum(ct->info)) ct = ctype_child(cts, ct);
-  if (LJ_LIKELY(ctype_isnum(ct->info))) {
-    if ((ct->info & CTF_FP)) {
-      if (ct->size == sizeof(double))
+  CTInfo info = ctype_info_acq(ct);
+  CTSize size;
+  if (ctype_isenum(info)) {
+    ct = ctype_child(cts, ct);
+    info = ctype_info_acq(ct);
+  }
+  size = ctype_size_acq(ct);
+  if (LJ_LIKELY(ctype_isnum(info))) {
+    if ((info & CTF_FP)) {
+      if (size == sizeof(double))
 	return IRT_NUM;
-      else if (ct->size == sizeof(float))
+      else if (size == sizeof(float))
 	return IRT_FLOAT;
     } else {
-      uint32_t b = lj_fls(ct->size);
+      uint32_t b = lj_fls(size);
       if (b <= 3)
-	return IRT_I8 + 2*b + ((ct->info & CTF_UNSIGNED) ? 1 : 0);
+	return IRT_I8 + 2*b + ((info & CTF_UNSIGNED) ? 1 : 0);
     }
-  } else if (ctype_isptr(ct->info)) {
-    return (LJ_64 && ct->size == 8) ? IRT_P64 : IRT_P32;
-  } else if (ctype_iscomplex(ct->info)) {
-    if (ct->size == 2*sizeof(double))
+  } else if (ctype_isptr(info)) {
+    return (LJ_64 && size == 8) ? IRT_P64 : IRT_P32;
+  } else if (ctype_iscomplex(info)) {
+    if (size == 2*sizeof(double))
       return IRT_NUM;
-    else if (ct->size == 2*sizeof(float))
+    else if (size == 2*sizeof(float))
       return IRT_FLOAT;
   }
   return IRT_CDATA;
