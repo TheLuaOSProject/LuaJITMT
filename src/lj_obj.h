@@ -1793,6 +1793,43 @@ static LJ_AINLINE uint32_t gc2_cycle_inc_acqrel(global_State *g)
   return next;
 }
 
+static LJ_AINLINE uint64_t gc2_grey_top_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.grey_top);
+}
+
+static LJ_AINLINE void gc2_grey_top_store_rlx(global_State *g, uint64_t top)
+{
+  la_store64_rlx(&g->gc2.grey_top, top);
+}
+
+static LJ_AINLINE int gc2_grey_top_cas(global_State *g, uint64_t *oldp,
+				       uint64_t top)
+{
+  return la_cas64(&g->gc2.grey_top, oldp, top, LA_SEQ, LA_ACQ);
+}
+
+static LJ_AINLINE uint64_t gc2_grey_bottom_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.grey_bottom);
+}
+
+static LJ_AINLINE uint64_t gc2_grey_bottom_rlx(global_State *g)
+{
+  return la_load64_rlx(&g->gc2.grey_bottom);
+}
+
+static LJ_AINLINE void gc2_grey_bottom_store_rlx(global_State *g,
+						 uint64_t bottom)
+{
+  la_store64_rlx(&g->gc2.grey_bottom, bottom);
+}
+
+static LJ_AINLINE void gc2_grey_bottom_rel(global_State *g, uint64_t bottom)
+{
+  la_store64_rel(&g->gc2.grey_bottom, bottom);
+}
+
 static LJ_AINLINE uint64_t gc2_marks_this_round_acq(global_State *g)
 {
   return la_load64_acq(&g->gc2.marks_this_round);
