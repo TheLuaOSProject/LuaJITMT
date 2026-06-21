@@ -2856,22 +2856,116 @@ static LJ_AINLINE void proto_knumtv_load_acq(TValue *dst, const GCproto *pt,
   lj_tv_load_acq(dst, &mref(pt->k, TValue)[idx]);
 }
 
+static LJ_AINLINE GCRef *gc2_finreg_cdata_preclaim_objvec_acq(global_State *g)
+{
+  return (GCRef *)la_loadptr_acq(
+    (void *const *)&g->gc2.finreg_cdata_preclaim_obj);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_preclaim_objvec_store_rlx(
+  global_State *g, GCRef *obj)
+{
+  la_storeptr_rlx((void **)&g->gc2.finreg_cdata_preclaim_obj, obj);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_preclaim_objvec_rel(global_State *g,
+							    GCRef *obj)
+{
+  la_storeptr_rel((void **)&g->gc2.finreg_cdata_preclaim_obj, obj);
+}
+
+static LJ_AINLINE TValue *gc2_finreg_cdata_preclaim_finvec_acq(
+  global_State *g)
+{
+  return (TValue *)la_loadptr_acq(
+    (void *const *)&g->gc2.finreg_cdata_preclaim_fin);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_preclaim_finvec_store_rlx(
+  global_State *g, TValue *fin)
+{
+  la_storeptr_rlx((void **)&g->gc2.finreg_cdata_preclaim_fin, fin);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_preclaim_finvec_rel(global_State *g,
+							    TValue *fin)
+{
+  la_storeptr_rel((void **)&g->gc2.finreg_cdata_preclaim_fin, fin);
+}
+
+static LJ_AINLINE MSize gc2_finreg_cdata_preclaim_capacity_acq(global_State *g)
+{
+  return (MSize)la_load32_acq(&g->gc2.finreg_cdata_preclaim_capacity);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_preclaim_capacity_store_rlx(
+  global_State *g, MSize cap)
+{
+  la_store32_rlx(&g->gc2.finreg_cdata_preclaim_capacity, (uint32_t)cap);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_preclaim_capacity_rel(global_State *g,
+							      MSize cap)
+{
+  la_store32_rel(&g->gc2.finreg_cdata_preclaim_capacity, (uint32_t)cap);
+}
+
+static LJ_AINLINE MSize gc2_finreg_cdata_preclaim_head_acq(global_State *g)
+{
+  return (MSize)la_load32_acq(&g->gc2.finreg_cdata_preclaim_head);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_preclaim_head_store_rlx(global_State *g,
+								MSize head)
+{
+  la_store32_rlx(&g->gc2.finreg_cdata_preclaim_head, (uint32_t)head);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_preclaim_head_rel(global_State *g,
+							  MSize head)
+{
+  la_store32_rel(&g->gc2.finreg_cdata_preclaim_head, (uint32_t)head);
+}
+
+static LJ_AINLINE MSize gc2_finreg_cdata_preclaim_count_acq(global_State *g)
+{
+  return (MSize)la_load32_acq(&g->gc2.finreg_cdata_preclaim_count);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_preclaim_count_store_rlx(
+  global_State *g, MSize count)
+{
+  la_store32_rlx(&g->gc2.finreg_cdata_preclaim_count, (uint32_t)count);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_preclaim_count_rel(global_State *g,
+							   MSize count)
+{
+  la_store32_rel(&g->gc2.finreg_cdata_preclaim_count, (uint32_t)count);
+}
+
 static LJ_AINLINE int gc2_finreg_cdata_preclaim_ready(global_State *g)
 {
-  return g->gc2.finreg_cdata_preclaim_obj != NULL &&
-	 g->gc2.finreg_cdata_preclaim_fin != NULL;
+  return gc2_finreg_cdata_preclaim_objvec_acq(g) != NULL &&
+	 gc2_finreg_cdata_preclaim_finvec_acq(g) != NULL;
 }
 
 static LJ_AINLINE GCobj *gc2_finreg_cdata_preclaim_obj_acq(global_State *g,
-							   MSize i)
+								   MSize i)
 {
-  return gcref_acq(g->gc2.finreg_cdata_preclaim_obj[i]);
+  GCRef *obj = gc2_finreg_cdata_preclaim_objvec_acq(g);
+  return obj ? gcref_acq(obj[i]) : NULL;
 }
 
 static LJ_AINLINE void gc2_finreg_cdata_preclaim_fin_acq(global_State *g,
-							 MSize i, TValue *fin)
+								 MSize i, TValue *fin)
 {
-  lj_tv_load_acq(fin, &g->gc2.finreg_cdata_preclaim_fin[i]);
+  TValue *finv = gc2_finreg_cdata_preclaim_finvec_acq(g);
+  if (finv) {
+    lj_tv_load_acq(fin, &finv[i]);
+  } else {
+    fin->u64 = ~(uint64_t)0;
+  }
 }
 
 static LJ_AINLINE int lj_tv_isnil_acq(const TValue *src)

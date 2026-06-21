@@ -17,6 +17,10 @@ Fix:
   object slots.
 - `tools/ci/m7_ffi_finreg.sh` rejects raw preclaim object-slot loads/stores in
   `src/lj_gc2.c`.
+- Follow-up state helper work routes the preclaim vector pointers, capacity,
+  head cursor, and count publisher through `gc2_finreg_cdata_preclaim_*()`
+  helpers in both `lj_gc.c` and `lj_gc2.c`, while keeping the slot publication
+  order unchanged.
 
 Verification:
 - `tools/ci/m7_ffi_finreg.sh` and `tools/ci/m8_weak.sh` passed.

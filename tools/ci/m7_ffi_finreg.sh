@@ -57,6 +57,34 @@ if hits=$(grep -nE -- '(setgcrefnullrel|setgcrefrel)[(](g->gc2[.]finreg_cdata_pr
   printf '%s\n' 'raw FINREG preclaim object-slot access is forbidden; use gc2_queue_slot_* helpers' >&2
   exit 1
 fi
+for helper in gc2_finreg_cdata_preclaim_objvec_acq \
+  gc2_finreg_cdata_preclaim_objvec_store_rlx \
+  gc2_finreg_cdata_preclaim_objvec_rel \
+  gc2_finreg_cdata_preclaim_finvec_acq \
+  gc2_finreg_cdata_preclaim_finvec_store_rlx \
+  gc2_finreg_cdata_preclaim_finvec_rel \
+  gc2_finreg_cdata_preclaim_capacity_acq \
+  gc2_finreg_cdata_preclaim_capacity_store_rlx \
+  gc2_finreg_cdata_preclaim_capacity_rel \
+  gc2_finreg_cdata_preclaim_head_acq \
+  gc2_finreg_cdata_preclaim_head_store_rlx \
+  gc2_finreg_cdata_preclaim_head_rel \
+  gc2_finreg_cdata_preclaim_count_acq \
+  gc2_finreg_cdata_preclaim_count_store_rlx \
+  gc2_finreg_cdata_preclaim_count_rel; do
+  if ! grep -qE "static LJ_AINLINE .*[*[:space:]]${helper}[[:space:]]*[(]" \
+      "$ROOT/src/lj_obj.h"; then
+    printf '%s\n' "${helper} helper is required for FINREG preclaim state" >&2
+    exit 1
+  fi
+done
+if hits=$(grep -nE -- '->[[:space:]]*gc2[.]finreg_cdata_preclaim_(obj|fin|capacity|head|count)([^[:alnum:]_]|$)|&[[:space:]]*[^)]*->[[:space:]]*gc2[.]finreg_cdata_preclaim_(obj|fin|capacity|head|count)([^[:alnum:]_]|$)' \
+    "$ROOT/src/lj_gc.c" \
+    "$ROOT/src/lj_gc2.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw FINREG preclaim state access is forbidden; use gc2_finreg_cdata_preclaim_* helpers' >&2
+  exit 1
+fi
 if hits=$(awk '
   /^LJLIB_CF\(ffi_gc\)/ { in_fn = 1 }
   in_fn && /->[[:space:]]*(info|size)([^[:alnum:]_]|$)/ { print FNR ":" $0 }

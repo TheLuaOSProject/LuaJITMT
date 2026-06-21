@@ -1,0 +1,34 @@
+# FINREG Preclaim State Helpers
+
+## Summary
+
+Routed GC2 cdata FINREG preclaim side-vector state through helper APIs:
+
+- `gc2_finreg_cdata_preclaim_objvec_*()` owns the preclaimed cdata object
+  vector pointer.
+- `gc2_finreg_cdata_preclaim_finvec_*()` owns the copied finalizer value vector
+  pointer.
+- `gc2_finreg_cdata_preclaim_capacity_*()` owns the side-vector capacity.
+- `gc2_finreg_cdata_preclaim_head_*()` owns the consumer cursor.
+- `gc2_finreg_cdata_preclaim_count_*()` owns the one-past-last published
+  preclaim record.
+
+The existing slot protocol is unchanged: `gc2_finclaim_publish()` release-copies
+the finalizer value, release-publishes the object slot as the ready marker, then
+release-publishes `count`. Legacy and GC2 root scans acquire the head/count
+range before marking preclaimed cdata/finalizers, and finalizer dispatch
+advances `head` through helper stores after clearing consumed slots.
+
+## Guardrail
+
+`tools/ci/m7_ffi_finreg.sh` now requires the helper surface and rejects raw
+production access to `finreg_cdata_preclaim_obj`, `finreg_cdata_preclaim_fin`,
+`finreg_cdata_preclaim_capacity`, `finreg_cdata_preclaim_head`, and
+`finreg_cdata_preclaim_count` in `lj_gc.c`/`lj_gc2.c`.
+
+## Follow-Up
+
+Resize/compaction remains owner-side and tied to the current P_WEAK preclaim
+bridge. A later slice should either prove the owner-quiesced resize invariant
+with phase/worker guards or add retirement before allowing active readers to
+race vector replacement.

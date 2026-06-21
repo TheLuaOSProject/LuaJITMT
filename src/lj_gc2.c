@@ -209,11 +209,11 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.finreg_cdata_queued, 0);
   la_store64_rlx(&g->gc2.finreg_cdata_sweep_queued, 0);
   la_store64_rlx(&g->gc2.finreg_cdata_pweak_queued, 0);
-  g->gc2.finreg_cdata_preclaim_obj = NULL;
-  g->gc2.finreg_cdata_preclaim_fin = NULL;
-  g->gc2.finreg_cdata_preclaim_capacity = 0;
-  g->gc2.finreg_cdata_preclaim_head = 0;
-  g->gc2.finreg_cdata_preclaim_count = 0;
+  gc2_finreg_cdata_preclaim_objvec_store_rlx(g, NULL);
+  gc2_finreg_cdata_preclaim_finvec_store_rlx(g, NULL);
+  gc2_finreg_cdata_preclaim_capacity_store_rlx(g, 0);
+  gc2_finreg_cdata_preclaim_head_store_rlx(g, 0);
+  gc2_finreg_cdata_preclaim_count_store_rlx(g, 0);
   la_store64_rlx(&g->gc2.finreg_cdata_pweak_claimed, 0);
   la_store64_rlx(&g->gc2.finreg_cdata_preclaim_overflow, 0);
   la_store64_rlx(&g->gc2.finreg_cdata_preclaim_dispatched, 0);
@@ -294,20 +294,24 @@ void lj_gc2_fini(global_State *g)
     gc2_weak_capacity_store_rlx(g, 0);
     gc2_weak_count_store_rlx(g, 0);
   }
-  if (g && g->gc2.finreg_cdata_preclaim_obj) {
-    lj_mem_freevec(g, g->gc2.finreg_cdata_preclaim_obj,
-		   g->gc2.finreg_cdata_preclaim_capacity, GCRef);
-    g->gc2.finreg_cdata_preclaim_obj = NULL;
-  }
-  if (g && g->gc2.finreg_cdata_preclaim_fin) {
-    lj_mem_freevec(g, g->gc2.finreg_cdata_preclaim_fin,
-		   g->gc2.finreg_cdata_preclaim_capacity, TValue);
-    g->gc2.finreg_cdata_preclaim_fin = NULL;
+  if (g) {
+    GCRef *obj = gc2_finreg_cdata_preclaim_objvec_acq(g);
+    if (obj) {
+      lj_mem_freevec(g, obj, gc2_finreg_cdata_preclaim_capacity_acq(g), GCRef);
+      gc2_finreg_cdata_preclaim_objvec_store_rlx(g, NULL);
+    }
   }
   if (g) {
-    g->gc2.finreg_cdata_preclaim_capacity = 0;
-    g->gc2.finreg_cdata_preclaim_head = 0;
-    g->gc2.finreg_cdata_preclaim_count = 0;
+    TValue *fin = gc2_finreg_cdata_preclaim_finvec_acq(g);
+    if (fin) {
+      lj_mem_freevec(g, fin, gc2_finreg_cdata_preclaim_capacity_acq(g), TValue);
+      gc2_finreg_cdata_preclaim_finvec_store_rlx(g, NULL);
+    }
+  }
+  if (g) {
+    gc2_finreg_cdata_preclaim_capacity_store_rlx(g, 0);
+    gc2_finreg_cdata_preclaim_head_store_rlx(g, 0);
+    gc2_finreg_cdata_preclaim_count_store_rlx(g, 0);
   }
   if (g) {
     GC2FinRegUDataNode *node = (GC2FinRegUDataNode *)
@@ -1436,10 +1440,11 @@ static void gc2_finreg_markmem(global_State *g, void *p)
 
 static void gc2_mark_finreg_cdata_preclaims(global_State *g)
 {
-  MSize i, head = g->gc2.finreg_cdata_preclaim_head;
-  MSize count = g->gc2.finreg_cdata_preclaim_count;
+  MSize i, head, count;
   if (!gc2_finreg_cdata_preclaim_ready(g))
     return;
+  head = gc2_finreg_cdata_preclaim_head_acq(g);
+  count = gc2_finreg_cdata_preclaim_count_acq(g);
   for (i = head; i < count; i++) {
     GCobj *o = gc2_finreg_cdata_preclaim_obj_acq(g, i);
     if (o) {
@@ -1847,7 +1852,9 @@ static MSize gc2_finclaim_next_capacity(MSize cap, MSize need)
 static void gc2_finclaim_publish(lua_State *L, global_State *g, MSize idx,
 				 GCobj *o, cTValue *fin)
 {
-  copyTVrel(L, &g->gc2.finreg_cdata_preclaim_fin[idx], fin);
+  GCRef *objv = gc2_finreg_cdata_preclaim_objvec_acq(g);
+  TValue *finv = gc2_finreg_cdata_preclaim_finvec_acq(g);
+  copyTVrel(L, &finv[idx], fin);
 #if defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
   if (la_xchg32_acqrel(&g->gc2.finreg_cdata_preclaim_publish_pause, 0) != 0) {
     la_store32_rel(&g->gc2.finreg_cdata_preclaim_publish_paused, 1);
@@ -1856,16 +1863,18 @@ static void gc2_finclaim_publish(lua_State *L, global_State *g, MSize idx,
     la_store32_rel(&g->gc2.finreg_cdata_preclaim_publish_paused, 0);
   }
 #endif
-  gc2_queue_slot_store_rel(&g->gc2.finreg_cdata_preclaim_obj[idx], o);
+  gc2_queue_slot_store_rel(&objv[idx], o);
   /* 05 section 5.8: finalizer value is visible before object ready marker. */
 }
 
 static void gc2_finclaim_clear(lua_State *L, global_State *g, MSize idx)
 {
+  GCRef *objv = gc2_finreg_cdata_preclaim_objvec_acq(g);
+  TValue *finv = gc2_finreg_cdata_preclaim_finvec_acq(g);
   TValue nilv;
-  gc2_queue_slot_clear_rel(&g->gc2.finreg_cdata_preclaim_obj[idx]);
+  gc2_queue_slot_clear_rel(&objv[idx]);
   setnilV(&nilv);
-  copyTVrel(L, &g->gc2.finreg_cdata_preclaim_fin[idx], &nilv);
+  copyTVrel(L, &finv[idx], &nilv);
 }
 
 static void gc2_finclaim_copy_slot(lua_State *L, GCRef *newobj, TValue *newfin,
@@ -1897,11 +1906,11 @@ static int gc2_finclaim_resize(global_State *g, MSize cap)
   L = mainthread_acq(g);
   if (!L)
     return 0;
-  oldobj = g->gc2.finreg_cdata_preclaim_obj;
-  oldfin = g->gc2.finreg_cdata_preclaim_fin;
-  oldcap = g->gc2.finreg_cdata_preclaim_capacity;
-  head = g->gc2.finreg_cdata_preclaim_head;
-  count = g->gc2.finreg_cdata_preclaim_count;
+  oldobj = gc2_finreg_cdata_preclaim_objvec_acq(g);
+  oldfin = gc2_finreg_cdata_preclaim_finvec_acq(g);
+  oldcap = gc2_finreg_cdata_preclaim_capacity_acq(g);
+  head = gc2_finreg_cdata_preclaim_head_acq(g);
+  count = gc2_finreg_cdata_preclaim_count_acq(g);
   pending = count > head ? count - head : 0;
   if (cap < pending)
     return 0;
@@ -1909,11 +1918,11 @@ static int gc2_finclaim_resize(global_State *g, MSize cap)
   newfin = lj_mem_newvec(L, cap, TValue);
   for (i = 0; i < pending; i++)
     gc2_finclaim_copy_slot(L, newobj, newfin, i, oldobj, oldfin, head + i);
-  g->gc2.finreg_cdata_preclaim_obj = newobj;
-  g->gc2.finreg_cdata_preclaim_fin = newfin;
-  g->gc2.finreg_cdata_preclaim_capacity = cap;
-  g->gc2.finreg_cdata_preclaim_head = 0;
-  g->gc2.finreg_cdata_preclaim_count = pending;
+  gc2_finreg_cdata_preclaim_objvec_rel(g, newobj);
+  gc2_finreg_cdata_preclaim_finvec_rel(g, newfin);
+  gc2_finreg_cdata_preclaim_capacity_rel(g, cap);
+  gc2_finreg_cdata_preclaim_head_rel(g, 0);
+  gc2_finreg_cdata_preclaim_count_rel(g, pending);
   if (oldobj)
     lj_mem_freevec(g, oldobj, oldcap, GCRef);
   if (oldfin)
@@ -1932,11 +1941,11 @@ static void gc2_finclaim_reset(global_State *g)
   L = mainthread_acq(g);
   if (!L)
     return;
-  obj = g->gc2.finreg_cdata_preclaim_obj;
-  fin = g->gc2.finreg_cdata_preclaim_fin;
-  cap = g->gc2.finreg_cdata_preclaim_capacity;
-  head = g->gc2.finreg_cdata_preclaim_head;
-  count = g->gc2.finreg_cdata_preclaim_count;
+  obj = gc2_finreg_cdata_preclaim_objvec_acq(g);
+  fin = gc2_finreg_cdata_preclaim_finvec_acq(g);
+  cap = gc2_finreg_cdata_preclaim_capacity_acq(g);
+  head = gc2_finreg_cdata_preclaim_head_acq(g);
+  count = gc2_finreg_cdata_preclaim_count_acq(g);
   pending = count > head ? count - head : 0;
   if (!obj || !fin || cap == 0) {
     (void)gc2_finclaim_resize(g, GC2_FINCLAIM_INIT);
@@ -1946,8 +1955,8 @@ static void gc2_finclaim_reset(global_State *g)
     for (i = 0; i < pending; i++)
       gc2_finclaim_copy_slot(L, obj, fin, i, obj, fin, head + i);
   }
-  g->gc2.finreg_cdata_preclaim_head = 0;
-  g->gc2.finreg_cdata_preclaim_count = pending;
+  gc2_finreg_cdata_preclaim_head_rel(g, 0);
+  gc2_finreg_cdata_preclaim_count_rel(g, pending);
   if (pending >= cap && cap < GC2_FINCLAIM_LIMIT) {
     MSize ncap = gc2_finclaim_next_capacity(cap, pending + 1u);
     if (ncap > cap)
@@ -2467,16 +2476,15 @@ int lj_gc2_finreg_cdata_preclaim(lua_State *L, global_State *g, GCobj *o,
     return 0;  /* Test-only side-vector failure injection. */
   }
 #endif
-  count = g->gc2.finreg_cdata_preclaim_count;
-  cap = g->gc2.finreg_cdata_preclaim_capacity;
-  if (!g->gc2.finreg_cdata_preclaim_obj ||
-      !g->gc2.finreg_cdata_preclaim_fin) {
+  count = gc2_finreg_cdata_preclaim_count_acq(g);
+  cap = gc2_finreg_cdata_preclaim_capacity_acq(g);
+  if (!gc2_finreg_cdata_preclaim_ready(g)) {
     if (!gc2_finclaim_resize(g, GC2_FINCLAIM_INIT)) {
       la_add64_rlx(&g->gc2.finreg_cdata_preclaim_overflow, 1);
       return 0;
     }
-    count = g->gc2.finreg_cdata_preclaim_count;
-    cap = g->gc2.finreg_cdata_preclaim_capacity;
+    count = gc2_finreg_cdata_preclaim_count_acq(g);
+    cap = gc2_finreg_cdata_preclaim_capacity_acq(g);
   }
   if (count >= cap) {
     MSize ncap = gc2_finclaim_next_capacity(cap, count + 1u);
@@ -2484,15 +2492,15 @@ int lj_gc2_finreg_cdata_preclaim(lua_State *L, global_State *g, GCobj *o,
       la_add64_rlx(&g->gc2.finreg_cdata_preclaim_overflow, 1);
       return 0;
     }
-    count = g->gc2.finreg_cdata_preclaim_count;
-    cap = g->gc2.finreg_cdata_preclaim_capacity;
+    count = gc2_finreg_cdata_preclaim_count_acq(g);
+    cap = gc2_finreg_cdata_preclaim_capacity_acq(g);
   }
   if (count >= cap) {
     la_add64_rlx(&g->gc2.finreg_cdata_preclaim_overflow, 1);
     return 0;
   }
   gc2_finclaim_publish(L, g, count, o, fin);
-  g->gc2.finreg_cdata_preclaim_count = count + 1u;
+  gc2_finreg_cdata_preclaim_count_rel(g, count + 1u);
   la_add64_rlx(&g->gc2.finreg_cdata_pweak_claimed, 1);
   return 1;  /* 05 section 5.8: P_WEAK owns claimed cdata finalizer. */
 #else
@@ -2510,8 +2518,8 @@ int lj_gc2_finreg_cdata_preclaim_take(lua_State *L, global_State *g,
   if (!L || !g || !o || !fin || o->gch.gct != ~LJ_TCDATA ||
       !gc2_finreg_cdata_preclaim_ready(g))
     return 0;
-  head = g->gc2.finreg_cdata_preclaim_head;
-  count = g->gc2.finreg_cdata_preclaim_count;
+  head = gc2_finreg_cdata_preclaim_head_acq(g);
+  count = gc2_finreg_cdata_preclaim_count_acq(g);
   if (head >= count)
     return 0;
   for (i = head; i < count; i++) {
@@ -2524,17 +2532,17 @@ int lj_gc2_finreg_cdata_preclaim_take(lua_State *L, global_State *g,
 	   gc2_finreg_cdata_preclaim_obj_acq(g, head) == NULL)
       head++;
     if (head == count) {
-      g->gc2.finreg_cdata_preclaim_head = 0;
-      g->gc2.finreg_cdata_preclaim_count = 0;
+      gc2_finreg_cdata_preclaim_head_rel(g, 0);
+      gc2_finreg_cdata_preclaim_count_rel(g, 0);
     } else {
-      g->gc2.finreg_cdata_preclaim_head = head;
+      gc2_finreg_cdata_preclaim_head_rel(g, head);
     }
     la_add64_rlx(&g->gc2.finreg_cdata_preclaim_dispatched, 1);
     return 1;  /* 05 section 5.8: dispatch order may differ from FINREG scan. */
   }
   if (head == count) {
-    g->gc2.finreg_cdata_preclaim_head = 0;
-    g->gc2.finreg_cdata_preclaim_count = 0;
+    gc2_finreg_cdata_preclaim_head_rel(g, 0);
+    gc2_finreg_cdata_preclaim_count_rel(g, 0);
   }
   return 0;
 #else

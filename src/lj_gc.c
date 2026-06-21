@@ -586,10 +586,11 @@ static void gc_finreg_markobj(global_State *g, GCobj *o)
 
 static void gc_mark_finreg_cdata_preclaims(global_State *g)
 {
-  MSize i, head = g->gc2.finreg_cdata_preclaim_head;
-  MSize count = g->gc2.finreg_cdata_preclaim_count;
+  MSize i, head, count;
   if (!gc2_finreg_cdata_preclaim_ready(g))
     return;
+  head = gc2_finreg_cdata_preclaim_head_acq(g);
+  count = gc2_finreg_cdata_preclaim_count_acq(g);
   for (i = head; i < count; i++) {
     GCobj *o = gc2_finreg_cdata_preclaim_obj_acq(g, i);
     if (o) {
