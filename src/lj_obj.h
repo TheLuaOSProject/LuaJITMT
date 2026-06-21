@@ -1797,6 +1797,45 @@ static LJ_AINLINE uint32_t gc2_cycle_leader_xchg_acqrel(global_State *g,
   return la_xchg32_acqrel(&g->gc2.cycle_leader, leader);
 }
 
+static LJ_AINLINE TGState *gc2_tg_list_acq(global_State *g)
+{
+  return (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
+}
+
+static LJ_AINLINE void gc2_tg_list_store_rlx(global_State *g, TGState *tg)
+{
+  la_storeptr_rlx((void **)&g->gc2.tg_list, tg);
+}
+
+static LJ_AINLINE int gc2_tg_list_cas(global_State *g, TGState **oldp,
+				      TGState *tg)
+{
+  return la_casptr((void **)&g->gc2.tg_list, (void **)oldp, tg,
+		   LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE uint32_t gc2_n_threads_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.n_threads);
+}
+
+static LJ_AINLINE void gc2_n_threads_store_rlx(global_State *g, uint32_t n)
+{
+  la_store32_rlx(&g->gc2.n_threads, n);
+}
+
+static LJ_AINLINE uint32_t gc2_n_threads_add_rlx(global_State *g,
+						 uint32_t n)
+{
+  return la_add32_rlx(&g->gc2.n_threads, n);
+}
+
+static LJ_AINLINE uint32_t gc2_n_threads_sub_acqrel(global_State *g,
+						    uint32_t n)
+{
+  return la_sub32_acqrel(&g->gc2.n_threads, n);
+}
+
 static LJ_AINLINE uint64_t gc2_hs_epoch_acq(global_State *g)
 {
   return la_load64_acq(&g->gc2.hs_epoch);

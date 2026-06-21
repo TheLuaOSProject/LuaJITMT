@@ -275,7 +275,7 @@ void LJ_FASTCALL lj_dispatch_update(global_State *g, int nolock)
 	if ((mode & DISPMODE_JIT) && !(oldmode & DISPMODE_JIT))
 	  lj_dispatch_init_hotcount(g);
 #endif
-	if (la_load32_acq(&g->gc2.n_threads) > 1)
+	if (gc2_n_threads_acq(g) > 1)
 	  redispatch = 1;
   }
   lj_tg_sync_dispatch(g);

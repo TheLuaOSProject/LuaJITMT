@@ -428,7 +428,7 @@ static int threading_tg_is_registered(global_State *g, TGState *target)
   TGState *tg;
   if (!g || !target)
     return 0;
-  for (tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
+  for (tg = gc2_tg_list_acq(g);
        tg != NULL;
        tg = lj_tg_next_acq(tg)) {
     if (tg == target)

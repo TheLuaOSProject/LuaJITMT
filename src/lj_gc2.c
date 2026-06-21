@@ -259,8 +259,8 @@ void lj_gc2_init(global_State *g)
 #endif
   la_store64_rlx(&g->gc2.weak_keys_marked, 0);
   la_store64_rlx(&g->gc2.weak_values_marked, 0);
-  g->gc2.tg_list = NULL;
-  g->gc2.n_threads = 0;
+  gc2_tg_list_store_rlx(g, NULL);
+  gc2_n_threads_store_rlx(g, 0);
   lj_gc2_update_pacing(g);
   lj_tg_attach(g, G2TG(g));  /* 05 section 5.4.1 main TG registration. */
 }
@@ -550,7 +550,7 @@ void lj_gc2_update_pacing(global_State *g)
 static void gc2_reset_alloc_trigger(global_State *g)
 {
   TGState *tg;
-  for (tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
+  for (tg = gc2_tg_list_acq(g);
        tg != NULL;
        tg = lj_tg_next_acq(tg))
     (void)lj_gc2_flush_alloc(g, tg);
@@ -580,7 +580,7 @@ static void gc2_clear_marks(TGState *tg)
 static void gc2_clear_marks_all(global_State *g)
 {
   TGState *tg;
-  for (tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
+  for (tg = gc2_tg_list_acq(g);
        tg != NULL;
        tg = lj_tg_next_acq(tg))
     gc2_clear_marks(tg);
@@ -653,7 +653,7 @@ void lj_gc2_legacy_mark_begin(global_State *g)
   /* Publish MARK before clearing the request token, so late allocators stop. */
   gc2_phase_rel(g, LJ_GC2_MARK);
   leader = gc2_cycle_leader_xchg_acqrel(g, 0);
-  if (g->gc2.tg_list == NULL && tg != NULL)
+  if (gc2_tg_list_acq(g) == NULL && tg != NULL)
     lj_tg_attach(g, tg);
   g->gc2.cycle++;
   if (leader)
@@ -1068,7 +1068,7 @@ int lj_gc2_sweep_needs_prepare(global_State *g)
   TGState *tg;
   if (!g || gc2_phase_acq(g) != LJ_GC2_SWEEP)
     return 0;
-  for (tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
+  for (tg = gc2_tg_list_acq(g);
        tg != NULL;
        tg = lj_tg_next_acq(tg))
     if (lj_gc2_sweep_tg_ready(tg) && tg->alloc.prepare_epoch != g->gc2.cycle)
@@ -1081,7 +1081,7 @@ int lj_gc2_sweep_pending(global_State *g)
   TGState *tg;
   if (!g || gc2_phase_acq(g) != LJ_GC2_SWEEP)
     return 0;
-  for (tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
+  for (tg = gc2_tg_list_acq(g);
        tg != NULL;
        tg = lj_tg_next_acq(tg))
     if (lj_gc2_sweep_tg_ready(tg) &&
@@ -1152,7 +1152,7 @@ uint64_t lj_gc2_sweep_live_aggregate(global_State *g)
   if (!g)
     return 0;
   epoch = g->gc2.cycle;
-  for (tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
+  for (tg = gc2_tg_list_acq(g);
        tg != NULL;
        tg = lj_tg_next_acq(tg)) {
     uint8_t flags = la_load8_acq(&tg->tg_flags);
@@ -1484,7 +1484,7 @@ static void gc2_scan_pending_roots(global_State *g)
 static void gc2_scan_tg_roots(global_State *g)
 {
   TGState *tg;
-  for (tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
+  for (tg = gc2_tg_list_acq(g);
        tg != NULL;
        tg = lj_tg_next_acq(tg)) {
     lua_State *thread_L, *cur_L;
@@ -2947,7 +2947,7 @@ int lj_gc2_ssb_empty(global_State *g)
     return 0;  /* 05 section 5.7.1 SSB-empty fixpoint predicate. */
   if (!gc2_grey_empty(g))
     return 0;
-  for (tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
+  for (tg = gc2_tg_list_acq(g);
        tg != NULL;
        tg = lj_tg_next_acq(tg)) {
     GCRef *next, *base;
@@ -3719,7 +3719,7 @@ static uint32_t gc2_worker_sweep_progress(global_State *g, uint32_t limit)
   uint32_t n = 0;
   if (gc2_sweep_blocked_by_finalizer(g))
     return 0;
-  for (tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
+  for (tg = gc2_tg_list_acq(g);
        tg != NULL && n < limit;
        tg = lj_tg_next_acq(tg)) {
     uint8_t flags = la_load8_acq(&tg->tg_flags);
@@ -3994,7 +3994,7 @@ uint32_t lj_gc2_paranoia_legacy_diff(global_State *g)
   uint32_t bad = 0;
   if (!g)
     return 0;
-  for (tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
+  for (tg = gc2_tg_list_acq(g);
        tg != NULL;
        tg = lj_tg_next_acq(tg)) {
     uint8_t flags = la_load8_acq(&tg->tg_flags);

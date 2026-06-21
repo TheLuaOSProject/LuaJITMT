@@ -11,6 +11,9 @@ Slice
   helpers.
 - Added a scoped guard in `tools/ci/m3_safepoint_handshake.sh` to reject raw
   `TGState.next_tg` access in production TG-list users.
+- Follow-up registry-helper slice routes the global `GC2State.tg_list` root
+  and `GC2State.n_threads` live count through `gc2_tg_*`/`gc2_n_threads_*`
+  helpers, with the same guard rejecting raw production registry access.
 - Extended that guard over the C fixtures that intentionally walk or manually
   publish TG-list nodes, and routed their `next_tg` reads/writes through the
   helpers too.
@@ -33,5 +36,6 @@ Validation
 Notes
 -----
 
-- `global_State.gc2.tg_list` remains the explicit acquire/CAS root. This slice
-  centralizes the per-node link discipline only.
+- `TGState.next_tg` and the global `GC2State.tg_list` root now have separate
+  helper surfaces: `lj_tg_next_*()` owns per-node links, while `gc2_tg_*()`
+  owns the list root and CAS publication/unlink discipline.

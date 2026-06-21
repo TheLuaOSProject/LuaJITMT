@@ -176,7 +176,7 @@ static uint32_t safepoint_signal_late(global_State *g, uint32_t actions,
 {
   TGState *tg;
   uint32_t signaled = 0;
-  for (tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
+  for (tg = gc2_tg_list_acq(g);
        tg != NULL;
        tg = lj_tg_next_acq(tg)) {
     if (la_load8_acq(&tg->tg_flags) & TGF_DEAD)  /* 05 section 5.4.1. */
@@ -197,7 +197,7 @@ static void safepoint_ack_native(global_State *g)
 {
   TGState *tg;
   TGState *self = lj_thr_get_tg_fallback(g);
-  for (tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
+  for (tg = gc2_tg_list_acq(g);
        tg != NULL;
        tg = lj_tg_next_acq(tg)) {
     lua_State *L;

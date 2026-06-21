@@ -15,6 +15,17 @@ if hits=$(grep -nE -- '->[[:space:]]*next_tg|&[[:alnum:]_]+->[[:space:]]*next_tg
   printf '%s\n' 'raw TGState next_tg access is forbidden; use lj_tg_next_* helpers' >&2
   exit 1
 fi
+if hits=$(grep -nE -- '->[[:space:]]*gc2[.](tg_list|n_threads)([^[:alnum:]_]|$)|gc2[[:space:]]*->[[:space:]]*(tg_list|n_threads)([^[:alnum:]_]|$)' \
+    "$ROOT/src/lj_gc.c" \
+    "$ROOT/src/lj_gc2.c" \
+    "$ROOT/src/lj_safepoint.c" \
+    "$ROOT/src/lib_threading.c" \
+    "$ROOT/src/lj_tg.c" \
+    "$ROOT/src/lj_dispatch.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw GC2 TG registry access is forbidden; use gc2_tg_* helpers' >&2
+  exit 1
+fi
 fields='hs_epoch|hs_pending|hs_actions|hs_signal_ns|hs_ack_latency_samples|hs_ack_latency_sum_ns|hs_ack_latency_max_ns|hs_ack_latency_buckets'
 if hits=$(grep -nE -- "->[[:space:]]*gc2[.](${fields})([^[:alnum:]_]|$)|gc2[[:space:]]*->[[:space:]]*(${fields})([^[:alnum:]_]|$)" \
     "$ROOT/src/lj_gc2.c" \

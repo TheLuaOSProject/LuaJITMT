@@ -144,7 +144,7 @@ static uint32_t gc_arena_finish_sweep_boundary(global_State *g, int drain)
     gc_arena_rebuild_free(g);
     return 0;
   }
-  for (tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
+  for (tg = gc2_tg_list_acq(g);
        tg != NULL;
        tg = lj_tg_next_acq(tg)) {
     /* 05 section 5.8 boundary-lazy traversable sweep bridge. */
@@ -1348,7 +1348,7 @@ uint32_t lj_gc_sweep_gc2_all_arena_bodies(global_State *g)
   uint32_t total = 0;
   if (!g)
     return 0;
-  for (tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
+  for (tg = gc2_tg_list_acq(g);
        tg != NULL;
        tg = lj_tg_next_acq(tg)) {
     GCArena *a;

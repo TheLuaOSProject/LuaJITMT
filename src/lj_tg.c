@@ -138,7 +138,7 @@ static void tg_attach_catchup(global_State *g, TGState *tg)
 
 void lj_tg_attach(global_State *g, TGState *tg)
 {
-  void *head;
+  TGState *head;
   if (!g || !tg)
     return;
   tg->poll = 0;
@@ -147,11 +147,10 @@ void lj_tg_attach(global_State *g, TGState *tg)
   tg_attach_catchup(g, tg);
   tg->tg_flags &= (uint8_t)~TGF_DEAD;
   do {
-    head = la_loadptr_acq((void *const *)&g->gc2.tg_list);  /* 05 section 5.4.1. */
-    lj_tg_next_rel(tg, (TGState *)head);
-  } while (!la_casptr((void **)&g->gc2.tg_list, &head, tg,
-		      LA_ACQ_REL, LA_ACQ));  /* 05 section 5.4.1 CAS-prepend. */
-  la_add32_rlx(&g->gc2.n_threads, 1);  /* Live TG count; list keeps dead nodes. */
+    head = gc2_tg_list_acq(g);  /* 05 section 5.4.1. */
+    lj_tg_next_rel(tg, head);
+  } while (!gc2_tg_list_cas(g, &head, tg));  /* 05 section 5.4.1 CAS-prepend. */
+  gc2_n_threads_add_rlx(g, 1);  /* Live TG count; list keeps dead nodes. */
 }
 
 void lj_tg_detach(global_State *g, TGState *tg)
@@ -169,7 +168,7 @@ void lj_tg_detach(global_State *g, TGState *tg)
   la_fence_rel();
   oldflags = la_or8_rlx(&tg->tg_flags, TGF_DEAD);  /* 05 section 5.4.1. */
   if (!(oldflags & TGF_DEAD))
-    (void)la_sub32_acqrel(&g->gc2.n_threads, 1);
+    (void)gc2_n_threads_sub_acqrel(g, 1);
   la_store32_rel(&tg->reqmask, 0);
   la_store32_rel(&tg->poll, 0);
   la_store8_rlx(&tg->in_native, 0);
@@ -206,12 +205,12 @@ uint32_t lj_tg_reclaim_dead(global_State *g)
 {
   TGState *prev, *tg;
   uint32_t reclaimed = 0;
-  if (!g || la_load32_acq(&g->gc2.n_threads) != 1 ||
+  if (!g || gc2_n_threads_acq(g) != 1 ||
       gc2_hs_pending_acq(g) != 0)
     return 0;
 restart:
   prev = NULL;
-  tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
+  tg = gc2_tg_list_acq(g);
   while (tg != NULL) {
     TGState *next = lj_tg_next_acq(tg);
     if (la_load8_acq(&tg->tg_flags) & TGF_DEAD) {
@@ -223,9 +222,8 @@ restart:
       if (prev) {
 	lj_tg_next_rel(prev, next);
       } else {
-	void *expect = tg;
-	if (!la_casptr((void **)&g->gc2.tg_list, &expect, next,
-		       LA_ACQ_REL, LA_ACQ))
+	TGState *expect = tg;
+	if (!gc2_tg_list_cas(g, &expect, next))
 	  goto restart;
       }
       lj_tg_next_rel(tg, NULL);
@@ -244,7 +242,7 @@ TGState *lj_tg_find_owner(global_State *g, uint32_t owner_tid)
   TGState *tg;
   if (!g || owner_tid == 0)
     return NULL;
-  for (tg = (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
+  for (tg = gc2_tg_list_acq(g);
        tg != NULL;
        tg = lj_tg_next_acq(tg)) {
     if (la_load32_acq(&tg->tid) == owner_tid)
