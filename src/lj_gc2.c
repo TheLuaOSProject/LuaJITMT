@@ -162,16 +162,16 @@ void lj_gc2_init(global_State *g)
   gc2_worker_wakes_store_rlx(g, 0);
   gc2_worker_parks_store_rlx(g, 0);
   gc2_worker_async_progress_store_rlx(g, 0);
-  la_store64_rlx(&g->gc2.tg_thread_roots, 0);
-  la_store64_rlx(&g->gc2.tg_cur_roots, 0);
-  la_store64_rlx(&g->gc2.tg_trace_roots, 0);
-  la_store64_rlx(&g->gc2.thread_scan_claims, 0);
-  la_store64_rlx(&g->gc2.thread_scan_busy, 0);
-  la_store64_rlx(&g->gc2.thread_scan_requeues, 0);
-  la_store64_rlx(&g->gc2.thread_scan_owner_scans, 0);
-  la_store64_rlx(&g->gc2.thread_scan_needscan, 0);
-  la_store64_rlx(&g->gc2.thread_scan_owner_needscans, 0);
-  la_store64_rlx(&g->gc2.thread_scan_dirty_misses, 0);
+  gc2_tg_thread_roots_store_rlx(g, 0);
+  gc2_tg_cur_roots_store_rlx(g, 0);
+  gc2_tg_trace_roots_store_rlx(g, 0);
+  gc2_thread_scan_claims_store_rlx(g, 0);
+  gc2_thread_scan_busy_store_rlx(g, 0);
+  gc2_thread_scan_requeues_store_rlx(g, 0);
+  gc2_thread_scan_owner_scans_store_rlx(g, 0);
+  gc2_thread_scan_needscan_store_rlx(g, 0);
+  gc2_thread_scan_owner_needscans_store_rlx(g, 0);
+  gc2_thread_scan_dirty_misses_store_rlx(g, 0);
   la_store64_rlx(&g->gc2.sweep_owner_runs, 0);
   la_store64_rlx(&g->gc2.sweep_owner_arenas, 0);
   la_store64_rlx(&g->gc2.sweep_owner_live_cells, 0);
@@ -1324,7 +1324,7 @@ static void gc2_thread_set_needscan(global_State *g, lua_State *L)
 {
   uint8_t old = la_or8_rlx(gc2_thread_flagp(L), LJ_GC_NEEDSCAN);
   if (!(old & LJ_GC_NEEDSCAN))
-    la_add64_rlx(&g->gc2.thread_scan_needscan, 1);
+    gc2_thread_scan_needscan_add(g, 1);
 }
 
 static void gc2_thread_clear_needscan(lua_State *L)
@@ -1420,7 +1420,7 @@ static void gc2_scan_owned_needscan(global_State *g, lua_State *owner_L)
     if (la_load32_acq(&th->thr_owner) != tid)
       continue;
     gc2_scan_thread_stack(g, th);
-    la_add64_rlx(&g->gc2.thread_scan_owner_needscans, 1);
+    gc2_thread_scan_owner_needscans_add(g, 1);
   }
 }
 
@@ -1515,17 +1515,17 @@ static void gc2_scan_tg_roots(global_State *g)
     cur_L = lj_tg_load_cur_L(tg);
     if (thread_L) {
       lj_gc2_markobj(g, obj2gco(thread_L));  /* 05 section 5.7.4 TG root. */
-      la_add64_rlx(&g->gc2.tg_thread_roots, 1);
+      gc2_tg_thread_roots_add(g, 1);
     }
     if (cur_L && cur_L != thread_L) {
       lj_gc2_markobj(g, obj2gco(cur_L));  /* 05 section 5.7.4 TG root. */
-      la_add64_rlx(&g->gc2.tg_cur_roots, 1);
+      gc2_tg_cur_roots_add(g, 1);
     }
 #if LJ_HASJIT
     {
       int32_t vmstate = (int32_t)la_load32_acq((uint32_t *)&tg->vmstate);
       if (vmstate > 0 && gc2_mark_trace_root(g, (TraceNo)vmstate))
-	la_add64_rlx(&g->gc2.tg_trace_roots, 1);
+	gc2_tg_trace_roots_add(g, 1);
     }
 #endif
   }
@@ -3679,7 +3679,7 @@ static int gc2_thread_owner_scans(global_State *g, lua_State *th)
     return 0;
   scanned_dirty = la_load64_acq(&th->scan_dirty_epoch);
   if (scanned_dirty != owner_dirty) {
-    la_add64_rlx(&g->gc2.thread_scan_dirty_misses, 1);
+    gc2_thread_scan_dirty_misses_add(g, 1);
     return 0;
   }
   return 1;
@@ -3708,22 +3708,22 @@ static void gc2_traverse_thread(global_State *g, lua_State *th)
   if (!th || tvref(th->stack) == NULL)
     return;
   if (!lj_state_gcscan_claim(th, &claim)) {
-    la_add64_rlx(&g->gc2.thread_scan_busy, 1);
+    gc2_thread_scan_busy_add(g, 1);
     if (gc2_thread_owner_scans(g, th)) {
       gc2_thread_clear_needscan(th);
-      la_add64_rlx(&g->gc2.thread_scan_owner_scans, 1);
+      gc2_thread_scan_owner_scans_add(g, 1);
     } else {
       int pushed = gc2_grey_push(g, obj2gco(th));
       lj_assertG(pushed, "gc2 busy thread requeue failed");
       UNUSED(pushed);
       if (gc2_thread_has_live_owner(g, th))
 	gc2_thread_set_needscan(g, th);
-      la_add64_rlx(&g->gc2.thread_scan_requeues, 1);
+      gc2_thread_scan_requeues_add(g, 1);
     }
     return;  /* 05 section 5.7.2: owner scan or retry preserves work. */
   }
   cycle = gc2_cycle_acq(g);
-  la_add64_rlx(&g->gc2.thread_scan_claims, 1);
+  gc2_thread_scan_claims_add(g, 1);
   lj_gc2_markmem(g, tvref(th->stack));
   top = gc2_stack_scan_top_worker(g, th);
   for (o = tvref(th->stack) + 1 + LJ_FR2; o < top; o++) {

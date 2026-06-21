@@ -2677,6 +2677,173 @@ static LJ_AINLINE void gc2_worker_async_progress_add(global_State *g,
   la_add64_rlx(&g->gc2.worker_async_progress, n);
 }
 
+static LJ_AINLINE uint64_t gc2_tg_thread_roots_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.tg_thread_roots);
+}
+
+static LJ_AINLINE void gc2_tg_thread_roots_store_rlx(global_State *g,
+						     uint64_t n)
+{
+  la_store64_rlx(&g->gc2.tg_thread_roots, n);
+}
+
+static LJ_AINLINE void gc2_tg_thread_roots_add(global_State *g, uint64_t n)
+{
+  la_add64_rlx(&g->gc2.tg_thread_roots, n);
+}
+
+static LJ_AINLINE uint64_t gc2_tg_cur_roots_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.tg_cur_roots);
+}
+
+static LJ_AINLINE void gc2_tg_cur_roots_store_rlx(global_State *g,
+						  uint64_t n)
+{
+  la_store64_rlx(&g->gc2.tg_cur_roots, n);
+}
+
+static LJ_AINLINE void gc2_tg_cur_roots_add(global_State *g, uint64_t n)
+{
+  la_add64_rlx(&g->gc2.tg_cur_roots, n);
+}
+
+static LJ_AINLINE uint64_t gc2_tg_trace_roots_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.tg_trace_roots);
+}
+
+static LJ_AINLINE void gc2_tg_trace_roots_store_rlx(global_State *g,
+						    uint64_t n)
+{
+  la_store64_rlx(&g->gc2.tg_trace_roots, n);
+}
+
+static LJ_AINLINE void gc2_tg_trace_roots_add(global_State *g, uint64_t n)
+{
+  la_add64_rlx(&g->gc2.tg_trace_roots, n);
+}
+
+static LJ_AINLINE uint64_t gc2_thread_scan_claims_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.thread_scan_claims);
+}
+
+static LJ_AINLINE void gc2_thread_scan_claims_store_rlx(global_State *g,
+							uint64_t n)
+{
+  la_store64_rlx(&g->gc2.thread_scan_claims, n);
+}
+
+static LJ_AINLINE void gc2_thread_scan_claims_add(global_State *g,
+						  uint64_t n)
+{
+  la_add64_rlx(&g->gc2.thread_scan_claims, n);
+}
+
+static LJ_AINLINE uint64_t gc2_thread_scan_busy_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.thread_scan_busy);
+}
+
+static LJ_AINLINE void gc2_thread_scan_busy_store_rlx(global_State *g,
+						      uint64_t n)
+{
+  la_store64_rlx(&g->gc2.thread_scan_busy, n);
+}
+
+static LJ_AINLINE void gc2_thread_scan_busy_add(global_State *g, uint64_t n)
+{
+  la_add64_rlx(&g->gc2.thread_scan_busy, n);
+}
+
+static LJ_AINLINE uint64_t gc2_thread_scan_requeues_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.thread_scan_requeues);
+}
+
+static LJ_AINLINE void gc2_thread_scan_requeues_store_rlx(global_State *g,
+							  uint64_t n)
+{
+  la_store64_rlx(&g->gc2.thread_scan_requeues, n);
+}
+
+static LJ_AINLINE void gc2_thread_scan_requeues_add(global_State *g,
+						    uint64_t n)
+{
+  la_add64_rlx(&g->gc2.thread_scan_requeues, n);
+}
+
+static LJ_AINLINE uint64_t gc2_thread_scan_owner_scans_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.thread_scan_owner_scans);
+}
+
+static LJ_AINLINE void gc2_thread_scan_owner_scans_store_rlx(global_State *g,
+							     uint64_t n)
+{
+  la_store64_rlx(&g->gc2.thread_scan_owner_scans, n);
+}
+
+static LJ_AINLINE void gc2_thread_scan_owner_scans_add(global_State *g,
+						       uint64_t n)
+{
+  la_add64_rlx(&g->gc2.thread_scan_owner_scans, n);
+}
+
+static LJ_AINLINE uint64_t gc2_thread_scan_needscan_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.thread_scan_needscan);
+}
+
+static LJ_AINLINE void gc2_thread_scan_needscan_store_rlx(global_State *g,
+							  uint64_t n)
+{
+  la_store64_rlx(&g->gc2.thread_scan_needscan, n);
+}
+
+static LJ_AINLINE void gc2_thread_scan_needscan_add(global_State *g,
+						    uint64_t n)
+{
+  la_add64_rlx(&g->gc2.thread_scan_needscan, n);
+}
+
+static LJ_AINLINE uint64_t gc2_thread_scan_owner_needscans_acq(
+  global_State *g)
+{
+  return la_load64_acq(&g->gc2.thread_scan_owner_needscans);
+}
+
+static LJ_AINLINE void gc2_thread_scan_owner_needscans_store_rlx(
+  global_State *g, uint64_t n)
+{
+  la_store64_rlx(&g->gc2.thread_scan_owner_needscans, n);
+}
+
+static LJ_AINLINE void gc2_thread_scan_owner_needscans_add(global_State *g,
+							   uint64_t n)
+{
+  la_add64_rlx(&g->gc2.thread_scan_owner_needscans, n);
+}
+
+static LJ_AINLINE uint64_t gc2_thread_scan_dirty_misses_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.thread_scan_dirty_misses);
+}
+
+static LJ_AINLINE void gc2_thread_scan_dirty_misses_store_rlx(global_State *g,
+							      uint64_t n)
+{
+  la_store64_rlx(&g->gc2.thread_scan_dirty_misses, n);
+}
+
+static LJ_AINLINE void gc2_thread_scan_dirty_misses_add(global_State *g,
+							uint64_t n)
+{
+  la_add64_rlx(&g->gc2.thread_scan_dirty_misses, n);
+}
+
 static LJ_AINLINE GCobj *gc2_finalizer_mpsc_acq(global_State *g)
 {
   return (GCobj *)la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc);
