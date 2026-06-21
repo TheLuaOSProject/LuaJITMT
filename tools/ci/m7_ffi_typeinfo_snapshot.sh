@@ -74,6 +74,17 @@ if hits=$(awk '
   exit 1
 fi
 if hits=$(awk '
+  /^static int ffi_typecmp_compatptr\(/ ||
+  /^static int ffi_istype_snapshot\(/ { in_fn = 1 }
+  /^static int ffi_istype_raw\(/ ||
+  /^LJLIB_CF\(ffi_istype\)/ { in_fn = 0 }
+  in_fn && /(^|[^[:alnum:]_])(ct1|ct2|d|s)\.(info|size)([^[:alnum:]_]|$)/ { print FNR ":" $0 }
+' "$ROOT/src/lib_ffi.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw local CType info/size reads are forbidden in ffi.istype snapshot compatibility checks; use ctype_info_acq() or ctype_size_acq()' >&2
+  exit 1
+fi
+if hits=$(awk '
   /^LJLIB_CF\(ffi_sizeof\)/ || /^LJLIB_CF\(ffi_offsetof\)/ { in_fn = 1 }
   in_fn && /->[[:space:]]*(info|size)([^[:alnum:]_]|$)/ { print FNR ":" $0 }
   in_fn && /^}/ { in_fn = 0 }

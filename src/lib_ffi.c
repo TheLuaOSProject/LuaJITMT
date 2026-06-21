@@ -971,15 +971,22 @@ static int ffi_typecmp_compatptr(FFITypeCmpSnap *ts, CTypeID did,
 {
   CType d = *d0, s = *s0;
   if (!((flags & CCF_CAST) || did == sid)) {
+    CTInfo dinfo, sinfo;
+    CTSize dsize, ssize;
     CTInfo dqual = 0, squal = 0;
     int ok = ffi_typecmp_childqual(ts, &d, &did, &d, &dqual);
     if (ok <= 0)
       return ok;
-    if (!ctype_isstruct(s.info)) {
+    sinfo = ctype_info_acq(&s);
+    if (!ctype_isstruct(sinfo)) {
       ok = ffi_typecmp_childqual(ts, &s, &sid, &s, &squal);
       if (ok <= 0)
 	return ok;
     }
+    dinfo = ctype_info_acq(&d);
+    sinfo = ctype_info_acq(&s);
+    dsize = ctype_size_acq(&d);
+    ssize = ctype_size_acq(&s);
     if ((flags & CCF_SAME)) {
       if (dqual != squal) {
 	*bp = 0;
@@ -990,22 +997,22 @@ static int ffi_typecmp_compatptr(FFITypeCmpSnap *ts, CTypeID did,
 	*bp = 0;
 	return 1;
       }
-      if (ctype_isvoid(d.info) || ctype_isvoid(s.info)) {
+      if (ctype_isvoid(dinfo) || ctype_isvoid(sinfo)) {
 	*bp = 1;
 	return 1;
       }
     }
-    if (ctype_type(d.info) != ctype_type(s.info) || d.size != s.size) {
+    if (ctype_type(dinfo) != ctype_type(sinfo) || dsize != ssize) {
       *bp = 0;
       return 1;
     }
-    if (ctype_isnum(d.info)) {
-      *bp = ((d.info ^ s.info) & (CTF_BOOL|CTF_FP)) == 0;
+    if (ctype_isnum(dinfo)) {
+      *bp = ((dinfo ^ sinfo) & (CTF_BOOL|CTF_FP)) == 0;
       return 1;
-    } else if (ctype_ispointer(d.info)) {
+    } else if (ctype_ispointer(dinfo)) {
       return ffi_typecmp_compatptr(ts, did, &d, sid, &s,
 				   flags|CCF_SAME, bp);
-    } else if (ctype_isstruct(d.info)) {
+    } else if (ctype_isstruct(dinfo)) {
       *bp = did == sid;
       return 1;
     }
@@ -1052,18 +1059,22 @@ static int ffi_istype_snapshot(CTState *cts, CTypeID id1, CTypeID id2, int *bp)
   if (ok > 0)
     ok = ffi_typecmp_rawrefid(&ts, id2, &rid2, &ct2);
   if (ok > 0) {
+    CTInfo info1 = ctype_info_acq(&ct1);
+    CTInfo info2 = ctype_info_acq(&ct2);
+    CTSize size1 = ctype_size_acq(&ct1);
+    CTSize size2 = ctype_size_acq(&ct2);
     if (rid1 == rid2) {
       b = 1;
-    } else if (ctype_type(ct1.info) == ctype_type(ct2.info) &&
-	       ct1.size == ct2.size) {
-      if (ctype_ispointer(ct1.info)) {
+    } else if (ctype_type(info1) == ctype_type(info2) &&
+	       size1 == size2) {
+      if (ctype_ispointer(info1)) {
 	ok = ffi_typecmp_compatptr(&ts, rid1, &ct1, rid2, &ct2,
 				   CCF_IGNQUAL, &b);
-      } else if (ctype_isnum(ct1.info) || ctype_isvoid(ct1.info)) {
-	b = ((ct1.info ^ ct2.info) & ~(CTF_QUAL|CTF_LONG)) == 0;
+      } else if (ctype_isnum(info1) || ctype_isvoid(info1)) {
+	b = ((info1 ^ info2) & ~(CTF_QUAL|CTF_LONG)) == 0;
       }
-    } else if (ctype_isstruct(ct1.info) && ctype_isptr(ct2.info)) {
-      ok = ffi_typecmp_rawid(&ts, ctype_cid(ct2.info), &cid, &child);
+    } else if (ctype_isstruct(info1) && ctype_isptr(info2)) {
+      ok = ffi_typecmp_rawid(&ts, ctype_cid(info2), &cid, &child);
       if (ok > 0 && rid1 == cid)
 	b = 1;
     }
