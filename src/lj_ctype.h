@@ -903,6 +903,21 @@ static LJ_AINLINE CTypeTab *ctype_retiredtab_xchg_acqrel(CTState *cts,
   return (CTypeTab *)la_xchgptr_acqrel((void **)&cts->retiredtab, tabh);
 }
 
+static LJ_AINLINE CTypeID ctype_hash_head_acq(const CTState *cts, uint32_t h)
+{
+  return (CTypeID)(la_load32_acq(&cts->hash[h]) & 0xffffu);
+}
+
+static LJ_AINLINE int ctype_hash_head_cas(CTState *cts, uint32_t h,
+					  CTypeID *oldid, CTypeID newid)
+{
+  uint32_t old = (uint32_t)*oldid;
+  int ok = la_cas32(&cts->hash[h], &old, (uint32_t)newid,
+		    LA_ACQ_REL, LA_ACQ);
+  *oldid = (CTypeID)(old & 0xffffu);
+  return ok;
+}
+
 /* Acquire current C type table. */
 static LJ_AINLINE CType *ctype_tab_acq(CTState *cts)
 {

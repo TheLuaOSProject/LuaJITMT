@@ -12,5 +12,12 @@ then
   echo "raw CType.next hash-chain access escaped helper" >&2
   exit 1
 fi
+if hits=$(grep -nE -- 'cts[[:space:]]*->[[:space:]]*hash|&[[:space:]]*cts[[:space:]]*->[[:space:]]*hash' \
+    "$ROOT/src/lj_ctype.c" \
+    "$ROOT/src/lib_ffi.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw CTState ctype hash head access is forbidden; use ctype_hash_head_* helpers' >&2
+  exit 1
+fi
 
 exec "$ROOT/tools/ci/lua_test.sh" m7_ffi_ctype_hash_publish

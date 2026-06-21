@@ -568,17 +568,14 @@ int lj_ctype_cb_isblacklisted(CTState *cts, void *func)
 
 static LJ_AINLINE CTypeID ctype_hash_load(CTState *cts, uint32_t h)
 {
-  return (CTypeID)(la_load32_acq(&cts->hash[h]) & 0xffffu);  /* 11.2: ctype hash publication. */
+  return ctype_hash_head_acq(cts, h);  /* 11.2: ctype hash publication. */
 }
 
 static LJ_AINLINE int ctype_hash_cas(CTState *cts, uint32_t h,
 				     CTypeID *oldid, CTypeID newid)
 {
-  uint32_t old = (uint32_t)*oldid;
-  int ok = la_cas32(&cts->hash[h], &old, (uint32_t)newid,
-		    LA_ACQ_REL, LA_ACQ);
-  *oldid = (CTypeID)(old & 0xffffu);
-  return ok;  /* 11.2: CAS-prepend ctype hash publication. */
+  return ctype_hash_head_cas(cts, h, oldid,
+			     newid);  /* 11.2: CAS-prepend ctype hash publication. */
 }
 
 static void ctype_hash_setnext(CTState *cts, CType *src, CTypeID id,
