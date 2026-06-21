@@ -1423,9 +1423,10 @@ static uint32_t asm_callx_flags(ASMState *as, IRIns *ir)
   if (IR(ir->op2)->o == IR_CARG) {  /* Copy calling convention info. */
     CTypeID id = (CTypeID)IR(IR(ir->op2)->op2)->i;
     CType *ct = ctype_get(ctype_ctsG(J2G(as->J)), id);
-    nargs |= ((ct->info & CTF_VARARG) ? CCI_VARARG : 0);
+    CTInfo info = ctype_info_acq(ct);
+    nargs |= ((info & CTF_VARARG) ? CCI_VARARG : 0);
 #if LJ_TARGET_X86
-    nargs |= (ctype_cconv(ct->info) << CCI_CC_SHIFT);
+    nargs |= (ctype_cconv(info) << CCI_CC_SHIFT);
 #endif
   }
 #endif
