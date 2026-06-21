@@ -1815,6 +1815,59 @@ static LJ_AINLINE uint64_t gc2_marks_this_round_xchg_acqrel(global_State *g,
   return la_xchg64_acqrel(&g->gc2.marks_this_round, n);
 }
 
+static LJ_AINLINE uint64_t gc2_weak_count_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.weak_count);
+}
+
+static LJ_AINLINE void gc2_weak_count_store_rlx(global_State *g, uint64_t n)
+{
+  la_store64_rlx(&g->gc2.weak_count, n);
+}
+
+static LJ_AINLINE uint64_t gc2_weak_count_add(global_State *g, uint64_t n)
+{
+  return la_add64_rlx(&g->gc2.weak_count, n);
+}
+
+static LJ_AINLINE uint64_t gc2_weak_scan_cursor_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.weak_scan_cursor);
+}
+
+static LJ_AINLINE void gc2_weak_scan_cursor_store_rlx(global_State *g,
+						      uint64_t cursor)
+{
+  la_store64_rlx(&g->gc2.weak_scan_cursor, cursor);
+}
+
+static LJ_AINLINE int gc2_weak_scan_cursor_cas(global_State *g,
+					       uint64_t *oldp,
+					       uint64_t cursor)
+{
+  return la_cas64(&g->gc2.weak_scan_cursor, oldp, cursor,
+		  LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE uint64_t gc2_weak_clear_cursor_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.weak_clear_cursor);
+}
+
+static LJ_AINLINE void gc2_weak_clear_cursor_store_rlx(global_State *g,
+						       uint64_t cursor)
+{
+  la_store64_rlx(&g->gc2.weak_clear_cursor, cursor);
+}
+
+static LJ_AINLINE int gc2_weak_clear_cursor_cas(global_State *g,
+						uint64_t *oldp,
+						uint64_t cursor)
+{
+  return la_cas64(&g->gc2.weak_clear_cursor, oldp, cursor,
+		  LA_ACQ_REL, LA_ACQ);
+}
+
 static LJ_AINLINE void gc2_cycle_leader_store_rlx(global_State *g,
 						  uint32_t leader)
 {
