@@ -371,6 +371,33 @@ typedef struct CTState {
   uint32_t hash[CTHASH_SIZE];  /* Hash anchors. Low 16 bits hold CTypeID. */
 } CTState;
 
+static LJ_AINLINE uint32_t ctype_parse_token_acq(const CTState *cts)
+{
+  return la_load32_acq(&cts->parse_token);
+}
+
+static LJ_AINLINE void ctype_parse_token_rel(CTState *cts, uint32_t seq)
+{
+  la_store32_rel(&cts->parse_token, seq);
+}
+
+static LJ_AINLINE int ctype_parse_token_cas(CTState *cts, uint32_t *oldp,
+					    uint32_t seq)
+{
+  return la_cas32(&cts->parse_token, oldp, seq, LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE int ctype_parse_token_wait(CTState *cts, uint32_t seq,
+					     int64_t ns)
+{
+  return la_futex_wait(&cts->parse_token, seq, ns);
+}
+
+static LJ_AINLINE int ctype_parse_token_wake(CTState *cts, int n)
+{
+  return la_futex_wake(&cts->parse_token, n);
+}
+
 static LJ_AINLINE FinRegGen *fin_gen_head_acq(const CTState *cts)
 {
   return (FinRegGen *)la_loadptr_acq((void *const *)&cts->fin_head);

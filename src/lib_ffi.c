@@ -853,7 +853,7 @@ typedef struct FFITypeCmpSnap {
 
 static int ffi_typecmp_begin(CTState *cts, FFITypeCmpSnap *ts)
 {
-  uint32_t seq = la_load32_acq(&cts->parse_token);
+  uint32_t seq = ctype_parse_token_acq(cts);
   if (seq & 1u)
     return -1;
   ts->cts = cts;
@@ -866,7 +866,7 @@ static int ffi_typecmp_begin(CTState *cts, FFITypeCmpSnap *ts)
 
 static int ffi_typecmp_end(FFITypeCmpSnap *ts)
 {
-  uint32_t seq = la_load32_acq(&ts->cts->parse_token);
+  uint32_t seq = ctype_parse_token_acq(ts->cts);
   return (seq == ts->seq && !(seq & 1u)) ? 1 : -1;
 }
 
@@ -1087,7 +1087,7 @@ typedef struct FFILayoutSnap {
 
 static int ffi_layout_begin(CTState *cts, FFILayoutSnap *ls)
 {
-  uint32_t seq = la_load32_acq(&cts->parse_token);
+  uint32_t seq = ctype_parse_token_acq(cts);
   if (seq & 1u)
     return -1;
   ls->cts = cts;
@@ -1100,7 +1100,7 @@ static int ffi_layout_begin(CTState *cts, FFILayoutSnap *ls)
 
 static int ffi_layout_end(FFILayoutSnap *ls)
 {
-  uint32_t seq = la_load32_acq(&ls->cts->parse_token);
+  uint32_t seq = ctype_parse_token_acq(ls->cts);
   return (seq == ls->seq && !(seq & 1u)) ? 1 : -1;
 }
 

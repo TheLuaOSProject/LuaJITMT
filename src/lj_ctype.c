@@ -157,11 +157,10 @@ CTKWDEF(CTKWNAMEDEF)
 void lj_ctype_parse_lock(CTState *cts, lua_State *L)
 {
   for (;;) {
-    uint32_t seq = la_load32_acq(&cts->parse_token);
+    uint32_t seq = ctype_parse_token_acq(cts);
     if ((seq & 1u) == 0) {
       uint32_t expect = seq;
-      if (la_cas32(&cts->parse_token, &expect, seq + 1u,
-		   LA_ACQ_REL, LA_ACQ))
+      if (ctype_parse_token_cas(cts, &expect, seq + 1u))
 	return;  /* 11.2: acquire the cparse CTState mutation sequence. */
       continue;
     }
@@ -169,7 +168,7 @@ void lj_ctype_parse_lock(CTState *cts, lua_State *L)
     {
       uint32_t actions;
       lj_native_enter(L2TG(L));
-      (void)la_futex_wait(&cts->parse_token, seq, 1000000);
+      (void)ctype_parse_token_wait(cts, seq, 1000000);
       actions = lj_native_leave(L);
       lj_safepoint_checkstop(L, actions);  /* 11.2: cdef may park. */
     }
@@ -182,11 +181,11 @@ void lj_ctype_parse_lock(CTState *cts, lua_State *L)
 
 void lj_ctype_parse_unlock(CTState *cts)
 {
-  uint32_t seq = la_load32_acq(&cts->parse_token);
+  uint32_t seq = ctype_parse_token_acq(cts);
   lj_assertCTS((seq & 1u) != 0, "cparse mutation sequence not held");
-  la_store32_rel(&cts->parse_token, seq + 1u);  /* 11.2: publish parser mutations. */
+  ctype_parse_token_rel(cts, seq + 1u);  /* 11.2: publish parser mutations. */
 #if defined(__linux__)
-  (void)la_futex_wake(&cts->parse_token, 1);  /* 11.2: wake next cparse waiter. */
+  (void)ctype_parse_token_wake(cts, 1);  /* 11.2: wake next cparse waiter. */
 #endif
 }
 
@@ -199,7 +198,7 @@ int lj_ctype_snapshot(CTState *cts, CTypeID id, CType *out)
 
   if (id == 0)
     return 0;
-  seq0 = la_load32_acq(&cts->parse_token);
+  seq0 = ctype_parse_token_acq(cts);
   if (seq0 & 1u)
     return -1;  /* Active parser rollback window: use the locked reader. */
   if (id >= ctype_top_acq(cts))
@@ -214,7 +213,7 @@ int lj_ctype_snapshot(CTState *cts, CTypeID id, CType *out)
   out->next = (CTypeID1)ctype_next_acq(ct);
   name = gcref_acq(ct->name);
   setgcrefp(out->name, name);
-  seq1 = la_load32_acq(&cts->parse_token);
+  seq1 = ctype_parse_token_acq(cts);
   if (seq0 != seq1 || (seq1 & 1u))
     return -1;  /* Parser overlapped the copy; retry under the lock. */
   return !ctype_isabandoned(out->info);
@@ -855,7 +854,7 @@ CTypeID lj_ctype_getname(CTState *cts, CType **ctp, GCstr *name, uint32_t tmask)
 int lj_ctype_getname_snapshot(CTState *cts, GCstr *name, uint32_t tmask,
 			      CTypeID *idp, CType *out, GCstr **redirp)
 {
-  uint32_t seq0 = la_load32_acq(&cts->parse_token);
+  uint32_t seq0 = ctype_parse_token_acq(cts);
   CTypeTab *tabh;
   CTypeID top, id;
   MSize budget;
@@ -910,13 +909,13 @@ int lj_ctype_getname_snapshot(CTState *cts, GCstr *name, uint32_t tmask,
       *idp = id;
       if (redirp)
 	*redirp = redir;
-      seq1 = la_load32_acq(&cts->parse_token);
+      seq1 = ctype_parse_token_acq(cts);
       return (seq0 == seq1 && !(seq1 & 1u)) ? 1 : -1;
     }
     id = next;
   }
   {
-    uint32_t seq1 = la_load32_acq(&cts->parse_token);
+    uint32_t seq1 = ctype_parse_token_acq(cts);
     return (seq0 == seq1 && !(seq1 & 1u)) ? 0 : -1;
   }
 }
@@ -1032,7 +1031,7 @@ int lj_ctype_getfieldq_snapshot(CTState *cts, const CType *root,
 				GCstr *name, CTSize *ofsp, CTInfo *qualp,
 				CType *out)
 {
-  uint32_t seq0 = la_load32_acq(&cts->parse_token);
+  uint32_t seq0 = ctype_parse_token_acq(cts);
   CTypeTab *tabh;
   CTypeID top, sib;
   CTInfo info;
@@ -1050,7 +1049,7 @@ int lj_ctype_getfieldq_snapshot(CTState *cts, const CType *root,
   ok = ctype_getfieldq_snapshot_rec(tabh, top, sib, name, 0, 0, ofsp,
 				    qualp, out, &budget);
   if (ok >= 0) {
-    uint32_t seq1 = la_load32_acq(&cts->parse_token);
+    uint32_t seq1 = ctype_parse_token_acq(cts);
     ok = (seq0 == seq1 && !(seq1 & 1u)) ? ok : -1;
   }
   return ok;
@@ -1059,7 +1058,7 @@ int lj_ctype_getfieldq_snapshot(CTState *cts, const CType *root,
 /* Sequence-checked pointer-to-struct test for stable auto-deref readers. */
 int lj_ctype_ptrstruct_snapshot(CTState *cts, CTypeID id, CTypeID *cidp)
 {
-  uint32_t seq0 = la_load32_acq(&cts->parse_token);
+  uint32_t seq0 = ctype_parse_token_acq(cts);
   CTypeTab *tabh;
   CTypeID top;
   MSize budget;
@@ -1088,7 +1087,7 @@ int lj_ctype_ptrstruct_snapshot(CTState *cts, CTypeID id, CTypeID *cidp)
     id = ctype_cid(ct.info);
   }
   {
-    uint32_t seq1 = la_load32_acq(&cts->parse_token);
+    uint32_t seq1 = ctype_parse_token_acq(cts);
     if (seq0 != seq1 || (seq1 & 1u))
       return -1;
   }
@@ -1103,7 +1102,7 @@ int lj_ctype_ptrstruct_snapshot(CTState *cts, CTypeID id, CTypeID *cidp)
 int lj_ctype_info_snapshot(CTState *cts, CTypeID id, CTInfo *infop,
 			   CTSize *szp, CTypeID *ridp, CType *rawp)
 {
-  uint32_t seq0 = la_load32_acq(&cts->parse_token);
+  uint32_t seq0 = ctype_parse_token_acq(cts);
   CTypeTab *tabh;
   CTypeID top;
   MSize budget;
@@ -1151,7 +1150,7 @@ int lj_ctype_info_snapshot(CTState *cts, CTypeID id, CTInfo *infop,
       qual |= (info & ~(CTF_ALIGN|CTMASK_CID));
       *infop = qual;
       *szp = ctype_isfunc(info) ? CTSIZE_INVALID : ct.size;
-      seq1 = la_load32_acq(&cts->parse_token);
+      seq1 = ctype_parse_token_acq(cts);
       return (seq0 == seq1 && !(seq1 & 1u)) ? 1 : -1;
     }
     id = ctype_cid(info);
@@ -1176,7 +1175,7 @@ CTSize lj_ctype_size(CTState *cts, CTypeID id)
 /* Sequence-checked size snapshot for stable non-parser ctype readers. */
 int lj_ctype_size_snapshot(CTState *cts, CTypeID id, CTSize *szp)
 {
-  uint32_t seq0 = la_load32_acq(&cts->parse_token);
+  uint32_t seq0 = ctype_parse_token_acq(cts);
   CTypeTab *tabh;
   CTypeID top;
   MSize budget;
@@ -1207,7 +1206,7 @@ int lj_ctype_size_snapshot(CTState *cts, CTypeID id, CTSize *szp)
     if (!ctype_isattrib(info)) {
       uint32_t seq1;
       *szp = ctype_hassize(info) ? size : CTSIZE_INVALID;
-      seq1 = la_load32_acq(&cts->parse_token);
+      seq1 = ctype_parse_token_acq(cts);
       return (seq0 == seq1 && !(seq1 & 1u)) ? 1 : -1;
     }
     id = ctype_cid(info);
@@ -1218,7 +1217,7 @@ int lj_ctype_size_snapshot(CTState *cts, CTypeID id, CTSize *szp)
 int lj_ctype_enumconst_snapshot(CTState *cts, const CType *root,
 				GCstr *name, CTSize *valp, CTypeID *cidp)
 {
-  uint32_t seq0 = la_load32_acq(&cts->parse_token);
+  uint32_t seq0 = ctype_parse_token_acq(cts);
   CTypeTab *tabh;
   CTypeID top, id;
   MSize budget;
@@ -1249,13 +1248,13 @@ int lj_ctype_enumconst_snapshot(CTState *cts, const CType *root,
       uint32_t seq1;
       *valp = size;
       *cidp = ctype_cid(info);
-      seq1 = la_load32_acq(&cts->parse_token);
+      seq1 = ctype_parse_token_acq(cts);
       return (seq0 == seq1 && !(seq1 & 1u)) ? 1 : -1;
     }
     id = (CTypeID)la_load16_acq(&ct->sib);
   }
   {
-    uint32_t seq1 = la_load32_acq(&cts->parse_token);
+    uint32_t seq1 = ctype_parse_token_acq(cts);
     return (seq0 == seq1 && !(seq1 & 1u)) ? 0 : -1;
   }
 }
