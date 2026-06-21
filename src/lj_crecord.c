@@ -1703,13 +1703,15 @@ static TRef crec_arith_meta(jit_State *J, TRef *sp, CType **s, CTState *cts,
     if (tviscdata(&rd->argv[0])) {
       CTypeID id = argv2cdata(J, J->base[0], &rd->argv[0])->ctypeid;
       CType *ct = ctype_raw(cts, id);
-      if (ctype_isptr(ct->info)) id = ctype_cid(ct->info);
+      CTInfo info = ctype_info_acq(ct);
+      if (ctype_isptr(info)) id = ctype_cid(info);
       tv = lj_ctype_metatv(cts, &metatv, id, (MMS)rd->data);
     }
     if (!tv && J->base[1] && tviscdata(&rd->argv[1])) {
       CTypeID id = argv2cdata(J, J->base[1], &rd->argv[1])->ctypeid;
       CType *ct = ctype_raw(cts, id);
-      if (ctype_isptr(ct->info)) id = ctype_cid(ct->info);
+      CTInfo info = ctype_info_acq(ct);
+      if (ctype_isptr(info)) id = ctype_cid(info);
       tv = lj_ctype_metatv(cts, &metatv, id, (MMS)rd->data);
     }
   }
@@ -1719,14 +1721,17 @@ static TRef crec_arith_meta(jit_State *J, TRef *sp, CType **s, CTState *cts,
       return 0;
     }  /* NYI: non-function metamethods. */
   } else if ((MMS)rd->data == MM_eq) {  /* Fallback cdata pointer comparison. */
-    if (sp[0] && sp[1] && ctype_isnum(s[0]->info) == ctype_isnum(s[1]->info)) {
-      /* Assume true comparison. Fixup and emit pending guard later. */
-      lj_ir_set(J, IRTG(IR_EQ, IRT_PTR), sp[0], sp[1]);
-      J->postproc = LJ_POST_FIXGUARD;
-      return TREF_TRUE;
-    } else {
-      return TREF_FALSE;
+    if (sp[0] && sp[1]) {
+      CTInfo info0 = ctype_info_acq(s[0]);
+      CTInfo info1 = ctype_info_acq(s[1]);
+      if (ctype_isnum(info0) == ctype_isnum(info1)) {
+	/* Assume true comparison. Fixup and emit pending guard later. */
+	lj_ir_set(J, IRTG(IR_EQ, IRT_PTR), sp[0], sp[1]);
+	J->postproc = LJ_POST_FIXGUARD;
+	return TREF_TRUE;
+      }
     }
+    return TREF_FALSE;
   }
   lj_trace_err(J, LJ_TRERR_BADTYPE);
   return 0;
