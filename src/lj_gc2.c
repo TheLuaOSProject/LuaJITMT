@@ -151,7 +151,7 @@ void lj_gc2_init(global_State *g)
   la_store32_rlx(&g->gc2.worker_wake, 0);
   la_store32_rlx(&g->gc2.worker_started, 0);
   la_store32_rlx(&g->gc2.worker_exited, 0);
-  la_store32_rlx(&g->gc2.worker_active, 0);
+  gc2_worker_active_store_rlx(g, 0);
   la_store64_rlx(&g->gc2.worker_runs, 0);
   la_store64_rlx(&g->gc2.worker_grey_drained, 0);
   la_store64_rlx(&g->gc2.worker_ssb_converted, 0);
@@ -1193,19 +1193,19 @@ int lj_gc2_sweep_to_idle(global_State *g)
   uint32_t expect = 0, phase;
   if (!g)
     return 0;
-  if (!la_cas32(&g->gc2.worker_active, &expect, 1, LA_ACQ_REL, LA_ACQ))
+  if (!gc2_worker_active_cas(g, &expect, 1))
     return 0;  /* 05 section 5.8 scheduler close waits for worker owner. */
   phase = la_load32_acq(&g->gc2.phase);
   if (phase != LJ_GC2_SWEEP || gc2_sweep_blocked_by_finalizer(g) ||
       lj_gc2_sweep_needs_prepare(g) || lj_gc2_sweep_pending(g)) {
-    la_store32_rel(&g->gc2.worker_active, 0);
+    gc2_worker_active_rel(g, 0);
     return 0;
   }
   la_store32_rel(&g->gc2.cycle_leader, 0);
   (void)gc2_flush_and_drain_ssb(g);
   phase = la_xchg32_acqrel(&g->gc2.phase, LJ_GC2_IDLE);
   if (phase != LJ_GC2_SWEEP) {
-    la_store32_rel(&g->gc2.worker_active, 0);
+    gc2_worker_active_rel(g, 0);
     return 0;
   }
   la_add64_rlx(&g->gc2.sweep_to_idle, 1);
@@ -1214,7 +1214,7 @@ int lj_gc2_sweep_to_idle(global_State *g)
   lj_gc2_handshake(g, gc2_idle_barrier_actions(g, 0));
   (void)lj_tg_reclaim_dead(g);
   lj_gc2_update_pacing(g);
-  la_store32_rel(&g->gc2.worker_active, 0);
+  gc2_worker_active_rel(g, 0);
   return 1;
 }
 
@@ -2304,7 +2304,7 @@ int lj_gc2_weak_complete(global_State *g, GCobj *legacy, uint32_t drain_limit)
       progress += (uint64_t)weakdrain;
       continue;
     }
-    if (la_load32_acq(&g->gc2.worker_active) == 0)
+    if (gc2_worker_active_acq(g) == 0)
       break;
     la_cpu_pause();  /* 05 section 5.8: peer drain must finish before fallback. */
   }
@@ -3742,24 +3742,24 @@ static uint32_t gc2_worker_finalizer_drain(global_State *g, uint32_t limit)
   if (!g || limit == 0 || la_load32_acq(&g->gc2.phase) != LJ_GC2_IDLE ||
       gc2_finalizer_mpsc_acq(g) == NULL)
     return 0;
-  if (!la_cas32(&g->gc2.worker_active, &expect, 1, LA_ACQ_REL, LA_ACQ)) {
+  if (!gc2_worker_active_cas(g, &expect, 1)) {
     la_add64_rlx(&g->gc2.worker_busy_retries, 1);
     return 0;
   }
   if (la_load32_acq(&g->gc2.phase) != LJ_GC2_IDLE ||
       gc2_finalizer_mpsc_acq(g) == NULL) {
-    la_store32_rel(&g->gc2.worker_active, 0);
+    gc2_worker_active_rel(g, 0);
     return 0;
   }
   if (!lj_gc2_finalizer_try_enter(g)) {
-    la_store32_rel(&g->gc2.worker_active, 0);
+    gc2_worker_active_rel(g, 0);
     return 0;
   }
   before = gc2_finalizer_mpsc_drained_acq(g);
   lj_gc2_finalizer_drain_owned(g);
   after = gc2_finalizer_mpsc_drained_acq(g);
   lj_gc2_finalizer_leave(g);
-  la_store32_rel(&g->gc2.worker_active, 0);
+  gc2_worker_active_rel(g, 0);
   delta = after - before;
   return delta > ~(uint32_t)0 ? ~(uint32_t)0 : (uint32_t)delta;
 }
@@ -3785,14 +3785,14 @@ static uint32_t gc2_worker_drain_inner(global_State *g, uint32_t limit,
   if (phase != LJ_GC2_MARK && phase != LJ_GC2_WEAK &&
       phase != LJ_GC2_SWEEP)
     return 0;
-  if (!la_cas32(&g->gc2.worker_active, &expect, 1, LA_ACQ_REL, LA_ACQ)) {
+  if (!gc2_worker_active_cas(g, &expect, 1)) {
     la_add64_rlx(&g->gc2.worker_busy_retries, 1);
     return 0;  /* 05 section 5.6.3 temporary single-worker bridge. */
   }
   phase = la_load32_acq(&g->gc2.phase);
   if (phase != LJ_GC2_MARK && phase != LJ_GC2_WEAK &&
       phase != LJ_GC2_SWEEP) {
-    la_store32_rel(&g->gc2.worker_active, 0);
+    gc2_worker_active_rel(g, 0);
     return 0;
   }
   if (phase == LJ_GC2_SWEEP) {
@@ -3839,7 +3839,7 @@ static uint32_t gc2_worker_drain_inner(global_State *g, uint32_t limit,
     la_add64_rlx(&g->gc2.worker_idle_declares, 1);
   if (progress)
     *progress = total;
-  la_store32_rel(&g->gc2.worker_active, 0);
+  gc2_worker_active_rel(g, 0);
   return total;  /* 05 section 5.6.3 total worker progress contract. */
 }
 
@@ -3908,10 +3908,10 @@ uint32_t lj_gc2_mark_complete(global_State *g, lua_State *L,
   la_add64_rlx(&g->gc2.mark_complete_runs, 1);
   for (;;) {
     hit = lj_gc2_fixpoint_run(g, L, max_rounds, limit);
-    if (hit || la_load32_acq(&g->gc2.worker_active) == 0)
+    if (hit || gc2_worker_active_acq(g) == 0)
       break;
     la_add64_rlx(&g->gc2.mark_complete_peer_waits, 1);
-    while (la_load32_acq(&g->gc2.worker_active) != 0)
+    while (gc2_worker_active_acq(g) != 0)
       la_cpu_pause();  /* 05 section 5.7.1 peer drain before P_WEAK. */
   }
   if (hit)
