@@ -502,13 +502,17 @@ static void clib_cache_free(global_State *g, CLibrary *cl)
 static CTSize clib_func_argsize(CTState *cts, CType *ct)
 {
   CTSize n = 0;
-  while (ct->sib) {
+  CTypeID sib = ctype_sib_acq(ct);
+  while (sib) {
     CType *d;
-    ct = ctype_get(cts, ct->sib);
-    if (ctype_isfield(ct->info)) {
+    CTInfo info;
+    ct = ctype_get(cts, sib);
+    info = ctype_info_acq(ct);
+    if (ctype_isfield(info)) {
       d = ctype_rawchild(cts, ct);
-      n += ((d->size + 3) & ~3);
+      n += ((ctype_size_acq(d) + 3) & ~3);
     }
+    sib = ctype_sib_acq(ct);
   }
   return n;
 }
@@ -517,10 +521,12 @@ static CTSize clib_func_argsize(CTState *cts, CType *ct)
 /* Get redirected or mangled external symbol. */
 static GCstr *clib_extsym(CTState *cts, CType *ct, GCstr *name)
 {
-  if (ct->sib) {
-    CType *ctf = ctype_get(cts, ct->sib);
+  CTypeID sib = ctype_sib_acq(ct);
+  if (sib) {
+    CType *ctf = ctype_get(cts, sib);
+    CTInfo finfo = ctype_info_acq(ctf);
     GCstr *redir = ctype_name_acq(ctf);
-    if (ctype_isxattrib(ctf->info, CTA_REDIR)) {
+    if (ctype_isxattrib(finfo, CTA_REDIR)) {
       lj_assertCTS(redir != NULL, "missing redirected symbol name");
       return redir;
     }
@@ -540,6 +546,7 @@ TValue *lj_clib_index(lua_State *L, CLibrary *cl, GCstr *name)
     CTypeID id;
     GCstr *symname = name;
     TValue tmp, *tv, *anchor;
+    CTInfo info;
     int ok = lj_ctype_getname_snapshot(cts, name, CLNS_INDEX, &id, &snap,
 				       &symname);
     if (ok < 0) {
@@ -550,20 +557,27 @@ TValue *lj_clib_index(lua_State *L, CLibrary *cl, GCstr *name)
 	lj_ctype_parse_unlock(cts);
 	lj_err_callerv(L, LJ_ERR_FFI_NODECL, strdata(name));
       }
-      if (!ctype_isconstval(ct->info))
+      if (!ctype_isconstval(ctype_info_acq(ct)))
 	symname = clib_extsym(cts, ct, name);
+      ctype_copy_rel(&snap, ct);
+      ct = &snap;
       lj_ctype_parse_unlock(cts);
     } else if (!ok) {
       lj_err_callerv(L, LJ_ERR_FFI_NODECL, strdata(name));
     }
-    if (ctype_isconstval(ct->info)) {
+    info = ctype_info_acq(ct);
+    if (ctype_isconstval(info)) {
       CType *ctt = ctype_child(cts, ct);
-      lj_assertCTS(ctype_isinteger(ctt->info) && ctt->size <= 4,
+      CTInfo cttinfo = ctype_info_acq(ctt);
+      CTSize cttsize = ctype_size_acq(ctt);
+      CTSize size = ctype_size_acq(ct);
+      lj_assertCTS(ctype_isinteger(cttinfo) && cttsize <= 4,
 		   "only 32 bit const supported");  /* NYI */
-      if ((ctt->info & CTF_UNSIGNED) && (int32_t)ct->size < 0) {
-	setnumV(&tmp, (lua_Number)(uint32_t)ct->size);
+      UNUSED(cttsize);
+      if ((cttinfo & CTF_UNSIGNED) && (int32_t)size < 0) {
+	setnumV(&tmp, (lua_Number)(uint32_t)size);
       } else {
-	setintV(&tmp, (int32_t)ct->size);
+	setintV(&tmp, (int32_t)size);
       }
     } else {
       const char *sym = strdata(symname);
@@ -572,12 +586,12 @@ TValue *lj_clib_index(lua_State *L, CLibrary *cl, GCstr *name)
 #endif
       void *p = clib_getsym(L, cl, sym);
       GCcdata *cd;
-      lj_assertCTS(ctype_isfunc(ct->info) || ctype_isextern(ct->info),
-		   "unexpected ctype %08x in clib", ct->info);
+      lj_assertCTS(ctype_isfunc(info) || ctype_isextern(info),
+		   "unexpected ctype %08x in clib", info);
 #if LJ_TARGET_X86 && LJ_ABI_WIN
       /* Retry with decorated name for fastcall/stdcall functions. */
-      if (!p && ctype_isfunc(ct->info)) {
-	CTInfo cconv = ctype_cconv(ct->info);
+      if (!p && ctype_isfunc(info)) {
+	CTInfo cconv = ctype_cconv(info);
 	if (cconv == CTCC_FASTCALL || cconv == CTCC_STDCALL) {
 	  CTSize sz = clib_func_argsize(cts, ct);
 	  const char *symd = lj_strfmt_pushf(L,

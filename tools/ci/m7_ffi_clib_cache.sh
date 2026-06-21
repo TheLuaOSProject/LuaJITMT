@@ -30,5 +30,16 @@ if hits=$(awk '
   printf '%s\n' 'raw CType info/size reads are forbidden in recorded FFI C library namespace lookups; use ctype_info_acq() or ctype_size_acq()' >&2
   exit 1
 fi
+if hits=$(awk '
+  /^static CTSize clib_func_argsize\(/ ||
+  /^static GCstr \*clib_extsym\(/ ||
+  /^TValue \*lj_clib_index\(/ { in_fn = 1 }
+  in_fn && /->[[:space:]]*(info|size|sib)([^[:alnum:]_]|$)/ { print FNR ":" $0 }
+  in_fn && /^}/ { in_fn = 0 }
+' "$ROOT/src/lj_clib.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw CType info/size/sib reads are forbidden in FFI C library namespace resolution; use ctype_*_acq() helpers' >&2
+  exit 1
+fi
 
 exec "$ROOT/tools/ci/lua_test.sh" m7_ffi_clib_cache
