@@ -9,7 +9,10 @@ the struct-vs-pointer special case.
 
 String declarations still use the parser-backed path. If the stable ctype
 snapshot overlaps an active parser mutation, `ffi.istype` falls back under the
-parser token and uses the previous raw comparator.
+parser token and uses the previous raw comparator. That fallback now snapshots
+its branch-critical `CType.info`/`CType.size` values through
+`ctype_info_acq()`/`ctype_size_acq()` instead of reading shared payload fields
+directly.
 
 Coverage:
 
@@ -19,6 +22,8 @@ Coverage:
 - kept a string declaration case in the same fixture to assert the parser path
   still advances the sequence;
 - wired the fixture into `m7_ffi_typeinfo_snapshot`.
+- extended `tools/ci/m7_ffi_typeinfo_snapshot.sh` to reject raw
+  `CType.info`/`CType.size` reads inside `ffi_istype_raw()`.
 
 Validation:
 

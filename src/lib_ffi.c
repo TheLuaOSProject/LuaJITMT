@@ -1013,16 +1013,20 @@ static int ffi_istype_raw(CTState *cts, CTypeID id1, CTypeID id2)
   CTypeID rid2 = ctype_rawrefid(cts, id2);
   CType *ct1 = ctype_get(cts, rid1);
   CType *ct2 = ctype_get(cts, rid2);
+  CTInfo info1 = ctype_info_acq(ct1);
+  CTInfo info2 = ctype_info_acq(ct2);
+  CTSize size1 = ctype_size_acq(ct1);
+  CTSize size2 = ctype_size_acq(ct2);
   if (rid1 == rid2) {
     return 1;
-  } else if (ctype_type(ct1->info) == ctype_type(ct2->info) &&
-	     ct1->size == ct2->size) {
-    if (ctype_ispointer(ct1->info))
+  } else if (ctype_type(info1) == ctype_type(info2) &&
+	     size1 == size2) {
+    if (ctype_ispointer(info1))
       return lj_cconv_compatptr(cts, ct1, ct2, CCF_IGNQUAL);
-    else if (ctype_isnum(ct1->info) || ctype_isvoid(ct1->info))
-      return ((ct1->info ^ ct2->info) & ~(CTF_QUAL|CTF_LONG)) == 0;
-  } else if (ctype_isstruct(ct1->info) && ctype_isptr(ct2->info) &&
-	     rid1 == ctype_rawid(cts, ctype_cid(ct2->info))) {
+    else if (ctype_isnum(info1) || ctype_isvoid(info1))
+      return ((info1 ^ info2) & ~(CTF_QUAL|CTF_LONG)) == 0;
+  } else if (ctype_isstruct(info1) && ctype_isptr(info2) &&
+	     rid1 == ctype_rawid(cts, ctype_cid(info2))) {
     return 1;
   }
   return 0;
