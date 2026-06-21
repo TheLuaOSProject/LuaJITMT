@@ -166,6 +166,17 @@ typedef struct CTypeTab {
   CType tab[1];			/* C type table slots. */
 } CTypeTab;
 
+static LJ_AINLINE uint64_t ctype_tab_retire_epoch_acq(const CTypeTab *tabh)
+{
+  return la_load64_acq(&tabh->retire_epoch);
+}
+
+static LJ_AINLINE void ctype_tab_retire_epoch_rel(CTypeTab *tabh,
+						  uint64_t epoch)
+{
+  la_store64_rel(&tabh->retire_epoch, epoch);
+}
+
 static LJ_AINLINE CTypeTab *ctype_tab_retired_next_acq(const CTypeTab *tabh)
 {
   return (CTypeTab *)la_loadptr_acq((void *const *)&tabh->retired_next);

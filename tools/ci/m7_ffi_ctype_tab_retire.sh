@@ -25,4 +25,11 @@ if hits=$(grep -nE -- 'cts[[:space:]]*->[[:space:]]*retiredtab|&[[:space:]]*cts[
   printf '%s\n' 'raw CTState retired CTypeTab head access is forbidden; use ctype_retiredtab_* helpers' >&2
   exit 1
 fi
+if hits=$(grep -nE -- '->[[:space:]]*retire_epoch|&[[:space:]]*[a-z]+[[:space:]]*->[[:space:]]*retire_epoch' \
+    "$ROOT/src/lj_ctype.c" \
+    "$ROOT/tests/t-ffi-ctype-tab-retire.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw CTypeTab retire_epoch access is forbidden; use ctype_tab_retire_epoch_* helpers' >&2
+  exit 1
+fi
 exec "$ROOT/tools/ci/lua_test.sh" m7_ffi_ctype_tab_retire

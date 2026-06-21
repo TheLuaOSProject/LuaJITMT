@@ -665,7 +665,7 @@ static CTypeTab *ctype_tab_new(lua_State *L, MSize sizetab)
 {
   CTypeTab *tabh = (CTypeTab *)lj_mem_new(L, ctype_tab_size(sizetab));
   tabh->sizetab = sizetab;
-  tabh->retire_epoch = 0;
+  ctype_tab_retire_epoch_rel(tabh, 0);
   ctype_tab_retired_next_rel(tabh, NULL);
   return tabh;
 }
@@ -686,7 +686,7 @@ static void ctype_tab_retired_push(CTState *cts, CTypeTab *ret)
 
 static void ctype_tab_retire(CTState *cts, CTypeTab *ret)
 {
-  la_store64_rel(&ret->retire_epoch, la_load64_acq(&cts->g->gc2.hs_epoch));
+  ctype_tab_retire_epoch_rel(ret, la_load64_acq(&cts->g->gc2.hs_epoch));
   ctype_tab_retired_push(cts, ret);
 }
 
@@ -1624,7 +1624,7 @@ uint32_t lj_ctype_reclaim_retired(global_State *g, uint64_t completed_epoch)
   while (ret) {
     CTypeTab *next = ctype_tab_retired_next_acq(ret);
     ctype_tab_retired_next_rel(ret, NULL);
-    if (la_load64_acq(&ret->retire_epoch) < completed_epoch) {
+    if (ctype_tab_retire_epoch_acq(ret) < completed_epoch) {
       ctype_tab_free(g, ret);
       reclaimed++;
     } else {
