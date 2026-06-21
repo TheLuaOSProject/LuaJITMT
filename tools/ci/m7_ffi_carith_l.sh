@@ -36,4 +36,13 @@ if hits=$(awk '
   printf '%s\n' 'raw CType info/size reads are forbidden in recorder arithmetic metamethod fallback; use ctype_info_acq() or ctype_size_acq()' >&2
   exit 1
 fi
+if hits=$(awk '
+  /^void LJ_FASTCALL recff_cdata_arith\(/ { in_fn = 1 }
+  /^void LJ_FASTCALL recff_clib_index\(/ { in_fn = 0 }
+  in_fn && /->[[:space:]]*(info|size)([^[:alnum:]_]|$)/ { print FNR ":" $0 }
+' "$ROOT/src/lj_crecord.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw CType info/size reads are forbidden in recorder cdata arithmetic normalization; use ctype_info_acq() or ctype_size_acq()' >&2
+  exit 1
+fi
 exec "$ROOT/tools/ci/lua_test.sh" m7_ffi_carith_l
