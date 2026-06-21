@@ -1234,13 +1234,15 @@ int lj_ccall_func(lua_State *L, GCcdata *cd)
   CTState *cts = ctype_cts(L);
   CTypeID id = ctype_rawid(cts, cd->ctypeid);
   CType *ct = ctype_get(cts, id);
+  CTInfo info = ctype_info_acq(ct);
   CTSize sz = CTSIZE_PTR;
-  if (ctype_isptr(ct->info)) {
-    sz = ct->size;
-    id = ctype_rawid(cts, ctype_cid(ct->info));
+  if (ctype_isptr(info)) {
+    sz = ctype_size_acq(ct);
+    id = ctype_rawid(cts, ctype_cid(info));
     ct = ctype_get(cts, id);
+    info = ctype_info_acq(ct);
   }
-  if (ctype_isfunc(ct->info)) {
+  if (ctype_isfunc(info)) {
     CCallState cc;
     TGState *tg = L2TG(L);
     void *old_ffi_call_func = tg->ffi_call_func;
@@ -1262,7 +1264,8 @@ int lj_ccall_func(lua_State *L, GCcdata *cd)
     gcsteps += ccall_get_results(L, cts, ct, &cc, &ret);
 #if LJ_TARGET_X86 && LJ_ABI_WIN
     /* Automatically detect __stdcall and fix up C function declaration. */
-    if (cc.spadj && ctype_cconv(ct->info) == CTCC_CDECL) {
+    info = ctype_info_acq(ct);
+    if (cc.spadj && ctype_cconv(info) == CTCC_CDECL) {
       CTF_INSERT(ct->info, CCONV, CTCC_STDCALL);
       lj_trace_abort(G(L));
     }
