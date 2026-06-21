@@ -844,23 +844,45 @@ static LJ_AINLINE CTState *ctype_cts(lua_State *L)
     } \
   } while (0)
 
-/* Check C type ID for validity when assertions are enabled. */
-static LJ_AINLINE CTypeID ctype_check(CTState *cts, CTypeID id)
-{
-  lj_assertCTS(id > 0 && id < (CTypeID)la_load32_acq(&cts->top),
-	       "bad CTID %d", id);
-  return id;
-}
-
-static LJ_AINLINE CTypeID ctype_top_acq(CTState *cts)
+static LJ_AINLINE CTypeID ctype_top_acq(const CTState *cts)
 {
   return (CTypeID)la_load32_acq(&cts->top);
 }
 
+static LJ_AINLINE void ctype_top_rel(CTState *cts, CTypeID top)
+{
+  la_store32_rel(&cts->top, top);
+}
+
+static LJ_AINLINE int ctype_top_cas(CTState *cts, uint32_t *oldp,
+				    CTypeID top)
+{
+  return la_cas32(&cts->top, oldp, top, LA_ACQ_REL, LA_ACQ);
+}
+
+/* Check C type ID for validity when assertions are enabled. */
+static LJ_AINLINE CTypeID ctype_check(CTState *cts, CTypeID id)
+{
+  lj_assertCTS(id > 0 && id < ctype_top_acq(cts), "bad CTID %d", id);
+  return id;
+}
+
 /* Acquire current C type table header. */
-static LJ_AINLINE CTypeTab *ctype_tabh_acq(CTState *cts)
+static LJ_AINLINE CTypeTab *ctype_tabh_acq(const CTState *cts)
 {
   return (CTypeTab *)la_loadptr_acq((void *const *)&cts->tabh);
+}
+
+static LJ_AINLINE void ctype_tabh_rel(CTState *cts, CTypeTab *tabh)
+{
+  la_storeptr_rel((void **)&cts->tabh, tabh);
+}
+
+static LJ_AINLINE int ctype_tabh_cas(CTState *cts, CTypeTab **oldp,
+				     CTypeTab *tabh)
+{
+  return la_casptr((void **)&cts->tabh, (void **)oldp, tabh,
+		   LA_ACQ_REL, LA_ACQ);
 }
 
 static LJ_AINLINE CTypeTab *ctype_retiredtab_acq(const CTState *cts)

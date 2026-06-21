@@ -714,7 +714,7 @@ static CType *ctype_tab_grow_l(lua_State *L, CTState *cts, CTypeID id)
     MSize osz = oldh->sizetab;
     MSize nsz;
     CTypeTab *newh;
-    void *expect;
+    CTypeTab *expect;
     if ((MSize)id < osz)
       return oldh->tab;
     nsz = ctype_tab_growsize(osz, id);
@@ -722,7 +722,7 @@ static CType *ctype_tab_grow_l(lua_State *L, CTState *cts, CTypeID id)
     memcpy(newh->tab, oldh->tab, osz*sizeof(CType));
     memset(newh->tab + osz, 0, (nsz - osz)*sizeof(CType));
     expect = oldh;
-    if (la_casptr((void **)&cts->tabh, &expect, newh, LA_ACQ_REL, LA_ACQ)) {
+    if (ctype_tabh_cas(cts, &expect, newh)) {
       ctype_tab_retire(cts, oldh);
       return newh->tab;
     }
@@ -741,7 +741,7 @@ static CTypeID ctype_top_reserve_l(lua_State *L, CTState *cts, CType **ctp)
       (void)ctype_tab_grow_l(L, cts, id);
       continue;
     }
-    if (la_cas32(&cts->top, &expect, id+1u, LA_ACQ_REL, LA_ACQ)) {
+    if (ctype_top_cas(cts, &expect, id+1u)) {
       *ctp = &tabh->tab[id];
       return id;
     }
@@ -1665,8 +1665,8 @@ CTState *lj_ctype_init(lua_State *L)
   const char *name = lj_ctype_typenames;
   CTypeID id;
   memset(cts, 0, sizeof(CTState));
-  la_storeptr_rel((void **)&cts->tabh, tabh);
-  la_store32_rel(&cts->top, CTTYPEINFO_NUM);
+  ctype_tabh_rel(cts, tabh);
+  ctype_top_rel(cts, CTTYPEINFO_NUM);
   ctype_metamap_init_l(L, cts);
   ctype_cbblack_init_l(L, cts);
   cts->g = G(L);
