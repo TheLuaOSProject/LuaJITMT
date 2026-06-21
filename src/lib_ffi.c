@@ -1238,19 +1238,20 @@ static int ffi_layout_info(FFILayoutSnap *ls, CTypeID id,
   if (ok <= 0)
     return ok;
   for (;;) {
-    CTInfo info = ct.info;
+    CTInfo info = ctype_info_acq(&ct);
+    CTSize size = ctype_size_acq(&ct);
     if (ctype_isenum(info)) {
       /* Follow child. Need to look at its attributes, too. */
     } else if (ctype_isattrib(info)) {
       if (ctype_isxattrib(info, CTA_QUAL))
-	qual |= ct.size;
+	qual |= size;
       else if (ctype_isxattrib(info, CTA_ALIGN) && !(qual & CTFP_ALIGNED))
-	qual |= CTFP_ALIGNED + CTALIGN(ct.size);
+	qual |= CTFP_ALIGNED + CTALIGN(size);
     } else {
       if (!(qual & CTFP_ALIGNED)) qual |= (info & CTF_ALIGN);
       qual |= (info & ~(CTF_ALIGN|CTMASK_CID));
       *infop = qual;
-      *szp = ctype_isfunc(info) ? CTSIZE_INVALID : ct.size;
+      *szp = ctype_isfunc(info) ? CTSIZE_INVALID : size;
       return 1;
     }
     ok = ffi_layout_get(ls, ctype_cid(info), &ct);
@@ -1267,26 +1268,30 @@ static int ffi_layout_info_raw(FFILayoutSnap *ls, CTypeID id,
   int ok = ffi_layout_get(ls, id, &ct);
   if (ok <= 0)
     return ok;
-  if (ctype_isref(ct.info)) {
-    id = ctype_cid(ct.info);
-    ok = ffi_layout_get(ls, id, &ct);
-    if (ok <= 0)
-      return ok;
+  {
+    CTInfo info = ctype_info_acq(&ct);
+    if (ctype_isref(info)) {
+      id = ctype_cid(info);
+      ok = ffi_layout_get(ls, id, &ct);
+      if (ok <= 0)
+	return ok;
+    }
   }
   for (;;) {
-    CTInfo info = ct.info;
+    CTInfo info = ctype_info_acq(&ct);
+    CTSize size = ctype_size_acq(&ct);
     if (ctype_isenum(info)) {
       /* Follow child. Need to look at its attributes, too. */
     } else if (ctype_isattrib(info)) {
       if (ctype_isxattrib(info, CTA_QUAL))
-	qual |= ct.size;
+	qual |= size;
       else if (ctype_isxattrib(info, CTA_ALIGN) && !(qual & CTFP_ALIGNED))
-	qual |= CTFP_ALIGNED + CTALIGN(ct.size);
+	qual |= CTFP_ALIGNED + CTALIGN(size);
     } else {
       if (!(qual & CTFP_ALIGNED)) qual |= (info & CTF_ALIGN);
       qual |= (info & ~(CTF_ALIGN|CTMASK_CID));
       *infop = qual;
-      *szp = ctype_isfunc(info) ? CTSIZE_INVALID : ct.size;
+      *szp = ctype_isfunc(info) ? CTSIZE_INVALID : size;
       return 1;
     }
     ok = ffi_layout_get(ls, ctype_cid(info), &ct);
