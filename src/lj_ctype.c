@@ -211,7 +211,7 @@ int lj_ctype_snapshot(CTState *cts, CTypeID id, CType *out)
   out->size = la_load32_acq(&ct->size);
   out->sib = (CTypeID1)ctype_sib_acq(ct);
   out->next = (CTypeID1)ctype_next_acq(ct);
-  name = gcref_acq(ct->name);
+  name = ctype_nameobj_acq(ct);
   setgcrefp(out->name, name);
   seq1 = ctype_parse_token_acq(cts);
   if (seq0 != seq1 || (seq1 & 1u))
@@ -879,7 +879,7 @@ int lj_ctype_getname_snapshot(CTState *cts, GCstr *name, uint32_t tmask,
     size = la_load32_acq(&ct->size);
     sib = ctype_sib_acq(ct);
     next = ctype_next_acq(ct);
-    gco = gcref_acq(ct->name);
+    gco = ctype_nameobj_acq(ct);
     if (!ctype_isabandoned(info) && gco == obj2gco(name) &&
 	((tmask >> ctype_type(info)) & 1)) {
       GCstr *redir = name;
@@ -892,7 +892,7 @@ int lj_ctype_getname_snapshot(CTState *cts, GCstr *name, uint32_t tmask,
 	  return -1;
 	rt = ctype_tab_slot(tabh, sib);
 	rinfo = la_load32_acq(&rt->info);
-	rgco = gcref_acq(rt->name);
+	rgco = ctype_nameobj_acq(rt);
 	if (ctype_isabandoned(rinfo))
 	  return 0;
 	if (ctype_isxattrib(rinfo, CTA_REDIR)) {
@@ -963,7 +963,7 @@ static int ctype_snapshot_copy(CTypeTab *tabh, CTypeID top, CTypeID id,
   out->size = la_load32_acq(&ct->size);
   out->sib = (CTypeID1)ctype_sib_acq(ct);
   out->next = (CTypeID1)ctype_next_acq(ct);
-  gco = gcref_acq(ct->name);
+  gco = ctype_nameobj_acq(ct);
   setgcrefp(out->name, gco);
   return !ctype_isabandoned(out->info);
 }
@@ -989,7 +989,7 @@ static int ctype_getfieldq_snapshot_rec(CTypeTab *tabh, CTypeID top,
     size = la_load32_acq(&ct->size);
     child = ctype_cid(info);
     next = ctype_sib_acq(ct);
-    gco = gcref_acq(ct->name);
+    gco = ctype_nameobj_acq(ct);
     if (ctype_isabandoned(info))
       return 0;
     if (gco == obj2gco(name)) {
@@ -1244,7 +1244,7 @@ int lj_ctype_enumconst_snapshot(CTState *cts, const CType *root,
     ct = ctype_tab_slot(tabh, id);
     info = la_load32_acq(&ct->info);
     size = la_load32_acq(&ct->size);
-    gco = gcref_acq(ct->name);
+    gco = ctype_nameobj_acq(ct);
     if (ctype_isabandoned(info))
       return 0;
     if (gco == obj2gco(name) && ctype_isconstval(info)) {

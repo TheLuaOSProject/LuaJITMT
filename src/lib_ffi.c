@@ -798,7 +798,7 @@ static int ffi_typeinfo_snapshot_locked(CTState *cts, CTypeID id, CType *out)
   out->size = la_load32_acq(&ct->size);
   out->sib = (CTypeID1)ctype_sib_acq(ct);
   out->next = (CTypeID1)ctype_next_acq(ct);
-  name = gcref_acq(ct->name);
+  name = ctype_nameobj_acq(ct);
   setgcrefp(out->name, name);
   return !ctype_isabandoned(out->info);
 }
@@ -1118,7 +1118,7 @@ static int ffi_layout_get(FFILayoutSnap *ls, CTypeID id, CType *out)
   out->size = la_load32_acq(&ct->size);
   out->sib = (CTypeID1)ctype_sib_acq(ct);
   out->next = (CTypeID1)ctype_next_acq(ct);
-  name = gcref_acq(ct->name);
+  name = ctype_nameobj_acq(ct);
   setgcrefp(out->name, name);
   return ctype_isabandoned(out->info) ? 0 : 1;
 }
