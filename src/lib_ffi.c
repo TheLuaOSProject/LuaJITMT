@@ -1304,33 +1304,39 @@ static int ffi_layout_vlsize(FFILayoutSnap *ls, const CType *ct,
 			     CTSize nelem, CTSize *szp)
 {
   CType cur = *ct, elem;
+  CTInfo info = ctype_info_acq(&cur);
+  CTSize size = ctype_size_acq(&cur);
   uint64_t xsz = 0;
   int ok;
-  if (ctype_isstruct(cur.info)) {
-    CTypeID arrid = 0, fid = cur.sib;
-    xsz = cur.size;
+  if (ctype_isstruct(info)) {
+    CTypeID arrid = 0, fid = ctype_sib_acq(&cur);
+    xsz = size;
     while (fid) {
       ok = ffi_layout_get(ls, fid, &cur);
       if (ok <= 0)
 	return ok;
-      if (ctype_type(cur.info) == CT_FIELD)
-	arrid = ctype_cid(cur.info);
-      fid = cur.sib;
+      info = ctype_info_acq(&cur);
+      if (ctype_type(info) == CT_FIELD)
+	arrid = ctype_cid(info);
+      fid = ctype_sib_acq(&cur);
     }
     if (arrid == 0)
       return 0;
     ok = ffi_layout_raw(ls, arrid, &cur);
     if (ok <= 0)
       return ok;
+    info = ctype_info_acq(&cur);
   }
-  if (!ctype_isvlarray(cur.info))
+  if (!ctype_isvlarray(info))
     return 0;
   ok = ffi_layout_rawchild(ls, &cur, &elem);
   if (ok <= 0)
     return ok;
-  if (!ctype_hassize(elem.info))
+  info = ctype_info_acq(&elem);
+  size = ctype_size_acq(&elem);
+  if (!ctype_hassize(info))
     return 0;
-  xsz += (uint64_t)elem.size * nelem;
+  xsz += (uint64_t)size * nelem;
   *szp = xsz < 0x80000000u ? (CTSize)xsz : CTSIZE_INVALID;
   return 1;
 }
@@ -1376,7 +1382,9 @@ static int ffi_layout_sizeof_snapshot(CTState *cts, CTypeID id, CTSize nelem,
     return -1;
   ok = ffi_layout_rawref(&ls, id, &ct);
   if (ok > 0) {
-    if (ctype_isvltype(ct.info)) {
+    CTInfo info = ctype_info_acq(&ct);
+    CTSize size = ctype_size_acq(&ct);
+    if (ctype_isvltype(info)) {
       if (!hasnelem) {
 	*neednelem = 1;
       } else {
@@ -1384,7 +1392,7 @@ static int ffi_layout_sizeof_snapshot(CTState *cts, CTypeID id, CTSize nelem,
       }
     } else {
       *neednelem = 0;
-      *szp = ctype_hassize(ct.info) ? ct.size : CTSIZE_INVALID;
+      *szp = ctype_hassize(info) ? size : CTSIZE_INVALID;
     }
   }
   if (ok >= 0 && ffi_layout_end(&ls) < 0)
