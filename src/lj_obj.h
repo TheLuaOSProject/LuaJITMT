@@ -1747,6 +1747,105 @@ static LJ_AINLINE lua_State *vmthread_acq(global_State *g)
   return o ? gco2th(o) : NULL;
 }
 
+static LJ_AINLINE GCobj *gc2_finalizer_mpsc_acq(global_State *g)
+{
+  return (GCobj *)la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc);
+}
+
+static LJ_AINLINE void gc2_finalizer_mpsc_store_rlx(global_State *g,
+						    GCobj *o)
+{
+  la_storeptr_rlx((void **)&g->gc2.finalizer_mpsc, o);
+}
+
+static LJ_AINLINE int gc2_finalizer_mpsc_cas(global_State *g, GCobj **oldp,
+					     GCobj *o)
+{
+  return la_casptr((void **)&g->gc2.finalizer_mpsc, (void **)oldp, o,
+		   LA_REL, LA_ACQ);
+}
+
+static LJ_AINLINE GCobj *gc2_finalizer_mpsc_xchg_acqrel(global_State *g,
+							GCobj *o)
+{
+  return (GCobj *)la_xchgptr_acqrel((void **)&g->gc2.finalizer_mpsc, o);
+}
+
+static LJ_AINLINE GCobj *gc2_finalizer_tail_acq(global_State *g)
+{
+  return (GCobj *)la_loadptr_acq((void *const *)&g->gc2.finalizer_tail);
+}
+
+static LJ_AINLINE void gc2_finalizer_tail_store_rlx(global_State *g,
+						    GCobj *o)
+{
+  la_storeptr_rlx((void **)&g->gc2.finalizer_tail, o);
+}
+
+static LJ_AINLINE void gc2_finalizer_tail_rel(global_State *g, GCobj *o)
+{
+  la_storeptr_rel((void **)&g->gc2.finalizer_tail, o);
+}
+
+static LJ_AINLINE uint32_t gc2_finalizer_active_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.finalizer_active);
+}
+
+static LJ_AINLINE void gc2_finalizer_active_store_rlx(global_State *g,
+						      uint32_t active)
+{
+  la_store32_rlx(&g->gc2.finalizer_active, active);
+}
+
+static LJ_AINLINE void gc2_finalizer_active_rel(global_State *g,
+						uint32_t active)
+{
+  la_store32_rel(&g->gc2.finalizer_active, active);
+}
+
+static LJ_AINLINE int gc2_finalizer_active_cas(global_State *g,
+					       uint32_t *oldp,
+					       uint32_t active)
+{
+  return la_cas32(&g->gc2.finalizer_active, oldp, active,
+		  LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE uint32_t gc2_finalizer_owner_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.finalizer_owner_tid);
+}
+
+static LJ_AINLINE void gc2_finalizer_owner_store_rlx(global_State *g,
+						     uint32_t owner)
+{
+  la_store32_rlx(&g->gc2.finalizer_owner_tid, owner);
+}
+
+static LJ_AINLINE void gc2_finalizer_owner_rel(global_State *g,
+					       uint32_t owner)
+{
+  la_store32_rel(&g->gc2.finalizer_owner_tid, owner);
+}
+
+static LJ_AINLINE uint64_t gc2_finalizer_mpsc_drained_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.finalizer_mpsc_drained);
+}
+
+static LJ_AINLINE void gc2_finalizer_mpsc_drained_store_rlx(global_State *g,
+							    uint64_t n)
+{
+  la_store64_rlx(&g->gc2.finalizer_mpsc_drained, n);
+}
+
+static LJ_AINLINE void gc2_finalizer_mpsc_drained_add(global_State *g,
+						      uint64_t n)
+{
+  la_add64_rlx(&g->gc2.finalizer_mpsc_drained, n);
+}
+
 #if LJ_GC64
 static LJ_AINLINE void setgcrefrel_(GCRef *r, const GCobj *gc)
 {

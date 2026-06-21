@@ -239,13 +239,13 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.finreg_udata_retired_nodes, 0);
   la_store64_rlx(&g->gc2.finreg_udata_discovered, 0);
   la_store64_rlx(&g->gc2.finreg_udata_forgets, 0);
-  la_storeptr_rlx((void **)&g->gc2.finalizer_mpsc, NULL);
-  la_storeptr_rlx((void **)&g->gc2.finalizer_tail, NULL);
-  la_store32_rlx(&g->gc2.finalizer_active, 0);
-  la_store32_rlx(&g->gc2.finalizer_owner_tid, 0);
+  gc2_finalizer_mpsc_store_rlx(g, NULL);
+  gc2_finalizer_tail_store_rlx(g, NULL);
+  gc2_finalizer_active_store_rlx(g, 0);
+  gc2_finalizer_owner_store_rlx(g, 0);
   la_store64_rlx(&g->gc2.finalizer_queued, 0);
   la_store64_rlx(&g->gc2.finalizer_dequeued, 0);
-  la_store64_rlx(&g->gc2.finalizer_mpsc_drained, 0);
+  gc2_finalizer_mpsc_drained_store_rlx(g, 0);
   la_store64_rlx(&g->gc2.finalizer_enters, 0);
   la_store64_rlx(&g->gc2.finalizer_leaves, 0);
   la_store64_rlx(&g->gc2.finalizer_sweep_blocks, 0);
@@ -833,7 +833,7 @@ static int gc2_finalizer_owned_by_current(global_State *g)
   uint32_t owner;
   if (!g)
     return 0;
-  owner = la_load32_acq(&g->gc2.finalizer_owner_tid);
+  owner = gc2_finalizer_owner_acq(g);
   if (owner == 0)
     return 0;
   tg = gc2_finalizer_current_tg(g);
@@ -846,13 +846,12 @@ void lj_gc2_finalizer_enqueue(global_State *g, GCobj *o)
   if (!g || !o)
     return;
   do {
-    head = (GCobj *)la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc);
+    head = gc2_finalizer_mpsc_acq(g);
     if (head)
       lj_obj_setgcwrel(o, head);
     else
       lj_obj_setgcwnullrel(o);
-  } while (!la_casptr((void **)&g->gc2.finalizer_mpsc, (void **)&head, o,
-		      LA_REL, LA_ACQ));
+  } while (!gc2_finalizer_mpsc_cas(g, &head, o));
   la_add64_rlx(&g->gc2.finalizer_queued, 1);
   if (head == NULL)
     lj_gc2_worker_wake(g);  /* 05 section 5.8: finalizer work became visible. */
@@ -866,7 +865,7 @@ void lj_gc2_finalizer_drain_owned(global_State *g)
     return;
   lj_assertG(gc2_finalizer_owned_by_current(g),
 	     "gc2 finalizer drain requires owner");
-  stack = (GCobj *)la_xchgptr_acqrel((void **)&g->gc2.finalizer_mpsc, NULL);
+  stack = gc2_finalizer_mpsc_xchg_acqrel(g, NULL);
   while (stack) {
     GCobj *next = lj_obj_gcw_acq(stack);
     if (newtail == NULL)
@@ -881,7 +880,7 @@ void lj_gc2_finalizer_drain_owned(global_State *g)
   }
   if (!rev)
     return;
-  oldtail = (GCobj *)la_loadptr_acq((void *const *)&g->gc2.finalizer_tail);
+  oldtail = gc2_finalizer_tail_acq(g);
 #if defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
   if (la_xchg32_acqrel(&g->gc2.finalizer_drain_test_pause, 0) != 0) {
     la_store32_rel(&g->gc2.finalizer_drain_test_paused, 1);
@@ -894,12 +893,12 @@ void lj_gc2_finalizer_drain_owned(global_State *g)
     GCobj *head = lj_obj_gcw_acq(oldtail);
     lj_obj_setgcwrel(newtail, head);
     lj_obj_setgcwrel(oldtail, rev);
-    la_storeptr_rel((void **)&g->gc2.finalizer_tail, newtail);
+    gc2_finalizer_tail_rel(g, newtail);
   } else {
     lj_obj_setgcwrel(newtail, rev);
-    la_storeptr_rel((void **)&g->gc2.finalizer_tail, newtail);
+    gc2_finalizer_tail_rel(g, newtail);
   }
-  la_add64_rlx(&g->gc2.finalizer_mpsc_drained, n);
+  gc2_finalizer_mpsc_drained_add(g, n);
 }
 
 void lj_gc2_finalizer_drain(global_State *g)
@@ -918,10 +917,10 @@ GCobj *lj_gc2_finalizer_dequeue_owned(global_State *g)
     return NULL;
   lj_assertG(gc2_finalizer_owned_by_current(g),
 	     "gc2 finalizer dequeue requires owner");
-  tail = (GCobj *)la_loadptr_acq((void *const *)&g->gc2.finalizer_tail);
+  tail = gc2_finalizer_tail_acq(g);
   if (!tail) {
     lj_gc2_finalizer_drain_owned(g);
-    tail = (GCobj *)la_loadptr_acq((void *const *)&g->gc2.finalizer_tail);
+    tail = gc2_finalizer_tail_acq(g);
     if (!tail)
       return NULL;
   }
@@ -930,7 +929,7 @@ GCobj *lj_gc2_finalizer_dequeue_owned(global_State *g)
   if (!o)
     return NULL;
   if (o == tail) {
-    la_storeptr_rel((void **)&g->gc2.finalizer_tail, NULL);
+    gc2_finalizer_tail_rel(g, NULL);
   } else {
     lj_obj_setgcwrel(tail, lj_obj_gcw_acq(o));
   }
@@ -957,21 +956,20 @@ int lj_gc2_finalizer_try_enter(global_State *g)
     return 0;
   owner = gc2_finalizer_current_owner(g);
   for (;;) {
-    old = la_load32_acq(&g->gc2.finalizer_active);
+    old = gc2_finalizer_active_acq(g);
     if (old != 0) {
-      if (la_load32_acq(&g->gc2.finalizer_owner_tid) != owner)
+      if (gc2_finalizer_owner_acq(g) != owner)
 	return 0;  /* 05 section 5.8: peer finalizer dispatch backs off. */
       if (old == ~(uint32_t)0)
 	return 0;
-      if (la_cas32(&g->gc2.finalizer_active, &old, old + 1,
-		   LA_ACQ_REL, LA_ACQ)) {
+      if (gc2_finalizer_active_cas(g, &old, old + 1)) {
 	la_add64_rlx(&g->gc2.finalizer_enters, 1);
 	return 1;
       }
       continue;
     }
-    if (la_cas32(&g->gc2.finalizer_active, &old, 1, LA_ACQ_REL, LA_ACQ)) {
-      la_store32_rel(&g->gc2.finalizer_owner_tid, owner);
+    if (gc2_finalizer_active_cas(g, &old, 1)) {
+      gc2_finalizer_owner_rel(g, owner);
       la_add64_rlx(&g->gc2.finalizer_enters, 1);
       return 1;
     }
@@ -993,18 +991,16 @@ void lj_gc2_finalizer_leave(global_State *g)
   if (!g)
     return;
   for (;;) {
-    old = la_load32_acq(&g->gc2.finalizer_active);
+    old = gc2_finalizer_active_acq(g);
     lj_assertG(old != 0, "gc2 finalizer active underflow");
     if (old == 0)
       return;
     if (old == 1) {
       uint32_t expect = 1;
-      if (la_cas32(&g->gc2.finalizer_active, &expect, ~(uint32_t)0,
-		   LA_ACQ_REL, LA_ACQ)) {
-	la_store32_rel(&g->gc2.finalizer_owner_tid, 0);
-	la_store32_rel(&g->gc2.finalizer_active, 0);
-	wake_worker =
-	  la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) != NULL;
+      if (gc2_finalizer_active_cas(g, &expect, ~(uint32_t)0)) {
+	gc2_finalizer_owner_rel(g, 0);
+	gc2_finalizer_active_rel(g, 0);
+	wake_worker = gc2_finalizer_mpsc_acq(g) != NULL;
 	break;  /* 05 section 5.8: close finalizer owner after last leave. */
       }
       continue;
@@ -1013,8 +1009,7 @@ void lj_gc2_finalizer_leave(global_State *g)
       la_cpu_pause();
       continue;
     }
-    if (la_cas32(&g->gc2.finalizer_active, &old, old - 1,
-		 LA_ACQ_REL, LA_ACQ))
+    if (gc2_finalizer_active_cas(g, &old, old - 1))
       break;  /* 05 section 5.8: nested owner leave. */
   }
   la_add64_rlx(&g->gc2.finalizer_leaves, 1);
@@ -1028,7 +1023,7 @@ static int gc2_finalizer_pending_for_sweep(global_State *g, int owner_ok)
     return 0;
   if (lj_gc2_finalizer_queue_pending(g))
     return 1;
-  if (la_load32_acq(&g->gc2.finalizer_active) == 0)
+  if (gc2_finalizer_active_acq(g) == 0)
     return 0;
   return !(owner_ok && gc2_finalizer_owned_by_current(g));
 }
@@ -1037,8 +1032,8 @@ int lj_gc2_finalizer_queue_pending(global_State *g)
 {
   if (!g)
     return 0;
-  return la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) != NULL ||
-	 la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) != NULL;
+  return gc2_finalizer_tail_acq(g) != NULL ||
+	 gc2_finalizer_mpsc_acq(g) != NULL;
 }
 
 int lj_gc2_finalizer_pending(global_State *g)
@@ -1478,8 +1473,7 @@ static void gc2_scan_pending_roots(global_State *g)
     return;
   lj_gc2_finalizer_enter(g);
   lj_gc2_finalizer_drain_owned(g);
-  gc2_mark_finalizer_ring(g, (GCobj *)la_loadptr_acq(
-	(void *const *)&g->gc2.finalizer_tail));
+  gc2_mark_finalizer_ring(g, gc2_finalizer_tail_acq(g));
   lj_gc2_finalizer_leave(g);
   gc2_scan_threading_live_roots(g);
 #if LJ_HASFFI
@@ -3746,14 +3740,14 @@ static uint32_t gc2_worker_finalizer_drain(global_State *g, uint32_t limit)
   uint32_t expect = 0;
   uint64_t before, after, delta;
   if (!g || limit == 0 || la_load32_acq(&g->gc2.phase) != LJ_GC2_IDLE ||
-      la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) == NULL)
+      gc2_finalizer_mpsc_acq(g) == NULL)
     return 0;
   if (!la_cas32(&g->gc2.worker_active, &expect, 1, LA_ACQ_REL, LA_ACQ)) {
     la_add64_rlx(&g->gc2.worker_busy_retries, 1);
     return 0;
   }
   if (la_load32_acq(&g->gc2.phase) != LJ_GC2_IDLE ||
-      la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) == NULL) {
+      gc2_finalizer_mpsc_acq(g) == NULL) {
     la_store32_rel(&g->gc2.worker_active, 0);
     return 0;
   }
@@ -3761,9 +3755,9 @@ static uint32_t gc2_worker_finalizer_drain(global_State *g, uint32_t limit)
     la_store32_rel(&g->gc2.worker_active, 0);
     return 0;
   }
-  before = la_load64_acq(&g->gc2.finalizer_mpsc_drained);
+  before = gc2_finalizer_mpsc_drained_acq(g);
   lj_gc2_finalizer_drain_owned(g);
-  after = la_load64_acq(&g->gc2.finalizer_mpsc_drained);
+  after = gc2_finalizer_mpsc_drained_acq(g);
   lj_gc2_finalizer_leave(g);
   la_store32_rel(&g->gc2.worker_active, 0);
   delta = after - before;

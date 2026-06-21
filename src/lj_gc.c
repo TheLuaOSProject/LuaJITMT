@@ -354,7 +354,7 @@ static void gc2_paranoia_check_roots(global_State *g)
     gc2_paranoia_checkone(g, o);
   lj_gc2_finalizer_enter(g);
   lj_gc2_finalizer_drain_owned(g);
-  o = (GCobj *)la_loadptr_acq((void *const *)&g->gc2.finalizer_tail);
+  o = gc2_finalizer_tail_acq(g);
   if (o) {
     GCobj *root = o;
     do {
@@ -795,8 +795,7 @@ static void gc_mark_finalizers(global_State *g)
 {
   lj_gc2_finalizer_enter(g);
   lj_gc2_finalizer_drain_owned(g);
-  gc_mark_finalizer_ring(g, (GCobj *)la_loadptr_acq(
-	(void *const *)&g->gc2.finalizer_tail));
+  gc_mark_finalizer_ring(g, gc2_finalizer_tail_acq(g));
   lj_gc2_finalizer_leave(g);
 }
 
