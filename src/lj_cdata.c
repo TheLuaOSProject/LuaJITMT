@@ -78,9 +78,10 @@ void LJ_FASTCALL lj_cdata_free(global_State *g, GCcdata *cd)
     cdata_free_finalizer_invariant(g);
   } else if (LJ_LIKELY(!cdataisv(cd))) {
     CType *ct = ctype_raw(ctype_ctsG(g), cd->ctypeid);
-    CTSize sz = ctype_hassize(ct->info) ? ct->size : CTSIZE_PTR;
-    lj_assertG(ctype_hassize(ct->info) || ctype_isfunc(ct->info) ||
-	       ctype_isextern(ct->info), "free of ctype without a size");
+    CTInfo info = ctype_info_acq(ct);
+    CTSize sz = ctype_hassize(info) ? ctype_size_acq(ct) : CTSIZE_PTR;
+    lj_assertG(ctype_hassize(info) || ctype_isfunc(info) ||
+	       ctype_isextern(info), "free of ctype without a size");
     lj_mem_free(g, cd, sizeof(GCcdata) + sz);
   } else {
     lj_mem_free(g, memcdatav(cd), sizecdatav(cd));
@@ -272,6 +273,8 @@ CType *lj_cdata_index_l(lua_State *L, CTState *cts, GCcdata *cd,
   uint8_t *p;
   CTypeID id;
   CType *ct;
+  CTInfo info;
+  CTSize size;
   ptrdiff_t idx;
   int locked = 0;
 
@@ -284,24 +287,30 @@ retry_locked:
     lj_ctype_parse_lock(cts, L);
   }
   ct = ctype_get(cts, id);
+  info = ctype_info_acq(ct);
+  size = ctype_size_acq(ct);
 
   /* Resolve reference for cdata object. */
-  if (ctype_isref(ct->info)) {
-    lj_assertCTS(ct->size == CTSIZE_PTR, "ref is not pointer-sized");
+  if (ctype_isref(info)) {
+    lj_assertCTS(size == CTSIZE_PTR, "ref is not pointer-sized");
     p = *(uint8_t **)p;
-    id = ctype_cid(ct->info);
+    id = ctype_cid(info);
     ct = ctype_get(cts, id);
+    info = ctype_info_acq(ct);
+    size = ctype_size_acq(ct);
   }
 
 collect_attrib:
   /* Skip attributes and collect qualifiers. */
-  while (ctype_isattrib(ct->info)) {
-    if (ctype_attrib(ct->info) == CTA_QUAL) *qual |= ct->size;
-    id = ctype_cid(ct->info);
+  while (ctype_isattrib(info)) {
+    if (ctype_attrib(info) == CTA_QUAL) *qual |= size;
+    id = ctype_cid(info);
     ct = ctype_get(cts, id);
+    info = ctype_info_acq(ct);
+    size = ctype_size_acq(ct);
   }
   /* Interning rejects refs to refs. */
-  lj_assertCTS(!ctype_isref(ct->info), "bad ref of ref");
+  lj_assertCTS(!ctype_isref(info), "bad ref of ref");
 
   if (tvisint(key)) {
     idx = (ptrdiff_t)intV(key);
@@ -309,13 +318,13 @@ collect_attrib:
   } else if (tvisnum(key)) {  /* Numeric key. */
     idx = lj_num2int_type(numV(key), ptrdiff_t);
   integer_key:
-    if (ctype_ispointer(ct->info)) {
+    if (ctype_ispointer(info)) {
       CTSize sz;
-      int ok = lj_ctype_size_snapshot(cts, ctype_cid(ct->info), &sz);
+      int ok = lj_ctype_size_snapshot(cts, ctype_cid(info), &sz);
       if (ok < 0) {
 	lj_ctype_parse_lock(cts, L);
 	/* 11.2: cdata numeric-key readers wait out parser rollback. */
-	sz = lj_ctype_size(cts, ctype_cid(ct->info));  /* Element size. */
+	sz = lj_ctype_size(cts, ctype_cid(info));  /* Element size. */
 	lj_ctype_parse_unlock(cts);
       } else if (ok == 0) {
 	sz = CTSIZE_INVALID;
@@ -323,10 +332,10 @@ collect_attrib:
       if (sz == CTSIZE_INVALID) {
 	lj_err_caller(L, LJ_ERR_FFI_INVSIZE);
       }
-      if (ctype_isptr(ct->info)) {
-	p = (uint8_t *)cdata_getptr(p, ct->size);
-      } else if ((ct->info & (CTF_VECTOR|CTF_COMPLEX))) {
-	if ((ct->info & CTF_COMPLEX)) idx &= 1;
+      if (ctype_isptr(info)) {
+	p = (uint8_t *)cdata_getptr(p, size);
+      } else if ((info & (CTF_VECTOR|CTF_COMPLEX))) {
+	if ((info & CTF_COMPLEX)) idx &= 1;
 	*qual |= CTF_CONST;  /* Valarray elements are constant. */
       }
       *pp = p + idx*(int32_t)sz;
@@ -336,11 +345,13 @@ collect_attrib:
     GCcdata *cdk = cdataV(key);
     CTypeID kid = ctype_rawid(cts, cdk->ctypeid);
     CType *ctk = ctype_get(cts, kid);
-    if (ctype_isenum(ctk->info)) {
-      kid = ctype_cid(ctk->info);
+    CTInfo kinfo = ctype_info_acq(ctk);
+    if (ctype_isenum(kinfo)) {
+      kid = ctype_cid(kinfo);
       ctk = ctype_get(cts, kid);
+      kinfo = ctype_info_acq(ctk);
     }
-    if (ctype_isinteger(ctk->info)) {
+    if (ctype_isinteger(kinfo)) {
       lj_cconv_ct_ct_l(L, cts, ctype_get(cts, CTID_INT_PSZ), CTID_INT_PSZ,
 		       ctk, kid,
 		       (uint8_t *)&idx, cdataptr(cdk), 0);
@@ -348,7 +359,7 @@ collect_attrib:
     }
   } else if (tvisstr(key)) {  /* String key. */
     GCstr *name = strV(key);
-    if (ctype_isstruct(ct->info)) {
+    if (ctype_isstruct(info)) {
       CTSize ofs;
       CType *fct;
       if (!locked) {
@@ -368,7 +379,7 @@ collect_attrib:
 	  lj_ctype_parse_unlock(cts);  /* 11.2: cdata field reader fence. */
 	return fct;
       }
-    } else if (ctype_iscomplex(ct->info)) {
+    } else if (ctype_iscomplex(info)) {
       if (name->len == 2) {
 	*qual |= CTF_CONST;  /* Complex fields are constant. */
 	if (strdata(name)[0] == 'r' && strdata(name)[1] == 'e') {
@@ -377,7 +388,7 @@ collect_attrib:
 	    lj_ctype_parse_unlock(cts);
 	  return ct;
 	} else if (strdata(name)[0] == 'i' && strdata(name)[1] == 'm') {
-	  *pp = p + (ct->size >> 1);
+	  *pp = p + (size >> 1);
 	  if (locked)
 	    lj_ctype_parse_unlock(cts);
 	  return ct;
@@ -387,11 +398,13 @@ collect_attrib:
       /* Allow indexing a (pointer to) struct constructor to get constants. */
       CTypeID sid = ctype_rawid(cts, *(CTypeID *)p);
       CType *sct = ctype_get(cts, sid);
-      if (ctype_isptr(sct->info)) {
-	sid = ctype_rawid(cts, ctype_cid(sct->info));
+      CTInfo sinfo = ctype_info_acq(sct);
+      if (ctype_isptr(sinfo)) {
+	sid = ctype_rawid(cts, ctype_cid(sinfo));
 	sct = ctype_get(cts, sid);
+	sinfo = ctype_info_acq(sct);
       }
-      if (ctype_isstruct(sct->info)) {
+      if (ctype_isstruct(sinfo)) {
 	CTSize ofs;
 	CType *fct;
 	if (!locked) {
@@ -405,7 +418,7 @@ collect_attrib:
 	} else {
 	  fct = lj_ctype_getfield(cts, sct, name, &ofs);
 	}
-	if (fct && ctype_isconstval(fct->info)) {
+	if (fct && ctype_isconstval(ctype_info_acq(fct))) {
 	  if (locked)
 	    lj_ctype_parse_unlock(cts);
 	  return fct;
@@ -413,9 +426,11 @@ collect_attrib:
       }
       ct = sct;  /* Allow resolving metamethods for constructors, too. */
       id = sid;
+      info = sinfo;
+      size = ctype_size_acq(ct);
     }
   }
-  if (ctype_isptr(ct->info)) {  /* Automatically perform '->'. */
+  if (ctype_isptr(info)) {  /* Automatically perform '->'. */
     CTypeID cid;
     int ptrstruct;
     int ok = locked ? 1 : lj_ctype_ptrstruct_snapshot(cts, id, &cid);
@@ -424,15 +439,17 @@ collect_attrib:
       goto retry_locked;
     }
     if (locked) {
-      cid = ctype_rawid(cts, ctype_cid(ct->info));
-      ptrstruct = ctype_isstruct(ctype_get(cts, cid)->info);
+      cid = ctype_rawid(cts, ctype_cid(info));
+      ptrstruct = ctype_isstruct(ctype_info_acq(ctype_get(cts, cid)));
     } else {
       ptrstruct = ok > 0;
     }
     if (ptrstruct) {
-      p = (uint8_t *)cdata_getptr(p, ct->size);
+      p = (uint8_t *)cdata_getptr(p, size);
       id = cid;
       ct = ctype_get(cts, id);
+      info = ctype_info_acq(ct);
+      size = ctype_size_acq(ct);
       goto collect_attrib;
     }
   }
@@ -449,13 +466,15 @@ collect_attrib:
 static void cdata_getconst(CTState *cts, TValue *o, CType *ct)
 {
   CType *ctt = ctype_child(cts, ct);
-  lj_assertCTS(ctype_isinteger(ctt->info) && ctt->size <= 4,
+  CTInfo tinfo = ctype_info_acq(ctt);
+  CTSize size = ctype_size_acq(ct);
+  lj_assertCTS(ctype_isinteger(tinfo) && ctype_size_acq(ctt) <= 4,
 	       "only 32 bit const supported");  /* NYI */
   /* Constants are already zero-extended/sign-extended to 32 bits. */
-  if ((ctt->info & CTF_UNSIGNED) && (int32_t)ct->size < 0)
-    setnumV(o, (lua_Number)(uint32_t)ct->size);
+  if ((tinfo & CTF_UNSIGNED) && (int32_t)size < 0)
+    setnumV(o, (lua_Number)(uint32_t)size);
   else
-    setintV(o, (int32_t)ct->size);
+    setintV(o, (int32_t)size);
 }
 
 /* Get C data value and convert to TValue. */
@@ -463,31 +482,36 @@ int lj_cdata_get_l(lua_State *L, CTState *cts, CType *s, TValue *o,
 		   uint8_t *sp)
 {
   CTypeID sid;
+  CTInfo info = ctype_info_acq(s);
 
-  if (ctype_isconstval(s->info)) {
+  if (ctype_isconstval(info)) {
     cdata_getconst(cts, o, s);
     return 0;  /* No GC step needed. */
-  } else if (ctype_isbitfield(s->info)) {
+  } else if (ctype_isbitfield(info)) {
     return lj_cconv_tv_bf_l(L, cts, s, o, sp);
   }
 
   /* Get child type of pointer/array/field. */
-  lj_assertCTS(ctype_ispointer(s->info) || ctype_isfield(s->info),
+  lj_assertCTS(ctype_ispointer(info) || ctype_isfield(info),
 	       "pointer or field expected");
-  sid = ctype_cid(s->info);
+  sid = ctype_cid(info);
   s = ctype_get(cts, sid);
+  info = ctype_info_acq(s);
 
   /* Resolve reference for field. */
-  if (ctype_isref(s->info)) {
-    lj_assertCTS(s->size == CTSIZE_PTR, "ref is not pointer-sized");
+  if (ctype_isref(info)) {
+    lj_assertCTS(ctype_size_acq(s) == CTSIZE_PTR, "ref is not pointer-sized");
     sp = *(uint8_t **)sp;
-    sid = ctype_cid(s->info);
+    sid = ctype_cid(info);
     s = ctype_get(cts, sid);
+    info = ctype_info_acq(s);
   }
 
   /* Skip attributes. */
-  while (ctype_isattrib(s->info))
+  while (ctype_isattrib(info)) {
     s = ctype_child(cts, s);
+    info = ctype_info_acq(s);
+  }
 
   return lj_cconv_tv_ct_l(L, cts, s, sid, o, sp);
 }
@@ -498,43 +522,51 @@ int lj_cdata_get_l(lua_State *L, CTState *cts, CType *s, TValue *o,
 void lj_cdata_set_l(lua_State *L, CTState *cts, CType *d, CTypeID did,
 		    uint8_t *dp, TValue *o, CTInfo qual)
 {
-  if (ctype_isconstval(d->info)) {
+  CTInfo info = ctype_info_acq(d);
+  CTSize size;
+  if (ctype_isconstval(info)) {
     goto err_const;
-  } else if (ctype_isbitfield(d->info)) {
-    if (((d->info|qual) & CTF_CONST)) goto err_const;
+  } else if (ctype_isbitfield(info)) {
+    if (((info|qual) & CTF_CONST)) goto err_const;
     lj_cconv_bf_tv_l(L, cts, d, dp, o);
     return;
   }
 
   /* Get child type of pointer/array/field. */
-  lj_assertCTS(ctype_ispointer(d->info) || ctype_isfield(d->info),
+  lj_assertCTS(ctype_ispointer(info) || ctype_isfield(info),
 	       "pointer or field expected");
-  did = ctype_cid(d->info);
+  did = ctype_cid(info);
   d = ctype_get(cts, did);
+  info = ctype_info_acq(d);
+  size = ctype_size_acq(d);
 
   /* Resolve reference for field. */
-  if (ctype_isref(d->info)) {
-    lj_assertCTS(d->size == CTSIZE_PTR, "ref is not pointer-sized");
+  if (ctype_isref(info)) {
+    lj_assertCTS(size == CTSIZE_PTR, "ref is not pointer-sized");
     dp = *(uint8_t **)dp;
-    did = ctype_cid(d->info);
+    did = ctype_cid(info);
     d = ctype_get(cts, did);
+    info = ctype_info_acq(d);
+    size = ctype_size_acq(d);
   }
 
   /* Skip attributes and collect qualifiers. */
   for (;;) {
-    if (ctype_isattrib(d->info)) {
-      if (ctype_attrib(d->info) == CTA_QUAL) qual |= d->size;
+    if (ctype_isattrib(info)) {
+      if (ctype_attrib(info) == CTA_QUAL) qual |= size;
     } else {
       break;
     }
-    did = ctype_cid(d->info);
+    did = ctype_cid(info);
     d = ctype_get(cts, did);
+    info = ctype_info_acq(d);
+    size = ctype_size_acq(d);
   }
 
-  lj_assertCTS(ctype_hassize(d->info), "store to ctype without size");
-  lj_assertCTS(!ctype_isvoid(d->info), "store to void type");
+  lj_assertCTS(ctype_hassize(info), "store to ctype without size");
+  lj_assertCTS(!ctype_isvoid(info), "store to void type");
 
-  if (((d->info|qual) & CTF_CONST)) {
+  if (((info|qual) & CTF_CONST)) {
   err_const:
     lj_err_caller(L, LJ_ERR_FFI_WRCONST);
   }
