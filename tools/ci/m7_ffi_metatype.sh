@@ -21,4 +21,13 @@ if hits=$(awk '
   printf '%s\n' 'raw CType info/size reads are forbidden in FFI metatype library helpers; use ctype_info_acq() or ctype_size_acq()' >&2
   exit 1
 fi
+if hits=$(awk '
+  /^void LJ_FASTCALL recff_cdata_call\(/ { in_fn = 1 }
+  /^static TRef crec_arith_int64\(/ { in_fn = 0 }
+  in_fn && /->[[:space:]]*(info|size)([^[:alnum:]_]|$)/ { print FNR ":" $0 }
+' "$ROOT/src/lj_crecord.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw CType info/size reads are forbidden in recorded cdata call/metatype lookup; use ctype_info_acq() or ctype_size_acq()' >&2
+  exit 1
+fi
 exec "$ROOT/tools/ci/lua_test.sh" m7_ffi_metatype

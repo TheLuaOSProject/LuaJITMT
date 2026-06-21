@@ -1513,6 +1513,7 @@ void LJ_FASTCALL recff_cdata_call(jit_State *J, RecordFFData *rd)
   GCcdata *cd = argv2cdata(J, J->base[0], &rd->argv[0]);
   CTypeID id = cd->ctypeid;
   CType *ct;
+  CTInfo ctinfo;
   TValue metatv;
   cTValue *tv;
   MMS mm = MM_call;
@@ -1524,8 +1525,9 @@ void LJ_FASTCALL recff_cdata_call(jit_State *J, RecordFFData *rd)
   }
   /* Record ctype __call/__new metamethod. */
   ct = ctype_raw(cts, id);
+  ctinfo = ctype_info_acq(ct);
   tv = lj_ctype_metatv(cts, &metatv,
-		       ctype_isptr(ct->info) ? ctype_cid(ct->info) : id, mm);
+		       ctype_isptr(ctinfo) ? ctype_cid(ctinfo) : id, mm);
   if (tv) {
     if (tvisfunc(tv)) {
       crec_tailcall(J, rd, tv);
