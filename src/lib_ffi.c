@@ -880,7 +880,7 @@ static int ffi_typecmp_get(FFITypeCmpSnap *ts, CTypeID id, CType *out)
     return -1;
   if (ts->budget-- == 0)
     return -1;
-  ct = &ts->tabh->tab[id];
+  ct = ctype_tab_slot(ts->tabh, id);
   info = la_load32_acq(&ct->info);
   out->info = info;
   out->size = la_load32_acq(&ct->size);
@@ -1113,7 +1113,7 @@ static int ffi_layout_get(FFILayoutSnap *ls, CTypeID id, CType *out)
     return 0;
   if (ls->budget-- == 0)
     return -1;
-  ct = &ls->tabh->tab[id];
+  ct = ctype_tab_slot(ls->tabh, id);
   out->info = la_load32_acq(&ct->info);
   out->size = la_load32_acq(&ct->size);
   out->sib = (CTypeID1)la_load16_acq(&ct->sib);

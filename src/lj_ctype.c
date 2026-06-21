@@ -206,7 +206,7 @@ int lj_ctype_snapshot(CTState *cts, CTypeID id, CType *out)
   tabh = ctype_tabh_acq(cts);
   if ((MSize)id >= ctype_tab_sizetab_acq(tabh))
     return -1;  /* Table/top snapshot raced a grow; retry under the lock. */
-  ct = &tabh->tab[id];
+  ct = ctype_tab_slot(tabh, id);
   out->info = la_load32_acq(&ct->info);
   out->size = la_load32_acq(&ct->size);
   out->sib = (CTypeID1)la_load16_acq(&ct->sib);
@@ -738,7 +738,7 @@ static CTypeID ctype_top_reserve_l(lua_State *L, CTState *cts, CType **ctp)
       continue;
     }
     if (ctype_top_cas(cts, &expect, id+1u)) {
-      *ctp = &tabh->tab[id];
+      *ctp = ctype_tab_slot(tabh, id);
       return id;
     }
   }
@@ -846,7 +846,7 @@ CTypeID lj_ctype_getname(CTState *cts, CType **ctp, GCstr *name, uint32_t tmask)
     *ctp = ctype_get(cts, id);
     return id;
   }
-  *ctp = &ctype_tab_acq(cts)[0];  /* Simplify caller logic. */
+  *ctp = ctype_tab_slot(ctype_tabh_acq(cts), 0);  /* Simplify caller logic. */
   return 0;
 }
 
@@ -874,7 +874,7 @@ int lj_ctype_getname_snapshot(CTState *cts, GCstr *name, uint32_t tmask,
       return -1;
     if (budget-- == 0)
       return -1;
-    ct = &tabh->tab[id];
+    ct = ctype_tab_slot(tabh, id);
     info = la_load32_acq(&ct->info);
     size = la_load32_acq(&ct->size);
     sib = (CTypeID)la_load16_acq(&ct->sib);
@@ -890,7 +890,7 @@ int lj_ctype_getname_snapshot(CTState *cts, GCstr *name, uint32_t tmask,
 	GCobj *rgco;
 	if (sib >= top || (MSize)sib >= ctype_tab_sizetab_acq(tabh))
 	  return -1;
-	rt = &tabh->tab[sib];
+	rt = ctype_tab_slot(tabh, sib);
 	rinfo = la_load32_acq(&rt->info);
 	rgco = gcref_acq(rt->name);
 	if (ctype_isabandoned(rinfo))
@@ -955,7 +955,7 @@ static int ctype_snapshot_copy(CTypeTab *tabh, CTypeID top, CTypeID id,
   GCobj *gco;
   if (id == 0 || id >= top || (MSize)id >= ctype_tab_sizetab_acq(tabh))
     return 0;
-  ct = &tabh->tab[id];
+  ct = ctype_tab_slot(tabh, id);
   out->info = la_load32_acq(&ct->info);
   out->size = la_load32_acq(&ct->size);
   out->sib = (CTypeID1)la_load16_acq(&ct->sib);
@@ -981,7 +981,7 @@ static int ctype_getfieldq_snapshot_rec(CTypeTab *tabh, CTypeID top,
       return -1;
     if ((*budget)-- == 0)
       return -1;
-    ct = &tabh->tab[sib];
+    ct = ctype_tab_slot(tabh, sib);
     info = la_load32_acq(&ct->info);
     size = la_load32_acq(&ct->size);
     child = ctype_cid(info);
@@ -1198,7 +1198,7 @@ int lj_ctype_size_snapshot(CTState *cts, CTypeID id, CTSize *szp)
       return -1;
     if (budget-- == 0)
       return -1;
-    ct = &tabh->tab[id];
+    ct = ctype_tab_slot(tabh, id);
     info = la_load32_acq(&ct->info);
     size = la_load32_acq(&ct->size);
     if (ctype_isabandoned(info))
@@ -1238,7 +1238,7 @@ int lj_ctype_enumconst_snapshot(CTState *cts, const CType *root,
       return -1;
     if (budget-- == 0)
       return -1;
-    ct = &tabh->tab[id];
+    ct = ctype_tab_slot(tabh, id);
     info = la_load32_acq(&ct->info);
     size = la_load32_acq(&ct->size);
     gco = gcref_acq(ct->name);

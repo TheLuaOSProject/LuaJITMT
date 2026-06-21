@@ -176,6 +176,11 @@ static LJ_AINLINE void ctype_tab_sizetab_rel(CTypeTab *tabh, MSize sizetab)
   la_store32_rel(&tabh->sizetab, sizetab);
 }
 
+static LJ_AINLINE CType *ctype_tab_slot(CTypeTab *tabh, CTypeID id)
+{
+  return &tabh->tab[id];
+}
+
 static LJ_AINLINE uint64_t ctype_tab_retire_epoch_acq(const CTypeTab *tabh)
 {
   return la_load64_acq(&tabh->retire_epoch);
@@ -969,7 +974,7 @@ static LJ_AINLINE int ctype_hash_head_cas(CTState *cts, uint32_t h,
 /* Acquire current C type table. */
 static LJ_AINLINE CType *ctype_tab_acq(CTState *cts)
 {
-  return ctype_tabh_acq(cts)->tab;
+  return ctype_tab_slot(ctype_tabh_acq(cts), 0);
 }
 
 /* Get C type for C type ID. */

@@ -40,4 +40,11 @@ if hits=$(grep -nE -- '->[[:space:]]*sizetab|&[[:space:]]*[a-z]+[[:space:]]*->[[
   printf '%s\n' 'raw CTypeTab sizetab access is forbidden; use ctype_tab_sizetab_* helpers' >&2
   exit 1
 fi
+if hits=$(grep -nE -- '->[[:space:]]*tab[[:space:]]*\[' \
+    "$ROOT/src/lj_ctype.c" \
+    "$ROOT/src/lib_ffi.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw CTypeTab slot access is forbidden; use ctype_tab_slot()' >&2
+  exit 1
+fi
 exec "$ROOT/tools/ci/lua_test.sh" m7_ffi_ctype_tab_retire
