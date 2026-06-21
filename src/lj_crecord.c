@@ -382,21 +382,25 @@ fallback:
 /* Determine whether a passed number or cdata number is non-zero. */
 static int crec_isnonzero(CType *s, void *p)
 {
+  CTInfo sinfo;
+  CTSize ssize;
   if (p == (void *)0)
     return 0;
   if (p == (void *)1)
     return 1;
-  if ((s->info & CTF_FP)) {
-    if (s->size == sizeof(float))
+  sinfo = ctype_info_acq(s);
+  ssize = ctype_size_acq(s);
+  if ((sinfo & CTF_FP)) {
+    if (ssize == sizeof(float))
       return (*(float *)p != 0);
     else
       return (*(double *)p != 0);
   } else {
-    if (s->size == 1)
+    if (ssize == 1)
       return (*(uint8_t *)p != 0);
-    else if (s->size == 2)
+    else if (ssize == 2)
       return (*(uint16_t *)p != 0);
-    else if (s->size == 4)
+    else if (ssize == 4)
       return (*(uint32_t *)p != 0);
     else
       return (*(uint64_t *)p != 0);
@@ -408,8 +412,8 @@ static TRef crec_ct_ct(jit_State *J, CType *d, CType *s, TRef dp, TRef sp,
 {
   IRType dt = crec_ct2irt(ctype_ctsG(J2G(J)), d);
   IRType st = crec_ct2irt(ctype_ctsG(J2G(J)), s);
-  CTSize dsize = d->size, ssize = s->size;
-  CTInfo dinfo = d->info, sinfo = s->info;
+  CTSize dsize = ctype_size_acq(d), ssize = ctype_size_acq(s);
+  CTInfo dinfo = ctype_info_acq(d), sinfo = ctype_info_acq(s);
 
   if (ctype_type(dinfo) > CT_MAYCONVERT || ctype_type(sinfo) > CT_MAYCONVERT)
     goto err_conv;
