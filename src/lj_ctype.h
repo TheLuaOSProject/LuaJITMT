@@ -154,9 +154,19 @@ static LJ_AINLINE CTInfo ctype_info_acq(const CType *ct)
   return la_load32_acq(&ct->info);  /* 11.2: ctype record payload. */
 }
 
+static LJ_AINLINE void ctype_info_rel(CType *ct, CTInfo info)
+{
+  la_store32_rel(&ct->info, info);  /* 11.2: ctype record payload. */
+}
+
 static LJ_AINLINE CTSize ctype_size_acq(const CType *ct)
 {
   return la_load32_acq(&ct->size);  /* 11.2: ctype record payload. */
+}
+
+static LJ_AINLINE void ctype_size_rel(CType *ct, CTSize size)
+{
+  la_store32_rel(&ct->size, size);  /* 11.2: ctype record payload. */
 }
 
 static LJ_AINLINE CTypeID ctype_next_acq(const CType *ct)
@@ -1081,10 +1091,27 @@ static LJ_AINLINE GCobj *ctype_nameobj_acq(const CType *ct)
   return gcref_acq(ct->name);
 }
 
+static LJ_AINLINE void ctype_nameobj_rel(CType *ct, GCobj *o)
+{
+  if (o)
+    setgcrefrel(ct->name, o);
+  else
+    setgcrefnullrel(ct->name);
+}
+
 static LJ_AINLINE GCstr *ctype_name_acq(const CType *ct)
 {
   GCobj *o = ctype_nameobj_acq(ct);
   return o ? gco2str(o) : NULL;
+}
+
+static LJ_AINLINE void ctype_copy_rel(CType *dst, const CType *src)
+{
+  ctype_info_rel(dst, ctype_info_acq(src));
+  ctype_size_rel(dst, ctype_size_acq(src));
+  ctype_sib_rel(dst, ctype_sib_acq(src));
+  ctype_next_rel(dst, ctype_next_acq(src));
+  ctype_nameobj_rel(dst, ctype_nameobj_acq(src));
 }
 
 LJ_FUNC CTypeID lj_ctype_new_l(lua_State *L, CTState *cts, CType **ctp);

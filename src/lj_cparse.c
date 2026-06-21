@@ -428,7 +428,7 @@ static CType *cp_ctype_publish(CPState *cp, CTypeID id, CType *src)
   do {
     dst = ctype_get(cp->cts, id);
     if (dst != src)
-      *dst = *src;
+      ctype_copy_rel(dst, src);
     tab = ctype_tab_acq(cp->cts);
   } while (dst != &tab[id]);
   return dst;

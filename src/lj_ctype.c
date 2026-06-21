@@ -584,7 +584,7 @@ static void ctype_hash_setnext(CTState *cts, CType *src, CTypeID id,
   do {
     dst = ctype_get(cts, id);
     if (dst != src)
-      *dst = *src;
+      ctype_copy_rel(dst, src);
     ctype_next_rel(dst, next);
     tab = ctype_tab_acq(cts);
   } while (dst != &tab[id]);
@@ -596,7 +596,7 @@ static CType *ctype_publish_current(CTState *cts, CTypeID id, CType *src)
   do {
     dst = ctype_get(cts, id);
     if (dst != src)
-      *dst = *src;
+      ctype_copy_rel(dst, src);
     tab = ctype_tab_acq(cts);
   } while (dst != &tab[id]);
   return dst;
