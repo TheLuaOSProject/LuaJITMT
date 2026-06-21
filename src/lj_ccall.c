@@ -149,14 +149,14 @@
 #define CCALL_HANDLE_STRUCTRET2 \
   int rcl[2]; rcl[0] = rcl[1] = 0; \
   ccall_classify_struct(cts, ctr, rcl, 0); \
-  ccall_struct_ret(cc, rcl, dp, ctr->size);
+  ccall_struct_ret(cc, rcl, dp, ctype_size_acq(ctr));
 
 #define CCALL_HANDLE_COMPLEXRET \
   /* Complex values are returned in one or two FPRs. */ \
   cc->retref = 0;
 
 #define CCALL_HANDLE_COMPLEXRET2 \
-  if (ctr->size == 2*sizeof(float)) {  /* Copy complex float from FPR. */ \
+  if (ctype_size_acq(ctr) == 2*sizeof(float)) {  /* Copy complex float from FPR. */ \
     *(int64_t *)dp = cc->fpr[0].l[0]; \
   } else {  /* Copy non-contiguous complex double from FPRs. */ \
     ((int64_t *)dp)[0] = cc->fpr[0].l[0]; \
@@ -179,7 +179,7 @@
 
 #define CCALL_HANDLE_REGARG \
   if (isfp) {  /* Try to pass argument in FPRs. */ \
-    int n2 = ctype_isvector(d->info) ? 1 : n; \
+    int n2 = ctype_isvector(ctype_info_acq(d)) ? 1 : n; \
     if (nfpr + n2 <= CCALL_NARG_FPR) { \
       dp = &cc->fpr[nfpr]; \
       nfpr += n2; \
@@ -1191,15 +1191,18 @@ static int ccall_set_args(lua_State *L, CTState *cts, CType *ct,
 static int ccall_get_results(lua_State *L, CTState *cts, CType *ct,
 			     CCallState *cc, int *ret)
 {
-  CTypeID rid = ctype_rawid(cts, ctype_cid(ct->info));
+  CTInfo info = ctype_info_acq(ct);
+  CTypeID rid = ctype_rawid(cts, ctype_cid(info));
   CType *ctr = ctype_get(cts, rid);
+  CTInfo rinfo = ctype_info_acq(ctr);
+  CTSize rsize = ctype_size_acq(ctr);
   uint8_t *sp = (uint8_t *)&cc->gpr[0];
-  if (ctype_isvoid(ctr->info)) {
+  if (ctype_isvoid(rinfo)) {
     *ret = 0;  /* Zero results. */
     return 0;  /* No additional GC step. */
   }
   *ret = 1;  /* One result. */
-  if (ctype_isstruct(ctr->info)) {
+  if (ctype_isstruct(rinfo)) {
     /* Return cdata object which is already on top of stack. */
     if (!cc->retref) {
       void *dp = cdataptr(cdataV(L->top-1));  /* Use preallocated object. */
@@ -1207,23 +1210,23 @@ static int ccall_get_results(lua_State *L, CTState *cts, CType *ct,
     }
     return 1;  /* One GC step. */
   }
-  if (ctype_iscomplex(ctr->info)) {
+  if (ctype_iscomplex(rinfo)) {
     /* Return cdata object which is already on top of stack. */
     void *dp = cdataptr(cdataV(L->top-1));  /* Use preallocated object. */
     CCALL_HANDLE_COMPLEXRET2
     return 1;  /* One GC step. */
   }
-  if (LJ_BE && ctr->size < CTSIZE_PTR &&
-      (ctype_isinteger_or_bool(ctr->info) || ctype_isenum(ctr->info)))
-    sp += (CTSIZE_PTR - ctr->size);
+  if (LJ_BE && rsize < CTSIZE_PTR &&
+      (ctype_isinteger_or_bool(rinfo) || ctype_isenum(rinfo)))
+    sp += (CTSIZE_PTR - rsize);
 #if CCALL_NUM_FPR
-  if (ctype_isfp(ctr->info) || ctype_isvector(ctr->info))
+  if (ctype_isfp(rinfo) || ctype_isvector(rinfo))
     sp = (uint8_t *)&cc->fpr[0];
 #endif
 #ifdef CCALL_HANDLE_RET
   CCALL_HANDLE_RET
 #endif
-  lj_assertL(!(ctype_isrefarray(ctr->info) || ctype_isstruct(ctr->info)),
+  lj_assertL(!(ctype_isrefarray(rinfo) || ctype_isstruct(rinfo)),
 	     "unexpected reference ctype");
   return lj_cconv_tv_ct_l(L, cts, ctr, rid, L->top-1, sp);
 }
