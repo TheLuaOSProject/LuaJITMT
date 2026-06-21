@@ -950,14 +950,16 @@ CTypeID lj_ccall_ctid_vararg(lua_State *L, CTState *cts, cTValue *o)
   } else if (tviscdata(o)) {
     CTypeID id = cdataV(o)->ctypeid;
     CType *s = ctype_get(cts, id);
-    if (ctype_isrefarray(s->info)) {
+    CTInfo sinfo = ctype_info_acq(s);
+    CTSize ssize = ctype_size_acq(s);
+    if (ctype_isrefarray(sinfo)) {
       return lj_ctype_intern_l(L, cts,
-	       CTINFO(CT_PTR, CTALIGN_PTR|ctype_cid(s->info)), CTSIZE_PTR);
-    } else if (ctype_isstruct(s->info) || ctype_isfunc(s->info)) {
+	       CTINFO(CT_PTR, CTALIGN_PTR|ctype_cid(sinfo)), CTSIZE_PTR);
+    } else if (ctype_isstruct(sinfo) || ctype_isfunc(sinfo)) {
       /* NYI: how to pass a struct by value in a vararg argument? */
       return lj_ctype_intern_l(L, cts, CTINFO(CT_PTR, CTALIGN_PTR|id),
 			       CTSIZE_PTR);
-    } else if (ctype_isfp(s->info) && s->size == sizeof(float)) {
+    } else if (ctype_isfp(sinfo) && ssize == sizeof(float)) {
       return CTID_DOUBLE;
     } else {
       return id;

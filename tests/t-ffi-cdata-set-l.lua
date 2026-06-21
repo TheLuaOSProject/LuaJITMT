@@ -14,6 +14,7 @@ typedef struct {
   unsigned int nibble:3;
 } lj_m7_set_outer_t;
 int abs(int);
+int snprintf(char *str, size_t size, const char *format, ...);
 ]]
 
 local ready, start = harness.channels(nthreads)
@@ -60,6 +61,11 @@ for tid = 1, nthreads do
 
       local bytes = ffi.new("uint8_t[4]", 65, 66, 67, 0)
       assert(ffi.string(bytes, 3) == "ABC")
+
+      local out = ffi.new("char[64]")
+      local n = ffi.C.snprintf(out, 64, "%g %p", ffi.new("float", i + 0.5),
+			       bytes)
+      assert(n > 0 and n < 64)
     end
 
     return true
