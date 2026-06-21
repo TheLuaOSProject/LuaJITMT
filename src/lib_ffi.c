@@ -472,8 +472,9 @@ LJLIB_CF(ffi_clib___index)	LJLIB_REC(clib_index 1)
     CTState *cts = ctype_cts(L);
     GCcdata *cd = cdataV(tv);
     CType *s = ctype_get(cts, cd->ctypeid);
-    if (ctype_isextern(s->info)) {
-      CTypeID sid = ctype_cid(s->info);
+    CTInfo sinfo = ctype_info_acq(s);
+    if (ctype_isextern(sinfo)) {
+      CTypeID sid = ctype_cid(sinfo);
       void *sp = *(void **)cdataptr(cd);
       CType *ct = ctype_raw(cts, sid);
       if (lj_cconv_tv_ct_l(L, cts, ct, sid, L->top-1, sp))
@@ -494,15 +495,17 @@ LJLIB_CF(ffi_clib___newindex)	LJLIB_REC(clib_index 0)
     GCcdata *cd = cdataV(tv);
     CTypeID did = cd->ctypeid;
     CType *d = ctype_get(cts, did);
-    if (ctype_isextern(d->info)) {
+    CTInfo dinfo = ctype_info_acq(d);
+    if (ctype_isextern(dinfo)) {
       CTInfo qual = 0;
       for (;;) {  /* Skip attributes and collect qualifiers. */
-	did = ctype_cid(d->info);
+	did = ctype_cid(dinfo);
 	d = ctype_get(cts, did);
-	if (!ctype_isattrib(d->info)) break;
-	if (ctype_attrib(d->info) == CTA_QUAL) qual |= d->size;
+	dinfo = ctype_info_acq(d);
+	if (!ctype_isattrib(dinfo)) break;
+	if (ctype_attrib(dinfo) == CTA_QUAL) qual |= ctype_size_acq(d);
       }
-      if (!((d->info|qual) & CTF_CONST)) {
+      if (!((dinfo|qual) & CTF_CONST)) {
 	lj_cconv_ct_tv_l(L, cts, d, did, *(void **)cdataptr(cd), o, 0);
 	return 0;
       }
