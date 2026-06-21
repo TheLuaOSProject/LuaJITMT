@@ -1915,16 +1915,18 @@ void LJ_FASTCALL recff_clib_index(jit_State *J, RecordFFData *rd)
     if (ctv)
       lj_tv_load_acq(&tv, ctv);
     if (id && ctv && !tvisnil(&tv)) {
+      CTInfo info = ctype_info_acq(ct);
       /* Specialize to the symbol name and make the result a constant. */
       emitir(IRTG(IR_EQ, IRT_STR), J->base[1], lj_ir_kstr(J, name));
-      if (ctype_isconstval(ct->info)) {
-	if (ct->size >= 0x80000000u &&
-	    (ctype_child(cts, ct)->info & CTF_UNSIGNED))
-	  J->base[0] = lj_ir_knum(J, (lua_Number)(uint32_t)ct->size);
+      if (ctype_isconstval(info)) {
+	CTSize size = ctype_size_acq(ct);
+	if (size >= 0x80000000u &&
+	    (ctype_info_acq(ctype_child(cts, ct)) & CTF_UNSIGNED))
+	  J->base[0] = lj_ir_knum(J, (lua_Number)(uint32_t)size);
 	else
-	  J->base[0] = lj_ir_kint(J, (int32_t)ct->size);
-      } else if (ctype_isextern(ct->info)) {
-	CTypeID sid = ctype_cid(ct->info);
+	  J->base[0] = lj_ir_kint(J, (int32_t)size);
+      } else if (ctype_isextern(info)) {
+	CTypeID sid = ctype_cid(info);
 	void *sp = *(void **)cdataptr(cdataV(&tv));
 	TRef ptr;
 	ct = ctype_raw(cts, sid);
