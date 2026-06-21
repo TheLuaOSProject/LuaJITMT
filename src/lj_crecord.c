@@ -1541,27 +1541,35 @@ void LJ_FASTCALL recff_cdata_call(jit_State *J, RecordFFData *rd)
 
 static TRef crec_arith_int64(jit_State *J, TRef *sp, CType **s, MMS mm)
 {
-  if (sp[0] && sp[1] && ctype_isnum(s[0]->info) && ctype_isnum(s[1]->info)) {
+  CTInfo sinfo[2];
+  CTSize ssize[2];
+  if (!sp[0] || !sp[1])
+    return 0;
+  sinfo[0] = ctype_info_acq(s[0]);
+  sinfo[1] = ctype_info_acq(s[1]);
+  if (ctype_isnum(sinfo[0]) && ctype_isnum(sinfo[1])) {
     IRType dt;
     CTypeID id;
     TRef tr;
     MSize i;
     IROp op;
     lj_needsplit(J);
-    if (((s[0]->info & CTF_UNSIGNED) && s[0]->size == 8) ||
-	((s[1]->info & CTF_UNSIGNED) && s[1]->size == 8)) {
+    ssize[0] = ctype_size_acq(s[0]);
+    ssize[1] = ctype_size_acq(s[1]);
+    if (((sinfo[0] & CTF_UNSIGNED) && ssize[0] == 8) ||
+	((sinfo[1] & CTF_UNSIGNED) && ssize[1] == 8)) {
       dt = IRT_U64; id = CTID_UINT64;
     } else {
       dt = IRT_I64; id = CTID_INT64;
       if (mm < MM_add &&
-	  !((s[0]->info | s[1]->info) & CTF_FP) &&
-	  s[0]->size == 4 && s[1]->size == 4) {  /* Try to narrow comparison. */
-	if (!((s[0]->info ^ s[1]->info) & CTF_UNSIGNED) ||
+	  !((sinfo[0] | sinfo[1]) & CTF_FP) &&
+	  ssize[0] == 4 && ssize[1] == 4) {  /* Try to narrow comparison. */
+	if (!((sinfo[0] ^ sinfo[1]) & CTF_UNSIGNED) ||
 	    (tref_isk(sp[1]) && IR(tref_ref(sp[1]))->i >= 0)) {
-	  dt = (s[0]->info & CTF_UNSIGNED) ? IRT_U32 : IRT_INT;
+	  dt = (sinfo[0] & CTF_UNSIGNED) ? IRT_U32 : IRT_INT;
 	  goto comp;
 	} else if (tref_isk(sp[0]) && IR(tref_ref(sp[0]))->i >= 0) {
-	  dt = (s[1]->info & CTF_UNSIGNED) ? IRT_U32 : IRT_INT;
+	  dt = (sinfo[1] & CTF_UNSIGNED) ? IRT_U32 : IRT_INT;
 	  goto comp;
 	}
       }
@@ -1572,7 +1580,7 @@ static TRef crec_arith_int64(jit_State *J, TRef *sp, CType **s, MMS mm)
 	sp[i] = emitconv(sp[i], dt, st, IRCONV_ANY);
       else if (!(st == IRT_I64 || st == IRT_U64))
 	sp[i] = emitconv(sp[i], dt, IRT_INT,
-			 (s[i]->info & CTF_UNSIGNED) ? 0 : IRCONV_SEXT);
+			 (sinfo[i] & CTF_UNSIGNED) ? 0 : IRCONV_SEXT);
     }
     if (mm < MM_add) {
     comp:
