@@ -54,6 +54,21 @@ if hits=$(awk '
   exit 1
 fi
 if hits=$(awk '
+  /^int lj_ctype_snapshot\(/ ||
+  /^static int ctype_snapshot_copy\(/ ||
+  /^static int ctype_getfieldq_snapshot_rec\(/ ||
+  /^int lj_ctype_ptrstruct_snapshot\(/ ||
+  /^int lj_ctype_info_snapshot\(/ { in_fn = 1 }
+  /^static void ctype_storestr_str\(/ ||
+  /^int lj_ctype_getfieldq_snapshot\(/ ||
+  /^\/\* -- C type information/ { in_fn = 0 }
+  in_fn && /(^|[^[:alnum:]_])(ct|cct)\.(info|size|sib)([^[:alnum:]_]|$)/ { print FNR ":" $0 }
+' "$ROOT/src/lj_ctype.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw local CType info/size/sibling reads are forbidden in ctype snapshot helpers; use CType helper loads' >&2
+  exit 1
+fi
+if hits=$(awk '
   /^static int ffi_istype_raw\(/ { in_fn = 1 }
   in_fn && /->[[:space:]]*(info|size)([^[:alnum:]_]|$)/ { print FNR ":" $0 }
   in_fn && /^}/ { in_fn = 0 }

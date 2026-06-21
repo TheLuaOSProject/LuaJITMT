@@ -216,7 +216,7 @@ int lj_ctype_snapshot(CTState *cts, CTypeID id, CType *out)
   seq1 = ctype_parse_token_acq(cts);
   if (seq0 != seq1 || (seq1 & 1u))
     return -1;  /* Parser overlapped the copy; retry under the lock. */
-  return !ctype_isabandoned(out->info);
+  return !ctype_isabandoned(ctype_info_acq(out));
 }
 
 static void ctype_storestr_str(lua_State *L, GCtab *tab, GCstr *key,
@@ -971,7 +971,7 @@ static int ctype_snapshot_copy(CTypeTab *tabh, CTypeID top, CTypeID id,
   out->next = (CTypeID1)ctype_next_acq(ct);
   gco = ctype_nameobj_acq(ct);
   setgcrefp(out->name, gco);
-  return !ctype_isabandoned(out->info);
+  return !ctype_isabandoned(ctype_info_acq(out));
 }
 
 static int ctype_getfieldq_snapshot_rec(CTypeTab *tabh, CTypeID top,
@@ -1012,21 +1012,23 @@ static int ctype_getfieldq_snapshot_rec(CTypeTab *tabh, CTypeID top,
       CType cct;
       int ok;
       for (;;) {
+	CTInfo cinfo;
 	if (cid >= top || (MSize)cid >= ctype_tab_sizetab_acq(tabh))
 	  return -1;
 	if ((*budget)-- == 0)
 	  return -1;
 	if (!ctype_snapshot_copy(tabh, top, cid, &cct))
 	  return 0;
-	if (!ctype_isattrib(cct.info))
+	cinfo = ctype_info_acq(&cct);
+	if (!ctype_isattrib(cinfo))
 	  break;
-	if (ctype_attrib(cct.info) == CTA_QUAL)
-	  q |= cct.size;
-	cid = ctype_cid(cct.info);
+	if (ctype_attrib(cinfo) == CTA_QUAL)
+	  q |= ctype_size_acq(&cct);
+	cid = ctype_cid(cinfo);
       }
-      ok = ctype_getfieldq_snapshot_rec(tabh, top, cct.sib, name,
-					baseofs + size, q, ofsp, qualp, out,
-					budget);
+      ok = ctype_getfieldq_snapshot_rec(tabh, top, ctype_sib_acq(&cct),
+					name, baseofs + size, q, ofsp,
+					qualp, out, budget);
       if (ok)
 	return ok;
     }
@@ -1072,6 +1074,7 @@ int lj_ctype_ptrstruct_snapshot(CTState *cts, CTypeID id, CTypeID *cidp)
   CTypeID top;
   MSize budget;
   CType ct;
+  CTInfo info;
   if (seq0 & 1u)
     return -1;
   top = ctype_top_acq(cts);
@@ -1081,9 +1084,10 @@ int lj_ctype_ptrstruct_snapshot(CTState *cts, CTypeID id, CTypeID *cidp)
     return -1;
   if (!ctype_snapshot_copy(tabh, top, id, &ct))
     return 0;
-  if (!ctype_isptr(ct.info))
+  info = ctype_info_acq(&ct);
+  if (!ctype_isptr(info))
     return 0;
-  id = ctype_cid(ct.info);
+  id = ctype_cid(info);
   for (;;) {
     if (id == 0 || id >= top || (MSize)id >= ctype_tab_sizetab_acq(tabh))
       return -1;
@@ -1091,16 +1095,17 @@ int lj_ctype_ptrstruct_snapshot(CTState *cts, CTypeID id, CTypeID *cidp)
       return -1;
     if (!ctype_snapshot_copy(tabh, top, id, &ct))
       return 0;
-    if (!ctype_isattrib(ct.info))
+    info = ctype_info_acq(&ct);
+    if (!ctype_isattrib(info))
       break;
-    id = ctype_cid(ct.info);
+    id = ctype_cid(info);
   }
   {
     uint32_t seq1 = ctype_parse_token_acq(cts);
     if (seq0 != seq1 || (seq1 & 1u))
       return -1;
   }
-  if (ctype_isstruct(ct.info)) {
+  if (ctype_isstruct(info)) {
     *cidp = id;
     return 1;
   }
@@ -1125,40 +1130,44 @@ int lj_ctype_info_snapshot(CTState *cts, CTypeID id, CTInfo *infop,
   if (rawp || ridp) {
     CTypeID rid = id;
     for (;;) {
+      CTInfo info;
       if (budget-- == 0)
 	return -1;
       if (!ctype_snapshot_copy(tabh, top, rid, &ct))
 	return 0;
-      if (!ctype_isattrib(ct.info)) {
+      info = ctype_info_acq(&ct);
+      if (!ctype_isattrib(info)) {
 	if (ridp)
 	  *ridp = rid;
 	if (rawp)
 	  *rawp = ct;
 	break;
       }
-      rid = ctype_cid(ct.info);
+      rid = ctype_cid(info);
     }
   }
   for (;;) {
     CTInfo info;
+    CTSize size;
     if (budget-- == 0)
       return -1;
     if (!ctype_snapshot_copy(tabh, top, id, &ct))
       return 0;
-    info = ct.info;
+    info = ctype_info_acq(&ct);
+    size = ctype_size_acq(&ct);
     if (ctype_isenum(info)) {
       /* Follow child. Need to look at its attributes, too. */
     } else if (ctype_isattrib(info)) {
       if (ctype_isxattrib(info, CTA_QUAL))
-	qual |= ct.size;
+	qual |= size;
       else if (ctype_isxattrib(info, CTA_ALIGN) && !(qual & CTFP_ALIGNED))
-	qual |= CTFP_ALIGNED + CTALIGN(ct.size);
+	qual |= CTFP_ALIGNED + CTALIGN(size);
     } else {
       uint32_t seq1;
       if (!(qual & CTFP_ALIGNED)) qual |= (info & CTF_ALIGN);
       qual |= (info & ~(CTF_ALIGN|CTMASK_CID));
       *infop = qual;
-      *szp = ctype_isfunc(info) ? CTSIZE_INVALID : ct.size;
+      *szp = ctype_isfunc(info) ? CTSIZE_INVALID : size;
       seq1 = ctype_parse_token_acq(cts);
       return (seq0 == seq1 && !(seq1 & 1u)) ? 1 : -1;
     }
