@@ -1172,6 +1172,7 @@ typedef struct GC2State {
   uint64_t hs_epoch;	/* Soft-handshake generation. */
   uint32_t hs_pending;	/* Outstanding handshake acknowledgements. */
   uint32_t hs_actions;	/* Current LJ_GC2_HS_* action bits. */
+  uint32_t hs_leader;	/* Serializes safepoint handshake leaders. */
   uint64_t hs_signal_ns;  /* Current handshake publication timestamp. */
   uint64_t hs_ack_latency_samples;  /* Safepoint ack latency samples. */
   uint64_t hs_ack_latency_sum_ns;  /* Total safepoint ack latency. */
@@ -1245,6 +1246,7 @@ typedef struct GC2State {
   uint64_t grey_pushed;	/* Grey entries scheduled from SSB/traversal. */
   uint64_t grey_drained;  /* Grey entries popped for traversal. */
   void *worker_thread[LJ_GC2_WORKER_MAX];  /* Opaque LJThr* parked workers. */
+  void *worker_tg[LJ_GC2_WORKER_MAX];  /* Opaque TGState* parked workers. */
   uint32_t n_workers;	/* Parked GC workers started for this state. */
   uint32_t worker_stop;  /* Request parked worker shutdown. */
   uint32_t worker_wake;  /* Futex word for worker wakeups. */
@@ -2061,6 +2063,40 @@ static LJ_AINLINE uint32_t gc2_n_threads_sub_acqrel(global_State *g,
 						    uint32_t n)
 {
   return la_sub32_acqrel(&g->gc2.n_threads, n);
+}
+
+static LJ_AINLINE uint32_t gc2_hs_leader_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.hs_leader);
+}
+
+static LJ_AINLINE void gc2_hs_leader_store_rlx(global_State *g,
+					       uint32_t leader)
+{
+  la_store32_rlx(&g->gc2.hs_leader, leader);
+}
+
+static LJ_AINLINE void gc2_hs_leader_rel(global_State *g, uint32_t leader)
+{
+  la_store32_rel(&g->gc2.hs_leader, leader);
+}
+
+static LJ_AINLINE int gc2_hs_leader_cas(global_State *g, uint32_t *oldp,
+					uint32_t leader)
+{
+  return la_cas32(&g->gc2.hs_leader, oldp, leader, LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE void gc2_hs_leader_futex_wake(global_State *g, int n)
+{
+  la_futex_wake(&g->gc2.hs_leader, n);
+}
+
+static LJ_AINLINE void gc2_hs_leader_futex_wait(global_State *g,
+						uint32_t leader,
+						int timeout_ns)
+{
+  la_futex_wait(&g->gc2.hs_leader, leader, timeout_ns);
 }
 
 static LJ_AINLINE uint64_t gc2_hs_epoch_acq(global_State *g)

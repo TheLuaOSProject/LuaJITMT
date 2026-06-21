@@ -54,6 +54,7 @@ typedef struct GC2State {
   uint64_t hs_epoch;           /* handshake generation (see §5.4)      */
   uint32_t hs_pending;         /* acks outstanding (atomic countdown)  */
   uint32_t hs_actions;         /* HS_* bits of current handshake       */
+  uint32_t hs_leader;          /* handshake leader owner token         */
   TGState *tg_list;            /* lock-free singly-linked list of TGs  */
   uint32_t n_threads;
   /* marking */
@@ -216,6 +217,10 @@ an `LJ_MT`/`LUAJIT_THREADSAFE` lock gate. Phase transitions and mutator SSB
 publication now wake the parked worker if one has been started, with
 `worker_wakes`, `worker_parks`, and `worker_async_progress` recording the
 bridge behavior until the full scheduler replaces the single-owner token.
+Parked workers now attach real no-Lua-stack TGs and use TG TLS, so safepoint
+self-identification no longer falls back to the main TG. Their TG storage is
+kept alive until the lockless TG registry has reclaimed the dead node. They can
+be remotely acknowledged as native TGs with no current `lua_State`.
 `collectgarbage("workers", N)` exposes that staged lifecycle to Lua: missing
 `N` queries the current worker count, `N <= 0` stops the parked worker, and any
 positive `N` starts the current one-worker scheduler while reporting the
@@ -487,8 +492,10 @@ boundary. `lj_gc2_sweep_to_idle()` waits for that latch plus the worker token,
 rechecks phase and traversable sweep predicates, records real `SWEEP -> IDLE`
 publications with `sweep_to_idle`, aggregates live estimates, and updates
 pacing. Parked workers may drain traversable arena sweep before the latch, but
-they do not publish `P_IDLE` until they have real scheduler/TG handshake
-identity.
+they do not publish `P_IDLE` while the legacy `lua_gc()` driver can be inside
+non-pollable C GC code. Worker-owned idle publication remains staged until the
+GC scheduler can guarantee that a worker-initiated close handshake cannot wait
+on a mutator that is itself driving the legacy close boundary.
 The partial-cycle full-GC fast-forward path still calls
 `lj_gc2_legacy_preserve_abort()` instead of entering `P_SWEEP`; that path now
 records real active-phase aborts with `preserve_abort_to_idle` and retains the

@@ -389,7 +389,7 @@ static void test_async_sweep_and_stop(lua_State *L, global_State *g,
   extra_tg.cur_L = L;
   lj_native_enter(&extra_tg);
   lj_tg_attach(g, &extra_tg);
-  assert(g->gc2.n_threads == 2);
+  assert(g->gc2.n_threads == 4);
 
   extra_plain = lj_arena_alloc(&extra_tg.alloc, &extra_tg.prng, 64, 0);
   extra_trav = lj_arena_alloc(&extra_tg.alloc, &extra_tg.prng, 64,
@@ -458,6 +458,7 @@ static void test_async_sweep_and_stop(lua_State *L, global_State *g,
   assert(g->gc2.worker_thread[1] == NULL);
   assert(la_load32_acq(&g->gc2.n_workers) == 0);
   assert(la_load32_acq(&g->gc2.worker_exited) == 2);
+  assert(la_load32_acq(&g->gc2.n_threads) == 2);
 
   lj_arena_alloc_restore_sweep_kind(&extra_tg.alloc, LJ_ARENAK_TRAVERSABLE);
   /* Synthetic boundary: main TG had no prepared work. */
@@ -467,9 +468,10 @@ static void test_async_sweep_and_stop(lua_State *L, global_State *g,
   assert(la_load32_acq(&g->gc2.phase) == LJ_GC2_SWEEP);
   lj_gc2_sweep_legacy_ready(g);
   assert(lj_gc2_sweep_to_idle(g) == 1);
+
   lj_tg_detach(g, &extra_tg);
   assert(g->gc2.n_threads == 1);
-  assert(lj_tg_reclaim_dead(g) == 1u);
+  assert(lj_tg_reclaim_dead(g) >= 1u);
   lj_tg_fini_thread(g, &extra_tg);
 }
 
@@ -490,6 +492,7 @@ int main(void)
   assert(g->gc2.worker_thread[1] != NULL);
   assert(la_load32_acq(&g->gc2.n_workers) == 2);
   assert(la_load32_acq(&g->gc2.worker_started) == 2);
+  assert(la_load32_acq(&g->gc2.n_threads) == 3);
 
   test_two_worker_contention(g);
   test_worker_finalizer_mpsc_drain(L, g);

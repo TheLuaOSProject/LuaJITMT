@@ -15,6 +15,7 @@
 #include "lj_safepoint.h"
 #include "lj_str.h"
 #include "lj_tab.h"
+#include "lj_thr.h"
 #include "lj_tg.h"
 #include "lj_trace.h"
 
@@ -200,23 +201,55 @@ static void safepoint_ack_native(global_State *g)
   for (tg = gc2_tg_list_acq(g);
        tg != NULL;
        tg = lj_tg_next_acq(tg)) {
-    lua_State *L;
     if (la_load8_acq(&tg->tg_flags) & TGF_DEAD)  /* 05 section 5.4.1. */
       continue;
-    L = lj_tg_load_cur_L(tg);
     if (tg == self)
       safepoint_ack_tg(g, tg);  /* Leader self-ack is a real poll. */
-    else if (la_load8_acq(&tg->in_native) && L)
+    else if (la_load8_acq(&tg->in_native))
       safepoint_ack_tg(g, tg);  /* 05 section 5.4.3 remote native ack. */
+  }
+}
+
+static uint32_t safepoint_leader_id(global_State *g)
+{
+  TGState *self = lj_thr_get_tg_fallback(g);
+  uint32_t id = self ? la_load32_acq(&self->tid) : 0;
+  return id && id != LJ_THREAD_GCSCAN ? id : 1u;
+}
+
+static uint32_t safepoint_leader_enter(global_State *g)
+{
+  uint32_t id = safepoint_leader_id(g);
+  for (;;) {
+    uint32_t expect = 0;
+    if (gc2_hs_leader_cas(g, &expect, id))
+      return id;
+    safepoint_ack_native(g);  /* Avoid leader-wait vs ack-wait deadlock. */
+    if (expect == 0)
+      continue;
+    gc2_hs_leader_futex_wait(g, expect, 1000000);
+  }
+}
+
+static void safepoint_leader_leave(global_State *g, uint32_t id)
+{
+  uint32_t expect = id;
+  if (gc2_hs_leader_cas(g, &expect, 0))
+    gc2_hs_leader_futex_wake(g, 1);
+  else {
+    gc2_hs_leader_rel(g, 0);
+    gc2_hs_leader_futex_wake(g, 1);
   }
 }
 
 uint32_t lj_safepoint_handshake(global_State *g, uint32_t actions)
 {
   uint64_t epoch;
+  uint32_t leader;
   uint32_t signaled, oldpending;
   if (!g || actions == 0)
     return 0;
+  leader = safepoint_leader_enter(g);
   gc2_hs_actions_rel(g, actions);  /* 05 section 5.4.2. */
   gc2_hs_pending_rel(g, 1);  /* 09 section 9.3 leader sentinel. */
   epoch = gc2_hs_epoch_rlx(g) + 1u;
@@ -246,5 +279,6 @@ uint32_t lj_safepoint_handshake(global_State *g, uint32_t actions)
   if (actions & LJ_GC2_HS_FLUSHJ)
     (void)lj_trace_flushall(mainthread_acq(g));  /* 08 section 8.7 leader action. */
   (void)lj_gc2_reclaim_retired(g, epoch);  /* 05 section 5.9 grace drain. */
+  safepoint_leader_leave(g, leader);
   return signaled;
 }
