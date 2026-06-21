@@ -22,4 +22,13 @@ if hits=$(awk '
   printf '%s\n' 'raw CType info/size reads are forbidden in FFI callback install helpers; use ctype_info_acq() or ctype_size_acq()' >&2
   exit 1
 fi
+if hits=$(awk '
+  /^static CType \*callback_checkfunc\(/ { in_fn = 1 }
+  in_fn && /->[[:space:]]*(info|size|sib)([^[:alnum:]_]|$)/ { print FNR ":" $0 }
+  in_fn && /^}/ { in_fn = 0 }
+' "$ROOT/src/lj_ccallback.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw CType info/size/sib reads are forbidden in callback_checkfunc(); use ctype_*_acq() helpers' >&2
+  exit 1
+fi
 exec "$ROOT/tools/ci/lua_test.sh" m7_ffi_callback_install

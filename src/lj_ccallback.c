@@ -1093,30 +1093,40 @@ static MSize callback_slot_claim_l(lua_State *L, CTState *cts)
 static CType *callback_checkfunc(CTState *cts, CType *ct, CTypeID *idp)
 {
   int narg = 0;
-  if (!ctype_isptr(ct->info) || (LJ_64 && ct->size != CTSIZE_PTR))
+  CTInfo info = ctype_info_acq(ct);
+  CTSize size = ctype_size_acq(ct);
+  if (!ctype_isptr(info) || (LJ_64 && size != CTSIZE_PTR))
     return NULL;
-  *idp = ctype_rawid(cts, ctype_cid(ct->info));
+  *idp = ctype_rawid(cts, ctype_cid(info));
   ct = ctype_get(cts, *idp);
-  if (ctype_isfunc(ct->info)) {
+  info = ctype_info_acq(ct);
+  if (ctype_isfunc(info)) {
     CType *ctr = ctype_rawchild(cts, ct);
-    CTypeID fid = ct->sib;
-    if (!(ctype_isvoid(ctr->info) || ctype_isenum(ctr->info) ||
-	  ctype_isptr(ctr->info) || (ctype_isnum(ctr->info) && ctr->size <= 8)))
+    CTypeID fid = ctype_sib_acq(ct);
+    CTInfo rinfo = ctype_info_acq(ctr);
+    CTSize rsize = ctype_size_acq(ctr);
+    if (!(ctype_isvoid(rinfo) || ctype_isenum(rinfo) ||
+	  ctype_isptr(rinfo) || (ctype_isnum(rinfo) && rsize <= 8)))
       return NULL;
-    if ((ct->info & CTF_VARARG))
+    if ((info & CTF_VARARG))
       return NULL;
     while (fid) {
       CType *ctf = ctype_get(cts, fid);
-      if (!ctype_isattrib(ctf->info)) {
+      CTInfo finfo = ctype_info_acq(ctf);
+      if (!ctype_isattrib(finfo)) {
 	CType *cta;
-	lj_assertCTS(ctype_isfield(ctf->info), "field expected");
+	CTInfo ainfo;
+	CTSize asize;
+	lj_assertCTS(ctype_isfield(finfo), "field expected");
 	cta = ctype_rawchild(cts, ctf);
-	if (!(ctype_isenum(cta->info) || ctype_isptr(cta->info) ||
-	      (ctype_isnum(cta->info) && cta->size <= 8)) ||
+	ainfo = ctype_info_acq(cta);
+	asize = ctype_size_acq(cta);
+	if (!(ctype_isenum(ainfo) || ctype_isptr(ainfo) ||
+	      (ctype_isnum(ainfo) && asize <= 8)) ||
 	    ++narg >= LUA_MINSTACK-3)
 	  return NULL;
       }
-      fid = ctf->sib;
+      fid = ctype_sib_acq(ctf);
     }
     return ct;
   }
