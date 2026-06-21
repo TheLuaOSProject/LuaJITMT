@@ -44,24 +44,27 @@ static int carith_checkarg(lua_State *L, CTState *cts, CDArith *ca)
       CTypeID cid = ctype_rawid(cts, id);
       CType *ct = ctype_get(cts, cid);
       uint8_t *p = (uint8_t *)cdataptr(cd);
-      if (ctype_isptr(ct->info)) {
-	p = (uint8_t *)cdata_getptr(p, ct->size);
-	if (ctype_isref(ct->info)) {
-	  cid = ctype_rawid(cts, ctype_cid(ct->info));
+      CTInfo info = ctype_info_acq(ct);
+      if (ctype_isptr(info)) {
+	p = (uint8_t *)cdata_getptr(p, ctype_size_acq(ct));
+	if (ctype_isref(info)) {
+	  cid = ctype_rawid(cts, ctype_cid(info));
 	  ct = ctype_get(cts, cid);
+	  info = ctype_info_acq(ct);
 	}
-      } else if (ctype_isfunc(ct->info)) {
+      } else if (ctype_isfunc(info)) {
 	CTypeID id0 = i ? ca->id[0] : 0;
 	p = (uint8_t *)*(void **)p;
 	cid = lj_ctype_intern_l(L, cts, CTINFO(CT_PTR, CTALIGN_PTR|id),
 				CTSIZE_PTR);
 	ct = ctype_get(cts, cid);
+	info = ctype_info_acq(ct);
 	if (i) {  /* C type table may have been reallocated. */
 	  ca->ct[0] = ctype_get(cts, id0);
 	}
       }
-      if (ctype_isenum(ct->info)) {
-	cid = ctype_cid(ct->info);
+      if (ctype_isenum(info)) {
+	cid = ctype_cid(info);
 	ct = ctype_get(cts, cid);
       }
       ca->ct[i] = ct;
@@ -83,11 +86,12 @@ static int carith_checkarg(lua_State *L, CTState *cts, CDArith *ca)
       TValue *o2 = i == 0 ? o+1 : o-1;
       CTypeID cid = ctype_rawid(cts, cdataV(o2)->ctypeid);
       CType *ct = ctype_get(cts, cid);
+      CTInfo info = ctype_info_acq(ct);
       ca->ct[i] = NULL;
       ca->id[i] = 0;
       ca->p[i] = (uint8_t *)strVdata(o);
       ok = 0;
-      if (ctype_isenum(ct->info)) {
+      if (ctype_isenum(info)) {
 	CTSize val;
 	CTypeID ecid;
 	int snap = lj_ctype_enumconst_snapshot(cts, ct, strV(o), &val, &ecid);
@@ -97,9 +101,10 @@ static int carith_checkarg(lua_State *L, CTState *cts, CDArith *ca)
 	  lj_ctype_parse_lock(cts, L);
 	  /* 11.2: enum string readers wait out parser rollback. */
 	  cct = lj_ctype_getfield(cts, ct, strV(o), &ofs);
-	  if (cct && ctype_isconstval(cct->info)) {
-	    ecid = ctype_cid(cct->info);
-	    val = cct->size;
+	  if (cct && ctype_isconstval(ctype_info_acq(cct))) {
+	    CTInfo cinfo = ctype_info_acq(cct);
+	    ecid = ctype_cid(cinfo);
+	    val = ctype_size_acq(cct);
 	    snap = 1;
 	  } else {
 	    snap = 0;
@@ -139,9 +144,11 @@ static int carith_ptr(lua_State *L, CTState *cts, CDArith *ca, MMS mm)
   CTSize sz;
   CTypeID id;
   GCcdata *cd;
-  if (ctype_isptr(ctp->info) || ctype_isrefarray(ctp->info)) {
+  CTInfo pinfo = ctype_info_acq(ctp);
+  CTInfo info1 = ctype_info_acq(ca->ct[1]);
+  if (ctype_isptr(pinfo) || ctype_isrefarray(pinfo)) {
     if ((mm == MM_sub || mm == MM_eq || mm == MM_lt || mm == MM_le) &&
-	(ctype_isptr(ca->ct[1]->info) || ctype_isrefarray(ca->ct[1]->info))) {
+	(ctype_isptr(info1) || ctype_isrefarray(info1))) {
       uint8_t *pp2 = ca->p[1];
       if (mm == MM_eq) {  /* Pointer equality. Incompatible pointers are ok. */
 	setboolV(L->top-1, (pp == pp2));
@@ -151,11 +158,11 @@ static int carith_ptr(lua_State *L, CTState *cts, CDArith *ca, MMS mm)
 	return 0;
       if (mm == MM_sub) {  /* Pointer difference. */
 	intptr_t diff;
-	int ok = lj_ctype_size_snapshot(cts, ctype_cid(ctp->info), &sz);
+	int ok = lj_ctype_size_snapshot(cts, ctype_cid(pinfo), &sz);
 	if (ok < 0) {
 	  lj_ctype_parse_lock(cts, L);
 	  /* 11.2: cdata pointer arithmetic readers wait out parser rollback. */
-	  sz = lj_ctype_size(cts, ctype_cid(ctp->info));  /* Element size. */
+	  sz = lj_ctype_size(cts, ctype_cid(pinfo));  /* Element size. */
 	  lj_ctype_parse_unlock(cts);
 	} else if (ok == 0) {
 	  sz = CTSIZE_INVALID;
@@ -177,16 +184,16 @@ static int carith_ptr(lua_State *L, CTState *cts, CDArith *ca, MMS mm)
 	return 1;
       }
     }
-    if (!((mm == MM_add || mm == MM_sub) && ctype_isnum(ca->ct[1]->info)))
+    if (!((mm == MM_add || mm == MM_sub) && ctype_isnum(info1)))
       return 0;
     lj_cconv_ct_ct_l(L, cts, ctype_get(cts, CTID_INT_PSZ), CTID_INT_PSZ,
 		     ca->ct[1], ca->id[1],
 		     (uint8_t *)&idx, ca->p[1], 0);
     if (mm == MM_sub) idx = (ptrdiff_t)(~(uintptr_t)idx+1u);
-  } else if (mm == MM_add && ctype_isnum(ctp->info) &&
-      (ctype_isptr(ca->ct[1]->info) || ctype_isrefarray(ca->ct[1]->info))) {
+  } else if (mm == MM_add && ctype_isnum(pinfo) &&
+      (ctype_isptr(info1) || ctype_isrefarray(info1))) {
     /* Swap pointer and index. */
-    ctp = ca->ct[1]; pp = ca->p[1];
+    ctp = ca->ct[1]; pp = ca->p[1]; pinfo = info1;
     lj_cconv_ct_ct_l(L, cts, ctype_get(cts, CTID_INT_PSZ), CTID_INT_PSZ,
 		     ca->ct[0], ca->id[0],
 		     (uint8_t *)&idx, ca->p[0], 0);
@@ -194,11 +201,11 @@ static int carith_ptr(lua_State *L, CTState *cts, CDArith *ca, MMS mm)
     return 0;
   }
   {
-    int ok = lj_ctype_size_snapshot(cts, ctype_cid(ctp->info), &sz);
+    int ok = lj_ctype_size_snapshot(cts, ctype_cid(pinfo), &sz);
     if (ok < 0) {
       lj_ctype_parse_lock(cts, L);
       /* 11.2: cdata pointer arithmetic readers wait out parser rollback. */
-      sz = lj_ctype_size(cts, ctype_cid(ctp->info));  /* Element size. */
+      sz = lj_ctype_size(cts, ctype_cid(pinfo));  /* Element size. */
       lj_ctype_parse_unlock(cts);
     } else if (ok == 0) {
       sz = CTSIZE_INVALID;
@@ -208,7 +215,7 @@ static int carith_ptr(lua_State *L, CTState *cts, CDArith *ca, MMS mm)
     return 0;
   pp += idx*(int32_t)sz;  /* Compute pointer + index. */
   id = lj_ctype_intern_l(L, cts,
-			 CTINFO(CT_PTR, CTALIGN_PTR|ctype_cid(ctp->info)),
+			 CTINFO(CT_PTR, CTALIGN_PTR|ctype_cid(pinfo)),
 			 CTSIZE_PTR);
   cd = lj_cdata_new_l(L, cts, id, CTSIZE_PTR);
   *(uint8_t **)cdataptr(cd) = pp;
@@ -220,10 +227,14 @@ static int carith_ptr(lua_State *L, CTState *cts, CDArith *ca, MMS mm)
 /* 64 bit integer arithmetic. */
 static int carith_int64(lua_State *L, CTState *cts, CDArith *ca, MMS mm)
 {
-  if (ctype_isnum(ca->ct[0]->info) && ca->ct[0]->size <= 8 &&
-      ctype_isnum(ca->ct[1]->info) && ca->ct[1]->size <= 8) {
-    CTypeID id = (((ca->ct[0]->info & CTF_UNSIGNED) && ca->ct[0]->size == 8) ||
-		  ((ca->ct[1]->info & CTF_UNSIGNED) && ca->ct[1]->size == 8)) ?
+  CTInfo info0 = ctype_info_acq(ca->ct[0]);
+  CTInfo info1 = ctype_info_acq(ca->ct[1]);
+  CTSize size0 = ctype_size_acq(ca->ct[0]);
+  CTSize size1 = ctype_size_acq(ca->ct[1]);
+  if (ctype_isnum(info0) && size0 <= 8 &&
+      ctype_isnum(info1) && size1 <= 8) {
+    CTypeID id = (((info0 & CTF_UNSIGNED) && size0 == 8) ||
+		  ((info1 & CTF_UNSIGNED) && size1 == 8)) ?
 		 CTID_UINT64 : CTID_INT64;
     CType *ct = ctype_get(cts, id);
     GCcdata *cd;
@@ -291,13 +302,15 @@ static int lj_carith_meta(lua_State *L, CTState *cts, CDArith *ca, MMS mm)
   if (tviscdata(L->base)) {
     CTypeID id = cdataV(L->base)->ctypeid;
     CType *ct = ctype_raw(cts, id);
-    if (ctype_isptr(ct->info)) id = ctype_cid(ct->info);
+    CTInfo info = ctype_info_acq(ct);
+    if (ctype_isptr(info)) id = ctype_cid(info);
     tv = lj_ctype_metatv(cts, &metatv, id, mm);
   }
   if (!tv && L->base+1 < L->top && tviscdata(L->base+1)) {
     CTypeID id = cdataV(L->base+1)->ctypeid;
     CType *ct = ctype_raw(cts, id);
-    if (ctype_isptr(ct->info)) id = ctype_cid(ct->info);
+    CTInfo info = ctype_info_acq(ct);
+    if (ctype_isptr(info)) id = ctype_cid(info);
     tv = lj_ctype_metatv(cts, &metatv, id, mm);
   }
   if (!tv) {
@@ -311,7 +324,7 @@ static int lj_carith_meta(lua_State *L, CTState *cts, CDArith *ca, MMS mm)
     }
     for (i = 0; i < 2; i++) {
       if (ca->ct[i] && tviscdata(L->base+i)) {
-	if (ctype_isenum(ca->ct[i]->info)) isenum = i;
+	if (ctype_isenum(ctype_info_acq(ca->ct[i]))) isenum = i;
 	repr[i] = strdata(lj_ctype_repr(L, ca->id[i], NULL));
       } else {
 	if (tvisstr(&L->base[i])) isstr = i;
@@ -391,18 +404,23 @@ uint64_t lj_carith_check64(lua_State *L, int narg, CTypeID *id)
     CTypeID sid = cdataV(o)->ctypeid;
     CType *s = ctype_get(cts, sid);
     uint64_t x;
-    if (ctype_isref(s->info)) {
+    CTInfo info = ctype_info_acq(s);
+    CTSize size;
+    if (ctype_isref(info)) {
       sp = *(void **)sp;
-      sid = ctype_cid(s->info);
+      sid = ctype_cid(info);
     }
     sid = ctype_rawid(cts, sid);
     s = ctype_get(cts, sid);
-    if (ctype_isenum(s->info)) {
-      sid = ctype_cid(s->info);
+    info = ctype_info_acq(s);
+    if (ctype_isenum(info)) {
+      sid = ctype_cid(info);
       s = ctype_get(cts, sid);
+      info = ctype_info_acq(s);
     }
-    if ((s->info & (CTMASK_NUM|CTF_BOOL|CTF_FP|CTF_UNSIGNED)) ==
-	CTINFO(CT_NUM, CTF_UNSIGNED) && s->size == 8)
+    size = ctype_size_acq(s);
+    if ((info & (CTMASK_NUM|CTF_BOOL|CTF_FP|CTF_UNSIGNED)) ==
+	CTINFO(CT_NUM, CTF_UNSIGNED) && size == 8)
       *id = CTID_UINT64;  /* Use uint64_t, since it has the highest rank. */
     else if (!*id)
       *id = CTID_INT64;  /* Use int64_t, unless already set. */
