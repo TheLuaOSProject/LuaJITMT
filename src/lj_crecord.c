@@ -632,6 +632,7 @@ static TRef crec_tv_ct(jit_State *J, CType *s, CTypeID sid, TRef sp)
 static TRef crec_ct_tv(jit_State *J, CType *d, TRef dp, TRef sp, cTValue *sval)
 {
   CTState *cts = ctype_ctsG(J2G(J));
+  CTInfo dinfo = ctype_info_acq(d);
   CTypeID sid = CTID_P_VOID;
   void *svisnz = 0;
   CType *s;
@@ -658,7 +659,7 @@ static TRef crec_ct_tv(jit_State *J, CType *d, TRef dp, TRef sp, cTValue *sval)
       sp = emitir(IRT(IR_ADD, IRT_PTR), sp, lj_ir_kintp(J, sizeof(GCudata)));
     }
   } else if (tref_isstr(sp)) {
-    if (ctype_isenum(d->info)) {  /* Match string against enum constant. */
+    if (ctype_isenum(dinfo)) {  /* Match string against enum constant. */
       GCstr *str = strV(sval);
       CTSize val;
       CTypeID ecid;
@@ -669,10 +670,15 @@ static TRef crec_ct_tv(jit_State *J, CType *d, TRef dp, TRef sp, cTValue *sval)
 	lj_ctype_parse_lock(cts, J->L);
 	/* 11.2: recorder enum string reader waits out parser rollback. */
 	cct = lj_ctype_getfield(cts, d, str, &ofs);
-	if (cct && ctype_isconstval(cct->info)) {
-	  val = cct->size;
-	  ecid = ctype_cid(cct->info);
-	  ok = 1;
+	if (cct) {
+	  CTInfo cctinfo = ctype_info_acq(cct);
+	  if (ctype_isconstval(cctinfo)) {
+	    val = ctype_size_acq(cct);
+	    ecid = ctype_cid(cctinfo);
+	    ok = 1;
+	  } else {
+	    ok = 0;
+	  }
 	} else {
 	  ok = 0;
 	}
@@ -682,12 +688,12 @@ static TRef crec_ct_tv(jit_State *J, CType *d, TRef dp, TRef sp, cTValue *sval)
       emitir(IRTG(IR_EQ, IRT_STR), sp, lj_ir_kstr(J, str));
       if (ok > 0) {
 	sid = ecid;
-	lj_assertJ(ctype_get(cts, sid)->size == 4,
+	lj_assertJ(ctype_size_acq(ctype_get(cts, sid)) == 4,
 		   "only 32 bit const supported");  /* NYI */
 	svisnz = (void *)(intptr_t)(val != 0);
 	sp = lj_ir_kint(J, (int32_t)val);
       }  /* else: interpreter will throw. */
-    } else if (ctype_isrefarray(d->info)) {  /* Copy string to array. */
+    } else if (ctype_isrefarray(dinfo)) {  /* Copy string to array. */
       lj_trace_err(J, LJ_TRERR_BADTYPE);  /* NYI */
     } else {  /* Otherwise pass the string data as a const char[]. */
       /* Don't use STRREF. It folds with SNEW, which loses the trailing NUL. */
@@ -700,23 +706,30 @@ static TRef crec_ct_tv(jit_State *J, CType *d, TRef dp, TRef sp, cTValue *sval)
 #endif
   } else {  /* NYI: tref_istab(sp). */
     IRType t;
+    CTInfo sinfo;
     sid = argv2cdata(J, sp, sval)->ctypeid;
     s = ctype_raw(cts, sid);
+    sinfo = ctype_info_acq(s);
     svisnz = cdataptr(cdataV(sval));
-    if (ctype_isfunc(s->info)) {
+    if (ctype_isfunc(sinfo)) {
       sid = lj_ctype_intern_l(J->L, cts, CTINFO(CT_PTR, CTALIGN_PTR|sid),
 			      CTSIZE_PTR);
       s = ctype_get(cts, sid);
+      sinfo = ctype_info_acq(s);
       t = IRT_PTR;
     } else {
       t = crec_ct2irt(cts, s);
     }
-    if (ctype_isptr(s->info)) {
+    if (ctype_isptr(sinfo)) {
       sp = emitir(IRT(IR_FLOAD, t), sp, IRFL_CDATA_PTR);
-      if (ctype_isref(s->info)) {
+      if (ctype_isref(sinfo)) {
 	svisnz = *(void **)svisnz;
 	s = ctype_rawchild(cts, s);
-	if (ctype_isenum(s->info)) s = ctype_child(cts, s);
+	sinfo = ctype_info_acq(s);
+	if (ctype_isenum(sinfo)) {
+	  s = ctype_child(cts, s);
+	  sinfo = ctype_info_acq(s);
+	}
 	t = crec_ct2irt(cts, s);
       } else {
 	goto doconv;
@@ -726,19 +739,22 @@ static TRef crec_ct_tv(jit_State *J, CType *d, TRef dp, TRef sp, cTValue *sval)
       lj_needsplit(J);
       goto doconv;
     } else if (t == IRT_INT || t == IRT_U32) {
-      if (ctype_isenum(s->info)) s = ctype_child(cts, s);
+      if (ctype_isenum(sinfo)) {
+	s = ctype_child(cts, s);
+	sinfo = ctype_info_acq(s);
+      }
       sp = emitir(IRT(IR_FLOAD, t), sp, IRFL_CDATA_INT);
       goto doconv;
     } else {
       sp = emitir(IRT(IR_ADD, IRT_PTR), sp, lj_ir_kintp(J, sizeof(GCcdata)));
     }
-    if (ctype_isnum(s->info) && t != IRT_CDATA)
+    if (ctype_isnum(sinfo) && t != IRT_CDATA)
       sp = emitir(IRT(IR_XLOAD, t), sp, 0);  /* Load number value. */
     goto doconv;
   }
   s = ctype_get(cts, sid);
 doconv:
-  if (ctype_isenum(d->info)) d = ctype_child(cts, d);
+  if (ctype_isenum(dinfo)) d = ctype_child(cts, d);
   return crec_ct_ct(J, d, s, dp, sp, svisnz);
 }
 
