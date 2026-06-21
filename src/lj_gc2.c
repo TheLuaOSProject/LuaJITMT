@@ -147,11 +147,11 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.grey_drained, 0);
   for (i = 0; i < LJ_GC2_WORKER_MAX; i++)
     g->gc2.worker_thread[i] = NULL;
-  la_store32_rlx(&g->gc2.n_workers, 0);
-  la_store32_rlx(&g->gc2.worker_stop, 0);
-  la_store32_rlx(&g->gc2.worker_wake, 0);
-  la_store32_rlx(&g->gc2.worker_started, 0);
-  la_store32_rlx(&g->gc2.worker_exited, 0);
+  gc2_n_workers_store_rlx(g, 0);
+  gc2_worker_stop_store_rlx(g, 0);
+  gc2_worker_wake_store_rlx(g, 0);
+  gc2_worker_started_store_rlx(g, 0);
+  gc2_worker_exited_store_rlx(g, 0);
   gc2_worker_active_store_rlx(g, 0);
   la_store64_rlx(&g->gc2.worker_runs, 0);
   la_store64_rlx(&g->gc2.worker_grey_drained, 0);
@@ -327,12 +327,12 @@ void lj_gc2_worker_wake(global_State *g)
   uint32_t n;
   if (!g)
     return;
-  n = la_load32_acq(&g->gc2.n_workers);
+  n = gc2_n_workers_acq(g);
   if (n == 0)
     return;
   la_add64_rlx(&g->gc2.worker_wakes, 1);
-  (void)la_add32_rlx(&g->gc2.worker_wake, 1);
-  la_futex_wake(&g->gc2.worker_wake, (int)n);
+  (void)gc2_worker_wake_add(g, 1);
+  gc2_worker_wake_futex_wake(g, (int)n);
 }
 
 static int gc2_worker_start_count(global_State *g, uint32_t n)
@@ -345,16 +345,16 @@ static int gc2_worker_start_count(global_State *g, uint32_t n)
     return 1;
   if (n > LJ_GC2_WORKER_MAX)
     n = LJ_GC2_WORKER_MAX;
-  if (la_load32_acq(&g->gc2.n_workers) != 0)
+  if (gc2_n_workers_acq(g) != 0)
     return 1;
   mainobj = gcref_acq(g->mainthref);
   L = mainobj ? &mainobj->th : NULL;
   if (!L)
     return 0;
-  la_store32_rel(&g->gc2.worker_stop, 0);
-  la_store32_rel(&g->gc2.worker_started, 0);
-  la_store32_rel(&g->gc2.worker_exited, 0);
-  la_store32_rel(&g->gc2.n_workers, n);  /* 05 section 5.6.3 parked pool. */
+  gc2_worker_stop_rel(g, 0);
+  gc2_worker_started_rel(g, 0);
+  gc2_worker_exited_rel(g, 0);
+  gc2_n_workers_rel(g, n);  /* 05 section 5.6.3 parked pool. */
   for (i = 0; i < n; i++) {
     LJThr *thr = (LJThr *)lj_mem_new(L, sizeof(LJThr));
     thr->tid = 0;
@@ -368,12 +368,12 @@ static int gc2_worker_start_count(global_State *g, uint32_t n)
     }
   }
   for (wait = 0; wait < 1000; wait++) {
-    uint32_t started = la_load32_acq(&g->gc2.worker_started);
+    uint32_t started = gc2_worker_started_acq(g);
     if (started >= n)
       return 1;
-    la_futex_wait(&g->gc2.worker_started, started, 1000000);
+    gc2_worker_started_futex_wait(g, started, 1000000);
   }
-  if (la_load32_acq(&g->gc2.worker_started) >= n)
+  if (gc2_worker_started_acq(g) >= n)
     return 1;
   lj_gc2_worker_stop(g);
   return 0;
@@ -386,7 +386,7 @@ int lj_gc2_workers_set(global_State *g, uint32_t n)
     return 0;
   if (n > LJ_GC2_WORKER_MAX)
     n = LJ_GC2_WORKER_MAX;
-  old = la_load32_acq(&g->gc2.n_workers);
+  old = gc2_n_workers_acq(g);
   if (old == n)
     return 1;
   if (old != 0)
@@ -400,7 +400,7 @@ int lj_gc2_worker_start(global_State *g)
 {
   if (!g)
     return 0;
-  if (la_load32_acq(&g->gc2.n_workers) != 0)
+  if (gc2_n_workers_acq(g) != 0)
     return 1;
   return gc2_worker_start_count(g, 1);
 }
@@ -413,10 +413,10 @@ void lj_gc2_worker_stop(global_State *g)
   for (i = 0; i < LJ_GC2_WORKER_MAX; i++)
     any |= g->gc2.worker_thread[i] != NULL;
   if (!any) {
-    la_store32_rel(&g->gc2.n_workers, 0);
+    gc2_n_workers_rel(g, 0);
     return;
   }
-  la_store32_rel(&g->gc2.worker_stop, 1);
+  gc2_worker_stop_rel(g, 1);
   lj_gc2_worker_wake(g);
   for (i = 0; i < LJ_GC2_WORKER_MAX; i++) {
     LJThr *thr = (LJThr *)g->gc2.worker_thread[i];
@@ -426,19 +426,19 @@ void lj_gc2_worker_stop(global_State *g)
     g->gc2.worker_thread[i] = NULL;
     lj_mem_free(g, thr, sizeof(LJThr));
   }
-  la_store32_rel(&g->gc2.n_workers, 0);
+  gc2_n_workers_rel(g, 0);
 }
 
 static void *gc2_worker_main(void *arg)
 {
   global_State *g = (global_State *)arg;
-  (void)la_add32_rlx(&g->gc2.worker_started, 1);
-  la_futex_wake(&g->gc2.worker_started, LJ_GC2_WORKER_MAX);
-  while (la_load32_acq(&g->gc2.worker_stop) == 0) {
+  (void)gc2_worker_started_add(g, 1);
+  gc2_worker_started_futex_wake(g, LJ_GC2_WORKER_MAX);
+  while (gc2_worker_stop_acq(g) == 0) {
     uint32_t total = 0;
     for (;;) {
       uint32_t step;
-      if (la_load32_acq(&g->gc2.worker_stop) != 0)
+      if (gc2_worker_stop_acq(g) != 0)
 	break;
       step = lj_gc2_worker_drain(g, LJ_GC2_WORKER_DRAIN_BATCH);
       if (step == 0)
@@ -447,18 +447,18 @@ static void *gc2_worker_main(void *arg)
     }
     if (total)
       la_add64_rlx(&g->gc2.worker_async_progress, total);
-    if (la_load32_acq(&g->gc2.worker_stop) != 0)
+    if (gc2_worker_stop_acq(g) != 0)
       break;
     la_add64_rlx(&g->gc2.worker_parks, 1);
     {
-      uint32_t wake = la_load32_acq(&g->gc2.worker_wake);
-      if (la_load32_acq(&g->gc2.worker_stop) != 0)
+      uint32_t wake = gc2_worker_wake_acq(g);
+      if (gc2_worker_stop_acq(g) != 0)
 	break;
-      la_futex_wait(&g->gc2.worker_wake, wake, -1);
+      gc2_worker_wake_futex_wait(g, wake, -1);
     }
   }
-  (void)la_add32_rlx(&g->gc2.worker_exited, 1);
-  la_futex_wake(&g->gc2.worker_exited, LJ_GC2_WORKER_MAX);
+  (void)gc2_worker_exited_add(g, 1);
+  gc2_worker_exited_futex_wake(g, LJ_GC2_WORKER_MAX);
   return NULL;
 }
 

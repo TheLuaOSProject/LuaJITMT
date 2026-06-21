@@ -753,7 +753,7 @@ LJLIB_CF(collectgarbage)
     return 1;
   } else if (opt == LUA_GCWORKERS) {
     global_State *g = G(L);
-    uint32_t old = la_load32_acq(&g->gc2.n_workers);
+    uint32_t old = gc2_n_workers_acq(g);
     if (hasdata) {
       if (data <= 0) {
 	lj_gc2_worker_stop(g);

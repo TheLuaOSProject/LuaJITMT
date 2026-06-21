@@ -1770,6 +1770,122 @@ static LJ_AINLINE uint32_t gc2_cycle_leader_xchg_acqrel(global_State *g,
   return la_xchg32_acqrel(&g->gc2.cycle_leader, leader);
 }
 
+static LJ_AINLINE uint32_t gc2_n_workers_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.n_workers);
+}
+
+static LJ_AINLINE void gc2_n_workers_store_rlx(global_State *g, uint32_t n)
+{
+  la_store32_rlx(&g->gc2.n_workers, n);
+}
+
+static LJ_AINLINE void gc2_n_workers_rel(global_State *g, uint32_t n)
+{
+  la_store32_rel(&g->gc2.n_workers, n);
+}
+
+static LJ_AINLINE uint32_t gc2_worker_stop_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.worker_stop);
+}
+
+static LJ_AINLINE void gc2_worker_stop_store_rlx(global_State *g,
+						 uint32_t stop)
+{
+  la_store32_rlx(&g->gc2.worker_stop, stop);
+}
+
+static LJ_AINLINE void gc2_worker_stop_rel(global_State *g, uint32_t stop)
+{
+  la_store32_rel(&g->gc2.worker_stop, stop);
+}
+
+static LJ_AINLINE uint32_t gc2_worker_wake_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.worker_wake);
+}
+
+static LJ_AINLINE void gc2_worker_wake_store_rlx(global_State *g,
+						 uint32_t wake)
+{
+  la_store32_rlx(&g->gc2.worker_wake, wake);
+}
+
+static LJ_AINLINE uint32_t gc2_worker_wake_add(global_State *g,
+					       uint32_t n)
+{
+  return la_add32_rlx(&g->gc2.worker_wake, n);
+}
+
+static LJ_AINLINE void gc2_worker_wake_futex_wake(global_State *g, int n)
+{
+  la_futex_wake(&g->gc2.worker_wake, n);
+}
+
+static LJ_AINLINE void gc2_worker_wake_futex_wait(global_State *g,
+						  uint32_t wake,
+						  int timeout_ns)
+{
+  la_futex_wait(&g->gc2.worker_wake, wake, timeout_ns);
+}
+
+static LJ_AINLINE uint32_t gc2_worker_started_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.worker_started);
+}
+
+static LJ_AINLINE void gc2_worker_started_store_rlx(global_State *g,
+						    uint32_t started)
+{
+  la_store32_rlx(&g->gc2.worker_started, started);
+}
+
+static LJ_AINLINE void gc2_worker_started_rel(global_State *g,
+					      uint32_t started)
+{
+  la_store32_rel(&g->gc2.worker_started, started);
+}
+
+static LJ_AINLINE uint32_t gc2_worker_started_add(global_State *g,
+						  uint32_t n)
+{
+  return la_add32_rlx(&g->gc2.worker_started, n);
+}
+
+static LJ_AINLINE void gc2_worker_started_futex_wake(global_State *g, int n)
+{
+  la_futex_wake(&g->gc2.worker_started, n);
+}
+
+static LJ_AINLINE void gc2_worker_started_futex_wait(global_State *g,
+						     uint32_t started,
+						     int timeout_ns)
+{
+  la_futex_wait(&g->gc2.worker_started, started, timeout_ns);
+}
+
+static LJ_AINLINE void gc2_worker_exited_store_rlx(global_State *g,
+						   uint32_t exited)
+{
+  la_store32_rlx(&g->gc2.worker_exited, exited);
+}
+
+static LJ_AINLINE void gc2_worker_exited_rel(global_State *g, uint32_t exited)
+{
+  la_store32_rel(&g->gc2.worker_exited, exited);
+}
+
+static LJ_AINLINE uint32_t gc2_worker_exited_add(global_State *g, uint32_t n)
+{
+  return la_add32_rlx(&g->gc2.worker_exited, n);
+}
+
+static LJ_AINLINE void gc2_worker_exited_futex_wake(global_State *g, int n)
+{
+  la_futex_wake(&g->gc2.worker_exited, n);
+}
+
 static LJ_AINLINE GCobj *gc2_finalizer_mpsc_acq(global_State *g)
 {
   return (GCobj *)la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc);
