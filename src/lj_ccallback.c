@@ -757,6 +757,7 @@ static void callback_conv_args(CTState *cts, lua_State *L, CCallbackRuntime *cb)
   CTypeID1 *cbid;
   int gcsteps = 0;
   CType *ct;
+  CTInfo ctinfo = 0;
   GCfunc *fn;
   int fntp;
   MSize ngpr = 0, nsp = 0, maxgpr = CCALL_NARG_GPR;
@@ -772,7 +773,8 @@ static void callback_conv_args(CTState *cts, lua_State *L, CCallbackRuntime *cb)
       (id = callback_cbid_load(cbid, slot)) != 0) {
     TValue tv;
     ct = ctype_get(cts, id);
-    rid = ctype_cid(ct->info);  /* Return type. x86: +(spadj<<16). */
+    ctinfo = ctype_info_acq(ct);
+    rid = ctype_cid(ctinfo);  /* Return type. x86: +(spadj<<16). */
     callback_func_load(cts, slot, &tv);
     if (tvisfunc(&tv)) {
       fn = funcV(&tv);
@@ -811,28 +813,33 @@ static void callback_conv_args(CTState *cts, lua_State *L, CCallbackRuntime *cb)
 
 #if LJ_TARGET_X86
   /* x86 has several different calling conventions. */
-  switch (ctype_cconv(ct->info)) {
+  switch (ctype_cconv(ctinfo)) {
   case CTCC_FASTCALL: maxgpr = 2; break;
   case CTCC_THISCALL: maxgpr = 1; break;
   default: maxgpr = 0; break;
   }
 #endif
 
-  fid = ct->sib;
+  fid = ctype_sib_acq(ct);
   while (fid) {
     CType *ctf = ctype_get(cts, fid);
-    if (!ctype_isattrib(ctf->info)) {
+    CTInfo finfo = ctype_info_acq(ctf);
+    if (!ctype_isattrib(finfo)) {
       CType *cta;
       void *sp;
       CTSize sz;
+      CTSize asize;
+      CTInfo ainfo;
       int isfp;
       MSize n;
       CTypeID aid;
-      lj_assertCTS(ctype_isfield(ctf->info), "field expected");
-      aid = ctype_rawid(cts, ctype_cid(ctf->info));
+      lj_assertCTS(ctype_isfield(finfo), "field expected");
+      aid = ctype_rawid(cts, ctype_cid(finfo));
       cta = ctype_get(cts, aid);
-      isfp = ctype_isfp(cta->info);
-      sz = (cta->size + CTSIZE_PTR-1) & ~(CTSIZE_PTR-1);
+      ainfo = ctype_info_acq(cta);
+      asize = ctype_size_acq(cta);
+      isfp = ctype_isfp(ainfo);
+      sz = (asize + CTSIZE_PTR-1) & ~(CTSIZE_PTR-1);
       n = sz / CTSIZE_PTR;  /* Number of GPRs or stack slots needed. */
 
       CALLBACK_HANDLE_REGARG  /* Handle register arguments. */
@@ -844,20 +851,20 @@ static void callback_conv_args(CTState *cts, lua_State *L, CCallbackRuntime *cb)
       nsp += n;
 
     done:
-      if (LJ_BE && cta->size < CTSIZE_PTR
+      if (LJ_BE && asize < CTSIZE_PTR
 #if LJ_TARGET_MIPS64
 	  && !(isfp && nsp)
 #endif
 	 )
-	sp = (void *)((uint8_t *)sp + CTSIZE_PTR-cta->size);
+	sp = (void *)((uint8_t *)sp + CTSIZE_PTR-asize);
       gcsteps += lj_cconv_tv_ct_l(L, cts, cta, aid, o++, sp);
     }
-    fid = ctf->sib;
+    fid = ctype_sib_acq(ctf);
   }
   L->top = o;
 #if LJ_TARGET_X86
   /* Store stack adjustment for returns from non-cdecl callbacks. */
-  if (ctype_cconv(ct->info) != CTCC_CDECL) {
+  if (ctype_cconv(ctinfo) != CTCC_CDECL) {
 #if LJ_FR2
     (L->base-3)->u64 |= (nsp << (16+2));
 #else
@@ -875,6 +882,8 @@ static void callback_conv_result(CTState *cts, lua_State *L, TValue *o,
 {
   CTypeID rid;
   CType *ctr;
+  CTInfo rinfo;
+  CTSize rsize;
 #if LJ_FR2
   rid = ctype_rawid(cts, (uint16_t)(L->base-3)->u64);
 #else
@@ -884,14 +893,16 @@ static void callback_conv_result(CTState *cts, lua_State *L, TValue *o,
 #if LJ_TARGET_X86
   cb->gpr[2] = 0;
 #endif
-  if (!ctype_isvoid(ctr->info)) {
+  rinfo = ctype_info_acq(ctr);
+  rsize = ctype_size_acq(ctr);
+  if (!ctype_isvoid(rinfo)) {
     uint8_t *dp = (uint8_t *)&cb->gpr[0];
 #if CCALL_NUM_FPR
-    if (ctype_isfp(ctr->info))
+    if (ctype_isfp(rinfo))
       dp = (uint8_t *)&cb->fpr[0];
 #endif
 #if LJ_TARGET_ARM64 && LJ_BE
-    if (ctype_isfp(ctr->info) && ctr->size == sizeof(float))
+    if (ctype_isfp(rinfo) && rsize == sizeof(float))
       dp = (uint8_t *)&cb->fpr[0].f[1];
 #endif
     lj_cconv_ct_tv_l(L, cts, ctr, rid, dp, o, 0);
@@ -899,23 +910,23 @@ static void callback_conv_result(CTState *cts, lua_State *L, TValue *o,
     CALLBACK_HANDLE_RET
 #endif
     /* Extend returned integers to (at least) 32 bits. */
-    if (ctype_isinteger_or_bool(ctr->info) && ctr->size < 4) {
-      if (ctr->info & CTF_UNSIGNED)
-	*(uint32_t *)dp = ctr->size == 1 ? (uint32_t)*(uint8_t *)dp :
+    if (ctype_isinteger_or_bool(rinfo) && rsize < 4) {
+      if (rinfo & CTF_UNSIGNED)
+	*(uint32_t *)dp = rsize == 1 ? (uint32_t)*(uint8_t *)dp :
 					   (uint32_t)*(uint16_t *)dp;
       else
-	*(int32_t *)dp = ctr->size == 1 ? (int32_t)*(int8_t *)dp :
+	*(int32_t *)dp = rsize == 1 ? (int32_t)*(int8_t *)dp :
 					  (int32_t)*(int16_t *)dp;
     }
 #if LJ_TARGET_MIPS64 || (LJ_TARGET_ARM64 && LJ_BE)
     /* Always sign-extend results to 64 bits. Even a soft-fp 'float'. */
-    if (ctr->size <= 4 &&
-	(LJ_ABI_SOFTFP || ctype_isinteger_or_bool(ctr->info)))
+    if (rsize <= 4 &&
+	(LJ_ABI_SOFTFP || ctype_isinteger_or_bool(rinfo)))
       *(int64_t *)dp = (int64_t)*(int32_t *)dp;
 #endif
 #if LJ_TARGET_X86
-    if (ctype_isfp(ctr->info))
-      cb->gpr[2] = ctr->size == sizeof(float) ? 1 : 2;
+    if (ctype_isfp(rinfo))
+      cb->gpr[2] = rsize == sizeof(float) ? 1 : 2;
 #endif
   }
 }
