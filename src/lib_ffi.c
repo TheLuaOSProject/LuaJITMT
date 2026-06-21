@@ -1151,12 +1151,14 @@ static int ffi_layout_rawref(FFILayoutSnap *ls, CTypeID id, CType *out)
 {
   int ok;
   for (;;) {
+    CTInfo info;
     ok = ffi_layout_get(ls, id, out);
     if (ok <= 0)
       return ok;
-    if (!(ctype_isattrib(out->info) || ctype_isref(out->info)))
+    info = ctype_info_acq(out);
+    if (!(ctype_isattrib(info) || ctype_isref(info)))
       return 1;
-    id = ctype_cid(out->info);
+    id = ctype_cid(info);
   }
 }
 
@@ -1165,14 +1167,16 @@ static int ffi_layout_rawid(FFILayoutSnap *ls, CTypeID id, CTypeID *ridp,
 {
   int ok;
   for (;;) {
+    CTInfo info;
     ok = ffi_layout_get(ls, id, out);
     if (ok <= 0)
       return ok;
-    if (!ctype_isattrib(out->info)) {
+    info = ctype_info_acq(out);
+    if (!ctype_isattrib(info)) {
       *ridp = id;
       return 1;
     }
-    id = ctype_cid(out->info);
+    id = ctype_cid(info);
   }
 }
 
@@ -1180,12 +1184,14 @@ static int ffi_layout_raw(FFILayoutSnap *ls, CTypeID id, CType *out)
 {
   int ok;
   for (;;) {
+    CTInfo info;
     ok = ffi_layout_get(ls, id, out);
     if (ok <= 0)
       return ok;
-    if (!ctype_isattrib(out->info))
+    info = ctype_info_acq(out);
+    if (!ctype_isattrib(info))
       return 1;
-    id = ctype_cid(out->info);
+    id = ctype_cid(info);
   }
 }
 
