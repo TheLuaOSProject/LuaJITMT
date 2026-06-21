@@ -1291,7 +1291,7 @@ static TRef crec_call_args(jit_State *J, RecordFFData *rd,
 {
   TRef args[CCI_NARGS_MAX];
   CTypeID fid;
-  CTInfo info = ct->info;  /* lj_ccall_ctid_vararg may invalidate ct pointer. */
+  CTInfo info = ctype_info_acq(ct);  /* lj_ccall_ctid_vararg may invalidate ct pointer. */
   MSize i, n;
   TRef tr, *base;
   cTValue *o;
@@ -1309,25 +1309,29 @@ static TRef crec_call_args(jit_State *J, RecordFFData *rd,
 #endif
 
   /* Skip initial attributes. */
-  fid = ct->sib;
+  fid = ctype_sib_acq(ct);
   while (fid) {
     CType *ctf = ctype_get(cts, fid);
-    if (!ctype_isattrib(ctf->info)) break;
-    fid = ctf->sib;
+    CTInfo ctfinfo = ctype_info_acq(ctf);
+    if (!ctype_isattrib(ctfinfo)) break;
+    fid = ctype_sib_acq(ctf);
   }
   args[0] = TREF_NIL;
   for (n = 0, base = J->base+1, o = rd->argv+1; *base; n++, base++, o++) {
     CTypeID did;
     CType *d;
+    CTInfo dinfo;
+    CTSize dsize;
 
     if (n >= CCI_NARGS_MAX)
       lj_trace_err(J, LJ_TRERR_NYICALL);
 
     if (fid) {  /* Get argument type from field. */
       CType *ctf = ctype_get(cts, fid);
-      fid = ctf->sib;
-      lj_assertJ(ctype_isfield(ctf->info), "field expected");
-      did = ctype_cid(ctf->info);
+      CTInfo ctfinfo = ctype_info_acq(ctf);
+      fid = ctype_sib_acq(ctf);
+      lj_assertJ(ctype_isfield(ctfinfo), "field expected");
+      did = ctype_cid(ctfinfo);
     } else {
       if (!(info & CTF_VARARG))
 	lj_trace_err(J, LJ_TRERR_NYICALL);  /* Too many arguments. */
@@ -1342,33 +1346,35 @@ static TRef crec_call_args(jit_State *J, RecordFFData *rd,
       did = lj_ccall_ctid_vararg(J->L, cts, o);  /* Infer vararg type. */
     }
     d = ctype_raw(cts, did);
-    if (!(ctype_isnum(d->info) || ctype_isptr(d->info) ||
-	  ctype_isenum(d->info)))
+    dinfo = ctype_info_acq(d);
+    dsize = ctype_size_acq(d);
+    if (!(ctype_isnum(dinfo) || ctype_isptr(dinfo) ||
+	  ctype_isenum(dinfo)))
       lj_trace_err(J, LJ_TRERR_NYICALL);
     tr = crec_ct_tv(J, d, 0, *base, o);
-    if (ctype_isinteger_or_bool(d->info)) {
+    if (ctype_isinteger_or_bool(dinfo)) {
 #if LJ_TARGET_ARM64 && LJ_TARGET_OSX
       if (!ngpr) {
 	/* Fixed args passed on the stack use their unpromoted size. */
-	if (d->size != lj_ir_type_size[tref_type(tr)]) {
-	  lj_assertJ(d->size == 1 || d->size==2, "unexpected size %d", d->size);
-	  tr = emitconv(tr, d->size==1 ? IRT_U8 : IRT_U16, tref_type(tr), 0);
+	if (dsize != lj_ir_type_size[tref_type(tr)]) {
+	  lj_assertJ(dsize == 1 || dsize==2, "unexpected size %d", dsize);
+	  tr = emitconv(tr, dsize==1 ? IRT_U8 : IRT_U16, tref_type(tr), 0);
 	}
       } else
 #endif
-      if (d->size < 4) {
-	if ((d->info & CTF_UNSIGNED))
-	  tr = emitconv(tr, IRT_INT, d->size==1 ? IRT_U8 : IRT_U16, 0);
+      if (dsize < 4) {
+	if ((dinfo & CTF_UNSIGNED))
+	  tr = emitconv(tr, IRT_INT, dsize==1 ? IRT_U8 : IRT_U16, 0);
 	else
-	  tr = emitconv(tr, IRT_INT, d->size==1 ? IRT_I8 : IRT_I16,IRCONV_SEXT);
+	  tr = emitconv(tr, IRT_INT, dsize==1 ? IRT_I8 : IRT_I16,IRCONV_SEXT);
       }
-    } else if (LJ_SOFTFP32 && ctype_isfp(d->info) && d->size > 4) {
+    } else if (LJ_SOFTFP32 && ctype_isfp(dinfo) && dsize > 4) {
       lj_needsplit(J);
     }
 #if LJ_TARGET_X86
     /* 64 bit args must not end up in registers for fastcall/thiscall. */
 #if LJ_ABI_WIN
-    if (!ctype_isfp(d->info)) {
+    if (!ctype_isfp(dinfo)) {
       /* Sigh, the Windows/x86 ABI allows reordering across 64 bit args. */
       if (tref_typerange(tr, IRT_I64, IRT_U64)) {
 	if (ngpr) {
@@ -1384,7 +1390,7 @@ static TRef crec_call_args(jit_State *J, RecordFFData *rd,
       }
     }
 #else
-    if (!ctype_isfp(d->info) && ngpr) {
+    if (!ctype_isfp(dinfo) && ngpr) {
       if (tref_typerange(tr, IRT_I64, IRT_U64)) {
 	/* No reordering for other x86 ABIs. Simply add alignment args. */
 	do { args[n++] = TREF_NIL; } while (--ngpr);
@@ -1394,7 +1400,7 @@ static TRef crec_call_args(jit_State *J, RecordFFData *rd,
     }
 #endif
 #elif LJ_TARGET_ARM64 && LJ_TARGET_OSX
-    if (!ctype_isfp(d->info) && ngpr) {
+    if (!ctype_isfp(dinfo) && ngpr) {
       ngpr--;
     }
 #endif
