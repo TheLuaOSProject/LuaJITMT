@@ -217,14 +217,14 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.finreg_cdata_pweak_claimed, 0);
   la_store64_rlx(&g->gc2.finreg_cdata_preclaim_overflow, 0);
   la_store64_rlx(&g->gc2.finreg_cdata_preclaim_dispatched, 0);
-  la_store64_rlx(&g->gc2.finreg_cdata_order_seen, 0);
-  la_store64_rlx(&g->gc2.finreg_cdata_order_claimed, 0);
-  la_store64_rlx(&g->gc2.finreg_cdata_order_unlinked, 0);
-  la_store64_rlx(&g->gc2.finreg_cdata_order_queued, 0);
-  la_store64_rlx(&g->gc2.finreg_cdata_order_retired, 0);
-  la_store64_rlx(&g->gc2.finreg_cdata_order_tombstones, 0);
-  la_store64_rlx(&g->gc2.finreg_cdata_order_fallbacks, 0);
-  la_store64_rlx(&g->gc2.finreg_cdata_pending_order_hits, 0);
+  gc2_finreg_cdata_order_seen_store_rlx(g, 0);
+  gc2_finreg_cdata_order_claimed_store_rlx(g, 0);
+  gc2_finreg_cdata_order_unlinked_store_rlx(g, 0);
+  gc2_finreg_cdata_order_queued_store_rlx(g, 0);
+  gc2_finreg_cdata_order_retired_store_rlx(g, 0);
+  gc2_finreg_cdata_order_tombstones_store_rlx(g, 0);
+  gc2_finreg_cdata_order_fallbacks_store_rlx(g, 0);
+  gc2_finreg_cdata_pending_order_hits_store_rlx(g, 0);
 #if defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
   g->gc2.finreg_cdata_preclaim_test_fail = 0;
   la_store32_rlx(&g->gc2.finreg_cdata_preclaim_publish_pause, 0);

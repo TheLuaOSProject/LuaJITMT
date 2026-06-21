@@ -1787,9 +1787,9 @@ static size_t gc_queue_cdata_finalizers_pweak_ordered(lua_State *L,
       ord = next;
       continue;
     }
-    la_add64_rlx(&g->gc2.finreg_cdata_order_seen, 1);
+    gc2_finreg_cdata_order_seen_add(g, 1);
     if (!t || !slot || !fin_gen_tab_enabled_acq(t)) {
-      la_add64_rlx(&g->gc2.finreg_cdata_order_tombstones, 1);
+      gc2_finreg_cdata_order_tombstones_add(g, 1);
       (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
       ord = next;
       continue;
@@ -1800,14 +1800,14 @@ static size_t gc_queue_cdata_finalizers_pweak_ordered(lua_State *L,
       lj_tv_load_acq(&fin, slot);
     }
     if (tvisnil(&fin)) {
-      la_add64_rlx(&g->gc2.finreg_cdata_order_tombstones, 1);
+      gc2_finreg_cdata_order_tombstones_add(g, 1);
       (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
       ord = next;
       continue;
     }
     o = gc_order_cdata_object(ord, t, slot);
     if (!o) {
-      la_add64_rlx(&g->gc2.finreg_cdata_order_tombstones, 1);
+      gc2_finreg_cdata_order_tombstones_add(g, 1);
       (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
       ord = next;
       continue;
@@ -1815,7 +1815,7 @@ static size_t gc_queue_cdata_finalizers_pweak_ordered(lua_State *L,
     if (!gc_cdata_finalizer_candidate_pweak(o)) {
       if (!(lj_obj_gcflags(o) & LJ_GC_CDATA_FIN) ||
 	  (lj_obj_gcflags(o) & LJ_GC_FINALIZED)) {
-	la_add64_rlx(&g->gc2.finreg_cdata_order_tombstones, 1);
+	gc2_finreg_cdata_order_tombstones_add(g, 1);
 	(void)lj_ctype_fin_order_retire(cts, prev, ord, next);
 	ord = next;
 	continue;
@@ -1825,26 +1825,26 @@ static size_t gc_queue_cdata_finalizers_pweak_ordered(lua_State *L,
       continue;
     }
     if (!lj_cdata_fin_claim_func(slot, &fin)) {
-      la_add64_rlx(&g->gc2.finreg_cdata_order_tombstones, 1);
+      gc2_finreg_cdata_order_tombstones_add(g, 1);
       (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
       ord = next;
       continue;
     }
-    la_add64_rlx(&g->gc2.finreg_cdata_order_claimed, 1);
+    gc2_finreg_cdata_order_claimed_add(g, 1);
     /*
     ** 05 section 5.8: ordered FINREG identity is enough for P_WEAK
     ** discovery without legacy root membership.
     */
     if (gc_unlink_root_object(g, o))
-      la_add64_rlx(&g->gc2.finreg_cdata_order_unlinked, 1);
+      gc2_finreg_cdata_order_unlinked_add(g, 1);
     if (!lj_gc2_finreg_cdata_preclaim(L, g, o, &fin)) {
       copyTVrel(L, slot, &fin);
       gc_marktv(g, &fin);
       markfinalized(o);
       lj_gc2_finreg_cdata_queue(g, o);
       lj_gc2_finalizer_enqueue(g, o);
-      la_add64_rlx(&g->gc2.finreg_cdata_order_fallbacks, 1);
-      la_add64_rlx(&g->gc2.finreg_cdata_order_queued, 1);
+      gc2_finreg_cdata_order_fallbacks_add(g, 1);
+      gc2_finreg_cdata_order_queued_add(g, 1);
       (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
       marked++;
       queued++;
@@ -1856,7 +1856,7 @@ static size_t gc_queue_cdata_finalizers_pweak_ordered(lua_State *L,
     markfinalized(o);
     lj_gc2_finreg_cdata_queue(g, o);
     lj_gc2_finalizer_enqueue(g, o);  /* queue claimed cdata in FINREG order. */
-    la_add64_rlx(&g->gc2.finreg_cdata_order_queued, 1);
+    gc2_finreg_cdata_order_queued_add(g, 1);
     (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
     marked++;
     queued++;
@@ -1937,7 +1937,7 @@ static size_t gc_separate_cdata_finalizers_ordered(global_State *g)
     */
     (void)gc_unlink_root_object(g, o);
     gc_queue_cdata_finalizer(g, o);
-    la_add64_rlx(&g->gc2.finreg_cdata_order_queued, 1);
+    gc2_finreg_cdata_order_queued_add(g, 1);
     queued++;
     (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
     ord = next;
@@ -1987,7 +1987,7 @@ static int gc_cdata_fin_pending_ordered(global_State *g, CTState *cts)
       continue;
     }
     if (gc_cdata_finalizer_candidate_close(o)) {
-      la_add64_rlx(&g->gc2.finreg_cdata_pending_order_hits, 1);
+      gc2_finreg_cdata_pending_order_hits_add(g, 1);
       return 1;
     }
     if (!(lj_obj_gcflags(o) & LJ_GC_CDATA_FIN) ||

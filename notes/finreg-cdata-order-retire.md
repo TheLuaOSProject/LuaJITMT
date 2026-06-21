@@ -17,6 +17,11 @@ Fix:
 - Retired nodes remain rooted/marked and are freed at FINREG teardown, so
   readers that already loaded an old physical link remain safe.
 - `collectgarbage("stats").finreg_cdata_order_retired` exposes the retire count.
+- Follow-up counter helper work routes ordered FINREG telemetry publication
+  through `gc2_finreg_cdata_order_*()` and
+  `gc2_finreg_cdata_pending_order_hits_*()` helpers. Ordered discovery,
+  close-time discovery, pending scans, CTState retire, and GC2 init no longer
+  spell direct atomics against the ordered counter fields.
 
 Regression:
 - `tests/t-gc2-traverse.c` now checks that a live ordered `ffi.gc` cdata stays

@@ -304,7 +304,7 @@ int lj_ctype_fin_order_retire(CTState *cts, FinRegOrderNode *prev,
   } while (!fin_order_retired_cas(cts, &head, ord));
   g = cts->g;
   if (g)
-    la_add64_rlx(&g->gc2.finreg_cdata_order_retired, 1);
+    gc2_finreg_cdata_order_retired_add(g, 1);
   fin_order_active_rel(ord, 0);
   if (prev) {
     expect = ord;
