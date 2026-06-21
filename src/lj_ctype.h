@@ -166,6 +166,16 @@ typedef struct CTypeTab {
   CType tab[1];			/* C type table slots. */
 } CTypeTab;
 
+static LJ_AINLINE MSize ctype_tab_sizetab_acq(const CTypeTab *tabh)
+{
+  return (MSize)la_load32_acq(&tabh->sizetab);
+}
+
+static LJ_AINLINE void ctype_tab_sizetab_rel(CTypeTab *tabh, MSize sizetab)
+{
+  la_store32_rel(&tabh->sizetab, sizetab);
+}
+
 static LJ_AINLINE uint64_t ctype_tab_retire_epoch_acq(const CTypeTab *tabh)
 {
   return la_load64_acq(&tabh->retire_epoch);

@@ -52,7 +52,7 @@ int main(void)
   assert(newh != oldh);
   ret = find_retired(cts, oldh);
   assert(ret != NULL);
-  assert(ret->sizetab > 0);
+  assert(ctype_tab_sizetab_acq(ret) > 0);
   retire_epoch = ctype_tab_retire_epoch_acq(ret);
   assert(lj_ctype_reclaim_retired(g, retire_epoch) == 0);
   assert(find_retired(cts, oldh) != NULL);

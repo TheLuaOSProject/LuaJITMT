@@ -204,7 +204,7 @@ int lj_ctype_snapshot(CTState *cts, CTypeID id, CType *out)
   if (id >= ctype_top_acq(cts))
     return 0;
   tabh = ctype_tabh_acq(cts);
-  if ((MSize)id >= tabh->sizetab)
+  if ((MSize)id >= ctype_tab_sizetab_acq(tabh))
     return -1;  /* Table/top snapshot raced a grow; retry under the lock. */
   ct = &tabh->tab[id];
   out->info = la_load32_acq(&ct->info);
@@ -664,7 +664,7 @@ static GCSize ctype_tab_size(MSize sizetab)
 static CTypeTab *ctype_tab_new(lua_State *L, MSize sizetab)
 {
   CTypeTab *tabh = (CTypeTab *)lj_mem_new(L, ctype_tab_size(sizetab));
-  tabh->sizetab = sizetab;
+  ctype_tab_sizetab_rel(tabh, sizetab);
   ctype_tab_retire_epoch_rel(tabh, 0);
   ctype_tab_retired_next_rel(tabh, NULL);
   return tabh;
@@ -672,7 +672,7 @@ static CTypeTab *ctype_tab_new(lua_State *L, MSize sizetab)
 
 static void ctype_tab_free(global_State *g, CTypeTab *tabh)
 {
-  lj_mem_free(g, tabh, ctype_tab_size(tabh->sizetab));
+  lj_mem_free(g, tabh, ctype_tab_size(ctype_tab_sizetab_acq(tabh)));
 }
 
 static void ctype_tab_retired_push(CTState *cts, CTypeTab *ret)
@@ -707,7 +707,7 @@ static CType *ctype_tab_grow_l(lua_State *L, CTState *cts, CTypeID id)
   if (id >= CTID_MAX) lj_err_msg(L, LJ_ERR_TABOV);
   for (;;) {
     CTypeTab *oldh = ctype_tabh_acq(cts);
-    MSize osz = oldh->sizetab;
+    MSize osz = ctype_tab_sizetab_acq(oldh);
     MSize nsz;
     CTypeTab *newh;
     CTypeTab *expect;
@@ -733,7 +733,7 @@ static CTypeID ctype_top_reserve_l(lua_State *L, CTState *cts, CType **ctp)
     CTypeID id = ctype_top_acq(cts);
     uint32_t expect = id;
     if (LJ_UNLIKELY(id >= CTID_MAX)) lj_err_msg(L, LJ_ERR_TABOV);
-    if (LJ_UNLIKELY((MSize)id >= tabh->sizetab)) {
+    if (LJ_UNLIKELY((MSize)id >= ctype_tab_sizetab_acq(tabh))) {
       (void)ctype_tab_grow_l(L, cts, id);
       continue;
     }
@@ -870,7 +870,7 @@ int lj_ctype_getname_snapshot(CTState *cts, GCstr *name, uint32_t tmask,
     CTSize size;
     CTypeID sib, next;
     GCobj *gco;
-    if (id >= top || (MSize)id >= tabh->sizetab)
+    if (id >= top || (MSize)id >= ctype_tab_sizetab_acq(tabh))
       return -1;
     if (budget-- == 0)
       return -1;
@@ -888,7 +888,7 @@ int lj_ctype_getname_snapshot(CTState *cts, GCstr *name, uint32_t tmask,
 	CType *rt;
 	CTInfo rinfo;
 	GCobj *rgco;
-	if (sib >= top || (MSize)sib >= tabh->sizetab)
+	if (sib >= top || (MSize)sib >= ctype_tab_sizetab_acq(tabh))
 	  return -1;
 	rt = &tabh->tab[sib];
 	rinfo = la_load32_acq(&rt->info);
@@ -953,7 +953,7 @@ static int ctype_snapshot_copy(CTypeTab *tabh, CTypeID top, CTypeID id,
 {
   CType *ct;
   GCobj *gco;
-  if (id == 0 || id >= top || (MSize)id >= tabh->sizetab)
+  if (id == 0 || id >= top || (MSize)id >= ctype_tab_sizetab_acq(tabh))
     return 0;
   ct = &tabh->tab[id];
   out->info = la_load32_acq(&ct->info);
@@ -977,7 +977,7 @@ static int ctype_getfieldq_snapshot_rec(CTypeTab *tabh, CTypeID top,
     CTSize size;
     CTypeID child, next;
     GCobj *gco;
-    if (sib >= top || (MSize)sib >= tabh->sizetab)
+    if (sib >= top || (MSize)sib >= ctype_tab_sizetab_acq(tabh))
       return -1;
     if ((*budget)-- == 0)
       return -1;
@@ -1003,7 +1003,7 @@ static int ctype_getfieldq_snapshot_rec(CTypeTab *tabh, CTypeID top,
       CType cct;
       int ok;
       for (;;) {
-	if (cid >= top || (MSize)cid >= tabh->sizetab)
+	if (cid >= top || (MSize)cid >= ctype_tab_sizetab_acq(tabh))
 	  return -1;
 	if ((*budget)-- == 0)
 	  return -1;
@@ -1068,7 +1068,7 @@ int lj_ctype_ptrstruct_snapshot(CTState *cts, CTypeID id, CTypeID *cidp)
   top = ctype_top_acq(cts);
   tabh = ctype_tabh_acq(cts);
   budget = top ? (MSize)top * 2u : 1u;
-  if (id == 0 || id >= top || (MSize)id >= tabh->sizetab)
+  if (id == 0 || id >= top || (MSize)id >= ctype_tab_sizetab_acq(tabh))
     return -1;
   if (!ctype_snapshot_copy(tabh, top, id, &ct))
     return 0;
@@ -1076,7 +1076,7 @@ int lj_ctype_ptrstruct_snapshot(CTState *cts, CTypeID id, CTypeID *cidp)
     return 0;
   id = ctype_cid(ct.info);
   for (;;) {
-    if (id == 0 || id >= top || (MSize)id >= tabh->sizetab)
+    if (id == 0 || id >= top || (MSize)id >= ctype_tab_sizetab_acq(tabh))
       return -1;
     if (budget-- == 0)
       return -1;
@@ -1187,14 +1187,14 @@ int lj_ctype_size_snapshot(CTState *cts, CTypeID id, CTSize *szp)
   if (id >= top)
     return 0;
   tabh = ctype_tabh_acq(cts);
-  if ((MSize)id >= tabh->sizetab)
+  if ((MSize)id >= ctype_tab_sizetab_acq(tabh))
     return -1;
   budget = top ? (MSize)top * 2u : 1u;
   for (;;) {
     CType *ct;
     CTInfo info;
     CTSize size;
-    if (id == 0 || id >= top || (MSize)id >= tabh->sizetab)
+    if (id == 0 || id >= top || (MSize)id >= ctype_tab_sizetab_acq(tabh))
       return -1;
     if (budget-- == 0)
       return -1;
@@ -1234,7 +1234,7 @@ int lj_ctype_enumconst_snapshot(CTState *cts, const CType *root,
     CTInfo info;
     CTSize size;
     GCobj *gco;
-    if (id >= top || (MSize)id >= tabh->sizetab)
+    if (id >= top || (MSize)id >= ctype_tab_sizetab_acq(tabh))
       return -1;
     if (budget-- == 0)
       return -1;

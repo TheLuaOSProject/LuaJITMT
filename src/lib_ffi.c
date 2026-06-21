@@ -876,7 +876,7 @@ static int ffi_typecmp_get(FFITypeCmpSnap *ts, CTypeID id, CType *out)
   CTInfo info;
   if (id == 0 || id >= ts->top)
     return 0;
-  if ((MSize)id >= ts->tabh->sizetab)
+  if ((MSize)id >= ctype_tab_sizetab_acq(ts->tabh))
     return -1;
   if (ts->budget-- == 0)
     return -1;
@@ -1108,7 +1108,8 @@ static int ffi_layout_get(FFILayoutSnap *ls, CTypeID id, CType *out)
 {
   CType *ct;
   GCobj *name;
-  if (id == 0 || id >= ls->top || (MSize)id >= ls->tabh->sizetab)
+  if (id == 0 || id >= ls->top ||
+      (MSize)id >= ctype_tab_sizetab_acq(ls->tabh))
     return 0;
   if (ls->budget-- == 0)
     return -1;
