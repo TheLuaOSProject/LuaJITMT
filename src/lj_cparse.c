@@ -483,8 +483,8 @@ static void cp_ctype_abandon(CPState *cp)
     if (id == 0)
       continue;
     CType *ct = ctype_get(cp->cts, id);
-    ct->info = CTINFO(CT_ATTRIB, CTATTRIB(CTA_BAD));
-    ct->size = 0;
+    ctype_info_rel(ct, CTINFO(CT_ATTRIB, CTATTRIB(CTA_BAD)));
+    ctype_size_rel(ct, 0);
     ctype_sib_rel(ct, 0);
     ctype_clearname(ct);
     /* Keep ct->next so hash walkers can skip through abandoned entries. */
@@ -495,8 +495,8 @@ static void cp_ctype_abandon(CPState *cp)
 static void cp_ctype_abandon_id(CPState *cp, CTypeID id)
 {
   CType *ct = ctype_get(cp->cts, id);
-  ct->info = CTINFO(CT_ATTRIB, CTATTRIB(CTA_BAD));
-  ct->size = 0;
+  ctype_info_rel(ct, CTINFO(CT_ATTRIB, CTATTRIB(CTA_BAD)));
+  ctype_size_rel(ct, 0);
   ctype_sib_rel(ct, 0);
   ctype_clearname(ct);
   /* Keep ct->next so hash walkers can skip through abandoned entries. */

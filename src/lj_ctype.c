@@ -652,7 +652,7 @@ static void ctype_abandon(CTState *cts, CTypeID id)
   ctype_clearname(&tmp);
   /* Keep ct->next so hash walkers can skip through abandoned entries. */
   ctype_publish_current(cts, id, &tmp);
-  lj_assertCTS(ctype_isabandoned(ctype_get(cts, id)->info),
+  lj_assertCTS(ctype_isabandoned(ctype_info_acq(ctype_get(cts, id))),
 	       "abandoned ctype not visible in current table");
 }
 
@@ -750,8 +750,8 @@ CTypeID lj_ctype_new_l(lua_State *L, CTState *cts, CType **ctp)
   CTypeID id = ctype_top_reserve_l(L, cts, ctp);
   CType *ct;
   ct = *ctp;
-  ct->info = 0;
-  ct->size = 0;
+  ctype_info_rel(ct, 0);
+  ctype_size_rel(ct, 0);
   ctype_sib_rel(ct, 0);
   ctype_next_rel(ct, 0);
   ctype_clearname(ct);
@@ -770,8 +770,8 @@ static CTypeID ctype_intern_l(lua_State *L, CTState *cts, CTInfo info,
   {
     CType *ct;
     id = ctype_top_reserve_l(L, cts, &ct);
-    ct->info = info;
-    ct->size = size;
+    ctype_info_rel(ct, info);
+    ctype_size_rel(ct, size);
     ctype_sib_rel(ct, 0);
     ctype_next_rel(ct, 0);
     ctype_clearname(ct);
@@ -1671,8 +1671,8 @@ CTState *lj_ctype_init(lua_State *L)
   cts->g = G(L);
   for (id = 0; id < CTTYPEINFO_NUM; id++, ct++) {
     CTInfo info = lj_ctype_typeinfo[id];
-    ct->size = (CTSize)((int32_t)(info << 16) >> 26);
-    ct->info = info & 0xffff03ffu;
+    ctype_size_rel(ct, (CTSize)((int32_t)(info << 16) >> 26));
+    ctype_info_rel(ct, info & 0xffff03ffu);
     ctype_sib_rel(ct, 0);
     if (ctype_type(info) == CT_KW || ctype_istypedef(info)) {
       size_t len = strlen(name);
