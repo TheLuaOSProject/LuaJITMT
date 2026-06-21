@@ -463,6 +463,9 @@ static void test_async_sweep_and_stop(lua_State *L, global_State *g,
   /* Synthetic boundary: main TG had no prepared work. */
   tg->alloc.prepare_epoch = sweep_cycle;
   tg->alloc.sweep_epoch = sweep_cycle;
+  assert(lj_gc2_sweep_to_idle(g) == 0);
+  assert(la_load32_acq(&g->gc2.phase) == LJ_GC2_SWEEP);
+  lj_gc2_sweep_legacy_ready(g);
   assert(lj_gc2_sweep_to_idle(g) == 1);
   lj_tg_detach(g, &extra_tg);
   assert(g->gc2.n_threads == 1);

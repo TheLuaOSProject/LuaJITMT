@@ -1220,6 +1220,7 @@ typedef struct GC2State {
   uint64_t weak_complete_runs;  /* P_WEAK completion attempts. */
   uint64_t weak_complete_progress;  /* Worker progress during P_WEAK finish. */
   uint64_t weak_to_sweep;  /* WEAK-to-SWEEP phase publications. */
+  uint32_t sweep_legacy_ready;  /* Legacy root sweep reached close boundary. */
   uint64_t sweep_to_idle;  /* SWEEP-to-IDLE phase publications. */
   uint64_t preserve_abort_to_idle;  /* Preserve aborts leaving an active phase. */
   uint64_t alloc_since_trigger;  /* Flushed mutator allocation bytes. */
@@ -2004,6 +2005,23 @@ static LJ_AINLINE uint32_t gc2_cycle_leader_xchg_acqrel(global_State *g,
 							uint32_t leader)
 {
   return la_xchg32_acqrel(&g->gc2.cycle_leader, leader);
+}
+
+static LJ_AINLINE uint32_t gc2_sweep_legacy_ready_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.sweep_legacy_ready);
+}
+
+static LJ_AINLINE void gc2_sweep_legacy_ready_store_rlx(global_State *g,
+							uint32_t ready)
+{
+  la_store32_rlx(&g->gc2.sweep_legacy_ready, ready);
+}
+
+static LJ_AINLINE void gc2_sweep_legacy_ready_rel(global_State *g,
+						  uint32_t ready)
+{
+  la_store32_rel(&g->gc2.sweep_legacy_ready, ready);
 }
 
 static LJ_AINLINE TGState *gc2_tg_list_acq(global_State *g)

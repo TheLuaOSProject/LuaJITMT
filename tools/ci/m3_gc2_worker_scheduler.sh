@@ -112,6 +112,22 @@ if hits=$(grep -nE -- '->[[:space:]]*gc2[.]cycle([^[:alnum:]_]|$)|&[[:space:]]*[
   printf '%s\n' 'raw GC2 cycle epoch access is forbidden; use gc2_cycle_* helpers' >&2
   exit 1
 fi
+for helper in gc2_sweep_legacy_ready_acq \
+  gc2_sweep_legacy_ready_store_rlx \
+  gc2_sweep_legacy_ready_rel; do
+  if ! grep -qE "^[[:space:]]*${helper}[[:space:]]*[(]|static LJ_AINLINE .*[*[:space:]]${helper}[[:space:]]*[(]" \
+      "$ROOT/src/lj_obj.h"; then
+    printf '%s\n' "${helper} helper is required for GC2 sweep close readiness" >&2
+    exit 1
+  fi
+done
+if hits=$(grep -nE -- '->[[:space:]]*gc2[.]sweep_legacy_ready([^[:alnum:]_]|$)|&[[:space:]]*[^)]*->[[:space:]]*gc2[.]sweep_legacy_ready([^[:alnum:]_]|$)' \
+    "$ROOT/src/lj_gc.c" \
+    "$ROOT/src/lj_gc2.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw GC2 sweep close-readiness access is forbidden; use gc2_sweep_legacy_ready_* helpers' >&2
+  exit 1
+fi
 if hits=$(grep -nE -- '->[[:space:]]*gc2[.](n_workers|worker_stop|worker_wake|worker_started|worker_exited)([^[:alnum:]_]|$)|&[[:space:]]*[^)]*->[[:space:]]*gc2[.](worker_wake|worker_started|worker_exited)([^[:alnum:]_]|$)' \
     "$ROOT/src/lj_gc2.c" \
     "$ROOT/src/lib_base.c" || true); [ -n "$hits" ]; then

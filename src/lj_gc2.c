@@ -124,6 +124,7 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.weak_complete_runs, 0);
   la_store64_rlx(&g->gc2.weak_complete_progress, 0);
   la_store64_rlx(&g->gc2.weak_to_sweep, 0);
+  gc2_sweep_legacy_ready_store_rlx(g, 0);
   la_store64_rlx(&g->gc2.sweep_to_idle, 0);
   la_store64_rlx(&g->gc2.preserve_abort_to_idle, 0);
   lj_gc2_alloc_since_store(g, 0);
@@ -817,6 +818,7 @@ void lj_gc2_weak_to_sweep(global_State *g)
     return;
   if (!gc2_phase_cas(g, &expect, LJ_GC2_SWEEP))
     return;
+  gc2_sweep_legacy_ready_rel(g, 0);
   la_add64_rlx(&g->gc2.weak_to_sweep, 1);
   lj_gc2_handshake(g, LJ_GC2_HS_DISABLE_BARRIER|LJ_GC2_HS_FLUSH_SSB|
 		   (gc2_cycle_sweep_minor_acq(g) ?
@@ -1191,12 +1193,21 @@ uint64_t lj_gc2_sweep_live_aggregate(global_State *g)
   return bytes;
 }
 
+void lj_gc2_sweep_legacy_ready(global_State *g)
+{
+  if (!g || gc2_phase_acq(g) != LJ_GC2_SWEEP)
+    return;
+  gc2_sweep_legacy_ready_rel(g, 1);
+  lj_gc2_worker_wake(g);  /* 05 section 5.8: legacy roots reached close. */
+}
+
 void lj_gc2_legacy_preserve_abort(global_State *g)
 {
   uint32_t phase;
   if (!g)
     return;
   gc2_cycle_leader_rel(g, 0);
+  gc2_sweep_legacy_ready_rel(g, 0);
   (void)gc2_flush_and_drain_ssb(g);
   phase = gc2_phase_xchg_acqrel(g, LJ_GC2_IDLE);
   if (phase != LJ_GC2_IDLE)
@@ -1214,6 +1225,7 @@ int lj_gc2_sweep_to_idle(global_State *g)
     return 0;  /* 05 section 5.8 scheduler close waits for worker owner. */
   phase = gc2_phase_acq(g);
   if (phase != LJ_GC2_SWEEP || gc2_sweep_blocked_by_finalizer(g) ||
+      !gc2_sweep_legacy_ready_acq(g) ||
       lj_gc2_sweep_needs_prepare(g) || lj_gc2_sweep_pending(g)) {
     gc2_worker_active_rel(g, 0);
     return 0;
@@ -1247,6 +1259,7 @@ void lj_gc2_legacy_cycle_end(global_State *g)
     la_add64_rlx(&g->gc2.sweep_to_idle, 1);
     lj_gc2_update_minor_survival_policy(g, lj_gc2_sweep_live_aggregate(g));
   }
+  gc2_sweep_legacy_ready_rel(g, 0);
   gc2_update_public_minor_gates(g);
   lj_gc2_handshake(g, gc2_idle_barrier_actions(g, 0));
   (void)lj_tg_reclaim_dead(g);

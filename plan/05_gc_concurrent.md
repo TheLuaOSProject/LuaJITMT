@@ -481,10 +481,14 @@ P_SWEEP entry handshake: {DISABLE_BARRIER, RESET_ALLOC, FLUSH_SSB(last)}.
   threads that allocate slowly): aggregate live_estimate, compute next
   trigger (§5.11), → P_IDLE.
 Current bridge note: legacy sweep still owns the string/root sweep state
-machine and calls `lj_gc2_sweep_to_idle()` at the final real `P_SWEEP`
-boundary. That GC2 helper waits for the worker token, rechecks phase and
-traversable sweep predicates, records real `SWEEP -> IDLE` publications with
-`sweep_to_idle`, aggregates live estimates, and updates pacing.
+machine and release-publishes `lj_gc2_sweep_legacy_ready()` after legacy
+string/root sweep and boundary preparation reach the final real `P_SWEEP`
+boundary. `lj_gc2_sweep_to_idle()` waits for that latch plus the worker token,
+rechecks phase and traversable sweep predicates, records real `SWEEP -> IDLE`
+publications with `sweep_to_idle`, aggregates live estimates, and updates
+pacing. Parked workers may drain traversable arena sweep before the latch, but
+they do not publish `P_IDLE` until they have real scheduler/TG handshake
+identity.
 The partial-cycle full-GC fast-forward path still calls
 `lj_gc2_legacy_preserve_abort()` instead of entering `P_SWEEP`; that path now
 records real active-phase aborts with `preserve_abort_to_idle` and retains the

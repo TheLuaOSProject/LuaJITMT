@@ -2174,6 +2174,7 @@ static size_t gc_onestep(lua_State *L)
       if (arena_prepare)
 	gc_arena_verify_sweep_boundary(g);
       (void)gc_arena_finish_sweep_boundary(g, 0);
+      lj_gc2_sweep_legacy_ready(g);
       if (gc_arena_sweep_pending(g))
 	return GCSWEEPMAX*GCSWEEPCOST;
       if (lj_gc2_finalizer_queue_pending(g)) {  /* Need finalizations? */
