@@ -178,9 +178,9 @@ void lj_gc2_init(global_State *g)
   gc2_sweep_live_updates_store_rlx(g, 0);
   gc2_sweep_live_huge_bytes_store_rlx(g, 0);
   gc2_live_estimate_store_rlx(g, 0);
-  g->gc2.weak_stack = NULL;
-  g->gc2.weak_ready = NULL;
-  g->gc2.weak_capacity = 0;
+  gc2_weak_stack_store_rlx(g, NULL);
+  gc2_weak_ready_store_rlx(g, NULL);
+  gc2_weak_capacity_store_rlx(g, 0);
   gc2_weak_count_store_rlx(g, 0);
   la_store64_rlx(&g->gc2.weak_tables_seen, 0);
   la_store64_rlx(&g->gc2.weak_tables_weakkey, 0);
@@ -276,16 +276,22 @@ void lj_gc2_fini(global_State *g)
     gc2_grey_top_store_rlx(g, 0);
     gc2_grey_bottom_store_rlx(g, 0);
   }
-  if (g && g->gc2.weak_stack) {
-    lj_mem_freevec(g, g->gc2.weak_stack, g->gc2.weak_capacity, GCRef);
-    g->gc2.weak_stack = NULL;
-  }
-  if (g && g->gc2.weak_ready) {
-    lj_mem_freevec(g, g->gc2.weak_ready, g->gc2.weak_capacity, uint8_t);
-    g->gc2.weak_ready = NULL;
+  if (g) {
+    GCRef *weak_stack = gc2_weak_stack_acq(g);
+    if (weak_stack) {
+      lj_mem_freevec(g, weak_stack, gc2_weak_capacity_acq(g), GCRef);
+      gc2_weak_stack_store_rlx(g, NULL);
+    }
   }
   if (g) {
-    g->gc2.weak_capacity = 0;
+    uint8_t *weak_ready = gc2_weak_ready_acq(g);
+    if (weak_ready) {
+      lj_mem_freevec(g, weak_ready, gc2_weak_capacity_acq(g), uint8_t);
+      gc2_weak_ready_store_rlx(g, NULL);
+    }
+  }
+  if (g) {
+    gc2_weak_capacity_store_rlx(g, 0);
     gc2_weak_count_store_rlx(g, 0);
   }
   if (g && g->gc2.finreg_cdata_preclaim_obj) {
@@ -1739,9 +1745,15 @@ static int gc2_grey_empty(global_State *g)
 
 static int gc2_weak_ensure(global_State *g)
 {
+  MSize cap;
+  GCRef *stack;
+  uint8_t *ready;
   if (!g)
     return 0;
-  if (g->gc2.weak_stack && g->gc2.weak_ready && g->gc2.weak_capacity > 0)
+  cap = gc2_weak_capacity_acq(g);
+  stack = gc2_weak_stack_acq(g);
+  ready = gc2_weak_ready_acq(g);
+  if (stack && ready && cap > 0)
     return 1;
   return gc2_weak_resize(g, GC2_WEAK_INIT);
 }
@@ -1774,14 +1786,14 @@ static int gc2_weak_resize(global_State *g, MSize cap)
   L = mainthread_acq(g);
   if (!L)
     return 0;
-  oldstack = g->gc2.weak_stack;
-  oldready = g->gc2.weak_ready;
-  oldcap = g->gc2.weak_capacity;
+  oldcap = gc2_weak_capacity_acq(g);
+  oldstack = gc2_weak_stack_acq(g);
+  oldready = gc2_weak_ready_acq(g);
   newstack = lj_mem_newvec(L, cap, GCRef);
   newready = lj_mem_newvec(L, cap, uint8_t);
-  g->gc2.weak_stack = newstack;
-  g->gc2.weak_ready = newready;
-  g->gc2.weak_capacity = cap;
+  gc2_weak_stack_rel(g, newstack);
+  gc2_weak_ready_rel(g, newready);
+  gc2_weak_capacity_rel(g, cap);
   if (oldstack)
     lj_mem_freevec(g, oldstack, oldcap, GCRef);
   if (oldready)
@@ -1792,18 +1804,24 @@ static int gc2_weak_resize(global_State *g, MSize cap)
 static void gc2_weak_reset(global_State *g)
 {
   MSize i;
+  MSize cap;
+  uint8_t *ready;
   uint64_t prior_count;
   if (!g)
     return;
   prior_count = gc2_weak_count_acq(g);
   (void)gc2_weak_ensure(g);
-  if (prior_count > (uint64_t)g->gc2.weak_capacity) {
-    MSize cap = gc2_weak_next_capacity(g->gc2.weak_capacity, prior_count);
-    if (cap > g->gc2.weak_capacity)
-      (void)gc2_weak_resize(g, cap);  /* 05 section 5.8 adaptive weak snapshot. */
+  cap = gc2_weak_capacity_acq(g);
+  if (prior_count > (uint64_t)cap) {
+    MSize ncap = gc2_weak_next_capacity(cap, prior_count);
+    if (ncap > cap)
+      (void)gc2_weak_resize(g, ncap);  /* 05 section 5.8 adaptive weak snapshot. */
   }
-  for (i = 0; i < g->gc2.weak_capacity; i++)
-    la_store8_rlx(&g->gc2.weak_ready[i], 0);
+  cap = gc2_weak_capacity_acq(g);
+  ready = gc2_weak_ready_acq(g);
+  if (ready)
+    for (i = 0; i < cap; i++)
+      la_store8_rlx(&ready[i], 0);
   gc2_weak_count_store_rlx(g, 0);  /* 05 section 5.8 side vector. */
   gc2_weak_scan_cursor_store_rlx(g, 0);
   gc2_weak_clear_cursor_store_rlx(g, 0);
@@ -1939,18 +1957,27 @@ static void gc2_finclaim_reset(global_State *g)
 
 static void gc2_weak_record(global_State *g, GCtab *t)
 {
+  MSize cap;
+  GCRef *stack;
+  uint8_t *ready;
   uint64_t idx;
-  if (!g || !t || !g->gc2.weak_stack || !g->gc2.weak_ready ||
-      g->gc2.weak_capacity == 0) {
+  if (!g || !t) {
     if (g)
       la_add64_rlx(&g->gc2.weak_tables_overflow, 1);
     return;
   }
+  cap = gc2_weak_capacity_acq(g);
+  stack = gc2_weak_stack_acq(g);
+  ready = gc2_weak_ready_acq(g);
+  if (!stack || !ready || cap == 0) {
+    la_add64_rlx(&g->gc2.weak_tables_overflow, 1);
+    return;
+  }
   idx = gc2_weak_count_add(g, 1);  /* 05 section 5.8 MPSC slot. */
-  if (idx < g->gc2.weak_capacity) {
-    gc2_queue_slot_store_rel(&g->gc2.weak_stack[(MSize)idx], obj2gco(t));
+  if (idx < (uint64_t)cap) {
+    gc2_queue_slot_store_rel(&stack[(MSize)idx], obj2gco(t));
     /* 05 section 5.8: publish weak snapshot slot before ready byte. */
-    la_store8_rel(&g->gc2.weak_ready[(MSize)idx], 1);
+    la_store8_rel(&ready[(MSize)idx], 1);
     la_add64_rlx(&g->gc2.weak_tables_queued, 1);
   } else {
     la_add64_rlx(&g->gc2.weak_tables_overflow, 1);
@@ -1961,14 +1988,20 @@ uint32_t lj_gc2_weak_snapshot_count(global_State *g)
 {
   uint64_t reserved, count;
   MSize cap;
-  if (!g || !g->gc2.weak_stack || !g->gc2.weak_ready)
+  GCRef *stack;
+  uint8_t *ready;
+  if (!g)
+    return 0;
+  cap = gc2_weak_capacity_acq(g);
+  stack = gc2_weak_stack_acq(g);
+  ready = gc2_weak_ready_acq(g);
+  if (!stack || !ready)
     return 0;
   reserved = gc2_weak_count_acq(g);
-  cap = g->gc2.weak_capacity;
   if (reserved > (uint64_t)cap)
     reserved = (uint64_t)cap;
   for (count = 0; count < reserved; count++)
-    if (la_load8_acq(&g->gc2.weak_ready[(MSize)count]) == 0)
+    if (la_load8_acq(&ready[(MSize)count]) == 0)
       break;
   return count > ~(uint32_t)0 ? ~(uint32_t)0 : (uint32_t)count;
 }
@@ -1976,9 +2009,13 @@ uint32_t lj_gc2_weak_snapshot_count(global_State *g)
 GCtab *lj_gc2_weak_snapshot_tab(global_State *g, uint32_t idx)
 {
   GCobj *o;
-  if (!g || !g->gc2.weak_stack || idx >= lj_gc2_weak_snapshot_count(g))
+  GCRef *stack;
+  if (!g || idx >= lj_gc2_weak_snapshot_count(g))
     return NULL;
-  o = gc2_queue_slot_load_acq(&g->gc2.weak_stack[idx]);
+  stack = gc2_weak_stack_acq(g);
+  if (!stack)
+    return NULL;
+  o = gc2_queue_slot_load_acq(&stack[idx]);
   return (o && o->gch.gct == ~LJ_TTAB) ? gco2tab(o) : NULL;
 }
 
@@ -2161,18 +2198,24 @@ uint32_t lj_gc2_weak_drain(global_State *g, uint32_t limit)
 static int gc2_weak_snapshot_complete(global_State *g, uint32_t *pn)
 {
   uint64_t reserved, cleared;
+  MSize cap;
   uint32_t n;
+  GCRef *stack;
+  uint8_t *ready;
   if (!g)
     return 0;
   if (gc2_phase_acq(g) != LJ_GC2_WEAK)
     return 0;
-  if (!g->gc2.weak_stack || !g->gc2.weak_ready) {
+  cap = gc2_weak_capacity_acq(g);
+  stack = gc2_weak_stack_acq(g);
+  ready = gc2_weak_ready_acq(g);
+  if (!stack || !ready) {
     if (pn)
       *pn = 0;
     return gc2_weak_count_acq(g) == 0;
   }
   reserved = gc2_weak_count_acq(g);
-  if (reserved > (uint64_t)g->gc2.weak_capacity)
+  if (reserved > (uint64_t)cap)
     return 0;  /* Overflowed snapshots are handled by the owner-clear bridge. */
   n = lj_gc2_weak_snapshot_count(g);
   if ((uint64_t)n != reserved)
@@ -2187,9 +2230,12 @@ static int gc2_weak_snapshot_complete(global_State *g, uint32_t *pn)
 
 static int gc2_weak_snapshot_has_tab(global_State *g, GCtab *t, uint32_t n)
 {
+  GCRef *stack = gc2_weak_stack_acq(g);
   uint32_t i;
+  if (!stack)
+    return 0;
   for (i = 0; i < n; i++) {
-    GCobj *o = gc2_queue_slot_load_acq(&g->gc2.weak_stack[i]);
+    GCobj *o = gc2_queue_slot_load_acq(&stack[i]);
     if (o == obj2gco(t))
       return 1;
   }
@@ -2256,11 +2302,18 @@ static int gc2_weak_backfill_legacy(global_State *g, GCobj *legacy)
 static int gc2_weak_overflow_clear_legacy(global_State *g, GCobj *legacy)
 {
   uint64_t reserved, tables = 0, slots = 0, cleared = 0;
-  if (!g || gc2_phase_acq(g) != LJ_GC2_WEAK ||
-      !g->gc2.weak_stack || !g->gc2.weak_ready)
+  MSize cap;
+  GCRef *stack;
+  uint8_t *ready;
+  if (!g || gc2_phase_acq(g) != LJ_GC2_WEAK)
+    return 0;
+  cap = gc2_weak_capacity_acq(g);
+  stack = gc2_weak_stack_acq(g);
+  ready = gc2_weak_ready_acq(g);
+  if (!stack || !ready)
     return 0;
   reserved = gc2_weak_count_acq(g);
-  if (reserved <= (uint64_t)g->gc2.weak_capacity)
+  if (reserved <= (uint64_t)cap)
     return 0;
   while (legacy) {
     GCtab *t;

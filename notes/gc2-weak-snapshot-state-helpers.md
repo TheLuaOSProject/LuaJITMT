@@ -21,8 +21,9 @@ Guarding:
 - `tools/ci/m8_weak.sh` now requires all nine helper definitions.
 - The same guard rejects raw production access to `weak_count`,
   `weak_scan_cursor`, and `weak_clear_cursor` in `lj_gc2.c`.
-- Pointer/capacity ownership for `weak_stack` and `weak_ready` remains a
-  separate follow-up slice.
+- Follow-up vector helper work now routes `weak_stack`, `weak_ready`, and
+  `weak_capacity` through `gc2_weak_*()` helpers while preserving the current
+  owner-quiesced resize invariant.
 
 Validation:
 - `tools/ci/m8_weak.sh` passed.

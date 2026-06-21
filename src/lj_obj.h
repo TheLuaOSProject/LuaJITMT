@@ -1867,6 +1867,54 @@ static LJ_AINLINE uint64_t gc2_weak_count_add(global_State *g, uint64_t n)
   return la_add64_rlx(&g->gc2.weak_count, n);
 }
 
+static LJ_AINLINE GCRef *gc2_weak_stack_acq(global_State *g)
+{
+  return (GCRef *)la_loadptr_acq((void *const *)&g->gc2.weak_stack);
+}
+
+static LJ_AINLINE void gc2_weak_stack_store_rlx(global_State *g,
+						GCRef *stack)
+{
+  la_storeptr_rlx((void **)&g->gc2.weak_stack, stack);
+}
+
+static LJ_AINLINE void gc2_weak_stack_rel(global_State *g, GCRef *stack)
+{
+  la_storeptr_rel((void **)&g->gc2.weak_stack, stack);
+}
+
+static LJ_AINLINE uint8_t *gc2_weak_ready_acq(global_State *g)
+{
+  return (uint8_t *)la_loadptr_acq((void *const *)&g->gc2.weak_ready);
+}
+
+static LJ_AINLINE void gc2_weak_ready_store_rlx(global_State *g,
+						uint8_t *ready)
+{
+  la_storeptr_rlx((void **)&g->gc2.weak_ready, ready);
+}
+
+static LJ_AINLINE void gc2_weak_ready_rel(global_State *g, uint8_t *ready)
+{
+  la_storeptr_rel((void **)&g->gc2.weak_ready, ready);
+}
+
+static LJ_AINLINE MSize gc2_weak_capacity_acq(global_State *g)
+{
+  return (MSize)la_load32_acq(&g->gc2.weak_capacity);
+}
+
+static LJ_AINLINE void gc2_weak_capacity_store_rlx(global_State *g,
+						   MSize cap)
+{
+  la_store32_rlx(&g->gc2.weak_capacity, (uint32_t)cap);
+}
+
+static LJ_AINLINE void gc2_weak_capacity_rel(global_State *g, MSize cap)
+{
+  la_store32_rel(&g->gc2.weak_capacity, (uint32_t)cap);
+}
+
 static LJ_AINLINE uint64_t gc2_weak_scan_cursor_acq(global_State *g)
 {
   return la_load64_acq(&g->gc2.weak_scan_cursor);
