@@ -709,7 +709,7 @@ got_layout:
   ct = ctype_get(cts, rid);  /* Table may have been reallocated. */
   lj_cconv_ct_init_l(L, cts, ct, rid, sz, cdataptr(cd),
 		     o, (MSize)(L->top - o));  /* Initialize cdata. */
-  if (ctype_isstruct(ct->info)) {
+  if (ctype_isstruct(ctype_info_acq(ct))) {
     /* Handle ctype __gc metamethod. Use the fast lookup here. */
     TValue gctv;
     cTValue *tv = lj_ctype_metatv(cts, &gctv, id, MM_gc);
@@ -743,20 +743,24 @@ LJLIB_CF(ffi_cast)	LJLIB_REC(ffi_new)
     lj_ctype_parse_lock(cts, L);
     rid = ctype_rawid(cts, id);
     d = ctype_get(cts, rid);
+    info = ctype_info_acq(d);
+    sz = ctype_size_acq(d);
     lj_ctype_parse_unlock(cts);
     goto got_type;
   }
   id = ffi_checkctype(L, cts, NULL);
   rid = ctype_rawid(cts, id);
   d = ctype_get(cts, rid);
+  info = ctype_info_acq(d);
+  sz = ctype_size_acq(d);
 got_type:
   L->top = o+1;  /* Make sure this is the last item on the stack. */
   lj_state_checkstack(L, 1);
   o = L->base + ofs;
-  if (!(ctype_isnum(d->info) || ctype_isptr(d->info) || ctype_isenum(d->info)))
+  if (!(ctype_isnum(info) || ctype_isptr(info) || ctype_isenum(info)))
     lj_err_arg(L, 1, LJ_ERR_FFI_INVTYPE);
   if (!(tviscdata(o) && cdataV(o)->ctypeid == id)) {
-    GCcdata *cd = lj_cdata_new_l(L, cts, id, d->size);
+    GCcdata *cd = lj_cdata_new_l(L, cts, id, sz);
     setcdataV(L, L->top++, cd);  /* Anchor across callback allocation. */
     lj_cconv_ct_tv_l(L, cts, d, rid, cdataptr(cd), o, CCF_CAST);
     L->top = o+1;
