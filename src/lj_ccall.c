@@ -988,7 +988,7 @@ static int ccall_set_args(lua_State *L, CTState *cts, CType *ct,
   int gcsteps = 0;
   TValue *o, *top = L->top;
   CTypeID fid;
-  CTInfo info = ct->info;  /* lj_ccall_ctid_vararg may invalidate ct pointer. */
+  CTInfo info = ctype_info_acq(ct);  /* Vararg inference may invalidate ct. */
   CType *ctr;
   MSize maxgpr, ngpr = 0, nsp = 0, narg;
 #if CCALL_NARG_FPR
@@ -1018,32 +1018,37 @@ static int ccall_set_args(lua_State *L, CTState *cts, CType *ct,
 
   /* Perform required setup for some result types. */
   ctr = ctype_rawchild(cts, ct);
-  if (ctype_isvector(ctr->info)) {
-    if (!(CCALL_VECTOR_REG && (ctr->size == 8 || ctr->size == 16)))
-      goto err_nyi;
-  } else if (ctype_iscomplex(ctr->info) || ctype_isstruct(ctr->info)) {
-    /* Preallocate cdata object and anchor it after arguments. */
-    CTSize sz = ctr->size;
-    GCcdata *cd = lj_cdata_new_l(L, cts, ctype_cid(info), sz);
-    void *dp = cdataptr(cd);
-    setcdataV(L, L->top++, cd);
-    if (ctype_isstruct(ctr->info)) {
-      CCALL_HANDLE_STRUCTRET
-    } else {
-      CCALL_HANDLE_COMPLEXRET
-    }
+  {
+    CTInfo rinfo = ctype_info_acq(ctr);
+    CTSize rsize = ctype_size_acq(ctr);
+    if (ctype_isvector(rinfo)) {
+      if (!(CCALL_VECTOR_REG && (rsize == 8 || rsize == 16)))
+	goto err_nyi;
+    } else if (ctype_iscomplex(rinfo) || ctype_isstruct(rinfo)) {
+      /* Preallocate cdata object and anchor it after arguments. */
+      CTSize sz = rsize;
+      GCcdata *cd = lj_cdata_new_l(L, cts, ctype_cid(info), sz);
+      void *dp = cdataptr(cd);
+      setcdataV(L, L->top++, cd);
+      if (ctype_isstruct(rinfo)) {
+	CCALL_HANDLE_STRUCTRET
+      } else {
+	CCALL_HANDLE_COMPLEXRET
+      }
 #if LJ_TARGET_X86
-  } else if (ctype_isfp(ctr->info)) {
-    cc->resx87 = ctr->size == sizeof(float) ? 1 : 2;
+    } else if (ctype_isfp(rinfo)) {
+      cc->resx87 = rsize == sizeof(float) ? 1 : 2;
 #endif
+    }
   }
 
   /* Skip initial attributes. */
-  fid = ct->sib;
+  fid = ctype_sib_acq(ct);
   while (fid) {
     CType *ctf = ctype_get(cts, fid);
-    if (!ctype_isattrib(ctf->info)) break;
-    fid = ctf->sib;
+    CTInfo finfo = ctype_info_acq(ctf);
+    if (!ctype_isattrib(finfo)) break;
+    fid = ctype_sib_acq(ctf);
   }
 
 #if LJ_TARGET_ARM64 && LJ_ABI_WIN
@@ -1058,7 +1063,8 @@ static int ccall_set_args(lua_State *L, CTState *cts, CType *ct,
   for (o = L->base+1, narg = 1; o < top; o++, narg++) {
     CTypeID did;
     CType *d;
-    CTSize sz;
+    CTInfo dinfo;
+    CTSize dsize, sz;
     MSize n, isfp = 0, isva = 0;
     void *dp, *rp = NULL;
 #if LJ_TARGET_X64 && !LJ_ABI_WIN
@@ -1067,9 +1073,10 @@ static int ccall_set_args(lua_State *L, CTState *cts, CType *ct,
 
     if (fid) {  /* Get argument type from field. */
       CType *ctf = ctype_get(cts, fid);
-      fid = ctf->sib;
-      lj_assertL(ctype_isfield(ctf->info), "field expected");
-      did = ctype_cid(ctf->info);
+      CTInfo finfo = ctype_info_acq(ctf);
+      fid = ctype_sib_acq(ctf);
+      lj_assertL(ctype_isfield(finfo), "field expected");
+      did = ctype_cid(finfo);
     } else {
       if (!(info & CTF_VARARG))
 	lj_err_caller(L, LJ_ERR_FFI_NUMARG);  /* Too many arguments. */
@@ -1077,23 +1084,25 @@ static int ccall_set_args(lua_State *L, CTState *cts, CType *ct,
       isva = 1;
     }
     d = ctype_raw(cts, did);
-    sz = d->size;
+    dinfo = ctype_info_acq(d);
+    dsize = ctype_size_acq(d);
+    sz = dsize;
 
     /* Find out how (by value/ref) and where (GPR/FPR) to pass an argument. */
-    if (ctype_isnum(d->info)) {
+    if (ctype_isnum(dinfo)) {
       if (sz > 8) goto err_nyi;
-      if ((d->info & CTF_FP))
+      if ((dinfo & CTF_FP))
 	isfp = 1;
-    } else if (ctype_isvector(d->info)) {
+    } else if (ctype_isvector(dinfo)) {
       if (CCALL_VECTOR_REG && (sz == 8 || sz == 16))
 	isfp = 1;
       else
 	goto err_nyi;
-    } else if (ctype_isstruct(d->info)) {
+    } else if (ctype_isstruct(dinfo)) {
       CCALL_HANDLE_STRUCTARG
-    } else if (ctype_iscomplex(d->info)) {
+    } else if (ctype_iscomplex(dinfo)) {
       CCALL_HANDLE_COMPLEXARG
-    } else if (!(CCALL_PACK_STACKARG && ctype_isenum(d->info))) {
+    } else if (!(CCALL_PACK_STACKARG && ctype_isenum(dinfo))) {
       sz = CTSIZE_PTR;
     }
     n = (sz + CTSIZE_PTR-1) / CTSIZE_PTR;  /* Number of GPRs or stack slots needed. */
@@ -1104,7 +1113,7 @@ static int ccall_set_args(lua_State *L, CTState *cts, CType *ct,
     if (CCALL_ALIGN_STACKARG) {  /* Align argument on stack. */
       MSize align = (1u << ctype_align(ccall_struct_align(cts, d, did))) - 1;
 #if LJ_TARGET_ARM64 && LJ_TARGET_OSX
-      isva = ctype_isstruct(d->info);
+      isva = ctype_isstruct(dinfo);
 #endif
       if (rp || (CCALL_PACK_STACKARG && isva && align < CTSIZE_PTR-1))
 	align = CTSIZE_PTR-1;
@@ -1131,25 +1140,25 @@ static int ccall_set_args(lua_State *L, CTState *cts, CType *ct,
     }
     lj_cconv_ct_tv_l(L, cts, d, did, (uint8_t *)dp, o, CCF_ARG(narg));
     /* Extend passed integers to 32 bits at least. */
-    if (ctype_isinteger_or_bool(d->info) && d->size < 4 &&
+    if (ctype_isinteger_or_bool(dinfo) && dsize < 4 &&
 	(!CCALL_PACK_STACKARG || !((uintptr_t)dp & 3))) {  /* Assumes LJ_LE. */
-      if (d->info & CTF_UNSIGNED)
-	*(uint32_t *)dp = d->size == 1 ? (uint32_t)*(uint8_t *)dp :
-					 (uint32_t)*(uint16_t *)dp;
+      if (dinfo & CTF_UNSIGNED)
+	*(uint32_t *)dp = dsize == 1 ? (uint32_t)*(uint8_t *)dp :
+					  (uint32_t)*(uint16_t *)dp;
       else
-	*(int32_t *)dp = d->size == 1 ? (int32_t)*(int8_t *)dp :
-					(int32_t)*(int16_t *)dp;
+	*(int32_t *)dp = dsize == 1 ? (int32_t)*(int8_t *)dp :
+					 (int32_t)*(int16_t *)dp;
     }
 #if LJ_TARGET_ARM64 && LJ_BE
-    if (isfp && d->size == sizeof(float))
+    if (isfp && dsize == sizeof(float))
       ((float *)dp)[1] = ((float *)dp)[0];  /* Floats occupy high slot. */
 #endif
 #if LJ_TARGET_MIPS64 || (LJ_TARGET_ARM64 && LJ_BE)
-    if ((ctype_isinteger_or_bool(d->info) || ctype_isenum(d->info)
+    if ((ctype_isinteger_or_bool(dinfo) || ctype_isenum(dinfo)
 #if LJ_TARGET_MIPS64
 	 || (isfp && nsp == 0)
 #endif
-	 ) && d->size <= 4) {
+	 ) && dsize <= 4) {
       *(int64_t *)dp = (int64_t)*(int32_t *)dp;  /* Sign-extend to 64 bit. */
     }
 #endif

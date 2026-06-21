@@ -39,4 +39,13 @@ if hits=$(awk '
   printf '%s\n' 'raw CType info/size/sib reads are forbidden in x86_64 POSIX C-call aggregate classification; use ctype_*_acq() helpers' >&2
   exit 1
 fi
+if hits=$(awk '
+  /^static int ccall_set_args\(/ { in_fn = 1 }
+  in_fn && /->[[:space:]]*(info|size|sib)([^[:alnum:]_]|$)/ { print FNR ":" $0 }
+  in_fn && /^}/ { in_fn = 0 }
+' "$ROOT/src/lj_ccall.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw CType info/size/sib reads are forbidden in C-call argument setup; use ctype_*_acq() helpers' >&2
+  exit 1
+fi
 exec "$ROOT/tools/ci/lua_test.sh" m7_ffi_cdata_set_l
