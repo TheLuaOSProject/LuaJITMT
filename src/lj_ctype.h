@@ -1016,10 +1016,11 @@ static LJ_AINLINE CType *ctype_get(CTState *cts, CTypeID id)
 /* Get child C type ID. */
 static LJ_AINLINE CTypeID ctype_childid(CTState *cts, CType *ct)
 {
-  lj_assertCTS(!(ctype_isvoid(ct->info) || ctype_isstruct(ct->info) ||
-	       ctype_isbitfield(ct->info)),
-	       "ctype %08x has no children", ct->info);
-  return ctype_cid(ct->info);
+  CTInfo info = ctype_info_acq(ct);
+  lj_assertCTS(!(ctype_isvoid(info) || ctype_isstruct(info) ||
+	       ctype_isbitfield(info)),
+	       "ctype %08x has no children", info);
+  return ctype_cid(info);
 }
 
 /* Get child C type. */
@@ -1032,22 +1033,26 @@ static LJ_AINLINE CType *ctype_child(CTState *cts, CType *ct)
 static LJ_AINLINE CTypeID ctype_rawid(CTState *cts, CTypeID id)
 {
   CType *ct = ctype_get(cts, id);
-  while (ctype_isattrib(ct->info)) {
-    id = ctype_cid(ct->info);
+  for (;;) {
+    CTInfo info = ctype_info_acq(ct);
+    if (!ctype_isattrib(info))
+      return id;
+    id = ctype_cid(info);
     ct = ctype_get(cts, id);
   }
-  return id;
 }
 
 /* Follow references and get raw type ID for a C type ID. */
 static LJ_AINLINE CTypeID ctype_rawrefid(CTState *cts, CTypeID id)
 {
   CType *ct = ctype_get(cts, id);
-  while (ctype_isattrib(ct->info) || ctype_isref(ct->info)) {
-    id = ctype_cid(ct->info);
+  for (;;) {
+    CTInfo info = ctype_info_acq(ct);
+    if (!(ctype_isattrib(info) || ctype_isref(info)))
+      return id;
+    id = ctype_cid(info);
     ct = ctype_get(cts, id);
   }
-  return id;
 }
 
 /* Get raw type for a C type ID. */
@@ -1060,11 +1065,12 @@ static LJ_AINLINE CType *ctype_raw(CTState *cts, CTypeID id)
 static LJ_AINLINE CTypeID ctype_rawchildid(CTState *cts, CType *ct)
 {
   CTypeID id;
-  do {
+  for (;;) {
     id = ctype_childid(cts, ct);
     ct = ctype_get(cts, id);
-  } while (ctype_isattrib(ct->info));
-  return id;
+    if (!ctype_isattrib(ctype_info_acq(ct)))
+      return id;
+  }
 }
 
 /* Get raw type of the child of a C type. */
