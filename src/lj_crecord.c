@@ -157,29 +157,35 @@ typedef struct CRecMemList {
 /* Generate copy list for element-wise struct copy. */
 static MSize crec_copy_struct(CRecMemList *ml, CTState *cts, CType *ct)
 {
-  CTypeID fid = ct->sib;
+  CTypeID fid = ctype_sib_acq(ct);
   MSize mlp = 0;
   while (fid) {
     CType *df = ctype_get(cts, fid);
-    fid = df->sib;
-    if (ctype_isfield(df->info)) {
+    CTInfo dfinfo = ctype_info_acq(df);
+    CTSize dfsize = ctype_size_acq(df);
+    fid = ctype_sib_acq(df);
+    if (ctype_isfield(dfinfo)) {
       CType *cct;
+      CTInfo cctinfo;
+      CTSize cctsize;
       IRType tp;
       if (!ctype_name_acq(df)) continue;  /* Ignore unnamed fields. */
       cct = ctype_rawchild(cts, df);  /* Field type. */
+      cctinfo = ctype_info_acq(cct);
+      cctsize = ctype_size_acq(cct);
       tp = crec_ct2irt(cts, cct);
       if (tp == IRT_CDATA) return 0;  /* NYI: aggregates. */
       if (mlp >= CREC_COPY_MAXUNROLL) return 0;
-      ml[mlp].ofs = df->size;
+      ml[mlp].ofs = dfsize;
       ml[mlp].tp = tp;
       mlp++;
-      if (ctype_iscomplex(cct->info)) {
+      if (ctype_iscomplex(cctinfo)) {
 	if (mlp >= CREC_COPY_MAXUNROLL) return 0;
-	ml[mlp].ofs = df->size + (cct->size >> 1);
+	ml[mlp].ofs = dfsize + (cctsize >> 1);
 	ml[mlp].tp = tp;
 	mlp++;
       }
-    } else if (!ctype_isconstval(df->info)) {
+    } else if (!ctype_isconstval(dfinfo)) {
       /* NYI: bitfields and sub-structures. */
       return 0;
     }
@@ -247,16 +253,17 @@ static void crec_copy(jit_State *J, TRef trdst, TRef trsrc, TRef trlen,
     if (len > CREC_COPY_MAXLEN) goto fallback;
     if (ct) {
       CTState *cts = ctype_ctsG(J2G(J));
-      lj_assertJ(ctype_isarray(ct->info) || ctype_isstruct(ct->info),
+      CTInfo info = ctype_info_acq(ct);
+      lj_assertJ(ctype_isarray(info) || ctype_isstruct(info),
 		 "copy of non-aggregate");
-      if (ctype_isarray(ct->info)) {
+      if (ctype_isarray(info)) {
 	CType *cct = ctype_rawchild(cts, ct);
 	tp = crec_ct2irt(cts, cct);
 	if (tp == IRT_CDATA) goto rawcopy;
 	step = lj_ir_type_size[tp];
 	lj_assertJ((len & (step-1)) == 0, "copy of fractional size");
-      } else if ((ct->info & CTF_UNION)) {
-	step = (1u << ctype_align(ct->info));
+      } else if ((info & CTF_UNION)) {
+	step = (1u << ctype_align(info));
 	goto rawcopy;
       } else {
 	mlp = crec_copy_struct(ml, cts, ct);
