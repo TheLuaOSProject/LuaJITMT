@@ -124,9 +124,9 @@ static void tg_adopt_gc2_phase(global_State *g, TGState *tg)
 
 static void tg_attach_catchup(global_State *g, TGState *tg)
 {
-  uint64_t epoch = la_load64_acq(&g->gc2.hs_epoch);
-  uint32_t pending = la_load32_acq(&g->gc2.hs_pending);
-  uint32_t actions = pending ? la_load32_acq(&g->gc2.hs_actions) : 0;
+  uint64_t epoch = gc2_hs_epoch_acq(g);
+  uint32_t pending = gc2_hs_pending_acq(g);
+  uint32_t actions = pending ? gc2_hs_actions_acq(g) : 0;
   tg->hs_epoch_ack = epoch;
   if (actions) {
     lj_safepoint_apply_tg(g, tg, actions);
@@ -207,7 +207,7 @@ uint32_t lj_tg_reclaim_dead(global_State *g)
   TGState *prev, *tg;
   uint32_t reclaimed = 0;
   if (!g || la_load32_acq(&g->gc2.n_threads) != 1 ||
-      la_load32_acq(&g->gc2.hs_pending) != 0)
+      gc2_hs_pending_acq(g) != 0)
     return 0;
 restart:
   prev = NULL;

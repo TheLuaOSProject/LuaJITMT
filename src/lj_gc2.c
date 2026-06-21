@@ -71,15 +71,15 @@ void lj_gc2_init(global_State *g)
   gc2_phase_store_rlx(g, LJ_GC2_IDLE);
   g->gc2.cycle = 0;
   gc2_cycle_leader_store_rlx(g, 0);
-  g->gc2.hs_epoch = 0;
-  g->gc2.hs_pending = 0;
-  g->gc2.hs_actions = 0;
-  la_store64_rlx(&g->gc2.hs_signal_ns, 0);
-  la_store64_rlx(&g->gc2.hs_ack_latency_samples, 0);
-  la_store64_rlx(&g->gc2.hs_ack_latency_sum_ns, 0);
-  la_store64_rlx(&g->gc2.hs_ack_latency_max_ns, 0);
+  gc2_hs_epoch_store_rlx(g, 0);
+  gc2_hs_pending_store_rlx(g, 0);
+  gc2_hs_actions_store_rlx(g, 0);
+  gc2_hs_signal_ns_store_rlx(g, 0);
+  gc2_hs_ack_latency_samples_store_rlx(g, 0);
+  gc2_hs_ack_latency_sum_store_rlx(g, 0);
+  gc2_hs_ack_latency_max_store_rlx(g, 0);
   for (i = 0; i < LJ_GC2_HS_LATENCY_BUCKETS; i++)
-    la_store64_rlx(&g->gc2.hs_ack_latency_buckets[i], 0);
+    gc2_hs_ack_latency_bucket_store_rlx(g, i, 0);
   la_store64_rlx(&g->gc2.smr_reclaim_runs, 0);
   la_store64_rlx(&g->gc2.smr_reclaimed, 0);
   la_store64_rlx(&g->gc2.cycle_requests, 0);

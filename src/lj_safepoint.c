@@ -41,22 +41,20 @@ static void safepoint_note_ack_latency(global_State *g)
   uint64_t start, now, delta, old;
   if (!g)
     return;
-  start = la_load64_acq(&g->gc2.hs_signal_ns);
+  start = gc2_hs_signal_ns_acq(g);
   if (start == 0)
     return;
   now = safepoint_now_ns();
   if (now < start)
     return;
   delta = now - start;
-  la_add64_rlx(&g->gc2.hs_ack_latency_samples, 1);
-  la_add64_rlx(&g->gc2.hs_ack_latency_sum_ns, delta);
-  la_add64_rlx(&g->gc2.hs_ack_latency_buckets[
-    safepoint_latency_bucket(delta)], 1);
-  old = la_load64_acq(&g->gc2.hs_ack_latency_max_ns);
+  gc2_hs_ack_latency_samples_add(g, 1);
+  gc2_hs_ack_latency_sum_add(g, delta);
+  gc2_hs_ack_latency_bucket_add(g, safepoint_latency_bucket(delta), 1);
+  old = gc2_hs_ack_latency_max_acq(g);
   while (delta > old) {
     uint64_t expect = old;
-    if (la_cas64(&g->gc2.hs_ack_latency_max_ns, &expect, delta,
-		 LA_ACQ_REL, LA_ACQ))
+    if (gc2_hs_ack_latency_max_cas(g, &expect, delta))
       break;
     old = expect;
   }
@@ -102,7 +100,7 @@ static uint32_t safepoint_ack_tg(global_State *g, TGState *tg)
   actions = la_xchg32_acqrel(&tg->reqmask, 0);  /* 05 section 5.4.2. */
   if (actions == 0)
     return 0;
-  epoch = la_load64_acq(&g->gc2.hs_epoch);  /* 05 section 5.4.2 epoch. */
+  epoch = gc2_hs_epoch_acq(g);  /* 05 section 5.4.2 epoch. */
   oldepoch = la_load64_acq(&tg->hs_epoch_ack);
   while (oldepoch != epoch) {
     uint64_t expect = oldepoch;
@@ -115,9 +113,9 @@ static uint32_t safepoint_ack_tg(global_State *g, TGState *tg)
   lj_safepoint_apply_tg(g, tg, actions);
   safepoint_note_ack_latency(g);  /* 13.8: mutator-observed poll latency. */
   la_store32_rel(&tg->poll, 0);
-  oldpending = la_sub32_acqrel(&g->gc2.hs_pending, 1);  /* 05 section 5.4.2. */
+  oldpending = gc2_hs_pending_sub_acqrel(g, 1);  /* 05 section 5.4.2. */
   if (oldpending == 1)
-    la_futex_wake(&g->gc2.hs_pending, 1);
+    gc2_hs_pending_futex_wake(g, 1);
   return actions;
 }
 
@@ -187,7 +185,7 @@ static uint32_t safepoint_signal_late(global_State *g, uint32_t actions,
       continue;  /* 09 section 9.3: attach self-caught this epoch. */
     if (la_load32_acq(&tg->reqmask) != 0 || la_load32_acq(&tg->poll) != 0)
       continue;  /* Already counted by this handshake. */
-    (void)la_add32_rlx(&g->gc2.hs_pending, 1);
+    (void)gc2_hs_pending_add_rlx(g, 1);
     signaled++;
     la_store32_rel(&tg->reqmask, actions);  /* 05 section 5.4.2. */
     la_store32_rel(&tg->poll, 1);  /* 05 section 5.4.2 signal word. */
@@ -219,11 +217,11 @@ uint32_t lj_safepoint_handshake(global_State *g, uint32_t actions)
   uint32_t signaled, oldpending;
   if (!g || actions == 0)
     return 0;
-  la_store32_rel(&g->gc2.hs_actions, actions);  /* 05 section 5.4.2. */
-  la_store32_rel(&g->gc2.hs_pending, 1);  /* 09 section 9.3 leader sentinel. */
-  epoch = la_load64_rlx(&g->gc2.hs_epoch) + 1u;
-  la_store64_rel(&g->gc2.hs_signal_ns, safepoint_now_ns());
-  la_store64_rel(&g->gc2.hs_epoch, epoch);  /* 05 section 5.4.2. */
+  gc2_hs_actions_rel(g, actions);  /* 05 section 5.4.2. */
+  gc2_hs_pending_rel(g, 1);  /* 09 section 9.3 leader sentinel. */
+  epoch = gc2_hs_epoch_rlx(g) + 1u;
+  gc2_hs_signal_ns_rel(g, safepoint_now_ns());
+  gc2_hs_epoch_rel(g, epoch);  /* 05 section 5.4.2. */
 
   signaled = safepoint_signal_late(g, actions, epoch);
   for (;;) {
@@ -235,16 +233,15 @@ uint32_t lj_safepoint_handshake(global_State *g, uint32_t actions)
     signaled += late;
   }
 
-  oldpending = la_sub32_acqrel(&g->gc2.hs_pending, 1);  /* Drop sentinel. */
+  oldpending = gc2_hs_pending_sub_acqrel(g, 1);  /* Drop sentinel. */
   if (oldpending == 1)
-    la_futex_wake(&g->gc2.hs_pending, 1);
-  while (la_load32_acq(&g->gc2.hs_pending) != 0) {
+    gc2_hs_pending_futex_wake(g, 1);
+  while (gc2_hs_pending_acq(g) != 0) {
     signaled += safepoint_signal_late(g, actions, epoch);
     safepoint_ack_native(g);
-    if (la_load32_acq(&g->gc2.hs_pending) == 0)
+    if (gc2_hs_pending_acq(g) == 0)
       break;
-    la_futex_wait(&g->gc2.hs_pending, la_load32_rlx(&g->gc2.hs_pending),
-		  1000000);
+    gc2_hs_pending_futex_wait(g, gc2_hs_pending_rlx(g), 1000000);
   }
   if (actions & LJ_GC2_HS_FLUSHJ)
     (void)lj_trace_flushall(mainthread_acq(g));  /* 08 section 8.7 leader action. */

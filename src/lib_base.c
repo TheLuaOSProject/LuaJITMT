@@ -519,7 +519,7 @@ static void gc_stats_setint(lua_State *L, GCtab *t, const char *name,
 }
 
 static void gc_stats_set_latency_buckets(lua_State *L, GCtab *t,
-					 GC2State *gc2)
+					 global_State *g)
 {
   GCtab *bt;
   TValue tv;
@@ -527,8 +527,7 @@ static void gc_stats_set_latency_buckets(lua_State *L, GCtab *t,
   lua_createtable(L, LJ_GC2_HS_LATENCY_BUCKETS, 0);
   bt = tabV(L->top - 1);
   for (i = 0; i < LJ_GC2_HS_LATENCY_BUCKETS; i++) {
-    setnumV(&tv, (lua_Number)la_load64_acq(
-      &gc2->hs_ack_latency_buckets[i]));
+    setnumV(&tv, (lua_Number)gc2_hs_ack_latency_bucket_acq(g, i));
     gc_stats_storetv_int(L, bt, (int32_t)i + 1, &tv);
   }
   lj_gc_pubtab(L, bt);
@@ -601,12 +600,12 @@ static void gc_stats_push(lua_State *L)
   gc_stats_setnum(L, t, "remembered_drained",
 		  la_load64_acq(&gc2->remembered_drained));
   gc_stats_setnum(L, t, "poll_ack_samples",
-		  la_load64_acq(&gc2->hs_ack_latency_samples));
+		  gc2_hs_ack_latency_samples_acq(g));
   gc_stats_setnum(L, t, "poll_ack_latency_sum_ns",
-		  la_load64_acq(&gc2->hs_ack_latency_sum_ns));
+		  gc2_hs_ack_latency_sum_acq(g));
   gc_stats_setnum(L, t, "poll_ack_latency_max_ns",
-		  la_load64_acq(&gc2->hs_ack_latency_max_ns));
-  gc_stats_set_latency_buckets(L, t, gc2);
+		  gc2_hs_ack_latency_max_acq(g));
+  gc_stats_set_latency_buckets(L, t, g);
   gc_stats_setnum(L, t, "alloc_since_trigger",
 		  lj_gc2_alloc_since_load(g));
   gc_stats_setnum(L, t, "cycle_alloc_bytes",

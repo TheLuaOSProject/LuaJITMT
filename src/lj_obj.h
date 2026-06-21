@@ -1797,6 +1797,177 @@ static LJ_AINLINE uint32_t gc2_cycle_leader_xchg_acqrel(global_State *g,
   return la_xchg32_acqrel(&g->gc2.cycle_leader, leader);
 }
 
+static LJ_AINLINE uint64_t gc2_hs_epoch_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.hs_epoch);
+}
+
+static LJ_AINLINE uint64_t gc2_hs_epoch_rlx(global_State *g)
+{
+  return la_load64_rlx(&g->gc2.hs_epoch);
+}
+
+static LJ_AINLINE void gc2_hs_epoch_store_rlx(global_State *g,
+					      uint64_t epoch)
+{
+  la_store64_rlx(&g->gc2.hs_epoch, epoch);
+}
+
+static LJ_AINLINE void gc2_hs_epoch_rel(global_State *g, uint64_t epoch)
+{
+  la_store64_rel(&g->gc2.hs_epoch, epoch);
+}
+
+static LJ_AINLINE uint32_t gc2_hs_pending_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.hs_pending);
+}
+
+static LJ_AINLINE uint32_t gc2_hs_pending_rlx(global_State *g)
+{
+  return la_load32_rlx(&g->gc2.hs_pending);
+}
+
+static LJ_AINLINE void gc2_hs_pending_store_rlx(global_State *g,
+						uint32_t pending)
+{
+  la_store32_rlx(&g->gc2.hs_pending, pending);
+}
+
+static LJ_AINLINE void gc2_hs_pending_rel(global_State *g, uint32_t pending)
+{
+  la_store32_rel(&g->gc2.hs_pending, pending);
+}
+
+static LJ_AINLINE uint32_t gc2_hs_pending_add_rlx(global_State *g,
+						  uint32_t n)
+{
+  return la_add32_rlx(&g->gc2.hs_pending, n);
+}
+
+static LJ_AINLINE uint32_t gc2_hs_pending_sub_acqrel(global_State *g,
+						     uint32_t n)
+{
+  return la_sub32_acqrel(&g->gc2.hs_pending, n);
+}
+
+static LJ_AINLINE void gc2_hs_pending_futex_wake(global_State *g, int n)
+{
+  la_futex_wake(&g->gc2.hs_pending, n);
+}
+
+static LJ_AINLINE void gc2_hs_pending_futex_wait(global_State *g,
+						 uint32_t pending,
+						 int timeout_ns)
+{
+  la_futex_wait(&g->gc2.hs_pending, pending, timeout_ns);
+}
+
+static LJ_AINLINE uint32_t gc2_hs_actions_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.hs_actions);
+}
+
+static LJ_AINLINE void gc2_hs_actions_store_rlx(global_State *g,
+						uint32_t actions)
+{
+  la_store32_rlx(&g->gc2.hs_actions, actions);
+}
+
+static LJ_AINLINE void gc2_hs_actions_rel(global_State *g, uint32_t actions)
+{
+  la_store32_rel(&g->gc2.hs_actions, actions);
+}
+
+static LJ_AINLINE uint64_t gc2_hs_signal_ns_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.hs_signal_ns);
+}
+
+static LJ_AINLINE void gc2_hs_signal_ns_store_rlx(global_State *g,
+						  uint64_t ns)
+{
+  la_store64_rlx(&g->gc2.hs_signal_ns, ns);
+}
+
+static LJ_AINLINE void gc2_hs_signal_ns_rel(global_State *g, uint64_t ns)
+{
+  la_store64_rel(&g->gc2.hs_signal_ns, ns);
+}
+
+static LJ_AINLINE uint64_t gc2_hs_ack_latency_samples_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.hs_ack_latency_samples);
+}
+
+static LJ_AINLINE void gc2_hs_ack_latency_samples_store_rlx(global_State *g,
+							    uint64_t n)
+{
+  la_store64_rlx(&g->gc2.hs_ack_latency_samples, n);
+}
+
+static LJ_AINLINE void gc2_hs_ack_latency_samples_add(global_State *g,
+						      uint64_t n)
+{
+  la_add64_rlx(&g->gc2.hs_ack_latency_samples, n);
+}
+
+static LJ_AINLINE uint64_t gc2_hs_ack_latency_sum_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.hs_ack_latency_sum_ns);
+}
+
+static LJ_AINLINE void gc2_hs_ack_latency_sum_store_rlx(global_State *g,
+							uint64_t ns)
+{
+  la_store64_rlx(&g->gc2.hs_ack_latency_sum_ns, ns);
+}
+
+static LJ_AINLINE void gc2_hs_ack_latency_sum_add(global_State *g,
+						  uint64_t ns)
+{
+  la_add64_rlx(&g->gc2.hs_ack_latency_sum_ns, ns);
+}
+
+static LJ_AINLINE uint64_t gc2_hs_ack_latency_max_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.hs_ack_latency_max_ns);
+}
+
+static LJ_AINLINE void gc2_hs_ack_latency_max_store_rlx(global_State *g,
+							uint64_t ns)
+{
+  la_store64_rlx(&g->gc2.hs_ack_latency_max_ns, ns);
+}
+
+static LJ_AINLINE int gc2_hs_ack_latency_max_cas(global_State *g,
+						 uint64_t *oldp,
+						 uint64_t ns)
+{
+  return la_cas64(&g->gc2.hs_ack_latency_max_ns, oldp, ns,
+		  LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE uint64_t gc2_hs_ack_latency_bucket_acq(global_State *g,
+							 uint32_t bucket)
+{
+  return la_load64_acq(&g->gc2.hs_ack_latency_buckets[bucket]);
+}
+
+static LJ_AINLINE void gc2_hs_ack_latency_bucket_store_rlx(global_State *g,
+							   uint32_t bucket,
+							   uint64_t n)
+{
+  la_store64_rlx(&g->gc2.hs_ack_latency_buckets[bucket], n);
+}
+
+static LJ_AINLINE void gc2_hs_ack_latency_bucket_add(global_State *g,
+						     uint32_t bucket,
+						     uint64_t n)
+{
+  la_add64_rlx(&g->gc2.hs_ack_latency_buckets[bucket], n);
+}
+
 static LJ_AINLINE uint32_t gc2_generational_acq(global_State *g)
 {
   return la_load32_acq(&g->gc2.generational);
