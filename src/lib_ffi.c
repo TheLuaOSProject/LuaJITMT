@@ -915,14 +915,16 @@ static int ffi_typecmp_rawid(FFITypeCmpSnap *ts, CTypeID id, CTypeID *ridp,
 {
   int ok;
   for (;;) {
+    CTInfo info;
     ok = ffi_typecmp_get(ts, id, out);
     if (ok <= 0)
       return ok;
-    if (!ctype_isattrib(out->info)) {
+    info = ctype_info_acq(out);
+    if (!ctype_isattrib(info)) {
       *ridp = id;
       return 1;
     }
-    id = ctype_cid(out->info);
+    id = ctype_cid(info);
   }
 }
 
@@ -932,29 +934,34 @@ static int ffi_typecmp_rawrefid(FFITypeCmpSnap *ts, CTypeID id, CTypeID *ridp,
   int ok = ffi_typecmp_get(ts, id, out);
   if (ok <= 0)
     return ok;
-  if (ctype_isref(out->info))
-    id = ctype_cid(out->info);
+  {
+    CTInfo info = ctype_info_acq(out);
+    if (ctype_isref(info))
+      id = ctype_cid(info);
+  }
   return ffi_typecmp_rawid(ts, id, ridp, out);
 }
 
 static int ffi_typecmp_childqual(FFITypeCmpSnap *ts, const CType *root,
 				 CTypeID *idp, CType *out, CTInfo *qualp)
 {
-  CTypeID id = ctype_cid(root->info);
+  CTypeID id = ctype_cid(ctype_info_acq(root));
   int ok;
   for (;;) {
+    CTInfo info;
     ok = ffi_typecmp_get(ts, id, out);
     if (ok <= 0)
       return ok;
-    if (ctype_isattrib(out->info)) {
-      if (ctype_attrib(out->info) == CTA_QUAL)
-	*qualp |= out->size;
-    } else if (!ctype_isenum(out->info)) {
-      *qualp |= (out->info & CTF_QUAL);
+    info = ctype_info_acq(out);
+    if (ctype_isattrib(info)) {
+      if (ctype_attrib(info) == CTA_QUAL)
+	*qualp |= ctype_size_acq(out);
+    } else if (!ctype_isenum(info)) {
+      *qualp |= (info & CTF_QUAL);
       *idp = id;
       return 1;
     }
-    id = ctype_cid(out->info);
+    id = ctype_cid(info);
   }
 }
 

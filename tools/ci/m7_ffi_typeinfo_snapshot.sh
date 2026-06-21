@@ -63,6 +63,17 @@ if hits=$(awk '
   exit 1
 fi
 if hits=$(awk '
+  /^static int ffi_typecmp_rawid\(/ ||
+  /^static int ffi_typecmp_rawrefid\(/ ||
+  /^static int ffi_typecmp_childqual\(/ { in_fn = 1 }
+  /^static int ffi_typecmp_compatptr\(/ { in_fn = 0 }
+  in_fn && /->[[:space:]]*(info|size)([^[:alnum:]_]|$)/ { print FNR ":" $0 }
+' "$ROOT/src/lib_ffi.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw CType info/size reads are forbidden in ffi.istype typecmp walkers; use ctype_info_acq() or ctype_size_acq()' >&2
+  exit 1
+fi
+if hits=$(awk '
   /^LJLIB_CF\(ffi_sizeof\)/ || /^LJLIB_CF\(ffi_offsetof\)/ { in_fn = 1 }
   in_fn && /->[[:space:]]*(info|size)([^[:alnum:]_]|$)/ { print FNR ":" $0 }
   in_fn && /^}/ { in_fn = 0 }
