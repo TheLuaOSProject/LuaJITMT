@@ -597,6 +597,8 @@ void lj_cconv_ct_tv_l(lua_State *L, CTState *cts, CType *d,
 {
   CTypeID sid = CTID_P_VOID;
   CType *s;
+  CTInfo dinfo = ctype_info_acq(d);
+  CTSize dsize = ctype_size_acq(d);
   void *tmpptr;
   CTSize tmpenum;
   uint8_t tmpbool, *sp = (uint8_t *)&tmpptr;
@@ -612,26 +614,34 @@ void lj_cconv_ct_tv_l(lua_State *L, CTState *cts, CType *d,
     sp = cdataptr(cdataV(o));
     sid = cdataV(o)->ctypeid;
     s = ctype_get(cts, sid);
-    if (ctype_isref(s->info)) {  /* Resolve reference for value. */
-      lj_assertCTS(s->size == CTSIZE_PTR, "ref is not pointer-sized");
-      sp = *(void **)sp;
-      sid = ctype_cid(s->info);
+    {
+      CTInfo sinfo = ctype_info_acq(s);
+      if (ctype_isref(sinfo)) {  /* Resolve reference for value. */
+	lj_assertCTS(ctype_size_acq(s) == CTSIZE_PTR, "ref is not pointer-sized");
+	sp = *(void **)sp;
+	sid = ctype_cid(sinfo);
+      }
     }
     s = ctype_raw(cts, sid);
-    if (ctype_isfunc(s->info)) {
-      sid = lj_ctype_intern_l(L, cts, CTINFO(CT_PTR, CTALIGN_PTR|sid),
-			      CTSIZE_PTR);
-      d = ctype_get(cts, did);  /* C type table may have been reallocated. */
-    } else {
-      if (ctype_isenum(s->info)) {
-	sid = ctype_cid(s->info);
-	s = ctype_get(cts, sid);
+    {
+      CTInfo sinfo = ctype_info_acq(s);
+      if (ctype_isfunc(sinfo)) {
+	sid = lj_ctype_intern_l(L, cts, CTINFO(CT_PTR, CTALIGN_PTR|sid),
+				CTSIZE_PTR);
+	d = ctype_get(cts, did);  /* C type table may have been reallocated. */
+	dinfo = ctype_info_acq(d);
+	dsize = ctype_size_acq(d);
+      } else {
+	if (ctype_isenum(sinfo)) {
+	  sid = ctype_cid(sinfo);
+	  s = ctype_get(cts, sid);
+	}
+	goto doconv;
       }
-      goto doconv;
     }
   } else if (tvisstr(o)) {
     GCstr *str = strV(o);
-    if (ctype_isenum(d->info)) {  /* Match string against enum constant. */
+    if (ctype_isenum(dinfo)) {  /* Match string against enum constant. */
       int ok = lj_ctype_enumconst_snapshot(cts, d, str, &tmpenum, &sid);
       if (ok < 0) {
 	CTSize ofs;
@@ -639,10 +649,15 @@ void lj_cconv_ct_tv_l(lua_State *L, CTState *cts, CType *d,
 	lj_ctype_parse_lock(cts, L);
 	/* 11.2: enum string readers wait out parser rollback. */
 	cct = lj_ctype_getfield(cts, d, str, &ofs);
-	if (cct && ctype_isconstval(cct->info)) {
-	  tmpenum = cct->size;
-	  sid = ctype_cid(cct->info);
-	  ok = 1;
+	if (cct) {
+	  CTInfo cctinfo = ctype_info_acq(cct);
+	  if (ctype_isconstval(cctinfo)) {
+	    tmpenum = ctype_size_acq(cct);
+	    sid = ctype_cid(cctinfo);
+	    ok = 1;
+	  } else {
+	    ok = 0;
+	  }
 	} else {
 	  ok = 0;
 	}
@@ -650,15 +665,17 @@ void lj_cconv_ct_tv_l(lua_State *L, CTState *cts, CType *d,
       }
       if (!ok)
 	goto err_conv;
-      lj_assertCTS(d->size == 4, "only 32 bit enum supported");  /* NYI */
+      lj_assertCTS(dsize == 4, "only 32 bit enum supported");  /* NYI */
       sp = (uint8_t *)&tmpenum;
-    } else if (ctype_isrefarray(d->info)) {  /* Copy string to array. */
+    } else if (ctype_isrefarray(dinfo)) {  /* Copy string to array. */
       CType *dc = ctype_rawchild(cts, d);
+      CTInfo dcinfo = ctype_info_acq(dc);
+      CTSize dcsize = ctype_size_acq(dc);
       CTSize sz = str->len+1;
-      if (!ctype_isinteger(dc->info) || dc->size != 1)
+      if (!ctype_isinteger(dcinfo) || dcsize != 1)
 	goto err_conv;
-      if (d->size != 0 && d->size < sz)
-	sz = d->size;
+      if (dsize != 0 && dsize < sz)
+	sz = dsize;
       memcpy(dp, strdata(str), sz);
       return;
     } else {  /* Otherwise pass it as a const char[]. */
@@ -667,10 +684,10 @@ void lj_cconv_ct_tv_l(lua_State *L, CTState *cts, CType *d,
       flags |= CCF_FROMTV;
     }
   } else if (tvistab(o)) {
-    if (ctype_isarray(d->info)) {
+    if (ctype_isarray(dinfo)) {
       cconv_array_tab_l(L, cts, d, did, dp, tabV(o), flags);
       return;
-    } else if (ctype_isstruct(d->info)) {
+    } else if (ctype_isstruct(dinfo)) {
       cconv_struct_tab_l(L, cts, d, did, dp, tabV(o), flags);
       return;
     } else {
@@ -709,8 +726,8 @@ void lj_cconv_ct_tv_l(lua_State *L, CTState *cts, CType *d,
   }
   s = ctype_get(cts, sid);
 doconv:
-  if (ctype_isenum(d->info)) {
-    did = ctype_cid(d->info);
+  if (ctype_isenum(dinfo)) {
+    did = ctype_cid(dinfo);
     d = ctype_get(cts, did);
   }
   lj_cconv_ct_ct_l(L, cts, d, did, s, sid, dp, sp, flags);
