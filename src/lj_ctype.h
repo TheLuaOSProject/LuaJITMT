@@ -159,6 +159,16 @@ static LJ_AINLINE void ctype_next_rel(CType *ct, CTypeID next)
   la_store16_rel(&ct->next, (CTypeID1)next);  /* 11.2: ctype hash-chain link. */
 }
 
+static LJ_AINLINE CTypeID ctype_sib_acq(const CType *ct)
+{
+  return (CTypeID)la_load16_acq(&ct->sib);  /* 11.2: ctype sibling link. */
+}
+
+static LJ_AINLINE void ctype_sib_rel(CType *ct, CTypeID sib)
+{
+  la_store16_rel(&ct->sib, (CTypeID1)sib);  /* 11.2: ctype sibling link. */
+}
+
 typedef struct CTypeTab {
   MSize sizetab;		/* Number of C type table slots. */
   uint64_t retire_epoch;	/* Safepoint epoch when retired. */

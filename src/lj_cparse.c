@@ -437,7 +437,7 @@ static CType *cp_ctype_publish(CPState *cp, CTypeID id, CType *src)
 static CType *cp_ctype_setsib(CPState *cp, CTypeID id, CTypeID sib)
 {
   CType *ct = cp_ctype_mut(cp, id);
-  ct->sib = sib;
+  ctype_sib_rel(ct, sib);
   return cp_ctype_publish(cp, id, ct);
 }
 
@@ -485,7 +485,7 @@ static void cp_ctype_abandon(CPState *cp)
     CType *ct = ctype_get(cp->cts, id);
     ct->info = CTINFO(CT_ATTRIB, CTATTRIB(CTA_BAD));
     ct->size = 0;
-    ct->sib = 0;
+    ctype_sib_rel(ct, 0);
     ctype_clearname(ct);
     /* Keep ct->next so hash walkers can skip through abandoned entries. */
     cp_ctype_publish(cp, id, ct);
@@ -497,7 +497,7 @@ static void cp_ctype_abandon_id(CPState *cp, CTypeID id)
   CType *ct = ctype_get(cp->cts, id);
   ct->info = CTINFO(CT_ATTRIB, CTATTRIB(CTA_BAD));
   ct->size = 0;
-  ct->sib = 0;
+  ctype_sib_rel(ct, 0);
   ctype_clearname(ct);
   /* Keep ct->next so hash walkers can skip through abandoned entries. */
   cp_ctype_publish(cp, id, ct);
@@ -990,7 +990,7 @@ static void cp_push_type(CPDecl *decl, CTypeID id)
     break;
   case CT_FUNC:
     /* Copy type, link parameters (shared). */
-    decl->stack[cp_push(decl, info, size)].sib = ct->sib;
+    decl->stack[cp_push(decl, info, size)].sib = ctype_sib_acq(ct);
     break;
   default:
     /* Copy type, merge common qualifiers. */
@@ -1037,12 +1037,12 @@ static CTypeID cp_decl_intern(CPState *cp, CPDecl *decl)
 	if (!ctype_isattrib(ctn->info)) break;
 	idx = ctn->next;  /* Skip attribute. */
       }
-      sib = ct->sib;  /* Next line may reallocate the C type table. */
+      sib = ctype_sib_acq(ct);  /* Next line may reallocate the C type table. */
       fid = cp_ctype_new(cp, &fct);
       csize = CTSIZE_INVALID;
       fct->info = cinfo = info + id;
       fct->size = size;
-      fct->sib = sib;
+      ctype_sib_rel(fct, sib);
       fct = cp_ctype_publish(cp, fid, fct);
       id = fid;
     } else if (ctype_isattrib(info)) {
@@ -1092,7 +1092,8 @@ static CTypeID cp_decl_intern(CPState *cp, CPDecl *decl)
 	  }
 	}
       } else if (ctype_isarray(info)) {  /* Check for valid array size etc. */
-	if (ct->sib == 0) {  /* Only check/size arrays not copied by unroll. */
+	if (ctype_sib_acq(ct) == 0) {
+	  /* Only check/size arrays not copied by unroll. */
 	  if (ctype_isref(cinfo))  /* Reject arrays of refs. */
 	    cp_err(cp, LJ_ERR_FFI_INVTYPE);
 	  /* Reject VLS or unknown-sized types. */
@@ -1416,7 +1417,7 @@ static CTypeID cp_struct_name(CPState *cp, CPDecl *sdecl, CTInfo info)
     ct = cp_ctype_publish(cp, sid, ct);
   }
   if (cp->tok == '{') {
-    if (ct->size != CTSIZE_INVALID || ct->sib)
+    if (ct->size != CTSIZE_INVALID || ctype_sib_acq(ct))
       cp_errmsg(cp, 0, LJ_ERR_FFI_REDEF, strdata(ctype_name_acq(ct)));
     ct = cp_ctype_setsib(cp, sid, 1);  /* Type is currently being defined. */
   }
@@ -1451,7 +1452,7 @@ static void cp_struct_layout(CPState *cp, CTypeID sid, CTInfo sattr)
   CTSize maxalign = ctype_align(sattr);
   CType *sct = cp_ctype_mut(cp, sid);
   CTInfo sinfo = sct->info;
-  CTypeID fieldid = sct->sib;
+  CTypeID fieldid = ctype_sib_acq(sct);
   while (fieldid) {
     CType *ct = ctype_get(cp->cts, fieldid);
     CTInfo attr = ct->size;  /* Field declaration attributes (temp.). */
@@ -1526,7 +1527,7 @@ static void cp_struct_layout(CPState *cp, CTypeID sid, CTInfo sattr)
       }
     }  /* All other fields in the chain are already set up. */
 
-    fieldid = ct->sib;
+    fieldid = ctype_sib_acq(ct);
   }
 
   /* Complete struct/union. */
@@ -2061,7 +2062,7 @@ static void cp_decl_multi(CPState *cp)
 	  aid = cp_ctype_new(cp, &cta);
 	  ct = ctype_get(cp->cts, id);  /* Table may have been reallocated. */
 	  cta->info = CTINFO(CT_ATTRIB, CTATTRIB(CTA_REDIR));
-	  cta->sib = ct->sib;
+	  ctype_sib_rel(cta, ctype_sib_acq(ct));
 	  cta = cp_ctype_publish(cp, aid, cta);
 	  cp_ctype_setname(cp, aid, decl.redir);
 	  cp_ctype_setsib(cp, id, aid);

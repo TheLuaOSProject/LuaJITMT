@@ -796,7 +796,7 @@ static int ffi_typeinfo_snapshot_locked(CTState *cts, CTypeID id, CType *out)
   ct = ctype_get(cts, id);
   out->info = la_load32_acq(&ct->info);
   out->size = la_load32_acq(&ct->size);
-  out->sib = (CTypeID1)la_load16_acq(&ct->sib);
+  out->sib = (CTypeID1)ctype_sib_acq(ct);
   out->next = (CTypeID1)ctype_next_acq(ct);
   name = gcref_acq(ct->name);
   setgcrefp(out->name, name);
@@ -884,7 +884,7 @@ static int ffi_typecmp_get(FFITypeCmpSnap *ts, CTypeID id, CType *out)
   info = la_load32_acq(&ct->info);
   out->info = info;
   out->size = la_load32_acq(&ct->size);
-  out->sib = (CTypeID1)la_load16_acq(&ct->sib);
+  out->sib = (CTypeID1)ctype_sib_acq(ct);
   out->next = (CTypeID1)ctype_next_acq(ct);
   setgcrefnull(out->name);
   return !ctype_isabandoned(info);
@@ -1116,7 +1116,7 @@ static int ffi_layout_get(FFILayoutSnap *ls, CTypeID id, CType *out)
   ct = ctype_tab_slot(ls->tabh, id);
   out->info = la_load32_acq(&ct->info);
   out->size = la_load32_acq(&ct->size);
-  out->sib = (CTypeID1)la_load16_acq(&ct->sib);
+  out->sib = (CTypeID1)ctype_sib_acq(ct);
   out->next = (CTypeID1)ctype_next_acq(ct);
   name = gcref_acq(ct->name);
   setgcrefp(out->name, name);

@@ -209,7 +209,7 @@ int lj_ctype_snapshot(CTState *cts, CTypeID id, CType *out)
   ct = ctype_tab_slot(tabh, id);
   out->info = la_load32_acq(&ct->info);
   out->size = la_load32_acq(&ct->size);
-  out->sib = (CTypeID1)la_load16_acq(&ct->sib);
+  out->sib = (CTypeID1)ctype_sib_acq(ct);
   out->next = (CTypeID1)ctype_next_acq(ct);
   name = gcref_acq(ct->name);
   setgcrefp(out->name, name);
@@ -752,7 +752,7 @@ CTypeID lj_ctype_new_l(lua_State *L, CTState *cts, CType **ctp)
   ct = *ctp;
   ct->info = 0;
   ct->size = 0;
-  ct->sib = 0;
+  ctype_sib_rel(ct, 0);
   ctype_next_rel(ct, 0);
   ctype_clearname(ct);
   return id;
@@ -772,7 +772,7 @@ static CTypeID ctype_intern_l(lua_State *L, CTState *cts, CTInfo info,
     id = ctype_top_reserve_l(L, cts, &ct);
     ct->info = info;
     ct->size = size;
-    ct->sib = 0;
+    ctype_sib_rel(ct, 0);
     ctype_next_rel(ct, 0);
     ctype_clearname(ct);
     head = ctype_hash_load(cts, h);
@@ -877,7 +877,7 @@ int lj_ctype_getname_snapshot(CTState *cts, GCstr *name, uint32_t tmask,
     ct = ctype_tab_slot(tabh, id);
     info = la_load32_acq(&ct->info);
     size = la_load32_acq(&ct->size);
-    sib = (CTypeID)la_load16_acq(&ct->sib);
+    sib = ctype_sib_acq(ct);
     next = ctype_next_acq(ct);
     gco = gcref_acq(ct->name);
     if (!ctype_isabandoned(info) && gco == obj2gco(name) &&
@@ -924,8 +924,11 @@ int lj_ctype_getname_snapshot(CTState *cts, GCstr *name, uint32_t tmask,
 CType *lj_ctype_getfieldq(CTState *cts, CType *ct, GCstr *name, CTSize *ofs,
 			  CTInfo *qual)
 {
-  while (ct->sib) {
-    ct = ctype_get(cts, ct->sib);
+  for (;;) {
+    CTypeID sib = ctype_sib_acq(ct);
+    if (!sib)
+      break;
+    ct = ctype_get(cts, sib);
     if (ctype_name_acq(ct) == name) {
       *ofs = ct->size;
       return ct;
@@ -958,7 +961,7 @@ static int ctype_snapshot_copy(CTypeTab *tabh, CTypeID top, CTypeID id,
   ct = ctype_tab_slot(tabh, id);
   out->info = la_load32_acq(&ct->info);
   out->size = la_load32_acq(&ct->size);
-  out->sib = (CTypeID1)la_load16_acq(&ct->sib);
+  out->sib = (CTypeID1)ctype_sib_acq(ct);
   out->next = (CTypeID1)ctype_next_acq(ct);
   gco = gcref_acq(ct->name);
   setgcrefp(out->name, gco);
@@ -985,7 +988,7 @@ static int ctype_getfieldq_snapshot_rec(CTypeTab *tabh, CTypeID top,
     info = la_load32_acq(&ct->info);
     size = la_load32_acq(&ct->size);
     child = ctype_cid(info);
-    next = (CTypeID)la_load16_acq(&ct->sib);
+    next = ctype_sib_acq(ct);
     gco = gcref_acq(ct->name);
     if (ctype_isabandoned(info))
       return 0;
@@ -1042,7 +1045,7 @@ int lj_ctype_getfieldq_snapshot(CTState *cts, const CType *root,
   info = la_load32_acq(&root->info);
   if (!ctype_isstruct(info))
     return 0;
-  sib = (CTypeID)la_load16_acq(&root->sib);
+  sib = ctype_sib_acq(root);
   top = ctype_top_acq(cts);
   tabh = ctype_tabh_acq(cts);
   budget = top ? (MSize)top * 4u : 1u;
@@ -1225,7 +1228,7 @@ int lj_ctype_enumconst_snapshot(CTState *cts, const CType *root,
     return -1;
   if (!ctype_isenum(la_load32_acq(&root->info)))
     return 0;
-  id = (CTypeID)la_load16_acq(&root->sib);
+  id = ctype_sib_acq(root);
   top = ctype_top_acq(cts);
   tabh = ctype_tabh_acq(cts);
   budget = top ? (MSize)top * 2u : 1u;
@@ -1251,7 +1254,7 @@ int lj_ctype_enumconst_snapshot(CTState *cts, const CType *root,
       seq1 = ctype_parse_token_acq(cts);
       return (seq0 == seq1 && !(seq1 & 1u)) ? 1 : -1;
     }
-    id = (CTypeID)la_load16_acq(&ct->sib);
+    id = ctype_sib_acq(ct);
   }
   {
     uint32_t seq1 = ctype_parse_token_acq(cts);
@@ -1264,13 +1267,13 @@ CTSize lj_ctype_vlsize(CTState *cts, CType *ct, CTSize nelem)
 {
   uint64_t xsz = 0;
   if (ctype_isstruct(ct->info)) {
-    CTypeID arrid = 0, fid = ct->sib;
+    CTypeID arrid = 0, fid = ctype_sib_acq(ct);
     xsz = ct->size;  /* Add the struct size. */
     while (fid) {
       CType *ctf = ctype_get(cts, fid);
       if (ctype_type(ctf->info) == CT_FIELD)
 	arrid = ctype_cid(ctf->info);  /* Remember last field of VLS. */
-      fid = ctf->sib;
+      fid = ctype_sib_acq(ctf);
     }
     ct = ctype_raw(cts, arrid);
   }
@@ -1670,7 +1673,7 @@ CTState *lj_ctype_init(lua_State *L)
     CTInfo info = lj_ctype_typeinfo[id];
     ct->size = (CTSize)((int32_t)(info << 16) >> 26);
     ct->info = info & 0xffff03ffu;
-    ct->sib = 0;
+    ctype_sib_rel(ct, 0);
     if (ctype_type(info) == CT_KW || ctype_istypedef(info)) {
       size_t len = strlen(name);
       GCstr *str = lj_str_new(L, name, len);
