@@ -1607,18 +1607,22 @@ static TRef crec_arith_ptr(jit_State *J, TRef *sp, CType **s, MMS mm)
 {
   CTState *cts = ctype_ctsG(J2G(J));
   CType *ctp = s[0];
+  CTInfo ctpinfo, s1info;
   if (!(sp[0] && sp[1])) return 0;
-  if (ctype_isptr(ctp->info) || ctype_isrefarray(ctp->info)) {
+  ctpinfo = ctype_info_acq(ctp);
+  s1info = ctype_info_acq(s[1]);
+  if (ctype_isptr(ctpinfo) || ctype_isrefarray(ctpinfo)) {
     if ((mm == MM_sub || mm == MM_eq || mm == MM_lt || mm == MM_le) &&
-	(ctype_isptr(s[1]->info) || ctype_isrefarray(s[1]->info))) {
+	(ctype_isptr(s1info) || ctype_isrefarray(s1info))) {
       if (mm == MM_sub) {  /* Pointer difference. */
 	TRef tr;
 	CTSize sz;
-	int ok = lj_ctype_size_snapshot(cts, ctype_cid(ctp->info), &sz);
+	CTypeID cid = ctype_cid(ctpinfo);
+	int ok = lj_ctype_size_snapshot(cts, cid, &sz);
 	if (ok < 0) {
 	  lj_ctype_parse_lock(cts, J->L);
 	  /* 11.2: cdata recorder pointer arithmetic waits out rollback. */
-	  sz = lj_ctype_size(cts, ctype_cid(ctp->info));
+	  sz = lj_ctype_size(cts, cid);
 	  lj_ctype_parse_unlock(cts);
 	} else if (ok == 0) {
 	  sz = CTSIZE_INVALID;
@@ -1639,12 +1643,13 @@ static TRef crec_arith_ptr(jit_State *J, TRef *sp, CType **s, MMS mm)
 	return TREF_TRUE;
       }
     }
-    if (!((mm == MM_add || mm == MM_sub) && ctype_isnum(s[1]->info)))
+    if (!((mm == MM_add || mm == MM_sub) && ctype_isnum(s1info)))
       return 0;
-  } else if (mm == MM_add && ctype_isnum(ctp->info) &&
-	     (ctype_isptr(s[1]->info) || ctype_isrefarray(s[1]->info))) {
+  } else if (mm == MM_add && ctype_isnum(ctpinfo) &&
+	     (ctype_isptr(s1info) || ctype_isrefarray(s1info))) {
     TRef tr = sp[0]; sp[0] = sp[1]; sp[1] = tr;  /* Swap pointer and index. */
     ctp = s[1];
+    ctpinfo = s1info;
   } else {
     return 0;
   }
@@ -1653,11 +1658,12 @@ static TRef crec_arith_ptr(jit_State *J, TRef *sp, CType **s, MMS mm)
     IRType t = tref_type(tr);
     CTSize sz;
     CTypeID id;
-    int ok = lj_ctype_size_snapshot(cts, ctype_cid(ctp->info), &sz);
+    CTypeID cid = ctype_cid(ctpinfo);
+    int ok = lj_ctype_size_snapshot(cts, cid, &sz);
     if (ok < 0) {
       lj_ctype_parse_lock(cts, J->L);
       /* 11.2: cdata recorder pointer arithmetic waits out rollback. */
-      sz = lj_ctype_size(cts, ctype_cid(ctp->info));
+      sz = lj_ctype_size(cts, cid);
       lj_ctype_parse_unlock(cts);
     } else if (ok == 0) {
       sz = CTSIZE_INVALID;
@@ -1679,7 +1685,7 @@ static TRef crec_arith_ptr(jit_State *J, TRef *sp, CType **s, MMS mm)
     tr = emitir(IRT(IR_MUL, IRT_INTP), tr, lj_ir_kintp(J, sz));
     tr = emitir(IRT(mm+(int)IR_ADD-(int)MM_add, IRT_PTR), sp[0], tr);
     id = lj_ctype_intern_l(J->L, cts,
-			   CTINFO(CT_PTR, CTALIGN_PTR|ctype_cid(ctp->info)),
+			   CTINFO(CT_PTR, CTALIGN_PTR|cid),
 			   CTSIZE_PTR);
     return emitir(IRTG(IR_CNEWI, IRT_CDATA), lj_ir_kint(J, id), tr);
   }
