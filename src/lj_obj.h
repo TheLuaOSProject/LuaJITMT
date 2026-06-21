@@ -2529,6 +2529,154 @@ static LJ_AINLINE void gc2_worker_exited_futex_wake(global_State *g, int n)
   la_futex_wake(&g->gc2.worker_exited, n);
 }
 
+static LJ_AINLINE uint64_t gc2_worker_runs_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.worker_runs);
+}
+
+static LJ_AINLINE void gc2_worker_runs_store_rlx(global_State *g, uint64_t n)
+{
+  la_store64_rlx(&g->gc2.worker_runs, n);
+}
+
+static LJ_AINLINE void gc2_worker_runs_add(global_State *g, uint64_t n)
+{
+  la_add64_rlx(&g->gc2.worker_runs, n);
+}
+
+static LJ_AINLINE uint64_t gc2_worker_grey_drained_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.worker_grey_drained);
+}
+
+static LJ_AINLINE void gc2_worker_grey_drained_store_rlx(global_State *g,
+							 uint64_t n)
+{
+  la_store64_rlx(&g->gc2.worker_grey_drained, n);
+}
+
+static LJ_AINLINE void gc2_worker_grey_drained_add(global_State *g,
+						   uint64_t n)
+{
+  la_add64_rlx(&g->gc2.worker_grey_drained, n);
+}
+
+static LJ_AINLINE uint64_t gc2_worker_ssb_converted_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.worker_ssb_converted);
+}
+
+static LJ_AINLINE void gc2_worker_ssb_converted_store_rlx(global_State *g,
+							  uint64_t n)
+{
+  la_store64_rlx(&g->gc2.worker_ssb_converted, n);
+}
+
+static LJ_AINLINE void gc2_worker_ssb_converted_add(global_State *g,
+						    uint64_t n)
+{
+  la_add64_rlx(&g->gc2.worker_ssb_converted, n);
+}
+
+static LJ_AINLINE uint64_t gc2_worker_weak_drained_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.worker_weak_drained);
+}
+
+static LJ_AINLINE void gc2_worker_weak_drained_store_rlx(global_State *g,
+							 uint64_t n)
+{
+  la_store64_rlx(&g->gc2.worker_weak_drained, n);
+}
+
+static LJ_AINLINE void gc2_worker_weak_drained_add(global_State *g,
+						   uint64_t n)
+{
+  la_add64_rlx(&g->gc2.worker_weak_drained, n);
+}
+
+static LJ_AINLINE uint64_t gc2_worker_idle_declares_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.worker_idle_declares);
+}
+
+static LJ_AINLINE void gc2_worker_idle_declares_store_rlx(global_State *g,
+							  uint64_t n)
+{
+  la_store64_rlx(&g->gc2.worker_idle_declares, n);
+}
+
+static LJ_AINLINE void gc2_worker_idle_declares_add(global_State *g,
+						    uint64_t n)
+{
+  la_add64_rlx(&g->gc2.worker_idle_declares, n);
+}
+
+static LJ_AINLINE uint64_t gc2_worker_busy_retries_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.worker_busy_retries);
+}
+
+static LJ_AINLINE void gc2_worker_busy_retries_store_rlx(global_State *g,
+							 uint64_t n)
+{
+  la_store64_rlx(&g->gc2.worker_busy_retries, n);
+}
+
+static LJ_AINLINE void gc2_worker_busy_retries_add(global_State *g,
+						   uint64_t n)
+{
+  la_add64_rlx(&g->gc2.worker_busy_retries, n);
+}
+
+static LJ_AINLINE uint64_t gc2_worker_wakes_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.worker_wakes);
+}
+
+static LJ_AINLINE void gc2_worker_wakes_store_rlx(global_State *g,
+						  uint64_t n)
+{
+  la_store64_rlx(&g->gc2.worker_wakes, n);
+}
+
+static LJ_AINLINE void gc2_worker_wakes_add(global_State *g, uint64_t n)
+{
+  la_add64_rlx(&g->gc2.worker_wakes, n);
+}
+
+static LJ_AINLINE uint64_t gc2_worker_parks_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.worker_parks);
+}
+
+static LJ_AINLINE void gc2_worker_parks_store_rlx(global_State *g, uint64_t n)
+{
+  la_store64_rlx(&g->gc2.worker_parks, n);
+}
+
+static LJ_AINLINE void gc2_worker_parks_add(global_State *g, uint64_t n)
+{
+  la_add64_rlx(&g->gc2.worker_parks, n);
+}
+
+static LJ_AINLINE uint64_t gc2_worker_async_progress_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.worker_async_progress);
+}
+
+static LJ_AINLINE void gc2_worker_async_progress_store_rlx(global_State *g,
+							   uint64_t n)
+{
+  la_store64_rlx(&g->gc2.worker_async_progress, n);
+}
+
+static LJ_AINLINE void gc2_worker_async_progress_add(global_State *g,
+						     uint64_t n)
+{
+  la_add64_rlx(&g->gc2.worker_async_progress, n);
+}
+
 static LJ_AINLINE GCobj *gc2_finalizer_mpsc_acq(global_State *g)
 {
   return (GCobj *)la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc);

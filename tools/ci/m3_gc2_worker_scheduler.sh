@@ -119,6 +119,46 @@ if hits=$(grep -nE -- '->[[:space:]]*gc2[.](n_workers|worker_stop|worker_wake|wo
   printf '%s\n' 'raw GC2 worker lifecycle state access is forbidden; use gc2_worker_* lifecycle helpers' >&2
   exit 1
 fi
+for helper in gc2_worker_runs_acq \
+  gc2_worker_runs_store_rlx \
+  gc2_worker_runs_add \
+  gc2_worker_grey_drained_acq \
+  gc2_worker_grey_drained_store_rlx \
+  gc2_worker_grey_drained_add \
+  gc2_worker_ssb_converted_acq \
+  gc2_worker_ssb_converted_store_rlx \
+  gc2_worker_ssb_converted_add \
+  gc2_worker_weak_drained_acq \
+  gc2_worker_weak_drained_store_rlx \
+  gc2_worker_weak_drained_add \
+  gc2_worker_idle_declares_acq \
+  gc2_worker_idle_declares_store_rlx \
+  gc2_worker_idle_declares_add \
+  gc2_worker_busy_retries_acq \
+  gc2_worker_busy_retries_store_rlx \
+  gc2_worker_busy_retries_add \
+  gc2_worker_wakes_acq \
+  gc2_worker_wakes_store_rlx \
+  gc2_worker_wakes_add \
+  gc2_worker_parks_acq \
+  gc2_worker_parks_store_rlx \
+  gc2_worker_parks_add \
+  gc2_worker_async_progress_acq \
+  gc2_worker_async_progress_store_rlx \
+  gc2_worker_async_progress_add; do
+  if ! grep -qE "^[[:space:]]*${helper}[[:space:]]*[(]|static LJ_AINLINE .*[*[:space:]]${helper}[[:space:]]*[(]" \
+      "$ROOT/src/lj_obj.h"; then
+    printf '%s\n' "${helper} helper is required for GC2 worker counters" >&2
+    exit 1
+  fi
+done
+if hits=$(grep -nE -- '->[[:space:]]*gc2[.](worker_(runs|grey_drained|ssb_converted|weak_drained|idle_declares|busy_retries|wakes|parks|async_progress))([^[:alnum:]_]|$)|&[[:space:]]*[^)]*->[[:space:]]*gc2[.](worker_(runs|grey_drained|ssb_converted|weak_drained|idle_declares|busy_retries|wakes|parks|async_progress))([^[:alnum:]_]|$)' \
+    "$ROOT/src/lj_gc2.c" \
+    "$ROOT/src/lib_base.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw GC2 worker counter access is forbidden; use gc2_worker_* counter helpers' >&2
+  exit 1
+fi
 if hits=$(grep -nE -- '->[[:space:]]*gc2[.]phase|&[[:space:]]*[^)]*->[[:space:]]*gc2[.]phase' \
     "$ROOT/src/lj_gc.c" \
     "$ROOT/src/lj_gc2.c" \

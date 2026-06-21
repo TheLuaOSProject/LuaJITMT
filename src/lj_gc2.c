@@ -153,15 +153,15 @@ void lj_gc2_init(global_State *g)
   gc2_worker_started_store_rlx(g, 0);
   gc2_worker_exited_store_rlx(g, 0);
   gc2_worker_active_store_rlx(g, 0);
-  la_store64_rlx(&g->gc2.worker_runs, 0);
-  la_store64_rlx(&g->gc2.worker_grey_drained, 0);
-  la_store64_rlx(&g->gc2.worker_ssb_converted, 0);
-  la_store64_rlx(&g->gc2.worker_weak_drained, 0);
-  la_store64_rlx(&g->gc2.worker_idle_declares, 0);
-  la_store64_rlx(&g->gc2.worker_busy_retries, 0);
-  la_store64_rlx(&g->gc2.worker_wakes, 0);
-  la_store64_rlx(&g->gc2.worker_parks, 0);
-  la_store64_rlx(&g->gc2.worker_async_progress, 0);
+  gc2_worker_runs_store_rlx(g, 0);
+  gc2_worker_grey_drained_store_rlx(g, 0);
+  gc2_worker_ssb_converted_store_rlx(g, 0);
+  gc2_worker_weak_drained_store_rlx(g, 0);
+  gc2_worker_idle_declares_store_rlx(g, 0);
+  gc2_worker_busy_retries_store_rlx(g, 0);
+  gc2_worker_wakes_store_rlx(g, 0);
+  gc2_worker_parks_store_rlx(g, 0);
+  gc2_worker_async_progress_store_rlx(g, 0);
   la_store64_rlx(&g->gc2.tg_thread_roots, 0);
   la_store64_rlx(&g->gc2.tg_cur_roots, 0);
   la_store64_rlx(&g->gc2.tg_trace_roots, 0);
@@ -342,7 +342,7 @@ void lj_gc2_worker_wake(global_State *g)
   n = gc2_n_workers_acq(g);
   if (n == 0)
     return;
-  la_add64_rlx(&g->gc2.worker_wakes, 1);
+  gc2_worker_wakes_add(g, 1);
   (void)gc2_worker_wake_add(g, 1);
   gc2_worker_wake_futex_wake(g, (int)n);
 }
@@ -458,10 +458,10 @@ static void *gc2_worker_main(void *arg)
       total = step > ~(uint32_t)0 - total ? ~(uint32_t)0 : total + step;
     }
     if (total)
-      la_add64_rlx(&g->gc2.worker_async_progress, total);
+      gc2_worker_async_progress_add(g, total);
     if (gc2_worker_stop_acq(g) != 0)
       break;
-    la_add64_rlx(&g->gc2.worker_parks, 1);
+    gc2_worker_parks_add(g, 1);
     {
       uint32_t wake = gc2_worker_wake_acq(g);
       if (gc2_worker_stop_acq(g) != 0)
@@ -3823,7 +3823,7 @@ static uint32_t gc2_worker_finalizer_drain(global_State *g, uint32_t limit)
       gc2_finalizer_mpsc_acq(g) == NULL)
     return 0;
   if (!gc2_worker_active_cas(g, &expect, 1)) {
-    la_add64_rlx(&g->gc2.worker_busy_retries, 1);
+    gc2_worker_busy_retries_add(g, 1);
     return 0;
   }
   if (gc2_phase_acq(g) != LJ_GC2_IDLE ||
@@ -3856,7 +3856,7 @@ static uint32_t gc2_worker_drain_inner(global_State *g, uint32_t limit,
     return 0;
   finalizer = gc2_worker_finalizer_drain(g, limit);
   if (finalizer) {
-    la_add64_rlx(&g->gc2.worker_runs, 1);
+    gc2_worker_runs_add(g, 1);
     if (progress)
       *progress = finalizer;
     return finalizer;  /* 05 section 5.8: worker drains finalizer queue work. */
@@ -3866,7 +3866,7 @@ static uint32_t gc2_worker_drain_inner(global_State *g, uint32_t limit,
       phase != LJ_GC2_SWEEP)
     return 0;
   if (!gc2_worker_active_cas(g, &expect, 1)) {
-    la_add64_rlx(&g->gc2.worker_busy_retries, 1);
+    gc2_worker_busy_retries_add(g, 1);
     return 0;  /* 05 section 5.6.3 temporary single-worker bridge. */
   }
   phase = gc2_phase_acq(g);
@@ -3906,17 +3906,17 @@ static uint32_t gc2_worker_drain_inner(global_State *g, uint32_t limit,
   total = gc2_worker_progress_add(total, weak);
   total = gc2_worker_progress_add(total, sweep);
   if (total)
-    la_add64_rlx(&g->gc2.worker_runs, 1);
+    gc2_worker_runs_add(g, 1);
   if (n) {
     la_add64_rlx(&g->gc2.grey_drained, n);
-    la_add64_rlx(&g->gc2.worker_grey_drained, n);
+    gc2_worker_grey_drained_add(g, n);
   }
   if (converted)
-    la_add64_rlx(&g->gc2.worker_ssb_converted, converted);
+    gc2_worker_ssb_converted_add(g, converted);
   if (weak)
-    la_add64_rlx(&g->gc2.worker_weak_drained, weak);
+    gc2_worker_weak_drained_add(g, weak);
   if (!total)
-    la_add64_rlx(&g->gc2.worker_idle_declares, 1);
+    gc2_worker_idle_declares_add(g, 1);
   if (progress)
     *progress = total;
   gc2_worker_active_rel(g, 0);

@@ -15,8 +15,8 @@ Runtime users in `lj_gc2.c` and the public `collectgarbage("workers")` query in
 `lib_base.c` no longer spell ad hoc atomics or futex operations against
 `GC2State.n_workers`, `worker_stop`, `worker_wake`, `worker_started`, or
 `worker_exited`. `tools/ci/m3_gc2_worker_scheduler.sh` rejects future raw
-production access to those lifecycle fields while leaving the separate
-`worker_wakes` telemetry counter untouched.
+production access to those lifecycle fields. The separate `worker_wakes`
+telemetry counter is covered by the follow-up worker counter helper slice.
 
 Validation:
 

@@ -15,6 +15,8 @@ Change:
 - `lj_gc2_worker_wake()` wakes the active parked worker count instead of one
   waiter.
 - `collectgarbage("workers", 2)` now results in two active parked workers.
+- A follow-up helper slice routes wake, park, contention, and async-progress
+  telemetry through `gc2_worker_*()` counter helpers.
 
 Reason:
 - This creates real scheduler concurrency at the OS-thread level while keeping

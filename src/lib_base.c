@@ -619,23 +619,23 @@ static void gc_stats_push(lua_State *L)
 		  la_load64_acq(&gc2->assist_ssb_converted));
   gc_stats_setnum(L, t, "assist_weak_drained",
 		  la_load64_acq(&gc2->assist_weak_drained));
-  gc_stats_setnum(L, t, "worker_runs", la_load64_acq(&gc2->worker_runs));
+  gc_stats_setnum(L, t, "worker_runs", gc2_worker_runs_acq(g));
   gc_stats_setnum(L, t, "worker_grey_drained",
-		  la_load64_acq(&gc2->worker_grey_drained));
+		  gc2_worker_grey_drained_acq(g));
   gc_stats_setnum(L, t, "worker_ssb_converted",
-		  la_load64_acq(&gc2->worker_ssb_converted));
+		  gc2_worker_ssb_converted_acq(g));
   gc_stats_setnum(L, t, "worker_weak_drained",
-		  la_load64_acq(&gc2->worker_weak_drained));
+		  gc2_worker_weak_drained_acq(g));
   gc_stats_setnum(L, t, "worker_idle_declares",
-		  la_load64_acq(&gc2->worker_idle_declares));
+		  gc2_worker_idle_declares_acq(g));
   gc_stats_setnum(L, t, "worker_busy_retries",
-		  la_load64_acq(&gc2->worker_busy_retries));
+		  gc2_worker_busy_retries_acq(g));
   gc_stats_setnum(L, t, "worker_wakes",
-		  la_load64_acq(&gc2->worker_wakes));
+		  gc2_worker_wakes_acq(g));
   gc_stats_setnum(L, t, "worker_parks",
-		  la_load64_acq(&gc2->worker_parks));
+		  gc2_worker_parks_acq(g));
   gc_stats_setnum(L, t, "worker_async_progress",
-		  la_load64_acq(&gc2->worker_async_progress));
+		  gc2_worker_async_progress_acq(g));
   gc_stats_setnum(L, t, "sweep_owner_runs",
 		  la_load64_acq(&gc2->sweep_owner_runs));
   gc_stats_setnum(L, t, "sweep_owner_arenas",
