@@ -25,11 +25,13 @@ LJ_NORET static void cconv_err_conv_l(lua_State *L, CTState *cts,
   const char *dst = strdata(lj_ctype_repr(L, did, NULL));
   const char *src;
   UNUSED(cts);
-  if ((flags & CCF_FROMTV))
-    src = lj_obj_typename[1+(ctype_isnum(s->info) ? LUA_TNUMBER :
-			     ctype_isarray(s->info) ? LUA_TSTRING : LUA_TNIL)];
-  else
+  if ((flags & CCF_FROMTV)) {
+    CTInfo sinfo = ctype_info_acq(s);
+    src = lj_obj_typename[1+(ctype_isnum(sinfo) ? LUA_TNUMBER :
+			     ctype_isarray(sinfo) ? LUA_TSTRING : LUA_TNIL)];
+  } else {
     src = strdata(lj_ctype_repr(L, sid, NULL));
+  }
   if (CCF_GETARG(flags))
     lj_err_argv(L, CCF_GETARG(flags), LJ_ERR_FFI_BADCONV, src, dst);
   else
@@ -65,14 +67,15 @@ static CType *cconv_childqual(CTState *cts, CType *ct, CTInfo *qual)
 {
   ct = ctype_child(cts, ct);
   for (;;) {
-    if (ctype_isattrib(ct->info)) {
-      if (ctype_attrib(ct->info) == CTA_QUAL) *qual |= ct->size;
-    } else if (!ctype_isenum(ct->info)) {
+    CTInfo info = ctype_info_acq(ct);
+    if (ctype_isattrib(info)) {
+      if (ctype_attrib(info) == CTA_QUAL) *qual |= ctype_size_acq(ct);
+    } else if (!ctype_isenum(info)) {
+      *qual |= (info & CTF_QUAL);
       break;
     }
     ct = ctype_child(cts, ct);
   }
-  *qual |= (ct->info & CTF_QUAL);
   return ct;
 }
 
@@ -83,31 +86,37 @@ int lj_cconv_compatptr(CTState *cts, CType *d, CType *s, CTInfo flags)
 {
   if (!((flags & CCF_CAST) || d == s)) {
     CTInfo dqual = 0, squal = 0;
+    CTInfo dinfo, sinfo;
+    CTSize dsize, ssize;
     d = cconv_childqual(cts, d, &dqual);
-    if (!ctype_isstruct(s->info))
+    sinfo = ctype_info_acq(s);
+    if (!ctype_isstruct(sinfo))
       s = cconv_childqual(cts, s, &squal);
+    dinfo = ctype_info_acq(d);
+    sinfo = ctype_info_acq(s);
+    dsize = ctype_size_acq(d);
+    ssize = ctype_size_acq(s);
     if ((flags & CCF_SAME)) {
       if (dqual != squal)
 	return 0;  /* Different qualifiers. */
     } else if (!(flags & CCF_IGNQUAL)) {
       if ((dqual & squal) != squal)
 	return 0;  /* Discarded qualifiers. */
-      if (ctype_isvoid(d->info) || ctype_isvoid(s->info))
+      if (ctype_isvoid(dinfo) || ctype_isvoid(sinfo))
 	return 1;  /* Converting to/from void * is always ok. */
     }
-    if (ctype_type(d->info) != ctype_type(s->info) ||
-	d->size != s->size)
+    if (ctype_type(dinfo) != ctype_type(sinfo) || dsize != ssize)
       return 0;  /* Different type or different size. */
-    if (ctype_isnum(d->info)) {
-      if (((d->info ^ s->info) & (CTF_BOOL|CTF_FP)))
+    if (ctype_isnum(dinfo)) {
+      if (((dinfo ^ sinfo) & (CTF_BOOL|CTF_FP)))
 	return 0;  /* Different numeric types. */
-    } else if (ctype_ispointer(d->info)) {
+    } else if (ctype_ispointer(dinfo)) {
       /* Check child types for compatibility. */
       return lj_cconv_compatptr(cts, d, s, flags|CCF_SAME);
-    } else if (ctype_isstruct(d->info)) {
+    } else if (ctype_isstruct(dinfo)) {
       if (d != s)
 	return 0;  /* Must be exact same type for struct/union. */
-    } else if (ctype_isfunc(d->info)) {
+    } else if (ctype_isfunc(dinfo)) {
       /* NYI: structural equality of functions. */
     }
   }
