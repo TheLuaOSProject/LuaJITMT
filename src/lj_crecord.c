@@ -2014,8 +2014,9 @@ void LJ_FASTCALL recff_ffi_fill(jit_State *J, RecordFFData *rd)
       CTSize sz;
       CTypeID id = ctype_rawid(cts, cdataV(&rd->argv[0])->ctypeid);
       CType *ct = ctype_get(cts, id);
-      if (ctype_isptr(ct->info)) {
-	id = ctype_rawid(cts, ctype_cid(ct->info));
+      CTInfo info = ctype_info_acq(ct);
+      if (ctype_isptr(info)) {
+	id = ctype_rawid(cts, ctype_cid(info));
 	ct = ctype_get(cts, id);
       }
       step = (1u<<ctype_align(lj_ctype_info(cts, id, &sz)));
@@ -2073,7 +2074,7 @@ void LJ_FASTCALL recff_ffi_xof(jit_State *J, RecordFFData *rd)
   CTypeID id = argv2ctype(J, J->base[0], &rd->argv[0]);
   if (rd->data == FF_ffi_sizeof) {
     CType *ct = lj_ctype_rawref(ctype_ctsG(J2G(J)), id);
-    if (ctype_isvltype(ct->info))
+    if (ctype_isvltype(ctype_info_acq(ct)))
       lj_trace_err(J, LJ_TRERR_BADTYPE);
   } else if (rd->data == FF_ffi_offsetof) {  /* Specialize to the field name. */
     if (!tref_isstr(J->base[1]))
@@ -2100,9 +2101,13 @@ static CTypeID crec_bit64_type(CTState *cts, cTValue *tv)
 {
   if (tviscdata(tv)) {
     CType *ct = lj_ctype_rawref(cts, cdataV(tv)->ctypeid);
-    if (ctype_isenum(ct->info)) ct = ctype_child(cts, ct);
-    if ((ct->info & (CTMASK_NUM|CTF_BOOL|CTF_FP|CTF_UNSIGNED)) ==
-	CTINFO(CT_NUM, CTF_UNSIGNED) && ct->size == 8)
+    CTInfo info = ctype_info_acq(ct);
+    if (ctype_isenum(info)) {
+      ct = ctype_child(cts, ct);
+      info = ctype_info_acq(ct);
+    }
+    if ((info & (CTMASK_NUM|CTF_BOOL|CTF_FP|CTF_UNSIGNED)) ==
+	CTINFO(CT_NUM, CTF_UNSIGNED) && ctype_size_acq(ct) == 8)
       return CTID_UINT64;  /* Use uint64_t, since it has the highest rank. */
     return CTID_INT64;  /* Otherwise use int64_t. */
   }
@@ -2242,10 +2247,15 @@ void LJ_FASTCALL lj_crecord_tonumber(jit_State *J, RecordFFData *rd)
 {
   CTState *cts = ctype_ctsG(J2G(J));
   CType *d, *ct = lj_ctype_rawref(cts, cdataV(&rd->argv[0])->ctypeid);
-  if (ctype_isenum(ct->info)) ct = ctype_child(cts, ct);
-  if (ctype_isnum(ct->info) || ctype_iscomplex(ct->info)) {
-    if (ctype_isinteger_or_bool(ct->info) && ct->size <= 4 &&
-	!(ct->size == 4 && (ct->info & CTF_UNSIGNED)))
+  CTInfo info = ctype_info_acq(ct);
+  if (ctype_isenum(info)) {
+    ct = ctype_child(cts, ct);
+    info = ctype_info_acq(ct);
+  }
+  if (ctype_isnum(info) || ctype_iscomplex(info)) {
+    CTSize size = ctype_size_acq(ct);
+    if (ctype_isinteger_or_bool(info) && size <= 4 &&
+	!(size == 4 && (info & CTF_UNSIGNED)))
       d = ctype_get(cts, CTID_INT32);
     else
       d = ctype_get(cts, CTID_DOUBLE);

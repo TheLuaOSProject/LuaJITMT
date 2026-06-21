@@ -71,5 +71,20 @@ if hits=$(awk '
   printf '%s\n' 'raw CType info/size reads are forbidden in FFI layout query helpers; use ctype_info_acq() or ctype_size_acq()' >&2
   exit 1
 fi
+if hits=$(awk '
+  /^void LJ_FASTCALL recff_ffi_fill\(/ ||
+  /^void LJ_FASTCALL recff_ffi_xof\(/ ||
+  /^static CTypeID crec_bit64_type\(/ ||
+  /^void LJ_FASTCALL lj_crecord_tonumber\(/ { in_fn = 1 }
+  /^void LJ_FASTCALL recff_ffi_typeof\(/ ||
+  /^void LJ_FASTCALL recff_ffi_gc\(/ ||
+  /^static TRef crec_bit64_arg\(/ ||
+  /^TRef lj_crecord_loadiu64\(/ { in_fn = 0 }
+  in_fn && /->[[:space:]]*(info|size)([^[:alnum:]_]|$)/ { print FNR ":" $0 }
+' "$ROOT/src/lj_crecord.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw CType info/size reads are forbidden in recorded FFI library metadata helpers; use ctype_info_acq() or ctype_size_acq()' >&2
+  exit 1
+fi
 
 exec "$ROOT/tools/ci/lua_test.sh" m7_ffi_typeinfo_snapshot
