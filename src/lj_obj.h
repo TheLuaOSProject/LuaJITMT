@@ -1793,6 +1793,28 @@ static LJ_AINLINE uint32_t gc2_cycle_inc_acqrel(global_State *g)
   return next;
 }
 
+static LJ_AINLINE uint64_t gc2_marks_this_round_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.marks_this_round);
+}
+
+static LJ_AINLINE void gc2_marks_this_round_store_rlx(global_State *g,
+						      uint64_t n)
+{
+  la_store64_rlx(&g->gc2.marks_this_round, n);
+}
+
+static LJ_AINLINE void gc2_marks_this_round_add(global_State *g, uint64_t n)
+{
+  la_add64_rlx(&g->gc2.marks_this_round, n);
+}
+
+static LJ_AINLINE uint64_t gc2_marks_this_round_xchg_acqrel(global_State *g,
+							    uint64_t n)
+{
+  return la_xchg64_acqrel(&g->gc2.marks_this_round, n);
+}
+
 static LJ_AINLINE void gc2_cycle_leader_store_rlx(global_State *g,
 						  uint32_t leader)
 {

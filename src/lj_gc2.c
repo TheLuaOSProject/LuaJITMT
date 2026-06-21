@@ -109,7 +109,7 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.remembered_overflows, 0);
   la_store64_rlx(&g->gc2.remembered_filtered, 0);
   la_store64_rlx(&g->gc2.remembered_drained, 0);
-  la_store64_rlx(&g->gc2.marks_this_round, 0);
+  gc2_marks_this_round_store_rlx(g, 0);
   g->gc2.ssb_head = NULL;
   la_store32_rlx(&g->gc2.ssb_published, 0);
   la_store32_rlx(&g->gc2.ssb_drained, 0);
@@ -658,7 +658,7 @@ void lj_gc2_legacy_mark_begin(global_State *g)
   (void)gc2_cycle_inc_acqrel(g);
   if (leader)
     la_add64_rlx(&g->gc2.cycle_starts, 1);
-  la_store64_rlx(&g->gc2.marks_this_round, 0);
+  gc2_marks_this_round_store_rlx(g, 0);
   if (!minor_requested)
     (void)gc2_flush_and_drain_ssb(g);  /* Discard remembered roots for majors. */
   (void)lj_tg_reclaim_dead(g);
@@ -3283,7 +3283,7 @@ int lj_gc2_markmem(global_State *g, void *p)
       return 0;
     marked = lj_arena_hugetab_mark(&tg->huge, p, NULL);
     if (marked == 1)
-      la_add64_rlx(&g->gc2.marks_this_round, 1);  /* 05 section 5.7.1. */
+      gc2_marks_this_round_add(g, 1);  /* 05 section 5.7.1. */
     return marked == 1;
   }
   cell = lj_arena_cellof(p);
@@ -3293,7 +3293,7 @@ int lj_gc2_markmem(global_State *g, void *p)
   marked = !la_bit_test_and_set64(&a->mark[cell >> 6],
 				  cell & 63);  /* 05 section 5.6.1. */
   if (marked)
-    la_add64_rlx(&g->gc2.marks_this_round, 1);  /* 05 section 5.7.1. */
+    gc2_marks_this_round_add(g, 1);  /* 05 section 5.7.1. */
   return marked;
 }
 
@@ -3879,7 +3879,7 @@ uint32_t lj_gc2_fixpoint_round(global_State *g, lua_State *L, uint32_t limit)
   phase = gc2_phase_acq(g);
   if (phase != LJ_GC2_MARK)
     return 0;
-  (void)la_xchg64_acqrel(&g->gc2.marks_this_round, 0);
+  (void)gc2_marks_this_round_xchg_acqrel(g, 0);
   (void)gc2_worker_drain_budget(g, limit);  /* 05 section 5.7.1 pre-round drain. */
   acked = lj_gc2_handshake(g, LJ_GC2_HS_SCAN_ROOTS|LJ_GC2_HS_FLUSH_SSB);
   if (acked == 0 && L) {
@@ -3887,7 +3887,7 @@ uint32_t lj_gc2_fixpoint_round(global_State *g, lua_State *L, uint32_t limit)
     (void)lj_gc2_flush_ssb(g, L2TG(L));
   }
   (void)gc2_worker_drain_budget(g, limit);  /* 05 section 5.7.1 post-root drain. */
-  fixpoint = la_load64_acq(&g->gc2.marks_this_round) == 0 &&
+  fixpoint = gc2_marks_this_round_acq(g) == 0 &&
 	     lj_gc2_ssb_empty(g);
   la_add64_rlx(&g->gc2.fixpoint_rounds, 1);
   if (fixpoint)
