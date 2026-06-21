@@ -66,7 +66,8 @@ void lj_gc2_init(global_State *g)
 {
   uint32_t i;
   g->gc2.gcpause_pct = 100;
-  g->gc2.assist_shift = lj_gc2_assist_shift_from_stepmul(g->gc.stepmul);
+  gc2_assist_shift_store_rlx(g,
+    lj_gc2_assist_shift_from_stepmul(g->gc.stepmul));
   g->gc2.phase = LJ_GC2_IDLE;
   g->gc2.cycle = 0;
   la_store32_rlx(&g->gc2.cycle_leader, 0);
@@ -136,7 +137,7 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.jit_hard_checks, 0);
   la_store64_rlx(&g->gc2.interp_hard_checks, 0);
   la_store64_rlx(&g->gc2.jit_scoped_slots_retired, 0);
-  g->gc2.assist_active = 0;
+  gc2_assist_active_store_rlx(g, 0);
   la_store32_rlx(&g->gc2.generational, 0);
   g->gc2.grey_stack = NULL;
   g->gc2.grey_capacity = 0;
@@ -2899,11 +2900,11 @@ uint32_t lj_gc2_assist(global_State *g, TGState *tg)
     return 0;
   if (!lj_gc2_hard_limit_reached(g))
     return 0;
-  if (!la_cas32(&g->gc2.assist_active, &expect, 1, LA_ACQ_REL, LA_ACQ))
+  if (!gc2_assist_active_cas(g, &expect, 1))
     return 0;  /* Current global grey deque has one owner side. */
   tg->gc_assist = 1;
   la_add64_rlx(&g->gc2.assist_runs, 1);  /* 05 section 5.11 telemetry. */
-  shift = la_load32_acq(&g->gc2.assist_shift);
+  shift = gc2_assist_shift_acq(g);
   if (shift > 8u)
     shift = 8u;
   limit = 1u << shift;
@@ -2934,7 +2935,7 @@ uint32_t lj_gc2_assist(global_State *g, TGState *tg)
   if (weak)
     la_add64_rlx(&g->gc2.assist_weak_drained, weak);
   tg->gc_assist = 0;
-  la_store32_rel(&g->gc2.assist_active, 0);
+  gc2_assist_active_rel(g, 0);
   return n + weak;
 }
 

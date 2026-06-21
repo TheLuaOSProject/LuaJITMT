@@ -1470,8 +1470,7 @@ LUA_API int lua_gc(lua_State *L, int what, int data)
   case LUA_GCSETSTEPMUL:
     res = (int)(g->gc.stepmul);
     g->gc.stepmul = (MSize)data;
-    la_store32_rel(&g->gc2.assist_shift,
-		   lj_gc2_assist_shift_from_stepmul((uint32_t)data));
+    gc2_assist_shift_rel(g, lj_gc2_assist_shift_from_stepmul((uint32_t)data));
     break;
   case LUA_GCISRUNNING:
     res = ((la_load32_acq(&g->mt_live) != 0 ? lj_gc_mt_threshold_load(g) :

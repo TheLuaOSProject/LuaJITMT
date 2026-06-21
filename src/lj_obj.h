@@ -1869,6 +1869,39 @@ static LJ_AINLINE int gc2_worker_active_cas(global_State *g, uint32_t *oldp,
   return la_cas32(&g->gc2.worker_active, oldp, active, LA_ACQ_REL, LA_ACQ);
 }
 
+static LJ_AINLINE uint32_t gc2_assist_shift_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.assist_shift);
+}
+
+static LJ_AINLINE void gc2_assist_shift_store_rlx(global_State *g,
+						  uint32_t shift)
+{
+  la_store32_rlx(&g->gc2.assist_shift, shift);
+}
+
+static LJ_AINLINE void gc2_assist_shift_rel(global_State *g, uint32_t shift)
+{
+  la_store32_rel(&g->gc2.assist_shift, shift);
+}
+
+static LJ_AINLINE void gc2_assist_active_store_rlx(global_State *g,
+						   uint32_t active)
+{
+  la_store32_rlx(&g->gc2.assist_active, active);
+}
+
+static LJ_AINLINE void gc2_assist_active_rel(global_State *g, uint32_t active)
+{
+  la_store32_rel(&g->gc2.assist_active, active);
+}
+
+static LJ_AINLINE int gc2_assist_active_cas(global_State *g, uint32_t *oldp,
+					    uint32_t active)
+{
+  return la_cas32(&g->gc2.assist_active, oldp, active, LA_ACQ_REL, LA_ACQ);
+}
+
 #if LJ_GC64
 static LJ_AINLINE void setgcrefrel_(GCRef *r, const GCobj *gc)
 {
