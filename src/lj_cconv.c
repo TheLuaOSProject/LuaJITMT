@@ -449,7 +449,7 @@ int lj_cconv_tv_ct_l(lua_State *L, CTState *cts, CType *s, CTypeID sid,
 int lj_cconv_tv_bf_l(lua_State *L, CTState *cts, CType *s, TValue *o,
 		     uint8_t *sp)
 {
-  CTInfo info = s->info;
+  CTInfo info = ctype_info_acq(s);
   CTSize pos, bsz;
   uint32_t val;
   lj_assertCTS(ctype_isbitfield(info), "bitfield expected");
@@ -713,7 +713,7 @@ doconv:
 void lj_cconv_bf_tv_l(lua_State *L, CTState *cts, CType *d, uint8_t *dp,
 		      TValue *o)
 {
-  CTInfo info = d->info;
+  CTInfo info = ctype_info_acq(d);
   CTSize pos, bsz;
   uint32_t val, mask;
   lj_assertCTS(ctype_isbitfield(info), "bitfield expected");
