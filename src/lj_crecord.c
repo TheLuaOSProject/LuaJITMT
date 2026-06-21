@@ -871,14 +871,18 @@ void LJ_FASTCALL recff_cdata_index(jit_State *J, RecordFFData *rd)
   CTState *cts = ctype_ctsG(J2G(J));
   CTypeID id = ctype_rawid(cts, cd->ctypeid);
   CType *ct = ctype_get(cts, id);
+  CTInfo ctinfo = ctype_info_acq(ct);
+  CTSize ctsize = ctype_size_acq(ct);
   CTypeID sid = 0;
 
   /* Resolve pointer or reference for cdata object. */
-  if (ctype_isptr(ct->info)) {
-    IRType t = (LJ_64 && ct->size == 8) ? IRT_P64 : IRT_P32;
-    if (ctype_isref(ct->info)) {
-      id = ctype_rawid(cts, ctype_cid(ct->info));
+  if (ctype_isptr(ctinfo)) {
+    IRType t = (LJ_64 && ctsize == 8) ? IRT_P64 : IRT_P32;
+    if (ctype_isref(ctinfo)) {
+      id = ctype_rawid(cts, ctype_cid(ctinfo));
       ct = ctype_get(cts, id);
+      ctinfo = ctype_info_acq(ct);
+      ctsize = ctype_size_acq(ct);
     }
     ptr = emitir(IRT(IR_FLOAD, t), ptr, IRFL_CDATA_PTR);
     ofs = 0;
@@ -889,11 +893,11 @@ again:
   idx = J->base[1];
   if (tref_isnumber(idx)) {
     idx = lj_opt_narrow_cindex(J, idx);
-    if (ctype_ispointer(ct->info)) {
+    if (ctype_ispointer(ctinfo)) {
       CTSize sz;
       CTInfo pinfo;
   integer_key:
-      pinfo = ct->info;
+      pinfo = ctype_info_acq(ct);
       sid = ctype_cid(pinfo);
       {
 	int ok = lj_ctype_size_snapshot(cts, sid, &sz);
@@ -929,19 +933,21 @@ again:
     GCcdata *cdk = cdataV(&rd->argv[1]);
     CType *ctk = ctype_raw(cts, cdk->ctypeid);
     IRType t = crec_ct2irt(cts, ctk);
-    if (ctype_ispointer(ct->info) && t >= IRT_I8 && t <= IRT_U64) {
-      if (ctk->size == 8) {
+    CTInfo ctkinfo = ctype_info_acq(ctk);
+    CTSize ctksize = ctype_size_acq(ctk);
+    if (ctype_ispointer(ctype_info_acq(ct)) && t >= IRT_I8 && t <= IRT_U64) {
+      if (ctksize == 8) {
 	idx = emitir(IRT(IR_FLOAD, t), idx, IRFL_CDATA_INT64);
-      } else if (ctk->size == 4) {
+      } else if (ctksize == 4) {
 	idx = emitir(IRT(IR_FLOAD, t), idx, IRFL_CDATA_INT);
       } else {
 	idx = emitir(IRT(IR_ADD, IRT_PTR), idx,
 		     lj_ir_kintp(J, sizeof(GCcdata)));
 	idx = emitir(IRT(IR_XLOAD, t), idx, 0);
       }
-      if (LJ_64 && ctk->size < sizeof(intptr_t) && !(ctk->info & CTF_UNSIGNED))
+      if (LJ_64 && ctksize < sizeof(intptr_t) && !(ctkinfo & CTF_UNSIGNED))
 	idx = emitconv(idx, IRT_INTP, IRT_INT, IRCONV_SEXT);
-      if (!LJ_64 && ctk->size > sizeof(intptr_t)) {
+      if (!LJ_64 && ctksize > sizeof(intptr_t)) {
 	idx = emitconv(idx, IRT_INTP, t, 0);
 	lj_needsplit(J);
       }
@@ -958,8 +964,8 @@ again:
       id = ctype_rawid(cts, crec_constructor(J, cd, ptr));
     }
     ct = ctype_get(cts, id);
-    cinfo = ct->info;
-    csize = ct->size;
+    cinfo = ctype_info_acq(ct);
+    csize = ctype_size_acq(ct);
     if (ctype_isstruct(cinfo)) {
       CType *fct;
       int ok = lj_ctype_getfieldq_snapshot(cts, ct, name, &fofs, NULL,
@@ -968,8 +974,8 @@ again:
 	lj_ctype_parse_lock(cts, J->L);
 	/* 11.2: cdata recorder field reader waits out parser rollback. */
 	ct = ctype_get(cts, id);
-	cinfo = ct->info;
-	csize = ct->size;
+	cinfo = ctype_info_acq(ct);
+	csize = ctype_size_acq(ct);
 	if (ctype_isstruct(cinfo)) {
 	  fct = lj_ctype_getfield(cts, ct, name, &fofs);
 	} else {
@@ -981,11 +987,11 @@ again:
       }
       found = fct != NULL;
       if (found) {
-	finfo = fct->info;
-	fsize = fct->size;
+	finfo = ctype_info_acq(fct);
+	fsize = ctype_size_acq(fct);
 	fid = ctype_cid(finfo);
 	if (ctype_isconstval(finfo))
-	  childinfo = ctype_child(cts, fct)->info;
+	  childinfo = ctype_info_acq(ctype_child(cts, fct));
       }
     }
     if (ctype_isstruct(cinfo)) {
@@ -1031,9 +1037,10 @@ again:
       if (ok < 0) {
 	lj_ctype_parse_lock(cts, J->L);
 	ct = ctype_get(cts, id);
-	if (ctype_isptr(ct->info)) {  /* Automatically perform '->'. */
-	  cid = ctype_rawid(cts, ctype_cid(ct->info));
-	  ptrstruct = ctype_isstruct(ctype_get(cts, cid)->info);
+	ctinfo = ctype_info_acq(ct);
+	if (ctype_isptr(ctinfo)) {  /* Automatically perform '->'. */
+	  cid = ctype_rawid(cts, ctype_cid(ctinfo));
+	  ptrstruct = ctype_isstruct(ctype_info_acq(ctype_get(cts, cid)));
 	}
 	lj_ctype_parse_unlock(cts);
       } else {
@@ -1044,10 +1051,10 @@ again:
 	cd = NULL;
 	goto again;
       }
-    } else if (ctype_isptr(ct->info)) {  /* Automatically perform '->'. */
-      CTypeID cid = ctype_rawid(cts, ctype_cid(ct->info));
+    } else if (ctype_isptr(ctype_info_acq(ct))) {  /* Automatically perform '->'. */
+      CTypeID cid = ctype_rawid(cts, ctype_cid(ctype_info_acq(ct)));
       CType *cct = ctype_get(cts, cid);
-      if (ctype_isstruct(cct->info)) {
+      if (ctype_isstruct(ctype_info_acq(cct))) {
 	ct = cct;
 	id = cid;
       }
@@ -1061,15 +1068,18 @@ again:
 
   /* Resolve reference for field. */
   ct = ctype_get(cts, sid);
-  if (ctype_isref(ct->info)) {
+  ctinfo = ctype_info_acq(ct);
+  if (ctype_isref(ctinfo)) {
     ptr = emitir(IRT(IR_XLOAD, IRT_PTR), ptr, 0);
-    sid = ctype_cid(ct->info);
+    sid = ctype_cid(ctinfo);
     ct = ctype_get(cts, sid);
+    ctinfo = ctype_info_acq(ct);
   }
 
-  while (ctype_isattrib(ct->info)) {
-    sid = ctype_cid(ct->info);
+  while (ctype_isattrib(ctinfo)) {
+    sid = ctype_cid(ctinfo);
     ct = ctype_get(cts, sid);  /* Skip attributes. */
+    ctinfo = ctype_info_acq(ct);
   }
 
   if (rd->data == 0) {  /* __index metamethod. */
