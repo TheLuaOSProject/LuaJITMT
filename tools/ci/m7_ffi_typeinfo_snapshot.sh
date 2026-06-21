@@ -62,5 +62,14 @@ if hits=$(awk '
   printf '%s\n' 'raw CType info/size reads are forbidden in ffi_istype_raw(); use ctype_info_acq() or ctype_size_acq()' >&2
   exit 1
 fi
+if hits=$(awk '
+  /^LJLIB_CF\(ffi_sizeof\)/ || /^LJLIB_CF\(ffi_offsetof\)/ { in_fn = 1 }
+  in_fn && /->[[:space:]]*(info|size)([^[:alnum:]_]|$)/ { print FNR ":" $0 }
+  in_fn && /^}/ { in_fn = 0 }
+' "$ROOT/src/lib_ffi.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw CType info/size reads are forbidden in FFI layout query helpers; use ctype_info_acq() or ctype_size_acq()' >&2
+  exit 1
+fi
 
 exec "$ROOT/tools/ci/lua_test.sh" m7_ffi_typeinfo_snapshot

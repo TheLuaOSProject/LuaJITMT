@@ -1468,16 +1468,19 @@ LJLIB_CF(ffi_sizeof)	LJLIB_REC(ffi_xof FF_ffi_sizeof)
     id = ffi_checkctype_layout_lock(L, cts, NULL);
     /* 11.2: keep layout reads atomic against failed parser rollback. */
     CType *ct = lj_ctype_rawref(cts, id);
-    if (ctype_isvltype(ct->info)) {
+    CTInfo info = ctype_info_acq(ct);
+    CTSize ctsz = ctype_size_acq(ct);
+    if (ctype_isvltype(info)) {
       CTSize nelem;
       lj_ctype_parse_unlock(cts);
       nelem = (CTSize)ffi_checkint(L, 2);
       id = ffi_checkctype_layout_lock(L, cts, NULL);
       ct = lj_ctype_rawref(cts, id);
-      sz = ctype_isvltype(ct->info) ?
+      info = ctype_info_acq(ct);
+      sz = ctype_isvltype(info) ?
 	   lj_ctype_vlsize(cts, ct, nelem) : CTSIZE_INVALID;
     } else {
-      sz = ctype_hassize(ct->info) ? ct->size : CTSIZE_INVALID;
+      sz = ctype_hassize(info) ? ctsz : CTSIZE_INVALID;
     }
     lj_ctype_parse_unlock(cts);
     if (LJ_UNLIKELY(sz == CTSIZE_INVALID)) {
@@ -1544,16 +1547,18 @@ LJLIB_CF(ffi_offsetof)	LJLIB_REC(ffi_xof FF_ffi_offsetof)
   }
   lj_ctype_parse_lock(cts, L);
   ct = lj_ctype_rawref(cts, id);
-  if (ctype_isstruct(ct->info) && ct->size != CTSIZE_INVALID) {
+  if (ctype_isstruct(ctype_info_acq(ct)) &&
+      ctype_size_acq(ct) != CTSIZE_INVALID) {
     CType *fct = lj_ctype_getfield(cts, ct, name, &ofs);
     if (fct) {
+      CTInfo finfo = ctype_info_acq(fct);
       setintV(L->top-1, ofs);
-      if (ctype_isfield(fct->info)) {
+      if (ctype_isfield(finfo)) {
 	lj_ctype_parse_unlock(cts);
 	return 1;
-      } else if (ctype_isbitfield(fct->info)) {
-	setintV(L->top++, ctype_bitpos(fct->info));
-	setintV(L->top++, ctype_bitbsz(fct->info));
+      } else if (ctype_isbitfield(finfo)) {
+	setintV(L->top++, ctype_bitpos(finfo));
+	setintV(L->top++, ctype_bitbsz(finfo));
 	lj_ctype_parse_unlock(cts);
 	return 3;
       }

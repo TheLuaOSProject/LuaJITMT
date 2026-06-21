@@ -22,7 +22,10 @@ ctype arguments:
   existing locked path.
 
 The existing locked path remains the fallback for strings, active parser
-windows, racing table growth, or inconsistent chains.
+windows, racing table growth, or inconsistent chains. The locked
+`ffi.sizeof()` and `ffi.offsetof()` fallbacks now mirror the snapshot path's
+payload discipline by reading branch-critical `CType.info`/`CType.size` values
+through `ctype_info_acq()`/`ctype_size_acq()`.
 
 ## Coverage
 
@@ -30,3 +33,7 @@ Added `tests/t-ffi-layout-snapshot.c`, wired into `m7_ffi_typeinfo_snapshot`.
 It verifies stable `sizeof`, `alignof`, `offsetof`, bitfield `offsetof`, and
 VLA `sizeof(ct, n)` do not advance the cparser sequence, while a string layout
 query still does.
+
+`tools/ci/m7_ffi_typeinfo_snapshot.sh` also rejects raw `CType.info` and
+`CType.size` reads in the `ffi.sizeof()` and `ffi.offsetof()` layout query
+bodies.
