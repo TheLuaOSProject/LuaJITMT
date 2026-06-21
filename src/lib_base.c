@@ -550,19 +550,18 @@ static void gc_stats_push(lua_State *L)
     gc_stats_setnum(L, t, "total_bytes", total);
     gc_stats_setnum(L, t, "total_kbytes", total >> 10);
   }
-  gc_stats_setint(L, t, "phase", la_load32_acq(&gc2->phase));
-  gc_stats_setint(L, t, "generational",
-		  la_load32_acq(&gc2->generational));
+  gc_stats_setint(L, t, "phase", gc2_phase_acq(g));
+  gc_stats_setint(L, t, "generational", gc2_generational_acq(g));
   gc_stats_setint(L, t, "cycle_minor_requested",
-		  la_load32_acq(&gc2->cycle_minor_requested));
+		  gc2_cycle_minor_requested_acq(g));
   gc_stats_setint(L, t, "cycle_sweep_minor",
-		  la_load32_acq(&gc2->cycle_sweep_minor));
+		  gc2_cycle_sweep_minor_acq(g));
   gc_stats_setint(L, t, "minor_sweep_enabled",
-		  la_load32_acq(&gc2->minor_sweep_enabled));
+		  gc2_minor_sweep_enabled_acq(g));
   gc_stats_setint(L, t, "cycle_roots_minor",
-		  la_load32_acq(&gc2->cycle_roots_minor));
+		  gc2_cycle_roots_minor_acq(g));
   gc_stats_setint(L, t, "minor_roots_enabled",
-		  la_load32_acq(&gc2->minor_roots_enabled));
+		  gc2_minor_roots_enabled_acq(g));
   gc_stats_setnum(L, t, "cycle_requests", la_load64_acq(&gc2->cycle_requests));
   gc_stats_setnum(L, t, "cycle_starts", la_load64_acq(&gc2->cycle_starts));
   gc_stats_setnum(L, t, "major_cycle_starts",
@@ -586,9 +585,9 @@ static void gc_stats_push(lua_State *L)
   gc_stats_setnum(L, t, "minor_survival_bytes",
 		  la_load64_acq(&gc2->minor_survival_bytes));
   gc_stats_setint(L, t, "minor_survival_pct",
-		  la_load32_acq(&gc2->minor_survival_pct));
+		  gc2_minor_survival_pct_acq(g));
   gc_stats_setint(L, t, "minor_survival_threshold_pct",
-		  la_load32_acq(&gc2->minor_survival_threshold_pct));
+		  gc2_minor_survival_threshold_pct_acq(g));
   gc_stats_setnum(L, t, "minor_survival_major_requests",
 		  la_load64_acq(&gc2->minor_survival_major_requests));
   gc_stats_setnum(L, t, "remembered_barriers",

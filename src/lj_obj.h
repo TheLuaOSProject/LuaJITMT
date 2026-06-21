@@ -1797,6 +1797,153 @@ static LJ_AINLINE uint32_t gc2_cycle_leader_xchg_acqrel(global_State *g,
   return la_xchg32_acqrel(&g->gc2.cycle_leader, leader);
 }
 
+static LJ_AINLINE uint32_t gc2_generational_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.generational);
+}
+
+static LJ_AINLINE void gc2_generational_store_rlx(global_State *g,
+						  uint32_t enabled)
+{
+  la_store32_rlx(&g->gc2.generational, enabled);
+}
+
+static LJ_AINLINE void gc2_generational_rel(global_State *g,
+					    uint32_t enabled)
+{
+  la_store32_rel(&g->gc2.generational, enabled);
+}
+
+static LJ_AINLINE void gc2_force_major_store_rlx(global_State *g,
+						 uint32_t force)
+{
+  la_store32_rlx(&g->gc2.force_major, force);
+}
+
+static LJ_AINLINE void gc2_force_major_rel(global_State *g, uint32_t force)
+{
+  la_store32_rel(&g->gc2.force_major, force);
+}
+
+static LJ_AINLINE uint32_t gc2_force_major_xchg_acqrel(global_State *g,
+						       uint32_t force)
+{
+  return la_xchg32_acqrel(&g->gc2.force_major, force);
+}
+
+static LJ_AINLINE uint32_t gc2_cycle_minor_requested_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.cycle_minor_requested);
+}
+
+static LJ_AINLINE void gc2_cycle_minor_requested_store_rlx(global_State *g,
+							   uint32_t minor)
+{
+  la_store32_rlx(&g->gc2.cycle_minor_requested, minor);
+}
+
+static LJ_AINLINE void gc2_cycle_minor_requested_rel(global_State *g,
+						     uint32_t minor)
+{
+  la_store32_rel(&g->gc2.cycle_minor_requested, minor);
+}
+
+static LJ_AINLINE uint32_t gc2_cycle_sweep_minor_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.cycle_sweep_minor);
+}
+
+static LJ_AINLINE void gc2_cycle_sweep_minor_store_rlx(global_State *g,
+						       uint32_t minor)
+{
+  la_store32_rlx(&g->gc2.cycle_sweep_minor, minor);
+}
+
+static LJ_AINLINE void gc2_cycle_sweep_minor_rel(global_State *g,
+						 uint32_t minor)
+{
+  la_store32_rel(&g->gc2.cycle_sweep_minor, minor);
+}
+
+static LJ_AINLINE uint32_t gc2_minor_sweep_enabled_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.minor_sweep_enabled);
+}
+
+static LJ_AINLINE void gc2_minor_sweep_enabled_store_rlx(global_State *g,
+							 uint32_t enabled)
+{
+  la_store32_rlx(&g->gc2.minor_sweep_enabled, enabled);
+}
+
+static LJ_AINLINE void gc2_minor_sweep_enabled_rel(global_State *g,
+						   uint32_t enabled)
+{
+  la_store32_rel(&g->gc2.minor_sweep_enabled, enabled);
+}
+
+static LJ_AINLINE uint32_t gc2_cycle_roots_minor_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.cycle_roots_minor);
+}
+
+static LJ_AINLINE void gc2_cycle_roots_minor_store_rlx(global_State *g,
+						       uint32_t minor)
+{
+  la_store32_rlx(&g->gc2.cycle_roots_minor, minor);
+}
+
+static LJ_AINLINE void gc2_cycle_roots_minor_rel(global_State *g,
+						 uint32_t minor)
+{
+  la_store32_rel(&g->gc2.cycle_roots_minor, minor);
+}
+
+static LJ_AINLINE uint32_t gc2_minor_roots_enabled_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.minor_roots_enabled);
+}
+
+static LJ_AINLINE void gc2_minor_roots_enabled_store_rlx(global_State *g,
+							 uint32_t enabled)
+{
+  la_store32_rlx(&g->gc2.minor_roots_enabled, enabled);
+}
+
+static LJ_AINLINE void gc2_minor_roots_enabled_rel(global_State *g,
+						   uint32_t enabled)
+{
+  la_store32_rel(&g->gc2.minor_roots_enabled, enabled);
+}
+
+static LJ_AINLINE uint32_t gc2_minor_survival_pct_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.minor_survival_pct);
+}
+
+static LJ_AINLINE void gc2_minor_survival_pct_store_rlx(global_State *g,
+							uint32_t pct)
+{
+  la_store32_rlx(&g->gc2.minor_survival_pct, pct);
+}
+
+static LJ_AINLINE void gc2_minor_survival_pct_rel(global_State *g,
+						  uint32_t pct)
+{
+  la_store32_rel(&g->gc2.minor_survival_pct, pct);
+}
+
+static LJ_AINLINE uint32_t gc2_minor_survival_threshold_pct_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.minor_survival_threshold_pct);
+}
+
+static LJ_AINLINE void gc2_minor_survival_threshold_pct_store_rlx(
+  global_State *g, uint32_t pct)
+{
+  la_store32_rlx(&g->gc2.minor_survival_threshold_pct, pct);
+}
+
 static LJ_AINLINE uint32_t gc2_n_workers_acq(global_State *g)
 {
   return la_load32_acq(&g->gc2.n_workers);

@@ -87,11 +87,11 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.major_cycle_starts, 0);
   la_store64_rlx(&g->gc2.minor_cycle_requests, 0);
   la_store64_rlx(&g->gc2.minor_cycle_starts, 0);
-  la_store32_rlx(&g->gc2.cycle_minor_requested, 0);
-  la_store32_rlx(&g->gc2.cycle_sweep_minor, 0);
-  la_store32_rlx(&g->gc2.minor_sweep_enabled, 0);
-  la_store32_rlx(&g->gc2.cycle_roots_minor, 0);
-  la_store32_rlx(&g->gc2.minor_roots_enabled, 0);
+  gc2_cycle_minor_requested_store_rlx(g, 0);
+  gc2_cycle_sweep_minor_store_rlx(g, 0);
+  gc2_minor_sweep_enabled_store_rlx(g, 0);
+  gc2_cycle_roots_minor_store_rlx(g, 0);
+  gc2_minor_roots_enabled_store_rlx(g, 0);
   la_store64_rlx(&g->gc2.minor_sweep_deferred, 0);
   la_store64_rlx(&g->gc2.minor_sweep_arenas, 0);
   la_store64_rlx(&g->gc2.minor_roots_deferred, 0);
@@ -99,11 +99,11 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.minor_root_scans, 0);
   la_store64_rlx(&g->gc2.minor_survival_base_live, 0);
   la_store64_rlx(&g->gc2.minor_survival_bytes, 0);
-  la_store32_rlx(&g->gc2.minor_survival_pct, 0);
-  la_store32_rlx(&g->gc2.minor_survival_threshold_pct,
-		 LJ_GC2_MINOR_SURVIVAL_MAJOR_PCT);
+  gc2_minor_survival_pct_store_rlx(g, 0);
+  gc2_minor_survival_threshold_pct_store_rlx(
+    g, LJ_GC2_MINOR_SURVIVAL_MAJOR_PCT);
   la_store64_rlx(&g->gc2.minor_survival_major_requests, 0);
-  la_store32_rlx(&g->gc2.force_major, 0);
+  gc2_force_major_store_rlx(g, 0);
   la_store64_rlx(&g->gc2.remembered_barriers, 0);
   la_store64_rlx(&g->gc2.remembered_pushed, 0);
   la_store64_rlx(&g->gc2.remembered_overflows, 0);
@@ -138,7 +138,7 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.interp_hard_checks, 0);
   la_store64_rlx(&g->gc2.jit_scoped_slots_retired, 0);
   gc2_assist_active_store_rlx(g, 0);
-  la_store32_rlx(&g->gc2.generational, 0);
+  gc2_generational_store_rlx(g, 0);
   g->gc2.grey_stack = NULL;
   g->gc2.grey_capacity = 0;
   g->gc2.grey_top = 0;
@@ -631,15 +631,15 @@ void lj_gc2_legacy_mark_begin(global_State *g)
   TGState *tg = G2TG(g);
   uint32_t leader;
   uint32_t forced_major, minor_requested, sweep_minor, roots_minor, drained;
-  forced_major = la_xchg32_acqrel(&g->gc2.force_major, 0);
-  minor_requested = !forced_major && la_load32_acq(&g->gc2.generational) != 0;
+  forced_major = gc2_force_major_xchg_acqrel(g, 0);
+  minor_requested = !forced_major && gc2_generational_acq(g) != 0;
   sweep_minor = minor_requested &&
-    la_load32_acq(&g->gc2.minor_sweep_enabled) != 0;
+    gc2_minor_sweep_enabled_acq(g) != 0;
   roots_minor = sweep_minor &&
-    la_load32_acq(&g->gc2.minor_roots_enabled) != 0;
-  la_store32_rel(&g->gc2.cycle_minor_requested, minor_requested);
-  la_store32_rel(&g->gc2.cycle_sweep_minor, sweep_minor);
-  la_store32_rel(&g->gc2.cycle_roots_minor, roots_minor);
+    gc2_minor_roots_enabled_acq(g) != 0;
+  gc2_cycle_minor_requested_rel(g, minor_requested);
+  gc2_cycle_sweep_minor_rel(g, sweep_minor);
+  gc2_cycle_roots_minor_rel(g, roots_minor);
   if (minor_requested)
     la_add64_rlx(&g->gc2.minor_cycle_requests, 1);
   if (minor_requested && !sweep_minor)
@@ -689,7 +689,7 @@ void lj_gc2_legacy_mark_begin(global_State *g)
 void lj_gc2_force_major(global_State *g)
 {
   if (g)
-    la_store32_rel(&g->gc2.force_major, 1);
+    gc2_force_major_rel(g, 1);
 }
 
 static uint32_t gc2_idle_barrier_actions(global_State *g, int flush_ssb)
@@ -697,7 +697,7 @@ static uint32_t gc2_idle_barrier_actions(global_State *g, int flush_ssb)
   uint32_t actions = LJ_GC2_HS_ALLOC_WHITE;
   if (flush_ssb)
     actions |= LJ_GC2_HS_FLUSH_SSB;
-  if (la_load32_acq(&g->gc2.generational))
+  if (gc2_generational_acq(g))
     actions |= LJ_GC2_HS_ENABLE_BARRIER;
   else
     actions |= LJ_GC2_HS_DISABLE_BARRIER;
@@ -709,9 +709,9 @@ static void gc2_update_public_minor_gates(global_State *g)
   uint32_t enabled;
   if (!g)
     return;
-  enabled = la_load32_acq(&g->gc2.generational) != 0;
-  la_store32_rel(&g->gc2.minor_sweep_enabled, enabled);
-  la_store32_rel(&g->gc2.minor_roots_enabled, enabled);
+  enabled = gc2_generational_acq(g) != 0;
+  gc2_minor_sweep_enabled_rel(g, enabled);
+  gc2_minor_roots_enabled_rel(g, enabled);
 }
 
 static uint32_t gc2_ratio_pct(uint64_t num, uint64_t den)
@@ -738,19 +738,19 @@ void lj_gc2_update_minor_survival_policy(global_State *g, uint64_t live)
     return;
   base = la_load64_acq(&g->gc2.minor_survival_base_live);
   alloc = lj_gc2_cycle_alloc_load(g);
-  minor = la_load32_acq(&g->gc2.cycle_sweep_minor) != 0;
+  minor = gc2_cycle_sweep_minor_acq(g) != 0;
   if (minor && live > base && alloc != 0) {
     survived = live - base;
     pct = gc2_ratio_pct(survived, alloc);
   }
   la_store64_rel(&g->gc2.minor_survival_bytes, survived);
-  la_store32_rel(&g->gc2.minor_survival_pct, pct);
+  gc2_minor_survival_pct_rel(g, pct);
   la_store64_rel(&g->gc2.minor_survival_base_live, live);
-  threshold = la_load32_acq(&g->gc2.minor_survival_threshold_pct);
+  threshold = gc2_minor_survival_threshold_pct_acq(g);
   if (threshold == 0)
     threshold = LJ_GC2_MINOR_SURVIVAL_MAJOR_PCT;
   if (minor && pct >= threshold &&
-      la_load32_acq(&g->gc2.generational) != 0) {
+      gc2_generational_acq(g) != 0) {
     la_add64_rlx(&g->gc2.minor_survival_major_requests, 1);
     lj_gc2_force_major(g);
   }
@@ -761,14 +761,14 @@ void lj_gc2_set_generational(global_State *g, int enabled)
   uint32_t want = enabled ? 1u : 0u;
   if (!g)
     return;
-  if (la_load32_acq(&g->gc2.generational) == want)
+  if (gc2_generational_acq(g) == want)
     return;
-  la_store32_rel(&g->gc2.generational, want);
+  gc2_generational_rel(g, want);
   if (want)
     lj_gc2_force_major(g);  /* First generational cycle establishes old marks. */
   else {
-    la_store32_rel(&g->gc2.force_major, 0);
-    la_store32_rel(&g->gc2.minor_survival_pct, 0);
+    gc2_force_major_rel(g, 0);
+    gc2_minor_survival_pct_rel(g, 0);
     la_store64_rel(&g->gc2.minor_survival_bytes, 0);
     gc2_update_public_minor_gates(g);
   }
@@ -804,7 +804,7 @@ void lj_gc2_weak_to_sweep(global_State *g)
     return;
   la_add64_rlx(&g->gc2.weak_to_sweep, 1);
   lj_gc2_handshake(g, LJ_GC2_HS_DISABLE_BARRIER|LJ_GC2_HS_FLUSH_SSB|
-		   (la_load32_acq(&g->gc2.cycle_sweep_minor) ?
+		   (gc2_cycle_sweep_minor_acq(g) ?
 		    LJ_GC2_HS_ALLOC_WHITE : LJ_GC2_HS_ALLOC_BLACK));
   (void)lj_gc2_drain_ssb(g);  /* Temporary worker-consume stand-in. */
   (void)lj_tg_reclaim_dead(g);
@@ -1103,7 +1103,7 @@ uint32_t lj_gc2_sweep_owner_progress(global_State *g, TGState *tg,
   if (gc2_sweep_blocked_by_finalizer(g))
     return 0;
   epoch = g->gc2.cycle;
-  minor = la_load32_acq(&g->gc2.cycle_sweep_minor) != 0;
+  minor = gc2_cycle_sweep_minor_acq(g) != 0;
   if (minor)
     (void)lj_gc_sweep_gc2_unmarked(g);
   tg->alloc.sweep_epoch = epoch;
@@ -1626,7 +1626,7 @@ void lj_gc2_scan_roots(global_State *g, lua_State *L)
 
 void lj_gc2_scan_minor_roots(global_State *g, lua_State *L)
 {
-  if (!g || la_load32_acq(&g->gc2.cycle_roots_minor) == 0)
+  if (!g || gc2_cycle_roots_minor_acq(g) == 0)
     return;
   la_add64_rlx(&g->gc2.minor_root_scans, 1);
   gc2_scan_pending_roots(g);
@@ -1641,7 +1641,7 @@ void lj_gc2_scan_cycle_roots(global_State *g, lua_State *L)
 {
   if (!g)
     return;
-  if (la_load32_acq(&g->gc2.cycle_roots_minor))
+  if (gc2_cycle_roots_minor_acq(g))
     lj_gc2_scan_minor_roots(g, L);
   else
     lj_gc2_scan_roots(g, L);
@@ -2980,7 +2980,7 @@ static int gc2_remember_active_g(global_State *g)
 {
   TGState *tg;
   if (!g || gc2_phase_acq(g) != LJ_GC2_IDLE ||
-      la_load32_acq(&g->gc2.generational) == 0)
+      gc2_generational_acq(g) == 0)
     return 0;
   tg = G2TG(g);
   return tg && tg->mark_active;
@@ -3002,7 +3002,7 @@ static void gc2_remember_obj(global_State *g, GCobj *o)
 static int gc2_remember_pair_match(global_State *g, GCobj *parent,
 				   GCobj *child)
 {
-  if (la_load32_acq(&g->gc2.minor_sweep_enabled) == 0 || child == NULL)
+  if (gc2_minor_sweep_enabled_acq(g) == 0 || child == NULL)
     return 1;
   if (parent && lj_gc2_ismarked(g, parent) <= 0)
     return 0;

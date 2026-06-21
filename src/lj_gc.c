@@ -60,7 +60,7 @@
 static LJ_AINLINE int gc2_suppress_legacy_mark(global_State *g)
 {
   return gc2_phase_acq(g) == LJ_GC2_MARK &&
-	 la_load32_acq(&g->gc2.cycle_roots_minor) != 0;
+	 gc2_cycle_roots_minor_acq(g) != 0;
 }
 
 void lj_gc_arena_markobj(global_State *g, GCobj *o)
@@ -458,7 +458,7 @@ static void gc2_paranoia_check_rawroots(global_State *g)
 
 static void gc2_paranoia_check_fixpoint(global_State *g)
 {
-  if (la_load32_acq(&g->gc2.cycle_roots_minor))
+  if (gc2_cycle_roots_minor_acq(g))
     return;
   gc2_paranoia_check_roots(g);
   gc2_paranoia_check_strtab(g);
@@ -2172,7 +2172,7 @@ static size_t gc_onestep(lua_State *L)
 	    mask > LJ_MIN_STRTAB*2-1)
 	  lj_str_resize(L, mask >> 1);  /* Shrink string table. */
       }
-      if (arena_prepare && la_load32_acq(&g->gc2.cycle_sweep_minor))
+      if (arena_prepare && gc2_cycle_sweep_minor_acq(g))
 	(void)lj_gc_sweep_gc2_unmarked(g);
       if (arena_prepare)
 	gc_arena_verify_sweep_boundary(g);
