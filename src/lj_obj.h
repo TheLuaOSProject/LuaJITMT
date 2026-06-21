@@ -1747,6 +1747,29 @@ static LJ_AINLINE lua_State *vmthread_acq(global_State *g)
   return o ? gco2th(o) : NULL;
 }
 
+static LJ_AINLINE void gc2_cycle_leader_store_rlx(global_State *g,
+						  uint32_t leader)
+{
+  la_store32_rlx(&g->gc2.cycle_leader, leader);
+}
+
+static LJ_AINLINE void gc2_cycle_leader_rel(global_State *g, uint32_t leader)
+{
+  la_store32_rel(&g->gc2.cycle_leader, leader);
+}
+
+static LJ_AINLINE int gc2_cycle_leader_cas(global_State *g, uint32_t *oldp,
+					   uint32_t leader)
+{
+  return la_cas32(&g->gc2.cycle_leader, oldp, leader, LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE uint32_t gc2_cycle_leader_xchg_acqrel(global_State *g,
+							uint32_t leader)
+{
+  return la_xchg32_acqrel(&g->gc2.cycle_leader, leader);
+}
+
 static LJ_AINLINE GCobj *gc2_finalizer_mpsc_acq(global_State *g)
 {
   return (GCobj *)la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc);

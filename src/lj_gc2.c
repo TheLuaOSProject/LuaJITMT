@@ -70,7 +70,7 @@ void lj_gc2_init(global_State *g)
     lj_gc2_assist_shift_from_stepmul(g->gc.stepmul));
   g->gc2.phase = LJ_GC2_IDLE;
   g->gc2.cycle = 0;
-  la_store32_rlx(&g->gc2.cycle_leader, 0);
+  gc2_cycle_leader_store_rlx(g, 0);
   g->gc2.hs_epoch = 0;
   g->gc2.hs_pending = 0;
   g->gc2.hs_actions = 0;
@@ -483,7 +483,7 @@ static int gc2_request_cycle(global_State *g, TGState *tg)
     return 0;
   if (lj_gc_threshold_load(g) == LJ_MAX_MEM)
     return 0;  /* Honor collectgarbage("stop"). */
-  if (!la_cas32(&g->gc2.cycle_leader, &expect, tid, LA_ACQ_REL, LA_ACQ))
+  if (!gc2_cycle_leader_cas(g, &expect, tid))
     return 0;  /* 05 section 5.11 nonblocking cycle-request token. */
   la_add64_rlx(&g->gc2.cycle_requests, 1);  /* 05 section 5.11 telemetry. */
   lj_gc_threshold_store(g, lj_gc_total_load(g));  /* Legacy cycle-driver bridge. */
@@ -652,7 +652,7 @@ void lj_gc2_legacy_mark_begin(global_State *g)
     la_add64_rlx(&g->gc2.major_cycle_starts, 1);
   /* Publish MARK before clearing the request token, so late allocators stop. */
   la_store32_rel(&g->gc2.phase, LJ_GC2_MARK);
-  leader = la_xchg32_acqrel(&g->gc2.cycle_leader, 0);
+  leader = gc2_cycle_leader_xchg_acqrel(g, 0);
   if (g->gc2.tg_list == NULL && tg != NULL)
     lj_tg_attach(g, tg);
   g->gc2.cycle++;
@@ -1180,7 +1180,7 @@ void lj_gc2_legacy_preserve_abort(global_State *g)
   uint32_t phase;
   if (!g)
     return;
-  la_store32_rel(&g->gc2.cycle_leader, 0);
+  gc2_cycle_leader_rel(g, 0);
   (void)gc2_flush_and_drain_ssb(g);
   phase = la_xchg32_acqrel(&g->gc2.phase, LJ_GC2_IDLE);
   if (phase != LJ_GC2_IDLE)
@@ -1202,7 +1202,7 @@ int lj_gc2_sweep_to_idle(global_State *g)
     gc2_worker_active_rel(g, 0);
     return 0;
   }
-  la_store32_rel(&g->gc2.cycle_leader, 0);
+  gc2_cycle_leader_rel(g, 0);
   (void)gc2_flush_and_drain_ssb(g);
   phase = la_xchg32_acqrel(&g->gc2.phase, LJ_GC2_IDLE);
   if (phase != LJ_GC2_SWEEP) {
@@ -1224,7 +1224,7 @@ void lj_gc2_legacy_cycle_end(global_State *g)
   uint32_t phase;
   if (!g)
     return;
-  la_store32_rel(&g->gc2.cycle_leader, 0);
+  gc2_cycle_leader_rel(g, 0);
   (void)gc2_flush_and_drain_ssb(g);
   phase = la_xchg32_acqrel(&g->gc2.phase, LJ_GC2_IDLE);
   if (phase == LJ_GC2_SWEEP) {
