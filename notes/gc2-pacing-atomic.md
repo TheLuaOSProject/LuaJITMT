@@ -1,15 +1,20 @@
-# GC2 Pacing Counter Atomic Helpers
+# GC2 Pacing Atomic Helpers
 
-GC2 allocation pacing uses four shared byte counters:
+GC2 allocation pacing uses four shared byte counters and one public pause
+control:
 
 - `gc2.alloc_since_trigger`
 - `gc2.cycle_alloc_bytes`
 - `gc2.trigger_bytes`
 - `gc2.hard_bytes`
+- `gc2.gcpause_pct`
 
 Mutators update `alloc_since_trigger` when per-TG allocation counters flush,
 while interpreter, trace, stats, and cycle-start paths read the pacing snapshot.
 Those accesses now go through `lj_gc2_*` helpers in `lj_gc.h`.
+The pause percentage is the `lua_gc(LUA_GCSETPAUSE)` control that feeds
+`lj_gc2_update_pacing()`; its init, publication, and acquire read now go
+through `gc2_gcpause_pct_*` helpers in `lj_obj.h`.
 
 `alloc_since_trigger` increments use relaxed fetch-add because this is
 counter-only accounting; cycle and assist decisions acquire-load snapshots.
@@ -22,9 +27,9 @@ The x86-64 VM already names the allocation-check loads through
 `x64_vm_gc2_alloc_since_acq()` and `x64_vm_gc2_hard_bytes_acq()`. The new guard
 keeps the C side aligned with those generated-code edges.
 
-Guard: `tools/ci/m5_gc2_pacing_atomic.sh` rejects raw C-side access to the four
-GC2 pacing fields outside `lj_gc.h` helper definitions and rejects raw x64 VM
-GC2 hard-check memory operands.
+Guard: `tools/ci/m5_gc2_pacing_atomic.sh` rejects raw C-side access to the GC2
+pacing fields outside helper definitions in `lj_gc.h`/`lj_obj.h` and rejects raw
+x64 VM GC2 hard-check memory operands.
 
 Test-design note: an earlier Lua smoke used four workers doing 2000
 `string.format()` allocations each while reading stats. That crashes on
@@ -35,7 +40,8 @@ as the existing GC total smoke.
 
 Validation:
 - `tools/ci/m5_gc2_pacing_atomic.sh` passed.
+- `tools/ci/m6_jit_alloc_account.sh` passed.
+- `tools/ci/m9_gc_stats.sh` passed.
 - `tools/ci/m0_source_guard.sh` passed.
 - Raw C-side GC2 pacing access scan passed.
-- `tools/ci/m5_concurrent_objects.sh` passed.
 - `git diff --check` passed before staging.

@@ -14,13 +14,21 @@ for helper in lj_gc2_alloc_since_load lj_gc2_alloc_since_store \
   fi
 done
 
+for helper in gc2_gcpause_pct_acq gc2_gcpause_pct_store_rlx \
+  gc2_gcpause_pct_rel; do
+  if ! grep -q "static LJ_AINLINE .* ${helper}" src/lj_obj.h; then
+    printf '%s\n' "${helper} helper is required for GC2 pause pacing" >&2
+    exit 1
+  fi
+done
+
 if hits=$(grep -RInE -- \
-    '(g->gc2|gc2->)\.(alloc_since_trigger|cycle_alloc_bytes|trigger_bytes|hard_bytes)' \
+    '(g->gc2|gc2->)\.(alloc_since_trigger|cycle_alloc_bytes|trigger_bytes|hard_bytes|gcpause_pct)' \
     src/lj_*.c src/lib_*.c src/lj_*.h 2>/dev/null | \
     grep -Ev '^(src/lj_gc\.h:|src/lj_obj\.h:|src/lj_asm_[^:]+\.h:)' || true); \
     [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
-  printf '%s\n' 'C-side GC2 pacing access must use lj_gc2_* helpers' >&2
+  printf '%s\n' 'C-side GC2 pacing access must use helper APIs' >&2
   exit 1
 fi
 

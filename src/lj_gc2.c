@@ -65,7 +65,7 @@ static uint32_t gc2_flush_and_drain_ssb(global_State *g)
 void lj_gc2_init(global_State *g)
 {
   uint32_t i;
-  g->gc2.gcpause_pct = 100;
+  gc2_gcpause_pct_store_rlx(g, 100);
   gc2_assist_shift_store_rlx(g,
     lj_gc2_assist_shift_from_stepmul(g->gc.stepmul));
   gc2_phase_store_rlx(g, LJ_GC2_IDLE);
@@ -535,7 +535,7 @@ void lj_gc2_update_pacing(global_State *g)
   live = gc2_live > legacy_live ? gc2_live : legacy_live;
   if (live < LJ_GC2_ACCT_FLUSH)
     live = LJ_GC2_ACCT_FLUSH;
-  pct = la_load32_acq(&g->gc2.gcpause_pct);
+  pct = gc2_gcpause_pct_acq(g);
   if (pct == 0)
     pct = 100;
   trigger = (live / 100u) * (uint64_t)pct +

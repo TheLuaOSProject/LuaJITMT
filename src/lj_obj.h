@@ -2392,6 +2392,22 @@ static LJ_AINLINE int gc2_worker_active_cas(global_State *g, uint32_t *oldp,
   return la_cas32(&g->gc2.worker_active, oldp, active, LA_ACQ_REL, LA_ACQ);
 }
 
+static LJ_AINLINE uint32_t gc2_gcpause_pct_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.gcpause_pct);
+}
+
+static LJ_AINLINE void gc2_gcpause_pct_store_rlx(global_State *g,
+						 uint32_t pct)
+{
+  la_store32_rlx(&g->gc2.gcpause_pct, pct);
+}
+
+static LJ_AINLINE void gc2_gcpause_pct_rel(global_State *g, uint32_t pct)
+{
+  la_store32_rel(&g->gc2.gcpause_pct, pct);
+}
+
 static LJ_AINLINE uint32_t gc2_assist_shift_acq(global_State *g)
 {
   return la_load32_acq(&g->gc2.assist_shift);
