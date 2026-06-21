@@ -13,7 +13,7 @@ if hits=$(grep -nE -- 'cts[[:space:]]*->[[:space:]]*(miscmap|metamap|sizemeta)|&
   exit 1
 fi
 if hits=$(awk '
-  /^LJLIB_CF\(ffi_meta___call\)/ || /^LJLIB_CF\(ffi_meta___tostring\)/ || /^static int ffi_pairs\(/ { in_fn = 1 }
+  /^LJLIB_CF\(ffi_metatype\)/ || /^LJLIB_CF\(ffi_meta___call\)/ || /^LJLIB_CF\(ffi_meta___tostring\)/ || /^static int ffi_pairs\(/ { in_fn = 1 }
   in_fn && /->[[:space:]]*(info|size)([^[:alnum:]_]|$)/ { print FNR ":" $0 }
   in_fn && /^}/ { in_fn = 0 }
 ' "$ROOT/src/lib_ffi.c" || true); [ -n "$hits" ]; then

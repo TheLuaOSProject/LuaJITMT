@@ -1678,10 +1678,10 @@ LJLIB_CF(ffi_metatype)
   GCtab *mt = lj_lib_checktab(L, 2);
   CTypeID rid = ctype_rawid(cts, id);
   CType *ct = ctype_get(cts, rid);
+  CTInfo info = ctype_info_acq(ct);
   TValue tmp;
   GCcdata *cd;
-  if (!(ctype_isstruct(ct->info) || ctype_iscomplex(ct->info) ||
-	ctype_isvector(ct->info)))
+  if (!(ctype_isstruct(info) || ctype_iscomplex(info) || ctype_isvector(info)))
     lj_err_arg(L, 1, LJ_ERR_FFI_INVTYPE);
   if (!lj_ctype_setmeta(cts, rid, mt))
     lj_err_caller(L, LJ_ERR_PROTMT);
@@ -1700,8 +1700,8 @@ LJLIB_CF(ffi_gc)	LJLIB_REC(.)
   TValue *fin = lj_lib_checkany(L, 2);
   CTState *cts = ctype_cts(L);
   CType *ct = ctype_raw(cts, cd->ctypeid);
-  if (!(ctype_isptr(ct->info) || ctype_isstruct(ct->info) ||
-	ctype_isrefarray(ct->info)))
+  CTInfo info = ctype_info_acq(ct);
+  if (!(ctype_isptr(info) || ctype_isstruct(info) || ctype_isrefarray(info)))
     lj_err_arg(L, 1, LJ_ERR_FFI_INVTYPE);
   lj_cdata_setfin(L, cd, gcval(fin), itype(fin));
   L->top = L->base+1;  /* Pass through the cdata object. */
@@ -1731,13 +1731,15 @@ LJLIB_CF(ffi_blocking)
   CTState *cts = ctype_cts(L);
   CTypeID id = ctype_rawid(cts, cd->ctypeid);
   CType *ct = ctype_get(cts, id);
+  CTInfo info = ctype_info_acq(ct);
   CTSize sz = CTSIZE_PTR;
-  if (ctype_isptr(ct->info)) {
-    sz = ct->size;
-    id = ctype_rawid(cts, ctype_cid(ct->info));
+  if (ctype_isptr(info)) {
+    sz = ctype_size_acq(ct);
+    id = ctype_rawid(cts, ctype_cid(info));
     ct = ctype_get(cts, id);
+    info = ctype_info_acq(ct);
   }
-  if (!ctype_isfunc(ct->info))
+  if (!ctype_isfunc(info))
     lj_err_arg(L, 1, LJ_ERR_FFI_INVTYPE);
   lj_ctype_cb_blacklist(cts, cdata_getptr(cdataptr(cd), sz));
   (void)lj_trace_flushall_hs(L);

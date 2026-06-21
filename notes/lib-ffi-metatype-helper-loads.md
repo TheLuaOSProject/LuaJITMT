@@ -7,6 +7,8 @@ lib_ffi metatype helper loads
   pointer payloads, and struct/vector `__tostring` dispatch.
 - Routed `ffi_pairs()` through `ctype_info_acq()` before pointer wrapper
   stripping for `__pairs`/`__ipairs` lookup.
+- Routed `ffi_metatype()` through `ctype_info_acq()` before validating
+  metatype-eligible struct, complex, and vector ctypes.
 - Extended `tools/ci/m7_ffi_metatype.sh` to reject raw `CType.info` and
   `CType.size` reads in these metatype library helper bodies.
 

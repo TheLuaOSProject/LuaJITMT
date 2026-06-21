@@ -57,6 +57,15 @@ if hits=$(grep -nE -- '(setgcrefnullrel|setgcrefrel)[(](g->gc2[.]finreg_cdata_pr
   printf '%s\n' 'raw FINREG preclaim object-slot access is forbidden; use gc2_queue_slot_* helpers' >&2
   exit 1
 fi
+if hits=$(awk '
+  /^LJLIB_CF\(ffi_gc\)/ { in_fn = 1 }
+  in_fn && /->[[:space:]]*(info|size)([^[:alnum:]_]|$)/ { print FNR ":" $0 }
+  in_fn && /^}/ { in_fn = 0 }
+' "$ROOT/src/lib_ffi.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw CType info/size reads are forbidden in ffi.gc(); use ctype_info_acq() or ctype_size_acq()' >&2
+  exit 1
+fi
 "$ROOT/tools/ci/lua_test.sh" m7_ffi_finreg
 cc -std=gnu99 -O2 -Wall -Wextra -Werror -mcx16 -I"$ROOT/src" \
   "$ROOT/tests/t-ffi-finreg-free-invariant.c" "$ROOT/src/libluajit.a" \
