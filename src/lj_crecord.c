@@ -1175,15 +1175,16 @@ static void crec_alloc(jit_State *J, RecordFFData *rd, CTypeID id)
     } else if (J->base[1] && !J->base[2] &&
 		!lj_cconv_multi_init(cts, rid, d, &rd->argv[1])) {
       goto single_init;
-    } else if (ctype_isarray(d->info)) {
+    } else if (ctype_isarray(info)) {
       CType *dc = ctype_rawchild(cts, d);  /* Array element type. */
-      CTSize ofs, esize = dc->size;
+      CTInfo dcinfo = ctype_info_acq(dc);
+      CTSize ofs, esize = ctype_size_acq(dc);
       TRef sp = 0;
       TValue tv;
       TValue *sval = &tv;
       MSize i;
       tv.u64 = 0;
-      if (!(ctype_isnum(dc->info) || ctype_isptr(dc->info)) ||
+      if (!(ctype_isnum(dcinfo) || ctype_isptr(dcinfo)) ||
 	  esize * CREC_FILL_MAXUNROLL < sz)
 	goto special;
       for (i = 1, ofs = 0; ofs < sz; ofs += esize) {
@@ -1194,61 +1195,70 @@ static void crec_alloc(jit_State *J, RecordFFData *rd, CTypeID id)
 	  sval = &rd->argv[i];
 	  i++;
 	} else if (i != 2) {
-	  sp = ctype_isnum(dc->info) ? lj_ir_kint(J, 0) : TREF_NIL;
+	  sp = ctype_isnum(dcinfo) ? lj_ir_kint(J, 0) : TREF_NIL;
 	}
 	crec_ct_tv(J, dc, dp, sp, sval);
       }
-    } else if (ctype_isstruct(d->info)) {
+    } else if (ctype_isstruct(info)) {
       CTypeID fid;
       MSize i = 1;
       if (!J->base[1]) {  /* Handle zero-fill of struct-of-NYI. */
-	fid = d->sib;
+	fid = ctype_sib_acq(d);
 	while (fid) {
 	  CType *df = ctype_get(cts, fid);
-	  fid = df->sib;
-	  if (ctype_isfield(df->info)) {
+	  CTInfo dfinfo = ctype_info_acq(df);
+	  fid = ctype_sib_acq(df);
+	  if (ctype_isfield(dfinfo)) {
 	    CType *dc;
+	    CTInfo dcinfo;
 	    if (!ctype_name_acq(df)) continue;  /* Ignore unnamed fields. */
 	    dc = ctype_rawchild(cts, df);  /* Field type. */
-	    if (!(ctype_isnum(dc->info) || ctype_isptr(dc->info) ||
-		  ctype_isenum(dc->info)))
+	    dcinfo = ctype_info_acq(dc);
+	    if (!(ctype_isnum(dcinfo) || ctype_isptr(dcinfo) ||
+		  ctype_isenum(dcinfo)))
 	      goto special;
-	  } else if (!ctype_isconstval(df->info)) {
+	  } else if (!ctype_isconstval(dfinfo)) {
 	    goto special;
 	  }
 	}
       }
-      fid = d->sib;
+      fid = ctype_sib_acq(d);
       while (fid) {
 	CType *df = ctype_get(cts, fid);
-	fid = df->sib;
-	if (ctype_isfield(df->info)) {
+	CTInfo dfinfo = ctype_info_acq(df);
+	fid = ctype_sib_acq(df);
+	if (ctype_isfield(dfinfo)) {
 	  CType *dc;
+	  CTInfo dcinfo;
+	  CTSize dcsize, dfsize;
 	  TRef sp, dp;
 	  TValue tv;
 	  TValue *sval = &tv;
 	  setintV(&tv, 0);
 	  if (!ctype_name_acq(df)) continue;  /* Ignore unnamed fields. */
 	  dc = ctype_rawchild(cts, df);  /* Field type. */
-	  if (!(ctype_isnum(dc->info) || ctype_isptr(dc->info) ||
-		ctype_isenum(dc->info)))
+	  dcinfo = ctype_info_acq(dc);
+	  dcsize = ctype_size_acq(dc);
+	  dfsize = ctype_size_acq(df);
+	  if (!(ctype_isnum(dcinfo) || ctype_isptr(dcinfo) ||
+		ctype_isenum(dcinfo)))
 	    lj_trace_err(J, LJ_TRERR_NYICONV);  /* NYI: init aggregates. */
 	  if (J->base[i]) {
 	    sp = J->base[i];
 	    sval = &rd->argv[i];
 	    i++;
 	  } else {
-	    sp = ctype_isptr(dc->info) ? TREF_NIL : lj_ir_kint(J, 0);
+	    sp = ctype_isptr(dcinfo) ? TREF_NIL : lj_ir_kint(J, 0);
 	  }
 	  dp = emitir(IRT(IR_ADD, IRT_PTR), trcd,
-		      lj_ir_kintp(J, df->size + sizeof(GCcdata)));
+		      lj_ir_kintp(J, dfsize + sizeof(GCcdata)));
 	  crec_ct_tv(J, dc, dp, sp, sval);
-	  if ((d->info & CTF_UNION)) {
-	    if (d->size != dc->size)  /* NYI: partial init of union. */
+	  if ((info & CTF_UNION)) {
+	    if (sz != dcsize)  /* NYI: partial init of union. */
 	      lj_trace_err(J, LJ_TRERR_NYICONV);
 	    break;
 	  }
-	} else if (!ctype_isconstval(df->info)) {
+	} else if (!ctype_isconstval(dfinfo)) {
 	  /* NYI: init bitfields and sub-structures. */
 	  lj_trace_err(J, LJ_TRERR_NYICONV);
 	}
