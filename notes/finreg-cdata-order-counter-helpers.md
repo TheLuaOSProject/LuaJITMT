@@ -26,6 +26,8 @@ rejects raw production access to the ordered FINREG counter fields in
 
 ## Follow-Up
 
-This centralizes telemetry publication for the ordered FINREG path. The broader
-cdata/userdata FINREG counters still have direct ad hoc increments and can be
-routed through the same style of helpers in later slices.
+This centralizes telemetry publication for the ordered FINREG path. Follow-up
+cdata FINREG counter helper work now routes registration, clear, queue,
+sweep-invariant, P_WEAK, and preclaim counters through the same style of helper
+surface. Userdata FINREG counters still have direct ad hoc increments and can be
+routed in a later slice.

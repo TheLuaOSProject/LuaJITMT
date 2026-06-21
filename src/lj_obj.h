@@ -2700,6 +2700,141 @@ static LJ_AINLINE int gc2_assist_active_cas(global_State *g, uint32_t *oldp,
   return la_cas32(&g->gc2.assist_active, oldp, active, LA_ACQ_REL, LA_ACQ);
 }
 
+static LJ_AINLINE uint64_t gc2_finreg_cdata_sets_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.finreg_cdata_sets);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_sets_store_rlx(global_State *g,
+						       uint64_t n)
+{
+  la_store64_rlx(&g->gc2.finreg_cdata_sets, n);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_sets_add(global_State *g, uint64_t n)
+{
+  la_add64_rlx(&g->gc2.finreg_cdata_sets, n);
+}
+
+static LJ_AINLINE uint64_t gc2_finreg_cdata_clears_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.finreg_cdata_clears);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_clears_store_rlx(global_State *g,
+							 uint64_t n)
+{
+  la_store64_rlx(&g->gc2.finreg_cdata_clears, n);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_clears_add(global_State *g, uint64_t n)
+{
+  la_add64_rlx(&g->gc2.finreg_cdata_clears, n);
+}
+
+static LJ_AINLINE uint64_t gc2_finreg_cdata_queued_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.finreg_cdata_queued);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_queued_store_rlx(global_State *g,
+							 uint64_t n)
+{
+  la_store64_rlx(&g->gc2.finreg_cdata_queued, n);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_queued_add(global_State *g, uint64_t n)
+{
+  la_add64_rlx(&g->gc2.finreg_cdata_queued, n);
+}
+
+static LJ_AINLINE uint64_t gc2_finreg_cdata_sweep_queued_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.finreg_cdata_sweep_queued);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_sweep_queued_store_rlx(global_State *g,
+							       uint64_t n)
+{
+  la_store64_rlx(&g->gc2.finreg_cdata_sweep_queued, n);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_sweep_queued_add(global_State *g,
+							 uint64_t n)
+{
+  la_add64_rlx(&g->gc2.finreg_cdata_sweep_queued, n);
+}
+
+static LJ_AINLINE uint64_t gc2_finreg_cdata_pweak_queued_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.finreg_cdata_pweak_queued);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_pweak_queued_store_rlx(global_State *g,
+							       uint64_t n)
+{
+  la_store64_rlx(&g->gc2.finreg_cdata_pweak_queued, n);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_pweak_queued_add(global_State *g,
+							 uint64_t n)
+{
+  la_add64_rlx(&g->gc2.finreg_cdata_pweak_queued, n);
+}
+
+static LJ_AINLINE uint64_t gc2_finreg_cdata_pweak_claimed_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.finreg_cdata_pweak_claimed);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_pweak_claimed_store_rlx(global_State *g,
+								uint64_t n)
+{
+  la_store64_rlx(&g->gc2.finreg_cdata_pweak_claimed, n);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_pweak_claimed_add(global_State *g,
+							  uint64_t n)
+{
+  la_add64_rlx(&g->gc2.finreg_cdata_pweak_claimed, n);
+}
+
+static LJ_AINLINE uint64_t gc2_finreg_cdata_preclaim_overflow_acq(
+  global_State *g)
+{
+  return la_load64_acq(&g->gc2.finreg_cdata_preclaim_overflow);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_preclaim_overflow_store_rlx(
+  global_State *g, uint64_t n)
+{
+  la_store64_rlx(&g->gc2.finreg_cdata_preclaim_overflow, n);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_preclaim_overflow_add(global_State *g,
+							      uint64_t n)
+{
+  la_add64_rlx(&g->gc2.finreg_cdata_preclaim_overflow, n);
+}
+
+static LJ_AINLINE uint64_t gc2_finreg_cdata_preclaim_dispatched_acq(
+  global_State *g)
+{
+  return la_load64_acq(&g->gc2.finreg_cdata_preclaim_dispatched);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_preclaim_dispatched_store_rlx(
+  global_State *g, uint64_t n)
+{
+  la_store64_rlx(&g->gc2.finreg_cdata_preclaim_dispatched, n);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_preclaim_dispatched_add(
+  global_State *g, uint64_t n)
+{
+  la_add64_rlx(&g->gc2.finreg_cdata_preclaim_dispatched, n);
+}
+
 static LJ_AINLINE void gc2_finreg_cdata_order_seen_store_rlx(global_State *g,
 							     uint64_t n)
 {

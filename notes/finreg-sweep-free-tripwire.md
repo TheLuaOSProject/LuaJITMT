@@ -16,7 +16,8 @@ edge.
   Release builds now fail closed instead of re-whitening, marking finalized, and
   queueing a finalizer from the sweep/free destructor path.
 - `finreg_cdata_sweep_queued` remains as a last-ditch invariant counter before
-  abort; normal tests assert it is unchanged.
+  abort; normal tests assert it is unchanged. Follow-up counter helper work now
+  updates this telemetry through `gc2_finreg_cdata_sweep_queued_add()`.
 - Extended `tools/ci/m7_ffi_finreg.sh` with a static guard rejecting
   `lj_cdata_free()` rescue calls that mark or queue `obj2gco(cd)`.
 - Added `tests/t-ffi-finreg-free-invariant.c`, which forks a child, sets

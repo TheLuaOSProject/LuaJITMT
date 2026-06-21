@@ -1874,7 +1874,7 @@ static size_t gc_queue_cdata_finalizers_pweak(lua_State *L, global_State *g)
   marked = gc_queue_cdata_finalizers_pweak_ordered(L, g, &ordered_queued);
   n += ordered_queued;
   if (n)
-    la_add64_rlx(&g->gc2.finreg_cdata_pweak_queued, n);
+    gc2_finreg_cdata_pweak_queued_add(g, n);
   if (marked)
     (void)gc_propagate_gray(g);
   return n;  /* 05 section 5.8: ordered FINREG P_WEAK cdata discovery. */

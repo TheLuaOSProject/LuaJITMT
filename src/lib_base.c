@@ -668,21 +668,21 @@ static void gc_stats_push(lua_State *L)
   gc_stats_setnum(L, t, "weak_values_marked",
 		  la_load64_acq(&gc2->weak_values_marked));
   gc_stats_setnum(L, t, "finreg_cdata_sets",
-		  la_load64_acq(&gc2->finreg_cdata_sets));
+		  gc2_finreg_cdata_sets_acq(g));
   gc_stats_setnum(L, t, "finreg_cdata_clears",
-		  la_load64_acq(&gc2->finreg_cdata_clears));
+		  gc2_finreg_cdata_clears_acq(g));
   gc_stats_setnum(L, t, "finreg_cdata_queued",
-		  la_load64_acq(&gc2->finreg_cdata_queued));
+		  gc2_finreg_cdata_queued_acq(g));
   gc_stats_setnum(L, t, "finreg_cdata_sweep_queued",
-		  la_load64_acq(&gc2->finreg_cdata_sweep_queued));
+		  gc2_finreg_cdata_sweep_queued_acq(g));
   gc_stats_setnum(L, t, "finreg_cdata_pweak_queued",
-		  la_load64_acq(&gc2->finreg_cdata_pweak_queued));
+		  gc2_finreg_cdata_pweak_queued_acq(g));
   gc_stats_setnum(L, t, "finreg_cdata_pweak_claimed",
-		  la_load64_acq(&gc2->finreg_cdata_pweak_claimed));
+		  gc2_finreg_cdata_pweak_claimed_acq(g));
   gc_stats_setnum(L, t, "finreg_cdata_preclaim_overflow",
-		  la_load64_acq(&gc2->finreg_cdata_preclaim_overflow));
+		  gc2_finreg_cdata_preclaim_overflow_acq(g));
   gc_stats_setnum(L, t, "finreg_cdata_preclaim_dispatched",
-		  la_load64_acq(&gc2->finreg_cdata_preclaim_dispatched));
+		  gc2_finreg_cdata_preclaim_dispatched_acq(g));
   gc_stats_setnum(L, t, "finreg_cdata_order_seen",
 		  la_load64_acq(&gc2->finreg_cdata_order_seen));
   gc_stats_setnum(L, t, "finreg_cdata_order_claimed",

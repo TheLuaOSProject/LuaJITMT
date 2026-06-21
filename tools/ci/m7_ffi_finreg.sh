@@ -75,6 +75,45 @@ if hits=$(grep -nE -- '->[[:space:]]*gc2[.](finreg_cdata_order_(seen|claimed|unl
   printf '%s\n' 'raw FINREG ordered counter access is forbidden; use gc2_finreg_cdata_order_* helpers' >&2
   exit 1
 fi
+for helper in gc2_finreg_cdata_sets_acq \
+  gc2_finreg_cdata_sets_store_rlx \
+  gc2_finreg_cdata_sets_add \
+  gc2_finreg_cdata_clears_acq \
+  gc2_finreg_cdata_clears_store_rlx \
+  gc2_finreg_cdata_clears_add \
+  gc2_finreg_cdata_queued_acq \
+  gc2_finreg_cdata_queued_store_rlx \
+  gc2_finreg_cdata_queued_add \
+  gc2_finreg_cdata_sweep_queued_acq \
+  gc2_finreg_cdata_sweep_queued_store_rlx \
+  gc2_finreg_cdata_sweep_queued_add \
+  gc2_finreg_cdata_pweak_queued_acq \
+  gc2_finreg_cdata_pweak_queued_store_rlx \
+  gc2_finreg_cdata_pweak_queued_add \
+  gc2_finreg_cdata_pweak_claimed_acq \
+  gc2_finreg_cdata_pweak_claimed_store_rlx \
+  gc2_finreg_cdata_pweak_claimed_add \
+  gc2_finreg_cdata_preclaim_overflow_acq \
+  gc2_finreg_cdata_preclaim_overflow_store_rlx \
+  gc2_finreg_cdata_preclaim_overflow_add \
+  gc2_finreg_cdata_preclaim_dispatched_acq \
+  gc2_finreg_cdata_preclaim_dispatched_store_rlx \
+  gc2_finreg_cdata_preclaim_dispatched_add; do
+  if ! grep -qE "static LJ_AINLINE .*[*[:space:]]${helper}[[:space:]]*[(]" \
+      "$ROOT/src/lj_obj.h"; then
+    printf '%s\n' "${helper} helper is required for FINREG cdata counters" >&2
+    exit 1
+  fi
+done
+if hits=$(grep -nE -- '->[[:space:]]*gc2[.](finreg_cdata_(sets|clears|queued|sweep_queued|pweak_queued|pweak_claimed|preclaim_overflow|preclaim_dispatched))([^[:alnum:]_]|$)|&[[:space:]]*[^)]*->[[:space:]]*gc2[.](finreg_cdata_(sets|clears|queued|sweep_queued|pweak_queued|pweak_claimed|preclaim_overflow|preclaim_dispatched))([^[:alnum:]_]|$)' \
+    "$ROOT/src/lj_gc.c" \
+    "$ROOT/src/lj_gc2.c" \
+    "$ROOT/src/lj_cdata.c" \
+    "$ROOT/src/lib_base.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw FINREG cdata counter access is forbidden; use gc2_finreg_cdata_* helpers' >&2
+  exit 1
+fi
 if hits=$(grep -nE -- '(makewhite|markfinalized|lj_gc_arena_markobj|lj_gc2_finreg_cdata_queue|lj_gc2_finalizer_enqueue)[(].*obj2gco[(]cd[)]' \
     "$ROOT/src/lj_cdata.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
