@@ -933,20 +933,23 @@ CType *lj_ctype_getfieldq(CTState *cts, CType *ct, GCstr *name, CTSize *ofs,
       break;
     ct = ctype_get(cts, sib);
     if (ctype_name_acq(ct) == name) {
-      *ofs = ct->size;
+      *ofs = ctype_size_acq(ct);
       return ct;
     }
-    if (ctype_isxattrib(ct->info, CTA_SUBTYPE)) {
+    if (ctype_isxattrib(ctype_info_acq(ct), CTA_SUBTYPE)) {
       CType *fct, *cct = ctype_child(cts, ct);
       CTInfo q = 0;
-      while (ctype_isattrib(cct->info)) {
-	if (ctype_attrib(cct->info) == CTA_QUAL) q |= cct->size;
+      for (;;) {
+	CTInfo cinfo = ctype_info_acq(cct);
+	if (!ctype_isattrib(cinfo))
+	  break;
+	if (ctype_attrib(cinfo) == CTA_QUAL) q |= ctype_size_acq(cct);
 	cct = ctype_child(cts, cct);
       }
       fct = lj_ctype_getfieldq(cts, cct, name, ofs, qual);
       if (fct) {
 	if (qual) *qual |= q;
-	*ofs += ct->size;
+	*ofs += ctype_size_acq(ct);
 	return fct;
       }
     }
@@ -1175,7 +1178,8 @@ CType *lj_ctype_rawref(CTState *cts, CTypeID id)
 CTSize lj_ctype_size(CTState *cts, CTypeID id)
 {
   CType *ct = ctype_raw(cts, id);
-  return ctype_hassize(ct->info) ? ct->size : CTSIZE_INVALID;
+  CTInfo info = ctype_info_acq(ct);
+  return ctype_hassize(info) ? ctype_size_acq(ct) : CTSIZE_INVALID;
 }
 
 /* Sequence-checked size snapshot for stable non-parser ctype readers. */
@@ -1269,22 +1273,28 @@ int lj_ctype_enumconst_snapshot(CTState *cts, const CType *root,
 CTSize lj_ctype_vlsize(CTState *cts, CType *ct, CTSize nelem)
 {
   uint64_t xsz = 0;
-  if (ctype_isstruct(ct->info)) {
+  CTInfo info = ctype_info_acq(ct);
+  CTSize size = ctype_size_acq(ct);
+  if (ctype_isstruct(info)) {
     CTypeID arrid = 0, fid = ctype_sib_acq(ct);
-    xsz = ct->size;  /* Add the struct size. */
+    xsz = size;  /* Add the struct size. */
     while (fid) {
       CType *ctf = ctype_get(cts, fid);
-      if (ctype_type(ctf->info) == CT_FIELD)
-	arrid = ctype_cid(ctf->info);  /* Remember last field of VLS. */
+      CTInfo finfo = ctype_info_acq(ctf);
+      if (ctype_type(finfo) == CT_FIELD)
+	arrid = ctype_cid(finfo);  /* Remember last field of VLS. */
       fid = ctype_sib_acq(ctf);
     }
     ct = ctype_raw(cts, arrid);
+    info = ctype_info_acq(ct);
   }
-  lj_assertCTS(ctype_isvlarray(ct->info), "VLA expected");
+  lj_assertCTS(ctype_isvlarray(info), "VLA expected");
   ct = ctype_rawchild(cts, ct);  /* Get array element. */
-  lj_assertCTS(ctype_hassize(ct->info), "bad VLA without size");
+  info = ctype_info_acq(ct);
+  size = ctype_size_acq(ct);
+  lj_assertCTS(ctype_hassize(info), "bad VLA without size");
   /* Calculate actual size of VLA and check for overflow. */
-  xsz += (uint64_t)ct->size * nelem;
+  xsz += (uint64_t)size * nelem;
   return xsz < 0x80000000u ? (CTSize)xsz : CTSIZE_INVALID;
 }
 
@@ -1294,20 +1304,21 @@ CTInfo lj_ctype_info(CTState *cts, CTypeID id, CTSize *szp)
   CTInfo qual = 0;
   CType *ct = ctype_get(cts, id);
   for (;;) {
-    CTInfo info = ct->info;
+    CTInfo info = ctype_info_acq(ct);
+    CTSize size = ctype_size_acq(ct);
     if (ctype_isenum(info)) {
       /* Follow child. Need to look at its attributes, too. */
     } else if (ctype_isattrib(info)) {
       if (ctype_isxattrib(info, CTA_QUAL))
-	qual |= ct->size;
+	qual |= size;
       else if (ctype_isxattrib(info, CTA_ALIGN) && !(qual & CTFP_ALIGNED))
-	qual |= CTFP_ALIGNED + CTALIGN(ct->size);
+	qual |= CTFP_ALIGNED + CTALIGN(size);
     } else {
       if (!(qual & CTFP_ALIGNED)) qual |= (info & CTF_ALIGN);
       qual |= (info & ~(CTF_ALIGN|CTMASK_CID));
       lj_assertCTS(ctype_hassize(info) || ctype_isfunc(info),
 		   "ctype without size");
-      *szp = ctype_isfunc(info) ? CTSIZE_INVALID : ct->size;
+      *szp = ctype_isfunc(info) ? CTSIZE_INVALID : size;
       break;
     }
     ct = ctype_get(cts, ctype_cid(info));
@@ -1319,7 +1330,8 @@ CTInfo lj_ctype_info(CTState *cts, CTypeID id, CTSize *szp)
 CTInfo lj_ctype_info_raw(CTState *cts, CTypeID id, CTSize *szp)
 {
   CType *ct = ctype_get(cts, id);
-  if (ctype_isref(ct->info)) id = ctype_cid(ct->info);
+  CTInfo info = ctype_info_acq(ct);
+  if (ctype_isref(info)) id = ctype_cid(info);
   return lj_ctype_info(cts, id, szp);
 }
 
@@ -1328,12 +1340,16 @@ cTValue *lj_ctype_meta(CTState *cts, CTypeID id, MMS mm)
 {
   CType *ct = ctype_get(cts, id);
   cTValue *tv;
-  while (ctype_isattrib(ct->info) || ctype_isref(ct->info)) {
-    id = ctype_cid(ct->info);
+  CTInfo info;
+  for (;;) {
+    info = ctype_info_acq(ct);
+    if (!(ctype_isattrib(info) || ctype_isref(info)))
+      break;
+    id = ctype_cid(info);
     ct = ctype_get(cts, id);
   }
-  if (ctype_isptr(ct->info) &&
-      ctype_isfunc(ctype_get(cts, ctype_cid(ct->info))->info))
+  if (ctype_isptr(info) &&
+      ctype_isfunc(ctype_info_acq(ctype_get(cts, ctype_cid(info)))))
     tv = lj_tab_getstr(ctype_miscmap_acq(cts), &cts->g->strempty);
   else {
     GCtab *mt = ctype_meta_tab(cts, id);
@@ -1351,12 +1367,16 @@ cTValue *lj_ctype_metatv(CTState *cts, TValue *out, CTypeID id, MMS mm)
   CType *ct = ctype_get(cts, id);
   cTValue *tv;
   TValue tabv;
-  while (ctype_isattrib(ct->info) || ctype_isref(ct->info)) {
-    id = ctype_cid(ct->info);
+  CTInfo info;
+  for (;;) {
+    info = ctype_info_acq(ct);
+    if (!(ctype_isattrib(info) || ctype_isref(info)))
+      break;
+    id = ctype_cid(info);
     ct = ctype_get(cts, id);
   }
-  if (ctype_isptr(ct->info) &&
-      ctype_isfunc(ctype_get(cts, ctype_cid(ct->info))->info))
+  if (ctype_isptr(info) &&
+      ctype_isfunc(ctype_info_acq(ctype_get(cts, ctype_cid(info)))))
     tv = lj_tab_getstr(ctype_miscmap_acq(cts), &cts->g->strempty);
   else {
     GCtab *mt = ctype_meta_tab(cts, id);
@@ -1477,8 +1497,8 @@ static void ctype_repr(CTRepr *ctr, CTypeID id)
   CTInfo qual = 0;
   int ptrto = 0;
   for (;;) {
-    CTInfo info = ct->info;
-    CTSize size = ct->size;
+    CTInfo info = ctype_info_acq(ct);
+    CTSize size = ctype_size_acq(ct);
     switch (ctype_type(info)) {
     case CT_NUM:
       if ((info & CTF_BOOL)) {
@@ -1538,7 +1558,7 @@ static void ctype_repr(CTRepr *ctr, CTypeID id)
 	if (ptrto) { ptrto = 0; ctype_prepc(ctr, '('); ctype_appc(ctr, ')'); }
 	ctype_appc(ctr, '[');
 	if (size != CTSIZE_INVALID) {
-	  CTSize csize = ctype_child(ctr->cts, ct)->size;
+	  CTSize csize = ctype_size_acq(ctype_child(ctr->cts, ct));
 	  ctype_appnum(ctr, csize ? size/csize : 0);
 	} else if ((info & CTF_VLA)) {
 	  ctype_appc(ctr, '?');
