@@ -2733,6 +2733,65 @@ static LJ_AINLINE void setgcrefnullrel_(GCRef *r)
 #define setgcrefroot(r, gc)	setgcrefrel((r), (gc))
 #define setgcrefmt(r, gc)	setgcrefrel((r), (gc))
 
+static LJ_AINLINE GC2FinRegUDataNode *
+gc2_finreg_udata_head_acq(global_State *g)
+{
+  return (GC2FinRegUDataNode *)la_loadptr_acq(
+    (void *const *)&g->gc2.finreg_udata_head);
+}
+
+static LJ_AINLINE void
+gc2_finreg_udata_head_store_rlx(global_State *g, GC2FinRegUDataNode *head)
+{
+  la_storeptr_rlx((void **)&g->gc2.finreg_udata_head, head);
+}
+
+static LJ_AINLINE GC2FinRegUDataNode *
+gc2_finreg_udata_head_xchg_acqrel(global_State *g,
+				  GC2FinRegUDataNode *head)
+{
+  return (GC2FinRegUDataNode *)la_xchgptr_acqrel(
+    (void **)&g->gc2.finreg_udata_head, head);
+}
+
+static LJ_AINLINE int
+gc2_finreg_udata_head_cas(global_State *g, GC2FinRegUDataNode **oldp,
+			  GC2FinRegUDataNode *head)
+{
+  return la_casptr((void **)&g->gc2.finreg_udata_head, (void **)oldp,
+		   head, LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE GC2FinRegUDataNode *
+gc2_finreg_udata_retired_acq(global_State *g)
+{
+  return (GC2FinRegUDataNode *)la_loadptr_acq(
+    (void *const *)&g->gc2.finreg_udata_retired);
+}
+
+static LJ_AINLINE void
+gc2_finreg_udata_retired_store_rlx(global_State *g,
+				   GC2FinRegUDataNode *head)
+{
+  la_storeptr_rlx((void **)&g->gc2.finreg_udata_retired, head);
+}
+
+static LJ_AINLINE GC2FinRegUDataNode *
+gc2_finreg_udata_retired_xchg_acqrel(global_State *g,
+				     GC2FinRegUDataNode *head)
+{
+  return (GC2FinRegUDataNode *)la_xchgptr_acqrel(
+    (void **)&g->gc2.finreg_udata_retired, head);
+}
+
+static LJ_AINLINE int
+gc2_finreg_udata_retired_cas(global_State *g, GC2FinRegUDataNode **oldp,
+			     GC2FinRegUDataNode *head)
+{
+  return la_casptr((void **)&g->gc2.finreg_udata_retired, (void **)oldp,
+		   head, LA_ACQ_REL, LA_ACQ);
+}
+
 static LJ_AINLINE GCobj *gc2_finreg_udata_obj_acq(GC2FinRegUDataNode *node)
 {
   return gcref_acq(node->obj);

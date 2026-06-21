@@ -833,8 +833,7 @@ static size_t gc_separateudata_registered(global_State *g, int all)
   TValue mmv;
   size_t m = 0;
   prev = NULL;
-  node = (GC2FinRegUDataNode *)la_loadptr_acq(
-    (void *const *)&g->gc2.finreg_udata_head);
+  node = gc2_finreg_udata_head_acq(g);
   while (node) {
     GC2FinRegUDataNode *next = gc2_finreg_udata_next_acq(node);
     GCobj *o = gc2_finreg_udata_obj_acq(node);
@@ -850,8 +849,7 @@ static size_t gc_separateudata_registered(global_State *g, int all)
 	continue;
       }
       prev = NULL;
-      node = (GC2FinRegUDataNode *)la_loadptr_acq(
-	(void *const *)&g->gc2.finreg_udata_head);
+      node = gc2_finreg_udata_head_acq(g);
       continue;
     }
     if (o->gch.gct != ~LJ_TUDATA) {
@@ -861,8 +859,7 @@ static size_t gc_separateudata_registered(global_State *g, int all)
 	continue;
       }
       prev = NULL;
-      node = (GC2FinRegUDataNode *)la_loadptr_acq(
-	(void *const *)&g->gc2.finreg_udata_head);
+      node = gc2_finreg_udata_head_acq(g);
       continue;
     }
     if (isfinalized(gco2ud(o))) {
@@ -872,8 +869,7 @@ static size_t gc_separateudata_registered(global_State *g, int all)
 	continue;
       }
       prev = NULL;
-      node = (GC2FinRegUDataNode *)la_loadptr_acq(
-	(void *const *)&g->gc2.finreg_udata_head);
+      node = gc2_finreg_udata_head_acq(g);
       continue;
     }
     if (!(iswhite(o) || all)) {
@@ -893,8 +889,7 @@ static size_t gc_separateudata_registered(global_State *g, int all)
 	continue;
       }
       prev = NULL;
-      node = (GC2FinRegUDataNode *)la_loadptr_acq(
-	(void *const *)&g->gc2.finreg_udata_head);
+      node = gc2_finreg_udata_head_acq(g);
       continue;
     }
     if (!finreg)
@@ -912,8 +907,7 @@ static size_t gc_separateudata_registered(global_State *g, int all)
       continue;
     }
     prev = NULL;
-    node = (GC2FinRegUDataNode *)la_loadptr_acq(
-      (void *const *)&g->gc2.finreg_udata_head);
+    node = gc2_finreg_udata_head_acq(g);
   }
   return m;  /* 05 section 5.8: GC2-owned userdata FINREG discovery. */
 }

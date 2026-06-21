@@ -17,6 +17,12 @@ Fix:
 - Explicit userdata finalizer clear and GC discovery both retire dead nodes.
 - `collectgarbage("stats").finreg_udata_retired_nodes` exposes the monotonic
   retire count.
+- Follow-up root helper work routes the active discovery-list root and retired
+  retention-list root through `gc2_finreg_udata_head_*()` and
+  `gc2_finreg_udata_retired_*()` helpers. The list lifetime contract is
+  unchanged, but registration, discovery, unlink, forget, init, and teardown no
+  longer spell ad hoc pointer atomics against `g->gc2.finreg_udata_head` or
+  `g->gc2.finreg_udata_retired`.
 
 Regression:
 - `tests/t-gc2-traverse.c` counts active userdata FINREG nodes around explicit
