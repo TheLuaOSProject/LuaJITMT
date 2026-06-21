@@ -401,10 +401,11 @@ copyval:  /* Copy value. */
 int lj_cconv_tv_ct_l(lua_State *L, CTState *cts, CType *s, CTypeID sid,
 		     TValue *o, uint8_t *sp)
 {
-  CTInfo sinfo = s->info;
+  CTInfo sinfo = ctype_info_acq(s);
+  CTSize ssize = ctype_size_acq(s);
   if (ctype_isnum(sinfo)) {
     if (!ctype_isbool(sinfo)) {
-      if (ctype_isinteger(sinfo) && s->size > 4) goto copyval;
+      if (ctype_isinteger(sinfo) && ssize > 4) goto copyval;
       if (LJ_DUALNUM && ctype_isinteger(sinfo)) {
 	int32_t i;
 	lj_cconv_ct_ct_l(L, cts, ctype_get(cts, CTID_INT32), CTID_INT32,
@@ -422,7 +423,7 @@ int lj_cconv_tv_ct_l(lua_State *L, CTState *cts, CType *s, CTypeID sid,
 	lj_assertCTS(tvisnum(o), "non-canonical NaN passed");
       }
     } else {
-      uint32_t b = s->size == 1 ? (*sp != 0) : (*(int *)sp != 0);
+      uint32_t b = ssize == 1 ? (*sp != 0) : (*(int *)sp != 0);
       setboolV(o, b);
       setboolV(&L2TG(L)->tmptv2, b);  /* Remember for trace recorder. */
     }
@@ -435,7 +436,7 @@ int lj_cconv_tv_ct_l(lua_State *L, CTState *cts, CType *s, CTypeID sid,
     GCcdata *cd;
     CTSize sz;
   copyval:  /* Copy value. */
-    sz = s->size;
+    sz = ssize;
     lj_assertCTS(sz != CTSIZE_INVALID, "value copy with invalid size");
     /* Attributes are stripped, qualifiers are kept (but mostly ignored). */
     cd = lj_cdata_new_l(L, cts, sid, sz);
