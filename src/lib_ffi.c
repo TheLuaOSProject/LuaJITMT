@@ -1191,15 +1191,17 @@ static int ffi_layout_raw(FFILayoutSnap *ls, CTypeID id, CType *out)
 
 static int ffi_layout_rawchild(FFILayoutSnap *ls, const CType *ct, CType *out)
 {
-  CTypeID id = ctype_cid(ct->info);
+  CTypeID id = ctype_cid(ctype_info_acq(ct));
   int ok;
   do {
+    CTInfo info;
     ok = ffi_layout_get(ls, id, out);
     if (ok <= 0)
       return ok;
-    if (!ctype_isattrib(out->info))
+    info = ctype_info_acq(out);
+    if (!ctype_isattrib(info))
       return 1;
-    id = ctype_cid(out->info);
+    id = ctype_cid(info);
   } while (1);
 }
 

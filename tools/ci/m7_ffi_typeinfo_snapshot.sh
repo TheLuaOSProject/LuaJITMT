@@ -72,6 +72,15 @@ if hits=$(awk '
   exit 1
 fi
 if hits=$(awk '
+  /^static int ffi_layout_rawchild\(/ { in_fn = 1 }
+  /^static int ffi_layout_info\(/ { in_fn = 0 }
+  in_fn && /->[[:space:]]*(info|size)([^[:alnum:]_]|$)/ { print FNR ":" $0 }
+' "$ROOT/src/lib_ffi.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw CType info/size reads are forbidden in FFI layout raw-child snapshots; use ctype_info_acq() or ctype_size_acq()' >&2
+  exit 1
+fi
+if hits=$(awk '
   /^void LJ_FASTCALL recff_ffi_fill\(/ ||
   /^void LJ_FASTCALL recff_ffi_xof\(/ ||
   /^static CTypeID crec_bit64_type\(/ ||
