@@ -623,7 +623,9 @@ static CTypeID ctype_hash_findtype(CTState *cts, CTypeID id, CTInfo info,
 {
   while (id) {
     CType *ct = ctype_get(cts, id);
-    if (!ctype_isabandoned(ct->info) && ct->info == info && ct->size == size)
+    CTInfo cinfo = ctype_info_acq(ct);
+    CTSize csize = ctype_size_acq(ct);
+    if (!ctype_isabandoned(cinfo) && cinfo == info && csize == size)
       return id;
     id = ctype_next_acq(ct);
   }
@@ -635,8 +637,9 @@ static CTypeID ctype_hash_findname(CTState *cts, CTypeID id, GCstr *name,
 {
   while (id) {
     CType *ct = ctype_get(cts, id);
-    if (!ctype_isabandoned(ct->info) && ctype_name_acq(ct) == name &&
-	((tmask >> ctype_type(ct->info)) & 1))
+    CTInfo info = ctype_info_acq(ct);
+    if (!ctype_isabandoned(info) && ctype_name_acq(ct) == name &&
+	((tmask >> ctype_type(info)) & 1))
       return id;
     id = ctype_next_acq(ct);
   }
@@ -805,7 +808,7 @@ CTypeID lj_ctype_intern_new_l(lua_State *L, CTState *cts, CTInfo info,
 /* Add type element to hash table. */
 static void ctype_addtype(CTState *cts, CType *ct, CTypeID id)
 {
-  uint32_t h = ct_hashtype(ct->info, ct->size);
+  uint32_t h = ct_hashtype(ctype_info_acq(ct), ctype_size_acq(ct));
   ctype_hash_prepend(cts, h, ct, id);
 }
 
