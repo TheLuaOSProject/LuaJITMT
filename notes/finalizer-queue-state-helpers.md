@@ -17,6 +17,10 @@ Guardrail:
   `g->gc2.finalizer_mpsc`, `finalizer_tail`, `finalizer_active`,
   `finalizer_owner_tid`, and `finalizer_mpsc_drained` in `lj_gc.c` and
   `lj_gc2.c`.
+- Follow-up counter helper work now routes queue, dequeue, guard, sweep-block,
+  spawn-deferral, and release-wake telemetry through `gc2_finalizer_*()`
+  helpers, and extends the worker-scheduler guard to reject raw counter access
+  in GC, GC2, stats, and threading code.
 
 Validation:
 

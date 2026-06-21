@@ -244,14 +244,14 @@ void lj_gc2_init(global_State *g)
   gc2_finalizer_tail_store_rlx(g, NULL);
   gc2_finalizer_active_store_rlx(g, 0);
   gc2_finalizer_owner_store_rlx(g, 0);
-  la_store64_rlx(&g->gc2.finalizer_queued, 0);
-  la_store64_rlx(&g->gc2.finalizer_dequeued, 0);
+  gc2_finalizer_queued_store_rlx(g, 0);
+  gc2_finalizer_dequeued_store_rlx(g, 0);
   gc2_finalizer_mpsc_drained_store_rlx(g, 0);
-  la_store64_rlx(&g->gc2.finalizer_enters, 0);
-  la_store64_rlx(&g->gc2.finalizer_leaves, 0);
-  la_store64_rlx(&g->gc2.finalizer_sweep_blocks, 0);
-  la_store64_rlx(&g->gc2.finalizer_spawn_deferrals, 0);
-  la_store64_rlx(&g->gc2.finalizer_spawn_release_wakes, 0);
+  gc2_finalizer_enters_store_rlx(g, 0);
+  gc2_finalizer_leaves_store_rlx(g, 0);
+  gc2_finalizer_sweep_blocks_store_rlx(g, 0);
+  gc2_finalizer_spawn_deferrals_store_rlx(g, 0);
+  gc2_finalizer_spawn_release_wakes_store_rlx(g, 0);
 #if defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
   la_store32_rlx(&g->gc2.finalizer_drain_test_pause, 0);
   la_store32_rlx(&g->gc2.finalizer_drain_test_paused, 0);
@@ -867,7 +867,7 @@ void lj_gc2_finalizer_enqueue(global_State *g, GCobj *o)
     else
       lj_obj_setgcwnullrel(o);
   } while (!gc2_finalizer_mpsc_cas(g, &head, o));
-  la_add64_rlx(&g->gc2.finalizer_queued, 1);
+  gc2_finalizer_queued_add(g, 1);
   if (head == NULL)
     lj_gc2_worker_wake(g);  /* 05 section 5.8: finalizer work became visible. */
 }
@@ -949,7 +949,7 @@ GCobj *lj_gc2_finalizer_dequeue_owned(global_State *g)
     lj_obj_setgcwrel(tail, lj_obj_gcw_acq(o));
   }
   lj_obj_setgcwnullrel(o);
-  la_add64_rlx(&g->gc2.finalizer_dequeued, 1);
+  gc2_finalizer_dequeued_add(g, 1);
   return o;  /* 05 section 5.8: GC2-owned finalizer queue bridge. */
 }
 
@@ -978,14 +978,14 @@ int lj_gc2_finalizer_try_enter(global_State *g)
       if (old == ~(uint32_t)0)
 	return 0;
       if (gc2_finalizer_active_cas(g, &old, old + 1)) {
-	la_add64_rlx(&g->gc2.finalizer_enters, 1);
+	gc2_finalizer_enters_add(g, 1);
 	return 1;
       }
       continue;
     }
     if (gc2_finalizer_active_cas(g, &old, 1)) {
       gc2_finalizer_owner_rel(g, owner);
-      la_add64_rlx(&g->gc2.finalizer_enters, 1);
+      gc2_finalizer_enters_add(g, 1);
       return 1;
     }
   }
@@ -1027,7 +1027,7 @@ void lj_gc2_finalizer_leave(global_State *g)
     if (gc2_finalizer_active_cas(g, &old, old - 1))
       break;  /* 05 section 5.8: nested owner leave. */
   }
-  la_add64_rlx(&g->gc2.finalizer_leaves, 1);
+  gc2_finalizer_leaves_add(g, 1);
   if (wake_worker)
     lj_gc2_worker_wake(g);  /* 05 section 5.8: owner release exposes work. */
 }
@@ -1065,7 +1065,7 @@ static int gc2_sweep_blocked_by_finalizer(global_State *g)
 {
   if (!lj_gc2_finalizer_sweep_pending(g))
     return 0;
-  la_add64_rlx(&g->gc2.finalizer_sweep_blocks, 1);
+  gc2_finalizer_sweep_blocks_add(g, 1);
   return 1;  /* 05 section 5.8 finalizer drain before traversable sweep. */
 }
 

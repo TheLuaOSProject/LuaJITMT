@@ -714,21 +714,21 @@ static void gc_stats_push(lua_State *L)
   gc_stats_setnum(L, t, "finreg_udata_forgets",
 		  gc2_finreg_udata_forgets_acq(g));
   gc_stats_setnum(L, t, "finalizer_queued",
-		  la_load64_acq(&gc2->finalizer_queued));
+		  gc2_finalizer_queued_acq(g));
   gc_stats_setnum(L, t, "finalizer_dequeued",
-		  la_load64_acq(&gc2->finalizer_dequeued));
+		  gc2_finalizer_dequeued_acq(g));
   gc_stats_setnum(L, t, "finalizer_mpsc_drained",
-		  la_load64_acq(&gc2->finalizer_mpsc_drained));
+		  gc2_finalizer_mpsc_drained_acq(g));
   gc_stats_setnum(L, t, "finalizer_enters",
-		  la_load64_acq(&gc2->finalizer_enters));
+		  gc2_finalizer_enters_acq(g));
   gc_stats_setnum(L, t, "finalizer_leaves",
-		  la_load64_acq(&gc2->finalizer_leaves));
+		  gc2_finalizer_leaves_acq(g));
   gc_stats_setnum(L, t, "finalizer_sweep_blocks",
-		  la_load64_acq(&gc2->finalizer_sweep_blocks));
+		  gc2_finalizer_sweep_blocks_acq(g));
   gc_stats_setnum(L, t, "finalizer_spawn_deferrals",
-		  la_load64_acq(&gc2->finalizer_spawn_deferrals));
+		  gc2_finalizer_spawn_deferrals_acq(g));
   gc_stats_setnum(L, t, "finalizer_spawn_release_wakes",
-		  la_load64_acq(&gc2->finalizer_spawn_release_wakes));
+		  gc2_finalizer_spawn_release_wakes_acq(g));
   lj_gc_pubtab(L, t);
 }
 

@@ -13,6 +13,8 @@ Fix:
 - The final secondary-thread exit now detects `GCSfinalize` with released
   `mt_gc_exclusive`, records `finalizer_spawn_release_wakes`, and publishes a
   GC2 worker wake request.
+- Follow-up counter helper work routes both `finalizer_spawn_deferrals` and
+  `finalizer_spawn_release_wakes` through `gc2_finalizer_*()` helpers.
 - This keeps callback stack ownership unchanged: user finalizers still execute
   on the claimed collector caller state, while the deferral release becomes a
   scheduler-visible event.

@@ -1692,7 +1692,7 @@ static int gc_fullgc_deferred_by_finalizer(global_State *g)
   if (g->gc.state == GCSfinalize &&
       la_load32_acq(&g->mt_live) != 0 &&
       la_load32_acq(&g->mt_gc_exclusive) == 0) {
-    la_add64_rlx(&g->gc2.finalizer_spawn_deferrals, 1);
+    gc2_finalizer_spawn_deferrals_add(g, 1);
     return 1;
   }
   return 0;

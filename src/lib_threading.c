@@ -327,7 +327,7 @@ static void threading_gc_leave(global_State *g)
     lj_gc_threshold_store(g, lj_gc_mt_threshold_load(g));
     if (g->gc.state == GCSfinalize &&
 	la_load32_acq(&g->mt_gc_exclusive) == 0) {
-      la_add64_rlx(&g->gc2.finalizer_spawn_release_wakes, 1);
+      gc2_finalizer_spawn_release_wakes_add(g, 1);
       lj_gc2_worker_wake(g);
     }
     la_futex_wake(&g->mt_live, INT_MAX);
