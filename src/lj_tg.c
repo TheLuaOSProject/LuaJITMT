@@ -110,15 +110,14 @@ static void tg_adopt_gc2_phase(global_State *g, TGState *tg)
 {
   uint32_t phase = gc2_phase_acq(g);
   if (phase == LJ_GC2_MARK || phase == LJ_GC2_WEAK) {
-    tg->mark_active = 1;
-    tg->alloc.alloc_black = 1;
+    lj_tg_mark_active_rel(tg, 1);
+    lj_tg_alloc_black_rel(tg, 1);
   } else if (phase == LJ_GC2_SWEEP) {
-    tg->mark_active = 0;
-    tg->alloc.alloc_black =
-      gc2_cycle_sweep_minor_acq(g) == 0;
+    lj_tg_mark_active_rel(tg, 0);
+    lj_tg_alloc_black_rel(tg, (uint8_t)(gc2_cycle_sweep_minor_acq(g) == 0));
   } else {
-    tg->mark_active = gc2_generational_acq(g) != 0;
-    tg->alloc.alloc_black = 0;
+    lj_tg_mark_active_rel(tg, gc2_generational_acq(g) != 0);
+    lj_tg_alloc_black_rel(tg, 0);
   }
 }
 

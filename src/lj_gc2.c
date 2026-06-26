@@ -3146,7 +3146,7 @@ static int gc2_barrier_active_g(global_State *g)
   if (!g)
     return 0;
   tg = G2TG(g);
-  if (!tg || !tg->mark_active)
+  if (!tg || !lj_tg_mark_active_acq(tg))
     return 0;
   phase = gc2_phase_acq(g);
   if (phase != LJ_GC2_MARK && phase != LJ_GC2_WEAK)
@@ -3161,7 +3161,7 @@ static int gc2_remember_active_g(global_State *g)
       gc2_generational_acq(g) == 0)
     return 0;
   tg = G2TG(g);
-  return tg && tg->mark_active;
+  return tg && lj_tg_mark_active_acq(tg);
 }
 
 static void gc2_remember_obj(global_State *g, GCobj *o)

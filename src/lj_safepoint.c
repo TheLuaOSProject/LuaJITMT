@@ -64,13 +64,13 @@ static void safepoint_note_ack_latency(global_State *g)
 void lj_safepoint_apply_tg(global_State *g, TGState *tg, uint32_t actions)
 {
   if (actions & LJ_GC2_HS_ENABLE_BARRIER)
-    la_store32_rel(&tg->mark_active, 1);
+    lj_tg_mark_active_rel(tg, 1);
   if (actions & LJ_GC2_HS_DISABLE_BARRIER)
-    la_store32_rel(&tg->mark_active, 0);
+    lj_tg_mark_active_rel(tg, 0);
   if (actions & LJ_GC2_HS_ALLOC_BLACK)
-    la_store8_rel(&tg->alloc.alloc_black, 1);
+    lj_tg_alloc_black_rel(tg, 1);
   if (actions & LJ_GC2_HS_ALLOC_WHITE)
-    la_store8_rel(&tg->alloc.alloc_black, 0);
+    lj_tg_alloc_black_rel(tg, 0);
   if (actions & LJ_GC2_HS_SCAN_ROOTS) {
     lua_State *L = lj_tg_load_cur_L(tg);
     lj_gc2_scan_cycle_roots(g, L);  /* 05 section 5.7.1/5.7.2. */

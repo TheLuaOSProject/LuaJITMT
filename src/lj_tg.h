@@ -128,6 +128,28 @@ static LJ_AINLINE void lj_tg_gc_assist_store_rlx(TGState *tg,
   la_store8_rlx(&tg->gc_assist, gc_assist);
 }
 
+static LJ_AINLINE uint32_t lj_tg_mark_active_acq(const TGState *tg)
+{
+  return la_load32_acq(&tg->mark_active);  /* 05 section 5.5 barrier mirror. */
+}
+
+static LJ_AINLINE void lj_tg_mark_active_rel(TGState *tg,
+					     uint32_t mark_active)
+{
+  la_store32_rel(&tg->mark_active, mark_active);  /* 05 section 5.5. */
+}
+
+static LJ_AINLINE uint8_t lj_tg_alloc_black_acq(const TGState *tg)
+{
+  return la_load8_acq(&tg->alloc.alloc_black);  /* 05 section 5.5 alloc color. */
+}
+
+static LJ_AINLINE void lj_tg_alloc_black_rel(TGState *tg,
+					     uint8_t alloc_black)
+{
+  la_store8_rel(&tg->alloc.alloc_black, alloc_black);  /* 05 section 5.5. */
+}
+
 static LJ_AINLINE uint8_t lj_tg_flags_acq(const TGState *tg)
 {
   return la_load8_acq(&tg->tg_flags);  /* 05 section 5.4.1 TG registry. */

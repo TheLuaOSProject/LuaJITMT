@@ -1777,7 +1777,7 @@ static int tab_tsetm_barrier_needed(lua_State *L, GCtab *parent)
   if (!L || !parent)
     return 0;
   tg = L2TG(L);
-  return (tg && la_load32_acq(&tg->mark_active)) || isblack(obj2gco(parent));
+  return (tg && lj_tg_mark_active_acq(tg)) || isblack(obj2gco(parent));
 }
 
 static TValue *tab_current_vm_array_key_slot(lua_State *L, GCtab *parent,
