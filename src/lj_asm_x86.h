@@ -1931,7 +1931,7 @@ static void asm_ahstore_inline_array_num(ASMState *as, IRIns *ir)
   IRRef tabref = IR(xref->op1)->op1;
   IRRef keyref = xref->op2;
   MCLabel l_done, l_fallback;
-  Reg slot, tab, key, base, coloc, src, fsrc;
+  Reg slot, tab, array, coloc, src, fsrc;
   RegSet allow;
 
   ra_evictset(as, RSET_SCRATCH);
@@ -1953,10 +1953,8 @@ static void asm_ahstore_inline_array_num(ASMState *as, IRIns *ir)
   rset_clear(allow, slot);
   tab = ra_alloc1(as, tabref, allow);
   rset_clear(allow, tab);
-  key = ra_alloc1(as, keyref, allow);
-  rset_clear(allow, key);
-  base = ra_scratch(as, allow);
-  rset_clear(allow, base);
+  array = ra_alloc1(as, xref->op1, allow);
+  rset_clear(allow, array);
   coloc = ra_scratch(as, allow);
   rset_clear(allow, coloc);
   src = ra_scratch(as, allow);
@@ -1969,17 +1967,13 @@ static void asm_ahstore_inline_array_num(ASMState *as, IRIns *ir)
   emit_rmro(as, XO_MOV, RID_EAX|REX_64, slot, 0);
 
   emit_sjcc(as, CC_NE, l_fallback);
-  emit_rmro(as, XO_CMP, base|REX_GC64, tab, offsetof(GCtab, array));
+  emit_rmro(as, XO_CMP, array|REX_GC64, tab, offsetof(GCtab, array));
   emit_sjcc(as, CC_NZ, l_fallback);
   emit_u32(as, TABARRAY_FLAG_RETIRING);
-  emit_rmro(as, XO_GROUP3, XOg_TEST, base, TABARRAY_ACAP_OFS);
+  emit_rmro(as, XO_GROUP3, XOg_TEST, array, TABARRAY_ACAP_OFS);
   emit_sjcc(as, CC_E, l_fallback);  /* Colocated arrays keep helper routing. */
-  emit_rr(as, XO_CMP, base|REX_GC64, coloc);
+  emit_rr(as, XO_CMP, array|REX_GC64, coloc);
   emit_rmro(as, XO_LEA, coloc|REX_GC64, tab, sizeof(GCtab));
-  emit_rr(as, XO_ARITH(XOg_ADD), base|REX_GC64, slot);
-  emit_rr(as, XO_GROUP3, REX_64|XOg_NEG, base);
-  emit_shifti(as, XOg_SHL|REX_64, base, 3);
-  emit_rr(as, XO_MOV, base, key);
 }
 
 static void asm_ahstore_inline_hash_num(ASMState *as, IRIns *ir)
