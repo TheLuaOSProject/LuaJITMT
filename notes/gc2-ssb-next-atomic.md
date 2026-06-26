@@ -25,5 +25,6 @@ Validation
 Notes
 -----
 
-- `global_State.gc2.ssb_head` remains the explicit acquire/CAS/xchg MPSC root.
-  This slice centralizes only the per-node link discipline.
+- Follow-up slices now route `TGState` SSB free/cursor state and
+  `global_State.gc2.ssb_head` through dedicated helpers. This original slice
+  centralized the per-node link discipline.

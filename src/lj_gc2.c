@@ -111,7 +111,7 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.remembered_filtered, 0);
   la_store64_rlx(&g->gc2.remembered_drained, 0);
   gc2_marks_this_round_store_rlx(g, 0);
-  g->gc2.ssb_head = NULL;
+  gc2_ssb_head_store_rlx(g, NULL);
   la_store32_rlx(&g->gc2.ssb_published, 0);
   la_store32_rlx(&g->gc2.ssb_drained, 0);
   la_store64_rlx(&g->gc2.ssb_items_published, 0);
@@ -2874,11 +2874,10 @@ static void gc2_ssb_activate(TGState *tg, GC2SSBNode *node)
 
 static void gc2_ssb_publish(global_State *g, GC2SSBNode *node)
 {
-  void *head = la_loadptr_acq((void *const *)&g->gc2.ssb_head);
+  GC2SSBNode *head = gc2_ssb_head_acq(g);
   do {
-    lj_gc2_ssb_next_rel(node, (GC2SSBNode *)head);
-  } while (!la_casptr((void **)&g->gc2.ssb_head, &head, node,
-		      LA_ACQ_REL, LA_ACQ));  /* 05 section 5.6.2 MPSC stack. */
+    lj_gc2_ssb_next_rel(node, head);
+  } while (!gc2_ssb_head_cas(g, &head, node));
   lj_gc2_worker_wake(g);  /* 05 section 5.6.3 parked worker scheduler. */
 }
 
@@ -2982,17 +2981,16 @@ static void gc2_ssb_recycle_node(GC2SSBNode *node)
 static void gc2_ssb_publish_list(global_State *g, GC2SSBNode *head)
 {
   GC2SSBNode *tail, *next;
-  void *oldhead;
+  GC2SSBNode *oldhead;
   if (!g || !head)
     return;
   tail = head;
   while ((next = lj_gc2_ssb_next_acq(tail)) != NULL)
     tail = next;
-  oldhead = la_loadptr_acq((void *const *)&g->gc2.ssb_head);
+  oldhead = gc2_ssb_head_acq(g);
   do {
-    lj_gc2_ssb_next_rel(tail, (GC2SSBNode *)oldhead);
-  } while (!la_casptr((void **)&g->gc2.ssb_head, &oldhead, head,
-		      LA_ACQ_REL, LA_ACQ));  /* 05 section 5.6.2 partial drain. */
+    lj_gc2_ssb_next_rel(tail, oldhead);
+  } while (!gc2_ssb_head_cas(g, &oldhead, head));  /* 05 section 5.6.2. */
 }
 
 static LJ_NOINLINE uint32_t gc2_drain_published_ssb_to_grey(global_State *g,
@@ -3002,7 +3000,7 @@ static LJ_NOINLINE uint32_t gc2_drain_published_ssb_to_grey(global_State *g,
   uint32_t nitems = 0, nnodes = 0;
   if (!g || limit == 0)
     return 0;
-  node = (GC2SSBNode *)la_xchgptr_acqrel((void **)&g->gc2.ssb_head, NULL);
+  node = gc2_ssb_head_xchg_acqrel(g, NULL);
   while (node && nitems < limit) {
     GC2SSBNode *next = lj_gc2_ssb_next_acq(node);
     while (node->n > 0 && nitems < limit) {
@@ -3120,7 +3118,7 @@ int lj_gc2_ssb_empty(global_State *g)
   TGState *tg;
   if (!g)
     return 1;
-  if (la_loadptr_acq((void *const *)&g->gc2.ssb_head) != NULL)
+  if (gc2_ssb_head_acq(g) != NULL)
     return 0;  /* 05 section 5.7.1 SSB-empty fixpoint predicate. */
   if (!gc2_grey_empty(g))
     return 0;

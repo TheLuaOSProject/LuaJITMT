@@ -2093,6 +2093,32 @@ static LJ_AINLINE int gc2_tg_list_cas(global_State *g, TGState **oldp,
 		   LA_ACQ_REL, LA_ACQ);
 }
 
+static LJ_AINLINE GC2SSBNode *gc2_ssb_head_acq(global_State *g)
+{
+  return (GC2SSBNode *)la_loadptr_acq(
+    (void *const *)&g->gc2.ssb_head);  /* 05 section 5.6.2 MPSC SSB. */
+}
+
+static LJ_AINLINE void gc2_ssb_head_store_rlx(global_State *g,
+					      GC2SSBNode *head)
+{
+  la_storeptr_rlx((void **)&g->gc2.ssb_head, head);
+}
+
+static LJ_AINLINE int gc2_ssb_head_cas(global_State *g, GC2SSBNode **oldp,
+				       GC2SSBNode *head)
+{
+  return la_casptr((void **)&g->gc2.ssb_head, (void **)oldp, head,
+		   LA_ACQ_REL, LA_ACQ);  /* 05 section 5.6.2 MPSC SSB. */
+}
+
+static LJ_AINLINE GC2SSBNode *gc2_ssb_head_xchg_acqrel(global_State *g,
+						       GC2SSBNode *head)
+{
+  return (GC2SSBNode *)la_xchgptr_acqrel((void **)&g->gc2.ssb_head,
+					 head);  /* 05 section 5.6.2. */
+}
+
 static LJ_AINLINE uint32_t gc2_n_threads_acq(global_State *g)
 {
   return la_load32_acq(&g->gc2.n_threads);

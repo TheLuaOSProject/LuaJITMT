@@ -52,6 +52,22 @@ if hits=$(grep -nE -- '(->|[.])[[:space:]]*ssb_(active|base|next|end)([^[:alnum:
   printf '%s\n' 'raw TG SSB active cursor access is forbidden; use lj_tg_ssb_* helpers' >&2
   exit 1
 fi
+for helper in gc2_ssb_head_acq \
+  gc2_ssb_head_store_rlx \
+  gc2_ssb_head_cas \
+  gc2_ssb_head_xchg_acqrel; do
+  if ! grep -qE "^[[:space:]]*static LJ_AINLINE .*[*[:space:]]${helper}[[:space:]]*[(]" \
+      "$ROOT/src/lj_obj.h"; then
+    printf '%s\n' "${helper} helper is required for the GC2 published SSB stack" >&2
+    exit 1
+  fi
+done
+if hits=$(grep -nE -- '->[[:space:]]*gc2[.]ssb_head|&[[:space:]]*[^)]*->[[:space:]]*gc2[.]ssb_head' \
+    "$ROOT"/src/*.c || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw GC2 published SSB stack access is forbidden; use gc2_ssb_head_* helpers' >&2
+  exit 1
+fi
 if hits=$(grep -nE -- 'setgcrefr?rel[(][*]lj_obj_gcwref[(](oldtail|tail)[)]' \
     "$ROOT/src/lj_gc2.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
