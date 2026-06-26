@@ -2076,6 +2076,39 @@ static LJ_AINLINE void gc2_sweep_legacy_ready_rel(global_State *g,
   la_store32_rel(&g->gc2.sweep_legacy_ready, ready);
 }
 
+static LJ_AINLINE uint64_t gc2_sweep_to_idle_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.sweep_to_idle);
+}
+
+static LJ_AINLINE void gc2_sweep_to_idle_store_rlx(global_State *g,
+						   uint64_t n)
+{
+  la_store64_rlx(&g->gc2.sweep_to_idle, n);
+}
+
+static LJ_AINLINE void gc2_sweep_to_idle_add(global_State *g, uint64_t n)
+{
+  la_add64_rlx(&g->gc2.sweep_to_idle, n);
+}
+
+static LJ_AINLINE uint64_t gc2_preserve_abort_to_idle_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.preserve_abort_to_idle);
+}
+
+static LJ_AINLINE void gc2_preserve_abort_to_idle_store_rlx(global_State *g,
+							    uint64_t n)
+{
+  la_store64_rlx(&g->gc2.preserve_abort_to_idle, n);
+}
+
+static LJ_AINLINE void gc2_preserve_abort_to_idle_add(global_State *g,
+						      uint64_t n)
+{
+  la_add64_rlx(&g->gc2.preserve_abort_to_idle, n);
+}
+
 static LJ_AINLINE TGState *gc2_tg_list_acq(global_State *g)
 {
   return (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);

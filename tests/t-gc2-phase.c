@@ -711,7 +711,7 @@ int main(void)
   assert(tg->alloc.needsweep[LJ_ARENAK_PLAIN] == NULL);
   assert(tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE] == NULL);
   tg->alloc.sweep_epoch = g->gc2.cycle;  /* Synthetic close boundary. */
-  sweep_to_idle0 = la_load64_acq(&g->gc2.sweep_to_idle);
+  sweep_to_idle0 = gc2_sweep_to_idle_acq(g);
   sweep_live_updates0 = la_load64_acq(&g->gc2.sweep_live_updates);
   finalizer_blocks0 = la_load64_acq(&g->gc2.finalizer_sweep_blocks);
   finalizer_enters0 = la_load64_acq(&g->gc2.finalizer_enters);
@@ -768,7 +768,7 @@ int main(void)
   lj_gc2_sweep_legacy_ready(g);
   assert(lj_gc2_sweep_to_idle(g) == 0);
   assert(la_load32_acq(&g->gc2.phase) == LJ_GC2_SWEEP);
-  assert(la_load64_acq(&g->gc2.sweep_to_idle) == sweep_to_idle0);
+  assert(gc2_sweep_to_idle_acq(g) == sweep_to_idle0);
   assert(la_load64_acq(&g->gc2.finalizer_sweep_blocks) ==
 	 finalizer_blocks0 + 1u);
   assert(lj_gc2_finalizer_dequeue(g) == obj2gco(phase_tab));
@@ -778,7 +778,7 @@ int main(void)
   assert(!lj_gc2_finalizer_sweep_pending(g));
   lj_gc2_sweep_legacy_ready(g);
   assert(lj_gc2_sweep_to_idle(g) == 1);
-  assert(la_load64_acq(&g->gc2.sweep_to_idle) == sweep_to_idle0 + 1u);
+  assert(gc2_sweep_to_idle_acq(g) == sweep_to_idle0 + 1u);
   assert(la_load64_acq(&g->gc2.sweep_live_updates) ==
 	 sweep_live_updates0 + 1u);
   assert_idle(g, tg);
@@ -793,9 +793,9 @@ int main(void)
   assert(g->gc2.phase == LJ_GC2_WEAK);
   assert(tg->mark_active == 1);
   assert(tg->alloc.alloc_black == 1);
-  preserve_abort_to_idle0 = la_load64_acq(&g->gc2.preserve_abort_to_idle);
+  preserve_abort_to_idle0 = gc2_preserve_abort_to_idle_acq(g);
   lj_gc2_legacy_preserve_abort(g);
-  assert(la_load64_acq(&g->gc2.preserve_abort_to_idle) ==
+  assert(gc2_preserve_abort_to_idle_acq(g) ==
 	 preserve_abort_to_idle0 + 1u);
   assert_idle(g, tg);
 

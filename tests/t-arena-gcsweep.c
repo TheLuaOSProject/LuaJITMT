@@ -360,19 +360,19 @@ static void test_sweep_to_idle_worker_active(void)
   setgcrefnull(empty);
   setmref(g->gc.sweep, &empty);
   g->gc.state = GCSsweep;
-  sweep_to_idle0 = la_load64_acq(&g->gc2.sweep_to_idle);
+  sweep_to_idle0 = gc2_sweep_to_idle_acq(g);
 
   la_store32_rel(&g->gc2.worker_active, 1);
   (void)lj_gc_step(L);
   assert(g->gc.state == GCSsweep);
   assert(la_load32_acq(&g->gc2.phase) == LJ_GC2_SWEEP);
-  assert(la_load64_acq(&g->gc2.sweep_to_idle) == sweep_to_idle0);
+  assert(gc2_sweep_to_idle_acq(g) == sweep_to_idle0);
 
   la_store32_rel(&g->gc2.worker_active, 0);
   (void)lj_gc_step(L);
   assert(g->gc.state == GCSpause);
   assert(la_load32_acq(&g->gc2.phase) == LJ_GC2_IDLE);
-  assert(la_load64_acq(&g->gc2.sweep_to_idle) == sweep_to_idle0 + 1u);
+  assert(gc2_sweep_to_idle_acq(g) == sweep_to_idle0 + 1u);
 
   setmref(g->gc.sweep, &g->gc.root);
   lua_close(L);

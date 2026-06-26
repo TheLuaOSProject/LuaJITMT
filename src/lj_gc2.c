@@ -126,8 +126,8 @@ void lj_gc2_init(global_State *g)
   gc2_weak_complete_progress_store_rlx(g, 0);
   gc2_weak_to_sweep_store_rlx(g, 0);
   gc2_sweep_legacy_ready_store_rlx(g, 0);
-  la_store64_rlx(&g->gc2.sweep_to_idle, 0);
-  la_store64_rlx(&g->gc2.preserve_abort_to_idle, 0);
+  gc2_sweep_to_idle_store_rlx(g, 0);
+  gc2_preserve_abort_to_idle_store_rlx(g, 0);
   lj_gc2_alloc_since_store(g, 0);
   lj_gc2_cycle_alloc_store(g, 0);
   lj_gc2_trigger_store(g, 0);
@@ -1300,7 +1300,7 @@ void lj_gc2_legacy_preserve_abort(global_State *g)
   (void)gc2_flush_and_drain_ssb(g);
   phase = gc2_phase_xchg_acqrel(g, LJ_GC2_IDLE);
   if (phase != LJ_GC2_IDLE)
-    la_add64_rlx(&g->gc2.preserve_abort_to_idle, 1);
+    gc2_preserve_abort_to_idle_add(g, 1);
   lj_gc2_handshake(g, gc2_idle_barrier_actions(g, 0));
   (void)lj_tg_reclaim_dead(g);
 }
@@ -1326,7 +1326,7 @@ int lj_gc2_sweep_to_idle(global_State *g)
     gc2_worker_active_rel(g, 0);
     return 0;
   }
-  la_add64_rlx(&g->gc2.sweep_to_idle, 1);
+  gc2_sweep_to_idle_add(g, 1);
   lj_gc2_update_minor_survival_policy(g, lj_gc2_sweep_live_aggregate(g));
   gc2_update_public_minor_gates(g);
   lj_gc2_handshake(g, gc2_idle_barrier_actions(g, 0));
@@ -1345,7 +1345,7 @@ void lj_gc2_legacy_cycle_end(global_State *g)
   (void)gc2_flush_and_drain_ssb(g);
   phase = gc2_phase_xchg_acqrel(g, LJ_GC2_IDLE);
   if (phase == LJ_GC2_SWEEP) {
-    la_add64_rlx(&g->gc2.sweep_to_idle, 1);
+    gc2_sweep_to_idle_add(g, 1);
     lj_gc2_update_minor_survival_policy(g, lj_gc2_sweep_live_aggregate(g));
   }
   gc2_sweep_legacy_ready_rel(g, 0);
