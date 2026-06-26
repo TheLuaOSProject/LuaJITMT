@@ -3504,6 +3504,20 @@ void lj_gc2_barrier_weak_key(lua_State *L, GCtab *t, cTValue *key)
     gc2_weak_keys_marked_add(g, 1);
 }
 
+void lj_gc2_barrier_weak_value(lua_State *L, GCtab *t, cTValue *val)
+{
+  global_State *g;
+  int weak;
+  if (!L || !t || !val || !tvisgcv(val))
+    return;
+  g = G(L);
+  if (gc2_phase_acq(g) != LJ_GC2_WEAK)
+    return;
+  weak = gc2_tab_weak_barrier_mode(g, t);
+  if ((weak & LJ_GC_WEAKVAL) && lj_gc2_markobj(g, gcV(val)))
+    gc2_weak_values_marked_add(g, 1);
+}
+
 void lj_gc2_barrier_weak_write(lua_State *L, GCtab *t, cTValue *key,
 			       cTValue *val)
 {

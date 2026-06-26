@@ -458,7 +458,10 @@ slots left behind by weak clearing. C API table setters that bypass normal
 legacy barriers also call `lj_gc2_barrier_weak_write()` to mark collectable
 inserted keys and values; when `lua_settable()`/`lua_setfield()` resolve a
 table-valued `__newindex` chain, they use the resolved owner table rather than
-the original proxy for that weak-write barrier. FFI cdata metatype
+the original proxy for that weak-write barrier. VM `vmeta_tset` stores through
+the same table-valued `__newindex` shape now add a resolved-owner weak-value
+barrier after the CAS-published store, relying on the existing VM key barrier
+for weak-key/all-weak key preservation. FFI cdata metatype
 `__newindex = weak_table` uses the same resolved-owner bridge for
 `ffi_meta___newindex`, with dedicated coverage in
 `tests/t-m8-ffi-weak-newindex.c`. The traversal harness also pins the raw C API

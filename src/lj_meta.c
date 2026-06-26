@@ -262,6 +262,7 @@ TValue *lj_meta_tsettv_pair(lua_State *L, cTValue *o, cTValue *k, cTValue *v)
     if (!dst)
       return NULL;
     if (lj_tab_trystoretv_cas(L, dst, v) == LJ_TAB_STORE_CAS_OK) {
+      lj_gc2_barrier_weak_value(L, owner, v);
       lj_gc2_barrier_tv_pair(L, owner ? obj2gco(owner) : NULL, v);
       return dst;
     }

@@ -311,6 +311,7 @@ LJ_FUNC void lj_gc2_barrier_tv_pair(lua_State *L, GCobj *parent, cTValue *tv);
 LJ_FUNCA void lj_gc2_barrier_tab_g(global_State *g, GCtab *t);
 LJ_FUNC void lj_gc2_barrier_tab(lua_State *L, GCtab *t);
 LJ_FUNC void lj_gc2_barrier_weak_key(lua_State *L, GCtab *t, cTValue *key);
+LJ_FUNC void lj_gc2_barrier_weak_value(lua_State *L, GCtab *t, cTValue *val);
 LJ_FUNC void lj_gc2_barrier_weak_write(lua_State *L, GCtab *t, cTValue *key,
 				       cTValue *val);
 LJ_FUNCA void lj_gc_barrierback_tab_g(global_State *g, GCtab *t);
