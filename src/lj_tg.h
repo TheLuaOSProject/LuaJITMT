@@ -101,6 +101,22 @@ static LJ_AINLINE void lj_tg_vmstate_store_rel(TGState *tg, int32_t vmstate)
   la_store32_rel((uint32_t *)&tg->vmstate, (uint32_t)vmstate);
 }
 
+static LJ_AINLINE uint8_t lj_tg_in_native_acq(const TGState *tg)
+{
+  return la_load8_acq(&tg->in_native);  /* 05 section 5.4.3 native ack. */
+}
+
+static LJ_AINLINE void lj_tg_in_native_rel(TGState *tg, uint8_t in_native)
+{
+  la_store8_rel(&tg->in_native, in_native);  /* 05 section 5.4.3. */
+}
+
+static LJ_AINLINE void lj_tg_in_native_store_rlx(TGState *tg,
+						 uint8_t in_native)
+{
+  la_store8_rlx(&tg->in_native, in_native);
+}
+
 static LJ_AINLINE uint8_t lj_tg_flags_acq(const TGState *tg)
 {
   return la_load8_acq(&tg->tg_flags);  /* 05 section 5.4.1 TG registry. */

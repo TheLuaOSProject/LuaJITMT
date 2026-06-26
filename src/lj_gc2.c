@@ -502,8 +502,8 @@ void lj_gc2_worker_stop(global_State *g)
   lj_gc2_worker_wake(g);
   self = lj_thr_get_tg_fallback(g);
   if (self) {
-    was_native = la_load8_acq(&self->in_native);
-    la_store8_rel(&self->in_native, 1);  /* Join wait can remote-ack workers. */
+    was_native = lj_tg_in_native_acq(self);
+    lj_tg_in_native_rel(self, 1);  /* Join wait can remote-ack workers. */
   }
   for (i = 0; i < LJ_GC2_WORKER_MAX; i++) {
     LJThr *thr = (LJThr *)g->gc2.worker_thread[i];
@@ -514,7 +514,7 @@ void lj_gc2_worker_stop(global_State *g)
     lj_mem_free(g, thr, sizeof(LJThr));
   }
   if (self)
-    la_store8_rel(&self->in_native, was_native);
+    lj_tg_in_native_rel(self, was_native);
   (void)gc2_worker_release_tg_slots(g);
   gc2_n_workers_rel(g, 0);
 }

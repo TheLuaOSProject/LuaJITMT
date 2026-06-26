@@ -88,7 +88,7 @@ static void chan_wait(lua_State *L, LJChan *ch)
   if (L)
     actions = lj_native_leave(L);
   else if (tg)
-    la_store8_rlx(&tg->in_native, 0);
+    lj_tg_in_native_store_rlx(tg, 0);
   lj_safepoint_checkstop(L, actions);
 }
 
@@ -131,7 +131,7 @@ static int chan_wait_timeout(lua_State *L, LJChan *ch, int64_t ns)
   if (L)
     lj_safepoint_checkstop(L, lj_native_leave(L));
   else if (tg)
-    la_store8_rlx(&tg->in_native, 0);
+    lj_tg_in_native_store_rlx(tg, 0);
   return rc != 0 && errno == ETIMEDOUT;
 }
 

@@ -956,7 +956,7 @@ lua_State * LJ_FASTCALL lj_ccallback_enter(CTState *cts, void *cf,
   cframe_errfunc(cf) = -1;
   cframe_nres(cf) = 0;
   L->cframe = cf;
-  was_native = (uint8_t)(tg->in_native != 0);
+  was_native = (uint8_t)(lj_tg_in_native_acq(tg) != 0);
   if (was_native) {
     if (tg->ffi_call_func != NULL)
       lj_ctype_cb_blacklist(cts, tg->ffi_call_func);

@@ -22,6 +22,20 @@ if hits=$(grep -nE -- '->[[:space:]]*(poll|reqmask|hs_epoch_ack)([^[:alnum:]_]|$
   printf '%s\n' 'raw TG safepoint mirror access is forbidden; use lj_tg_* safepoint helpers' >&2
   exit 1
 fi
+for helper in lj_tg_in_native_acq lj_tg_in_native_rel lj_tg_in_native_store_rlx
+do
+  if ! grep -q "$helper" "$ROOT/src/lj_tg.h"; then
+    printf '%s\n' "missing TG native-state helper: $helper" >&2
+    exit 1
+  fi
+done
+if hits=$(grep -RInE -- '->[[:space:]]*in_native([^[:alnum:]_]|$)|&[[:space:]]*[^)]*->[[:space:]]*in_native([^[:alnum:]_]|$)' \
+    "$ROOT/src"/lj_*.c "$ROOT/src"/lib_*.c "$ROOT/src"/lj_*.h 2>/dev/null | \
+    grep -vF "$ROOT/src/lj_tg.h:" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw TG native-state access is forbidden; use lj_tg_in_native_* helpers' >&2
+  exit 1
+fi
 for helper in \
   lj_tg_flags_acq \
   lj_tg_flags_store_rlx \

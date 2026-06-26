@@ -171,7 +171,7 @@ void lj_tg_detach(global_State *g, TGState *tg)
     (void)gc2_n_threads_sub_acqrel(g, 1);
   lj_tg_reqmask_rel(tg, 0);
   lj_tg_poll_rel(tg, 0);
-  la_store8_rlx(&tg->in_native, 0);
+  lj_tg_in_native_store_rlx(tg, 0);
 #if LJ_HASFFI
   tg->ffi_call_func = NULL;
 #endif

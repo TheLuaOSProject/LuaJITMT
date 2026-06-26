@@ -157,7 +157,7 @@ uint32_t lj_safepoint_ack_check(lua_State *L)
 void lj_native_enter(TGState *tg)
 {
   if (tg)
-    la_store8_rel(&tg->in_native, 1);  /* 05 section 5.4.3. */
+    lj_tg_in_native_rel(tg, 1);
 }
 
 uint32_t lj_native_leave(lua_State *L)
@@ -168,7 +168,7 @@ uint32_t lj_native_leave(lua_State *L)
   tg = L2TG(L);
   if (!tg)
     return 0;
-  la_store8_rlx(&tg->in_native, 0);  /* 05 section 5.4.3 boundary. */
+  lj_tg_in_native_store_rlx(tg, 0);  /* 05 section 5.4.3 boundary. */
   return lj_safepoint_poll(L);
 }
 
@@ -205,7 +205,7 @@ static void safepoint_ack_native(global_State *g)
       continue;
     if (tg == self)
       safepoint_ack_tg(g, tg);  /* Leader self-ack is a real poll. */
-    else if (la_load8_acq(&tg->in_native))
+    else if (lj_tg_in_native_acq(tg))
       safepoint_ack_tg(g, tg);  /* 05 section 5.4.3 remote native ack. */
   }
 }
