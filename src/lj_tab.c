@@ -973,6 +973,39 @@ static void rehashtab(lua_State *L, GCtab *t, cTValue *ek)
   lj_tab_resize(L, t, asize, hsize2hbits(total));
 }
 
+static TValue *tab_rehash_forwarded_key(lua_State *L, GCtab *t, cTValue *key)
+{
+  rehashtab(L, t, key);
+  return lj_tab_set(L, t, key);
+}
+
+TValue *lj_tab_setint_forward(lua_State *L, GCtab *t, int32_t key)
+{
+  TValue *array, val;
+  MSize asize, hmask;
+  uint32_t hbits, nasize;
+  asize = lj_tab_array_snapshot_acq(t, &array);
+  (void)lj_tab_node_snapshot_acq(t, &hmask);
+  hbits = hmask > 0 ? lj_fls((uint32_t)hmask) + 1u : 0;
+  if (asize >= LJ_MAX_ASIZE) {
+    /* Preserve semantics over layout: move this key out of the maxed array. */
+    lj_tab_resize(L, t, (uint32_t)key, hbits);
+    return lj_tab_setinth(L, t, key);
+  }
+  nasize = (uint32_t)asize + 1u;  /* Force a replacement array generation. */
+  if ((MSize)key >= asize && (MSize)key + 1u > (MSize)nasize)
+    nasize = (uint32_t)key + 1u;
+  lj_tab_resize(L, t, nasize, hbits);
+  asize = lj_tab_array_snapshot_acq(t, &array);
+  if ((MSize)key < asize) {
+    lj_tv_load_acq(&val, &array[key]);
+    if (tvisforward(&val))
+      lj_tab_storenilraw(&array[key]);
+    return &array[key];
+  }
+  return lj_tab_setinth(L, t, key);
+}
+
 static void tab_rehash_chain_overflow(lua_State *L, GCtab *t, cTValue *ek,
 				      MSize oldhmask)
 {
@@ -1439,6 +1472,7 @@ retry_lookup:
 	  return slot;
 	if (tab_val_forward_retry_once(&val, &forward_retry))
 	  goto retry_lookup;
+	return tab_rehash_forwarded_key(L, t, &k);
       }
       return &n->val;
     }
@@ -1473,6 +1507,7 @@ retry_lookup:
 	  return slot;
 	if (tab_val_forward_retry_once(&val, &forward_retry))
 	  goto retry_lookup;
+	return tab_rehash_forwarded_key(L, t, &k);
       }
       return &n->val;
     }
@@ -1521,6 +1556,7 @@ TValue *lj_tab_set(lua_State *L, GCtab *t, cTValue *key)
 	      return slot;
 	    if (tab_val_forward_retry_once(&val, &forward_retry))
 	      goto retry_lookup;
+	    return tab_rehash_forwarded_key(L, t, key);
 	  }
 	  return &n->val;
 	}

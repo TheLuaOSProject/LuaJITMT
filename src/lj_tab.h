@@ -128,6 +128,7 @@ LJ_FUNC int lj_tab_try_newkey_anchor(lua_State *L, GCtab *t, cTValue *key,
 LJ_FUNC int lj_tab_try_newkey_chain(lua_State *L, GCtab *t, cTValue *key,
 				    cTValue *claim, TValue **slot);
 LJ_FUNCA TValue *lj_tab_setinth(lua_State *L, GCtab *t, int32_t key);
+LJ_FUNC TValue *lj_tab_setint_forward(lua_State *L, GCtab *t, int32_t key);
 LJ_FUNC TValue *lj_tab_setstr(lua_State *L, GCtab *t, const GCstr *key);
 LJ_FUNC TValue *lj_tab_set(lua_State *L, GCtab *t, cTValue *key);
 LJ_FUNCA TValue *lj_tab_storetv(lua_State *L, TValue *dst, cTValue *src);
@@ -227,6 +228,7 @@ retry_array:
 	  la_cpu_pause();
 	  goto retry_array;
 	}
+	return lj_tab_setint_forward(L, t, key);
       }
       return &array[key];
     }

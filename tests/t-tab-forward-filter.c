@@ -241,6 +241,7 @@ int main(void)
   lua_State *L = luaL_newstate();
   GCtab *t;
   GCstr *visible, *hidden;
+  TValue lightkey;
   TValue *slot;
 
   assert(L != NULL);
@@ -260,6 +261,11 @@ int main(void)
 #if LJ_HASJIT
   assert(lj_tab_len_hint(t, 2) == 2);
 #endif
+  lj_tab_storeint(L, lj_tab_setint(L, t, 3), 333);
+  tabfwd_assert_forward(slot);
+  tabfwd_assert_i32(lj_tab_getint(t, 3), 333);
+  assert(lj_tab_len(t) == 3);
+  assert(tabfwd_table_maxn(L, -1) == 3);
 
   visible = tabfwd_newstr(L, "tab-forward-filter-visible");
   hidden = tabfwd_newstr(L, "tab-forward-filter-hidden");
@@ -273,9 +279,21 @@ int main(void)
     setstrV(L, &key, hidden);
     assert(tvisnil(lj_tab_get(L, t, &key)));
   }
+  lj_tab_storeint(L, lj_tab_setstr(L, t, hidden), 66);
+  tabfwd_assert_forward(slot);
+  tabfwd_assert_i32(lj_tab_getstr(t, hidden), 66);
 
-  assert(tabfwd_count_next_visible(t) == 3);
-  assert(lj_tab_len(t) == 2);
+  setrawlightudV(&lightkey, (void *)(uintptr_t)0xfeed1234);
+  slot = lj_tab_set(L, t, &lightkey);
+  lj_tab_storeint(L, slot, 77);
+  tabfwd_store_forward(slot);
+  assert(tvisnil(lj_tab_get(L, t, &lightkey)));
+  lj_tab_storeint(L, lj_tab_set(L, t, &lightkey), 88);
+  tabfwd_assert_forward(slot);
+  tabfwd_assert_i32(lj_tab_get(L, t, &lightkey), 88);
+
+  assert(tabfwd_count_next_visible(t) == 6);
+  assert(lj_tab_len(t) == 3);
   exercise_array_forward_hop(L);
   exercise_hash_forward_hop(L);
   exercise_hash_to_array_forward_hop(L);

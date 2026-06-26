@@ -41,9 +41,11 @@ forwarded separated-array slot through `TabArrayHdr.next_gen`, falling through
 to integer hash lookup when the successor array is too small for a shrink-tail
 key. C setter lookups route matched forwarded array/hash slots to successor
 generations when `next_gen` is visible, including integer hash keys that
-migrated into the successor array. C `lj_tab_next()` now resolves visible
-forwarded array/hash slots through the published successor for the current
-logical key.
+migrated into the successor array; if the successor is still unresolved after
+the bounded retry, setters now repair/rebuild and re-resolve instead of
+returning the internal sentinel slot to callers. C `lj_tab_next()` now resolves
+visible forwarded array/hash slots through the published successor for the
+current logical key.
 x64 `ipairs_aux` now routes visible forwarded array slots through the exported
 C integer getter wrapper before deciding whether the iterator stops. x64 array
 `BC_TGETV`, `BC_TGETB`, and `BC_TGETR` now send visible forwarded slot
@@ -370,8 +372,12 @@ logical key before falling back to absent filtering, and x64 `BC_ITERN` plus
 helpers follow `TabArrayHdr.next_gen` for visible forwarded array slots before
 deciding whether a candidate boundary is absent.
 C setter lookups now route matched visible `LJ_TFORWARD` slots to successor
-array or hash generations when `next_gen` is already published, while retaining
-the legacy fallback behavior until the final RETIRING/FORWARD/CAS writer lands.
+array or hash generations when `next_gen` is already published. When the
+successor is still unresolved after the bounded retry, setters repair the
+current generation by forcing a replacement array, moving the key to the hash
+part in the max-array edge case, or rebuilding the hash generation, then
+re-resolve the key instead of returning an internal sentinel slot to a caller.
+This is a safety bridge, not the final cooperative RETIRING/FORWARD/CAS writer.
 Publication barriers that receive a `TValue *` snapshot the value before GC2
 marking and legacy `tviswhite()` / `gcV()` checks, so the current release-store
 bridge does not reread a shared destination slot after publication.
