@@ -22,4 +22,12 @@ if hits=$(grep -nE -- '->[[:space:]]*gc2[.](sweep_live_updates|sweep_live_huge_b
   exit 1
 fi
 
+if hits=$(grep -nE -- '->[[:space:]]*gc2[.](remembered_barriers|remembered_pushed|remembered_overflows|remembered_filtered|remembered_drained)([^[:alnum:]_]|$)|(^|[^[:alnum:]_])gc2->[[:space:]]*(remembered_barriers|remembered_pushed|remembered_overflows|remembered_filtered|remembered_drained)([^[:alnum:]_]|$)' \
+    "$ROOT/src/lj_gc2.c" \
+    "$ROOT/src/lib_base.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw GC2 remembered stat access is forbidden; use gc2_remembered_* helpers' >&2
+  exit 1
+fi
+
 exec "$ROOT/tools/ci/lua_test.sh" m9_gc_stats

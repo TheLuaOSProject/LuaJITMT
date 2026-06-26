@@ -590,15 +590,15 @@ static void gc_stats_push(lua_State *L)
   gc_stats_setnum(L, t, "minor_survival_major_requests",
 		  gc2_minor_survival_major_requests_acq(g));
   gc_stats_setnum(L, t, "remembered_barriers",
-		  la_load64_acq(&gc2->remembered_barriers));
+		  gc2_remembered_barriers_acq(g));
   gc_stats_setnum(L, t, "remembered_pushed",
-		  la_load64_acq(&gc2->remembered_pushed));
+		  gc2_remembered_pushed_acq(g));
   gc_stats_setnum(L, t, "remembered_overflows",
-		  la_load64_acq(&gc2->remembered_overflows));
+		  gc2_remembered_overflows_acq(g));
   gc_stats_setnum(L, t, "remembered_filtered",
-		  la_load64_acq(&gc2->remembered_filtered));
+		  gc2_remembered_filtered_acq(g));
   gc_stats_setnum(L, t, "remembered_drained",
-		  la_load64_acq(&gc2->remembered_drained));
+		  gc2_remembered_drained_acq(g));
   gc_stats_setnum(L, t, "poll_ack_samples",
 		  gc2_hs_ack_latency_samples_acq(g));
   gc_stats_setnum(L, t, "poll_ack_latency_sum_ns",
