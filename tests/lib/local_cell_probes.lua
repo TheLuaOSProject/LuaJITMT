@@ -336,6 +336,25 @@ assert(self == f and fx == 30 and x == 30)
 ]=] .. trace_assert(opts)
 end
 
+function M.assigned_before_fnew(opts)
+  opts = opts or {}
+  return jit_setup(opts) .. [=[
+local function run(n)
+  local s = 0
+  for i = 1, n do
+    local x = i
+    local function f()
+      x = x + 1
+      return x
+    end
+    s = s + f()
+  end
+  return s
+end
+assert(run(30) == 495)
+]=] .. trace_assert(opts)
+end
+
 function M.pre_fnew_update(opts)
   opts = opts or {}
   return jit_setup(opts) .. [=[

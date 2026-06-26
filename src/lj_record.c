@@ -2172,6 +2172,27 @@ static TRef rec_celluv_promote_slot(jit_State *J, BCReg slotno, int fromstack)
   return slotref;
 }
 
+/* A destination write before FNEW overwrites a pending raw/local cell slot.
+** Promoting before that write only creates a discarded cell; FNEW will sync and
+** promote the current traced value when it reaches the capture.
+*/
+static int rec_celluv_slot_defined_before(jit_State *J, const BCIns *limit,
+					  BCReg slotno)
+{
+  const BCIns *pc = J->pc;
+  for (; pc < limit; pc++) {
+    BCIns ins = *pc;
+    BCOp op = bc_op(ins);
+    if (op == BC_KNIL) {
+      if (bc_a(ins) <= slotno && slotno <= bc_d(ins))
+	return 1;
+    } else if (bcmode_a(op) == BCMdst && bc_a(ins) == slotno) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
 static void rec_celluv_promote_pending(jit_State *J)
 {
   const BCIns *pc = J->pc;
@@ -2191,7 +2212,7 @@ static void rec_celluv_promote_pending(jit_State *J)
 	uint32_t v = proto_uv(pt)[i];
 	BCReg slot = (BCReg)(v & 0xff);
 	if ((v & PROTO_UV_LOCAL) && !(v & PROTO_UV_IMMUTABLE) &&
-	    slot != cnewslot)
+	    slot != cnewslot && !rec_celluv_slot_defined_before(J, pc, slot))
 	  rec_celluv_promote_slot(J, slot, 1);
       }
     } else if (op == BC_FORL || op == BC_ITERL || op == BC_LOOP ||

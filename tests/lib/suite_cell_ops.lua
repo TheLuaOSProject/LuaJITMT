@@ -6,6 +6,7 @@ local M = {}
 
 local assert_text_any_contains = checks.assert_text_any_contains
 local assert_text_all_contains = checks.assert_text_all_contains
+local contains = checks.contains
 local assert_dump_contains = checks.assert_dump_contains
 local assert_dump_match = checks.assert_dump_match
 local luajit = runtime.luajit
@@ -15,6 +16,14 @@ local luajit_dump = runtime.luajit_dump
 
 local function dump_i(t, dump, code)
   luajit_dump(t, dump, "-jdump=i", code)
+end
+
+local function assert_dump_not_contains(t, dump, needle, label)
+  local data = t:read(dump)
+  label = label or dump
+  if contains(data, needle) then
+    error(label .. ": unexpected dump text: " .. needle, 2)
+  end
 end
 
 function M.run_bytecode_guards(t, tmpname)
@@ -136,6 +145,16 @@ function M.run_jit_dump_guards(t, dump)
   assert_dump_contains(t, dump, "TRACE 1 stop -> loop", "loaded first-promotion FNEW trace")
   assert_dump_match(t, dump, "CALLS.*lj_func_promoteuv_forjit", "loaded first-promotion helper")
   assert_dump_match(t, dump, "CALLA.*lj_func_newL_gc_forjit", "loaded first-promotion FNEW helper")
+
+  dump_i(t, dump, probes.assigned_before_fnew({
+    hotexit = true,
+    trace_assert = "assigned-before-FNEW creation should trace"
+  }))
+  assert_dump_contains(t, dump, "TRACE 1 stop -> loop", "assigned-before-FNEW trace")
+  assert_dump_match(t, dump, "CALLS.*lj_func_syncslot_forjit", "assigned-before-FNEW sync helper")
+  assert_dump_match(t, dump, "CALLA.*lj_func_newL_gc_forjit", "assigned-before-FNEW FNEW helper")
+  assert_dump_not_contains(t, dump, "lj_func_promoteuv_forjit",
+			   "assigned-before-FNEW discarded promotion")
 end
 
 function M.run_jit_runtime_guards(t)
