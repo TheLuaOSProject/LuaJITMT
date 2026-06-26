@@ -102,6 +102,29 @@ static void rec_check_ir(jit_State *J)
   }
 }
 
+static int rec_check_may_pending_celluv(jit_State *J, BCReg slotno)
+{
+  ptrdiff_t i, j, n;
+  GCRef *kr;
+  if (!J->pt || !(J->pt->flags & PROTO_CHILD))
+    return 0;
+  n = J->pt->sizekgc;
+  kr = mref(J->pt->k, GCRef) - 1;
+  for (i = 0; i < n; i++, kr--) {
+    GCobj *o = gcref_acq(*kr);
+    if (o->gch.gct == ~LJ_TPROTO) {
+      GCproto *pt = gco2pt(o);
+      for (j = 0; j < pt->sizeuv; j++) {
+	uint32_t v = proto_uv(pt)[j];
+	if ((v & PROTO_UV_LOCAL) && !(v & PROTO_UV_IMMUTABLE) &&
+	    (BCReg)(v & 0xff) == slotno)
+	  return 1;
+      }
+    }
+  }
+  return 0;
+}
+
 /* Compare stack slots and frames of the recorder and the VM. */
 static void rec_check_slots(jit_State *J)
 {
@@ -163,9 +186,14 @@ static void rec_check_slots(jit_State *J)
 	lj_assertJ(tref_isint(tr), "keyindex slot %d bad type %d",
 				   s, tref_type(tr));
       } else {
-	/* Number repr. may differ, but other types must be the same. */
-	lj_assertJ(tvisnumber(tv) ? tref_isnumber(tr) :
-				    itype2irt(tv) == tref_type(tr),
+	/* Number repr. may differ, but other types must be the same.
+	** Pending local-cell promotion records a P32 cell before the
+	** interpreter stack slot is physically promoted by compiled code.
+	*/
+	lj_assertJ((tvisnumber(tv) ? tref_isnumber(tr) :
+		    itype2irt(tv) == tref_type(tr)) ||
+		   (tref_istype(tr, IRT_P32) && s >= J->baseslot &&
+		    rec_check_may_pending_celluv(J, (BCReg)(s - J->baseslot))),
 		   "slot %d type mismatch: stack type %d vs IR type %d",
 		   s, itypemap(tv), tref_type(tr));
 	if (tref_isk(tr)) {  /* Compare constants. */
@@ -2074,6 +2102,9 @@ static TRef rec_upvalue(jit_State *J, uint32_t uv, TRef val)
   TRef fn = getcurrf(J);
   IRRef uref;
   int needbarrier = 0;
+  if (val == 0 && proto_celluv(J->pt) &&
+      (proto_uv(J->pt)[uv] & PROTO_UV_LOCAL) && tvisfunc(uvval(uvp)))
+    goto noconstify;
   if (val == 0 && uvp->immutable && tvisfunc(uvval(uvp)) &&
       funcV(uvval(uvp)) == J->fn)
     return fn;
