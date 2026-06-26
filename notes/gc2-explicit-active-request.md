@@ -11,3 +11,10 @@ This is still a bridge. The active-thread path performs only bounded
 `lj_gc2_worker_drain()` assistance and `step` returns false; exact
 `collectgarbage("collect")` parking still needs a GC2 leader path that can
 close sweep without legacy collector ownership.
+
+Follow-up: active-thread `collectgarbage("step")` now uses an explicit request
+variant that bypasses the automatic-trigger stop gate. This matches the
+single-thread legacy path where `collectgarbage("step")` restarts GC after
+`collectgarbage("stop")`. Stopped full `collect` still needs a separate
+"one requested full cycle then restore stopped" bridge before it can both make
+progress under active threads and preserve `isrunning == false`.

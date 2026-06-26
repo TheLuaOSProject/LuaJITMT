@@ -70,6 +70,26 @@ for _ = 1, reps do
     if stats0 then collectgarbage("collect") end
   end
 
+  if _ == 1 then
+    local ch = th.channel(1)
+    collectgarbage("collect")
+    collectgarbage("stop")
+    local stats0 = collectgarbage("stats")
+    local t = th.spawn(function(q)
+      q:recv()
+    end, ch)
+    assert(collectgarbage("isrunning") == false)
+    assert(collectgarbage("step") == false)
+    do
+      local stats1 = collectgarbage("stats")
+      assert(stats1.cycle_requests >= stats0.cycle_requests + 1)
+    end
+    assert(collectgarbage("isrunning") == true)
+    ch:send(true)
+    assert(({ t:join() })[1] == true)
+    collectgarbage("collect")
+  end
+
   do
     local n = 128
     local ch = th.channel(16)

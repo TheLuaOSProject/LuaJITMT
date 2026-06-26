@@ -619,7 +619,8 @@ static void gc2_request_threshold(global_State *g)
   }
 }
 
-static int gc2_request_cycle_start(global_State *g, TGState *tg)
+static int gc2_request_cycle_start(global_State *g, TGState *tg,
+				   int honor_stop)
 {
   uint32_t expect = 0;
   uint32_t tid = tg ? la_load32_acq(&tg->tid) : 0;
@@ -627,7 +628,7 @@ static int gc2_request_cycle_start(global_State *g, TGState *tg)
     return 0;
   if (gc2_phase_acq(g) != LJ_GC2_IDLE)
     return 0;
-  if (gc2_logical_stopped(g))
+  if (honor_stop && gc2_logical_stopped(g))
     return 0;  /* Honor collectgarbage("stop"). */
   if (!gc2_cycle_leader_cas(g, &expect, tid))
     return 0;  /* 05 section 5.11 nonblocking cycle-request token. */
@@ -641,10 +642,21 @@ int lj_gc2_request_cycle(global_State *g, TGState *tg)
   int requested;
   if (!g)
     return 0;
-  requested = gc2_request_cycle_start(g, tg);
+  requested = gc2_request_cycle_start(g, tg, 1);
   if (!requested && gc2_phase_acq(g) != LJ_GC2_IDLE)
     lj_gc2_worker_wake(g);  /* Explicit step/overflow may expose active work. */
   return requested;
+}
+
+int lj_gc2_request_cycle_explicit(global_State *g, TGState *tg)
+{
+  int requested;
+  if (!g)
+    return 0;
+  requested = gc2_request_cycle_start(g, tg, 0);
+  if (!requested && gc2_phase_acq(g) != LJ_GC2_IDLE)
+    lj_gc2_worker_wake(g);
+  return requested;  /* Explicit step ignores the automatic-GC stop gate. */
 }
 
 int lj_gc2_request_major(global_State *g, TGState *tg)

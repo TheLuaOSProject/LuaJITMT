@@ -167,7 +167,8 @@ and rechecking it after the claim; secondary `spawn` / `luaMT_attach()` entry
 waits out that slow-path word before incrementing `mt_live`. If peers are
 already live, explicit `collect` / `step` now request a GC2 cycle and save the
 pending driver threshold in `mt_gc_threshold` instead of running the legacy
-collector concurrently.
+collector concurrently. The active-thread `step` request bypasses the
+automatic-GC stop gate, matching the legacy single-thread restart behavior.
 
 The channel userdata is shared freely; all ops are method calls
 (lib_threading.c → lj_chan.c). GC: channels live in non-traversable? NO —
