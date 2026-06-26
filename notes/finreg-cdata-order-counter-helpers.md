@@ -16,13 +16,16 @@ Routed ordered cdata FINREG telemetry counters through helper APIs:
 GC2 initialization now resets these counters through relaxed helper stores.
 P_WEAK ordered discovery, close-time ordered discovery, pending ordered scans,
 and CTState ordered-node retirement publish increments through the helper
-surface instead of ad hoc `la_add64_rlx()` calls against `g->gc2`.
+surface instead of ad hoc `la_add64_rlx()` calls against `g->gc2`. GC stats
+export and focused FINREG fixtures now read the ordered counters through
+acquire helpers.
 
 ## Guardrail
 
 `tools/ci/m7_ffi_finreg.sh` now requires the ordered-counter helper surface and
 rejects raw production access to the ordered FINREG counter fields in
-`src/lj_ctype.c`, `src/lj_gc.c`, and `src/lj_gc2.c`.
+`src/lj_ctype.c`, `src/lj_gc.c`, `src/lj_gc2.c`, and `src/lib_base.c`.
+`tools/ci/m9_gc_stats.sh` also rejects raw FINREG ordered stat aliases.
 
 ## Follow-Up
 

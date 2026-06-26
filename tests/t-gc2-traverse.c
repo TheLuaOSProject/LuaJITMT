@@ -3637,15 +3637,15 @@ static void test_finreg_cdata_order_active_retire(lua_State *L, global_State *g)
   lua_gc(L, LUA_GCSTOP, 0);
   assert(finreg_cdata_order_active_refs(g, live) == 1u);
 
-  queued0 = la_load64_acq(&g->gc2.finreg_cdata_order_queued);
-  retired0 = la_load64_acq(&g->gc2.finreg_cdata_order_retired);
+  queued0 = gc2_finreg_cdata_order_queued_acq(g);
+  retired0 = gc2_finreg_cdata_order_retired_acq(g);
   lua_pop(L, 1);
   lua_gc(L, LUA_GCCOLLECT, 0);
   lua_gc(L, LUA_GCCOLLECT, 0);
   lua_gc(L, LUA_GCSTOP, 0);
   assert(finreg_cdata_order_active_refs(g, live) == 0);
-  assert(la_load64_acq(&g->gc2.finreg_cdata_order_queued) == queued0 + 1u);
-  assert(la_load64_acq(&g->gc2.finreg_cdata_order_retired) >= retired0 + 1u);
+  assert(gc2_finreg_cdata_order_queued_acq(g) == queued0 + 1u);
+  assert(gc2_finreg_cdata_order_retired_acq(g) >= retired0 + 1u);
 
   lua_settop(L, 0);
   assert(luaL_dostring(L,
@@ -3655,10 +3655,10 @@ static void test_finreg_cdata_order_active_retire(lua_State *L, global_State *g)
     "return cd\n") == LUA_OK);
   cleared = obj2gco(cdataV(L->top - 1));
   assert(finreg_cdata_order_active_refs(g, cleared) == 1u);
-  retired0 = la_load64_acq(&g->gc2.finreg_cdata_order_retired);
+  retired0 = gc2_finreg_cdata_order_retired_acq(g);
   assert(!lj_gc_cdata_fin_pending(g));
   assert(finreg_cdata_order_active_refs(g, cleared) == 0);
-  assert(la_load64_acq(&g->gc2.finreg_cdata_order_retired) >= retired0 + 1u);
+  assert(gc2_finreg_cdata_order_retired_acq(g) >= retired0 + 1u);
   lua_settop(L, 0);
 }
 
@@ -3759,10 +3759,10 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   mpscd1 = la_load64_acq(&g->gc2.finalizer_mpsc_drained);
   claimed1 = la_load64_acq(&g->gc2.finreg_cdata_pweak_claimed);
   dispatched1 = la_load64_acq(&g->gc2.finreg_cdata_preclaim_dispatched);
-  orderq1 = la_load64_acq(&g->gc2.finreg_cdata_order_queued);
-  orderclaimed1 = la_load64_acq(&g->gc2.finreg_cdata_order_claimed);
-  orderunlinked1 = la_load64_acq(&g->gc2.finreg_cdata_order_unlinked);
-  orderfallback1 = la_load64_acq(&g->gc2.finreg_cdata_order_fallbacks);
+  orderq1 = gc2_finreg_cdata_order_queued_acq(g);
+  orderclaimed1 = gc2_finreg_cdata_order_claimed_acq(g);
+  orderunlinked1 = gc2_finreg_cdata_order_unlinked_acq(g);
+  orderfallback1 = gc2_finreg_cdata_order_fallbacks_acq(g);
   finalized0 = gc2_cdata_finalized;
   lua_settop(L, 0);
   lua_pushcfunction(L, gc2_cdata_counting_finalizer);
@@ -3783,12 +3783,12 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
 	 sweepqueued1);
   assert(la_load64_acq(&g->gc2.finreg_cdata_pweak_queued) == pweak1 + 1u);
   assert(la_load64_acq(&g->gc2.finreg_cdata_pweak_claimed) == claimed1 + 1u);
-  assert(la_load64_acq(&g->gc2.finreg_cdata_order_queued) == orderq1 + 1u);
-  assert(la_load64_acq(&g->gc2.finreg_cdata_order_claimed) ==
+  assert(gc2_finreg_cdata_order_queued_acq(g) == orderq1 + 1u);
+  assert(gc2_finreg_cdata_order_claimed_acq(g) ==
 	 orderclaimed1 + 1u);
-  assert(la_load64_acq(&g->gc2.finreg_cdata_order_unlinked) ==
+  assert(gc2_finreg_cdata_order_unlinked_acq(g) ==
 	 orderunlinked1);
-  assert(la_load64_acq(&g->gc2.finreg_cdata_order_fallbacks) ==
+  assert(gc2_finreg_cdata_order_fallbacks_acq(g) ==
 	 orderfallback1);
   assert(la_load64_acq(&g->gc2.finalizer_queued) == finalizerq1 + 1u);
   assert(la_load64_acq(&g->gc2.finalizer_dequeued) == finalizerd1 + 1u);
@@ -3853,9 +3853,9 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   mpscd2 = la_load64_acq(&g->gc2.finalizer_mpsc_drained);
   claimed2 = la_load64_acq(&g->gc2.finreg_cdata_pweak_claimed);
   dispatched2 = la_load64_acq(&g->gc2.finreg_cdata_preclaim_dispatched);
-  orderq2 = la_load64_acq(&g->gc2.finreg_cdata_order_queued);
-  orderclaimed2 = la_load64_acq(&g->gc2.finreg_cdata_order_claimed);
-  orderfallback2 = la_load64_acq(&g->gc2.finreg_cdata_order_fallbacks);
+  orderq2 = gc2_finreg_cdata_order_queued_acq(g);
+  orderclaimed2 = gc2_finreg_cdata_order_claimed_acq(g);
+  orderfallback2 = gc2_finreg_cdata_order_fallbacks_acq(g);
   gc2_cdata_order_count = 0;
   lua_pushcfunction(L, gc2_cdata_order_finalizer_1);
   lua_setglobal(L, "gc2_cdata_order_finalizer_1");
@@ -3886,10 +3886,10 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   assert(la_load64_acq(&g->gc2.finalizer_mpsc_drained) == mpscd2 + 3u);
   assert(la_load64_acq(&g->gc2.finreg_cdata_preclaim_dispatched) ==
 	 dispatched2 + 3u);
-  assert(la_load64_acq(&g->gc2.finreg_cdata_order_queued) == orderq2 + 3u);
-  assert(la_load64_acq(&g->gc2.finreg_cdata_order_claimed) ==
+  assert(gc2_finreg_cdata_order_queued_acq(g) == orderq2 + 3u);
+  assert(gc2_finreg_cdata_order_claimed_acq(g) ==
 	 orderclaimed2 + 3u);
-  assert(la_load64_acq(&g->gc2.finreg_cdata_order_fallbacks) ==
+  assert(gc2_finreg_cdata_order_fallbacks_acq(g) ==
 	 orderfallback2);
   assert(la_load64_acq(&g->gc2.finreg_cdata_clears) == clears2 + 3u);
   assert(gc2_cdata_order_count == 3);
@@ -3908,9 +3908,9 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   mpscd2 = la_load64_acq(&g->gc2.finalizer_mpsc_drained);
   claimed2 = la_load64_acq(&g->gc2.finreg_cdata_pweak_claimed);
   dispatched2 = la_load64_acq(&g->gc2.finreg_cdata_preclaim_dispatched);
-  orderq2 = la_load64_acq(&g->gc2.finreg_cdata_order_queued);
-  orderclaimed2 = la_load64_acq(&g->gc2.finreg_cdata_order_claimed);
-  orderfallback2 = la_load64_acq(&g->gc2.finreg_cdata_order_fallbacks);
+  orderq2 = gc2_finreg_cdata_order_queued_acq(g);
+  orderclaimed2 = gc2_finreg_cdata_order_claimed_acq(g);
+  orderfallback2 = gc2_finreg_cdata_order_fallbacks_acq(g);
   overflow2 = la_load64_acq(&g->gc2.finreg_cdata_preclaim_overflow);
   gc2_cdata_order_count = 0;
   lj_gc2_test_finreg_cdata_preclaim_fail(g, 1);
@@ -3940,10 +3940,10 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   assert(la_load64_acq(&g->gc2.finalizer_mpsc_drained) == mpscd2 + 3u);
   assert(la_load64_acq(&g->gc2.finreg_cdata_preclaim_dispatched) ==
 	 dispatched2 + 2u);
-  assert(la_load64_acq(&g->gc2.finreg_cdata_order_queued) == orderq2 + 3u);
-  assert(la_load64_acq(&g->gc2.finreg_cdata_order_claimed) ==
+  assert(gc2_finreg_cdata_order_queued_acq(g) == orderq2 + 3u);
+  assert(gc2_finreg_cdata_order_claimed_acq(g) ==
 	 orderclaimed2 + 3u);
-  assert(la_load64_acq(&g->gc2.finreg_cdata_order_fallbacks) ==
+  assert(gc2_finreg_cdata_order_fallbacks_acq(g) ==
 	 orderfallback2 + 1u);
   assert(la_load64_acq(&g->gc2.finreg_cdata_clears) == clears2 + 3u);
   assert(gc2_cdata_order_count == 3);
@@ -3962,9 +3962,9 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   mpscd2 = la_load64_acq(&g->gc2.finalizer_mpsc_drained);
   claimed2 = la_load64_acq(&g->gc2.finreg_cdata_pweak_claimed);
   dispatched2 = la_load64_acq(&g->gc2.finreg_cdata_preclaim_dispatched);
-  orderq2 = la_load64_acq(&g->gc2.finreg_cdata_order_queued);
-  orderclaimed2 = la_load64_acq(&g->gc2.finreg_cdata_order_claimed);
-  orderfallback2 = la_load64_acq(&g->gc2.finreg_cdata_order_fallbacks);
+  orderq2 = gc2_finreg_cdata_order_queued_acq(g);
+  orderclaimed2 = gc2_finreg_cdata_order_claimed_acq(g);
+  orderfallback2 = gc2_finreg_cdata_order_fallbacks_acq(g);
   gc2_cdata_order_count = 0;
   assert(luaL_dostring(L,
     "local ffi = require('ffi')\n"
@@ -3992,10 +3992,10 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   assert(la_load64_acq(&g->gc2.finalizer_mpsc_drained) == mpscd2 + 3u);
   assert(la_load64_acq(&g->gc2.finreg_cdata_preclaim_dispatched) ==
 	 dispatched2 + 3u);
-  assert(la_load64_acq(&g->gc2.finreg_cdata_order_queued) == orderq2 + 3u);
-  assert(la_load64_acq(&g->gc2.finreg_cdata_order_claimed) ==
+  assert(gc2_finreg_cdata_order_queued_acq(g) == orderq2 + 3u);
+  assert(gc2_finreg_cdata_order_claimed_acq(g) ==
 	 orderclaimed2 + 3u);
-  assert(la_load64_acq(&g->gc2.finreg_cdata_order_fallbacks) ==
+  assert(gc2_finreg_cdata_order_fallbacks_acq(g) ==
 	 orderfallback2);
   assert(la_load64_acq(&g->gc2.finreg_cdata_clears) == clears2 + 3u);
   assert(gc2_cdata_order_count == 3);
@@ -4013,9 +4013,9 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   mpscd2 = la_load64_acq(&g->gc2.finalizer_mpsc_drained);
   claimed2 = la_load64_acq(&g->gc2.finreg_cdata_pweak_claimed);
   dispatched2 = la_load64_acq(&g->gc2.finreg_cdata_preclaim_dispatched);
-  orderq2 = la_load64_acq(&g->gc2.finreg_cdata_order_queued);
-  orderclaimed2 = la_load64_acq(&g->gc2.finreg_cdata_order_claimed);
-  orderfallback2 = la_load64_acq(&g->gc2.finreg_cdata_order_fallbacks);
+  orderq2 = gc2_finreg_cdata_order_queued_acq(g);
+  orderclaimed2 = gc2_finreg_cdata_order_claimed_acq(g);
+  orderfallback2 = gc2_finreg_cdata_order_fallbacks_acq(g);
   gc2_cdata_order_count = 0;
   assert(luaL_dostring(L,
     "local ffi = require('ffi')\n"
@@ -4040,10 +4040,10 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   assert(la_load64_acq(&g->gc2.finalizer_mpsc_drained) == mpscd2 + 2u);
   assert(la_load64_acq(&g->gc2.finreg_cdata_preclaim_dispatched) ==
 	 dispatched2 + 2u);
-  assert(la_load64_acq(&g->gc2.finreg_cdata_order_queued) == orderq2 + 2u);
-  assert(la_load64_acq(&g->gc2.finreg_cdata_order_claimed) ==
+  assert(gc2_finreg_cdata_order_queued_acq(g) == orderq2 + 2u);
+  assert(gc2_finreg_cdata_order_claimed_acq(g) ==
 	 orderclaimed2 + 2u);
-  assert(la_load64_acq(&g->gc2.finreg_cdata_order_fallbacks) ==
+  assert(gc2_finreg_cdata_order_fallbacks_acq(g) ==
 	 orderfallback2);
   assert(la_load64_acq(&g->gc2.finreg_cdata_clears) == clears2 + 2u);
   assert(gc2_cdata_order_count == 2);
@@ -4071,9 +4071,9 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   finalizerq2 = la_load64_acq(&g->gc2.finalizer_queued);
   finalizerd2 = la_load64_acq(&g->gc2.finalizer_dequeued);
   mpscd2 = la_load64_acq(&g->gc2.finalizer_mpsc_drained);
-  orderq2 = la_load64_acq(&g->gc2.finreg_cdata_order_queued);
-  orderfallback2 = la_load64_acq(&g->gc2.finreg_cdata_order_fallbacks);
-  pendingorder2 = la_load64_acq(&g->gc2.finreg_cdata_pending_order_hits);
+  orderq2 = gc2_finreg_cdata_order_queued_acq(g);
+  orderfallback2 = gc2_finreg_cdata_order_fallbacks_acq(g);
+  pendingorder2 = gc2_finreg_cdata_pending_order_hits_acq(g);
   gc2_cdata_order_count = 0;
   assert(luaL_dostring(L,
     "local ffi = require('ffi')\n"
@@ -4085,13 +4085,13 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
     LUA_OK);
   assert(la_load64_acq(&g->gc2.finreg_cdata_sets) == sets2 + 3u);
   assert(lj_gc_cdata_fin_pending(g));
-  assert(la_load64_acq(&g->gc2.finreg_cdata_pending_order_hits) ==
+  assert(gc2_finreg_cdata_pending_order_hits_acq(g) ==
 	 pendingorder2 + 1u);
   lj_gc_finalize_cdata(L);
   assert(lj_gc2_finalizer_queue_pending(g));
   assert(!lj_gc_cdata_fin_pending(g));
-  assert(la_load64_acq(&g->gc2.finreg_cdata_order_queued) == orderq2 + 3u);
-  assert(la_load64_acq(&g->gc2.finreg_cdata_order_fallbacks) ==
+  assert(gc2_finreg_cdata_order_queued_acq(g) == orderq2 + 3u);
+  assert(gc2_finreg_cdata_order_fallbacks_acq(g) ==
 	 orderfallback2);
   assert(la_load64_acq(&g->gc2.finreg_cdata_sweep_queued) ==
 	 sweepqueued2);
@@ -4117,9 +4117,9 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   finalizerq2 = la_load64_acq(&g->gc2.finalizer_queued);
   finalizerd2 = la_load64_acq(&g->gc2.finalizer_dequeued);
   mpscd2 = la_load64_acq(&g->gc2.finalizer_mpsc_drained);
-  orderq2 = la_load64_acq(&g->gc2.finreg_cdata_order_queued);
-  orderfallback2 = la_load64_acq(&g->gc2.finreg_cdata_order_fallbacks);
-  pendingorder2 = la_load64_acq(&g->gc2.finreg_cdata_pending_order_hits);
+  orderq2 = gc2_finreg_cdata_order_queued_acq(g);
+  orderfallback2 = gc2_finreg_cdata_order_fallbacks_acq(g);
+  pendingorder2 = gc2_finreg_cdata_pending_order_hits_acq(g);
   gc2_cdata_order_count = 0;
   assert(luaL_dostring(L,
     "local ffi = require('ffi')\n"
@@ -4129,14 +4129,14 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   assert(la_load64_acq(&g->gc2.finreg_cdata_sets) == sets2 + 1u);
   assert(test_unlink_root_object(g, obj2gco(cdataV(L->top - 1))));
   assert(lj_gc_cdata_fin_pending(g));
-  assert(la_load64_acq(&g->gc2.finreg_cdata_pending_order_hits) ==
+  assert(gc2_finreg_cdata_pending_order_hits_acq(g) ==
 	 pendingorder2 + 1u);
   lua_pop(L, 1);
   lj_gc_finalize_cdata(L);
   assert(lj_gc2_finalizer_queue_pending(g));
   assert(!lj_gc_cdata_fin_pending(g));
-  assert(la_load64_acq(&g->gc2.finreg_cdata_order_queued) == orderq2 + 1u);
-  assert(la_load64_acq(&g->gc2.finreg_cdata_order_fallbacks) ==
+  assert(gc2_finreg_cdata_order_queued_acq(g) == orderq2 + 1u);
+  assert(gc2_finreg_cdata_order_fallbacks_acq(g) ==
 	 orderfallback2);
   assert(la_load64_acq(&g->gc2.finreg_cdata_sweep_queued) ==
 	 sweepqueued2);
@@ -4161,9 +4161,9 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   mpscd2 = la_load64_acq(&g->gc2.finalizer_mpsc_drained);
   claimed2 = la_load64_acq(&g->gc2.finreg_cdata_pweak_claimed);
   dispatched2 = la_load64_acq(&g->gc2.finreg_cdata_preclaim_dispatched);
-  orderq2 = la_load64_acq(&g->gc2.finreg_cdata_order_queued);
-  orderclaimed2 = la_load64_acq(&g->gc2.finreg_cdata_order_claimed);
-  orderfallback2 = la_load64_acq(&g->gc2.finreg_cdata_order_fallbacks);
+  orderq2 = gc2_finreg_cdata_order_queued_acq(g);
+  orderclaimed2 = gc2_finreg_cdata_order_claimed_acq(g);
+  orderfallback2 = gc2_finreg_cdata_order_fallbacks_acq(g);
   overflow2 = la_load64_acq(&g->gc2.finreg_cdata_preclaim_overflow);
   gc2_cdata_bulk_finalized = 0;
   lua_pushcfunction(L, gc2_cdata_bulk_finalizer);
@@ -4203,11 +4203,11 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
 	 mpscd2 + (uint64_t)bulk_n);
   assert(la_load64_acq(&g->gc2.finreg_cdata_preclaim_dispatched) ==
 	 dispatched2 + (uint64_t)bulk_n);
-  assert(la_load64_acq(&g->gc2.finreg_cdata_order_queued) ==
+  assert(gc2_finreg_cdata_order_queued_acq(g) ==
 	 orderq2 + (uint64_t)bulk_n);
-  assert(la_load64_acq(&g->gc2.finreg_cdata_order_claimed) ==
+  assert(gc2_finreg_cdata_order_claimed_acq(g) ==
 	 orderclaimed2 + (uint64_t)bulk_n);
-  assert(la_load64_acq(&g->gc2.finreg_cdata_order_fallbacks) ==
+  assert(gc2_finreg_cdata_order_fallbacks_acq(g) ==
 	 orderfallback2);
   assert(la_load64_acq(&g->gc2.finreg_cdata_clears) ==
 	 clears2 + (uint64_t)bulk_n);

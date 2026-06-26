@@ -45,20 +45,28 @@ if hits=$(grep -nE -- 'ord[[:space:]]*->[[:space:]]*(retired_next|active)' \
   printf '%s\n' 'raw FINREG ordered-node retire state access is forbidden; use fin_order_* helpers' >&2
   exit 1
 fi
-for helper in gc2_finreg_cdata_order_seen_store_rlx \
+for helper in gc2_finreg_cdata_order_seen_acq \
+  gc2_finreg_cdata_order_seen_store_rlx \
   gc2_finreg_cdata_order_seen_add \
+  gc2_finreg_cdata_order_claimed_acq \
   gc2_finreg_cdata_order_claimed_store_rlx \
   gc2_finreg_cdata_order_claimed_add \
+  gc2_finreg_cdata_order_unlinked_acq \
   gc2_finreg_cdata_order_unlinked_store_rlx \
   gc2_finreg_cdata_order_unlinked_add \
+  gc2_finreg_cdata_order_queued_acq \
   gc2_finreg_cdata_order_queued_store_rlx \
   gc2_finreg_cdata_order_queued_add \
+  gc2_finreg_cdata_order_retired_acq \
   gc2_finreg_cdata_order_retired_store_rlx \
   gc2_finreg_cdata_order_retired_add \
+  gc2_finreg_cdata_order_tombstones_acq \
   gc2_finreg_cdata_order_tombstones_store_rlx \
   gc2_finreg_cdata_order_tombstones_add \
+  gc2_finreg_cdata_order_fallbacks_acq \
   gc2_finreg_cdata_order_fallbacks_store_rlx \
   gc2_finreg_cdata_order_fallbacks_add \
+  gc2_finreg_cdata_pending_order_hits_acq \
   gc2_finreg_cdata_pending_order_hits_store_rlx \
   gc2_finreg_cdata_pending_order_hits_add; do
   if ! grep -qE "static LJ_AINLINE .*[*[:space:]]${helper}[[:space:]]*[(]" \
@@ -70,7 +78,8 @@ done
 if hits=$(grep -nE -- '->[[:space:]]*gc2[.](finreg_cdata_order_(seen|claimed|unlinked|queued|retired|tombstones|fallbacks)|finreg_cdata_pending_order_hits)([^[:alnum:]_]|$)|&[[:space:]]*[^)]*->[[:space:]]*gc2[.](finreg_cdata_order_(seen|claimed|unlinked|queued|retired|tombstones|fallbacks)|finreg_cdata_pending_order_hits)([^[:alnum:]_]|$)' \
     "$ROOT/src/lj_ctype.c" \
     "$ROOT/src/lj_gc.c" \
-    "$ROOT/src/lj_gc2.c" || true); [ -n "$hits" ]; then
+    "$ROOT/src/lj_gc2.c" \
+    "$ROOT/src/lib_base.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
   printf '%s\n' 'raw FINREG ordered counter access is forbidden; use gc2_finreg_cdata_order_* helpers' >&2
   exit 1

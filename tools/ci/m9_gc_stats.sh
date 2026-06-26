@@ -30,4 +30,11 @@ if hits=$(grep -nE -- '->[[:space:]]*gc2[.](remembered_barriers|remembered_pushe
   exit 1
 fi
 
+if hits=$(grep -nE -- '(^|[^[:alnum:]_])gc2->[[:space:]]*(finreg_cdata_order_(seen|claimed|unlinked|queued|retired|tombstones|fallbacks)|finreg_cdata_pending_order_hits)([^[:alnum:]_]|$)' \
+    "$ROOT/src/lib_base.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw GC2 FINREG ordered stat access is forbidden; use gc2_finreg_cdata_order_* helpers' >&2
+  exit 1
+fi
+
 exec "$ROOT/tools/ci/lua_test.sh" m9_gc_stats

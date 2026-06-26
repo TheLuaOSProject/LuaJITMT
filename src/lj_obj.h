@@ -4532,6 +4532,11 @@ static LJ_AINLINE void gc2_finreg_cdata_preclaim_dispatched_add(
   la_add64_rlx(&g->gc2.finreg_cdata_preclaim_dispatched, n);
 }
 
+static LJ_AINLINE uint64_t gc2_finreg_cdata_order_seen_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.finreg_cdata_order_seen);
+}
+
 static LJ_AINLINE void gc2_finreg_cdata_order_seen_store_rlx(global_State *g,
 							     uint64_t n)
 {
@@ -4542,6 +4547,11 @@ static LJ_AINLINE void gc2_finreg_cdata_order_seen_add(global_State *g,
 						       uint64_t n)
 {
   la_add64_rlx(&g->gc2.finreg_cdata_order_seen, n);
+}
+
+static LJ_AINLINE uint64_t gc2_finreg_cdata_order_claimed_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.finreg_cdata_order_claimed);
 }
 
 static LJ_AINLINE void gc2_finreg_cdata_order_claimed_store_rlx(global_State *g,
@@ -4556,6 +4566,11 @@ static LJ_AINLINE void gc2_finreg_cdata_order_claimed_add(global_State *g,
   la_add64_rlx(&g->gc2.finreg_cdata_order_claimed, n);
 }
 
+static LJ_AINLINE uint64_t gc2_finreg_cdata_order_unlinked_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.finreg_cdata_order_unlinked);
+}
+
 static LJ_AINLINE void gc2_finreg_cdata_order_unlinked_store_rlx(global_State *g,
 								 uint64_t n)
 {
@@ -4566,6 +4581,11 @@ static LJ_AINLINE void gc2_finreg_cdata_order_unlinked_add(global_State *g,
 							   uint64_t n)
 {
   la_add64_rlx(&g->gc2.finreg_cdata_order_unlinked, n);
+}
+
+static LJ_AINLINE uint64_t gc2_finreg_cdata_order_queued_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.finreg_cdata_order_queued);
 }
 
 static LJ_AINLINE void gc2_finreg_cdata_order_queued_store_rlx(global_State *g,
@@ -4580,6 +4600,11 @@ static LJ_AINLINE void gc2_finreg_cdata_order_queued_add(global_State *g,
   la_add64_rlx(&g->gc2.finreg_cdata_order_queued, n);
 }
 
+static LJ_AINLINE uint64_t gc2_finreg_cdata_order_retired_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.finreg_cdata_order_retired);
+}
+
 static LJ_AINLINE void gc2_finreg_cdata_order_retired_store_rlx(global_State *g,
 								uint64_t n)
 {
@@ -4590,6 +4615,12 @@ static LJ_AINLINE void gc2_finreg_cdata_order_retired_add(global_State *g,
 							  uint64_t n)
 {
   la_add64_rlx(&g->gc2.finreg_cdata_order_retired, n);
+}
+
+static LJ_AINLINE uint64_t gc2_finreg_cdata_order_tombstones_acq(
+  global_State *g)
+{
+  return la_load64_acq(&g->gc2.finreg_cdata_order_tombstones);
 }
 
 static LJ_AINLINE void gc2_finreg_cdata_order_tombstones_store_rlx(
@@ -4604,6 +4635,12 @@ static LJ_AINLINE void gc2_finreg_cdata_order_tombstones_add(global_State *g,
   la_add64_rlx(&g->gc2.finreg_cdata_order_tombstones, n);
 }
 
+static LJ_AINLINE uint64_t gc2_finreg_cdata_order_fallbacks_acq(
+  global_State *g)
+{
+  return la_load64_acq(&g->gc2.finreg_cdata_order_fallbacks);
+}
+
 static LJ_AINLINE void gc2_finreg_cdata_order_fallbacks_store_rlx(
   global_State *g, uint64_t n)
 {
@@ -4614,6 +4651,12 @@ static LJ_AINLINE void gc2_finreg_cdata_order_fallbacks_add(global_State *g,
 							    uint64_t n)
 {
   la_add64_rlx(&g->gc2.finreg_cdata_order_fallbacks, n);
+}
+
+static LJ_AINLINE uint64_t gc2_finreg_cdata_pending_order_hits_acq(
+  global_State *g)
+{
+  return la_load64_acq(&g->gc2.finreg_cdata_pending_order_hits);
 }
 
 static LJ_AINLINE void gc2_finreg_cdata_pending_order_hits_store_rlx(

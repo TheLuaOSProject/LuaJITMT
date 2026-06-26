@@ -540,7 +540,6 @@ static void gc_stats_set_latency_buckets(lua_State *L, GCtab *t,
 static void gc_stats_push(lua_State *L)
 {
   global_State *g = G(L);
-  GC2State *gc2 = &g->gc2;
   GCtab *t;
   lua_createtable(L, 0, 86);
   t = tabV(L->top - 1);
@@ -684,21 +683,21 @@ static void gc_stats_push(lua_State *L)
   gc_stats_setnum(L, t, "finreg_cdata_preclaim_dispatched",
 		  gc2_finreg_cdata_preclaim_dispatched_acq(g));
   gc_stats_setnum(L, t, "finreg_cdata_order_seen",
-		  la_load64_acq(&gc2->finreg_cdata_order_seen));
+		  gc2_finreg_cdata_order_seen_acq(g));
   gc_stats_setnum(L, t, "finreg_cdata_order_claimed",
-		  la_load64_acq(&gc2->finreg_cdata_order_claimed));
+		  gc2_finreg_cdata_order_claimed_acq(g));
   gc_stats_setnum(L, t, "finreg_cdata_order_unlinked",
-		  la_load64_acq(&gc2->finreg_cdata_order_unlinked));
+		  gc2_finreg_cdata_order_unlinked_acq(g));
   gc_stats_setnum(L, t, "finreg_cdata_order_queued",
-		  la_load64_acq(&gc2->finreg_cdata_order_queued));
+		  gc2_finreg_cdata_order_queued_acq(g));
   gc_stats_setnum(L, t, "finreg_cdata_order_retired",
-		  la_load64_acq(&gc2->finreg_cdata_order_retired));
+		  gc2_finreg_cdata_order_retired_acq(g));
   gc_stats_setnum(L, t, "finreg_cdata_order_tombstones",
-		  la_load64_acq(&gc2->finreg_cdata_order_tombstones));
+		  gc2_finreg_cdata_order_tombstones_acq(g));
   gc_stats_setnum(L, t, "finreg_cdata_order_fallbacks",
-		  la_load64_acq(&gc2->finreg_cdata_order_fallbacks));
+		  gc2_finreg_cdata_order_fallbacks_acq(g));
   gc_stats_setnum(L, t, "finreg_cdata_pending_order_hits",
-		  la_load64_acq(&gc2->finreg_cdata_pending_order_hits));
+		  gc2_finreg_cdata_pending_order_hits_acq(g));
   gc_stats_setnum(L, t, "finreg_udata_sets",
 		  gc2_finreg_udata_sets_acq(g));
   gc_stats_setnum(L, t, "finreg_udata_clears",
