@@ -39,7 +39,7 @@
 static int threading_arena_internal(global_State *g)
 {
   return g->allocf == lj_arena_allocf && g->main_tg &&
-	 (g->main_tg->tg_flags & TGF_ARENA_INTERNAL);
+	 lj_tg_flags_test_acq(g->main_tg, TGF_ARENA_INTERNAL);
 }
 
 /* -- Thread methods ------------------------------------------------------ */
@@ -346,7 +346,7 @@ static void threading_rehome_unstarted_stack(lua_State *L, lua_State *L1,
   MSize stacksize;
   size_t sz;
   L1->tg_hint = dst;
-  if (!oldst || !tg || !(tg->tg_flags & TGF_ARENA_INTERNAL) ||
+  if (!oldst || !tg || !lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL) ||
       g->allocf != lj_arena_allocf)
     return;
   if (lj_arena_of(oldst)->hdr.owner_tid != tg->alloc.owner_tid)

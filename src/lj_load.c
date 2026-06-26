@@ -94,14 +94,14 @@ typedef struct FileReaderCtx {
 static int load_had_stopreq(lua_State *L)
 {
   TGState *tg = L2TG(L);
-  return tg && (la_load8_acq(&tg->tg_flags) & TGF_STOPREQ);
+  return tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ);
 }
 
 static int load_fresh_stopreq(lua_State *L, uint32_t actions, int had_stopreq)
 {
   TGState *tg = L2TG(L);
   return (actions & LJ_GC2_HS_STOPREQ) ||
-    (!had_stopreq && tg && (la_load8_acq(&tg->tg_flags) & TGF_STOPREQ));
+    (!had_stopreq && tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ));
 }
 
 static FILE *load_native_fopen(lua_State *L, const char *filename,

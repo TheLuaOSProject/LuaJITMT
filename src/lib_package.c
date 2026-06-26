@@ -42,14 +42,14 @@
 static int ll_had_stopreq(lua_State *L)
 {
   TGState *tg = L2TG(L);
-  return tg && (la_load8_acq(&tg->tg_flags) & TGF_STOPREQ);
+  return tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ);
 }
 
 static int ll_fresh_stopreq(lua_State *L, uint32_t actions, int had_stopreq)
 {
   TGState *tg = L2TG(L);
   return (actions & LJ_GC2_HS_STOPREQ) ||
-    (!had_stopreq && tg && (la_load8_acq(&tg->tg_flags) & TGF_STOPREQ));
+    (!had_stopreq && tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ));
 }
 
 static void *ll_native_dlopen(lua_State *L, const char *path, int flags,
@@ -367,14 +367,14 @@ static int lj_cf_package_unloadlib(lua_State *L)
 static int pkg_had_stopreq(lua_State *L)
 {
   TGState *tg = L2TG(L);
-  return tg && (la_load8_acq(&tg->tg_flags) & TGF_STOPREQ);
+  return tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ);
 }
 
 static int pkg_fresh_stopreq(lua_State *L, uint32_t actions, int had_stopreq)
 {
   TGState *tg = L2TG(L);
   return (actions & LJ_GC2_HS_STOPREQ) ||
-    (!had_stopreq && tg && (la_load8_acq(&tg->tg_flags) & TGF_STOPREQ));
+    (!had_stopreq && tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ));
 }
 
 static FILE *pkg_native_fopen(lua_State *L, const char *filename,

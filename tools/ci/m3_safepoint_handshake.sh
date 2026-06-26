@@ -22,6 +22,26 @@ if hits=$(grep -nE -- '->[[:space:]]*(poll|reqmask|hs_epoch_ack)([^[:alnum:]_]|$
   printf '%s\n' 'raw TG safepoint mirror access is forbidden; use lj_tg_* safepoint helpers' >&2
   exit 1
 fi
+for helper in \
+  lj_tg_flags_acq \
+  lj_tg_flags_store_rlx \
+  lj_tg_flags_or_rlx \
+  lj_tg_flags_and_rlx \
+  lj_tg_flags_test_acq \
+  lj_tg_flags_all_acq
+do
+  if ! grep -q "$helper" "$ROOT/src/lj_tg.h"; then
+    printf '%s\n' "missing TG flag helper: $helper" >&2
+    exit 1
+  fi
+done
+if hits=$(grep -RInE -- '->[[:space:]]*tg_flags([^[:alnum:]_]|$)|&[[:space:]]*[^)]*->[[:space:]]*tg_flags([^[:alnum:]_]|$)' \
+    "$ROOT/src"/lj_*.c "$ROOT/src"/lib_*.c "$ROOT/src"/lj_*.h 2>/dev/null | \
+    grep -vF "$ROOT/src/lj_tg.h:" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw TG flag access is forbidden; use lj_tg_flags_* helpers' >&2
+  exit 1
+fi
 if hits=$(grep -nE -- '->[[:space:]]*gc2[.](tg_list|n_threads)([^[:alnum:]_]|$)|gc2[[:space:]]*->[[:space:]]*(tg_list|n_threads)([^[:alnum:]_]|$)' \
     "$ROOT/src/lj_gc.c" \
     "$ROOT/src/lj_gc2.c" \

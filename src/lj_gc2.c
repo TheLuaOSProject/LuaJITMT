@@ -354,7 +354,7 @@ void lj_gc2_worker_wake(global_State *g)
 static int gc2_worker_arena_internal(global_State *g)
 {
   return g && g->allocf == lj_arena_allocf && g->main_tg &&
-	 (g->main_tg->tg_flags & TGF_ARENA_INTERNAL);
+	 lj_tg_flags_test_acq(g->main_tg, TGF_ARENA_INTERNAL);
 }
 
 static int gc2_worker_tg_registered(global_State *g, TGState *target)
@@ -671,9 +671,9 @@ static TGState *gc2_tg_for_mem(global_State *g, const void *p)
 
 static void gc2_clear_marks(TGState *tg)
 {
-  if (tg && (tg->tg_flags & TGF_ARENA_INTERNAL)) {
+  if (tg && lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL)) {
     lj_arena_alloc_clear_marks(&tg->alloc);
-    if (tg->tg_flags & TGF_HUGETAB)
+    if (lj_tg_flags_test_acq(tg, TGF_HUGETAB))
       lj_arena_hugetab_clear_marks(&tg->huge);
   }
 }
@@ -1164,7 +1164,7 @@ int lj_gc2_sweep_tg_ready(TGState *tg)
   uint8_t flags;
   if (!tg)
     return 0;
-  flags = la_load8_acq(&tg->tg_flags);
+  flags = lj_tg_flags_acq(tg);
   return !(flags & TGF_DEAD) && (flags & TGF_ARENA_INTERNAL);
 }
 
@@ -1203,7 +1203,8 @@ uint32_t lj_gc2_sweep_owner_progress(global_State *g, TGState *tg,
   uint32_t n = 0, epoch;
   uint64_t live = 0;
   int minor;
-  if (!g || !tg || limit == 0 || !(tg->tg_flags & TGF_ARENA_INTERNAL))
+  if (!g || !tg || limit == 0 ||
+      !lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL))
     return 0;
   if (gc2_phase_acq(g) != LJ_GC2_SWEEP)
     return 0;
@@ -1262,7 +1263,7 @@ uint64_t lj_gc2_sweep_live_aggregate(global_State *g)
   for (tg = gc2_tg_list_acq(g);
        tg != NULL;
        tg = lj_tg_next_acq(tg)) {
-    uint8_t flags = la_load8_acq(&tg->tg_flags);
+    uint8_t flags = lj_tg_flags_acq(tg);
     if ((flags & (TGF_DEAD|TGF_ARENA_INTERNAL)) != TGF_ARENA_INTERNAL)
       continue;
     cells += gc2_sweep_live_cells(tg->alloc.owned[LJ_ARENAK_TRAVERSABLE],
@@ -1451,7 +1452,7 @@ static uint64_t gc2_thread_owner_dirty(global_State *g, lua_State *L,
   if (owner == 0 || owner == LJ_THREAD_GCSCAN)
     return 0;
   tg = lj_tg_find_owner(g, owner);
-  if (!tg || (la_load8_acq(&tg->tg_flags) & TGF_DEAD))
+  if (!tg || lj_tg_flags_test_acq(tg, TGF_DEAD))
     return 0;
   if (ptg)
     *ptg = tg;
@@ -1610,7 +1611,7 @@ static void gc2_scan_tg_roots(global_State *g)
        tg = lj_tg_next_acq(tg)) {
     lua_State *thread_L, *cur_L;
     lj_gc2_markmem(g, tg->tmpbuf.b);
-    if (la_load8_acq(&tg->tg_flags) & TGF_DEAD)
+    if (lj_tg_flags_test_acq(tg, TGF_DEAD))
       continue;
     thread_L = lj_tg_load_thread_L(tg);
     cur_L = lj_tg_load_cur_L(tg);
@@ -3128,7 +3129,7 @@ int lj_gc2_ssb_empty(global_State *g)
        tg != NULL;
        tg = lj_tg_next_acq(tg)) {
     GCRef *next, *base;
-    if (la_load8_acq(&tg->tg_flags) & TGF_DEAD)
+    if (lj_tg_flags_test_acq(tg, TGF_DEAD))
       continue;
     next = (GCRef *)la_loadptr_acq((void *const *)&tg->ssb_next);
     base = (GCRef *)la_loadptr_acq((void *const *)&tg->ssb_base);
@@ -3417,12 +3418,12 @@ static int gc2_mark_base_traversable(global_State *g, void *p)
 {
   TGState *tg = gc2_tg_for_mem(g, p);
   GCArena *a;
-  if (!p || !tg || !(tg->tg_flags & TGF_ARENA_INTERNAL))
+  if (!p || !tg || !lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL))
     return 0;
   a = lj_arena_of(p);
   if (lj_arena_ishuge(a)) {
     LJHugeInfo hi;
-    if (!(tg->tg_flags & TGF_HUGETAB) ||
+    if (!lj_tg_flags_test_acq(tg, TGF_HUGETAB) ||
 	lj_arena_hugetab_lookup(&tg->huge, p, &hi) != 1)
       return 0;
     return (hi.flags & LJ_HUGEF_TRAVERSABLE) != 0;
@@ -3448,11 +3449,11 @@ int lj_gc2_markmem(global_State *g, void *p)
   GCArena *a;
   uint32_t cell;
   int marked;
-  if (!p || !tg || !(tg->tg_flags & TGF_ARENA_INTERNAL))
+  if (!p || !tg || !lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL))
     return 0;
   a = lj_arena_of(p);
   if (lj_arena_ishuge(a)) {
-    if (!(tg->tg_flags & TGF_HUGETAB))
+    if (!lj_tg_flags_test_acq(tg, TGF_HUGETAB))
       return 0;
     marked = lj_arena_hugetab_mark(&tg->huge, p, NULL);
     if (marked == 1)
@@ -3796,7 +3797,7 @@ static int gc2_thread_has_live_owner(global_State *g, lua_State *th)
   if (owner == 0 || owner == LJ_THREAD_GCSCAN)
     return 0;
   tg = lj_tg_find_owner(g, owner);
-  return tg && !(la_load8_acq(&tg->tg_flags) & TGF_DEAD);
+  return tg && !lj_tg_flags_test_acq(tg, TGF_DEAD);
 }
 
 static void gc2_traverse_thread(global_State *g, lua_State *th)
@@ -3903,7 +3904,7 @@ static uint32_t gc2_worker_sweep_progress(global_State *g, uint32_t limit)
   for (tg = gc2_tg_list_acq(g);
        tg != NULL && n < limit;
        tg = lj_tg_next_acq(tg)) {
-    uint8_t flags = la_load8_acq(&tg->tg_flags);
+    uint8_t flags = lj_tg_flags_acq(tg);
     if ((flags & (TGF_DEAD|TGF_ARENA_INTERNAL)) != TGF_ARENA_INTERNAL)
       continue;
     n += lj_gc2_sweep_owner_progress(g, tg, limit - n);
@@ -4105,12 +4106,12 @@ int lj_gc2_ismarkedmem(global_State *g, void *p)
   TGState *tg = gc2_tg_for_mem(g, p);
   GCArena *a;
   uint32_t cell;
-  if (!p || !tg || !(tg->tg_flags & TGF_ARENA_INTERNAL))
+  if (!p || !tg || !lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL))
     return -1;
   a = lj_arena_of(p);
   if (lj_arena_ishuge(a)) {
     LJHugeInfo hi;
-    if (!(tg->tg_flags & TGF_HUGETAB) ||
+    if (!lj_tg_flags_test_acq(tg, TGF_HUGETAB) ||
 	lj_arena_hugetab_lookup(&tg->huge, p, &hi) != 1)
       return -1;
     return (hi.flags & LJ_HUGEF_MARK) != 0;
@@ -4178,7 +4179,7 @@ uint32_t lj_gc2_paranoia_legacy_diff(global_State *g)
   for (tg = gc2_tg_list_acq(g);
        tg != NULL;
        tg = lj_tg_next_acq(tg)) {
-    uint8_t flags = la_load8_acq(&tg->tg_flags);
+    uint8_t flags = lj_tg_flags_acq(tg);
     if ((flags & (TGF_DEAD|TGF_ARENA_INTERNAL)) != TGF_ARENA_INTERNAL)
       continue;
     for (a = tg->alloc.owned[LJ_ARENAK_TRAVERSABLE];

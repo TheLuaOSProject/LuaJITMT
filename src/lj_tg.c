@@ -60,10 +60,10 @@ void lj_tg_init(GG_State *GG, int alloc_ready)
   if (!alloc_ready)
     lj_arena_alloc_init(&tg->alloc);
   else
-    tg->tg_flags |= TGF_ARENA_INTERNAL;
+    lj_tg_flags_or_rlx(tg, TGF_ARENA_INTERNAL);
   lj_arena_allocd_init(&tg->allocd, &tg->alloc, &tg->prng, 0);
   if (alloc_ready && lj_arena_hugetab_init(&tg->huge, TG_HUGETAB_BITS)) {
-    tg->tg_flags |= TGF_HUGETAB;
+    lj_tg_flags_or_rlx(tg, TGF_HUGETAB);
     lj_arena_allocd_sethugetab(&tg->allocd, &tg->huge);
   }
   tg_init_common(g, tg, L);
@@ -73,7 +73,7 @@ void lj_tg_fini(global_State *g)
 {
   if (g->main_tg) {
     lj_buf_free(g, &g->main_tg->tmpbuf);
-    if (g->main_tg->tg_flags & TGF_HUGETAB)
+    if (lj_tg_flags_test_acq(g->main_tg, TGF_HUGETAB))
       lj_arena_hugetab_fini(&g->main_tg->huge);
     lj_arena_alloc_fini(&g->main_tg->alloc);
   }
@@ -87,10 +87,10 @@ void lj_tg_init_thread(global_State *g, TGState *tg, lua_State *L,
     L->tg_hint = tg;
   lj_arena_alloc_init(&tg->alloc);
   if (arena_internal)
-    tg->tg_flags |= TGF_ARENA_INTERNAL;
+    lj_tg_flags_or_rlx(tg, TGF_ARENA_INTERNAL);
   lj_arena_allocd_init(&tg->allocd, &tg->alloc, &tg->prng, 0);
   if (arena_internal && lj_arena_hugetab_init(&tg->huge, TG_HUGETAB_BITS)) {
-    tg->tg_flags |= TGF_HUGETAB;
+    lj_tg_flags_or_rlx(tg, TGF_HUGETAB);
     lj_arena_allocd_sethugetab(&tg->allocd, &tg->huge);
   }
   tg_init_common(g, tg, L);
@@ -101,7 +101,7 @@ void lj_tg_fini_thread(global_State *g, TGState *tg)
   if (!tg)
     return;
   lj_buf_free(g, &tg->tmpbuf);
-  if (tg->tg_flags & TGF_HUGETAB)
+  if (lj_tg_flags_test_acq(tg, TGF_HUGETAB))
     lj_arena_hugetab_fini(&tg->huge);
   lj_arena_alloc_fini(&tg->alloc);
 }
@@ -145,7 +145,7 @@ void lj_tg_attach(global_State *g, TGState *tg)
   lj_tg_reqmask_store_rlx(tg, 0);
   tg_adopt_gc2_phase(g, tg);  /* 09 section 9.3 attach catch-up scaffold. */
   tg_attach_catchup(g, tg);
-  tg->tg_flags &= (uint8_t)~TGF_DEAD;
+  lj_tg_flags_and_rlx(tg, (uint8_t)~TGF_DEAD);
   do {
     head = gc2_tg_list_acq(g);  /* 05 section 5.4.1. */
     lj_tg_next_rel(tg, head);
@@ -166,7 +166,7 @@ void lj_tg_detach(global_State *g, TGState *tg)
   (void)lj_gc2_flush_ssb(g, tg);  /* 09 section 9.3 detach publishes SSB. */
   (void)lj_gc2_flush_alloc(g, tg);  /* 04 section 4.8 detach accounting. */
   la_fence_rel();
-  oldflags = la_or8_rlx(&tg->tg_flags, TGF_DEAD);  /* 05 section 5.4.1. */
+  oldflags = lj_tg_flags_or_rlx(tg, TGF_DEAD);  /* 05 section 5.4.1. */
   if (!(oldflags & TGF_DEAD))
     (void)gc2_n_threads_sub_acqrel(g, 1);
   lj_tg_reqmask_rel(tg, 0);
@@ -180,24 +180,24 @@ void lj_tg_detach(global_State *g, TGState *tg)
 static int tg_transfer_dead_alloc(global_State *g, TGState *tg)
 {
   TGState *main_tg = g ? g->main_tg : NULL;
-  if (!(tg->tg_flags & TGF_ARENA_INTERNAL))
+  if (!lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL))
     return 1;
-  if (!main_tg || !(main_tg->tg_flags & TGF_ARENA_INTERNAL))
+  if (!main_tg || !lj_tg_flags_test_acq(main_tg, TGF_ARENA_INTERNAL))
     return 0;
   lj_buf_free(g, &tg->tmpbuf);  /* Route through the still-findable owner. */
   lj_buf_init(NULL, &tg->tmpbuf);
-  if (tg->tg_flags & TGF_HUGETAB) {
-    if (!(main_tg->tg_flags & TGF_HUGETAB) ||
+  if (lj_tg_flags_test_acq(tg, TGF_HUGETAB)) {
+    if (!lj_tg_flags_test_acq(main_tg, TGF_HUGETAB) ||
 	!lj_arena_hugetab_transfer(&main_tg->huge, &tg->huge,
 				   main_tg->alloc.owner_tid))
       return 0;
     lj_arena_hugetab_fini(&tg->huge);
-    tg->tg_flags &= (uint8_t)~TGF_HUGETAB;
+    lj_tg_flags_and_rlx(tg, (uint8_t)~TGF_HUGETAB);
     lj_arena_allocd_sethugetab(&tg->allocd, NULL);
   }
   (void)lj_arena_alloc_transfer(&main_tg->alloc, &tg->alloc);
   lj_arena_allocd_init(&tg->allocd, &tg->alloc, &tg->prng, 0);
-  tg->tg_flags &= (uint8_t)~TGF_ARENA_INTERNAL;
+  lj_tg_flags_and_rlx(tg, (uint8_t)~TGF_ARENA_INTERNAL);
   return 1;
 }
 
@@ -213,7 +213,7 @@ restart:
   tg = gc2_tg_list_acq(g);
   while (tg != NULL) {
     TGState *next = lj_tg_next_acq(tg);
-    if (la_load8_acq(&tg->tg_flags) & TGF_DEAD) {
+    if (lj_tg_flags_test_acq(tg, TGF_DEAD)) {
       if (!tg_transfer_dead_alloc(g, tg)) {
 	prev = tg;  /* Keep owner lookup live until allocator transfer succeeds. */
 	tg = next;

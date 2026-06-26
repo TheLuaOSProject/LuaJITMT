@@ -72,7 +72,7 @@ static int io_fresh_stopreq(lua_State *L, uint32_t actions, int had_stopreq)
 {
   TGState *tg = L2TG(L);
   return (actions & LJ_GC2_HS_STOPREQ) ||
-    (!had_stopreq && tg && (la_load8_acq(&tg->tg_flags) & TGF_STOPREQ));
+    (!had_stopreq && tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ));
 }
 
 static void io_checkstop_fresh(lua_State *L, uint32_t actions, int had_stopreq)
@@ -228,7 +228,7 @@ static IOFileUD *io_file_open(lua_State *L, const char *mode)
 {
   const char *fname = strdata(lj_lib_checkstr(L, 1));
   TGState *tg = L2TG(L);
-  int had_stopreq = tg && (la_load8_acq(&tg->tg_flags) & TGF_STOPREQ);
+  int had_stopreq = tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ);
   IOFileUD *iof = io_file_new(L);
   uint32_t actions;
   iof->fp = io_native_fopen(L, fname, mode, &actions);
@@ -243,14 +243,14 @@ static int io_file_close(lua_State *L, IOFileUD *iof)
   int ok;
   if ((iof->type & IOFILE_TYPE_MASK) == IOFILE_TYPE_FILE) {
     TGState *tg = L2TG(L);
-    int had_stopreq = tg && (la_load8_acq(&tg->tg_flags) & TGF_STOPREQ);
+    int had_stopreq = tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ);
     uint32_t actions;
     ok = (io_native_fclose(L, iof->fp, &actions) == 0);
     iof->fp = NULL;
     io_checkstop_fresh(L, actions, had_stopreq);
   } else if ((iof->type & IOFILE_TYPE_MASK) == IOFILE_TYPE_PIPE) {
     TGState *tg = L2TG(L);
-    int had_stopreq = tg && (la_load8_acq(&tg->tg_flags) & TGF_STOPREQ);
+    int had_stopreq = tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ);
     uint32_t actions = 0;
     int stat = -1;
 #if LJ_TARGET_POSIX || (LJ_TARGET_WINDOWS && !LJ_TARGET_XBOXONE && !LJ_TARGET_UWP)
@@ -387,7 +387,7 @@ static int io_file_write(lua_State *L, IOFileUD *iof, int start)
 {
   FILE *fp = iof->fp;
   TGState *tg = L2TG(L);
-  int had_stopreq = tg && (la_load8_acq(&tg->tg_flags) & TGF_STOPREQ);
+  int had_stopreq = tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ);
   cTValue *tv;
   int status = 1;
   for (tv = L->base+start; tv < L->top; tv++) {
@@ -604,7 +604,7 @@ LJLIB_CF(io_open)
   GCstr *s = lj_lib_optstr(L, 2);
   const char *mode = s ? strdata(s) : "r";
   TGState *tg = L2TG(L);
-  int had_stopreq = tg && (la_load8_acq(&tg->tg_flags) & TGF_STOPREQ);
+  int had_stopreq = tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ);
   IOFileUD *iof = io_file_new(L);
   uint32_t actions;
   iof->fp = io_native_fopen(L, fname, mode, &actions);
@@ -619,7 +619,7 @@ LJLIB_CF(io_popen)
   GCstr *s = lj_lib_optstr(L, 2);
   const char *mode = s ? strdata(s) : "r";
   TGState *tg = L2TG(L);
-  int had_stopreq = tg && (la_load8_acq(&tg->tg_flags) & TGF_STOPREQ);
+  int had_stopreq = tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ);
   IOFileUD *iof = io_file_new(L);
   uint32_t actions;
   iof->type = IOFILE_TYPE_PIPE;
@@ -653,7 +653,7 @@ LJLIB_CF(io_tmpfile)
   iof->fp = NULL; errno = ENOSYS;
 #else
   TGState *tg = L2TG(L);
-  int had_stopreq = tg && (la_load8_acq(&tg->tg_flags) & TGF_STOPREQ);
+  int had_stopreq = tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ);
   uint32_t actions;
   iof = io_file_new(L);
   lj_native_enter(tg);

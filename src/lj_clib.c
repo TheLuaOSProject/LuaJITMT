@@ -99,7 +99,7 @@ static const char *clib_check_lds(lua_State *L, const char *buf)
 static int clib_had_stopreq(lua_State *L)
 {
   TGState *tg = L2TG(L);
-  return tg && (la_load8_acq(&tg->tg_flags) & TGF_STOPREQ);
+  return tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ);
 }
 
 static int clib_fresh_stopreq(lua_State *L, uint32_t actions,
@@ -107,7 +107,7 @@ static int clib_fresh_stopreq(lua_State *L, uint32_t actions,
 {
   TGState *tg = L2TG(L);
   return (actions & LJ_GC2_HS_STOPREQ) ||
-    (!had_stopreq && tg && (la_load8_acq(&tg->tg_flags) & TGF_STOPREQ));
+    (!had_stopreq && tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ));
 }
 
 static FILE *clib_native_fopen(lua_State *L, const char *name,
@@ -142,7 +142,7 @@ static uint32_t clib_native_fclose(lua_State *L, FILE *fp)
 static void clib_lds_checkstop(lua_State *L, FILE *fp, uint32_t actions)
 {
   if ((actions & LJ_GC2_HS_STOPREQ) ||
-      (L2TG(L) && (la_load8_acq(&L2TG(L)->tg_flags) & TGF_STOPREQ))) {
+      (L2TG(L) && lj_tg_flags_test_acq(L2TG(L), TGF_STOPREQ))) {
     uint32_t close_actions = clib_native_fclose(L, fp);
     lj_safepoint_checkstop(L, actions | close_actions);
   }

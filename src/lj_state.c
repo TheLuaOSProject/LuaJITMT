@@ -102,7 +102,7 @@ int lj_state_rehome_stack(lua_State *L)
   GCobj *up;
   MSize stacksize = L->stacksize;
   size_t sz = (size_t)stacksize * sizeof(TValue);
-  if (!oldst || !tg || !(tg->tg_flags & TGF_ARENA_INTERNAL) ||
+  if (!oldst || !tg || !lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL) ||
       g->allocf != lj_arena_allocf)
     return 1;
   if (lj_arena_of(oldst)->hdr.owner_tid == tg->alloc.owner_tid)
@@ -253,7 +253,7 @@ static void close_state(lua_State *L)
 {
   global_State *g = G(L);
   int arena_alloc = g->main_tg &&
-		    (g->main_tg->tg_flags & TGF_ARENA_INTERNAL);
+		    lj_tg_flags_test_acq(g->main_tg, TGF_ARENA_INTERNAL);
   lj_func_closeuv(L, tvref(L->stack));
   lj_gc_freeall(g);
   lj_assertG(gcref_acq(g->gc.root) == obj2gco(L),
@@ -291,7 +291,7 @@ static void close_state(lua_State *L)
       alloc = g->main_tg->alloc;
     else
       lj_arena_alloc_init(&alloc);
-    if (g->main_tg && (g->main_tg->tg_flags & TGF_HUGETAB))
+    if (g->main_tg && lj_tg_flags_test_acq(g->main_tg, TGF_HUGETAB))
       lj_arena_hugetab_fini(&g->main_tg->huge);
     lj_arena_alloc_fini(&alloc);
     if (gghuge)

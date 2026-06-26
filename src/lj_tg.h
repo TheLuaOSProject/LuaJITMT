@@ -101,6 +101,36 @@ static LJ_AINLINE void lj_tg_vmstate_store_rel(TGState *tg, int32_t vmstate)
   la_store32_rel((uint32_t *)&tg->vmstate, (uint32_t)vmstate);
 }
 
+static LJ_AINLINE uint8_t lj_tg_flags_acq(const TGState *tg)
+{
+  return la_load8_acq(&tg->tg_flags);  /* 05 section 5.4.1 TG registry. */
+}
+
+static LJ_AINLINE void lj_tg_flags_store_rlx(TGState *tg, uint8_t flags)
+{
+  la_store8_rlx(&tg->tg_flags, flags);
+}
+
+static LJ_AINLINE uint8_t lj_tg_flags_or_rlx(TGState *tg, uint8_t flags)
+{
+  return la_or8_rlx(&tg->tg_flags, flags);  /* 05 section 5.4.1/09 section 9.6. */
+}
+
+static LJ_AINLINE uint8_t lj_tg_flags_and_rlx(TGState *tg, uint8_t flags)
+{
+  return la_and8_rlx(&tg->tg_flags, flags);
+}
+
+static LJ_AINLINE int lj_tg_flags_test_acq(const TGState *tg, uint8_t flags)
+{
+  return (lj_tg_flags_acq(tg) & flags) != 0;
+}
+
+static LJ_AINLINE int lj_tg_flags_all_acq(const TGState *tg, uint8_t flags)
+{
+  return (lj_tg_flags_acq(tg) & flags) == flags;
+}
+
 static LJ_AINLINE GC2SSBNode *lj_gc2_ssb_next_acq(const GC2SSBNode *node)
 {
   return (GC2SSBNode *)la_loadptr_acq((void *const *)&node->next);

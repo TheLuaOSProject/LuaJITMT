@@ -113,7 +113,7 @@ static void gc_mark_tab_retired_mem(global_State *g)
 static void gc_arena_rebuild_free(global_State *g)
 {
   TGState *tg = G2TG(g);
-  if (tg && (tg->tg_flags & TGF_ARENA_INTERNAL))
+  if (tg && lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL))
     lj_arena_alloc_rebuild_free(&tg->alloc);
 }
 
@@ -183,7 +183,7 @@ static void gc_arena_verify_marked(global_State *g, GCobj *o)
 {
   TGState *tg = G2TG(g);
   int marked;
-  if (!tg || !(tg->tg_flags & TGF_ARENA_INTERNAL))
+  if (!tg || !lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL))
     return;
   marked = lj_gc2_ismarked(g, o);
   if (marked < 0)
@@ -195,7 +195,7 @@ static void gc_arena_verify_sweep_boundary(global_State *g)
 {
   TGState *tg = G2TG(g);
   GCobj *o;
-  if (!tg || !(tg->tg_flags & TGF_ARENA_INTERNAL) ||
+  if (!tg || !lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL) ||
       gc2_phase_acq(g) != LJ_GC2_SWEEP ||
       lj_gc2_finalizer_sweep_pending(g))
     return;
@@ -1253,7 +1253,7 @@ static int gc2_deferred_body_pending(global_State *g, GCobj *o)
   TGState *tg = G2TG(g);
   GCArena *a;
   uint32_t cell;
-  if (!o || !tg || !(tg->tg_flags & TGF_ARENA_INTERNAL) ||
+  if (!o || !tg || !lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL) ||
       g->allocf != lj_arena_allocf)
     return 0;
   a = lj_arena_of(o);
@@ -2473,7 +2473,7 @@ void lj_gc_barriertrace(global_State *g, uint32_t traceno)
 
 static LJArenaAllocD *gc_arena_allocd_for_tg(global_State *g, TGState *tg)
 {
-  if (tg && (tg->tg_flags & TGF_ARENA_INTERNAL))
+  if (tg && lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL))
     return &tg->allocd;
   return (LJArenaAllocD *)g->allocd;
 }
@@ -2642,7 +2642,7 @@ int lj_mem_freegco_defer(global_State *g, void *p, GCSize osize)
   TGState *tg = G2TG(g);
   GCArena *a;
   uint32_t cell;
-  if (!p || !tg || !(tg->tg_flags & TGF_ARENA_INTERNAL) ||
+  if (!p || !tg || !lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL) ||
       g->allocf != lj_arena_allocf)
     return 0;
   a = lj_arena_of(p);

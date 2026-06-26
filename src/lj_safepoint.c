@@ -79,7 +79,7 @@ void lj_safepoint_apply_tg(global_State *g, TGState *tg, uint32_t actions)
     lj_gc2_flush_ssb(g, tg);  /* 05 section 5.6.2. */
   (void)lj_gc2_flush_alloc(g, tg);  /* 04 section 4.8 safepoint flush. */
   if ((actions & LJ_GC2_HS_RESET_ALLOC) &&
-      (tg->tg_flags & TGF_ARENA_INTERNAL)) {
+      lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL)) {
     lj_arena_alloc_prepare_sweep_kind(&tg->alloc, LJ_ARENAK_TRAVERSABLE);
     lj_arena_alloc_restore_sweep_kind(&tg->alloc, LJ_ARENAK_PLAIN);
     tg->alloc.prepare_epoch = gc2_cycle_acq(g);
@@ -89,7 +89,7 @@ void lj_safepoint_apply_tg(global_State *g, TGState *tg, uint32_t actions)
   if (actions & LJ_GC2_HS_EXIT_TRACES)
     lj_trace_abort(g);  /* 08 section 8.7: no active recorder past ack. */
   if (actions & LJ_GC2_HS_STOPREQ)
-    la_or8_rlx(&tg->tg_flags, TGF_STOPREQ);  /* 09 section 9.6 shutdown. */
+    lj_tg_flags_or_rlx(tg, TGF_STOPREQ);  /* 09 section 9.6 shutdown. */
 }
 
 static uint32_t safepoint_ack_tg(global_State *g, TGState *tg)
@@ -143,7 +143,7 @@ void lj_safepoint_checkstop(lua_State *L, uint32_t actions)
     return;
   tg = L2TG(L);
   if ((actions & LJ_GC2_HS_STOPREQ) ||
-      (tg && (la_load8_acq(&tg->tg_flags) & TGF_STOPREQ)))
+      (tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ)))
     lj_err_callermsg(L, "thread interrupted: VM shutdown");
 }
 
@@ -180,7 +180,7 @@ static uint32_t safepoint_signal_late(global_State *g, uint32_t actions,
   for (tg = gc2_tg_list_acq(g);
        tg != NULL;
        tg = lj_tg_next_acq(tg)) {
-    if (la_load8_acq(&tg->tg_flags) & TGF_DEAD)  /* 05 section 5.4.1. */
+    if (lj_tg_flags_test_acq(tg, TGF_DEAD))  /* 05 section 5.4.1. */
       continue;
     if (lj_tg_hs_epoch_ack_acq(tg) == epoch)
       continue;  /* 09 section 9.3: attach self-caught this epoch. */
@@ -201,7 +201,7 @@ static void safepoint_ack_native(global_State *g)
   for (tg = gc2_tg_list_acq(g);
        tg != NULL;
        tg = lj_tg_next_acq(tg)) {
-    if (la_load8_acq(&tg->tg_flags) & TGF_DEAD)  /* 05 section 5.4.1. */
+    if (lj_tg_flags_test_acq(tg, TGF_DEAD))  /* 05 section 5.4.1. */
       continue;
     if (tg == self)
       safepoint_ack_tg(g, tg);  /* Leader self-ack is a real poll. */
