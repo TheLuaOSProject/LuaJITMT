@@ -456,6 +456,87 @@ cTValue *lj_clib_cache_get(CLibrary *cl, GCstr *name)
   return e ? (cTValue *)&e->val : NULL;
 }
 
+CLibCacheEntry *lj_clib_cache_retired_head_acq(global_State *g)
+{
+  return (CLibCacheEntry *)la_loadptr_acq(
+    (void *const *)&g->gc2.clib_cache_retired);
+}
+
+static int clib_cache_retired_cas(global_State *g, CLibCacheEntry **oldp,
+				  CLibCacheEntry *entry)
+{
+  return la_casptr((void **)&g->gc2.clib_cache_retired, (void **)oldp,
+		   entry, LA_ACQ_REL, LA_ACQ);
+}
+
+static CLibCacheEntry *clib_cache_retired_xchg_acqrel(global_State *g,
+						      CLibCacheEntry *head)
+{
+  return (CLibCacheEntry *)la_xchgptr_acqrel(
+    (void **)&g->gc2.clib_cache_retired, head);
+}
+
+static void clib_cache_retired_push(global_State *g, CLibCacheEntry *entry)
+{
+  CLibCacheEntry *head = lj_clib_cache_retired_head_acq(g);
+  do {
+    lj_clib_cache_retired_next_rel(entry, head);
+  } while (!clib_cache_retired_cas(g, &head, entry));
+}
+
+static void clib_cache_retire(lua_State *L, global_State *g,
+			      CLibCacheEntry *entry)
+{
+  if (L) {
+    GCstr *name = lj_clib_cache_name_acq(entry);
+    TValue tv;
+    if (name) {
+      TValue key;
+      setstrV(L, &key, name);
+      lj_gc_barrierroot(L, &key);
+    }
+    lj_clib_cache_val_acq(&tv, entry);
+    lj_gc_barrierroot(L, &tv);
+  }
+  lj_clib_cache_retire_epoch_rel(entry, gc2_hs_epoch_acq(g));
+  clib_cache_retired_push(g, entry);
+}
+
+uint32_t lj_clib_cache_reclaim_retired(global_State *g,
+				       uint64_t completed_epoch)
+{
+  CLibCacheEntry *entry;
+  uint32_t reclaimed = 0;
+  if (!g || completed_epoch == 0)
+    return 0;
+  entry = clib_cache_retired_xchg_acqrel(g, NULL);
+  while (entry) {
+    CLibCacheEntry *next = lj_clib_cache_retired_next_acq(entry);
+    lj_clib_cache_retired_next_rel(entry, NULL);
+    if (lj_clib_cache_retire_epoch_acq(entry) < completed_epoch) {
+      lj_mem_freet(g, entry);
+      reclaimed++;
+    } else {
+      clib_cache_retired_push(g, entry);
+    }
+    entry = next;
+  }
+  return reclaimed;
+}
+
+void lj_clib_cache_freeretired(global_State *g)
+{
+  CLibCacheEntry *entry;
+  if (!g)
+    return;
+  entry = clib_cache_retired_xchg_acqrel(g, NULL);
+  while (entry) {
+    CLibCacheEntry *next = lj_clib_cache_retired_next_acq(entry);
+    lj_mem_freet(g, entry);
+    entry = next;
+  }
+}
+
 static TValue *clib_cache_publish(lua_State *L, CLibrary *cl, GCstr *name,
 				  cTValue *val)
 {
@@ -465,6 +546,9 @@ static TValue *clib_cache_publish(lua_State *L, CLibrary *cl, GCstr *name,
   lj_gc_barrierroot(L, &key);  /* 11.7 CLibrary side-cache key. */
   lj_gc_barrierroot(L, val);  /* 11.7 CLibrary side-cache value. */
   e = lj_mem_newt(L, sizeof(CLibCacheEntry), CLibCacheEntry);
+  lj_clib_cache_next_rel(e, NULL);
+  lj_clib_cache_retired_next_rel(e, NULL);
+  lj_clib_cache_retire_epoch_rel(e, 0);
   lj_clib_cache_name_rel(e, name);
   lj_clib_cache_val_rel(L, e, val);
   for (;;) {
@@ -487,12 +571,12 @@ static TValue *clib_cache_publish(lua_State *L, CLibrary *cl, GCstr *name,
   }
 }
 
-static void clib_cache_free(global_State *g, CLibrary *cl)
+static void clib_cache_free(lua_State *L, global_State *g, CLibrary *cl)
 {
   CLibCacheEntry *e = lj_clib_cache_head_xchg_acqrel(cl, NULL);
   while (e) {
     CLibCacheEntry *next = lj_clib_cache_next_acq(e);
-    lj_mem_freet(g, e);
+    clib_cache_retire(L, g, e);
     e = next;
   }
 }
@@ -650,7 +734,7 @@ void lj_clib_load(lua_State *L, GCtab *mt, GCstr *name, int global)
 void lj_clib_unload(lua_State *L, global_State *g, CLibrary *cl)
 {
   uint32_t actions;
-  clib_cache_free(g, cl);
+  clib_cache_free(L, g, cl);
   actions = clib_unloadlib(L, cl);
   cl->handle = NULL;
   if (L)

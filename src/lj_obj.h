@@ -1234,6 +1234,7 @@ typedef struct GC2State {
   uint64_t jit_hard_checks;  /* Trace GC checks entered past hard limit. */
   uint64_t interp_hard_checks;  /* Interpreter GC checks past hard limit. */
   uint64_t jit_scoped_slots_retired;  /* Scoped flush trace slots retired. */
+  void *clib_cache_retired;  /* Unloaded FFI CLibrary cache entries. */
   uint32_t gcpause_pct;	/* GC2 pacing percentage. */
   uint32_t assist_shift;  /* Bounded assist work is 1 << shift. */
   uint32_t assist_active;  /* Nonblocking owner token for mark assists. */

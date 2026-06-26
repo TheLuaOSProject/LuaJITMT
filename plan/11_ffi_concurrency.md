@@ -206,8 +206,12 @@ records to `CLibrary.cache_head` with a CAS prepend, after rooting the resolved
 TValue on the active Lua stack. `lj_clib_cache_get()` is the shared acquire
 lookup path for the interpreter and recorder. A successful cache-head CAS marks
 the raw side-entry allocation before key/value barriers. Legacy GC and GC2
-traverse the side cache as a CLibrary userdata root; `__gc` unload and the
-`lj_udata_free()` backstop both free side entries idempotently.
+traverse the side cache as a CLibrary userdata root. `__gc` unload and the
+`lj_udata_free()` backstop detach side entries and retire them through the GC2
+SMR drain; live-state retirements publish key/value root barriers, legacy GC
+and GC2 also mark retired side entries as raw roots until a completed handshake
+epoch reclaims them, and state close force-drains any
+remaining retired entries.
 Performance/cleanup of this side cache, or folding it back into a full
 concurrent table protocol, is deferred to M9.
 

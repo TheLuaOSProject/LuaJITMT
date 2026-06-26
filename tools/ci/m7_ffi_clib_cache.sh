@@ -3,13 +3,29 @@
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
-if hits=$(grep -nE -- '->[[:space:]]*next\b' \
+if hits=$(grep -nE -- '->[[:space:]]*(next|retired_next|retire_epoch)\b' \
   "$ROOT/src/lj_clib.c" \
   "$ROOT/src/lj_gc.c" \
-  "$ROOT/src/lj_gc2.c" \
   "$ROOT/src/lj_crecord.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
-  printf '%s\n' 'raw CLibCacheEntry next-link access is forbidden; use lj_clib_cache_next_* helpers' >&2
+  printf '%s\n' 'raw CLibCacheEntry link/epoch access is forbidden; use lj_clib_cache_* helpers' >&2
+  exit 1
+fi
+if hits=$(awk '
+  /^static void gc2_traverse_clib_(retired_)?cache\(/ { in_fn = 1 }
+  in_fn && /->[[:space:]]*(next|retired_next|retire_epoch)\b/ { print FNR ":" $0 }
+  in_fn && /^}/ { in_fn = 0 }
+' "$ROOT/src/lj_gc2.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw CLibCacheEntry link/epoch access is forbidden in GC2 CLibrary cache traversal; use lj_clib_cache_* helpers' >&2
+  exit 1
+fi
+if ! grep -q 'lj_clib_cache_reclaim_retired' "$ROOT/src/lj_gc2.c"; then
+  printf '%s\n' 'GC2 retired-object drain must reclaim retired CLibrary cache entries' >&2
+  exit 1
+fi
+if ! grep -q 'lj_clib_cache_freeretired' "$ROOT/src/lj_state.c"; then
+  printf '%s\n' 'state close must drain retired CLibrary cache entries' >&2
   exit 1
 fi
 if hits=$(awk '

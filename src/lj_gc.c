@@ -444,6 +444,23 @@ static void gc2_paranoia_check_rawroots(global_State *g)
 	   ctret = ctype_tab_retired_next_acq(ctret)) {
 	gc2_paranoia_checkmem(g, ctret, "retired ctype table");
       }
+      {
+	CLibCacheEntry *ce;
+	for (ce = lj_clib_cache_retired_head_acq(g);
+	     ce != NULL;
+	     ce = lj_clib_cache_retired_next_acq(ce)) {
+	  GCstr *name = lj_clib_cache_name_acq(ce);
+	  TValue tv;
+	  gc2_paranoia_checkmem(g, ce, "retired FFI CLibrary cache entry");
+	  if (name)
+	    gc2_paranoia_checkobj(g, obj2gco(name),
+				  "retired FFI CLibrary cache key");
+	  lj_clib_cache_val_acq(&tv, ce);
+	  if (tvisgcv(&tv))
+	    gc2_paranoia_checkobj(g, gcV(&tv),
+				  "retired FFI CLibrary cache value");
+	}
+      }
       gc2_paranoia_checkmem(g, ctype_cb_cbid_acq(cts), "callback ids");
       gc2_paranoia_checkmem(g, ctype_cb_owner_acq(cts), "callback owners");
       gc2_paranoia_checkmem(g, ctype_cb_func_acq(cts), "callback functions");
@@ -507,6 +524,22 @@ static void gc_traverse_thread(global_State *g, lua_State *th);
    lj_obj_cleargcflags(obj2gco(s), LJ_GC_WHITES))
 
 #if LJ_HASFFI
+static void gc_mark_clib_retired_cache(global_State *g)
+{
+  CLibCacheEntry *e;
+  for (e = lj_clib_cache_retired_head_acq(g);
+       e != NULL;
+       e = lj_clib_cache_retired_next_acq(e)) {
+    GCstr *name = lj_clib_cache_name_acq(e);
+    TValue tv;
+    lj_gc_arena_markmem(g, e);
+    if (name)
+      gc_mark_str(g, name);
+    lj_clib_cache_val_acq(&tv, e);
+    gc_marktv(g, &tv);
+  }
+}
+
 static void gc_mark_clib_cache(global_State *g, CLibrary *cl)
 {
   CLibCacheEntry *e;
@@ -706,6 +739,7 @@ static void gc_mark_gcroot(global_State *g)
 	if (pinmt)
 	  gc_markobj(g, pinmt);
       }
+      gc_mark_clib_retired_cache(g);
       lj_ctype_fin_mark(g, gc_finreg_markobj, lj_gc_arena_markmem);
       gc_mark_finreg_cdata_preclaims(g);
       lj_gc_arena_markmem(g, ctype_cb_cbid_acq(cts));

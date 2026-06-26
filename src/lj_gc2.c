@@ -58,6 +58,9 @@ static void gc2_finalizer_free_ring(global_State *g, GC2FinalizerNode *tail);
 static int gc2_tab_weak_mode(global_State *g, GCtab *t, GCtab *mt);
 static void *gc2_worker_main(void *arg);
 static void gc2_mark_tv_worker(global_State *g, cTValue *tv);
+#if LJ_HASFFI
+static void gc2_traverse_clib_retired_cache(global_State *g);
+#endif
 
 static uint32_t gc2_flush_and_drain_ssb(global_State *g)
 {
@@ -147,6 +150,7 @@ void lj_gc2_init(global_State *g)
   gc2_jit_hard_checks_store_rlx(g, 0);
   gc2_interp_hard_checks_store_rlx(g, 0);
   gc2_jit_scoped_slots_retired_store_rlx(g, 0);
+  g->gc2.clib_cache_retired = NULL;
   gc2_assist_active_store_rlx(g, 0);
   gc2_generational_store_rlx(g, 0);
   gc2_grey_stack_store_rlx(g, NULL);
@@ -1460,6 +1464,7 @@ uint32_t lj_gc2_reclaim_retired(global_State *g, uint64_t epoch)
   n += lj_tab_reclaim_retired(g, epoch);  /* 06 section 6.3.5 SMR drain. */
 #if LJ_HASFFI
   n += lj_ctype_reclaim_retired(g, epoch);  /* 11.2 CTState table SMR drain. */
+  n += lj_clib_cache_reclaim_retired(g, epoch);  /* 11.7 CLibrary cache SMR. */
 #endif
   n += lj_mcode_reclaim_retired(g, epoch);  /* 08 section 8.7 SMR drain. */
   n += lj_trace_reclaim_retired(g, epoch);  /* 08 section 8.3/8.7 drain. */
@@ -1875,6 +1880,7 @@ static void gc2_scan_global_roots(global_State *g)
 	if (pinmt)
 	  lj_gc2_markobj(g, obj2gco(pinmt));
       }
+      gc2_traverse_clib_retired_cache(g);
       lj_ctype_fin_mark(g, gc2_finreg_markobj, gc2_finreg_markmem);
       lj_gc2_markmem(g, ctype_cb_cbid_acq(cts));
       owner = ctype_cb_owner_acq(cts);
@@ -3812,6 +3818,22 @@ static int gc2_traverse_tab(global_State *g, GCtab *t)
 }
 
 #if LJ_HASFFI
+static void gc2_traverse_clib_retired_cache(global_State *g)
+{
+  CLibCacheEntry *e;
+  for (e = lj_clib_cache_retired_head_acq(g);
+       e != NULL;
+       e = lj_clib_cache_retired_next_acq(e)) {
+    GCstr *name = lj_clib_cache_name_acq(e);
+    TValue tv;
+    lj_gc2_markmem(g, e);
+    if (name)
+      gc2_markobj_worker(g, obj2gco(name));
+    lj_clib_cache_val_acq(&tv, e);
+    gc2_mark_tv_worker(g, &tv);
+  }
+}
+
 static void gc2_traverse_clib_cache(global_State *g, CLibrary *cl)
 {
   CLibCacheEntry *e;

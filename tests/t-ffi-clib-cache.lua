@@ -62,4 +62,24 @@ assert(ffi.C.abs(-77) == 77)
 assert(tonumber(ffi.C.strlen("cache-root")) == 10)
 assert(ffi.C.LJ_M7_CLIB_CONST == 73)
 
-print(("t-ffi-clib-cache OK: %d threads, %d cache hits"):format(nthreads, total))
+local function exercise_load_unload(rounds)
+  local ok = pcall(function()
+    local cl = ffi.load("c")
+    assert(cl.abs(-1) == 1)
+    cl = nil
+  end)
+  if not ok then return 0 end
+  for i = 1, rounds do
+    local cl = ffi.load("c")
+    assert(cl.abs(-i) == i)
+    assert(tonumber(cl.strlen("retire")) == 6)
+    cl = nil
+    harness.fullgc(3)
+  end
+  return rounds
+end
+
+local unloads = exercise_load_unload(harness.env_number("LJ_M7_FFI_CLIB_UNLOADS", 16))
+
+print(("t-ffi-clib-cache OK: %d threads, %d cache hits, %d unloads"):format(
+  nthreads, total, unloads))

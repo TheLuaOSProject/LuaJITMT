@@ -467,10 +467,11 @@ static TValue *ffi_clib_index(lua_State *L)
 
 LJLIB_CF(ffi_clib___index)	LJLIB_REC(clib_index 1)
 {
-  TValue *tv = ffi_clib_index(L);
-  if (tviscdata(tv)) {
+  TValue tv;
+  lj_tv_load_acq(&tv, ffi_clib_index(L));
+  if (tviscdata(&tv)) {
     CTState *cts = ctype_cts(L);
-    GCcdata *cd = cdataV(tv);
+    GCcdata *cd = cdataV(&tv);
     CType *s = ctype_get(cts, cd->ctypeid);
     CTInfo sinfo = ctype_info_acq(s);
     if (ctype_isextern(sinfo)) {
@@ -482,17 +483,18 @@ LJLIB_CF(ffi_clib___index)	LJLIB_REC(clib_index 1)
       return 1;
     }
   }
-  copyTV(L, L->top-1, tv);
+  copyTV(L, L->top-1, &tv);
   return 1;
 }
 
 LJLIB_CF(ffi_clib___newindex)	LJLIB_REC(clib_index 0)
 {
-  TValue *tv = ffi_clib_index(L);
+  TValue tv;
   TValue *o = L->base+2;
-  if (o < L->top && tviscdata(tv)) {
+  lj_tv_load_acq(&tv, ffi_clib_index(L));
+  if (o < L->top && tviscdata(&tv)) {
     CTState *cts = ctype_cts(L);
-    GCcdata *cd = cdataV(tv);
+    GCcdata *cd = cdataV(&tv);
     CTypeID did = cd->ctypeid;
     CType *d = ctype_get(cts, did);
     CTInfo dinfo = ctype_info_acq(d);

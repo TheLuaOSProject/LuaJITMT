@@ -24,6 +24,7 @@
 #if LJ_HASFFI
 #include "lj_ccallback.h"
 #include "lj_ctype.h"
+#include "lj_clib.h"
 #endif
 #include "lj_trace.h"
 #include "lj_dispatch.h"
@@ -264,6 +265,7 @@ static void close_state(lua_State *L)
   lj_trace_freestate(g);
 #if LJ_HASFFI
   lj_ctype_freestate(g);
+  lj_clib_cache_freeretired(g);
 #endif
   lj_str_freetab(g);
   lj_tab_freeretired(g);
