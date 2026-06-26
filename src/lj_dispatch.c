@@ -117,6 +117,7 @@ void lj_dispatch_init_hotcount(global_State *g)
 #define DISPMODE_INS	0x04	/* Override instruction dispatch. */
 #define DISPMODE_JIT	0x10	/* JIT compiler on. */
 #define DISPMODE_PROF	0x40	/* Profiling active. */
+#define DISPMODE_UPDATE	0x80	/* Dispatch table update in progress. */
 
 static void dispatch_setins_cells(ASMFunction *disp, ASMFunction f)
 {
@@ -166,21 +167,21 @@ static void dispatch_setrecord(ASMFunction *disp, uint8_t mode)
 }
 #endif
 
-/* Update dispatch table depending on various flags. */
-void LJ_FASTCALL lj_dispatch_update(global_State *g, int nolock)
-{
-#if LJ_HASPROFILE && !LJ_PROFILE_SIGPROF
-  int profile_locked = nolock ? 0 : lj_profile_lock();
+static uint8_t dispatch_state_mode(global_State *g
+#if LJ_HASJIT
+				   , jit_State **Jp, TGState **tgp,
+				   int *rec_ownerp
 #endif
-  uint32_t redispatch = 0;
-  uint8_t oldmode = g->dispatchmode;
+				   )
+{
   uint8_t mode = 0;
   uint8_t hookmask = hookmask_load(g);
 #if LJ_HASJIT
   jit_State *J = G2J(g);
-  TGState *tg = G2TG(g);
-  int rec_owner = lj_trace_state_load(J) != LJ_TRACE_IDLE &&
-		  lj_jit_token_held(J);
+  *Jp = J;
+  *tgp = G2TG(g);
+  *rec_ownerp = lj_trace_state_load(J) != LJ_TRACE_IDLE &&
+		lj_jit_token_held(J);
   mode |= (J->flags & JIT_F_ON) ? DISPMODE_JIT : 0;
 #endif
 #if LJ_HASPROFILE
@@ -189,10 +190,39 @@ void LJ_FASTCALL lj_dispatch_update(global_State *g, int nolock)
   mode |= (hookmask & (LUA_MASKLINE|LUA_MASKCOUNT)) ? DISPMODE_INS : 0;
   mode |= (hookmask & LUA_MASKCALL) ? DISPMODE_CALL : 0;
   mode |= (hookmask & LUA_MASKRET) ? DISPMODE_RET : 0;
+  return mode;
+}
+
+/* Update dispatch table depending on various flags. */
+void LJ_FASTCALL lj_dispatch_update(global_State *g, int nolock)
+{
+  uint32_t redispatch = 0;
+  uint8_t oldmode, mode;
+#if LJ_HASJIT
+  jit_State *J;
+  TGState *tg;
+  int rec_owner;
+#endif
+retry:
+  oldmode = dispatchmode_load_acq(g);
+  if ((oldmode & DISPMODE_UPDATE)) {
+    /* Async profile triggers may interrupt the owner of the update token. */
+    if (nolock > 1) return;
+    la_cpu_pause();
+    goto retry;
+  }
+#if LJ_HASJIT
+  mode = dispatch_state_mode(g, &J, &tg, &rec_owner);
+#else
+  mode = dispatch_state_mode(g);
+#endif
   if (oldmode != mode) {  /* Mode changed? */
-    ASMFunction *disp = G2GG(g)->dispatch;
+    uint8_t claim = (uint8_t)(oldmode | DISPMODE_UPDATE);
+    ASMFunction *disp;
     ASMFunction f_forl, f_iterl, f_itern, f_loop, f_funcf, f_funcv;
-    g->dispatchmode = mode;
+    if (!dispatchmode_cas(g, &oldmode, claim))
+      goto retry;
+    disp = G2GG(g)->dispatch;
 
     /* Hotcount if JIT is on. Recording overlays are TG-local below. */
     if ((mode & DISPMODE_JIT)) {
@@ -277,16 +307,18 @@ void LJ_FASTCALL lj_dispatch_update(global_State *g, int nolock)
 #endif
 	if (gc2_n_threads_acq(g) > 1)
 	  redispatch = 1;
+    dispatchmode_store_rel(g, mode);
+#if LJ_HASJIT
+    if (dispatch_state_mode(g, &J, &tg, &rec_owner) != mode)
+#else
+    if (dispatch_state_mode(g) != mode)
+#endif
+      goto retry;
   }
   lj_tg_sync_dispatch(g);
 #if LJ_HASJIT
   if (rec_owner && tg)
     dispatch_setrecord(tg->dispatch, mode);
-#endif
-#if LJ_HASPROFILE && !LJ_PROFILE_SIGPROF
-  if (profile_locked) lj_profile_unlock();
-#else
-  UNUSED(nolock);
 #endif
   if (redispatch)
     (void)lj_gc2_handshake(g, LJ_GC2_HS_REDISPATCH);

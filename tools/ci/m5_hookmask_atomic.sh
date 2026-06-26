@@ -8,6 +8,14 @@ if ! grep -q 'static LJ_AINLINE uint8_t hookmask_load' src/lj_obj.h; then
   printf '%s\n' 'hookmask_load helper is required for C-side hook-mask reads' >&2
   exit 1
 fi
+if ! grep -q 'static LJ_AINLINE int hookmask_profile_enter' src/lj_obj.h; then
+  printf '%s\n' 'hookmask_profile_enter helper is required for profiler VMEVENT ownership' >&2
+  exit 1
+fi
+if ! grep -q 'static LJ_AINLINE void hookmask_profile_leave' src/lj_obj.h; then
+  printf '%s\n' 'hookmask_profile_leave helper is required for profiler VMEVENT release' >&2
+  exit 1
+fi
 
 if ! grep -q '^|\.macro x64_vm_hookmask_acq' src/vm_x64.dasc; then
   printf '%s\n' 'x64_vm_hookmask_acq macro is required for generated hook-mask reads' >&2

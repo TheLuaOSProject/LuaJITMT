@@ -1434,6 +1434,22 @@ static LJ_AINLINE void vmstate_store_rel(global_State *g, int32_t vmstate)
 
 #define setvmstate(g, st)	vmstate_store_rel((g), ~LJ_VMST_##st)
 
+static LJ_AINLINE uint8_t dispatchmode_load_acq(global_State *g)
+{
+  return la_load8_acq(&g->dispatchmode);  /* 07 section 7.3 dispatch table. */
+}
+
+static LJ_AINLINE void dispatchmode_store_rel(global_State *g, uint8_t mode)
+{
+  la_store8_rel(&g->dispatchmode, mode);  /* 07 section 7.3 dispatch table. */
+}
+
+static LJ_AINLINE int dispatchmode_cas(global_State *g, uint8_t *oldp,
+				       uint8_t mode)
+{
+  return la_cas8(&g->dispatchmode, oldp, mode, LA_ACQ_REL, LA_ACQ);
+}
+
 /* Hook management. Hook event masks are defined in lua.h. */
 #define HOOK_EVENTMASK		0x0f
 #define HOOK_ACTIVE		0x10
@@ -1474,6 +1490,30 @@ static LJ_AINLINE int hookmask_set_if_clear(global_State *g, uint8_t blocked,
     next = (uint8_t)(old | set);
     if (la_cas8(&g->hookmask, &old, next, LA_ACQ_REL, LA_ACQ))
       return 1;  /* 03 section 3.6 global hooks. */
+  }
+}
+
+static LJ_AINLINE int hookmask_profile_enter(global_State *g, uint8_t *savep)
+{
+  uint8_t old = hookmask_load(g);
+  for (;;) {
+    uint8_t saved = (uint8_t)(old & (uint8_t)~HOOK_PROFILE);
+    uint8_t next = (old & HOOK_VMEVENT) ? saved : HOOK_VMEVENT;
+    if (next == old || la_cas8(&g->hookmask, &old, next, LA_ACQ_REL, LA_ACQ)) {
+      *savep = saved;
+      return !(saved & HOOK_VMEVENT);
+    }
+  }
+}
+
+static LJ_AINLINE void hookmask_profile_leave(global_State *g, uint8_t saved)
+{
+  uint8_t old = hookmask_load(g);
+  for (;;) {
+    uint8_t next = (uint8_t)((saved & (uint8_t)~HOOK_EVENTMASK) |
+			     (old & (HOOK_EVENTMASK|HOOK_PROFILE)));
+    if (la_cas8(&g->hookmask, &old, next, LA_ACQ_REL, LA_ACQ))
+      return;  /* Preserve hook changes and a retriggered profile bit. */
   }
 }
 

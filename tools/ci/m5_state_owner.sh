@@ -10,4 +10,41 @@ if hits=$(grep -nE 'ps->[[:space:]]*abort[[:space:]]*=|if[[:space:]]*\([[:space:
   exit 1
 fi
 
+if hits=$(grep -RInE 'pthread_mutex|profile_lock|profile_unlock|lj_profile_lock|lj_profile_unlock|CriticalSection' \
+  "$ROOT/src/lj_profile.c" "$ROOT/src/lj_profile.h" "$ROOT/src/lj_dispatch.c" || true); \
+  [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'profiler hook and dispatch coordination must not use mutex/critical-section locks' >&2
+  exit 1
+fi
+
+for helper in \
+  profile_g_load_acq profile_g_store_rel \
+  profile_cb_load_acq profile_cb_store_rel \
+  profile_data_load_acq profile_data_store_rel \
+  profile_samples_xchg profile_samples_add \
+  profile_vmstate_load_acq profile_vmstate_store_rel
+do
+  if ! grep -q "$helper" "$ROOT/src/lj_profile.c"; then
+    printf '%s\n' "missing profiler shared-state helper: $helper" >&2
+    exit 1
+  fi
+done
+
+for helper in dispatchmode_load_acq dispatchmode_store_rel dispatchmode_cas
+do
+  if ! grep -q "$helper" "$ROOT/src/lj_obj.h"; then
+    printf '%s\n' "missing dispatchmode helper: $helper" >&2
+    exit 1
+  fi
+done
+
+if hits=$(grep -RInF -- '->dispatchmode' "$ROOT/src"/lj_*.c "$ROOT/src"/lib_*.c \
+  "$ROOT/src"/lj_*.h 2>/dev/null | grep -vF "$ROOT/src/lj_obj.h:" || true); \
+  [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'C-side dispatchmode access must use dispatchmode_* helpers' >&2
+  exit 1
+fi
+
 exec "$ROOT/tools/ci/lua_test.sh" m5_state_owner
