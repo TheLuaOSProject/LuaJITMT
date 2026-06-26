@@ -237,6 +237,18 @@ static LJ_AINLINE int lj_tg_hs_epoch_ack_cas(TGState *tg, uint64_t *oldp,
   return la_cas64(&tg->hs_epoch_ack, oldp, epoch, LA_ACQ_REL, LA_ACQ);
 }
 
+static LJ_AINLINE uint64_t lj_tg_local_total_xchg_acqrel(TGState *tg,
+							 uint64_t bytes)
+{
+  return la_xchg64_acqrel(&tg->local_total, bytes);  /* 04 section 4.8. */
+}
+
+static LJ_AINLINE uint64_t lj_tg_local_total_add_rlx(TGState *tg,
+						     uint64_t bytes)
+{
+  return la_add64_rlx(&tg->local_total, bytes);  /* 04 section 4.8. */
+}
+
 static LJ_AINLINE lua_State *lj_tg_load_cur_L(TGState *tg)
 {
   return (lua_State *)la_loadptr_acq((void *const *)&tg->cur_L);

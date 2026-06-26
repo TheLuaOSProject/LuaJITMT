@@ -568,7 +568,7 @@ uint64_t lj_gc2_flush_alloc(global_State *g, TGState *tg)
   uint64_t bytes;
   if (!g || !tg)
     return 0;
-  bytes = la_xchg64_acqrel(&tg->local_total, 0);  /* 04 section 4.8. */
+  bytes = lj_tg_local_total_xchg_acqrel(tg, 0);
   if (bytes != 0)
     lj_gc2_alloc_since_add(g, bytes);  /* 05 section 5.11. */
   return bytes;
@@ -606,7 +606,7 @@ void lj_gc2_account_alloc(global_State *g, TGState *tg, GCSize bytes)
   uint64_t old;
   if (!g || !tg || bytes == 0)
     return;
-  old = la_add64_rlx(&tg->local_total, (uint64_t)bytes);  /* 04 section 4.8. */
+  old = lj_tg_local_total_add_rlx(tg, (uint64_t)bytes);
   if (old + (uint64_t)bytes < old || old + (uint64_t)bytes >= LJ_GC2_ACCT_FLUSH)
     (void)lj_gc2_flush_alloc(g, tg);
   gc2_maybe_trigger_cycle(g, tg);
