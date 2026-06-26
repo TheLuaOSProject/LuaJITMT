@@ -1455,7 +1455,7 @@ static void trace_hotside(jit_State *J, const BCIns *pc, lua_State *L,
 static int trace_poll_pending(lua_State *L)
 {
   TGState *tg = L ? L2TG(L) : NULL;
-  return tg && la_load32_acq(&tg->poll) != 0;
+  return tg && lj_tg_poll_acq(tg) != 0;
 }
 
 /* Stitch a new trace to the previous trace. */
