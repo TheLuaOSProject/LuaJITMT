@@ -72,8 +72,8 @@ static void test_strong_table(lua_State *L, global_State *g, TGState *tg)
   lj_gc2_legacy_mark_begin(g);
   assert(lj_gc2_ismarked(g, obj2gco(parent)) == 0);
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 0);
-  grey_pushed0 = la_load64_acq(&g->gc2.grey_pushed);
-  grey_drained0 = la_load64_acq(&g->gc2.grey_drained);
+  grey_pushed0 = gc2_grey_pushed_acq(g);
+  grey_drained0 = gc2_grey_drained_acq(g);
   assert(lj_gc2_markobj(g, obj2gco(parent)) == 1);
   flush_and_drain(g, tg);
   assert(lj_gc2_ismarked(g, obj2gco(parent)) == 1);
@@ -82,8 +82,8 @@ static void test_strong_table(lua_State *L, global_State *g, TGState *tg)
   assert(parent->hmask > 0);
   assert(lj_gc2_ismarkedmem(g, lj_tab_array_hdrw(lj_tab_array_acq(parent))) == 1);
   assert(lj_gc2_ismarkedmem(g, lj_tab_node_hdrw(lj_tab_node_acq(parent))) == 1);
-  assert(la_load64_acq(&g->gc2.grey_pushed) == grey_pushed0 + 2u);
-  assert(la_load64_acq(&g->gc2.grey_drained) == grey_drained0 + 2u);
+  assert(gc2_grey_pushed_acq(g) == grey_pushed0 + 2u);
+  assert(gc2_grey_drained_acq(g) == grey_drained0 + 2u);
   lj_gc2_legacy_cycle_end(g);
   lua_pop(L, 2);
 }
@@ -106,16 +106,16 @@ static void test_grey_deque_growth(lua_State *L, global_State *g, TGState *tg)
   lj_gc2_legacy_mark_begin(g);
   assert(lj_gc2_ismarked(g, obj2gco(parent)) == 0);
   assert(lj_gc2_ismarked(g, obj2gco(child[0])) == 0);
-  grey_pushed0 = la_load64_acq(&g->gc2.grey_pushed);
-  grey_drained0 = la_load64_acq(&g->gc2.grey_drained);
+  grey_pushed0 = gc2_grey_pushed_acq(g);
+  grey_drained0 = gc2_grey_drained_acq(g);
   assert(lj_gc2_markobj(g, obj2gco(parent)) == 1);
   flush_and_drain(g, tg);
   assert(lj_gc2_ismarked(g, obj2gco(parent)) == 1);
   for (i = 0; i < GC2_DEQUE_GROW_N; i++)
     assert(lj_gc2_ismarked(g, obj2gco(child[i])) == 1);
-  assert(la_load64_acq(&g->gc2.grey_pushed) ==
+  assert(gc2_grey_pushed_acq(g) ==
 	 grey_pushed0 + GC2_DEQUE_GROW_N + 1u);
-  assert(la_load64_acq(&g->gc2.grey_drained) ==
+  assert(gc2_grey_drained_acq(g) ==
 	 grey_drained0 + GC2_DEQUE_GROW_N + 1u);
   lj_gc2_legacy_cycle_end(g);
   lua_pop(L, 1);
@@ -281,7 +281,7 @@ static void test_grey_deque_steal_race(lua_State *L, global_State *g,
     lua_pushfstring(L, "gc2 steal race %d", i);
     o = obj2gco(strV(L->top - 1));
     grey_publish_test_item(g, o);
-    drained0 = la_load64_acq(&g->gc2.grey_drained);
+    drained0 = gc2_grey_drained_acq(g);
     ctx.g = g;
     ctx.stolen = NULL;
     assert(pthread_barrier_init(&ctx.barrier, NULL, 2) == 0);
@@ -291,7 +291,7 @@ static void test_grey_deque_steal_race(lua_State *L, global_State *g,
     assert(pthread_join(thief, NULL) == 0);
     assert(pthread_barrier_destroy(&ctx.barrier) == 0);
 
-    drained1 = la_load64_acq(&g->gc2.grey_drained);
+    drained1 = gc2_grey_drained_acq(g);
     owner_won = drained1 == drained0 + 1u;
     thief_won = ctx.stolen == o;
     assert(owner_won || thief_won);
@@ -329,7 +329,7 @@ static void test_worker_drain(lua_State *L, global_State *g, TGState *tg)
   assert(lj_gc2_flush_ssb(g, tg) == 1);
   assert(!lj_gc2_ssb_empty(g));
 
-  grey_drained0 = la_load64_acq(&g->gc2.grey_drained);
+  grey_drained0 = gc2_grey_drained_acq(g);
   worker_runs0 = la_load64_acq(&g->gc2.worker_runs);
   worker_grey0 = la_load64_acq(&g->gc2.worker_grey_drained);
   worker_ssb0 = la_load64_acq(&g->gc2.worker_ssb_converted);
@@ -345,7 +345,7 @@ static void test_worker_drain(lua_State *L, global_State *g, TGState *tg)
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(grandchild)) == 1);
   assert(lj_gc2_ssb_empty(g));
-  assert(la_load64_acq(&g->gc2.grey_drained) == grey_drained0 + 3u);
+  assert(gc2_grey_drained_acq(g) == grey_drained0 + 3u);
   assert(la_load64_acq(&g->gc2.worker_runs) == worker_runs0 + 1u);
   assert(la_load64_acq(&g->gc2.worker_grey_drained) == worker_grey0 + 3u);
   assert(la_load64_acq(&g->gc2.worker_ssb_converted) == worker_ssb0 + 1u);

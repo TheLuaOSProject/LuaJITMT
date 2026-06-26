@@ -673,8 +673,8 @@ int main(void)
   assert(!lj_gc2_ssb_empty(g));
   ssb_published0 = gc2_ssb_published_acq(g);
   ssb_drained0 = gc2_ssb_drained_acq(g);
-  grey_pushed0 = la_load64_acq(&g->gc2.grey_pushed);
-  grey_drained0 = la_load64_acq(&g->gc2.grey_drained);
+  grey_pushed0 = gc2_grey_pushed_acq(g);
+  grey_drained0 = gc2_grey_drained_acq(g);
   phase_plain = lj_arena_alloc(&tg->alloc, &tg->prng, 64, 0);
   phase_trav = lj_arena_alloc(&tg->alloc, &tg->prng, 64,
 			      LJ_AF_TRAVERSABLE);
@@ -696,8 +696,8 @@ int main(void)
   assert(lj_gc2_ssb_empty(g));
   assert(lj_gc2_ismarked(g, obj2gco(phase_tab)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(phase_child)) == 1);
-  assert(la_load64_acq(&g->gc2.grey_pushed) == grey_pushed0 + 2u);
-  assert(la_load64_acq(&g->gc2.grey_drained) == grey_drained0 + 2u);
+  assert(gc2_grey_pushed_acq(g) == grey_pushed0 + 2u);
+  assert(gc2_grey_drained_acq(g) == grey_drained0 + 2u);
   assert(tg->alloc.bump[LJ_ARENAK_PLAIN].a == phase_plain_a);
   assert(tg->alloc.bump[LJ_ARENAK_TRAVERSABLE].a == phase_trav_a);
   assert(arena_list_contains(tg->alloc.owned[LJ_ARENAK_PLAIN],

@@ -145,8 +145,8 @@ void lj_gc2_init(global_State *g)
   gc2_grey_capacity_store_rlx(g, 0);
   gc2_grey_top_store_rlx(g, 0);
   gc2_grey_bottom_store_rlx(g, 0);
-  la_store64_rlx(&g->gc2.grey_pushed, 0);
-  la_store64_rlx(&g->gc2.grey_drained, 0);
+  gc2_grey_pushed_store_rlx(g, 0);
+  gc2_grey_drained_store_rlx(g, 0);
   for (i = 0; i < LJ_GC2_WORKER_MAX; i++)
     g->gc2.worker_thread[i] = NULL;
   for (i = 0; i < LJ_GC2_WORKER_MAX; i++)
@@ -1851,7 +1851,7 @@ static int gc2_grey_push(global_State *g, GCobj *o)
   gc2_queue_slot_store_rel(&stack[(MSize)(bottom % cap)], o);
   /* 05 section 5.6.3: slot release-published before bottom. */
   gc2_grey_bottom_rel(g, bottom + 1);
-  la_add64_rlx(&g->gc2.grey_pushed, 1);
+  gc2_grey_pushed_add(g, 1);
   return 1;
 }
 
@@ -3888,7 +3888,7 @@ static uint32_t gc2_drain_grey(global_State *g, uint32_t limit)
     }
   }
   if (n)
-    la_add64_rlx(&g->gc2.grey_drained, n);
+    gc2_grey_drained_add(g, n);
   return n;
 }
 
@@ -4007,7 +4007,7 @@ static uint32_t gc2_worker_drain_inner(global_State *g, uint32_t limit,
   if (total)
     gc2_worker_runs_add(g, 1);
   if (n) {
-    la_add64_rlx(&g->gc2.grey_drained, n);
+    gc2_grey_drained_add(g, n);
     gc2_worker_grey_drained_add(g, n);
   }
   if (converted)

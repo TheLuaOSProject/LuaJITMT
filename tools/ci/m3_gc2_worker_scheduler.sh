@@ -234,6 +234,24 @@ if hits=$(grep -nE -- '->[[:space:]]*gc2[.](grey_stack|grey_capacity|grey_top|gr
   printf '%s\n' 'raw GC2 grey deque state access is forbidden; use gc2_grey_* helpers' >&2
   exit 1
 fi
+for helper in gc2_grey_pushed_acq \
+  gc2_grey_pushed_store_rlx \
+  gc2_grey_pushed_add \
+  gc2_grey_drained_acq \
+  gc2_grey_drained_store_rlx \
+  gc2_grey_drained_add; do
+  if ! grep -qE "static LJ_AINLINE .*[*[:space:]]${helper}[[:space:]]*[(]" \
+      "$ROOT/src/lj_obj.h"; then
+    printf '%s\n' "${helper} helper is required for GC2 grey telemetry counters" >&2
+    exit 1
+  fi
+done
+if hits=$(grep -nE -- '->[[:space:]]*gc2[.](grey_pushed|grey_drained)([^[:alnum:]_]|$)|&[[:space:]]*[^)]*->[[:space:]]*gc2[.](grey_pushed|grey_drained)([^[:alnum:]_]|$)' \
+    "$ROOT/src/lj_gc2.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw GC2 grey telemetry counter access is forbidden; use gc2_grey_* helpers' >&2
+  exit 1
+fi
 if hits=$(grep -nE -- '->[[:space:]]*gc2[.]assist_(active|shift)|&[[:space:]]*[^)]*->[[:space:]]*gc2[.]assist_(active|shift)' \
     "$ROOT/src/lj_api.c" \
     "$ROOT/src/lj_gc2.c" || true); [ -n "$hits" ]; then

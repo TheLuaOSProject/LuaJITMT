@@ -2062,6 +2062,36 @@ static LJ_AINLINE void gc2_grey_bottom_rel(global_State *g, uint64_t bottom)
   la_store64_rel(&g->gc2.grey_bottom, bottom);
 }
 
+static LJ_AINLINE uint64_t gc2_grey_pushed_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.grey_pushed);
+}
+
+static LJ_AINLINE void gc2_grey_pushed_store_rlx(global_State *g, uint64_t n)
+{
+  la_store64_rlx(&g->gc2.grey_pushed, n);
+}
+
+static LJ_AINLINE void gc2_grey_pushed_add(global_State *g, uint64_t n)
+{
+  la_add64_rlx(&g->gc2.grey_pushed, n);
+}
+
+static LJ_AINLINE uint64_t gc2_grey_drained_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.grey_drained);
+}
+
+static LJ_AINLINE void gc2_grey_drained_store_rlx(global_State *g, uint64_t n)
+{
+  la_store64_rlx(&g->gc2.grey_drained, n);
+}
+
+static LJ_AINLINE void gc2_grey_drained_add(global_State *g, uint64_t n)
+{
+  la_add64_rlx(&g->gc2.grey_drained, n);
+}
+
 static LJ_AINLINE uint64_t gc2_marks_this_round_acq(global_State *g)
 {
   return la_load64_acq(&g->gc2.marks_this_round);
