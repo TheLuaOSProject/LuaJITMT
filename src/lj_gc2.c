@@ -94,7 +94,7 @@ void lj_gc2_init(global_State *g)
   gc2_cycle_roots_minor_store_rlx(g, 0);
   gc2_minor_roots_enabled_store_rlx(g, 0);
   gc2_minor_sweep_deferred_store_rlx(g, 0);
-  la_store64_rlx(&g->gc2.minor_sweep_arenas, 0);
+  gc2_minor_sweep_arenas_store_rlx(g, 0);
   gc2_minor_roots_deferred_store_rlx(g, 0);
   gc2_major_root_scans_store_rlx(g, 0);
   gc2_minor_root_scans_store_rlx(g, 0);
@@ -176,9 +176,9 @@ void lj_gc2_init(global_State *g)
   gc2_thread_scan_needscan_store_rlx(g, 0);
   gc2_thread_scan_owner_needscans_store_rlx(g, 0);
   gc2_thread_scan_dirty_misses_store_rlx(g, 0);
-  la_store64_rlx(&g->gc2.sweep_owner_runs, 0);
-  la_store64_rlx(&g->gc2.sweep_owner_arenas, 0);
-  la_store64_rlx(&g->gc2.sweep_owner_live_cells, 0);
+  gc2_sweep_owner_runs_store_rlx(g, 0);
+  gc2_sweep_owner_arenas_store_rlx(g, 0);
+  gc2_sweep_owner_live_cells_store_rlx(g, 0);
   gc2_sweep_live_updates_store_rlx(g, 0);
   gc2_sweep_live_huge_bytes_store_rlx(g, 0);
   gc2_live_estimate_store_rlx(g, 0);
@@ -1229,11 +1229,11 @@ uint32_t lj_gc2_sweep_owner_progress(global_State *g, TGState *tg,
     n++;
   }
   if (n) {
-    la_add64_rlx(&g->gc2.sweep_owner_runs, 1);
-    la_add64_rlx(&g->gc2.sweep_owner_arenas, n);
-    la_add64_rlx(&g->gc2.sweep_owner_live_cells, live);
+    gc2_sweep_owner_runs_add(g, 1);
+    gc2_sweep_owner_arenas_add(g, n);
+    gc2_sweep_owner_live_cells_add(g, live);
     if (minor)
-      la_add64_rlx(&g->gc2.minor_sweep_arenas, n);
+      gc2_minor_sweep_arenas_add(g, n);
   }
   return n;
 }

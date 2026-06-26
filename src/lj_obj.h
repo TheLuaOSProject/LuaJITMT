@@ -1946,6 +1946,22 @@ static LJ_AINLINE void gc2_minor_sweep_deferred_add(global_State *g,
   la_add64_rlx(&g->gc2.minor_sweep_deferred, n);
 }
 
+static LJ_AINLINE uint64_t gc2_minor_sweep_arenas_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.minor_sweep_arenas);
+}
+
+static LJ_AINLINE void gc2_minor_sweep_arenas_store_rlx(global_State *g,
+							uint64_t n)
+{
+  la_store64_rlx(&g->gc2.minor_sweep_arenas, n);
+}
+
+static LJ_AINLINE void gc2_minor_sweep_arenas_add(global_State *g, uint64_t n)
+{
+  la_add64_rlx(&g->gc2.minor_sweep_arenas, n);
+}
+
 static LJ_AINLINE uint64_t gc2_minor_roots_deferred_acq(global_State *g)
 {
   return la_load64_acq(&g->gc2.minor_roots_deferred);
@@ -3082,6 +3098,55 @@ static LJ_AINLINE void gc2_minor_survival_major_requests_add(global_State *g,
 							     uint64_t n)
 {
   la_add64_rlx(&g->gc2.minor_survival_major_requests, n);
+}
+
+static LJ_AINLINE uint64_t gc2_sweep_owner_runs_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.sweep_owner_runs);
+}
+
+static LJ_AINLINE void gc2_sweep_owner_runs_store_rlx(global_State *g,
+						      uint64_t n)
+{
+  la_store64_rlx(&g->gc2.sweep_owner_runs, n);
+}
+
+static LJ_AINLINE void gc2_sweep_owner_runs_add(global_State *g, uint64_t n)
+{
+  la_add64_rlx(&g->gc2.sweep_owner_runs, n);
+}
+
+static LJ_AINLINE uint64_t gc2_sweep_owner_arenas_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.sweep_owner_arenas);
+}
+
+static LJ_AINLINE void gc2_sweep_owner_arenas_store_rlx(global_State *g,
+							uint64_t n)
+{
+  la_store64_rlx(&g->gc2.sweep_owner_arenas, n);
+}
+
+static LJ_AINLINE void gc2_sweep_owner_arenas_add(global_State *g, uint64_t n)
+{
+  la_add64_rlx(&g->gc2.sweep_owner_arenas, n);
+}
+
+static LJ_AINLINE uint64_t gc2_sweep_owner_live_cells_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.sweep_owner_live_cells);
+}
+
+static LJ_AINLINE void gc2_sweep_owner_live_cells_store_rlx(global_State *g,
+							    uint64_t n)
+{
+  la_store64_rlx(&g->gc2.sweep_owner_live_cells, n);
+}
+
+static LJ_AINLINE void gc2_sweep_owner_live_cells_add(global_State *g,
+						      uint64_t n)
+{
+  la_add64_rlx(&g->gc2.sweep_owner_live_cells, n);
 }
 
 static LJ_AINLINE uint64_t gc2_sweep_live_updates_acq(global_State *g)

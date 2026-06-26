@@ -355,7 +355,7 @@ int main(void)
   assert(la_load32_acq(&g->gc2.cycle_roots_minor) == 0);
   assert(la_load32_acq(&g->gc2.minor_roots_enabled) == 0);
   assert(gc2_minor_sweep_deferred_acq(g) == 0);
-  assert(la_load64_acq(&g->gc2.minor_sweep_arenas) == 0);
+  assert(gc2_minor_sweep_arenas_acq(g) == 0);
   assert(gc2_minor_roots_deferred_acq(g) == 0);
   assert(gc2_minor_survival_base_live_acq(g) == 0);
   assert(gc2_minor_survival_bytes_acq(g) == 0);

@@ -572,7 +572,7 @@ static void gc_stats_push(lua_State *L)
   gc_stats_setnum(L, t, "minor_sweep_deferred",
 		  gc2_minor_sweep_deferred_acq(g));
   gc_stats_setnum(L, t, "minor_sweep_arenas",
-		  la_load64_acq(&gc2->minor_sweep_arenas));
+		  gc2_minor_sweep_arenas_acq(g));
   gc_stats_setnum(L, t, "minor_roots_deferred",
 		  gc2_minor_roots_deferred_acq(g));
   gc_stats_setnum(L, t, "major_root_scans",
@@ -637,11 +637,11 @@ static void gc_stats_push(lua_State *L)
   gc_stats_setnum(L, t, "worker_async_progress",
 		  gc2_worker_async_progress_acq(g));
   gc_stats_setnum(L, t, "sweep_owner_runs",
-		  la_load64_acq(&gc2->sweep_owner_runs));
+		  gc2_sweep_owner_runs_acq(g));
   gc_stats_setnum(L, t, "sweep_owner_arenas",
-		  la_load64_acq(&gc2->sweep_owner_arenas));
+		  gc2_sweep_owner_arenas_acq(g));
   gc_stats_setnum(L, t, "sweep_owner_live_cells",
-		  la_load64_acq(&gc2->sweep_owner_live_cells));
+		  gc2_sweep_owner_live_cells_acq(g));
   gc_stats_setnum(L, t, "sweep_live_updates",
 		  gc2_sweep_live_updates_acq(g));
   gc_stats_setnum(L, t, "sweep_live_huge_bytes",

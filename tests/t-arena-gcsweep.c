@@ -104,10 +104,10 @@ static void test_worker_owned_sweep_direct(void)
   assert(lj_gc2_sweep_pending(g));
 
   worker_runs0 = la_load64_acq(&g->gc2.worker_runs);
-  arenas0 = la_load64_acq(&g->gc2.sweep_owner_arenas);
+  arenas0 = gc2_sweep_owner_arenas_acq(g);
   assert(lj_gc2_worker_drain(g, 1) == 1u);
   assert(la_load64_acq(&g->gc2.worker_runs) == worker_runs0 + 1u);
-  assert(la_load64_acq(&g->gc2.sweep_owner_arenas) == arenas0 + 1u);
+  assert(gc2_sweep_owner_arenas_acq(g) == arenas0 + 1u);
   assert(la_load32_acq(&g->gc2.worker_active) == 0);
   assert(!arena_list_contains(extra_tg.alloc.needsweep[LJ_ARENAK_TRAVERSABLE],
 			      swept_a));
@@ -175,9 +175,9 @@ static void test_minor_sweep_identity_direct(void)
   la_store32_rel(&g->gc2.cycle_sweep_minor, 1);
   lj_arena_alloc_prepare_sweep_kind(&extra_tg.alloc, LJ_ARENAK_TRAVERSABLE);
   assert(extra_tg.alloc.needsweep[LJ_ARENAK_TRAVERSABLE] != NULL);
-  minor_arenas0 = la_load64_acq(&g->gc2.minor_sweep_arenas);
+  minor_arenas0 = gc2_minor_sweep_arenas_acq(g);
   assert(lj_gc2_sweep_owner_progress(g, &extra_tg, 1) == 1u);
-  assert(la_load64_acq(&g->gc2.minor_sweep_arenas) == minor_arenas0 + 1u);
+  assert(gc2_minor_sweep_arenas_acq(g) == minor_arenas0 + 1u);
   assert(ptr_state(dead) == 1);
   assert(ptr_state(live) == 3);
   assert(lj_arena_of(live)->hdr.sweep_epoch == sweep_cycle);
@@ -226,10 +226,10 @@ static void test_boundary_lazy_sweep(void)
   g->gc.state = GCSsweep;
   oldstepmul = g->gc.stepmul;
   g->gc.stepmul = 1;
-  arenas0 = la_load64_acq(&g->gc2.sweep_owner_arenas);
+  arenas0 = gc2_sweep_owner_arenas_acq(g);
 
   (void)lj_gc_step(L);
-  delta = la_load64_acq(&g->gc2.sweep_owner_arenas) - arenas0;
+  delta = gc2_sweep_owner_arenas_acq(g) - arenas0;
   assert(delta > 0);
   assert(delta <= LJ_GC2_SWEEP_BATCH);
   assert(g->gc.state == GCSsweep);
@@ -306,10 +306,10 @@ static void test_boundary_lazy_sweep_extra_tg(void)
   g->gc.state = GCSsweep;
   oldstepmul = g->gc.stepmul;
   g->gc.stepmul = 1;
-  arenas0 = la_load64_acq(&g->gc2.sweep_owner_arenas);
+  arenas0 = gc2_sweep_owner_arenas_acq(g);
 
   (void)lj_gc_step(L);
-  delta = la_load64_acq(&g->gc2.sweep_owner_arenas) - arenas0;
+  delta = gc2_sweep_owner_arenas_acq(g) - arenas0;
   assert(delta > 0);
   assert(delta <= LJ_GC2_SWEEP_BATCH);
   assert(g->gc.state == GCSsweep);
@@ -514,17 +514,17 @@ int main(void)
   assert(ptr_state(deadnode) == 3);
   L->top--;
 
-  sweep_owner_runs0 = la_load64_acq(&g->gc2.sweep_owner_runs);
-  sweep_owner_arenas0 = la_load64_acq(&g->gc2.sweep_owner_arenas);
-  sweep_owner_live0 = la_load64_acq(&g->gc2.sweep_owner_live_cells);
+  sweep_owner_runs0 = gc2_sweep_owner_runs_acq(g);
+  sweep_owner_arenas0 = gc2_sweep_owner_arenas_acq(g);
+  sweep_owner_live0 = gc2_sweep_owner_live_cells_acq(g);
   sweep_epoch0 = tg->alloc.sweep_epoch;
   before_tab = g->gc.total;
   lua_pushnil(L);
   lua_setfield(L, -2, "deadtab");
   lua_gc(L, LUA_GCCOLLECT, 0);
-  assert(la_load64_acq(&g->gc2.sweep_owner_runs) > sweep_owner_runs0);
-  assert(la_load64_acq(&g->gc2.sweep_owner_arenas) > sweep_owner_arenas0);
-  assert(la_load64_acq(&g->gc2.sweep_owner_live_cells) >= sweep_owner_live0);
+  assert(gc2_sweep_owner_runs_acq(g) > sweep_owner_runs0);
+  assert(gc2_sweep_owner_arenas_acq(g) > sweep_owner_arenas0);
+  assert(gc2_sweep_owner_live_cells_acq(g) >= sweep_owner_live0);
   assert(tg->alloc.sweep_epoch > sweep_epoch0);
   assert(g->gc.total <=
 	 before_tab - deadtab_size - deadarr_size - deadnode_size);
