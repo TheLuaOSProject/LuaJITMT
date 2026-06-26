@@ -98,12 +98,12 @@ void lj_gc2_init(global_State *g)
   gc2_minor_roots_deferred_store_rlx(g, 0);
   gc2_major_root_scans_store_rlx(g, 0);
   gc2_minor_root_scans_store_rlx(g, 0);
-  la_store64_rlx(&g->gc2.minor_survival_base_live, 0);
-  la_store64_rlx(&g->gc2.minor_survival_bytes, 0);
+  gc2_minor_survival_base_live_store_rlx(g, 0);
+  gc2_minor_survival_bytes_store_rlx(g, 0);
   gc2_minor_survival_pct_store_rlx(g, 0);
   gc2_minor_survival_threshold_pct_store_rlx(
     g, LJ_GC2_MINOR_SURVIVAL_MAJOR_PCT);
-  la_store64_rlx(&g->gc2.minor_survival_major_requests, 0);
+  gc2_minor_survival_major_requests_store_rlx(g, 0);
   gc2_force_major_store_rlx(g, 0);
   gc2_remembered_barriers_store_rlx(g, 0);
   gc2_remembered_pushed_store_rlx(g, 0);
@@ -840,22 +840,22 @@ void lj_gc2_update_minor_survival_policy(global_State *g, uint64_t live)
   int minor;
   if (!g)
     return;
-  base = la_load64_acq(&g->gc2.minor_survival_base_live);
+  base = gc2_minor_survival_base_live_acq(g);
   alloc = lj_gc2_cycle_alloc_load(g);
   minor = gc2_cycle_sweep_minor_acq(g) != 0;
   if (minor && live > base && alloc != 0) {
     survived = live - base;
     pct = gc2_ratio_pct(survived, alloc);
   }
-  la_store64_rel(&g->gc2.minor_survival_bytes, survived);
+  gc2_minor_survival_bytes_rel(g, survived);
   gc2_minor_survival_pct_rel(g, pct);
-  la_store64_rel(&g->gc2.minor_survival_base_live, live);
+  gc2_minor_survival_base_live_rel(g, live);
   threshold = gc2_minor_survival_threshold_pct_acq(g);
   if (threshold == 0)
     threshold = LJ_GC2_MINOR_SURVIVAL_MAJOR_PCT;
   if (minor && pct >= threshold &&
       gc2_generational_acq(g) != 0) {
-    la_add64_rlx(&g->gc2.minor_survival_major_requests, 1);
+    gc2_minor_survival_major_requests_add(g, 1);
     lj_gc2_force_major(g);
   }
 }
@@ -873,7 +873,7 @@ void lj_gc2_set_generational(global_State *g, int enabled)
   else {
     gc2_force_major_rel(g, 0);
     gc2_minor_survival_pct_rel(g, 0);
-    la_store64_rel(&g->gc2.minor_survival_bytes, 0);
+    gc2_minor_survival_bytes_rel(g, 0);
     gc2_update_public_minor_gates(g);
   }
   if (gc2_phase_acq(g) == LJ_GC2_IDLE)

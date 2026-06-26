@@ -357,12 +357,12 @@ int main(void)
   assert(gc2_minor_sweep_deferred_acq(g) == 0);
   assert(la_load64_acq(&g->gc2.minor_sweep_arenas) == 0);
   assert(gc2_minor_roots_deferred_acq(g) == 0);
-  assert(la_load64_acq(&g->gc2.minor_survival_base_live) == 0);
-  assert(la_load64_acq(&g->gc2.minor_survival_bytes) == 0);
-  assert(la_load32_acq(&g->gc2.minor_survival_pct) == 0);
-  assert(la_load32_acq(&g->gc2.minor_survival_threshold_pct) ==
+  assert(gc2_minor_survival_base_live_acq(g) == 0);
+  assert(gc2_minor_survival_bytes_acq(g) == 0);
+  assert(gc2_minor_survival_pct_acq(g) == 0);
+  assert(gc2_minor_survival_threshold_pct_acq(g) ==
 	 LJ_GC2_MINOR_SURVIVAL_MAJOR_PCT);
-  assert(la_load64_acq(&g->gc2.minor_survival_major_requests) == 0);
+  assert(gc2_minor_survival_major_requests_acq(g) == 0);
   assert(la_load32_acq(&g->gc2.force_major) == 0);
   assert(gc2_remembered_filtered_acq(g) == 0);
   assert(gc2_remembered_drained_acq(g) == 0);
@@ -540,33 +540,33 @@ int main(void)
   lj_gc2_set_generational(g, 0);
 
   minor_survival_major0 =
-    la_load64_acq(&g->gc2.minor_survival_major_requests);
+    gc2_minor_survival_major_requests_acq(g);
   la_store32_rel(&g->gc2.generational, 1);
   la_store32_rel(&g->gc2.cycle_sweep_minor, 1);
   la_store64_rel(&g->gc2.cycle_alloc_bytes, 1000);
-  la_store64_rel(&g->gc2.minor_survival_base_live, 10000);
+  gc2_minor_survival_base_live_rel(g, 10000);
   lj_gc2_update_minor_survival_policy(g, 10500);
-  assert(la_load64_acq(&g->gc2.minor_survival_bytes) == 500);
-  assert(la_load32_acq(&g->gc2.minor_survival_pct) == 50);
-  assert(la_load64_acq(&g->gc2.minor_survival_base_live) == 10500);
+  assert(gc2_minor_survival_bytes_acq(g) == 500);
+  assert(gc2_minor_survival_pct_acq(g) == 50);
+  assert(gc2_minor_survival_base_live_acq(g) == 10500);
   assert(la_load32_acq(&g->gc2.force_major) == 0);
-  assert(la_load64_acq(&g->gc2.minor_survival_major_requests) ==
+  assert(gc2_minor_survival_major_requests_acq(g) ==
 	 minor_survival_major0);
   la_store64_rel(&g->gc2.cycle_alloc_bytes, 1000);
-  la_store64_rel(&g->gc2.minor_survival_base_live, 10000);
+  gc2_minor_survival_base_live_rel(g, 10000);
   lj_gc2_update_minor_survival_policy(g, 10800);
-  assert(la_load64_acq(&g->gc2.minor_survival_bytes) == 800);
-  assert(la_load32_acq(&g->gc2.minor_survival_pct) ==
+  assert(gc2_minor_survival_bytes_acq(g) == 800);
+  assert(gc2_minor_survival_pct_acq(g) ==
 	 LJ_GC2_MINOR_SURVIVAL_MAJOR_PCT);
-  assert(la_load64_acq(&g->gc2.minor_survival_base_live) == 10800);
+  assert(gc2_minor_survival_base_live_acq(g) == 10800);
   assert(la_load32_acq(&g->gc2.force_major) == 1);
-  assert(la_load64_acq(&g->gc2.minor_survival_major_requests) ==
+  assert(gc2_minor_survival_major_requests_acq(g) ==
 	 minor_survival_major0 + 1u);
   la_store32_rel(&g->gc2.cycle_sweep_minor, 0);
   lj_gc2_set_generational(g, 0);
   assert(la_load32_acq(&g->gc2.force_major) == 0);
-  assert(la_load32_acq(&g->gc2.minor_survival_pct) == 0);
-  assert(la_load64_acq(&g->gc2.minor_survival_bytes) == 0);
+  assert(gc2_minor_survival_pct_acq(g) == 0);
+  assert(gc2_minor_survival_bytes_acq(g) == 0);
 
   lua_settop(L, 0);
   lj_gc2_set_generational(g, 1);

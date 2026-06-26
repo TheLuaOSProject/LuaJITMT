@@ -61,6 +61,27 @@ if hits=$(grep -nE -- '->[[:space:]]*(gc2[.])?(cycle_requests|cycle_starts|major
   printf '%s\n' 'raw GC2 cycle/root telemetry access is forbidden; use gc2_* helpers' >&2
   exit 1
 fi
+for helper in gc2_minor_survival_base_live_acq \
+  gc2_minor_survival_base_live_store_rlx \
+  gc2_minor_survival_base_live_rel \
+  gc2_minor_survival_bytes_acq \
+  gc2_minor_survival_bytes_store_rlx \
+  gc2_minor_survival_bytes_rel \
+  gc2_minor_survival_major_requests_acq \
+  gc2_minor_survival_major_requests_store_rlx \
+  gc2_minor_survival_major_requests_add; do
+  if ! grep -qE "^[[:space:]]*static LJ_AINLINE .*[*[:space:]]${helper}[[:space:]]*[(]" \
+      "$ROOT/src/lj_obj.h"; then
+    printf '%s\n' "${helper} helper is required for GC2 minor-survival telemetry" >&2
+    exit 1
+  fi
+done
+if hits=$(grep -nE -- '->[[:space:]]*(gc2[.])?(minor_survival_base_live|minor_survival_bytes|minor_survival_major_requests)([^[:alnum:]_]|$)|&[[:space:]]*[^)]*->[[:space:]]*(gc2[.])?(minor_survival_base_live|minor_survival_bytes|minor_survival_major_requests)([^[:alnum:]_]|$)' \
+    "$ROOT"/src/*.c || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw GC2 minor-survival telemetry access is forbidden; use gc2_* helpers' >&2
+  exit 1
+fi
 for helper in gc2_assist_runs_acq \
   gc2_assist_runs_store_rlx \
   gc2_assist_runs_add \

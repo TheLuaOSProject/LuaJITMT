@@ -2974,6 +2974,40 @@ static LJ_AINLINE void gc2_minor_roots_enabled_rel(global_State *g,
   la_store32_rel(&g->gc2.minor_roots_enabled, enabled);
 }
 
+static LJ_AINLINE uint64_t gc2_minor_survival_base_live_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.minor_survival_base_live);
+}
+
+static LJ_AINLINE void gc2_minor_survival_base_live_store_rlx(global_State *g,
+							      uint64_t live)
+{
+  la_store64_rlx(&g->gc2.minor_survival_base_live, live);
+}
+
+static LJ_AINLINE void gc2_minor_survival_base_live_rel(global_State *g,
+							uint64_t live)
+{
+  la_store64_rel(&g->gc2.minor_survival_base_live, live);
+}
+
+static LJ_AINLINE uint64_t gc2_minor_survival_bytes_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.minor_survival_bytes);
+}
+
+static LJ_AINLINE void gc2_minor_survival_bytes_store_rlx(global_State *g,
+							  uint64_t bytes)
+{
+  la_store64_rlx(&g->gc2.minor_survival_bytes, bytes);
+}
+
+static LJ_AINLINE void gc2_minor_survival_bytes_rel(global_State *g,
+						    uint64_t bytes)
+{
+  la_store64_rel(&g->gc2.minor_survival_bytes, bytes);
+}
+
 static LJ_AINLINE uint32_t gc2_minor_survival_pct_acq(global_State *g)
 {
   return la_load32_acq(&g->gc2.minor_survival_pct);
@@ -3000,6 +3034,24 @@ static LJ_AINLINE void gc2_minor_survival_threshold_pct_store_rlx(
   global_State *g, uint32_t pct)
 {
   la_store32_rlx(&g->gc2.minor_survival_threshold_pct, pct);
+}
+
+static LJ_AINLINE uint64_t gc2_minor_survival_major_requests_acq(
+  global_State *g)
+{
+  return la_load64_acq(&g->gc2.minor_survival_major_requests);
+}
+
+static LJ_AINLINE void gc2_minor_survival_major_requests_store_rlx(
+  global_State *g, uint64_t n)
+{
+  la_store64_rlx(&g->gc2.minor_survival_major_requests, n);
+}
+
+static LJ_AINLINE void gc2_minor_survival_major_requests_add(global_State *g,
+							     uint64_t n)
+{
+  la_add64_rlx(&g->gc2.minor_survival_major_requests, n);
 }
 
 static LJ_AINLINE uint64_t gc2_sweep_live_updates_acq(global_State *g)

@@ -580,15 +580,15 @@ static void gc_stats_push(lua_State *L)
   gc_stats_setnum(L, t, "minor_root_scans",
 		  gc2_minor_root_scans_acq(g));
   gc_stats_setnum(L, t, "minor_survival_base_live",
-		  la_load64_acq(&gc2->minor_survival_base_live));
+		  gc2_minor_survival_base_live_acq(g));
   gc_stats_setnum(L, t, "minor_survival_bytes",
-		  la_load64_acq(&gc2->minor_survival_bytes));
+		  gc2_minor_survival_bytes_acq(g));
   gc_stats_setint(L, t, "minor_survival_pct",
 		  gc2_minor_survival_pct_acq(g));
   gc_stats_setint(L, t, "minor_survival_threshold_pct",
 		  gc2_minor_survival_threshold_pct_acq(g));
   gc_stats_setnum(L, t, "minor_survival_major_requests",
-		  la_load64_acq(&gc2->minor_survival_major_requests));
+		  gc2_minor_survival_major_requests_acq(g));
   gc_stats_setnum(L, t, "remembered_barriers",
 		  la_load64_acq(&gc2->remembered_barriers));
   gc_stats_setnum(L, t, "remembered_pushed",
