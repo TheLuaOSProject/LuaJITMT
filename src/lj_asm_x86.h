@@ -1496,6 +1496,7 @@ static void asm_hrefk(ASMState *as, IRIns *ir)
     }
   }
   asm_guardcc(as, CC_NE);
+  checkmclim(as);  /* Split HREFK address setup from key guard materialization. */
 #if LJ_64
   if (!irt_ispri(irkey->t)) {
     Reg key = ra_scratch(as, rset_exclude(RSET_GPR, node));
@@ -1549,6 +1550,7 @@ static void asm_hrefk(ASMState *as, IRIns *ir)
 	      ofs + (int32_t)offsetof(Node, key.it));
   }
 #endif
+  checkmclim(as);  /* Split HREFK key and node-generation guard sequences. */
   /* Guard HREFK's constant slot against a newer, smaller node generation. */
   asm_guardcc(as, CC_B);
   asm_href_tab_node_hmask_cmpi_acq(as, node, (int32_t)kslot->op2);
@@ -1789,6 +1791,7 @@ static void asm_ahuvload(ASMState *as, IRIns *ir)
     RegSet allow = irt_isnum(ir->t) ? RSET_FPR : RSET_GPR;
     Reg dest = ra_dest(as, ir, allow);
     asm_fuseahuref(as, ir->op1, RSET_GPR);
+    checkmclim(as);  /* Split fused ref materialization from GC64 load guard. */
     if (ir->o == IR_VLOAD) as->mrm.ofs += 8 * ir->op2;
 #if LJ_GC64
     if (irt_isaddr(ir->t)) {
@@ -1817,6 +1820,7 @@ static void asm_ahuvload(ASMState *as, IRIns *ir)
     }
 #endif
     asm_fuseahuref(as, ir->op1, gpr);
+    checkmclim(as);  /* Split fused ref materialization from load type guard. */
     if (ir->o == IR_VLOAD) as->mrm.ofs += 8 * ir->op2;
   }
   /* Always do the type check, even if the load result is unused. */
@@ -1945,6 +1949,7 @@ static void asm_ahstore_inline_array_num(ASMState *as, IRIns *ir)
   asm_gencall(as, ci, args);
   asm_tvptr(as, ra_releasetmp(as, ASMREF_TMP1), ir->op2, IRTMPREF_IN1);
   l_fallback = emit_label(as);
+  checkmclim(as);  /* Split helper fallback setup from inline array CAS. */
 
   emit_sjcc(as, CC_E, l_done);  /* CAS success skips the helper fallback. */
 
@@ -1965,6 +1970,7 @@ static void asm_ahstore_inline_array_num(ASMState *as, IRIns *ir)
   emit_i8(as, 0xf0);  /* LOCK prefix: release-publish and intercore CAS. */
   emit_rr(as, XO_MOVDto, fsrc|REX_64, src);  /* Really MOVQ r64, xmm. */
   emit_rmro(as, XO_MOV, RID_EAX|REX_64, slot, 0);
+  checkmclim(as);  /* Split inline array CAS from generation validation. */
 
   emit_sjcc(as, CC_NE, l_fallback);
   emit_rmro(as, XO_CMP, array|REX_GC64, tab, offsetof(GCtab, array));
@@ -2000,6 +2006,7 @@ static void asm_ahstore_inline_hash_num(ASMState *as, IRIns *ir)
 	    IRTMPREF_IN1|IRTMPREF_IN2);
   asm_tvptr(as, ra_releasetmp(as, ASMREF_TMP1), ir->op2, IRTMPREF_IN1);
   l_fallback = emit_label(as);
+  checkmclim(as);  /* Split helper fallback setup from inline hash CAS. */
 
   emit_sjcc(as, CC_E, l_done);  /* CAS success skips the helper fallback. */
 
@@ -2020,6 +2027,7 @@ static void asm_ahstore_inline_hash_num(ASMState *as, IRIns *ir)
   emit_i8(as, 0xf0);  /* LOCK prefix: release-publish and intercore CAS. */
   emit_rr(as, XO_MOVDto, fsrc|REX_64, src);  /* Really MOVQ r64, xmm. */
   emit_rmro(as, XO_MOV, RID_EAX|REX_64, slot, 0);
+  checkmclim(as);  /* Split inline hash CAS from node-generation checks. */
 
   emit_sjcc(as, CC_A, l_fallback);
   emit_rr(as, XO_CMP, slot|REX_GC64, top);
@@ -2033,6 +2041,7 @@ static void asm_ahstore_inline_hash_num(ASMState *as, IRIns *ir)
   emit_u32(as, TABNODE_FLAG_RETIRING);
   emit_rmro(as, XO_GROUP3, XOg_TEST, node, TABNODE_FLAGS_OFS);
   emit_rmro(as, XO_MOV, node|REX_GC64, tab, offsetof(GCtab, node));
+  checkmclim(as);  /* Split hash node validation from weak/metatable checks. */
   emit_sjcc(as, CC_NE, l_fallback);
   emit_i8(as, LJ_GC_WEAK);
   emit_rmro(as, XO_GROUP3b, XOg_TEST, tab, offsetof(GCtab, marked));
