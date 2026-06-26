@@ -89,6 +89,7 @@ static void test_worker_owned_sweep_direct(void)
   g->gc2.cycle++;
   sweep_cycle = g->gc2.cycle;
   g->gc2.phase = LJ_GC2_SWEEP;
+  gc2_sweep_legacy_ready_store_rlx(g, 0);
   lj_arena_alloc_prepare_sweep_kind(&extra_tg.alloc, LJ_ARENAK_PLAIN);
   lj_arena_alloc_prepare_sweep_kind(&extra_tg.alloc, LJ_ARENAK_TRAVERSABLE);
   lj_arena_alloc_restore_sweep_kind(&extra_tg.alloc, LJ_ARENAK_PLAIN);
@@ -105,6 +106,10 @@ static void test_worker_owned_sweep_direct(void)
 
   worker_runs0 = la_load64_acq(&g->gc2.worker_runs);
   arenas0 = gc2_sweep_owner_arenas_acq(g);
+  assert(lj_gc2_worker_drain(g, 1) == 0);
+  assert(la_load64_acq(&g->gc2.worker_runs) == worker_runs0);
+  assert(gc2_sweep_owner_arenas_acq(g) == arenas0);
+  lj_gc2_sweep_legacy_ready(g);
   assert(lj_gc2_worker_drain(g, 1) == 1u);
   assert(la_load64_acq(&g->gc2.worker_runs) == worker_runs0 + 1u);
   assert(gc2_sweep_owner_arenas_acq(g) == arenas0 + 1u);
@@ -170,12 +175,16 @@ static void test_minor_sweep_identity_direct(void)
   g->gc2.cycle++;
   sweep_cycle = g->gc2.cycle;
   g->gc2.phase = LJ_GC2_SWEEP;
+  gc2_sweep_legacy_ready_store_rlx(g, 0);
   la_store32_rel(&g->gc2.cycle_minor_requested, 1);
   la_store32_rel(&g->gc2.minor_sweep_enabled, 1);
   la_store32_rel(&g->gc2.cycle_sweep_minor, 1);
   lj_arena_alloc_prepare_sweep_kind(&extra_tg.alloc, LJ_ARENAK_TRAVERSABLE);
   assert(extra_tg.alloc.needsweep[LJ_ARENAK_TRAVERSABLE] != NULL);
   minor_arenas0 = gc2_minor_sweep_arenas_acq(g);
+  assert(lj_gc2_sweep_owner_progress(g, &extra_tg, 1) == 0);
+  assert(gc2_minor_sweep_arenas_acq(g) == minor_arenas0);
+  lj_gc2_sweep_legacy_ready(g);
   assert(lj_gc2_sweep_owner_progress(g, &extra_tg, 1) == 1u);
   assert(gc2_minor_sweep_arenas_acq(g) == minor_arenas0 + 1u);
   assert(ptr_state(dead) == 1);
@@ -386,7 +395,8 @@ int main(void)
   TValue *tv;
   GCtab *keep, *arrtab, *deadtab, *deadcolo, *deadsplit;
   GCfunc *fn, *deadchunk, *deadfn, *livefn, *deadcf, *finchunk, *finfn;
-  GCfunc *bcfn, *hugefn;
+  GCfunc *bcfn, *hugefn, *uvfn;
+  GCupval *deaduv;
   GCproto *deadpt, *deadfnpt;
   GCproto *bcpt, *hugept, *finpt;
   GCSize before_tab, deadtab_size, deadarr_size, deadnode_size;
@@ -397,6 +407,7 @@ int main(void)
   GCSize before_bc, bcfn_size, bcpt_size, before_huge, hugefn_size;
   GCSize hugept_size;
   GCSize before_fin, finpt_size, finchunk_size, finfn_size;
+  GCSize before_uv, uvfn_size, uv_size;
   uint64_t sweep_owner_runs0, sweep_owner_arenas0, sweep_owner_live0;
   uint64_t huge_live_bytes;
   uint32_t sweep_epoch0;
@@ -413,6 +424,10 @@ int main(void)
     "keep.parent = loadstring('return function(x) return x + 7 end')\n"
     "keep.deadfn = keep.parent()\n"
     "keep.livefn = keep.parent()\n"
+    "do\n"
+    "  local x = 10\n"
+    "  keep.uvdead = function() x = x + 1; return x end\n"
+    "end\n"
     "keep.arr = {}\n"
     "for i = 1, 300 do keep.arr[i] = i end\n"
     "keep.deadtab = {}\n"
@@ -480,6 +495,22 @@ int main(void)
   assert(isluafunc(livefn));
   assert(funcproto(livefn) == deadfnpt);
   assert(ptr_state(livefn) == 2);
+  L->top--;
+
+  lua_getfield(L, -1, "uvdead");
+  tv = L->top - 1;
+  assert(tvisfunc(tv));
+  uvfn = funcV(tv);
+  assert(isluafunc(uvfn));
+  assert(uvfn->l.nupvalues == 1);
+  uvfn_size = sizeLfunc((MSize)uvfn->l.nupvalues);
+  deaduv = func_uv_acq(&uvfn->l, 0);
+  uv_size = sizeof(GCupval);
+  assert(deaduv->closed);
+  assert(uvval(deaduv) == &deaduv->tv);
+  assert((lj_arena_of(deaduv)->hdr.flags & LJ_AF_TRAVERSABLE) != 0);
+  assert(ptr_state(uvfn) == 2);
+  assert(ptr_state(deaduv) == 2);
   L->top--;
 
   lua_getfield(L, -1, "arr");
@@ -594,6 +625,14 @@ int main(void)
   assert((ptr_state(deadfn) & 2u) == 0);
   assert(ptr_state(deadfnpt) == 2);
   assert(ptr_state(livefn) == 2);
+
+  before_uv = g->gc.total;
+  lua_pushnil(L);
+  lua_setfield(L, -2, "uvdead");
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  assert(g->gc.total <= before_uv - uvfn_size - uv_size);
+  assert((ptr_state(uvfn) & 2u) == 0);
+  assert((ptr_state(deaduv) & 2u) == 0);
 
   before_raw = g->gc.total;
   raw = lj_mem_newgco_raw(L, 64, LJ_AF_TRAVERSABLE);
