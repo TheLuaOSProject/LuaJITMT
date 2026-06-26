@@ -5389,9 +5389,13 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
       |  movzx RDd, PC_RD
       |  jmp =>BC_JLOOP
     } else {
+#if LJ_HASJIT
+      |  ins_next
+#else
       |  cmp TGPOLL, 0
       |  jnz ->vm_safepoint
       |  ins_next
+#endif
     }
     |
     |3:  // Clear missing parameters.

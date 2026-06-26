@@ -591,6 +591,26 @@ static int call_init(lua_State *L, GCfunc *fn)
   }
 }
 
+static void call_fill_missing(lua_State *L, int *missing)
+{
+  while (*missing > 0) {
+    setnilV(L->top++);
+    (*missing)--;
+  }
+  *missing = 0;
+}
+
+#if LJ_HASJIT
+static void call_hot_poll(lua_State *L, int *missing)
+{
+  TGState *tg = L2TG(L);
+  if (tg && lj_tg_poll_acq(tg) != 0) {
+    call_fill_missing(L, missing);
+    lj_safepoint_ack_check(L);
+  }
+}
+#endif
+
 /* Call dispatch. Used by call hooks, hot calls or when recording. */
 ASMFunction LJ_FASTCALL lj_dispatch_call(lua_State *L, const BCIns *pc)
 {
@@ -605,6 +625,7 @@ ASMFunction LJ_FASTCALL lj_dispatch_call(lua_State *L, const BCIns *pc)
   int missing = call_init(L, fn);
 #if LJ_HASJIT
   if ((uintptr_t)pc & 1) {  /* Marker for hot call. */
+    call_hot_poll(L, &missing);
 #ifdef LUA_USE_ASSERT
     ptrdiff_t delta = L->top - L->base;
 #endif
@@ -633,12 +654,12 @@ ASMFunction LJ_FASTCALL lj_dispatch_call(lua_State *L, const BCIns *pc)
 #endif
   hookmask = hookmask_load(g);
   if ((hookmask & LUA_MASKCALL)) {
-    int i;
-    for (i = 0; i < missing; i++)  /* Add missing parameters. */
-      setnilV(L->top++);
+    int i, nmissing = missing;
+    if (missing > 0)  /* Add missing parameters. */
+      call_fill_missing(L, &missing);
     callhook(L, LUA_HOOKCALL, -1);
     /* Preserve modifications of missing parameters by lua_setlocal(). */
-    while (missing-- > 0 && tvisnil(L->top - 1))
+    for (i = 0; i < nmissing && tvisnil(L->top - 1); i++)
       L->top--;
   }
 #if LJ_HASJIT

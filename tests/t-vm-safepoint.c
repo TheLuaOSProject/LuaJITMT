@@ -207,6 +207,25 @@ static void load_scoped_flush_side(lua_State *L)
   }
 }
 
+static void load_funcf_hotcall_after_publish(lua_State *L)
+{
+  int status = luaL_loadstring(L,
+    "jit.opt.start('hotloop=1', 'hotexit=1000000', "
+    "'callunroll=0', 'recunroll=0')\n"
+    "local function f(n)\n"
+    "  if n <= 0 then assert_acked_now(); return 0 end\n"
+    "  return f(n - 1) + 1\n"
+    "end\n"
+    "publish_poll()\n"
+    "assert_pending()\n"
+    "return f(64)\n");
+  if (status != LUA_OK) {
+    fprintf(stderr, "load_funcf_hotcall_after_publish failed: %s\n",
+	    lua_tostring(L, -1));
+    assert(status == LUA_OK);
+  }
+}
+
 static void load_recorder_call_unroll_flush(lua_State *L)
 {
   int status = luaL_loadstring(L,
@@ -607,6 +626,11 @@ int main(void)
   epoch0 = g->gc2.hs_epoch;
   scoped_slots0 = gc2_jit_scoped_slots_retired_acq(g);
   assert(count_scope_flushing_traces(G2J(g)) == 0);
+  load_funcf_hotcall_after_publish(L);
+  epoch0 = g->gc2.hs_epoch;
+  call_expect(L, 64, "call_funcf_hotcall_after_publish");
+  assert_acked(g, tg, epoch0);
+
   load_recorder_call_unroll_flush(L);
   assert(lua_pcall(L, 0, 1, 0) == LUA_OK);
   assert(lua_toboolean(L, -1) == 1);
