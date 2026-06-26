@@ -1667,6 +1667,31 @@ static TValue *tab_current_jit_array_slot(lua_State *L, GCtab *parent,
   return lj_tab_setint(L, parent, (int32_t)key);
 }
 
+static LJ_AINLINE int tab_jit_array_current_match(GCtab *parent,
+						  TValue *orig, MSize key)
+{
+  TValue *array;
+  MSize asize;
+  uintptr_t base;
+  asize = lj_tab_asize_acq(parent);
+  array = lj_tab_array_acq(parent);
+  if (array && !lj_tab_array_is_colocated(parent, array))
+    asize = lj_tab_array_hdr_asize_acq(array);
+  base = (uintptr_t)(void *)orig - (uintptr_t)key * sizeof(TValue);
+  return key < asize && array == (TValue *)(void *)base &&
+	 !lj_tab_array_is_retiring(parent, array);
+}
+
+static LJ_AINLINE int tab_jit_hash_current_match(GCtab *parent,
+						 TValue *orig)
+{
+  Node *node = lj_tab_node_acq(parent);
+  MSize hmask = lj_tab_node_hmask_acq(node);
+  MSize idx;
+  return tab_ptr_index((uintptr_t)node, (uintptr_t)orig, sizeof(Node),
+		       hmask + 1u, &idx) && !lj_tab_node_is_retiring(node);
+}
+
 static TValue *tab_current_jit_hash_slot(lua_State *L, GCtab *parent,
 					 TValue *orig, cTValue *key,
 					 TValue *keycopy, cTValue **keyp)
@@ -1703,6 +1728,9 @@ LJ_FUNCA TValue *lj_tab_storetv_forjit_array_nogc(lua_State *L,
 						  MSize key)
 {
   TValue *orig = dst;
+  if (tab_jit_array_current_match(parent, orig, key) &&
+      lj_tab_trystoretv_cas(L, orig, src) == LJ_TAB_STORE_CAS_OK)
+    return orig;
   for (;;) {
     dst = tab_current_jit_array_slot(L, parent, orig, key);
     if (lj_tab_trystoretv_cas(L, dst, src) == LJ_TAB_STORE_CAS_OK)
@@ -1744,6 +1772,11 @@ LJ_FUNCA TValue *lj_tab_storetv_forjit_hash(lua_State *L, GCtab *parent,
   TValue keycopy;
   TValue *orig = dst;
   cTValue *barrier_key = key;
+  if (tab_jit_hash_current_match(parent, orig) &&
+      lj_tab_trystoretv_cas(L, orig, src) == LJ_TAB_STORE_CAS_OK) {
+    dst = orig;
+    goto done;
+  }
   for (;;) {
     dst = tab_current_jit_hash_slot(L, parent, orig, key, &keycopy,
 				    &barrier_key);
@@ -1751,6 +1784,7 @@ LJ_FUNCA TValue *lj_tab_storetv_forjit_hash(lua_State *L, GCtab *parent,
       break;
     la_cpu_pause();  /* JIT hash store saw FORWARD after key/current routing. */
   }
+done:
   lj_gc2_barrier_weak_write(L, parent, barrier_key, dst);  /* M8: traced weak hash write. */
   lj_gc2_barrier_tv_pair(L, obj2gco(parent), dst);  /* M10: traced parent barrier. */
   return dst;
