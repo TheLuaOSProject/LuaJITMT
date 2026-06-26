@@ -590,7 +590,7 @@ static void ctype_hash_setnext(CTState *cts, CType *src, CTypeID id,
   } while (dst != &tab[id]);
 }
 
-static CType *ctype_publish_current(CTState *cts, CTypeID id, CType *src)
+CType *lj_ctype_publish(CTState *cts, CTypeID id, CType *src)
 {
   CType *tab, *dst;
   do {
@@ -654,7 +654,7 @@ static void ctype_abandon(CTState *cts, CTypeID id)
   tmp.sib = 0;
   ctype_clearname(&tmp);
   /* Keep ct->next so hash walkers can skip through abandoned entries. */
-  ctype_publish_current(cts, id, &tmp);
+  lj_ctype_publish(cts, id, &tmp);
   lj_assertCTS(ctype_isabandoned(ctype_info_acq(ctype_get(cts, id))),
 	       "abandoned ctype not visible in current table");
 }

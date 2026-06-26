@@ -14,13 +14,30 @@
 
 #include "lib/lua_fixture_helpers.h"
 
+static void force_table_move_after_reserve(lua_State *L, CTState *cts)
+{
+  CTypeTab *before = ctype_tabh_acq(cts);
+  int guard = 0;
+  while (ctype_tabh_acq(cts) == before) {
+    CType *ct;
+    CTypeID id = lj_ctype_new_l(L, cts, &ct);
+    ct->info = CTINFO(CT_ATTRIB, CTATTRIB(CTA_BAD));
+    ct->size = 0;
+    ct->sib = 0;
+    ctype_next_rel(ct, 0);
+    setgcrefnull(ct->name);
+    assert(id != 0);
+    assert(++guard < CTID_MAX);
+  }
+}
+
 int main(void)
 {
   lua_State *L = ljt_lua_newstate_openlibs();
   global_State *g;
   CTState *cts;
-  CTypeID top0, top1, baseid, ptrid1, ptrid2;
-  CType *basect, *ptrct;
+  CTypeID top0, top1, baseid, movedid, ptrid1, ptrid2;
+  CType *basect, *movedct, *curct, *ptrct;
   CTInfo ptrinfo;
   int isnew = 0;
 
@@ -40,12 +57,26 @@ int main(void)
   setgcrefnull(basect->name);
   assert(ctype_top_acq(cts) == top0 + 1u);
 
-  ptrinfo = CTINFO(CT_PTR, CTALIGN_PTR|baseid);
+  movedid = lj_ctype_new_l(L, cts, &movedct);
+  force_table_move_after_reserve(L, cts);
+  assert(movedct != ctype_get(cts, movedid));
+  movedct->info = CTINFO(CT_STRUCT, CTALIGN(2));
+  movedct->size = 8;
+  movedct->sib = 0;
+  ctype_next_rel(movedct, 0);
+  setgcrefnull(movedct->name);
+  curct = lj_ctype_publish(cts, movedid, movedct);
+  assert(curct == ctype_get(cts, movedid));
+  assert(curct != movedct);
+  assert(curct->info == CTINFO(CT_STRUCT, CTALIGN(2)));
+  assert(curct->size == 8);
+
+  ptrinfo = CTINFO(CT_PTR, CTALIGN_PTR|movedid);
   ptrid1 = lj_ctype_intern_new_l(L, cts, ptrinfo, CTSIZE_PTR, &isnew);
   assert(isnew == 1);
-  assert(ptrid1 == top0 + 1u);
+  assert(ptrid1 > movedid);
   top1 = ctype_top_acq(cts);
-  assert(top1 == top0 + 2u);
+  assert(top1 == ptrid1 + 1u);
 
   isnew = 1;
   ptrid2 = lj_ctype_intern_new_l(L, cts, ptrinfo, CTSIZE_PTR, &isnew);
@@ -59,6 +90,6 @@ int main(void)
   assert(!ctype_isabandoned(ptrct->info));
 
   lua_close(L);
-  printf("t-ffi-ctype-ticket-intern OK: ctype tickets are monotonic and duplicate interning reuses IDs\n");
+  printf("t-ffi-ctype-ticket-intern OK: ctype tickets are monotonic, RCU-published, and duplicate interning reuses IDs\n");
   return 0;
 }

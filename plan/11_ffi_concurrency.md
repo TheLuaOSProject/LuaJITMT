@@ -38,7 +38,9 @@ GCtab *miscmap; GCRef *metamap; CCallback cb; uint32_t hash[CTHASH_SIZE]; }`
   growth allocation throws or another grower wins publication. Records are
   written *before* publication; publication = the hash insert below (or, for
   anonymous types, the store of the ID into its referencing record/cdata —
-  release).
+  release). Reserved records that may have been initialized through a
+  pre-growth slot are first copied into the current `CTypeTab` with
+  `lj_ctype_publish()`.
 - **hash chains**: CAS-prepend on `hash[h]` (CTypeID1 16-bit heads — CAS
   via the containing aligned 32-bit pair? CTypeID1 is uint16; widen
   `hash[]` to uint32, low 16 bits = id, padding for CAS).

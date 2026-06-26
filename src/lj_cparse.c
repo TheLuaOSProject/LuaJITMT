@@ -424,14 +424,7 @@ static CType *cp_ctype_mut(CPState *cp, CTypeID id)
 
 static CType *cp_ctype_publish(CPState *cp, CTypeID id, CType *src)
 {
-  CType *tab, *dst;
-  do {
-    dst = ctype_get(cp->cts, id);
-    if (dst != src)
-      ctype_copy_rel(dst, src);
-    tab = ctype_tab_acq(cp->cts);
-  } while (dst != &tab[id]);
-  return dst;
+  return lj_ctype_publish(cp->cts, id, src);
 }
 
 static CType *cp_ctype_setsib(CPState *cp, CTypeID id, CTypeID sib)
