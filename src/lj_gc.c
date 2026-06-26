@@ -137,6 +137,19 @@ static int gc_arena_sweep_pending(global_State *g)
   return lj_gc2_sweep_pending(g);
 }
 
+static void gc_arena_preserve_root_chain(global_State *g)
+{
+  GCobj *o;
+  uint32_t n = 0;
+  for (o = gcref_acq(g->gc.root); o != NULL; o = lj_obj_gcw_acq(o)) {
+    lj_gc_arena_markobj(g, o);
+    if (++n == 1000000u) {
+      lj_assertG(0, "root list cycle at arena sweep boundary");
+      break;
+    }
+  }
+}
+
 static uint32_t gc_arena_finish_sweep_boundary(global_State *g, int drain)
 {
   TGState *tg;
@@ -157,6 +170,10 @@ static uint32_t gc_arena_finish_sweep_boundary(global_State *g, int drain)
       lj_arena_alloc_restore_sweep_kind(&tg->alloc, LJ_ARENAK_PLAIN);
       tg->alloc.prepare_epoch = cycle;
     }
+  }
+  if (!gc2_sweep_legacy_ready_acq(g)) {
+    gc_arena_preserve_root_chain(g);
+    lj_gc2_sweep_legacy_ready(g);
   }
   do {  /* 05 section 5.6.3 worker-owned sweep bridge. */
     uint32_t swept = lj_gc2_worker_drain(g, LJ_GC2_SWEEP_BATCH);
@@ -1246,6 +1263,11 @@ static void gc_traverse_thread(global_State *g, lua_State *th)
     for (; o < top; o++)  /* Clear unmarked slots. */
       setnilV(o);
   }
+  for (mt = gcref_acq(th->openupval); mt != NULL; mt = lj_obj_gcw_acq(mt)) {
+    lj_gc_arena_markobj(g, mt);
+    if (iswhite(mt))
+      gc_mark(g, mt);
+  }
   {
     GCtab *env = tabref_acq(th->env);
     gc_mark_thread_root_tab(g, env);
@@ -1436,7 +1458,7 @@ static uint32_t gc2_sweep_arena_bodies(global_State *g, GCArena *a,
     if (lj_arena_bm_get(a->block, i) &&
 	(!unmarked_only || !lj_arena_bm_get(a->mark, i))) {
       GCobj *o = (GCobj *)lj_arena_cellptr(a, i);
-      if (unmarked_only && gc2_valid_freeable_obj(o) && !isdead(g, o)) {
+      if (unmarked_only && gc2_valid_freeable_obj(o)) {
 	lj_arena_bm_set(a->mark, i);
 	continue;
       }

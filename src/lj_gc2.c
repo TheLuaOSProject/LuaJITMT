@@ -1209,6 +1209,8 @@ uint32_t lj_gc2_sweep_owner_progress(global_State *g, TGState *tg,
     return 0;
   if (gc2_phase_acq(g) != LJ_GC2_SWEEP)
     return 0;
+  if (!gc2_sweep_legacy_ready_acq(g))
+    return 0;
   if (gc2_sweep_blocked_by_finalizer(g))
     return 0;
   epoch = gc2_cycle_acq(g);

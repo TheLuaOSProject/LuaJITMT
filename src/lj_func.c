@@ -222,8 +222,11 @@ void LJ_FASTCALL lj_func_closeuv(lua_State *L, TValue *level)
 
 void LJ_FASTCALL lj_func_freeuv(global_State *g, GCupval *uv)
 {
-  if (!uv->closed)
+  if (!uv->closed) {
     unlinkuv(g, uv);
+  } else if (lj_mem_freegco_defer(g, uv, sizeof(GCupval))) {
+    return;
+  }
   lj_mem_freet(g, uv);
 }
 

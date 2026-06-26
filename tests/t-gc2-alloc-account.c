@@ -518,6 +518,8 @@ int main(void)
   assert(la_load32_acq(&g->gc2.cycle_sweep_minor) == 1);
   lj_gc2_legacy_weak_begin(g);
   lj_gc2_legacy_sweep_begin(g);
+  assert(lj_gc2_sweep_owner_progress(g, tg, 64) == 0);
+  lj_gc2_sweep_legacy_ready(g);
   assert(lj_gc2_sweep_owner_progress(g, tg, 64) > 0);
   assert(!root_contains(g, obj2gco(active_child)));
   lj_gc2_legacy_cycle_end(g);

@@ -69,6 +69,7 @@ local function run_bench_smoke(t)
 
   local luajit = shell_quote(t:path("src", "luajit"))
   local bench_mt = shell_quote(t:path("aux", "bench", "bench_mt.lua"))
+  local bench_lua = shell_quote(t:path("aux", "bench", "bench.lua"))
   assert_command_output_all_contains(
     "BENCH_SCALE=0.0001 " .. luajit .. " " .. bench_mt ..
       " 1 chan_pingpong",
@@ -81,6 +82,10 @@ local function run_bench_smoke(t)
     "BENCH_SCALE=0.0001 BENCH_THREADS='1 2' BENCH_FILTER=arith-MT " ..
       shell_quote(t:path("aux", "bench", "run.sh")) .. " scaling " .. luajit,
     "weak_legacy_skipped=")
+  assert_command_output_all_contains(
+    "BENCH_SCALE=0.01 " .. luajit .. " -joff " .. bench_lua ..
+      " closures_upval",
+    { "closures_upval", "ns/op" })
   print("M9 benchmark smoke guard passed")
 end
 
