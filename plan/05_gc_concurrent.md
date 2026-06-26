@@ -492,10 +492,11 @@ boundary. `lj_gc2_sweep_to_idle()` waits for that latch plus the worker token,
 rechecks phase and traversable sweep predicates, records real `SWEEP -> IDLE`
 publications with `sweep_to_idle`, aggregates live estimates, and updates
 pacing. Parked workers may drain traversable arena sweep before the latch, but
-they do not publish `P_IDLE` while the legacy `lua_gc()` driver can be inside
-non-pollable C GC code. Worker-owned idle publication remains staged until the
-GC scheduler can guarantee that a worker-initiated close handshake cannot wait
-on a mutator that is itself driving the legacy close boundary.
+they publish `P_IDLE` only after the latch and all sweep predicates are clear.
+The legacy C GC driver now polls safepoints between `gc_onestep()` state-machine
+steps so a worker-initiated close handshake can complete during synchronous
+`lua_gc()` driving. Legacy sweep still owns the final Lua GC state transition to
+`GCSpause`; full scheduler ownership of that state machine remains staged.
 The partial-cycle full-GC fast-forward path still calls
 `lj_gc2_legacy_preserve_abort()` instead of entering `P_SWEEP`; that path now
 records real active-phase aborts with `preserve_abort_to_idle` and retains the

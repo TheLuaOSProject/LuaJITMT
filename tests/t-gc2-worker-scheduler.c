@@ -86,6 +86,18 @@ static int arena_list_contains(GCArena *a, GCArena *needle)
   return 0;
 }
 
+static void mark_worker_tgs_sweep_ready(global_State *g, uint32_t sweep_cycle)
+{
+  uint32_t i;
+  for (i = 0; i < LJ_GC2_WORKER_MAX; i++) {
+    TGState *worker = (TGState *)g->gc2.worker_tg[i];
+    if (!worker)
+      continue;
+    worker->alloc.prepare_epoch = sweep_cycle;
+    worker->alloc.sweep_epoch = sweep_cycle;
+  }
+}
+
 static int unlink_root_object(global_State *g, GCobj *needle)
 {
   GCRef *p = &g->gc.root;
@@ -453,21 +465,29 @@ static void test_async_sweep_and_stop(lua_State *L, global_State *g,
   assert(la_load32_acq(&g->gc2.phase) == LJ_GC2_SWEEP);
   assert(!lj_gc2_sweep_pending(g));
 
+  lj_arena_alloc_restore_sweep_kind(&extra_tg.alloc, LJ_ARENAK_TRAVERSABLE);
+  /* Synthetic boundary: main TG had no prepared work. */
+  tg->alloc.prepare_epoch = sweep_cycle;
+  tg->alloc.sweep_epoch = sweep_cycle;
+  mark_worker_tgs_sweep_ready(g, sweep_cycle);
+  assert(lj_gc2_sweep_to_idle(g) == 0);
+  assert(la_load32_acq(&g->gc2.phase) == LJ_GC2_SWEEP);
+  async0 = la_load64_acq(&g->gc2.worker_async_progress);
+  lj_gc2_sweep_legacy_ready(g);
+  for (i = 0; i < 1000 && la_load32_acq(&g->gc2.phase) == LJ_GC2_SWEEP; i++) {
+    lj_gc2_worker_wake(g);
+    (void)lj_safepoint_poll(L);
+    sleep_ns(1000000L);
+  }
+  assert(la_load32_acq(&g->gc2.phase) == LJ_GC2_IDLE);
+  assert(la_load64_acq(&g->gc2.worker_async_progress) > async0);
+
   lj_gc2_worker_stop(g);
   assert(g->gc2.worker_thread[0] == NULL);
   assert(g->gc2.worker_thread[1] == NULL);
   assert(la_load32_acq(&g->gc2.n_workers) == 0);
   assert(la_load32_acq(&g->gc2.worker_exited) == 2);
   assert(la_load32_acq(&g->gc2.n_threads) == 2);
-
-  lj_arena_alloc_restore_sweep_kind(&extra_tg.alloc, LJ_ARENAK_TRAVERSABLE);
-  /* Synthetic boundary: main TG had no prepared work. */
-  tg->alloc.prepare_epoch = sweep_cycle;
-  tg->alloc.sweep_epoch = sweep_cycle;
-  assert(lj_gc2_sweep_to_idle(g) == 0);
-  assert(la_load32_acq(&g->gc2.phase) == LJ_GC2_SWEEP);
-  lj_gc2_sweep_legacy_ready(g);
-  assert(lj_gc2_sweep_to_idle(g) == 1);
 
   lj_tg_detach(g, &extra_tg);
   assert(g->gc2.n_threads == 1);

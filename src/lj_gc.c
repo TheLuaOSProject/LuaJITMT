@@ -22,6 +22,7 @@
 #include "lj_gc2.h"
 #include "lj_chan.h"
 #include "lj_err.h"
+#include "lj_safepoint.h"
 #include "lj_thr.h"
 #include "lj_tg.h"
 #include "lj_buf.h"
@@ -2113,6 +2114,7 @@ static int gc_jit_defer_fixpoint(global_State *g)
 static size_t gc_onestep(lua_State *L)
 {
   global_State *g = G(L);
+  (void)lj_safepoint_poll(L);  /* Let worker-led handshakes finish between GC steps. */
   switch (g->gc.state) {
   case GCSpause:
     gc_mark_start(g);  /* Start a new GC cycle by marking all GC roots. */

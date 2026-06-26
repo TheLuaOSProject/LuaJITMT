@@ -487,6 +487,8 @@ int lj_gc2_worker_start(global_State *g)
 void lj_gc2_worker_stop(global_State *g)
 {
   uint32_t i, any = 0;
+  TGState *self;
+  uint8_t was_native = 0;
   if (!g)
     return;
   for (i = 0; i < LJ_GC2_WORKER_MAX; i++)
@@ -498,6 +500,11 @@ void lj_gc2_worker_stop(global_State *g)
   }
   gc2_worker_stop_rel(g, 1);
   lj_gc2_worker_wake(g);
+  self = lj_thr_get_tg_fallback(g);
+  if (self) {
+    was_native = la_load8_acq(&self->in_native);
+    la_store8_rel(&self->in_native, 1);  /* Join wait can remote-ack workers. */
+  }
   for (i = 0; i < LJ_GC2_WORKER_MAX; i++) {
     LJThr *thr = (LJThr *)g->gc2.worker_thread[i];
     if (!thr)
@@ -506,6 +513,8 @@ void lj_gc2_worker_stop(global_State *g)
     g->gc2.worker_thread[i] = NULL;
     lj_mem_free(g, thr, sizeof(LJThr));
   }
+  if (self)
+    la_store8_rel(&self->in_native, was_native);
   (void)gc2_worker_release_tg_slots(g);
   gc2_n_workers_rel(g, 0);
 }
@@ -532,6 +541,9 @@ static void *gc2_worker_main(void *arg)
 	break;
       total = step > ~(uint32_t)0 - total ? ~(uint32_t)0 : total + step;
     }
+    if (total == 0 && gc2_phase_acq(g) == LJ_GC2_SWEEP &&
+	lj_gc2_sweep_to_idle(g))
+      total = 1;  /* 05 section 5.8: scheduler-owned idle close. */
     if (total)
       gc2_worker_async_progress_add(g, total);
     if (gc2_worker_stop_acq(g) != 0)
