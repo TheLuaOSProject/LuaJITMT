@@ -157,4 +157,29 @@ if hits=$(grep -nE -- "${weak_mark_raw_re}|${weak_mark_addr_re}" \
   exit 1
 fi
 
+for helper in gc2_finalizer_drain_test_pause_store_rlx \
+  gc2_finalizer_drain_test_pause_rel \
+  gc2_finalizer_drain_test_pause_xchg_acqrel \
+  gc2_finalizer_drain_test_paused_acq \
+  gc2_finalizer_drain_test_paused_store_rlx \
+  gc2_finalizer_drain_test_paused_rel \
+  gc2_finalizer_drain_test_release_acq \
+  gc2_finalizer_drain_test_release_store_rlx \
+  gc2_finalizer_drain_test_release_rel; do
+  if ! grep -qE "static LJ_AINLINE .*[*[:space:]]${helper}[[:space:]]*[(]" \
+      "$ROOT/src/lj_obj.h"; then
+    printf '%s\n' "${helper} helper is required for GC2 finalizer test hooks" >&2
+    exit 1
+  fi
+done
+
+finalizer_test_hooks='finalizer_drain_test_(pause|paused|release)'
+if hits=$(grep -nE -- "->[[:space:]]*gc2[.]${finalizer_test_hooks}([^[:alnum:]_]|$)|&[[:space:]]*[^)]*->[[:space:]]*gc2[.]${finalizer_test_hooks}([^[:alnum:]_]|$)" \
+    "$ROOT/src/lj_gc2.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' \
+    'raw GC2 finalizer test-hook access is forbidden; use gc2_finalizer_* helpers' >&2
+  exit 1
+fi
+
 exec "$ROOT/tools/ci/lua_test.sh" m8_weak

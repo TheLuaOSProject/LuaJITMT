@@ -97,7 +97,7 @@ static void *finalizer_drain_release_worker(void *arg)
 {
   PeerRelease *rel = (PeerRelease *)arg;
   sleep_ns(rel->delay_ns);
-  la_store32_rel(&rel->g->gc2.finalizer_drain_test_release, 1);
+  gc2_finalizer_drain_test_release_rel(rel->g, 1);
   return NULL;
 }
 #endif
@@ -214,7 +214,7 @@ static void test_finalizer_drain_concurrent_consumers(lua_State *L,
 
   fd.g = g;
   assert(pthread_create(&thread, NULL, finalizer_drain_worker, &fd) == 0);
-  while (la_load32_acq(&g->gc2.finalizer_drain_test_paused) == 0)
+  while (gc2_finalizer_drain_test_paused_acq(g) == 0)
     la_cpu_pause();
   assert(la_load32_acq(&fd.finished) == 0);
   assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) == NULL);
@@ -226,7 +226,7 @@ static void test_finalizer_drain_concurrent_consumers(lua_State *L,
     lj_gc2_finalizer_drain_owned(g);
     lj_gc2_finalizer_leave(g);
   }
-  la_store32_rel(&g->gc2.finalizer_drain_test_release, 1);
+  gc2_finalizer_drain_test_release_rel(g, 1);
 
   assert(pthread_join(thread, NULL) == 0);
   assert(la_load32_acq(&fd.finished) == 1);
@@ -282,7 +282,7 @@ static void test_finalizer_scan_waits_for_drain(lua_State *L, global_State *g)
   lj_gc2_finalizer_enqueue(g, a);
   fd.g = g;
   assert(pthread_create(&drain_thread, NULL, finalizer_drain_worker, &fd) == 0);
-  while (la_load32_acq(&g->gc2.finalizer_drain_test_paused) == 0)
+  while (gc2_finalizer_drain_test_paused_acq(g) == 0)
     la_cpu_pause();
   assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) == NULL);
   assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) == NULL);

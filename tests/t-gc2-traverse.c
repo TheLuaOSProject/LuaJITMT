@@ -3584,7 +3584,7 @@ static void test_finreg_cdata_preclaim_publish_order(lua_State *L,
   dispatched0 = la_load64_acq(&g->gc2.finreg_cdata_preclaim_dispatched);
   lj_gc2_test_finreg_cdata_preclaim_publish_pause(g);
   assert(pthread_create(&thread, NULL, finclaim_publish_thread, &ctx) == 0);
-  while (la_load32_acq(&g->gc2.finreg_cdata_preclaim_publish_paused) == 0)
+  while (gc2_finreg_cdata_preclaim_publish_paused_acq(g) == 0)
     la_cpu_pause();
 
   assert(!lj_gc2_finreg_cdata_preclaim_take(L, g, obj2gco(cd), &fin));
@@ -3592,7 +3592,7 @@ static void test_finreg_cdata_preclaim_publish_order(lua_State *L,
   assert(la_load64_acq(&g->gc2.finreg_cdata_preclaim_dispatched) ==
 	 dispatched0);
 
-  la_store32_rel(&g->gc2.finreg_cdata_preclaim_publish_release, 1);
+  gc2_finreg_cdata_preclaim_publish_release_rel(g, 1);
   assert(pthread_join(thread, NULL) == 0);
   assert(ctx.ok);
   assert(la_load64_acq(&g->gc2.finreg_cdata_pweak_claimed) == claimed0 + 1u);
@@ -3927,7 +3927,7 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   lua_gc(L, LUA_GCCOLLECT, 0);
   lua_gc(L, LUA_GCCOLLECT, 0);
   lua_gc(L, LUA_GCSTOP, 0);
-  assert(g->gc2.finreg_cdata_preclaim_test_fail == 0);
+  assert(gc2_finreg_cdata_preclaim_test_fail_acq(g) == 0);
   assert(la_load64_acq(&g->gc2.finreg_cdata_queued) == queued2 + 3u);
   assert(la_load64_acq(&g->gc2.finreg_cdata_sweep_queued) ==
 	 sweepqueued2);

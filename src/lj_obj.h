@@ -4209,6 +4209,61 @@ static LJ_AINLINE void gc2_finalizer_spawn_release_wakes_add(global_State *g,
   la_add64_rlx(&g->gc2.finalizer_spawn_release_wakes, n);
 }
 
+#if defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
+static LJ_AINLINE void gc2_finalizer_drain_test_pause_store_rlx(
+  global_State *g, uint32_t pause)
+{
+  la_store32_rlx(&g->gc2.finalizer_drain_test_pause, pause);
+}
+
+static LJ_AINLINE void gc2_finalizer_drain_test_pause_rel(global_State *g,
+							  uint32_t pause)
+{
+  la_store32_rel(&g->gc2.finalizer_drain_test_pause, pause);
+}
+
+static LJ_AINLINE uint32_t gc2_finalizer_drain_test_pause_xchg_acqrel(
+  global_State *g, uint32_t pause)
+{
+  return la_xchg32_acqrel(&g->gc2.finalizer_drain_test_pause, pause);
+}
+
+static LJ_AINLINE uint32_t gc2_finalizer_drain_test_paused_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.finalizer_drain_test_paused);
+}
+
+static LJ_AINLINE void gc2_finalizer_drain_test_paused_store_rlx(
+  global_State *g, uint32_t paused)
+{
+  la_store32_rlx(&g->gc2.finalizer_drain_test_paused, paused);
+}
+
+static LJ_AINLINE void gc2_finalizer_drain_test_paused_rel(global_State *g,
+							   uint32_t paused)
+{
+  la_store32_rel(&g->gc2.finalizer_drain_test_paused, paused);
+}
+
+static LJ_AINLINE uint32_t gc2_finalizer_drain_test_release_acq(
+  global_State *g)
+{
+  return la_load32_acq(&g->gc2.finalizer_drain_test_release);
+}
+
+static LJ_AINLINE void gc2_finalizer_drain_test_release_store_rlx(
+  global_State *g, uint32_t release)
+{
+  la_store32_rlx(&g->gc2.finalizer_drain_test_release, release);
+}
+
+static LJ_AINLINE void gc2_finalizer_drain_test_release_rel(global_State *g,
+							    uint32_t release)
+{
+  la_store32_rel(&g->gc2.finalizer_drain_test_release, release);
+}
+#endif
+
 static LJ_AINLINE uint32_t gc2_worker_active_acq(global_State *g)
 {
   return la_load32_acq(&g->gc2.worker_active);
@@ -5119,6 +5174,80 @@ static LJ_AINLINE void gc2_finreg_cdata_preclaim_count_rel(global_State *g,
 {
   la_store32_rel(&g->gc2.finreg_cdata_preclaim_count, (uint32_t)count);
 }
+
+#if defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
+static LJ_AINLINE uint32_t gc2_finreg_cdata_preclaim_test_fail_acq(
+  global_State *g)
+{
+  return la_load32_acq(&g->gc2.finreg_cdata_preclaim_test_fail);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_preclaim_test_fail_store_rlx(
+  global_State *g, uint32_t n)
+{
+  la_store32_rlx(&g->gc2.finreg_cdata_preclaim_test_fail, n);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_preclaim_test_fail_rel(
+  global_State *g, uint32_t n)
+{
+  la_store32_rel(&g->gc2.finreg_cdata_preclaim_test_fail, n);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_preclaim_publish_pause_store_rlx(
+  global_State *g, uint32_t pause)
+{
+  la_store32_rlx(&g->gc2.finreg_cdata_preclaim_publish_pause, pause);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_preclaim_publish_pause_rel(
+  global_State *g, uint32_t pause)
+{
+  la_store32_rel(&g->gc2.finreg_cdata_preclaim_publish_pause, pause);
+}
+
+static LJ_AINLINE uint32_t gc2_finreg_cdata_preclaim_publish_pause_xchg_acqrel(
+  global_State *g, uint32_t pause)
+{
+  return la_xchg32_acqrel(&g->gc2.finreg_cdata_preclaim_publish_pause, pause);
+}
+
+static LJ_AINLINE uint32_t gc2_finreg_cdata_preclaim_publish_paused_acq(
+  global_State *g)
+{
+  return la_load32_acq(&g->gc2.finreg_cdata_preclaim_publish_paused);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_preclaim_publish_paused_store_rlx(
+  global_State *g, uint32_t paused)
+{
+  la_store32_rlx(&g->gc2.finreg_cdata_preclaim_publish_paused, paused);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_preclaim_publish_paused_rel(
+  global_State *g, uint32_t paused)
+{
+  la_store32_rel(&g->gc2.finreg_cdata_preclaim_publish_paused, paused);
+}
+
+static LJ_AINLINE uint32_t gc2_finreg_cdata_preclaim_publish_release_acq(
+  global_State *g)
+{
+  return la_load32_acq(&g->gc2.finreg_cdata_preclaim_publish_release);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_preclaim_publish_release_store_rlx(
+  global_State *g, uint32_t release)
+{
+  la_store32_rlx(&g->gc2.finreg_cdata_preclaim_publish_release, release);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_preclaim_publish_release_rel(
+  global_State *g, uint32_t release)
+{
+  la_store32_rel(&g->gc2.finreg_cdata_preclaim_publish_release, release);
+}
+#endif
 
 static LJ_AINLINE int gc2_finreg_cdata_preclaim_ready(global_State *g)
 {

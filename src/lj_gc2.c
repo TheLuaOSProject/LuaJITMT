@@ -230,10 +230,10 @@ void lj_gc2_init(global_State *g)
   gc2_finreg_cdata_order_fallbacks_store_rlx(g, 0);
   gc2_finreg_cdata_pending_order_hits_store_rlx(g, 0);
 #if defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
-  g->gc2.finreg_cdata_preclaim_test_fail = 0;
-  la_store32_rlx(&g->gc2.finreg_cdata_preclaim_publish_pause, 0);
-  la_store32_rlx(&g->gc2.finreg_cdata_preclaim_publish_paused, 0);
-  la_store32_rlx(&g->gc2.finreg_cdata_preclaim_publish_release, 0);
+  gc2_finreg_cdata_preclaim_test_fail_store_rlx(g, 0);
+  gc2_finreg_cdata_preclaim_publish_pause_store_rlx(g, 0);
+  gc2_finreg_cdata_preclaim_publish_paused_store_rlx(g, 0);
+  gc2_finreg_cdata_preclaim_publish_release_store_rlx(g, 0);
 #endif
   gc2_finreg_udata_sets_store_rlx(g, 0);
   gc2_finreg_udata_clears_store_rlx(g, 0);
@@ -257,9 +257,9 @@ void lj_gc2_init(global_State *g)
   gc2_finalizer_spawn_deferrals_store_rlx(g, 0);
   gc2_finalizer_spawn_release_wakes_store_rlx(g, 0);
 #if defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
-  la_store32_rlx(&g->gc2.finalizer_drain_test_pause, 0);
-  la_store32_rlx(&g->gc2.finalizer_drain_test_paused, 0);
-  la_store32_rlx(&g->gc2.finalizer_drain_test_release, 0);
+  gc2_finalizer_drain_test_pause_store_rlx(g, 0);
+  gc2_finalizer_drain_test_paused_store_rlx(g, 0);
+  gc2_finalizer_drain_test_release_store_rlx(g, 0);
 #endif
   gc2_weak_keys_marked_store_rlx(g, 0);
   gc2_weak_values_marked_store_rlx(g, 0);
@@ -987,11 +987,11 @@ void lj_gc2_finalizer_drain_owned(global_State *g)
     return;
   oldtail = gc2_finalizer_tail_acq(g);
 #if defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
-  if (la_xchg32_acqrel(&g->gc2.finalizer_drain_test_pause, 0) != 0) {
-    la_store32_rel(&g->gc2.finalizer_drain_test_paused, 1);
-    while (la_load32_acq(&g->gc2.finalizer_drain_test_release) == 0)
+  if (gc2_finalizer_drain_test_pause_xchg_acqrel(g, 0) != 0) {
+    gc2_finalizer_drain_test_paused_rel(g, 1);
+    while (gc2_finalizer_drain_test_release_acq(g) == 0)
       la_cpu_pause();
-    la_store32_rel(&g->gc2.finalizer_drain_test_paused, 0);
+    gc2_finalizer_drain_test_paused_rel(g, 0);
   }
 #endif
   if (oldtail) {
@@ -1970,11 +1970,11 @@ static void gc2_finclaim_publish(lua_State *L, global_State *g, MSize idx,
   TValue *finv = gc2_finreg_cdata_preclaim_finvec_acq(g);
   copyTVrel(L, &finv[idx], fin);
 #if defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
-  if (la_xchg32_acqrel(&g->gc2.finreg_cdata_preclaim_publish_pause, 0) != 0) {
-    la_store32_rel(&g->gc2.finreg_cdata_preclaim_publish_paused, 1);
-    while (la_load32_acq(&g->gc2.finreg_cdata_preclaim_publish_release) == 0)
+  if (gc2_finreg_cdata_preclaim_publish_pause_xchg_acqrel(g, 0) != 0) {
+    gc2_finreg_cdata_preclaim_publish_paused_rel(g, 1);
+    while (gc2_finreg_cdata_preclaim_publish_release_acq(g) == 0)
       la_cpu_pause();
-    la_store32_rel(&g->gc2.finreg_cdata_preclaim_publish_paused, 0);
+    gc2_finreg_cdata_preclaim_publish_paused_rel(g, 0);
   }
 #endif
   gc2_queue_slot_store_rel(&objv[idx], o);
@@ -2554,25 +2554,25 @@ void lj_gc2_finreg_cdata_queue(global_State *g, GCobj *o)
 void lj_gc2_test_finreg_cdata_preclaim_fail(global_State *g, uint32_t n)
 {
   if (g)
-    g->gc2.finreg_cdata_preclaim_test_fail = n;
+    gc2_finreg_cdata_preclaim_test_fail_rel(g, n);
 }
 
 void lj_gc2_test_finreg_cdata_preclaim_publish_pause(global_State *g)
 {
   if (!g)
     return;
-  la_store32_rel(&g->gc2.finreg_cdata_preclaim_publish_release, 0);
-  la_store32_rel(&g->gc2.finreg_cdata_preclaim_publish_paused, 0);
-  la_store32_rel(&g->gc2.finreg_cdata_preclaim_publish_pause, 1);
+  gc2_finreg_cdata_preclaim_publish_release_rel(g, 0);
+  gc2_finreg_cdata_preclaim_publish_paused_rel(g, 0);
+  gc2_finreg_cdata_preclaim_publish_pause_rel(g, 1);
 }
 
 void lj_gc2_test_finalizer_drain_pause(global_State *g)
 {
   if (!g)
     return;
-  la_store32_rel(&g->gc2.finalizer_drain_test_release, 0);
-  la_store32_rel(&g->gc2.finalizer_drain_test_paused, 0);
-  la_store32_rel(&g->gc2.finalizer_drain_test_pause, 1);
+  gc2_finalizer_drain_test_release_rel(g, 0);
+  gc2_finalizer_drain_test_paused_rel(g, 0);
+  gc2_finalizer_drain_test_pause_rel(g, 1);
 }
 #endif
 
@@ -2581,11 +2581,15 @@ int lj_gc2_finreg_cdata_preclaim(lua_State *L, global_State *g, GCobj *o,
 {
 #if LJ_HASFFI
   MSize count, cap;
+#if defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
+  uint32_t test_fail;
+#endif
   if (!L || !g || !o || !fin || o->gch.gct != ~LJ_TCDATA)
     return 0;
 #if defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
-  if (g->gc2.finreg_cdata_preclaim_test_fail) {
-    g->gc2.finreg_cdata_preclaim_test_fail--;
+  test_fail = gc2_finreg_cdata_preclaim_test_fail_acq(g);
+  if (test_fail) {
+    gc2_finreg_cdata_preclaim_test_fail_rel(g, test_fail - 1u);
     gc2_finreg_cdata_preclaim_overflow_add(g, 1);
     return 0;  /* Test-only side-vector failure injection. */
   }

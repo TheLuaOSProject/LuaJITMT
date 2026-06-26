@@ -156,11 +156,35 @@ for helper in gc2_finreg_cdata_preclaim_objvec_acq \
     exit 1
   fi
 done
+for helper in gc2_finreg_cdata_preclaim_test_fail_acq \
+  gc2_finreg_cdata_preclaim_test_fail_store_rlx \
+  gc2_finreg_cdata_preclaim_test_fail_rel \
+  gc2_finreg_cdata_preclaim_publish_pause_store_rlx \
+  gc2_finreg_cdata_preclaim_publish_pause_rel \
+  gc2_finreg_cdata_preclaim_publish_pause_xchg_acqrel \
+  gc2_finreg_cdata_preclaim_publish_paused_acq \
+  gc2_finreg_cdata_preclaim_publish_paused_store_rlx \
+  gc2_finreg_cdata_preclaim_publish_paused_rel \
+  gc2_finreg_cdata_preclaim_publish_release_acq \
+  gc2_finreg_cdata_preclaim_publish_release_store_rlx \
+  gc2_finreg_cdata_preclaim_publish_release_rel; do
+  if ! grep -qE "static LJ_AINLINE .*[*[:space:]]${helper}[[:space:]]*[(]" \
+      "$ROOT/src/lj_obj.h"; then
+    printf '%s\n' "${helper} helper is required for FINREG preclaim test hooks" >&2
+    exit 1
+  fi
+done
 if hits=$(grep -nE -- '->[[:space:]]*gc2[.]finreg_cdata_preclaim_(obj|fin|capacity|head|count)([^[:alnum:]_]|$)|&[[:space:]]*[^)]*->[[:space:]]*gc2[.]finreg_cdata_preclaim_(obj|fin|capacity|head|count)([^[:alnum:]_]|$)' \
     "$ROOT/src/lj_gc.c" \
     "$ROOT/src/lj_gc2.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
   printf '%s\n' 'raw FINREG preclaim state access is forbidden; use gc2_finreg_cdata_preclaim_* helpers' >&2
+  exit 1
+fi
+if hits=$(grep -nE -- '->[[:space:]]*gc2[.](finreg_cdata_preclaim_test_fail|finreg_cdata_preclaim_publish_(pause|paused|release))([^[:alnum:]_]|$)|&[[:space:]]*[^)]*->[[:space:]]*gc2[.](finreg_cdata_preclaim_test_fail|finreg_cdata_preclaim_publish_(pause|paused|release))([^[:alnum:]_]|$)' \
+    "$ROOT/src/lj_gc2.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw FINREG preclaim test-hook access is forbidden; use gc2_finreg_cdata_preclaim_* helpers' >&2
   exit 1
 fi
 if hits=$(awk '
