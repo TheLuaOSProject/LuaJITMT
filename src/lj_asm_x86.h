@@ -1861,6 +1861,10 @@ static void asm_ahstore_forjit(ASMState *as, IRIns *ir)
   IRIns *xref = IR(ir->op1);
   IRRef tabref, keyref;
   int keyistv = 1;
+  if (ir->o == IR_ASTORE &&
+      (irt_isnum(ir->t) || irt_ispri(ir->t) || irt_islightud(ir->t) ||
+       (LJ_DUALNUM && irt_isinteger(ir->t))))
+    id = IRCALL_lj_tab_storetv_forjit_array_nogc;
   if (xref->o == IR_AREF) {
     tabref = IR(xref->op1)->op1;
     keyref = xref->op2;

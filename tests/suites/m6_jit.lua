@@ -556,6 +556,34 @@ end
 assert(a[1] == 80)
 assert(util.traceinfo(1), "shared existing array store did not trace")
 ]=], { "ASTORE", "XPOLL" }, "shared existing array store")
+
+      local route_dump = t:tmp("lj-m6-table-store-helper-routes.dump")
+      luajit_dump(t, route_dump, "-jdump=im", [=[
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local util = require("jit.util")
+local a = { 0 }
+for i = 1, 80 do
+  a[1] = i + 0.5
+end
+assert(a[1] == 80.5)
+assert(util.traceinfo(1), "numeric array store did not trace")
+
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local h = { stable = 0 }
+for i = 1, 80 do
+  h.stable = i + 0.5
+end
+assert(h.stable == 80.5)
+assert(util.traceinfo(1), "numeric hash store did not trace")
+]=])
+      assert_dump_contains(t, route_dump,
+                           "lj_tab_storetv_forjit_array_nogc",
+                           "numeric ASTORE no-GC helper")
+      assert_dump_contains(t, route_dump,
+                           "lj_tab_storetv_forjit_hash",
+                           "numeric HSTORE full helper")
       print("M6 JIT table-store helper behavior passed")
     end
   })

@@ -137,6 +137,10 @@ LJ_FUNCA int lj_tab_trystoretv_cas(lua_State *L, TValue *dst, cTValue *src);
 LJ_FUNCA TValue *lj_tab_storetv_forjit_array(lua_State *L, GCtab *parent,
 					     TValue *dst, cTValue *src,
 					     MSize key);
+LJ_FUNCA TValue *lj_tab_storetv_forjit_array_nogc(lua_State *L,
+						  GCtab *parent,
+						  TValue *dst, cTValue *src,
+						  MSize key);
 LJ_FUNCA TValue *lj_tab_storetv_forvm_array(lua_State *L, GCtab *parent,
 					    TValue *dst, cTValue *src,
 					    MSize key);

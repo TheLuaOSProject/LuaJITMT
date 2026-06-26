@@ -1697,9 +1697,10 @@ static TValue *tab_current_jit_hash_slot(lua_State *L, GCtab *parent,
   return lj_tab_set(L, parent, key);
 }
 
-LJ_FUNCA TValue *lj_tab_storetv_forjit_array(lua_State *L, GCtab *parent,
-					     TValue *dst, cTValue *src,
-					     MSize key)
+LJ_FUNCA TValue *lj_tab_storetv_forjit_array_nogc(lua_State *L,
+						  GCtab *parent,
+						  TValue *dst, cTValue *src,
+						  MSize key)
 {
   TValue *orig = dst;
   for (;;) {
@@ -1708,6 +1709,14 @@ LJ_FUNCA TValue *lj_tab_storetv_forjit_array(lua_State *L, GCtab *parent,
       break;
     la_cpu_pause();  /* JIT array store saw FORWARD after key/current routing. */
   }
+  return dst;
+}
+
+LJ_FUNCA TValue *lj_tab_storetv_forjit_array(lua_State *L, GCtab *parent,
+					     TValue *dst, cTValue *src,
+					     MSize key)
+{
+  dst = lj_tab_storetv_forjit_array_nogc(L, parent, dst, src, key);
   lj_gc2_barrier_weak_write(L, parent, NULL, dst);  /* M8: traced weak-value array write. */
   lj_gc2_barrier_tv_pair(L, obj2gco(parent), dst);  /* M10: traced parent barrier. */
   return dst;
