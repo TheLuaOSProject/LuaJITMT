@@ -6,9 +6,9 @@
 #define lj_gc2_c
 #define LUA_CORE
 
+#include <stdlib.h>
 #if LJ_GC2_PARANOIA
 #include <stdio.h>
-#include <stdlib.h>
 #endif
 
 #include "lj_obj.h"
@@ -42,12 +42,19 @@
 #define GC2_FINCLAIM_LIMIT \
   ((MSize)(LJ_MAX_MEM32 / (sizeof(GCRef) + sizeof(TValue))))
 
+typedef struct GC2FinalizerNode {
+  struct GC2FinalizerNode *next;
+  GCobj *obj;
+} GC2FinalizerNode;
+
 static int gc2_grey_grow(global_State *g);
 static int gc2_grey_empty(global_State *g);
 static int gc2_weak_resize(global_State *g, MSize cap);
 static void gc2_weak_reset(global_State *g);
 static int gc2_finclaim_resize(global_State *g, MSize cap);
 static void gc2_finclaim_reset(global_State *g);
+static void gc2_finalizer_free_stack(global_State *g, GC2FinalizerNode *node);
+static void gc2_finalizer_free_ring(global_State *g, GC2FinalizerNode *tail);
 static int gc2_tab_weak_mode(global_State *g, GCtab *t, GCtab *mt);
 static void *gc2_worker_main(void *arg);
 static void gc2_mark_tv_worker(global_State *g, cTValue *tv);
@@ -337,6 +344,15 @@ void lj_gc2_fini(global_State *g)
       lj_mem_freet(g, node);
       node = next;
     }
+  }
+  if (g) {
+    GC2FinalizerNode *stack =
+      (GC2FinalizerNode *)gc2_finalizer_mpsc_xchg_acqrel(g, NULL);
+    GC2FinalizerNode *tail =
+      (GC2FinalizerNode *)gc2_finalizer_tail_acq(g);
+    gc2_finalizer_tail_store_rlx(g, NULL);
+    gc2_finalizer_free_stack(g, stack);
+    gc2_finalizer_free_ring(g, tail);
   }
 }
 
@@ -976,18 +992,61 @@ static int gc2_finalizer_owned_by_current(global_State *g)
   return owner == (tg ? la_load32_acq(&tg->tid) : ~(uint32_t)0);
 }
 
+static GC2FinalizerNode *gc2_finalizer_node_new(global_State *g, GCobj *o)
+{
+  GC2FinalizerNode *node;
+  if (!g || !o)
+    return NULL;
+  /* Producers may enqueue without owning the Lua allocator/TG. */
+  node = (GC2FinalizerNode *)malloc(sizeof(GC2FinalizerNode));
+  if (!node) {
+    lj_assertG_(g, 0, "out of memory allocating finalizer queue node");
+    abort();
+  }
+  node->next = NULL;
+  node->obj = o;
+  return node;
+}
+
+static void gc2_finalizer_node_free(global_State *g, GC2FinalizerNode *node)
+{
+  UNUSED(g);
+  if (node)
+    free(node);
+}
+
+static void gc2_finalizer_free_stack(global_State *g, GC2FinalizerNode *node)
+{
+  while (node) {
+    GC2FinalizerNode *next = node->next;
+    gc2_finalizer_node_free(g, node);
+    node = next;
+  }
+}
+
+static void gc2_finalizer_free_ring(global_State *g, GC2FinalizerNode *tail)
+{
+  GC2FinalizerNode *node;
+  if (!tail)
+    return;
+  node = tail->next;
+  tail->next = NULL;
+  gc2_finalizer_free_stack(g, node);
+}
+
 void lj_gc2_finalizer_enqueue(global_State *g, GCobj *o)
 {
-  GCobj *head;
+  GC2FinalizerNode *node;
+  void *head;
   if (!g || !o)
+    return;
+  node = gc2_finalizer_node_new(g, o);
+  if (!node)
     return;
   do {
     head = gc2_finalizer_mpsc_acq(g);
-    if (head)
-      lj_obj_setgcwrel(o, head);
-    else
-      lj_obj_setgcwnullrel(o);
-  } while (!gc2_finalizer_mpsc_cas(g, &head, o));
+    node->next = (GC2FinalizerNode *)head;
+  } while (!gc2_finalizer_mpsc_cas(g, &head, node));
   gc2_finalizer_queued_add(g, 1);
   if (head == NULL)
     lj_gc2_worker_wake(g);  /* 05 section 5.8: finalizer work became visible. */
@@ -995,28 +1054,25 @@ void lj_gc2_finalizer_enqueue(global_State *g, GCobj *o)
 
 void lj_gc2_finalizer_drain_owned(global_State *g)
 {
-  GCobj *stack, *rev = NULL, *newtail = NULL, *oldtail;
+  GC2FinalizerNode *stack, *rev = NULL, *newtail = NULL, *oldtail;
   size_t n = 0;
   if (!g)
     return;
   lj_assertG(gc2_finalizer_owned_by_current(g),
 	     "gc2 finalizer drain requires owner");
-  stack = gc2_finalizer_mpsc_xchg_acqrel(g, NULL);
+  stack = (GC2FinalizerNode *)gc2_finalizer_mpsc_xchg_acqrel(g, NULL);
   while (stack) {
-    GCobj *next = lj_obj_gcw_acq(stack);
+    GC2FinalizerNode *next = stack->next;
     if (newtail == NULL)
       newtail = stack;
-    if (rev)
-      lj_obj_setgcwrel(stack, rev);
-    else
-      lj_obj_setgcwnullrel(stack);
+    stack->next = rev;
     rev = stack;
     stack = next;
     n++;
   }
   if (!rev)
     return;
-  oldtail = gc2_finalizer_tail_acq(g);
+  oldtail = (GC2FinalizerNode *)gc2_finalizer_tail_acq(g);
 #if defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
   if (gc2_finalizer_drain_test_pause_xchg_acqrel(g, 0) != 0) {
     gc2_finalizer_drain_test_paused_rel(g, 1);
@@ -1026,12 +1082,12 @@ void lj_gc2_finalizer_drain_owned(global_State *g)
   }
 #endif
   if (oldtail) {
-    GCobj *head = lj_obj_gcw_acq(oldtail);
-    lj_obj_setgcwrel(newtail, head);
-    lj_obj_setgcwrel(oldtail, rev);
+    GC2FinalizerNode *head = oldtail->next;
+    newtail->next = head;
+    oldtail->next = rev;
     gc2_finalizer_tail_rel(g, newtail);
   } else {
-    lj_obj_setgcwrel(newtail, rev);
+    newtail->next = rev;
     gc2_finalizer_tail_rel(g, newtail);
   }
   gc2_finalizer_mpsc_drained_add(g, n);
@@ -1048,28 +1104,30 @@ void lj_gc2_finalizer_drain(global_State *g)
 
 GCobj *lj_gc2_finalizer_dequeue_owned(global_State *g)
 {
-  GCobj *tail, *o;
+  GC2FinalizerNode *tail, *node;
+  GCobj *o;
   if (!g)
     return NULL;
   lj_assertG(gc2_finalizer_owned_by_current(g),
 	     "gc2 finalizer dequeue requires owner");
-  tail = gc2_finalizer_tail_acq(g);
+  tail = (GC2FinalizerNode *)gc2_finalizer_tail_acq(g);
   if (!tail) {
     lj_gc2_finalizer_drain_owned(g);
-    tail = gc2_finalizer_tail_acq(g);
+    tail = (GC2FinalizerNode *)gc2_finalizer_tail_acq(g);
     if (!tail)
       return NULL;
   }
-  o = lj_obj_gcw_acq(tail);
+  node = tail->next;
+  o = node ? node->obj : NULL;
   lj_assertG(o != NULL, "broken gc2 finalizer queue");
   if (!o)
     return NULL;
-  if (o == tail) {
+  if (node == tail) {
     gc2_finalizer_tail_rel(g, NULL);
   } else {
-    lj_obj_setgcwrel(tail, lj_obj_gcw_acq(o));
+    tail->next = node->next;
   }
-  lj_obj_setgcwnullrel(o);
+  gc2_finalizer_node_free(g, node);
   gc2_finalizer_dequeued_add(g, 1);
   return o;  /* 05 section 5.8: GC2-owned finalizer queue bridge. */
 }
@@ -1670,15 +1728,27 @@ static void gc2_mark_finreg_cdata_preclaims(global_State *g)
 }
 #endif
 
-static void gc2_mark_finalizer_ring(global_State *g, GCobj *tail)
+static void gc2_mark_finalizer_obj(global_State *g, GCobj *o)
 {
-  GCobj *o = tail;
-  if (!o)
+  (void)lj_gc2_markobj(g, o);
+}
+
+void lj_gc2_finalizer_mark_queued(global_State *g, GC2FinalizerMarkFunc mark)
+{
+  GC2FinalizerNode *tail, *node;
+  if (!g || !mark)
     return;
+  lj_assertG(gc2_finalizer_owned_by_current(g),
+	     "gc2 finalizer mark requires owner");
+  tail = (GC2FinalizerNode *)gc2_finalizer_tail_acq(g);
+  if (!tail)
+    return;
+  node = tail;
   do {
-    o = lj_obj_gcw_acq(o);
-    lj_gc2_markobj(g, o);
-  } while (o != tail);
+    node = node->next;
+    if (node->obj)
+      mark(g, node->obj);
+  } while (node != tail);
 }
 
 static void gc2_scan_threading_live_roots(global_State *g)
@@ -1701,7 +1771,7 @@ static void gc2_scan_pending_roots(global_State *g)
     return;
   lj_gc2_finalizer_enter(g);
   lj_gc2_finalizer_drain_owned(g);
-  gc2_mark_finalizer_ring(g, gc2_finalizer_tail_acq(g));
+  lj_gc2_finalizer_mark_queued(g, gc2_mark_finalizer_obj);
   lj_gc2_finalizer_leave(g);
   gc2_scan_threading_live_roots(g);
 #if LJ_HASFFI

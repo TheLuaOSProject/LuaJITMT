@@ -8,6 +8,8 @@
 
 #include "lj_obj.h"
 
+typedef void (*GC2FinalizerMarkFunc)(global_State *g, GCobj *o);
+
 #ifndef LJ_GC2_PARANOIA
 #define LJ_GC2_PARANOIA		0
 #endif
@@ -125,6 +127,8 @@ LJ_FUNC void lj_gc2_finalizer_drain_owned(global_State *g);
 LJ_FUNC void lj_gc2_finalizer_drain(global_State *g);
 LJ_FUNC GCobj *lj_gc2_finalizer_dequeue_owned(global_State *g);
 LJ_FUNC GCobj *lj_gc2_finalizer_dequeue(global_State *g);
+LJ_FUNC void lj_gc2_finalizer_mark_queued(global_State *g,
+					  GC2FinalizerMarkFunc mark);
 LJ_FUNC int lj_gc2_finalizer_try_enter(global_State *g);
 LJ_FUNC void lj_gc2_finalizer_enter(global_State *g);
 LJ_FUNC void lj_gc2_finalizer_leave(global_State *g);

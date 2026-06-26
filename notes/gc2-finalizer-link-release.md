@@ -11,3 +11,10 @@ Verification:
 - tools/ci/lua_test.sh m8_weak
 - tools/ci/lua_test.sh m3_gc2_worker_scheduler
 - tools/ci/lua_test.sh m3_gc2_paranoia
+
+Current state:
+
+- This was superseded by `notes/finalizer-queue-nodes.md`: the GC2 finalizer
+  queue no longer links through queued objects' `gcw` fields. The release-link
+  work remains relevant for other object-list paths, but finalizer queue links
+  now live in dedicated queue nodes.

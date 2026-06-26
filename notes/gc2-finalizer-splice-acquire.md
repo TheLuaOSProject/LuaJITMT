@@ -26,3 +26,9 @@ This removes the remaining runtime direct `setgcrefr()` use from the GC2
 finalizer splice. The remaining direct `setgcref*` hits after this are helper
 definitions, stack-local CAS expected values, parser-local state, startup
 initialization, or macro forms that need separate broader passes.
+
+## Current State
+
+This note describes the older object-link ring. The current GC2 finalizer queue
+uses dedicated queue nodes, documented in `notes/finalizer-queue-nodes.md`, so
+the splice no longer reads or writes queued objects' `gcw` links.

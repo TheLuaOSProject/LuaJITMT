@@ -367,6 +367,11 @@ static void gc2_paranoia_check_strtab(global_State *g)
   }
 }
 
+static void gc2_paranoia_check_finalizer_obj(global_State *g, GCobj *o)
+{
+  gc2_paranoia_checkone(g, o);
+}
+
 static void gc2_paranoia_check_roots(global_State *g)
 {
   GCobj *o;
@@ -374,14 +379,7 @@ static void gc2_paranoia_check_roots(global_State *g)
     gc2_paranoia_checkone(g, o);
   lj_gc2_finalizer_enter(g);
   lj_gc2_finalizer_drain_owned(g);
-  o = gc2_finalizer_tail_acq(g);
-  if (o) {
-    GCobj *root = o;
-    do {
-      o = lj_obj_gcw_acq(o);
-      gc2_paranoia_checkone(g, o);
-    } while (o != root);
-  }
+  lj_gc2_finalizer_mark_queued(g, gc2_paranoia_check_finalizer_obj);
   lj_gc2_finalizer_leave(g);
 }
 
@@ -784,16 +782,10 @@ static void gc_mark_uv(global_State *g)
   }
 }
 
-static void gc_mark_finalizer_ring(global_State *g, GCobj *root)
+static void gc_mark_finalizer_obj(global_State *g, GCobj *o)
 {
-  GCobj *u = root;
-  if (u) {
-    do {
-      u = lj_obj_gcw_acq(u);
-      makewhite(g, u);  /* Could be from previous GC. */
-      gc_mark(g, u);
-    } while (u != root);
-  }
+  makewhite(g, o);  /* Could be from previous GC. */
+  gc_mark(g, o);
 }
 
 static int gc_chain_splice(GCRef *p, GCobj *o)
@@ -819,7 +811,7 @@ static void gc_mark_finalizers(global_State *g)
 {
   lj_gc2_finalizer_enter(g);
   lj_gc2_finalizer_drain_owned(g);
-  gc_mark_finalizer_ring(g, gc2_finalizer_tail_acq(g));
+  lj_gc2_finalizer_mark_queued(g, gc_mark_finalizer_obj);
   lj_gc2_finalizer_leave(g);
 }
 

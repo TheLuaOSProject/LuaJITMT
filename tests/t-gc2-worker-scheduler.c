@@ -421,6 +421,7 @@ static void test_async_sweep_and_stop(lua_State *L, global_State *g,
   lj_arena_alloc_prepare_sweep_kind(&extra_tg.alloc, LJ_ARENAK_TRAVERSABLE);
   lj_arena_alloc_restore_sweep_kind(&extra_tg.alloc, LJ_ARENAK_PLAIN);
   extra_tg.alloc.prepare_epoch = sweep_cycle;
+  lj_gc2_sweep_legacy_ready(g);
   assert(extra_tg.alloc.needsweep[LJ_ARENAK_PLAIN] == NULL);
   assert(arena_list_contains(extra_tg.alloc.owned[LJ_ARENAK_PLAIN],
 			     extra_plain_a));
@@ -465,6 +466,8 @@ static void test_async_sweep_and_stop(lua_State *L, global_State *g,
   assert(la_load32_acq(&g->gc2.phase) == LJ_GC2_SWEEP);
   assert(!lj_gc2_sweep_pending(g));
 
+  /* Keep the later close-boundary assertion synthetic and explicit. */
+  gc2_sweep_legacy_ready_rel(g, 0);
   lj_arena_alloc_restore_sweep_kind(&extra_tg.alloc, LJ_ARENAK_TRAVERSABLE);
   /* Synthetic boundary: main TG had no prepared work. */
   tg->alloc.prepare_epoch = sweep_cycle;

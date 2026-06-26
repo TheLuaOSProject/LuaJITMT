@@ -447,7 +447,9 @@ path; it now also mirrors the legacy userdata finalizer run-once clear at
 membership additions and stale clears if the metatable's `__gc` field is mutated
 in place before separation. The traversal harness covers both in-place behavior
 directions: a lazy add runs once, and a stale clear suppresses finalization. The
-linked queue itself remains legacy-owned.
+GC2 finalizer queue now links dedicated queue nodes instead of reusing queued
+objects' `gcw` root/list links; callback execution and ordering remain owned by
+the legacy finalizer drain bridge.
 The first
 weak-write bridge is present for new weak-table hash keys:
 `lj_tab_newkey()` calls `lj_gc2_barrier_weak_key()` during `P_WEAK`, marking a
@@ -525,8 +527,10 @@ instead of waiting forever for `mt_live == 0`, and explicit
 `collectgarbage("step", ...)` keeps `GCSfinalize` open instead of reporting a
 completed cycle while that worker is still live. User finalizer callbacks now
 run on the owner-claimed collector caller `lua_State` instead of the shared
-`vmthread(g)` stack, but full scheduler-owned string/root/finalizer sweep
-driving and FINREG/finqueue execution remain follow-up work.
+`vmthread(g)` stack. Pending finalizer objects are retained through dedicated
+GC2 queue nodes and marked through the owner-drained queue scanner, but full
+scheduler-owned string/root/finalizer sweep driving and FINREG/finqueue
+execution remain follow-up work.
 
 ## 5.9 Deferred reclamation (grace periods) — the GC as universal SMR
 

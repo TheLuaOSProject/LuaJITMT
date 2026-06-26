@@ -185,6 +185,35 @@ static void test_finalizer_consumer_ring(lua_State *L, global_State *g)
   lua_settop(L, 0);
 }
 
+static void test_finalizer_queue_preserves_object_link(lua_State *L,
+						       global_State *g)
+{
+  GCobj *sentinel, *queued;
+  lua_settop(L, 0);
+  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) == NULL);
+  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) == NULL);
+  lua_newtable(L);
+  sentinel = obj2gco(tabV(L->top - 1));
+  lua_newtable(L);
+  queued = obj2gco(tabV(L->top - 1));
+  assert(unlink_root_object(g, queued));
+  assert(unlink_root_object(g, sentinel));
+
+  lj_obj_setgcw(queued, sentinel);
+  lj_gc2_finalizer_enqueue(g, queued);
+  assert(lj_obj_gcw_acq(queued) == sentinel);
+  lj_gc2_finalizer_drain(g);
+  assert(lj_obj_gcw_acq(queued) == sentinel);
+  assert(lj_gc2_finalizer_dequeue(g) == queued);
+  assert(lj_obj_gcw_acq(queued) == sentinel);
+  assert(lj_gc2_finalizer_dequeue(g) == NULL);
+
+  lj_obj_setgcwnull(queued);
+  relink_root_object(g, queued);
+  relink_root_object(g, sentinel);
+  lua_settop(L, 0);
+}
+
 #if defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
 static void test_finalizer_drain_concurrent_consumers(lua_State *L,
 						      global_State *g)
@@ -643,6 +672,7 @@ int main(void)
   assert_idle(g, tg);
 
   test_finalizer_consumer_ring(L, g);
+  test_finalizer_queue_preserves_object_link(L, g);
 #if defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
   test_finalizer_drain_concurrent_consumers(L, g);
   test_finalizer_scan_waits_for_drain(L, g);

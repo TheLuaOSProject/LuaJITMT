@@ -4042,44 +4042,44 @@ static LJ_AINLINE void gc2_thread_scan_dirty_misses_add(global_State *g,
   la_add64_rlx(&g->gc2.thread_scan_dirty_misses, n);
 }
 
-static LJ_AINLINE GCobj *gc2_finalizer_mpsc_acq(global_State *g)
+static LJ_AINLINE void *gc2_finalizer_mpsc_acq(global_State *g)
 {
-  return (GCobj *)la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc);
+  return la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc);
 }
 
 static LJ_AINLINE void gc2_finalizer_mpsc_store_rlx(global_State *g,
-						    GCobj *o)
+						    void *p)
 {
-  la_storeptr_rlx((void **)&g->gc2.finalizer_mpsc, o);
+  la_storeptr_rlx((void **)&g->gc2.finalizer_mpsc, p);
 }
 
-static LJ_AINLINE int gc2_finalizer_mpsc_cas(global_State *g, GCobj **oldp,
-					     GCobj *o)
+static LJ_AINLINE int gc2_finalizer_mpsc_cas(global_State *g, void **oldp,
+					     void *p)
 {
-  return la_casptr((void **)&g->gc2.finalizer_mpsc, (void **)oldp, o,
+  return la_casptr((void **)&g->gc2.finalizer_mpsc, oldp, p,
 		   LA_REL, LA_ACQ);
 }
 
-static LJ_AINLINE GCobj *gc2_finalizer_mpsc_xchg_acqrel(global_State *g,
-							GCobj *o)
+static LJ_AINLINE void *gc2_finalizer_mpsc_xchg_acqrel(global_State *g,
+						       void *p)
 {
-  return (GCobj *)la_xchgptr_acqrel((void **)&g->gc2.finalizer_mpsc, o);
+  return la_xchgptr_acqrel((void **)&g->gc2.finalizer_mpsc, p);
 }
 
-static LJ_AINLINE GCobj *gc2_finalizer_tail_acq(global_State *g)
+static LJ_AINLINE void *gc2_finalizer_tail_acq(global_State *g)
 {
-  return (GCobj *)la_loadptr_acq((void *const *)&g->gc2.finalizer_tail);
+  return la_loadptr_acq((void *const *)&g->gc2.finalizer_tail);
 }
 
 static LJ_AINLINE void gc2_finalizer_tail_store_rlx(global_State *g,
-						    GCobj *o)
+						    void *p)
 {
-  la_storeptr_rlx((void **)&g->gc2.finalizer_tail, o);
+  la_storeptr_rlx((void **)&g->gc2.finalizer_tail, p);
 }
 
-static LJ_AINLINE void gc2_finalizer_tail_rel(global_State *g, GCobj *o)
+static LJ_AINLINE void gc2_finalizer_tail_rel(global_State *g, void *p)
 {
-  la_storeptr_rel((void **)&g->gc2.finalizer_tail, o);
+  la_storeptr_rel((void **)&g->gc2.finalizer_tail, p);
 }
 
 static LJ_AINLINE uint32_t gc2_finalizer_active_acq(global_State *g)
