@@ -105,11 +105,11 @@ void lj_gc2_init(global_State *g)
     g, LJ_GC2_MINOR_SURVIVAL_MAJOR_PCT);
   la_store64_rlx(&g->gc2.minor_survival_major_requests, 0);
   gc2_force_major_store_rlx(g, 0);
-  la_store64_rlx(&g->gc2.remembered_barriers, 0);
-  la_store64_rlx(&g->gc2.remembered_pushed, 0);
-  la_store64_rlx(&g->gc2.remembered_overflows, 0);
-  la_store64_rlx(&g->gc2.remembered_filtered, 0);
-  la_store64_rlx(&g->gc2.remembered_drained, 0);
+  gc2_remembered_barriers_store_rlx(g, 0);
+  gc2_remembered_pushed_store_rlx(g, 0);
+  gc2_remembered_overflows_store_rlx(g, 0);
+  gc2_remembered_filtered_store_rlx(g, 0);
+  gc2_remembered_drained_store_rlx(g, 0);
   gc2_marks_this_round_store_rlx(g, 0);
   gc2_ssb_head_store_rlx(g, NULL);
   gc2_ssb_published_store_rlx(g, 0);
@@ -782,7 +782,7 @@ void lj_gc2_legacy_mark_begin(global_State *g)
 		     LJ_GC2_HS_FLUSH_SSB|LJ_GC2_HS_RESET_ALLOC);
     drained = lj_gc2_drain_ssb(g);
     if (drained)
-      la_add64_rlx(&g->gc2.remembered_drained, drained);
+      gc2_remembered_drained_add(g, drained);
   } else {
     lj_gc2_handshake(g, LJ_GC2_HS_ENABLE_BARRIER|LJ_GC2_HS_ALLOC_BLACK|
 		     LJ_GC2_HS_RESET_ALLOC);
@@ -3166,9 +3166,9 @@ static void gc2_remember_obj(global_State *g, GCobj *o)
   if (!g || !o)
     return;
   if (gc2_ssb_push(g, o, 0)) {
-    la_add64_rlx(&g->gc2.remembered_pushed, 1);
+    gc2_remembered_pushed_add(g, 1);
   } else {
-    la_add64_rlx(&g->gc2.remembered_overflows, 1);
+    gc2_remembered_overflows_add(g, 1);
     lj_gc2_force_major(g);
     (void)gc2_request_cycle(g, G2TG(g));
   }
@@ -3189,9 +3189,9 @@ static void gc2_remember_pair(global_State *g, GCobj *parent, GCobj *child)
   GCobj *root = parent ? parent : child;
   if (!g || !root || !gc2_remember_active_g(g))
     return;
-  la_add64_rlx(&g->gc2.remembered_barriers, 1);
+  gc2_remembered_barriers_add(g, 1);
   if (!gc2_remember_pair_match(g, parent, child)) {
-    la_add64_rlx(&g->gc2.remembered_filtered, 1);
+    gc2_remembered_filtered_add(g, 1);
     return;
   }
   gc2_remember_obj(g, root);

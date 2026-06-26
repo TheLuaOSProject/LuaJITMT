@@ -161,22 +161,22 @@ static void test_vm_generational_table_store_remembered(lua_State *L,
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 0);
   assert(lj_gc2_ssb_empty(g));
 
-  remembered_barriers0 = la_load64_acq(&g->gc2.remembered_barriers);
-  remembered_pushed0 = la_load64_acq(&g->gc2.remembered_pushed);
-  remembered_filtered0 = la_load64_acq(&g->gc2.remembered_filtered);
+  remembered_barriers0 = gc2_remembered_barriers_acq(g);
+  remembered_pushed0 = gc2_remembered_pushed_acq(g);
+  remembered_filtered0 = gc2_remembered_filtered_acq(g);
   lua_pushvalue(L, 1);
   lua_pushvalue(L, 2);
   lua_pushvalue(L, 3);
   lua_call(L, 2, 0);
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 0);
   lua_pop(L, 1);
-  assert(la_load64_acq(&g->gc2.remembered_barriers) >
+  assert(gc2_remembered_barriers_acq(g) >
 	 remembered_barriers0);
-  assert(la_load64_acq(&g->gc2.remembered_pushed) > remembered_pushed0);
-  assert(la_load64_acq(&g->gc2.remembered_filtered) == remembered_filtered0);
+  assert(gc2_remembered_pushed_acq(g) > remembered_pushed0);
+  assert(gc2_remembered_filtered_acq(g) == remembered_filtered0);
   assert(active_ssb_last(tg) == obj2gco(parent));
 
-  remembered_drained0 = la_load64_acq(&g->gc2.remembered_drained);
+  remembered_drained0 = gc2_remembered_drained_acq(g);
   major_starts0 = la_load64_acq(&g->gc2.major_cycle_starts);
   minor_requests0 = la_load64_acq(&g->gc2.minor_cycle_requests);
   minor_starts0 = la_load64_acq(&g->gc2.minor_cycle_starts);
@@ -186,7 +186,7 @@ static void test_vm_generational_table_store_remembered(lua_State *L,
 	 minor_requests0 + 1u);
   assert(la_load64_acq(&g->gc2.minor_cycle_starts) == minor_starts0 + 1u);
   assert(la_load32_acq(&g->gc2.cycle_roots_minor) == 1);
-  assert(la_load64_acq(&g->gc2.remembered_drained) >=
+  assert(gc2_remembered_drained_acq(g) >=
 	 remembered_drained0 + 1u);
   assert(lj_gc2_ismarked(g, obj2gco(parent)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
@@ -275,9 +275,9 @@ static void test_jit_generational_table_store_remembered(lua_State *L,
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 0);
   assert(lj_gc2_ssb_empty(g));
 
-  remembered_barriers0 = la_load64_acq(&g->gc2.remembered_barriers);
-  remembered_pushed0 = la_load64_acq(&g->gc2.remembered_pushed);
-  remembered_filtered0 = la_load64_acq(&g->gc2.remembered_filtered);
+  remembered_barriers0 = gc2_remembered_barriers_acq(g);
+  remembered_pushed0 = gc2_remembered_pushed_acq(g);
+  remembered_filtered0 = gc2_remembered_filtered_acq(g);
   lua_pushvalue(L, 1);
   lua_pushvalue(L, 2);
   lua_pushvalue(L, 3);
@@ -286,13 +286,13 @@ static void test_jit_generational_table_store_remembered(lua_State *L,
   assert(find_trace(g) != NULL);
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 0);
   lua_pop(L, 1);
-  assert(la_load64_acq(&g->gc2.remembered_barriers) >
+  assert(gc2_remembered_barriers_acq(g) >
 	 remembered_barriers0);
-  assert(la_load64_acq(&g->gc2.remembered_pushed) > remembered_pushed0);
-  assert(la_load64_acq(&g->gc2.remembered_filtered) == remembered_filtered0);
+  assert(gc2_remembered_pushed_acq(g) > remembered_pushed0);
+  assert(gc2_remembered_filtered_acq(g) == remembered_filtered0);
   assert(active_ssb_last(tg) == obj2gco(parent));
 
-  remembered_drained0 = la_load64_acq(&g->gc2.remembered_drained);
+  remembered_drained0 = gc2_remembered_drained_acq(g);
   major_starts0 = la_load64_acq(&g->gc2.major_cycle_starts);
   minor_requests0 = la_load64_acq(&g->gc2.minor_cycle_requests);
   minor_starts0 = la_load64_acq(&g->gc2.minor_cycle_starts);
@@ -302,7 +302,7 @@ static void test_jit_generational_table_store_remembered(lua_State *L,
 	 minor_requests0 + 1u);
   assert(la_load64_acq(&g->gc2.minor_cycle_starts) == minor_starts0 + 1u);
   assert(la_load32_acq(&g->gc2.cycle_roots_minor) == 1);
-  assert(la_load64_acq(&g->gc2.remembered_drained) >=
+  assert(gc2_remembered_drained_acq(g) >=
 	 remembered_drained0 + 1u);
   assert(lj_gc2_ismarked(g, obj2gco(parent)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
@@ -364,8 +364,8 @@ int main(void)
 	 LJ_GC2_MINOR_SURVIVAL_MAJOR_PCT);
   assert(la_load64_acq(&g->gc2.minor_survival_major_requests) == 0);
   assert(la_load32_acq(&g->gc2.force_major) == 0);
-  assert(la_load64_acq(&g->gc2.remembered_filtered) == 0);
-  assert(la_load64_acq(&g->gc2.remembered_drained) == 0);
+  assert(gc2_remembered_filtered_acq(g) == 0);
+  assert(gc2_remembered_drained_acq(g) == 0);
   assert(la_load32_acq(&g->gc2.assist_shift) ==
 	 lj_gc2_assist_shift_from_stepmul(g->gc.stepmul));
   assert(la_load64_acq(&g->gc2.trigger_bytes) >= LJ_GC2_ACCT_FLUSH);
@@ -591,7 +591,7 @@ int main(void)
   parent = tabV(L->top - 1);
   assert(lj_gc2_ssb_push(g, obj2gco(parent)) == 1);
   assert(!lj_gc2_ssb_empty(g));
-  remembered_drained0 = la_load64_acq(&g->gc2.remembered_drained);
+  remembered_drained0 = gc2_remembered_drained_acq(g);
   major_starts0 = la_load64_acq(&g->gc2.major_cycle_starts);
   minor_requests0 = la_load64_acq(&g->gc2.minor_cycle_requests);
   minor_starts0 = la_load64_acq(&g->gc2.minor_cycle_starts);
@@ -603,7 +603,7 @@ int main(void)
   assert(la_load32_acq(&g->gc2.cycle_minor_requested) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(parent)) == 1);
   assert(lj_gc2_ssb_empty(g));
-  assert(la_load64_acq(&g->gc2.remembered_drained) >=
+  assert(gc2_remembered_drained_acq(g) >=
 	 remembered_drained0 + 1u);
   lj_gc2_legacy_cycle_end(g);
   lj_gc2_set_generational(g, 0);
@@ -624,51 +624,51 @@ int main(void)
   assert(lj_gc2_markobj(g, obj2gco(parent)) == 1);
   assert(lj_gc2_markobj(g, obj2gco(child)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(grandchild)) == 0);
-  remembered_pushed0 = la_load64_acq(&g->gc2.remembered_pushed);
-  remembered_filtered0 = la_load64_acq(&g->gc2.remembered_filtered);
+  remembered_pushed0 = gc2_remembered_pushed_acq(g);
+  remembered_filtered0 = gc2_remembered_filtered_acq(g);
   settabV(L, &vals[0], grandchild);
   lj_gc2_barrier_tv_pair_g(g, obj2gco(parent), &vals[0]);
-  assert(la_load64_acq(&g->gc2.remembered_pushed) == remembered_pushed0 + 1u);
+  assert(gc2_remembered_pushed_acq(g) == remembered_pushed0 + 1u);
   settabV(L, &vals[0], child);
   lj_gc2_barrier_tv_pair_g(g, obj2gco(parent), &vals[0]);
-  assert(la_load64_acq(&g->gc2.remembered_filtered) ==
+  assert(gc2_remembered_filtered_acq(g) ==
 	 remembered_filtered0 + 1u);
-  assert(la_load64_acq(&g->gc2.remembered_pushed) ==
+  assert(gc2_remembered_pushed_acq(g) ==
 	 remembered_pushed0 + 1u);
   (void)lj_gc2_handshake(g, LJ_GC2_HS_FLUSH_SSB);
   (void)lj_gc2_drain_ssb(g);
-  remembered_pushed0 = la_load64_acq(&g->gc2.remembered_pushed);
-  remembered_filtered0 = la_load64_acq(&g->gc2.remembered_filtered);
+  remembered_pushed0 = gc2_remembered_pushed_acq(g);
+  remembered_filtered0 = gc2_remembered_filtered_acq(g);
   setintV(&vals[0], 1);
   settabV(L, &vals[1], grandchild);
   assert(lj_meta_tsettv_pair(L, L->top - 3, &vals[0], &vals[1]) != NULL);
-  assert(la_load64_acq(&g->gc2.remembered_pushed) == remembered_pushed0 + 2u);
+  assert(gc2_remembered_pushed_acq(g) == remembered_pushed0 + 2u);
   settabV(L, &vals[1], child);
   assert(lj_meta_tsettv_pair(L, L->top - 3, &vals[0], &vals[1]) != NULL);
-  assert(la_load64_acq(&g->gc2.remembered_filtered) ==
+  assert(gc2_remembered_filtered_acq(g) ==
 	 remembered_filtered0 + 1u);
-  assert(la_load64_acq(&g->gc2.remembered_pushed) ==
+  assert(gc2_remembered_pushed_acq(g) ==
 	 remembered_pushed0 + 3u);
   (void)lj_gc2_handshake(g, LJ_GC2_HS_FLUSH_SSB);
   (void)lj_gc2_drain_ssb(g);
-  remembered_pushed0 = la_load64_acq(&g->gc2.remembered_pushed);
-  remembered_filtered0 = la_load64_acq(&g->gc2.remembered_filtered);
+  remembered_pushed0 = gc2_remembered_pushed_acq(g);
+  remembered_filtered0 = gc2_remembered_filtered_acq(g);
   lj_gc2_barrier_obj_pair(L, obj2gco(parent), obj2gco(grandchild));
-  assert(la_load64_acq(&g->gc2.remembered_pushed) == remembered_pushed0 + 1u);
+  assert(gc2_remembered_pushed_acq(g) == remembered_pushed0 + 1u);
   lj_gc2_barrier_obj_pair(L, obj2gco(parent), obj2gco(child));
-  assert(la_load64_acq(&g->gc2.remembered_filtered) ==
+  assert(gc2_remembered_filtered_acq(g) ==
 	 remembered_filtered0 + 1u);
-  assert(la_load64_acq(&g->gc2.remembered_pushed) ==
+  assert(gc2_remembered_pushed_acq(g) ==
 	 remembered_pushed0 + 1u);
   (void)lj_gc2_handshake(g, LJ_GC2_HS_FLUSH_SSB);
   (void)lj_gc2_drain_ssb(g);
-  remembered_pushed0 = la_load64_acq(&g->gc2.remembered_pushed);
-  remembered_filtered0 = la_load64_acq(&g->gc2.remembered_filtered);
+  remembered_pushed0 = gc2_remembered_pushed_acq(g);
+  remembered_filtered0 = gc2_remembered_filtered_acq(g);
   settabV(L, &vals[0], grandchild);
   settabV(L, &vals[1], child);
   lj_gc2_barrier_tvn_pair_g(g, obj2gco(parent), vals, 2);
-  assert(la_load64_acq(&g->gc2.remembered_pushed) == remembered_pushed0 + 1u);
-  assert(la_load64_acq(&g->gc2.remembered_filtered) ==
+  assert(gc2_remembered_pushed_acq(g) == remembered_pushed0 + 1u);
+  assert(gc2_remembered_filtered_acq(g) ==
 	 remembered_filtered0 + 1u);
   (void)lj_gc2_handshake(g, LJ_GC2_HS_FLUSH_SSB);
   (void)lj_gc2_drain_ssb(g);
@@ -697,10 +697,10 @@ int main(void)
   la_store32_rel(&g->gc2.force_major, 0);  /* Internal minor test owns age setup. */
   la_store32_rel(&g->gc2.minor_sweep_enabled, 1);
   la_store32_rel(&g->gc2.minor_roots_enabled, 1);
-  remembered_pushed0 = la_load64_acq(&g->gc2.remembered_pushed);
-  remembered_drained0 = la_load64_acq(&g->gc2.remembered_drained);
+  remembered_pushed0 = gc2_remembered_pushed_acq(g);
+  remembered_drained0 = gc2_remembered_drained_acq(g);
   lj_gc2_barrier_obj_pair(L, obj2gco(parent), obj2gco(child));
-  assert(la_load64_acq(&g->gc2.remembered_pushed) == remembered_pushed0 + 1u);
+  assert(gc2_remembered_pushed_acq(g) == remembered_pushed0 + 1u);
   major_starts0 = la_load64_acq(&g->gc2.major_cycle_starts);
   minor_requests0 = la_load64_acq(&g->gc2.minor_cycle_requests);
   minor_starts0 = la_load64_acq(&g->gc2.minor_cycle_starts);
@@ -717,7 +717,7 @@ int main(void)
   lj_gc2_barrier_obj_pair(L, obj2gco(parent), obj2gco(active_child));
   assert(lj_gc2_ismarked(g, obj2gco(active_child)) == 1);
   lua_pop(L, 1);
-  assert(la_load64_acq(&g->gc2.remembered_drained) >=
+  assert(gc2_remembered_drained_acq(g) >=
 	 remembered_drained0 + 1u);
   assert(lj_gc2_ismarked(g, obj2gco(old_survivor)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(parent)) == 1);

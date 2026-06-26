@@ -444,9 +444,9 @@ static void exercise_tsetm_helper_post_barrier(lua_State *L)
   la_store32_rel(&g->gc2.generational, 1);
   la_store32_rel(&g->gc2.minor_sweep_enabled, 1);
   la_store32_rel(&tg->mark_active, 1);
-  remembered0 = la_load64_acq(&g->gc2.remembered_barriers);
+  remembered0 = gc2_remembered_barriers_acq(g);
   lj_tab_storetvn_forvm_array(L, t, 4, src, 2);
-  assert(la_load64_acq(&g->gc2.remembered_barriers) > remembered0);
+  assert(gc2_remembered_barriers_acq(g) > remembered0);
   tabfwd_assert_i32(lj_tab_getint(t, 4), 7171);
   tabfwd_assert_i32(lj_tab_getint(t, 5), 7272);
 

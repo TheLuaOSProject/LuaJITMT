@@ -2444,6 +2444,89 @@ static LJ_AINLINE uint32_t gc2_force_major_xchg_acqrel(global_State *g,
   return la_xchg32_acqrel(&g->gc2.force_major, force);
 }
 
+static LJ_AINLINE uint64_t gc2_remembered_barriers_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.remembered_barriers);
+}
+
+static LJ_AINLINE void gc2_remembered_barriers_store_rlx(global_State *g,
+							 uint64_t n)
+{
+  la_store64_rlx(&g->gc2.remembered_barriers, n);
+}
+
+static LJ_AINLINE void gc2_remembered_barriers_add(global_State *g,
+						   uint64_t n)
+{
+  la_add64_rlx(&g->gc2.remembered_barriers, n);
+}
+
+static LJ_AINLINE uint64_t gc2_remembered_pushed_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.remembered_pushed);
+}
+
+static LJ_AINLINE void gc2_remembered_pushed_store_rlx(global_State *g,
+						       uint64_t n)
+{
+  la_store64_rlx(&g->gc2.remembered_pushed, n);
+}
+
+static LJ_AINLINE void gc2_remembered_pushed_add(global_State *g, uint64_t n)
+{
+  la_add64_rlx(&g->gc2.remembered_pushed, n);
+}
+
+static LJ_AINLINE uint64_t gc2_remembered_overflows_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.remembered_overflows);
+}
+
+static LJ_AINLINE void gc2_remembered_overflows_store_rlx(global_State *g,
+							  uint64_t n)
+{
+  la_store64_rlx(&g->gc2.remembered_overflows, n);
+}
+
+static LJ_AINLINE void gc2_remembered_overflows_add(global_State *g,
+						    uint64_t n)
+{
+  la_add64_rlx(&g->gc2.remembered_overflows, n);
+}
+
+static LJ_AINLINE uint64_t gc2_remembered_filtered_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.remembered_filtered);
+}
+
+static LJ_AINLINE void gc2_remembered_filtered_store_rlx(global_State *g,
+							 uint64_t n)
+{
+  la_store64_rlx(&g->gc2.remembered_filtered, n);
+}
+
+static LJ_AINLINE void gc2_remembered_filtered_add(global_State *g,
+						   uint64_t n)
+{
+  la_add64_rlx(&g->gc2.remembered_filtered, n);
+}
+
+static LJ_AINLINE uint64_t gc2_remembered_drained_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.remembered_drained);
+}
+
+static LJ_AINLINE void gc2_remembered_drained_store_rlx(global_State *g,
+							uint64_t n)
+{
+  la_store64_rlx(&g->gc2.remembered_drained, n);
+}
+
+static LJ_AINLINE void gc2_remembered_drained_add(global_State *g, uint64_t n)
+{
+  la_add64_rlx(&g->gc2.remembered_drained, n);
+}
+
 static LJ_AINLINE uint32_t gc2_cycle_minor_requested_acq(global_State *g)
 {
   return la_load32_acq(&g->gc2.cycle_minor_requested);
