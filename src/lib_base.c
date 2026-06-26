@@ -664,9 +664,9 @@ static void gc_stats_push(lua_State *L)
   gc_stats_setnum(L, t, "weak_legacy_backfill_cleared",
 		  gc2_weak_legacy_backfill_cleared_acq(g));
   gc_stats_setnum(L, t, "weak_keys_marked",
-		  la_load64_acq(&gc2->weak_keys_marked));
+		  gc2_weak_keys_marked_acq(g));
   gc_stats_setnum(L, t, "weak_values_marked",
-		  la_load64_acq(&gc2->weak_values_marked));
+		  gc2_weak_values_marked_acq(g));
   gc_stats_setnum(L, t, "finreg_cdata_sets",
 		  gc2_finreg_cdata_sets_acq(g));
   gc_stats_setnum(L, t, "finreg_cdata_clears",

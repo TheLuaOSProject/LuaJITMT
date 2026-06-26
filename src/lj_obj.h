@@ -2525,6 +2525,38 @@ static LJ_AINLINE void gc2_weak_legacy_backfill_cleared_add(global_State *g,
   la_add64_rlx(&g->gc2.weak_legacy_backfill_cleared, n);
 }
 
+static LJ_AINLINE uint64_t gc2_weak_keys_marked_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.weak_keys_marked);
+}
+
+static LJ_AINLINE void gc2_weak_keys_marked_store_rlx(global_State *g,
+						      uint64_t n)
+{
+  la_store64_rlx(&g->gc2.weak_keys_marked, n);
+}
+
+static LJ_AINLINE void gc2_weak_keys_marked_add(global_State *g, uint64_t n)
+{
+  la_add64_rlx(&g->gc2.weak_keys_marked, n);
+}
+
+static LJ_AINLINE uint64_t gc2_weak_values_marked_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.weak_values_marked);
+}
+
+static LJ_AINLINE void gc2_weak_values_marked_store_rlx(global_State *g,
+							uint64_t n)
+{
+  la_store64_rlx(&g->gc2.weak_values_marked, n);
+}
+
+static LJ_AINLINE void gc2_weak_values_marked_add(global_State *g, uint64_t n)
+{
+  la_add64_rlx(&g->gc2.weak_values_marked, n);
+}
+
 static LJ_AINLINE uint64_t gc2_weak_scan_cursor_acq(global_State *g)
 {
   return la_load64_acq(&g->gc2.weak_scan_cursor);

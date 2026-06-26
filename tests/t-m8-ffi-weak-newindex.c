@@ -49,14 +49,14 @@ static void test_ffi_weak_newindex_target_write_barrier(lua_State *L,
   lj_gc2_legacy_weak_begin(g);
   assert(lj_gc2_weak_drain(g, 1) == 1u);
   assert(lj_gc2_weak_drain(g, 1) == 0);
-  weak_vals0 = la_load64_acq(&g->gc2.weak_values_marked);
+  weak_vals0 = gc2_weak_values_marked_acq(g);
 
   lua_pushvalue(L, 4);
   lua_pushvalue(L, 2);
   lua_pushvalue(L, 3);
   lua_call(L, 2, 0);
   assert(lj_gc2_ismarked(g, obj2gco(val)) == 1);
-  assert(la_load64_acq(&g->gc2.weak_values_marked) == weak_vals0 + 1u);
+  assert(gc2_weak_values_marked_acq(g) == weak_vals0 + 1u);
   assert(!lj_gc2_ssb_empty(g));
   flush_and_drain(g, tg);
 

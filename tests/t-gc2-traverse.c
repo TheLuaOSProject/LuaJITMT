@@ -1154,8 +1154,8 @@ static void test_jit_weak_table_store_helper_barrier(lua_State *L,
   assert(lj_gc2_ismarked(g, obj2gco(weak)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(key)) == 0);
   assert(lj_gc2_ismarked(g, obj2gco(val)) == 0);
-  weak_keys0 = la_load64_acq(&g->gc2.weak_keys_marked);
-  weak_vals0 = la_load64_acq(&g->gc2.weak_values_marked);
+  weak_keys0 = gc2_weak_keys_marked_acq(g);
+  weak_vals0 = gc2_weak_values_marked_acq(g);
 
   lj_gc2_legacy_weak_begin(g);
   lua_pushvalue(L, 1);
@@ -1167,8 +1167,8 @@ static void test_jit_weak_table_store_helper_barrier(lua_State *L,
   assert(find_trace(g) != NULL);
   assert(lj_gc2_ismarked(g, obj2gco(key)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(val)) == 1);
-  assert(la_load64_acq(&g->gc2.weak_keys_marked) == weak_keys0 + 1u);
-  assert(la_load64_acq(&g->gc2.weak_values_marked) == weak_vals0 + 1u);
+  assert(gc2_weak_keys_marked_acq(g) == weak_keys0 + 1u);
+  assert(gc2_weak_values_marked_acq(g) == weak_vals0 + 1u);
   assert(!lj_gc2_ssb_empty(g));
   flush_and_drain(g, tg);
   lj_gc2_legacy_cycle_end(g);
@@ -1219,8 +1219,8 @@ static void test_jit_weak_array_store_helper_barrier(lua_State *L,
   assert(lj_gc2_ismarked(g, obj2gco(weak)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(oldval)) == 0);
   assert(lj_gc2_ismarked(g, obj2gco(val)) == 0);
-  weak_keys0 = la_load64_acq(&g->gc2.weak_keys_marked);
-  weak_vals0 = la_load64_acq(&g->gc2.weak_values_marked);
+  weak_keys0 = gc2_weak_keys_marked_acq(g);
+  weak_vals0 = gc2_weak_values_marked_acq(g);
 
   lj_gc2_legacy_weak_begin(g);
   lua_pushvalue(L, 1);
@@ -1230,8 +1230,8 @@ static void test_jit_weak_array_store_helper_barrier(lua_State *L,
   lua_call(L, 3, 0);
   assert(find_trace(g) != NULL);
   assert(lj_gc2_ismarked(g, obj2gco(val)) == 1);
-  assert(la_load64_acq(&g->gc2.weak_keys_marked) == weak_keys0);
-  assert(la_load64_acq(&g->gc2.weak_values_marked) == weak_vals0 + 1u);
+  assert(gc2_weak_keys_marked_acq(g) == weak_keys0);
+  assert(gc2_weak_values_marked_acq(g) == weak_vals0 + 1u);
   assert(!lj_gc2_ssb_empty(g));
   flush_and_drain(g, tg);
   lj_gc2_legacy_cycle_end(g);
@@ -1397,7 +1397,7 @@ static void test_jit_profile_registry_weak_barrier(void)
   assert(lj_gc2_ismarked(g2, obj2gco(cb)) == 0);
   lua_pop(L2, 1);
 
-  weak_vals0 = la_load64_acq(&g2->gc2.weak_values_marked);
+  weak_vals0 = gc2_weak_values_marked_acq(g2);
   lj_gc2_legacy_weak_begin(g2);
   lua_getglobal(L2, "require");
   lua_pushliteral(L2, LUA_JITLIBNAME ".profile");
@@ -1409,7 +1409,7 @@ static void test_jit_profile_registry_weak_barrier(void)
   assert(lj_gc2_ismarked(g2, obj2gco(cb)) == 1);
   while (lj_gc2_weak_drain(g2, 1) != 0)
     ;
-  assert(la_load64_acq(&g2->gc2.weak_values_marked) > weak_vals0);
+  assert(gc2_weak_values_marked_acq(g2) > weak_vals0);
   luaJIT_profile_stop(L2);
   lj_gc2_legacy_cycle_end(g2);
   lua_close(L2);
@@ -2059,16 +2059,16 @@ static void test_weak_post_clear_resurrection_write(lua_State *L,
   assert(lj_gc2_weak_drain(g, 1) == 1u);
   assert(weak_entry_is_nil(L, weak, key));
   assert(lj_gc2_weak_drain(g, 1) == 0);
-  weak_keys0 = la_load64_acq(&g->gc2.weak_keys_marked);
-  weak_vals0 = la_load64_acq(&g->gc2.weak_values_marked);
+  weak_keys0 = gc2_weak_keys_marked_acq(g);
+  weak_vals0 = gc2_weak_values_marked_acq(g);
 
   lua_pushvalue(L, 4);
   lua_pushvalue(L, 5);
   lua_settable(L, 1);
   assert(lj_gc2_ismarked(g, obj2gco(late_key)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(late_val)) == 1);
-  assert(la_load64_acq(&g->gc2.weak_keys_marked) == weak_keys0 + 1u);
-  assert(la_load64_acq(&g->gc2.weak_values_marked) == weak_vals0 + 1u);
+  assert(gc2_weak_keys_marked_acq(g) == weak_keys0 + 1u);
+  assert(gc2_weak_values_marked_acq(g) == weak_vals0 + 1u);
   assert(!lj_gc2_ssb_empty(g));
   flush_and_drain(g, tg);
   lua_pushvalue(L, 4);
@@ -2105,8 +2105,8 @@ static void test_vm_weak_post_clear_existing_key_write(lua_State *L,
   assert(lj_gc2_weak_drain(g, 1) == 1u);
   assert(weak_entry_is_nil(L, weak, key));
   assert(lj_gc2_weak_drain(g, 1) == 0);
-  weak_keys0 = la_load64_acq(&g->gc2.weak_keys_marked);
-  weak_vals0 = la_load64_acq(&g->gc2.weak_values_marked);
+  weak_keys0 = gc2_weak_keys_marked_acq(g);
+  weak_vals0 = gc2_weak_values_marked_acq(g);
 
   lua_pushvalue(L, 1);
   lua_pushvalue(L, 2);
@@ -2115,8 +2115,8 @@ static void test_vm_weak_post_clear_existing_key_write(lua_State *L,
   lua_call(L, 3, 0);
   assert(lj_gc2_ismarked(g, obj2gco(key)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(late_val)) == 1);
-  assert(la_load64_acq(&g->gc2.weak_keys_marked) == weak_keys0 + 1u);
-  assert(la_load64_acq(&g->gc2.weak_values_marked) == weak_vals0);
+  assert(gc2_weak_keys_marked_acq(g) == weak_keys0 + 1u);
+  assert(gc2_weak_values_marked_acq(g) == weak_vals0);
   assert(!lj_gc2_ssb_empty(g));
   flush_and_drain(g, tg);
   lua_pushvalue(L, 3);
@@ -2168,8 +2168,8 @@ static void test_capi_rawset_weak_write_barrier(lua_State *L, global_State *g,
   assert(lj_gc2_ismarked(g, obj2gco(array_val)) == 0);
 
   lj_gc2_legacy_weak_begin(g);
-  weak_keys0 = la_load64_acq(&g->gc2.weak_keys_marked);
-  weak_vals0 = la_load64_acq(&g->gc2.weak_values_marked);
+  weak_keys0 = gc2_weak_keys_marked_acq(g);
+  weak_vals0 = gc2_weak_values_marked_acq(g);
 
   lua_pushvalue(L, 2);
   lua_pushvalue(L, 3);
@@ -2180,8 +2180,8 @@ static void test_capi_rawset_weak_write_barrier(lua_State *L, global_State *g,
   assert(lj_gc2_ismarked(g, obj2gco(hash_key)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(hash_val)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(array_val)) == 1);
-  assert(la_load64_acq(&g->gc2.weak_keys_marked) == weak_keys0 + 1u);
-  assert(la_load64_acq(&g->gc2.weak_values_marked) == weak_vals0 + 2u);
+  assert(gc2_weak_keys_marked_acq(g) == weak_keys0 + 1u);
+  assert(gc2_weak_values_marked_acq(g) == weak_vals0 + 2u);
   assert(!lj_gc2_ssb_empty(g));
   flush_and_drain(g, tg);
   lj_gc2_legacy_cycle_end(g);
@@ -2213,8 +2213,8 @@ static void test_weak_key_write_barrier(lua_State *L, global_State *g,
   assert(lj_gc2_ismarked(g, obj2gco(weak)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(key)) == 0);
   assert(lj_gc2_ismarked(g, obj2gco(val)) == 0);
-  weak_keys0 = la_load64_acq(&g->gc2.weak_keys_marked);
-  weak_vals0 = la_load64_acq(&g->gc2.weak_values_marked);
+  weak_keys0 = gc2_weak_keys_marked_acq(g);
+  weak_vals0 = gc2_weak_values_marked_acq(g);
 
   lj_gc2_legacy_weak_begin(g);
   lua_pushvalue(L, 2);
@@ -2222,8 +2222,8 @@ static void test_weak_key_write_barrier(lua_State *L, global_State *g,
   lua_settable(L, 1);
   assert(lj_gc2_ismarked(g, obj2gco(key)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(val)) == 1);
-  assert(la_load64_acq(&g->gc2.weak_keys_marked) == weak_keys0 + 1u);
-  assert(la_load64_acq(&g->gc2.weak_values_marked) == weak_vals0 + 1u);
+  assert(gc2_weak_keys_marked_acq(g) == weak_keys0 + 1u);
+  assert(gc2_weak_values_marked_acq(g) == weak_vals0 + 1u);
   assert(!lj_gc2_ssb_empty(g));
   flush_and_drain(g, tg);
   lj_gc2_legacy_cycle_end(g);
@@ -2257,8 +2257,8 @@ static void test_vm_weak_key_write_barrier(lua_State *L, global_State *g,
   assert(lj_gc2_ismarked(g, obj2gco(weak)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(key)) == 0);
   assert(lj_gc2_ismarked(g, obj2gco(val)) == 0);
-  weak_keys0 = la_load64_acq(&g->gc2.weak_keys_marked);
-  weak_vals0 = la_load64_acq(&g->gc2.weak_values_marked);
+  weak_keys0 = gc2_weak_keys_marked_acq(g);
+  weak_vals0 = gc2_weak_values_marked_acq(g);
 
   lj_gc2_legacy_weak_begin(g);
   lua_pushvalue(L, 1);
@@ -2268,8 +2268,8 @@ static void test_vm_weak_key_write_barrier(lua_State *L, global_State *g,
   lua_call(L, 3, 0);
   assert(lj_gc2_ismarked(g, obj2gco(key)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(val)) == 1);
-  assert(la_load64_acq(&g->gc2.weak_keys_marked) == weak_keys0 + 1u);
-  assert(la_load64_acq(&g->gc2.weak_values_marked) == weak_vals0);
+  assert(gc2_weak_keys_marked_acq(g) == weak_keys0 + 1u);
+  assert(gc2_weak_values_marked_acq(g) == weak_vals0);
   assert(!lj_gc2_ssb_empty(g));
   flush_and_drain(g, tg);
   lj_gc2_legacy_cycle_end(g);
@@ -2319,8 +2319,8 @@ static void test_peer_weak_key_write_barrier(lua_State *L, global_State *g,
   assert(lj_gc2_ismarked(g, obj2gco(weak)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(key)) == 0);
   assert(lj_gc2_ismarked(g, obj2gco(val)) == 0);
-  weak_keys0 = la_load64_acq(&g->gc2.weak_keys_marked);
-  weak_vals0 = la_load64_acq(&g->gc2.weak_values_marked);
+  weak_keys0 = gc2_weak_keys_marked_acq(g);
+  weak_vals0 = gc2_weak_values_marked_acq(g);
 
   lj_gc2_legacy_weak_begin(g);
   grey_wait(&ctx.barrier);  /* Peer TG performs the P_WEAK table write. */
@@ -2329,8 +2329,8 @@ static void test_peer_weak_key_write_barrier(lua_State *L, global_State *g,
   assert(pthread_barrier_destroy(&ctx.barrier) == 0);
   assert(lj_gc2_ismarked(g, obj2gco(key)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(val)) == 1);
-  assert(la_load64_acq(&g->gc2.weak_keys_marked) == weak_keys0 + 1u);
-  assert(la_load64_acq(&g->gc2.weak_values_marked) == weak_vals0);
+  assert(gc2_weak_keys_marked_acq(g) == weak_keys0 + 1u);
+  assert(gc2_weak_values_marked_acq(g) == weak_vals0);
   assert(!lj_gc2_ssb_empty(g));
   flush_and_drain(g, tg);
   lj_gc2_legacy_cycle_end(g);
@@ -2365,8 +2365,8 @@ static void test_vm_weak_value_hash_key_barrier(lua_State *L, global_State *g,
   assert(lj_gc2_ismarked(g, obj2gco(weak)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(key)) == 0);
   assert(lj_gc2_ismarked(g, obj2gco(val)) == 0);
-  weak_keys0 = la_load64_acq(&g->gc2.weak_keys_marked);
-  weak_vals0 = la_load64_acq(&g->gc2.weak_values_marked);
+  weak_keys0 = gc2_weak_keys_marked_acq(g);
+  weak_vals0 = gc2_weak_values_marked_acq(g);
 
   lj_gc2_legacy_weak_begin(g);
   lua_pushvalue(L, 1);
@@ -2376,8 +2376,8 @@ static void test_vm_weak_value_hash_key_barrier(lua_State *L, global_State *g,
   lua_call(L, 3, 0);
   assert(lj_gc2_ismarked(g, obj2gco(key)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(val)) == 1);
-  assert(la_load64_acq(&g->gc2.weak_keys_marked) == weak_keys0 + 1u);
-  assert(la_load64_acq(&g->gc2.weak_values_marked) == weak_vals0);
+  assert(gc2_weak_keys_marked_acq(g) == weak_keys0 + 1u);
+  assert(gc2_weak_values_marked_acq(g) == weak_vals0);
   assert(!lj_gc2_ssb_empty(g));
   flush_and_drain(g, tg);
   lj_gc2_legacy_cycle_end(g);
@@ -2449,7 +2449,7 @@ static void test_table_insert_weak_value_array_barrier(lua_State *L,
   assert(lj_gc2_ismarked(g, obj2gco(val)) == 0);
 
   lj_gc2_legacy_weak_begin(g);
-  weak_vals0 = la_load64_acq(&g->gc2.weak_values_marked);
+  weak_vals0 = gc2_weak_values_marked_acq(g);
   lua_getglobal(L, "table");
   lua_getfield(L, -1, "insert");
   lua_pushvalue(L, 1);
@@ -2457,7 +2457,7 @@ static void test_table_insert_weak_value_array_barrier(lua_State *L,
   lua_call(L, 2, 0);  /* table.insert weak-value array write. */
   lua_pop(L, 1);
   assert(lj_gc2_ismarked(g, obj2gco(val)) == 1);
-  assert(la_load64_acq(&g->gc2.weak_values_marked) == weak_vals0 + 1u);
+  assert(gc2_weak_values_marked_acq(g) == weak_vals0 + 1u);
   assert(!lj_gc2_ssb_empty(g));
   flush_and_drain(g, tg);
   lj_gc2_legacy_cycle_end(g);
@@ -2498,20 +2498,20 @@ static void test_capi_weak_newindex_target_write_barrier(lua_State *L,
   assert(lj_gc2_weak_drain(g, 1) == 1u);
   assert(weak_entry_is_nil(L, weak, key));
   assert(lj_gc2_weak_drain(g, 1) == 0);
-  weak_keys0 = la_load64_acq(&g->gc2.weak_keys_marked);
-  weak_vals0 = la_load64_acq(&g->gc2.weak_values_marked);
+  weak_keys0 = gc2_weak_keys_marked_acq(g);
+  weak_vals0 = gc2_weak_values_marked_acq(g);
 
   lua_pushvalue(L, 2);
   lua_pushvalue(L, 5);
   lua_settable(L, 4);
   assert(lj_gc2_ismarked(g, obj2gco(late_val)) == 1);
-  assert(la_load64_acq(&g->gc2.weak_keys_marked) == weak_keys0);
-  assert(la_load64_acq(&g->gc2.weak_values_marked) == weak_vals0 + 1u);
+  assert(gc2_weak_keys_marked_acq(g) == weak_keys0);
+  assert(gc2_weak_values_marked_acq(g) == weak_vals0 + 1u);
 
   lua_pushvalue(L, 6);
   lua_setfield(L, 4, "field");
   assert(lj_gc2_ismarked(g, obj2gco(field_val)) == 1);
-  assert(la_load64_acq(&g->gc2.weak_values_marked) == weak_vals0 + 2u);
+  assert(gc2_weak_values_marked_acq(g) == weak_vals0 + 2u);
   assert(!lj_gc2_ssb_empty(g));
   flush_and_drain(g, tg);
 
@@ -3063,7 +3063,7 @@ static void test_lib_register_weak_value_barrier(void)
   assert(lj_gc2_ismarked(g2, obj2gco(val)) == 0);
   lua_pop(L2, 1);
 
-  weak_vals0 = la_load64_acq(&g2->gc2.weak_values_marked);
+  weak_vals0 = gc2_weak_values_marked_acq(g2);
   lj_gc2_legacy_weak_begin(g2);
   lj_lib_register(L2, "m8lib", init, NULL);
   assert(tabV(L2->top - 1) == mod);
@@ -3072,7 +3072,7 @@ static void test_lib_register_weak_value_barrier(void)
     ;
   lua_getfield(L2, -1, "slot");
   assert(tabV(L2->top - 1) == val);
-  assert(la_load64_acq(&g2->gc2.weak_values_marked) == weak_vals0 + 1u);
+  assert(gc2_weak_values_marked_acq(g2) == weak_vals0 + 1u);
   lj_gc2_legacy_cycle_end(g2);
   lua_close(L2);
   lj_thr_set_tg(oldtg);

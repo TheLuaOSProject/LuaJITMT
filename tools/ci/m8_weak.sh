@@ -131,4 +131,30 @@ if hits=$(grep -nE -- "${weak_scan_raw_re}|${weak_scan_addr_re}" \
   exit 1
 fi
 
+for helper in gc2_weak_keys_marked_acq \
+  gc2_weak_keys_marked_store_rlx \
+  gc2_weak_keys_marked_add \
+  gc2_weak_values_marked_acq \
+  gc2_weak_values_marked_store_rlx \
+  gc2_weak_values_marked_add; do
+  if ! grep -qE "static LJ_AINLINE .*[*[:space:]]${helper}[[:space:]]*[(]" \
+      "$ROOT/src/lj_obj.h"; then
+    printf '%s\n' "${helper} helper is required for GC2 weak mark counters" >&2
+    exit 1
+  fi
+done
+
+weak_mark_counters='weak_(keys|values)_marked'
+weak_mark_raw_re="->[[:space:]]*(gc2[.])?${weak_mark_counters}"
+weak_mark_raw_re="${weak_mark_raw_re}([^[:alnum:]_]|$)"
+weak_mark_addr_re="&[[:space:]]*[^)]*->[[:space:]]*(gc2[.])?"
+weak_mark_addr_re="${weak_mark_addr_re}${weak_mark_counters}([^[:alnum:]_]|$)"
+if hits=$(grep -nE -- "${weak_mark_raw_re}|${weak_mark_addr_re}" \
+    "$ROOT/src/lj_gc2.c" "$ROOT/src/lib_base.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' \
+    'raw GC2 weak mark counter access is forbidden; use gc2_weak_* helpers' >&2
+  exit 1
+fi
+
 exec "$ROOT/tools/ci/lua_test.sh" m8_weak
