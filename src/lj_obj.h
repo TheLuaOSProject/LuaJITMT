@@ -2119,6 +2119,70 @@ static LJ_AINLINE GC2SSBNode *gc2_ssb_head_xchg_acqrel(global_State *g,
 					 head);  /* 05 section 5.6.2. */
 }
 
+static LJ_AINLINE uint32_t gc2_ssb_published_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.ssb_published);
+}
+
+static LJ_AINLINE void gc2_ssb_published_store_rlx(global_State *g,
+						   uint32_t n)
+{
+  la_store32_rlx(&g->gc2.ssb_published, n);
+}
+
+static LJ_AINLINE void gc2_ssb_published_add(global_State *g, uint32_t n)
+{
+  la_add32_rlx(&g->gc2.ssb_published, n);
+}
+
+static LJ_AINLINE uint32_t gc2_ssb_drained_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.ssb_drained);
+}
+
+static LJ_AINLINE void gc2_ssb_drained_store_rlx(global_State *g, uint32_t n)
+{
+  la_store32_rlx(&g->gc2.ssb_drained, n);
+}
+
+static LJ_AINLINE void gc2_ssb_drained_add(global_State *g, uint32_t n)
+{
+  la_add32_rlx(&g->gc2.ssb_drained, n);
+}
+
+static LJ_AINLINE uint64_t gc2_ssb_items_published_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.ssb_items_published);
+}
+
+static LJ_AINLINE void gc2_ssb_items_published_store_rlx(global_State *g,
+							 uint64_t n)
+{
+  la_store64_rlx(&g->gc2.ssb_items_published, n);
+}
+
+static LJ_AINLINE void gc2_ssb_items_published_add(global_State *g,
+						   uint64_t n)
+{
+  la_add64_rlx(&g->gc2.ssb_items_published, n);
+}
+
+static LJ_AINLINE uint64_t gc2_ssb_items_drained_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.ssb_items_drained);
+}
+
+static LJ_AINLINE void gc2_ssb_items_drained_store_rlx(global_State *g,
+						       uint64_t n)
+{
+  la_store64_rlx(&g->gc2.ssb_items_drained, n);
+}
+
+static LJ_AINLINE void gc2_ssb_items_drained_add(global_State *g, uint64_t n)
+{
+  la_add64_rlx(&g->gc2.ssb_items_drained, n);
+}
+
 static LJ_AINLINE uint32_t gc2_n_threads_acq(global_State *g)
 {
   return la_load32_acq(&g->gc2.n_threads);

@@ -68,6 +68,30 @@ if hits=$(grep -nE -- '->[[:space:]]*gc2[.]ssb_head|&[[:space:]]*[^)]*->[[:space
   printf '%s\n' 'raw GC2 published SSB stack access is forbidden; use gc2_ssb_head_* helpers' >&2
   exit 1
 fi
+for helper in gc2_ssb_published_acq \
+  gc2_ssb_published_store_rlx \
+  gc2_ssb_published_add \
+  gc2_ssb_drained_acq \
+  gc2_ssb_drained_store_rlx \
+  gc2_ssb_drained_add \
+  gc2_ssb_items_published_acq \
+  gc2_ssb_items_published_store_rlx \
+  gc2_ssb_items_published_add \
+  gc2_ssb_items_drained_acq \
+  gc2_ssb_items_drained_store_rlx \
+  gc2_ssb_items_drained_add; do
+  if ! grep -qE "^[[:space:]]*static LJ_AINLINE .*[*[:space:]]${helper}[[:space:]]*[(]" \
+      "$ROOT/src/lj_obj.h"; then
+    printf '%s\n' "${helper} helper is required for GC2 SSB telemetry counters" >&2
+    exit 1
+  fi
+done
+if hits=$(grep -nE -- '->[[:space:]]*gc2[.](ssb_published|ssb_drained|ssb_items_published|ssb_items_drained)([^[:alnum:]_]|$)|&[[:space:]]*[^)]*->[[:space:]]*gc2[.](ssb_published|ssb_drained|ssb_items_published|ssb_items_drained)([^[:alnum:]_]|$)' \
+    "$ROOT"/src/*.c || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw GC2 SSB telemetry counter access is forbidden; use gc2_ssb_* helpers' >&2
+  exit 1
+fi
 if hits=$(grep -nE -- 'setgcrefr?rel[(][*]lj_obj_gcwref[(](oldtail|tail)[)]' \
     "$ROOT/src/lj_gc2.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2

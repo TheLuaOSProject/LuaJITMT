@@ -112,10 +112,10 @@ void lj_gc2_init(global_State *g)
   la_store64_rlx(&g->gc2.remembered_drained, 0);
   gc2_marks_this_round_store_rlx(g, 0);
   gc2_ssb_head_store_rlx(g, NULL);
-  la_store32_rlx(&g->gc2.ssb_published, 0);
-  la_store32_rlx(&g->gc2.ssb_drained, 0);
-  la_store64_rlx(&g->gc2.ssb_items_published, 0);
-  la_store64_rlx(&g->gc2.ssb_items_drained, 0);
+  gc2_ssb_published_store_rlx(g, 0);
+  gc2_ssb_drained_store_rlx(g, 0);
+  gc2_ssb_items_published_store_rlx(g, 0);
+  gc2_ssb_items_drained_store_rlx(g, 0);
   la_store64_rlx(&g->gc2.fixpoint_rounds, 0);
   la_store64_rlx(&g->gc2.fixpoint_hits, 0);
   la_store64_rlx(&g->gc2.mark_complete_runs, 0);
@@ -2907,8 +2907,8 @@ static uint32_t gc2_flush_ssb(global_State *g, TGState *tg, int allow_drain)
     return 0;
   node->n = n;
   gc2_ssb_publish(g, node);
-  la_add32_rlx(&g->gc2.ssb_published, 1);
-  la_add64_rlx(&g->gc2.ssb_items_published, n);
+  gc2_ssb_published_add(g, 1);
+  gc2_ssb_items_published_add(g, n);
   gc2_ssb_activate(tg, fresh);
   return n;
 }
@@ -3023,10 +3023,10 @@ static LJ_NOINLINE uint32_t gc2_drain_published_ssb_to_grey(global_State *g,
   if (node)
     gc2_ssb_publish_list(g, node);
   if (nnodes) {
-    la_add32_rlx(&g->gc2.ssb_drained, nnodes);
+    gc2_ssb_drained_add(g, nnodes);
   }
   if (nitems)
-    la_add64_rlx(&g->gc2.ssb_items_drained, nitems);
+    gc2_ssb_items_drained_add(g, nitems);
   return nitems;
 }
 
