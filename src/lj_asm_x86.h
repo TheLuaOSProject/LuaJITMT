@@ -1907,6 +1907,21 @@ static int asm_ahstore_can_inline_array_num(ASMState *as, IRIns *ir)
 	 irt_isinteger(IR(xref->op2)->t);
 }
 
+static int asm_ahstore_can_inline_hash_num(ASMState *as, IRIns *ir)
+{
+  IRIns *xref = IR(ir->op1);
+  return ir->o == IR_HSTORE && irt_isnum(ir->t) &&
+	 (xref->o == IR_HREF || xref->o == IR_HREFK);
+}
+
+static IRRef asm_ahstore_hash_tabref(ASMState *as, IRIns *xref)
+{
+  if (xref->o == IR_HREFK)
+    return IR(xref->op1)->op1;
+  lj_assertA(xref->o == IR_HREF, "expected HREF/HREFK hash store ref");
+  return xref->op1;
+}
+
 static void asm_ahstore_inline_array_num(ASMState *as, IRIns *ir)
 {
   const CCallInfo *ci =
@@ -1966,6 +1981,71 @@ static void asm_ahstore_inline_array_num(ASMState *as, IRIns *ir)
   emit_shifti(as, XOg_SHL|REX_64, base, 3);
   emit_rr(as, XO_MOV, base, key);
 }
+
+static void asm_ahstore_inline_hash_num(ASMState *as, IRIns *ir)
+{
+  const CCallInfo *ci = &lj_ir_callinfo[IRCALL_lj_tab_storetv_forjit_hash];
+  IRRef args[5];
+  IRIns *xref = IR(ir->op1);
+  IRRef tabref = asm_ahstore_hash_tabref(as, xref);
+  IRRef keyref = xref->o == IR_HREFK ? IR(xref->op2)->op1 : xref->op2;
+  MCLabel l_done, l_fallback;
+  Reg slot, tab, node, top, src, fsrc;
+  RegSet allow;
+
+  ra_evictset(as, RSET_SCRATCH);
+  args[0] = ASMREF_L;     /* lua_State *L */
+  args[1] = tabref;       /* GCtab *parent */
+  args[2] = ir->op1;      /* TValue *dst */
+  args[3] = ASMREF_TMP1;  /* cTValue *src */
+  args[4] = ASMREF_TMP2;  /* cTValue *key */
+
+  l_done = emit_label(as);
+  asm_gencall(as, ci, args);
+  asm_tvptr(as, ra_releasetmp(as, ASMREF_TMP2), keyref,
+	    IRTMPREF_IN1|IRTMPREF_IN2);
+  asm_tvptr(as, ra_releasetmp(as, ASMREF_TMP1), ir->op2, IRTMPREF_IN1);
+  l_fallback = emit_label(as);
+
+  emit_sjcc(as, CC_E, l_done);  /* CAS success skips the helper fallback. */
+
+  allow = rset_exclude(RSET_GPR, RID_EAX);
+  slot = ra_alloc1(as, ir->op1, allow);
+  rset_clear(allow, slot);
+  tab = ra_alloc1(as, tabref, allow);
+  rset_clear(allow, tab);
+  node = ra_scratch(as, allow);
+  rset_clear(allow, node);
+  top = ra_scratch(as, allow);
+  rset_clear(allow, top);
+  src = ra_scratch(as, allow);
+  fsrc = ra_alloc1(as, ir->op2, RSET_FPR);
+  ra_scratch(as, RID2RSET(RID_EAX));
+
+  emit_rmro(as, XO_CMPXCHG, src|REX_64, slot, 0);
+  emit_i8(as, 0xf0);  /* LOCK prefix: release-publish and intercore CAS. */
+  emit_rr(as, XO_MOVDto, fsrc|REX_64, src);  /* Really MOVQ r64, xmm. */
+  emit_rmro(as, XO_MOV, RID_EAX|REX_64, slot, 0);
+
+  emit_sjcc(as, CC_A, l_fallback);
+  emit_rr(as, XO_CMP, slot|REX_GC64, top);
+  emit_sjcc(as, CC_B, l_fallback);
+  emit_rr(as, XO_CMP, slot|REX_GC64, node);
+  emit_rr(as, XO_ARITH(XOg_ADD), top|REX_GC64, node);
+  emit_shifti(as, XOg_SHL|REX_64, top, 3);
+  emit_rmrxo(as, XO_LEA, top|REX_GC64, top, top, XM_SCALE2, 0);
+  emit_rmro(as, XO_MOV, top, node, TABNODE_HMASK_OFS);
+  emit_sjcc(as, CC_NZ, l_fallback);
+  emit_u32(as, TABNODE_FLAG_RETIRING);
+  emit_rmro(as, XO_GROUP3, XOg_TEST, node, TABNODE_FLAGS_OFS);
+  emit_rmro(as, XO_MOV, node|REX_GC64, tab, offsetof(GCtab, node));
+  emit_sjcc(as, CC_NE, l_fallback);
+  emit_i8(as, LJ_GC_WEAK);
+  emit_rmro(as, XO_GROUP3b, XOg_TEST, tab, offsetof(GCtab, marked));
+  emit_sjcc(as, CC_NZ, l_fallback);
+  emit_rr(as, XO_TEST, node|REX_GC64, node);
+  emit_rmro(as, XO_MOV, node|REX_GC64, tab, offsetof(GCtab, metatable));
+}
 #endif
 
 static void asm_ustore_forjit(ASMState *as, IRIns *ir)
@@ -1991,6 +2071,10 @@ static void asm_ahustore(ASMState *as, IRIns *ir)
   }
   if (asm_ahstore_can_inline_array_num(as, ir)) {
     asm_ahstore_inline_array_num(as, ir);
+    return;
+  }
+  if (asm_ahstore_can_inline_hash_num(as, ir)) {
+    asm_ahstore_inline_hash_num(as, ir);
     return;
   }
   if (ir->o == IR_ASTORE || ir->o == IR_HSTORE) {

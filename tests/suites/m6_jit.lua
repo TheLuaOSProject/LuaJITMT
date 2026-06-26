@@ -92,10 +92,10 @@ jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
 local wk = setmetatable({ stable = 0 }, { __mode = "k" })
 for i = 1, 200 do
-  wk.stable = i
+  wk.stable = i + 0.5
 end
-assert(wk.stable == 200)
-assert(util.traceinfo(1), "weak-key existing table store did not trace")
+assert(wk.stable == 200.5)
+assert(util.traceinfo(1), "weak-key numeric table store did not trace")
 
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
@@ -598,10 +598,29 @@ assert(util.traceinfo(1), "numeric hash store did not trace")
                            "numeric ASTORE no-GC helper")
       assert_dump_contains(t, route_dump,
                            "lock cmpxchg",
-                           "numeric ASTORE inline CAS fallback gate")
+                           "numeric table-store inline CAS fallback gate")
       assert_dump_contains(t, route_dump,
                            "lj_tab_storetv_forjit_hash",
-                           "numeric HSTORE full helper")
+                           "numeric HSTORE helper fallback")
+
+      local hash_route_dump = t:tmp("lj-m6-hstore-inline-cas.dump")
+      luajit_dump(t, hash_route_dump, "-jdump=im", [=[
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local util = require("jit.util")
+local h = { stable = 0 }
+for i = 1, 80 do
+  h.stable = i + 0.5
+end
+assert(h.stable == 80.5)
+assert(util.traceinfo(1), "numeric hash store did not trace")
+]=])
+      assert_dump_contains(t, hash_route_dump,
+                           "lock cmpxchg",
+                           "numeric HSTORE inline CAS fallback gate")
+      assert_dump_contains(t, hash_route_dump,
+                           "lj_tab_storetv_forjit_hash",
+                           "numeric HSTORE helper fallback")
       print("M6 JIT table-store helper behavior passed")
     end
   })
