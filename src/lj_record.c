@@ -1726,6 +1726,59 @@ static int nommstr(jit_State *J, TRef key)
   return 1;  /* CANNOT be a metamethod name. */
 }
 
+static IRRef rec_idx_poll_alias_limit(jit_State *J)
+{
+  IRRef lim = J->chain[IR_LOOP];
+  if (J->chain[IR_XBAR] > lim) lim = J->chain[IR_XBAR];
+  if (J->chain[IR_XPOLL] > lim) lim = J->chain[IR_XPOLL];
+  return lim;
+}
+
+static int rec_idx_no_call_since(jit_State *J, IRRef lim)
+{
+  IROp op;
+  for (op = IR_CALLN; op <= IR_CALLXS; op++)
+    if (J->chain[op] > lim)
+      return 0;
+  return 1;
+}
+
+static TRef rec_idx_fwd_latest_store(jit_State *J, RecordIndex *ix)
+{
+  IRRef astore = J->chain[IR_ASTORE];
+  IRRef hstore = J->chain[IR_HSTORE];
+  IRRef ref = astore > hstore ? astore : hstore;
+  IRRef lim = rec_idx_poll_alias_limit(J);
+  IRIns *store, *xr;
+  IRRef tab, key, xtab, xkey;
+  IRType t;
+
+  if (ref <= lim || !rec_idx_no_call_since(J, ref))
+    return 0;
+  store = IR(ref);
+  if (irt_isnil(store->t))
+    return 0;
+  xr = IR(store->op1);
+  if (xr->o == IR_AREF || xr->o == IR_HREFK) {
+    xtab = IR(xr->op1)->op1;
+    xkey = xr->op2;
+  } else if (xr->o == IR_HREF || xr->o == IR_NEWREF) {
+    xtab = xr->op1;
+    xkey = xr->op2;
+  } else {
+    return 0;
+  }
+  tab = tref_ref(ix->tab);
+  key = tref_ref(xr->o == IR_AREF && tref_isnumber(ix->key) ?
+		 lj_opt_narrow_index(J, ix->key) : ix->key);
+  if (IR(xkey)->o == IR_KSLOT) xkey = IR(xkey)->op1;
+  if (IR(key)->o == IR_KSLOT) key = IR(key)->op1;
+  if (xtab != tab || xkey != key)
+    return 0;
+  t = irt_t(IR(store->op2)->t);
+  return irtype_ispri(t) ? TREF_PRI(t) : TREF(store->op2, t);
+}
+
 /* Record indexed load/store. */
 TRef lj_record_idx(jit_State *J, RecordIndex *ix)
 {
@@ -1786,6 +1839,12 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
 	goto handlemm;
       return TREF_NIL;
     }
+  }
+
+  if (ix->val == 0) {
+    TRef res = rec_idx_fwd_latest_store(J, ix);
+    if (res)
+      return res;
   }
 
   /* Record the key lookup. */

@@ -580,7 +580,8 @@ assert(s == 3280 and a[81] == 80.5)
       assert_trace1_ir(t, array_forward_dump,
                        "same-slot array store/read must forward ASTORE",
                        function(st)
-        return st.astore and st.aref and not st.aload and st.xpoll
+        return st.astore and st.aref and not st.aload and st.xpoll and
+               st.array == 2 and st.xload == 2
       end)
 
       local hash_forward_dump = t:tmp("lj-m6-hstore-forward-read.dump")
