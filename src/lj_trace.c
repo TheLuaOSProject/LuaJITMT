@@ -1699,8 +1699,8 @@ uintptr_t LJ_FASTCALL lj_trace_unwind(jit_State *J, uintptr_t addr, ExitNo *ep)
 #if EXITTRACE_VMSTATE
   TGState *tg = J2TG(J);
   TraceNo traceno = tg ?
-    (TraceNo)(int32_t)la_load32_acq((uint32_t *)&tg->vmstate) :
-    (TraceNo)J2G(J)->vmstate;
+    (TraceNo)lj_tg_vmstate_load_acq(tg) :
+    (TraceNo)vmstate_load_acq(J2G(J));
 #else
   TraceNo traceno = trace_exit_find(J, (MCode *)addr);
 #endif

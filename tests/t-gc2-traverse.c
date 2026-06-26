@@ -1332,15 +1332,15 @@ static void test_jit_tg_executing_trace_root(lua_State *L, global_State *g,
   assert(T != NULL);
   assert(T->traceno > 0);
 
-  old_vmstate = la_load32_acq((uint32_t *)&tg->vmstate);
+  old_vmstate = (uint32_t)lj_tg_vmstate_load_acq(tg);
   trace_roots0 = la_load64_acq(&g->gc2.tg_trace_roots);
   lj_gc2_legacy_mark_begin(g);
   assert(lj_gc2_ismarked(g, obj2gco(T)) == 0);
-  la_store32_rel((uint32_t *)&tg->vmstate, (uint32_t)T->traceno);
+  lj_tg_vmstate_store_rel(tg, (int32_t)T->traceno);
   lj_gc2_scan_roots(g, NULL);
   assert(lj_gc2_ismarked(g, obj2gco(T)) == 1);
   assert(la_load64_acq(&g->gc2.tg_trace_roots) == trace_roots0 + 1u);
-  la_store32_rel((uint32_t *)&tg->vmstate, old_vmstate);
+  lj_tg_vmstate_store_rel(tg, (int32_t)old_vmstate);
   lj_gc2_legacy_cycle_end(g);
   UNUSED(L);
 }

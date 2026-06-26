@@ -1062,8 +1062,6 @@ enum {
   LJ_VMST__MAX
 };
 
-#define setvmstate(g, st)	((g)->vmstate = ~LJ_VMST_##st)
-
 /* Metamethods. ORDER MM */
 #ifdef LJ_HASFFI
 #define MMDEF_FFI(_) _(new)
@@ -1378,7 +1376,7 @@ typedef struct global_State {
   uint8_t vmevmask;	/* VM event mask. */
   StrInternState str;	/* String interning. */
   TabState tab;		/* Table raw storage retirement. */
-  volatile int32_t vmstate;  /* VM state or current JIT code trace number. */
+  int32_t vmstate;  /* VM state or current JIT code trace number. */
   GCRef mainthref;	/* Link to main thread. */
   SBuf tmpbuf;		/* Temporary string buffer. */
   TValue tmptv, tmptv2;	/* Temporary TValues. */
@@ -1423,6 +1421,18 @@ LJ_STATIC_ASSERT(offsetof(global_State, nilnode) ==
   check_exp(tvisnil(&G(L)->nilnode.val), &G(L)->nilnode.val)
 #define niltvg(g) \
   check_exp(tvisnil(&(g)->nilnode.val), &(g)->nilnode.val)
+
+static LJ_AINLINE int32_t vmstate_load_acq(global_State *g)
+{
+  return (int32_t)la_load32_acq((uint32_t *)&g->vmstate);
+}
+
+static LJ_AINLINE void vmstate_store_rel(global_State *g, int32_t vmstate)
+{
+  la_store32_rel((uint32_t *)&g->vmstate, (uint32_t)vmstate);
+}
+
+#define setvmstate(g, st)	vmstate_store_rel((g), ~LJ_VMST_##st)
 
 /* Hook management. Hook event masks are defined in lua.h. */
 #define HOOK_EVENTMASK		0x0f

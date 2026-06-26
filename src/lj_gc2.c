@@ -1624,7 +1624,7 @@ static void gc2_scan_tg_roots(global_State *g)
     }
 #if LJ_HASJIT
     {
-      int32_t vmstate = (int32_t)la_load32_acq((uint32_t *)&tg->vmstate);
+      int32_t vmstate = lj_tg_vmstate_load_acq(tg);
       if (vmstate > 0 && gc2_mark_trace_root(g, (TraceNo)vmstate))
 	gc2_tg_trace_roots_add(g, 1);
     }

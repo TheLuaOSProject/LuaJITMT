@@ -2229,7 +2229,7 @@ int LJ_FASTCALL lj_gc_step(lua_State *L)
 {
   global_State *g = G(L);
   GCSize lim;
-  int32_t ostate = g->vmstate;
+  int32_t ostate = vmstate_load_acq(g);
   setvmstate(g, GC);
   lim = (GCSTEPSIZE/100) * g->gc.stepmul;
   if (lim == 0)
@@ -2244,18 +2244,18 @@ int LJ_FASTCALL lj_gc_step(lua_State *L)
     lim -= (GCSize)gc_onestep(L);
     if (g->gc.state == GCSpause) {
       lj_gc_threshold_store(g, (g->gc.estimate/100) * g->gc.pause);
-      g->vmstate = ostate;
+      vmstate_store_rel(g, ostate);
       return 1;  /* Finished a GC cycle. */
     }
   } while (sizeof(lim) == 8 ? ((int64_t)lim > 0) : ((int32_t)lim > 0));
   if (g->gc.debt < GCSTEPSIZE) {
     lj_gc_threshold_store(g, lj_gc_total_load(g) + GCSTEPSIZE);
-    g->vmstate = ostate;
+    vmstate_store_rel(g, ostate);
     return -1;
   } else {
     g->gc.debt -= GCSTEPSIZE;
     lj_gc_threshold_store(g, lj_gc_total_load(g));
-    g->vmstate = ostate;
+    vmstate_store_rel(g, ostate);
     return 0;
   }
 }
@@ -2313,7 +2313,7 @@ int LJ_FASTCALL lj_gc_step_jit(global_State *g, MSize steps)
 void lj_gc_fullgc(lua_State *L)
 {
   global_State *g = G(L);
-  int32_t ostate = g->vmstate;
+  int32_t ostate = vmstate_load_acq(g);
   setvmstate(g, GC);
   if (g->gc.state <= GCSatomic) {  /* Caught somewhere in the middle. */
     lj_gc2_legacy_preserve_abort(g);
@@ -2334,12 +2334,12 @@ void lj_gc_fullgc(lua_State *L)
   do {
     gc_onestep(L);
     if (gc_fullgc_deferred_by_finalizer(g)) {
-      g->vmstate = ostate;
+      vmstate_store_rel(g, ostate);
       return;
     }
   } while (g->gc.state != GCSpause);
   lj_gc_threshold_store(g, (g->gc.estimate/100) * g->gc.pause);
-  g->vmstate = ostate;
+  vmstate_store_rel(g, ostate);
 }
 
 /* -- Write barriers ------------------------------------------------------ */

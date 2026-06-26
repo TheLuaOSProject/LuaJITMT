@@ -180,7 +180,7 @@ static void profile_trigger(ProfileState *ps)
   /* Set profile hook. */
   if (hookmask_set_if_clear(g, HOOK_PROFILE|HOOK_VMEVENT|HOOK_GC,
 			    HOOK_PROFILE)) {
-    int st = g->vmstate;
+    int st = vmstate_load_acq(g);
     ps->vmstate = st >= 0 ? 'N' :
 		  st == ~LJ_VMST_INTERP ? 'I' :
 		  st == ~LJ_VMST_C ? 'C' :
