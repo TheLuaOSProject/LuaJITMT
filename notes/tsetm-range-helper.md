@@ -42,3 +42,20 @@ Validation:
 
 - `tools/ci/lua_test.sh m5_tab_cas_store`
 - `tools/ci/lua_test.sh m10_generational`
+
+## 2026-06-26 real-bytecode x64 coverage
+
+- Extended `tests/t-x64-tset-forward.c` with a count-hook driven constructor
+  case that reaches the real x64 `BC_TSETM` interpreter path.
+- The hook catches the temporary table after the final multires call has
+  produced its values but before `TSETM` executes, grows the array enough to
+  satisfy the VM fit check, republishes the table mirror to an old generation
+  with forwarded destination slots, and then lets `BC_TSETM` call
+  `lj_tab_storetvn_forvm_array()`.
+- The guard asserts the old slots remain `LJ_TFORWARD`, the successor
+  generation receives the range values, and logical `lj_tab_getint()` reads
+  through the old mirror to the successor values.
+
+Validation:
+
+- `tools/ci/lua_test.sh m5_x64_tset_nil_snapshot`

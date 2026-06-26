@@ -82,7 +82,9 @@ helper-backed table-store regressions that confirm the remembered SSB entry is
 the old parent table and that the next minor cycle marks the young child
 through that parent.
 The x64 `TSET` nil-snapshot guard also rejects pre-store `barrierback` repairs
-and requires the post-store VM value/range publication helpers.
+and requires the post-store VM value/range publication helpers, including a
+hook-driven real-bytecode `BC_TSETM` constructor case over an old forwarded
+array generation.
 `tools/ci/m9_m10_gc.sh` chains the current M9 stats/benchmark smokes with the
 M10 generational guard.
 These are milestone
