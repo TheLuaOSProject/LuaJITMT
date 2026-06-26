@@ -58,11 +58,11 @@ int main(void)
   assert(lj_str_retired_next_acq(hdr) == NULL);
   retire_epoch = g->gc2.hs_epoch;
   assert(hdr->retire_epoch == retire_epoch);
-  smr_runs0 = la_load64_acq(&g->gc2.smr_reclaim_runs);
-  smr_reclaimed0 = la_load64_acq(&g->gc2.smr_reclaimed);
+  smr_runs0 = gc2_smr_reclaim_runs_acq(g);
+  smr_reclaimed0 = gc2_smr_reclaimed_acq(g);
   assert(lj_gc2_reclaim_retired(g, retire_epoch) == 0);
-  assert(la_load64_acq(&g->gc2.smr_reclaim_runs) == smr_runs0);
-  assert(la_load64_acq(&g->gc2.smr_reclaimed) == smr_reclaimed0);
+  assert(gc2_smr_reclaim_runs_acq(g) == smr_runs0);
+  assert(gc2_smr_reclaimed_acq(g) == smr_reclaimed0);
   assert(la_loadptr_acq((void *const *)&g->str.retired) == hdr);
   assert(lj_str_new(L, "m5-strtab-cas-same",
 		    strlen("m5-strtab-cas-same")) == s1);
@@ -76,8 +76,8 @@ int main(void)
   (void)lj_gc2_handshake(g, LJ_GC2_HS_FLUSH_SSB);
   assert(g->gc2.hs_epoch > retire_epoch);
   assert(la_loadptr_acq((void *const *)&g->str.retired) == NULL);
-  assert(la_load64_acq(&g->gc2.smr_reclaim_runs) > smr_runs0);
-  assert(la_load64_acq(&g->gc2.smr_reclaimed) >= smr_reclaimed0 + 1u);
+  assert(gc2_smr_reclaim_runs_acq(g) > smr_runs0);
+  assert(gc2_smr_reclaimed_acq(g) >= smr_reclaimed0 + 1u);
 
   lua_close(L);
   printf("t-strtab-cas OK: active-drain resize claim, GC2 epoch retire, and duplicate intern guard verified\n");

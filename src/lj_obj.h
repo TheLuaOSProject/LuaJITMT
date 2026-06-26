@@ -2591,6 +2591,38 @@ static LJ_AINLINE void gc2_hs_ack_latency_bucket_add(global_State *g,
   la_add64_rlx(&g->gc2.hs_ack_latency_buckets[bucket], n);
 }
 
+static LJ_AINLINE uint64_t gc2_smr_reclaim_runs_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.smr_reclaim_runs);
+}
+
+static LJ_AINLINE void gc2_smr_reclaim_runs_store_rlx(global_State *g,
+						      uint64_t n)
+{
+  la_store64_rlx(&g->gc2.smr_reclaim_runs, n);
+}
+
+static LJ_AINLINE void gc2_smr_reclaim_runs_add(global_State *g, uint64_t n)
+{
+  la_add64_rlx(&g->gc2.smr_reclaim_runs, n);
+}
+
+static LJ_AINLINE uint64_t gc2_smr_reclaimed_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.smr_reclaimed);
+}
+
+static LJ_AINLINE void gc2_smr_reclaimed_store_rlx(global_State *g,
+						   uint64_t n)
+{
+  la_store64_rlx(&g->gc2.smr_reclaimed, n);
+}
+
+static LJ_AINLINE void gc2_smr_reclaimed_add(global_State *g, uint64_t n)
+{
+  la_add64_rlx(&g->gc2.smr_reclaimed, n);
+}
+
 static LJ_AINLINE uint32_t gc2_generational_acq(global_State *g)
 {
   return la_load32_acq(&g->gc2.generational);

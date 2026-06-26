@@ -81,8 +81,8 @@ void lj_gc2_init(global_State *g)
   gc2_hs_ack_latency_max_store_rlx(g, 0);
   for (i = 0; i < LJ_GC2_HS_LATENCY_BUCKETS; i++)
     gc2_hs_ack_latency_bucket_store_rlx(g, i, 0);
-  la_store64_rlx(&g->gc2.smr_reclaim_runs, 0);
-  la_store64_rlx(&g->gc2.smr_reclaimed, 0);
+  gc2_smr_reclaim_runs_store_rlx(g, 0);
+  gc2_smr_reclaimed_store_rlx(g, 0);
   la_store64_rlx(&g->gc2.cycle_requests, 0);
   la_store64_rlx(&g->gc2.cycle_starts, 0);
   la_store64_rlx(&g->gc2.major_cycle_starts, 0);
@@ -1373,8 +1373,8 @@ uint32_t lj_gc2_reclaim_retired(global_State *g, uint64_t epoch)
   n += lj_mcode_reclaim_retired(g, epoch);  /* 08 section 8.7 SMR drain. */
   n += lj_trace_reclaim_retired(g, epoch);  /* 08 section 8.3/8.7 drain. */
   if (n) {
-    la_add64_rlx(&g->gc2.smr_reclaim_runs, 1);
-    la_add64_rlx(&g->gc2.smr_reclaimed, n);
+    gc2_smr_reclaim_runs_add(g, 1);
+    gc2_smr_reclaimed_add(g, n);
   }
   return n;
 }
