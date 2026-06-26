@@ -32,8 +32,10 @@
 #endif
 #include "lj_trace.h"
 #include "lj_dispatch.h"
+#include "lj_safepoint.h"
 #include "lj_vm.h"
 #include "lj_vmevent.h"
+#include "lj_profile.h"
 #include "lj_lib.h"
 
 #include "luajit.h"
@@ -711,13 +713,14 @@ LJLIB_CF(jit_profile_stop)
 {
   GCtab *registry;
   TValue key;
-  luaJIT_profile_stop(L);
+  uint32_t actions = lj_profile_stop_hs(L);
   registry = tabV(registry(L));
   key.u64 = KEY_PROFILE_THREAD;
   jit_profile_registry_store(L, registry, &key, niltv(L));
   key.u64 = KEY_PROFILE_FUNC;
   jit_profile_registry_store(L, registry, &key, niltv(L));
   lj_gc_pubtab(L, registry);
+  lj_safepoint_checkstop(L, actions);
   return 0;
 }
 

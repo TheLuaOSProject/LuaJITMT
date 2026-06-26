@@ -17,6 +17,7 @@
 #include "lj_dispatch.h"
 #include "lj_thr.h"
 #include "lj_tg.h"
+#include "lj_safepoint.h"
 #if LJ_HASJIT
 #include "lj_jit.h"
 #include "lj_trace.h"
@@ -242,13 +243,15 @@ static void profile_timer_start(ProfileState *ps)
 }
 
 /* Stop profiling timer. */
-static void profile_timer_stop(ProfileState *ps)
+static uint32_t profile_timer_stop(ProfileState *ps, lua_State *L)
 {
+  UNUSED(L);
   struct itimerval tm;
   tm.it_value.tv_sec = tm.it_interval.tv_sec = 0;
   tm.it_value.tv_usec = tm.it_interval.tv_usec = 0;
   setitimer(ITIMER_PROF, &tm, NULL);
   sigaction(SIGPROF, &ps->oldsa, NULL);
+  return 0;
 }
 
 #elif LJ_PROFILE_PTHREAD
@@ -282,10 +285,14 @@ static void profile_timer_start(ProfileState *ps)
 }
 
 /* Stop profiling timer thread. */
-static void profile_timer_stop(ProfileState *ps)
+static uint32_t profile_timer_stop(ProfileState *ps, lua_State *L)
 {
+  uint32_t actions;
   la_store32_rel(&ps->abort, 1);
+  lj_native_enter(L2TG(L));
   pthread_join(ps->thread, NULL);
+  actions = lj_native_leave(L);
+  return actions;
 }
 
 #elif LJ_PROFILE_WTHREAD
@@ -330,10 +337,12 @@ static void profile_timer_start(ProfileState *ps)
 }
 
 /* Stop profiling timer thread. */
-static void profile_timer_stop(ProfileState *ps)
+static uint32_t profile_timer_stop(ProfileState *ps, lua_State *L)
 {
+  UNUSED(L);
   la_store32_rel(&ps->abort, 1);
   WaitForSingleObject(ps->thread, INFINITE);
+  return 0;
 }
 
 #endif
@@ -379,13 +388,14 @@ LUA_API void luaJIT_profile_start(lua_State *L, const char *mode,
   profile_timer_start(ps);
 }
 
-/* Stop profiling. */
-LUA_API void luaJIT_profile_stop(lua_State *L)
+/* Stop profiling and return pending safepoint actions. */
+uint32_t lj_profile_stop_hs(lua_State *L)
 {
   ProfileState *ps = &profile_state;
   global_State *g = profile_g_load_acq(ps);
+  uint32_t actions = 0;
   if (G(L) == g) {  /* Only stop profiler if started by this VM. */
-    profile_timer_stop(ps);
+    actions = profile_timer_stop(ps, L);
     hookmask_update(g, HOOK_PROFILE, 0);
     lj_dispatch_update(g, 0);
 #if LJ_HASJIT
@@ -400,6 +410,13 @@ LUA_API void luaJIT_profile_stop(lua_State *L)
     profile_vmstate_store_rel(ps, 'N');
     profile_g_store_rel(ps, NULL);
   }
+  return actions;
+}
+
+/* Stop profiling. */
+LUA_API void luaJIT_profile_stop(lua_State *L)
+{
+  lj_safepoint_checkstop(L, lj_profile_stop_hs(L));
 }
 
 /* Return a compact stack dump. */

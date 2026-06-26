@@ -547,6 +547,18 @@ return function(add)
   })
 
   add({
+    name = "m5_profile_stop_native",
+    description = "jit.profile stop native-state STOPREQ behavior",
+    run = function(t)
+      t:build({ quiet = true })
+      build_and_run_c(t, t:tmp("lj_t_profile_stop_native"),
+                      "t-profile-stop-native.c", { build = false,
+                                                   timeout = "20s" })
+      print("M5 jit.profile stop native-state behavior passed")
+    end
+  })
+
+  add({
     name = "m5_gc_total_atomic",
     description = "GC total atomic accounting helper behavior",
     run = function(t)
