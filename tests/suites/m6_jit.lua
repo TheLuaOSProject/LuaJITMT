@@ -575,6 +575,17 @@ assert(util.traceinfo(1), "numeric array store did not trace")
 
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
+local b = {}
+for i = 1, 256 do b[i] = 0 end
+for i = 1, 80 do
+  local j = (i % 256) + 1
+  b[j] = i + 0.5
+end
+assert(b[81] == 80.5)
+assert(util.traceinfo(1), "separated numeric array store did not trace")
+
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
 local h = { stable = 0 }
 for i = 1, 80 do
   h.stable = i + 0.5
@@ -585,6 +596,9 @@ assert(util.traceinfo(1), "numeric hash store did not trace")
       assert_dump_contains(t, route_dump,
                            "lj_tab_storetv_forjit_array_nogc",
                            "numeric ASTORE no-GC helper")
+      assert_dump_contains(t, route_dump,
+                           "lock cmpxchg",
+                           "numeric ASTORE inline CAS fallback gate")
       assert_dump_contains(t, route_dump,
                            "lj_tab_storetv_forjit_hash",
                            "numeric HSTORE full helper")

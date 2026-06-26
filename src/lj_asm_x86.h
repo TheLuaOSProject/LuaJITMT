@@ -1252,6 +1252,8 @@ static void asm_aref(ASMState *as, IRIns *ir)
 #define TABNODE_HMASK_OFS	(-(int32_t)sizeof(TabNodeHdr))
 #define TABNODE_FLAGS_OFS \
   (TABNODE_HMASK_OFS + (int32_t)offsetof(TabNodeHdr, flags))
+#define TABARRAY_ACAP_OFS \
+  (-(int32_t)sizeof(TabArrayHdr) + (int32_t)offsetof(TabArrayHdr, acap))
 
 static LJ_AINLINE void asm_href_tab_node_flags_test_acq(ASMState *as,
 							Reg node,
@@ -1897,6 +1899,75 @@ static void asm_ahstore_forjit(ASMState *as, IRIns *ir)
   asm_tvptr(as, ra_releasetmp(as, ASMREF_TMP1), ir->op2, IRTMPREF_IN1);
 }
 
+#if defined(__linux__) && LJ_TARGET_X64
+static int asm_ahstore_can_inline_array_num(ASMState *as, IRIns *ir)
+{
+  IRIns *xref = IR(ir->op1);
+  return ir->o == IR_ASTORE && irt_isnum(ir->t) && xref->o == IR_AREF &&
+	 irt_isinteger(IR(xref->op2)->t);
+}
+
+static void asm_ahstore_inline_array_num(ASMState *as, IRIns *ir)
+{
+  const CCallInfo *ci =
+    &lj_ir_callinfo[IRCALL_lj_tab_storetv_forjit_array_nogc];
+  IRRef args[5];
+  IRIns *xref = IR(ir->op1);
+  IRRef tabref = IR(xref->op1)->op1;
+  IRRef keyref = xref->op2;
+  MCLabel l_done, l_fallback;
+  Reg slot, tab, key, base, coloc, src, fsrc;
+  RegSet allow;
+
+  ra_evictset(as, RSET_SCRATCH);
+  args[0] = ASMREF_L;     /* lua_State *L */
+  args[1] = tabref;       /* GCtab *parent */
+  args[2] = ir->op1;      /* TValue *dst */
+  args[3] = ASMREF_TMP1;  /* cTValue *src */
+  args[4] = keyref;       /* MSize index */
+
+  l_done = emit_label(as);
+  asm_gencall(as, ci, args);
+  asm_tvptr(as, ra_releasetmp(as, ASMREF_TMP1), ir->op2, IRTMPREF_IN1);
+  l_fallback = emit_label(as);
+
+  emit_sjcc(as, CC_E, l_done);  /* CAS success skips the helper fallback. */
+
+  allow = rset_exclude(RSET_GPR, RID_EAX);
+  slot = ra_alloc1(as, ir->op1, allow);
+  rset_clear(allow, slot);
+  tab = ra_alloc1(as, tabref, allow);
+  rset_clear(allow, tab);
+  key = ra_alloc1(as, keyref, allow);
+  rset_clear(allow, key);
+  base = ra_scratch(as, allow);
+  rset_clear(allow, base);
+  coloc = ra_scratch(as, allow);
+  rset_clear(allow, coloc);
+  src = ra_scratch(as, allow);
+  fsrc = ra_alloc1(as, ir->op2, RSET_FPR);
+  ra_scratch(as, RID2RSET(RID_EAX));
+
+  emit_rmro(as, XO_CMPXCHG, src|REX_64, slot, 0);
+  emit_i8(as, 0xf0);  /* LOCK prefix: release-publish and intercore CAS. */
+  emit_rr(as, XO_MOVDto, fsrc|REX_64, src);  /* Really MOVQ r64, xmm. */
+  emit_rmro(as, XO_MOV, RID_EAX|REX_64, slot, 0);
+
+  emit_sjcc(as, CC_NE, l_fallback);
+  emit_rmro(as, XO_CMP, base|REX_GC64, tab, offsetof(GCtab, array));
+  emit_sjcc(as, CC_NZ, l_fallback);
+  emit_u32(as, TABARRAY_FLAG_RETIRING);
+  emit_rmro(as, XO_GROUP3, XOg_TEST, base, TABARRAY_ACAP_OFS);
+  emit_sjcc(as, CC_E, l_fallback);  /* Colocated arrays keep helper routing. */
+  emit_rr(as, XO_CMP, base|REX_GC64, coloc);
+  emit_rmro(as, XO_LEA, coloc|REX_GC64, tab, sizeof(GCtab));
+  emit_rr(as, XO_ARITH(XOg_ADD), base|REX_GC64, slot);
+  emit_rr(as, XO_GROUP3, REX_64|XOg_NEG, base);
+  emit_shifti(as, XOg_SHL|REX_64, base, 3);
+  emit_rr(as, XO_MOV, base, key);
+}
+#endif
+
 static void asm_ustore_forjit(ASMState *as, IRIns *ir)
 {
   const CCallInfo *ci = &lj_ir_callinfo[IRCALL_lj_func_storeuv_forjit];
@@ -1916,6 +1987,10 @@ static void asm_ahustore(ASMState *as, IRIns *ir)
 #if defined(__linux__) && LJ_TARGET_X64
   if (ir->o == IR_USTORE && irt_isgcv(ir->t) && IR(ir->op1)->o == IR_UREFC) {
     asm_ustore_forjit(as, ir);
+    return;
+  }
+  if (asm_ahstore_can_inline_array_num(as, ir)) {
+    asm_ahstore_inline_array_num(as, ir);
     return;
   }
   if (ir->o == IR_ASTORE || ir->o == IR_HSTORE) {
