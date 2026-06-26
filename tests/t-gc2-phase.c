@@ -387,24 +387,24 @@ static void test_phase_transition_guards(global_State *g, TGState *tg)
   uint64_t mark_to_weak0, weak_to_sweep0;
 
   assert_idle(g, tg);
-  mark_to_weak0 = la_load64_acq(&g->gc2.mark_to_weak);
-  weak_to_sweep0 = la_load64_acq(&g->gc2.weak_to_sweep);
+  mark_to_weak0 = gc2_mark_to_weak_acq(g);
+  weak_to_sweep0 = gc2_weak_to_sweep_acq(g);
   lj_gc2_mark_to_weak(g);
   assert(g->gc2.phase == LJ_GC2_IDLE);
-  assert(la_load64_acq(&g->gc2.mark_to_weak) == mark_to_weak0);
+  assert(gc2_mark_to_weak_acq(g) == mark_to_weak0);
   lj_gc2_weak_to_sweep(g);
   assert(g->gc2.phase == LJ_GC2_IDLE);
-  assert(la_load64_acq(&g->gc2.weak_to_sweep) == weak_to_sweep0);
+  assert(gc2_weak_to_sweep_acq(g) == weak_to_sweep0);
 
   la_store32_rel(&g->gc2.phase, LJ_GC2_MARK);
   lj_gc2_weak_to_sweep(g);
   assert(g->gc2.phase == LJ_GC2_MARK);
-  assert(la_load64_acq(&g->gc2.weak_to_sweep) == weak_to_sweep0);
+  assert(gc2_weak_to_sweep_acq(g) == weak_to_sweep0);
 
   la_store32_rel(&g->gc2.phase, LJ_GC2_WEAK);
   lj_gc2_mark_to_weak(g);
   assert(g->gc2.phase == LJ_GC2_WEAK);
-  assert(la_load64_acq(&g->gc2.mark_to_weak) == mark_to_weak0);
+  assert(gc2_mark_to_weak_acq(g) == mark_to_weak0);
 
   la_store32_rel(&g->gc2.phase, LJ_GC2_IDLE);
   assert_idle(g, tg);
@@ -439,16 +439,16 @@ static void test_mark_complete_waits_for_peer(lua_State *L, global_State *g,
   la_store32_rel(&g->gc2.worker_active, 1);
   rel.g = g;
   rel.delay_ns = 20000000L;
-  runs0 = la_load64_acq(&g->gc2.mark_complete_runs);
-  hits0 = la_load64_acq(&g->gc2.mark_complete_hits);
-  waits0 = la_load64_acq(&g->gc2.mark_complete_peer_waits);
+  runs0 = gc2_mark_complete_runs_acq(g);
+  hits0 = gc2_mark_complete_hits_acq(g);
+  waits0 = gc2_mark_complete_peer_waits_acq(g);
   assert(pthread_create(&thread, NULL, release_worker_active, &rel) == 0);
   assert(lj_gc2_mark_complete(g, L, 2, ~(uint32_t)0) == 1);
   assert(pthread_join(thread, NULL) == 0);
   assert(la_load32_acq(&g->gc2.worker_active) == 0);
-  assert(la_load64_acq(&g->gc2.mark_complete_runs) == runs0 + 1u);
-  assert(la_load64_acq(&g->gc2.mark_complete_hits) == hits0 + 1u);
-  assert(la_load64_acq(&g->gc2.mark_complete_peer_waits) > waits0);
+  assert(gc2_mark_complete_runs_acq(g) == runs0 + 1u);
+  assert(gc2_mark_complete_hits_acq(g) == hits0 + 1u);
+  assert(gc2_mark_complete_peer_waits_acq(g) > waits0);
   assert(lj_gc2_ssb_empty(g));
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
 
@@ -536,8 +536,8 @@ static void test_incremental_fixpoint_round(lua_State *L, global_State *g)
   assert(lj_gc2_ismarked(g, obj2gco(grandchild)) == 0);
   assert(lj_gc2_ssb_empty(g));
 
-  rounds0 = la_load64_acq(&g->gc2.fixpoint_rounds);
-  hits0 = la_load64_acq(&g->gc2.fixpoint_hits);
+  rounds0 = gc2_fixpoint_rounds_acq(g);
+  hits0 = gc2_fixpoint_hits_acq(g);
   worker_runs0 = la_load64_acq(&g->gc2.worker_runs);
   worker_grey0 = la_load64_acq(&g->gc2.worker_grey_drained);
   worker_ssb0 = la_load64_acq(&g->gc2.worker_ssb_converted);
@@ -547,8 +547,8 @@ static void test_incremental_fixpoint_round(lua_State *L, global_State *g)
   assert(lj_gc_step(L) <= 0);
   assert(g->gc2.phase == LJ_GC2_MARK);
   assert(g->gc.state == GCSpropagate);
-  assert(la_load64_acq(&g->gc2.fixpoint_rounds) == rounds0 + 1u);
-  assert(la_load64_acq(&g->gc2.fixpoint_hits) == hits0);
+  assert(gc2_fixpoint_rounds_acq(g) == rounds0 + 1u);
+  assert(gc2_fixpoint_hits_acq(g) == hits0);
   assert(lj_gc2_ismarked(g, obj2gco(parent)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(grandchild)) == 1);
@@ -806,22 +806,22 @@ int main(void)
     "  for j = 1, 18 do t[j] = i + j end\n"
     "  hold[i] = t\n"
     "end\n") == LUA_OK);
-  fixpoint_rounds0 = la_load64_acq(&g->gc2.fixpoint_rounds);
-  fixpoint_hits0 = la_load64_acq(&g->gc2.fixpoint_hits);
-  mark_complete_runs0 = la_load64_acq(&g->gc2.mark_complete_runs);
-  mark_complete_hits0 = la_load64_acq(&g->gc2.mark_complete_hits);
-  mark_to_weak0 = la_load64_acq(&g->gc2.mark_to_weak);
-  weak_complete_runs0 = la_load64_acq(&g->gc2.weak_complete_runs);
-  weak_to_sweep0 = la_load64_acq(&g->gc2.weak_to_sweep);
+  fixpoint_rounds0 = gc2_fixpoint_rounds_acq(g);
+  fixpoint_hits0 = gc2_fixpoint_hits_acq(g);
+  mark_complete_runs0 = gc2_mark_complete_runs_acq(g);
+  mark_complete_hits0 = gc2_mark_complete_hits_acq(g);
+  mark_to_weak0 = gc2_mark_to_weak_acq(g);
+  weak_complete_runs0 = gc2_weak_complete_runs_acq(g);
+  weak_to_sweep0 = gc2_weak_to_sweep_acq(g);
   sweep_live_updates0 = la_load64_acq(&g->gc2.sweep_live_updates);
   lj_gc_fullgc(L);
-  assert(la_load64_acq(&g->gc2.fixpoint_rounds) > fixpoint_rounds0);
-  assert(la_load64_acq(&g->gc2.fixpoint_hits) > fixpoint_hits0);
-  assert(la_load64_acq(&g->gc2.mark_complete_runs) > mark_complete_runs0);
-  assert(la_load64_acq(&g->gc2.mark_complete_hits) > mark_complete_hits0);
-  assert(la_load64_acq(&g->gc2.mark_to_weak) > mark_to_weak0);
-  assert(la_load64_acq(&g->gc2.weak_complete_runs) > weak_complete_runs0);
-  assert(la_load64_acq(&g->gc2.weak_to_sweep) > weak_to_sweep0);
+  assert(gc2_fixpoint_rounds_acq(g) > fixpoint_rounds0);
+  assert(gc2_fixpoint_hits_acq(g) > fixpoint_hits0);
+  assert(gc2_mark_complete_runs_acq(g) > mark_complete_runs0);
+  assert(gc2_mark_complete_hits_acq(g) > mark_complete_hits0);
+  assert(gc2_mark_to_weak_acq(g) > mark_to_weak0);
+  assert(gc2_weak_complete_runs_acq(g) > weak_complete_runs0);
+  assert(gc2_weak_to_sweep_acq(g) > weak_to_sweep0);
   assert(la_load64_acq(&g->gc2.sweep_live_updates) > sweep_live_updates0);
   live_estimate = la_load64_acq(&g->gc2.live_estimate);
   assert(live_estimate > 0);
@@ -836,13 +836,13 @@ int main(void)
     "  weakcase[k] = {}\n"
     "end\n") == LUA_OK);
   worker_weak0 = la_load64_acq(&g->gc2.worker_weak_drained);
-  weak_complete_progress0 = la_load64_acq(&g->gc2.weak_complete_progress);
+  weak_complete_progress0 = gc2_weak_complete_progress_acq(g);
   weak_clear_tables0 = la_load64_acq(&g->gc2.weak_clear_tables);
   weak_clear_cleared0 = la_load64_acq(&g->gc2.weak_clear_cleared);
   weak_legacy_fallbacks0 = la_load64_acq(&g->gc2.weak_legacy_fallbacks);
   lj_gc_fullgc(L);
   assert(la_load64_acq(&g->gc2.worker_weak_drained) > worker_weak0);
-  assert(la_load64_acq(&g->gc2.weak_complete_progress) >
+  assert(gc2_weak_complete_progress_acq(g) >
 	 weak_complete_progress0);
   assert(la_load64_acq(&g->gc2.weak_clear_tables) > weak_clear_tables0);
   assert(la_load64_acq(&g->gc2.weak_clear_cleared) > weak_clear_cleared0);

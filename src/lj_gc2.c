@@ -116,15 +116,15 @@ void lj_gc2_init(global_State *g)
   gc2_ssb_drained_store_rlx(g, 0);
   gc2_ssb_items_published_store_rlx(g, 0);
   gc2_ssb_items_drained_store_rlx(g, 0);
-  la_store64_rlx(&g->gc2.fixpoint_rounds, 0);
-  la_store64_rlx(&g->gc2.fixpoint_hits, 0);
-  la_store64_rlx(&g->gc2.mark_complete_runs, 0);
-  la_store64_rlx(&g->gc2.mark_complete_hits, 0);
-  la_store64_rlx(&g->gc2.mark_complete_peer_waits, 0);
-  la_store64_rlx(&g->gc2.mark_to_weak, 0);
-  la_store64_rlx(&g->gc2.weak_complete_runs, 0);
-  la_store64_rlx(&g->gc2.weak_complete_progress, 0);
-  la_store64_rlx(&g->gc2.weak_to_sweep, 0);
+  gc2_fixpoint_rounds_store_rlx(g, 0);
+  gc2_fixpoint_hits_store_rlx(g, 0);
+  gc2_mark_complete_runs_store_rlx(g, 0);
+  gc2_mark_complete_hits_store_rlx(g, 0);
+  gc2_mark_complete_peer_waits_store_rlx(g, 0);
+  gc2_mark_to_weak_store_rlx(g, 0);
+  gc2_weak_complete_runs_store_rlx(g, 0);
+  gc2_weak_complete_progress_store_rlx(g, 0);
+  gc2_weak_to_sweep_store_rlx(g, 0);
   gc2_sweep_legacy_ready_store_rlx(g, 0);
   la_store64_rlx(&g->gc2.sweep_to_idle, 0);
   la_store64_rlx(&g->gc2.preserve_abort_to_idle, 0);
@@ -890,7 +890,7 @@ void lj_gc2_mark_to_weak(global_State *g)
   uint32_t expect = LJ_GC2_MARK;
   if (!g || !gc2_phase_cas(g, &expect, LJ_GC2_WEAK))
     return;
-  la_add64_rlx(&g->gc2.mark_to_weak, 1);
+  gc2_mark_to_weak_add(g, 1);
   lj_gc2_worker_wake(g);  /* 05 section 5.6.3 parked worker scheduler. */
 }
 
@@ -907,7 +907,7 @@ void lj_gc2_weak_to_sweep(global_State *g)
   if (!gc2_phase_cas(g, &expect, LJ_GC2_SWEEP))
     return;
   gc2_sweep_legacy_ready_rel(g, 0);
-  la_add64_rlx(&g->gc2.weak_to_sweep, 1);
+  gc2_weak_to_sweep_add(g, 1);
   lj_gc2_handshake(g, LJ_GC2_HS_DISABLE_BARRIER|LJ_GC2_HS_FLUSH_SSB|
 		   (gc2_cycle_sweep_minor_acq(g) ?
 		    LJ_GC2_HS_ALLOC_WHITE : LJ_GC2_HS_ALLOC_BLACK));
@@ -2476,7 +2476,7 @@ int lj_gc2_weak_complete(global_State *g, GCobj *legacy, uint32_t drain_limit)
   uint64_t progress = 0;
   if (!g || drain_limit == 0 || gc2_phase_acq(g) != LJ_GC2_WEAK)
     return 0;
-  la_add64_rlx(&g->gc2.weak_complete_runs, 1);
+  gc2_weak_complete_runs_add(g, 1);
   for (;;) {
     weakdrain = lj_gc2_worker_drain(g, drain_limit);
     if (weakdrain) {
@@ -2488,7 +2488,7 @@ int lj_gc2_weak_complete(global_State *g, GCobj *legacy, uint32_t drain_limit)
     la_cpu_pause();  /* 05 section 5.8: peer drain must finish before fallback. */
   }
   if (progress)
-    la_add64_rlx(&g->gc2.weak_complete_progress, progress);
+    gc2_weak_complete_progress_add(g, progress);
   if (lj_gc2_weak_snapshot_covers_legacy(g, legacy)) {
 #if LJ_GC2_PARANOIA
     gc2_weak_paranoia_zero_diff(g, legacy);
@@ -4060,9 +4060,9 @@ uint32_t lj_gc2_fixpoint_round(global_State *g, lua_State *L, uint32_t limit)
   (void)gc2_worker_drain_budget(g, limit);  /* 05 section 5.7.1 post-root drain. */
   fixpoint = gc2_marks_this_round_acq(g) == 0 &&
 	     lj_gc2_ssb_empty(g);
-  la_add64_rlx(&g->gc2.fixpoint_rounds, 1);
+  gc2_fixpoint_rounds_add(g, 1);
   if (fixpoint)
-    la_add64_rlx(&g->gc2.fixpoint_hits, 1);
+    gc2_fixpoint_hits_add(g, 1);
   return fixpoint;
 }
 
@@ -4084,17 +4084,17 @@ uint32_t lj_gc2_mark_complete(global_State *g, lua_State *L,
   uint32_t hit;
   if (!g || gc2_phase_acq(g) != LJ_GC2_MARK)
     return 0;
-  la_add64_rlx(&g->gc2.mark_complete_runs, 1);
+  gc2_mark_complete_runs_add(g, 1);
   for (;;) {
     hit = lj_gc2_fixpoint_run(g, L, max_rounds, limit);
     if (hit || gc2_worker_active_acq(g) == 0)
       break;
-    la_add64_rlx(&g->gc2.mark_complete_peer_waits, 1);
+    gc2_mark_complete_peer_waits_add(g, 1);
     while (gc2_worker_active_acq(g) != 0)
       la_cpu_pause();  /* 05 section 5.7.1 peer drain before P_WEAK. */
   }
   if (hit)
-    la_add64_rlx(&g->gc2.mark_complete_hits, 1);
+    gc2_mark_complete_hits_add(g, 1);
   return hit;  /* 05 section 5.7.1 scheduler-owned mark completion bridge. */
 }
 

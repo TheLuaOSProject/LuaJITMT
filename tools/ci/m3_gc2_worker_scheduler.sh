@@ -119,6 +119,45 @@ if hits=$(grep -nE -- '->[[:space:]]*gc2[.](remembered_barriers|remembered_pushe
   printf '%s\n' 'raw GC2 remembered telemetry counter access is forbidden; use gc2_remembered_* helpers' >&2
   exit 1
 fi
+for helper in gc2_fixpoint_rounds_acq \
+  gc2_fixpoint_rounds_store_rlx \
+  gc2_fixpoint_rounds_add \
+  gc2_fixpoint_hits_acq \
+  gc2_fixpoint_hits_store_rlx \
+  gc2_fixpoint_hits_add \
+  gc2_mark_complete_runs_acq \
+  gc2_mark_complete_runs_store_rlx \
+  gc2_mark_complete_runs_add \
+  gc2_mark_complete_hits_acq \
+  gc2_mark_complete_hits_store_rlx \
+  gc2_mark_complete_hits_add \
+  gc2_mark_complete_peer_waits_acq \
+  gc2_mark_complete_peer_waits_store_rlx \
+  gc2_mark_complete_peer_waits_add \
+  gc2_mark_to_weak_acq \
+  gc2_mark_to_weak_store_rlx \
+  gc2_mark_to_weak_add \
+  gc2_weak_complete_runs_acq \
+  gc2_weak_complete_runs_store_rlx \
+  gc2_weak_complete_runs_add \
+  gc2_weak_complete_progress_acq \
+  gc2_weak_complete_progress_store_rlx \
+  gc2_weak_complete_progress_add \
+  gc2_weak_to_sweep_acq \
+  gc2_weak_to_sweep_store_rlx \
+  gc2_weak_to_sweep_add; do
+  if ! grep -qE "^[[:space:]]*static LJ_AINLINE .*[*[:space:]]${helper}[[:space:]]*[(]" \
+      "$ROOT/src/lj_obj.h"; then
+    printf '%s\n' "${helper} helper is required for GC2 fixpoint/phase counters" >&2
+    exit 1
+  fi
+done
+if hits=$(grep -nE -- '->[[:space:]]*gc2[.](fixpoint_rounds|fixpoint_hits|mark_complete_runs|mark_complete_hits|mark_complete_peer_waits|mark_to_weak|weak_complete_runs|weak_complete_progress|weak_to_sweep)([^[:alnum:]_]|$)|&[[:space:]]*[^)]*->[[:space:]]*gc2[.](fixpoint_rounds|fixpoint_hits|mark_complete_runs|mark_complete_hits|mark_complete_peer_waits|mark_to_weak|weak_complete_runs|weak_complete_progress|weak_to_sweep)([^[:alnum:]_]|$)' \
+    "$ROOT"/src/*.c || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw GC2 fixpoint/phase counter access is forbidden; use gc2_* helpers' >&2
+  exit 1
+fi
 if hits=$(grep -nE -- 'setgcrefr?rel[(][*]lj_obj_gcwref[(](oldtail|tail)[)]' \
     "$ROOT/src/lj_gc2.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2

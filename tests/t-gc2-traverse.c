@@ -484,8 +484,8 @@ static void test_fixpoint_round(lua_State *L, global_State *g, TGState *tg)
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 0);
   assert(lj_gc2_ismarked(g, obj2gco(grandchild)) == 0);
 
-  rounds0 = la_load64_acq(&g->gc2.fixpoint_rounds);
-  hits0 = la_load64_acq(&g->gc2.fixpoint_hits);
+  rounds0 = gc2_fixpoint_rounds_acq(g);
+  hits0 = gc2_fixpoint_hits_acq(g);
   worker_runs0 = la_load64_acq(&g->gc2.worker_runs);
 
   assert(lj_gc2_fixpoint_round(g, L, 1) == 0);
@@ -494,22 +494,22 @@ static void test_fixpoint_round(lua_State *L, global_State *g, TGState *tg)
   assert(lj_gc2_ismarked(g, obj2gco(grandchild)) == 0);
   assert(!lj_gc2_ssb_empty(g));
   assert(la_load64_acq(&g->gc2.marks_this_round) > 0);
-  assert(la_load64_acq(&g->gc2.fixpoint_rounds) == rounds0 + 1u);
-  assert(la_load64_acq(&g->gc2.fixpoint_hits) == hits0);
+  assert(gc2_fixpoint_rounds_acq(g) == rounds0 + 1u);
+  assert(gc2_fixpoint_hits_acq(g) == hits0);
   assert(la_load64_acq(&g->gc2.worker_runs) > worker_runs0);
 
   assert(lj_gc2_fixpoint_round(g, L, ~(uint32_t)0) == 0);
   assert(lj_gc2_ismarked(g, obj2gco(grandchild)) == 1);
   assert(lj_gc2_ssb_empty(g));
   assert(la_load64_acq(&g->gc2.marks_this_round) > 0);
-  assert(la_load64_acq(&g->gc2.fixpoint_rounds) == rounds0 + 2u);
-  assert(la_load64_acq(&g->gc2.fixpoint_hits) == hits0);
+  assert(gc2_fixpoint_rounds_acq(g) == rounds0 + 2u);
+  assert(gc2_fixpoint_hits_acq(g) == hits0);
 
   assert(lj_gc2_fixpoint_round(g, L, ~(uint32_t)0) == 1);
   assert(lj_gc2_ssb_empty(g));
   assert(la_load64_acq(&g->gc2.marks_this_round) == 0);
-  assert(la_load64_acq(&g->gc2.fixpoint_rounds) == rounds0 + 3u);
-  assert(la_load64_acq(&g->gc2.fixpoint_hits) == hits0 + 1u);
+  assert(gc2_fixpoint_rounds_acq(g) == rounds0 + 3u);
+  assert(gc2_fixpoint_hits_acq(g) == hits0 + 1u);
 
   lj_gc2_legacy_cycle_end(g);
   lua_pop(L, 1);
@@ -1698,16 +1698,16 @@ static void test_weak_complete_bridge(lua_State *L, global_State *g,
   setgcrefnull(g->gc.weak);
   legacy_weak_link(g, weak, LJ_GC_WEAKVAL);
   lj_gc2_legacy_weak_begin(g);
-  runs0 = la_load64_acq(&g->gc2.weak_complete_runs);
-  progress0 = la_load64_acq(&g->gc2.weak_complete_progress);
+  runs0 = gc2_weak_complete_runs_acq(g);
+  progress0 = gc2_weak_complete_progress_acq(g);
   skipped0 = la_load64_acq(&g->gc2.weak_legacy_skipped);
   fallbacks0 = la_load64_acq(&g->gc2.weak_legacy_fallbacks);
   clear_tables0 = la_load64_acq(&g->gc2.weak_clear_tables);
   clear_cleared0 = la_load64_acq(&g->gc2.weak_clear_cleared);
   assert(lj_gc2_weak_complete(g, gcref(g->gc.weak), 1) == 1);
   assert(weak_entry_is_nil(L, weak, key));
-  assert(la_load64_acq(&g->gc2.weak_complete_runs) == runs0 + 1u);
-  assert(la_load64_acq(&g->gc2.weak_complete_progress) == progress0 + 1u);
+  assert(gc2_weak_complete_runs_acq(g) == runs0 + 1u);
+  assert(gc2_weak_complete_progress_acq(g) == progress0 + 1u);
   assert(la_load64_acq(&g->gc2.weak_legacy_skipped) == skipped0 + 1u);
   assert(la_load64_acq(&g->gc2.weak_legacy_fallbacks) == fallbacks0);
   assert(la_load64_acq(&g->gc2.weak_clear_tables) == clear_tables0 + 1u);
@@ -1727,7 +1727,7 @@ static void test_weak_complete_bridge(lua_State *L, global_State *g,
   legacy_weak_link(g, missing, LJ_GC_WEAKVAL);
   legacy_weak_link(g, weak, LJ_GC_WEAKVAL);
   lj_gc2_legacy_weak_begin(g);
-  runs0 = la_load64_acq(&g->gc2.weak_complete_runs);
+  runs0 = gc2_weak_complete_runs_acq(g);
   skipped0 = la_load64_acq(&g->gc2.weak_legacy_skipped);
   fallbacks0 = la_load64_acq(&g->gc2.weak_legacy_fallbacks);
   backfills0 = la_load64_acq(&g->gc2.weak_legacy_backfills);
@@ -1736,7 +1736,7 @@ static void test_weak_complete_bridge(lua_State *L, global_State *g,
   assert(lj_gc2_weak_complete(g, gcref(g->gc.weak), 1) == 1);
   assert(weak_entry_is_nil(L, weak, key));
   assert(weak_entry_is_nil(L, missing, mkey));
-  assert(la_load64_acq(&g->gc2.weak_complete_runs) == runs0 + 1u);
+  assert(gc2_weak_complete_runs_acq(g) == runs0 + 1u);
   assert(la_load64_acq(&g->gc2.weak_legacy_skipped) == skipped0 + 1u);
   assert(la_load64_acq(&g->gc2.weak_legacy_fallbacks) == fallbacks0);
   assert(la_load64_acq(&g->gc2.weak_legacy_backfills) == backfills0 + 1u);
