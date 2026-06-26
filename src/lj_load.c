@@ -163,9 +163,14 @@ LUALIB_API int luaL_loadfilex(lua_State *L, const char *filename,
     chunkname = lua_pushfstring(L, "@%s", filename);
     ctx.fp = load_native_fopen(L, filename, &actions);
     if (ctx.fp == NULL) {
-      L->top--;
-      lj_safepoint_checkstop(L, actions);
-      lua_pushfstring(L, "cannot open %s: %s", filename, strerror(errno));
+      err = errno;
+      {
+	char errbuf[LJ_ERR_ERRNO_BUFSZ];
+	const char *emsg = lj_err_strerrno(err, errbuf, sizeof(errbuf));
+	L->top--;
+	lj_safepoint_checkstop(L, actions);
+	lua_pushfstring(L, "cannot open %s: %s", filename, emsg);
+      }
       return LUA_ERRFILE;
     }
     if (load_fresh_stopreq(L, actions, had_stopreq)) {
@@ -189,8 +194,10 @@ LUALIB_API int luaL_loadfilex(lua_State *L, const char *filename,
   lj_safepoint_checkstop(L, ctx.actions);
   if (err) {
     const char *fname = filename ? filename : "stdin";
+    char errbuf[LJ_ERR_ERRNO_BUFSZ];
+    const char *emsg = lj_err_strerrno(err, errbuf, sizeof(errbuf));
     L->top--;
-    lua_pushfstring(L, "cannot read %s: %s", fname, strerror(err));
+    lua_pushfstring(L, "cannot read %s: %s", fname, emsg);
     return LUA_ERRFILE;
   }
   return status;

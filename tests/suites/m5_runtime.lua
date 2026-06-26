@@ -262,6 +262,28 @@ return function(add)
   })
 
   add({
+    name = "m5_libc_error_reentrant",
+    description = "reentrant libc error-string formatting behavior",
+    run = function(t)
+      t:run([==[
+if hits=$(grep -RInE -- 'strerror[[:space:]]*\(' src/*.c src/*.h | \
+    grep -v '^src/lj_err.c:' || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw production strerror() use is forbidden; use lj_err_strerrno()' >&2
+  exit 1
+fi
+]==], { cwd = t.root, quiet = true })
+      build_and_run_luajit_script(t, "t-libc-error-reentrant.lua", nil, {
+        joff = true,
+        env = {
+          LJ_M5_ERRNO_THREADS = os.getenv("LJ_M5_ERRNO_THREADS") or "6",
+          LJ_M5_ERRNO_ITERS = os.getenv("LJ_M5_ERRNO_ITERS") or "160"
+        }
+      })
+    end
+  })
+
+  add({
     name = "m5_parser_capture_meta",
     description = "parser captured-local metadata behavior",
     run = function(t)

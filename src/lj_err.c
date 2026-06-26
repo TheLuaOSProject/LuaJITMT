@@ -94,6 +94,45 @@ LJ_DATADEF const char *lj_err_allmsg =
 #include "lj_errmsg.h"
 ;
 
+static const char *err_strunknown(char *buf, size_t bufsz)
+{
+  static const char msg[] = "Unknown error";
+  size_t len = sizeof(msg);
+  if (bufsz == 0)
+    return msg;
+  if (len > bufsz)
+    len = bufsz;
+  memcpy(buf, msg, len-1);
+  buf[len-1] = '\0';
+  return buf;
+}
+
+/* Return a thread-local/reentrant OS error string when the target supports it. */
+const char *lj_err_strerrno(int errnum, char *buf, size_t bufsz)
+{
+  if (bufsz == 0)
+    return err_strunknown(buf, bufsz);
+#if LJ_TARGET_POSIX
+#if defined(__GLIBC__) && defined(_GNU_SOURCE)
+  {
+    char *s = strerror_r(errnum, buf, bufsz);
+    return s ? s : err_strunknown(buf, bufsz);
+  }
+#else
+  if (strerror_r(errnum, buf, bufsz) == 0) {
+    buf[bufsz-1] = '\0';
+    return buf;
+  }
+  return err_strunknown(buf, bufsz);
+#endif
+#else
+  {
+    const char *s = strerror(errnum);
+    return s ? s : err_strunknown(buf, bufsz);
+  }
+#endif
+}
+
 /* -- Internal frame unwinding -------------------------------------------- */
 
 /* Unwind Lua stack and move error message to new top. */

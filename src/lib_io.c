@@ -231,10 +231,16 @@ static IOFileUD *io_file_open(lua_State *L, const char *mode)
   int had_stopreq = tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ);
   IOFileUD *iof = io_file_new(L);
   uint32_t actions;
+  int err = 0;
   iof->fp = io_native_fopen(L, fname, mode, &actions);
-  io_fopen_checkstop(L, iof, actions, had_stopreq);
   if (iof->fp == NULL)
-    luaL_argerror(L, 1, lj_strfmt_pushf(L, "%s: %s", fname, strerror(errno)));
+    err = errno;
+  io_fopen_checkstop(L, iof, actions, had_stopreq);
+  if (iof->fp == NULL) {
+    char errbuf[LJ_ERR_ERRNO_BUFSZ];
+    const char *emsg = lj_err_strerrno(err, errbuf, sizeof(errbuf));
+    luaL_argerror(L, 1, lj_strfmt_pushf(L, "%s: %s", fname, emsg));
+  }
   return iof;
 }
 

@@ -23,6 +23,7 @@ local m5_concurrent_cases = {
   "m5_registry_root",
   "m5_nomm_cache",
   "m5_os_reentrant",
+  "m5_libc_error_reentrant",
   "m5_state_owner",
   "m5_buffer_publish",
   "m5_threading_alloc",

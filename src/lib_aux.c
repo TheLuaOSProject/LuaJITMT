@@ -37,11 +37,13 @@ LUALIB_API int luaL_fileresult(lua_State *L, int stat, const char *fname)
     return 1;
   } else {
     int en = errno;  /* Lua API calls may change this value. */
+    char errbuf[LJ_ERR_ERRNO_BUFSZ];
+    const char *emsg = lj_err_strerrno(en, errbuf, sizeof(errbuf));
     setnilV(L->top++);
     if (fname)
-      lua_pushfstring(L, "%s: %s", fname, strerror(en));
+      lua_pushfstring(L, "%s: %s", fname, emsg);
     else
-      lua_pushfstring(L, "%s", strerror(en));
+      lua_pushfstring(L, "%s", emsg);
     setintV(L->top++, en);
     lj_trace_abort(G(L));
     return 3;

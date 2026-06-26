@@ -842,6 +842,8 @@ static lua_State *threading_spawn_core(lua_State *L, GCtab *env, TValue *base,
   threading_live_publish(G(L), th, live);
   rc = lj_thr_create(&th->thr, threading_worker, th);
   if (rc != 0) {
+    char errbuf[LJ_ERR_ERRNO_BUFSZ];
+    const char *emsg = lj_err_strerrno(rc, errbuf, sizeof(errbuf));
     threading_live_remove(th);
     threading_rehome_unstarted_stack(L, L1, tg);
     lj_tg_fini_thread(G(L), tg);
@@ -849,7 +851,7 @@ static lua_State *threading_spawn_core(lua_State *L, GCtab *env, TValue *base,
     th->tg = NULL;
     th->state = LJ_THREAD_DONE;
     threading_gc_leave(G(L));
-    lj_err_callermsg(L, strerror(rc));
+    lj_err_callermsg(L, emsg);
   }
 
   return L1;
