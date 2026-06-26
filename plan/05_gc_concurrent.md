@@ -563,9 +563,11 @@ same nonblocking leader token used by allocation triggers, store the pending
 threshold in the MT threshold mirror, and perform only bounded worker-drain
 assistance before returning. Active-thread explicit `step` bypasses the
 automatic-trigger stop gate, matching the legacy single-thread behavior where
-`collectgarbage("step")` restarts GC after `collectgarbage("stop")`. Exact
-`collect` parking and stopped full-collect restore still wait on the GC2 leader
-path that can close sweep without legacy driver ownership.
+`collectgarbage("step")` restarts GC after `collectgarbage("stop")`. Active
+stopped `collect` requests a one-shot major cycle and restores the stopped
+threshold when that requested full cycle later reaches idle. Exact `collect`
+parking still waits on the GC2 leader path that can close sweep without legacy
+driver ownership.
 
 ## 5.11 Pacing & assists
 Trigger when `alloc_since_trigger > trigger_bytes` where trigger_bytes =

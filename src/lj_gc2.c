@@ -47,6 +47,17 @@ typedef struct GC2FinalizerNode {
   GCobj *obj;
 } GC2FinalizerNode;
 
+static GC2FinalizerNode *gc2_finalizer_node_next_acq(GC2FinalizerNode *fn)
+{
+  return (GC2FinalizerNode *)la_loadptr_acq((void *const *)&fn->next);
+}
+
+static void gc2_finalizer_node_next_rel(GC2FinalizerNode *fn,
+					GC2FinalizerNode *next)
+{
+  la_storeptr_rel((void **)&fn->next, next);
+}
+
 static int gc2_grey_grow(global_State *g);
 static int gc2_grey_empty(global_State *g);
 static int gc2_weak_resize(global_State *g, MSize cap);
@@ -115,6 +126,7 @@ void lj_gc2_init(global_State *g)
     g, LJ_GC2_MINOR_SURVIVAL_MAJOR_PCT);
   gc2_minor_survival_major_requests_store_rlx(g, 0);
   gc2_force_major_store_rlx(g, 0);
+  gc2_restore_stopped_store_rlx(g, 0);
   gc2_remembered_barriers_store_rlx(g, 0);
   gc2_remembered_pushed_store_rlx(g, 0);
   gc2_remembered_overflows_store_rlx(g, 0);
@@ -667,6 +679,20 @@ int lj_gc2_request_major(global_State *g, TGState *tg)
   return lj_gc2_request_cycle(g, tg);
 }
 
+int lj_gc2_request_stopped_major(global_State *g, TGState *tg)
+{
+  int requested;
+  if (!g)
+    return 0;
+  lj_gc2_force_major(g);
+  requested = gc2_request_cycle_start(g, tg, 0);
+  if (requested)
+    gc2_restore_stopped_rel(g, 1);
+  else if (gc2_phase_acq(g) != LJ_GC2_IDLE)
+    lj_gc2_worker_wake(g);
+  return requested;
+}
+
 void lj_gc2_check_trigger(global_State *g, TGState *tg)
 {
   if (gc2_phase_acq(g) != LJ_GC2_IDLE)
@@ -738,6 +764,12 @@ void lj_gc2_publish_idle_threshold(global_State *g)
     return;
   if (g->gc.state != GCSpause || gc2_phase_acq(g) != LJ_GC2_IDLE)
     return;
+  if (gc2_restore_stopped_xchg_acqrel(g, 0)) {
+    lj_gc2_helper_soft_limit_store(g, ~(uint64_t)0);
+    lj_gc_mt_threshold_store(g, LJ_MAX_MEM);
+    lj_gc_threshold_store(g, LJ_MAX_MEM);
+    return;  /* Preserve collectgarbage("stop") after requested full GC. */
+  }
   if (lj_gc_threshold_load(g) == LJ_MAX_MEM)
     return;  /* Honor collectgarbage("stop") and MT stop-the-world gates. */
   trigger = lj_gc2_trigger_load(g);
@@ -1061,7 +1093,7 @@ static GC2FinalizerNode *gc2_finalizer_node_new(global_State *g, GCobj *o)
     lj_assertG_(g, 0, "out of memory allocating finalizer queue node");
     abort();
   }
-  node->next = NULL;
+  gc2_finalizer_node_next_rel(node, NULL);
   node->obj = o;
   return node;
 }
@@ -1076,7 +1108,7 @@ static void gc2_finalizer_node_free(global_State *g, GC2FinalizerNode *node)
 static void gc2_finalizer_free_stack(global_State *g, GC2FinalizerNode *node)
 {
   while (node) {
-    GC2FinalizerNode *next = node->next;
+    GC2FinalizerNode *next = gc2_finalizer_node_next_acq(node);
     gc2_finalizer_node_free(g, node);
     node = next;
   }
@@ -1087,8 +1119,8 @@ static void gc2_finalizer_free_ring(global_State *g, GC2FinalizerNode *tail)
   GC2FinalizerNode *node;
   if (!tail)
     return;
-  node = tail->next;
-  tail->next = NULL;
+  node = gc2_finalizer_node_next_acq(tail);
+  gc2_finalizer_node_next_rel(tail, NULL);
   gc2_finalizer_free_stack(g, node);
 }
 
@@ -1103,7 +1135,7 @@ void lj_gc2_finalizer_enqueue(global_State *g, GCobj *o)
     return;
   do {
     head = gc2_finalizer_mpsc_acq(g);
-    node->next = (GC2FinalizerNode *)head;
+    gc2_finalizer_node_next_rel(node, (GC2FinalizerNode *)head);
   } while (!gc2_finalizer_mpsc_cas(g, &head, node));
   gc2_finalizer_queued_add(g, 1);
   if (head == NULL)
@@ -1120,10 +1152,10 @@ void lj_gc2_finalizer_drain_owned(global_State *g)
 	     "gc2 finalizer drain requires owner");
   stack = (GC2FinalizerNode *)gc2_finalizer_mpsc_xchg_acqrel(g, NULL);
   while (stack) {
-    GC2FinalizerNode *next = stack->next;
+    GC2FinalizerNode *next = gc2_finalizer_node_next_acq(stack);
     if (newtail == NULL)
       newtail = stack;
-    stack->next = rev;
+    gc2_finalizer_node_next_rel(stack, rev);
     rev = stack;
     stack = next;
     n++;
@@ -1140,12 +1172,12 @@ void lj_gc2_finalizer_drain_owned(global_State *g)
   }
 #endif
   if (oldtail) {
-    GC2FinalizerNode *head = oldtail->next;
-    newtail->next = head;
-    oldtail->next = rev;
+    GC2FinalizerNode *head = gc2_finalizer_node_next_acq(oldtail);
+    gc2_finalizer_node_next_rel(newtail, head);
+    gc2_finalizer_node_next_rel(oldtail, rev);
     gc2_finalizer_tail_rel(g, newtail);
   } else {
-    newtail->next = rev;
+    gc2_finalizer_node_next_rel(newtail, rev);
     gc2_finalizer_tail_rel(g, newtail);
   }
   gc2_finalizer_mpsc_drained_add(g, n);
@@ -1175,7 +1207,7 @@ GCobj *lj_gc2_finalizer_dequeue_owned(global_State *g)
     if (!tail)
       return NULL;
   }
-  node = tail->next;
+  node = gc2_finalizer_node_next_acq(tail);
   o = node ? node->obj : NULL;
   lj_assertG(o != NULL, "broken gc2 finalizer queue");
   if (!o)
@@ -1183,7 +1215,7 @@ GCobj *lj_gc2_finalizer_dequeue_owned(global_State *g)
   if (node == tail) {
     gc2_finalizer_tail_rel(g, NULL);
   } else {
-    tail->next = node->next;
+    gc2_finalizer_node_next_rel(tail, gc2_finalizer_node_next_acq(node));
   }
   gc2_finalizer_node_free(g, node);
   gc2_finalizer_dequeued_add(g, 1);
@@ -1804,7 +1836,7 @@ void lj_gc2_finalizer_mark_queued(global_State *g, GC2FinalizerMarkFunc mark)
     return;
   node = tail;
   do {
-    node = node->next;
+    node = gc2_finalizer_node_next_acq(node);
     if (node->obj)
       mark(g, node->obj);
   } while (node != tail);

@@ -1446,7 +1446,10 @@ LUA_API int lua_gc(lua_State *L, int what, int data)
       lj_gc_fullgc(L);
       api_gc_leaveexclusive(g);
     } else if (la_load32_acq(&g->mt_live) != 0) {
-      (void)lj_gc2_request_major(g, L2TG(L));
+      if (lj_gc_mt_threshold_load(g) == LJ_MAX_MEM)
+	(void)lj_gc2_request_stopped_major(g, L2TG(L));
+      else
+	(void)lj_gc2_request_major(g, L2TG(L));
       (void)lj_gc2_worker_drain(g, LJ_GC2_WORKER_DRAIN_BATCH);
     }
     break;

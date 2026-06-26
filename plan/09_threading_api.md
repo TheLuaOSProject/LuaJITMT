@@ -169,6 +169,9 @@ already live, explicit `collect` / `step` now request a GC2 cycle and save the
 pending driver threshold in `mt_gc_threshold` instead of running the legacy
 collector concurrently. The active-thread `step` request bypasses the
 automatic-GC stop gate, matching the legacy single-thread restart behavior.
+The active-thread stopped `collect` path marks the requested major cycle with a
+one-shot stopped-threshold restore so the eventual cycle completion does not
+permanently restart automatic GC.
 
 The channel userdata is shared freely; all ops are method calls
 (lib_threading.c → lj_chan.c). GC: channels live in non-traversable? NO —

@@ -1199,6 +1199,7 @@ typedef struct GC2State {
   uint32_t minor_survival_threshold_pct;  /* Survival pct forcing a major. */
   uint64_t minor_survival_major_requests;  /* High-survival major requests. */
   uint32_t force_major;  /* One-shot full-GC major-cycle override. */
+  uint32_t restore_stopped;  /* Restore stopped GC after explicit full cycle. */
   uint64_t remembered_barriers;  /* Idle generational barriers observed. */
   uint64_t remembered_pushed;  /* Idle remembered entries queued. */
   uint64_t remembered_overflows;  /* Remembered SSB overflows forcing major. */
@@ -3217,6 +3218,24 @@ static LJ_AINLINE uint32_t gc2_force_major_xchg_acqrel(global_State *g,
 						       uint32_t force)
 {
   return la_xchg32_acqrel(&g->gc2.force_major, force);
+}
+
+static LJ_AINLINE void gc2_restore_stopped_store_rlx(global_State *g,
+						     uint32_t restore)
+{
+  la_store32_rlx(&g->gc2.restore_stopped, restore);
+}
+
+static LJ_AINLINE void gc2_restore_stopped_rel(global_State *g,
+					       uint32_t restore)
+{
+  la_store32_rel(&g->gc2.restore_stopped, restore);
+}
+
+static LJ_AINLINE uint32_t gc2_restore_stopped_xchg_acqrel(global_State *g,
+							   uint32_t restore)
+{
+  return la_xchg32_acqrel(&g->gc2.restore_stopped, restore);
 }
 
 static LJ_AINLINE uint64_t gc2_remembered_barriers_acq(global_State *g)

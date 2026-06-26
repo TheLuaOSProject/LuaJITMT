@@ -15,6 +15,10 @@ close sweep without legacy collector ownership.
 Follow-up: active-thread `collectgarbage("step")` now uses an explicit request
 variant that bypasses the automatic-trigger stop gate. This matches the
 single-thread legacy path where `collectgarbage("step")` restarts GC after
-`collectgarbage("stop")`. Stopped full `collect` still needs a separate
-"one requested full cycle then restore stopped" bridge before it can both make
-progress under active threads and preserve `isrunning == false`.
+`collectgarbage("stop")`.
+
+Stopped full `collect` now records a one-shot restore bit when its request is
+accepted. The active call still returns before completion, so `isrunning` is
+true while the requested cycle is pending, but `lj_gc2_publish_idle_threshold()`
+restores both the live threshold and `mt_gc_threshold` to `LJ_MAX_MEM` after
+that requested full cycle reaches idle.
