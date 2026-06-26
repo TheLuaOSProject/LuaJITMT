@@ -19,6 +19,7 @@ end
 
 local m3_scaffold_deps = {
   "m3_gc2_worker_scheduler",
+  "m3_gc_active_thread_roots",
   "m3_safepoint_handshake",
   "m3_vmevent_native_stdio",
   "m3_vm_safepoint",
@@ -52,6 +53,18 @@ return function(add)
       run_luajit_script_jit_modes(t, "t-gc-workers.lua")
 
       print("M3 GC2 worker scheduler test passed")
+    end
+  })
+
+  register({
+    name = "m3_gc_active_thread_roots",
+    description = "active thread GC roots preserve standard-library globals",
+    run = function(t)
+      make_clean(t)
+      make_default(t, { jobs = false })
+      run_luajit_script_jit_modes(t, "t-gc-active-thread-roots.lua", nil,
+                                  { timeout = "10s" })
+      print("M3 active thread root GC regression passed")
     end
   })
 
@@ -148,6 +161,7 @@ return function(add)
       })
 
       utils.run_case(cases, t, "m3_gc2_worker_scheduler")
+      utils.run_case(cases, t, "m3_gc_active_thread_roots")
       utils.run_case(cases, t, "m3_safepoint_handshake")
       utils.run_case(cases, t, "m3_vm_safepoint")
       utils.run_case(cases, t, "m3_gc2_paranoia")

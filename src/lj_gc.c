@@ -739,7 +739,6 @@ static void gc_mark_start(global_State *g)
   lj_gc_list_clear_rel(&g->gc.grayagain);
   lj_gc_list_clear_rel(&g->gc.weak);
   gc_markobj(g, mainL);
-  gc_traverse_thread(g, mainL);
   {
     GCtab *env = tabref_acq(mainL->env);
     if (env)
@@ -2180,7 +2179,6 @@ static int atomic(global_State *g, lua_State *L)
   lj_gc_list_move_rel(&g->gc.gray, &g->gc.weak);  /* Empty weak tables. */
   lj_assertG(!iswhite(obj2gco(mainthread_acq(g))), "main thread turned white");
   gc_markobj(g, L);  /* Mark running thread. */
-  gc_traverse_thread(g, L);
   gc_traverse_curtrace(g);  /* Traverse current trace. */
   gc_mark_gcroot(g);  /* Mark GC roots (again). */
   gc_propagate_gray(g);  /* Propagate all of the above. */
