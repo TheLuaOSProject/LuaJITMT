@@ -1,0 +1,21 @@
+{
+    "id": "xmake",
+    "version": "1.3.0",
+    "name": "xmake",
+    "options": {
+        "version": {
+            "type": "string",
+            "default": "latest",
+            "proposals": [
+                "latest",
+                "3.0.8",
+                "3.0.0"
+            ],
+            "description": "Xmake version to install"
+        }
+    },
+    "installsAfter": [
+        "./llvm-latest",
+        "./llvm"
+    ]
+}

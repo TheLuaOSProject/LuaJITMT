@@ -1,0 +1,33 @@
+FROM docker.io/nvidia/opengl:1.2-glvnd-devel-ubuntu22.04
+
+ARG DEBIAN_FRONTEND=noninteractive
+ARG USERNAME=vscode
+ARG USER_UID=1000
+ARG USER_GID=1000
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        sudo ca-certificates wget zsh curl git \
+        build-essential cmake ninja-build pkg-config \
+        mesa-utils vulkan-tools \
+        x11-apps xauth \
+        libx11-dev libxext-dev libxrandr-dev libxi-dev libxinerama-dev libxcursor-dev \
+        libvulkan-dev vulkan-validationlayers \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN if getent group "${USER_GID}" >/dev/null; then \
+        USER_GROUP="$(getent group "${USER_GID}" | cut -d: -f1)"; \
+    else \
+        groupadd --gid "${USER_GID}" "${USERNAME}"; \
+        USER_GROUP="${USERNAME}"; \
+    fi \
+    && if ! id -u "${USERNAME}" >/dev/null 2>&1; then \
+        useradd --uid "${USER_UID}" --gid "${USER_GROUP}" -m "${USERNAME}" -s /bin/zsh; \
+    fi \
+    && echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${USERNAME} \
+    && chmod 0440 /etc/sudoers.d/${USERNAME} \
+    && mkdir -p /tmp/xdg-runtime \
+    && chown ${USERNAME}:${USER_GROUP} /tmp/xdg-runtime
+
+RUN apt-get update && apt install -y lsb-release wget software-properties-common gnupg &&  rm -rf /var/lib/apt/lists/*
+# now, llvm

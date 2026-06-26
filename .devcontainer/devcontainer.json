@@ -1,0 +1,59 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the
+// README at: https://github.com/devcontainers/templates/tree/main/src/go .
+{
+	"name": "debian",
+	"remoteUser": "vscode",
+	"updateRemoteUserUID": true,
+	"image": "mcr.microsoft.com/devcontainers/base:trixie",
+	// "runArgs": [
+	// 	"--security-opt=seccomp=unconfined",
+	// 	"--security-opt=apparmor=unconfined",
+	// 	"--security-opt=label=disable",
+	// 	"--cap-add=PERFMON",
+	// 	"--cap-add=SYS_ADMIN"
+	// ],
+	"features": {
+		"ghcr.io/devcontainers/features/common-utils:2": {
+			"installZsh": true,
+			"configureZshAsDefaultShell": true,
+			"installOhMyZsh": true,
+			"installOhMyZshConfig": true,
+			"upgradePackages": true,
+			"nonFreePackages": true,
+			"installSsl": true,
+			"username": "vscode",
+			"userUid": "automatic",
+			"userGid": "automatic"
+		},
+		"./llvm": {
+			"version": "22"
+		},
+		"./xmake": {},
+		// // "ghcr.io/ebaskoro/devcontainer-features/emscripten:1": {},
+		// "devwasm.azurecr.io/dev-wasm/dev-wasm-feature/wasmtime-wasi:0": {
+		// 	"version": "24",
+		// 	"wasmtime_version": "v24.0.0",
+		// 	"wit_version": "0.30.0",
+		// 	"wasm_tools_version": "1.214.0",
+		// 	"location": "/usr/local"
+		// }
+	},
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"llvm-vs-code-extensions.vscode-clangd",
+				"openai.chatgpt"
+			]
+		}
+	},
+	// Features to add to the dev container. More info: https://containers.dev/features.
+	// "features": {},
+	// Use 'forwardPorts' to make a list of ports inside the container available locally.
+	// "forwardPorts": [],
+	// Use 'postCreateCommand' to run commands after the container is created.
+	// "postCreateCommand": "go version",
+	// Configure tool-specific properties.
+	// "customizations": {},
+	// Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
+	// "remoteUser": "root"
+}
