@@ -150,6 +150,18 @@ static LJ_AINLINE void lj_tg_alloc_black_rel(TGState *tg,
   la_store8_rel(&tg->alloc.alloc_black, alloc_black);  /* 05 section 5.5. */
 }
 
+#if LJ_HASJIT
+static LJ_AINLINE int lj_tg_jit_exitcode_acq(const TGState *tg)
+{
+  return (int)la_load32_acq((uint32_t *)&tg->jit_exitcode);
+}
+
+static LJ_AINLINE void lj_tg_jit_exitcode_rel(TGState *tg, int exitcode)
+{
+  la_store32_rel((uint32_t *)&tg->jit_exitcode, (uint32_t)exitcode);
+}
+#endif
+
 #if LJ_HASFFI
 static LJ_AINLINE void *lj_tg_ffi_call_func_acq(const TGState *tg)
 {

@@ -1577,7 +1577,7 @@ int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr)
   ExitDataCP exd;
   int errcode;
 #if LJ_TARGET_X64 && !LJ_ABI_WIN
-  int exitcode = tg->jit_exitcode;
+  int exitcode = lj_tg_jit_exitcode_acq(tg);
 #else
   int exitcode = J->exitcode;
 #endif
@@ -1589,7 +1589,7 @@ int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr)
   setnilV(&exiterr);
   if (exitcode) {  /* Trace unwound with error code. */
 #if LJ_TARGET_X64 && !LJ_ABI_WIN
-    tg->jit_exitcode = 0;
+    lj_tg_jit_exitcode_rel(tg, 0);
 #else
     J->exitcode = 0;
 #endif

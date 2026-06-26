@@ -368,7 +368,7 @@ static void err_unwind_win_jit(global_State *g, int errcode)
       if (stub) {  /* Jump to side exit to unwind the trace. */
 	ctx.CONTEXT_REG_PC = stub;
 #if LJ_TARGET_X64 && !LJ_ABI_WIN
-	G2TG(g)->jit_exitcode = errcode;
+	lj_tg_jit_exitcode_rel(G2TG(g), errcode);
 #else
 	G2J(g)->exitcode = errcode;
 #endif
@@ -544,7 +544,7 @@ static int err_unwind_jit(int version, int actions,
     lj_assertG(lj_tg_jit_base(g), "unexpected throw across mcode frame");
     if (stub) {  /* Jump to side exit to unwind the trace. */
 #if LJ_TARGET_X64 && !LJ_ABI_WIN
-      G2TG(g)->jit_exitcode = LJ_UEXCLASS_ERRCODE(uexclass);
+      lj_tg_jit_exitcode_rel(G2TG(g), LJ_UEXCLASS_ERRCODE(uexclass));
 #else
       G2J(g)->exitcode = LJ_UEXCLASS_ERRCODE(uexclass);
 #endif
