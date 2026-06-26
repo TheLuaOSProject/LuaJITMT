@@ -215,6 +215,49 @@ static LJ_AINLINE void lj_gc2_ssb_next_rel(GC2SSBNode *node,
   la_storeptr_rel((void **)&node->next, next);
 }
 
+static LJ_AINLINE GC2SSBNode *lj_tg_ssb_free_acq(const TGState *tg)
+{
+  return (GC2SSBNode *)la_loadptr_acq(
+    (void *const *)&tg->ssb_free);  /* 05 section 5.6.2 SSB. */
+}
+
+static LJ_AINLINE void lj_tg_ssb_free_store_rlx(TGState *tg,
+						GC2SSBNode *node)
+{
+  la_storeptr_rlx((void **)&tg->ssb_free, node);  /* 05 section 5.6.2 SSB. */
+}
+
+static LJ_AINLINE int lj_tg_ssb_free_cas(TGState *tg, GC2SSBNode **oldp,
+					 GC2SSBNode *node)
+{
+  return la_casptr((void **)&tg->ssb_free, (void **)oldp, node,
+		   LA_ACQ_REL, LA_ACQ);  /* 05 section 5.6.2 SSB free stack. */
+}
+
+static LJ_AINLINE GC2SSBNode *lj_tg_ssb_free_pop(TGState *tg)
+{
+  GC2SSBNode *head = lj_tg_ssb_free_acq(tg);
+  /* The owner TG is the only popper; GC2 workers/assists only push recycle. */
+  while (head != NULL) {
+    GC2SSBNode *next = lj_gc2_ssb_next_acq(head);
+    GC2SSBNode *oldhead = head;
+    if (lj_tg_ssb_free_cas(tg, &oldhead, next)) {
+      lj_gc2_ssb_next_rel(head, NULL);
+      return head;
+    }
+    head = oldhead;
+  }
+  return NULL;
+}
+
+static LJ_AINLINE void lj_tg_ssb_free_push(TGState *tg, GC2SSBNode *node)
+{
+  GC2SSBNode *head = lj_tg_ssb_free_acq(tg);
+  do {
+    lj_gc2_ssb_next_rel(node, head);
+  } while (!lj_tg_ssb_free_cas(tg, &head, node));
+}
+
 static LJ_AINLINE TGState *lj_tg_next_acq(const TGState *tg)
 {
   return (TGState *)la_loadptr_acq((void *const *)&tg->next_tg);

@@ -15,6 +15,23 @@ if hits=$(grep -nE -- 'ssb_node\[[^]]+\][.]next' \
   printf '%s\n' 'raw embedded GC2 SSB next-link init is forbidden; use lj_gc2_ssb_next_* helpers' >&2
   exit 1
 fi
+for helper in lj_tg_ssb_free_acq \
+  lj_tg_ssb_free_store_rlx \
+  lj_tg_ssb_free_cas \
+  lj_tg_ssb_free_pop \
+  lj_tg_ssb_free_push; do
+  if ! grep -qE "^[[:space:]]*static LJ_AINLINE .*[*[:space:]]${helper}[[:space:]]*[(]" \
+      "$ROOT/src/lj_tg.h"; then
+    printf '%s\n' "${helper} helper is required for the TG SSB free-list head" >&2
+    exit 1
+  fi
+done
+if hits=$(grep -nE -- '(->|[.])[[:space:]]*ssb_free([^[:alnum:]_]|$)' \
+    "$ROOT"/src/*.c || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw TG SSB free-list head access is forbidden; use lj_tg_ssb_free_* helpers' >&2
+  exit 1
+fi
 if hits=$(grep -nE -- 'setgcrefr?rel[(][*]lj_obj_gcwref[(](oldtail|tail)[)]' \
     "$ROOT/src/lj_gc2.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2

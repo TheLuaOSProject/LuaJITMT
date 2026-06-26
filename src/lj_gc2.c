@@ -2897,14 +2897,13 @@ static uint32_t gc2_flush_ssb(global_State *g, TGState *tg, int allow_drain)
   n = (uint32_t)(next - base);
   if (n == 0)
     return 0;
-  fresh = tg->ssb_free;
+  fresh = lj_tg_ssb_free_pop(tg);
   if (!fresh && allow_drain) {
     (void)lj_gc2_drain_ssb(g);  /* Temporary scaffold until workers recycle. */
-    fresh = tg->ssb_free;
+    fresh = lj_tg_ssb_free_pop(tg);
   }
   if (!fresh)
     return 0;
-  tg->ssb_free = lj_gc2_ssb_next_acq(fresh);
   node = tg->ssb_active;
   node->n = n;
   gc2_ssb_publish(g, node);
@@ -2973,8 +2972,7 @@ static void gc2_ssb_recycle_node(GC2SSBNode *node)
   TGState *owner = node->owner;
   node->n = 0;
   if (owner) {
-    lj_gc2_ssb_next_rel(node, owner->ssb_free);
-    owner->ssb_free = node;
+    lj_tg_ssb_free_push(owner, node);
   } else {
     lj_gc2_ssb_next_rel(node, NULL);
   }

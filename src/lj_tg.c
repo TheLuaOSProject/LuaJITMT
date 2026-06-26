@@ -24,7 +24,7 @@ static void tg_init_ssb(TGState *tg)
   lj_gc2_ssb_next_rel(&tg->ssb_node[1], NULL);
   tg->ssb_node[1].n = 0;
   tg->ssb_active = &tg->ssb_node[0];
-  tg->ssb_free = &tg->ssb_node[1];
+  lj_tg_ssb_free_store_rlx(tg, &tg->ssb_node[1]);
   tg->ssb_base = tg->ssb_node[0].slot;
   tg->ssb_next = tg->ssb_base;
   tg->ssb_end = tg->ssb_base + TG_GC2_SSB_SLOTS;
