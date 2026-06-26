@@ -472,16 +472,19 @@ static void gc2_paranoia_check_fixpoint(global_State *g)
 #endif
 
 static void gc_mark(global_State *g, GCobj *o);
+static void gc_traverse_thread(global_State *g, lua_State *th);
 
 /* Mark a TValue (if needed). */
 #define gc_marktv(g, tv) \
   { lj_assertG(!tvisgcv(tv) || (~itype(tv) == gcval(tv)->gch.gct), \
 	       "TValue and GC type mismatch"); \
-    if (tviswhite(tv)) gc_mark(g, gcV(tv)); }
+    if (tvisgcv(tv)) { lj_gc_arena_markobj((g), gcV(tv)); \
+      if (tviswhite(tv)) gc_mark((g), gcV(tv)); } }
 
 /* Mark a GCobj (if needed). */
 #define gc_markobj(g, o) \
-  { if (iswhite(obj2gco(o))) gc_mark(g, obj2gco(o)); }
+  { lj_gc_arena_markobj((g), obj2gco(o)); \
+    if (iswhite(obj2gco(o))) gc_mark((g), obj2gco(o)); }
 
 /* Mark a string object. */
 #define gc_mark_str(g, s) \
@@ -736,6 +739,7 @@ static void gc_mark_start(global_State *g)
   lj_gc_list_clear_rel(&g->gc.grayagain);
   lj_gc_list_clear_rel(&g->gc.weak);
   gc_markobj(g, mainL);
+  gc_traverse_thread(g, mainL);
   {
     GCtab *env = tabref_acq(mainL->env);
     if (env)
@@ -921,6 +925,17 @@ size_t lj_gc_separateudata(global_State *g, int all)
 
 /* -- Propagation phase --------------------------------------------------- */
 
+static int gc_weak_list_has(global_State *g, GCtab *t)
+{
+  GCobj *want = obj2gco(t);
+  GCobj *o;
+  for (o = lj_gc_list_head_acq(&g->gc.weak); o != NULL;
+       o = gcref_acq(gco2tab(o)->gclist))
+    if (o == want)
+      return 1;
+  return 0;
+}
+
 /* Traverse a table. */
 static int gc_traverse_tab(global_State *g, GCtab *t)
 {
@@ -958,7 +973,8 @@ static int gc_traverse_tab(global_State *g, GCtab *t)
 #endif
       {
 	lj_obj_masksetgcflags(obj2gco(t), LJ_GC_WEAK, weak);
-	lj_gc_list_push_rel(&g->gc.weak, obj2gco(t));
+	if (!gc_weak_list_has(g, t))
+	  lj_gc_list_push_rel(&g->gc.weak, obj2gco(t));
       }
     }
   }
@@ -1097,6 +1113,12 @@ static void gc_traverse_proto(global_State *g, GCproto *pt)
 #endif
 }
 
+static GCproto *gc_func_proto_if_lua(GCfunc *fn)
+{
+  return fn->c.ffid == FF_LUA ?
+	 (GCproto *)(mref(fn->l.pc, char) - sizeof(GCproto)) : NULL;
+}
+
 /* Traverse the frame structure of a stack. */
 static MSize gc_traverse_frames(global_State *g, lua_State *th)
 {
@@ -1104,8 +1126,9 @@ static MSize gc_traverse_frames(global_State *g, lua_State *th)
   /* Note: extra vararg frame not skipped, marks function twice (harmless). */
   for (frame = th->base-1; frame > bot+LJ_FR2; frame = frame_prev(frame)) {
     GCfunc *fn = frame_func(frame);
+    GCproto *pt = gc_func_proto_if_lua(fn);
     TValue *ftop = frame;
-    if (isluafunc(fn)) ftop += funcproto(fn)->framesize;
+    if (pt) ftop += pt->framesize;
     if (ftop > top) top = ftop;
     if (!LJ_FR2) gc_markobj(g, fn);  /* Need to mark hidden function (or L). */
   }
@@ -1114,16 +1137,110 @@ static MSize gc_traverse_frames(global_State *g, lua_State *th)
   return (MSize)(top - bot);  /* Return minimum needed stack size. */
 }
 
+/* Calculate number of used slots in a live bytecode frame. */
+static BCReg gc_cur_topslot(GCproto *pt, const BCIns *pc, uint32_t nres)
+{
+  BCIns ins = pc[-1];
+  if (bc_op(ins) == BC_UCLO)
+    ins = pc[bc_j(ins)];
+  switch (bc_op(ins)) {
+  case BC_CALL: case BC_ITERC:
+    return bc_a(ins) + bc_c(ins) + LJ_FR2;
+  case BC_CALLM: case BC_CALLMT:
+    return bc_a(ins) + bc_c(ins) + nres-1+1+LJ_FR2;
+  case BC_RETM:
+    return bc_a(ins) + bc_d(ins) + nres-1;
+  case BC_TSETM:
+    return bc_a(ins) + nres-1;
+  default:
+    return pt->framesize;
+  }
+}
+
+static TValue *gc_active_thread_top(lua_State *th, TValue *top)
+{
+  TValue *bot = tvref(th->stack);
+  TValue *max = tvref(th->maxstack);
+  TValue *frame;
+  if (top > max)
+    top = max;
+  if (th->base <= bot + 1 + LJ_FR2)
+    return top;
+  frame = th->base - 1;
+  if (frame > bot + LJ_FR2 && frame_islua(frame)) {
+    GCproto *pt = gc_func_proto_if_lua(frame_func(frame));
+    if (pt) {
+      TValue *ltop = th->base + pt->framesize;
+      if (ltop > top)
+	top = ltop;
+    }
+  } else if (frame > bot + LJ_FR2 && frame_isc(frame)) {
+    TValue *prev = frame_prev(frame);
+    if (prev > bot + LJ_FR2 && frame_islua(prev)) {
+      GCproto *pt = gc_func_proto_if_lua(frame_func(prev));
+      if (pt) {
+	void *cf = cframe_raw(th->cframe);
+	const BCIns *pc = cf ? cframe_pc(cf) : NULL;
+	const BCIns *bc = proto_bc(pt);
+	if (pc && pc > bc && pc <= bc + pt->sizebc) {
+	  TValue *ctop = prev + 1 + gc_cur_topslot(pt, pc,
+						   cframe_multres_n(cf));
+	  if (ctop > top)
+	    top = ctop;
+	}
+      }
+    }
+  }
+  return top > max ? max : top;
+}
+
+static void gc_mark_thread_root_tv(global_State *g, cTValue *tv)
+{
+  GCobj *o;
+  if (!tvisgcv(tv))
+    return;
+  o = gcV(tv);
+  lj_gc_arena_markobj(g, o);
+  if (iswhite(o)) {
+    gc_mark(g, o);
+  } else if (tvistab(tv) && isblack(o)) {
+    if (gc_traverse_tab(g, tabV(tv)) > 0)
+      black2gray(o);
+  }
+}
+
+static void gc_mark_thread_root_tab(global_State *g, GCtab *t)
+{
+  GCobj *o;
+  if (!t)
+    return;
+  o = obj2gco(t);
+  lj_gc_arena_markobj(g, o);
+  if (iswhite(o))
+    gc_mark(g, o);
+  else if (isblack(o)) {
+    if (gc_traverse_tab(g, t) > 0)
+      black2gray(o);
+  }
+}
+
 /* Traverse a thread object. */
 static void gc_traverse_thread(global_State *g, lua_State *th)
 {
   GCobj *mt;
   TValue *o, *top = th->top;
   TValue tv;
+  MSize used;
   lj_gc_arena_markmem(g, tvref(th->stack));
+  used = gc_traverse_frames(g, th);
+  if (th == lj_tg_cur_L(g) && th->base > tvref(th->stack) + 1 + LJ_FR2) {
+    top = gc_active_thread_top(th, top);
+  } else if (tvref(th->stack) + used > top) {
+    top = tvref(th->stack) + used;
+  }
   for (o = tvref(th->stack)+1+LJ_FR2; o < top; o++) {
     lj_tv_load_acq(&tv, o);
-    gc_marktv(g, &tv);
+    gc_mark_thread_root_tv(g, &tv);
   }
   if (g->gc.state == GCSatomic) {
     top = tvref(th->stack) + th->stacksize;
@@ -1132,13 +1249,13 @@ static void gc_traverse_thread(global_State *g, lua_State *th)
   }
   {
     GCtab *env = tabref_acq(th->env);
-    if (env)
-      gc_markobj(g, env);
+    gc_mark_thread_root_tab(g, env);
   }
   mt = gcref_acq(th->mt_thread);
   if (mt != NULL)
     gc_markobj(g, mt);
-  lj_state_shrinkstack(th, gc_traverse_frames(g, th));
+  if (th != lj_tg_cur_L(g))
+    lj_state_shrinkstack(th, used);
 }
 
 /* Propagate one gray object. Traverse it and turn it black. */
@@ -2053,7 +2170,7 @@ void lj_gc_freeall(global_State *g)
 /* -- Collector ----------------------------------------------------------- */
 
 /* Atomic part of the GC cycle, transitioning from mark to sweep phase. */
-static void atomic(global_State *g, lua_State *L)
+static int atomic(global_State *g, lua_State *L)
 {
   size_t udsize;
 
@@ -2063,6 +2180,7 @@ static void atomic(global_State *g, lua_State *L)
   lj_gc_list_move_rel(&g->gc.gray, &g->gc.weak);  /* Empty weak tables. */
   lj_assertG(!iswhite(obj2gco(mainthread_acq(g))), "main thread turned white");
   gc_markobj(g, L);  /* Mark running thread. */
+  gc_traverse_thread(g, L);
   gc_traverse_curtrace(g);  /* Traverse current trace. */
   gc_mark_gcroot(g);  /* Mark GC roots (again). */
   gc_propagate_gray(g);  /* Propagate all of the above. */
@@ -2070,11 +2188,16 @@ static void atomic(global_State *g, lua_State *L)
   lj_gc_list_move_rel(&g->gc.gray, &g->gc.grayagain);  /* Empty 2nd chance. */
   gc_propagate_gray(g);  /* Propagate it. */
 
+  /* 05 section 5.7.1 legacy atomic fixpoint-round bridge. */
+  if (!lj_gc2_mark_complete(g, L, 64, ~(uint32_t)0))
+    return 0;
+
   udsize = lj_gc_separateudata(g, 0);  /* Separate userdata to be finalized. */
   gc_mark_finalizers(g);  /* Mark them. */
   udsize += gc_propagate_gray(g);  /* And propagate the marks. */
   /* 05 section 5.7.1 legacy atomic fixpoint-round bridge. */
-  (void)lj_gc2_mark_complete(g, L, 64, ~(uint32_t)0);
+  if (!lj_gc2_mark_complete(g, L, 64, ~(uint32_t)0))
+    return 0;
   gc2_paranoia_check_fixpoint(g);
 
   /* All marking done, clear weak tables. */
@@ -2096,6 +2219,7 @@ static void atomic(global_State *g, lua_State *L)
   g->strempty.marked = g->gc.currentwhite;
   setmref(g->gc.sweep, &g->gc.root);
   g->gc.estimate = lj_gc_total_load(g) - (GCSize)udsize;  /* Initial estimate. */
+  return 1;
 }
 
 #if LJ_HASJIT
@@ -2135,7 +2259,8 @@ static size_t gc_onestep(lua_State *L)
   case GCSatomic:
     if (lj_tg_jit_base(g))  /* Don't run atomic phase on trace. */
       return LJ_MAX_MEM;
-    atomic(g, L);
+    if (!atomic(g, L))
+      return GCSWEEPCOST;
     g->gc.state = GCSsweepstring;  /* Start of sweep phase. */
     g->gc.sweepstr = 0;
     return 0;

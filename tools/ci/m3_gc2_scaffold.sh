@@ -110,6 +110,10 @@ for helper in gc2_tg_thread_roots_acq \
   gc2_thread_scan_owner_needscans_acq \
   gc2_thread_scan_owner_needscans_store_rlx \
   gc2_thread_scan_owner_needscans_add \
+  gc2_thread_scan_needscan_pending_acq \
+  gc2_thread_scan_needscan_pending_store_rlx \
+  gc2_thread_scan_needscan_pending_inc \
+  gc2_thread_scan_needscan_pending_dec \
   gc2_thread_scan_dirty_misses_acq \
   gc2_thread_scan_dirty_misses_store_rlx \
   gc2_thread_scan_dirty_misses_add; do
@@ -119,7 +123,7 @@ for helper in gc2_tg_thread_roots_acq \
     exit 1
   fi
 done
-if hits=$(grep -nE -- '->[[:space:]]*gc2[.]((tg_(thread|cur|trace)_roots)|(thread_scan_(claims|busy|requeues|owner_scans|needscan|owner_needscans|dirty_misses)))([^[:alnum:]_]|$)|&[[:space:]]*[^)]*->[[:space:]]*gc2[.]((tg_(thread|cur|trace)_roots)|(thread_scan_(claims|busy|requeues|owner_scans|needscan|owner_needscans|dirty_misses)))([^[:alnum:]_]|$)' \
+if hits=$(grep -nE -- '->[[:space:]]*gc2[.]((tg_(thread|cur|trace)_roots)|(thread_scan_(claims|busy|requeues|owner_scans|needscan|owner_needscans|needscan_pending|dirty_misses)))([^[:alnum:]_]|$)|&[[:space:]]*[^)]*->[[:space:]]*gc2[.]((tg_(thread|cur|trace)_roots)|(thread_scan_(claims|busy|requeues|owner_scans|needscan|owner_needscans|needscan_pending|dirty_misses)))([^[:alnum:]_]|$)' \
     "$ROOT/src/lj_gc2.c" \
     "$ROOT/src/lib_base.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2

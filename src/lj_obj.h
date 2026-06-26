@@ -1269,6 +1269,7 @@ typedef struct GC2State {
   uint64_t thread_scan_owner_scans;  /* Busy stacks covered by owner scans. */
   uint64_t thread_scan_needscan;  /* Busy stacks handed to owning TG scan. */
   uint64_t thread_scan_owner_needscans;  /* Pending owned stacks scanned. */
+  uint32_t thread_scan_needscan_pending;  /* Live NEEDSCAN handoffs. */
   uint64_t thread_scan_dirty_misses;  /* Same-cycle scans rejected as stale. */
   uint64_t sweep_owner_runs;  /* Owner traversable arena sweep batches. */
   uint64_t sweep_owner_arenas;  /* Traversable arenas swept by owner. */
@@ -3997,6 +3998,30 @@ static LJ_AINLINE void gc2_thread_scan_owner_needscans_add(global_State *g,
 							   uint64_t n)
 {
   la_add64_rlx(&g->gc2.thread_scan_owner_needscans, n);
+}
+
+static LJ_AINLINE uint32_t gc2_thread_scan_needscan_pending_acq(
+  global_State *g)
+{
+  return la_load32_acq(&g->gc2.thread_scan_needscan_pending);
+}
+
+static LJ_AINLINE void gc2_thread_scan_needscan_pending_store_rlx(
+  global_State *g, uint32_t n)
+{
+  la_store32_rlx(&g->gc2.thread_scan_needscan_pending, n);
+}
+
+static LJ_AINLINE void gc2_thread_scan_needscan_pending_inc(global_State *g)
+{
+  la_add32_rlx(&g->gc2.thread_scan_needscan_pending, 1);
+}
+
+static LJ_AINLINE void gc2_thread_scan_needscan_pending_dec(global_State *g)
+{
+  uint32_t old = la_sub32_rlx(&g->gc2.thread_scan_needscan_pending, 1);
+  lj_assertG(old > 0, "thread NEEDSCAN pending underflow");
+  UNUSED(old);
 }
 
 static LJ_AINLINE uint64_t gc2_thread_scan_dirty_misses_acq(global_State *g)

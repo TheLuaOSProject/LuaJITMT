@@ -175,6 +175,7 @@ void lj_gc2_init(global_State *g)
   gc2_thread_scan_owner_scans_store_rlx(g, 0);
   gc2_thread_scan_needscan_store_rlx(g, 0);
   gc2_thread_scan_owner_needscans_store_rlx(g, 0);
+  gc2_thread_scan_needscan_pending_store_rlx(g, 0);
   gc2_thread_scan_dirty_misses_store_rlx(g, 0);
   gc2_sweep_owner_runs_store_rlx(g, 0);
   gc2_sweep_owner_arenas_store_rlx(g, 0);
@@ -1403,17 +1404,84 @@ static void gc2_mark_fixedstr(global_State *g)
   }
 }
 
+static BCReg gc2_cur_topslot(GCproto *pt, const BCIns *pc, uint32_t nres)
+{
+  BCIns ins = pc[-1];
+  if (bc_op(ins) == BC_UCLO)
+    ins = pc[bc_j(ins)];
+  switch (bc_op(ins)) {
+  case BC_CALL: case BC_ITERC:
+    return bc_a(ins) + bc_c(ins) + LJ_FR2;
+  case BC_CALLM: case BC_CALLMT:
+    return bc_a(ins) + bc_c(ins) + nres-1+1+LJ_FR2;
+  case BC_RETM:
+    return bc_a(ins) + bc_d(ins) + nres-1;
+  case BC_TSETM:
+    return bc_a(ins) + nres-1;
+  default:
+    return pt->framesize;
+  }
+}
+
+static GCproto *gc2_func_proto_if_lua(GCfunc *fn)
+{
+  return fn->c.ffid == FF_LUA ?
+	 (GCproto *)(mref(fn->l.pc, char) - sizeof(GCproto)) : NULL;
+}
+
+static TValue *gc2_active_thread_top(lua_State *L, TValue *top)
+{
+  TValue *bot = tvref(L->stack);
+  TValue *max = tvref(L->maxstack);
+  TValue *frame;
+  if (top > max)
+    top = max;
+  if (L->base <= bot + 1 + LJ_FR2)
+    return top;
+  frame = L->base - 1;
+  if (frame > bot + LJ_FR2 && frame_islua(frame)) {
+    GCproto *pt = gc2_func_proto_if_lua(frame_func(frame));
+    if (pt) {
+      TValue *ltop = L->base + pt->framesize;
+      if (ltop > top)
+	top = ltop;
+    }
+  } else if (frame > bot + LJ_FR2 && frame_isc(frame)) {
+    TValue *prev = frame_prev(frame);
+    if (prev > bot + LJ_FR2 && frame_islua(prev)) {
+      GCproto *pt = gc2_func_proto_if_lua(frame_func(prev));
+      if (pt) {
+	void *cf = cframe_raw(L->cframe);
+	const BCIns *pc = cf ? cframe_pc(cf) : NULL;
+	const BCIns *bc = proto_bc(pt);
+	if (pc && pc > bc && pc <= bc + pt->sizebc) {
+	  TValue *ctop = prev + 1 + gc2_cur_topslot(pt, pc,
+						    cframe_multres_n(cf));
+	  if (ctop > top)
+	    top = ctop;
+	}
+      }
+    }
+  }
+  return top > max ? max : top;
+}
+
 static TValue *gc2_stack_scan_top(global_State *g, lua_State *L)
 {
   TValue *frame, *bot = tvref(L->stack);
-  TValue *top = L->top, *ctop = curr_top(L), *max = tvref(L->maxstack);
+  TValue *top = L->top, *max = tvref(L->maxstack);
   for (frame = L->base - 1; frame > bot + LJ_FR2; frame = frame_prev(frame)) {
     GCfunc *fn = frame_func(frame);
     if (!LJ_FR2)
       lj_gc2_markobj(g, obj2gco(fn));
   }
-  if (ctop > top)
-    top = ctop;
+  if (L == lj_tg_cur_L(g) && L->base > bot + 1 + LJ_FR2) {
+    top = gc2_active_thread_top(L, top);
+  } else {
+    TValue *ctop = curr_top(L);
+    if (ctop > top)
+      top = ctop;
+  }
   return top > max ? max : top;
 }
 
@@ -1425,13 +1493,17 @@ static LJ_AINLINE uint8_t *gc2_thread_flagp(lua_State *L)
 static void gc2_thread_set_needscan(global_State *g, lua_State *L)
 {
   uint8_t old = la_or8_rlx(gc2_thread_flagp(L), LJ_GC_NEEDSCAN);
-  if (!(old & LJ_GC_NEEDSCAN))
+  if (!(old & LJ_GC_NEEDSCAN)) {
     gc2_thread_scan_needscan_add(g, 1);
+    gc2_thread_scan_needscan_pending_inc(g);
+  }
 }
 
-static void gc2_thread_clear_needscan(lua_State *L)
+static void gc2_thread_clear_needscan(global_State *g, lua_State *L)
 {
-  la_and8_rlx(gc2_thread_flagp(L), (uint8_t)~LJ_GC_NEEDSCAN);
+  uint8_t old = la_and8_rlx(gc2_thread_flagp(L), (uint8_t)~LJ_GC_NEEDSCAN);
+  if (g && (old & LJ_GC_NEEDSCAN))
+    gc2_thread_scan_needscan_pending_dec(g);
 }
 
 static int gc2_thread_needscan(lua_State *L)
@@ -1496,7 +1568,7 @@ static void gc2_scan_thread_stack(global_State *g, lua_State *L)
   dirty_epoch = gc2_thread_owner_dirty(g, L, NULL);
   la_store64_rel(&L->scan_dirty_epoch, dirty_epoch);
   la_store64_rel(&L->scan_epoch, cycle);
-  gc2_thread_clear_needscan(L);
+  gc2_thread_clear_needscan(g, L);
 }
 
 static void gc2_scan_owned_needscan(global_State *g, lua_State *owner_L)
@@ -1511,6 +1583,8 @@ static void gc2_scan_owned_needscan(global_State *g, lua_State *owner_L)
     return;
   tid = la_load32_acq(&tg->tid);
   if (tid == 0 || tid == LJ_THREAD_GCSCAN)
+    return;
+  if (gc2_thread_scan_needscan_pending_acq(g) == 0)
     return;
   for (o = gcref_acq(g->gc.root); o != NULL; o = lj_obj_gcw_acq(o)) {
     lua_State *th;
@@ -3755,14 +3829,19 @@ static void gc2_traverse_proto(global_State *g, GCproto *pt)
 static TValue *gc2_stack_scan_top_worker(global_State *g, lua_State *L)
 {
   TValue *frame, *bot = tvref(L->stack);
-  TValue *top = L->top, *ctop = curr_top(L), *max = tvref(L->maxstack);
+  TValue *top = L->top, *max = tvref(L->maxstack);
   for (frame = L->base - 1; frame > bot + LJ_FR2; frame = frame_prev(frame)) {
     GCfunc *fn = frame_func(frame);
     if (!LJ_FR2)
       gc2_markobj_worker(g, obj2gco(fn));
   }
-  if (ctop > top)
-    top = ctop;
+  if (L == lj_tg_cur_L(g) && L->base > bot + 1 + LJ_FR2) {
+    top = gc2_active_thread_top(L, top);
+  } else {
+    TValue *ctop = curr_top(L);
+    if (ctop > top)
+      top = ctop;
+  }
   return top > max ? max : top;
 }
 
@@ -3813,7 +3892,7 @@ static void gc2_traverse_thread(global_State *g, lua_State *th)
   if (!lj_state_gcscan_claim(th, &claim)) {
     gc2_thread_scan_busy_add(g, 1);
     if (gc2_thread_owner_scans(g, th)) {
-      gc2_thread_clear_needscan(th);
+      gc2_thread_clear_needscan(g, th);
       gc2_thread_scan_owner_scans_add(g, 1);
     } else {
       int pushed = gc2_grey_push(g, obj2gco(th));
@@ -3852,7 +3931,7 @@ static void gc2_traverse_thread(global_State *g, lua_State *th)
   }
   la_store64_rel(&th->scan_dirty_epoch, 0);
   la_store64_rel(&th->scan_epoch, cycle);
-  gc2_thread_clear_needscan(th);
+  gc2_thread_clear_needscan(g, th);
   lj_state_dropclaim(&claim);
 }
 
