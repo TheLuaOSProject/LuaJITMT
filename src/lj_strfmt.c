@@ -191,6 +191,13 @@ SBuf * LJ_FASTCALL lj_strfmt_putint(SBuf *sb, int32_t k)
 }
 
 #if LJ_HASJIT
+/* Add integer to per-thread-group temporary buffer. */
+SBuf * LJ_FASTCALL lj_strfmt_putint_tg(SBuf *sb, int32_t k)
+{
+  lj_buf_wptr_tg(sb, lj_strfmt_wint(lj_buf_more_tg(sb, STRFMT_MAXBUF_INT), k));
+  return sb;
+}
+
 /* Add number to buffer. */
 SBuf * LJ_FASTCALL lj_strfmt_putnum(SBuf *sb, cTValue *o)
 {

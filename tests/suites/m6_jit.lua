@@ -811,7 +811,7 @@ assert(#keep == 120 and keep[120][80] == "value-120-80")
     run = function(t)
       build_default(t)
       local dump = t:tmp("lj-m6-tmpbuf-format-ir.dump")
-      luajit_dump(t, dump, "-jdump=ir", [=[
+      luajit_dump(t, dump, "-jdump=im", [=[
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
 local s = 0
@@ -827,6 +827,24 @@ assert(s > 0)
         end
         if contains(data, "lj_buf_tmp_reset") then
           error("tmpbuf format trace still calls lj_buf_tmp_reset", 2)
+        end
+        if not contains(data, "->lj_strfmt_putint_tg") then
+          error("tmpbuf format trace did not use TG integer-format helper", 2)
+        end
+        if not contains(data, "->lj_buf_putstr_tg") then
+          error("tmpbuf format trace did not use TG string-append helper", 2)
+        end
+        if not contains(data, "->lj_buf_tostr_tg") then
+          error("tmpbuf format trace did not use TG buffer-finalize helper", 2)
+        end
+        if data:match("%->lj_strfmt_putint[^_%w]") then
+          error("tmpbuf format trace still calls generic integer-format helper", 2)
+        end
+        if data:match("%->lj_buf_putstr[^_%w]") then
+          error("tmpbuf format trace still calls generic string-append helper", 2)
+        end
+        if data:match("%->lj_buf_tostr[^_%w]") then
+          error("tmpbuf format trace still calls generic buffer-finalize helper", 2)
         end
       end
       luajit_code(t, jit_tmpbuf_thread_format_smoke(), { timeout = "30s" })

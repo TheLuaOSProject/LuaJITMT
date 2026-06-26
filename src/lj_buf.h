@@ -251,6 +251,40 @@ static LJ_AINLINE char *lj_buf_more(SBuf *sb, MSize sz)
   return lj_buf_wptr_acq(sb);
 }
 
+#if LJ_HASJIT
+/* Raw accessors are only for the JIT-proven runtime TG temporary buffer. */
+static LJ_AINLINE MSize lj_buf_left_tg(const SBuf *sb)
+{
+  char *w = sb->w;
+  char *e = sb->e;
+  uintptr_t uw = (uintptr_t)(void *)w;
+  uintptr_t ue = (uintptr_t)(void *)e;
+  return uw <= ue ? (MSize)(ue - uw) : 0;
+}
+
+static LJ_AINLINE MSize lj_buf_len_tg(const SBuf *sb)
+{
+  char *b = sb->b;
+  char *w = sb->w;
+  char *e = sb->e;
+  uintptr_t ub = (uintptr_t)(void *)b;
+  uintptr_t uw = (uintptr_t)(void *)w;
+  return lj_buf_ptr_range(w, b, e) ? (MSize)(uw - ub) : 0;
+}
+
+static LJ_AINLINE char *lj_buf_more_tg(SBuf *sb, MSize sz)
+{
+  if (LJ_UNLIKELY(sz > lj_buf_left_tg(sb)))
+    return lj_buf_more2(sb, sz);
+  return sb->w;
+}
+
+static LJ_AINLINE void lj_buf_wptr_tg(SBuf *sb, char *p)
+{
+  sb->w = p;
+}
+#endif
+
 /* Extended buffer management */
 static LJ_AINLINE void lj_bufx_init(lua_State *L, SBufExt *sbx)
 {
@@ -316,6 +350,11 @@ LJ_FUNC SBuf *lj_buf_putmem(SBuf *sb, const void *q, MSize len);
 LJ_FUNC SBuf * LJ_FASTCALL lj_buf_putchar(SBuf *sb, int c);
 #endif
 LJ_FUNC SBuf * LJ_FASTCALL lj_buf_putstr(SBuf *sb, GCstr *s);
+#if LJ_HASJIT
+LJ_FUNC SBuf *lj_buf_putmem_tg(SBuf *sb, const void *q, MSize len);
+LJ_FUNC SBuf * LJ_FASTCALL lj_buf_putchar_tg(SBuf *sb, int c);
+LJ_FUNC SBuf * LJ_FASTCALL lj_buf_putstr_tg(SBuf *sb, GCstr *s);
+#endif
 
 static LJ_AINLINE char *lj_buf_wmem(char *p, const void *q, MSize len)
 {
@@ -339,6 +378,9 @@ LJ_FUNC SBuf *lj_buf_puttab(SBuf *sb, GCtab *t, GCstr *sep,
 
 /* Miscellaneous buffer operations */
 LJ_FUNCA GCstr * LJ_FASTCALL lj_buf_tostr(SBuf *sb);
+#if LJ_HASJIT
+LJ_FUNCA GCstr * LJ_FASTCALL lj_buf_tostr_tg(SBuf *sb);
+#endif
 LJ_FUNC GCstr *lj_buf_cat2str(lua_State *L, GCstr *s1, GCstr *s2);
 LJ_FUNC uint32_t LJ_FASTCALL lj_buf_ruleb128(const char **pp);
 

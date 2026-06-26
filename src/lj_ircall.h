@@ -170,6 +170,10 @@ typedef struct CCallInfo {
   _(ANY,	lj_buf_putmem,		3,   S, PGC, CCI_T) \
   _(ANY,	lj_buf_putstr,		2,  FL, PGC, CCI_T) \
   _(ANY,	lj_buf_putchar,		2,  FL, PGC, CCI_T) \
+  _(ANY,	lj_strfmt_putint_tg,	2,  FL, PGC, CCI_T) \
+  _(ANY,	lj_buf_putmem_tg,	3,   S, PGC, CCI_T) \
+  _(ANY,	lj_buf_putstr_tg,	2,  FL, PGC, CCI_T) \
+  _(ANY,	lj_buf_putchar_tg,	2,  FL, PGC, CCI_T) \
   _(ANY,	lj_buf_putstr_reverse,	2,  FL, PGC, CCI_T) \
   _(ANY,	lj_buf_putstr_lower,	2,  FL, PGC, CCI_T) \
   _(ANY,	lj_buf_putstr_upper,	2,  FL, PGC, CCI_T) \
@@ -183,6 +187,7 @@ typedef struct CCallInfo {
   _(BUFFER,	lj_serialize_encode,	2,  FA, STR, CCI_L|CCI_T) \
   _(BUFFER,	lj_serialize_decode,	3,   A, INT, CCI_L|CCI_T) \
   _(ANY,	lj_buf_tostr,		1,  FL, STR, CCI_T) \
+  _(ANY,	lj_buf_tostr_tg,	1,  FL, STR, CCI_T) \
   _(ANY,	lj_tab_new_ah,		3,   A, TAB, CCI_L|CCI_T) \
   _(ANY,	lj_tab_new1,		2,  FA, TAB, CCI_L|CCI_T) \
   _(ANY,	lj_tab_dup,		2,  FA, TAB, CCI_L|CCI_T) \

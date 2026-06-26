@@ -93,6 +93,7 @@ LJ_FUNC const char *lj_strfmt_wstrnum(lua_State *L, cTValue *o, MSize *lenp);
 LJ_FUNC SBuf * LJ_FASTCALL lj_strfmt_putint(SBuf *sb, int32_t k);
 #if LJ_HASJIT
 LJ_FUNC SBuf * LJ_FASTCALL lj_strfmt_putnum(SBuf *sb, cTValue *o);
+LJ_FUNC SBuf * LJ_FASTCALL lj_strfmt_putint_tg(SBuf *sb, int32_t k);
 #endif
 LJ_FUNC SBuf * LJ_FASTCALL lj_strfmt_putptr(SBuf *sb, const void *v);
 #if LJ_HASJIT

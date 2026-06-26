@@ -175,6 +175,37 @@ SBuf * LJ_FASTCALL lj_buf_putstr(SBuf *sb, GCstr *s)
   return sb;
 }
 
+#if LJ_HASJIT
+SBuf *lj_buf_putmem_tg(SBuf *sb, const void *q, MSize len)
+{
+  if (len) {
+    char *w = lj_buf_more_tg(sb, len);
+    w = lj_buf_wmem(w, q, len);
+    lj_buf_wptr_tg(sb, w);
+  }
+  return sb;
+}
+
+SBuf * LJ_FASTCALL lj_buf_putchar_tg(SBuf *sb, int c)
+{
+  char *w = lj_buf_more_tg(sb, 1);
+  *w++ = (char)c;
+  lj_buf_wptr_tg(sb, w);
+  return sb;
+}
+
+SBuf * LJ_FASTCALL lj_buf_putstr_tg(SBuf *sb, GCstr *s)
+{
+  MSize len = s->len;
+  if (len) {
+    char *w = lj_buf_more_tg(sb, len);
+    w = lj_buf_wmem(w, strdata(s), len);
+    lj_buf_wptr_tg(sb, w);
+  }
+  return sb;
+}
+#endif
+
 /* -- High-level buffer put operations ------------------------------------ */
 
 SBuf * LJ_FASTCALL lj_buf_putstr_reverse(SBuf *sb, GCstr *s)
@@ -289,6 +320,14 @@ GCstr * LJ_FASTCALL lj_buf_tostr(SBuf *sb)
 {
   return lj_str_new(sbufL(sb), lj_buf_bptr_acq(sb), sbuflen(sb));
 }
+
+#if LJ_HASJIT
+GCstr * LJ_FASTCALL lj_buf_tostr_tg(SBuf *sb)
+{
+  MSize len = lj_buf_len_tg(sb);
+  return lj_str_new(sbufL(sb), len ? sb->b : "", len);
+}
+#endif
 
 /* Concatenate two strings. */
 GCstr *lj_buf_cat2str(lua_State *L, GCstr *s1, GCstr *s2)

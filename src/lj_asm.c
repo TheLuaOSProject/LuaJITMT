@@ -1254,12 +1254,37 @@ static void asm_bufhdr(ASMState *as, IRIns *ir)
 #endif
 }
 
+#if LJ_TARGET_X86ORX64
+static int asm_buf_is_tg_tmpbuf(ASMState *as, IRRef ref)
+{
+  for (;;) {
+    IRIns *ir = IR(ref);
+    if (ir->o == IR_BUFPUT) {
+      ref = ir->op1;
+    } else if (ir->o == IR_BUFHDR) {
+      if (ir->op2 == IRBUFHDR_RESET)
+	return IR(ir->op1)->o == IR_LREF;
+      if (ir->op2 != IRBUFHDR_APPEND)
+	return 0;
+      ref = ir->op1;
+    } else {
+      return 0;
+    }
+  }
+}
+#endif
+
 static void asm_bufput(ASMState *as, IRIns *ir)
 {
   const CCallInfo *ci = &lj_ir_callinfo[IRCALL_lj_buf_putstr];
   IRRef args[3];
   IRIns *irs;
   int kchar = -129;
+#if LJ_TARGET_X86ORX64
+  int tg_tmpbuf = asm_buf_is_tg_tmpbuf(as, ir->op1);
+  if (tg_tmpbuf)
+    ci = &lj_ir_callinfo[IRCALL_lj_buf_putstr_tg];
+#endif
   args[0] = ir->op1;  /* SBuf * */
   args[1] = ir->op2;  /* GCstr * */
   irs = IR(ir->op2);
@@ -1270,7 +1295,12 @@ static void asm_bufput(ASMState *as, IRIns *ir)
     if (s->len == 1) {  /* Optimize put of single-char string constant. */
       kchar = (int8_t)strdata(s)[0];  /* Signed! */
       args[1] = ASMREF_TMP1;  /* int, truncated to char */
+#if LJ_TARGET_X86ORX64
+      ci = &lj_ir_callinfo[tg_tmpbuf ? IRCALL_lj_buf_putchar_tg :
+				       IRCALL_lj_buf_putchar];
+#else
       ci = &lj_ir_callinfo[IRCALL_lj_buf_putchar];
+#endif
     }
   } else if (mayfuse(as, ir->op2) && ra_noreg(irs->r)) {
     if (irs->o == IR_TOSTR) {  /* Fuse number to string conversions. */
@@ -1281,15 +1311,31 @@ static void asm_bufput(ASMState *as, IRIns *ir)
 	lj_assertA(irt_isinteger(IR(irs->op1)->t),
 		   "TOSTR of non-numeric IR %04d", irs->op1);
 	args[1] = irs->op1;  /* int */
-	if (irs->op2 == IRTOSTR_INT)
+	if (irs->op2 == IRTOSTR_INT) {
+#if LJ_TARGET_X86ORX64
+	  ci = &lj_ir_callinfo[tg_tmpbuf ? IRCALL_lj_strfmt_putint_tg :
+					   IRCALL_lj_strfmt_putint];
+#else
 	  ci = &lj_ir_callinfo[IRCALL_lj_strfmt_putint];
-	else
+#endif
+	} else {
+#if LJ_TARGET_X86ORX64
+	  ci = &lj_ir_callinfo[tg_tmpbuf ? IRCALL_lj_buf_putchar_tg :
+					   IRCALL_lj_buf_putchar];
+#else
 	  ci = &lj_ir_callinfo[IRCALL_lj_buf_putchar];
+#endif
+	}
       }
     } else if (irs->o == IR_SNEW) {  /* Fuse string allocation. */
       args[1] = irs->op1;  /* const void * */
       args[2] = irs->op2;  /* MSize */
+#if LJ_TARGET_X86ORX64
+      ci = &lj_ir_callinfo[tg_tmpbuf ? IRCALL_lj_buf_putmem_tg :
+				       IRCALL_lj_buf_putmem];
+#else
       ci = &lj_ir_callinfo[IRCALL_lj_buf_putmem];
+#endif
     }
   }
   asm_setupresult(as, ir, ci);  /* SBuf * */
@@ -1307,6 +1353,10 @@ static void asm_bufstr(ASMState *as, IRIns *ir)
 {
   const CCallInfo *ci = &lj_ir_callinfo[IRCALL_lj_buf_tostr];
   IRRef args[1];
+#if LJ_TARGET_X86ORX64
+  if (asm_buf_is_tg_tmpbuf(as, ir->op1))
+    ci = &lj_ir_callinfo[IRCALL_lj_buf_tostr_tg];
+#endif
   args[0] = ir->op1;  /* SBuf *sb */
   as->gcsteps++;
   asm_setupresult(as, ir, ci);  /* GCstr * */
