@@ -3070,7 +3070,7 @@ uint32_t lj_gc2_drain_ssb(global_State *g)
 uint32_t lj_gc2_assist(global_State *g, TGState *tg)
 {
   uint32_t phase, shift, limit, expect = 0, n = 0, converted = 0, weak = 0;
-  if (!g || !tg || tg->gc_assist)
+  if (!g || !tg || lj_tg_gc_assist_acq(tg))
     return 0;
   phase = gc2_phase_acq(g);
   if (phase != LJ_GC2_MARK && phase != LJ_GC2_WEAK)
@@ -3079,7 +3079,7 @@ uint32_t lj_gc2_assist(global_State *g, TGState *tg)
     return 0;
   if (!gc2_assist_active_cas(g, &expect, 1))
     return 0;  /* Current global grey deque has one owner side. */
-  tg->gc_assist = 1;
+  lj_tg_gc_assist_store_rlx(tg, 1);
   la_add64_rlx(&g->gc2.assist_runs, 1);  /* 05 section 5.11 telemetry. */
   shift = gc2_assist_shift_acq(g);
   if (shift > 8u)
@@ -3111,7 +3111,7 @@ uint32_t lj_gc2_assist(global_State *g, TGState *tg)
     la_add64_rlx(&g->gc2.assist_ssb_converted, converted);
   if (weak)
     la_add64_rlx(&g->gc2.assist_weak_drained, weak);
-  tg->gc_assist = 0;
+  lj_tg_gc_assist_store_rlx(tg, 0);
   gc2_assist_active_rel(g, 0);
   return n + weak;
 }

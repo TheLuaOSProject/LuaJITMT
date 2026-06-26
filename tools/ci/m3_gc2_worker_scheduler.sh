@@ -98,6 +98,20 @@ if hits=$(grep -nE -- '->[[:space:]]*gc2[.]assist_(active|shift)|&[[:space:]]*[^
   printf '%s\n' 'raw GC2 assist state access is forbidden; use gc2_assist_* helpers' >&2
   exit 1
 fi
+for helper in lj_tg_gc_assist_acq lj_tg_gc_assist_store_rlx
+do
+  if ! grep -q "$helper" "$ROOT/src/lj_tg.h"; then
+    printf '%s\n' "missing TG GC assist helper: $helper" >&2
+    exit 1
+  fi
+done
+if hits=$(grep -RInE -- '->[[:space:]]*gc_assist([^[:alnum:]_]|$)|&[[:space:]]*[^)]*->[[:space:]]*gc_assist([^[:alnum:]_]|$)' \
+    "$ROOT/src"/lj_*.c "$ROOT/src"/lib_*.c "$ROOT/src"/lj_*.h 2>/dev/null | \
+    grep -vF "$ROOT/src/lj_tg.h:" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw TG GC assist access is forbidden; use lj_tg_gc_assist_* helpers' >&2
+  exit 1
+fi
 if hits=$(grep -nE -- '->[[:space:]]*gc2[.]cycle_leader|&[[:space:]]*[^)]*->[[:space:]]*gc2[.]cycle_leader' \
     "$ROOT/src/lj_gc2.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2

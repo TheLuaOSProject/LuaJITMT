@@ -117,6 +117,17 @@ static LJ_AINLINE void lj_tg_in_native_store_rlx(TGState *tg,
   la_store8_rlx(&tg->in_native, in_native);
 }
 
+static LJ_AINLINE uint8_t lj_tg_gc_assist_acq(const TGState *tg)
+{
+  return la_load8_acq(&tg->gc_assist);  /* 05 section 5.11 assist reentry. */
+}
+
+static LJ_AINLINE void lj_tg_gc_assist_store_rlx(TGState *tg,
+						 uint8_t gc_assist)
+{
+  la_store8_rlx(&tg->gc_assist, gc_assist);
+}
+
 static LJ_AINLINE uint8_t lj_tg_flags_acq(const TGState *tg)
 {
   return la_load8_acq(&tg->tg_flags);  /* 05 section 5.4.1 TG registry. */
