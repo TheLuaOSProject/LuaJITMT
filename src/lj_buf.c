@@ -322,6 +322,11 @@ GCstr * LJ_FASTCALL lj_buf_tostr(SBuf *sb)
 }
 
 #if LJ_HASJIT
+int32_t LJ_FASTCALL lj_buf_len_tg_forjit(SBuf *sb)
+{
+  return (int32_t)lj_buf_len_tg(sb);
+}
+
 GCstr * LJ_FASTCALL lj_buf_tostr_tg(SBuf *sb)
 {
   MSize len = lj_buf_len_tg(sb);

@@ -838,8 +838,11 @@ assert(s > 0)
            not data:match("mov byte %[[^%]]+%+0x1%], 0x78") then
           error("tmpbuf format trace did not inline literal byte appends", 2)
         end
-        if not contains(data, "->lj_buf_tostr_tg") then
-          error("tmpbuf format trace did not use TG buffer-finalize helper", 2)
+        if not contains(data, "->lj_buf_len_tg_forjit") then
+          error("tmpbuf format trace did not use TG buffer-length helper", 2)
+        end
+        if contains(data, "->lj_buf_tostr_tg") then
+          error("tmpbuf length-only trace still materializes TG buffer string", 2)
         end
         if data:match("%->lj_strfmt_putint[^_%w]") then
           error("tmpbuf format trace still calls generic integer-format helper", 2)

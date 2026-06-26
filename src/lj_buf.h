@@ -210,6 +210,7 @@ LJ_FUNC void LJ_FASTCALL lj_buf_shrink(lua_State *L, SBuf *sb);
 LJ_FUNC char * LJ_FASTCALL lj_buf_tmp(lua_State *L, MSize sz);
 #if LJ_HASJIT
 LJ_FUNC SBuf * LJ_FASTCALL lj_buf_tmp_reset(lua_State *L);
+LJ_FUNC int32_t LJ_FASTCALL lj_buf_len_tg_forjit(SBuf *sb);
 #endif
 
 static LJ_AINLINE void lj_buf_init(lua_State *L, SBuf *sb)

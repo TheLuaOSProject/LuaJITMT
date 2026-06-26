@@ -2636,6 +2636,16 @@ static void rec_varg(jit_State *J, BCReg dst, ptrdiff_t nresults)
   }
 }
 
+static int rec_bufstr_is_tg_tmpbuf(jit_State *J, IRIns *ir)
+{
+  IRIns *hdr;
+  if (!LJ_TARGET_X86ORX64 || ir->o != IR_BUFSTR)
+    return 0;
+  hdr = IR(ir->op2);
+  return hdr->o == IR_BUFHDR && hdr->op2 == IRBUFHDR_RESET &&
+	 IR(hdr->op1)->o == IR_LREF;
+}
+
 /* -- Record allocations -------------------------------------------------- */
 
 static TRef rec_tnew(jit_State *J, uint32_t ah)
@@ -3004,9 +3014,13 @@ void lj_record_ins(jit_State *J)
     break;
 
   case BC_LEN:
-    if (tref_isstr(rc))
-      rc = emitir(IRTI(IR_FLOAD), rc, IRFL_STR_LEN);
-    else if (!LJ_52 && tref_istab(rc))
+    if (tref_isstr(rc)) {
+      IRIns *ir = IR(tref_ref(rc));
+      if (rec_bufstr_is_tg_tmpbuf(J, ir))
+	rc = lj_ir_call(J, IRCALL_lj_buf_len_tg_forjit, ir->op1);
+      else
+	rc = emitir(IRTI(IR_FLOAD), rc, IRFL_STR_LEN);
+    } else if (!LJ_52 && tref_istab(rc))
       rc = emitir(IRTI(IR_ALEN), rc, TREF_NIL);
     else
       rc = rec_mm_len(J, rc, rcv);
