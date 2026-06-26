@@ -258,6 +258,50 @@ static LJ_AINLINE void lj_tg_ssb_free_push(TGState *tg, GC2SSBNode *node)
   } while (!lj_tg_ssb_free_cas(tg, &head, node));
 }
 
+static LJ_AINLINE GC2SSBNode *lj_tg_ssb_active_acq(const TGState *tg)
+{
+  return (GC2SSBNode *)la_loadptr_acq(
+    (void *const *)&tg->ssb_active);  /* 05 section 5.6.2 active SSB. */
+}
+
+static LJ_AINLINE void lj_tg_ssb_active_rel(TGState *tg, GC2SSBNode *node)
+{
+  la_storeptr_rel((void **)&tg->ssb_active, node);  /* 05 section 5.6.2. */
+}
+
+static LJ_AINLINE GCRef *lj_tg_ssb_base_acq(const TGState *tg)
+{
+  return (GCRef *)la_loadptr_acq(
+    (void *const *)&tg->ssb_base);  /* 05 section 5.6.2 SSB cursor. */
+}
+
+static LJ_AINLINE void lj_tg_ssb_base_rel(TGState *tg, GCRef *base)
+{
+  la_storeptr_rel((void **)&tg->ssb_base, base);  /* 05 section 5.6.2. */
+}
+
+static LJ_AINLINE GCRef *lj_tg_ssb_next_acq(const TGState *tg)
+{
+  return (GCRef *)la_loadptr_acq(
+    (void *const *)&tg->ssb_next);  /* 05 section 5.6.2 SSB cursor. */
+}
+
+static LJ_AINLINE void lj_tg_ssb_next_rel(TGState *tg, GCRef *next)
+{
+  la_storeptr_rel((void **)&tg->ssb_next, next);  /* 05 section 5.6.2. */
+}
+
+static LJ_AINLINE GCRef *lj_tg_ssb_end_acq(const TGState *tg)
+{
+  return (GCRef *)la_loadptr_acq(
+    (void *const *)&tg->ssb_end);  /* 05 section 5.6.2 SSB cursor. */
+}
+
+static LJ_AINLINE void lj_tg_ssb_end_rel(TGState *tg, GCRef *end)
+{
+  la_storeptr_rel((void **)&tg->ssb_end, end);  /* 05 section 5.6.2. */
+}
+
 static LJ_AINLINE TGState *lj_tg_next_acq(const TGState *tg)
 {
   return (TGState *)la_loadptr_acq((void *const *)&tg->next_tg);

@@ -32,6 +32,26 @@ if hits=$(grep -nE -- '(->|[.])[[:space:]]*ssb_free([^[:alnum:]_]|$)' \
   printf '%s\n' 'raw TG SSB free-list head access is forbidden; use lj_tg_ssb_free_* helpers' >&2
   exit 1
 fi
+for helper in lj_tg_ssb_active_acq \
+  lj_tg_ssb_active_rel \
+  lj_tg_ssb_base_acq \
+  lj_tg_ssb_base_rel \
+  lj_tg_ssb_next_acq \
+  lj_tg_ssb_next_rel \
+  lj_tg_ssb_end_acq \
+  lj_tg_ssb_end_rel; do
+  if ! grep -qE "^[[:space:]]*static LJ_AINLINE .*[*[:space:]]${helper}[[:space:]]*[(]" \
+      "$ROOT/src/lj_tg.h"; then
+    printf '%s\n' "${helper} helper is required for TG SSB active cursors" >&2
+    exit 1
+  fi
+done
+if hits=$(grep -nE -- '(->|[.])[[:space:]]*ssb_(active|base|next|end)([^[:alnum:]_]|$)' \
+    "$ROOT"/src/*.c || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw TG SSB active cursor access is forbidden; use lj_tg_ssb_* helpers' >&2
+  exit 1
+fi
 if hits=$(grep -nE -- 'setgcrefr?rel[(][*]lj_obj_gcwref[(](oldtail|tail)[)]' \
     "$ROOT/src/lj_gc2.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2

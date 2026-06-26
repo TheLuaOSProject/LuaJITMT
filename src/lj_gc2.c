@@ -2865,12 +2865,11 @@ static void gc2_ssb_activate(TGState *tg, GC2SSBNode *node)
 {
   lj_gc2_ssb_next_rel(node, NULL);
   node->n = 0;
-  tg->ssb_active = node;
+  lj_tg_ssb_active_rel(tg, node);
   /* 05 section 5.6.2: publish active SSB cursor reset. */
-  la_storeptr_rel((void **)&tg->ssb_base, node->slot);
-  la_storeptr_rel((void **)&tg->ssb_end,
-		  node->slot + TG_GC2_SSB_SLOTS);
-  la_storeptr_rel((void **)&tg->ssb_next, node->slot);
+  lj_tg_ssb_base_rel(tg, node->slot);
+  lj_tg_ssb_end_rel(tg, node->slot + TG_GC2_SSB_SLOTS);
+  lj_tg_ssb_next_rel(tg, node->slot);
 }
 
 static void gc2_ssb_publish(global_State *g, GC2SSBNode *node)
@@ -2888,10 +2887,13 @@ static uint32_t gc2_flush_ssb(global_State *g, TGState *tg, int allow_drain)
   GC2SSBNode *node, *fresh;
   GCRef *base, *next;
   uint32_t n;
-  if (!g || !tg || !tg->ssb_active)
+  if (!g || !tg)
     return 0;
-  base = (GCRef *)la_loadptr_acq((void *const *)&tg->ssb_base);
-  next = (GCRef *)la_loadptr_acq((void *const *)&tg->ssb_next);
+  node = lj_tg_ssb_active_acq(tg);
+  if (!node)
+    return 0;
+  base = lj_tg_ssb_base_acq(tg);
+  next = lj_tg_ssb_next_acq(tg);
   if (!base || !next)
     return 0;
   n = (uint32_t)(next - base);
@@ -2904,7 +2906,6 @@ static uint32_t gc2_flush_ssb(global_State *g, TGState *tg, int allow_drain)
   }
   if (!fresh)
     return 0;
-  node = tg->ssb_active;
   node->n = n;
   gc2_ssb_publish(g, node);
   la_add32_rlx(&g->gc2.ssb_published, 1);
@@ -2927,21 +2928,21 @@ static int gc2_ssb_push(global_State *g, GCobj *o, int allow_drain)
   tg = G2TG(g);
   if (!tg)
     return 0;
-  next = (GCRef *)la_loadptr_acq((void *const *)&tg->ssb_next);
-  end = (GCRef *)la_loadptr_acq((void *const *)&tg->ssb_end);
+  next = lj_tg_ssb_next_acq(tg);
+  end = lj_tg_ssb_end_acq(tg);
   if (!next || !end)
     return 0;
   if (next == end) {
     if (gc2_flush_ssb(g, tg, allow_drain) == 0)
       return 0;
-    next = (GCRef *)la_loadptr_acq((void *const *)&tg->ssb_next);
-    end = (GCRef *)la_loadptr_acq((void *const *)&tg->ssb_end);
+    next = lj_tg_ssb_next_acq(tg);
+    end = lj_tg_ssb_end_acq(tg);
     if (!next || !end || next == end)
       return 0;
   }
   gc2_queue_slot_store_rel(next, o);
   /* 05 section 5.6.2: slot release-published before cursor advance. */
-  la_storeptr_rel((void **)&tg->ssb_next, next + 1);
+  lj_tg_ssb_next_rel(tg, next + 1);
   return 1;
 }
 
@@ -3038,8 +3039,8 @@ static uint32_t gc2_drain_active_ssb_to_grey(global_State *g, TGState *tg,
   uint32_t n = 0;
   if (!g || !tg || limit == 0)
     return 0;
-  base = (GCRef *)la_loadptr_acq((void *const *)&tg->ssb_base);
-  next = (GCRef *)la_loadptr_acq((void *const *)&tg->ssb_next);
+  base = lj_tg_ssb_base_acq(tg);
+  next = lj_tg_ssb_next_acq(tg);
   if (!base || !next)
     return 0;
   while (n < limit && next > base) {
@@ -3049,7 +3050,7 @@ static uint32_t gc2_drain_active_ssb_to_grey(global_State *g, TGState *tg,
     gc2_ssb_mark_one(g, o);
     next = slot;
     /* 05 section 5.7.1: publish slot processed before cursor retreat. */
-    la_storeptr_rel((void **)&tg->ssb_next, next);
+    lj_tg_ssb_next_rel(tg, next);
     n++;
   }
   return n;
@@ -3129,8 +3130,8 @@ int lj_gc2_ssb_empty(global_State *g)
     GCRef *next, *base;
     if (lj_tg_flags_test_acq(tg, TGF_DEAD))
       continue;
-    next = (GCRef *)la_loadptr_acq((void *const *)&tg->ssb_next);
-    base = (GCRef *)la_loadptr_acq((void *const *)&tg->ssb_base);
+    next = lj_tg_ssb_next_acq(tg);
+    base = lj_tg_ssb_base_acq(tg);
     if (next != base)
       return 0;
   }
