@@ -178,7 +178,7 @@ static void state_stack_dirty(lua_State *L, uint32_t tid)
     return;
   tg = lj_tg_find_owner(G(L), tid);
   if (tg)
-    la_add64_rlx(&tg->stack_dirty_epoch, 1);
+    lj_tg_stack_dirty_epoch_add_rlx(tg, 1);
 }
 
 void lj_state_dropclaim(LJStateClaim *claim)

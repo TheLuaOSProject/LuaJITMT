@@ -249,6 +249,17 @@ static LJ_AINLINE uint64_t lj_tg_local_total_add_rlx(TGState *tg,
   return la_add64_rlx(&tg->local_total, bytes);  /* 04 section 4.8. */
 }
 
+static LJ_AINLINE uint64_t lj_tg_stack_dirty_epoch_acq(const TGState *tg)
+{
+  return la_load64_acq(&tg->stack_dirty_epoch);  /* 05 section 5.7.3. */
+}
+
+static LJ_AINLINE uint64_t lj_tg_stack_dirty_epoch_add_rlx(TGState *tg,
+							   uint64_t n)
+{
+  return la_add64_rlx(&tg->stack_dirty_epoch, n);  /* 05 section 5.7.3. */
+}
+
 static LJ_AINLINE lua_State *lj_tg_load_cur_L(TGState *tg)
 {
   return (lua_State *)la_loadptr_acq((void *const *)&tg->cur_L);

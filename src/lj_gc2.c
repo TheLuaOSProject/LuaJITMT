@@ -1456,7 +1456,7 @@ static uint64_t gc2_thread_owner_dirty(global_State *g, lua_State *L,
     return 0;
   if (ptg)
     *ptg = tg;
-  return la_load64_acq(&tg->stack_dirty_epoch);
+  return lj_tg_stack_dirty_epoch_acq(tg);
 }
 
 static void gc2_scan_thread_stack(global_State *g, lua_State *L)

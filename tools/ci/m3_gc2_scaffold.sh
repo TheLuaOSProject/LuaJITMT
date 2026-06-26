@@ -126,6 +126,20 @@ if hits=$(grep -nE -- '->[[:space:]]*gc2[.]((tg_(thread|cur|trace)_roots)|(threa
   printf '%s\n' 'raw GC2 thread-root scan counter access is forbidden; use gc2_tg_* or gc2_thread_scan_* helpers' >&2
   exit 1
 fi
+for helper in lj_tg_stack_dirty_epoch_acq lj_tg_stack_dirty_epoch_add_rlx
+do
+  if ! grep -q "$helper" "$ROOT/src/lj_tg.h"; then
+    printf '%s\n' "missing TG stack-dirty helper: $helper" >&2
+    exit 1
+  fi
+done
+if hits=$(grep -RInE -- '->[[:space:]]*stack_dirty_epoch([^[:alnum:]_]|$)|&[[:space:]]*[^)]*->[[:space:]]*stack_dirty_epoch([^[:alnum:]_]|$)' \
+    "$ROOT/src"/lj_*.c "$ROOT/src"/lib_*.c "$ROOT/src"/lj_*.h 2>/dev/null | \
+    grep -vF "$ROOT/src/lj_tg.h:" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw C-side TG stack-dirty epoch access is forbidden; use lj_tg_stack_dirty_epoch_* helpers' >&2
+  exit 1
+fi
 
 if hits=$(grep -nE -- '->[[:space:]]*hdr[.]next|hdr[.]next[[:space:]]*=' \
     "$ROOT/src/lj_arena.c" \
