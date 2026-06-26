@@ -108,6 +108,15 @@ function M.run_jit_dump_guards(t, dump)
   assert_dump_contains(t, dump, "USTORE", "loaded CNEW/FNEW USTORE")
   assert_dump_contains(t, dump, "OBAR", "loaded CNEW/FNEW OBAR")
 
+  dump_i(t, dump, probes.self_recursive_call({
+    hotexit = true,
+    trace_assert = "self-recursive immutable call should trace"
+  }))
+  assert_dump_contains(t, dump, "TRACE 1", "self-recursive immutable trace")
+  assert_dump_match(t, dump, "SLOAD%s+#0%s+R", "self-recursive current function")
+  assert_dump_not_contains(t, dump, "UREFC", "self-recursive immutable UGET")
+  assert_dump_not_contains(t, dump, "ULOAD", "self-recursive immutable UGET")
+
   dump_i(t, dump, probes.source_mixed_raw_local({
     hotexit = true,
     trace_assert = "source mixed raw-local CNEW/FNEW should trace"

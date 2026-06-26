@@ -254,6 +254,23 @@ assert(f() == f)
 ]=] .. trace_assert(opts)
 end
 
+function M.self_recursive_call(opts)
+  opts = opts or {}
+  return jit_setup(opts) .. [=[
+local function make()
+  local function fib(n)
+    if n < 2 then return n end
+    return fib(n - 1) + fib(n - 2)
+  end
+  return fib
+end
+local f = make()
+assert(f(10) == 55)
+local g = make()
+assert(g(10) == 55)
+]=] .. trace_assert(opts)
+end
+
 function M.source_mixed_raw_local(opts)
   opts = opts or {}
   return jit_setup(opts) .. [=[

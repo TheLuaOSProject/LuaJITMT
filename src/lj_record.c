@@ -2074,6 +2074,9 @@ static TRef rec_upvalue(jit_State *J, uint32_t uv, TRef val)
   TRef fn = getcurrf(J);
   IRRef uref;
   int needbarrier = 0;
+  if (val == 0 && uvp->immutable && tvisfunc(uvval(uvp)) &&
+      funcV(uvval(uvp)) == J->fn)
+    return fn;
   if (rec_upvalue_constify(J, uvp)) {  /* Try to constify immutable upvalue. */
     TRef tr, kfunc;
     lj_assertJ(val == 0, "bad usage");
