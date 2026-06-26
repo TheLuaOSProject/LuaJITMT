@@ -33,4 +33,36 @@ if hits=$(grep -nE -- '->[[:space:]]*gc2[.](weak_stack|weak_ready|weak_capacity)
   exit 1
 fi
 
+for helper in gc2_weak_tables_seen_acq \
+  gc2_weak_tables_seen_store_rlx \
+  gc2_weak_tables_seen_add \
+  gc2_weak_tables_weakkey_acq \
+  gc2_weak_tables_weakkey_store_rlx \
+  gc2_weak_tables_weakkey_add \
+  gc2_weak_tables_weakval_acq \
+  gc2_weak_tables_weakval_store_rlx \
+  gc2_weak_tables_weakval_add \
+  gc2_weak_tables_allweak_acq \
+  gc2_weak_tables_allweak_store_rlx \
+  gc2_weak_tables_allweak_add \
+  gc2_weak_tables_queued_acq \
+  gc2_weak_tables_queued_store_rlx \
+  gc2_weak_tables_queued_add \
+  gc2_weak_tables_overflow_acq \
+  gc2_weak_tables_overflow_store_rlx \
+  gc2_weak_tables_overflow_add; do
+  if ! grep -qE "static LJ_AINLINE .*[*[:space:]]${helper}[[:space:]]*[(]" \
+      "$ROOT/src/lj_obj.h"; then
+    printf '%s\n' "${helper} helper is required for GC2 weak discovery counters" >&2
+    exit 1
+  fi
+done
+
+if hits=$(grep -nE -- '->[[:space:]]*gc2[.](weak_tables_(seen|weakkey|weakval|allweak|queued|overflow))([^[:alnum:]_]|$)|&[[:space:]]*[^)]*->[[:space:]]*gc2[.](weak_tables_(seen|weakkey|weakval|allweak|queued|overflow))([^[:alnum:]_]|$)' \
+    "$ROOT/src/lj_gc2.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw GC2 weak discovery counter access is forbidden; use gc2_weak_* helpers' >&2
+  exit 1
+fi
+
 exec "$ROOT/tools/ci/lua_test.sh" m8_weak

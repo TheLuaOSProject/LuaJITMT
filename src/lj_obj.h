@@ -2193,6 +2193,106 @@ static LJ_AINLINE void gc2_weak_capacity_rel(global_State *g, MSize cap)
   la_store32_rel(&g->gc2.weak_capacity, (uint32_t)cap);
 }
 
+static LJ_AINLINE uint64_t gc2_weak_tables_seen_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.weak_tables_seen);
+}
+
+static LJ_AINLINE void gc2_weak_tables_seen_store_rlx(global_State *g,
+						      uint64_t n)
+{
+  la_store64_rlx(&g->gc2.weak_tables_seen, n);
+}
+
+static LJ_AINLINE void gc2_weak_tables_seen_add(global_State *g, uint64_t n)
+{
+  la_add64_rlx(&g->gc2.weak_tables_seen, n);
+}
+
+static LJ_AINLINE uint64_t gc2_weak_tables_weakkey_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.weak_tables_weakkey);
+}
+
+static LJ_AINLINE void gc2_weak_tables_weakkey_store_rlx(global_State *g,
+							 uint64_t n)
+{
+  la_store64_rlx(&g->gc2.weak_tables_weakkey, n);
+}
+
+static LJ_AINLINE void gc2_weak_tables_weakkey_add(global_State *g,
+						   uint64_t n)
+{
+  la_add64_rlx(&g->gc2.weak_tables_weakkey, n);
+}
+
+static LJ_AINLINE uint64_t gc2_weak_tables_weakval_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.weak_tables_weakval);
+}
+
+static LJ_AINLINE void gc2_weak_tables_weakval_store_rlx(global_State *g,
+							 uint64_t n)
+{
+  la_store64_rlx(&g->gc2.weak_tables_weakval, n);
+}
+
+static LJ_AINLINE void gc2_weak_tables_weakval_add(global_State *g,
+						   uint64_t n)
+{
+  la_add64_rlx(&g->gc2.weak_tables_weakval, n);
+}
+
+static LJ_AINLINE uint64_t gc2_weak_tables_allweak_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.weak_tables_allweak);
+}
+
+static LJ_AINLINE void gc2_weak_tables_allweak_store_rlx(global_State *g,
+							 uint64_t n)
+{
+  la_store64_rlx(&g->gc2.weak_tables_allweak, n);
+}
+
+static LJ_AINLINE void gc2_weak_tables_allweak_add(global_State *g,
+						   uint64_t n)
+{
+  la_add64_rlx(&g->gc2.weak_tables_allweak, n);
+}
+
+static LJ_AINLINE uint64_t gc2_weak_tables_queued_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.weak_tables_queued);
+}
+
+static LJ_AINLINE void gc2_weak_tables_queued_store_rlx(global_State *g,
+							uint64_t n)
+{
+  la_store64_rlx(&g->gc2.weak_tables_queued, n);
+}
+
+static LJ_AINLINE void gc2_weak_tables_queued_add(global_State *g, uint64_t n)
+{
+  la_add64_rlx(&g->gc2.weak_tables_queued, n);
+}
+
+static LJ_AINLINE uint64_t gc2_weak_tables_overflow_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.weak_tables_overflow);
+}
+
+static LJ_AINLINE void gc2_weak_tables_overflow_store_rlx(global_State *g,
+							  uint64_t n)
+{
+  la_store64_rlx(&g->gc2.weak_tables_overflow, n);
+}
+
+static LJ_AINLINE void gc2_weak_tables_overflow_add(global_State *g,
+						    uint64_t n)
+{
+  la_add64_rlx(&g->gc2.weak_tables_overflow, n);
+}
+
 static LJ_AINLINE uint64_t gc2_weak_scan_cursor_acq(global_State *g)
 {
   return la_load64_acq(&g->gc2.weak_scan_cursor);

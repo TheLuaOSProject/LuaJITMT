@@ -1537,19 +1537,19 @@ static void test_weak_snapshot_growth(lua_State *L, global_State *g, TGState *tg
   assert(n > cap0);
 
   make_weak_table_batch(L, n);
-  overflow0 = la_load64_acq(&g->gc2.weak_tables_overflow);
+  overflow0 = gc2_weak_tables_overflow_acq(g);
   lj_gc2_legacy_mark_begin(g);
   mark_weak_table_batch(L, g, n);
   flush_and_drain(g, tg);
   assert(g->gc2.weak_capacity == cap0);
   assert(la_load64_acq(&g->gc2.weak_count) == n);
   assert(lj_gc2_weak_snapshot_count(g) == cap0);
-  assert(la_load64_acq(&g->gc2.weak_tables_overflow) == overflow0 + 1u);
+  assert(gc2_weak_tables_overflow_acq(g) == overflow0 + 1u);
   lj_gc2_legacy_cycle_end(g);
   lua_settop(L, 0);
 
   make_weak_table_batch(L, n);
-  overflow1 = la_load64_acq(&g->gc2.weak_tables_overflow);
+  overflow1 = gc2_weak_tables_overflow_acq(g);
   lj_gc2_legacy_mark_begin(g);
   cap1 = g->gc2.weak_capacity;
   assert(cap1 > cap0);
@@ -1558,7 +1558,7 @@ static void test_weak_snapshot_growth(lua_State *L, global_State *g, TGState *tg
   flush_and_drain(g, tg);
   assert(la_load64_acq(&g->gc2.weak_count) == n);
   assert(lj_gc2_weak_snapshot_count(g) == n);
-  assert(la_load64_acq(&g->gc2.weak_tables_overflow) == overflow1);
+  assert(gc2_weak_tables_overflow_acq(g) == overflow1);
   lj_gc2_legacy_cycle_end(g);
   lua_settop(L, 0);
 }
@@ -1810,12 +1810,12 @@ static void test_weak_tables(lua_State *L, global_State *g, TGState *tg)
   make_weak_table(L, "v", &weakv, &keyv, &valv);
   make_weak_table(L, "k", &weakk, &keyk, &valk);
   make_weak_table(L, "kv", &weakkv, &keykv, &valkv);
-  seen0 = la_load64_acq(&g->gc2.weak_tables_seen);
-  weakkey0 = la_load64_acq(&g->gc2.weak_tables_weakkey);
-  weakval0 = la_load64_acq(&g->gc2.weak_tables_weakval);
-  allweak0 = la_load64_acq(&g->gc2.weak_tables_allweak);
-  queued0 = la_load64_acq(&g->gc2.weak_tables_queued);
-  overflow0 = la_load64_acq(&g->gc2.weak_tables_overflow);
+  seen0 = gc2_weak_tables_seen_acq(g);
+  weakkey0 = gc2_weak_tables_weakkey_acq(g);
+  weakval0 = gc2_weak_tables_weakval_acq(g);
+  allweak0 = gc2_weak_tables_allweak_acq(g);
+  queued0 = gc2_weak_tables_queued_acq(g);
+  overflow0 = gc2_weak_tables_overflow_acq(g);
   scan_runs0 = la_load64_acq(&g->gc2.weak_scan_runs);
   scan_tables0 = la_load64_acq(&g->gc2.weak_scan_tables);
   scan_slots0 = la_load64_acq(&g->gc2.weak_scan_slots);
@@ -1841,12 +1841,12 @@ static void test_weak_tables(lua_State *L, global_State *g, TGState *tg)
   assert_weak_mode_marked(g, weakv);
   assert_weak_mode_marked(g, weakk);
   assert_weak_mode_marked(g, weakkv);
-  assert(la_load64_acq(&g->gc2.weak_tables_seen) == seen0 + 3u);
-  assert(la_load64_acq(&g->gc2.weak_tables_weakkey) == weakkey0 + 2u);
-  assert(la_load64_acq(&g->gc2.weak_tables_weakval) == weakval0 + 2u);
-  assert(la_load64_acq(&g->gc2.weak_tables_allweak) == allweak0 + 1u);
-  assert(la_load64_acq(&g->gc2.weak_tables_queued) == queued0 + 3u);
-  assert(la_load64_acq(&g->gc2.weak_tables_overflow) == overflow0);
+  assert(gc2_weak_tables_seen_acq(g) == seen0 + 3u);
+  assert(gc2_weak_tables_weakkey_acq(g) == weakkey0 + 2u);
+  assert(gc2_weak_tables_weakval_acq(g) == weakval0 + 2u);
+  assert(gc2_weak_tables_allweak_acq(g) == allweak0 + 1u);
+  assert(gc2_weak_tables_queued_acq(g) == queued0 + 3u);
+  assert(gc2_weak_tables_overflow_acq(g) == overflow0);
   assert(lj_gc2_weak_snapshot_count(g) == 3u);
   assert(weak_snapshot_has(g, weakv));
   assert(weak_snapshot_has(g, weakk));

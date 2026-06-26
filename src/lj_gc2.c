@@ -186,12 +186,12 @@ void lj_gc2_init(global_State *g)
   gc2_weak_ready_store_rlx(g, NULL);
   gc2_weak_capacity_store_rlx(g, 0);
   gc2_weak_count_store_rlx(g, 0);
-  la_store64_rlx(&g->gc2.weak_tables_seen, 0);
-  la_store64_rlx(&g->gc2.weak_tables_weakkey, 0);
-  la_store64_rlx(&g->gc2.weak_tables_weakval, 0);
-  la_store64_rlx(&g->gc2.weak_tables_allweak, 0);
-  la_store64_rlx(&g->gc2.weak_tables_queued, 0);
-  la_store64_rlx(&g->gc2.weak_tables_overflow, 0);
+  gc2_weak_tables_seen_store_rlx(g, 0);
+  gc2_weak_tables_weakkey_store_rlx(g, 0);
+  gc2_weak_tables_weakval_store_rlx(g, 0);
+  gc2_weak_tables_allweak_store_rlx(g, 0);
+  gc2_weak_tables_queued_store_rlx(g, 0);
+  gc2_weak_tables_overflow_store_rlx(g, 0);
   gc2_weak_scan_cursor_store_rlx(g, 0);
   la_store64_rlx(&g->gc2.weak_scan_runs, 0);
   la_store64_rlx(&g->gc2.weak_scan_tables, 0);
@@ -2086,14 +2086,14 @@ static void gc2_weak_record(global_State *g, GCtab *t)
   uint64_t idx;
   if (!g || !t) {
     if (g)
-      la_add64_rlx(&g->gc2.weak_tables_overflow, 1);
+      gc2_weak_tables_overflow_add(g, 1);
     return;
   }
   cap = gc2_weak_capacity_acq(g);
   stack = gc2_weak_stack_acq(g);
   ready = gc2_weak_ready_acq(g);
   if (!stack || !ready || cap == 0) {
-    la_add64_rlx(&g->gc2.weak_tables_overflow, 1);
+    gc2_weak_tables_overflow_add(g, 1);
     return;
   }
   idx = gc2_weak_count_add(g, 1);  /* 05 section 5.8 MPSC slot. */
@@ -2101,9 +2101,9 @@ static void gc2_weak_record(global_State *g, GCtab *t)
     gc2_queue_slot_store_rel(&stack[(MSize)idx], obj2gco(t));
     /* 05 section 5.8: publish weak snapshot slot before ready byte. */
     la_store8_rel(&ready[(MSize)idx], 1);
-    la_add64_rlx(&g->gc2.weak_tables_queued, 1);
+    gc2_weak_tables_queued_add(g, 1);
   } else {
-    la_add64_rlx(&g->gc2.weak_tables_overflow, 1);
+    gc2_weak_tables_overflow_add(g, 1);
   }
 }
 
@@ -3532,13 +3532,13 @@ static void gc2_note_weak_table(global_State *g, GCtab *t, int weak)
     return;  /* FFI finalizer registry is owned by FINREG, not weak clear. */
   /* 05 section 5.8: capture traversal-time weak mode. */
   lj_obj_masksetgcflags(obj2gco(t), LJ_GC_WEAK, weak);
-  la_add64_rlx(&g->gc2.weak_tables_seen, 1);
+  gc2_weak_tables_seen_add(g, 1);
   if (weak & LJ_GC_WEAKKEY)
-    la_add64_rlx(&g->gc2.weak_tables_weakkey, 1);
+    gc2_weak_tables_weakkey_add(g, 1);
   if (weak & LJ_GC_WEAKVAL)
-    la_add64_rlx(&g->gc2.weak_tables_weakval, 1);
+    gc2_weak_tables_weakval_add(g, 1);
   if (weak == LJ_GC_WEAK)
-    la_add64_rlx(&g->gc2.weak_tables_allweak, 1);
+    gc2_weak_tables_allweak_add(g, 1);
   gc2_weak_record(g, t);
 }
 
