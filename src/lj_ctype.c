@@ -689,7 +689,7 @@ static void ctype_tab_retired_push(CTState *cts, CTypeTab *ret)
 
 static void ctype_tab_retire(CTState *cts, CTypeTab *ret)
 {
-  ctype_tab_retire_epoch_rel(ret, la_load64_acq(&cts->g->gc2.hs_epoch));
+  ctype_tab_retire_epoch_rel(ret, gc2_hs_epoch_acq(cts->g));
   ctype_tab_retired_push(cts, ret);
 }
 

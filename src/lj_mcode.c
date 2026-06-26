@@ -544,7 +544,7 @@ void lj_mcode_free(jit_State *J)
   uint64_t epoch;
   if (!mc)
     return;
-  epoch = la_load64_acq(&J2G(J)->gc2.hs_epoch);
+  epoch = gc2_hs_epoch_acq(J2G(J));
   while (mc) {
     MCode *next = mcode_area_next_acq(mc);
     MCodeRetire *ret = lj_mem_newt(J->L, sizeof(MCodeRetire), MCodeRetire);

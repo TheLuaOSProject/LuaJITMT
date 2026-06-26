@@ -87,10 +87,7 @@ if hits=$(grep -nE -- '->[[:space:]]*gc2[.](tg_list|n_threads)([^[:alnum:]_]|$)|
 fi
 fields='hs_epoch|hs_pending|hs_actions|hs_leader|hs_signal_ns|hs_ack_latency_samples|hs_ack_latency_sum_ns|hs_ack_latency_max_ns|hs_ack_latency_buckets'
 if hits=$(grep -nE -- "->[[:space:]]*gc2[.](${fields})([^[:alnum:]_]|$)|gc2[[:space:]]*->[[:space:]]*(${fields})([^[:alnum:]_]|$)" \
-    "$ROOT/src/lj_gc2.c" \
-    "$ROOT/src/lj_safepoint.c" \
-    "$ROOT/src/lj_tg.c" \
-    "$ROOT/src/lib_base.c" || true); [ -n "$hits" ]; then
+    "$ROOT"/src/*.c || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
   printf '%s\n' 'raw GC2 handshake state access is forbidden; use gc2_hs_* helpers' >&2
   exit 1

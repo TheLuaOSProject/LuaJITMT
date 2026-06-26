@@ -420,7 +420,7 @@ static TabNodeRetire *tab_retire_reserve(lua_State *L, Node *node,
 
 static void tab_retire_arm(global_State *g, TabNodeRetire *ret)
 {
-  la_store64_rel(&ret->retire_epoch, la_load64_acq(&g->gc2.hs_epoch));
+  la_store64_rel(&ret->retire_epoch, gc2_hs_epoch_acq(g));
   la_store32_rel(&ret->armed, 1);
 }
 
@@ -450,7 +450,7 @@ static TabArrayRetire *tab_array_retire_reserve(lua_State *L, TValue *array,
 
 static void tab_array_retire_arm(global_State *g, TabArrayRetire *ret)
 {
-  la_store64_rel(&ret->retire_epoch, la_load64_acq(&g->gc2.hs_epoch));
+  la_store64_rel(&ret->retire_epoch, gc2_hs_epoch_acq(g));
   la_store32_rel(&ret->armed, 1);
 }
 

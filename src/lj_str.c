@@ -153,7 +153,7 @@ static void strtab_retired_push(global_State *g, StrTabHdr *hdr)
 
 static void strtab_retire(global_State *g, StrTabHdr *hdr)
 {
-  la_store64_rel(&hdr->retire_epoch, la_load64_acq(&g->gc2.hs_epoch));
+  la_store64_rel(&hdr->retire_epoch, gc2_hs_epoch_acq(g));
   strtab_retired_push(g, hdr);
 }
 
