@@ -1,0 +1,27 @@
+local path = os.getenv("LJ_JIT_IO_STOPREQ_OUT") or "/tmp/lj-jit-io-stopreq.out"
+local f = assert(io.open(path, "w"))
+
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+for i = 1, 200 do f:write("x", i, "\n") end
+
+jit.flush()
+for i = 1, 200 do f:flush() end
+
+io.output(f)
+
+jit.flush()
+for i = 1, 200 do io.write("y", i, "\n") end
+
+jit.flush()
+for i = 1, 200 do io.flush() end
+
+f:close()
+local r = assert(io.open(path, "r"))
+local data = r:read("*a")
+r:close()
+assert(data:match("x200\n"), "file:write output missing")
+assert(data:match("y200\n"), "io.write output missing")
+os.remove(path)
+
+print("t-jit-io-native-stopreq OK")

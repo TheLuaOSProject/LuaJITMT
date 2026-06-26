@@ -42,7 +42,8 @@ local m6_cases = {
   "m6_jit_mcode_publish",
   "m6_jit_flush_hs",
   "m6_jit_tmpbuf_thread_format",
-  "m6_jit_perftools_native"
+  "m6_jit_perftools_native",
+  "m6_jit_io_native_stopreq"
 }
 
 local function table_store_smoke()
@@ -1105,6 +1106,32 @@ assert(live >= 8, live)
       t:build({ clean = true, quiet = true })
       if not ok then error(err, 0) end
       print("M6 JIT perf-map native-state STOPREQ behavior passed")
+    end
+  })
+
+  add({
+    name = "m6_jit_io_native_stopreq",
+    description = "JIT IO write/flush avoids raw traced stdio calls",
+    run = function(t)
+      local dump = t:tmp("lj_t-jit-io-native-stopreq.dump")
+      build_default(t)
+      runtime.luajit_dump_file(t, dump, "-jdump=ir",
+                               t:path("tests", "t-jit-io-native-stopreq.lua"),
+                               nil, {
+        env = { LJ_JIT_IO_STOPREQ_OUT = t:tmp("lj_jit_io_stopreq.out") }
+      })
+      local data = t:read(dump)
+      if contains(data, "fputc") or contains(data, "fwrite") or
+         contains(data, "fflush") then
+        error("traced IO write/flush emitted raw stdio call:\n" .. data, 0)
+      end
+      checks.assert_dump_contains(t, dump, "io.method.write",
+                                  "JIT IO native STOPREQ probe")
+      checks.assert_dump_contains(t, dump, "io.method.flush",
+                                  "JIT IO native STOPREQ probe")
+      checks.assert_dump_contains(t, dump, "t-jit-io-native-stopreq OK",
+                                  "JIT IO native STOPREQ probe")
+      print("M6 JIT IO native-state STOPREQ behavior passed")
     end
   })
 
