@@ -557,6 +557,13 @@ false. "stop"/"restart": gate the trigger. "count": 04 §4.8.
 "setpause"/"setstepmul": map to gcpause_pct / assist_shift. New:
 "torture" (§5.13), "workers", N.
 
+Current bridge: while secondary Lua threads are live, explicit `collect` and
+`step` do not run the legacy collector. They request a GC2 cycle through the
+same nonblocking leader token used by allocation triggers, store the pending
+threshold in the MT threshold mirror, and perform only bounded worker-drain
+assistance before returning. Exact `collect` parking still waits on the GC2
+leader path that can close sweep without legacy driver ownership.
+
 ## 5.11 Pacing & assists
 Trigger when `alloc_since_trigger > trigger_bytes` where trigger_bytes =
 live_estimate * gcpause_pct/100 (default 100% ⇒ 2x heap growth, Lua-like).

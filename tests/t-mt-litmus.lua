@@ -52,15 +52,22 @@ for _ = 1, reps do
 
   do
     local ch = th.channel(1)
+    if _ == 1 then collectgarbage("collect") end
+    local stats0 = _ == 1 and collectgarbage("stats") or nil
     local t = th.spawn(function(q)
       q:recv()
     end, ch)
     assert(collectgarbage("isrunning") == true)
     collectgarbage("collect")
-    collectgarbage("step")
+    assert(collectgarbage("step") == false)
+    if stats0 then
+      local stats1 = collectgarbage("stats")
+      assert(stats1.cycle_requests >= stats0.cycle_requests + 1)
+    end
     assert(collectgarbage("isrunning") == true)
     ch:send(true)
     assert(({ t:join() })[1] == true)
+    if stats0 then collectgarbage("collect") end
   end
 
   do

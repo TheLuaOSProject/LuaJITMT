@@ -1445,6 +1445,9 @@ LUA_API int lua_gc(lua_State *L, int what, int data)
     if (api_gc_enterexclusive(g)) {
       lj_gc_fullgc(L);
       api_gc_leaveexclusive(g);
+    } else if (la_load32_acq(&g->mt_live) != 0) {
+      (void)lj_gc2_request_major(g, L2TG(L));
+      (void)lj_gc2_worker_drain(g, LJ_GC2_WORKER_DRAIN_BATCH);
     }
     break;
   case LUA_GCCOUNT:
@@ -1456,8 +1459,13 @@ LUA_API int lua_gc(lua_State *L, int what, int data)
   case LUA_GCSTEP: {
     GCSize a = (GCSize)data << 10;
     GCSize total;
-    if (!api_gc_enterexclusive(g))
-      break;  /* M4: explicit steps wait for the real concurrent GC. */
+    if (!api_gc_enterexclusive(g)) {
+      if (la_load32_acq(&g->mt_live) != 0) {
+	(void)lj_gc2_request_cycle(g, L2TG(L));
+	(void)lj_gc2_worker_drain(g, LJ_GC2_WORKER_DRAIN_BATCH);
+      }
+      break;  /* Active MT steps request/assist GC2 but don't complete it. */
+    }
     total = lj_gc_total_load(g);
     lj_gc_threshold_store(g, (a <= total) ? (total - a) : 0);
     while (lj_gc_total_load(g) >= lj_gc_threshold_load(g))

@@ -596,7 +596,30 @@ uint64_t lj_gc2_flush_alloc(global_State *g, TGState *tg)
   return bytes;
 }
 
-static int gc2_request_cycle(global_State *g, TGState *tg)
+static int gc2_logical_stopped(global_State *g)
+{
+  if (la_load32_acq(&g->mt_live) != 0) {
+    GCSize threshold = lj_gc_mt_threshold_load(g);
+    if (la_load32_acq(&g->mt_live) == 0)
+      threshold = lj_gc_threshold_load(g);
+    return threshold == LJ_MAX_MEM;
+  }
+  return lj_gc_threshold_load(g) == LJ_MAX_MEM;
+}
+
+static void gc2_request_threshold(global_State *g)
+{
+  GCSize total = lj_gc_total_load(g);
+  if (la_load32_acq(&g->mt_live) != 0) {
+    lj_gc_mt_threshold_store(g, total);
+    if (la_load32_acq(&g->mt_live) == 0)
+      lj_gc_threshold_store(g, total);
+  } else {
+    lj_gc_threshold_store(g, total);
+  }
+}
+
+static int gc2_request_cycle_start(global_State *g, TGState *tg)
 {
   uint32_t expect = 0;
   uint32_t tid = tg ? la_load32_acq(&tg->tid) : 0;
@@ -604,13 +627,32 @@ static int gc2_request_cycle(global_State *g, TGState *tg)
     return 0;
   if (gc2_phase_acq(g) != LJ_GC2_IDLE)
     return 0;
-  if (lj_gc_threshold_load(g) == LJ_MAX_MEM)
+  if (gc2_logical_stopped(g))
     return 0;  /* Honor collectgarbage("stop"). */
   if (!gc2_cycle_leader_cas(g, &expect, tid))
     return 0;  /* 05 section 5.11 nonblocking cycle-request token. */
   gc2_cycle_requests_add(g, 1);  /* 05 section 5.11 telemetry. */
-  lj_gc_threshold_store(g, lj_gc_total_load(g));  /* Legacy cycle-driver bridge. */
+  gc2_request_threshold(g);  /* Legacy cycle-driver bridge. */
   return 1;
+}
+
+int lj_gc2_request_cycle(global_State *g, TGState *tg)
+{
+  int requested;
+  if (!g)
+    return 0;
+  requested = gc2_request_cycle_start(g, tg);
+  if (!requested && gc2_phase_acq(g) != LJ_GC2_IDLE)
+    lj_gc2_worker_wake(g);  /* Explicit step/overflow may expose active work. */
+  return requested;
+}
+
+int lj_gc2_request_major(global_State *g, TGState *tg)
+{
+  if (!g)
+    return 0;
+  lj_gc2_force_major(g);
+  return lj_gc2_request_cycle(g, tg);
 }
 
 void lj_gc2_check_trigger(global_State *g, TGState *tg)
@@ -620,7 +662,7 @@ void lj_gc2_check_trigger(global_State *g, TGState *tg)
   if (lj_gc2_alloc_since_load(g) <=
       lj_gc2_trigger_load(g))  /* 05 section 5.11 trigger. */
     return;
-  (void)gc2_request_cycle(g, tg);
+  (void)lj_gc2_request_cycle(g, tg);
 }
 
 void lj_gc2_account_alloc(global_State *g, TGState *tg, GCSize bytes)
@@ -3356,7 +3398,7 @@ static void gc2_remember_obj(global_State *g, GCobj *o)
   } else {
     gc2_remembered_overflows_add(g, 1);
     lj_gc2_force_major(g);
-    (void)gc2_request_cycle(g, G2TG(g));
+    (void)lj_gc2_request_cycle(g, G2TG(g));
   }
 }
 

@@ -164,7 +164,10 @@ through `lj_gc_threshold_*()` / `lj_gc_mt_threshold_*()` helpers, and
 threshold if `mt_live` reaches zero during the update. Explicit legacy
 `collect` / `step` claim `mt_gc_exclusive` only after observing `mt_live == 0`
 and rechecking it after the claim; secondary `spawn` / `luaMT_attach()` entry
-waits out that slow-path word before incrementing `mt_live`.
+waits out that slow-path word before incrementing `mt_live`. If peers are
+already live, explicit `collect` / `step` now request a GC2 cycle and save the
+pending driver threshold in `mt_gc_threshold` instead of running the legacy
+collector concurrently.
 
 The channel userdata is shared freely; all ops are method calls
 (lib_threading.c → lj_chan.c). GC: channels live in non-traversable? NO —
