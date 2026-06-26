@@ -32,19 +32,16 @@ if hits=$(grep -RInE -- \
   exit 1
 fi
 
-for helper in x64_vm_gc2_alloc_since_acq x64_vm_gc2_hard_bytes_acq; do
-  if ! grep -q "^|\\.macro ${helper}" src/vm_x64.dasc; then
-    printf '%s\n' "${helper} macro is required for x64 VM GC2 checks" >&2
-    exit 1
-  fi
-done
+if ! grep -q "lj_gc_should_step_vm" src/vm_x64.dasc; then
+  printf '%s\n' 'x64 VM GC2 hard checks must call lj_gc_should_step_vm' >&2
+  exit 1
+fi
 
-if hits=$(grep -nE 'GL:[^ ]+->gc2\.(alloc_since_trigger|hard_bytes)' \
-    src/vm_x64.dasc | \
-    grep -Ev 'x64_vm_gc2_(alloc_since|hard_bytes)_acq' || true); \
+if hits=$(grep -nE 'GL:[^ ]+->gc2\.(alloc_since_trigger|hard_bytes)|x64_vm_gc2_(alloc_since|hard_bytes)_acq' \
+    src/vm_x64.dasc || true); \
     [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
-  printf '%s\n' 'x64 VM GC2 allocation checks must use x64_vm_gc2_* helpers' >&2
+  printf '%s\n' 'x64 VM GC2 hard checks must keep pacing reads in C helpers' >&2
   exit 1
 fi
 

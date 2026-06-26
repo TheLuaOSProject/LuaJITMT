@@ -20,16 +20,15 @@ through `gc2_gcpause_pct_*` helpers in `lj_obj.h`.
 counter-only accounting; cycle and assist decisions acquire-load snapshots.
 Cycle-start reset uses `lj_gc2_alloc_since_xchg()` so the snapshot and zeroing
 cannot lose a concurrent flushed allocation. Pacing publication stores use
-release ordering so x86-64 VM TSO loads and C acquire readers see complete
-threshold updates.
+release ordering so helper-side acquire readers see complete threshold updates.
 
-The x86-64 VM already names the allocation-check loads through
-`x64_vm_gc2_alloc_since_acq()` and `x64_vm_gc2_hard_bytes_acq()`. The new guard
-keeps the C side aligned with those generated-code edges.
+The x86-64 VM now reaches GC2 hard-limit checks through
+`lj_gc_should_step_vm()`, keeping allocation-check pacing reads in C helper code
+instead of generated interpreter assembly.
 
 Guard: `tools/ci/m5_gc2_pacing_atomic.sh` rejects raw C-side access to the GC2
 pacing fields outside helper definitions in `lj_gc.h`/`lj_obj.h` and rejects raw
-x64 VM GC2 hard-check memory operands.
+x64 VM GC2 hard-check memory operands or reintroduced load macros.
 
 Test-design note: an earlier Lua smoke used four workers doing 2000
 `string.format()` allocations each while reading stats. That crashes on

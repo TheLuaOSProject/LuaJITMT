@@ -348,18 +348,6 @@
 |.macro x64_vm_hookmask_acq, dst, g
 |  movzx dst, byte GL:g->hookmask	// x64_vm_hookmask_acq: TSO acquire load.
 |.endmacro
-|.macro x64_vm_gc_total_acq, dst, g
-|  mov dst, GL:g->gc.total		// x64_vm_gc_total_acq: TSO acquire load.
-|.endmacro
-|.macro x64_vm_gc_threshold_acq, dst, g
-|  mov dst, GL:g->gc.threshold		// x64_vm_gc_threshold_acq: TSO acquire load.
-|.endmacro
-|.macro x64_vm_gc2_alloc_since_acq, dst, g
-|  mov dst, GL:g->gc2.alloc_since_trigger	// x64_vm_gc2_alloc_since_acq.
-|.endmacro
-|.macro x64_vm_gc2_hard_bytes_acq, dst, g
-|  mov dst, GL:g->gc2.hard_bytes	// x64_vm_gc2_hard_bytes_acq.
-|.endmacro
 |.macro x64_vm_tab_node_acq, dst, tab
 |  mov dst, tab->node		// x64_vm_tab_node_acq: TSO acquire load.
 |.endmacro
@@ -1310,20 +1298,16 @@ static void build_subroutines(BuildCtx *ctx)
   |  movsd xmm1, qword [BASE+8]
   |.endmacro
   |
-  |// Inlined GC threshold check. Caveat: uses labels 1 and 9.
+  |// C-owned GC threshold check. Caveat: uses label 1.
   |.macro ffgccheck
-  |  load_G ITYPE
-  |  x64_vm_gc_total_acq RB, ITYPE
-  |  x64_vm_gc_threshold_acq TMPR, ITYPE
-  |  cmp RB, TMPR
-  |  jb >9
-  |  call ->fff_gcstep
-  |  jmp >1
-  |9:
-  |  x64_vm_gc2_alloc_since_acq RB, ITYPE
-  |  x64_vm_gc2_hard_bytes_acq TMPR, ITYPE
-  |  cmp RB, TMPR
-  |  jbe >1
+  |  mov RB, BASE
+  |  mov TMP1, RD
+  |  load_G CARG1
+  |  call extern lj_gc_should_step_vm
+  |  test eax, eax
+  |  mov BASE, RB
+  |  mov RD, TMP1
+  |  jz >1
   |  call ->fff_gcstep
   |1:
   |.endmacro
@@ -4099,16 +4083,16 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ins_AD	// RA = dst, RD = hbits|asize
     |  mov L:RB, SAVE_L
     |  mov L:RB->base, BASE
-    |  load_G ITYPE
-    |  x64_vm_gc_total_acq RA, ITYPE
-    |  x64_vm_gc_threshold_acq TMPR, ITYPE
-    |  cmp RA, TMPR
     |  mov SAVE_PC, PC
-    |  jae >5
-    |  x64_vm_gc2_alloc_since_acq RA, ITYPE
-    |  x64_vm_gc2_hard_bytes_acq TMPR, ITYPE
-    |  cmp RA, TMPR
-    |  ja >5
+    |  mov RB, BASE
+    |  mov TMP1, RD
+    |  load_G CARG1
+    |  call extern lj_gc_should_step_vm
+    |  test eax, eax
+    |  mov BASE, RB
+    |  mov L:RB, SAVE_L
+    |  mov RD, TMP1
+    |  jnz >5
     |1:
     |  test RDd, RDd
     |  jnz >6
@@ -4144,17 +4128,17 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
   case BC_TDUP:
     |  ins_AND	// RA = dst, RD = table const (~) (holding template table)
     |  mov L:RB, SAVE_L
-    |  load_G ITYPE
-    |  x64_vm_gc_total_acq RA, ITYPE
-    |  mov SAVE_PC, PC
-    |  x64_vm_gc_threshold_acq TMPR, ITYPE
-    |  cmp RA, TMPR
     |  mov L:RB->base, BASE
-    |  jae >3
-    |  x64_vm_gc2_alloc_since_acq RA, ITYPE
-    |  x64_vm_gc2_hard_bytes_acq TMPR, ITYPE
-    |  cmp RA, TMPR
-    |  ja >3
+    |  mov SAVE_PC, PC
+    |  mov RB, BASE
+    |  mov TMP1, RD
+    |  load_G CARG1
+    |  call extern lj_gc_should_step_vm
+    |  test eax, eax
+    |  mov BASE, RB
+    |  mov L:RB, SAVE_L
+    |  mov RD, TMP1
+    |  jnz >3
     |2:
     |  mov TAB:CARG2, [KBASE+RD*8]	// Caveat: CARG2 == BASE
     |  mov L:CARG1, L:RB		// Caveat: CARG1 == RA

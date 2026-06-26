@@ -233,14 +233,11 @@ label has no remaining VM branch users and is retired; the JIT C-call
 path now also runs the GC2 hard-threshold assist from `lj_gc_step_fixtop()` once
 the current legacy VM threshold check branches there, with
 `GC2State.interp_hard_checks` telemetry. `lj_gc_step_fixtop()` now also splits
-GC2-hard and legacy-threshold work, and x64 `BC_TNEW`/`BC_TDUP` branch to that
-slow path when `GC2State.alloc_since_trigger` exceeds `hard_bytes`, even with
-the legacy threshold parked at `LJ_MAX_MEM`. The x64 fast-function
-`ffgccheck` path has the same GC2 hard-threshold branch and calls
-`lj_gc_step_top()` after publishing its precomputed stack top. C-side
-allocation checks use the same `lj_gc_should_step()` predicate and split
-helpers. The direct x64 `gc.total`/`gc.threshold` branch remains as the legacy
-half of this staged entry point until §7.5 inline allocation replaces it.
+GC2-hard and legacy-threshold work. x64 `BC_TNEW`/`BC_TDUP` and the
+fast-function `ffgccheck` path call the C-owned `lj_gc_should_step_vm()`
+predicate before entering the existing step helpers, so legacy total/threshold
+and GC2 hard-threshold reads no longer live in VM assembly. C-side allocation
+checks use the same `lj_gc_should_step()` predicate and split helpers.
 `lj_tab_new()` now constructs `GCtab` bodies from unlinked raw GC storage,
 initializes the empty/colocated table shape, nil-clears new array slots, then
 CAS-publishes the table root with `lj_gc_linkobj()`. This removes the

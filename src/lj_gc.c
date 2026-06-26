@@ -2410,6 +2410,11 @@ static void gc_step_assist_top(lua_State *L, global_State *g, int legacy_step)
     lj_gc_step(L);
 }
 
+int LJ_FASTCALL lj_gc_should_step_vm(global_State *g)
+{
+  return lj_gc_should_step(g);
+}
+
 /* Ditto, but fix the stack top first. */
 void LJ_FASTCALL lj_gc_step_fixtop(lua_State *L)
 {

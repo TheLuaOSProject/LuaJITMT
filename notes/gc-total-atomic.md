@@ -13,13 +13,13 @@ free concurrently, so the counter now has a helper layer in `lj_gc.h`:
 
 Allocator, free, stack rehome, GC step, GC2 pacing, `collectgarbage()`, and
 `gcinfo()` readers now go through these helpers. x86-64 VM allocation checks
-also name their TSO loads through `x64_vm_gc_total_acq()`,
-`x64_vm_gc_threshold_acq()`, `x64_vm_gc2_alloc_since_acq()`, and
-`x64_vm_gc2_hard_bytes_acq()`.
+call `lj_gc_should_step_vm()` before the existing step helpers, so the shared GC
+pacing reads stay in C helper code instead of interpreter assembly.
 
 Guard: `tools/ci/m5_gc_total_atomic.sh` rejects raw C-side `g->gc.total`
 access outside the helper definitions and rejects raw x64 VM allocation-check
-loads for the GC total/threshold and GC2 hard-limit fields.
+loads or reintroduced allocation-check load macros for the GC total/threshold
+and GC2 hard-limit fields.
 
 Validation:
 - `tools/ci/m5_gc_total_atomic.sh` passed.
