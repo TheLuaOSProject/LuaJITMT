@@ -3586,6 +3586,7 @@ static uint32_t asm_x86_inslen(const uint8_t* p)
 }
 
 #if LJ_GC64
+#if !(LJ_TARGET_X64 && !LJ_ABI_WIN)
 static int asm_x86_prevloadaddr(MCode *p, uint32_t ilen, Reg r, uintptr_t addr)
 {
   if (p == NULL)
@@ -3627,6 +3628,19 @@ static int asm_x86_isvmstate(MCode *p, MCode *prev, uint32_t ilen,
 }
 #endif
 
+#if LJ_TARGET_X64 && !LJ_ABI_WIN
+static int asm_x86_istgvmstate(MCode *p, uint32_t ilen, int32_t traceno)
+{
+  return ilen == 11 &&
+    p[0] == (MCode)(0x40 + ((RID_DISPATCH >> 3) & 1)) &&
+    p[1] == XI_MOVmi &&
+    p[2] == MODRM(XM_OFS32, 0, RID_DISPATCH) &&
+    *(int32_t *)(p+3) == DISPATCH_TG(vmstate) &&
+    *(int32_t *)(p+7) == traceno;
+}
+#endif
+#endif
+
 /* Patch exit jumps of existing machine code to a new target. */
 void lj_asm_patchexit(jit_State *J, GCtrace *T, ExitNo exitno, MCode *target)
 {
@@ -3638,15 +3652,23 @@ void lj_asm_patchexit(jit_State *J, GCtrace *T, ExitNo exitno, MCode *target)
   MCode *px = exitstub_addr(J, exitno) - 6;
   MCode *pe = mcode+len-6;
   MCode *pgc = NULL;
-#if LJ_GC64
+#if LJ_GC64 && !(LJ_TARGET_X64 && !LJ_ABI_WIN)
   const void *statep = (const void *)&J2G(J)->vmstate;
-#else
+#elif !LJ_GC64
   uint32_t statei = u32ptr(&J2G(J)->vmstate);
 #endif
   if (len > 5 && p[len-5] == XI_JMP && p+len-6 + *(int32_t *)(p+len-4) == px)
     asm_mcode_patch_i32(J, p+len-4, jmprel(J, p+len, target));
   /* Do not patch parent exit for a stack check. Skip beyond vmstate update. */
 #if LJ_GC64
+#if LJ_TARGET_X64 && !LJ_ABI_WIN
+  for (; p < pe; ) {
+    uint32_t ilen = asm_x86_inslen(p);
+    if (asm_x86_istgvmstate(p, ilen, (int32_t)traceno))
+      break;
+    p += ilen;
+  }
+#else
   {
     MCode *prev = NULL;
     uint32_t prevlen = 0;
@@ -3660,6 +3682,7 @@ void lj_asm_patchexit(jit_State *J, GCtrace *T, ExitNo exitno, MCode *target)
       p += ilen;
     }
   }
+#endif
 #else
   for (; p < pe; p += asm_x86_inslen(p)) {
     intptr_t ofs = LJ_GC64 ? (p[0] & 0xf0) == 0x40 : LJ_64;

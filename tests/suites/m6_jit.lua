@@ -272,6 +272,9 @@ assert(s==2080.0)
       if root_mcode and contains(root_mcode, "push rcx") then
         error("trace-head vmstate publish must not save rcx in simple traces", 2)
       end
+      if root_mcode and contains(root_mcode, "mov rcx,") then
+        error("trace-head vmstate publish must not mirror to global vmstate", 2)
+      end
 
       local funcf_dump = t:tmp("lj_t-jit-xpoll-funcf.dump")
       luajit_dump(t, funcf_dump, "-jdump=im", [=[

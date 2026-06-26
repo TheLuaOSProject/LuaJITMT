@@ -147,6 +147,19 @@ static LJ_AINLINE void profile_vmstate_store_rel(ProfileState *ps,
   la_store32_rel((uint32_t *)&ps->vmstate, (uint32_t)vmstate);
 }
 
+static int32_t profile_sample_vmstate(global_State *g)
+{
+  TGState *tg = G2TG(g);
+  int32_t st;
+  if (tg && lj_tg_vmstate_load_acq(tg) >= 0)
+    return 'N';
+  st = vmstate_load_acq(g);
+  return st >= 0 ? 'N' :
+	 st == ~LJ_VMST_INTERP ? 'I' :
+	 st == ~LJ_VMST_C ? 'C' :
+	 st == ~LJ_VMST_GC ? 'G' : 'J';
+}
+
 /* -- Profiler/hook interaction ------------------------------------------- */
 
 #if !LJ_PROFILE_SIGPROF
@@ -189,11 +202,8 @@ static void profile_trigger(ProfileState *ps)
   int st;
   if (!g) return;
   profile_samples_add(ps, 1);  /* Always increment number of samples. */
-  st = vmstate_load_acq(g);
-  profile_vmstate_store_rel(ps, st >= 0 ? 'N' :
-			    st == ~LJ_VMST_INTERP ? 'I' :
-			    st == ~LJ_VMST_C ? 'C' :
-			    st == ~LJ_VMST_GC ? 'G' : 'J');
+  st = profile_sample_vmstate(g);
+  profile_vmstate_store_rel(ps, st);
   /* Set profile hook. */
   if (hookmask_set_if_clear(g, HOOK_PROFILE|HOOK_VMEVENT|HOOK_GC,
 			    HOOK_PROFILE)) {

@@ -169,7 +169,7 @@ typedef struct {
   ((T)->exitstub + EXITSTUB_TRACE_SPACING*(exitno))
 #endif
 
-#define EXITTRACE_VMSTATE	1	/* g->vmstate has traceno on exit. */
+#define EXITTRACE_VMSTATE	1	/* vmstate has current trace on exit. */
 
 /* -- x86 ModRM operand encoding ------------------------------------------ */
 
