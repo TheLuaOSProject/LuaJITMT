@@ -219,9 +219,6 @@ typedef struct CCallInfo {
   _(ANY,	sinh,			1,   N, NUM, XA_FP) \
   _(ANY,	cosh,			1,   N, NUM, XA_FP) \
   _(ANY,	tanh,			1,   N, NUM, XA_FP) \
-  _(ANY,	fputc,			2,   S, INT, 0) \
-  _(ANY,	fwrite,			4,   S, INT, 0) \
-  _(ANY,	fflush,			1,   S, INT, 0) \
   /* ORDER FPM */ \
   _(FPMATH,	lj_vm_floor,		1,   N, NUM, XA_FP) \
   _(FPMATH,	lj_vm_ceil,		1,   N, NUM, XA_FP) \

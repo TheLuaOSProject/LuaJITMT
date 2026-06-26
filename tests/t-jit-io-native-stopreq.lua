@@ -1,5 +1,13 @@
 local path = os.getenv("LJ_JIT_IO_STOPREQ_OUT") or "/tmp/lj-jit-io-stopreq.out"
 local f = assert(io.open(path, "w"))
+local vmdef = require("jit.vmdef")
+
+jit.off()
+for _, name in pairs(vmdef.ircall) do
+  assert(name ~= "fputc" and name ~= "fwrite" and name ~= "fflush",
+         "raw stdio IR call target still exists: " .. tostring(name))
+end
+jit.on()
 
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")

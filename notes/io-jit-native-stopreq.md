@@ -9,6 +9,9 @@ without marking the current TG native, unlike the interpreter IO paths that use
 For now the recorder treats IO write/flush fast functions as NYI. This
 preserves Lua semantics by falling back to the interpreter's native-state
 wrappers, trading traced IO throughput for safe shutdown/safepoint behavior.
+The raw libc stdio call targets are also absent from generated `jit.vmdef`
+metadata, so reintroducing traced stdio requires an explicit IR-call table
+change.
 
 `tests/t-jit-io-native-stopreq.lua` heats all four write/flush variants; the
 M6 suite captures the generated IR and rejects raw stdio calls while no
