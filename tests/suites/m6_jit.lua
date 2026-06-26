@@ -731,6 +731,25 @@ assert(#keep == 120 and keep[120][80] == "value-120-80")
     description = "M6 JIT uses the running TG tmpbuf for threaded string.format traces",
     run = function(t)
       build_default(t)
+      local dump = t:tmp("lj-m6-tmpbuf-format-ir.dump")
+      luajit_dump(t, dump, "-jdump=ir", [=[
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local s = 0
+for i = 1, 80 do
+  s = s + #string.format("%d:%s", i, "x")
+end
+assert(s > 0)
+]=])
+      do
+        local data = t:read(dump)
+        if not (contains(data, "LREF") and data:match("BUFHDR%s+%d+%s+RESET")) then
+          error("tmpbuf format trace did not use runtime LREF BUFHDR reset", 2)
+        end
+        if contains(data, "lj_buf_tmp_reset") then
+          error("tmpbuf format trace still calls lj_buf_tmp_reset", 2)
+        end
+      end
       luajit_code(t, jit_tmpbuf_thread_format_smoke(), { timeout = "30s" })
       print("M6 JIT threaded string.format tmpbuf smoke passed")
     end

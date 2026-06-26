@@ -1202,11 +1202,23 @@ static void asm_bufhdr_write(ASMState *as, Reg sb);
 static void asm_bufhdr(ASMState *as, IRIns *ir)
 {
   Reg sb = ra_dest(as, ir, RSET_GPR);
+#if LJ_TARGET_X86ORX64
+  int tg_tmpbuf = 0;
+#endif
   switch (ir->op2) {
   case IRBUFHDR_RESET: {
     Reg tmp = ra_scratch(as, rset_exclude(RSET_GPR, sb));
     IRIns irbp;
     irbp.ot = IRT(0, IRT_PTR);  /* Buffer data pointer type. */
+#if LJ_TARGET_X86ORX64
+    if (IR(ir->op1)->o == IR_LREF) {
+      IRIns irgc;
+      irgc.ot = IRT(0, IRT_PGC);  /* GC type. */
+      tg_tmpbuf = 1;
+      emit_storeofs(as, &irgc, tmp, sb, offsetof(SBuf, L));
+      emit_gettg(as, tmp, cur_L);
+    }
+#endif
     emit_storeofs(as, &irbp, tmp, sb, offsetof(SBuf, w));
     emit_loadofs(as, &irbp, tmp, sb, offsetof(SBuf, b));
     break;
@@ -1233,7 +1245,10 @@ static void asm_bufhdr(ASMState *as, IRIns *ir)
   default: lj_assertA(0, "bad BUFHDR op2 %d", ir->op2); break;
   }
 #if LJ_TARGET_X86ORX64
-  ra_left(as, sb, ir->op1);
+  if (tg_tmpbuf)
+    emit_leatg(as, sb, tmpbuf);
+  else
+    ra_left(as, sb, ir->op1);
 #else
   ra_leftov(as, sb, ir->op1);
 #endif
