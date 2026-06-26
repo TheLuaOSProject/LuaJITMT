@@ -2388,7 +2388,7 @@ int LJ_FASTCALL lj_gc_step(lua_State *L)
   do {
     lim -= (GCSize)gc_onestep(L);
     if (g->gc.state == GCSpause) {
-      lj_gc_threshold_store(g, (g->gc.estimate/100) * g->gc.pause);
+      lj_gc2_publish_idle_threshold(g);
       vmstate_store_rel(g, ostate);
       return 1;  /* Finished a GC cycle. */
     }
@@ -2407,6 +2407,9 @@ int LJ_FASTCALL lj_gc_step(lua_State *L)
 
 static void gc_step_assist_top(lua_State *L, global_State *g, int legacy_step)
 {
+  lj_gc2_check_trigger(g, L2TG(L));
+  if (!legacy_step)
+    legacy_step = lj_gc_total_load(g) >= lj_gc_threshold_load(g);
   if (lj_gc2_hard_limit_reached(g)) {
     gc2_interp_hard_checks_add(g, 1);
     lj_gc2_assist(g, L2TG(L));  /* 05 section 5.11 interpreter assist bridge. */
@@ -2436,13 +2439,16 @@ int LJ_FASTCALL lj_gc_step_jit(global_State *g, MSize steps)
 {
   lua_State *L = lj_tg_cur_L(g);
   int legacy_step, hard_step;
+  TGState *tg;
   L->base = lj_tg_jit_base(g);
   L->top = curr_topL(L);
+  tg = L2TG(L);
+  lj_gc2_check_trigger(g, tg);
   legacy_step = lj_gc_total_load(g) >= lj_gc_threshold_load(g);
   hard_step = lj_gc2_hard_limit_reached(g);
   if (hard_step) {
     gc2_jit_hard_checks_add(g, 1);
-    lj_gc2_assist(g, L2TG(L));  /* 05 section 5.11 trace-side assist bridge. */
+    lj_gc2_assist(g, tg);  /* 05 section 5.11 trace-side assist bridge. */
   }
   if (legacy_step) {
     while (steps-- > 0 && lj_gc_step(L) == 0)
@@ -2483,7 +2489,7 @@ void lj_gc_fullgc(lua_State *L)
       return;
     }
   } while (g->gc.state != GCSpause);
-  lj_gc_threshold_store(g, (g->gc.estimate/100) * g->gc.pause);
+  lj_gc2_publish_idle_threshold(g);
   vmstate_store_rel(g, ostate);
 }
 

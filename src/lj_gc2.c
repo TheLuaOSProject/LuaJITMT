@@ -592,7 +592,7 @@ static int gc2_request_cycle(global_State *g, TGState *tg)
   return 1;
 }
 
-static void gc2_maybe_trigger_cycle(global_State *g, TGState *tg)
+void lj_gc2_check_trigger(global_State *g, TGState *tg)
 {
   if (gc2_phase_acq(g) != LJ_GC2_IDLE)
     return;
@@ -610,7 +610,7 @@ void lj_gc2_account_alloc(global_State *g, TGState *tg, GCSize bytes)
   old = lj_tg_local_total_add_rlx(tg, (uint64_t)bytes);
   if (old + (uint64_t)bytes < old || old + (uint64_t)bytes >= LJ_GC2_ACCT_FLUSH)
     (void)lj_gc2_flush_alloc(g, tg);
-  gc2_maybe_trigger_cycle(g, tg);
+  lj_gc2_check_trigger(g, tg);
   if (lj_gc2_hard_limit_reached(g))  /* 05 section 5.11 hard limit. */
     (void)lj_gc2_assist(g, tg);
 }
@@ -635,18 +635,38 @@ void lj_gc2_update_pacing(global_State *g)
   legacy_live = g->gc.estimate ? g->gc.estimate : lj_gc_total_load(g);
   gc2_live = gc2_live_estimate_acq(g);
   live = gc2_live > legacy_live ? gc2_live : legacy_live;
-  if (live < LJ_GC2_ACCT_FLUSH)
-    live = LJ_GC2_ACCT_FLUSH;
+  if (live < LJ_GC2_TRIGGER_MIN)
+    live = LJ_GC2_TRIGGER_MIN;
   pct = gc2_gcpause_pct_acq(g);
   if (pct == 0)
     pct = 100;
   trigger = (live / 100u) * (uint64_t)pct +
 	    ((live % 100u) * (uint64_t)pct) / 100u;
-  if (trigger < LJ_GC2_ACCT_FLUSH)
-    trigger = LJ_GC2_ACCT_FLUSH;
+  if (trigger < LJ_GC2_TRIGGER_MIN)
+    trigger = LJ_GC2_TRIGGER_MIN;
   hard = trigger > ~(uint64_t)0 / 2u ? ~(uint64_t)0 : trigger * 2u;
   lj_gc2_trigger_store(g, trigger);  /* 05 section 5.11. */
   lj_gc2_hard_store(g, hard);  /* 05 section 5.11. */
+}
+
+void lj_gc2_publish_idle_threshold(global_State *g)
+{
+  uint64_t trigger, since, remain, total, limit;
+  if (!g)
+    return;
+  if (g->gc.state != GCSpause || gc2_phase_acq(g) != LJ_GC2_IDLE)
+    return;
+  if (lj_gc_threshold_load(g) == LJ_MAX_MEM)
+    return;  /* Honor collectgarbage("stop") and MT stop-the-world gates. */
+  trigger = lj_gc2_trigger_load(g);
+  since = lj_gc2_alloc_since_load(g);
+  remain = since >= trigger ? 0 : trigger - since;
+  total = (uint64_t)lj_gc_total_load(g);
+  limit = (uint64_t)LJ_MAX_MEM - 1u;
+  if (remain > limit || total > limit - remain)
+    lj_gc_threshold_store(g, (GCSize)limit);
+  else
+    lj_gc_threshold_store(g, (GCSize)(total + remain));
 }
 
 static void gc2_reset_alloc_trigger(global_State *g)

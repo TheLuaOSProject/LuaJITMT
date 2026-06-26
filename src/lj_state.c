@@ -246,6 +246,8 @@ static TValue *cpluaopen(lua_State *L, lua_CFunction dummy, void *ud)
   lj_trace_initstate(g);
   lj_err_verify();
   setgcrefroot(g->vmthref, obj2gco(lj_state_new(L)));
+  lj_gc2_update_pacing(g);
+  lj_gc2_publish_idle_threshold(g);
   return NULL;
 }
 

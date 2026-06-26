@@ -1466,6 +1466,7 @@ LUA_API int lua_gc(lua_State *L, int what, int data)
     g->gc.pause = (MSize)data;
     gc2_gcpause_pct_rel(g, data > 0 ? (uint32_t)data : 1u);
     lj_gc2_update_pacing(g);
+    lj_gc2_publish_idle_threshold(g);
     break;
   case LUA_GCSETSTEPMUL:
     res = (int)(g->gc.stepmul);

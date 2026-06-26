@@ -83,9 +83,15 @@ local function run_bench_smoke(t)
       shell_quote(t:path("aux", "bench", "run.sh")) .. " scaling " .. luajit,
     "weak_legacy_skipped=")
   assert_command_output_all_contains(
+    "BENCH_SCALE=0.05 " .. luajit .. " -joff " .. bench_lua ..
+      " alloc_tables",
+    { "alloc_tables", "ns/op" },
+    { timeout = "20s" })
+  assert_command_output_all_contains(
     "BENCH_SCALE=0.01 " .. luajit .. " -joff " .. bench_lua ..
       " closures_upval",
-    { "closures_upval", "ns/op" })
+    { "closures_upval", "ns/op" },
+    { timeout = "20s" })
   print("M9 benchmark smoke guard passed")
 end
 

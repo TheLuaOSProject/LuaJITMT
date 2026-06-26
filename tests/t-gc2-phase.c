@@ -825,7 +825,7 @@ int main(void)
   assert(la_load64_acq(&g->gc2.sweep_live_updates) > sweep_live_updates0);
   live_estimate = la_load64_acq(&g->gc2.live_estimate);
   assert(live_estimate > 0);
-  assert(la_load64_acq(&g->gc2.trigger_bytes) >= LJ_GC2_ACCT_FLUSH);
+  assert(la_load64_acq(&g->gc2.trigger_bytes) >= LJ_GC2_TRIGGER_MIN);
   assert(la_load64_acq(&g->gc2.trigger_bytes) >= live_estimate);
   assert_idle(g, tg);
 

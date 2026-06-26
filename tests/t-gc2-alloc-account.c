@@ -368,7 +368,7 @@ int main(void)
   assert(gc2_remembered_drained_acq(g) == 0);
   assert(la_load32_acq(&g->gc2.assist_shift) ==
 	 lj_gc2_assist_shift_from_stepmul(g->gc.stepmul));
-  assert(la_load64_acq(&g->gc2.trigger_bytes) >= LJ_GC2_ACCT_FLUSH);
+  assert(la_load64_acq(&g->gc2.trigger_bytes) >= LJ_GC2_TRIGGER_MIN);
   assert(la_load64_acq(&g->gc2.hard_bytes) ==
 	 2u * la_load64_acq(&g->gc2.trigger_bytes));
   assert(la_load64_acq(&g->gc2.cycle_alloc_bytes) == 0);
@@ -381,7 +381,7 @@ int main(void)
 
   (void)lua_gc(L, LUA_GCSETPAUSE, 150);
   assert(la_load32_acq(&g->gc2.gcpause_pct) == 150);
-  assert(la_load64_acq(&g->gc2.trigger_bytes) >= LJ_GC2_ACCT_FLUSH);
+  assert(la_load64_acq(&g->gc2.trigger_bytes) >= LJ_GC2_TRIGGER_MIN);
   assert(la_load64_acq(&g->gc2.hard_bytes) ==
 	 2u * la_load64_acq(&g->gc2.trigger_bytes));
   (void)lua_gc(L, LUA_GCSETSTEPMUL, 400);
@@ -392,6 +392,11 @@ int main(void)
   (void)la_xchg64_acqrel(&g->gc2.alloc_since_trigger, 0);
   assert(la_load64_acq(&tg->local_total) == 0);
   assert(la_load64_acq(&g->gc2.alloc_since_trigger) == 0);
+  lj_gc2_update_pacing(g);
+  lj_gc2_publish_idle_threshold(g);
+  assert(lj_gc_threshold_load(g) >= lj_gc_total_load(g));
+  assert((uint64_t)(lj_gc_threshold_load(g) - lj_gc_total_load(g)) >=
+	 LJ_GC2_TRIGGER_MIN);
 
   p = lj_mem_realloc(L, NULL, 0, 128);
   assert(p != NULL);
@@ -739,6 +744,8 @@ int main(void)
 #endif
 
   lj_gc_threshold_store(g, LJ_MAX_MEM);
+  lj_gc2_publish_idle_threshold(g);
+  assert(lj_gc_threshold_load(g) == LJ_MAX_MEM);
   (void)la_xchg64_acqrel(&g->gc2.alloc_since_trigger, 0);
   cycle_requests0 = gc2_cycle_requests_acq(g);
   lj_gc2_account_alloc(g, tg, LJ_GC2_ACCT_FLUSH);
