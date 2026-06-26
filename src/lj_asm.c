@@ -1274,6 +1274,10 @@ static int asm_buf_is_tg_tmpbuf(ASMState *as, IRRef ref)
 }
 #endif
 
+#if defined(__linux__) && LJ_TARGET_X64
+static int asm_bufput_const_tg_inline(ASMState *as, IRIns *ir, GCstr *s);
+#endif
+
 static void asm_bufput(ASMState *as, IRIns *ir)
 {
   const CCallInfo *ci = &lj_ir_callinfo[IRCALL_lj_buf_putstr];
@@ -1292,6 +1296,10 @@ static void asm_bufput(ASMState *as, IRIns *ir)
 	     "BUFPUT of non-string IR %04d", ir->op2 - REF_BIAS);
   if (irs->o == IR_KGC) {
     GCstr *s = ir_kstr(irs);
+#if defined(__linux__) && LJ_TARGET_X64
+    if (tg_tmpbuf && asm_bufput_const_tg_inline(as, ir, s))
+      return;
+#endif
     if (s->len == 1) {  /* Optimize put of single-char string constant. */
       kchar = (int8_t)strdata(s)[0];  /* Signed! */
       args[1] = ASMREF_TMP1;  /* int, truncated to char */

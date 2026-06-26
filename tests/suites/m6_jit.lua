@@ -834,6 +834,10 @@ assert(s > 0)
         if not contains(data, "->lj_buf_putstr_tg") then
           error("tmpbuf format trace did not use TG string-append helper", 2)
         end
+        if not data:match("mov byte %[[^%]]+%], 0x3a") or
+           not data:match("mov byte %[[^%]]+%+0x1%], 0x78") then
+          error("tmpbuf format trace did not inline literal byte appends", 2)
+        end
         if not contains(data, "->lj_buf_tostr_tg") then
           error("tmpbuf format trace did not use TG buffer-finalize helper", 2)
         end

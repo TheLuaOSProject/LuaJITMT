@@ -2042,6 +2042,53 @@ static void asm_ahstore_inline_hash_num(ASMState *as, IRIns *ir)
 }
 #endif
 
+#if defined(__linux__) && LJ_TARGET_X64
+static int asm_bufput_const_tg_inline(ASMState *as, IRIns *ir, GCstr *s)
+{
+  const CCallInfo *ci = &lj_ir_callinfo[IRCALL_lj_buf_putstr_tg];
+  IRRef args[2];
+  const char *p = strdata(s);
+  MSize len = s->len;
+  MCLabel l_done, l_fallback;
+  Reg sb, w, end;
+  RegSet allow;
+  MSize i;
+
+  if (len == 0 || len > 4)
+    return 0;
+
+  args[0] = ir->op1;  /* SBuf * */
+  args[1] = ir->op2;  /* GCstr * */
+  asm_setupresult(as, ir, ci);  /* SBuf * */
+  l_done = emit_label(as);
+  asm_gencall(as, ci, args);
+  l_fallback = emit_label(as);
+
+  sb = ra_alloc1(as, ir->op1, RSET_GPR);
+  allow = rset_exclude(RSET_GPR, sb);
+  if (sb != RID_RET)
+    rset_clear(allow, RID_RET);
+  w = ra_scratch(as, allow);
+  rset_clear(allow, w);
+  end = ra_scratch(as, allow);
+
+  emit_jmp(as, l_done);
+  if (sb != RID_RET)
+    emit_rr(as, XO_MOV, RID_RET|REX_GC64, sb);
+  emit_rmro(as, XO_MOVto, end|REX_GC64, sb, offsetof(SBuf, w));
+  for (i = len; i-- > 0; ) {
+    emit_i8(as, (int8_t)(uint8_t)p[i]);
+    emit_rmro(as, XO_MOVmib, 0, w, (int32_t)i);
+  }
+  emit_sjcc(as, CC_A, l_fallback);
+  emit_rmro(as, XO_CMP, end|REX_GC64, sb, offsetof(SBuf, e));
+  emit_gri(as, XG_ARITHi(XOg_ADD), end|REX_GC64, (int32_t)len);
+  emit_rr(as, XO_MOV, end|REX_GC64, w);
+  emit_rmro(as, XO_MOV, w|REX_GC64, sb, offsetof(SBuf, w));
+  return 1;
+}
+#endif
+
 static void asm_ustore_forjit(ASMState *as, IRIns *ir)
 {
   const CCallInfo *ci = &lj_ir_callinfo[IRCALL_lj_func_storeuv_forjit];
