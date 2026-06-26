@@ -12,6 +12,13 @@ for helper in lj_gc_total_load lj_gc_total_store lj_gc_total_add \
   fi
 done
 
+if hits=$(grep -nE '__atomic_fetch_(add|sub)' src/lj_gc.h || true); \
+    [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'GC total accounting must use lj_atomic.h fetch helpers' >&2
+  exit 1
+fi
+
 if hits=$(grep -RInE -- 'g->gc\.total|G\(L\)->gc\.total' \
     src/lj_*.c src/lib_*.c src/lj_*.h 2>/dev/null | \
     grep -Ev '^(src/lj_gc\.h:|src/lj_obj\.h:|src/lj_asm_[^:]+\.h:)' || true); \

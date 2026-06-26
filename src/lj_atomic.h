@@ -33,6 +33,7 @@ LA_INLINE uint32_t la_load32_acq(const uint32_t *p){return __atomic_load_n(p,__A
 LA_INLINE uint64_t la_load64_acq(const uint64_t *p){return __atomic_load_n(p,__ATOMIC_ACQUIRE);}
 LA_INLINE void    *la_loadptr_rlx(void *const *p) {return __atomic_load_n((void *const *)p,__ATOMIC_RELAXED);}
 LA_INLINE void    *la_loadptr_acq(void *const *p) {return __atomic_load_n((void *const *)p,__ATOMIC_ACQUIRE);}
+#define la_loadfunc_acq(p) __atomic_load_n((p),__ATOMIC_ACQUIRE)
 
 /* ---- stores --------------------------------------------------------- */
 LA_INLINE void la_store8_rlx (uint8_t  *p,uint8_t  v){__atomic_store_n(p,v,__ATOMIC_RELAXED);}
@@ -44,6 +45,7 @@ LA_INLINE void la_store64_rel(uint64_t *p,uint64_t v){__atomic_store_n(p,v,__ATO
 LA_INLINE void la_store16_rel(uint16_t *p,uint16_t v){__atomic_store_n(p,v,__ATOMIC_RELEASE);}
 LA_INLINE void la_storeptr_rlx(void **p,void *v){__atomic_store_n(p,v,__ATOMIC_RELAXED);}
 LA_INLINE void la_storeptr_rel(void **p,void *v){__atomic_store_n(p,v,__ATOMIC_RELEASE);}
+#define la_storefunc_rel(p,v) __atomic_store_n((p),(v),__ATOMIC_RELEASE)
 
 /* ---- CAS (strong; returns 1 on success; *exp updated on failure) ---- */
 LA_INLINE int la_cas32(uint32_t *p,uint32_t *exp,uint32_t des,int mo_s,int mo_f)
@@ -94,6 +96,8 @@ LA_INLINE int la_cas128(la_u128 *p, la_u128 *exp, la_u128 des)
 /* ---- fetch ops ------------------------------------------------------ */
 LA_INLINE uint32_t la_add32_rlx(uint32_t *p,uint32_t v){return __atomic_fetch_add(p,v,__ATOMIC_RELAXED);}
 LA_INLINE uint64_t la_add64_rlx(uint64_t *p,uint64_t v){return __atomic_fetch_add(p,v,__ATOMIC_RELAXED);}
+LA_INLINE uint32_t la_sub32_rlx(uint32_t *p,uint32_t v){return __atomic_fetch_sub(p,v,__ATOMIC_RELAXED);}
+LA_INLINE uint64_t la_sub64_rlx(uint64_t *p,uint64_t v){return __atomic_fetch_sub(p,v,__ATOMIC_RELAXED);}
 LA_INLINE uint32_t la_sub32_acqrel(uint32_t *p,uint32_t v){return __atomic_fetch_sub(p,v,__ATOMIC_ACQ_REL);}
 LA_INLINE uint8_t  la_or8_rlx (uint8_t  *p,uint8_t  v){return __atomic_fetch_or(p,v,__ATOMIC_RELAXED);}
 LA_INLINE uint8_t  la_and8_rlx(uint8_t  *p,uint8_t  v){return __atomic_fetch_and(p,v,__ATOMIC_RELAXED);}

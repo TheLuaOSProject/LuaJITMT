@@ -119,9 +119,9 @@ static LJ_AINLINE void lj_gc_total_store(global_State *g, GCSize total)
 static LJ_AINLINE void lj_gc_total_add(global_State *g, GCSize bytes)
 {
 #if LJ_GC64
-  (void)__atomic_fetch_add(&g->gc.total, bytes, LA_RLX);
+  (void)la_add64_rlx(&g->gc.total, bytes);
 #else
-  (void)__atomic_fetch_add(&g->gc.total, (uint32_t)bytes, LA_RLX);
+  (void)la_add32_rlx(&g->gc.total, (uint32_t)bytes);
 #endif
   /* 04 section 4.8 accounting: atomicity matters, ordering is counter-only. */
 }
@@ -129,9 +129,9 @@ static LJ_AINLINE void lj_gc_total_add(global_State *g, GCSize bytes)
 static LJ_AINLINE void lj_gc_total_sub(global_State *g, GCSize bytes)
 {
 #if LJ_GC64
-  (void)__atomic_fetch_sub(&g->gc.total, bytes, LA_RLX);
+  (void)la_sub64_rlx(&g->gc.total, bytes);
 #else
-  (void)__atomic_fetch_sub(&g->gc.total, (uint32_t)bytes, LA_RLX);
+  (void)la_sub32_rlx(&g->gc.total, (uint32_t)bytes);
 #endif
   /* 04 section 4.8 accounting: atomicity matters, ordering is counter-only. */
 }

@@ -774,18 +774,23 @@ static void gdbjit_buildobj(GDBJITctx *ctx)
 
 /* -- Interface to GDB JIT API -------------------------------------------- */
 
-static int gdbjit_lock;
+static uint32_t gdbjit_lock;
 
 static void gdbjit_lock_acquire()
 {
-  while (__sync_lock_test_and_set(&gdbjit_lock, 1)) {
+  uint32_t expect;
+  do {
+    expect = 0;
+    if (la_cas32(&gdbjit_lock, &expect, 1, LA_ACQ_REL, LA_ACQ))
+      return;  /* 08 section 8.3: opt-in GDBJIT descriptor lock. */
     /* Just spin; futexes or pthreads aren't worth the portability cost. */
-  }
+    la_cpu_pause();
+  } while (1);
 }
 
 static void gdbjit_lock_release()
 {
-  __sync_lock_release(&gdbjit_lock);
+  la_store32_rel(&gdbjit_lock, 0);  /* 08 section 8.3: descriptor unlock. */
 }
 
 /* Add new entry to GDB JIT symbol chain. */

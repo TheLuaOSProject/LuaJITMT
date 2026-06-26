@@ -1496,12 +1496,12 @@ static LJ_AINLINE uint8_t hookmask_restore_(global_State *g, uint8_t h)
 
 static LJ_AINLINE lua_Hook hookf_load(global_State *g)
 {
-  return __atomic_load_n(&g->hookf, LA_ACQ);  /* 03 section 3.6 global hooks. */
+  return la_loadfunc_acq(&g->hookf);  /* 03 section 3.6 global hooks. */
 }
 
 static LJ_AINLINE void hookf_store(global_State *g, lua_Hook hookf)
 {
-  __atomic_store_n(&g->hookf, hookf, LA_REL);  /* 03 section 3.6 global hooks. */
+  la_storefunc_rel(&g->hookf, hookf);  /* 03 section 3.6 global hooks. */
 }
 
 static LJ_AINLINE int32_t hookcount_load(global_State *g)

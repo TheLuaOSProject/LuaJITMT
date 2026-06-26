@@ -11,6 +11,13 @@ for helper in hookf_load hookf_store hookcount_load hookcstart_load hookcount_st
   fi
 done
 
+if hits=$(grep -nE '__atomic_(load|store)_n\(&g->hookf' src/lj_obj.h || true); \
+    [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'global hook function publication must use lj_atomic.h helpers' >&2
+  exit 1
+fi
+
 if hits=$(grep -RInE -- '->hook(f|count|cstart)' src/lj_*.c src/lib_*.c src/lj_*.h 2>/dev/null | \
     grep -Ev '^src/lj_obj\.h:' || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
