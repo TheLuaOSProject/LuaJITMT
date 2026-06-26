@@ -561,24 +561,24 @@ static void gc_stats_push(lua_State *L)
 		  gc2_cycle_roots_minor_acq(g));
   gc_stats_setint(L, t, "minor_roots_enabled",
 		  gc2_minor_roots_enabled_acq(g));
-  gc_stats_setnum(L, t, "cycle_requests", la_load64_acq(&gc2->cycle_requests));
-  gc_stats_setnum(L, t, "cycle_starts", la_load64_acq(&gc2->cycle_starts));
+  gc_stats_setnum(L, t, "cycle_requests", gc2_cycle_requests_acq(g));
+  gc_stats_setnum(L, t, "cycle_starts", gc2_cycle_starts_acq(g));
   gc_stats_setnum(L, t, "major_cycle_starts",
-		  la_load64_acq(&gc2->major_cycle_starts));
+		  gc2_major_cycle_starts_acq(g));
   gc_stats_setnum(L, t, "minor_cycle_requests",
-		  la_load64_acq(&gc2->minor_cycle_requests));
+		  gc2_minor_cycle_requests_acq(g));
   gc_stats_setnum(L, t, "minor_cycle_starts",
-		  la_load64_acq(&gc2->minor_cycle_starts));
+		  gc2_minor_cycle_starts_acq(g));
   gc_stats_setnum(L, t, "minor_sweep_deferred",
-		  la_load64_acq(&gc2->minor_sweep_deferred));
+		  gc2_minor_sweep_deferred_acq(g));
   gc_stats_setnum(L, t, "minor_sweep_arenas",
 		  la_load64_acq(&gc2->minor_sweep_arenas));
   gc_stats_setnum(L, t, "minor_roots_deferred",
-		  la_load64_acq(&gc2->minor_roots_deferred));
+		  gc2_minor_roots_deferred_acq(g));
   gc_stats_setnum(L, t, "major_root_scans",
-		  la_load64_acq(&gc2->major_root_scans));
+		  gc2_major_root_scans_acq(g));
   gc_stats_setnum(L, t, "minor_root_scans",
-		  la_load64_acq(&gc2->minor_root_scans));
+		  gc2_minor_root_scans_acq(g));
   gc_stats_setnum(L, t, "minor_survival_base_live",
 		  la_load64_acq(&gc2->minor_survival_base_live));
   gc_stats_setnum(L, t, "minor_survival_bytes",
@@ -612,13 +612,13 @@ static void gc_stats_push(lua_State *L)
 		  lj_gc2_cycle_alloc_load(g));
   gc_stats_setnum(L, t, "trigger_bytes", lj_gc2_trigger_load(g));
   gc_stats_setnum(L, t, "hard_bytes", lj_gc2_hard_load(g));
-  gc_stats_setnum(L, t, "assist_runs", la_load64_acq(&gc2->assist_runs));
+  gc_stats_setnum(L, t, "assist_runs", gc2_assist_runs_acq(g));
   gc_stats_setnum(L, t, "assist_grey_drained",
-		  la_load64_acq(&gc2->assist_grey_drained));
+		  gc2_assist_grey_drained_acq(g));
   gc_stats_setnum(L, t, "assist_ssb_converted",
-		  la_load64_acq(&gc2->assist_ssb_converted));
+		  gc2_assist_ssb_converted_acq(g));
   gc_stats_setnum(L, t, "assist_weak_drained",
-		  la_load64_acq(&gc2->assist_weak_drained));
+		  gc2_assist_weak_drained_acq(g));
   gc_stats_setnum(L, t, "worker_runs", gc2_worker_runs_acq(g));
   gc_stats_setnum(L, t, "worker_grey_drained",
 		  gc2_worker_grey_drained_acq(g));

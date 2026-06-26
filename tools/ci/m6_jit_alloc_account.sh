@@ -55,10 +55,43 @@ for helper in gc2_cycle_requests_acq \
     exit 1
   fi
 done
-if hits=$(grep -nE -- '->[[:space:]]*gc2[.](cycle_requests|cycle_starts|major_cycle_starts|minor_cycle_requests|minor_cycle_starts|minor_sweep_deferred|minor_roots_deferred|major_root_scans|minor_root_scans)([^[:alnum:]_]|$)|&[[:space:]]*[^)]*->[[:space:]]*gc2[.](cycle_requests|cycle_starts|major_cycle_starts|minor_cycle_requests|minor_cycle_starts|minor_sweep_deferred|minor_roots_deferred|major_root_scans|minor_root_scans)([^[:alnum:]_]|$)' \
+if hits=$(grep -nE -- '->[[:space:]]*(gc2[.])?(cycle_requests|cycle_starts|major_cycle_starts|minor_cycle_requests|minor_cycle_starts|minor_sweep_deferred|minor_roots_deferred|major_root_scans|minor_root_scans)([^[:alnum:]_]|$)|&[[:space:]]*[^)]*->[[:space:]]*(gc2[.])?(cycle_requests|cycle_starts|major_cycle_starts|minor_cycle_requests|minor_cycle_starts|minor_sweep_deferred|minor_roots_deferred|major_root_scans|minor_root_scans)([^[:alnum:]_]|$)' \
     "$ROOT"/src/*.c || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
   printf '%s\n' 'raw GC2 cycle/root telemetry access is forbidden; use gc2_* helpers' >&2
+  exit 1
+fi
+for helper in gc2_assist_runs_acq \
+  gc2_assist_runs_store_rlx \
+  gc2_assist_runs_add \
+  gc2_assist_grey_drained_acq \
+  gc2_assist_grey_drained_store_rlx \
+  gc2_assist_grey_drained_add \
+  gc2_assist_ssb_converted_acq \
+  gc2_assist_ssb_converted_store_rlx \
+  gc2_assist_ssb_converted_add \
+  gc2_assist_weak_drained_acq \
+  gc2_assist_weak_drained_store_rlx \
+  gc2_assist_weak_drained_add \
+  gc2_jit_hard_checks_acq \
+  gc2_jit_hard_checks_store_rlx \
+  gc2_jit_hard_checks_add \
+  gc2_interp_hard_checks_acq \
+  gc2_interp_hard_checks_store_rlx \
+  gc2_interp_hard_checks_add \
+  gc2_jit_scoped_slots_retired_acq \
+  gc2_jit_scoped_slots_retired_store_rlx \
+  gc2_jit_scoped_slots_retired_add; do
+  if ! grep -qE "^[[:space:]]*static LJ_AINLINE .*[*[:space:]]${helper}[[:space:]]*[(]" \
+      "$ROOT/src/lj_obj.h"; then
+    printf '%s\n' "${helper} helper is required for GC2 assist/hard-check telemetry" >&2
+    exit 1
+  fi
+done
+if hits=$(grep -nE -- '->[[:space:]]*(gc2[.])?(assist_runs|assist_grey_drained|assist_ssb_converted|assist_weak_drained|jit_hard_checks|interp_hard_checks|jit_scoped_slots_retired)([^[:alnum:]_]|$)|&[[:space:]]*[^)]*->[[:space:]]*(gc2[.])?(assist_runs|assist_grey_drained|assist_ssb_converted|assist_weak_drained|jit_hard_checks|interp_hard_checks|jit_scoped_slots_retired)([^[:alnum:]_]|$)' \
+    "$ROOT"/src/*.c || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw GC2 assist/hard-check telemetry access is forbidden; use gc2_* helpers' >&2
   exit 1
 fi
 

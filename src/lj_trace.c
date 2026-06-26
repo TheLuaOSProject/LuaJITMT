@@ -775,7 +775,7 @@ static uint32_t lj_trace_flushscope_retire(global_State *g, uint64_t epoch)
     }
   }
   if (retired)
-    la_add64_rlx(&g->gc2.jit_scoped_slots_retired, retired);
+    gc2_jit_scoped_slots_retired_add(g, retired);
   return retired;
 }
 

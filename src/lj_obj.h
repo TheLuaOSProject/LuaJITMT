@@ -3753,6 +3753,122 @@ static LJ_AINLINE void gc2_assist_shift_rel(global_State *g, uint32_t shift)
   la_store32_rel(&g->gc2.assist_shift, shift);
 }
 
+static LJ_AINLINE uint64_t gc2_assist_runs_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.assist_runs);
+}
+
+static LJ_AINLINE void gc2_assist_runs_store_rlx(global_State *g, uint64_t n)
+{
+  la_store64_rlx(&g->gc2.assist_runs, n);
+}
+
+static LJ_AINLINE void gc2_assist_runs_add(global_State *g, uint64_t n)
+{
+  la_add64_rlx(&g->gc2.assist_runs, n);
+}
+
+static LJ_AINLINE uint64_t gc2_assist_grey_drained_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.assist_grey_drained);
+}
+
+static LJ_AINLINE void gc2_assist_grey_drained_store_rlx(global_State *g,
+							 uint64_t n)
+{
+  la_store64_rlx(&g->gc2.assist_grey_drained, n);
+}
+
+static LJ_AINLINE void gc2_assist_grey_drained_add(global_State *g,
+						   uint64_t n)
+{
+  la_add64_rlx(&g->gc2.assist_grey_drained, n);
+}
+
+static LJ_AINLINE uint64_t gc2_assist_ssb_converted_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.assist_ssb_converted);
+}
+
+static LJ_AINLINE void gc2_assist_ssb_converted_store_rlx(global_State *g,
+							  uint64_t n)
+{
+  la_store64_rlx(&g->gc2.assist_ssb_converted, n);
+}
+
+static LJ_AINLINE void gc2_assist_ssb_converted_add(global_State *g,
+						    uint64_t n)
+{
+  la_add64_rlx(&g->gc2.assist_ssb_converted, n);
+}
+
+static LJ_AINLINE uint64_t gc2_assist_weak_drained_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.assist_weak_drained);
+}
+
+static LJ_AINLINE void gc2_assist_weak_drained_store_rlx(global_State *g,
+							 uint64_t n)
+{
+  la_store64_rlx(&g->gc2.assist_weak_drained, n);
+}
+
+static LJ_AINLINE void gc2_assist_weak_drained_add(global_State *g,
+						   uint64_t n)
+{
+  la_add64_rlx(&g->gc2.assist_weak_drained, n);
+}
+
+static LJ_AINLINE uint64_t gc2_jit_hard_checks_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.jit_hard_checks);
+}
+
+static LJ_AINLINE void gc2_jit_hard_checks_store_rlx(global_State *g,
+						     uint64_t n)
+{
+  la_store64_rlx(&g->gc2.jit_hard_checks, n);
+}
+
+static LJ_AINLINE void gc2_jit_hard_checks_add(global_State *g, uint64_t n)
+{
+  la_add64_rlx(&g->gc2.jit_hard_checks, n);
+}
+
+static LJ_AINLINE uint64_t gc2_interp_hard_checks_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.interp_hard_checks);
+}
+
+static LJ_AINLINE void gc2_interp_hard_checks_store_rlx(global_State *g,
+							uint64_t n)
+{
+  la_store64_rlx(&g->gc2.interp_hard_checks, n);
+}
+
+static LJ_AINLINE void gc2_interp_hard_checks_add(global_State *g,
+						  uint64_t n)
+{
+  la_add64_rlx(&g->gc2.interp_hard_checks, n);
+}
+
+static LJ_AINLINE uint64_t gc2_jit_scoped_slots_retired_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.jit_scoped_slots_retired);
+}
+
+static LJ_AINLINE void gc2_jit_scoped_slots_retired_store_rlx(global_State *g,
+							      uint64_t n)
+{
+  la_store64_rlx(&g->gc2.jit_scoped_slots_retired, n);
+}
+
+static LJ_AINLINE void gc2_jit_scoped_slots_retired_add(global_State *g,
+							uint64_t n)
+{
+  la_add64_rlx(&g->gc2.jit_scoped_slots_retired, n);
+}
+
 static LJ_AINLINE void gc2_assist_active_store_rlx(global_State *g,
 						   uint32_t active)
 {

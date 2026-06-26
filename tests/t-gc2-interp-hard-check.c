@@ -39,16 +39,16 @@ static void test_hard_only_helper(lua_State *L, global_State *g)
 
   legacy_state0 = g->gc.state;
   arm_gc2_hard_mark(g);
-  interp_checks0 = la_load64_acq(&g->gc2.interp_hard_checks);
-  assist_runs0 = la_load64_acq(&g->gc2.assist_runs);
+  interp_checks0 = gc2_interp_hard_checks_acq(g);
+  assist_runs0 = gc2_assist_runs_acq(g);
 
   lj_gc_step_fixtop(L);
 
-  if (la_load64_acq(&g->gc2.interp_hard_checks) <= interp_checks0) {
+  if (gc2_interp_hard_checks_acq(g) <= interp_checks0) {
     fputs("hard-only helper did not enter the GC2 hard check\n", stderr);
     assert(0);
   }
-  if (la_load64_acq(&g->gc2.assist_runs) <= assist_runs0) {
+  if (gc2_assist_runs_acq(g) <= assist_runs0) {
     fputs("hard-only helper did not run the GC2 hard assist\n", stderr);
     assert(0);
   }
@@ -67,17 +67,17 @@ static void test_hard_only_c_check(lua_State *L, global_State *g)
 
   legacy_state0 = g->gc.state;
   arm_gc2_hard_mark(g);
-  interp_checks0 = la_load64_acq(&g->gc2.interp_hard_checks);
-  assist_runs0 = la_load64_acq(&g->gc2.assist_runs);
+  interp_checks0 = gc2_interp_hard_checks_acq(g);
+  assist_runs0 = gc2_assist_runs_acq(g);
 
   lj_gc_check(L);
 
-  if (la_load64_acq(&g->gc2.interp_hard_checks) <= interp_checks0) {
+  if (gc2_interp_hard_checks_acq(g) <= interp_checks0) {
     fputs("hard-only C lj_gc_check did not enter the GC2 hard check\n",
 	  stderr);
     assert(0);
   }
-  if (la_load64_acq(&g->gc2.assist_runs) <= assist_runs0) {
+  if (gc2_assist_runs_acq(g) <= assist_runs0) {
     fputs("hard-only C lj_gc_check did not run the GC2 hard assist\n",
 	  stderr);
     assert(0);
@@ -100,17 +100,17 @@ static void test_hard_only_fastfunc(lua_State *L, global_State *g)
     "assert(x == 'A')\n");
   legacy_state0 = g->gc.state;
   arm_gc2_hard_mark(g);
-  interp_checks0 = la_load64_acq(&g->gc2.interp_hard_checks);
-  assist_runs0 = la_load64_acq(&g->gc2.assist_runs);
+  interp_checks0 = gc2_interp_hard_checks_acq(g);
+  assist_runs0 = gc2_assist_runs_acq(g);
 
   ljt_lua_pcall(L, 0, 0, "lua_pcall");
 
-  if (la_load64_acq(&g->gc2.interp_hard_checks) <= interp_checks0) {
+  if (gc2_interp_hard_checks_acq(g) <= interp_checks0) {
     fputs("hard-only fast function did not enter the GC2 hard check\n",
 	  stderr);
     assert(0);
   }
-  if (la_load64_acq(&g->gc2.assist_runs) <= assist_runs0) {
+  if (gc2_assist_runs_acq(g) <= assist_runs0) {
     fputs("hard-only fast function did not run the GC2 hard assist\n",
 	  stderr);
     assert(0);
@@ -134,7 +134,7 @@ int main(void)
   luaL_openlibs(L);
   g = G(L);
   assert(g != NULL);
-  assert(la_load64_acq(&g->gc2.interp_hard_checks) == 0);
+  assert(gc2_interp_hard_checks_acq(g) == 0);
 
   ljt_lua_dostring(L, "if jit then jit.off() end\n");
   ljt_lua_loadstring(L,
@@ -142,17 +142,17 @@ int main(void)
     "assert(type(x) == 'table')\n");
 
   arm_gc2_hard_mark(g);
-  interp_checks0 = la_load64_acq(&g->gc2.interp_hard_checks);
-  assist_runs0 = la_load64_acq(&g->gc2.assist_runs);
+  interp_checks0 = gc2_interp_hard_checks_acq(g);
+  assist_runs0 = gc2_assist_runs_acq(g);
 
   lj_gc_threshold_store(g, g->gc.total);
   ljt_lua_pcall(L, 0, 0, "lua_pcall");
 
-  if (la_load64_acq(&g->gc2.interp_hard_checks) <= interp_checks0) {
+  if (gc2_interp_hard_checks_acq(g) <= interp_checks0) {
     fputs("interpreted TNEW did not enter the GC2 hard check\n", stderr);
     assert(0);
   }
-  if (la_load64_acq(&g->gc2.assist_runs) <= assist_runs0) {
+  if (gc2_assist_runs_acq(g) <= assist_runs0) {
     fputs("interpreted TNEW did not run the GC2 hard assist\n", stderr);
     assert(0);
   }
@@ -164,17 +164,17 @@ int main(void)
     "assert(type(x) == 'table')\n");
   legacy_state0 = g->gc.state;
   arm_gc2_hard_mark(g);
-  interp_checks0 = la_load64_acq(&g->gc2.interp_hard_checks);
-  assist_runs0 = la_load64_acq(&g->gc2.assist_runs);
+  interp_checks0 = gc2_interp_hard_checks_acq(g);
+  assist_runs0 = gc2_assist_runs_acq(g);
 
   ljt_lua_pcall(L, 0, 0, "lua_pcall");
 
-  if (la_load64_acq(&g->gc2.interp_hard_checks) <= interp_checks0) {
+  if (gc2_interp_hard_checks_acq(g) <= interp_checks0) {
     fputs("interpreted hard-only TNEW did not enter the GC2 hard check\n",
 	  stderr);
     assert(0);
   }
-  if (la_load64_acq(&g->gc2.assist_runs) <= assist_runs0) {
+  if (gc2_assist_runs_acq(g) <= assist_runs0) {
     fputs("interpreted hard-only TNEW did not run the GC2 hard assist\n",
 	  stderr);
     assert(0);

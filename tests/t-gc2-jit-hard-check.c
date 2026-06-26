@@ -27,16 +27,16 @@ static void run_hard_alloc_trace(lua_State *L, global_State *g,
   la_store32_rel(&g->gc2.assist_shift, 0);
   la_store64_rel(&g->gc2.alloc_since_trigger, 2);
   legacy_state0 = g->gc.state;
-  jit_checks0 = la_load64_acq(&g->gc2.jit_hard_checks);
-  assist_runs0 = la_load64_acq(&g->gc2.assist_runs);
+  jit_checks0 = gc2_jit_hard_checks_acq(g);
+  assist_runs0 = gc2_assist_runs_acq(g);
 
   ljt_lua_dostring(L, src);
 
-  if (la_load64_acq(&g->gc2.jit_hard_checks) <= jit_checks0) {
+  if (gc2_jit_hard_checks_acq(g) <= jit_checks0) {
     fprintf(stderr, "%s did not enter the x64 GC2 hard check\n", name);
     assert(0);
   }
-  if (la_load64_acq(&g->gc2.assist_runs) <= assist_runs0) {
+  if (gc2_assist_runs_acq(g) <= assist_runs0) {
     fprintf(stderr, "%s did not run the GC2 hard assist\n", name);
     assert(0);
   }
@@ -57,7 +57,7 @@ int main(void)
   luaL_openlibs(L);
   g = G(L);
   assert(g != NULL);
-  assert(la_load64_acq(&g->gc2.jit_hard_checks) == 0);
+  assert(gc2_jit_hard_checks_acq(g) == 0);
 
   ljt_lua_dostring(L,
     "assert(jit and jit.status())\n"

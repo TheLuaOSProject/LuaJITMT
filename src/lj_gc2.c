@@ -132,13 +132,13 @@ void lj_gc2_init(global_State *g)
   lj_gc2_cycle_alloc_store(g, 0);
   lj_gc2_trigger_store(g, 0);
   lj_gc2_hard_store(g, 0);
-  la_store64_rlx(&g->gc2.assist_runs, 0);
-  la_store64_rlx(&g->gc2.assist_grey_drained, 0);
-  la_store64_rlx(&g->gc2.assist_ssb_converted, 0);
-  la_store64_rlx(&g->gc2.assist_weak_drained, 0);
-  la_store64_rlx(&g->gc2.jit_hard_checks, 0);
-  la_store64_rlx(&g->gc2.interp_hard_checks, 0);
-  la_store64_rlx(&g->gc2.jit_scoped_slots_retired, 0);
+  gc2_assist_runs_store_rlx(g, 0);
+  gc2_assist_grey_drained_store_rlx(g, 0);
+  gc2_assist_ssb_converted_store_rlx(g, 0);
+  gc2_assist_weak_drained_store_rlx(g, 0);
+  gc2_jit_hard_checks_store_rlx(g, 0);
+  gc2_interp_hard_checks_store_rlx(g, 0);
+  gc2_jit_scoped_slots_retired_store_rlx(g, 0);
   gc2_assist_active_store_rlx(g, 0);
   gc2_generational_store_rlx(g, 0);
   gc2_grey_stack_store_rlx(g, NULL);
@@ -3077,7 +3077,7 @@ uint32_t lj_gc2_assist(global_State *g, TGState *tg)
   if (!gc2_assist_active_cas(g, &expect, 1))
     return 0;  /* Current global grey deque has one owner side. */
   lj_tg_gc_assist_store_rlx(tg, 1);
-  la_add64_rlx(&g->gc2.assist_runs, 1);  /* 05 section 5.11 telemetry. */
+  gc2_assist_runs_add(g, 1);  /* 05 section 5.11 telemetry. */
   shift = gc2_assist_shift_acq(g);
   if (shift > 8u)
     shift = 8u;
@@ -3103,11 +3103,11 @@ uint32_t lj_gc2_assist(global_State *g, TGState *tg)
       weak = lj_gc2_weak_drain(g, limit - work);  /* 05 section 5.11. */
   }
   if (n)
-    la_add64_rlx(&g->gc2.assist_grey_drained, n);
+    gc2_assist_grey_drained_add(g, n);
   if (converted)
-    la_add64_rlx(&g->gc2.assist_ssb_converted, converted);
+    gc2_assist_ssb_converted_add(g, converted);
   if (weak)
-    la_add64_rlx(&g->gc2.assist_weak_drained, weak);
+    gc2_assist_weak_drained_add(g, weak);
   lj_tg_gc_assist_store_rlx(tg, 0);
   gc2_assist_active_rel(g, 0);
   return n + weak;

@@ -2263,7 +2263,7 @@ int LJ_FASTCALL lj_gc_step(lua_State *L)
 static void gc_step_assist_top(lua_State *L, global_State *g, int legacy_step)
 {
   if (lj_gc2_hard_limit_reached(g)) {
-    la_add64_rlx(&g->gc2.interp_hard_checks, 1);
+    gc2_interp_hard_checks_add(g, 1);
     lj_gc2_assist(g, L2TG(L));  /* 05 section 5.11 interpreter assist bridge. */
   }
   if (legacy_step)
@@ -2296,7 +2296,7 @@ int LJ_FASTCALL lj_gc_step_jit(global_State *g, MSize steps)
   legacy_step = lj_gc_total_load(g) >= lj_gc_threshold_load(g);
   hard_step = lj_gc2_hard_limit_reached(g);
   if (hard_step) {
-    la_add64_rlx(&g->gc2.jit_hard_checks, 1);
+    gc2_jit_hard_checks_add(g, 1);
     lj_gc2_assist(g, L2TG(L));  /* 05 section 5.11 trace-side assist bridge. */
   }
   if (legacy_step) {
