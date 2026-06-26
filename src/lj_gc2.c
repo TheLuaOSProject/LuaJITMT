@@ -148,9 +148,9 @@ void lj_gc2_init(global_State *g)
   gc2_grey_pushed_store_rlx(g, 0);
   gc2_grey_drained_store_rlx(g, 0);
   for (i = 0; i < LJ_GC2_WORKER_MAX; i++)
-    g->gc2.worker_thread[i] = NULL;
+    gc2_worker_thread_store_rlx(g, i, NULL);
   for (i = 0; i < LJ_GC2_WORKER_MAX; i++)
-    g->gc2.worker_tg[i] = NULL;
+    gc2_worker_tg_store_rlx(g, i, NULL);
   gc2_n_workers_store_rlx(g, 0);
   gc2_worker_stop_store_rlx(g, 0);
   gc2_worker_wake_store_rlx(g, 0);
@@ -375,14 +375,14 @@ static int gc2_worker_release_tg_slot(global_State *g, uint32_t i)
   TGState *tg;
   if (!g || i >= LJ_GC2_WORKER_MAX)
     return 0;
-  tg = (TGState *)g->gc2.worker_tg[i];
+  tg = gc2_worker_tg_acq(g, i);
   if (!tg)
     return 1;
   if (gc2_worker_tg_registered(g, tg))
     return 0;
   lj_tg_fini_thread(g, tg);
   lj_mem_free(g, tg, sizeof(TGState));
-  g->gc2.worker_tg[i] = NULL;
+  gc2_worker_tg_store_rlx(g, i, NULL);
   return 1;
 }
 
@@ -433,12 +433,12 @@ static int gc2_worker_start_count(global_State *g, uint32_t n)
     thr->tid = lj_thr_newid();
     tg->tid = thr->tid;
     tg->alloc.owner_tid = thr->tid;
-    g->gc2.worker_thread[i] = thr;
-    g->gc2.worker_tg[i] = tg;
+    gc2_worker_thread_store_rlx(g, i, thr);
+    gc2_worker_tg_store_rlx(g, i, tg);
     rc = lj_thr_create(thr, gc2_worker_main, tg);
     if (rc != 0) {
-      g->gc2.worker_thread[i] = NULL;
-      g->gc2.worker_tg[i] = NULL;
+      gc2_worker_thread_store_rlx(g, i, NULL);
+      gc2_worker_tg_store_rlx(g, i, NULL);
       lj_tg_fini_thread(g, tg);
       lj_mem_free(g, tg, sizeof(TGState));
       lj_mem_free(g, thr, sizeof(LJThr));
@@ -492,7 +492,7 @@ void lj_gc2_worker_stop(global_State *g)
   if (!g)
     return;
   for (i = 0; i < LJ_GC2_WORKER_MAX; i++)
-    any |= g->gc2.worker_thread[i] != NULL;
+    any |= gc2_worker_thread_acq(g, i) != NULL;
   if (!any) {
     (void)gc2_worker_release_tg_slots(g);
     gc2_n_workers_rel(g, 0);
@@ -506,11 +506,11 @@ void lj_gc2_worker_stop(global_State *g)
     lj_tg_in_native_rel(self, 1);  /* Join wait can remote-ack workers. */
   }
   for (i = 0; i < LJ_GC2_WORKER_MAX; i++) {
-    LJThr *thr = (LJThr *)g->gc2.worker_thread[i];
+    LJThr *thr = (LJThr *)gc2_worker_thread_acq(g, i);
     if (!thr)
       continue;
     (void)lj_thr_join(thr, NULL);
-    g->gc2.worker_thread[i] = NULL;
+    gc2_worker_thread_store_rlx(g, i, NULL);
     lj_mem_free(g, thr, sizeof(LJThr));
   }
   if (self)

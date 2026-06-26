@@ -68,6 +68,23 @@ if hits=$(grep -nE -- '->[[:space:]]*gc2[.]ssb_head|&[[:space:]]*[^)]*->[[:space
   printf '%s\n' 'raw GC2 published SSB stack access is forbidden; use gc2_ssb_head_* helpers' >&2
   exit 1
 fi
+for helper in gc2_worker_thread_acq \
+  gc2_worker_thread_store_rlx \
+  gc2_worker_tg_acq \
+  gc2_worker_tg_store_rlx; do
+  if ! grep -qE "^[[:space:]]*static LJ_AINLINE .*[*[:space:]]${helper}[[:space:]]*[(]" \
+      "$ROOT/src/lj_obj.h"; then
+    printf '%s\n' "${helper} helper is required for GC2 worker parking slots" >&2
+    exit 1
+  fi
+done
+if hits=$(grep -nE -- '->[[:space:]]*gc2[.](worker_thread|worker_tg)[[]|&[[:space:]]*[^)]*->[[:space:]]*gc2[.](worker_thread|worker_tg)[[]' \
+    "$ROOT/src/lj_gc2.c" \
+    "$ROOT/tests/t-gc2-worker-scheduler.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw GC2 worker parking slot access is forbidden; use gc2_worker_* helpers' >&2
+  exit 1
+fi
 for helper in gc2_ssb_published_acq \
   gc2_ssb_published_store_rlx \
   gc2_ssb_published_add \

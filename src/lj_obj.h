@@ -3578,6 +3578,28 @@ static LJ_AINLINE void gc2_n_workers_rel(global_State *g, uint32_t n)
   la_store32_rel(&g->gc2.n_workers, n);
 }
 
+static LJ_AINLINE void *gc2_worker_thread_acq(global_State *g, uint32_t i)
+{
+  return la_loadptr_acq((void *const *)&g->gc2.worker_thread[i]);
+}
+
+static LJ_AINLINE void gc2_worker_thread_store_rlx(global_State *g,
+						   uint32_t i, void *thr)
+{
+  la_storeptr_rlx((void **)&g->gc2.worker_thread[i], thr);
+}
+
+static LJ_AINLINE TGState *gc2_worker_tg_acq(global_State *g, uint32_t i)
+{
+  return (TGState *)la_loadptr_acq((void *const *)&g->gc2.worker_tg[i]);
+}
+
+static LJ_AINLINE void gc2_worker_tg_store_rlx(global_State *g, uint32_t i,
+					       TGState *tg)
+{
+  la_storeptr_rlx((void **)&g->gc2.worker_tg[i], tg);
+}
+
 static LJ_AINLINE uint32_t gc2_worker_stop_acq(global_State *g)
 {
   return la_load32_acq(&g->gc2.worker_stop);

@@ -90,7 +90,7 @@ static void mark_worker_tgs_sweep_ready(global_State *g, uint32_t sweep_cycle)
 {
   uint32_t i;
   for (i = 0; i < LJ_GC2_WORKER_MAX; i++) {
-    TGState *worker = (TGState *)g->gc2.worker_tg[i];
+    TGState *worker = gc2_worker_tg_acq(g, i);
     if (!worker)
       continue;
     worker->alloc.prepare_epoch = sweep_cycle;
@@ -483,8 +483,8 @@ static void test_async_sweep_and_stop(lua_State *L, global_State *g,
   assert(la_load64_acq(&g->gc2.worker_async_progress) > async0);
 
   lj_gc2_worker_stop(g);
-  assert(g->gc2.worker_thread[0] == NULL);
-  assert(g->gc2.worker_thread[1] == NULL);
+  assert(gc2_worker_thread_acq(g, 0) == NULL);
+  assert(gc2_worker_thread_acq(g, 1) == NULL);
   assert(la_load32_acq(&g->gc2.n_workers) == 0);
   assert(la_load32_acq(&g->gc2.worker_exited) == 2);
   assert(la_load32_acq(&g->gc2.n_threads) == 2);
@@ -508,8 +508,8 @@ int main(void)
   assert(tg != NULL);
 
   assert(lj_gc2_workers_set(g, 2) == 1);
-  assert(g->gc2.worker_thread[0] != NULL);
-  assert(g->gc2.worker_thread[1] != NULL);
+  assert(gc2_worker_thread_acq(g, 0) != NULL);
+  assert(gc2_worker_thread_acq(g, 1) != NULL);
   assert(la_load32_acq(&g->gc2.n_workers) == 2);
   assert(la_load32_acq(&g->gc2.worker_started) == 2);
   assert(la_load32_acq(&g->gc2.n_threads) == 3);
