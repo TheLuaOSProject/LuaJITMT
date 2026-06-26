@@ -1391,6 +1391,13 @@ LUA_API int lua_resume(lua_State *L, int nargs)
 
 static void api_gc_setlogical(global_State *g, GCSize threshold)
 {
+  uint64_t soft = ~(uint64_t)0;
+  if (threshold != LJ_MAX_MEM) {
+    GCSize total = lj_gc_total_load(g);
+    soft = (uint64_t)total > soft - LJ_GC2_HELPER_IDLE_STEP ?
+	   soft : (uint64_t)total + LJ_GC2_HELPER_IDLE_STEP;
+  }
+  lj_gc2_helper_soft_limit_store(g, soft);
   if (la_load32_acq(&g->mt_live) != 0) {
     lj_gc_mt_threshold_store(g, threshold);
     if (la_load32_acq(&g->mt_live) == 0)

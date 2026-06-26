@@ -491,6 +491,37 @@ static void emit_rma(ASMState *as, x86Op xo, Reg rr, const void *addr)
   }
 }
 
+#if LJ_TARGET_X64 && LJ_GC64 && !LJ_ABI_WIN
+/* mov [addr], i, clobbering ra. Only use at trace heads with a free GPR. */
+static void emit_movmroi_addr_nosave(ASMState *as, Reg ra, const void *addr,
+				     int32_t i)
+{
+  emit_i32(as, i);
+  if (checki32(mcpofs(as, addr)) && checki32(mctopofs(as, addr))) {
+    emit_rmro(as, XO_MOVmi, 0, RID_RIP, (int32_t)mcpofs(as, addr));
+  } else if (!checki32((intptr_t)addr)) {
+    emit_rmro(as, XO_MOVmi, 0, ra, 0);
+    emit_loadu64(as, ra, (uintptr_t)addr);
+  } else {
+    MCode *p = as->mcp;
+    asm_mcode_put_i32(as, p-4, ptr2addr(addr));
+    asm_mcode_put_u8(as, p-5, MODRM(XM_SCALE1, RID_ESP, RID_EBP));
+    as->mcp = emit_opm(as, XO_MOVmi, XM_OFS0, 0, RID_ESP, p, -5);
+  }
+}
+
+#define emit_setvmstate_root(as, i) \
+  (emit_movmroi_addr_nosave((as), RID_ECX, \
+			    (void *)&J2G((as)->J)->vmstate, \
+			    (int32_t)(i)), \
+   emit_movmroi((as), RID_DISPATCH, DISPATCH_TG(vmstate), (int32_t)(i)))
+
+#endif
+
+#ifndef emit_setvmstate_root
+#define emit_setvmstate_root(as, i) emit_setvmstate((as), (i))
+#endif
+
 /* Load 64 bit IR constant into register. */
 static void emit_loadk64(ASMState *as, Reg r, IRIns *ir)
 {

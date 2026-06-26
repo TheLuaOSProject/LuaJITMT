@@ -220,6 +220,17 @@ static LJ_AINLINE void lj_gc2_hard_store(global_State *g, uint64_t bytes)
   la_store64_rel(&g->gc2.hard_bytes, bytes);
 }
 
+static LJ_AINLINE uint64_t lj_gc2_helper_soft_limit_load(global_State *g)
+{
+  return la_load64_acq(&g->gc2.helper_soft_limit);
+}
+
+static LJ_AINLINE void lj_gc2_helper_soft_limit_store(global_State *g,
+						      uint64_t bytes)
+{
+  la_store64_rel(&g->gc2.helper_soft_limit, bytes);
+}
+
 static LJ_AINLINE int lj_gc2_hard_limit_reached(global_State *g)
 {
   return lj_gc2_alloc_since_load(g) > lj_gc2_hard_load(g);

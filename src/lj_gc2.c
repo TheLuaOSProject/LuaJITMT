@@ -132,6 +132,7 @@ void lj_gc2_init(global_State *g)
   lj_gc2_cycle_alloc_store(g, 0);
   lj_gc2_trigger_store(g, 0);
   lj_gc2_hard_store(g, 0);
+  lj_gc2_helper_soft_limit_store(g, LJ_GC2_HELPER_IDLE_STEP);
   gc2_assist_runs_store_rlx(g, 0);
   gc2_assist_grey_drained_store_rlx(g, 0);
   gc2_assist_ssb_converted_store_rlx(g, 0);
@@ -626,6 +627,13 @@ uint32_t lj_gc2_assist_shift_from_stepmul(uint32_t stepmul)
   return shift;
 }
 
+static uint64_t gc2_helper_soft_next(GCSize total)
+{
+  uint64_t max = ~(uint64_t)0;
+  return (uint64_t)total > max - LJ_GC2_HELPER_IDLE_STEP ?
+	 max : (uint64_t)total + LJ_GC2_HELPER_IDLE_STEP;
+}
+
 void lj_gc2_update_pacing(global_State *g)
 {
   uint64_t live, legacy_live, gc2_live, trigger, hard;
@@ -662,6 +670,7 @@ void lj_gc2_publish_idle_threshold(global_State *g)
   since = lj_gc2_alloc_since_load(g);
   remain = since >= trigger ? 0 : trigger - since;
   total = (uint64_t)lj_gc_total_load(g);
+  lj_gc2_helper_soft_limit_store(g, gc2_helper_soft_next((GCSize)total));
   limit = (uint64_t)LJ_MAX_MEM - 1u;
   if (remain > limit || total > limit - remain)
     lj_gc_threshold_store(g, (GCSize)limit);
@@ -677,6 +686,7 @@ static void gc2_reset_alloc_trigger(global_State *g)
        tg = lj_tg_next_acq(tg))
     (void)lj_gc2_flush_alloc(g, tg);
   lj_gc2_cycle_alloc_store(g, lj_gc2_alloc_since_xchg(g, 0));
+  lj_gc2_helper_soft_limit_store(g, ~(uint64_t)0);
 }
 
 static TGState *gc2_tg_for_mem(global_State *g, const void *p)

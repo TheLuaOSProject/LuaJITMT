@@ -3460,8 +3460,9 @@ static int asm_x86_isvmstate(MCode *p, MCode *prev, uint32_t ilen,
   } else if (p[1] == MODRM(XM_OFS0, 0, RID_ESP) &&
 	     p[2] == MODRM(XM_SCALE1, RID_ESP, RID_EBP)) {
     return (uintptr_t)(int64_t)*(int32_t *)(p+3) == stateaddr;
-  } else if (p[1] == MODRM(XM_OFS0, 0, RID_ECX)) {
-    return asm_x86_prevloadaddr(prev, prevlen, RID_ECX, stateaddr);
+  } else if ((p[1] & 0xf8) == MODRM(XM_OFS0, 0, 0) &&
+	     (p[1] & 7) != RID_ESP) {
+    return asm_x86_prevloadaddr(prev, prevlen, (Reg)(p[1] & 7), stateaddr);
   }
   return 0;
 }

@@ -1929,7 +1929,7 @@ static void asm_head_root(ASMState *as)
 {
   int32_t spadj;
   asm_head_root_base(as);
-  emit_setvmstate(as, (int32_t)as->T->traceno);
+  emit_setvmstate_root(as, (int32_t)as->T->traceno);
   spadj = asm_stack_adjust(as);
   as->T->spadjust = (uint16_t)spadj;
   emit_spsub(as, spadj);

@@ -268,6 +268,10 @@ assert(s==2080.0)
       assert_dump_contains(t, dump, "XPOLL", "x64 loop trace")
       assert_x64_loop_poll_count(t, dump,
         "x64 IR_XPOLL must lower to a TG poll at the loop label", 1)
+      local root_mcode = t:read(dump):match("TRACE 1 mcode.-TRACE 1 stop")
+      if root_mcode and contains(root_mcode, "push rcx") then
+        error("trace-head vmstate publish must not save rcx in simple traces", 2)
+      end
 
       local funcf_dump = t:tmp("lj_t-jit-xpoll-funcf.dump")
       luajit_dump(t, funcf_dump, "-jdump=im", [=[

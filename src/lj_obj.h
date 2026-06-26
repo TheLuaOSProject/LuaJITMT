@@ -1226,6 +1226,7 @@ typedef struct GC2State {
   uint64_t cycle_alloc_bytes;  /* Flushed allocation bytes at cycle start. */
   uint64_t trigger_bytes;  /* Allocation bytes before next GC2 trigger. */
   uint64_t hard_bytes;	/* Allocation bytes before mutator assists. */
+  uint64_t helper_soft_limit;  /* Next helper-side idle totalbytes GC step. */
   uint64_t assist_runs;  /* Mutator assist attempts past hard limit. */
   uint64_t assist_grey_drained;  /* Grey objects traced by assists. */
   uint64_t assist_ssb_converted;  /* SSB entries converted by assists. */
