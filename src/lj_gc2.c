@@ -83,21 +83,21 @@ void lj_gc2_init(global_State *g)
     gc2_hs_ack_latency_bucket_store_rlx(g, i, 0);
   gc2_smr_reclaim_runs_store_rlx(g, 0);
   gc2_smr_reclaimed_store_rlx(g, 0);
-  la_store64_rlx(&g->gc2.cycle_requests, 0);
-  la_store64_rlx(&g->gc2.cycle_starts, 0);
-  la_store64_rlx(&g->gc2.major_cycle_starts, 0);
-  la_store64_rlx(&g->gc2.minor_cycle_requests, 0);
-  la_store64_rlx(&g->gc2.minor_cycle_starts, 0);
+  gc2_cycle_requests_store_rlx(g, 0);
+  gc2_cycle_starts_store_rlx(g, 0);
+  gc2_major_cycle_starts_store_rlx(g, 0);
+  gc2_minor_cycle_requests_store_rlx(g, 0);
+  gc2_minor_cycle_starts_store_rlx(g, 0);
   gc2_cycle_minor_requested_store_rlx(g, 0);
   gc2_cycle_sweep_minor_store_rlx(g, 0);
   gc2_minor_sweep_enabled_store_rlx(g, 0);
   gc2_cycle_roots_minor_store_rlx(g, 0);
   gc2_minor_roots_enabled_store_rlx(g, 0);
-  la_store64_rlx(&g->gc2.minor_sweep_deferred, 0);
+  gc2_minor_sweep_deferred_store_rlx(g, 0);
   la_store64_rlx(&g->gc2.minor_sweep_arenas, 0);
-  la_store64_rlx(&g->gc2.minor_roots_deferred, 0);
-  la_store64_rlx(&g->gc2.major_root_scans, 0);
-  la_store64_rlx(&g->gc2.minor_root_scans, 0);
+  gc2_minor_roots_deferred_store_rlx(g, 0);
+  gc2_major_root_scans_store_rlx(g, 0);
+  gc2_minor_root_scans_store_rlx(g, 0);
   la_store64_rlx(&g->gc2.minor_survival_base_live, 0);
   la_store64_rlx(&g->gc2.minor_survival_bytes, 0);
   gc2_minor_survival_pct_store_rlx(g, 0);
@@ -586,7 +586,7 @@ static int gc2_request_cycle(global_State *g, TGState *tg)
     return 0;  /* Honor collectgarbage("stop"). */
   if (!gc2_cycle_leader_cas(g, &expect, tid))
     return 0;  /* 05 section 5.11 nonblocking cycle-request token. */
-  la_add64_rlx(&g->gc2.cycle_requests, 1);  /* 05 section 5.11 telemetry. */
+  gc2_cycle_requests_add(g, 1);  /* 05 section 5.11 telemetry. */
   lj_gc_threshold_store(g, lj_gc_total_load(g));  /* Legacy cycle-driver bridge. */
   return 1;
 }
@@ -745,15 +745,15 @@ void lj_gc2_legacy_mark_begin(global_State *g)
   gc2_cycle_sweep_minor_rel(g, sweep_minor);
   gc2_cycle_roots_minor_rel(g, roots_minor);
   if (minor_requested)
-    la_add64_rlx(&g->gc2.minor_cycle_requests, 1);
+    gc2_minor_cycle_requests_add(g, 1);
   if (minor_requested && !sweep_minor)
-    la_add64_rlx(&g->gc2.minor_sweep_deferred, 1);
+    gc2_minor_sweep_deferred_add(g, 1);
   if (minor_requested && !roots_minor)
-    la_add64_rlx(&g->gc2.minor_roots_deferred, 1);
+    gc2_minor_roots_deferred_add(g, 1);
   if (roots_minor)
-    la_add64_rlx(&g->gc2.minor_cycle_starts, 1);
+    gc2_minor_cycle_starts_add(g, 1);
   else
-    la_add64_rlx(&g->gc2.major_cycle_starts, 1);
+    gc2_major_cycle_starts_add(g, 1);
   /* Publish MARK before clearing the request token, so late allocators stop. */
   gc2_phase_rel(g, LJ_GC2_MARK);
   leader = gc2_cycle_leader_xchg_acqrel(g, 0);
@@ -761,7 +761,7 @@ void lj_gc2_legacy_mark_begin(global_State *g)
     lj_tg_attach(g, tg);
   (void)gc2_cycle_inc_acqrel(g);
   if (leader)
-    la_add64_rlx(&g->gc2.cycle_starts, 1);
+    gc2_cycle_starts_add(g, 1);
   gc2_marks_this_round_store_rlx(g, 0);
   if (!minor_requested)
     (void)gc2_flush_and_drain_ssb(g);  /* Discard remembered roots for majors. */
@@ -1741,7 +1741,7 @@ void lj_gc2_scan_roots(global_State *g, lua_State *L)
 {
   if (!g)
     return;
-  la_add64_rlx(&g->gc2.major_root_scans, 1);
+  gc2_major_root_scans_add(g, 1);
   gc2_scan_global_roots(g);
   gc2_scan_thread_roots(g, L);
 }
@@ -1750,7 +1750,7 @@ void lj_gc2_scan_minor_roots(global_State *g, lua_State *L)
 {
   if (!g || gc2_cycle_roots_minor_acq(g) == 0)
     return;
-  la_add64_rlx(&g->gc2.minor_root_scans, 1);
+  gc2_minor_root_scans_add(g, 1);
   gc2_scan_pending_roots(g);
   gc2_scan_tg_roots(g);
   gc2_scan_thread_roots(g, L);

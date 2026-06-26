@@ -1846,6 +1846,155 @@ static LJ_AINLINE uint32_t gc2_cycle_inc_acqrel(global_State *g)
   return next;
 }
 
+static LJ_AINLINE uint64_t gc2_cycle_requests_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.cycle_requests);
+}
+
+static LJ_AINLINE void gc2_cycle_requests_store_rlx(global_State *g,
+						    uint64_t n)
+{
+  la_store64_rlx(&g->gc2.cycle_requests, n);
+}
+
+static LJ_AINLINE void gc2_cycle_requests_add(global_State *g, uint64_t n)
+{
+  la_add64_rlx(&g->gc2.cycle_requests, n);
+}
+
+static LJ_AINLINE uint64_t gc2_cycle_starts_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.cycle_starts);
+}
+
+static LJ_AINLINE void gc2_cycle_starts_store_rlx(global_State *g,
+						  uint64_t n)
+{
+  la_store64_rlx(&g->gc2.cycle_starts, n);
+}
+
+static LJ_AINLINE void gc2_cycle_starts_add(global_State *g, uint64_t n)
+{
+  la_add64_rlx(&g->gc2.cycle_starts, n);
+}
+
+static LJ_AINLINE uint64_t gc2_major_cycle_starts_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.major_cycle_starts);
+}
+
+static LJ_AINLINE void gc2_major_cycle_starts_store_rlx(global_State *g,
+							uint64_t n)
+{
+  la_store64_rlx(&g->gc2.major_cycle_starts, n);
+}
+
+static LJ_AINLINE void gc2_major_cycle_starts_add(global_State *g,
+						  uint64_t n)
+{
+  la_add64_rlx(&g->gc2.major_cycle_starts, n);
+}
+
+static LJ_AINLINE uint64_t gc2_minor_cycle_requests_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.minor_cycle_requests);
+}
+
+static LJ_AINLINE void gc2_minor_cycle_requests_store_rlx(global_State *g,
+							  uint64_t n)
+{
+  la_store64_rlx(&g->gc2.minor_cycle_requests, n);
+}
+
+static LJ_AINLINE void gc2_minor_cycle_requests_add(global_State *g,
+						    uint64_t n)
+{
+  la_add64_rlx(&g->gc2.minor_cycle_requests, n);
+}
+
+static LJ_AINLINE uint64_t gc2_minor_cycle_starts_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.minor_cycle_starts);
+}
+
+static LJ_AINLINE void gc2_minor_cycle_starts_store_rlx(global_State *g,
+							uint64_t n)
+{
+  la_store64_rlx(&g->gc2.minor_cycle_starts, n);
+}
+
+static LJ_AINLINE void gc2_minor_cycle_starts_add(global_State *g,
+						  uint64_t n)
+{
+  la_add64_rlx(&g->gc2.minor_cycle_starts, n);
+}
+
+static LJ_AINLINE uint64_t gc2_minor_sweep_deferred_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.minor_sweep_deferred);
+}
+
+static LJ_AINLINE void gc2_minor_sweep_deferred_store_rlx(global_State *g,
+							  uint64_t n)
+{
+  la_store64_rlx(&g->gc2.minor_sweep_deferred, n);
+}
+
+static LJ_AINLINE void gc2_minor_sweep_deferred_add(global_State *g,
+						    uint64_t n)
+{
+  la_add64_rlx(&g->gc2.minor_sweep_deferred, n);
+}
+
+static LJ_AINLINE uint64_t gc2_minor_roots_deferred_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.minor_roots_deferred);
+}
+
+static LJ_AINLINE void gc2_minor_roots_deferred_store_rlx(global_State *g,
+							  uint64_t n)
+{
+  la_store64_rlx(&g->gc2.minor_roots_deferred, n);
+}
+
+static LJ_AINLINE void gc2_minor_roots_deferred_add(global_State *g,
+						    uint64_t n)
+{
+  la_add64_rlx(&g->gc2.minor_roots_deferred, n);
+}
+
+static LJ_AINLINE uint64_t gc2_major_root_scans_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.major_root_scans);
+}
+
+static LJ_AINLINE void gc2_major_root_scans_store_rlx(global_State *g,
+						      uint64_t n)
+{
+  la_store64_rlx(&g->gc2.major_root_scans, n);
+}
+
+static LJ_AINLINE void gc2_major_root_scans_add(global_State *g, uint64_t n)
+{
+  la_add64_rlx(&g->gc2.major_root_scans, n);
+}
+
+static LJ_AINLINE uint64_t gc2_minor_root_scans_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.minor_root_scans);
+}
+
+static LJ_AINLINE void gc2_minor_root_scans_store_rlx(global_State *g,
+						      uint64_t n)
+{
+  la_store64_rlx(&g->gc2.minor_root_scans, n);
+}
+
+static LJ_AINLINE void gc2_minor_root_scans_add(global_State *g, uint64_t n)
+{
+  la_add64_rlx(&g->gc2.minor_root_scans, n);
+}
+
 static LJ_AINLINE GCRef *gc2_grey_stack_acq(global_State *g)
 {
   return (GCRef *)la_loadptr_acq((void *const *)&g->gc2.grey_stack);

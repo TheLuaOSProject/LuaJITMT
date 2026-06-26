@@ -2721,11 +2721,11 @@ static void test_minor_root_scan(lua_State *L, global_State *g, TGState *tg)
   la_store32_rel(&g->gc2.minor_roots_enabled, 1);
   lj_gc2_legacy_mark_begin(g);
   assert(la_load32_acq(&g->gc2.cycle_roots_minor) == 0);
-  major_roots0 = la_load64_acq(&g->gc2.major_root_scans);
-  minor_roots0 = la_load64_acq(&g->gc2.minor_root_scans);
+  major_roots0 = gc2_major_root_scans_acq(g);
+  minor_roots0 = gc2_minor_root_scans_acq(g);
   lj_gc2_scan_minor_roots(g, L);
-  assert(la_load64_acq(&g->gc2.major_root_scans) == major_roots0);
-  assert(la_load64_acq(&g->gc2.minor_root_scans) == minor_roots0);
+  assert(gc2_major_root_scans_acq(g) == major_roots0);
+  assert(gc2_minor_root_scans_acq(g) == minor_roots0);
   assert(lj_gc2_ismarked(g, obj2gco(stack_tab)) == 0);
   assert(lj_gc2_ismarked(g, obj2gco(registry_tab)) == 0);
 #if LJ_HASFFI
@@ -2743,11 +2743,11 @@ static void test_minor_root_scan(lua_State *L, global_State *g, TGState *tg)
 #if LJ_HASFFI
   assert(lj_gc2_ismarked(g, obj2gco(preclaim_cd)) == 0);
 #endif
-  major_roots0 = la_load64_acq(&g->gc2.major_root_scans);
-  minor_roots0 = la_load64_acq(&g->gc2.minor_root_scans);
+  major_roots0 = gc2_major_root_scans_acq(g);
+  minor_roots0 = gc2_minor_root_scans_acq(g);
   assert(lj_gc2_handshake(g, LJ_GC2_HS_SCAN_ROOTS) == 1);
-  assert(la_load64_acq(&g->gc2.major_root_scans) == major_roots0);
-  assert(la_load64_acq(&g->gc2.minor_root_scans) > minor_roots0);
+  assert(gc2_major_root_scans_acq(g) == major_roots0);
+  assert(gc2_minor_root_scans_acq(g) > minor_roots0);
   assert(lj_gc2_ismarked(g, obj2gco(stack_tab)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(registry_tab)) == 0);
 #if LJ_HASFFI

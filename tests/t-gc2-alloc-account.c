@@ -91,17 +91,17 @@ static void test_public_minor_skips_legacy_registry_roots(lua_State *L,
   assert(lj_gc2_ismarked(g, obj2gco(reg_only)) == 0);
   assert(lj_gc2_ssb_empty(g));
 
-  major0 = la_load64_acq(&g->gc2.major_cycle_starts);
-  minor_req0 = la_load64_acq(&g->gc2.minor_cycle_requests);
-  minor_start0 = la_load64_acq(&g->gc2.minor_cycle_starts);
+  major0 = gc2_major_cycle_starts_acq(g);
+  minor_req0 = gc2_minor_cycle_requests_acq(g);
+  minor_start0 = gc2_minor_cycle_starts_acq(g);
   g->gc.stepmul = 1;
   la_store32_rel(&g->gc2.assist_shift, lj_gc2_assist_shift_from_stepmul(1));
   (void)lj_gc_step(L);
   for (i = 0; i < 10000 && g->gc.state == GCSpropagate; i++)
     (void)lj_gc_step(L);
-  assert(la_load64_acq(&g->gc2.major_cycle_starts) == major0);
-  assert(la_load64_acq(&g->gc2.minor_cycle_requests) == minor_req0 + 1u);
-  assert(la_load64_acq(&g->gc2.minor_cycle_starts) == minor_start0 + 1u);
+  assert(gc2_major_cycle_starts_acq(g) == major0);
+  assert(gc2_minor_cycle_requests_acq(g) == minor_req0 + 1u);
+  assert(gc2_minor_cycle_starts_acq(g) == minor_start0 + 1u);
   assert(la_load32_acq(&g->gc2.cycle_roots_minor) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(reg_only)) == 0);
 
@@ -141,13 +141,13 @@ static void test_vm_generational_table_store_remembered(lua_State *L,
   child = tabV(L->top - 1);
   lj_gc2_set_generational(g, 1);
   assert(la_load32_acq(&g->gc2.force_major) == 1);
-  major_starts0 = la_load64_acq(&g->gc2.major_cycle_starts);
-  minor_requests0 = la_load64_acq(&g->gc2.minor_cycle_requests);
-  minor_starts0 = la_load64_acq(&g->gc2.minor_cycle_starts);
+  major_starts0 = gc2_major_cycle_starts_acq(g);
+  minor_requests0 = gc2_minor_cycle_requests_acq(g);
+  minor_starts0 = gc2_minor_cycle_starts_acq(g);
   lj_gc2_legacy_mark_begin(g);
-  assert(la_load64_acq(&g->gc2.major_cycle_starts) == major_starts0 + 1u);
-  assert(la_load64_acq(&g->gc2.minor_cycle_requests) == minor_requests0);
-  assert(la_load64_acq(&g->gc2.minor_cycle_starts) == minor_starts0);
+  assert(gc2_major_cycle_starts_acq(g) == major_starts0 + 1u);
+  assert(gc2_minor_cycle_requests_acq(g) == minor_requests0);
+  assert(gc2_minor_cycle_starts_acq(g) == minor_starts0);
   assert(la_load32_acq(&g->gc2.cycle_minor_requested) == 0);
   assert(lj_gc2_markobj(g, obj2gco(parent)) == 1);
   (void)lj_gc2_flush_ssb(g, tg);
@@ -177,14 +177,14 @@ static void test_vm_generational_table_store_remembered(lua_State *L,
   assert(active_ssb_last(tg) == obj2gco(parent));
 
   remembered_drained0 = gc2_remembered_drained_acq(g);
-  major_starts0 = la_load64_acq(&g->gc2.major_cycle_starts);
-  minor_requests0 = la_load64_acq(&g->gc2.minor_cycle_requests);
-  minor_starts0 = la_load64_acq(&g->gc2.minor_cycle_starts);
+  major_starts0 = gc2_major_cycle_starts_acq(g);
+  minor_requests0 = gc2_minor_cycle_requests_acq(g);
+  minor_starts0 = gc2_minor_cycle_starts_acq(g);
   lj_gc2_legacy_mark_begin(g);
-  assert(la_load64_acq(&g->gc2.major_cycle_starts) == major_starts0);
-  assert(la_load64_acq(&g->gc2.minor_cycle_requests) ==
+  assert(gc2_major_cycle_starts_acq(g) == major_starts0);
+  assert(gc2_minor_cycle_requests_acq(g) ==
 	 minor_requests0 + 1u);
-  assert(la_load64_acq(&g->gc2.minor_cycle_starts) == minor_starts0 + 1u);
+  assert(gc2_minor_cycle_starts_acq(g) == minor_starts0 + 1u);
   assert(la_load32_acq(&g->gc2.cycle_roots_minor) == 1);
   assert(gc2_remembered_drained_acq(g) >=
 	 remembered_drained0 + 1u);
@@ -255,13 +255,13 @@ static void test_jit_generational_table_store_remembered(lua_State *L,
   child = tabV(L->top - 1);
   lj_gc2_set_generational(g, 1);
   assert(la_load32_acq(&g->gc2.force_major) == 1);
-  major_starts0 = la_load64_acq(&g->gc2.major_cycle_starts);
-  minor_requests0 = la_load64_acq(&g->gc2.minor_cycle_requests);
-  minor_starts0 = la_load64_acq(&g->gc2.minor_cycle_starts);
+  major_starts0 = gc2_major_cycle_starts_acq(g);
+  minor_requests0 = gc2_minor_cycle_requests_acq(g);
+  minor_starts0 = gc2_minor_cycle_starts_acq(g);
   lj_gc2_legacy_mark_begin(g);
-  assert(la_load64_acq(&g->gc2.major_cycle_starts) == major_starts0 + 1u);
-  assert(la_load64_acq(&g->gc2.minor_cycle_requests) == minor_requests0);
-  assert(la_load64_acq(&g->gc2.minor_cycle_starts) == minor_starts0);
+  assert(gc2_major_cycle_starts_acq(g) == major_starts0 + 1u);
+  assert(gc2_minor_cycle_requests_acq(g) == minor_requests0);
+  assert(gc2_minor_cycle_starts_acq(g) == minor_starts0);
   assert(la_load32_acq(&g->gc2.cycle_minor_requested) == 0);
   assert(lj_gc2_markobj(g, obj2gco(parent)) == 1);
   (void)lj_gc2_flush_ssb(g, tg);
@@ -293,14 +293,14 @@ static void test_jit_generational_table_store_remembered(lua_State *L,
   assert(active_ssb_last(tg) == obj2gco(parent));
 
   remembered_drained0 = gc2_remembered_drained_acq(g);
-  major_starts0 = la_load64_acq(&g->gc2.major_cycle_starts);
-  minor_requests0 = la_load64_acq(&g->gc2.minor_cycle_requests);
-  minor_starts0 = la_load64_acq(&g->gc2.minor_cycle_starts);
+  major_starts0 = gc2_major_cycle_starts_acq(g);
+  minor_requests0 = gc2_minor_cycle_requests_acq(g);
+  minor_starts0 = gc2_minor_cycle_starts_acq(g);
   lj_gc2_legacy_mark_begin(g);
-  assert(la_load64_acq(&g->gc2.major_cycle_starts) == major_starts0);
-  assert(la_load64_acq(&g->gc2.minor_cycle_requests) ==
+  assert(gc2_major_cycle_starts_acq(g) == major_starts0);
+  assert(gc2_minor_cycle_requests_acq(g) ==
 	 minor_requests0 + 1u);
-  assert(la_load64_acq(&g->gc2.minor_cycle_starts) == minor_starts0 + 1u);
+  assert(gc2_minor_cycle_starts_acq(g) == minor_starts0 + 1u);
   assert(la_load32_acq(&g->gc2.cycle_roots_minor) == 1);
   assert(gc2_remembered_drained_acq(g) >=
 	 remembered_drained0 + 1u);
@@ -344,19 +344,19 @@ int main(void)
   assert(tg != NULL);
   assert(la_load32_acq(&g->gc2.gcpause_pct) == 100);
   assert(la_load32_acq(&g->gc2.cycle_leader) == 0);
-  assert(la_load64_acq(&g->gc2.cycle_requests) == 0);
-  assert(la_load64_acq(&g->gc2.cycle_starts) == 0);
-  assert(la_load64_acq(&g->gc2.major_cycle_starts) == 0);
-  assert(la_load64_acq(&g->gc2.minor_cycle_requests) == 0);
-  assert(la_load64_acq(&g->gc2.minor_cycle_starts) == 0);
+  assert(gc2_cycle_requests_acq(g) == 0);
+  assert(gc2_cycle_starts_acq(g) == 0);
+  assert(gc2_major_cycle_starts_acq(g) == 0);
+  assert(gc2_minor_cycle_requests_acq(g) == 0);
+  assert(gc2_minor_cycle_starts_acq(g) == 0);
   assert(la_load32_acq(&g->gc2.cycle_minor_requested) == 0);
   assert(la_load32_acq(&g->gc2.cycle_sweep_minor) == 0);
   assert(la_load32_acq(&g->gc2.minor_sweep_enabled) == 0);
   assert(la_load32_acq(&g->gc2.cycle_roots_minor) == 0);
   assert(la_load32_acq(&g->gc2.minor_roots_enabled) == 0);
-  assert(la_load64_acq(&g->gc2.minor_sweep_deferred) == 0);
+  assert(gc2_minor_sweep_deferred_acq(g) == 0);
   assert(la_load64_acq(&g->gc2.minor_sweep_arenas) == 0);
-  assert(la_load64_acq(&g->gc2.minor_roots_deferred) == 0);
+  assert(gc2_minor_roots_deferred_acq(g) == 0);
   assert(la_load64_acq(&g->gc2.minor_survival_base_live) == 0);
   assert(la_load64_acq(&g->gc2.minor_survival_bytes) == 0);
   assert(la_load32_acq(&g->gc2.minor_survival_pct) == 0);
@@ -424,63 +424,63 @@ int main(void)
   lj_gc_threshold_store(g, g->gc.total + 4u * LJ_GC2_ACCT_FLUSH);
   la_store64_rel(&g->gc2.trigger_bytes, 1);
   (void)la_xchg64_acqrel(&g->gc2.alloc_since_trigger, 0);
-  cycle_requests0 = la_load64_acq(&g->gc2.cycle_requests);
-  cycle_starts0 = la_load64_acq(&g->gc2.cycle_starts);
-  major_starts0 = la_load64_acq(&g->gc2.major_cycle_starts);
-  minor_requests0 = la_load64_acq(&g->gc2.minor_cycle_requests);
-  minor_starts0 = la_load64_acq(&g->gc2.minor_cycle_starts);
+  cycle_requests0 = gc2_cycle_requests_acq(g);
+  cycle_starts0 = gc2_cycle_starts_acq(g);
+  major_starts0 = gc2_major_cycle_starts_acq(g);
+  minor_requests0 = gc2_minor_cycle_requests_acq(g);
+  minor_starts0 = gc2_minor_cycle_starts_acq(g);
   lj_gc2_account_alloc(g, tg, LJ_GC2_ACCT_FLUSH);
   assert(la_load64_acq(&tg->local_total) == 0);
   assert(lj_gc_threshold_load(g) == g->gc.total);
   assert(la_load32_acq(&g->gc2.cycle_leader) == tg->tid);
-  assert(la_load64_acq(&g->gc2.cycle_requests) == cycle_requests0 + 1u);
-  assert(la_load64_acq(&g->gc2.cycle_starts) == cycle_starts0);
+  assert(gc2_cycle_requests_acq(g) == cycle_requests0 + 1u);
+  assert(gc2_cycle_starts_acq(g) == cycle_starts0);
   lj_gc2_account_alloc(g, tg, LJ_GC2_ACCT_FLUSH);
-  assert(la_load64_acq(&g->gc2.cycle_requests) == cycle_requests0 + 1u);
+  assert(gc2_cycle_requests_acq(g) == cycle_requests0 + 1u);
   lj_gc2_legacy_mark_begin(g);
   assert(la_load32_acq(&g->gc2.cycle_leader) == 0);
-  assert(la_load64_acq(&g->gc2.cycle_starts) == cycle_starts0 + 1u);
-  assert(la_load64_acq(&g->gc2.major_cycle_starts) == major_starts0 + 1u);
-  assert(la_load64_acq(&g->gc2.minor_cycle_requests) == minor_requests0);
-  assert(la_load64_acq(&g->gc2.minor_cycle_starts) == minor_starts0);
+  assert(gc2_cycle_starts_acq(g) == cycle_starts0 + 1u);
+  assert(gc2_major_cycle_starts_acq(g) == major_starts0 + 1u);
+  assert(gc2_minor_cycle_requests_acq(g) == minor_requests0);
+  assert(gc2_minor_cycle_starts_acq(g) == minor_starts0);
   assert(la_load32_acq(&g->gc2.cycle_minor_requested) == 0);
   assert(la_load64_acq(&g->gc2.cycle_alloc_bytes) >=
 	 2u * LJ_GC2_ACCT_FLUSH);
   lj_gc2_legacy_cycle_end(g);
 
   la_store32_rel(&g->gc2.generational, 1);
-  major_starts0 = la_load64_acq(&g->gc2.major_cycle_starts);
-  minor_requests0 = la_load64_acq(&g->gc2.minor_cycle_requests);
-  minor_starts0 = la_load64_acq(&g->gc2.minor_cycle_starts);
-  minor_deferred0 = la_load64_acq(&g->gc2.minor_sweep_deferred);
-  minor_roots_deferred0 = la_load64_acq(&g->gc2.minor_roots_deferred);
+  major_starts0 = gc2_major_cycle_starts_acq(g);
+  minor_requests0 = gc2_minor_cycle_requests_acq(g);
+  minor_starts0 = gc2_minor_cycle_starts_acq(g);
+  minor_deferred0 = gc2_minor_sweep_deferred_acq(g);
+  minor_roots_deferred0 = gc2_minor_roots_deferred_acq(g);
   lj_gc2_legacy_mark_begin(g);
-  assert(la_load64_acq(&g->gc2.major_cycle_starts) == major_starts0 + 1u);
-  assert(la_load64_acq(&g->gc2.minor_cycle_requests) ==
+  assert(gc2_major_cycle_starts_acq(g) == major_starts0 + 1u);
+  assert(gc2_minor_cycle_requests_acq(g) ==
 	 minor_requests0 + 1u);
-  assert(la_load64_acq(&g->gc2.minor_cycle_starts) == minor_starts0);
+  assert(gc2_minor_cycle_starts_acq(g) == minor_starts0);
   assert(la_load32_acq(&g->gc2.cycle_minor_requested) == 1);
   assert(la_load32_acq(&g->gc2.cycle_sweep_minor) == 0);
   assert(tg->alloc.alloc_black == 1);
-  assert(la_load64_acq(&g->gc2.minor_sweep_deferred) ==
+  assert(gc2_minor_sweep_deferred_acq(g) ==
 	 minor_deferred0 + 1u);
   assert(la_load32_acq(&g->gc2.cycle_roots_minor) == 0);
-  assert(la_load64_acq(&g->gc2.minor_roots_deferred) ==
+  assert(gc2_minor_roots_deferred_acq(g) ==
 	 minor_roots_deferred0 + 1u);
   lj_gc2_legacy_cycle_end(g);
 
   la_store32_rel(&g->gc2.minor_sweep_enabled, 1);
   la_store32_rel(&g->gc2.minor_roots_enabled, 1);
-  major_starts0 = la_load64_acq(&g->gc2.major_cycle_starts);
-  minor_requests0 = la_load64_acq(&g->gc2.minor_cycle_requests);
-  minor_starts0 = la_load64_acq(&g->gc2.minor_cycle_starts);
-  minor_deferred0 = la_load64_acq(&g->gc2.minor_sweep_deferred);
-  minor_roots_deferred0 = la_load64_acq(&g->gc2.minor_roots_deferred);
+  major_starts0 = gc2_major_cycle_starts_acq(g);
+  minor_requests0 = gc2_minor_cycle_requests_acq(g);
+  minor_starts0 = gc2_minor_cycle_starts_acq(g);
+  minor_deferred0 = gc2_minor_sweep_deferred_acq(g);
+  minor_roots_deferred0 = gc2_minor_roots_deferred_acq(g);
   lj_gc2_legacy_mark_begin(g);
-  assert(la_load64_acq(&g->gc2.major_cycle_starts) == major_starts0);
-  assert(la_load64_acq(&g->gc2.minor_cycle_requests) ==
+  assert(gc2_major_cycle_starts_acq(g) == major_starts0);
+  assert(gc2_minor_cycle_requests_acq(g) ==
 	 minor_requests0 + 1u);
-  assert(la_load64_acq(&g->gc2.minor_cycle_starts) == minor_starts0 + 1u);
+  assert(gc2_minor_cycle_starts_acq(g) == minor_starts0 + 1u);
   assert(la_load32_acq(&g->gc2.cycle_minor_requested) == 1);
   assert(la_load32_acq(&g->gc2.cycle_sweep_minor) == 1);
   assert(la_load32_acq(&g->gc2.cycle_roots_minor) == 1);
@@ -491,8 +491,8 @@ int main(void)
   active_child = tabV(L->top - 1);
   assert(lj_gc2_ismarked(g, obj2gco(active_child)) == 0);
   lua_pop(L, 1);
-  assert(la_load64_acq(&g->gc2.minor_sweep_deferred) == minor_deferred0);
-  assert(la_load64_acq(&g->gc2.minor_roots_deferred) ==
+  assert(gc2_minor_sweep_deferred_acq(g) == minor_deferred0);
+  assert(gc2_minor_roots_deferred_acq(g) ==
 	 minor_roots_deferred0);
   lj_gc2_legacy_cycle_end(g);
 
@@ -525,15 +525,15 @@ int main(void)
   la_store32_rel(&g->gc2.minor_sweep_enabled, 0);
   la_store32_rel(&g->gc2.minor_roots_enabled, 0);
 
-  major_starts0 = la_load64_acq(&g->gc2.major_cycle_starts);
-  minor_requests0 = la_load64_acq(&g->gc2.minor_cycle_requests);
-  minor_starts0 = la_load64_acq(&g->gc2.minor_cycle_starts);
+  major_starts0 = gc2_major_cycle_starts_acq(g);
+  minor_requests0 = gc2_minor_cycle_requests_acq(g);
+  minor_starts0 = gc2_minor_cycle_starts_acq(g);
   lj_gc2_force_major(g);
   lj_gc2_legacy_mark_begin(g);
-  assert(la_load64_acq(&g->gc2.major_cycle_starts) == major_starts0 + 1u);
+  assert(gc2_major_cycle_starts_acq(g) == major_starts0 + 1u);
   assert(tg->alloc.alloc_black == 1);
-  assert(la_load64_acq(&g->gc2.minor_cycle_requests) == minor_requests0);
-  assert(la_load64_acq(&g->gc2.minor_cycle_starts) == minor_starts0);
+  assert(gc2_minor_cycle_requests_acq(g) == minor_requests0);
+  assert(gc2_minor_cycle_starts_acq(g) == minor_starts0);
   assert(la_load32_acq(&g->gc2.cycle_minor_requested) == 0);
   assert(la_load32_acq(&g->gc2.force_major) == 0);
   lj_gc2_legacy_cycle_end(g);
@@ -575,13 +575,13 @@ int main(void)
   assert(la_load32_acq(&g->gc2.minor_sweep_enabled) == 0);
   assert(la_load32_acq(&g->gc2.minor_roots_enabled) == 0);
   assert(tg->mark_active == 1);
-  major_starts0 = la_load64_acq(&g->gc2.major_cycle_starts);
-  minor_requests0 = la_load64_acq(&g->gc2.minor_cycle_requests);
-  minor_starts0 = la_load64_acq(&g->gc2.minor_cycle_starts);
+  major_starts0 = gc2_major_cycle_starts_acq(g);
+  minor_requests0 = gc2_minor_cycle_requests_acq(g);
+  minor_starts0 = gc2_minor_cycle_starts_acq(g);
   lj_gc2_legacy_mark_begin(g);
-  assert(la_load64_acq(&g->gc2.major_cycle_starts) == major_starts0 + 1u);
-  assert(la_load64_acq(&g->gc2.minor_cycle_requests) == minor_requests0);
-  assert(la_load64_acq(&g->gc2.minor_cycle_starts) == minor_starts0);
+  assert(gc2_major_cycle_starts_acq(g) == major_starts0 + 1u);
+  assert(gc2_minor_cycle_requests_acq(g) == minor_requests0);
+  assert(gc2_minor_cycle_starts_acq(g) == minor_starts0);
   assert(la_load32_acq(&g->gc2.cycle_minor_requested) == 0);
   assert(la_load32_acq(&g->gc2.force_major) == 0);
   lj_gc2_legacy_cycle_end(g);
@@ -592,14 +592,14 @@ int main(void)
   assert(lj_gc2_ssb_push(g, obj2gco(parent)) == 1);
   assert(!lj_gc2_ssb_empty(g));
   remembered_drained0 = gc2_remembered_drained_acq(g);
-  major_starts0 = la_load64_acq(&g->gc2.major_cycle_starts);
-  minor_requests0 = la_load64_acq(&g->gc2.minor_cycle_requests);
-  minor_starts0 = la_load64_acq(&g->gc2.minor_cycle_starts);
+  major_starts0 = gc2_major_cycle_starts_acq(g);
+  minor_requests0 = gc2_minor_cycle_requests_acq(g);
+  minor_starts0 = gc2_minor_cycle_starts_acq(g);
   lj_gc2_legacy_mark_begin(g);
-  assert(la_load64_acq(&g->gc2.major_cycle_starts) == major_starts0);
-  assert(la_load64_acq(&g->gc2.minor_cycle_requests) ==
+  assert(gc2_major_cycle_starts_acq(g) == major_starts0);
+  assert(gc2_minor_cycle_requests_acq(g) ==
 	 minor_requests0 + 1u);
-  assert(la_load64_acq(&g->gc2.minor_cycle_starts) == minor_starts0 + 1u);
+  assert(gc2_minor_cycle_starts_acq(g) == minor_starts0 + 1u);
   assert(la_load32_acq(&g->gc2.cycle_minor_requested) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(parent)) == 1);
   assert(lj_gc2_ssb_empty(g));
@@ -701,14 +701,14 @@ int main(void)
   remembered_drained0 = gc2_remembered_drained_acq(g);
   lj_gc2_barrier_obj_pair(L, obj2gco(parent), obj2gco(child));
   assert(gc2_remembered_pushed_acq(g) == remembered_pushed0 + 1u);
-  major_starts0 = la_load64_acq(&g->gc2.major_cycle_starts);
-  minor_requests0 = la_load64_acq(&g->gc2.minor_cycle_requests);
-  minor_starts0 = la_load64_acq(&g->gc2.minor_cycle_starts);
+  major_starts0 = gc2_major_cycle_starts_acq(g);
+  minor_requests0 = gc2_minor_cycle_requests_acq(g);
+  minor_starts0 = gc2_minor_cycle_starts_acq(g);
   lj_gc2_legacy_mark_begin(g);
-  assert(la_load64_acq(&g->gc2.major_cycle_starts) == major_starts0);
-  assert(la_load64_acq(&g->gc2.minor_cycle_requests) ==
+  assert(gc2_major_cycle_starts_acq(g) == major_starts0);
+  assert(gc2_minor_cycle_requests_acq(g) ==
 	 minor_requests0 + 1u);
-  assert(la_load64_acq(&g->gc2.minor_cycle_starts) == minor_starts0 + 1u);
+  assert(gc2_minor_cycle_starts_acq(g) == minor_starts0 + 1u);
   assert(la_load32_acq(&g->gc2.cycle_roots_minor) == 1);
   assert(tg->alloc.alloc_black == 1);
   lua_newtable(L);
@@ -738,12 +738,12 @@ int main(void)
 
   lj_gc_threshold_store(g, LJ_MAX_MEM);
   (void)la_xchg64_acqrel(&g->gc2.alloc_since_trigger, 0);
-  cycle_requests0 = la_load64_acq(&g->gc2.cycle_requests);
+  cycle_requests0 = gc2_cycle_requests_acq(g);
   lj_gc2_account_alloc(g, tg, LJ_GC2_ACCT_FLUSH);
   assert(la_load64_acq(&tg->local_total) == 0);
   assert(lj_gc_threshold_load(g) == LJ_MAX_MEM);
   assert(la_load32_acq(&g->gc2.cycle_leader) == 0);
-  assert(la_load64_acq(&g->gc2.cycle_requests) == cycle_requests0);
+  assert(gc2_cycle_requests_acq(g) == cycle_requests0);
   lj_gc_threshold_store(g, g->gc.total + 4u * LJ_GC2_ACCT_FLUSH);
   lj_gc2_update_pacing(g);
 
