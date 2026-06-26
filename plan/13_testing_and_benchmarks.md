@@ -128,19 +128,23 @@ Run litmus + t-api + t-tab suites under it weekly-equivalent cadence.
 
 ## 13.8 Benchmarks: multi-thread suite (aux/bench/bench_mt.lua)
 Scaling curves 1,2,4,8 threads: arith-MT (embarrassingly parallel),
-tab_hash_read-MT shared table, tab_hash_write-MT sharded vs shared,
-alloc-MT (allocator scalability — the headline number for ADR-4),
-string_intern-MT (worst-case shared structure), chan_pingpong (latency),
+tab_read-shared with prebuilt keys, tab_read-keybuild for the historical
+key-construction plus shared-read stress case, tab_write-shared and
+tab_write-sharded, alloc-MT (allocator scalability — the headline number for
+ADR-4), intern-MT with materialized strings, chan_pingpong (latency),
 chan_throughput, pmap-image-kernel (the 09 §9.11 pmap on a synthetic
 workload). Report ops/sec/thread + total; plot speedup. GC metrics are dumped
 via `collectgarbage("stats")`: current fields include cycle requests/starts,
-poll-ack sample/sum/max latency plus histogram buckets for approximate P99,
+owner-side poll-ack sample/sum/max latency plus histogram buckets for
+approximate P99,
 allocation trigger/hard-limit bytes, assist work, worker work and parked-worker
 scheduler telemetry, owner sweep work, weak clearing/write marks, FINREG
 fallback/order counters, finalizer queueing/MPSC drains, finalizer-spawn
 deferrals, and live estimates.
 `bench_mt.lua` uses `threading.now()` for monotonic wall-clock timings and
-reports per-run poll-ack P99 bucket bounds from histogram deltas.
+reports per-run owner-side poll-ack P99 bucket bounds from histogram deltas.
+Synthetic leader and remote-native safepoint acknowledgements are excluded from
+that latency histogram.
 Use `BENCH_SCALE=<factor>` for short probes, `BENCH_THREADS="1 2 4 8"` to
 override the scaling set in `aux/bench/run.sh scaling`, and
 `BENCH_FILTER=<substring>` to isolate one benchmark. Pairwise channel

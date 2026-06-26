@@ -593,9 +593,9 @@ int main(void)
   assert(tg->hs_epoch_ack == g->gc2.hs_epoch);
   assert(tg->mark_active == 1);
   assert(tg->alloc.alloc_black == 1);
-  assert(la_load64_acq(&g->gc2.hs_ack_latency_samples) == ack_samples0 + 1u);
-  assert(la_load64_acq(&g->gc2.hs_ack_latency_sum_ns) >= ack_sum0);
-  assert(la_load64_acq(&g->gc2.hs_ack_latency_max_ns) >= ack_max0);
+  assert(la_load64_acq(&g->gc2.hs_ack_latency_samples) == ack_samples0);
+  assert(la_load64_acq(&g->gc2.hs_ack_latency_sum_ns) == ack_sum0);
+  assert(la_load64_acq(&g->gc2.hs_ack_latency_max_ns) == ack_max0);
 
   actions = LJ_GC2_HS_DISABLE_BARRIER|LJ_GC2_HS_ALLOC_WHITE;
   assert(lj_gc2_handshake(g, actions) == 1);
@@ -742,12 +742,18 @@ int main(void)
   assert(tg->mark_active == 0);
   assert(tg->alloc.alloc_black == 0);
 
+  ack_samples0 = la_load64_acq(&g->gc2.hs_ack_latency_samples);
+  ack_sum0 = la_load64_acq(&g->gc2.hs_ack_latency_sum_ns);
+  ack_max0 = la_load64_acq(&g->gc2.hs_ack_latency_max_ns);
   publish_manual(g, tg, LJ_GC2_HS_ENABLE_BARRIER);
   assert(lj_safepoint_poll(L) == LJ_GC2_HS_ENABLE_BARRIER);
   assert(g->gc2.hs_pending == 0);
   assert(tg->poll == 0);
   assert(tg->reqmask == 0);
   assert(tg->mark_active == 1);
+  assert(la_load64_acq(&g->gc2.hs_ack_latency_samples) == ack_samples0 + 1u);
+  assert(la_load64_acq(&g->gc2.hs_ack_latency_sum_ns) >= ack_sum0);
+  assert(la_load64_acq(&g->gc2.hs_ack_latency_max_ns) >= ack_max0);
   assert(lj_safepoint_poll(L) == 0);
 
   lj_native_enter(tg);
@@ -1035,8 +1041,7 @@ int main(void)
   assert(extra_tg.mark_active == 1);
   assert(extra_tg.alloc.alloc_black == 1);
   assert(extra_tg.in_native == 1);
-  assert(la_load64_acq(&g->gc2.hs_ack_latency_samples) >=
-	 ack_samples0 + 2u);
+  assert(la_load64_acq(&g->gc2.hs_ack_latency_samples) == ack_samples0);
 
   lj_tg_detach(g, &extra_tg);
   assert(g->gc2.n_threads == 1);

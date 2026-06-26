@@ -92,7 +92,8 @@ void lj_safepoint_apply_tg(global_State *g, TGState *tg, uint32_t actions)
     lj_tg_flags_or_rlx(tg, TGF_STOPREQ);  /* 09 section 9.6 shutdown. */
 }
 
-static uint32_t safepoint_ack_tg(global_State *g, TGState *tg)
+static uint32_t safepoint_ack_tg(global_State *g, TGState *tg,
+				 int note_latency)
 {
   uint64_t epoch, oldepoch;
   uint32_t actions, oldpending;
@@ -112,7 +113,8 @@ static uint32_t safepoint_ack_tg(global_State *g, TGState *tg)
   if (oldepoch == epoch)
     return 0;
   lj_safepoint_apply_tg(g, tg, actions);
-  safepoint_note_ack_latency(g);  /* 13.8: mutator-observed poll latency. */
+  if (note_latency)
+    safepoint_note_ack_latency(g);  /* 13.8: mutator-observed poll latency. */
   lj_tg_poll_rel(tg, 0);
   oldpending = gc2_hs_pending_sub_acqrel(g, 1);  /* 05 section 5.4.2. */
   if (oldpending == 1)
@@ -122,7 +124,7 @@ static uint32_t safepoint_ack_tg(global_State *g, TGState *tg)
 
 uint32_t lj_safepoint_ack(lua_State *L)
 {
-  return L ? safepoint_ack_tg(G(L), L2TG(L)) : 0;
+  return L ? safepoint_ack_tg(G(L), L2TG(L), 1) : 0;
 }
 
 uint32_t lj_safepoint_poll(lua_State *L)
@@ -204,9 +206,9 @@ static void safepoint_ack_native(global_State *g)
     if (lj_tg_flags_test_acq(tg, TGF_DEAD))  /* 05 section 5.4.1. */
       continue;
     if (tg == self)
-      safepoint_ack_tg(g, tg);  /* Leader self-ack is a real poll. */
+      safepoint_ack_tg(g, tg, 0);  /* Leader owns this synthetic ack. */
     else if (lj_tg_in_native_acq(tg))
-      safepoint_ack_tg(g, tg);  /* 05 section 5.4.3 remote native ack. */
+      safepoint_ack_tg(g, tg, 0);  /* 05 section 5.4.3 remote native ack. */
   }
 }
 

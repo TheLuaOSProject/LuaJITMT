@@ -268,8 +268,8 @@ Accepted serialized surfaces are `ffi.cdef`, `require`, and the serialized
 recorder/recorder token; do not spend M9 trying to make those parallel unless a
 correctness issue demands it.
 Gate: ≤10% single-thread geomean (stretch 5%); bench_mt scaling ≥6x on
-8 cores for tab_hash_read-MT and arith-MT; GC pause P99 (mutator-observed
-via poll latency probe) <500µs on the churn bench.
+8 cores for tab_read-shared and arith-MT; GC pause P99 (owner-side,
+mutator-observed poll acknowledgements) <500µs on the churn bench.
 
 Current implementation note: `collectgarbage("stats")` now returns a
 benchmark-facing table of GC2 counters for cycle starts, requested vs actual
@@ -277,7 +277,9 @@ minor cycles, allocation pacing, poll-ack latency, assist/worker progress, owner
 sweep progress, weak clearing, weak-write marks, FINREG fallback/order counters,
 finalizer queueing/MPSC drains, finalizer-spawn deferrals, and live estimates.
 `plan/aux/bench/bench_mt.lua` prints a stable subset of those fields after a run
-and reports approximate poll-ack P99 latency from histogram deltas.
+and reports approximate owner-side poll-ack P99 latency from histogram deltas;
+synthetic leader and remote-native acknowledgements do not contribute to the
+poll-latency histogram.
 `tools/ci/m9_m10_gc.sh` now aggregates the M9 stats smoke, M9 benchmark smoke,
 and M10 generational guard, and each child guard checks that aggregate wiring.
 

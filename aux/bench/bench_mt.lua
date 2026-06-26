@@ -162,13 +162,31 @@ run("arith-MT", 5e7, function(id, _, n)
 end)
 
 -- 2. Shared table, read-mostly: gen-header acquire + chain walk scaling.
-run("tab_read-shared", 2e7, function(id, t, n)
+run("tab_read-shared", 2e7, function(id, sh, n)
+  local t = sh.t
+  local keys = sh.keys
+  local s = 0
+  for i = 1, n do s = s + t[keys[i % 4096 + 1]] end
+  return s
+end, function()
+  local t = {}
+  local keys = {}
+  for i = 1, 4096 do
+    local k = "k" .. i
+    keys[i] = k
+    t[k] = i
+  end
+  return { t = t, keys = keys }
+end)
+
+-- 2b. Historical mixed case: key construction/interning plus shared read.
+run("tab_read-keybuild", 2e7, function(id, t, n)
   local s = 0
   for i = 1, n do s = s + t["k" .. (i % 4096 + 1)] end
   return s
 end, function()
   local t = {}
-  for i = 1, 4096 do t["k"..i] = i end
+  for i = 1, 4096 do t["k" .. i] = i end
   return t
 end)
 
@@ -198,10 +216,13 @@ end)
 -- 6. String interning storm: the worst-case shared structure (06 §6.5).
 run("intern-MT", 1e6, function(id, _, n)
   local s = 0
+  local keep = {}
   for i = 1, n do
-    s = s + #("prefix_" .. (i % 65536))
+    local str = "prefix_" .. (i % 65536)
+    keep[i % 256 + 1] = str
+    s = s + #str
   end
-  return s
+  return s + #(keep[n % 256 + 1] or "")
 end)
 
 -- 7. Shared upvalue cell hammering: cell CAS/store visibility cost.
