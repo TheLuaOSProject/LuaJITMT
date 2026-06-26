@@ -24,6 +24,7 @@ local m7_cases = {
   "m7_ffi_cdef_dup_stack",
   "m7_ffi_cparse_rollback",
   "m7_ffi_typeinfo_snapshot",
+  "m7_ffi_no_cts_l",
   "m7_ffi_ctype_intern_l",
   "m7_ffi_ctype_hash_publish",
   "m7_ffi_ctype_tab_retire",
@@ -55,6 +56,48 @@ local function build_clib_ldscript_fixture(t)
 end
 
 return function(add)
+  add({
+    name = "m7_ffi_no_cts_l",
+    description = "FFI CTState lua_State split guard",
+    run = function(t)
+      t:run([==[
+if hits=$(awk '
+  /typedef struct CTState \{/ { in_cts = 1 }
+  in_cts && /lua_State[[:space:]]*\*/ { print FNR ":" $0 }
+  in_cts && /^\} CTState;/ { in_cts = 0 }
+' src/lj_ctype.h || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'CTState must not carry lua_State *L; pass active lua_State explicitly' >&2
+  exit 1
+fi
+if hits=$(grep -RInE -- 'cts[[:space:]]*->[[:space:]]*L([^[:alnum:]_]|$)|parse_L([^[:alnum:]_]|$)' src || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'shared CTState lua_State bridges are forbidden' >&2
+  exit 1
+fi
+if hits=$(grep -RInE -- 'lj_ctype_new[[:space:]]*\(|lj_ctype_intern[[:space:]]*\(' src || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'old non-explicit-L ctype allocation/intern APIs are forbidden' >&2
+  exit 1
+fi
+if hits=$(grep -RInE -- 'mref(_acq)?\([^)]*ctype_state|setmref(rel)?\([^)]*ctype_state' src/*.c src/*.h 2>/dev/null | \
+    grep -v '^src/lj_ctype.h:912:' | \
+    grep -v '^src/lj_ctype.c:1721:' || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw C-side CTState global pointer access is forbidden; use ctype_ctsG() or the init publisher' >&2
+  exit 1
+fi
+if hits=$(grep -nE -- 'ctype_state|DISPATCH_GL\(ctype_state\)' src/vm_x64.dasc | \
+    grep -v 'lj_ctype_ctsG_acq' || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw x64 VM CTState loads are forbidden; call lj_ctype_ctsG_acq()' >&2
+  exit 1
+fi
+]==], { cwd = t.root, quiet = true })
+      print("M7 FFI CTState lua_State split guard passed")
+    end
+  })
+
   add({
     name = "m7_ffi_blocking",
     description = "FFI blocking recorder blacklist behavior",
