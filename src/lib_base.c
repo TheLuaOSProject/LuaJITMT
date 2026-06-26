@@ -648,21 +648,21 @@ static void gc_stats_push(lua_State *L)
 		  gc2_sweep_live_huge_bytes_acq(g));
   gc_stats_setnum(L, t, "live_estimate", gc2_live_estimate_acq(g));
   gc_stats_setnum(L, t, "weak_clear_tables",
-		  la_load64_acq(&gc2->weak_clear_tables));
+		  gc2_weak_clear_tables_acq(g));
   gc_stats_setnum(L, t, "weak_clear_cleared",
-		  la_load64_acq(&gc2->weak_clear_cleared));
+		  gc2_weak_clear_cleared_acq(g));
   gc_stats_setnum(L, t, "weak_legacy_skipped",
-		  la_load64_acq(&gc2->weak_legacy_skipped));
+		  gc2_weak_legacy_skipped_acq(g));
   gc_stats_setnum(L, t, "weak_legacy_fallbacks",
-		  la_load64_acq(&gc2->weak_legacy_fallbacks));
+		  gc2_weak_legacy_fallbacks_acq(g));
   gc_stats_setnum(L, t, "weak_legacy_backfills",
-		  la_load64_acq(&gc2->weak_legacy_backfills));
+		  gc2_weak_legacy_backfills_acq(g));
   gc_stats_setnum(L, t, "weak_legacy_backfill_tables",
-		  la_load64_acq(&gc2->weak_legacy_backfill_tables));
+		  gc2_weak_legacy_backfill_tables_acq(g));
   gc_stats_setnum(L, t, "weak_legacy_backfill_slots",
-		  la_load64_acq(&gc2->weak_legacy_backfill_slots));
+		  gc2_weak_legacy_backfill_slots_acq(g));
   gc_stats_setnum(L, t, "weak_legacy_backfill_cleared",
-		  la_load64_acq(&gc2->weak_legacy_backfill_cleared));
+		  gc2_weak_legacy_backfill_cleared_acq(g));
   gc_stats_setnum(L, t, "weak_keys_marked",
 		  la_load64_acq(&gc2->weak_keys_marked));
   gc_stats_setnum(L, t, "weak_values_marked",

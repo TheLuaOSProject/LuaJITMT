@@ -193,21 +193,21 @@ void lj_gc2_init(global_State *g)
   gc2_weak_tables_queued_store_rlx(g, 0);
   gc2_weak_tables_overflow_store_rlx(g, 0);
   gc2_weak_scan_cursor_store_rlx(g, 0);
-  la_store64_rlx(&g->gc2.weak_scan_runs, 0);
-  la_store64_rlx(&g->gc2.weak_scan_tables, 0);
-  la_store64_rlx(&g->gc2.weak_scan_slots, 0);
-  la_store64_rlx(&g->gc2.weak_scan_clearable, 0);
+  gc2_weak_scan_runs_store_rlx(g, 0);
+  gc2_weak_scan_tables_store_rlx(g, 0);
+  gc2_weak_scan_slots_store_rlx(g, 0);
+  gc2_weak_scan_clearable_store_rlx(g, 0);
   gc2_weak_clear_cursor_store_rlx(g, 0);
-  la_store64_rlx(&g->gc2.weak_clear_runs, 0);
-  la_store64_rlx(&g->gc2.weak_clear_tables, 0);
-  la_store64_rlx(&g->gc2.weak_clear_slots, 0);
-  la_store64_rlx(&g->gc2.weak_clear_cleared, 0);
-  la_store64_rlx(&g->gc2.weak_legacy_skipped, 0);
-  la_store64_rlx(&g->gc2.weak_legacy_fallbacks, 0);
-  la_store64_rlx(&g->gc2.weak_legacy_backfills, 0);
-  la_store64_rlx(&g->gc2.weak_legacy_backfill_tables, 0);
-  la_store64_rlx(&g->gc2.weak_legacy_backfill_slots, 0);
-  la_store64_rlx(&g->gc2.weak_legacy_backfill_cleared, 0);
+  gc2_weak_clear_runs_store_rlx(g, 0);
+  gc2_weak_clear_tables_store_rlx(g, 0);
+  gc2_weak_clear_slots_store_rlx(g, 0);
+  gc2_weak_clear_cleared_store_rlx(g, 0);
+  gc2_weak_legacy_skipped_store_rlx(g, 0);
+  gc2_weak_legacy_fallbacks_store_rlx(g, 0);
+  gc2_weak_legacy_backfills_store_rlx(g, 0);
+  gc2_weak_legacy_backfill_tables_store_rlx(g, 0);
+  gc2_weak_legacy_backfill_slots_store_rlx(g, 0);
+  gc2_weak_legacy_backfill_cleared_store_rlx(g, 0);
   gc2_finreg_cdata_sets_store_rlx(g, 0);
   gc2_finreg_cdata_clears_store_rlx(g, 0);
   gc2_finreg_cdata_queued_store_rlx(g, 0);
@@ -2270,10 +2270,10 @@ uint32_t lj_gc2_weak_snapshot_scan(global_State *g, uint32_t limit)
     scanned++;
   }
   if (scanned) {
-    la_add64_rlx(&g->gc2.weak_scan_runs, 1);
-    la_add64_rlx(&g->gc2.weak_scan_tables, scanned);
-    la_add64_rlx(&g->gc2.weak_scan_slots, slots);
-    la_add64_rlx(&g->gc2.weak_scan_clearable, clearable);
+    gc2_weak_scan_runs_add(g, 1);
+    gc2_weak_scan_tables_add(g, scanned);
+    gc2_weak_scan_slots_add(g, slots);
+    gc2_weak_scan_clearable_add(g, clearable);
   }
   return scanned;
 }
@@ -2303,10 +2303,10 @@ uint32_t lj_gc2_weak_snapshot_clear(global_State *g, uint32_t limit)
     scanned++;
   }
   if (scanned) {
-    la_add64_rlx(&g->gc2.weak_clear_runs, 1);
-    la_add64_rlx(&g->gc2.weak_clear_tables, scanned);
-    la_add64_rlx(&g->gc2.weak_clear_slots, slots);
-    la_add64_rlx(&g->gc2.weak_clear_cleared, cleared);
+    gc2_weak_clear_runs_add(g, 1);
+    gc2_weak_clear_tables_add(g, scanned);
+    gc2_weak_clear_slots_add(g, slots);
+    gc2_weak_clear_cleared_add(g, cleared);
   }
   return scanned;
 }
@@ -2414,10 +2414,10 @@ static int gc2_weak_backfill_legacy(global_State *g, GCobj *legacy)
     legacy = gcref_acq(t->gclist);
   }
   if (tables) {
-    la_add64_rlx(&g->gc2.weak_legacy_backfills, 1);
-    la_add64_rlx(&g->gc2.weak_legacy_backfill_tables, tables);
-    la_add64_rlx(&g->gc2.weak_legacy_backfill_slots, slots);
-    la_add64_rlx(&g->gc2.weak_legacy_backfill_cleared, cleared);
+    gc2_weak_legacy_backfills_add(g, 1);
+    gc2_weak_legacy_backfill_tables_add(g, tables);
+    gc2_weak_legacy_backfill_slots_add(g, slots);
+    gc2_weak_legacy_backfill_cleared_add(g, cleared);
   }
   return 1;  /* 05 section 5.8: owner-cleared legacy weak snapshot gaps. */
 }
@@ -2452,10 +2452,10 @@ static int gc2_weak_overflow_clear_legacy(global_State *g, GCobj *legacy)
     legacy = gcref_acq(t->gclist);
   }
   if (tables) {
-    la_add64_rlx(&g->gc2.weak_legacy_backfills, 1);
-    la_add64_rlx(&g->gc2.weak_legacy_backfill_tables, tables);
-    la_add64_rlx(&g->gc2.weak_legacy_backfill_slots, slots);
-    la_add64_rlx(&g->gc2.weak_legacy_backfill_cleared, cleared);
+    gc2_weak_legacy_backfills_add(g, 1);
+    gc2_weak_legacy_backfill_tables_add(g, tables);
+    gc2_weak_legacy_backfill_slots_add(g, slots);
+    gc2_weak_legacy_backfill_cleared_add(g, cleared);
   }
   return 1;  /* 05 section 5.8: overflowed weak snapshots stay GC2-owned. */
 }
@@ -2465,9 +2465,9 @@ void lj_gc2_weak_legacy_result(global_State *g, int skipped)
   if (!g)
     return;
   if (skipped)
-    la_add64_rlx(&g->gc2.weak_legacy_skipped, 1);
+    gc2_weak_legacy_skipped_add(g, 1);
   else
-    la_add64_rlx(&g->gc2.weak_legacy_fallbacks, 1);
+    gc2_weak_legacy_fallbacks_add(g, 1);
 }
 
 int lj_gc2_weak_complete(global_State *g, GCobj *legacy, uint32_t drain_limit)

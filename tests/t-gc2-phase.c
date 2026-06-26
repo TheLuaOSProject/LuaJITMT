@@ -588,15 +588,15 @@ static void test_isolated_weak_skip_case(const char *mode)
   lua_settable(L, 1);
   lua_pop(L, 2);  /* Keep only the weak table as a stack root. */
 
-  skipped0 = la_load64_acq(&g->gc2.weak_legacy_skipped);
-  fallbacks0 = la_load64_acq(&g->gc2.weak_legacy_fallbacks);
-  weak_clear_tables0 = la_load64_acq(&g->gc2.weak_clear_tables);
-  weak_clear_cleared0 = la_load64_acq(&g->gc2.weak_clear_cleared);
+  skipped0 = gc2_weak_legacy_skipped_acq(g);
+  fallbacks0 = gc2_weak_legacy_fallbacks_acq(g);
+  weak_clear_tables0 = gc2_weak_clear_tables_acq(g);
+  weak_clear_cleared0 = gc2_weak_clear_cleared_acq(g);
   lj_gc_fullgc(L);
-  assert(la_load64_acq(&g->gc2.weak_clear_tables) > weak_clear_tables0);
-  assert(la_load64_acq(&g->gc2.weak_clear_cleared) > weak_clear_cleared0);
-  assert(la_load64_acq(&g->gc2.weak_legacy_skipped) == skipped0 + 1u);
-  assert(la_load64_acq(&g->gc2.weak_legacy_fallbacks) == fallbacks0);
+  assert(gc2_weak_clear_tables_acq(g) > weak_clear_tables0);
+  assert(gc2_weak_clear_cleared_acq(g) > weak_clear_cleared0);
+  assert(gc2_weak_legacy_skipped_acq(g) == skipped0 + 1u);
+  assert(gc2_weak_legacy_fallbacks_acq(g) == fallbacks0);
   assert_idle(g, tg);
 
   lua_close(L);
@@ -837,16 +837,16 @@ int main(void)
     "end\n") == LUA_OK);
   worker_weak0 = la_load64_acq(&g->gc2.worker_weak_drained);
   weak_complete_progress0 = gc2_weak_complete_progress_acq(g);
-  weak_clear_tables0 = la_load64_acq(&g->gc2.weak_clear_tables);
-  weak_clear_cleared0 = la_load64_acq(&g->gc2.weak_clear_cleared);
-  weak_legacy_fallbacks0 = la_load64_acq(&g->gc2.weak_legacy_fallbacks);
+  weak_clear_tables0 = gc2_weak_clear_tables_acq(g);
+  weak_clear_cleared0 = gc2_weak_clear_cleared_acq(g);
+  weak_legacy_fallbacks0 = gc2_weak_legacy_fallbacks_acq(g);
   lj_gc_fullgc(L);
   assert(la_load64_acq(&g->gc2.worker_weak_drained) > worker_weak0);
   assert(gc2_weak_complete_progress_acq(g) >
 	 weak_complete_progress0);
-  assert(la_load64_acq(&g->gc2.weak_clear_tables) > weak_clear_tables0);
-  assert(la_load64_acq(&g->gc2.weak_clear_cleared) > weak_clear_cleared0);
-  assert(la_load64_acq(&g->gc2.weak_legacy_fallbacks) >=
+  assert(gc2_weak_clear_tables_acq(g) > weak_clear_tables0);
+  assert(gc2_weak_clear_cleared_acq(g) > weak_clear_cleared0);
+  assert(gc2_weak_legacy_fallbacks_acq(g) >=
 	 weak_legacy_fallbacks0);
   assert_idle(g, tg);
   lua_pushnil(L);
@@ -865,27 +865,27 @@ int main(void)
     "  end\n"
     "  weakmany[i] = w\n"
     "end\n") == LUA_OK);
-  weak_legacy_fallbacks0 = la_load64_acq(&g->gc2.weak_legacy_fallbacks);
-  weak_legacy_skipped0 = la_load64_acq(&g->gc2.weak_legacy_skipped);
-  weak_legacy_backfills0 = la_load64_acq(&g->gc2.weak_legacy_backfills);
+  weak_legacy_fallbacks0 = gc2_weak_legacy_fallbacks_acq(g);
+  weak_legacy_skipped0 = gc2_weak_legacy_skipped_acq(g);
+  weak_legacy_backfills0 = gc2_weak_legacy_backfills_acq(g);
   weak_legacy_backfill_tables0 =
-    la_load64_acq(&g->gc2.weak_legacy_backfill_tables);
+    gc2_weak_legacy_backfill_tables_acq(g);
   weak_legacy_backfill_cleared0 =
-    la_load64_acq(&g->gc2.weak_legacy_backfill_cleared);
+    gc2_weak_legacy_backfill_cleared_acq(g);
   lj_gc_fullgc(L);
   assert(luaL_dostring(L,
     "for i = 1, weak_n do\n"
     "  assert(next(weakmany[i]) == nil)\n"
     "end\n") == LUA_OK);
-  assert(la_load64_acq(&g->gc2.weak_legacy_fallbacks) ==
+  assert(gc2_weak_legacy_fallbacks_acq(g) ==
 	 weak_legacy_fallbacks0);
-  assert(la_load64_acq(&g->gc2.weak_legacy_skipped) ==
+  assert(gc2_weak_legacy_skipped_acq(g) ==
 	 weak_legacy_skipped0 + 1u);
-  assert(la_load64_acq(&g->gc2.weak_legacy_backfills) >
+  assert(gc2_weak_legacy_backfills_acq(g) >
 	 weak_legacy_backfills0);
-  assert(la_load64_acq(&g->gc2.weak_legacy_backfill_tables) >
+  assert(gc2_weak_legacy_backfill_tables_acq(g) >
 	 weak_legacy_backfill_tables0);
-  assert(la_load64_acq(&g->gc2.weak_legacy_backfill_cleared) >
+  assert(gc2_weak_legacy_backfill_cleared_acq(g) >
 	 weak_legacy_backfill_cleared0);
   assert_idle(g, tg);
   lua_pushnil(L);

@@ -857,15 +857,15 @@ int main(void)
   (void)la_xchg64_acqrel(&g->gc2.alloc_since_trigger, 0);
   assist_runs0 = gc2_assist_runs_acq(g);
   assist_weak0 = gc2_assist_weak_drained_acq(g);
-  weak_clear_tables0 = la_load64_acq(&g->gc2.weak_clear_tables);
-  weak_clear_cleared0 = la_load64_acq(&g->gc2.weak_clear_cleared);
+  weak_clear_tables0 = gc2_weak_clear_tables_acq(g);
+  weak_clear_cleared0 = gc2_weak_clear_cleared_acq(g);
   lj_gc2_account_alloc(g, tg, LJ_GC2_ACCT_FLUSH);
   assert(tg->gc_assist == 0);
   assert(la_load32_acq(&g->gc2.assist_active) == 0);
   assert(gc2_assist_runs_acq(g) == assist_runs0 + 1u);
   assert(gc2_assist_weak_drained_acq(g) == assist_weak0 + 1u);
-  assert(la_load64_acq(&g->gc2.weak_clear_tables) == weak_clear_tables0 + 1u);
-  assert(la_load64_acq(&g->gc2.weak_clear_cleared) ==
+  assert(gc2_weak_clear_tables_acq(g) == weak_clear_tables0 + 1u);
+  assert(gc2_weak_clear_cleared_acq(g) ==
 	 weak_clear_cleared0 + 1u);
   lua_pushvalue(L, 2);
   lua_gettable(L, 1);

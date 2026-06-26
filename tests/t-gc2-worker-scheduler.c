@@ -371,14 +371,14 @@ static void test_async_weak(lua_State *L, global_State *g, TGState *tg)
 
   async0 = la_load64_acq(&g->gc2.worker_async_progress);
   worker_weak0 = la_load64_acq(&g->gc2.worker_weak_drained);
-  clears0 = la_load64_acq(&g->gc2.weak_clear_tables);
+  clears0 = gc2_weak_clear_tables_acq(g);
   lj_gc2_legacy_weak_begin(g);
   for (i = 0; i < 1000 && !weak_entry_is_nil(L, weak, key); i++)
     sleep_ns(1000000L);
   assert(weak_entry_is_nil(L, weak, key));
   assert(la_load64_acq(&g->gc2.worker_async_progress) > async0);
   assert(la_load64_acq(&g->gc2.worker_weak_drained) > worker_weak0);
-  assert(la_load64_acq(&g->gc2.weak_clear_tables) > clears0);
+  assert(gc2_weak_clear_tables_acq(g) > clears0);
   assert(la_load32_acq(&g->gc2.worker_active) == 0);
 
   lj_gc2_legacy_cycle_end(g);

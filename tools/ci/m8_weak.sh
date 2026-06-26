@@ -65,4 +65,70 @@ if hits=$(grep -nE -- '->[[:space:]]*gc2[.](weak_tables_(seen|weakkey|weakval|al
   exit 1
 fi
 
+for helper in gc2_weak_scan_runs_acq \
+  gc2_weak_scan_runs_store_rlx \
+  gc2_weak_scan_runs_add \
+  gc2_weak_scan_tables_acq \
+  gc2_weak_scan_tables_store_rlx \
+  gc2_weak_scan_tables_add \
+  gc2_weak_scan_slots_acq \
+  gc2_weak_scan_slots_store_rlx \
+  gc2_weak_scan_slots_add \
+  gc2_weak_scan_clearable_acq \
+  gc2_weak_scan_clearable_store_rlx \
+  gc2_weak_scan_clearable_add \
+  gc2_weak_clear_runs_acq \
+  gc2_weak_clear_runs_store_rlx \
+  gc2_weak_clear_runs_add \
+  gc2_weak_clear_tables_acq \
+  gc2_weak_clear_tables_store_rlx \
+  gc2_weak_clear_tables_add \
+  gc2_weak_clear_slots_acq \
+  gc2_weak_clear_slots_store_rlx \
+  gc2_weak_clear_slots_add \
+  gc2_weak_clear_cleared_acq \
+  gc2_weak_clear_cleared_store_rlx \
+  gc2_weak_clear_cleared_add \
+  gc2_weak_legacy_skipped_acq \
+  gc2_weak_legacy_skipped_store_rlx \
+  gc2_weak_legacy_skipped_add \
+  gc2_weak_legacy_fallbacks_acq \
+  gc2_weak_legacy_fallbacks_store_rlx \
+  gc2_weak_legacy_fallbacks_add \
+  gc2_weak_legacy_backfills_acq \
+  gc2_weak_legacy_backfills_store_rlx \
+  gc2_weak_legacy_backfills_add \
+  gc2_weak_legacy_backfill_tables_acq \
+  gc2_weak_legacy_backfill_tables_store_rlx \
+  gc2_weak_legacy_backfill_tables_add \
+  gc2_weak_legacy_backfill_slots_acq \
+  gc2_weak_legacy_backfill_slots_store_rlx \
+  gc2_weak_legacy_backfill_slots_add \
+  gc2_weak_legacy_backfill_cleared_acq \
+  gc2_weak_legacy_backfill_cleared_store_rlx \
+  gc2_weak_legacy_backfill_cleared_add; do
+  if ! grep -qE "static LJ_AINLINE .*[*[:space:]]${helper}[[:space:]]*[(]" \
+      "$ROOT/src/lj_obj.h"; then
+    printf '%s\n' "${helper} helper is required for GC2 weak scan counters" >&2
+    exit 1
+  fi
+done
+
+weak_legacy_counters='weak_legacy_(skipped|fallbacks|backfills)'
+weak_legacy_counters="${weak_legacy_counters}|weak_legacy_backfill_(tables|slots|cleared)"
+weak_scan_counters='weak_scan_(runs|tables|slots|clearable)'
+weak_scan_counters="${weak_scan_counters}|weak_clear_(runs|tables|slots|cleared)"
+weak_scan_counters="${weak_scan_counters}|${weak_legacy_counters}"
+weak_scan_raw_re="->[[:space:]]*(gc2[.])?(${weak_scan_counters})"
+weak_scan_raw_re="${weak_scan_raw_re}([^[:alnum:]_]|$)"
+weak_scan_addr_re="&[[:space:]]*[^)]*->[[:space:]]*(gc2[.])?"
+weak_scan_addr_re="${weak_scan_addr_re}(${weak_scan_counters})([^[:alnum:]_]|$)"
+if hits=$(grep -nE -- "${weak_scan_raw_re}|${weak_scan_addr_re}" \
+    "$ROOT/src/lj_gc2.c" "$ROOT/src/lib_base.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' \
+    'raw GC2 weak scan counter access is forbidden; use gc2_weak_* helpers' >&2
+  exit 1
+fi
+
 exec "$ROOT/tools/ci/lua_test.sh" m8_weak
