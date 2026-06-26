@@ -20,4 +20,18 @@ if hits=$(awk '
   printf '%s\n' 'raw CType info/size/sib reads are forbidden in callback runtime conversion helpers; use ctype_*_acq() helpers' >&2
   exit 1
 fi
+for helper in lj_tg_ffi_call_func_acq lj_tg_ffi_call_func_rel
+do
+  if ! grep -q "$helper" "$ROOT/src/lj_tg.h"; then
+    printf '%s\n' "missing TG FFI call-function helper: $helper" >&2
+    exit 1
+  fi
+done
+if hits=$(grep -RInE -- '->[[:space:]]*ffi_call_func([^[:alnum:]_]|$)|&[[:space:]]*[^)]*->[[:space:]]*ffi_call_func([^[:alnum:]_]|$)' \
+    "$ROOT/src/lj_ccall.c" "$ROOT/src/lj_ccallback.c" "$ROOT/src/lj_tg.c" "$ROOT/src/lj_tg.h" 2>/dev/null | \
+    grep -vF "$ROOT/src/lj_tg.h:" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw TG FFI call-function access is forbidden; use lj_tg_ffi_call_func_* helpers' >&2
+  exit 1
+fi
 exec "$ROOT/tools/ci/lua_test.sh" m7_ffi_callback_runtime

@@ -1263,21 +1263,21 @@ int lj_ccall_func(lua_State *L, GCcdata *cd)
   if (ctype_isfunc(info)) {
     CCallState cc;
     TGState *tg = L2TG(L);
-    void *old_ffi_call_func = tg->ffi_call_func;
+    void *old_ffi_call_func = lj_tg_ffi_call_func_acq(tg);
     uint32_t actions;
     CCallbackRuntime *cb = &tg->cb;
     int gcsteps, ret;
     cc.func = (void (*)(void))cdata_getptr(cdataptr(cd), sz);
     gcsteps = ccall_set_args(L, cts, ct, &cc);
     cb->slot = ~0u;
-    tg->ffi_call_func = (void *)cc.func;
+    lj_tg_ffi_call_func_rel(tg, (void *)cc.func);
     lj_native_enter(tg);
     lj_vm_ffi_call(&cc);
     actions = lj_native_leave(L);
     if (cb->slot != ~0u) {  /* Blacklist function that called a callback. */
       lj_ctype_cb_blacklist(cts, (void *)cc.func);
     }
-    tg->ffi_call_func = old_ffi_call_func;
+    lj_tg_ffi_call_func_rel(tg, old_ffi_call_func);
     ct = ctype_get(cts, id);  /* Table may have been reallocated. */
     gcsteps += ccall_get_results(L, cts, ct, &cc, &ret);
 #if LJ_TARGET_X86 && LJ_ABI_WIN

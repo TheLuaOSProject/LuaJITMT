@@ -150,6 +150,18 @@ static LJ_AINLINE void lj_tg_alloc_black_rel(TGState *tg,
   la_store8_rel(&tg->alloc.alloc_black, alloc_black);  /* 05 section 5.5. */
 }
 
+#if LJ_HASFFI
+static LJ_AINLINE void *lj_tg_ffi_call_func_acq(const TGState *tg)
+{
+  return la_loadptr_acq((void *const *)&tg->ffi_call_func);  /* 11.5 callback. */
+}
+
+static LJ_AINLINE void lj_tg_ffi_call_func_rel(TGState *tg, void *func)
+{
+  la_storeptr_rel((void **)&tg->ffi_call_func, func);  /* 11.5 callback. */
+}
+#endif
+
 static LJ_AINLINE uint8_t lj_tg_flags_acq(const TGState *tg)
 {
   return la_load8_acq(&tg->tg_flags);  /* 05 section 5.4.1 TG registry. */

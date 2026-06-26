@@ -733,7 +733,7 @@ void lj_ccallback_unwind(lua_State *L, TValue *cont)
   if (L == NULL || tg == NULL || tg->gl != G(L))
     return;
   cb = &tg->cb;
-  tg->ffi_call_func = NULL;
+  lj_tg_ffi_call_func_rel(tg, NULL);
   frame = callback_frame_top(cb);
   if (frame != NULL && frame->cont == cont) {
     uint8_t auto_detach = frame->auto_detach;
@@ -941,6 +941,7 @@ lua_State * LJ_FASTCALL lj_ccallback_enter(CTState *cts, void *cf,
   uint8_t was_native;
   uint8_t auto_detach = cb->auto_detach;
   uint32_t actions = 0;
+  void *ffi_call_func;
   if (LJ_UNLIKELY(tg == NULL || tg->gl != g || cb != &tg->cb ||
 		  L == NULL || lj_tg_load_cur_L(tg) != L || L2TG(L) != tg))
     abort();
@@ -958,8 +959,9 @@ lua_State * LJ_FASTCALL lj_ccallback_enter(CTState *cts, void *cf,
   L->cframe = cf;
   was_native = (uint8_t)(lj_tg_in_native_acq(tg) != 0);
   if (was_native) {
-    if (tg->ffi_call_func != NULL)
-      lj_ctype_cb_blacklist(cts, tg->ffi_call_func);
+    ffi_call_func = lj_tg_ffi_call_func_acq(tg);
+    if (ffi_call_func != NULL)
+      lj_ctype_cb_blacklist(cts, ffi_call_func);
     actions = lj_native_leave(L);
   }
   callback_conv_args(cts, L, cb);

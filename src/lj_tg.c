@@ -172,7 +172,7 @@ void lj_tg_detach(global_State *g, TGState *tg)
   lj_tg_poll_rel(tg, 0);
   lj_tg_in_native_store_rlx(tg, 0);
 #if LJ_HASFFI
-  tg->ffi_call_func = NULL;
+  lj_tg_ffi_call_func_rel(tg, NULL);
 #endif
 }
 
