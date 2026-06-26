@@ -21,6 +21,9 @@ function M.trace1_ir_state(t, dump)
     hrefk = false,
     hmask = false,
     node = false,
+    astore = false,
+    hstore = false,
+    hload = false,
     done = false
   }
   local inir = false
@@ -43,6 +46,9 @@ function M.trace1_ir_state(t, dump)
       if contains(line, " HREFK") then st.hrefk = true end
       if contains(line, " AREF ") then st.aref = true end
       if contains(line, " ALOAD ") then st.aload = true end
+      if contains(line, " ASTORE ") then st.astore = true end
+      if contains(line, " HSTORE ") then st.hstore = true end
+      if contains(line, " HLOAD ") then st.hload = true end
       if contains(line, " XPOLL ") or contains(line, "XPOLL") then st.xpoll = true end
       if contains(line, "tab.hmask") then st.hmask = true end
       if contains(line, "tab.node") then st.node = true end

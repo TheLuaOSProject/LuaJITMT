@@ -246,6 +246,28 @@ static TRef fwd_ahload(jit_State *J, IRRef xref)
 	  return lj_ir_kstr(J, strV(tv));
       }
       /* Othwerwise: don't intern as a constant. */
+    } else if (ir->o != IR_TNEW && ir->o != IR_TDUP) {
+      /* Lockless table header loads are intentionally not CSE'd. This can
+      ** leave a fresh AREF/HREF after a same-slot store, so the older
+      ** ref>xref store-forwarding search above misses it. Recover the
+      ** existing S2L optimization only within the current poll/loop region.
+      */
+      IRRef slim = poll_alias_limit(J, J->chain[IR_LOOP]);
+      ref = J->chain[fins->o+IRDELTA_L2S];
+      while (ref > slim) {
+	IRIns *store = IR(ref);
+	if (ref <= xref) {
+	  switch (aa_ahref(J, xr, IR(store->op1))) {
+	  case ALIAS_NO:
+	    break;  /* Continue searching. */
+	  case ALIAS_MAY:
+	    goto cselim;  /* Conflicting store. */
+	  case ALIAS_MUST:
+	    return fwd_aa_tab_clear(J, ref, tab) ? store->op2 : 0;
+	  }
+	}
+	ref = store->prev;
+      }
     }
   }
 

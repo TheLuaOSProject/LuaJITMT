@@ -561,6 +561,48 @@ assert(a[1] == 80)
 assert(util.traceinfo(1), "shared existing array store did not trace")
 ]=], { "ASTORE", "XPOLL" }, "shared existing array store")
 
+      local array_forward_dump = t:tmp("lj-m6-astore-forward-read.dump")
+      luajit_dump(t, array_forward_dump, "-jdump=ir", [=[
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+jit.off()
+local a = {}
+for i = 1, 256 do a[i] = 0 end
+jit.on()
+local s = 0
+for i = 1, 80 do
+  local j = (i % 256) + 1
+  a[j] = i + 0.5
+  s = s + a[j]
+end
+assert(s == 3280 and a[81] == 80.5)
+]=], { timeout = "20s" })
+      assert_trace1_ir(t, array_forward_dump,
+                       "same-slot array store/read must forward ASTORE",
+                       function(st)
+        return st.astore and st.aref and not st.aload and st.xpoll
+      end)
+
+      local hash_forward_dump = t:tmp("lj-m6-hstore-forward-read.dump")
+      luajit_dump(t, hash_forward_dump, "-jdump=ir", [=[
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+jit.off()
+local h = { stable = 0 }
+jit.on()
+local s = 0
+for i = 1, 80 do
+  h.stable = i + 0.5
+  s = s + h.stable
+end
+assert(s == 3280 and h.stable == 80.5)
+]=], { timeout = "20s" })
+      assert_trace1_ir(t, hash_forward_dump,
+                       "same-slot hash store/read must forward HSTORE",
+                       function(st)
+        return st.hstore and st.hrefk and not st.hload and st.xpoll
+      end)
+
       local route_dump = t:tmp("lj-m6-table-store-helper-routes.dump")
       luajit_dump(t, route_dump, "-jdump=im", [=[
 jit.flush()
