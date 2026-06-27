@@ -139,7 +139,11 @@ channel happens-before edge. Lua-facing receives use `lj_chan_recv_timeout_gc()`
 to apply a root barrier before clearing the channel slot, so the previous
 channel root is not lost before the result is copied onto the Lua stack. Legacy
 GC and GC2 traversal also acquire-snapshot channel slots into local `TValue`s
-before marking.
+before marking. The contended blocking send/recv paths now skip the old
+spin-before-park window and enter the native futex wait path immediately; this
+trades the planned latency fast path for lower CPU burn and stronger
+preemption stability while keeping the same channel linearization and timeout
+semantics.
 
 Thread userdata links are published through `lua_State.mt_thread` with
 `setgcrefrel()` in `threading_state_set_ud()` and read back with
