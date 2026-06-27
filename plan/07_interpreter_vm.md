@@ -212,12 +212,18 @@ Out of scope for this implementation pass. Do not spend milestone time on
 non-x86-64 dasc work until the x86-64 Linux runtime is green.
 
 ## 7.9 Audit checklist for this document's changes
-- [ ] `grep -c "vm_safepoint" vm_x64.dasc` ≥ 4 sites + stub
-- [ ] no remaining `DISPATCH_GL(gc\.` after M2
+- [x] `grep -c "vm_safepoint" vm_x64.dasc` ≥ 4 sites + stub
+- [x] no remaining `DISPATCH_GL(gc\.` after M2
 - [ ] `barrierback` macro deleted; `wbarrier_tv` used by TSETV/TSETS/TSETB/
       TSETM/USETx/CSET
-- [ ] BC_TNEW slow-path label still reachable for asize>0 templates
+- [x] BC_TNEW slow-path label still reachable for asize>0 templates
 - [ ] interp-only build (`-joff`) passes the stock suite
+
+Current guard: `m3_vm_safepoint` now asserts the migrated x64 VM source
+invariants before running `t-vm-safepoint`: at least five `vm_safepoint`
+references, no x64 `DISPATCH_GL(gc.*)` loads, no x64 inline `barrierback`, and
+both the empty-table `lj_tab_new0` and non-empty `lj_tab_new` `BC_TNEW` paths
+remain present.
 
 Current x64 bridge note: the base-library `setmetatable` fast path now
 publishes the table -> metatable edge through `lj_gc2_barrier_obj_pair()` before

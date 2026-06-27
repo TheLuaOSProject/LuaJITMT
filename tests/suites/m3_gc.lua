@@ -12,6 +12,31 @@ local capture_luajit = runtime.capture_luajit
 local run_lua_test_case = runtime.run_lua_test_case
 local run_luajit_script_jit_modes = runtime.run_luajit_script_jit_modes
 
+local function assert_x64_vm_static_guards(t)
+  local vm = utils.read_file(t:path("src", "vm_x64.dasc"))
+  local safepoints = checks.count_plain(vm, "vm_safepoint")
+  if safepoints < 5 then
+    error("x64 VM safepoint surface regressed: saw " .. safepoints ..
+          " vm_safepoint references", 2)
+  end
+  if vm:find("DISPATCH_GL%(gc%.") then
+    error("x64 VM must not load global GC state through DISPATCH_GL(gc.*)", 2)
+  end
+  if vm:find("barrierback", 1, true) then
+    error("x64 VM must not reintroduce inline legacy barrierback", 2)
+  end
+  local tnew = vm:match("case BC_TNEW:(.-)case BC_TDUP:")
+  if not tnew then
+    error("x64 VM BC_TNEW block not found", 2)
+  end
+  if not tnew:find("call extern lj_tab_new0", 1, true) then
+    error("x64 VM empty BC_TNEW path must stay on lj_tab_new0", 2)
+  end
+  if not tnew:find("call extern lj_tab_new", 1, true) then
+    error("x64 VM non-empty BC_TNEW slow path must stay reachable", 2)
+  end
+end
+
 local function build_loadlib_stopreq_so(t)
   return build_shared_library(t, t:tmp("lj_t-loadlib-stopreq.so"),
                               "t-loadlib-stopreq-lib.c")
@@ -109,6 +134,7 @@ return function(add)
     name = "m3_vm_safepoint",
     description = "focused x64 VM safepoint poll fixture",
     run = function(t)
+      assert_x64_vm_static_guards(t)
       make_clean(t)
       make_default(t)
       compile_and_run_c(t, t:tmp("lj_t_vm_safepoint"),
