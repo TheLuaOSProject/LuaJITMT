@@ -3072,6 +3072,24 @@ void lj_gc2_finreg_cdata_finalizer_enqueue(global_State *g, GCobj *o)
 #endif
 }
 
+static int gc2_finreg_root_splice(GCRef *p, GCobj *o)
+{
+  GCobj *next = lj_obj_gcw_acq(o);
+  GCRef oldref, nextref;
+  setgcref(oldref, o);
+  if (next)
+    setgcref(nextref, next);
+  else
+    setgcrefnull(nextref);
+#if LJ_GC64
+  return la_cas64(&p->gcptr64, &oldref.gcptr64, nextref.gcptr64,
+		  LA_ACQ_REL, LA_ACQ);
+#else
+  return la_cas32(&p->gcptr32, &oldref.gcptr32, nextref.gcptr32,
+		  LA_ACQ_REL, LA_ACQ);
+#endif
+}
+
 #if LJ_HASFFI
 static int gc2_finreg_cdata_candidate_pweak(GCobj *o)
 {
@@ -3103,24 +3121,6 @@ static GCobj *gc2_finreg_cdata_order_object(FinRegOrderNode *ord, GCtab *t,
   if (!tviscdata(&key) || gcV(&key) != o)
     return NULL;
   return o;  /* 05 section 5.8: ordered FINREG node owns cdata identity. */
-}
-
-static int gc2_finreg_root_splice(GCRef *p, GCobj *o)
-{
-  GCobj *next = lj_obj_gcw_acq(o);
-  GCRef oldref, nextref;
-  setgcref(oldref, o);
-  if (next)
-    setgcref(nextref, next);
-  else
-    setgcrefnull(nextref);
-#if LJ_GC64
-  return la_cas64(&p->gcptr64, &oldref.gcptr64, nextref.gcptr64,
-		  LA_ACQ_REL, LA_ACQ);
-#else
-  return la_cas32(&p->gcptr32, &oldref.gcptr32, nextref.gcptr32,
-		  LA_ACQ_REL, LA_ACQ);
-#endif
 }
 
 static int gc2_finreg_cdata_unlink_root(global_State *g, GCobj *target)
@@ -3613,6 +3613,110 @@ void lj_gc2_finreg_udata_forget(global_State *g, GCobj *o)
   }
   if (cleared)
     gc2_finreg_udata_forgets_add(g, 1);
+}
+
+static int gc2_finreg_udata_unlink_root(global_State *g, GCobj *target)
+{
+  GCRef *p = lj_obj_gcwref(obj2gco(mainthread_acq(g)));
+  GCobj *o;
+  while ((o = gcref_acq(*p)) != NULL) {
+    if (o == target) {
+      if (gc2_finreg_root_splice(p, o))
+	return 1;  /* root unlink after userdata FINREG claim. */
+      la_cpu_pause();
+      continue;
+    }
+    p = lj_obj_gcwref(o);
+  }
+  return 0;
+}
+
+size_t lj_gc2_finreg_udata_finalize(global_State *g, int all)
+{
+  GC2FinRegUDataNode *prev, *node;
+  TValue mmv;
+  size_t m = 0;
+  if (!g)
+    return 0;
+  prev = NULL;
+  node = gc2_finreg_udata_head_acq(g);
+  while (node) {
+    GC2FinRegUDataNode *next = gc2_finreg_udata_next_acq(node);
+    GCobj *o = gc2_finreg_udata_obj_acq(node);
+    uint8_t flags;
+    int finreg;
+    if (!gc2_finreg_udata_active_acq(node)) {
+      node = next;
+      continue;
+    }
+    if (!o) {
+      if (lj_gc2_finreg_udata_unlink(g, prev, node, next)) {
+	node = next;
+	continue;
+      }
+      prev = NULL;
+      node = gc2_finreg_udata_head_acq(g);
+      continue;
+    }
+    if (o->gch.gct != ~LJ_TUDATA) {
+      gc2_finreg_udata_obj_clear(node);
+      if (lj_gc2_finreg_udata_unlink(g, prev, node, next)) {
+	node = next;
+	continue;
+      }
+      prev = NULL;
+      node = gc2_finreg_udata_head_acq(g);
+      continue;
+    }
+    if (lj_obj_gcflags(o) & LJ_GC_FINALIZED) {
+      gc2_finreg_udata_obj_clear(node);
+      if (lj_gc2_finreg_udata_unlink(g, prev, node, next)) {
+	node = next;
+	continue;
+      }
+      prev = NULL;
+      node = gc2_finreg_udata_head_acq(g);
+      continue;
+    }
+    if (!(iswhite(o) || all)) {
+      prev = node;
+      node = next;
+      continue;
+    }
+    flags = lj_obj_gcflags(o);
+    finreg = (flags & LJ_GC_UDATA_FINREG) != 0;
+    if (!lj_meta_fasttv(g, tabref_acq(gco2ud(o)->metatable), MM_gc, &mmv)) {
+      if (finreg)
+	lj_gc2_finreg_udata_set(g, o, 0);
+      markfinalized(o);  /* Side-list no-finalizer userdata is done. */
+      gc2_finreg_udata_obj_clear(node);
+      if (lj_gc2_finreg_udata_unlink(g, prev, node, next)) {
+	node = next;
+	continue;
+      }
+      prev = NULL;
+      node = gc2_finreg_udata_head_acq(g);
+      continue;
+    }
+    if (!finreg)
+      (void)lj_gc2_finreg_udata_set(g, o, 1);
+    /*
+    ** 05 section 5.8: GC2 userdata FINREG identity is enough for
+    ** discovery without legacy userdata-chain membership.
+    */
+    (void)gc2_finreg_udata_unlink_root(g, o);
+    gc2_finreg_udata_obj_clear(node);
+    gc2_finreg_udata_discovered_add(g, 1);
+    lj_gc2_finreg_udata_finalizer_enqueue(g, o);
+    m += sizeudata(gco2ud(o));
+    if (lj_gc2_finreg_udata_unlink(g, prev, node, next)) {
+      node = next;
+      continue;
+    }
+    prev = NULL;
+    node = gc2_finreg_udata_head_acq(g);
+  }
+  return m;  /* 05 section 5.8: GC2-owned userdata FINREG discovery. */
 }
 
 void lj_gc2_finreg_udata_queue(global_State *g, GCobj *o)

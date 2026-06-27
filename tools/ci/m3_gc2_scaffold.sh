@@ -18,14 +18,31 @@ check_raw_finreg_udata_next() {
   fi
 }
 
-check_raw_finreg_udata_next "src/lj_gc.c:gc_separateudata_registered" \
-  "$ROOT/src/lj_gc.c" "static size_t gc_separateudata_registered"
+check_raw_finreg_udata_next "src/lj_gc2.c:lj_gc2_finreg_udata_finalize" \
+  "$ROOT/src/lj_gc2.c" "size_t lj_gc2_finreg_udata_finalize"
 check_raw_finreg_udata_next "src/lj_gc2.c:lj_gc2_fini" \
   "$ROOT/src/lj_gc2.c" "void lj_gc2_fini"
 check_raw_finreg_udata_next "src/lj_gc2.c:lj_gc2_finreg_udata_register" \
   "$ROOT/src/lj_gc2.c" "void lj_gc2_finreg_udata_register"
 check_raw_finreg_udata_next "src/lj_gc2.c:lj_gc2_finreg_udata_forget" \
   "$ROOT/src/lj_gc2.c" "void lj_gc2_finreg_udata_forget"
+
+if ! grep -qE 'LJ_FUNC size_t lj_gc2_finreg_udata_finalize[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.h"; then
+  printf '%s\n' 'lj_gc2_finreg_udata_finalize declaration is required' >&2
+  exit 1
+fi
+if ! grep -qE '^size_t lj_gc2_finreg_udata_finalize[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.c"; then
+  printf '%s\n' 'lj_gc2_finreg_udata_finalize definition is required' >&2
+  exit 1
+fi
+if hits=$(grep -nE -- 'gc_separateudata_registered|gc_unlink_udata_object|gc_queue_udata_finalizer' \
+    "$ROOT/src/lj_gc.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'userdata FINREG discovery must stay in lj_gc2 helpers' >&2
+  exit 1
+fi
 
 for helper in gc2_finreg_udata_head_acq \
   gc2_finreg_udata_head_store_rlx \

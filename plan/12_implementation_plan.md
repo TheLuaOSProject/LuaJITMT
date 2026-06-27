@@ -245,13 +245,14 @@ object's `gcw` root/list link.
 User finalizer callbacks now run on the claimed collector caller `lua_State`
 instead of the shared `vmthread(g)` stack. Userdata FINREG membership now uses a
 GC2 side list for discovery, including in-place metatable finalizer additions
-and manually chain-unlinked userdata. Cdata ordered FINREG discovery covers the
-ordinary P_WEAK and close-time paths. The M9 cleanup removed close-time
-generation-table pending/discovery scans; P_WEAK preclaim side-vector failure
-now restores and queues the same ordered object without a legacy root-list
-walk. If cdata with a live finalizer reaches sweep/free, that is now a fatal
-FINREG invariant instead of a rescue queue; safety and Lua finalizer semantics
-win over trying to recover from a missed owner edge.
+and manually chain-unlinked userdata; `lj_gc2_finreg_udata_finalize()` owns the
+side-list walk and finalizer queue publication. Cdata ordered FINREG discovery
+covers the ordinary P_WEAK and close-time paths. The M9 cleanup removed
+close-time generation-table pending/discovery scans; P_WEAK preclaim side-vector
+failure now restores and queues the same ordered object without a legacy
+root-list walk. If cdata with a live finalizer reaches sweep/free, that is now
+a fatal FINREG invariant instead of a rescue queue; safety and Lua finalizer
+semantics win over trying to recover from a missed owner edge.
 The broader planned FINREG/finqueue dispatch path remains M8 work rather than
 an M9 performance cleanup.
 The original "finalizer that spawns a thread" item now has bridge tests for
