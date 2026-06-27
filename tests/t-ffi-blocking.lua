@@ -33,10 +33,10 @@ end
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
 assert(run_abs(100) == 5050)
-assert(trace_count() > 0, "baseline FFI call loop should record")
+assert(trace_count() == 0, "ordinary FFI call loop must stay off trace")
 
 assert(ffi.blocking(abs) == abs)
-assert(trace_count() == 0, "ffi.blocking must flush existing traces")
+assert(trace_count() == 0, "ffi.blocking must keep FFI calls off trace")
 assert(run_abs(100) == 5050)
 assert(trace_count() == 0, "ffi.blocking function must stay off trace")
 
@@ -53,9 +53,17 @@ do
   local sleep_ms = 800
   local worker = th.spawn(function(ready_ch, done_ch, timeout_ms)
     local ffi = require"ffi"
-    local poll = ffi.blocking(ffi.C.poll)
+    local poll = ffi.C.poll
+    local function call_poll(timeout)
+      return poll(nil, 0, timeout)
+    end
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    for _ = 1, 120 do
+      assert(call_poll(0) == 0)
+    end
     ready_ch:send("sleeping")
-    assert(poll(nil, 0, timeout_ms) == 0)
+    assert(call_poll(timeout_ms) == 0)
     done_ch:send("done")
     return true
   end, ready, done, sleep_ms)
@@ -71,7 +79,7 @@ do
   collectgarbage("collect")
   local elapsed = now() - t0
   assert(elapsed < 0.5,
-         ("collectgarbage blocked on ffi.blocking native call for %.3fs"):
+         ("collectgarbage blocked on ordinary FFI native call for %.3fs"):
 	 format(elapsed))
 
   local msg, done_ok = done:recv(2)

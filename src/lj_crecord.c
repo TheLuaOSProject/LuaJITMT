@@ -43,6 +43,15 @@
 #define emitconv(a, dt, st, flags) \
   emitir(IRT(IR_CONV, (dt)), (a), (st)|((dt) << 5)|(flags))
 
+/*
+** Safety bridge for 11.5: ordinary FFI C calls must not run from traced mcode
+** until IR_CALLXS has a native-state enter/leave protocol. The interpreted
+** ccall path already marks native and checks STOPREQ after result conversion.
+*/
+#ifndef LJ_FFI_RECORD_CALLS
+#define LJ_FFI_RECORD_CALLS 0
+#endif
+
 /* -- C type checks ------------------------------------------------------- */
 
 static GCcdata *argv2cdata(jit_State *J, TRef tr, cTValue *o)
@@ -1286,6 +1295,7 @@ static void crec_alloc(jit_State *J, RecordFFData *rd, CTypeID id)
 /* Record argument conversions.
 ** Note: may reallocate the C type table and invalidate CType pointers.
 */
+#if LJ_FFI_RECORD_CALLS
 static TRef crec_call_args(jit_State *J, RecordFFData *rd,
 			   CTState *cts, CType *ct)
 {
@@ -1433,6 +1443,7 @@ static void crec_snap_caller(jit_State *J)
   J->base += delta; J->baseslot += (BCReg)delta;
   J->base[-1-LJ_FR2] = ftr; J->pc = pc;
 }
+#endif
 
 /* Record function call. */
 static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
@@ -1441,14 +1452,21 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
   CTypeID id = ctype_rawid(cts, cd->ctypeid);
   CType *ct = ctype_get(cts, id);
   CTInfo info = ctype_info_acq(ct);
+#if LJ_FFI_RECORD_CALLS
   IRType tp = IRT_PTR;
+#endif
   if (ctype_isptr(info)) {
+#if LJ_FFI_RECORD_CALLS
     tp = (LJ_64 && ctype_size_acq(ct) == 8) ? IRT_P64 : IRT_P32;
+#endif
     id = ctype_rawid(cts, ctype_cid(info));
     ct = ctype_get(cts, id);
     info = ctype_info_acq(ct);  /* crec_call_args may invalidate ct pointer. */
   }
   if (ctype_isfunc(info)) {
+#if !LJ_FFI_RECORD_CALLS
+    lj_trace_err(J, LJ_TRERR_BLACKL);
+#else
     TRef func = emitir(IRT(IR_FLOAD, tp), J->base[0], IRFL_CDATA_PTR);
     CType *ctr = ctype_rawchild(cts, ct);
     CTInfo ctr_info = ctype_info_acq(ctr);  /* crec_call_args may invalidate ctr. */
@@ -1503,6 +1521,7 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
     J->base[0] = tr;
     J->needsnap = 1;
     return 1;
+#endif
   }
   return 0;
 }

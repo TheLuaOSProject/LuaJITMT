@@ -131,21 +131,17 @@ FINREG/finqueue dispatch lands.
 - **FFI call out** (interpreter `->vm_ffi_call`, JIT IR_CALLXS): wrap with
   native enter/leave (05 §5.4.3). Cost: two byte-stores + a poll-check on
   return — significant for tiny leaf calls (ffi_struct bench guards this).
-  Optimization (DECIDED, v1): calls *recorded as fast* (no callback risk,
-  trivial signatures — the JIT already classifies) skip native-state and
-  instead rely on poll-at-backedge; only interpreter calls and JIT calls
-  to unanalyzed pointers do enter/leave. The GC then must tolerate a
-  mutator stuck ≤1 FFI call without acking: it already does — handshakes
-  wait, hard-pacing throttles only the offender (05 §5.4.2/5.11). A truly
-  blocking C function called via the fast path can stall GC completion:
-  document `ffi.blocking(fn)` wrapper that forces native-state per call.
   Current bridge: interpreted FFI calls enter native state around
   `lj_vm_ffi_call(&cc)`, preserve the native-leave action mask, and check
   `HS_STOPREQ` after callback blacklist handling and result conversion have
-  restored local FFI bookkeeping. `ffi.blocking(fn)` currently marks the
-  function pointer in the existing CTState pointer-key blacklist and returns
-  the same cdata function, forcing future calls through the interpreted
-  native-enter path instead of recorded `IR_CALLXS` fast calls.
+  restored local FFI bookkeeping. Safety-first default: cdata function calls do
+  not record `IR_CALLXS` unless `LJ_FFI_RECORD_CALLS` is explicitly enabled, so
+  ordinary FFI calls naturally use the interpreted native-state path. This
+  removes the previous requirement that users identify blocking functions with
+  `ffi.blocking(fn)` before GC/shutdown can progress while C is blocked.
+  `ffi.blocking(fn)` remains as a compatibility marker and validation API, but
+  traced C-call throughput stays deferred until `IR_CALLXS` has an explicit
+  native-state enter/leave protocol.
 - **Callbacks (C→Lua)**: callback entry (lj_ccallback.c enter) runs
   `lj_native_leave` on the carrier thread; if the OS thread is foreign
   (created by C, never attached), auto-attach a TG (luaMT_attach path, 09
