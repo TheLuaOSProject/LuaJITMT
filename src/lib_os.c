@@ -115,7 +115,7 @@ static char *os_native_tmpnam(lua_State *L, char *buf)
   char *p;
   lj_native_enter(L2TG(L));
   p = tmpnam(buf);
-  (void)lj_native_leave(L);
+  lj_safepoint_checkstop(L, lj_native_leave(L));
   return p;
 }
 #endif

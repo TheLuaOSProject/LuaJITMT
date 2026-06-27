@@ -54,6 +54,37 @@ if hits=$(grep -RInE -- '->[[:space:]]*in_native([^[:alnum:]_]|$)|&[[:space:]]*[
   printf '%s\n' 'raw TG native-state access is forbidden; use lj_tg_in_native_* helpers' >&2
   exit 1
 fi
+if hits=$(awk '
+  FNR == 1 { fn = "" }
+  /^static FILE \*perftools_native_fopen\(lua_State \*L, const char \*fname\)$/ {
+    fn = "perftools_native_fopen"
+  }
+  /^static void perftools_native_fprintf\(lua_State \*L, FILE \*fp, uintptr_t mcode,$/ {
+    fn = "perftools_native_fprintf"
+  }
+  /^static void mcode_native_leave\(lua_State \*L\)$/ {
+    fn = "mcode_native_leave"
+  }
+  /^static void aux_finalizer_error_report\(lua_State \*L, const char \*s\)$/ {
+    fn = "aux_finalizer_error_report"
+  }
+  /^}/ { fn = "" }
+  /\(void\)[[:space:]]*lj_native_leave\(L\)[[:space:]]*;/ {
+    ok = 0
+    if (FILENAME ~ /src\/lj_trace[.]c$/ &&
+	(fn == "perftools_native_fopen" ||
+	 fn == "perftools_native_fprintf")) ok = 1
+    if (FILENAME ~ /src\/lj_mcode[.]c$/ &&
+	fn == "mcode_native_leave") ok = 1
+    if (FILENAME ~ /src\/lib_aux[.]c$/ &&
+	fn == "aux_finalizer_error_report") ok = 1
+    if (!ok) print FILENAME ":" FNR ":" $0
+  }
+' "$ROOT/src"/lj_*.c "$ROOT/src"/lib_*.c); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'native leaves must route STOPREQ actions or be a documented deferred recorder/finalizer boundary' >&2
+  exit 1
+fi
 for helper in \
   lj_tg_flags_acq \
   lj_tg_flags_store_rlx \
