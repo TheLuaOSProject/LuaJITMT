@@ -5,9 +5,8 @@
 
 The helper-backed snapshot covers vararg flag reconstruction and x86 calling
 convention bits used by traced FFI calls. Default builds no longer record FFI
-C calls until `IR_CALLXS` has a native-state protocol; this helper remains for
-explicit `LJ_FFI_RECORD_CALLS` performance experiments and the eventual native
-bridge.
+C calls, and `LJ_FFI_RECORD_CALLS` hard-fails at compile time until `IR_CALLXS`
+has a native-state protocol. This helper remains for the eventual native bridge.
 
 Guardrail:
 
