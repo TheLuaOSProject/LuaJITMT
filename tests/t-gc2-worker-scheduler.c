@@ -269,7 +269,7 @@ static void test_worker_real_finalizer_dispatch(lua_State *L, global_State *g)
   dequeued0 = la_load64_acq(&g->gc2.finalizer_dequeued);
   async0 = gc2_worker_async_progress_acq(g);
 
-  separated = lj_gc_separateudata(g, 1);
+  separated = lj_gc2_finreg_udata_finalize(g, 1);
   assert(separated >= 3u);
   assert(la_load64_acq(&g->gc2.finalizer_queued) == queued0 + 3u);
   assert(wait_u64_at_least(&g->gc2.finalizer_mpsc_drained, drained0 + 3u));
@@ -286,7 +286,7 @@ static void test_worker_real_finalizer_dispatch(lua_State *L, global_State *g)
   assert(finalizer_order[2] == 1);
 
   lua_settop(L, 0);
-  lj_gc_separateudata(g, 1);
+  lj_gc2_finreg_udata_finalize(g, 1);
   lj_gc2_finalizer_dispatch_all(L);
   assert(finalizer_count == 3);
   finalizer_expected_L = NULL;

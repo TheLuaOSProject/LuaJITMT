@@ -387,8 +387,8 @@ P_WEAK (leader+workers, barrier still ON, mutators running):
   closes the resurrection race with near-zero cost (weak tables are rare).
   Finalizables: walk the finalizer-registered set (FINREG objects are
   listed in a lock-free registry populated at registration: ffi.gc,
-  setmetatable-with-__gc on udata — see lj_gc_separateudata logic
-  lj_gc.c:142): unmarked ⇒ gc2_mark it (resurrect), push to finqueue (MPSC),
+  setmetatable-with-__gc on udata — see `lj_gc2_finreg_udata_finalize()`):
+  unmarked ⇒ gc2_mark it (resurrect), push to finqueue (MPSC),
   clear FINREG (run-once, like markfinalized today). Finalizer thread runs
   entries after P_SWEEP begins (ordering: reverse registration like today’s
   mmudata list — preserve by pushing in registry order and reversing).
@@ -448,12 +448,13 @@ queued finalizable objects when reached during a GC2 MARK/WEAK phase, but
 legacy now supplies only the protected callback runner; GC2 owns queue drain
 ordering and dequeued-object routing into FINREG dispatch. Userdata FINREG
 telemetry also mirrors C/API `__gc` metatable assignment/clear events and
-counts the legacy `mmudata` queue point in `lj_gc_separateudata()`. The
-original bridge left userdata finalizer membership and execution on the legacy
-path; it now also mirrors the legacy userdata finalizer run-once clear at
-`gc_finalize()`, and uses a userdata-only FINREG membership bit to mirror lazy
-membership additions and stale clears if the metatable's `__gc` field is mutated
-in place before separation. The traversal harness covers both in-place behavior
+counts the GC2 userdata finalizer queue point in
+`lj_gc2_finreg_udata_finalize()`. The original bridge left userdata finalizer
+membership and execution on the legacy path; it now also mirrors the legacy
+userdata finalizer run-once clear at `gc_finalize()`, and uses a userdata-only
+FINREG membership bit to mirror lazy membership additions and stale clears if
+the metatable's `__gc` field is mutated in place before separation. The
+traversal harness covers both in-place behavior
 directions: a lazy add runs once, and a stale clear suppresses finalization. The
 GC2 finalizer queue now links dedicated queue nodes instead of reusing queued
 objects' `gcw` root/list links; callback execution remains on the claimed

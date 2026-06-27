@@ -835,12 +835,6 @@ static void gc_mark_finalizers(global_State *g)
   lj_gc2_finalizer_mark_all(g, gc_mark_finalizer_obj);
 }
 
-/* Separate userdata objects to be finalized to the GC2 finalizer queue. */
-size_t lj_gc_separateudata(global_State *g, int all)
-{
-  return lj_gc2_finreg_udata_finalize(g, all);
-}
-
 /* -- Propagation phase --------------------------------------------------- */
 
 static int gc_weak_list_has(global_State *g, GCtab *t)
@@ -1568,7 +1562,8 @@ static int atomic(global_State *g, lua_State *L)
   if (!lj_gc2_mark_complete(g, L, 64, ~(uint32_t)0))
     return 0;
 
-  udsize = lj_gc_separateudata(g, 0);  /* Separate userdata to be finalized. */
+  /* Separate userdata to be finalized. */
+  udsize = lj_gc2_finreg_udata_finalize(g, 0);
   gc_mark_finalizers(g);  /* Mark them. */
   udsize += gc_propagate_gray(g);  /* And propagate the marks. */
   /* 05 section 5.7.1 legacy atomic fixpoint-round bridge. */

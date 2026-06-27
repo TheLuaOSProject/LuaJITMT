@@ -500,7 +500,7 @@ if hits=$(grep -nE -- 'lj_gc2_finalizer_queue_pending[[:space:]]*[(]|lj_gc_cdata
   printf '%s\n' 'lua_close finalizer fixed-point checks must use lj_gc2_finalizer_close_pending' >&2
   exit 1
 fi
-if hits=$(grep -nE -- 'lj_gc_finalize_(udata|cdata|cdata_disable)[[:space:]]*[(]|lj_gc_cdata_fin_pending[[:space:]]*[(]|LJ_FUNC .*[[:space:]]lj_gc_finalize_(udata|cdata|cdata_disable)[[:space:]]*[(]|LJ_FUNC .*[[:space:]]lj_gc_cdata_fin_pending[[:space:]]*[(]' \
+if hits=$(grep -nE -- 'lj_gc_finalize_(udata|cdata|cdata_disable)[[:space:]]*[(]|lj_gc_cdata_fin_pending[[:space:]]*[(]|lj_gc_separateudata[[:space:]]*[(]|LJ_FUNC .*[[:space:]]lj_gc_finalize_(udata|cdata|cdata_disable)[[:space:]]*[(]|LJ_FUNC .*[[:space:]]lj_gc_cdata_fin_pending[[:space:]]*[(]|LJ_FUNC .*[[:space:]]lj_gc_separateudata[[:space:]]*[(]' \
     "$ROOT/src/lj_gc.c" \
     "$ROOT/src/lj_gc.h" \
     "$ROOT/src/lj_state.c" \

@@ -443,7 +443,8 @@ LUA_API void lua_close(lua_State *L)
   lj_threading_shutdown(L);
   lj_tg_clearcur_L(g);
   lj_func_closeuv(L, tvref(L->stack));
-  lj_gc_separateudata(g, 1);  /* Separate udata which have GC metamethods. */
+  /* Separate udata which have GC metamethods. */
+  lj_gc2_finreg_udata_finalize(g, 1);
 #if LJ_HASJIT
   G2J(g)->flags &= ~JIT_F_ON;
   lj_trace_state_store(G2J(g), LJ_TRACE_IDLE);
@@ -455,7 +456,8 @@ LUA_API void lua_close(lua_State *L)
     L->base = L->top = tvref(L->stack) + 1 + LJ_FR2;
     L->cframe = NULL;
     if (lj_vm_cpcall(L, NULL, NULL, cpfinalize) == LUA_OK) {
-      lj_gc_separateudata(g, 1);  /* Separate udata again. */
+      /* Separate udata again. */
+      lj_gc2_finreg_udata_finalize(g, 1);
       /* Until nothing is left to do. */
       if (!lj_gc2_finalizer_close_pending(g))
 	break;
