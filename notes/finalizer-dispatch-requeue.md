@@ -11,6 +11,8 @@ Legacy GC supplies only the protected callback runner. GC2 selects the
 cdata/userdata FINREG dispatch path and owns requeue/rewhite state mutation.
 The M8 weak/finalizer gate rejects reintroducing legacy object routing or
 direct FINREG dispatch calls there.
+The raw object-dispatch callback type is also internal/test-only; production
+finalizer drain/step APIs accept only the protected callback runner.
 
 This keeps callback execution on the claimed caller `lua_State`, but moves more
 of the finalizer object lifecycle under the GC2 dispatch boundary.

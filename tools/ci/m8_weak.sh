@@ -239,6 +239,31 @@ if hits=$(awk '
     'production finalizer drain/step APIs must take GC2FinalizerCallFunc only' >&2
   exit 1
 fi
+if hits=$(awk '
+  /^[[:space:]]*#[[:space:]]*if[[:space:]]+defined[(]lj_gc2_c[)]/ &&
+      /LJ_GC2_TEST_HELPERS/ {
+    in_internal = 1
+    depth = 0
+    next
+  }
+  in_internal && /^[[:space:]]*#[[:space:]]*if/ { depth++ }
+  in_internal && /^[[:space:]]*#[[:space:]]*endif/ {
+    if (depth == 0) {
+      in_internal = 0
+      next
+    }
+    depth--
+    next
+  }
+  /GC2FinalizerDispatchFunc/ && !in_internal {
+    print FILENAME ":" FNR ":" $0
+  }
+' "$ROOT/src/lj_gc2.h"); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' \
+    'raw finalizer object-dispatch type must stay internal/test-only in lj_gc2.h' >&2
+  exit 1
+fi
 for pattern in 'lj_gc2_finalizer_dispatch_all(L, gc_call_finalizer)' \
   'lj_gc2_finalizer_step(L, gc_call_finalizer,'; do
   if ! grep -qF "$pattern" "$ROOT/src/lj_gc.c"; then

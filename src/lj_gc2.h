@@ -8,6 +8,10 @@
 
 #include "lj_obj.h"
 
+#ifndef LJ_GC2_PARANOIA
+#define LJ_GC2_PARANOIA		0
+#endif
+
 typedef void (*GC2FinalizerMarkFunc)(global_State *g, GCobj *o);
 typedef void (*GC2FinRegMarkFunc)(global_State *g, cTValue *tv);
 typedef void (*GC2FinRegMarkObjFunc)(global_State *g, GCobj *o);
@@ -15,11 +19,9 @@ typedef void (*GC2FinRegMarkMemFunc)(global_State *g, void *p);
 typedef void (*GC2FinRegMarkTVFunc)(global_State *g, cTValue *tv);
 typedef int (*GC2FinalizerCallFunc)(global_State *g, lua_State *L,
 				    cTValue *mo, GCobj *o);
+#if defined(lj_gc2_c) || defined(LJ_GC2_TEST_HELPERS) || defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
 typedef int (*GC2FinalizerDispatchFunc)(lua_State *L, global_State *g,
 					GCobj *o);
-
-#ifndef LJ_GC2_PARANOIA
-#define LJ_GC2_PARANOIA		0
 #endif
 
 enum {
