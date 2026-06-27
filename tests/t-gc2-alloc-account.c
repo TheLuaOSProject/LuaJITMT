@@ -861,7 +861,7 @@ int main(void)
   assert(lj_gc2_markobj(g, obj2gco(weak)) == 1);
   assert(lj_gc2_flush_ssb(g, tg) == 1);
   (void)lj_gc2_test_ssb_drain(g);
-  assert(lj_gc2_weak_snapshot_count(g) == 1u);
+  assert(lj_gc2_test_weak_snapshot_count(g) == 1u);
   assert(lj_gc2_ismarked(g, obj2gco(key)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(val)) == 0);
   lj_gc2_legacy_weak_begin(g);

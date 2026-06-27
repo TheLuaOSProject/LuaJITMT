@@ -43,6 +43,26 @@ if ! grep -qE '^[[:space:]]*static int lj_gc2_ssb_empty[[:space:]]*[(]' \
   printf '%s\n' 'lj_gc2_ssb_empty must stay static inside lj_gc2.c' >&2
   exit 1
 fi
+if hits=$(grep -nE -- 'lj_gc2_weak_(snapshot_(count|tab|scan|clear|covers_legacy)|drain|legacy_result)[[:space:]]*[(]|LJ_FUNC .*lj_gc2_weak_(snapshot_(count|tab|scan|clear|covers_legacy)|drain|legacy_result)[[:space:]]*[(]' \
+    "$ROOT"/src/*.c "$ROOT"/tests/*.c "$ROOT/src/lj_gc2.h" | \
+    grep -v "$ROOT/src/lj_gc2.c:" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'direct GC2 weak snapshot/drain helpers must stay inside lj_gc2.c; use weak_complete, worker APIs, or test wrappers' >&2
+  exit 1
+fi
+for helper in lj_gc2_weak_snapshot_count \
+  lj_gc2_weak_snapshot_tab \
+  lj_gc2_weak_snapshot_scan \
+  lj_gc2_weak_snapshot_clear \
+  lj_gc2_weak_drain \
+  lj_gc2_weak_snapshot_covers_legacy \
+  lj_gc2_weak_legacy_result; do
+  if ! grep -qE "^[[:space:]]*static .*${helper}[[:space:]]*[(]" \
+      "$ROOT/src/lj_gc2.c"; then
+    printf '%s\n' "${helper} must stay static inside lj_gc2.c" >&2
+    exit 1
+  fi
+done
 
 check_raw_finreg_udata_next() {
   label=$1

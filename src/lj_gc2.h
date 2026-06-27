@@ -95,14 +95,6 @@ LJ_FUNC void lj_gc2_mark_to_weak(global_State *g);
 LJ_FUNC int lj_gc2_weak_complete(global_State *g, GCobj *legacy,
 				 uint32_t drain_limit);
 LJ_FUNC void lj_gc2_weak_to_sweep(global_State *g);
-LJ_FUNC uint32_t lj_gc2_weak_snapshot_count(global_State *g);
-LJ_FUNC GCtab *lj_gc2_weak_snapshot_tab(global_State *g, uint32_t idx);
-LJ_FUNC uint32_t lj_gc2_weak_snapshot_scan(global_State *g, uint32_t limit);
-LJ_FUNC uint32_t lj_gc2_weak_snapshot_clear(global_State *g, uint32_t limit);
-LJ_FUNC uint32_t lj_gc2_weak_drain(global_State *g, uint32_t limit);
-LJ_FUNC int lj_gc2_weak_snapshot_covers_legacy(global_State *g,
-					       GCobj *legacy);
-LJ_FUNC void lj_gc2_weak_legacy_result(global_State *g, int skipped);
 LJ_FUNC void lj_gc2_finreg_cdata_set(global_State *g, GCobj *o, int enabled);
 LJ_FUNC void lj_gc2_finreg_cdata_finalizer_enqueue(global_State *g,
 						   GCobj *o);
@@ -159,6 +151,15 @@ LJ_FUNC void lj_gc2_finalizer_mark_all(global_State *g,
 LJ_FUNC int lj_gc2_test_ssb_push(global_State *g, GCobj *o);
 LJ_FUNC uint32_t lj_gc2_test_ssb_drain(global_State *g);
 LJ_FUNC int lj_gc2_test_ssb_empty(global_State *g);
+LJ_FUNC uint32_t lj_gc2_test_weak_snapshot_count(global_State *g);
+LJ_FUNC GCtab *lj_gc2_test_weak_snapshot_tab(global_State *g, uint32_t idx);
+LJ_FUNC uint32_t lj_gc2_test_weak_snapshot_scan(global_State *g,
+					       uint32_t limit);
+LJ_FUNC uint32_t lj_gc2_test_weak_snapshot_clear(global_State *g,
+						uint32_t limit);
+LJ_FUNC uint32_t lj_gc2_test_weak_drain(global_State *g, uint32_t limit);
+LJ_FUNC int lj_gc2_test_weak_snapshot_covers_legacy(global_State *g,
+						    GCobj *legacy);
 LJ_FUNC void lj_gc2_test_scan_roots(global_State *g, lua_State *L);
 LJ_FUNC void lj_gc2_test_scan_minor_roots(global_State *g, lua_State *L);
 LJ_FUNC GCobj *lj_gc2_test_grey_steal(global_State *g);

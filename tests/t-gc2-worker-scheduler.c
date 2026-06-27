@@ -376,9 +376,9 @@ static void test_async_weak(lua_State *L, global_State *g, TGState *tg)
   lj_gc2_legacy_mark_begin(g);
   assert(lj_gc2_markobj(g, obj2gco(weak)) == 1);
   assert(lj_gc2_flush_ssb(g, tg) == 1);
-  for (i = 0; i < 1000 && lj_gc2_weak_snapshot_count(g) == 0; i++)
+  for (i = 0; i < 1000 && lj_gc2_test_weak_snapshot_count(g) == 0; i++)
     sleep_ns(1000000L);
-  assert(lj_gc2_weak_snapshot_count(g) == 1u);
+  assert(lj_gc2_test_weak_snapshot_count(g) == 1u);
   assert(lj_gc2_ismarked(g, obj2gco(key)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(val)) == 0);
 

@@ -2786,7 +2786,7 @@ static void gc2_weak_record(global_State *g, GCtab *t)
   }
 }
 
-uint32_t lj_gc2_weak_snapshot_count(global_State *g)
+static uint32_t lj_gc2_weak_snapshot_count(global_State *g)
 {
   uint64_t reserved, count;
   MSize cap;
@@ -2808,7 +2808,7 @@ uint32_t lj_gc2_weak_snapshot_count(global_State *g)
   return count > ~(uint32_t)0 ? ~(uint32_t)0 : (uint32_t)count;
 }
 
-GCtab *lj_gc2_weak_snapshot_tab(global_State *g, uint32_t idx)
+static GCtab *lj_gc2_weak_snapshot_tab(global_State *g, uint32_t idx)
 {
   GCobj *o;
   GCRef *stack;
@@ -2924,7 +2924,7 @@ static void gc2_weak_paranoia_zero_diff(global_State *g, GCobj *legacy)
 }
 #endif
 
-uint32_t lj_gc2_weak_snapshot_scan(global_State *g, uint32_t limit)
+static uint32_t lj_gc2_weak_snapshot_scan(global_State *g, uint32_t limit)
 {
   uint64_t start, end;
   uint32_t i, n, scanned = 0;
@@ -2957,7 +2957,7 @@ uint32_t lj_gc2_weak_snapshot_scan(global_State *g, uint32_t limit)
   return scanned;
 }
 
-uint32_t lj_gc2_weak_snapshot_clear(global_State *g, uint32_t limit)
+static uint32_t lj_gc2_weak_snapshot_clear(global_State *g, uint32_t limit)
 {
   uint64_t start, end;
   uint32_t i, n, scanned = 0;
@@ -2990,7 +2990,7 @@ uint32_t lj_gc2_weak_snapshot_clear(global_State *g, uint32_t limit)
   return scanned;
 }
 
-uint32_t lj_gc2_weak_drain(global_State *g, uint32_t limit)
+static uint32_t lj_gc2_weak_drain(global_State *g, uint32_t limit)
 {
   if (!g || limit == 0 || gc2_phase_acq(g) != LJ_GC2_WEAK)
     return 0;
@@ -3044,7 +3044,7 @@ static int gc2_weak_snapshot_has_tab(global_State *g, GCtab *t, uint32_t n)
   return 0;
 }
 
-int lj_gc2_weak_snapshot_covers_legacy(global_State *g, GCobj *legacy)
+static int lj_gc2_weak_snapshot_covers_legacy(global_State *g, GCobj *legacy)
 {
   uint32_t n;
   uint64_t legacy_count = 0;
@@ -3139,7 +3139,7 @@ static int gc2_weak_overflow_clear_legacy(global_State *g, GCobj *legacy)
   return 1;  /* 05 section 5.8: overflowed weak snapshots stay GC2-owned. */
 }
 
-void lj_gc2_weak_legacy_result(global_State *g, int skipped)
+static void lj_gc2_weak_legacy_result(global_State *g, int skipped)
 {
   if (!g)
     return;
@@ -3147,6 +3147,36 @@ void lj_gc2_weak_legacy_result(global_State *g, int skipped)
     gc2_weak_legacy_skipped_add(g, 1);
   else
     gc2_weak_legacy_fallbacks_add(g, 1);
+}
+
+uint32_t lj_gc2_test_weak_snapshot_count(global_State *g)
+{
+  return lj_gc2_weak_snapshot_count(g);
+}
+
+GCtab *lj_gc2_test_weak_snapshot_tab(global_State *g, uint32_t idx)
+{
+  return lj_gc2_weak_snapshot_tab(g, idx);
+}
+
+uint32_t lj_gc2_test_weak_snapshot_scan(global_State *g, uint32_t limit)
+{
+  return lj_gc2_weak_snapshot_scan(g, limit);
+}
+
+uint32_t lj_gc2_test_weak_snapshot_clear(global_State *g, uint32_t limit)
+{
+  return lj_gc2_weak_snapshot_clear(g, limit);
+}
+
+uint32_t lj_gc2_test_weak_drain(global_State *g, uint32_t limit)
+{
+  return lj_gc2_weak_drain(g, limit);
+}
+
+int lj_gc2_test_weak_snapshot_covers_legacy(global_State *g, GCobj *legacy)
+{
+  return lj_gc2_weak_snapshot_covers_legacy(g, legacy);
 }
 
 int lj_gc2_weak_complete(global_State *g, GCobj *legacy, uint32_t drain_limit)
