@@ -1586,7 +1586,7 @@ static int gc_jit_defer_fixpoint(global_State *g)
   return lj_tg_jit_base(g) != NULL &&
 	 g->gc.state == GCSpropagate &&
 	 lj_gc_list_head_acq(&g->gc.gray) == NULL &&
-	 gc2_phase_acq(g) == LJ_GC2_MARK;
+	 lj_gc2_mark_phase_active(g);
 }
 #else
 #define gc_jit_defer_fixpoint(g)	0
@@ -1606,7 +1606,7 @@ static size_t gc_onestep(lua_State *L)
       return propagatemark(g);  /* Propagate one gray object. */
     if (lj_gc2_worker_drain(g, LJ_GC2_WORKER_DRAIN_BATCH) != 0)
       return GCSWEEPCOST;  /* 05 section 5.6.3 bounded worker step bridge. */
-    if (gc2_phase_acq(g) == LJ_GC2_MARK) {
+    if (lj_gc2_mark_phase_active(g)) {
       if (gc_jit_defer_fixpoint(g))
 	return LJ_MAX_MEM;  /* Root handshakes are run after trace exit. */
       if (lj_gc2_fixpoint_round(g, L, LJ_GC2_WORKER_DRAIN_BATCH) == 0)

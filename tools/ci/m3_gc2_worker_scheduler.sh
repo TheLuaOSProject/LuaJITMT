@@ -301,6 +301,26 @@ for helper in lj_gc2_fixpoint_run lj_gc2_sweep_live_aggregate; do
     exit 1
   fi
 done
+if ! grep -qE 'LJ_FUNC int lj_gc2_mark_phase_active[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.h"; then
+  printf '%s\n' 'lj_gc2_mark_phase_active declaration is required for legacy mark-step phase ownership' >&2
+  exit 1
+fi
+if ! grep -qE '^int lj_gc2_mark_phase_active[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.c"; then
+  printf '%s\n' 'lj_gc2_mark_phase_active definition is required for legacy mark-step phase ownership' >&2
+  exit 1
+fi
+if ! grep -qF 'lj_gc2_mark_phase_active(g)' "$ROOT/src/lj_gc.c"; then
+  printf '%s\n' 'legacy GC mark-step policy must query lj_gc2_mark_phase_active' >&2
+  exit 1
+fi
+if hits=$(grep -nE -- 'gc2_phase_acq[[:space:]]*[(][[:space:]]*g[[:space:]]*[)]' \
+    "$ROOT/src/lj_gc.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'legacy GC must not read raw GC2 phase; use GC2-owned predicates' >&2
+  exit 1
+fi
 if hits=$(grep -nE -- 'lj_gc2_legacy_(weak|sweep)_begin[[:space:]]*[(]|LJ_FUNC .*lj_gc2_legacy_(weak|sweep)_begin[[:space:]]*[(]' \
     "$ROOT"/src/*.c "$ROOT"/tests/*.c "$ROOT/src/lj_gc2.h" || true); \
     [ -n "$hits" ]; then

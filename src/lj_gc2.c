@@ -1297,10 +1297,14 @@ void lj_gc2_set_generational(global_State *g, int enabled)
     lj_gc2_handshake(g, gc2_idle_barrier_actions(g, 0));
 }
 
+int lj_gc2_mark_phase_active(global_State *g)
+{
+  return g && gc2_phase_acq(g) == LJ_GC2_MARK;
+}
+
 int lj_gc2_legacy_mark_suppressed(global_State *g)
 {
-  return g && gc2_phase_acq(g) == LJ_GC2_MARK &&
-	 gc2_cycle_roots_minor_acq(g) != 0;
+  return lj_gc2_mark_phase_active(g) && gc2_cycle_roots_minor_acq(g) != 0;
 }
 
 void lj_gc2_mark_to_weak(global_State *g)
