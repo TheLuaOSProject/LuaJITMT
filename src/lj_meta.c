@@ -266,7 +266,7 @@ TValue *lj_meta_tsettv_pair(lua_State *L, cTValue *o, cTValue *k, cTValue *v)
       lj_gc2_barrier_tv_pair(L, owner ? obj2gco(owner) : NULL, v);
       return dst;
     }
-    la_cpu_pause();  /* Slot became FORWARD after lookup; re-resolve it. */
+    lj_tab_store_wait_no_l();  /* Slot became FORWARD; re-resolve it. */
   }
 }
 

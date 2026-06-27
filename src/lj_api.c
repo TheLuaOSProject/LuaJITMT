@@ -772,7 +772,7 @@ LUALIB_API int luaL_newmetatable(lua_State *L, const char *tname)
     TValue old;
     lj_tv_load_acq(&old, tv);
     if (tvisforward(&old)) {
-      la_cpu_pause();  /* luaL_newmetatable saw FORWARD after lookup. */
+      lj_tab_store_wait_no_l();  /* luaL_newmetatable saw FORWARD. */
       continue;
     }
     if (tvisnil(&old)) {
@@ -785,11 +785,11 @@ LUALIB_API int luaL_newmetatable(lua_State *L, const char *tname)
 	return 1;
       }
       if (tvisforward(&expect)) {
-	la_cpu_pause();  /* luaL_newmetatable store raced with FORWARD. */
+	lj_tab_store_wait_no_l();  /* Store raced with FORWARD. */
 	continue;
       }
       if (tvisnil(&expect)) {
-	la_cpu_pause();
+	lj_tab_store_wait_no_l();
 	continue;
       }
       copyTV(L, L->top++, &expect);
@@ -1051,7 +1051,7 @@ LUA_API void lua_settable(lua_State *L, int idx)
 	L->top = key;
 	return;
       }
-      la_cpu_pause();  /* C API settable saw FORWARD after lookup. */
+      lj_tab_store_wait_no_l();  /* C API settable saw FORWARD. */
     } else {
       TValue *base = L->top;
       copyTV(L, base+2, base-3-2*LJ_FR2);
@@ -1081,7 +1081,7 @@ LUA_API void lua_setfield(lua_State *L, int idx, const char *k)
 	L->top = val;
 	return;
       }
-      la_cpu_pause();  /* C API setfield saw FORWARD after lookup. */
+      lj_tab_store_wait_no_l();  /* C API setfield saw FORWARD. */
     } else {
       TValue *base = L->top;
       copyTV(L, base+2, base-3-2*LJ_FR2);
@@ -1103,7 +1103,7 @@ LUA_API void lua_rawset(lua_State *L, int idx)
     dst = lj_tab_set(L, t, key);
     if (lj_tab_trystoretv_cas(L, dst, key+1) == LJ_TAB_STORE_CAS_OK)
       break;
-    la_cpu_pause();  /* C API rawset saw FORWARD after lookup. */
+    lj_tab_store_wait_no_l();  /* C API rawset saw FORWARD. */
   }
   lj_gc2_barrier_weak_write(L, t, key, key+1);
   lj_gc_pubtab(L, t);
@@ -1121,7 +1121,7 @@ LUA_API void lua_rawseti(lua_State *L, int idx, int n)
     dst = lj_tab_setint(L, t, n);
     if (lj_tab_trystoretv_cas(L, dst, src) == LJ_TAB_STORE_CAS_OK)
       break;
-    la_cpu_pause();  /* C API rawseti saw FORWARD after lookup. */
+    lj_tab_store_wait_no_l();  /* C API rawseti saw FORWARD. */
   }
   setintV(&key, n);
   lj_gc2_barrier_weak_write(L, t, &key, src);

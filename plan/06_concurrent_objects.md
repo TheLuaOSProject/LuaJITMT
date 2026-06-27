@@ -346,7 +346,8 @@ helpers or `copyTVrel()` instead of raw `lj_tab_set*()` destination stores;
 parser anchor stores, serializer dictionary preparation, and recorder template
 markers also back off through no-`lua_State` sleeps when a forwarded slot or CAS
 loss forces a retry; central VM/JIT table-store helper retries and CAS losers
-use the same no-`lua_State` wait helper;
+use the same no-`lua_State` wait helper; C API/library/JIT/FFI/debug/string/
+threading/ctype/meta table-store retry loops now use that helper too;
 rehash/new-key insertion also release-publishes hash keys through
 `tab_storekeyrel()` and moved values through `copyTVrel()` during legacy resize
 rebuilds. This records a scoped release-store bridge without changing the

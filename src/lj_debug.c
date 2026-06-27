@@ -482,7 +482,7 @@ static void debug_activelines_storebool(lua_State *L, GCtab *t, int32_t line)
     dst = lj_tab_setint(L, t, line);
     if (lj_tab_trystoretv_cas(L, dst, &tv) == LJ_TAB_STORE_CAS_OK)
       return;
-    la_cpu_pause();  /* debug activelines store saw FORWARD after lookup. */
+    lj_tab_store_wait_no_l();  /* debug activelines store saw FORWARD. */
   }
 }
 

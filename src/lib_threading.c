@@ -183,7 +183,7 @@ static TValue *threading_storeudata_str(lua_State *L, GCtab *env, GCstr *key,
     dst = lj_tab_setstr(L, env, key);
     if (lj_tab_trystoretv_cas(L, dst, &tv) == LJ_TAB_STORE_CAS_OK)
       return dst;
-    la_cpu_pause();  /* threading env store saw FORWARD after lookup. */
+    lj_tab_store_wait_no_l();  /* threading env store saw FORWARD. */
   }
 }
 

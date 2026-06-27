@@ -132,7 +132,7 @@ static TValue *jit_attach_event_store(lua_State *L, GCtab *tab, cTValue *key,
     dst = lj_tab_set(L, tab, key);
     if (lj_tab_trystoretv_cas(L, dst, src) == LJ_TAB_STORE_CAS_OK)
       return dst;
-    la_cpu_pause();  /* jit.attach event table saw FORWARD after lookup. */
+    lj_tab_store_wait_no_l();  /* jit.attach event table saw FORWARD. */
   }
 }
 
@@ -185,7 +185,7 @@ static TValue *jit_util_storetv_str(lua_State *L, GCtab *t, GCstr *key,
     dst = lj_tab_setstr(L, t, key);
     if (lj_tab_trystoretv_cas(L, dst, src) == LJ_TAB_STORE_CAS_OK)
       return dst;
-    la_cpu_pause();  /* jit.util string-key store saw FORWARD after lookup. */
+    lj_tab_store_wait_no_l();  /* jit.util string store saw FORWARD. */
   }
 }
 
@@ -197,7 +197,7 @@ static TValue *jit_util_storetv_int(lua_State *L, GCtab *t, int32_t key,
     dst = lj_tab_setint(L, t, key);
     if (lj_tab_trystoretv_cas(L, dst, src) == LJ_TAB_STORE_CAS_OK)
       return dst;
-    la_cpu_pause();  /* jit.util int-key store saw FORWARD after lookup. */
+    lj_tab_store_wait_no_l();  /* jit.util int store saw FORWARD. */
   }
 }
 
@@ -654,7 +654,7 @@ static TValue *jit_profile_registry_store(lua_State *L, GCtab *registry,
     dst = lj_tab_set(L, registry, key);
     if (lj_tab_trystoretv_cas(L, dst, tv) == LJ_TAB_STORE_CAS_OK)
       return dst;
-    la_cpu_pause();  /* jit.profile registry saw FORWARD after lookup. */
+    lj_tab_store_wait_no_l();  /* jit.profile registry saw FORWARD. */
   }
 }
 
