@@ -127,7 +127,10 @@ LJ_FUNC int lj_gc2_finreg_udata_unlink(global_State *g,
 				       GC2FinRegUDataNode *next);
 LJ_FUNC void lj_gc2_finreg_udata_forget(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc2_finreg_udata_queue(global_State *g, GCobj *o);
+LJ_FUNC void lj_gc2_finreg_udata_finalizer_enqueue(global_State *g,
+						   GCobj *o);
 LJ_FUNC void lj_gc2_finalizer_enqueue(global_State *g, GCobj *o);
+LJ_FUNC void lj_gc2_finalizer_mark_enqueue(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc2_finalizer_drain_owned(global_State *g);
 LJ_FUNC void lj_gc2_finalizer_drain(global_State *g);
 LJ_FUNC GCobj *lj_gc2_finalizer_dequeue_owned(global_State *g);

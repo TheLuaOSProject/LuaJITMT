@@ -872,9 +872,7 @@ static int gc_unlink_udata_object(global_State *g, GCobj *target)
 static size_t gc_queue_udata_finalizer(global_State *g, GCobj *o)
 {
   size_t m = sizeudata(gco2ud(o));
-  markfinalized(o);
-  lj_gc2_finreg_udata_queue(g, o);
-  lj_gc2_finalizer_enqueue(g, o);
+  lj_gc2_finreg_udata_finalizer_enqueue(g, o);
   return m;
 }
 
@@ -1870,12 +1868,6 @@ void lj_gc_finalize_udata(lua_State *L)
 }
 
 #if LJ_HASFFI
-static void gc_queue_cdata_finalizer(global_State *g, GCobj *o)
-{
-  markfinalized(o);
-  lj_gc2_finalizer_enqueue(g, o);
-}
-
 static int gc_cdata_finalizer_candidate_pweak(GCobj *o)
 {
   return o->gch.gct == ~LJ_TCDATA &&
@@ -1998,7 +1990,6 @@ static size_t gc_queue_cdata_finalizers_pweak_ordered(lua_State *L,
     if (!lj_gc2_finreg_cdata_preclaim(L, g, o, &fin)) {
       copyTVrel(L, slot, &fin);
       gc_marktv(g, &fin);
-      markfinalized(o);
       lj_gc2_finreg_cdata_finalizer_enqueue(g, o);
       gc2_finreg_cdata_order_fallbacks_add(g, 1);
       gc2_finreg_cdata_order_queued_add(g, 1);
@@ -2010,7 +2001,6 @@ static size_t gc_queue_cdata_finalizers_pweak_ordered(lua_State *L,
     }
     lj_cdata_fin_storenil(L, slot);
     gc_marktv(g, &fin);
-    markfinalized(o);
     lj_gc2_finreg_cdata_finalizer_enqueue(g, o);
     gc2_finreg_cdata_order_queued_add(g, 1);
     (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
@@ -2092,7 +2082,7 @@ static size_t gc_separate_cdata_finalizers_ordered(global_State *g)
     ** discovery without legacy root membership.
     */
     (void)gc_unlink_root_object(g, o);
-    gc_queue_cdata_finalizer(g, o);
+    lj_gc2_finalizer_mark_enqueue(g, o);
     gc2_finreg_cdata_order_queued_add(g, 1);
     queued++;
     (void)lj_ctype_fin_order_retire(cts, prev, ord, next);

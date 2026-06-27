@@ -236,6 +236,28 @@ if hits=$(grep -nE -- '->[[:space:]]*gc2[.]finalizer_(mpsc|tail|active|owner_tid
   printf '%s\n' 'raw GC2 finalizer queue/owner state access is forbidden; use gc2_finalizer_* helpers' >&2
   exit 1
 fi
+for helper in lj_gc2_finalizer_mark_enqueue \
+  lj_gc2_finreg_udata_finalizer_enqueue; do
+  if ! grep -qE "LJ_FUNC void ${helper}[[:space:]]*[(]" \
+      "$ROOT/src/lj_gc2.h"; then
+    printf '%s\n' "${helper} declaration is required for GC2 finalizer publication" >&2
+    exit 1
+  fi
+  if ! grep -qE "^void ${helper}[[:space:]]*[(]" \
+      "$ROOT/src/lj_gc2.c"; then
+    printf '%s\n' "${helper} definition is required for GC2 finalizer publication" >&2
+    exit 1
+  fi
+done
+if hits=$(grep -nE -- 'lj_gc2_finalizer_enqueue[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc.c" \
+    "$ROOT/src/lib_threading.c" \
+    "$ROOT/src/lj_cdata.c" \
+    "$ROOT/src/lib_ffi.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'legacy production code must publish finalizers through GC2 mark/FINREG enqueue helpers' >&2
+  exit 1
+fi
 for helper in gc2_finalizer_queued_acq \
   gc2_finalizer_queued_store_rlx \
   gc2_finalizer_queued_add \

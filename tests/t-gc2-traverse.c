@@ -3899,7 +3899,6 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
     assert(tvisfunc(L->top - 1));
     assert(lj_gc2_finreg_cdata_preclaim(L, g, o, L->top - 1));
     assert(test_unlink_root_object(g, o));
-    markfinalized(o);
     lj_gc2_finreg_cdata_finalizer_enqueue(g, o);
     setnilV(&nilv);
     lj_cdata_setfin(L, cd, gcval(&nilv), itype(&nilv));

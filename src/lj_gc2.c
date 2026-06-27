@@ -1288,6 +1288,14 @@ void lj_gc2_finalizer_enqueue(global_State *g, GCobj *o)
     lj_gc2_worker_wake(g);  /* 05 section 5.8: finalizer work became visible. */
 }
 
+void lj_gc2_finalizer_mark_enqueue(global_State *g, GCobj *o)
+{
+  if (!g || !o)
+    return;
+  markfinalized(o);
+  lj_gc2_finalizer_enqueue(g, o);
+}
+
 void lj_gc2_finalizer_drain_owned(global_State *g)
 {
   GC2FinalizerNode *stack, *rev = NULL, *newtail = NULL, *oldtail;
@@ -2997,6 +3005,7 @@ void lj_gc2_finreg_cdata_finalizer_enqueue(global_State *g, GCobj *o)
 #if LJ_HASFFI
   if (!g || !o || o->gch.gct != ~LJ_TCDATA)
     return;
+  markfinalized(o);
   gc2_finreg_cdata_queue_mark(g, o);
   lj_gc2_finalizer_enqueue(g, o);
 #else
@@ -3256,6 +3265,15 @@ void lj_gc2_finreg_udata_queue(global_State *g, GCobj *o)
     return;
   gc2_finreg_queue_mark(g, o);
   gc2_finreg_udata_queued_add(g, 1);
+}
+
+void lj_gc2_finreg_udata_finalizer_enqueue(global_State *g, GCobj *o)
+{
+  if (!g || !o || o->gch.gct != ~LJ_TUDATA)
+    return;
+  markfinalized(o);
+  lj_gc2_finreg_udata_queue(g, o);
+  lj_gc2_finalizer_enqueue(g, o);
 }
 
 static GCobj *gc2_grey_pop(global_State *g)
