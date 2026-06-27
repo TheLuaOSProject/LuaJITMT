@@ -225,6 +225,7 @@ LJ_FUNC TValue *lj_tab_setint_forward(lua_State *L, GCtab *t, int32_t key);
 LJ_FUNC TValue *lj_tab_setstr(lua_State *L, GCtab *t, const GCstr *key);
 LJ_FUNC TValue *lj_tab_set(lua_State *L, GCtab *t, cTValue *key);
 LJ_FUNCA TValue *lj_tab_storetv(lua_State *L, TValue *dst, cTValue *src);
+LJ_FUNCA void lj_tab_wait_no_l(void);
 LJ_FUNCA void lj_tab_store_wait_no_l(void);
 #define LJ_TAB_STORE_CAS_OK		0
 #define LJ_TAB_STORE_CAS_FORWARD	1
@@ -293,7 +294,7 @@ genarray:
 	goto genarray;
       if (forward_retry) {
 	forward_retry = 0;
-	la_cpu_pause();
+	lj_tab_wait_no_l();
 	goto retry_array;
       }
       return NULL;
@@ -319,7 +320,7 @@ retry_array:
 	  goto genarray;
 	if (forward_retry) {
 	  forward_retry = 0;
-	  la_cpu_pause();
+	  lj_tab_wait_no_l();
 	  goto retry_array;
 	}
 	return lj_tab_setint_forward(L, t, key);

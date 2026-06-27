@@ -14,6 +14,8 @@
 #include "lj_arch.h"
 #include "lj_atomic.h"
 
+LJ_FUNCA void lj_tab_wait_no_l(void);
+
 /* -- Memory references --------------------------------------------------- */
 
 /* Memory and GC object sizes. */
@@ -809,7 +811,7 @@ retry_snapshot:
   asize = lj_tab_asize_acq(t);
   array = lj_tab_array_acq(t);
   if (lj_tab_array_is_retiring(t, array)) {
-    la_cpu_pause();
+    lj_tab_wait_no_l();
     goto retry_snapshot;
   }
   if (array && !lj_tab_array_is_colocated(t, array))
@@ -834,7 +836,7 @@ static LJ_AINLINE MSize lj_tab_array_separated_snapshot_acq(const GCtab *t,
 retry_snapshot:
   array = lj_tab_array_acq(t);
   if (lj_tab_array_is_retiring(t, array)) {
-    la_cpu_pause();
+    lj_tab_wait_no_l();
     goto retry_snapshot;
   }
   *arrayp = array;
@@ -1001,7 +1003,7 @@ retry_snapshot:
   node = lj_tab_node_acq(t);
   hmask = lj_tab_node_hmask_acq(node);
   if (lj_tab_node_is_retiring(node)) {
-    la_cpu_pause();
+    lj_tab_wait_no_l();
     goto retry_snapshot;
   }
   *hmaskp = hmask;

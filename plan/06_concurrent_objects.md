@@ -347,7 +347,10 @@ parser anchor stores, serializer dictionary preparation, and recorder template
 markers also back off through no-`lua_State` sleeps when a forwarded slot or CAS
 loss forces a retry; central VM/JIT table-store helper retries and CAS losers
 use the same no-`lua_State` wait helper; C API/library/JIT/FFI/debug/string/
-threading/ctype/meta table-store retry loops now use that helper too;
+threading/ctype/meta table-store retry loops now use that helper too; low-level
+table generation snapshots, forwarded/keylocked lookups, new-key insertion,
+FINREG new-key helpers, and traversal rechecks use the same no-`lua_State`
+table wait helper instead of raw CPU spins;
 rehash/new-key insertion also release-publishes hash keys through
 `tab_storekeyrel()` and moved values through `copyTVrel()` during legacy resize
 rebuilds. This records a scoped release-store bridge without changing the

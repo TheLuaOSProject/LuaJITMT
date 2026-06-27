@@ -64,7 +64,7 @@ static LJ_AINLINE int tab_key_islocked(cTValue *key)
   return tviskeylock(key);
 }
 
-static void tab_finreg_claim_wait_no_l(void)
+LJ_FUNCA void lj_tab_wait_no_l(void)
 {
   (void)lj_thr_sleep_ns(NULL, 1000000);
 }
@@ -78,7 +78,7 @@ static LJ_AINLINE int tab_key_retry_once(cTValue *key, int *retry)
 {
   if (tab_key_islocked(key) && *retry) {
     *retry = 0;
-    la_cpu_pause();
+    lj_tab_wait_no_l();
     return 1;
   }
   return 0;
@@ -100,7 +100,7 @@ static LJ_AINLINE int tab_val_forward_retry_once(cTValue *val, int *retry)
 {
   if (tvisforward(val) && *retry) {
     *retry = 0;
-    la_cpu_pause();
+    lj_tab_wait_no_l();
     return 1;
   }
   return 0;
@@ -1242,7 +1242,7 @@ retry_insert:
     if (slot)
       return slot;
     if (locked) {
-      la_cpu_pause();
+      lj_tab_wait_no_l();
       goto retry_insert;
     }
     if (chainlen >= LJ_TAB_MAXCHAIN) {
@@ -1254,14 +1254,14 @@ retry_insert:
     TValue nk, nv;
     lj_tv_load_acq(&nk, &n->key);
     if (tab_key_islocked(&nk)) {
-      la_cpu_pause();
+      lj_tab_wait_no_l();
       goto retry_insert;
     }
     lj_tv_load_acq(&nv, &n->val);
     if (tvisnil(&nk) && tvisnil(&nv)) {
       int reserved = lj_tab_node_free_reserve(nodebase);
       if (reserved < 0) {
-	la_cpu_pause();
+	lj_tab_wait_no_l();
 	goto retry_insert;
       }
       if (reserved == 0) {
@@ -1272,7 +1272,7 @@ retry_insert:
 	int claimed = tab_try_claim_nil_key(&n->key);
 	if (claimed < 0) {
 	  lj_tab_node_free_release(nodebase);
-	  la_cpu_pause();
+	  lj_tab_wait_no_l();
 	  goto retry_insert;
 	}
 	if (claimed == 1) {
@@ -1293,7 +1293,7 @@ retry_insert:
     lj_assertL(nodebase != &G(L)->nilnode, "insert into fallback hash");
     if (!freenode) {
       if (locked) {
-	la_cpu_pause();
+	lj_tab_wait_no_l();
 	goto retry_insert;
       }
       rehashtab(L, t, key);
@@ -1308,7 +1308,7 @@ retry_insert:
       }
       if (locked) {
 	tab_release_claimed_free(nodebase, freenode);
-	la_cpu_pause();
+	lj_tab_wait_no_l();
 	goto retry_insert;
       }
       if (chainlen >= LJ_TAB_MAXCHAIN) {
@@ -1344,14 +1344,14 @@ int lj_tab_try_newkey_anchor(lua_State *L, GCtab *t, cTValue *key,
     if (lj_obj_equal(&nk, key))
       return -1;  /* A racing inserter published the key; retry lookup. */
     if (tviskeylock(&nk)) {
-      tab_finreg_claim_wait_no_l();  /* Claimed anchor is publishing key. */
+      lj_tab_wait_no_l();  /* Claimed anchor is publishing key. */
       continue;
     }
     if (!tvisnil(&nk))
       return 0;  /* Caller handles collision-chain or resize fallback. */
     lj_tv_load_acq(&nv, &n->val);
     if (!tvisnil(&nv)) {
-      tab_finreg_claim_wait_no_l();  /* Claimed anchor value is publishing. */
+      lj_tab_wait_no_l();  /* Claimed anchor value is publishing. */
       continue;
     }
     {
@@ -1392,7 +1392,7 @@ int lj_tab_try_newkey_chain(lua_State *L, GCtab *t, cTValue *key,
 	return -1;  /* Existing or racing insert for this key; retry lookup. */
       }
       if (tviskeylock(&nk) || (tvisnil(&nk) && tab_val_isclaim(&nv, claim))) {
-	tab_finreg_claim_wait_no_l();  /* Linked insert is publishing key. */
+	lj_tab_wait_no_l();  /* Linked insert is publishing key. */
 	goto retry;
       }
     }
@@ -1409,7 +1409,7 @@ int lj_tab_try_newkey_chain(lua_State *L, GCtab *t, cTValue *key,
 	if (lj_obj_equal(&nk, key))
 	  goto found_existing;
 	if (tviskeylock(&nk)) {
-	  tab_finreg_claim_wait_no_l();  /* Free-node key is publishing. */
+	  lj_tab_wait_no_l();  /* Free-node key is publishing. */
 	  goto release_retry;
 	}
 	if (!tvisnil(&nk))
@@ -1417,7 +1417,7 @@ int lj_tab_try_newkey_chain(lua_State *L, GCtab *t, cTValue *key,
 	lj_tv_load_acq(&nv, &n->val);
 	if (!tvisnil(&nv)) {
 	  if (tab_val_isclaim(&nv, claim)) {
-	    tab_finreg_claim_wait_no_l();  /* Free-node value is publishing. */
+	    lj_tab_wait_no_l();  /* Free-node value is publishing. */
 	    goto release_retry;
 	  }
 	  continue;
@@ -1586,7 +1586,7 @@ LJ_FUNCA TValue *lj_tab_storetv(lua_State *L, TValue *dst, cTValue *src)
 
 LJ_FUNCA void lj_tab_store_wait_no_l(void)
 {
-  (void)lj_thr_sleep_ns(NULL, 1000000);
+  lj_tab_wait_no_l();
 }
 
 LJ_FUNCA int lj_tab_trystoretv_cas(lua_State *L, TValue *dst, cTValue *src)
@@ -2125,7 +2125,7 @@ int lj_tab_next(GCtab *t, cTValue *key, TValue *o)
       if (!tab_val_absent(&val)) {
 	lj_tv_load_acq(&key, &n->key);
 	if (tab_hash_key_hidden(&key)) {
-	  la_cpu_pause();
+	  lj_tab_wait_no_l();
 	  lj_tv_load_acq(&val, &n->val);
 	  lj_tv_load_acq(&key, &n->key);
 	  if (tab_hash_key_hidden(&key) || tab_val_absent(&val))
