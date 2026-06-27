@@ -17,8 +17,8 @@
 static void flush_and_drain(global_State *g, TGState *tg)
 {
   (void)lj_gc2_flush_ssb(g, tg);
-  (void)lj_gc2_drain_ssb(g);
-  assert(lj_gc2_ssb_empty(g));
+  (void)lj_gc2_test_ssb_drain(g);
+  assert(lj_gc2_test_ssb_empty(g));
 }
 
 #if LJ_HASFFI
@@ -57,7 +57,7 @@ static void test_ffi_weak_newindex_target_write_barrier(lua_State *L,
   lua_call(L, 2, 0);
   assert(lj_gc2_ismarked(g, obj2gco(val)) == 1);
   assert(gc2_weak_values_marked_acq(g) == weak_vals0 + 1u);
-  assert(!lj_gc2_ssb_empty(g));
+  assert(!lj_gc2_test_ssb_empty(g));
   flush_and_drain(g, tg);
 
   lua_getfield(L, 1, "late");
@@ -96,7 +96,7 @@ static void test_ffi_newindex_target_parent_barrier(lua_State *L,
   lua_pushvalue(L, 3);
   lua_call(L, 2, 0);
   assert(lj_gc2_ismarked(g, obj2gco(val)) == 1);
-  assert(!lj_gc2_ssb_empty(g));
+  assert(!lj_gc2_test_ssb_empty(g));
   flush_and_drain(g, tg);
 
   lua_getfield(L, 1, "child");

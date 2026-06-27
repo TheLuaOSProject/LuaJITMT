@@ -43,7 +43,7 @@ static int wait_ssb_empty(global_State *g)
 {
   int i;
   for (i = 0; i < 1000; i++) {
-    if (lj_gc2_ssb_empty(g))
+    if (lj_gc2_test_ssb_empty(g))
       return 1;
     sleep_ns(1000000L);
   }

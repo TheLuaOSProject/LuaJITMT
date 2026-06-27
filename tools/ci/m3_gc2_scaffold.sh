@@ -21,6 +21,28 @@ if ! grep -qE '^[[:space:]]*static void lj_gc2_scan_minor_roots[[:space:]]*[(]' 
   printf '%s\n' 'lj_gc2_scan_minor_roots must stay static inside lj_gc2.c' >&2
   exit 1
 fi
+if hits=$(grep -nE -- 'lj_gc2_(ssb_push|drain_ssb|ssb_empty)[[:space:]]*[(]|LJ_FUNC .*lj_gc2_(ssb_push|drain_ssb|ssb_empty)[[:space:]]*[(]' \
+    "$ROOT"/src/*.c "$ROOT"/tests/*.c "$ROOT/src/lj_gc2.h" | \
+    grep -v "$ROOT/src/lj_gc2.c:" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'direct GC2 SSB queue helpers must stay inside lj_gc2.c; use production APIs or test wrappers' >&2
+  exit 1
+fi
+if ! grep -qE '^[[:space:]]*static int lj_gc2_ssb_push[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.c"; then
+  printf '%s\n' 'lj_gc2_ssb_push must stay static inside lj_gc2.c' >&2
+  exit 1
+fi
+if ! grep -qE '^[[:space:]]*static uint32_t lj_gc2_drain_ssb[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.c"; then
+  printf '%s\n' 'lj_gc2_drain_ssb must stay static inside lj_gc2.c' >&2
+  exit 1
+fi
+if ! grep -qE '^[[:space:]]*static int lj_gc2_ssb_empty[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.c"; then
+  printf '%s\n' 'lj_gc2_ssb_empty must stay static inside lj_gc2.c' >&2
+  exit 1
+fi
 
 check_raw_finreg_udata_next() {
   label=$1

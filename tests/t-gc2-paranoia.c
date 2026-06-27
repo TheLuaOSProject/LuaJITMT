@@ -122,16 +122,16 @@ int main(void)
 
   lj_gc_fullgc(L);
   assert(lj_gc2_paranoia_legacy_diff(g) == 0);
-  assert(lj_gc2_ssb_empty(g));
+  assert(lj_gc2_test_ssb_empty(g));
   g->gc.stepmul = 1;
   g->gc.threshold = 0;
   while (lj_gc_step(L) <= 0)
     ;
   assert(lj_gc2_paranoia_legacy_diff(g) == 0);
-  assert(lj_gc2_ssb_empty(g));
+  assert(lj_gc2_test_ssb_empty(g));
 
   lj_gc2_legacy_mark_begin(g);
-  assert(lj_gc2_ssb_empty(g));
+  assert(lj_gc2_test_ssb_empty(g));
   stray = lj_arena_alloc(&tg->alloc, &tg->prng, 64, LJ_AF_TRAVERSABLE);
   assert(stray != NULL);
   assert(lj_gc2_paranoia_legacy_diff(g) == 1);

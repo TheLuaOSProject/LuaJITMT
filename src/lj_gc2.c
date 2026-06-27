@@ -117,6 +117,9 @@ static int lj_gc2_finalizer_pending(global_State *g);
 static int gc2_tab_weak_mode(global_State *g, GCtab *t, GCtab *mt);
 static void *gc2_worker_main(void *arg);
 static void gc2_mark_tv_worker(global_State *g, cTValue *tv);
+static int lj_gc2_ssb_push(global_State *g, GCobj *o);
+static uint32_t lj_gc2_drain_ssb(global_State *g);
+static int lj_gc2_ssb_empty(global_State *g);
 #if LJ_HASFFI
 static void gc2_traverse_clib_retired_cache(global_State *g);
 #endif
@@ -4169,7 +4172,7 @@ static int gc2_ssb_push(global_State *g, GCobj *o, int allow_drain)
   return 1;
 }
 
-int lj_gc2_ssb_push(global_State *g, GCobj *o)
+static int lj_gc2_ssb_push(global_State *g, GCobj *o)
 {
   return gc2_ssb_push(g, o, 1);
 }
@@ -4278,7 +4281,7 @@ static uint32_t gc2_drain_active_ssb_to_grey(global_State *g, TGState *tg,
   return n;
 }
 
-uint32_t lj_gc2_drain_ssb(global_State *g)
+static uint32_t lj_gc2_drain_ssb(global_State *g)
 {
   uint32_t nitems;
   if (!g)
@@ -4337,7 +4340,7 @@ uint32_t lj_gc2_assist(global_State *g, TGState *tg)
   return n + weak;
 }
 
-int lj_gc2_ssb_empty(global_State *g)
+static int lj_gc2_ssb_empty(global_State *g)
 {
   TGState *tg;
   if (!g)
@@ -4358,6 +4361,21 @@ int lj_gc2_ssb_empty(global_State *g)
       return 0;
   }
   return 1;
+}
+
+int lj_gc2_test_ssb_push(global_State *g, GCobj *o)
+{
+  return lj_gc2_ssb_push(g, o);
+}
+
+uint32_t lj_gc2_test_ssb_drain(global_State *g)
+{
+  return lj_gc2_drain_ssb(g);
+}
+
+int lj_gc2_test_ssb_empty(global_State *g)
+{
+  return lj_gc2_ssb_empty(g);
 }
 
 static int gc2_barrier_active_g(global_State *g)

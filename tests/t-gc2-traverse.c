@@ -35,19 +35,19 @@
 static void flush_and_drain(global_State *g, TGState *tg)
 {
   (void)lj_gc2_flush_ssb(g, tg);
-  (void)lj_gc2_drain_ssb(g);
-  assert(lj_gc2_ssb_empty(g));
+  (void)lj_gc2_test_ssb_drain(g);
+  assert(lj_gc2_test_ssb_empty(g));
 }
 
 static void worker_drain_all(global_State *g)
 {
   uint32_t i;
   for (i = 0; i < 1024; i++) {
-    if (lj_gc2_ssb_empty(g))
+    if (lj_gc2_test_ssb_empty(g))
       return;
     assert(lj_gc2_worker_drain(g, LJ_GC2_WORKER_DRAIN_BATCH) != 0);
   }
-  assert(lj_gc2_ssb_empty(g));
+  assert(lj_gc2_test_ssb_empty(g));
 }
 
 static int weak_snapshot_has(global_State *g, GCtab *t);
@@ -171,7 +171,7 @@ static void *grey_owner_thread(void *arg)
 {
   GreyRaceCtx *ctx = (GreyRaceCtx *)arg;
   grey_wait(&ctx->barrier);
-  (void)lj_gc2_drain_ssb(ctx->g);
+  (void)lj_gc2_test_ssb_drain(ctx->g);
   return NULL;
 }
 
@@ -261,14 +261,14 @@ static void test_grey_deque_steal_race(lua_State *L, global_State *g,
   grey_publish_test_item(g, obj2gco(strV(L->top - 1)));
   assert(lj_gc2_test_grey_steal(g) == obj2gco(strV(L->top - 1)));
   assert(lj_gc2_test_grey_steal(g) == NULL);
-  assert(lj_gc2_ssb_empty(g));
+  assert(lj_gc2_test_ssb_empty(g));
   lua_pop(L, 1);
 
   lua_pushliteral(L, "gc2 owner pop");
   grey_publish_test_item(g, obj2gco(strV(L->top - 1)));
-  assert(lj_gc2_drain_ssb(g) == 0);
+  assert(lj_gc2_test_ssb_drain(g) == 0);
   assert(lj_gc2_test_grey_steal(g) == NULL);
-  assert(lj_gc2_ssb_empty(g));
+  assert(lj_gc2_test_ssb_empty(g));
   lua_pop(L, 1);
 
   for (i = 0; i < GC2_STEAL_RACE_N; i++) {
@@ -296,7 +296,7 @@ static void test_grey_deque_steal_race(lua_State *L, global_State *g,
     thief_won = ctx.stolen == o;
     assert(owner_won || thief_won);
     assert(!(owner_won && thief_won));
-    assert(lj_gc2_ssb_empty(g));
+    assert(lj_gc2_test_ssb_empty(g));
     lua_pop(L, 1);
   }
 
@@ -327,7 +327,7 @@ static void test_worker_drain(lua_State *L, global_State *g, TGState *tg)
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 0);
   assert(lj_gc2_ismarked(g, obj2gco(grandchild)) == 0);
   assert(lj_gc2_flush_ssb(g, tg) == 1);
-  assert(!lj_gc2_ssb_empty(g));
+  assert(!lj_gc2_test_ssb_empty(g));
 
   grey_drained0 = gc2_grey_drained_acq(g);
   worker_runs0 = gc2_worker_runs_acq(g);
@@ -344,7 +344,7 @@ static void test_worker_drain(lua_State *L, global_State *g, TGState *tg)
   assert(lj_gc2_ismarked(g, obj2gco(parent)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(grandchild)) == 1);
-  assert(lj_gc2_ssb_empty(g));
+  assert(lj_gc2_test_ssb_empty(g));
   assert(gc2_grey_drained_acq(g) == grey_drained0 + 3u);
   assert(gc2_worker_runs_acq(g) == worker_runs0 + 1u);
   assert(gc2_worker_grey_drained_acq(g) == worker_grey0 + 3u);
@@ -378,7 +378,7 @@ static void test_worker_drain_race(lua_State *L, global_State *g, TGState *tg)
   lj_gc2_legacy_mark_begin(g);
   assert(lj_gc2_markobj(g, obj2gco(parent)) == 1);
   assert(lj_gc2_flush_ssb(g, tg) == 1);
-  assert(!lj_gc2_ssb_empty(g));
+  assert(!lj_gc2_test_ssb_empty(g));
 
   worker_runs0 = gc2_worker_runs_acq(g);
   worker_grey0 = gc2_worker_grey_drained_acq(g);
@@ -411,7 +411,7 @@ static void test_worker_drain_race(lua_State *L, global_State *g, TGState *tg)
   assert(lj_gc2_ismarked(g, obj2gco(parent)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(grandchild)) == 1);
-  assert(lj_gc2_ssb_empty(g));
+  assert(lj_gc2_test_ssb_empty(g));
 
   lj_gc2_legacy_cycle_end(g);
   lua_pop(L, 3);
@@ -428,9 +428,9 @@ static void test_worker_leaf_ssb(lua_State *L, global_State *g, TGState *tg)
   s2 = strV(L->top - 1);
 
   lj_gc2_legacy_mark_begin(g);
-  assert(lj_gc2_ssb_push(g, obj2gco(s)) == 1);
+  assert(lj_gc2_test_ssb_push(g, obj2gco(s)) == 1);
   assert(lj_gc2_flush_ssb(g, tg) == 1);
-  assert(!lj_gc2_ssb_empty(g));
+  assert(!lj_gc2_test_ssb_empty(g));
 
   worker_runs0 = gc2_worker_runs_acq(g);
   worker_ssb0 = gc2_worker_ssb_converted_acq(g);
@@ -438,20 +438,20 @@ static void test_worker_leaf_ssb(lua_State *L, global_State *g, TGState *tg)
 
   assert(lj_gc2_worker_drain(g, 1) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(s)) == 1);
-  assert(lj_gc2_ssb_empty(g));
+  assert(lj_gc2_test_ssb_empty(g));
   assert(gc2_worker_runs_acq(g) == worker_runs0 + 1u);
   assert(gc2_worker_ssb_converted_acq(g) == worker_ssb0 + 1u);
   assert(gc2_worker_grey_drained_acq(g) == worker_grey0);
 
-  assert(lj_gc2_ssb_push(g, obj2gco(s2)) == 1);
+  assert(lj_gc2_test_ssb_push(g, obj2gco(s2)) == 1);
   assert(lj_gc2_flush_ssb(g, tg) == 1);
-  assert(!lj_gc2_ssb_empty(g));
+  assert(!lj_gc2_test_ssb_empty(g));
   worker_runs0 = gc2_worker_runs_acq(g);
   worker_ssb0 = gc2_worker_ssb_converted_acq(g);
   worker_grey0 = gc2_worker_grey_drained_acq(g);
   assert(lj_gc2_worker_drain(g, 1) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(s2)) == 1);
-  assert(lj_gc2_ssb_empty(g));
+  assert(lj_gc2_test_ssb_empty(g));
   assert(gc2_worker_runs_acq(g) == worker_runs0 + 1u);
   assert(gc2_worker_ssb_converted_acq(g) == worker_ssb0 + 1u);
   assert(gc2_worker_grey_drained_acq(g) == worker_grey0);
@@ -492,7 +492,7 @@ static void test_fixpoint_round(lua_State *L, global_State *g, TGState *tg)
   assert(lj_gc2_ismarked(g, obj2gco(parent)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 0);
   assert(lj_gc2_ismarked(g, obj2gco(grandchild)) == 0);
-  assert(!lj_gc2_ssb_empty(g));
+  assert(!lj_gc2_test_ssb_empty(g));
   assert(la_load64_acq(&g->gc2.marks_this_round) > 0);
   assert(gc2_fixpoint_rounds_acq(g) == rounds0 + 1u);
   assert(gc2_fixpoint_hits_acq(g) == hits0);
@@ -500,13 +500,13 @@ static void test_fixpoint_round(lua_State *L, global_State *g, TGState *tg)
 
   assert(lj_gc2_fixpoint_round(g, L, ~(uint32_t)0) == 0);
   assert(lj_gc2_ismarked(g, obj2gco(grandchild)) == 1);
-  assert(lj_gc2_ssb_empty(g));
+  assert(lj_gc2_test_ssb_empty(g));
   assert(la_load64_acq(&g->gc2.marks_this_round) > 0);
   assert(gc2_fixpoint_rounds_acq(g) == rounds0 + 2u);
   assert(gc2_fixpoint_hits_acq(g) == hits0);
 
   assert(lj_gc2_fixpoint_round(g, L, ~(uint32_t)0) == 1);
-  assert(lj_gc2_ssb_empty(g));
+  assert(lj_gc2_test_ssb_empty(g));
   assert(la_load64_acq(&g->gc2.marks_this_round) == 0);
   assert(gc2_fixpoint_rounds_acq(g) == rounds0 + 3u);
   assert(gc2_fixpoint_hits_acq(g) == hits0 + 1u);
@@ -533,7 +533,7 @@ static void test_c_value_barrier(lua_State *L, global_State *g, TGState *tg)
   lua_pushvalue(L, -1);
   lua_rawseti(L, -3, 1);
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
-  assert(!lj_gc2_ssb_empty(g));
+  assert(!lj_gc2_test_ssb_empty(g));
   flush_and_drain(g, tg);
   lj_gc2_legacy_cycle_end(g);
   lua_pop(L, 2);
@@ -559,7 +559,7 @@ static void test_c_table_rescan_barrier(lua_State *L, global_State *g,
   settabV(L, &lj_tab_array_acq(parent)[0], child);
   lj_gc_anybarriert(L, parent);
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 0);
-  assert(!lj_gc2_ssb_empty(g));
+  assert(!lj_gc2_test_ssb_empty(g));
   flush_and_drain(g, tg);
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
   lj_gc2_legacy_cycle_end(g);
@@ -599,7 +599,7 @@ static void test_vm_upvalue_barrier(lua_State *L, global_State *g, TGState *tg)
   lua_call(L, 1, 0);
   assert(tabV(uvval(uv)) == child);
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
-  assert(!lj_gc2_ssb_empty(g));
+  assert(!lj_gc2_test_ssb_empty(g));
   flush_and_drain(g, tg);
   lj_gc2_legacy_cycle_end(g);
   lua_pop(L, 3);
@@ -627,7 +627,7 @@ static void test_vm_table_barrier(lua_State *L, global_State *g, TGState *tg)
   lua_pushvalue(L, -3);
   lua_call(L, 2, 0);
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
-  assert(!lj_gc2_ssb_empty(g));
+  assert(!lj_gc2_test_ssb_empty(g));
   flush_and_drain(g, tg);
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
   lj_gc2_legacy_cycle_end(g);
@@ -661,7 +661,7 @@ static void test_vm_meta_tset_barrier(lua_State *L, global_State *g,
   lua_pushvalue(L, -4);
   lua_call(L, 3, 0);
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
-  assert(!lj_gc2_ssb_empty(g));
+  assert(!lj_gc2_test_ssb_empty(g));
   flush_and_drain(g, tg);
   assert(lj_gc2_ismarked(g, obj2gco(key)) == 1);
   lj_gc2_legacy_cycle_end(g);
@@ -707,7 +707,7 @@ static void test_capi_newindex_target_parent_barrier(lua_State *L,
   lua_pushvalue(L, 5);
   lua_setfield(L, 2, "field");
   assert(lj_gc2_ismarked(g, obj2gco(child_setfield)) == 1);
-  assert(!lj_gc2_ssb_empty(g));
+  assert(!lj_gc2_test_ssb_empty(g));
   flush_and_drain(g, tg);
   assert(lj_gc2_ismarked(g, obj2gco(key)) == 1);
 
@@ -1102,7 +1102,7 @@ static void test_jit_table_store_helper_barrier(lua_State *L, global_State *g,
   lua_pushinteger(L, 20);
   lua_call(L, 3, 0);
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
-  assert(!lj_gc2_ssb_empty(g));
+  assert(!lj_gc2_test_ssb_empty(g));
   flush_and_drain(g, tg);
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
   lj_gc2_legacy_cycle_end(g);
@@ -1169,7 +1169,7 @@ static void test_jit_weak_table_store_helper_barrier(lua_State *L,
   assert(lj_gc2_ismarked(g, obj2gco(val)) == 1);
   assert(gc2_weak_keys_marked_acq(g) == weak_keys0 + 1u);
   assert(gc2_weak_values_marked_acq(g) == weak_vals0 + 1u);
-  assert(!lj_gc2_ssb_empty(g));
+  assert(!lj_gc2_test_ssb_empty(g));
   flush_and_drain(g, tg);
   lj_gc2_legacy_cycle_end(g);
   lua_pop(L, 5);
@@ -1232,7 +1232,7 @@ static void test_jit_weak_array_store_helper_barrier(lua_State *L,
   assert(lj_gc2_ismarked(g, obj2gco(val)) == 1);
   assert(gc2_weak_keys_marked_acq(g) == weak_keys0);
   assert(gc2_weak_values_marked_acq(g) == weak_vals0 + 1u);
-  assert(!lj_gc2_ssb_empty(g));
+  assert(!lj_gc2_test_ssb_empty(g));
   flush_and_drain(g, tg);
   lj_gc2_legacy_cycle_end(g);
   lua_pop(L, 4);
@@ -1288,7 +1288,7 @@ static void test_jit_upvalue_barrier(lua_State *L, global_State *g,
   lua_call(L, 2, 0);
   assert(tabV(uvval(uv)) == child);
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
-  assert(!lj_gc2_ssb_empty(g));
+  assert(!lj_gc2_test_ssb_empty(g));
   flush_and_drain(g, tg);
   lj_gc2_legacy_cycle_end(g);
   lua_pop(L, 3);
@@ -2069,7 +2069,7 @@ static void test_weak_post_clear_resurrection_write(lua_State *L,
   assert(lj_gc2_ismarked(g, obj2gco(late_val)) == 1);
   assert(gc2_weak_keys_marked_acq(g) == weak_keys0 + 1u);
   assert(gc2_weak_values_marked_acq(g) == weak_vals0 + 1u);
-  assert(!lj_gc2_ssb_empty(g));
+  assert(!lj_gc2_test_ssb_empty(g));
   flush_and_drain(g, tg);
   lua_pushvalue(L, 4);
   lua_gettable(L, 1);
@@ -2117,7 +2117,7 @@ static void test_vm_weak_post_clear_existing_key_write(lua_State *L,
   assert(lj_gc2_ismarked(g, obj2gco(late_val)) == 1);
   assert(gc2_weak_keys_marked_acq(g) == weak_keys0 + 1u);
   assert(gc2_weak_values_marked_acq(g) == weak_vals0);
-  assert(!lj_gc2_ssb_empty(g));
+  assert(!lj_gc2_test_ssb_empty(g));
   flush_and_drain(g, tg);
   lua_pushvalue(L, 3);
   lua_gettable(L, 2);
@@ -2182,7 +2182,7 @@ static void test_capi_rawset_weak_write_barrier(lua_State *L, global_State *g,
   assert(lj_gc2_ismarked(g, obj2gco(array_val)) == 1);
   assert(gc2_weak_keys_marked_acq(g) == weak_keys0 + 1u);
   assert(gc2_weak_values_marked_acq(g) == weak_vals0 + 2u);
-  assert(!lj_gc2_ssb_empty(g));
+  assert(!lj_gc2_test_ssb_empty(g));
   flush_and_drain(g, tg);
   lj_gc2_legacy_cycle_end(g);
   lua_pop(L, 5);
@@ -2224,7 +2224,7 @@ static void test_weak_key_write_barrier(lua_State *L, global_State *g,
   assert(lj_gc2_ismarked(g, obj2gco(val)) == 1);
   assert(gc2_weak_keys_marked_acq(g) == weak_keys0 + 1u);
   assert(gc2_weak_values_marked_acq(g) == weak_vals0 + 1u);
-  assert(!lj_gc2_ssb_empty(g));
+  assert(!lj_gc2_test_ssb_empty(g));
   flush_and_drain(g, tg);
   lj_gc2_legacy_cycle_end(g);
   lua_pop(L, 3);
@@ -2270,7 +2270,7 @@ static void test_vm_weak_key_write_barrier(lua_State *L, global_State *g,
   assert(lj_gc2_ismarked(g, obj2gco(val)) == 1);
   assert(gc2_weak_keys_marked_acq(g) == weak_keys0 + 1u);
   assert(gc2_weak_values_marked_acq(g) == weak_vals0);
-  assert(!lj_gc2_ssb_empty(g));
+  assert(!lj_gc2_test_ssb_empty(g));
   flush_and_drain(g, tg);
   lj_gc2_legacy_cycle_end(g);
   lua_pop(L, 4);
@@ -2331,7 +2331,7 @@ static void test_peer_weak_key_write_barrier(lua_State *L, global_State *g,
   assert(lj_gc2_ismarked(g, obj2gco(val)) == 1);
   assert(gc2_weak_keys_marked_acq(g) == weak_keys0 + 1u);
   assert(gc2_weak_values_marked_acq(g) == weak_vals0);
-  assert(!lj_gc2_ssb_empty(g));
+  assert(!lj_gc2_test_ssb_empty(g));
   flush_and_drain(g, tg);
   lj_gc2_legacy_cycle_end(g);
   lua_settop(peer, 0);
@@ -2378,7 +2378,7 @@ static void test_vm_weak_value_hash_key_barrier(lua_State *L, global_State *g,
   assert(lj_gc2_ismarked(g, obj2gco(val)) == 1);
   assert(gc2_weak_keys_marked_acq(g) == weak_keys0 + 1u);
   assert(gc2_weak_values_marked_acq(g) == weak_vals0 + 1u);
-  assert(!lj_gc2_ssb_empty(g));
+  assert(!lj_gc2_test_ssb_empty(g));
   flush_and_drain(g, tg);
   lj_gc2_legacy_cycle_end(g);
   lua_pop(L, 4);
@@ -2416,7 +2416,7 @@ static void test_vm_weak_value_array_barrier(lua_State *L, global_State *g,
   lua_pushvalue(L, 3);
   lua_call(L, 2, 0);
   assert(lj_gc2_ismarked(g, obj2gco(val)) == 1);
-  assert(!lj_gc2_ssb_empty(g));
+  assert(!lj_gc2_test_ssb_empty(g));
   flush_and_drain(g, tg);
   lj_gc2_legacy_cycle_end(g);
   lua_pop(L, 3);
@@ -2458,7 +2458,7 @@ static void test_table_insert_weak_value_array_barrier(lua_State *L,
   lua_pop(L, 1);
   assert(lj_gc2_ismarked(g, obj2gco(val)) == 1);
   assert(gc2_weak_values_marked_acq(g) == weak_vals0 + 1u);
-  assert(!lj_gc2_ssb_empty(g));
+  assert(!lj_gc2_test_ssb_empty(g));
   flush_and_drain(g, tg);
   lj_gc2_legacy_cycle_end(g);
   lua_pop(L, 2);
@@ -2512,7 +2512,7 @@ static void test_capi_weak_newindex_target_write_barrier(lua_State *L,
   lua_setfield(L, 4, "field");
   assert(lj_gc2_ismarked(g, obj2gco(field_val)) == 1);
   assert(gc2_weak_values_marked_acq(g) == weak_vals0 + 2u);
-  assert(!lj_gc2_ssb_empty(g));
+  assert(!lj_gc2_test_ssb_empty(g));
   flush_and_drain(g, tg);
 
   lua_pushvalue(L, 2);
@@ -2577,7 +2577,7 @@ static void test_vm_weak_newindex_target_write_barrier(lua_State *L,
   assert(lj_gc2_ismarked(g, obj2gco(late_val)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(field_val)) == 1);
   assert(gc2_weak_values_marked_acq(g) == weak_vals0 + 2u);
-  assert(!lj_gc2_ssb_empty(g));
+  assert(!lj_gc2_test_ssb_empty(g));
   flush_and_drain(g, tg);
 
   lua_pushvalue(L, 3);
@@ -2607,7 +2607,7 @@ static void test_tvalue_range_barrier(lua_State *L, global_State *g,
   lj_gc2_barrier_tvn_g(g, vals, 2);
   assert(lj_gc2_ismarked(g, obj2gco(child1)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(child2)) == 1);
-  assert(!lj_gc2_ssb_empty(g));
+  assert(!lj_gc2_test_ssb_empty(g));
   flush_and_drain(g, tg);
   lj_gc2_legacy_cycle_end(g);
 }
@@ -2650,7 +2650,7 @@ static void test_vm_tsetm_range_barrier(lua_State *L, global_State *g,
   assert(tabV(lj_tab_getint(parent, 2)) == child2);
   assert(lj_gc2_ismarked(g, obj2gco(child1)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(child2)) == 1);
-  assert(!lj_gc2_ssb_empty(g));
+  assert(!lj_gc2_test_ssb_empty(g));
   flush_and_drain(g, tg);
   lj_gc2_legacy_cycle_end(g);
   lua_pop(L, 1);
@@ -2678,7 +2678,7 @@ static void test_vm_tsetm_range_barrier(lua_State *L, global_State *g,
   assert(lj_tab_asize_acq(parent) >= TSETM_BIG_N);
   assert(tabV(lj_tab_getint(parent, TSETM_BIG_N)) == last);
   assert(lj_gc2_ismarked(g, obj2gco(last)) == 1);
-  assert(!lj_gc2_ssb_empty(g));
+  assert(!lj_gc2_test_ssb_empty(g));
   flush_and_drain(g, tg);
   lj_gc2_legacy_cycle_end(g);
   lua_pop(L, 6);
@@ -2887,7 +2887,7 @@ static void test_thread(lua_State *L, global_State *g, TGState *tg)
   worker_drain_all(g);
   assert(la_load64_acq(&g->gc2.thread_scan_claims) == claims0 + 1u);
   assert(lj_gc2_ismarked(g, obj2gco(busy_tab)) == 1);
-  assert(lj_gc2_ssb_empty(g));
+  assert(lj_gc2_test_ssb_empty(g));
   lj_gc2_legacy_cycle_end(g);
   lua_pop(L, 1);
 
@@ -2925,7 +2925,7 @@ static void test_thread(lua_State *L, global_State *g, TGState *tg)
   (void)lj_gc2_flush_ssb(g, tg);
   worker_drain_all(g);
   assert(la_load64_acq(&g->gc2.thread_scan_owner_scans) > owner_scans0);
-  assert(lj_gc2_ssb_empty(g));
+  assert(lj_gc2_test_ssb_empty(g));
   lj_state_owner_rel(busy, 0);
   lj_gc2_legacy_cycle_end(g);
   lua_pop(L, 1);
@@ -3002,7 +3002,7 @@ static void test_thread(lua_State *L, global_State *g, TGState *tg)
   (void)lj_gc2_flush_ssb(g, tg);
   worker_drain_all(g);
   assert(la_load64_acq(&g->gc2.thread_scan_owner_scans) > owner_scans0);
-  assert(lj_gc2_ssb_empty(g));
+  assert(lj_gc2_test_ssb_empty(g));
   lj_state_owner_rel(busy, 0);
   if (oldcur)
     lj_tg_setcur_L(g, oldcur);
@@ -3030,7 +3030,7 @@ static void test_thread(lua_State *L, global_State *g, TGState *tg)
   assert(la_load64_acq(&g->gc2.thread_scan_busy) > busy0);
   assert(la_load64_acq(&g->gc2.thread_scan_owner_scans) > owner_scans0);
   assert(la_load64_acq(&g->gc2.thread_scan_requeues) == requeues0);
-  assert(lj_gc2_ssb_empty(g));
+  assert(lj_gc2_test_ssb_empty(g));
   lj_state_owner_rel(busy, 0);
   if (oldcur)
     lj_tg_setcur_L(g, oldcur);
@@ -3060,9 +3060,9 @@ static void test_userdata(lua_State *L, global_State *g)
   assert(lj_gc2_ismarked(g, obj2gco(env)) == 0);
   assert(lj_gc2_ismarked(g, obj2gco(mt)) == 0);
   assert(lj_gc2_markobj(g, obj2gco(ud)) == 1);
-  assert(!lj_gc2_ssb_empty(g));
-  assert(lj_gc2_drain_ssb(g) == 0);
-  assert(lj_gc2_ssb_empty(g));
+  assert(!lj_gc2_test_ssb_empty(g));
+  assert(lj_gc2_test_ssb_drain(g) == 0);
+  assert(lj_gc2_test_ssb_empty(g));
   assert(lj_gc2_ismarked(g, obj2gco(env)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(mt)) == 1);
   lj_gc2_legacy_cycle_end(g);
@@ -4353,7 +4353,7 @@ static void test_leaf_ssb(lua_State *L, global_State *g, TGState *tg)
   lua_pushliteral(L, "gc2 leaf ssb");
   s = strV(L->top - 1);
   lj_gc2_legacy_mark_begin(g);
-  assert(lj_gc2_ssb_push(g, obj2gco(s)) == 1);
+  assert(lj_gc2_test_ssb_push(g, obj2gco(s)) == 1);
   flush_and_drain(g, tg);
   assert(lj_gc2_ismarked(g, obj2gco(s)) == 1);
   lj_gc2_legacy_cycle_end(g);

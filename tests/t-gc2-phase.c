@@ -463,7 +463,7 @@ static void test_mark_complete_waits_for_peer(lua_State *L, global_State *g,
   g->gc.state = GCSpropagate;
   assert(lj_gc2_markobj(g, obj2gco(parent)) == 1);
   assert(lj_gc2_flush_ssb(g, tg) == 1);
-  assert(!lj_gc2_ssb_empty(g));
+  assert(!lj_gc2_test_ssb_empty(g));
 
   gc2_worker_active_rel(g, 1);
   rel.g = g;
@@ -478,7 +478,7 @@ static void test_mark_complete_waits_for_peer(lua_State *L, global_State *g,
   assert(gc2_mark_complete_runs_acq(g) == runs0 + 1u);
   assert(gc2_mark_complete_hits_acq(g) == hits0 + 1u);
   assert(gc2_mark_complete_peer_waits_acq(g) > waits0);
-  assert(lj_gc2_ssb_empty(g));
+  assert(lj_gc2_test_ssb_empty(g));
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
 
   g->gc.state = GCSpause;
@@ -512,7 +512,7 @@ static void test_incremental_worker_step(lua_State *L, global_State *g,
   g->gc.state = GCSpropagate;
   assert(lj_gc2_markobj(g, obj2gco(parent)) == 1);
   assert(lj_gc2_flush_ssb(g, tg) == 1);
-  assert(!lj_gc2_ssb_empty(g));
+  assert(!lj_gc2_test_ssb_empty(g));
 
   worker_runs0 = gc2_worker_runs_acq(g);
   worker_grey0 = gc2_worker_grey_drained_acq(g);
@@ -522,7 +522,7 @@ static void test_incremental_worker_step(lua_State *L, global_State *g,
   lj_gc_threshold_store(g, g->gc.total);
   assert(lj_gc_step(L) <= 0);
   assert(g->gc.state == GCSpropagate);
-  assert(lj_gc2_ssb_empty(g));
+  assert(lj_gc2_test_ssb_empty(g));
   assert(lj_gc2_ismarked(g, obj2gco(parent)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(grandchild)) == 1);
@@ -563,7 +563,7 @@ static void test_incremental_fixpoint_round(lua_State *L, global_State *g)
   assert(lj_gc2_ismarked(g, obj2gco(parent)) == 0);
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 0);
   assert(lj_gc2_ismarked(g, obj2gco(grandchild)) == 0);
-  assert(lj_gc2_ssb_empty(g));
+  assert(lj_gc2_test_ssb_empty(g));
 
   rounds0 = gc2_fixpoint_rounds_acq(g);
   hits0 = gc2_fixpoint_hits_acq(g);
@@ -700,7 +700,7 @@ int main(void)
   assert(lj_gc2_ismarked(g, obj2gco(phase_child)) == 0);
   assert(lj_gc2_markobj(g, obj2gco(phase_tab)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(phase_tab)) == 1);
-  assert(!lj_gc2_ssb_empty(g));
+  assert(!lj_gc2_test_ssb_empty(g));
   ssb_published0 = gc2_ssb_published_acq(g);
   ssb_drained0 = gc2_ssb_drained_acq(g);
   grey_pushed0 = gc2_grey_pushed_acq(g);
@@ -723,7 +723,7 @@ int main(void)
   assert(gc2_ssb_published_acq(g) == ssb_published0 + 1u);
   assert(tg->ssb_next == tg->ssb_base);
   assert(gc2_ssb_drained_acq(g) == ssb_drained0 + 1u);
-  assert(lj_gc2_ssb_empty(g));
+  assert(lj_gc2_test_ssb_empty(g));
   assert(lj_gc2_ismarked(g, obj2gco(phase_tab)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(phase_child)) == 1);
   assert(gc2_grey_pushed_acq(g) == grey_pushed0 + 2u);

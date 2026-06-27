@@ -59,35 +59,35 @@ int main(void)
   lj_gc2_legacy_mark_begin(g);
   assert(la_load64_acq(&g->gc2.marks_this_round) == 0);
   assert(lj_gc2_markobj(g, NULL) == 0);
-  assert(lj_gc2_ssb_empty(g));
+  assert(lj_gc2_test_ssb_empty(g));
 
   assert(lj_gc2_markmem(g, trav) == 1);
   assert(ptr_state(trav) == 3);
-  assert(lj_gc2_ssb_empty(g));
+  assert(lj_gc2_test_ssb_empty(g));
   assert(lj_gc2_markmem(g, trav) == 0);
   assert(la_load64_acq(&g->gc2.marks_this_round) == 1);
 
   assert(lj_gc2_markmem(g, plain) == 1);
   assert(ptr_state(plain) == 3);
-  assert(lj_gc2_ssb_empty(g));
+  assert(lj_gc2_test_ssb_empty(g));
   assert(lj_gc2_markmem(g, plain) == 0);
   assert(la_load64_acq(&g->gc2.marks_this_round) == 2);
 
   assert(lj_gc2_markmem(g, huge) == 1);
   assert(lj_arena_hugetab_lookup(&tg->huge, huge, &hi) == 1);
   assert(hi.flags == (LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_MARK));
-  assert(lj_gc2_ssb_empty(g));
+  assert(lj_gc2_test_ssb_empty(g));
   assert(lj_gc2_markmem(g, huge) == 0);
   assert(la_load64_acq(&g->gc2.marks_this_round) == 3);
 
   assert(lj_gc2_ismarked(g, obj2gco(tab)) == 0);
   assert(lj_gc2_markobj(g, obj2gco(tab)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(tab)) == 1);
-  assert(!lj_gc2_ssb_empty(g));
+  assert(!lj_gc2_test_ssb_empty(g));
   assert(lj_gc2_markobj(g, obj2gco(tab)) == 0);
   assert(lj_gc2_flush_ssb(g, tg) == 1);
-  assert(lj_gc2_drain_ssb(g) == 1);
-  assert(lj_gc2_ssb_empty(g));
+  assert(lj_gc2_test_ssb_drain(g) == 1);
+  assert(lj_gc2_test_ssb_empty(g));
   assert(la_load64_acq(&g->gc2.marks_this_round) == 4);
 
   lj_gc2_legacy_cycle_end(g);
