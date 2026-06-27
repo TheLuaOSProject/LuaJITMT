@@ -44,24 +44,27 @@ int lj_jit_token_try(jit_State *J)
 {
   global_State *g = J2G(J);
   TGState *tg = J2TG(J);
+  uint32_t tid = tg ? lj_tg_tid_acq(tg) : 0;
   uint32_t expect = 0;
-  if (!tg || tg->tid == 0)
+  if (tid == 0)
     return 0;
-  return jit_token_cas(g, &expect, tg->tid);
+  return jit_token_cas(g, &expect, tid);
 }
 
 int lj_jit_token_held(jit_State *J)
 {
   global_State *g = J2G(J);
   TGState *tg = J2TG(J);
-  return tg && tg->tid != 0 && jit_token_acq(g) == tg->tid;
+  uint32_t tid = tg ? lj_tg_tid_acq(tg) : 0;
+  return tid != 0 && jit_token_acq(g) == tid;
 }
 
 void lj_jit_token_release(jit_State *J)
 {
   global_State *g = J2G(J);
   TGState *tg = J2TG(J);
-  if (tg && tg->tid != 0 && jit_token_acq(g) == tg->tid)
+  uint32_t tid = tg ? lj_tg_tid_acq(tg) : 0;
+  if (tid != 0 && jit_token_acq(g) == tid)
     jit_token_rel(g, 0);
 }
 

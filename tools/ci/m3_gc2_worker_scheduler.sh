@@ -118,6 +118,8 @@ done
 if hits=$(grep -nE -- '(^|[^[:alnum:]_])(tg|main_tg|self|cur)[[:space:]]*->[[:space:]]*tid([^[:alnum:]_]|$)|la_load32_acq[(]&[^)]*->[[:space:]]*tid' \
     "$ROOT/src/lj_tg.c" \
     "$ROOT/src/lj_gc2.c" \
+    "$ROOT/src/lj_safepoint.c" \
+    "$ROOT/src/lj_trace.c" \
     "$ROOT/src/lib_threading.c" \
     "$ROOT/src/lj_thr.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
