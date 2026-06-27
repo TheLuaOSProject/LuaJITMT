@@ -184,7 +184,8 @@ done
 if hits=$(grep -nE -- '->[[:space:]]*gc2[.](finreg_udata_(sets|clears|queued|registered|retired_nodes|discovered|forgets))([^[:alnum:]_]|$)|&[[:space:]]*[^)]*->[[:space:]]*gc2[.](finreg_udata_(sets|clears|queued|registered|retired_nodes|discovered|forgets))([^[:alnum:]_]|$)' \
     "$ROOT/src/lj_gc.c" \
     "$ROOT/src/lj_gc2.c" \
-    "$ROOT/src/lib_base.c" || true); [ -n "$hits" ]; then
+    "$ROOT/src/lib_base.c" \
+    "$ROOT/tests/t-gc2-traverse.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
   printf '%s\n' 'raw GC2 FINREG userdata counter access is forbidden; use gc2_finreg_udata_* helpers' >&2
   exit 1

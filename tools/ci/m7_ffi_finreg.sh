@@ -188,7 +188,8 @@ if hits=$(grep -nE -- '->[[:space:]]*gc2[.](finreg_cdata_order_(seen|claimed|unl
     "$ROOT/src/lj_ctype.c" \
     "$ROOT/src/lj_gc.c" \
     "$ROOT/src/lj_gc2.c" \
-    "$ROOT/src/lib_base.c" || true); [ -n "$hits" ]; then
+    "$ROOT/src/lib_base.c" \
+    "$ROOT/tests/t-gc2-traverse.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
   printf '%s\n' 'raw FINREG ordered counter access is forbidden; use gc2_finreg_cdata_order_* helpers' >&2
   exit 1
@@ -227,7 +228,8 @@ if hits=$(grep -nE -- '->[[:space:]]*gc2[.](finreg_cdata_(sets|clears|queued|swe
     "$ROOT/src/lj_gc.c" \
     "$ROOT/src/lj_gc2.c" \
     "$ROOT/src/lj_cdata.c" \
-    "$ROOT/src/lib_base.c" || true); [ -n "$hits" ]; then
+    "$ROOT/src/lib_base.c" \
+    "$ROOT/tests/t-gc2-traverse.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
   printf '%s\n' 'raw FINREG cdata counter access is forbidden; use gc2_finreg_cdata_* helpers' >&2
   exit 1
@@ -338,13 +340,15 @@ for helper in gc2_finreg_cdata_preclaim_test_fail_acq \
 done
 if hits=$(grep -nE -- '->[[:space:]]*gc2[.]finreg_cdata_preclaim_(obj|fin|capacity|head|count)([^[:alnum:]_]|$)|&[[:space:]]*[^)]*->[[:space:]]*gc2[.]finreg_cdata_preclaim_(obj|fin|capacity|head|count)([^[:alnum:]_]|$)' \
     "$ROOT/src/lj_gc.c" \
-    "$ROOT/src/lj_gc2.c" || true); [ -n "$hits" ]; then
+    "$ROOT/src/lj_gc2.c" \
+    "$ROOT/tests/t-gc2-traverse.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
   printf '%s\n' 'raw FINREG preclaim state access is forbidden; use gc2_finreg_cdata_preclaim_* helpers' >&2
   exit 1
 fi
 if hits=$(grep -nE -- '->[[:space:]]*gc2[.](finreg_cdata_preclaim_test_fail|finreg_cdata_preclaim_publish_(pause|paused|release))([^[:alnum:]_]|$)|&[[:space:]]*[^)]*->[[:space:]]*gc2[.](finreg_cdata_preclaim_test_fail|finreg_cdata_preclaim_publish_(pause|paused|release))([^[:alnum:]_]|$)' \
-    "$ROOT/src/lj_gc2.c" || true); [ -n "$hits" ]; then
+    "$ROOT/src/lj_gc2.c" \
+    "$ROOT/tests/t-gc2-traverse.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
   printf '%s\n' 'raw FINREG preclaim test-hook access is forbidden; use gc2_finreg_cdata_preclaim_* helpers' >&2
   exit 1

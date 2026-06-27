@@ -17,5 +17,5 @@ surface and rejects raw production access to these counter fields in
 
 ## Follow-Up
 
-Userdata FINREG counters still have direct ad hoc increments and can be routed
-through the same style of helper surface in a later slice.
+Follow-up fixture cleanup routes `tests/t-gc2-traverse.c` counter snapshots
+through the same acquire helpers and extends the M7 guard over that fixture.
