@@ -48,6 +48,7 @@ fi
 for spec in \
   "$ROOT/src/lj_gc.c:gc_finreg_claim_wait_no_l" \
   "$ROOT/src/lj_gc2.c:gc2_finreg_claim_wait_no_l" \
+  "$ROOT/src/lj_tab.c:tab_finreg_claim_wait_no_l" \
   "$ROOT/src/lj_ctype.c:ctype_fin_claim_wait_no_l"; do
   file=${spec%:*}
   helper=${spec#*:}
@@ -75,6 +76,30 @@ if hits=$(awk '
   printf '%s\n' 'FINREG claim/keylock waits must yield via *_finreg_claim_wait_no_l(), not spin on la_cpu_pause()' >&2
   exit 1
 fi
+for fn in lj_tab_try_newkey_anchor lj_tab_try_newkey_chain; do
+  if ! awk -v fn="$fn" '
+    $0 ~ ("^int[[:space:]]+" fn "[[:space:]]*[(]") {
+      inside = 1
+    }
+    inside && /tab_finreg_claim_wait_no_l[[:space:]]*[(]/ {
+      found = 1
+    }
+    inside && /la_cpu_pause[[:space:]]*[(]/ {
+      bad = FILENAME ":" FNR ":" $0
+    }
+    inside && /^}/ {
+      inside = 0
+    }
+    END {
+      if (bad != "")
+	print bad
+      exit(found && bad == "" ? 0 : 1)
+    }
+  ' "$ROOT/src/lj_tab.c"; then
+    printf '%s\n' "${fn} FINREG insertion waits must use tab_finreg_claim_wait_no_l()" >&2
+    exit 1
+  fi
+done
 for helper in gc2_finreg_cdata_order_seen_acq \
   gc2_finreg_cdata_order_seen_store_rlx \
   gc2_finreg_cdata_order_seen_add \

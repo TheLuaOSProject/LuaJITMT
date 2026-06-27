@@ -15,6 +15,7 @@
 #include "lj_err.h"
 #include "lj_tab.h"
 #include "lj_tg.h"
+#include "lj_thr.h"
 
 #define LJ_TAB_MAXCHAIN		8u
 
@@ -61,6 +62,11 @@ static LJ_AINLINE int tab_val_isclaim(cTValue *tv, cTValue *claim)
 static LJ_AINLINE int tab_key_islocked(cTValue *key)
 {
   return tviskeylock(key);
+}
+
+static void tab_finreg_claim_wait_no_l(void)
+{
+  (void)lj_thr_sleep_ns(NULL, 1000000);
 }
 
 static LJ_AINLINE int tab_hash_key_hidden(cTValue *key)
@@ -1338,14 +1344,14 @@ int lj_tab_try_newkey_anchor(lua_State *L, GCtab *t, cTValue *key,
     if (lj_obj_equal(&nk, key))
       return -1;  /* A racing inserter published the key; retry lookup. */
     if (tviskeylock(&nk)) {
-      la_cpu_pause();  /* Claimed empty anchor is publishing its key. */
+      tab_finreg_claim_wait_no_l();  /* Claimed anchor is publishing key. */
       continue;
     }
     if (!tvisnil(&nk))
       return 0;  /* Caller handles collision-chain or resize fallback. */
     lj_tv_load_acq(&nv, &n->val);
     if (!tvisnil(&nv)) {
-      la_cpu_pause();  /* Another claimed empty anchor is publishing key. */
+      tab_finreg_claim_wait_no_l();  /* Claimed anchor value is publishing. */
       continue;
     }
     {
@@ -1386,7 +1392,7 @@ int lj_tab_try_newkey_chain(lua_State *L, GCtab *t, cTValue *key,
 	return -1;  /* Existing or racing insert for this key; retry lookup. */
       }
       if (tviskeylock(&nk) || (tvisnil(&nk) && tab_val_isclaim(&nv, claim))) {
-	la_cpu_pause();  /* Linked collision insert has not published key. */
+	tab_finreg_claim_wait_no_l();  /* Linked insert is publishing key. */
 	goto retry;
       }
     }
@@ -1403,7 +1409,7 @@ int lj_tab_try_newkey_chain(lua_State *L, GCtab *t, cTValue *key,
 	if (lj_obj_equal(&nk, key))
 	  goto found_existing;
 	if (tviskeylock(&nk)) {
-	  la_cpu_pause();  /* Unlinked free-node key claim is publishing. */
+	  tab_finreg_claim_wait_no_l();  /* Free-node key is publishing. */
 	  goto release_retry;
 	}
 	if (!tvisnil(&nk))
@@ -1411,7 +1417,7 @@ int lj_tab_try_newkey_chain(lua_State *L, GCtab *t, cTValue *key,
 	lj_tv_load_acq(&nv, &n->val);
 	if (!tvisnil(&nv)) {
 	  if (tab_val_isclaim(&nv, claim)) {
-	    la_cpu_pause();  /* Unlinked free-node claim is still publishing. */
+	    tab_finreg_claim_wait_no_l();  /* Free-node value is publishing. */
 	    goto release_retry;
 	  }
 	  continue;
