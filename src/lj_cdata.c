@@ -14,6 +14,7 @@
 #include "lj_ctype.h"
 #include "lj_cconv.h"
 #include "lj_cdata.h"
+#include "lj_thr.h"
 
 /* -- C data allocation --------------------------------------------------- */
 
@@ -101,6 +102,11 @@ int lj_cdata_fin_isclaim(cTValue *tv)
   return tv_rawload(tv) == LJ_CDATA_FINCLAIM_U64;
 }
 
+static void cdata_fin_claim_wait_no_l(void)
+{
+  (void)lj_thr_sleep_ns(NULL, 1000000);
+}
+
 static int cdata_fin_claim(TValue *tv, TValue *old, int nonnil)
 {
   TValue claim;
@@ -108,7 +114,7 @@ static int cdata_fin_claim(TValue *tv, TValue *old, int nonnil)
   for (;;) {
     lj_tv_load_acq(old, tv);
     if (lj_cdata_fin_isclaim(old)) {
-      la_cpu_pause();
+      cdata_fin_claim_wait_no_l();
       continue;
     }
     if (nonnil && tvisnil(old))

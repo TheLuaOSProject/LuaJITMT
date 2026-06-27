@@ -46,6 +46,7 @@ if hits=$(grep -nE -- 'ord[[:space:]]*->[[:space:]]*(retired_next|active)' \
   exit 1
 fi
 for spec in \
+  "$ROOT/src/lj_cdata.c:cdata_fin_claim_wait_no_l" \
   "$ROOT/src/lj_gc.c:gc_finreg_claim_wait_no_l" \
   "$ROOT/src/lj_gc2.c:gc2_finreg_claim_wait_no_l" \
   "$ROOT/src/lj_tab.c:tab_finreg_claim_wait_no_l" \
@@ -59,6 +60,7 @@ for spec in \
   fi
 done
 if hits=$(awk '
+  /if[[:space:]]*[(]lj_cdata_fin_isclaim/ ||
   /while[[:space:]]*[(]lj_cdata_fin_isclaim/ ||
   /while[[:space:]]*[(]ctype_fin_has_claim/ ||
   /while[[:space:]]*[(].*tviskeylock/ {
@@ -70,10 +72,33 @@ if hits=$(awk '
   scan > 0 {
     scan--
   }
-' "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc2.c" "$ROOT/src/lj_ctype.c" || true); \
+' "$ROOT/src/lj_cdata.c" "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc2.c" \
+  "$ROOT/src/lj_ctype.c" || true); \
   [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
   printf '%s\n' 'FINREG claim/keylock waits must yield via *_finreg_claim_wait_no_l(), not spin on la_cpu_pause()' >&2
+  exit 1
+fi
+if ! awk '
+  /^static int cdata_fin_claim[[:space:]]*[(]/ {
+    inside = 1
+  }
+  inside && /cdata_fin_claim_wait_no_l[[:space:]]*[(]/ {
+    found = 1
+  }
+  inside && /la_cpu_pause[[:space:]]*[(]/ {
+    bad = FILENAME ":" FNR ":" $0
+  }
+  inside && /^}/ {
+    inside = 0
+  }
+  END {
+    if (bad != "")
+      print bad
+    exit(found && bad == "" ? 0 : 1)
+  }
+' "$ROOT/src/lj_cdata.c"; then
+  printf '%s\n' 'cdata_fin_claim FINREG slot waits must use cdata_fin_claim_wait_no_l()' >&2
   exit 1
 fi
 for fn in lj_tab_try_newkey_anchor lj_tab_try_newkey_chain; do

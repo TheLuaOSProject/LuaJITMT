@@ -110,7 +110,7 @@ lj_cconv.o: lj_cconv.c lj_obj.h lua.h luaconf.h lj_def.h lj_arch.h \
  lj_ccallback.h
 lj_cdata.o: lj_cdata.c lj_obj.h lua.h luaconf.h lj_def.h lj_arch.h \
  lj_atomic.h lj_gc.h lj_gc2.h lj_err.h lj_errmsg.h lj_tab.h lj_ctype.h \
- lj_cconv.h lj_cdata.h
+ lj_cconv.h lj_cdata.h lj_thr.h
 lj_chan.o: lj_chan.c lj_obj.h lua.h luaconf.h lj_def.h lj_arch.h \
  lj_atomic.h lj_chan.h lj_gc.h lj_safepoint.h lj_gc2.h lj_tg.h lj_bc.h \
  lj_arena.h lj_ctype.h
