@@ -18,7 +18,9 @@
 static GCtrace *retired_find(jit_State *J, GCtrace *needle)
 {
   GCtrace *T;
-  for (T = J->retiredtraces; T != NULL; T = trace_retired_next_acq(T))
+  for (T = trace_retired_head_acq(J);
+       T != NULL;
+       T = trace_retired_next_acq(T))
     if (T == needle)
       return T;
   return NULL;
@@ -39,7 +41,7 @@ int main(void)
   assert(L != NULL);
   g = G(L);
   J = G2J(g);
-  assert(J->retiredtraces == NULL);
+  assert(trace_retired_head_acq(J) == NULL);
   assert(luaL_loadstring(L, "return 1") == 0);
   pt = funcproto(funcV(L->top - 1));
 
@@ -53,7 +55,7 @@ int main(void)
   T = lj_trace_alloc(L, &tmpl);
   assert(gcref(T->startpt) == NULL);
   lj_trace_free_unpublished(g, T);
-  assert(J->retiredtraces == NULL);
+  assert(trace_retired_head_acq(J) == NULL);
 
   T = lj_trace_alloc(L, &tmpl);
   setgcref(T->startpt, obj2gco(pt));

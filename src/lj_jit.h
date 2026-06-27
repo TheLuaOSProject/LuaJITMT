@@ -872,6 +872,44 @@ typedef struct jit_State {
 #endif
 } jit_State;
 
+static LJ_AINLINE TraceVec *tracevec_retired_head_acq(const jit_State *J)
+{
+  return (TraceVec *)la_loadptr_acq((void *const *)&J->retiredtracev);
+}
+
+static LJ_AINLINE int tracevec_retired_head_cas(jit_State *J,
+						TraceVec **oldp,
+						TraceVec *tv)
+{
+  return la_casptr((void **)&J->retiredtracev, (void **)oldp, tv,
+		   LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE TraceVec *
+tracevec_retired_head_xchg_acqrel(jit_State *J, TraceVec *tv)
+{
+  return (TraceVec *)la_xchgptr_acqrel((void **)&J->retiredtracev, tv);
+}
+
+static LJ_AINLINE GCtrace *trace_retired_head_acq(const jit_State *J)
+{
+  return (GCtrace *)la_loadptr_acq((void *const *)&J->retiredtraces);
+}
+
+static LJ_AINLINE int trace_retired_head_cas(jit_State *J,
+					     GCtrace **oldp,
+					     GCtrace *T)
+{
+  return la_casptr((void **)&J->retiredtraces, (void **)oldp, T,
+		   LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE GCtrace *
+trace_retired_head_xchg_acqrel(jit_State *J, GCtrace *T)
+{
+  return (GCtrace *)la_xchgptr_acqrel((void **)&J->retiredtraces, T);
+}
+
 static LJ_AINLINE MSize trace_sizetrace_acq(const jit_State *J)
 {
   return (MSize)la_load32_acq(&J->sizetrace);

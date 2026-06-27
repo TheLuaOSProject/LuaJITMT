@@ -485,7 +485,7 @@ static void gc2_paranoia_check_rawroots(global_State *g)
     TraceVec *tv = tracevec_acq(J);
     if (tv)
       gc2_paranoia_checkmem(g, tv, "trace vector");
-    for (tv = (TraceVec *)la_loadptr_acq((void *const *)&J->retiredtracev);
+    for (tv = tracevec_retired_head_acq(J);
 	 tv != NULL;
 	 tv = tracevec_retired_next_acq(tv))
       gc2_paranoia_checkmem(g, tv, "retired trace vector");

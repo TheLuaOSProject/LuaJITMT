@@ -18,7 +18,9 @@
 static int retired_has(jit_State *J, TraceVec *needle)
 {
   TraceVec *tv;
-  for (tv = J->retiredtracev; tv != NULL; tv = tracevec_retired_next_acq(tv))
+  for (tv = tracevec_retired_head_acq(J);
+       tv != NULL;
+       tv = tracevec_retired_next_acq(tv))
     if (tv == needle)
       return 1;
   return 0;
@@ -35,7 +37,7 @@ int main(void)
   g = G(L);
   J = G2J(g);
   assert(J->tracev == NULL);
-  assert(J->retiredtracev == NULL);
+  assert(tracevec_retired_head_acq(J) == NULL);
 
   ljt_lua_dostring(L,
     "local util = require'jit.util'\n"
@@ -58,7 +60,7 @@ int main(void)
   assert(oldtv != NULL);
   assert(oldtv->sizetrace == 3);
   assert(trace_sizetrace_acq(J) == oldtv->sizetrace);
-  assert(J->retiredtracev == NULL);
+  assert(tracevec_retired_head_acq(J) == NULL);
 
   ljt_lua_dostring(L,
     "local util = require'jit.util'\n"
@@ -87,7 +89,7 @@ int main(void)
   assert(lj_trace_reclaim_retired(g, epoch) == 0);
   assert(retired_has(J, oldtv));
   assert(lj_trace_reclaim_retired(g, epoch + 1u) >= 1);
-  assert(J->retiredtracev == NULL);
+  assert(tracevec_retired_head_acq(J) == NULL);
 
   lua_close(L);
   printf("t-jit-tracevec OK: trace vector grows by RCU and retires by epoch\n");
