@@ -215,6 +215,30 @@ static LJ_AINLINE void lj_gc2_ssb_next_rel(GC2SSBNode *node,
   la_storeptr_rel((void **)&node->next, next);
 }
 
+static LJ_AINLINE TGState *lj_gc2_ssb_owner_acq(const GC2SSBNode *node)
+{
+  /* 05 section 5.6.2: SSB owner. */
+  return (TGState *)la_loadptr_acq((void *const *)&node->owner);
+}
+
+static LJ_AINLINE void lj_gc2_ssb_owner_rel(GC2SSBNode *node, TGState *owner)
+{
+  /* 05 section 5.6.2: SSB owner. */
+  la_storeptr_rel((void **)&node->owner, owner);
+}
+
+static LJ_AINLINE uint32_t lj_gc2_ssb_count_acq(const GC2SSBNode *node)
+{
+  /* 05 section 5.6.2: SSB item count. */
+  return la_load32_acq(&node->n);
+}
+
+static LJ_AINLINE void lj_gc2_ssb_count_rel(GC2SSBNode *node, uint32_t n)
+{
+  /* 05 section 5.6.2: SSB item count. */
+  la_store32_rel(&node->n, n);
+}
+
 static LJ_AINLINE GC2SSBNode *lj_tg_ssb_free_acq(const TGState *tg)
 {
   return (GC2SSBNode *)la_loadptr_acq(

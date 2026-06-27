@@ -17,12 +17,12 @@
 
 static void tg_init_ssb(TGState *tg)
 {
-  tg->ssb_node[0].owner = tg;
+  lj_gc2_ssb_owner_rel(&tg->ssb_node[0], tg);
   lj_gc2_ssb_next_rel(&tg->ssb_node[0], NULL);
-  tg->ssb_node[0].n = 0;
-  tg->ssb_node[1].owner = tg;
+  lj_gc2_ssb_count_rel(&tg->ssb_node[0], 0);
+  lj_gc2_ssb_owner_rel(&tg->ssb_node[1], tg);
   lj_gc2_ssb_next_rel(&tg->ssb_node[1], NULL);
-  tg->ssb_node[1].n = 0;
+  lj_gc2_ssb_count_rel(&tg->ssb_node[1], 0);
   lj_tg_ssb_active_rel(tg, &tg->ssb_node[0]);
   lj_tg_ssb_free_store_rlx(tg, &tg->ssb_node[1]);
   lj_tg_ssb_base_rel(tg, tg->ssb_node[0].slot);

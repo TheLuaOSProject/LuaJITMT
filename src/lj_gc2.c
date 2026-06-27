@@ -4271,7 +4271,7 @@ GCobj *lj_gc2_test_grey_steal(global_State *g)
 static void gc2_ssb_activate(TGState *tg, GC2SSBNode *node)
 {
   lj_gc2_ssb_next_rel(node, NULL);
-  node->n = 0;
+  lj_gc2_ssb_count_rel(node, 0);
   lj_tg_ssb_active_rel(tg, node);
   /* 05 section 5.6.2: publish active SSB cursor reset. */
   lj_tg_ssb_base_rel(tg, node->slot);
@@ -4312,7 +4312,7 @@ static uint32_t gc2_flush_ssb(global_State *g, TGState *tg, int allow_drain)
   }
   if (!fresh)
     return 0;
-  node->n = n;
+  lj_gc2_ssb_count_rel(node, n);
   gc2_ssb_publish(g, node);
   gc2_ssb_published_add(g, 1);
   gc2_ssb_items_published_add(g, n);
@@ -4376,8 +4376,8 @@ static void gc2_ssb_mark_one(global_State *g, GCobj *o)
 
 static void gc2_ssb_recycle_node(GC2SSBNode *node)
 {
-  TGState *owner = node->owner;
-  node->n = 0;
+  TGState *owner = lj_gc2_ssb_owner_acq(node);
+  lj_gc2_ssb_count_rel(node, 0);
   if (owner) {
     lj_tg_ssb_free_push(owner, node);
   } else {
@@ -4410,15 +4410,17 @@ static LJ_NOINLINE uint32_t gc2_drain_published_ssb_to_grey(global_State *g,
   node = gc2_ssb_head_xchg_acqrel(g, NULL);
   while (node && nitems < limit) {
     GC2SSBNode *next = lj_gc2_ssb_next_acq(node);
-    while (node->n > 0 && nitems < limit) {
-      GCRef *slot = &node->slot[node->n - 1u];
+    uint32_t count = lj_gc2_ssb_count_acq(node);
+    while (count > 0 && nitems < limit) {
+      GCRef *slot = &node->slot[count - 1u];
       GCobj *o = gc2_queue_slot_load_acq(slot);
       gc2_queue_slot_clear_rel(slot);
-      node->n--;
+      count--;
+      lj_gc2_ssb_count_rel(node, count);
       gc2_ssb_mark_one(g, o);
       nitems++;
     }
-    if (node->n == 0) {
+    if (count == 0) {
       nnodes++;
       gc2_ssb_recycle_node(node);
       node = next;

@@ -9,6 +9,28 @@ if hits=$(grep -nE -- '(^|[^[:alnum:]_])(node|tail|fresh)[[:space:]]*->[[:space:
   printf '%s\n' 'raw GC2 SSB next-link access is forbidden; use lj_gc2_ssb_next_* helpers' >&2
   exit 1
 fi
+for helper in lj_gc2_ssb_owner_acq \
+  lj_gc2_ssb_owner_rel \
+  lj_gc2_ssb_count_acq \
+  lj_gc2_ssb_count_rel; do
+  if ! grep -qE "^[[:space:]]*static LJ_AINLINE .*[*[:space:]]${helper}[[:space:]]*[(]" \
+      "$ROOT/src/lj_tg.h"; then
+    printf '%s\n' "${helper} helper is required for GC2 SSB node metadata" >&2
+    exit 1
+  fi
+done
+if hits=$(grep -nE -- '(^|[^[:alnum:]_])(node|tail|fresh)[[:space:]]*->[[:space:]]*(owner|n)([^[:alnum:]_]|$)' \
+    "$ROOT/src/lj_gc2.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw GC2 SSB node owner/count access is forbidden; use lj_gc2_ssb_* helpers' >&2
+  exit 1
+fi
+if hits=$(grep -nE -- 'ssb_node\[[^]]+\][.](owner|n)([^[:alnum:]_]|$)' \
+    "$ROOT/src/lj_tg.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw embedded GC2 SSB owner/count init is forbidden; use lj_gc2_ssb_* helpers' >&2
+  exit 1
+fi
 for helper in gc2_worker_tg_retire_tg_acq \
   gc2_worker_tg_retire_tg_rel \
   gc2_finalizer_node_obj_acq \
