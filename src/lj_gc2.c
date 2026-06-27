@@ -4044,7 +4044,7 @@ static GCobj *gc2_grey_pop(global_State *g)
   return NULL;
 }
 
-GCobj *lj_gc2_grey_steal(global_State *g)
+static GCobj *lj_gc2_grey_steal(global_State *g)
 {
   GCRef *stack;
   uint64_t top, bottom, expect;
@@ -4068,6 +4068,11 @@ GCobj *lj_gc2_grey_steal(global_State *g)
   if (!gc2_grey_top_cas(g, &expect, top + 1))
     return NULL;
   return o;
+}
+
+GCobj *lj_gc2_test_grey_steal(global_State *g)
+{
+  return lj_gc2_grey_steal(g);
 }
 
 static void gc2_ssb_activate(TGState *tg, GC2SSBNode *node)

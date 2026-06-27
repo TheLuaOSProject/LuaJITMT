@@ -473,6 +473,18 @@ if hits=$(grep -nE -- '->[[:space:]]*gc2[.](grey_stack|grey_capacity|grey_top|gr
   printf '%s\n' 'raw GC2 grey deque state access is forbidden; use gc2_grey_* helpers' >&2
   exit 1
 fi
+if hits=$(grep -nE -- 'lj_gc2_grey_steal[[:space:]]*[(]|LJ_FUNC .*lj_gc2_grey_steal[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.c" "$ROOT/src/lj_gc2.h" "$ROOT"/src/*.c | \
+    grep -v "$ROOT/src/lj_gc2.c:" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw GC2 grey steal control must stay inside lj_gc2.c' >&2
+  exit 1
+fi
+if ! grep -qE '^[[:space:]]*static GCobj [*]lj_gc2_grey_steal[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.c"; then
+  printf '%s\n' 'lj_gc2_grey_steal must stay static inside lj_gc2.c' >&2
+  exit 1
+fi
 for helper in gc2_grey_pushed_acq \
   gc2_grey_pushed_store_rlx \
   gc2_grey_pushed_add \

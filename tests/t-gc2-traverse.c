@@ -179,7 +179,7 @@ static void *grey_thief_thread(void *arg)
 {
   GreyRaceCtx *ctx = (GreyRaceCtx *)arg;
   grey_wait(&ctx->barrier);
-  ctx->stolen = lj_gc2_grey_steal(ctx->g);
+  ctx->stolen = lj_gc2_test_grey_steal(ctx->g);
   return NULL;
 }
 
@@ -259,15 +259,15 @@ static void test_grey_deque_steal_race(lua_State *L, global_State *g,
 
   lua_pushliteral(L, "gc2 direct steal");
   grey_publish_test_item(g, obj2gco(strV(L->top - 1)));
-  assert(lj_gc2_grey_steal(g) == obj2gco(strV(L->top - 1)));
-  assert(lj_gc2_grey_steal(g) == NULL);
+  assert(lj_gc2_test_grey_steal(g) == obj2gco(strV(L->top - 1)));
+  assert(lj_gc2_test_grey_steal(g) == NULL);
   assert(lj_gc2_ssb_empty(g));
   lua_pop(L, 1);
 
   lua_pushliteral(L, "gc2 owner pop");
   grey_publish_test_item(g, obj2gco(strV(L->top - 1)));
   assert(lj_gc2_drain_ssb(g) == 0);
-  assert(lj_gc2_grey_steal(g) == NULL);
+  assert(lj_gc2_test_grey_steal(g) == NULL);
   assert(lj_gc2_ssb_empty(g));
   lua_pop(L, 1);
 
