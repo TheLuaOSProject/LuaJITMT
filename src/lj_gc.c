@@ -1534,8 +1534,8 @@ static int gc_call_finalizer(global_State *g, lua_State *L,
   int errcode;
   ptrdiff_t oldtop;
   TValue *top;
-  while (!lj_state_tryclaim(cbL, lj_thr_current_id(g), &claim))
-    la_cpu_pause();
+  if (!lj_state_tryclaim(cbL, lj_thr_current_id(g), &claim))
+    return 0;  /* Caller must preclaim before clearing FINREG state. */
   lj_assertG(cbL != vmthread_acq(g),
 	     "gc_call_finalizer must not use shared vmthread callback stack");
   oldL = lj_tg_cur_L(g);

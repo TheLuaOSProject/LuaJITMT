@@ -182,4 +182,31 @@ if hits=$(grep -nE -- "->[[:space:]]*gc2[.]${finalizer_test_hooks}([^[:alnum:]_]
   exit 1
 fi
 
+if hits=$(awk '
+  /^static int gc_call_finalizer\(global_State \*g, lua_State \*L,/ {
+    in_fn = 1
+  }
+  in_fn && (/while[[:space:]]*\(!lj_state_tryclaim/ || /la_cpu_pause[[:space:]]*\(/) {
+    print FILENAME ":" FNR ":" $0
+  }
+  in_fn && /^}/ { in_fn = 0 }
+' "$ROOT/src/lj_gc.c"); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' \
+    'finalizer callback dispatch must defer on a busy lua_State instead of spinning' >&2
+  exit 1
+fi
+
+if ! awk '
+  /^static int lj_gc2_finalizer_dispatch_one\(lua_State \*L,/ { in_fn = 1 }
+  in_fn && /lj_state_tryclaim\(L,/ { claimed = 1 }
+  in_fn && /lj_gc2_finalizer_dequeue_owned\(g\)/ && !claimed { bad = 1 }
+  in_fn && /^}/ { in_fn = 0 }
+  END { exit(claimed && !bad ? 0 : 1) }
+' "$ROOT/src/lj_gc2.c"; then
+  printf '%s\n' \
+    'GC2 finalizer dispatch must claim callback lua_State before dequeuing finalizers' >&2
+  exit 1
+fi
+
 exec "$ROOT/tools/ci/lua_test.sh" m8_weak

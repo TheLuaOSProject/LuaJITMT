@@ -49,6 +49,8 @@ typedef struct FinalizerProducer {
   pthread_barrier_t *barrier;
 } FinalizerProducer;
 
+static uint32_t finalizer_state_claim_dispatch_called;
+
 #if defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
 typedef struct FinalizerDrainer {
   global_State *g;
@@ -114,6 +116,14 @@ static int finalizer_churn(lua_State *L)
   if (status != LUA_OK)
     lua_pop(L, 1);
   return 0;
+}
+
+static int finalizer_state_claim_dispatch(lua_State *L, global_State *g,
+					  GCobj *o)
+{
+  UNUSED(L); UNUSED(g); UNUSED(o);
+  la_store32_rel(&finalizer_state_claim_dispatch_called, 1);
+  return 1;
 }
 
 static int unlink_root_object(global_State *g, GCobj *target)
@@ -631,6 +641,41 @@ static void test_isolated_weak_skip_case(const char *mode)
   lua_close(L);
 }
 
+static void test_finalizer_step_defers_busy_callback_state(lua_State *L,
+							   global_State *g)
+{
+  GCtab *t;
+  GCSize cost = 0;
+  uint32_t saved_owner;
+  uint32_t fake_owner = 0x70000000u;
+
+  if (fake_owner == lj_thr_current_id(g) || fake_owner == LJ_THREAD_GCSCAN)
+    fake_owner--;
+
+  lua_settop(L, 0);
+  lua_newtable(L);
+  t = tabV(L->top - 1);
+  saved_owner = lj_state_owner_acq(L);
+  assert(saved_owner != fake_owner);
+  assert(!lj_gc2_finalizer_queue_pending(g));
+  lj_gc2_test_finalizer_enqueue(g, obj2gco(t));
+  assert(lj_gc2_finalizer_queue_pending(g));
+
+  lj_state_owner_rel(L, fake_owner);
+  la_store32_rel(&finalizer_state_claim_dispatch_called, 0);
+  assert(lj_gc2_finalizer_step(L, finalizer_state_claim_dispatch, 1,
+			       &cost) == -1);
+  assert(cost == LJ_MAX_MEM);
+  assert(la_load32_acq(&finalizer_state_claim_dispatch_called) == 0);
+  assert(lj_state_owner_acq(L) == fake_owner);
+  assert(lj_gc2_finalizer_queue_pending(g));
+
+  lj_state_owner_rel(L, saved_owner);
+  assert(lj_gc2_test_finalizer_dequeue(g) == obj2gco(t));
+  assert(!lj_gc2_finalizer_queue_pending(g));
+  lua_pop(L, 1);
+}
+
 int main(void)
 {
   lua_State *L;
@@ -678,6 +723,7 @@ int main(void)
   test_finalizer_scan_waits_for_drain(L, g);
 #endif
   test_finalizer_mpsc_concurrent_producers(L, g);
+  test_finalizer_step_defers_busy_callback_state(L, g);
   test_phase_transition_guards(g, tg);
   test_incremental_worker_step(L, g, tg);
   test_incremental_fixpoint_round(L, g);

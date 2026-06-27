@@ -1395,22 +1395,29 @@ static int lj_gc2_finalizer_dispatch_one(lua_State *L,
 					 GC2FinalizerDispatchFunc dispatch)
 {
   global_State *g;
+  LJStateClaim claim;
   GCobj *o;
   int rc;
   if (!L || !dispatch)
     return 0;
   g = G(L);
   lj_assertG(lj_tg_jit_base(g) == NULL, "finalizer called on trace");
-  if (!lj_gc2_finalizer_try_enter(g))
+  if (!lj_state_tryclaim(L, lj_thr_current_id(g), &claim))
+    return 0;  /* 05 section 5.8: callback stack busy; leave queue intact. */
+  if (!lj_gc2_finalizer_try_enter(g)) {
+    lj_state_dropclaim(&claim);
     return 0;
+  }
   lj_gc2_finalizer_drain_owned(g);
   o = lj_gc2_finalizer_dequeue_owned(g);
   if (o == NULL) {
     lj_gc2_finalizer_leave(g);
+    lj_state_dropclaim(&claim);
     return 0;
   }
   rc = dispatch(L, g, o);
   lj_gc2_finalizer_leave(g);
+  lj_state_dropclaim(&claim);
   return rc < 0 ? -1 : 1;
 }
 
