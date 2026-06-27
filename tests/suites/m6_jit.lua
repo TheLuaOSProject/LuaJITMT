@@ -998,7 +998,7 @@ assert(x=="abc")
     name = "m6_jit_gcstep_guard",
     description = "legacy JIT GC-step pacing behavior",
     run = function(t)
-      build_default(t)
+      clean_build(t)
       assert_ir_dump_probe_contains(t, "lj_t-jit-gcstep.dump", [=[
 jit.opt.start("hotloop=1","hotexit=1")
 local x
@@ -1031,6 +1031,26 @@ for _ = 1, 5 do
 end
 assert(best >= 0)
 ]=], { timeout = "10s" })
+      luajit_code(t, [=[
+local function run(n)
+  local s = 0
+  for i = 1, n do
+    local x = i
+    local f = function()
+      x = x + 1
+      return x
+    end
+    s = s + f()
+  end
+  return s
+end
+local n = 200000
+local want = n * (n + 1) / 2 + n
+for _ = 1, 3 do
+  collectgarbage("collect")
+  assert(run(n) == want)
+end
+]=], { joff = true, timeout = "10s" })
       print("M6 JIT GC-step behavior passed")
     end
   })
