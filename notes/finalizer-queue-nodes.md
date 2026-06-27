@@ -21,6 +21,9 @@ than taking allocator ownership implicitly.
 Legacy GC, GC2 root scans, and paranoia checks now mark queued finalizer objects
 through `lj_gc2_finalizer_mark_all()` callbacks. GC2 owns claiming the
 finalizer owner, draining the producer stack, and walking the stable owner ring.
+Dispatch-time consumption enters through `lj_gc2_finalizer_dispatch_one()` for
+the same owner/drain/dequeue/release sequence, with legacy GC retaining only the
+dequeued-object semantic callback.
 
 ## Coverage
 

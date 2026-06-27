@@ -1577,43 +1577,34 @@ static int gc_call_finalizer(global_State *g, lua_State *L,
   return continue_gc;
 }
 
-/* Finalize one userdata or cdata object from the GC2 finalizer queue. */
-static int gc_finalize(lua_State *L)
+static int gc_dispatch_finalizer_obj(lua_State *L, global_State *g, GCobj *o)
 {
-  global_State *g = G(L);
-  GCobj *o;
-  int rc;
-  lj_assertG(lj_tg_jit_base(g) == NULL, "finalizer called on trace");
-  if (!lj_gc2_finalizer_try_enter(g))
-    return 0;
-  lj_gc2_finalizer_drain_owned(g);
-  o = lj_gc2_finalizer_dequeue_owned(g);
-  if (o == NULL) {
-    lj_gc2_finalizer_leave(g);
-    return 0;
-  }
 #if LJ_HASFFI
   if (o->gch.gct == ~LJ_TCDATA) {
+    int rc;
     /* Add cdata back to the GC list and make it white. */
     lj_gc_linkobj(g, o);  /* CAS-requeue finalized cdata on root list. */
     makewhite(g, o);
     lj_gc_arena_markobj(g, o);
     rc = lj_gc2_finreg_cdata_dispatch(L, g, o, gc_call_finalizer);
-    lj_gc2_finalizer_leave(g);
-    return rc < 0 ? -1 : 1;
+    return rc;
   }
 #endif
-  /* Add userdata back to the main userdata list and make it white. */
-  lj_gc_linkobj_after(obj2gco(mainthread_acq(g)), o);
-  makewhite(g, o);
-  lj_gc_arena_markobj(g, o);
-  rc = lj_gc2_finreg_udata_dispatch(L, g, o, gc_call_finalizer);
-  if (rc < 0) {
-    lj_gc2_finalizer_leave(g);
-    return -1;
+  {
+    int rc;
+    /* Add userdata back to the main userdata list and make it white. */
+    lj_gc_linkobj_after(obj2gco(mainthread_acq(g)), o);
+    makewhite(g, o);
+    lj_gc_arena_markobj(g, o);
+    rc = lj_gc2_finreg_udata_dispatch(L, g, o, gc_call_finalizer);
+    return rc;
   }
-  lj_gc2_finalizer_leave(g);
-  return 1;
+}
+
+/* Finalize one userdata or cdata object from the GC2 finalizer queue. */
+static int gc_finalize(lua_State *L)
+{
+  return lj_gc2_finalizer_dispatch_one(L, gc_dispatch_finalizer_obj);
 }
 
 /* Finalize all userdata/cdata objects from the GC2 finalizer queue. */

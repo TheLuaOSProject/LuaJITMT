@@ -241,7 +241,9 @@ state while close-time drains still complete through the blocking wrapper. The
 older `finalizer_token` bridge has been removed, and normal finalizer producers
 publish through the GC2 MPSC/consumer-ring bridge instead of legacy `mmudata`;
 that bridge now links dedicated queue nodes instead of overwriting each pending
-object's `gcw` root/list link.
+object's `gcw` root/list link. Dispatch-time queue consumption goes through
+`lj_gc2_finalizer_dispatch_one()`, leaving legacy GC with the dequeued-object
+semantic callback rather than direct owner/drain/dequeue access.
 User finalizer callbacks now run on the claimed collector caller `lua_State`
 instead of the shared `vmthread(g)` stack. Userdata FINREG membership now uses a
 GC2 side list for discovery, including in-place metatable finalizer additions

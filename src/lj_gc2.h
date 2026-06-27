@@ -15,6 +15,8 @@ typedef void (*GC2FinRegMarkMemFunc)(global_State *g, void *p);
 typedef void (*GC2FinRegMarkTVFunc)(global_State *g, cTValue *tv);
 typedef int (*GC2FinalizerCallFunc)(global_State *g, lua_State *L,
 				    cTValue *mo, GCobj *o);
+typedef int (*GC2FinalizerDispatchFunc)(lua_State *L, global_State *g,
+					GCobj *o);
 
 #ifndef LJ_GC2_PARANOIA
 #define LJ_GC2_PARANOIA		0
@@ -158,6 +160,8 @@ LJ_FUNC void lj_gc2_finalizer_drain_owned(global_State *g);
 LJ_FUNC void lj_gc2_finalizer_drain(global_State *g);
 LJ_FUNC GCobj *lj_gc2_finalizer_dequeue_owned(global_State *g);
 LJ_FUNC GCobj *lj_gc2_finalizer_dequeue(global_State *g);
+LJ_FUNC int lj_gc2_finalizer_dispatch_one(lua_State *L,
+					  GC2FinalizerDispatchFunc dispatch);
 LJ_FUNC void lj_gc2_finalizer_mark_all(global_State *g,
 				       GC2FinalizerMarkFunc mark);
 LJ_FUNC int lj_gc2_finalizer_try_enter(global_State *g);
