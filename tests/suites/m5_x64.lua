@@ -1,8 +1,77 @@
+local utils = require("suite_utils")
+local checks = require("suite_assert")
 local build = require("suite_build")
 local runtime = require("suite_runtime")
 
 local build_and_run_luajit_code = runtime.build_and_run_luajit_code
 local compile_and_run_c = build.compile_and_run_c
+
+local function vm_case(vm, opname)
+  local label = "case " .. opname .. ":"
+  local first = vm:find(label, 1, true)
+  if not first then error("x64 VM block not found: " .. label, 2) end
+  local nextcase = vm:find("\n  case BC_", first + #label, true)
+  if not nextcase then nextcase = #vm + 1 end
+  return vm:sub(first, nextcase - 1)
+end
+
+local function assert_has(label, data, needle)
+  checks.assert_text_contains(label, data, needle, "x64 VM text")
+end
+
+local function assert_missing(label, data, needle)
+  if data:find(needle, 1, true) then
+    error(label .. ": unexpected x64 VM text: " .. needle, 2)
+  end
+end
+
+local function assert_count_at_least(label, data, needle, mincount)
+  checks.assert_text_contains_count(label, data, needle, mincount,
+                                    "x64 VM text")
+end
+
+local function assert_x64_vm_store_publication(t)
+  local vm = utils.read_file(t:path("src", "vm_x64.dasc"))
+  assert_missing("x64 VM store publication", vm, "barrierback")
+  assert_missing("x64 VM store publication", vm, "lj_gc_barrieruv")
+
+  local tsetv = vm_case(vm, "BC_TSETV")
+  assert_has("BC_TSETV", tsetv, "call extern lj_tab_storetv_forvm_array")
+  assert_has("BC_TSETV", tsetv, "->vm_gc2_barriertv_tab")
+
+  local tsets = vm_case(vm, "BC_TSETS")
+  assert_has("BC_TSETS", tsets, "jmp ->vmeta_tsets")
+  assert_missing("BC_TSETS", tsets, "lj_tab_storetv")
+  assert_missing("BC_TSETS", tsets, "vm_gc2_barriertv_tab")
+
+  local tsetb = vm_case(vm, "BC_TSETB")
+  assert_has("BC_TSETB", tsetb, "call extern lj_tab_storetv_forvm_array")
+  assert_has("BC_TSETB", tsetb, "->vm_gc2_barriertv_tab")
+
+  local tsetr = vm_case(vm, "BC_TSETR")
+  assert_count_at_least("BC_TSETR", tsetr,
+                        "call extern lj_tab_storetv_forvm_array", 2)
+  assert_count_at_least("BC_TSETR", tsetr, "->vm_gc2_barriertv_tab", 2)
+
+  local tsetm = vm_case(vm, "BC_TSETM")
+  assert_has("BC_TSETM", tsetm,
+             "call extern lj_tab_storetvn_forvm_array")
+
+  local cset = vm_case(vm, "BC_CSET")
+  assert_has("BC_CSET", cset, "call extern lj_func_storeuv_pub")
+
+  local usetv = vm_case(vm, "BC_USETV")
+  assert_has("BC_USETV", usetv, "call extern lj_func_storeuv_pub")
+
+  local usets = vm_case(vm, "BC_USETS")
+  assert_has("BC_USETS", usets, "call extern lj_func_storeuvstr_pub")
+
+  local usetn = vm_case(vm, "BC_USETN")
+  assert_has("BC_USETN", usetn, "call extern lj_func_storeuvnum_pub")
+
+  local usetp = vm_case(vm, "BC_USETP")
+  assert_has("BC_USETP", usetp, "call extern lj_func_storeuvpri_pub")
+end
 
 local function tget_array_header_smoke()
   return [[
@@ -92,6 +161,15 @@ assert(n == 5)
 end
 
 return function(add)
+  add({
+    name = "m5_x64_vm_store_publication",
+    description = "x64 VM table/cell store publication surface",
+    run = function(t)
+      assert_x64_vm_store_publication(t)
+      print("M5 x64 VM store publication surface passed")
+    end
+  })
+
   add({
     name = "m5_x64_getmetatable_node_order",
     description = "x64 getmetatable behavior",

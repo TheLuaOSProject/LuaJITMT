@@ -214,8 +214,8 @@ non-x86-64 dasc work until the x86-64 Linux runtime is green.
 ## 7.9 Audit checklist for this document's changes
 - [x] `grep -c "vm_safepoint" vm_x64.dasc` ≥ 4 sites + stub
 - [x] no remaining `DISPATCH_GL(gc\.` after M2
-- [ ] `barrierback` macro deleted; `wbarrier_tv` used by TSETV/TSETS/TSETB/
-      TSETM/USETx/CSET
+- [x] x64 `barrierback` macro deleted; TSETV/TSETS/TSETB/TSETM and closed
+      USETx/CSET stores route through helper-backed publication barriers
 - [x] BC_TNEW slow-path label still reachable for asize>0 templates
 - [x] interp-only build (`-joff`) passes the stock suite
 
@@ -229,15 +229,24 @@ Current stock guard: `m3_interp_stock_joff` builds the default x64 VM and runs
 the vendored stock suite as `luajit -joff test.lua --quiet`; the current pass
 reports `386 passed`.
 
+Current store-publication guard: `m5_x64_vm_store_publication` asserts the x64
+VM cannot reintroduce legacy inline `barrierback`/`lj_gc_barrieruv` paths,
+keeps `TSETV`/`TSETB`/`TSETR` array stores on
+`lj_tab_storetv_forvm_array()`, keeps `TSETM` range stores on
+`lj_tab_storetvn_forvm_array()`, keeps `TSETS` on the C fallback instead of a
+direct hash-slot store, and keeps closed `CSET`/`USETx` paths on
+`lj_func_storeuv_*_pub()` release-copy helpers.
+
 Current x64 bridge note: the base-library `setmetatable` fast path now
 publishes the table -> metatable edge through `lj_gc2_barrier_obj_pair()` before
 the legacy black-table repair. The x64 `TSETV`, `TSETB`, `TSETR`, and `TSETM`
 fast array/range stores now publish slots first and route post-store checks
 through VM helpers that combine parent-aware GC2 barriers with legacy
-incremental black-table repair. The broader 7.4 replacement remains open for the
-final cross-VM `wbarrier_tv` macro cleanup; x64 closed `USETx`/`CSET` stores
-already release-copy through `lj_func_storeuv_*_pub()` helpers, and raw/open
-cell stores remain stack-local writes. The old x64 `vm_gc2_barriertab` helper
+incremental black-table repair. This helper-backed x64 path supersedes the
+original inline `wbarrier_tv` sketch in favor of a more conservative,
+C-auditable safety surface; x64 closed `USETx`/`CSET` stores release-copy through
+`lj_func_storeuv_*_pub()` helpers, and raw/open cell stores remain stack-local
+writes. The old x64 `vm_gc2_barriertab` helper
 label has no remaining VM branch users and is retired; the JIT C-call
 `lj_gc2_barrier_tab_g` path remains separate. The interpreter allocation slow
 path now also runs the GC2 hard-threshold assist from `lj_gc_step_fixtop()` once
