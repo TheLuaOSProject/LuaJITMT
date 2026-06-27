@@ -217,13 +217,17 @@ non-x86-64 dasc work until the x86-64 Linux runtime is green.
 - [ ] `barrierback` macro deleted; `wbarrier_tv` used by TSETV/TSETS/TSETB/
       TSETM/USETx/CSET
 - [x] BC_TNEW slow-path label still reachable for asize>0 templates
-- [ ] interp-only build (`-joff`) passes the stock suite
+- [x] interp-only build (`-joff`) passes the stock suite
 
 Current guard: `m3_vm_safepoint` now asserts the migrated x64 VM source
 invariants before running `t-vm-safepoint`: at least five `vm_safepoint`
 references, no x64 `DISPATCH_GL(gc.*)` loads, no x64 inline `barrierback`, and
 both the empty-table `lj_tab_new0` and non-empty `lj_tab_new` `BC_TNEW` paths
 remain present.
+
+Current stock guard: `m3_interp_stock_joff` builds the default x64 VM and runs
+the vendored stock suite as `luajit -joff test.lua --quiet`; the current pass
+reports `386 passed`.
 
 Current x64 bridge note: the base-library `setmetatable` fast path now
 publishes the table -> metatable edge through `lj_gc2_barrier_obj_pair()` before

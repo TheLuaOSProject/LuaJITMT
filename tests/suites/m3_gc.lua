@@ -48,6 +48,7 @@ local m3_scaffold_deps = {
   "m3_safepoint_handshake",
   "m3_vmevent_native_stdio",
   "m3_vm_safepoint",
+  "m3_interp_stock_joff",
   "m3_gc2_paranoia",
   "m2_arena_all",
   "m0_matrix"
@@ -143,6 +144,25 @@ return function(add)
   })
 
   register({
+    name = "m3_interp_stock_joff",
+    description = "interpreter-only stock LuaJIT suite under -joff",
+    run = function(t)
+      make_default(t, { jobs = false })
+      t:run({
+        t:path("src", "luajit"),
+        "-joff",
+        "test.lua",
+        "--quiet"
+      }, {
+        cwd = t:path("tests", "stock", "test"),
+        env = { LUA_PATH = runtime.lua_path(t) },
+        timeout = "240s"
+      })
+      print("M3 interpreter-only stock suite passed under -joff")
+    end
+  })
+
+  register({
     name = "m3_gc2_paranoia",
     description = "GC2 paranoia build, oracle fixtures, and stock tests",
     run = function(t)
@@ -190,6 +210,7 @@ return function(add)
       utils.run_case(cases, t, "m3_gc_active_thread_roots")
       utils.run_case(cases, t, "m3_safepoint_handshake")
       utils.run_case(cases, t, "m3_vm_safepoint")
+      utils.run_case(cases, t, "m3_interp_stock_joff")
       utils.run_case(cases, t, "m3_gc2_paranoia")
       runtime.run_lua_test_case(t, "m2_arena_all")
 
