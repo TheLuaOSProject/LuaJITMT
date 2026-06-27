@@ -76,6 +76,8 @@ LJ_FUNC uint32_t lj_gc2_reclaim_retired(global_State *g, uint64_t epoch);
 LJ_FUNC void lj_gc2_scan_cycle_roots(global_State *g, lua_State *L);
 LJ_FUNC uint32_t lj_gc2_flush_ssb(global_State *g, TGState *tg);
 LJ_FUNC int lj_gc2_workers_set(global_State *g, uint32_t n);
+LJ_FUNC int lj_gc2_workers_set_l(lua_State *L, uint32_t n,
+				 uint32_t *actionsp);
 LJ_FUNC void lj_gc2_worker_stop(global_State *g);
 LJ_FUNC uint32_t lj_gc2_worker_drain(global_State *g, uint32_t limit);
 LJ_FUNC uint32_t lj_gc2_fixpoint_round(global_State *g, lua_State *L,

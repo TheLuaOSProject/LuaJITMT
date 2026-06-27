@@ -93,6 +93,21 @@ if hits=$(grep -nE -- 'lj_gc2_worker_start[[:space:]]*[(]|LJ_FUNC int lj_gc2_wor
   printf '%s\n' 'raw GC2 single-worker start API is obsolete; use lj_gc2_workers_set' >&2
   exit 1
 fi
+for pattern in 'lj_gc2_workers_set_l(L,' 'lj_safepoint_checkstop(L, actions);'; do
+  if ! grep -qF "$pattern" "$ROOT/src/lib_base.c"; then
+    printf '%s\n' "collectgarbage('workers') must use ${pattern}" >&2
+    exit 1
+  fi
+done
+if ! grep -qE '^[[:space:]]*int lj_gc2_workers_set_l[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.c"; then
+  printf '%s\n' 'L-aware GC2 worker setter is required for public worker control' >&2
+  exit 1
+fi
+if ! grep -qF 'actions = lj_native_leave(L);' "$ROOT/src/lj_gc2.c"; then
+  printf '%s\n' 'GC2 worker joins must capture native-leave actions for Lua callers' >&2
+  exit 1
+fi
 for helper in lj_tg_tid_acq lj_tg_tid_rel; do
   if ! grep -qE "^[[:space:]]*static LJ_AINLINE .*[*[:space:]]${helper}[[:space:]]*[(]" \
       "$ROOT/src/lj_tg.h"; then

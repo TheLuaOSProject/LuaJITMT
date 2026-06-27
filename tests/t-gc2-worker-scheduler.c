@@ -74,6 +74,23 @@ static int wait_gc2_counter_at_least(global_State *g,
   return 0;
 }
 
+static void publish_manual(global_State *g, TGState *tg, uint32_t actions)
+{
+  uint64_t epoch = la_load64_rlx(&g->gc2.hs_epoch) + 1u;
+  la_store32_rel(&g->gc2.hs_actions, actions);
+  la_store32_rel(&g->gc2.hs_pending, 1);  /* 05 section 5.4.2. */
+  la_store64_rel(&g->gc2.hs_epoch, epoch);  /* 05 section 5.4.2. */
+  la_store32_rel(&tg->reqmask, actions);  /* 05 section 5.4.2. */
+  la_store32_rel(&tg->poll, 1);  /* 05 section 5.4.2 signal word. */
+}
+
+static void clear_stopreq(TGState *tg)
+{
+  uint8_t flags = lj_tg_flags_acq(tg);
+  assert((flags & TGF_STOPREQ) != 0);
+  (void)lj_tg_flags_and_rlx(tg, (uint8_t)~TGF_STOPREQ);
+}
+
 static lua_State *finalizer_expected_L;
 static int finalizer_count;
 static int finalizer_order[3];
@@ -321,6 +338,28 @@ static void test_finalizer_owner_leave_rewakes_worker(lua_State *L,
   assert(gc2_n_workers_acq(g) == 2);
 }
 
+static void test_worker_stop_l_delivers_stopreq(lua_State *L, global_State *g,
+						TGState *tg)
+{
+  uint32_t actions = 0;
+
+  assert(lj_gc2_workers_set(g, 1) == 1);
+  assert(gc2_n_workers_acq(g) == 1);
+  publish_manual(g, tg, LJ_GC2_HS_STOPREQ);
+  assert(lj_gc2_workers_set_l(L, 0, &actions) == 1);
+  assert((actions & LJ_GC2_HS_STOPREQ) != 0);
+  assert((lj_tg_flags_acq(tg) & TGF_STOPREQ) != 0);
+  assert(lj_tg_in_native_acq(tg) == 0);
+  assert(gc2_n_workers_acq(g) == 0);
+  assert(gc2_worker_thread_acq(g, 0) == NULL);
+  assert(la_load32_acq(&g->gc2.hs_pending) == 0);
+  assert(lj_tg_poll_acq(tg) == 0);
+  assert(lj_tg_reqmask_acq(tg) == 0);
+  clear_stopreq(tg);
+  assert(lj_gc2_workers_set(g, 2) == 1);
+  assert(gc2_n_workers_acq(g) == 2);
+}
+
 static void test_async_mark(lua_State *L, global_State *g, TGState *tg)
 {
   GCtab *parent, *child, *grandchild;
@@ -534,6 +573,7 @@ int main(void)
   test_worker_finalizer_mpsc_drain(L, g);
   test_worker_real_finalizer_dispatch(L, g);
   test_finalizer_owner_leave_rewakes_worker(L, g);
+  test_worker_stop_l_delivers_stopreq(L, g, tg);
   test_async_mark(L, g, tg);
   test_async_weak(L, g, tg);
   test_async_sweep_and_stop(L, g, tg);

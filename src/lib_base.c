@@ -751,12 +751,13 @@ LJLIB_CF(collectgarbage)
   } else if (opt == LUA_GCWORKERS) {
     global_State *g = G(L);
     uint32_t old = gc2_n_workers_acq(g);
+    uint32_t actions = 0;
     if (hasdata) {
-      if (data <= 0) {
-	lj_gc2_worker_stop(g);
-      } else if (!lj_gc2_workers_set(g, (uint32_t)data)) {
+      int ok = lj_gc2_workers_set_l(L, data <= 0 ? 0u : (uint32_t)data,
+				    &actions);
+      lj_safepoint_checkstop(L, actions);
+      if (!ok)
 	lj_err_callermsg(L, "cannot start GC worker");
-      }
     }
     setintV(L->top, (int32_t)old);
   } else if (opt == LUA_GCGENERATIONAL || opt == LUA_GCINCREMENTAL) {
