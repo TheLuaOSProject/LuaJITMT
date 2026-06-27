@@ -162,6 +162,32 @@ if hits=$(awk '
   exit 1
 fi
 for required in \
+  'static void frontend_checkstop_fresh(lua_State *L, uint32_t actions,' \
+  'frontend_fresh_stopreq(L, actions, had_stopreq)' \
+  'frontend_checkstop_fresh(L, actions, had_stopreq)'
+do
+  if ! grep -qF "$required" "$ROOT/src/luajit.c"; then
+    printf '%s\n' "frontend native fresh STOPREQ guard is missing: $required" >&2
+    exit 1
+  fi
+done
+if hits=$(awk '
+  /^static void frontend_(fwrite|fflush)\(/ ||
+  /^static char \*frontend_fgets\(/ {
+    in_frontend_native = 1
+  }
+  in_frontend_native && /lj_safepoint_checkstop\(L, lj_native_leave\(L\)\);/ {
+    print FILENAME ":" FNR ":" $0
+  }
+  in_frontend_native && /^}/ {
+    in_frontend_native = 0
+  }
+' "$ROOT/src/luajit.c"); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'frontend native I/O must use fresh STOPREQ semantics' >&2
+  exit 1
+fi
+for required in \
   'static void chan_checkstop_fresh(lua_State *L, uint32_t actions,' \
   'chan_poll_pending_stopreq(L, actions)' \
   'chan_checkstop_fresh(L, actions, had_stopreq)'

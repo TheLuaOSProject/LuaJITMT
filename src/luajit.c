@@ -60,13 +60,37 @@ static char *empty_argv[2] = { NULL, NULL };
 
 /* -- Native-state stdio wrappers ---------------------------------------- */
 
+static int frontend_had_stopreq(lua_State *L)
+{
+  TGState *tg = L2TG(L);
+  return tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ);
+}
+
+static int frontend_fresh_stopreq(lua_State *L, uint32_t actions,
+				  int had_stopreq)
+{
+  TGState *tg = L2TG(L);
+  return (actions & LJ_GC2_HS_STOPREQ) ||
+    (!had_stopreq && tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ));
+}
+
+static void frontend_checkstop_fresh(lua_State *L, uint32_t actions,
+				     int had_stopreq)
+{
+  if (frontend_fresh_stopreq(L, actions, had_stopreq))
+    lj_safepoint_checkstop(L, actions);
+}
+
 static void frontend_fwrite(lua_State *L, const void *p, size_t size,
 			    size_t n, FILE *fp)
 {
   if (L) {
+    uint32_t actions;
+    int had_stopreq = frontend_had_stopreq(L);
     lj_native_enter(L2TG(L));
     (void)fwrite(p, size, n, fp);
-    lj_safepoint_checkstop(L, lj_native_leave(L));
+    actions = lj_native_leave(L);
+    frontend_checkstop_fresh(L, actions, had_stopreq);
   } else {
     (void)fwrite(p, size, n, fp);
   }
@@ -86,9 +110,12 @@ static void frontend_fputc(lua_State *L, int c, FILE *fp)
 static void frontend_fflush(lua_State *L, FILE *fp)
 {
   if (L) {
+    uint32_t actions;
+    int had_stopreq = frontend_had_stopreq(L);
     lj_native_enter(L2TG(L));
     (void)fflush(fp);
-    lj_safepoint_checkstop(L, lj_native_leave(L));
+    actions = lj_native_leave(L);
+    frontend_checkstop_fresh(L, actions, had_stopreq);
   } else {
     (void)fflush(fp);
   }
@@ -97,11 +124,15 @@ static void frontend_fflush(lua_State *L, FILE *fp)
 static char *frontend_fgets(lua_State *L, char *buf, int size, FILE *fp)
 {
   char *p;
+  uint32_t actions;
+  int had_stopreq;
   if (!L)
     return fgets(buf, size, fp);
+  had_stopreq = frontend_had_stopreq(L);
   lj_native_enter(L2TG(L));
   p = fgets(buf, size, fp);
-  lj_safepoint_checkstop(L, lj_native_leave(L));
+  actions = lj_native_leave(L);
+  frontend_checkstop_fresh(L, actions, had_stopreq);
   return p;
 }
 

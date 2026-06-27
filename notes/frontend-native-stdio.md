@@ -37,3 +37,15 @@ Passed:
 - `printf 'print(42)\n' | ./src/luajit`
 - `./src/luajit -e 'error("frontend smoke")'`
 - `tools/ci/lua_test.sh m0_matrix`
+
+## Fresh STOPREQ follow-up
+
+Date: 2026-06-27
+
+The frontend wrappers now use a local fresh STOPREQ helper. A pre-existing
+sticky shutdown flag no longer interrupts an otherwise successful prompt,
+stdout/stderr, or stdin native stdio call unless the native region
+acknowledges a new STOPREQ action or the flag appears during the call.
+
+`tools/ci/m3_safepoint_handshake.sh` now guards the frontend wrappers against
+reintroducing direct `lj_safepoint_checkstop(L, lj_native_leave(L))` calls.
