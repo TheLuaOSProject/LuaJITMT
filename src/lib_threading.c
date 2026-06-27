@@ -42,6 +42,41 @@ static int threading_arena_internal(global_State *g)
 	 lj_tg_flags_test_acq(g->main_tg, TGF_ARENA_INTERNAL);
 }
 
+static int threading_had_stopreq(lua_State *L)
+{
+  TGState *tg = L2TG(L);
+  return tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ);
+}
+
+static int threading_pending_stopreq(lua_State *L)
+{
+  TGState *tg = L2TG(L);
+  return tg && (lj_tg_reqmask_acq(tg) & LJ_GC2_HS_STOPREQ);
+}
+
+static uint32_t threading_poll_pending_stopreq(lua_State *L, uint32_t actions)
+{
+  if (!(actions & LJ_GC2_HS_STOPREQ) && threading_pending_stopreq(L))
+    actions |= lj_safepoint_poll(L);
+  return actions;
+}
+
+static int threading_fresh_stopreq(lua_State *L, uint32_t actions,
+				   int had_stopreq)
+{
+  TGState *tg = L2TG(L);
+  return (actions & LJ_GC2_HS_STOPREQ) ||
+    (!had_stopreq && tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ));
+}
+
+static void threading_checkstop_fresh(lua_State *L, uint32_t actions,
+				      int had_stopreq)
+{
+  actions = threading_poll_pending_stopreq(L, actions);
+  if (threading_fresh_stopreq(L, actions, had_stopreq))
+    lj_safepoint_checkstop(L, actions);
+}
+
 /* -- Thread methods ------------------------------------------------------ */
 
 static LJThread *threading_tothread(lua_State *L)
@@ -500,8 +535,9 @@ static uint32_t threading_join_claim_results(lua_State *L, lua_State *child,
 {
   uint32_t actions = 0;
   while (!lj_state_claim(child, tid)) {
+    int had_stopreq = threading_had_stopreq(L);
     actions |= lj_thr_sleep_ns(L, 1000000);
-    lj_safepoint_checkstop(L, actions);
+    threading_checkstop_fresh(L, actions, had_stopreq);
   }
   return actions;
 }
@@ -511,6 +547,7 @@ static int threading_join_core(lua_State *L, LJThread *th, int has_timeout,
 {
   int remove_live = 0;
   uint32_t join_actions = 0;
+  int join_had_stopreq = threading_had_stopreq(L);
   uint32_t state;
   if (threading_is_current_thread(L, th)) {
     if (has_timeout) {
@@ -534,10 +571,11 @@ static int threading_join_core(lua_State *L, LJThread *th, int has_timeout,
     {
       uint32_t futex = la_load32_acq(&th->futex);
       uint32_t actions;
+      int had_stopreq = threading_had_stopreq(L);
       lj_native_enter(L2TG(L));
       (void)la_futex_wait(&th->futex, futex, ns);
       actions = lj_native_leave(L);
-      lj_safepoint_checkstop(L, actions);
+      threading_checkstop_fresh(L, actions, had_stopreq);
     }
     if (ns > 0 && la_load32_acq(&th->state) != LJ_THREAD_DONE) {
       setnilV(L->top++);
@@ -549,6 +587,7 @@ static int threading_join_core(lua_State *L, LJThread *th, int has_timeout,
   if (la_load32_acq(&th->joined) == 0) {
     uint32_t expect = 0;
     if (la_cas32(&th->joined, &expect, 1, LA_ACQ_REL, LA_ACQ)) {
+      join_had_stopreq = threading_had_stopreq(L);
       lj_native_enter(L2TG(L));
       (void)lj_thr_join(&th->thr, NULL);
       join_actions = lj_native_leave(L);
@@ -571,7 +610,7 @@ static int threading_join_core(lua_State *L, LJThread *th, int has_timeout,
     threading_live_remove(th);
     (void)lj_tg_reclaim_dead(G(L));
   }
-  lj_safepoint_checkstop(L, join_actions);
+  threading_checkstop_fresh(L, join_actions, join_had_stopreq);
   return (int)th->nresults + 1;
 }
 
@@ -659,9 +698,14 @@ LJLIB_CF(threading_mutex_lock)
     uint32_t expect = LJ_MUTEX_UNLOCKED;
     if (la_cas32(&m->state, &expect, LJ_MUTEX_LOCKED, LA_ACQ_REL, LA_ACQ))
       return 0;
-    lj_native_enter(L2TG(L));
-    (void)la_futex_wait(&m->state, LJ_MUTEX_LOCKED, 1000000);
-    lj_safepoint_checkstop(L, lj_native_leave(L));
+    {
+      uint32_t actions;
+      int had_stopreq = threading_had_stopreq(L);
+      lj_native_enter(L2TG(L));
+      (void)la_futex_wait(&m->state, LJ_MUTEX_LOCKED, 1000000);
+      actions = lj_native_leave(L);
+      threading_checkstop_fresh(L, actions, had_stopreq);
+    }
   }
 }
 
@@ -828,7 +872,11 @@ LJLIB_CF(threading_sleep)
     lua_Number nsec = sec * 1000000000.0;
     ns = nsec > (lua_Number)INT64_MAX ? INT64_MAX : (int64_t)nsec;
   }
-  lj_safepoint_checkstop(L, lj_thr_sleep_ns(L, ns));
+  {
+    int had_stopreq = threading_had_stopreq(L);
+    uint32_t actions = lj_thr_sleep_ns(L, ns);
+    threading_checkstop_fresh(L, actions, had_stopreq);
+  }
   return 0;
 }
 
