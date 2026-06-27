@@ -518,7 +518,7 @@ static AliasRet aa_uref(IRIns *refa, IRIns *refb)
 TRef LJ_FASTCALL lj_opt_fwd_uload(jit_State *J)
 {
   IRRef uref = fins->op1;
-  IRRef lim = REF_BASE;  /* Search limit. */
+  IRRef lim = poll_alias_limit(J, uref);  /* Search limit. */
   IRIns *xr = IR(uref);
   IRRef ref;
 
@@ -554,8 +554,9 @@ TRef LJ_FASTCALL lj_opt_dse_ustore(jit_State *J)
   IRRef val = fins->op2;  /* Stored value reference. */
   IRIns *xr = IR(xref);
   IRRef1 *refp = &J->chain[IR_USTORE];
+  IRRef lim = poll_alias_limit(J, xref);
   IRRef ref = *refp;
-  while (ref > xref) {  /* Search for redundant or conflicting stores. */
+  while (ref > lim) {  /* Search for redundant or conflicting stores. */
     IRIns *store = IR(ref);
     switch (aa_uref(xr, IR(store->op1))) {
     case ALIAS_NO:
@@ -620,12 +621,12 @@ TRef LJ_FASTCALL lj_opt_fwd_fload(jit_State *J)
 {
   IRRef oref = fins->op1;  /* Object reference. */
   IRRef fid = fins->op2;  /* Field ID. */
-  IRRef lim = oref;  /* Search limit. */
+  IRRef lim = poll_alias_limit(J, oref);  /* Search limit. */
   IRRef ref;
 
   /* Search for conflicting stores. */
   ref = J->chain[IR_FSTORE];
-  while (ref > oref) {
+  while (ref > lim) {
     IRIns *store = IR(ref);
     switch (aa_fref(J, fins, IR(store->op1))) {
     case ALIAS_NO:   break;  /* Continue searching. */
@@ -654,8 +655,9 @@ TRef LJ_FASTCALL lj_opt_dse_fstore(jit_State *J)
   IRRef val = fins->op2;  /* Stored value reference. */
   IRIns *xr = IR(fref);
   IRRef1 *refp = &J->chain[IR_FSTORE];
+  IRRef lim = poll_alias_limit(J, fref);
   IRRef ref = *refp;
-  while (ref > fref) {  /* Search for redundant or conflicting stores. */
+  while (ref > lim) {  /* Search for redundant or conflicting stores. */
     IRIns *store = IR(ref);
     switch (aa_fref(J, xr, IR(store->op1))) {
     case ALIAS_NO:

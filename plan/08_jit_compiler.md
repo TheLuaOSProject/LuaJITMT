@@ -276,9 +276,12 @@ handler — sized LJ_MAX_EXITSTUBGR-compatible; see lj_vmstruct notes.
   for `XLOAD` forwarding/CSE and `XSTORE` DSE; this advances the current XBAR
   surface. The helper-backed table-store bridge also makes `ASTORE`/`HSTORE`
   DSE stop at `IR_XPOLL`, so a trace poll cannot be crossed while deciding that
-  table stores are redundant. A narrow M6 bridge records table-slot stores on
-  Linux/x64 and lowers them through release-store hash/array helpers with the
-  AREF/HREF-derived table parent. Numeric `NEWREF` stores use a generic
+  table stores are redundant. The same conservative poll/XBAR alias limit now
+  gates `ULOAD`/`FLOAD` forwarding and `USTORE`/`FSTORE` DSE, so shared-cell
+  and field optimizations do not elide work across a poll that can enable GC2
+  barriers or handshake actions. A narrow M6 bridge records table-slot stores
+  on Linux/x64 and lowers them through release-store hash/array helpers with
+  the AREF/HREF-derived table parent. Numeric `NEWREF` stores use a generic
   returned-slot helper because the slot may be in the array part. The helpers
   run the parent-aware value barrier, and existing weak table stores also call
   the P_WEAK weak-write bridge. When a helper receives a visible

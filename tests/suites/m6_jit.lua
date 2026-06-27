@@ -1,6 +1,7 @@
 local checks = require("suite_assert")
 local build = require("suite_build")
 local runtime = require("suite_runtime")
+local utils = require("suite_utils")
 local jitutils = require("suite_jit")
 local cellops = require("suite_cell_ops")
 
@@ -25,6 +26,18 @@ local build_default = build.build_default
 local clean_build = build.clean_build
 local build_and_run_c = build.build_and_run_c
 local run_lua_test_case = runtime.run_lua_test_case
+
+local function assert_poll_alias_source_guards(t)
+  local src = utils.read_file(t:path("src", "lj_opt_mem.c"))
+  checks.assert_text_contains("M6 poll alias guard", src,
+    "IRRef lim = poll_alias_limit(J, uref);", "ULOAD poll alias limit")
+  checks.assert_text_contains("M6 poll alias guard", src,
+    "IRRef lim = poll_alias_limit(J, xref);", "USTORE poll alias limit")
+  checks.assert_text_contains("M6 poll alias guard", src,
+    "IRRef lim = poll_alias_limit(J, oref);", "FLOAD poll alias limit")
+  checks.assert_text_contains("M6 poll alias guard", src,
+    "IRRef lim = poll_alias_limit(J, fref);", "FSTORE poll alias limit")
+end
 
 local m6_cases = {
   "m6_dispatch_redispatch",
@@ -319,6 +332,7 @@ assert(s==2720)
     name = "m6_jit_barrier_xpoll",
     description = "x64 trace barrier behavior across XPOLL poll regions",
     run = function(t)
+      assert_poll_alias_source_guards(t)
       build_default(t)
       local tbar = t:tmp("lj_t-jit-tbar-xpoll.dump")
       luajit_dump(t, tbar, "-jdump=im", [=[
