@@ -2,10 +2,11 @@ Active-thread explicit GC requests no longer disappear silently.
 
 When `lua_gc(LUA_GCCOLLECT)` or `lua_gc(LUA_GCSTEP)` cannot claim
 `mt_gc_exclusive` because secondary Lua threads are live, it now routes through
-`lj_gc2_request_major()` / `lj_gc2_request_cycle()`. The request uses the same
-GC2 leader token as allocation-triggered cycles and stores the driver threshold
-through `mt_gc_threshold` while `mt_live` is nonzero, so the request survives
-until the legacy bridge can safely run again.
+`lj_gc2_request_major()` / `lj_gc2_request_cycle_explicit()`. Those public
+request helpers use the same GC2 leader token as allocation-triggered cycles
+and store the driver threshold through `mt_gc_threshold` while `mt_live` is
+nonzero, so the request survives until the legacy bridge can safely run again.
+The automatic allocation-trigger helper stays private to `lj_gc2.c`.
 
 This is still a bridge. The active-thread path performs only bounded
 `lj_gc2_worker_drain()` assistance and `step` returns false; exact

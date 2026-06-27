@@ -61,6 +61,17 @@ if hits=$(grep -nE -- '->[[:space:]]*(gc2[.])?(cycle_requests|cycle_starts|major
   printf '%s\n' 'raw GC2 cycle/root telemetry access is forbidden; use gc2_* helpers' >&2
   exit 1
 fi
+if hits=$(grep -RInE -- 'lj_gc2_request_cycle[[:space:]]*[(]|LJ_FUNC .*lj_gc2_request_cycle[[:space:]]*[(]' \
+    "$ROOT"/src "$ROOT"/tests | grep -v "$ROOT/src/lj_gc2.c:" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'automatic GC2 cycle requests must stay inside lj_gc2.c; use explicit/public request helpers' >&2
+  exit 1
+fi
+if ! grep -qE '^[[:space:]]*static int lj_gc2_request_cycle[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.c"; then
+  printf '%s\n' 'lj_gc2_request_cycle must stay static inside lj_gc2.c' >&2
+  exit 1
+fi
 for helper in gc2_minor_survival_base_live_acq \
   gc2_minor_survival_base_live_store_rlx \
   gc2_minor_survival_base_live_rel \

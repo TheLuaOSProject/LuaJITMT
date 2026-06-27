@@ -801,7 +801,7 @@ static int gc2_request_cycle_start(global_State *g, TGState *tg,
   return 1;
 }
 
-int lj_gc2_request_cycle(global_State *g, TGState *tg)
+static int lj_gc2_request_cycle(global_State *g, TGState *tg)
 {
   int requested;
   if (!g)
