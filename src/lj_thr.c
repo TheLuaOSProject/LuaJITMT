@@ -82,12 +82,12 @@ int lj_state_claim(lua_State *L, uint32_t tid)
   if (!L || tid == 0 || tid == LJ_THREAD_GCSCAN)
     return 0;
   for (;;) {
-    owner = la_load32_acq(&L->thr_owner);
+    owner = lj_state_owner_acq(L);
     if (owner == tid)
       return 1;
     if (owner == 0) {
       uint32_t expect = 0;
-      if (la_cas32(&L->thr_owner, &expect, tid, LA_ACQ_REL, LA_ACQ))
+      if (lj_state_owner_cas(L, &expect, tid))
 	return 1;
       continue;
     }
@@ -110,7 +110,7 @@ int lj_state_tryclaim(lua_State *L, uint32_t tid, LJStateClaim *claim)
   if (!L || tid == 0 || tid == LJ_THREAD_GCSCAN)
     return 0;
   for (;;) {
-    owner = la_load32_acq(&L->thr_owner);
+    owner = lj_state_owner_acq(L);
     if (owner == tid) {
       if (claim) {
 	claim->L = L;
@@ -120,7 +120,7 @@ int lj_state_tryclaim(lua_State *L, uint32_t tid, LJStateClaim *claim)
     }
     if (owner == 0) {
       uint32_t expect = 0;
-      if (la_cas32(&L->thr_owner, &expect, tid, LA_ACQ_REL, LA_ACQ)) {
+      if (lj_state_owner_cas(L, &expect, tid)) {
 	if (claim) {
 	  claim->L = L;
 	  claim->tid = tid;
@@ -149,11 +149,10 @@ int lj_state_gcscan_claim(lua_State *L, LJStateClaim *claim)
   if (!L)
     return 0;
   for (;;) {
-    owner = la_load32_acq(&L->thr_owner);
+    owner = lj_state_owner_acq(L);
     if (owner == 0) {
       uint32_t expect = 0;
-      if (la_cas32(&L->thr_owner, &expect, LJ_THREAD_GCSCAN,
-		   LA_ACQ_REL, LA_ACQ)) {
+      if (lj_state_owner_cas(L, &expect, LJ_THREAD_GCSCAN)) {
 	if (claim) {
 	  claim->L = L;
 	  claim->tid = LJ_THREAD_GCSCAN;
@@ -192,11 +191,11 @@ void lj_state_dropclaim(LJStateClaim *claim)
 void lj_state_release(lua_State *L, uint32_t tid)
 {
   if (L && tid != 0) {
-    uint32_t owner = la_load32_acq(&L->thr_owner);
+    uint32_t owner = lj_state_owner_acq(L);
     lj_assertX(owner == tid, "lua_State owner mismatch");
     UNUSED(owner);
     state_stack_dirty(L, tid);
-    la_store32_rel(&L->thr_owner, 0);
+    lj_state_owner_rel(L, 0);
   }
 }
 

@@ -47,4 +47,30 @@ if hits=$(grep -RInF -- '->dispatchmode' "$ROOT/src"/lj_*.c "$ROOT/src"/lib_*.c 
   exit 1
 fi
 
+for helper in \
+  lj_state_owner_acq \
+  lj_state_owner_rel \
+  lj_state_owner_cas \
+  lj_state_scan_epoch_acq \
+  lj_state_scan_epoch_rel \
+  lj_state_scan_dirty_epoch_acq \
+  lj_state_scan_dirty_epoch_rel
+do
+  if ! grep -q "$helper" "$ROOT/src/lj_obj.h"; then
+    printf '%s\n' "missing lua_State owner/scan helper: $helper" >&2
+    exit 1
+  fi
+done
+
+if hits=$(grep -RInE -- '->[[:space:]]*(thr_owner|scan_epoch|scan_dirty_epoch)([^[:alnum:]_]|$)|&[[:space:]]*[^)]*->[[:space:]]*(thr_owner|scan_epoch|scan_dirty_epoch)([^[:alnum:]_]|$)' \
+  "$ROOT/src"/lj_*.c "$ROOT/src"/lib_*.c \
+  "$ROOT/tests/t-state-owner.c" \
+  "$ROOT/tests/t-thr-substrate.c" \
+  "$ROOT/tests/t-gc2-traverse.c" 2>/dev/null || true); \
+  [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'C-side lua_State owner/scan access must use lj_state_* helpers' >&2
+  exit 1
+fi
+
 exec "$ROOT/tools/ci/lua_test.sh" m5_state_owner

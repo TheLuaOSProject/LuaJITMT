@@ -45,10 +45,10 @@ static void check_xmove_unowned_target(lua_State *L)
   lua_settop(L, 0);
   co = lua_newthread(L);
   top0 = lua_gettop(L);
-  assert(co->thr_owner == 0);
+  assert(lj_state_owner_acq(co) == 0);
   lua_pushinteger(L, 42);
   lua_xmove(L, co, 1);
-  assert(co->thr_owner == 0);
+  assert(lj_state_owner_acq(co) == 0);
   assert(lua_tointeger(co, -1) == 42);
   assert(lua_gettop(L) == top0);
   lua_pop(co, 1);
@@ -61,13 +61,13 @@ static void check_xmove_unowned_source(lua_State *L)
   lua_State *co;
   lua_settop(L, 0);
   co = lua_newthread(L);
-  assert(co->thr_owner == 0);
+  assert(lj_state_owner_acq(co) == 0);
   assert(lj_state_claim(co, tid));
   lua_pushinteger(co, 77);
   lj_state_release(co, tid);
-  assert(co->thr_owner == 0);
+  assert(lj_state_owner_acq(co) == 0);
   lua_xmove(co, L, 1);
-  assert(co->thr_owner == 0);
+  assert(lj_state_owner_acq(co) == 0);
   assert(lua_tointeger(L, -1) == 77);
   assert(lua_gettop(co) == 0);
   lua_pop(L, 2);
@@ -79,14 +79,14 @@ static void check_thread_env_unowned(lua_State *L)
   GCtab *env;
   lua_settop(L, 0);
   co = lua_newthread(L);
-  assert(co->thr_owner == 0);
+  assert(lj_state_owner_acq(co) == 0);
   lua_newtable(L);
   env = tabV(L->top-1);
   assert(lua_setfenv(L, -2) == 1);
-  assert(co->thr_owner == 0);
+  assert(lj_state_owner_acq(co) == 0);
   lua_getfenv(L, -1);
   assert(tabV(L->top-1) == env);
-  assert(co->thr_owner == 0);
+  assert(lj_state_owner_acq(co) == 0);
   lua_pop(L, 2);
 }
 
@@ -102,13 +102,13 @@ static void check_resume_unowned(lua_State *L)
   lua_State *co;
   lua_settop(L, 0);
   co = lua_newthread(L);
-  assert(co->thr_owner == 0);
+  assert(lj_state_owner_acq(co) == 0);
   assert(lj_state_claim(co, tid));
   lua_pushcfunction(co, resume_return);
   lj_state_release(co, tid);
-  assert(co->thr_owner == 0);
+  assert(lj_state_owner_acq(co) == 0);
   assert(lua_resume(co, 0) == LUA_OK);
-  assert(co->thr_owner == 0);
+  assert(lj_state_owner_acq(co) == 0);
   assert(lj_state_claim(co, tid));
   assert(lua_tointeger(co, -1) == 91);
   lua_pop(co, 1);
@@ -124,18 +124,18 @@ static void check_coroutine_resume_unowned(lua_State *L)
   lua_settop(L, 0);
   co = lua_newthread(L);
   coidx = lua_gettop(L);
-  assert(co->thr_owner == 0);
+  assert(lj_state_owner_acq(co) == 0);
   assert(lj_state_claim(co, tid));
   lua_pushcfunction(co, resume_return);
   lj_state_release(co, tid);
-  assert(co->thr_owner == 0);
+  assert(lj_state_owner_acq(co) == 0);
   lua_getglobal(L, "coroutine");
   lua_getfield(L, -1, "resume");
   lua_pushvalue(L, coidx);
   lua_call(L, 1, 2);
   assert(lua_toboolean(L, -2));
   assert(lua_tointeger(L, -1) == 91);
-  assert(co->thr_owner == 0);
+  assert(lj_state_owner_acq(co) == 0);
   lua_settop(L, 0);
 }
 
@@ -150,18 +150,18 @@ static void check_coroutine_wrap_unowned(lua_State *L)
   assert(lua_getupvalue(L, -1, 1) != NULL);
   co = lua_tothread(L, -1);
   assert(co != NULL);
-  assert(co->thr_owner == 0);
+  assert(lj_state_owner_acq(co) == 0);
   lua_pop(L, 1);
   lua_call(L, 0, 1);
   assert(lua_tointeger(L, -1) == 91);
-  assert(co->thr_owner == 0);
+  assert(lj_state_owner_acq(co) == 0);
   lua_settop(L, 0);
 }
 
 static int busy_xmove_target(lua_State *L)
 {
   lua_State *co = lua_newthread(L);
-  co->thr_owner = foreign_tid(L);
+  lj_state_owner_rel(co, foreign_tid(L));
   lua_pushinteger(L, 1);
   lua_xmove(L, co, 1);
   return 0;
@@ -174,7 +174,7 @@ static int busy_xmove_source(lua_State *L)
   assert(lj_state_claim(co, tid));
   lua_pushinteger(co, 2);
   lj_state_release(co, tid);
-  co->thr_owner = foreign_tid(L);
+  lj_state_owner_rel(co, foreign_tid(L));
   lua_xmove(co, L, 1);
   return 0;
 }
@@ -182,7 +182,7 @@ static int busy_xmove_source(lua_State *L)
 static int busy_lua_status(lua_State *L)
 {
   lua_State *co = lua_newthread(L);
-  co->thr_owner = foreign_tid(L);
+  lj_state_owner_rel(co, foreign_tid(L));
   (void)lua_status(co);
   return 0;
 }
@@ -190,7 +190,7 @@ static int busy_lua_status(lua_State *L)
 static int busy_getfenv_thread(lua_State *L)
 {
   lua_State *co = lua_newthread(L);
-  co->thr_owner = foreign_tid(L);
+  lj_state_owner_rel(co, foreign_tid(L));
   lua_getfenv(L, -1);
   return 0;
 }
@@ -198,7 +198,7 @@ static int busy_getfenv_thread(lua_State *L)
 static int busy_setfenv_thread(lua_State *L)
 {
   lua_State *co = lua_newthread(L);
-  co->thr_owner = foreign_tid(L);
+  lj_state_owner_rel(co, foreign_tid(L));
   lua_newtable(L);
   (void)lua_setfenv(L, -2);
   return 0;
@@ -207,7 +207,7 @@ static int busy_setfenv_thread(lua_State *L)
 static int busy_lua_resume(lua_State *L)
 {
   lua_State *co = lua_newthread(L);
-  co->thr_owner = foreign_tid(L);
+  lj_state_owner_rel(co, foreign_tid(L));
   (void)lua_resume(co, 0);
   return 0;
 }
@@ -220,7 +220,7 @@ static int busy_coroutine_resume(lua_State *L)
   assert(lj_state_claim(co, tid));
   lua_pushcfunction(co, resume_return);
   lj_state_release(co, tid);
-  co->thr_owner = foreign_tid(L);
+  lj_state_owner_rel(co, foreign_tid(L));
   lua_getglobal(L, "coroutine");
   lua_getfield(L, -1, "resume");
   lua_pushvalue(L, coidx);
@@ -238,7 +238,7 @@ static int busy_coroutine_wrap(lua_State *L)
   assert(lua_getupvalue(L, -1, 1) != NULL);
   co = lua_tothread(L, -1);
   assert(co != NULL);
-  co->thr_owner = foreign_tid(L);
+  lj_state_owner_rel(co, foreign_tid(L));
   lua_pop(L, 1);
   lua_call(L, 0, LUA_MULTRET);
   return 0;
@@ -249,7 +249,7 @@ static int busy_lua_getstack(lua_State *L)
   lua_State *co = lua_newthread(L);
   lua_Debug ar;
   memset(&ar, 0, sizeof(ar));
-  co->thr_owner = foreign_tid(L);
+  lj_state_owner_rel(co, foreign_tid(L));
   (void)lua_getstack(co, 0, &ar);
   return 0;
 }
@@ -259,7 +259,7 @@ static int busy_lua_getinfo(lua_State *L)
   lua_State *co = lua_newthread(L);
   lua_Debug ar;
   memset(&ar, 0, sizeof(ar));
-  co->thr_owner = foreign_tid(L);
+  lj_state_owner_rel(co, foreign_tid(L));
   (void)lua_getinfo(co, "S", &ar);
   return 0;
 }
@@ -269,7 +269,7 @@ static int busy_lua_getlocal(lua_State *L)
   lua_State *co = lua_newthread(L);
   lua_Debug ar;
   memset(&ar, 0, sizeof(ar));
-  co->thr_owner = foreign_tid(L);
+  lj_state_owner_rel(co, foreign_tid(L));
   (void)lua_getlocal(co, &ar, 1);
   return 0;
 }
@@ -279,7 +279,7 @@ static int busy_lua_setlocal(lua_State *L)
   lua_State *co = lua_newthread(L);
   lua_Debug ar;
   memset(&ar, 0, sizeof(ar));
-  co->thr_owner = foreign_tid(L);
+  lj_state_owner_rel(co, foreign_tid(L));
   (void)lua_setlocal(co, &ar, 1);
   return 0;
 }
@@ -287,7 +287,7 @@ static int busy_lua_setlocal(lua_State *L)
 static int busy_debug_getinfo(lua_State *L)
 {
   lua_State *co = lua_newthread(L);
-  co->thr_owner = foreign_tid(L);
+  lj_state_owner_rel(co, foreign_tid(L));
   lua_getglobal(L, "debug");
   lua_getfield(L, -1, "getinfo");
   lua_pushvalue(L, -3);
@@ -299,7 +299,7 @@ static int busy_debug_getinfo(lua_State *L)
 static int busy_debug_getlocal(lua_State *L)
 {
   lua_State *co = lua_newthread(L);
-  co->thr_owner = foreign_tid(L);
+  lj_state_owner_rel(co, foreign_tid(L));
   lua_getglobal(L, "debug");
   lua_getfield(L, -1, "getlocal");
   lua_pushvalue(L, -3);
@@ -312,7 +312,7 @@ static int busy_debug_getlocal(lua_State *L)
 static int busy_debug_setlocal(lua_State *L)
 {
   lua_State *co = lua_newthread(L);
-  co->thr_owner = foreign_tid(L);
+  lj_state_owner_rel(co, foreign_tid(L));
   lua_getglobal(L, "debug");
   lua_getfield(L, -1, "setlocal");
   lua_pushvalue(L, -3);
@@ -326,7 +326,7 @@ static int busy_debug_setlocal(lua_State *L)
 static int busy_debug_traceback(lua_State *L)
 {
   lua_State *co = lua_newthread(L);
-  co->thr_owner = foreign_tid(L);
+  lj_state_owner_rel(co, foreign_tid(L));
   lua_getglobal(L, "debug");
   lua_getfield(L, -1, "traceback");
   lua_pushvalue(L, -3);
@@ -337,7 +337,7 @@ static int busy_debug_traceback(lua_State *L)
 static int busy_luaL_traceback(lua_State *L)
 {
   lua_State *co = lua_newthread(L);
-  co->thr_owner = foreign_tid(L);
+  lj_state_owner_rel(co, foreign_tid(L));
   luaL_traceback(L, co, "msg", 0);
   return 0;
 }
@@ -347,7 +347,7 @@ static int busy_luaJIT_profile_dumpstack(lua_State *L)
 {
   lua_State *co = lua_newthread(L);
   size_t len = 0;
-  co->thr_owner = foreign_tid(L);
+  lj_state_owner_rel(co, foreign_tid(L));
   (void)luaJIT_profile_dumpstack(co, "l", 1, &len);
   return 0;
 }
@@ -355,7 +355,7 @@ static int busy_luaJIT_profile_dumpstack(lua_State *L)
 static int busy_jit_profile_dumpstack(lua_State *L)
 {
   lua_State *co = lua_newthread(L);
-  co->thr_owner = foreign_tid(L);
+  lj_state_owner_rel(co, foreign_tid(L));
   lua_getglobal(L, "require");
   lua_pushliteral(L, "jit.profile");
   lua_call(L, 1, 1);
@@ -371,7 +371,7 @@ static int busy_jit_profile_dumpstack(lua_State *L)
 static int busy_coroutine_status(lua_State *L)
 {
   lua_State *co = lua_newthread(L);
-  co->thr_owner = foreign_tid(L);
+  lj_state_owner_rel(co, foreign_tid(L));
   lua_getglobal(L, "coroutine");
   lua_getfield(L, -1, "status");
   lua_pushvalue(L, -3);

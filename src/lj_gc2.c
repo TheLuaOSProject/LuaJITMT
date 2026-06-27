@@ -1701,7 +1701,7 @@ static uint64_t gc2_thread_owner_dirty(global_State *g, lua_State *L,
     *ptg = NULL;
   if (!g || !L)
     return 0;
-  owner = la_load32_acq(&L->thr_owner);
+  owner = lj_state_owner_acq(L);
   if (owner == 0 || owner == LJ_THREAD_GCSCAN)
     return 0;
   tg = lj_tg_find_owner(g, owner);
@@ -1747,8 +1747,8 @@ static void gc2_scan_thread_stack(global_State *g, lua_State *L)
     }
   }
   dirty_epoch = gc2_thread_owner_dirty(g, L, NULL);
-  la_store64_rel(&L->scan_dirty_epoch, dirty_epoch);
-  la_store64_rel(&L->scan_epoch, cycle);
+  lj_state_scan_dirty_epoch_rel(L, dirty_epoch);
+  lj_state_scan_epoch_rel(L, cycle);
   gc2_thread_clear_needscan(g, L);
 }
 
@@ -1774,7 +1774,7 @@ static void gc2_scan_owned_needscan(global_State *g, lua_State *owner_L)
     th = gco2th(o);
     if (th == owner_L || !gc2_thread_needscan(th))
       continue;
-    if (la_load32_acq(&th->thr_owner) != tid)
+    if (lj_state_owner_acq(th) != tid)
       continue;
     gc2_scan_thread_stack(g, th);
     gc2_thread_scan_owner_needscans_add(g, 1);
@@ -4080,10 +4080,10 @@ static int gc2_thread_owner_scans(global_State *g, lua_State *th)
   if (!tg)
     return 0;
   cycle = gc2_cycle_acq(g);
-  scan_epoch = la_load64_acq(&th->scan_epoch);
+  scan_epoch = lj_state_scan_epoch_acq(th);
   if (scan_epoch != cycle)
     return 0;
-  scanned_dirty = la_load64_acq(&th->scan_dirty_epoch);
+  scanned_dirty = lj_state_scan_dirty_epoch_acq(th);
   if (scanned_dirty != owner_dirty) {
     gc2_thread_scan_dirty_misses_add(g, 1);
     return 0;
@@ -4097,7 +4097,7 @@ static int gc2_thread_has_live_owner(global_State *g, lua_State *th)
   TGState *tg;
   if (!g || !th)
     return 0;
-  owner = la_load32_acq(&th->thr_owner);
+  owner = lj_state_owner_acq(th);
   if (owner == 0 || owner == LJ_THREAD_GCSCAN)
     return 0;
   tg = lj_tg_find_owner(g, owner);
@@ -4153,8 +4153,8 @@ static void gc2_traverse_thread(global_State *g, lua_State *th)
       gc2_mark_tv_worker(g, &tv);
     }
   }
-  la_store64_rel(&th->scan_dirty_epoch, 0);
-  la_store64_rel(&th->scan_epoch, cycle);
+  lj_state_scan_dirty_epoch_rel(th, 0);
+  lj_state_scan_epoch_rel(th, cycle);
   gc2_thread_clear_needscan(g, th);
   lj_state_dropclaim(&claim);
 }

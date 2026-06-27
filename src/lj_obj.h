@@ -1710,6 +1710,43 @@ LJ_FUNCA TGState *lj_thr_get_tg_fallback(global_State *g);
 #define L2TG(L)			((L)->tg_hint ? (L)->tg_hint : G2TG(G(L)))
 #define registry(L)		(&G(L)->registrytv)
 
+static LJ_AINLINE uint32_t lj_state_owner_acq(const lua_State *L)
+{
+  return la_load32_acq((uint32_t *)&L->thr_owner);
+}
+
+static LJ_AINLINE void lj_state_owner_rel(lua_State *L, uint32_t owner)
+{
+  la_store32_rel(&L->thr_owner, owner);
+}
+
+static LJ_AINLINE int lj_state_owner_cas(lua_State *L, uint32_t *oldp,
+					 uint32_t owner)
+{
+  return la_cas32(&L->thr_owner, oldp, owner, LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE uint64_t lj_state_scan_epoch_acq(const lua_State *L)
+{
+  return la_load64_acq((uint64_t *)&L->scan_epoch);
+}
+
+static LJ_AINLINE void lj_state_scan_epoch_rel(lua_State *L, uint64_t epoch)
+{
+  la_store64_rel(&L->scan_epoch, epoch);
+}
+
+static LJ_AINLINE uint64_t lj_state_scan_dirty_epoch_acq(const lua_State *L)
+{
+  return la_load64_acq((uint64_t *)&L->scan_dirty_epoch);
+}
+
+static LJ_AINLINE void lj_state_scan_dirty_epoch_rel(lua_State *L,
+						     uint64_t epoch)
+{
+  la_store64_rel(&L->scan_dirty_epoch, epoch);
+}
+
 /* Macros to access the currently executing (Lua) function. */
 #if LJ_GC64
 #define curr_func(L)		(&gcval(L->base-2)->fn)

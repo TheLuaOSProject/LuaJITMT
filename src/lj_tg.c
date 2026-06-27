@@ -54,7 +54,7 @@ void lj_tg_init(GG_State *GG, int alloc_ready)
   tg->tid = lj_thr_newid();
   tg->alloc.owner_tid = tg->tid;
   L->tg_hint = tg;
-  L->thr_owner = tg->tid;
+  lj_state_owner_rel(L, tg->tid);
   if (!lj_thr_get_tg())
     lj_thr_set_tg(tg);  /* 03 section 3.2: bootstrap main OS-thread TLS. */
   if (!alloc_ready)
