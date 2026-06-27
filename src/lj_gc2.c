@@ -6,6 +6,7 @@
 #define lj_gc2_c
 #define LUA_CORE
 
+#include <limits.h>
 #include <stdlib.h>
 #if LJ_GC2_PARANOIA
 #include <stdio.h>
@@ -1482,6 +1483,64 @@ int lj_gc2_finalizer_pending(global_State *g)
 int lj_gc2_finalizer_sweep_pending(global_State *g)
 {
   return gc2_finalizer_pending_for_sweep(g, 1);
+}
+
+GCSize lj_gc2_finalizer_pause_threshold(global_State *g)
+{
+  GCSize oldt;
+  if (!g)
+    return 0;
+  oldt = mt_live_acq(g) != 0 ? lj_gc_mt_threshold_load(g) :
+	 lj_gc_threshold_load(g);
+  lj_gc_mt_threshold_store(g, oldt);
+  lj_gc_threshold_store(g, LJ_MAX_MEM);
+  return oldt;
+}
+
+void lj_gc2_finalizer_restore_threshold(global_State *g, GCSize oldt)
+{
+  if (!g)
+    return;
+  lj_gc_threshold_store(g, oldt);
+  if (mt_live_acq(g) != 0) {
+    lj_gc_mt_threshold_store(g, oldt);
+    lj_gc_threshold_store(g, LJ_MAX_MEM);
+    if (mt_live_acq(g) == 0)
+      lj_gc_threshold_store(g, oldt);
+  }
+}
+
+int lj_gc2_finalizer_mt_release_exclusive(global_State *g)
+{
+  if (!g || mt_gc_exclusive_acq(g) == 0)
+    return 0;
+  mt_gc_exclusive_rel(g, 0);
+#if defined(__linux__)
+  mt_gc_exclusive_futex_wake(g, INT_MAX);
+#endif
+  return 1;  /* 09 section 9.6: finalizer may spawn while GC is paused. */
+}
+
+int lj_gc2_finalizer_mt_reclaim_exclusive(global_State *g)
+{
+  if (!g)
+    return 0;
+  for (;;) {
+    uint32_t expect = 0;
+    if (mt_live_acq(g) != 0)
+      return 0;  /* 09 section 9.6: finalizer-spawn outlived callback. */
+    if (mt_gc_exclusive_cas(g, &expect, 1)) {
+      if (mt_live_acq(g) == 0)
+	return 1;
+      mt_gc_exclusive_rel(g, 0);
+#if defined(__linux__)
+      mt_gc_exclusive_futex_wake(g, INT_MAX);
+#endif
+      return 0;
+    }
+    if (mt_gc_exclusive_acq(g) != 0)
+      return 0;
+  }
 }
 
 int lj_gc2_finalizer_spawn_deferred(global_State *g)

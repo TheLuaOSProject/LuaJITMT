@@ -297,14 +297,18 @@ if hits=$(grep -nE -- '->[[:space:]]*gc2[.](finalizer_(queued|dequeued|mpsc_drai
   printf '%s\n' 'raw GC2 finalizer counter access is forbidden; use gc2_finalizer_* helpers' >&2
   exit 1
 fi
-for helper in lj_gc2_finalizer_spawn_deferred \
+for helper in lj_gc2_finalizer_pause_threshold \
+  lj_gc2_finalizer_restore_threshold \
+  lj_gc2_finalizer_mt_release_exclusive \
+  lj_gc2_finalizer_mt_reclaim_exclusive \
+  lj_gc2_finalizer_spawn_deferred \
   lj_gc2_finalizer_spawn_release; do
   if ! grep -qE "^[[:space:]]*LJ_FUNC .*[[:space:]]${helper}[[:space:]]*[(]" \
       "$ROOT/src/lj_gc2.h"; then
-    printf '%s\n' "${helper} declaration is required for finalizer-spawn scheduler ownership" >&2
+    printf '%s\n' "${helper} declaration is required for finalizer scheduler ownership" >&2
     exit 1
   fi
-  if ! grep -qE "^[[:space:]]*(int|void)[[:space:]]+${helper}[[:space:]]*[(]" \
+  if ! grep -qE "^[[:space:]]*(GCSize|int|void)[[:space:]]+${helper}[[:space:]]*[(]" \
       "$ROOT/src/lj_gc2.c"; then
     printf '%s\n' "${helper} implementation is required in lj_gc2.c" >&2
     exit 1
@@ -315,6 +319,12 @@ if hits=$(grep -nE -- 'gc2_finalizer_spawn_(deferrals|release_wakes)_add|lj_gc2_
     "$ROOT/src/lib_threading.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
   printf '%s\n' 'finalizer-spawn deferral/release wake policy must stay in lj_gc2 helpers' >&2
+  exit 1
+fi
+if hits=$(grep -nE -- 'mt_gc_exclusive_(rel|cas|futex_wake)[(]|lj_gc_threshold_store[(]g,[[:space:]]*LJ_MAX_MEM[)]' \
+    "$ROOT/src/lj_gc.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'finalizer callback pause policy must stay in lj_gc2 helpers' >&2
   exit 1
 fi
 if hits=$(grep -nE -- '->[[:space:]]*gc2[.]worker_active|&[[:space:]]*[^)]*->[[:space:]]*gc2[.]worker_active' \

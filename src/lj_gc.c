@@ -9,8 +9,6 @@
 #define lj_gc_c
 #define LUA_CORE
 
-#include <limits.h>
-
 #if LJ_GC2_PARANOIA
 #include <stdio.h>
 #include <stdlib.h>
@@ -1648,48 +1646,6 @@ void lj_gc_clearweak_legacy(global_State *g, GCobj *o)
   }
 }
 
-static int gc_finalizer_mt_release_exclusive(global_State *g)
-{
-  if (mt_gc_exclusive_acq(g) == 0)
-    return 0;
-  mt_gc_exclusive_rel(g, 0);
-#if defined(__linux__)
-  mt_gc_exclusive_futex_wake(g, INT_MAX);
-#endif
-  return 1;  /* 09 section 9.6: finalizer may spawn while GC is paused. */
-}
-
-static int gc_finalizer_mt_reclaim_exclusive(global_State *g)
-{
-  for (;;) {
-    uint32_t expect = 0;
-    if (mt_live_acq(g) != 0)
-      return 0;  /* 09 section 9.6: finalizer-spawn outlived callback. */
-    if (mt_gc_exclusive_cas(g, &expect, 1)) {
-      if (mt_live_acq(g) == 0)
-	return 1;
-      mt_gc_exclusive_rel(g, 0);
-#if defined(__linux__)
-      mt_gc_exclusive_futex_wake(g, INT_MAX);
-#endif
-      return 0;
-    }
-    if (mt_gc_exclusive_acq(g) != 0)
-      return 0;
-  }
-}
-
-static void gc_finalizer_restore_threshold(global_State *g, GCSize oldt)
-{
-  lj_gc_threshold_store(g, oldt);
-  if (mt_live_acq(g) != 0) {
-    lj_gc_mt_threshold_store(g, oldt);
-    lj_gc_threshold_store(g, LJ_MAX_MEM);
-    if (mt_live_acq(g) == 0)
-      lj_gc_threshold_store(g, oldt);
-  }
-}
-
 static int gc_call_finalizer(global_State *g, lua_State *L,
 			     cTValue *mo, GCobj *o)
 {
@@ -1710,13 +1666,10 @@ static int gc_call_finalizer(global_State *g, lua_State *L,
 	     "gc_call_finalizer must not use shared vmthread callback stack");
   oldL = lj_tg_cur_L(g);
   oldh = hook_save(g);
-  oldt = mt_live_acq(g) != 0 ? lj_gc_mt_threshold_load(g) :
-	 lj_gc_threshold_load(g);
-  lj_gc_mt_threshold_store(g, oldt);
+  oldt = lj_gc2_finalizer_pause_threshold(g);
   lj_trace_abort(g);
   hook_entergc(g);  /* Disable hooks and new traces during __gc. */
   if (LJ_HASPROFILE && (oldh & HOOK_PROFILE)) lj_dispatch_update(g, 0);
-  lj_gc_threshold_store(g, LJ_MAX_MEM);  /* Prevent GC steps. */
   lj_state_checkstack(cbL, 2+LJ_FR2+LUA_MINSTACK);
   oldtop = savestack(cbL, cbL->top);
   top = cbL->top;
@@ -1724,17 +1677,17 @@ static int gc_call_finalizer(global_State *g, lua_State *L,
   if (LJ_FR2) setnilV(top++);
   setgcV(cbL, top, o, ~o->gch.gct);
   cbL->top = top+1;
-  had_mt_exclusive = gc_finalizer_mt_release_exclusive(g);
+  had_mt_exclusive = lj_gc2_finalizer_mt_release_exclusive(g);
   errcode = lj_vm_pcall(cbL, top, 1+0, -1);  /* Stack: |mo|o| -> | */
   if (had_mt_exclusive)
-    continue_gc = gc_finalizer_mt_reclaim_exclusive(g);
+    continue_gc = lj_gc2_finalizer_mt_reclaim_exclusive(g);
   if (oldL)
     lj_tg_setcur_L(g, oldL);
   else
     lj_tg_clearcur_L(g);
   hook_restore(g, oldh);
   if (LJ_HASPROFILE && (oldh & HOOK_PROFILE)) lj_dispatch_update(g, 0);
-  gc_finalizer_restore_threshold(g, oldt);
+  lj_gc2_finalizer_restore_threshold(g, oldt);
   if (errcode) {
     TValue tmp;
     copyTV(cbL, &tmp, cbL->top-1);
