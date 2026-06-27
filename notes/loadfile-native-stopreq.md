@@ -15,6 +15,13 @@
   `feof`/`ferror` calls in `lj_load.c`.
 - Added FIFO STOPREQ coverage for `loadfile(fifo)` and `dofile(fifo)` to the
   existing safepoint handshake fixture.
+- Follow-up fresh STOPREQ cleanup: `luaL_loadfilex()` now snapshots the sticky
+  shutdown flag once before opening/reading and carries it through
+  `reader_file()`. Pre-existing sticky STOPREQ no longer stops the reader,
+  converts open failure into shutdown, or throws after the close; STOPREQ
+  observed during loader native operations is still deferred until parser
+  cleanup and file close complete. The safepoint handshake fixture covers
+  sticky successful `loadfile()` and sticky missing-file behavior.
 - Validation:
   - `tools/ci/lua_test.sh m3_safepoint_handshake`
   - normal `loadfile()` smoke via `./src/luajit -e ...`

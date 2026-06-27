@@ -30,6 +30,36 @@ if hits=$(awk '
   exit 1
 fi
 for required in \
+  'static void load_checkstop_fresh(lua_State *L, uint32_t actions,' \
+  'int had_stopreq;' \
+  'load_fresh_stopreq(L, actions, ctx->had_stopreq)' \
+  'load_checkstop_fresh(L, ctx.actions, ctx.had_stopreq)'
+do
+  if ! grep -qF "$required" "$ROOT/src/lj_load.c"; then
+    printf '%s\n' "loadfile fresh STOPREQ guard is missing: $required" >&2
+    exit 1
+  fi
+done
+if hits=$(awk '
+  /^static void load_checkstop_fresh\(lua_State \*L, uint32_t actions,/ {
+    in_fresh = 1
+  }
+  in_fresh && /^}/ { in_fresh = 0; next }
+  /^static const char \*reader_file\(lua_State \*L, void \*ud, size_t \*size\)/ {
+    in_reader = 1
+  }
+  in_reader && /^}/ { in_reader = 0; next }
+  in_reader && /load_had_stopreq\(L\)/ { print FILENAME ":" FNR ":" $0 }
+  /lj_safepoint_checkstop\(L, ctx[.]actions\);/ { print FILENAME ":" FNR ":" $0 }
+  /lj_safepoint_checkstop\(L, actions\);/ && !in_fresh {
+    print FILENAME ":" FNR ":" $0
+  }
+' "$ROOT/src/lj_load.c"); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'loadfile native STOPREQ checks must use fresh semantics' >&2
+  exit 1
+fi
+for required in \
   'static int io_had_stopreq(lua_State *L)' \
   'static uint32_t io_poll_pending_stopreq(lua_State *L, uint32_t actions)' \
   'static void io_checkstop_fresh(lua_State *L, uint32_t actions, int had_stopreq)' \
