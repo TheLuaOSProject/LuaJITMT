@@ -293,14 +293,15 @@ if hits=$(grep -nE -- 'lj_gc2_finalizer_mark_queued[[:space:]]*[(]' \
   printf '%s\n' 'queued finalizer marking must stay in lj_gc2_finalizer_mark_all' >&2
   exit 1
 fi
-if ! grep -qE 'LJ_FUNC int lj_gc2_finalizer_dispatch_one[[:space:]]*[(]' \
-    "$ROOT/src/lj_gc2.h"; then
-  printf '%s\n' 'lj_gc2_finalizer_dispatch_one declaration is required for finalizer dispatch ownership' >&2
+if hits=$(grep -nE -- 'LJ_FUNC .*[[:space:]]lj_gc2_finalizer_dispatch_one[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.h" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'single-item GC2 finalizer dispatch must stay inside lj_gc2.c' >&2
   exit 1
 fi
-if ! grep -qE '^int lj_gc2_finalizer_dispatch_one[[:space:]]*[(]' \
+if ! grep -qE '^[[:space:]]*static int lj_gc2_finalizer_dispatch_one[[:space:]]*[(]' \
     "$ROOT/src/lj_gc2.c"; then
-  printf '%s\n' 'lj_gc2_finalizer_dispatch_one definition is required for finalizer dispatch ownership' >&2
+  printf '%s\n' 'lj_gc2_finalizer_dispatch_one must stay static inside lj_gc2.c' >&2
   exit 1
 fi
 if hits=$(grep -nE -- 'lj_gc2_finalizer_(try_enter|drain_owned|dequeue_owned|leave)[[:space:]]*[(]' \
@@ -331,6 +332,7 @@ for helper in lj_gc2_finalizer_enqueue \
   lj_gc2_finalizer_dequeue \
   lj_gc2_finalizer_drain_owned \
   lj_gc2_finalizer_dequeue_owned \
+  lj_gc2_finalizer_dispatch_one \
   lj_gc2_finalizer_pending; do
   if ! grep -qE "^[[:space:]]*static .*[*[:space:]]${helper}[[:space:]]*[(]" \
       "$ROOT/src/lj_gc2.c"; then

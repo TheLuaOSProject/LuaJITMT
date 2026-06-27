@@ -1394,8 +1394,8 @@ static GCobj *lj_gc2_finalizer_dequeue(global_State *g)
   return o;
 }
 
-int lj_gc2_finalizer_dispatch_one(lua_State *L,
-				  GC2FinalizerDispatchFunc dispatch)
+static int lj_gc2_finalizer_dispatch_one(lua_State *L,
+					 GC2FinalizerDispatchFunc dispatch)
 {
   global_State *g;
   GCobj *o;

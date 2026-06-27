@@ -125,8 +125,6 @@ LJ_FUNC size_t lj_gc2_finreg_udata_finalize(global_State *g, int all);
 LJ_FUNC int lj_gc2_finreg_udata_dispatch(lua_State *L, global_State *g,
 					 GCobj *o,
 					 GC2FinalizerCallFunc call);
-LJ_FUNC int lj_gc2_finalizer_dispatch_one(lua_State *L,
-					  GC2FinalizerDispatchFunc dispatch);
 LJ_FUNC void lj_gc2_finalizer_dispatch_all(lua_State *L,
 					   GC2FinalizerDispatchFunc dispatch);
 LJ_FUNC int lj_gc2_finalizer_step(lua_State *L,

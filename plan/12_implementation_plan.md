@@ -242,8 +242,9 @@ older `finalizer_token` bridge has been removed, and normal finalizer producers
 publish through the GC2 MPSC/consumer-ring bridge instead of legacy `mmudata`;
 that bridge now links dedicated queue nodes instead of overwriting each pending
 object's `gcw` root/list link. Dispatch-time queue consumption goes through
-`lj_gc2_finalizer_dispatch_one()`, leaving legacy GC with the dequeued-object
-semantic callback rather than direct owner/drain/dequeue access. Close-time
+GC2's internal `lj_gc2_finalizer_dispatch_one()`, leaving legacy GC with the
+dequeued-object semantic callback via public dispatch-all/step entry points
+rather than direct owner/drain/dequeue access. Close-time
 drain-all uses `lj_gc2_finalizer_dispatch_all()`, so the blocking drain /
 queue-pending / dispatch-one loop also stays in GC2. Incremental
 `GCSfinalize` work uses `lj_gc2_finalizer_step()`, moving queue checks, trace
