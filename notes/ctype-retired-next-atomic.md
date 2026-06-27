@@ -21,5 +21,6 @@ Validation:
 - `tools/ci/m7_ffi.sh`
 
 Follow-up:
-- `StrTabHdr.retired_next` still has analogous raw acquire casts in string/GC
-  retirement traversal and can be cleaned up with the same pattern.
+- The analogous `StrTabHdr.retired_next` helper cleanup is covered in
+  `notes/strtab-retired-next-atomic.md`; that path now also centralizes the
+  string-table heads and `StrTabHdr.retire_epoch`.

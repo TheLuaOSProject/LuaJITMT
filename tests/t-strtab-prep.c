@@ -16,20 +16,21 @@ LJ_STATIC_ASSERT((offsetof(StrTabHdr, bucket) & (sizeof(GCRef)-1u)) == 0);
 
 static void check_strtab(global_State *g)
 {
+  StrTabHdr *hdr = lj_str_tabh_acq(g);
   GCRef *bucket;
   MSize i;
 
-  assert(g->str.tabh != NULL);
+  assert(hdr != NULL);
   assert(g->str.mask != ~(MSize)0);
-  assert(g->str.tabh->mask == g->str.mask);
-  assert(g->str.tabh->resize == 0);
-  assert(g->str.tabh->copy_cursor == 0);
-  assert(g->str.tabh->retire_epoch == 0);
-  assert(lj_str_retired_next_acq(g->str.tabh) == NULL);
+  assert(hdr->mask == g->str.mask);
+  assert(hdr->resize == 0);
+  assert(hdr->copy_cursor == 0);
+  assert(lj_str_retire_epoch_acq(hdr) == 0);
+  assert(lj_str_retired_next_acq(hdr) == NULL);
   assert(((uintptr_t)lj_str_buckets(g) & (sizeof(GCRef)-1u)) == 0);
   assert(offsetof(StrTabHdr, bucket) < lj_str_tabsize(g->str.mask));
 
-  bucket = lj_str_buckets(g);
+  bucket = hdr->bucket;
   for (i = 0; i <= g->str.mask; i++) {
     uintptr_t u = lj_str_ref_load_acq(&bucket[i]);
     GCobj *head = lj_str_hashhead(bucket[i]);

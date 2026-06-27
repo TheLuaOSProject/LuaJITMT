@@ -16,13 +16,69 @@
 
 #define lj_str_hashhead_u(u) \
   ((GCobj *)(void *)((u) & ~(uintptr_t)LJ_STRHASH_LINKMASK))
-#define lj_str_buckets(g)	((g)->str.tabh->bucket)
 #define lj_str_tabsize(mask) \
   ((mask) == ~(MSize)0 ? (GCSize)0 : \
    (GCSize)offsetof(StrTabHdr, bucket) + \
    (((GCSize)(mask) + 1u) * (GCSize)sizeof(GCRef)))
 #define lj_str_tabbytes(tabh) \
   ((tabh) ? lj_str_tabsize((tabh)->mask) : (GCSize)0)
+
+static LJ_AINLINE StrTabHdr *lj_str_tabh_acq(const global_State *g)
+{
+  return (StrTabHdr *)la_loadptr_acq((void *const *)&g->str.tabh);
+}
+
+static LJ_AINLINE void lj_str_tabh_store_rlx(global_State *g, StrTabHdr *hdr)
+{
+  la_storeptr_rlx((void **)&g->str.tabh, hdr);
+}
+
+static LJ_AINLINE void lj_str_tabh_rel(global_State *g, StrTabHdr *hdr)
+{
+  /* 06 section 6.5: RCU string table publish. */
+  la_storeptr_rel((void **)&g->str.tabh, hdr);
+}
+
+static LJ_AINLINE StrTabHdr *lj_str_tabh_xchg_acqrel(global_State *g,
+						     StrTabHdr *hdr)
+{
+  return (StrTabHdr *)la_xchgptr_acqrel((void **)&g->str.tabh, hdr);
+}
+
+static LJ_AINLINE StrTabHdr *lj_str_retired_head_acq(const global_State *g)
+{
+  return (StrTabHdr *)la_loadptr_acq((void *const *)&g->str.retired);
+}
+
+static LJ_AINLINE void lj_str_retired_head_store_rlx(global_State *g,
+						     StrTabHdr *hdr)
+{
+  la_storeptr_rlx((void **)&g->str.retired, hdr);
+}
+
+static LJ_AINLINE int lj_str_retired_head_cas(global_State *g,
+					     StrTabHdr **oldp,
+					     StrTabHdr *hdr)
+{
+  return la_casptr((void **)&g->str.retired, (void **)oldp, hdr,
+		   LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE StrTabHdr *lj_str_retired_head_xchg_acqrel(global_State *g,
+							     StrTabHdr *hdr)
+{
+  return (StrTabHdr *)la_xchgptr_acqrel((void **)&g->str.retired, hdr);
+}
+
+static LJ_AINLINE uint64_t lj_str_retire_epoch_acq(const StrTabHdr *hdr)
+{
+  return la_load64_acq(&hdr->retire_epoch);
+}
+
+static LJ_AINLINE void lj_str_retire_epoch_rel(StrTabHdr *hdr, uint64_t epoch)
+{
+  la_store64_rel(&hdr->retire_epoch, epoch);
+}
 
 static LJ_AINLINE StrTabHdr *lj_str_retired_next_acq(const StrTabHdr *hdr)
 {
@@ -34,6 +90,8 @@ static LJ_AINLINE void lj_str_retired_next_rel(StrTabHdr *hdr,
 {
   la_storeptr_rel((void **)&hdr->retired_next, next);
 }
+
+#define lj_str_buckets(g)	(lj_str_tabh_acq((g))->bucket)
 
 static LJ_AINLINE uintptr_t lj_str_ref_load_acq(const GCRef *r)
 {

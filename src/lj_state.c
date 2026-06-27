@@ -384,8 +384,8 @@ LUA_API lua_State *lua_newstate(lua_Alloc allocf, void *allocd)
   setgcrefroot(g->mainthref, obj2gco(L));
   lj_uv_setprev_rel(&g->uvhead, &g->uvhead);
   lj_uv_setnext_rel(&g->uvhead, &g->uvhead);
-  g->str.tabh = NULL;
-  g->str.retired = NULL;
+  lj_str_tabh_store_rlx(g, NULL);
+  lj_str_retired_head_store_rlx(g, NULL);
   g->str.mask = ~(MSize)0;
   g->tab.retired_nodes = NULL;
   g->tab.retired_arrays = NULL;

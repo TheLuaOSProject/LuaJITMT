@@ -1078,10 +1078,10 @@ static void gc2_clear_marks_all(global_State *g)
 static void gc2_mark_strtab_mem(global_State *g)
 {
   StrTabHdr *hdr;
-  hdr = (StrTabHdr *)la_loadptr_acq((void *const *)&g->str.tabh);
+  hdr = lj_str_tabh_acq(g);
   if (hdr)
     lj_gc2_markmem(g, hdr);
-  for (hdr = (StrTabHdr *)la_loadptr_acq((void *const *)&g->str.retired);
+  for (hdr = lj_str_retired_head_acq(g);
        hdr != NULL;
        hdr = lj_str_retired_next_acq(hdr))
     lj_gc2_markmem(g, hdr);
@@ -2060,7 +2060,7 @@ static void gc2_mark_fixedstr(global_State *g)
   MSize i;
   StrTabHdr *hdr;
   GCRef *strtab;
-  hdr = (StrTabHdr *)la_loadptr_acq((void *const *)&g->str.tabh);
+  hdr = lj_str_tabh_acq(g);
   if (!hdr)
     return;
   strtab = hdr->bucket;

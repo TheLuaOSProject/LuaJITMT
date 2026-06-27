@@ -3,6 +3,43 @@
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+for helper in lj_str_tabh_acq \
+  lj_str_tabh_store_rlx \
+  lj_str_tabh_rel \
+  lj_str_tabh_xchg_acqrel \
+  lj_str_retired_head_acq \
+  lj_str_retired_head_store_rlx \
+  lj_str_retired_head_cas \
+  lj_str_retired_head_xchg_acqrel \
+  lj_str_retire_epoch_acq \
+  lj_str_retire_epoch_rel; do
+  if ! grep -qE "^[[:space:]]*static LJ_AINLINE .*[*[:space:]]${helper}[[:space:]]*[(]" \
+      "$ROOT/src/lj_str.h"; then
+    printf '%s\n' "${helper} helper is required for string-table publication" >&2
+    exit 1
+  fi
+done
+if hits=$(grep -nE -- '(^|[^[:alnum:]_])g[[:space:]]*->[[:space:]]*str[.](tabh|retired)([^[:alnum:]_]|$)|&[[:space:]]*g[[:space:]]*->[[:space:]]*str[.](tabh|retired)([^[:alnum:]_]|$)' \
+    "$ROOT/src/lj_str.c" \
+    "$ROOT/src/lj_gc.c" \
+    "$ROOT/src/lj_gc2.c" \
+    "$ROOT/src/lj_state.c" \
+    "$ROOT/tests/t-strtab-cas.c" \
+    "$ROOT/tests/t-strtab-prep.c" \
+    "$ROOT/tests/t-strtab-rehash.c" \
+    "$ROOT/tests/t-arena-gcmark.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw string-table head access is forbidden; use lj_str_tabh_* or lj_str_retired_head_* helpers' >&2
+  exit 1
+fi
+if hits=$(grep -nE -- '->[[:space:]]*retire_epoch([^[:alnum:]_]|$)' \
+    "$ROOT/src/lj_str.c" \
+    "$ROOT/tests/t-strtab-cas.c" \
+    "$ROOT/tests/t-strtab-prep.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw StrTabHdr retire_epoch access is forbidden; use lj_str_retire_epoch_* helpers' >&2
+  exit 1
+fi
 if hits=$(grep -nE -- '->[[:space:]]*retired_next' \
     "$ROOT/src/lj_str.c" \
     "$ROOT/src/lj_gc.c" \

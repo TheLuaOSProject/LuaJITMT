@@ -46,11 +46,13 @@ int main(void)
   GCstr *interned[TARGET_STRINGS];
   uint32_t found = 0, i;
   uint32_t n;
+  StrTabHdr *hdr;
 
   assert(L != NULL);
   g = G(L);
   lj_str_resize(L, TARGET_MASK);
-  assert(g->str.tabh != NULL);
+  hdr = lj_str_tabh_acq(g);
+  assert(hdr != NULL);
   assert(g->str.mask == TARGET_MASK);
 
   for (n = 0; found < TARGET_STRINGS; n++) {
@@ -71,8 +73,9 @@ int main(void)
   }
 
   assert(g->str.second == 1);
-  assert(g->str.tabh->resize == 0);
-  assert(lj_str_hashsecondary(g->str.tabh->bucket[TARGET_BUCKET]) != 0);
+  hdr = lj_str_tabh_acq(g);
+  assert(hdr->resize == 0);
+  assert(lj_str_hashsecondary(hdr->bucket[TARGET_BUCKET]) != 0);
   for (i = 0; i < TARGET_STRINGS; i++)
     assert(lj_str_new(L, candidate[i], strlen(candidate[i])) == interned[i]);
 

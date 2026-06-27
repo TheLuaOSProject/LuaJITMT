@@ -11,6 +11,7 @@
 
 #include "lj_obj.h"
 #include "lj_arena.h"
+#include "lj_str.h"
 #include "lj_tg.h"
 #if LJ_HASFFI
 #include "lj_ctype.h"
@@ -146,7 +147,7 @@ int main(void)
   tab = tabV(tv);
   assert((lj_arena_of(tab)->hdr.flags & LJ_AF_TRAVERSABLE) != 0);
   assert_arena_white(g, tab);
-  assert(arena_mem_marked(g, g->str.tabh));
+  assert(arena_mem_marked(g, lj_str_tabh_acq(g)));
 
   lua_getfield(L, -1, "arr");
   tv = L->top - 1;

@@ -150,16 +150,16 @@ static LJ_AINLINE int strref_cas_rel(GCRef *r, uintptr_t *expect, uintptr_t want
 
 static void strtab_retired_push(global_State *g, StrTabHdr *hdr)
 {
-  void *head = la_loadptr_acq((void *const *)&g->str.retired);
+  StrTabHdr *head = lj_str_retired_head_acq(g);
+  /* 06 section 6.5: RCU retire. */
   do {
-    lj_str_retired_next_rel(hdr, (StrTabHdr *)head);
-  } while (!la_casptr((void **)&g->str.retired, &head, hdr,
-		      LA_ACQ_REL, LA_ACQ));  /* 06 section 6.5 RCU retire. */
+    lj_str_retired_next_rel(hdr, head);
+  } while (!lj_str_retired_head_cas(g, &head, hdr));
 }
 
 static void strtab_retire(global_State *g, StrTabHdr *hdr)
 {
-  la_store64_rel(&hdr->retire_epoch, gc2_hs_epoch_acq(g));
+  lj_str_retire_epoch_rel(hdr, gc2_hs_epoch_acq(g));
   strtab_retired_push(g, hdr);
 }
 
@@ -195,7 +195,7 @@ static LJ_AINLINE void strtab_leave(StrTabHdr *hdr)
 static StrTabHdr *strtab_enter(global_State *g)
 {
   for (;;) {
-    StrTabHdr *hdr = (StrTabHdr *)la_loadptr_acq((void *const *)&g->str.tabh);
+    StrTabHdr *hdr = lj_str_tabh_acq(g);
     MSize state, expect;
     if (hdr == NULL)
       return NULL;
@@ -210,7 +210,7 @@ static StrTabHdr *strtab_enter(global_State *g)
     }
     expect = state;
     if (la_cas32(&hdr->resize, &expect, state + 1u, LA_ACQ_REL, LA_ACQ)) {
-      if (LJ_LIKELY((StrTabHdr *)la_loadptr_acq((void *const *)&g->str.tabh) == hdr))
+      if (LJ_LIKELY(lj_str_tabh_acq(g) == hdr))
 	return hdr;
       strtab_leave(hdr);
     }
@@ -222,7 +222,7 @@ void lj_str_resize(lua_State *L, MSize newmask)
 {
   global_State *g = G(L);
   StrTabHdr *newhdr;
-  StrTabHdr *oldhdr = (StrTabHdr *)la_loadptr_acq((void *const *)&g->str.tabh);
+  StrTabHdr *oldhdr = lj_str_tabh_acq(g);
   GCRef *newtab, *oldtab = oldhdr ? oldhdr->bucket : NULL;
   GCSize newsize;
   MSize i, oldmask = oldhdr ? oldhdr->mask : ~(MSize)0;
@@ -316,7 +316,7 @@ void lj_str_resize(lua_State *L, MSize newmask)
 
   /* Retire old table and replace with new table. */
   g->str.mask = newmask;
-  la_storeptr_rel((void **)&g->str.tabh, newhdr);  /* 06 section 6.5 RCU publish. */
+  lj_str_tabh_rel(g, newhdr);
   if (oldhdr)
     strtab_retire(g, oldhdr);
 }
@@ -328,13 +328,13 @@ static LJ_NOINLINE GCstr *lj_str_rehash_chain(lua_State *L, StrHash hashc,
 {
   global_State *g = G(L);
   int ow = g->gc.state == GCSsweepstring ? otherwhite(g) : 0;  /* Sweeping? */
-  StrTabHdr *hdr = (StrTabHdr *)la_loadptr_acq((void *const *)&g->str.tabh);
+  StrTabHdr *hdr = lj_str_tabh_acq(g);
   GCRef *strtab;
   MSize strmask;
   GCobj *o;
   if (!hdr || !strtab_claim(hdr))
     return lj_str_new(L, str, len);
-  if ((StrTabHdr *)la_loadptr_acq((void *const *)&g->str.tabh) != hdr) {
+  if (lj_str_tabh_acq(g) != hdr) {
     strtab_release(hdr);
     return lj_str_new(L, str, len);
   }
@@ -528,11 +528,11 @@ uint32_t lj_str_reclaim_retired(global_State *g, uint64_t completed_epoch)
   uint32_t reclaimed = 0;
   if (!g || completed_epoch == 0)
     return 0;
-  hdr = (StrTabHdr *)la_xchgptr_acqrel((void **)&g->str.retired, NULL);
+  hdr = lj_str_retired_head_xchg_acqrel(g, NULL);
   while (hdr) {
     StrTabHdr *next = lj_str_retired_next_acq(hdr);
     lj_str_retired_next_rel(hdr, NULL);
-    if (la_load64_acq(&hdr->retire_epoch) < completed_epoch) {
+    if (lj_str_retire_epoch_acq(hdr) < completed_epoch) {
       lj_mem_free(g, hdr, lj_str_tabbytes(hdr));
       reclaimed++;
     } else {
@@ -545,13 +545,11 @@ uint32_t lj_str_reclaim_retired(global_State *g, uint64_t completed_epoch)
 
 void lj_str_freetab(global_State *g)
 {
-  StrTabHdr *hdr = g->str.tabh;
+  StrTabHdr *hdr = lj_str_tabh_xchg_acqrel(g, NULL);
   if (hdr) {
-    g->str.tabh = NULL;
     lj_mem_free(g, hdr, lj_str_tabbytes(hdr));
   }
-  hdr = (StrTabHdr *)la_loadptr_acq((void *const *)&g->str.retired);
-  g->str.retired = NULL;
+  hdr = lj_str_retired_head_xchg_acqrel(g, NULL);
   while (hdr) {
     StrTabHdr *next = lj_str_retired_next_acq(hdr);
     lj_mem_free(g, hdr, lj_str_tabbytes(hdr));

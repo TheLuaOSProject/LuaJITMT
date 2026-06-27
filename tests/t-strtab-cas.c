@@ -29,7 +29,7 @@ int main(void)
 
   assert(L != NULL);
   g = G(L);
-  hdr = g->str.tabh;
+  hdr = lj_str_tabh_acq(g);
   assert(hdr != NULL);
   assert(hdr->resize == 0);
 
@@ -51,19 +51,19 @@ int main(void)
   la_store32_rel(&hdr->resize, 0);
 
   lj_str_resize(L, wantmask);
-  assert(g->str.tabh != hdr);
+  assert(lj_str_tabh_acq(g) != hdr);
   assert(g->str.mask == wantmask);
-  assert(g->str.tabh->resize == 0);
-  assert(la_loadptr_acq((void *const *)&g->str.retired) == hdr);
+  assert(lj_str_tabh_acq(g)->resize == 0);
+  assert(lj_str_retired_head_acq(g) == hdr);
   assert(lj_str_retired_next_acq(hdr) == NULL);
-  retire_epoch = g->gc2.hs_epoch;
-  assert(hdr->retire_epoch == retire_epoch);
+  retire_epoch = gc2_hs_epoch_acq(g);
+  assert(lj_str_retire_epoch_acq(hdr) == retire_epoch);
   smr_runs0 = gc2_smr_reclaim_runs_acq(g);
   smr_reclaimed0 = gc2_smr_reclaimed_acq(g);
   assert(lj_gc2_reclaim_retired(g, retire_epoch) == 0);
   assert(gc2_smr_reclaim_runs_acq(g) == smr_runs0);
   assert(gc2_smr_reclaimed_acq(g) == smr_reclaimed0);
-  assert(la_loadptr_acq((void *const *)&g->str.retired) == hdr);
+  assert(lj_str_retired_head_acq(g) == hdr);
   assert(lj_str_new(L, "m5-strtab-cas-same",
 		    strlen("m5-strtab-cas-same")) == s1);
 
@@ -72,10 +72,10 @@ int main(void)
     snprintf(buf, sizeof(buf), "m5-strtab-cas-%d-%d", i, i * 31);
     assert(lj_str_new(L, buf, strlen(buf)) != NULL);
   }
-  assert(g->str.tabh->resize == 0);
+  assert(lj_str_tabh_acq(g)->resize == 0);
   (void)lj_gc2_handshake(g, LJ_GC2_HS_FLUSH_SSB);
-  assert(g->gc2.hs_epoch > retire_epoch);
-  assert(la_loadptr_acq((void *const *)&g->str.retired) == NULL);
+  assert(gc2_hs_epoch_acq(g) > retire_epoch);
+  assert(lj_str_retired_head_acq(g) == NULL);
   assert(gc2_smr_reclaim_runs_acq(g) > smr_runs0);
   assert(gc2_smr_reclaimed_acq(g) >= smr_reclaimed0 + 1u);
 
