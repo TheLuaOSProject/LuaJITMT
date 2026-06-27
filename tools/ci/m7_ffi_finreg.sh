@@ -83,6 +83,12 @@ if ! awk '
   /^static int cdata_fin_claim[[:space:]]*[(]/ {
     inside = 1
   }
+  inside && /lj_tv_cas[[:space:]]*[(]/ {
+    saw_cas = 1
+  }
+  inside && saw_cas && /cdata_fin_claim_wait_no_l[[:space:]]*[(]/ {
+    found_after_cas = 1
+  }
   inside && /cdata_fin_claim_wait_no_l[[:space:]]*[(]/ {
     found = 1
   }
@@ -95,10 +101,10 @@ if ! awk '
   END {
     if (bad != "")
       print bad
-    exit(found && bad == "" ? 0 : 1)
+    exit(found && found_after_cas && bad == "" ? 0 : 1)
   }
 ' "$ROOT/src/lj_cdata.c"; then
-  printf '%s\n' 'cdata_fin_claim FINREG slot waits must use cdata_fin_claim_wait_no_l()' >&2
+  printf '%s\n' 'cdata_fin_claim FINREG slot waits and CAS losers must use cdata_fin_claim_wait_no_l()' >&2
   exit 1
 fi
 if ! awk '

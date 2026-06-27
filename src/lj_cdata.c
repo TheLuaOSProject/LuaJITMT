@@ -121,6 +121,7 @@ static int cdata_fin_claim(TValue *tv, TValue *old, int nonnil)
       return 0;
     if (lj_tv_cas(tv, old, &claim))
       return 1;  /* 11.4 FINREG slot claim. */
+    cdata_fin_claim_wait_no_l();  /* CAS loser: yield before retrying. */
   }
 }
 
