@@ -2064,7 +2064,7 @@ void lj_gc_closeuv(global_State *g, GCupval *uv)
 
 #if LJ_HASJIT
 /* Mark a trace if it's saved during the propagation phase. */
-void lj_gc_barriertrace(global_State *g, uint32_t traceno)
+void lj_gc_pubtrace(global_State *g, uint32_t traceno)
 {
   if (g->gc.state == GCSpropagate || g->gc.state == GCSatomic)
     gc_marktrace(g, traceno);

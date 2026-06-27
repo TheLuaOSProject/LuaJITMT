@@ -33,4 +33,20 @@ if hits=$(grep -nE -- '->[[:space:]]*retired_next' \
   printf '%s\n' 'raw JIT retired trace next-link access is forbidden; use trace*_retired_next_* helpers' >&2
   exit 1
 fi
+if hits=$(grep -nE -- 'lj_gc_barriertrace[[:space:]]*[(]|LJ_FUNC .*lj_gc_barriertrace[[:space:]]*[(]' \
+    "$ROOT"/src/*.c "$ROOT/src/lj_gc.h" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'legacy-named trace barrier is forbidden; use lj_gc_pubtrace for trace publication' >&2
+  exit 1
+fi
+if ! grep -qE 'LJ_FUNC void lj_gc_pubtrace[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc.h"; then
+  printf '%s\n' 'lj_gc_pubtrace declaration is required for trace publication' >&2
+  exit 1
+fi
+if ! grep -qE '^void lj_gc_pubtrace[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc.c"; then
+  printf '%s\n' 'lj_gc_pubtrace definition is required for trace publication' >&2
+  exit 1
+fi
 exec "$ROOT/tools/ci/lua_test.sh" m5_jit_trace_publish

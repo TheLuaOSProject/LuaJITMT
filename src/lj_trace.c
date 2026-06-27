@@ -496,7 +496,7 @@ static void trace_save(jit_State *J, GCtrace *T)
   J->curfinal = NULL;
   lj_gc_linkobj(g, obj2gco(T));  /* CAS-publish root after body init. */
   traceslot_publish(J, T->traceno, T);
-  lj_gc_barriertrace(g, T->traceno);
+  lj_gc_pubtrace(g, T->traceno);
   lj_gdbjit_addtrace(J, T);
 #ifdef LUAJIT_USE_PERFTOOLS
   perftools_addtrace(J, T);
