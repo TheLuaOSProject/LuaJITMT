@@ -29,6 +29,31 @@ if hits=$(awk '
   printf '%s\n' 'loadfile FILE state probes must go through native-state wrappers' >&2
   exit 1
 fi
+for required in \
+  'static void package_checkstop_fresh(lua_State *L, uint32_t actions,' \
+  'package_fresh_stopreq(L, actions, had_stopreq)' \
+  'package_checkstop_fresh(L, actions, had_stopreq)'
+do
+  if ! grep -qF "$required" "$ROOT/src/lib_package.c"; then
+    printf '%s\n' "package loader fresh STOPREQ guard is missing: $required" >&2
+    exit 1
+  fi
+done
+if hits=$(awk '
+  /^static void package_checkstop_fresh\(lua_State \*L, uint32_t actions,/ {
+    in_fresh = 1
+  }
+  /lj_safepoint_checkstop\(L, actions\);/ && !in_fresh {
+    print FILENAME ":" FNR ":" $0
+  }
+  in_fresh && /^}/ {
+    in_fresh = 0
+  }
+' "$ROOT/src/lib_package.c"); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'package loader native action checks must use fresh STOPREQ semantics' >&2
+  exit 1
+fi
 if hits=$(grep -nE -- '->[[:space:]]*next_tg|&[[:alnum:]_]+->[[:space:]]*next_tg|next_tg[[:space:]]*=' \
     "$ROOT/src/lj_gc.c" \
     "$ROOT/src/lj_gc2.c" \

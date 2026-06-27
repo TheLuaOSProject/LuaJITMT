@@ -10,6 +10,10 @@
 - Added a tiny sleeping-constructor shared object and wired it into
   `m3_safepoint_handshake` to behavior-test `package.loadlib()` and
   `ffi.load()` while blocked in `dlopen`.
+- Follow-up cleanup made `package.loadlib()` / package dynamic-symbol STOPREQ
+  checks use fresh native-action semantics. A pre-existing sticky STOPREQ no
+  longer makes an otherwise successful `package.loadlib()` throw after `dlopen`
+  or `dlsym` returns without acknowledging a new native stop.
 - Validation:
   - `tools/ci/lua_test.sh m3_safepoint_handshake`
   - `tools/ci/lua_test.sh m7_ffi_clib_cache`
