@@ -48,4 +48,26 @@ if hits=$(grep -RInE -- '->[[:space:]]*ffi_call_func([^[:alnum:]_]|$)|&[[:space:
   printf '%s\n' 'raw TG FFI call-function access is forbidden; use lj_tg_ffi_call_func_* helpers' >&2
   exit 1
 fi
+for helper in ccallback_had_stopreq ccallback_fresh_stopreq
+do
+  if ! grep -q "$helper" "$ROOT/src/lj_ccallback.c"; then
+    printf '%s\n' "missing FFI callback native STOPREQ freshness helper: $helper" >&2
+    exit 1
+  fi
+done
+if ! grep -q 'native_had_stopreq' "$ROOT/src/lj_ctype.h" ||
+   ! grep -q 'cb->native_had_stopreq = (uint8_t)had_stopreq' "$ROOT/src/lj_ccall.c" ||
+   ! grep -q 'cb->native_had_stopreq' "$ROOT/src/lj_ccallback.c"; then
+  printf '%s\n' 'FFI callback STOPREQ freshness must use the surrounding FFI native-entry snapshot' >&2
+  exit 1
+fi
+if hits=$(awk '
+  /^lua_State \* LJ_FASTCALL lj_ccallback_enter\(/ { in_fn = 1 }
+  in_fn && /actions[[:space:]]*&[[:space:]]*LJ_GC2_HS_STOPREQ/ { print FNR ":" $0 }
+  in_fn && /^}/ { in_fn = 0 }
+' "$ROOT/src/lj_ccallback.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'callback entry must use fresh STOPREQ detection, not the native-leave action mask alone' >&2
+  exit 1
+fi
 exec "$ROOT/tools/ci/lua_test.sh" m7_ffi_callback_runtime

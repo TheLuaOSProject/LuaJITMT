@@ -931,6 +931,19 @@ static void callback_conv_result(CTState *cts, lua_State *L, TValue *o,
   }
 }
 
+static int ccallback_had_stopreq(CCallbackRuntime *cb)
+{
+  return cb && cb->native_had_stopreq != 0;
+}
+
+static int ccallback_fresh_stopreq(lua_State *L, uint32_t actions,
+				   int had_stopreq)
+{
+  TGState *tg = L ? L2TG(L) : NULL;
+  return (actions & LJ_GC2_HS_STOPREQ) ||
+    (!had_stopreq && tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ));
+}
+
 /* Enter callback. */
 lua_State * LJ_FASTCALL lj_ccallback_enter(CTState *cts, void *cf,
 					   CCallbackRuntime *cb)
@@ -941,6 +954,7 @@ lua_State * LJ_FASTCALL lj_ccallback_enter(CTState *cts, void *cf,
   uint8_t was_native;
   uint8_t auto_detach = cb->auto_detach;
   uint32_t actions = 0;
+  int had_stopreq = 0;
   void *ffi_call_func;
   if (LJ_UNLIKELY(tg == NULL || tg->gl != g || cb != &tg->cb ||
 		  L == NULL || lj_tg_load_cur_L(tg) != L || L2TG(L) != tg))
@@ -962,13 +976,14 @@ lua_State * LJ_FASTCALL lj_ccallback_enter(CTState *cts, void *cf,
     ffi_call_func = lj_tg_ffi_call_func_acq(tg);
     if (ffi_call_func != NULL)
       lj_ctype_cb_blacklist(cts, ffi_call_func);
+    had_stopreq = ccallback_had_stopreq(cb);
     actions = lj_native_leave(L);
   }
   callback_conv_args(cts, L, cb);
   callback_frame_push(L, cb, L->base-1, was_native, auto_detach);
   cb->auto_detach = 0;
   if (was_native) {
-    if (actions & LJ_GC2_HS_STOPREQ) {
+    if (ccallback_fresh_stopreq(L, actions, had_stopreq)) {
       callback_frame_top(cb)->was_native = 0;
       lj_safepoint_checkstop(L, actions);
     }

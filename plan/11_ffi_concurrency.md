@@ -143,6 +143,9 @@ FINREG/finqueue dispatch lands.
   `IR_CALLXS` has an explicit native-state enter/leave protocol. This removes
   the previous requirement that users identify blocking functions with
   `ffi.blocking(fn)` before GC/shutdown can progress while C is blocked.
+  Callback entry applies the same freshness rule: pre-existing sticky
+  `TGF_STOPREQ` is tolerated, but a STOPREQ newly acknowledged while the
+  carrier was native interrupts before the Lua callback body runs.
   `ffi.blocking(fn)` remains as a compatibility marker and validation API, but
   traced C-call throughput stays deferred behind the native-state protocol.
 - **Callbacks (C→Lua)**: callback entry (lj_ccallback.c enter) runs

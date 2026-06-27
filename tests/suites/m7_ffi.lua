@@ -135,6 +135,8 @@ fi
           cfile = "t-ffi-callback-nested-native.c" },
         { output = "lj_t-ffi-callback-owner-lifetime",
           cfile = "t-ffi-callback-owner-lifetime.c" },
+        { output = "lj_t-ffi-callback-stopreq",
+          cfile = "t-ffi-callback-stopreq.c" },
         { output = "lj_t-ffi-callback-attached-carrier",
           cfile = "t-ffi-callback-attached-carrier.c" },
         { output = "lj_t-ffi-callback-auto-attach",

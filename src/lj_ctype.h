@@ -395,6 +395,7 @@ typedef LJ_ALIGN(8) struct CCallbackRuntime {
   MSize slot;			/* Current callback slot. */
   MSize depth;			/* Active callback frames on this TG. */
   uint8_t auto_detach;		/* Pending scoped attach before frame push. */
+  uint8_t native_had_stopreq;	/* Sticky STOPREQ before surrounding FFI call. */
   CCallbackFrame frame[CCALLBACK_MAX_NEST];  /* Per-callback return state. */
 } CCallbackRuntime;
 
