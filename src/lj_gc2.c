@@ -3850,6 +3850,24 @@ int lj_gc2_test_finreg_cdata_preclaim_take(lua_State *L, global_State *g,
   return lj_gc2_finreg_cdata_preclaim_take(L, g, o, fin);
 }
 
+static void gc2_finreg_dispatch_requeue(global_State *g, GCobj *o)
+{
+  if (!g || !o)
+    return;
+#if LJ_HASFFI
+  if (o->gch.gct == ~LJ_TCDATA) {
+    lj_gc_linkobj(g, o);  /* CAS-requeue finalized cdata on root list. */
+  } else
+#endif
+  if (o->gch.gct == ~LJ_TUDATA) {
+    lj_gc_linkobj_after(obj2gco(mainthread_acq(g)), o);
+  } else {
+    return;
+  }
+  makewhite(g, o);
+  lj_gc_arena_markobj(g, o);
+}
+
 #if LJ_HASFFI
 static void gc2_finreg_cdata_dispatch_clear(global_State *g, GCobj *o)
 {
@@ -3925,6 +3943,7 @@ int lj_gc2_finreg_cdata_dispatch(lua_State *L, global_State *g, GCobj *o,
 #if LJ_HASFFI
   if (!L || !g || !o || !call || o->gch.gct != ~LJ_TCDATA)
     return 0;
+  gc2_finreg_dispatch_requeue(g, o);
   return gc2_finreg_cdata_dispatch_ffi(L, g, o, call);
 #else
   UNUSED(L); UNUSED(g); UNUSED(o); UNUSED(call);
@@ -4171,6 +4190,7 @@ int lj_gc2_finreg_udata_dispatch(lua_State *L, global_State *g, GCobj *o,
   TValue motv;
   if (!L || !g || !o || !call || o->gch.gct != ~LJ_TUDATA)
     return 0;
+  gc2_finreg_dispatch_requeue(g, o);
   if (lj_gc2_finreg_udata_set(g, o, 0) < 0)
     lj_gc2_finreg_udata_forget(g, o);
   mo = lj_meta_fasttv(g, tabref_acq(gco2ud(o)->metatable), MM_gc, &motv);

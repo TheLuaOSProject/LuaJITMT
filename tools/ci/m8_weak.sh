@@ -210,6 +210,38 @@ if ! awk '
 fi
 
 if hits=$(awk '
+  /^static int gc_dispatch_finalizer_obj\(lua_State \*L,/ { in_fn = 1 }
+  in_fn && /(lj_gc_linkobj|lj_gc_linkobj_after|makewhite|lj_gc_arena_markobj)[[:space:]]*[(]/ {
+    print FILENAME ":" FNR ":" $0
+  }
+  in_fn && /^}/ { in_fn = 0 }
+' "$ROOT/src/lj_gc.c"); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' \
+    'legacy finalizer dispatch must leave requeue/rewhite state mutation to GC2 FINREG dispatch helpers' >&2
+  exit 1
+fi
+
+if ! grep -qE '^[[:space:]]*static void gc2_finreg_dispatch_requeue[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.c"; then
+  printf '%s\n' 'gc2_finreg_dispatch_requeue helper is required for finalizer dispatch ownership' >&2
+  exit 1
+fi
+for fn in lj_gc2_finreg_cdata_dispatch lj_gc2_finreg_udata_dispatch; do
+  if ! awk -v fn="$fn" '
+    $0 ~ ("^int[[:space:]]+" fn "[[:space:]]*[(]") { in_fn = 1 }
+    in_fn && /gc2_finreg_dispatch_requeue[[:space:]]*[(]g,[[:space:]]*o[)]/ {
+      found = 1
+    }
+    in_fn && /^}/ { in_fn = 0 }
+    END { exit(found ? 0 : 1) }
+  ' "$ROOT/src/lj_gc2.c"; then
+    printf '%s\n' "${fn} must requeue/rewhite finalizer objects through gc2_finreg_dispatch_requeue" >&2
+    exit 1
+  fi
+done
+
+if hits=$(awk '
   /^static void lj_gc2_finalizer_enter\(global_State \*g\)/ ||
   /^static void lj_gc2_finalizer_leave\(global_State \*g\)/ ||
   /^void lj_gc2_finalizer_dispatch_all\(lua_State \*L,/ {

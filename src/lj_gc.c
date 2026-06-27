@@ -1588,23 +1588,11 @@ static int gc_dispatch_finalizer_obj(lua_State *L, global_State *g, GCobj *o)
 {
 #if LJ_HASFFI
   if (o->gch.gct == ~LJ_TCDATA) {
-    int rc;
-    /* Add cdata back to the GC list and make it white. */
-    lj_gc_linkobj(g, o);  /* CAS-requeue finalized cdata on root list. */
-    makewhite(g, o);
-    lj_gc_arena_markobj(g, o);
-    rc = lj_gc2_finreg_cdata_dispatch(L, g, o, gc_call_finalizer);
-    return rc;
+    return lj_gc2_finreg_cdata_dispatch(L, g, o, gc_call_finalizer);
   }
 #endif
   {
-    int rc;
-    /* Add userdata back to the main userdata list and make it white. */
-    lj_gc_linkobj_after(obj2gco(mainthread_acq(g)), o);
-    makewhite(g, o);
-    lj_gc_arena_markobj(g, o);
-    rc = lj_gc2_finreg_udata_dispatch(L, g, o, gc_call_finalizer);
-    return rc;
+    return lj_gc2_finreg_udata_dispatch(L, g, o, gc_call_finalizer);
   }
 }
 
