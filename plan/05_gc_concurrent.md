@@ -538,7 +538,11 @@ run on the owner-claimed collector caller `lua_State` instead of the shared
 GC2 queue nodes and marked through `lj_gc2_finalizer_mark_all()`, whose GC2
 side owns the owner-drained queue scanner, but full
 scheduler-owned string/root/finalizer sweep driving and FINREG/finqueue
-execution remain follow-up work.
+execution remain follow-up work. Legacy root-chain splice retry losers and GC2
+FINREG root-unlink retry losers now wait through no-`lua_State` native sleep
+helpers instead of raw CPU pauses; GC2 worker-control CAS fallthrough and
+debug/paranoia finalizer/preclaim pause gates use the same peer wait helper, so
+preempted peers cannot turn these required retry windows into CPU spins.
 
 ## 5.9 Deferred reclamation (grace periods) — the GC as universal SMR
 

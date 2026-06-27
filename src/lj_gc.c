@@ -54,10 +54,15 @@
 #define gray2black(x)		(lj_obj_addgcflags((x), LJ_GC_BLACK))
 #define isfinalized(u)		(lj_obj_gcflags(obj2gco(u)) & LJ_GC_FINALIZED)
 
+static void gc_root_wait_no_l(void)
+{
+  (void)lj_thr_sleep_ns(NULL, 1000000);
+}
+
 #if LJ_HASFFI
 static void gc_finreg_claim_wait_no_l(void)
 {
-  (void)lj_thr_sleep_ns(NULL, 1000000);
+  gc_root_wait_no_l();
 }
 #endif
 
@@ -1317,7 +1322,7 @@ static void gc2_unlink_root_obj(global_State *g, GCobj *dead)
     if (o == dead) {
       if (gc_chain_splice(p, o))
 	return;
-      la_cpu_pause();
+      gc_root_wait_no_l();
       continue;
     }
     p = lj_obj_gcwref(o);
@@ -1334,14 +1339,14 @@ uint32_t lj_gc_sweep_gc2_unmarked(global_State *g)
     if (marked == 0) {
       if (o->gch.gct == 0) {
 	if (!gc_chain_splice(p, o)) {
-	  la_cpu_pause();
+	  gc_root_wait_no_l();
 	  continue;
 	}
 	continue;
       }
       if (isdead(g, o) && gc2_valid_freeable_obj(o)) {
 	if (!gc_chain_splice(p, o)) {
-	  la_cpu_pause();
+	  gc_root_wait_no_l();
 	  continue;
 	}
 	if (!gc2_free_unmarked_obj(g, o))
@@ -1419,7 +1424,7 @@ static GCRef *gc_sweep(global_State *g, GCRef *p, uint32_t lim)
   while ((o = gcref_acq(*p)) != NULL && lim-- > 0) {
     if (LJ_UNLIKELY(o->gch.gct == 0)) {
       if (!gc_chain_splice(p, o)) {
-	la_cpu_pause();
+	gc_root_wait_no_l();
 	continue;
       }
       continue;  /* Body destructor already ran via GC2 arena sweep. */
@@ -1436,7 +1441,7 @@ static GCRef *gc_sweep(global_State *g, GCRef *p, uint32_t lim)
       lj_assertG(isdead(g, o) || ow == LJ_GC_SFIXED,
 		 "sweep of unlive object");
       if (!gc_chain_splice(p, o)) {
-	la_cpu_pause();
+	gc_root_wait_no_l();
 	continue;
       }
       gc_freefunc[o->gch.gct - ~LJ_TSTR](g, o);

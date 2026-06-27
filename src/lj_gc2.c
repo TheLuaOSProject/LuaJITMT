@@ -573,7 +573,7 @@ static void gc2_worker_control_lock(global_State *g)
     if (expect != 0)
       gc2_worker_control_futex_wait(g, expect, 1000000);
     else
-      la_cpu_pause();
+      gc2_peer_wait_no_l();
   }
 }
 
@@ -1328,7 +1328,7 @@ static void lj_gc2_finalizer_drain_owned(global_State *g)
   if (gc2_finalizer_drain_test_pause_xchg_acqrel(g, 0) != 0) {
     gc2_finalizer_drain_test_paused_rel(g, 1);
     while (gc2_finalizer_drain_test_release_acq(g) == 0)
-      la_cpu_pause();
+      gc2_peer_wait_no_l();
     gc2_finalizer_drain_test_paused_rel(g, 0);
   }
 #endif
@@ -2683,7 +2683,7 @@ static void gc2_finclaim_publish(lua_State *L, global_State *g, MSize idx,
   if (gc2_finreg_cdata_preclaim_publish_pause_xchg_acqrel(g, 0) != 0) {
     gc2_finreg_cdata_preclaim_publish_paused_rel(g, 1);
     while (gc2_finreg_cdata_preclaim_publish_release_acq(g) == 0)
-      la_cpu_pause();
+      gc2_peer_wait_no_l();
     gc2_finreg_cdata_preclaim_publish_paused_rel(g, 0);
   }
 #endif
@@ -3362,7 +3362,7 @@ static int gc2_finreg_cdata_unlink_root(global_State *g, GCobj *target)
     if (o == target) {
       if (gc2_finreg_root_splice(p, o))
 	return 1;  /* root unlink after ordered FINREG claim. */
-      la_cpu_pause();
+      gc2_finreg_claim_wait_no_l();
       continue;
     }
     p = lj_obj_gcwref(o);
@@ -3973,7 +3973,7 @@ static int gc2_finreg_udata_unlink_root(global_State *g, GCobj *target)
     if (o == target) {
       if (gc2_finreg_root_splice(p, o))
 	return 1;  /* root unlink after userdata FINREG claim. */
-      la_cpu_pause();
+      gc2_finreg_claim_wait_no_l();
       continue;
     }
     p = lj_obj_gcwref(o);

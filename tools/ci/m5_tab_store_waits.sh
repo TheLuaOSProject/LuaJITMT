@@ -55,6 +55,29 @@ if grep -n 'la_cpu_pause[[:space:]]*(' "$SRC" "$ROOT/src/lj_tab.h" "$ROOT/src/lj
   exit 1
 fi
 
+if ! awk '
+  function track_braces(line) {
+    opens = gsub(/\{/, "{", line)
+    line = $0
+    closes = gsub(/\}/, "}", line)
+    if (opens)
+      body = 1
+    depth += opens - closes
+    if (body && depth == 0)
+      in_fn = 0
+  }
+  /^static void tab_finreg_claim_wait_no_l\(void\)/ {
+    in_fn = 1; body = 0; depth = 0
+  }
+  in_fn && /lj_tab_wait_no_l[[:space:]]*\(/ { found = 1 }
+  in_fn && /la_cpu_pause[[:space:]]*\(/ { bad = 1 }
+  in_fn { track_braces($0) }
+  END { exit found && !bad ? 0 : 1 }
+' "$SRC"; then
+  printf '%s\n' 'tab_finreg_claim_wait_no_l() must delegate to lj_tab_wait_no_l(), not spin' >&2
+  exit 1
+fi
+
 check_store_fn() {
   fn=$1
   if ! awk -v fn="$fn" '
@@ -100,7 +123,7 @@ check_tab_wait_fn() {
     !in_fn && $0 ~ fn "[[:space:]]*\\(" {
       in_fn = 1; body = 0; depth = 0
     }
-    in_fn && /lj_tab_wait_no_l[[:space:]]*\(/ { saw_helper = 1 }
+    in_fn && /(lj_tab_wait_no_l|tab_finreg_claim_wait_no_l)[[:space:]]*\(/ { saw_helper = 1 }
     in_fn && /la_cpu_pause[[:space:]]*\(/ { print FILENAME ":" FNR ":" $0; bad = 1 }
     in_fn { track_braces($0) }
     END {
