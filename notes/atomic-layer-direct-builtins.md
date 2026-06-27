@@ -9,6 +9,8 @@ that were outside `src/lj_atomic.h`.
   `lj_atomic.h`, preserving the existing acquire/release publication.
 - The opt-in GDBJIT descriptor spinlock now uses `la_cas32()` plus
   `la_store32_rel()` instead of legacy `__sync_*` builtins.
+- The same opt-in descriptor lock now sleeps in no-`lua_State` native slices
+  under contention rather than burning CPU in a pause loop.
 - Focused guards now reject regressions in GC total accounting, global hook
   function publication, and the GDBJIT synchronization surface.
 

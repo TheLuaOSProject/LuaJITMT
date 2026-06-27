@@ -171,7 +171,7 @@ lj_gc2.o: lj_gc2.c lj_obj.h lua.h luaconf.h lj_def.h lj_arch.h \
 lj_gdbjit.o: lj_gdbjit.c lj_obj.h lua.h luaconf.h lj_def.h lj_arch.h \
  lj_atomic.h lj_gc.h lj_err.h lj_errmsg.h lj_debug.h lj_frame.h lj_bc.h \
  lj_buf.h lj_str.h lj_tg.h lj_arena.h lj_ctype.h lj_strfmt.h lj_jit.h \
- lj_ir.h lj_dispatch.h
+ lj_ir.h lj_dispatch.h lj_thr.h
 lj_ir.o: lj_ir.c lj_obj.h lua.h luaconf.h lj_def.h lj_arch.h lj_atomic.h \
  lj_gc.h lj_buf.h lj_str.h lj_tg.h lj_bc.h lj_arena.h lj_ctype.h lj_tab.h \
  lj_func.h lj_ir.h lj_jit.h lj_ircall.h lj_iropt.h lj_trace.h \

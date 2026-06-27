@@ -15,6 +15,10 @@
   access and compile a clean `LUAJIT_USE_GDBJIT` build.
 - Follow-up: the script now cleans `src` after the opt-in build as well, so
   incremental default-build launchers do not inherit GDBJIT-compiled objects.
+- Follow-up descriptor-lock wait slice: the opt-in GDBJIT descriptor lock still
+  uses `la_cas32()`/`la_store32_rel()` for ownership, but a contended acquire
+  now waits through `lj_thr_sleep_ns(NULL, 1000000)` instead of spinning on
+  `la_cpu_pause()`. The CI wrapper rejects reintroducing the pause loop.
 
 ## Validation
 

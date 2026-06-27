@@ -18,6 +18,7 @@
 #include "lj_strfmt.h"
 #include "lj_jit.h"
 #include "lj_dispatch.h"
+#include "lj_thr.h"
 
 /* This is not compiled in by default.
 ** Enable with -DLUAJIT_USE_GDBJIT in the Makefile and recompile everything.
@@ -776,6 +777,11 @@ static void gdbjit_buildobj(GDBJITctx *ctx)
 
 static uint32_t gdbjit_lock;
 
+static void gdbjit_lock_wait_no_l(void)
+{
+  (void)lj_thr_sleep_ns(NULL, 1000000);
+}
+
 static void gdbjit_lock_acquire()
 {
   uint32_t expect;
@@ -783,8 +789,7 @@ static void gdbjit_lock_acquire()
     expect = 0;
     if (la_cas32(&gdbjit_lock, &expect, 1, LA_ACQ_REL, LA_ACQ))
       return;  /* 08 section 8.3: opt-in GDBJIT descriptor lock. */
-    /* Just spin; futexes or pthreads aren't worth the portability cost. */
-    la_cpu_pause();
+    gdbjit_lock_wait_no_l();
   } while (1);
 }
 
