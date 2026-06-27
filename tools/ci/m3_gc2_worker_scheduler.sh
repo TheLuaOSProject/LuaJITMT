@@ -430,6 +430,26 @@ if hits=$(grep -nE -- 'lj_gc2_finalizer_drain[[:space:]]*[(]' \
   printf '%s\n' 'legacy close-time finalizer drain loops must use lj_gc2_finalizer_dispatch_all' >&2
   exit 1
 fi
+if ! grep -qE 'LJ_FUNC int lj_gc2_finalizer_phase_pending[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.h"; then
+  printf '%s\n' 'lj_gc2_finalizer_phase_pending declaration is required for sweep-to-finalize ownership' >&2
+  exit 1
+fi
+if ! grep -qE '^int lj_gc2_finalizer_phase_pending[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.c"; then
+  printf '%s\n' 'lj_gc2_finalizer_phase_pending definition is required for sweep-to-finalize ownership' >&2
+  exit 1
+fi
+if ! grep -qF 'lj_gc2_finalizer_phase_pending(g)' "$ROOT/src/lj_gc.c"; then
+  printf '%s\n' 'legacy sweep-to-finalize transition must use lj_gc2_finalizer_phase_pending' >&2
+  exit 1
+fi
+if hits=$(grep -nE -- 'lj_gc2_finalizer_queue_pending[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'legacy GC must not open-code low-level finalizer queue checks' >&2
+  exit 1
+fi
 if ! grep -qE 'LJ_FUNC int lj_gc2_finalizer_close_pending[[:space:]]*[(]' \
     "$ROOT/src/lj_gc2.h"; then
   printf '%s\n' 'lj_gc2_finalizer_close_pending declaration is required for lua_close fixed-point ownership' >&2

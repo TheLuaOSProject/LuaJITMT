@@ -271,6 +271,16 @@ for pattern in 'lj_gc2_finalizer_dispatch_all(L, gc_call_finalizer)' \
     exit 1
   fi
 done
+if ! grep -qF 'lj_gc2_finalizer_phase_pending(g)' "$ROOT/src/lj_gc.c"; then
+  printf '%s\n' 'legacy GC sweep-to-finalize transition must use lj_gc2_finalizer_phase_pending' >&2
+  exit 1
+fi
+if hits=$(grep -nE -- 'lj_gc2_finalizer_queue_pending[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'legacy GC must not open-code finalizer queue pending checks' >&2
+  exit 1
+fi
 if ! grep -qF 'lj_gc2_finalizer_close_pending(g)' "$ROOT/src/lj_state.c"; then
   printf '%s\n' 'lua_close finalizer fixed-point loop must use lj_gc2_finalizer_close_pending' >&2
   exit 1

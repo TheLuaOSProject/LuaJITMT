@@ -1764,7 +1764,7 @@ static size_t gc_onestep(lua_State *L)
       lj_gc2_sweep_legacy_ready(g);
       if (gc_arena_sweep_pending(g))
 	return GCSWEEPMAX*GCSWEEPCOST;
-      if (lj_gc2_finalizer_queue_pending(g)) {  /* Need finalizations? */
+      if (lj_gc2_finalizer_phase_pending(g)) {  /* Need finalizations? */
 	g->gc.state = GCSfinalize;
       } else {  /* Otherwise skip this phase to help the JIT. */
 	if (gc2_legacy_sweep_close(g)) {
