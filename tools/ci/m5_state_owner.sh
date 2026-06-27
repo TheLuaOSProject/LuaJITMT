@@ -73,4 +73,17 @@ if hits=$(grep -RInE -- '->[[:space:]]*(thr_owner|scan_epoch|scan_dirty_epoch)([
   exit 1
 fi
 
+if ! grep -qE '^[[:space:]]*static void state_gcscan_wait_no_l[[:space:]]*[(]void[)]' \
+  "$ROOT/src/lj_thr.c"; then
+  printf '%s\n' 'GCSCAN owner waits must use state_gcscan_wait_no_l()' >&2
+  exit 1
+fi
+
+if hits=$(grep -nE -- 'la_cpu_pause[[:space:]]*[(]' \
+  "$ROOT/src/lj_thr.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'lua_State owner waits must yield via state_gcscan_wait_no_l(), not spin on la_cpu_pause()' >&2
+  exit 1
+fi
+
 exec "$ROOT/tools/ci/lua_test.sh" m5_state_owner

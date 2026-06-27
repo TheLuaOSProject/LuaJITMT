@@ -76,6 +76,11 @@ TGState *lj_thr_get_tg_fallback(global_State *g)
   return tg && tg->gl == g ? tg : g->main_tg;
 }
 
+static void state_gcscan_wait_no_l(void)
+{
+  (void)lj_thr_sleep_ns(NULL, 1000000);
+}
+
 int lj_state_claim(lua_State *L, uint32_t tid)
 {
   uint32_t owner;
@@ -92,7 +97,7 @@ int lj_state_claim(lua_State *L, uint32_t tid)
       continue;
     }
     if (owner == LJ_THREAD_GCSCAN) {
-      la_cpu_pause();
+      state_gcscan_wait_no_l();
       continue;
     }
     return 0;
@@ -131,7 +136,7 @@ int lj_state_tryclaim(lua_State *L, uint32_t tid, LJStateClaim *claim)
       continue;
     }
     if (owner == LJ_THREAD_GCSCAN) {
-      la_cpu_pause();
+      state_gcscan_wait_no_l();
       continue;
     }
     return 0;
@@ -163,7 +168,7 @@ int lj_state_gcscan_claim(lua_State *L, LJStateClaim *claim)
       continue;
     }
     if (owner == LJ_THREAD_GCSCAN) {
-      la_cpu_pause();  /* 05 section 5.7.2: scan claim is short-lived. */
+      state_gcscan_wait_no_l();  /* 05 section 5.7.2: scan claim handoff. */
       continue;
     }
     return 0;

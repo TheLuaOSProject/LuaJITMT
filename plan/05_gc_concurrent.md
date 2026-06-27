@@ -334,8 +334,9 @@ Suspended coroutines: workers traverse them as ordinary heap objects, but
 must hold the claim: `CAS th->thr_owner 0→GCSCAN`; on failure (running),
 set `th->gcflags|=GCF_NEEDSCAN` — the owner's next HS_SCAN_ROOTS scans any
 claimed-by-it coroutine with that bit (its resume chain covers it). Resume
-seeing GCSCAN spins with la_cpu_pause (bounded: scanning is wait-free and
-short; the one sanctioned micro-wait, 03 §3.7). `stack_dirty_epoch` lets a
+seeing GCSCAN waits through a no-`lua_State` native sleep slice so a preempted
+scanner cannot force a peer into a CPU spin; the scan remains bounded and
+short in the non-preempted case (03 §3.7). `stack_dirty_epoch` lets a
 worker skip rescanning a coroutine untouched since last round (set on
 resume/yield/state ops).
 

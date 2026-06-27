@@ -155,9 +155,10 @@ hooks are a v2 item with `hookmask_th` reserved.
 
 `L->thr_owner`: 0=free, tid=running on that OS thread, GCSCAN=claimed by a
 marker. `coroutine.resume` does CAS 0→tid (error "coroutine already running
-on another thread" on tid≠self mismatch; "claimed by GC" loops once via
-la_cpu_pause — markers hold claims only for a bounded scan, the single
-runtime spin-wait, bounded by stack size; justified in 05 §5.7.2).
+on another thread" on tid≠self mismatch; "claimed by GC" waits through a
+no-`lua_State` native sleep slice. The scanner claim remains bounded by stack
+size, but the safety-first implementation avoids burning CPU if the scanner is
+preempted while holding `LJ_THREAD_GCSCAN`; justified in 05 §5.7.2).
 `lua_newthread`/coroutine.create unchanged otherwise.
 
 ## 3.8 Order of work
