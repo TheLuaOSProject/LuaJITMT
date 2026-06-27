@@ -7,7 +7,7 @@ Date: 2026-06-20
 Ordered FINREG discovery now owns the normal P_WEAK cdata finalizer path, and
 the remaining live fallback telemetry is `finreg_cdata_order_fallbacks` for
 ordered preclaim allocation/test-injection failures plus
-`finreg_cdata_sweep_queued` for defensive late sweep/free discovery.
+`finreg_cdata_sweep_queued` as a fatal sweep/free invariant tripwire.
 
 `finreg_cdata_pweak_root_fallbacks` no longer had a production increment. It
 was only initialized, exported through `collectgarbage("stats")`, printed by
@@ -20,8 +20,8 @@ the benchmark harness, and asserted unchanged in traversal coverage.
 - Removed benchmark reporting and stats-test requirements for the stale key.
 - Removed traversal snapshots/assertions that only proved the stale counter
   stayed flat; retained coverage for ordered queueing, ordered fallback,
-  preclaim overflow, sweep queueing, MPSC finalizer dispatch, and close-time
-  ordered discovery.
+  preclaim overflow, sweep/free tripwire stability, MPSC finalizer dispatch,
+  and close-time ordered discovery.
 
 ## Verification
 
