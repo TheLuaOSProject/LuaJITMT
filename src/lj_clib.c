@@ -22,6 +22,7 @@
 #include "lj_clib.h"
 #include "lj_strfmt.h"
 #include "lj_tg.h"
+#include "lj_thr.h"
 
 /* -- OS-specific functions ----------------------------------------------- */
 
@@ -456,6 +457,11 @@ cTValue *lj_clib_cache_get(CLibrary *cl, GCstr *name)
   return e ? (cTValue *)&e->val : NULL;
 }
 
+static void clib_cache_publish_wait_no_l(void)
+{
+  (void)lj_thr_sleep_ns(NULL, 1000000);
+}
+
 CLibCacheEntry *lj_clib_cache_retired_head_acq(global_State *g)
 {
   return (CLibCacheEntry *)gc2_clib_cache_retired_acq(g);
@@ -564,7 +570,7 @@ static TValue *clib_cache_publish(lua_State *L, CLibrary *cl, GCstr *name,
       lj_gc_pubroot(L, &e->val);
       return &e->val;
     }
-    la_cpu_pause();
+    clib_cache_publish_wait_no_l();
   }
 }
 

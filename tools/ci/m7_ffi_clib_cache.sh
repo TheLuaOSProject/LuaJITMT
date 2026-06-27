@@ -44,6 +44,33 @@ if ! grep -q 'lj_clib_cache_freeretired' "$ROOT/src/lj_state.c"; then
   printf '%s\n' 'state close must drain retired CLibrary cache entries' >&2
   exit 1
 fi
+if ! grep -qE '^[[:space:]]*static void clib_cache_publish_wait_no_l[[:space:]]*[(]void[)]' \
+    "$ROOT/src/lj_clib.c"; then
+  printf '%s\n' 'CLibrary cache publish retries must use clib_cache_publish_wait_no_l()' >&2
+  exit 1
+fi
+if ! awk '
+  /^static TValue \*clib_cache_publish[[:space:]]*[(]/ {
+    inside = 1
+  }
+  inside && /clib_cache_publish_wait_no_l[[:space:]]*[(]/ {
+    found = 1
+  }
+  inside && /la_cpu_pause[[:space:]]*[(]/ {
+    bad = FILENAME ":" FNR ":" $0
+  }
+  inside && /^}/ {
+    inside = 0
+  }
+  END {
+    if (bad != "")
+      print bad
+    exit(found && bad == "" ? 0 : 1)
+  }
+' "$ROOT/src/lj_clib.c"; then
+  printf '%s\n' 'clib_cache_publish CAS losers must yield via clib_cache_publish_wait_no_l()' >&2
+  exit 1
+fi
 if hits=$(awk '
   /^LJLIB_CF\(ffi_clib___index\)/ || /^LJLIB_CF\(ffi_clib___newindex\)/ { in_fn = 1 }
   in_fn && /->[[:space:]]*(info|size)([^[:alnum:]_]|$)/ { print FNR ":" $0 }
