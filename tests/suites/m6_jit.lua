@@ -57,7 +57,8 @@ local m6_cases = {
   "m6_jit_flush_hs",
   "m6_jit_tmpbuf_thread_format",
   "m6_jit_perftools_native",
-  "m6_jit_io_native_stopreq"
+  "m6_jit_io_native_stopreq",
+  "m6_jit_buffer_method_shared_nyi"
 }
 
 local function table_store_smoke()
@@ -1269,6 +1270,123 @@ assert(live >= 8, live)
       checks.assert_dump_contains(t, dump, "t-jit-io-native-stopreq OK",
                                   "JIT IO native STOPREQ probe")
       print("M6 JIT IO native-state STOPREQ behavior passed")
+    end
+  })
+
+  add({
+    name = "m6_jit_buffer_method_shared_nyi",
+    description = "JIT string.buffer methods avoid raw shared SBuf field IR",
+    run = function(t)
+      local dump = t:tmp("lj_t-jit-buffer-method-shared-nyi.dump")
+      build_default(t)
+      local recsrc = utils.read_file(t:path("src", "lj_ffrecord.c"))
+      if contains(recsrc, "recff_sbufx_") or
+         contains(recsrc, "IRBUFHDR_WRITE") then
+        error("shared string.buffer recorder raw SBuf helpers returned", 0)
+      end
+      luajit_dump(t, dump, "-jdump=ir", [=[
+local buffer = require("string.buffer")
+local ffi_ok, ffi = pcall(require, "ffi")
+if ffi_ok then ffi.cdef("typedef unsigned char lj_m6_buf_u8;") end
+
+local function heat(label, fn)
+  print(label)
+  jit.flush()
+  jit.opt.start("hotloop=1", "hotexit=1")
+  for i = 1, 80 do fn(i) end
+end
+
+heat("buffer.method.reset", function(i)
+  local b = buffer.new()
+  b:put("abc", i)
+  b:reset()
+  assert(#b == 0)
+end)
+
+heat("buffer.method.skip", function()
+  local b = buffer.new()
+  b:set("abcdef")
+  b:skip(2)
+  assert(tostring(b) == "cdef")
+end)
+
+heat("buffer.method.set", function(i)
+  local b = buffer.new()
+  local s = "x" .. i
+  b:set(s)
+  assert(tostring(b) == s)
+end)
+
+heat("buffer.method.put", function(i)
+  local b = buffer.new()
+  b:put("x", i)
+  assert(tostring(b) == "x" .. i)
+end)
+
+heat("buffer.method.putf", function(i)
+  local b = buffer.new()
+  b:putf("%d:%s", i, "q")
+  assert(tostring(b) == i .. ":q")
+end)
+
+heat("buffer.method.get", function()
+  local b = buffer.new()
+  b:set("abcdef")
+  assert(b:get(3) == "abc")
+  assert(tostring(b) == "def")
+end)
+
+heat("buffer.method.tostring", function(i)
+  local b = buffer.new()
+  b:set("t" .. i)
+  assert(tostring(b) == "t" .. i)
+end)
+
+heat("buffer.method.len", function()
+  local b = buffer.new()
+  b:set("abcd")
+  assert(#b == 4)
+end)
+
+heat("buffer.method.encode.decode", function(i)
+  local b = buffer.new()
+  b:encode({answer = i})
+  assert(b:decode().answer == i)
+end)
+
+if ffi_ok then
+  heat("buffer.method.putcdata", function()
+    local b = buffer.new()
+    local p = ffi.new("lj_m6_buf_u8[3]", 65, 66, 67)
+    b:putcdata(p, 3)
+    assert(tostring(b) == "ABC")
+  end)
+
+  heat("buffer.method.reserve.commit.ref", function()
+    local b = buffer.new()
+    local p, n = b:reserve(4)
+    assert(n >= 4)
+    p[0], p[1], p[2], p[3] = 76, 74, 33, 10
+    b:commit(4)
+    local r, len = b:ref()
+    assert(len == 4)
+    assert(string.char(r[0], r[1], r[2], r[3]) == "LJ!\n")
+  end)
+end
+
+print("t-jit-buffer-method-shared-nyi OK")
+]=])
+      local data = t:read(dump)
+      if contains(data, "BUFHDR") or contains(data, "SBUF") then
+        error("shared string.buffer methods emitted raw buffer IR:\n" .. data, 0)
+      end
+      checks.assert_dump_contains(t, dump, "buffer.method.put",
+                                  "JIT buffer method NYI probe")
+      checks.assert_dump_contains(t, dump, "buffer.method.encode.decode",
+                                  "JIT buffer method NYI probe")
+      checks.assert_dump_contains(t, dump, "t-jit-buffer-method-shared-nyi OK",
+                                  "JIT buffer method NYI probe")
+      print("M6 JIT string.buffer method NYI guard passed")
     end
   })
 
