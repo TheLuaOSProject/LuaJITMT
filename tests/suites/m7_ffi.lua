@@ -103,6 +103,10 @@ fi
     description = "FFI blocking recorder blacklist behavior",
     run = function(t)
       clean_build(t)
+      run_c_fixture_specs(t, {
+        { output = "lj_t-ffi-cbblack-race",
+          cfile = "t-ffi-cbblack-race.c" }
+      })
       run_luajit_script(t, "t-ffi-blocking.lua")
       print("M7 ffi.blocking behavior passed")
     end

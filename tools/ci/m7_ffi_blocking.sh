@@ -13,6 +13,42 @@ if hits=$(awk '
   exit 1
 fi
 if ! awk '
+  /^static void ctype_cbblack_wait_no_l[[:space:]]*[(]void[)]/ {
+    in_wait = 1
+  }
+  in_wait && /lj_thr_sleep_ns[[:space:]]*[(][[:space:]]*NULL[[:space:]]*,[[:space:]]*1000000[[:space:]]*[)]/ {
+    wait_sleeps = 1
+  }
+  in_wait && /^}/ { in_wait = 0 }
+  /^void lj_ctype_cb_blacklist[[:space:]]*[(]/ {
+    in_fn = 1
+  }
+  in_fn && /ctype_cbblack_slot_cas[[:space:]]*[(]/ {
+    saw_cas = 1
+  }
+  in_fn && saw_cas && /expect[[:space:]]*==[[:space:]]*key/ {
+    reconciles_duplicate = 1
+  }
+  in_fn && saw_cas && /ctype_cbblack_wait_no_l[[:space:]]*[(]/ {
+    waits_after_cas = 1
+  }
+  in_fn && /la_cpu_pause[[:space:]]*[(]/ {
+    bad = FNR ":" $0
+  }
+  in_fn && /^}/ {
+    in_fn = 0
+  }
+  END {
+    if (bad != "")
+      print bad
+    exit(wait_sleeps && saw_cas && reconciles_duplicate &&
+         waits_after_cas && bad == "" ? 0 : 1)
+  }
+' "$ROOT/src/lj_ctype.c"; then
+  printf '%s\n' 'callback/blocking blacklist CAS losers must reconcile duplicate winners and yield via ctype_cbblack_wait_no_l()' >&2
+  exit 1
+fi
+if ! awk '
   /^#define LJ_FFI_RECORD_CALLS 0$/ { defoff = 1 }
   /^#if LJ_FFI_RECORD_CALLS$/ && defoff && !seen_harderr { in_harderr = 1 }
   in_harderr && /#error .*IR_CALLXS.*native-state/ { harderr = 1 }

@@ -525,6 +525,11 @@ static LJ_AINLINE MSize ctype_cbblack_hash(uint64_t key, MSize mask)
   return (MSize)(hashrot((uint32_t)key, (uint32_t)(key >> 32)) & mask);
 }
 
+static void ctype_cbblack_wait_no_l(void)
+{
+  (void)lj_thr_sleep_ns(NULL, 1000000);
+}
+
 void lj_ctype_cb_blacklist(CTState *cts, void *func)
 {
   uint64_t key = ctype_cbblack_key(func);
@@ -545,6 +550,9 @@ void lj_ctype_cb_blacklist(CTState *cts, void *func)
       uint64_t expect = 0;
       if (ctype_cbblack_slot_cas(tab, slot, &expect, key))
 	return;  /* 11.5 callback blacklist CAS publish. */
+      if (expect == key)
+	return;  /* Duplicate publisher won this slot. */
+      ctype_cbblack_wait_no_l();  /* CAS loser: yield before probing on. */
     }
   }
   ctype_cbblack_all_rel(cts, 1);  /* Full set: blacklist all. */
