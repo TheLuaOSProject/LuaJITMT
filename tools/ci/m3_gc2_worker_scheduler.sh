@@ -569,8 +569,7 @@ if hits=$(grep -nE -- '->[[:space:]]*gc2[.](finalizer_(queued|dequeued|mpsc_drai
 fi
 for helper in lj_gc2_finalizer_pause_threshold \
   lj_gc2_finalizer_restore_threshold \
-  lj_gc2_finalizer_mt_release_exclusive \
-  lj_gc2_finalizer_mt_reclaim_exclusive \
+  lj_gc2_finalizer_pcall \
   lj_gc2_finalizer_fullgc_deferred \
   lj_gc2_finalizer_spawn_release; do
   if ! grep -qE "^[[:space:]]*LJ_FUNC .*[[:space:]]${helper}[[:space:]]*[(]" \
@@ -584,6 +583,31 @@ for helper in lj_gc2_finalizer_pause_threshold \
     exit 1
   fi
 done
+for helper in gc2_finalizer_mt_release_exclusive \
+  gc2_finalizer_mt_reclaim_exclusive; do
+  if ! grep -qE "^static int ${helper}[[:space:]]*[(]" \
+      "$ROOT/src/lj_gc2.c"; then
+    printf '%s\n' "${helper} must stay static inside lj_gc2.c" >&2
+    exit 1
+  fi
+done
+if hits=$(grep -nE -- 'LJ_FUNC .*[[:space:]]lj_gc2_finalizer_mt_(release|reclaim)_exclusive[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.h" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw finalizer MT exclusive helpers must stay private to lj_gc2.c' >&2
+  exit 1
+fi
+if ! grep -qF 'lj_gc2_finalizer_pcall(g, cbL, top, &continue_gc)' \
+    "$ROOT/src/lj_gc.c"; then
+  printf '%s\n' 'gc_call_finalizer must run protected finalizer calls through lj_gc2_finalizer_pcall' >&2
+  exit 1
+fi
+if hits=$(grep -nE -- 'lj_gc2_finalizer_mt_(release|reclaim)_exclusive[[:space:]]*[(]|lj_vm_pcall[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'legacy finalizer callback path must not own MT-exclusive pcall policy' >&2
+  exit 1
+fi
 if hits=$(grep -nE -- 'LJ_FUNC .*[[:space:]]lj_gc2_finalizer_spawn_deferred[[:space:]]*[(]' \
     "$ROOT/src/lj_gc2.h" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2

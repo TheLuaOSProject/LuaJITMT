@@ -40,6 +40,7 @@ typedef int (*GC2FinalizerDispatchFunc)(lua_State *L, global_State *g,
 #include "lj_trace.h"
 #include "lj_mcode.h"
 #include "lj_dispatch.h"
+#include "lj_vm.h"
 
 #define GC2_GREY_INIT	256u
 #define GC2_GREY_LIMIT	((MSize)(LJ_MAX_MEM32 / sizeof(GCRef)))
@@ -1816,6 +1817,9 @@ static int gc2_finalizer_sweep_pending(global_State *g)
   return gc2_finalizer_pending_for_sweep(g, 1);
 }
 
+static int gc2_finalizer_mt_release_exclusive(global_State *g);
+static int gc2_finalizer_mt_reclaim_exclusive(global_State *g);
+
 GCSize lj_gc2_finalizer_pause_threshold(global_State *g)
 {
   GCSize oldt;
@@ -1841,7 +1845,7 @@ void lj_gc2_finalizer_restore_threshold(global_State *g, GCSize oldt)
   }
 }
 
-int lj_gc2_finalizer_mt_release_exclusive(global_State *g)
+static int gc2_finalizer_mt_release_exclusive(global_State *g)
 {
   if (!g || mt_gc_exclusive_acq(g) == 0)
     return 0;
@@ -1852,7 +1856,7 @@ int lj_gc2_finalizer_mt_release_exclusive(global_State *g)
   return 1;  /* 09 section 9.6: finalizer may spawn while GC is paused. */
 }
 
-int lj_gc2_finalizer_mt_reclaim_exclusive(global_State *g)
+static int gc2_finalizer_mt_reclaim_exclusive(global_State *g)
 {
   if (!g)
     return 0;
@@ -1872,6 +1876,18 @@ int lj_gc2_finalizer_mt_reclaim_exclusive(global_State *g)
     if (mt_gc_exclusive_acq(g) != 0)
       return 0;
   }
+}
+
+int lj_gc2_finalizer_pcall(global_State *g, lua_State *L,
+			   TValue *top, int *continue_gc)
+{
+  int had_mt_exclusive = gc2_finalizer_mt_release_exclusive(g);
+  int errcode = lj_vm_pcall(L, top, 1+0, -1);  /* Stack: |mo|o| -> | */
+  int keep_gc = had_mt_exclusive ?
+		gc2_finalizer_mt_reclaim_exclusive(g) : 1;
+  if (continue_gc)
+    *continue_gc = keep_gc;
+  return errcode;
 }
 
 static int gc2_finalizer_spawn_deferred(global_State *g)

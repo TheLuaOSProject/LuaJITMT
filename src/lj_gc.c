@@ -41,7 +41,6 @@
 #include "lj_trace.h"
 #include "lj_dispatch.h"
 #include "lj_arena.h"
-#include "lj_vm.h"
 #include "lj_vmevent.h"
 
 #define GCSTEPSIZE	1024u
@@ -1534,7 +1533,6 @@ static int gc_call_finalizer(global_State *g, lua_State *L,
   lua_State *oldL;
   uint8_t oldh;
   GCSize oldt;
-  int had_mt_exclusive;
   int continue_gc = 1;
   int errcode;
   ptrdiff_t oldtop;
@@ -1556,10 +1554,7 @@ static int gc_call_finalizer(global_State *g, lua_State *L,
   if (LJ_FR2) setnilV(top++);
   setgcV(cbL, top, o, ~o->gch.gct);
   cbL->top = top+1;
-  had_mt_exclusive = lj_gc2_finalizer_mt_release_exclusive(g);
-  errcode = lj_vm_pcall(cbL, top, 1+0, -1);  /* Stack: |mo|o| -> | */
-  if (had_mt_exclusive)
-    continue_gc = lj_gc2_finalizer_mt_reclaim_exclusive(g);
+  errcode = lj_gc2_finalizer_pcall(g, cbL, top, &continue_gc);
   if (oldL)
     lj_tg_setcur_L(g, oldL);
   else

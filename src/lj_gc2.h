@@ -176,8 +176,8 @@ LJ_FUNC int lj_gc2_test_finalizer_step_dispatch(lua_State *L,
 #endif
 LJ_FUNC GCSize lj_gc2_finalizer_pause_threshold(global_State *g);
 LJ_FUNC void lj_gc2_finalizer_restore_threshold(global_State *g, GCSize oldt);
-LJ_FUNC int lj_gc2_finalizer_mt_release_exclusive(global_State *g);
-LJ_FUNC int lj_gc2_finalizer_mt_reclaim_exclusive(global_State *g);
+LJ_FUNC int lj_gc2_finalizer_pcall(global_State *g, lua_State *L,
+				   TValue *top, int *continue_gc);
 LJ_FUNC void lj_gc2_finalizer_spawn_release(global_State *g);
 LJ_FUNCA void lj_gc2_barrier_tv_g(global_State *g, cTValue *tv);
 LJ_FUNCA void lj_gc2_barrier_tvn_pair_g(global_State *g, GCobj *parent,
