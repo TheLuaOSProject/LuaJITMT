@@ -409,10 +409,10 @@ static TabNodeRetire *tab_retire_reserve(lua_State *L, Node *node,
 					 MSize hmask)
 {
   TabNodeRetire *ret = lj_mem_newt(L, sizeof(TabNodeRetire), TabNodeRetire);
-  ret->node = node;
-  ret->hmask = hmask;
-  la_store64_rel(&ret->retire_epoch, 0);
-  la_store32_rel(&ret->armed, 0);
+  lj_tab_node_retired_node_rel(ret, node);
+  lj_tab_node_retired_hmask_rel(ret, hmask);
+  lj_tab_node_retired_epoch_rel(ret, 0);
+  lj_tab_node_retired_armed_rel(ret, 0);
   lj_tab_node_retired_next_rel(ret, NULL);
   tab_retired_push(G(L), ret);
   return ret;
@@ -420,8 +420,8 @@ static TabNodeRetire *tab_retire_reserve(lua_State *L, Node *node,
 
 static void tab_retire_arm(global_State *g, TabNodeRetire *ret)
 {
-  la_store64_rel(&ret->retire_epoch, gc2_hs_epoch_acq(g));
-  la_store32_rel(&ret->armed, 1);
+  lj_tab_node_retired_epoch_rel(ret, gc2_hs_epoch_acq(g));
+  lj_tab_node_retired_armed_rel(ret, 1);
 }
 
 static void tab_array_retired_push(global_State *g, TabArrayRetire *ret)
@@ -437,12 +437,12 @@ static TabArrayRetire *tab_array_retire_reserve(lua_State *L, TValue *array,
 						MSize acap)
 {
   TabArrayRetire *ret = lj_mem_newt(L, sizeof(TabArrayRetire), TabArrayRetire);
-  ret->array = array;
-  ret->acap = acap;
+  lj_tab_array_retired_array_rel(ret, array);
+  lj_tab_array_retired_acap_rel(ret, acap);
   lj_assertL(!array || acap == lj_tab_array_hdr_acap_acq(array),
 	     "mismatched retired table array capacity");
-  la_store64_rel(&ret->retire_epoch, 0);
-  la_store32_rel(&ret->armed, 0);
+  lj_tab_array_retired_epoch_rel(ret, 0);
+  lj_tab_array_retired_armed_rel(ret, 0);
   lj_tab_array_retired_next_rel(ret, NULL);
   tab_array_retired_push(G(L), ret);
   return ret;
@@ -450,8 +450,8 @@ static TabArrayRetire *tab_array_retire_reserve(lua_State *L, TValue *array,
 
 static void tab_array_retire_arm(global_State *g, TabArrayRetire *ret)
 {
-  la_store64_rel(&ret->retire_epoch, gc2_hs_epoch_acq(g));
-  la_store32_rel(&ret->armed, 1);
+  lj_tab_array_retired_epoch_rel(ret, gc2_hs_epoch_acq(g));
+  lj_tab_array_retired_armed_rel(ret, 1);
 }
 
 /*
@@ -832,10 +832,11 @@ uint32_t lj_tab_reclaim_retired(global_State *g, uint64_t completed_epoch)
   while (ret) {
     TabNodeRetire *next = lj_tab_node_retired_next_acq(ret);
     lj_tab_node_retired_next_rel(ret, NULL);
-    if (!la_load32_acq(&ret->armed)) {
+    if (!lj_tab_node_retired_armed_acq(ret)) {
       tab_retired_push(g, ret);
-    } else if (la_load64_acq(&ret->retire_epoch) < completed_epoch) {
-      tab_node_free(g, ret->node, ret->hmask);
+    } else if (lj_tab_node_retired_epoch_acq(ret) < completed_epoch) {
+      tab_node_free(g, lj_tab_node_retired_node_acq(ret),
+		    lj_tab_node_retired_hmask_acq(ret));
       lj_mem_freet(g, ret);
       reclaimed++;
     } else {
@@ -848,10 +849,11 @@ uint32_t lj_tab_reclaim_retired(global_State *g, uint64_t completed_epoch)
   while (aret) {
     TabArrayRetire *next = lj_tab_array_retired_next_acq(aret);
     lj_tab_array_retired_next_rel(aret, NULL);
-    if (!la_load32_acq(&aret->armed)) {
+    if (!lj_tab_array_retired_armed_acq(aret)) {
       tab_array_retired_push(g, aret);
-    } else if (la_load64_acq(&aret->retire_epoch) < completed_epoch) {
-      tab_array_free(g, aret->array, aret->acap);
+    } else if (lj_tab_array_retired_epoch_acq(aret) < completed_epoch) {
+      tab_array_free(g, lj_tab_array_retired_array_acq(aret),
+		     lj_tab_array_retired_acap_acq(aret));
       lj_mem_freet(g, aret);
       reclaimed++;
     } else {
@@ -872,8 +874,9 @@ void lj_tab_freeretired(global_State *g)
 					   NULL);
   while (ret) {
     TabNodeRetire *next = lj_tab_node_retired_next_acq(ret);
-    if (la_load32_acq(&ret->armed))
-      tab_node_free(g, ret->node, ret->hmask);
+    if (lj_tab_node_retired_armed_acq(ret))
+      tab_node_free(g, lj_tab_node_retired_node_acq(ret),
+		    lj_tab_node_retired_hmask_acq(ret));
     lj_mem_freet(g, ret);
     ret = next;
   }
@@ -881,8 +884,9 @@ void lj_tab_freeretired(global_State *g)
     (void **)&g->tab.retired_arrays, NULL);
   while (aret) {
     TabArrayRetire *next = lj_tab_array_retired_next_acq(aret);
-    if (la_load32_acq(&aret->armed))
-      tab_array_free(g, aret->array, aret->acap);
+    if (lj_tab_array_retired_armed_acq(aret))
+      tab_array_free(g, lj_tab_array_retired_array_acq(aret),
+		     lj_tab_array_retired_acap_acq(aret));
     lj_mem_freet(g, aret);
     aret = next;
   }

@@ -969,8 +969,9 @@ static void gc2_mark_tab_retired_mem(global_State *g)
        ret != NULL;
        ret = lj_tab_node_retired_next_acq(ret)) {
     lj_gc2_markmem(g, ret);
-    if (la_load32_acq(&ret->armed))
-      lj_gc2_markmem(g, lj_tab_node_hdrw(ret->node));
+    if (lj_tab_node_retired_armed_acq(ret))
+      lj_gc2_markmem(g,
+		     lj_tab_node_hdrw(lj_tab_node_retired_node_acq(ret)));
   }
 }
 

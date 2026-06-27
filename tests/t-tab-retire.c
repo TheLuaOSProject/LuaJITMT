@@ -19,7 +19,7 @@ static TabNodeRetire *find_retired(global_State *g, Node *node)
 	 (void *const *)&g->tab.retired_nodes);
        ret != NULL;
        ret = lj_tab_node_retired_next_acq(ret))
-    if (ret->node == node)
+    if (lj_tab_node_retired_node_acq(ret) == node)
       return ret;
   return NULL;
 }
@@ -96,9 +96,9 @@ int main(void)
   assert(lj_tab_node_hdr_flags_acq(oldnode) == TABNODE_FLAG_RETIRING);
   ret = find_retired(g, oldnode);
   assert(ret != NULL);
-  assert(ret->hmask == oldhmask);
-  assert(ret->armed == 1);
-  retire_epoch = ret->retire_epoch;
+  assert(lj_tab_node_retired_hmask_acq(ret) == oldhmask);
+  assert(lj_tab_node_retired_armed_acq(ret) == 1);
+  retire_epoch = lj_tab_node_retired_epoch_acq(ret);
   assert(lj_tab_reclaim_retired(g, retire_epoch) == 0);
   assert(find_retired(g, oldnode) != NULL);
   assert(lj_tab_reclaim_retired(g, retire_epoch + 1u) == 1);
