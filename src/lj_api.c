@@ -1045,13 +1045,14 @@ LUA_API void lua_settable(lua_State *L, int idx)
     o = lj_meta_tset_owner(L, t, L->top-2, &owner);
     if (o) {
       TValue *key = L->top-2, *val = L->top-1;
-      if (lj_tab_trystoretv_cas(L, o, val) == LJ_TAB_STORE_CAS_OK) {
+      if (lj_tab_trystoretv_cas_keyed(L, owner, o, key, val) ==
+	  LJ_TAB_STORE_CAS_OK) {
 	lj_gc2_barrier_weak_write(L, owner, key, val);
 	lj_gc2_barrier_tv_pair(L, obj2gco(owner), o);
 	L->top = key;
 	return;
       }
-      lj_tab_store_wait_no_l();  /* C API settable saw FORWARD. */
+      lj_tab_store_wait_no_l();  /* C API settable saw stale/FORWARD slot. */
     } else {
       TValue *base = L->top;
       copyTV(L, base+2, base-3-2*LJ_FR2);
@@ -1075,13 +1076,14 @@ LUA_API void lua_setfield(lua_State *L, int idx, const char *k)
     o = lj_meta_tset_owner(L, t, &key, &owner);
     if (o) {
       TValue *val = L->top-1;
-      if (lj_tab_trystoretv_cas(L, o, val) == LJ_TAB_STORE_CAS_OK) {
+      if (lj_tab_trystoretv_cas_keyed(L, owner, o, &key, val) ==
+	  LJ_TAB_STORE_CAS_OK) {
 	lj_gc2_barrier_weak_write(L, owner, &key, val);
 	lj_gc2_barrier_tv_pair(L, obj2gco(owner), o);
 	L->top = val;
 	return;
       }
-      lj_tab_store_wait_no_l();  /* C API setfield saw FORWARD. */
+      lj_tab_store_wait_no_l();  /* C API setfield saw stale/FORWARD slot. */
     } else {
       TValue *base = L->top;
       copyTV(L, base+2, base-3-2*LJ_FR2);
@@ -1101,9 +1103,10 @@ LUA_API void lua_rawset(lua_State *L, int idx)
   key = L->top-2;
   for (;;) {
     dst = lj_tab_set(L, t, key);
-    if (lj_tab_trystoretv_cas(L, dst, key+1) == LJ_TAB_STORE_CAS_OK)
+    if (lj_tab_trystoretv_cas_keyed(L, t, dst, key, key+1) ==
+	LJ_TAB_STORE_CAS_OK)
       break;
-    lj_tab_store_wait_no_l();  /* C API rawset saw FORWARD. */
+    lj_tab_store_wait_no_l();  /* C API rawset saw stale/FORWARD slot. */
   }
   lj_gc2_barrier_weak_write(L, t, key, key+1);
   lj_gc_pubtab(L, t);
@@ -1117,13 +1120,14 @@ LUA_API void lua_rawseti(lua_State *L, int idx, int n)
   TValue key;
   lj_checkapi_slot(1);
   src = L->top-1;
+  setintV(&key, n);
   for (;;) {
     dst = lj_tab_setint(L, t, n);
-    if (lj_tab_trystoretv_cas(L, dst, src) == LJ_TAB_STORE_CAS_OK)
+    if (lj_tab_trystoretv_cas_keyed(L, t, dst, &key, src) ==
+	LJ_TAB_STORE_CAS_OK)
       break;
-    lj_tab_store_wait_no_l();  /* C API rawseti saw FORWARD. */
+    lj_tab_store_wait_no_l();  /* C API rawseti saw stale/FORWARD slot. */
   }
-  setintV(&key, n);
   lj_gc2_barrier_weak_write(L, t, &key, src);
   lj_gc_pubtabtv(L, t, dst);
   L->top = src;

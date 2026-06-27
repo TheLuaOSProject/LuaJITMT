@@ -227,13 +227,15 @@ int lj_ctype_snapshot(CTState *cts, CTypeID id, CType *out)
 static void ctype_storestr_str(lua_State *L, GCtab *tab, GCstr *key,
 			       GCstr *val)
 {
-  TValue tv, *dst;
+  TValue keytv, tv, *dst;
   setstrV(L, &tv, val);
+  setstrV(L, &keytv, key);
   for (;;) {
     dst = lj_tab_setstr(L, tab, key);
-    if (lj_tab_trystoretv_cas(L, dst, &tv) == LJ_TAB_STORE_CAS_OK)
+    if (lj_tab_trystoretv_cas_keyed(L, tab, dst, &keytv, &tv) ==
+	LJ_TAB_STORE_CAS_OK)
       return;
-    lj_tab_store_wait_no_l();  /* ctype string store saw FORWARD. */
+    lj_tab_store_wait_no_l();  /* ctype string store saw stale/FORWARD slot. */
   }
 }
 

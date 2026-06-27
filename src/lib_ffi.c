@@ -786,26 +786,30 @@ LJLIB_CF(ffi_typeof)	LJLIB_REC(.)
 static void ffi_typeinfo_storeint(lua_State *L, GCtab *tab, GCstr *key,
 				  int32_t val)
 {
-  TValue tv, *dst;
+  TValue keytv, tv, *dst;
   setintV(&tv, val);
+  setstrV(L, &keytv, key);
   for (;;) {
     dst = lj_tab_setstr(L, tab, key);
-    if (lj_tab_trystoretv_cas(L, dst, &tv) == LJ_TAB_STORE_CAS_OK)
+    if (lj_tab_trystoretv_cas_keyed(L, tab, dst, &keytv, &tv) ==
+	LJ_TAB_STORE_CAS_OK)
       return;
-    lj_tab_store_wait_no_l();  /* FFI typeinfo int store saw FORWARD. */
+    lj_tab_store_wait_no_l();  /* FFI typeinfo int store saw stale/FORWARD slot. */
   }
 }
 
 static void ffi_typeinfo_storestr(lua_State *L, GCtab *tab, GCstr *key,
 				  GCstr *val)
 {
-  TValue tv, *dst;
+  TValue keytv, tv, *dst;
   setstrV(L, &tv, val);
+  setstrV(L, &keytv, key);
   for (;;) {
     dst = lj_tab_setstr(L, tab, key);
-    if (lj_tab_trystoretv_cas(L, dst, &tv) == LJ_TAB_STORE_CAS_OK)
+    if (lj_tab_trystoretv_cas_keyed(L, tab, dst, &keytv, &tv) ==
+	LJ_TAB_STORE_CAS_OK)
       return;
-    lj_tab_store_wait_no_l();  /* FFI typeinfo string store saw FORWARD. */
+    lj_tab_store_wait_no_l();  /* FFI typeinfo string store saw stale/FORWARD slot. */
   }
 }
 
@@ -1820,12 +1824,14 @@ LJLIB_PUSH(top-2) LJLIB_SET(arch)
 static TValue *ffi_loaded_store(lua_State *L, GCtab *t, GCstr *name,
 				cTValue *src)
 {
-  TValue *dst;
+  TValue keytv, *dst;
+  setstrV(L, &keytv, name);
   for (;;) {
     dst = lj_tab_setstr(L, t, name);
-    if (lj_tab_trystoretv_cas(L, dst, src) == LJ_TAB_STORE_CAS_OK)
+    if (lj_tab_trystoretv_cas_keyed(L, t, dst, &keytv, src) ==
+	LJ_TAB_STORE_CAS_OK)
       return dst;
-    lj_tab_store_wait_no_l();  /* FFI module registry saw FORWARD. */
+    lj_tab_store_wait_no_l();  /* FFI module registry saw stale/FORWARD slot. */
   }
 }
 
@@ -1833,12 +1839,14 @@ static TValue *ffi_miscmap_store(lua_State *L, CTState *cts, GCstr *key,
 				 cTValue *src)
 {
   GCtab *miscmap = ctype_miscmap_acq(cts);
-  TValue *dst;
+  TValue keytv, *dst;
+  setstrV(L, &keytv, key);
   for (;;) {
     dst = lj_tab_setstr(L, miscmap, key);
-    if (lj_tab_trystoretv_cas(L, dst, src) == LJ_TAB_STORE_CAS_OK)
+    if (lj_tab_trystoretv_cas_keyed(L, miscmap, dst, &keytv, src) ==
+	LJ_TAB_STORE_CAS_OK)
       return dst;
-    lj_tab_store_wait_no_l();  /* FFI miscmap store saw FORWARD. */
+    lj_tab_store_wait_no_l();  /* FFI miscmap store saw stale/FORWARD slot. */
   }
 }
 

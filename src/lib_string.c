@@ -675,13 +675,15 @@ LJLIB_CF(string_format)		LJLIB_REC(.)
 static void string_storetab_str(lua_State *L, GCtab *tab, GCstr *key,
 				GCtab *val)
 {
-  TValue tv, *dst;
+  TValue keytv, tv, *dst;
   settabV(L, &tv, val);
+  setstrV(L, &keytv, key);
   for (;;) {
     dst = lj_tab_setstr(L, tab, key);
-    if (lj_tab_trystoretv_cas(L, dst, &tv) == LJ_TAB_STORE_CAS_OK)
+    if (lj_tab_trystoretv_cas_keyed(L, tab, dst, &keytv, &tv) ==
+	LJ_TAB_STORE_CAS_OK)
       return;
-    lj_tab_store_wait_no_l();  /* string metatable store saw FORWARD. */
+    lj_tab_store_wait_no_l();  /* string metatable store saw stale/FORWARD slot. */
   }
 }
 

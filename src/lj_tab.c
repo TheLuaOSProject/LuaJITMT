@@ -1619,6 +1619,112 @@ static LJ_AINLINE int tab_ptr_index(uintptr_t base, uintptr_t elem,
   return 0;
 }
 
+static int tab_current_array_slot_for_key(GCtab *parent, TValue *dst,
+					  int32_t key)
+{
+  TValue *array;
+  MSize asize;
+  if (key < 0)
+    return 0;
+  asize = lj_tab_asize_acq(parent);
+  array = lj_tab_array_acq(parent);
+  if (array && !lj_tab_array_is_colocated(parent, array))
+    asize = lj_tab_array_hdr_asize_acq(array);
+  if (!array || (MSize)key >= asize)
+    return 0;
+  if (dst == &array[key] && !lj_tab_array_is_retiring(parent, array))
+    return 1;
+  {
+    TValue val;
+    TValue *next = array;
+    MSize nextasize = asize;
+    lj_tv_load_acq(&val, &array[key]);
+    if ((lj_tab_array_is_retiring(parent, array) || tvisforward(&val)) &&
+	lj_tab_array_forward_hop(parent, &next, &nextasize) &&
+	(MSize)key < nextasize)
+      return dst == &next[key] && !lj_tab_array_is_retiring(parent, next);
+  }
+  return 0;
+}
+
+static int tab_current_hash_slot_for_key(GCtab *parent, TValue *dst,
+					 cTValue *key)
+{
+  Node *node = lj_tab_node_acq(parent);
+  MSize hmask = lj_tab_node_hmask_acq(node);
+  MSize idx;
+  TValue nk;
+  if (lj_tab_node_is_retiring(node)) {
+    node = lj_tab_node_nextgen_acq(node);
+    if (!node)
+      return 0;
+    hmask = lj_tab_node_hmask_acq(node);
+    if (lj_tab_node_is_retiring(node))
+      return 0;
+  }
+  if (hmask == 0)
+    return 0;
+  if (!tab_ptr_index((uintptr_t)node, (uintptr_t)dst, sizeof(Node),
+		     hmask + 1u, &idx) || dst != &node[idx].val) {
+    Node *n = hashkey_node(node, hmask, key);
+    do {
+      lj_tv_load_acq(&nk, &n->key);
+      if (!tab_key_islocked(&nk) && !tvisnil(&nk) && lj_obj_equal(&nk, key)) {
+	TValue val;
+	lj_tv_load_acq(&val, &n->val);
+	if (tvisforward(&val)) {
+	  Node *nextnode = node;
+	  MSize nexthmask = hmask;
+	  TValue *slot = tab_forwarded_setslot(parent, &nextnode, &nexthmask,
+					       key);
+	  return slot == dst;
+	}
+	return 0;
+      }
+    } while ((n = lj_tab_nextnode_acq(n)));
+    return 0;
+  }
+  lj_tv_load_acq(&nk, &node[idx].key);
+  return !tab_key_islocked(&nk) && !tvisnil(&nk) && lj_obj_equal(&nk, key);
+}
+
+static int tab_current_slot_for_key(GCtab *parent, TValue *dst, cTValue *key)
+{
+  int32_t k;
+  int64_t i64;
+  TValue hkey;
+  cTValue *keyh = key;
+  if (tvisint(key)) {
+    k = intV(key);
+    if (tab_current_array_slot_for_key(parent, dst, k))
+      return 1;
+    setnumV(&hkey, (lua_Number)k);
+    keyh = &hkey;
+  } else if (tvisnum(key) && lj_num2int_check(numV(key), i64, k)) {
+    if (tab_current_array_slot_for_key(parent, dst, k))
+      return 1;
+  }
+  return tab_current_hash_slot_for_key(parent, dst, keyh);
+}
+
+LJ_FUNCA int lj_tab_trystoretv_cas_keyed(lua_State *L, GCtab *parent,
+					 TValue *dst, cTValue *key,
+					 cTValue *src)
+{
+  int rc;
+  if (!parent)
+    return lj_tab_trystoretv_cas(L, dst, src);
+  if (!tab_current_slot_for_key(parent, dst, key))
+    return LJ_TAB_STORE_CAS_STALE;
+  rc = lj_tab_trystoretv_cas(L, dst, src);
+  if (rc != LJ_TAB_STORE_CAS_OK)
+    return rc;
+  if (tab_current_slot_for_key(parent, dst, key))
+    return LJ_TAB_STORE_CAS_OK;
+  lj_gc_pubtabtv(L, parent, dst);
+  return LJ_TAB_STORE_CAS_STALE;
+}
+
 static TValue *tab_forwarded_jit_array_slot(lua_State *L, GCtab *parent,
 					    TValue *array, MSize asize,
 					    TValue *dst, MSize key)
@@ -1674,10 +1780,12 @@ LJ_FUNCA TValue *lj_tab_test_storetv_forjit_array_observed(lua_State *L,
 {
   TValue *slot = tab_forwarded_jit_array_slot(L, parent, array, asize, dst,
 					      key);
+  TValue keytv;
+  setintV(&keytv, (int32_t)key);
   if (slot == dst)
     return slot;
-  return lj_tab_trystoretv_cas(L, slot, src) == LJ_TAB_STORE_CAS_OK ?
-	 slot : NULL;
+  return lj_tab_trystoretv_cas_keyed(L, parent, slot, &keytv, src) ==
+	 LJ_TAB_STORE_CAS_OK ? slot : NULL;
 }
 
 LJ_FUNCA TValue *lj_tab_test_storetv_forjit_hash_observed(lua_State *L,
@@ -1693,8 +1801,8 @@ LJ_FUNCA TValue *lj_tab_test_storetv_forjit_hash_observed(lua_State *L,
 					     &keycopy, &barrier_key);
   if (slot == dst)
     return slot;
-  return lj_tab_trystoretv_cas(L, slot, src) == LJ_TAB_STORE_CAS_OK ?
-	 slot : NULL;
+  return lj_tab_trystoretv_cas_keyed(L, parent, slot, barrier_key, src) ==
+	 LJ_TAB_STORE_CAS_OK ? slot : NULL;
 }
 #endif
 
@@ -1784,14 +1892,18 @@ LJ_FUNCA TValue *lj_tab_storetv_forjit_array_nogc(lua_State *L,
 						  MSize key)
 {
   TValue *orig = dst;
+  TValue keytv;
+  setintV(&keytv, (int32_t)key);
   if (tab_jit_array_current_match(parent, orig, key) &&
-      lj_tab_trystoretv_cas(L, orig, src) == LJ_TAB_STORE_CAS_OK)
+      lj_tab_trystoretv_cas_keyed(L, parent, orig, &keytv, src) ==
+      LJ_TAB_STORE_CAS_OK)
     return orig;
   for (;;) {
     dst = tab_current_jit_array_slot(L, parent, orig, key);
-    if (lj_tab_trystoretv_cas(L, dst, src) == LJ_TAB_STORE_CAS_OK)
+    if (lj_tab_trystoretv_cas_keyed(L, parent, dst, &keytv, src) ==
+	LJ_TAB_STORE_CAS_OK)
       break;
-    lj_tab_store_wait_no_l();  /* JIT array store saw FORWARD. */
+    lj_tab_store_wait_no_l();  /* JIT array store saw stale/FORWARD slot. */
   }
   return dst;
 }
@@ -1814,9 +1926,14 @@ LJ_FUNCA TValue *lj_tab_storetv_forvm_array(lua_State *L, GCtab *parent,
   /* The x64 VM runs its existing table barrier sequence after this helper. */
   for (;;) {
     dst = tab_current_jit_array_slot(L, parent, orig, key);
-    if (lj_tab_trystoretv_cas(L, dst, src) == LJ_TAB_STORE_CAS_OK)
-      break;
-    lj_tab_store_wait_no_l();  /* VM array store saw FORWARD. */
+    {
+      TValue keytv;
+      setintV(&keytv, (int32_t)key);
+      if (lj_tab_trystoretv_cas_keyed(L, parent, dst, &keytv, src) ==
+	  LJ_TAB_STORE_CAS_OK)
+	break;
+    }
+    lj_tab_store_wait_no_l();  /* VM array store saw stale/FORWARD slot. */
   }
   return dst;
 }
@@ -1829,16 +1946,18 @@ LJ_FUNCA TValue *lj_tab_storetv_forjit_hash(lua_State *L, GCtab *parent,
   TValue *orig = dst;
   cTValue *barrier_key = key;
   if (tab_jit_hash_current_match(parent, orig) &&
-      lj_tab_trystoretv_cas(L, orig, src) == LJ_TAB_STORE_CAS_OK) {
+      lj_tab_trystoretv_cas_keyed(L, parent, orig, key, src) ==
+      LJ_TAB_STORE_CAS_OK) {
     dst = orig;
     goto done;
   }
   for (;;) {
     dst = tab_current_jit_hash_slot(L, parent, orig, key, &keycopy,
 				    &barrier_key);
-    if (lj_tab_trystoretv_cas(L, dst, src) == LJ_TAB_STORE_CAS_OK)
+    if (lj_tab_trystoretv_cas_keyed(L, parent, dst, barrier_key, src) ==
+	LJ_TAB_STORE_CAS_OK)
       break;
-    lj_tab_store_wait_no_l();  /* JIT hash store saw FORWARD. */
+    lj_tab_store_wait_no_l();  /* JIT hash store saw stale/FORWARD slot. */
   }
 done:
   lj_gc2_barrier_weak_write(L, parent, barrier_key, dst);  /* M8: traced weak hash write. */
@@ -1852,9 +1971,10 @@ LJ_FUNCA TValue *lj_tab_storetv_forjit_newref(lua_State *L, GCtab *parent,
 {
   for (;;) {
     dst = lj_tab_set(L, parent, key);
-    if (lj_tab_trystoretv_cas(L, dst, src) == LJ_TAB_STORE_CAS_OK)
+    if (lj_tab_trystoretv_cas_keyed(L, parent, dst, key, src) ==
+	LJ_TAB_STORE_CAS_OK)
       break;
-    lj_tab_store_wait_no_l();  /* JIT NEWREF store saw FORWARD. */
+    lj_tab_store_wait_no_l();  /* JIT NEWREF store saw stale/FORWARD slot. */
   }
   lj_gc2_barrier_weak_write(L, parent, key, dst);  /* M8: traced NEWREF weak write. */
   lj_gc2_barrier_tv_pair(L, obj2gco(parent), dst);  /* M10: traced parent barrier. */
@@ -1935,11 +2055,14 @@ LJ_FUNCA void lj_tab_storetvn_forvm_array(lua_State *L, GCtab *parent,
     return;
   for (i = 0; i < n; i++) {
     TValue *dst;
+    TValue key;
+    setintV(&key, (int32_t)(start + i));
     for (;;) {
       dst = tab_current_vm_array_key_slot(L, parent, (MSize)(start + i));
-      if (lj_tab_trystoretv_cas(L, dst, &src[i]) == LJ_TAB_STORE_CAS_OK)
+      if (lj_tab_trystoretv_cas_keyed(L, parent, dst, &key, &src[i]) ==
+	  LJ_TAB_STORE_CAS_OK)
 	break;
-      lj_tab_store_wait_no_l();  /* VM TSETM saw FORWARD. */
+      lj_tab_store_wait_no_l();  /* VM TSETM saw stale/FORWARD slot. */
     }
   }
   if (tab_tsetm_barrier_needed(L, parent))

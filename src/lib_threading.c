@@ -177,13 +177,15 @@ static void threading_state_set_ud(lua_State *L, lua_State *L1, GCudata *ud)
 static TValue *threading_storeudata_str(lua_State *L, GCtab *env, GCstr *key,
 					GCudata *ud)
 {
-  TValue tv, *dst;
+  TValue keytv, tv, *dst;
   setudataV(L, &tv, ud);
+  setstrV(L, &keytv, key);
   for (;;) {
     dst = lj_tab_setstr(L, env, key);
-    if (lj_tab_trystoretv_cas(L, dst, &tv) == LJ_TAB_STORE_CAS_OK)
+    if (lj_tab_trystoretv_cas_keyed(L, env, dst, &keytv, &tv) ==
+	LJ_TAB_STORE_CAS_OK)
       return dst;
-    lj_tab_store_wait_no_l();  /* threading env store saw FORWARD. */
+    lj_tab_store_wait_no_l();  /* threading env store saw stale/FORWARD slot. */
   }
 }
 

@@ -163,9 +163,11 @@ C mirror readers, and helper-backed stores.
 Helper-backed Linux/x64 `ASTORE`/`HSTORE` stores now pass the array index or
 hash key into their helpers and resolve before CAS if the recorded slot is
 outside the current generation; `NEWREF` stores key-resolve before each CAS.
-This closes the stale retiring-generation slot case for helper-backed traced
-table stores while the broader generated RETIRING/FORWARD/CAS write protocol
-remains pending.
+Public/runtime C stores with parent/key context now use the same keyed CAS
+validation, retrying stale old-generation destinations before returning to Lua.
+This closes the stale retiring-generation slot case for the converted helper
+and C store surfaces while the broader generated RETIRING/FORWARD/CAS write
+protocol remains pending.
 Linux/x64
 secure builds now use the original M6 dual-map mcode write view: each mcode
 area is memfd-backed, mapped once RX and once RW, `MCLink.rw` carries the

@@ -32,21 +32,21 @@ static void table_insert_shift_store(lua_State *L, GCtab *t, int32_t i)
   for (;;) {
     TValue *dst = lj_tab_setint(L, t, i);
     cTValue *src = lj_tab_getint(t, i-1);
-    TValue val;
+    TValue key, val;
     int have_src = src != NULL;
     if (have_src)
       lj_tv_load_acq(&val, src);
     else
       setnilV(&val);
-    if (lj_tab_trystoretv_cas(L, dst, &val) == LJ_TAB_STORE_CAS_OK) {
+    setintV(&key, i);
+    if (lj_tab_trystoretv_cas_keyed(L, t, dst, &key, &val) ==
+	LJ_TAB_STORE_CAS_OK) {
       if (have_src) {
-	TValue key;
-	setintV(&key, i);
 	lj_gc2_barrier_weak_write(L, t, &key, &val);
       }
       return;
     }
-    lj_tab_store_wait_no_l();  /* table.insert shift saw FORWARD. */
+    lj_tab_store_wait_no_l();  /* table.insert shift saw stale/FORWARD slot. */
   }
 }
 
@@ -54,11 +54,14 @@ static TValue *table_insert_value_store(lua_State *L, GCtab *t, int32_t i,
 					cTValue *src)
 {
   TValue *dst;
+  TValue key;
+  setintV(&key, i);
   for (;;) {
     dst = lj_tab_setint(L, t, i);
-    if (lj_tab_trystoretv_cas(L, dst, src) == LJ_TAB_STORE_CAS_OK)
+    if (lj_tab_trystoretv_cas_keyed(L, t, dst, &key, src) ==
+	LJ_TAB_STORE_CAS_OK)
       return dst;
-    lj_tab_store_wait_no_l();  /* table.insert value saw FORWARD. */
+    lj_tab_store_wait_no_l();  /* table.insert value saw stale/FORWARD slot. */
   }
 }
 
@@ -339,13 +342,15 @@ LJLIB_PUSH("n")
 static void table_pack_storeint_str(lua_State *L, GCtab *t, GCstr *key,
 				    int32_t val)
 {
-  TValue tv, *dst;
+  TValue keytv, tv, *dst;
   setintV(&tv, val);
+  setstrV(L, &keytv, key);
   for (;;) {
     dst = lj_tab_setstr(L, t, key);
-    if (lj_tab_trystoretv_cas(L, dst, &tv) == LJ_TAB_STORE_CAS_OK)
+    if (lj_tab_trystoretv_cas_keyed(L, t, dst, &keytv, &tv) ==
+	LJ_TAB_STORE_CAS_OK)
       return;
-    lj_tab_store_wait_no_l();  /* table.pack "n" store saw FORWARD. */
+    lj_tab_store_wait_no_l();  /* table.pack "n" store saw stale/FORWARD slot. */
   }
 }
 

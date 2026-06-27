@@ -71,6 +71,82 @@ static void exercise_direct_cas(lua_State *L)
   tabfwd_assert_forward(&slot);
 }
 
+static void exercise_keyed_cas_array_stale(lua_State *L)
+{
+  GCtab *t;
+  TValue *oldarray, *newarray, key, src;
+  MSize oldasize, newasize;
+  int32_t k = 4;
+  MSize i;
+
+  lua_settop(L, 0);
+  lua_createtable(L, LJ_MAX_COLOSIZE + 16, 0);
+  t = tabV(L->top-1);
+  assert(lj_tab_array_separated(t));
+  oldarray = lj_tab_array_acq(t);
+  oldasize = lj_tab_asize_acq(t);
+  assert((MSize)k < oldasize);
+  for (i = 0; i < oldasize; i++)
+    lj_tab_storeint(L, lj_tab_setint(L, t, (int32_t)i), (int32_t)i + 12000);
+
+  lj_tab_resize(L, t, (uint32_t)oldasize + 8u, 0);
+  newarray = lj_tab_array_acq(t);
+  newasize = lj_tab_asize_acq(t);
+  assert(newarray != oldarray);
+
+  setintV(&key, k);
+  setintV(&src, 12345);
+  assert(lj_tab_trystoretv_cas_keyed(L, t, &oldarray[k], &key, &src) ==
+	 LJ_TAB_STORE_CAS_STALE);
+  tabfwd_assert_i32(&oldarray[k], k + 12000);
+  tabfwd_assert_i32(&newarray[k], k + 12000);
+  assert(lj_tab_trystoretv_cas_keyed(L, t, lj_tab_setint(L, t, k),
+				     &key, &src) == LJ_TAB_STORE_CAS_OK);
+  tabfwd_assert_i32(&newarray[k], 12345);
+
+  lj_tab_array_rel(t, newarray);
+  lj_tab_asize_rel(t, newasize);
+}
+
+static void exercise_keyed_cas_hash_stale(lua_State *L)
+{
+  GCtab *t;
+  GCstr *hkey;
+  TValue keytv, src;
+  Node *oldnode, *newnode, *oldn, *newn;
+  MSize oldhmask, newhmask;
+
+  lua_settop(L, 0);
+  lua_createtable(L, 0, 8);
+  t = tabV(L->top-1);
+  hkey = lj_str_newlit(L, "keyed_cas_hash_stale");
+  lj_tab_storeint(L, lj_tab_setstr(L, t, hkey), 13000);
+  oldnode = lj_tab_node_acq(t);
+  oldhmask = lj_tab_node_hmask_acq(oldnode);
+  oldn = tabfwd_find_str_node(oldnode, oldhmask, hkey);
+  assert(oldn != NULL);
+
+  lj_tab_resize(L, t, t->asize, lj_fls(oldhmask) + 2u);
+  newnode = lj_tab_node_acq(t);
+  newhmask = lj_tab_node_hmask_acq(newnode);
+  assert(newnode != oldnode);
+  newn = tabfwd_find_str_node(newnode, newhmask, hkey);
+  assert(newn != NULL);
+
+  setstrV(L, &keytv, hkey);
+  setintV(&src, 13333);
+  assert(lj_tab_trystoretv_cas_keyed(L, t, &oldn->val, &keytv, &src) ==
+	 LJ_TAB_STORE_CAS_STALE);
+  tabfwd_assert_i32(&oldn->val, 13000);
+  tabfwd_assert_i32(&newn->val, 13000);
+  assert(lj_tab_trystoretv_cas_keyed(L, t, lj_tab_setstr(L, t, hkey),
+				     &keytv, &src) == LJ_TAB_STORE_CAS_OK);
+  tabfwd_assert_i32(&newn->val, 13333);
+
+  lj_tab_node_rel(t, newnode);
+  lj_tab_hmask_rel(t, newhmask);
+}
+
 static void exercise_meta_forward_retry(lua_State *L)
 {
   GCtab *t;
@@ -503,6 +579,8 @@ int main(void)
   luaL_openlibs(L);
 
   exercise_direct_cas(L);
+  exercise_keyed_cas_array_stale(L);
+  exercise_keyed_cas_hash_stale(L);
   exercise_meta_forward_retry(L);
   exercise_capi_rawseti_forward_retry(L);
   exercise_capi_settable_forward_retry(L);

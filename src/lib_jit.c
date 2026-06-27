@@ -130,9 +130,10 @@ static TValue *jit_attach_event_store(lua_State *L, GCtab *tab, cTValue *key,
   TValue *dst;
   for (;;) {
     dst = lj_tab_set(L, tab, key);
-    if (lj_tab_trystoretv_cas(L, dst, src) == LJ_TAB_STORE_CAS_OK)
+    if (lj_tab_trystoretv_cas_keyed(L, tab, dst, key, src) ==
+	LJ_TAB_STORE_CAS_OK)
       return dst;
-    lj_tab_store_wait_no_l();  /* jit.attach event table saw FORWARD. */
+    lj_tab_store_wait_no_l();  /* jit.attach event table saw stale/FORWARD slot. */
   }
 }
 
@@ -180,24 +181,28 @@ LJLIB_PUSH(top-2) LJLIB_SET(version)
 static TValue *jit_util_storetv_str(lua_State *L, GCtab *t, GCstr *key,
 				    cTValue *src)
 {
-  TValue *dst;
+  TValue keytv, *dst;
+  setstrV(L, &keytv, key);
   for (;;) {
     dst = lj_tab_setstr(L, t, key);
-    if (lj_tab_trystoretv_cas(L, dst, src) == LJ_TAB_STORE_CAS_OK)
+    if (lj_tab_trystoretv_cas_keyed(L, t, dst, &keytv, src) ==
+	LJ_TAB_STORE_CAS_OK)
       return dst;
-    lj_tab_store_wait_no_l();  /* jit.util string store saw FORWARD. */
+    lj_tab_store_wait_no_l();  /* jit.util string store saw stale/FORWARD slot. */
   }
 }
 
 static TValue *jit_util_storetv_int(lua_State *L, GCtab *t, int32_t key,
 				    cTValue *src)
 {
-  TValue *dst;
+  TValue keytv, *dst;
+  setintV(&keytv, key);
   for (;;) {
     dst = lj_tab_setint(L, t, key);
-    if (lj_tab_trystoretv_cas(L, dst, src) == LJ_TAB_STORE_CAS_OK)
+    if (lj_tab_trystoretv_cas_keyed(L, t, dst, &keytv, src) ==
+	LJ_TAB_STORE_CAS_OK)
       return dst;
-    lj_tab_store_wait_no_l();  /* jit.util int store saw FORWARD. */
+    lj_tab_store_wait_no_l();  /* jit.util int store saw stale/FORWARD slot. */
   }
 }
 
@@ -652,9 +657,10 @@ static TValue *jit_profile_registry_store(lua_State *L, GCtab *registry,
   TValue *dst;
   for (;;) {
     dst = lj_tab_set(L, registry, key);
-    if (lj_tab_trystoretv_cas(L, dst, tv) == LJ_TAB_STORE_CAS_OK)
+    if (lj_tab_trystoretv_cas_keyed(L, registry, dst, key, tv) ==
+	LJ_TAB_STORE_CAS_OK)
       return dst;
-    lj_tab_store_wait_no_l();  /* jit.profile registry saw FORWARD. */
+    lj_tab_store_wait_no_l();  /* jit.profile registry saw stale/FORWARD slot. */
   }
 }
 

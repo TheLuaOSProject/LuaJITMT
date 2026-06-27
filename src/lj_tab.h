@@ -229,7 +229,11 @@ LJ_FUNCA void lj_tab_wait_no_l(void);
 LJ_FUNCA void lj_tab_store_wait_no_l(void);
 #define LJ_TAB_STORE_CAS_OK		0
 #define LJ_TAB_STORE_CAS_FORWARD	1
+#define LJ_TAB_STORE_CAS_STALE		2
 LJ_FUNCA int lj_tab_trystoretv_cas(lua_State *L, TValue *dst, cTValue *src);
+LJ_FUNCA int lj_tab_trystoretv_cas_keyed(lua_State *L, GCtab *parent,
+					 TValue *dst, cTValue *key,
+					 cTValue *src);
 LJ_FUNCA TValue *lj_tab_storetv_forjit_array(lua_State *L, GCtab *parent,
 					     TValue *dst, cTValue *src,
 					     MSize key);

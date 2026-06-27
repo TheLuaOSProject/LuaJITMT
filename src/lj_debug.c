@@ -476,13 +476,15 @@ LUA_API const char *lua_setlocal(lua_State *L, const lua_Debug *ar, int n)
 
 static void debug_activelines_storebool(lua_State *L, GCtab *t, int32_t line)
 {
-  TValue tv, *dst;
+  TValue key, tv, *dst;
   setboolV(&tv, 1);
+  setintV(&key, line);
   for (;;) {
     dst = lj_tab_setint(L, t, line);
-    if (lj_tab_trystoretv_cas(L, dst, &tv) == LJ_TAB_STORE_CAS_OK)
+    if (lj_tab_trystoretv_cas_keyed(L, t, dst, &key, &tv) ==
+	LJ_TAB_STORE_CAS_OK)
       return;
-    lj_tab_store_wait_no_l();  /* debug activelines store saw FORWARD. */
+    lj_tab_store_wait_no_l();  /* debug activelines store saw stale/FORWARD slot. */
   }
 }
 

@@ -209,3 +209,66 @@ check_store_fn_file "$ROOT/src/lib_threading.c" threading_storeudata_str
 check_store_fn_file "$ROOT/src/lj_debug.c" debug_activelines_storebool
 check_store_fn_file "$ROOT/src/lj_ctype.c" ctype_storestr_str
 check_store_fn_file "$ROOT/src/lj_meta.c" lj_meta_tsettv_pair
+
+check_keyed_store_fn_file() {
+  file=$1
+  fn=$2
+  if ! awk -v fn="$fn" '
+    function track_braces(line) {
+      opens = gsub(/\{/, "{", line)
+      line = $0
+      closes = gsub(/\}/, "}", line)
+      if (opens)
+	body = 1
+      depth += opens - closes
+      if (body && depth == 0)
+	in_fn = 0
+    }
+    !in_fn &&
+    $0 ~ "^[[:space:]]*(static |LUA_API |LJ_FUNCA |TValue \\*)" &&
+    $0 ~ fn "[[:space:]]*\\(" {
+      in_fn = 1; body = 0; depth = 0
+    }
+    in_fn && /lj_tab_trystoretv_cas_keyed[[:space:]]*\(/ { saw_keyed = 1 }
+    in_fn { track_braces($0) }
+    END {
+      if (!saw_keyed)
+	exit 1
+    }
+  ' "$file"; then
+    printf '%s\n' "$file:$fn must use lj_tab_trystoretv_cas_keyed()" >&2
+    exit 1
+  fi
+}
+
+check_keyed_store_fn_file "$ROOT/src/lj_tab.c" lj_tab_storetv_forjit_array_nogc
+check_keyed_store_fn_file "$ROOT/src/lj_tab.c" lj_tab_storetv_forvm_array
+check_keyed_store_fn_file "$ROOT/src/lj_tab.c" lj_tab_storetv_forjit_hash
+check_keyed_store_fn_file "$ROOT/src/lj_tab.c" lj_tab_storetv_forjit_newref
+check_keyed_store_fn_file "$ROOT/src/lj_tab.c" lj_tab_storetvn_forvm_array
+check_keyed_store_fn_file "$ROOT/src/lib_base.c" gc_stats_storetv_str
+check_keyed_store_fn_file "$ROOT/src/lib_base.c" gc_stats_storetv_int
+check_keyed_store_fn_file "$ROOT/src/lib_base.c" base_storestr_str
+check_keyed_store_fn_file "$ROOT/src/lib_base.c" base_storetab_str
+check_keyed_store_fn_file "$ROOT/src/lj_lib.c" lib_storefunc_str
+check_keyed_store_fn_file "$ROOT/src/lj_lib.c" lib_storetv_key
+check_keyed_store_fn_file "$ROOT/src/lib_table.c" table_insert_shift_store
+check_keyed_store_fn_file "$ROOT/src/lib_table.c" table_insert_value_store
+check_keyed_store_fn_file "$ROOT/src/lib_table.c" table_pack_storeint_str
+check_keyed_store_fn_file "$ROOT/src/lj_api.c" lua_settable
+check_keyed_store_fn_file "$ROOT/src/lj_api.c" lua_setfield
+check_keyed_store_fn_file "$ROOT/src/lj_api.c" lua_rawset
+check_keyed_store_fn_file "$ROOT/src/lj_api.c" lua_rawseti
+check_keyed_store_fn_file "$ROOT/src/lib_jit.c" jit_attach_event_store
+check_keyed_store_fn_file "$ROOT/src/lib_jit.c" jit_util_storetv_str
+check_keyed_store_fn_file "$ROOT/src/lib_jit.c" jit_util_storetv_int
+check_keyed_store_fn_file "$ROOT/src/lib_jit.c" jit_profile_registry_store
+check_keyed_store_fn_file "$ROOT/src/lib_ffi.c" ffi_typeinfo_storeint
+check_keyed_store_fn_file "$ROOT/src/lib_ffi.c" ffi_typeinfo_storestr
+check_keyed_store_fn_file "$ROOT/src/lib_ffi.c" ffi_loaded_store
+check_keyed_store_fn_file "$ROOT/src/lib_ffi.c" ffi_miscmap_store
+check_keyed_store_fn_file "$ROOT/src/lib_string.c" string_storetab_str
+check_keyed_store_fn_file "$ROOT/src/lib_threading.c" threading_storeudata_str
+check_keyed_store_fn_file "$ROOT/src/lj_debug.c" debug_activelines_storebool
+check_keyed_store_fn_file "$ROOT/src/lj_ctype.c" ctype_storestr_str
+check_keyed_store_fn_file "$ROOT/src/lj_meta.c" lj_meta_tsettv_pair

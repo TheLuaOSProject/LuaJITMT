@@ -350,7 +350,11 @@ use the same no-`lua_State` wait helper; C API/library/JIT/FFI/debug/string/
 threading/ctype/meta table-store retry loops now use that helper too; low-level
 table generation snapshots, forwarded/keylocked lookups, new-key insertion,
 FINREG new-key helpers, and traversal rechecks use the same no-`lua_State`
-table wait helper instead of raw CPU spins;
+table wait helper instead of raw CPU spins. Public/runtime table stores that
+carry parent/key context now publish through `lj_tab_trystoretv_cas_keyed()`,
+which validates the destination before and after CAS against the parent table's
+current generation or a visible `LJ_TFORWARD` successor, and retries stale old
+generation slots instead of returning after a lost migration-window write;
 rehash/new-key insertion also release-publishes hash keys through
 `tab_storekeyrel()` and moved values through `copyTVrel()` during legacy resize
 rebuilds. This records a scoped release-store bridge without changing the

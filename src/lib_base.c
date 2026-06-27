@@ -481,24 +481,28 @@ static TValue *gc_stats_storetv_str(lua_State *L, GCtab *t, const char *name,
 				    cTValue *src)
 {
   GCstr *key = lj_str_newz(L, name);
-  TValue *dst;
+  TValue keytv, *dst;
+  setstrV(L, &keytv, key);
   for (;;) {
     dst = lj_tab_setstr(L, t, key);
-    if (lj_tab_trystoretv_cas(L, dst, src) == LJ_TAB_STORE_CAS_OK)
+    if (lj_tab_trystoretv_cas_keyed(L, t, dst, &keytv, src) ==
+	LJ_TAB_STORE_CAS_OK)
       return dst;
-    lj_tab_store_wait_no_l();  /* GC stats string store saw FORWARD. */
+    lj_tab_store_wait_no_l();  /* GC stats string store saw stale/FORWARD slot. */
   }
 }
 
 static TValue *gc_stats_storetv_int(lua_State *L, GCtab *t, int32_t key,
 				    cTValue *src)
 {
-  TValue *dst;
+  TValue keytv, *dst;
+  setintV(&keytv, key);
   for (;;) {
     dst = lj_tab_setint(L, t, key);
-    if (lj_tab_trystoretv_cas(L, dst, src) == LJ_TAB_STORE_CAS_OK)
+    if (lj_tab_trystoretv_cas_keyed(L, t, dst, &keytv, src) ==
+	LJ_TAB_STORE_CAS_OK)
       return dst;
-    lj_tab_store_wait_no_l();  /* GC stats int store saw FORWARD. */
+    lj_tab_store_wait_no_l();  /* GC stats int store saw stale/FORWARD slot. */
   }
 }
 
@@ -1023,13 +1027,15 @@ static void setpc_wrap_aux(lua_State *L, GCfunc *fn)
 
 static void base_storestr_str(lua_State *L, GCtab *tab, GCstr *key, GCstr *val)
 {
-  TValue tv, *dst;
+  TValue keytv, tv, *dst;
   setstrV(L, &tv, val);
+  setstrV(L, &keytv, key);
   for (;;) {
     dst = lj_tab_setstr(L, tab, key);
-    if (lj_tab_trystoretv_cas(L, dst, &tv) == LJ_TAB_STORE_CAS_OK)
+    if (lj_tab_trystoretv_cas_keyed(L, tab, dst, &keytv, &tv) ==
+	LJ_TAB_STORE_CAS_OK)
       return;
-    lj_tab_store_wait_no_l();  /* Base string store saw FORWARD. */
+    lj_tab_store_wait_no_l();  /* Base string store saw stale/FORWARD slot. */
   }
 }
 
@@ -1045,13 +1051,15 @@ static void newproxy_weaktable(lua_State *L)
 
 static void base_storetab_str(lua_State *L, GCtab *tab, GCstr *key, GCtab *val)
 {
-  TValue tv, *dst;
+  TValue keytv, tv, *dst;
   settabV(L, &tv, val);
+  setstrV(L, &keytv, key);
   for (;;) {
     dst = lj_tab_setstr(L, tab, key);
-    if (lj_tab_trystoretv_cas(L, dst, &tv) == LJ_TAB_STORE_CAS_OK)
+    if (lj_tab_trystoretv_cas_keyed(L, tab, dst, &keytv, &tv) ==
+	LJ_TAB_STORE_CAS_OK)
       return;
-    lj_tab_store_wait_no_l();  /* Base table store saw FORWARD. */
+    lj_tab_store_wait_no_l();  /* Base table store saw stale/FORWARD slot. */
   }
 }
 
