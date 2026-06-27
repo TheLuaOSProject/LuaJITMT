@@ -670,7 +670,7 @@ static void jit_profile_callback(lua_State *L2, lua_State *L, int samples,
     char vmst = (char)vmstate;
     int status;
     if (!lj_state_tryclaim(L2, lj_thr_current_id(G(L)), &claim))
-      exit(EXIT_FAILURE);
+      return;  /* Drop samples while the hidden callback coroutine is busy. */
     setfuncV(L2, L2->top++, funcV(tv));
     setthreadV(L2, L2->top++, L);
     setintV(L2->top++, samples);

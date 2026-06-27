@@ -45,4 +45,21 @@ if ! awk '
   exit 1
 fi
 
+if hits=$(awk '
+  /^static void jit_profile_callback\(lua_State \*L2, lua_State \*L,/ {
+    inside = 1
+  }
+  inside && /!lj_state_tryclaim\(L2,/ { claimfail = 1; next }
+  inside && claimfail && /^[[:space:]]*$/ { next }
+  inside && claimfail {
+    if (/exit[[:space:]]*\(/) print FILENAME ":" FNR ":" $0
+    claimfail = 0
+  }
+  inside && /^}/ { inside = 0; claimfail = 0 }
+' src/lib_jit.c); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'jit.profile callback must drop busy hidden-coroutine samples, not exit' >&2
+  exit 1
+fi
+
 exec "$ROOT/tools/ci/lua_test.sh" m5_profile_stop_native

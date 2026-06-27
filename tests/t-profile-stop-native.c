@@ -18,7 +18,11 @@
 
 #include "lj_atomic.h"
 #include "lj_gc2.h"
+#include "lj_tab.h"
+#include "lj_thr.h"
 #include "lj_tg.h"
+
+#define KEY_PROFILE_THREAD	(U64x(81000000,00000000)|'t')
 
 static void clear_stopreq(TGState *tg)
 {
@@ -140,6 +144,47 @@ static void run_native_join_test(lua_State *L, global_State *g, TGState *tg)
     "profile.stop()\n");
 }
 
+static lua_State *profile_callback_thread(lua_State *L)
+{
+  TValue key;
+  cTValue *tv;
+  key.u64 = KEY_PROFILE_THREAD;
+  tv = lj_tab_get(L, tabV(registry(L)), &key);
+  assert(tvisthread(tv));
+  return threadV(tv);
+}
+
+static void run_busy_callback_state_test(lua_State *L, global_State *g)
+{
+  lua_State *L2;
+  uint32_t saved_owner, fake_owner;
+
+  run_ok(L,
+    "local profile = require('jit.profile')\n"
+    "profile.start('i1', function() end)\n");
+
+  L2 = profile_callback_thread(L);
+  saved_owner = lj_state_owner_acq(L2);
+  fake_owner = lj_thr_current_id(g) + 7000u;
+  if (fake_owner == 0 || fake_owner == lj_thr_current_id(g) ||
+      fake_owner == LJ_THREAD_GCSCAN)
+    fake_owner = 7000u;
+
+  lj_state_owner_rel(L2, fake_owner);
+  run_ok(L,
+    "local x = 0\n"
+    "for i = 1, 2000000 do x = x + i end\n"
+    "assert(x > 0)\n");
+  assert(lj_state_owner_acq(L2) == fake_owner);
+  lj_state_owner_rel(L2, saved_owner);
+
+  run_ok(L,
+    "local profile = require('jit.profile')\n"
+    "profile.stop()\n"
+    "profile.start('i1', function() end)\n"
+    "profile.stop()\n");
+}
+
 #endif
 
 int main(void)
@@ -158,6 +203,7 @@ int main(void)
   run_deferred_cleanup_test(L, tg);
 #if LJ_PROFILE_PTHREAD
   run_native_join_test(L, g, tg);
+  run_busy_callback_state_test(L, g);
 #endif
 
   lua_close(L);
