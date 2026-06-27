@@ -98,6 +98,16 @@ static LJ_AINLINE TraceState lj_trace_state_store_active(jit_State *J,
   }
 }
 
+static LJ_AINLINE void lj_trace_state_abort(jit_State *J)
+{
+  uint32_t old = (uint32_t)lj_trace_state_load(J);
+  while ((old & (uint32_t)LJ_TRACE_ACTIVE) != 0) {
+    uint32_t next = old & ~(uint32_t)LJ_TRACE_ACTIVE;
+    if (la_cas32((uint32_t *)&J->state, &old, next, LA_ACQ_REL, LA_ACQ))
+      break;  /* 08 section 8.7: publish async recorder abort. */
+  }
+}
+
 #define lj_trace_end(J)		lj_trace_state_store_active((J), LJ_TRACE_END)
 
 #else
