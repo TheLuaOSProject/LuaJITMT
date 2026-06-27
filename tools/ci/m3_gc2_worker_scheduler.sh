@@ -236,8 +236,7 @@ if hits=$(grep -nE -- '->[[:space:]]*gc2[.]finalizer_(mpsc|tail|active|owner_tid
   printf '%s\n' 'raw GC2 finalizer queue/owner state access is forbidden; use gc2_finalizer_* helpers' >&2
   exit 1
 fi
-for helper in lj_gc2_finalizer_mark_enqueue \
-  lj_gc2_finreg_udata_finalizer_enqueue; do
+for helper in lj_gc2_finreg_udata_finalizer_enqueue; do
   if ! grep -qE "LJ_FUNC void ${helper}[[:space:]]*[(]" \
       "$ROOT/src/lj_gc2.h"; then
     printf '%s\n' "${helper} declaration is required for GC2 finalizer publication" >&2
@@ -281,20 +280,22 @@ if hits=$(grep -nE -- 'lj_gc2_finalizer_(try_enter|drain_owned|dequeue_owned|lea
   printf '%s\n' 'legacy finalizer dispatch must use lj_gc2_finalizer_dispatch_one' >&2
   exit 1
 fi
-if hits=$(grep -nE -- 'lj_gc2_finalizer_(try_enter|enter|leave|drain|dequeue|drain_owned|dequeue_owned)[[:space:]]*[(]' \
+if hits=$(grep -nE -- 'lj_gc2_finalizer_(enqueue|mark_enqueue|try_enter|enter|leave|drain|dequeue|drain_owned|dequeue_owned)[[:space:]]*[(]' \
     "$ROOT"/src/*.c | grep -v "$ROOT/src/lj_gc2.c:" || true); \
     [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
-  printf '%s\n' 'low-level GC2 finalizer owner primitives must stay inside lj_gc2.c' >&2
+  printf '%s\n' 'low-level GC2 finalizer queue/owner primitives must stay inside lj_gc2.c' >&2
   exit 1
 fi
-if hits=$(grep -nE -- 'LJ_FUNC .*[[:space:]]lj_gc2_finalizer_(try_enter|enter|leave|drain|dequeue|drain_owned|dequeue_owned)[[:space:]]*[(]' \
+if hits=$(grep -nE -- 'LJ_FUNC .*[[:space:]]lj_gc2_finalizer_(enqueue|mark_enqueue|try_enter|enter|leave|drain|dequeue|drain_owned|dequeue_owned)[[:space:]]*[(]' \
     "$ROOT/src/lj_gc2.h" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
-  printf '%s\n' 'low-level GC2 finalizer owner primitives must not be public lj_gc2.h APIs' >&2
+  printf '%s\n' 'low-level GC2 finalizer queue/owner primitives must not be public lj_gc2.h APIs' >&2
   exit 1
 fi
-for helper in lj_gc2_finalizer_try_enter \
+for helper in lj_gc2_finalizer_enqueue \
+  lj_gc2_finalizer_mark_enqueue \
+  lj_gc2_finalizer_try_enter \
   lj_gc2_finalizer_enter \
   lj_gc2_finalizer_leave \
   lj_gc2_finalizer_drain \

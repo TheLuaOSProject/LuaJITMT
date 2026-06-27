@@ -80,7 +80,7 @@ static void *finalizer_enqueue_worker(void *arg)
   rc = pthread_barrier_wait(fp->barrier);
   assert(rc == 0 || rc == PTHREAD_BARRIER_SERIAL_THREAD);
   for (i = 0; i < fp->count; i++)
-    lj_gc2_finalizer_enqueue(fp->g, fp->objs[fp->start + i]);
+    lj_gc2_test_finalizer_enqueue(fp->g, fp->objs[fp->start + i]);
   return NULL;
 }
 
@@ -159,9 +159,9 @@ static void test_finalizer_consumer_ring(lua_State *L, global_State *g)
   drained0 = la_load64_acq(&g->gc2.finalizer_mpsc_drained);
   assert(lj_gc2_worker_start(g) == 1);
   wakes0 = gc2_worker_wakes_acq(g);
-  lj_gc2_finalizer_enqueue(g, a);
-  lj_gc2_finalizer_enqueue(g, b);
-  lj_gc2_finalizer_enqueue(g, c);
+  lj_gc2_test_finalizer_enqueue(g, a);
+  lj_gc2_test_finalizer_enqueue(g, b);
+  lj_gc2_test_finalizer_enqueue(g, c);
   assert(la_load64_acq(&g->gc2.finalizer_queued) == queued0 + 3u);
   assert(gc2_worker_wakes_acq(g) == wakes0 + 1u);
   lj_gc2_worker_stop(g);
@@ -200,7 +200,7 @@ static void test_finalizer_queue_preserves_object_link(lua_State *L,
   assert(unlink_root_object(g, sentinel));
 
   lj_obj_setgcw(queued, sentinel);
-  lj_gc2_finalizer_enqueue(g, queued);
+  lj_gc2_test_finalizer_enqueue(g, queued);
   assert(lj_obj_gcw_acq(queued) == sentinel);
   lj_gc2_test_finalizer_drain(g);
   assert(lj_obj_gcw_acq(queued) == sentinel);
@@ -237,7 +237,7 @@ static void test_finalizer_drain_concurrent_consumers(lua_State *L,
   drained0 = la_load64_acq(&g->gc2.finalizer_mpsc_drained);
   dequeued0 = la_load64_acq(&g->gc2.finalizer_dequeued);
   lj_gc2_test_finalizer_drain_pause(g);
-  lj_gc2_finalizer_enqueue(g, a);
+  lj_gc2_test_finalizer_enqueue(g, a);
   assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) != NULL);
   assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) == NULL);
 
@@ -249,7 +249,7 @@ static void test_finalizer_drain_concurrent_consumers(lua_State *L,
   assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) == NULL);
   assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) == NULL);
   assert(la_load64_acq(&g->gc2.finalizer_mpsc_drained) == drained0);
-  lj_gc2_finalizer_enqueue(g, b);
+  lj_gc2_test_finalizer_enqueue(g, b);
 
   if (lj_gc2_test_finalizer_try_enter(g)) {
     lj_gc2_test_finalizer_drain_owned(g);
@@ -308,7 +308,7 @@ static void test_finalizer_scan_waits_for_drain(lua_State *L, global_State *g)
 
   drained0 = la_load64_acq(&g->gc2.finalizer_mpsc_drained);
   lj_gc2_test_finalizer_drain_pause(g);
-  lj_gc2_finalizer_enqueue(g, a);
+  lj_gc2_test_finalizer_enqueue(g, a);
   fd.g = g;
   assert(pthread_create(&drain_thread, NULL, finalizer_drain_worker, &fd) == 0);
   while (gc2_finalizer_drain_test_paused_acq(g) == 0)
@@ -791,7 +791,7 @@ int main(void)
   assert(!lj_gc2_finalizer_queue_pending(g));
   assert(!lj_gc2_finalizer_pending(g));
   assert(unlink_root_object(g, obj2gco(phase_tab)));
-  lj_gc2_finalizer_enqueue(g, obj2gco(phase_tab));
+  lj_gc2_test_finalizer_enqueue(g, obj2gco(phase_tab));
   assert(lj_gc2_finalizer_queue_pending(g));
   assert(lj_gc2_finalizer_pending(g));
   assert(lj_gc2_finalizer_sweep_pending(g));

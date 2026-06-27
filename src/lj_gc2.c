@@ -104,6 +104,8 @@ static int gc2_finclaim_resize(global_State *g, MSize cap);
 static void gc2_finclaim_reset(global_State *g);
 static void gc2_finalizer_free_stack(global_State *g, GC2FinalizerNode *node);
 static void gc2_finalizer_free_ring(global_State *g, GC2FinalizerNode *tail);
+static void lj_gc2_finalizer_enqueue(global_State *g, GCobj *o);
+static void lj_gc2_finalizer_mark_enqueue(global_State *g, GCobj *o);
 static void lj_gc2_finalizer_drain_owned(global_State *g);
 static void lj_gc2_finalizer_drain(global_State *g);
 static GCobj *lj_gc2_finalizer_dequeue_owned(global_State *g);
@@ -1278,7 +1280,7 @@ static void gc2_finalizer_free_ring(global_State *g, GC2FinalizerNode *tail)
   gc2_finalizer_free_stack(g, node);
 }
 
-void lj_gc2_finalizer_enqueue(global_State *g, GCobj *o)
+static void lj_gc2_finalizer_enqueue(global_State *g, GCobj *o)
 {
   GC2FinalizerNode *node;
   void *head;
@@ -1296,7 +1298,7 @@ void lj_gc2_finalizer_enqueue(global_State *g, GCobj *o)
     lj_gc2_worker_wake(g);  /* 05 section 5.8: finalizer work became visible. */
 }
 
-void lj_gc2_finalizer_mark_enqueue(global_State *g, GCobj *o)
+static void lj_gc2_finalizer_mark_enqueue(global_State *g, GCobj *o)
 {
   if (!g || !o)
     return;
@@ -1571,6 +1573,11 @@ void lj_gc2_test_finalizer_drain(global_State *g)
 GCobj *lj_gc2_test_finalizer_dequeue(global_State *g)
 {
   return lj_gc2_finalizer_dequeue(g);
+}
+
+void lj_gc2_test_finalizer_enqueue(global_State *g, GCobj *o)
+{
+  lj_gc2_finalizer_enqueue(g, o);
 }
 
 static int gc2_finalizer_pending_for_sweep(global_State *g, int owner_ok)
