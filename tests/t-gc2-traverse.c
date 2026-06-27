@@ -1317,7 +1317,7 @@ static void test_jit_current_trace_root(lua_State *L, global_State *g,
   J->cur.nk = REF_TRUE;
   J->cur.nins = REF_TRUE;
   setgcref(J->cur.startpt, obj2gco(pt));
-  lj_gc2_scan_roots(g, L);
+  lj_gc2_test_scan_roots(g, L);
   assert(lj_gc2_ismarked(g, obj2gco(pt)) == 1);
   J->cur = saved;
   lj_gc2_legacy_cycle_end(g);
@@ -1337,7 +1337,7 @@ static void test_jit_tg_executing_trace_root(lua_State *L, global_State *g,
   lj_gc2_legacy_mark_begin(g);
   assert(lj_gc2_ismarked(g, obj2gco(T)) == 0);
   lj_tg_vmstate_store_rel(tg, (int32_t)T->traceno);
-  lj_gc2_scan_roots(g, NULL);
+  lj_gc2_test_scan_roots(g, NULL);
   assert(lj_gc2_ismarked(g, obj2gco(T)) == 1);
   assert(la_load64_acq(&g->gc2.tg_trace_roots) == trace_roots0 + 1u);
   lj_tg_vmstate_store_rel(tg, (int32_t)old_vmstate);
@@ -2733,7 +2733,7 @@ static void test_tg_thread_roots(lua_State *L, global_State *g, TGState *tg)
   assert(lj_gc2_ismarked(g, obj2gco(cur_L)) == 0);
   lj_tg_attach(g, &extra_tg);
   assert(g->gc2.n_threads == 2);
-  lj_gc2_scan_roots(g, NULL);
+  lj_gc2_test_scan_roots(g, NULL);
   assert(lj_gc2_ismarked(g, obj2gco(thread_L)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(cur_L)) == 1);
   assert(la_load64_acq(&g->gc2.tg_thread_roots) > thread_roots0);
@@ -2788,7 +2788,7 @@ static void test_minor_root_scan(lua_State *L, global_State *g, TGState *tg)
   assert(la_load32_acq(&g->gc2.cycle_roots_minor) == 0);
   major_roots0 = gc2_major_root_scans_acq(g);
   minor_roots0 = gc2_minor_root_scans_acq(g);
-  lj_gc2_scan_minor_roots(g, L);
+  lj_gc2_test_scan_minor_roots(g, L);
   assert(gc2_major_root_scans_acq(g) == major_roots0);
   assert(gc2_minor_root_scans_acq(g) == minor_roots0);
   assert(lj_gc2_ismarked(g, obj2gco(stack_tab)) == 0);
@@ -2914,7 +2914,7 @@ static void test_thread(lua_State *L, global_State *g, TGState *tg)
 	 needscan_pending0 + 1u);
   assert(lj_obj_gcflags(obj2gco(busy)) & LJ_GC_NEEDSCAN);
   assert(lj_gc2_ismarked(g, obj2gco(busy_tab)) == 0);
-  lj_gc2_scan_roots(g, L);
+  lj_gc2_test_scan_roots(g, L);
   assert(lj_state_scan_epoch_acq(busy) == g->gc2.cycle);
   assert(lj_gc2_ismarked(g, obj2gco(busy_tab)) == 1);
   assert(la_load64_acq(&g->gc2.thread_scan_owner_needscans) ==
@@ -2972,7 +2972,7 @@ static void test_thread(lua_State *L, global_State *g, TGState *tg)
   needscan_pending0 = la_load32_acq(&g->gc2.thread_scan_needscan_pending);
   dirty_misses0 = la_load64_acq(&g->gc2.thread_scan_dirty_misses);
   lj_gc2_legacy_mark_begin(g);
-  lj_gc2_scan_roots(g, busy);
+  lj_gc2_test_scan_roots(g, busy);
   assert(lj_state_scan_epoch_acq(busy) == g->gc2.cycle);
   assert(lj_state_scan_dirty_epoch_acq(busy) ==
 	 lj_tg_stack_dirty_epoch_acq(tg));
@@ -2993,7 +2993,7 @@ static void test_thread(lua_State *L, global_State *g, TGState *tg)
   assert(la_load32_acq(&g->gc2.thread_scan_needscan_pending) >
 	 needscan_pending0);
   assert(lj_obj_gcflags(obj2gco(busy)) & LJ_GC_NEEDSCAN);
-  lj_gc2_scan_roots(g, busy);
+  lj_gc2_test_scan_roots(g, busy);
   assert((lj_obj_gcflags(obj2gco(busy)) & LJ_GC_NEEDSCAN) == 0);
   assert(la_load32_acq(&g->gc2.thread_scan_needscan_pending) ==
 	 needscan_pending0);
@@ -3022,7 +3022,7 @@ static void test_thread(lua_State *L, global_State *g, TGState *tg)
   requeues0 = la_load64_acq(&g->gc2.thread_scan_requeues);
   owner_scans0 = la_load64_acq(&g->gc2.thread_scan_owner_scans);
   lj_gc2_legacy_mark_begin(g);
-  lj_gc2_scan_roots(g, busy);
+  lj_gc2_test_scan_roots(g, busy);
   assert(lj_state_scan_epoch_acq(busy) == g->gc2.cycle);
   assert(lj_gc2_ismarked(g, obj2gco(busy_tab)) == 1);
   assert(lj_gc2_flush_ssb(g, tg) != 0);

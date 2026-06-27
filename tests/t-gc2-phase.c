@@ -322,7 +322,7 @@ static void test_finalizer_scan_waits_for_drain(lua_State *L, global_State *g)
   rel.delay_ns = 1000000L;
   assert(pthread_create(&release_thread, NULL, finalizer_drain_release_worker,
 			&rel) == 0);
-  lj_gc2_scan_roots(g, L);
+  lj_gc2_test_scan_roots(g, L);
   assert(pthread_join(release_thread, NULL) == 0);
   assert(pthread_join(drain_thread, NULL) == 0);
   assert(la_load32_acq(&fd.finished) == 1);

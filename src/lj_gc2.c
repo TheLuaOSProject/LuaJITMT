@@ -2403,7 +2403,7 @@ static void gc2_scan_global_roots(global_State *g)
 #endif
 }
 
-void lj_gc2_scan_roots(global_State *g, lua_State *L)
+static void lj_gc2_scan_roots(global_State *g, lua_State *L)
 {
   if (!g)
     return;
@@ -2412,7 +2412,7 @@ void lj_gc2_scan_roots(global_State *g, lua_State *L)
   gc2_scan_thread_roots(g, L);
 }
 
-void lj_gc2_scan_minor_roots(global_State *g, lua_State *L)
+static void lj_gc2_scan_minor_roots(global_State *g, lua_State *L)
 {
   if (!g || gc2_cycle_roots_minor_acq(g) == 0)
     return;
@@ -2433,6 +2433,16 @@ void lj_gc2_scan_cycle_roots(global_State *g, lua_State *L)
     lj_gc2_scan_minor_roots(g, L);
   else
     lj_gc2_scan_roots(g, L);
+}
+
+void lj_gc2_test_scan_roots(global_State *g, lua_State *L)
+{
+  lj_gc2_scan_roots(g, L);
+}
+
+void lj_gc2_test_scan_minor_roots(global_State *g, lua_State *L)
+{
+  lj_gc2_scan_minor_roots(g, L);
 }
 
 static void *gc2_mark_base(GCobj *o);

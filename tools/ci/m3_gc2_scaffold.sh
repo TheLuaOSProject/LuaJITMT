@@ -4,6 +4,24 @@ set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 
+if hits=$(grep -nE -- 'lj_gc2_scan_(roots|minor_roots)[[:space:]]*[(]|LJ_FUNC void lj_gc2_scan_(roots|minor_roots)[[:space:]]*[(]' \
+    "$ROOT"/src/*.c "$ROOT"/tests/*.c "$ROOT/src/lj_gc2.h" | \
+    grep -v "$ROOT/src/lj_gc2.c:" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'direct GC2 root scan helpers must stay inside lj_gc2.c; use scan_cycle or test wrappers' >&2
+  exit 1
+fi
+if ! grep -qE '^[[:space:]]*static void lj_gc2_scan_roots[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.c"; then
+  printf '%s\n' 'lj_gc2_scan_roots must stay static inside lj_gc2.c' >&2
+  exit 1
+fi
+if ! grep -qE '^[[:space:]]*static void lj_gc2_scan_minor_roots[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.c"; then
+  printf '%s\n' 'lj_gc2_scan_minor_roots must stay static inside lj_gc2.c' >&2
+  exit 1
+fi
+
 check_raw_finreg_udata_next() {
   label=$1
   file=$2
