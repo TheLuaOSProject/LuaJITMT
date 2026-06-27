@@ -1246,6 +1246,27 @@ static int ccall_get_results(lua_State *L, CTState *cts, CType *ct,
   return lj_cconv_tv_ct_l(L, cts, ctr, rid, L->top-1, sp);
 }
 
+static int ccall_had_stopreq(lua_State *L)
+{
+  TGState *tg = L2TG(L);
+  return tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ);
+}
+
+static int ccall_fresh_stopreq(lua_State *L, uint32_t actions,
+			       int had_stopreq)
+{
+  TGState *tg = L2TG(L);
+  return (actions & LJ_GC2_HS_STOPREQ) ||
+    (!had_stopreq && tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ));
+}
+
+static void ccall_checkstop_fresh(lua_State *L, uint32_t actions,
+				  int had_stopreq)
+{
+  if (ccall_fresh_stopreq(L, actions, had_stopreq))
+    lj_safepoint_checkstop(L, actions);
+}
+
 /* Call C function. */
 int lj_ccall_func(lua_State *L, GCcdata *cd)
 {
@@ -1266,11 +1287,12 @@ int lj_ccall_func(lua_State *L, GCcdata *cd)
     void *old_ffi_call_func = lj_tg_ffi_call_func_acq(tg);
     uint32_t actions;
     CCallbackRuntime *cb = &tg->cb;
-    int gcsteps, ret;
+    int gcsteps, ret, had_stopreq;
     cc.func = (void (*)(void))cdata_getptr(cdataptr(cd), sz);
     gcsteps = ccall_set_args(L, cts, ct, &cc);
     cb->slot = ~0u;
     lj_tg_ffi_call_func_rel(tg, (void *)cc.func);
+    had_stopreq = ccall_had_stopreq(L);
     lj_native_enter(tg);
     lj_vm_ffi_call(&cc);
     actions = lj_native_leave(L);
@@ -1288,7 +1310,7 @@ int lj_ccall_func(lua_State *L, GCcdata *cd)
       lj_trace_abort(G(L));
     }
 #endif
-    lj_safepoint_checkstop(L, actions);
+    ccall_checkstop_fresh(L, actions, had_stopreq);
     while (gcsteps-- > 0)
       lj_gc_check(L);
     return ret;
