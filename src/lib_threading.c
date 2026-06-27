@@ -325,11 +325,7 @@ static void threading_gc_leave(global_State *g)
 {
   if (mt_live_sub_acqrel(g, 1) == 1) {
     lj_gc_threshold_store(g, lj_gc_mt_threshold_load(g));
-    if (g->gc.state == GCSfinalize &&
-	mt_gc_exclusive_acq(g) == 0) {
-      gc2_finalizer_spawn_release_wakes_add(g, 1);
-      lj_gc2_worker_wake(g);
-    }
+    lj_gc2_finalizer_spawn_release(g);
     mt_live_futex_wake(g, INT_MAX);
   }
 }

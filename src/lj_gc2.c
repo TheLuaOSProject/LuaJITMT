@@ -1476,6 +1476,31 @@ int lj_gc2_finalizer_sweep_pending(global_State *g)
   return gc2_finalizer_pending_for_sweep(g, 1);
 }
 
+int lj_gc2_finalizer_spawn_deferred(global_State *g)
+{
+  if (!g)
+    return 0;
+  if (g->gc.state == GCSfinalize &&
+      mt_live_acq(g) != 0 &&
+      mt_gc_exclusive_acq(g) == 0) {
+    gc2_finalizer_spawn_deferrals_add(g, 1);
+    return 1;
+  }
+  return 0;
+}
+
+void lj_gc2_finalizer_spawn_release(global_State *g)
+{
+  if (!g)
+    return;
+  if (g->gc.state == GCSfinalize &&
+      mt_live_acq(g) == 0 &&
+      mt_gc_exclusive_acq(g) == 0) {
+    gc2_finalizer_spawn_release_wakes_add(g, 1);
+    lj_gc2_worker_wake(g);
+  }
+}
+
 static int gc2_sweep_blocked_by_finalizer(global_State *g)
 {
   if (!lj_gc2_finalizer_sweep_pending(g))

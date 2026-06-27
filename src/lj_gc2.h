@@ -139,6 +139,8 @@ LJ_FUNC void lj_gc2_finalizer_leave(global_State *g);
 LJ_FUNC int lj_gc2_finalizer_queue_pending(global_State *g);
 LJ_FUNC int lj_gc2_finalizer_pending(global_State *g);
 LJ_FUNC int lj_gc2_finalizer_sweep_pending(global_State *g);
+LJ_FUNC int lj_gc2_finalizer_spawn_deferred(global_State *g);
+LJ_FUNC void lj_gc2_finalizer_spawn_release(global_State *g);
 LJ_FUNC void lj_gc2_barrier_tv(lua_State *L, cTValue *tv);
 LJ_FUNCA void lj_gc2_barrier_tv_g(global_State *g, cTValue *tv);
 LJ_FUNCA void lj_gc2_barrier_tvn_g(global_State *g, cTValue *tv, uint32_t n);

@@ -1856,17 +1856,6 @@ static int gc_finalize(lua_State *L)
   return 1;
 }
 
-static int gc_fullgc_deferred_by_finalizer(global_State *g)
-{
-  if (g->gc.state == GCSfinalize &&
-      mt_live_acq(g) != 0 &&
-      mt_gc_exclusive_acq(g) == 0) {
-    gc2_finalizer_spawn_deferrals_add(g, 1);
-    return 1;
-  }
-  return 0;
-}
-
 /* Finalize all userdata/cdata objects from the GC2 finalizer queue. */
 void lj_gc_finalize_udata(lua_State *L)
 {
@@ -2385,7 +2374,7 @@ static size_t gc_onestep(lua_State *L)
 	g->gc.estimate -= GCFINALIZECOST;
       return GCFINALIZECOST;
     }
-    if (gc_fullgc_deferred_by_finalizer(g))
+    if (lj_gc2_finalizer_spawn_deferred(g))
       return LJ_MAX_MEM;  /* Keep GCSfinalize open until spawned TG exits. */
     (void)gc_arena_finish_sweep_boundary(g, 1);
     if (gc2_legacy_sweep_close(g)) {
@@ -2519,7 +2508,7 @@ void lj_gc_fullgc(lua_State *L)
   g->gc.state = GCSpause;
   do {
     gc_onestep(L);
-    if (gc_fullgc_deferred_by_finalizer(g)) {
+    if (lj_gc2_finalizer_spawn_deferred(g)) {
       vmstate_store_rel(g, ostate);
       return;
     }

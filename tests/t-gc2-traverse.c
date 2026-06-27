@@ -3238,9 +3238,8 @@ static void test_ffi_loaded_weak_value_barrier(void)
 
 static void test_finalizer_spawn_deferred_state(lua_State *L, global_State *g)
 {
-  uint64_t deferrals0 = la_load64_acq(&g->gc2.finalizer_spawn_deferrals);
-  uint64_t releasewakes0 =
-    la_load64_acq(&g->gc2.finalizer_spawn_release_wakes);
+  uint64_t deferrals0 = gc2_finalizer_spawn_deferrals_acq(g);
+  uint64_t releasewakes0 = gc2_finalizer_spawn_release_wakes_acq(g);
 
   lua_settop(L, 0);
   assert(luaL_dostring(L,
@@ -3265,7 +3264,7 @@ static void test_finalizer_spawn_deferred_state(lua_State *L, global_State *g)
   assert(mt_live_acq(g) != 0);
   assert(mt_gc_exclusive_acq(g) == 0);
   assert(lj_gc_threshold_load(g) == LJ_MAX_MEM);
-  assert(la_load64_acq(&g->gc2.finalizer_spawn_deferrals) > deferrals0);
+  assert(gc2_finalizer_spawn_deferrals_acq(g) > deferrals0);
 
   assert(luaL_dostring(L,
     "local msg, ok = gc2_spawn_started:recv(1)\n"
@@ -3277,8 +3276,7 @@ static void test_finalizer_spawn_deferred_state(lua_State *L, global_State *g)
     "gc2_spawn_started = nil\n"
     "gc2_spawn_release = nil\n") == LUA_OK);
   assert(mt_live_acq(g) == 0);
-  assert(la_load64_acq(&g->gc2.finalizer_spawn_release_wakes) >
-	 releasewakes0);
+  assert(gc2_finalizer_spawn_release_wakes_acq(g) > releasewakes0);
   lua_gc(L, LUA_GCCOLLECT, 0);
   assert(g->gc.state == GCSpause);
   lua_gc(L, LUA_GCCOLLECT, 0);
