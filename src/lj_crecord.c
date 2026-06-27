@@ -51,6 +51,9 @@
 #ifndef LJ_FFI_RECORD_CALLS
 #define LJ_FFI_RECORD_CALLS 0
 #endif
+#if LJ_FFI_RECORD_CALLS
+#error "LJ_FFI_RECORD_CALLS requires an IR_CALLXS native-state protocol"
+#endif
 
 /* -- C type checks ------------------------------------------------------- */
 

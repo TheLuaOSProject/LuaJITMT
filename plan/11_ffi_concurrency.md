@@ -135,13 +135,13 @@ FINREG/finqueue dispatch lands.
   `lj_vm_ffi_call(&cc)`, preserve the native-leave action mask, and check
   `HS_STOPREQ` after callback blacklist handling and result conversion have
   restored local FFI bookkeeping. Safety-first default: cdata function calls do
-  not record `IR_CALLXS` unless `LJ_FFI_RECORD_CALLS` is explicitly enabled, so
-  ordinary FFI calls naturally use the interpreted native-state path. This
-  removes the previous requirement that users identify blocking functions with
+  not record `IR_CALLXS`, so ordinary FFI calls naturally use the interpreted
+  native-state path. `LJ_FFI_RECORD_CALLS` hard-fails at compile time until
+  `IR_CALLXS` has an explicit native-state enter/leave protocol. This removes
+  the previous requirement that users identify blocking functions with
   `ffi.blocking(fn)` before GC/shutdown can progress while C is blocked.
   `ffi.blocking(fn)` remains as a compatibility marker and validation API, but
-  traced C-call throughput stays deferred until `IR_CALLXS` has an explicit
-  native-state enter/leave protocol.
+  traced C-call throughput stays deferred behind the native-state protocol.
 - **Callbacks (C→Lua)**: callback entry (lj_ccallback.c enter) runs
   `lj_native_leave` on the carrier thread; if the OS thread is foreign
   (created by C, never attached), auto-attach a TG (luaMT_attach path, 09

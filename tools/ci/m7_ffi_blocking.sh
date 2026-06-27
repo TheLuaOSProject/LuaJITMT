@@ -14,6 +14,9 @@ if hits=$(awk '
 fi
 if ! awk '
   /^#define LJ_FFI_RECORD_CALLS 0$/ { defoff = 1 }
+  /^#if LJ_FFI_RECORD_CALLS$/ && defoff && !seen_harderr { in_harderr = 1 }
+  in_harderr && /#error .*IR_CALLXS.*native-state/ { harderr = 1 }
+  in_harderr && /^#endif/ { in_harderr = 0; seen_harderr = 1 }
   /^static int crec_call\(jit_State \*J, RecordFFData \*rd, GCcdata \*cd\)$/ {
     in_fn = 1
   }
@@ -21,9 +24,9 @@ if ! awk '
   in_fn && guarded && /lj_trace_err\(J, LJ_TRERR_BLACKL\)/ { aborts = 1 }
   in_fn && /IR_CALLXS/ { has_callxs = 1 }
   in_fn && /^}/ { in_fn = 0 }
-  END { exit(defoff && guarded && aborts && has_callxs ? 0 : 1) }
+  END { exit(defoff && harderr && guarded && aborts && has_callxs ? 0 : 1) }
 ' "$ROOT/src/lj_crecord.c"; then
-  printf '%s\n' 'FFI C-call recorder must default to the native-state interpreted path until IR_CALLXS has a native protocol' >&2
+  printf '%s\n' 'FFI C-call recorder must hard-disable traced calls until IR_CALLXS has a native protocol' >&2
   exit 1
 fi
 exec "$ROOT/tools/ci/lua_test.sh" m7_ffi_blocking
