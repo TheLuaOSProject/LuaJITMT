@@ -69,6 +69,33 @@ do
   end
 end
 
+do
+  local stale = ffi.cast("lj_m7_cback_install_t", function(x)
+    return x + 1
+  end)
+  stale:free()
+
+  local live = ffi.cast("lj_m7_cback_install_t", function(x)
+    return x + 2
+  end)
+  assert(live(10) == 12)
+
+  local ok, err = pcall(function()
+    stale:set(function(x)
+      return x + 99
+    end)
+  end)
+  assert(not ok and tostring(err):match("bad callback"), tostring(err))
+  assert(live(10) == 12)
+
+  ok, err = pcall(function()
+    stale:free()
+  end)
+  assert(not ok and tostring(err):match("bad callback"), tostring(err))
+
+  live:free()
+end
+
 collectgarbage("restart")
 harness.fullgc()
 

@@ -405,7 +405,14 @@ static LJ_AINLINE void lj_udata_udtype_rel(GCudata *ud, uint8_t udtype)
 typedef struct GCcdata {
   GCHeader;
   uint16_t ctypeid;	/* C type ID. */
+  uint16_t flags;	/* Internal cdata flags; uses x64 header padding. */
 } GCcdata;
+
+LJ_STATIC_ASSERT(offsetof(GCcdata, flags) ==
+		 offsetof(GCcdata, ctypeid) + sizeof(uint16_t));
+#if LJ_64
+LJ_STATIC_ASSERT(sizeof(GCcdata) == 16);
+#endif
 
 /* Prepended to variable-sized or realigned C data objects. */
 typedef struct GCcdataVar {
@@ -415,6 +422,27 @@ typedef struct GCcdataVar {
 } GCcdataVar;
 
 #define cdataptr(cd)	((void *)((cd)+1))
+#define LJ_CDATA_CALLBACK_FREE	0x0001u
+static LJ_AINLINE uint16_t cdata_flags_acq(const GCcdata *cd)
+{
+  return la_load16_acq(&cd->flags);
+}
+
+static LJ_AINLINE void cdata_flags_rel(GCcdata *cd, uint16_t flags)
+{
+  la_store16_rel(&cd->flags, flags);
+}
+
+static LJ_AINLINE void cdata_flags_or_atomic(GCcdata *cd, uint16_t flags)
+{
+  uint16_t old = cdata_flags_acq(cd);
+  for (;;) {
+    uint16_t next = (uint16_t)(old | flags);
+    if (la_cas16(&cd->flags, &old, next, LA_ACQ_REL, LA_ACQ))
+      return;
+  }
+}
+
 #define cdataisv(cd)	((cd)->marked & 0x80)
 #define cdatav(cd)	((GCcdataVar *)((char *)(cd) - sizeof(GCcdataVar)))
 #define cdatavlen(cd)	check_exp(cdataisv(cd), cdatav(cd)->len)

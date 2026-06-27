@@ -532,6 +532,21 @@ LJLIB_CF(ffi_clib___gc)
 
 #define LJLIB_MODULE_ffi_callback
 
+static LJ_AINLINE void *ffi_callback_ptr_acq(GCcdata *cd)
+{
+  return la_loadptr_acq((void *const *)cdataptr(cd));
+}
+
+static LJ_AINLINE int ffi_callback_isfree_acq(GCcdata *cd)
+{
+  return (cdata_flags_acq(cd) & LJ_CDATA_CALLBACK_FREE) != 0;
+}
+
+static LJ_AINLINE void ffi_callback_markfree(GCcdata *cd)
+{
+  cdata_flags_or_atomic(cd, LJ_CDATA_CALLBACK_FREE);
+}
+
 static int ffi_callback_set(lua_State *L, GCfunc *fn)
 {
   GCcdata *cd = ffi_checkcdata(L, 1);
@@ -539,8 +554,10 @@ static int ffi_callback_set(lua_State *L, GCfunc *fn)
   CType *ct = ctype_raw(cts, cd->ctypeid);
   CTInfo info = ctype_info_acq(ct);
   CTSize size = ctype_size_acq(ct);
+  if (ffi_callback_isfree_acq(cd))
+    goto bad_callback;
   if (ctype_isptr(info) && (LJ_32 || size == 8)) {
-    MSize slot = lj_ccallback_ptr2slot(cts, *(void **)cdataptr(cd));
+    MSize slot = lj_ccallback_ptr2slot(cts, ffi_callback_ptr_acq(cd));
     CTypeID1 *cbid = NULL;
     lua_State **owner = NULL;
     if (slot < ctype_cb_sizeid_acq(cts) &&
@@ -549,6 +566,7 @@ static int ffi_callback_set(lua_State *L, GCfunc *fn)
       if (fn) {
 	lj_ccallback_func_store_l(L, cts, slot, fn);
       } else {
+	ffi_callback_markfree(cd);  /* Tombstone cdata; keep C trampoline ptr. */
 	owner = ctype_cb_owner_acq(cts);
 	if (owner && ctype_cb_owner_slot_acq(owner, slot) == NULL) {
 	  /* 11.5 disowned callback free: nil function before cbid release. */
@@ -565,6 +583,7 @@ static int ffi_callback_set(lua_State *L, GCfunc *fn)
       return 0;
     }
   }
+bad_callback:
   lj_err_caller(L, LJ_ERR_FFI_BADCBACK);
   return 0;
 }

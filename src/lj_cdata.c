@@ -50,6 +50,7 @@ GCcdata *lj_cdata_newv(lua_State *L, CTypeID id, CTSize sz, CTSize align)
   g = G(L);
   cd->gct = ~LJ_TCDATA;
   cd->ctypeid = id;
+  cdata_flags_rel(cd, 0);
   newwhite(g, obj2gco(cd));
   lj_obj_addgcflags(obj2gco(cd), 0x80);
   lj_gc_linkobj(g, obj2gco(cd));
