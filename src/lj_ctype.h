@@ -399,6 +399,20 @@ typedef LJ_ALIGN(8) struct CCallbackRuntime {
   CCallbackFrame frame[CCALLBACK_MAX_NEST];  /* Per-callback return state. */
 } CCallbackRuntime;
 
+static LJ_AINLINE uint8_t
+ccallback_native_had_stopreq_acq(const CCallbackRuntime *cb)
+{
+  /* 11.5 native callback STOPREQ snapshot. */
+  return cb ? la_load8_acq(&cb->native_had_stopreq) : 0;
+}
+
+static LJ_AINLINE void
+ccallback_native_had_stopreq_rel(CCallbackRuntime *cb, uint8_t had_stopreq)
+{
+  /* 11.5 native callback STOPREQ snapshot. */
+  la_store8_rel(&cb->native_had_stopreq, had_stopreq);
+}
+
 typedef LJ_ALIGN(8) struct CCallback {
   void *mcode;			/* Machine code for callback func. pointers. */
   CTypeID1 *cbid;		/* Callback type table. */

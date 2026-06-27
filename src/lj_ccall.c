@@ -1287,14 +1287,14 @@ int lj_ccall_func(lua_State *L, GCcdata *cd)
     void *old_ffi_call_func = lj_tg_ffi_call_func_acq(tg);
     uint32_t actions;
     CCallbackRuntime *cb = &tg->cb;
-    uint8_t old_native_had_stopreq = cb->native_had_stopreq;
+    uint8_t old_native_had_stopreq = ccallback_native_had_stopreq_acq(cb);
     int gcsteps, ret, had_stopreq;
     cc.func = (void (*)(void))cdata_getptr(cdataptr(cd), sz);
     gcsteps = ccall_set_args(L, cts, ct, &cc);
     cb->slot = ~0u;
     lj_tg_ffi_call_func_rel(tg, (void *)cc.func);
     had_stopreq = ccall_had_stopreq(L);
-    cb->native_had_stopreq = (uint8_t)had_stopreq;
+    ccallback_native_had_stopreq_rel(cb, (uint8_t)had_stopreq);
     lj_native_enter(tg);
     lj_vm_ffi_call(&cc);
     actions = lj_native_leave(L);
@@ -1302,7 +1302,7 @@ int lj_ccall_func(lua_State *L, GCcdata *cd)
       lj_ctype_cb_blacklist(cts, (void *)cc.func);
     }
     lj_tg_ffi_call_func_rel(tg, old_ffi_call_func);
-    cb->native_had_stopreq = old_native_had_stopreq;
+    ccallback_native_had_stopreq_rel(cb, old_native_had_stopreq);
     ct = ctype_get(cts, id);  /* Table may have been reallocated. */
     gcsteps += ccall_get_results(L, cts, ct, &cc, &ret);
 #if LJ_TARGET_X86 && LJ_ABI_WIN

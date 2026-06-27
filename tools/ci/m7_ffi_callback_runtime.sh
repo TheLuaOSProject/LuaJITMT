@@ -55,11 +55,25 @@ do
     exit 1
   fi
 done
+for helper in ccallback_native_had_stopreq_acq ccallback_native_had_stopreq_rel
+do
+  if ! grep -q "$helper" "$ROOT/src/lj_ctype.h"; then
+    printf '%s\n' "missing FFI callback native STOPREQ snapshot helper: $helper" >&2
+    exit 1
+  fi
+done
 if ! grep -q 'native_had_stopreq' "$ROOT/src/lj_ctype.h" ||
-   ! grep -q 'cb->native_had_stopreq = (uint8_t)had_stopreq' "$ROOT/src/lj_ccall.c" ||
-   ! grep -q 'cb->native_had_stopreq = 0' "$ROOT/src/lj_ccallback.c" ||
-   ! grep -q 'cb->native_had_stopreq' "$ROOT/src/lj_ccallback.c"; then
+   ! grep -q 'ccallback_native_had_stopreq_rel(cb, (uint8_t)had_stopreq)' "$ROOT/src/lj_ccall.c" ||
+   ! grep -q 'ccallback_native_had_stopreq_rel(cb, 0)' "$ROOT/src/lj_ccallback.c" ||
+   ! grep -q 'ccallback_native_had_stopreq_acq(cb)' "$ROOT/src/lj_ccallback.c"; then
   printf '%s\n' 'FFI callback STOPREQ freshness must use the surrounding FFI native-entry snapshot' >&2
+  exit 1
+fi
+if hits=$(grep -RInE -- '->[[:space:]]*native_had_stopreq([^[:alnum:]_]|$)|&[[:space:]]*[^)]*->[[:space:]]*native_had_stopreq([^[:alnum:]_]|$)' \
+    "$ROOT/src/lj_ccall.c" "$ROOT/src/lj_ccallback.c" "$ROOT/src/lj_ctype.h" 2>/dev/null | \
+    grep -vF "$ROOT/src/lj_ctype.h:" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw callback native STOPREQ snapshot access is forbidden; use ccallback_native_had_stopreq_* helpers' >&2
   exit 1
 fi
 if hits=$(awk '
