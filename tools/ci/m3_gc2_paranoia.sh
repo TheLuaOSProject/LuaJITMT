@@ -19,4 +19,17 @@ if hits=$(grep -nE -- '->[[:space:]]*gc2[.]marks_this_round|&[[:space:]]*[^)]*->
   exit 1
 fi
 
+if hits=$(grep -nE -- 'lj_gc2_paranoia_legacy_diff[[:space:]]*[(]|LJ_FUNC .*lj_gc2_paranoia_legacy_diff[[:space:]]*[(]' \
+    "$ROOT"/src/*.c "$ROOT"/tests/*.c "$ROOT/src/lj_gc2.h" | \
+    grep -v "$ROOT/src/lj_gc2.c:" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw GC2 paranoia legacy diff must stay inside lj_gc2.c; use test wrappers' >&2
+  exit 1
+fi
+if ! grep -qE '^[[:space:]]*static uint32_t lj_gc2_paranoia_legacy_diff[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.c"; then
+  printf '%s\n' 'lj_gc2_paranoia_legacy_diff must stay static inside lj_gc2.c' >&2
+  exit 1
+fi
+
 exec "$ROOT/tools/ci/lua_test.sh" m3_gc2_paranoia

@@ -5502,7 +5502,7 @@ static uint32_t gc2_paranoia_scan_arena(global_State *g, GCArena *a)
   return bad;
 }
 
-uint32_t lj_gc2_paranoia_legacy_diff(global_State *g)
+static uint32_t lj_gc2_paranoia_legacy_diff(global_State *g)
 {
   TGState *tg;
   GCArena *a;
@@ -5523,6 +5523,11 @@ uint32_t lj_gc2_paranoia_legacy_diff(global_State *g)
       bad += gc2_paranoia_scan_arena(g, a);
   }
   return bad;
+}
+
+uint32_t lj_gc2_test_paranoia_legacy_diff(global_State *g)
+{
+  return lj_gc2_paranoia_legacy_diff(g);
 }
 
 #endif

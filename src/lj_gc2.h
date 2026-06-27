@@ -142,6 +142,9 @@ LJ_FUNC void lj_gc2_test_update_minor_survival_policy(global_State *g,
 LJ_FUNC uint32_t lj_gc2_test_sweep_owner_progress(global_State *g,
 						  TGState *tg,
 						  uint32_t limit);
+#if LJ_GC2_PARANOIA
+LJ_FUNC uint32_t lj_gc2_test_paranoia_legacy_diff(global_State *g);
+#endif
 LJ_FUNC void lj_gc2_test_finreg_cdata_finalizer_enqueue(global_State *g,
 							GCobj *o);
 LJ_FUNC int lj_gc2_test_finreg_cdata_preclaim(lua_State *L, global_State *g,
@@ -188,8 +191,5 @@ LJ_FUNC int lj_gc2_markobj(global_State *g, GCobj *o);
 LJ_FUNC int lj_gc2_markmem(global_State *g, void *p);
 LJ_FUNC int lj_gc2_ismarkedmem(global_State *g, void *p);
 LJ_FUNC int lj_gc2_ismarked(global_State *g, GCobj *o);
-#if LJ_GC2_PARANOIA
-LJ_FUNC uint32_t lj_gc2_paranoia_legacy_diff(global_State *g);
-#endif
 
 #endif
