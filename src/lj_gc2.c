@@ -1427,6 +1427,47 @@ void lj_gc2_finalizer_dispatch_all(lua_State *L,
   }
 }
 
+int lj_gc2_finalizer_step(lua_State *L, GC2FinalizerDispatchFunc dispatch,
+			  GCSize finalize_cost, GCSize *cost)
+{
+  global_State *g;
+  if (cost)
+    *cost = 0;
+  if (!L || !dispatch)
+    return 0;
+  g = G(L);
+  if (lj_gc2_finalizer_queue_pending(g)) {
+    GCSize old, total;
+    int finrc;
+    if (lj_tg_jit_base(g)) {
+      if (cost)
+	*cost = LJ_MAX_MEM;
+      return -1;  /* 05 section 5.8: do not run finalizers on trace. */
+    }
+    old = lj_gc_total_load(g);
+    finrc = lj_gc2_finalizer_dispatch_one(L, dispatch);
+    if (finrc <= 0) {
+      if (cost)
+	*cost = LJ_MAX_MEM;
+      return -1;  /* Busy owner or finalizer-spawn deferred GC. */
+    }
+    total = lj_gc_total_load(g);
+    if (old >= total && g->gc.estimate > old - total)
+      g->gc.estimate -= old - total;
+    if (g->gc.estimate > finalize_cost)
+      g->gc.estimate -= finalize_cost;
+    if (cost)
+      *cost = finalize_cost;
+    return 1;
+  }
+  if (lj_gc2_finalizer_spawn_deferred(g)) {
+    if (cost)
+      *cost = LJ_MAX_MEM;
+    return -1;  /* Keep GCSfinalize open until spawned TG exits. */
+  }
+  return 0;
+}
+
 int lj_gc2_finalizer_try_enter(global_State *g)
 {
   uint32_t owner, old;

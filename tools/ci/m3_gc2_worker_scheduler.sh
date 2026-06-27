@@ -297,6 +297,23 @@ if hits=$(grep -nE -- 'lj_gc2_finalizer_drain[[:space:]]*[(]' \
   printf '%s\n' 'legacy close-time finalizer drain loops must use lj_gc2_finalizer_dispatch_all' >&2
   exit 1
 fi
+if ! grep -qE 'LJ_FUNC int lj_gc2_finalizer_step[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.h"; then
+  printf '%s\n' 'lj_gc2_finalizer_step declaration is required for GCSfinalize step ownership' >&2
+  exit 1
+fi
+if ! grep -qE '^int lj_gc2_finalizer_step[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.c"; then
+  printf '%s\n' 'lj_gc2_finalizer_step definition is required for GCSfinalize step ownership' >&2
+  exit 1
+fi
+if hits=$(sed -n '/case GCSfinalize:/,/default:/p' "$ROOT/src/lj_gc.c" | \
+    grep -nE -- 'lj_gc2_finalizer_(queue_pending|spawn_deferred)[[:space:]]*[(]|lj_tg_jit_base[[:space:]]*[(]|lj_gc_total_load[[:space:]]*[(]' || true); \
+    [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'GCSfinalize step policy must stay in lj_gc2_finalizer_step' >&2
+  exit 1
+fi
 if hits=$(grep -nE -- 'lj_gc2_finalizer_enqueue[[:space:]]*[(]' \
     "$ROOT/src/lj_gc.c" \
     "$ROOT/src/lib_threading.c" \

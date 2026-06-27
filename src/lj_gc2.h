@@ -164,6 +164,9 @@ LJ_FUNC int lj_gc2_finalizer_dispatch_one(lua_State *L,
 					  GC2FinalizerDispatchFunc dispatch);
 LJ_FUNC void lj_gc2_finalizer_dispatch_all(lua_State *L,
 					   GC2FinalizerDispatchFunc dispatch);
+LJ_FUNC int lj_gc2_finalizer_step(lua_State *L,
+				  GC2FinalizerDispatchFunc dispatch,
+				  GCSize finalize_cost, GCSize *cost);
 LJ_FUNC void lj_gc2_finalizer_mark_all(global_State *g,
 				       GC2FinalizerMarkFunc mark);
 LJ_FUNC int lj_gc2_finalizer_try_enter(global_State *g);

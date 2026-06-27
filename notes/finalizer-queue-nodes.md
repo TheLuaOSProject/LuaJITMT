@@ -26,6 +26,9 @@ the same owner/drain/dequeue/release sequence, with legacy GC retaining only the
 dequeued-object semantic callback.
 Close-time drain-all uses `lj_gc2_finalizer_dispatch_all()`, keeping the
 blocking drain/pending/dispatch loop on the GC2 side of the queue boundary.
+Incremental `GCSfinalize` work uses `lj_gc2_finalizer_step()`, so queue-pending
+checks, trace deferral, per-finalizer cost accounting, and finalizer-spawn
+deferral are also kept behind the GC2 finalizer boundary.
 
 ## Coverage
 

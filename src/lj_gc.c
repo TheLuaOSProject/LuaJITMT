@@ -1601,12 +1601,6 @@ static int gc_dispatch_finalizer_obj(lua_State *L, global_State *g, GCobj *o)
   }
 }
 
-/* Finalize one userdata or cdata object from the GC2 finalizer queue. */
-static int gc_finalize(lua_State *L)
-{
-  return lj_gc2_finalizer_dispatch_one(L, gc_dispatch_finalizer_obj);
-}
-
 /* Finalize all userdata/cdata objects from the GC2 finalizer queue. */
 void lj_gc_finalize_udata(lua_State *L)
 {
@@ -1802,25 +1796,13 @@ static size_t gc_onestep(lua_State *L)
     return GCSWEEPMAX*GCSWEEPCOST;
     }
   case GCSfinalize:
-    if (lj_gc2_finalizer_queue_pending(g)) {
-      GCSize old = lj_gc_total_load(g);
-      int finrc;
-      if (lj_tg_jit_base(g))  /* Don't call finalizers on trace. */
-	return LJ_MAX_MEM;
-      finrc = gc_finalize(L);  /* Finalize one userdata/cdata object. */
-      if (finrc <= 0)  /* Busy owner or deferred finalizer-spawn reclaim. */
-	return LJ_MAX_MEM;
-      {
-	GCSize total = lj_gc_total_load(g);
-	if (old >= total && g->gc.estimate > old - total)
-	  g->gc.estimate -= old - total;
-      }
-      if (g->gc.estimate > GCFINALIZECOST)
-	g->gc.estimate -= GCFINALIZECOST;
-      return GCFINALIZECOST;
+    {
+      GCSize fincost;
+      int finstep = lj_gc2_finalizer_step(L, gc_dispatch_finalizer_obj,
+					  GCFINALIZECOST, &fincost);
+      if (finstep != 0)
+	return fincost;
     }
-    if (lj_gc2_finalizer_spawn_deferred(g))
-      return LJ_MAX_MEM;  /* Keep GCSfinalize open until spawned TG exits. */
     (void)gc_arena_finish_sweep_boundary(g, 1);
     if (gc2_legacy_sweep_close(g)) {
       g->gc.state = GCSpause;  /* End of GC cycle. */

@@ -245,7 +245,10 @@ object's `gcw` root/list link. Dispatch-time queue consumption goes through
 `lj_gc2_finalizer_dispatch_one()`, leaving legacy GC with the dequeued-object
 semantic callback rather than direct owner/drain/dequeue access. Close-time
 drain-all uses `lj_gc2_finalizer_dispatch_all()`, so the blocking drain /
-queue-pending / dispatch-one loop also stays in GC2.
+queue-pending / dispatch-one loop also stays in GC2. Incremental
+`GCSfinalize` work uses `lj_gc2_finalizer_step()`, moving queue checks, trace
+deferral, cost accounting, and finalizer-spawn deferral into GC2 while legacy GC
+retains only the sweep-close state transition.
 User finalizer callbacks now run on the claimed collector caller `lua_State`
 instead of the shared `vmthread(g)` stack. Userdata FINREG membership now uses a
 GC2 side list for discovery, including in-place metatable finalizer additions
