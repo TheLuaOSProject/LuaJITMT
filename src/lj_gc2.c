@@ -3369,6 +3369,25 @@ int lj_gc2_finreg_cdata_pending(global_State *g)
 #endif
 }
 
+void lj_gc2_finreg_cdata_disable(global_State *g)
+{
+#if LJ_HASFFI
+  CTState *cts = ctype_ctsG(g);
+  FinRegGen *gen;
+  if (!g || cts == NULL)
+    return;
+  for (gen = fin_gen_head_acq(cts);
+       gen != NULL;
+       gen = fin_gen_next_acq(gen)) {
+    GCtab *t = fin_gen_tab_acq(gen);
+    if (t)
+      fin_gen_tab_disable_rel(t);  /* Disable FINREG generation. */
+  }
+#else
+  UNUSED(g);
+#endif
+}
+
 #if defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
 void lj_gc2_test_finreg_cdata_preclaim_fail(global_State *g, uint32_t n)
 {

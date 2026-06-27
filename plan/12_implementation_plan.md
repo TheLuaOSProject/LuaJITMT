@@ -251,13 +251,14 @@ side-list walk and finalizer queue publication, while
 lookup before calling back to the legacy protected callback runner. Cdata
 ordered FINREG discovery covers the ordinary P_WEAK and close-time paths, and
 `lj_gc2_finreg_cdata_dispatch()` owns dispatch-time FINREG slot/preclaim
-resolution before calling back to the legacy protected callback runner. The M9
-cleanup removed close-time generation-table pending/discovery scans; P_WEAK
-preclaim side-vector failure now restores and queues the same ordered object
-without a legacy root-list walk. If cdata with a live finalizer reaches
-sweep/free, that is now a fatal FINREG invariant instead of a rescue queue;
-safety and Lua finalizer semantics win over trying to recover from a missed
-owner edge.
+resolution before calling back to the legacy protected callback runner. GC2
+also owns close-time FINREG generation disable through
+`lj_gc2_finreg_cdata_disable()`. The M9 cleanup removed close-time
+generation-table pending/discovery scans; P_WEAK preclaim side-vector failure
+now restores and queues the same ordered object without a legacy root-list walk.
+If cdata with a live finalizer reaches sweep/free, that is now a fatal FINREG
+invariant instead of a rescue queue; safety and Lua finalizer semantics win over
+trying to recover from a missed owner edge.
 The broader planned FINREG/finqueue dispatch path remains M8 work rather than
 an M9 performance cleanup.
 The original "finalizer that spawns a thread" item now has bridge tests for

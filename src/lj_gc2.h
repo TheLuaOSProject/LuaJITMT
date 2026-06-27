@@ -113,6 +113,7 @@ LJ_FUNC size_t lj_gc2_finreg_cdata_finalize_pweak(lua_State *L,
 						  global_State *g,
 						  GC2FinRegMarkFunc mark);
 LJ_FUNC size_t lj_gc2_finreg_cdata_finalize_close(global_State *g);
+LJ_FUNC void lj_gc2_finreg_cdata_disable(global_State *g);
 LJ_FUNC int lj_gc2_finreg_cdata_pending(global_State *g);
 LJ_FUNC int lj_gc2_finreg_cdata_preclaim(lua_State *L, global_State *g,
 					 GCobj *o, cTValue *fin);

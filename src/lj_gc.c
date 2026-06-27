@@ -1666,17 +1666,7 @@ void lj_gc_finalize_cdata(lua_State *L)
 
 void lj_gc_finalize_cdata_disable(global_State *g)
 {
-  CTState *cts = ctype_ctsG(g);
-  FinRegGen *gen;
-  if (cts == NULL)
-    return;
-  for (gen = fin_gen_head_acq(cts);
-       gen != NULL;
-       gen = fin_gen_next_acq(gen)) {
-    GCtab *t = fin_gen_tab_acq(gen);
-    if (t)
-      fin_gen_tab_disable_rel(t);  /* Disable FINREG generation. */
-  }
+  lj_gc2_finreg_cdata_disable(g);
 }
 #endif
 
