@@ -41,10 +41,10 @@ static void run_true_minor_cycle(lua_State *L, global_State *g, TGState *tg)
   assert(la_load32_acq(&g->gc2.cycle_roots_minor) == 1);
   lj_gc2_scan_cycle_roots(g, L);
   assert(lj_gc2_mark_complete(g, L, 64, ~(uint32_t)0) == 1);
-  lj_gc2_legacy_weak_begin(g);
+  lj_gc2_mark_to_weak(g);
   assert(lj_gc2_weak_complete(g, gcref(g->gc.weak),
 			      LJ_GC2_WEAK_DRAIN_BATCH) == 1);
-  lj_gc2_legacy_sweep_begin(g);
+  lj_gc2_weak_to_sweep(g);
   lj_gc2_sweep_legacy_ready(g);
   do {
     swept = lj_gc2_sweep_owner_progress(g, tg, LJ_GC2_SWEEP_BATCH);

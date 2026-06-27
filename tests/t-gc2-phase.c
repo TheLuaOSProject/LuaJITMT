@@ -712,11 +712,11 @@ int main(void)
   assert(phase_trav != NULL);
   phase_plain_a = lj_arena_of(phase_plain);
   phase_trav_a = lj_arena_of(phase_trav);
-  lj_gc2_legacy_weak_begin(g);
+  lj_gc2_mark_to_weak(g);
   assert(g->gc2.phase == LJ_GC2_WEAK);
   assert(tg->mark_active == 1);
   assert(tg->alloc.alloc_black == 1);
-  lj_gc2_legacy_sweep_begin(g);
+  lj_gc2_weak_to_sweep(g);
   assert(g->gc2.phase == LJ_GC2_SWEEP);
   assert(tg->mark_active == 0);
   assert(tg->alloc.alloc_black == 1);
@@ -819,7 +819,7 @@ int main(void)
   assert(g->gc2.phase == LJ_GC2_MARK);
   assert(tg->mark_active == 1);
   assert(tg->alloc.alloc_black == 1);
-  lj_gc2_legacy_weak_begin(g);
+  lj_gc2_mark_to_weak(g);
   assert(g->gc2.phase == LJ_GC2_WEAK);
   assert(tg->mark_active == 1);
   assert(tg->alloc.alloc_black == 1);

@@ -1177,11 +1177,6 @@ void lj_gc2_set_generational(global_State *g, int enabled)
     lj_gc2_handshake(g, gc2_idle_barrier_actions(g, 0));
 }
 
-void lj_gc2_legacy_weak_begin(global_State *g)
-{
-  lj_gc2_mark_to_weak(g);
-}
-
 void lj_gc2_mark_to_weak(global_State *g)
 {
   uint32_t expect = LJ_GC2_MARK;
@@ -1189,11 +1184,6 @@ void lj_gc2_mark_to_weak(global_State *g)
     return;
   gc2_mark_to_weak_add(g, 1);
   lj_gc2_worker_wake(g);  /* 05 section 5.6.3 parked worker scheduler. */
-}
-
-void lj_gc2_legacy_sweep_begin(global_State *g)
-{
-  lj_gc2_weak_to_sweep(g);
 }
 
 void lj_gc2_weak_to_sweep(global_State *g)

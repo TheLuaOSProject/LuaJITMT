@@ -262,6 +262,13 @@ for helper in lj_gc2_fixpoint_run lj_gc2_sweep_live_aggregate; do
     exit 1
   fi
 done
+if hits=$(grep -nE -- 'lj_gc2_legacy_(weak|sweep)_begin[[:space:]]*[(]|LJ_FUNC .*lj_gc2_legacy_(weak|sweep)_begin[[:space:]]*[(]' \
+    "$ROOT"/src/*.c "$ROOT"/tests/*.c "$ROOT/src/lj_gc2.h" || true); \
+    [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'obsolete GC2 legacy phase aliases are forbidden; use lj_gc2_mark_to_weak or lj_gc2_weak_to_sweep' >&2
+  exit 1
+fi
 if hits=$(grep -nE -- 'setgcrefr?rel[(][*]lj_obj_gcwref[(](oldtail|tail)[)]' \
     "$ROOT/src/lj_gc2.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2

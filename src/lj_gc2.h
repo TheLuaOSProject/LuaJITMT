@@ -65,8 +65,6 @@ LJ_FUNC uint32_t lj_gc2_assist(global_State *g, TGState *tg);
 LJ_FUNC void lj_gc2_set_generational(global_State *g, int enabled);
 LJ_FUNC void lj_gc2_legacy_mark_begin(global_State *g);
 LJ_FUNC void lj_gc2_force_major(global_State *g);
-LJ_FUNC void lj_gc2_legacy_weak_begin(global_State *g);
-LJ_FUNC void lj_gc2_legacy_sweep_begin(global_State *g);
 LJ_FUNC void lj_gc2_legacy_preserve_abort(global_State *g);
 LJ_FUNC void lj_gc2_legacy_cycle_end(global_State *g);
 LJ_FUNC void lj_gc2_sweep_legacy_ready(global_State *g);

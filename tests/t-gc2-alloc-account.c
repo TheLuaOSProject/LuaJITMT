@@ -509,10 +509,10 @@ int main(void)
   assert(la_load32_acq(&g->gc2.phase) == LJ_GC2_MARK);
   assert(la_load32_acq(&g->gc2.cycle_sweep_minor) == 1);
   assert_late_attach_color(g, tg, &late_tg, 7001u, 1, 1);
-  lj_gc2_legacy_weak_begin(g);
+  lj_gc2_mark_to_weak(g);
   assert(la_load32_acq(&g->gc2.phase) == LJ_GC2_WEAK);
   assert_late_attach_color(g, tg, &late_tg, 7002u, 1, 1);
-  lj_gc2_legacy_sweep_begin(g);
+  lj_gc2_weak_to_sweep(g);
   assert(la_load32_acq(&g->gc2.phase) == LJ_GC2_SWEEP);
   assert(tg->alloc.alloc_black == 0);
   assert_late_attach_color(g, tg, &late_tg, 7003u, 0, 0);
@@ -525,8 +525,8 @@ int main(void)
   flipwhite(obj2gco(active_child));  /* Manual GC2 sweep setup mirrors legacy atomic. */
   lj_gc2_legacy_mark_begin(g);
   assert(la_load32_acq(&g->gc2.cycle_sweep_minor) == 1);
-  lj_gc2_legacy_weak_begin(g);
-  lj_gc2_legacy_sweep_begin(g);
+  lj_gc2_mark_to_weak(g);
+  lj_gc2_weak_to_sweep(g);
   assert(lj_gc2_sweep_owner_progress(g, tg, 64) == 0);
   lj_gc2_sweep_legacy_ready(g);
   assert(lj_gc2_sweep_owner_progress(g, tg, 64) > 0);
@@ -864,7 +864,7 @@ int main(void)
   assert(lj_gc2_test_weak_snapshot_count(g) == 1u);
   assert(lj_gc2_ismarked(g, obj2gco(key)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(val)) == 0);
-  lj_gc2_legacy_weak_begin(g);
+  lj_gc2_mark_to_weak(g);
   la_store64_rel(&g->gc2.hard_bytes, 1);
   la_store32_rel(&g->gc2.assist_shift, 0);
   (void)la_xchg64_acqrel(&g->gc2.alloc_since_trigger, 0);

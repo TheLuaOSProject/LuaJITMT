@@ -385,7 +385,7 @@ static void test_async_weak(lua_State *L, global_State *g, TGState *tg)
   async0 = gc2_worker_async_progress_acq(g);
   worker_weak0 = gc2_worker_weak_drained_acq(g);
   clears0 = gc2_weak_clear_tables_acq(g);
-  lj_gc2_legacy_weak_begin(g);
+  lj_gc2_mark_to_weak(g);
   for (i = 0; i < 1000 && !weak_entry_is_nil(L, weak, key); i++)
     sleep_ns(1000000L);
   assert(weak_entry_is_nil(L, weak, key));

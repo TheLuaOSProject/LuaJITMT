@@ -46,7 +46,7 @@ static void test_ffi_weak_newindex_target_write_barrier(lua_State *L,
   flush_and_drain(g, tg);
   assert(lj_gc2_ismarked(g, obj2gco(val)) == 0);
 
-  lj_gc2_legacy_weak_begin(g);
+  lj_gc2_mark_to_weak(g);
   assert(lj_gc2_test_weak_drain(g, 1) == 1u);
   assert(lj_gc2_test_weak_drain(g, 1) == 0);
   weak_vals0 = gc2_weak_values_marked_acq(g);

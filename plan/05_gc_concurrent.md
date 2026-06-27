@@ -396,12 +396,12 @@ P_WEAK (leader+workers, barrier still ON, mutators running):
   FINREG hash order; FINREG generation scans still detect pending close-time
   cdata work.
 Current bridge note: `lj_gc2_mark_to_weak()` now makes `P_WEAK` visible after
-the fixpoint/paranoia bridge, and `lj_gc2_legacy_weak_begin()` aliases that
-helper for current callers. `lj_gc2_weak_complete()` owns the current bounded
-weak-drain loop and legacy fallback decision, while `lj_gc2_weak_to_sweep()`
-publishes the staged `P_SWEEP` transition and runs the existing sweep-entry
-handshake after a successful `P_WEAK -> P_SWEEP` CAS. This preserves the
-original `MARK -> WEAK -> SWEEP` phase shape for
+the fixpoint/paranoia bridge, and callers use that transition helper directly.
+`lj_gc2_weak_complete()` owns the current bounded weak-drain loop and legacy
+fallback decision, while `lj_gc2_weak_to_sweep()` publishes the staged
+`P_SWEEP` transition and runs the existing sweep-entry handshake after a
+successful `P_WEAK -> P_SWEEP` CAS. This preserves the original
+`MARK -> WEAK -> SWEEP` phase shape for
 follow-up work, but legacy atomic still supplies the stop-the-world oracle; the
 independent weak-table worklist and full concurrent weak/sweep phase ownership
 above are not implemented yet. GC2 traversal now stores weak-table discoveries
