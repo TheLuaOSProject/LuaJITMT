@@ -3,6 +3,32 @@
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+for required in \
+  'static int load_native_feof(lua_State *L, FILE *fp, uint32_t *actionsp)' \
+  'static int load_native_ferror(lua_State *L, FILE *fp, uint32_t *actionsp)' \
+  'load_native_feof(L, ctx->fp, &actions)' \
+  'load_native_ferror(L, ctx.fp, &actions)'
+do
+  if ! grep -qF "$required" "$ROOT/src/lj_load.c"; then
+    printf '%s\n' "loadfile native-state wrapper is missing: $required" >&2
+    exit 1
+  fi
+done
+if hits=$(awk '
+  /^static int load_native_(feof|ferror)\(/ {
+    in_wrapper = 1
+  }
+  !in_wrapper && /(^|[^[:alnum:]_])(feof|ferror)[[:space:]]*\(/ {
+    print FILENAME ":" FNR ":" $0
+  }
+  in_wrapper && /^}/ {
+    in_wrapper = 0
+  }
+' "$ROOT/src/lj_load.c"); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'loadfile FILE state probes must go through native-state wrappers' >&2
+  exit 1
+fi
 if hits=$(grep -nE -- '->[[:space:]]*next_tg|&[[:alnum:]_]+->[[:space:]]*next_tg|next_tg[[:space:]]*=' \
     "$ROOT/src/lj_gc.c" \
     "$ROOT/src/lj_gc2.c" \

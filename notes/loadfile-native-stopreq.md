@@ -4,9 +4,15 @@
   `fopen`, `fread`, and `fclose` could block without marking the TG native.
 - Wrapped those file-loader operations in `lj_native_enter` /
   `lj_native_leave`.
+- Follow-up cleanup wrapped the remaining `feof` and `ferror` FILE-state
+  probes too. Their action masks are folded into the same deferred
+  `reader_file()`/post-parse delivery path so parser cleanup and file close
+  still run before a STOPREQ throw.
 - `reader_file()` records STOPREQ actions and stops feeding the parser, but the
   actual STOPREQ throw is deferred until after `lua_loadx()` unwinds so shutdown
   is not converted into a normal `loadfile()` nil/error result.
+- `tools/ci/m3_safepoint_handshake.sh` now guards against reintroducing raw
+  `feof`/`ferror` calls in `lj_load.c`.
 - Added FIFO STOPREQ coverage for `loadfile(fifo)` and `dofile(fifo)` to the
   existing safepoint handshake fixture.
 - Validation:
