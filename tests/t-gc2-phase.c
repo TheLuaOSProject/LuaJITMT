@@ -149,7 +149,7 @@ static void relink_root_object(global_State *g, GCobj *o)
 
 static void test_finalizer_consumer_ring(lua_State *L, global_State *g)
 {
-  GCobj *a, *b, *c;
+  GCobj *a, *b, *c, *d, *e;
   uint64_t queued0, dequeued0, drained0, wakes0;
   lua_settop(L, 0);
   assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) == NULL);
@@ -160,9 +160,15 @@ static void test_finalizer_consumer_ring(lua_State *L, global_State *g)
   b = obj2gco(tabV(L->top - 1));
   lua_newtable(L);
   c = obj2gco(tabV(L->top - 1));
+  lua_newtable(L);
+  d = obj2gco(tabV(L->top - 1));
+  lua_newtable(L);
+  e = obj2gco(tabV(L->top - 1));
   assert(unlink_root_object(g, a));
   assert(unlink_root_object(g, b));
   assert(unlink_root_object(g, c));
+  assert(unlink_root_object(g, d));
+  assert(unlink_root_object(g, e));
 
   queued0 = la_load64_acq(&g->gc2.finalizer_queued);
   dequeued0 = la_load64_acq(&g->gc2.finalizer_dequeued);
@@ -182,13 +188,25 @@ static void test_finalizer_consumer_ring(lua_State *L, global_State *g)
   assert(la_load64_acq(&g->gc2.finalizer_mpsc_drained) == drained0 + 3u);
   assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) == NULL);
   assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) != NULL);
+  lj_gc2_test_finalizer_enqueue(g, d);
+  lj_gc2_test_finalizer_enqueue(g, e);
+  assert(la_load64_acq(&g->gc2.finalizer_queued) == queued0 + 5u);
+  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) != NULL);
+  lj_gc2_test_finalizer_drain(g);
+  assert(la_load64_acq(&g->gc2.finalizer_mpsc_drained) == drained0 + 5u);
+  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) == NULL);
+  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) != NULL);
   assert(lj_gc2_test_finalizer_dequeue(g) == a);
   assert(lj_gc2_test_finalizer_dequeue(g) == b);
   assert(lj_gc2_test_finalizer_dequeue(g) == c);
+  assert(lj_gc2_test_finalizer_dequeue(g) == d);
+  assert(lj_gc2_test_finalizer_dequeue(g) == e);
   assert(lj_gc2_test_finalizer_dequeue(g) == NULL);
-  assert(la_load64_acq(&g->gc2.finalizer_dequeued) == dequeued0 + 3u);
+  assert(la_load64_acq(&g->gc2.finalizer_dequeued) == dequeued0 + 5u);
   assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) == NULL);
 
+  relink_root_object(g, e);
+  relink_root_object(g, d);
   relink_root_object(g, c);
   relink_root_object(g, b);
   relink_root_object(g, a);
