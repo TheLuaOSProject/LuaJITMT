@@ -13,6 +13,17 @@ actions from native entropy calls, closes the `/dev/urandom` file descriptor
 before checking STOPREQ, conditions the PRNG state after a successful seed, and
 only then delivers pending shutdown interruption.
 
+2026-06-27 follow-up:
+
+- The Lua-facing secure reseed path now uses a fresh STOPREQ helper. A
+  pre-existing sticky shutdown flag no longer interrupts an otherwise
+  successful no-argument `math.randomseed()` reseed when no native entropy call
+  acknowledged a new STOPREQ action.
+- The success path still conditions the PRNG state before delivering a fresh
+  STOPREQ.
+- `t-prng-seed-native.c` covers sticky STOPREQ reseed behavior, and the M5
+  guard rejects raw reseed STOPREQ checks outside the fresh helper.
+
 Validation:
 
 - `tools/ci/m5_prng_seed_native.sh`

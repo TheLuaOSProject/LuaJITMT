@@ -2,6 +2,7 @@ local runtime = require("suite_runtime")
 
 local build_and_run_luajit_code = runtime.build_and_run_luajit_code
 local build_and_run_luajit_script = runtime.build_and_run_luajit_script
+local build_and_run_c = runtime.build_and_run_c
 local luajit_script = runtime.luajit_script
 
 local function ctype_name_smoke()
@@ -313,7 +314,7 @@ if ! awk '
   /^static int prng_seed_secure\(lua_State \*L, PRNGState \*rs\)/ { inside = 1 }
   inside && /^ok:/ { ok = NR }
   inside && /lj_prng_condition\(rs\)/ { condition = NR }
-  inside && /lj_safepoint_checkstop\(L, actions\);/ { check = NR }
+  inside && /prng_checkstop_fresh\(L, actions, had_stopreq\);/ { check = NR }
   inside && /return 1;  \/\* Success/ { ret = NR }
   inside && /^}/ {
     if (ok && condition > ok && check > condition && ret > check) found = 1
@@ -324,9 +325,40 @@ if ! awk '
   printf '%s\n' 'successful secure reseed must condition the seed before STOPREQ handling' >&2
   exit 1
 fi
+for required in \
+  'static void prng_checkstop_fresh(lua_State *L, uint32_t actions,' \
+  'prng_checkstop_fresh(L, actions, had_stopreq)'
+do
+  if ! grep -qF "$required" src/lj_prng.c; then
+    printf '%s\n' "PRNG native fresh STOPREQ guard is missing: $required" >&2
+    exit 1
+  fi
+done
+if hits=$(awk '
+  /^static void prng_checkstop_fresh\(lua_State \*L, uint32_t actions,/ {
+    in_fresh = 1
+  }
+  /^static int prng_seed_secure\(lua_State \*L, PRNGState \*rs\)/ {
+    in_seed = 1
+  }
+  in_seed && /lj_safepoint_checkstop\(L, actions\);/ && !in_fresh {
+    print FILENAME ":" FNR ":" $0
+  }
+  in_seed && /^}/ {
+    in_seed = 0
+  }
+  in_fresh && /^}/ {
+    in_fresh = 0
+  }
+' src/lj_prng.c); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'PRNG native entropy checks must use fresh STOPREQ semantics' >&2
+  exit 1
+fi
 ]==], { cwd = t.root, quiet = true })
-      build_and_run_luajit_script(t, "t-prng-seed-native.lua", nil,
-        { joff = true })
+      build_and_run_c(t, t:tmp("lj_t-prng-seed-native"),
+                      "t-prng-seed-native.c")
+      luajit_script(t, "t-prng-seed-native.lua", nil, { joff = true })
     end
   })
 
