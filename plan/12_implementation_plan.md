@@ -256,6 +256,11 @@ also owns close-time FINREG generation disable through
 `lj_gc2_finreg_cdata_disable()`. The M9 cleanup removed close-time
 generation-table pending/discovery scans; P_WEAK preclaim side-vector failure
 now restores and queues the same ordered object without a legacy root-list walk.
+The GC2 FINREG root helper layer owns the cdata FINREG generation/preclaim root
+walks: legacy GC enters through `lj_gc2_finreg_cdata_mark_roots()`, and GC2 keeps
+preclaims in pending roots while marking FINREG generations from the FFI global
+root path. Collector-specific callbacks preserve each marker's coloring
+semantics.
 Queued finalizer marking now routes through `lj_gc2_finalizer_mark_all()`, so
 GC2 owns the finalizer owner claim, producer-stack drain, and stable ring walk
 while legacy marking callbacks preserve classic collector coloring semantics.

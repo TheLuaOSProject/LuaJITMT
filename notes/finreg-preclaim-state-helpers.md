@@ -15,8 +15,11 @@ Routed GC2 cdata FINREG preclaim side-vector state through helper APIs:
 
 The existing slot protocol is unchanged: `gc2_finclaim_publish()` release-copies
 the finalizer value, release-publishes the object slot as the ready marker, then
-release-publishes `count`. Legacy and GC2 root scans acquire the head/count
-range before marking preclaimed cdata/finalizers, and finalizer dispatch
+release-publishes `count`. Legacy root scans enter through
+`lj_gc2_finreg_cdata_mark_roots()`, while GC2's pending-root scan calls the same
+GC2-owned preclaim walker internally. Both acquire the head/count range before
+marking preclaimed cdata/finalizers. Collector-specific callbacks still provide
+the actual object/value/memory marking semantics, and finalizer dispatch
 advances `head` through helper stores after clearing consumed slots.
 
 ## Guardrail
@@ -24,7 +27,9 @@ advances `head` through helper stores after clearing consumed slots.
 `tools/ci/m7_ffi_finreg.sh` now requires the helper surface and rejects raw
 production access to `finreg_cdata_preclaim_obj`, `finreg_cdata_preclaim_fin`,
 `finreg_cdata_preclaim_capacity`, `finreg_cdata_preclaim_head`, and
-`finreg_cdata_preclaim_count` in `lj_gc.c`/`lj_gc2.c`.
+`finreg_cdata_preclaim_count` in `lj_gc.c`/`lj_gc2.c`. It also rejects legacy
+`lj_ctype_fin_mark()` or direct preclaim root scans in `lj_gc.c`; those must
+stay behind `lj_gc2_finreg_cdata_mark_roots()`.
 
 ## Follow-Up
 

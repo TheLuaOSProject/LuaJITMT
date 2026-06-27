@@ -10,6 +10,9 @@
 
 typedef void (*GC2FinalizerMarkFunc)(global_State *g, GCobj *o);
 typedef void (*GC2FinRegMarkFunc)(global_State *g, cTValue *tv);
+typedef void (*GC2FinRegMarkObjFunc)(global_State *g, GCobj *o);
+typedef void (*GC2FinRegMarkMemFunc)(global_State *g, void *p);
+typedef void (*GC2FinRegMarkTVFunc)(global_State *g, cTValue *tv);
 typedef int (*GC2FinalizerCallFunc)(global_State *g, lua_State *L,
 				    cTValue *mo, GCobj *o);
 
@@ -112,6 +115,10 @@ LJ_FUNC void lj_gc2_finreg_cdata_finalizer_enqueue(global_State *g,
 LJ_FUNC size_t lj_gc2_finreg_cdata_finalize_pweak(lua_State *L,
 						  global_State *g,
 						  GC2FinRegMarkFunc mark);
+LJ_FUNC void lj_gc2_finreg_cdata_mark_roots(global_State *g,
+					    GC2FinRegMarkObjFunc markobj,
+					    GC2FinRegMarkMemFunc markmem,
+					    GC2FinRegMarkTVFunc marktv);
 LJ_FUNC size_t lj_gc2_finreg_cdata_finalize_close(global_State *g);
 LJ_FUNC void lj_gc2_finreg_cdata_disable(global_State *g);
 LJ_FUNC int lj_gc2_finreg_cdata_pending(global_State *g);

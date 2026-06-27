@@ -631,26 +631,14 @@ static void gc_mark(global_State *g, GCobj *o)
 #if LJ_HASFFI
 static void gc_finreg_markobj(global_State *g, GCobj *o)
 {
+  lj_gc_arena_markobj(g, o);
   if (iswhite(o))
     gc_mark(g, o);
 }
 
-static void gc_mark_finreg_cdata_preclaims(global_State *g)
+static void gc_finreg_marktv(global_State *g, cTValue *tv)
 {
-  MSize i, head, count;
-  if (!gc2_finreg_cdata_preclaim_ready(g))
-    return;
-  head = gc2_finreg_cdata_preclaim_head_acq(g);
-  count = gc2_finreg_cdata_preclaim_count_acq(g);
-  for (i = head; i < count; i++) {
-    GCobj *o = gc2_finreg_cdata_preclaim_obj_acq(g, i);
-    if (o) {
-      TValue fin;
-      gc_markobj(g, o);
-      gc2_finreg_cdata_preclaim_fin_acq(g, i, &fin);
-      gc_marktv(g, &fin);
-    }
-  }
+  gc_marktv(g, tv);
 }
 #endif
 
@@ -739,8 +727,8 @@ static void gc_mark_gcroot(global_State *g)
 	  gc_markobj(g, pinmt);
       }
       gc_mark_clib_retired_cache(g);
-      lj_ctype_fin_mark(g, gc_finreg_markobj, lj_gc_arena_markmem);
-      gc_mark_finreg_cdata_preclaims(g);
+      lj_gc2_finreg_cdata_mark_roots(g, gc_finreg_markobj,
+				      lj_gc_arena_markmem, gc_finreg_marktv);
       lj_gc_arena_markmem(g, ctype_cb_cbid_acq(cts));
       owner = ctype_cb_owner_acq(cts);
       lj_gc_arena_markmem(g, owner);

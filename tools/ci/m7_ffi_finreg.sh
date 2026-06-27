@@ -142,6 +142,7 @@ if hits=$(grep -nE -- 'lj_gc2_finreg_cdata_queue[[:space:]]*[(]' \
   exit 1
 fi
 for helper in lj_gc2_finreg_cdata_finalize_pweak \
+  lj_gc2_finreg_cdata_mark_roots \
   lj_gc2_finreg_cdata_finalize_close \
   lj_gc2_finreg_cdata_dispatch \
   lj_gc2_finreg_cdata_disable \
@@ -161,6 +162,12 @@ if hits=$(grep -nE -- 'fin_gen_tab_disable_rel|gc_finalize_cdata_clear|gc_finali
     "$ROOT/src/lj_gc.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
   printf '%s\n' 'ordered FINREG cdata discovery/dispatch/disable must stay in lj_gc2 helpers' >&2
+  exit 1
+fi
+if hits=$(grep -nE -- 'lj_ctype_fin_mark[[:space:]]*[(]|gc_mark_finreg_cdata_preclaims|gc2_finreg_cdata_preclaim_(ready|head_acq|count_acq|obj_acq|fin_acq)[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'cdata FINREG root/preclaim marking must stay in lj_gc2 helpers' >&2
   exit 1
 fi
 if hits=$(grep -nE -- '(makewhite|markfinalized|lj_gc_arena_markobj|lj_gc2_finreg_cdata_queue|lj_gc2_finreg_cdata_finalizer_enqueue|lj_gc2_finalizer_enqueue)[(].*obj2gco[(]cd[)]' \

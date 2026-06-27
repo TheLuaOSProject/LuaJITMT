@@ -2038,10 +2038,17 @@ static void gc2_finreg_markmem(global_State *g, void *p)
   (void)lj_gc2_markmem(g, p);
 }
 
-static void gc2_mark_finreg_cdata_preclaims(global_State *g)
+static void gc2_finreg_marktv(global_State *g, cTValue *tv)
+{
+  gc2_mark_tv(g, tv);
+}
+
+static void gc2_mark_finreg_cdata_preclaims(global_State *g,
+					    GC2FinRegMarkObjFunc markobj,
+					    GC2FinRegMarkTVFunc marktv)
 {
   MSize i, head, count;
-  if (!gc2_finreg_cdata_preclaim_ready(g))
+  if (!markobj || !marktv || !gc2_finreg_cdata_preclaim_ready(g))
     return;
   head = gc2_finreg_cdata_preclaim_head_acq(g);
   count = gc2_finreg_cdata_preclaim_count_acq(g);
@@ -2049,11 +2056,31 @@ static void gc2_mark_finreg_cdata_preclaims(global_State *g)
     GCobj *o = gc2_finreg_cdata_preclaim_obj_acq(g, i);
     if (o) {
       TValue fin;
-      lj_gc2_markobj(g, o);
+      markobj(g, o);
       gc2_finreg_cdata_preclaim_fin_acq(g, i, &fin);
-      gc2_mark_tv(g, &fin);
+      marktv(g, &fin);
     }
   }
+}
+
+static void gc2_mark_finreg_cdata_generations(global_State *g,
+					      GC2FinRegMarkObjFunc markobj,
+					      GC2FinRegMarkMemFunc markmem)
+{
+  if (!g || !markobj || !markmem)
+    return;
+  lj_ctype_fin_mark(g, markobj, markmem);
+}
+
+void lj_gc2_finreg_cdata_mark_roots(global_State *g,
+				    GC2FinRegMarkObjFunc markobj,
+				    GC2FinRegMarkMemFunc markmem,
+				    GC2FinRegMarkTVFunc marktv)
+{
+  if (!g || !markobj || !markmem || !marktv)
+    return;
+  gc2_mark_finreg_cdata_generations(g, markobj, markmem);
+  gc2_mark_finreg_cdata_preclaims(g, markobj, marktv);
 }
 #endif
 
@@ -2115,7 +2142,8 @@ static void gc2_scan_pending_roots(global_State *g)
   lj_gc2_finalizer_mark_all(g, gc2_mark_finalizer_obj);
   gc2_scan_threading_live_roots(g);
 #if LJ_HASFFI
-  gc2_mark_finreg_cdata_preclaims(g);
+  gc2_mark_finreg_cdata_preclaims(g, gc2_finreg_markobj,
+				   gc2_finreg_marktv);
 #endif
 }
 
@@ -2216,7 +2244,8 @@ static void gc2_scan_global_roots(global_State *g)
 	  lj_gc2_markobj(g, obj2gco(pinmt));
       }
       gc2_traverse_clib_retired_cache(g);
-      lj_ctype_fin_mark(g, gc2_finreg_markobj, gc2_finreg_markmem);
+      gc2_mark_finreg_cdata_generations(g, gc2_finreg_markobj,
+					 gc2_finreg_markmem);
       lj_gc2_markmem(g, ctype_cb_cbid_acq(cts));
       owner = ctype_cb_owner_acq(cts);
       lj_gc2_markmem(g, owner);
