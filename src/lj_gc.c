@@ -39,9 +39,7 @@
 #include "lj_clib.h"
 #endif
 #include "lj_trace.h"
-#include "lj_dispatch.h"
 #include "lj_arena.h"
-#include "lj_vmevent.h"
 
 #define GCSTEPSIZE	1024u
 #define GCSWEEPMAX	40
@@ -1524,63 +1522,10 @@ void lj_gc_clearweak_legacy(global_State *g, GCobj *o)
   }
 }
 
-static int gc_call_finalizer(global_State *g, lua_State *L,
-			     cTValue *mo, GCobj *o)
-{
-  /* Save and restore lots of state around the __gc callback. */
-  LJStateClaim claim;
-  lua_State *cbL = L;
-  lua_State *oldL;
-  uint8_t oldh;
-  GCSize oldt;
-  int continue_gc = 1;
-  int errcode;
-  ptrdiff_t oldtop;
-  TValue *top;
-  if (!lj_state_tryclaim(cbL, lj_thr_current_id(g), &claim))
-    return 0;  /* Caller must preclaim before clearing FINREG state. */
-  lj_assertG(cbL != vmthread_acq(g),
-	     "gc_call_finalizer must not use shared vmthread callback stack");
-  oldL = lj_tg_cur_L(g);
-  oldh = hook_save(g);
-  oldt = lj_gc2_finalizer_pause_threshold(g);
-  lj_trace_abort(g);
-  hook_entergc(g);  /* Disable hooks and new traces during __gc. */
-  if (LJ_HASPROFILE && (oldh & HOOK_PROFILE)) lj_dispatch_update(g, 0);
-  lj_state_checkstack(cbL, 2+LJ_FR2+LUA_MINSTACK);
-  oldtop = savestack(cbL, cbL->top);
-  top = cbL->top;
-  copyTV(cbL, top++, mo);
-  if (LJ_FR2) setnilV(top++);
-  setgcV(cbL, top, o, ~o->gch.gct);
-  cbL->top = top+1;
-  errcode = lj_gc2_finalizer_pcall(g, cbL, top, &continue_gc);
-  if (oldL)
-    lj_tg_setcur_L(g, oldL);
-  else
-    lj_tg_clearcur_L(g);
-  hook_restore(g, oldh);
-  if (LJ_HASPROFILE && (oldh & HOOK_PROFILE)) lj_dispatch_update(g, 0);
-  lj_gc2_finalizer_restore_threshold(g, oldt);
-  if (errcode) {
-    TValue tmp;
-    copyTV(cbL, &tmp, cbL->top-1);
-    cbL->top = restorestack(cbL, oldtop);
-    lj_state_dropclaim(&claim);
-    lj_vmevent_send(g, ERRFIN,
-      copyTV(V, V->top++, &tmp);
-    );
-  } else {
-    cbL->top = restorestack(cbL, oldtop);
-    lj_state_dropclaim(&claim);
-  }
-  return continue_gc;
-}
-
 /* Finalize all userdata/cdata objects from the GC2 finalizer queue. */
 void lj_gc_finalize_udata(lua_State *L)
 {
-  lj_gc2_finalizer_dispatch_all(L, gc_call_finalizer);
+  lj_gc2_finalizer_dispatch_all(L);
 }
 
 #if LJ_HASFFI
@@ -1773,8 +1718,7 @@ static size_t gc_onestep(lua_State *L)
   case GCSfinalize:
     {
       GCSize fincost;
-      int finstep = lj_gc2_finalizer_step(L, gc_call_finalizer,
-					  GCFINALIZECOST, &fincost);
+      int finstep = lj_gc2_finalizer_step(L, GCFINALIZECOST, &fincost);
       if (finstep != 0)
 	return fincost;
     }

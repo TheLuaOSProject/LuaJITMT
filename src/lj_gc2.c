@@ -32,6 +32,7 @@ typedef int (*GC2FinalizerDispatchFunc)(lua_State *L, global_State *g,
 #include "lj_arena.h"
 #include "lj_tg.h"
 #include "lj_frame.h"
+#include "lj_state.h"
 #if LJ_HASFFI
 #include "lj_ctype.h"
 #include "lj_cdata.h"
@@ -40,6 +41,7 @@ typedef int (*GC2FinalizerDispatchFunc)(lua_State *L, global_State *g,
 #include "lj_trace.h"
 #include "lj_mcode.h"
 #include "lj_dispatch.h"
+#include "lj_vmevent.h"
 #include "lj_vm.h"
 
 #define GC2_GREY_INIT	256u
@@ -56,7 +58,6 @@ typedef struct GC2FinalizerNode {
 } GC2FinalizerNode;
 
 typedef struct GC2FinalizerDispatchCtx {
-  GC2FinalizerCallFunc call;
   GC2FinalizerDispatchFunc dispatch;
 } GC2FinalizerDispatchCtx;
 
@@ -140,12 +141,12 @@ static int lj_gc2_ssb_empty(global_State *g);
 static int lj_gc2_finreg_cdata_preclaim(lua_State *L, global_State *g,
 					GCobj *o, cTValue *fin);
 static void lj_gc2_finreg_udata_finalizer_enqueue(global_State *g, GCobj *o);
+static int gc2_call_finalizer(global_State *g, lua_State *L,
+			      cTValue *mo, GCobj *o);
 static int lj_gc2_finreg_cdata_dispatch(lua_State *L, global_State *g,
-					GCobj *o,
-					GC2FinalizerCallFunc call);
+					GCobj *o);
 static int lj_gc2_finreg_udata_dispatch(lua_State *L, global_State *g,
-					GCobj *o,
-					GC2FinalizerCallFunc call);
+					GCobj *o);
 #if LJ_HASFFI
 static void gc2_traverse_clib_retired_cache(global_State *g);
 #endif
@@ -1517,14 +1518,12 @@ static int gc2_finalizer_dispatch_obj(lua_State *L, global_State *g, GCobj *o,
     return 0;
   if (ctx->dispatch)
     return ctx->dispatch(L, g, o);
-  if (!ctx->call)
-    return 0;
 #if LJ_HASFFI
   if (o->gch.gct == ~LJ_TCDATA)
-    return lj_gc2_finreg_cdata_dispatch(L, g, o, ctx->call);
+    return lj_gc2_finreg_cdata_dispatch(L, g, o);
 #endif
   if (o->gch.gct == ~LJ_TUDATA)
-    return lj_gc2_finreg_udata_dispatch(L, g, o, ctx->call);
+    return lj_gc2_finreg_udata_dispatch(L, g, o);
   lj_assertG(0, "bad GC2 finalizer dispatch object");
   return 0;
 }
@@ -1536,7 +1535,7 @@ static int lj_gc2_finalizer_dispatch_one(lua_State *L,
   LJStateClaim claim;
   GCobj *o;
   int rc;
-  if (!L || !ctx || (!ctx->call && !ctx->dispatch))
+  if (!L || !ctx)
     return 0;
   g = G(L);
   lj_assertG(lj_tg_jit_base(g) == NULL, "finalizer called on trace");
@@ -1559,13 +1558,12 @@ static int lj_gc2_finalizer_dispatch_one(lua_State *L,
   return rc < 0 ? -1 : 1;
 }
 
-void lj_gc2_finalizer_dispatch_all(lua_State *L, GC2FinalizerCallFunc call)
+void lj_gc2_finalizer_dispatch_all(lua_State *L)
 {
   GC2FinalizerDispatchCtx ctx;
   global_State *g;
-  if (!L || !call)
+  if (!L)
     return;
-  ctx.call = call;
   ctx.dispatch = NULL;
   g = G(L);
   for (;;) {
@@ -1586,7 +1584,7 @@ static int lj_gc2_finalizer_step_ctx(lua_State *L,
   global_State *g;
   if (cost)
     *cost = 0;
-  if (!L || !ctx || (!ctx->call && !ctx->dispatch))
+  if (!L || !ctx)
     return 0;
   g = G(L);
   if (gc2_finalizer_queue_pending(g)) {
@@ -1621,11 +1619,9 @@ static int lj_gc2_finalizer_step_ctx(lua_State *L,
   return 0;
 }
 
-int lj_gc2_finalizer_step(lua_State *L, GC2FinalizerCallFunc call,
-			  GCSize finalize_cost, GCSize *cost)
+int lj_gc2_finalizer_step(lua_State *L, GCSize finalize_cost, GCSize *cost)
 {
   GC2FinalizerDispatchCtx ctx;
-  ctx.call = call;
   ctx.dispatch = NULL;
   return lj_gc2_finalizer_step_ctx(L, &ctx, finalize_cost, cost);
 }
@@ -1773,7 +1769,6 @@ int lj_gc2_test_finalizer_step_dispatch(lua_State *L,
 					GCSize finalize_cost, GCSize *cost)
 {
   GC2FinalizerDispatchCtx ctx;
-  ctx.call = NULL;
   ctx.dispatch = dispatch;
   return lj_gc2_finalizer_step_ctx(L, &ctx, finalize_cost, cost);
 }
@@ -1820,7 +1815,7 @@ static int gc2_finalizer_sweep_pending(global_State *g)
 static int gc2_finalizer_mt_release_exclusive(global_State *g);
 static int gc2_finalizer_mt_reclaim_exclusive(global_State *g);
 
-GCSize lj_gc2_finalizer_pause_threshold(global_State *g)
+static GCSize gc2_finalizer_pause_threshold(global_State *g)
 {
   GCSize oldt;
   if (!g)
@@ -1832,7 +1827,7 @@ GCSize lj_gc2_finalizer_pause_threshold(global_State *g)
   return oldt;
 }
 
-void lj_gc2_finalizer_restore_threshold(global_State *g, GCSize oldt)
+static void gc2_finalizer_restore_threshold(global_State *g, GCSize oldt)
 {
   if (!g)
     return;
@@ -1878,8 +1873,8 @@ static int gc2_finalizer_mt_reclaim_exclusive(global_State *g)
   }
 }
 
-int lj_gc2_finalizer_pcall(global_State *g, lua_State *L,
-			   TValue *top, int *continue_gc)
+static int gc2_finalizer_pcall(global_State *g, lua_State *L,
+			       TValue *top, int *continue_gc)
 {
   int had_mt_exclusive = gc2_finalizer_mt_release_exclusive(g);
   int errcode = lj_vm_pcall(L, top, 1+0, -1);  /* Stack: |mo|o| -> | */
@@ -1888,6 +1883,59 @@ int lj_gc2_finalizer_pcall(global_State *g, lua_State *L,
   if (continue_gc)
     *continue_gc = keep_gc;
   return errcode;
+}
+
+static int gc2_call_finalizer(global_State *g, lua_State *L,
+			      cTValue *mo, GCobj *o)
+{
+  /* Save and restore lots of state around the __gc callback. */
+  LJStateClaim claim;
+  lua_State *cbL = L;
+  lua_State *oldL;
+  uint8_t oldh;
+  GCSize oldt;
+  int continue_gc = 1;
+  int errcode;
+  ptrdiff_t oldtop;
+  TValue *top;
+  if (!lj_state_tryclaim(cbL, lj_thr_current_id(g), &claim))
+    return 0;  /* Caller must preclaim before clearing FINREG state. */
+  lj_assertG(cbL != vmthread_acq(g),
+	     "gc2 finalizer must not use shared vmthread callback stack");
+  oldL = lj_tg_cur_L(g);
+  oldh = hook_save(g);
+  oldt = gc2_finalizer_pause_threshold(g);
+  lj_trace_abort(g);
+  hook_entergc(g);  /* Disable hooks and new traces during __gc. */
+  if (LJ_HASPROFILE && (oldh & HOOK_PROFILE)) lj_dispatch_update(g, 0);
+  lj_state_checkstack(cbL, 2+LJ_FR2+LUA_MINSTACK);
+  oldtop = savestack(cbL, cbL->top);
+  top = cbL->top;
+  copyTV(cbL, top++, mo);
+  if (LJ_FR2) setnilV(top++);
+  setgcV(cbL, top, o, ~o->gch.gct);
+  cbL->top = top+1;
+  errcode = gc2_finalizer_pcall(g, cbL, top, &continue_gc);
+  if (oldL)
+    lj_tg_setcur_L(g, oldL);
+  else
+    lj_tg_clearcur_L(g);
+  hook_restore(g, oldh);
+  if (LJ_HASPROFILE && (oldh & HOOK_PROFILE)) lj_dispatch_update(g, 0);
+  gc2_finalizer_restore_threshold(g, oldt);
+  if (errcode) {
+    TValue tmp;
+    copyTV(cbL, &tmp, cbL->top-1);
+    cbL->top = restorestack(cbL, oldtop);
+    lj_state_dropclaim(&claim);
+    lj_vmevent_send(g, ERRFIN,
+      copyTV(V, V->top++, &tmp);
+    );
+  } else {
+    cbL->top = restorestack(cbL, oldtop);
+    lj_state_dropclaim(&claim);
+  }
+  return continue_gc;
 }
 
 static int gc2_finalizer_spawn_deferred(global_State *g)
@@ -4001,19 +4049,17 @@ static int gc2_finreg_cdata_dispatch_claim_preclaimed(global_State *g,
 }
 
 static int gc2_finreg_cdata_dispatch_preclaimed(lua_State *L, global_State *g,
-						GCobj *o, cTValue *fin,
-						GC2FinalizerCallFunc call)
+						GCobj *o, cTValue *fin)
 {
   TValue tmp;
   if (!gc2_finreg_cdata_dispatch_claim_preclaimed(g, o))
     return 0;  /* P_WEAK preclaim suppressed by later ffi.gc(cd, nil). */
   copyTV(L, &tmp, fin);
-  return call(g, L, &tmp, o) ? 1 : -1;
+  return gc2_call_finalizer(g, L, &tmp, o) ? 1 : -1;
 }
 
 static int gc2_finreg_cdata_dispatch_slot(lua_State *L, global_State *g,
-					  GCobj *o, cTValue *key,
-					  GC2FinalizerCallFunc call)
+					  GCobj *o, cTValue *key)
 {
   CTState *cts = ctype_ctsG(g);
   GCtab *t;
@@ -4025,38 +4071,36 @@ static int gc2_finreg_cdata_dispatch_slot(lua_State *L, global_State *g,
     copyTV(L, &tmp, &fin);
     lj_cdata_fin_storenil(L, slot);  /* Clear claimed finalizer slot. */
     gc2_finreg_cdata_dispatch_clear(g, o);
-    return call(g, L, &tmp, o) ? 1 : -1;
+    return gc2_call_finalizer(g, L, &tmp, o) ? 1 : -1;
   }
   gc2_finreg_cdata_dispatch_clear(g, o);
   return 0;
 }
 
 static int gc2_finreg_cdata_dispatch_ffi(lua_State *L, global_State *g,
-					 GCobj *o,
-					 GC2FinalizerCallFunc call)
+					 GCobj *o)
 {
   TValue key;
   TValue fin;
-  if (!L || !g || !o || !call || o->gch.gct != ~LJ_TCDATA)
+  if (!L || !g || !o || o->gch.gct != ~LJ_TCDATA)
     return 0;
   if (lj_gc2_finreg_cdata_preclaim_take(L, g, o, &fin))
-    return gc2_finreg_cdata_dispatch_preclaimed(L, g, o, &fin, call);
+    return gc2_finreg_cdata_dispatch_preclaimed(L, g, o, &fin);
   setcdataV(L, &key, gco2cd(o));
-  return gc2_finreg_cdata_dispatch_slot(L, g, o, &key, call);
+  return gc2_finreg_cdata_dispatch_slot(L, g, o, &key);
 }
 #endif
 
 static int lj_gc2_finreg_cdata_dispatch(lua_State *L, global_State *g,
-					GCobj *o,
-					GC2FinalizerCallFunc call)
+					GCobj *o)
 {
 #if LJ_HASFFI
-  if (!L || !g || !o || !call || o->gch.gct != ~LJ_TCDATA)
+  if (!L || !g || !o || o->gch.gct != ~LJ_TCDATA)
     return 0;
   gc2_finreg_dispatch_requeue(g, o);
-  return gc2_finreg_cdata_dispatch_ffi(L, g, o, call);
+  return gc2_finreg_cdata_dispatch_ffi(L, g, o);
 #else
-  UNUSED(L); UNUSED(g); UNUSED(o); UNUSED(call);
+  UNUSED(L); UNUSED(g); UNUSED(o);
   return 0;
 #endif
 }
@@ -4294,18 +4338,17 @@ size_t lj_gc2_finreg_udata_finalize(global_State *g, int all)
 }
 
 static int lj_gc2_finreg_udata_dispatch(lua_State *L, global_State *g,
-					GCobj *o,
-					GC2FinalizerCallFunc call)
+					GCobj *o)
 {
   cTValue *mo;
   TValue motv;
-  if (!L || !g || !o || !call || o->gch.gct != ~LJ_TUDATA)
+  if (!L || !g || !o || o->gch.gct != ~LJ_TUDATA)
     return 0;
   gc2_finreg_dispatch_requeue(g, o);
   if (lj_gc2_finreg_udata_set(g, o, 0) < 0)
     lj_gc2_finreg_udata_forget(g, o);
   mo = lj_meta_fasttv(g, tabref_acq(gco2ud(o)->metatable), MM_gc, &motv);
-  if (mo && !call(g, L, mo, o))
+  if (mo && !gc2_call_finalizer(g, L, mo, o))
     return -1;
   return 1;  /* 05 section 5.8: GC2-owned userdata dispatch resolution. */
 }

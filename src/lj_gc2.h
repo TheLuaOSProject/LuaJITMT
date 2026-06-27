@@ -17,8 +17,6 @@ typedef void (*GC2FinRegMarkFunc)(global_State *g, cTValue *tv);
 typedef void (*GC2FinRegMarkObjFunc)(global_State *g, GCobj *o);
 typedef void (*GC2FinRegMarkMemFunc)(global_State *g, void *p);
 typedef void (*GC2FinRegMarkTVFunc)(global_State *g, cTValue *tv);
-typedef int (*GC2FinalizerCallFunc)(global_State *g, lua_State *L,
-				    cTValue *mo, GCobj *o);
 #if defined(lj_gc2_c) || defined(LJ_GC2_TEST_HELPERS) || defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
 typedef int (*GC2FinalizerDispatchFunc)(lua_State *L, global_State *g,
 					GCobj *o);
@@ -116,10 +114,8 @@ LJ_FUNC void lj_gc2_finreg_udata_register_mt(lua_State *L, global_State *g,
 					     GCudata *ud, GCtab *mt);
 LJ_FUNC void lj_gc2_finreg_udata_forget(global_State *g, GCobj *o);
 LJ_FUNC size_t lj_gc2_finreg_udata_finalize(global_State *g, int all);
-LJ_FUNC void lj_gc2_finalizer_dispatch_all(lua_State *L,
-					   GC2FinalizerCallFunc call);
+LJ_FUNC void lj_gc2_finalizer_dispatch_all(lua_State *L);
 LJ_FUNC int lj_gc2_finalizer_step(lua_State *L,
-				  GC2FinalizerCallFunc call,
 				  GCSize finalize_cost, GCSize *cost);
 LJ_FUNC void lj_gc2_finalizer_mark_all(global_State *g,
 				       GC2FinalizerMarkFunc mark);
@@ -174,10 +170,6 @@ LJ_FUNC int lj_gc2_test_finalizer_step_dispatch(lua_State *L,
 						GCSize finalize_cost,
 						GCSize *cost);
 #endif
-LJ_FUNC GCSize lj_gc2_finalizer_pause_threshold(global_State *g);
-LJ_FUNC void lj_gc2_finalizer_restore_threshold(global_State *g, GCSize oldt);
-LJ_FUNC int lj_gc2_finalizer_pcall(global_State *g, lua_State *L,
-				   TValue *top, int *continue_gc);
 LJ_FUNC void lj_gc2_finalizer_spawn_release(global_State *g);
 LJ_FUNCA void lj_gc2_barrier_tv_g(global_State *g, cTValue *tv);
 LJ_FUNCA void lj_gc2_barrier_tvn_pair_g(global_State *g, GCobj *parent,

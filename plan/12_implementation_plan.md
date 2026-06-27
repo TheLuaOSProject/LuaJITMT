@@ -244,9 +244,9 @@ older `finalizer_token` bridge has been removed, and normal finalizer producers
 publish through the GC2 MPSC/consumer-ring bridge instead of legacy `mmudata`;
 that bridge now links dedicated queue nodes instead of overwriting each pending
 object's `gcw` root/list link. Dispatch-time queue consumption goes through
-GC2's internal `lj_gc2_finalizer_dispatch_one()`, leaving legacy GC with the
-protected callback runner via public dispatch-all/step entry points rather than
-direct owner/drain/dequeue or dequeued-object routing access. Close-time
+GC2's internal `lj_gc2_finalizer_dispatch_one()`, leaving legacy GC with only
+public dispatch-all/step entry points rather than callback-runner,
+owner/drain/dequeue, or dequeued-object routing access. Close-time
 drain-all uses `lj_gc2_finalizer_dispatch_all()`, so the blocking drain /
 queue-pending / dispatch-one loop also stays in GC2. Incremental
 `GCSfinalize` work uses `lj_gc2_finalizer_step()`, moving queue checks, trace
@@ -257,11 +257,11 @@ instead of the shared `vmthread(g)` stack. Userdata FINREG membership now uses a
 GC2 side list for discovery, including in-place metatable finalizer additions
 and manually chain-unlinked userdata; `lj_gc2_finreg_udata_finalize()` owns the
 side-list walk and finalizer queue publication, while
-`lj_gc2_finreg_udata_dispatch()` owns dispatch-time FINREG clear and `__gc`
-lookup before calling back to the legacy protected callback runner. Cdata
+`lj_gc2_finreg_udata_dispatch()` owns dispatch-time FINREG clear, object
+requeue/rewhite, `__gc` lookup, and protected callback execution. Cdata
 ordered FINREG discovery covers the ordinary P_WEAK and close-time paths, and
 `lj_gc2_finreg_cdata_dispatch()` owns dispatch-time FINREG slot/preclaim
-resolution before calling back to the legacy protected callback runner. GC2
+resolution, object requeue/rewhite, and protected callback execution. GC2
 also owns close-time FINREG generation disable through
 `lj_gc2_finreg_cdata_disable()`. The M9 cleanup removed close-time
 generation-table pending/discovery scans; P_WEAK preclaim side-vector failure
