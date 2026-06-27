@@ -426,7 +426,7 @@ static void test_async_sweep_and_stop(lua_State *L, global_State *g,
   lj_native_enter(tg);
 
   lj_gc2_test_finalizer_enter(g);
-  assert(lj_gc2_finalizer_pending(g));
+  assert(lj_gc2_test_finalizer_pending(g));
   g->gc2.cycle++;
   sweep_cycle = g->gc2.cycle;
   g->gc2.phase = LJ_GC2_SWEEP;
@@ -459,7 +459,7 @@ static void test_async_sweep_and_stop(lua_State *L, global_State *g,
   assert(arena_list_contains(extra_tg.alloc.needsweep[LJ_ARENAK_TRAVERSABLE],
 			     swept_a));
   lj_gc2_test_finalizer_leave(g);
-  assert(!lj_gc2_finalizer_pending(g));
+  assert(!lj_gc2_test_finalizer_pending(g));
   wakes0 = gc2_worker_wakes_acq(g);
   for (i = 0; i < 1000 &&
 	      gc2_sweep_owner_arenas_acq(g) == arenas0; i++) {

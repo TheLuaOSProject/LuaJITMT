@@ -754,7 +754,7 @@ int main(void)
 	 finalizer_enters0 + 1u);
   assert(la_load64_acq(&g->gc2.finalizer_leaves) == finalizer_leaves0);
   assert(!lj_gc2_finalizer_queue_pending(g));
-  assert(lj_gc2_finalizer_pending(g));
+  assert(lj_gc2_test_finalizer_pending(g));
   assert(!lj_gc2_finalizer_sweep_pending(g));
   saved_tg = lj_thr_get_tg();
   lj_tg_init_thread(g, &peer_tg, NULL, 0);
@@ -789,11 +789,11 @@ int main(void)
   assert(la_load64_acq(&g->gc2.finalizer_leaves) ==
 	 finalizer_leaves0 + 2u);
   assert(!lj_gc2_finalizer_queue_pending(g));
-  assert(!lj_gc2_finalizer_pending(g));
+  assert(!lj_gc2_test_finalizer_pending(g));
   assert(unlink_root_object(g, obj2gco(phase_tab)));
   lj_gc2_test_finalizer_enqueue(g, obj2gco(phase_tab));
   assert(lj_gc2_finalizer_queue_pending(g));
-  assert(lj_gc2_finalizer_pending(g));
+  assert(lj_gc2_test_finalizer_pending(g));
   assert(lj_gc2_finalizer_sweep_pending(g));
   lj_gc2_sweep_legacy_ready(g);
   assert(lj_gc2_sweep_to_idle(g) == 0);
@@ -804,7 +804,7 @@ int main(void)
   assert(lj_gc2_test_finalizer_dequeue(g) == obj2gco(phase_tab));
   relink_root_object(g, obj2gco(phase_tab));
   assert(!lj_gc2_finalizer_queue_pending(g));
-  assert(!lj_gc2_finalizer_pending(g));
+  assert(!lj_gc2_test_finalizer_pending(g));
   assert(!lj_gc2_finalizer_sweep_pending(g));
   lj_gc2_sweep_legacy_ready(g);
   assert(lj_gc2_sweep_to_idle(g) == 1);

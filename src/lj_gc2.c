@@ -113,6 +113,7 @@ static GCobj *lj_gc2_finalizer_dequeue(global_State *g);
 static int lj_gc2_finalizer_try_enter(global_State *g);
 static void lj_gc2_finalizer_enter(global_State *g);
 static void lj_gc2_finalizer_leave(global_State *g);
+static int lj_gc2_finalizer_pending(global_State *g);
 static int gc2_tab_weak_mode(global_State *g, GCtab *t, GCtab *mt);
 static void *gc2_worker_main(void *arg);
 static void gc2_mark_tv_worker(global_State *g, cTValue *tv);
@@ -1580,6 +1581,11 @@ void lj_gc2_test_finalizer_enqueue(global_State *g, GCobj *o)
   lj_gc2_finalizer_enqueue(g, o);
 }
 
+int lj_gc2_test_finalizer_pending(global_State *g)
+{
+  return lj_gc2_finalizer_pending(g);
+}
+
 static int gc2_finalizer_pending_for_sweep(global_State *g, int owner_ok)
 {
   if (!g)
@@ -1599,7 +1605,7 @@ int lj_gc2_finalizer_queue_pending(global_State *g)
 	 gc2_finalizer_mpsc_acq(g) != NULL;
 }
 
-int lj_gc2_finalizer_pending(global_State *g)
+static int lj_gc2_finalizer_pending(global_State *g)
 {
   return gc2_finalizer_pending_for_sweep(g, 0);
 }
