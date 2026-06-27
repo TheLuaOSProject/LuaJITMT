@@ -152,8 +152,8 @@ static void test_finalizer_consumer_ring(lua_State *L, global_State *g)
   GCobj *a, *b, *c, *d, *e;
   uint64_t queued0, dequeued0, drained0, wakes0;
   lua_settop(L, 0);
-  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) == NULL);
-  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) == NULL);
+  assert(gc2_finalizer_mpsc_acq(g) == NULL);
+  assert(gc2_finalizer_tail_acq(g) == NULL);
   lua_newtable(L);
   a = obj2gco(tabV(L->top - 1));
   lua_newtable(L);
@@ -170,40 +170,40 @@ static void test_finalizer_consumer_ring(lua_State *L, global_State *g)
   assert(unlink_root_object(g, d));
   assert(unlink_root_object(g, e));
 
-  queued0 = la_load64_acq(&g->gc2.finalizer_queued);
-  dequeued0 = la_load64_acq(&g->gc2.finalizer_dequeued);
-  drained0 = la_load64_acq(&g->gc2.finalizer_mpsc_drained);
+  queued0 = gc2_finalizer_queued_acq(g);
+  dequeued0 = gc2_finalizer_dequeued_acq(g);
+  drained0 = gc2_finalizer_mpsc_drained_acq(g);
   assert(lj_gc2_workers_set(g, 1) == 1);
   wakes0 = gc2_worker_wakes_acq(g);
   lj_gc2_test_finalizer_enqueue(g, a);
   lj_gc2_test_finalizer_enqueue(g, b);
   lj_gc2_test_finalizer_enqueue(g, c);
-  assert(la_load64_acq(&g->gc2.finalizer_queued) == queued0 + 3u);
+  assert(gc2_finalizer_queued_acq(g) == queued0 + 3u);
   assert(gc2_worker_wakes_acq(g) == wakes0 + 1u);
   lj_gc2_worker_stop(g);
-  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) != NULL);
-  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) == NULL);
+  assert(gc2_finalizer_mpsc_acq(g) != NULL);
+  assert(gc2_finalizer_tail_acq(g) == NULL);
 
   lj_gc2_test_finalizer_drain(g);
-  assert(la_load64_acq(&g->gc2.finalizer_mpsc_drained) == drained0 + 3u);
-  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) == NULL);
-  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) != NULL);
+  assert(gc2_finalizer_mpsc_drained_acq(g) == drained0 + 3u);
+  assert(gc2_finalizer_mpsc_acq(g) == NULL);
+  assert(gc2_finalizer_tail_acq(g) != NULL);
   lj_gc2_test_finalizer_enqueue(g, d);
   lj_gc2_test_finalizer_enqueue(g, e);
-  assert(la_load64_acq(&g->gc2.finalizer_queued) == queued0 + 5u);
-  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) != NULL);
+  assert(gc2_finalizer_queued_acq(g) == queued0 + 5u);
+  assert(gc2_finalizer_mpsc_acq(g) != NULL);
   lj_gc2_test_finalizer_drain(g);
-  assert(la_load64_acq(&g->gc2.finalizer_mpsc_drained) == drained0 + 5u);
-  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) == NULL);
-  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) != NULL);
+  assert(gc2_finalizer_mpsc_drained_acq(g) == drained0 + 5u);
+  assert(gc2_finalizer_mpsc_acq(g) == NULL);
+  assert(gc2_finalizer_tail_acq(g) != NULL);
   assert(lj_gc2_test_finalizer_dequeue(g) == a);
   assert(lj_gc2_test_finalizer_dequeue(g) == b);
   assert(lj_gc2_test_finalizer_dequeue(g) == c);
   assert(lj_gc2_test_finalizer_dequeue(g) == d);
   assert(lj_gc2_test_finalizer_dequeue(g) == e);
   assert(lj_gc2_test_finalizer_dequeue(g) == NULL);
-  assert(la_load64_acq(&g->gc2.finalizer_dequeued) == dequeued0 + 5u);
-  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) == NULL);
+  assert(gc2_finalizer_dequeued_acq(g) == dequeued0 + 5u);
+  assert(gc2_finalizer_tail_acq(g) == NULL);
 
   relink_root_object(g, e);
   relink_root_object(g, d);
@@ -218,8 +218,8 @@ static void test_finalizer_queue_preserves_object_link(lua_State *L,
 {
   GCobj *sentinel, *queued;
   lua_settop(L, 0);
-  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) == NULL);
-  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) == NULL);
+  assert(gc2_finalizer_mpsc_acq(g) == NULL);
+  assert(gc2_finalizer_tail_acq(g) == NULL);
   lua_newtable(L);
   sentinel = obj2gco(tabV(L->top - 1));
   lua_newtable(L);
@@ -253,8 +253,8 @@ static void test_finalizer_drain_concurrent_consumers(lua_State *L,
   int seen_a = 0, seen_b = 0, n = 0;
 
   lua_settop(L, 0);
-  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) == NULL);
-  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) == NULL);
+  assert(gc2_finalizer_mpsc_acq(g) == NULL);
+  assert(gc2_finalizer_tail_acq(g) == NULL);
   lua_newtable(L);
   a = obj2gco(tabV(L->top - 1));
   lua_newtable(L);
@@ -262,21 +262,21 @@ static void test_finalizer_drain_concurrent_consumers(lua_State *L,
   assert(unlink_root_object(g, a));
   assert(unlink_root_object(g, b));
 
-  drained0 = la_load64_acq(&g->gc2.finalizer_mpsc_drained);
-  dequeued0 = la_load64_acq(&g->gc2.finalizer_dequeued);
+  drained0 = gc2_finalizer_mpsc_drained_acq(g);
+  dequeued0 = gc2_finalizer_dequeued_acq(g);
   lj_gc2_test_finalizer_drain_pause(g);
   lj_gc2_test_finalizer_enqueue(g, a);
-  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) != NULL);
-  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) == NULL);
+  assert(gc2_finalizer_mpsc_acq(g) != NULL);
+  assert(gc2_finalizer_tail_acq(g) == NULL);
 
   fd.g = g;
   assert(pthread_create(&thread, NULL, finalizer_drain_worker, &fd) == 0);
   while (gc2_finalizer_drain_test_paused_acq(g) == 0)
     la_cpu_pause();
   assert(la_load32_acq(&fd.finished) == 0);
-  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) == NULL);
-  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) == NULL);
-  assert(la_load64_acq(&g->gc2.finalizer_mpsc_drained) == drained0);
+  assert(gc2_finalizer_mpsc_acq(g) == NULL);
+  assert(gc2_finalizer_tail_acq(g) == NULL);
+  assert(gc2_finalizer_mpsc_drained_acq(g) == drained0);
   lj_gc2_test_finalizer_enqueue(g, b);
 
   if (lj_gc2_test_finalizer_try_enter(g)) {
@@ -288,9 +288,9 @@ static void test_finalizer_drain_concurrent_consumers(lua_State *L,
   assert(pthread_join(thread, NULL) == 0);
   assert(la_load32_acq(&fd.finished) == 1);
   lj_gc2_test_finalizer_drain(g);
-  assert(la_load64_acq(&g->gc2.finalizer_mpsc_drained) == drained0 + 2u);
-  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) == NULL);
-  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) != NULL);
+  assert(gc2_finalizer_mpsc_drained_acq(g) == drained0 + 2u);
+  assert(gc2_finalizer_mpsc_acq(g) == NULL);
+  assert(gc2_finalizer_tail_acq(g) != NULL);
   while ((o = lj_gc2_test_finalizer_dequeue(g)) != NULL) {
     if (o == a) {
       assert(seen_a == 0);
@@ -306,8 +306,8 @@ static void test_finalizer_drain_concurrent_consumers(lua_State *L,
   assert(n == 2);
   assert(seen_a == 1);
   assert(seen_b == 1);
-  assert(la_load64_acq(&g->gc2.finalizer_dequeued) == dequeued0 + 2u);
-  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) == NULL);
+  assert(gc2_finalizer_dequeued_acq(g) == dequeued0 + 2u);
+  assert(gc2_finalizer_tail_acq(g) == NULL);
 
   relink_root_object(g, b);
   relink_root_object(g, a);
@@ -323,8 +323,8 @@ static void test_finalizer_scan_waits_for_drain(lua_State *L, global_State *g)
   uint64_t drained0;
 
   lua_settop(L, 0);
-  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) == NULL);
-  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) == NULL);
+  assert(gc2_finalizer_mpsc_acq(g) == NULL);
+  assert(gc2_finalizer_tail_acq(g) == NULL);
   lua_newtable(L);
   a = obj2gco(tabV(L->top - 1));
   assert(unlink_root_object(g, a));
@@ -334,16 +334,16 @@ static void test_finalizer_scan_waits_for_drain(lua_State *L, global_State *g)
   assert(g->gc2.phase == LJ_GC2_MARK);
   assert(lj_gc2_ismarked(g, a) == 0);
 
-  drained0 = la_load64_acq(&g->gc2.finalizer_mpsc_drained);
+  drained0 = gc2_finalizer_mpsc_drained_acq(g);
   lj_gc2_test_finalizer_drain_pause(g);
   lj_gc2_test_finalizer_enqueue(g, a);
   fd.g = g;
   assert(pthread_create(&drain_thread, NULL, finalizer_drain_worker, &fd) == 0);
   while (gc2_finalizer_drain_test_paused_acq(g) == 0)
     la_cpu_pause();
-  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) == NULL);
-  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) == NULL);
-  assert(la_load64_acq(&g->gc2.finalizer_mpsc_drained) == drained0);
+  assert(gc2_finalizer_mpsc_acq(g) == NULL);
+  assert(gc2_finalizer_tail_acq(g) == NULL);
+  assert(gc2_finalizer_mpsc_drained_acq(g) == drained0);
   assert(lj_gc2_ismarked(g, a) == 0);
 
   rel.g = g;
@@ -354,7 +354,7 @@ static void test_finalizer_scan_waits_for_drain(lua_State *L, global_State *g)
   assert(pthread_join(release_thread, NULL) == 0);
   assert(pthread_join(drain_thread, NULL) == 0);
   assert(la_load32_acq(&fd.finished) == 1);
-  assert(la_load64_acq(&g->gc2.finalizer_mpsc_drained) == drained0 + 1u);
+  assert(gc2_finalizer_mpsc_drained_acq(g) == drained0 + 1u);
   assert(lj_gc2_ismarked(g, a) == 1);
 
   o = lj_gc2_test_finalizer_dequeue(g);
@@ -381,8 +381,8 @@ static void test_finalizer_mpsc_concurrent_producers(lua_State *L,
   lua_settop(L, 0);
   lua_gc(L, LUA_GCSTOP, 0);
   assert(lua_checkstack(L, NTOTAL));
-  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) == NULL);
-  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) == NULL);
+  assert(gc2_finalizer_mpsc_acq(g) == NULL);
+  assert(gc2_finalizer_tail_acq(g) == NULL);
   for (i = 0; i < NTOTAL; i++) {
     lua_newtable(L);
     objs[i] = obj2gco(tabV(L->top - 1));
@@ -390,9 +390,9 @@ static void test_finalizer_mpsc_concurrent_producers(lua_State *L,
     assert(unlink_root_object(g, objs[i]));
   }
 
-  queued0 = la_load64_acq(&g->gc2.finalizer_queued);
-  dequeued0 = la_load64_acq(&g->gc2.finalizer_dequeued);
-  drained0 = la_load64_acq(&g->gc2.finalizer_mpsc_drained);
+  queued0 = gc2_finalizer_queued_acq(g);
+  dequeued0 = gc2_finalizer_dequeued_acq(g);
+  drained0 = gc2_finalizer_mpsc_drained_acq(g);
   assert(pthread_barrier_init(&barrier, NULL, NPROD) == 0);
   for (i = 0; i < NPROD; i++) {
     prod[i].g = g;
@@ -407,13 +407,13 @@ static void test_finalizer_mpsc_concurrent_producers(lua_State *L,
     assert(pthread_join(threads[i], NULL) == 0);
   assert(pthread_barrier_destroy(&barrier) == 0);
 
-  assert(la_load64_acq(&g->gc2.finalizer_queued) ==
+  assert(gc2_finalizer_queued_acq(g) ==
 	 queued0 + (uint64_t)NTOTAL);
-  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) != NULL);
-  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) == NULL);
+  assert(gc2_finalizer_mpsc_acq(g) != NULL);
+  assert(gc2_finalizer_tail_acq(g) == NULL);
 
   lj_gc2_test_finalizer_drain(g);
-  assert(la_load64_acq(&g->gc2.finalizer_mpsc_drained) ==
+  assert(gc2_finalizer_mpsc_drained_acq(g) ==
 	 drained0 + (uint64_t)NTOTAL);
   for (;;) {
     GCobj *o = lj_gc2_test_finalizer_dequeue(g);
@@ -427,10 +427,10 @@ static void test_finalizer_mpsc_concurrent_producers(lua_State *L,
     n++;
   }
   assert(n == NTOTAL);
-  assert(la_load64_acq(&g->gc2.finalizer_dequeued) ==
+  assert(gc2_finalizer_dequeued_acq(g) ==
 	 dequeued0 + (uint64_t)NTOTAL);
-  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) == NULL);
-  assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) == NULL);
+  assert(gc2_finalizer_mpsc_acq(g) == NULL);
+  assert(gc2_finalizer_tail_acq(g) == NULL);
   for (i = 0; i < NTOTAL; i++)
     assert(seen[i] == 1);
 
@@ -807,16 +807,16 @@ int main(void)
   tg->alloc.sweep_epoch = g->gc2.cycle;  /* Synthetic close boundary. */
   sweep_to_idle0 = gc2_sweep_to_idle_acq(g);
   sweep_live_updates0 = la_load64_acq(&g->gc2.sweep_live_updates);
-  finalizer_blocks0 = la_load64_acq(&g->gc2.finalizer_sweep_blocks);
-  finalizer_enters0 = la_load64_acq(&g->gc2.finalizer_enters);
-  finalizer_leaves0 = la_load64_acq(&g->gc2.finalizer_leaves);
+  finalizer_blocks0 = gc2_finalizer_sweep_blocks_acq(g);
+  finalizer_enters0 = gc2_finalizer_enters_acq(g);
+  finalizer_leaves0 = gc2_finalizer_leaves_acq(g);
   lj_gc2_test_finalizer_enter(g);
-  assert(la_load32_acq(&g->gc2.finalizer_active) == 1);
-  assert(la_load32_acq(&g->gc2.finalizer_owner_tid) ==
+  assert(gc2_finalizer_active_acq(g) == 1);
+  assert(gc2_finalizer_owner_acq(g) ==
 	 la_load32_acq(&tg->tid));
-  assert(la_load64_acq(&g->gc2.finalizer_enters) ==
+  assert(gc2_finalizer_enters_acq(g) ==
 	 finalizer_enters0 + 1u);
-  assert(la_load64_acq(&g->gc2.finalizer_leaves) == finalizer_leaves0);
+  assert(gc2_finalizer_leaves_acq(g) == finalizer_leaves0);
   assert(!lj_gc2_finalizer_queue_pending(g));
   assert(lj_gc2_test_finalizer_pending(g));
   assert(!lj_gc2_finalizer_sweep_pending(g));
@@ -829,28 +829,28 @@ int main(void)
   peer_tg.cur_L = L;
   lj_thr_set_tg(&peer_tg);
   assert(!lj_gc2_test_finalizer_try_enter(g));
-  assert(la_load32_acq(&g->gc2.finalizer_active) == 1);
+  assert(gc2_finalizer_active_acq(g) == 1);
   assert(lj_gc2_finalizer_sweep_pending(g));
   lj_thr_set_tg(saved_tg);
   lj_tg_fini_thread(g, &peer_tg);
   assert(lj_gc2_test_finalizer_try_enter(g));
-  assert(la_load32_acq(&g->gc2.finalizer_active) == 2);
-  assert(la_load32_acq(&g->gc2.finalizer_owner_tid) ==
+  assert(gc2_finalizer_active_acq(g) == 2);
+  assert(gc2_finalizer_owner_acq(g) ==
 	 la_load32_acq(&tg->tid));
-  assert(la_load64_acq(&g->gc2.finalizer_enters) ==
+  assert(gc2_finalizer_enters_acq(g) ==
 	 finalizer_enters0 + 2u);
   lj_gc2_test_finalizer_leave(g);
-  assert(la_load32_acq(&g->gc2.finalizer_active) == 1);
-  assert(la_load32_acq(&g->gc2.finalizer_owner_tid) ==
+  assert(gc2_finalizer_active_acq(g) == 1);
+  assert(gc2_finalizer_owner_acq(g) ==
 	 la_load32_acq(&tg->tid));
-  assert(la_load64_acq(&g->gc2.finalizer_leaves) ==
+  assert(gc2_finalizer_leaves_acq(g) ==
 	 finalizer_leaves0 + 1u);
   lj_gc2_test_finalizer_leave(g);
-  assert(la_load32_acq(&g->gc2.finalizer_active) == 0);
-  assert(la_load32_acq(&g->gc2.finalizer_owner_tid) == 0);
-  assert(la_load64_acq(&g->gc2.finalizer_enters) ==
+  assert(gc2_finalizer_active_acq(g) == 0);
+  assert(gc2_finalizer_owner_acq(g) == 0);
+  assert(gc2_finalizer_enters_acq(g) ==
 	 finalizer_enters0 + 2u);
-  assert(la_load64_acq(&g->gc2.finalizer_leaves) ==
+  assert(gc2_finalizer_leaves_acq(g) ==
 	 finalizer_leaves0 + 2u);
   assert(!lj_gc2_finalizer_queue_pending(g));
   assert(!lj_gc2_test_finalizer_pending(g));
@@ -863,7 +863,7 @@ int main(void)
   assert(lj_gc2_sweep_to_idle(g) == 0);
   assert(la_load32_acq(&g->gc2.phase) == LJ_GC2_SWEEP);
   assert(gc2_sweep_to_idle_acq(g) == sweep_to_idle0);
-  assert(la_load64_acq(&g->gc2.finalizer_sweep_blocks) ==
+  assert(gc2_finalizer_sweep_blocks_acq(g) ==
 	 finalizer_blocks0 + 1u);
   assert(lj_gc2_test_finalizer_dequeue(g) == obj2gco(phase_tab));
   relink_root_object(g, obj2gco(phase_tab));
@@ -1023,21 +1023,21 @@ int main(void)
   lua_setfield(L, -2, "__gc");
   lua_setmetatable(L, -2);
   lua_pop(L, 1);
-  finalizer_enters0 = la_load64_acq(&g->gc2.finalizer_enters);
-  finalizer_leaves0 = la_load64_acq(&g->gc2.finalizer_leaves);
-  finalizer_queued0 = la_load64_acq(&g->gc2.finalizer_queued);
-  finalizer_dequeued0 = la_load64_acq(&g->gc2.finalizer_dequeued);
-  finalizer_mpsc_drained0 = la_load64_acq(&g->gc2.finalizer_mpsc_drained);
+  finalizer_enters0 = gc2_finalizer_enters_acq(g);
+  finalizer_leaves0 = gc2_finalizer_leaves_acq(g);
+  finalizer_queued0 = gc2_finalizer_queued_acq(g);
+  finalizer_dequeued0 = gc2_finalizer_dequeued_acq(g);
+  finalizer_mpsc_drained0 = gc2_finalizer_mpsc_drained_acq(g);
   lj_gc_fullgc(L);
-  assert(la_load32_acq(&g->gc2.finalizer_active) == 0);
-  assert(la_load64_acq(&g->gc2.finalizer_queued) > finalizer_queued0);
-  assert(la_load64_acq(&g->gc2.finalizer_dequeued) > finalizer_dequeued0);
-  assert(la_load64_acq(&g->gc2.finalizer_mpsc_drained) >
+  assert(gc2_finalizer_active_acq(g) == 0);
+  assert(gc2_finalizer_queued_acq(g) > finalizer_queued0);
+  assert(gc2_finalizer_dequeued_acq(g) > finalizer_dequeued0);
+  assert(gc2_finalizer_mpsc_drained_acq(g) >
 	 finalizer_mpsc_drained0);
-  assert(la_load64_acq(&g->gc2.finalizer_enters) > finalizer_enters0);
-  assert(la_load64_acq(&g->gc2.finalizer_leaves) > finalizer_leaves0);
-  assert(la_load64_acq(&g->gc2.finalizer_enters) ==
-	 la_load64_acq(&g->gc2.finalizer_leaves));
+  assert(gc2_finalizer_enters_acq(g) > finalizer_enters0);
+  assert(gc2_finalizer_leaves_acq(g) > finalizer_leaves0);
+  assert(gc2_finalizer_enters_acq(g) ==
+	 gc2_finalizer_leaves_acq(g));
   assert_idle(g, tg);
 
   lua_close(L);

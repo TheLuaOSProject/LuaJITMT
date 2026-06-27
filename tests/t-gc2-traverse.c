@@ -3777,9 +3777,9 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   queued1 = gc2_finreg_cdata_queued_acq(g);
   sweepqueued1 = gc2_finreg_cdata_sweep_queued_acq(g);
   pweak1 = gc2_finreg_cdata_pweak_queued_acq(g);
-  finalizerq1 = la_load64_acq(&g->gc2.finalizer_queued);
-  finalizerd1 = la_load64_acq(&g->gc2.finalizer_dequeued);
-  mpscd1 = la_load64_acq(&g->gc2.finalizer_mpsc_drained);
+  finalizerq1 = gc2_finalizer_queued_acq(g);
+  finalizerd1 = gc2_finalizer_dequeued_acq(g);
+  mpscd1 = gc2_finalizer_mpsc_drained_acq(g);
   claimed1 = gc2_finreg_cdata_pweak_claimed_acq(g);
   dispatched1 = gc2_finreg_cdata_preclaim_dispatched_acq(g);
   finalized0 = gc2_cdata_finalized;
@@ -3801,9 +3801,9 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
 	 sweepqueued1);
   assert(gc2_finreg_cdata_pweak_queued_acq(g) == pweak1 + 1u);
   assert(gc2_finreg_cdata_pweak_claimed_acq(g) == claimed1 + 1u);
-  assert(la_load64_acq(&g->gc2.finalizer_queued) == finalizerq1 + 1u);
-  assert(la_load64_acq(&g->gc2.finalizer_dequeued) == finalizerd1 + 1u);
-  assert(la_load64_acq(&g->gc2.finalizer_mpsc_drained) == mpscd1 + 1u);
+  assert(gc2_finalizer_queued_acq(g) == finalizerq1 + 1u);
+  assert(gc2_finalizer_dequeued_acq(g) == finalizerd1 + 1u);
+  assert(gc2_finalizer_mpsc_drained_acq(g) == mpscd1 + 1u);
   assert(gc2_finreg_cdata_preclaim_dispatched_acq(g) ==
 	 dispatched1 + 1u);
   assert(gc2_finreg_cdata_clears_acq(g) == clears1 + 1u);
@@ -3815,9 +3815,9 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   assert(gc2_finreg_cdata_sweep_queued_acq(g) ==
 	 sweepqueued1);
   assert(gc2_finreg_cdata_pweak_claimed_acq(g) == claimed1 + 1u);
-  assert(la_load64_acq(&g->gc2.finalizer_queued) == finalizerq1 + 1u);
-  assert(la_load64_acq(&g->gc2.finalizer_dequeued) == finalizerd1 + 1u);
-  assert(la_load64_acq(&g->gc2.finalizer_mpsc_drained) == mpscd1 + 1u);
+  assert(gc2_finalizer_queued_acq(g) == finalizerq1 + 1u);
+  assert(gc2_finalizer_dequeued_acq(g) == finalizerd1 + 1u);
+  assert(gc2_finalizer_mpsc_drained_acq(g) == mpscd1 + 1u);
   assert(gc2_finreg_cdata_preclaim_dispatched_acq(g) ==
 	 dispatched1 + 1u);
   assert(gc2_cdata_finalized == finalized0 + 1);
@@ -3827,9 +3827,9 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   queued1 = gc2_finreg_cdata_queued_acq(g);
   sweepqueued1 = gc2_finreg_cdata_sweep_queued_acq(g);
   pweak1 = gc2_finreg_cdata_pweak_queued_acq(g);
-  finalizerq1 = la_load64_acq(&g->gc2.finalizer_queued);
-  finalizerd1 = la_load64_acq(&g->gc2.finalizer_dequeued);
-  mpscd1 = la_load64_acq(&g->gc2.finalizer_mpsc_drained);
+  finalizerq1 = gc2_finalizer_queued_acq(g);
+  finalizerd1 = gc2_finalizer_dequeued_acq(g);
+  mpscd1 = gc2_finalizer_mpsc_drained_acq(g);
   claimed1 = gc2_finreg_cdata_pweak_claimed_acq(g);
   dispatched1 = gc2_finreg_cdata_preclaim_dispatched_acq(g);
   orderq1 = gc2_finreg_cdata_order_queued_acq(g);
@@ -3863,9 +3863,9 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
 	 orderunlinked1);
   assert(gc2_finreg_cdata_order_fallbacks_acq(g) ==
 	 orderfallback1);
-  assert(la_load64_acq(&g->gc2.finalizer_queued) == finalizerq1 + 1u);
-  assert(la_load64_acq(&g->gc2.finalizer_dequeued) == finalizerd1 + 1u);
-  assert(la_load64_acq(&g->gc2.finalizer_mpsc_drained) == mpscd1 + 1u);
+  assert(gc2_finalizer_queued_acq(g) == finalizerq1 + 1u);
+  assert(gc2_finalizer_dequeued_acq(g) == finalizerd1 + 1u);
+  assert(gc2_finalizer_mpsc_drained_acq(g) == mpscd1 + 1u);
   assert(gc2_finreg_cdata_preclaim_dispatched_acq(g) ==
 	 dispatched1 + 1u);
   assert(gc2_finreg_cdata_clears_acq(g) == clears1 + 1u);
@@ -3874,9 +3874,9 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   sets1 = gc2_finreg_cdata_sets_acq(g);
   clears1 = gc2_finreg_cdata_clears_acq(g);
   queued1 = gc2_finreg_cdata_queued_acq(g);
-  finalizerq1 = la_load64_acq(&g->gc2.finalizer_queued);
-  finalizerd1 = la_load64_acq(&g->gc2.finalizer_dequeued);
-  mpscd1 = la_load64_acq(&g->gc2.finalizer_mpsc_drained);
+  finalizerq1 = gc2_finalizer_queued_acq(g);
+  finalizerd1 = gc2_finalizer_dequeued_acq(g);
+  mpscd1 = gc2_finalizer_mpsc_drained_acq(g);
   claimed1 = gc2_finreg_cdata_pweak_claimed_acq(g);
   dispatched1 = gc2_finreg_cdata_preclaim_dispatched_acq(g);
   finalized0 = gc2_cdata_finalized;
@@ -3904,10 +3904,10 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   assert(gc2_finreg_cdata_clears_acq(g) == clears1 + 1u);
   assert(gc2_finreg_cdata_queued_acq(g) == queued1 + 1u);
   assert(gc2_finreg_cdata_pweak_claimed_acq(g) == claimed1 + 1u);
-  assert(la_load64_acq(&g->gc2.finalizer_queued) == finalizerq1 + 1u);
+  assert(gc2_finalizer_queued_acq(g) == finalizerq1 + 1u);
   lj_gc_finalize_udata(L);
-  assert(la_load64_acq(&g->gc2.finalizer_dequeued) == finalizerd1 + 1u);
-  assert(la_load64_acq(&g->gc2.finalizer_mpsc_drained) == mpscd1 + 1u);
+  assert(gc2_finalizer_dequeued_acq(g) == finalizerd1 + 1u);
+  assert(gc2_finalizer_mpsc_drained_acq(g) == mpscd1 + 1u);
   assert(gc2_finreg_cdata_preclaim_dispatched_acq(g) ==
 	 dispatched1 + 1u);
   assert(gc2_finreg_cdata_clears_acq(g) == clears1 + 1u);
@@ -3919,9 +3919,9 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   queued2 = gc2_finreg_cdata_queued_acq(g);
   sweepqueued2 = gc2_finreg_cdata_sweep_queued_acq(g);
   pweak2 = gc2_finreg_cdata_pweak_queued_acq(g);
-  finalizerq2 = la_load64_acq(&g->gc2.finalizer_queued);
-  finalizerd2 = la_load64_acq(&g->gc2.finalizer_dequeued);
-  mpscd2 = la_load64_acq(&g->gc2.finalizer_mpsc_drained);
+  finalizerq2 = gc2_finalizer_queued_acq(g);
+  finalizerd2 = gc2_finalizer_dequeued_acq(g);
+  mpscd2 = gc2_finalizer_mpsc_drained_acq(g);
   claimed2 = gc2_finreg_cdata_pweak_claimed_acq(g);
   dispatched2 = gc2_finreg_cdata_preclaim_dispatched_acq(g);
   orderq2 = gc2_finreg_cdata_order_queued_acq(g);
@@ -3952,9 +3952,9 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
 	 sweepqueued2);
   assert(gc2_finreg_cdata_pweak_queued_acq(g) == pweak2 + 3u);
   assert(gc2_finreg_cdata_pweak_claimed_acq(g) == claimed2 + 3u);
-  assert(la_load64_acq(&g->gc2.finalizer_queued) == finalizerq2 + 3u);
-  assert(la_load64_acq(&g->gc2.finalizer_dequeued) == finalizerd2 + 3u);
-  assert(la_load64_acq(&g->gc2.finalizer_mpsc_drained) == mpscd2 + 3u);
+  assert(gc2_finalizer_queued_acq(g) == finalizerq2 + 3u);
+  assert(gc2_finalizer_dequeued_acq(g) == finalizerd2 + 3u);
+  assert(gc2_finalizer_mpsc_drained_acq(g) == mpscd2 + 3u);
   assert(gc2_finreg_cdata_preclaim_dispatched_acq(g) ==
 	 dispatched2 + 3u);
   assert(gc2_finreg_cdata_order_queued_acq(g) == orderq2 + 3u);
@@ -3974,9 +3974,9 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   queued2 = gc2_finreg_cdata_queued_acq(g);
   sweepqueued2 = gc2_finreg_cdata_sweep_queued_acq(g);
   pweak2 = gc2_finreg_cdata_pweak_queued_acq(g);
-  finalizerq2 = la_load64_acq(&g->gc2.finalizer_queued);
-  finalizerd2 = la_load64_acq(&g->gc2.finalizer_dequeued);
-  mpscd2 = la_load64_acq(&g->gc2.finalizer_mpsc_drained);
+  finalizerq2 = gc2_finalizer_queued_acq(g);
+  finalizerd2 = gc2_finalizer_dequeued_acq(g);
+  mpscd2 = gc2_finalizer_mpsc_drained_acq(g);
   claimed2 = gc2_finreg_cdata_pweak_claimed_acq(g);
   dispatched2 = gc2_finreg_cdata_preclaim_dispatched_acq(g);
   orderq2 = gc2_finreg_cdata_order_queued_acq(g);
@@ -4006,9 +4006,9 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   assert(gc2_finreg_cdata_pweak_claimed_acq(g) == claimed2 + 2u);
   assert(gc2_finreg_cdata_preclaim_overflow_acq(g) ==
 	 overflow2 + 1u);
-  assert(la_load64_acq(&g->gc2.finalizer_queued) == finalizerq2 + 3u);
-  assert(la_load64_acq(&g->gc2.finalizer_dequeued) == finalizerd2 + 3u);
-  assert(la_load64_acq(&g->gc2.finalizer_mpsc_drained) == mpscd2 + 3u);
+  assert(gc2_finalizer_queued_acq(g) == finalizerq2 + 3u);
+  assert(gc2_finalizer_dequeued_acq(g) == finalizerd2 + 3u);
+  assert(gc2_finalizer_mpsc_drained_acq(g) == mpscd2 + 3u);
   assert(gc2_finreg_cdata_preclaim_dispatched_acq(g) ==
 	 dispatched2 + 2u);
   assert(gc2_finreg_cdata_order_queued_acq(g) == orderq2 + 3u);
@@ -4028,9 +4028,9 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   queued2 = gc2_finreg_cdata_queued_acq(g);
   sweepqueued2 = gc2_finreg_cdata_sweep_queued_acq(g);
   pweak2 = gc2_finreg_cdata_pweak_queued_acq(g);
-  finalizerq2 = la_load64_acq(&g->gc2.finalizer_queued);
-  finalizerd2 = la_load64_acq(&g->gc2.finalizer_dequeued);
-  mpscd2 = la_load64_acq(&g->gc2.finalizer_mpsc_drained);
+  finalizerq2 = gc2_finalizer_queued_acq(g);
+  finalizerd2 = gc2_finalizer_dequeued_acq(g);
+  mpscd2 = gc2_finalizer_mpsc_drained_acq(g);
   claimed2 = gc2_finreg_cdata_pweak_claimed_acq(g);
   dispatched2 = gc2_finreg_cdata_preclaim_dispatched_acq(g);
   orderq2 = gc2_finreg_cdata_order_queued_acq(g);
@@ -4058,9 +4058,9 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
 	 sweepqueued2);
   assert(gc2_finreg_cdata_pweak_queued_acq(g) == pweak2 + 3u);
   assert(gc2_finreg_cdata_pweak_claimed_acq(g) == claimed2 + 3u);
-  assert(la_load64_acq(&g->gc2.finalizer_queued) == finalizerq2 + 3u);
-  assert(la_load64_acq(&g->gc2.finalizer_dequeued) == finalizerd2 + 3u);
-  assert(la_load64_acq(&g->gc2.finalizer_mpsc_drained) == mpscd2 + 3u);
+  assert(gc2_finalizer_queued_acq(g) == finalizerq2 + 3u);
+  assert(gc2_finalizer_dequeued_acq(g) == finalizerd2 + 3u);
+  assert(gc2_finalizer_mpsc_drained_acq(g) == mpscd2 + 3u);
   assert(gc2_finreg_cdata_preclaim_dispatched_acq(g) ==
 	 dispatched2 + 3u);
   assert(gc2_finreg_cdata_order_queued_acq(g) == orderq2 + 3u);
@@ -4079,9 +4079,9 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   queued2 = gc2_finreg_cdata_queued_acq(g);
   sweepqueued2 = gc2_finreg_cdata_sweep_queued_acq(g);
   pweak2 = gc2_finreg_cdata_pweak_queued_acq(g);
-  finalizerq2 = la_load64_acq(&g->gc2.finalizer_queued);
-  finalizerd2 = la_load64_acq(&g->gc2.finalizer_dequeued);
-  mpscd2 = la_load64_acq(&g->gc2.finalizer_mpsc_drained);
+  finalizerq2 = gc2_finalizer_queued_acq(g);
+  finalizerd2 = gc2_finalizer_dequeued_acq(g);
+  mpscd2 = gc2_finalizer_mpsc_drained_acq(g);
   claimed2 = gc2_finreg_cdata_pweak_claimed_acq(g);
   dispatched2 = gc2_finreg_cdata_preclaim_dispatched_acq(g);
   orderq2 = gc2_finreg_cdata_order_queued_acq(g);
@@ -4106,9 +4106,9 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
 	 sweepqueued2);
   assert(gc2_finreg_cdata_pweak_queued_acq(g) == pweak2 + 2u);
   assert(gc2_finreg_cdata_pweak_claimed_acq(g) == claimed2 + 2u);
-  assert(la_load64_acq(&g->gc2.finalizer_queued) == finalizerq2 + 2u);
-  assert(la_load64_acq(&g->gc2.finalizer_dequeued) == finalizerd2 + 2u);
-  assert(la_load64_acq(&g->gc2.finalizer_mpsc_drained) == mpscd2 + 2u);
+  assert(gc2_finalizer_queued_acq(g) == finalizerq2 + 2u);
+  assert(gc2_finalizer_dequeued_acq(g) == finalizerd2 + 2u);
+  assert(gc2_finalizer_mpsc_drained_acq(g) == mpscd2 + 2u);
   assert(gc2_finreg_cdata_preclaim_dispatched_acq(g) ==
 	 dispatched2 + 2u);
   assert(gc2_finreg_cdata_order_queued_acq(g) == orderq2 + 2u);
@@ -4128,9 +4128,9 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   assert(gc2_finreg_cdata_sweep_queued_acq(g) ==
 	 sweepqueued2);
   assert(gc2_finreg_cdata_pweak_claimed_acq(g) == claimed2 + 2u);
-  assert(la_load64_acq(&g->gc2.finalizer_queued) == finalizerq2 + 2u);
-  assert(la_load64_acq(&g->gc2.finalizer_dequeued) == finalizerd2 + 2u);
-  assert(la_load64_acq(&g->gc2.finalizer_mpsc_drained) == mpscd2 + 2u);
+  assert(gc2_finalizer_queued_acq(g) == finalizerq2 + 2u);
+  assert(gc2_finalizer_dequeued_acq(g) == finalizerd2 + 2u);
+  assert(gc2_finalizer_mpsc_drained_acq(g) == mpscd2 + 2u);
   assert(gc2_finreg_cdata_preclaim_dispatched_acq(g) ==
 	 dispatched2 + 2u);
   assert(gc2_cdata_order_count == 2);
@@ -4139,9 +4139,9 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   clears2 = gc2_finreg_cdata_clears_acq(g);
   sweepqueued2 = gc2_finreg_cdata_sweep_queued_acq(g);
   pweak2 = gc2_finreg_cdata_pweak_queued_acq(g);
-  finalizerq2 = la_load64_acq(&g->gc2.finalizer_queued);
-  finalizerd2 = la_load64_acq(&g->gc2.finalizer_dequeued);
-  mpscd2 = la_load64_acq(&g->gc2.finalizer_mpsc_drained);
+  finalizerq2 = gc2_finalizer_queued_acq(g);
+  finalizerd2 = gc2_finalizer_dequeued_acq(g);
+  mpscd2 = gc2_finalizer_mpsc_drained_acq(g);
   orderq2 = gc2_finreg_cdata_order_queued_acq(g);
   orderfallback2 = gc2_finreg_cdata_order_fallbacks_acq(g);
   pendingorder2 = gc2_finreg_cdata_pending_order_hits_acq(g);
@@ -4167,10 +4167,10 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   assert(gc2_finreg_cdata_sweep_queued_acq(g) ==
 	 sweepqueued2);
   assert(gc2_finreg_cdata_pweak_queued_acq(g) == pweak2);
-  assert(la_load64_acq(&g->gc2.finalizer_queued) == finalizerq2 + 3u);
+  assert(gc2_finalizer_queued_acq(g) == finalizerq2 + 3u);
   lj_gc_finalize_udata(L);
-  assert(la_load64_acq(&g->gc2.finalizer_dequeued) == finalizerd2 + 3u);
-  assert(la_load64_acq(&g->gc2.finalizer_mpsc_drained) == mpscd2 + 3u);
+  assert(gc2_finalizer_dequeued_acq(g) == finalizerd2 + 3u);
+  assert(gc2_finalizer_mpsc_drained_acq(g) == mpscd2 + 3u);
   assert(gc2_finreg_cdata_clears_acq(g) == clears2 + 3u);
   assert(!lj_gc2_finalizer_queue_pending(g));
   assert(!lj_gc_cdata_fin_pending(g));
@@ -4185,9 +4185,9 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   clears2 = gc2_finreg_cdata_clears_acq(g);
   sweepqueued2 = gc2_finreg_cdata_sweep_queued_acq(g);
   pweak2 = gc2_finreg_cdata_pweak_queued_acq(g);
-  finalizerq2 = la_load64_acq(&g->gc2.finalizer_queued);
-  finalizerd2 = la_load64_acq(&g->gc2.finalizer_dequeued);
-  mpscd2 = la_load64_acq(&g->gc2.finalizer_mpsc_drained);
+  finalizerq2 = gc2_finalizer_queued_acq(g);
+  finalizerd2 = gc2_finalizer_dequeued_acq(g);
+  mpscd2 = gc2_finalizer_mpsc_drained_acq(g);
   orderq2 = gc2_finreg_cdata_order_queued_acq(g);
   orderfallback2 = gc2_finreg_cdata_order_fallbacks_acq(g);
   pendingorder2 = gc2_finreg_cdata_pending_order_hits_acq(g);
@@ -4212,10 +4212,10 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   assert(gc2_finreg_cdata_sweep_queued_acq(g) ==
 	 sweepqueued2);
   assert(gc2_finreg_cdata_pweak_queued_acq(g) == pweak2);
-  assert(la_load64_acq(&g->gc2.finalizer_queued) == finalizerq2 + 1u);
+  assert(gc2_finalizer_queued_acq(g) == finalizerq2 + 1u);
   lj_gc_finalize_udata(L);
-  assert(la_load64_acq(&g->gc2.finalizer_dequeued) == finalizerd2 + 1u);
-  assert(la_load64_acq(&g->gc2.finalizer_mpsc_drained) == mpscd2 + 1u);
+  assert(gc2_finalizer_dequeued_acq(g) == finalizerd2 + 1u);
+  assert(gc2_finalizer_mpsc_drained_acq(g) == mpscd2 + 1u);
   assert(gc2_finreg_cdata_clears_acq(g) == clears2 + 1u);
   assert(!lj_gc2_finalizer_queue_pending(g));
   assert(!lj_gc_cdata_fin_pending(g));
@@ -4227,9 +4227,9 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   queued2 = gc2_finreg_cdata_queued_acq(g);
   sweepqueued2 = gc2_finreg_cdata_sweep_queued_acq(g);
   pweak2 = gc2_finreg_cdata_pweak_queued_acq(g);
-  finalizerq2 = la_load64_acq(&g->gc2.finalizer_queued);
-  finalizerd2 = la_load64_acq(&g->gc2.finalizer_dequeued);
-  mpscd2 = la_load64_acq(&g->gc2.finalizer_mpsc_drained);
+  finalizerq2 = gc2_finalizer_queued_acq(g);
+  finalizerd2 = gc2_finalizer_dequeued_acq(g);
+  mpscd2 = gc2_finalizer_mpsc_drained_acq(g);
   claimed2 = gc2_finreg_cdata_pweak_claimed_acq(g);
   dispatched2 = gc2_finreg_cdata_preclaim_dispatched_acq(g);
   orderq2 = gc2_finreg_cdata_order_queued_acq(g);
@@ -4266,11 +4266,11 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   assert(gc2_finreg_cdata_preclaim_overflow_acq(g) ==
 	 overflow2);
   assert(gc2_finreg_cdata_preclaim_capacity_acq(g) >= (MSize)bulk_n);
-  assert(la_load64_acq(&g->gc2.finalizer_queued) ==
+  assert(gc2_finalizer_queued_acq(g) ==
 	 finalizerq2 + (uint64_t)bulk_n);
-  assert(la_load64_acq(&g->gc2.finalizer_dequeued) ==
+  assert(gc2_finalizer_dequeued_acq(g) ==
 	 finalizerd2 + (uint64_t)bulk_n);
-  assert(la_load64_acq(&g->gc2.finalizer_mpsc_drained) ==
+  assert(gc2_finalizer_mpsc_drained_acq(g) ==
 	 mpscd2 + (uint64_t)bulk_n);
   assert(gc2_finreg_cdata_preclaim_dispatched_acq(g) ==
 	 dispatched2 + (uint64_t)bulk_n);
