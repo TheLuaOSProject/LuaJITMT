@@ -12,13 +12,18 @@ advance while the effective root policy was still full-major.
 
 ## Fix
 
-`src/lj_gc.c` now suppresses the legacy mark bridge only when:
+`src/lj_gc2.c` now owns the predicate used by the legacy mark bridge through
+`lj_gc2_legacy_mark_suppressed()`. That predicate suppresses GC2 marking from
+legacy mark callbacks only when:
 
 - GC2 phase is `LJ_GC2_MARK`
 - the current cycle has `cycle_roots_minor != 0`
 
 Legacy marking still runs. Direct GC2 minor root scans, remembered-set scans,
-thread/TG roots, and major-cycle bridge marking are unchanged.
+thread/TG roots, and major-cycle bridge marking are unchanged. `src/lj_gc.c`
+only calls the GC2 predicate from `lj_gc_arena_markobj()` /
+`lj_gc_arena_markmem()`; the M10 guard rejects reintroducing the local
+phase/minor-root test there.
 
 `LJ_GC2_PARANOIA` full-root fixpoint checks now return early for true minor
 cycles. The existing paranoia oracle checks full legacy roots/strtab/rawroots,
@@ -49,3 +54,11 @@ Passed:
 - `tools/ci/lua_test.sh m3_gc2_paranoia`
 - `tools/ci/lua_test.sh m10_generational`
 - `tools/ci/lua_test.sh m3_gc2_scaffold`
+
+Follow-up cleanup:
+
+- The minor-root legacy mark suppression predicate now lives behind
+  `lj_gc2_legacy_mark_suppressed()`, and `tools/ci/m10_generational.sh` guards
+  that boundary.
+  Verification: `tools/ci/m10_generational.sh`, `tools/ci/m9_m10_gc.sh`, and
+  `tools/ci/m3_gc2_paranoia.sh` passed.

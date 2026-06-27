@@ -65,21 +65,15 @@ static void gc_finreg_claim_wait_no_l(void)
 
 /* -- Mark phase ---------------------------------------------------------- */
 
-static LJ_AINLINE int gc2_suppress_legacy_mark(global_State *g)
-{
-  return gc2_phase_acq(g) == LJ_GC2_MARK &&
-	 gc2_cycle_roots_minor_acq(g) != 0;
-}
-
 void lj_gc_arena_markobj(global_State *g, GCobj *o)
 {
-  if (!gc2_suppress_legacy_mark(g))
+  if (!lj_gc2_legacy_mark_suppressed(g))
     lj_gc2_markobj(g, o);
 }
 
 void lj_gc_arena_markmem(global_State *g, void *p)
 {
-  if (!gc2_suppress_legacy_mark(g))
+  if (!lj_gc2_legacy_mark_suppressed(g))
     (void)lj_gc2_markmem(g, p);
 }
 
