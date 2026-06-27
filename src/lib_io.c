@@ -115,6 +115,22 @@ static int io_native_setvbuf(lua_State *L, FILE *fp, int mode, size_t size)
   return ok;
 }
 
+static void io_native_clearerr(lua_State *L, FILE *fp)
+{
+  lj_native_enter(L2TG(L));
+  clearerr(fp);
+  lj_safepoint_checkstop(L, lj_native_leave(L));
+}
+
+static int io_native_ferror(lua_State *L, FILE *fp)
+{
+  int err;
+  lj_native_enter(L2TG(L));
+  err = ferror(fp);
+  lj_safepoint_checkstop(L, lj_native_leave(L));
+  return err;
+}
+
 static int io_native_fscanf_num(lua_State *L, FILE *fp, lua_Number *dp)
 {
   int ok;
@@ -141,6 +157,15 @@ static size_t io_native_fread(lua_State *L, void *buf, size_t size,
   nr = fread(buf, size, n, fp);
   lj_safepoint_checkstop(L, lj_native_leave(L));
   return nr;
+}
+
+static int io_native_ungetc(lua_State *L, int c, FILE *fp)
+{
+  int rc;
+  lj_native_enter(L2TG(L));
+  rc = ungetc(c, fp);
+  lj_safepoint_checkstop(L, lj_native_leave(L));
+  return rc;
 }
 
 static int io_native_getc(lua_State *L, FILE *fp, uint32_t *actionsp)
@@ -353,7 +378,7 @@ static int io_file_readlen(lua_State *L, FILE *fp, MSize m)
   } else {
     uint32_t actions;
     int c = io_native_getc(L, fp, &actions);
-    ungetc(c, fp);
+    (void)io_native_ungetc(L, c, fp);
     lj_safepoint_checkstop(L, actions);
     setstrV(L, L->top++, &G(L)->strempty);
     return (c != EOF);
@@ -364,7 +389,7 @@ static int io_file_read(lua_State *L, IOFileUD *iof, int start)
 {
   FILE *fp = iof->fp;
   int ok, n, nargs = (int)(L->top - L->base) - start;
-  clearerr(fp);
+  io_native_clearerr(L, fp);
   if (nargs == 0) {
     ok = io_file_readline(L, fp, 1);
     n = start+1;  /* Return 1 result. */
@@ -391,7 +416,7 @@ static int io_file_read(lua_State *L, IOFileUD *iof, int start)
       }
     }
   }
-  if (ferror(fp))
+  if (io_native_ferror(L, fp))
     return luaL_fileresult(L, 0, NULL);
   if (!ok)
     setnilV(L->top-1);  /* Replace last result with nil. */
@@ -441,7 +466,7 @@ static int io_file_iter(lua_State *L)
     L->top += n;
   }
   n = io_file_read(L, iof, 0);
-  if (ferror(iof->fp))
+  if (io_native_ferror(L, iof->fp))
     lj_err_callermsg(L, strVdata(L->top-2));
   if (tvisnil(L->base) && (iof->type & IOFILE_FLAG_CLOSE)) {
     io_file_close(L, iof);  /* Return values are ignored. */

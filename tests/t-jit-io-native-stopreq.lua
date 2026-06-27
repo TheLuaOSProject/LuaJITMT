@@ -27,6 +27,7 @@ for i = 1, 200 do io.flush() end
 
 f:close()
 local r = assert(io.open(path, "r"))
+assert(r:read(0) == "")
 local data = r:read("*a")
 r:close()
 assert(data:match("x200\n"), "file:write output missing")
