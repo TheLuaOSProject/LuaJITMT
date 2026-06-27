@@ -37,4 +37,32 @@ if hits=$(grep -nE -- '(^|[^[:alnum:]_])gc2->[[:space:]]*(finreg_cdata_order_(se
   exit 1
 fi
 
+if ! grep -qE '^typedef struct GC2StatsSnapshot[[:space:]]*[{]' \
+    "$ROOT/src/lj_gc2.h"; then
+  printf '%s\n' 'GC2StatsSnapshot is required for GC stats ownership' >&2
+  exit 1
+fi
+if ! grep -qE 'LJ_FUNC void lj_gc2_stats_snapshot[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.h"; then
+  printf '%s\n' 'lj_gc2_stats_snapshot declaration is required for GC stats ownership' >&2
+  exit 1
+fi
+if ! grep -qE '^void lj_gc2_stats_snapshot[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.c"; then
+  printf '%s\n' 'lj_gc2_stats_snapshot definition is required in lj_gc2.c' >&2
+  exit 1
+fi
+for pattern in 'GC2StatsSnapshot s;' 'lj_gc2_stats_snapshot(g, &s);'; do
+  if ! grep -qF "$pattern" "$ROOT/src/lib_base.c"; then
+    printf '%s\n' "collectgarbage('stats') must use ${pattern}" >&2
+    exit 1
+  fi
+done
+if hits=$(grep -nE -- 'gc2_[[:alnum:]_]+_acq[[:space:]]*[(]|lj_gc2_(alloc_since|cycle_alloc|trigger|hard)_load[[:space:]]*[(]|lj_gc2_minor_roots_active[[:space:]]*[(]' \
+    "$ROOT/src/lib_base.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'collectgarbage("stats") must read GC2 state through lj_gc2_stats_snapshot' >&2
+  exit 1
+fi
+
 exec "$ROOT/tools/ci/lua_test.sh" m9_gc_stats

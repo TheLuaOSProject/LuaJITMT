@@ -121,6 +121,26 @@ for pattern in 'lj_gc2_workers_set_l(L,' 'lj_safepoint_checkstop(L, actions);'; 
     exit 1
   fi
 done
+if ! grep -qE 'LJ_FUNC uint32_t lj_gc2_workers_count[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.h"; then
+  printf '%s\n' 'lj_gc2_workers_count declaration is required for public worker count ownership' >&2
+  exit 1
+fi
+if ! grep -qE '^uint32_t lj_gc2_workers_count[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.c"; then
+  printf '%s\n' 'lj_gc2_workers_count definition is required in lj_gc2.c' >&2
+  exit 1
+fi
+if ! grep -qF 'lj_gc2_workers_count(g)' "$ROOT/src/lib_base.c"; then
+  printf '%s\n' "collectgarbage('workers') must query worker count through lj_gc2_workers_count" >&2
+  exit 1
+fi
+if hits=$(grep -nE -- 'gc2_n_workers_acq[[:space:]]*[(]' \
+    "$ROOT/src/lib_base.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' "collectgarbage('workers') must not read raw GC2 worker count" >&2
+  exit 1
+fi
 if ! grep -qE '^[[:space:]]*int lj_gc2_workers_set_l[[:space:]]*[(]' \
     "$ROOT/src/lj_gc2.c"; then
   printf '%s\n' 'L-aware GC2 worker setter is required for public worker control' >&2
@@ -995,7 +1015,7 @@ for helper in gc2_minor_sweep_arenas_acq \
     exit 1
   fi
 done
-if hits=$(grep -nE -- '->[[:space:]]*(gc2[.])?(minor_sweep_arenas|sweep_owner_runs|sweep_owner_arenas|sweep_owner_live_cells)([^[:alnum:]_]|$)|&[[:space:]]*[^)]*->[[:space:]]*(gc2[.])?(minor_sweep_arenas|sweep_owner_runs|sweep_owner_arenas|sweep_owner_live_cells)([^[:alnum:]_]|$)' \
+if hits=$(grep -nE -- '->[[:space:]]*gc2[.](minor_sweep_arenas|sweep_owner_runs|sweep_owner_arenas|sweep_owner_live_cells)([^[:alnum:]_]|$)|&[[:space:]]*[^)]*->[[:space:]]*gc2[.](minor_sweep_arenas|sweep_owner_runs|sweep_owner_arenas|sweep_owner_live_cells)([^[:alnum:]_]|$)' \
     "$ROOT/src/lj_gc2.c" \
     "$ROOT/src/lib_base.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2

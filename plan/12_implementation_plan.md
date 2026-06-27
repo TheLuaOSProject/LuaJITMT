@@ -309,6 +309,9 @@ benchmark-facing table of GC2 counters for cycle starts, requested vs actual
 minor cycles, allocation pacing, poll-ack latency, assist/worker progress, owner
 sweep progress, weak clearing, weak-write marks, FINREG fallback/order counters,
 finalizer queueing/MPSC drains, finalizer-spawn deferrals, and live estimates.
+`lib_base.c` formats the Lua table from `GC2StatsSnapshot`, while
+`lj_gc2_stats_snapshot()` owns the GC2 acquire-load boundary for the exported
+counters.
 `plan/aux/bench/bench_mt.lua` prints a stable subset of those fields after a run
 and reports approximate owner-side poll-ack P99 latency from histogram deltas;
 synthetic leader and remote-native acknowledgements do not contribute to the

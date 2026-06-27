@@ -143,6 +143,8 @@ allocation trigger/hard-limit bytes, assist work, worker work and parked-worker
 scheduler telemetry, owner sweep work, weak clearing/write marks, FINREG
 fallback/order counters, finalizer queueing/MPSC drains, finalizer-spawn
 deferrals, and live estimates.
+Those fields are read through `lj_gc2_stats_snapshot()`, leaving the benchmark
+surface stable while GC2 owns the telemetry snapshot boundary.
 `bench_mt.lua` uses `threading.now()` for monotonic wall-clock timings and
 reports per-run owner-side poll-ack P99 bucket bounds from histogram deltas.
 Synthetic leader and remote-native safepoint acknowledgements are excluded from

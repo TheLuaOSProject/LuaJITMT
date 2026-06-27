@@ -81,9 +81,10 @@ if ! grep -qF 'lj_gc2_minor_roots_active(g)' "$ROOT/src/lj_gc.c"; then
     "legacy paranoia minor-root skip must query lj_gc2_minor_roots_active" >&2
   exit 1
 fi
-if ! grep -qF 'lj_gc2_minor_roots_active(g)' "$ROOT/src/lib_base.c"; then
+if ! grep -qF 's->cycle_roots_minor = lj_gc2_minor_roots_active(g);' \
+    "$ROOT/src/lj_gc2.c"; then
   printf '%s\n' \
-    "GC stats must query lj_gc2_minor_roots_active for the minor-root cycle state" >&2
+    "GC stats snapshot must query lj_gc2_minor_roots_active for the minor-root cycle state" >&2
   exit 1
 fi
 if hits=$(grep -nE -- 'gc2_cycle_roots_minor_acq[[:space:]]*[(][[:space:]]*g[[:space:]]*[)]' \
@@ -95,11 +96,11 @@ if hits=$(grep -nE -- 'gc2_cycle_roots_minor_acq[[:space:]]*[(][[:space:]]*g[[:s
     exit 1
   fi
 fi
-if hits=$(grep -nE -- 'gc2_cycle_roots_minor_acq[[:space:]]*[(][[:space:]]*g[[:space:]]*[)]' \
+if hits=$(grep -nE -- 'gc2_cycle_roots_minor_acq[[:space:]]*[(][[:space:]]*g[[:space:]]*[)]|lj_gc2_minor_roots_active[[:space:]]*[(]' \
   "$ROOT/src/lib_base.c" || true); then
   if [ -n "$hits" ]; then
     printf '%s\n' \
-      "GC stats must not read the raw GC2 minor-root cycle latch" \
+      "GC stats table builder must use the GC2 snapshot for minor-root state" \
       "$hits" >&2
     exit 1
   fi

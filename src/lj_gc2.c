@@ -8,6 +8,7 @@
 
 #include <limits.h>
 #include <stdlib.h>
+#include <string.h>
 #if LJ_GC2_PARANOIA
 #include <stdio.h>
 #endif
@@ -699,6 +700,11 @@ static int gc2_worker_start_count_locked_l(global_State *g, uint32_t n,
 static int gc2_worker_start_count_locked(global_State *g, uint32_t n)
 {
   return gc2_worker_start_count_locked_l(g, n, NULL, NULL);
+}
+
+uint32_t lj_gc2_workers_count(global_State *g)
+{
+  return g ? gc2_n_workers_acq(g) : 0;
 }
 
 int lj_gc2_workers_set_l(lua_State *L, uint32_t n, uint32_t *actionsp)
@@ -2248,6 +2254,118 @@ uint32_t lj_gc2_handshake(global_State *g, uint32_t actions)
 uint64_t lj_gc2_retire_epoch(global_State *g)
 {
   return g ? gc2_hs_epoch_acq(g) : 0;
+}
+
+void lj_gc2_stats_snapshot(global_State *g, GC2StatsSnapshot *s)
+{
+  uint32_t i;
+  if (!s)
+    return;
+  if (!g) {
+    memset(s, 0, sizeof(*s));
+    return;
+  }
+  s->total_bytes = lj_gc_total_load(g);
+  s->phase = gc2_phase_acq(g);
+  s->generational = gc2_generational_acq(g);
+  s->cycle_minor_requested = gc2_cycle_minor_requested_acq(g);
+  s->cycle_sweep_minor = gc2_cycle_sweep_minor_acq(g);
+  s->minor_sweep_enabled = gc2_minor_sweep_enabled_acq(g);
+  s->cycle_roots_minor = lj_gc2_minor_roots_active(g);
+  s->minor_roots_enabled = gc2_minor_roots_enabled_acq(g);
+  s->cycle_requests = gc2_cycle_requests_acq(g);
+  s->cycle_starts = gc2_cycle_starts_acq(g);
+  s->major_cycle_starts = gc2_major_cycle_starts_acq(g);
+  s->minor_cycle_requests = gc2_minor_cycle_requests_acq(g);
+  s->minor_cycle_starts = gc2_minor_cycle_starts_acq(g);
+  s->minor_sweep_deferred = gc2_minor_sweep_deferred_acq(g);
+  s->minor_sweep_arenas = gc2_minor_sweep_arenas_acq(g);
+  s->minor_roots_deferred = gc2_minor_roots_deferred_acq(g);
+  s->major_root_scans = gc2_major_root_scans_acq(g);
+  s->minor_root_scans = gc2_minor_root_scans_acq(g);
+  s->minor_survival_base_live = gc2_minor_survival_base_live_acq(g);
+  s->minor_survival_bytes = gc2_minor_survival_bytes_acq(g);
+  s->minor_survival_pct = gc2_minor_survival_pct_acq(g);
+  s->minor_survival_threshold_pct = gc2_minor_survival_threshold_pct_acq(g);
+  s->minor_survival_major_requests = gc2_minor_survival_major_requests_acq(g);
+  s->remembered_barriers = gc2_remembered_barriers_acq(g);
+  s->remembered_pushed = gc2_remembered_pushed_acq(g);
+  s->remembered_overflows = gc2_remembered_overflows_acq(g);
+  s->remembered_filtered = gc2_remembered_filtered_acq(g);
+  s->remembered_drained = gc2_remembered_drained_acq(g);
+  s->poll_ack_samples = gc2_hs_ack_latency_samples_acq(g);
+  s->poll_ack_latency_sum_ns = gc2_hs_ack_latency_sum_acq(g);
+  s->poll_ack_latency_max_ns = gc2_hs_ack_latency_max_acq(g);
+  for (i = 0; i < LJ_GC2_HS_LATENCY_BUCKETS; i++)
+    s->poll_ack_latency_buckets[i] = gc2_hs_ack_latency_bucket_acq(g, i);
+  s->alloc_since_trigger = lj_gc2_alloc_since_load(g);
+  s->cycle_alloc_bytes = lj_gc2_cycle_alloc_load(g);
+  s->trigger_bytes = lj_gc2_trigger_load(g);
+  s->hard_bytes = lj_gc2_hard_load(g);
+  s->assist_runs = gc2_assist_runs_acq(g);
+  s->assist_grey_drained = gc2_assist_grey_drained_acq(g);
+  s->assist_ssb_converted = gc2_assist_ssb_converted_acq(g);
+  s->assist_weak_drained = gc2_assist_weak_drained_acq(g);
+  s->worker_runs = gc2_worker_runs_acq(g);
+  s->worker_grey_drained = gc2_worker_grey_drained_acq(g);
+  s->worker_ssb_converted = gc2_worker_ssb_converted_acq(g);
+  s->worker_weak_drained = gc2_worker_weak_drained_acq(g);
+  s->worker_idle_declares = gc2_worker_idle_declares_acq(g);
+  s->worker_busy_retries = gc2_worker_busy_retries_acq(g);
+  s->worker_wakes = gc2_worker_wakes_acq(g);
+  s->worker_parks = gc2_worker_parks_acq(g);
+  s->worker_async_progress = gc2_worker_async_progress_acq(g);
+  s->sweep_owner_runs = gc2_sweep_owner_runs_acq(g);
+  s->sweep_owner_arenas = gc2_sweep_owner_arenas_acq(g);
+  s->sweep_owner_live_cells = gc2_sweep_owner_live_cells_acq(g);
+  s->sweep_live_updates = gc2_sweep_live_updates_acq(g);
+  s->sweep_live_huge_bytes = gc2_sweep_live_huge_bytes_acq(g);
+  s->live_estimate = gc2_live_estimate_acq(g);
+  s->weak_clear_tables = gc2_weak_clear_tables_acq(g);
+  s->weak_clear_cleared = gc2_weak_clear_cleared_acq(g);
+  s->weak_legacy_skipped = gc2_weak_legacy_skipped_acq(g);
+  s->weak_legacy_fallbacks = gc2_weak_legacy_fallbacks_acq(g);
+  s->weak_legacy_backfills = gc2_weak_legacy_backfills_acq(g);
+  s->weak_legacy_backfill_tables = gc2_weak_legacy_backfill_tables_acq(g);
+  s->weak_legacy_backfill_slots = gc2_weak_legacy_backfill_slots_acq(g);
+  s->weak_legacy_backfill_cleared = gc2_weak_legacy_backfill_cleared_acq(g);
+  s->weak_keys_marked = gc2_weak_keys_marked_acq(g);
+  s->weak_values_marked = gc2_weak_values_marked_acq(g);
+  s->finreg_cdata_sets = gc2_finreg_cdata_sets_acq(g);
+  s->finreg_cdata_clears = gc2_finreg_cdata_clears_acq(g);
+  s->finreg_cdata_queued = gc2_finreg_cdata_queued_acq(g);
+  s->finreg_cdata_sweep_queued = gc2_finreg_cdata_sweep_queued_acq(g);
+  s->finreg_cdata_pweak_queued = gc2_finreg_cdata_pweak_queued_acq(g);
+  s->finreg_cdata_pweak_claimed = gc2_finreg_cdata_pweak_claimed_acq(g);
+  s->finreg_cdata_preclaim_overflow =
+    gc2_finreg_cdata_preclaim_overflow_acq(g);
+  s->finreg_cdata_preclaim_dispatched =
+    gc2_finreg_cdata_preclaim_dispatched_acq(g);
+  s->finreg_cdata_order_seen = gc2_finreg_cdata_order_seen_acq(g);
+  s->finreg_cdata_order_claimed = gc2_finreg_cdata_order_claimed_acq(g);
+  s->finreg_cdata_order_unlinked = gc2_finreg_cdata_order_unlinked_acq(g);
+  s->finreg_cdata_order_queued = gc2_finreg_cdata_order_queued_acq(g);
+  s->finreg_cdata_order_retired = gc2_finreg_cdata_order_retired_acq(g);
+  s->finreg_cdata_order_tombstones = gc2_finreg_cdata_order_tombstones_acq(g);
+  s->finreg_cdata_order_fallbacks = gc2_finreg_cdata_order_fallbacks_acq(g);
+  s->finreg_cdata_pending_order_hits =
+    gc2_finreg_cdata_pending_order_hits_acq(g);
+  s->finreg_udata_sets = gc2_finreg_udata_sets_acq(g);
+  s->finreg_udata_clears = gc2_finreg_udata_clears_acq(g);
+  s->finreg_udata_queued = gc2_finreg_udata_queued_acq(g);
+  s->finreg_udata_registered = gc2_finreg_udata_registered_acq(g);
+  s->finreg_udata_retired_nodes = gc2_finreg_udata_retired_nodes_acq(g);
+  s->finreg_udata_discovered = gc2_finreg_udata_discovered_acq(g);
+  s->finreg_udata_forgets = gc2_finreg_udata_forgets_acq(g);
+  s->finalizer_queued = gc2_finalizer_queued_acq(g);
+  s->finalizer_dequeued = gc2_finalizer_dequeued_acq(g);
+  s->finalizer_mpsc_drained = gc2_finalizer_mpsc_drained_acq(g);
+  s->finalizer_enters = gc2_finalizer_enters_acq(g);
+  s->finalizer_leaves = gc2_finalizer_leaves_acq(g);
+  s->finalizer_sweep_blocks = gc2_finalizer_sweep_blocks_acq(g);
+  s->finalizer_spawn_deferrals = gc2_finalizer_spawn_deferrals_acq(g);
+  s->finalizer_spawn_release_wakes =
+    gc2_finalizer_spawn_release_wakes_acq(g);
 }
 
 uint32_t lj_gc2_reclaim_retired(global_State *g, uint64_t epoch)

@@ -524,7 +524,7 @@ static void gc_stats_setint(lua_State *L, GCtab *t, const char *name,
 }
 
 static void gc_stats_set_latency_buckets(lua_State *L, GCtab *t,
-					 global_State *g)
+					 const GC2StatsSnapshot *s)
 {
   GCtab *bt;
   TValue tv;
@@ -532,7 +532,7 @@ static void gc_stats_set_latency_buckets(lua_State *L, GCtab *t,
   lua_createtable(L, LJ_GC2_HS_LATENCY_BUCKETS, 0);
   bt = tabV(L->top - 1);
   for (i = 0; i < LJ_GC2_HS_LATENCY_BUCKETS; i++) {
-    setnumV(&tv, (lua_Number)gc2_hs_ack_latency_bucket_acq(g, i));
+    setnumV(&tv, (lua_Number)s->poll_ack_latency_buckets[i]);
     gc_stats_storetv_int(L, bt, (int32_t)i + 1, &tv);
   }
   lj_gc_pubtab(L, bt);
@@ -545,194 +545,136 @@ static void gc_stats_set_latency_buckets(lua_State *L, GCtab *t,
 static void gc_stats_push(lua_State *L)
 {
   global_State *g = G(L);
+  GC2StatsSnapshot s;
   GCtab *t;
+  lj_gc2_stats_snapshot(g, &s);
   lua_createtable(L, 0, 86);
   t = tabV(L->top - 1);
-  {
-    GCSize total = lj_gc_total_load(g);
-    gc_stats_setnum(L, t, "total_bytes", total);
-    gc_stats_setnum(L, t, "total_kbytes", total >> 10);
-  }
-  gc_stats_setint(L, t, "phase", gc2_phase_acq(g));
-  gc_stats_setint(L, t, "generational", gc2_generational_acq(g));
-  gc_stats_setint(L, t, "cycle_minor_requested",
-		  gc2_cycle_minor_requested_acq(g));
-  gc_stats_setint(L, t, "cycle_sweep_minor",
-		  gc2_cycle_sweep_minor_acq(g));
-  gc_stats_setint(L, t, "minor_sweep_enabled",
-		  gc2_minor_sweep_enabled_acq(g));
-  gc_stats_setint(L, t, "cycle_roots_minor",
-		  lj_gc2_minor_roots_active(g));
-  gc_stats_setint(L, t, "minor_roots_enabled",
-		  gc2_minor_roots_enabled_acq(g));
-  gc_stats_setnum(L, t, "cycle_requests", gc2_cycle_requests_acq(g));
-  gc_stats_setnum(L, t, "cycle_starts", gc2_cycle_starts_acq(g));
-  gc_stats_setnum(L, t, "major_cycle_starts",
-		  gc2_major_cycle_starts_acq(g));
-  gc_stats_setnum(L, t, "minor_cycle_requests",
-		  gc2_minor_cycle_requests_acq(g));
-  gc_stats_setnum(L, t, "minor_cycle_starts",
-		  gc2_minor_cycle_starts_acq(g));
-  gc_stats_setnum(L, t, "minor_sweep_deferred",
-		  gc2_minor_sweep_deferred_acq(g));
-  gc_stats_setnum(L, t, "minor_sweep_arenas",
-		  gc2_minor_sweep_arenas_acq(g));
-  gc_stats_setnum(L, t, "minor_roots_deferred",
-		  gc2_minor_roots_deferred_acq(g));
-  gc_stats_setnum(L, t, "major_root_scans",
-		  gc2_major_root_scans_acq(g));
-  gc_stats_setnum(L, t, "minor_root_scans",
-		  gc2_minor_root_scans_acq(g));
+  gc_stats_setnum(L, t, "total_bytes", s.total_bytes);
+  gc_stats_setnum(L, t, "total_kbytes", s.total_bytes >> 10);
+  gc_stats_setint(L, t, "phase", s.phase);
+  gc_stats_setint(L, t, "generational", s.generational);
+  gc_stats_setint(L, t, "cycle_minor_requested", s.cycle_minor_requested);
+  gc_stats_setint(L, t, "cycle_sweep_minor", s.cycle_sweep_minor);
+  gc_stats_setint(L, t, "minor_sweep_enabled", s.minor_sweep_enabled);
+  gc_stats_setint(L, t, "cycle_roots_minor", s.cycle_roots_minor);
+  gc_stats_setint(L, t, "minor_roots_enabled", s.minor_roots_enabled);
+  gc_stats_setnum(L, t, "cycle_requests", s.cycle_requests);
+  gc_stats_setnum(L, t, "cycle_starts", s.cycle_starts);
+  gc_stats_setnum(L, t, "major_cycle_starts", s.major_cycle_starts);
+  gc_stats_setnum(L, t, "minor_cycle_requests", s.minor_cycle_requests);
+  gc_stats_setnum(L, t, "minor_cycle_starts", s.minor_cycle_starts);
+  gc_stats_setnum(L, t, "minor_sweep_deferred", s.minor_sweep_deferred);
+  gc_stats_setnum(L, t, "minor_sweep_arenas", s.minor_sweep_arenas);
+  gc_stats_setnum(L, t, "minor_roots_deferred", s.minor_roots_deferred);
+  gc_stats_setnum(L, t, "major_root_scans", s.major_root_scans);
+  gc_stats_setnum(L, t, "minor_root_scans", s.minor_root_scans);
   gc_stats_setnum(L, t, "minor_survival_base_live",
-		  gc2_minor_survival_base_live_acq(g));
-  gc_stats_setnum(L, t, "minor_survival_bytes",
-		  gc2_minor_survival_bytes_acq(g));
-  gc_stats_setint(L, t, "minor_survival_pct",
-		  gc2_minor_survival_pct_acq(g));
+		  s.minor_survival_base_live);
+  gc_stats_setnum(L, t, "minor_survival_bytes", s.minor_survival_bytes);
+  gc_stats_setint(L, t, "minor_survival_pct", s.minor_survival_pct);
   gc_stats_setint(L, t, "minor_survival_threshold_pct",
-		  gc2_minor_survival_threshold_pct_acq(g));
+		  s.minor_survival_threshold_pct);
   gc_stats_setnum(L, t, "minor_survival_major_requests",
-		  gc2_minor_survival_major_requests_acq(g));
-  gc_stats_setnum(L, t, "remembered_barriers",
-		  gc2_remembered_barriers_acq(g));
-  gc_stats_setnum(L, t, "remembered_pushed",
-		  gc2_remembered_pushed_acq(g));
-  gc_stats_setnum(L, t, "remembered_overflows",
-		  gc2_remembered_overflows_acq(g));
-  gc_stats_setnum(L, t, "remembered_filtered",
-		  gc2_remembered_filtered_acq(g));
-  gc_stats_setnum(L, t, "remembered_drained",
-		  gc2_remembered_drained_acq(g));
-  gc_stats_setnum(L, t, "poll_ack_samples",
-		  gc2_hs_ack_latency_samples_acq(g));
+		  s.minor_survival_major_requests);
+  gc_stats_setnum(L, t, "remembered_barriers", s.remembered_barriers);
+  gc_stats_setnum(L, t, "remembered_pushed", s.remembered_pushed);
+  gc_stats_setnum(L, t, "remembered_overflows", s.remembered_overflows);
+  gc_stats_setnum(L, t, "remembered_filtered", s.remembered_filtered);
+  gc_stats_setnum(L, t, "remembered_drained", s.remembered_drained);
+  gc_stats_setnum(L, t, "poll_ack_samples", s.poll_ack_samples);
   gc_stats_setnum(L, t, "poll_ack_latency_sum_ns",
-		  gc2_hs_ack_latency_sum_acq(g));
+		  s.poll_ack_latency_sum_ns);
   gc_stats_setnum(L, t, "poll_ack_latency_max_ns",
-		  gc2_hs_ack_latency_max_acq(g));
-  gc_stats_set_latency_buckets(L, t, g);
-  gc_stats_setnum(L, t, "alloc_since_trigger",
-		  lj_gc2_alloc_since_load(g));
-  gc_stats_setnum(L, t, "cycle_alloc_bytes",
-		  lj_gc2_cycle_alloc_load(g));
-  gc_stats_setnum(L, t, "trigger_bytes", lj_gc2_trigger_load(g));
-  gc_stats_setnum(L, t, "hard_bytes", lj_gc2_hard_load(g));
-  gc_stats_setnum(L, t, "assist_runs", gc2_assist_runs_acq(g));
-  gc_stats_setnum(L, t, "assist_grey_drained",
-		  gc2_assist_grey_drained_acq(g));
-  gc_stats_setnum(L, t, "assist_ssb_converted",
-		  gc2_assist_ssb_converted_acq(g));
-  gc_stats_setnum(L, t, "assist_weak_drained",
-		  gc2_assist_weak_drained_acq(g));
-  gc_stats_setnum(L, t, "worker_runs", gc2_worker_runs_acq(g));
-  gc_stats_setnum(L, t, "worker_grey_drained",
-		  gc2_worker_grey_drained_acq(g));
-  gc_stats_setnum(L, t, "worker_ssb_converted",
-		  gc2_worker_ssb_converted_acq(g));
-  gc_stats_setnum(L, t, "worker_weak_drained",
-		  gc2_worker_weak_drained_acq(g));
-  gc_stats_setnum(L, t, "worker_idle_declares",
-		  gc2_worker_idle_declares_acq(g));
-  gc_stats_setnum(L, t, "worker_busy_retries",
-		  gc2_worker_busy_retries_acq(g));
-  gc_stats_setnum(L, t, "worker_wakes",
-		  gc2_worker_wakes_acq(g));
-  gc_stats_setnum(L, t, "worker_parks",
-		  gc2_worker_parks_acq(g));
-  gc_stats_setnum(L, t, "worker_async_progress",
-		  gc2_worker_async_progress_acq(g));
-  gc_stats_setnum(L, t, "sweep_owner_runs",
-		  gc2_sweep_owner_runs_acq(g));
-  gc_stats_setnum(L, t, "sweep_owner_arenas",
-		  gc2_sweep_owner_arenas_acq(g));
-  gc_stats_setnum(L, t, "sweep_owner_live_cells",
-		  gc2_sweep_owner_live_cells_acq(g));
-  gc_stats_setnum(L, t, "sweep_live_updates",
-		  gc2_sweep_live_updates_acq(g));
-  gc_stats_setnum(L, t, "sweep_live_huge_bytes",
-		  gc2_sweep_live_huge_bytes_acq(g));
-  gc_stats_setnum(L, t, "live_estimate", gc2_live_estimate_acq(g));
-  gc_stats_setnum(L, t, "weak_clear_tables",
-		  gc2_weak_clear_tables_acq(g));
-  gc_stats_setnum(L, t, "weak_clear_cleared",
-		  gc2_weak_clear_cleared_acq(g));
-  gc_stats_setnum(L, t, "weak_legacy_skipped",
-		  gc2_weak_legacy_skipped_acq(g));
-  gc_stats_setnum(L, t, "weak_legacy_fallbacks",
-		  gc2_weak_legacy_fallbacks_acq(g));
-  gc_stats_setnum(L, t, "weak_legacy_backfills",
-		  gc2_weak_legacy_backfills_acq(g));
+		  s.poll_ack_latency_max_ns);
+  gc_stats_set_latency_buckets(L, t, &s);
+  gc_stats_setnum(L, t, "alloc_since_trigger", s.alloc_since_trigger);
+  gc_stats_setnum(L, t, "cycle_alloc_bytes", s.cycle_alloc_bytes);
+  gc_stats_setnum(L, t, "trigger_bytes", s.trigger_bytes);
+  gc_stats_setnum(L, t, "hard_bytes", s.hard_bytes);
+  gc_stats_setnum(L, t, "assist_runs", s.assist_runs);
+  gc_stats_setnum(L, t, "assist_grey_drained", s.assist_grey_drained);
+  gc_stats_setnum(L, t, "assist_ssb_converted", s.assist_ssb_converted);
+  gc_stats_setnum(L, t, "assist_weak_drained", s.assist_weak_drained);
+  gc_stats_setnum(L, t, "worker_runs", s.worker_runs);
+  gc_stats_setnum(L, t, "worker_grey_drained", s.worker_grey_drained);
+  gc_stats_setnum(L, t, "worker_ssb_converted", s.worker_ssb_converted);
+  gc_stats_setnum(L, t, "worker_weak_drained", s.worker_weak_drained);
+  gc_stats_setnum(L, t, "worker_idle_declares", s.worker_idle_declares);
+  gc_stats_setnum(L, t, "worker_busy_retries", s.worker_busy_retries);
+  gc_stats_setnum(L, t, "worker_wakes", s.worker_wakes);
+  gc_stats_setnum(L, t, "worker_parks", s.worker_parks);
+  gc_stats_setnum(L, t, "worker_async_progress", s.worker_async_progress);
+  gc_stats_setnum(L, t, "sweep_owner_runs", s.sweep_owner_runs);
+  gc_stats_setnum(L, t, "sweep_owner_arenas", s.sweep_owner_arenas);
+  gc_stats_setnum(L, t, "sweep_owner_live_cells", s.sweep_owner_live_cells);
+  gc_stats_setnum(L, t, "sweep_live_updates", s.sweep_live_updates);
+  gc_stats_setnum(L, t, "sweep_live_huge_bytes", s.sweep_live_huge_bytes);
+  gc_stats_setnum(L, t, "live_estimate", s.live_estimate);
+  gc_stats_setnum(L, t, "weak_clear_tables", s.weak_clear_tables);
+  gc_stats_setnum(L, t, "weak_clear_cleared", s.weak_clear_cleared);
+  gc_stats_setnum(L, t, "weak_legacy_skipped", s.weak_legacy_skipped);
+  gc_stats_setnum(L, t, "weak_legacy_fallbacks", s.weak_legacy_fallbacks);
+  gc_stats_setnum(L, t, "weak_legacy_backfills", s.weak_legacy_backfills);
   gc_stats_setnum(L, t, "weak_legacy_backfill_tables",
-		  gc2_weak_legacy_backfill_tables_acq(g));
+		  s.weak_legacy_backfill_tables);
   gc_stats_setnum(L, t, "weak_legacy_backfill_slots",
-		  gc2_weak_legacy_backfill_slots_acq(g));
+		  s.weak_legacy_backfill_slots);
   gc_stats_setnum(L, t, "weak_legacy_backfill_cleared",
-		  gc2_weak_legacy_backfill_cleared_acq(g));
-  gc_stats_setnum(L, t, "weak_keys_marked",
-		  gc2_weak_keys_marked_acq(g));
-  gc_stats_setnum(L, t, "weak_values_marked",
-		  gc2_weak_values_marked_acq(g));
-  gc_stats_setnum(L, t, "finreg_cdata_sets",
-		  gc2_finreg_cdata_sets_acq(g));
-  gc_stats_setnum(L, t, "finreg_cdata_clears",
-		  gc2_finreg_cdata_clears_acq(g));
-  gc_stats_setnum(L, t, "finreg_cdata_queued",
-		  gc2_finreg_cdata_queued_acq(g));
+		  s.weak_legacy_backfill_cleared);
+  gc_stats_setnum(L, t, "weak_keys_marked", s.weak_keys_marked);
+  gc_stats_setnum(L, t, "weak_values_marked", s.weak_values_marked);
+  gc_stats_setnum(L, t, "finreg_cdata_sets", s.finreg_cdata_sets);
+  gc_stats_setnum(L, t, "finreg_cdata_clears", s.finreg_cdata_clears);
+  gc_stats_setnum(L, t, "finreg_cdata_queued", s.finreg_cdata_queued);
   gc_stats_setnum(L, t, "finreg_cdata_sweep_queued",
-		  gc2_finreg_cdata_sweep_queued_acq(g));
+		  s.finreg_cdata_sweep_queued);
   gc_stats_setnum(L, t, "finreg_cdata_pweak_queued",
-		  gc2_finreg_cdata_pweak_queued_acq(g));
+		  s.finreg_cdata_pweak_queued);
   gc_stats_setnum(L, t, "finreg_cdata_pweak_claimed",
-		  gc2_finreg_cdata_pweak_claimed_acq(g));
+		  s.finreg_cdata_pweak_claimed);
   gc_stats_setnum(L, t, "finreg_cdata_preclaim_overflow",
-		  gc2_finreg_cdata_preclaim_overflow_acq(g));
+		  s.finreg_cdata_preclaim_overflow);
   gc_stats_setnum(L, t, "finreg_cdata_preclaim_dispatched",
-		  gc2_finreg_cdata_preclaim_dispatched_acq(g));
+		  s.finreg_cdata_preclaim_dispatched);
   gc_stats_setnum(L, t, "finreg_cdata_order_seen",
-		  gc2_finreg_cdata_order_seen_acq(g));
+		  s.finreg_cdata_order_seen);
   gc_stats_setnum(L, t, "finreg_cdata_order_claimed",
-		  gc2_finreg_cdata_order_claimed_acq(g));
+		  s.finreg_cdata_order_claimed);
   gc_stats_setnum(L, t, "finreg_cdata_order_unlinked",
-		  gc2_finreg_cdata_order_unlinked_acq(g));
+		  s.finreg_cdata_order_unlinked);
   gc_stats_setnum(L, t, "finreg_cdata_order_queued",
-		  gc2_finreg_cdata_order_queued_acq(g));
+		  s.finreg_cdata_order_queued);
   gc_stats_setnum(L, t, "finreg_cdata_order_retired",
-		  gc2_finreg_cdata_order_retired_acq(g));
+		  s.finreg_cdata_order_retired);
   gc_stats_setnum(L, t, "finreg_cdata_order_tombstones",
-		  gc2_finreg_cdata_order_tombstones_acq(g));
+		  s.finreg_cdata_order_tombstones);
   gc_stats_setnum(L, t, "finreg_cdata_order_fallbacks",
-		  gc2_finreg_cdata_order_fallbacks_acq(g));
+		  s.finreg_cdata_order_fallbacks);
   gc_stats_setnum(L, t, "finreg_cdata_pending_order_hits",
-		  gc2_finreg_cdata_pending_order_hits_acq(g));
-  gc_stats_setnum(L, t, "finreg_udata_sets",
-		  gc2_finreg_udata_sets_acq(g));
-  gc_stats_setnum(L, t, "finreg_udata_clears",
-		  gc2_finreg_udata_clears_acq(g));
-  gc_stats_setnum(L, t, "finreg_udata_queued",
-		  gc2_finreg_udata_queued_acq(g));
+		  s.finreg_cdata_pending_order_hits);
+  gc_stats_setnum(L, t, "finreg_udata_sets", s.finreg_udata_sets);
+  gc_stats_setnum(L, t, "finreg_udata_clears", s.finreg_udata_clears);
+  gc_stats_setnum(L, t, "finreg_udata_queued", s.finreg_udata_queued);
   gc_stats_setnum(L, t, "finreg_udata_registered",
-		  gc2_finreg_udata_registered_acq(g));
+		  s.finreg_udata_registered);
   gc_stats_setnum(L, t, "finreg_udata_retired_nodes",
-		  gc2_finreg_udata_retired_nodes_acq(g));
+		  s.finreg_udata_retired_nodes);
   gc_stats_setnum(L, t, "finreg_udata_discovered",
-		  gc2_finreg_udata_discovered_acq(g));
-  gc_stats_setnum(L, t, "finreg_udata_forgets",
-		  gc2_finreg_udata_forgets_acq(g));
-  gc_stats_setnum(L, t, "finalizer_queued",
-		  gc2_finalizer_queued_acq(g));
-  gc_stats_setnum(L, t, "finalizer_dequeued",
-		  gc2_finalizer_dequeued_acq(g));
+		  s.finreg_udata_discovered);
+  gc_stats_setnum(L, t, "finreg_udata_forgets", s.finreg_udata_forgets);
+  gc_stats_setnum(L, t, "finalizer_queued", s.finalizer_queued);
+  gc_stats_setnum(L, t, "finalizer_dequeued", s.finalizer_dequeued);
   gc_stats_setnum(L, t, "finalizer_mpsc_drained",
-		  gc2_finalizer_mpsc_drained_acq(g));
-  gc_stats_setnum(L, t, "finalizer_enters",
-		  gc2_finalizer_enters_acq(g));
-  gc_stats_setnum(L, t, "finalizer_leaves",
-		  gc2_finalizer_leaves_acq(g));
+		  s.finalizer_mpsc_drained);
+  gc_stats_setnum(L, t, "finalizer_enters", s.finalizer_enters);
+  gc_stats_setnum(L, t, "finalizer_leaves", s.finalizer_leaves);
   gc_stats_setnum(L, t, "finalizer_sweep_blocks",
-		  gc2_finalizer_sweep_blocks_acq(g));
+		  s.finalizer_sweep_blocks);
   gc_stats_setnum(L, t, "finalizer_spawn_deferrals",
-		  gc2_finalizer_spawn_deferrals_acq(g));
+		  s.finalizer_spawn_deferrals);
   gc_stats_setnum(L, t, "finalizer_spawn_release_wakes",
-		  gc2_finalizer_spawn_release_wakes_acq(g));
+		  s.finalizer_spawn_release_wakes);
   lj_gc_pubtab(L, t);
 }
 
@@ -755,7 +697,7 @@ LJLIB_CF(collectgarbage)
     return 1;
   } else if (opt == LUA_GCWORKERS) {
     global_State *g = G(L);
-    uint32_t old = gc2_n_workers_acq(g);
+    uint32_t old = lj_gc2_workers_count(g);
     uint32_t actions = 0;
     if (hasdata) {
       int ok = lj_gc2_workers_set_l(L, data <= 0 ? 0u : (uint32_t)data,
