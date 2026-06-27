@@ -1472,6 +1472,81 @@ static LJ_AINLINE int dispatchmode_cas(global_State *g, uint8_t *oldp,
   return la_cas8(&g->dispatchmode, oldp, mode, LA_ACQ_REL, LA_ACQ);
 }
 
+static LJ_AINLINE uint32_t mt_active_acq(global_State *g)
+{
+  return la_load32_acq(&g->mt_active);
+}
+
+static LJ_AINLINE int mt_active_cas(global_State *g, uint32_t *oldp,
+				    uint32_t active)
+{
+  return la_cas32(&g->mt_active, oldp, active, LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE uint32_t mt_live_acq(global_State *g)
+{
+  return la_load32_acq(&g->mt_live);
+}
+
+static LJ_AINLINE uint32_t mt_live_add_rlx(global_State *g, uint32_t n)
+{
+  return la_add32_rlx(&g->mt_live, n);
+}
+
+static LJ_AINLINE uint32_t mt_live_sub_acqrel(global_State *g, uint32_t n)
+{
+  return la_sub32_acqrel(&g->mt_live, n);
+}
+
+static LJ_AINLINE void mt_live_futex_wait(global_State *g, uint32_t live,
+					  int64_t timeout_ns)
+{
+  (void)la_futex_wait(&g->mt_live, live, timeout_ns);
+}
+
+static LJ_AINLINE void mt_live_futex_wake(global_State *g, int n)
+{
+  la_futex_wake(&g->mt_live, n);
+}
+
+static LJ_AINLINE uint32_t mt_gc_exclusive_acq(global_State *g)
+{
+  return la_load32_acq(&g->mt_gc_exclusive);
+}
+
+static LJ_AINLINE void mt_gc_exclusive_rel(global_State *g, uint32_t active)
+{
+  la_store32_rel(&g->mt_gc_exclusive, active);
+}
+
+static LJ_AINLINE int mt_gc_exclusive_cas(global_State *g, uint32_t *oldp,
+					  uint32_t active)
+{
+  return la_cas32(&g->mt_gc_exclusive, oldp, active, LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE void mt_gc_exclusive_futex_wait(global_State *g,
+						  uint32_t active,
+						  int64_t timeout_ns)
+{
+  (void)la_futex_wait(&g->mt_gc_exclusive, active, timeout_ns);
+}
+
+static LJ_AINLINE void mt_gc_exclusive_futex_wake(global_State *g, int n)
+{
+  la_futex_wake(&g->mt_gc_exclusive, n);
+}
+
+static LJ_AINLINE uint32_t mt_shutdown_acq(global_State *g)
+{
+  return la_load32_acq(&g->mt_shutdown);
+}
+
+static LJ_AINLINE void mt_shutdown_rel(global_State *g, uint32_t shutdown)
+{
+  la_store32_rel(&g->mt_shutdown, shutdown);
+}
+
 /* Hook management. Hook event masks are defined in lua.h. */
 #define HOOK_EVENTMASK		0x0f
 #define HOOK_ACTIVE		0x10

@@ -247,19 +247,19 @@ void lj_threading_shutdown(lua_State *L)
   TGState *cur = lj_thr_get_tg();
   LJThreadLive *node;
   LJThread *th;
-  la_store32_rel(&g->mt_shutdown, 1);
-  if (!threading_live_head(g) && la_load32_acq(&g->mt_live) == 0)
+  mt_shutdown_rel(g, 1);
+  if (!threading_live_head(g) && mt_live_acq(g) == 0)
     return;
   lj_assertG(cur == NULL || cur == g->main_tg,
 	     "lua_close called from non-main OS thread");
   UNUSED(cur);
-  if (la_load32_acq(&g->mt_live) != 0) {
+  if (mt_live_acq(g) != 0) {
     (void)lj_safepoint_handshake(g, LJ_GC2_HS_STOPREQ);
-    while (la_load32_acq(&g->mt_live) != 0) {
-      uint32_t live = la_load32_acq(&g->mt_live);
+    while (mt_live_acq(g) != 0) {
+      uint32_t live = mt_live_acq(g);
       if (live == 0)
 	break;
-      (void)la_futex_wait(&g->mt_live, live, 1000000);
+      mt_live_futex_wait(g, live, 1000000);
     }
   }
   for (node = threading_live_head(g); node != NULL;
@@ -293,16 +293,16 @@ static int threading_gc_enter(lua_State *L)
   for (;;) {
     uint32_t expect;
     uint32_t exclusive;
-    while ((exclusive = la_load32_acq(&g->mt_gc_exclusive)) != 0) {
-      if (la_load32_acq(&g->mt_shutdown) != 0)
+    while ((exclusive = mt_gc_exclusive_acq(g)) != 0) {
+      if (mt_shutdown_acq(g) != 0)
 	return 0;
-      (void)la_futex_wait(&g->mt_gc_exclusive, exclusive, 1000000);
+      mt_gc_exclusive_futex_wait(g, exclusive, 1000000);
     }
-    if (la_load32_acq(&g->mt_shutdown) != 0)
+    if (mt_shutdown_acq(g) != 0)
       return 0;
     expect = 0;
-    (void)la_cas32(&g->mt_active, &expect, 1, LA_ACQ_REL, LA_ACQ);
-    if (la_add32_rlx(&g->mt_live, 1) == 0) {
+    (void)mt_active_cas(g, &expect, 1);
+    if (mt_live_add_rlx(g, 1) == 0) {
       GCSize threshold = lj_gc_threshold_load(g);
       if (threshold == LJ_MAX_MEM && g->gc.state == GCSfinalize)
 	threshold = lj_gc_mt_threshold_load(g);
@@ -310,8 +310,8 @@ static int threading_gc_enter(lua_State *L)
       /* M4: no automatic GC while children run. */
       lj_gc_threshold_store(g, LJ_MAX_MEM);
     }
-    if (la_load32_acq(&g->mt_gc_exclusive) == 0) {
-      if (la_load32_acq(&g->mt_shutdown) != 0) {
+    if (mt_gc_exclusive_acq(g) == 0) {
+      if (mt_shutdown_acq(g) != 0) {
 	threading_gc_leave(g);
 	return 0;
       }
@@ -323,14 +323,14 @@ static int threading_gc_enter(lua_State *L)
 
 static void threading_gc_leave(global_State *g)
 {
-  if (la_sub32_acqrel(&g->mt_live, 1) == 1) {
+  if (mt_live_sub_acqrel(g, 1) == 1) {
     lj_gc_threshold_store(g, lj_gc_mt_threshold_load(g));
     if (g->gc.state == GCSfinalize &&
-	la_load32_acq(&g->mt_gc_exclusive) == 0) {
+	mt_gc_exclusive_acq(g) == 0) {
       gc2_finalizer_spawn_release_wakes_add(g, 1);
       lj_gc2_worker_wake(g);
     }
-    la_futex_wake(&g->mt_live, INT_MAX);
+    mt_live_futex_wake(g, INT_MAX);
   }
 }
 
@@ -394,7 +394,7 @@ static void *threading_worker(void *arg)
   tg->thread_ud = th->ud;
   lj_tg_attach(g, tg);
 
-  if (la_load32_acq(&g->mt_shutdown) != 0) {
+  if (mt_shutdown_acq(g) != 0) {
     th->status = LUA_ERRRUN;
     th->nresults = 0;
   } else {
@@ -795,7 +795,7 @@ static lua_State *threading_spawn_core(lua_State *L, GCtab *env, TValue *base,
   ptrdiff_t i;
   int rc;
 
-  if (la_load32_acq(&G(L)->mt_shutdown) != 0)
+  if (mt_shutdown_acq(G(L)) != 0)
     lj_err_callermsg(L, "VM shutdown in progress");
   lj_state_checkstack(L, 2);
   base = L->base + baseofs;
@@ -1028,7 +1028,7 @@ int lj_threading_attach(lua_State *L)
     return 0;
   }
   lj_tg_attach(g, tg);
-  if (la_load32_acq(&g->mt_shutdown) != 0) {
+  if (mt_shutdown_acq(g) != 0) {
     lj_threading_detach(L, 1);
     return 0;
   }

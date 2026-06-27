@@ -1648,11 +1648,11 @@ void lj_gc_clearweak_legacy(global_State *g, GCobj *o)
 
 static int gc_finalizer_mt_release_exclusive(global_State *g)
 {
-  if (la_load32_acq(&g->mt_gc_exclusive) == 0)
+  if (mt_gc_exclusive_acq(g) == 0)
     return 0;
-  la_store32_rel(&g->mt_gc_exclusive, 0);
+  mt_gc_exclusive_rel(g, 0);
 #if defined(__linux__)
-  (void)la_futex_wake(&g->mt_gc_exclusive, INT_MAX);
+  mt_gc_exclusive_futex_wake(g, INT_MAX);
 #endif
   return 1;  /* 09 section 9.6: finalizer may spawn while GC is paused. */
 }
@@ -1661,18 +1661,18 @@ static int gc_finalizer_mt_reclaim_exclusive(global_State *g)
 {
   for (;;) {
     uint32_t expect = 0;
-    if (la_load32_acq(&g->mt_live) != 0)
+    if (mt_live_acq(g) != 0)
       return 0;  /* 09 section 9.6: finalizer-spawn outlived callback. */
-    if (la_cas32(&g->mt_gc_exclusive, &expect, 1, LA_ACQ_REL, LA_ACQ)) {
-      if (la_load32_acq(&g->mt_live) == 0)
+    if (mt_gc_exclusive_cas(g, &expect, 1)) {
+      if (mt_live_acq(g) == 0)
 	return 1;
-      la_store32_rel(&g->mt_gc_exclusive, 0);
+      mt_gc_exclusive_rel(g, 0);
 #if defined(__linux__)
-      (void)la_futex_wake(&g->mt_gc_exclusive, INT_MAX);
+      mt_gc_exclusive_futex_wake(g, INT_MAX);
 #endif
       return 0;
     }
-    if (la_load32_acq(&g->mt_gc_exclusive) != 0)
+    if (mt_gc_exclusive_acq(g) != 0)
       return 0;
   }
 }
@@ -1680,10 +1680,10 @@ static int gc_finalizer_mt_reclaim_exclusive(global_State *g)
 static void gc_finalizer_restore_threshold(global_State *g, GCSize oldt)
 {
   lj_gc_threshold_store(g, oldt);
-  if (la_load32_acq(&g->mt_live) != 0) {
+  if (mt_live_acq(g) != 0) {
     lj_gc_mt_threshold_store(g, oldt);
     lj_gc_threshold_store(g, LJ_MAX_MEM);
-    if (la_load32_acq(&g->mt_live) == 0)
+    if (mt_live_acq(g) == 0)
       lj_gc_threshold_store(g, oldt);
   }
 }
@@ -1708,7 +1708,7 @@ static int gc_call_finalizer(global_State *g, lua_State *L,
 	     "gc_call_finalizer must not use shared vmthread callback stack");
   oldL = lj_tg_cur_L(g);
   oldh = hook_save(g);
-  oldt = la_load32_acq(&g->mt_live) != 0 ? lj_gc_mt_threshold_load(g) :
+  oldt = mt_live_acq(g) != 0 ? lj_gc_mt_threshold_load(g) :
 	 lj_gc_threshold_load(g);
   lj_gc_mt_threshold_store(g, oldt);
   lj_trace_abort(g);
@@ -1855,8 +1855,8 @@ static int gc_finalize(lua_State *L)
 static int gc_fullgc_deferred_by_finalizer(global_State *g)
 {
   if (g->gc.state == GCSfinalize &&
-      la_load32_acq(&g->mt_live) != 0 &&
-      la_load32_acq(&g->mt_gc_exclusive) == 0) {
+      mt_live_acq(g) != 0 &&
+      mt_gc_exclusive_acq(g) == 0) {
     gc2_finalizer_spawn_deferrals_add(g, 1);
     return 1;
   }

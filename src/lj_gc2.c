@@ -610,9 +610,9 @@ uint64_t lj_gc2_flush_alloc(global_State *g, TGState *tg)
 
 static int gc2_logical_stopped(global_State *g)
 {
-  if (la_load32_acq(&g->mt_live) != 0) {
+  if (mt_live_acq(g) != 0) {
     GCSize threshold = lj_gc_mt_threshold_load(g);
-    if (la_load32_acq(&g->mt_live) == 0)
+    if (mt_live_acq(g) == 0)
       threshold = lj_gc_threshold_load(g);
     return threshold == LJ_MAX_MEM;
   }
@@ -622,9 +622,9 @@ static int gc2_logical_stopped(global_State *g)
 static void gc2_request_threshold(global_State *g)
 {
   GCSize total = lj_gc_total_load(g);
-  if (la_load32_acq(&g->mt_live) != 0) {
+  if (mt_live_acq(g) != 0) {
     lj_gc_mt_threshold_store(g, total);
-    if (la_load32_acq(&g->mt_live) == 0)
+    if (mt_live_acq(g) == 0)
       lj_gc_threshold_store(g, total);
   } else {
     lj_gc_threshold_store(g, total);

@@ -1398,9 +1398,9 @@ static void api_gc_setlogical(global_State *g, GCSize threshold)
 	   soft : (uint64_t)total + LJ_GC2_HELPER_IDLE_STEP;
   }
   lj_gc2_helper_soft_limit_store(g, soft);
-  if (la_load32_acq(&g->mt_live) != 0) {
+  if (mt_live_acq(g) != 0) {
     lj_gc_mt_threshold_store(g, threshold);
-    if (la_load32_acq(&g->mt_live) == 0)
+    if (mt_live_acq(g) == 0)
       lj_gc_threshold_store(g, threshold);
   } else {
     lj_gc_threshold_store(g, threshold);
@@ -1410,12 +1410,12 @@ static void api_gc_setlogical(global_State *g, GCSize threshold)
 static int api_gc_enterexclusive(global_State *g)
 {
   uint32_t expect = 0;
-  if (la_load32_acq(&g->mt_live) != 0)
+  if (mt_live_acq(g) != 0)
     return 0;
-  if (!la_cas32(&g->mt_gc_exclusive, &expect, 1, LA_ACQ_REL, LA_ACQ))
+  if (!mt_gc_exclusive_cas(g, &expect, 1))
     return 0;
-  if (la_load32_acq(&g->mt_live) != 0) {
-    la_store32_rel(&g->mt_gc_exclusive, 0);
+  if (mt_live_acq(g) != 0) {
+    mt_gc_exclusive_rel(g, 0);
     return 0;
   }
   return 1;
@@ -1423,8 +1423,8 @@ static int api_gc_enterexclusive(global_State *g)
 
 static void api_gc_leaveexclusive(global_State *g)
 {
-  la_store32_rel(&g->mt_gc_exclusive, 0);
-  la_futex_wake(&g->mt_gc_exclusive, INT_MAX);
+  mt_gc_exclusive_rel(g, 0);
+  mt_gc_exclusive_futex_wake(g, INT_MAX);
 }
 
 LUA_API int lua_gc(lua_State *L, int what, int data)
@@ -1445,7 +1445,7 @@ LUA_API int lua_gc(lua_State *L, int what, int data)
     if (api_gc_enterexclusive(g)) {
       lj_gc_fullgc(L);
       api_gc_leaveexclusive(g);
-    } else if (la_load32_acq(&g->mt_live) != 0) {
+    } else if (mt_live_acq(g) != 0) {
       if (lj_gc_mt_threshold_load(g) == LJ_MAX_MEM)
 	(void)lj_gc2_request_stopped_major(g, L2TG(L));
       else
@@ -1463,7 +1463,7 @@ LUA_API int lua_gc(lua_State *L, int what, int data)
     GCSize a = (GCSize)data << 10;
     GCSize total;
     if (!api_gc_enterexclusive(g)) {
-      if (la_load32_acq(&g->mt_live) != 0) {
+      if (mt_live_acq(g) != 0) {
 	(void)lj_gc2_request_cycle_explicit(g, L2TG(L));
 	(void)lj_gc2_worker_drain(g, LJ_GC2_WORKER_DRAIN_BATCH);
       }
@@ -1492,7 +1492,7 @@ LUA_API int lua_gc(lua_State *L, int what, int data)
     gc2_assist_shift_rel(g, lj_gc2_assist_shift_from_stepmul((uint32_t)data));
     break;
   case LUA_GCISRUNNING:
-    res = ((la_load32_acq(&g->mt_live) != 0 ? lj_gc_mt_threshold_load(g) :
+    res = ((mt_live_acq(g) != 0 ? lj_gc_mt_threshold_load(g) :
 	    lj_gc_threshold_load(g)) != LJ_MAX_MEM);
     break;
   case LUA_GCGENERATIONAL:

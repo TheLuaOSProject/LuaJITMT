@@ -3260,8 +3260,8 @@ static void test_finalizer_spawn_deferred_state(lua_State *L, global_State *g)
 
   lua_gc(L, LUA_GCCOLLECT, 0);
   assert(g->gc.state == GCSfinalize);
-  assert(la_load32_acq(&g->mt_live) != 0);
-  assert(la_load32_acq(&g->mt_gc_exclusive) == 0);
+  assert(mt_live_acq(g) != 0);
+  assert(mt_gc_exclusive_acq(g) == 0);
   assert(lj_gc_threshold_load(g) == LJ_MAX_MEM);
   assert(la_load64_acq(&g->gc2.finalizer_spawn_deferrals) > deferrals0);
 
@@ -3274,7 +3274,7 @@ static void test_finalizer_spawn_deferred_state(lua_State *L, global_State *g)
     "gc2_spawn_worker = nil\n"
     "gc2_spawn_started = nil\n"
     "gc2_spawn_release = nil\n") == LUA_OK);
-  assert(la_load32_acq(&g->mt_live) == 0);
+  assert(mt_live_acq(g) == 0);
   assert(la_load64_acq(&g->gc2.finalizer_spawn_release_wakes) >
 	 releasewakes0);
   lua_gc(L, LUA_GCCOLLECT, 0);

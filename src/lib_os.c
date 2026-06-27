@@ -365,7 +365,7 @@ LJLIB_CF(os_setlocale)
   else if (opt == 3) opt = LC_COLLATE;
   else if (opt == 4) opt = LC_MONETARY;
   else if (opt == 6) opt = LC_ALL;
-  if (str && la_load32_acq(&G(L)->mt_active) != 0)
+  if (str && mt_active_acq(G(L)) != 0)
     lj_err_callermsg(L, "os.setlocale mutation disabled after threading activation");
   lua_pushstring(L, setlocale(opt, str));
 #endif
