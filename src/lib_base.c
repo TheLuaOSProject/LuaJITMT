@@ -29,6 +29,7 @@
 #include "lj_frame.h"
 #include "lj_thr.h"
 #include "lj_safepoint.h"
+#include "lj_tg.h"
 #if LJ_HASFFI
 #include "lj_ctype.h"
 #include "lj_cconv.h"
@@ -810,13 +811,38 @@ LJLIB_CF(newproxy)
 
 LJLIB_PUSH("tostring")
 
+static int print_had_stopreq(lua_State *L)
+{
+  TGState *tg = L2TG(L);
+  return tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ);
+}
+
+static int print_fresh_stopreq(lua_State *L, uint32_t actions,
+			       int had_stopreq)
+{
+  TGState *tg = L2TG(L);
+  return (actions & LJ_GC2_HS_STOPREQ) ||
+    (!had_stopreq && tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ));
+}
+
+static void print_checkstop_fresh(lua_State *L, uint32_t actions,
+				  int had_stopreq)
+{
+  if (print_fresh_stopreq(L, actions, had_stopreq))
+    lj_safepoint_checkstop(L, actions);
+}
+
 static void print_native_write(lua_State *L, const char *str, size_t size)
 {
+  uint32_t actions;
+  int had_stopreq;
   if (size == 0)
     return;
+  had_stopreq = print_had_stopreq(L);
   lj_native_enter(L2TG(L));
   (void)fwrite(str, 1, size, stdout);
-  lj_safepoint_checkstop(L, lj_native_leave(L));
+  actions = lj_native_leave(L);
+  print_checkstop_fresh(L, actions, had_stopreq);
 }
 
 static void print_native_char(lua_State *L, int c)

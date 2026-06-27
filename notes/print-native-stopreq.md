@@ -8,6 +8,9 @@
 - Added C fixture coverage that fills a pipe, redirects stdout to it, runs a
   large `print()`, publishes STOPREQ while the write is blocked, drains the
   pipe from a helper thread, and verifies the VM shutdown interruption.
+- Follow-up cleanup made `print()` stdout writes use fresh STOPREQ semantics.
+  A pre-existing sticky shutdown flag no longer interrupts a cleanup `print()`
+  unless the write itself acknowledges a new STOPREQ.
 - Validation:
   - `tools/ci/lua_test.sh m3_safepoint_handshake`
   - normal `print()` smoke through `./src/luajit -e ...`

@@ -82,6 +82,31 @@ if hits=$(awk '
   printf '%s\n' 'os native action checks must use fresh STOPREQ semantics' >&2
   exit 1
 fi
+for required in \
+  'static void print_checkstop_fresh(lua_State *L, uint32_t actions,' \
+  'print_fresh_stopreq(L, actions, had_stopreq)' \
+  'print_checkstop_fresh(L, actions, had_stopreq)'
+do
+  if ! grep -qF "$required" "$ROOT/src/lib_base.c"; then
+    printf '%s\n' "print native fresh STOPREQ guard is missing: $required" >&2
+    exit 1
+  fi
+done
+if hits=$(awk '
+  /^static void print_native_write\(lua_State \*L, const char \*str, size_t size\)/ {
+    in_write = 1
+  }
+  in_write && /lj_safepoint_checkstop\(L, lj_native_leave\(L\)\);/ {
+    print FILENAME ":" FNR ":" $0
+  }
+  in_write && /^}/ {
+    in_write = 0
+  }
+' "$ROOT/src/lib_base.c"); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'print native writes must use fresh STOPREQ semantics' >&2
+  exit 1
+fi
 if hits=$(grep -nE -- '->[[:space:]]*next_tg|&[[:alnum:]_]+->[[:space:]]*next_tg|next_tg[[:space:]]*=' \
     "$ROOT/src/lj_gc.c" \
     "$ROOT/src/lj_gc2.c" \

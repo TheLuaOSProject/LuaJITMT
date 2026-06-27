@@ -908,6 +908,7 @@ int main(void)
     "expect_sticky_ok(function() return os.execute(':') end)\n"
     "expect_sticky_ok(function() return os.tmpname() end, function(name) os.remove(name) end)\n"
     "expect_sticky_ok(function() return io.tmpfile() end, function(file) file:close() end)\n"
+    "expect_sticky_ok(function() return print() end)\n"
     "p = os.tmpname()\n"
     "f = assert(io.open(p, 'w'))\n"
     "f:write('z')\n"
