@@ -2181,6 +2181,14 @@ void lj_gc2_legacy_cycle_end(global_State *g)
   lj_gc2_update_pacing(g);
 }
 
+int lj_gc2_legacy_sweep_close(global_State *g)
+{
+  if (gc2_phase_acq(g) == LJ_GC2_SWEEP)
+    return lj_gc2_sweep_to_idle(g);
+  lj_gc2_legacy_cycle_end(g);  /* Preserving full-GC fast-forward sweep. */
+  return 1;
+}
+
 uint32_t lj_gc2_handshake(global_State *g, uint32_t actions)
 {
   return lj_safepoint_handshake(g, actions);

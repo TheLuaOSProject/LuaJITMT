@@ -67,6 +67,7 @@ LJ_FUNC void lj_gc2_legacy_mark_begin(global_State *g);
 LJ_FUNC void lj_gc2_force_major(global_State *g);
 LJ_FUNC void lj_gc2_legacy_preserve_abort(global_State *g);
 LJ_FUNC void lj_gc2_legacy_cycle_end(global_State *g);
+LJ_FUNC int lj_gc2_legacy_sweep_close(global_State *g);
 LJ_FUNC void lj_gc2_sweep_legacy_ready(global_State *g);
 LJ_FUNC int lj_gc2_sweep_to_idle(global_State *g);
 LJ_FUNC int lj_gc2_sweep_tg_ready(TGState *tg);

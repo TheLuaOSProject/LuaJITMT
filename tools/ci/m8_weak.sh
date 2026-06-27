@@ -349,6 +349,26 @@ if ! grep -qF 'lj_gc2_sweep_legacy_can_progress(g)' "$ROOT/src/lj_gc.c"; then
   printf '%s\n' 'legacy GC arena sweep readiness must use lj_gc2_sweep_legacy_can_progress' >&2
   exit 1
 fi
+if ! grep -qE 'LJ_FUNC int lj_gc2_legacy_sweep_close[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.h"; then
+  printf '%s\n' 'lj_gc2_legacy_sweep_close declaration is required for sweep-close ownership' >&2
+  exit 1
+fi
+if ! grep -qE '^int lj_gc2_legacy_sweep_close[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.c"; then
+  printf '%s\n' 'lj_gc2_legacy_sweep_close definition is required for sweep-close ownership' >&2
+  exit 1
+fi
+if ! grep -qF 'lj_gc2_legacy_sweep_close(g)' "$ROOT/src/lj_gc.c"; then
+  printf '%s\n' 'legacy GC sweep close must use lj_gc2_legacy_sweep_close' >&2
+  exit 1
+fi
+if hits=$(grep -nE -- 'lj_gc2_sweep_to_idle[[:space:]]*[(]|lj_gc2_legacy_cycle_end[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'legacy GC must not choose sweep-to-idle versus preserve-close directly' >&2
+  exit 1
+fi
 if hits=$(grep -nE -- 'lj_gc2_finalizer_sweep_pending[[:space:]]*[(]' \
     "$ROOT/src/lj_gc.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2

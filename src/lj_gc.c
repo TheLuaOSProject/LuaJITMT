@@ -193,14 +193,6 @@ static uint32_t gc_arena_finish_sweep_boundary(global_State *g, int drain)
   return total;
 }
 
-static int gc2_legacy_sweep_close(global_State *g)
-{
-  if (gc2_phase_acq(g) == LJ_GC2_SWEEP)
-    return lj_gc2_sweep_to_idle(g);
-  lj_gc2_legacy_cycle_end(g);  /* Preserving full-GC fast-forward sweep. */
-  return 1;
-}
-
 #ifdef LUA_USE_ASSERT
 static void gc_arena_verify_marked(global_State *g, GCobj *o)
 {
@@ -1678,7 +1670,7 @@ static size_t gc_onestep(lua_State *L)
       if (lj_gc2_finalizer_phase_pending(g)) {  /* Need finalizations? */
 	g->gc.state = GCSfinalize;
       } else {  /* Otherwise skip this phase to help the JIT. */
-	if (gc2_legacy_sweep_close(g)) {
+	if (lj_gc2_legacy_sweep_close(g)) {
 	  g->gc.state = GCSpause;  /* End of GC cycle. */
 	  g->gc.debt = 0;
 	} else {
@@ -1696,7 +1688,7 @@ static size_t gc_onestep(lua_State *L)
 	return fincost;
     }
     (void)gc_arena_finish_sweep_boundary(g, 1);
-    if (gc2_legacy_sweep_close(g)) {
+    if (lj_gc2_legacy_sweep_close(g)) {
       g->gc.state = GCSpause;  /* End of GC cycle. */
       g->gc.debt = 0;
     }

@@ -502,11 +502,14 @@ P_SWEEP entry handshake: {DISABLE_BARRIER, RESET_ALLOC, FLUSH_SSB(last)}.
 Current bridge note: legacy sweep still owns the string/root sweep state
 machine and release-publishes `lj_gc2_sweep_legacy_ready()` after legacy
 string/root sweep and boundary preparation reach the final real `P_SWEEP`
-boundary. `lj_gc2_sweep_to_idle()` waits for that latch plus the worker token,
-rechecks phase and traversable sweep predicates, records real `SWEEP -> IDLE`
-publications with `sweep_to_idle`, aggregates live estimates, and updates
-pacing. Parked workers may drain traversable arena sweep before the latch, but
-they publish `P_IDLE` only after the latch and all sweep predicates are clear.
+boundary. `lj_gc2_legacy_sweep_close()` owns the legacy driver's choice between
+real `SWEEP -> IDLE` closure and the preserving full-GC fast-forward close path;
+the real close path still uses `lj_gc2_sweep_to_idle()` to wait for the latch
+plus the worker token, recheck phase and traversable sweep predicates, record
+real `SWEEP -> IDLE` publications with `sweep_to_idle`, aggregate live
+estimates, and update pacing. Parked workers may drain traversable arena sweep
+before the latch, but they publish `P_IDLE` only after the latch and all sweep
+predicates are clear.
 The legacy C GC driver now polls safepoints between `gc_onestep()` state-machine
 steps so a worker-initiated close handshake can complete during synchronous
 `lua_gc()` driving. Legacy sweep still owns the final Lua GC state transition to
