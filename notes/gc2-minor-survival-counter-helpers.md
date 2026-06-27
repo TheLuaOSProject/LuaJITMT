@@ -9,3 +9,5 @@ accessors in `lj_obj.h`.
 Runtime initialization, policy updates, stats export, and the focused
 allocation-account fixture now use the helper surface. The M6 allocation-account
 guard rejects raw production C access to these minor-survival telemetry fields.
+The policy updater itself is private to `lj_gc2.c`; C fixtures use
+`lj_gc2_test_update_minor_survival_policy()` for direct threshold probes.

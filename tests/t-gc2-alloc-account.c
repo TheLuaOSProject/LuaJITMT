@@ -556,7 +556,7 @@ int main(void)
   la_store32_rel(&g->gc2.cycle_sweep_minor, 1);
   la_store64_rel(&g->gc2.cycle_alloc_bytes, 1000);
   gc2_minor_survival_base_live_rel(g, 10000);
-  lj_gc2_update_minor_survival_policy(g, 10500);
+  lj_gc2_test_update_minor_survival_policy(g, 10500);
   assert(gc2_minor_survival_bytes_acq(g) == 500);
   assert(gc2_minor_survival_pct_acq(g) == 50);
   assert(gc2_minor_survival_base_live_acq(g) == 10500);
@@ -565,7 +565,7 @@ int main(void)
 	 minor_survival_major0);
   la_store64_rel(&g->gc2.cycle_alloc_bytes, 1000);
   gc2_minor_survival_base_live_rel(g, 10000);
-  lj_gc2_update_minor_survival_policy(g, 10800);
+  lj_gc2_test_update_minor_survival_policy(g, 10800);
   assert(gc2_minor_survival_bytes_acq(g) == 800);
   assert(gc2_minor_survival_pct_acq(g) ==
 	 LJ_GC2_MINOR_SURVIVAL_MAJOR_PCT);

@@ -82,6 +82,18 @@ if hits=$(grep -nE -- '->[[:space:]]*(gc2[.])?(minor_survival_base_live|minor_su
   printf '%s\n' 'raw GC2 minor-survival telemetry access is forbidden; use gc2_* helpers' >&2
   exit 1
 fi
+if hits=$(grep -nE -- 'lj_gc2_update_minor_survival_policy[[:space:]]*[(]|LJ_FUNC .*lj_gc2_update_minor_survival_policy[[:space:]]*[(]' \
+    "$ROOT"/src/*.c "$ROOT"/tests/*.c "$ROOT/src/lj_gc2.h" | \
+    grep -v "$ROOT/src/lj_gc2.c:" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'GC2 minor-survival policy updater must stay inside lj_gc2.c; use public cycle APIs or test wrappers' >&2
+  exit 1
+fi
+if ! grep -qE '^[[:space:]]*static void lj_gc2_update_minor_survival_policy[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.c"; then
+  printf '%s\n' 'lj_gc2_update_minor_survival_policy must stay static inside lj_gc2.c' >&2
+  exit 1
+fi
 for helper in gc2_assist_runs_acq \
   gc2_assist_runs_store_rlx \
   gc2_assist_runs_add \

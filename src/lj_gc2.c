@@ -1123,7 +1123,7 @@ static uint32_t gc2_ratio_pct(uint64_t num, uint64_t den)
   return (uint32_t)((num * 100u) / den);
 }
 
-void lj_gc2_update_minor_survival_policy(global_State *g, uint64_t live)
+static void lj_gc2_update_minor_survival_policy(global_State *g, uint64_t live)
 {
   uint64_t base, alloc, survived = 0;
   uint32_t pct = 0, threshold;
@@ -1149,6 +1149,13 @@ void lj_gc2_update_minor_survival_policy(global_State *g, uint64_t live)
     lj_gc2_force_major(g);
   }
 }
+
+#if defined(lj_gc2_c) || defined(LJ_GC2_TEST_HELPERS) || defined(LUA_USE_ASSERT)
+void lj_gc2_test_update_minor_survival_policy(global_State *g, uint64_t live)
+{
+  lj_gc2_update_minor_survival_policy(g, live);
+}
+#endif
 
 void lj_gc2_set_generational(global_State *g, int enabled)
 {
