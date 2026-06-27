@@ -14,6 +14,7 @@
 #include "lj_state.h"
 #include "lj_dispatch.h"
 #include "lj_safepoint.h"
+#include "lj_tg.h"
 #include "lj_vm.h"
 #include "lj_vmevent.h"
 
@@ -52,6 +53,33 @@ static uint32_t vmevent_report_failure(lua_State *L)
   return actions;
 }
 
+static int vmevent_had_stopreq(lua_State *L)
+{
+  TGState *tg;
+  if (!L)
+    return 0;
+  tg = L2TG(L);
+  return tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ);
+}
+
+static int vmevent_fresh_stopreq(lua_State *L, uint32_t actions,
+				 int had_stopreq)
+{
+  TGState *tg;
+  if (!L)
+    return 0;
+  tg = L2TG(L);
+  return (actions & LJ_GC2_HS_STOPREQ) ||
+    (!had_stopreq && tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ));
+}
+
+static void vmevent_checkstop_fresh(lua_State *L, uint32_t actions,
+				    int had_stopreq)
+{
+  if (vmevent_fresh_stopreq(L, actions, had_stopreq))
+    lj_safepoint_checkstop(L, actions);
+}
+
 void lj_vmevent_call(lua_State *L, ptrdiff_t argbase)
 {
   global_State *g = G(L);
@@ -59,6 +87,7 @@ void lj_vmevent_call(lua_State *L, ptrdiff_t argbase)
   uint8_t oldmask = g->vmevmask;
   uint8_t oldh = hook_save(g);
   uint32_t actions = 0;
+  int had_stopreq = 0;
   int status;
   g->vmevmask = 0;  /* Disable all events. */
   hook_vmevent(g);
@@ -66,6 +95,7 @@ void lj_vmevent_call(lua_State *L, ptrdiff_t argbase)
   if (LJ_UNLIKELY(status)) {
     /* Really shouldn't use stderr here, but where else to complain? */
     L->top--;
+    had_stopreq = vmevent_had_stopreq(L);
     actions = vmevent_report_failure(L);
   }
   lj_tg_setcur_L(g, oldL);
@@ -76,5 +106,5 @@ void lj_vmevent_call(lua_State *L, ptrdiff_t argbase)
   if (g->vmevmask != VMEVENT_NOCACHE)
     g->vmevmask = oldmask;  /* Restore event mask, but not if not modified. */
   if (LJ_UNLIKELY(status))
-    lj_safepoint_checkstop(L, actions);
+    vmevent_checkstop_fresh(L, actions, had_stopreq);
 }

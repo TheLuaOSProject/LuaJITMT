@@ -16,4 +16,26 @@ if hits=$(awk '
   exit 1
 fi
 
+for required in \
+  'static void vmevent_checkstop_fresh(lua_State *L, uint32_t actions,' \
+  'vmevent_checkstop_fresh(L, actions, had_stopreq)'
+do
+  if ! grep -qF "$required" "$ROOT/src/lj_vmevent.c"; then
+    printf '%s\n' "VM-event native fresh STOPREQ guard is missing: $required" >&2
+    exit 1
+  fi
+done
+
+if hits=$(awk '
+  /^static void vmevent_checkstop_fresh\(lua_State \*L, uint32_t actions,/ {
+    in_fresh = 1
+  }
+  in_fresh && /^}/ { in_fresh = 0; next }
+  /lj_safepoint_checkstop\(L, actions\);/ && !in_fresh { print FNR ":" $0 }
+' "$ROOT/src/lj_vmevent.c"); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'VM-event native STOPREQ checks must use fresh semantics' >&2
+  exit 1
+fi
+
 exec "$ROOT/tools/ci/lua_test.sh" m3_vmevent_native_stdio

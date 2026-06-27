@@ -123,6 +123,8 @@ return function(add)
     run = function(t)
       local out = t:tmp("lj_m3_vmevent_native_stdio.out")
       t:build({ quiet = true })
+      compile_and_run_c(t, t:tmp("lj_t-vmevent-native-stopreq"),
+                        "t-vmevent-native-stopreq.c", { timeout = "20s" })
       capture_luajit(t, { "-e", vmevent_native_stdio_smoke() }, out, {
         stderr_to_stdout = true
       })
