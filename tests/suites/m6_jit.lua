@@ -39,6 +39,7 @@ local m6_cases = {
   "m6_jit_alloc_account",
   "m6_jit_gc2_readiness",
   "m6_jit_gcstep_guard",
+  "m6_jit_mcode_native",
   "m6_jit_mcode_publish",
   "m6_jit_flush_hs",
   "m6_jit_tmpbuf_thread_format",
@@ -1031,6 +1032,108 @@ end
 assert(best >= 0)
 ]=], { timeout = "10s" })
       print("M6 JIT GC-step behavior passed")
+    end
+  })
+
+  add({
+    name = "m6_jit_mcode_native",
+    description = "Linux/x64 mcode allocation and sync-core native boundary",
+    run = function(t)
+      t:run([==[
+if hits=$(grep -nF -- 'lj_safepoint_checkstop' src/lj_mcode.c || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'mcode transactions must not throw STOPREQ before recorder cleanup' >&2
+  exit 1
+fi
+if ! awk '
+  /static lua_State \*mcode_native_enter\(jit_State \*J\)/ { inside = 1 }
+  inside && /lj_native_enter\(L2TG\(L\)\)/ { enter = 1 }
+  inside && /^}/ { inside = 0 }
+  END { exit(enter ? 0 : 1) }
+' src/lj_mcode.c; then
+  printf '%s\n' 'missing mcode native-enter helper' >&2
+  exit 1
+fi
+if ! awk '
+  /static void mcode_native_leave\(lua_State \*L\)/ { inside = 1 }
+  inside && /lj_native_leave\(L\)/ { leave = 1 }
+  inside && /^}/ { inside = 0 }
+  END { exit(leave ? 0 : 1) }
+' src/lj_mcode.c; then
+  printf '%s\n' 'missing mcode native-leave helper' >&2
+  exit 1
+fi
+if ! awk '
+  /void lj_mcode_sync_core\(jit_State \*J\)/ {
+    inside = 1; enter = membarrier = leave = 0
+  }
+  inside && /mcode_native_enter\(J\)/ { enter = 1 }
+  inside && /la_membarrier_synccore\(\)/ { membarrier = 1 }
+  inside && /mcode_native_leave\(L\)/ { leave = 1 }
+  inside && /^}/ {
+    if (enter && membarrier && leave) found = 1
+    inside = 0
+  }
+  END { exit(found ? 0 : 1) }
+' src/lj_mcode.c; then
+  printf '%s\n' 'sync-core membarrier must run inside a native region' >&2
+  exit 1
+fi
+if ! awk '
+  /static void \*mcode_alloc_dualmap\(jit_State \*J, uintptr_t hint, size_t sz\)/ {
+    inside = 1; enter = memfd = trunc = maprx = maprw = closefd = leave = 0
+  }
+  inside && /mcode_native_enter\(J\)/ { enter = NR }
+  inside && /mcode_memfd_create\(\)/ { memfd = NR }
+  inside && /ftruncate\(fd,/ { trunc = NR }
+  inside && /mmap\(\(void \*\)hint/ { maprx = NR }
+  inside && /mmap\(NULL/ { maprw = NR }
+  inside && /close\(fd\)/ { closefd = NR }
+  inside && /mcode_native_leave\(L\)/ { leave = NR }
+  inside && /^}/ {
+    if (enter && memfd && trunc && maprx && maprw && closefd && leave &&
+        closefd < leave) found = 1
+    inside = 0
+  }
+  END { exit(found ? 0 : 1) }
+' src/lj_mcode.c; then
+  printf '%s\n' 'dual-map mcode allocation must close resources before native leave' >&2
+  exit 1
+fi
+if ! awk '
+  /static void \*mcode_alloc_at\(jit_State \*J, uintptr_t hint, size_t sz, int prot\)/ {
+    inside = 1
+  }
+  inside && /mcode_alloc_dualmap\(J, hint, sz\)/ { found = 1 }
+  inside && /^}/ { inside = 0 }
+  END { exit(found ? 0 : 1) }
+' src/lj_mcode.c; then
+  printf '%s\n' 'mcode_alloc_at must pass J into dual-map allocation' >&2
+  exit 1
+fi
+]==], { cwd = t.root, quiet = true })
+      clean_build(t)
+      luajit_code(t, [=[
+local util = require"jit.util"
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1", "sizemcode=4", "maxmcode=64")
+local function make(seed)
+  return assert(loadstring(("return function(n) local s=%d; for i=1,n do s=s+i end return s end"):format(seed)))()
+end
+for n = 1, 16 do
+  local seed = n * 31
+  local f = make(seed)
+  for _ = 1, 8 do
+    assert(f(40) == seed + 820)
+  end
+end
+local live = 0
+for tr = 1, 64 do
+  if util.traceinfo(tr) then live = live + 1 end
+end
+assert(live >= 8, live)
+]=], { timeout = os.getenv("M6_MCODE_TIMEOUT") or "60s" })
+      print("M6 JIT mcode native boundary guard passed")
     end
   })
 

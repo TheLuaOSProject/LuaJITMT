@@ -14,6 +14,7 @@
 #include "lj_err.h"
 #include "lj_jit.h"
 #include "lj_mcode.h"
+#include "lj_safepoint.h"
 #include "lj_trace.h"
 #include "lj_dispatch.h"
 #include "lj_prng.h"
@@ -79,13 +80,29 @@ void lj_mcode_init(global_State *g)
 #endif
 }
 
+static lua_State *mcode_native_enter(jit_State *J)
+{
+  lua_State *L = J ? J->L : NULL;
+  if (L)
+    lj_native_enter(L2TG(L));
+  return L;
+}
+
+static void mcode_native_leave(lua_State *L)
+{
+  if (L)
+    (void)lj_native_leave(L);
+}
+
 void lj_mcode_sync_core(jit_State *J)
 {
 #if defined(__linux__) && LJ_TARGET_X64
   global_State *g = J2G(J);
   if (LJ_LIKELY(la_load32_acq(&g->jit_mcode_synccore) != 0)) {
+    lua_State *L = mcode_native_enter(J);
     if (LJ_UNLIKELY(la_membarrier_synccore() != 0))
       la_store32_rel(&g->jit_mcode_synccore, 0);  /* Fall back to legacy path. */
+    mcode_native_leave(L);
   }
 #else
   UNUSED(J);
@@ -112,8 +129,9 @@ static LJ_NORET LJ_NOINLINE void mcode_protfail(jit_State *J)
 #define MCPROT_RX	PAGE_EXECUTE_READ
 #define MCPROT_RWX	PAGE_EXECUTE_READWRITE
 
-static void *mcode_alloc_at(uintptr_t hint, size_t sz, DWORD prot)
+static void *mcode_alloc_at(jit_State *J, uintptr_t hint, size_t sz, DWORD prot)
 {
+  UNUSED(J);
   return LJ_WIN_VALLOC((void *)hint, sz,
 		       MEM_RESERVE|MEM_COMMIT|MEM_TOP_DOWN, prot);
 }
@@ -185,39 +203,47 @@ static int mcode_memfd_create(void)
 #endif
 }
 
-static void *mcode_alloc_dualmap(uintptr_t hint, size_t sz)
+static void *mcode_alloc_dualmap(jit_State *J, uintptr_t hint, size_t sz)
 {
+  lua_State *L = mcode_native_enter(J);
   int fd = mcode_memfd_create();
-  void *rx, *rw;
+  void *rx = MAP_FAILED, *rw = MAP_FAILED, *result = NULL;
   if (fd == -1)
-    return NULL;
-  if (ftruncate(fd, (off_t)sz) != 0) {
-    close(fd);
-    return NULL;
-  }
+    goto done;
+  if (ftruncate(fd, (off_t)sz) != 0)
+    goto done;
   rx = mmap((void *)hint, sz, MCPROT_RX, MAP_SHARED, fd, 0);
-  if (rx == MAP_FAILED) {
-    close(fd);
-    return NULL;
-  }
+  if (rx == MAP_FAILED)
+    goto done;
   rw = mmap(NULL, sz, MCPROT_RW, MAP_SHARED, fd, 0);
-  close(fd);
-  if (rw == MAP_FAILED) {
-    munmap(rx, sz);
-    return NULL;
-  }
+  if (rw == MAP_FAILED)
+    goto done;
   ((MCLink *)rw)->rw = (MCode *)rw;
-  return rx;
+  result = rx;
+done:
+  if (fd != -1)
+    close(fd);
+  if (result == NULL) {
+    if (rw != MAP_FAILED)
+      munmap(rw, sz);
+    if (rx != MAP_FAILED)
+      munmap(rx, sz);
+  }
+  mcode_native_leave(L);
+  return result;
 }
 #endif
 
-static void *mcode_alloc_at(uintptr_t hint, size_t sz, int prot)
+static void *mcode_alloc_at(jit_State *J, uintptr_t hint, size_t sz, int prot)
 {
 #if LJ_MCODE_DUALMAP
   UNUSED(prot);
-  return mcode_alloc_dualmap(hint, sz);
+  return mcode_alloc_dualmap(J, hint, sz);
 #else
-  void *p = mmap((void *)hint, sz, prot|MCPROT_CREATE, MAP_PRIVATE|MAP_ANONYMOUS|MCMAP_CREATE, -1, 0);
+  void *p;
+  lua_State *L = mcode_native_enter(J);
+  p = mmap((void *)hint, sz, prot|MCPROT_CREATE, MAP_PRIVATE|MAP_ANONYMOUS|MCMAP_CREATE, -1, 0);
+  mcode_native_leave(L);
   if (p == MAP_FAILED) return NULL;
 #if MCMAP_CREATE
   pthread_jit_write_protect_np(0);
@@ -292,9 +318,10 @@ static void *mcode_alloc_at_TEST(jit_State *J, uintptr_t hint, size_t sz, int pr
   default:  /* 'F' or unknown: Fail any further allocations. */
     return NULL;
   }
-  return mcode_alloc_at(hint, sz, prot);
+  return mcode_alloc_at(J, hint, sz, prot);
 }
-#define mcode_alloc_at(hint, sz, prot)	mcode_alloc_at_TEST(J, hint, sz, prot)
+#define mcode_alloc_at(J, hint, sz, prot) \
+  mcode_alloc_at_TEST((J), (hint), (sz), (prot))
 #endif
 
 static void mcode_free_mapping(MCode *area, size_t sz)
@@ -406,7 +433,7 @@ static void *mcode_alloc(jit_State *J, size_t sz)
   if (!mcode_inrange(J, hint, sz))  /* Also takes care of NULL J->mcarea. */
     goto probe;
   for (; i < 16; i++) {
-    void *p = mcode_alloc_at(hint, sz, MCPROT_GEN);
+    void *p = mcode_alloc_at(J, hint, sz, MCPROT_GEN);
     if (mcode_inrange(J, (uintptr_t)p, sz))
       return p;  /* Success. */
     else if (p)
@@ -427,7 +454,7 @@ fail:
   if (!J->mcarea) {  /* Switch to a new range now. */
     void *p;
   newrange:
-    p = mcode_alloc_at(0, sz, MCPROT_GEN);
+    p = mcode_alloc_at(J, 0, sz, MCPROT_GEN);
     if (p) {
       mcode_setrange(J, (uintptr_t)p + (sz >> 1));
       return p;  /* Success. */
@@ -446,10 +473,10 @@ static void *mcode_alloc(jit_State *J, size_t sz)
 {
 #if defined(__OpenBSD__) || defined(__NetBSD__) || LJ_TARGET_UWP
   /* Allow better executable memory allocation for OpenBSD W^X mode. */
-  void *p = mcode_alloc_at(0, sz, MCPROT_RUN);
+  void *p = mcode_alloc_at(J, 0, sz, MCPROT_RUN);
   if (p) mcode_setprot(J, p, sz, MCPROT_GEN);
 #else
-  void *p = mcode_alloc_at(0, sz, MCPROT_GEN);
+  void *p = mcode_alloc_at(J, 0, sz, MCPROT_GEN);
 #endif
   if (!p) lj_trace_err(J, LJ_TRERR_MCODEAL);
   return p;
