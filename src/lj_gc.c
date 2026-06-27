@@ -377,10 +377,7 @@ static void gc2_paranoia_check_roots(global_State *g)
   GCobj *o;
   for (o = gcref_acq(g->gc.root); o != NULL; o = lj_obj_gcw_acq(o))
     gc2_paranoia_checkone(g, o);
-  lj_gc2_finalizer_enter(g);
-  lj_gc2_finalizer_drain_owned(g);
-  lj_gc2_finalizer_mark_queued(g, gc2_paranoia_check_finalizer_obj);
-  lj_gc2_finalizer_leave(g);
+  lj_gc2_finalizer_mark_all(g, gc2_paranoia_check_finalizer_obj);
 }
 
 static void gc2_paranoia_check_rawroots(global_State *g)
@@ -845,10 +842,7 @@ static int gc_chain_splice(GCRef *p, GCobj *o)
 /* Mark userdata/cdata in finalizer queues. */
 static void gc_mark_finalizers(global_State *g)
 {
-  lj_gc2_finalizer_enter(g);
-  lj_gc2_finalizer_drain_owned(g);
-  lj_gc2_finalizer_mark_queued(g, gc_mark_finalizer_obj);
-  lj_gc2_finalizer_leave(g);
+  lj_gc2_finalizer_mark_all(g, gc_mark_finalizer_obj);
 }
 
 /* Separate userdata objects to be finalized to the GC2 finalizer queue. */

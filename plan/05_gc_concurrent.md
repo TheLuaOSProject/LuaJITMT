@@ -533,7 +533,8 @@ instead of waiting forever for `mt_live == 0`, and explicit
 completed cycle while that worker is still live. User finalizer callbacks now
 run on the owner-claimed collector caller `lua_State` instead of the shared
 `vmthread(g)` stack. Pending finalizer objects are retained through dedicated
-GC2 queue nodes and marked through the owner-drained queue scanner, but full
+GC2 queue nodes and marked through `lj_gc2_finalizer_mark_all()`, whose GC2
+side owns the owner-drained queue scanner, but full
 scheduler-owned string/root/finalizer sweep driving and FINREG/finqueue
 execution remain follow-up work.
 

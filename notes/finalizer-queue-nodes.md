@@ -19,8 +19,8 @@ allocator or a collector TG, so losing Lua allocator accounting here is safer
 than taking allocator ownership implicitly.
 
 Legacy GC, GC2 root scans, and paranoia checks now mark queued finalizer objects
-through `lj_gc2_finalizer_mark_queued()` callbacks after claiming the finalizer
-owner and draining the producer stack.
+through `lj_gc2_finalizer_mark_all()` callbacks. GC2 owns claiming the
+finalizer owner, draining the producer stack, and walking the stable owner ring.
 
 ## Coverage
 

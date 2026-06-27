@@ -256,6 +256,9 @@ also owns close-time FINREG generation disable through
 `lj_gc2_finreg_cdata_disable()`. The M9 cleanup removed close-time
 generation-table pending/discovery scans; P_WEAK preclaim side-vector failure
 now restores and queues the same ordered object without a legacy root-list walk.
+Queued finalizer marking now routes through `lj_gc2_finalizer_mark_all()`, so
+GC2 owns the finalizer owner claim, producer-stack drain, and stable ring walk
+while legacy marking callbacks preserve classic collector coloring semantics.
 If cdata with a live finalizer reaches sweep/free, that is now a fatal FINREG
 invariant instead of a rescue queue; safety and Lua finalizer semantics win over
 trying to recover from a missed owner edge.

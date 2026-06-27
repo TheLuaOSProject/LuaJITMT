@@ -2062,7 +2062,8 @@ static void gc2_mark_finalizer_obj(global_State *g, GCobj *o)
   (void)lj_gc2_markobj(g, o);
 }
 
-void lj_gc2_finalizer_mark_queued(global_State *g, GC2FinalizerMarkFunc mark)
+static void gc2_finalizer_mark_queued_owned(global_State *g,
+					    GC2FinalizerMarkFunc mark)
 {
   GC2FinalizerNode *tail, *node;
   if (!g || !mark)
@@ -2083,6 +2084,16 @@ void lj_gc2_finalizer_mark_queued(global_State *g, GC2FinalizerMarkFunc mark)
   } while (node != tail);
 }
 
+void lj_gc2_finalizer_mark_all(global_State *g, GC2FinalizerMarkFunc mark)
+{
+  if (!g || !mark)
+    return;
+  lj_gc2_finalizer_enter(g);
+  lj_gc2_finalizer_drain_owned(g);
+  gc2_finalizer_mark_queued_owned(g, mark);
+  lj_gc2_finalizer_leave(g);
+}
+
 static void gc2_scan_threading_live_roots(global_State *g)
 {
   LJThreadLive *node;
@@ -2101,10 +2112,7 @@ static void gc2_scan_pending_roots(global_State *g)
 {
   if (!g)
     return;
-  lj_gc2_finalizer_enter(g);
-  lj_gc2_finalizer_drain_owned(g);
-  lj_gc2_finalizer_mark_queued(g, gc2_mark_finalizer_obj);
-  lj_gc2_finalizer_leave(g);
+  lj_gc2_finalizer_mark_all(g, gc2_mark_finalizer_obj);
   gc2_scan_threading_live_roots(g);
 #if LJ_HASFFI
   gc2_mark_finreg_cdata_preclaims(g);

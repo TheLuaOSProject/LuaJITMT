@@ -249,6 +249,22 @@ for helper in lj_gc2_finalizer_mark_enqueue \
     exit 1
   fi
 done
+if ! grep -qE 'LJ_FUNC void lj_gc2_finalizer_mark_all[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.h"; then
+  printf '%s\n' 'lj_gc2_finalizer_mark_all declaration is required for queued finalizer marking' >&2
+  exit 1
+fi
+if ! grep -qE '^void lj_gc2_finalizer_mark_all[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.c"; then
+  printf '%s\n' 'lj_gc2_finalizer_mark_all definition is required for queued finalizer marking' >&2
+  exit 1
+fi
+if hits=$(grep -nE -- 'lj_gc2_finalizer_mark_queued[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'queued finalizer marking must stay in lj_gc2_finalizer_mark_all' >&2
+  exit 1
+fi
 if hits=$(grep -nE -- 'lj_gc2_finalizer_enqueue[[:space:]]*[(]' \
     "$ROOT/src/lj_gc.c" \
     "$ROOT/src/lib_threading.c" \
