@@ -24,6 +24,8 @@ finalizer owner, draining the producer stack, and walking the stable owner ring.
 Dispatch-time consumption enters through `lj_gc2_finalizer_dispatch_one()` for
 the same owner/drain/dequeue/release sequence, with legacy GC retaining only the
 dequeued-object semantic callback.
+Close-time drain-all uses `lj_gc2_finalizer_dispatch_all()`, keeping the
+blocking drain/pending/dispatch loop on the GC2 side of the queue boundary.
 
 ## Coverage
 

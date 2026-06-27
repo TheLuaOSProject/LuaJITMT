@@ -1610,14 +1610,7 @@ static int gc_finalize(lua_State *L)
 /* Finalize all userdata/cdata objects from the GC2 finalizer queue. */
 void lj_gc_finalize_udata(lua_State *L)
 {
-  global_State *g = G(L);
-  for (;;) {
-    lj_gc2_finalizer_drain(g);
-    if (!lj_gc2_finalizer_queue_pending(g))
-      break;
-    if (!gc_finalize(L))
-      la_cpu_pause();
-  }
+  lj_gc2_finalizer_dispatch_all(L, gc_dispatch_finalizer_obj);
 }
 
 #if LJ_HASFFI

@@ -281,6 +281,22 @@ if hits=$(grep -nE -- 'lj_gc2_finalizer_(try_enter|drain_owned|dequeue_owned|lea
   printf '%s\n' 'legacy finalizer dispatch must use lj_gc2_finalizer_dispatch_one' >&2
   exit 1
 fi
+if ! grep -qE 'LJ_FUNC void lj_gc2_finalizer_dispatch_all[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.h"; then
+  printf '%s\n' 'lj_gc2_finalizer_dispatch_all declaration is required for finalizer drain-loop ownership' >&2
+  exit 1
+fi
+if ! grep -qE '^void lj_gc2_finalizer_dispatch_all[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.c"; then
+  printf '%s\n' 'lj_gc2_finalizer_dispatch_all definition is required for finalizer drain-loop ownership' >&2
+  exit 1
+fi
+if hits=$(grep -nE -- 'lj_gc2_finalizer_drain[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'legacy close-time finalizer drain loops must use lj_gc2_finalizer_dispatch_all' >&2
+  exit 1
+fi
 if hits=$(grep -nE -- 'lj_gc2_finalizer_enqueue[[:space:]]*[(]' \
     "$ROOT/src/lj_gc.c" \
     "$ROOT/src/lib_threading.c" \

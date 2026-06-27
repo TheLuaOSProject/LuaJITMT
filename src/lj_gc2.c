@@ -1411,6 +1411,22 @@ int lj_gc2_finalizer_dispatch_one(lua_State *L,
   return rc < 0 ? -1 : 1;
 }
 
+void lj_gc2_finalizer_dispatch_all(lua_State *L,
+				   GC2FinalizerDispatchFunc dispatch)
+{
+  global_State *g;
+  if (!L || !dispatch)
+    return;
+  g = G(L);
+  for (;;) {
+    lj_gc2_finalizer_drain(g);
+    if (!lj_gc2_finalizer_queue_pending(g))
+      break;
+    if (!lj_gc2_finalizer_dispatch_one(L, dispatch))
+      la_cpu_pause();
+  }
+}
+
 int lj_gc2_finalizer_try_enter(global_State *g)
 {
   uint32_t owner, old;
