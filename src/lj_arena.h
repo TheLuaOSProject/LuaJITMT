@@ -58,6 +58,16 @@ struct GCArena {
   uint64_t mark[LJ_ARENA_WORDS];
 };
 
+static LJ_AINLINE uint32_t lj_arena_owner_acq(const GCArena *a)
+{
+  return la_load32_acq(&a->hdr.owner_tid);  /* 04 section 4.6 owner route. */
+}
+
+static LJ_AINLINE void lj_arena_owner_rel(GCArena *a, uint32_t owner_tid)
+{
+  la_store32_rel(&a->hdr.owner_tid, owner_tid);  /* 04 section 4.6. */
+}
+
 static LJ_AINLINE GCArena *lj_arena_next_acq(const GCArena *a)
 {
   return (GCArena *)la_loadptr_acq((void *const *)&a->hdr.next);
@@ -90,6 +100,17 @@ struct TGAlloc {
   uint32_t owner_tid;
   uint8_t alloc_black;
 };
+
+static LJ_AINLINE uint32_t lj_arena_alloc_owner_acq(const TGAlloc *alloc)
+{
+  return la_load32_acq(&alloc->owner_tid);  /* 04 section 4.6 owner route. */
+}
+
+static LJ_AINLINE void lj_arena_alloc_owner_rel(TGAlloc *alloc,
+						uint32_t owner_tid)
+{
+  la_store32_rel(&alloc->owner_tid, owner_tid);  /* 04 section 4.6. */
+}
 
 struct HugeTab {
   LJHugeTabHdr *h;

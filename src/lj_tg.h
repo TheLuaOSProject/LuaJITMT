@@ -309,7 +309,7 @@ static LJ_AINLINE uint32_t lj_tg_tid_acq(const TGState *tg)
 
 static LJ_AINLINE void lj_tg_tid_rel(TGState *tg, uint32_t tid)
 {
-  tg->alloc.owner_tid = tid;
+  lj_arena_alloc_owner_rel(&tg->alloc, tid);
   la_store32_rel(&tg->tid, tid);  /* Publish allocator owner before TG id. */
 }
 

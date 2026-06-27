@@ -188,7 +188,7 @@ static int tg_transfer_dead_alloc(global_State *g, TGState *tg)
   if (lj_tg_flags_test_acq(tg, TGF_HUGETAB)) {
     if (!lj_tg_flags_test_acq(main_tg, TGF_HUGETAB) ||
 	!lj_arena_hugetab_transfer(&main_tg->huge, &tg->huge,
-				   main_tg->alloc.owner_tid))
+				   lj_arena_alloc_owner_acq(&main_tg->alloc)))
       return 0;
     lj_arena_hugetab_fini(&tg->huge);
     lj_tg_flags_and_rlx(tg, (uint8_t)~TGF_HUGETAB);

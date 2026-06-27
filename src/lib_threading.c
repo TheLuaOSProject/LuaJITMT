@@ -349,7 +349,8 @@ static void threading_rehome_unstarted_stack(lua_State *L, lua_State *L1,
   if (!oldst || !tg || !lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL) ||
       g->allocf != lj_arena_allocf)
     return;
-  if (lj_arena_of(oldst)->hdr.owner_tid != tg->alloc.owner_tid)
+  if (lj_arena_owner_acq(lj_arena_of(oldst)) !=
+      lj_arena_alloc_owner_acq(&tg->alloc))
     return;
   stacksize = L1->stacksize;
   sz = (size_t)stacksize * sizeof(TValue);

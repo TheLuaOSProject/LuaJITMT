@@ -2672,7 +2672,7 @@ static LJArenaAllocD *gc_arena_allocd_for_new(lua_State *L)
 static LJArenaAllocD *gc_arena_allocd_for_ptr(global_State *g, const void *p)
 {
   if (p) {
-    uint32_t owner_tid = lj_arena_of(p)->hdr.owner_tid;
+    uint32_t owner_tid = lj_arena_owner_acq(lj_arena_of(p));
     TGState *tg = lj_tg_find_owner(g, owner_tid);
     if (tg)
       return gc_arena_allocd_for_tg(g, tg);

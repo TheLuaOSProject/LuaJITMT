@@ -466,7 +466,7 @@ int lj_arena_hugetab_transfer(HugeTab *dst, HugeTab *src, uint32_t owner_tid)
 	int inserted = lj_arena_hugetab_insert(dst, p, size, hflags);
 	if (inserted < 0)
 	  return 0;
-	lj_arena_of(p)->hdr.owner_tid = owner_tid;
+	lj_arena_owner_rel(lj_arena_of(p), owner_tid);
 	if (inserted >= 0)
 	  (void)lj_arena_hugetab_delete(src, p, NULL);
       }
@@ -809,7 +809,7 @@ static uint32_t arena_transfer_list(GCArena **dstp, GCArena *a,
   uint32_t n = 0;
   while (a) {
     GCArena *next = lj_arena_next_acq(a);
-    a->hdr.owner_tid = owner_tid;
+    lj_arena_owner_rel(a, owner_tid);
     lj_arena_next_rel(a, *dstp);
     *dstp = a;
     a = next;
@@ -821,8 +821,10 @@ static uint32_t arena_transfer_list(GCArena **dstp, GCArena *a,
 uint32_t lj_arena_alloc_transfer(TGAlloc *dst, TGAlloc *src)
 {
   uint32_t k, n = 0;
+  uint32_t owner_tid;
   if (!dst || !src || dst == src)
     return 0;
+  owner_tid = lj_arena_alloc_owner_acq(dst);
   for (k = 0; k < LJ_ARENA_NKINDS; k++) {
     LJArenaBump *b = &src->bump[k];
     if (b->a && b->cell < b->end)
@@ -831,15 +833,14 @@ uint32_t lj_arena_alloc_transfer(TGAlloc *dst, TGAlloc *src)
     src->bump[k].cell = 0;
     src->bump[k].end = 0;
     arena_clear_bins(src, k);
-    n += arena_transfer_list(&dst->owned[k], src->owned[k],
-			     dst->owner_tid);
+    n += arena_transfer_list(&dst->owned[k], src->owned[k], owner_tid);
     src->owned[k] = NULL;
     n += arena_transfer_list(&dst->needsweep[k], src->needsweep[k],
-			     dst->owner_tid);
+			     owner_tid);
     src->needsweep[k] = NULL;
     lj_arena_alloc_rebuild_free_kind(dst, k);
   }
-  src->owner_tid = 0;
+  lj_arena_alloc_owner_rel(src, 0);
   src->alloc_black = 0;
   return n;
 }
@@ -851,7 +852,7 @@ static GCArena *arena_alloc_fresh(TGAlloc *alloc, PRNGState *rs,
   GCArena *a = lj_arena_map(rs, flags);
   if (!a)
     return NULL;
-  a->hdr.owner_tid = alloc->owner_tid;
+  lj_arena_owner_rel(a, lj_arena_alloc_owner_acq(alloc));
   lj_arena_next_rel(a, alloc->owned[k]);
   alloc->owned[k] = a;
   alloc->bump[k].a = a;
@@ -871,7 +872,7 @@ void *lj_arena_alloc(TGAlloc *alloc, PRNGState *rs, size_t size,
   if (size > LJ_HUGE_THRESHOLD) {
     void *p = lj_arena_huge_map(rs, size, flags);
     if (p)
-      lj_arena_of(p)->hdr.owner_tid = alloc->owner_tid;
+      lj_arena_owner_rel(lj_arena_of(p), lj_arena_alloc_owner_acq(alloc));
     return p;
   }
   ncells = lj_arena_ncells(size);
@@ -996,7 +997,8 @@ static void *arena_allocf_new(LJArenaAllocD *ad, size_t size, uint32_t flags)
     return lj_arena_alloc(ad->alloc, ad->prng, size, flags);
   p = lj_arena_huge_map(ad->prng, size, flags);
   if (p)
-    lj_arena_of(p)->hdr.owner_tid = ad->alloc->owner_tid;
+    lj_arena_owner_rel(lj_arena_of(p),
+		       lj_arena_alloc_owner_acq(ad->alloc));
   if (p && lj_arena_hugetab_insert(ad->huge, p, size,
 				   arena_allocf_hflags(ad, flags)) != 1) {
     lj_arena_huge_unmap(p, size);

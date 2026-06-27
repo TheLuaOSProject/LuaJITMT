@@ -943,7 +943,7 @@ static void gc2_reset_alloc_trigger(global_State *g)
 static TGState *gc2_tg_for_mem(global_State *g, const void *p)
 {
   if (p) {
-    uint32_t owner_tid = lj_arena_of(p)->hdr.owner_tid;
+    uint32_t owner_tid = lj_arena_owner_acq(lj_arena_of(p));
     TGState *owner = lj_tg_find_owner(g, owner_tid);
     if (owner)
       return owner;
