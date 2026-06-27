@@ -23,4 +23,10 @@ if hits=$(grep -nE -- 'ct[[:space:]]*->[[:space:]]*info[[:space:]]*=[[:space:]]*
   printf '%s\n' 'raw parser CType abandon payload stores are forbidden; use ctype_info_rel() or ctype_size_rel()' >&2
   exit 1
 fi
+if hits=$(grep -nE -- '->[[:space:]]*(info|size|sib|name)([^[:alnum:]_]|$)|setgcrefnull\([^)]*->[[:space:]]*name' \
+    "$ROOT/tests/t-ffi-ctype-ticket-intern.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw ticket/intern fixture CType access is forbidden; use ctype helper loads/stores' >&2
+  exit 1
+fi
 exec "$ROOT/tools/ci/lua_test.sh" m7_ffi_ctype_ticket_intern

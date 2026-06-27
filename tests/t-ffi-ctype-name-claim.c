@@ -15,15 +15,21 @@
 
 #include "lib/lua_fixture_helpers.h"
 
+static void init_test_ctype(CType *ct, CTInfo info, CTSize size)
+{
+  ctype_info_rel(ct, info);
+  ctype_size_rel(ct, size);
+  ctype_sib_rel(ct, 0);
+  ctype_next_rel(ct, 0);
+  ctype_clearname(ct);
+}
+
 static CTypeID new_named(CTState *cts, lua_State *L, CTInfo info, CTSize size,
 			 GCstr *name, CType **ctp)
 {
   CTypeID id = lj_ctype_new_l(L, cts, ctp);
   CType *ct = *ctp;
-  ct->info = info;
-  ct->size = size;
-  ct->sib = 0;
-  ctype_next_rel(ct, 0);
+  init_test_ctype(ct, info, size);
   ctype_setname(ct, name);
   return id;
 }
@@ -35,11 +41,7 @@ static void force_table_move_after_reserve(lua_State *L, CTState *cts)
   while (ctype_tabh_acq(cts) == before) {
     CType *ct;
     CTypeID id = lj_ctype_new_l(L, cts, &ct);
-    ct->info = CTINFO(CT_ATTRIB, CTATTRIB(CTA_BAD));
-    ct->size = 0;
-    ct->sib = 0;
-    ctype_next_rel(ct, 0);
-    setgcrefnull(ct->name);
+    init_test_ctype(ct, CTINFO(CT_ATTRIB, CTATTRIB(CTA_BAD)), 0);
     assert(id != 0);
     assert(++guard < CTID_MAX);
   }
@@ -73,7 +75,7 @@ int main(void)
   id2 = new_named(cts, L, CTINFO(CT_TYPEDEF, CTID_INT32), 0, name, &ct2);
   winner = lj_ctype_addname_unique(cts, ct2, id2, default_ns);
   assert(winner == id1);
-  assert(ctype_isabandoned(ctype_get(cts, id2)->info));
+  assert(ctype_isabandoned(ctype_info_acq(ctype_get(cts, id2))));
   assert(lj_ctype_getname(cts, &found, name, default_ns) == id1);
   lua_pushinteger(L, (lua_Integer)id2);
   lua_setglobal(L, "lj_m7_name_claim_loser_id");
@@ -112,7 +114,7 @@ int main(void)
   assert(ct4 != ctype_get(cts, id4));
   winner = lj_ctype_addname_unique(cts, ct4, id4, default_ns);
   assert(winner == id1);
-  assert(ctype_isabandoned(ctype_get(cts, id4)->info));
+  assert(ctype_isabandoned(ctype_info_acq(ctype_get(cts, id4))));
   assert(lj_ctype_getname(cts, &found, name, default_ns) == id1);
   lua_pushinteger(L, (lua_Integer)id4);
   lua_setglobal(L, "lj_m7_name_claim_moved_loser_id");

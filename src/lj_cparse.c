@@ -1381,14 +1381,14 @@ static CTypeID cp_struct_name(CPState *cp, CPDecl *sdecl, CTInfo info)
     if (cp->val.id) {  /* Name of existing struct/union/enum. */
       sid = cp->val.id;
       ct = cp->ct;
-      if ((ct->info ^ info) & (CTMASK_NUM|CTF_UNION))  /* Wrong type. */
+      if ((ctype_info_acq(ct) ^ info) & (CTMASK_NUM|CTF_UNION))  /* Wrong type. */
 	cp_errmsg(cp, 0, LJ_ERR_FFI_REDEF, strdata(ctype_name_acq(ct)));
     } else {  /* Create named, incomplete struct/union/enum. */
       if ((cp->mode & CPARSE_MODE_NOIMPLICIT))
 	cp_errmsg(cp, 0, LJ_ERR_FFI_BADTAG, strdata(cp->str));
       sid = cp_ctype_new(cp, &ct);
-      ct->info = info;
-      ct->size = CTSIZE_INVALID;
+      ctype_info_rel(ct, info);
+      ctype_size_rel(ct, CTSIZE_INVALID);
       ct = cp_ctype_publish(cp, sid, ct);
       ct = cp_ctype_setname(cp, sid, cp->str);
       {
@@ -1399,18 +1399,18 @@ static CTypeID cp_struct_name(CPState *cp, CPDecl *sdecl, CTInfo info)
 	  ct = ctype_get(cp->cts, sid);
 	}
       }
-      if ((ct->info ^ info) & (CTMASK_NUM|CTF_UNION))  /* Wrong type. */
+      if ((ctype_info_acq(ct) ^ info) & (CTMASK_NUM|CTF_UNION))  /* Wrong type. */
 	cp_errmsg(cp, 0, LJ_ERR_FFI_REDEF, strdata(ctype_name_acq(ct)));
     }
     cp_next(cp);
   } else {  /* Create anonymous, incomplete struct/union/enum. */
     sid = cp_ctype_new(cp, &ct);
-    ct->info = info;
-    ct->size = CTSIZE_INVALID;
+    ctype_info_rel(ct, info);
+    ctype_size_rel(ct, CTSIZE_INVALID);
     ct = cp_ctype_publish(cp, sid, ct);
   }
   if (cp->tok == '{') {
-    if (ct->size != CTSIZE_INVALID || ctype_sib_acq(ct))
+    if (ctype_size_acq(ct) != CTSIZE_INVALID || ctype_sib_acq(ct))
       cp_errmsg(cp, 0, LJ_ERR_FFI_REDEF, strdata(ctype_name_acq(ct)));
     ct = cp_ctype_setsib(cp, sid, 1);  /* Type is currently being defined. */
   }
