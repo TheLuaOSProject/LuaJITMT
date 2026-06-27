@@ -4527,22 +4527,6 @@ static int gc2_tab_weak_barrier_mode(global_State *g, GCtab *t)
   return gc2_tab_weak_mode(g, t, tabref_acq(t->metatable));
 }
 
-void lj_gc2_barrier_tv(lua_State *L, cTValue *tv)
-{
-  global_State *g;
-  TValue snap;
-  if (L && tv) {
-    lj_tv_load_acq(&snap, tv);
-    if (tvisgcv(&snap)) {
-      g = G(L);
-      if (gc2_barrier_active_g(g))
-	lj_gc2_markobj(g, gcV(&snap));
-      else
-	gc2_remember_pair(g, NULL, gcV(&snap));
-    }
-  }
-}
-
 void lj_gc2_barrier_tv_g(global_State *g, cTValue *tv)
 {
   TValue snap;
@@ -4592,23 +4576,6 @@ void lj_gc2_barrier_tvn_pair_g(global_State *g, GCobj *parent,
 	gc2_remember_pair(g, parent, gcV(&snap));
     }
   }
-}
-
-void lj_gc2_barrier_uv(global_State *g, cTValue *tv)
-{
-  lj_gc2_barrier_tv_g(g, tv);
-}
-
-void lj_gc2_barrier_obj(lua_State *L, GCobj *o)
-{
-  global_State *g;
-  if (!o || !L)
-    return;
-  g = G(L);
-  if (gc2_barrier_active_g(g))
-    lj_gc2_markobj(g, o);
-  else
-    gc2_remember_pair(g, NULL, o);
 }
 
 void lj_gc2_barrier_obj_pair(lua_State *L, GCobj *parent, GCobj *child)

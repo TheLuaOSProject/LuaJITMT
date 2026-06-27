@@ -43,6 +43,12 @@ if ! grep -qE '^[[:space:]]*static int lj_gc2_ssb_empty[[:space:]]*[(]' \
   printf '%s\n' 'lj_gc2_ssb_empty must stay static inside lj_gc2.c' >&2
   exit 1
 fi
+if hits=$(grep -RInE -- 'lj_gc2_barrier_(tv|uv|obj)[[:space:]]*[(]|LJ_FUNC .*lj_gc2_barrier_(tv|uv|obj)[[:space:]]*[(]' \
+    "$ROOT"/src "$ROOT"/tests || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'parentless GC2 barrier wrappers are forbidden; use global-context or parent-aware helpers' >&2
+  exit 1
+fi
 if hits=$(grep -nE -- 'lj_gc2_weak_(snapshot_(count|tab|scan|clear|covers_legacy)|drain|legacy_result)[[:space:]]*[(]|LJ_FUNC .*lj_gc2_weak_(snapshot_(count|tab|scan|clear|covers_legacy)|drain|legacy_result)[[:space:]]*[(]' \
     "$ROOT"/src/*.c "$ROOT"/tests/*.c "$ROOT/src/lj_gc2.h" | \
     grep -v "$ROOT/src/lj_gc2.c:" || true); [ -n "$hits" ]; then
