@@ -1248,7 +1248,9 @@ typedef struct GC2State {
   uint64_t grey_drained;  /* Grey entries popped for traversal. */
   void *worker_thread[LJ_GC2_WORKER_MAX];  /* Opaque LJThr* parked workers. */
   void *worker_tg[LJ_GC2_WORKER_MAX];  /* Opaque TGState* parked workers. */
+  void *worker_tg_retired;  /* Dead worker TGs awaiting registry unlink. */
   uint32_t n_workers;	/* Parked GC workers started for this state. */
+  uint32_t worker_control;  /* Serializes parked worker lifecycle changes. */
   uint32_t worker_stop;  /* Request parked worker shutdown. */
   uint32_t worker_wake;  /* Futex word for worker wakeups. */
   uint32_t worker_started;  /* Workers that have entered their loops. */
@@ -3730,6 +3732,40 @@ static LJ_AINLINE void gc2_n_workers_rel(global_State *g, uint32_t n)
   la_store32_rel(&g->gc2.n_workers, n);
 }
 
+static LJ_AINLINE uint32_t gc2_worker_control_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.worker_control);
+}
+
+static LJ_AINLINE void gc2_worker_control_store_rlx(global_State *g,
+						    uint32_t owner)
+{
+  la_store32_rlx(&g->gc2.worker_control, owner);
+}
+
+static LJ_AINLINE void gc2_worker_control_rel(global_State *g, uint32_t owner)
+{
+  la_store32_rel(&g->gc2.worker_control, owner);
+}
+
+static LJ_AINLINE int gc2_worker_control_cas(global_State *g, uint32_t *oldp,
+					     uint32_t owner)
+{
+  return la_cas32(&g->gc2.worker_control, oldp, owner, LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE void gc2_worker_control_futex_wake(global_State *g, int n)
+{
+  la_futex_wake(&g->gc2.worker_control, n);
+}
+
+static LJ_AINLINE void gc2_worker_control_futex_wait(global_State *g,
+						     uint32_t owner,
+						     int64_t timeout_ns)
+{
+  la_futex_wait(&g->gc2.worker_control, owner, timeout_ns);
+}
+
 static LJ_AINLINE void *gc2_worker_thread_acq(global_State *g, uint32_t i)
 {
   return la_loadptr_acq((void *const *)&g->gc2.worker_thread[i]);
@@ -3750,6 +3786,22 @@ static LJ_AINLINE void gc2_worker_tg_store_rlx(global_State *g, uint32_t i,
 					       TGState *tg)
 {
   la_storeptr_rlx((void **)&g->gc2.worker_tg[i], tg);
+}
+
+static LJ_AINLINE void *gc2_worker_tg_retired_acq(global_State *g)
+{
+  return la_loadptr_acq((void *const *)&g->gc2.worker_tg_retired);
+}
+
+static LJ_AINLINE void gc2_worker_tg_retired_store_rlx(global_State *g,
+						       void *head)
+{
+  la_storeptr_rlx((void **)&g->gc2.worker_tg_retired, head);
+}
+
+static LJ_AINLINE void gc2_worker_tg_retired_rel(global_State *g, void *head)
+{
+  la_storeptr_rel((void **)&g->gc2.worker_tg_retired, head);
 }
 
 static LJ_AINLINE uint32_t gc2_worker_stop_acq(global_State *g)

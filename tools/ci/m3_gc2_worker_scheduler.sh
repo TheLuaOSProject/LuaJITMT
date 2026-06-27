@@ -71,10 +71,19 @@ fi
 for helper in gc2_worker_thread_acq \
   gc2_worker_thread_store_rlx \
   gc2_worker_tg_acq \
-  gc2_worker_tg_store_rlx; do
+  gc2_worker_tg_store_rlx \
+  gc2_worker_tg_retired_acq \
+  gc2_worker_tg_retired_store_rlx \
+  gc2_worker_tg_retired_rel \
+  gc2_worker_control_acq \
+  gc2_worker_control_store_rlx \
+  gc2_worker_control_rel \
+  gc2_worker_control_cas \
+  gc2_worker_control_futex_wake \
+  gc2_worker_control_futex_wait; do
   if ! grep -qE "^[[:space:]]*static LJ_AINLINE .*[*[:space:]]${helper}[[:space:]]*[(]" \
       "$ROOT/src/lj_obj.h"; then
-    printf '%s\n' "${helper} helper is required for GC2 worker parking slots" >&2
+    printf '%s\n' "${helper} helper is required for GC2 worker parking/control state" >&2
     exit 1
   fi
 done
@@ -83,6 +92,13 @@ if hits=$(grep -nE -- '->[[:space:]]*gc2[.](worker_thread|worker_tg)[[]|&[[:spac
     "$ROOT/tests/t-gc2-worker-scheduler.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
   printf '%s\n' 'raw GC2 worker parking slot access is forbidden; use gc2_worker_* helpers' >&2
+  exit 1
+fi
+if hits=$(grep -nE -- '->[[:space:]]*gc2[.](worker_tg_retired|worker_control)([^[:alnum:]_]|$)|&[[:space:]]*[^)]*->[[:space:]]*gc2[.](worker_tg_retired|worker_control)([^[:alnum:]_]|$)' \
+    "$ROOT/src/lj_gc2.c" \
+    "$ROOT/tests/t-gc2-worker-scheduler.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw GC2 worker control/retire access is forbidden; use gc2_worker_* helpers' >&2
   exit 1
 fi
 for helper in gc2_ssb_published_acq \

@@ -211,10 +211,10 @@ Current parked-worker delta: the original target remains the full worker pool
 with per-worker Chase-Lev ownership, grow-safe deque migration, steal/idle
 declaration, and scheduler-owned phase transitions described above. The current
 implementation adds an explicit, opt-in `lj_gc2_worker_start/stop/wake`
-lifecycle for one parked internal worker over the existing bounded
+lifecycle for a capped two-worker parked pool over the existing bounded
 `lj_gc2_worker_drain()` surface. It does not auto-start workers and does not add
 an `LJ_MT`/`LUAJIT_THREADSAFE` lock gate. Phase transitions and mutator SSB
-publication now wake the parked worker if one has been started, with
+publication now wake started parked workers, with
 `worker_wakes`, `worker_parks`, and `worker_async_progress` recording the
 bridge behavior until the full scheduler replaces the single-owner token.
 Parked workers now attach real no-Lua-stack TGs and use TG TLS, so safepoint
@@ -222,9 +222,15 @@ self-identification no longer falls back to the main TG. Their TG storage is
 kept alive until the lockless TG registry has reclaimed the dead node. They can
 be remotely acknowledged as native TGs with no current `lua_State`.
 `collectgarbage("workers", N)` exposes that staged lifecycle to Lua: missing
-`N` queries the current worker count, `N <= 0` stops the parked worker, and any
-positive `N` starts the current one-worker scheduler while reporting the
-previous count.
+`N` queries the current worker count, `N <= 0` stops the parked workers, and any
+positive `N` starts the capped parked pool while reporting the previous count.
+Current lifecycle guard: parked worker start/stop/set operations are serialized
+by `GC2State.worker_control`, so racy Lua calls to
+`collectgarbage("workers", N)` cannot concurrently mutate worker thread/TG
+slots. Waiters park as native TGs while waiting for the control word. Dead
+worker TGs that are still registry-visible are moved to a retired list and
+freed only after TG reclamation unlinks them, so rapid control churn can reuse
+worker slots without violating TG registry lifetime.
 
 ### 5.6.4 gc2_traverse — per-type tracing
 Port the existing traversal logic, replacing color plumbing:

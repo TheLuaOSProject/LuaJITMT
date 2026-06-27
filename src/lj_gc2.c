@@ -47,6 +47,23 @@ typedef struct GC2FinalizerNode {
   GCobj *obj;
 } GC2FinalizerNode;
 
+typedef struct GC2WorkerTGRetire {
+  struct GC2WorkerTGRetire *next;
+  TGState *tg;
+} GC2WorkerTGRetire;
+
+static GC2WorkerTGRetire *gc2_worker_tg_retire_next_acq(
+  GC2WorkerTGRetire *wr)
+{
+  return (GC2WorkerTGRetire *)la_loadptr_acq((void *const *)&wr->next);
+}
+
+static void gc2_worker_tg_retire_next_rel(GC2WorkerTGRetire *wr,
+					  GC2WorkerTGRetire *next)
+{
+  la_storeptr_rel((void **)&wr->next, next);
+}
+
 static GC2FinalizerNode *gc2_finalizer_node_next_acq(GC2FinalizerNode *fn)
 {
   return (GC2FinalizerNode *)la_loadptr_acq((void *const *)&fn->next);
@@ -175,7 +192,9 @@ void lj_gc2_init(global_State *g)
     gc2_worker_thread_store_rlx(g, i, NULL);
   for (i = 0; i < LJ_GC2_WORKER_MAX; i++)
     gc2_worker_tg_store_rlx(g, i, NULL);
+  gc2_worker_tg_retired_store_rlx(g, NULL);
   gc2_n_workers_store_rlx(g, 0);
+  gc2_worker_control_store_rlx(g, 0);
   gc2_worker_stop_store_rlx(g, 0);
   gc2_worker_wake_store_rlx(g, 0);
   gc2_worker_started_store_rlx(g, 0);
@@ -404,6 +423,48 @@ static int gc2_worker_tg_registered(global_State *g, TGState *target)
   return 0;
 }
 
+static void gc2_worker_free_tg(global_State *g, TGState *tg)
+{
+  lj_tg_fini_thread(g, tg);
+  lj_mem_free(g, tg, sizeof(TGState));
+}
+
+static int gc2_worker_retire_tg(global_State *g, TGState *tg)
+{
+  lua_State *L = mainthread_acq(g);
+  GC2WorkerTGRetire *node;
+  if (!L)
+    return 0;
+  node = lj_mem_newt(L, sizeof(GC2WorkerTGRetire), GC2WorkerTGRetire);
+  node->tg = tg;
+  gc2_worker_tg_retire_next_rel(
+    node, (GC2WorkerTGRetire *)gc2_worker_tg_retired_acq(g));
+  gc2_worker_tg_retired_rel(g, node);
+  return 1;
+}
+
+static void gc2_worker_reclaim_retired_tgs(global_State *g)
+{
+  GC2WorkerTGRetire *prev = NULL;
+  GC2WorkerTGRetire *node =
+    (GC2WorkerTGRetire *)gc2_worker_tg_retired_acq(g);
+  while (node) {
+    GC2WorkerTGRetire *next = gc2_worker_tg_retire_next_acq(node);
+    if (!gc2_worker_tg_registered(g, node->tg)) {
+      if (prev)
+	gc2_worker_tg_retire_next_rel(prev, next);
+      else
+	gc2_worker_tg_retired_rel(g, next);
+      gc2_worker_free_tg(g, node->tg);
+      lj_mem_freet(g, node);
+      node = next;
+      continue;
+    }
+    prev = node;
+    node = next;
+  }
+}
+
 static int gc2_worker_release_tg_slot(global_State *g, uint32_t i)
 {
   TGState *tg;
@@ -412,10 +473,15 @@ static int gc2_worker_release_tg_slot(global_State *g, uint32_t i)
   tg = gc2_worker_tg_acq(g, i);
   if (!tg)
     return 1;
-  if (gc2_worker_tg_registered(g, tg))
-    return 0;
-  lj_tg_fini_thread(g, tg);
-  lj_mem_free(g, tg, sizeof(TGState));
+  if (gc2_worker_tg_registered(g, tg)) {
+    if (!lj_tg_flags_test_acq(tg, TGF_DEAD))
+      return 0;
+    if (!gc2_worker_retire_tg(g, tg))
+      return 0;
+    gc2_worker_tg_store_rlx(g, i, NULL);
+    return 1;
+  }
+  gc2_worker_free_tg(g, tg);
   gc2_worker_tg_store_rlx(g, i, NULL);
   return 1;
 }
@@ -427,6 +493,7 @@ static int gc2_worker_release_tg_slots(global_State *g)
   if (!g)
     return 0;
   (void)lj_tg_reclaim_dead(g);
+  gc2_worker_reclaim_retired_tgs(g);
   for (i = 0; i < LJ_GC2_WORKER_MAX; i++)
     ok &= gc2_worker_release_tg_slot(g, i);
   return ok;
@@ -437,7 +504,42 @@ static int gc2_worker_prepare_tg_slots(global_State *g)
   return gc2_worker_release_tg_slots(g);
 }
 
-static int gc2_worker_start_count(global_State *g, uint32_t n)
+static void gc2_worker_control_lock(global_State *g)
+{
+  TGState *self = NULL;
+  uint8_t was_native = 0;
+  for (;;) {
+    uint32_t expect = 0;
+    if (gc2_worker_control_cas(g, &expect, 1)) {
+      if (self)
+	lj_tg_in_native_rel(self, was_native);
+      return;
+    }
+    if (!self) {
+      self = lj_thr_get_tg_fallback(g);
+      if (self) {
+	was_native = lj_tg_in_native_acq(self);
+	lj_tg_in_native_rel(self, 1);
+      }
+    }
+    if (expect == 0)
+      expect = gc2_worker_control_acq(g);
+    if (expect != 0)
+      gc2_worker_control_futex_wait(g, expect, 1000000);
+    else
+      la_cpu_pause();
+  }
+}
+
+static void gc2_worker_control_unlock(global_State *g)
+{
+  gc2_worker_control_rel(g, 0);
+  gc2_worker_control_futex_wake(g, 0x7fffffff);
+}
+
+static void gc2_worker_stop_locked(global_State *g);
+
+static int gc2_worker_start_count_locked(global_State *g, uint32_t n)
 {
   GCobj *mainobj;
   lua_State *L;
@@ -476,7 +578,7 @@ static int gc2_worker_start_count(global_State *g, uint32_t n)
       lj_tg_fini_thread(g, tg);
       lj_mem_free(g, tg, sizeof(TGState));
       lj_mem_free(g, thr, sizeof(LJThr));
-      lj_gc2_worker_stop(g);
+      gc2_worker_stop_locked(g);
       return 0;
     }
   }
@@ -488,37 +590,51 @@ static int gc2_worker_start_count(global_State *g, uint32_t n)
   }
   if (gc2_worker_started_acq(g) >= n)
     return 1;
-  lj_gc2_worker_stop(g);
+  gc2_worker_stop_locked(g);
   return 0;
 }
 
 int lj_gc2_workers_set(global_State *g, uint32_t n)
 {
   uint32_t old;
+  int ok;
   if (!g)
     return 0;
   if (n > LJ_GC2_WORKER_MAX)
     n = LJ_GC2_WORKER_MAX;
+  gc2_worker_control_lock(g);
   old = gc2_n_workers_acq(g);
-  if (old == n)
+  if (old == n) {
+    gc2_worker_control_unlock(g);
     return 1;
+  }
   if (old != 0)
-    lj_gc2_worker_stop(g);
-  if (n == 0)
+    gc2_worker_stop_locked(g);
+  if (n == 0) {
+    gc2_worker_control_unlock(g);
     return 1;
-  return gc2_worker_start_count(g, n);
+  }
+  ok = gc2_worker_start_count_locked(g, n);
+  gc2_worker_control_unlock(g);
+  return ok;
 }
 
 int lj_gc2_worker_start(global_State *g)
 {
+  int ok;
   if (!g)
     return 0;
-  if (gc2_n_workers_acq(g) != 0)
+  gc2_worker_control_lock(g);
+  if (gc2_n_workers_acq(g) != 0) {
+    gc2_worker_control_unlock(g);
     return 1;
-  return gc2_worker_start_count(g, 1);
+  }
+  ok = gc2_worker_start_count_locked(g, 1);
+  gc2_worker_control_unlock(g);
+  return ok;
 }
 
-void lj_gc2_worker_stop(global_State *g)
+static void gc2_worker_stop_locked(global_State *g)
 {
   uint32_t i, any = 0;
   TGState *self;
@@ -551,6 +667,15 @@ void lj_gc2_worker_stop(global_State *g)
     lj_tg_in_native_rel(self, was_native);
   (void)gc2_worker_release_tg_slots(g);
   gc2_n_workers_rel(g, 0);
+}
+
+void lj_gc2_worker_stop(global_State *g)
+{
+  if (!g)
+    return;
+  gc2_worker_control_lock(g);
+  gc2_worker_stop_locked(g);
+  gc2_worker_control_unlock(g);
 }
 
 static void *gc2_worker_main(void *arg)
