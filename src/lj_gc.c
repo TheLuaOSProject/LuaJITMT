@@ -1584,22 +1584,10 @@ static int gc_call_finalizer(global_State *g, lua_State *L,
   return continue_gc;
 }
 
-static int gc_dispatch_finalizer_obj(lua_State *L, global_State *g, GCobj *o)
-{
-#if LJ_HASFFI
-  if (o->gch.gct == ~LJ_TCDATA) {
-    return lj_gc2_finreg_cdata_dispatch(L, g, o, gc_call_finalizer);
-  }
-#endif
-  {
-    return lj_gc2_finreg_udata_dispatch(L, g, o, gc_call_finalizer);
-  }
-}
-
 /* Finalize all userdata/cdata objects from the GC2 finalizer queue. */
 void lj_gc_finalize_udata(lua_State *L)
 {
-  lj_gc2_finalizer_dispatch_all(L, gc_dispatch_finalizer_obj);
+  lj_gc2_finalizer_dispatch_all(L, gc_call_finalizer);
 }
 
 #if LJ_HASFFI
@@ -1792,7 +1780,7 @@ static size_t gc_onestep(lua_State *L)
   case GCSfinalize:
     {
       GCSize fincost;
-      int finstep = lj_gc2_finalizer_step(L, gc_dispatch_finalizer_obj,
+      int finstep = lj_gc2_finalizer_step(L, gc_call_finalizer,
 					  GCFINALIZECOST, &fincost);
       if (finstep != 0)
 	return fincost;

@@ -7,9 +7,10 @@ finalizer queue dequeue and before FINREG dispatch clears registration state:
 - userdata are requeued after the main thread root;
 - both are made current-white and arena-marked.
 
-Legacy `gc_dispatch_finalizer_obj()` only selects the cdata/userdata GC2
-dispatch API and supplies the callback function. The M8 weak/finalizer gate
-rejects reintroducing requeue/rewhite state mutation there.
+Legacy GC supplies only the protected callback runner. GC2 selects the
+cdata/userdata FINREG dispatch path and owns requeue/rewhite state mutation.
+The M8 weak/finalizer gate rejects reintroducing legacy object routing or
+direct FINREG dispatch calls there.
 
 This keeps callback execution on the claimed caller `lua_State`, but moves more
 of the finalizer object lifecycle under the GC2 dispatch boundary.

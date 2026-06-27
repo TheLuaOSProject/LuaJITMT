@@ -23,8 +23,9 @@ through `lj_gc2_finalizer_mark_all()` callbacks. GC2 owns claiming the
 finalizer owner, draining the producer stack, and walking the stable owner ring.
 Dispatch-time consumption enters through GC2's internal
 `lj_gc2_finalizer_dispatch_one()` for the same owner/drain/dequeue/release
-sequence, with legacy GC retaining only the dequeued-object semantic callback
-through public dispatch-all/step entry points.
+sequence. Public dispatch-all/step entry points now take only the protected
+callback runner; GC2 owns dequeued-object routing into cdata/userdata FINREG
+dispatch.
 Close-time drain-all uses `lj_gc2_finalizer_dispatch_all()`, keeping the
 blocking drain/pending/dispatch loop on the GC2 side of the queue boundary.
 Incremental `GCSfinalize` work uses `lj_gc2_finalizer_step()`, so queue-pending

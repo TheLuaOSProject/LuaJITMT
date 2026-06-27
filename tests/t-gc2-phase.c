@@ -681,8 +681,8 @@ static void test_finalizer_step_defers_busy_callback_state(lua_State *L,
 
   lj_state_owner_rel(L, fake_owner);
   la_store32_rel(&finalizer_state_claim_dispatch_called, 0);
-  assert(lj_gc2_finalizer_step(L, finalizer_state_claim_dispatch, 1,
-			       &cost) == -1);
+  assert(lj_gc2_test_finalizer_step_dispatch(L, finalizer_state_claim_dispatch,
+					     1, &cost) == -1);
   assert(cost == LJ_MAX_MEM);
   assert(la_load32_acq(&finalizer_state_claim_dispatch_called) == 0);
   assert(lj_state_owner_acq(L) == fake_owner);

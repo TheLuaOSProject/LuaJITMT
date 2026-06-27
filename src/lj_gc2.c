@@ -48,6 +48,11 @@ typedef struct GC2FinalizerNode {
   GCobj *obj;
 } GC2FinalizerNode;
 
+typedef struct GC2FinalizerDispatchCtx {
+  GC2FinalizerCallFunc call;
+  GC2FinalizerDispatchFunc dispatch;
+} GC2FinalizerDispatchCtx;
+
 typedef struct GC2WorkerTGRetire {
   struct GC2WorkerTGRetire *next;
   TGState *tg;
@@ -1490,14 +1495,33 @@ static GCobj *lj_gc2_finalizer_dequeue(global_State *g)
   return o;
 }
 
+static int gc2_finalizer_dispatch_obj(lua_State *L, global_State *g, GCobj *o,
+				      GC2FinalizerDispatchCtx *ctx)
+{
+  if (!ctx || !o)
+    return 0;
+  if (ctx->dispatch)
+    return ctx->dispatch(L, g, o);
+  if (!ctx->call)
+    return 0;
+#if LJ_HASFFI
+  if (o->gch.gct == ~LJ_TCDATA)
+    return lj_gc2_finreg_cdata_dispatch(L, g, o, ctx->call);
+#endif
+  if (o->gch.gct == ~LJ_TUDATA)
+    return lj_gc2_finreg_udata_dispatch(L, g, o, ctx->call);
+  lj_assertG(0, "bad GC2 finalizer dispatch object");
+  return 0;
+}
+
 static int lj_gc2_finalizer_dispatch_one(lua_State *L,
-					 GC2FinalizerDispatchFunc dispatch)
+					 GC2FinalizerDispatchCtx *ctx)
 {
   global_State *g;
   LJStateClaim claim;
   GCobj *o;
   int rc;
-  if (!L || !dispatch)
+  if (!L || !ctx || (!ctx->call && !ctx->dispatch))
     return 0;
   g = G(L);
   lj_assertG(lj_tg_jit_base(g) == NULL, "finalizer called on trace");
@@ -1514,35 +1538,38 @@ static int lj_gc2_finalizer_dispatch_one(lua_State *L,
     lj_state_dropclaim(&claim);
     return 0;
   }
-  rc = dispatch(L, g, o);
+  rc = gc2_finalizer_dispatch_obj(L, g, o, ctx);
   lj_gc2_finalizer_leave(g);
   lj_state_dropclaim(&claim);
   return rc < 0 ? -1 : 1;
 }
 
-void lj_gc2_finalizer_dispatch_all(lua_State *L,
-				   GC2FinalizerDispatchFunc dispatch)
+void lj_gc2_finalizer_dispatch_all(lua_State *L, GC2FinalizerCallFunc call)
 {
+  GC2FinalizerDispatchCtx ctx;
   global_State *g;
-  if (!L || !dispatch)
+  if (!L || !call)
     return;
+  ctx.call = call;
+  ctx.dispatch = NULL;
   g = G(L);
   for (;;) {
     lj_gc2_finalizer_drain(g);
     if (!lj_gc2_finalizer_queue_pending(g))
       break;
-    if (!lj_gc2_finalizer_dispatch_one(L, dispatch))
+    if (!lj_gc2_finalizer_dispatch_one(L, &ctx))
       gc2_finalizer_wait_no_l();
   }
 }
 
-int lj_gc2_finalizer_step(lua_State *L, GC2FinalizerDispatchFunc dispatch,
-			  GCSize finalize_cost, GCSize *cost)
+static int lj_gc2_finalizer_step_ctx(lua_State *L,
+				     GC2FinalizerDispatchCtx *ctx,
+				     GCSize finalize_cost, GCSize *cost)
 {
   global_State *g;
   if (cost)
     *cost = 0;
-  if (!L || !dispatch)
+  if (!L || !ctx || (!ctx->call && !ctx->dispatch))
     return 0;
   g = G(L);
   if (lj_gc2_finalizer_queue_pending(g)) {
@@ -1554,7 +1581,7 @@ int lj_gc2_finalizer_step(lua_State *L, GC2FinalizerDispatchFunc dispatch,
       return -1;  /* 05 section 5.8: do not run finalizers on trace. */
     }
     old = lj_gc_total_load(g);
-    finrc = lj_gc2_finalizer_dispatch_one(L, dispatch);
+    finrc = lj_gc2_finalizer_dispatch_one(L, ctx);
     if (finrc <= 0) {
       if (cost)
 	*cost = LJ_MAX_MEM;
@@ -1575,6 +1602,15 @@ int lj_gc2_finalizer_step(lua_State *L, GC2FinalizerDispatchFunc dispatch,
     return -1;  /* Keep GCSfinalize open until spawned TG exits. */
   }
   return 0;
+}
+
+int lj_gc2_finalizer_step(lua_State *L, GC2FinalizerCallFunc call,
+			  GCSize finalize_cost, GCSize *cost)
+{
+  GC2FinalizerDispatchCtx ctx;
+  ctx.call = call;
+  ctx.dispatch = NULL;
+  return lj_gc2_finalizer_step_ctx(L, &ctx, finalize_cost, cost);
 }
 
 static int lj_gc2_finalizer_try_enter(global_State *g)
@@ -1698,6 +1734,16 @@ void lj_gc2_test_finalizer_enqueue(global_State *g, GCobj *o)
 int lj_gc2_test_finalizer_pending(global_State *g)
 {
   return lj_gc2_finalizer_pending(g);
+}
+
+int lj_gc2_test_finalizer_step_dispatch(lua_State *L,
+					GC2FinalizerDispatchFunc dispatch,
+					GCSize finalize_cost, GCSize *cost)
+{
+  GC2FinalizerDispatchCtx ctx;
+  ctx.call = NULL;
+  ctx.dispatch = dispatch;
+  return lj_gc2_finalizer_step_ctx(L, &ctx, finalize_cost, cost);
 }
 
 static int gc2_finalizer_pending_for_sweep(global_State *g, int owner_ok)

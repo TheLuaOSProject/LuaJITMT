@@ -209,16 +209,59 @@ if ! awk '
   exit 1
 fi
 
-if hits=$(awk '
-  /^static int gc_dispatch_finalizer_obj\(lua_State \*L,/ { in_fn = 1 }
-  in_fn && /(lj_gc_linkobj|lj_gc_linkobj_after|makewhite|lj_gc_arena_markobj)[[:space:]]*[(]/ {
-    print FILENAME ":" FNR ":" $0
-  }
-  in_fn && /^}/ { in_fn = 0 }
-' "$ROOT/src/lj_gc.c"); [ -n "$hits" ]; then
+if hits=$(grep -nE -- '^static int gc_dispatch_finalizer_obj[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
   printf '%s\n' \
-    'legacy finalizer dispatch must leave requeue/rewhite state mutation to GC2 FINREG dispatch helpers' >&2
+    'legacy finalizer object routing must stay in GC2 finalizer dispatch helpers' >&2
+  exit 1
+fi
+if hits=$(grep -nE -- 'lj_gc2_finreg_(cdata|udata)_dispatch[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' \
+    'legacy finalizer dispatch must call GC2 finalizer dispatch APIs, not FINREG dispatch directly' >&2
+  exit 1
+fi
+if hits=$(awk '
+  /LJ_FUNC (void|int) lj_gc2_finalizer_(dispatch_all|step)[[:space:]]*[(]/ {
+    in_decl = 1
+  }
+  in_decl && /GC2FinalizerDispatchFunc/ {
+    print FILENAME ":" FNR ":" $0
+  }
+  in_decl && /;/ {
+    in_decl = 0
+  }
+' "$ROOT/src/lj_gc2.h"); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' \
+    'production finalizer drain/step APIs must take GC2FinalizerCallFunc only' >&2
+  exit 1
+fi
+for pattern in 'lj_gc2_finalizer_dispatch_all(L, gc_call_finalizer)' \
+  'lj_gc2_finalizer_step(L, gc_call_finalizer,'; do
+  if ! grep -qF "$pattern" "$ROOT/src/lj_gc.c"; then
+    printf '%s\n' "legacy GC finalizer path must call ${pattern}" >&2
+    exit 1
+  fi
+done
+
+if hits=$(awk '
+  /^static void gc2_finreg_dispatch_requeue\(global_State \*g,/ { in_fn = 1 }
+  in_fn && /lj_gc_linkobj[[:space:]]*[(]/ { cdata_link = 1 }
+  in_fn && /lj_gc_linkobj_after[[:space:]]*[(]/ { udata_link = 1 }
+  in_fn && /makewhite[[:space:]]*[(]/ { white = 1 }
+  in_fn && /lj_gc_arena_markobj[[:space:]]*[(]/ { arena = 1 }
+  in_fn && /^}/ { in_fn = 0 }
+  END {
+    if (!(cdata_link && udata_link && white && arena))
+      print "missing requeue/rewhite state mutation"
+  }
+' "$ROOT/src/lj_gc2.c"); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' \
+    'GC2 FINREG dispatch helper must own finalizer object requeue/rewhite state mutation' >&2
   exit 1
 fi
 

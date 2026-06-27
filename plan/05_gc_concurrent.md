@@ -445,9 +445,10 @@ cdata FINREG mutation telemetry from `ffi.gc(cd, fn)`, explicit
 `ffi.gc(cd, nil)` clears, ctype `__gc` registrations, and legacy
 `mmudata` queue/finalizer-driven cdata clears. FINREG queue hooks now mark
 queued finalizable objects when reached during a GC2 MARK/WEAK phase, but
-legacy still owns protected callback execution and drain ordering. Userdata
-FINREG telemetry also mirrors C/API `__gc` metatable assignment/clear events
-and counts the legacy `mmudata` queue point in `lj_gc_separateudata()`. The
+legacy now supplies only the protected callback runner; GC2 owns queue drain
+ordering and dequeued-object routing into FINREG dispatch. Userdata FINREG
+telemetry also mirrors C/API `__gc` metatable assignment/clear events and
+counts the legacy `mmudata` queue point in `lj_gc_separateudata()`. The
 original bridge left userdata finalizer membership and execution on the legacy
 path; it now also mirrors the legacy userdata finalizer run-once clear at
 `gc_finalize()`, and uses a userdata-only FINREG membership bit to mirror lazy
@@ -455,8 +456,8 @@ membership additions and stale clears if the metatable's `__gc` field is mutated
 in place before separation. The traversal harness covers both in-place behavior
 directions: a lazy add runs once, and a stale clear suppresses finalization. The
 GC2 finalizer queue now links dedicated queue nodes instead of reusing queued
-objects' `gcw` root/list links; callback execution and ordering remain owned by
-the legacy finalizer drain bridge.
+objects' `gcw` root/list links; callback execution remains on the claimed
+caller `lua_State`.
 The first
 weak-write bridge is present for new weak-table hash keys:
 `lj_tab_newkey()` calls `lj_gc2_barrier_weak_key()` during `P_WEAK`, marking a
