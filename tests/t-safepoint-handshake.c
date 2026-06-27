@@ -856,6 +856,17 @@ int main(void)
     "  local ffi = require('ffi')\n"
     "  expect_native_stopreq(function() return ffi.load(so) end)\n"
     "end\n"
+    "local function expect_ldscript_sticky_ok()\n"
+    "  local so = os.getenv('LJ_LOADLIB_STOPREQ_SO')\n"
+    "  if not so or so == '' then return end\n"
+    "  local script = os.tmpname()\n"
+    "  local out = assert(io.open(script, 'w'))\n"
+    "  out:write('/* GNU ld script */\\nINPUT(', so, ')\\n')\n"
+    "  out:close()\n"
+    "  local ffi = require('ffi')\n"
+    "  expect_sticky_ok(function() return ffi.load(script) end)\n"
+    "  os.remove(script)\n"
+    "end\n"
     "local function expect_mutex_lock_stopreq()\n"
     "  local th = require('threading')\n"
     "  local m = th.mutex()\n"
@@ -930,6 +941,7 @@ int main(void)
     "expect_native_stopreq(function() return write_pipe:write(big) end)\n"
     "write_pipe:close()\n"
     "expect_loadlib_stopreq()\n"
+    "expect_ldscript_sticky_ok()\n"
     "os.remove(p)\n") != LUA_OK) {
     fprintf(stderr, "STOPREQ coverage chunk failed: %s\n",
 	    lua_tostring(L, -1));

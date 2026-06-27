@@ -5,9 +5,16 @@
 - The path matters on Linux because `ffi.load()` may parse linker scripts after
   a failed `dlopen`; those file operations can block on unusual or remote
   filesystems and should not leave the mutator invisible to handshakes.
+- Follow-up cleanup made per-line ld-script STOPREQ checks use the same fresh
+  native-action rule as the open/close path. A pre-existing sticky STOPREQ no
+  longer makes an otherwise successful `ffi.load()` of an ld script throw while
+  no new native action was acknowledged.
 - Added `m7_ffi_clib_ldscript`, which builds a tiny shared object, writes a GNU
   ld script pointing at it, loads the script with `ffi.load()`, and calls a real
   symbol through the resolved CLibrary.
+- `t-safepoint-handshake.c` now also creates an ld script for the loadlib test
+  shared object under a sticky STOPREQ and verifies `ffi.load()` stays on the
+  normal cleanup path.
 - Validation:
   - `tools/ci/lua_test.sh m7_ffi_clib_ldscript`
   - `tools/ci/lua_test.sh m7_ffi_clib_cache`

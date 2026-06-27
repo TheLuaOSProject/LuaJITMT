@@ -111,6 +111,13 @@ static int clib_fresh_stopreq(lua_State *L, uint32_t actions,
     (!had_stopreq && tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ));
 }
 
+static void clib_checkstop_fresh(lua_State *L, uint32_t actions,
+				 int had_stopreq)
+{
+  if (clib_fresh_stopreq(L, actions, had_stopreq))
+    lj_safepoint_checkstop(L, actions);
+}
+
 static FILE *clib_native_fopen(lua_State *L, const char *name,
 			       uint32_t *actionsp)
 {
@@ -140,10 +147,10 @@ static uint32_t clib_native_fclose(lua_State *L, FILE *fp)
   return actions;
 }
 
-static void clib_lds_checkstop(lua_State *L, FILE *fp, uint32_t actions)
+static void clib_lds_checkstop(lua_State *L, FILE *fp, uint32_t actions,
+			       int had_stopreq)
 {
-  if ((actions & LJ_GC2_HS_STOPREQ) ||
-      (L2TG(L) && lj_tg_flags_test_acq(L2TG(L), TGF_STOPREQ))) {
+  if (clib_fresh_stopreq(L, actions, had_stopreq)) {
     uint32_t close_actions = clib_native_fclose(L, fp);
     lj_safepoint_checkstop(L, actions | close_actions);
   }
@@ -156,18 +163,21 @@ static const char *clib_resolve_lds(lua_State *L, const char *name)
   int had_stopreq = clib_had_stopreq(L);
   FILE *fp = clib_native_fopen(L, name, &actions);
   const char *p = NULL;
-  if (fp && clib_fresh_stopreq(L, actions, had_stopreq)) {
-    uint32_t close_actions = clib_native_fclose(L, fp);
-    lj_safepoint_checkstop(L, actions | close_actions);
+  if (clib_fresh_stopreq(L, actions, had_stopreq)) {
+    if (fp) {
+      uint32_t close_actions = clib_native_fclose(L, fp);
+      lj_safepoint_checkstop(L, actions | close_actions);
+    } else {
+      clib_checkstop_fresh(L, actions, had_stopreq);
+    }
   }
-  lj_safepoint_checkstop(L, actions);
   if (fp) {
     char buf[256];
     if (clib_native_fgets(L, buf, sizeof(buf), fp, &actions)) {
-      clib_lds_checkstop(L, fp, actions);
+      clib_lds_checkstop(L, fp, actions, had_stopreq);
       if (!strncmp(buf, "/* GNU ld script", 16)) {  /* ld script magic? */
 	while (clib_native_fgets(L, buf, sizeof(buf), fp, &actions)) {
-	  clib_lds_checkstop(L, fp, actions);  /* Check all lines. */
+	  clib_lds_checkstop(L, fp, actions, had_stopreq);  /* Check all lines. */
 	  p = clib_check_lds(L, buf);
 	  if (p) break;
 	}
@@ -176,7 +186,7 @@ static const char *clib_resolve_lds(lua_State *L, const char *name)
       }
     }
     actions = clib_native_fclose(L, fp);
-    lj_safepoint_checkstop(L, actions);
+    clib_checkstop_fresh(L, actions, had_stopreq);
   }
   return p;
 }
@@ -223,7 +233,7 @@ static void *clib_loadlib(lua_State *L, const char *name, int global)
 			       &actions);
   if (!h) {
     const char *e, *err = dlerror();
-    lj_safepoint_checkstop(L, actions);
+    clib_checkstop_fresh(L, actions, had_stopreq);
     if (err && *err == '/' && (e = strchr(err, ':')) &&
 	(name = clib_resolve_lds(L, strdata(lj_str_new(L, err, e-err))))) {
       had_stopreq = clib_had_stopreq(L);
@@ -238,7 +248,7 @@ static void *clib_loadlib(lua_State *L, const char *name, int global)
 	return h;
       }
       err = dlerror();
-      lj_safepoint_checkstop(L, actions);
+      clib_checkstop_fresh(L, actions, had_stopreq);
     }
     if (!err) err = "dlopen failed";
     lj_err_callermsg(L, err);
@@ -259,8 +269,9 @@ static uint32_t clib_unloadlib(lua_State *L, CLibrary *cl)
 static void *clib_getsym(lua_State *L, CLibrary *cl, const char *name)
 {
   uint32_t actions;
+  int had_stopreq = clib_had_stopreq(L);
   void *p = clib_native_dlsym(L, cl->handle, name, &actions);
-  lj_safepoint_checkstop(L, actions);
+  clib_checkstop_fresh(L, actions, had_stopreq);
   return p;
 }
 
@@ -737,11 +748,12 @@ void lj_clib_load(lua_State *L, GCtab *mt, GCstr *name, int global)
 void lj_clib_unload(lua_State *L, global_State *g, CLibrary *cl)
 {
   uint32_t actions;
+  int had_stopreq = L ? clib_had_stopreq(L) : 0;
   clib_cache_free(L, g, cl);
   actions = clib_unloadlib(L, cl);
   cl->handle = NULL;
   if (L)
-    lj_safepoint_checkstop(L, actions);
+    clib_checkstop_fresh(L, actions, had_stopreq);
 }
 
 /* Create the default C library object. */
