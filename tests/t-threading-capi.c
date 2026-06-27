@@ -15,6 +15,7 @@
 #include "lualib.h"
 
 #include "lj_obj.h"
+#include "lj_tg.h"
 
 static void failf(const char *fmt, ...)
 {
@@ -94,6 +95,8 @@ typedef struct JoinOwnerCtx {
   int released;
 } JoinOwnerCtx;
 
+static lua_State *join_stopreq_child;
+
 static void store_flag(int *p, int v)
 {
   __atomic_store_n(p, v, __ATOMIC_RELEASE);
@@ -140,6 +143,12 @@ static void check_spawn_stack(lua_State *L, int base, lua_State *child,
   if (top == base + 1 && lua_isthread(L, -1) && lua_tothread(L, -1) == child)
     return;
   failf("%s: luaMT_spawn left unexpected values on stack", what);
+}
+
+static int join_stopreq_c(lua_State *L)
+{
+  check(join_stopreq_child != NULL, "missing STOPREQ join child");
+  return luaMT_join(L, join_stopreq_child, -1.0);
 }
 
 static void test_spawn_join_before_require(lua_State *L)
@@ -303,6 +312,56 @@ static void test_join_waits_for_busy_done_owner(lua_State *L)
 	"luaMT_join owner-wait stack height mismatch");
   check(lua_toboolean(L, -2) == 1, "luaMT_join owner-wait did not return true");
   check(lua_tointeger(L, -1) == 99, "luaMT_join owner-wait result mismatch");
+  lua_settop(L, base);
+}
+
+static void test_join_busy_done_owner_stopreq(lua_State *L)
+{
+  enum { WAIT_LIMIT = 1000 };
+  const uint32_t fake_owner = 0x60000001u;
+  lua_State *child;
+  int base = lua_gettop(L);
+  int status, nres, i;
+  const char *err;
+
+  store_flag(&return_99_ran, 0);
+  lua_pushcfunction(L, c_return_99);
+  child = luaMT_spawn(L, 0);
+  check(child != NULL, "luaMT_spawn STOPREQ owner-wait worker returned NULL");
+  check_spawn_stack(L, base, child, "STOPREQ owner-wait worker");
+
+  for (i = 0; i < WAIT_LIMIT; i++) {
+    if (load_flag(&return_99_ran) == 1 && lj_state_owner_acq(child) == 0)
+      break;
+    sleep_ms(1);
+  }
+  check(load_flag(&return_99_ran) == 1 && lj_state_owner_acq(child) == 0,
+	"STOPREQ owner-wait worker did not run and release child state");
+
+  lj_state_owner_rel(child, fake_owner);
+  join_stopreq_child = child;
+  (void)lj_tg_flags_or_rlx(L2TG(L), TGF_STOPREQ);
+  lua_pushcfunction(L, join_stopreq_c);
+  status = lua_pcall(L, 0, LUA_MULTRET, 0);
+  check(status != LUA_OK, "luaMT_join ignored STOPREQ while child owner was busy");
+  err = lua_tostring(L, -1);
+  check(err && strstr(err, "thread interrupted: VM shutdown") != NULL,
+	"luaMT_join STOPREQ error mismatch");
+  lua_pop(L, 1);
+  (void)lj_tg_flags_and_rlx(L2TG(L), (uint8_t)~TGF_STOPREQ);
+  check(lj_state_owner_acq(child) == fake_owner,
+	"STOPREQ join claimed or released busy child state");
+
+  lj_state_owner_rel(child, 0);
+  join_stopreq_child = NULL;
+  nres = luaMT_join(L, child, -1.0);
+  check(nres == 2, "luaMT_join STOPREQ recovery result count mismatch");
+  check(lua_gettop(L) == base + nres ||
+	lua_gettop(L) == base + nres + 1,
+	"luaMT_join STOPREQ recovery stack height mismatch");
+  check(lua_toboolean(L, -2) == 1, "luaMT_join STOPREQ recovery failed");
+  check(lua_tointeger(L, -1) == 99,
+	"luaMT_join STOPREQ recovery result mismatch");
   lua_settop(L, base);
 }
 
@@ -470,6 +529,7 @@ int main(void)
   test_timeout_then_success(L);
   test_error_object(L);
   test_join_waits_for_busy_done_owner(L);
+  test_join_busy_done_owner_stopreq(L);
   test_attach_detach(L);
   luaMT_fence();
 

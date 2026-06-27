@@ -499,8 +499,10 @@ static uint32_t threading_join_claim_results(lua_State *L, lua_State *child,
 					     uint32_t tid)
 {
   uint32_t actions = 0;
-  while (!lj_state_claim(child, tid))
+  while (!lj_state_claim(child, tid)) {
     actions |= lj_thr_sleep_ns(L, 1000000);
+    lj_safepoint_checkstop(L, actions);
+  }
   return actions;
 }
 
