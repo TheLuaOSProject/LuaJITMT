@@ -26,7 +26,7 @@ int main(void)
   global_State *g;
 
   g = G(L);
-  assert(la_load32_acq(&g->jit_token) == 0);
+  assert(jit_token_acq(g) == 0);
 
   {
     GCtrace trace;
@@ -67,10 +67,10 @@ int main(void)
     lj_thr_set_tg(&secondary);
     assert(G2TG(g) == &secondary);
     assert(lj_jit_token_try(g->jitp) != 0);
-    assert(la_load32_acq(&g->jit_token) == secondary.tid);
+    assert(jit_token_acq(g) == secondary.tid);
     assert(lj_jit_token_held(g->jitp) != 0);
     lj_jit_token_release(g->jitp);
-    assert(la_load32_acq(&g->jit_token) == 0);
+    assert(jit_token_acq(g) == 0);
     lj_thr_set_tg(saved_tg);
     lj_tg_fini_thread(g, &secondary);
   }
@@ -93,10 +93,10 @@ int main(void)
     "end\n"
     "for _ = 1, 20 do assert(f(80) == 3240) end\n"
     "assert(tracecount() > 0, 'expected token-owned recording')\n");
-  assert(la_load32_acq(&g->jit_token) == 0);
+  assert(jit_token_acq(g) == 0);
 
   ljt_lua_dostring(L, "jit.flush()");
-  la_store32_rel(&g->jit_token, 0x7fffffffu);
+  jit_token_rel(g, 0x7fffffffu);
   ljt_lua_dostring(L,
     "local util = require'jit.util'\n"
     "jit.opt.start('hotloop=1', 'hotexit=1')\n"
@@ -113,9 +113,9 @@ int main(void)
     "end\n"
     "for _ = 1, 40 do assert(f(80) == 3240) end\n"
     "assert(tracecount() == 0, 'busy recorder token must skip tracing')\n");
-  assert(la_load32_acq(&g->jit_token) == 0x7fffffffu);
+  assert(jit_token_acq(g) == 0x7fffffffu);
 
-  la_store32_rel(&g->jit_token, 0);
+  jit_token_rel(g, 0);
   ljt_lua_dostring(L,
     "local util = require'jit.util'\n"
     "jit.opt.start('hotloop=1', 'hotexit=1')\n"
@@ -132,7 +132,7 @@ int main(void)
     "end\n"
     "for _ = 1, 20 do assert(f(80) == 3240) end\n"
     "assert(tracecount() > 0, 'recording should resume after token release')\n");
-  assert(la_load32_acq(&g->jit_token) == 0);
+  assert(jit_token_acq(g) == 0);
 
   lua_close(L);
   printf("t-jit-token OK: recorder token accepts secondary TGs and skips busy recording\n");

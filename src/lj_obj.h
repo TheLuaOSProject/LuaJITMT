@@ -1438,6 +1438,24 @@ static LJ_AINLINE void vmstate_store_rel(global_State *g, int32_t vmstate)
 
 #define setvmstate(g, st)	vmstate_store_rel((g), ~LJ_VMST_##st)
 
+#if LJ_HASJIT
+static LJ_AINLINE uint32_t jit_token_acq(global_State *g)
+{
+  return la_load32_acq(&g->jit_token);
+}
+
+static LJ_AINLINE void jit_token_rel(global_State *g, uint32_t owner)
+{
+  la_store32_rel(&g->jit_token, owner);
+}
+
+static LJ_AINLINE int jit_token_cas(global_State *g, uint32_t *oldp,
+				    uint32_t owner)
+{
+  return la_cas32(&g->jit_token, oldp, owner, LA_ACQ_REL, LA_ACQ);
+}
+#endif
+
 static LJ_AINLINE uint8_t dispatchmode_load_acq(global_State *g)
 {
   return la_load8_acq(&g->dispatchmode);  /* 07 section 7.3 dispatch table. */

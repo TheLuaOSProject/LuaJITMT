@@ -47,22 +47,22 @@ int lj_jit_token_try(jit_State *J)
   uint32_t expect = 0;
   if (!tg || tg->tid == 0)
     return 0;
-  return la_cas32(&g->jit_token, &expect, tg->tid, LA_ACQ_REL, LA_ACQ);
+  return jit_token_cas(g, &expect, tg->tid);
 }
 
 int lj_jit_token_held(jit_State *J)
 {
   global_State *g = J2G(J);
   TGState *tg = J2TG(J);
-  return tg && tg->tid != 0 && la_load32_acq(&g->jit_token) == tg->tid;
+  return tg && tg->tid != 0 && jit_token_acq(g) == tg->tid;
 }
 
 void lj_jit_token_release(jit_State *J)
 {
   global_State *g = J2G(J);
   TGState *tg = J2TG(J);
-  if (tg && tg->tid != 0 && la_load32_acq(&g->jit_token) == tg->tid)
-    la_store32_rel(&g->jit_token, 0);
+  if (tg && tg->tid != 0 && jit_token_acq(g) == tg->tid)
+    jit_token_rel(g, 0);
 }
 
 void lj_trace_abort(global_State *g)

@@ -925,7 +925,7 @@ int main(void)
 #if LJ_HASFFI
 #if LJ_HASJIT
   assert(lj_trace_state_load(G2J(g)) == LJ_TRACE_IDLE);
-  assert(la_load32_acq(&g->jit_token) == 0);
+  assert(jit_token_acq(g) == 0);
 #endif
   ffi_stopreq_g = g;
   ffi_stopreq_tg = tg;
