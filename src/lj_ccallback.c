@@ -734,6 +734,7 @@ void lj_ccallback_unwind(lua_State *L, TValue *cont)
     return;
   cb = &tg->cb;
   lj_tg_ffi_call_func_rel(tg, NULL);
+  cb->native_had_stopreq = 0;
   frame = callback_frame_top(cb);
   if (frame != NULL && frame->cont == cont) {
     uint8_t auto_detach = frame->auto_detach;

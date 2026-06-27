@@ -57,6 +57,7 @@ do
 done
 if ! grep -q 'native_had_stopreq' "$ROOT/src/lj_ctype.h" ||
    ! grep -q 'cb->native_had_stopreq = (uint8_t)had_stopreq' "$ROOT/src/lj_ccall.c" ||
+   ! grep -q 'cb->native_had_stopreq = 0' "$ROOT/src/lj_ccallback.c" ||
    ! grep -q 'cb->native_had_stopreq' "$ROOT/src/lj_ccallback.c"; then
   printf '%s\n' 'FFI callback STOPREQ freshness must use the surrounding FFI native-entry snapshot' >&2
   exit 1

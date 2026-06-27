@@ -125,6 +125,7 @@ static int callback_assert_clean_c(lua_State *L)
   assert(lj_tg_poll_acq(test_tg) == 0);
   assert(lj_tg_reqmask_acq(test_tg) == 0);
   assert(lj_tg_in_native_acq(test_tg) == 0);
+  assert(test_tg->cb.native_had_stopreq == 0);
   assert(test_tg->cb.depth == 0);
   return 0;
 }
@@ -171,6 +172,18 @@ int main(void)
     "assert(sticky_entered)\n"
     "assert(value == 12, tostring(value))\n"
     "sticky_cb:free()\n"
+    "lj_m7_callback_assert_clean()\n"
+    "local sticky_error_cb = ffi.cast('lj_m7_callback_stopreq_cb_t',\n"
+    "  function()\n"
+    "    error('sticky callback error')\n"
+    "  end)\n"
+    "lj_m7_callback_mark_stopreq()\n"
+    "ok, value = pcall(function() return call_plain(sticky_error_cb) end)\n"
+    "lj_m7_callback_clear_stopreq()\n"
+    "sticky_error_cb:free()\n"
+    "assert(not ok)\n"
+    "assert(tostring(value):find('sticky callback error', 1, true),\n"
+    "       tostring(value))\n"
     "lj_m7_callback_assert_clean()\n"
     "local fresh_entered = false\n"
     "local fresh_cb = ffi.cast('lj_m7_callback_stopreq_cb_t', function(x)\n"
