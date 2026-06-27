@@ -2980,13 +2980,25 @@ static void gc2_finreg_queue_mark(global_State *g, GCobj *o)
     (void)lj_gc2_markobj(g, o);  /* 05 section 5.8 FINREG resurrection. */
 }
 
-void lj_gc2_finreg_cdata_queue(global_State *g, GCobj *o)
+static void gc2_finreg_cdata_queue_mark(global_State *g, GCobj *o)
 {
 #if LJ_HASFFI
   if (!g || !o || o->gch.gct != ~LJ_TCDATA)
     return;
   gc2_finreg_queue_mark(g, o);
   gc2_finreg_cdata_queued_add(g, 1);
+#else
+  UNUSED(g); UNUSED(o);
+#endif
+}
+
+void lj_gc2_finreg_cdata_finalizer_enqueue(global_State *g, GCobj *o)
+{
+#if LJ_HASFFI
+  if (!g || !o || o->gch.gct != ~LJ_TCDATA)
+    return;
+  gc2_finreg_cdata_queue_mark(g, o);
+  lj_gc2_finalizer_enqueue(g, o);
 #else
   UNUSED(g); UNUSED(o);
 #endif

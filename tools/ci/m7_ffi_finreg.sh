@@ -123,7 +123,25 @@ if hits=$(grep -nE -- '->[[:space:]]*gc2[.](finreg_cdata_(sets|clears|queued|swe
   printf '%s\n' 'raw FINREG cdata counter access is forbidden; use gc2_finreg_cdata_* helpers' >&2
   exit 1
 fi
-if hits=$(grep -nE -- '(makewhite|markfinalized|lj_gc_arena_markobj|lj_gc2_finreg_cdata_queue|lj_gc2_finalizer_enqueue)[(].*obj2gco[(]cd[)]' \
+if ! grep -qE 'LJ_FUNC void lj_gc2_finreg_cdata_finalizer_enqueue[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.h"; then
+  printf '%s\n' 'lj_gc2_finreg_cdata_finalizer_enqueue declaration is required' >&2
+  exit 1
+fi
+if ! grep -qE '^void lj_gc2_finreg_cdata_finalizer_enqueue[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.c"; then
+  printf '%s\n' 'lj_gc2_finreg_cdata_finalizer_enqueue definition is required' >&2
+  exit 1
+fi
+if hits=$(grep -nE -- 'lj_gc2_finreg_cdata_queue[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc.c" \
+    "$ROOT/src/lj_cdata.c" \
+    "$ROOT/src/lib_ffi.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'FINREG cdata finalizer publication must use lj_gc2_finreg_cdata_finalizer_enqueue()' >&2
+  exit 1
+fi
+if hits=$(grep -nE -- '(makewhite|markfinalized|lj_gc_arena_markobj|lj_gc2_finreg_cdata_queue|lj_gc2_finreg_cdata_finalizer_enqueue|lj_gc2_finalizer_enqueue)[(].*obj2gco[(]cd[)]' \
     "$ROOT/src/lj_cdata.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
   printf '%s\n' 'cdata sweep/free must not rescue finalizers; FINREG discovery owns finalizer queueing' >&2

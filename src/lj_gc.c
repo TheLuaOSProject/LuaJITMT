@@ -1999,8 +1999,7 @@ static size_t gc_queue_cdata_finalizers_pweak_ordered(lua_State *L,
       copyTVrel(L, slot, &fin);
       gc_marktv(g, &fin);
       markfinalized(o);
-      lj_gc2_finreg_cdata_queue(g, o);
-      lj_gc2_finalizer_enqueue(g, o);
+      lj_gc2_finreg_cdata_finalizer_enqueue(g, o);
       gc2_finreg_cdata_order_fallbacks_add(g, 1);
       gc2_finreg_cdata_order_queued_add(g, 1);
       (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
@@ -2012,8 +2011,7 @@ static size_t gc_queue_cdata_finalizers_pweak_ordered(lua_State *L,
     lj_cdata_fin_storenil(L, slot);
     gc_marktv(g, &fin);
     markfinalized(o);
-    lj_gc2_finreg_cdata_queue(g, o);
-    lj_gc2_finalizer_enqueue(g, o);  /* queue claimed cdata in FINREG order. */
+    lj_gc2_finreg_cdata_finalizer_enqueue(g, o);
     gc2_finreg_cdata_order_queued_add(g, 1);
     (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
     marked++;
