@@ -31,6 +31,18 @@ if ! grep -qE '^int lj_gc2_legacy_mark_suppressed[[:space:]]*[(]' \
     "lj_gc2_legacy_mark_suppressed definition is required for minor-root legacy mark policy" >&2
   exit 1
 fi
+if ! grep -qE 'LJ_FUNC int lj_gc2_minor_roots_active[[:space:]]*[(]' \
+  "$ROOT/src/lj_gc2.h"; then
+  printf '%s\n' \
+    "lj_gc2_minor_roots_active declaration is required for minor-root cycle ownership" >&2
+  exit 1
+fi
+if ! grep -qE '^int lj_gc2_minor_roots_active[[:space:]]*[(]' \
+  "$ROOT/src/lj_gc2.c"; then
+  printf '%s\n' \
+    "lj_gc2_minor_roots_active definition is required for minor-root cycle ownership" >&2
+  exit 1
+fi
 if hits=$(grep -nE -- 'gc2_suppress_legacy_mark[[:space:]]*[(]' \
   "$ROOT/src/lj_gc.c" || true); then
   if [ -n "$hits" ]; then
@@ -63,6 +75,34 @@ if ! grep -qF 'lj_gc2_legacy_mark_suppressed(g)' "$ROOT/src/lj_gc.c"; then
   printf '%s\n' \
     "legacy arena mark bridge must query lj_gc2_legacy_mark_suppressed" >&2
   exit 1
+fi
+if ! grep -qF 'lj_gc2_minor_roots_active(g)' "$ROOT/src/lj_gc.c"; then
+  printf '%s\n' \
+    "legacy paranoia minor-root skip must query lj_gc2_minor_roots_active" >&2
+  exit 1
+fi
+if ! grep -qF 'lj_gc2_minor_roots_active(g)' "$ROOT/src/lib_base.c"; then
+  printf '%s\n' \
+    "GC stats must query lj_gc2_minor_roots_active for the minor-root cycle state" >&2
+  exit 1
+fi
+if hits=$(grep -nE -- 'gc2_cycle_roots_minor_acq[[:space:]]*[(][[:space:]]*g[[:space:]]*[)]' \
+  "$ROOT/src/lj_gc.c" || true); then
+  if [ -n "$hits" ]; then
+    printf '%s\n' \
+      "legacy GC must not read raw GC2 minor-root cycle latch" \
+      "$hits" >&2
+    exit 1
+  fi
+fi
+if hits=$(grep -nE -- 'gc2_cycle_roots_minor_acq[[:space:]]*[(][[:space:]]*g[[:space:]]*[)]' \
+  "$ROOT/src/lib_base.c" || true); then
+  if [ -n "$hits" ]; then
+    printf '%s\n' \
+      "GC stats must not read the raw GC2 minor-root cycle latch" \
+      "$hits" >&2
+    exit 1
+  fi
 fi
 
 exec "$ROOT/tools/ci/lua_test.sh" m10_generational

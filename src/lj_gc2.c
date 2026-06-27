@@ -1302,9 +1302,14 @@ int lj_gc2_mark_phase_active(global_State *g)
   return g && gc2_phase_acq(g) == LJ_GC2_MARK;
 }
 
+int lj_gc2_minor_roots_active(global_State *g)
+{
+  return g && gc2_cycle_roots_minor_acq(g) != 0;
+}
+
 int lj_gc2_legacy_mark_suppressed(global_State *g)
 {
-  return lj_gc2_mark_phase_active(g) && gc2_cycle_roots_minor_acq(g) != 0;
+  return lj_gc2_mark_phase_active(g) && lj_gc2_minor_roots_active(g);
 }
 
 void lj_gc2_mark_to_weak(global_State *g)
@@ -2155,6 +2160,11 @@ void lj_gc2_sweep_legacy_ready(global_State *g)
     return;
   gc2_sweep_legacy_ready_rel(g, 1);
   lj_gc2_worker_wake(g);  /* 05 section 5.8: legacy roots reached close. */
+}
+
+void lj_gc2_legacy_sweep_boundary_reached(global_State *g)
+{
+  lj_gc2_sweep_legacy_ready(g);
 }
 
 void lj_gc2_legacy_preserve_abort(global_State *g)

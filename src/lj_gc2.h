@@ -66,12 +66,14 @@ LJ_FUNC uint32_t lj_gc2_assist(global_State *g, TGState *tg);
 LJ_FUNC void lj_gc2_set_generational(global_State *g, int enabled);
 LJ_FUNC void lj_gc2_legacy_mark_begin(global_State *g);
 LJ_FUNC int lj_gc2_mark_phase_active(global_State *g);
+LJ_FUNC int lj_gc2_minor_roots_active(global_State *g);
 LJ_FUNC int lj_gc2_legacy_mark_suppressed(global_State *g);
 LJ_FUNC void lj_gc2_force_major(global_State *g);
 LJ_FUNC void lj_gc2_legacy_preserve_abort(global_State *g);
 LJ_FUNC void lj_gc2_legacy_cycle_end(global_State *g);
 LJ_FUNC int lj_gc2_legacy_sweep_close(global_State *g);
 LJ_FUNC void lj_gc2_sweep_legacy_ready(global_State *g);
+LJ_FUNC void lj_gc2_legacy_sweep_boundary_reached(global_State *g);
 LJ_FUNC void lj_gc2_sweep_prepare_legacy_boundary(global_State *g,
 						  GC2LegacySweepPreserveFunc preserve);
 LJ_FUNC int lj_gc2_sweep_to_idle(global_State *g);

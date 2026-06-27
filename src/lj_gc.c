@@ -463,7 +463,7 @@ static void gc2_paranoia_check_rawroots(global_State *g)
 
 static void gc2_paranoia_check_fixpoint(global_State *g)
 {
-  if (gc2_cycle_roots_minor_acq(g))
+  if (lj_gc2_minor_roots_active(g))
     return;
   gc2_paranoia_check_roots(g);
   gc2_paranoia_check_strtab(g);
@@ -1641,7 +1641,7 @@ static size_t gc_onestep(lua_State *L)
       if (arena_prepare)
 	gc_arena_verify_sweep_boundary(g);
       (void)gc_arena_finish_sweep_boundary(g, 0);
-      lj_gc2_sweep_legacy_ready(g);
+      lj_gc2_legacy_sweep_boundary_reached(g);
       if (gc_arena_sweep_pending(g))
 	return GCSWEEPMAX*GCSWEEPCOST;
       if (lj_gc2_finalizer_phase_pending(g)) {  /* Need finalizations? */

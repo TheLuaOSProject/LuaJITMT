@@ -513,6 +513,26 @@ if ! grep -qF 'lj_gc2_sweep_prepare_legacy_boundary(g, gc_arena_preserve_root_ch
   printf '%s\n' 'legacy arena sweep boundary must use lj_gc2_sweep_prepare_legacy_boundary' >&2
   exit 1
 fi
+if ! grep -qE 'LJ_FUNC void lj_gc2_legacy_sweep_boundary_reached[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.h"; then
+  printf '%s\n' 'lj_gc2_legacy_sweep_boundary_reached declaration is required for sweep-ready ownership' >&2
+  exit 1
+fi
+if ! grep -qE '^void lj_gc2_legacy_sweep_boundary_reached[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.c"; then
+  printf '%s\n' 'lj_gc2_legacy_sweep_boundary_reached definition is required for sweep-ready ownership' >&2
+  exit 1
+fi
+if ! grep -qF 'lj_gc2_legacy_sweep_boundary_reached(g)' "$ROOT/src/lj_gc.c"; then
+  printf '%s\n' 'legacy GC sweep boundary must publish through lj_gc2_legacy_sweep_boundary_reached' >&2
+  exit 1
+fi
+if hits=$(grep -nE -- 'lj_gc2_sweep_legacy_ready[[:space:]]*[(][[:space:]]*g[[:space:]]*[)]' \
+    "$ROOT/src/lj_gc.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'legacy GC must not publish the raw GC2 sweep-ready latch directly' >&2
+  exit 1
+fi
 if ! grep -qE 'LJ_FUNC int lj_gc2_sweep_minor_active[[:space:]]*[(]' \
     "$ROOT/src/lj_gc2.h"; then
   printf '%s\n' 'lj_gc2_sweep_minor_active declaration is required for minor sweep ownership' >&2

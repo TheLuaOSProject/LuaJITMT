@@ -562,7 +562,7 @@ static void gc_stats_push(lua_State *L)
   gc_stats_setint(L, t, "minor_sweep_enabled",
 		  gc2_minor_sweep_enabled_acq(g));
   gc_stats_setint(L, t, "cycle_roots_minor",
-		  gc2_cycle_roots_minor_acq(g));
+		  lj_gc2_minor_roots_active(g));
   gc_stats_setint(L, t, "minor_roots_enabled",
 		  gc2_minor_roots_enabled_acq(g));
   gc_stats_setnum(L, t, "cycle_requests", gc2_cycle_requests_acq(g));

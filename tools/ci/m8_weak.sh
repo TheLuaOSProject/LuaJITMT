@@ -369,6 +369,12 @@ if hits=$(grep -nE -- 'lj_gc2_sweep_to_idle[[:space:]]*[(]|lj_gc2_legacy_cycle_e
   printf '%s\n' 'legacy GC must not choose sweep-to-idle versus preserve-close directly' >&2
   exit 1
 fi
+if hits=$(grep -nE -- 'lj_gc2_sweep_legacy_ready[[:space:]]*[(][[:space:]]*g[[:space:]]*[)]' \
+    "$ROOT/src/lj_gc.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'legacy GC must publish sweep readiness through lj_gc2_legacy_sweep_boundary_reached' >&2
+  exit 1
+fi
 if hits=$(grep -nE -- 'lj_gc2_finalizer_sweep_pending[[:space:]]*[(]' \
     "$ROOT/src/lj_gc.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
