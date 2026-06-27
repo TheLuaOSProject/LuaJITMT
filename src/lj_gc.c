@@ -1600,8 +1600,7 @@ static int gc_finalize(lua_State *L)
 {
   global_State *g = G(L);
   GCobj *o;
-  cTValue *mo;
-  TValue motv;
+  int rc;
   lj_assertG(lj_tg_jit_base(g) == NULL, "finalizer called on trace");
   if (!lj_gc2_finalizer_try_enter(g))
     return 0;
@@ -1613,7 +1612,6 @@ static int gc_finalize(lua_State *L)
   }
 #if LJ_HASFFI
   if (o->gch.gct == ~LJ_TCDATA) {
-    int rc;
     /* Add cdata back to the GC list and make it white. */
     lj_gc_linkobj(g, o);  /* CAS-requeue finalized cdata on root list. */
     makewhite(g, o);
@@ -1627,11 +1625,8 @@ static int gc_finalize(lua_State *L)
   lj_gc_linkobj_after(obj2gco(mainthread_acq(g)), o);
   makewhite(g, o);
   lj_gc_arena_markobj(g, o);
-  if (lj_gc2_finreg_udata_set(g, o, 0) < 0)
-    lj_gc2_finreg_udata_forget(g, o);
-  /* Resolve the __gc metamethod. */
-  mo = lj_meta_fasttv(g, tabref_acq(gco2ud(o)->metatable), MM_gc, &motv);
-  if (mo && !gc_call_finalizer(g, L, mo, o)) {
+  rc = lj_gc2_finreg_udata_dispatch(L, g, o, gc_call_finalizer);
+  if (rc < 0) {
     lj_gc2_finalizer_leave(g);
     return -1;
   }

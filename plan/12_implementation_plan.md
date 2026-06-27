@@ -246,8 +246,10 @@ User finalizer callbacks now run on the claimed collector caller `lua_State`
 instead of the shared `vmthread(g)` stack. Userdata FINREG membership now uses a
 GC2 side list for discovery, including in-place metatable finalizer additions
 and manually chain-unlinked userdata; `lj_gc2_finreg_udata_finalize()` owns the
-side-list walk and finalizer queue publication. Cdata ordered FINREG discovery
-covers the ordinary P_WEAK and close-time paths, and
+side-list walk and finalizer queue publication, while
+`lj_gc2_finreg_udata_dispatch()` owns dispatch-time FINREG clear and `__gc`
+lookup before calling back to the legacy protected callback runner. Cdata
+ordered FINREG discovery covers the ordinary P_WEAK and close-time paths, and
 `lj_gc2_finreg_cdata_dispatch()` owns dispatch-time FINREG slot/preclaim
 resolution before calling back to the legacy protected callback runner. The M9
 cleanup removed close-time generation-table pending/discovery scans; P_WEAK

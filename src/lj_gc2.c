@@ -3801,6 +3801,21 @@ size_t lj_gc2_finreg_udata_finalize(global_State *g, int all)
   return m;  /* 05 section 5.8: GC2-owned userdata FINREG discovery. */
 }
 
+int lj_gc2_finreg_udata_dispatch(lua_State *L, global_State *g, GCobj *o,
+				 GC2FinalizerCallFunc call)
+{
+  cTValue *mo;
+  TValue motv;
+  if (!L || !g || !o || !call || o->gch.gct != ~LJ_TUDATA)
+    return 0;
+  if (lj_gc2_finreg_udata_set(g, o, 0) < 0)
+    lj_gc2_finreg_udata_forget(g, o);
+  mo = lj_meta_fasttv(g, tabref_acq(gco2ud(o)->metatable), MM_gc, &motv);
+  if (mo && !call(g, L, mo, o))
+    return -1;
+  return 1;  /* 05 section 5.8: GC2-owned userdata dispatch resolution. */
+}
+
 void lj_gc2_finreg_udata_queue(global_State *g, GCobj *o)
 {
   if (!g || !o || o->gch.gct != ~LJ_TUDATA)
