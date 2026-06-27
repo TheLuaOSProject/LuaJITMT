@@ -3072,6 +3072,196 @@ void lj_gc2_finreg_cdata_finalizer_enqueue(global_State *g, GCobj *o)
 #endif
 }
 
+#if LJ_HASFFI
+static int gc2_finreg_cdata_candidate_close(GCobj *o)
+{
+  return o->gch.gct == ~LJ_TCDATA &&
+	 (lj_obj_gcflags(o) & LJ_GC_CDATA_FIN) &&
+	 !(lj_obj_gcflags(o) & LJ_GC_FINALIZED);
+}
+
+static GCobj *gc2_finreg_cdata_order_object(FinRegOrderNode *ord, GCtab *t,
+					    TValue *slot)
+{
+  Node *node = (Node *)slot;
+  TValue key;
+  GCobj *o;
+  if (!ord || !t || !slot)
+    return NULL;
+  o = fin_order_obj_acq(ord);
+  if (!o || o->gch.gct != ~LJ_TCDATA)
+    return NULL;
+  lj_tv_load_acq(&key, &node->key);
+  if (!tviscdata(&key) || gcV(&key) != o)
+    return NULL;
+  return o;  /* 05 section 5.8: ordered FINREG node owns cdata identity. */
+}
+
+static int gc2_finreg_root_splice(GCRef *p, GCobj *o)
+{
+  GCobj *next = lj_obj_gcw_acq(o);
+  GCRef oldref, nextref;
+  setgcref(oldref, o);
+  if (next)
+    setgcref(nextref, next);
+  else
+    setgcrefnull(nextref);
+#if LJ_GC64
+  return la_cas64(&p->gcptr64, &oldref.gcptr64, nextref.gcptr64,
+		  LA_ACQ_REL, LA_ACQ);
+#else
+  return la_cas32(&p->gcptr32, &oldref.gcptr32, nextref.gcptr32,
+		  LA_ACQ_REL, LA_ACQ);
+#endif
+}
+
+static int gc2_finreg_cdata_unlink_root(global_State *g, GCobj *target)
+{
+  GCRef *p = &g->gc.root;
+  GCobj *o;
+  while ((o = gcref_acq(*p)) != NULL) {
+    if (o == target) {
+      if (gc2_finreg_root_splice(p, o))
+	return 1;  /* root unlink after ordered FINREG close claim. */
+      la_cpu_pause();
+      continue;
+    }
+    p = lj_obj_gcwref(o);
+  }
+  return 0;
+}
+#endif
+
+size_t lj_gc2_finreg_cdata_finalize_close(global_State *g)
+{
+#if LJ_HASFFI
+  CTState *cts = ctype_ctsG(g);
+  FinRegOrderNode *prev, *ord;
+  size_t queued = 0;
+  if (cts == NULL)
+    return 0;
+  prev = NULL;
+  ord = fin_order_head_acq(cts);
+  while (ord != NULL) {
+    FinRegOrderNode *next = fin_order_next_acq(ord);
+    GCtab *t = fin_order_tab_acq(ord);
+    TValue *slot = fin_order_slot_acq(ord);
+    TValue fin;
+    GCobj *o;
+    if (fin_order_active_acq(ord) != 1) {
+      ord = next;
+      continue;
+    }
+    if (!t || !slot || !fin_gen_tab_enabled_acq(t)) {
+      (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
+      ord = next;
+      continue;
+    }
+    lj_tv_load_acq(&fin, slot);
+    while (lj_cdata_fin_isclaim(&fin)) {
+      la_cpu_pause();
+      lj_tv_load_acq(&fin, slot);
+    }
+    if (tvisnil(&fin)) {
+      (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
+      ord = next;
+      continue;
+    }
+    o = gc2_finreg_cdata_order_object(ord, t, slot);
+    if (!o) {
+      (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
+      ord = next;
+      continue;
+    }
+    if (!gc2_finreg_cdata_candidate_close(o)) {
+      if (!(lj_obj_gcflags(o) & LJ_GC_CDATA_FIN) ||
+	  (lj_obj_gcflags(o) & LJ_GC_FINALIZED)) {
+	(void)lj_ctype_fin_order_retire(cts, prev, ord, next);
+	ord = next;
+	continue;
+      }
+      prev = ord;
+      ord = next;
+      continue;
+    }
+    /*
+    ** 05 section 5.8: ordered FINREG identity is enough for close-time
+    ** discovery without legacy root membership.
+    */
+    (void)gc2_finreg_cdata_unlink_root(g, o);
+    lj_gc2_finalizer_mark_enqueue(g, o);
+    gc2_finreg_cdata_order_queued_add(g, 1);
+    queued++;
+    (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
+    ord = next;
+  }
+  return queued;  /* 05 section 5.8: GC2-owned close-time FINREG scan. */
+#else
+  UNUSED(g);
+  return 0;
+#endif
+}
+
+int lj_gc2_finreg_cdata_pending(global_State *g)
+{
+#if LJ_HASFFI
+  CTState *cts = ctype_ctsG(g);
+  FinRegOrderNode *prev, *ord;
+  if (cts == NULL)
+    return 0;
+  prev = NULL;
+  ord = fin_order_head_acq(cts);
+  while (ord != NULL) {
+    FinRegOrderNode *next = fin_order_next_acq(ord);
+    GCtab *t = fin_order_tab_acq(ord);
+    TValue *slot = fin_order_slot_acq(ord);
+    TValue fin;
+    GCobj *o;
+    if (fin_order_active_acq(ord) != 1) {
+      ord = next;
+      continue;
+    }
+    if (!t || !slot || !fin_gen_tab_enabled_acq(t)) {
+      (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
+      ord = next;
+      continue;
+    }
+    lj_tv_load_acq(&fin, slot);
+    while (lj_cdata_fin_isclaim(&fin)) {
+      la_cpu_pause();
+      lj_tv_load_acq(&fin, slot);
+    }
+    if (tvisnil(&fin)) {
+      (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
+      ord = next;
+      continue;
+    }
+    o = gc2_finreg_cdata_order_object(ord, t, slot);
+    if (!o) {
+      (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
+      ord = next;
+      continue;
+    }
+    if (gc2_finreg_cdata_candidate_close(o)) {
+      gc2_finreg_cdata_pending_order_hits_add(g, 1);
+      return 1;
+    }
+    if (!(lj_obj_gcflags(o) & LJ_GC_CDATA_FIN) ||
+	(lj_obj_gcflags(o) & LJ_GC_FINALIZED)) {
+      (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
+      ord = next;
+      continue;
+    }
+    prev = ord;
+    ord = next;
+  }
+  return 0;  /* 05 section 5.8: GC2-owned close-time pending FINREG scan. */
+#else
+  UNUSED(g);
+  return 0;
+#endif
+}
+
 #if defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
 void lj_gc2_test_finreg_cdata_preclaim_fail(global_State *g, uint32_t n)
 {

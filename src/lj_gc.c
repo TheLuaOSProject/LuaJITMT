@@ -1829,13 +1829,6 @@ static int gc_cdata_finalizer_candidate_pweak(GCobj *o)
 	 iswhite(o);
 }
 
-static int gc_cdata_finalizer_candidate_close(GCobj *o)
-{
-  return o->gch.gct == ~LJ_TCDATA &&
-	 (lj_obj_gcflags(o) & LJ_GC_CDATA_FIN) &&
-	 !(lj_obj_gcflags(o) & LJ_GC_FINALIZED);
-}
-
 static GCobj *gc_order_cdata_object(FinRegOrderNode *ord, GCtab *t,
 				    TValue *slot)
 {
@@ -1979,142 +1972,15 @@ static size_t gc_queue_cdata_finalizers_pweak(lua_State *L, global_State *g)
   return n;  /* 05 section 5.8: ordered FINREG P_WEAK cdata discovery. */
 }
 
-static size_t gc_separate_cdata_finalizers_ordered(global_State *g)
-{
-  CTState *cts = ctype_ctsG(g);
-  FinRegOrderNode *prev, *ord;
-  size_t queued = 0;
-  if (cts == NULL)
-    return 0;
-  prev = NULL;
-  ord = fin_order_head_acq(cts);
-  while (ord != NULL) {
-    FinRegOrderNode *next = fin_order_next_acq(ord);
-    GCtab *t = fin_order_tab_acq(ord);
-    TValue *slot = fin_order_slot_acq(ord);
-    TValue fin;
-    GCobj *o;
-    if (fin_order_active_acq(ord) != 1) {
-      ord = next;
-      continue;
-    }
-    if (!t || !slot || !fin_gen_tab_enabled_acq(t)) {
-      (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
-      ord = next;
-      continue;
-    }
-    lj_tv_load_acq(&fin, slot);
-    while (lj_cdata_fin_isclaim(&fin)) {
-      la_cpu_pause();
-      lj_tv_load_acq(&fin, slot);
-    }
-    if (tvisnil(&fin)) {
-      (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
-      ord = next;
-      continue;
-    }
-    o = gc_order_cdata_object(ord, t, slot);
-    if (!o) {
-      (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
-      ord = next;
-      continue;
-    }
-    if (!gc_cdata_finalizer_candidate_close(o)) {
-      if (!(lj_obj_gcflags(o) & LJ_GC_CDATA_FIN) ||
-	  (lj_obj_gcflags(o) & LJ_GC_FINALIZED)) {
-	(void)lj_ctype_fin_order_retire(cts, prev, ord, next);
-	ord = next;
-	continue;
-      }
-      prev = ord;
-      ord = next;
-      continue;
-    }
-    /*
-    ** 05 section 5.8: ordered FINREG identity is enough for close-time
-    ** discovery without legacy root membership.
-    */
-    (void)gc_unlink_root_object(g, o);
-    lj_gc2_finalizer_mark_enqueue(g, o);
-    gc2_finreg_cdata_order_queued_add(g, 1);
-    queued++;
-    (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
-    ord = next;
-  }
-  return queued;  /* 05 section 5.8: FINREG ordered close-time cdata scan. */
-}
-
-static void gc_separate_cdata_finalizers(global_State *g)
-{
-  (void)gc_separate_cdata_finalizers_ordered(g);
-}
-
-static int gc_cdata_fin_pending_ordered(global_State *g, CTState *cts)
-{
-  FinRegOrderNode *prev, *ord;
-  prev = NULL;
-  ord = fin_order_head_acq(cts);
-  while (ord != NULL) {
-    FinRegOrderNode *next = fin_order_next_acq(ord);
-    GCtab *t = fin_order_tab_acq(ord);
-    TValue *slot = fin_order_slot_acq(ord);
-    TValue fin;
-    GCobj *o;
-    if (fin_order_active_acq(ord) != 1) {
-      ord = next;
-      continue;
-    }
-    if (!t || !slot || !fin_gen_tab_enabled_acq(t)) {
-      (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
-      ord = next;
-      continue;
-    }
-    lj_tv_load_acq(&fin, slot);
-    while (lj_cdata_fin_isclaim(&fin)) {
-      la_cpu_pause();
-      lj_tv_load_acq(&fin, slot);
-    }
-    if (tvisnil(&fin)) {
-      (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
-      ord = next;
-      continue;
-    }
-    o = gc_order_cdata_object(ord, t, slot);
-    if (!o) {
-      (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
-      ord = next;
-      continue;
-    }
-    if (gc_cdata_finalizer_candidate_close(o)) {
-      gc2_finreg_cdata_pending_order_hits_add(g, 1);
-      return 1;
-    }
-    if (!(lj_obj_gcflags(o) & LJ_GC_CDATA_FIN) ||
-	(lj_obj_gcflags(o) & LJ_GC_FINALIZED)) {
-      (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
-      ord = next;
-      continue;
-    }
-    prev = ord;
-    ord = next;
-  }
-  return 0;  /* FINREG ordered close-time cdata pending scan. */
-}
-
 int lj_gc_cdata_fin_pending(global_State *g)
 {
-  CTState *cts = ctype_ctsG(g);
-  if (cts == NULL)
-    return 0;
-  return gc_cdata_fin_pending_ordered(g, cts);
+  return lj_gc2_finreg_cdata_pending(g);
 }
 
 /* Finalize all cdata objects from finalizer table. */
 void lj_gc_finalize_cdata(lua_State *L)
 {
-  global_State *g = G(L);
-  if (ctype_ctsG(g) != NULL)
-    gc_separate_cdata_finalizers(g);
+  (void)lj_gc2_finreg_cdata_finalize_close(G(L));
 }
 
 void lj_gc_finalize_cdata_disable(global_State *g)
