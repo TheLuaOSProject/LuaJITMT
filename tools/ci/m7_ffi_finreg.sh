@@ -141,7 +141,8 @@ if hits=$(grep -nE -- 'lj_gc2_finreg_cdata_queue[[:space:]]*[(]' \
   printf '%s\n' 'FINREG cdata finalizer publication must use lj_gc2_finreg_cdata_finalizer_enqueue()' >&2
   exit 1
 fi
-for helper in lj_gc2_finreg_cdata_finalize_close \
+for helper in lj_gc2_finreg_cdata_finalize_pweak \
+  lj_gc2_finreg_cdata_finalize_close \
   lj_gc2_finreg_cdata_pending; do
   if ! grep -qE "LJ_FUNC .*[[:space:]]${helper}[[:space:]]*[(]" \
       "$ROOT/src/lj_gc2.h"; then
@@ -154,10 +155,10 @@ for helper in lj_gc2_finreg_cdata_finalize_close \
     exit 1
   fi
 done
-if hits=$(grep -nE -- 'gc_separate_cdata_finalizers_ordered|gc_cdata_fin_pending_ordered|gc_cdata_finalizer_candidate_close' \
+if hits=$(grep -nE -- 'gc_queue_cdata_finalizers_pweak|gc_cdata_finalizer_candidate_pweak|gc_order_cdata_object|gc_unlink_root_object|gc_separate_cdata_finalizers_ordered|gc_cdata_fin_pending_ordered|gc_cdata_finalizer_candidate_close' \
     "$ROOT/src/lj_gc.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
-  printf '%s\n' 'close-time FINREG cdata discovery must stay in lj_gc2 helpers' >&2
+  printf '%s\n' 'ordered FINREG cdata discovery must stay in lj_gc2 helpers' >&2
   exit 1
 fi
 if hits=$(grep -nE -- '(makewhite|markfinalized|lj_gc_arena_markobj|lj_gc2_finreg_cdata_queue|lj_gc2_finreg_cdata_finalizer_enqueue|lj_gc2_finalizer_enqueue)[(].*obj2gco[(]cd[)]' \

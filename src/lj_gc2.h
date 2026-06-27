@@ -9,6 +9,7 @@
 #include "lj_obj.h"
 
 typedef void (*GC2FinalizerMarkFunc)(global_State *g, GCobj *o);
+typedef void (*GC2FinRegMarkFunc)(global_State *g, cTValue *tv);
 
 #ifndef LJ_GC2_PARANOIA
 #define LJ_GC2_PARANOIA		0
@@ -106,6 +107,9 @@ LJ_FUNC void lj_gc2_weak_legacy_result(global_State *g, int skipped);
 LJ_FUNC void lj_gc2_finreg_cdata_set(global_State *g, GCobj *o, int enabled);
 LJ_FUNC void lj_gc2_finreg_cdata_finalizer_enqueue(global_State *g,
 						   GCobj *o);
+LJ_FUNC size_t lj_gc2_finreg_cdata_finalize_pweak(lua_State *L,
+						  global_State *g,
+						  GC2FinRegMarkFunc mark);
 LJ_FUNC size_t lj_gc2_finreg_cdata_finalize_close(global_State *g);
 LJ_FUNC int lj_gc2_finreg_cdata_pending(global_State *g);
 LJ_FUNC int lj_gc2_finreg_cdata_preclaim(lua_State *L, global_State *g,

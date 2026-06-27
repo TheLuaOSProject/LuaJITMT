@@ -1821,155 +1821,9 @@ void lj_gc_finalize_udata(lua_State *L)
 }
 
 #if LJ_HASFFI
-static int gc_cdata_finalizer_candidate_pweak(GCobj *o)
+static void gc_mark_finreg_tv(global_State *g, cTValue *tv)
 {
-  return o->gch.gct == ~LJ_TCDATA &&
-	 (lj_obj_gcflags(o) & LJ_GC_CDATA_FIN) &&
-	 !(lj_obj_gcflags(o) & LJ_GC_FINALIZED) &&
-	 iswhite(o);
-}
-
-static GCobj *gc_order_cdata_object(FinRegOrderNode *ord, GCtab *t,
-				    TValue *slot)
-{
-  Node *node = (Node *)slot;
-  TValue key;
-  GCobj *o;
-  if (!ord || !t || !slot)
-    return NULL;
-  o = fin_order_obj_acq(ord);
-  if (!o || o->gch.gct != ~LJ_TCDATA)
-    return NULL;
-  lj_tv_load_acq(&key, &node->key);
-  if (!tviscdata(&key) || gcV(&key) != o)
-    return NULL;
-  return o;  /* 05 section 5.8: ordered FINREG node owns cdata identity. */
-}
-
-static int gc_unlink_root_object(global_State *g, GCobj *target)
-{
-  GCRef *p = &g->gc.root;
-  GCobj *o;
-  while ((o = gcref_acq(*p)) != NULL) {
-    if (o == target) {
-      if (gc_chain_splice(p, o))
-	return 1;  /* root unlink after ordered FINREG claim. */
-      la_cpu_pause();
-      continue;
-    }
-    p = lj_obj_gcwref(o);
-  }
-  return 0;
-}
-
-static size_t gc_queue_cdata_finalizers_pweak_ordered(lua_State *L,
-						      global_State *g,
-						      size_t *queuedp)
-{
-  CTState *cts = ctype_ctsG(g);
-  FinRegOrderNode *prev, *ord;
-  size_t marked = 0, queued = 0;
-  if (cts == NULL)
-    return 0;
-  prev = NULL;
-  ord = fin_order_head_acq(cts);
-  while (ord != NULL) {
-    FinRegOrderNode *next = fin_order_next_acq(ord);
-    GCtab *t = fin_order_tab_acq(ord);
-    TValue *slot = fin_order_slot_acq(ord);
-    TValue fin;
-    GCobj *o;
-    if (fin_order_active_acq(ord) != 1) {
-      ord = next;
-      continue;
-    }
-    gc2_finreg_cdata_order_seen_add(g, 1);
-    if (!t || !slot || !fin_gen_tab_enabled_acq(t)) {
-      gc2_finreg_cdata_order_tombstones_add(g, 1);
-      (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
-      ord = next;
-      continue;
-    }
-    lj_tv_load_acq(&fin, slot);
-    while (lj_cdata_fin_isclaim(&fin)) {
-      la_cpu_pause();
-      lj_tv_load_acq(&fin, slot);
-    }
-    if (tvisnil(&fin)) {
-      gc2_finreg_cdata_order_tombstones_add(g, 1);
-      (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
-      ord = next;
-      continue;
-    }
-    o = gc_order_cdata_object(ord, t, slot);
-    if (!o) {
-      gc2_finreg_cdata_order_tombstones_add(g, 1);
-      (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
-      ord = next;
-      continue;
-    }
-    if (!gc_cdata_finalizer_candidate_pweak(o)) {
-      if (!(lj_obj_gcflags(o) & LJ_GC_CDATA_FIN) ||
-	  (lj_obj_gcflags(o) & LJ_GC_FINALIZED)) {
-	gc2_finreg_cdata_order_tombstones_add(g, 1);
-	(void)lj_ctype_fin_order_retire(cts, prev, ord, next);
-	ord = next;
-	continue;
-      }
-      prev = ord;
-      ord = next;
-      continue;
-    }
-    if (!lj_cdata_fin_claim_func(slot, &fin)) {
-      gc2_finreg_cdata_order_tombstones_add(g, 1);
-      (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
-      ord = next;
-      continue;
-    }
-    gc2_finreg_cdata_order_claimed_add(g, 1);
-    /*
-    ** 05 section 5.8: ordered FINREG identity is enough for P_WEAK
-    ** discovery without legacy root membership.
-    */
-    if (gc_unlink_root_object(g, o))
-      gc2_finreg_cdata_order_unlinked_add(g, 1);
-    if (!lj_gc2_finreg_cdata_preclaim(L, g, o, &fin)) {
-      copyTVrel(L, slot, &fin);
-      gc_marktv(g, &fin);
-      lj_gc2_finreg_cdata_finalizer_enqueue(g, o);
-      gc2_finreg_cdata_order_fallbacks_add(g, 1);
-      gc2_finreg_cdata_order_queued_add(g, 1);
-      (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
-      marked++;
-      queued++;
-      ord = next;
-      continue;
-    }
-    lj_cdata_fin_storenil(L, slot);
-    gc_marktv(g, &fin);
-    lj_gc2_finreg_cdata_finalizer_enqueue(g, o);
-    gc2_finreg_cdata_order_queued_add(g, 1);
-    (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
-    marked++;
-    queued++;
-    ord = next;
-  }
-  if (queuedp)
-    *queuedp += queued;
-  return marked;  /* 05 section 5.8: FINREG ordered P_WEAK cdata scan. */
-}
-
-static size_t gc_queue_cdata_finalizers_pweak(lua_State *L, global_State *g)
-{
-  size_t marked, ordered_queued = 0;
-  size_t n = 0;
-  marked = gc_queue_cdata_finalizers_pweak_ordered(L, g, &ordered_queued);
-  n += ordered_queued;
-  if (n)
-    gc2_finreg_cdata_pweak_queued_add(g, n);
-  if (marked)
-    (void)gc_propagate_gray(g);
-  return n;  /* 05 section 5.8: ordered FINREG P_WEAK cdata discovery. */
+  gc_marktv(g, tv);
 }
 
 int lj_gc_cdata_fin_pending(global_State *g)
@@ -2049,7 +1903,8 @@ static int atomic(global_State *g, lua_State *L)
   /* All marking done, clear weak tables. */
   lj_gc2_mark_to_weak(g);
 #if LJ_HASFFI
-  (void)gc_queue_cdata_finalizers_pweak(L, g);
+  if (lj_gc2_finreg_cdata_finalize_pweak(L, g, gc_mark_finreg_tv))
+    (void)gc_propagate_gray(g);
 #endif
   {
     GCobj *weak = lj_gc_list_head_acq(&g->gc.weak);
