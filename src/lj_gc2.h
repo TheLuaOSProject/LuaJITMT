@@ -13,6 +13,7 @@
 #endif
 
 typedef void (*GC2FinalizerMarkFunc)(global_State *g, GCobj *o);
+typedef void (*GC2LegacySweepPreserveFunc)(global_State *g);
 typedef void (*GC2FinRegMarkFunc)(global_State *g, cTValue *tv);
 typedef void (*GC2FinRegMarkObjFunc)(global_State *g, GCobj *o);
 typedef void (*GC2FinRegMarkMemFunc)(global_State *g, void *p);
@@ -71,9 +72,12 @@ LJ_FUNC void lj_gc2_legacy_preserve_abort(global_State *g);
 LJ_FUNC void lj_gc2_legacy_cycle_end(global_State *g);
 LJ_FUNC int lj_gc2_legacy_sweep_close(global_State *g);
 LJ_FUNC void lj_gc2_sweep_legacy_ready(global_State *g);
+LJ_FUNC void lj_gc2_sweep_prepare_legacy_boundary(global_State *g,
+						  GC2LegacySweepPreserveFunc preserve);
 LJ_FUNC int lj_gc2_sweep_to_idle(global_State *g);
 LJ_FUNC int lj_gc2_sweep_tg_ready(TGState *tg);
 LJ_FUNC int lj_gc2_sweep_legacy_can_progress(global_State *g);
+LJ_FUNC int lj_gc2_sweep_minor_active(global_State *g);
 LJ_FUNC int lj_gc2_sweep_needs_prepare(global_State *g);
 LJ_FUNC int lj_gc2_sweep_pending(global_State *g);
 LJ_FUNC uint32_t lj_gc2_handshake(global_State *g, uint32_t actions);

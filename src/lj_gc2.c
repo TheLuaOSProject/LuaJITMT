@@ -1996,6 +1996,12 @@ int lj_gc2_sweep_legacy_can_progress(global_State *g)
 	 !gc2_finalizer_pending_for_sweep(g, 1);
 }
 
+int lj_gc2_sweep_minor_active(global_State *g)
+{
+  return g && gc2_phase_acq(g) == LJ_GC2_SWEEP &&
+	 gc2_cycle_sweep_minor_acq(g) != 0;
+}
+
 int lj_gc2_sweep_needs_prepare(global_State *g)
 {
   TGState *tg;
@@ -2009,6 +2015,31 @@ int lj_gc2_sweep_needs_prepare(global_State *g)
     if (lj_gc2_sweep_tg_ready(tg) && tg->alloc.prepare_epoch != cycle)
       return 1;
   return 0;
+}
+
+void lj_gc2_sweep_prepare_legacy_boundary(global_State *g,
+					  GC2LegacySweepPreserveFunc preserve)
+{
+  TGState *tg;
+  uint32_t cycle;
+  if (!lj_gc2_sweep_legacy_can_progress(g))
+    return;
+  cycle = gc2_cycle_acq(g);
+  for (tg = gc2_tg_list_acq(g);
+       tg != NULL;
+       tg = lj_tg_next_acq(tg)) {
+    if (lj_gc2_sweep_tg_ready(tg) &&
+	tg->alloc.prepare_epoch != cycle) {
+      lj_arena_alloc_prepare_sweep_kind(&tg->alloc, LJ_ARENAK_TRAVERSABLE);
+      lj_arena_alloc_restore_sweep_kind(&tg->alloc, LJ_ARENAK_PLAIN);
+      tg->alloc.prepare_epoch = cycle;
+    }
+  }
+  if (!gc2_sweep_legacy_ready_acq(g)) {
+    if (preserve)
+      preserve(g);
+    lj_gc2_sweep_legacy_ready(g);
+  }
 }
 
 int lj_gc2_sweep_pending(global_State *g)

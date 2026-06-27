@@ -498,6 +498,41 @@ if ! grep -qF 'lj_gc2_sweep_legacy_can_progress(g)' "$ROOT/src/lj_gc.c"; then
   printf '%s\n' 'legacy arena sweep readiness must use lj_gc2_sweep_legacy_can_progress' >&2
   exit 1
 fi
+if ! grep -qE 'LJ_FUNC void lj_gc2_sweep_prepare_legacy_boundary[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.h"; then
+  printf '%s\n' 'lj_gc2_sweep_prepare_legacy_boundary declaration is required for sweep-boundary ownership' >&2
+  exit 1
+fi
+if ! grep -qE '^void lj_gc2_sweep_prepare_legacy_boundary[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.c"; then
+  printf '%s\n' 'lj_gc2_sweep_prepare_legacy_boundary definition is required for sweep-boundary ownership' >&2
+  exit 1
+fi
+if ! grep -qF 'lj_gc2_sweep_prepare_legacy_boundary(g, gc_arena_preserve_root_chain)' \
+    "$ROOT/src/lj_gc.c"; then
+  printf '%s\n' 'legacy arena sweep boundary must use lj_gc2_sweep_prepare_legacy_boundary' >&2
+  exit 1
+fi
+if ! grep -qE 'LJ_FUNC int lj_gc2_sweep_minor_active[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.h"; then
+  printf '%s\n' 'lj_gc2_sweep_minor_active declaration is required for minor sweep ownership' >&2
+  exit 1
+fi
+if ! grep -qE '^int lj_gc2_sweep_minor_active[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.c"; then
+  printf '%s\n' 'lj_gc2_sweep_minor_active definition is required for minor sweep ownership' >&2
+  exit 1
+fi
+if ! grep -qF 'lj_gc2_sweep_minor_active(g)' "$ROOT/src/lj_gc.c"; then
+  printf '%s\n' 'legacy GC minor sweep policy must query lj_gc2_sweep_minor_active' >&2
+  exit 1
+fi
+if hits=$(grep -nE -- 'gc2_cycle_acq[[:space:]]*[(][[:space:]]*g[[:space:]]*[)]|gc2_sweep_legacy_ready_acq[[:space:]]*[(][[:space:]]*g[[:space:]]*[)]|gc2_cycle_sweep_minor_acq[[:space:]]*[(][[:space:]]*g[[:space:]]*[)]' \
+    "$ROOT/src/lj_gc.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'legacy GC must not read raw GC2 sweep epoch/readiness/minor latches' >&2
+  exit 1
+fi
 if ! grep -qE 'LJ_FUNC int lj_gc2_legacy_sweep_close[[:space:]]*[(]' \
     "$ROOT/src/lj_gc2.h"; then
   printf '%s\n' 'lj_gc2_legacy_sweep_close declaration is required for sweep-close ownership' >&2

@@ -152,29 +152,12 @@ static void gc_arena_preserve_root_chain(global_State *g)
 
 static uint32_t gc_arena_finish_sweep_boundary(global_State *g, int drain)
 {
-  TGState *tg;
   uint32_t total = 0;
-  uint32_t cycle;
   if (!gc_arena_sweep_ready(g)) {
     gc_arena_rebuild_free(g);
     return 0;
   }
-  cycle = gc2_cycle_acq(g);
-  for (tg = gc2_tg_list_acq(g);
-       tg != NULL;
-       tg = lj_tg_next_acq(tg)) {
-    /* 05 section 5.8 boundary-lazy traversable sweep bridge. */
-    if (lj_gc2_sweep_tg_ready(tg) &&
-	tg->alloc.prepare_epoch != cycle) {
-      lj_arena_alloc_prepare_sweep_kind(&tg->alloc, LJ_ARENAK_TRAVERSABLE);
-      lj_arena_alloc_restore_sweep_kind(&tg->alloc, LJ_ARENAK_PLAIN);
-      tg->alloc.prepare_epoch = cycle;
-    }
-  }
-  if (!gc2_sweep_legacy_ready_acq(g)) {
-    gc_arena_preserve_root_chain(g);
-    lj_gc2_sweep_legacy_ready(g);
-  }
+  lj_gc2_sweep_prepare_legacy_boundary(g, gc_arena_preserve_root_chain);
   do {  /* 05 section 5.6.3 worker-owned sweep bridge. */
     uint32_t swept = lj_gc2_worker_drain(g, LJ_GC2_SWEEP_BATCH);
     if (swept > ~(uint32_t)0 - total)
@@ -1653,7 +1636,7 @@ static size_t gc_onestep(lua_State *L)
 	    mask > LJ_MIN_STRTAB*2-1)
 	  lj_str_resize(L, mask >> 1);  /* Shrink string table. */
       }
-      if (arena_prepare && gc2_cycle_sweep_minor_acq(g))
+      if (arena_prepare && lj_gc2_sweep_minor_active(g))
 	(void)lj_gc_sweep_gc2_unmarked(g);
       if (arena_prepare)
 	gc_arena_verify_sweep_boundary(g);
