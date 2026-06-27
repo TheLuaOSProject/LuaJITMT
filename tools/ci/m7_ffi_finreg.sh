@@ -224,6 +224,26 @@ for helper in gc2_finreg_cdata_sets_acq \
     exit 1
   fi
 done
+for helper in lj_gc2_finreg_cdata_note_sweep_queued \
+  lj_gc2_finreg_cdata_note_order_retired; do
+  if ! grep -qE "LJ_FUNC void[[:space:]]+${helper}[[:space:]]*[(]" \
+      "$ROOT/src/lj_gc2.h"; then
+    printf '%s\n' "${helper} declaration is required for GC2-owned FINREG notifications" >&2
+    exit 1
+  fi
+  if ! grep -qE "^void[[:space:]]+${helper}[[:space:]]*[(]" \
+      "$ROOT/src/lj_gc2.c"; then
+    printf '%s\n' "${helper} definition is required in lj_gc2.c" >&2
+    exit 1
+  fi
+done
+if hits=$(grep -nE -- 'gc2_finreg_cdata_(sweep_queued|order_retired)_add[[:space:]]*[(]' \
+    "$ROOT/src/lj_cdata.c" \
+    "$ROOT/src/lj_ctype.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'FINREG cdata producers must use lj_gc2_finreg_cdata_note_* helpers for GC2 counter ownership' >&2
+  exit 1
+fi
 if hits=$(grep -nE -- '->[[:space:]]*gc2[.](finreg_cdata_(sets|clears|queued|sweep_queued|pweak_queued|pweak_claimed|preclaim_overflow|preclaim_dispatched))([^[:alnum:]_]|$)|&[[:space:]]*[^)]*->[[:space:]]*gc2[.](finreg_cdata_(sets|clears|queued|sweep_queued|pweak_queued|pweak_claimed|preclaim_overflow|preclaim_dispatched))([^[:alnum:]_]|$)' \
     "$ROOT/src/lj_gc.c" \
     "$ROOT/src/lj_gc2.c" \

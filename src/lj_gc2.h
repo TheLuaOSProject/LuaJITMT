@@ -101,6 +101,8 @@ LJ_FUNC int lj_gc2_weak_complete(global_State *g, GCobj *legacy,
 				 uint32_t drain_limit);
 LJ_FUNC void lj_gc2_weak_to_sweep(global_State *g);
 LJ_FUNC void lj_gc2_finreg_cdata_set(global_State *g, GCobj *o, int enabled);
+LJ_FUNC void lj_gc2_finreg_cdata_note_sweep_queued(global_State *g);
+LJ_FUNC void lj_gc2_finreg_cdata_note_order_retired(global_State *g);
 LJ_FUNC size_t lj_gc2_finreg_cdata_finalize_pweak(lua_State *L,
 						  global_State *g,
 						  GC2FinRegMarkFunc mark);

@@ -334,7 +334,6 @@ int lj_ctype_fin_order_retire(CTState *cts, FinRegOrderNode *prev,
 			      FinRegOrderNode *ord, FinRegOrderNode *next)
 {
   FinRegOrderNode *head, *expect;
-  global_State *g;
   if (!cts || !ord)
     return 0;
   if (!fin_order_active_retiring(ord))
@@ -343,9 +342,7 @@ int lj_ctype_fin_order_retire(CTState *cts, FinRegOrderNode *prev,
     head = fin_order_retired_acq(cts);
     fin_order_retired_next_rel(ord, head);
   } while (!fin_order_retired_cas(cts, &head, ord));
-  g = cts->g;
-  if (g)
-    gc2_finreg_cdata_order_retired_add(g, 1);
+  lj_gc2_finreg_cdata_note_order_retired(cts->g);
   fin_order_active_rel(ord, 0);
   if (prev) {
     expect = ord;

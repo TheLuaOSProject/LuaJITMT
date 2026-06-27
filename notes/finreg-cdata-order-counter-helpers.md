@@ -19,6 +19,9 @@ and CTState ordered-node retirement publish increments through the helper
 surface instead of ad hoc `la_add64_rlx()` calls against `g->gc2`. GC stats
 export and focused FINREG fixtures now read the ordered counters through
 acquire helpers.
+The CTState ordered-node producer now reports retire events through
+`lj_gc2_finreg_cdata_note_order_retired()`, leaving the low-level ordered
+counter add behind `lj_gc2.c`.
 
 ## Guardrail
 

@@ -68,7 +68,7 @@ GCcdata *lj_cdata_newx_l(lua_State *L, CTState *cts, CTypeID id, CTSize sz,
 
 static LJ_NORET LJ_NOINLINE void cdata_free_finalizer_invariant(global_State *g)
 {
-  gc2_finreg_cdata_sweep_queued_add(g, 1);
+  lj_gc2_finreg_cdata_note_sweep_queued(g);
   lj_assertG_(g, 0, "cdata finalizer reached sweep/free outside FINREG");
   abort();
 }

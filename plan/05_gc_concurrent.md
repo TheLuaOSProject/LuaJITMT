@@ -443,8 +443,10 @@ FFI finalizer table is explicitly excluded from the weak snapshot because it is
 owned by the FINREG/finalizer path, not weak-table clearing. GC2 now mirrors
 cdata FINREG mutation telemetry from `ffi.gc(cd, fn)`, explicit
 `ffi.gc(cd, nil)` clears, ctype `__gc` registrations, and legacy
-`mmudata` queue/finalizer-driven cdata clears. FINREG queue hooks now mark
-queued finalizable objects when reached during a GC2 MARK/WEAK phase, but
+`mmudata` queue/finalizer-driven cdata clears. Producer-side sweep-invariant
+and ordered-retire cdata FINREG notifications now call GC2 public note helpers,
+leaving the low-level counter writes inside `lj_gc2.c`. FINREG queue hooks now
+mark queued finalizable objects when reached during a GC2 MARK/WEAK phase, but
 legacy now supplies only the protected callback runner; GC2 owns queue drain
 ordering and dequeued-object routing into FINREG dispatch. Userdata FINREG
 telemetry also mirrors C/API `__gc` metatable assignment/clear events and

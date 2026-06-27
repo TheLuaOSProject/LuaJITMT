@@ -3584,6 +3584,26 @@ void lj_gc2_finreg_cdata_set(global_State *g, GCobj *o, int enabled)
 #endif
 }
 
+void lj_gc2_finreg_cdata_note_sweep_queued(global_State *g)
+{
+#if LJ_HASFFI
+  if (g)
+    gc2_finreg_cdata_sweep_queued_add(g, 1);
+#else
+  UNUSED(g);
+#endif
+}
+
+void lj_gc2_finreg_cdata_note_order_retired(global_State *g)
+{
+#if LJ_HASFFI
+  if (g)
+    gc2_finreg_cdata_order_retired_add(g, 1);
+#else
+  UNUSED(g);
+#endif
+}
+
 static void gc2_finreg_queue_mark(global_State *g, GCobj *o)
 {
   uint32_t phase;
