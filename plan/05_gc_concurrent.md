@@ -443,8 +443,8 @@ cdata FINREG mutation telemetry from `ffi.gc(cd, fn)`, explicit
 `ffi.gc(cd, nil)` clears, ctype `__gc` registrations, and legacy
 `mmudata` queue/finalizer-driven cdata clears. FINREG queue hooks now mark
 queued finalizable objects when reached during a GC2 MARK/WEAK phase, but
-legacy still owns finalizer callback resolution, callback execution, and drain
-ordering. Userdata
+legacy still owns protected callback execution, userdata metamethod resolution,
+and drain ordering. Userdata
 FINREG telemetry also mirrors C/API `__gc` metatable assignment/clear events
 and counts the legacy `mmudata` queue point in `lj_gc_separateudata()`. The
 original bridge left userdata finalizer membership and execution on the legacy

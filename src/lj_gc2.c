@@ -3488,6 +3488,88 @@ int lj_gc2_finreg_cdata_preclaim_take(lua_State *L, global_State *g,
 #endif
 }
 
+#if LJ_HASFFI
+static void gc2_finreg_cdata_dispatch_clear(global_State *g, GCobj *o)
+{
+  lj_obj_cleargcflags_atomic(o, LJ_GC_CDATA_FIN);
+  lj_gc2_finreg_cdata_set(g, o, 0);
+}
+
+static int gc2_finreg_cdata_dispatch_claim_preclaimed(global_State *g,
+						      GCobj *o)
+{
+  uint8_t old = la_load8_acq(lj_obj_gcflags_ref(o));
+  for (;;) {
+    uint8_t next;
+    if (!(old & LJ_GC_CDATA_FIN))
+      return 0;
+    next = (uint8_t)(old & (uint8_t)~LJ_GC_CDATA_FIN);
+    if (la_cas8(lj_obj_gcflags_ref(o), &old, next, LA_ACQ_REL, LA_ACQ)) {
+      lj_gc2_finreg_cdata_set(g, o, 0);
+      return 1;
+    }
+  }
+}
+
+static int gc2_finreg_cdata_dispatch_preclaimed(lua_State *L, global_State *g,
+						GCobj *o, cTValue *fin,
+						GC2FinalizerCallFunc call)
+{
+  TValue tmp;
+  if (!gc2_finreg_cdata_dispatch_claim_preclaimed(g, o))
+    return 0;  /* P_WEAK preclaim suppressed by later ffi.gc(cd, nil). */
+  copyTV(L, &tmp, fin);
+  return call(g, L, &tmp, o) ? 1 : -1;
+}
+
+static int gc2_finreg_cdata_dispatch_slot(lua_State *L, global_State *g,
+					  GCobj *o, cTValue *key,
+					  GC2FinalizerCallFunc call)
+{
+  CTState *cts = ctype_ctsG(g);
+  GCtab *t;
+  TValue *slot;
+  TValue fin;
+  slot = (TValue *)lj_ctype_fin_get(L, cts, key, &t);
+  if (slot != niltv(L) && lj_cdata_fin_claim_func(slot, &fin)) {
+    TValue tmp;
+    copyTV(L, &tmp, &fin);
+    lj_cdata_fin_storenil(L, slot);  /* Clear claimed finalizer slot. */
+    gc2_finreg_cdata_dispatch_clear(g, o);
+    return call(g, L, &tmp, o) ? 1 : -1;
+  }
+  gc2_finreg_cdata_dispatch_clear(g, o);
+  return 0;
+}
+
+static int gc2_finreg_cdata_dispatch_ffi(lua_State *L, global_State *g,
+					 GCobj *o,
+					 GC2FinalizerCallFunc call)
+{
+  TValue key;
+  TValue fin;
+  if (!L || !g || !o || !call || o->gch.gct != ~LJ_TCDATA)
+    return 0;
+  if (lj_gc2_finreg_cdata_preclaim_take(L, g, o, &fin))
+    return gc2_finreg_cdata_dispatch_preclaimed(L, g, o, &fin, call);
+  setcdataV(L, &key, gco2cd(o));
+  return gc2_finreg_cdata_dispatch_slot(L, g, o, &key, call);
+}
+#endif
+
+int lj_gc2_finreg_cdata_dispatch(lua_State *L, global_State *g, GCobj *o,
+				 GC2FinalizerCallFunc call)
+{
+#if LJ_HASFFI
+  if (!L || !g || !o || !call || o->gch.gct != ~LJ_TCDATA)
+    return 0;
+  return gc2_finreg_cdata_dispatch_ffi(L, g, o, call);
+#else
+  UNUSED(L); UNUSED(g); UNUSED(o); UNUSED(call);
+  return 0;
+#endif
+}
+
 int lj_gc2_finreg_udata_set(global_State *g, GCobj *o, int enabled)
 {
   uint8_t old;

@@ -1595,58 +1595,6 @@ static int gc_call_finalizer(global_State *g, lua_State *L,
   return continue_gc;
 }
 
-#if LJ_HASFFI
-static void gc_finalize_cdata_clear(global_State *g, GCobj *o)
-{
-  lj_obj_cleargcflags_atomic(o, LJ_GC_CDATA_FIN);
-  lj_gc2_finreg_cdata_set(g, o, 0);
-}
-
-static int gc_finalize_cdata_claim_preclaimed(global_State *g, GCobj *o)
-{
-  uint8_t old = la_load8_acq(lj_obj_gcflags_ref(o));
-  for (;;) {
-    uint8_t next;
-    if (!(old & LJ_GC_CDATA_FIN))
-      return 0;
-    next = (uint8_t)(old & (uint8_t)~LJ_GC_CDATA_FIN);
-    if (la_cas8(lj_obj_gcflags_ref(o), &old, next, LA_ACQ_REL, LA_ACQ)) {
-      lj_gc2_finreg_cdata_set(g, o, 0);
-      return 1;
-    }
-  }
-}
-
-static int gc_finalize_cdata_slot_owned(lua_State *L, GCobj *o, cTValue *key)
-{
-  global_State *g = G(L);
-  CTState *cts = ctype_ctsG(g);
-  GCtab *t;
-  TValue *slot;
-  TValue fin;
-  slot = (TValue *)lj_ctype_fin_get(L, cts, key, &t);
-  if (slot != niltv(L) && lj_cdata_fin_claim_func(slot, &fin)) {
-    TValue tmp;
-    copyTV(L, &tmp, &fin);
-    lj_cdata_fin_storenil(L, slot);  /* Clear claimed finalizer slot. */
-    gc_finalize_cdata_clear(g, o);
-    return gc_call_finalizer(g, L, &tmp, o) ? 1 : -1;
-  }
-  gc_finalize_cdata_clear(g, o);
-  return 0;
-}
-
-static int gc_finalize_cdata_preclaimed(lua_State *L, GCobj *o, cTValue *fin)
-{
-  global_State *g = G(L);
-  TValue tmp;
-  if (!gc_finalize_cdata_claim_preclaimed(g, o))
-    return 0;  /* P_WEAK preclaim suppressed by later ffi.gc(cd, nil). */
-  copyTV(L, &tmp, fin);
-  return gc_call_finalizer(g, L, &tmp, o) ? 1 : -1;
-}
-#endif
-
 /* Finalize one userdata or cdata object from the GC2 finalizer queue. */
 static int gc_finalize(lua_State *L)
 {
@@ -1665,20 +1613,12 @@ static int gc_finalize(lua_State *L)
   }
 #if LJ_HASFFI
   if (o->gch.gct == ~LJ_TCDATA) {
-    TValue key;
-    TValue fin;
     int rc;
     /* Add cdata back to the GC list and make it white. */
     lj_gc_linkobj(g, o);  /* CAS-requeue finalized cdata on root list. */
     makewhite(g, o);
     lj_gc_arena_markobj(g, o);
-    /* Resolve finalizer. */
-    if (lj_gc2_finreg_cdata_preclaim_take(L, g, o, &fin))
-      rc = gc_finalize_cdata_preclaimed(L, o, &fin);
-    else {
-      setcdataV(L, &key, gco2cd(o));
-      rc = gc_finalize_cdata_slot_owned(L, o, &key);
-    }
+    rc = lj_gc2_finreg_cdata_dispatch(L, g, o, gc_call_finalizer);
     lj_gc2_finalizer_leave(g);
     return rc < 0 ? -1 : 1;
   }

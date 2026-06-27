@@ -10,6 +10,8 @@
 
 typedef void (*GC2FinalizerMarkFunc)(global_State *g, GCobj *o);
 typedef void (*GC2FinRegMarkFunc)(global_State *g, cTValue *tv);
+typedef int (*GC2FinalizerCallFunc)(global_State *g, lua_State *L,
+				    cTValue *mo, GCobj *o);
 
 #ifndef LJ_GC2_PARANOIA
 #define LJ_GC2_PARANOIA		0
@@ -116,6 +118,9 @@ LJ_FUNC int lj_gc2_finreg_cdata_preclaim(lua_State *L, global_State *g,
 					 GCobj *o, cTValue *fin);
 LJ_FUNC int lj_gc2_finreg_cdata_preclaim_take(lua_State *L, global_State *g,
 					      GCobj *o, TValue *fin);
+LJ_FUNC int lj_gc2_finreg_cdata_dispatch(lua_State *L, global_State *g,
+					 GCobj *o,
+					 GC2FinalizerCallFunc call);
 #if defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
 LJ_FUNC void lj_gc2_test_finreg_cdata_preclaim_fail(global_State *g,
 								    uint32_t n);
