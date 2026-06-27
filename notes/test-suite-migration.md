@@ -231,6 +231,9 @@ Lua test-suite migration notes:
 - Removed the `m2_arena_gcsweep` source-marker list. The case now relies on the
   runtime arena sweep C fixture itself, and the M2 LuaJIT-linked fixtures share
   the central C-fixture helper.
+- Standalone M2 arena fixtures build with `-DLUAJIT_SECURITY_PRNG=0` because
+  they compile selected runtime sources without linking the VM native/safepoint
+  objects used by the secure PRNG path.
 - Removed source-marker checks from the M5 sentinel, bytecode dump compatibility,
   registry root, and nomm-cache fixture cases. Those cases now rely on their C
   behavior fixtures instead of asserting implementation text in `src/`.

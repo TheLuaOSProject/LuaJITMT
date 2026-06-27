@@ -29,6 +29,7 @@ end
 
 local function run_standalone_fixture(t, out, cfile)
   compile_and_run_sources(t, out, arena_sources(t, cfile), {
+    cflags = "-DLUAJIT_SECURITY_PRNG=0",
     link_luajit = false,
     libs = {}
   })
