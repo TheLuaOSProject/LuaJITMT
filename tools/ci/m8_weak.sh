@@ -297,7 +297,7 @@ if ! grep -qE '^[[:space:]]*static void gc2_finreg_dispatch_requeue[[:space:]]*[
 fi
 for fn in lj_gc2_finreg_cdata_dispatch lj_gc2_finreg_udata_dispatch; do
   if ! awk -v fn="$fn" '
-    $0 ~ ("^int[[:space:]]+" fn "[[:space:]]*[(]") { in_fn = 1 }
+    $0 ~ ("^static int[[:space:]]+" fn "[[:space:]]*[(]") { in_fn = 1 }
     in_fn && /gc2_finreg_dispatch_requeue[[:space:]]*[(]g,[[:space:]]*o[)]/ {
       found = 1
     }

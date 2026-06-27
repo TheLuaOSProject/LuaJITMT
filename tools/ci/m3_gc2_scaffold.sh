@@ -109,14 +109,15 @@ if ! grep -qE '^size_t lj_gc2_finreg_udata_finalize[[:space:]]*[(]' \
   printf '%s\n' 'lj_gc2_finreg_udata_finalize definition is required' >&2
   exit 1
 fi
-if ! grep -qE 'LJ_FUNC int lj_gc2_finreg_udata_dispatch[[:space:]]*[(]' \
-    "$ROOT/src/lj_gc2.h"; then
-  printf '%s\n' 'lj_gc2_finreg_udata_dispatch declaration is required' >&2
+if hits=$(grep -nE -- 'LJ_FUNC .*[[:space:]]lj_gc2_finreg_udata_dispatch[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.h" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'userdata FINREG dispatch resolution must stay private to lj_gc2.c' >&2
   exit 1
 fi
-if ! grep -qE '^int lj_gc2_finreg_udata_dispatch[[:space:]]*[(]' \
+if ! grep -qE '^static int lj_gc2_finreg_udata_dispatch[[:space:]]*[(]' \
     "$ROOT/src/lj_gc2.c"; then
-  printf '%s\n' 'lj_gc2_finreg_udata_dispatch definition is required' >&2
+  printf '%s\n' 'lj_gc2_finreg_udata_dispatch must stay static inside lj_gc2.c' >&2
   exit 1
 fi
 if hits=$(grep -nE -- 'gc_separateudata_registered|gc_unlink_udata_object|gc_queue_udata_finalizer' \

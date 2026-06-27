@@ -13,6 +13,8 @@ The M8 weak/finalizer gate rejects reintroducing legacy object routing or
 direct FINREG dispatch calls there.
 The raw object-dispatch callback type is also internal/test-only; production
 finalizer drain/step APIs accept only the protected callback runner.
+The cdata/userdata FINREG dispatch resolvers are private to `lj_gc2.c`; callers
+cannot bypass the GC2 finalizer dispatch boundary and invoke them directly.
 
 This keeps callback execution on the claimed caller `lua_State`, but moves more
 of the finalizer object lifecycle under the GC2 dispatch boundary.

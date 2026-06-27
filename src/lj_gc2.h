@@ -22,6 +22,7 @@ typedef int (*GC2FinalizerCallFunc)(global_State *g, lua_State *L,
 #if defined(lj_gc2_c) || defined(LJ_GC2_TEST_HELPERS) || defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
 typedef int (*GC2FinalizerDispatchFunc)(lua_State *L, global_State *g,
 					GCobj *o);
+#define LJ_GC2_HAS_FINALIZER_DISPATCH_TYPE 1
 #endif
 
 enum {
@@ -101,9 +102,6 @@ LJ_FUNC void lj_gc2_finreg_cdata_mark_roots(global_State *g,
 LJ_FUNC size_t lj_gc2_finreg_cdata_finalize_close(global_State *g);
 LJ_FUNC void lj_gc2_finreg_cdata_disable(global_State *g);
 LJ_FUNC int lj_gc2_finreg_cdata_pending(global_State *g);
-LJ_FUNC int lj_gc2_finreg_cdata_dispatch(lua_State *L, global_State *g,
-					 GCobj *o,
-					 GC2FinalizerCallFunc call);
 #if defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
 LJ_FUNC void lj_gc2_test_finreg_cdata_preclaim_fail(global_State *g,
 								    uint32_t n);
@@ -117,9 +115,6 @@ LJ_FUNC void lj_gc2_finreg_udata_register_mt(lua_State *L, global_State *g,
 					     GCudata *ud, GCtab *mt);
 LJ_FUNC void lj_gc2_finreg_udata_forget(global_State *g, GCobj *o);
 LJ_FUNC size_t lj_gc2_finreg_udata_finalize(global_State *g, int all);
-LJ_FUNC int lj_gc2_finreg_udata_dispatch(lua_State *L, global_State *g,
-					 GCobj *o,
-					 GC2FinalizerCallFunc call);
 LJ_FUNC void lj_gc2_finalizer_dispatch_all(lua_State *L,
 					   GC2FinalizerCallFunc call);
 LJ_FUNC int lj_gc2_finalizer_step(lua_State *L,

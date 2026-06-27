@@ -16,6 +16,12 @@
 #include "lj_atomic.h"
 #include "lj_chan.h"
 #include "lj_gc2.h"
+#ifndef LJ_GC2_HAS_FINALIZER_DISPATCH_TYPE
+/* Amalgamation may include lj_gc2.h before lj_gc2_c exposes internals. */
+typedef int (*GC2FinalizerDispatchFunc)(lua_State *L, global_State *g,
+					GCobj *o);
+#define LJ_GC2_HAS_FINALIZER_DISPATCH_TYPE 1
+#endif
 #include "lj_gc.h"
 #include "lj_thr.h"
 #include "lj_buf.h"
@@ -131,6 +137,12 @@ static int lj_gc2_ssb_empty(global_State *g);
 static int lj_gc2_finreg_cdata_preclaim(lua_State *L, global_State *g,
 					GCobj *o, cTValue *fin);
 static void lj_gc2_finreg_udata_finalizer_enqueue(global_State *g, GCobj *o);
+static int lj_gc2_finreg_cdata_dispatch(lua_State *L, global_State *g,
+					GCobj *o,
+					GC2FinalizerCallFunc call);
+static int lj_gc2_finreg_udata_dispatch(lua_State *L, global_State *g,
+					GCobj *o,
+					GC2FinalizerCallFunc call);
 #if LJ_HASFFI
 static void gc2_traverse_clib_retired_cache(global_State *g);
 #endif
@@ -3983,8 +3995,9 @@ static int gc2_finreg_cdata_dispatch_ffi(lua_State *L, global_State *g,
 }
 #endif
 
-int lj_gc2_finreg_cdata_dispatch(lua_State *L, global_State *g, GCobj *o,
-				 GC2FinalizerCallFunc call)
+static int lj_gc2_finreg_cdata_dispatch(lua_State *L, global_State *g,
+					GCobj *o,
+					GC2FinalizerCallFunc call)
 {
 #if LJ_HASFFI
   if (!L || !g || !o || !call || o->gch.gct != ~LJ_TCDATA)
@@ -4229,8 +4242,9 @@ size_t lj_gc2_finreg_udata_finalize(global_State *g, int all)
   return m;  /* 05 section 5.8: GC2-owned userdata FINREG discovery. */
 }
 
-int lj_gc2_finreg_udata_dispatch(lua_State *L, global_State *g, GCobj *o,
-				 GC2FinalizerCallFunc call)
+static int lj_gc2_finreg_udata_dispatch(lua_State *L, global_State *g,
+					GCobj *o,
+					GC2FinalizerCallFunc call)
 {
   cTValue *mo;
   TValue motv;

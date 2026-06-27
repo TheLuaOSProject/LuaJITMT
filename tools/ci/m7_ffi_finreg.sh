@@ -261,7 +261,6 @@ fi
 for helper in lj_gc2_finreg_cdata_finalize_pweak \
   lj_gc2_finreg_cdata_mark_roots \
   lj_gc2_finreg_cdata_finalize_close \
-  lj_gc2_finreg_cdata_dispatch \
   lj_gc2_finreg_cdata_disable \
   lj_gc2_finreg_cdata_pending; do
   if ! grep -qE "LJ_FUNC .*[[:space:]]${helper}[[:space:]]*[(]" \
@@ -275,6 +274,17 @@ for helper in lj_gc2_finreg_cdata_finalize_pweak \
     exit 1
   fi
 done
+if hits=$(grep -nE -- 'LJ_FUNC .*[[:space:]]lj_gc2_finreg_cdata_dispatch[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.h" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'cdata FINREG dispatch resolution must stay private to lj_gc2.c' >&2
+  exit 1
+fi
+if ! grep -qE '^static int lj_gc2_finreg_cdata_dispatch[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.c"; then
+  printf '%s\n' 'lj_gc2_finreg_cdata_dispatch must stay static inside lj_gc2.c' >&2
+  exit 1
+fi
 if hits=$(grep -nE -- 'fin_gen_tab_disable_rel|gc_finalize_cdata_clear|gc_finalize_cdata_claim_preclaimed|gc_finalize_cdata_slot_owned|gc_finalize_cdata_preclaimed|gc_queue_cdata_finalizers_pweak|gc_cdata_finalizer_candidate_pweak|gc_order_cdata_object|gc_unlink_root_object|gc_separate_cdata_finalizers_ordered|gc_cdata_fin_pending_ordered|gc_cdata_finalizer_candidate_close' \
     "$ROOT/src/lj_gc.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
