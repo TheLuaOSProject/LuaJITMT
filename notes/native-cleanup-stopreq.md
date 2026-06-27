@@ -32,6 +32,10 @@ Follow-up consistency slice:
   shutdown flag does not interrupt later cleanup calls, but a native leave that
   acknowledges a new shutdown still closes/removes the just-created temporary
   resource before throwing.
+- Public `os.remove`, `os.rename`, `os.execute`, and the non-POSIX `tmpnam`
+  helper now use the same fresh STOPREQ check. This keeps post-interruption
+  cleanup scripts from being interrupted merely because `TGF_STOPREQ` was
+  already sticky before entering the native call.
 - The safepoint handshake harness now has explicit sticky-temp coverage and
   post-clear assertions that each expected STOPREQ case leaves no pending
   shutdown flag/poll state behind.
