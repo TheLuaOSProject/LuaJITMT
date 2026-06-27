@@ -272,3 +272,40 @@ check_keyed_store_fn_file "$ROOT/src/lib_threading.c" threading_storeudata_str
 check_keyed_store_fn_file "$ROOT/src/lj_debug.c" debug_activelines_storebool
 check_keyed_store_fn_file "$ROOT/src/lj_ctype.c" ctype_storestr_str
 check_keyed_store_fn_file "$ROOT/src/lj_meta.c" lj_meta_tsettv_pair
+
+check_nil_keyed_fn_file() {
+  file=$1
+  fn=$2
+  if ! awk -v fn="$fn" '
+    function track_braces(line) {
+      opens = gsub(/\{/, "{", line)
+      line = $0
+      closes = gsub(/\}/, "}", line)
+      if (opens)
+	body = 1
+      depth += opens - closes
+      if (body && depth == 0)
+	in_fn = 0
+    }
+    !in_fn &&
+    $0 ~ "^[[:space:]]*(static |LUALIB_API |LJ_FUNCA |TValue \\*)" &&
+    $0 ~ fn "[[:space:]]*\\(" {
+      in_fn = 1; body = 0; depth = 0
+    }
+    in_fn && /lj_tab_trysetnil_cas_keyed[[:space:]]*\(/ { saw_keyed = 1 }
+    in_fn && /lj_tv_cas[[:space:]]*\(/ { bad = 1 }
+    in_fn { track_braces($0) }
+    END {
+      if (!saw_keyed || bad)
+	exit 1
+    }
+  ' "$file"; then
+    printf '%s\n' "$file:$fn must use lj_tab_trysetnil_cas_keyed(), not raw lj_tv_cas()" >&2
+    exit 1
+  fi
+}
+
+check_nil_keyed_fn_file "$ROOT/src/lj_api.c" luaL_newmetatable
+check_nil_keyed_fn_file "$ROOT/src/lj_parse.c" parse_keep_storebool
+check_nil_keyed_fn_file "$ROOT/src/lj_serialize.c" serialize_dict_storeint
+check_nil_keyed_fn_file "$ROOT/src/lj_record.c" rec_template_mark_nil

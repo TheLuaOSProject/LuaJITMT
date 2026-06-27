@@ -76,7 +76,7 @@ check_helper "$GC2" gc2_finreg_claim_wait_no_l gc2_peer_wait_no_l
 check_function_wait "$GC" gc2_unlink_root_obj gc_root_wait_no_l
 check_function_wait "$GC" lj_gc_sweep_gc2_unmarked gc_root_wait_no_l
 check_function_wait "$GC" gc_sweep gc_root_wait_no_l
-check_function_wait "$GC2" gc2_worker_control_lock gc2_peer_wait_no_l
+check_function_wait "$GC2" gc2_worker_control_lock_l gc2_peer_wait_no_l
 check_function_wait "$GC2" lj_gc2_finalizer_drain_owned gc2_peer_wait_no_l
 check_function_wait "$GC2" gc2_finclaim_publish gc2_peer_wait_no_l
 check_function_wait "$GC2" gc2_finreg_cdata_unlink_root gc2_finreg_claim_wait_no_l

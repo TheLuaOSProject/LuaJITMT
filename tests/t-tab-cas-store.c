@@ -147,6 +147,46 @@ static void exercise_keyed_cas_hash_stale(lua_State *L)
   lj_tab_hmask_rel(t, newhmask);
 }
 
+static void exercise_keyed_nil_cas_hash_stale(lua_State *L)
+{
+  GCtab *t;
+  GCstr *hkey;
+  TValue keytv, old, src, *oldslot, *newslot;
+  Node *oldnode, *newnode;
+  MSize oldhmask, newhmask;
+
+  lua_settop(L, 0);
+  lua_createtable(L, 0, 8);
+  t = tabV(L->top-1);
+  hkey = lj_str_newlit(L, "keyed_nil_cas_hash_stale");
+  oldslot = lj_tab_setstr(L, t, hkey);
+  assert(lj_tv_isnil_acq(oldslot));
+  oldnode = lj_tab_node_acq(t);
+  oldhmask = lj_tab_node_hmask_acq(oldnode);
+
+  lj_tab_resize(L, t, t->asize, lj_fls(oldhmask) + 2u);
+  newnode = lj_tab_node_acq(t);
+  newhmask = lj_tab_node_hmask_acq(newnode);
+  assert(newnode != oldnode);
+
+  setstrV(L, &keytv, hkey);
+  setintV(&src, 14444);
+  assert(lj_tab_trysetnil_cas_keyed(L, t, oldslot, &keytv, &src, &old) ==
+	 LJ_TAB_STORE_CAS_STALE);
+  assert(lj_tv_isnil_acq(oldslot));
+
+  newslot = lj_tab_setstr(L, t, hkey);
+  assert(lj_tab_trysetnil_cas_keyed(L, t, newslot, &keytv, &src, &old) ==
+	 LJ_TAB_STORE_CAS_OK);
+  tabfwd_assert_i32(newslot, 14444);
+  assert(lj_tab_trysetnil_cas_keyed(L, t, newslot, &keytv, &src, &old) ==
+	 LJ_TAB_STORE_CAS_EXISTS);
+  tabfwd_assert_i32(&old, 14444);
+
+  lj_tab_node_rel(t, newnode);
+  lj_tab_hmask_rel(t, newhmask);
+}
+
 static void exercise_meta_forward_retry(lua_State *L)
 {
   GCtab *t;
@@ -581,6 +621,7 @@ int main(void)
   exercise_direct_cas(L);
   exercise_keyed_cas_array_stale(L);
   exercise_keyed_cas_hash_stale(L);
+  exercise_keyed_nil_cas_hash_stale(L);
   exercise_meta_forward_retry(L);
   exercise_capi_rawseti_forward_retry(L);
   exercise_capi_settable_forward_retry(L);

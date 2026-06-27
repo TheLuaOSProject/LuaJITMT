@@ -258,16 +258,12 @@ static void parse_keep_storebool(lua_State *L, GCtab *t, cTValue *key)
   TValue val, old, *dst;
   setboolV(&val, 1);
   for (;;) {
+    int rc;
     dst = lj_tab_set(L, t, key);
-    lj_tv_load_acq(&old, dst);
-    if (tvisforward(&old)) {
-      parse_keep_wait_no_l();  /* Parser anchor store saw FORWARD. */
-      continue;
-    }
-    if (!tvisnil(&old))
+    rc = lj_tab_trysetnil_cas_keyed(L, t, dst, key, &val, &old);
+    if (rc == LJ_TAB_STORE_CAS_OK || rc == LJ_TAB_STORE_CAS_EXISTS)
       return;
-    if (lj_tv_cas(dst, &old, &val))
-      return;
+    /* Parser anchor store saw stale/FORWARD slot. */
     parse_keep_wait_no_l();
   }
 }

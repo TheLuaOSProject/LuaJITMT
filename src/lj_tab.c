@@ -1707,6 +1707,19 @@ static int tab_current_slot_for_key(GCtab *parent, TValue *dst, cTValue *key)
   return tab_current_hash_slot_for_key(parent, dst, keyh);
 }
 
+LJ_FUNCA int lj_tab_read_current_keyed(GCtab *parent, TValue *dst,
+				       cTValue *key, TValue *oldp)
+{
+  if (!tab_current_slot_for_key(parent, dst, key))
+    return LJ_TAB_STORE_CAS_STALE;
+  lj_tv_load_acq(oldp, dst);
+  if (tvisforward(oldp))
+    return LJ_TAB_STORE_CAS_FORWARD;
+  if (!tab_current_slot_for_key(parent, dst, key))
+    return LJ_TAB_STORE_CAS_STALE;
+  return LJ_TAB_STORE_CAS_OK;
+}
+
 LJ_FUNCA int lj_tab_trystoretv_cas_keyed(lua_State *L, GCtab *parent,
 					 TValue *dst, cTValue *key,
 					 cTValue *src)
@@ -1723,6 +1736,34 @@ LJ_FUNCA int lj_tab_trystoretv_cas_keyed(lua_State *L, GCtab *parent,
     return LJ_TAB_STORE_CAS_OK;
   lj_gc_pubtabtv(L, parent, dst);
   return LJ_TAB_STORE_CAS_STALE;
+}
+
+LJ_FUNCA int lj_tab_trysetnil_cas_keyed(lua_State *L, GCtab *parent,
+					TValue *dst, cTValue *key,
+					cTValue *src, TValue *oldp)
+{
+  TValue expect;
+  int rc;
+  for (;;) {
+    rc = lj_tab_read_current_keyed(parent, dst, key, oldp);
+    if (rc != LJ_TAB_STORE_CAS_OK)
+      return rc;
+    if (!tvisnil(oldp))
+      return LJ_TAB_STORE_CAS_EXISTS;
+    expect = *oldp;
+    if (lj_tv_cas(dst, &expect, src)) {
+      if (tab_current_slot_for_key(parent, dst, key))
+	return LJ_TAB_STORE_CAS_OK;
+      lj_gc_pubtabtv(L, parent, dst);
+      return LJ_TAB_STORE_CAS_STALE;
+    }
+    *oldp = expect;
+    if (tvisforward(&expect))
+      return LJ_TAB_STORE_CAS_FORWARD;
+    if (!tvisnil(&expect))
+      return LJ_TAB_STORE_CAS_EXISTS;
+    lj_tab_store_wait_no_l();
+  }
 }
 
 static TValue *tab_forwarded_jit_array_slot(lua_State *L, GCtab *parent,

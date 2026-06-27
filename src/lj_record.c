@@ -1404,16 +1404,12 @@ static void rec_template_mark_nil(jit_State *J, GCtab *tpl, cTValue *key)
   TValue marker, old, *dst;
   settabV(J->L, &marker, tpl);
   for (;;) {
+    int rc;
     dst = lj_tab_set(J->L, tpl, key);
-    lj_tv_load_acq(&old, dst);
-    if (tvisforward(&old)) {
-      rec_template_wait_no_l();  /* Template marker saw FORWARD. */
-      continue;
-    }
-    if (!tvisnil(&old))
+    rc = lj_tab_trysetnil_cas_keyed(J->L, tpl, dst, key, &marker, &old);
+    if (rc == LJ_TAB_STORE_CAS_OK || rc == LJ_TAB_STORE_CAS_EXISTS)
       return;
-    if (lj_tv_cas(dst, &old, &marker))
-      return;
+    /* Template marker saw stale/FORWARD slot. */
     rec_template_wait_no_l();
   }
 }

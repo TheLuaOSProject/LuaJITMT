@@ -767,32 +767,31 @@ LUALIB_API int luaL_newmetatable(lua_State *L, const char *tname)
 {
   GCtab *regt = tabV(registry(L));
   GCstr *key = lj_str_newz(L, tname);
+  TValue keytv;
+  setstrV(L, &keytv, key);
   for (;;) {
     TValue *tv = lj_tab_setstr(L, regt, key);
     TValue old;
-    lj_tv_load_acq(&old, tv);
-    if (tvisforward(&old)) {
-      lj_tab_store_wait_no_l();  /* luaL_newmetatable saw FORWARD. */
+    int rc = lj_tab_read_current_keyed(regt, tv, &keytv, &old);
+    if (rc != LJ_TAB_STORE_CAS_OK) {
+      lj_tab_store_wait_no_l();  /* luaL_newmetatable saw stale/FORWARD slot. */
       continue;
     }
     if (tvisnil(&old)) {
       GCtab *mt = lj_tab_new(L, 0, 1);
-      TValue tmp, expect = old;
+      TValue tmp;
       settabV(L, &tmp, mt);
-      if (lj_tv_cas(tv, &expect, &tmp)) {
+      rc = lj_tab_trysetnil_cas_keyed(L, regt, tv, &keytv, &tmp, &old);
+      if (rc == LJ_TAB_STORE_CAS_OK) {
 	settabV(L, L->top++, mt);
 	lj_gc_pubtab(L, regt);
 	return 1;
       }
-      if (tvisforward(&expect)) {
-	lj_tab_store_wait_no_l();  /* Store raced with FORWARD. */
-	continue;
-      }
-      if (tvisnil(&expect)) {
+      if (rc != LJ_TAB_STORE_CAS_EXISTS) {
 	lj_tab_store_wait_no_l();
 	continue;
       }
-      copyTV(L, L->top++, &expect);
+      copyTV(L, L->top++, &old);
       return 0;
     } else {
       copyTV(L, L->top++, &old);

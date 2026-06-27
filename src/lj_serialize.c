@@ -138,16 +138,12 @@ static void serialize_dict_storeint(lua_State *L, GCtab *dict, cTValue *key,
   TValue val, old, *dst;
   setintV(&val, idx);
   for (;;) {
+    int rc;
     dst = lj_tab_set(L, dict, key);
-    lj_tv_load_acq(&old, dst);
-    if (tvisforward(&old)) {
-      serialize_dict_wait_no_l();  /* Dictionary saw FORWARD after lookup. */
-      continue;
-    }
-    if (!tvisnil(&old))
+    rc = lj_tab_trysetnil_cas_keyed(L, dict, dst, key, &val, &old);
+    if (rc == LJ_TAB_STORE_CAS_OK || rc == LJ_TAB_STORE_CAS_EXISTS)
       return;
-    if (lj_tv_cas(dst, &old, &val))
-      return;
+    /* Dictionary saw stale/FORWARD slot after lookup. */
     serialize_dict_wait_no_l();
   }
 }

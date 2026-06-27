@@ -355,6 +355,8 @@ carry parent/key context now publish through `lj_tab_trystoretv_cas_keyed()`,
 which validates the destination before and after CAS against the parent table's
 current generation or a visible `LJ_TFORWARD` successor, and retries stale old
 generation slots instead of returning after a lost migration-window write;
+insert-if-absent helpers use `lj_tab_trysetnil_cas_keyed()` for the same keyed
+generation validation before publishing nil-slot claims;
 rehash/new-key insertion also release-publishes hash keys through
 `tab_storekeyrel()` and moved values through `copyTVrel()` during legacy resize
 rebuilds. This records a scoped release-store bridge without changing the
