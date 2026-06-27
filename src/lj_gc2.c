@@ -1904,6 +1904,12 @@ int lj_gc2_sweep_tg_ready(TGState *tg)
   return !(flags & TGF_DEAD) && (flags & TGF_ARENA_INTERNAL);
 }
 
+int lj_gc2_sweep_legacy_can_progress(global_State *g)
+{
+  return g && gc2_phase_acq(g) == LJ_GC2_SWEEP &&
+	 !gc2_finalizer_pending_for_sweep(g, 1);
+}
+
 int lj_gc2_sweep_needs_prepare(global_State *g)
 {
   TGState *tg;

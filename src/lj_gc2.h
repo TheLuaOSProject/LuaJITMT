@@ -72,6 +72,7 @@ LJ_FUNC void lj_gc2_legacy_cycle_end(global_State *g);
 LJ_FUNC void lj_gc2_sweep_legacy_ready(global_State *g);
 LJ_FUNC int lj_gc2_sweep_to_idle(global_State *g);
 LJ_FUNC int lj_gc2_sweep_tg_ready(TGState *tg);
+LJ_FUNC int lj_gc2_sweep_legacy_can_progress(global_State *g);
 LJ_FUNC int lj_gc2_sweep_needs_prepare(global_State *g);
 LJ_FUNC int lj_gc2_sweep_pending(global_State *g);
 LJ_FUNC uint32_t lj_gc2_handshake(global_State *g, uint32_t actions);

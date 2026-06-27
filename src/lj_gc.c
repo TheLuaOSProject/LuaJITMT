@@ -129,8 +129,7 @@ static void gc_arena_rebuild_free(global_State *g)
 
 static int gc_arena_sweep_ready(global_State *g)
 {
-  return gc2_phase_acq(g) == LJ_GC2_SWEEP &&
-	 !lj_gc2_finalizer_sweep_pending(g);
+  return lj_gc2_sweep_legacy_can_progress(g);
 }
 
 static int gc_arena_sweep_needs_prepare(global_State *g)
@@ -223,8 +222,7 @@ static void gc_arena_verify_sweep_boundary(global_State *g)
   TGState *tg = G2TG(g);
   GCobj *o;
   if (!tg || !lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL) ||
-      gc2_phase_acq(g) != LJ_GC2_SWEEP ||
-      lj_gc2_finalizer_sweep_pending(g))
+      !gc_arena_sweep_ready(g))
     return;
   for (o = gcref_acq(g->gc.root); o != NULL; o = lj_obj_gcw_acq(o)) {
     gc_arena_verify_marked(g, o);
