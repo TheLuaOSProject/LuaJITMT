@@ -20,6 +20,7 @@ if ! awk '
   }
   in_fn && /lj_thr_sleep_ns\(L,[[:space:]]*1000000\)/ { slept = 1 }
   in_fn && /lj_safepoint_checkstop\(L,[[:space:]]*actions\)/ { checked = 1 }
+  in_fn && /threading_checkstop_fresh\(L,[[:space:]]*actions,[[:space:]]*had_stopreq\)/ { checked = 1 }
   in_fn && /^}/ { in_fn = 0 }
   END { exit(slept && checked ? 0 : 1) }
 ' "$ROOT/src/lib_threading.c"; then

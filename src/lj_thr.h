@@ -46,6 +46,26 @@ static LJ_AINLINE void lj_thread_live_next_rel(LJThreadLive *node,
   la_storeptr_rel((void **)&node->next, next);
 }
 
+static LJ_AINLINE LJThreadLive *
+lj_thread_live_head_acq(const global_State *g)
+{
+  return (LJThreadLive *)la_loadptr_acq((void *const *)&g->threading_live);
+}
+
+static LJ_AINLINE int lj_thread_live_head_cas(global_State *g,
+					      LJThreadLive **oldp,
+					      LJThreadLive *node)
+{
+  return la_casptr((void **)&g->threading_live, (void **)oldp, node,
+		   LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE LJThreadLive *
+lj_thread_live_head_xchg_acqrel(global_State *g, LJThreadLive *node)
+{
+  return (LJThreadLive *)la_xchgptr_acqrel((void **)&g->threading_live, node);
+}
+
 typedef struct LJThread {
   LJThr thr;
   lua_State *L;
@@ -60,6 +80,18 @@ typedef struct LJThread {
   uint32_t nresults;
   uint32_t main_thread;
 } LJThread;
+
+static LJ_AINLINE LJThreadLive *
+lj_thread_live_node_acq(const LJThread *th)
+{
+  return (LJThreadLive *)la_loadptr_acq((void *const *)&th->live_node);
+}
+
+static LJ_AINLINE void lj_thread_live_node_rel(LJThread *th,
+					       LJThreadLive *node)
+{
+  la_storeptr_rel((void **)&th->live_node, node);
+}
 
 static LJ_AINLINE lua_State *lj_thread_state_load_acq(const LJThread *th)
 {

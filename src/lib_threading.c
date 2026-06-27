@@ -87,11 +87,6 @@ static LJThread *threading_tothread(lua_State *L)
   return (LJThread *)uddata(udataV(L->base));
 }
 
-static LJThreadLive *threading_live_head(global_State *g)
-{
-  return (LJThreadLive *)la_loadptr_acq((void *const *)&g->threading_live);
-}
-
 static GCudata *threading_live_ud(LJThreadLive *node)
 {
   GCobj *o = gcref_acq(node->ud);
@@ -115,13 +110,12 @@ static LJThreadLive *threading_live_new(lua_State *L, GCudata *ud)
 static void threading_live_publish(global_State *g, LJThread *th,
 				   LJThreadLive *node)
 {
-  void *head;
+  LJThreadLive *head;
   do {
-    head = la_loadptr_acq((void *const *)&g->threading_live);
-    lj_thread_live_next_rel(node, (LJThreadLive *)head);
-  } while (!la_casptr((void **)&g->threading_live, &head, node,
-		      LA_ACQ_REL, LA_ACQ));
-  la_storeptr_rel((void **)&th->live_node, node);
+    head = lj_thread_live_head_acq(g);
+    lj_thread_live_next_rel(node, head);
+  } while (!lj_thread_live_head_cas(g, &head, node));
+  lj_thread_live_node_rel(th, node);
 }
 
 static void threading_live_free_node(global_State *g, LJThreadLive *node)
@@ -137,17 +131,16 @@ static void threading_live_remove(LJThread *th)
   LJThreadLive *node;
   if (!th)
     return;
-  node = (LJThreadLive *)la_loadptr_acq((void *const *)&th->live_node);
+  node = lj_thread_live_node_acq(th);
   if (node) {
     setgcrefrel(node->ud, NULL);
-    la_storeptr_rel((void **)&th->live_node, NULL);
+    lj_thread_live_node_rel(th, NULL);
   }
 }
 
 static void threading_live_free_all(global_State *g)
 {
-  LJThreadLive *node = (LJThreadLive *)
-    la_xchgptr_acqrel((void **)&g->threading_live, NULL);
+  LJThreadLive *node = lj_thread_live_head_xchg_acqrel(g, NULL);
   while (node) {
     LJThreadLive *next = lj_thread_live_next_acq(node);
     lj_mem_freet(g, node);
@@ -312,7 +305,7 @@ void lj_threading_shutdown(lua_State *L)
   LJThread *th;
   mt_shutdown_rel(g, 1);
   mt_gc_exclusive_futex_wake(g, INT_MAX);
-  if (!threading_live_head(g) && mt_live_acq(g) == 0 &&
+  if (!lj_thread_live_head_acq(g) && mt_live_acq(g) == 0 &&
       mt_entering_acq(g) == 0)
     return;
   lj_assertG(cur == NULL || cur == g->main_tg,
@@ -328,7 +321,7 @@ void lj_threading_shutdown(lua_State *L)
       mt_live_futex_wait(g, live, 1000000);
     }
   }
-  for (node = threading_live_head(g); node != NULL;
+  for (node = lj_thread_live_head_acq(g); node != NULL;
        node = lj_thread_live_next_acq(node)) {
     GCudata *ud = threading_live_ud(node);
     if (!ud)

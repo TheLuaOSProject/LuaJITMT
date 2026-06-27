@@ -3,6 +3,31 @@
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+for helper in lj_thread_live_head_acq \
+  lj_thread_live_head_cas \
+  lj_thread_live_head_xchg_acqrel \
+  lj_thread_live_node_acq \
+  lj_thread_live_node_rel; do
+  if ! grep -qE "^[[:space:]]*static LJ_AINLINE .*[*[:space:]]${helper}[[:space:]]*[(]|^[[:space:]]*${helper}[[:space:]]*[(]" \
+      "$ROOT/src/lj_thr.h"; then
+    printf '%s\n' "${helper} helper is required for threading live roots" >&2
+    exit 1
+  fi
+done
+if hits=$(grep -nE -- '(^|[^[:alnum:]_])g[[:space:]]*->[[:space:]]*threading_live([^[:alnum:]_]|$)|&[[:space:]]*g[[:space:]]*->[[:space:]]*threading_live([^[:alnum:]_]|$)' \
+    "$ROOT/src/lib_threading.c" \
+    "$ROOT/src/lj_gc.c" \
+    "$ROOT/src/lj_gc2.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw threading_live head access is forbidden; use lj_thread_live_head_* helpers' >&2
+  exit 1
+fi
+if hits=$(grep -nE -- '(^|[^[:alnum:]_])th[[:space:]]*->[[:space:]]*live_node([^[:alnum:]_]|$)|&[[:space:]]*th[[:space:]]*->[[:space:]]*live_node([^[:alnum:]_]|$)' \
+    "$ROOT/src/lib_threading.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw LJThread.live_node access is forbidden; use lj_thread_live_node_* helpers' >&2
+  exit 1
+fi
 if hits=$(grep -nE -- '(^|[^[:alnum:]_])node[[:space:]]*->[[:space:]]*next' \
     "$ROOT/src/lib_threading.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2

@@ -676,7 +676,7 @@ static void gc_mark_fixedstr(global_State *g)
 static void gc_mark_threading_live(global_State *g)
 {
   LJThreadLive *node;
-  for (node = (LJThreadLive *)la_loadptr_acq((void *const *)&g->threading_live);
+  for (node = lj_thread_live_head_acq(g);
        node != NULL;
        node = lj_thread_live_next_acq(node)) {
     GCobj *o = gcref_acq(node->ud);
