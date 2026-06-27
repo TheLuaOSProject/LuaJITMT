@@ -71,6 +71,28 @@ static LJ_AINLINE Node *hashmask(const GCtab *t, uint32_t hash)
 #define hsize2hbits(s)	((s) ? ((s)==1 ? 1 : 1+lj_fls((uint32_t)((s)-1))) : 0)
 
 static LJ_AINLINE TabNodeRetire *
+lj_tab_node_retired_head_acq(const global_State *g)
+{
+  return (TabNodeRetire *)la_loadptr_acq(
+    (void *const *)&g->tab.retired_nodes);
+}
+
+static LJ_AINLINE int lj_tab_node_retired_head_cas(global_State *g,
+						   TabNodeRetire **oldp,
+						   TabNodeRetire *ret)
+{
+  return la_casptr((void **)&g->tab.retired_nodes, (void **)oldp, ret,
+		   LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE TabNodeRetire *
+lj_tab_node_retired_head_xchg_acqrel(global_State *g, TabNodeRetire *ret)
+{
+  return (TabNodeRetire *)la_xchgptr_acqrel(
+    (void **)&g->tab.retired_nodes, ret);
+}
+
+static LJ_AINLINE TabNodeRetire *
 lj_tab_node_retired_next_acq(const TabNodeRetire *ret)
 {
   return (TabNodeRetire *)la_loadptr_acq((void *const *)&ret->next);
@@ -126,6 +148,28 @@ static LJ_AINLINE void lj_tab_node_retired_armed_rel(TabNodeRetire *ret,
 						     uint32_t armed)
 {
   la_store32_rel(&ret->armed, armed);
+}
+
+static LJ_AINLINE TabArrayRetire *
+lj_tab_array_retired_head_acq(const global_State *g)
+{
+  return (TabArrayRetire *)la_loadptr_acq(
+    (void *const *)&g->tab.retired_arrays);
+}
+
+static LJ_AINLINE int lj_tab_array_retired_head_cas(global_State *g,
+						    TabArrayRetire **oldp,
+						    TabArrayRetire *ret)
+{
+  return la_casptr((void **)&g->tab.retired_arrays, (void **)oldp, ret,
+		   LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE TabArrayRetire *
+lj_tab_array_retired_head_xchg_acqrel(global_State *g, TabArrayRetire *ret)
+{
+  return (TabArrayRetire *)la_xchgptr_acqrel(
+    (void **)&g->tab.retired_arrays, ret);
 }
 
 static LJ_AINLINE TabArrayRetire *

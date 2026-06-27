@@ -102,8 +102,7 @@ static void gc_mark_tab_retired_mem(global_State *g)
 {
   TabNodeRetire *ret;
   TabArrayRetire *aret;
-  for (ret = (TabNodeRetire *)la_loadptr_acq(
-	 (void *const *)&g->tab.retired_nodes);
+  for (ret = lj_tab_node_retired_head_acq(g);
        ret != NULL;
        ret = lj_tab_node_retired_next_acq(ret)) {
     lj_gc_arena_markmem(g, ret);
@@ -111,8 +110,7 @@ static void gc_mark_tab_retired_mem(global_State *g)
       lj_gc_arena_markmem(g,
 			  lj_tab_node_hdrw(lj_tab_node_retired_node_acq(ret)));
   }
-  for (aret = (TabArrayRetire *)la_loadptr_acq(
-	 (void *const *)&g->tab.retired_arrays);
+  for (aret = lj_tab_array_retired_head_acq(g);
        aret != NULL;
        aret = lj_tab_array_retired_next_acq(aret)) {
     lj_gc_arena_markmem(g, aret);
@@ -404,8 +402,7 @@ static void gc2_paranoia_check_rawroots(global_State *g)
        hdr != NULL;
        hdr = lj_str_retired_next_acq(hdr))
     gc2_paranoia_checkmem(g, hdr, "retired string table");
-  for (ret = (TabNodeRetire *)la_loadptr_acq(
-	 (void *const *)&g->tab.retired_nodes);
+  for (ret = lj_tab_node_retired_head_acq(g);
        ret != NULL;
        ret = lj_tab_node_retired_next_acq(ret)) {
     gc2_paranoia_checkmem(g, ret, "retired table node record");
@@ -414,8 +411,7 @@ static void gc2_paranoia_check_rawroots(global_State *g)
 			    lj_tab_node_hdrw(lj_tab_node_retired_node_acq(ret)),
 			    "retired table nodes");
   }
-  for (aret = (TabArrayRetire *)la_loadptr_acq(
-	 (void *const *)&g->tab.retired_arrays);
+  for (aret = lj_tab_array_retired_head_acq(g);
        aret != NULL;
        aret = lj_tab_array_retired_next_acq(aret)) {
     gc2_paranoia_checkmem(g, aret, "retired table array record");

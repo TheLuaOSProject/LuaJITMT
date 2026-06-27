@@ -21,5 +21,16 @@ Validation:
 
 Notes:
 - Head operations for `global_State.tab.retired_nodes` and
-  `global_State.tab.retired_arrays` remain explicit acquire/CAS/xchg sites.
-  This slice centralizes only the per-record next links.
+  `global_State.tab.retired_arrays` now route through
+  `lj_tab_node_retired_head_*()` and `lj_tab_array_retired_head_*()` helpers.
+  Runtime retirement push, epoch reclaim, close-time free, legacy GC marking,
+  GC2 paranoia scans, and focused fixtures use those helpers.
+- `tools/ci/m5_tab_retire.sh` and `tools/ci/m5_tab_array_publish.sh` reject
+  raw table retired head access in the implementation, scanner, and focused
+  fixtures.
+
+Follow-up validation:
+- `git diff --check`
+- `tools/ci/m5_tab_retire.sh`
+- `tools/ci/m5_tab_array_publish.sh`
+- `tools/ci/m3_gc2_paranoia.sh`
