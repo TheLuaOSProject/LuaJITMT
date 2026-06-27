@@ -9,6 +9,7 @@
 #include "lua.h"
 #include "lauxlib.h"
 #include "lualib.h"
+#include "luajit.h"
 
 #include "lj_obj.h"
 
@@ -45,24 +46,27 @@ static void run_ok(lua_State *L, const char *chunk)
   assert(rc == LUA_OK);
 }
 
-static void expect_stopreq_error(lua_State *L, int rc)
+static void profile_noop_cb(void *data, lua_State *L, int samples, int vmstate)
 {
-  const char *err;
-  assert(rc != LUA_OK);
-  err = lua_tostring(L, -1);
-  assert(err && strstr(err, "thread interrupted: VM shutdown"));
-  lua_pop(L, 1);
+  UNUSED(data);
+  UNUSED(L);
+  UNUSED(samples);
+  UNUSED(vmstate);
 }
 
-static void run_deferred_cleanup_test(lua_State *L, TGState *tg)
+static void run_sticky_cleanup_test(lua_State *L, TGState *tg)
 {
   run_ok(L,
     "local profile = require('jit.profile')\n"
     "profile.start('i1000', function() end)\n");
   set_stopreq(tg);
-  expect_stopreq_error(L, luaL_dostring(L,
+  run_ok(L,
     "local profile = require('jit.profile')\n"
-    "profile.stop()\n"));
+    "profile.stop()\n");
+  clear_stopreq(tg);
+  luaJIT_profile_start(L, "i1000", profile_noop_cb, NULL);
+  set_stopreq(tg);
+  luaJIT_profile_stop(L);
   clear_stopreq(tg);
   run_ok(L,
     "local profile = require('jit.profile')\n"
@@ -96,6 +100,15 @@ static void run_callback_error_test(lua_State *L)
 #include <pthread.h>
 
 #include "lj_safepoint.h"
+
+static void expect_stopreq_error(lua_State *L, int rc)
+{
+  const char *err;
+  assert(rc != LUA_OK);
+  err = lua_tostring(L, -1);
+  assert(err && strstr(err, "thread interrupted: VM shutdown"));
+  lua_pop(L, 1);
+}
 
 typedef struct ProfileStopCtx {
   global_State *g;
@@ -221,7 +234,7 @@ int main(void)
   assert(tg != NULL);
 
   run_ok(L, "assert(require('jit.profile'))");
-  run_deferred_cleanup_test(L, tg);
+  run_sticky_cleanup_test(L, tg);
   run_callback_error_test(L);
 #if LJ_PROFILE_PTHREAD
   run_native_join_test(L, g, tg);

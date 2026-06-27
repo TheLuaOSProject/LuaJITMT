@@ -30,10 +30,22 @@ if ! grep -qF 'LJ_FUNC uint32_t lj_profile_stop_hs(lua_State *L);' src/lj_profil
   exit 1
 fi
 
+for required in \
+  'static void jit_profile_checkstop_fresh(lua_State *L, uint32_t actions,' \
+  'jit_profile_checkstop_fresh(L, actions, had_stopreq)' \
+  'static void profile_checkstop_fresh(lua_State *L, uint32_t actions,' \
+  'profile_checkstop_fresh(L, actions, had_stopreq)'
+do
+  if ! grep -qF "$required" src/lib_jit.c src/lj_profile.c; then
+    printf '%s\n' "profile stop fresh STOPREQ guard is missing: $required" >&2
+    exit 1
+  fi
+done
+
 if ! awk '
   /LJLIB_CF\(jit_profile_stop\)/ { inside = 1 }
   inside && /jit_profile_registry_clear\(L\);/ { cleared = NR }
-  inside && /lj_safepoint_checkstop\(L, actions\);/ { checked = NR }
+  inside && /jit_profile_checkstop_fresh\(L, actions, had_stopreq\);/ { checked = NR }
   inside && /^}/ {
     if (cleared && checked && checked > cleared)
       found = 1
@@ -42,6 +54,50 @@ if ! awk '
   END { exit(found ? 0 : 1) }
 ' src/lib_jit.c; then
   printf '%s\n' 'jit.profile.stop must check STOPREQ after clearing registry anchors' >&2
+  exit 1
+fi
+
+if hits=$(awk '
+  /^static void jit_profile_checkstop_fresh\(lua_State \*L, uint32_t actions,/ {
+    in_fresh = 1
+  }
+  /LJLIB_CF\(jit_profile_stop\)/ {
+    in_stop = 1
+  }
+  in_stop && /lj_safepoint_checkstop\(L, actions\);/ && !in_fresh {
+    print FILENAME ":" FNR ":" $0
+  }
+  in_stop && /^}/ {
+    in_stop = 0
+  }
+  in_fresh && /^}/ {
+    in_fresh = 0
+  }
+' src/lib_jit.c); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'jit.profile.stop must use fresh STOPREQ semantics' >&2
+  exit 1
+fi
+
+if hits=$(awk '
+  /^static void profile_checkstop_fresh\(lua_State \*L, uint32_t actions,/ {
+    in_fresh = 1
+  }
+  /^LUA_API void luaJIT_profile_stop\(lua_State \*L\)/ {
+    in_stop = 1
+  }
+  in_stop && /lj_safepoint_checkstop\(L,/ && !in_fresh {
+    print FILENAME ":" FNR ":" $0
+  }
+  in_stop && /^}/ {
+    in_stop = 0
+  }
+  in_fresh && /^}/ {
+    in_fresh = 0
+  }
+' src/lj_profile.c); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'luaJIT_profile_stop must use fresh STOPREQ semantics' >&2
   exit 1
 fi
 

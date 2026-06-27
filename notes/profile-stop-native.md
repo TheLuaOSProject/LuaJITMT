@@ -11,6 +11,17 @@ Lua `jit.profile.stop()` wrapper clears its hidden callback coroutine/function
 registry anchors before delivering STOPREQ. This keeps profiler state stopped
 and Lua-level anchors cleared even when shutdown interrupts the stop call.
 
+2026-06-27 follow-up:
+
+- Both `luaJIT_profile_stop()` and the Lua `jit.profile.stop()` wrapper now use
+  fresh STOPREQ helpers. A pre-existing sticky shutdown flag no longer
+  interrupts otherwise successful profiler stop cleanup; a STOPREQ published
+  during the native `pthread_join()` still interrupts after cleanup.
+- `t-profile-stop-native.c` now covers sticky cleanup for both the Lua wrapper
+  and public C API, while keeping the native-join STOPREQ regression.
+- `tools/ci/m5_profile_stop_native.sh` now guards against raw profile-stop
+  STOPREQ checks outside the fresh helpers.
+
 Validation:
 
 - `tools/ci/m5_profile_stop_native.sh`

@@ -413,10 +413,33 @@ uint32_t lj_profile_stop_hs(lua_State *L)
   return actions;
 }
 
+static int profile_had_stopreq(lua_State *L)
+{
+  TGState *tg = L2TG(L);
+  return tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ);
+}
+
+static int profile_fresh_stopreq(lua_State *L, uint32_t actions,
+				 int had_stopreq)
+{
+  TGState *tg = L2TG(L);
+  return (actions & LJ_GC2_HS_STOPREQ) ||
+    (!had_stopreq && tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ));
+}
+
+static void profile_checkstop_fresh(lua_State *L, uint32_t actions,
+				    int had_stopreq)
+{
+  if (profile_fresh_stopreq(L, actions, had_stopreq))
+    lj_safepoint_checkstop(L, actions);
+}
+
 /* Stop profiling. */
 LUA_API void luaJIT_profile_stop(lua_State *L)
 {
-  lj_safepoint_checkstop(L, lj_profile_stop_hs(L));
+  int had_stopreq = profile_had_stopreq(L);
+  uint32_t actions = lj_profile_stop_hs(L);
+  profile_checkstop_fresh(L, actions, had_stopreq);
 }
 
 /* Return a compact stack dump. */
