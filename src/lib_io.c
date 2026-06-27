@@ -106,6 +106,15 @@ static int io_native_fflush(lua_State *L, FILE *fp)
   return ok;
 }
 
+static int io_native_setvbuf(lua_State *L, FILE *fp, int mode, size_t size)
+{
+  int ok;
+  lj_native_enter(L2TG(L));
+  ok = setvbuf(fp, NULL, mode, size);
+  lj_safepoint_checkstop(L, lj_native_leave(L));
+  return ok;
+}
+
 static int io_native_fscanf_num(lua_State *L, FILE *fp, lua_Number *dp)
 {
   int ok;
@@ -567,7 +576,7 @@ LJLIB_CF(io_method_setvbuf)
   if (opt == 0) opt = _IOFBF;
   else if (opt == 1) opt = _IOLBF;
   else if (opt == 2) opt = _IONBF;
-  return luaL_fileresult(L, setvbuf(fp, NULL, opt, sz) == 0, NULL);
+  return luaL_fileresult(L, io_native_setvbuf(L, fp, opt, sz) == 0, NULL);
 }
 
 LJLIB_CF(io_method_lines)

@@ -1,5 +1,6 @@
 local path = os.getenv("LJ_JIT_IO_STOPREQ_OUT") or "/tmp/lj-jit-io-stopreq.out"
 local f = assert(io.open(path, "w"))
+assert(f:setvbuf("no"))
 local vmdef = require("jit.vmdef")
 
 jit.off()
