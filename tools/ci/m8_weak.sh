@@ -271,6 +271,27 @@ for pattern in 'lj_gc2_finalizer_dispatch_all(L, gc_call_finalizer)' \
     exit 1
   fi
 done
+if ! grep -qF 'lj_gc2_finalizer_fullgc_deferred(g)' "$ROOT/src/lj_gc.c"; then
+  printf '%s\n' 'lj_gc_fullgc finalizer-spawn deferral must use lj_gc2_finalizer_fullgc_deferred' >&2
+  exit 1
+fi
+if hits=$(grep -nE -- 'LJ_FUNC .*[[:space:]]lj_gc2_finalizer_spawn_deferred[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.h" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw finalizer-spawn deferral predicate must stay private to lj_gc2.c' >&2
+  exit 1
+fi
+if ! grep -qE '^static int gc2_finalizer_spawn_deferred[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.c"; then
+  printf '%s\n' 'private gc2_finalizer_spawn_deferred implementation is required' >&2
+  exit 1
+fi
+if hits=$(grep -nE -- 'lj_gc2_finalizer_spawn_deferred[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'legacy GC must not call raw finalizer-spawn deferral predicate' >&2
+  exit 1
+fi
 if ! grep -qF 'lj_gc2_finalizer_phase_pending(g)' "$ROOT/src/lj_gc.c"; then
   printf '%s\n' 'legacy GC sweep-to-finalize transition must use lj_gc2_finalizer_phase_pending' >&2
   exit 1

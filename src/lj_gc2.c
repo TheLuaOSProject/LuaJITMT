@@ -1574,6 +1574,8 @@ void lj_gc2_finalizer_dispatch_all(lua_State *L, GC2FinalizerCallFunc call)
   }
 }
 
+static int gc2_finalizer_spawn_deferred(global_State *g);
+
 static int lj_gc2_finalizer_step_ctx(lua_State *L,
 				     GC2FinalizerDispatchCtx *ctx,
 				     GCSize finalize_cost, GCSize *cost)
@@ -1608,7 +1610,7 @@ static int lj_gc2_finalizer_step_ctx(lua_State *L,
       *cost = finalize_cost;
     return 1;
   }
-  if (lj_gc2_finalizer_spawn_deferred(g)) {
+  if (gc2_finalizer_spawn_deferred(g)) {
     if (cost)
       *cost = LJ_MAX_MEM;
     return -1;  /* Keep GCSfinalize open until spawned TG exits. */
@@ -1623,6 +1625,11 @@ int lj_gc2_finalizer_step(lua_State *L, GC2FinalizerCallFunc call,
   ctx.call = call;
   ctx.dispatch = NULL;
   return lj_gc2_finalizer_step_ctx(L, &ctx, finalize_cost, cost);
+}
+
+int lj_gc2_finalizer_fullgc_deferred(global_State *g)
+{
+  return gc2_finalizer_spawn_deferred(g);
 }
 
 static int lj_gc2_finalizer_try_enter(global_State *g)
@@ -1855,7 +1862,7 @@ int lj_gc2_finalizer_mt_reclaim_exclusive(global_State *g)
   }
 }
 
-int lj_gc2_finalizer_spawn_deferred(global_State *g)
+static int gc2_finalizer_spawn_deferred(global_State *g)
 {
   if (!g)
     return 0;

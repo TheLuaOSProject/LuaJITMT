@@ -537,7 +537,7 @@ for helper in lj_gc2_finalizer_pause_threshold \
   lj_gc2_finalizer_restore_threshold \
   lj_gc2_finalizer_mt_release_exclusive \
   lj_gc2_finalizer_mt_reclaim_exclusive \
-  lj_gc2_finalizer_spawn_deferred \
+  lj_gc2_finalizer_fullgc_deferred \
   lj_gc2_finalizer_spawn_release; do
   if ! grep -qE "^[[:space:]]*LJ_FUNC .*[[:space:]]${helper}[[:space:]]*[(]" \
       "$ROOT/src/lj_gc2.h"; then
@@ -550,6 +550,27 @@ for helper in lj_gc2_finalizer_pause_threshold \
     exit 1
   fi
 done
+if hits=$(grep -nE -- 'LJ_FUNC .*[[:space:]]lj_gc2_finalizer_spawn_deferred[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.h" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw finalizer-spawn deferral predicate must stay private to lj_gc2.c' >&2
+  exit 1
+fi
+if ! grep -qE '^static int gc2_finalizer_spawn_deferred[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.c"; then
+  printf '%s\n' 'private gc2_finalizer_spawn_deferred implementation is required' >&2
+  exit 1
+fi
+if ! grep -qF 'lj_gc2_finalizer_fullgc_deferred(g)' "$ROOT/src/lj_gc.c"; then
+  printf '%s\n' 'lj_gc_fullgc must use lj_gc2_finalizer_fullgc_deferred' >&2
+  exit 1
+fi
+if hits=$(grep -nE -- 'lj_gc2_finalizer_spawn_deferred[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'legacy GC must not call raw finalizer-spawn deferral predicate' >&2
+  exit 1
+fi
 if hits=$(grep -nE -- 'gc2_finalizer_spawn_(deferrals|release_wakes)_add|lj_gc2_worker_wake[(]g[)]' \
     "$ROOT/src/lj_gc.c" \
     "$ROOT/src/lib_threading.c" || true); [ -n "$hits" ]; then

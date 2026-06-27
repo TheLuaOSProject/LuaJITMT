@@ -1917,7 +1917,7 @@ void lj_gc_fullgc(lua_State *L)
   g->gc.state = GCSpause;
   do {
     gc_onestep(L);
-    if (lj_gc2_finalizer_spawn_deferred(g)) {
+    if (lj_gc2_finalizer_fullgc_deferred(g)) {
       vmstate_store_rel(g, ostate);
       return;
     }

@@ -122,6 +122,7 @@ LJ_FUNC int lj_gc2_finalizer_step(lua_State *L,
 				  GCSize finalize_cost, GCSize *cost);
 LJ_FUNC void lj_gc2_finalizer_mark_all(global_State *g,
 				       GC2FinalizerMarkFunc mark);
+LJ_FUNC int lj_gc2_finalizer_fullgc_deferred(global_State *g);
 LJ_FUNC int lj_gc2_finalizer_phase_pending(global_State *g);
 LJ_FUNC int lj_gc2_finalizer_close_pending(global_State *g);
 #if defined(lj_gc2_c) || defined(LJ_GC2_TEST_HELPERS) || defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
@@ -176,7 +177,6 @@ LJ_FUNC GCSize lj_gc2_finalizer_pause_threshold(global_State *g);
 LJ_FUNC void lj_gc2_finalizer_restore_threshold(global_State *g, GCSize oldt);
 LJ_FUNC int lj_gc2_finalizer_mt_release_exclusive(global_State *g);
 LJ_FUNC int lj_gc2_finalizer_mt_reclaim_exclusive(global_State *g);
-LJ_FUNC int lj_gc2_finalizer_spawn_deferred(global_State *g);
 LJ_FUNC void lj_gc2_finalizer_spawn_release(global_State *g);
 LJ_FUNCA void lj_gc2_barrier_tv_g(global_State *g, cTValue *tv);
 LJ_FUNCA void lj_gc2_barrier_tvn_pair_g(global_State *g, GCobj *parent,
