@@ -210,11 +210,11 @@ loop from `lj_gc.c`.
 Current parked-worker delta: the original target remains the full worker pool
 with per-worker Chase-Lev ownership, grow-safe deque migration, steal/idle
 declaration, and scheduler-owned phase transitions described above. The current
-implementation adds an explicit, opt-in `lj_gc2_worker_start/stop/wake`
-lifecycle for a capped two-worker parked pool over the existing bounded
+implementation adds an explicit, opt-in `lj_gc2_workers_set()` / stop lifecycle
+for a capped two-worker parked pool over the existing bounded
 `lj_gc2_worker_drain()` surface. It does not auto-start workers and does not add
 an `LJ_MT`/`LUAJIT_THREADSAFE` lock gate. Phase transitions and mutator SSB
-publication now wake started parked workers, with
+publication now wake started parked workers through GC2-internal wake control, with
 `worker_wakes`, `worker_parks`, and `worker_async_progress` recording the
 bridge behavior until the full scheduler replaces the single-owner token.
 Parked workers now attach real no-Lua-stack TGs and use TG TLS, so safepoint

@@ -655,21 +655,6 @@ int lj_gc2_workers_set(global_State *g, uint32_t n)
   return ok;
 }
 
-int lj_gc2_worker_start(global_State *g)
-{
-  int ok;
-  if (!g)
-    return 0;
-  gc2_worker_control_lock(g);
-  if (gc2_n_workers_acq(g) != 0) {
-    gc2_worker_control_unlock(g);
-    return 1;
-  }
-  ok = gc2_worker_start_count_locked(g, 1);
-  gc2_worker_control_unlock(g);
-  return ok;
-}
-
 static void gc2_worker_stop_locked(global_State *g)
 {
   uint32_t i, any = 0;

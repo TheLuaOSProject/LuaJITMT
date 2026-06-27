@@ -157,7 +157,7 @@ static void test_finalizer_consumer_ring(lua_State *L, global_State *g)
   queued0 = la_load64_acq(&g->gc2.finalizer_queued);
   dequeued0 = la_load64_acq(&g->gc2.finalizer_dequeued);
   drained0 = la_load64_acq(&g->gc2.finalizer_mpsc_drained);
-  assert(lj_gc2_worker_start(g) == 1);
+  assert(lj_gc2_workers_set(g, 1) == 1);
   wakes0 = gc2_worker_wakes_acq(g);
   lj_gc2_test_finalizer_enqueue(g, a);
   lj_gc2_test_finalizer_enqueue(g, b);

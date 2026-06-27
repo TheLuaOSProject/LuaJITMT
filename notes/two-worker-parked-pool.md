@@ -10,10 +10,11 @@ Context:
 
 Change:
 - `GC2State` now stores a capped two-slot parked worker array.
-- `lj_gc2_workers_set(g, n)` starts/stops an exact capped count, while
-  `lj_gc2_worker_start(g)` keeps its old "ensure at least one" meaning.
-- `lj_gc2_worker_wake()` wakes the active parked worker count instead of one
-  waiter.
+- `lj_gc2_workers_set(g, n)` starts/stops an exact capped count; the old
+  single-worker start helper has been removed.
+- Internal `lj_gc2_worker_wake()` wakes the active parked worker count instead
+  of one waiter; C harnesses use `lj_gc2_test_worker_wake()` for forced wake
+  races.
 - `collectgarbage("workers", 2)` now results in two active parked workers.
 - A follow-up helper slice routes wake, park, contention, and async-progress
   telemetry through `gc2_worker_*()` counter helpers.

@@ -86,6 +86,13 @@ if ! grep -qE '^[[:space:]]*static void lj_gc2_worker_wake[[:space:]]*[(]' \
   printf '%s\n' 'lj_gc2_worker_wake must stay static inside lj_gc2.c' >&2
   exit 1
 fi
+if hits=$(grep -nE -- 'lj_gc2_worker_start[[:space:]]*[(]|LJ_FUNC int lj_gc2_worker_start[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.c" "$ROOT/src/lj_gc2.h" "$ROOT"/src/*.c || true); \
+    [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw GC2 single-worker start API is obsolete; use lj_gc2_workers_set' >&2
+  exit 1
+fi
 for helper in lj_tg_tid_acq lj_tg_tid_rel; do
   if ! grep -qE "^[[:space:]]*static LJ_AINLINE .*[*[:space:]]${helper}[[:space:]]*[(]" \
       "$ROOT/src/lj_tg.h"; then
