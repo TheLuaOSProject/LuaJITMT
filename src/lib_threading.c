@@ -451,6 +451,15 @@ static LJThread *threading_thread_from_state(lua_State *L, lua_State *child)
   return NULL;  /* unreachable */
 }
 
+static uint32_t threading_join_claim_results(lua_State *L, lua_State *child,
+					     uint32_t tid)
+{
+  uint32_t actions = 0;
+  while (!lj_state_claim(child, tid))
+    actions |= lj_thr_sleep_ns(L, 1000000);
+  return actions;
+}
+
 static int threading_join_core(lua_State *L, LJThread *th, int has_timeout,
 			       int64_t ns)
 {
@@ -507,8 +516,7 @@ static int threading_join_core(lua_State *L, LJThread *th, int has_timeout,
     uint32_t tid = lj_thr_current_id(G(L));
     uint32_t i;
     lua_State *child = lj_thread_state_load_acq(th);
-    while (!lj_state_claim(child, tid))
-      la_cpu_pause();
+    join_actions |= threading_join_claim_results(L, child, tid);
     for (i = 0; i < th->nresults; i++)
       copyTV(L, L->top++, child->base + i);
     lj_state_release(child, tid);

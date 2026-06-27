@@ -3,4 +3,15 @@
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+if hits=$(awk '
+  /while[[:space:]]*\(!lj_state_claim\(child, tid\)\)/ {
+    line = $0
+    if ((getline nextline) > 0 && nextline ~ /la_cpu_pause[[:space:]]*\(/)
+      print FNR-1 ":" line "\n" FNR ":" nextline
+  }
+' "$ROOT/src/lib_threading.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'DONE child join result claims must wait in native slices, not spin on la_cpu_pause()' >&2
+  exit 1
+fi
 exec "$ROOT/tools/ci/lua_test.sh" m4_threading_api

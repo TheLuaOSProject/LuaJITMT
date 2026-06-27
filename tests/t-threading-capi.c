@@ -4,6 +4,7 @@
 
 #include <stdarg.h>
 #include <pthread.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,6 +13,8 @@
 #include "lua.h"
 #include "lauxlib.h"
 #include "lualib.h"
+
+#include "lj_obj.h"
 
 static void failf(const char *fmt, ...)
 {
@@ -57,6 +60,15 @@ static int c_sleep_done(lua_State *L)
   return 1;
 }
 
+static int return_99_ran;
+
+static int c_return_99(lua_State *L)
+{
+  __atomic_store_n(&return_99_ran, 1, __ATOMIC_RELEASE);
+  lua_pushinteger(L, 99);
+  return 1;
+}
+
 typedef struct AttachCtx {
   lua_State *L;
   int status;
@@ -69,6 +81,11 @@ typedef struct AttachCloseCtx {
   int detached;
   int status;
 } AttachCloseCtx;
+
+typedef struct JoinOwnerCtx {
+  lua_State *child;
+  int released;
+} JoinOwnerCtx;
 
 static void store_flag(int *p, int v)
 {
@@ -230,6 +247,58 @@ static void test_error_object(lua_State *L)
   lua_settop(L, base);
 }
 
+static void *join_owner_release_worker(void *arg)
+{
+  JoinOwnerCtx *ctx = (JoinOwnerCtx *)arg;
+  sleep_ms(50);
+  lj_state_owner_rel(ctx->child, 0);
+  store_flag(&ctx->released, 1);
+  return NULL;
+}
+
+static void test_join_waits_for_busy_done_owner(lua_State *L)
+{
+  enum { WAIT_LIMIT = 1000 };
+  const uint32_t fake_owner = 0x60000000u;
+  JoinOwnerCtx ctx;
+  lua_State *child;
+  pthread_t thread;
+  int base = lua_gettop(L);
+  int nres, i;
+
+  store_flag(&return_99_ran, 0);
+  lua_pushcfunction(L, c_return_99);
+  child = luaMT_spawn(L, 0);
+  check(child != NULL, "luaMT_spawn owner-wait worker returned NULL");
+  check_spawn_stack(L, base, child, "owner-wait worker");
+
+  for (i = 0; i < WAIT_LIMIT; i++) {
+    if (load_flag(&return_99_ran) == 1 && lj_state_owner_acq(child) == 0)
+      break;
+    sleep_ms(1);
+  }
+  check(load_flag(&return_99_ran) == 1 && lj_state_owner_acq(child) == 0,
+	"owner-wait worker did not run and release child state");
+
+  lj_state_owner_rel(child, fake_owner);
+  memset(&ctx, 0, sizeof(ctx));
+  ctx.child = child;
+  if (pthread_create(&thread, NULL, join_owner_release_worker, &ctx) != 0)
+    failf("pthread_create owner release failed");
+
+  nres = luaMT_join(L, child, -1.0);
+  if (pthread_join(thread, NULL) != 0)
+    failf("pthread_join owner release failed");
+  check(load_flag(&ctx.released) == 1, "owner release worker did not run");
+  check(nres == 2, "luaMT_join owner-wait result count mismatch");
+  check(lua_gettop(L) == base + nres ||
+	lua_gettop(L) == base + nres + 1,
+	"luaMT_join owner-wait stack height mismatch");
+  check(lua_toboolean(L, -2) == 1, "luaMT_join owner-wait did not return true");
+  check(lua_tointeger(L, -1) == 99, "luaMT_join owner-wait result mismatch");
+  lua_settop(L, base);
+}
+
 static void *attach_worker(void *arg)
 {
   AttachCtx *ctx = (AttachCtx *)arg;
@@ -348,6 +417,7 @@ int main(void)
   require_threading(L);
   test_timeout_then_success(L);
   test_error_object(L);
+  test_join_waits_for_busy_done_owner(L);
   test_attach_detach(L);
   luaMT_fence();
 
