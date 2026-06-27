@@ -70,6 +70,27 @@ static void run_deferred_cleanup_test(lua_State *L, TGState *tg)
     "profile.stop()\n");
 }
 
+static void run_callback_error_test(lua_State *L)
+{
+  run_ok(L,
+    "local profile = require('jit.profile')\n"
+    "local clock = os.clock\n"
+    "local seen = 0\n"
+    "profile.start('i1', function()\n"
+    "  seen = seen + 1\n"
+    "  error('profile callback containment smoke')\n"
+    "end)\n"
+    "local deadline = clock() + 0.5\n"
+    "local x = 0\n"
+    "while seen == 0 and clock() < deadline do\n"
+    "  for i = 1, 10000 do x = x + i end\n"
+    "end\n"
+    "assert(seen > 0, 'profile callback did not run')\n"
+    "profile.stop()\n"
+    "profile.start('i1', function() seen = seen + 1 end)\n"
+    "profile.stop()\n");
+}
+
 #if LJ_PROFILE_PTHREAD
 
 #include <pthread.h>
@@ -201,6 +222,7 @@ int main(void)
 
   run_ok(L, "assert(require('jit.profile'))");
   run_deferred_cleanup_test(L, tg);
+  run_callback_error_test(L);
 #if LJ_PROFILE_PTHREAD
   run_native_join_test(L, g, tg);
   run_busy_callback_state_test(L, g);

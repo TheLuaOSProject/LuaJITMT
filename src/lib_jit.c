@@ -658,6 +658,17 @@ static TValue *jit_profile_registry_store(lua_State *L, GCtab *registry,
   }
 }
 
+static void jit_profile_registry_clear(lua_State *L)
+{
+  GCtab *registry = tabV(registry(L));
+  TValue key;
+  key.u64 = KEY_PROFILE_THREAD;
+  jit_profile_registry_store(L, registry, &key, niltv(L));
+  key.u64 = KEY_PROFILE_FUNC;
+  jit_profile_registry_store(L, registry, &key, niltv(L));
+  lj_gc_pubtab(L, registry);
+}
+
 static void jit_profile_callback(lua_State *L2, lua_State *L, int samples,
 				 int vmstate)
 {
@@ -677,8 +688,12 @@ static void jit_profile_callback(lua_State *L2, lua_State *L, int samples,
     setstrV(L2, L2->top++, lj_str_new(L2, &vmst, 1));
     status = lua_pcall(L2, 3, 0, 0);  /* callback(thread, samples, vmstate) */
     if (status) {
-      if (G(L2)->panic) G(L2)->panic(L2);
-      exit(EXIT_FAILURE);
+      L2->top = L2->base;
+      lj_state_dropclaim(&claim);
+      (void)lj_profile_stop_hs(L);
+      jit_profile_registry_clear(L);
+      lj_trace_abort(G(L));
+      return;
     }
     lj_state_dropclaim(&claim);
     lj_trace_abort(G(L2));
@@ -711,15 +726,8 @@ LJLIB_CF(jit_profile_start)
 /* profile.stop() */
 LJLIB_CF(jit_profile_stop)
 {
-  GCtab *registry;
-  TValue key;
   uint32_t actions = lj_profile_stop_hs(L);
-  registry = tabV(registry(L));
-  key.u64 = KEY_PROFILE_THREAD;
-  jit_profile_registry_store(L, registry, &key, niltv(L));
-  key.u64 = KEY_PROFILE_FUNC;
-  jit_profile_registry_store(L, registry, &key, niltv(L));
-  lj_gc_pubtab(L, registry);
+  jit_profile_registry_clear(L);
   lj_safepoint_checkstop(L, actions);
   return 0;
 }
