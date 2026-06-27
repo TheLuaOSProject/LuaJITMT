@@ -20,6 +20,20 @@ if hits=$(awk '
   printf '%s\n' 'raw CType info/size/sib reads are forbidden in callback runtime conversion helpers; use ctype_*_acq() helpers' >&2
   exit 1
 fi
+if hits=$(awk '
+  /^CCallbackRuntime \* LJ_FASTCALL lj_ccallback_prepare\(/ { in_fn = 1 }
+  in_fn && /abort[[:space:]]*\(/ { print FNR ":" $0 }
+  in_fn && /^}/ { in_fn = 0 }
+' "$ROOT/src/lj_ccallback.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'TLS-less callbacks without a legal carrier must return NULL, not abort' >&2
+  exit 1
+fi
+if ! grep -qF 'jz ->vm_ffi_callback_dead' "$ROOT/src/vm_x64.dasc" ||
+   ! grep -qF '|->vm_ffi_callback_dead:' "$ROOT/src/vm_x64.dasc"; then
+  printf '%s\n' 'x64 callback trampoline must return a zero C result when prepare returns NULL' >&2
+  exit 1
+fi
 for helper in lj_tg_ffi_call_func_acq lj_tg_ffi_call_func_rel
 do
   if ! grep -q "$helper" "$ROOT/src/lj_tg.h"; then

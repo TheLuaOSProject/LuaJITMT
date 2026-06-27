@@ -21,27 +21,37 @@
 
 typedef int (*AutoCallback)(int, int, int, int, int,
 			    int, int, int, int, int);
+typedef double (*AutoFpCallback)(double);
 
 typedef struct AutoCtx {
   int status;
   int result;
+  double fp_result;
   TGState *after_tg;
 } AutoCtx;
 
 static lua_State *mainL;
 static CTState *saved_cts;
 static AutoCallback saved_cb;
+static AutoFpCallback saved_fp_cb;
 static MSize saved_slot;
+static MSize saved_fp_slot;
 static lua_State *saved_owner;
+static lua_State *saved_fp_owner;
 static lua_State *callbackL;
 static int context_checks;
 
-static lua_State *slot_owner(void)
+static lua_State *slot_owner_at(MSize slot)
 {
   lua_State **owner = (lua_State **)la_loadptr_acq(
     (void *const *)&saved_cts->cb.owner);
   assert(owner != NULL);
-  return (lua_State *)la_loadptr_acq((void *const *)&owner[saved_slot]);
+  return (lua_State *)la_loadptr_acq((void *const *)&owner[slot]);
+}
+
+static lua_State *slot_owner(void)
+{
+  return slot_owner_at(saved_slot);
 }
 
 static void capture_cb(AutoCallback cb)
@@ -59,6 +69,23 @@ static void capture_cb(AutoCallback cb)
   assert(saved_owner != NULL);
   assert(saved_owner != mainL);
   assert(saved_owner->tg_hint == NULL);
+}
+
+static void capture_fp_cb(AutoFpCallback cb)
+{
+  CTypeID1 *cbid;
+  saved_cts = ctype_cts(mainL);
+  saved_fp_cb = cb;
+  saved_fp_slot = lj_ccallback_ptr2slot(saved_cts, (void *)cb);
+  assert(saved_fp_slot != ~0u);
+  assert(saved_fp_slot < la_load32_acq(&saved_cts->cb.sizeid));
+  cbid = (CTypeID1 *)la_loadptr_acq((void *const *)&saved_cts->cb.cbid);
+  assert(cbid != NULL);
+  assert(la_load16_acq(&cbid[saved_fp_slot]) != 0);
+  saved_fp_owner = slot_owner_at(saved_fp_slot);
+  assert(saved_fp_owner != NULL);
+  assert(saved_fp_owner != mainL);
+  assert(saved_fp_owner->tg_hint == NULL);
 }
 
 static int check_callback_context(lua_State *L)
@@ -86,6 +113,20 @@ static void *foreign_worker(void *arg)
   return NULL;
 }
 
+static void *stale_foreign_worker(void *arg)
+{
+  AutoCtx *ctx = (AutoCtx *)arg;
+  if (lj_thr_get_tg() != NULL) {
+    ctx->status = 1;
+    return NULL;
+  }
+  ctx->result = saved_cb(10, 9, 8, 7, 6, 5, 4, 3, 2, 1);
+  ctx->fp_result = saved_fp_cb(12.5);
+  ctx->after_tg = lj_thr_get_tg();
+  ctx->status = 0;
+  return NULL;
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -99,6 +140,8 @@ int main(void)
   lua_setglobal(L, "lj_m7_check_auto_context");
   lua_pushlightuserdata(L, (void *)capture_cb);
   lua_setglobal(L, "lj_m7_capture_auto_cb");
+  lua_pushlightuserdata(L, (void *)capture_fp_cb);
+  lua_setglobal(L, "lj_m7_capture_auto_fp_cb");
 
   ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"
@@ -106,6 +149,8 @@ int main(void)
     "typedef int (*lj_m7_auto_cb_t)(int, int, int, int, int,\n"
     "                               int, int, int, int, int);\n"
     "typedef void (*lj_m7_capture_auto_cb_t)(lj_m7_auto_cb_t);\n"
+    "typedef double (*lj_m7_auto_fp_cb_t)(double);\n"
+    "typedef void (*lj_m7_capture_auto_fp_cb_t)(lj_m7_auto_fp_cb_t);\n"
     "]]\n"
     "local cb = ffi.cast('lj_m7_auto_cb_t',\n"
     "  function(a, b, c, d, e, f, g, h, i, j)\n"
@@ -115,15 +160,27 @@ int main(void)
     "local capture = ffi.cast('lj_m7_capture_auto_cb_t',\n"
     "                         lj_m7_capture_auto_cb)\n"
     "capture(cb)\n"
-    "m7_auto_keep_cb = cb\n");
+    "local fp_cb = ffi.cast('lj_m7_auto_fp_cb_t', function(x)\n"
+    "  return x + 0.5\n"
+    "end)\n"
+    "local capture_fp = ffi.cast('lj_m7_capture_auto_fp_cb_t',\n"
+    "                            lj_m7_capture_auto_fp_cb)\n"
+    "capture_fp(fp_cb)\n"
+    "m7_auto_keep_cb = cb\n"
+    "m7_auto_keep_fp_cb = fp_cb\n");
   assert(saved_cb != NULL);
+  assert(saved_fp_cb != NULL);
   assert(saved_owner != NULL);
+  assert(saved_fp_owner != NULL);
   ljt_lua_dostring(L, "collectgarbage('collect')\ncollectgarbage('collect')\n");
   assert(slot_owner() == saved_owner);
+  assert(slot_owner_at(saved_fp_slot) == saved_fp_owner);
   assert(saved_owner->tg_hint == NULL);
+  assert(saved_fp_owner->tg_hint == NULL);
 
   ctx.status = 99;
   ctx.result = 0;
+  ctx.fp_result = -1.0;
   ctx.after_tg = (TGState *)1;
   assert(pthread_create(&pt, NULL, foreign_worker, &ctx) == 0);
   assert(pthread_join(pt, NULL) == 0);
@@ -138,9 +195,26 @@ int main(void)
   ljt_lua_dostring(L,
     "m7_auto_keep_cb:free()\n"
     "m7_auto_keep_cb = nil\n"
-    "collectgarbage('collect')\n");
+    "m7_auto_keep_fp_cb:free()\n"
+    "m7_auto_keep_fp_cb = nil\n");
   assert(slot_owner() == NULL);
+  assert(slot_owner_at(saved_fp_slot) == NULL);
+
+  ctx.status = 99;
+  ctx.result = -1;
+  ctx.fp_result = -1.0;
+  ctx.after_tg = (TGState *)1;
+  assert(pthread_create(&pt, NULL, stale_foreign_worker, &ctx) == 0);
+  assert(pthread_join(pt, NULL) == 0);
+  assert(ctx.status == 0);
+  assert(ctx.result == 0);
+  assert(ctx.fp_result == 0.0);
+  assert(ctx.after_tg == NULL);
+  assert(slot_owner() == NULL);
+  assert(slot_owner_at(saved_fp_slot) == NULL);
+
+  ljt_lua_dostring(L, "collectgarbage('collect')\n");
   lua_close(L);
-  printf("t-ffi-callback-auto-attach OK: TLS-less pthread callback auto-attached carrier TG\n");
+  printf("t-ffi-callback-auto-attach OK: TLS-less pthread callback auto-attach and stale return verified\n");
   return 0;
 }

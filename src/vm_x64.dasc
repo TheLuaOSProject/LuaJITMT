@@ -3068,6 +3068,8 @@ static void build_subroutines(BuildCtx *ctx)
 |  mov CARG2d, KBASEd
 |  call extern lj_ccallback_prepare
 |  mov KBASE, rax
+|  test KBASE, KBASE
+|  jz ->vm_ffi_callback_dead
 |  mov TMPR, aword [rsp+32]
 |  mov CBACK:KBASE->gpr[0], TMPR
 |  mov TMPR, aword [rsp+40]
@@ -3142,6 +3144,12 @@ static void build_subroutines(BuildCtx *ctx)
 |  call extern lj_ccallback_leave	// (CTState *cts, TValue *o, CCallbackRuntime *cb)
 |  mov rax, CBACK:KBASE->gpr[0]
 |  movsd xmm0, qword CBACK:KBASE->fpr[0]
+|  jmp ->vm_leave_unw
+|
+|->vm_ffi_callback_dead:
+|  add rsp, 144
+|  xor eax, eax
+|  xorps xmm0, xmm0
 |  jmp ->vm_leave_unw
 |.endif
   |

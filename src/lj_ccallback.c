@@ -715,7 +715,7 @@ CCallbackRuntime * LJ_FASTCALL lj_ccallback_prepare(CTState *cts, MSize slot)
       auto_detach = 1;
     }
     if (tg == NULL || tg->gl != cts->g || lj_tg_load_cur_L(tg) == NULL)
-      abort();  /* No legal callback carrier for this foreign pthread. */
+      return NULL;  /* No legal callback carrier for this foreign pthread. */
   }
   L = lj_tg_load_cur_L(tg);
   cb = &tg->cb;
