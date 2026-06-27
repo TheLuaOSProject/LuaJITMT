@@ -302,6 +302,17 @@ static LJ_AINLINE void lj_tg_ssb_end_rel(TGState *tg, GCRef *end)
   la_storeptr_rel((void **)&tg->ssb_end, end);  /* 05 section 5.6.2. */
 }
 
+static LJ_AINLINE uint32_t lj_tg_tid_acq(const TGState *tg)
+{
+  return la_load32_acq(&tg->tid);  /* 05 section 5.4.1 TG owner id. */
+}
+
+static LJ_AINLINE void lj_tg_tid_rel(TGState *tg, uint32_t tid)
+{
+  tg->alloc.owner_tid = tid;
+  la_store32_rel(&tg->tid, tid);  /* Publish allocator owner before TG id. */
+}
+
 static LJ_AINLINE TGState *lj_tg_next_acq(const TGState *tg)
 {
   return (TGState *)la_loadptr_acq((void *const *)&tg->next_tg);

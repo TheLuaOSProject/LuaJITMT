@@ -68,6 +68,22 @@ if hits=$(grep -nE -- '(->|[.])[[:space:]]*ssb_(active|base|next|end)([^[:alnum:
   printf '%s\n' 'raw TG SSB active cursor access is forbidden; use lj_tg_ssb_* helpers' >&2
   exit 1
 fi
+for helper in lj_tg_tid_acq lj_tg_tid_rel; do
+  if ! grep -qE "^[[:space:]]*static LJ_AINLINE .*[*[:space:]]${helper}[[:space:]]*[(]" \
+      "$ROOT/src/lj_tg.h"; then
+    printf '%s\n' "${helper} helper is required for TG owner ids" >&2
+    exit 1
+  fi
+done
+if hits=$(grep -nE -- '(^|[^[:alnum:]_])(tg|main_tg|self|cur)[[:space:]]*->[[:space:]]*tid([^[:alnum:]_]|$)|la_load32_acq[(]&[^)]*->[[:space:]]*tid' \
+    "$ROOT/src/lj_tg.c" \
+    "$ROOT/src/lj_gc2.c" \
+    "$ROOT/src/lib_threading.c" \
+    "$ROOT/src/lj_thr.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw TGState tid access is forbidden; use lj_tg_tid_* helpers' >&2
+  exit 1
+fi
 for helper in gc2_ssb_head_acq \
   gc2_ssb_head_store_rlx \
   gc2_ssb_head_cas \

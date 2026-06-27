@@ -588,8 +588,7 @@ static int gc2_worker_start_count_locked(global_State *g, uint32_t n)
     thr->tid = 0;
     lj_tg_init_thread(g, tg, NULL, gc2_worker_arena_internal(g));
     thr->tid = lj_thr_newid();
-    tg->tid = thr->tid;
-    tg->alloc.owner_tid = thr->tid;
+    lj_tg_tid_rel(tg, thr->tid);
     gc2_worker_thread_store_rlx(g, i, thr);
     gc2_worker_tg_store_rlx(g, i, tg);
     rc = lj_thr_create(thr, gc2_worker_main, tg);
@@ -781,7 +780,7 @@ static int gc2_request_cycle_start(global_State *g, TGState *tg,
 				   int honor_stop)
 {
   uint32_t expect = 0;
-  uint32_t tid = tg ? la_load32_acq(&tg->tid) : 0;
+  uint32_t tid = tg ? lj_tg_tid_acq(tg) : 0;
   if (tid == 0)
     return 0;
   if (gc2_phase_acq(g) != LJ_GC2_IDLE)
@@ -1212,7 +1211,7 @@ static TGState *gc2_finalizer_current_tg(global_State *g)
 static uint32_t gc2_finalizer_current_owner(global_State *g)
 {
   TGState *tg = gc2_finalizer_current_tg(g);
-  uint32_t tid = tg ? la_load32_acq(&tg->tid) : 0;
+  uint32_t tid = tg ? lj_tg_tid_acq(tg) : 0;
   return tid != 0 ? tid : ~(uint32_t)0;
 }
 
@@ -1226,7 +1225,7 @@ static int gc2_finalizer_owned_by_current(global_State *g)
   if (owner == 0)
     return 0;
   tg = gc2_finalizer_current_tg(g);
-  return owner == (tg ? la_load32_acq(&tg->tid) : ~(uint32_t)0);
+  return owner == (tg ? lj_tg_tid_acq(tg) : ~(uint32_t)0);
 }
 
 static GC2FinalizerNode *gc2_finalizer_node_new(global_State *g, GCobj *o)
@@ -1909,7 +1908,7 @@ static void gc2_scan_owned_needscan(global_State *g, lua_State *owner_L)
   tg = L2TG(owner_L);
   if (!tg)
     return;
-  tid = la_load32_acq(&tg->tid);
+  tid = lj_tg_tid_acq(tg);
   if (tid == 0 || tid == LJ_THREAD_GCSCAN)
     return;
   if (gc2_thread_scan_needscan_pending_acq(g) == 0)

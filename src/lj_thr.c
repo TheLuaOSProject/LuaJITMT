@@ -55,7 +55,7 @@ uint32_t lj_thr_id(const LJThr *thr)
 uint32_t lj_thr_current_id(global_State *g)
 {
   TGState *tg = lj_thr_get_tg_fallback(g);
-  return tg ? tg->tid : 0;
+  return tg ? lj_tg_tid_acq(tg) : 0;
 }
 
 void lj_thr_set_tg(TGState *tg)

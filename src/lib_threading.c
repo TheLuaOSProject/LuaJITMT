@@ -377,8 +377,7 @@ static void *threading_worker(void *arg)
   int status;
 
   lj_thr_set_tg(tg);
-  tg->tid = tid;
-  tg->alloc.owner_tid = tid;
+  lj_tg_tid_rel(tg, tid);
   L->tg_hint = tg;
   if (!lj_state_claim(L, tid)) {
     th->status = LUA_ERRRUN;
@@ -817,8 +816,7 @@ static lua_State *threading_spawn_core(lua_State *L, GCtab *env, TValue *base,
   th->nargs = (uint32_t)nargs;
   lj_tg_init_thread(G(L), tg, L1, threading_arena_internal(G(L)));
   th->thr.tid = lj_thr_newid();
-  tg->tid = th->thr.tid;
-  tg->alloc.owner_tid = th->thr.tid;
+  lj_tg_tid_rel(tg, th->thr.tid);
   tg->thread_ud = ud;
   if (!lj_state_rehome_stack(L1)) {
     L1->tg_hint = L2TG(L);
@@ -891,7 +889,7 @@ LJLIB_CF(threading_current)
       th->tg = tg;
       th->state = LJ_THREAD_RUNNING;
       th->main_thread = (L == mainthread_acq(G(L)));
-      th->thr.tid = tg ? tg->tid : 0;
+      th->thr.tid = tg ? lj_tg_tid_acq(tg) : 0;
       threading_state_set_ud(L, L, ud);
       if (tg)
 	tg->thread_ud = ud;
@@ -1009,8 +1007,7 @@ int lj_threading_attach(lua_State *L)
     return 0;
   }
   lj_tg_init_thread(g, tg, L, threading_arena_internal(g));
-  tg->tid = tid;
-  tg->alloc.owner_tid = tid;
+  lj_tg_tid_rel(tg, tid);
   L->tg_hint = tg;
   lj_thr_set_tg(tg);
   lj_tg_store_cur_L(tg, L);
@@ -1051,7 +1048,7 @@ void lj_threading_detach(lua_State *L, int disown_callbacks)
   tg = lj_thr_get_tg();
   if (!tg || tg == g->main_tg || lj_tg_load_thread_L(tg) != L)
     return;
-  tid = tg->tid;
+  tid = lj_tg_tid_acq(tg);
   if (disown_callbacks)
     lj_ccallback_disown_state(L);
   lj_tg_detach(g, tg);

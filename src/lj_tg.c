@@ -50,11 +50,11 @@ void lj_tg_init(GG_State *GG, int alloc_ready)
   TGState *tg = &GG->main_tg;
   global_State *g = &GG->g;
   lua_State *L = &GG->L;
+  uint32_t tid = lj_thr_newid();
   g->main_tg = tg;
-  tg->tid = lj_thr_newid();
-  tg->alloc.owner_tid = tg->tid;
+  lj_tg_tid_rel(tg, tid);
   L->tg_hint = tg;
-  lj_state_owner_rel(L, tg->tid);
+  lj_state_owner_rel(L, tid);
   if (!lj_thr_get_tg())
     lj_thr_set_tg(tg);  /* 03 section 3.2: bootstrap main OS-thread TLS. */
   if (!alloc_ready)
@@ -244,10 +244,10 @@ TGState *lj_tg_find_owner(global_State *g, uint32_t owner_tid)
   for (tg = gc2_tg_list_acq(g);
        tg != NULL;
        tg = lj_tg_next_acq(tg)) {
-    if (la_load32_acq(&tg->tid) == owner_tid)
+    if (lj_tg_tid_acq(tg) == owner_tid)
       return tg;
   }
-  return g->main_tg && la_load32_acq(&g->main_tg->tid) == owner_tid ?
+  return g->main_tg && lj_tg_tid_acq(g->main_tg) == owner_tid ?
 	 g->main_tg : NULL;
 }
 
