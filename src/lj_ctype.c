@@ -179,8 +179,7 @@ void lj_ctype_parse_lock(CTState *cts, lua_State *L)
       lj_safepoint_checkstop(L, actions);  /* 11.2: cdef may park. */
     }
 #else
-    UNUSED(L);
-    la_cpu_pause();  /* 11.2: non-Linux fallback outside the target matrix. */
+    lj_safepoint_checkstop(L, lj_thr_sleep_ns(L, 1000000));
 #endif
   }
 }

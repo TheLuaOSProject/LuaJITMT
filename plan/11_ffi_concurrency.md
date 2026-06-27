@@ -72,8 +72,10 @@ GCtab *miscmap; GCRef *metamap; CCallback cb; uint32_t hash[CTHASH_SIZE]; }`
   serialized the whole cdef through a tiny CAS token (`cts->parse_token`)
   because cdef is an initialization-time API. Current implementation decision:
   this is an accepted blocking exception, not a hot-path lock-free target.
-  Waiters park on a futex in `lj_ctype_parse_lock()`, and cleanup/naming can be
-  revisited in M9 without changing the functional requirement.
+  Waiters park on a futex in `lj_ctype_parse_lock()` on Linux; the fallback path
+  uses the same native sleep/STOPREQ helper discipline instead of a raw CPU
+  pause. Cleanup/naming can be revisited in M9 without changing the functional
+  requirement.
 - `ffi.typeof/metatype/istype` read paths: pure RCU reads. `ffi.metatype`
   one-shot rule enforced with CAS on the miscmap slot (raw nil→mt).
   Current implementation note: metatypes use a CTState side root

@@ -7,6 +7,11 @@ FFI parse token helper surface
   readers, and FFI type/layout snapshot readers through the helper API.
 - Extended `tools/ci/m7_ffi_cdef_token.sh` to reject raw implementation-side
   `cts->parse_token` access.
+- Follow-up safety cleanup: the non-Linux `lj_ctype_parse_lock()` fallback now
+  sleeps through `lj_thr_sleep_ns(L, ...)` and processes STOPREQ instead of
+  spinning on `la_cpu_pause()`. The token guard also rejects raw pause waits in
+  `src/lj_ctype.c` / `src/lib_ffi.c`, giving the FFI ctype/parser surface the
+  same no-busy-spin invariant as the Linux futex path.
 
 Verification:
 
