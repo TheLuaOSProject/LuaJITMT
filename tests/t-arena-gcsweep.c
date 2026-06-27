@@ -2,6 +2,10 @@
 ** Focused test for the runtime traversable arena sweep bridge.
 */
 
+#ifndef LJ_GC2_TEST_HELPERS
+#define LJ_GC2_TEST_HELPERS
+#endif
+
 #include <assert.h>
 #include <stdio.h>
 
@@ -182,10 +186,10 @@ static void test_minor_sweep_identity_direct(void)
   lj_arena_alloc_prepare_sweep_kind(&extra_tg.alloc, LJ_ARENAK_TRAVERSABLE);
   assert(extra_tg.alloc.needsweep[LJ_ARENAK_TRAVERSABLE] != NULL);
   minor_arenas0 = gc2_minor_sweep_arenas_acq(g);
-  assert(lj_gc2_sweep_owner_progress(g, &extra_tg, 1) == 0);
+  assert(lj_gc2_test_sweep_owner_progress(g, &extra_tg, 1) == 0);
   assert(gc2_minor_sweep_arenas_acq(g) == minor_arenas0);
   lj_gc2_sweep_legacy_ready(g);
-  assert(lj_gc2_sweep_owner_progress(g, &extra_tg, 1) == 1u);
+  assert(lj_gc2_test_sweep_owner_progress(g, &extra_tg, 1) == 1u);
   assert(gc2_minor_sweep_arenas_acq(g) == minor_arenas0 + 1u);
   assert(ptr_state(dead) == 1);
   assert(ptr_state(live) == 3);

@@ -269,6 +269,18 @@ if hits=$(grep -nE -- 'lj_gc2_legacy_(weak|sweep)_begin[[:space:]]*[(]|LJ_FUNC .
   printf '%s\n' 'obsolete GC2 legacy phase aliases are forbidden; use lj_gc2_mark_to_weak or lj_gc2_weak_to_sweep' >&2
   exit 1
 fi
+if hits=$(grep -nE -- 'lj_gc2_sweep_owner_progress[[:space:]]*[(]|LJ_FUNC .*lj_gc2_sweep_owner_progress[[:space:]]*[(]' \
+    "$ROOT"/src/*.c "$ROOT"/tests/*.c "$ROOT/src/lj_gc2.h" | \
+    grep -v "$ROOT/src/lj_gc2.c:" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw GC2 sweep owner progress must stay inside lj_gc2.c; use lj_gc2_worker_drain or test wrappers' >&2
+  exit 1
+fi
+if ! grep -qE '^[[:space:]]*static uint32_t lj_gc2_sweep_owner_progress[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.c"; then
+  printf '%s\n' 'lj_gc2_sweep_owner_progress must stay static inside lj_gc2.c' >&2
+  exit 1
+fi
 if hits=$(grep -nE -- 'setgcrefr?rel[(][*]lj_obj_gcwref[(](oldtail|tail)[)]' \
     "$ROOT/src/lj_gc2.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2

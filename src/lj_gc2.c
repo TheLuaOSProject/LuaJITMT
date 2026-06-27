@@ -1737,8 +1737,8 @@ int lj_gc2_sweep_pending(global_State *g)
   return 0;
 }
 
-uint32_t lj_gc2_sweep_owner_progress(global_State *g, TGState *tg,
-				      uint32_t limit)
+static uint32_t lj_gc2_sweep_owner_progress(global_State *g, TGState *tg,
+					     uint32_t limit)
 {
   uint32_t n = 0, epoch;
   uint64_t live = 0;
@@ -1778,6 +1778,12 @@ uint32_t lj_gc2_sweep_owner_progress(global_State *g, TGState *tg,
       gc2_minor_sweep_arenas_add(g, n);
   }
   return n;
+}
+
+uint32_t lj_gc2_test_sweep_owner_progress(global_State *g, TGState *tg,
+					  uint32_t limit)
+{
+  return lj_gc2_sweep_owner_progress(g, tg, limit);
 }
 
 static uint64_t gc2_sweep_live_cells(GCArena *a, uint32_t epoch)

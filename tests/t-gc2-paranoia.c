@@ -47,7 +47,7 @@ static void run_true_minor_cycle(lua_State *L, global_State *g, TGState *tg)
   lj_gc2_weak_to_sweep(g);
   lj_gc2_sweep_legacy_ready(g);
   do {
-    swept = lj_gc2_sweep_owner_progress(g, tg, LJ_GC2_SWEEP_BATCH);
+    swept = lj_gc2_test_sweep_owner_progress(g, tg, LJ_GC2_SWEEP_BATCH);
   } while (swept != 0);
   assert(!lj_gc2_sweep_pending(g));
   lj_gc2_legacy_cycle_end(g);

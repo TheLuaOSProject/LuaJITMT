@@ -202,7 +202,7 @@ The temporary `_progress()` compatibility alias has been removed. During
 through the published weak snapshot, with `worker_weak_drained` attributing
 that bounded work; the full scheduler-owned weak drain remains staged. During
 `P_SWEEP`, the same temporary worker owner can spend its budget on bounded
-traversable arena sweep batches through `lj_gc2_sweep_owner_progress()`, after
+traversable arena sweep batches through GC2's internal sweep-owner helper after
 the legacy sweep boundary prepares the arena lists and restores plain arenas.
 This keeps the previous boundary-lazy sweep bridge but removes its direct sweep
 loop from `lj_gc.c`.
