@@ -424,4 +424,25 @@ if hits=$(grep -nE -- "->[[:space:]]*gc2[.](${fields})([^[:alnum:]_]|$)|gc2[[:sp
   printf '%s\n' 'raw GC2 handshake state access is forbidden; use gc2_hs_* helpers' >&2
   exit 1
 fi
+if ! grep -qE 'LJ_FUNC uint64_t lj_gc2_retire_epoch[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.h"; then
+  printf '%s\n' 'lj_gc2_retire_epoch declaration is required for SMR retire epoch ownership' >&2
+  exit 1
+fi
+if ! grep -qE '^uint64_t lj_gc2_retire_epoch[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.c"; then
+  printf '%s\n' 'lj_gc2_retire_epoch definition is required for SMR retire epoch ownership' >&2
+  exit 1
+fi
+if hits=$(grep -nE -- 'gc2_hs_epoch_acq[[:space:]]*[(]' \
+    "$ROOT/src/lj_str.c" \
+    "$ROOT/src/lj_tab.c" \
+    "$ROOT/src/lj_trace.c" \
+    "$ROOT/src/lj_mcode.c" \
+    "$ROOT/src/lj_ctype.c" \
+    "$ROOT/src/lj_clib.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'SMR retire producers must query lj_gc2_retire_epoch instead of raw handshake epoch' >&2
+  exit 1
+fi
 exec "$ROOT/tools/ci/lua_test.sh" m3_safepoint_handshake

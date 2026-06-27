@@ -130,7 +130,7 @@ static void tracevec_retired_push(jit_State *J, TraceVec *tv)
 static void tracevec_retire(jit_State *J, TraceVec *tv)
 {
   if (tv) {
-    la_store64_rel(&tv->retire_epoch, gc2_hs_epoch_acq(J2G(J)));
+    la_store64_rel(&tv->retire_epoch, lj_gc2_retire_epoch(J2G(J)));
     tracevec_retired_push(J, tv);
   }
 }
@@ -161,7 +161,7 @@ static void trace_retire(global_State *g, GCtrace *T)
   jit_State *J = G2J(g);
   uint64_t epoch = la_load64_acq(&T->retire_epoch);
   if (epoch == 0 || epoch == LJ_TRACE_SCOPE_FLUSHING)
-    epoch = gc2_hs_epoch_acq(g);
+    epoch = lj_gc2_retire_epoch(g);
   la_store64_rel(&T->retire_epoch, epoch);
   trace_retired_next_rel(T, NULL);
   lj_gc_arena_markmem(g, T);
@@ -822,7 +822,7 @@ void lj_trace_flushscope_hs(global_State *g, uint32_t work)
   if (work != 0) {
     (void)trace_flushscope_mark_deps(G2J(g));
     (void)lj_gc2_handshake(g, LJ_GC2_HS_EXIT_TRACES);  /* 08 section 8.7 scoped boundary. */
-    (void)lj_trace_flushscope_retire(g, gc2_hs_epoch_acq(g));
+    (void)lj_trace_flushscope_retire(g, lj_gc2_retire_epoch(g));
   }
 }
 

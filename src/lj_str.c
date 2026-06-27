@@ -8,6 +8,7 @@
 
 #include "lj_obj.h"
 #include "lj_gc.h"
+#include "lj_gc2.h"
 #include "lj_err.h"
 #include "lj_str.h"
 #include "lj_char.h"
@@ -159,7 +160,7 @@ static void strtab_retired_push(global_State *g, StrTabHdr *hdr)
 
 static void strtab_retire(global_State *g, StrTabHdr *hdr)
 {
-  lj_str_retire_epoch_rel(hdr, gc2_hs_epoch_acq(g));
+  lj_str_retire_epoch_rel(hdr, lj_gc2_retire_epoch(g));
   strtab_retired_push(g, hdr);
 }
 

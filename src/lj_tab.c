@@ -12,6 +12,7 @@
 #include "lj_obj.h"
 #include "lj_atomic.h"
 #include "lj_gc.h"
+#include "lj_gc2.h"
 #include "lj_err.h"
 #include "lj_tab.h"
 #include "lj_tg.h"
@@ -431,7 +432,7 @@ static TabNodeRetire *tab_retire_reserve(lua_State *L, Node *node,
 
 static void tab_retire_arm(global_State *g, TabNodeRetire *ret)
 {
-  lj_tab_node_retired_epoch_rel(ret, gc2_hs_epoch_acq(g));
+  lj_tab_node_retired_epoch_rel(ret, lj_gc2_retire_epoch(g));
   lj_tab_node_retired_armed_rel(ret, 1);
 }
 
@@ -461,7 +462,7 @@ static TabArrayRetire *tab_array_retire_reserve(lua_State *L, TValue *array,
 
 static void tab_array_retire_arm(global_State *g, TabArrayRetire *ret)
 {
-  lj_tab_array_retired_epoch_rel(ret, gc2_hs_epoch_acq(g));
+  lj_tab_array_retired_epoch_rel(ret, lj_gc2_retire_epoch(g));
   lj_tab_array_retired_armed_rel(ret, 1);
 }
 

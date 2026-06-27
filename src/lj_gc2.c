@@ -2245,6 +2245,11 @@ uint32_t lj_gc2_handshake(global_State *g, uint32_t actions)
   return lj_safepoint_handshake(g, actions);
 }
 
+uint64_t lj_gc2_retire_epoch(global_State *g)
+{
+  return g ? gc2_hs_epoch_acq(g) : 0;
+}
+
 uint32_t lj_gc2_reclaim_retired(global_State *g, uint64_t epoch)
 {
   uint32_t n = 0;

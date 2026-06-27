@@ -512,7 +512,7 @@ static void clib_cache_retire(lua_State *L, global_State *g,
     lj_clib_cache_val_acq(&tv, entry);
     lj_gc_pubroot(L, &tv);
   }
-  lj_clib_cache_retire_epoch_rel(entry, gc2_hs_epoch_acq(g));
+  lj_clib_cache_retire_epoch_rel(entry, lj_gc2_retire_epoch(g));
   clib_cache_retired_push(g, entry);
 }
 

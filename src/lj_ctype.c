@@ -9,6 +9,7 @@
 
 #include "lj_atomic.h"
 #include "lj_gc.h"
+#include "lj_gc2.h"
 #include "lj_err.h"
 #include "lj_str.h"
 #include "lj_tab.h"
@@ -737,7 +738,7 @@ static void ctype_tab_retired_push(CTState *cts, CTypeTab *ret)
 
 static void ctype_tab_retire(CTState *cts, CTypeTab *ret)
 {
-  ctype_tab_retire_epoch_rel(ret, gc2_hs_epoch_acq(cts->g));
+  ctype_tab_retire_epoch_rel(ret, lj_gc2_retire_epoch(cts->g));
   ctype_tab_retired_push(cts, ret);
 }
 

@@ -573,6 +573,13 @@ gens are raw allocations carved from non-traversable arenas with their own
 block bits and freed *only* via defer_free; sweep treats cells with the
 AF_RAWGEN arena flag as opaque. Simplest ownership story.)
 
+Current bridge: retired string-table vectors, table node/array vectors, ctype
+tables, CLibrary cache entries, mcode records, trace vectors/traces, and scoped
+trace flushes stamp their retirement through `lj_gc2_retire_epoch()`. The
+subsystem-specific retired record formats and reclaim predicates remain local,
+but GC2 owns the current handshake-epoch read used by SMR producers and the
+completed-epoch reclaim fanout through `lj_gc2_reclaim_retired()`.
+
 ## 5.10 collectgarbage() mapping
 "collect": requester triggers cycle, then *parks* (allowed block) until
 phase returns to P_IDLE with cycle>seen. "step": hint the leader; returns
