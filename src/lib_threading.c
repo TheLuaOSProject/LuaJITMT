@@ -614,7 +614,7 @@ LJLIB_CF(threading_mutex_lock)
     if (la_cas32(&m->state, &expect, LJ_MUTEX_LOCKED, LA_ACQ_REL, LA_ACQ))
       return 0;
     lj_native_enter(L2TG(L));
-    (void)la_futex_wait(&m->state, LJ_MUTEX_LOCKED, -1);
+    (void)la_futex_wait(&m->state, LJ_MUTEX_LOCKED, 1000000);
     lj_safepoint_checkstop(L, lj_native_leave(L));
   }
 }

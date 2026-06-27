@@ -84,6 +84,12 @@ static int publish_stopreq_c(lua_State *L)
   return 0;
 }
 
+static int publish_global_stopreq_c(lua_State *L)
+{
+  assert(lj_safepoint_handshake(G(L), LJ_GC2_HS_STOPREQ) >= 1u);
+  return 0;
+}
+
 static int mark_sticky_stopreq_c(lua_State *L)
 {
   TGState *tg = G2TG(G(L));
@@ -531,6 +537,8 @@ int main(void)
   lua_setglobal(L, "publish_alloc_white");
   lua_pushcfunction(L, publish_stopreq_c);
   lua_setglobal(L, "publish_stopreq");
+  lua_pushcfunction(L, publish_global_stopreq_c);
+  lua_setglobal(L, "publish_global_stopreq");
   lua_pushcfunction(L, mark_sticky_stopreq_c);
   lua_setglobal(L, "mark_sticky_stopreq");
   lua_pushcfunction(L, assert_acked_alloc_white_c);
@@ -848,6 +856,27 @@ int main(void)
     "  local ffi = require('ffi')\n"
     "  expect_native_stopreq(function() return ffi.load(so) end)\n"
     "end\n"
+    "local function expect_mutex_lock_stopreq()\n"
+    "  local th = require('threading')\n"
+    "  local m = th.mutex()\n"
+    "  local done = th.channel(1)\n"
+    "  assert(m:lock() == nil)\n"
+    "  local worker = th.spawn(function(mm, out)\n"
+    "    local ok, err = pcall(function() return mm:lock() end)\n"
+    "    out:send({ok, tostring(err)})\n"
+    "  end, m, done)\n"
+    "  th.sleep(0.01)\n"
+    "  publish_global_stopreq()\n"
+    "  clear_stopreq()\n"
+    "  local res, rok = done:recv(1)\n"
+    "  assert(rok == true, 'mutex lock STOPREQ did not wake before unlock')\n"
+    "  assert(res[1] == false)\n"
+    "  assert(res[2]:find('thread interrupted: VM shutdown', 1, true))\n"
+    "  assert(({ worker:join(1) })[1] == true)\n"
+    "  m:unlock()\n"
+    "  assert_no_stopreq()\n"
+    "end\n"
+    "expect_mutex_lock_stopreq()\n"
     "local p = os.tmpname()\n"
     "local q = p .. '.stopreq'\n"
     "local f = assert(io.open(p, 'w'))\n"
