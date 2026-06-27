@@ -12,6 +12,7 @@
 #include "lj_str.h"
 #include "lj_char.h"
 #include "lj_prng.h"
+#include "lj_thr.h"
 
 /* -- String helpers ------------------------------------------------------ */
 
@@ -127,6 +128,11 @@ static LJ_NOINLINE StrHash hash_dense(uint64_t seed, StrHash h,
 #define LJ_STRTAB_RESIZE	((MSize)0x80000000u)
 #define LJ_STRTAB_ACTIVE_MASK	(~LJ_STRTAB_RESIZE)
 
+static void strtab_wait_no_l(void)
+{
+  (void)lj_thr_sleep_ns(NULL, 1000000);
+}
+
 static LJ_AINLINE int strref_cas_rel(GCRef *r, uintptr_t *expect, uintptr_t want)
 {
 #if LJ_GC64
@@ -169,7 +175,7 @@ static int strtab_claim(StrTabHdr *hdr)
       break;
   }
   while (la_load32_acq(&hdr->resize) & LJ_STRTAB_ACTIVE_MASK)
-    la_cpu_pause();
+    strtab_wait_no_l();
   return 1;
 }
 
@@ -195,11 +201,11 @@ static StrTabHdr *strtab_enter(global_State *g)
       return NULL;
     state = la_load32_acq(&hdr->resize);  /* 06 section 6.5 RCU header pin. */
     if (state & LJ_STRTAB_RESIZE) {
-      la_cpu_pause();
+      strtab_wait_no_l();
       continue;
     }
     if (state == LJ_STRTAB_ACTIVE_MASK) {
-      la_cpu_pause();
+      strtab_wait_no_l();
       continue;
     }
     expect = state;

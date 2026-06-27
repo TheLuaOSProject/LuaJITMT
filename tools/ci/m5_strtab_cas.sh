@@ -40,4 +40,15 @@ if hits=$(grep -nE -- '->[[:space:]]*gc2[.](smr_reclaim_runs|smr_reclaimed)([^[:
   printf '%s\n' 'raw GC2 SMR reclaim counter access is forbidden; use gc2_smr_* helpers' >&2
   exit 1
 fi
+if ! grep -qE '^[[:space:]]*static void strtab_wait_no_l[[:space:]]*[(]void[)]' \
+    "$ROOT/src/lj_str.c"; then
+  printf '%s\n' 'strtab resize/active waits must use strtab_wait_no_l()' >&2
+  exit 1
+fi
+if hits=$(grep -nE -- 'la_cpu_pause[[:space:]]*[(]' \
+    "$ROOT/src/lj_str.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'string-table resize/active waits must yield via strtab_wait_no_l(), not spin on la_cpu_pause()' >&2
+  exit 1
+fi
 exec "$ROOT/tools/ci/lua_test.sh" m5_strtab_cas
