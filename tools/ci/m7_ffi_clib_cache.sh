@@ -20,6 +20,22 @@ if hits=$(awk '
   printf '%s\n' 'raw CLibCacheEntry link/epoch access is forbidden in GC2 CLibrary cache traversal; use lj_clib_cache_* helpers' >&2
   exit 1
 fi
+for helper in gc2_clib_cache_retired_acq \
+  gc2_clib_cache_retired_store_rlx \
+  gc2_clib_cache_retired_cas \
+  gc2_clib_cache_retired_xchg_acqrel; do
+  if ! grep -qE "^[[:space:]]*static LJ_AINLINE .*[*[:space:]]${helper}[[:space:]]*[(]" \
+      "$ROOT/src/lj_obj.h"; then
+    printf '%s\n' "${helper} helper is required for GC2 CLibrary cache retired root" >&2
+    exit 1
+  fi
+done
+if hits=$(grep -nE -- '->[[:space:]]*gc2[.]clib_cache_retired|&[[:space:]]*[^)]*->[[:space:]]*gc2[.]clib_cache_retired' \
+    "$ROOT"/src/*.c || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw GC2 CLibrary cache retired-root access is forbidden; use gc2_clib_cache_retired_* helpers' >&2
+  exit 1
+fi
 if ! grep -q 'lj_clib_cache_reclaim_retired' "$ROOT/src/lj_gc2.c"; then
   printf '%s\n' 'GC2 retired-object drain must reclaim retired CLibrary cache entries' >&2
   exit 1

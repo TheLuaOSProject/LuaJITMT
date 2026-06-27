@@ -4503,6 +4503,30 @@ static LJ_AINLINE void gc2_jit_scoped_slots_retired_add(global_State *g,
   la_add64_rlx(&g->gc2.jit_scoped_slots_retired, n);
 }
 
+static LJ_AINLINE void *gc2_clib_cache_retired_acq(global_State *g)
+{
+  return la_loadptr_acq((void *const *)&g->gc2.clib_cache_retired);
+}
+
+static LJ_AINLINE void gc2_clib_cache_retired_store_rlx(global_State *g,
+							void *head)
+{
+  la_storeptr_rlx((void **)&g->gc2.clib_cache_retired, head);
+}
+
+static LJ_AINLINE int gc2_clib_cache_retired_cas(global_State *g, void **oldp,
+						 void *head)
+{
+  return la_casptr((void **)&g->gc2.clib_cache_retired, oldp, head,
+		   LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE void *gc2_clib_cache_retired_xchg_acqrel(global_State *g,
+							   void *head)
+{
+  return la_xchgptr_acqrel((void **)&g->gc2.clib_cache_retired, head);
+}
+
 static LJ_AINLINE void gc2_assist_active_store_rlx(global_State *g,
 						   uint32_t active)
 {

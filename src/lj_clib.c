@@ -458,22 +458,19 @@ cTValue *lj_clib_cache_get(CLibrary *cl, GCstr *name)
 
 CLibCacheEntry *lj_clib_cache_retired_head_acq(global_State *g)
 {
-  return (CLibCacheEntry *)la_loadptr_acq(
-    (void *const *)&g->gc2.clib_cache_retired);
+  return (CLibCacheEntry *)gc2_clib_cache_retired_acq(g);
 }
 
 static int clib_cache_retired_cas(global_State *g, CLibCacheEntry **oldp,
 				  CLibCacheEntry *entry)
 {
-  return la_casptr((void **)&g->gc2.clib_cache_retired, (void **)oldp,
-		   entry, LA_ACQ_REL, LA_ACQ);
+  return gc2_clib_cache_retired_cas(g, (void **)oldp, entry);
 }
 
 static CLibCacheEntry *clib_cache_retired_xchg_acqrel(global_State *g,
 						      CLibCacheEntry *head)
 {
-  return (CLibCacheEntry *)la_xchgptr_acqrel(
-    (void **)&g->gc2.clib_cache_retired, head);
+  return (CLibCacheEntry *)gc2_clib_cache_retired_xchg_acqrel(g, head);
 }
 
 static void clib_cache_retired_push(global_State *g, CLibCacheEntry *entry)

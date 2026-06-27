@@ -162,7 +162,7 @@ void lj_gc2_init(global_State *g)
   gc2_jit_hard_checks_store_rlx(g, 0);
   gc2_interp_hard_checks_store_rlx(g, 0);
   gc2_jit_scoped_slots_retired_store_rlx(g, 0);
-  g->gc2.clib_cache_retired = NULL;
+  gc2_clib_cache_retired_store_rlx(g, NULL);
   gc2_assist_active_store_rlx(g, 0);
   gc2_generational_store_rlx(g, 0);
   gc2_grey_stack_store_rlx(g, NULL);

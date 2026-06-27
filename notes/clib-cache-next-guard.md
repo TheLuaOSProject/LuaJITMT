@@ -11,6 +11,9 @@
   - `src/lj_crecord.c`
 - The guard intentionally excludes `src/lj_clib.h`, where the helper
   definitions spell the field.
+- Follow-up: the GC2 retired-entry root now routes through
+  `gc2_clib_cache_retired_*()` helpers in `src/lj_obj.h`, and the same guard
+  rejects raw `g->gc2.clib_cache_retired` access in production C files.
 
 ## Validation target
 
