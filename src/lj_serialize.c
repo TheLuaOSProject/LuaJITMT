@@ -343,17 +343,19 @@ static char *serialize_put(char *w, SBufExt *sbx, cTValue *o)
   } else if (tviscdata(o)) {
     CTState *cts = ctype_cts(sbufL(sbx));
     CType *s = ctype_raw(cts, cdataV(o)->ctypeid);
+    CTInfo sinfo = ctype_info_acq(s);
+    CTSize ssize = ctype_size_acq(s);
     uint8_t *sp = cdataptr(cdataV(o));
-    if (ctype_isinteger(s->info) && s->size == 8) {
+    if (ctype_isinteger(sinfo) && ssize == 8) {
       w = serialize_more(w, sbx, 1+8);
-      *w++ = (s->info & CTF_UNSIGNED) ? SER_TAG_UINT64 : SER_TAG_INT64;
+      *w++ = (sinfo & CTF_UNSIGNED) ? SER_TAG_UINT64 : SER_TAG_INT64;
 #if LJ_BE
       { uint64_t u = lj_bswap64(*(uint64_t *)sp); memcpy(w, &u, 8); }
 #else
       memcpy(w, sp, 8);
 #endif
       w += 8;
-    } else if (ctype_iscomplex(s->info) && s->size == 16) {
+    } else if (ctype_iscomplex(sinfo) && ssize == 16) {
       w = serialize_more(w, sbx, 1+16);
       *w++ = SER_TAG_COMPLEX;
 #if LJ_BE

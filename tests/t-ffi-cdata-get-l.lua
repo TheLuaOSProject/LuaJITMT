@@ -1,6 +1,7 @@
 local th = require"threading"
 local ffi = require"ffi"
 local harness = require"thread_harness"
+local buffer = require"string.buffer"
 
 local nthreads = harness.arg_number(1, "LJ_M7_FFI_GET_THREADS", 6)
 local iters = harness.arg_number(2, "LJ_M7_FFI_GET_ITERS", 400)
@@ -16,6 +17,16 @@ typedef struct {
 } lj_m7_get_outer_t;
 int abs(int);
 ]]
+
+do
+  local i64 = ffi.new("int64_t", -42)
+  local u64 = ffi.new("uint64_t", 42)
+  local complex = ffi.new("complex", 12.5, -3.25)
+
+  assert(buffer.decode(buffer.encode(i64)) == i64)
+  assert(buffer.decode(buffer.encode(u64)) == u64)
+  assert(tostring(buffer.decode(buffer.encode(complex))) == tostring(complex))
+end
 
 local ready, start = harness.channels(nthreads)
 local workers = {}
