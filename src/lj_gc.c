@@ -54,6 +54,13 @@
 #define gray2black(x)		(lj_obj_addgcflags((x), LJ_GC_BLACK))
 #define isfinalized(u)		(lj_obj_gcflags(obj2gco(u)) & LJ_GC_FINALIZED)
 
+#if LJ_HASFFI
+static void gc_finreg_claim_wait_no_l(void)
+{
+  (void)lj_thr_sleep_ns(NULL, 1000000);
+}
+#endif
+
 /* -- Mark phase ---------------------------------------------------------- */
 
 static LJ_AINLINE int gc2_suppress_legacy_mark(global_State *g)
@@ -919,7 +926,7 @@ static int gc_traverse_tab(global_State *g, GCtab *t)
 	  lj_tv_load_acq(&key, &n->key);
 	  key_loaded = 1;
 	  while (lj_cdata_fin_isclaim(&val) || tviskeylock(&key)) {
-	    la_cpu_pause();
+	    gc_finreg_claim_wait_no_l();
 	    lj_tv_load_acq(&val, &n->val);
 	    lj_tv_load_acq(&key, &n->key);
 	  }

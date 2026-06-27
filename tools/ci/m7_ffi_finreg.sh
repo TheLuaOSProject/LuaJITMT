@@ -45,6 +45,36 @@ if hits=$(grep -nE -- 'ord[[:space:]]*->[[:space:]]*(retired_next|active)' \
   printf '%s\n' 'raw FINREG ordered-node retire state access is forbidden; use fin_order_* helpers' >&2
   exit 1
 fi
+for spec in \
+  "$ROOT/src/lj_gc.c:gc_finreg_claim_wait_no_l" \
+  "$ROOT/src/lj_gc2.c:gc2_finreg_claim_wait_no_l" \
+  "$ROOT/src/lj_ctype.c:ctype_fin_claim_wait_no_l"; do
+  file=${spec%:*}
+  helper=${spec#*:}
+  if ! grep -qE "^[[:space:]]*static void ${helper}[[:space:]]*[(]void[)]" \
+      "$file"; then
+    printf '%s\n' "${helper} helper is required for FINREG claim waits" >&2
+    exit 1
+  fi
+done
+if hits=$(awk '
+  /while[[:space:]]*[(]lj_cdata_fin_isclaim/ ||
+  /while[[:space:]]*[(]ctype_fin_has_claim/ ||
+  /while[[:space:]]*[(].*tviskeylock/ {
+    scan = 6
+  }
+  scan > 0 && /la_cpu_pause[[:space:]]*[(]/ {
+    print FILENAME ":" FNR ":" $0
+  }
+  scan > 0 {
+    scan--
+  }
+' "$ROOT/src/lj_gc.c" "$ROOT/src/lj_gc2.c" "$ROOT/src/lj_ctype.c" || true); \
+  [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'FINREG claim/keylock waits must yield via *_finreg_claim_wait_no_l(), not spin on la_cpu_pause()' >&2
+  exit 1
+fi
 for helper in gc2_finreg_cdata_order_seen_acq \
   gc2_finreg_cdata_order_seen_store_rlx \
   gc2_finreg_cdata_order_seen_add \

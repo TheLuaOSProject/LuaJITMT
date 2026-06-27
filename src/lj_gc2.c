@@ -113,6 +113,7 @@ static GCobj *lj_gc2_finalizer_dequeue(global_State *g);
 static int lj_gc2_finalizer_try_enter(global_State *g);
 static void gc2_peer_wait_no_l(void);
 static void gc2_finalizer_wait_no_l(void);
+static void gc2_finreg_claim_wait_no_l(void);
 static void lj_gc2_finalizer_enter(global_State *g);
 static void lj_gc2_finalizer_leave(global_State *g);
 static int lj_gc2_finalizer_pending(global_State *g);
@@ -1513,6 +1514,11 @@ static void gc2_peer_wait_no_l(void)
 }
 
 static void gc2_finalizer_wait_no_l(void)
+{
+  gc2_peer_wait_no_l();
+}
+
+static void gc2_finreg_claim_wait_no_l(void)
 {
   gc2_peer_wait_no_l();
 }
@@ -3395,7 +3401,7 @@ size_t lj_gc2_finreg_cdata_finalize_pweak(lua_State *L, global_State *g,
     }
     lj_tv_load_acq(&fin, slot);
     while (lj_cdata_fin_isclaim(&fin)) {
-      la_cpu_pause();
+      gc2_finreg_claim_wait_no_l();
       lj_tv_load_acq(&fin, slot);
     }
     if (tvisnil(&fin)) {
@@ -3491,7 +3497,7 @@ size_t lj_gc2_finreg_cdata_finalize_close(global_State *g)
     }
     lj_tv_load_acq(&fin, slot);
     while (lj_cdata_fin_isclaim(&fin)) {
-      la_cpu_pause();
+      gc2_finreg_claim_wait_no_l();
       lj_tv_load_acq(&fin, slot);
     }
     if (tvisnil(&fin)) {
@@ -3560,7 +3566,7 @@ int lj_gc2_finreg_cdata_pending(global_State *g)
     }
     lj_tv_load_acq(&fin, slot);
     while (lj_cdata_fin_isclaim(&fin)) {
-      la_cpu_pause();
+      gc2_finreg_claim_wait_no_l();
       lj_tv_load_acq(&fin, slot);
     }
     if (tvisnil(&fin)) {
@@ -4879,7 +4885,7 @@ static int gc2_traverse_tab(global_State *g, GCtab *t)
 	  lj_tv_load_acq(&key, &n->key);
 	  key_loaded = 1;
 	  while (lj_cdata_fin_isclaim(&val) || tviskeylock(&key)) {
-	    la_cpu_pause();
+	    gc2_finreg_claim_wait_no_l();
 	    lj_tv_load_acq(&val, &n->val);
 	    lj_tv_load_acq(&key, &n->key);
 	  }

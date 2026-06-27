@@ -17,6 +17,12 @@
 #include "lj_ccallback.h"
 #include "lj_buf.h"
 #include "lj_safepoint.h"
+#include "lj_thr.h"
+
+static void ctype_fin_claim_wait_no_l(void)
+{
+  (void)lj_thr_sleep_ns(NULL, 1000000);
+}
 
 /* -- C type definitions -------------------------------------------------- */
 
@@ -385,7 +391,7 @@ int lj_ctype_fin_newgen(lua_State *L, CTState *cts, cTValue *key,
     if (headtab && !fin_gen_tab_enabled_acq(headtab))
       return 0;
     while (ctype_fin_has_claim(cts, claim))
-      la_cpu_pause();
+      ctype_fin_claim_wait_no_l();
     if (ctype_fin_any_key(cts, L, key))
       return -1;
     t = ctype_fin_tab_new_l(L, hbits);
