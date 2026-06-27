@@ -13,7 +13,9 @@ Changes:
   `DISPMODE_UPDATE` token before rewriting the global dispatch template.
   Async profiler timer/signal triggers return instead of spinning if they
   interrupt a thread that already owns the token; the owner revalidates the
-  requested mode before leaving the update path.
+  requested mode before leaving the update path. Non-async dispatch updaters
+  that find the token busy now wait in no-`lua_State` native sleep slices
+  instead of burning CPU in a pause loop.
 - Added profiler-specific hookmask helpers. The profile hook atomically claims
   `HOOK_VMEVENT`, drains samples with an exchange, invokes the callback, and
   restores the saved hook mask while preserving concurrent hook event/profile

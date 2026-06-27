@@ -22,6 +22,7 @@
 #include "lj_atomic.h"
 #include "lj_gc2.h"
 #include "lj_safepoint.h"
+#include "lj_thr.h"
 #if LJ_HASJIT
 #include "lj_jit.h"
 #endif
@@ -193,6 +194,11 @@ static uint8_t dispatch_state_mode(global_State *g
   return mode;
 }
 
+static void dispatch_update_wait_no_l(void)
+{
+  (void)lj_thr_sleep_ns(NULL, 1000000);
+}
+
 /* Update dispatch table depending on various flags. */
 void LJ_FASTCALL lj_dispatch_update(global_State *g, int nolock)
 {
@@ -208,7 +214,7 @@ retry:
   if ((oldmode & DISPMODE_UPDATE)) {
     /* Async profile triggers may interrupt the owner of the update token. */
     if (nolock > 1) return;
-    la_cpu_pause();
+    dispatch_update_wait_no_l();
     goto retry;
   }
 #if LJ_HASJIT
