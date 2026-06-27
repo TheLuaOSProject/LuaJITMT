@@ -174,7 +174,6 @@ LJ_FUNC int lj_gc2_finalizer_mt_reclaim_exclusive(global_State *g);
 LJ_FUNC int lj_gc2_finalizer_spawn_deferred(global_State *g);
 LJ_FUNC void lj_gc2_finalizer_spawn_release(global_State *g);
 LJ_FUNCA void lj_gc2_barrier_tv_g(global_State *g, cTValue *tv);
-LJ_FUNCA void lj_gc2_barrier_tvn_g(global_State *g, cTValue *tv, uint32_t n);
 LJ_FUNCA void lj_gc2_barrier_tvn_pair_g(global_State *g, GCobj *parent,
 					cTValue *tv, uint32_t n);
 LJ_FUNCA void lj_gc2_barrier_obj_pair(lua_State *L, GCobj *parent, GCobj *child);

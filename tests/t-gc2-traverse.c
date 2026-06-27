@@ -2604,7 +2604,7 @@ static void test_tvalue_range_barrier(lua_State *L, global_State *g,
   lj_gc2_legacy_mark_begin(g);
   assert(lj_gc2_ismarked(g, obj2gco(child1)) == 0);
   assert(lj_gc2_ismarked(g, obj2gco(child2)) == 0);
-  lj_gc2_barrier_tvn_g(g, vals, 2);
+  lj_gc2_barrier_tvn_pair_g(g, NULL, vals, 2);
   assert(lj_gc2_ismarked(g, obj2gco(child1)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(child2)) == 1);
   assert(!lj_gc2_test_ssb_empty(g));
