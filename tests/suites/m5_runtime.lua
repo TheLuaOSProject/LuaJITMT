@@ -248,6 +248,89 @@ return function(add)
   })
 
   add({
+    name = "m5_prng_seed_native",
+    description = "no-argument math.randomseed native entropy guard",
+    run = function(t)
+      t:run([==[
+if ! grep -qF 'LJ_FUNC int lj_prng_seed_secure_l(lua_State *L, PRNGState *rs);' src/lj_prng.h; then
+  printf '%s\n' 'missing L-aware PRNG secure seed declaration' >&2
+  exit 1
+fi
+if ! awk '
+  /LJLIB_CF\(math_randomseed\)/ { inside = 1 }
+  inside && /lj_prng_seed_secure_l\(L, rs\)/ { found = 1 }
+  inside && /^}/ { inside = 0 }
+  END { exit(found ? 0 : 1) }
+' src/lib_math.c; then
+  printf '%s\n' 'math.randomseed() must call the L-aware secure seed path' >&2
+  exit 1
+fi
+if ! grep -qF 'lj_prng_seed_secure(&prng)' src/lj_state.c; then
+  printf '%s\n' 'lua_newstate bootstrap must keep the non-throwing secure seed path' >&2
+  exit 1
+fi
+if ! awk '
+  /^int LJ_FASTCALL lj_prng_seed_secure\(PRNGState \*rs\)/ { inside = 1 }
+  inside && /prng_seed_secure\(NULL, rs\)/ { found = 1 }
+  inside && /^}/ { inside = 0 }
+  END { exit(found ? 0 : 1) }
+' src/lj_prng.c; then
+  printf '%s\n' 'bootstrap PRNG seed entry point must forward without a lua_State' >&2
+  exit 1
+fi
+if ! awk '
+  /static long prng_native_getrandom/ { inside = 1; enter = call = leave = 0 }
+  inside && /lj_native_enter\(L2TG\(L\)\)/ { enter = 1 }
+  inside && /syscall\(SYS_getrandom/ { call = 1 }
+  inside && /\*actionsp \|= lj_native_leave\(L\)/ { leave = 1 }
+  inside && /^}/ {
+    if (enter && call && leave) found = 1
+    inside = 0
+  }
+  END { exit(found ? 0 : 1) }
+' src/lj_prng.c; then
+  printf '%s\n' 'Linux getrandom secure seeding must run as a native region' >&2
+  exit 1
+fi
+if ! awk '
+  /static ssize_t prng_native_urandom/ {
+    inside = 1; opened = readfd = closed = leave = 0
+  }
+  inside && /open\("\/dev\/urandom"/ { opened = NR }
+  inside && /read\(fd,/ { readfd = NR }
+  inside && /close\(fd\)/ { closed = NR }
+  inside && /\*actionsp \|= lj_native_leave\(L\)/ { leave = NR }
+  inside && /^}/ {
+    if (opened && readfd && closed && leave && closed < leave) found = 1
+    inside = 0
+  }
+  END { exit(found ? 0 : 1) }
+' src/lj_prng.c; then
+  printf '%s\n' '/dev/urandom fallback must close the fd before leaving native state' >&2
+  exit 1
+fi
+if ! awk '
+  /^static int prng_seed_secure\(lua_State \*L, PRNGState \*rs\)/ { inside = 1 }
+  inside && /^ok:/ { ok = NR }
+  inside && /lj_prng_condition\(rs\)/ { condition = NR }
+  inside && /lj_safepoint_checkstop\(L, actions\);/ { check = NR }
+  inside && /return 1;  \/\* Success/ { ret = NR }
+  inside && /^}/ {
+    if (ok && condition > ok && check > condition && ret > check) found = 1
+    inside = 0
+  }
+  END { exit(found ? 0 : 1) }
+' src/lj_prng.c; then
+  printf '%s\n' 'successful secure reseed must condition the seed before STOPREQ handling' >&2
+  exit 1
+fi
+]==], { cwd = t.root, quiet = true })
+      build_and_run_luajit_script(t, "t-prng-seed-native.lua", nil,
+        { joff = true })
+    end
+  })
+
+  add({
     name = "m5_os_reentrant",
     description = "POSIX os.date/tmpname reentrancy and setlocale behavior",
     run = function(t)

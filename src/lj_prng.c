@@ -14,6 +14,7 @@
 #include "lj_def.h"
 #include "lj_arch.h"
 #include "lj_prng.h"
+#include "lj_safepoint.h"
 
 /* -- PRNG step function -------------------------------------------------- */
 
@@ -145,6 +146,49 @@ extern int getentropy(void *buf, size_t len)
 
 #endif
 
+#if LUAJIT_SECURITY_PRNG && LJ_TARGET_POSIX
+
+#if LJ_TARGET_LINUX && defined(SYS_getrandom)
+static long prng_native_getrandom(lua_State *L, void *buf, size_t len,
+				  uint32_t *actionsp)
+{
+  long n;
+  if (L) lj_native_enter(L2TG(L));
+  n = syscall(SYS_getrandom, buf, len, 0);
+  if (L) *actionsp |= lj_native_leave(L);
+  return n;
+}
+#endif
+
+#if LJ_TARGET_HAS_GETENTROPY
+static int prng_native_getentropy(lua_State *L, void *buf, size_t len,
+				  uint32_t *actionsp)
+{
+  int rc;
+  if (L) lj_native_enter(L2TG(L));
+  rc = getentropy(buf, len);
+  if (L) *actionsp |= lj_native_leave(L);
+  return rc;
+}
+#endif
+
+static ssize_t prng_native_urandom(lua_State *L, void *buf, size_t len,
+				   uint32_t *actionsp)
+{
+  ssize_t n = -1;
+  int fd;
+  if (L) lj_native_enter(L2TG(L));
+  fd = open("/dev/urandom", O_RDONLY|O_CLOEXEC);
+  if (fd != -1) {
+    n = read(fd, buf, len);
+    (void)close(fd);
+  }
+  if (L) *actionsp |= lj_native_leave(L);
+  return n;
+}
+
+#endif
+
 #if LUAJIT_SECURITY_PRNG == 0
 
 /* If you really don't care about security, then define
@@ -160,11 +204,18 @@ int LJ_FASTCALL lj_prng_seed_secure(PRNGState *rs)
   return 1;
 }
 
+int lj_prng_seed_secure_l(lua_State *L, PRNGState *rs)
+{
+  UNUSED(L);
+  return lj_prng_seed_secure(rs);
+}
+
 #else
 
 /* Securely seed PRNG from system entropy. Returns 0 on failure. */
-int LJ_FASTCALL lj_prng_seed_secure(PRNGState *rs)
+static int prng_seed_secure(lua_State *L, PRNGState *rs)
 {
+  uint32_t actions = 0;
 #if LJ_TARGET_XBOX360
 
   if (XNetRandom(rs->u, (unsigned int)sizeof(rs->u)) == 0)
@@ -207,18 +258,22 @@ int LJ_FASTCALL lj_prng_seed_secure(PRNGState *rs)
 
 #if LJ_TARGET_LINUX && defined(SYS_getrandom)
 
-  if (syscall(SYS_getrandom, rs->u, sizeof(rs->u), 0) == (long)sizeof(rs->u))
+  if (prng_native_getrandom(L, rs->u, sizeof(rs->u), &actions) ==
+      (long)sizeof(rs->u))
     goto ok;
+  lj_safepoint_checkstop(L, actions);
 
 #elif LJ_TARGET_HAS_GETENTROPY
 
 #ifdef __ELF__
-  if (&getentropy && getentropy(rs->u, sizeof(rs->u)) == 0)
+  if (&getentropy &&
+      prng_native_getentropy(L, rs->u, sizeof(rs->u), &actions) == 0)
     goto ok;
 #else
-  if (getentropy(rs->u, sizeof(rs->u)) == 0)
+  if (prng_native_getentropy(L, rs->u, sizeof(rs->u), &actions) == 0)
     goto ok;
 #endif
+  lj_safepoint_checkstop(L, actions);
 
 #endif
 
@@ -226,15 +281,10 @@ int LJ_FASTCALL lj_prng_seed_secure(PRNGState *rs)
   ** existent or accessible in a chroot or container, or if the process
   ** or the OS ran out of file descriptors.
   */
-  {
-    int fd = open("/dev/urandom", O_RDONLY|O_CLOEXEC);
-    if (fd != -1) {
-      ssize_t n = read(fd, rs->u, sizeof(rs->u));
-      (void)close(fd);
-      if (n == (ssize_t)sizeof(rs->u))
-	goto ok;
-    }
-  }
+  if (prng_native_urandom(L, rs->u, sizeof(rs->u), &actions) ==
+      (ssize_t)sizeof(rs->u))
+    goto ok;
+  lj_safepoint_checkstop(L, actions);
 
 #else
 
@@ -247,13 +297,24 @@ int LJ_FASTCALL lj_prng_seed_secure(PRNGState *rs)
 #error "Missing secure PRNG seed for this OS"
 
 #endif
+  lj_safepoint_checkstop(L, actions);
   return 0;  /* Fail. */
 
 ok:
   lj_prng_condition(rs);
   (void)lj_prng_u64(rs);
+  lj_safepoint_checkstop(L, actions);
   return 1;  /* Success. */
 }
 
-#endif
+int LJ_FASTCALL lj_prng_seed_secure(PRNGState *rs)
+{
+  return prng_seed_secure(NULL, rs);
+}
 
+int lj_prng_seed_secure_l(lua_State *L, PRNGState *rs)
+{
+  return prng_seed_secure(L, rs);
+}
+
+#endif

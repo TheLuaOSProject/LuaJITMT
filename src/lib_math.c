@@ -187,7 +187,7 @@ LJLIB_CF(math_randomseed)
   PRNGState *rs = &L2TG(L)->prng;
   if (L->base != L->top)
     random_seed(rs, lj_lib_checknum(L, 1));
-  else if (!lj_prng_seed_secure(rs))
+  else if (!lj_prng_seed_secure_l(L, rs))
     lj_err_caller(L, LJ_ERR_PRNGSD);
   return 0;
 }
@@ -203,4 +203,3 @@ LUALIB_API int luaopen_math(lua_State *L)
   LJ_LIB_REG(L, LUA_MATHLIBNAME, math);
   return 1;
 }
-

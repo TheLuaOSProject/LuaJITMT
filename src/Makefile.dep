@@ -225,7 +225,8 @@ lj_parse.o: lj_parse.c lj_obj.h lua.h luaconf.h lj_def.h lj_arch.h \
  lj_atomic.h lj_gc.h lj_err.h lj_errmsg.h lj_debug.h lj_buf.h lj_str.h \
  lj_tg.h lj_bc.h lj_arena.h lj_ctype.h lj_tab.h lj_func.h lj_state.h \
  lj_strfmt.h lj_lex.h lj_parse.h lj_vm.h lj_vmevent.h
-lj_prng.o: lj_prng.c lj_def.h lua.h luaconf.h lj_arch.h lj_prng.h
+lj_prng.o: lj_prng.c lj_def.h lua.h luaconf.h lj_arch.h lj_prng.h \
+ lj_safepoint.h lj_obj.h lj_atomic.h lj_gc2.h
 lj_profile.o: lj_profile.c lj_obj.h lua.h luaconf.h lj_def.h lj_arch.h \
  lj_atomic.h lj_err.h lj_errmsg.h lj_buf.h lj_gc.h lj_str.h lj_tg.h \
  lj_bc.h lj_arena.h lj_ctype.h lj_frame.h lj_debug.h lj_dispatch.h \

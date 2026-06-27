@@ -18,6 +18,7 @@ local m5_concurrent_cases = {
   "m5_itype_nan",
   "m5_itype_sentinel",
   "m5_math_random_tg",
+  "m5_prng_seed_native",
   "m5_udtype_publish",
   "m5_ctype_name_publish",
   "m5_registry_root",

@@ -9,6 +9,7 @@
 #include "lj_def.h"
 
 LJ_FUNC int LJ_FASTCALL lj_prng_seed_secure(PRNGState *rs);
+LJ_FUNC int lj_prng_seed_secure_l(lua_State *L, PRNGState *rs);
 LJ_FUNC uint64_t LJ_FASTCALL lj_prng_u64(PRNGState *rs);
 LJ_FUNC uint64_t LJ_FASTCALL lj_prng_u64d(PRNGState *rs);
 
