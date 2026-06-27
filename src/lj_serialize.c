@@ -15,6 +15,7 @@
 #include "lj_gc.h"
 #include "lj_str.h"
 #include "lj_tab.h"
+#include "lj_thr.h"
 #include "lj_udata.h"
 #if LJ_HASFFI
 #include "lj_ctype.h"
@@ -126,6 +127,11 @@ static LJ_AINLINE char *serialize_ru124(char *r, char *w, uint32_t *pv)
   return NULL;
 }
 
+static LJ_AINLINE void serialize_dict_wait_no_l(void)
+{
+  (void)lj_thr_sleep_ns(NULL, 1000000);
+}
+
 static void serialize_dict_storeint(lua_State *L, GCtab *dict, cTValue *key,
 				    int32_t idx)
 {
@@ -135,14 +141,14 @@ static void serialize_dict_storeint(lua_State *L, GCtab *dict, cTValue *key,
     dst = lj_tab_set(L, dict, key);
     lj_tv_load_acq(&old, dst);
     if (tvisforward(&old)) {
-      la_cpu_pause();  /* serializer dictionary saw FORWARD after lookup. */
+      serialize_dict_wait_no_l();  /* Dictionary saw FORWARD after lookup. */
       continue;
     }
     if (!tvisnil(&old))
       return;
     if (lj_tv_cas(dst, &old, &val))
       return;
-    la_cpu_pause();
+    serialize_dict_wait_no_l();
   }
 }
 

@@ -224,7 +224,7 @@ lj_opt_split.o: lj_opt_split.c lj_obj.h lua.h luaconf.h lj_def.h \
 lj_parse.o: lj_parse.c lj_obj.h lua.h luaconf.h lj_def.h lj_arch.h \
  lj_atomic.h lj_gc.h lj_err.h lj_errmsg.h lj_debug.h lj_buf.h lj_str.h \
  lj_tg.h lj_bc.h lj_arena.h lj_ctype.h lj_tab.h lj_func.h lj_state.h \
- lj_strfmt.h lj_lex.h lj_parse.h lj_vm.h lj_vmevent.h
+ lj_thr.h lj_strfmt.h lj_lex.h lj_parse.h lj_vm.h lj_vmevent.h
 lj_prng.o: lj_prng.c lj_def.h lua.h luaconf.h lj_arch.h lj_prng.h \
  lj_safepoint.h lj_obj.h lj_atomic.h lj_gc2.h
 lj_profile.o: lj_profile.c lj_obj.h lua.h luaconf.h lj_def.h lj_arch.h \
@@ -234,10 +234,10 @@ lj_profile.o: lj_profile.c lj_obj.h lua.h luaconf.h lj_def.h lj_arch.h \
  lj_traceerr.h lj_profile.h luajit.h
 lj_record.o: lj_record.c lj_obj.h lua.h luaconf.h lj_def.h lj_arch.h \
  lj_atomic.h lj_err.h lj_errmsg.h lj_gc.h lj_str.h lj_tab.h lj_meta.h \
- lj_frame.h lj_bc.h lj_ctype.h lj_ff.h lj_ffdef.h lj_debug.h lj_ir.h \
- lj_jit.h lj_ircall.h lj_iropt.h lj_trace.h lj_dispatch.h lj_tg.h \
- lj_arena.h lj_traceerr.h lj_record.h lj_ffrecord.h lj_snap.h lj_vm.h \
- lj_prng.h
+ lj_thr.h lj_frame.h lj_bc.h lj_ctype.h lj_ff.h lj_ffdef.h lj_debug.h \
+ lj_ir.h lj_jit.h lj_ircall.h lj_iropt.h lj_trace.h lj_dispatch.h \
+ lj_tg.h lj_arena.h lj_traceerr.h lj_record.h lj_ffrecord.h lj_snap.h \
+ lj_vm.h lj_prng.h
 lj_safepoint.o: lj_safepoint.c lj_obj.h lua.h luaconf.h lj_def.h \
  lj_arch.h lj_atomic.h lj_arena.h lj_err.h lj_errmsg.h lj_gc2.h \
  lj_mcode.h lj_jit.h lj_ir.h lj_safepoint.h lj_str.h lj_tab.h lj_thr.h \
@@ -245,8 +245,8 @@ lj_safepoint.o: lj_safepoint.c lj_obj.h lua.h luaconf.h lj_def.h \
  lj_traceerr.h
 lj_serialize.o: lj_serialize.c lj_obj.h lua.h luaconf.h lj_def.h \
  lj_arch.h lj_atomic.h lj_err.h lj_errmsg.h lj_buf.h lj_gc.h lj_str.h \
- lj_tg.h lj_bc.h lj_arena.h lj_ctype.h lj_tab.h lj_udata.h lj_cdata.h \
- lj_ir.h lj_serialize.h
+ lj_tg.h lj_bc.h lj_arena.h lj_ctype.h lj_tab.h lj_thr.h lj_udata.h \
+ lj_cdata.h lj_ir.h lj_serialize.h
 lj_snap.o: lj_snap.c lj_obj.h lua.h luaconf.h lj_def.h lj_arch.h \
  lj_atomic.h lj_gc.h lj_tab.h lj_state.h lj_frame.h lj_bc.h lj_ir.h \
  lj_jit.h lj_iropt.h lj_trace.h lj_dispatch.h lj_tg.h lj_arena.h \

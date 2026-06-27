@@ -19,6 +19,7 @@
 #include "lj_tab.h"
 #include "lj_func.h"
 #include "lj_state.h"
+#include "lj_thr.h"
 #include "lj_bc.h"
 #if LJ_HASFFI
 #include "lj_ctype.h"
@@ -247,6 +248,11 @@ static BCReg const_str(FuncState *fs, ExpDesc *e)
 }
 
 /* Anchor string constant to avoid GC. */
+static LJ_AINLINE void parse_keep_wait_no_l(void)
+{
+  (void)lj_thr_sleep_ns(NULL, 1000000);
+}
+
 static void parse_keep_storebool(lua_State *L, GCtab *t, cTValue *key)
 {
   TValue val, old, *dst;
@@ -255,14 +261,14 @@ static void parse_keep_storebool(lua_State *L, GCtab *t, cTValue *key)
     dst = lj_tab_set(L, t, key);
     lj_tv_load_acq(&old, dst);
     if (tvisforward(&old)) {
-      la_cpu_pause();  /* parser anchor store saw FORWARD after lookup. */
+      parse_keep_wait_no_l();  /* Parser anchor store saw FORWARD. */
       continue;
     }
     if (!tvisnil(&old))
       return;
     if (lj_tv_cas(dst, &old, &val))
       return;
-    la_cpu_pause();
+    parse_keep_wait_no_l();
   }
 }
 

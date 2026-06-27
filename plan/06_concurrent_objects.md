@@ -343,6 +343,9 @@ copied result slots through `lj_tab_storetvn()` instead of the old raw
 `mov [array], TValue` loop. C-side runtime/library/parser/serializer
 table-slot writers converted so far publish values through `lj_tab_store*()`
 helpers or `copyTVrel()` instead of raw `lj_tab_set*()` destination stores;
+parser anchor stores, serializer dictionary preparation, and recorder template
+markers also back off through no-`lua_State` sleeps when a forwarded slot or CAS
+loss forces a retry;
 rehash/new-key insertion also release-publishes hash keys through
 `tab_storekeyrel()` and moved values through `copyTVrel()` during legacy resize
 rebuilds. This records a scoped release-store bridge without changing the

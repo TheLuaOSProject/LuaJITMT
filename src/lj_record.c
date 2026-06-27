@@ -15,6 +15,7 @@
 #include "lj_gc.h"
 #include "lj_str.h"
 #include "lj_tab.h"
+#include "lj_thr.h"
 #include "lj_meta.h"
 #include "lj_frame.h"
 #if LJ_HASFFI
@@ -1393,6 +1394,11 @@ static void rec_rbchash_publish(jit_State *J, TRef tr, const BCIns *pc)
   la_store32_rel(&rbc->ref, tref_ref(tr));  /* Recorder table-bump cache. */
 }
 
+static LJ_AINLINE void rec_template_wait_no_l(void)
+{
+  (void)lj_thr_sleep_ns(NULL, 1000000);
+}
+
 static void rec_template_mark_nil(jit_State *J, GCtab *tpl, cTValue *key)
 {
   TValue marker, old, *dst;
@@ -1401,14 +1407,14 @@ static void rec_template_mark_nil(jit_State *J, GCtab *tpl, cTValue *key)
     dst = lj_tab_set(J->L, tpl, key);
     lj_tv_load_acq(&old, dst);
     if (tvisforward(&old)) {
-      la_cpu_pause();  /* recorder template marker saw FORWARD after lookup. */
+      rec_template_wait_no_l();  /* Template marker saw FORWARD. */
       continue;
     }
     if (!tvisnil(&old))
       return;
     if (lj_tv_cas(dst, &old, &marker))
       return;
-    la_cpu_pause();
+    rec_template_wait_no_l();
   }
 }
 
