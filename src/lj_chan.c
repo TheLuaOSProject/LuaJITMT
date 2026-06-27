@@ -75,11 +75,46 @@ static void chan_wake(LJChan *ch)
   la_futex_wake(&ch->futex, INT_MAX);
 }
 
+static int chan_had_stopreq(lua_State *L)
+{
+  TGState *tg = L ? L2TG(L) : NULL;
+  return tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ);
+}
+
+static int chan_pending_stopreq(lua_State *L)
+{
+  TGState *tg = L ? L2TG(L) : NULL;
+  return tg && (lj_tg_reqmask_acq(tg) & LJ_GC2_HS_STOPREQ);
+}
+
+static uint32_t chan_poll_pending_stopreq(lua_State *L, uint32_t actions)
+{
+  if (!(actions & LJ_GC2_HS_STOPREQ) && chan_pending_stopreq(L))
+    actions |= lj_safepoint_poll(L);
+  return actions;
+}
+
+static int chan_fresh_stopreq(lua_State *L, uint32_t actions, int had_stopreq)
+{
+  TGState *tg = L ? L2TG(L) : NULL;
+  return (actions & LJ_GC2_HS_STOPREQ) ||
+    (!had_stopreq && tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ));
+}
+
+static void chan_checkstop_fresh(lua_State *L, uint32_t actions,
+				 int had_stopreq)
+{
+  actions = chan_poll_pending_stopreq(L, actions);
+  if (chan_fresh_stopreq(L, actions, had_stopreq))
+    lj_safepoint_checkstop(L, actions);
+}
+
 static void chan_wait(lua_State *L, LJChan *ch)
 {
   uint32_t f = la_load32_acq(&ch->futex);
   TGState *tg = L ? L2TG(L) : NULL;
   uint32_t actions = 0;
+  int had_stopreq = chan_had_stopreq(L);
   if (tg)
     lj_native_enter(tg);  /* 09 section 9.5: channel park is native. */
   (void)la_futex_wait(&ch->futex, f, 1000000);
@@ -87,7 +122,7 @@ static void chan_wait(lua_State *L, LJChan *ch)
     actions = lj_native_leave(L);
   else if (tg)
     lj_tg_in_native_store_rlx(tg, 0);
-  lj_safepoint_checkstop(L, actions);
+  chan_checkstop_fresh(L, actions, had_stopreq);
 }
 
 static int64_t chan_now_ns(void)
@@ -116,6 +151,8 @@ static int chan_wait_timeout(lua_State *L, LJChan *ch, int64_t ns)
 {
   uint32_t f;
   TGState *tg;
+  uint32_t actions = 0;
+  int had_stopreq = chan_had_stopreq(L);
   int rc;
   if (ns <= 0)
     return 1;
@@ -127,9 +164,10 @@ static int chan_wait_timeout(lua_State *L, LJChan *ch, int64_t ns)
     lj_native_enter(tg);  /* 09 section 9.5: timed channel park. */
   rc = la_futex_wait(&ch->futex, f, ns);
   if (L)
-    lj_safepoint_checkstop(L, lj_native_leave(L));
+    actions = lj_native_leave(L);
   else if (tg)
     lj_tg_in_native_store_rlx(tg, 0);
+  chan_checkstop_fresh(L, actions, had_stopreq);
   return rc != 0 && errno == ETIMEDOUT;
 }
 
