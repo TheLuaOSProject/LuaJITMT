@@ -1799,7 +1799,7 @@ int lj_gc2_finalizer_phase_pending(global_State *g)
 
 int lj_gc2_finalizer_close_pending(global_State *g)
 {
-  return gc2_finalizer_queue_pending(g) || lj_gc_cdata_fin_pending(g);
+  return gc2_finalizer_queue_pending(g) || lj_gc2_finreg_cdata_pending(g);
 }
 
 static int lj_gc2_finalizer_pending(global_State *g)

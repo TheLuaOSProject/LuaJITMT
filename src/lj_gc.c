@@ -1522,32 +1522,10 @@ void lj_gc_clearweak_legacy(global_State *g, GCobj *o)
   }
 }
 
-/* Finalize all userdata/cdata objects from the GC2 finalizer queue. */
-void lj_gc_finalize_udata(lua_State *L)
-{
-  lj_gc2_finalizer_dispatch_all(L);
-}
-
 #if LJ_HASFFI
 static void gc_mark_finreg_tv(global_State *g, cTValue *tv)
 {
   gc_marktv(g, tv);
-}
-
-int lj_gc_cdata_fin_pending(global_State *g)
-{
-  return lj_gc2_finreg_cdata_pending(g);
-}
-
-/* Finalize all cdata objects from finalizer table. */
-void lj_gc_finalize_cdata(lua_State *L)
-{
-  (void)lj_gc2_finreg_cdata_finalize_close(G(L));
-}
-
-void lj_gc_finalize_cdata_disable(global_State *g)
-{
-  lj_gc2_finreg_cdata_disable(g);
 }
 #endif
 

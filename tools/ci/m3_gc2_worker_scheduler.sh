@@ -500,6 +500,16 @@ if hits=$(grep -nE -- 'lj_gc2_finalizer_queue_pending[[:space:]]*[(]|lj_gc_cdata
   printf '%s\n' 'lua_close finalizer fixed-point checks must use lj_gc2_finalizer_close_pending' >&2
   exit 1
 fi
+if hits=$(grep -nE -- 'lj_gc_finalize_(udata|cdata|cdata_disable)[[:space:]]*[(]|lj_gc_cdata_fin_pending[[:space:]]*[(]|LJ_FUNC .*[[:space:]]lj_gc_finalize_(udata|cdata|cdata_disable)[[:space:]]*[(]|LJ_FUNC .*[[:space:]]lj_gc_cdata_fin_pending[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc.c" \
+    "$ROOT/src/lj_gc.h" \
+    "$ROOT/src/lj_state.c" \
+    "$ROOT/tests/t-gc2-traverse.c" \
+    "$ROOT/tests/t-gc2-worker-scheduler.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'legacy close-time finalizer wrappers are forbidden; use GC2 finalizer/FINREG APIs directly' >&2
+  exit 1
+fi
 if ! grep -qE 'LJ_FUNC int lj_gc2_finalizer_step[[:space:]]*[(]' \
     "$ROOT/src/lj_gc2.h"; then
   printf '%s\n' 'lj_gc2_finalizer_step declaration is required for GCSfinalize step ownership' >&2
@@ -618,13 +628,14 @@ if hits=$(grep -nE -- 'LJ_FUNC .*[[:space:]]lj_gc2_finalizer_(pause_threshold|re
   printf '%s\n' 'raw finalizer callback helpers must stay private to lj_gc2.c' >&2
   exit 1
 fi
-for pattern in 'lj_gc2_finalizer_dispatch_all(L)' \
-  'lj_gc2_finalizer_step(L, GCFINALIZECOST,'; do
-  if ! grep -qF "$pattern" "$ROOT/src/lj_gc.c"; then
-    printf '%s\n' "legacy GC finalizer path must call ${pattern}" >&2
-    exit 1
-  fi
-done
+if ! grep -qF 'lj_gc2_finalizer_dispatch_all(L)' "$ROOT/src/lj_state.c"; then
+  printf '%s\n' 'lua_close finalizer drain must call lj_gc2_finalizer_dispatch_all(L)' >&2
+  exit 1
+fi
+if ! grep -qF 'lj_gc2_finalizer_step(L, GCFINALIZECOST,' "$ROOT/src/lj_gc.c"; then
+  printf '%s\n' 'legacy GCSfinalize step must call lj_gc2_finalizer_step' >&2
+  exit 1
+fi
 if hits=$(grep -nE -- 'gc_call_finalizer|lj_gc2_finalizer_(pause_threshold|restore_threshold|pcall)[[:space:]]*[(]|lj_gc2_finalizer_mt_(release|reclaim)_exclusive[[:space:]]*[(]|lj_vm_pcall[[:space:]]*[(]|lj_vmevent_send[[:space:]]*[(]|hook_(save|entergc|restore)[[:space:]]*[(]|lj_state_checkstack[[:space:]]*[(]|savestack[[:space:]]*[(]|restorestack[[:space:]]*[(]' \
     "$ROOT/src/lj_gc.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2

@@ -278,13 +278,14 @@ for helper in lj_gc2_test_finalizer_queue_pending \
     exit 1
   fi
 done
-for pattern in 'lj_gc2_finalizer_dispatch_all(L)' \
-  'lj_gc2_finalizer_step(L, GCFINALIZECOST,'; do
-  if ! grep -qF "$pattern" "$ROOT/src/lj_gc.c"; then
-    printf '%s\n' "legacy GC finalizer path must call ${pattern}" >&2
-    exit 1
-  fi
-done
+if ! grep -qF 'lj_gc2_finalizer_dispatch_all(L)' "$ROOT/src/lj_state.c"; then
+  printf '%s\n' 'lua_close finalizer drain must call lj_gc2_finalizer_dispatch_all(L)' >&2
+  exit 1
+fi
+if ! grep -qF 'lj_gc2_finalizer_step(L, GCFINALIZECOST,' "$ROOT/src/lj_gc.c"; then
+  printf '%s\n' 'legacy GCSfinalize step must call lj_gc2_finalizer_step' >&2
+  exit 1
+fi
 if ! grep -qF 'lj_gc2_finalizer_fullgc_deferred(g)' "$ROOT/src/lj_gc.c"; then
   printf '%s\n' 'lj_gc_fullgc finalizer-spawn deferral must use lj_gc2_finalizer_fullgc_deferred' >&2
   exit 1
@@ -362,6 +363,16 @@ if hits=$(grep -nE -- 'lj_gc2_finalizer_queue_pending[[:space:]]*[(]|lj_gc_cdata
     "$ROOT/src/lj_state.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
   printf '%s\n' 'lua_close must not open-code finalizer queue or FINREG pending checks' >&2
+  exit 1
+fi
+if hits=$(grep -nE -- 'lj_gc_finalize_(udata|cdata|cdata_disable)[[:space:]]*[(]|lj_gc_cdata_fin_pending[[:space:]]*[(]|LJ_FUNC .*[[:space:]]lj_gc_finalize_(udata|cdata|cdata_disable)[[:space:]]*[(]|LJ_FUNC .*[[:space:]]lj_gc_cdata_fin_pending[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc.c" \
+    "$ROOT/src/lj_gc.h" \
+    "$ROOT/src/lj_state.c" \
+    "$ROOT/tests/t-gc2-traverse.c" \
+    "$ROOT/tests/t-gc2-worker-scheduler.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'legacy close-time finalizer wrappers are forbidden; use GC2 finalizer/FINREG APIs directly' >&2
   exit 1
 fi
 

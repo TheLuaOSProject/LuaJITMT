@@ -277,7 +277,7 @@ static void test_worker_real_finalizer_dispatch(lua_State *L, global_State *g)
   assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) != NULL);
   assert(wait_gc2_counter_at_least(g, gc2_worker_async_progress_acq, async0 + 3u));
 
-  lj_gc_finalize_udata(L);
+  lj_gc2_finalizer_dispatch_all(L);
   assert(la_load64_acq(&g->gc2.finalizer_dequeued) == dequeued0 + 3u);
   assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) == NULL);
   assert(finalizer_count == 3);
@@ -287,7 +287,7 @@ static void test_worker_real_finalizer_dispatch(lua_State *L, global_State *g)
 
   lua_settop(L, 0);
   lj_gc_separateudata(g, 1);
-  lj_gc_finalize_udata(L);
+  lj_gc2_finalizer_dispatch_all(L);
   assert(finalizer_count == 3);
   finalizer_expected_L = NULL;
 }

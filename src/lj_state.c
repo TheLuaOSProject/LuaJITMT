@@ -425,8 +425,10 @@ static TValue *cpfinalize(lua_State *L, lua_CFunction dummy, void *ud)
 {
   UNUSED(dummy);
   UNUSED(ud);
-  lj_gc_finalize_cdata(L);
-  lj_gc_finalize_udata(L);
+#if LJ_HASFFI
+  (void)lj_gc2_finreg_cdata_finalize_close(G(L));
+#endif
+  lj_gc2_finalizer_dispatch_all(L);
   /* Frame pop omitted. */
   return NULL;
 }
@@ -460,7 +462,7 @@ LUA_API void lua_close(lua_State *L)
     }
   }
 #if LJ_HASFFI
-  lj_gc_finalize_cdata_disable(g);
+  lj_gc2_finreg_cdata_disable(g);
 #endif
   close_state(L);
 }
