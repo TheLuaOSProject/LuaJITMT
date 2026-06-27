@@ -114,11 +114,12 @@ CAS-publishes a new weak-key FINREG generation instead of resizing/copying the
 old table. The generation publisher waits out visible FINREG claim sentinels
 across all generations, rechecks for the cdata key, creates a private
 generation with the new key already claimed, and publishes it as the newest
-head. Legacy GC and GC2 root, identify, traverse, and close-drain every FINREG
-generation; traversal waits out claim sentinels before marking finalizer
-values. The initial FINREG generation is created during `lj_ctype_init()` and
-published directly through `CTState.fin_head`; the legacy `GCROOT_FFI_FIN`
-bootstrap root has been removed. Recorded
+head. Losing publish CAS attempts yield through the no-L FINREG wait helper
+before retrying. Legacy GC and GC2 root, identify, traverse, and close-drain
+every FINREG generation; traversal waits out claim sentinels before marking
+finalizer values. The initial FINREG generation is created during
+`lj_ctype_init()` and published directly through `CTState.fin_head`; the
+legacy `GCROOT_FFI_FIN` bootstrap root has been removed. Recorded
 `ffi.gc()`/ctype-`__gc` finalizer registration now emits
 `IRCALL_lj_cdata_setfin` and is covered by traced direct, nil-clear, and
 metatype tests plus the multi-threaded default-JIT FINREG stress. Normal

@@ -101,6 +101,28 @@ if ! awk '
   printf '%s\n' 'cdata_fin_claim FINREG slot waits must use cdata_fin_claim_wait_no_l()' >&2
   exit 1
 fi
+if ! awk '
+  /^int lj_ctype_fin_newgen[[:space:]]*[(]/ {
+    inside = 1
+  }
+  inside && /ctype_fin_claim_wait_no_l[[:space:]]*[(]/ {
+    found = 1
+  }
+  inside && /la_cpu_pause[[:space:]]*[(]/ {
+    bad = FILENAME ":" FNR ":" $0
+  }
+  inside && /^}/ {
+    inside = 0
+  }
+  END {
+    if (bad != "")
+      print bad
+    exit(found && bad == "" ? 0 : 1)
+  }
+' "$ROOT/src/lj_ctype.c"; then
+  printf '%s\n' 'lj_ctype_fin_newgen FINREG generation waits must use ctype_fin_claim_wait_no_l()' >&2
+  exit 1
+fi
 for fn in lj_tab_try_newkey_anchor lj_tab_try_newkey_chain; do
   if ! awk -v fn="$fn" '
     $0 ~ ("^int[[:space:]]+" fn "[[:space:]]*[(]") {

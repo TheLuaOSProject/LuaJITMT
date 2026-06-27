@@ -405,7 +405,7 @@ int lj_ctype_fin_newgen(lua_State *L, CTState *cts, cTValue *key,
       return 1;  /* 11.4 FINREG generation CAS publish. */
     }
     lj_mem_freet(G(L), gen);
-    la_cpu_pause();
+    ctype_fin_claim_wait_no_l();
   }
 }
 
