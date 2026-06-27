@@ -723,4 +723,44 @@ if hits=$(grep -nE -- '->[[:space:]]*gc2[.]phase|&[[:space:]]*[^)]*->[[:space:]]
   printf '%s\n' 'raw GC2 phase access is forbidden; use gc2_phase_* helpers' >&2
   exit 1
 fi
+if ! awk '
+  /^static void gc2_peer_wait_no_l\(void\)/ {
+    inside = 1
+  }
+  inside && /lj_thr_sleep_ns\(NULL, 1000000\)/ {
+    found = 1
+  }
+  inside && /^}/ {
+    inside = 0
+  }
+  END { exit(found ? 0 : 1) }
+' "$ROOT/src/lj_gc2.c"; then
+  printf '%s\n' 'missing GC2 peer no-L native sleep wait helper' >&2
+  exit 1
+fi
+for fn in lj_gc2_weak_complete lj_gc2_mark_complete; do
+  if ! awk -v fn="$fn" '
+    $0 ~ ("^[[:alnum:]_ *]+ " fn "\\(") {
+      inside = 1
+    }
+    inside && /gc2_peer_wait_no_l[[:space:]]*\(/ {
+      found = 1
+    }
+    inside && /la_cpu_pause[[:space:]]*\(/ {
+      bad = FILENAME ":" FNR ":" $0
+    }
+    inside && /^}/ {
+      inside = 0
+    }
+    END {
+      if (bad != "")
+	print bad
+      exit(found && bad == "" ? 0 : 1)
+    }
+  ' "$ROOT/src/lj_gc2.c"; then
+    printf '%s\n' \
+      "GC2 phase-completion peer wait in ${fn} must use native sleep slices" >&2
+    exit 1
+  fi
+done
 exec "$ROOT/tools/ci/lua_test.sh" m3_gc2_worker_scheduler

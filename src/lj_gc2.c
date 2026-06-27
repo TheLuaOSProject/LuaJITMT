@@ -111,6 +111,7 @@ static void lj_gc2_finalizer_drain(global_State *g);
 static GCobj *lj_gc2_finalizer_dequeue_owned(global_State *g);
 static GCobj *lj_gc2_finalizer_dequeue(global_State *g);
 static int lj_gc2_finalizer_try_enter(global_State *g);
+static void gc2_peer_wait_no_l(void);
 static void gc2_finalizer_wait_no_l(void);
 static void lj_gc2_finalizer_enter(global_State *g);
 static void lj_gc2_finalizer_leave(global_State *g);
@@ -1506,9 +1507,14 @@ static int lj_gc2_finalizer_try_enter(global_State *g)
   }
 }
 
-static void gc2_finalizer_wait_no_l(void)
+static void gc2_peer_wait_no_l(void)
 {
   (void)lj_thr_sleep_ns(NULL, 1000000);
+}
+
+static void gc2_finalizer_wait_no_l(void)
+{
+  gc2_peer_wait_no_l();
 }
 
 static void lj_gc2_finalizer_enter(global_State *g)
@@ -3213,7 +3219,7 @@ int lj_gc2_weak_complete(global_State *g, GCobj *legacy, uint32_t drain_limit)
     }
     if (gc2_worker_active_acq(g) == 0)
       break;
-    la_cpu_pause();  /* 05 section 5.8: peer drain must finish before fallback. */
+    gc2_peer_wait_no_l();  /* 05 section 5.8: wait for peer drain. */
   }
   if (progress)
     gc2_weak_complete_progress_add(g, progress);
@@ -5389,7 +5395,7 @@ uint32_t lj_gc2_mark_complete(global_State *g, lua_State *L,
       break;
     gc2_mark_complete_peer_waits_add(g, 1);
     while (gc2_worker_active_acq(g) != 0)
-      la_cpu_pause();  /* 05 section 5.7.1 peer drain before P_WEAK. */
+      gc2_peer_wait_no_l();  /* 05 section 5.7.1 peer drain before P_WEAK. */
   }
   if (hit)
     gc2_mark_complete_hits_add(g, 1);
