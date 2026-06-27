@@ -61,6 +61,19 @@ static int wait_u64_at_least(uint64_t *p, uint64_t target)
   return 0;
 }
 
+static int wait_gc2_counter_at_least(global_State *g,
+				     uint64_t (*load)(global_State *),
+				     uint64_t target)
+{
+  int i;
+  for (i = 0; i < 1000; i++) {
+    if (load(g) >= target)
+      return 1;
+    sleep_ns(1000000L);
+  }
+  return 0;
+}
+
 static lua_State *finalizer_expected_L;
 static int finalizer_count;
 static int finalizer_order[3];
@@ -149,20 +162,20 @@ static void test_two_worker_contention(global_State *g)
 {
   uint64_t busy0, parks0, wakes0;
 
-  assert(la_load32_acq(&g->gc2.n_workers) == 2);
-  parks0 = la_load64_acq(&g->gc2.worker_parks);
+  assert(gc2_n_workers_acq(g) == 2);
+  parks0 = gc2_worker_parks_acq(g);
   if (parks0 < 2u)
-    assert(wait_u64_at_least(&g->gc2.worker_parks, 2u));
+    assert(wait_gc2_counter_at_least(g, gc2_worker_parks_acq, 2u));
 
-  busy0 = la_load64_acq(&g->gc2.worker_busy_retries);
-  wakes0 = la_load64_acq(&g->gc2.worker_wakes);
-  la_store32_rel(&g->gc2.worker_active, 1);
+  busy0 = gc2_worker_busy_retries_acq(g);
+  wakes0 = gc2_worker_wakes_acq(g);
+  gc2_worker_active_rel(g, 1);
   la_store32_rel(&g->gc2.phase, LJ_GC2_MARK);
   lj_gc2_worker_wake(g);
-  assert(la_load64_acq(&g->gc2.worker_wakes) > wakes0);
-  assert(wait_u64_at_least(&g->gc2.worker_busy_retries, busy0 + 2u));
+  assert(gc2_worker_wakes_acq(g) > wakes0);
+  assert(wait_gc2_counter_at_least(g, gc2_worker_busy_retries_acq, busy0 + 2u));
   la_store32_rel(&g->gc2.phase, LJ_GC2_IDLE);
-  la_store32_rel(&g->gc2.worker_active, 0);
+  gc2_worker_active_rel(g, 0);
 }
 
 static void test_worker_finalizer_mpsc_drain(lua_State *L, global_State *g)
@@ -171,7 +184,7 @@ static void test_worker_finalizer_mpsc_drain(lua_State *L, global_State *g)
   uint64_t drained0, runs0, async0;
 
   lua_settop(L, 0);
-  assert(la_load32_acq(&g->gc2.n_workers) == 2);
+  assert(gc2_n_workers_acq(g) == 2);
   assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) == NULL);
   assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) == NULL);
 
@@ -183,17 +196,17 @@ static void test_worker_finalizer_mpsc_drain(lua_State *L, global_State *g)
   assert(unlink_root_object(g, b));
 
   drained0 = la_load64_acq(&g->gc2.finalizer_mpsc_drained);
-  runs0 = la_load64_acq(&g->gc2.worker_runs);
-  async0 = la_load64_acq(&g->gc2.worker_async_progress);
+  runs0 = gc2_worker_runs_acq(g);
+  async0 = gc2_worker_async_progress_acq(g);
 
   lj_gc2_finalizer_enqueue(g, a);
   lj_gc2_finalizer_enqueue(g, b);
   assert(wait_u64_at_least(&g->gc2.finalizer_mpsc_drained, drained0 + 2u));
   assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) == NULL);
   assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) != NULL);
-  assert(la_load64_acq(&g->gc2.worker_runs) > runs0);
-  assert(wait_u64_at_least(&g->gc2.worker_async_progress, async0 + 2u));
-  assert(la_load32_acq(&g->gc2.worker_active) == 0);
+  assert(gc2_worker_runs_acq(g) > runs0);
+  assert(wait_gc2_counter_at_least(g, gc2_worker_async_progress_acq, async0 + 2u));
+  assert(gc2_worker_active_acq(g) == 0);
 
   assert(lj_gc2_finalizer_dequeue(g) == a);
   assert(lj_gc2_finalizer_dequeue(g) == b);
@@ -225,7 +238,7 @@ static void test_worker_real_finalizer_dispatch(lua_State *L, global_State *g)
   finalizer_count = 0;
   finalizer_order[0] = finalizer_order[1] = finalizer_order[2] = 0;
 
-  assert(la_load32_acq(&g->gc2.n_workers) == 2);
+  assert(gc2_n_workers_acq(g) == 2);
   assert(la_load32_acq(&g->gc2.phase) == LJ_GC2_IDLE);
   assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) == NULL);
   assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) == NULL);
@@ -237,7 +250,7 @@ static void test_worker_real_finalizer_dispatch(lua_State *L, global_State *g)
   queued0 = la_load64_acq(&g->gc2.finalizer_queued);
   drained0 = la_load64_acq(&g->gc2.finalizer_mpsc_drained);
   dequeued0 = la_load64_acq(&g->gc2.finalizer_dequeued);
-  async0 = la_load64_acq(&g->gc2.worker_async_progress);
+  async0 = gc2_worker_async_progress_acq(g);
 
   separated = lj_gc_separateudata(g, 1);
   assert(separated >= 3u);
@@ -245,7 +258,7 @@ static void test_worker_real_finalizer_dispatch(lua_State *L, global_State *g)
   assert(wait_u64_at_least(&g->gc2.finalizer_mpsc_drained, drained0 + 3u));
   assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) == NULL);
   assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) != NULL);
-  assert(wait_u64_at_least(&g->gc2.worker_async_progress, async0 + 3u));
+  assert(wait_gc2_counter_at_least(g, gc2_worker_async_progress_acq, async0 + 3u));
 
   lj_gc_finalize_udata(L);
   assert(la_load64_acq(&g->gc2.finalizer_dequeued) == dequeued0 + 3u);
@@ -269,7 +282,7 @@ static void test_finalizer_owner_leave_rewakes_worker(lua_State *L,
   uint64_t drained0, parks0, wakes0;
 
   assert(lj_gc2_workers_set(g, 1) == 1);
-  assert(la_load32_acq(&g->gc2.n_workers) == 1);
+  assert(gc2_n_workers_acq(g) == 1);
   lua_settop(L, 0);
   assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) == NULL);
   assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) == NULL);
@@ -282,17 +295,17 @@ static void test_finalizer_owner_leave_rewakes_worker(lua_State *L,
   assert(unlink_root_object(g, b));
 
   drained0 = la_load64_acq(&g->gc2.finalizer_mpsc_drained);
-  parks0 = la_load64_acq(&g->gc2.worker_parks);
-  wakes0 = la_load64_acq(&g->gc2.worker_wakes);
+  parks0 = gc2_worker_parks_acq(g);
+  wakes0 = gc2_worker_wakes_acq(g);
   lj_gc2_finalizer_enter(g);
   lj_gc2_finalizer_enqueue(g, a);
   lj_gc2_finalizer_enqueue(g, b);
-  assert(wait_u64_at_least(&g->gc2.worker_parks, parks0 + 1u));
+  assert(wait_gc2_counter_at_least(g, gc2_worker_parks_acq, parks0 + 1u));
   assert(la_load64_acq(&g->gc2.finalizer_mpsc_drained) == drained0);
   assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) != NULL);
   assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) == NULL);
   lj_gc2_finalizer_leave(g);
-  assert(wait_u64_at_least(&g->gc2.worker_wakes, wakes0 + 2u));
+  assert(wait_gc2_counter_at_least(g, gc2_worker_wakes_acq, wakes0 + 2u));
   assert(wait_u64_at_least(&g->gc2.finalizer_mpsc_drained, drained0 + 2u));
   assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) == NULL);
   assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) != NULL);
@@ -305,7 +318,7 @@ static void test_finalizer_owner_leave_rewakes_worker(lua_State *L,
   lua_settop(L, 0);
 
   assert(lj_gc2_workers_set(g, 2) == 1);
-  assert(la_load32_acq(&g->gc2.n_workers) == 2);
+  assert(gc2_n_workers_acq(g) == 2);
 }
 
 static void test_async_mark(lua_State *L, global_State *g, TGState *tg)
@@ -325,27 +338,27 @@ static void test_async_mark(lua_State *L, global_State *g, TGState *tg)
   lua_pushvalue(L, -2);
   lua_rawseti(L, -4, 1);
 
-  wakes0 = la_load64_acq(&g->gc2.worker_wakes);
+  wakes0 = gc2_worker_wakes_acq(g);
   lj_gc2_legacy_mark_begin(g);
-  assert(la_load64_acq(&g->gc2.worker_wakes) > wakes0);
+  assert(gc2_worker_wakes_acq(g) > wakes0);
   assert(lj_gc2_ismarked(g, obj2gco(parent)) == 0);
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 0);
   assert(lj_gc2_ismarked(g, obj2gco(grandchild)) == 0);
 
-  async0 = la_load64_acq(&g->gc2.worker_async_progress);
-  runs0 = la_load64_acq(&g->gc2.worker_runs);
-  ssb0 = la_load64_acq(&g->gc2.worker_ssb_converted);
-  grey0 = la_load64_acq(&g->gc2.worker_grey_drained);
+  async0 = gc2_worker_async_progress_acq(g);
+  runs0 = gc2_worker_runs_acq(g);
+  ssb0 = gc2_worker_ssb_converted_acq(g);
+  grey0 = gc2_worker_grey_drained_acq(g);
 
   assert(lj_gc2_markobj(g, obj2gco(parent)) == 1);
   assert(lj_gc2_flush_ssb(g, tg) == 1);
   assert(wait_until_marked(g, obj2gco(grandchild)));
   assert(wait_ssb_empty(g));
-  assert(la_load64_acq(&g->gc2.worker_async_progress) > async0);
-  assert(la_load64_acq(&g->gc2.worker_runs) > runs0);
-  assert(la_load64_acq(&g->gc2.worker_ssb_converted) > ssb0);
-  assert(la_load64_acq(&g->gc2.worker_grey_drained) >= grey0 + 3u);
-  assert(la_load32_acq(&g->gc2.worker_active) == 0);
+  assert(gc2_worker_async_progress_acq(g) > async0);
+  assert(gc2_worker_runs_acq(g) > runs0);
+  assert(gc2_worker_ssb_converted_acq(g) > ssb0);
+  assert(gc2_worker_grey_drained_acq(g) >= grey0 + 3u);
+  assert(gc2_worker_active_acq(g) == 0);
 
   lj_gc2_legacy_cycle_end(g);
   lua_pop(L, 3);
@@ -369,17 +382,17 @@ static void test_async_weak(lua_State *L, global_State *g, TGState *tg)
   assert(lj_gc2_ismarked(g, obj2gco(key)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(val)) == 0);
 
-  async0 = la_load64_acq(&g->gc2.worker_async_progress);
-  worker_weak0 = la_load64_acq(&g->gc2.worker_weak_drained);
+  async0 = gc2_worker_async_progress_acq(g);
+  worker_weak0 = gc2_worker_weak_drained_acq(g);
   clears0 = gc2_weak_clear_tables_acq(g);
   lj_gc2_legacy_weak_begin(g);
   for (i = 0; i < 1000 && !weak_entry_is_nil(L, weak, key); i++)
     sleep_ns(1000000L);
   assert(weak_entry_is_nil(L, weak, key));
-  assert(la_load64_acq(&g->gc2.worker_async_progress) > async0);
-  assert(la_load64_acq(&g->gc2.worker_weak_drained) > worker_weak0);
+  assert(gc2_worker_async_progress_acq(g) > async0);
+  assert(gc2_worker_weak_drained_acq(g) > worker_weak0);
   assert(gc2_weak_clear_tables_acq(g) > clears0);
-  assert(la_load32_acq(&g->gc2.worker_active) == 0);
+  assert(gc2_worker_active_acq(g) == 0);
 
   lj_gc2_legacy_cycle_end(g);
   lua_pop(L, 3);
@@ -430,32 +443,32 @@ static void test_async_sweep_and_stop(lua_State *L, global_State *g,
   swept_a = extra_tg.alloc.needsweep[LJ_ARENAK_TRAVERSABLE];
   assert(swept_a != NULL);
 
-  async0 = la_load64_acq(&g->gc2.worker_async_progress);
+  async0 = gc2_worker_async_progress_acq(g);
   arenas0 = gc2_sweep_owner_arenas_acq(g);
   blocks0 = la_load64_acq(&g->gc2.finalizer_sweep_blocks);
-  wakes0 = la_load64_acq(&g->gc2.worker_wakes);
+  wakes0 = gc2_worker_wakes_acq(g);
   for (i = 0; i < 1000 &&
 	      la_load64_acq(&g->gc2.finalizer_sweep_blocks) == blocks0; i++) {
     lj_gc2_worker_wake(g);
     sleep_ns(1000000L);
   }
-  assert(la_load64_acq(&g->gc2.worker_wakes) > wakes0);
+  assert(gc2_worker_wakes_acq(g) > wakes0);
   assert(la_load64_acq(&g->gc2.finalizer_sweep_blocks) > blocks0);
   assert(gc2_sweep_owner_arenas_acq(g) == arenas0);
-  assert(la_load64_acq(&g->gc2.worker_async_progress) == async0);
+  assert(gc2_worker_async_progress_acq(g) == async0);
   assert(arena_list_contains(extra_tg.alloc.needsweep[LJ_ARENAK_TRAVERSABLE],
 			     swept_a));
   lj_gc2_finalizer_leave(g);
   assert(!lj_gc2_finalizer_pending(g));
-  wakes0 = la_load64_acq(&g->gc2.worker_wakes);
+  wakes0 = gc2_worker_wakes_acq(g);
   for (i = 0; i < 1000 &&
 	      gc2_sweep_owner_arenas_acq(g) == arenas0; i++) {
     lj_gc2_worker_wake(g);
     sleep_ns(1000000L);
   }
-  assert(la_load64_acq(&g->gc2.worker_wakes) > wakes0);
+  assert(gc2_worker_wakes_acq(g) > wakes0);
   assert(gc2_sweep_owner_arenas_acq(g) > arenas0);
-  assert(la_load64_acq(&g->gc2.worker_async_progress) > async0);
+  assert(gc2_worker_async_progress_acq(g) > async0);
   assert(!arena_list_contains(extra_tg.alloc.needsweep[LJ_ARENAK_TRAVERSABLE],
 			      swept_a));
   assert(arena_list_contains(extra_tg.alloc.owned[LJ_ARENAK_TRAVERSABLE],
@@ -475,7 +488,7 @@ static void test_async_sweep_and_stop(lua_State *L, global_State *g,
   mark_worker_tgs_sweep_ready(g, sweep_cycle);
   assert(lj_gc2_sweep_to_idle(g) == 0);
   assert(la_load32_acq(&g->gc2.phase) == LJ_GC2_SWEEP);
-  async0 = la_load64_acq(&g->gc2.worker_async_progress);
+  async0 = gc2_worker_async_progress_acq(g);
   lj_gc2_sweep_legacy_ready(g);
   for (i = 0; i < 1000 && la_load32_acq(&g->gc2.phase) == LJ_GC2_SWEEP; i++) {
     lj_gc2_worker_wake(g);
@@ -483,13 +496,13 @@ static void test_async_sweep_and_stop(lua_State *L, global_State *g,
     sleep_ns(1000000L);
   }
   assert(la_load32_acq(&g->gc2.phase) == LJ_GC2_IDLE);
-  assert(la_load64_acq(&g->gc2.worker_async_progress) > async0);
+  assert(gc2_worker_async_progress_acq(g) > async0);
 
   lj_gc2_worker_stop(g);
   assert(gc2_worker_thread_acq(g, 0) == NULL);
   assert(gc2_worker_thread_acq(g, 1) == NULL);
-  assert(la_load32_acq(&g->gc2.n_workers) == 0);
-  assert(la_load32_acq(&g->gc2.worker_exited) == 2);
+  assert(gc2_n_workers_acq(g) == 0);
+  assert(gc2_worker_exited_acq(g) == 2);
   assert(la_load32_acq(&g->gc2.n_threads) == 2);
 
   lj_tg_detach(g, &extra_tg);
@@ -513,8 +526,8 @@ int main(void)
   assert(lj_gc2_workers_set(g, 2) == 1);
   assert(gc2_worker_thread_acq(g, 0) != NULL);
   assert(gc2_worker_thread_acq(g, 1) != NULL);
-  assert(la_load32_acq(&g->gc2.n_workers) == 2);
-  assert(la_load32_acq(&g->gc2.worker_started) == 2);
+  assert(gc2_n_workers_acq(g) == 2);
+  assert(gc2_worker_started_acq(g) == 2);
   assert(la_load32_acq(&g->gc2.n_threads) == 3);
 
   test_two_worker_contention(g);

@@ -104,16 +104,16 @@ static void test_worker_owned_sweep_direct(void)
   assert(lj_gc2_sweep_needs_prepare(g));
   assert(lj_gc2_sweep_pending(g));
 
-  worker_runs0 = la_load64_acq(&g->gc2.worker_runs);
+  worker_runs0 = gc2_worker_runs_acq(g);
   arenas0 = gc2_sweep_owner_arenas_acq(g);
   assert(lj_gc2_worker_drain(g, 1) == 0);
-  assert(la_load64_acq(&g->gc2.worker_runs) == worker_runs0);
+  assert(gc2_worker_runs_acq(g) == worker_runs0);
   assert(gc2_sweep_owner_arenas_acq(g) == arenas0);
   lj_gc2_sweep_legacy_ready(g);
   assert(lj_gc2_worker_drain(g, 1) == 1u);
-  assert(la_load64_acq(&g->gc2.worker_runs) == worker_runs0 + 1u);
+  assert(gc2_worker_runs_acq(g) == worker_runs0 + 1u);
   assert(gc2_sweep_owner_arenas_acq(g) == arenas0 + 1u);
-  assert(la_load32_acq(&g->gc2.worker_active) == 0);
+  assert(gc2_worker_active_acq(g) == 0);
   assert(!arena_list_contains(extra_tg.alloc.needsweep[LJ_ARENAK_TRAVERSABLE],
 			      swept_a));
   assert(arena_list_contains(extra_tg.alloc.owned[LJ_ARENAK_TRAVERSABLE],
@@ -122,10 +122,10 @@ static void test_worker_owned_sweep_direct(void)
   assert((swept_a->hdr.flags & LJ_AF_NEEDSWEEP) == 0);
   assert(swept_a->hdr.sweep_epoch == sweep_cycle);
   assert(!lj_gc2_sweep_pending(g));
-  idle0 = la_load64_acq(&g->gc2.worker_idle_declares);
+  idle0 = gc2_worker_idle_declares_acq(g);
   assert(lj_gc2_worker_drain(g, 1) == 0);
-  assert(la_load64_acq(&g->gc2.worker_idle_declares) == idle0 + 1u);
-  assert(la_load32_acq(&g->gc2.worker_active) == 0);
+  assert(gc2_worker_idle_declares_acq(g) == idle0 + 1u);
+  assert(gc2_worker_active_acq(g) == 0);
 
   lj_arena_alloc_restore_sweep_kind(&extra_tg.alloc, LJ_ARENAK_TRAVERSABLE);
   lj_gc2_legacy_cycle_end(g);
@@ -371,13 +371,13 @@ static void test_sweep_to_idle_worker_active(void)
   g->gc.state = GCSsweep;
   sweep_to_idle0 = gc2_sweep_to_idle_acq(g);
 
-  la_store32_rel(&g->gc2.worker_active, 1);
+  gc2_worker_active_rel(g, 1);
   (void)lj_gc_step(L);
   assert(g->gc.state == GCSsweep);
   assert(la_load32_acq(&g->gc2.phase) == LJ_GC2_SWEEP);
   assert(gc2_sweep_to_idle_acq(g) == sweep_to_idle0);
 
-  la_store32_rel(&g->gc2.worker_active, 0);
+  gc2_worker_active_rel(g, 0);
   (void)lj_gc_step(L);
   assert(g->gc.state == GCSpause);
   assert(la_load32_acq(&g->gc2.phase) == LJ_GC2_IDLE);

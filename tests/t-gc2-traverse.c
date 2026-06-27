@@ -330,9 +330,9 @@ static void test_worker_drain(lua_State *L, global_State *g, TGState *tg)
   assert(!lj_gc2_ssb_empty(g));
 
   grey_drained0 = gc2_grey_drained_acq(g);
-  worker_runs0 = la_load64_acq(&g->gc2.worker_runs);
-  worker_grey0 = la_load64_acq(&g->gc2.worker_grey_drained);
-  worker_ssb0 = la_load64_acq(&g->gc2.worker_ssb_converted);
+  worker_runs0 = gc2_worker_runs_acq(g);
+  worker_grey0 = gc2_worker_grey_drained_acq(g);
+  worker_ssb0 = gc2_worker_ssb_converted_acq(g);
 
   ctx.g = g;
   ctx.limit = 8;
@@ -346,9 +346,9 @@ static void test_worker_drain(lua_State *L, global_State *g, TGState *tg)
   assert(lj_gc2_ismarked(g, obj2gco(grandchild)) == 1);
   assert(lj_gc2_ssb_empty(g));
   assert(gc2_grey_drained_acq(g) == grey_drained0 + 3u);
-  assert(la_load64_acq(&g->gc2.worker_runs) == worker_runs0 + 1u);
-  assert(la_load64_acq(&g->gc2.worker_grey_drained) == worker_grey0 + 3u);
-  assert(la_load64_acq(&g->gc2.worker_ssb_converted) == worker_ssb0 + 1u);
+  assert(gc2_worker_runs_acq(g) == worker_runs0 + 1u);
+  assert(gc2_worker_grey_drained_acq(g) == worker_grey0 + 3u);
+  assert(gc2_worker_ssb_converted_acq(g) == worker_ssb0 + 1u);
 
   lj_gc2_legacy_cycle_end(g);
   lua_pop(L, 3);
@@ -380,11 +380,11 @@ static void test_worker_drain_race(lua_State *L, global_State *g, TGState *tg)
   assert(lj_gc2_flush_ssb(g, tg) == 1);
   assert(!lj_gc2_ssb_empty(g));
 
-  worker_runs0 = la_load64_acq(&g->gc2.worker_runs);
-  worker_grey0 = la_load64_acq(&g->gc2.worker_grey_drained);
-  worker_ssb0 = la_load64_acq(&g->gc2.worker_ssb_converted);
-  idle0 = la_load64_acq(&g->gc2.worker_idle_declares);
-  busy0 = la_load64_acq(&g->gc2.worker_busy_retries);
+  worker_runs0 = gc2_worker_runs_acq(g);
+  worker_grey0 = gc2_worker_grey_drained_acq(g);
+  worker_ssb0 = gc2_worker_ssb_converted_acq(g);
+  idle0 = gc2_worker_idle_declares_acq(g);
+  busy0 = gc2_worker_busy_retries_acq(g);
 
   ctx.g = g;
   ctx.limit = 8;
@@ -402,12 +402,12 @@ static void test_worker_drain_race(lua_State *L, global_State *g, TGState *tg)
 
   total = ctx.progress[0] + ctx.progress[1];
   assert(total == 4u);
-  assert(la_load32_acq(&g->gc2.worker_active) == 0);
-  assert(la_load64_acq(&g->gc2.worker_runs) == worker_runs0 + 1u);
-  assert(la_load64_acq(&g->gc2.worker_grey_drained) == worker_grey0 + 3u);
-  assert(la_load64_acq(&g->gc2.worker_ssb_converted) == worker_ssb0 + 1u);
-  assert(la_load64_acq(&g->gc2.worker_idle_declares) > idle0 ||
-	 la_load64_acq(&g->gc2.worker_busy_retries) > busy0);
+  assert(gc2_worker_active_acq(g) == 0);
+  assert(gc2_worker_runs_acq(g) == worker_runs0 + 1u);
+  assert(gc2_worker_grey_drained_acq(g) == worker_grey0 + 3u);
+  assert(gc2_worker_ssb_converted_acq(g) == worker_ssb0 + 1u);
+  assert(gc2_worker_idle_declares_acq(g) > idle0 ||
+	 gc2_worker_busy_retries_acq(g) > busy0);
   assert(lj_gc2_ismarked(g, obj2gco(parent)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(grandchild)) == 1);
@@ -432,29 +432,29 @@ static void test_worker_leaf_ssb(lua_State *L, global_State *g, TGState *tg)
   assert(lj_gc2_flush_ssb(g, tg) == 1);
   assert(!lj_gc2_ssb_empty(g));
 
-  worker_runs0 = la_load64_acq(&g->gc2.worker_runs);
-  worker_ssb0 = la_load64_acq(&g->gc2.worker_ssb_converted);
-  worker_grey0 = la_load64_acq(&g->gc2.worker_grey_drained);
+  worker_runs0 = gc2_worker_runs_acq(g);
+  worker_ssb0 = gc2_worker_ssb_converted_acq(g);
+  worker_grey0 = gc2_worker_grey_drained_acq(g);
 
   assert(lj_gc2_worker_drain(g, 1) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(s)) == 1);
   assert(lj_gc2_ssb_empty(g));
-  assert(la_load64_acq(&g->gc2.worker_runs) == worker_runs0 + 1u);
-  assert(la_load64_acq(&g->gc2.worker_ssb_converted) == worker_ssb0 + 1u);
-  assert(la_load64_acq(&g->gc2.worker_grey_drained) == worker_grey0);
+  assert(gc2_worker_runs_acq(g) == worker_runs0 + 1u);
+  assert(gc2_worker_ssb_converted_acq(g) == worker_ssb0 + 1u);
+  assert(gc2_worker_grey_drained_acq(g) == worker_grey0);
 
   assert(lj_gc2_ssb_push(g, obj2gco(s2)) == 1);
   assert(lj_gc2_flush_ssb(g, tg) == 1);
   assert(!lj_gc2_ssb_empty(g));
-  worker_runs0 = la_load64_acq(&g->gc2.worker_runs);
-  worker_ssb0 = la_load64_acq(&g->gc2.worker_ssb_converted);
-  worker_grey0 = la_load64_acq(&g->gc2.worker_grey_drained);
+  worker_runs0 = gc2_worker_runs_acq(g);
+  worker_ssb0 = gc2_worker_ssb_converted_acq(g);
+  worker_grey0 = gc2_worker_grey_drained_acq(g);
   assert(lj_gc2_worker_drain(g, 1) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(s2)) == 1);
   assert(lj_gc2_ssb_empty(g));
-  assert(la_load64_acq(&g->gc2.worker_runs) == worker_runs0 + 1u);
-  assert(la_load64_acq(&g->gc2.worker_ssb_converted) == worker_ssb0 + 1u);
-  assert(la_load64_acq(&g->gc2.worker_grey_drained) == worker_grey0);
+  assert(gc2_worker_runs_acq(g) == worker_runs0 + 1u);
+  assert(gc2_worker_ssb_converted_acq(g) == worker_ssb0 + 1u);
+  assert(gc2_worker_grey_drained_acq(g) == worker_grey0);
 
   lj_gc2_legacy_cycle_end(g);
   lua_pop(L, 2);
@@ -486,7 +486,7 @@ static void test_fixpoint_round(lua_State *L, global_State *g, TGState *tg)
 
   rounds0 = gc2_fixpoint_rounds_acq(g);
   hits0 = gc2_fixpoint_hits_acq(g);
-  worker_runs0 = la_load64_acq(&g->gc2.worker_runs);
+  worker_runs0 = gc2_worker_runs_acq(g);
 
   assert(lj_gc2_fixpoint_round(g, L, 1) == 0);
   assert(lj_gc2_ismarked(g, obj2gco(parent)) == 1);
@@ -496,7 +496,7 @@ static void test_fixpoint_round(lua_State *L, global_State *g, TGState *tg)
   assert(la_load64_acq(&g->gc2.marks_this_round) > 0);
   assert(gc2_fixpoint_rounds_acq(g) == rounds0 + 1u);
   assert(gc2_fixpoint_hits_acq(g) == hits0);
-  assert(la_load64_acq(&g->gc2.worker_runs) > worker_runs0);
+  assert(gc2_worker_runs_acq(g) > worker_runs0);
 
   assert(lj_gc2_fixpoint_round(g, L, ~(uint32_t)0) == 0);
   assert(lj_gc2_ismarked(g, obj2gco(grandchild)) == 1);
@@ -1892,20 +1892,20 @@ static void test_worker_weak_drain(lua_State *L, global_State *g, TGState *tg)
   assert(lj_gc2_ismarked(g, obj2gco(val)) == 0);
 
   lj_gc2_legacy_weak_begin(g);
-  worker_runs0 = la_load64_acq(&g->gc2.worker_runs);
-  worker_weak0 = la_load64_acq(&g->gc2.worker_weak_drained);
+  worker_runs0 = gc2_worker_runs_acq(g);
+  worker_weak0 = gc2_worker_weak_drained_acq(g);
   clear_tables0 = gc2_weak_clear_tables_acq(g);
   clear_cleared0 = gc2_weak_clear_cleared_acq(g);
   assert(lj_gc2_worker_drain(g, 1) == 1u);
-  assert(la_load64_acq(&g->gc2.worker_runs) == worker_runs0 + 1u);
-  assert(la_load64_acq(&g->gc2.worker_weak_drained) == worker_weak0 + 1u);
+  assert(gc2_worker_runs_acq(g) == worker_runs0 + 1u);
+  assert(gc2_worker_weak_drained_acq(g) == worker_weak0 + 1u);
   assert(gc2_weak_clear_tables_acq(g) == clear_tables0 + 1u);
   assert(gc2_weak_clear_cleared_acq(g) == clear_cleared0 + 1u);
   assert(weak_entry_is_nil(L, weak, key));
-  idle0 = la_load64_acq(&g->gc2.worker_idle_declares);
+  idle0 = gc2_worker_idle_declares_acq(g);
   assert(lj_gc2_worker_drain(g, 1) == 0);
-  assert(la_load64_acq(&g->gc2.worker_idle_declares) == idle0 + 1u);
-  assert(la_load32_acq(&g->gc2.worker_active) == 0);
+  assert(gc2_worker_idle_declares_acq(g) == idle0 + 1u);
+  assert(gc2_worker_active_acq(g) == 0);
   lj_gc2_legacy_cycle_end(g);
   lua_pop(L, 3);
 }

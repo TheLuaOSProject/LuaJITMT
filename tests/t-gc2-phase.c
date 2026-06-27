@@ -69,7 +69,7 @@ static void *release_worker_active(void *arg)
 {
   PeerRelease *rel = (PeerRelease *)arg;
   sleep_ns(rel->delay_ns);
-  la_store32_rel(&rel->g->gc2.worker_active, 0);
+  gc2_worker_active_rel(rel->g, 0);
   return NULL;
 }
 
@@ -158,12 +158,12 @@ static void test_finalizer_consumer_ring(lua_State *L, global_State *g)
   dequeued0 = la_load64_acq(&g->gc2.finalizer_dequeued);
   drained0 = la_load64_acq(&g->gc2.finalizer_mpsc_drained);
   assert(lj_gc2_worker_start(g) == 1);
-  wakes0 = la_load64_acq(&g->gc2.worker_wakes);
+  wakes0 = gc2_worker_wakes_acq(g);
   lj_gc2_finalizer_enqueue(g, a);
   lj_gc2_finalizer_enqueue(g, b);
   lj_gc2_finalizer_enqueue(g, c);
   assert(la_load64_acq(&g->gc2.finalizer_queued) == queued0 + 3u);
-  assert(la_load64_acq(&g->gc2.worker_wakes) == wakes0 + 1u);
+  assert(gc2_worker_wakes_acq(g) == wakes0 + 1u);
   lj_gc2_worker_stop(g);
   assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) != NULL);
   assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) == NULL);
@@ -465,7 +465,7 @@ static void test_mark_complete_waits_for_peer(lua_State *L, global_State *g,
   assert(lj_gc2_flush_ssb(g, tg) == 1);
   assert(!lj_gc2_ssb_empty(g));
 
-  la_store32_rel(&g->gc2.worker_active, 1);
+  gc2_worker_active_rel(g, 1);
   rel.g = g;
   rel.delay_ns = 20000000L;
   runs0 = gc2_mark_complete_runs_acq(g);
@@ -474,7 +474,7 @@ static void test_mark_complete_waits_for_peer(lua_State *L, global_State *g,
   assert(pthread_create(&thread, NULL, release_worker_active, &rel) == 0);
   assert(lj_gc2_mark_complete(g, L, 2, ~(uint32_t)0) == 1);
   assert(pthread_join(thread, NULL) == 0);
-  assert(la_load32_acq(&g->gc2.worker_active) == 0);
+  assert(gc2_worker_active_acq(g) == 0);
   assert(gc2_mark_complete_runs_acq(g) == runs0 + 1u);
   assert(gc2_mark_complete_hits_acq(g) == hits0 + 1u);
   assert(gc2_mark_complete_peer_waits_acq(g) > waits0);
@@ -514,9 +514,9 @@ static void test_incremental_worker_step(lua_State *L, global_State *g,
   assert(lj_gc2_flush_ssb(g, tg) == 1);
   assert(!lj_gc2_ssb_empty(g));
 
-  worker_runs0 = la_load64_acq(&g->gc2.worker_runs);
-  worker_grey0 = la_load64_acq(&g->gc2.worker_grey_drained);
-  worker_ssb0 = la_load64_acq(&g->gc2.worker_ssb_converted);
+  worker_runs0 = gc2_worker_runs_acq(g);
+  worker_grey0 = gc2_worker_grey_drained_acq(g);
+  worker_ssb0 = gc2_worker_ssb_converted_acq(g);
   g->gc.stepmul = 1;
   g->gc.debt = 0;
   lj_gc_threshold_store(g, g->gc.total);
@@ -526,9 +526,9 @@ static void test_incremental_worker_step(lua_State *L, global_State *g,
   assert(lj_gc2_ismarked(g, obj2gco(parent)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(grandchild)) == 1);
-  assert(la_load64_acq(&g->gc2.worker_runs) == worker_runs0 + 1u);
-  assert(la_load64_acq(&g->gc2.worker_grey_drained) == worker_grey0 + 3u);
-  assert(la_load64_acq(&g->gc2.worker_ssb_converted) == worker_ssb0 + 1u);
+  assert(gc2_worker_runs_acq(g) == worker_runs0 + 1u);
+  assert(gc2_worker_grey_drained_acq(g) == worker_grey0 + 3u);
+  assert(gc2_worker_ssb_converted_acq(g) == worker_ssb0 + 1u);
 
   g->gc.stepmul = old_stepmul;
   g->gc.state = GCSpause;
@@ -567,9 +567,9 @@ static void test_incremental_fixpoint_round(lua_State *L, global_State *g)
 
   rounds0 = gc2_fixpoint_rounds_acq(g);
   hits0 = gc2_fixpoint_hits_acq(g);
-  worker_runs0 = la_load64_acq(&g->gc2.worker_runs);
-  worker_grey0 = la_load64_acq(&g->gc2.worker_grey_drained);
-  worker_ssb0 = la_load64_acq(&g->gc2.worker_ssb_converted);
+  worker_runs0 = gc2_worker_runs_acq(g);
+  worker_grey0 = gc2_worker_grey_drained_acq(g);
+  worker_ssb0 = gc2_worker_ssb_converted_acq(g);
   g->gc.stepmul = 1;
   g->gc.debt = 0;
   lj_gc_threshold_store(g, g->gc.total);
@@ -581,9 +581,9 @@ static void test_incremental_fixpoint_round(lua_State *L, global_State *g)
   assert(lj_gc2_ismarked(g, obj2gco(parent)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(grandchild)) == 1);
-  assert(la_load64_acq(&g->gc2.worker_runs) > worker_runs0);
-  assert(la_load64_acq(&g->gc2.worker_grey_drained) > worker_grey0);
-  assert(la_load64_acq(&g->gc2.worker_ssb_converted) > worker_ssb0);
+  assert(gc2_worker_runs_acq(g) > worker_runs0);
+  assert(gc2_worker_grey_drained_acq(g) > worker_grey0);
+  assert(gc2_worker_ssb_converted_acq(g) > worker_ssb0);
 
   g->gc.stepmul = old_stepmul;
   g->gc.state = GCSpause;
@@ -865,13 +865,13 @@ int main(void)
     "  local k = {}\n"
     "  weakcase[k] = {}\n"
     "end\n") == LUA_OK);
-  worker_weak0 = la_load64_acq(&g->gc2.worker_weak_drained);
+  worker_weak0 = gc2_worker_weak_drained_acq(g);
   weak_complete_progress0 = gc2_weak_complete_progress_acq(g);
   weak_clear_tables0 = gc2_weak_clear_tables_acq(g);
   weak_clear_cleared0 = gc2_weak_clear_cleared_acq(g);
   weak_legacy_fallbacks0 = gc2_weak_legacy_fallbacks_acq(g);
   lj_gc_fullgc(L);
-  assert(la_load64_acq(&g->gc2.worker_weak_drained) > worker_weak0);
+  assert(gc2_worker_weak_drained_acq(g) > worker_weak0);
   assert(gc2_weak_complete_progress_acq(g) >
 	 weak_complete_progress0);
   assert(gc2_weak_clear_tables_acq(g) > weak_clear_tables0);

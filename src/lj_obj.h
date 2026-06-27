@@ -3843,6 +3843,11 @@ static LJ_AINLINE void gc2_worker_exited_rel(global_State *g, uint32_t exited)
   la_store32_rel(&g->gc2.worker_exited, exited);
 }
 
+static LJ_AINLINE uint32_t gc2_worker_exited_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.worker_exited);
+}
+
 static LJ_AINLINE uint32_t gc2_worker_exited_add(global_State *g, uint32_t n)
 {
   return la_add32_rlx(&g->gc2.worker_exited, n);

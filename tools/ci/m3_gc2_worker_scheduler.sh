@@ -228,7 +228,11 @@ if hits=$(grep -nE -- '->[[:space:]]*gc2[.](finalizer_(queued|dequeued|mpsc_drai
   exit 1
 fi
 if hits=$(grep -nE -- '->[[:space:]]*gc2[.]worker_active|&[[:space:]]*[^)]*->[[:space:]]*gc2[.]worker_active' \
-    "$ROOT/src/lj_gc2.c" || true); [ -n "$hits" ]; then
+    "$ROOT/src/lj_gc2.c" \
+    "$ROOT/tests/t-gc2-worker-scheduler.c" \
+    "$ROOT/tests/t-gc2-traverse.c" \
+    "$ROOT/tests/t-gc2-phase.c" \
+    "$ROOT/tests/t-arena-gcsweep.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
   printf '%s\n' 'raw GC2 worker-active claim access is forbidden; use gc2_worker_active_* helpers' >&2
   exit 1
@@ -339,9 +343,36 @@ if hits=$(grep -nE -- '->[[:space:]]*gc2[.](sweep_to_idle|preserve_abort_to_idle
   printf '%s\n' 'raw GC2 sweep-close telemetry access is forbidden; use gc2_sweep_to_idle_* or gc2_preserve_abort_to_idle_* helpers' >&2
   exit 1
 fi
+for helper in gc2_n_workers_acq \
+  gc2_n_workers_store_rlx \
+  gc2_n_workers_rel \
+  gc2_worker_stop_acq \
+  gc2_worker_stop_store_rlx \
+  gc2_worker_stop_rel \
+  gc2_worker_wake_acq \
+  gc2_worker_wake_store_rlx \
+  gc2_worker_wake_add \
+  gc2_worker_started_acq \
+  gc2_worker_started_store_rlx \
+  gc2_worker_started_rel \
+  gc2_worker_started_add \
+  gc2_worker_exited_acq \
+  gc2_worker_exited_store_rlx \
+  gc2_worker_exited_rel \
+  gc2_worker_exited_add; do
+  if ! grep -qE "^[[:space:]]*${helper}[[:space:]]*[(]|static LJ_AINLINE .*[*[:space:]]${helper}[[:space:]]*[(]" \
+      "$ROOT/src/lj_obj.h"; then
+    printf '%s\n' "${helper} helper is required for GC2 worker lifecycle state" >&2
+    exit 1
+  fi
+done
 if hits=$(grep -nE -- '->[[:space:]]*gc2[.](n_workers|worker_stop|worker_wake|worker_started|worker_exited)([^[:alnum:]_]|$)|&[[:space:]]*[^)]*->[[:space:]]*gc2[.](worker_wake|worker_started|worker_exited)([^[:alnum:]_]|$)' \
     "$ROOT/src/lj_gc2.c" \
-    "$ROOT/src/lib_base.c" || true); [ -n "$hits" ]; then
+    "$ROOT/src/lib_base.c" \
+    "$ROOT/tests/t-gc2-worker-scheduler.c" \
+    "$ROOT/tests/t-gc2-traverse.c" \
+    "$ROOT/tests/t-gc2-phase.c" \
+    "$ROOT/tests/t-arena-gcsweep.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
   printf '%s\n' 'raw GC2 worker lifecycle state access is forbidden; use gc2_worker_* lifecycle helpers' >&2
   exit 1
@@ -381,7 +412,11 @@ for helper in gc2_worker_runs_acq \
 done
 if hits=$(grep -nE -- '->[[:space:]]*gc2[.](worker_(runs|grey_drained|ssb_converted|weak_drained|idle_declares|busy_retries|wakes|parks|async_progress))([^[:alnum:]_]|$)|&[[:space:]]*[^)]*->[[:space:]]*gc2[.](worker_(runs|grey_drained|ssb_converted|weak_drained|idle_declares|busy_retries|wakes|parks|async_progress))([^[:alnum:]_]|$)' \
     "$ROOT/src/lj_gc2.c" \
-    "$ROOT/src/lib_base.c" || true); [ -n "$hits" ]; then
+    "$ROOT/src/lib_base.c" \
+    "$ROOT/tests/t-gc2-worker-scheduler.c" \
+    "$ROOT/tests/t-gc2-traverse.c" \
+    "$ROOT/tests/t-gc2-phase.c" \
+    "$ROOT/tests/t-arena-gcsweep.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
   printf '%s\n' 'raw GC2 worker counter access is forbidden; use gc2_worker_* counter helpers' >&2
   exit 1
