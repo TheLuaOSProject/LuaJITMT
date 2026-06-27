@@ -1797,7 +1797,7 @@ static uint64_t gc2_saturating_add64(uint64_t a, uint64_t b)
   return a > ~(uint64_t)0 - b ? ~(uint64_t)0 : a + b;
 }
 
-uint64_t lj_gc2_sweep_live_aggregate(global_State *g)
+static uint64_t lj_gc2_sweep_live_aggregate(global_State *g)
 {
   TGState *tg;
   uint64_t cells = 0, huge_bytes = 0, bytes;
@@ -5399,8 +5399,8 @@ uint32_t lj_gc2_fixpoint_round(global_State *g, lua_State *L, uint32_t limit)
   return fixpoint;
 }
 
-uint32_t lj_gc2_fixpoint_run(global_State *g, lua_State *L,
-			     uint32_t max_rounds, uint32_t limit)
+static uint32_t lj_gc2_fixpoint_run(global_State *g, lua_State *L,
+				    uint32_t max_rounds, uint32_t limit)
 {
   uint32_t i;
   if (!g || max_rounds == 0 || limit == 0)

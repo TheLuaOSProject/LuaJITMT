@@ -11,8 +11,9 @@ accessors:
 
 Ordering:
 - Init uses relaxed stores before the GC2 state is concurrently visible.
-- `lj_gc2_sweep_live_aggregate()` release-publishes the huge-byte contribution
-  and combined live estimate, then relaxed-increments update telemetry.
+- GC2's internal `lj_gc2_sweep_live_aggregate()` release-publishes the
+  huge-byte contribution and combined live estimate, then relaxed-increments
+  update telemetry.
 - `lj_gc2_update_pacing()` and `collectgarbage("stats")` acquire-load the
   helper-backed snapshot.
 
@@ -20,6 +21,9 @@ Guarding:
 - `tools/ci/m9_gc_stats.sh` now requires all nine helper definitions.
 - The same guard rejects raw production access to `sweep_live_updates`,
   `sweep_live_huge_bytes`, and `live_estimate` in `lj_gc2.c` and `lib_base.c`.
+- `tools/ci/m3_gc2_worker_scheduler.sh` keeps the aggregate helper private to
+  `lj_gc2.c`; public cycle closure enters through sweep-to-idle or legacy
+  cycle-end.
 - Test internals still inspect the fields directly when asserting fixture state.
 
 Validation:

@@ -18,6 +18,9 @@ Guarding:
 - `tools/ci/m3_gc2_paranoia.sh` now requires all four helper definitions.
 - The same guard rejects raw production access to `GC2State.marks_this_round`
   in `lj_gc2.c`.
+- `tools/ci/m3_gc2_worker_scheduler.sh` keeps the repeated bounded fixpoint
+  driver private to `lj_gc2.c`; public mark completion enters through
+  `lj_gc2_mark_complete()`.
 - C tests still inspect the field directly for fixture assertions.
 
 Validation:

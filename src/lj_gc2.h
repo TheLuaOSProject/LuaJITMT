@@ -72,7 +72,6 @@ LJ_FUNC void lj_gc2_legacy_preserve_abort(global_State *g);
 LJ_FUNC void lj_gc2_legacy_cycle_end(global_State *g);
 LJ_FUNC void lj_gc2_sweep_legacy_ready(global_State *g);
 LJ_FUNC int lj_gc2_sweep_to_idle(global_State *g);
-LJ_FUNC uint64_t lj_gc2_sweep_live_aggregate(global_State *g);
 LJ_FUNC int lj_gc2_sweep_tg_ready(TGState *tg);
 LJ_FUNC int lj_gc2_sweep_needs_prepare(global_State *g);
 LJ_FUNC int lj_gc2_sweep_pending(global_State *g);
@@ -87,8 +86,6 @@ LJ_FUNC uint32_t lj_gc2_sweep_owner_progress(global_State *g, TGState *tg,
 					     uint32_t limit);
 LJ_FUNC uint32_t lj_gc2_fixpoint_round(global_State *g, lua_State *L,
 				       uint32_t limit);
-LJ_FUNC uint32_t lj_gc2_fixpoint_run(global_State *g, lua_State *L,
-				     uint32_t max_rounds, uint32_t limit);
 LJ_FUNC uint32_t lj_gc2_mark_complete(global_State *g, lua_State *L,
 				      uint32_t max_rounds, uint32_t limit);
 LJ_FUNC void lj_gc2_mark_to_weak(global_State *g);

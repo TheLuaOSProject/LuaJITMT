@@ -248,6 +248,20 @@ if hits=$(grep -nE -- '->[[:space:]]*gc2[.](fixpoint_rounds|fixpoint_hits|mark_c
   printf '%s\n' 'raw GC2 fixpoint/phase counter access is forbidden; use gc2_* helpers' >&2
   exit 1
 fi
+if hits=$(grep -nE -- 'lj_gc2_(fixpoint_run|sweep_live_aggregate)[[:space:]]*[(]|LJ_FUNC .*lj_gc2_(fixpoint_run|sweep_live_aggregate)[[:space:]]*[(]' \
+    "$ROOT"/src/*.c "$ROOT"/tests/*.c "$ROOT/src/lj_gc2.h" | \
+    grep -v "$ROOT/src/lj_gc2.c:" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'GC2 repeated fixpoint and sweep-live aggregation helpers must stay inside lj_gc2.c' >&2
+  exit 1
+fi
+for helper in lj_gc2_fixpoint_run lj_gc2_sweep_live_aggregate; do
+  if ! grep -qE "^[[:space:]]*static .*${helper}[[:space:]]*[(]" \
+      "$ROOT/src/lj_gc2.c"; then
+    printf '%s\n' "${helper} must stay static inside lj_gc2.c" >&2
+    exit 1
+  fi
+done
 if hits=$(grep -nE -- 'setgcrefr?rel[(][*]lj_obj_gcwref[(](oldtail|tail)[)]' \
     "$ROOT/src/lj_gc2.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
