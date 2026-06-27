@@ -261,15 +261,19 @@ if hits=$(grep -nE -- '->[[:space:]]*gc2[.]finalizer_(mpsc|tail|active|owner_tid
   printf '%s\n' 'raw GC2 finalizer queue/owner state access is forbidden; use gc2_finalizer_* helpers' >&2
   exit 1
 fi
-for helper in lj_gc2_finreg_udata_finalizer_enqueue; do
-  if ! grep -qE "LJ_FUNC void ${helper}[[:space:]]*[(]" \
-      "$ROOT/src/lj_gc2.h"; then
-    printf '%s\n' "${helper} declaration is required for GC2 finalizer publication" >&2
-    exit 1
-  fi
-  if ! grep -qE "^void ${helper}[[:space:]]*[(]" \
+if hits=$(grep -nE -- 'lj_gc2_finreg_udata_(queue|finalizer_enqueue|unlink)[[:space:]]*[(]|LJ_FUNC .*lj_gc2_finreg_udata_(queue|finalizer_enqueue|unlink)[[:space:]]*[(]' \
+    "$ROOT"/src/*.c "$ROOT"/tests/*.c "$ROOT/src/lj_gc2.h" | \
+    grep -v "$ROOT/src/lj_gc2.c:" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw FINREG userdata queue/unlink helpers must stay inside lj_gc2.c; use public FINREG APIs or test wrappers' >&2
+  exit 1
+fi
+for helper in lj_gc2_finreg_udata_queue \
+  lj_gc2_finreg_udata_finalizer_enqueue \
+  lj_gc2_finreg_udata_unlink; do
+  if ! grep -qE "^[[:space:]]*static .*${helper}[[:space:]]*[(]" \
       "$ROOT/src/lj_gc2.c"; then
-    printf '%s\n' "${helper} definition is required for GC2 finalizer publication" >&2
+    printf '%s\n' "${helper} must stay static inside lj_gc2.c" >&2
     exit 1
   fi
 done

@@ -120,6 +120,9 @@ static void gc2_mark_tv_worker(global_State *g, cTValue *tv);
 static int lj_gc2_ssb_push(global_State *g, GCobj *o);
 static uint32_t lj_gc2_drain_ssb(global_State *g);
 static int lj_gc2_ssb_empty(global_State *g);
+static int lj_gc2_finreg_cdata_preclaim(lua_State *L, global_State *g,
+					GCobj *o, cTValue *fin);
+static void lj_gc2_finreg_udata_finalizer_enqueue(global_State *g, GCobj *o);
 #if LJ_HASFFI
 static void gc2_traverse_clib_retired_cache(global_State *g);
 #endif
@@ -3259,7 +3262,7 @@ static void gc2_finreg_cdata_queue_mark(global_State *g, GCobj *o)
 #endif
 }
 
-void lj_gc2_finreg_cdata_finalizer_enqueue(global_State *g, GCobj *o)
+static void lj_gc2_finreg_cdata_finalizer_enqueue(global_State *g, GCobj *o)
 {
 #if LJ_HASFFI
   if (!g || !o || o->gch.gct != ~LJ_TCDATA)
@@ -3614,8 +3617,8 @@ void lj_gc2_test_finalizer_drain_pause(global_State *g)
 }
 #endif
 
-int lj_gc2_finreg_cdata_preclaim(lua_State *L, global_State *g, GCobj *o,
-				 cTValue *fin)
+static int lj_gc2_finreg_cdata_preclaim(lua_State *L, global_State *g,
+					GCobj *o, cTValue *fin)
 {
 #if LJ_HASFFI
   MSize count, cap;
@@ -3665,8 +3668,8 @@ int lj_gc2_finreg_cdata_preclaim(lua_State *L, global_State *g, GCobj *o,
 #endif
 }
 
-int lj_gc2_finreg_cdata_preclaim_take(lua_State *L, global_State *g,
-				      GCobj *o, TValue *fin)
+static int lj_gc2_finreg_cdata_preclaim_take(lua_State *L, global_State *g,
+					     GCobj *o, TValue *fin)
 {
 #if LJ_HASFFI
   MSize head, count, i;
@@ -3705,6 +3708,23 @@ int lj_gc2_finreg_cdata_preclaim_take(lua_State *L, global_State *g,
   UNUSED(L); UNUSED(g); UNUSED(o); UNUSED(fin);
   return 0;
 #endif
+}
+
+void lj_gc2_test_finreg_cdata_finalizer_enqueue(global_State *g, GCobj *o)
+{
+  lj_gc2_finreg_cdata_finalizer_enqueue(g, o);
+}
+
+int lj_gc2_test_finreg_cdata_preclaim(lua_State *L, global_State *g,
+				      GCobj *o, cTValue *fin)
+{
+  return lj_gc2_finreg_cdata_preclaim(L, g, o, fin);
+}
+
+int lj_gc2_test_finreg_cdata_preclaim_take(lua_State *L, global_State *g,
+					   GCobj *o, TValue *fin)
+{
+  return lj_gc2_finreg_cdata_preclaim_take(L, g, o, fin);
 }
 
 #if LJ_HASFFI
@@ -3864,9 +3884,10 @@ static int gc2_finreg_udata_retire(global_State *g,
   return 1;
 }
 
-int lj_gc2_finreg_udata_unlink(global_State *g, GC2FinRegUDataNode *prev,
-			       GC2FinRegUDataNode *node,
-			       GC2FinRegUDataNode *next)
+static int lj_gc2_finreg_udata_unlink(global_State *g,
+				      GC2FinRegUDataNode *prev,
+				      GC2FinRegUDataNode *node,
+				      GC2FinRegUDataNode *next)
 {
   GC2FinRegUDataNode *expect;
   if (!g || !node)
@@ -4035,7 +4056,7 @@ int lj_gc2_finreg_udata_dispatch(lua_State *L, global_State *g, GCobj *o,
   return 1;  /* 05 section 5.8: GC2-owned userdata dispatch resolution. */
 }
 
-void lj_gc2_finreg_udata_queue(global_State *g, GCobj *o)
+static void lj_gc2_finreg_udata_queue(global_State *g, GCobj *o)
 {
   if (!g || !o || o->gch.gct != ~LJ_TUDATA)
     return;
@@ -4043,13 +4064,18 @@ void lj_gc2_finreg_udata_queue(global_State *g, GCobj *o)
   gc2_finreg_udata_queued_add(g, 1);
 }
 
-void lj_gc2_finreg_udata_finalizer_enqueue(global_State *g, GCobj *o)
+static void lj_gc2_finreg_udata_finalizer_enqueue(global_State *g, GCobj *o)
 {
   if (!g || !o || o->gch.gct != ~LJ_TUDATA)
     return;
   markfinalized(o);
   lj_gc2_finreg_udata_queue(g, o);
   lj_gc2_finalizer_enqueue(g, o);
+}
+
+void lj_gc2_test_finreg_udata_queue(global_State *g, GCobj *o)
+{
+  lj_gc2_finreg_udata_queue(g, o);
 }
 
 static GCobj *gc2_grey_pop(global_State *g)

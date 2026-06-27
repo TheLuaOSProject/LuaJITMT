@@ -123,16 +123,22 @@ if hits=$(grep -nE -- '->[[:space:]]*gc2[.](finreg_cdata_(sets|clears|queued|swe
   printf '%s\n' 'raw FINREG cdata counter access is forbidden; use gc2_finreg_cdata_* helpers' >&2
   exit 1
 fi
-if ! grep -qE 'LJ_FUNC void lj_gc2_finreg_cdata_finalizer_enqueue[[:space:]]*[(]' \
-    "$ROOT/src/lj_gc2.h"; then
-  printf '%s\n' 'lj_gc2_finreg_cdata_finalizer_enqueue declaration is required' >&2
+if hits=$(grep -nE -- 'lj_gc2_finreg_cdata_(finalizer_enqueue|preclaim|preclaim_take)[[:space:]]*[(]|LJ_FUNC .*lj_gc2_finreg_cdata_(finalizer_enqueue|preclaim|preclaim_take)[[:space:]]*[(]' \
+    "$ROOT"/src/*.c "$ROOT"/tests/*.c "$ROOT/src/lj_gc2.h" | \
+    grep -v "$ROOT/src/lj_gc2.c:" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw FINREG cdata preclaim/finalizer producer helpers must stay inside lj_gc2.c; use public FINREG APIs or test wrappers' >&2
   exit 1
 fi
-if ! grep -qE '^void lj_gc2_finreg_cdata_finalizer_enqueue[[:space:]]*[(]' \
-    "$ROOT/src/lj_gc2.c"; then
-  printf '%s\n' 'lj_gc2_finreg_cdata_finalizer_enqueue definition is required' >&2
-  exit 1
-fi
+for helper in lj_gc2_finreg_cdata_finalizer_enqueue \
+  lj_gc2_finreg_cdata_preclaim \
+  lj_gc2_finreg_cdata_preclaim_take; do
+  if ! grep -qE "^[[:space:]]*static .*${helper}[[:space:]]*[(]" \
+      "$ROOT/src/lj_gc2.c"; then
+    printf '%s\n' "${helper} must stay static inside lj_gc2.c" >&2
+    exit 1
+  fi
+done
 if hits=$(grep -nE -- 'lj_gc2_finreg_cdata_queue[[:space:]]*[(]' \
     "$ROOT/src/lj_gc.c" \
     "$ROOT/src/lj_cdata.c" \

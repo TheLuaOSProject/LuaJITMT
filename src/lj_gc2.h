@@ -96,8 +96,6 @@ LJ_FUNC int lj_gc2_weak_complete(global_State *g, GCobj *legacy,
 				 uint32_t drain_limit);
 LJ_FUNC void lj_gc2_weak_to_sweep(global_State *g);
 LJ_FUNC void lj_gc2_finreg_cdata_set(global_State *g, GCobj *o, int enabled);
-LJ_FUNC void lj_gc2_finreg_cdata_finalizer_enqueue(global_State *g,
-						   GCobj *o);
 LJ_FUNC size_t lj_gc2_finreg_cdata_finalize_pweak(lua_State *L,
 						  global_State *g,
 						  GC2FinRegMarkFunc mark);
@@ -108,10 +106,6 @@ LJ_FUNC void lj_gc2_finreg_cdata_mark_roots(global_State *g,
 LJ_FUNC size_t lj_gc2_finreg_cdata_finalize_close(global_State *g);
 LJ_FUNC void lj_gc2_finreg_cdata_disable(global_State *g);
 LJ_FUNC int lj_gc2_finreg_cdata_pending(global_State *g);
-LJ_FUNC int lj_gc2_finreg_cdata_preclaim(lua_State *L, global_State *g,
-					 GCobj *o, cTValue *fin);
-LJ_FUNC int lj_gc2_finreg_cdata_preclaim_take(lua_State *L, global_State *g,
-					      GCobj *o, TValue *fin);
 LJ_FUNC int lj_gc2_finreg_cdata_dispatch(lua_State *L, global_State *g,
 					 GCobj *o,
 					 GC2FinalizerCallFunc call);
@@ -126,18 +120,11 @@ LJ_FUNC void lj_gc2_finreg_udata_register(lua_State *L, global_State *g,
 					  GCobj *o);
 LJ_FUNC void lj_gc2_finreg_udata_register_mt(lua_State *L, global_State *g,
 					     GCudata *ud, GCtab *mt);
-LJ_FUNC int lj_gc2_finreg_udata_unlink(global_State *g,
-				       GC2FinRegUDataNode *prev,
-				       GC2FinRegUDataNode *node,
-				       GC2FinRegUDataNode *next);
 LJ_FUNC void lj_gc2_finreg_udata_forget(global_State *g, GCobj *o);
 LJ_FUNC size_t lj_gc2_finreg_udata_finalize(global_State *g, int all);
 LJ_FUNC int lj_gc2_finreg_udata_dispatch(lua_State *L, global_State *g,
 					 GCobj *o,
 					 GC2FinalizerCallFunc call);
-LJ_FUNC void lj_gc2_finreg_udata_queue(global_State *g, GCobj *o);
-LJ_FUNC void lj_gc2_finreg_udata_finalizer_enqueue(global_State *g,
-						   GCobj *o);
 LJ_FUNC int lj_gc2_finalizer_dispatch_one(lua_State *L,
 					  GC2FinalizerDispatchFunc dispatch);
 LJ_FUNC void lj_gc2_finalizer_dispatch_all(lua_State *L,
@@ -160,6 +147,14 @@ LJ_FUNC uint32_t lj_gc2_test_weak_snapshot_clear(global_State *g,
 LJ_FUNC uint32_t lj_gc2_test_weak_drain(global_State *g, uint32_t limit);
 LJ_FUNC int lj_gc2_test_weak_snapshot_covers_legacy(global_State *g,
 						    GCobj *legacy);
+LJ_FUNC void lj_gc2_test_finreg_cdata_finalizer_enqueue(global_State *g,
+							GCobj *o);
+LJ_FUNC int lj_gc2_test_finreg_cdata_preclaim(lua_State *L, global_State *g,
+					      GCobj *o, cTValue *fin);
+LJ_FUNC int lj_gc2_test_finreg_cdata_preclaim_take(lua_State *L,
+						   global_State *g,
+						   GCobj *o, TValue *fin);
+LJ_FUNC void lj_gc2_test_finreg_udata_queue(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc2_test_scan_roots(global_State *g, lua_State *L);
 LJ_FUNC void lj_gc2_test_scan_minor_roots(global_State *g, lua_State *L);
 LJ_FUNC GCobj *lj_gc2_test_grey_steal(global_State *g);

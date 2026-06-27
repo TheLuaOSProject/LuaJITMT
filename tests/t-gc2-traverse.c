@@ -194,7 +194,7 @@ static void *grey_worker_drain_thread(void *arg)
 static void *finclaim_publish_thread(void *arg)
 {
   FinclaimPublishCtx *ctx = (FinclaimPublishCtx *)arg;
-  ctx->ok = lj_gc2_finreg_cdata_preclaim(ctx->L, ctx->g, ctx->o,
+  ctx->ok = lj_gc2_test_finreg_cdata_preclaim(ctx->L, ctx->g, ctx->o,
 					 &ctx->fin);
   return NULL;
 }
@@ -2775,7 +2775,7 @@ static void test_minor_root_scan(lua_State *L, global_State *g, TGState *tg)
   lua_pushvalue(L, -1);
   lua_setfield(L, LUA_REGISTRYINDEX, "gc2_minor_preclaim_cdata");
   lua_pushcfunction(L, gc2_cdata_counting_finalizer);
-  assert(lj_gc2_finreg_cdata_preclaim(L, g, obj2gco(preclaim_cd),
+  assert(lj_gc2_test_finreg_cdata_preclaim(L, g, obj2gco(preclaim_cd),
 				      L->top - 1));
   lua_pop(L, 1);
   lua_pop(L, 1);
@@ -2825,7 +2825,7 @@ static void test_minor_root_scan(lua_State *L, global_State *g, TGState *tg)
 #if LJ_HASFFI
   {
     TValue fin;
-    assert(lj_gc2_finreg_cdata_preclaim_take(L, g, obj2gco(preclaim_cd),
+    assert(lj_gc2_test_finreg_cdata_preclaim_take(L, g, obj2gco(preclaim_cd),
 					     &fin));
     assert(tvisfunc(&fin));
   }
@@ -3607,7 +3607,7 @@ static void test_finreg_userdata_queue_mark(lua_State *L, global_State *g,
 
   lj_gc2_legacy_mark_begin(g);
   assert(lj_gc2_ismarked(g, obj2gco(ud)) == 0);
-  lj_gc2_finreg_udata_queue(g, obj2gco(ud));
+  lj_gc2_test_finreg_udata_queue(g, obj2gco(ud));
   assert(la_load64_acq(&g->gc2.finreg_udata_queued) == queued0 + 1u);
   assert(lj_gc2_ismarked(g, obj2gco(ud)) == 1);
   flush_and_drain(g, tg);
@@ -3663,7 +3663,7 @@ static void test_finreg_cdata_preclaim_publish_order(lua_State *L,
   while (gc2_finreg_cdata_preclaim_publish_paused_acq(g) == 0)
     la_cpu_pause();
 
-  assert(!lj_gc2_finreg_cdata_preclaim_take(L, g, obj2gco(cd), &fin));
+  assert(!lj_gc2_test_finreg_cdata_preclaim_take(L, g, obj2gco(cd), &fin));
   assert(la_load64_acq(&g->gc2.finreg_cdata_pweak_claimed) == claimed0);
   assert(la_load64_acq(&g->gc2.finreg_cdata_preclaim_dispatched) ==
 	 dispatched0);
@@ -3672,7 +3672,7 @@ static void test_finreg_cdata_preclaim_publish_order(lua_State *L,
   assert(pthread_join(thread, NULL) == 0);
   assert(ctx.ok);
   assert(la_load64_acq(&g->gc2.finreg_cdata_pweak_claimed) == claimed0 + 1u);
-  assert(lj_gc2_finreg_cdata_preclaim_take(L, g, obj2gco(cd), &fin));
+  assert(lj_gc2_test_finreg_cdata_preclaim_take(L, g, obj2gco(cd), &fin));
   assert(tvisfunc(&fin));
   assert(la_load64_acq(&g->gc2.finreg_cdata_preclaim_dispatched) ==
 	 dispatched0 + 1u);
@@ -3897,9 +3897,9 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
     TValue nilv;
     lua_getglobal(L, "gc2_cdata_counting_finalizer");
     assert(tvisfunc(L->top - 1));
-    assert(lj_gc2_finreg_cdata_preclaim(L, g, o, L->top - 1));
+    assert(lj_gc2_test_finreg_cdata_preclaim(L, g, o, L->top - 1));
     assert(test_unlink_root_object(g, o));
-    lj_gc2_finreg_cdata_finalizer_enqueue(g, o);
+    lj_gc2_test_finreg_cdata_finalizer_enqueue(g, o);
     setnilV(&nilv);
     lj_cdata_setfin(L, cd, gcval(&nilv), itype(&nilv));
   }
