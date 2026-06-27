@@ -11,6 +11,7 @@ local build_shared_library = build.build_shared_library
 local capture_luajit = runtime.capture_luajit
 local run_lua_test_case = runtime.run_lua_test_case
 local run_luajit_script_jit_modes = runtime.run_luajit_script_jit_modes
+local gc2_test_cflags = "-DLJ_GC2_TEST_HELPERS"
 
 local function assert_x64_vm_static_guards(t)
   local vm = utils.read_file(t:path("src", "vm_x64.dasc"))
@@ -75,7 +76,9 @@ return function(add)
       make_default(t, { jobs = false })
 
       compile_and_run_c(t, t:tmp("lj_t-gc2-worker-scheduler"),
-                        "t-gc2-worker-scheduler.c")
+                        "t-gc2-worker-scheduler.c", {
+        cflags = gc2_test_cflags
+      })
       run_luajit_script_jit_modes(t, "t-gc-workers.lua")
 
       print("M3 GC2 worker scheduler test passed")
@@ -105,7 +108,7 @@ return function(add)
       make_default(t)
       compile_and_run_c(t, t:tmp("lj_t_safepoint_handshake"),
                         "t-safepoint-handshake.c", {
-        cflags = pthread,
+        cflags = { gc2_test_cflags, pthread },
         pthread = pthread,
         env = { LJ_LOADLIB_STOPREQ_SO = loadlib_so }
       })
@@ -204,6 +207,8 @@ return function(add)
         "t-gc2-phase",
         "t-gc2-markbits",
         "t-gc2-traverse"
+      }, {
+        cflags = gc2_test_cflags
       })
 
       utils.run_case(cases, t, "m3_gc2_worker_scheduler")

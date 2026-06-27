@@ -5,6 +5,7 @@ local runtime = require("suite_runtime")
 local capture_luajit = runtime.capture_luajit
 local luajit_script = runtime.luajit_script
 local run_luajit_script_jit_modes = runtime.run_luajit_script_jit_modes
+local gc2_test_cflags = "-DLJ_GC2_TEST_HELPERS"
 
 local M8_C_FIXTURES = {
   "t-gc2-phase",
@@ -50,7 +51,10 @@ local function run_default_matrix(t)
   run_luajit_script_jit_modes(t, "t-m8-finalizer-spawn-live.lua", nil,
                               { timeout = "10s" })
   run_luajit_script_jit_modes(t, "t-ffi-gc-finreg.lua", { "3", "72" })
-  build.run_c_fixtures(t, M8_C_FIXTURES, { output_suffix = "_m8" })
+  build.run_c_fixtures(t, M8_C_FIXTURES, {
+    output_suffix = "_m8",
+    cflags = gc2_test_cflags
+  })
 end
 
 local function run_paranoia_matrix(t)

@@ -104,6 +104,11 @@ static int gc2_finclaim_resize(global_State *g, MSize cap);
 static void gc2_finclaim_reset(global_State *g);
 static void gc2_finalizer_free_stack(global_State *g, GC2FinalizerNode *node);
 static void gc2_finalizer_free_ring(global_State *g, GC2FinalizerNode *tail);
+static void lj_gc2_finalizer_drain_owned(global_State *g);
+static GCobj *lj_gc2_finalizer_dequeue_owned(global_State *g);
+static int lj_gc2_finalizer_try_enter(global_State *g);
+static void lj_gc2_finalizer_enter(global_State *g);
+static void lj_gc2_finalizer_leave(global_State *g);
 static int gc2_tab_weak_mode(global_State *g, GCtab *t, GCtab *mt);
 static void *gc2_worker_main(void *arg);
 static void gc2_mark_tv_worker(global_State *g, cTValue *tv);
@@ -1297,7 +1302,7 @@ void lj_gc2_finalizer_mark_enqueue(global_State *g, GCobj *o)
   lj_gc2_finalizer_enqueue(g, o);
 }
 
-void lj_gc2_finalizer_drain_owned(global_State *g)
+static void lj_gc2_finalizer_drain_owned(global_State *g)
 {
   GC2FinalizerNode *stack, *rev = NULL, *newtail = NULL, *oldtail;
   size_t n = 0;
@@ -1347,7 +1352,7 @@ void lj_gc2_finalizer_drain(global_State *g)
   lj_gc2_finalizer_leave(g);
 }
 
-GCobj *lj_gc2_finalizer_dequeue_owned(global_State *g)
+static GCobj *lj_gc2_finalizer_dequeue_owned(global_State *g)
 {
   GC2FinalizerNode *tail, *node;
   GCobj *o;
@@ -1468,7 +1473,7 @@ int lj_gc2_finalizer_step(lua_State *L, GC2FinalizerDispatchFunc dispatch,
   return 0;
 }
 
-int lj_gc2_finalizer_try_enter(global_State *g)
+static int lj_gc2_finalizer_try_enter(global_State *g)
 {
   uint32_t owner, old;
   if (!g)
@@ -1495,7 +1500,7 @@ int lj_gc2_finalizer_try_enter(global_State *g)
   }
 }
 
-void lj_gc2_finalizer_enter(global_State *g)
+static void lj_gc2_finalizer_enter(global_State *g)
 {
   if (!g)
     return;
@@ -1503,7 +1508,7 @@ void lj_gc2_finalizer_enter(global_State *g)
     la_cpu_pause();
 }
 
-void lj_gc2_finalizer_leave(global_State *g)
+static void lj_gc2_finalizer_leave(global_State *g)
 {
   uint32_t old;
   int wake_worker = 0;
@@ -1534,6 +1539,26 @@ void lj_gc2_finalizer_leave(global_State *g)
   gc2_finalizer_leaves_add(g, 1);
   if (wake_worker)
     lj_gc2_worker_wake(g);  /* 05 section 5.8: owner release exposes work. */
+}
+
+int lj_gc2_test_finalizer_try_enter(global_State *g)
+{
+  return lj_gc2_finalizer_try_enter(g);
+}
+
+void lj_gc2_test_finalizer_enter(global_State *g)
+{
+  lj_gc2_finalizer_enter(g);
+}
+
+void lj_gc2_test_finalizer_leave(global_State *g)
+{
+  lj_gc2_finalizer_leave(g);
+}
+
+void lj_gc2_test_finalizer_drain_owned(global_State *g)
+{
+  lj_gc2_finalizer_drain_owned(g);
 }
 
 static int gc2_finalizer_pending_for_sweep(global_State *g, int owner_ok)

@@ -259,7 +259,10 @@ return function(add)
       t:build({ clean = true, quiet = true })
       build_and_run_c(t, t:tmp("lj_t_safepoint_handshake"),
                       "t-safepoint-handshake.c",
-                      { build = false })
+                      {
+        build = false,
+        cflags = "-DLJ_GC2_TEST_HELPERS"
+      })
       print("M6 dispatch redispatch guard passed")
     end
   })

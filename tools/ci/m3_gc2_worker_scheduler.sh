@@ -288,6 +288,23 @@ if hits=$(grep -nE -- 'lj_gc2_finalizer_(try_enter|enter|leave|drain_owned|deque
   printf '%s\n' 'low-level GC2 finalizer owner primitives must stay inside lj_gc2.c' >&2
   exit 1
 fi
+if hits=$(grep -nE -- 'LJ_FUNC .*[[:space:]]lj_gc2_finalizer_(try_enter|enter|leave|drain_owned|dequeue_owned)[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.h" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'low-level GC2 finalizer owner primitives must not be public lj_gc2.h APIs' >&2
+  exit 1
+fi
+for helper in lj_gc2_finalizer_try_enter \
+  lj_gc2_finalizer_enter \
+  lj_gc2_finalizer_leave \
+  lj_gc2_finalizer_drain_owned \
+  lj_gc2_finalizer_dequeue_owned; do
+  if ! grep -qE "^[[:space:]]*static .*[*[:space:]]${helper}[[:space:]]*[(]" \
+      "$ROOT/src/lj_gc2.c"; then
+    printf '%s\n' "${helper} must stay static inside lj_gc2.c" >&2
+    exit 1
+  fi
+done
 if ! grep -qE 'LJ_FUNC void lj_gc2_finalizer_dispatch_all[[:space:]]*[(]' \
     "$ROOT/src/lj_gc2.h"; then
   printf '%s\n' 'lj_gc2_finalizer_dispatch_all declaration is required for finalizer drain-loop ownership' >&2

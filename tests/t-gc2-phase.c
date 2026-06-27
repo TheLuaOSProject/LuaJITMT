@@ -251,9 +251,9 @@ static void test_finalizer_drain_concurrent_consumers(lua_State *L,
   assert(la_load64_acq(&g->gc2.finalizer_mpsc_drained) == drained0);
   lj_gc2_finalizer_enqueue(g, b);
 
-  if (lj_gc2_finalizer_try_enter(g)) {
-    lj_gc2_finalizer_drain_owned(g);
-    lj_gc2_finalizer_leave(g);
+  if (lj_gc2_test_finalizer_try_enter(g)) {
+    lj_gc2_test_finalizer_drain_owned(g);
+    lj_gc2_test_finalizer_leave(g);
   }
   gc2_finalizer_drain_test_release_rel(g, 1);
 
@@ -746,7 +746,7 @@ int main(void)
   finalizer_blocks0 = la_load64_acq(&g->gc2.finalizer_sweep_blocks);
   finalizer_enters0 = la_load64_acq(&g->gc2.finalizer_enters);
   finalizer_leaves0 = la_load64_acq(&g->gc2.finalizer_leaves);
-  lj_gc2_finalizer_enter(g);
+  lj_gc2_test_finalizer_enter(g);
   assert(la_load32_acq(&g->gc2.finalizer_active) == 1);
   assert(la_load32_acq(&g->gc2.finalizer_owner_tid) ==
 	 la_load32_acq(&tg->tid));
@@ -764,24 +764,24 @@ int main(void)
   peer_tg.alloc.owner_tid = peer_tg.tid;
   peer_tg.cur_L = L;
   lj_thr_set_tg(&peer_tg);
-  assert(!lj_gc2_finalizer_try_enter(g));
+  assert(!lj_gc2_test_finalizer_try_enter(g));
   assert(la_load32_acq(&g->gc2.finalizer_active) == 1);
   assert(lj_gc2_finalizer_sweep_pending(g));
   lj_thr_set_tg(saved_tg);
   lj_tg_fini_thread(g, &peer_tg);
-  assert(lj_gc2_finalizer_try_enter(g));
+  assert(lj_gc2_test_finalizer_try_enter(g));
   assert(la_load32_acq(&g->gc2.finalizer_active) == 2);
   assert(la_load32_acq(&g->gc2.finalizer_owner_tid) ==
 	 la_load32_acq(&tg->tid));
   assert(la_load64_acq(&g->gc2.finalizer_enters) ==
 	 finalizer_enters0 + 2u);
-  lj_gc2_finalizer_leave(g);
+  lj_gc2_test_finalizer_leave(g);
   assert(la_load32_acq(&g->gc2.finalizer_active) == 1);
   assert(la_load32_acq(&g->gc2.finalizer_owner_tid) ==
 	 la_load32_acq(&tg->tid));
   assert(la_load64_acq(&g->gc2.finalizer_leaves) ==
 	 finalizer_leaves0 + 1u);
-  lj_gc2_finalizer_leave(g);
+  lj_gc2_test_finalizer_leave(g);
   assert(la_load32_acq(&g->gc2.finalizer_active) == 0);
   assert(la_load32_acq(&g->gc2.finalizer_owner_tid) == 0);
   assert(la_load64_acq(&g->gc2.finalizer_enters) ==

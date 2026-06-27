@@ -156,9 +156,7 @@ LJ_FUNC void lj_gc2_finreg_udata_finalizer_enqueue(global_State *g,
 						   GCobj *o);
 LJ_FUNC void lj_gc2_finalizer_enqueue(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc2_finalizer_mark_enqueue(global_State *g, GCobj *o);
-LJ_FUNC void lj_gc2_finalizer_drain_owned(global_State *g);
 LJ_FUNC void lj_gc2_finalizer_drain(global_State *g);
-LJ_FUNC GCobj *lj_gc2_finalizer_dequeue_owned(global_State *g);
 LJ_FUNC GCobj *lj_gc2_finalizer_dequeue(global_State *g);
 LJ_FUNC int lj_gc2_finalizer_dispatch_one(lua_State *L,
 					  GC2FinalizerDispatchFunc dispatch);
@@ -169,9 +167,12 @@ LJ_FUNC int lj_gc2_finalizer_step(lua_State *L,
 				  GCSize finalize_cost, GCSize *cost);
 LJ_FUNC void lj_gc2_finalizer_mark_all(global_State *g,
 				       GC2FinalizerMarkFunc mark);
-LJ_FUNC int lj_gc2_finalizer_try_enter(global_State *g);
-LJ_FUNC void lj_gc2_finalizer_enter(global_State *g);
-LJ_FUNC void lj_gc2_finalizer_leave(global_State *g);
+#if defined(lj_gc2_c) || defined(LJ_GC2_TEST_HELPERS) || defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
+LJ_FUNC int lj_gc2_test_finalizer_try_enter(global_State *g);
+LJ_FUNC void lj_gc2_test_finalizer_enter(global_State *g);
+LJ_FUNC void lj_gc2_test_finalizer_leave(global_State *g);
+LJ_FUNC void lj_gc2_test_finalizer_drain_owned(global_State *g);
+#endif
 LJ_FUNC int lj_gc2_finalizer_queue_pending(global_State *g);
 LJ_FUNC int lj_gc2_finalizer_pending(global_State *g);
 LJ_FUNC int lj_gc2_finalizer_sweep_pending(global_State *g);
