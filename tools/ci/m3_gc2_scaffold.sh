@@ -148,7 +148,8 @@ for helper in gc2_finreg_udata_head_acq \
 done
 if hits=$(grep -nE -- '->[[:space:]]*gc2[.]finreg_udata_(head|retired)([^[:alnum:]_]|$)|&[[:space:]]*[^)]*->[[:space:]]*gc2[.]finreg_udata_(head|retired)([^[:alnum:]_]|$)' \
     "$ROOT/src/lj_gc.c" \
-    "$ROOT/src/lj_gc2.c" || true); [ -n "$hits" ]; then
+    "$ROOT/src/lj_gc2.c" \
+    "$ROOT/tests/t-gc2-traverse.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
   printf '%s\n' 'raw GC2 FINREG userdata root access is forbidden; use gc2_finreg_udata_* helpers' >&2
   exit 1

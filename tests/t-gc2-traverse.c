@@ -3316,8 +3316,7 @@ static uint32_t finreg_udata_active_nodes(global_State *g)
 {
   GC2FinRegUDataNode *node;
   uint32_t n = 0;
-  for (node = (GC2FinRegUDataNode *)la_loadptr_acq(
-	 (void *const *)&g->gc2.finreg_udata_head);
+  for (node = gc2_finreg_udata_head_acq(g);
        node != NULL;
        node = gc2_finreg_udata_next_acq(node))
     n += gc2_finreg_udata_active_acq(node) != 0;
@@ -3328,8 +3327,7 @@ static uint32_t finreg_udata_active_refs(global_State *g, GCobj *target)
 {
   GC2FinRegUDataNode *node;
   uint32_t n = 0;
-  for (node = (GC2FinRegUDataNode *)la_loadptr_acq(
-	 (void *const *)&g->gc2.finreg_udata_head);
+  for (node = gc2_finreg_udata_head_acq(g);
        node != NULL;
        node = gc2_finreg_udata_next_acq(node))
     n += gc2_finreg_udata_active_acq(node) &&
@@ -3687,8 +3685,7 @@ static uint32_t finreg_cdata_order_active_refs(global_State *g, GCobj *target)
   uint32_t n = 0;
   if (!cts)
     return 0;
-  for (ord = (FinRegOrderNode *)la_loadptr_acq(
-	 (void *const *)&cts->fin_order_head);
+  for (ord = fin_order_head_acq(cts);
        ord != NULL;
        ord = fin_order_next_acq(ord))
     n += fin_order_active_acq(ord) == 1 && fin_order_obj_acq(ord) == target;
