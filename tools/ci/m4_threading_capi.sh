@@ -20,4 +20,14 @@ if hits=$(grep -nF 'la_futex_wait(&m->state, LJ_MUTEX_LOCKED, -1)' \
   printf '%s\n' 'mutex lock waits must use bounded native waits so STOPREQ is delivered before unlock' >&2
   exit 1
 fi
+if ! awk '
+  /int lj_threading_attach\(lua_State \*L\)/ { in_attach = 1 }
+  in_attach && /if \(!threading_entering_begin\(g\)\)/ { entering = FNR }
+  in_attach && /if \(!lj_state_claim\(L, tid\)\)/ { claim = FNR }
+  in_attach && /^}/ { in_attach = 0 }
+  END { exit !(entering && claim && entering < claim) }
+' "$ROOT/src/lib_threading.c"; then
+  printf '%s\n' 'luaMT_attach must count mt_entering before claiming the Lua state' >&2
+  exit 1
+fi
 exec "$ROOT/tools/ci/lua_test.sh" m4_threading_capi

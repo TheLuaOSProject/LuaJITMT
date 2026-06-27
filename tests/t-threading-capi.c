@@ -82,6 +82,13 @@ typedef struct AttachCloseCtx {
   int status;
 } AttachCloseCtx;
 
+typedef struct AttachExclusiveCloseCtx {
+  lua_State *L;
+  int started;
+  int attached;
+  int done;
+} AttachExclusiveCloseCtx;
+
 typedef struct JoinOwnerCtx {
   lua_State *child;
   int released;
@@ -406,6 +413,51 @@ static void test_close_waits_for_attach(void)
   check(load_flag(&ctx.status) == 0, "attach-close worker failed");
 }
 
+static void *attach_exclusive_close_worker(void *arg)
+{
+  AttachExclusiveCloseCtx *ctx = (AttachExclusiveCloseCtx *)arg;
+  store_flag(&ctx->started, 1);
+  if (luaMT_attach(ctx->L)) {
+    store_flag(&ctx->attached, 1);
+    luaMT_detach(ctx->L);
+  }
+  store_flag(&ctx->done, 1);
+  return NULL;
+}
+
+static void test_close_waits_for_entering_attach(void)
+{
+  lua_State *L = luaL_newstate();
+  lua_State *child;
+  global_State *g;
+  pthread_t thread;
+  AttachExclusiveCloseCtx ctx;
+  int waited = 0;
+
+  check(L != NULL, "luaL_newstate exclusive attach-close failed");
+  luaL_openlibs(L);
+  g = G(L);
+  child = lua_newthread(L);
+  mt_gc_exclusive_rel(g, 1);
+  memset(&ctx, 0, sizeof(ctx));
+  ctx.L = child;
+  if (pthread_create(&thread, NULL, attach_exclusive_close_worker, &ctx) != 0)
+    failf("pthread_create exclusive attach-close failed");
+  while (mt_entering_acq(g) == 0) {
+    check(!load_flag(&ctx.done), "exclusive attach returned before shutdown");
+    sleep_ms(1);
+    if (++waited > 5000)
+      failf("exclusive attach did not reach entering state");
+  }
+  check(load_flag(&ctx.started) == 1, "exclusive attach worker did not start");
+  check(mt_live_acq(g) == 0, "exclusive attach became live before shutdown");
+  lua_close(L);
+  if (pthread_join(thread, NULL) != 0)
+    failf("pthread_join exclusive attach-close failed");
+  check(load_flag(&ctx.done) == 1, "lua_close returned before entering attach finished");
+  check(load_flag(&ctx.attached) == 0, "entering attach succeeded during shutdown");
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -423,6 +475,7 @@ int main(void)
 
   lua_close(L);
   test_close_waits_for_attach();
+  test_close_waits_for_entering_attach();
   puts("t-threading-capi OK: public luaMT spawn/join/fence/attach verified");
   return 0;
 }

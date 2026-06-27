@@ -1415,6 +1415,7 @@ typedef struct global_State {
   GC2State gc2;		/* Concurrent GC scaffold state. */
   uint32_t mt_active;	/* One-way latch: secondary Lua threads existed. */
   uint32_t mt_live;	/* Active secondary Lua threads. */
+  uint32_t mt_entering;	/* Secondary entrants before mt_live claim. */
   uint32_t mt_gc_exclusive;  /* Explicit legacy GC excludes secondary entry. */
   uint32_t mt_shutdown;	/* VM teardown is rejecting new secondary threads. */
   GCSize mt_gc_threshold;  /* Saved automatic-GC threshold. */
@@ -1511,6 +1512,33 @@ static LJ_AINLINE void mt_live_futex_wait(global_State *g, uint32_t live,
 static LJ_AINLINE void mt_live_futex_wake(global_State *g, int n)
 {
   la_futex_wake(&g->mt_live, n);
+}
+
+static LJ_AINLINE uint32_t mt_entering_acq(global_State *g)
+{
+  return la_load32_acq(&g->mt_entering);
+}
+
+static LJ_AINLINE uint32_t mt_entering_add_rlx(global_State *g, uint32_t n)
+{
+  return la_add32_rlx(&g->mt_entering, n);
+}
+
+static LJ_AINLINE uint32_t mt_entering_sub_acqrel(global_State *g, uint32_t n)
+{
+  return la_sub32_acqrel(&g->mt_entering, n);
+}
+
+static LJ_AINLINE void mt_entering_futex_wait(global_State *g,
+					      uint32_t entering,
+					      int64_t timeout_ns)
+{
+  (void)la_futex_wait(&g->mt_entering, entering, timeout_ns);
+}
+
+static LJ_AINLINE void mt_entering_futex_wake(global_State *g, int n)
+{
+  la_futex_wake(&g->mt_entering, n);
 }
 
 static LJ_AINLINE uint32_t mt_gc_exclusive_acq(global_State *g)

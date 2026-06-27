@@ -177,6 +177,13 @@ The active-thread stopped `collect` path marks the requested major cycle with a
 one-shot stopped-threshold restore so the eventual cycle completion does not
 permanently restart automatic GC.
 
+Current lifecycle bridge: pre-live secondary entrants are counted in
+`mt_entering` before a foreign `luaMT_attach()` claims the Lua state, and
+`lua_close()` rejects new entrants, wakes `mt_gc_exclusive` waiters, and waits
+for `mt_entering == 0` before using the existing STOPREQ/`mt_live` shutdown
+wait. This keeps an external attach blocked behind explicit legacy GC from
+outliving state teardown.
+
 The channel userdata is shared freely; all ops are method calls
 (lib_threading.c → lj_chan.c). GC: channels live in non-traversable? NO —
 traversable arenas; traverse = mark in-flight slot values (bounded scan of

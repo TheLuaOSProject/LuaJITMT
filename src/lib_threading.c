@@ -241,6 +241,32 @@ static void threading_wake_thread(LJThread *th)
   la_futex_wake(&th->futex, INT_MAX);
 }
 
+static void threading_entering_leave(global_State *g)
+{
+  if (mt_entering_sub_acqrel(g, 1) == 1)
+    mt_entering_futex_wake(g, INT_MAX);
+}
+
+static int threading_entering_begin(global_State *g)
+{
+  mt_entering_add_rlx(g, 1);
+  if (mt_shutdown_acq(g) != 0) {
+    threading_entering_leave(g);
+    return 0;
+  }
+  return 1;
+}
+
+static void threading_wait_entering(global_State *g)
+{
+  while (mt_entering_acq(g) != 0) {
+    uint32_t entering = mt_entering_acq(g);
+    if (entering == 0)
+      break;
+    mt_entering_futex_wait(g, entering, 1000000);
+  }
+}
+
 void lj_threading_shutdown(lua_State *L)
 {
   global_State *g = G(L);
@@ -248,11 +274,14 @@ void lj_threading_shutdown(lua_State *L)
   LJThreadLive *node;
   LJThread *th;
   mt_shutdown_rel(g, 1);
-  if (!threading_live_head(g) && mt_live_acq(g) == 0)
+  mt_gc_exclusive_futex_wake(g, INT_MAX);
+  if (!threading_live_head(g) && mt_live_acq(g) == 0 &&
+      mt_entering_acq(g) == 0)
     return;
   lj_assertG(cur == NULL || cur == g->main_tg,
 	     "lua_close called from non-main OS thread");
   UNUSED(cur);
+  threading_wait_entering(g);
   if (mt_live_acq(g) != 0) {
     (void)lj_safepoint_handshake(g, LJ_GC2_HS_STOPREQ);
     while (mt_live_acq(g) != 0) {
@@ -287,19 +316,23 @@ void lj_threading_shutdown(lua_State *L)
 
 static void threading_gc_leave(global_State *g);
 
-static int threading_gc_enter(lua_State *L)
+static int threading_gc_enter_counted(lua_State *L)
 {
   global_State *g = G(L);
   for (;;) {
     uint32_t expect;
     uint32_t exclusive;
     while ((exclusive = mt_gc_exclusive_acq(g)) != 0) {
-      if (mt_shutdown_acq(g) != 0)
+      if (mt_shutdown_acq(g) != 0) {
+	threading_entering_leave(g);
 	return 0;
+      }
       mt_gc_exclusive_futex_wait(g, exclusive, 1000000);
     }
-    if (mt_shutdown_acq(g) != 0)
+    if (mt_shutdown_acq(g) != 0) {
+      threading_entering_leave(g);
       return 0;
+    }
     expect = 0;
     (void)mt_active_cas(g, &expect, 1);
     if (mt_live_add_rlx(g, 1) == 0) {
@@ -311,6 +344,7 @@ static int threading_gc_enter(lua_State *L)
       lj_gc_threshold_store(g, LJ_MAX_MEM);
     }
     if (mt_gc_exclusive_acq(g) == 0) {
+      threading_entering_leave(g);
       if (mt_shutdown_acq(g) != 0) {
 	threading_gc_leave(g);
 	return 0;
@@ -319,6 +353,14 @@ static int threading_gc_enter(lua_State *L)
     }
     threading_gc_leave(g);
   }
+}
+
+static int threading_gc_enter(lua_State *L)
+{
+  global_State *g = G(L);
+  if (!threading_entering_begin(g))
+    return 0;
+  return threading_gc_enter_counted(L);
 }
 
 static void threading_gc_leave(global_State *g)
@@ -1003,12 +1045,17 @@ int lj_threading_attach(lua_State *L)
     return lj_tg_load_thread_L(cur) == L;
   if (L == mainthread_acq(g))
     return 0;
-  tid = lj_thr_newid();
-  if (!lj_state_claim(L, tid))
+  if (!threading_entering_begin(g))
     return 0;
+  tid = lj_thr_newid();
+  if (!lj_state_claim(L, tid)) {
+    threading_entering_leave(g);
+    return 0;
+  }
   tg = (TGState *)malloc(sizeof(TGState));
   if (!tg) {
     lj_state_release(L, tid);
+    threading_entering_leave(g);
     return 0;
   }
   lj_tg_init_thread(g, tg, L, threading_arena_internal(g));
@@ -1021,7 +1068,7 @@ int lj_threading_attach(lua_State *L)
   if (o && o->gch.gct == ~LJ_TUDATA &&
       lj_udata_udtype_acq(gco2ud(o)) == UDTYPE_THREAD)
     tg->thread_ud = gco2ud(o);
-  if (!threading_gc_enter(L)) {
+  if (!threading_gc_enter_counted(L)) {
     L->tg_hint = NULL;
     lj_thr_set_tg(NULL);
     lj_state_release(L, tid);

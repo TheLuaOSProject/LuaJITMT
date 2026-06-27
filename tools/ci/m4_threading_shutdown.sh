@@ -30,6 +30,11 @@ for helper in mt_active_acq \
   mt_live_sub_acqrel \
   mt_live_futex_wait \
   mt_live_futex_wake \
+  mt_entering_acq \
+  mt_entering_add_rlx \
+  mt_entering_sub_acqrel \
+  mt_entering_futex_wait \
+  mt_entering_futex_wake \
   mt_gc_exclusive_acq \
   mt_gc_exclusive_rel \
   mt_gc_exclusive_cas \
@@ -43,9 +48,10 @@ for helper in mt_active_acq \
     exit 1
   fi
 done
-if hits=$(grep -nE -- '->[[:space:]]*mt_(active|live|gc_exclusive|shutdown)([^[:alnum:]_]|$)|&[[:space:]]*[^)]*->[[:space:]]*mt_(active|live|gc_exclusive|shutdown)([^[:alnum:]_]|$)' \
+if hits=$(grep -nE -- '->[[:space:]]*mt_(active|live|entering|gc_exclusive|shutdown)([^[:alnum:]_]|$)|&[[:space:]]*[^)]*->[[:space:]]*mt_(active|live|entering|gc_exclusive|shutdown)([^[:alnum:]_]|$)' \
     "$ROOT"/src/*.c \
-    "$ROOT/tests/t-gc2-traverse.c" || true); [ -n "$hits" ]; then
+    "$ROOT/tests/t-gc2-traverse.c" \
+    "$ROOT/tests/t-threading-capi.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
   printf '%s\n' 'raw MT lifecycle/GC state access is forbidden; use mt_* helpers' >&2
   exit 1
