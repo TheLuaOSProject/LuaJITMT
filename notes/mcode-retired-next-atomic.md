@@ -27,4 +27,16 @@ Notes:
   still making the chain publication/acquire discipline explicit.
 - `tools/ci/m6_jit_mcode_publish.sh` also rejects raw `MCLink.next` access in
   the mcode implementation and inline helpers.
-- `J->retiredmcode` head operations remain explicit acquire/CAS/xchg sites.
+- 2026-06-27 follow-up: added `mcode_retired_head_acq()`,
+  `mcode_retired_head_cas()`, and `mcode_retired_head_xchg_acqrel()` in
+  `src/lj_jit.h`. Mcode retired-list push, reclaim, shutdown free, marking,
+  GC2 paranoia scanning, and the focused C fixture now use those helpers.
+  `tools/ci/m5_jit_trace_publish.sh` and `tools/ci/m6_jit_mcode_publish.sh`
+  reject raw `J->retiredmcode` access in the implementation, GC scanner, and
+  focused test.
+
+Follow-up validation:
+- `git diff --check`
+- `tools/ci/m6_jit_mcode_publish.sh`
+- `tools/ci/m5_jit_trace_publish.sh`
+- `tools/ci/m3_gc2_paranoia.sh`

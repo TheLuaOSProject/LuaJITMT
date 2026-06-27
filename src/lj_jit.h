@@ -872,6 +872,25 @@ typedef struct jit_State {
 #endif
 } jit_State;
 
+static LJ_AINLINE MCodeRetire *mcode_retired_head_acq(const jit_State *J)
+{
+  return (MCodeRetire *)la_loadptr_acq((void *const *)&J->retiredmcode);
+}
+
+static LJ_AINLINE int mcode_retired_head_cas(jit_State *J,
+					     MCodeRetire **oldp,
+					     MCodeRetire *ret)
+{
+  return la_casptr((void **)&J->retiredmcode, (void **)oldp, ret,
+		   LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE MCodeRetire *
+mcode_retired_head_xchg_acqrel(jit_State *J, MCodeRetire *ret)
+{
+  return (MCodeRetire *)la_xchgptr_acqrel((void **)&J->retiredmcode, ret);
+}
+
 static LJ_AINLINE TraceVec *tracevec_retired_head_acq(const jit_State *J)
 {
   return (TraceVec *)la_loadptr_acq((void *const *)&J->retiredtracev);

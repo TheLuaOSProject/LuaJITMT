@@ -19,7 +19,7 @@
 static MCodeRetire *retired_find(jit_State *J, MCode *needle)
 {
   MCodeRetire *ret;
-  for (ret = (MCodeRetire *)la_loadptr_acq((void *const *)&J->retiredmcode);
+  for (ret = mcode_retired_head_acq(J);
        ret != NULL;
        ret = mcode_retired_next_acq(ret))
     if (ret->area == needle)
@@ -39,7 +39,7 @@ int main(void)
 
   g = G(L);
   J = G2J(g);
-  assert(la_loadptr_acq((void *const *)&J->retiredmcode) == NULL);
+  assert(mcode_retired_head_acq(J) == NULL);
 
   ljt_lua_dostring(L,
     "jit.flush()\n"
@@ -55,7 +55,7 @@ int main(void)
   szall = J->szallmcarea;
   assert(oldmc != NULL);
   assert(szall != 0);
-  assert(la_loadptr_acq((void *const *)&J->retiredmcode) == NULL);
+  assert(mcode_retired_head_acq(J) == NULL);
 
   assert(lj_trace_flushall(L) == 0);
   assert(J->mcarea == NULL);
@@ -75,7 +75,7 @@ int main(void)
   assert(lj_mcode_reclaim_retired(g, epoch + 1u) == 0);
   assert(retired_find(J, oldmc) != NULL);
   assert(lj_mcode_reclaim_retired(g, epoch + LJ_FLUSH_EPOCHS) >= 1);
-  assert(la_loadptr_acq((void *const *)&J->retiredmcode) == NULL);
+  assert(mcode_retired_head_acq(J) == NULL);
   assert(J->szallmcarea == 0);
 
   lua_close(L);
