@@ -111,6 +111,7 @@ static void lj_gc2_finalizer_drain(global_State *g);
 static GCobj *lj_gc2_finalizer_dequeue_owned(global_State *g);
 static GCobj *lj_gc2_finalizer_dequeue(global_State *g);
 static int lj_gc2_finalizer_try_enter(global_State *g);
+static void gc2_finalizer_wait_no_l(void);
 static void lj_gc2_finalizer_enter(global_State *g);
 static void lj_gc2_finalizer_leave(global_State *g);
 static int lj_gc2_finalizer_pending(global_State *g);
@@ -1433,7 +1434,7 @@ void lj_gc2_finalizer_dispatch_all(lua_State *L,
     if (!lj_gc2_finalizer_queue_pending(g))
       break;
     if (!lj_gc2_finalizer_dispatch_one(L, dispatch))
-      la_cpu_pause();
+      gc2_finalizer_wait_no_l();
   }
 }
 
@@ -1505,12 +1506,17 @@ static int lj_gc2_finalizer_try_enter(global_State *g)
   }
 }
 
+static void gc2_finalizer_wait_no_l(void)
+{
+  (void)lj_thr_sleep_ns(NULL, 1000000);
+}
+
 static void lj_gc2_finalizer_enter(global_State *g)
 {
   if (!g)
     return;
   while (!lj_gc2_finalizer_try_enter(g))
-    la_cpu_pause();
+    gc2_finalizer_wait_no_l();
 }
 
 static void lj_gc2_finalizer_leave(global_State *g)
@@ -1535,7 +1541,7 @@ static void lj_gc2_finalizer_leave(global_State *g)
       continue;
     }
     if (old == ~(uint32_t)0) {
-      la_cpu_pause();
+      gc2_finalizer_wait_no_l();
       continue;
     }
     if (gc2_finalizer_active_cas(g, &old, old - 1))

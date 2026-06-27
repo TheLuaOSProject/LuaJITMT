@@ -209,4 +209,19 @@ if ! awk '
   exit 1
 fi
 
+if hits=$(awk '
+  /^static void lj_gc2_finalizer_enter\(global_State \*g\)/ ||
+  /^static void lj_gc2_finalizer_leave\(global_State \*g\)/ ||
+  /^void lj_gc2_finalizer_dispatch_all\(lua_State \*L,/ {
+    in_fn = 1
+  }
+  in_fn && /la_cpu_pause[[:space:]]*\(/ { print FILENAME ":" FNR ":" $0 }
+  in_fn && /^}/ { in_fn = 0 }
+' "$ROOT/src/lj_gc2.c"); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' \
+    'GC2 finalizer owner waits must use native sleep slices instead of CPU spinning' >&2
+  exit 1
+fi
+
 exec "$ROOT/tools/ci/lua_test.sh" m8_weak
