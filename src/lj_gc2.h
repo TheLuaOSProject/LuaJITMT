@@ -156,8 +156,6 @@ LJ_FUNC void lj_gc2_finreg_udata_finalizer_enqueue(global_State *g,
 						   GCobj *o);
 LJ_FUNC void lj_gc2_finalizer_enqueue(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc2_finalizer_mark_enqueue(global_State *g, GCobj *o);
-LJ_FUNC void lj_gc2_finalizer_drain(global_State *g);
-LJ_FUNC GCobj *lj_gc2_finalizer_dequeue(global_State *g);
 LJ_FUNC int lj_gc2_finalizer_dispatch_one(lua_State *L,
 					  GC2FinalizerDispatchFunc dispatch);
 LJ_FUNC void lj_gc2_finalizer_dispatch_all(lua_State *L,
@@ -172,6 +170,8 @@ LJ_FUNC int lj_gc2_test_finalizer_try_enter(global_State *g);
 LJ_FUNC void lj_gc2_test_finalizer_enter(global_State *g);
 LJ_FUNC void lj_gc2_test_finalizer_leave(global_State *g);
 LJ_FUNC void lj_gc2_test_finalizer_drain_owned(global_State *g);
+LJ_FUNC void lj_gc2_test_finalizer_drain(global_State *g);
+LJ_FUNC GCobj *lj_gc2_test_finalizer_dequeue(global_State *g);
 #endif
 LJ_FUNC int lj_gc2_finalizer_queue_pending(global_State *g);
 LJ_FUNC int lj_gc2_finalizer_pending(global_State *g);

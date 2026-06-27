@@ -281,14 +281,14 @@ if hits=$(grep -nE -- 'lj_gc2_finalizer_(try_enter|drain_owned|dequeue_owned|lea
   printf '%s\n' 'legacy finalizer dispatch must use lj_gc2_finalizer_dispatch_one' >&2
   exit 1
 fi
-if hits=$(grep -nE -- 'lj_gc2_finalizer_(try_enter|enter|leave|drain_owned|dequeue_owned)[[:space:]]*[(]' \
+if hits=$(grep -nE -- 'lj_gc2_finalizer_(try_enter|enter|leave|drain|dequeue|drain_owned|dequeue_owned)[[:space:]]*[(]' \
     "$ROOT"/src/*.c | grep -v "$ROOT/src/lj_gc2.c:" || true); \
     [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
   printf '%s\n' 'low-level GC2 finalizer owner primitives must stay inside lj_gc2.c' >&2
   exit 1
 fi
-if hits=$(grep -nE -- 'LJ_FUNC .*[[:space:]]lj_gc2_finalizer_(try_enter|enter|leave|drain_owned|dequeue_owned)[[:space:]]*[(]' \
+if hits=$(grep -nE -- 'LJ_FUNC .*[[:space:]]lj_gc2_finalizer_(try_enter|enter|leave|drain|dequeue|drain_owned|dequeue_owned)[[:space:]]*[(]' \
     "$ROOT/src/lj_gc2.h" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
   printf '%s\n' 'low-level GC2 finalizer owner primitives must not be public lj_gc2.h APIs' >&2
@@ -297,6 +297,8 @@ fi
 for helper in lj_gc2_finalizer_try_enter \
   lj_gc2_finalizer_enter \
   lj_gc2_finalizer_leave \
+  lj_gc2_finalizer_drain \
+  lj_gc2_finalizer_dequeue \
   lj_gc2_finalizer_drain_owned \
   lj_gc2_finalizer_dequeue_owned; do
   if ! grep -qE "^[[:space:]]*static .*[*[:space:]]${helper}[[:space:]]*[(]" \

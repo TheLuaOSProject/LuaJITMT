@@ -208,9 +208,9 @@ static void test_worker_finalizer_mpsc_drain(lua_State *L, global_State *g)
   assert(wait_gc2_counter_at_least(g, gc2_worker_async_progress_acq, async0 + 2u));
   assert(gc2_worker_active_acq(g) == 0);
 
-  assert(lj_gc2_finalizer_dequeue(g) == a);
-  assert(lj_gc2_finalizer_dequeue(g) == b);
-  assert(lj_gc2_finalizer_dequeue(g) == NULL);
+  assert(lj_gc2_test_finalizer_dequeue(g) == a);
+  assert(lj_gc2_test_finalizer_dequeue(g) == b);
+  assert(lj_gc2_test_finalizer_dequeue(g) == NULL);
   assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) == NULL);
 
   relink_root_object(g, b);
@@ -310,9 +310,9 @@ static void test_finalizer_owner_leave_rewakes_worker(lua_State *L,
   assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc) == NULL);
   assert(la_loadptr_acq((void *const *)&g->gc2.finalizer_tail) != NULL);
 
-  assert(lj_gc2_finalizer_dequeue(g) == a);
-  assert(lj_gc2_finalizer_dequeue(g) == b);
-  assert(lj_gc2_finalizer_dequeue(g) == NULL);
+  assert(lj_gc2_test_finalizer_dequeue(g) == a);
+  assert(lj_gc2_test_finalizer_dequeue(g) == b);
+  assert(lj_gc2_test_finalizer_dequeue(g) == NULL);
   relink_root_object(g, b);
   relink_root_object(g, a);
   lua_settop(L, 0);
