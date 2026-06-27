@@ -422,7 +422,7 @@ void lj_gc2_fini(global_State *g)
   }
 }
 
-void lj_gc2_worker_wake(global_State *g)
+static void lj_gc2_worker_wake(global_State *g)
 {
   uint32_t n;
   if (!g)
@@ -433,6 +433,11 @@ void lj_gc2_worker_wake(global_State *g)
   gc2_worker_wakes_add(g, 1);
   (void)gc2_worker_wake_add(g, 1);
   gc2_worker_wake_futex_wake(g, (int)n);
+}
+
+void lj_gc2_test_worker_wake(global_State *g)
+{
+  lj_gc2_worker_wake(g);
 }
 
 static int gc2_worker_arena_internal(global_State *g)

@@ -88,7 +88,6 @@ LJ_FUNC GCobj *lj_gc2_grey_steal(global_State *g);
 LJ_FUNC int lj_gc2_worker_start(global_State *g);
 LJ_FUNC int lj_gc2_workers_set(global_State *g, uint32_t n);
 LJ_FUNC void lj_gc2_worker_stop(global_State *g);
-LJ_FUNC void lj_gc2_worker_wake(global_State *g);
 LJ_FUNC uint32_t lj_gc2_worker_drain(global_State *g, uint32_t limit);
 LJ_FUNC uint32_t lj_gc2_sweep_owner_progress(global_State *g, TGState *tg,
 					     uint32_t limit);
@@ -164,6 +163,7 @@ LJ_FUNC int lj_gc2_finalizer_step(lua_State *L,
 LJ_FUNC void lj_gc2_finalizer_mark_all(global_State *g,
 				       GC2FinalizerMarkFunc mark);
 #if defined(lj_gc2_c) || defined(LJ_GC2_TEST_HELPERS) || defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
+LJ_FUNC void lj_gc2_test_worker_wake(global_State *g);
 LJ_FUNC int lj_gc2_test_finalizer_try_enter(global_State *g);
 LJ_FUNC void lj_gc2_test_finalizer_enter(global_State *g);
 LJ_FUNC void lj_gc2_test_finalizer_leave(global_State *g);

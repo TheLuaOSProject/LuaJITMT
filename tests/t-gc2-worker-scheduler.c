@@ -171,7 +171,7 @@ static void test_two_worker_contention(global_State *g)
   wakes0 = gc2_worker_wakes_acq(g);
   gc2_worker_active_rel(g, 1);
   la_store32_rel(&g->gc2.phase, LJ_GC2_MARK);
-  lj_gc2_worker_wake(g);
+  lj_gc2_test_worker_wake(g);
   assert(gc2_worker_wakes_acq(g) > wakes0);
   assert(wait_gc2_counter_at_least(g, gc2_worker_busy_retries_acq, busy0 + 2u));
   la_store32_rel(&g->gc2.phase, LJ_GC2_IDLE);
@@ -449,7 +449,7 @@ static void test_async_sweep_and_stop(lua_State *L, global_State *g,
   wakes0 = gc2_worker_wakes_acq(g);
   for (i = 0; i < 1000 &&
 	      la_load64_acq(&g->gc2.finalizer_sweep_blocks) == blocks0; i++) {
-    lj_gc2_worker_wake(g);
+    lj_gc2_test_worker_wake(g);
     sleep_ns(1000000L);
   }
   assert(gc2_worker_wakes_acq(g) > wakes0);
@@ -463,7 +463,7 @@ static void test_async_sweep_and_stop(lua_State *L, global_State *g,
   wakes0 = gc2_worker_wakes_acq(g);
   for (i = 0; i < 1000 &&
 	      gc2_sweep_owner_arenas_acq(g) == arenas0; i++) {
-    lj_gc2_worker_wake(g);
+    lj_gc2_test_worker_wake(g);
     sleep_ns(1000000L);
   }
   assert(gc2_worker_wakes_acq(g) > wakes0);
@@ -491,7 +491,7 @@ static void test_async_sweep_and_stop(lua_State *L, global_State *g,
   async0 = gc2_worker_async_progress_acq(g);
   lj_gc2_sweep_legacy_ready(g);
   for (i = 0; i < 1000 && la_load32_acq(&g->gc2.phase) == LJ_GC2_SWEEP; i++) {
-    lj_gc2_worker_wake(g);
+    lj_gc2_test_worker_wake(g);
     (void)lj_safepoint_poll(L);
     sleep_ns(1000000L);
   }

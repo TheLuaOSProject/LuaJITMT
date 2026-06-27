@@ -68,6 +68,24 @@ if hits=$(grep -nE -- '(->|[.])[[:space:]]*ssb_(active|base|next|end)([^[:alnum:
   printf '%s\n' 'raw TG SSB active cursor access is forbidden; use lj_tg_ssb_* helpers' >&2
   exit 1
 fi
+if hits=$(grep -nE -- 'lj_gc2_worker_wake[[:space:]]*[(]' \
+    "$ROOT"/src/*.c | grep -v "$ROOT/src/lj_gc2.c:" || true); \
+    [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw GC2 worker wake control must stay inside lj_gc2.c' >&2
+  exit 1
+fi
+if hits=$(grep -nE -- 'LJ_FUNC void lj_gc2_worker_wake[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.h" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw GC2 worker wake control must not be a public lj_gc2.h API' >&2
+  exit 1
+fi
+if ! grep -qE '^[[:space:]]*static void lj_gc2_worker_wake[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.c"; then
+  printf '%s\n' 'lj_gc2_worker_wake must stay static inside lj_gc2.c' >&2
+  exit 1
+fi
 for helper in lj_tg_tid_acq lj_tg_tid_rel; do
   if ! grep -qE "^[[:space:]]*static LJ_AINLINE .*[*[:space:]]${helper}[[:space:]]*[(]" \
       "$ROOT/src/lj_tg.h"; then
