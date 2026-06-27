@@ -4159,7 +4159,7 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   assert(gc2_finreg_cdata_pending_order_hits_acq(g) ==
 	 pendingorder2 + 1u);
   lj_gc_finalize_cdata(L);
-  assert(lj_gc2_finalizer_queue_pending(g));
+  assert(lj_gc2_test_finalizer_queue_pending(g));
   assert(!lj_gc_cdata_fin_pending(g));
   assert(gc2_finreg_cdata_order_queued_acq(g) == orderq2 + 3u);
   assert(gc2_finreg_cdata_order_fallbacks_acq(g) ==
@@ -4172,7 +4172,7 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   assert(gc2_finalizer_dequeued_acq(g) == finalizerd2 + 3u);
   assert(gc2_finalizer_mpsc_drained_acq(g) == mpscd2 + 3u);
   assert(gc2_finreg_cdata_clears_acq(g) == clears2 + 3u);
-  assert(!lj_gc2_finalizer_queue_pending(g));
+  assert(!lj_gc2_test_finalizer_queue_pending(g));
   assert(!lj_gc_cdata_fin_pending(g));
   assert(gc2_cdata_order_count == 3);
   assert(gc2_cdata_order[0] == 3);
@@ -4204,7 +4204,7 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
 	 pendingorder2 + 1u);
   lua_pop(L, 1);
   lj_gc_finalize_cdata(L);
-  assert(lj_gc2_finalizer_queue_pending(g));
+  assert(lj_gc2_test_finalizer_queue_pending(g));
   assert(!lj_gc_cdata_fin_pending(g));
   assert(gc2_finreg_cdata_order_queued_acq(g) == orderq2 + 1u);
   assert(gc2_finreg_cdata_order_fallbacks_acq(g) ==
@@ -4217,7 +4217,7 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   assert(gc2_finalizer_dequeued_acq(g) == finalizerd2 + 1u);
   assert(gc2_finalizer_mpsc_drained_acq(g) == mpscd2 + 1u);
   assert(gc2_finreg_cdata_clears_acq(g) == clears2 + 1u);
-  assert(!lj_gc2_finalizer_queue_pending(g));
+  assert(!lj_gc2_test_finalizer_queue_pending(g));
   assert(!lj_gc_cdata_fin_pending(g));
   assert(gc2_cdata_order_count == 1);
   assert(gc2_cdata_order[0] == 1);

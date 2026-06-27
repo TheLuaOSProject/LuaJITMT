@@ -122,6 +122,8 @@ static void lj_gc2_finalizer_drain(global_State *g);
 static GCobj *lj_gc2_finalizer_dequeue_owned(global_State *g);
 static GCobj *lj_gc2_finalizer_dequeue(global_State *g);
 static int lj_gc2_finalizer_try_enter(global_State *g);
+static int gc2_finalizer_queue_pending(global_State *g);
+static int gc2_finalizer_sweep_pending(global_State *g);
 static void gc2_peer_wait_no_l(void);
 static void gc2_finalizer_wait_no_l(void);
 static void gc2_finreg_claim_wait_no_l(void);
@@ -1567,7 +1569,7 @@ void lj_gc2_finalizer_dispatch_all(lua_State *L, GC2FinalizerCallFunc call)
   g = G(L);
   for (;;) {
     lj_gc2_finalizer_drain(g);
-    if (!lj_gc2_finalizer_queue_pending(g))
+    if (!gc2_finalizer_queue_pending(g))
       break;
     if (!lj_gc2_finalizer_dispatch_one(L, &ctx))
       gc2_finalizer_wait_no_l();
@@ -1586,7 +1588,7 @@ static int lj_gc2_finalizer_step_ctx(lua_State *L,
   if (!L || !ctx || (!ctx->call && !ctx->dispatch))
     return 0;
   g = G(L);
-  if (lj_gc2_finalizer_queue_pending(g)) {
+  if (gc2_finalizer_queue_pending(g)) {
     GCSize old, total;
     int finrc;
     if (lj_tg_jit_base(g)) {
@@ -1750,9 +1752,19 @@ void lj_gc2_test_finalizer_enqueue(global_State *g, GCobj *o)
   lj_gc2_finalizer_enqueue(g, o);
 }
 
+int lj_gc2_test_finalizer_queue_pending(global_State *g)
+{
+  return gc2_finalizer_queue_pending(g);
+}
+
 int lj_gc2_test_finalizer_pending(global_State *g)
 {
   return lj_gc2_finalizer_pending(g);
+}
+
+int lj_gc2_test_finalizer_sweep_pending(global_State *g)
+{
+  return gc2_finalizer_sweep_pending(g);
 }
 
 int lj_gc2_test_finalizer_step_dispatch(lua_State *L,
@@ -1769,14 +1781,14 @@ static int gc2_finalizer_pending_for_sweep(global_State *g, int owner_ok)
 {
   if (!g)
     return 0;
-  if (lj_gc2_finalizer_queue_pending(g))
+  if (gc2_finalizer_queue_pending(g))
     return 1;
   if (gc2_finalizer_active_acq(g) == 0)
     return 0;
   return !(owner_ok && gc2_finalizer_owned_by_current(g));
 }
 
-int lj_gc2_finalizer_queue_pending(global_State *g)
+static int gc2_finalizer_queue_pending(global_State *g)
 {
   if (!g)
     return 0;
@@ -1786,12 +1798,12 @@ int lj_gc2_finalizer_queue_pending(global_State *g)
 
 int lj_gc2_finalizer_phase_pending(global_State *g)
 {
-  return lj_gc2_finalizer_queue_pending(g);
+  return gc2_finalizer_queue_pending(g);
 }
 
 int lj_gc2_finalizer_close_pending(global_State *g)
 {
-  return lj_gc2_finalizer_queue_pending(g) || lj_gc_cdata_fin_pending(g);
+  return gc2_finalizer_queue_pending(g) || lj_gc_cdata_fin_pending(g);
 }
 
 static int lj_gc2_finalizer_pending(global_State *g)
@@ -1799,7 +1811,7 @@ static int lj_gc2_finalizer_pending(global_State *g)
   return gc2_finalizer_pending_for_sweep(g, 0);
 }
 
-int lj_gc2_finalizer_sweep_pending(global_State *g)
+static int gc2_finalizer_sweep_pending(global_State *g)
 {
   return gc2_finalizer_pending_for_sweep(g, 1);
 }
@@ -1889,7 +1901,7 @@ void lj_gc2_finalizer_spawn_release(global_State *g)
 
 static int gc2_sweep_blocked_by_finalizer(global_State *g)
 {
-  if (!lj_gc2_finalizer_sweep_pending(g))
+  if (!gc2_finalizer_sweep_pending(g))
     return 0;
   gc2_finalizer_sweep_blocks_add(g, 1);
   return 1;  /* 05 section 5.8 finalizer drain before traversable sweep. */

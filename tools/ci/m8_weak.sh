@@ -264,6 +264,28 @@ if hits=$(awk '
     'raw finalizer object-dispatch type must stay internal/test-only in lj_gc2.h' >&2
   exit 1
 fi
+if hits=$(grep -nE -- 'LJ_FUNC .*[[:space:]]lj_gc2_finalizer_(queue_pending|sweep_pending)[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.h" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw finalizer pending predicates must stay private to lj_gc2.c' >&2
+  exit 1
+fi
+for helper in gc2_finalizer_queue_pending \
+  gc2_finalizer_sweep_pending; do
+  if ! grep -qE "^[[:space:]]*static int ${helper}[[:space:]]*[(]" \
+      "$ROOT/src/lj_gc2.c"; then
+    printf '%s\n' "${helper} must stay static inside lj_gc2.c" >&2
+    exit 1
+  fi
+done
+for helper in lj_gc2_test_finalizer_queue_pending \
+  lj_gc2_test_finalizer_sweep_pending; do
+  if ! grep -qE "^[[:space:]]*LJ_FUNC int ${helper}[[:space:]]*[(]" \
+      "$ROOT/src/lj_gc2.h"; then
+    printf '%s\n' "${helper} declaration is required for finalizer fixture predicates" >&2
+    exit 1
+  fi
+done
 for pattern in 'lj_gc2_finalizer_dispatch_all(L, gc_call_finalizer)' \
   'lj_gc2_finalizer_step(L, gc_call_finalizer,'; do
   if ! grep -qF "$pattern" "$ROOT/src/lj_gc.c"; then

@@ -675,9 +675,9 @@ static void test_finalizer_step_defers_busy_callback_state(lua_State *L,
   t = tabV(L->top - 1);
   saved_owner = lj_state_owner_acq(L);
   assert(saved_owner != fake_owner);
-  assert(!lj_gc2_finalizer_queue_pending(g));
+  assert(!lj_gc2_test_finalizer_queue_pending(g));
   lj_gc2_test_finalizer_enqueue(g, obj2gco(t));
-  assert(lj_gc2_finalizer_queue_pending(g));
+  assert(lj_gc2_test_finalizer_queue_pending(g));
 
   lj_state_owner_rel(L, fake_owner);
   la_store32_rel(&finalizer_state_claim_dispatch_called, 0);
@@ -686,11 +686,11 @@ static void test_finalizer_step_defers_busy_callback_state(lua_State *L,
   assert(cost == LJ_MAX_MEM);
   assert(la_load32_acq(&finalizer_state_claim_dispatch_called) == 0);
   assert(lj_state_owner_acq(L) == fake_owner);
-  assert(lj_gc2_finalizer_queue_pending(g));
+  assert(lj_gc2_test_finalizer_queue_pending(g));
 
   lj_state_owner_rel(L, saved_owner);
   assert(lj_gc2_test_finalizer_dequeue(g) == obj2gco(t));
-  assert(!lj_gc2_finalizer_queue_pending(g));
+  assert(!lj_gc2_test_finalizer_queue_pending(g));
   lua_pop(L, 1);
 }
 
@@ -817,9 +817,9 @@ int main(void)
   assert(gc2_finalizer_enters_acq(g) ==
 	 finalizer_enters0 + 1u);
   assert(gc2_finalizer_leaves_acq(g) == finalizer_leaves0);
-  assert(!lj_gc2_finalizer_queue_pending(g));
+  assert(!lj_gc2_test_finalizer_queue_pending(g));
   assert(lj_gc2_test_finalizer_pending(g));
-  assert(!lj_gc2_finalizer_sweep_pending(g));
+  assert(!lj_gc2_test_finalizer_sweep_pending(g));
   saved_tg = lj_thr_get_tg();
   lj_tg_init_thread(g, &peer_tg, NULL, 0);
   peer_tg.tid = tg->tid + 5000u;
@@ -830,7 +830,7 @@ int main(void)
   lj_thr_set_tg(&peer_tg);
   assert(!lj_gc2_test_finalizer_try_enter(g));
   assert(gc2_finalizer_active_acq(g) == 1);
-  assert(lj_gc2_finalizer_sweep_pending(g));
+  assert(lj_gc2_test_finalizer_sweep_pending(g));
   lj_thr_set_tg(saved_tg);
   lj_tg_fini_thread(g, &peer_tg);
   assert(lj_gc2_test_finalizer_try_enter(g));
@@ -852,13 +852,13 @@ int main(void)
 	 finalizer_enters0 + 2u);
   assert(gc2_finalizer_leaves_acq(g) ==
 	 finalizer_leaves0 + 2u);
-  assert(!lj_gc2_finalizer_queue_pending(g));
+  assert(!lj_gc2_test_finalizer_queue_pending(g));
   assert(!lj_gc2_test_finalizer_pending(g));
   assert(unlink_root_object(g, obj2gco(phase_tab)));
   lj_gc2_test_finalizer_enqueue(g, obj2gco(phase_tab));
-  assert(lj_gc2_finalizer_queue_pending(g));
+  assert(lj_gc2_test_finalizer_queue_pending(g));
   assert(lj_gc2_test_finalizer_pending(g));
-  assert(lj_gc2_finalizer_sweep_pending(g));
+  assert(lj_gc2_test_finalizer_sweep_pending(g));
   lj_gc2_sweep_legacy_ready(g);
   assert(lj_gc2_sweep_to_idle(g) == 0);
   assert(la_load32_acq(&g->gc2.phase) == LJ_GC2_SWEEP);
@@ -867,9 +867,9 @@ int main(void)
 	 finalizer_blocks0 + 1u);
   assert(lj_gc2_test_finalizer_dequeue(g) == obj2gco(phase_tab));
   relink_root_object(g, obj2gco(phase_tab));
-  assert(!lj_gc2_finalizer_queue_pending(g));
+  assert(!lj_gc2_test_finalizer_queue_pending(g));
   assert(!lj_gc2_test_finalizer_pending(g));
-  assert(!lj_gc2_finalizer_sweep_pending(g));
+  assert(!lj_gc2_test_finalizer_sweep_pending(g));
   lj_gc2_sweep_legacy_ready(g);
   assert(lj_gc2_sweep_to_idle(g) == 1);
   assert(gc2_sweep_to_idle_acq(g) == sweep_to_idle0 + 1u);

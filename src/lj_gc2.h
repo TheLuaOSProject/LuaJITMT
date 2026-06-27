@@ -166,14 +166,14 @@ LJ_FUNC void lj_gc2_test_finalizer_drain_owned(global_State *g);
 LJ_FUNC void lj_gc2_test_finalizer_drain(global_State *g);
 LJ_FUNC GCobj *lj_gc2_test_finalizer_dequeue(global_State *g);
 LJ_FUNC void lj_gc2_test_finalizer_enqueue(global_State *g, GCobj *o);
+LJ_FUNC int lj_gc2_test_finalizer_queue_pending(global_State *g);
 LJ_FUNC int lj_gc2_test_finalizer_pending(global_State *g);
+LJ_FUNC int lj_gc2_test_finalizer_sweep_pending(global_State *g);
 LJ_FUNC int lj_gc2_test_finalizer_step_dispatch(lua_State *L,
 						GC2FinalizerDispatchFunc dispatch,
 						GCSize finalize_cost,
 						GCSize *cost);
 #endif
-LJ_FUNC int lj_gc2_finalizer_queue_pending(global_State *g);
-LJ_FUNC int lj_gc2_finalizer_sweep_pending(global_State *g);
 LJ_FUNC GCSize lj_gc2_finalizer_pause_threshold(global_State *g);
 LJ_FUNC void lj_gc2_finalizer_restore_threshold(global_State *g, GCSize oldt);
 LJ_FUNC int lj_gc2_finalizer_mt_release_exclusive(global_State *g);
