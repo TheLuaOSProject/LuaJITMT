@@ -182,13 +182,13 @@ void lj_cdata_setfin(lua_State *L, GCcdata *cd, GCobj *obj, uint32_t it)
       copyTVrel(L, anchor + 1, &val);
       L->top = anchor + 2;
     }
-    lj_gc_barrierroot(L, &val);
+    lj_gc_pubroot(L, &val);
     ord = lj_ctype_fin_order_new(L);
   } else if (LJ_LIKELY(anchor + 1 < tvref(L->maxstack))) {
     copyTVrel(L, anchor, &key);
     L->top = anchor + 1;
   }
-  lj_gc_barrierroot(L, &key);
+  lj_gc_pubroot(L, &key);
   for (;;) {
     tv = (TValue *)lj_ctype_fin_get(L, cts, &key, &t);
     if (tv == niltv(L)) {

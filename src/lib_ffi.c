@@ -1738,7 +1738,7 @@ LJLIB_CF(ffi_metatype)
   if (!lj_ctype_setmeta(cts, rid, mt))
     lj_err_caller(L, LJ_ERR_PROTMT);
   settabV(L, &tmp, mt);
-  lj_gc_barrierroot(L, &tmp);  /* 11.2 metatype side root. */
+  lj_gc_pubroot(L, &tmp);  /* 11.2 metatype side root. */
   cd = lj_cdata_new_(L, CTID_CTYPEID, 4);
   *(CTypeID *)cdataptr(cd) = id;
   setcdataV(L, L->top-1, cd);

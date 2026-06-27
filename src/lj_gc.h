@@ -291,7 +291,7 @@ static LJ_AINLINE void lj_gc_list_move_rel(GCRef *dst, GCRef *src)
       lj_gc_step_fixtop(L); }
 
 /* Write barriers. */
-LJ_FUNC void lj_gc_barrierroot(lua_State *L, cTValue *tv);
+LJ_FUNC void lj_gc_pubroot(lua_State *L, cTValue *tv);
 LJ_FUNC void lj_gc_barrierf(global_State *g, GCobj *o, GCobj *v);
 LJ_FUNC void lj_gc_closeuv(global_State *g, GCupval *uv);
 #if LJ_HASJIT

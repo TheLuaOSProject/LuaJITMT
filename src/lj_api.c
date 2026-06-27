@@ -237,7 +237,7 @@ static void copy_slot(lua_State *L, TValue *f, int idx)
   } else {
     TValue *o = index2adr_check(L, idx);
     if (idx == LUA_REGISTRYINDEX) {
-      lj_gc_barrierroot(L, f);
+      lj_gc_pubroot(L, f);
       copyTVrel(L, o, f);
     } else if (idx < LUA_GLOBALSINDEX) {
       copyTVrel(L, o, f);

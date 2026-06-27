@@ -72,7 +72,7 @@ static void callback_owner_barrier_l(lua_State *L, lua_State *carrier)
 {
   TValue tv;
   setthreadV(L, &tv, carrier);
-  lj_gc_barrierroot(L, &tv);  /* 11.5 callback carrier side root. */
+  lj_gc_pubroot(L, &tv);  /* 11.5 callback carrier side root. */
 }
 
 static LJ_AINLINE TValue *callback_func_slots(CTState *cts)
@@ -100,7 +100,7 @@ void lj_ccallback_func_store_l(lua_State *L, CTState *cts, MSize slot,
     lj_err_caller(L, LJ_ERR_FFI_CBACKOV);
   setfuncV(L, &tv, fn);
   copyTVrel(L, &func[slot], &tv);
-  lj_gc_barrierroot(L, &func[slot]);  /* 11.5 callback function side root. */
+  lj_gc_pubroot(L, &func[slot]);  /* 11.5 callback function side root. */
 }
 
 void lj_ccallback_func_clear(CTState *cts, MSize slot)

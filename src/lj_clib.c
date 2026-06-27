@@ -490,10 +490,10 @@ static void clib_cache_retire(lua_State *L, global_State *g,
     if (name) {
       TValue key;
       setstrV(L, &key, name);
-      lj_gc_barrierroot(L, &key);
+      lj_gc_pubroot(L, &key);
     }
     lj_clib_cache_val_acq(&tv, entry);
-    lj_gc_barrierroot(L, &tv);
+    lj_gc_pubroot(L, &tv);
   }
   lj_clib_cache_retire_epoch_rel(entry, gc2_hs_epoch_acq(g));
   clib_cache_retired_push(g, entry);
@@ -540,8 +540,8 @@ static TValue *clib_cache_publish(lua_State *L, CLibrary *cl, GCstr *name,
   TValue key;
   CLibCacheEntry *e;
   setstrV(L, &key, name);
-  lj_gc_barrierroot(L, &key);  /* 11.7 CLibrary side-cache key. */
-  lj_gc_barrierroot(L, val);  /* 11.7 CLibrary side-cache value. */
+  lj_gc_pubroot(L, &key);  /* 11.7 CLibrary side-cache key. */
+  lj_gc_pubroot(L, val);  /* 11.7 CLibrary side-cache value. */
   e = lj_mem_newt(L, sizeof(CLibCacheEntry), CLibCacheEntry);
   lj_clib_cache_next_rel(e, NULL);
   lj_clib_cache_retired_next_rel(e, NULL);
@@ -560,8 +560,8 @@ static TValue *clib_cache_publish(lua_State *L, CLibrary *cl, GCstr *name,
     expect = head;
     if (lj_clib_cache_head_cas_rel(cl, &expect, e)) {
       lj_gc_arena_markmem(G(L), e);  /* 11.7 side-entry publish barrier. */
-      lj_gc_barrierroot(L, &key);  /* Publish-race barrier, see 11.7. */
-      lj_gc_barrierroot(L, &e->val);
+      lj_gc_pubroot(L, &key);  /* Publish-race barrier, see 11.7. */
+      lj_gc_pubroot(L, &e->val);
       return &e->val;
     }
     la_cpu_pause();

@@ -73,7 +73,7 @@ static LJThreadLive *threading_live_new(lua_State *L, GCudata *ud)
   lj_thread_live_next_rel(node, NULL);
   setgcrefrel(node->ud, obj2gco(ud));
   setudataV(L, &tv, ud);
-  lj_gc_barrierroot(L, &tv);  /* 09 section 9.2: native live root. */
+  lj_gc_pubroot(L, &tv);  /* 09 section 9.2: native live root. */
   return node;
 }
 

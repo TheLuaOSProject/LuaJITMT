@@ -231,7 +231,7 @@ static int chan_try_recv_pub(lua_State *L, LJChan *ch, TValue *out)
 		   LA_ACQ_REL, LA_ACQ)) {  /* 09 section 9.5 dequeue ticket. */
 	chan_loadtv_acq(out, slot);
 	if (L)
-	  lj_gc_barrierroot(L, out);
+	  lj_gc_pubroot(L, out);
 	chan_cleartv_rel(slot);
 	la_store64_rel(&slot->seq, pos + ch->cap);
 	chan_wake(ch);

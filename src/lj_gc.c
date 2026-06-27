@@ -1947,7 +1947,7 @@ void lj_gc_fullgc(lua_State *L)
 /* -- Write barriers ------------------------------------------------------ */
 
 /* Barrier for a store to a global root slot. */
-void lj_gc_barrierroot(lua_State *L, cTValue *tv)
+void lj_gc_pubroot(lua_State *L, cTValue *tv)
 {
   global_State *g = G(L);
   lj_gc2_barrier_tv_g(g, tv);
