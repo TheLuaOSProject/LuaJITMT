@@ -1777,6 +1777,11 @@ int lj_gc2_finalizer_queue_pending(global_State *g)
 	 gc2_finalizer_mpsc_acq(g) != NULL;
 }
 
+int lj_gc2_finalizer_close_pending(global_State *g)
+{
+  return lj_gc2_finalizer_queue_pending(g) || lj_gc_cdata_fin_pending(g);
+}
+
 static int lj_gc2_finalizer_pending(global_State *g)
 {
   return gc2_finalizer_pending_for_sweep(g, 0);

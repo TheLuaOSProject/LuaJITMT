@@ -430,6 +430,22 @@ if hits=$(grep -nE -- 'lj_gc2_finalizer_drain[[:space:]]*[(]' \
   printf '%s\n' 'legacy close-time finalizer drain loops must use lj_gc2_finalizer_dispatch_all' >&2
   exit 1
 fi
+if ! grep -qE 'LJ_FUNC int lj_gc2_finalizer_close_pending[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.h"; then
+  printf '%s\n' 'lj_gc2_finalizer_close_pending declaration is required for lua_close fixed-point ownership' >&2
+  exit 1
+fi
+if ! grep -qE '^int lj_gc2_finalizer_close_pending[[:space:]]*[(]' \
+    "$ROOT/src/lj_gc2.c"; then
+  printf '%s\n' 'lj_gc2_finalizer_close_pending definition is required for lua_close fixed-point ownership' >&2
+  exit 1
+fi
+if hits=$(grep -nE -- 'lj_gc2_finalizer_queue_pending[[:space:]]*[(]|lj_gc_cdata_fin_pending[[:space:]]*[(]' \
+    "$ROOT/src/lj_state.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'lua_close finalizer fixed-point checks must use lj_gc2_finalizer_close_pending' >&2
+  exit 1
+fi
 if ! grep -qE 'LJ_FUNC int lj_gc2_finalizer_step[[:space:]]*[(]' \
     "$ROOT/src/lj_gc2.h"; then
   printf '%s\n' 'lj_gc2_finalizer_step declaration is required for GCSfinalize step ownership' >&2

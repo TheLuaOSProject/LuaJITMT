@@ -122,6 +122,7 @@ LJ_FUNC int lj_gc2_finalizer_step(lua_State *L,
 				  GCSize finalize_cost, GCSize *cost);
 LJ_FUNC void lj_gc2_finalizer_mark_all(global_State *g,
 				       GC2FinalizerMarkFunc mark);
+LJ_FUNC int lj_gc2_finalizer_close_pending(global_State *g);
 #if defined(lj_gc2_c) || defined(LJ_GC2_TEST_HELPERS) || defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
 LJ_FUNC int lj_gc2_test_ssb_push(global_State *g, GCobj *o);
 LJ_FUNC uint32_t lj_gc2_test_ssb_drain(global_State *g);

@@ -455,7 +455,7 @@ LUA_API void lua_close(lua_State *L)
     if (lj_vm_cpcall(L, NULL, NULL, cpfinalize) == LUA_OK) {
       lj_gc_separateudata(g, 1);  /* Separate udata again. */
       /* Until nothing is left to do. */
-      if (!lj_gc2_finalizer_queue_pending(g) && !lj_gc_cdata_fin_pending(g))
+      if (!lj_gc2_finalizer_close_pending(g))
 	break;
     }
   }

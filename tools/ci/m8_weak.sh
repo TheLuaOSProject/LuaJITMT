@@ -271,6 +271,16 @@ for pattern in 'lj_gc2_finalizer_dispatch_all(L, gc_call_finalizer)' \
     exit 1
   fi
 done
+if ! grep -qF 'lj_gc2_finalizer_close_pending(g)' "$ROOT/src/lj_state.c"; then
+  printf '%s\n' 'lua_close finalizer fixed-point loop must use lj_gc2_finalizer_close_pending' >&2
+  exit 1
+fi
+if hits=$(grep -nE -- 'lj_gc2_finalizer_queue_pending[[:space:]]*[(]|lj_gc_cdata_fin_pending[[:space:]]*[(]' \
+    "$ROOT/src/lj_state.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'lua_close must not open-code finalizer queue or FINREG pending checks' >&2
+  exit 1
+fi
 
 if hits=$(awk '
   /^static void gc2_finreg_dispatch_requeue\(global_State \*g,/ { in_fn = 1 }
