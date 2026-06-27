@@ -64,6 +64,16 @@ static void gc2_worker_tg_retire_next_rel(GC2WorkerTGRetire *wr,
   la_storeptr_rel((void **)&wr->next, next);
 }
 
+static TGState *gc2_worker_tg_retire_tg_acq(GC2WorkerTGRetire *ret)
+{
+  return (TGState *)la_loadptr_acq((void *const *)&ret->tg);
+}
+
+static void gc2_worker_tg_retire_tg_rel(GC2WorkerTGRetire *ret, TGState *tg)
+{
+  la_storeptr_rel((void **)&ret->tg, tg);
+}
+
 static GC2FinalizerNode *gc2_finalizer_node_next_acq(GC2FinalizerNode *fn)
 {
   return (GC2FinalizerNode *)la_loadptr_acq((void *const *)&fn->next);
@@ -73,6 +83,16 @@ static void gc2_finalizer_node_next_rel(GC2FinalizerNode *fn,
 					GC2FinalizerNode *next)
 {
   la_storeptr_rel((void **)&fn->next, next);
+}
+
+static GCobj *gc2_finalizer_node_obj_acq(GC2FinalizerNode *fn)
+{
+  return (GCobj *)la_loadptr_acq((void *const *)&fn->obj);
+}
+
+static void gc2_finalizer_node_obj_rel(GC2FinalizerNode *fn, GCobj *o)
+{
+  la_storeptr_rel((void **)&fn->obj, o);
 }
 
 static int gc2_grey_grow(global_State *g);
@@ -436,7 +456,7 @@ static int gc2_worker_retire_tg(global_State *g, TGState *tg)
   if (!L)
     return 0;
   node = lj_mem_newt(L, sizeof(GC2WorkerTGRetire), GC2WorkerTGRetire);
-  node->tg = tg;
+  gc2_worker_tg_retire_tg_rel(node, tg);
   gc2_worker_tg_retire_next_rel(
     node, (GC2WorkerTGRetire *)gc2_worker_tg_retired_acq(g));
   gc2_worker_tg_retired_rel(g, node);
@@ -450,12 +470,13 @@ static void gc2_worker_reclaim_retired_tgs(global_State *g)
     (GC2WorkerTGRetire *)gc2_worker_tg_retired_acq(g);
   while (node) {
     GC2WorkerTGRetire *next = gc2_worker_tg_retire_next_acq(node);
-    if (!gc2_worker_tg_registered(g, node->tg)) {
+    TGState *tg = gc2_worker_tg_retire_tg_acq(node);
+    if (!gc2_worker_tg_registered(g, tg)) {
       if (prev)
 	gc2_worker_tg_retire_next_rel(prev, next);
       else
 	gc2_worker_tg_retired_rel(g, next);
-      gc2_worker_free_tg(g, node->tg);
+      gc2_worker_free_tg(g, tg);
       lj_mem_freet(g, node);
       node = next;
       continue;
@@ -1220,7 +1241,7 @@ static GC2FinalizerNode *gc2_finalizer_node_new(global_State *g, GCobj *o)
     abort();
   }
   gc2_finalizer_node_next_rel(node, NULL);
-  node->obj = o;
+  gc2_finalizer_node_obj_rel(node, o);
   return node;
 }
 
@@ -1334,7 +1355,7 @@ GCobj *lj_gc2_finalizer_dequeue_owned(global_State *g)
       return NULL;
   }
   node = gc2_finalizer_node_next_acq(tail);
-  o = node ? node->obj : NULL;
+  o = node ? gc2_finalizer_node_obj_acq(node) : NULL;
   lj_assertG(o != NULL, "broken gc2 finalizer queue");
   if (!o)
     return NULL;
@@ -1963,8 +1984,11 @@ void lj_gc2_finalizer_mark_queued(global_State *g, GC2FinalizerMarkFunc mark)
   node = tail;
   do {
     node = gc2_finalizer_node_next_acq(node);
-    if (node->obj)
-      mark(g, node->obj);
+    {
+      GCobj *o = gc2_finalizer_node_obj_acq(node);
+      if (o)
+	mark(g, o);
+    }
   } while (node != tail);
 }
 

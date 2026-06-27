@@ -9,6 +9,22 @@ if hits=$(grep -nE -- '(^|[^[:alnum:]_])(node|tail|fresh)[[:space:]]*->[[:space:
   printf '%s\n' 'raw GC2 SSB next-link access is forbidden; use lj_gc2_ssb_next_* helpers' >&2
   exit 1
 fi
+for helper in gc2_worker_tg_retire_tg_acq \
+  gc2_worker_tg_retire_tg_rel \
+  gc2_finalizer_node_obj_acq \
+  gc2_finalizer_node_obj_rel; do
+  if ! grep -qE "^[[:space:]]*static .*[*[:space:]]${helper}[[:space:]]*[(]" \
+      "$ROOT/src/lj_gc2.c"; then
+    printf '%s\n' "${helper} helper is required for GC2 scheduler node payloads" >&2
+    exit 1
+  fi
+done
+if hits=$(grep -nE -- '(^|[^[:alnum:]_])(node|wr)[[:space:]]*->[[:space:]]*(obj|tg)' \
+    "$ROOT/src/lj_gc2.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw GC2 scheduler node payload access is forbidden; use GC2 scheduler payload helpers' >&2
+  exit 1
+fi
 if hits=$(grep -nE -- 'ssb_node\[[^]]+\][.]next' \
     "$ROOT/src/lj_tg.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
