@@ -30,6 +30,35 @@ if hits=$(awk '
   exit 1
 fi
 for required in \
+  'static int io_had_stopreq(lua_State *L)' \
+  'static uint32_t io_poll_pending_stopreq(lua_State *L, uint32_t actions)' \
+  'static void io_checkstop_fresh(lua_State *L, uint32_t actions, int had_stopreq)' \
+  'io_checkstop_fresh(L, actions, had_stopreq)'
+do
+  if ! grep -qF "$required" "$ROOT/src/lib_io.c"; then
+    printf '%s\n' "io native fresh STOPREQ guard is missing: $required" >&2
+    exit 1
+  fi
+done
+if hits=$(awk '
+  /^static void io_checkstop_fresh\(lua_State \*L, uint32_t actions, int had_stopreq\)/ {
+    in_fresh = 1
+  }
+  /lj_safepoint_checkstop\(L, actions\);/ && !in_fresh {
+    print FILENAME ":" FNR ":" $0
+  }
+  /lj_safepoint_checkstop\(L, lj_native_leave\(L\)\);/ {
+    print FILENAME ":" FNR ":" $0
+  }
+  in_fresh && /^}/ {
+    in_fresh = 0
+  }
+' "$ROOT/src/lib_io.c"); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'io native action checks must use fresh STOPREQ semantics' >&2
+  exit 1
+fi
+for required in \
   'static void package_checkstop_fresh(lua_State *L, uint32_t actions,' \
   'package_fresh_stopreq(L, actions, had_stopreq)' \
   'package_checkstop_fresh(L, actions, had_stopreq)'
