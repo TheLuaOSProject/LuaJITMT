@@ -17,11 +17,39 @@
 #include "lj_ccallback.h"
 #include "lj_buf.h"
 #include "lj_safepoint.h"
+#include "lj_tg.h"
 #include "lj_thr.h"
 
 static void ctype_fin_claim_wait_no_l(void)
 {
   (void)lj_thr_sleep_ns(NULL, 1000000);
+}
+
+static int ctype_had_stopreq(lua_State *L)
+{
+  TGState *tg;
+  if (!L)
+    return 0;
+  tg = L2TG(L);
+  return tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ);
+}
+
+static int ctype_fresh_stopreq(lua_State *L, uint32_t actions,
+			       int had_stopreq)
+{
+  TGState *tg;
+  if (!L)
+    return 0;
+  tg = L2TG(L);
+  return (actions & LJ_GC2_HS_STOPREQ) ||
+    (!had_stopreq && tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ));
+}
+
+static void ctype_checkstop_fresh(lua_State *L, uint32_t actions,
+				  int had_stopreq)
+{
+  if (ctype_fresh_stopreq(L, actions, had_stopreq))
+    lj_safepoint_checkstop(L, actions);
 }
 
 /* -- C type definitions -------------------------------------------------- */
@@ -173,13 +201,18 @@ void lj_ctype_parse_lock(CTState *cts, lua_State *L)
 #if defined(__linux__)
     {
       uint32_t actions;
+      int had_stopreq = ctype_had_stopreq(L);
       lj_native_enter(L2TG(L));
       (void)ctype_parse_token_wait(cts, seq, 1000000);
       actions = lj_native_leave(L);
-      lj_safepoint_checkstop(L, actions);  /* 11.2: cdef may park. */
+      ctype_checkstop_fresh(L, actions, had_stopreq);  /* 11.2: cdef may park. */
     }
 #else
-    lj_safepoint_checkstop(L, lj_thr_sleep_ns(L, 1000000));
+    {
+      int had_stopreq = ctype_had_stopreq(L);
+      uint32_t actions = lj_thr_sleep_ns(L, 1000000);
+      ctype_checkstop_fresh(L, actions, had_stopreq);
+    }
 #endif
   }
 }

@@ -12,6 +12,12 @@ FFI parse token helper surface
   spinning on `la_cpu_pause()`. The token guard also rejects raw pause waits in
   `src/lj_ctype.c` / `src/lib_ffi.c`, giving the FFI ctype/parser surface the
   same no-busy-spin invariant as the Linux futex path.
+- Follow-up native STOPREQ cleanup: contended `ffi.cdef()` parser-token waits
+  now use fresh STOPREQ semantics. A pre-existing sticky `TGF_STOPREQ` no
+  longer aborts an otherwise successful cdef wait, while a STOPREQ flag that
+  appears during the native wait still interrupts before the parser lock is
+  acquired. `tests/t-ffi-cdef-token-stopreq.c` covers sticky-only success,
+  fresh STOPREQ failure, and post-interruption recovery.
 
 Verification:
 

@@ -216,7 +216,29 @@ fi
     name = "m7_ffi_cdef_token",
     description = "parser-driven FFI CTState mutation behavior",
     run = function(t)
+      t:run([==[
+for required in \
+  'static void ctype_checkstop_fresh(lua_State *L, uint32_t actions,' \
+  'ctype_checkstop_fresh(L, actions, had_stopreq)'
+do
+  if ! grep -qF "$required" src/lj_ctype.c; then
+    printf '%s\n' "ctype parser-token fresh STOPREQ guard is missing: $required" >&2
+    exit 1
+  fi
+done
+if hits=$(awk '
+  /^void lj_ctype_parse_lock\(CTState \*cts, lua_State \*L\)/ { in_lock = 1 }
+  /^void lj_ctype_parse_unlock\(CTState \*cts\)/ { in_lock = 0 }
+  in_lock && /lj_safepoint_checkstop\(L,/ { print FNR ":" $0 }
+' src/lj_ctype.c); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'FFI ctype parser-token waits must use fresh STOPREQ semantics' >&2
+  exit 1
+fi
+]==], { cwd = t.root, quiet = true })
       clean_build(t)
+      build_and_run_c(t, t:tmp("lj_t-ffi-cdef-token-stopreq"),
+                      "t-ffi-cdef-token-stopreq.c", { timeout = "20s" })
       run_luajit_script(t, "t-ffi-cdef-token.lua", {
         getenv("LJ_M7_FFI_CDEF_THREADS", "6"),
         getenv("LJ_M7_FFI_CDEF_ITERS", "120")
