@@ -375,6 +375,30 @@ static void test_debug_debug_stopreq(lua_State *L)
   assert_not_native_c(L);
 }
 
+static void test_debug_debug_sticky_ok(lua_State *L)
+{
+  int pipefd[2];
+  int saved_stdin;
+  int status;
+  assert(pipe(pipefd) == 0);
+  saved_stdin = dup(STDIN_FILENO);
+  assert(saved_stdin != -1);
+  assert(write(pipefd[1], "cont\n", 5) == 5);
+  close(pipefd[1]);
+  assert(dup2(pipefd[0], STDIN_FILENO) != -1);
+  status = luaL_dostring(L,
+    "mark_sticky_stopreq()\n"
+    "local ok, err = pcall(function() return debug.debug() end)\n"
+    "clear_stopreq()\n"
+    "assert_no_stopreq()\n"
+    "assert(ok, tostring(err))\n");
+  assert(dup2(saved_stdin, STDIN_FILENO) != -1);
+  close(saved_stdin);
+  close(pipefd[0]);
+  assert(status == LUA_OK);
+  assert_not_native_c(L);
+}
+
 static int assert_not_native_c(lua_State *L)
 {
   global_State *g = G(L);
@@ -958,6 +982,7 @@ int main(void)
 
   test_print_stopreq(L);
   test_debug_debug_stopreq(L);
+  test_debug_debug_sticky_ok(L);
 
   assert(luaL_dostring(L,
     "local th = require('threading')\n"

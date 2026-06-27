@@ -13,3 +13,13 @@
   - direct `tests/stock/test/misc/debug_gc.lua`
   - direct `tests/stock/test/lang/meta/debuginfo.lua`
   - `tools/ci/run_stock_tests.sh ./src/luajit --quiet lang/meta/debuginfo.lua`
+
+2026-06-27 follow-up:
+
+- Made the `debug.debug()` prompt/stdin native checks use fresh STOPREQ semantics.
+  A pre-existing sticky shutdown flag no longer interrupts a successful
+  debugger continuation; a STOPREQ published while `fputs`/`fgets` is in native
+  state is still delivered.
+- Added a sticky `debug.debug()` regression to `t-safepoint-handshake.c`.
+- Added an M3 CI source guard so future edits keep the debugger native I/O path
+  on the fresh STOPREQ helper.

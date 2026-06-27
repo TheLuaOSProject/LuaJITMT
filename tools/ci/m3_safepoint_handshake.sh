@@ -107,6 +107,31 @@ if hits=$(awk '
   printf '%s\n' 'print native writes must use fresh STOPREQ semantics' >&2
   exit 1
 fi
+for required in \
+  'static void debug_checkstop_fresh(lua_State *L, uint32_t actions,' \
+  'debug_fresh_stopreq(L, actions, had_stopreq)' \
+  'debug_checkstop_fresh(L, actions, had_stopreq)'
+do
+  if ! grep -qF "$required" "$ROOT/src/lib_debug.c"; then
+    printf '%s\n' "debug native fresh STOPREQ guard is missing: $required" >&2
+    exit 1
+  fi
+done
+if hits=$(awk '
+  /^static (void|char \*)debug_native_(fputs|fgets)\(/ {
+    in_debug_native = 1
+  }
+  in_debug_native && /lj_safepoint_checkstop\(L, lj_native_leave\(L\)\);/ {
+    print FILENAME ":" FNR ":" $0
+  }
+  in_debug_native && /^}/ {
+    in_debug_native = 0
+  }
+' "$ROOT/src/lib_debug.c"); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'debug native I/O must use fresh STOPREQ semantics' >&2
+  exit 1
+fi
 if hits=$(grep -nE -- '->[[:space:]]*next_tg|&[[:alnum:]_]+->[[:space:]]*next_tg|next_tg[[:space:]]*=' \
     "$ROOT/src/lj_gc.c" \
     "$ROOT/src/lj_gc2.c" \
