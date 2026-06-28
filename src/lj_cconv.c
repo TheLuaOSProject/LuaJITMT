@@ -642,27 +642,7 @@ void lj_cconv_ct_tv_l(lua_State *L, CTState *cts, CType *d,
   } else if (tvisstr(o)) {
     GCstr *str = strV(o);
     if (ctype_isenum(dinfo)) {  /* Match string against enum constant. */
-      int ok = lj_ctype_enumconst_snapshot(cts, d, str, &tmpenum, &sid);
-      if (ok < 0) {
-	CTSize ofs;
-	CType *cct;
-	lj_ctype_parse_lock(cts, L);
-	/* 11.2: enum string readers wait out parser rollback. */
-	cct = lj_ctype_getfield(cts, d, str, &ofs);
-	if (cct) {
-	  CTInfo cctinfo = ctype_info_acq(cct);
-	  if (ctype_isconstval(cctinfo)) {
-	    tmpenum = ctype_size_acq(cct);
-	    sid = ctype_cid(cctinfo);
-	    ok = 1;
-	  } else {
-	    ok = 0;
-	  }
-	} else {
-	  ok = 0;
-	}
-	lj_ctype_parse_unlock(cts);
-      }
+      int ok = lj_ctype_enumconst_wait(L, cts, did, str, &tmpenum, &sid);
       if (!ok)
 	goto err_conv;
       lj_assertCTS(dsize == 4, "only 32 bit enum supported");  /* NYI */

@@ -236,9 +236,16 @@ void lj_ctype_parse_unlock(CTState *cts)
 #endif
 }
 
+static LJ_AINLINE int ctype_snapshot_done(CTState *cts, uint32_t seq0,
+					  int ok)
+{
+  uint32_t seq1 = ctype_parse_token_acq(cts);
+  return (seq0 == seq1 && !(seq1 & 1u)) ? ok : -1;
+}
+
 int lj_ctype_snapshot(CTState *cts, CTypeID id, CType *out)
 {
-  uint32_t seq0, seq1;
+  uint32_t seq0;
   CTypeTab *tabh;
   CType *ct;
   GCobj *name;
@@ -249,7 +256,7 @@ int lj_ctype_snapshot(CTState *cts, CTypeID id, CType *out)
   if (seq0 & 1u)
     return -1;  /* Active parser rollback window: use the locked reader. */
   if (id >= ctype_top_acq(cts))
-    return 0;
+    return ctype_snapshot_done(cts, seq0, 0);
   tabh = ctype_tabh_acq(cts);
   if ((MSize)id >= ctype_tab_sizetab_acq(tabh))
     return -1;  /* Table/top snapshot raced a grow; retry under the lock. */
@@ -260,10 +267,8 @@ int lj_ctype_snapshot(CTState *cts, CTypeID id, CType *out)
   out->next = (CTypeID1)ctype_next_acq(ct);
   name = ctype_nameobj_acq(ct);
   setgcrefp(out->name, name);
-  seq1 = ctype_parse_token_acq(cts);
-  if (seq0 != seq1 || (seq1 & 1u))
-    return -1;  /* Parser overlapped the copy; retry under the lock. */
-  return !ctype_isabandoned(ctype_info_acq(out));
+  return ctype_snapshot_done(cts, seq0,
+			     !ctype_isabandoned(ctype_info_acq(out)));
 }
 
 static void ctype_storestr_str(lua_State *L, GCtab *tab, GCstr *key,
@@ -1137,10 +1142,10 @@ int lj_ctype_ptrstruct_snapshot(CTState *cts, CTypeID id, CTypeID *cidp)
   if (id == 0 || id >= top || (MSize)id >= ctype_tab_sizetab_acq(tabh))
     return -1;
   if (!ctype_snapshot_copy(tabh, top, id, &ct))
-    return 0;
+    return ctype_snapshot_done(cts, seq0, 0);
   info = ctype_info_acq(&ct);
   if (!ctype_isptr(info))
-    return 0;
+    return ctype_snapshot_done(cts, seq0, 0);
   id = ctype_cid(info);
   for (;;) {
     if (id == 0 || id >= top || (MSize)id >= ctype_tab_sizetab_acq(tabh))
@@ -1148,7 +1153,7 @@ int lj_ctype_ptrstruct_snapshot(CTState *cts, CTypeID id, CTypeID *cidp)
     if (budget-- == 0)
       return -1;
     if (!ctype_snapshot_copy(tabh, top, id, &ct))
-      return 0;
+      return ctype_snapshot_done(cts, seq0, 0);
     info = ctype_info_acq(&ct);
     if (!ctype_isattrib(info))
       break;
@@ -1188,7 +1193,7 @@ int lj_ctype_info_snapshot(CTState *cts, CTypeID id, CTInfo *infop,
       if (budget-- == 0)
 	return -1;
       if (!ctype_snapshot_copy(tabh, top, rid, &ct))
-	return 0;
+	return ctype_snapshot_done(cts, seq0, 0);
       info = ctype_info_acq(&ct);
       if (!ctype_isattrib(info)) {
 	if (ridp)
@@ -1206,7 +1211,7 @@ int lj_ctype_info_snapshot(CTState *cts, CTypeID id, CTInfo *infop,
     if (budget-- == 0)
       return -1;
     if (!ctype_snapshot_copy(tabh, top, id, &ct))
-      return 0;
+      return ctype_snapshot_done(cts, seq0, 0);
     info = ctype_info_acq(&ct);
     size = ctype_size_acq(&ct);
     if (ctype_isenum(info)) {
@@ -1255,10 +1260,10 @@ int lj_ctype_size_snapshot(CTState *cts, CTypeID id, CTSize *szp)
   if (seq0 & 1u)
     return -1;
   if (id == 0)
-    return 0;
+    return ctype_snapshot_done(cts, seq0, 0);
   top = ctype_top_acq(cts);
   if (id >= top)
-    return 0;
+    return ctype_snapshot_done(cts, seq0, 0);
   tabh = ctype_tabh_acq(cts);
   if ((MSize)id >= ctype_tab_sizetab_acq(tabh))
     return -1;
@@ -1275,7 +1280,7 @@ int lj_ctype_size_snapshot(CTState *cts, CTypeID id, CTSize *szp)
     info = ctype_info_acq(ct);
     size = ctype_size_acq(ct);
     if (ctype_isabandoned(info))
-      return 0;
+      return ctype_snapshot_done(cts, seq0, 0);
     if (!ctype_isattrib(info)) {
       uint32_t seq1;
       *szp = ctype_hassize(info) ? size : CTSIZE_INVALID;
@@ -1297,7 +1302,7 @@ int lj_ctype_enumconst_snapshot(CTState *cts, const CType *root,
   if (seq0 & 1u)
     return -1;
   if (!ctype_isenum(ctype_info_acq(root)))
-    return 0;
+    return ctype_snapshot_done(cts, seq0, 0);
   id = ctype_sib_acq(root);
   top = ctype_top_acq(cts);
   tabh = ctype_tabh_acq(cts);
@@ -1316,7 +1321,7 @@ int lj_ctype_enumconst_snapshot(CTState *cts, const CType *root,
     size = ctype_size_acq(ct);
     gco = ctype_nameobj_acq(ct);
     if (ctype_isabandoned(info))
-      return 0;
+      return ctype_snapshot_done(cts, seq0, 0);
     if (gco == obj2gco(name) && ctype_isconstval(info)) {
       uint32_t seq1;
       *valp = size;
@@ -1327,8 +1332,62 @@ int lj_ctype_enumconst_snapshot(CTState *cts, const CType *root,
     id = ctype_sib_acq(ct);
   }
   {
-    uint32_t seq1 = ctype_parse_token_acq(cts);
-    return (seq0 == seq1 && !(seq1 & 1u)) ? 0 : -1;
+    return ctype_snapshot_done(cts, seq0, 0);
+  }
+}
+
+static int ctype_enumconst_snapshot_id(CTState *cts, CTypeID rootid,
+				       GCstr *name, CTSize *valp,
+				       CTypeID *cidp)
+{
+  uint32_t seq0 = ctype_parse_token_acq(cts);
+  CTypeTab *tabh;
+  CTypeID top, id;
+  CType root;
+  MSize budget;
+  if (seq0 & 1u)
+    return -1;
+  top = ctype_top_acq(cts);
+  tabh = ctype_tabh_acq(cts);
+  if (!ctype_snapshot_copy(tabh, top, rootid, &root))
+    return ctype_snapshot_done(cts, seq0, 0);
+  if (!ctype_isenum(ctype_info_acq(&root)))
+    return ctype_snapshot_done(cts, seq0, 0);
+  id = ctype_sib_acq(&root);
+  budget = top ? (MSize)top * 2u : 1u;
+  while (id) {
+    CType *ct;
+    CTInfo info;
+    CTSize size;
+    GCobj *gco;
+    if (id >= top || (MSize)id >= ctype_tab_sizetab_acq(tabh))
+      return -1;
+    if (budget-- == 0)
+      return -1;
+    ct = ctype_tab_slot(tabh, id);
+    info = ctype_info_acq(ct);
+    size = ctype_size_acq(ct);
+    gco = ctype_nameobj_acq(ct);
+    if (ctype_isabandoned(info))
+      return ctype_snapshot_done(cts, seq0, 0);
+    if (gco == obj2gco(name) && ctype_isconstval(info)) {
+      *valp = size;
+      *cidp = ctype_cid(info);
+      return ctype_snapshot_done(cts, seq0, 1);
+    }
+    id = ctype_sib_acq(ct);
+  }
+  return ctype_snapshot_done(cts, seq0, 0);
+}
+
+int lj_ctype_enumconst_wait(lua_State *L, CTState *cts, CTypeID rootid,
+			    GCstr *name, CTSize *valp, CTypeID *cidp)
+{
+  for (;;) {
+    int ok = ctype_enumconst_snapshot_id(cts, rootid, name, valp, cidp);
+    if (ok >= 0)
+      return ok;
+    lj_ctype_parse_wait(cts, L, ctype_parse_token_acq(cts));
   }
 }
 

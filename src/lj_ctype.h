@@ -1150,6 +1150,9 @@ LJ_FUNC int lj_ctype_snapshot(CTState *cts, CTypeID id, CType *out);
 LJ_FUNC int lj_ctype_enumconst_snapshot(CTState *cts, const CType *ct,
 					GCstr *name, CTSize *valp,
 					CTypeID *cidp);
+LJ_FUNC int lj_ctype_enumconst_wait(lua_State *L, CTState *cts,
+				    CTypeID id, GCstr *name,
+				    CTSize *valp, CTypeID *cidp);
 LJ_FUNC void lj_ctype_parse_wait(CTState *cts, lua_State *L, uint32_t seq);
 LJ_FUNC void lj_ctype_parse_lock(CTState *cts, lua_State *L);
 LJ_FUNC void lj_ctype_parse_unlock(CTState *cts);

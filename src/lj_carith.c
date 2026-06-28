@@ -94,23 +94,9 @@ static int carith_checkarg(lua_State *L, CTState *cts, CDArith *ca)
       if (ctype_isenum(info)) {
 	CTSize val;
 	CTypeID ecid;
-	int snap = lj_ctype_enumconst_snapshot(cts, ct, strV(o), &val, &ecid);
-	if (snap < 0) {
-	  CTSize ofs;
-	  CType *cct;
-	  lj_ctype_parse_lock(cts, L);
-	  /* 11.2: enum string readers wait out parser rollback. */
-	  cct = lj_ctype_getfield(cts, ct, strV(o), &ofs);
-	  if (cct && ctype_isconstval(ctype_info_acq(cct))) {
-	    CTInfo cinfo = ctype_info_acq(cct);
-	    ecid = ctype_cid(cinfo);
-	    val = ctype_size_acq(cct);
-	    snap = 1;
-	  } else {
-	    snap = 0;
-	  }
-	  lj_ctype_parse_unlock(cts);
-	}
+	CTypeID enumid = cid;
+	int snap = lj_ctype_enumconst_wait(L, cts, enumid, strV(o),
+					   &val, &ecid);
 	if (snap > 0) {
 	  cid = ecid;
 	  ca->enumval[i] = val;
@@ -119,8 +105,8 @@ static int carith_checkarg(lua_State *L, CTState *cts, CDArith *ca)
 	  ca->p[i] = (uint8_t *)&ca->enumval[i];
 	  ok = 1;
 	} else {
-	  ca->ct[1-i] = ct;  /* Use enum to improve error message. */
-	  ca->id[1-i] = cid;
+	  ca->ct[1-i] = ctype_get(cts, enumid);  /* Improve error message. */
+	  ca->id[1-i] = enumid;
 	  ca->p[1-i] = NULL;
 	  break;
 	}

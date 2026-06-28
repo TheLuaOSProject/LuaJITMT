@@ -74,6 +74,29 @@ if hits=$(awk '
   exit 1
 fi
 if hits=$(awk '
+  /^int lj_ctype_enumconst_snapshot\(/ { in_fn = 1 }
+  /^static int ctype_enumconst_snapshot_id\(/ { in_fn = 0 }
+  in_fn && /return[[:space:]]+0[[:space:]]*;/ { print FNR ":" $0 }
+' "$ROOT/src/lj_ctype.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'enum constant snapshots must validate the parser sequence before returning a miss' >&2
+  exit 1
+fi
+if hits=$(grep -nE -- 'enum string readers wait out parser rollback|lj_ctype_getfield[[:space:]]*[(][[:space:]]*cts,[[:space:]]*(ct|d),' \
+    "$ROOT/src/lj_carith.c" \
+    "$ROOT/src/lj_cconv.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'enum string readers must use enumconst snapshot wait/retry instead of parser-lock fallback lookups' >&2
+  exit 1
+fi
+if hits=$(grep -nE -- 'lj_ctype_enumconst_wait[[:space:]]*[(][^)]*const[[:space:]]+CType[[:space:]]*[*]' \
+    "$ROOT/src/lj_ctype.c" \
+    "$ROOT/src/lj_ctype.h" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'enum constant wait helpers must take CTypeID and refetch after native waits' >&2
+  exit 1
+fi
+if hits=$(awk '
   /^static int ffi_typecmp_compatptr\(/ ||
   /^static int ffi_istype_snapshot\(/ { in_fn = 1 }
   /^static void ffi_istype_snapshot_wait\(/ ||
