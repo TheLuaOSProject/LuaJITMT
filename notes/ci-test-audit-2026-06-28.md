@@ -142,6 +142,9 @@
 - Migrated weak completion telemetry and tests to `weak_bridge_*`, including
   `collectgarbage("stats")`, benchmark stat output, M8 weak guards, and M3
   weak-helper visibility checks. No old developer-stat aliases are kept.
+- Removed two tombstone-only M3 CI guards for already-deleted weak/sweep phase
+  aliases and old paranoia diff aliases. Current transition/root-diff behavior
+  remains covered by the C fixtures and the active helper-shape guards.
 - Public or semantic compatibility helpers such as FFI pointer compatibility
   checks are not removal targets unless the language/API contract changes.
 - Anti-legacy guards that merely prevent reintroducing already-removed wrapper

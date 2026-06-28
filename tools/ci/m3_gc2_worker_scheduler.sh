@@ -341,13 +341,6 @@ if hits=$(grep -nE -- 'gc2_phase_acq[[:space:]]*[(][[:space:]]*g[[:space:]]*[)]'
   printf '%s\n' 'legacy GC must not read raw GC2 phase; use GC2-owned predicates' >&2
   exit 1
 fi
-if hits=$(grep -nE -- 'lj_gc2_legacy_(weak|sweep)_begin[[:space:]]*[(]|LJ_FUNC .*lj_gc2_legacy_(weak|sweep)_begin[[:space:]]*[(]' \
-    "$ROOT"/src/*.c "$ROOT"/tests/*.c "$ROOT/src/lj_gc2.h" || true); \
-    [ -n "$hits" ]; then
-  printf '%s\n' "$hits" >&2
-  printf '%s\n' 'obsolete GC2 legacy phase aliases are forbidden; use lj_gc2_mark_to_weak or lj_gc2_weak_to_sweep' >&2
-  exit 1
-fi
 if hits=$(grep -nE -- 'lj_gc2_sweep_owner_progress[[:space:]]*[(]|LJ_FUNC .*lj_gc2_sweep_owner_progress[[:space:]]*[(]' \
     "$ROOT"/src/*.c "$ROOT"/tests/*.c "$ROOT/src/lj_gc2.h" | \
     grep -v "$ROOT/src/lj_gc2.c:" || true); [ -n "$hits" ]; then

@@ -61,6 +61,9 @@ Overall correctness/stability progress: 70-80%.
 - Renamed GC2 weak completion telemetry and helper/test surfaces to
   `weak_bridge_*`, including the public developer stats keys and benchmark/stat
   smoke coverage. No old stat aliases are kept.
+- Removed tombstone-only M3 CI guards for old weak/sweep phase aliases and old
+  paranoia diff aliases; behavior fixtures and current helper guards now own
+  those contracts.
 
 ## Still remaining
 
