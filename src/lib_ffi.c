@@ -81,26 +81,6 @@ static CTypeID ffi_checkctype(lua_State *L, CTState *cts, TValue *param)
   }
 }
 
-static CTypeID ffi_checkctype_layout_lock(lua_State *L, CTState *cts,
-					  TValue *param)
-{
-  TValue *o = L->base;
-  int errcode = 0;
-  CTypeID id;
-  if (!(o < L->top)) {
-  err_argtype:
-    lj_err_argtype(L, 1, "C type");
-  }
-  if (!tvisstr(o)) goto err_argtype;
-  lj_ctype_parse_lock(cts, L);
-  id = ffi_parse_ctype_locked(L, cts, param, &errcode);
-  if (errcode) {
-    lj_ctype_parse_unlock(cts);
-    lj_err_throw(L, errcode);  /* Propagate errors. */
-  }
-  return id;  /* 11.2: layout reader waits out parser rollback. */
-}
-
 static CTypeID ffi_checkctype_noparse(lua_State *L, TValue *param, int *isstr)
 {
   TValue *o = L->base;
@@ -681,9 +661,11 @@ LJLIB_CF(ffi_new)	LJLIB_REC(.)
   GCcdata *cd;
   int isstr, neednelem = 0;
   id = ffi_checkctype_noparse(L, NULL, &isstr);
-  if (!isstr) {
+  if (isstr)
+    id = ffi_checkctype(L, cts, NULL);
+  {
     int ok = ffi_new_layout_snapshot(cts, id, 0, 0, &rid, &info, &sz,
-				     &neednelem);
+				    &neednelem);
     if (ok < 0)
       ok = ffi_new_layout_wait(L, cts, id, 0, 0, &rid, &info, &sz,
 			       &neednelem);
@@ -703,26 +685,6 @@ LJLIB_CF(ffi_new)	LJLIB_REC(.)
       goto got_layout;  /* Invalid/abandoned ID: report as invalid size. */
     }
   }
-  id = ffi_checkctype_layout_lock(L, cts, NULL);
-  rid = ctype_rawid(cts, id);
-  ct = ctype_get(cts, rid);
-  info = lj_ctype_info(cts, id, &sz);
-  if ((info & CTF_VLA)) {
-    CTSize nelem;
-    lj_ctype_parse_unlock(cts);
-    nelem = (CTSize)ffi_checkint(L, 2);
-    id = ffi_checkctype_layout_lock(L, cts, NULL);
-    rid = ctype_rawid(cts, id);
-    ct = ctype_get(cts, rid);
-    info = lj_ctype_info(cts, id, &sz);
-    ofs = 2;
-    sz = (info & CTF_VLA) ? lj_ctype_vlsize(cts, ct, nelem) : CTSIZE_INVALID;
-  }
-  if (sz == CTSIZE_INVALID) {
-    lj_ctype_parse_unlock(cts);
-    lj_err_arg(L, 1, LJ_ERR_FFI_INVSIZE);
-  }
-  lj_ctype_parse_unlock(cts);  /* 11.2: ffi.new waits out parser rollback. */
 got_layout:
   if (sz == CTSIZE_INVALID)
     lj_err_arg(L, 1, LJ_ERR_FFI_INVSIZE);
@@ -1092,12 +1054,10 @@ LJLIB_CF(ffi_istype)	LJLIB_REC(.)
       ffi_istype_snapshot_wait(L, cts, id1, id2, &b);
       goto done;
     }
-    id1 = ffi_checkctype_layout_lock(L, cts, NULL);
-    lj_ctype_parse_unlock(cts);
+    id1 = ffi_checkctype(L, cts, NULL);
     ffi_istype_snapshot_wait(L, cts, id1, id2, &b);
   } else if (isstr) {
-    id1 = ffi_checkctype_layout_lock(L, cts, NULL);
-    lj_ctype_parse_unlock(cts);
+    id1 = ffi_checkctype(L, cts, NULL);
   }
 done:
   setboolV(L->top-1, b);
@@ -1530,7 +1490,9 @@ LJLIB_CF(ffi_sizeof)	LJLIB_REC(ffi_xof FF_ffi_sizeof)
   } else {
     int isstr, neednelem = 0;
     id = ffi_checkctype_noparse(L, NULL, &isstr);
-    if (!isstr) {
+    if (isstr)
+      id = ffi_checkctype(L, cts, NULL);
+    {
       int ok = ffi_layout_sizeof_snapshot(cts, id, 0, 0, &sz, &neednelem);
       if (ok < 0)
 	ok = ffi_layout_sizeof_wait(L, cts, id, 0, 0, &sz, &neednelem);
@@ -1554,28 +1516,6 @@ LJLIB_CF(ffi_sizeof)	LJLIB_REC(ffi_xof FF_ffi_sizeof)
 	return 1;
       }
     }
-    id = ffi_checkctype_layout_lock(L, cts, NULL);
-    /* 11.2: keep layout reads atomic against failed parser rollback. */
-    CType *ct = lj_ctype_rawref(cts, id);
-    CTInfo info = ctype_info_acq(ct);
-    CTSize ctsz = ctype_size_acq(ct);
-    if (ctype_isvltype(info)) {
-      CTSize nelem;
-      lj_ctype_parse_unlock(cts);
-      nelem = (CTSize)ffi_checkint(L, 2);
-      id = ffi_checkctype_layout_lock(L, cts, NULL);
-      ct = lj_ctype_rawref(cts, id);
-      info = ctype_info_acq(ct);
-      sz = ctype_isvltype(info) ?
-	   lj_ctype_vlsize(cts, ct, nelem) : CTSIZE_INVALID;
-    } else {
-      sz = ctype_hassize(info) ? ctsz : CTSIZE_INVALID;
-    }
-    lj_ctype_parse_unlock(cts);
-    if (LJ_UNLIKELY(sz == CTSIZE_INVALID)) {
-      setnilV(L->top-1);
-      return 1;
-    }
   }
 got_size:
   setintV(L->top-1, (int32_t)sz);
@@ -1589,7 +1529,9 @@ LJLIB_CF(ffi_alignof)	LJLIB_REC(ffi_xof FF_ffi_alignof)
   CTSize align;
   int isstr;
   id = ffi_checkctype_noparse(L, NULL, &isstr);
-  if (!isstr) {
+  if (isstr)
+    id = ffi_checkctype(L, cts, NULL);
+  {
     int ok = ffi_layout_alignof_snapshot(cts, id, &align);
     if (ok < 0)
       ok = ffi_layout_alignof_wait(L, cts, id, &align);
@@ -1597,17 +1539,7 @@ LJLIB_CF(ffi_alignof)	LJLIB_REC(ffi_xof FF_ffi_alignof)
       setintV(L->top-1, (int32_t)align);
       return 1;
     }
-    if (ok == 0) {
-      setnilV(L->top-1);
-      return 1;
-    }
-  }
-  id = ffi_checkctype_layout_lock(L, cts, NULL);
-  {
-    CTSize sz = 0;
-    CTInfo info = lj_ctype_info_raw(cts, id, &sz);
-    lj_ctype_parse_unlock(cts);
-    setintV(L->top-1, 1 << ctype_align(info));
+    setnilV(L->top-1);
   }
   return 1;
 }
@@ -1620,10 +1552,8 @@ LJLIB_CF(ffi_offsetof)	LJLIB_REC(ffi_xof FF_ffi_offsetof)
   CTSize ofs;
   int isstr;
   id = ffi_checkctype_noparse(L, NULL, &isstr);
-  if (isstr) {
-    id = ffi_checkctype_layout_lock(L, cts, NULL);
-    lj_ctype_parse_unlock(cts);
-  }
+  if (isstr)
+    id = ffi_checkctype(L, cts, NULL);
   name = lj_lib_checkstr(L, 2);
   {
     CType snap;

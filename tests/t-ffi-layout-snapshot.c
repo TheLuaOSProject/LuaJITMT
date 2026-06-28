@@ -85,7 +85,7 @@ int main(void)
   lua_State *L = ljt_lua_newstate_openlibs();
   CTState *cts;
   TGState *tg;
-  uint32_t seq0, seq1, seq2, seq3, seq4, seq5;
+  uint32_t seq0, seq1, seq2, seq3, seq4, seq5, seq6, seq7, seq8, seq9;
 
   ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"
@@ -239,9 +239,36 @@ int main(void)
 
   ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"
-    "assert(ffi.sizeof('struct { int lock_path; }') == 4)\n");
+    "assert(ffi.alignof('struct { int a; double b; }') == 8)\n");
   seq5 = ljt_ctype_parse_seq(cts);
-  assert(seq5 != seq4);
+  assert(seq5 == seq4 + 2u);
+
+  ljt_lua_dostring(L,
+    "local ffi = require('ffi')\n"
+    "assert(ffi.sizeof('struct { int lock_path; }') == 4)\n");
+  seq6 = ljt_ctype_parse_seq(cts);
+  assert(seq6 == seq5 + 2u);
+
+  ljt_lua_dostring(L,
+    "local ffi = require('ffi')\n"
+    "assert(ffi.sizeof('int [?]', 7) == 28)\n");
+  seq7 = ljt_ctype_parse_seq(cts);
+  assert(seq7 == seq6 + 2u);
+
+  ljt_lua_dostring(L,
+    "local ffi = require('ffi')\n"
+    "local arr = ffi.new('int [?]', 7)\n"
+    "arr[6] = 91\n"
+    "assert(ffi.sizeof(arr) == 28 and arr[6] == 91)\n");
+  seq8 = ljt_ctype_parse_seq(cts);
+  assert(seq8 == seq7 + 2u);
+
+  ljt_lua_dostring(L,
+    "local ffi = require('ffi')\n"
+    "local v = ffi.cast(lj_m7_layout_int_ct, 23)\n"
+    "assert(ffi.istype('int', v))\n");
+  seq9 = ljt_ctype_parse_seq(cts);
+  assert(seq9 == seq8 + 2u);
 
   lua_close(L);
   printf("t-ffi-layout-snapshot OK: stable layout queries avoid cparser sequence\n");
