@@ -14,3 +14,10 @@ Please point your favorite browser to:
 
  doc/luajit.html
 
+
+LuaJIT-MT
+---------------------
+
+Adds lockless multithreading to LuaJIT.
+
+Disclaimer: AI agents (Claude Fable, GPT-5.5) were used extensively in the implementation. 
