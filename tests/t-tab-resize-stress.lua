@@ -650,6 +650,113 @@ local function exercise_concurrent_traversal_resize()
   harness.fullgc(2)
 end
 
+local function next_churn_writer(tbl, ready, start, id, n)
+  assert(ready:send(true, 10) == true)
+  local _, ok = start:recv(10)
+  assert(ok == true)
+  for i = 1, n do
+    local ak = i + id * 4096
+    local hk = "next-churn:" .. id .. ":" .. i
+    tbl[ak] = { owner = id, round = i }
+    tbl[hk] = i
+    if i > 8 and i % 3 == 0 then tbl[ak - 6] = nil end
+    if i > 16 and i % 5 == 0 then
+      tbl["next-churn:" .. id .. ":" .. (i - 9)] = nil
+    end
+    if i % 64 == 0 then collectgarbage("step") end
+  end
+  return true
+end
+
+local function next_churn_observer(tbl, ready, start, id, rounds)
+  local function check(k, v, label)
+    if k ~= nil then
+      assert_lua_value(k, label .. " key")
+      assert_lua_value(v, label .. " value")
+    end
+  end
+
+  assert(ready:send(true, 10) == true)
+  local _, ok = start:recv(10)
+  assert(ok == true)
+  for round = 1, rounds do
+    local k, v = next(tbl, nil)
+    check(k, v, "next churn")
+
+    local count = 0
+    for pk, pv in pairs(tbl) do
+      check(pk, pv, "pairs churn")
+      count = count + 1
+      if count >= 96 then break end
+    end
+
+    tbl["observer:" .. id .. ":" .. round] = round
+    if round > 12 and round % 4 == 0 then
+      tbl["observer:" .. id .. ":" .. (round - 8)] = nil
+    end
+    if round % 16 == 0 then
+      collectgarbage("step")
+      if id == 1 then th.sleep(0.001) end
+    end
+  end
+  return true
+end
+
+local function exercise_next_churn_resize()
+  local t = {}
+  local live_keys = {}
+  local live_vals = {}
+  local weak_keys = setmetatable({}, { __mode = "v" })
+  local weak_vals = setmetatable({}, { __mode = "v" })
+  local observers = 2
+  local nworkers = writers + observers
+  local ready, start = ready_start(nworkers)
+  local workers = {}
+  local n = math.min(key_objects, 96)
+
+  for i = 1, n do
+    local key = { kind = "next-churn-key", id = i }
+    local val = { kind = "next-churn-value", id = i }
+    t[key] = val
+    live_keys[i] = key
+    live_vals[i] = val
+    weak_keys[i] = key
+    weak_vals[i] = val
+  end
+  for i = 1, 64 do
+    t[i] = i
+    t["seed:" .. i] = i
+  end
+
+  for i = 1, writers do
+    workers[#workers + 1] =
+      th.spawn(next_churn_writer, t, ready, start, i, reps)
+  end
+  for i = 1, observers do
+    workers[#workers + 1] =
+      th.spawn(next_churn_observer, t, ready, start, i, traversal_rounds)
+  end
+  harness.wait_ready(ready, nworkers, 10, "next churn resize")
+  harness.release_start(start, nworkers, 10)
+  collect_while_working(128)
+  harness.join_each(workers, function(result, _, msg)
+    assert(result == true, tostring(msg or result))
+  end, 30)
+  harness.fullgc(3)
+
+  for i = 1, n do
+    local key = live_keys[i]
+    local val = live_vals[i]
+    assert(type(weak_keys[i]) == "table",
+	   "next churn resize lost rooted table key")
+    assert(type(weak_vals[i]) == "table",
+	   "next churn resize lost rooted table value")
+    assert(t[key] == val, "next churn resize changed rooted object slot")
+    assert_lua_value(key, "next churn resize")
+    assert_lua_value(val, "next churn resize")
+  end
+end
+
 local ran = 0
 ran = ran + run_case("weak", exercise_weak_clear_resize)
 ran = ran + run_case("gcmark", exercise_gc_mark_resize)
@@ -661,6 +768,7 @@ ran = ran + run_case("metatable", exercise_metatable_resize)
 ran = ran + run_case("jitstore", exercise_jit_store_resize)
 ran = ran + run_case("jitread", exercise_jit_read_resize)
 ran = ran + run_case("traversal", exercise_concurrent_traversal_resize)
+ran = ran + run_case("nextchurn", exercise_next_churn_resize)
 assert(ran > 0, "no table resize stress cases selected")
 
 print(("t-tab-resize-stress OK: %d writers, %d resize rounds"):format(
