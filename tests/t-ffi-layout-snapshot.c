@@ -90,7 +90,13 @@ static void assert_predefined_layout_avoids_wait(lua_State *L, CTState *cts)
     "assert(ffi.sizeof(lj_m7_layout_int_ct) == 4)\n"
     "assert(ffi.alignof(lj_m7_layout_int_ct) == 4)\n"
     "assert(tonumber(ffi.new(lj_m7_layout_int_ct, 33)) == 33)\n"
-    "assert(tonumber(ffi.cast(lj_m7_layout_int_ct, 23)) == 23)\n");
+    "assert(tonumber(ffi.cast(lj_m7_layout_int_ct, 23)) == 23)\n"
+    "assert(ffi.sizeof('int') == 4)\n"
+    "assert(ffi.alignof('double') == 8)\n"
+    "assert(tonumber(ffi.new('int', 33)) == 33)\n"
+    "assert(tonumber(ffi.cast('int', 23.75)) == 23)\n"
+    "assert(ffi.istype('int', ffi.cast('int', 4)))\n"
+    "assert(tostring(ffi.typeof('int')) == tostring(lj_m7_layout_int_ct))\n");
 
   ljt_ctype_release_parse_token(cts, release_seq);
   assert(ljt_ctype_parse_seq(cts) == seq0 + 2u);
@@ -304,14 +310,14 @@ int main(void)
     "local v = ffi.cast(lj_m7_layout_int_ct, 23)\n"
     "assert(ffi.istype('int', v))\n");
   seq9 = ljt_ctype_parse_seq(cts);
-  assert(seq9 == seq8 + 2u);
+  assert(seq9 == seq8);
 
   ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"
     "local v = ffi.cast('int', 23.75)\n"
     "assert(tonumber(v) == 23)\n");
   seq10 = ljt_ctype_parse_seq(cts);
-  assert(seq10 == seq9 + 2u);
+  assert(seq10 == seq9);
 
   lua_close(L);
   printf("t-ffi-layout-snapshot OK: stable layout queries avoid cparser sequence\n");

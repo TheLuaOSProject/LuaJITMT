@@ -56,6 +56,75 @@ static CTypeID ffi_parse_ctype_locked(lua_State *L, CTState *cts,
   return cp.val.id;
 }
 
+static int ffi_strlit(GCstr *s, const char *lit, MSize len)
+{
+  const char *p;
+  if (s->len != len)
+    return 0;
+  p = strdata(s);
+  while (len-- != 0)
+    if (*p++ != *lit++)
+      return 0;
+  return 1;
+}
+
+#define ffi_ctype_match(s, lit) \
+  ffi_strlit((s), "" lit, (MSize)(sizeof(lit)-1))
+
+static int ffi_predefined_ctype_string(GCstr *s, CTypeID *idp)
+{
+  if (ffi_ctype_match(s, "void")) { *idp = CTID_VOID; return 1; }
+  if (ffi_ctype_match(s, "bool")) { *idp = CTID_BOOL; return 1; }
+  if (ffi_ctype_match(s, "_Bool")) { *idp = CTID_BOOL; return 1; }
+  if (ffi_ctype_match(s, "char")) { *idp = CTID_INT8; return 1; }
+  if (ffi_ctype_match(s, "signed char")) { *idp = CTID_INT8; return 1; }
+  if (ffi_ctype_match(s, "unsigned char")) { *idp = CTID_UINT8; return 1; }
+  if (ffi_ctype_match(s, "short")) { *idp = CTID_INT16; return 1; }
+  if (ffi_ctype_match(s, "short int")) { *idp = CTID_INT16; return 1; }
+  if (ffi_ctype_match(s, "signed short")) { *idp = CTID_INT16; return 1; }
+  if (ffi_ctype_match(s, "signed short int")) { *idp = CTID_INT16; return 1; }
+  if (ffi_ctype_match(s, "unsigned short")) { *idp = CTID_UINT16; return 1; }
+  if (ffi_ctype_match(s, "unsigned short int")) {
+    *idp = CTID_UINT16;
+    return 1;
+  }
+  if (ffi_ctype_match(s, "int")) { *idp = CTID_INT32; return 1; }
+  if (ffi_ctype_match(s, "signed")) { *idp = CTID_INT32; return 1; }
+  if (ffi_ctype_match(s, "signed int")) { *idp = CTID_INT32; return 1; }
+  if (ffi_ctype_match(s, "unsigned")) { *idp = CTID_UINT32; return 1; }
+  if (ffi_ctype_match(s, "unsigned int")) { *idp = CTID_UINT32; return 1; }
+  if (sizeof(long) == 8 &&
+      (ffi_ctype_match(s, "long") || ffi_ctype_match(s, "long int") ||
+       ffi_ctype_match(s, "signed long") ||
+       ffi_ctype_match(s, "signed long int"))) {
+    *idp = CTID_INT64;
+    return 1;
+  }
+  if (sizeof(long) == 8 &&
+      (ffi_ctype_match(s, "unsigned long") ||
+       ffi_ctype_match(s, "unsigned long int"))) {
+    *idp = CTID_UINT64;
+    return 1;
+  }
+  if (ffi_ctype_match(s, "float")) { *idp = CTID_FLOAT; return 1; }
+  if (ffi_ctype_match(s, "double")) { *idp = CTID_DOUBLE; return 1; }
+  if (ffi_ctype_match(s, "int8_t")) { *idp = CTID_INT8; return 1; }
+  if (ffi_ctype_match(s, "uint8_t")) { *idp = CTID_UINT8; return 1; }
+  if (ffi_ctype_match(s, "int16_t")) { *idp = CTID_INT16; return 1; }
+  if (ffi_ctype_match(s, "uint16_t")) { *idp = CTID_UINT16; return 1; }
+  if (ffi_ctype_match(s, "int32_t")) { *idp = CTID_INT32; return 1; }
+  if (ffi_ctype_match(s, "uint32_t")) { *idp = CTID_UINT32; return 1; }
+  if (ffi_ctype_match(s, "int64_t")) { *idp = CTID_INT64; return 1; }
+  if (ffi_ctype_match(s, "uint64_t")) { *idp = CTID_UINT64; return 1; }
+  if (ffi_ctype_match(s, "ptrdiff_t")) { *idp = CTID_INT_PSZ; return 1; }
+  if (ffi_ctype_match(s, "size_t")) { *idp = CTID_UINT_PSZ; return 1; }
+  if (ffi_ctype_match(s, "ssize_t")) { *idp = CTID_INT_PSZ; return 1; }
+  if (ffi_ctype_match(s, "intptr_t")) { *idp = CTID_INT_PSZ; return 1; }
+  if (ffi_ctype_match(s, "uintptr_t")) { *idp = CTID_UINT_PSZ; return 1; }
+  if (ffi_ctype_match(s, "wchar_t")) { *idp = CTID_WCHAR; return 1; }
+  return 0;
+}
+
 /* Check first argument for a C type and returns its ID. */
 static CTypeID ffi_checkctype(lua_State *L, CTState *cts, TValue *param)
 {
@@ -65,8 +134,11 @@ static CTypeID ffi_checkctype(lua_State *L, CTState *cts, TValue *param)
     lj_err_argtype(L, 1, "C type");
   }
   if (tvisstr(o)) {  /* Parse an abstract C type declaration. */
+    GCstr *s = strV(o);
     int errcode;
     CTypeID id;
+    if ((!param || param >= L->top) && ffi_predefined_ctype_string(s, &id))
+      return id;  /* 11.2: immutable predefined ctype names need no parser. */
     lj_ctype_parse_lock(cts, L);
     id = ffi_parse_ctype_locked(L, cts, param, &errcode);
     lj_ctype_parse_unlock(cts);
