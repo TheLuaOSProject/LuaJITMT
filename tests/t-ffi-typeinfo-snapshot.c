@@ -50,8 +50,8 @@ static void *release_parse_token(void *arg)
   return NULL;
 }
 
-static void assert_typedef_name_waits_without_lock(lua_State *L, CTState *cts,
-						   TGState *tg)
+static void assert_direct_name_waits_without_lock(lua_State *L, CTState *cts,
+						  TGState *tg)
 {
   ParseReleaseCtx ctx;
   pthread_t thread;
@@ -68,7 +68,11 @@ static void assert_typedef_name_waits_without_lock(lua_State *L, CTState *cts,
     "local ffi = require('ffi')\n"
     "local ct = ffi.typeof('lj_m7_typeinfo_snapshot_t')\n"
     "assert(tonumber(ct) == lj_m7_typeinfo_snapshot_id)\n"
-    "assert(ffi.sizeof('lj_m7_typeinfo_snapshot_t') == 4)\n");
+    "assert(ffi.sizeof('lj_m7_typeinfo_snapshot_t') == 4)\n"
+    "local tag = ffi.typeof('struct lj_m7_typeinfo_snapshot_tag')\n"
+    "assert(tonumber(tag) == lj_m7_typeinfo_tag_id)\n"
+    "assert(ffi.sizeof('union lj_m7_typeinfo_snapshot_union') == 8)\n"
+    "assert(ffi.sizeof('enum lj_m7_typeinfo_snapshot_enum') == 4)\n");
   assert(pthread_join(thread, NULL) == 0);
   assert(ctx.saw_native);
   assert(ljt_ctype_parse_seq(cts) == ctx.release_seq);
@@ -83,9 +87,23 @@ int main(void)
 
   ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"
-    "ffi.cdef('typedef struct { int x; } lj_m7_typeinfo_snapshot_t;')\n"
+    "ffi.cdef[[\n"
+    "typedef struct { int x; } lj_m7_typeinfo_snapshot_t;\n"
+    "typedef struct lj_m7_typeinfo_snapshot_tag { int x; } "
+    "lj_m7_typeinfo_snapshot_tag_t;\n"
+    "typedef union lj_m7_typeinfo_snapshot_union { int x; double y; } "
+    "lj_m7_typeinfo_snapshot_union_t;\n"
+    "typedef enum lj_m7_typeinfo_snapshot_enum { "
+    "LJ_M7_TYPEINFO_SNAPSHOT_E = 7 } lj_m7_typeinfo_snapshot_enum_t;\n"
+    "]]\n"
     "lj_m7_typeinfo_snapshot_id = "
     "tonumber(ffi.typeof('lj_m7_typeinfo_snapshot_t'))\n"
+    "lj_m7_typeinfo_tag_id = "
+    "tonumber(ffi.typeof('struct lj_m7_typeinfo_snapshot_tag'))\n"
+    "lj_m7_typeinfo_union_id = "
+    "tonumber(ffi.typeof('union lj_m7_typeinfo_snapshot_union'))\n"
+    "lj_m7_typeinfo_enum_id = "
+    "tonumber(ffi.typeof('enum lj_m7_typeinfo_snapshot_enum'))\n"
     "lj_m7_typeinfo_int_id = tonumber(ffi.typeof('int'))\n"
     "assert(type(lj_m7_typeinfo_snapshot_id) == 'number')\n");
 
@@ -102,6 +120,16 @@ int main(void)
     "  assert(tonumber(ct) == lj_m7_typeinfo_snapshot_id)\n"
     "  assert(ffi.sizeof('lj_m7_typeinfo_snapshot_t') == 4)\n"
     "  assert(ffi.alignof('lj_m7_typeinfo_snapshot_t') == 4)\n"
+    "  local tag = ffi.typeof('struct lj_m7_typeinfo_snapshot_tag')\n"
+    "  assert(tonumber(tag) == lj_m7_typeinfo_tag_id)\n"
+    "  assert(ffi.sizeof('struct lj_m7_typeinfo_snapshot_tag') == 4)\n"
+    "  assert(ffi.alignof('struct lj_m7_typeinfo_snapshot_tag') == 4)\n"
+    "  local u = ffi.typeof('union lj_m7_typeinfo_snapshot_union')\n"
+    "  assert(tonumber(u) == lj_m7_typeinfo_union_id)\n"
+    "  assert(ffi.sizeof('union lj_m7_typeinfo_snapshot_union') == 8)\n"
+    "  local e = ffi.typeof('enum lj_m7_typeinfo_snapshot_enum')\n"
+    "  assert(tonumber(e) == lj_m7_typeinfo_enum_id)\n"
+    "  assert(ffi.sizeof('enum lj_m7_typeinfo_snapshot_enum') == 4)\n"
     "end\n"
     "for i = 1, 100 do\n"
     "  local ti = ffi.typeinfo(lj_m7_typeinfo_snapshot_id)\n"
@@ -112,7 +140,7 @@ int main(void)
   seq1 = ljt_ctype_parse_seq(cts);
   assert(seq1 == seq0);
 
-  assert_typedef_name_waits_without_lock(L, cts, tg);
+  assert_direct_name_waits_without_lock(L, cts, tg);
   seq1 = ljt_ctype_parse_seq(cts);
   assert(seq1 == seq0 + 2u);
 

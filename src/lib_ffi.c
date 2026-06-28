@@ -151,31 +151,86 @@ static int ffi_predefined_ctype_string(GCstr *s, CTypeID *idp)
   return 0;
 }
 
-static int ffi_simple_typedef_string(lua_State *L, CTState *cts, GCstr *s,
-				     CTypeID *idp)
+static int ffi_ident_string(const char *p, MSize len)
 {
-  const char *p = strdata(s);
-  MSize len = s->len, i;
-  CType ct;
-  CTypeID id;
-  CTInfo info;
-  int ok;
+  MSize i;
   if (len == 0 || lj_char_isdigit((uint8_t)p[0]))
     return 0;
   for (i = 0; i < len; i++)
     if (!lj_char_isident((uint8_t)p[i]))
       return 0;
-  ok = lj_ctype_getname_snapshot(cts, s, (1u << CT_TYPEDEF), &id, &ct, NULL);
-  if (ok < 0)
-    ok = lj_ctype_getname_wait(L, cts, s, (1u << CT_TYPEDEF), &id, &ct,
-			       NULL);
-  if (ok <= 0)
-    return 0;
-  info = ctype_info_acq(&ct);
-  if (!ctype_istypedef(info))
-    return 0;
-  *idp = ctype_cid(info);
   return 1;
+}
+
+static int ffi_lookup_named_ctype(lua_State *L, CTState *cts, GCstr *name,
+				  uint32_t tmask, CTypeID *idp, CType *out)
+{
+  int ok = lj_ctype_getname_snapshot(cts, name, tmask, idp, out, NULL);
+  if (ok < 0)
+    ok = lj_ctype_getname_wait(L, cts, name, tmask, idp, out, NULL);
+  return ok;
+}
+
+static int ffi_direct_ctype_string(lua_State *L, CTState *cts, GCstr *s,
+				   CTypeID *idp)
+{
+  const char *p = strdata(s);
+  MSize len = s->len;
+  CType ct;
+  CTypeID id;
+  CTInfo info;
+  while (len != 0 && ffi_cspace(*p)) { p++; len--; }
+  while (len != 0 && ffi_cspace(p[len-1])) len--;
+  if (ffi_ident_string(p, len)) {
+    GCstr *name = len == s->len ? s : lj_str_new(L, p, len);
+    int ok = ffi_lookup_named_ctype(L, cts, name, (1u << CT_TYPEDEF),
+				    &id, &ct);
+    if (ok > 0) {
+      info = ctype_info_acq(&ct);
+      if (ctype_istypedef(info)) {
+	*idp = ctype_cid(info);
+	return 1;
+      }
+    }
+  } else {
+    uint32_t tmask;
+    int wantunion = 0, wantenum = 0;
+    MSize kwlen;
+    if (len >= 6 && ffi_strlit(p, 6, "struct", 6)) {
+      kwlen = 6;
+      tmask = (1u << CT_STRUCT);
+    } else if (len >= 5 && ffi_strlit(p, 5, "union", 5)) {
+      kwlen = 5;
+      tmask = (1u << CT_STRUCT);
+      wantunion = 1;
+    } else if (len >= 4 && ffi_strlit(p, 4, "enum", 4)) {
+      kwlen = 4;
+      tmask = (1u << CT_ENUM);
+      wantenum = 1;
+    } else {
+      return 0;
+    }
+    if (len == kwlen || !ffi_cspace(p[kwlen]))
+      return 0;
+    p += kwlen + 1;
+    len -= kwlen + 1;
+    while (len != 0 && ffi_cspace(*p)) { p++; len--; }
+    if (!ffi_ident_string(p, len))
+      return 0;
+    {
+      GCstr *name = lj_str_new(L, p, len);
+      int ok = ffi_lookup_named_ctype(L, cts, name, tmask, &id, &ct);
+      if (ok > 0) {
+	info = ctype_info_acq(&ct);
+	if (wantenum ? ctype_isenum(info) :
+	    ctype_isstruct(info) && (((info & CTF_UNION) != 0) == wantunion)) {
+	  *idp = id;
+	  return 1;
+	}
+      }
+    }
+  }
+  return 0;
 }
 
 /* Check first argument for a C type and returns its ID. */
@@ -193,7 +248,7 @@ static CTypeID ffi_checkctype(lua_State *L, CTState *cts, TValue *param)
     if ((!param || param >= L->top) && ffi_predefined_ctype_string(s, &id))
       return id;  /* 11.2: immutable predefined ctype names need no parser. */
     if ((!param || param >= L->top) &&
-	ffi_simple_typedef_string(L, cts, s, &id))
+	ffi_direct_ctype_string(L, cts, s, &id))
       return id;
     lj_ctype_parse_lock(cts, L);
     id = ffi_parse_ctype_locked(L, cts, param, &errcode);
