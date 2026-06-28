@@ -11,11 +11,14 @@ spellings. The immutable predefined const bases `const void`, `void const`,
 those bases do not need a parser round trip.
 
 Predefined complex primitives use the same direct path for the parser's common
-spellings: `complex`, `complex double`, `double complex`, `complex float`,
-`float complex`, and the GNU `__complex`/`__complex__` keyword aliases. These
-return the existing immutable `CTID_COMPLEX_DOUBLE` or `CTID_COMPLEX_FLOAT`
-records, so direct qualifiers, pointer chains, and fixed-size arrays over those
-bases can reuse the same parser-free machinery.
+spellings: `complex`, `_Complex`, `complex double`, `double complex`,
+`complex float`, `float complex`, and the GNU `__complex`/`__complex__`
+keyword aliases. LuaJIT's parser also maps `long double complex` and matching
+`_Complex`/GNU keyword variants to the existing complex-double ctype, so those
+exact spellings return `CTID_COMPLEX_DOUBLE` directly too. All of these return
+the existing immutable `CTID_COMPLEX_DOUBLE` or `CTID_COMPLEX_FLOAT` records,
+so direct qualifiers, pointer chains, and fixed-size arrays over those bases
+can reuse the same parser-free machinery.
 
 Target primitive numeric spellings that the parser normally interns as plain
 ctype records also use the direct path: `long long`, signed/unsigned
