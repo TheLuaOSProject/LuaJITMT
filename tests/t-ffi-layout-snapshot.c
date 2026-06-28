@@ -96,7 +96,13 @@ static void assert_predefined_layout_avoids_wait(lua_State *L, CTState *cts)
     "assert(tonumber(ffi.new('int', 33)) == 33)\n"
     "assert(tonumber(ffi.cast('int', 23.75)) == 23)\n"
     "assert(ffi.istype('int', ffi.cast('int', 4)))\n"
-    "assert(tostring(ffi.typeof('int')) == tostring(lj_m7_layout_int_ct))\n");
+    "assert(tostring(ffi.typeof('int')) == tostring(lj_m7_layout_int_ct))\n"
+    "assert(ffi.sizeof('void *') == 8)\n"
+    "assert(ffi.alignof('const char *') == 8)\n"
+    "assert(ffi.sizeof('uint8_t *') == 8)\n"
+    "assert(ffi.istype('void *', ffi.cast('void *', 0)))\n"
+    "assert(ffi.istype('const char *', ffi.cast('const char *', 0)))\n"
+    "assert(ffi.typeof('uint8_t *'))\n");
 
   ljt_ctype_release_parse_token(cts, release_seq);
   assert(ljt_ctype_parse_seq(cts) == seq0 + 2u);

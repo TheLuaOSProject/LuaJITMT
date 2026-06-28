@@ -74,11 +74,26 @@ static int ffi_strlit(GCstr *s, const char *lit, MSize len)
 static int ffi_predefined_ctype_string(GCstr *s, CTypeID *idp)
 {
   if (ffi_ctype_match(s, "void")) { *idp = CTID_VOID; return 1; }
+  if (ffi_ctype_match(s, "void *")) { *idp = CTID_P_VOID; return 1; }
+  if (ffi_ctype_match(s, "void*")) { *idp = CTID_P_VOID; return 1; }
+  if (ffi_ctype_match(s, "const void *")) { *idp = CTID_P_CVOID; return 1; }
+  if (ffi_ctype_match(s, "const void*")) { *idp = CTID_P_CVOID; return 1; }
+  if (ffi_ctype_match(s, "void const *")) { *idp = CTID_P_CVOID; return 1; }
+  if (ffi_ctype_match(s, "void const*")) { *idp = CTID_P_CVOID; return 1; }
   if (ffi_ctype_match(s, "bool")) { *idp = CTID_BOOL; return 1; }
   if (ffi_ctype_match(s, "_Bool")) { *idp = CTID_BOOL; return 1; }
   if (ffi_ctype_match(s, "char")) { *idp = CTID_INT8; return 1; }
   if (ffi_ctype_match(s, "signed char")) { *idp = CTID_INT8; return 1; }
   if (ffi_ctype_match(s, "unsigned char")) { *idp = CTID_UINT8; return 1; }
+  if (ffi_ctype_match(s, "const char *")) { *idp = CTID_P_CCHAR; return 1; }
+  if (ffi_ctype_match(s, "const char*")) { *idp = CTID_P_CCHAR; return 1; }
+  if (ffi_ctype_match(s, "char const *")) { *idp = CTID_P_CCHAR; return 1; }
+  if (ffi_ctype_match(s, "char const*")) { *idp = CTID_P_CCHAR; return 1; }
+  if (ffi_ctype_match(s, "unsigned char *")) {
+    *idp = CTID_P_UINT8;
+    return 1;
+  }
+  if (ffi_ctype_match(s, "unsigned char*")) { *idp = CTID_P_UINT8; return 1; }
   if (ffi_ctype_match(s, "short")) { *idp = CTID_INT16; return 1; }
   if (ffi_ctype_match(s, "short int")) { *idp = CTID_INT16; return 1; }
   if (ffi_ctype_match(s, "signed short")) { *idp = CTID_INT16; return 1; }
@@ -110,6 +125,8 @@ static int ffi_predefined_ctype_string(GCstr *s, CTypeID *idp)
   if (ffi_ctype_match(s, "double")) { *idp = CTID_DOUBLE; return 1; }
   if (ffi_ctype_match(s, "int8_t")) { *idp = CTID_INT8; return 1; }
   if (ffi_ctype_match(s, "uint8_t")) { *idp = CTID_UINT8; return 1; }
+  if (ffi_ctype_match(s, "uint8_t *")) { *idp = CTID_P_UINT8; return 1; }
+  if (ffi_ctype_match(s, "uint8_t*")) { *idp = CTID_P_UINT8; return 1; }
   if (ffi_ctype_match(s, "int16_t")) { *idp = CTID_INT16; return 1; }
   if (ffi_ctype_match(s, "uint16_t")) { *idp = CTID_UINT16; return 1; }
   if (ffi_ctype_match(s, "int32_t")) { *idp = CTID_INT32; return 1; }
