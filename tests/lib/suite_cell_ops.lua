@@ -41,9 +41,6 @@ function M.run_source_guards(t)
     error("x64 closed-upvalue USTORE helper must not be gated to GC values", 2)
   end
 
-  local debugsrc = utils.read_source_file(t:path("src", "lj_debug.c"))
-  checks.assert_text_contains("lua_getlocal local-cell acquire guard", debugsrc,
-    "lj_tv_load_acq(L->top, o);", "local-cell acquire read")
 end
 
 function M.run_bytecode_guards(t, tmpname)
@@ -62,6 +59,7 @@ end
 
 function M.run_publication_behavior_guards(t)
   luajit(t, { "-e", probes.dumped_closure_behavior() })
+  luajit(t, { "-e", probes.debug_local_behavior() })
   luajit(t, { "-e", probes.owner_numeric({
     trace_assert = "expected traced CGET/CSET owner loop",
     second_run = true

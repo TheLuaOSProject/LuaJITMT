@@ -290,6 +290,10 @@ Lua test-suite migration notes:
 - Converted `m7_ffi_callback_install` and `m7_ffi_snap_restore_l` to
   behavior-only coverage through their Lua regressions, removing the last M7
   direct source checks and unused source assertion helpers.
+- Converted the local-cell `lua_getlocal()` source guard to behavior coverage:
+  a suspended coroutine now verifies `debug.getlocal()` and `debug.setlocal()`
+  dereference a captured mutable local cell and keep the closure-observed value
+  coherent.
 - Converted the M5 x64 cases, including `m5_x64_tset_nil_snapshot`, to rely on
   Lua smoke tests and C forward/snapshot fixtures instead of direct
   `vm_x64.dasc` source inspections.

@@ -65,6 +65,37 @@ assert(inner() == 1 and inner() == 2)
 ]=]
 end
 
+function M.debug_local_behavior()
+  return [=[
+local co = coroutine.create(function()
+  local x = { tag = "initial", seq = 1 }
+  local function get()
+    return x
+  end
+  x = { tag = "updated", seq = 2 }
+  coroutine.yield(get)
+  return get()
+end)
+
+local ok, get = coroutine.resume(co)
+assert(ok and type(get) == "function")
+
+local name, value = debug.getlocal(co, 1, 1)
+assert(name == "x")
+assert(type(value) == "table" and value.tag == "updated" and value.seq == 2)
+assert(get() == value)
+
+local replacement = { tag = "replacement", seq = 3 }
+assert(debug.setlocal(co, 1, 1, replacement) == "x")
+local name2, value2 = debug.getlocal(co, 1, 1)
+assert(name2 == "x" and value2 == replacement)
+assert(get() == replacement)
+
+local ok2, final = coroutine.resume(co)
+assert(ok2 and final == replacement)
+]=]
+end
+
 function M.owner_numeric(opts)
   opts = opts or {}
   local second = ""
