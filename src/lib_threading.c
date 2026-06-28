@@ -1154,9 +1154,9 @@ void lj_threading_detach(lua_State *L, int disown_callbacks)
   tg->thread_ud = NULL;
   L->tg_hint = NULL;
   lj_state_release(L, tid);
-  threading_gc_leave(g);
   lj_thr_set_tg(NULL);
   (void)lj_tg_reclaim_dead(g);
+  threading_gc_leave(g);
 }
 
 LUA_API void luaMT_detach(lua_State *L)
