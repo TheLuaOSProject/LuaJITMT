@@ -10,10 +10,11 @@ FFI cdata field snapshot slice
   ID-rooted wait/retry helpers for string-key struct fields, constructor
   constants, and pointer `->` auto-deref. It no longer takes the ctype parser
   token for this fallback path.
-- `lj_ctype_getfieldq_wait()`, `lj_ctype_ptrstruct_wait()`, and
-  `lj_ctype_info_wait()` park in native time while another parser owns the
-  token. They are rooted by `CTypeID`; callers refetch table `CType *` state
-  after a wait and only return copied field snapshots.
+- `lj_ctype_getfieldq_wait()` and `lj_ctype_info_wait()` park in native time
+  while another parser owns the token. They are rooted by `CTypeID`; callers
+  refetch table `CType *` state after a wait and only return copied field
+  snapshots. Pointer auto-deref uses the ID-rooted info wait path; the old
+  unused `lj_ctype_ptrstruct_wait()` entrypoint has been removed.
 - `recff_cdata_index()` uses the same field and pointer snapshots for recorder
   specialization, with busy paths still aborting rather than parking.
 - Coverage: `t-ffi-field-snapshot.c` now actively holds the parse token across

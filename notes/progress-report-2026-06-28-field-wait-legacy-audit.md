@@ -22,10 +22,11 @@ Overall correctness/stability progress: 70-80%.
 - Removed the parser-lock fallback from `lj_cdata_index_l()` string-key field
   lookup. Struct fields, constructor constants, and pointer auto-deref now use
   ID-rooted wait/retry helpers.
-- Added `lj_ctype_getfieldq_wait()`, `lj_ctype_ptrstruct_wait()`, and
-  `lj_ctype_info_wait()`. These helpers park in native time while the parser
-  token is busy and avoid retaining table-owned `CType *` pointers across the
-  wait.
+- Added `lj_ctype_getfieldq_wait()` and `lj_ctype_info_wait()`. These helpers
+  park in native time while the parser token is busy and avoid retaining
+  table-owned `CType *` pointers across the wait. The earlier
+  `lj_ctype_ptrstruct_wait()` helper was later removed when pointer auto-deref
+  moved to the ID-rooted info wait path.
 - Fixed field snapshot qualifier handling so failed/retried attempts do not
   publish partial qualifier accumulation.
 - Converted the cdata field source expectation into behavior coverage:

@@ -1232,17 +1232,6 @@ int lj_ctype_ptrstruct_snapshot(CTState *cts, CTypeID id, CTypeID *cidp)
   return 0;
 }
 
-int lj_ctype_ptrstruct_wait(lua_State *L, CTState *cts, CTypeID id,
-			    CTypeID *cidp)
-{
-  for (;;) {
-    int ok = lj_ctype_ptrstruct_snapshot(cts, id, cidp);
-    if (ok >= 0)
-      return ok;
-    lj_ctype_parse_wait(cts, L, ctype_parse_token_acq(cts));
-  }
-}
-
 static int ctype_info_predefined(CTState *cts, CTypeID id, CTInfo *infop,
 				 CTSize *szp, CTypeID *ridp, CType *rawp);
 

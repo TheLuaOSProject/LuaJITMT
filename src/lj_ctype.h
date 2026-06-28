@@ -1244,8 +1244,6 @@ LJ_FUNC int lj_ctype_getfieldq_wait(lua_State *L, CTState *cts,
 				    CType *out);
 LJ_FUNC int lj_ctype_ptrstruct_snapshot(CTState *cts, CTypeID id,
 					CTypeID *cidp);
-LJ_FUNC int lj_ctype_ptrstruct_wait(lua_State *L, CTState *cts, CTypeID id,
-				    CTypeID *cidp);
 LJ_FUNC CType *lj_ctype_rawref(CTState *cts, CTypeID id);
 LJ_FUNC CTSize lj_ctype_size(CTState *cts, CTypeID id);
 LJ_FUNC int lj_ctype_rawref_snapshot(CTState *cts, CTypeID id,
