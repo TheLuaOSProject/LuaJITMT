@@ -703,14 +703,16 @@ static void jit_profile_callback(lua_State *L2, lua_State *L, int samples,
   LJStateClaim claim;
   TValue key;
   cTValue *tv;
+  TValue cbtv;
   key.u64 = KEY_PROFILE_FUNC;
   tv = lj_tab_get(L, tabV(registry(L)), &key);
-  if (tvisfunc(tv)) {
+  lj_tv_load_acq(&cbtv, tv);
+  if (tvisfunc(&cbtv)) {
     char vmst = (char)vmstate;
     int status;
     if (!lj_state_tryclaim(L2, lj_thr_current_id(G(L)), &claim))
       return;  /* Drop samples while the hidden callback coroutine is busy. */
-    setfuncV(L2, L2->top++, funcV(tv));
+    setfuncV(L2, L2->top++, funcV(&cbtv));
     setthreadV(L2, L2->top++, L);
     setintV(L2->top++, samples);
     setstrV(L2, L2->top++, lj_str_new(L2, &vmst, 1));
