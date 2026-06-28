@@ -633,6 +633,7 @@ assert(uv==vals[64])
     name = "m6_jit_xbar_xpoll",
     description = "FFI XBAR aliasing respects XPOLL poll regions",
     run = function(t)
+      assert_poll_alias_source_guards(t)
       build_default(t)
       local copy_dump = t:tmp("lj-m6-xbar-copy-ir.dump")
       run_ir_dump_probe(t, copy_dump, [=[
