@@ -799,7 +799,7 @@ LJLIB_CF(threading_channel_peek)
   LJChan *ch = threading_tochan(L);
   int rc;
   setnilV(&out);
-  rc = lj_chan_peek(ch, &out);
+  rc = lj_chan_peek_gc(L, ch, &out);
   threading_push_recv(L, rc, &out);
   return 2;
 }

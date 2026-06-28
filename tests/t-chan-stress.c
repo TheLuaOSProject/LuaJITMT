@@ -35,6 +35,7 @@ typedef struct ProducerCtx {
 typedef struct RendezvousCtx {
   LJChan *ch;
   uint32_t sent;
+  int rc;
 } RendezvousCtx;
 
 static int tv_to_int(cTValue *tv)
@@ -80,8 +81,8 @@ static void *rendezvous_sender(void *arg)
   RendezvousCtx *ctx = (RendezvousCtx *)arg;
   TValue tv;
   setintV(&tv, 7);
-  assert(lj_chan_send(NULL, ctx->ch, &tv) == LJ_CHAN_OK);
-  la_store32_rel(&ctx->sent, 1);
+  ctx->rc = lj_chan_send(NULL, ctx->ch, &tv);
+  la_store32_rel(&ctx->sent, ctx->rc == LJ_CHAN_OK ? 1u : 2u);
   return NULL;
 }
 
@@ -151,6 +152,7 @@ static void test_rendezvous(void)
   assert(lj_chan_recv_timeout(NULL, ch, &out, 0) == LJ_CHAN_TIMEOUT);
   ctx.ch = ch;
   ctx.sent = 0;
+  ctx.rc = -1;
   assert(pthread_create(&sender, NULL, rendezvous_sender, &ctx) == 0);
   while (la_load64_acq(&ch->enq) == 0)
     la_cpu_pause();
@@ -158,9 +160,31 @@ static void test_rendezvous(void)
   assert(lj_chan_recv(NULL, ch, &out) == LJ_CHAN_OK);
   assert(tv_to_int(&out) == 7);
   assert(pthread_join(sender, NULL) == 0);
+  assert(ctx.rc == LJ_CHAN_OK);
   assert(la_load32_acq(&ctx.sent) == 1);
   lj_chan_close(ch);
   assert(lj_chan_recv(NULL, ch, &out) == LJ_CHAN_CLOSED);
+  free(ch);
+}
+
+static void test_rendezvous_close_send(void)
+{
+  LJChan *ch = (LJChan *)malloc(lj_chan_memsize(0));
+  RendezvousCtx ctx;
+  pthread_t sender;
+  assert(ch != NULL);
+  lj_chan_init(ch, 0);
+  ctx.ch = ch;
+  ctx.sent = 0;
+  ctx.rc = -1;
+  assert(pthread_create(&sender, NULL, rendezvous_sender, &ctx) == 0);
+  while (la_load64_acq(&ch->enq) == 0)
+    la_cpu_pause();
+  assert(la_load32_acq(&ctx.sent) == 0);
+  lj_chan_close(ch);
+  assert(pthread_join(sender, NULL) == 0);
+  assert(ctx.rc == LJ_CHAN_CLOSED);
+  assert(la_load32_acq(&ctx.sent) == 2);
   free(ch);
 }
 
@@ -202,6 +226,7 @@ int main(void)
   test_basic();
   test_capacity_one();
   test_rendezvous();
+  test_rendezvous_close_send();
   test_stress();
   printf("t-chan-stress OK: bounded MPMC channel substrate verified\n");
   return 0;

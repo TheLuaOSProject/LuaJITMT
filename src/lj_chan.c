@@ -226,17 +226,28 @@ static int chan_cancel_rendezvous_send(LJChan *ch, uint64_t pos)
   return 0;
 }
 
+static int chan_rendezvous_send_status(LJChan *ch, uint64_t pos)
+{
+  if (la_load64_acq(&ch->deq) > pos)
+    return LJ_CHAN_OK;
+  if (la_load32_acq(&ch->closed))
+    return chan_cancel_rendezvous_send(ch, pos) ? LJ_CHAN_CLOSED :
+						  LJ_CHAN_OK;
+  return LJ_CHAN_FULL;
+}
+
 static int chan_wait_rendezvous_send(lua_State *L, LJChan *ch, uint64_t pos,
 				     int64_t deadline)
 {
   for (;;) {
+    int rc = chan_rendezvous_send_status(ch, pos);
     int64_t waitns;
-    if (la_load64_acq(&ch->deq) > pos || la_load32_acq(&ch->closed))
-      return LJ_CHAN_OK;
+    if (rc != LJ_CHAN_FULL)
+      return rc;
     waitns = chan_remaining_ns(deadline);
     if (waitns == 0)
       return chan_cancel_rendezvous_send(ch, pos) ? LJ_CHAN_TIMEOUT :
-						    LJ_CHAN_OK;
+							    LJ_CHAN_OK;
     (void)chan_wait_timeout(L, ch, waitns);
   }
 }
@@ -296,10 +307,10 @@ int lj_chan_send(lua_State *L, LJChan *ch, cTValue *tv)
     int rc = chan_try_send_pos(ch, tv, &pos);
     if (rc == LJ_CHAN_OK) {
       if (ch->rendezvous) {
-	while (la_load64_acq(&ch->deq) <= pos && !la_load32_acq(&ch->closed))
+	while ((rc = chan_rendezvous_send_status(ch, pos)) == LJ_CHAN_FULL)
 	  chan_wait(L, ch);
       }
-      return LJ_CHAN_OK;
+      return rc;
     }
     if (rc == LJ_CHAN_CLOSED)
       return rc;
@@ -388,7 +399,7 @@ int lj_chan_recv_timeout_gc(lua_State *L, LJChan *ch, TValue *out, int64_t ns)
   }
 }
 
-int lj_chan_peek(LJChan *ch, TValue *out)
+int lj_chan_peek_gc(lua_State *L, LJChan *ch, TValue *out)
 {
   uint64_t pos;
   if (!ch || !out)
@@ -399,8 +410,19 @@ int lj_chan_peek(LJChan *ch, TValue *out)
     uint64_t seq = la_load64_acq(&slot->seq);
     int64_t dif = (int64_t)(seq - (pos + 1u));
     if (dif == 0) {
-      chan_loadtv_acq(out, slot);  /* 09 section 9.5: acquire seq publishes value. */
-      return LJ_CHAN_OK;
+      TValue snap;
+      uint64_t raw;
+      chan_loadtv_acq(&snap, slot);  /* 09 section 9.5: acquire seq publishes value. */
+      raw = tv_rawload(&snap);
+      if (L)
+	lj_gc_pubroot(L, &snap);
+      if (la_load64_acq(&ch->deq) == pos &&
+	  la_load64_acq(&slot->seq) == seq &&
+	  tv_rawload_acq(&slot->tv) == raw) {
+	tv_rawstore_rel(out, raw);
+	return LJ_CHAN_OK;
+      }
+      pos = la_load64_acq(&ch->deq);
     } else if (dif < 0) {
       if (la_load32_acq(&ch->closed) && la_load64_acq(&ch->enq) <= pos)
 	return LJ_CHAN_CLOSED;
