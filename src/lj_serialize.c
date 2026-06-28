@@ -254,7 +254,7 @@ static char *serialize_put(char *w, SBufExt *sbx, cTValue *o)
     /* Write metatable index. */
     {
       GCtab *dict_mt = tabref_acq(sbx->dict_mt);
-      GCtab *mt = tabref_acq(t->metatable);
+      GCtab *mt = lj_tab_metatable_acq(t);
       if (LJ_UNLIKELY(dict_mt) && mt) {
 	TValue mto;
 	Node *n;
@@ -492,7 +492,7 @@ static char *serialize_get(char *r, SBufExt *sbx, TValue *o)
       r = serialize_ru124(r, w, &nhash); if (LJ_UNLIKELY(!r)) goto eob;
     }
     t = lj_tab_new(sbufL(sbx), narray, hsize2hbits(nhash));
-    setgcrefmt(t->metatable, obj2gco(mt));
+    lj_tab_metatable_rel(t, mt);
     if (mt)
       lj_gc_pubtabobj(sbufL(sbx), t, mt);
     {

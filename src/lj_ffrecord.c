@@ -1316,10 +1316,10 @@ static void LJ_FASTCALL recff_debug_getmetatable(jit_State *J, RecordFFData *rd)
   TRef mtref;
   TRef tr = J->base[0];
   if (tref_istab(tr)) {
-    mt = tabref_acq(tabV(&rd->argv[0])->metatable);
+    mt = lj_tab_metatable_acq(tabV(&rd->argv[0]));
     mtref = emitir(IRT(IR_FLOAD, IRT_TAB), tr, IRFL_TAB_META);
   } else if (tref_isudata(tr)) {
-    mt = tabref_acq(udataV(&rd->argv[0])->metatable);
+    mt = lj_udata_metatable_acq(udataV(&rd->argv[0]));
     mtref = emitir(IRT(IR_FLOAD, IRT_TAB), tr, IRFL_UDATA_META);
   } else {
     mt = tabref_acq(basemt_obj(J2G(J), &rd->argv[0]));

@@ -152,7 +152,7 @@ LJLIB_ASM(setmetatable)		LJLIB_REC(.)
     lj_err_caller(L, LJ_ERR_PROTMT);
   if (mt)
     lj_tab_nomm_rel(mt, 0);  /* Do not trust stale metamethod miss caches. */
-  setgcrefmt(t->metatable, obj2gco(mt));
+  lj_tab_metatable_rel(t, mt);
   if (mt) { lj_gc_pubtabobj(L, t, mt); }
   settabV(L, L->base-1-LJ_FR2, t);
   return FFH_RES(1);
@@ -1036,7 +1036,7 @@ static void newproxy_weaktable(lua_State *L)
 {
   GCtab *t = lj_tab_new(L, 0, 1);
   settabV(L, L->top++, t);
-  setgcrefmt(t->metatable, obj2gco(t));
+  lj_tab_metatable_rel(t, t);
   base_storestr_str(L, t, lj_str_newlit(L, "__mode"), lj_str_newlit(L, "kv"));
   lj_tab_nomm_rel(t, (uint8_t)(~(1u<<MM_mode)));
   lj_gc_pubtab(L, t);

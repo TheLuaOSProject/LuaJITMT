@@ -638,7 +638,7 @@ static LJ_AINLINE void tab_init_empty(global_State *g, GCtab *t)
   lj_tab_nomm_rel(t, (uint8_t)~0);
   lj_tab_colo_rel(t, 0);
   lj_tab_array_set(t, NULL);
-  setgcrefnullrel(t->metatable);
+  lj_tab_metatable_rel(t, NULL);
   lj_tab_asize_rel(t, 0);
   lj_tab_acap_rel(t, 0);
   lj_tab_hmask_rel(t, 0);

@@ -1007,9 +1007,9 @@ LUA_API int lua_getmetatable(lua_State *L, int idx)
   cTValue *o = index2adr_read(L, idx, &snap);
   GCtab *mt = NULL;
   if (tvistab(o))
-    mt = tabref_acq(tabV(o)->metatable);
+    mt = lj_tab_metatable_acq(tabV(o));
   else if (tvisudata(o))
-    mt = tabref_acq(udataV(o)->metatable);
+    mt = lj_udata_metatable_acq(udataV(o));
   else
     mt = tabref_acq(basemt_obj(G(L), o));
   if (mt == NULL)
@@ -1131,7 +1131,7 @@ LUALIB_API void *luaL_testudata(lua_State *L, int idx, const char *tname)
     if (tv) {
       TValue mtv;
       lj_tv_load_acq(&mtv, tv);
-      if (tvistab(&mtv) && tabV(&mtv) == tabref_acq(ud->metatable))
+      if (tvistab(&mtv) && tabV(&mtv) == lj_udata_metatable_acq(ud))
 	return uddata(ud);
     }
   }
@@ -1266,18 +1266,18 @@ LUA_API int lua_setmetatable(lua_State *L, int idx)
   if (mt)
     lj_tab_nomm_rel(mt, 0);  /* Do not trust stale metamethod miss caches. */
   if (tvistab(o)) {
-    setgcrefmt(tabV(o)->metatable, obj2gco(mt));
+    lj_tab_metatable_rel(tabV(o), mt);
     if (mt)
       lj_gc_pubtabobj(L, tabV(o), mt);
   } else if (tvisudata(o)) {
     GCudata *ud = udataV(o);
-    GCtab *oldmt = tabref_acq(ud->metatable);
+    GCtab *oldmt = lj_udata_metatable_acq(ud);
     TValue oldv, newv;
     int oldfin = lj_meta_fasttv(g, oldmt, MM_gc, &oldv) != NULL;
     int newfin = lj_meta_fasttv(g, mt, MM_gc, &newv) != NULL;
     if (mt)
       lj_gc2_finreg_udata_register(L, g, obj2gco(ud));
-    setgcrefmt(ud->metatable, obj2gco(mt));
+    lj_udata_metatable_rel(ud, mt);
     if (mt)
       lj_gc_pubobjobj(L, ud, mt);
     if (newfin) {

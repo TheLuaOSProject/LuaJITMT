@@ -709,7 +709,7 @@ static CLibrary *clib_new(lua_State *L, GCtab *mt)
   CLibrary *cl = (CLibrary *)uddata(ud);
   cl->cache = t;
   cl->cache_head = NULL;
-  setgcrefmt(ud->metatable, obj2gco(mt));
+  lj_udata_metatable_rel(ud, mt);
   lj_gc_pubobjobj(L, ud, mt);
   lj_gc2_finreg_udata_register_mt(L, G(L), ud, mt);
   lj_udata_udtype_rel(ud, UDTYPE_FFI_CLIB);

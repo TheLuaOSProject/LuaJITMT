@@ -206,12 +206,12 @@ void lj_cdata_setfin(lua_State *L, GCcdata *cd, GCobj *obj, uint32_t it)
 	goto done;
       }
       t = lj_ctype_fin_head(cts);
-      if (!t || !gcref_acq(t->metatable))
+      if (!t || !lj_tab_metatable_acq(t))
 	goto done;
       cdata_fin_setclaim(&old);
       switch (lj_tab_try_newkey_anchor(L, t, &key, &old, &tv)) {
       case 1:
-	if (!gcref_acq(t->metatable)) {
+	if (!lj_tab_metatable_acq(t)) {
 	  lj_cdata_fin_storenil(L, tv);
 	  lj_obj_cleargcflags_atomic(obj2gco(cd), LJ_GC_CDATA_FIN);
 	  lj_gc2_finreg_cdata_set(g, obj2gco(cd), 0);
@@ -226,7 +226,7 @@ void lj_cdata_setfin(lua_State *L, GCcdata *cd, GCobj *obj, uint32_t it)
       }
       switch (lj_tab_try_newkey_chain(L, t, &key, &old, &tv)) {
       case 1:
-	if (!gcref_acq(t->metatable)) {
+	if (!lj_tab_metatable_acq(t)) {
 	  lj_cdata_fin_storenil(L, tv);
 	  lj_obj_cleargcflags_atomic(obj2gco(cd), LJ_GC_CDATA_FIN);
 	  lj_gc2_finreg_cdata_set(g, obj2gco(cd), 0);
@@ -241,7 +241,7 @@ void lj_cdata_setfin(lua_State *L, GCcdata *cd, GCobj *obj, uint32_t it)
       }
       switch (lj_ctype_fin_newgen(L, cts, &key, &old, &t, &tv)) {
       case 1:
-	if (!gcref_acq(t->metatable)) {
+	if (!lj_tab_metatable_acq(t)) {
 	  lj_cdata_fin_storenil(L, tv);
 	  lj_obj_cleargcflags_atomic(obj2gco(cd), LJ_GC_CDATA_FIN);
 	  lj_gc2_finreg_cdata_set(g, obj2gco(cd), 0);
@@ -256,7 +256,7 @@ void lj_cdata_setfin(lua_State *L, GCcdata *cd, GCobj *obj, uint32_t it)
       }
     }
     (void)lj_cdata_fin_claim_any(tv, &old);
-    if (!gcref_acq(t->metatable)) {
+    if (!lj_tab_metatable_acq(t)) {
       lj_cdata_fin_storenil(L, tv);
       lj_obj_cleargcflags_atomic(obj2gco(cd), LJ_GC_CDATA_FIN);
       lj_gc2_finreg_cdata_set(g, obj2gco(cd), 0);

@@ -1122,11 +1122,11 @@ int lj_record_mm_lookup(jit_State *J, RecordIndex *ix, MMS mm)
   GCtab *mt;
   TValue motv, motv2;
   if (tref_istab(ix->tab)) {
-    mt = tabref_acq(tabV(&ix->tabv)->metatable);
+    mt = lj_tab_metatable_acq(tabV(&ix->tabv));
     mix.tab = emitir(IRT(IR_FLOAD, IRT_TAB), ix->tab, IRFL_TAB_META);
   } else if (tref_isudata(ix->tab)) {
     int udtype = lj_udata_udtype_acq(udataV(&ix->tabv));
-    mt = tabref_acq(udataV(&ix->tabv)->metatable);
+    mt = lj_udata_metatable_acq(udataV(&ix->tabv));
     mix.tab = emitir(IRT(IR_FLOAD, IRT_TAB), ix->tab, IRFL_UDATA_META);
     /* The metatables of special userdata objects are treated as immutable. */
     if (udtype != UDTYPE_USERDATA) {
@@ -1277,11 +1277,11 @@ static void rec_mm_equal(jit_State *J, RecordIndex *ix, int op)
     copyTV(J->L, &mo1v, &ix->mobjv);
     /* Avoid the 2nd lookup and the objcmp if the metatables are equal. */
     bv = &ix->keyv;
-    if (tvistab(bv) && tabref_acq(tabV(bv)->metatable) == ix->mtv) {
+    if (tvistab(bv) && lj_tab_metatable_acq(tabV(bv)) == ix->mtv) {
       TRef mt2 = emitir(IRT(IR_FLOAD, IRT_TAB), ix->key, IRFL_TAB_META);
       emitir(IRTG(IR_EQ, IRT_TAB), mt2, ix->mt);
     } else if (tvisudata(bv) &&
-	       tabref_acq(udataV(bv)->metatable) == ix->mtv) {
+	       lj_udata_metatable_acq(udataV(bv)) == ix->mtv) {
       TRef mt2 = emitir(IRT(IR_FLOAD, IRT_TAB), ix->key, IRFL_UDATA_META);
       emitir(IRTG(IR_EQ, IRT_TAB), mt2, ix->mt);
     } else {  /* Lookup metamethod on 2nd operand and compare both. */
@@ -1319,11 +1319,11 @@ static void rec_mm_comp(jit_State *J, RecordIndex *ix, int op)
       copyTV(J->L, &mo1v, &ix->mobjv);
       /* Avoid the 2nd lookup and the objcmp if the metatables are equal. */
       bv = &ix->keyv;
-      if (tvistab(bv) && tabref_acq(tabV(bv)->metatable) == ix->mtv) {
+      if (tvistab(bv) && lj_tab_metatable_acq(tabV(bv)) == ix->mtv) {
 	TRef mt2 = emitir(IRT(IR_FLOAD, IRT_TAB), ix->key, IRFL_TAB_META);
 	emitir(IRTG(IR_EQ, IRT_TAB), mt2, ix->mt);
       } else if (tvisudata(bv) &&
-		 tabref_acq(udataV(bv)->metatable) == ix->mtv) {
+		 lj_udata_metatable_acq(udataV(bv)) == ix->mtv) {
 	TRef mt2 = emitir(IRT(IR_FLOAD, IRT_TAB), ix->key, IRFL_UDATA_META);
 	emitir(IRTG(IR_EQ, IRT_TAB), mt2, ix->mt);
       } else {  /* Lookup metamethod on 2nd operand and compare both. */
@@ -1909,7 +1909,7 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
     if (irtype_ispri(t)) res = TREF_PRI(t);  /* Canonicalize primitives. */
     return res;
   } else {  /* Indexed store. */
-    GCtab *mt = tabref_acq(tabV(&ix->tabv)->metatable);
+    GCtab *mt = lj_tab_metatable_acq(tabV(&ix->tabv));
     int keybarrier = tref_isgcv(ix->key) && !tref_isnil(ix->val);
 #if defined(__linux__) && LJ_TARGET_X64
     /* M6: numeric NEWREF/HSTORE uses the generic returned-slot helper. */

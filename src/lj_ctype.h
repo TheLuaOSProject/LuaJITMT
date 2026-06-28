@@ -259,17 +259,17 @@ static LJ_AINLINE void fin_gen_tab_rel(FinRegGen *gen, GCtab *tab)
 
 static LJ_AINLINE void fin_gen_tab_enable_rel(GCtab *tab)
 {
-  setgcrefmt(tab->metatable, obj2gco(tab));
+  lj_tab_metatable_rel(tab, tab);
 }
 
 static LJ_AINLINE int fin_gen_tab_enabled_acq(const GCtab *tab)
 {
-  return gcref_acq(tab->metatable) != NULL;
+  return lj_tab_metatable_acq(tab) != NULL;
 }
 
 static LJ_AINLINE void fin_gen_tab_disable_rel(GCtab *tab)
 {
-  setgcrefnullrel(tab->metatable);
+  lj_tab_metatable_rel(tab, NULL);
 }
 
 static LJ_AINLINE FinRegGen *fin_gen_next_acq(const FinRegGen *gen)

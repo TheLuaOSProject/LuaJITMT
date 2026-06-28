@@ -538,7 +538,7 @@ static void gc_mark(global_State *g, GCobj *o)
   if (LJ_UNLIKELY(gct == ~LJ_TUDATA)) {
     GCudata *ud = gco2ud(o);
     uint8_t udtype = lj_udata_udtype_acq(ud);
-    GCtab *mt = tabref_acq(ud->metatable);
+    GCtab *mt = lj_udata_metatable_acq(ud);
     GCtab *env = tabref_acq(ud->env);
     gray2black(o);  /* Userdata are never gray. */
     if (mt) gc_markobj(g, mt);
@@ -825,7 +825,7 @@ static int gc_traverse_tab(global_State *g, GCtab *t)
   void *arraymem;
   TValue modev;
   cTValue *mode;
-  GCtab *mt = tabref_acq(t->metatable);
+  GCtab *mt = lj_tab_metatable_acq(t);
   arraymem = lj_tab_array_mem_acq(t);
   if (arraymem)
     lj_gc_arena_markmem(g, arraymem);

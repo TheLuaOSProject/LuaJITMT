@@ -2680,7 +2680,7 @@ LJLIB_CF(ffi_pin)
   CTState *cts = ctype_cts(L);
   GCtab *mt = ctype_pinmt_acq(cts);
   GCudata *ud = lj_udata_new(L, sizeof(TValue), mt);
-  setgcrefmt(ud->metatable, obj2gco(mt));
+  lj_udata_metatable_rel(ud, mt);
   lj_gc_pubobjobj(L, ud, mt);
   lj_gc2_finreg_udata_register_mt(L, G(L), ud, mt);
   copyTVrel(L, (TValue *)uddata(ud), o);

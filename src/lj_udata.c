@@ -21,7 +21,7 @@ GCudata *lj_udata_new(lua_State *L, MSize sz, GCtab *env)
   newwhite(g, ud);  /* Not finalized. */
   ud->gct = ~LJ_TUDATA;
   ud->len = sz;
-  setgcrefnullrel(ud->metatable);
+  lj_udata_metatable_rel(ud, NULL);
   setgcrefrel(ud->env, obj2gco(env));
   if (env)
     lj_gc_pubobjobj(L, ud, env);

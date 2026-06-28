@@ -235,7 +235,7 @@ static GCudata *threading_new_thread_ud(lua_State *L, GCtab *env)
   GCudata *ud = lj_udata_new(L, sizeof(LJThread), env);
   LJThread *th = (LJThread *)uddata(ud);
   memset(th, 0, sizeof(*th));
-  setgcrefmt(ud->metatable, obj2gco(env));
+  lj_udata_metatable_rel(ud, env);
   lj_gc_pubobjobj(L, ud, env);
   th->ud = ud;
   lj_gc2_finreg_udata_register_mt(L, g, ud, env);
@@ -1020,7 +1020,7 @@ LJLIB_CF(threading_mutex)
   GCtab *env = tabref_acq(curr_func(L)->c.env);
   GCudata *ud = lj_udata_new(L, sizeof(LJMutex), env);
   LJMutex *m = (LJMutex *)uddata(ud);
-  setgcrefmt(ud->metatable, obj2gco(env));
+  lj_udata_metatable_rel(ud, env);
   lj_gc_pubobjobj(L, ud, env);
   lj_gc2_finreg_udata_register_mt(L, G(L), ud, env);
   m->state = LJ_MUTEX_UNLOCKED;
@@ -1049,7 +1049,7 @@ LJLIB_CF(threading_channel)
     lj_err_arg(L, 1, LJ_ERR_NUMRNG);
   env = tabref_acq(curr_func(L)->c.env);
   ud = lj_udata_new(L, lj_chan_memsize(cap), env);
-  setgcrefmt(ud->metatable, obj2gco(env));
+  lj_udata_metatable_rel(ud, env);
   lj_gc_pubobjobj(L, ud, env);
   lj_gc2_finreg_udata_register_mt(L, G(L), ud, env);
   lj_chan_init((LJChan *)uddata(ud), cap);

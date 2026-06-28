@@ -292,7 +292,7 @@ static IOFileUD *io_file_new(lua_State *L)
   GCudata *ud = udataV(L->top-1);
   {
     GCtab *mt = tabref_acq(curr_func(L)->c.env);
-    setgcrefmt(ud->metatable, obj2gco(mt));
+    lj_udata_metatable_rel(ud, mt);
     lj_gc_pubobjobj(L, ud, mt);
     lj_gc2_finreg_udata_register_mt(L, G(L), ud, mt);
   }
@@ -843,7 +843,7 @@ static GCobj *io_std_new(lua_State *L, FILE *fp, const char *name)
   GCudata *ud = udataV(L->top-1);
   {
     GCtab *mt = tabV(L->top-3);
-    setgcrefmt(ud->metatable, obj2gco(mt));
+    lj_udata_metatable_rel(ud, mt);
     lj_gc_pubobjobj(L, ud, mt);
     lj_gc2_finreg_udata_register_mt(L, G(L), ud, mt);
   }

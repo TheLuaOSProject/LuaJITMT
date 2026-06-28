@@ -339,7 +339,7 @@ LJLIB_CF(buffer_new)
   }
   env = tabref_acq(curr_func(L)->c.env);
   ud = lj_udata_new(L, sizeof(SBufExt), env);
-  setgcrefmt(ud->metatable, obj2gco(env));
+  lj_udata_metatable_rel(ud, env);
   lj_gc_pubobjobj(L, ud, env);
   lj_gc2_finreg_udata_register_mt(L, G(L), ud, env);
   setudataV(L, L->top++, ud);

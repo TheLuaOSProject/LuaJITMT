@@ -4539,7 +4539,7 @@ size_t lj_gc2_finreg_udata_finalize(global_State *g, int all)
     }
     flags = lj_obj_gcflags(o);
     finreg = (flags & LJ_GC_UDATA_FINREG) != 0;
-    if (!lj_meta_fasttv(g, tabref_acq(gco2ud(o)->metatable), MM_gc, &mmv)) {
+    if (!lj_meta_fasttv(g, lj_udata_metatable_acq(gco2ud(o)), MM_gc, &mmv)) {
       if (finreg)
 	lj_gc2_finreg_udata_set(g, o, 0);
       markfinalized(o);  /* Side-list no-finalizer userdata is done. */
@@ -4583,7 +4583,7 @@ static int lj_gc2_finreg_udata_dispatch(lua_State *L, global_State *g,
   gc2_finreg_dispatch_requeue(g, o);
   if (lj_gc2_finreg_udata_set(g, o, 0) < 0)
     lj_gc2_finreg_udata_forget(g, o);
-  mo = lj_meta_fasttv(g, tabref_acq(gco2ud(o)->metatable), MM_gc, &motv);
+  mo = lj_meta_fasttv(g, lj_udata_metatable_acq(gco2ud(o)), MM_gc, &motv);
   if (mo && !gc2_call_finalizer(g, L, mo, o))
     return -1;
   return 1;  /* 05 section 5.8: GC2-owned userdata dispatch resolution. */
@@ -5056,7 +5056,7 @@ static int gc2_tab_weak_barrier_mode(global_State *g, GCtab *t)
   int weak = lj_obj_gcflags(obj2gco(t)) & LJ_GC_WEAK;
   if (weak)
     return weak;  /* 05 section 5.8: use captured P_WEAK mode. */
-  return gc2_tab_weak_mode(g, t, tabref_acq(t->metatable));
+  return gc2_tab_weak_mode(g, t, lj_tab_metatable_acq(t));
 }
 
 void lj_gc2_barrier_tv_g(global_State *g, cTValue *tv)
@@ -5351,7 +5351,7 @@ static void gc2_marktrace_worker(global_State *g, TraceNo traceno)
 
 static int gc2_traverse_tab(global_State *g, GCtab *t)
 {
-  GCtab *mt = tabref_acq(t->metatable);
+  GCtab *mt = lj_tab_metatable_acq(t);
   int weak = gc2_tab_weak_mode(g, t, mt);
   int ffi_fin = gc2_tab_is_ffi_fin(g, t);
   void *arraymem;
@@ -5465,7 +5465,7 @@ static void gc2_traverse_clib_cache(global_State *g, CLibrary *cl)
 
 static void gc2_traverse_udata(global_State *g, GCudata *ud)
 {
-  GCtab *mt = tabref_acq(ud->metatable);
+  GCtab *mt = lj_udata_metatable_acq(ud);
   GCtab *env = tabref_acq(ud->env);
   uint8_t udtype = lj_udata_udtype_acq(ud);
   if (mt)

@@ -5204,6 +5204,31 @@ static LJ_AINLINE void setgcrefnullrel_(GCRef *r)
 #define setgcrefroot(r, gc)	setgcrefrel((r), (gc))
 #define setgcrefmt(r, gc)	setgcrefrel((r), (gc))
 
+static LJ_AINLINE GCtab *lj_tab_metatable_acq(const GCtab *t)
+{
+  return tabref_acq(t->metatable);
+}
+
+static LJ_AINLINE void lj_tab_metatable_rel(GCtab *t, GCtab *mt)
+{
+  setgcrefmt(t->metatable, obj2gco(mt));
+}
+
+static LJ_AINLINE GCtab *lj_udata_metatable_acq(const GCudata *ud)
+{
+  return tabref_acq(ud->metatable);
+}
+
+static LJ_AINLINE void lj_udata_metatable_rel(GCudata *ud, GCtab *mt)
+{
+  setgcrefmt(ud->metatable, obj2gco(mt));
+}
+
+static LJ_AINLINE GCtab *lj_obj_metatable_acq(const GCobj *o)
+{
+  return tabref_acq(o->gch.metatable);
+}
+
 static LJ_AINLINE uint64_t gc2_finreg_udata_sets_acq(global_State *g)
 {
   return la_load64_acq(&g->gc2.finreg_udata_sets);
