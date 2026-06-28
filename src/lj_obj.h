@@ -682,6 +682,16 @@ static LJ_AINLINE void lj_tab_nomm_rel(GCtab *t, uint8_t nomm)
   la_store8_rel(&t->nomm, nomm);
 }
 
+static LJ_AINLINE int8_t lj_tab_colo_acq(const GCtab *t)
+{
+  return (int8_t)la_load8_acq((const uint8_t *)&t->colo);
+}
+
+static LJ_AINLINE void lj_tab_colo_rel(GCtab *t, int8_t colo)
+{
+  la_store8_rel((uint8_t *)&t->colo, (uint8_t)colo);
+}
+
 #define sizetabcolo(n)	((n)*sizeof(TValue) + sizeof(GCtab))
 #define tabref(r)	((GCtab *)gcref((r)))
 #define tabref_acq(r)	((GCtab *)gcref_acq((r)))
@@ -733,7 +743,7 @@ static LJ_AINLINE void lj_tab_acap_rel(GCtab *t, MSize acap)
 
 static LJ_AINLINE int lj_tab_array_separated(const GCtab *t)
 {
-  return LJ_MAX_COLOSIZE == 0 || t->colo <= 0;
+  return LJ_MAX_COLOSIZE == 0 || lj_tab_colo_acq(t) <= 0;
 }
 
 static LJ_AINLINE const TabArrayHdr *lj_tab_array_hdr(const TValue *array)

@@ -636,9 +636,9 @@ static LJ_AINLINE void tab_init_empty(global_State *g, GCtab *t)
   Node *nilnode = &g->nilnode;
   t->gct = ~LJ_TTAB;
   lj_tab_nomm_rel(t, (uint8_t)~0);
-  t->colo = 0;
+  lj_tab_colo_rel(t, 0);
   lj_tab_array_set(t, NULL);
-  setgcrefnull(t->metatable);
+  setgcrefnullrel(t->metatable);
   lj_tab_asize_rel(t, 0);
   lj_tab_acap_rel(t, 0);
   lj_tab_hmask_rel(t, 0);
@@ -673,7 +673,7 @@ static GCtab *newtab(lua_State *L, uint32_t asize, uint32_t hbits)
     lj_assertL((sizeof(GCtab) & 7) == 0, "bad GCtab size");
     t = (GCtab *)lj_mem_newgco_unlinked(L, sizetabcolo(asize));
     tab_init_empty(g, t);
-    t->colo = (int8_t)asize;
+    lj_tab_colo_rel(t, (int8_t)asize);
     array = (TValue *)((char *)t + sizeof(GCtab));
     cleararray(array, asize);
     tab_publish_array(t, array, asize, asize);
@@ -802,8 +802,9 @@ void LJ_FASTCALL lj_tab_clear(GCtab *t)
 /* Free a table. */
 void LJ_FASTCALL lj_tab_free(global_State *g, GCtab *t)
 {
-  MSize size = LJ_MAX_COLOSIZE != 0 && t->colo ?
-	       sizetabcolo((uint32_t)t->colo & 0x7f) : sizeof(GCtab);
+  int8_t colo = lj_tab_colo_acq(t);
+  MSize size = LJ_MAX_COLOSIZE != 0 && colo ?
+	       sizetabcolo((uint32_t)colo & 0x7f) : sizeof(GCtab);
   MSize hmask;
   Node *node = lj_tab_node_snapshot_acq(t, &hmask);
   TValue *array;
@@ -1003,8 +1004,11 @@ restart_resize:
     }
   }
   if (newarray) {
-    if (LJ_MAX_COLOSIZE != 0 && t->colo > 0)
-      t->colo = (int8_t)(t->colo | 0x80);  /* Mark as separated (colo < 0). */
+    if (LJ_MAX_COLOSIZE != 0) {
+      int8_t colo = lj_tab_colo_acq(t);
+      if (colo > 0)
+	lj_tab_colo_rel(t, (int8_t)(colo | 0x80));  /* Mark separated. */
+    }
     lj_tab_acap_rel(t, newacap);
   }
   if (asize > oldasize) {

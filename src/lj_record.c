@@ -1552,12 +1552,14 @@ static int rec_idx_tab_trace_local(jit_State *J, TRef tab)
 #if defined(__linux__) && LJ_TARGET_X64
 static int rec_idx_tab_array_has_hdr(const GCtab *t, const TValue *array)
 {
+  int8_t colo;
   if (array == NULL)
     return 0;
 #if LJ_MAX_COLOSIZE != 0
-  if (t->colo > 0)
+  colo = lj_tab_colo_acq(t);
+  if (colo > 0)
     return 0;
-  if (t->colo < 0) {
+  if (colo < 0) {
     const TValue *coloarray = (const TValue *)(const void *)
       ((const char *)(const void *)t + sizeof(GCtab));
     if (array == coloarray)

@@ -1170,13 +1170,14 @@ static size_t propagatemark(global_State *g)
   lj_gc_list_pop_head_rel(&g->gc.gray, o);  /* Remove from gray list. */
   if (LJ_LIKELY(gct == ~LJ_TTAB)) {
     GCtab *t = gco2tab(o);
+    int8_t colo = lj_tab_colo_acq(t);
     MSize acap = lj_tab_array_separated_acap_acq(t);
     MSize hmask;
     (void)lj_tab_node_snapshot_acq(t, &hmask);
     if (gc_traverse_tab(g, t) > 0)
       black2gray(o);  /* Keep weak tables gray. */
-    return (LJ_MAX_COLOSIZE != 0 && t->colo ?
-	    sizetabcolo((uint32_t)t->colo & 0x7f) : sizeof(GCtab)) +
+    return (LJ_MAX_COLOSIZE != 0 && colo ?
+	    sizetabcolo((uint32_t)colo & 0x7f) : sizeof(GCtab)) +
 	   (acap ? lj_tab_array_bytes(acap) : 0) +
 	   (hmask ? lj_tab_node_bytes(hmask) : 0);
   } else if (LJ_LIKELY(gct == ~LJ_TFUNC)) {
