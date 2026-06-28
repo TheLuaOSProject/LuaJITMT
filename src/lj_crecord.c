@@ -2008,15 +2008,15 @@ void LJ_FASTCALL recff_ffi_fill(jit_State *J, RecordFFData *rd)
   if (trdst && trlen) {
     CTSize step = 1;
     if (tviscdata(&rd->argv[0])) {  /* Get alignment of original destination. */
-      CTSize sz;
-      CTypeID id = ctype_rawid(cts, cdataV(&rd->argv[0])->ctypeid);
-      CType *ct = ctype_get(cts, id);
+      CType snap, child;
+      CType *ct = crec_ctype_rawref(J, cts, cdataV(&rd->argv[0])->ctypeid,
+				    &snap);
       CTInfo info = ctype_info_acq(ct);
       if (ctype_isptr(info)) {
-	id = ctype_rawid(cts, ctype_cid(info));
-	ct = ctype_get(cts, id);
+	ct = crec_ctype_rawref(J, cts, ctype_cid(info), &child);
+	info = ctype_info_acq(ct);
       }
-      step = (1u<<ctype_align(lj_ctype_info(cts, id, &sz)));
+      step = (1u << ctype_align(info));
     }
     trdst = crec_ct_tv(J, ctype_get(cts, CTID_P_VOID), 0, trdst, &rd->argv[0]);
     trlen = crec_toint(J, cts, trlen, &rd->argv[1]);

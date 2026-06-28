@@ -21,8 +21,8 @@ Guardrail:
   and release the token instead of reading shared ctype metadata through a raw
   table pointer.
 - `tests/t-ffi-recorder-libmeta-busy.c` applies the same parser-busy trace
-  abort guard to recorded `tonumber(cdata)` and bit64 cdata argument
-  classification, including enum child metadata snapshots.
+  abort guard to recorded `ffi.fill(cdata, ...)`, `tonumber(cdata)`, and bit64
+  cdata argument classification, including enum child metadata snapshots.
 - Do not replace this with a source-search guard. The project policy in
   `notes/ci-source-search-policy.md` requires behavior fixtures or generated
   artifact checks for CI coverage.

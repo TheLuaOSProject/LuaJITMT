@@ -90,6 +90,21 @@ int main(void)
     "jit.attach(lj_m7_trace_parse_token)\n"
     "assert(lj_m7_trace_parse_token_abort_count() >= 1)\n");
 
+  assert_busy_trace_releases(L, cts,
+    "local ffi = require('ffi')\n"
+    "local buf = ffi.new('uint64_t[4]')\n"
+    "jit.attach(lj_m7_trace_parse_token, 'trace')\n"
+    "jit.flush()\n"
+    "jit.on()\n"
+    "jit.opt.start('hotloop=1', 'hotexit=1')\n"
+    "local function run(n)\n"
+    "  for i = 1, n do ffi.fill(buf, 32, i) end\n"
+    "  return tonumber(buf[0])\n"
+    "end\n"
+    "for i = 1, 3 do assert(run(8) == 0x0808080808080808) end\n"
+    "jit.attach(lj_m7_trace_parse_token)\n"
+    "assert(lj_m7_trace_parse_token_abort_count() >= 1)\n");
+
   ljt_lua_dostring(L,
     "local bit = require('bit')\n"
     "local ffi = require('ffi')\n"
@@ -100,18 +115,21 @@ int main(void)
     "local enum = lj_m7_recmeta_enum\n"
     "local u64 = lj_m7_recmeta_u64\n"
     "local mask = ffi.new('uint64_t', 0xffULL)\n"
+    "local buf = ffi.new('uint64_t[4]')\n"
     "local function run(n)\n"
     "  local sum = 0\n"
     "  local x = ffi.new('uint64_t', 0)\n"
     "  for i = 1, n do\n"
     "    sum = sum + tonumber(i64) + tonumber(enum)\n"
     "    x = bit.bxor(x, bit.band(u64, mask))\n"
+    "    ffi.fill(buf, 32, i)\n"
     "  end\n"
-    "  return sum, tostring(x)\n"
+    "  return sum, tostring(x), tonumber(buf[0])\n"
     "end\n"
     "for i = 1, 30 do\n"
-    "  local sum, x = run(40)\n"
-    "  assert(sum == 49382400 and x == '0ULL')\n"
+    "  local sum, x, b = run(40)\n"
+    "  assert(sum == 49382400 and x == '0ULL' and b == "
+    "0x2828282828282828)\n"
     "end\n");
 
   lua_close(L);
