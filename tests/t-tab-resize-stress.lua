@@ -4,6 +4,8 @@ local harness = require"thread_harness"
 local reps = harness.env_number("LJ_M5_TAB_RESIZE_STRESS_REPS", 768)
 local writers = harness.env_number("LJ_M5_TAB_RESIZE_STRESS_THREADS", 3)
 local jit_reps = harness.env_number("LJ_M5_TAB_RESIZE_STRESS_JIT_REPS", 2200)
+local jit_read_reps =
+  harness.env_number("LJ_M5_TAB_RESIZE_STRESS_JIT_READ_REPS", jit_reps)
 local traversal_rounds =
   harness.env_number("LJ_M5_TAB_RESIZE_STRESS_TRAVERSAL_ROUNDS", 192)
 
@@ -145,6 +147,58 @@ local function exercise_jit_store_resize()
   harness.fullgc(2)
 end
 
+local function jit_read_worker(tbl, ready, start, array_key, hash_key, want, n)
+  local okjit, jitmod = pcall(require, "jit")
+  if okjit and jitmod.status() then
+    jitmod.opt.start("hotloop=1", "hotexit=1")
+  end
+  assert(ready:send(true, 10) == true)
+  local _, ok = start:recv(10)
+  assert(ok == true)
+  for i = 1, n do
+    local av = tbl[array_key]
+    local hv = tbl[hash_key]
+    assert(av == want, "traced array read changed across resize")
+    assert(hv == want, "traced hash read changed across resize")
+    assert(type(av) ~= "userdata" and type(av) ~= "cdata",
+	   "traced array read exposed an internal sentinel")
+    assert(type(hv) ~= "userdata" and type(hv) ~= "cdata",
+	   "traced hash read exposed an internal sentinel")
+    if i % 251 == 0 then collectgarbage("step") end
+  end
+  return true
+end
+
+local function exercise_jit_read_resize()
+  local t = {}
+  local nreaders = writers
+  local ready, start = ready_start(nreaders)
+  local workers = {}
+  for i = 1, nreaders do
+    t[i] = i
+    t["read:" .. i] = i
+  end
+  for i = 1, nreaders do
+    workers[i] = th.spawn(jit_read_worker, t, ready, start, i,
+			  "read:" .. i, i, jit_read_reps)
+  end
+  harness.wait_ready(ready, nreaders, 10, "jit read resize")
+  harness.release_start(start, nreaders, 10)
+  for i = 1, reps do
+    local k = 20000 + i
+    t[k] = i
+    t["grow:" .. i] = i
+    if i > 8 and i % 5 == 0 then t["grow:" .. (i - 4)] = nil end
+    if i % 32 == 0 then collectgarbage("step") end
+  end
+  harness.join_all(workers, 30)
+  for i = 1, nreaders do
+    assert(t[i] == i, "stable array key changed after traced resize reads")
+    assert(t["read:" .. i] == i, "stable hash key changed after traced resize reads")
+  end
+  harness.fullgc(2)
+end
+
 local function traversal_resize_writer(tbl, ready, start, id, n)
   assert(ready:send(true, 10) == true)
   local _, ok = start:recv(10)
@@ -230,6 +284,7 @@ end
 exercise_weak_clear_resize()
 exercise_gc_mark_resize()
 exercise_jit_store_resize()
+exercise_jit_read_resize()
 exercise_concurrent_traversal_resize()
 
 print(("t-tab-resize-stress OK: %d writers, %d resize rounds"):format(
