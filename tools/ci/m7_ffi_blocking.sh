@@ -80,6 +80,20 @@ if hits=$(grep -nE 'static .*ccall_native_(save|enter|leave|checkstop)' "$ROOT/s
   printf '%s\n' 'FFI C-call native-state helpers must not collapse back to file-local statics' >&2
   exit 1
 fi
+for helper in ccallback_slot_acq ccallback_slot_rel; do
+  if ! grep -qE "static LJ_AINLINE .* ${helper}[[:space:]]*[(]" "$ROOT/src/lj_ctype.h"; then
+    printf 'callback runtime slot helper missing: %s\n' "$helper" >&2
+    exit 1
+  fi
+done
+if hits=$(grep -nE -- 'cb->[[:space:]]*slot|tg->[[:space:]]*cb[.]slot' \
+    "$ROOT/src/lj_ccall.c" \
+    "$ROOT/src/lj_ccallback.c" \
+    "$ROOT/tests/t-ffi-ccall-native-helpers.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw callback runtime slot access is forbidden; use ccallback_slot_* helpers' >&2
+  exit 1
+fi
 if ! awk '
   /^int lj_ccall_func[[:space:]]*[(]/ { in_fn = 1 }
   in_fn && /lj_ccall_native_save[[:space:]]*[(]/ { save = 1 }

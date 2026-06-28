@@ -1283,7 +1283,7 @@ void lj_ccall_native_enter(lua_State *L, CCallNativeState *st, void *func)
   TGState *tg = st->tg;
   CCallbackRuntime *cb = st->cb;
   int had_stopreq;
-  cb->slot = ~0u;
+  ccallback_slot_rel(cb, ~0u);
   lj_tg_ffi_call_func_rel(tg, func);
   had_stopreq = ccall_had_stopreq(L);
   st->had_stopreq = had_stopreq;
@@ -1296,7 +1296,8 @@ uint32_t lj_ccall_native_leave(lua_State *L, CTState *cts,
 {
   uint32_t actions = lj_native_leave(L);
   CCallbackRuntime *cb = st->cb;
-  if (cb->slot != ~0u)  /* Blacklist function that called a callback. */
+  /* Blacklist function that called a callback. */
+  if (ccallback_slot_acq(cb) != ~0u)
     lj_ctype_cb_blacklist(cts, func);
   lj_tg_ffi_call_func_rel(st->tg, st->old_ffi_call_func);
   ccallback_native_had_stopreq_rel(cb, st->old_native_had_stopreq);

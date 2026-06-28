@@ -720,7 +720,7 @@ CCallbackRuntime * LJ_FASTCALL lj_ccallback_prepare(CTState *cts, MSize slot)
   L = lj_tg_load_cur_L(tg);
   cb = &tg->cb;
   cb->L = L;  /* Callback carrier TG from current TLS, not slot owner. */
-  cb->slot = slot;
+  ccallback_slot_rel(cb, slot);
   cb->auto_detach = auto_detach;
   return cb;
 }
@@ -753,7 +753,7 @@ static void callback_conv_args(CTState *cts, lua_State *L, CCallbackRuntime *cb)
 {
   TValue *o = L->top;
   intptr_t *stack = cb->stack;
-  MSize slot = cb->slot;
+  MSize slot = ccallback_slot_acq(cb);
   CTypeID id = 0, rid, fid;
   CTypeID1 *cbid;
   int gcsteps = 0;
@@ -1021,7 +1021,7 @@ void LJ_FASTCALL lj_ccallback_leave(CTState *cts, TValue *o,
   L->top -= 2+2*LJ_FR2;
   L->base = obase;
   L->cframe = cframe_prev(L->cframe);
-  cb->slot = 0;  /* Blacklist C function that called the callback. */
+  ccallback_slot_rel(cb, 0);  /* Blacklist C function that called the callback. */
   callback_frame_pop(cb);
   cb->auto_detach = 0;
   if (was_native)

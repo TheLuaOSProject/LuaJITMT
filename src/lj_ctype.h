@@ -419,6 +419,18 @@ static LJ_AINLINE MSize ccallback_depth_acq(const CCallbackRuntime *cb)
   return cb ? (MSize)la_load32_acq(&cb->depth) : 0;
 }
 
+static LJ_AINLINE MSize ccallback_slot_acq(const CCallbackRuntime *cb)
+{
+  /* 11.5 native FFI/callback handoff slot marker. */
+  return cb ? (MSize)la_load32_acq(&cb->slot) : 0;
+}
+
+static LJ_AINLINE void ccallback_slot_rel(CCallbackRuntime *cb, MSize slot)
+{
+  /* 11.5 native FFI/callback handoff slot marker. */
+  la_store32_rel(&cb->slot, slot);
+}
+
 typedef LJ_ALIGN(8) struct CCallback {
   void *mcode;			/* Machine code for callback func. pointers. */
   CTypeID1 *cbid;		/* Callback type table. */

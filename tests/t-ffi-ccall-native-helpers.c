@@ -99,7 +99,7 @@ static void run_restore_state(lua_State *L, CTState *cts, TGState *tg)
   assert(lj_tg_in_native_acq(tg) != 0);
   assert(lj_tg_ffi_call_func_acq(tg) == func);
   assert(ccallback_native_had_stopreq_acq(&tg->cb) == 0);
-  assert(tg->cb.slot == (MSize)~0u);
+  assert(ccallback_slot_acq(&tg->cb) == (MSize)~0u);
 
   actions = lj_ccall_native_leave(L, cts, &native, func);
   assert(actions == 0);
@@ -119,7 +119,7 @@ static void run_callback_blacklist(lua_State *L, CTState *cts, TGState *tg)
   clear_stopreq(tg);
   lj_ccall_native_save(L, &native);
   lj_ccall_native_enter(L, &native, func);
-  tg->cb.slot = 0;  /* Simulate a callback trampoline reaching Lua. */
+  ccallback_slot_rel(&tg->cb, 0);  /* Simulate a callback trampoline reaching Lua. */
   (void)lj_ccall_native_leave(L, cts, &native, func);
 
   assert(lj_tg_in_native_acq(tg) == 0);
