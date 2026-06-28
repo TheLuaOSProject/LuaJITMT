@@ -3,8 +3,9 @@
 - Tightened the M5 empty-hash/nilnode fixture so its nilnode link assertion
   reads `Node.next` through `lj_tab_nextnode_acq()` instead of the raw
   `nextnode()` macro.
-- Extended `tools/ci/m5_tab_emptyhash.sh` with a static test-tree guard that
-  rejects raw `nextnode()` traversal in C fixtures. Production table walkers
-  already route through `lj_tab_nextnode_acq()`; this prevents future tests
-  from normalizing direct shared-link reads.
-- Validation: `tools/ci/m5_tab_emptyhash.sh`.
+- Historical state: `tools/ci/m5_tab_emptyhash.sh` once included a static
+  test-tree guard for raw `nextnode()` traversal in C fixtures. That
+  source-search guard has been removed; production and fixture walkers should
+  still use `lj_tab_nextnode_acq()` because `Node.next` is a shared publication
+  edge.
+- Validation: `tools/ci/lua_test.sh m5_tab_emptyhash`.

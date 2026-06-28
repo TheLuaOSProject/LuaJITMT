@@ -1,5 +1,6 @@
 local utils = require("suite_utils")
 local optutils = require("suite_opts")
+local build = require("suite_build")
 
 local M = {}
 
@@ -223,7 +224,7 @@ function M.add_luajit_c_fixture_cases(add, specs)
         local runopts = optutils.copy(opts)
         if runopts.clean == nil then runopts.clean = false end
         if runopts.quiet == nil then runopts.quiet = true end
-        M.build_and_run_c(t, t:tmp(output), cfile, runopts)
+        build.build_and_run_c(t, t:tmp(output), cfile, runopts)
         if message then print(message) end
       end
     })

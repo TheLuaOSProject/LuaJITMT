@@ -5,8 +5,10 @@ function calls, field accesses, or implementation snippets. Those checks are
 too brittle: they lock in spelling and local structure, but they do not prove
 that the runtime behavior is correct.
 
-This policy supersedes older notes that mention deliberate static source guards
-or `suite_utils.read_source_file()`.
+This policy supersedes older notes that mention deliberate static source guards,
+per-case guard scripts, or `suite_utils.read_source_file()`. Treat those older
+entries as historical context for why a helper exists, not as instructions to
+recreate a source-search test.
 
 The old source-file guard compatibility APIs have been removed from the Lua test
 harness. Do not reintroduce generic helpers that read repository source and
@@ -47,3 +49,8 @@ Examples of invariants that should be documented or tested behaviorally:
   not source checks for specific helper call names.
 - Native entropy and mcode paths need behavioral fixtures for STOPREQ/native
   boundary handling rather than source-order assertions.
+
+When replacing an old source guard, keep the useful part: document the memory
+ordering, ownership, or publication rule near the helper or in `notes/`, and
+add a behavior fixture when a bad implementation would be observable. Do not
+encode the implementation spelling as the test.

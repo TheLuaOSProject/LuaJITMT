@@ -6,6 +6,9 @@
   compatibility wrappers from the Lua test harness.
 - Removed the old `suite_runtime` build/C-fixture compatibility exports; suites
   now import `suite_build` directly for those helpers.
+- Routed `suite_runtime.add_luajit_c_fixture_cases()` through `suite_build`
+  directly so fixture registration no longer depends on the removed runtime
+  build helper export.
 - Kept generated dump assertions because JIT/bytecode/ASM dump text is a
   generated behavior surface, not repository source.
 - Switched output-file checks to read the captured output and assert text
@@ -77,11 +80,12 @@ Validation:
 
 - Moved shared text, file-result, and dump-result assertions into
   `tests/lib/suite_assert.lua`.
-- Left compatibility exports in `suite_utils.lua` while routing dump and
-  file-result suites to `suite_assert` directly.
-- Kept the source-file content guard in the assertion module.
-- Added the same source-file content guard to raw `Test:read()` so tests cannot
-  bypass it by reading `src/` or top-level C fixture sources directly.
+- Historical state: this pass left compatibility exports in `suite_utils.lua`
+  while routing dump and file-result suites to `suite_assert` directly.
+- Historical state: this pass added source-file content guards to
+  `suite_assert` and raw `Test:read()`. Those source-search guards were removed
+  on 2026-06-28; current policy is behavior fixtures, generated artifact
+  assertions, or documentation.
 - Confirmed JIT/bytecode dump matching remains supported as result matching.
 
 Validation:
@@ -93,10 +97,11 @@ Validation:
 
 ## 2026-06-28 explicit source-read API
 
-- Added the same source-file rejection to `tests/lib/suite_utils.lua`
-  `read_file()` so runnable suites cannot bypass the `Test:read()` guard.
-- Added `suite_utils.read_source_file()` for deliberate static source guards.
-  Current M3/M5/M6/local-cell source guards use this explicit API.
+- Historical state: this pass added source-file rejection to
+  `tests/lib/suite_utils.lua` `read_file()` and introduced
+  `suite_utils.read_source_file()` for deliberate static source guards.
+  Both the explicit source-read API and those source-search tests were removed
+  in the later 2026-06-28 source-search guard removal.
 - Changed `add_luajit_c_fixture_cases()` to default to incremental builds;
   cases that require a separate build profile must opt into `clean = true`.
 - `tests/lib/ljtest.lua` caches repeated same-flag clean builds within one
@@ -235,17 +240,16 @@ Validation:
 
 ## 2026-06-20 source guard behavior case
 
-- Added `m0_source_guard` as a first-class Lua suite case.
-- The case verifies that framework reads/assertions reject source paths while
-  generated result-file matching still works.
-- Added the thin CI compatibility wrapper and rechecked wrapper parity.
+- Historical state: this pass added `m0_source_guard` as a first-class Lua
+  suite case and added a thin CI compatibility wrapper.
+- That case and wrapper were removed by the 2026-06-28 source-search guard
+  cleanup. Generated result-file matching remains supported because generated
+  IR/bytecode/ASM output is an allowed behavior surface.
 
 Validation:
 
-- `tools/ci/lua_test.sh --list`
-- `tools/ci/lua_test.sh m0_source_guard`
-- `tools/ci/m0_source_guard.sh`
-- `comm -23 <(tools/ci/lua_test.sh --list | sort) <(find tools/ci -maxdepth 1 -name '*.sh' -printf '%f\n' | sed 's/[.]sh$//' | sort)`
+- Historical validation used `tools/ci/lua_test.sh m0_source_guard` and
+  `tools/ci/m0_source_guard.sh`; neither entrypoint exists now.
 - `git diff --check`
 
 ## 2026-06-20 Lua benchmark CSV gate
@@ -307,7 +311,7 @@ Validation:
 
 - `tools/ci/lua_test.sh m5_jit_hash_store_nyi m5_jit_trace_publish m6_jit_token m7_ffi_ccall_native m7_ffi_finreg m7_ffi_jit_cnew`
 - `tools/ci/lua_test.sh --list`
-- duplicate trace-count helper `rg` check over migrated files
+- Historical local audit for duplicate trace-count helpers over migrated files
 - `git diff --check`
 
 ## 2026-06-20 shared C table-forward helpers
