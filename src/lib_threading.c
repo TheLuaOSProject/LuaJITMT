@@ -8,7 +8,6 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 
 #define lib_threading_c
 #define LUA_LIB
@@ -267,10 +266,7 @@ static int64_t threading_capi_timeout_ns(lua_Number sec)
 
 static int64_t threading_now_ns(void)
 {
-  struct timespec ts;
-  if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0)
-    return 0;
-  return (int64_t)ts.tv_sec * 1000000000ll + (int64_t)ts.tv_nsec;
+  return (int64_t)lj_thr_now_ns();
 }
 
 static int64_t threading_deadline_ns(int64_t ns)
@@ -861,13 +857,11 @@ LJLIB_CF(threading_cpucount)
 
 LJLIB_CF(threading_now)
 {
-  struct timespec ts;
-  if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
+  uint64_t ns = lj_thr_now_ns();
+  if (ns == 0) {
     setnilV(L->top++);
   } else {
-    lua_Number sec = (lua_Number)ts.tv_sec +
-      (lua_Number)ts.tv_nsec / 1000000000.0;
-    setnumV(L->top++, sec);
+    setnumV(L->top++, (lua_Number)ns / 1000000000.0);
   }
   return 1;
 }

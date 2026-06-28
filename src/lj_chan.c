@@ -11,11 +11,11 @@
 #include "lj_chan.h"
 #include "lj_gc.h"
 #include "lj_safepoint.h"
+#include "lj_thr.h"
 #include "lj_tg.h"
 
 #include <errno.h>
 #include <limits.h>
-#include <time.h>
 
 static LJ_AINLINE void chan_storetv_rel(LJChanSlot *slot, cTValue *tv)
 {
@@ -137,10 +137,7 @@ static void chan_wait(lua_State *L, LJChan *ch)
 
 static int64_t chan_now_ns(void)
 {
-  struct timespec ts;
-  if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0)
-    return 0;
-  return (int64_t)ts.tv_sec * 1000000000ll + (int64_t)ts.tv_nsec;
+  return (int64_t)lj_thr_now_ns();
 }
 
 static int64_t chan_deadline_ns(int64_t ns)

@@ -119,7 +119,7 @@ int main(void)
   lua_State *late_L;
   TGState late_tg;
   HandshakeCtx hs = {0};
-  pthread_t hs_thread;
+  LJThr hs_thread;
   void *ret = NULL;
   uint64_t epoch0;
 
@@ -188,7 +188,7 @@ int main(void)
   /* Hold the leader handshake open on a remote TG until cur_L is restored. */
   lj_tg_store_cur_L(&hold_tg, NULL);
   epoch0 = la_load64_acq(&g->gc2.hs_epoch);
-  assert(pthread_create(&hs_thread, NULL, handshake_main, &hs) == 0);
+  assert(lj_thr_create(&hs_thread, handshake_main, &hs) == 0);
   while (la_load64_acq(&g->gc2.hs_epoch) == epoch0)
     la_cpu_pause();
   while (la_load32_acq(&g->gc2.hs_pending) == 0)
@@ -217,7 +217,7 @@ int main(void)
 
   lj_tg_store_cur_L(&hold_tg, hold_L);
   assert(lj_safepoint_ack(hold_L) == hs.actions);
-  assert(pthread_join(hs_thread, NULL) == 0);
+  assert(lj_thr_join(&hs_thread, NULL) == 0);
   assert(hs.signaled == 3u);
   assert(g->gc2.hs_pending == 0);
   assert(la_load64_acq(&catch.tg.hs_epoch_ack) == g->gc2.hs_epoch);
@@ -248,6 +248,6 @@ int main(void)
   lua_pop(L, 1);
   lua_close(L);
 
-  printf("t-thr-substrate OK: pthread create/join, TG TLS, sleep verified\n");
+  printf("t-thr-substrate OK: thread create/join, TG TLS, sleep verified\n");
   return 0;
 }

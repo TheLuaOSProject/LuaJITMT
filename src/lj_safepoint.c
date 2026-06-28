@@ -19,14 +19,9 @@
 #include "lj_tg.h"
 #include "lj_trace.h"
 
-#include <time.h>
-
 static uint64_t safepoint_now_ns(void)
 {
-  struct timespec ts;
-  if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0)
-    return 0;
-  return (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
+  return lj_thr_now_ns();
 }
 
 static uint32_t safepoint_latency_bucket(uint64_t ns)

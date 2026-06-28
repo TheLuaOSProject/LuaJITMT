@@ -12,15 +12,24 @@
 
 #include <errno.h>
 #include <string.h>
+#if defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#else
 #include <sys/mman.h>
+#endif
 
 #include "lj_obj.h"
 #include "lj_atomic.h"
 #include "lj_arena.h"
 #include "lj_prng.h"
 
+#if !defined(_WIN32)
 #ifndef MAP_ANONYMOUS
 #define MAP_ANONYMOUS MAP_ANON
+#endif
 #endif
 
 #define LJ_ARENA_MMAP_PROBE_MAX		30
@@ -127,6 +136,54 @@ static uintptr_t arena_random_hint(PRNGState *rs, size_t span)
   return hint;
 }
 
+#if defined(_WIN32)
+static void *arena_map_aligned(PRNGState *rs, size_t keep)
+{
+  int olderr = errno;
+  uintptr_t hint = 0;
+  int retry;
+  if (!arena_addr_ok(LJ_ARENA_MMAP_LOWER, keep))
+    return NULL;
+  for (retry = 0; retry < LJ_ARENA_MMAP_PROBE_MAX; retry++) {
+    void *p = VirtualAlloc(hint ? (void *)hint : NULL, keep,
+			   MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
+    uintptr_t addr = (uintptr_t)p;
+    if (p) {
+      if ((addr & LJ_ARENA_MASK) == 0 && arena_addr_ok(addr, keep)) {
+	errno = olderr;
+	return p;
+      }
+      VirtualFree(p, 0, MEM_RELEASE);
+    }
+    if (hint && retry < LJ_ARENA_MMAP_PROBE_LINEAR) {
+      hint += 0x1000000u;
+      if (!arena_addr_ok(hint, keep))
+	hint = 0;
+      continue;
+    }
+    hint = arena_random_hint(rs, keep);
+  }
+  errno = olderr;
+  return NULL;
+}
+
+static void arena_unmap_aligned(void *p, size_t size)
+{
+  UNUSED(size);
+  VirtualFree(p, 0, MEM_RELEASE);
+}
+
+static void *arena_os_map(size_t size)
+{
+  return VirtualAlloc(NULL, size, MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
+}
+
+static void arena_os_unmap(void *p, size_t size)
+{
+  UNUSED(size);
+  VirtualFree(p, 0, MEM_RELEASE);
+}
+#else
 static void *arena_trim(void *base, size_t span, size_t keep)
 {
   uintptr_t addr = (uintptr_t)base;
@@ -182,6 +239,24 @@ static void *arena_map_aligned(PRNGState *rs, size_t keep)
   return NULL;
 }
 
+static void arena_unmap_aligned(void *p, size_t size)
+{
+  munmap(p, size);
+}
+
+static void *arena_os_map(size_t size)
+{
+  void *p = mmap(NULL, size, PROT_READ|PROT_WRITE,
+		 MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
+  return p == MAP_FAILED ? NULL : p;
+}
+
+static void arena_os_unmap(void *p, size_t size)
+{
+  munmap(p, size);
+}
+#endif
+
 GCArena *lj_arena_map(PRNGState *rs, uint32_t flags)
 {
   GCArena *a = (GCArena *)arena_map_aligned(rs, LJ_ARENA_SIZE);
@@ -196,7 +271,7 @@ void lj_arena_unmap(GCArena *a)
 {
   int olderr = errno;
   if (a)
-    munmap((void *)a, LJ_ARENA_SIZE);
+    arena_unmap_aligned((void *)a, LJ_ARENA_SIZE);
   errno = olderr;
 }
 
@@ -229,7 +304,7 @@ void lj_arena_huge_unmap(void *p, size_t size)
   int olderr = errno;
   size_t mapsize = lj_arena_huge_mapsize(size);
   if (p && mapsize)
-    munmap((void *)lj_arena_of(p), mapsize);
+    arena_unmap_aligned((void *)lj_arena_of(p), mapsize);
   errno = olderr;
 }
 
@@ -308,9 +383,8 @@ int lj_arena_hugetab_init(HugeTab *ht, uint32_t hbits)
   LJHugeTabHdr *h;
   if (!ht || ht->h || !mapsize)
     return 0;
-  h = (LJHugeTabHdr *)mmap(NULL, mapsize, PROT_READ|PROT_WRITE,
-			   MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
-  if (h == MAP_FAILED)
+  h = (LJHugeTabHdr *)arena_os_map(mapsize);
+  if (!h)
     return 0;
   h->hbits = hbits;
   h->mask = (1u << hbits) - 1u;
@@ -327,7 +401,7 @@ void lj_arena_hugetab_fini(HugeTab *ht)
     LJHugeTabHdr *h = ht->h;
     size_t mapsize = h->mapsize;
     ht->h = NULL;
-    munmap((void *)h, mapsize);
+    arena_os_unmap((void *)h, mapsize);
   }
   errno = olderr;
 }

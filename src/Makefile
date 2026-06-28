@@ -304,7 +304,10 @@ TARGET_SYS?= $(HOST_SYS)
 ifeq (Windows,$(TARGET_SYS))
   TARGET_STRIP+= --strip-unneeded
   TARGET_XSHLDFLAGS= -shared -Wl,--out-implib,$(TARGET_DLLDOTANAME)
+  TARGET_XSHLDFLAGS+= -static-libgcc
+  TARGET_XLDFLAGS+= -static-libgcc
   TARGET_DYNXLDOPTS=
+  TARGET_XLIBS+= -lsynchronization
 else
   TARGET_AR+= 2>/dev/null
 ifeq (,$(shell $(TARGET_CC) -o /dev/null -c -x c /dev/null -fno-stack-protector 2>/dev/null || echo 1))

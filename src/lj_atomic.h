@@ -223,6 +223,58 @@ LA_INLINE int la_futex_wake(uint32_t *p, int n)
 }
 #endif /* __APPLE__ && __MACH__ */
 
+/* ---- futex-style waits (Windows) ------------------------------------- */
+#if defined(_WIN32)
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0602
+#elif _WIN32_WINNT < 0x0602
+#undef _WIN32_WINNT
+#define _WIN32_WINNT 0x0602
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#include <errno.h>
+
+#define LA_HAS_FUTEX 1
+
+LA_INLINE DWORD la_timeout_ns_to_windows_ms(int64_t ns)
+{
+  uint64_t ms;
+  if (ns < 0)
+    return INFINITE;
+  ms = ((uint64_t)ns + 999999u) / 1000000u;
+  if (ms == 0)
+    ms = 1;
+  return ms >= INFINITE ? INFINITE - 1u : (DWORD)ms;
+}
+
+/* Wait while *p == val. ns<0: infinite. Returns 0 woken/changed,
+** -1 with errno on error (ETIMEDOUT is normal). */
+LA_INLINE int la_futex_wait(uint32_t *p, uint32_t val, int64_t ns)
+{
+  if (WaitOnAddress((volatile VOID *)p, &val, sizeof(val),
+		    la_timeout_ns_to_windows_ms(ns)))
+    return 0;
+  switch (GetLastError()) {
+  case ERROR_TIMEOUT: errno = ETIMEDOUT; break;
+  case ERROR_INVALID_ADDRESS: errno = EINVAL; break;
+  default: errno = EAGAIN; break;
+  }
+  return -1;
+}
+
+LA_INLINE int la_futex_wake(uint32_t *p, int n)
+{
+  if (n == 1)
+    WakeByAddressSingle((PVOID)p);
+  else if (n > 1)
+    WakeByAddressAll((PVOID)p);
+  return 0;
+}
+#endif /* _WIN32 */
+
 /* ---- compile-time checks ------------------------------------------- */
 typedef char la_assert_ptr8[sizeof(void *) == 8 ? 1 : -1];
 /* x86-64: build with -mcx16 so la_cas128 lowers to cmpxchg16b; without it

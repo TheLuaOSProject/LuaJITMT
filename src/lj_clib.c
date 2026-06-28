@@ -24,6 +24,27 @@
 #include "lj_tg.h"
 #include "lj_thr.h"
 
+static int clib_had_stopreq(lua_State *L)
+{
+  TGState *tg = L2TG(L);
+  return tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ);
+}
+
+static int clib_fresh_stopreq(lua_State *L, uint32_t actions,
+			      int had_stopreq)
+{
+  TGState *tg = L2TG(L);
+  return (actions & LJ_GC2_HS_STOPREQ) ||
+    (!had_stopreq && tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ));
+}
+
+static void clib_checkstop_fresh(lua_State *L, uint32_t actions,
+				 int had_stopreq)
+{
+  if (clib_fresh_stopreq(L, actions, had_stopreq))
+    lj_safepoint_checkstop(L, actions);
+}
+
 /* -- OS-specific functions ----------------------------------------------- */
 
 #if LJ_TARGET_DLOPEN
@@ -95,27 +116,6 @@ static const char *clib_check_lds(lua_State *L, const char *buf)
     return strdata(lj_str_new(L, p, e-p));
   }
   return NULL;
-}
-
-static int clib_had_stopreq(lua_State *L)
-{
-  TGState *tg = L2TG(L);
-  return tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ);
-}
-
-static int clib_fresh_stopreq(lua_State *L, uint32_t actions,
-			      int had_stopreq)
-{
-  TGState *tg = L2TG(L);
-  return (actions & LJ_GC2_HS_STOPREQ) ||
-    (!had_stopreq && tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ));
-}
-
-static void clib_checkstop_fresh(lua_State *L, uint32_t actions,
-				 int had_stopreq)
-{
-  if (clib_fresh_stopreq(L, actions, had_stopreq))
-    lj_safepoint_checkstop(L, actions);
 }
 
 static FILE *clib_native_fopen(lua_State *L, const char *name,

@@ -6,16 +6,32 @@
 #ifndef _LJ_THR_H
 #define _LJ_THR_H
 
-#include <pthread.h>
 #include <stdint.h>
 
 #include "lj_atomic.h"
 #include "lj_obj.h"
 
+#if LJ_TARGET_WINDOWS
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#else
+#include <pthread.h>
+#endif
+
 typedef void *(*LJThrFunc)(void *);
 
 typedef struct LJThr {
+#if LJ_TARGET_WINDOWS
+  HANDLE handle;
+  DWORD sysid;
+  LJThrFunc func;
+  void *arg;
+  void *ret;
+#else
   pthread_t handle;
+#endif
   uint32_t tid;
 } LJThr;
 
@@ -108,6 +124,7 @@ LJ_FUNC int lj_thr_join(LJThr *thr, void **ret);
 LJ_FUNC uint32_t lj_thr_newid(void);
 LJ_FUNC uint32_t lj_thr_id(const LJThr *thr);
 LJ_FUNC uint32_t lj_thr_current_id(global_State *g);
+LJ_FUNC uint64_t lj_thr_now_ns(void);
 LJ_FUNC void lj_thr_set_tg(TGState *tg);
 LJ_FUNC TGState *lj_thr_get_tg(void);
 LJ_FUNCA TGState *lj_thr_get_tg_fallback(global_State *g);
