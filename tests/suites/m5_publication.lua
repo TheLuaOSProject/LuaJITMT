@@ -482,26 +482,6 @@ local function assert_cclosure_upvalue_source_guards(t)
     end
   end
 
-  local function c_function_body(src, signature)
-    local start = assert(src:find(signature, 1, true),
-                         "missing C function " .. signature)
-    local brace = assert(src:find("{", start, true),
-                         "missing C function body " .. signature)
-    local depth = 0
-    for i = brace, #src do
-      local ch = src:sub(i, i)
-      if ch == "{" then
-        depth = depth + 1
-      elseif ch == "}" then
-        depth = depth - 1
-        if depth == 0 then
-          return src:sub(start, i)
-        end
-      end
-    end
-    error("unterminated C function " .. signature, 2)
-  end
-
   for _, file in ipairs({ "lib_base.c", "lib_table.c", "lib_string.c" }) do
     local src = utils.read_source_file(t:path("src", file))
     if src:find("lj_lib_upvalue(L", 1, true) then
@@ -524,14 +504,14 @@ local function assert_cclosure_upvalue_source_guards(t)
   end
 
   local lj_api = utils.read_source_file(t:path("src", "lj_api.c"))
-  local getupvalue = c_function_body(lj_api,
+  local getupvalue = utils.c_function_body(lj_api,
     "LUA_API const char *lua_getupvalue(lua_State *L, int idx, int n)")
   assert_contains("lua_getupvalue() C-upvalue snapshot", getupvalue,
     "index2adr_read(L, idx, &snap)")
   assert_contains("lua_getupvalue() selected upvalue snapshot", getupvalue,
     "lj_tv_load_acq(L->top, val)")
 
-  local cupvalue_store = c_function_body(lj_api,
+  local cupvalue_store = utils.c_function_body(lj_api,
     "static LJ_AINLINE void index2adr_cupvalue_store_rel(lua_State *L, int idx,")
   assert_contains("C-upvalue store trace flush", cupvalue_store,
     "api_trace_flush_mutation(L);")
@@ -540,7 +520,7 @@ local function assert_cclosure_upvalue_source_guards(t)
   assert_contains("C-upvalue store publication", cupvalue_store,
     "lj_gc_pubobjtv(L, fn, &snap);")
 
-  local pushcclosure = c_function_body(lj_api,
+  local pushcclosure = utils.c_function_body(lj_api,
     "LUA_API void lua_pushcclosure(lua_State *L, lua_CFunction f, int n)")
   assert_contains("lua_pushcclosure() C-upvalue release copy", pushcclosure,
     "copyTVrel(L, &fn->c.upvalue[n], L->top+n);")

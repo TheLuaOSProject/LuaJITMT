@@ -403,35 +403,15 @@ print("jit-env-mutation-flush OK")
 ]=]
 end
 
-local function c_function_body(src, signature)
-  local start = assert(src:find(signature, 1, true),
-                       "missing C function " .. signature)
-  local brace = assert(src:find("{", start, true),
-                       "missing C function body " .. signature)
-  local depth = 0
-  for i = brace, #src do
-    local ch = src:sub(i, i)
-    if ch == "{" then
-      depth = depth + 1
-    elseif ch == "}" then
-      depth = depth - 1
-      if depth == 0 then
-        return src:sub(start, i)
-      end
-    end
-  end
-  error("unterminated C function " .. signature, 2)
-end
-
 local function assert_cclosure_upvalue_trace_source_guards(t)
   local api = utils.read_source_file(t:path("src", "lj_api.c"))
 
-  local flush = c_function_body(api,
+  local flush = utils.c_function_body(api,
     "static LJ_AINLINE void api_trace_flush_mutation(lua_State *L)")
   checks.assert_text_contains("C upvalue trace flush", flush,
     "lj_trace_flushall_hs(L)", "full trace flush handshake")
 
-  local cupvalue_store = c_function_body(api,
+  local cupvalue_store = utils.c_function_body(api,
     "static LJ_AINLINE void index2adr_cupvalue_store_rel(lua_State *L, int idx,")
   checks.assert_text_contains("C upvalue trace flush", cupvalue_store,
     "api_trace_flush_mutation(L);", "API mutation trace flush")
@@ -440,7 +420,7 @@ local function assert_cclosure_upvalue_trace_source_guards(t)
   checks.assert_text_contains("C upvalue trace flush", cupvalue_store,
     "lj_gc_pubobjtv(L, fn, &snap);", "C upvalue publication")
 
-  local copy_slot = c_function_body(api,
+  local copy_slot = utils.c_function_body(api,
     "static void copy_slot(lua_State *L, TValue *f, int idx)")
   checks.assert_text_contains("C upvalue trace flush", copy_slot,
     "index2adr_cupvalue_store_rel(L, idx, f);",
@@ -461,7 +441,7 @@ end
 
 local function assert_env_trace_source_guards(t)
   local api = utils.read_source_file(t:path("src", "lj_api.c"))
-  local copy_slot = c_function_body(api,
+  local copy_slot = utils.c_function_body(api,
     "static void copy_slot(lua_State *L, TValue *f, int idx)")
   checks.assert_text_contains_count("API env trace flush", copy_slot,
     "api_trace_flush_mutation(L);", 2, "copy_slot env trace flush")
@@ -470,7 +450,7 @@ local function assert_env_trace_source_guards(t)
   checks.assert_text_contains("API env trace flush", copy_slot,
     "setgcrefrel(fn->c.env, obj2gco(t));", "API C function env release store")
 
-  local lua_setfenv = c_function_body(api,
+  local lua_setfenv = utils.c_function_body(api,
     "LUA_API int lua_setfenv(lua_State *L, int idx)")
   checks.assert_text_contains_count("API env trace flush", lua_setfenv,
     "api_trace_flush_mutation(L);", 2, "lua_setfenv env trace flush")
@@ -482,7 +462,7 @@ local function assert_env_trace_source_guards(t)
   local base = utils.read_source_file(t:path("src", "lib_base.c"))
   checks.assert_text_contains("base env trace flush", base,
     "#include \"lj_trace.h\"", "base library trace flush include")
-  local base_setfenv = c_function_body(base, "LJLIB_CF(setfenv)")
+  local base_setfenv = utils.c_function_body(base, "LJLIB_CF(setfenv)")
   checks.assert_text_contains_count("base env trace flush", base_setfenv,
     "lib_trace_flush_env(L);", 2, "base setfenv trace flush")
   checks.assert_text_contains("base env trace flush", base_setfenv,

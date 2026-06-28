@@ -60,6 +60,26 @@ function M.read_source_file(path)
   return read_raw_file(path)
 end
 
+function M.c_function_body(src, signature)
+  local start = assert(src:find(signature, 1, true),
+                       "missing C function " .. signature)
+  local brace = assert(src:find("{", start, true),
+                       "missing C function body " .. signature)
+  local depth = 0
+  for i = brace, #src do
+    local ch = src:sub(i, i)
+    if ch == "{" then
+      depth = depth + 1
+    elseif ch == "}" then
+      depth = depth - 1
+      if depth == 0 then
+        return src:sub(start, i)
+      end
+    end
+  end
+  error("unterminated C function " .. signature, 2)
+end
+
 function M.write_file(path, data, mode)
   local f, err = io.open(path, mode or "wb")
   if not f then error(path .. ": " .. err, 2) end
