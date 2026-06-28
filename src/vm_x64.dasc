@@ -5394,6 +5394,13 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |2:
     if (op == BC_JFUNCF) {
       |  movzx RDd, PC_RD
+      |  load_J RA
+      |  mov RA, [RA+J_OFS(tracev)]
+      |  mov RA, [RA+RD*8+TRACEV_SLOT_OFS]
+      |  cmp RA, 1
+      |  ja >4
+      |  ins_next
+      |4:
       |  jmp =>BC_JLOOP
     } else {
 #if LJ_HASJIT

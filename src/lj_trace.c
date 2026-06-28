@@ -745,6 +745,8 @@ static void trace_scope_clear_slot(jit_State *J, TraceNo traceno, GCtrace *T,
     }
   }
   lj_gdbjit_deltrace(J, T);
+  if (trace_root_acq(T) == 0)
+    trace_unpatch(J, T);
   trace_traceno_rel(T, 0);  /* Scoped slot retired after HS_EXIT_TRACES grace. */
   trace_link_rel(T, 0);
   trace_nextroot_rel(T, 0);
@@ -798,8 +800,10 @@ int lj_trace_flushall(lua_State *L)
     GCtrace *T = traceref(J, i);
     if (T) {
       trace_exittab_reset(J, T);
-      if (trace_root_acq(T) == 0)
+      if (trace_root_acq(T) == 0) {
 	trace_flushroot(J, T, 0);
+	trace_unpatch(J, T);
+      }
       lj_gdbjit_deltrace(J, T);
       trace_traceno_rel(T, 0);  /* Blacklist the link for cont_stitch. */
       trace_link_rel(T, 0);
@@ -1266,7 +1270,7 @@ static LJ_AINLINE void trace_pendpatch(jit_State *J, int force)
 	TraceNo traceno = bc_d(patchins);
 	GCtrace *T = traceref(J, traceno);
 	if (T && trace_traceno_acq(T) == traceno &&
-	    la_load64_acq(&T->retire_epoch) != LJ_TRACE_SCOPE_FLUSHING)
+	    la_load64_acq(&T->retire_epoch) == 0)
 	  bc_publish(J->patchpc, patchins);
       } else {
 	bc_publish(J->patchpc, patchins);
@@ -1437,7 +1441,7 @@ static void trace_hotside(jit_State *J, const BCIns *pc, lua_State *L,
   uint32_t hotexit = J->param[JIT_P_hotexit];
   uint8_t count;
   if (!parentT || trace_traceno_acq(parentT) != parent ||
-      la_load64_acq(&parentT->retire_epoch) == LJ_TRACE_SCOPE_FLUSHING ||
+      la_load64_acq(&parentT->retire_epoch) != 0 ||
       exitno >= trace_nsnap_acq(parentT))
     return;
   snap = &trace_snap_acq(parentT)[exitno];
@@ -1458,7 +1462,7 @@ static void trace_hotside(jit_State *J, const BCIns *pc, lua_State *L,
       return;
     parentT = traceref(J, parent);
     if (!parentT || trace_traceno_acq(parentT) != parent ||
-	la_load64_acq(&parentT->retire_epoch) == LJ_TRACE_SCOPE_FLUSHING ||
+	la_load64_acq(&parentT->retire_epoch) != 0 ||
 	exitno >= trace_nsnap_acq(parentT)) {
       lj_jit_token_release(J);
       return;
