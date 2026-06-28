@@ -11,6 +11,10 @@ String declarations still use the parser-backed path. User-defined or
 parser-created ctype comparisons still wait/retry if their sequence-checked
 snapshot overlaps an active parser mutation, so rollback and in-progress type
 publication remain hidden from readers.
+Exact `CTypeID` equality is handled before that snapshot path. This needs no
+ctype-table read, so `ffi.istype(ct, value)` can record under an unrelated
+parser-owned token when the ctype object and cdata value already carry the same
+ID.
 
 Predefined immutable ctype pairs (`int`, `uint8_t`, ctype objects for those
 IDs, and other records in the predefined range) now use the same comparison
@@ -28,8 +32,12 @@ Coverage:
 - holds the parser token while checking predefined `int`/`uint8_t`
   comparisons, proving that immutable predefined comparisons do not park behind
   unrelated parser work;
-- keeps a user-defined struct comparison under a held parser token, proving the
-  guarded wait/retry path still runs for parser-created records;
+- keeps a user-defined struct-vs-pointer comparison under a held parser token,
+  proving the guarded wait/retry path still runs for parser-created records
+  when the comparison needs the snapshot walker;
+- holds the parser token from a trace-start callback around an exact-ID
+  user-defined struct comparison and requires a successful trace with no
+  `CTBUSY`;
 - wired the fixture into `m7_ffi_typeinfo_snapshot`.
 
 Validation:

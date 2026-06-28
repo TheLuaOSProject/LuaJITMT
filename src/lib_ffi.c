@@ -846,7 +846,7 @@ static jit_State *ffi_active_recorder(lua_State *L)
 }
 #endif
 
-static void ffi_layout_wait_or_record_ctbusy(lua_State *L, CTState *cts)
+static void ffi_ctype_wait_or_record_ctbusy(lua_State *L, CTState *cts)
 {
 #if LJ_HASJIT
   jit_State *J = ffi_active_recorder(L);
@@ -1884,10 +1884,18 @@ LJLIB_CF(ffi_istype)	LJLIB_REC(.)
     CTypeID id2 = cd->ctypeid == CTID_CTYPEID ? *(CTypeID *)cdataptr(cd) :
 						cd->ctypeid;
     if (!isstr) {
+      if (id1 == id2) {
+	b = 1;
+	goto done;
+      }
       ffi_istype_snapshot_wait(L, cts, id1, id2, &b);
       goto done;
     }
     id1 = ffi_checkctype(L, cts, NULL);
+    if (id1 == id2) {
+      b = 1;
+      goto done;
+    }
     ffi_istype_snapshot_wait(L, cts, id1, id2, &b);
   } else if (isstr) {
     id1 = ffi_checkctype(L, cts, NULL);
@@ -2200,7 +2208,7 @@ static int ffi_new_layout_wait(lua_State *L, CTState *cts, CTypeID id,
 				 infop, szp, neednelem);
     if (ok >= 0)
       return ok;
-    ffi_layout_wait_or_record_ctbusy(L, cts);
+    ffi_ctype_wait_or_record_ctbusy(L, cts);
   }
 }
 
@@ -2262,7 +2270,7 @@ static int ffi_layout_sizeof_wait(lua_State *L, CTState *cts, CTypeID id,
 				    neednelem);
     if (ok >= 0)
       return ok;
-    ffi_layout_wait_or_record_ctbusy(L, cts);
+    ffi_ctype_wait_or_record_ctbusy(L, cts);
   }
 }
 
@@ -2308,7 +2316,7 @@ static int ffi_layout_alignof_wait(lua_State *L, CTState *cts, CTypeID id,
     ok = ffi_layout_alignof_snapshot(cts, id, alignp);
     if (ok >= 0)
       return ok;
-    ffi_layout_wait_or_record_ctbusy(L, cts);
+    ffi_ctype_wait_or_record_ctbusy(L, cts);
   }
 }
 
@@ -2409,7 +2417,7 @@ static int ffi_layout_offsetof_wait(lua_State *L, CTState *cts, CTypeID id,
     ok = ffi_layout_offsetof_snapshot(cts, id, name, ofs, out);
     if (ok >= 0)
       return ok;
-    ffi_layout_wait_or_record_ctbusy(L, cts);
+    ffi_ctype_wait_or_record_ctbusy(L, cts);
   }
 }
 
