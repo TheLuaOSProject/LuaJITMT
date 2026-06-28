@@ -560,6 +560,26 @@ static void exercise_io_lines_upvalue_mutation(lua_State *L)
     "io.lines upvalue mutation");
 }
 
+static void exercise_coroutine_wrap_upvalue_mutation(lua_State *L)
+{
+  check_lua(L, luaL_dostring(L,
+    "local wrap = coroutine.wrap(function()\n"
+    "  coroutine.yield('original-yield')\n"
+    "  return 'original-done'\n"
+    "end)\n"
+    "assert(wrap() == 'original-yield')\n"
+    "local co = coroutine.create(function()\n"
+    "  coroutine.yield('replacement-yield')\n"
+    "  return 'replacement-done'\n"
+    "end)\n"
+    "local name, old = debug.getupvalue(wrap, 1)\n"
+    "assert(name and type(old) == 'thread')\n"
+    "assert(debug.setupvalue(wrap, 1, co))\n"
+    "assert(wrap() == 'replacement-yield')\n"
+    "assert(wrap() == 'replacement-done')\n"),
+    "coroutine.wrap upvalue mutation");
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -579,6 +599,7 @@ int main(void)
   exercise_thread_api(L);
   exercise_gmatch_position(L);
   exercise_io_lines_upvalue_mutation(L);
+  exercise_coroutine_wrap_upvalue_mutation(L);
 
   lua_close(L);
   printf("t-cclosure-upvalue-snapshot OK: C closure upvalue snapshots verified\n");
