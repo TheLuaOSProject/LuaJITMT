@@ -188,12 +188,28 @@ typedef LJ_ALIGN(CCALL_ALIGN_CALLSTATE) struct CCallState {
   GPRArg stack[CCALL_NUM_STACK];	/* Stack slots. */
 } CCallState;
 
+/* Native-state bookkeeping around an FFI C call. */
+typedef struct CCallNativeState {
+  TGState *tg;
+  CCallbackRuntime *cb;
+  void *old_ffi_call_func;
+  uint8_t old_native_had_stopreq;
+  int had_stopreq;
+} CCallNativeState;
+
 /* -- C call handling ----------------------------------------------------- */
 
 /* Really belongs to lj_vm.h. */
 LJ_ASMF void LJ_FASTCALL lj_vm_ffi_call(CCallState *cc);
 
 LJ_FUNC CTypeID lj_ccall_ctid_vararg(lua_State *L, CTState *cts, cTValue *o);
+LJ_FUNC void lj_ccall_native_save(lua_State *L, CCallNativeState *st);
+LJ_FUNC void lj_ccall_native_enter(lua_State *L, CCallNativeState *st,
+				   void *func);
+LJ_FUNC uint32_t lj_ccall_native_leave(lua_State *L, CTState *cts,
+				       CCallNativeState *st, void *func);
+LJ_FUNC void lj_ccall_native_checkstop(lua_State *L, uint32_t actions,
+				       const CCallNativeState *st);
 LJ_FUNC int lj_ccall_func(lua_State *L, GCcdata *cd);
 
 #endif

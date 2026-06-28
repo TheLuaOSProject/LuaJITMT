@@ -54,4 +54,32 @@ if ! awk '
   printf '%s\n' 'LJ_FFI_RECORD_CALLS must default off and hard-error until IR_CALLXS has a native protocol' >&2
   exit 1
 fi
+if ! awk '
+  /typedef struct CCallNativeState/ { state = 1 }
+  /LJ_FUNC void lj_ccall_native_save[[:space:]]*[(]/ { save = 1 }
+  /LJ_FUNC void lj_ccall_native_enter[[:space:]]*[(]/ { enter = 1 }
+  /LJ_FUNC uint32_t lj_ccall_native_leave[[:space:]]*[(]/ { leave = 1 }
+  /LJ_FUNC void lj_ccall_native_checkstop[[:space:]]*[(]/ { check = 1 }
+  END { exit(state && save && enter && leave && check ? 0 : 1) }
+' "$ROOT/src/lj_ccall.h"; then
+  printf '%s\n' 'FFI C-call native-state helpers must remain exported for the future IR_CALLXS bridge' >&2
+  exit 1
+fi
+if hits=$(grep -nE 'static .*ccall_native_(save|enter|leave|checkstop)' "$ROOT/src/lj_ccall.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'FFI C-call native-state helpers must not collapse back to file-local statics' >&2
+  exit 1
+fi
+if ! awk '
+  /^int lj_ccall_func[[:space:]]*[(]/ { in_fn = 1 }
+  in_fn && /lj_ccall_native_save[[:space:]]*[(]/ { save = 1 }
+  in_fn && /lj_ccall_native_enter[[:space:]]*[(]/ { enter = 1 }
+  in_fn && /lj_ccall_native_leave[[:space:]]*[(]/ { leave = 1 }
+  in_fn && /lj_ccall_native_checkstop[[:space:]]*[(]/ { check = 1 }
+  in_fn && /^}/ { in_fn = 0 }
+  END { exit(save && enter && leave && check ? 0 : 1) }
+' "$ROOT/src/lj_ccall.c"; then
+  printf '%s\n' 'interpreted FFI C calls must route through the exported native-state helper ABI' >&2
+  exit 1
+fi
 exec "$ROOT/tools/ci/lua_test.sh" m7_ffi_blocking

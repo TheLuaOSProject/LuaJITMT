@@ -106,6 +106,8 @@ fi
       run_c_fixture_specs(t, {
         { output = "lj_t-ffi-cbblack-race",
           cfile = "t-ffi-cbblack-race.c" },
+        { output = "lj_t-ffi-ccall-native-helpers",
+          cfile = "t-ffi-ccall-native-helpers.c" },
         { output = "lj_t-ffi-ccall-stopreq",
           cfile = "t-ffi-ccall-stopreq.c" }
       })
