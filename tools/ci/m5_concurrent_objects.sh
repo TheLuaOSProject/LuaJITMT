@@ -30,6 +30,7 @@ if ! awk '
 fi
 
 "$ROOT/tools/ci/m5_metadata_store_waits.sh"
+"$ROOT/tools/ci/m5_meta_snapshot.sh"
 "$ROOT/tools/ci/m5_tab_store_waits.sh"
 "$ROOT/tools/ci/m5_gc_waits.sh"
 exec "$ROOT/tools/ci/lua_test.sh" m5_concurrent_objects
