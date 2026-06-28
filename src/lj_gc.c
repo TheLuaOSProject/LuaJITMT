@@ -1465,7 +1465,7 @@ static int gc_mayclear(global_State *g, cTValue *o, int val)
 }
 
 /* Clear collected entries from weak tables. */
-void lj_gc_clearweak_legacy(global_State *g, GCobj *o)
+void lj_gc_clearweak_bridge(global_State *g, GCobj *o)
 {
   while (o) {
     GCtab *t = gco2tab(o);
@@ -1587,7 +1587,7 @@ static int atomic(global_State *g, lua_State *L)
   {
     GCobj *weak = lj_gc_list_head_acq(&g->gc.weak);
     if (!lj_gc2_weak_complete(g, weak, LJ_GC2_WEAK_DRAIN_BATCH))
-      lj_gc_clearweak_legacy(g, weak);
+      lj_gc_clearweak_bridge(g, weak);
   }
   lj_gc2_weak_to_sweep(g);
 

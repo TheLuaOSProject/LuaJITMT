@@ -16,9 +16,9 @@ local function bucket_total(stats)
 end
 
 local finreg_stats = {
-  "weak_legacy_backfill_tables",
-  "weak_legacy_backfill_slots",
-  "weak_legacy_backfill_cleared",
+  "weak_bridge_backfill_tables",
+  "weak_bridge_backfill_slots",
+  "weak_bridge_backfill_cleared",
   "weak_keys_marked",
   "weak_values_marked",
   "finreg_cdata_sets",
@@ -116,9 +116,9 @@ assert_number(before, "sweep_live_huge_bytes")
 assert_number(before, "live_estimate")
 assert_number(before, "weak_clear_tables")
 assert_number(before, "weak_clear_cleared")
-assert_number(before, "weak_legacy_skipped")
-assert_number(before, "weak_legacy_fallbacks")
-assert_number(before, "weak_legacy_backfills")
+assert_number(before, "weak_bridge_skipped")
+assert_number(before, "weak_bridge_fallbacks")
+assert_number(before, "weak_bridge_backfills")
 assert_number(before, "finalizer_queued")
 assert_number(before, "finalizer_dequeued")
 for i = 1, #finreg_stats do
@@ -172,7 +172,7 @@ assert(after.sweep_live_updates >= before.sweep_live_updates)
 assert(after.live_estimate >= 0)
 assert(after.finalizer_queued >= before.finalizer_queued)
 assert(after.finalizer_dequeued >= before.finalizer_dequeued)
-assert(after.weak_legacy_skipped >= before.weak_legacy_skipped)
+assert(after.weak_bridge_skipped >= before.weak_bridge_skipped)
 for i = 1, #finreg_stats do
   local key = finreg_stats[i]
   assert_number(after, key)

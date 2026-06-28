@@ -599,15 +599,15 @@ static void gc_stats_push(lua_State *L)
   gc_stats_setnum(L, t, "live_estimate", s.live_estimate);
   gc_stats_setnum(L, t, "weak_clear_tables", s.weak_clear_tables);
   gc_stats_setnum(L, t, "weak_clear_cleared", s.weak_clear_cleared);
-  gc_stats_setnum(L, t, "weak_legacy_skipped", s.weak_legacy_skipped);
-  gc_stats_setnum(L, t, "weak_legacy_fallbacks", s.weak_legacy_fallbacks);
-  gc_stats_setnum(L, t, "weak_legacy_backfills", s.weak_legacy_backfills);
-  gc_stats_setnum(L, t, "weak_legacy_backfill_tables",
-		  s.weak_legacy_backfill_tables);
-  gc_stats_setnum(L, t, "weak_legacy_backfill_slots",
-		  s.weak_legacy_backfill_slots);
-  gc_stats_setnum(L, t, "weak_legacy_backfill_cleared",
-		  s.weak_legacy_backfill_cleared);
+  gc_stats_setnum(L, t, "weak_bridge_skipped", s.weak_bridge_skipped);
+  gc_stats_setnum(L, t, "weak_bridge_fallbacks", s.weak_bridge_fallbacks);
+  gc_stats_setnum(L, t, "weak_bridge_backfills", s.weak_bridge_backfills);
+  gc_stats_setnum(L, t, "weak_bridge_backfill_tables",
+		  s.weak_bridge_backfill_tables);
+  gc_stats_setnum(L, t, "weak_bridge_backfill_slots",
+		  s.weak_bridge_backfill_slots);
+  gc_stats_setnum(L, t, "weak_bridge_backfill_cleared",
+		  s.weak_bridge_backfill_cleared);
   gc_stats_setnum(L, t, "weak_keys_marked", s.weak_keys_marked);
   gc_stats_setnum(L, t, "weak_values_marked", s.weak_values_marked);
   gc_stats_setnum(L, t, "finreg_cdata_sets", s.finreg_cdata_sets);

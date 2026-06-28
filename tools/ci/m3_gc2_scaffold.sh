@@ -55,7 +55,7 @@ if hits=$(grep -RInE -- 'lj_gc2_barrier_tvn_g[[:space:]]*[(]|LJ_FUNCA .*lj_gc2_b
   printf '%s\n' 'parentless GC2 range barrier wrapper is forbidden; use lj_gc2_barrier_tvn_pair_g with an explicit parent or NULL root context' >&2
   exit 1
 fi
-if hits=$(grep -nE -- 'lj_gc2_weak_(snapshot_(count|tab|scan|clear|covers_legacy)|drain|legacy_result)[[:space:]]*[(]|LJ_FUNC .*lj_gc2_weak_(snapshot_(count|tab|scan|clear|covers_legacy)|drain|legacy_result)[[:space:]]*[(]' \
+if hits=$(grep -nE -- 'lj_gc2_weak_(snapshot_(count|tab|scan|clear|covers_bridge)|drain|bridge_result)[[:space:]]*[(]|LJ_FUNC .*lj_gc2_weak_(snapshot_(count|tab|scan|clear|covers_bridge)|drain|bridge_result)[[:space:]]*[(]' \
     "$ROOT"/src/*.c "$ROOT"/tests/*.c "$ROOT/src/lj_gc2.h" | \
     grep -v "$ROOT/src/lj_gc2.c:" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
@@ -67,8 +67,8 @@ for helper in lj_gc2_weak_snapshot_count \
   lj_gc2_weak_snapshot_scan \
   lj_gc2_weak_snapshot_clear \
   lj_gc2_weak_drain \
-  lj_gc2_weak_snapshot_covers_legacy \
-  lj_gc2_weak_legacy_result; do
+  lj_gc2_weak_snapshot_covers_bridge \
+  lj_gc2_weak_bridge_result; do
   if ! grep -qE "^[[:space:]]*static .*${helper}[[:space:]]*[(]" \
       "$ROOT/src/lj_gc2.c"; then
     printf '%s\n' "${helper} must stay static inside lj_gc2.c" >&2

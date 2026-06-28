@@ -645,15 +645,15 @@ static void test_isolated_weak_skip_case(const char *mode)
   lua_settable(L, 1);
   lua_pop(L, 2);  /* Keep only the weak table as a stack root. */
 
-  skipped0 = gc2_weak_legacy_skipped_acq(g);
-  fallbacks0 = gc2_weak_legacy_fallbacks_acq(g);
+  skipped0 = gc2_weak_bridge_skipped_acq(g);
+  fallbacks0 = gc2_weak_bridge_fallbacks_acq(g);
   weak_clear_tables0 = gc2_weak_clear_tables_acq(g);
   weak_clear_cleared0 = gc2_weak_clear_cleared_acq(g);
   lj_gc_fullgc(L);
   assert(gc2_weak_clear_tables_acq(g) > weak_clear_tables0);
   assert(gc2_weak_clear_cleared_acq(g) > weak_clear_cleared0);
-  assert(gc2_weak_legacy_skipped_acq(g) == skipped0 + 1u);
-  assert(gc2_weak_legacy_fallbacks_acq(g) == fallbacks0);
+  assert(gc2_weak_bridge_skipped_acq(g) == skipped0 + 1u);
+  assert(gc2_weak_bridge_fallbacks_acq(g) == fallbacks0);
   assert_idle(g, tg);
 
   lua_close(L);
@@ -710,9 +710,9 @@ int main(void)
   uint64_t sweep_to_idle0, preserve_abort_to_idle0;
   uint64_t sweep_live_updates0, live_estimate;
   uint64_t worker_weak0, weak_clear_tables0, weak_clear_cleared0;
-  uint64_t weak_legacy_fallbacks0;
-  uint64_t weak_legacy_skipped0, weak_legacy_backfills0;
-  uint64_t weak_legacy_backfill_tables0, weak_legacy_backfill_cleared0;
+  uint64_t weak_bridge_fallbacks0;
+  uint64_t weak_bridge_skipped0, weak_bridge_backfills0;
+  uint64_t weak_bridge_backfill_tables0, weak_bridge_backfill_cleared0;
   uint64_t finalizer_enters0, finalizer_leaves0, finalizer_blocks0;
   uint64_t finalizer_queued0, finalizer_dequeued0, finalizer_mpsc_drained0;
   MSize weak_n;
@@ -933,15 +933,15 @@ int main(void)
   weak_complete_progress0 = gc2_weak_complete_progress_acq(g);
   weak_clear_tables0 = gc2_weak_clear_tables_acq(g);
   weak_clear_cleared0 = gc2_weak_clear_cleared_acq(g);
-  weak_legacy_fallbacks0 = gc2_weak_legacy_fallbacks_acq(g);
+  weak_bridge_fallbacks0 = gc2_weak_bridge_fallbacks_acq(g);
   lj_gc_fullgc(L);
   assert(gc2_worker_weak_drained_acq(g) > worker_weak0);
   assert(gc2_weak_complete_progress_acq(g) >
 	 weak_complete_progress0);
   assert(gc2_weak_clear_tables_acq(g) > weak_clear_tables0);
   assert(gc2_weak_clear_cleared_acq(g) > weak_clear_cleared0);
-  assert(gc2_weak_legacy_fallbacks_acq(g) >=
-	 weak_legacy_fallbacks0);
+  assert(gc2_weak_bridge_fallbacks_acq(g) >=
+	 weak_bridge_fallbacks0);
   assert_idle(g, tg);
   lua_pushnil(L);
   lua_setglobal(L, "weakcase");
@@ -959,28 +959,28 @@ int main(void)
     "  end\n"
     "  weakmany[i] = w\n"
     "end\n") == LUA_OK);
-  weak_legacy_fallbacks0 = gc2_weak_legacy_fallbacks_acq(g);
-  weak_legacy_skipped0 = gc2_weak_legacy_skipped_acq(g);
-  weak_legacy_backfills0 = gc2_weak_legacy_backfills_acq(g);
-  weak_legacy_backfill_tables0 =
-    gc2_weak_legacy_backfill_tables_acq(g);
-  weak_legacy_backfill_cleared0 =
-    gc2_weak_legacy_backfill_cleared_acq(g);
+  weak_bridge_fallbacks0 = gc2_weak_bridge_fallbacks_acq(g);
+  weak_bridge_skipped0 = gc2_weak_bridge_skipped_acq(g);
+  weak_bridge_backfills0 = gc2_weak_bridge_backfills_acq(g);
+  weak_bridge_backfill_tables0 =
+    gc2_weak_bridge_backfill_tables_acq(g);
+  weak_bridge_backfill_cleared0 =
+    gc2_weak_bridge_backfill_cleared_acq(g);
   lj_gc_fullgc(L);
   assert(luaL_dostring(L,
     "for i = 1, weak_n do\n"
     "  assert(next(weakmany[i]) == nil)\n"
     "end\n") == LUA_OK);
-  assert(gc2_weak_legacy_fallbacks_acq(g) ==
-	 weak_legacy_fallbacks0);
-  assert(gc2_weak_legacy_skipped_acq(g) ==
-	 weak_legacy_skipped0 + 1u);
-  assert(gc2_weak_legacy_backfills_acq(g) >
-	 weak_legacy_backfills0);
-  assert(gc2_weak_legacy_backfill_tables_acq(g) >
-	 weak_legacy_backfill_tables0);
-  assert(gc2_weak_legacy_backfill_cleared_acq(g) >
-	 weak_legacy_backfill_cleared0);
+  assert(gc2_weak_bridge_fallbacks_acq(g) ==
+	 weak_bridge_fallbacks0);
+  assert(gc2_weak_bridge_skipped_acq(g) ==
+	 weak_bridge_skipped0 + 1u);
+  assert(gc2_weak_bridge_backfills_acq(g) >
+	 weak_bridge_backfills0);
+  assert(gc2_weak_bridge_backfill_tables_acq(g) >
+	 weak_bridge_backfill_tables0);
+  assert(gc2_weak_bridge_backfill_cleared_acq(g) >
+	 weak_bridge_backfill_cleared0);
   assert_idle(g, tg);
   lua_pushnil(L);
   lua_setglobal(L, "weakmany");

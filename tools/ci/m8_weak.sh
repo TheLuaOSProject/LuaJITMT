@@ -89,24 +89,24 @@ for helper in gc2_weak_scan_runs_acq \
   gc2_weak_clear_cleared_acq \
   gc2_weak_clear_cleared_store_rlx \
   gc2_weak_clear_cleared_add \
-  gc2_weak_legacy_skipped_acq \
-  gc2_weak_legacy_skipped_store_rlx \
-  gc2_weak_legacy_skipped_add \
-  gc2_weak_legacy_fallbacks_acq \
-  gc2_weak_legacy_fallbacks_store_rlx \
-  gc2_weak_legacy_fallbacks_add \
-  gc2_weak_legacy_backfills_acq \
-  gc2_weak_legacy_backfills_store_rlx \
-  gc2_weak_legacy_backfills_add \
-  gc2_weak_legacy_backfill_tables_acq \
-  gc2_weak_legacy_backfill_tables_store_rlx \
-  gc2_weak_legacy_backfill_tables_add \
-  gc2_weak_legacy_backfill_slots_acq \
-  gc2_weak_legacy_backfill_slots_store_rlx \
-  gc2_weak_legacy_backfill_slots_add \
-  gc2_weak_legacy_backfill_cleared_acq \
-  gc2_weak_legacy_backfill_cleared_store_rlx \
-  gc2_weak_legacy_backfill_cleared_add; do
+  gc2_weak_bridge_skipped_acq \
+  gc2_weak_bridge_skipped_store_rlx \
+  gc2_weak_bridge_skipped_add \
+  gc2_weak_bridge_fallbacks_acq \
+  gc2_weak_bridge_fallbacks_store_rlx \
+  gc2_weak_bridge_fallbacks_add \
+  gc2_weak_bridge_backfills_acq \
+  gc2_weak_bridge_backfills_store_rlx \
+  gc2_weak_bridge_backfills_add \
+  gc2_weak_bridge_backfill_tables_acq \
+  gc2_weak_bridge_backfill_tables_store_rlx \
+  gc2_weak_bridge_backfill_tables_add \
+  gc2_weak_bridge_backfill_slots_acq \
+  gc2_weak_bridge_backfill_slots_store_rlx \
+  gc2_weak_bridge_backfill_slots_add \
+  gc2_weak_bridge_backfill_cleared_acq \
+  gc2_weak_bridge_backfill_cleared_store_rlx \
+  gc2_weak_bridge_backfill_cleared_add; do
   if ! grep -qE "static LJ_AINLINE .*[*[:space:]]${helper}[[:space:]]*[(]" \
       "$ROOT/src/lj_obj.h"; then
     printf '%s\n' "${helper} helper is required for GC2 weak scan counters" >&2
@@ -114,11 +114,11 @@ for helper in gc2_weak_scan_runs_acq \
   fi
 done
 
-weak_legacy_counters='weak_legacy_(skipped|fallbacks|backfills)'
-weak_legacy_counters="${weak_legacy_counters}|weak_legacy_backfill_(tables|slots|cleared)"
+weak_bridge_counters='weak_bridge_(skipped|fallbacks|backfills)'
+weak_bridge_counters="${weak_bridge_counters}|weak_bridge_backfill_(tables|slots|cleared)"
 weak_scan_counters='weak_scan_(runs|tables|slots|clearable)'
 weak_scan_counters="${weak_scan_counters}|weak_clear_(runs|tables|slots|cleared)"
-weak_scan_counters="${weak_scan_counters}|${weak_legacy_counters}"
+weak_scan_counters="${weak_scan_counters}|${weak_bridge_counters}"
 weak_scan_raw_re="->[[:space:]]*gc2[.](${weak_scan_counters})"
 weak_scan_raw_re="${weak_scan_raw_re}([^[:alnum:]_]|$)"
 weak_scan_addr_re="&[[:space:]]*[^)]*->[[:space:]]*gc2[.]"

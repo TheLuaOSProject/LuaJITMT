@@ -81,7 +81,7 @@ local function run_bench_smoke(t)
   assert_command_output_contains(
     "BENCH_SCALE=0.0001 BENCH_THREADS='1 2' BENCH_FILTER=arith-MT " ..
       shell_quote(t:path("aux", "bench", "run.sh")) .. " scaling " .. luajit,
-    "weak_legacy_skipped=")
+    "weak_bridge_skipped=")
   assert_command_output_all_contains(
     "BENCH_SCALE=0.05 " .. luajit .. " -joff " .. bench_lua ..
       " alloc_tables",

@@ -398,7 +398,7 @@ P_WEAK (leader+workers, barrier still ON, mutators running):
   cdata work.
 Current bridge note: `lj_gc2_mark_to_weak()` now makes `P_WEAK` visible after
 the fixpoint/paranoia bridge, and callers use that transition helper directly.
-`lj_gc2_weak_complete()` owns the current bounded weak-drain loop and legacy
+`lj_gc2_weak_complete()` owns the current bounded weak-drain loop and bridge
 fallback decision, while `lj_gc2_weak_to_sweep()` publishes the staged
 `P_SWEEP` transition and runs the existing sweep-entry handshake after a
 successful `P_WEAK -> P_SWEEP` CAS. This preserves the original
@@ -410,27 +410,27 @@ in a bounded GC2-owned side vector
 (`weak_stack`/`weak_count`) with per-slot ready publication, and counts them by
 mode (`weak_tables_seen`, `weak_tables_weakkey`, `weak_tables_weakval`,
 `weak_tables_allweak`, `weak_tables_queued`, `weak_tables_overflow`) without
-linking through `GCtab.gclist`, because the legacy bridge still owns that link
+linking through `GCtab.gclist`, because the bridge still owns that link
 for `g->gc.weak`. Snapshot readers expose only the contiguous ready prefix, so
 reserved-but-unpublished MPSC slots are not scanned. `lj_gc2_weak_snapshot_scan()`
-is a bounded, read-only oracle over that vector that mirrors the legacy weak
+is a bounded, read-only oracle over that vector that mirrors the classic weak
 clear predicate, advances through the published ready prefix with
 `weak_scan_cursor`, and publishes scan telemetry. `lj_gc2_weak_snapshot_clear()`
 applies the same predicate with release nil stores, advances through the
 published ready prefix with `weak_clear_cursor` without moving past
-reserved-but-unpublished slots, and now runs before the legacy weak-clearing
+reserved-but-unpublished slots, and now runs before the bridge weak-clearing
 fallback. `lj_gc2_weak_drain()` is the phase-gated bounded driver used by
 `lj_gc2_weak_complete()` in `LJ_GC2_WEAK_DRAIN_BATCH` chunks while the full
 worker-owned weak drain is staged. The current bridge uses the legacy color
 bits as a stop-the-world weak-clear oracle while `g->gc.state == GCSatomic`,
 so GC2 weak-key/all-weak clearing matches the legacy `gc_mayclear()` predicate
 even though GC2 stack rescans are intentionally more conservative. The helper
-skips legacy `gc_clearweak()` after `lj_gc2_weak_snapshot_covers_legacy()`
+skips the fallback `gc_clearweak()` after `lj_gc2_weak_snapshot_covers_bridge()`
 proves the current-cycle snapshot was fully published, fully clear-drained, and
-covers every table in the final legacy `g->gc.weak` list. When the snapshot is
-complete but misses legacy weak-list entries, the owner backfills those tables
-with the same captured-mode clear predicate before skipping legacy clearing.
-Incomplete, overflowed, or invalid snapshots still fall back to the legacy
+covers every table in the final bridge `g->gc.weak` list. When the snapshot is
+complete but misses bridge weak-list entries, the owner backfills those tables
+with the same captured-mode clear predicate before skipping fallback clearing.
+Incomplete, overflowed, or invalid snapshots still fall back to the classic
 pass.
 String-bearing weak hash slots now follow legacy `gc_mayclear()` semantics in
 the GC2 clear driver: strings are marked but are not themselves weak-cleared,

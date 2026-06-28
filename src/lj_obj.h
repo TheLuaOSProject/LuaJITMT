@@ -1410,12 +1410,12 @@ typedef struct GC2State {
   uint64_t weak_clear_tables;  /* Weak snapshot tables clear-scanned. */
   uint64_t weak_clear_slots;  /* Weak snapshot clear entries inspected. */
   uint64_t weak_clear_cleared;  /* Weak entries cleared by GC2. */
-  uint64_t weak_legacy_skipped;  /* Legacy weak pass skipped after coverage. */
-  uint64_t weak_legacy_fallbacks;  /* Legacy weak pass fallback executions. */
-  uint64_t weak_legacy_backfills;  /* Legacy weak gaps cleared by GC2 owner. */
-  uint64_t weak_legacy_backfill_tables;  /* Missing legacy weak tables cleared. */
-  uint64_t weak_legacy_backfill_slots;  /* Backfilled weak entries inspected. */
-  uint64_t weak_legacy_backfill_cleared;  /* Backfilled weak entries cleared. */
+  uint64_t weak_bridge_skipped;  /* Bridge weak fallback skipped after coverage. */
+  uint64_t weak_bridge_fallbacks;  /* Bridge weak fallback executions. */
+  uint64_t weak_bridge_backfills;  /* Bridge weak gaps cleared by GC2 owner. */
+  uint64_t weak_bridge_backfill_tables;  /* Missing bridge weak tables cleared. */
+  uint64_t weak_bridge_backfill_slots;  /* Backfilled weak entries inspected. */
+  uint64_t weak_bridge_backfill_cleared;  /* Backfilled weak entries cleared. */
   uint64_t finreg_cdata_sets;  /* Cdata finalizer registrations mirrored. */
   uint64_t finreg_cdata_clears;  /* Cdata finalizer clears mirrored. */
   uint64_t finreg_cdata_queued;  /* Cdata finalizers queued from FINREG. */
@@ -2694,107 +2694,107 @@ static LJ_AINLINE void gc2_weak_clear_cleared_add(global_State *g, uint64_t n)
   la_add64_rlx(&g->gc2.weak_clear_cleared, n);
 }
 
-static LJ_AINLINE uint64_t gc2_weak_legacy_skipped_acq(global_State *g)
+static LJ_AINLINE uint64_t gc2_weak_bridge_skipped_acq(global_State *g)
 {
-  return la_load64_acq(&g->gc2.weak_legacy_skipped);
+  return la_load64_acq(&g->gc2.weak_bridge_skipped);
 }
 
-static LJ_AINLINE void gc2_weak_legacy_skipped_store_rlx(global_State *g,
+static LJ_AINLINE void gc2_weak_bridge_skipped_store_rlx(global_State *g,
 							 uint64_t n)
 {
-  la_store64_rlx(&g->gc2.weak_legacy_skipped, n);
+  la_store64_rlx(&g->gc2.weak_bridge_skipped, n);
 }
 
-static LJ_AINLINE void gc2_weak_legacy_skipped_add(global_State *g,
+static LJ_AINLINE void gc2_weak_bridge_skipped_add(global_State *g,
 						   uint64_t n)
 {
-  la_add64_rlx(&g->gc2.weak_legacy_skipped, n);
+  la_add64_rlx(&g->gc2.weak_bridge_skipped, n);
 }
 
-static LJ_AINLINE uint64_t gc2_weak_legacy_fallbacks_acq(global_State *g)
+static LJ_AINLINE uint64_t gc2_weak_bridge_fallbacks_acq(global_State *g)
 {
-  return la_load64_acq(&g->gc2.weak_legacy_fallbacks);
+  return la_load64_acq(&g->gc2.weak_bridge_fallbacks);
 }
 
-static LJ_AINLINE void gc2_weak_legacy_fallbacks_store_rlx(global_State *g,
+static LJ_AINLINE void gc2_weak_bridge_fallbacks_store_rlx(global_State *g,
 							   uint64_t n)
 {
-  la_store64_rlx(&g->gc2.weak_legacy_fallbacks, n);
+  la_store64_rlx(&g->gc2.weak_bridge_fallbacks, n);
 }
 
-static LJ_AINLINE void gc2_weak_legacy_fallbacks_add(global_State *g,
+static LJ_AINLINE void gc2_weak_bridge_fallbacks_add(global_State *g,
 						     uint64_t n)
 {
-  la_add64_rlx(&g->gc2.weak_legacy_fallbacks, n);
+  la_add64_rlx(&g->gc2.weak_bridge_fallbacks, n);
 }
 
-static LJ_AINLINE uint64_t gc2_weak_legacy_backfills_acq(global_State *g)
+static LJ_AINLINE uint64_t gc2_weak_bridge_backfills_acq(global_State *g)
 {
-  return la_load64_acq(&g->gc2.weak_legacy_backfills);
+  return la_load64_acq(&g->gc2.weak_bridge_backfills);
 }
 
-static LJ_AINLINE void gc2_weak_legacy_backfills_store_rlx(global_State *g,
+static LJ_AINLINE void gc2_weak_bridge_backfills_store_rlx(global_State *g,
 							   uint64_t n)
 {
-  la_store64_rlx(&g->gc2.weak_legacy_backfills, n);
+  la_store64_rlx(&g->gc2.weak_bridge_backfills, n);
 }
 
-static LJ_AINLINE void gc2_weak_legacy_backfills_add(global_State *g,
+static LJ_AINLINE void gc2_weak_bridge_backfills_add(global_State *g,
 						     uint64_t n)
 {
-  la_add64_rlx(&g->gc2.weak_legacy_backfills, n);
+  la_add64_rlx(&g->gc2.weak_bridge_backfills, n);
 }
 
-static LJ_AINLINE uint64_t gc2_weak_legacy_backfill_tables_acq(global_State *g)
+static LJ_AINLINE uint64_t gc2_weak_bridge_backfill_tables_acq(global_State *g)
 {
-  return la_load64_acq(&g->gc2.weak_legacy_backfill_tables);
+  return la_load64_acq(&g->gc2.weak_bridge_backfill_tables);
 }
 
-static LJ_AINLINE void gc2_weak_legacy_backfill_tables_store_rlx(
+static LJ_AINLINE void gc2_weak_bridge_backfill_tables_store_rlx(
   global_State *g, uint64_t n)
 {
-  la_store64_rlx(&g->gc2.weak_legacy_backfill_tables, n);
+  la_store64_rlx(&g->gc2.weak_bridge_backfill_tables, n);
 }
 
-static LJ_AINLINE void gc2_weak_legacy_backfill_tables_add(global_State *g,
+static LJ_AINLINE void gc2_weak_bridge_backfill_tables_add(global_State *g,
 							   uint64_t n)
 {
-  la_add64_rlx(&g->gc2.weak_legacy_backfill_tables, n);
+  la_add64_rlx(&g->gc2.weak_bridge_backfill_tables, n);
 }
 
-static LJ_AINLINE uint64_t gc2_weak_legacy_backfill_slots_acq(global_State *g)
+static LJ_AINLINE uint64_t gc2_weak_bridge_backfill_slots_acq(global_State *g)
 {
-  return la_load64_acq(&g->gc2.weak_legacy_backfill_slots);
+  return la_load64_acq(&g->gc2.weak_bridge_backfill_slots);
 }
 
-static LJ_AINLINE void gc2_weak_legacy_backfill_slots_store_rlx(
+static LJ_AINLINE void gc2_weak_bridge_backfill_slots_store_rlx(
   global_State *g, uint64_t n)
 {
-  la_store64_rlx(&g->gc2.weak_legacy_backfill_slots, n);
+  la_store64_rlx(&g->gc2.weak_bridge_backfill_slots, n);
 }
 
-static LJ_AINLINE void gc2_weak_legacy_backfill_slots_add(global_State *g,
+static LJ_AINLINE void gc2_weak_bridge_backfill_slots_add(global_State *g,
 							  uint64_t n)
 {
-  la_add64_rlx(&g->gc2.weak_legacy_backfill_slots, n);
+  la_add64_rlx(&g->gc2.weak_bridge_backfill_slots, n);
 }
 
-static LJ_AINLINE uint64_t gc2_weak_legacy_backfill_cleared_acq(
+static LJ_AINLINE uint64_t gc2_weak_bridge_backfill_cleared_acq(
   global_State *g)
 {
-  return la_load64_acq(&g->gc2.weak_legacy_backfill_cleared);
+  return la_load64_acq(&g->gc2.weak_bridge_backfill_cleared);
 }
 
-static LJ_AINLINE void gc2_weak_legacy_backfill_cleared_store_rlx(
+static LJ_AINLINE void gc2_weak_bridge_backfill_cleared_store_rlx(
   global_State *g, uint64_t n)
 {
-  la_store64_rlx(&g->gc2.weak_legacy_backfill_cleared, n);
+  la_store64_rlx(&g->gc2.weak_bridge_backfill_cleared, n);
 }
 
-static LJ_AINLINE void gc2_weak_legacy_backfill_cleared_add(global_State *g,
+static LJ_AINLINE void gc2_weak_bridge_backfill_cleared_add(global_State *g,
 							    uint64_t n)
 {
-  la_add64_rlx(&g->gc2.weak_legacy_backfill_cleared, n);
+  la_add64_rlx(&g->gc2.weak_bridge_backfill_cleared, n);
 }
 
 static LJ_AINLINE uint64_t gc2_weak_keys_marked_acq(global_State *g)

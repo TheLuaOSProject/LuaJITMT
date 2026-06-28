@@ -139,6 +139,9 @@
   x64 `barrierback` check owned by M5, M10 no longer duplicates the stats-table
   checks owned by M9, and M10/M3 no longer carry old-helper-name tombstones for
   already-removed mark/sweep bridge wrappers.
+- Migrated weak completion telemetry and tests to `weak_bridge_*`, including
+  `collectgarbage("stats")`, benchmark stat output, M8 weak guards, and M3
+  weak-helper visibility checks. No old developer-stat aliases are kept.
 - Public or semantic compatibility helpers such as FFI pointer compatibility
   checks are not removal targets unless the language/API contract changes.
 - Anti-legacy guards that merely prevent reintroducing already-removed wrapper

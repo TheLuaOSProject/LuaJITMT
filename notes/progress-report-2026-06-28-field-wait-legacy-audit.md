@@ -12,7 +12,7 @@ Overall correctness/stability progress: 70-80%.
 - FFI concurrency outside mutable `ffi.cdef`: 70-80%.
 - Interpreter-side FFI parser fallback removal: 58-68%.
 - FFI recorder read-only ctype paths: 82-90%.
-- Legacy/compat bridge removal, excluding public API semantics: 85-91%.
+- Legacy/compat bridge removal, excluding public API semantics: 88-93%.
 - CI migration from source guards to behavior tests: 74-84%.
 - Release-quality soak and benchmark readiness: 47-57%.
 - Performance parity with stock LuaJIT: 35-45%, intentionally secondary.
@@ -58,6 +58,9 @@ Overall correctness/stability progress: 70-80%.
   x64 `barrierback` guard, M10 no longer duplicates M9's stats-builder guard,
   and old removed-helper tombstones were dropped where current helper checks and
   behavior coverage already protect the boundary.
+- Renamed GC2 weak completion telemetry and helper/test surfaces to
+  `weak_bridge_*`, including the public developer stats keys and benchmark/stat
+  smoke coverage. No old stat aliases are kept.
 
 ## Still remaining
 
@@ -65,10 +68,10 @@ Overall correctness/stability progress: 70-80%.
   queries where errors, VLA/VLS size, and rollback behavior need careful
   snapshot equivalents.
 - `lj_clib.c` namespace lookup still has a parser fallback path.
-- GC2 legacy bridge names and tests remain in mark/cycle, weak, and finalizer
-  areas. The highest-value cleanup is to convert exact-name source guards around
-  finalizer/weak behavior into semantic tests, then rename or remove the old
-  bridge names where the names are only fork-era scaffolding.
+- GC2 bridge names and tests remain in mark/cycle and finalizer areas. The
+  highest-value cleanup is to convert exact-name source guards around finalizer
+  behavior into semantic tests, then rename or remove old bridge names where the
+  names are only fork-era scaffolding.
 - Aggregate CI still has many source guards. Keep guards for memory ordering,
   ABI, and generated-code boundaries; convert source-shape checks when behavior
   can observe the invariant.

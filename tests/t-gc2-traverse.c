@@ -1462,7 +1462,7 @@ static int weak_entry_is_nil(lua_State *L, GCtab *weak, GCtab *key)
   return tvisnil(lj_tab_get(L, weak, &k));
 }
 
-static void legacy_weak_link(global_State *g, GCtab *t, int weak)
+static void weak_bridge_link(global_State *g, GCtab *t, int weak)
 {
   lj_obj_masksetgcflags(obj2gco(t), LJ_GC_WEAK, weak);
   setgcrefr(t->gclist, g->gc.weak);
@@ -1624,7 +1624,7 @@ static void test_weak_self_metatable_publish_barrier(lua_State *L,
   lua_pop(L, 1);
 }
 
-static void test_weak_snapshot_legacy_coverage(lua_State *L, global_State *g,
+static void test_weak_snapshot_bridge_coverage(lua_State *L, global_State *g,
 					       TGState *tg)
 {
   GCtab *weak, *key, *val;
@@ -1640,39 +1640,39 @@ static void test_weak_snapshot_legacy_coverage(lua_State *L, global_State *g,
   flush_and_drain(g, tg);
   assert(lj_gc2_test_weak_snapshot_count(g) == 1u);
   setgcrefnull(g->gc.weak);
-  legacy_weak_link(g, weak, LJ_GC_WEAKVAL);
-  assert(!lj_gc2_test_weak_snapshot_covers_legacy(g, gcref(g->gc.weak)));
+  weak_bridge_link(g, weak, LJ_GC_WEAKVAL);
+  assert(!lj_gc2_test_weak_snapshot_covers_bridge(g, gcref(g->gc.weak)));
 
   lj_gc2_mark_to_weak(g);
-  assert(!lj_gc2_test_weak_snapshot_covers_legacy(g, gcref(g->gc.weak)));
+  assert(!lj_gc2_test_weak_snapshot_covers_bridge(g, gcref(g->gc.weak)));
   assert(lj_gc2_test_weak_drain(g, 1) == 1u);
-  assert(lj_gc2_test_weak_snapshot_covers_legacy(g, gcref(g->gc.weak)));
+  assert(lj_gc2_test_weak_snapshot_covers_bridge(g, gcref(g->gc.weak)));
 
   lj_obj_cleargcflags(obj2gco(weak), LJ_GC_WEAK);
-  assert(!lj_gc2_test_weak_snapshot_covers_legacy(g, gcref(g->gc.weak)));
+  assert(!lj_gc2_test_weak_snapshot_covers_bridge(g, gcref(g->gc.weak)));
   lj_obj_masksetgcflags(obj2gco(weak), LJ_GC_WEAK, LJ_GC_WEAKVAL);
-  assert(lj_gc2_test_weak_snapshot_covers_legacy(g, gcref(g->gc.weak)));
+  assert(lj_gc2_test_weak_snapshot_covers_bridge(g, gcref(g->gc.weak)));
   lj_obj_masksetgcflags(obj2gco(weak), LJ_GC_WEAK, LJ_GC_WEAKKEY);
-  assert(lj_gc2_test_weak_snapshot_covers_legacy(g, gcref(g->gc.weak)));
+  assert(lj_gc2_test_weak_snapshot_covers_bridge(g, gcref(g->gc.weak)));
   lj_obj_masksetgcflags(obj2gco(weak), LJ_GC_WEAK, LJ_GC_WEAK);
-  assert(lj_gc2_test_weak_snapshot_covers_legacy(g, gcref(g->gc.weak)));
+  assert(lj_gc2_test_weak_snapshot_covers_bridge(g, gcref(g->gc.weak)));
   lj_obj_masksetgcflags(obj2gco(weak), LJ_GC_WEAK, LJ_GC_WEAKVAL);
 
   count = la_load64_acq(&g->gc2.weak_count);
   idx = la_add64_rlx(&g->gc2.weak_count, 1);
   assert(idx == count);
   assert(idx < (uint64_t)g->gc2.weak_capacity);
-  assert(!lj_gc2_test_weak_snapshot_covers_legacy(g, gcref(g->gc.weak)));
+  assert(!lj_gc2_test_weak_snapshot_covers_bridge(g, gcref(g->gc.weak)));
   la_store64_rlx(&g->gc2.weak_count, count);
-  assert(lj_gc2_test_weak_snapshot_covers_legacy(g, gcref(g->gc.weak)));
+  assert(lj_gc2_test_weak_snapshot_covers_bridge(g, gcref(g->gc.weak)));
 
   la_store64_rlx(&g->gc2.weak_count, (uint64_t)g->gc2.weak_capacity + 1u);
-  assert(!lj_gc2_test_weak_snapshot_covers_legacy(g, gcref(g->gc.weak)));
+  assert(!lj_gc2_test_weak_snapshot_covers_bridge(g, gcref(g->gc.weak)));
   la_store64_rlx(&g->gc2.weak_count, count);
 
   setgcrefnull(g->gc.weak);
-  legacy_weak_link(g, absent, LJ_GC_WEAKVAL);
-  assert(!lj_gc2_test_weak_snapshot_covers_legacy(g, gcref(g->gc.weak)));
+  weak_bridge_link(g, absent, LJ_GC_WEAKVAL);
+  assert(!lj_gc2_test_weak_snapshot_covers_bridge(g, gcref(g->gc.weak)));
 
   setgcrefnull(g->gc.weak);
   lj_gc2_legacy_cycle_end(g);
@@ -1696,20 +1696,20 @@ static void test_weak_complete_bridge(lua_State *L, global_State *g,
   flush_and_drain(g, tg);
   assert(lj_gc2_test_weak_snapshot_count(g) == 1u);
   setgcrefnull(g->gc.weak);
-  legacy_weak_link(g, weak, LJ_GC_WEAKVAL);
+  weak_bridge_link(g, weak, LJ_GC_WEAKVAL);
   lj_gc2_mark_to_weak(g);
   runs0 = gc2_weak_complete_runs_acq(g);
   progress0 = gc2_weak_complete_progress_acq(g);
-  skipped0 = gc2_weak_legacy_skipped_acq(g);
-  fallbacks0 = gc2_weak_legacy_fallbacks_acq(g);
+  skipped0 = gc2_weak_bridge_skipped_acq(g);
+  fallbacks0 = gc2_weak_bridge_fallbacks_acq(g);
   clear_tables0 = gc2_weak_clear_tables_acq(g);
   clear_cleared0 = gc2_weak_clear_cleared_acq(g);
   assert(lj_gc2_weak_complete(g, gcref(g->gc.weak), 1) == 1);
   assert(weak_entry_is_nil(L, weak, key));
   assert(gc2_weak_complete_runs_acq(g) == runs0 + 1u);
   assert(gc2_weak_complete_progress_acq(g) == progress0 + 1u);
-  assert(gc2_weak_legacy_skipped_acq(g) == skipped0 + 1u);
-  assert(gc2_weak_legacy_fallbacks_acq(g) == fallbacks0);
+  assert(gc2_weak_bridge_skipped_acq(g) == skipped0 + 1u);
+  assert(gc2_weak_bridge_fallbacks_acq(g) == fallbacks0);
   assert(gc2_weak_clear_tables_acq(g) == clear_tables0 + 1u);
   assert(gc2_weak_clear_cleared_acq(g) == clear_cleared0 + 1u);
   setgcrefnull(g->gc.weak);
@@ -1724,25 +1724,25 @@ static void test_weak_complete_bridge(lua_State *L, global_State *g,
   flush_and_drain(g, tg);
   assert(lj_gc2_test_weak_snapshot_count(g) == 1u);
   setgcrefnull(g->gc.weak);
-  legacy_weak_link(g, missing, LJ_GC_WEAKVAL);
-  legacy_weak_link(g, weak, LJ_GC_WEAKVAL);
+  weak_bridge_link(g, missing, LJ_GC_WEAKVAL);
+  weak_bridge_link(g, weak, LJ_GC_WEAKVAL);
   lj_gc2_mark_to_weak(g);
   runs0 = gc2_weak_complete_runs_acq(g);
-  skipped0 = gc2_weak_legacy_skipped_acq(g);
-  fallbacks0 = gc2_weak_legacy_fallbacks_acq(g);
-  backfills0 = gc2_weak_legacy_backfills_acq(g);
-  backfill_tables0 = gc2_weak_legacy_backfill_tables_acq(g);
-  backfill_cleared0 = gc2_weak_legacy_backfill_cleared_acq(g);
+  skipped0 = gc2_weak_bridge_skipped_acq(g);
+  fallbacks0 = gc2_weak_bridge_fallbacks_acq(g);
+  backfills0 = gc2_weak_bridge_backfills_acq(g);
+  backfill_tables0 = gc2_weak_bridge_backfill_tables_acq(g);
+  backfill_cleared0 = gc2_weak_bridge_backfill_cleared_acq(g);
   assert(lj_gc2_weak_complete(g, gcref(g->gc.weak), 1) == 1);
   assert(weak_entry_is_nil(L, weak, key));
   assert(weak_entry_is_nil(L, missing, mkey));
   assert(gc2_weak_complete_runs_acq(g) == runs0 + 1u);
-  assert(gc2_weak_legacy_skipped_acq(g) == skipped0 + 1u);
-  assert(gc2_weak_legacy_fallbacks_acq(g) == fallbacks0);
-  assert(gc2_weak_legacy_backfills_acq(g) == backfills0 + 1u);
-  assert(gc2_weak_legacy_backfill_tables_acq(g) ==
+  assert(gc2_weak_bridge_skipped_acq(g) == skipped0 + 1u);
+  assert(gc2_weak_bridge_fallbacks_acq(g) == fallbacks0);
+  assert(gc2_weak_bridge_backfills_acq(g) == backfills0 + 1u);
+  assert(gc2_weak_bridge_backfill_tables_acq(g) ==
 	 backfill_tables0 + 1u);
-  assert(gc2_weak_legacy_backfill_cleared_acq(g) ==
+  assert(gc2_weak_bridge_backfill_cleared_acq(g) ==
 	 backfill_cleared0 + 1u);
   setgcrefnull(g->gc.weak);
   lj_gc2_legacy_cycle_end(g);
@@ -1752,7 +1752,7 @@ static void test_weak_complete_bridge(lua_State *L, global_State *g,
   UNUSED(mval);
 }
 
-static void test_weak_legacy_fallback_hmask0(lua_State *L, global_State *g,
+static void test_weak_bridge_fallback_hmask0(lua_State *L, global_State *g,
 					     TGState *tg)
 {
   GCtab *weak, *key, *val;
@@ -1777,16 +1777,16 @@ static void test_weak_legacy_fallback_hmask0(lua_State *L, global_State *g,
   makewhite(g, obj2gco(val));
 
   setgcrefnull(g->gc.weak);
-  legacy_weak_link(g, weak, LJ_GC_WEAKVAL);
+  weak_bridge_link(g, weak, LJ_GC_WEAKVAL);
   lj_gc2_mark_to_weak(g);
   la_store64_rlx(&g->gc2.weak_count, 1);
   la_store8_rlx(&g->gc2.weak_ready[0], 0);
 
-  fallbacks0 = gc2_weak_legacy_fallbacks_acq(g);
+  fallbacks0 = gc2_weak_bridge_fallbacks_acq(g);
   assert(lj_gc2_weak_complete(g, gcref(g->gc.weak), 1) == 0);
-  assert(gc2_weak_legacy_fallbacks_acq(g) == fallbacks0 + 1u);
+  assert(gc2_weak_bridge_fallbacks_acq(g) == fallbacks0 + 1u);
   assert(!tvisnil(&node->val));
-  lj_gc_clearweak_legacy(g, gcref(g->gc.weak));
+  lj_gc_clearweak_bridge(g, gcref(g->gc.weak));
   assert(tvisnil(&node->val));
 
   setgcrefnull(g->gc.weak);
@@ -4411,9 +4411,9 @@ int main(void)
   test_worker_weak_drain(L, g, tg);
   test_weak_snapshot_ready_publication(L, g);
   test_weak_self_metatable_publish_barrier(L, g, tg);
-  test_weak_snapshot_legacy_coverage(L, g, tg);
+  test_weak_snapshot_bridge_coverage(L, g, tg);
   test_weak_complete_bridge(L, g, tg);
-  test_weak_legacy_fallback_hmask0(L, g, tg);
+  test_weak_bridge_fallback_hmask0(L, g, tg);
   test_weak_clear_marks_string_slots(L, g, tg);
   test_weak_drain_uses_captured_mode(L, g, tg);
   test_weak_pre_clear_late_write_survives_drain(L, g, tg);

@@ -82,12 +82,12 @@ typedef struct GC2StatsSnapshot {
   uint64_t live_estimate;
   uint64_t weak_clear_tables;
   uint64_t weak_clear_cleared;
-  uint64_t weak_legacy_skipped;
-  uint64_t weak_legacy_fallbacks;
-  uint64_t weak_legacy_backfills;
-  uint64_t weak_legacy_backfill_tables;
-  uint64_t weak_legacy_backfill_slots;
-  uint64_t weak_legacy_backfill_cleared;
+  uint64_t weak_bridge_skipped;
+  uint64_t weak_bridge_fallbacks;
+  uint64_t weak_bridge_backfills;
+  uint64_t weak_bridge_backfill_tables;
+  uint64_t weak_bridge_backfill_slots;
+  uint64_t weak_bridge_backfill_cleared;
   uint64_t weak_keys_marked;
   uint64_t weak_values_marked;
   uint64_t finreg_cdata_sets;
@@ -198,7 +198,7 @@ LJ_FUNC uint32_t lj_gc2_fixpoint_round(global_State *g, lua_State *L,
 LJ_FUNC uint32_t lj_gc2_mark_complete(global_State *g, lua_State *L,
 				      uint32_t max_rounds, uint32_t limit);
 LJ_FUNC void lj_gc2_mark_to_weak(global_State *g);
-LJ_FUNC int lj_gc2_weak_complete(global_State *g, GCobj *legacy,
+LJ_FUNC int lj_gc2_weak_complete(global_State *g, GCobj *bridge_head,
 				 uint32_t drain_limit);
 LJ_FUNC void lj_gc2_weak_to_sweep(global_State *g);
 LJ_FUNC void lj_gc2_finreg_cdata_set(global_State *g, GCobj *o, int enabled);
@@ -246,8 +246,8 @@ LJ_FUNC uint32_t lj_gc2_test_weak_snapshot_scan(global_State *g,
 LJ_FUNC uint32_t lj_gc2_test_weak_snapshot_clear(global_State *g,
 						uint32_t limit);
 LJ_FUNC uint32_t lj_gc2_test_weak_drain(global_State *g, uint32_t limit);
-LJ_FUNC int lj_gc2_test_weak_snapshot_covers_legacy(global_State *g,
-						    GCobj *legacy);
+LJ_FUNC int lj_gc2_test_weak_snapshot_covers_bridge(global_State *g,
+						    GCobj *bridge_head);
 LJ_FUNC void lj_gc2_test_update_minor_survival_policy(global_State *g,
 						      uint64_t live);
 LJ_FUNC uint32_t lj_gc2_test_sweep_owner_progress(global_State *g,
