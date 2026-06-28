@@ -40,6 +40,9 @@ Overall correctness/stability progress: 70-80%.
   `legacy_*` GC2 bridge/source guards and duplicate guard scripts. FFI pointer
   compatibility helpers are semantic compatibility logic and should not be
   deleted just because they contain `compat`.
+- Removed the exact internal M10 legacy mark-suppression helper name. The
+  replacement, `lj_gc2_minor_roots_skip_bridge_mark()`, names the actual
+  behavior without implying that legacy marking itself is disabled.
 
 ## Still remaining
 
@@ -73,3 +76,8 @@ Overall correctness/stability progress: 70-80%.
 - `make -C src -j$(getconf _NPROCESSORS_ONLN)`
 - `tools/ci/lua_test.sh m7_ffi_typeinfo_snapshot`
 - `tools/ci/m7_ffi_typeinfo_snapshot.sh`
+- `tools/ci/lua_test.sh m7_ffi_cparse_rollback m7_ffi_cdata_get_l m7_ffi_carith_l`
+- `tools/ci/lua_test.sh m7_ffi`
+- `tools/ci/m10_generational.sh`
+- `tools/ci/m3_gc2_paranoia.sh`
+- `tools/ci/m3_gc2_scaffold.sh`

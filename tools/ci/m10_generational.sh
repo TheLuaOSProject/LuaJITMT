@@ -19,17 +19,28 @@ if hits=$(grep -nE -- "->[[:space:]]*gc2[.](${fields})([^[:alnum:]_]|$)|gc2[[:sp
   fi
 fi
 
-if ! grep -qE 'LJ_FUNC int lj_gc2_legacy_mark_suppressed[[:space:]]*[(]' \
+if ! grep -qE 'LJ_FUNC int lj_gc2_minor_roots_skip_bridge_mark[[:space:]]*[(]' \
   "$ROOT/src/lj_gc2.h"; then
   printf '%s\n' \
-    "lj_gc2_legacy_mark_suppressed declaration is required for minor-root legacy mark policy" >&2
+    "lj_gc2_minor_roots_skip_bridge_mark declaration is required for minor-root bridge policy" >&2
   exit 1
 fi
-if ! grep -qE '^int lj_gc2_legacy_mark_suppressed[[:space:]]*[(]' \
+if ! grep -qE '^int lj_gc2_minor_roots_skip_bridge_mark[[:space:]]*[(]' \
   "$ROOT/src/lj_gc2.c"; then
   printf '%s\n' \
-    "lj_gc2_legacy_mark_suppressed definition is required for minor-root legacy mark policy" >&2
+    "lj_gc2_minor_roots_skip_bridge_mark definition is required for minor-root bridge policy" >&2
   exit 1
+fi
+if hits=$(grep -nE -- 'lj_gc2_legacy_mark_suppressed[[:space:]]*[(]' \
+  "$ROOT/src/lj_gc.c" \
+  "$ROOT/src/lj_gc2.c" \
+  "$ROOT/src/lj_gc2.h" || true); then
+  if [ -n "$hits" ]; then
+    printf '%s\n' \
+      "old legacy mark-suppression helper name must not be reintroduced" \
+      "$hits" >&2
+    exit 1
+  fi
 fi
 if ! grep -qE 'LJ_FUNC int lj_gc2_minor_roots_active[[:space:]]*[(]' \
   "$ROOT/src/lj_gc2.h"; then
@@ -42,15 +53,6 @@ if ! grep -qE '^int lj_gc2_minor_roots_active[[:space:]]*[(]' \
   printf '%s\n' \
     "lj_gc2_minor_roots_active definition is required for minor-root cycle ownership" >&2
   exit 1
-fi
-if hits=$(grep -nE -- 'gc2_suppress_legacy_mark[[:space:]]*[(]' \
-  "$ROOT/src/lj_gc.c" || true); then
-  if [ -n "$hits" ]; then
-    printf '%s\n' \
-      "legacy mark suppression policy must stay behind lj_gc2_legacy_mark_suppressed" \
-      "$hits" >&2
-    exit 1
-  fi
 fi
 if hits=$(awk '
   /gc2_phase_acq[[:space:]]*[(][[:space:]]*g[[:space:]]*[)][[:space:]]*==[[:space:]]*LJ_GC2_MARK/ {
@@ -66,14 +68,14 @@ if hits=$(awk '
 ' "$ROOT/src/lj_gc.c" || true); then
   if [ -n "$hits" ]; then
     printf '%s\n' \
-      "legacy mark suppression policy must stay behind lj_gc2_legacy_mark_suppressed" \
+      "minor-root bridge mark policy must stay behind lj_gc2_minor_roots_skip_bridge_mark" \
       "$hits" >&2
     exit 1
   fi
 fi
-if ! grep -qF 'lj_gc2_legacy_mark_suppressed(g)' "$ROOT/src/lj_gc.c"; then
+if ! grep -qF 'lj_gc2_minor_roots_skip_bridge_mark(g)' "$ROOT/src/lj_gc.c"; then
   printf '%s\n' \
-    "legacy arena mark bridge must query lj_gc2_legacy_mark_suppressed" >&2
+    "arena mark bridge must query lj_gc2_minor_roots_skip_bridge_mark" >&2
   exit 1
 fi
 if ! grep -qF 'lj_gc2_minor_roots_active(g)' "$ROOT/src/lj_gc.c"; then

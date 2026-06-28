@@ -67,13 +67,13 @@ static void gc_finreg_claim_wait_no_l(void)
 
 void lj_gc_arena_markobj(global_State *g, GCobj *o)
 {
-  if (!lj_gc2_legacy_mark_suppressed(g))
+  if (!lj_gc2_minor_roots_skip_bridge_mark(g))
     lj_gc2_markobj(g, o);
 }
 
 void lj_gc_arena_markmem(global_State *g, void *p)
 {
-  if (!lj_gc2_legacy_mark_suppressed(g))
+  if (!lj_gc2_minor_roots_skip_bridge_mark(g))
     (void)lj_gc2_markmem(g, p);
 }
 

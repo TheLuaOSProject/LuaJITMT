@@ -118,6 +118,10 @@
 - Highest-priority legacy cleanup is in GC2 bridge scaffolding, not FFI pointer
   compatibility. Exact-name guards around `legacy_*` sweep/finalizer/weak
   helpers should become semantic behavior tests before the names are removed.
+- The old internal M10 legacy mark-suppression helper name was removed in favor
+  of `lj_gc2_minor_roots_skip_bridge_mark()`, which describes the actual
+  policy: minor-root cycles skip only the arena-to-GC2 bridge mark, not legacy
+  marking itself.
 - Duplicate legacy source guards in weak/worker CI should be collapsed; keeping
   the same exact-name guard in multiple scripts increases churn and blocks
   better helper boundaries.

@@ -12,9 +12,9 @@ advance while the effective root policy was still full-major.
 
 ## Fix
 
-`src/lj_gc2.c` now owns the predicate used by the legacy mark bridge through
-`lj_gc2_legacy_mark_suppressed()`. That predicate suppresses GC2 marking from
-legacy mark callbacks only when:
+`src/lj_gc2.c` now owns the predicate used by the mark bridge through
+`lj_gc2_minor_roots_skip_bridge_mark()`. That predicate suppresses GC2 marking
+from bridge callbacks only when:
 
 - GC2 phase is `LJ_GC2_MARK`
 - the current cycle has `cycle_roots_minor != 0`
@@ -57,9 +57,10 @@ Passed:
 
 Follow-up cleanup:
 
-- The minor-root legacy mark suppression predicate now lives behind
-  `lj_gc2_legacy_mark_suppressed()`, and `tools/ci/m10_generational.sh` guards
-  that boundary.
+- The minor-root bridge mark predicate now lives behind
+  `lj_gc2_minor_roots_skip_bridge_mark()`, and
+  `tools/ci/m10_generational.sh` guards that boundary while rejecting the old
+  helper name.
   Verification: `tools/ci/m10_generational.sh`, `tools/ci/m9_m10_gc.sh`, and
   `tools/ci/m3_gc2_paranoia.sh` passed.
 - The raw `cycle_roots_minor` predicate is now exposed to non-GC2 production

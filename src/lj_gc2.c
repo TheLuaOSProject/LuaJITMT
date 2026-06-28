@@ -1322,7 +1322,7 @@ int lj_gc2_minor_roots_active(global_State *g)
   return g && gc2_cycle_roots_minor_acq(g) != 0;
 }
 
-int lj_gc2_legacy_mark_suppressed(global_State *g)
+int lj_gc2_minor_roots_skip_bridge_mark(global_State *g)
 {
   return lj_gc2_mark_phase_active(g) && lj_gc2_minor_roots_active(g);
 }
