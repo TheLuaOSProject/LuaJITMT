@@ -250,6 +250,10 @@ fi
     name = "m7_ffi_clib_ldscript",
     description = "FFI C library GNU ld-script resolution behavior",
     run = function(t)
+      if jit.os == "OSX" then
+        print("M7 FFI clib ld-script behavior skipped on macOS")
+        return
+      end
       clean_build(t)
       local script = build_clib_ldscript_fixture(t)
       luajit_code(t, [[
