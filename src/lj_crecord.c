@@ -869,7 +869,12 @@ static void crec_tailcall(jit_State *J, RecordFFData *rd, cTValue *tv)
 static cTValue *crec_ctype_metatv(jit_State *J, CTState *cts, TValue *out,
 				  CTypeID id, MMS mm)
 {
-  int ok = lj_ctype_metatv_snapshot(cts, out, id, mm);
+  int ok;
+  if (lj_ctype_predefined_nometa(cts, id)) {
+    setnilV(out);
+    return NULL;
+  }
+  ok = lj_ctype_metatv_snapshot(cts, out, id, mm);
   if (ok < 0)
     lj_trace_err(J, LJ_TRERR_CTBUSY);
   return ok ? out : NULL;
@@ -881,7 +886,10 @@ static CTypeID crec_ctype_ptr_metaid(jit_State *J, CTState *cts, CTypeID id)
   CTypeID rid;
   CTInfo info;
   CTSize size;
-  int ok = lj_ctype_info_snapshot(cts, id, &info, &size, &rid, &snap);
+  int ok;
+  if (lj_ctype_predefined_nometa(cts, id))
+    return id;
+  ok = lj_ctype_info_snapshot(cts, id, &info, &size, &rid, &snap);
   if (ok < 0)
     lj_trace_err(J, LJ_TRERR_CTBUSY);
   if (!ok)

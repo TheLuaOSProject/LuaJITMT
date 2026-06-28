@@ -24,6 +24,27 @@ static void assert_busy_trace_releases(lua_State *L, CTState *cts,
   ljt_ctype_assert_trace_abort_released(cts);
 }
 
+static void assert_predefined_no_meta_trace_completes(lua_State *L,
+						      CTState *cts)
+{
+  ljt_ctype_arm_trace_abort(L, cts);
+  ljt_lua_dostring(L,
+    "jit.attach(lj_m7_trace_parse_token, 'trace')\n"
+    "jit.flush()\n"
+    "jit.on()\n"
+    "jit.opt.start('hotloop=1')\n"
+    "local function run(n)\n"
+    "  local sum = 0\n"
+    "  for i = 1, n do sum = sum + tonumber(lj_m7_rec_metatv_int_ct(i)) end\n"
+    "  return sum\n"
+    "end\n"
+    "for i = 1, 3 do assert(run(8) == 36) end\n"
+    "jit.attach(lj_m7_trace_parse_token)\n"
+    "assert(lj_m7_trace_parse_token_start_count() >= 1)\n"
+    "assert(lj_m7_trace_parse_token_ctbusy_count() == 0)\n");
+  assert((ctype_parse_token_acq(cts) & 1u) == 0);
+}
+
 int main(void)
 {
   lua_State *L = ljt_lua_newstate_openlibs();
@@ -42,11 +63,14 @@ int main(void)
     "lj_m7_rec_metatv_gc_count + 1 end,\n"
     "})\n"
     "lj_m7_rec_metatv_ct = ct\n"
+    "lj_m7_rec_metatv_int_ct = ffi.typeof('int')\n"
     "lj_m7_rec_metatv_obj = ct(40)\n"
     "lj_m7_rec_metatv_rhs = ct(2)\n");
 
   cts = ctype_ctsG(G(L));
   assert(cts != NULL);
+
+  assert_predefined_no_meta_trace_completes(L, cts);
 
   assert_busy_trace_releases(L, cts,
     "jit.attach(lj_m7_trace_parse_token, 'trace')\n"

@@ -365,32 +365,11 @@ static int ffi_ctype_info_read(lua_State *L, CTState *cts, CTypeID id,
   return ok;
 }
 
-static int ffi_ctype_predefined_nometa(CTState *cts, CTypeID id)
-{
-  CType raw, child;
-  CTInfo info, cinfo;
-  CTSize size;
-  if (!ffi_ctype_info_predefined(cts, id, &info, &size, NULL, &raw))
-    return 0;
-  info = ctype_info_acq(&raw);
-  if (ctype_isstruct(info) || ctype_iscomplex(info) || ctype_isvector(info))
-    return 0;
-  if (ctype_isptr(info)) {
-    CTypeID cid = ctype_cid(info);
-    if (!ffi_ctype_predefined_snapshot(cts, cid, &child))
-      return 0;
-    cinfo = ctype_info_acq(&child);
-    if (ctype_isfunc(cinfo))
-      return 0;
-  }
-  return 1;
-}
-
 static cTValue *ffi_ctype_metatv_read(lua_State *L, CTState *cts,
 				      TValue *out, CTypeID id, MMS mm)
 {
   int ok;
-  if (ffi_ctype_predefined_nometa(cts, id)) {
+  if (lj_ctype_predefined_nometa(cts, id)) {
     setnilV(out);
     return NULL;
   }

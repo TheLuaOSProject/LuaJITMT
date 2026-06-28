@@ -11,15 +11,17 @@ metamethods use the wait helper. Pointer-wrapper stripping in `__call`,
 `pairs`, and arithmetic dispatch is also snapshot-backed.
 
 Immutable predefined CType IDs that cannot legally have ctype metatables now
-return "no metamethod" without consulting the parser sequence. This covers
-scalar, enum, void, array, and non-function-pointer predefined IDs. Predefined
-complex/vector types and all parser-created types keep the snapshot/wait path,
-because `ffi.metatype()` can attach tables to complex/vector and struct-like
-records.
+return "no metamethod" without consulting the parser sequence. The shared
+`lj_ctype_predefined_nometa()` predicate covers scalar, enum, void, array, and
+non-function-pointer predefined IDs. Predefined complex/vector types and all
+parser-created types keep the snapshot/wait path, because `ffi.metatype()` can
+attach tables to complex/vector and struct-like records.
 
-Recorder FFI ctype metamethod lookups use `lj_ctype_metatv_snapshot()`. A
-busy parser token aborts recording with `LJ_TRERR_CTBUSY` instead of waiting
-from the recorder; normal execution then falls back to the interpreter path.
+Recorder FFI ctype metamethod lookups use the same predefined no-metatable
+predicate before `lj_ctype_metatv_snapshot()`. For parser-created and
+metatable-capable types, a busy parser token still aborts recording with
+`LJ_TRERR_CTBUSY` instead of waiting from the recorder; normal execution then
+falls back to the interpreter path.
 
 While covering `__newindex`, pointer auto-deref now preserves qualifiers from
 the pointed-to struct. A write through `const struct *` therefore still fails
@@ -34,7 +36,9 @@ Coverage:
   `__add`, and `__pairs` wait from a native region before dispatching the
   metamethod.
 - `tests/t-ffi-recorder-metatv-busy.c` holds the parser token during trace
-  recording and verifies ctype `__call`, `__add`, table-backed `__index`, and
-  `ffi.new()`/`__gc` lookup abort recording rather than waiting.
+  recording and verifies predefined `int` construction does not hit a
+  parser-busy abort, while ctype `__call`, `__add`, table-backed `__index`,
+  and `ffi.new()`/`__gc` lookup on parser-created metatypes still abort
+  recording rather than waiting.
 - The fixtures are wired into `m7_ffi_metatype`; this is behavior coverage,
   not a source-search guard.

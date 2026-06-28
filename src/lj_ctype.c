@@ -1494,6 +1494,32 @@ static int ctype_predefined_id(CTypeID id)
   return id > CTID_NONE && id <= CTID_CTYPEID;
 }
 
+int lj_ctype_predefined_nometa(CTState *cts, CTypeID id)
+{
+  CTypeTab *tabh;
+  CType *ct;
+  CTInfo info;
+  if (!ctype_predefined_id(id))
+    return 0;
+  tabh = ctype_tabh_acq(cts);
+  if ((MSize)CTID_CTYPEID >= ctype_tab_sizetab_acq(tabh))
+    return 0;
+  ct = ctype_tab_slot(tabh, id);
+  info = ctype_info_acq(ct);
+  if (ctype_isabandoned(info) || ctype_isstruct(info) ||
+      ctype_iscomplex(info) || ctype_isvector(info))
+    return 0;
+  if (ctype_isptr(info)) {
+    CTypeID cid = ctype_cid(info);
+    if (!ctype_predefined_id(cid))
+      return 0;
+    info = ctype_info_acq(ctype_tab_slot(tabh, cid));
+    if (ctype_isabandoned(info) || ctype_isfunc(info))
+      return 0;
+  }
+  return 1;
+}
+
 static int ctype_size_predefined(CTState *cts, CTypeID id, CTSize *szp)
 {
   CTypeTab *tabh;
