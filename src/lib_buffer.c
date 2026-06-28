@@ -337,7 +337,7 @@ LJLIB_CF(buffer_new)
       }
     }
   }
-  env = tabref_acq(curr_func(L)->c.env);
+  env = lj_func_env_acq(curr_func(L));
   ud = lj_udata_new(L, sizeof(SBufExt), env);
   lj_udata_metatable_rel(ud, env);
   lj_gc_pubobjobj(L, ud, env);

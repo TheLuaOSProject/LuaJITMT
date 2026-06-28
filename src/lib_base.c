@@ -172,8 +172,8 @@ LJLIB_CF(getfenv)		LJLIB_REC(.)
     if (LJ_FR2) o--;
   }
   fn = &gcval(o)->fn;
-  settabV(L, L->top++, isluafunc(fn) ? tabref_acq(fn->l.env) :
-				       tabref_acq(L->env));
+  settabV(L, L->top++, isluafunc(fn) ? lj_func_env_acq(fn) :
+				       lj_state_env_acq(L));
   return 1;
 }
 
@@ -187,7 +187,7 @@ LJLIB_CF(setfenv)
     if (level == 0) {
       lib_trace_flush_env(L);
       /* NOBARRIER: A thread (i.e. L) is never black. */
-      setgcrefrel(L->env, obj2gco(t));
+      lj_state_env_rel(L, t);
       return 0;
     }
     if (level < 0)
@@ -201,7 +201,7 @@ LJLIB_CF(setfenv)
   if (!isluafunc(fn))
     lj_err_caller(L, LJ_ERR_SETFENV);
   lib_trace_flush_env(L);
-  setgcrefrel(fn->l.env, obj2gco(t));
+  lj_func_env_rel(fn, t);
   lj_gc_pubobjobj(L, obj2gco(fn), t);
   setfuncV(L, L->top++, fn);
   return 1;
@@ -398,7 +398,7 @@ static int load_aux(lua_State *L, int status, int envarg)
     if (tvistab(L->base+envarg-1) && tvisfunc(L->top-1)) {
       GCfunc *fn = funcV(L->top-1);
       GCtab *t = tabV(L->base+envarg-1);
-      setgcrefrel(fn->c.env, obj2gco(t));
+      lj_func_env_rel(fn, t);
       lj_gc_pubobjobj(L, fn, t);
     }
     return 1;
@@ -814,7 +814,7 @@ LJLIB_CF(print)
   int shortcut;
   lj_lib_upvalue_load_acq(L, 1, &uv);
   tostring_str = strV(&uv);
-  tv = lj_tab_getstr(tabref_acq(L->env), tostring_str);
+  tv = lj_tab_getstr(lj_state_env_acq(L), tostring_str);
   if (tv) {
     lj_tv_load_acq(&tvsnap, tv);
     if (!tvisnil(&tvsnap)) {
@@ -1059,7 +1059,7 @@ static void base_storetab_str(lua_State *L, GCtab *tab, GCstr *key, GCtab *val)
 LUALIB_API int luaopen_base(lua_State *L)
 {
   /* NOBARRIER: Table and value are the same. */
-  GCtab *env = tabref_acq(L->env);
+  GCtab *env = lj_state_env_acq(L);
   base_storetab_str(L, env, lj_str_newlit(L, "_G"), env);
   lua_pushliteral(L, LUA_VERSION);  /* top-3. */
   newproxy_weaktable(L);  /* top-2. */

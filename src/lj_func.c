@@ -240,7 +240,7 @@ GCfunc *lj_func_newC(lua_State *L, MSize nelems, GCtab *env)
   fn->c.ffid = FF_C;
   fn->c.nupvalues = (uint8_t)nelems;
   setmref(fn->c.pc, &G(L)->bc_cfunc_ext);
-  setgcrefrel(fn->c.env, obj2gco(env));
+  lj_func_env_rel(fn, env);
   lj_gc_pubobjobj(L, fn, env);
   return fn;
 }
@@ -254,7 +254,7 @@ static GCfunc *func_newL(lua_State *L, GCproto *pt, GCtab *env)
   fn->l.nupvalues = 0;  /* Set to zero until upvalues are initialized. */
   setmref(fn->l.pc, proto_bc(pt));
   lj_gc_pubobjobj(L, fn, pt);
-  setgcrefrel(fn->l.env, obj2gco(env));
+  lj_func_env_rel(fn, env);
   lj_gc_pubobjobj(L, fn, env);
   /* Saturating 3 bit counter (0..7) for created closures. */
   count = (uint32_t)pt->flags + PROTO_CLCOUNT;
@@ -285,7 +285,7 @@ static GCfunc *func_newL_gc_base(lua_State *L, TValue *base, GCproto *pt,
 {
   GCfunc *fn;
   MSize i, nuv;
-  fn = func_newL(L, pt, tabref_acq(parent->env));
+  fn = func_newL(L, pt, lj_funcL_env_acq(parent));
   nuv = pt->sizeuv;
   if (base == NULL)
     base = L->base;

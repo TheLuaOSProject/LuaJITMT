@@ -2697,7 +2697,7 @@ LJLIB_CF(ffi_load)
 {
   GCstr *name = lj_lib_checkstr(L, 1);
   int global = (L->base+1 < L->top && tvistruecond(L->base+1));
-  lj_clib_load(L, tabref_acq(curr_func(L)->c.env), name, global);
+  lj_clib_load(L, lj_func_env_acq(curr_func(L)), name, global);
   return 1;
 }
 

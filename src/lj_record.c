@@ -3177,7 +3177,7 @@ void lj_record_ins(jit_State *J)
   /* -- Table ops --------------------------------------------------------- */
 
   case BC_GGET: case BC_GSET:
-    settabV(J->L, &ix.tabv, tabref_acq(J->fn->l.env));
+    settabV(J->L, &ix.tabv, lj_func_env_acq(J->fn));
     ix.tab = emitir(IRT(IR_FLOAD, IRT_TAB), getcurrf(J), IRFL_FUNC_ENV);
     ix.idxchain = LJ_MAX_IDXCHAIN;
     rc = lj_record_idx(J, &ix);

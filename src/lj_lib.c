@@ -103,7 +103,7 @@ static const uint8_t *lib_read_lfunc(lua_State *L, const uint8_t *p, GCtab *tab)
   ls.chunkname = name;
   pt = lj_bcread_proto(&ls);
   pt->firstline = ~(BCLine)0;
-  fn = lj_func_newL_empty(L, pt, tabref_acq(L->env));
+  fn = lj_func_newL_empty(L, pt, lj_state_env_acq(L));
   {
     TValue *slot;
     /* NOBARRIER: See below for common barrier. */
@@ -116,7 +116,7 @@ static const uint8_t *lib_read_lfunc(lua_State *L, const uint8_t *p, GCtab *tab)
 void lj_lib_register(lua_State *L, const char *libname,
 		     const uint8_t *p, const lua_CFunction *cf)
 {
-  GCtab *env = tabref_acq(L->env);
+  GCtab *env = lj_state_env_acq(L);
   GCfunc *ofn = NULL;
   int ffid = *p++;
   BCIns *bcff = &L2GG(L)->bcff[*p++];
@@ -217,7 +217,7 @@ void lj_lib_prereg(lua_State *L, const char *name, lua_CFunction f, GCtab *env)
 {
   luaL_findtable(L, LUA_REGISTRYINDEX, "_PRELOAD", 4);
   lua_pushcfunction(L, f);
-  setgcrefrel(funcV(L->top-1)->c.env, obj2gco(env));
+  lj_func_env_rel(funcV(L->top-1), env);
   lj_gc_pubobjobj(L, funcV(L->top-1), env);
   lua_setfield(L, -2, name);
   L->top--;
@@ -226,7 +226,7 @@ void lj_lib_prereg(lua_State *L, const char *name, lua_CFunction f, GCtab *env)
 int lj_lib_postreg(lua_State *L, lua_CFunction cf, int id, const char *name)
 {
   GCfunc *fn = lj_lib_pushcf(L, cf, id);
-  GCtab *t = tabref_acq(curr_func(L)->c.env);  /* Reference to parent table. */
+  GCtab *t = lj_func_env_acq(curr_func(L));  /* Reference to parent table. */
   GCstr *key = lj_str_newz(L, name);
   TValue *slot = lib_storefunc_str(L, t, key, fn);
   lib_weak_write_str(L, t, key, slot);

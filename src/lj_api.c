@@ -48,7 +48,7 @@ static TValue *index2adr(lua_State *L, int idx)
     return L->top + idx;
   } else if (idx == LUA_GLOBALSINDEX) {
     TValue *o = &L2TG(L)->tmptv;
-    settabV(L, o, tabref_acq(L->env));
+    settabV(L, o, lj_state_env_acq(L));
     return o;
   } else if (idx == LUA_REGISTRYINDEX) {
     return registry(L);
@@ -58,7 +58,7 @@ static TValue *index2adr(lua_State *L, int idx)
 		"calling frame is not a C function");
     if (idx == LUA_ENVIRONINDEX) {
       TValue *o = &L2TG(L)->tmptv;
-      settabV(L, o, tabref_acq(fn->c.env));
+      settabV(L, o, lj_func_env_acq(fn));
       return o;
     } else {
       idx = LUA_GLOBALSINDEX - idx;
@@ -151,8 +151,8 @@ static TValue *index2adr_stack(lua_State *L, int idx)
 static GCtab *getcurrenv(lua_State *L)
 {
   GCfunc *fn = curr_func(L);
-  return fn->c.gct == ~LJ_TFUNC ? tabref_acq(fn->c.env) :
-				  tabref_acq(L->env);
+  return fn->c.gct == ~LJ_TFUNC ? lj_func_env_acq(fn) :
+				  lj_state_env_acq(L);
 }
 
 static lua_State *api_errstate(lua_State *L)
@@ -285,7 +285,7 @@ static void copy_slot(lua_State *L, TValue *f, int idx)
     t = tabV(f);
     api_trace_flush_mutation(L);
     /* NOBARRIER: A thread (i.e. L) is never black. */
-    setgcrefrel(L->env, obj2gco(t));
+    lj_state_env_rel(L, t);
   } else if (idx == LUA_ENVIRONINDEX) {
     GCfunc *fn = curr_func(L);
     GCtab *t;
@@ -294,7 +294,7 @@ static void copy_slot(lua_State *L, TValue *f, int idx)
     lj_checkapi(tvistab(f), "stack slot %d is not a table", idx);
     t = tabV(f);
     api_trace_flush_mutation(L);
-    setgcrefrel(fn->c.env, obj2gco(t));
+    lj_func_env_rel(fn, t);
     lj_gc_pubobjobj(L, fn, t);
   } else {
     TValue *o = index2adr_check(L, idx);
@@ -1041,16 +1041,16 @@ LUA_API void lua_getfenv(lua_State *L, int idx)
   TValue snap;
   cTValue *o = index2adr_check_read(L, idx, &snap);
   if (tvisfunc(o)) {
-    settabV(L, L->top, tabref_acq(funcV(o)->c.env));
+    settabV(L, L->top, lj_func_env_acq(funcV(o)));
   } else if (tvisudata(o)) {
-    settabV(L, L->top, tabref_acq(udataV(o)->env));
+    settabV(L, L->top, lj_udata_env_acq(udataV(o)));
   } else if (tvisthread(o)) {
     LJStateClaim claim;
     lua_State *L1 = threadV(o);
     GCtab *env;
     if (!lj_state_tryclaim(L1, lj_thr_current_id(G(L)), &claim))
       lj_err_callermsg(api_errstate(L), "thread busy");
-    env = tabref_acq(L1->env);
+    env = lj_state_env_acq(L1);
     lj_state_dropclaim(&claim);
     settabV(L, L->top, env);
   } else {
@@ -1324,18 +1324,18 @@ LUA_API int lua_setfenv(lua_State *L, int idx)
   if (tvisfunc(o)) {
     GCfunc *fn = funcV(o);
     api_trace_flush_mutation(L);
-    setgcrefrel(fn->c.env, obj2gco(t));
+    lj_func_env_rel(fn, t);
     lj_gc_pubobjobj(L, fn, t);
   } else if (tvisudata(o)) {
     GCudata *ud = udataV(o);
-    setgcrefrel(ud->env, obj2gco(t));
+    lj_udata_env_rel(ud, t);
     lj_gc_pubobjobj(L, ud, t);
   } else if (tvisthread(o)) {
     lua_State *L1 = threadV(o);
     api_trace_flush_mutation(L);
     if (!lj_state_tryclaim(L1, lj_thr_current_id(G(L)), &claim))
       lj_err_callermsg(api_errstate(L), "thread busy");
-    setgcrefrel(L1->env, obj2gco(t));
+    lj_state_env_rel(L1, t);
     claimed = 1;
     lj_gc_pubobjobj(L, obj2gco(L1), t);
   } else {

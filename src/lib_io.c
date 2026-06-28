@@ -291,7 +291,7 @@ static IOFileUD *io_file_new(lua_State *L)
   IOFileUD *iof = (IOFileUD *)lua_newuserdata(L, sizeof(IOFileUD));
   GCudata *ud = udataV(L->top-1);
   {
-    GCtab *mt = tabref_acq(curr_func(L)->c.env);
+    GCtab *mt = lj_func_env_acq(curr_func(L));
     lj_udata_metatable_rel(ud, mt);
     lj_gc_pubobjobj(L, ud, mt);
     lj_gc2_finreg_udata_register_mt(L, G(L), ud, mt);

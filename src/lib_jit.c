@@ -916,11 +916,11 @@ LUALIB_API int luaopen_jit(lua_State *L)
   LJ_LIB_REG(L, LUA_JITLIBNAME, jit);
 #if LJ_HASPROFILE
   lj_lib_prereg(L, LUA_JITLIBNAME ".profile", luaopen_jit_profile,
-		tabref_acq(L->env));
+		lj_state_env_acq(L));
 #endif
 #ifndef LUAJIT_DISABLE_JITUTIL
   lj_lib_prereg(L, LUA_JITLIBNAME ".util", luaopen_jit_util,
-		tabref_acq(L->env));
+		lj_state_env_acq(L));
 #endif
 #if LJ_HASJIT
   LJ_LIB_REG(L, "jit.opt", jit_opt);

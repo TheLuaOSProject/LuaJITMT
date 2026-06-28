@@ -236,7 +236,7 @@ static TValue *cpluaopen(lua_State *L, lua_CFunction dummy, void *ud)
   UNUSED(ud);
   stack_init(L, L);
   /* NOBARRIER: State initialization, all objects are white. */
-  setgcrefrel(L->env, obj2gco(lj_tab_new(L, 0, LJ_MIN_GLOBAL)));
+  lj_state_env_rel(L, lj_tab_new(L, 0, LJ_MIN_GLOBAL));
   settabV(L, registry(L), lj_tab_new(L, 0, LJ_MIN_REGISTRY));
   lj_str_init(L);
   lj_meta_init(L);
@@ -485,9 +485,9 @@ lua_State *lj_state_new(lua_State *L)
   setgcrefnullrel(L1->openupval);
   setgcrefnullrel(L1->mt_thread);
   setmrefr(L1->glref, L->glref);
-  setgcrefrrel(L1->env, L->env);
+  lj_state_env_copy_rel(L1, L);
   {
-    GCtab *env = tabref_acq(L1->env);
+    GCtab *env = lj_state_env_acq(L1);
     if (env)
       lj_gc_pubobjobj(L, L1, env);
   }

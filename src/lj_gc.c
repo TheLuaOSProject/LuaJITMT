@@ -539,7 +539,7 @@ static void gc_mark(global_State *g, GCobj *o)
     GCudata *ud = gco2ud(o);
     uint8_t udtype = lj_udata_udtype_acq(ud);
     GCtab *mt = lj_udata_metatable_acq(ud);
-    GCtab *env = tabref_acq(ud->env);
+    GCtab *env = lj_udata_env_acq(ud);
     gray2black(o);  /* Userdata are never gray. */
     if (mt) gc_markobj(g, mt);
     if (env) gc_markobj(g, env);
@@ -747,7 +747,7 @@ static void gc_mark_start(global_State *g)
   lj_gc_list_clear_rel(&g->gc.weak);
   gc_markobj(g, mainL);
   {
-    GCtab *env = tabref_acq(mainL->env);
+    GCtab *env = lj_state_env_acq(mainL);
     if (env)
       gc_markobj(g, env);
   }
@@ -925,7 +925,7 @@ static int gc_traverse_tab(global_State *g, GCtab *t)
 static void gc_traverse_func(global_State *g, GCfunc *fn)
 {
   {
-    GCtab *env = tabref_acq(fn->c.env);
+    GCtab *env = lj_func_env_acq(fn);
     if (env)
       gc_markobj(g, env);
   }
@@ -1150,7 +1150,7 @@ static void gc_traverse_thread(global_State *g, lua_State *th)
       gc_mark(g, mt);
   }
   {
-    GCtab *env = tabref_acq(th->env);
+    GCtab *env = lj_state_env_acq(th);
     gc_mark_thread_root_tab(g, env);
   }
   mt = gcref_acq(th->mt_thread);

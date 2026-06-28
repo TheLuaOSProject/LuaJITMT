@@ -2566,7 +2566,7 @@ static void gc2_scan_thread_stack(global_State *g, lua_State *L)
     gc2_mark_tv(g, &tv);
   }
   {
-    GCtab *env = tabref_acq(L->env);
+    GCtab *env = lj_state_env_acq(L);
     if (env)
       lj_gc2_markobj(g, obj2gco(env));
   }
@@ -2789,7 +2789,7 @@ static void gc2_scan_global_roots(global_State *g)
   ptrdiff_t i;
   lj_gc2_markobj(g, obj2gco(mainL));
   {
-    GCtab *env = tabref_acq(mainL->env);
+    GCtab *env = lj_state_env_acq(mainL);
     if (env)
       lj_gc2_markobj(g, obj2gco(env));
   }
@@ -5466,7 +5466,7 @@ static void gc2_traverse_clib_cache(global_State *g, CLibrary *cl)
 static void gc2_traverse_udata(global_State *g, GCudata *ud)
 {
   GCtab *mt = lj_udata_metatable_acq(ud);
-  GCtab *env = tabref_acq(ud->env);
+  GCtab *env = lj_udata_env_acq(ud);
   uint8_t udtype = lj_udata_udtype_acq(ud);
   if (mt)
     gc2_markobj_worker(g, obj2gco(mt));
@@ -5522,7 +5522,7 @@ static void gc2_traverse_upval(global_State *g, GCupval *uv)
 
 static void gc2_traverse_func(global_State *g, GCfunc *fn)
 {
-  GCtab *env = tabref_acq(fn->c.env);
+  GCtab *env = lj_func_env_acq(fn);
   if (env)
     gc2_markobj_worker(g, obj2gco(env));
   if (isluafunc(fn)) {
@@ -5663,7 +5663,7 @@ static void gc2_traverse_thread(global_State *g, lua_State *th)
     gc2_mark_tv_worker(g, &tv);
   }
   {
-    GCtab *env = tabref_acq(th->env);
+    GCtab *env = lj_state_env_acq(th);
     if (env)
       gc2_markobj_worker(g, obj2gco(env));
   }

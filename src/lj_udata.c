@@ -22,7 +22,7 @@ GCudata *lj_udata_new(lua_State *L, MSize sz, GCtab *env)
   ud->gct = ~LJ_TUDATA;
   ud->len = sz;
   lj_udata_metatable_rel(ud, NULL);
-  setgcrefrel(ud->env, obj2gco(env));
+  lj_udata_env_rel(ud, env);
   if (env)
     lj_gc_pubobjobj(L, ud, env);
   lj_udata_udtype_rel(ud, UDTYPE_USERDATA);

@@ -313,7 +313,7 @@ LJLIB_CF(debug_getuservalue)
 {
   TValue *o = L->base;
   if (o < L->top && tvisudata(o))
-    settabV(L, o, tabref_acq(udataV(o)->env));
+    settabV(L, o, lj_udata_env_acq(udataV(o)));
   else
     setnilV(o);
   L->top = o+1;

@@ -5229,6 +5229,47 @@ static LJ_AINLINE GCtab *lj_obj_metatable_acq(const GCobj *o)
   return tabref_acq(o->gch.metatable);
 }
 
+static LJ_AINLINE GCtab *lj_func_env_acq(const GCfunc *fn)
+{
+  return tabref_acq(fn->c.env);
+}
+
+static LJ_AINLINE void lj_func_env_rel(GCfunc *fn, GCtab *env)
+{
+  setgcrefrel(fn->c.env, obj2gco(env));
+}
+
+static LJ_AINLINE GCtab *lj_funcL_env_acq(const GCfuncL *fn)
+{
+  return tabref_acq(fn->env);
+}
+
+static LJ_AINLINE GCtab *lj_state_env_acq(const lua_State *L)
+{
+  return tabref_acq(L->env);
+}
+
+static LJ_AINLINE void lj_state_env_rel(lua_State *L, GCtab *env)
+{
+  setgcrefrel(L->env, obj2gco(env));
+}
+
+static LJ_AINLINE void lj_state_env_copy_rel(lua_State *dst,
+					     const lua_State *src)
+{
+  lj_state_env_rel(dst, lj_state_env_acq(src));
+}
+
+static LJ_AINLINE GCtab *lj_udata_env_acq(const GCudata *ud)
+{
+  return tabref_acq(ud->env);
+}
+
+static LJ_AINLINE void lj_udata_env_rel(GCudata *ud, GCtab *env)
+{
+  setgcrefrel(ud->env, obj2gco(env));
+}
+
 static LJ_AINLINE uint64_t gc2_finreg_udata_sets_acq(global_State *g)
 {
   return la_load64_acq(&g->gc2.finreg_udata_sets);
