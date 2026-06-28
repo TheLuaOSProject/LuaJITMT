@@ -216,7 +216,7 @@ finalizer ordering, finalizer that spawns a thread).
 Gate: paranoia oracle extended to weak sets, zero-diff.
 
 Current implementation note: the original M8 target above remains intact.
-`tools/ci/m8_weak.sh` now covers deterministic weak-mode semantics,
+`tools/ci/lua_test.sh m8_weak` now covers deterministic weak-mode semantics,
 string weak-reference parity, weak-table cycles, current `ffi.gc()` ordering
 and clear/nested-GC behavior, close-time cdata/userdata finalizer drain, and
 focused GC2 weak/barrier paranoia coverage. It also reruns the GC2 phase

@@ -8,6 +8,11 @@ that the runtime behavior is correct.
 This policy supersedes older notes that mention deliberate static source guards
 or `suite_utils.read_source_file()`.
 
+The only supported shell entrypoint under `tools/ci/` is
+`tools/ci/lua_test.sh`. Run focused cases as
+`tools/ci/lua_test.sh <case...>`; do not add per-case compatibility wrapper
+scripts.
+
 Use one of these instead:
 
 - A Lua behavior test when the invariant is visible through public or internal
