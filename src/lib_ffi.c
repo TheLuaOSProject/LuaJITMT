@@ -134,6 +134,27 @@ static int ffi_predefined_ctype_part(const char *p, MSize len, CTypeID *idp)
   }
   if (ffi_ctype_match("float")) { *idp = CTID_FLOAT; return 1; }
   if (ffi_ctype_match("double")) { *idp = CTID_DOUBLE; return 1; }
+  if (ffi_ctype_match("complex") ||
+      ffi_ctype_match("__complex") ||
+      ffi_ctype_match("__complex__") ||
+      ffi_ctype_match("complex double") ||
+      ffi_ctype_match("double complex") ||
+      ffi_ctype_match("__complex double") ||
+      ffi_ctype_match("double __complex") ||
+      ffi_ctype_match("__complex__ double") ||
+      ffi_ctype_match("double __complex__")) {
+    *idp = CTID_COMPLEX_DOUBLE;
+    return 1;
+  }
+  if (ffi_ctype_match("complex float") ||
+      ffi_ctype_match("float complex") ||
+      ffi_ctype_match("__complex float") ||
+      ffi_ctype_match("float __complex") ||
+      ffi_ctype_match("__complex__ float") ||
+      ffi_ctype_match("float __complex__")) {
+    *idp = CTID_COMPLEX_FLOAT;
+    return 1;
+  }
   if (ffi_ctype_match("int8_t")) { *idp = CTID_INT8; return 1; }
   if (ffi_ctype_match("uint8_t")) { *idp = CTID_UINT8; return 1; }
   if (ffi_ctype_match("uint8_t *")) { *idp = CTID_P_UINT8; return 1; }
