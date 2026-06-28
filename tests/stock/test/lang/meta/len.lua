@@ -16,7 +16,7 @@ do --- table
   assert(#t == 3) -- __len does NOT work on tables.
 end
 
-do --- userdata +lua<5.2
+do --- userdata
   local u = newproxy(true)
   getmetatable(u).__len = function(o) return 42 end
   assert(#u == 42)

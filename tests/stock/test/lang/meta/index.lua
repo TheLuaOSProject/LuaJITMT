@@ -25,7 +25,7 @@ do --- table 2
   assert(x == "foo")
 end
 
-do --- userdata +lua<5.2
+do --- userdata
   local u = newproxy(true)
   getmetatable(u).__index = { foo = u, bar = 42 }
 

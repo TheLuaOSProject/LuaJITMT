@@ -92,7 +92,12 @@ static CTypeID argv2ctype(jit_State *J, TRef tr, cTValue *o)
     emitir(IRTG(IR_EQ, IRT_STR), tr, lj_ir_kstr(J, s));
     cp.L = J->L;
     cp.cts = ctype_cts(J->L);
-    lj_ctype_parse_lock(cp.cts, J->L);
+    {
+      uint32_t seq = ctype_parse_token_acq(cp.cts);
+      uint32_t expect = seq;
+      if ((seq & 1u) || !ctype_parse_token_cas(cp.cts, &expect, seq + 1u))
+	lj_trace_err(J, LJ_TRERR_CTBUSY);
+    }
     cp.srcname = strdata(s);
     cp.p = strdata(s);
     cp.param = NULL;

@@ -62,7 +62,7 @@ do --- tostring table __tostring __call
   assert(x == 5050)
 end
 
-do --- print calls overridden tostring +lua<5.2
+do --- print calls overridden tostring
   local x = false
   local co = coroutine.create(function() print(1) end)
   debug.setfenv(co, setmetatable({}, { __index = {

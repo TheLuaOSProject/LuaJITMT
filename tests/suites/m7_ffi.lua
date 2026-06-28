@@ -333,6 +333,8 @@ assert(cl.lj_clib_ldscript_value() == 42)
                       "t-ffi-namespace-snapshot.c", { timeout = "20s" })
       build_and_run_c(t, t:tmp("lj_t-ffi-istype-snapshot"),
                       "t-ffi-istype-snapshot.c", { timeout = "20s" })
+      build_and_run_c(t, t:tmp("lj_t-ffi-recorder-string-ctype-busy"),
+                      "t-ffi-recorder-string-ctype-busy.c", { timeout = "20s" })
       run_luajit_script(t, "t-ffi-cparse-rollback-reader.lua", nil, { joff = true })
       print("M7 FFI typeinfo snapshot behavior passed")
     end

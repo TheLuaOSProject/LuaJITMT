@@ -223,13 +223,6 @@ LUA_API void lua_xmove(lua_State *L, lua_State *to, int n)
   lj_state_dropclaim(&toclaim);
 }
 
-LUA_API const lua_Number *lua_version(lua_State *L)
-{
-  static const lua_Number version = LUA_VERSION_NUM;
-  UNUSED(L);
-  return &version;
-}
-
 /* -- Stack manipulation -------------------------------------------------- */
 
 LUA_API int lua_gettop(lua_State *L)
@@ -1418,11 +1411,6 @@ LUALIB_API int luaL_callmeta(lua_State *L, int idx, const char *field)
 }
 
 /* -- Coroutine yield and resume ------------------------------------------ */
-
-LUA_API int lua_isyieldable(lua_State *L)
-{
-  return cframe_canyield(L->cframe);
-}
 
 LUA_API int lua_yield(lua_State *L, int nresults)
 {

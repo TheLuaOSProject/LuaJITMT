@@ -1,6 +1,6 @@
 assert.lua
 error.lua
-getfenv.lua +lua<5.2
+getfenv.lua
 getsetmetatable.lua
 ipairs.lua
 next.lua

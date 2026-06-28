@@ -169,8 +169,8 @@ A UTF-8 BOM is skipped at the start of the source code.
 
 <h3 id="load_mode"><tt>load*()</tt> add a mode parameter</h3>
 <p>
-As an extension from Lua 5.2, the functions <tt>loadstring()</tt>,
-<tt>loadfile()</tt> and (new) <tt>load()</tt> add an optional
+The functions <tt>loadstring()</tt>, <tt>loadfile()</tt> and
+<tt>load()</tt> add an optional
 <tt>mode</tt> parameter.
 </p>
 <p>
@@ -303,11 +303,10 @@ the standard Lua&nbsp;5.1 VM: e.g. you can yield across <tt>pcall()</tt>
 and <tt>xpcall()</tt>, across iterators and across metamethods.
 </p>
 
-<h2 id="lua52">Extensions from Lua 5.2</h2>
+<h2 id="api_extensions">Always-on Language and API Extensions</h2>
 <p>
-LuaJIT supports some language and library extensions from Lua&nbsp;5.2.
-Features that are unlikely to break existing code are unconditionally
-enabled:
+LuaJIT provides the following language, library, and C API extensions
+unconditionally:
 </p>
 <ul>
 <li><tt>goto</tt> and <tt>::labels::</tt>.</li>
@@ -336,7 +335,6 @@ indexes for varargs.</li>
 C&nbsp;functions.</li>
 <li><tt>debug.upvalueid()</tt> and <tt>debug.upvaluejoin()</tt>.</li>
 <li>Lua/C API extensions:
-<tt>lua_version()</tt>
 <tt>lua_upvalueid()</tt>
 <tt>lua_upvaluejoin()</tt>
 <tt>lua_loadx()</tt>
@@ -350,8 +348,6 @@ C&nbsp;functions.</li>
 <tt>luaL_traceback()</tt>
 <tt>luaL_setfuncs()</tt>
 <tt>luaL_pushmodule()</tt>
-<tt>luaL_newlibtable()</tt>
-<tt>luaL_newlib()</tt>
 <tt>luaL_testudata()</tt>
 <tt>luaL_setmetatable()</tt>
 </li>
@@ -363,9 +359,9 @@ This fork does not provide Lua&nbsp;5.2 compatibility mode. The supported
 language surface is Lua&nbsp;5.1 plus the extensions listed above.
 </p>
 
-<h2 id="lua53">Extensions from Lua 5.3</h2>
+<h2 id="more_extensions">Additional Language and Library Extensions</h2>
 <p>
-LuaJIT supports some extensions from Lua&nbsp;5.3:
+LuaJIT also supports these language and library extensions:
 <ul>
 <li>Unicode escape <tt>'\u{XX...}'</tt> embeds the UTF-8 encoding in string literals.</li>
 <li>The argument table <tt>arg</tt> can be read (and modified) by <tt>LUA_INIT</tt> and <tt>-e</tt> chunks.</li>
@@ -373,9 +369,6 @@ LuaJIT supports some extensions from Lua&nbsp;5.3:
 <li><tt>assert()</tt> accepts any type of error object.</li>
 <li><tt>table.move(a1, f, e, t [,a2])</tt>.</li>
 <li><tt>coroutine.isyieldable()</tt>.</li>
-<li>Lua/C API extensions:
-<tt>lua_isyieldable()</tt>
-</li>
 </ul>
 
 <h2 id="exceptions">C++ Exception Interoperability</h2>
