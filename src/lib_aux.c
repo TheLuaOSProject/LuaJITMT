@@ -17,6 +17,7 @@
 #include "lauxlib.h"
 
 #include "lj_obj.h"
+#include "lj_api.h"
 #include "lj_err.h"
 #include "lj_safepoint.h"
 #include "lj_state.h"
@@ -172,9 +173,9 @@ static void adjuststack(luaL_Buffer *B)
   if (B->lvl > 1) {
     lua_State *L = B->L;
     int toget = 1;  /* number of levels to concat */
-    size_t toplen = lua_objlen(L, -1);
+    size_t toplen = lj_api_objlen(L, -1);
     do {
-      size_t l = lua_objlen(L, -(toget+1));
+      size_t l = lj_api_objlen(L, -(toget+1));
       if (!(B->lvl - toget + 1 >= LUA_MINSTACK/2 || toplen > l))
 	break;
       toplen += l;
@@ -264,7 +265,7 @@ LUALIB_API int luaL_ref(lua_State *L, int t)
     lua_rawgeti(L, t, ref);  /* remove it from list */
     lua_rawseti(L, t, FREELIST_REF);  /* (t[FREELIST_REF] = t[ref]) */
   } else {  /* no free elements */
-    ref = (int)lua_objlen(L, t);
+    ref = (int)lj_api_objlen(L, t);
     ref++;  /* create new reference */
   }
   lua_rawseti(L, t, ref);

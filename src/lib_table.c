@@ -15,6 +15,7 @@
 
 #include "lj_obj.h"
 #include "lj_atomic.h"
+#include "lj_api.h"
 #include "lj_gc.h"
 #include "lj_gc2.h"
 #include "lj_err.h"
@@ -267,7 +268,7 @@ static int sort_comp(lua_State *L, int a, int b)
     lua_pop(L, 1);
     return res;
   } else {  /* a < b? */
-    return lua_lessthan(L, a, b);
+    return lj_api_lessthan(L, a, b);
   }
 }
 

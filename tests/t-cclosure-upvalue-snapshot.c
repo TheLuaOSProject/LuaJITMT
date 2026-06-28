@@ -9,6 +9,7 @@
 #include "lua.h"
 #include "lauxlib.h"
 #include "lualib.h"
+#include "lj_api.h"
 
 static void check_lua(lua_State *L, int status, const char *what)
 {
@@ -208,7 +209,7 @@ static int option_reader_c(lua_State *L)
 static int objlen_reader_c(lua_State *L)
 {
   int uv = lua_upvalueindex(1);
-  assert(lua_objlen(L, uv) == 3);
+  assert(lj_api_objlen(L, uv) == 3);
   assert(lua_type(L, uv) == LUA_TSTRING);
   lua_pushvalue(L, uv);
   return 1;
@@ -221,11 +222,11 @@ static int compare_api_reader_c(lua_State *L)
   int str1 = lua_upvalueindex(3);
   int str2 = lua_upvalueindex(4);
 
-  assert(lua_lessthan(L, low, high));
-  assert(!lua_lessthan(L, high, low));
-  assert(!lua_equal(L, low, high));
+  assert(lj_api_lessthan(L, low, high));
+  assert(!lj_api_lessthan(L, high, low));
+  assert(!lj_api_equal(L, low, high));
   assert(!lua_rawequal(L, low, high));
-  assert(lua_equal(L, str1, str2));
+  assert(lj_api_equal(L, str1, str2));
   assert(lua_rawequal(L, str1, str2));
 
   lua_pushboolean(L, 1);

@@ -22,6 +22,7 @@
 #include "lj_func.h"
 #include "lj_udata.h"
 #include "lj_meta.h"
+#include "lj_api.h"
 #include "lj_state.h"
 #include "lj_bc.h"
 #include "lj_frame.h"
@@ -412,7 +413,7 @@ LUA_API int lua_rawequal(lua_State *L, int idx1, int idx2)
   return (o1 == niltv(L) || o2 == niltv(L)) ? 0 : lj_obj_equal(o1, o2);
 }
 
-LUA_API int lua_equal(lua_State *L, int idx1, int idx2)
+LJ_FUNC int lj_api_equal(lua_State *L, int idx1, int idx2)
 {
   TValue snap1, snap2;
   cTValue *o1 = index2adr_read(L, idx1, &snap1);
@@ -446,7 +447,7 @@ LUA_API int lua_equal(lua_State *L, int idx1, int idx2)
   }
 }
 
-LUA_API int lua_lessthan(lua_State *L, int idx1, int idx2)
+LJ_FUNC int lj_api_lessthan(lua_State *L, int idx1, int idx2)
 {
   TValue snap1, snap2;
   cTValue *o1 = index2adr_read(L, idx1, &snap1);
@@ -696,7 +697,7 @@ LUALIB_API int luaL_checkoption(lua_State *L, int idx, const char *def,
   lj_err_argv(L, idx, LJ_ERR_INVOPTM, s);
 }
 
-LUA_API size_t lua_objlen(lua_State *L, int idx)
+LJ_FUNC size_t lj_api_objlen(lua_State *L, int idx)
 {
   TValue snap;
   TValue *o = index2adr_read(L, idx, &snap);
@@ -1426,7 +1427,7 @@ static TValue *cpcall(lua_State *L, lua_CFunction func, void *ud)
   return top-1;  /* Now call the newly allocated C function. */
 }
 
-LUA_API int lua_cpcall(lua_State *L, lua_CFunction func, void *ud)
+LJ_FUNC int lj_api_cpcall(lua_State *L, lua_CFunction func, void *ud)
 {
   global_State *g = G(L);
   uint8_t oldh = hook_save(g);

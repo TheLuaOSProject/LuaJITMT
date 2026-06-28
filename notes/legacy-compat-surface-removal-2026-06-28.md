@@ -20,6 +20,12 @@ current lockless policy:
   `luaL_optlong`. Callers should use `luaL_checkinteger()` and
   `luaL_optinteger()` with an explicit local cast when they really need a
   narrower C type.
+- Removed the remaining public Lua 5.1-style helper entry points
+  `lua_equal()`, `lua_lessthan()`, `lua_objlen()`, and `lua_cpcall()` from the
+  lockless runtime header/export surface. Runtime code that still needs those
+  semantics uses `lj_api_*` internal helpers, which keeps table sorting, auxlib
+  buffer sizing, the frontend protected main call, and focused C upvalue
+  fixtures from depending on old compatibility symbols.
 - Removed redundant `string.gmatch` C-closure and local-cell x64 source guards;
   behavior fixtures, bytecode checks, and generated JIT dump checks cover the
   observable semantics.
