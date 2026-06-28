@@ -319,15 +319,22 @@ LJLIB_CF(buffer_new)
   if (L->base+targ-1 < L->top) {
     GCtab *options = lj_lib_checktab(L, targ);
     cTValue *opt_dict, *opt_mt;
+    TValue optv;
     opt_dict = lj_tab_getstr(options, lj_str_newlit(L, "dict"));
-    if (opt_dict && tvistab(opt_dict)) {
-      dict_str = tabV(opt_dict);
-      lj_serialize_dict_prep_str(L, dict_str);
+    if (opt_dict) {
+      lj_tv_load_acq(&optv, opt_dict);
+      if (tvistab(&optv)) {
+	dict_str = tabV(&optv);
+	lj_serialize_dict_prep_str(L, dict_str);
+      }
     }
     opt_mt = lj_tab_getstr(options, lj_str_newlit(L, "metatable"));
-    if (opt_mt && tvistab(opt_mt)) {
-      dict_mt = tabV(opt_mt);
-      lj_serialize_dict_prep_mt(L, dict_mt);
+    if (opt_mt) {
+      lj_tv_load_acq(&optv, opt_mt);
+      if (tvistab(&optv)) {
+	dict_mt = tabV(&optv);
+	lj_serialize_dict_prep_mt(L, dict_mt);
+      }
     }
   }
   env = tabref_acq(curr_func(L)->c.env);
