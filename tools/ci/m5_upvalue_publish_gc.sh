@@ -26,6 +26,11 @@ if ! grep -Fq 'lj_tv_load_acq(&fileuv, &fn->c.upvalue[0]);' \
   printf '%s\n' 'io_file_iter is missing its acquire snapshot of the file C upvalue' >&2
   exit 1
 fi
+if ! grep -Fq 'lj_tv_load_acq(L->top+i, &fn->c.upvalue[1+i]);' \
+    "$ROOT/src/lib_io.c"; then
+  printf '%s\n' 'io_file_iter must acquire-snapshot read option C upvalues' >&2
+  exit 1
+fi
 
 if hits=$(grep -nF 'lj_typename(&fn->c.upvalue' "$ROOT/src/lj_err.c" || true);
 then

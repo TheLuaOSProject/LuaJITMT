@@ -603,6 +603,21 @@ static void exercise_io_lines_upvalue_mutation(lua_State *L)
     "assert(not ok, 'mutated io.lines upvalue unexpectedly succeeded')\n"
     "assert(tostring(err):find('attempt to use a closed file', 1, true), tostring(err))\n"),
     "io.lines upvalue mutation");
+
+  check_lua(L, luaL_dostring(L,
+    "local path = os.tmpname()\n"
+    "local f = assert(io.open(path, 'w'))\n"
+    "f:write('12\\n34\\n')\n"
+    "f:close()\n"
+    "local it = assert(io.lines(path, '*n'))\n"
+    "local name, opt = debug.getupvalue(it, 2)\n"
+    "assert(name and opt == '*n', tostring(opt))\n"
+    "assert(debug.setupvalue(it, 2, '*l'))\n"
+    "assert(it() == '12')\n"
+    "assert(it() == '34')\n"
+    "assert(it() == nil)\n"
+    "os.remove(path)\n"),
+    "io.lines read-option upvalue mutation");
 }
 
 static void exercise_coroutine_wrap_upvalue_mutation(lua_State *L)
