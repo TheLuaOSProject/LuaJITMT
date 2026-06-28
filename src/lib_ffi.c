@@ -1681,22 +1681,16 @@ LJLIB_CF(ffi_metatype)
   int isstr;
   TValue tmp;
   GCcdata *cd;
+  CTSize sz;
+  int ok;
   id = ffi_checkctype_noparse(L, NULL, &isstr);
-  if (!isstr) {
-    CType snap;
-    CTSize sz;
-    int ok = lj_ctype_info_snapshot(cts, id, &info, &sz, &rid, &snap);
-    if (ok <= 0)
-      ok = lj_ctype_info_wait(L, cts, id, &info, &sz, &rid, &snap);
-    if (ok <= 0)
-      lj_err_arg(L, 1, LJ_ERR_FFI_INVTYPE);
-  } else {
-    CType *ct;
+  if (isstr)
     id = ffi_checkctype(L, cts, NULL);
-    rid = ctype_rawid(cts, id);
-    ct = ctype_get(cts, rid);
-    info = ctype_info_acq(ct);
-  }
+  ok = lj_ctype_info_snapshot(cts, id, &info, &sz, &rid, NULL);
+  if (ok <= 0)
+    ok = lj_ctype_info_wait(L, cts, id, &info, &sz, &rid, NULL);
+  if (ok <= 0)
+    lj_err_arg(L, 1, LJ_ERR_FFI_INVTYPE);
   if (!(ctype_isstruct(info) || ctype_iscomplex(info) || ctype_isvector(info)))
     lj_err_arg(L, 1, LJ_ERR_FFI_INVTYPE);
   if (!lj_ctype_setmeta(cts, rid, mt))

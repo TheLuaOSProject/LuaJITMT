@@ -473,6 +473,8 @@ print("dump cnewi ok")
     description = "FFI metatype side-map behavior",
     run = function(t)
       clean_build(t)
+      build_and_run_c(t, t:tmp("lj_t-ffi-metatype-snapshot"),
+                      "t-ffi-metatype-snapshot.c", { timeout = "20s" })
       run_luajit_script(t, "t-ffi-metatype-miscmap.lua", {
         getenv("LJ_M7_FFI_META_THREADS", "6"),
         getenv("LJ_M7_FFI_META_ITERS", "60")
