@@ -29,14 +29,30 @@ local run_lua_test_case = runtime.run_lua_test_case
 
 local function assert_poll_alias_source_guards(t)
   local src = utils.read_source_file(t:path("src", "lj_opt_mem.c"))
-  checks.assert_text_contains("M6 poll alias guard", src,
+  local function body(signature)
+    return utils.c_function_body(src, signature)
+  end
+  checks.assert_text_contains("M6 poll alias guard",
+    body("TRef LJ_FASTCALL lj_opt_dse_ahstore"),
+    "IRRef lim = poll_alias_limit(J, xref);", "ASTORE/HSTORE poll alias limit")
+  checks.assert_text_contains("M6 poll alias guard",
+    body("TRef LJ_FASTCALL lj_opt_fwd_uload"),
     "IRRef lim = poll_alias_limit(J, uref);", "ULOAD poll alias limit")
-  checks.assert_text_contains("M6 poll alias guard", src,
+  checks.assert_text_contains("M6 poll alias guard",
+    body("TRef LJ_FASTCALL lj_opt_dse_ustore"),
     "IRRef lim = poll_alias_limit(J, xref);", "USTORE poll alias limit")
-  checks.assert_text_contains("M6 poll alias guard", src,
+  checks.assert_text_contains("M6 poll alias guard",
+    body("TRef LJ_FASTCALL lj_opt_fwd_fload"),
     "IRRef lim = poll_alias_limit(J, oref);", "FLOAD poll alias limit")
-  checks.assert_text_contains("M6 poll alias guard", src,
+  checks.assert_text_contains("M6 poll alias guard",
+    body("TRef LJ_FASTCALL lj_opt_dse_fstore"),
     "IRRef lim = poll_alias_limit(J, fref);", "FSTORE poll alias limit")
+  checks.assert_text_contains("M6 poll alias guard",
+    body("TRef LJ_FASTCALL lj_opt_fwd_xload"),
+    "lim = poll_alias_limit(J, lim);", "XLOAD poll alias limit")
+  checks.assert_text_contains("M6 poll alias guard",
+    body("TRef LJ_FASTCALL lj_opt_dse_xstore"),
+    "lim = poll_alias_limit(J, lim);", "XSTORE poll alias limit")
 end
 
 local m6_cases = {
