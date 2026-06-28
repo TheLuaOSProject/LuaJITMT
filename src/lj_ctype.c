@@ -1489,13 +1489,51 @@ int lj_ctype_size_snapshot(CTState *cts, CTypeID id, CTSize *szp)
   }
 }
 
+static int ctype_predefined_id(CTypeID id)
+{
+  return id > CTID_NONE && id <= CTID_CTYPEID;
+}
+
+static int ctype_size_predefined(CTState *cts, CTypeID id, CTSize *szp)
+{
+  CTypeTab *tabh;
+  CTypeID top = CTID_CTYPEID + 1;
+  MSize budget = (MSize)top * 2u;
+  if (!ctype_predefined_id(id))
+    return -1;
+  tabh = ctype_tabh_acq(cts);
+  if ((MSize)CTID_CTYPEID >= ctype_tab_sizetab_acq(tabh))
+    return -1;
+  for (;;) {
+    CType ct;
+    CTInfo info;
+    CTSize size;
+    if (!ctype_predefined_id(id) || budget-- == 0)
+      return -1;
+    if (!ctype_snapshot_copy(tabh, top, id, &ct)) {
+      *szp = CTSIZE_INVALID;
+      return 0;
+    }
+    info = ctype_info_acq(&ct);
+    size = ctype_size_acq(&ct);
+    if (!ctype_isattrib(info)) {
+      *szp = ctype_hassize(info) ? size : CTSIZE_INVALID;
+      return 1;
+    }
+    id = ctype_cid(info);
+  }
+}
+
 /* Wait/retry helper for scalar size only. Callers must refetch CType pointers
 ** after this returns if they need to retain or return a CType across the wait.
 */
 int lj_ctype_size_wait(lua_State *L, CTState *cts, CTypeID id, CTSize *szp)
 {
+  int ok = ctype_size_predefined(cts, id, szp);
+  if (ok >= 0)
+    return ok;
   for (;;) {
-    int ok = lj_ctype_size_snapshot(cts, id, szp);
+    ok = lj_ctype_size_snapshot(cts, id, szp);
     if (ok > 0)
       return 1;
     if (ok == 0) {

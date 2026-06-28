@@ -70,6 +70,21 @@ static void assert_size_waits_without_lock(lua_State *L, CTState *cts,
   assert(ljt_ctype_parse_seq(cts) == ctx.release_seq);
 }
 
+static void assert_predefined_size_avoids_wait(lua_State *L, CTState *cts)
+{
+  uint32_t seq0 = ljt_ctype_parse_seq(cts);
+  uint32_t release_seq = ljt_ctype_hold_parse_token(cts);
+
+  ljt_lua_dostring(L,
+    "assert(lj_m7_elem_int_ptr[2] == 300)\n"
+    "local q = lj_m7_elem_int_ptr + 3\n"
+    "assert(q[0] == 400)\n"
+    "assert(q - lj_m7_elem_int_ptr == 3)\n");
+
+  ljt_ctype_release_parse_token(cts, release_seq);
+  assert(ljt_ctype_parse_seq(cts) == seq0 + 2u);
+}
+
 int main(void)
 {
   lua_State *L = ljt_lua_newstate_openlibs();
@@ -79,10 +94,13 @@ int main(void)
 
   ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"
-    "ffi.cdef('typedef int lj_m7_elem_snapshot_t;')\n"
-    "lj_m7_elem_arr = ffi.new('lj_m7_elem_snapshot_t[4]', {10, 20, 30, 40})\n"
+    "ffi.cdef('typedef struct { int x; } lj_m7_elem_snapshot_t;')\n"
+    "lj_m7_elem_arr = ffi.new('lj_m7_elem_snapshot_t[4]',\n"
+    "                         {{10}, {20}, {30}, {40}})\n"
     "lj_m7_elem_ptr = ffi.cast('lj_m7_elem_snapshot_t *', lj_m7_elem_arr)\n"
-    "lj_m7_elem_q = lj_m7_elem_ptr + 3\n");
+    "lj_m7_elem_q = lj_m7_elem_ptr + 3\n"
+    "lj_m7_elem_int_arr = ffi.new('int[4]', {100, 200, 300, 400})\n"
+    "lj_m7_elem_int_ptr = ffi.cast('int *', lj_m7_elem_int_arr)\n");
 
   cts = ctype_ctsG(G(L));
   assert(cts != NULL);
@@ -94,28 +112,32 @@ int main(void)
     "local ffi = require('ffi')\n"
     "local p = lj_m7_elem_ptr\n"
     "for i = 1, 100 do\n"
-    "  assert(p[2] == 30)\n"
+    "  assert(p[2].x == 30)\n"
     "  local q = p + 3\n"
     "  assert(q - p == 3)\n"
     "end\n");
   seq1 = ljt_ctype_parse_seq(cts);
   assert(seq1 == seq0);
 
-  assert_size_waits_without_lock(L, cts, tg,
-    "assert(lj_m7_elem_ptr[2] == 30)\n");
+  assert_predefined_size_avoids_wait(L, cts);
   seq1 = ljt_ctype_parse_seq(cts);
   assert(seq1 == seq0 + 2u);
 
   assert_size_waits_without_lock(L, cts, tg,
-    "local q = lj_m7_elem_ptr + 3\n"
-    "assert(q[0] == 40)\n");
+    "assert(lj_m7_elem_ptr[2].x == 30)\n");
   seq1 = ljt_ctype_parse_seq(cts);
   assert(seq1 == seq0 + 4u);
 
   assert_size_waits_without_lock(L, cts, tg,
-    "assert(lj_m7_elem_q - lj_m7_elem_ptr == 3)\n");
+    "local q = lj_m7_elem_ptr + 3\n"
+    "assert(q[0].x == 40)\n");
   seq1 = ljt_ctype_parse_seq(cts);
   assert(seq1 == seq0 + 6u);
+
+  assert_size_waits_without_lock(L, cts, tg,
+    "assert(lj_m7_elem_q - lj_m7_elem_ptr == 3)\n");
+  seq1 = ljt_ctype_parse_seq(cts);
+  assert(seq1 == seq0 + 8u);
 
   {
     ljt_ctype_arm_trace_abort(L, cts);
@@ -130,7 +152,7 @@ int main(void)
       "  for i = 1, n do\n"
       "    local k = (i - 1) % 4\n"
       "    local q = p + k\n"
-      "    sum = sum + p[k] + tonumber(q - p)\n"
+      "    sum = sum + p[k].x + tonumber(q - p)\n"
       "  end\n"
       "  return sum\n"
       "end\n"
@@ -151,7 +173,7 @@ int main(void)
     "  for i = 1, n do\n"
     "    local k = (i - 1) % 4\n"
     "    local q = p + k\n"
-    "    sum = sum + p[k] + tonumber(q - p)\n"
+    "    sum = sum + p[k].x + tonumber(q - p)\n"
     "  end\n"
     "  return sum\n"
     "end\n"
