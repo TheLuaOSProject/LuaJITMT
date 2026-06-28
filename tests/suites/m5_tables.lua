@@ -79,7 +79,9 @@ return function(add)
 	  LJ_M5_TAB_RESIZE_STRESS_THREADS =
 	    os.getenv("LJ_M5_TAB_RESIZE_STRESS_THREADS") or "3",
 	  LJ_M5_TAB_RESIZE_STRESS_JIT_REPS =
-	    os.getenv("LJ_M5_TAB_RESIZE_STRESS_JIT_REPS") or "2200"
+	    os.getenv("LJ_M5_TAB_RESIZE_STRESS_JIT_REPS") or "2200",
+	  LJ_M5_TAB_RESIZE_STRESS_TRAVERSAL_ROUNDS =
+	    os.getenv("LJ_M5_TAB_RESIZE_STRESS_TRAVERSAL_ROUNDS") or "192"
 	}
       },
       message = "M5 table resize forwarding stress passed"

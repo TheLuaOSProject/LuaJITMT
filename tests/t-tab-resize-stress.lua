@@ -4,6 +4,8 @@ local harness = require"thread_harness"
 local reps = harness.env_number("LJ_M5_TAB_RESIZE_STRESS_REPS", 768)
 local writers = harness.env_number("LJ_M5_TAB_RESIZE_STRESS_THREADS", 3)
 local jit_reps = harness.env_number("LJ_M5_TAB_RESIZE_STRESS_JIT_REPS", 2200)
+local traversal_rounds =
+  harness.env_number("LJ_M5_TAB_RESIZE_STRESS_TRAVERSAL_ROUNDS", 192)
 
 local function assert_lua_value(v, label)
   local tv = type(v)
@@ -143,9 +145,92 @@ local function exercise_jit_store_resize()
   harness.fullgc(2)
 end
 
+local function traversal_resize_writer(tbl, ready, start, id, n)
+  assert(ready:send(true, 10) == true)
+  local _, ok = start:recv(10)
+  assert(ok == true)
+  for i = 1, n do
+    tbl[i] = i
+    tbl[id * 1000000 + i] = { id = id, round = i }
+    if i % 64 == 0 then collectgarbage("step") end
+  end
+  return true
+end
+
+local function traversal_observer(tbl, ready, start, id, rounds)
+  local function check(v, label)
+    local tv = type(v)
+    assert(tv ~= "userdata", label .. " exposed an internal userdata sentinel")
+    assert(tv ~= "cdata", label .. " exposed an internal cdata sentinel")
+  end
+
+  assert(ready:send(true, 10) == true)
+  local _, ok = start:recv(10)
+  assert(ok == true)
+  for round = 1, rounds do
+    local count = 0
+    for k, v in pairs(tbl) do
+      check(k, "pairs traversal")
+      check(v, "pairs traversal")
+      count = count + 1
+      if count >= 256 then break end
+    end
+
+    count = 0
+    for i, v in ipairs(tbl) do
+      assert(type(i) == "number", "ipairs returned non-number index")
+      check(v, "ipairs traversal")
+      count = count + 1
+      if count >= 256 then break end
+    end
+
+    do
+      local k, v = next(tbl, nil)
+      if k ~= nil then
+	check(k, "next(nil) traversal")
+	check(v, "next(nil) traversal")
+      end
+    end
+
+    if round % 16 == 0 then
+      collectgarbage("step")
+      if id == 1 then th.sleep(0.001) end
+    end
+  end
+  return true
+end
+
+local function exercise_concurrent_traversal_resize()
+  local t = {}
+  local observers = 2
+  local nworkers = writers + observers
+  local ready, start = ready_start(nworkers)
+  local workers = {}
+
+  for i = 1, 64 do t[i] = i end
+  for i = 1, writers do
+    workers[#workers + 1] =
+      th.spawn(traversal_resize_writer, t, ready, start, i, reps)
+  end
+  for i = 1, observers do
+    workers[#workers + 1] =
+      th.spawn(traversal_observer, t, ready, start, i, traversal_rounds)
+  end
+  harness.wait_ready(ready, nworkers, 10, "traversal resize")
+  harness.release_start(start, nworkers, 10)
+  collect_while_working(96)
+  harness.join_all(workers, 30)
+  for i = 1, math.min(reps, 128) do
+    assert(type(t[i]) == "number", "array traversal resize lost numeric slot")
+    assert_lua_value(t[i], "concurrent traversal resize")
+  end
+  harness.fullgc(2)
+end
+
 exercise_weak_clear_resize()
 exercise_gc_mark_resize()
 exercise_jit_store_resize()
+exercise_concurrent_traversal_resize()
 
 print(("t-tab-resize-stress OK: %d writers, %d resize rounds"):format(
   writers, reps))
