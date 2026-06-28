@@ -619,10 +619,9 @@ static void test_multistate_public_api_gc(lua_State *L1)
   assert(tg2->hs_epoch_ack == g2->gc2.hs_epoch);
 
   assert(lj_gc2_test_finalizer_try_enter(g2));
-  assert(la_load32_acq(&g2->gc2.finalizer_owner_tid) ==
-	 la_load32_acq(&tg2->tid));
+  assert(gc2_finalizer_owner_acq(g2) == lj_tg_tid_acq(tg2));
   lj_gc2_test_finalizer_leave(g2);
-  assert(la_load32_acq(&g2->gc2.finalizer_owner_tid) == 0);
+  assert(gc2_finalizer_owner_acq(g2) == 0);
 
   luaL_openlibs(L2);
   assert(luaL_dostring(L2,

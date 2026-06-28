@@ -291,6 +291,17 @@ if hits=$(grep -nE -- '->[[:space:]]*next_tg|&[[:alnum:]_]+->[[:space:]]*next_tg
   printf '%s\n' 'raw TGState next_tg access is forbidden; use lj_tg_next_* helpers' >&2
   exit 1
 fi
+if ! grep -qE 'static LJ_AINLINE uint32_t gc2_finalizer_owner_acq[[:space:]]*[(]' \
+    "$ROOT/src/lj_obj.h"; then
+  printf '%s\n' 'gc2_finalizer_owner_acq helper is required for finalizer owner reads' >&2
+  exit 1
+fi
+if hits=$(grep -nE -- '->[[:space:]]*gc2[.]finalizer_owner_tid|&[[:space:]]*[^)]*->[[:space:]]*gc2[.]finalizer_owner_tid' \
+    "$ROOT/tests/t-safepoint-handshake.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw safepoint fixture finalizer owner access is forbidden; use gc2_finalizer_owner_* helpers' >&2
+  exit 1
+fi
 if hits=$(grep -RInE -- '->[[:space:]]*(poll|reqmask|hs_epoch_ack)([^[:alnum:]_]|$)|&[[:space:]]*[^)]*->[[:space:]]*(poll|reqmask|hs_epoch_ack)([^[:alnum:]_]|$)' \
     "$ROOT/src"/lj_*.c "$ROOT/src"/lib_*.c "$ROOT/src"/lj_*.h 2>/dev/null | \
     grep -vF "$ROOT/src/lj_tg.h:" || true); [ -n "$hits" ]; then
