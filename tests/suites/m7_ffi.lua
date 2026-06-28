@@ -105,7 +105,9 @@ fi
       clean_build(t)
       run_c_fixture_specs(t, {
         { output = "lj_t-ffi-cbblack-race",
-          cfile = "t-ffi-cbblack-race.c" }
+          cfile = "t-ffi-cbblack-race.c" },
+        { output = "lj_t-ffi-ccall-stopreq",
+          cfile = "t-ffi-ccall-stopreq.c" }
       })
       run_luajit_script(t, "t-ffi-blocking.lua")
       print("M7 ffi.blocking behavior passed")
