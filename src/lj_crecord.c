@@ -114,6 +114,76 @@ static CTypeID argv2ctype(jit_State *J, TRef tr, cTValue *o)
   }
 }
 
+static CType *crec_ctype_snapshot(jit_State *J, CTState *cts, CTypeID id,
+				  CType *out)
+{
+  int ok = lj_ctype_snapshot(cts, id, out);
+  if (ok < 0)
+    lj_trace_err(J, LJ_TRERR_CTBUSY);
+  if (!ok)
+    lj_trace_err(J, LJ_TRERR_BADTYPE);
+  return out;
+}
+
+static CType *crec_ctype_rawref(jit_State *J, CTState *cts, CTypeID id,
+				CType *out)
+{
+  int ok = lj_ctype_rawref_snapshot(cts, id, NULL, out);
+  if (ok < 0)
+    lj_trace_err(J, LJ_TRERR_CTBUSY);
+  if (!ok)
+    lj_trace_err(J, LJ_TRERR_BADTYPE);
+  return out;
+}
+
+static CType *crec_ctype_rawchild(jit_State *J, CTState *cts, CType *ct,
+				  CType *out)
+{
+  CTInfo parent = ctype_info_acq(ct);
+  CTInfo info;
+  CTSize size;
+  int ok = lj_ctype_info_snapshot(cts, ctype_cid(parent), &info, &size,
+				  NULL, out);
+  UNUSED(info); UNUSED(size);
+  if (ok < 0)
+    lj_trace_err(J, LJ_TRERR_CTBUSY);
+  if (!ok)
+    lj_trace_err(J, LJ_TRERR_BADTYPE);
+  return out;
+}
+
+static IRType crec_ct2irt_snapshot(jit_State *J, CTState *cts, CType *ct)
+{
+  CTInfo info = ctype_info_acq(ct);
+  CTSize size;
+  CType child;
+  if (ctype_isenum(info)) {
+    ct = crec_ctype_snapshot(J, cts, ctype_cid(info), &child);
+    info = ctype_info_acq(ct);
+  }
+  size = ctype_size_acq(ct);
+  if (LJ_LIKELY(ctype_isnum(info))) {
+    if ((info & CTF_FP)) {
+      if (size == sizeof(double))
+	return IRT_NUM;
+      else if (size == sizeof(float))
+	return IRT_FLOAT;
+    } else {
+      uint32_t b = lj_fls(size);
+      if (b <= 3)
+	return IRT_I8 + 2*b + ((info & CTF_UNSIGNED) ? 1 : 0);
+    }
+  } else if (ctype_isptr(info)) {
+    return (LJ_64 && size == 8) ? IRT_P64 : IRT_P32;
+  } else if (ctype_iscomplex(info)) {
+    if (size == 2*sizeof(double))
+      return IRT_NUM;
+    else if (size == 2*sizeof(float))
+      return IRT_FLOAT;
+  }
+  return IRT_CDATA;
+}
+
 /* Convert CType to IRType (if possible). */
 static IRType crec_ct2irt(CTState *cts, CType *ct)
 {
@@ -172,12 +242,14 @@ typedef struct CRecMemList {
 } CRecMemList;
 
 /* Generate copy list for element-wise struct copy. */
-static MSize crec_copy_struct(CRecMemList *ml, CTState *cts, CType *ct)
+static MSize crec_copy_struct(jit_State *J, CRecMemList *ml, CTState *cts,
+			      CType *ct)
 {
   CTypeID fid = ctype_sib_acq(ct);
   MSize mlp = 0;
   while (fid) {
-    CType *df = ctype_get(cts, fid);
+    CType dfcopy, child;
+    CType *df = crec_ctype_snapshot(J, cts, fid, &dfcopy);
     CTInfo dfinfo = ctype_info_acq(df);
     CTSize dfsize = ctype_size_acq(df);
     fid = ctype_sib_acq(df);
@@ -187,10 +259,10 @@ static MSize crec_copy_struct(CRecMemList *ml, CTState *cts, CType *ct)
       CTSize cctsize;
       IRType tp;
       if (!ctype_name_acq(df)) continue;  /* Ignore unnamed fields. */
-      cct = ctype_rawchild(cts, df);  /* Field type. */
+      cct = crec_ctype_rawchild(J, cts, df, &child);  /* Field type. */
       cctinfo = ctype_info_acq(cct);
       cctsize = ctype_size_acq(cct);
-      tp = crec_ct2irt(cts, cct);
+      tp = crec_ct2irt_snapshot(J, cts, cct);
       if (tp == IRT_CDATA) return 0;  /* NYI: aggregates. */
       if (mlp >= CREC_COPY_MAXUNROLL) return 0;
       ml[mlp].ofs = dfsize;
@@ -274,8 +346,8 @@ static void crec_copy(jit_State *J, TRef trdst, TRef trsrc, TRef trlen,
       lj_assertJ(ctype_isarray(info) || ctype_isstruct(info),
 		 "copy of non-aggregate");
       if (ctype_isarray(info)) {
-	CType *cct = ctype_rawchild(cts, ct);
-	tp = crec_ct2irt(cts, cct);
+	CType child, *cct = crec_ctype_rawchild(J, cts, ct, &child);
+	tp = crec_ct2irt_snapshot(J, cts, cct);
 	if (tp == IRT_CDATA) goto rawcopy;
 	step = lj_ir_type_size[tp];
 	lj_assertJ((len & (step-1)) == 0, "copy of fractional size");
@@ -283,7 +355,7 @@ static void crec_copy(jit_State *J, TRef trdst, TRef trsrc, TRef trlen,
 	step = (1u << ctype_align(info));
 	goto rawcopy;
       } else {
-	mlp = crec_copy_struct(ml, cts, ct);
+	mlp = crec_copy_struct(J, ml, cts, ct);
 	goto emitcopy;
       }
     } else {
@@ -801,28 +873,6 @@ static cTValue *crec_ctype_metatv(jit_State *J, CTState *cts, TValue *out,
   if (ok < 0)
     lj_trace_err(J, LJ_TRERR_CTBUSY);
   return ok ? out : NULL;
-}
-
-static CType *crec_ctype_snapshot(jit_State *J, CTState *cts, CTypeID id,
-				  CType *out)
-{
-  int ok = lj_ctype_snapshot(cts, id, out);
-  if (ok < 0)
-    lj_trace_err(J, LJ_TRERR_CTBUSY);
-  if (!ok)
-    lj_trace_err(J, LJ_TRERR_BADTYPE);
-  return out;
-}
-
-static CType *crec_ctype_rawref(jit_State *J, CTState *cts, CTypeID id,
-				CType *out)
-{
-  int ok = lj_ctype_rawref_snapshot(cts, id, NULL, out);
-  if (ok < 0)
-    lj_trace_err(J, LJ_TRERR_CTBUSY);
-  if (!ok)
-    lj_trace_err(J, LJ_TRERR_BADTYPE);
-  return out;
 }
 
 static CTypeID crec_ctype_ptr_metaid(jit_State *J, CTState *cts, CTypeID id)
