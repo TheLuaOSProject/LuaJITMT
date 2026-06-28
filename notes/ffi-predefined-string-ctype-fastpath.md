@@ -32,6 +32,13 @@ uses the same parser-compatible numeric ctype shape as `long long` instead of
 the x86-64 `long`/`int64_t` predefined ID, because the parser does not attach
 the `long` flag to that keyword spelling.
 
+Simple integer declaration-specifier reorderings over `char`, `short`, `int`,
+`long`, and `long long` are direct too, including GNU `__signed` aliases and
+suffix-style forms such as `char unsigned`, `short __signed int`, and
+`long long unsigned`. The direct resolver accepts only this scalar integer
+subset; duplicate or mixed specifiers still fall back to the parser for normal
+diagnostics.
+
 Exact already-published typedef identifiers and simple tag names also bypass
 the parser token on the stable path. `ffi.typeof("my_typedef")`,
 `ffi.sizeof("struct my_tag")`, `ffi.typeof("union my_tag")`, and similar

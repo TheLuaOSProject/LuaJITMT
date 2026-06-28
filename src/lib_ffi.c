@@ -294,6 +294,27 @@ static int ffi_int_keyword_token(const char *p, MSize len, int *bitsp)
   return 0;
 }
 
+static int ffi_integer_spec_token(const char *p, MSize len, int *tokp)
+{
+  if (len == 4 && ffi_strlit(p, len, "char", 4)) {
+    *tokp = 1;
+    return 1;
+  }
+  if (len == 5 && ffi_strlit(p, len, "short", 5)) {
+    *tokp = 2;
+    return 1;
+  }
+  if (len == 3 && ffi_strlit(p, len, "int", 3)) {
+    *tokp = 3;
+    return 1;
+  }
+  if (len == 4 && ffi_strlit(p, len, "long", 4)) {
+    *tokp = 4;
+    return 1;
+  }
+  return 0;
+}
+
 static int ffi_direct_int_keyword_ctype(lua_State *L, CTState *cts,
 					const char *p, MSize len,
 					CTypeID *idp)
@@ -335,6 +356,69 @@ static int ffi_direct_int_keyword_ctype(lua_State *L, CTState *cts,
     else if (bits == 32) *idp = CTID_INT32;
     else if (bits == 128) *idp = CTID_INT128;
     else *idp = lj_ctype_intern_l(L, cts, CTINFO(CT_NUM, CTALIGN(3)), 8);
+  }
+  return 1;
+}
+
+static int ffi_direct_integer_spec_ctype(lua_State *L, CTState *cts,
+					 const char *p, MSize len,
+					 CTypeID *idp)
+{
+  int sign = 0, seen_char = 0, seen_short = 0, seen_int = 0, nlong = 0;
+  int seen = 0;
+  while (len != 0 && ffi_cspace(*p)) { p++; len--; }
+  while (len != 0 && ffi_cspace(p[len-1])) len--;
+  while (len != 0) {
+    MSize toklen = 0;
+    int tok;
+    while (toklen < len && !ffi_cspace(p[toklen])) toklen++;
+    if (ffi_sign_token(p, toklen, &tok)) {
+      if (sign != 0)
+	return 0;
+      sign = tok;
+    } else if (ffi_integer_spec_token(p, toklen, &tok)) {
+      if (tok == 1) {
+	if (seen_char || seen_short || seen_int || nlong)
+	  return 0;
+	seen_char = 1;
+      } else if (tok == 2) {
+	if (seen_char || seen_short || nlong)
+	  return 0;
+	seen_short = 1;
+      } else if (tok == 3) {
+	if (seen_char || seen_int)
+	  return 0;
+	seen_int = 1;
+      } else {
+	if (seen_char || seen_short || nlong == 2)
+	  return 0;
+	nlong++;
+      }
+    } else {
+      return 0;
+    }
+    seen = 1;
+    p += toklen;
+    len -= toklen;
+    while (len != 0 && ffi_cspace(*p)) { p++; len--; }
+  }
+  if (!seen)
+    return 0;
+  if (seen_char) {
+    *idp = sign == 2 ? CTID_UINT8 : CTID_INT8;
+  } else if (seen_short) {
+    *idp = sign == 2 ? CTID_UINT16 : CTID_INT16;
+  } else if (nlong == 2) {
+    *idp = lj_ctype_intern_l(L, cts,
+			     CTINFO(CT_NUM,
+				    (sign == 2 ? CTF_UNSIGNED : 0)|CTALIGN(3)),
+			     8);
+  } else if (nlong == 1) {
+    if (sizeof(long) != 8)
+      return 0;
+    *idp = sign == 2 ? CTID_UINT64 : CTID_INT64;
+  } else {
+    *idp = sign == 2 ? CTID_UINT32 : CTID_INT32;
   }
   return 1;
 }
@@ -466,6 +550,8 @@ static int ffi_direct_ctype_base_unqualified(lua_State *L, CTState *cts,
   if (ffi_predefined_ctype_part(p, len, idp))
     return 1;
   if (ffi_direct_int_keyword_ctype(L, cts, p, len, idp))
+    return 1;
+  if (ffi_direct_integer_spec_ctype(L, cts, p, len, idp))
     return 1;
   if (ffi_direct_numeric_ctype(L, cts, p, len, idp))
     return 1;
