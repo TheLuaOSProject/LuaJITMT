@@ -1849,8 +1849,13 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
 	lj_udata_udtype_acq(udataV(&ix->tabv)) == UDTYPE_BUFFER &&
 	tref_istab(ix->mobj) && tref_isstr(ix->key) && tref_isk(ix->key)) {
       cTValue *val = lj_tab_getstr(tabV(&ix->mobjv), strV(&ix->keyv));
-      TRef tr = lj_record_constify(J, val);
-      if (tr) return tr;  /* Specialize to the value, i.e. a method. */
+      if (val) {
+	TValue valv;
+	TRef tr;
+	lj_tv_load_acq(&valv, val);
+	tr = lj_record_constify(J, &valv);
+	if (tr) return tr;  /* Specialize to the value, i.e. a method. */
+      }
     }
 #endif
     /* Otherwise retry lookup with metaobject. */
