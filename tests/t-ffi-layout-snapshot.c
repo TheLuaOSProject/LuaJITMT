@@ -212,6 +212,28 @@ int main(void)
   seq2 = ljt_ctype_parse_seq(cts);
   assert(seq2 == seq1 + 2u);
 
+  {
+    ljt_ctype_arm_trace_abort(L, cts);
+    ljt_lua_dostring(L,
+      "local ffi = lj_m7_ffi\n"
+      "local ct = lj_m7_layout_snapshot_ct\n"
+      "jit.attach(lj_m7_trace_parse_token, 'trace')\n"
+      "jit.flush()\n"
+      "jit.on()\n"
+      "jit.opt.start('hotloop=1', 'hotexit=1')\n"
+      "local function run(n)\n"
+      "  local sum = 0\n"
+      "  for i = 1, n do sum = sum + ffi.sizeof(ct) end\n"
+      "  return sum\n"
+      "end\n"
+      "for i = 1, 3 do assert(run(8) == 128) end\n"
+      "jit.attach(lj_m7_trace_parse_token)\n"
+      "assert(lj_m7_trace_parse_token_abort_count() >= 1)\n");
+    ljt_ctype_assert_trace_abort_released(cts);
+  }
+  seq2 = ljt_ctype_parse_seq(cts);
+  assert(seq2 == seq1 + 4u);
+
   ljt_lua_dostring(L,
     "local ffi = lj_m7_ffi\n"
     "local ct = lj_m7_layout_snapshot_ct\n"

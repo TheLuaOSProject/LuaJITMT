@@ -1408,6 +1408,38 @@ CType *lj_ctype_rawref(CTState *cts, CTypeID id)
   return ctype_get(cts, ctype_rawrefid(cts, id));
 }
 
+/* Sequence-checked raw-ref type snapshot for stable recorder readers. */
+int lj_ctype_rawref_snapshot(CTState *cts, CTypeID id, CTypeID *ridp,
+			     CType *out)
+{
+  uint32_t seq0 = ctype_parse_token_acq(cts);
+  CTypeTab *tabh;
+  CTypeID top;
+  MSize budget;
+  CType ct;
+  if (seq0 & 1u)
+    return -1;
+  top = ctype_top_acq(cts);
+  tabh = ctype_tabh_acq(cts);
+  budget = top ? (MSize)top * 4u : 1u;
+  for (;;) {
+    CTInfo info;
+    if (budget-- == 0)
+      return -1;
+    if (!ctype_snapshot_copy(tabh, top, id, &ct))
+      return ctype_snapshot_done(cts, seq0, 0);
+    info = ctype_info_acq(&ct);
+    if (!(ctype_isattrib(info) || ctype_isref(info))) {
+      if (ridp)
+	*ridp = id;
+      if (out)
+	*out = ct;
+      return ctype_snapshot_done(cts, seq0, 1);
+    }
+    id = ctype_cid(info);
+  }
+}
+
 /* Get size for a C type ID. Does NOT support VLA/VLS. */
 CTSize lj_ctype_size(CTState *cts, CTypeID id)
 {

@@ -2046,10 +2046,17 @@ void LJ_FASTCALL recff_ffi_abi(jit_State *J, RecordFFData *rd)
 /* Record ffi.sizeof(), ffi.alignof(), ffi.offsetof(). */
 void LJ_FASTCALL recff_ffi_xof(jit_State *J, RecordFFData *rd)
 {
+  CTState *cts = ctype_ctsG(J2G(J));
   CTypeID id = argv2ctype(J, J->base[0], &rd->argv[0]);
   if (rd->data == FF_ffi_sizeof) {
-    CType *ct = lj_ctype_rawref(ctype_ctsG(J2G(J)), id);
-    if (ctype_isvltype(ctype_info_acq(ct)))
+    CType snap;
+    int ok = lj_ctype_rawref_snapshot(cts, id, NULL, &snap);
+    if (ok < 0) {
+      lj_trace_err(J, LJ_TRERR_CTBUSY);
+    } else if (!ok) {
+      lj_trace_err(J, LJ_TRERR_BADTYPE);
+    }
+    if (ctype_isvltype(ctype_info_acq(&snap)))
       lj_trace_err(J, LJ_TRERR_BADTYPE);
   } else if (rd->data == FF_ffi_offsetof) {  /* Specialize to the field name. */
     if (!tref_isstr(J->base[1]))

@@ -16,15 +16,16 @@ Converted paths:
 
 Guardrail:
 
-- `tools/ci/m7_ffi_typeinfo_snapshot.sh` rejects raw `->info` / `->size` reads
-  in these recorded FFI library metadata helpers.
+- `tests/t-ffi-layout-snapshot.c` now holds the ctype parse token while the JIT
+  records ctype-object `ffi.sizeof(ct)`. The recorder must abort with CTBUSY
+  and release the token instead of reading shared ctype metadata through a raw
+  table pointer.
+- Do not replace this with a source-search guard. The project policy in
+  `notes/ci-source-search-policy.md` requires behavior fixtures or generated
+  artifact checks for CI coverage.
 
 Validation:
 
-- `tools/ci/m7_ffi_typeinfo_snapshot.sh`
-- stock `lib/ffi/jit_misc.lua`
-- stock `lib/ffi/bit64.lua`
-- stock `lib/ffi/ffi_jit_conv.lua`
-- `tools/ci/m7_ffi_carith_l.sh`
-- `tools/ci/m0_source_guard.sh`
+- `tools/ci/lua_test.sh m7_ffi_typeinfo_snapshot`
+- `tools/ci/lua_test.sh m7_ffi`
 - `git diff --check`
