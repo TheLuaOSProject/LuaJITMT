@@ -2570,10 +2570,10 @@ static void gc2_scan_thread_stack(global_State *g, lua_State *L)
     if (env)
       lj_gc2_markobj(g, obj2gco(env));
   }
-  mt = gcref_acq(L->mt_thread);
+  mt = lj_state_mt_thread_acq(L);
   if (mt != NULL)
     lj_gc2_markobj(g, mt);
-  for (uv = gcref_acq(L->openupval); uv != NULL;
+  for (uv = lj_state_openupval_acq(L); uv != NULL;
        uv = lj_obj_gcw_acq(uv)) {
     lj_gc2_markobj(g, uv);
     if (uv->gch.gct == ~LJ_TUPVAL) {
@@ -5667,10 +5667,10 @@ static void gc2_traverse_thread(global_State *g, lua_State *th)
     if (env)
       gc2_markobj_worker(g, obj2gco(env));
   }
-  mt = gcref_acq(th->mt_thread);
+  mt = lj_state_mt_thread_acq(th);
   if (mt != NULL)
     gc2_markobj_worker(g, mt);
-  for (uv = gcref_acq(th->openupval); uv != NULL;
+  for (uv = lj_state_openupval_acq(th); uv != NULL;
        uv = lj_obj_gcw_acq(uv)) {
     gc2_markobj_worker(g, uv);
     if (uv->gch.gct == ~LJ_TUPVAL) {
@@ -5973,7 +5973,7 @@ static int gc2_root_oracle_has_base(global_State *g, void *p)
       return 1;
     if (o->gch.gct == ~LJ_TTHREAD) {
       GCobj *uv;
-      for (uv = gcref_acq(gco2th(o)->openupval); uv != NULL;
+      for (uv = lj_state_openupval_acq(gco2th(o)); uv != NULL;
 	   uv = lj_obj_gcw_acq(uv))
 	if (gc2_root_oracle_liveobj(uv) && gc2_mark_base(uv) == p)
 	  return 1;

@@ -220,7 +220,7 @@ static BCReg snap_usedef(jit_State *J, uint8_t *udf,
 #endif
 
   /* Treat open upvalues as used. */
-  o = gcref_acq(J->L->openupval);
+  o = lj_state_openupval_acq(J->L);
   while (o) {
     if (uvval(gco2uv(o)) < J->L->base) break;
     udf[uvval(gco2uv(o)) - J->L->base] = 0;

@@ -210,7 +210,7 @@ static GCtab *threading_ensure_env(lua_State *L)
 
 static void threading_state_set_ud(lua_State *L, lua_State *L1, GCudata *ud)
 {
-  setgcrefrel(L1->mt_thread, obj2gco(ud));
+  lj_state_mt_thread_rel(L1, ud);
   lj_gc_pubobjobj(L, L1, ud);
 }
 
@@ -441,7 +441,7 @@ static void threading_rehome_unstarted_stack(lua_State *L, lua_State *L1,
   setmref(L1->maxstack, (TValue *)((char *)tvref(L1->maxstack) + delta));
   L1->base = (TValue *)((char *)L1->base + delta);
   L1->top = (TValue *)((char *)L1->top + delta);
-  for (up = gcref_acq(L1->openupval); up != NULL;
+  for (up = lj_state_openupval_acq(L1); up != NULL;
        up = lj_obj_gcw_acq(up))
     setmref(gco2uv(up)->v, (TValue *)((char *)uvval(gco2uv(up)) + delta));
   lj_gc_total_sub(g, (GCSize)sz);
@@ -522,7 +522,7 @@ static LJThread *threading_thread_from_state(lua_State *L, lua_State *child)
   GCobj *o;
   if (!child || G(child) != G(L))
     lj_err_callermsg(L, "bad child thread");
-  o = gcref_acq(child->mt_thread);
+  o = lj_state_mt_thread_acq(child);
   if (o && o->gch.gct == ~LJ_TUDATA) {
     GCudata *ud = gco2ud(o);
     if (lj_udata_udtype_acq(ud) == UDTYPE_THREAD) {
@@ -1125,7 +1125,7 @@ int lj_threading_attach(lua_State *L)
   lj_thr_set_tg(tg);
   lj_tg_store_cur_L(tg, L);
   lj_tg_store_thread_L(tg, L);
-  o = gcref_acq(L->mt_thread);
+  o = lj_state_mt_thread_acq(L);
   if (o && o->gch.gct == ~LJ_TUDATA &&
       lj_udata_udtype_acq(gco2ud(o)) == UDTYPE_THREAD)
     tg->thread_ud = gco2ud(o);

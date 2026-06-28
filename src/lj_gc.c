@@ -194,7 +194,7 @@ static void gc_arena_verify_sweep_boundary(global_State *g)
     gc_arena_verify_marked(g, o);
     if (o->gch.gct == ~LJ_TTHREAD) {
       GCobj *uv;
-      for (uv = gcref_acq(gco2th(o)->openupval); uv != NULL;
+      for (uv = lj_state_openupval_acq(gco2th(o)); uv != NULL;
 	   uv = lj_obj_gcw_acq(uv))
 	gc_arena_verify_marked(g, uv);
     }
@@ -259,7 +259,7 @@ static void gc2_paranoia_checkthread(global_State *g, lua_State *th)
     return;
   gc2_paranoia_checkobj(g, obj2gco(th), "thread");
   gc2_paranoia_checkmem(g, tvref(th->stack), "thread stack");
-  for (uv = gcref_acq(th->openupval); uv != NULL; uv = lj_obj_gcw_acq(uv))
+  for (uv = lj_state_openupval_acq(th); uv != NULL; uv = lj_obj_gcw_acq(uv))
     gc2_paranoia_checkobj(g, uv, "open upvalue");
 }
 
@@ -1144,7 +1144,7 @@ static void gc_traverse_thread(global_State *g, lua_State *th)
     for (; o < top; o++)  /* Clear unmarked slots. */
       setnilV(o);
   }
-  for (mt = gcref_acq(th->openupval); mt != NULL; mt = lj_obj_gcw_acq(mt)) {
+  for (mt = lj_state_openupval_acq(th); mt != NULL; mt = lj_obj_gcw_acq(mt)) {
     lj_gc_arena_markobj(g, mt);
     if (iswhite(mt))
       gc_mark(g, mt);
@@ -1153,7 +1153,7 @@ static void gc_traverse_thread(global_State *g, lua_State *th)
     GCtab *env = lj_state_env_acq(th);
     gc_mark_thread_root_tab(g, env);
   }
-  mt = gcref_acq(th->mt_thread);
+  mt = lj_state_mt_thread_acq(th);
   if (mt != NULL)
     gc_markobj(g, mt);
   if (th != lj_tg_cur_L(g))
@@ -1400,7 +1400,7 @@ static GCRef *gc_sweep(global_State *g, GCRef *p, uint32_t lim)
       continue;  /* Body destructor already ran via GC2 arena sweep. */
     }
     if (o->gch.gct == ~LJ_TTHREAD)  /* Need to sweep open upvalues, too. */
-      gc_fullsweep(g, &gco2th(o)->openupval);
+      gc_fullsweep(g, lj_state_openupval_ref(gco2th(o)));
     if (((lj_obj_gcflags(o) ^ LJ_GC_WHITES) & ow)) {  /* Black or current white? */
       lj_assertG(!isdead(g, o) || (lj_obj_gcflags(o) & LJ_GC_FIXED),
 		 "sweep of undead object");

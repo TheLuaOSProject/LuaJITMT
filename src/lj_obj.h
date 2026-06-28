@@ -5265,6 +5265,41 @@ static LJ_AINLINE void lj_state_env_copy_rel(lua_State *dst,
   lj_state_env_rel(dst, lj_state_env_acq(src));
 }
 
+static LJ_AINLINE GCRef *lj_state_openupval_ref(lua_State *L)
+{
+  return &L->openupval;
+}
+
+static LJ_AINLINE GCobj *lj_state_openupval_acq(const lua_State *L)
+{
+  return gcref_acq(L->openupval);
+}
+
+static LJ_AINLINE void lj_state_openupval_rel(lua_State *L, GCobj *head)
+{
+  setgcrefrel(L->openupval, head);
+}
+
+static LJ_AINLINE void lj_state_openupval_clear_rel(lua_State *L)
+{
+  setgcrefnullrel(L->openupval);
+}
+
+static LJ_AINLINE GCobj *lj_state_mt_thread_acq(const lua_State *L)
+{
+  return gcref_acq(L->mt_thread);
+}
+
+static LJ_AINLINE void lj_state_mt_thread_rel(lua_State *L, GCudata *ud)
+{
+  setgcrefrel(L->mt_thread, obj2gco(ud));
+}
+
+static LJ_AINLINE void lj_state_mt_thread_clear_rel(lua_State *L)
+{
+  setgcrefnullrel(L->mt_thread);
+}
+
 static LJ_AINLINE GCtab *lj_udata_env_acq(const GCudata *ud)
 {
   return tabref_acq(ud->env);

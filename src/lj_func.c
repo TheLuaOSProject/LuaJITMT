@@ -43,7 +43,7 @@ static void unlinkuv(global_State *g, GCupval *uv)
 static GCupval *func_finduv(lua_State *L, TValue *slot)
 {
   global_State *g = G(L);
-  GCRef *pp = &L->openupval;
+  GCRef *pp = lj_state_openupval_ref(L);
   GCupval *p;
   GCupval *uv;
   GCobj *next;
@@ -206,12 +206,12 @@ void LJ_FASTCALL lj_func_closeuv(lua_State *L, TValue *level)
   GCupval *uv;
   global_State *g = G(L);
   GCobj *head;
-  while ((head = gcref_acq(L->openupval)) != NULL &&
+  while ((head = lj_state_openupval_acq(L)) != NULL &&
 	 uvval((uv = gco2uv(head))) >= level) {
     GCobj *o = obj2gco(uv);
     lj_assertG(!isblack(o), "bad black upvalue");
     lj_assertG(!uv->closed && uvval(uv) != &uv->tv, "closed upvalue in chain");
-    setgcrefrel(L->openupval, lj_obj_gcw_acq(o));  /* No longer open. */
+    lj_state_openupval_rel(L, lj_obj_gcw_acq(o));  /* No longer open. */
     if (isdead(g, o)) {
       lj_func_freeuv(g, uv);
     } else {

@@ -88,7 +88,7 @@ static void resizestack(lua_State *L, MSize n)
     lj_tg_setjit_base(G(L), (TValue *)((char *)jbase + delta));
   L->base = (TValue *)((char *)L->base + delta);
   L->top = (TValue *)((char *)L->top + delta);
-  for (up = gcref_acq(L->openupval); up != NULL;
+  for (up = lj_state_openupval_acq(L); up != NULL;
        up = lj_obj_gcw_acq(up))
     setmref(gco2uv(up)->v, (TValue *)((char *)uvval(gco2uv(up)) + delta));
 }
@@ -120,7 +120,7 @@ int lj_state_rehome_stack(lua_State *L)
   setmref(L->maxstack, (TValue *)((char *)tvref(L->maxstack) + delta));
   L->base = (TValue *)((char *)L->base + delta);
   L->top = (TValue *)((char *)L->top + delta);
-  for (up = gcref_acq(L->openupval); up != NULL;
+  for (up = lj_state_openupval_acq(L); up != NULL;
        up = lj_obj_gcw_acq(up))
     setmref(gco2uv(up)->v, (TValue *)((char *)uvval(gco2uv(up)) + delta));
   lj_mem_freevec(g, oldst, stacksize, TValue);
@@ -482,8 +482,8 @@ lua_State *lj_state_new(lua_State *L)
   lj_state_owner_rel(L1, 0);
   lj_state_scan_epoch_rel(L1, 0);
   lj_state_scan_dirty_epoch_rel(L1, 0);
-  setgcrefnullrel(L1->openupval);
-  setgcrefnullrel(L1->mt_thread);
+  lj_state_openupval_clear_rel(L1);
+  lj_state_mt_thread_clear_rel(L1);
   setmrefr(L1->glref, L->glref);
   lj_state_env_copy_rel(L1, L);
   {
@@ -504,10 +504,10 @@ void LJ_FASTCALL lj_state_free(global_State *g, lua_State *L)
 #endif
   if (L == lj_tg_cur_L(g))
     lj_tg_clearcur_L(g);
-  if (gcref_acq(L->openupval) != NULL) {
+  if (lj_state_openupval_acq(L) != NULL) {
     lj_func_closeuv(L, tvref(L->stack));
     lj_trace_abort(g);  /* For aa_uref soundness. */
-    lj_assertG(gcref_acq(L->openupval) == NULL, "stale open upvalues");
+    lj_assertG(lj_state_openupval_acq(L) == NULL, "stale open upvalues");
   }
   lj_mem_freevec(g, tvref(L->stack), L->stacksize, TValue);
   lj_mem_freet(g, L);
