@@ -101,6 +101,20 @@ if ! awk '
 fi
 
 if ! awk '
+  /^static GCstr \*index2adr_number_tostr\(/ { in_fn = 1 }
+  in_fn && /index_iscupvalue\(idx\)/ { saw_cupvalue = 1 }
+  in_fn && /index2adr_cupvalue_store_rel\(L, idx, &tv\)/ { saw_store = 1 }
+  in_fn && /^}/ {
+    if (!(saw_cupvalue && saw_store))
+      exit 1
+    in_fn = 0
+  }
+' "$ROOT/src/lj_api.c"; then
+  printf '%s\n' 'C-upvalue number-to-string coercion must use the release-published store funnel' >&2
+  exit 1
+fi
+
+if ! awk '
   /^LUA_API void lua_pushcclosure\(/ { in_fn = 1 }
   in_fn && /copyTVrel\(L, &fn->c.upvalue\[n\], L->top\+n\)/ { saw_rel = 1 }
   in_fn && /lj_gc_pubobjtv\(L, fn, &fn->c.upvalue\[n\]\)/ { saw_pub = 1 }
