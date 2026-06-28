@@ -17,6 +17,21 @@ if hits=$(grep -nF -- 'J_OFS(trace)' "$ROOT/src/vm_x64.dasc" || true); [ -n "$hi
   printf '%s\n' 'x64 VM trace-slot loads must use J->tracev, not J->trace' >&2
   exit 1
 fi
+if ! awk '
+  /case BC_JFUNCF:/ { in_jfuncf = 1 }
+  in_jfuncf && /jmp =>BC_JLOOP/ {
+    if (saw_tracev && saw_slot && saw_pending && saw_fallback) ok = 1
+    in_jfuncf = 0
+  }
+  in_jfuncf && /J_OFS\(tracev\)/ { saw_tracev = 1 }
+  in_jfuncf && /TRACEV_SLOT_OFS/ { saw_slot = 1 }
+  in_jfuncf && /cmp RA, 1/ { saw_pending = 1 }
+  in_jfuncf && /ins_next/ { saw_fallback = 1 }
+  END { exit ok ? 0 : 1 }
+' "$ROOT/src/vm_x64.dasc"; then
+  printf '%s\n' 'x64 JFUNCF must validate the tracev slot and fall back with ins_next before BC_JLOOP' >&2
+  exit 1
+fi
 if hits=$(grep -nE -- '(^|[^[:alnum:]_])(ret|tail|mcret)[[:space:]]*->[[:space:]]*next' \
     "$ROOT/src/lj_mcode.c" \
     "$ROOT/src/lj_gc.c" \
