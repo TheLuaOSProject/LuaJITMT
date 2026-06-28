@@ -832,22 +832,6 @@ static void ffi_typeinfo_storestr(lua_State *L, GCtab *tab, GCstr *key,
   }
 }
 
-static int ffi_typeinfo_snapshot_locked(CTState *cts, CTypeID id, CType *out)
-{
-  CType *ct;
-  GCobj *name;
-  if (!(id > 0 && id < ctype_top_acq(cts)))
-    return 0;
-  ct = ctype_get(cts, id);
-  out->info = ctype_info_acq(ct);
-  out->size = ctype_size_acq(ct);
-  out->sib = (CTypeID1)ctype_sib_acq(ct);
-  out->next = (CTypeID1)ctype_next_acq(ct);
-  name = ctype_nameobj_acq(ct);
-  setgcrefp(out->name, name);
-  return !ctype_isabandoned(out->info);
-}
-
 /* Internal and unsupported API. */
 LJLIB_CF(ffi_typeinfo)
 {
@@ -859,11 +843,6 @@ LJLIB_CF(ffi_typeinfo)
   CTypeID sib;
   GCstr *name;
   int ok = lj_ctype_snapshot(cts, id, &snap);
-  if (ok < 0) {
-    lj_ctype_parse_lock(cts, L);
-    ok = ffi_typeinfo_snapshot_locked(cts, id, &snap);
-    lj_ctype_parse_unlock(cts);
-  }
   if (ok > 0) {
     GCtab *t;
     info = snap.info;

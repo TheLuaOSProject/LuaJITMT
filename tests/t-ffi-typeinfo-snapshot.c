@@ -22,6 +22,21 @@ static uint32_t parse_seq(CTState *cts)
   return seq;
 }
 
+static uint32_t hold_parse_token(CTState *cts)
+{
+  uint32_t seq = parse_seq(cts);
+  ctype_parse_token_rel(cts, seq + 1u);
+  assert((ctype_parse_token_acq(cts) & 1u) != 0);
+  return seq + 2u;
+}
+
+static void release_parse_token(CTState *cts, uint32_t seq)
+{
+  ctype_parse_token_rel(cts, seq);
+  (void)ctype_parse_token_wake(cts, 1);
+  assert((ctype_parse_token_acq(cts) & 1u) == 0);
+}
+
 int main(void)
 {
   lua_State *L = ljt_lua_newstate_openlibs();
@@ -50,6 +65,21 @@ int main(void)
   seq1 = parse_seq(cts);
   assert(seq1 == seq0);
 
+  {
+    uint32_t release_seq = hold_parse_token(cts);
+    ljt_lua_dostring(L,
+      "local ffi = require('ffi')\n"
+      "assert(ffi.typeinfo(lj_m7_typeinfo_snapshot_id) == nil)\n");
+    assert((ctype_parse_token_acq(cts) & 1u) != 0);
+    release_parse_token(cts, release_seq);
+  }
+
+  ljt_lua_dostring(L,
+    "local ffi = require('ffi')\n"
+    "local ti = ffi.typeinfo(lj_m7_typeinfo_snapshot_id)\n"
+    "assert(ti and ti.size == 4)\n");
+  assert(parse_seq(cts) == seq1 + 2u);
+
   ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"
     "ffi.cdef('typedef int lj_m7_typeinfo_snapshot_seq_t;')\n"
@@ -66,6 +96,6 @@ int main(void)
   assert(seq3 == seq2);
 
   lua_close(L);
-  printf("t-ffi-typeinfo-snapshot OK: stable typeinfo reads avoid cparser sequence\n");
+  printf("t-ffi-typeinfo-snapshot OK: stable typeinfo reads avoid parser locking\n");
   return 0;
 }
