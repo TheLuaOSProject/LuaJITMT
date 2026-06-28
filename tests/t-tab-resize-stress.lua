@@ -10,6 +10,8 @@ local traversal_rounds =
   harness.env_number("LJ_M5_TAB_RESIZE_STRESS_TRAVERSAL_ROUNDS", 192)
 local finalizer_objects =
   harness.env_number("LJ_M5_TAB_RESIZE_STRESS_FIN_OBJECTS", 192)
+local key_objects =
+  harness.env_number("LJ_M5_TAB_RESIZE_STRESS_KEY_OBJECTS", 192)
 local selected_cases = os.getenv("LJ_M5_TAB_RESIZE_STRESS_CASES")
 local selected_traversal_modes =
   os.getenv("LJ_M5_TAB_RESIZE_TRAVERSAL_MODES")
@@ -129,6 +131,58 @@ local function exercise_gc_mark_resize()
 	     "GC missed table-owned object during resize forwarding")
       assert_lua_value(obj, "strong resize")
     end
+  end
+end
+
+local function object_key_resize_writer(tbl, ready, start, id, n)
+  assert(ready:send(true, 10) == true)
+  local _, ok = start:recv(10)
+  assert(ok == true)
+  for i = 1, n do
+    tbl["resize-key:" .. id .. ":" .. i] = i
+    tbl[id * 1000000 + i] = i
+    if i > 64 and i % 8 == 0 then
+      tbl["resize-key:" .. id .. ":" .. (i - 32)] = nil
+    end
+    if i % 64 == 0 then collectgarbage("step") end
+  end
+  return true
+end
+
+local function exercise_gc_key_resize()
+  local t = {}
+  local weak_keys = setmetatable({}, { __mode = "v" })
+  local weak_vals = setmetatable({}, { __mode = "v" })
+  local ready, start = ready_start(writers)
+  local workers = {}
+  local n = key_objects
+
+  for i = 1, n do
+    local key = { kind = "resize-key", id = i }
+    local val = { kind = "resize-value", id = i }
+    t[key] = val
+    weak_keys[i] = key
+    weak_vals[i] = val
+  end
+
+  for i = 1, writers do
+    workers[i] =
+      th.spawn(object_key_resize_writer, t, ready, start, i, reps)
+  end
+  harness.wait_ready(ready, writers, 10, "GC object key resize")
+  harness.release_start(start, writers, 10)
+  collect_while_working(128)
+  harness.join_all(workers, 30)
+  harness.fullgc(3)
+
+  for i = 1, n do
+    local key = weak_keys[i]
+    local val = weak_vals[i]
+    assert(type(key) == "table", "GC missed table-owned hash key during resize")
+    assert(type(val) == "table", "GC missed object-keyed value during resize")
+    assert(t[key] == val, "object-keyed slot changed during resize")
+    assert_lua_value(key, "object-key resize")
+    assert_lua_value(val, "object-key resize")
   end
 end
 
@@ -440,6 +494,7 @@ end
 local ran = 0
 ran = ran + run_case("weak", exercise_weak_clear_resize)
 ran = ran + run_case("gcmark", exercise_gc_mark_resize)
+ran = ran + run_case("gckey", exercise_gc_key_resize)
 ran = ran + run_case("finalizer", exercise_finalizer_resize)
 ran = ran + run_case("metatable", exercise_metatable_resize)
 ran = ran + run_case("jitstore", exercise_jit_store_resize)
