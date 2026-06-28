@@ -1905,14 +1905,18 @@ static TValue *ffi_miscmap_store(lua_State *L, CTState *cts, GCstr *key,
 static void ffi_register_module(lua_State *L)
 {
   cTValue *tmp = lj_tab_getstr(tabV(registry(L)), lj_str_newlit(L, "_LOADED"));
-  if (tmp && tvistab(tmp)) {
-    GCtab *t = tabV(tmp);
-    GCstr *name = lj_str_newlit(L, LUA_FFILIBNAME);
-    TValue key;
-    setstrV(L, &key, name);
-    ffi_loaded_store(L, t, name, L->top-1);
-    lj_gc2_barrier_weak_write(L, t, &key, L->top-1);
-    lj_gc_pubtab(L, t);
+  if (tmp) {
+    TValue loaded;
+    lj_tv_load_acq(&loaded, tmp);
+    if (tvistab(&loaded)) {
+      GCtab *t = tabV(&loaded);
+      GCstr *name = lj_str_newlit(L, LUA_FFILIBNAME);
+      TValue key;
+      setstrV(L, &key, name);
+      ffi_loaded_store(L, t, name, L->top-1);
+      lj_gc2_barrier_weak_write(L, t, &key, L->top-1);
+      lj_gc_pubtab(L, t);
+    }
   }
 }
 

@@ -273,6 +273,18 @@ check_keyed_store_fn_file "$ROOT/src/lj_debug.c" debug_activelines_storebool
 check_keyed_store_fn_file "$ROOT/src/lj_ctype.c" ctype_storestr_str
 check_keyed_store_fn_file "$ROOT/src/lj_meta.c" lj_meta_tsettv_pair
 
+if ! awk '
+  /^static void ffi_register_module\(/ { in_fn = 1; found = 1 }
+  in_fn && /lj_tv_load_acq\(&loaded, tmp\)/ { saw_acq = 1 }
+  in_fn && /tabV\(&loaded\)/ { saw_tab = 1 }
+  in_fn && /ffi_loaded_store\(L, t, name, L->top-1\)/ { saw_store = 1 }
+  in_fn && /^}/ { in_fn = 0 }
+  END { exit(found && saw_acq && saw_tab && saw_store ? 0 : 1) }
+' "$ROOT/src/lib_ffi.c"; then
+  printf '%s\n' 'ffi_register_module() must snapshot _LOADED before publishing ffi' >&2
+  exit 1
+fi
+
 check_nil_keyed_fn_file() {
   file=$1
   fn=$2
