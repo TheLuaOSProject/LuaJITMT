@@ -340,18 +340,37 @@ static int ffi_direct_ctype_part(lua_State *L, CTState *cts, GCstr *s,
 static int ffi_direct_ctype_string(lua_State *L, CTState *cts, GCstr *s,
 				   CTypeID *idp)
 {
+  enum { FFI_DIRECT_MAX_ARRAYS = 8 };
   const char *p = strdata(s);
   MSize len = s->len;
   while (len != 0 && ffi_cspace(*p)) { p++; len--; }
   while (len != 0 && ffi_cspace(p[len-1])) len--;
   {
     MSize baselen = len;
-    CTSize nelem;
+    CTSize nelem[FFI_DIRECT_MAX_ARRAYS];
     CTypeID elemid;
-    if (ffi_direct_array_suffix(p, &baselen, &nelem) &&
-	ffi_direct_ctype_part(L, cts, s, p, baselen, &elemid) &&
-	ffi_direct_array_ctype(L, cts, elemid, nelem, idp))
+    MSize narr = 0;
+    for (;;) {
+      CTSize n;
+      MSize nextlen = baselen;
+      if (!ffi_direct_array_suffix(p, &nextlen, &n))
+	break;
+      if (narr == FFI_DIRECT_MAX_ARRAYS) {
+	narr = 0;
+	break;
+      }
+      nelem[narr++] = n;
+      baselen = nextlen;
+    }
+    if (narr != 0 && ffi_direct_ctype_part(L, cts, s, p, baselen, &elemid)) {
+      MSize i;
+      for (i = 0; i < narr; i++) {
+	if (!ffi_direct_array_ctype(L, cts, elemid, nelem[i], &elemid))
+	  return 0;
+      }
+      *idp = elemid;
       return 1;
+    }
   }
   return ffi_direct_ctype_part(L, cts, s, p, len, idp);
 }
