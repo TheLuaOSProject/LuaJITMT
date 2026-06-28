@@ -506,6 +506,22 @@ static void exercise_gmatch_position(lua_State *L)
     "assert(name and pos == 3, tostring(pos))\n"), "gmatch position upvalue");
 }
 
+static void exercise_io_lines_upvalue_mutation(lua_State *L)
+{
+  check_lua(L, luaL_dostring(L,
+    "local path = os.tmpname()\n"
+    "local f = assert(io.open(path, 'w'))\n"
+    "f:write('line\\n')\n"
+    "f:close()\n"
+    "local it = assert(io.lines(path))\n"
+    "assert(debug.setupvalue(it, 1, false))\n"
+    "local ok, err = pcall(it)\n"
+    "os.remove(path)\n"
+    "assert(not ok, 'mutated io.lines upvalue unexpectedly succeeded')\n"
+    "assert(tostring(err):find('attempt to use a closed file', 1, true), tostring(err))\n"),
+    "io.lines upvalue mutation");
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -523,6 +539,7 @@ int main(void)
   exercise_callmeta_api(L);
   exercise_thread_api(L);
   exercise_gmatch_position(L);
+  exercise_io_lines_upvalue_mutation(L);
 
   lua_close(L);
   printf("t-cclosure-upvalue-snapshot OK: C closure upvalue snapshots verified\n");

@@ -494,9 +494,15 @@ static int io_file_write(lua_State *L, IOFileUD *iof, int start)
 static int io_file_iter(lua_State *L)
 {
   GCfunc *fn = curr_func(L);
-  IOFileUD *iof = uddata(udataV(&fn->c.upvalue[0]));
+  TValue fileuv;
+  IOFileUD *iof;
   int n = fn->c.nupvalues - 1;
   int i;
+  lj_tv_load_acq(&fileuv, &fn->c.upvalue[0]);
+  if (!tvisudata(&fileuv) ||
+      lj_udata_udtype_acq(udataV(&fileuv)) != UDTYPE_IO_FILE)
+    lj_err_caller(L, LJ_ERR_IOCLFL);
+  iof = uddata(udataV(&fileuv));
   if (iof->fp == NULL)
     lj_err_caller(L, LJ_ERR_IOCLFL);
   L->top = L->base;

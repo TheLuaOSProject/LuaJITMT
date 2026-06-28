@@ -475,6 +475,21 @@ print("proto-knum-acq-smoke OK")
 ]=]
 end
 
+local function assert_cclosure_upvalue_source_guards(t)
+  local lib_io = utils.read_source_file(t:path("src", "lib_io.c"))
+  if lib_io:find("udataV(&fn->c.upvalue[0])", 1, true) then
+    error("io_file_iter must snapshot the file C upvalue before userdata access", 2)
+  end
+  if not lib_io:find("lj_tv_load_acq(&fileuv, &fn->c.upvalue[0]);", 1, true) then
+    error("io_file_iter is missing its acquire snapshot of the file C upvalue", 2)
+  end
+
+  local lj_err = utils.read_source_file(t:path("src", "lj_err.c"))
+  if lj_err:find("lj_typename(&fn->c.upvalue", 1, true) then
+    error("lj_err_argtype must snapshot C upvalues before type naming", 2)
+  end
+end
+
 return function(add)
   add({
     name = "m5_state_owner",
@@ -506,6 +521,7 @@ return function(add)
     name = "m5_upvalue_publish_gc",
     description = "closed-upvalue GC object publication behavior",
     run = function(t)
+      assert_cclosure_upvalue_source_guards(t)
       build_and_run_luajit_script(t, "t-threading-upvalue.lua", nil,
                                   { joff = true })
       build_and_run_c(t, t:tmp("lj_t-cclosure-upvalue-snapshot"),

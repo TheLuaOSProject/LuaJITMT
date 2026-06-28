@@ -1152,10 +1152,13 @@ LJ_NOINLINE void lj_err_argtype(lua_State *L, int narg, const char *xname)
     } else {
       GCfunc *fn = curr_func(L);
       int idx = LUA_GLOBALSINDEX - narg;
-      if (idx <= fn->c.nupvalues)
-	tname = lj_typename(&fn->c.upvalue[idx-1]);
-      else
+      if (idx <= fn->c.nupvalues) {
+	TValue tv;
+	lj_tv_load_acq(&tv, &fn->c.upvalue[idx-1]);
+	tname = lj_typename(&tv);
+      } else {
 	tname = lj_obj_typename[0];
+      }
     }
   } else {
     TValue *o = narg < 0 ? L->top + narg : L->base + narg-1;
