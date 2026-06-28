@@ -249,6 +249,99 @@ local function exercise_weak_key_resize()
   end
 end
 
+local function weak_key_meta_resize_writer(tbl, ready, start, id, n)
+  assert(ready:send(true, 10) == true)
+  local _, ok = start:recv(10)
+  assert(ok == true)
+  local roots = {}
+  for i = 1, n do
+    local key = { kind = "weak-meta-key", owner = id, round = i }
+    tbl[key] = { owner = id, round = i }
+    tbl["weak-meta-grow:" .. id .. ":" .. i] = i
+    if i % 12 == 0 then roots[#roots + 1] = key end
+    if #roots > 24 then roots[#roots - 23] = nil end
+    if i % 31 == 0 then
+      local probe = tbl.resize_meta_probe
+      assert(type(probe) == "table" and probe.tag == "weak-meta-probe",
+	     "weak-key metatable __index probe changed during resize")
+    end
+    if i > 64 and i % 7 == 0 then
+      tbl["weak-meta-grow:" .. id .. ":" .. (i - 32)] = nil
+    end
+    if i % 64 == 0 then collectgarbage("step") end
+  end
+  return true
+end
+
+local function exercise_weak_key_metatable_resize()
+  local fallback = { resize_meta_probe = { tag = "weak-meta-probe" } }
+  local mt = { __mode = "k", __index = fallback }
+  local weak = setmetatable({}, mt)
+  local weak_mt = setmetatable({}, { __mode = "v" })
+  local weak_fallback = setmetatable({}, { __mode = "v" })
+  local live_keys = {}
+  local weak_vals = setmetatable({}, { __mode = "v" })
+  local n = key_objects
+
+  weak_mt[1] = mt
+  weak_fallback[1] = fallback
+  weak_fallback[2] = fallback.resize_meta_probe
+
+  for i = 1, n do
+    local key = { kind = "rooted-weak-meta-key", id = i }
+    local val = { kind = "weak-meta-value", id = i }
+    weak[key] = val
+    weak_vals[i] = val
+    if i % 2 == 1 then live_keys[i] = key end
+  end
+
+  fallback = nil
+  mt = nil
+
+  local ready, start = ready_start(writers)
+  local workers = {}
+  for i = 1, writers do
+    workers[i] =
+      th.spawn(weak_key_meta_resize_writer, weak, ready, start, i, reps)
+  end
+  harness.wait_ready(ready, writers, 10, "weak-key metatable resize")
+  harness.release_start(start, writers, 10)
+  collect_while_working(128)
+  harness.join_all(workers, 30)
+  harness.fullgc(4)
+
+  local kept_mt = weak_mt[1]
+  local kept_fallback = weak_fallback[1]
+  local kept_probe = weak_fallback[2]
+  assert(type(kept_mt) == "table",
+	 "GC missed weak-key table metatable during resize forwarding")
+  assert(type(kept_fallback) == "table",
+	 "GC missed weak-key table __index during resize forwarding")
+  assert(type(kept_probe) == "table",
+	 "GC missed weak-key table __index probe during resize forwarding")
+  assert(getmetatable(weak) == kept_mt,
+	 "weak-key table metatable changed during resize")
+  assert(weak.resize_meta_probe == kept_probe,
+	 "weak-key metatable __index probe changed after resize")
+
+  for i = 1, n do
+    if i % 2 == 1 then
+      local key = live_keys[i]
+      local val = weak[key]
+      assert(type(key) == "table", "weak-meta resize lost rooted key")
+      assert(type(val) == "table",
+	     "weak-meta resize lost rooted weak-key entry")
+      assert(weak_vals[i] == val,
+	     "weak-meta resize failed to keep rooted entry value live")
+      assert_lua_value(key, "weak-key metatable resize")
+      assert_lua_value(val, "weak-key metatable resize")
+    else
+      assert(weak_vals[i] == nil,
+	     "weak-meta resize kept value for unrooted collected key")
+    end
+  end
+end
+
 local function finalizer_resize_writer(tbl, ready, start, id, n)
   assert(ready:send(true, 10) == true)
   local _, ok = start:recv(10)
@@ -562,6 +655,7 @@ ran = ran + run_case("weak", exercise_weak_clear_resize)
 ran = ran + run_case("gcmark", exercise_gc_mark_resize)
 ran = ran + run_case("gckey", exercise_gc_key_resize)
 ran = ran + run_case("weakkey", exercise_weak_key_resize)
+ran = ran + run_case("weakmeta", exercise_weak_key_metatable_resize)
 ran = ran + run_case("finalizer", exercise_finalizer_resize)
 ran = ran + run_case("metatable", exercise_metatable_resize)
 ran = ran + run_case("jitstore", exercise_jit_store_resize)
