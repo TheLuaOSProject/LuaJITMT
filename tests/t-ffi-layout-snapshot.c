@@ -102,7 +102,10 @@ static void assert_predefined_layout_avoids_wait(lua_State *L, CTState *cts)
     "assert(ffi.sizeof('uint8_t *') == 8)\n"
     "assert(ffi.istype('void *', ffi.cast('void *', 0)))\n"
     "assert(ffi.istype('const char *', ffi.cast('const char *', 0)))\n"
-    "assert(ffi.typeof('uint8_t *'))\n");
+    "assert(ffi.typeof('uint8_t *'))\n"
+    "assert(ffi.sizeof('  int\\n') == 4)\n"
+    "assert(ffi.alignof('\\tconst char *  ') == 8)\n"
+    "assert(ffi.istype(' void* ', ffi.cast('void *', 0)))\n");
 
   ljt_ctype_release_parse_token(cts, release_seq);
   assert(ljt_ctype_parse_seq(cts) == seq0 + 2u);

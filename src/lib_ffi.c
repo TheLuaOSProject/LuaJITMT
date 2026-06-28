@@ -56,89 +56,97 @@ static CTypeID ffi_parse_ctype_locked(lua_State *L, CTState *cts,
   return cp.val.id;
 }
 
-static int ffi_strlit(GCstr *s, const char *lit, MSize len)
+static int ffi_cspace(char c)
 {
-  const char *p;
-  if (s->len != len)
+  return c == ' ' || c == '\t' || c == '\n' || c == '\r' ||
+	 c == '\f' || c == '\v';
+}
+
+static int ffi_strlit(const char *p, MSize plen, const char *lit, MSize len)
+{
+  if (plen != len)
     return 0;
-  p = strdata(s);
   while (len-- != 0)
     if (*p++ != *lit++)
       return 0;
   return 1;
 }
 
-#define ffi_ctype_match(s, lit) \
-  ffi_strlit((s), "" lit, (MSize)(sizeof(lit)-1))
+#define ffi_ctype_match(lit) \
+  ffi_strlit(p, len, "" lit, (MSize)(sizeof(lit)-1))
 
 static int ffi_predefined_ctype_string(GCstr *s, CTypeID *idp)
 {
-  if (ffi_ctype_match(s, "void")) { *idp = CTID_VOID; return 1; }
-  if (ffi_ctype_match(s, "void *")) { *idp = CTID_P_VOID; return 1; }
-  if (ffi_ctype_match(s, "void*")) { *idp = CTID_P_VOID; return 1; }
-  if (ffi_ctype_match(s, "const void *")) { *idp = CTID_P_CVOID; return 1; }
-  if (ffi_ctype_match(s, "const void*")) { *idp = CTID_P_CVOID; return 1; }
-  if (ffi_ctype_match(s, "void const *")) { *idp = CTID_P_CVOID; return 1; }
-  if (ffi_ctype_match(s, "void const*")) { *idp = CTID_P_CVOID; return 1; }
-  if (ffi_ctype_match(s, "bool")) { *idp = CTID_BOOL; return 1; }
-  if (ffi_ctype_match(s, "_Bool")) { *idp = CTID_BOOL; return 1; }
-  if (ffi_ctype_match(s, "char")) { *idp = CTID_INT8; return 1; }
-  if (ffi_ctype_match(s, "signed char")) { *idp = CTID_INT8; return 1; }
-  if (ffi_ctype_match(s, "unsigned char")) { *idp = CTID_UINT8; return 1; }
-  if (ffi_ctype_match(s, "const char *")) { *idp = CTID_P_CCHAR; return 1; }
-  if (ffi_ctype_match(s, "const char*")) { *idp = CTID_P_CCHAR; return 1; }
-  if (ffi_ctype_match(s, "char const *")) { *idp = CTID_P_CCHAR; return 1; }
-  if (ffi_ctype_match(s, "char const*")) { *idp = CTID_P_CCHAR; return 1; }
-  if (ffi_ctype_match(s, "unsigned char *")) {
+  const char *p = strdata(s);
+  MSize len = s->len;
+  while (len != 0 && ffi_cspace(*p)) { p++; len--; }
+  while (len != 0 && ffi_cspace(p[len-1])) len--;
+  if (ffi_ctype_match("void")) { *idp = CTID_VOID; return 1; }
+  if (ffi_ctype_match("void *")) { *idp = CTID_P_VOID; return 1; }
+  if (ffi_ctype_match("void*")) { *idp = CTID_P_VOID; return 1; }
+  if (ffi_ctype_match("const void *")) { *idp = CTID_P_CVOID; return 1; }
+  if (ffi_ctype_match("const void*")) { *idp = CTID_P_CVOID; return 1; }
+  if (ffi_ctype_match("void const *")) { *idp = CTID_P_CVOID; return 1; }
+  if (ffi_ctype_match("void const*")) { *idp = CTID_P_CVOID; return 1; }
+  if (ffi_ctype_match("bool")) { *idp = CTID_BOOL; return 1; }
+  if (ffi_ctype_match("_Bool")) { *idp = CTID_BOOL; return 1; }
+  if (ffi_ctype_match("char")) { *idp = CTID_INT8; return 1; }
+  if (ffi_ctype_match("signed char")) { *idp = CTID_INT8; return 1; }
+  if (ffi_ctype_match("unsigned char")) { *idp = CTID_UINT8; return 1; }
+  if (ffi_ctype_match("const char *")) { *idp = CTID_P_CCHAR; return 1; }
+  if (ffi_ctype_match("const char*")) { *idp = CTID_P_CCHAR; return 1; }
+  if (ffi_ctype_match("char const *")) { *idp = CTID_P_CCHAR; return 1; }
+  if (ffi_ctype_match("char const*")) { *idp = CTID_P_CCHAR; return 1; }
+  if (ffi_ctype_match("unsigned char *")) {
     *idp = CTID_P_UINT8;
     return 1;
   }
-  if (ffi_ctype_match(s, "unsigned char*")) { *idp = CTID_P_UINT8; return 1; }
-  if (ffi_ctype_match(s, "short")) { *idp = CTID_INT16; return 1; }
-  if (ffi_ctype_match(s, "short int")) { *idp = CTID_INT16; return 1; }
-  if (ffi_ctype_match(s, "signed short")) { *idp = CTID_INT16; return 1; }
-  if (ffi_ctype_match(s, "signed short int")) { *idp = CTID_INT16; return 1; }
-  if (ffi_ctype_match(s, "unsigned short")) { *idp = CTID_UINT16; return 1; }
-  if (ffi_ctype_match(s, "unsigned short int")) {
+  if (ffi_ctype_match("unsigned char*")) { *idp = CTID_P_UINT8; return 1; }
+  if (ffi_ctype_match("short")) { *idp = CTID_INT16; return 1; }
+  if (ffi_ctype_match("short int")) { *idp = CTID_INT16; return 1; }
+  if (ffi_ctype_match("signed short")) { *idp = CTID_INT16; return 1; }
+  if (ffi_ctype_match("signed short int")) { *idp = CTID_INT16; return 1; }
+  if (ffi_ctype_match("unsigned short")) { *idp = CTID_UINT16; return 1; }
+  if (ffi_ctype_match("unsigned short int")) {
     *idp = CTID_UINT16;
     return 1;
   }
-  if (ffi_ctype_match(s, "int")) { *idp = CTID_INT32; return 1; }
-  if (ffi_ctype_match(s, "signed")) { *idp = CTID_INT32; return 1; }
-  if (ffi_ctype_match(s, "signed int")) { *idp = CTID_INT32; return 1; }
-  if (ffi_ctype_match(s, "unsigned")) { *idp = CTID_UINT32; return 1; }
-  if (ffi_ctype_match(s, "unsigned int")) { *idp = CTID_UINT32; return 1; }
+  if (ffi_ctype_match("int")) { *idp = CTID_INT32; return 1; }
+  if (ffi_ctype_match("signed")) { *idp = CTID_INT32; return 1; }
+  if (ffi_ctype_match("signed int")) { *idp = CTID_INT32; return 1; }
+  if (ffi_ctype_match("unsigned")) { *idp = CTID_UINT32; return 1; }
+  if (ffi_ctype_match("unsigned int")) { *idp = CTID_UINT32; return 1; }
   if (sizeof(long) == 8 &&
-      (ffi_ctype_match(s, "long") || ffi_ctype_match(s, "long int") ||
-       ffi_ctype_match(s, "signed long") ||
-       ffi_ctype_match(s, "signed long int"))) {
+      (ffi_ctype_match("long") || ffi_ctype_match("long int") ||
+       ffi_ctype_match("signed long") ||
+       ffi_ctype_match("signed long int"))) {
     *idp = CTID_INT64;
     return 1;
   }
   if (sizeof(long) == 8 &&
-      (ffi_ctype_match(s, "unsigned long") ||
-       ffi_ctype_match(s, "unsigned long int"))) {
+      (ffi_ctype_match("unsigned long") ||
+       ffi_ctype_match("unsigned long int"))) {
     *idp = CTID_UINT64;
     return 1;
   }
-  if (ffi_ctype_match(s, "float")) { *idp = CTID_FLOAT; return 1; }
-  if (ffi_ctype_match(s, "double")) { *idp = CTID_DOUBLE; return 1; }
-  if (ffi_ctype_match(s, "int8_t")) { *idp = CTID_INT8; return 1; }
-  if (ffi_ctype_match(s, "uint8_t")) { *idp = CTID_UINT8; return 1; }
-  if (ffi_ctype_match(s, "uint8_t *")) { *idp = CTID_P_UINT8; return 1; }
-  if (ffi_ctype_match(s, "uint8_t*")) { *idp = CTID_P_UINT8; return 1; }
-  if (ffi_ctype_match(s, "int16_t")) { *idp = CTID_INT16; return 1; }
-  if (ffi_ctype_match(s, "uint16_t")) { *idp = CTID_UINT16; return 1; }
-  if (ffi_ctype_match(s, "int32_t")) { *idp = CTID_INT32; return 1; }
-  if (ffi_ctype_match(s, "uint32_t")) { *idp = CTID_UINT32; return 1; }
-  if (ffi_ctype_match(s, "int64_t")) { *idp = CTID_INT64; return 1; }
-  if (ffi_ctype_match(s, "uint64_t")) { *idp = CTID_UINT64; return 1; }
-  if (ffi_ctype_match(s, "ptrdiff_t")) { *idp = CTID_INT_PSZ; return 1; }
-  if (ffi_ctype_match(s, "size_t")) { *idp = CTID_UINT_PSZ; return 1; }
-  if (ffi_ctype_match(s, "ssize_t")) { *idp = CTID_INT_PSZ; return 1; }
-  if (ffi_ctype_match(s, "intptr_t")) { *idp = CTID_INT_PSZ; return 1; }
-  if (ffi_ctype_match(s, "uintptr_t")) { *idp = CTID_UINT_PSZ; return 1; }
-  if (ffi_ctype_match(s, "wchar_t")) { *idp = CTID_WCHAR; return 1; }
+  if (ffi_ctype_match("float")) { *idp = CTID_FLOAT; return 1; }
+  if (ffi_ctype_match("double")) { *idp = CTID_DOUBLE; return 1; }
+  if (ffi_ctype_match("int8_t")) { *idp = CTID_INT8; return 1; }
+  if (ffi_ctype_match("uint8_t")) { *idp = CTID_UINT8; return 1; }
+  if (ffi_ctype_match("uint8_t *")) { *idp = CTID_P_UINT8; return 1; }
+  if (ffi_ctype_match("uint8_t*")) { *idp = CTID_P_UINT8; return 1; }
+  if (ffi_ctype_match("int16_t")) { *idp = CTID_INT16; return 1; }
+  if (ffi_ctype_match("uint16_t")) { *idp = CTID_UINT16; return 1; }
+  if (ffi_ctype_match("int32_t")) { *idp = CTID_INT32; return 1; }
+  if (ffi_ctype_match("uint32_t")) { *idp = CTID_UINT32; return 1; }
+  if (ffi_ctype_match("int64_t")) { *idp = CTID_INT64; return 1; }
+  if (ffi_ctype_match("uint64_t")) { *idp = CTID_UINT64; return 1; }
+  if (ffi_ctype_match("ptrdiff_t")) { *idp = CTID_INT_PSZ; return 1; }
+  if (ffi_ctype_match("size_t")) { *idp = CTID_UINT_PSZ; return 1; }
+  if (ffi_ctype_match("ssize_t")) { *idp = CTID_INT_PSZ; return 1; }
+  if (ffi_ctype_match("intptr_t")) { *idp = CTID_INT_PSZ; return 1; }
+  if (ffi_ctype_match("uintptr_t")) { *idp = CTID_UINT_PSZ; return 1; }
+  if (ffi_ctype_match("wchar_t")) { *idp = CTID_WCHAR; return 1; }
   return 0;
 }
 
