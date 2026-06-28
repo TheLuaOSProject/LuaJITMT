@@ -35,16 +35,8 @@ jit.opt.start("hotloop=1", "hotexit=1")
 assert(run_abs(100) == 5050)
 assert(trace_count() == 0, "ordinary FFI call loop must stay off trace")
 
-assert(ffi.blocking(abs) == abs)
-assert(trace_count() == 0, "ffi.blocking must keep FFI calls off trace")
-assert(run_abs(100) == 5050)
-assert(trace_count() == 0, "ffi.blocking function must stay off trace")
-
-assert(ffi.blocking(abs)(-9) == 9)
-assert(pcall(ffi.blocking, ffi.new("int[1]")) == false)
-assert(pcall(ffi.blocking, function() end) == false)
-
-local getpid = ffi.blocking(ffi.C.getpid)
+assert(ffi.blocking == nil)
+local getpid = ffi.C.getpid
 assert(getpid() > 0)
 
 do

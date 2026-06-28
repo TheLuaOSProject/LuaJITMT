@@ -23,6 +23,9 @@ current lockless policy:
 - Removed redundant `string.gmatch` C-closure and local-cell x64 source guards;
   behavior fixtures, bytecode checks, and generated JIT dump checks cover the
   observable semantics.
+- Removed the public `ffi.blocking()` compatibility marker after ordinary FFI
+  calls were made native-state safe by default. Internal callback blacklisting
+  remains for callback safety.
 
 Kept intentionally:
 

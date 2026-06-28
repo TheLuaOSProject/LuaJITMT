@@ -142,12 +142,13 @@ FINREG/finqueue dispatch lands.
   native-state path. `LJ_FFI_RECORD_CALLS` hard-fails at compile time until
   `IR_CALLXS` has an explicit native-state enter/leave protocol. This removes
   the previous requirement that users identify blocking functions with
-  `ffi.blocking(fn)` before GC/shutdown can progress while C is blocked.
+  `ffi.blocking(fn)` before GC/shutdown can progress while C is blocked. The
+  obsolete public marker entry point has been removed from the supported FFI
+  surface; internal callback blacklisting remains for callback safety.
   Callback entry applies the same freshness rule: pre-existing sticky
   `TGF_STOPREQ` is tolerated, but a STOPREQ newly acknowledged while the
   carrier was native interrupts before the Lua callback body runs.
-  `ffi.blocking(fn)` remains as a compatibility marker and validation API, but
-  traced C-call throughput stays deferred behind the native-state protocol.
+  Traced C-call throughput stays deferred behind the native-state protocol.
 - **Callbacks (C→Lua)**: callback entry (lj_ccallback.c enter) runs
   `lj_native_leave` on the carrier thread; if the OS thread is foreign
   (created by C, never attached), auto-attach a TG (luaMT_attach path, 09

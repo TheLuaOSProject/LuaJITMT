@@ -2691,32 +2691,6 @@ LJLIB_CF(ffi_pin)
   return 1;
 }
 
-LJLIB_CF(ffi_blocking)
-{
-  GCcdata *cd = ffi_checkcdata(L, 1);
-  CTState *cts = ctype_cts(L);
-  CTypeID id = cd->ctypeid;
-  CTInfo info;
-  CTSize sz = CTSIZE_PTR;
-  CTSize snap_size;
-  int ok = ffi_ctype_info_read(L, cts, id, &info, &snap_size, NULL, NULL);
-  if (ok <= 0)
-    lj_err_arg(L, 1, LJ_ERR_FFI_INVTYPE);
-  if (ctype_isptr(info)) {
-    id = ctype_cid(info);
-    sz = snap_size;
-    ok = ffi_ctype_info_read(L, cts, id, &info, &snap_size, NULL, NULL);
-    if (ok <= 0)
-      lj_err_arg(L, 1, LJ_ERR_FFI_INVTYPE);
-  }
-  if (!ctype_isfunc(info))
-    lj_err_arg(L, 1, LJ_ERR_FFI_INVTYPE);
-  lj_ctype_cb_blacklist(cts, cdata_getptr(cdataptr(cd), sz));
-  (void)lj_trace_flushall_hs(L);
-  L->top = L->base+1;  /* Pass through the function pointer. */
-  return 1;
-}
-
 LJLIB_PUSH(top-5) LJLIB_SET(!)  /* Store clib metatable in func environment. */
 
 LJLIB_CF(ffi_load)

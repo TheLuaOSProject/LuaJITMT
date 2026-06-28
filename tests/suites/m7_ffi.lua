@@ -57,7 +57,7 @@ end
 return function(add)
   add({
     name = "m7_ffi_blocking",
-    description = "FFI blocking recorder blacklist behavior",
+    description = "FFI native blocking-call behavior",
     run = function(t)
       clean_build(t)
       run_c_fixture_specs(t, {
@@ -69,7 +69,7 @@ return function(add)
           cfile = "t-ffi-ccall-stopreq.c" }
       })
       run_luajit_script(t, "t-ffi-blocking.lua")
-      print("M7 ffi.blocking behavior passed")
+      print("M7 FFI native blocking-call behavior passed")
     end
   })
 

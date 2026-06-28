@@ -9,6 +9,10 @@ lib_ffi entry validation helper loads
 - Extended the metatype, finreg, and blocking gates to reject raw
   `CType.info`/`CType.size` reads in the corresponding FFI entry bodies.
 
+Current status: the public `ffi_blocking()` entrypoint was later removed after
+ordinary FFI calls were made native-state safe by default. The metatype and
+finalizer validation notes remain live.
+
 Verification:
 
 - `tools/ci/m7_ffi_metatype.sh`
