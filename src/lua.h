@@ -269,8 +269,6 @@ LUA_API void lua_setallocf (lua_State *L, lua_Alloc f, void *ud);
 
 #define lua_pushcfunction(L,f)	lua_pushcclosure(L, (f), 0)
 
-#define lua_strlen(L,i)		lua_objlen(L, (i))
-
 #define lua_isfunction(L,n)	(lua_type(L, (n)) == LUA_TFUNCTION)
 #define lua_istable(L,n)	(lua_type(L, (n)) == LUA_TTABLE)
 #define lua_islightuserdata(L,n)	(lua_type(L, (n)) == LUA_TLIGHTUSERDATA)
@@ -288,20 +286,6 @@ LUA_API void lua_setallocf (lua_State *L, lua_Alloc f, void *ud);
 
 #define lua_tostring(L,i)	lua_tolstring(L, (i), NULL)
 
-
-
-/*
-** compatibility macros and functions
-*/
-
-#define lua_open()	luaL_newstate()
-
-#define lua_getregistry(L)	lua_pushvalue(L, LUA_REGISTRYINDEX)
-
-#define lua_getgccount(L)	lua_gc(L, LUA_GCCOUNT, 0)
-
-#define lua_Chunkreader		lua_Reader
-#define lua_Chunkwriter		lua_Writer
 
 
 /* hack */

@@ -178,7 +178,6 @@ static void lua_setfield(lua_State*L,int idx,const char*k);
 #define lua_pop(L,n)lua_settop(L,-(n)-1)
 #define lua_newtable(L)lua_createtable(L,0,0)
 #define lua_pushcfunction(L,f)lua_pushcclosure(L,(f),0)
-#define lua_strlen(L,i)lua_objlen(L,(i))
 #define lua_isfunction(L,n)(lua_type(L,(n))==6)
 #define lua_istable(L,n)(lua_type(L,(n))==5)
 #define lua_isnil(L,n)(lua_type(L,(n))==0)
@@ -6068,9 +6067,9 @@ static void adjuststack(luaL_Buffer*B){
 if(B->lvl>1){
 lua_State*L=B->L;
 int toget=1;
-size_t toplen=lua_strlen(L,-1);
+size_t toplen=lua_objlen(L,-1);
 do{
-size_t l=lua_strlen(L,-(toget+1));
+size_t l=lua_objlen(L,-(toget+1));
 if(B->lvl-toget+1>=(20/2)||toplen>l){
 toplen+=l;
 toget++;

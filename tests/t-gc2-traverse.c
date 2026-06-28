@@ -1382,7 +1382,7 @@ static void test_jit_profile_registry_weak_barrier(void)
 
   lua_pushcfunction(L2, gc2_profile_callback);
   cb = funcV(L2->top - 1);
-  lua_getregistry(L2);
+  lua_pushvalue(L2, LUA_REGISTRYINDEX);
   reg = tabV(L2->top - 1);
   lua_newtable(L2);
   lua_pushliteral(L2, "__mode");

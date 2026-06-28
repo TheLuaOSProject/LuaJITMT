@@ -17,7 +17,7 @@ static void set_field(lua_State *L, const char *key, int value)
 
 static void check_registry_field(lua_State *L, const char *key, int value)
 {
-  lua_getregistry(L);
+  lua_pushvalue(L, LUA_REGISTRYINDEX);
   assert(lua_istable(L, -1));
   lua_getfield(L, -1, key);
   assert(lua_tointeger(L, -1) == value);
