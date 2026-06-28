@@ -108,12 +108,12 @@ generation, which is also what keeps HREFK valid. Full design: 06 §6.2–6.3,
 executable model: aux/nbtab_model.c.
 
 ### ADR-7 — Upvalues: cell model (always-closed upvalues), new bytecodes
-CNEW/CGET/CSET, no open upvalues in current chunks. DECIDED. Open upvalues
-alias live stack slots of one thread; sharing them across threads would force
+CNEW/CGET/CSET, no open upvalues in v4 chunks. DECIDED. Open upvalues alias
+live stack slots of one thread; sharing them across threads would force
 cross-thread stack access and pin stack reallocation. Cells keep exact Lua
 sharing semantics (closing preserves GCupval identity) while making every
-upvalue a stable heap word. Old bytecode dump versions are rejected instead of
-translated through a legacy upvalue mode. Full design: 06 §6.4.
+upvalue a stable heap word. Legacy (v2) chunks keep the old machinery with a
+documented capture-at-FNEW deviation under MT. Full design: 06 §6.4, 10.
 
 ### ADR-8 — JIT: single-recorder token; immutable published traces;
 side-exit indirection table instead of code patching; dual-mapped mcode for

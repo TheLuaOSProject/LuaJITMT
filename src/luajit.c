@@ -352,7 +352,7 @@ static int loadline(lua_State *L)
   if (!pushline(L, 1))
     return -1;  /* no input */
   for (;;) {  /* repeat until gets a complete line */
-    status = luaL_loadbuffer(L, lua_tostring(L, 1), lua_objlen(L, 1), "=stdin");
+    status = luaL_loadbuffer(L, lua_tostring(L, 1), lua_strlen(L, 1), "=stdin");
     if (!incomplete(L, status)) break;  /* cannot try to add lines? */
     if (!pushline(L, 0))  /* no more input? */
       return -1;
@@ -690,7 +690,7 @@ int main(int argc, char **argv)
   int status;
   lua_State *L;
   if (!argv[0]) argv = empty_argv; else if (argv[0][0]) progname = argv[0];
-  L = luaL_newstate();
+  L = lua_open();
   if (L == NULL) {
     l_message("cannot create state: not enough memory");
     return EXIT_FAILURE;

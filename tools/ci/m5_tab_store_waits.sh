@@ -190,6 +190,7 @@ check_store_fn_file "$ROOT/src/lj_lib.c" lib_storefunc_str
 check_store_fn_file "$ROOT/src/lj_lib.c" lib_storetv_key
 check_store_fn_file "$ROOT/src/lib_table.c" table_insert_shift_store
 check_store_fn_file "$ROOT/src/lib_table.c" table_insert_value_store
+check_store_fn_file "$ROOT/src/lib_table.c" table_pack_storeint_str
 check_store_fn_file "$ROOT/src/lj_api.c" luaL_newmetatable
 check_store_fn_file "$ROOT/src/lj_api.c" lua_settable
 check_store_fn_file "$ROOT/src/lj_api.c" lua_setfield
@@ -253,6 +254,7 @@ check_keyed_store_fn_file "$ROOT/src/lj_lib.c" lib_storefunc_str
 check_keyed_store_fn_file "$ROOT/src/lj_lib.c" lib_storetv_key
 check_keyed_store_fn_file "$ROOT/src/lib_table.c" table_insert_shift_store
 check_keyed_store_fn_file "$ROOT/src/lib_table.c" table_insert_value_store
+check_keyed_store_fn_file "$ROOT/src/lib_table.c" table_pack_storeint_str
 check_keyed_store_fn_file "$ROOT/src/lj_api.c" lua_settable
 check_keyed_store_fn_file "$ROOT/src/lj_api.c" lua_setfield
 check_keyed_store_fn_file "$ROOT/src/lj_api.c" lua_rawset

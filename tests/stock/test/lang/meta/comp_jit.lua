@@ -85,11 +85,19 @@ do --- Mixed metamethods for ordered comparisons.
     for i=1,100 do x = t1 < t2 end
     return x
   end)
-  assert(not ok)
+  if table.pack then
+    assert(ok and ret == true)
+  else
+    assert(not ok)
+  end
   local ok, ret = pcall(function()
     local x
     for i=1,100 do x = t1 <= t2 end
     return x
   end)
-  assert(not ok)
+  if table.pack then
+    assert(ok and ret == true)
+  else
+    assert(not ok)
+  end
 end

@@ -15,7 +15,7 @@ do --- table
   assert(o == t and a == "foo" and b == "bar")
 end
 
-do --- userdata
+do --- userdata +lua<5.2
   local u = newproxy(true)
   getmetatable(u).__call = callmeta
 

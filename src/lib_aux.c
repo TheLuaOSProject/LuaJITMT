@@ -200,9 +200,9 @@ static void adjuststack(luaL_Buffer *B)
   if (B->lvl > 1) {
     lua_State *L = B->L;
     int toget = 1;  /* number of levels to concat */
-    size_t toplen = lua_objlen(L, -1);
+    size_t toplen = lua_strlen(L, -1);
     do {
-      size_t l = lua_objlen(L, -(toget+1));
+      size_t l = lua_strlen(L, -(toget+1));
       if (!(B->lvl - toget + 1 >= LUA_MINSTACK/2 || toplen > l))
 	break;
       toplen += l;

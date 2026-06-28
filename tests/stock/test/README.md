@@ -50,6 +50,8 @@ allow key/value pairs to be specified in a standard place/format.
 
 Some common pieces of metadata are:
   * `+luajit>=2.1` - The test requires LuaJIT 2.1 or later to run.
+  * `+lua<5.2` - The test requires Lua 5.1 or earlier to run (all versions of
+                 LuaJIT report themselves as 5.1).
   * `+ffi` - The test requires the `ffi` library to be present.
   * `+bit` - The test requires the `bit` library to be present.
   * `+jit` - The test requires JIT compilation be available and turned on.

@@ -37,11 +37,11 @@ return function(add)
       message = "M5 internal table sentinel tag tests passed"
     },
     {
-      name = "m5_bcdump_current",
-      description = "current bytecode dump validation C fixture",
-      output = "lj_t-bcdump-current",
-      cfile = "t-bcdump-current.c",
-      message = "M5 current bytecode dump validation tests passed"
+      name = "m5_bcdump_compat",
+      description = "bytecode dump compatibility C fixture",
+      output = "lj_t-bcdump-compat",
+      cfile = "t-bcdump-compat.c",
+      message = "M5 bytecode dump compatibility tests passed"
     },
     {
       name = "m5_registry_root",

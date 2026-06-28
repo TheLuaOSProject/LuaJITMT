@@ -733,6 +733,13 @@ extern void *LJ_WIN_LOADLIBA(const char *path);
 #define LJ_UNWIND_JIT		0
 #endif
 
+/* Compatibility with Lua 5.1 vs. 5.2. */
+#ifdef LUAJIT_ENABLE_LUA52COMPAT
+#define LJ_52			1
+#else
+#define LJ_52			0
+#endif
+
 /* -- VM security --------------------------------------------------------- */
 
 /* Don't make any changes here. Instead build with:

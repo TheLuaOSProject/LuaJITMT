@@ -336,6 +336,42 @@ LJLIB_CF(table_sort)
   return 0;
 }
 
+#if LJ_52
+LJLIB_PUSH("n")
+
+static void table_pack_storeint_str(lua_State *L, GCtab *t, GCstr *key,
+				    int32_t val)
+{
+  TValue keytv, tv, *dst;
+  setintV(&tv, val);
+  setstrV(L, &keytv, key);
+  for (;;) {
+    dst = lj_tab_setstr(L, t, key);
+    if (lj_tab_trystoretv_cas_keyed(L, t, dst, &keytv, &tv) ==
+	LJ_TAB_STORE_CAS_OK)
+      return;
+    lj_tab_store_wait_no_l();  /* table.pack "n" store saw stale/FORWARD slot. */
+  }
+}
+
+LJLIB_CF(table_pack)
+{
+  TValue *array, *base = L->base;
+  MSize i, n = (uint32_t)(L->top - base);
+  GCtab *t = lj_tab_new(L, n ? n+1 : 0, 1);
+  table_pack_storeint_str(L, t, strV(lj_lib_upvalue(L, 1)), (int32_t)n);
+  (void)lj_tab_array_snapshot_acq(t, &array);
+  array++;
+  for (i = 0; i < n; i++)
+    lj_tab_storetv(L, &array[i], &base[i]);
+  settabV(L, base, t);
+  L->top = base+1;
+  lj_gc_pubtab(L, t);
+  lj_gc_check(L);
+  return 1;
+}
+#endif
+
 LJLIB_NOREG LJLIB_CF(table_new)		LJLIB_REC(.)
 {
   int32_t a = lj_lib_checkint(L, 1);
@@ -367,6 +403,10 @@ static int luaopen_table_clear(lua_State *L)
 LUALIB_API int luaopen_table(lua_State *L)
 {
   LJ_LIB_REG(L, LUA_TABLIBNAME, table);
+#if LJ_52
+  lua_getglobal(L, "unpack");
+  lua_setfield(L, -2, "unpack");
+#endif
   lj_lib_prereg(L, LUA_TABLIBNAME ".new", luaopen_table_new, tabV(L->top-1));
   lj_lib_prereg(L, LUA_TABLIBNAME ".clear", luaopen_table_clear, tabV(L->top-1));
   return 1;

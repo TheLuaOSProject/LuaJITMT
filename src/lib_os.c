@@ -147,8 +147,13 @@ static char *os_native_tmpnam(lua_State *L, char *buf)
 LJLIB_CF(os_execute)
 {
 #if LJ_NO_SYSTEM
+#if LJ_52
+  errno = ENOSYS;
+  return luaL_fileresult(L, 0, NULL);
+#else
   lua_pushinteger(L, -1);
   return 1;
+#endif
 #else
   const char *cmd = luaL_optstring(L, 1, NULL);
   TGState *tg = L2TG(L);
@@ -160,7 +165,13 @@ LJLIB_CF(os_execute)
   stat = system(cmd);
   actions = lj_native_leave(L);
   os_checkstop_fresh(L, actions, had_stopreq, had_pending_stopreq);
+#if LJ_52
+  if (cmd)
+    return luaL_execresult(L, stat);
+  setboolV(L->top++, 1);
+#else
   setintV(L->top++, stat);
+#endif
   return 1;
 #endif
 }

@@ -339,7 +339,11 @@ static int io_file_close(lua_State *L, IOFileUD *iof)
 #endif
     iof->fp = NULL;
     io_checkstop_fresh(L, actions, had_stopreq);
+#if LJ_52
+    return luaL_execresult(L, stat);
+#else
     ok = (stat != -1);
+#endif
   } else {
     lj_assertL((iof->type & IOFILE_TYPE_MASK) == IOFILE_TYPE_STDF,
 	       "close of unknown FILE* type");
@@ -477,6 +481,12 @@ static int io_file_write(lua_State *L, IOFileUD *iof, int start)
       status = (io_native_fwrite(L, p, 1, len, fp, &actions) == len);
       io_checkstop_fresh(L, actions, had_stopreq);
     }
+  }
+  if (LJ_52 && status) {
+    L->top = L->base+1;
+    if (start == 0)
+      setudataV(L, L->base, IOSTDF_UD(L, GCROOT_IO_OUTPUT));
+    return 1;
   }
   return luaL_fileresult(L, status, NULL);
 }

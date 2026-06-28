@@ -12,6 +12,9 @@ local function default_tags()
   
   -- Lua version and features
   tags.lua = tonumber(_VERSION:match"%d+%.%d+")
+  if table.pack then
+    tags["compat5.2"] = true
+  end
   if loadstring"return 0xep+9" then
     tags.hexfloat = true
   end

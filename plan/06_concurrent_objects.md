@@ -500,11 +500,7 @@ slice. Mixed raw-local FNEW traces are covered for source/loaded immutable
 captures through stack-value synchronization and for mutable captures after the
 slot is promoted at trace entry or when the hot trace performs the first
 mutable raw-slot promotion with otherwise type-stable loop-carried slots.
-### 6.4.4 Bytecode compatibility
-Old bytecode dump versions are intentionally not a supported runtime surface.
-Source compilation and current-version dumps use the cell model directly;
-older dumps are rejected by the loader instead of being translated through a
-legacy upvalue mode.
+### 6.4.4 Legacy chunks: see 10 §10.4 (capture-at-FNEW under MT).
 
 ## 6.5 String interning (lj_str.c rewrite)
 

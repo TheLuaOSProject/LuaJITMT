@@ -1096,7 +1096,7 @@ static void lex_match(LexState *ls, LexToken what, LexToken who, BCLine line)
 static GCstr *lex_str(LexState *ls)
 {
   GCstr *s;
-  if (ls->tok != TK_name && ls->tok != TK_goto)
+  if (ls->tok != TK_name && (LJ_52 || ls->tok != TK_goto))
     err_token(ls, TK_name);
   s = strV(&ls->tokval);
   lj_lex_next(ls);
@@ -1797,7 +1797,7 @@ static void expr_table(LexState *ls, ExpDesc *e)
       if (!expr_isk(&key)) expr_index(fs, e, &key);
       if (expr_isnumk(&key) && expr_numiszero(&key)) needarr = 1; else nhash++;
       lex_check(ls, '=');
-    } else if ((ls->tok == TK_name || ls->tok == TK_goto) &&
+    } else if ((ls->tok == TK_name || (!LJ_52 && ls->tok == TK_goto)) &&
 	       lj_lex_lookahead(ls) == '=') {
       expr_str(ls, &key);
       lex_check(ls, '=');
@@ -1896,7 +1896,7 @@ static BCReg parse_params(LexState *ls, int needself)
     var_new_lit(ls, nparams++, "self");
   if (ls->tok != ')') {
     do {
-      if (ls->tok == TK_name || ls->tok == TK_goto) {
+      if (ls->tok == TK_name || (!LJ_52 && ls->tok == TK_goto)) {
 	var_new(ls, nparams++, lex_str(ls));
       } else if (ls->tok == TK_dots) {
 	lj_lex_next(ls);
@@ -1972,8 +1972,10 @@ static void parse_args(LexState *ls, ExpDesc *e)
   BCReg base;
   BCLine line = ls->linenumber;
   if (ls->tok == '(') {
+#if !LJ_52
     if (line != ls->lastline)
       err_syntax(ls, LJ_ERR_XAMBIG);
+#endif
     lj_lex_next(ls);
     if (ls->tok == ')') {  /* f(). */
       args.k = VVOID;
@@ -2019,7 +2021,7 @@ static void expr_primary(LexState *ls, ExpDesc *v)
     expr(ls, v);
     lex_match(ls, ')', '(', line);
     expr_discharge(ls->fs, v);
-  } else if (ls->tok == TK_name || ls->tok == TK_goto) {
+  } else if (ls->tok == TK_name || (!LJ_52 && ls->tok == TK_goto)) {
     var_lookup(ls, v);
   } else {
     err_syntax(ls, LJ_ERR_XSYMBOL);
@@ -2467,12 +2469,14 @@ static void parse_label(LexState *ls)
     lj_lex_error(ls, 0, LJ_ERR_XLDUP, strdata(name));
   idx = gola_new(ls, name, VSTACK_LABEL, fs->pc);
   lex_check(ls, TK_label);
-  /* Recursively parse trailing labels. */
+  /* Recursively parse trailing statements: labels and ';' (Lua 5.2 only). */
   for (;;) {
     if (ls->tok == TK_label) {
       synlevel_begin(ls);
       parse_label(ls);
       synlevel_end(ls);
+    } else if (LJ_52 && ls->tok == ';') {
+      lj_lex_next(ls);
     } else {
       break;
     }
@@ -2746,12 +2750,17 @@ static int parse_stmt(LexState *ls)
   case TK_break:
     lj_lex_next(ls);
     parse_break(ls);
-    return 1;  /* Must be last in Lua 5.1. */
+    return !LJ_52;  /* Must be last in Lua 5.1. */
+#if LJ_52
+  case ';':
+    lj_lex_next(ls);
+    break;
+#endif
   case TK_label:
     parse_label(ls);
     break;
   case TK_goto:
-    if (lj_lex_lookahead(ls) == TK_name) {
+    if (LJ_52 || lj_lex_lookahead(ls) == TK_name) {
       lj_lex_next(ls);
       parse_goto(ls);
       break;

@@ -1238,9 +1238,15 @@ static TRef rec_mm_len(jit_State *J, TRef tr, TValue *tv)
     base += LJ_FR2;
     basev += LJ_FR2;
     base[1] = tr; copyTV(J->L, basev+1, tv);
+#if LJ_52
+    base[2] = tr; copyTV(J->L, basev+2, tv);
+#else
     base[2] = TREF_NIL; setnilV(basev+2);
+#endif
     lj_record_call(J, func, 2);
   } else {
+    if (LJ_52 && tref_istab(tr))
+      return emitir(IRTI(IR_ALEN), tr, TREF_NIL);
     lj_trace_err(J, LJ_TRERR_NOMM);
   }
   return 0;  /* No result yet. */
@@ -1296,6 +1302,16 @@ static void rec_mm_comp(jit_State *J, RecordIndex *ix, int op)
   copyTV(J->L, &ix->tabv, &ix->valv);
   while (1) {
     MMS mm = (op & 2) ? MM_le : MM_lt;  /* Try __le + __lt or only __lt. */
+#if LJ_52
+    if (!lj_record_mm_lookup(J, ix, mm)) {  /* Lookup mm on 1st operand. */
+      ix->tab = ix->key;
+      copyTV(J->L, &ix->tabv, &ix->keyv);
+      if (!lj_record_mm_lookup(J, ix, mm))  /* Lookup mm on 2nd operand. */
+	goto nomatch;
+    }
+    rec_mm_callcomp(J, ix, op);
+    return;
+#else
     if (lj_record_mm_lookup(J, ix, mm)) {  /* Lookup mm on 1st operand. */
       cTValue *bv;
       TRef mo1 = ix->mobj;
@@ -1320,6 +1336,7 @@ static void rec_mm_comp(jit_State *J, RecordIndex *ix, int op)
       rec_mm_callcomp(J, ix, op);
       return;
     }
+#endif
   nomatch:
     /* Lookup failed. Retry with  __lt and swapped operands. */
     if (!(op & 2)) break;  /* Already at __lt. Interpreter will throw. */
@@ -2947,6 +2964,8 @@ void lj_record_ins(jit_State *J)
 	  ta = IRT_NUM;
 	} else if (ta == IRT_NUM && tc == IRT_INT) {
 	  rc = emitir(IRTN(IR_CONV), rc, IRCONV_NUM_INT);
+	} else if (LJ_52) {
+	  ta = IRT_NIL;  /* Force metamethod for different types. */
 	} else if (!((ta == IRT_FALSE || ta == IRT_TRUE) &&
 		     (tc == IRT_FALSE || tc == IRT_TRUE))) {
 	  break;  /* Interpreter will throw for two different types. */
@@ -3034,7 +3053,7 @@ void lj_record_ins(jit_State *J)
 	rc = lj_ir_call(J, IRCALL_lj_buf_len_tg_forjit, ir->op1);
       else
 	rc = emitir(IRTI(IR_FLOAD), rc, IRFL_STR_LEN);
-    } else if (tref_istab(rc))
+    } else if (!LJ_52 && tref_istab(rc))
       rc = emitir(IRTI(IR_ALEN), rc, TREF_NIL);
     else
       rc = rec_mm_len(J, rc, rcv);
