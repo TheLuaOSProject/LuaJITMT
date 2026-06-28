@@ -236,7 +236,7 @@ int main(void)
     stored = lj_tab_storetv_forvm_array(L, t, &oldarray[key_helper], &src,
 					(MSize)key_helper);
     assert(stored == &newarray[key_helper]);
-    tabfwd_assert_i32(&oldarray[key_helper], key_helper + 6000);
+    tabfwd_assert_forward(&oldarray[key_helper]);
     tabfwd_assert_i32(&newarray[key_helper], val_helper);
   }
 

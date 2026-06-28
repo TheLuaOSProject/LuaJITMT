@@ -59,6 +59,7 @@ static void exercise_array_forward_hop(lua_State *L)
   assert(newarray != oldarray);
   assert(lj_tab_array_nextgen_acq(oldarray) == newarray);
   tabfwd_assert_i32(lj_tab_getint(t, 5), 505);
+  tabfwd_assert_forward(&oldarray[5]);
 
   tabfwd_store_forward(&oldarray[5]);
   la_store32_rel(&lj_tab_array_hdrw(oldarray)->acap,
@@ -93,6 +94,7 @@ static void exercise_array_forward_hop(lua_State *L)
   assert(newasize == 6);
   assert(lj_tab_array_nextgen_acq(oldarray) == newarray);
   tabfwd_assert_i32(lj_tab_getint(t, tail), 606);
+  tabfwd_assert_forward(&oldarray[tail]);
 
   tabfwd_store_forward(&oldarray[tail]);
   la_store32_rel(&lj_tab_array_hdrw(oldarray)->acap,
@@ -146,6 +148,9 @@ static void exercise_hash_forward_hop(lua_State *L)
   tabfwd_assert_i32(lj_tab_getstr(t, hopstr), 101);
   tabfwd_assert_i32(lj_tab_getint(t, 33), 202);
   tabfwd_assert_i32(lj_tab_get(L, t, &lightkey), 303);
+  tabfwd_assert_forward(oldstrslot);
+  tabfwd_assert_forward(oldnumslot);
+  tabfwd_assert_forward(oldkeyslot);
 
   tabfwd_store_forward(oldstrslot);
   tabfwd_store_forward(oldnumslot);
@@ -211,6 +216,7 @@ static void exercise_hash_to_array_forward_hop(lua_State *L)
   assert(lj_tab_array_nextgen_acq(oldarray) == newarray);
   assert(lj_tab_node_nextgen_acq(oldnode) == newnode);
   tabfwd_assert_i32(lj_tab_getint(t, moveint), 707);
+  tabfwd_assert_forward(oldnumslot);
 
   tabfwd_store_forward(oldnumslot);
   la_store32_rel(&lj_tab_array_hdrw(oldarray)->acap,

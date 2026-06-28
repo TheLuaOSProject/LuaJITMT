@@ -106,7 +106,7 @@ static void exercise_array_retiring_jit(lua_State *L)
   setintV(&src, 201);
   lj_tab_storetv_forjit_array(L, t, &oldarray[key], &src, (MSize)key);
   lj_tv_load_acq(&oldval, &oldarray[key]);
-  tabfwd_assert_i32(&oldval, 16000);
+  assert(tvisforward(&oldval));
   tabfwd_assert_i32(&newarray[key], 201);
   tabfwd_assert_i32(lj_tab_getint(t, key), 201);
 
@@ -144,7 +144,7 @@ static void exercise_array_current_retiring_jit(lua_State *L)
   setintV(&src, 204);
   lj_tab_storetv_forjit_array(L, t, &oldarray[key], &src, (MSize)key);
   lj_tv_load_acq(&oldval, &oldarray[key]);
-  tabfwd_assert_i32(&oldval, 18000);
+  assert(tvisforward(&oldval));
 
   lj_tab_array_rel(t, newarray);
   lj_tab_asize_rel(t, newasize);
@@ -186,7 +186,7 @@ static void exercise_array_retiring_observed_jit(lua_State *L)
 						   &src, (MSize)key);
   assert(slot == &newarray[key]);
   lj_tv_load_acq(&oldval, &oldarray[key]);
-  tabfwd_assert_i32(&oldval, 18100);
+  assert(tvisforward(&oldval));
   tabfwd_assert_i32(&newarray[key], 207);
   tabfwd_assert_i32(lj_tab_getint(t, key), 207);
 
@@ -315,7 +315,7 @@ static void exercise_hash_retiring_observed_jit(lua_State *L)
 						  &oldn->val, &src);
   assert(slot == &newn->val);
   lj_tv_load_acq(&oldval, &oldn->val);
-  tabfwd_assert_i32(&oldval, 19100);
+  assert(tvisforward(&oldval));
   tabfwd_assert_i32(&newn->val, 208);
   tabfwd_assert_i32(lj_tab_getstr(t, hkey), 208);
 
@@ -350,7 +350,7 @@ static void exercise_hash_retiring_jit(lua_State *L)
   setstrV(L, &keytv, hkey);
   lj_tab_storetv_forjit_hash(L, t, &oldn->val, &src, &keytv);
   lj_tv_load_acq(&oldval, &oldn->val);
-  tabfwd_assert_i32(&oldval, 17000);
+  assert(tvisforward(&oldval));
   tabfwd_assert_i32(lj_tab_getstr(t, hkey), 202);
 
   lua_pop(L, 1);
@@ -390,7 +390,7 @@ static void exercise_hash_current_retiring_jit(lua_State *L)
   setstrV(L, &keytv, hkey);
   lj_tab_storetv_forjit_hash(L, t, &oldn->val, &src, &keytv);
   lj_tv_load_acq(&oldval, &oldn->val);
-  tabfwd_assert_i32(&oldval, 19000);
+  assert(tvisforward(&oldval));
 
   lj_tab_node_rel(t, newnode);
   lj_tab_hmask_rel(t, newhmask);

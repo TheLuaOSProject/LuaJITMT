@@ -1117,6 +1117,7 @@ static void gc2_mark_strtab_mem(global_State *g)
 static void gc2_mark_tab_retired_mem(global_State *g)
 {
   TabNodeRetire *ret;
+  TabArrayRetire *aret;
   for (ret = (TabNodeRetire *)la_loadptr_acq(
 	 (void *const *)&g->tab.retired_nodes);
        ret != NULL;
@@ -1125,6 +1126,14 @@ static void gc2_mark_tab_retired_mem(global_State *g)
     if (lj_tab_node_retired_armed_acq(ret))
       lj_gc2_markmem(g,
 		     lj_tab_node_hdrw(lj_tab_node_retired_node_acq(ret)));
+  }
+  for (aret = lj_tab_array_retired_head_acq(g);
+       aret != NULL;
+       aret = lj_tab_array_retired_next_acq(aret)) {
+    lj_gc2_markmem(g, aret);
+    if (lj_tab_array_retired_armed_acq(aret))
+      lj_gc2_markmem(g,
+		     lj_tab_array_hdrw(lj_tab_array_retired_array_acq(aret)));
   }
 }
 
@@ -3331,13 +3340,19 @@ static void gc2_weak_process_tab(global_State *g, GCtab *t, int clear,
     MSize i, asize = lj_tab_array_snapshot_acq(t, &array);
     for (i = 0; i < asize; i++) {
       TValue val;
+      TValue *slot = &array[i];
       lj_tv_load_acq(&val, &array[i]);
+      if (tvisforward(&val)) {
+	slot = lj_tab_forwarded_array_slot(t, array, asize, i, &val);
+	if (!slot)
+	  continue;
+      }
       if (!tvisnil(&val)) {
 	(*slots)++;
 	if (gc2_weak_mayclear(g, &val, 1, clear)) {
 	  (*clearable)++;
 	  if (clear)
-	    lj_tab_storenilraw(&array[i]);
+	    lj_tab_storenilraw(slot);
 	}
       }
     }
@@ -3348,15 +3363,31 @@ static void gc2_weak_process_tab(global_State *g, GCtab *t, int clear,
     for (i = 0; i <= hmask; i++) {
       Node *n = &node[i];
       TValue key, val;
+      TValue *slot = &n->val;
+      int key_loaded = 0;
       lj_tv_load_acq(&val, &n->val);
-      if (!tvisnil(&val)) {
+      if (tvisforward(&val)) {
 	lj_tv_load_acq(&key, &n->key);
+	key_loaded = 1;
+	while (tviskeylock(&key)) {
+	  gc2_peer_wait_no_l();
+	  lj_tv_load_acq(&key, &n->key);
+	}
+	if (tvisnil(&key))
+	  continue;
+	slot = lj_tab_forwarded_hash_slot(t, node, hmask, &key, &val);
+	if (!slot)
+	  continue;
+      }
+      if (!tvisnil(&val)) {
+	if (!key_loaded)
+	  lj_tv_load_acq(&key, &n->key);
 	(*slots)++;
 	if (gc2_weak_mayclear(g, &key, 0, clear) ||
 	    gc2_weak_mayclear(g, &val, 1, clear)) {
 	  (*clearable)++;
 	  if (clear)
-	    lj_tab_storenilraw(&n->val);
+	    lj_tab_storenilraw(slot);
 	}
       }
     }
@@ -5341,6 +5372,9 @@ static int gc2_traverse_tab(global_State *g, GCtab *t)
     for (i = 0; i < asize; i++) {
       TValue val;
       lj_tv_load_acq(&val, &array[i]);
+      if (tvisforward(&val) &&
+	  !lj_tab_forwarded_array_slot(t, array, asize, i, &val))
+	continue;
       gc2_mark_tv_worker(g, &val);
     }
   }
@@ -5364,6 +5398,19 @@ static int gc2_traverse_tab(global_State *g, GCtab *t)
 	  }
 	}
 #endif
+	if (tvisforward(&val)) {
+	  if (!key_loaded) {
+	    lj_tv_load_acq(&key, &n->key);
+	    key_loaded = 1;
+	  }
+	  while (tviskeylock(&key)) {
+	    gc2_peer_wait_no_l();
+	    lj_tv_load_acq(&key, &n->key);
+	  }
+	  if (tvisnil(&key) ||
+	      !lj_tab_forwarded_hash_slot(t, node, hmask, &key, &val))
+	    continue;
+	}
 	if (!tvisnil(&val)) {
 	  if (!key_loaded)
 	    lj_tv_load_acq(&key, &n->key);

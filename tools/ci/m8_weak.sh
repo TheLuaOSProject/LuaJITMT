@@ -119,9 +119,9 @@ weak_legacy_counters="${weak_legacy_counters}|weak_legacy_backfill_(tables|slots
 weak_scan_counters='weak_scan_(runs|tables|slots|clearable)'
 weak_scan_counters="${weak_scan_counters}|weak_clear_(runs|tables|slots|cleared)"
 weak_scan_counters="${weak_scan_counters}|${weak_legacy_counters}"
-weak_scan_raw_re="->[[:space:]]*(gc2[.])?(${weak_scan_counters})"
+weak_scan_raw_re="->[[:space:]]*gc2[.](${weak_scan_counters})"
 weak_scan_raw_re="${weak_scan_raw_re}([^[:alnum:]_]|$)"
-weak_scan_addr_re="&[[:space:]]*[^)]*->[[:space:]]*(gc2[.])?"
+weak_scan_addr_re="&[[:space:]]*[^)]*->[[:space:]]*gc2[.]"
 weak_scan_addr_re="${weak_scan_addr_re}(${weak_scan_counters})([^[:alnum:]_]|$)"
 if hits=$(grep -nE -- "${weak_scan_raw_re}|${weak_scan_addr_re}" \
     "$ROOT/src/lj_gc2.c" "$ROOT/src/lib_base.c" || true); [ -n "$hits" ]; then
@@ -145,9 +145,9 @@ for helper in gc2_weak_keys_marked_acq \
 done
 
 weak_mark_counters='weak_(keys|values)_marked'
-weak_mark_raw_re="->[[:space:]]*(gc2[.])?${weak_mark_counters}"
+weak_mark_raw_re="->[[:space:]]*gc2[.]${weak_mark_counters}"
 weak_mark_raw_re="${weak_mark_raw_re}([^[:alnum:]_]|$)"
-weak_mark_addr_re="&[[:space:]]*[^)]*->[[:space:]]*(gc2[.])?"
+weak_mark_addr_re="&[[:space:]]*[^)]*->[[:space:]]*gc2[.]"
 weak_mark_addr_re="${weak_mark_addr_re}${weak_mark_counters}([^[:alnum:]_]|$)"
 if hits=$(grep -nE -- "${weak_mark_raw_re}|${weak_mark_addr_re}" \
     "$ROOT/src/lj_gc2.c" "$ROOT/src/lib_base.c" || true); [ -n "$hits" ]; then

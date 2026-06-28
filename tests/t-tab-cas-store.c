@@ -98,7 +98,7 @@ static void exercise_keyed_cas_array_stale(lua_State *L)
   setintV(&src, 12345);
   assert(lj_tab_trystoretv_cas_keyed(L, t, &oldarray[k], &key, &src) ==
 	 LJ_TAB_STORE_CAS_STALE);
-  tabfwd_assert_i32(&oldarray[k], k + 12000);
+  tabfwd_assert_forward(&oldarray[k]);
   tabfwd_assert_i32(&newarray[k], k + 12000);
   assert(lj_tab_trystoretv_cas_keyed(L, t, lj_tab_setint(L, t, k),
 				     &key, &src) == LJ_TAB_STORE_CAS_OK);
@@ -137,7 +137,7 @@ static void exercise_keyed_cas_hash_stale(lua_State *L)
   setintV(&src, 13333);
   assert(lj_tab_trystoretv_cas_keyed(L, t, &oldn->val, &keytv, &src) ==
 	 LJ_TAB_STORE_CAS_STALE);
-  tabfwd_assert_i32(&oldn->val, 13000);
+  tabfwd_assert_forward(&oldn->val);
   tabfwd_assert_i32(&newn->val, 13000);
   assert(lj_tab_trystoretv_cas_keyed(L, t, lj_tab_setstr(L, t, hkey),
 				     &keytv, &src) == LJ_TAB_STORE_CAS_OK);
@@ -525,7 +525,7 @@ static void exercise_tsetm_helper_current_retiring(lua_State *L)
   lj_tab_storetvn_forvm_array(L, t, (uint32_t)start, src, 3);
   for (i = 0; i < 3; i++) {
     lj_tv_load_acq(&oldval, &oldarray[start + i]);
-    tabfwd_assert_i32(&oldval, start + (int32_t)i + 7000);
+    assert(tvisforward(&oldval));
   }
   tabfwd_assert_i32(&newarray[start], 8181);
   tabfwd_assert_i32(&newarray[start + 1], 8282);

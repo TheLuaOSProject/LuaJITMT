@@ -1,0 +1,151 @@
+# Progress Report - 2026-06-28
+
+## Current State
+
+- Branch: `v2.1`
+- Latest pushed commit before this slice: `e86c8acb m9: own GC stats snapshots`
+- Current completed local slice: production table resize forwarding with `LJ_TFORWARD`
+- Safety priority: language semantics, memory safety, GC visibility, and stability remain higher priority than LuaJIT performance parity.
+
+The table resize-forward slice is now commit-ready after the focused validation listed below. The previous audit blockers were addressed:
+
+- Hash replacement sizing now accounts for visible hash keys even when their current value is nil, and resize publication uses a retry path with generation/flags CAS checks.
+- Legacy GC and GC2 now resolve forwarded table slots during mark traversal and weak clearing.
+- GC2 now marks retired separated-array backing memory, matching retired hash-node handling.
+- The x64 TSET/TSETM fixture now expects old non-nil separated-array slots to become internal `FORWARD` sentinels.
+
+Unrelated local scratch files are still present and intentionally ignored:
+
+- `.luarc.json`
+- `a.out`
+- `m`
+- `t`
+- `tests/stock/test/m`
+
+## Done And Pushed
+
+Recent completed and pushed slices:
+
+- `cbbe57c6 m3: own SMR retire epoch queries`
+- `92a335f5 m7: own cdata finreg notifications`
+- `e86c8acb m9: own GC stats snapshots`
+
+The broader project already has landed ownership/facade work across tables, GC2, weak tables, traces, ctype, FFI, finalizers, hooks, native-state boundaries, and CI source guards.
+
+## Completed In This Slice
+
+Table resize forwarding:
+
+- Added CAS helpers for array `next_gen`, node `next_gen`, and full node-header flags words.
+- Made separated-array replacement publish `oldarray->next_gen` by CAS before retiring the old generation.
+- Made hash replacement publish `oldnode->next_gen` and claim `TABNODE_FLAG_RETIRING` with a full flags-word CAS.
+- Added retry cleanup for failed resize claims, including freeing unpublished replacement arrays/nodes and discardable retire records.
+- Moved retire-list publication until after the old generation is successfully claimed.
+- Added `tab_freeze_forward()` so old non-nil visible slots are CAS-stamped as internal `FORWARD` before migration.
+- Left old nil slots as nil, avoiding ambiguous GC visibility for absent values.
+- Migrated values with put-if-absent CAS so a concurrent successor write is not overwritten.
+- Conservatively sizes hash replacement for visible hash keys and array shrink tails.
+
+GC and weak-table correctness:
+
+- Legacy GC table mark traversal resolves forwarded array/hash slots.
+- Legacy weak clearing resolves forwarded slots and clears the successor slot, not the retired slot.
+- GC2 mark traversal and weak processing now do the same.
+- GC2 marks retired separated-array memory in addition to retired hash-node memory.
+
+Tests and guards:
+
+- Updated C fixtures for production-forwarded old slots.
+- Preserved nil-slot expectations where old slots were logically absent.
+- Added an M5 source guard requiring `lj_tab_resize()` to freeze-forward array/hash slots and avoid direct snapshot copies in the guarded migration path.
+- Narrowed M8 weak source guards so they check the intended GC2 weak fields without false positives.
+
+## Validation Passed
+
+- `make -C src -j2`
+- `tools/ci/m5_tab_forward_filter.sh`
+- `tools/ci/m5_tab_cas_store.sh`
+- `tools/ci/lua_test.sh m5_x64_tset_nil_snapshot`
+- `tools/ci/m6_jit_table_store_helper.sh`
+- `tools/ci/m8_weak.sh`
+- `tools/ci/m10_generational.sh`
+- `tools/ci/m9_m10_gc.sh`
+- `git diff --check`
+- `tools/ci/m0_source_guard.sh`
+- `make -C src clean`
+- `make -C src -j2`
+- `make -C src clean`
+- `make -C src amalg`
+- `make -C src clean`
+
+The amalgam build passed with existing warning noise.
+
+## Best Lockless Opportunities
+
+Worth doing:
+
+- Table resize stress coverage and remaining edge proofs.
+  The implementation is now much more lockless, but it still deserves multi-thread stress around resize, weak clear, GC traversal, JIT stores, and finalizer interaction.
+
+- Source local/upvalue ownership.
+  This is a high-value correctness area because closure/upvalue semantics are core Lua behavior. It is worth making ownership explicit even if it costs performance.
+
+- Traced FFI native-state protocol.
+  Worth doing for safety. Do not try to make mutable `ffi.cdef` fully lockless unless requirements change; that is a lower-value, high-risk target.
+
+- Selected GC2 handoff queues and wait helpers.
+  Worth tightening where the state is already single-owner or CAS-owned. Avoid changing lifecycle parking/shutdown paths just for lockless purity.
+
+Probably not worth making more lockless:
+
+- User-facing `threading.mutex` and channel blocking semantics.
+  These are synchronization APIs by design.
+
+- Safepoint leadership and GC2 lifecycle parking.
+  These are rare, semantic coordination points; locks or blocking waits are acceptable if they keep shutdown and phase changes stable.
+
+- GDBJIT descriptor locking.
+  This is tooling/debugger integration, not a hot language path.
+
+- `ffi.cdef` mutation.
+  Keep it serialized unless a very specific workload proves it is worth the complexity.
+
+## Percent Complete Forecast
+
+- Foundational atomic/helper/facade migration: 80-88%
+- GC2/legacy GC ownership scaffolding: 75-85%
+- Weak/finalizer/cdata-finalizer ownership: 75-85%
+- Table semantics and resize forwarding: 65-75%
+- JIT safety and trace/native-state handling: 60-70%
+- FFI safety excluding mutable cdef concurrency: 55-65%
+- Test and source-guard infrastructure: 80-88%
+- Performance parity with LuaJIT: 35-45%
+- Overall safety/stability objective: 65-75%
+- Overall safety/stability plus near-LuaJIT performance: 50-60%
+
+## Time Remaining Forecast
+
+Assuming one focused senior engineer and continued subagent review:
+
+- Table resize-forward follow-up stress/proof pass: 1-3 focused days.
+- Correctness alpha, with major known semantic races closed and guarded: 2-4 focused weeks.
+- Strong beta, with broader stress coverage and major JIT/FFI/upvalue gaps closed: 6-10 focused weeks.
+- Performance pass toward near-LuaJIT behavior on key workloads: 4-10 additional weeks, safest after semantic closure.
+- Production-confidence soak and workload validation: 3-6 months.
+
+If safety/stability stays ahead of LuaJIT-level speed, the credible path is shorter: close semantic races first, then optimize only large, localized regressions.
+
+## Immediate Next Steps
+
+1. Commit and push the table resize-forward slice.
+2. Add stress tests specifically for resize vs weak clear, resize vs GC traversal, and resize vs JIT stores.
+3. Start the source local cell/upvalue ownership slice.
+4. Start the traced FFI native-state protocol slice.
+5. Run fresh pinned benchmarks after correctness work lands, then update the performance forecast with data.
+
+## Main Risks
+
+- Table resize remains the largest correctness risk because it combines replacement generation publication, concurrent readers/writers, GC visibility, weak clearing, and JIT fast paths.
+- Colocated arrays still need careful treatment because they cannot use separated-array `next_gen`.
+- More lockless is not automatically better; rare lifecycle coordination should stay simple if lockless replacement would weaken stability.
+- Performance can be recovered later, but optimizing before semantic closure risks reintroducing races.

@@ -316,6 +316,11 @@ LJ_FUNC TValue *lj_tab_storethread(lua_State *L, TValue *dst, lua_State *th);
 LJ_FUNC TValue *lj_tab_storeproto(lua_State *L, TValue *dst, GCproto *pt);
 LJ_FUNC TValue *lj_tab_storefunc(lua_State *L, TValue *dst, GCfunc *fn);
 LJ_FUNC TValue *lj_tab_storeudata(lua_State *L, TValue *dst, GCudata *ud);
+LJ_FUNC TValue *lj_tab_forwarded_array_slot(GCtab *t, TValue *array,
+					    MSize asize, MSize idx,
+					    TValue *valp);
+LJ_FUNC TValue *lj_tab_forwarded_hash_slot(GCtab *t, Node *node, MSize hmask,
+					   cTValue *key, TValue *valp);
 
 static LJ_AINLINE int lj_tab_array_forward_hop(const GCtab *t, TValue **arrayp,
 					       MSize *asizep)

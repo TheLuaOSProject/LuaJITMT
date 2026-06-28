@@ -798,6 +798,27 @@ static LJ_AINLINE TValue *lj_tab_array_nextgen_acq(const TValue *array)
 #endif
 }
 
+static LJ_AINLINE int lj_tab_array_nextgen_cas(TValue *array,
+					       const TValue **oldp,
+					       const TValue *next)
+{
+#if LJ_GC64
+  uint64_t old = (uint64_t)(uintptr_t)(const void *)*oldp;
+  int ok = la_cas64(&lj_tab_array_hdrw(array)->next_gen.ptr64, &old,
+		    (uint64_t)(uintptr_t)(const void *)next,
+		    LA_ACQ_REL, LA_ACQ);
+  *oldp = (const TValue *)(const void *)(uintptr_t)old;
+  return ok;
+#else
+  uint32_t old = (uint32_t)(uintptr_t)(const void *)*oldp;
+  int ok = la_cas32(&lj_tab_array_hdrw(array)->next_gen.ptr32, &old,
+		    (uint32_t)(uintptr_t)(const void *)next,
+		    LA_ACQ_REL, LA_ACQ);
+  *oldp = (const TValue *)(const void *)(uintptr_t)old;
+  return ok;
+#endif
+}
+
 static LJ_AINLINE void lj_tab_array_nextgen_rel(TValue *array,
 						const TValue *next)
 {
@@ -828,6 +849,21 @@ static LJ_AINLINE void lj_tab_array_hdr_flags_or_rel(TValue *array,
   do {
     want = old | (uint32_t)flags;
   } while (old != want && !la_cas32(word, &old, want, LA_ACQ_REL, LA_ACQ));
+}
+
+static LJ_AINLINE int lj_tab_array_hdr_flags_try_or_rel(TValue *array,
+							MSize flags)
+{
+  uint32_t *word = &lj_tab_array_hdrw(array)->acap;
+  uint32_t old = la_load32_acq(word);
+  uint32_t want;
+  flags &= TABARRAY_FLAGS_MASK;
+  do {
+    if (old & (uint32_t)flags)
+      return 0;
+    want = old | (uint32_t)flags;
+  } while (!la_cas32(word, &old, want, LA_ACQ_REL, LA_ACQ));
+  return 1;
 }
 
 static LJ_AINLINE MSize lj_tab_array_snapshot_acq(const GCtab *t,
@@ -935,6 +971,19 @@ static LJ_AINLINE MSize lj_tab_node_hdr_flags_acq(const Node *node)
 	 TABNODE_FLAGS_MASK;
 }
 
+static LJ_AINLINE uint32_t lj_tab_node_hdr_flags_word_acq(const Node *node)
+{
+  return la_load32_acq(&lj_tab_node_hdr(node)->flags);
+}
+
+static LJ_AINLINE int lj_tab_node_hdr_flags_word_cas(Node *node,
+						     uint32_t *oldp,
+						     uint32_t want)
+{
+  return la_cas32(&lj_tab_node_hdrw(node)->flags, oldp, want,
+		  LA_ACQ_REL, LA_ACQ);
+}
+
 static LJ_AINLINE MSize lj_tab_node_freecount_acq(const Node *node)
 {
   return (MSize)la_load32_acq(&lj_tab_node_hdr(node)->flags) &
@@ -994,6 +1043,26 @@ static LJ_AINLINE Node *lj_tab_node_nextgen_acq(const Node *node)
 #endif
 }
 
+static LJ_AINLINE int lj_tab_node_nextgen_cas(Node *node, const Node **oldp,
+					      const Node *next)
+{
+#if LJ_GC64
+  uint64_t old = (uint64_t)(uintptr_t)(const void *)*oldp;
+  int ok = la_cas64(&lj_tab_node_hdrw(node)->next_gen.ptr64, &old,
+		    (uint64_t)(uintptr_t)(const void *)next,
+		    LA_ACQ_REL, LA_ACQ);
+  *oldp = (const Node *)(const void *)(uintptr_t)old;
+  return ok;
+#else
+  uint32_t old = (uint32_t)(uintptr_t)(const void *)*oldp;
+  int ok = la_cas32(&lj_tab_node_hdrw(node)->next_gen.ptr32, &old,
+		    (uint32_t)(uintptr_t)(const void *)next,
+		    LA_ACQ_REL, LA_ACQ);
+  *oldp = (const Node *)(const void *)(uintptr_t)old;
+  return ok;
+#endif
+}
+
 static LJ_AINLINE void lj_tab_node_nextgen_rel(Node *node, const Node *next)
 {
 #if LJ_GC64
@@ -1020,6 +1089,20 @@ static LJ_AINLINE void lj_tab_node_hdr_flags_or_rel(Node *node, MSize flags)
   do {
     want = old | (uint32_t)flags;
   } while (old != want && !la_cas32(word, &old, want, LA_ACQ_REL, LA_ACQ));
+}
+
+static LJ_AINLINE int lj_tab_node_hdr_flags_try_or_rel(Node *node, MSize flags)
+{
+  uint32_t *word = &lj_tab_node_hdrw(node)->flags;
+  uint32_t old = la_load32_acq(word);
+  uint32_t want;
+  flags &= TABNODE_FLAGS_MASK;
+  do {
+    if (old & (uint32_t)flags)
+      return 0;
+    want = old | (uint32_t)flags;
+  } while (!la_cas32(word, &old, want, LA_ACQ_REL, LA_ACQ));
+  return 1;
 }
 
 static LJ_AINLINE Node *lj_tab_node_snapshot_acq(const GCtab *t,

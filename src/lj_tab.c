@@ -194,6 +194,63 @@ static TValue *tab_forwarded_setslot(GCtab *t, Node **nodep, MSize *hmaskp,
   return NULL;
 }
 
+TValue *lj_tab_forwarded_array_slot(GCtab *t, TValue *array, MSize asize,
+				    MSize idx, TValue *valp)
+{
+  for (;;) {
+    TValue *nextarray = array;
+    MSize nextasize = asize;
+    TValue *slot = NULL;
+    if (!lj_tab_array_forward_hop(t, &nextarray, &nextasize))
+      return NULL;
+    if (idx < nextasize) {
+      slot = &nextarray[idx];
+    } else if (idx <= (MSize)INT32_MAX) {
+      slot = (TValue *)lj_tab_getinth(t, (int32_t)idx);
+    }
+    if (slot) {
+      lj_tv_load_acq(valp, slot);
+      if (tvisforward(valp)) {
+	array = nextarray;
+	asize = nextasize;
+	continue;
+      }
+      if (!tab_val_absent(valp))
+	return slot;
+    }
+    if (lj_tab_array_acq(t) == array && lj_tab_array_is_retiring(t, array)) {
+      lj_tab_wait_no_l();
+      continue;
+    }
+    return NULL;
+  }
+}
+
+TValue *lj_tab_forwarded_hash_slot(GCtab *t, Node *node, MSize hmask,
+				   cTValue *key, TValue *valp)
+{
+  for (;;) {
+    Node *hopnode = node;
+    MSize hophmask = hmask;
+    TValue *slot = tab_forwarded_setslot(t, &hopnode, &hophmask, key);
+    if (slot) {
+      lj_tv_load_acq(valp, slot);
+      if (tvisforward(valp)) {
+	node = hopnode;
+	hmask = hophmask;
+	continue;
+      }
+      if (!tab_val_absent(valp))
+	return slot;
+    }
+    if (lj_tab_node_acq(t) == node && lj_tab_node_is_retiring(node)) {
+      lj_tab_wait_no_l();
+      continue;
+    }
+    return NULL;
+  }
+}
+
 static LJ_AINLINE int tab_array_slot_absent_acq(GCtab *t, TValue **arrayp,
 						MSize *asizep, MSize idx)
 {
@@ -323,6 +380,45 @@ static LJ_AINLINE void tab_storekeylockrel(TValue *dst)
   tv_rawstore_rel(dst, tv_rawload(&keylock));
 }
 
+static int tab_freeze_forward(TValue *slot, TValue *oldp)
+{
+  TValue forward;
+  setforwardV(&forward);
+  for (;;) {
+    lj_tv_load_acq(oldp, slot);
+    if (tvisforward(oldp))
+      return 0;
+    if (tvisnil(oldp))
+      return 0;
+    if (lj_tv_cas(slot, oldp, &forward))
+      return 1;  /* M5: old slot ownership moved to its next generation. */
+    lj_tab_wait_no_l();
+  }
+}
+
+static int tab_store_if_absent_cas(lua_State *L, TValue *dst, cTValue *src)
+{
+  TValue old;
+  UNUSED(L);
+  for (;;) {
+    lj_tv_load_acq(&old, dst);
+    if (!tab_val_absent(&old))
+      return 0;
+    if (lj_tv_cas(dst, &old, src))
+      return 1;
+    if (!tab_val_absent(&old))
+      return 0;
+    lj_tab_wait_no_l();
+  }
+}
+
+static void tab_migrate_store_if_absent(lua_State *L, GCtab *t, TValue *dst,
+					cTValue *key, cTValue *val)
+{
+  UNUSED(t); UNUSED(key);
+  (void)tab_store_if_absent_cas(L, dst, val);
+}
+
 static TValue *tab_rehash_insert(lua_State *L, Node *nodebase, MSize hmask,
 				 Node **freetopp, cTValue *key)
 {
@@ -379,8 +475,7 @@ static TValue *tab_rehash_slot(lua_State *L, TValue *array, uint32_t asize,
 }
 
 static uint32_t tab_rehash_hashcount(Node *oldnode, MSize oldhmask,
-				     TValue *oldarray, uint32_t oldasize,
-				     uint32_t asize)
+				     uint32_t oldasize, uint32_t asize)
 {
   uint32_t count = 0;
   if (oldhmask > 0) {
@@ -388,23 +483,29 @@ static uint32_t tab_rehash_hashcount(Node *oldnode, MSize oldhmask,
     for (i = 0; i <= oldhmask; i++) {
       Node *n = &oldnode[i];
       TValue key, val;
-      lj_tv_load_acq(&val, &n->val);
-      if (!tab_val_absent(&val)) {
-	uint32_t idx;
-	lj_tv_load_acq(&key, &n->key);
-	if (tab_hash_key_hidden(&key))
-	  continue;
-	if (!tab_rehash_arrayindex(asize, &key, &idx))
-	  count++;
+      uint32_t idx;
+    retry_node:
+      lj_tv_load_acq(&key, &n->key);
+      if (tab_key_islocked(&key)) {
+	lj_tab_wait_no_l();
+	goto retry_node;
       }
+      lj_tv_load_acq(&val, &n->val);
+      if (tvisnil(&key)) {
+	if (!tab_val_absent(&val)) {
+	  lj_tab_wait_no_l();
+	  goto retry_node;
+	}
+	continue;
+      }
+      if (tab_hash_key_hidden(&key))
+	continue;
+      if (!tab_rehash_arrayindex(asize, &key, &idx))
+	count++;
     }
   }
-  if (asize < oldasize) {
-    uint32_t i;
-    for (i = asize; i < oldasize; i++)
-      if (!tab_slot_absent_acq(&oldarray[i]))
-	count++;
-  }
+  if (asize < oldasize)
+    count += oldasize - asize;
   return count;
 }
 
@@ -426,8 +527,13 @@ static TabNodeRetire *tab_retire_reserve(lua_State *L, Node *node,
   lj_tab_node_retired_epoch_rel(ret, 0);
   lj_tab_node_retired_armed_rel(ret, 0);
   lj_tab_node_retired_next_rel(ret, NULL);
-  tab_retired_push(G(L), ret);
   return ret;
+}
+
+static void tab_retire_discard(global_State *g, TabNodeRetire *ret)
+{
+  if (ret)
+    lj_mem_freet(g, ret);
 }
 
 static void tab_retire_arm(global_State *g, TabNodeRetire *ret)
@@ -456,8 +562,13 @@ static TabArrayRetire *tab_array_retire_reserve(lua_State *L, TValue *array,
   lj_tab_array_retired_epoch_rel(ret, 0);
   lj_tab_array_retired_armed_rel(ret, 0);
   lj_tab_array_retired_next_rel(ret, NULL);
-  tab_array_retired_push(G(L), ret);
   return ret;
+}
+
+static void tab_array_retire_discard(global_State *g, TabArrayRetire *ret)
+{
+  if (ret)
+    lj_mem_freet(g, ret);
 }
 
 static void tab_array_retire_arm(global_State *g, TabArrayRetire *ret)
@@ -697,25 +808,50 @@ void LJ_FASTCALL lj_tab_free(global_State *g, GCtab *t)
 /* Resize a table to fit the new array/hash part sizes. */
 void lj_tab_resize(lua_State *L, GCtab *t, uint32_t asize, uint32_t hbits)
 {
+  global_State *g = G(L);
   MSize oldhmask;
-  Node *oldnode = lj_tab_node_snapshot_acq(t, &oldhmask);
+  Node *oldnode;
   TValue *oldarray;
-  uint32_t oldasize = (uint32_t)lj_tab_array_snapshot_acq(t, &oldarray);
-  int oldarray_separated = oldarray && !lj_tab_array_is_colocated(t, oldarray);
-  uint32_t oldacap = oldarray_separated ?
+  uint32_t oldasize;
+  int oldarray_separated;
+  uint32_t oldacap;
+  TValue *array;
+  uint32_t newacap;
+  int array_changed;
+  int newarray;
+  MSize newhmask;
+  Node *newnode;
+  Node *newfreetop;
+  uint32_t hashcount;
+  uint32_t hash_flags0;
+  TabNodeRetire *oldret;
+  TabArrayRetire *oldaret;
+  int array_next_claimed;
+  Node *node_succ;
+
+restart_resize:
+  oldnode = lj_tab_node_snapshot_acq(t, &oldhmask);
+  oldasize = (uint32_t)lj_tab_array_snapshot_acq(t, &oldarray);
+  oldarray_separated = oldarray && !lj_tab_array_is_colocated(t, oldarray);
+  oldacap = oldarray_separated ?
     (uint32_t)lj_tab_array_hdr_acap_acq(oldarray) : oldasize;
-  TValue *array = oldarray;
-  uint32_t newacap = oldacap;
-  int array_changed = asize != oldasize;
-  int newarray = 0;
-  MSize newhmask = 0;
-  Node *newnode = NULL;
-  Node *newfreetop = NULL;
-  uint32_t hashcount = tab_rehash_hashcount(oldnode, oldhmask, oldarray,
-					    oldasize, asize);
-  TabNodeRetire *oldret = oldhmask > 0 ?
-    tab_retire_reserve(L, oldnode, oldhmask) : NULL;
-  TabArrayRetire *oldaret = NULL;
+  array = oldarray;
+  newacap = oldacap;
+  array_changed = asize != oldasize;
+  newarray = 0;
+  newhmask = 0;
+  newnode = NULL;
+  newfreetop = NULL;
+  oldret = NULL;
+  oldaret = NULL;
+  array_next_claimed = 0;
+  node_succ = NULL;
+  hash_flags0 = oldhmask > 0 ? lj_tab_node_hdr_flags_word_acq(oldnode) : 0;
+  if (oldhmask > 0 && (hash_flags0 & (uint32_t)TABNODE_FLAG_RETIRING)) {
+    lj_tab_wait_no_l();
+    goto restart_resize;
+  }
+  hashcount = tab_rehash_hashcount(oldnode, oldhmask, oldasize, asize);
   if (hashcount) {
     uint32_t needhbits = hsize2hbits(hashcount);
     if (hbits < needhbits)
@@ -735,16 +871,15 @@ void lj_tab_resize(lua_State *L, GCtab *t, uint32_t asize, uint32_t hbits)
   if (newarray) {
     uint32_t i;
     uint32_t copy = oldasize < newacap ? oldasize : newacap;
-    if (oldarray_separated && oldacap > 0)
-      oldaret = tab_array_retire_reserve(L, oldarray, oldacap);
     array = tab_array_new(L, asize, newacap);
-    for (i = 0; i < copy; i++)
-      lj_tv_load_acq(&array[i], &oldarray[i]);
-    for (i = asize; i < copy; i++)
+    for (i = 0; i < newacap; i++)
       lj_tab_storenilraw(&array[i]);
-    if (LJ_MAX_COLOSIZE != 0 && t->colo > 0)
-      t->colo = (int8_t)(t->colo | 0x80);  /* Mark as separated (colo < 0). */
-    t->acap = newacap;
+    if (!oldarray_separated) {
+      for (i = 0; i < copy; i++)
+	lj_tv_load_acq(&array[i], &oldarray[i]);
+      for (i = asize; i < copy; i++)
+	lj_tab_storenilraw(&array[i]);
+    }
   }
   if (asize > oldasize) {  /* Array part grows? */
     uint32_t i;
@@ -755,15 +890,78 @@ void lj_tab_resize(lua_State *L, GCtab *t, uint32_t asize, uint32_t hbits)
     newnode = newhpart_alloc(L, hbits, &newhmask);
     newfreetop = &newnode[newhmask+1];
   }
+  if (oldhmask > 0)
+    oldret = tab_retire_reserve(L, oldnode, oldhmask);
+  if (newarray && oldarray_separated && oldacap > 0)
+    oldaret = tab_array_retire_reserve(L, oldarray, oldacap);
+  {
+    TValue *curarray;
+    MSize curasize = lj_tab_array_snapshot_acq(t, &curarray);
+    if (curarray != oldarray || (uint32_t)curasize != oldasize ||
+	lj_tab_node_acq(t) != oldnode)
+      goto retry_resize;
+  }
+  if (oldaret) {
+    const TValue *expect = NULL;
+    if (!lj_tab_array_nextgen_cas(oldarray, &expect, array))
+      goto retry_resize;
+    array_next_claimed = 1;
+  }
+  if (oldret) {
+    const Node *expect_next = NULL;
+    uint32_t expect_flags = hash_flags0;
+    uint32_t want_flags = hash_flags0 | (uint32_t)TABNODE_FLAG_RETIRING;
+    node_succ = hbits ? newnode : &g->nilnode;
+    if (!lj_tab_node_nextgen_cas(oldnode, &expect_next, node_succ))
+      goto retry_resize;
+    if (!lj_tab_node_hdr_flags_word_cas(oldnode, &expect_flags, want_flags)) {
+      const Node *revert = node_succ;
+      (void)lj_tab_node_nextgen_cas(oldnode, &revert, NULL);
+      goto retry_resize;
+    }
+    tab_retired_push(g, oldret);
+  }
+  if (oldaret) {
+    lj_tab_array_hdr_flags_or_rel(oldarray, TABARRAY_FLAG_RETIRING);
+    tab_array_retired_push(g, oldaret);
+  }
+  if (newarray && oldarray_separated) {
+    uint32_t i;
+    for (i = 0; i < oldasize; i++) {
+      TValue val;
+      if (tab_freeze_forward(&oldarray[i], &val) && !tab_val_absent(&val)) {
+	if (i < asize) {
+	  tab_migrate_store_if_absent(L, t, &array[i], NULL, &val);
+	} else {
+	  TValue key;
+	  TValue *slot;
+	  lj_assertL(hbits != 0, "missing hash part during array tail rehash");
+	  setnumV(&key, (lua_Number)i);
+	  slot = tab_rehash_insert(L, newnode, newhmask, &newfreetop, &key);
+	  tab_migrate_store_if_absent(L, t, slot, &key, &val);
+	}
+      }
+    }
+  }
   if (oldhmask > 0) {  /* Reinsert pairs from old hash part. */
     uint32_t i;
     for (i = 0; i <= oldhmask; i++) {
       Node *n = &oldnode[i];
       TValue key, val;
-      lj_tv_load_acq(&val, &n->val);
+      do {
+	lj_tv_load_acq(&key, &n->key);
+	if (!tab_key_islocked(&key))
+	  break;
+	lj_tab_wait_no_l();
+      } while (1);
+      if (oldret) {
+	if (!tab_freeze_forward(&n->val, &val))
+	  continue;
+      } else {
+	lj_tv_load_acq(&val, &n->val);
+      }
       if (!tab_val_absent(&val)) {
 	TValue *slot;
-	lj_tv_load_acq(&key, &n->key);
 	if (tab_hash_key_hidden(&key))
 	  continue;
 	if (hbits) {
@@ -773,25 +971,28 @@ void lj_tab_resize(lua_State *L, GCtab *t, uint32_t asize, uint32_t hbits)
 	  slot = tab_rehash_arrayslot(array, asize, &key);
 	  lj_assertL(slot != NULL, "missing hash part during rehash");
 	}
-	copyTVrel(L, slot, &val);
+	tab_migrate_store_if_absent(L, t, slot, &key, &val);
       }
     }
   }
-  if (hbits && asize < oldasize) {  /* Reinsert old array tail off-table. */
+  if (!oldarray_separated && hbits && asize < oldasize) {
+    /* Reinsert old colocated array tail off-table. */
     uint32_t i;
     for (i = asize; i < oldasize; i++) {
       TValue key, val;
       lj_tv_load_acq(&val, &oldarray[i]);
       if (!tab_val_absent(&val)) {
 	setnumV(&key, (lua_Number)i);
-	copyTVrel(L, tab_rehash_insert(L, newnode, newhmask, &newfreetop, &key),
-		  &val);
+	tab_migrate_store_if_absent(L, t,
+	  tab_rehash_insert(L, newnode, newhmask, &newfreetop, &key),
+	  &key, &val);
       }
     }
   }
-  if (oldaret) {
-    lj_tab_array_nextgen_rel(oldarray, array);
-    lj_tab_array_hdr_flags_or_rel(oldarray, TABARRAY_FLAG_RETIRING);
+  if (newarray) {
+    if (LJ_MAX_COLOSIZE != 0 && t->colo > 0)
+      t->colo = (int8_t)(t->colo | 0x80);  /* Mark as separated (colo < 0). */
+    t->acap = newacap;
   }
   if (asize > oldasize) {
     if (array != oldarray)
@@ -799,10 +1000,6 @@ void lj_tab_resize(lua_State *L, GCtab *t, uint32_t asize, uint32_t hbits)
     lj_tab_asize_rel(t, asize);
     if (oldaret)
       tab_array_retire_arm(G(L), oldaret);
-  }
-  if (oldret) {
-    lj_tab_node_nextgen_rel(oldnode, hbits ? newnode : &G(L)->nilnode);
-    lj_tab_node_hdr_flags_or_rel(oldnode, TABNODE_FLAG_RETIRING);
   }
   /* Publish the rebuilt hash part. */
   if (hbits) {
@@ -830,6 +1027,21 @@ void lj_tab_resize(lua_State *L, GCtab *t, uint32_t asize, uint32_t hbits)
   if (oldhmask > 0)
     lj_assertL(oldret && la_load32_acq(&oldret->armed),
 	       "retired table nodes not armed");
+  return;
+
+retry_resize:
+  if (array_next_claimed) {
+    const TValue *revert = array;
+    (void)lj_tab_array_nextgen_cas(oldarray, &revert, NULL);
+  }
+  if (newnode)
+    tab_node_free(g, newnode, newhmask);
+  if (newarray && array && array != oldarray)
+    tab_array_free(g, array, newacap);
+  tab_retire_discard(g, oldret);
+  tab_array_retire_discard(g, oldaret);
+  lj_tab_wait_no_l();
+  goto restart_resize;
 }
 
 uint32_t lj_tab_reclaim_retired(global_State *g, uint64_t completed_epoch)

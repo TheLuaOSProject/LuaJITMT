@@ -867,6 +867,9 @@ static int gc_traverse_tab(global_State *g, GCtab *t)
     for (i = 0; i < asize; i++) {
       TValue val;
       lj_tv_load_acq(&val, &array[i]);
+      if (tvisforward(&val) &&
+	  !lj_tab_forwarded_array_slot(t, array, asize, i, &val))
+	continue;
       gc_marktv(g, &val);
     }
   }
@@ -890,6 +893,19 @@ static int gc_traverse_tab(global_State *g, GCtab *t)
 	  }
 	}
 #endif
+	if (tvisforward(&val)) {
+	  if (!key_loaded) {
+	    lj_tv_load_acq(&key, &n->key);
+	    key_loaded = 1;
+	  }
+	  while (tviskeylock(&key)) {
+	    gc_root_wait_no_l();
+	    lj_tv_load_acq(&key, &n->key);
+	  }
+	  if (tvisnil(&key) ||
+	      !lj_tab_forwarded_hash_slot(t, node, hmask, &key, &val))
+	    continue;
+	}
 	if (!tvisnil(&val)) {  /* Mark non-empty slot. */
 	  if (!key_loaded)
 	    lj_tv_load_acq(&key, &n->key);
@@ -1461,9 +1477,15 @@ void lj_gc_clearweak_legacy(global_State *g, GCobj *o)
       for (i = 0; i < asize; i++) {
 	/* Clear array slot when value is about to be collected. */
 	TValue val;
+	TValue *slot = &array[i];
 	lj_tv_load_acq(&val, &array[i]);
+	if (tvisforward(&val)) {
+	  slot = lj_tab_forwarded_array_slot(t, array, asize, i, &val);
+	  if (!slot)
+	    continue;
+	}
 	if (gc_mayclear(g, &val, 1))
-	  lj_tab_storenilraw(&array[i]);
+	  lj_tab_storenilraw(slot);
       }
     }
     {
@@ -1472,12 +1494,28 @@ void lj_gc_clearweak_legacy(global_State *g, GCobj *o)
       for (i = 0; i <= hmask; i++) {
 	Node *n = &node[i];
 	TValue key, val;
+	TValue *slot = &n->val;
+	int key_loaded = 0;
 	/* Clear hash slot when key or value is about to be collected. */
 	lj_tv_load_acq(&val, &n->val);
-	if (!tvisnil(&val)) {
+	if (tvisforward(&val)) {
 	  lj_tv_load_acq(&key, &n->key);
+	  key_loaded = 1;
+	  while (tviskeylock(&key)) {
+	    gc_root_wait_no_l();
+	    lj_tv_load_acq(&key, &n->key);
+	  }
+	  if (tvisnil(&key))
+	    continue;
+	  slot = lj_tab_forwarded_hash_slot(t, node, hmask, &key, &val);
+	  if (!slot)
+	    continue;
+	}
+	if (!tvisnil(&val)) {
+	  if (!key_loaded)
+	    lj_tv_load_acq(&key, &n->key);
 	  if (gc_mayclear(g, &key, 0) || gc_mayclear(g, &val, 1))
-	    lj_tab_storenilraw(&n->val);
+	    lj_tab_storenilraw(slot);
 	}
       }
     }
