@@ -1053,18 +1053,16 @@ static int ffi_typecmp_compatptr(FFITypeCmpSnap *ts, CTypeID did,
   return 1;
 }
 
-static int ffi_istype_snapshot(CTState *cts, CTypeID id1, CTypeID id2, int *bp)
+static int ffi_istype_compare(FFITypeCmpSnap *ts, CTypeID id1, CTypeID id2,
+			      int *bp)
 {
-  FFITypeCmpSnap ts;
   CType ct1, ct2, child;
   CTypeID rid1, rid2, cid;
-  int ok = ffi_typecmp_begin(cts, &ts);
+  int ok;
   int b = 0;
-  if (ok < 0)
-    return -1;
-  ok = ffi_typecmp_rawrefid(&ts, id1, &rid1, &ct1);
+  ok = ffi_typecmp_rawrefid(ts, id1, &rid1, &ct1);
   if (ok > 0)
-    ok = ffi_typecmp_rawrefid(&ts, id2, &rid2, &ct2);
+    ok = ffi_typecmp_rawrefid(ts, id2, &rid2, &ct2);
   if (ok > 0) {
     CTInfo info1 = ctype_info_acq(&ct1);
     CTInfo info2 = ctype_info_acq(&ct2);
@@ -1075,30 +1073,59 @@ static int ffi_istype_snapshot(CTState *cts, CTypeID id1, CTypeID id2, int *bp)
     } else if (ctype_type(info1) == ctype_type(info2) &&
 	       size1 == size2) {
       if (ctype_ispointer(info1)) {
-	ok = ffi_typecmp_compatptr(&ts, rid1, &ct1, rid2, &ct2,
+	ok = ffi_typecmp_compatptr(ts, rid1, &ct1, rid2, &ct2,
 				   CCF_IGNQUAL, &b);
       } else if (ctype_isnum(info1) || ctype_isvoid(info1)) {
 	b = ((info1 ^ info2) & ~(CTF_QUAL|CTF_LONG)) == 0;
       }
     } else if (ctype_isstruct(info1) && ctype_isptr(info2)) {
-      ok = ffi_typecmp_rawid(&ts, ctype_cid(info2), &cid, &child);
+      ok = ffi_typecmp_rawid(ts, ctype_cid(info2), &cid, &child);
       if (ok > 0 && rid1 == cid)
 	b = 1;
     }
   } else if (ok == 0) {
     b = 0;
   }
-  if (ok >= 0 && ffi_typecmp_end(&ts) < 0)
-    return -1;
   if (ok < 0)
     return -1;
   *bp = b;
   return 1;
 }
 
+static int ffi_istype_snapshot(CTState *cts, CTypeID id1, CTypeID id2, int *bp)
+{
+  FFITypeCmpSnap ts;
+  int ok = ffi_typecmp_begin(cts, &ts);
+  if (ok < 0)
+    return -1;
+  ok = ffi_istype_compare(&ts, id1, id2, bp);
+  if (ok >= 0 && ffi_typecmp_end(&ts) < 0)
+    return -1;
+  return ok;
+}
+
+static int ffi_istype_predefined(CTState *cts, CTypeID id1, CTypeID id2,
+				 int *bp)
+{
+  FFITypeCmpSnap ts;
+  if (!(id1 > CTID_NONE && id1 <= CTID_CTYPEID &&
+	id2 > CTID_NONE && id2 <= CTID_CTYPEID))
+    return 0;
+  ts.cts = cts;
+  ts.top = CTID_CTYPEID + 1;
+  ts.tabh = ctype_tabh_acq(cts);
+  ts.seq = 0;
+  ts.budget = (MSize)ts.top * 6u;
+  if ((MSize)CTID_CTYPEID >= ctype_tab_sizetab_acq(ts.tabh))
+    return 0;
+  return ffi_istype_compare(&ts, id1, id2, bp) > 0;
+}
+
 static void ffi_istype_snapshot_wait(lua_State *L, CTState *cts,
 				     CTypeID id1, CTypeID id2, int *bp)
 {
+  if (ffi_istype_predefined(cts, id1, id2, bp))
+    return;
   for (;;) {
     int ok = ffi_istype_snapshot(cts, id1, id2, bp);
     if (ok >= 0)

@@ -73,6 +73,24 @@ static void assert_istype_waits_without_lock(lua_State *L, CTState *cts,
   assert(ljt_ctype_parse_seq(cts) == ctx.release_seq);
 }
 
+static void assert_istype_predefined_avoids_wait(lua_State *L, CTState *cts)
+{
+  uint32_t seq0 = ljt_ctype_parse_seq(cts);
+  uint32_t release_seq = ljt_ctype_hold_parse_token(cts);
+
+  ljt_lua_dostring(L,
+    "local ffi = require('ffi')\n"
+    "assert(ffi.istype(lj_m7_istype_snapshot_int, "
+    "lj_m7_istype_snapshot_int_obj) == true)\n"
+    "assert(ffi.istype(lj_m7_istype_snapshot_int, "
+    "lj_m7_istype_snapshot_uint8_obj) == false)\n"
+    "assert(ffi.istype(lj_m7_istype_snapshot_int, "
+    "lj_m7_istype_snapshot_int) == true)\n");
+
+  ljt_ctype_release_parse_token(cts, release_seq);
+  assert(ljt_ctype_parse_seq(cts) == seq0 + 2u);
+}
+
 int main(void)
 {
   lua_State *L = ljt_lua_newstate_openlibs();
@@ -88,7 +106,9 @@ int main(void)
     "lj_m7_istype_snapshot_arr = ffi.typeof('lj_m7_istype_snapshot_t[1]')\n"
     "lj_m7_istype_snapshot_int = ffi.typeof('int')\n"
     "lj_m7_istype_snapshot_uint8 = ffi.typeof('uint8_t')\n"
-    "lj_m7_istype_snapshot_obj = lj_m7_istype_snapshot_ct()\n");
+    "lj_m7_istype_snapshot_obj = lj_m7_istype_snapshot_ct()\n"
+    "lj_m7_istype_snapshot_int_obj = lj_m7_istype_snapshot_int()\n"
+    "lj_m7_istype_snapshot_uint8_obj = lj_m7_istype_snapshot_uint8()\n");
 
   cts = ctype_ctsG(G(L));
   assert(cts != NULL);
@@ -119,9 +139,13 @@ int main(void)
   seq1 = ljt_ctype_parse_seq(cts);
   assert(seq1 == seq0);
 
-  assert_istype_waits_without_lock(L, cts, tg);
+  assert_istype_predefined_avoids_wait(L, cts);
   seq1 = ljt_ctype_parse_seq(cts);
   assert(seq1 == seq0 + 2u);
+
+  assert_istype_waits_without_lock(L, cts, tg);
+  seq1 = ljt_ctype_parse_seq(cts);
+  assert(seq1 == seq0 + 4u);
 
   ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"
