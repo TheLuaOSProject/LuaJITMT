@@ -323,22 +323,22 @@ for helper in lj_gc2_fixpoint_run lj_gc2_sweep_live_aggregate; do
 done
 if ! grep -qE 'LJ_FUNC int lj_gc2_mark_phase_active[[:space:]]*[(]' \
     "$ROOT/src/lj_gc2.h"; then
-  printf '%s\n' 'lj_gc2_mark_phase_active declaration is required for legacy mark-step phase ownership' >&2
+  printf '%s\n' 'lj_gc2_mark_phase_active declaration is required for classic mark-step phase ownership' >&2
   exit 1
 fi
 if ! grep -qE '^int lj_gc2_mark_phase_active[[:space:]]*[(]' \
     "$ROOT/src/lj_gc2.c"; then
-  printf '%s\n' 'lj_gc2_mark_phase_active definition is required for legacy mark-step phase ownership' >&2
+  printf '%s\n' 'lj_gc2_mark_phase_active definition is required for classic mark-step phase ownership' >&2
   exit 1
 fi
 if ! grep -qF 'lj_gc2_mark_phase_active(g)' "$ROOT/src/lj_gc.c"; then
-  printf '%s\n' 'legacy GC mark-step policy must query lj_gc2_mark_phase_active' >&2
+  printf '%s\n' 'classic GC mark-step policy must query lj_gc2_mark_phase_active' >&2
   exit 1
 fi
 if hits=$(grep -nE -- 'gc2_phase_acq[[:space:]]*[(][[:space:]]*g[[:space:]]*[)]' \
     "$ROOT/src/lj_gc.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
-  printf '%s\n' 'legacy GC must not read raw GC2 phase; use GC2-owned predicates' >&2
+  printf '%s\n' 'classic GC must not read raw GC2 phase; use GC2-owned predicates' >&2
   exit 1
 fi
 if hits=$(grep -nE -- 'lj_gc2_sweep_owner_progress[[:space:]]*[(]|LJ_FUNC .*lj_gc2_sweep_owner_progress[[:space:]]*[(]' \
@@ -488,7 +488,7 @@ if ! grep -qE '^int lj_gc2_finalizer_phase_pending[[:space:]]*[(]' \
   exit 1
 fi
 if ! grep -qF 'lj_gc2_finalizer_phase_pending(g)' "$ROOT/src/lj_gc.c"; then
-  printf '%s\n' 'legacy sweep-to-finalize transition must use lj_gc2_finalizer_phase_pending' >&2
+  printf '%s\n' 'classic sweep-to-finalize transition must use lj_gc2_finalizer_phase_pending' >&2
   exit 1
 fi
 if hits=$(grep -nE -- 'lj_gc2_finalizer_queue_pending[[:space:]]*[(]' \
@@ -580,10 +580,10 @@ if ! grep -qF 'lj_gc2_sweep_bridge_close(g)' "$ROOT/src/lj_gc.c"; then
   printf '%s\n' 'sweep close must use lj_gc2_sweep_bridge_close' >&2
   exit 1
 fi
-if hits=$(grep -nE -- 'lj_gc2_sweep_to_idle[[:space:]]*[(]|lj_gc2_legacy_cycle_end[[:space:]]*[(]' \
+if hits=$(grep -nE -- 'lj_gc2_sweep_to_idle[[:space:]]*[(]|lj_gc2_cycle_to_idle[[:space:]]*[(]' \
     "$ROOT/src/lj_gc.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
-  printf '%s\n' 'legacy GC must not choose sweep-to-idle versus preserve-close directly' >&2
+  printf '%s\n' 'classic GC must not choose sweep-to-idle versus preserve-close directly' >&2
   exit 1
 fi
 if hits=$(grep -nE -- 'lj_gc2_finalizer_sweep_pending[[:space:]]*[(]' \

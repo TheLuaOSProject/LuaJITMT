@@ -148,6 +148,10 @@
 - Removed duplicate M3 finalizer negative scans that M8 already owns through its
   close-time finalizer, callback-stack, and finalizer-spawn behavior gates. M3
   still keeps the positive worker-scheduler ownership checks.
+- Renamed the GC2 lifecycle helper surface to purpose names:
+  `lj_gc2_mark_begin()`, `lj_gc2_preserve_abort_to_idle()`, and
+  `lj_gc2_cycle_to_idle()`. The remaining M3 guard checks the current lower-level
+  cycle-close helper name instead of the removed fork-era label.
 - Public or semantic compatibility helpers such as FFI pointer compatibility
   checks are not removal targets unless the language/API contract changes.
 - Anti-legacy guards that merely prevent reintroducing already-removed wrapper

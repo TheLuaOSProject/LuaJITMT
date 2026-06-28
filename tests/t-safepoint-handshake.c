@@ -690,7 +690,7 @@ int main(void)
 
   lua_newtable(L);
   root_tab = tabV(L->top - 1);
-  lj_gc2_legacy_mark_begin(g);
+  lj_gc2_mark_begin(g);
   assert(lj_gc2_ismarked(g, obj2gco(root_tab)) == 0);
   epoch0 = g->gc2.hs_epoch;
   assert(lj_gc2_handshake(g, LJ_GC2_HS_SCAN_ROOTS) == 1);
@@ -748,13 +748,13 @@ int main(void)
   assert(gc2_ssb_drained_acq(g) == ssb_drained0 + 1u);
   assert(gc2_ssb_items_drained_acq(g) == ssb_items_drained0 + 1u);
   lua_pop(L, 1);
-  lj_gc2_legacy_cycle_end(g);
+  lj_gc2_cycle_to_idle(g);
   assert(tg->mark_active == 0);
   assert(tg->alloc.alloc_black == 0);
 
   lua_newtable(L);
   native_tab = tabV(L->top - 1);
-  lj_gc2_legacy_mark_begin(g);
+  lj_gc2_mark_begin(g);
   assert(lj_gc2_ismarked(g, obj2gco(native_tab)) == 0);
   lj_native_enter(tg);
   assert(tg->in_native == 1);
@@ -770,7 +770,7 @@ int main(void)
   assert(lj_gc2_test_ssb_drain(g) > 0);
   assert(lj_gc2_test_ssb_empty(g));
   lua_pop(L, 1);
-  lj_gc2_legacy_cycle_end(g);
+  lj_gc2_cycle_to_idle(g);
   assert(tg->mark_active == 0);
   assert(tg->alloc.alloc_black == 0);
 

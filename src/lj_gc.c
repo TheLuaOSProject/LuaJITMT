@@ -741,7 +741,7 @@ static void gc_mark_start(global_State *g)
 {
   lua_State *mainL = mainthread_acq(g);
   lua_State *vmL = vmthread_acq(g);
-  lj_gc2_legacy_mark_begin(g);
+  lj_gc2_mark_begin(g);
   lj_gc_list_clear_rel(&g->gc.gray);
   lj_gc_list_clear_rel(&g->gc.grayagain);
   lj_gc_list_clear_rel(&g->gc.weak);
@@ -1817,7 +1817,7 @@ void lj_gc_fullgc(lua_State *L)
   int32_t ostate = vmstate_load_acq(g);
   setvmstate(g, GC);
   if (g->gc.state <= GCSatomic) {  /* Caught somewhere in the middle. */
-    lj_gc2_legacy_preserve_abort(g);
+    lj_gc2_preserve_abort_to_idle(g);
     setmref(g->gc.sweep, &g->gc.root);  /* Sweep everything (preserving it). */
     lj_gc_list_clear_rel(&g->gc.gray);  /* Reset partial propagation lists. */
     lj_gc_list_clear_rel(&g->gc.grayagain);

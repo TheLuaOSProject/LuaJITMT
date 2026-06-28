@@ -56,7 +56,7 @@ int main(void)
   lua_newtable(L);
   tab = tabV(L->top - 1);
 
-  lj_gc2_legacy_mark_begin(g);
+  lj_gc2_mark_begin(g);
   assert(la_load64_acq(&g->gc2.marks_this_round) == 0);
   assert(lj_gc2_markobj(g, NULL) == 0);
   assert(lj_gc2_test_ssb_empty(g));
@@ -90,7 +90,7 @@ int main(void)
   assert(lj_gc2_test_ssb_empty(g));
   assert(la_load64_acq(&g->gc2.marks_this_round) == 4);
 
-  lj_gc2_legacy_cycle_end(g);
+  lj_gc2_cycle_to_idle(g);
   lj_arena_free(&tg->alloc, trav, trav_size);
   lj_arena_free(&tg->alloc, plain, plain_size);
   lj_arena_allocf(&tg->allocd, huge, huge_size, 0);

@@ -378,7 +378,7 @@ static void test_async_mark(lua_State *L, global_State *g, TGState *tg)
   lua_rawseti(L, -4, 1);
 
   wakes0 = gc2_worker_wakes_acq(g);
-  lj_gc2_legacy_mark_begin(g);
+  lj_gc2_mark_begin(g);
   assert(gc2_worker_wakes_acq(g) > wakes0);
   assert(lj_gc2_ismarked(g, obj2gco(parent)) == 0);
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 0);
@@ -399,7 +399,7 @@ static void test_async_mark(lua_State *L, global_State *g, TGState *tg)
   assert(gc2_worker_grey_drained_acq(g) >= grey0 + 3u);
   assert(gc2_worker_active_acq(g) == 0);
 
-  lj_gc2_legacy_cycle_end(g);
+  lj_gc2_cycle_to_idle(g);
   lua_pop(L, 3);
 }
 
@@ -412,7 +412,7 @@ static void test_async_weak(lua_State *L, global_State *g, TGState *tg)
   lua_settop(L, 0);
   make_weak_table(L, &weak, &key, &val);
 
-  lj_gc2_legacy_mark_begin(g);
+  lj_gc2_mark_begin(g);
   assert(lj_gc2_markobj(g, obj2gco(weak)) == 1);
   assert(lj_gc2_flush_ssb(g, tg) == 1);
   for (i = 0; i < 1000 && lj_gc2_test_weak_snapshot_count(g) == 0; i++)
@@ -433,7 +433,7 @@ static void test_async_weak(lua_State *L, global_State *g, TGState *tg)
   assert(gc2_weak_clear_tables_acq(g) > clears0);
   assert(gc2_worker_active_acq(g) == 0);
 
-  lj_gc2_legacy_cycle_end(g);
+  lj_gc2_cycle_to_idle(g);
   lua_pop(L, 3);
 }
 

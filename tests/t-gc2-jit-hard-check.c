@@ -69,7 +69,7 @@ int main(void)
   lua_settop(L, 0);
   lua_newtable(L);
   parent = tabV(L->top - 1);
-  lj_gc2_legacy_mark_begin(g);
+  lj_gc2_mark_begin(g);
   assert(lj_gc2_markobj(g, obj2gco(parent)) == 1);
 
   run_hard_alloc_trace(L, g, "TNEW",
@@ -98,7 +98,7 @@ int main(void)
     "assert(x == 'abc')\n");
 
   lj_gc_threshold_store(g, g->gc.total + 4u * LJ_GC2_ACCT_FLUSH);
-  lj_gc2_legacy_cycle_end(g);
+  lj_gc2_cycle_to_idle(g);
   lua_close(L);
   puts("t-gc2-jit-hard-check OK: TNEW/CNEW/SNEW x64 GC checks enter GC2 hard assist");
   return 0;

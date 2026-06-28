@@ -41,7 +41,7 @@ static void test_ffi_weak_newindex_target_write_barrier(lua_State *L,
   weak = tabV(L->top - 4);
   val = tabV(L->top - 2);
 
-  lj_gc2_legacy_mark_begin(g);
+  lj_gc2_mark_begin(g);
   assert(lj_gc2_markobj(g, obj2gco(weak)) == 1);
   flush_and_drain(g, tg);
   assert(lj_gc2_ismarked(g, obj2gco(val)) == 0);
@@ -64,7 +64,7 @@ static void test_ffi_weak_newindex_target_write_barrier(lua_State *L,
   assert(tvistab(L->top - 1) && tabV(L->top - 1) == val);
   lua_pop(L, 1);
 
-  lj_gc2_legacy_cycle_end(g);
+  lj_gc2_cycle_to_idle(g);
 }
 
 static void test_ffi_newindex_target_parent_barrier(lua_State *L,
@@ -86,7 +86,7 @@ static void test_ffi_newindex_target_parent_barrier(lua_State *L,
   target = tabV(L->top - 4);
   val = tabV(L->top - 2);
 
-  lj_gc2_legacy_mark_begin(g);
+  lj_gc2_mark_begin(g);
   assert(lj_gc2_markobj(g, obj2gco(target)) == 1);
   flush_and_drain(g, tg);
   assert(lj_gc2_ismarked(g, obj2gco(val)) == 0);
@@ -103,7 +103,7 @@ static void test_ffi_newindex_target_parent_barrier(lua_State *L,
   assert(tvistab(L->top - 1) && tabV(L->top - 1) == val);
   lua_pop(L, 1);
 
-  lj_gc2_legacy_cycle_end(g);
+  lj_gc2_cycle_to_idle(g);
 }
 #endif
 

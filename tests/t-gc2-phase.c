@@ -1,5 +1,5 @@
 /*
-** Focused test for the GC2 legacy phase scaffold.
+** Focused test for the GC2 phase bridge scaffold.
 */
 
 #include <assert.h>
@@ -330,7 +330,7 @@ static void test_finalizer_scan_waits_for_drain(lua_State *L, global_State *g)
   assert(unlink_root_object(g, a));
   lua_pop(L, 1);
 
-  lj_gc2_legacy_mark_begin(g);
+  lj_gc2_mark_begin(g);
   assert(g->gc2.phase == LJ_GC2_MARK);
   assert(lj_gc2_ismarked(g, a) == 0);
 
@@ -361,7 +361,7 @@ static void test_finalizer_scan_waits_for_drain(lua_State *L, global_State *g)
   assert(o == a);
   assert(lj_gc2_test_finalizer_dequeue(g) == NULL);
   relink_root_object(g, a);
-  lj_gc2_legacy_preserve_abort(g);
+  lj_gc2_preserve_abort_to_idle(g);
   assert(g->gc2.phase == LJ_GC2_IDLE);
 }
 #endif
@@ -484,7 +484,7 @@ static void test_mark_complete_waits_for_peer(lua_State *L, global_State *g,
   lua_rawseti(L, -3, 1);
   lua_pop(L, 1);
 
-  lj_gc2_legacy_mark_begin(g);
+  lj_gc2_mark_begin(g);
   setgcrefnull(g->gc.gray);
   setgcrefnull(g->gc.grayagain);
   setgcrefnull(g->gc.weak);
@@ -510,7 +510,7 @@ static void test_mark_complete_waits_for_peer(lua_State *L, global_State *g,
   assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
 
   g->gc.state = GCSpause;
-  lj_gc2_legacy_cycle_end(g);
+  lj_gc2_cycle_to_idle(g);
   lua_pop(L, 1);
 }
 
@@ -533,7 +533,7 @@ static void test_incremental_worker_step(lua_State *L, global_State *g,
   lua_pushvalue(L, -2);
   lua_rawseti(L, -4, 1);  /* parent[1] = child. */
 
-  lj_gc2_legacy_mark_begin(g);
+  lj_gc2_mark_begin(g);
   setgcrefnull(g->gc.gray);
   setgcrefnull(g->gc.grayagain);
   setgcrefnull(g->gc.weak);
@@ -560,7 +560,7 @@ static void test_incremental_worker_step(lua_State *L, global_State *g,
 
   g->gc.stepmul = old_stepmul;
   g->gc.state = GCSpause;
-  lj_gc2_legacy_cycle_end(g);
+  lj_gc2_cycle_to_idle(g);
   lua_pop(L, 3);
 }
 
@@ -583,7 +583,7 @@ static void test_incremental_fixpoint_round(lua_State *L, global_State *g)
   lua_rawseti(L, -4, 1);  /* parent[1] = child. */
   lua_pop(L, 2);  /* Keep only parent as the stack root. */
 
-  lj_gc2_legacy_mark_begin(g);
+  lj_gc2_mark_begin(g);
   setgcrefnull(g->gc.gray);
   setgcrefnull(g->gc.grayagain);
   setgcrefnull(g->gc.weak);
@@ -615,7 +615,7 @@ static void test_incremental_fixpoint_round(lua_State *L, global_State *g)
 
   g->gc.stepmul = old_stepmul;
   g->gc.state = GCSpause;
-  lj_gc2_legacy_cycle_end(g);
+  lj_gc2_cycle_to_idle(g);
   lua_pop(L, 1);
 }
 
@@ -754,7 +754,7 @@ int main(void)
   lua_pushvalue(L, -1);
   lua_setfield(L, -3, "child");
   cycle0 = g->gc2.cycle;
-  lj_gc2_legacy_mark_begin(g);
+  lj_gc2_mark_begin(g);
   assert(g->gc2.phase == LJ_GC2_MARK);
   assert(g->gc2.cycle == cycle0 + 1u);
   assert(la_load64_acq(&g->gc2.marks_this_round) == 0);
@@ -879,7 +879,7 @@ int main(void)
   lua_pop(L, 2);
   lj_arena_free(&tg->alloc, phase_plain, 64);
   lj_arena_free(&tg->alloc, phase_trav, 64);
-  lj_gc2_legacy_mark_begin(g);
+  lj_gc2_mark_begin(g);
   assert(g->gc2.phase == LJ_GC2_MARK);
   assert(tg->mark_active == 1);
   assert(tg->alloc.alloc_black == 1);
@@ -888,7 +888,7 @@ int main(void)
   assert(tg->mark_active == 1);
   assert(tg->alloc.alloc_black == 1);
   preserve_abort_to_idle0 = gc2_preserve_abort_to_idle_acq(g);
-  lj_gc2_legacy_preserve_abort(g);
+  lj_gc2_preserve_abort_to_idle(g);
   assert(gc2_preserve_abort_to_idle_acq(g) ==
 	 preserve_abort_to_idle0 + 1u);
   assert_idle(g, tg);
@@ -1041,6 +1041,6 @@ int main(void)
   assert_idle(g, tg);
 
   lua_close(L);
-  printf("t-gc2-phase OK: legacy GC2 phases and mirrors verified\n");
+  printf("t-gc2-phase OK: GC2 phase bridge and mirrors verified\n");
   return 0;
 }

@@ -36,7 +36,7 @@ static int paranoia_finalizer(lua_State *L)
 static void run_true_minor_cycle(lua_State *L, global_State *g, TGState *tg)
 {
   uint32_t swept;
-  lj_gc2_legacy_mark_begin(g);
+  lj_gc2_mark_begin(g);
   assert(la_load32_acq(&g->gc2.cycle_sweep_minor) == 1);
   assert(la_load32_acq(&g->gc2.cycle_roots_minor) == 1);
   lj_gc2_scan_cycle_roots(g, L);
@@ -50,7 +50,7 @@ static void run_true_minor_cycle(lua_State *L, global_State *g, TGState *tg)
     swept = lj_gc2_test_sweep_owner_progress(g, tg, LJ_GC2_SWEEP_BATCH);
   } while (swept != 0);
   assert(!lj_gc2_sweep_pending(g));
-  lj_gc2_legacy_cycle_end(g);
+  lj_gc2_cycle_to_idle(g);
 }
 
 static void test_minor_major_paranoia(void)
@@ -130,7 +130,7 @@ int main(void)
   assert(lj_gc2_test_paranoia_root_diff(g) == 0);
   assert(lj_gc2_test_ssb_empty(g));
 
-  lj_gc2_legacy_mark_begin(g);
+  lj_gc2_mark_begin(g);
   assert(lj_gc2_test_ssb_empty(g));
   stray = lj_arena_alloc(&tg->alloc, &tg->prng, 64, LJ_AF_TRAVERSABLE);
   assert(stray != NULL);
@@ -138,7 +138,7 @@ int main(void)
   lj_arena_free(&tg->alloc, stray, 64);
   assert(lj_gc2_test_paranoia_root_diff(g) == 0);
 
-  lj_gc2_legacy_cycle_end(g);
+  lj_gc2_cycle_to_idle(g);
 
   lj_tg_init_thread(g, &extra_tg, NULL, 1);
   extra_tg.tid = tg->tid + 3000u;
@@ -148,14 +148,14 @@ int main(void)
   lj_tg_attach(g, &extra_tg);
   assert(g->gc2.n_threads == 2);
 
-  lj_gc2_legacy_mark_begin(g);
+  lj_gc2_mark_begin(g);
   extra_stray = lj_arena_alloc(&extra_tg.alloc, &extra_tg.prng, 64,
 			       LJ_AF_TRAVERSABLE);
   assert(extra_stray != NULL);
   assert(lj_gc2_test_paranoia_root_diff(g) == 1);
   lj_arena_free(&extra_tg.alloc, extra_stray, 64);
   assert(lj_gc2_test_paranoia_root_diff(g) == 0);
-  lj_gc2_legacy_cycle_end(g);
+  lj_gc2_cycle_to_idle(g);
 
   lj_tg_detach(g, &extra_tg);
   assert(g->gc2.n_threads == 1);

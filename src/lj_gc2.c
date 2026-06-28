@@ -1152,7 +1152,7 @@ static int gc2_mark_trace_root(global_State *g, TraceNo traceno)
 }
 #endif
 
-void lj_gc2_legacy_mark_begin(global_State *g)
+void lj_gc2_mark_begin(global_State *g)
 {
   TGState *tg;
   uint32_t leader;
@@ -2182,7 +2182,7 @@ void lj_gc2_sweep_bridge_boundary_reached(global_State *g)
   lj_gc2_sweep_bridge_ready(g);
 }
 
-void lj_gc2_legacy_preserve_abort(global_State *g)
+void lj_gc2_preserve_abort_to_idle(global_State *g)
 {
   uint32_t phase;
   if (!g)
@@ -2228,7 +2228,7 @@ int lj_gc2_sweep_to_idle(global_State *g)
   return 1;
 }
 
-void lj_gc2_legacy_cycle_end(global_State *g)
+void lj_gc2_cycle_to_idle(global_State *g)
 {
   uint32_t phase;
   if (!g)
@@ -2251,7 +2251,7 @@ int lj_gc2_sweep_bridge_close(global_State *g)
 {
   if (gc2_phase_acq(g) == LJ_GC2_SWEEP)
     return lj_gc2_sweep_to_idle(g);
-  lj_gc2_legacy_cycle_end(g);  /* Preserving full-GC fast-forward sweep. */
+  lj_gc2_cycle_to_idle(g);  /* Preserving full-GC fast-forward sweep. */
   return 1;
 }
 

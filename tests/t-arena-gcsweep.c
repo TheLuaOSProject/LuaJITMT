@@ -132,7 +132,7 @@ static void test_worker_owned_sweep_direct(void)
   assert(gc2_worker_active_acq(g) == 0);
 
   lj_arena_alloc_restore_sweep_kind(&extra_tg.alloc, LJ_ARENAK_TRAVERSABLE);
-  lj_gc2_legacy_cycle_end(g);
+  lj_gc2_cycle_to_idle(g);
   lj_tg_detach(g, &extra_tg);
   assert(g->gc2.n_threads == 1);
   assert(lj_tg_reclaim_dead(g) == 1u);
@@ -195,7 +195,7 @@ static void test_minor_sweep_identity_direct(void)
   assert(ptr_state(live) == 3);
   assert(lj_arena_of(live)->hdr.sweep_epoch == sweep_cycle);
 
-  lj_gc2_legacy_cycle_end(g);
+  lj_gc2_cycle_to_idle(g);
   la_store32_rel(&g->gc2.cycle_minor_requested, 0);
   la_store32_rel(&g->gc2.cycle_sweep_minor, 0);
   la_store32_rel(&g->gc2.minor_sweep_enabled, 0);

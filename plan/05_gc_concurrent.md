@@ -523,7 +523,7 @@ steps so a worker-initiated close handshake can complete during synchronous
 `lua_gc()` driving. Legacy sweep still owns the final Lua GC state transition to
 `GCSpause`; full scheduler ownership of that state machine remains staged.
 The partial-cycle full-GC fast-forward path still calls
-`lj_gc2_legacy_preserve_abort()` instead of entering `P_SWEEP`; that path now
+`lj_gc2_preserve_abort_to_idle()` instead of entering `P_SWEEP`; that path now
 records real active-phase aborts with `preserve_abort_to_idle` and retains the
 legacy close wrapper for its preserving sweep. Sweep-to-idle closure now also
 aggregates swept traversable arena live cells and marked

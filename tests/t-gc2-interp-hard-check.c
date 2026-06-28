@@ -19,7 +19,7 @@
 static void arm_gc2_hard_mark(global_State *g)
 {
   lj_gc_threshold_store(g, LJ_MAX_MEM);
-  lj_gc2_legacy_mark_begin(g);
+  lj_gc2_mark_begin(g);
   la_store64_rel(&g->gc2.hard_bytes, 1);
   la_store32_rel(&g->gc2.assist_shift, 0);
   la_store64_rel(&g->gc2.alloc_since_trigger, 2);
@@ -27,7 +27,7 @@ static void arm_gc2_hard_mark(global_State *g)
 
 static void finish_gc2_mark(global_State *g)
 {
-  lj_gc2_legacy_cycle_end(g);
+  lj_gc2_cycle_to_idle(g);
   g->gc.state = GCSpause;
   lj_gc_threshold_store(g, g->gc.total + 4u * LJ_GC2_ACCT_FLUSH);
 }
