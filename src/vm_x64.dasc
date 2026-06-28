@@ -5376,6 +5376,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 #endif
   case BC_IFUNCF:
     |  ins_AD  // BASE = new base, RA = framesize, RD = nargs+1
+#if LJ_HASJIT
     if (op == BC_JFUNCF) {
       |  cmp TGPOLL, 0
       |  jz >1
@@ -5383,6 +5384,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
       |  jmp ->vm_safepoint
       |1:
     }
+#endif
     |  mov KBASE, [PC-4+PC2PROTO(k)]
     |  mov L:RB, SAVE_L
     |  lea RA, [BASE+RA*8]		// Top of frame.
@@ -5392,6 +5394,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  cmp NARGS:RDd, RAd		// Check for missing parameters.
     |  jbe >3
     |2:
+#if LJ_HASJIT
     if (op == BC_JFUNCF) {
       |  movzx RDd, PC_RD
       |  load_J RA
@@ -5402,7 +5405,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
       |  ins_next
       |4:
       |  jmp =>BC_JLOOP
-    } else {
+    } else
+#endif
+    {
 #if LJ_HASJIT
       |  ins_next
 #else
@@ -5429,6 +5434,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 
   case BC_IFUNCV:
     |  ins_AD  // BASE = new base, RA = framesize, RD = nargs+1
+#if LJ_HASJIT
     if (op == BC_JFUNCV) {
       |  cmp TGPOLL, 0
       |  jz >1
@@ -5436,6 +5442,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
       |  jmp ->vm_safepoint
       |1:
     }
+#endif
     |  lea RBd, [NARGS:RD*8+FRAME_VARG+8]
     |  lea RD, [BASE+NARGS:RD*8+8]
     |  mov LFUNC:KBASE, [BASE-16]
@@ -5462,10 +5469,13 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  sub RBd, 1
     |  jnz <1
     |2:
+#if LJ_HASJIT
     if (op == BC_JFUNCV) {
       |  movzx RDd, PC_RD
       |  jmp =>BC_JLOOP
-    } else {
+    } else
+#endif
+    {
       |  mov KBASE, [PC-4+PC2PROTO(k)]
       |  cmp TGPOLL, 0
       |  jnz ->vm_safepoint

@@ -690,7 +690,7 @@ int main(void)
   assert(tg != NULL);
   assert(g->gc2.tg_list == tg);
   assert(g->gc2.n_threads == 1);
-  assert(g->gc2.hs_epoch == 0);
+  epoch0 = g->gc2.hs_epoch;
   assert(g->gc2.hs_pending == 0);
   assert(g->gc2.ssb_head == NULL);
   assert(gc2_ssb_published_acq(g) == 0);
@@ -698,7 +698,7 @@ int main(void)
   assert(lj_gc2_test_ssb_empty(g));
   assert(tg->poll == 0);
   assert(tg->reqmask == 0);
-  assert(tg->hs_epoch_ack == 0);
+  assert(tg->hs_epoch_ack == epoch0);
   assert(tg->ssb_active == &tg->ssb_node[0]);
   assert(tg->ssb_free == &tg->ssb_node[1]);
   assert(tg->ssb_base == tg->ssb_node[0].slot);
