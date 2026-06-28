@@ -55,6 +55,19 @@ if ! awk '
   exit 1
 fi
 
+for fn in lua_rawequal lua_equal lua_lessthan; do
+  if ! awk -v fn="$fn" '
+    $0 ~ ("^LUA_API int " fn "\\(") { in_fn = 1; found = 1 }
+    in_fn && /index2adr_read\(L, idx1, &snap1\)/ { saw_idx1 = 1 }
+    in_fn && /index2adr_read\(L, idx2, &snap2\)/ { saw_idx2 = 1 }
+    in_fn && /^}/ { in_fn = 0 }
+    END { exit(found && saw_idx1 && saw_idx2 ? 0 : 1) }
+  ' "$ROOT/src/lj_api.c"; then
+    printf '%s\n' "$fn must acquire-snapshot pseudo-index C upvalues before comparison" >&2
+    exit 1
+  fi
+done
+
 if ! awk '
   /^static LJ_AINLINE void index2adr_cupvalue_store_rel\(/ { in_fn = 1 }
   in_fn && /api_trace_flush_mutation\(L\)/ { saw_flush = 1 }

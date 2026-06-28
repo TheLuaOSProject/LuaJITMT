@@ -197,6 +197,24 @@ static int objlen_reader_c(lua_State *L)
   return 1;
 }
 
+static int compare_api_reader_c(lua_State *L)
+{
+  int low = lua_upvalueindex(1);
+  int high = lua_upvalueindex(2);
+  int str1 = lua_upvalueindex(3);
+  int str2 = lua_upvalueindex(4);
+
+  assert(lua_lessthan(L, low, high));
+  assert(!lua_lessthan(L, high, low));
+  assert(!lua_equal(L, low, high));
+  assert(!lua_rawequal(L, low, high));
+  assert(lua_equal(L, str1, str2));
+  assert(lua_rawequal(L, str1, str2));
+
+  lua_pushboolean(L, 1);
+  return 1;
+}
+
 static int table_api_reader_c(lua_State *L)
 {
   int uv = lua_upvalueindex(1);
@@ -371,6 +389,22 @@ static void exercise_number_readers(lua_State *L)
   lua_pushcclosure(L, objlen_reader_c, 1);
   check_lua(L, lua_pcall(L, 0, 1, 0), "objlen reader");
   assert_string(L, -1, "789");
+  lua_pop(L, 1);
+
+  lua_settop(L, base);
+}
+
+static void exercise_compare_apis(lua_State *L)
+{
+  int base = lua_gettop(L);
+
+  lua_pushinteger(L, 3);
+  lua_pushinteger(L, 7);
+  lua_pushliteral(L, "same");
+  lua_pushliteral(L, "same");
+  lua_pushcclosure(L, compare_api_reader_c, 4);
+  check_lua(L, lua_pcall(L, 0, 1, 0), "compare api reader");
+  assert(lua_toboolean(L, -1));
   lua_pop(L, 1);
 
   lua_settop(L, base);
@@ -589,6 +623,7 @@ int main(void)
   exercise_upvalue_reader(L, push_upvalue_c, "pushvalue");
   exercise_upvalue_reader(L, copy_upvalue_c, "copy");
   exercise_number_readers(L);
+  exercise_compare_apis(L);
   exercise_table_apis(L);
   exercise_metatable_apis(L);
   exercise_function_env_apis(L);
