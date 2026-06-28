@@ -14,14 +14,23 @@ end
 do
   local wv = setmetatable({}, { __mode = "v" })
   local keep = { tag = "keep" }
+  local objkey = { tag = "object-key" }
+  local objval = { tag = "object-value" }
+  local key_observer = setmetatable({}, { __mode = "v" })
   wv.keep = keep
   wv.drop = { tag = "drop" }
   wv.str = "m8 weak strings stay strong"
+  wv[objkey] = objval
+  key_observer[1] = objkey
+  objkey = nil
   fullgc(3)
   assert(wv.keep == keep, "weak-value table cleared an anchored value")
   assert(wv.drop == nil, "weak-value table kept an unreachable value")
   assert(wv.str == "m8 weak strings stay strong",
 	 "weak-value table cleared a string value")
+  assert(key_observer[1] ~= nil, "weak-value table cleared a live object key")
+  assert(wv[key_observer[1]] == objval,
+	 "weak-value table lost object-keyed live value")
 end
 
 do
@@ -29,14 +38,20 @@ do
   local keepk = { tag = "keep-key" }
   local dropk = { tag = "drop-key" }
   local keepv = { tag = "keep-value" }
+  local dropv = { tag = "drop-value" }
+  local value_observer = setmetatable({}, { __mode = "v" })
   wk[keepk] = keepv
-  wk[dropk] = { tag = "drop-value" }
+  wk[dropk] = dropv
   wk["m8-string-key"] = { tag = "string-key-value" }
+  value_observer[1] = dropv
   dropk = nil
+  dropv = nil
   fullgc(3)
   assert(wk[keepk] == keepv, "weak-key table cleared an anchored key")
   assert(wk["m8-string-key"] ~= nil, "weak-key table cleared a string key")
   assert(npairs(wk) == 2, "weak-key table kept an unreachable key")
+  assert(value_observer[1] == nil,
+	 "weak-key table kept value for unreachable key")
 end
 
 do
@@ -44,18 +59,24 @@ do
   local keepk = { tag = "keep-key" }
   local keepv = { tag = "keep-value" }
   local dropk = { tag = "drop-key" }
+  local dropv = { tag = "drop-value" }
   local key_only = { tag = "key-only" }
+  local value_observer = setmetatable({}, { __mode = "v" })
   wkv[keepk] = keepv
-  wkv[dropk] = { tag = "drop-value" }
+  wkv[dropk] = dropv
   wkv[key_only] = { tag = "drop-value-with-live-key" }
   wkv["m8-string-key"] = "m8-string-value"
+  value_observer[1] = dropv
   dropk = nil
+  dropv = nil
   key_only = nil
   fullgc(3)
   assert(wkv[keepk] == keepv, "weak-kv table cleared anchored entry")
   assert(wkv["m8-string-key"] == "m8-string-value",
 	 "weak-kv table cleared string key/value entry")
   assert(npairs(wkv) == 2, "weak-kv table kept unreachable entries")
+  assert(value_observer[1] == nil,
+	 "weak-kv table kept value for unreachable key")
 end
 
 do

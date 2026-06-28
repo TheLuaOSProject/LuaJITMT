@@ -397,4 +397,14 @@ if hits=$(awk '
   exit 1
 fi
 
+for required in \
+  'weak-value table cleared a live object key' \
+  'weak-key table kept value for unreachable key' \
+  'weak-kv table kept value for unreachable key'; do
+  if ! grep -qF "$required" "$ROOT/tests/t-weak-modes.lua"; then
+    printf '%s\n' "t-weak-modes.lua must cover: ${required}" >&2
+    exit 1
+  fi
+done
+
 exec "$ROOT/tools/ci/lua_test.sh" m8_weak
