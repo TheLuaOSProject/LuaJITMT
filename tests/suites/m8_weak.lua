@@ -53,7 +53,8 @@ local function run_default_matrix(t)
   run_luajit_script_jit_modes(t, "t-ffi-gc-finreg.lua", { "3", "72" })
   build.run_c_fixtures(t, M8_C_FIXTURES, {
     output_suffix = "_m8",
-    cflags = gc2_test_cflags
+    cflags = gc2_test_cflags,
+    timeout = "20s"
   })
 end
 
@@ -69,7 +70,8 @@ local function run_paranoia_matrix(t)
   })
   build.run_c_fixtures(t, M8_C_FIXTURES, {
     output_suffix = "_m8_paranoia",
-    cflags = xcflags
+    cflags = xcflags,
+    timeout = "20s"
   })
 end
 

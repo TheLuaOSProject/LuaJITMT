@@ -257,6 +257,12 @@ Validation:
 - `m8_weak` aggregate is currently blocked by the unrelated
   `t-gc2-traverse_m8` C fixture hang; a direct bounded run returned 124.
 
+Follow-up on 2026-06-28:
+
+- `m8_weak` now passes through the Lua suite runner. The M8 C fixture batches
+  have per-fixture 20s timeouts so any future `t-gc2-traverse_m8` regression
+  fails bounded instead of hanging the aggregate.
+
 Validation:
 
 - `timeout 240s tools/ci/lua_test.sh m4_threading_litmus m4_threading_stress m5_os_reentrant m6_jit_mcode_publish m7_ffi_clib_cache m7_ffi_callback_runtime m7_ffi_carith_l m7_ffi_ctype_intern_l m7_ffi_finreg m7_ffi_metatype`
