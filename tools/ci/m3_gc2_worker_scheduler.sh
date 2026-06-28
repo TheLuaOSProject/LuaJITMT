@@ -363,6 +363,7 @@ if hits=$(grep -nE -- '->[[:space:]]*gc2[.]finalizer_(mpsc|tail|active|owner_tid
     "$ROOT/src/lj_gc.c" \
     "$ROOT/src/lj_gc2.c" \
     "$ROOT/tests/t-gc2-phase.c" \
+    "$ROOT/tests/t-gc2-worker-scheduler.c" \
     "$ROOT/tests/t-gc2-traverse.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
   printf '%s\n' 'raw GC2 finalizer queue/owner state access is forbidden; use gc2_finalizer_* helpers' >&2
@@ -664,6 +665,7 @@ if hits=$(grep -nE -- '->[[:space:]]*gc2[.](finalizer_(queued|dequeued|mpsc_drai
     "$ROOT/src/lib_base.c" \
     "$ROOT/src/lib_threading.c" \
     "$ROOT/tests/t-gc2-phase.c" \
+    "$ROOT/tests/t-gc2-worker-scheduler.c" \
     "$ROOT/tests/t-gc2-traverse.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
   printf '%s\n' 'raw GC2 finalizer counter access is forbidden; use gc2_finalizer_* helpers' >&2
