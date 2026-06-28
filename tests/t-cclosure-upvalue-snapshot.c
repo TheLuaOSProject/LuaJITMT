@@ -156,6 +156,13 @@ static int number_reader_c(lua_State *L)
   assert(lua_isnumber(L, uv));
   assert(lua_isstring(L, uv));
   assert(!lua_iscfunction(L, uv));
+  assert(!lua_isnil(L, uv));
+  assert(!lua_isnone(L, uv));
+  assert(!lua_isnoneornil(L, uv));
+  assert(strcmp(lua_typename(L, lua_type(L, uv)), "number") == 0);
+  assert(strcmp(luaL_typename(L, uv), "number") == 0);
+  luaL_checktype(L, uv, LUA_TNUMBER);
+  luaL_checkany(L, uv);
   assert(lua_toboolean(L, uv));
   assert((int)lua_tonumber(L, uv) == 123);
   assert((int)lua_tonumberx(L, uv, &ok) == 123 && ok);
@@ -347,6 +354,10 @@ static int udata_reader_c(lua_State *L)
   int uv = lua_upvalueindex(1);
   void *p = luaL_testudata(L, uv, "snap_udata");
   assert(p != NULL);
+  assert(lua_isuserdata(L, uv));
+  assert(luaL_checkudata(L, uv, "snap_udata") == p);
+  luaL_checktype(L, uv, LUA_TUSERDATA);
+  luaL_checkany(L, uv);
   assert(lua_touserdata(L, uv) == p);
   assert(lua_topointer(L, uv) != NULL);
   lua_pushboolean(L, 1);

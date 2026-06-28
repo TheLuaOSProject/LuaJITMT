@@ -55,6 +55,18 @@ if ! awk '
   exit 1
 fi
 
+for fn in lua_isuserdata luaL_checkany; do
+  if ! awk -v fn="$fn" '
+    $0 ~ ("^(LUA_API int|LUALIB_API void) " fn "\\(") { in_fn = 1; found = 1 }
+    in_fn && /index2adr_read\(L, idx, &snap\)/ { saw_index = 1 }
+    in_fn && /^}/ { in_fn = 0 }
+    END { exit(found && saw_index ? 0 : 1) }
+  ' "$ROOT/src/lj_api.c"; then
+    printf '%s\n' "$fn must acquire-snapshot pseudo-index C upvalues before type checks" >&2
+    exit 1
+  fi
+done
+
 for fn in lua_rawequal lua_equal lua_lessthan; do
   if ! awk -v fn="$fn" '
     $0 ~ ("^LUA_API int " fn "\\(") { in_fn = 1; found = 1 }
