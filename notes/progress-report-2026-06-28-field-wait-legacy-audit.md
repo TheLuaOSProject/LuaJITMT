@@ -43,6 +43,10 @@ Overall correctness/stability progress: 70-80%.
 - Removed the exact internal M10 legacy mark-suppression helper name. The
   replacement, `lj_gc2_minor_roots_skip_bridge_mark()`, names the actual
   behavior without implying that legacy marking itself is disabled.
+- Removed another internal legacy helper name from the sweep-close bridge. The
+  replacement, `lj_gc2_sweep_bridge_close()`, owns the legacy driver's choice
+  between real `SWEEP -> IDLE` closure and preserving full-GC fast-forward
+  closure.
 
 ## Still remaining
 
@@ -81,3 +85,6 @@ Overall correctness/stability progress: 70-80%.
 - `tools/ci/m10_generational.sh`
 - `tools/ci/m3_gc2_paranoia.sh`
 - `tools/ci/m3_gc2_scaffold.sh`
+- `tools/ci/m3_gc2_worker_scheduler.sh`
+- `tools/ci/lua_test.sh m2_arena_gcsweep`
+- `tools/ci/m8_weak.sh`

@@ -128,6 +128,9 @@
 - The duplicate M8 sweep/finalizer source guard block was removed; the stronger
   M3 worker-scheduler guard remains canonical for those boundaries, while M8
   still owns weak/finalizer behavior fixtures.
+- The internal sweep-close bridge helper was renamed to
+  `lj_gc2_sweep_bridge_close()`, keeping the behavior boundary while removing
+  another exact legacy helper name from production source.
 - Public or semantic compatibility helpers such as FFI pointer compatibility
   checks are not removal targets unless the language/API contract changes.
 - Anti-legacy guards that merely prevent reintroducing already-removed wrapper

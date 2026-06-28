@@ -170,7 +170,7 @@ LJ_FUNC int lj_gc2_minor_roots_skip_bridge_mark(global_State *g);
 LJ_FUNC void lj_gc2_force_major(global_State *g);
 LJ_FUNC void lj_gc2_legacy_preserve_abort(global_State *g);
 LJ_FUNC void lj_gc2_legacy_cycle_end(global_State *g);
-LJ_FUNC int lj_gc2_legacy_sweep_close(global_State *g);
+LJ_FUNC int lj_gc2_sweep_bridge_close(global_State *g);
 LJ_FUNC void lj_gc2_sweep_legacy_ready(global_State *g);
 LJ_FUNC void lj_gc2_legacy_sweep_boundary_reached(global_State *g);
 LJ_FUNC void lj_gc2_sweep_prepare_legacy_boundary(global_State *g,
