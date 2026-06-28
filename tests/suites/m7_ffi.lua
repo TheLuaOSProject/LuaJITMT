@@ -44,7 +44,7 @@ local m7_cases = {
   "m7_ffi_nested_state",
   "m7_ffi_callback_install",
   "m7_ffi_callback_runtime",
-  "m7_ffi_blocking"
+  "m7_ffi_ccall_native"
 }
 
 local function build_clib_ldscript_fixture(t)
@@ -56,7 +56,7 @@ end
 
 return function(add)
   add({
-    name = "m7_ffi_blocking",
+    name = "m7_ffi_ccall_native",
     description = "FFI native blocking-call behavior",
     run = function(t)
       clean_build(t)
@@ -68,7 +68,7 @@ return function(add)
         { output = "lj_t-ffi-ccall-stopreq",
           cfile = "t-ffi-ccall-stopreq.c" }
       })
-      run_luajit_script(t, "t-ffi-blocking.lua")
+      run_luajit_script(t, "t-ffi-ccall-native.lua")
       print("M7 FFI native blocking-call behavior passed")
     end
   })

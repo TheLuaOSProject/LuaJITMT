@@ -80,4 +80,4 @@ do
   assert(joined == true and result == true)
 end
 
-print("t-ffi-blocking OK")
+print("t-ffi-ccall-native OK")

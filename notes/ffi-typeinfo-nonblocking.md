@@ -39,4 +39,4 @@ Verification:
 
 - `tools/ci/lua_test.sh m7_ffi_typeinfo_snapshot`
 - `tools/ci/lua_test.sh m7_ffi_cparse_rollback`
-- `tools/ci/m7_ffi_blocking.sh`
+- `tools/ci/lua_test.sh m7_ffi_ccall_native`

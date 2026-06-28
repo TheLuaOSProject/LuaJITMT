@@ -112,7 +112,7 @@ Validation:
 Validation:
 
 - `tools/ci/lua_test.sh --list`
-- `tools/ci/lua_test.sh m7_ffi_blocking m7_ffi_callback_runtime`
+- `tools/ci/lua_test.sh m7_ffi_ccall_native m7_ffi_callback_runtime`
 - `tools/ci/m3_safepoint_handshake.sh`
 
 ## 2026-06-20 CI wrapper parity
@@ -305,7 +305,7 @@ Validation:
 
 Validation:
 
-- `tools/ci/lua_test.sh m5_jit_hash_store_nyi m5_jit_trace_publish m6_jit_token m7_ffi_blocking m7_ffi_finreg m7_ffi_jit_cnew`
+- `tools/ci/lua_test.sh m5_jit_hash_store_nyi m5_jit_trace_publish m6_jit_token m7_ffi_ccall_native m7_ffi_finreg m7_ffi_jit_cnew`
 - `tools/ci/lua_test.sh --list`
 - duplicate trace-count helper `rg` check over migrated files
 - `git diff --check`

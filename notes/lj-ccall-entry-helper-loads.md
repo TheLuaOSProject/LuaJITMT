@@ -14,6 +14,6 @@ Verification:
 
 - `tools/ci/m7_ffi_cdata_set_l.sh`
 - `tools/ci/m7_ffi_cdata_get_l.sh`
-- `tools/ci/m7_ffi_blocking.sh`
+- `tools/ci/lua_test.sh m7_ffi_ccall_native`
 - `tools/ci/m0_source_guard.sh`
 - `git diff --check`
