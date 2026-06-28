@@ -639,10 +639,17 @@ TValue *lj_clib_index(lua_State *L, CLibrary *cl, GCstr *name)
     }
     info = ctype_info_acq(ct);
     if (ctype_isconstval(info)) {
-      CType *ctt = ctype_child(cts, ct);
-      CTInfo cttinfo = ctype_info_acq(ctt);
-      CTSize cttsize = ctype_size_acq(ctt);
+      CTypeID childid = ctype_cid(info);
+      CTInfo cttinfo;
+      CTSize cttsize;
       CTSize size = ctype_size_acq(ct);
+      int cok = lj_ctype_info_snapshot(cts, childid, &cttinfo, &cttsize,
+				       NULL, NULL);
+      if (cok <= 0)
+	cok = lj_ctype_info_wait(L, cts, childid, &cttinfo, &cttsize,
+				 NULL, NULL);
+      if (cok <= 0)
+	lj_err_callerv(L, LJ_ERR_FFI_NODECL, strdata(name));
       lj_assertCTS(ctype_isinteger(cttinfo) && cttsize <= 4,
 		   "only 32 bit const supported");  /* NYI */
       UNUSED(cttsize);
