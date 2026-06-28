@@ -1620,8 +1620,10 @@ LJLIB_CF(ffi_offsetof)	LJLIB_REC(ffi_xof FF_ffi_offsetof)
   CTSize ofs;
   int isstr;
   id = ffi_checkctype_noparse(L, NULL, &isstr);
-  if (isstr)
-    id = ffi_checkctype(L, cts, NULL);
+  if (isstr) {
+    id = ffi_checkctype_layout_lock(L, cts, NULL);
+    lj_ctype_parse_unlock(cts);
+  }
   name = lj_lib_checkstr(L, 2);
   {
     CType snap;
