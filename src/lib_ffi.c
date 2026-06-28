@@ -346,16 +346,27 @@ LJLIB_CF(ffi_meta___tostring)
     id = *(CTypeID *)p;
   } else {
     CTState *cts = ctype_cts(L);
-    CTypeID rid = ctype_rawid(cts, id);
-    CType *ct = ctype_get(cts, rid);
-    CTInfo info = ctype_info_acq(ct);
-    CTSize size = ctype_size_acq(ct);
+    CTypeID rid;
+    CType snap;
+    CTInfo info;
+    CTSize size;
+    int ok = lj_ctype_info_snapshot(cts, id, &info, &size, &rid, &snap);
+    if (ok <= 0)
+      ok = lj_ctype_info_wait(L, cts, id, &info, &size, &rid, &snap);
+    if (ok <= 0)
+      lj_err_arg(L, 1, LJ_ERR_FFI_INVTYPE);
+    info = ctype_info_acq(&snap);
+    size = ctype_size_acq(&snap);
     if (ctype_isref(info)) {
+      CTypeID refid = ctype_cid(info);
       p = *(void **)p;
-      rid = ctype_rawid(cts, ctype_cid(info));
-      ct = ctype_get(cts, rid);
-      info = ctype_info_acq(ct);
-      size = ctype_size_acq(ct);
+      ok = lj_ctype_info_snapshot(cts, refid, &info, &size, &rid, &snap);
+      if (ok <= 0)
+	ok = lj_ctype_info_wait(L, cts, refid, &info, &size, &rid, &snap);
+      if (ok <= 0)
+	lj_err_arg(L, 1, LJ_ERR_FFI_INVTYPE);
+      info = ctype_info_acq(&snap);
+      size = ctype_size_acq(&snap);
     }
     if (ctype_iscomplex(info)) {
       setstrV(L, L->top-1, lj_ctype_repr_complex(L, cdataptr(cd), size));
@@ -371,10 +382,15 @@ LJLIB_CF(ffi_meta___tostring)
       p = (void *)(uintptr_t)*(uint32_t *)p;
     } else {
       if (ctype_isptr(info)) {
+	CTypeID childid = ctype_cid(info);
 	p = cdata_getptr(p, size);
-	rid = ctype_rawid(cts, ctype_cid(info));
-	ct = ctype_get(cts, rid);
-	info = ctype_info_acq(ct);
+	ok = lj_ctype_info_snapshot(cts, childid, &info, &size, &rid, &snap);
+	if (ok <= 0)
+	  ok = lj_ctype_info_wait(L, cts, childid, &info, &size, &rid,
+				  &snap);
+	if (ok <= 0)
+	  lj_err_arg(L, 1, LJ_ERR_FFI_INVTYPE);
+	info = ctype_info_acq(&snap);
       }
       if (ctype_isstruct(info) || ctype_isvector(info)) {
 	/* Handle ctype __tostring metamethod. */
