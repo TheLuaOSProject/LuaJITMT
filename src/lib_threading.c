@@ -265,6 +265,28 @@ static int64_t threading_capi_timeout_ns(lua_Number sec)
   return nsec > (lua_Number)INT64_MAX ? INT64_MAX : (int64_t)nsec;
 }
 
+static int64_t threading_now_ns(void)
+{
+  struct timespec ts;
+  if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0)
+    return 0;
+  return (int64_t)ts.tv_sec * 1000000000ll + (int64_t)ts.tv_nsec;
+}
+
+static int64_t threading_deadline_ns(int64_t ns)
+{
+  int64_t now = threading_now_ns();
+  if (ns > INT64_MAX - now)
+    return INT64_MAX;
+  return now + ns;
+}
+
+static int64_t threading_remaining_ns(int64_t deadline)
+{
+  int64_t now = threading_now_ns();
+  return deadline > now ? deadline - now : 0;
+}
+
 static void threading_wake_thread(LJThread *th)
 {
   la_add32_rlx(&th->futex, 1);
@@ -541,6 +563,7 @@ static int threading_join_core(lua_State *L, LJThread *th, int has_timeout,
   int remove_live = 0;
   uint32_t join_actions = 0;
   int join_had_stopreq = threading_had_stopreq(L);
+  int64_t deadline = ns > 0 ? threading_deadline_ns(ns) : 0;
   uint32_t state;
   if (threading_is_current_thread(L, th)) {
     if (has_timeout) {
@@ -556,7 +579,10 @@ static int threading_join_core(lua_State *L, LJThread *th, int has_timeout,
     state = la_load32_acq(&th->state);
     if (state == LJ_THREAD_DONE)
       break;
-    if (ns == 0) {
+    if (has_timeout) {
+      ns = threading_remaining_ns(deadline);
+    }
+    if (has_timeout && ns == 0) {
       setnilV(L->top++);
       lua_pushliteral(L, "timeout");
       return 2;
@@ -569,11 +595,6 @@ static int threading_join_core(lua_State *L, LJThread *th, int has_timeout,
       (void)la_futex_wait(&th->futex, futex, ns);
       actions = lj_native_leave(L);
       threading_checkstop_fresh(L, actions, had_stopreq);
-    }
-    if (ns > 0 && la_load32_acq(&th->state) != LJ_THREAD_DONE) {
-      setnilV(L->top++);
-      lua_pushliteral(L, "timeout");
-      return 2;
     }
   }
 

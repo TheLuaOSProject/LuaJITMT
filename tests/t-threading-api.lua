@@ -164,6 +164,11 @@ local slow = th.spawn(function()
 end)
 local timed, why = slow:join(0)
 assert(timed == nil and why == "timeout")
+local timed_start = assert(th.now())
+timed, why = slow:join(0.03)
+local timed_elapsed = assert(th.now()) - timed_start
+assert(timed == nil and why == "timeout")
+assert(timed_elapsed >= 0.015)
 local slowres = { slow:join() }
 assert(slowres[1] == true and slowres[2] == "done")
 
