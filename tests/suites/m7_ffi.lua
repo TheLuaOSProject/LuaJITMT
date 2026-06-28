@@ -157,6 +157,17 @@ if ! grep -qF 'la_loadptr_acq((void *const *)&cb->L)' src/lj_ctype.h ||
   printf '%s\n' 'callback runtime carrier helpers must use acquire/release pointer operations' >&2
   exit 1
 fi
+for helper in ccallback_depth_acq ccallback_depth_rel; do
+  if ! grep -qE "${helper}[[:space:]]*[(]" src/lj_ctype.h; then
+    printf 'callback runtime depth helper missing: %s\n' "$helper" >&2
+    exit 1
+  fi
+done
+if ! grep -qF 'la_load32_acq(&cb->depth)' src/lj_ctype.h ||
+   ! grep -qF 'la_store32_rel(&cb->depth' src/lj_ctype.h; then
+  printf '%s\n' 'callback runtime depth helpers must use acquire/release 32-bit operations' >&2
+  exit 1
+fi
 if hits=$(grep -nE -- 'cb->[[:space:]]*auto_detach' src/lj_ccallback.c || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
   printf '%s\n' 'raw callback runtime auto_detach access is forbidden; use ccallback_auto_detach_* helpers' >&2
@@ -165,6 +176,11 @@ fi
 if hits=$(grep -nE -- 'cb->[[:space:]]*L([^[:alnum:]_]|$)' src/lj_ccallback.c || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
   printf '%s\n' 'raw callback runtime carrier L access is forbidden; use ccallback_L_* helpers' >&2
+  exit 1
+fi
+if hits=$(grep -nE -- 'cb->[[:space:]]*depth' src/lj_ccallback.c || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw callback runtime depth access is forbidden; use ccallback_depth_* helpers' >&2
   exit 1
 fi
 ]==], { cwd = t.root, quiet = true })

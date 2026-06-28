@@ -656,25 +656,25 @@ static void callback_frame_push(lua_State *L, CCallbackRuntime *cb,
 				TValue *cont, uint8_t was_native,
 				uint8_t auto_detach)
 {
-  MSize depth = cb->depth;
+  MSize depth = ccallback_depth_acq(cb);
   if (LJ_UNLIKELY(depth >= CCALLBACK_MAX_NEST))
     lj_err_caller(L, LJ_ERR_FFI_CBACKOV);
   cb->frame[depth].L = L;
   cb->frame[depth].cont = cont;
   cb->frame[depth].was_native = was_native;
   cb->frame[depth].auto_detach = auto_detach;
-  cb->depth = depth + 1;
+  ccallback_depth_rel(cb, depth + 1);
 }
 
 static CCallbackFrame *callback_frame_top(CCallbackRuntime *cb)
 {
-  MSize depth = cb->depth;
+  MSize depth = ccallback_depth_acq(cb);
   return depth == 0 ? NULL : &cb->frame[depth-1];
 }
 
 static void callback_frame_pop(CCallbackRuntime *cb)
 {
-  MSize depth = cb->depth;
+  MSize depth = ccallback_depth_acq(cb);
   CCallbackFrame *frame;
   if (depth == 0)
     return;
@@ -684,7 +684,7 @@ static void callback_frame_pop(CCallbackRuntime *cb)
   frame->cont = NULL;
   frame->was_native = 0;
   frame->auto_detach = 0;
-  cb->depth = depth;
+  ccallback_depth_rel(cb, depth);
 }
 
 static int callback_auto_attach(CTState *cts, MSize slot)

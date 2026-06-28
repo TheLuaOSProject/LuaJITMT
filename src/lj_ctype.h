@@ -445,6 +445,12 @@ static LJ_AINLINE MSize ccallback_depth_acq(const CCallbackRuntime *cb)
   return cb ? (MSize)la_load32_acq(&cb->depth) : 0;
 }
 
+static LJ_AINLINE void ccallback_depth_rel(CCallbackRuntime *cb, MSize depth)
+{
+  /* 11.5 callback frame metadata publication. */
+  la_store32_rel(&cb->depth, depth);
+}
+
 static LJ_AINLINE MSize ccallback_slot_acq(const CCallbackRuntime *cb)
 {
   /* 11.5 native FFI/callback handoff slot marker. */
