@@ -521,11 +521,8 @@ LJLIB_CF(ffi_clib___index)	LJLIB_REC(clib_index 1)
     CTInfo sinfo, erawinfo;
     CTSize ssize;
     CTypeID rid;
-    int ok = lj_ctype_info_snapshot(cts, cd->ctypeid, &sinfo, &ssize, &rid,
-				    &esnap);
-    if (ok <= 0)
-      ok = lj_ctype_info_wait(L, cts, cd->ctypeid, &sinfo, &ssize, &rid,
-			      &esnap);
+    int ok = ffi_ctype_info_read(L, cts, cd->ctypeid, &sinfo, &ssize, &rid,
+				 &esnap);
     if (ok <= 0)
       lj_err_arg(L, 2, LJ_ERR_FFI_INVTYPE);
     erawinfo = ctype_info_acq(&esnap);
@@ -533,9 +530,7 @@ LJLIB_CF(ffi_clib___index)	LJLIB_REC(clib_index 1)
       CType tsnap;
       CTypeID sid = ctype_cid(erawinfo);
       void *sp = *(void **)cdataptr(cd);
-      ok = lj_ctype_info_snapshot(cts, sid, &sinfo, &ssize, &rid, &tsnap);
-      if (ok <= 0)
-	ok = lj_ctype_info_wait(L, cts, sid, &sinfo, &ssize, &rid, &tsnap);
+      ok = ffi_ctype_info_read(L, cts, sid, &sinfo, &ssize, &rid, &tsnap);
       if (ok <= 0)
 	lj_err_arg(L, 2, LJ_ERR_FFI_INVTYPE);
       if (lj_cconv_tv_ct_l(L, cts, &tsnap, rid, L->top-1, sp))
@@ -560,18 +555,14 @@ LJLIB_CF(ffi_clib___newindex)	LJLIB_REC(clib_index 0)
     CTInfo dinfo, erawinfo;
     CTSize dsize;
     CTypeID rid;
-    int ok = lj_ctype_info_snapshot(cts, did, &dinfo, &dsize, &rid, &esnap);
-    if (ok <= 0)
-      ok = lj_ctype_info_wait(L, cts, did, &dinfo, &dsize, &rid, &esnap);
+    int ok = ffi_ctype_info_read(L, cts, did, &dinfo, &dsize, &rid, &esnap);
     if (ok <= 0)
       lj_err_arg(L, 2, LJ_ERR_FFI_INVTYPE);
     erawinfo = ctype_info_acq(&esnap);
     if (ctype_isextern(erawinfo)) {
       CType dsnap;
       did = ctype_cid(erawinfo);
-      ok = lj_ctype_info_snapshot(cts, did, &dinfo, &dsize, &rid, &dsnap);
-      if (ok <= 0)
-	ok = lj_ctype_info_wait(L, cts, did, &dinfo, &dsize, &rid, &dsnap);
+      ok = ffi_ctype_info_read(L, cts, did, &dinfo, &dsize, &rid, &dsnap);
       if (ok <= 0)
 	lj_err_arg(L, 2, LJ_ERR_FFI_INVTYPE);
       if (!(dinfo & CTF_CONST)) {
@@ -623,9 +614,7 @@ static int ffi_callback_set(lua_State *L, GCfunc *fn)
   int ok;
   if (ffi_callback_isfree_acq(cd))
     goto bad_callback;
-  ok = lj_ctype_info_snapshot(cts, cd->ctypeid, &info, &size, NULL, NULL);
-  if (ok <= 0)
-    ok = lj_ctype_info_wait(L, cts, cd->ctypeid, &info, &size, NULL, NULL);
+  ok = ffi_ctype_info_read(L, cts, cd->ctypeid, &info, &size, NULL, NULL);
   if (ok <= 0)
     goto bad_callback;
   if (ctype_isptr(info) && (LJ_32 || size == 8)) {
@@ -1805,9 +1794,7 @@ LJLIB_CF(ffi_gc)	LJLIB_REC(.)
   CTState *cts = ctype_cts(L);
   CTInfo info;
   CTSize sz;
-  int ok = lj_ctype_info_snapshot(cts, cd->ctypeid, &info, &sz, NULL, NULL);
-  if (ok <= 0)
-    ok = lj_ctype_info_wait(L, cts, cd->ctypeid, &info, &sz, NULL, NULL);
+  int ok = ffi_ctype_info_read(L, cts, cd->ctypeid, &info, &sz, NULL, NULL);
   if (ok <= 0)
     lj_err_arg(L, 1, LJ_ERR_FFI_INVTYPE);
   if (!(ctype_isptr(info) || ctype_isstruct(info) || ctype_isrefarray(info)))
@@ -1842,17 +1829,13 @@ LJLIB_CF(ffi_blocking)
   CTInfo info;
   CTSize sz = CTSIZE_PTR;
   CTSize snap_size;
-  int ok = lj_ctype_info_snapshot(cts, id, &info, &snap_size, NULL, NULL);
-  if (ok <= 0)
-    ok = lj_ctype_info_wait(L, cts, id, &info, &snap_size, NULL, NULL);
+  int ok = ffi_ctype_info_read(L, cts, id, &info, &snap_size, NULL, NULL);
   if (ok <= 0)
     lj_err_arg(L, 1, LJ_ERR_FFI_INVTYPE);
   if (ctype_isptr(info)) {
     id = ctype_cid(info);
     sz = snap_size;
-    ok = lj_ctype_info_snapshot(cts, id, &info, &snap_size, NULL, NULL);
-    if (ok <= 0)
-      ok = lj_ctype_info_wait(L, cts, id, &info, &snap_size, NULL, NULL);
+    ok = ffi_ctype_info_read(L, cts, id, &info, &snap_size, NULL, NULL);
     if (ok <= 0)
       lj_err_arg(L, 1, LJ_ERR_FFI_INVTYPE);
   }

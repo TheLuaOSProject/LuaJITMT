@@ -72,6 +72,14 @@ static void assert_clib_extern_waits_without_lock(lua_State *L, CTState *cts,
   assert(ljt_ctype_parse_seq(cts) == ctx.release_seq);
 }
 
+static void assert_busy_trace_releases(lua_State *L, CTState *cts,
+				       const char *chunk)
+{
+  ljt_ctype_arm_trace_abort(L, cts);
+  ljt_lua_dostring(L, chunk);
+  ljt_ctype_assert_trace_abort_released(cts);
+}
+
 int main(void)
 {
   const char *so = getenv("LJ_M7_FFI_CLIB_EXTERN_SO");
@@ -130,6 +138,35 @@ int main(void)
     "cl.lj_m7_clib_snapshot_struct = lj_m7_clib_snapshot_struct_ct({ x = 56 })\n"
     "assert(cl.lj_m7_clib_snapshot_value == 42)\n"
     "assert(cl.lj_m7_clib_snapshot_struct.x == 56)\n");
+
+  assert_busy_trace_releases(L, cts,
+    "local cl = lj_m7_clib_extern_cl\n"
+    "jit.attach(lj_m7_trace_parse_token, 'trace')\n"
+    "jit.flush()\n"
+    "jit.on()\n"
+    "jit.opt.start('hotloop=1', 'hotexit=1')\n"
+    "local function run(n)\n"
+    "  local sum = 0\n"
+    "  for i = 1, n do sum = sum + cl.lj_m7_clib_snapshot_value end\n"
+    "  return sum\n"
+    "end\n"
+    "for i = 1, 3 do assert(run(8) == 336) end\n"
+    "jit.attach(lj_m7_trace_parse_token)\n"
+    "assert(lj_m7_trace_parse_token_abort_count() >= 1)\n");
+
+  assert_busy_trace_releases(L, cts,
+    "local cl = lj_m7_clib_extern_cl\n"
+    "jit.attach(lj_m7_trace_parse_token, 'trace')\n"
+    "jit.flush()\n"
+    "jit.on()\n"
+    "jit.opt.start('hotloop=1', 'hotexit=1')\n"
+    "local function run(n)\n"
+    "  for i = 1, n do cl.lj_m7_clib_snapshot_value = 100 + i end\n"
+    "  return cl.lj_m7_clib_snapshot_value\n"
+    "end\n"
+    "for i = 1, 3 do assert(run(8) == 108) end\n"
+    "jit.attach(lj_m7_trace_parse_token)\n"
+    "assert(lj_m7_trace_parse_token_abort_count() >= 1)\n");
 
   lua_close(L);
   printf("t-ffi-clib-extern-snapshot OK: extern variables wait on ctype snapshots\n");
