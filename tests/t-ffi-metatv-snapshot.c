@@ -70,6 +70,20 @@ static void assert_metatv_waits_without_lock(lua_State *L, CTState *cts,
   assert(ljt_ctype_parse_seq(cts) == ctx.release_seq);
 }
 
+static void assert_predefined_metatv_avoids_wait(lua_State *L, CTState *cts)
+{
+  uint32_t release_seq = ljt_ctype_hold_parse_token(cts);
+
+  ljt_lua_dostring(L,
+    "local ffi = require('ffi')\n"
+    "local v = lj_m7_metatv_int_ct(42)\n"
+    "assert(ffi.istype(lj_m7_metatv_int_ct, v))\n"
+    "local ok, err = pcall(function() return v.no_such_field end)\n"
+    "assert(not ok and tostring(err):match('no_such_field'))\n");
+  assert((ctype_parse_token_acq(cts) & 1u) != 0);
+  ljt_ctype_release_parse_token(cts, release_seq);
+}
+
 int main(void)
 {
   lua_State *L = ljt_lua_newstate_openlibs();
@@ -96,6 +110,7 @@ int main(void)
     "  __gc = function() lj_m7_metatv_gc_count = lj_m7_metatv_gc_count + 1 end,\n"
     "})\n"
     "lj_m7_metatv_ct = ct\n"
+    "lj_m7_metatv_int_ct = ffi.typeof('int')\n"
     "lj_m7_metatv_obj = ct(40)\n"
     "lj_m7_metatv_rhs = ct(2)\n");
 
@@ -121,10 +136,18 @@ int main(void)
   seq1 = ljt_ctype_parse_seq(cts);
   assert(seq1 == seq0);
 
+  assert_predefined_metatv_avoids_wait(L, cts);
+  seq1 = ljt_ctype_parse_seq(cts);
+  assert(seq1 == seq0 + 2u);
+
   assert_metatv_waits_without_lock(L, cts, tg,
     "assert(lj_m7_metatv_obj(2) == 42)\n");
+  seq1 = ljt_ctype_parse_seq(cts);
+  assert(seq1 == seq0 + 4u);
   assert_metatv_waits_without_lock(L, cts, tg,
     "assert((lj_m7_metatv_obj + lj_m7_metatv_rhs).x == 42)\n");
+  seq1 = ljt_ctype_parse_seq(cts);
+  assert(seq1 == seq0 + 6u);
   assert_metatv_waits_without_lock(L, cts, tg,
     "local seen = 0\n"
     "for k, v in pairs(lj_m7_metatv_obj) do\n"
@@ -132,6 +155,8 @@ int main(void)
     "  seen = seen + 1\n"
     "end\n"
     "assert(seen == 1)\n");
+  seq1 = ljt_ctype_parse_seq(cts);
+  assert(seq1 == seq0 + 8u);
 
   ljt_lua_dostring(L,
     "lj_m7_metatv_obj = nil\n"
