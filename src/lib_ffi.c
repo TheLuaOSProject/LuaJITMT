@@ -76,10 +76,8 @@ static int ffi_strlit(const char *p, MSize plen, const char *lit, MSize len)
 #define ffi_ctype_match(lit) \
   ffi_strlit(p, len, "" lit, (MSize)(sizeof(lit)-1))
 
-static int ffi_predefined_ctype_string(GCstr *s, CTypeID *idp)
+static int ffi_predefined_ctype_part(const char *p, MSize len, CTypeID *idp)
 {
-  const char *p = strdata(s);
-  MSize len = s->len;
   while (len != 0 && ffi_cspace(*p)) { p++; len--; }
   while (len != 0 && ffi_cspace(p[len-1])) len--;
   if (ffi_ctype_match("void")) { *idp = CTID_VOID; return 1; }
@@ -151,6 +149,11 @@ static int ffi_predefined_ctype_string(GCstr *s, CTypeID *idp)
   return 0;
 }
 
+static int ffi_predefined_ctype_string(GCstr *s, CTypeID *idp)
+{
+  return ffi_predefined_ctype_part(strdata(s), s->len, idp);
+}
+
 static int ffi_ident_string(const char *p, MSize len)
 {
   MSize i;
@@ -171,18 +174,20 @@ static int ffi_lookup_named_ctype(lua_State *L, CTState *cts, GCstr *name,
   return ok;
 }
 
-static int ffi_direct_ctype_string(lua_State *L, CTState *cts, GCstr *s,
-				   CTypeID *idp)
+static int ffi_direct_ctype_base_string(lua_State *L, CTState *cts, GCstr *s,
+					const char *p, MSize len,
+					CTypeID *idp)
 {
-  const char *p = strdata(s);
-  MSize len = s->len;
   CType ct;
   CTypeID id;
   CTInfo info;
+  if (ffi_predefined_ctype_part(p, len, idp))
+    return 1;
   while (len != 0 && ffi_cspace(*p)) { p++; len--; }
   while (len != 0 && ffi_cspace(p[len-1])) len--;
   if (ffi_ident_string(p, len)) {
-    GCstr *name = len == s->len ? s : lj_str_new(L, p, len);
+    GCstr *name = (p == strdata(s) && len == s->len) ? s :
+		  lj_str_new(L, p, len);
     int ok = ffi_lookup_named_ctype(L, cts, name, (1u << CT_TYPEDEF),
 				    &id, &ct);
     if (ok > 0) {
@@ -231,6 +236,36 @@ static int ffi_direct_ctype_string(lua_State *L, CTState *cts, GCstr *s,
     }
   }
   return 0;
+}
+
+static int ffi_direct_pointer_base(const char *p, MSize len)
+{
+  MSize i;
+  for (i = 0; i < len; i++)
+    if (p[i] == '*')
+      return 0;
+  return 1;
+}
+
+static int ffi_direct_ctype_string(lua_State *L, CTState *cts, GCstr *s,
+				   CTypeID *idp)
+{
+  const char *p = strdata(s);
+  MSize len = s->len;
+  while (len != 0 && ffi_cspace(*p)) { p++; len--; }
+  while (len != 0 && ffi_cspace(p[len-1])) len--;
+  if (len != 0 && p[len-1] == '*') {
+    CTypeID baseid;
+    MSize baselen = len - 1;
+    while (baselen != 0 && ffi_cspace(p[baselen-1])) baselen--;
+    if (baselen != 0 && ffi_direct_pointer_base(p, baselen) &&
+	ffi_direct_ctype_base_string(L, cts, s, p, baselen, &baseid)) {
+      *idp = lj_ctype_intern_l(L, cts,
+			       CTINFO(CT_PTR, CTALIGN_PTR|baseid), CTSIZE_PTR);
+      return 1;
+    }
+  }
+  return ffi_direct_ctype_base_string(L, cts, s, p, len, idp);
 }
 
 /* Check first argument for a C type and returns its ID. */
