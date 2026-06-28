@@ -91,7 +91,7 @@ static void *worker_main(void *arg)
   la_store32_rel(&ctx->attached, 1);
   while (la_load32_acq(&ctx->release) == 0)
     la_cpu_pause();
-  assert(ctx->tg.in_native == 1);
+  assert(lj_tg_in_native_acq(&ctx->tg) == 1);
   lj_tg_detach(ctx->g, &ctx->tg);
   lj_thr_set_tg(NULL);
   lj_tg_fini_thread(ctx->g, &ctx->tg);

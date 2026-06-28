@@ -6,20 +6,11 @@ ffi.cdef[[
 int abs(int);
 int getpid(void);
 int poll(void *fds, unsigned long nfds, int timeout);
-typedef long time_t;
-struct timespec {
-  time_t tv_sec;
-  long tv_nsec;
-};
-int clock_gettime(int clk_id, struct timespec *tp);
 ]]
 
 local abs = ffi.C.abs
-local CLOCK_MONOTONIC = 1
 local function now()
-  local ts = ffi.new("struct timespec[1]")
-  assert(ffi.C.clock_gettime(CLOCK_MONOTONIC, ts) == 0)
-  return tonumber(ts[0].tv_sec) + tonumber(ts[0].tv_nsec) / 1000000000
+  return assert(th.now())
 end
 
 local function run_abs(n)

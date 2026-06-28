@@ -576,7 +576,7 @@ static int gc2_worker_control_lock_l(global_State *g, lua_State *L,
 				     uint32_t *actionsp)
 {
   TGState *self = NULL;
-  uint8_t was_native = 0;
+  uint32_t was_native = 0;
   for (;;) {
     uint32_t expect = 0;
     if (gc2_worker_control_cas(g, &expect, 1)) {
@@ -588,7 +588,8 @@ static int gc2_worker_control_lock_l(global_State *g, lua_State *L,
       self = lj_thr_get_tg_fallback(g);
       if (self) {
 	was_native = lj_tg_in_native_acq(self);
-	lj_tg_in_native_rel(self, 1);
+	lj_tg_in_native_rel(self, was_native == ~(uint32_t)0 ?
+			    was_native : was_native + 1);
       }
     }
     if (expect == 0)
@@ -776,7 +777,7 @@ static void gc2_worker_stop_locked_l(global_State *g, lua_State *L,
 {
   uint32_t i, any = 0;
   TGState *self;
-  uint8_t was_native = 0;
+  uint32_t was_native = 0;
   if (!g)
     return;
   for (i = 0; i < LJ_GC2_WORKER_MAX; i++)
@@ -795,7 +796,9 @@ static void gc2_worker_stop_locked_l(global_State *g, lua_State *L,
     self = lj_thr_get_tg_fallback(g);
     if (self) {
       was_native = lj_tg_in_native_acq(self);
-      lj_tg_in_native_rel(self, 1);  /* Join wait can remote-ack workers. */
+      lj_tg_in_native_rel(self, was_native == ~(uint32_t)0 ?
+			  was_native : was_native + 1);
+      /* Join wait can remote-ack workers. */
     }
   }
   for (i = 0; i < LJ_GC2_WORKER_MAX; i++) {

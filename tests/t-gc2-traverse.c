@@ -32,6 +32,8 @@
 #include "lj_jit.h"
 #endif
 
+#include "lib/thread_fixture_helpers.h"
+
 static void flush_and_drain(global_State *g, TGState *tg)
 {
   (void)lj_gc2_flush_ssb(g, tg);
@@ -123,7 +125,7 @@ static void test_grey_deque_growth(lua_State *L, global_State *g, TGState *tg)
 
 typedef struct GreyRaceCtx {
   global_State *g;
-  pthread_barrier_t barrier;
+  ljt_barrier_t barrier;
   GCobj *stolen;
 } GreyRaceCtx;
 
@@ -135,7 +137,7 @@ typedef struct WorkerDrainCtx {
 
 typedef struct WorkerDrainRaceCtx {
   global_State *g;
-  pthread_barrier_t barrier;
+  ljt_barrier_t barrier;
   uint32_t limit;
   uint32_t progress[2];
 } WorkerDrainRaceCtx;
@@ -147,7 +149,7 @@ typedef struct WorkerDrainRaceThread {
 
 typedef struct WeakPeerWriteCtx {
   lua_State *L;
-  pthread_barrier_t barrier;
+  ljt_barrier_t barrier;
   int status;
 } WeakPeerWriteCtx;
 
@@ -161,10 +163,10 @@ typedef struct FinclaimPublishCtx {
 } FinclaimPublishCtx;
 #endif
 
-static void grey_wait(pthread_barrier_t *barrier)
+static void grey_wait(ljt_barrier_t *barrier)
 {
-  int rc = pthread_barrier_wait(barrier);
-  assert(rc == 0 || rc == PTHREAD_BARRIER_SERIAL_THREAD);
+  int rc = ljt_barrier_wait(barrier);
+  assert(rc == 0 || rc == LJT_BARRIER_SERIAL_THREAD);
 }
 
 static void *grey_owner_thread(void *arg)
@@ -284,12 +286,12 @@ static void test_grey_deque_steal_race(lua_State *L, global_State *g,
     drained0 = gc2_grey_drained_acq(g);
     ctx.g = g;
     ctx.stolen = NULL;
-    assert(pthread_barrier_init(&ctx.barrier, NULL, 2) == 0);
+    assert(ljt_barrier_init(&ctx.barrier, 2) == 0);
     assert(pthread_create(&owner, NULL, grey_owner_thread, &ctx) == 0);
     assert(pthread_create(&thief, NULL, grey_thief_thread, &ctx) == 0);
     assert(pthread_join(owner, NULL) == 0);
     assert(pthread_join(thief, NULL) == 0);
-    assert(pthread_barrier_destroy(&ctx.barrier) == 0);
+    assert(ljt_barrier_destroy(&ctx.barrier) == 0);
 
     drained1 = gc2_grey_drained_acq(g);
     owner_won = drained1 == drained0 + 1u;
@@ -391,14 +393,14 @@ static void test_worker_drain_race(lua_State *L, global_State *g, TGState *tg)
   ctx.progress[0] = ctx.progress[1] = 0;
   arg0.ctx = &ctx; arg0.idx = 0;
   arg1.ctx = &ctx; arg1.idx = 1;
-  assert(pthread_barrier_init(&ctx.barrier, NULL, 2) == 0);
+  assert(ljt_barrier_init(&ctx.barrier, 2) == 0);
   assert(pthread_create(&worker0, NULL, grey_worker_drain_race_thread,
 			&arg0) == 0);
   assert(pthread_create(&worker1, NULL, grey_worker_drain_race_thread,
 			&arg1) == 0);
   assert(pthread_join(worker0, NULL) == 0);
   assert(pthread_join(worker1, NULL) == 0);
-  assert(pthread_barrier_destroy(&ctx.barrier) == 0);
+  assert(ljt_barrier_destroy(&ctx.barrier) == 0);
 
   total = ctx.progress[0] + ctx.progress[1];
   assert(total == 4u);
@@ -2310,7 +2312,7 @@ static void test_peer_weak_key_write_barrier(lua_State *L, global_State *g,
 
   ctx.L = peer;
   ctx.status = -1;
-  assert(pthread_barrier_init(&ctx.barrier, NULL, 2) == 0);
+  assert(ljt_barrier_init(&ctx.barrier, 2) == 0);
   assert(pthread_create(&thread, NULL, weak_peer_write_thread, &ctx) == 0);
 
   lj_gc2_mark_begin(g);
@@ -2326,7 +2328,7 @@ static void test_peer_weak_key_write_barrier(lua_State *L, global_State *g,
   grey_wait(&ctx.barrier);  /* Peer TG performs the P_WEAK table write. */
   assert(pthread_join(thread, NULL) == 0);
   assert(ctx.status == 0);
-  assert(pthread_barrier_destroy(&ctx.barrier) == 0);
+  assert(ljt_barrier_destroy(&ctx.barrier) == 0);
   assert(lj_gc2_ismarked(g, obj2gco(key)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(val)) == 1);
   assert(gc2_weak_keys_marked_acq(g) == weak_keys0 + 1u);

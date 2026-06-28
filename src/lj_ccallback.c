@@ -653,7 +653,7 @@ void lj_ccallback_mcode_free(CTState *cts)
 #endif
 
 static void callback_frame_push(lua_State *L, CCallbackRuntime *cb,
-				TValue *cont, uint8_t was_native,
+				TValue *cont, uint32_t native_depth,
 				uint8_t auto_detach)
 {
   MSize depth = cb->depth;
@@ -661,7 +661,7 @@ static void callback_frame_push(lua_State *L, CCallbackRuntime *cb,
     lj_err_caller(L, LJ_ERR_FFI_CBACKOV);
   cb->frame[depth].L = L;
   cb->frame[depth].cont = cont;
-  cb->frame[depth].was_native = was_native;
+  cb->frame[depth].native_depth = native_depth;
   cb->frame[depth].auto_detach = auto_detach;
   cb->depth = depth + 1;
 }
@@ -682,7 +682,7 @@ static void callback_frame_pop(CCallbackRuntime *cb)
   frame = &cb->frame[depth];
   frame->L = NULL;
   frame->cont = NULL;
-  frame->was_native = 0;
+  frame->native_depth = 0;
   frame->auto_detach = 0;
   cb->depth = depth;
 }
@@ -952,7 +952,7 @@ lua_State * LJ_FASTCALL lj_ccallback_enter(CTState *cts, void *cf,
   lua_State *L = cb->L;
   global_State *g = cts->g;
   TGState *tg = lj_thr_get_tg();
-  uint8_t was_native;
+  uint32_t native_depth;
   uint8_t auto_detach = cb->auto_detach;
   uint32_t actions = 0;
   int had_stopreq = 0;
@@ -972,20 +972,21 @@ lua_State * LJ_FASTCALL lj_ccallback_enter(CTState *cts, void *cf,
   cframe_errfunc(cf) = -1;
   cframe_nres(cf) = 0;
   L->cframe = cf;
-  was_native = (uint8_t)(lj_tg_in_native_acq(tg) != 0);
-  if (was_native) {
+  native_depth = lj_tg_in_native_acq(tg);
+  if (native_depth != 0) {
     ffi_call_func = lj_tg_ffi_call_func_acq(tg);
     if (ffi_call_func != NULL)
       lj_ctype_cb_blacklist(cts, ffi_call_func);
     had_stopreq = ccallback_had_stopreq(cb);
-    actions = lj_native_leave(L);
+    lj_tg_in_native_store_rlx(tg, 0);
+    actions = lj_safepoint_poll(L);
   }
   callback_conv_args(cts, L, cb);
-  callback_frame_push(L, cb, L->base-1, was_native, auto_detach);
+  callback_frame_push(L, cb, L->base-1, native_depth, auto_detach);
   cb->auto_detach = 0;
-  if (was_native) {
+  if (native_depth != 0) {
     if (ccallback_fresh_stopreq(L, actions, had_stopreq)) {
-      callback_frame_top(cb)->was_native = 0;
+      callback_frame_top(cb)->native_depth = 0;
       lj_safepoint_checkstop(L, actions);
     }
   }
@@ -998,7 +999,7 @@ void LJ_FASTCALL lj_ccallback_leave(CTState *cts, TValue *o,
 {
   CCallbackFrame *frame = callback_frame_top(cb);
   lua_State *L = frame ? frame->L : cb->L;
-  uint8_t was_native = frame ? frame->was_native : 0;
+  uint32_t native_depth = frame ? frame->native_depth : 0;
   uint8_t auto_detach = frame ? frame->auto_detach : cb->auto_detach;
   TGState *tg = lj_thr_get_tg();
   GCfunc *fn;
@@ -1024,8 +1025,8 @@ void LJ_FASTCALL lj_ccallback_leave(CTState *cts, TValue *o,
   cb->slot = 0;  /* Blacklist C function that called the callback. */
   callback_frame_pop(cb);
   cb->auto_detach = 0;
-  if (was_native)
-    lj_native_enter(tg);
+  if (native_depth != 0)
+    lj_tg_in_native_rel(tg, native_depth);
   if (auto_detach)
     lj_threading_detach(L, 0);
 }

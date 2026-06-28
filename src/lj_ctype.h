@@ -383,7 +383,7 @@ typedef LJ_ALIGN(8) union FPRCBArg { double d; float f[2]; } FPRCBArg;
 typedef struct CCallbackFrame {
   lua_State *L;			/* Callback carrier Lua state. */
   TValue *cont;			/* Continuation frame owning this entry. */
-  uint8_t was_native;		/* Callback entered from a native region. */
+  uint32_t native_depth;	/* Callback entered from a native region. */
   uint8_t auto_detach;		/* Scoped foreign-thread auto-attach. */
 } CCallbackFrame;
 

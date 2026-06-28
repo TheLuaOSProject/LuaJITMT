@@ -38,7 +38,7 @@ static void *perf_reader_thread(void *arg)
   PerfStopCtx *ctx = (PerfStopCtx *)arg;
   int fd, i;
   for (i = 0; i < 5000; i++) {
-    if (la_load8_acq(&ctx->tg->in_native)) {
+    if (lj_tg_in_native_acq(ctx->tg)) {
       la_store32_rel(&ctx->saw_native, 1);
       break;
     }

@@ -61,7 +61,7 @@ struct TGState {
   TValue *jit_base;
   int jit_exitcode;
   int32_t vmstate;
-  uint8_t in_native;
+  uint32_t in_native;
   uint8_t gc_assist;
   uint8_t hookmask_th;
   uint8_t tg_flags;
@@ -101,20 +101,38 @@ static LJ_AINLINE void lj_tg_vmstate_store_rel(TGState *tg, int32_t vmstate)
   la_store32_rel((uint32_t *)&tg->vmstate, (uint32_t)vmstate);
 }
 
-static LJ_AINLINE uint8_t lj_tg_in_native_acq(const TGState *tg)
+static LJ_AINLINE uint32_t lj_tg_in_native_acq(const TGState *tg)
 {
-  return la_load8_acq(&tg->in_native);  /* 05 section 5.4.3 native ack. */
+  return la_load32_acq(&tg->in_native);  /* 05 section 5.4.3 native ack. */
 }
 
-static LJ_AINLINE void lj_tg_in_native_rel(TGState *tg, uint8_t in_native)
+static LJ_AINLINE void lj_tg_in_native_rel(TGState *tg, uint32_t in_native)
 {
-  la_store8_rel(&tg->in_native, in_native);  /* 05 section 5.4.3. */
+  la_store32_rel(&tg->in_native, in_native);  /* 05 section 5.4.3. */
 }
 
 static LJ_AINLINE void lj_tg_in_native_store_rlx(TGState *tg,
-						 uint8_t in_native)
+						 uint32_t in_native)
 {
-  la_store8_rlx(&tg->in_native, in_native);
+  la_store32_rlx(&tg->in_native, in_native);
+}
+
+static LJ_AINLINE uint32_t lj_tg_in_native_inc_rel(TGState *tg)
+{
+  uint32_t depth = lj_tg_in_native_acq(tg);
+  if (depth != ~(uint32_t)0)
+    depth++;
+  lj_tg_in_native_rel(tg, depth);
+  return depth;
+}
+
+static LJ_AINLINE uint32_t lj_tg_in_native_dec_rel(TGState *tg)
+{
+  uint32_t depth = lj_tg_in_native_acq(tg);
+  if (depth != 0)
+    depth--;
+  lj_tg_in_native_rel(tg, depth);
+  return depth;
 }
 
 static LJ_AINLINE uint8_t lj_tg_gc_assist_acq(const TGState *tg)

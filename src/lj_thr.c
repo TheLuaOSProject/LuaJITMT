@@ -231,7 +231,7 @@ uint32_t lj_thr_sleep_ns(lua_State *L, int64_t ns)
   if (L) {
     actions = lj_native_leave(L);
   } else if (tg) {
-    lj_tg_in_native_store_rlx(tg, 0);  /* No Lua stack is available to poll. */
+    (void)lj_tg_in_native_dec_rel(tg);  /* No Lua stack is available to poll. */
   }
   return actions;
 }

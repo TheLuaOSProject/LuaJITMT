@@ -19,6 +19,8 @@
 #include "lj_thr.h"
 #include "lj_tg.h"
 
+#include "lib/thread_fixture_helpers.h"
+
 static int arena_list_contains(GCArena *a, GCArena *needle)
 {
   while (a) {
@@ -46,7 +48,7 @@ typedef struct FinalizerProducer {
   GCobj **objs;
   int start;
   int count;
-  pthread_barrier_t *barrier;
+  ljt_barrier_t *barrier;
 } FinalizerProducer;
 
 static uint32_t finalizer_state_claim_dispatch_called;
@@ -79,8 +81,8 @@ static void *finalizer_enqueue_worker(void *arg)
 {
   FinalizerProducer *fp = (FinalizerProducer *)arg;
   int rc, i;
-  rc = pthread_barrier_wait(fp->barrier);
-  assert(rc == 0 || rc == PTHREAD_BARRIER_SERIAL_THREAD);
+  rc = ljt_barrier_wait(fp->barrier);
+  assert(rc == 0 || rc == LJT_BARRIER_SERIAL_THREAD);
   for (i = 0; i < fp->count; i++)
     lj_gc2_test_finalizer_enqueue(fp->g, fp->objs[fp->start + i]);
   return NULL;
@@ -374,7 +376,7 @@ static void test_finalizer_mpsc_concurrent_producers(lua_State *L,
   uint8_t seen[NTOTAL];
   pthread_t threads[NPROD];
   FinalizerProducer prod[NPROD];
-  pthread_barrier_t barrier;
+  ljt_barrier_t barrier;
   uint64_t queued0, dequeued0, drained0;
   int i, j, n = 0;
 
@@ -393,7 +395,7 @@ static void test_finalizer_mpsc_concurrent_producers(lua_State *L,
   queued0 = gc2_finalizer_queued_acq(g);
   dequeued0 = gc2_finalizer_dequeued_acq(g);
   drained0 = gc2_finalizer_mpsc_drained_acq(g);
-  assert(pthread_barrier_init(&barrier, NULL, NPROD) == 0);
+  assert(ljt_barrier_init(&barrier, NPROD) == 0);
   for (i = 0; i < NPROD; i++) {
     prod[i].g = g;
     prod[i].objs = objs;
@@ -405,7 +407,7 @@ static void test_finalizer_mpsc_concurrent_producers(lua_State *L,
   }
   for (i = 0; i < NPROD; i++)
     assert(pthread_join(threads[i], NULL) == 0);
-  assert(pthread_barrier_destroy(&barrier) == 0);
+  assert(ljt_barrier_destroy(&barrier) == 0);
 
   assert(gc2_finalizer_queued_acq(g) ==
 	 queued0 + (uint64_t)NTOTAL);
