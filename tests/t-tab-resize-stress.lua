@@ -10,6 +10,7 @@ local traversal_rounds =
   harness.env_number("LJ_M5_TAB_RESIZE_STRESS_TRAVERSAL_ROUNDS", 192)
 local finalizer_objects =
   harness.env_number("LJ_M5_TAB_RESIZE_STRESS_FIN_OBJECTS", 192)
+local selected_cases = os.getenv("LJ_M5_TAB_RESIZE_STRESS_CASES")
 
 local function assert_lua_value(v, label)
   local tv = type(v)
@@ -19,6 +20,23 @@ end
 
 local function ready_start(n)
   return th.channel(n), th.channel(n)
+end
+
+local function case_filter(spec)
+  if spec == nil or spec == "" then return nil end
+  local out = {}
+  for name in spec:gmatch("[^,%s]+") do out[name] = true end
+  return out
+end
+
+local enabled_cases = case_filter(selected_cases)
+
+local function run_case(name, fn)
+  if enabled_cases == nil or enabled_cases[name] then
+    fn()
+    return 1
+  end
+  return 0
 end
 
 local function collect_while_working(rounds)
@@ -166,6 +184,60 @@ local function exercise_finalizer_resize()
     assert(finalized[i] ~= true,
 	   "table-held finalizer cdata was finalized during resize")
   end
+end
+
+local function metatable_resize_writer(tbl, ready, start, id, n)
+  assert(ready:send(true, 10) == true)
+  local _, ok = start:recv(10)
+  assert(ok == true)
+  for i = 1, n do
+    tbl["resize-mt:" .. id .. ":" .. i] = i
+    tbl[id * 1000000 + i] = i
+    if i % 37 == 0 then
+      local probe = tbl.resize_meta_probe
+      assert(type(probe) == "table" and probe.tag == "resize-metatable",
+	     "metatable __index probe changed during resize")
+    end
+    if i > 48 and i % 9 == 0 then
+      tbl["resize-mt:" .. id .. ":" .. (i - 24)] = nil
+    end
+    if i % 64 == 0 then collectgarbage("step") end
+  end
+  return true
+end
+
+local function exercise_metatable_resize()
+  local t = {}
+  local weak = setmetatable({}, { __mode = "v" })
+  local probe = { tag = "resize-metatable" }
+  local mt = { __index = { resize_meta_probe = probe } }
+  weak[1] = mt
+  weak[2] = probe
+  setmetatable(t, mt)
+  mt = nil
+  probe = nil
+
+  local ready, start = ready_start(writers)
+  local workers = {}
+  for i = 1, writers do
+    workers[i] =
+      th.spawn(metatable_resize_writer, t, ready, start, i, reps)
+  end
+  harness.wait_ready(ready, writers, 10, "metatable resize")
+  harness.release_start(start, writers, 10)
+  collect_while_working(128)
+  harness.join_all(workers, 30)
+  harness.fullgc(3)
+
+  local kept_mt = weak[1]
+  local kept_probe = weak[2]
+  assert(type(kept_mt) == "table",
+	 "GC missed table metatable during resize forwarding")
+  assert(type(kept_probe) == "table",
+	 "GC missed table metatable __index edge during resize forwarding")
+  assert(getmetatable(t) == kept_mt, "table metatable changed during resize")
+  assert(t.resize_meta_probe == kept_probe,
+	 "metatable __index probe changed after resize")
 end
 
 local function jit_store_worker(tbl, ready, start, key, n)
@@ -342,12 +414,15 @@ local function exercise_concurrent_traversal_resize()
   harness.fullgc(2)
 end
 
-exercise_weak_clear_resize()
-exercise_gc_mark_resize()
-exercise_finalizer_resize()
-exercise_jit_store_resize()
-exercise_jit_read_resize()
-exercise_concurrent_traversal_resize()
+local ran = 0
+ran = ran + run_case("weak", exercise_weak_clear_resize)
+ran = ran + run_case("gcmark", exercise_gc_mark_resize)
+ran = ran + run_case("finalizer", exercise_finalizer_resize)
+ran = ran + run_case("metatable", exercise_metatable_resize)
+ran = ran + run_case("jitstore", exercise_jit_store_resize)
+ran = ran + run_case("jitread", exercise_jit_read_resize)
+ran = ran + run_case("traversal", exercise_concurrent_traversal_resize)
+assert(ran > 0, "no table resize stress cases selected")
 
 print(("t-tab-resize-stress OK: %d writers, %d resize rounds"):format(
   writers, reps))

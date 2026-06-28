@@ -69,7 +69,7 @@ return function(add)
   runtime.add_luajit_script_cases(add, {
     {
       name = "m5_tab_resize_stress",
-      description = "table resize forwarding stress across GC, weak clear, and JIT stores",
+      description = "table resize forwarding stress across GC, weak clear, metatables, and JIT stores",
       script = "t-tab-resize-stress.lua",
       opts = {
 	timeout = "30s",
@@ -85,7 +85,9 @@ return function(add)
 	  LJ_M5_TAB_RESIZE_STRESS_TRAVERSAL_ROUNDS =
 	    os.getenv("LJ_M5_TAB_RESIZE_STRESS_TRAVERSAL_ROUNDS") or "192",
 	  LJ_M5_TAB_RESIZE_STRESS_FIN_OBJECTS =
-	    os.getenv("LJ_M5_TAB_RESIZE_STRESS_FIN_OBJECTS") or "192"
+	    os.getenv("LJ_M5_TAB_RESIZE_STRESS_FIN_OBJECTS") or "192",
+	  LJ_M5_TAB_RESIZE_STRESS_CASES =
+	    os.getenv("LJ_M5_TAB_RESIZE_STRESS_CASES") or ""
 	}
       },
       message = "M5 table resize forwarding stress passed"
