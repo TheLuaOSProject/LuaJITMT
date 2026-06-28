@@ -2423,8 +2423,9 @@ uint32_t LJ_FASTCALL lj_tab_keyindex(GCtab *t, cTValue *key)
 {
   TValue tmp;
   TValue *array;
-  uint32_t asize = (uint32_t)lj_tab_array_snapshot_acq(t, &array);
-  UNUSED(array);
+  uint32_t asize;
+retry_all:
+  asize = (uint32_t)lj_tab_array_snapshot_acq(t, &array);
   if (tvisint(key)) {
     int32_t k = intV(key);
     if ((uint32_t)k < asize)
@@ -2453,6 +2454,15 @@ uint32_t LJ_FASTCALL lj_tab_keyindex(GCtab *t, cTValue *key)
       if (tab_key_retry_once(&nk, &retry))
 	goto retry_lookup;
     } while ((n = lj_tab_nextnode_acq(n)));
+    {
+      TValue *curarray;
+      uint32_t curasize = (uint32_t)lj_tab_array_snapshot_acq(t, &curarray);
+      if (curasize != asize || curarray != array ||
+	  lj_tab_node_acq(t) != node || lj_tab_node_is_retiring(node)) {
+	lj_tab_wait_no_l();
+	goto retry_all;
+      }
+    }
     if (key->u32.hi == LJ_KEYINDEX)  /* Despecialized ITERN while running. */
       return key->u32.lo;
     return ~0u;  /* Invalid key to next. */

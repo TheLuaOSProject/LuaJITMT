@@ -330,6 +330,8 @@
 #define TG_CB2DISP		((int)offsetof(TGState, dispatch)-(int)offsetof(TGState, cb))
 #define TAB_COLO_SLOTS		((int)sizeof(GCtab))
 #define TABARRAY_ASIZE_OFS	(-(int)sizeof(TabArrayHdr))
+#define TABARRAY_ACAP_OFS	\
+  (TABARRAY_ASIZE_OFS + (int)offsetof(TabArrayHdr, acap))
 #define TABNODE_HMASK_OFS	(-(int)sizeof(TabNodeHdr))
 #define TABNODE_FLAGS_OFS	(TABNODE_HMASK_OFS + (int)offsetof(TabNodeHdr, flags))
 |.define TGPOLL, dword [DISPATCH+DISPATCH_TG(poll)]
@@ -359,6 +361,9 @@
 |.endmacro
 |.macro x64_vm_tab_array_asize_acq, dst, array
 |  mov dst, dword [array+TABARRAY_ASIZE_OFS]	// x64_vm_tab_array_asize_acq: TSO acquire load.
+|.endmacro
+|.macro x64_vm_tab_array_flags_acq, dst, array
+|  mov dst, dword [array+TABARRAY_ACAP_OFS]	// x64_vm_tab_array_flags_acq: TSO acquire load.
 |.endmacro
 |.macro x64_vm_tab_node_flags_acq, dst, node
 |  mov dst, dword [node+TABNODE_FLAGS_OFS]	// x64_vm_tab_node_flags_acq: TSO acquire load.
@@ -1569,6 +1574,9 @@ static void build_subroutines(BuildCtx *ctx)
   |  lea r8, [RB+TAB_COLO_SLOTS]
   |  cmp RD, r8; je >3
   |  x64_vm_tab_array_asize_acq TMPRd, RD
+  |  x64_vm_tab_array_flags_acq r9d, RD
+  |  test r9d, TABARRAY_FLAG_RETIRING
+  |  jnz >6
   |3:
   |  cmp RAd, TMPRd;  jae >2		// Not in array part?
   |  lea RD, [RD+RA*8]
@@ -1577,6 +1585,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  cmp r8, LJ_TNIL;  je ->fff_res0
   |  mov64 r9, LJ_TFORWARD_BITS
   |  cmp r8, r9; jne >4
+  |6:
   |.if X64WIN
   |  mov TMPR, BASE
   |  mov CARG2d, RAd
@@ -2955,6 +2964,9 @@ static void build_subroutines(BuildCtx *ctx)
   |  lea NEXT_TMP, [NEXT_TAB+TAB_COLO_SLOTS]
   |  cmp r10, NEXT_TMP; je >1
   |  x64_vm_tab_array_asize_acq NEXT_ASIZE, r10
+  |  x64_vm_tab_array_flags_acq CARG3d, r10
+  |  test CARG3d, TABARRAY_FLAG_RETIRING
+  |  jnz >8
   |1:  // Traverse array part.
   |  cmp NEXT_IDX, NEXT_ASIZE;  jae >5
   |  mov NEXT_TMP, qword [r10+NEXT_IDX*8]
@@ -4769,6 +4781,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  lea r8, [RB+TAB_COLO_SLOTS]
     |  cmp ITYPE, r8; je >1
     |  x64_vm_tab_array_asize_acq TMPRd, ITYPE
+    |  x64_vm_tab_array_flags_acq r9d, ITYPE
+    |  test r9d, TABARRAY_FLAG_RETIRING
+    |  jnz >8
     |1:  // Traverse array part.
     |  cmp RCd, TMPRd; jae >5		// Index points after array part?
     |  mov r8, [ITYPE+RC*8]

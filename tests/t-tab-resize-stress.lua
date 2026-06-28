@@ -11,6 +11,8 @@ local traversal_rounds =
 local finalizer_objects =
   harness.env_number("LJ_M5_TAB_RESIZE_STRESS_FIN_OBJECTS", 192)
 local selected_cases = os.getenv("LJ_M5_TAB_RESIZE_STRESS_CASES")
+local selected_traversal_modes =
+  os.getenv("LJ_M5_TAB_RESIZE_TRAVERSAL_MODES")
 
 local function assert_lua_value(v, label)
   local tv = type(v)
@@ -30,6 +32,9 @@ local function case_filter(spec)
 end
 
 local enabled_cases = case_filter(selected_cases)
+local enabled_traversal_modes =
+  case_filter(selected_traversal_modes) or
+  { pairs = true, ipairs = true, next = true }
 
 local function run_case(name, fn)
   if enabled_cases == nil or enabled_cases[name] then
@@ -347,35 +352,51 @@ end
 local function traversal_observer(tbl, ready, start, id, rounds)
   local function check(v, label)
     local tv = type(v)
-    assert(tv ~= "userdata", label .. " exposed an internal userdata sentinel")
-    assert(tv ~= "cdata", label .. " exposed an internal cdata sentinel")
+    if tv == "userdata" then
+      return label .. " exposed an internal userdata sentinel"
+    end
+    if tv == "cdata" then
+      return label .. " exposed an internal cdata sentinel"
+    end
+    return nil
   end
 
   assert(ready:send(true, 10) == true)
   local _, ok = start:recv(10)
   assert(ok == true)
   for round = 1, rounds do
-    local count = 0
-    for k, v in pairs(tbl) do
-      check(k, "pairs traversal")
-      check(v, "pairs traversal")
-      count = count + 1
-      if count >= 256 then break end
+    if enabled_traversal_modes.pairs then
+      local count = 0
+      for k, v in pairs(tbl) do
+	local err = check(k, "pairs traversal")
+	if err then return nil, err end
+	err = check(v, "pairs traversal")
+	if err then return nil, err end
+	count = count + 1
+	if count >= 256 then break end
+      end
     end
 
-    count = 0
-    for i, v in ipairs(tbl) do
-      assert(type(i) == "number", "ipairs returned non-number index")
-      check(v, "ipairs traversal")
-      count = count + 1
-      if count >= 256 then break end
+    if enabled_traversal_modes.ipairs then
+      local count = 0
+      for i, v in ipairs(tbl) do
+	if type(i) ~= "number" then
+	  return nil, "ipairs returned non-number index"
+	end
+	local err = check(v, "ipairs traversal")
+	if err then return nil, err end
+	count = count + 1
+	if count >= 256 then break end
+      end
     end
 
-    do
+    if enabled_traversal_modes.next then
       local k, v = next(tbl, nil)
       if k ~= nil then
-	check(k, "next(nil) traversal")
-	check(v, "next(nil) traversal")
+	local err = check(k, "next(nil) traversal")
+	if err then return nil, err end
+	err = check(v, "next(nil) traversal")
+	if err then return nil, err end
       end
     end
 
@@ -406,7 +427,9 @@ local function exercise_concurrent_traversal_resize()
   harness.wait_ready(ready, nworkers, 10, "traversal resize")
   harness.release_start(start, nworkers, 10)
   collect_while_working(96)
-  harness.join_all(workers, 30)
+  harness.join_each(workers, function(result, _, msg)
+    assert(result == true, tostring(msg or result))
+  end, 30)
   for i = 1, math.min(reps, 128) do
     assert(type(t[i]) == "number", "array traversal resize lost numeric slot")
     assert_lua_value(t[i], "concurrent traversal resize")

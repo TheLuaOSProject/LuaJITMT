@@ -542,12 +542,16 @@ static void trace_unpatch(jit_State *J, GCtrace *T)
   BCIns startins = trace_startins_acq(T);
   BCOp op = bc_op(startins);
   BCIns *pc = (BCIns *)trace_startpc_acq(T);
-  UNUSED(J);
+  TraceNo traceno = trace_traceno_acq(T);
+  BCIns cur;
   if (op == BC_JMP)
     return;  /* No need to unpatch branches in parent traces (yet). */
-  switch (bc_op(*pc)) {
+  cur = (BCIns)la_load32_acq((uint32_t *)pc);
+  switch (bc_op(cur)) {
   case BC_JFORL:
-    lj_assertJ(traceref(J, bc_d(*pc)) == T, "JFORL references other trace");
+    if (bc_d(cur) != traceno)
+      break;
+    lj_assertJ(traceref(J, bc_d(cur)) == T, "JFORL references other trace");
     bc_publish(pc, startins);
     pc += bc_j(startins);
     lj_assertJ(bc_op(*pc) == BC_JFORI, "FORL does not point to JFORI");
@@ -555,11 +559,15 @@ static void trace_unpatch(jit_State *J, GCtrace *T)
     break;
   case BC_JITERL:
   case BC_JLOOP:
+    if (bc_d(cur) != traceno)
+      break;
     lj_assertJ(op == BC_ITERL || op == BC_ITERN || op == BC_LOOP ||
 	       bc_isret(op), "bad original bytecode %d", op);
     bc_publish(pc, startins);
     break;
   case BC_JFUNCF:
+    if (bc_d(cur) != traceno)
+      break;
     lj_assertJ(op == BC_FUNCF, "bad original bytecode %d", op);
     bc_publish(pc, startins);
     break;
@@ -605,6 +613,10 @@ unpatch:
       }
     }
   }
+  /* Another scoped flush may have unlinked this root first. The guarded
+  ** unpatch above is idempotent and only rewrites bytecode still naming T.
+  */
+  trace_unpatch(J, T);
   return retargeted;
 }
 
@@ -1408,9 +1420,14 @@ static void trace_hotside(jit_State *J, const BCIns *pc, lua_State *L,
 			  TraceNo parent, ExitNo exitno)
 {
   GCtrace *parentT = traceref(J, parent);
-  SnapShot *snap = &trace_snap_acq(parentT)[exitno];
+  SnapShot *snap;
   uint32_t hotexit = J->param[JIT_P_hotexit];
   uint8_t count;
+  if (!parentT || trace_traceno_acq(parentT) != parent ||
+      la_load64_acq(&parentT->retire_epoch) == LJ_TRACE_SCOPE_FLUSHING ||
+      exitno >= trace_nsnap_acq(parentT))
+    return;
+  snap = &trace_snap_acq(parentT)[exitno];
   if (!(hookmask_load(J2G(J)) & (HOOK_GC|HOOK_VMEVENT)) &&
       isluafunc(curr_func(L))) {
     for (;;) {
@@ -1426,6 +1443,14 @@ static void trace_hotside(jit_State *J, const BCIns *pc, lua_State *L,
       return;
     if (!lj_jit_token_try(J))
       return;
+    parentT = traceref(J, parent);
+    if (!parentT || trace_traceno_acq(parentT) != parent ||
+	la_load64_acq(&parentT->retire_epoch) == LJ_TRACE_SCOPE_FLUSHING ||
+	exitno >= trace_nsnap_acq(parentT)) {
+      lj_jit_token_release(J);
+      return;
+    }
+    snap = &trace_snap_acq(parentT)[exitno];
     for (;;) {
       count = (uint8_t)snap_count_acq(snap);
       if (count == SNAPCOUNT_DONE) {

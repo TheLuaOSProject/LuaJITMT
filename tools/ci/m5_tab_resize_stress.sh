@@ -35,7 +35,8 @@ for required in \
     "LJ_M5_TAB_RESIZE_STRESS_JIT_READ_REPS" \
     "LJ_M5_TAB_RESIZE_STRESS_TRAVERSAL_ROUNDS" \
     "LJ_M5_TAB_RESIZE_STRESS_FIN_OBJECTS" \
-    "LJ_M5_TAB_RESIZE_STRESS_CASES"; do
+    "LJ_M5_TAB_RESIZE_STRESS_CASES" \
+    "LJ_M5_TAB_RESIZE_TRAVERSAL_MODES"; do
   if ! grep -Fq "$required" "$SUITE"; then
     printf 'm5_tab_resize_stress suite case is missing env wiring: %s\n' \
       "$required" >&2
