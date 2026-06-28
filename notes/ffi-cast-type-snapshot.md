@@ -7,13 +7,15 @@ copy the raw type record, type info, size, and raw ID into a local `CType`.
 
 String declarations still use the parser-backed path, preserving declaration
 parsing behavior. If the stable ctype-object snapshot overlaps an active parser
-mutation, `ffi.cast` falls back under the parser token and then converts using
-the locked raw ctype record.
+mutation, `ffi.cast` waits via `lj_ctype_info_wait()` and refetches by ctype ID
+before conversion instead of falling through to the parser-lock string path.
 
 Coverage added:
 
 - stable enum ctype-object casts now cover numeric enum casts as well as cdata
   enum casts;
+- the typeinfo snapshot guard rejects stable ctype-object casts that reach a
+  parser-lock fallback before the snapshot wait/retry path;
 - cparser rollback reader now races failed enum cdefs against numeric enum
   casts and checks the failed declaration does not leave a usable rolled-back
   layout behind.
