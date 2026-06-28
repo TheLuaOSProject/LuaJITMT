@@ -811,7 +811,7 @@ static int gc_weak_list_has(global_State *g, GCtab *t)
   GCobj *want = obj2gco(t);
   GCobj *o;
   for (o = lj_gc_list_head_acq(&g->gc.weak); o != NULL;
-       o = gcref_acq(gco2tab(o)->gclist))
+       o = lj_tab_gclist_acq(gco2tab(o)))
     if (o == want)
       return 1;
   return 0;
@@ -1520,7 +1520,7 @@ void lj_gc_clearweak_bridge(global_State *g, GCobj *o)
 	}
       }
     }
-    o = gcref_acq(t->gclist);
+    o = lj_tab_gclist_acq(t);
   }
 }
 

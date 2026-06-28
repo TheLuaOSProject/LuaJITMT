@@ -3408,7 +3408,7 @@ static void gc2_weak_paranoia_zero_diff(global_State *g, GCobj *bridge_head)
     t = gco2tab(bridge_head);
     gc2_weak_process_tab(g, t, 0, &slots, &clearable);
     tables++;
-    bridge_head = gcref_acq(t->gclist);
+    bridge_head = lj_tab_gclist_acq(t);
   }
   if (clearable != 0) {
     fprintf(stderr, "GC2 weak paranoia: %llu/%llu clearable weak slots "
@@ -3563,7 +3563,7 @@ static int lj_gc2_weak_snapshot_covers_bridge(global_State *g,
     found = gc2_weak_snapshot_has_tab(g, t, n);
     if (!found)
       return 0;
-    bridge_head = gcref_acq(t->gclist);
+    bridge_head = lj_tab_gclist_acq(t);
   }
   return 1;  /* 05 section 5.8: GC2-cleared snapshot covers bridge weak list. */
 }
@@ -3587,7 +3587,7 @@ static int gc2_weak_backfill_bridge(global_State *g, GCobj *bridge_head)
       gc2_weak_process_tab(g, t, 1, &slots, &cleared);
       tables++;
     }
-    bridge_head = gcref_acq(t->gclist);
+    bridge_head = lj_tab_gclist_acq(t);
   }
   if (tables) {
     gc2_weak_bridge_backfills_add(g, 1);
@@ -3625,7 +3625,7 @@ static int gc2_weak_overflow_clear_bridge(global_State *g, GCobj *bridge_head)
       return 0;
     gc2_weak_process_tab(g, t, 1, &slots, &cleared);
     tables++;
-    bridge_head = gcref_acq(t->gclist);
+    bridge_head = lj_tab_gclist_acq(t);
   }
   if (tables) {
     gc2_weak_bridge_backfills_add(g, 1);

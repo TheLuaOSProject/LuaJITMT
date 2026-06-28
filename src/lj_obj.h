@@ -5229,6 +5229,11 @@ static LJ_AINLINE GCtab *lj_obj_metatable_acq(const GCobj *o)
   return tabref_acq(o->gch.metatable);
 }
 
+static LJ_AINLINE GCobj *lj_tab_gclist_acq(const GCtab *t)
+{
+  return gcref_acq(t->gclist);
+}
+
 static LJ_AINLINE GCtab *lj_func_env_acq(const GCfunc *fn)
 {
   return tabref_acq(fn->c.env);
