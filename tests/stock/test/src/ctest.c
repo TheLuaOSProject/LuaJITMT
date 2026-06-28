@@ -163,7 +163,7 @@ LUA_API float LJ_STDCALL stdcall_ff(float a, float b) { return a+b; }
 
 static int ct_call(lua_State *L)
 {
-  int nresults = luaL_checkint(L, 1);
+  int nresults = (int)luaL_checkinteger(L, 1);
   luaL_checkstack(L, nresults, "too many results");
   lua_call(L, lua_gettop(L)-2, nresults);
   return lua_gettop(L)-1;
@@ -183,7 +183,7 @@ static int ct_callon(lua_State *L)
 
 static int ct_pcall_err(lua_State *L)
 {
-  int nresults = luaL_checkint(L, 1);
+  int nresults = (int)luaL_checkinteger(L, 1);
   luaL_checkstack(L, nresults, "too many results");
   if (lua_pcall(L, lua_gettop(L)-2, nresults, 0))
     lua_error(L);
@@ -334,6 +334,7 @@ static luaL_Reg ct_funcs[] = {
 
 LUA_API int luaopen_ctest(lua_State *L)
 {
-  luaL_register(L, "ctest", ct_funcs);
+  luaL_pushmodule(L, "ctest", sizeof(ct_funcs)/sizeof(ct_funcs[0])-1);
+  luaL_setfuncs(L, ct_funcs, 0);
   return 1;
 }

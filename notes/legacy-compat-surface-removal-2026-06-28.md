@@ -11,6 +11,15 @@ current lockless policy:
 - Made `-DLUAJIT_ENABLE_LUA52COMPAT` fail explicitly in `lj_arch.h`.
 - Removed stale v2 bytecode compatibility plan/test material and replaced it
   with current-only dump validation wording.
+- Removed the public `luaL_openlib()` and `luaL_register()` compatibility
+  entry points. In-tree module registration uses explicit `luaL_pushmodule()`
+  and `luaL_setfuncs()` calls so supported module setup stays visible in the
+  caller instead of hidden behind an old wrapper API.
+- Removed the unused public `luaL_typerror()` wrapper and the integer-cast
+  auxlib macros `luaL_checkint`, `luaL_optint`, `luaL_checklong`, and
+  `luaL_optlong`. Callers should use `luaL_checkinteger()` and
+  `luaL_optinteger()` with an explicit local cast when they really need a
+  narrower C type.
 - Removed redundant `string.gmatch` C-closure and local-cell x64 source guards;
   behavior fixtures, bytecode checks, and generated JIT dump checks cover the
   observable semantics.

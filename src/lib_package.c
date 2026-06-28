@@ -707,7 +707,9 @@ LUALIB_API int luaopen_package(lua_State *L)
   luaL_newmetatable(L, "_LOADLIB");
   lj_lib_pushcf(L, lj_cf_package_unloadlib, 1);
   lua_setfield(L, -2, "__gc");
-  luaL_register(L, LUA_LOADLIBNAME, package_lib);
+  luaL_pushmodule(L, LUA_LOADLIBNAME,
+		  sizeof(package_lib)/sizeof(package_lib[0])-1);
+  luaL_setfuncs(L, package_lib, 0);
   lua_copy(L, -1, LUA_ENVIRONINDEX);
   lua_createtable(L, sizeof(package_loaders)/sizeof(package_loaders[0])-1, 0);
   for (i = 0; package_loaders[i] != NULL; i++) {
@@ -731,7 +733,7 @@ LUALIB_API int luaopen_package(lua_State *L)
   luaL_findtable(L, LUA_REGISTRYINDEX, "_PRELOAD", 4);
   lua_setfield(L, -2, "preload");
   lua_pushvalue(L, LUA_GLOBALSINDEX);
-  luaL_register(L, NULL, package_global);
+  luaL_setfuncs(L, package_global, 0);
   lua_pop(L, 1);
   return 1;
 }

@@ -39,8 +39,8 @@ static int ct_isalloc(lua_State *L)
 
 static int ct_usereg(lua_State *L)
 {
-  int n = luaL_checkint(L, 1);
-  int m = luaL_checkint(L, 2);
+  int n = (int)luaL_checkinteger(L, 1);
+  int m = (int)luaL_checkinteger(L, 2);
   int i;
   int a = 0, b = 0, c = 0, d = 0, e = 0, f = 0;
   for (i = 0; i < n; i++) {
@@ -123,7 +123,8 @@ static luaL_Reg ct_funcs[] = {
 extern "C" {
 LUA_API int luaopen_cpptest(lua_State *L)
 {
-  luaL_register(L, "cpptest", ct_funcs);
+  luaL_pushmodule(L, "cpptest", sizeof(ct_funcs)/sizeof(ct_funcs[0])-1);
+  luaL_setfuncs(L, ct_funcs, 0);
   return 1;
 }
 }

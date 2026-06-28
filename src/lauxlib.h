@@ -23,13 +23,8 @@ typedef struct luaL_Reg {
   lua_CFunction func;
 } luaL_Reg;
 
-LUALIB_API void (luaL_openlib) (lua_State *L, const char *libname,
-                                const luaL_Reg *l, int nup);
-LUALIB_API void (luaL_register) (lua_State *L, const char *libname,
-                                const luaL_Reg *l);
 LUALIB_API int (luaL_getmetafield) (lua_State *L, int obj, const char *e);
 LUALIB_API int (luaL_callmeta) (lua_State *L, int obj, const char *e);
-LUALIB_API int (luaL_typerror) (lua_State *L, int narg, const char *tname);
 LUALIB_API int (luaL_argerror) (lua_State *L, int numarg, const char *extramsg);
 LUALIB_API const char *(luaL_checklstring) (lua_State *L, int numArg,
                                                           size_t *l);
@@ -102,11 +97,6 @@ LUALIB_API void (luaL_setmetatable) (lua_State *L, const char *tname);
 		((void)((cond) || luaL_argerror(L, (numarg), (extramsg))))
 #define luaL_checkstring(L,n)	(luaL_checklstring(L, (n), NULL))
 #define luaL_optstring(L,n,d)	(luaL_optlstring(L, (n), (d), NULL))
-#define luaL_checkint(L,n)	((int)luaL_checkinteger(L, (n)))
-#define luaL_optint(L,n,d)	((int)luaL_optinteger(L, (n), (d)))
-#define luaL_checklong(L,n)	((long)luaL_checkinteger(L, (n)))
-#define luaL_optlong(L,n,d)	((long)luaL_optinteger(L, (n), (d)))
-
 #define luaL_typename(L,i)	lua_typename(L, lua_type(L,(i)))
 
 #define luaL_dofile(L, fn) \

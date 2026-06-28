@@ -626,7 +626,7 @@ LJLIB_CF(string_gsub)
   const char *src = luaL_checklstring(L, 1, &srcl);
   const char *p = luaL_checkstring(L, 2);
   int  tr = lua_type(L, 3);
-  int max_s = luaL_optint(L, 4, (int)(srcl+1));
+  int max_s = (int)luaL_optinteger(L, 4, (lua_Integer)(srcl+1));
   int anchor = (*p == '^') ? (p++, 1) : 0;
   int n = 0;
   MatchState ms;

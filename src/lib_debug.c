@@ -383,7 +383,7 @@ LJLIB_CF(debug_sethook)
   } else {
     const char *smask = luaL_checkstring(L, arg+2);
     luaL_checktype(L, arg+1, LUA_TFUNCTION);
-    count = luaL_optint(L, arg+3, 0);
+    count = (int)luaL_optinteger(L, arg+3, 0);
     func = hookf; mask = makemask(smask, count);
   }
   (L->top++)->u64 = KEY_HOOK;
