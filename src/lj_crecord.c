@@ -670,7 +670,7 @@ static TRef crec_ct_ct(jit_State *J, CType *d, CType *s, TRef dp, TRef sp,
 static TRef crec_tv_ct(jit_State *J, CType *s, CTypeID sid, TRef sp)
 {
   CTState *cts = ctype_ctsG(J2G(J));
-  IRType t = crec_ct2irt(cts, s);
+  IRType t = crec_ct2irt_snapshot(J, cts, s);
   CTInfo sinfo = ctype_info_acq(s);
   CTSize ssize = ctype_size_acq(s);
   if (ctype_isnum(sinfo)) {
