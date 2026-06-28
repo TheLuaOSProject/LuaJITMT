@@ -27,20 +27,30 @@ lock-free ctype intern table. The base-name wait still happens in native time
 when a parser is active, so the lookup does not read rollback-sensitive names
 while the parser token is held.
 
+One fixed-size array suffix over a direct base, including a direct pointer
+chain base, also stays off the parser token: `ffi.typeof("int[4]")`,
+`ffi.typeof("my_typedef[3]")`, `ffi.typeof("struct my_tag[2]")`, and
+`ffi.typeof("my_typedef *[2]")`. The fast path accepts only a decimal element
+count with no leading-zero C integer ambiguity, snapshots the resolved element
+type's size/alignment through the ctype sequence helpers, and interns the array
+ctype only if the element type has a stable fixed size.
+
 The reason is concurrency, not just speed. Predefined names are installed
 during `lj_ctype_init()` before the `CTState` is shared, and their payload
 records are immutable. Published typedef names are not immutable in the same
 way, so their fast path uses the ctype namespace snapshot/wait helpers and
 falls back to the parser if the string is not a direct typedef or tag lookup.
 
-General declarations still use the parser path. That includes arrays,
-qualifiers that need attribute records, structs/unions/enums, function types,
-qualified pointer chains that are not exact predefined spellings, declarations
-with `$` parameters, variable-length forms, and strings whose internal spacing
-or token sequence does not exactly match the predefined table, a single typedef
-identifier, a simple tag lookup, or a trailing pointer chain over one of those
-bases. Those can allocate or intern ctype records, observe rollback-sensitive
-names, or need normal parser diagnostics.
+General declarations still use the parser path. That includes unknown-size
+arrays, variable-length arrays, array size expressions, multi-dimensional
+arrays, qualifiers that need attribute records, structs/unions/enums, function
+types, qualified pointer chains that are not exact predefined spellings,
+declarations with `$` parameters, variable-length forms, and strings whose
+internal spacing or token sequence does not exactly match the predefined table,
+a single typedef identifier, a simple tag lookup, a trailing pointer chain over
+one of those bases, or one fixed-size array suffix over one of those bases.
+Those can allocate or intern ctype records, observe rollback-sensitive names,
+or need normal parser diagnostics.
 
 Validation target:
 

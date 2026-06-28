@@ -178,6 +178,10 @@ static int ffi_lookup_named_ctype(lua_State *L, CTState *cts, GCstr *name,
   return ok;
 }
 
+static int ffi_ctype_info_read(lua_State *L, CTState *cts, CTypeID id,
+			       CTInfo *infop, CTSize *szp, CTypeID *ridp,
+			       CType *rawp);
+
 static int ffi_direct_ctype_base_string(lua_State *L, CTState *cts, GCstr *s,
 					const char *p, MSize len,
 					CTypeID *idp)
@@ -258,11 +262,62 @@ static MSize ffi_direct_pointer_suffix(const char *p, MSize *lenp)
   return nptr;
 }
 
-static int ffi_direct_ctype_string(lua_State *L, CTState *cts, GCstr *s,
-				   CTypeID *idp)
+static int ffi_direct_array_suffix(const char *p, MSize *lenp, CTSize *nelemp)
 {
-  const char *p = strdata(s);
-  MSize len = s->len;
+  MSize len = *lenp, i, dstart, dend;
+  uint64_t nelem = 0;
+  while (len != 0 && ffi_cspace(p[len-1])) len--;
+  if (len == 0 || p[len-1] != ']')
+    return 0;
+  i = len - 1;
+  while (i != 0 && ffi_cspace(p[i-1])) i--;
+  dend = i;
+  while (i != 0 && lj_char_isdigit((uint8_t)p[i-1])) i--;
+  dstart = i;
+  if (dstart == dend)
+    return 0;
+  if (dend - dstart > 1 && p[dstart] == '0')
+    return 0;  /* Keep C octal/hex integer spellings on the parser path. */
+  for (i = dstart; i < dend; i++) {
+    nelem = nelem * 10u + (uint32_t)(p[i] - '0');
+    if (nelem >= 0x80000000u)
+      return 0;
+  }
+  i = dstart;
+  while (i != 0 && ffi_cspace(p[i-1])) i--;
+  if (i == 0 || p[i-1] != '[')
+    return 0;
+  i--;
+  while (i != 0 && ffi_cspace(p[i-1])) i--;
+  if (i == 0)
+    return 0;
+  *lenp = i;
+  *nelemp = (CTSize)nelem;
+  return 1;
+}
+
+static int ffi_direct_array_ctype(lua_State *L, CTState *cts, CTypeID elemid,
+				  CTSize nelem, CTypeID *idp)
+{
+  CTInfo einfo, ainfo;
+  CTSize esize;
+  uint64_t asize;
+  int ok = ffi_ctype_info_read(L, cts, elemid, &einfo, &esize, NULL, NULL);
+  if (ok <= 0 || ctype_isref(einfo) || ctype_isvltype(einfo) ||
+      esize == CTSIZE_INVALID)
+    return 0;
+  asize = (uint64_t)nelem * esize;
+  if (asize >= 0x80000000u)
+    return 0;
+  ainfo = CTINFO(CT_ARRAY, elemid);
+  ainfo |= (einfo & (CTF_ALIGN|CTF_QUAL));
+  *idp = lj_ctype_intern_l(L, cts, ainfo, (CTSize)asize);
+  return 1;
+}
+
+static int ffi_direct_ctype_part(lua_State *L, CTState *cts, GCstr *s,
+				 const char *p, MSize len, CTypeID *idp)
+{
   while (len != 0 && ffi_cspace(*p)) { p++; len--; }
   while (len != 0 && ffi_cspace(p[len-1])) len--;
   {
@@ -280,6 +335,25 @@ static int ffi_direct_ctype_string(lua_State *L, CTState *cts, GCstr *s,
     }
   }
   return ffi_direct_ctype_base_string(L, cts, s, p, len, idp);
+}
+
+static int ffi_direct_ctype_string(lua_State *L, CTState *cts, GCstr *s,
+				   CTypeID *idp)
+{
+  const char *p = strdata(s);
+  MSize len = s->len;
+  while (len != 0 && ffi_cspace(*p)) { p++; len--; }
+  while (len != 0 && ffi_cspace(p[len-1])) len--;
+  {
+    MSize baselen = len;
+    CTSize nelem;
+    CTypeID elemid;
+    if (ffi_direct_array_suffix(p, &baselen, &nelem) &&
+	ffi_direct_ctype_part(L, cts, s, p, baselen, &elemid) &&
+	ffi_direct_array_ctype(L, cts, elemid, nelem, idp))
+      return 1;
+  }
+  return ffi_direct_ctype_part(L, cts, s, p, len, idp);
 }
 
 /* Check first argument for a C type and returns its ID. */
