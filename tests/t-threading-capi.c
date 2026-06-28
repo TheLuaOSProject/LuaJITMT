@@ -14,6 +14,7 @@
 #include "lauxlib.h"
 #include "lualib.h"
 
+#include "lj_gc2.h"
 #include "lj_obj.h"
 #include "lj_tg.h"
 
@@ -95,6 +96,12 @@ typedef struct JoinOwnerCtx {
   int released;
 } JoinOwnerCtx;
 
+typedef struct StopreqPublishCtx {
+  global_State *g;
+  TGState *tg;
+  int published;
+} StopreqPublishCtx;
+
 static lua_State *join_stopreq_child;
 
 static void store_flag(int *p, int v)
@@ -105,6 +112,35 @@ static void store_flag(int *p, int v)
 static int load_flag(const int *p)
 {
   return __atomic_load_n(p, __ATOMIC_ACQUIRE);
+}
+
+static void publish_stopreq(global_State *g, TGState *tg)
+{
+  uint64_t epoch;
+  check(tg != NULL, "missing TG for STOPREQ publish");
+  epoch = la_load64_rlx(&g->gc2.hs_epoch) + 1u;
+  la_store32_rel(&g->gc2.hs_actions, LJ_GC2_HS_STOPREQ);
+  la_store32_rel(&g->gc2.hs_pending, 1);
+  la_store64_rel(&g->gc2.hs_epoch, epoch);
+  lj_tg_reqmask_rel(tg, LJ_GC2_HS_STOPREQ);
+  lj_tg_poll_rel(tg, 1);
+}
+
+static void *stopreq_publish_worker(void *arg)
+{
+  enum { WAIT_LIMIT = 1000 };
+  StopreqPublishCtx *ctx = (StopreqPublishCtx *)arg;
+  int i;
+  for (i = 0; i < WAIT_LIMIT; i++) {
+    if (lj_tg_in_native_acq(ctx->tg))
+      break;
+    sleep_ms(1);
+  }
+  check(lj_tg_in_native_acq(ctx->tg),
+	"STOPREQ publisher did not observe native wait");
+  publish_stopreq(ctx->g, ctx->tg);
+  store_flag(&ctx->published, 1);
+  return NULL;
 }
 
 static void load_lua_function(lua_State *L, const char *chunk)
@@ -319,7 +355,9 @@ static void test_join_busy_done_owner_stopreq(lua_State *L)
 {
   enum { WAIT_LIMIT = 1000 };
   const uint32_t fake_owner = 0x60000001u;
+  StopreqPublishCtx ctx;
   lua_State *child;
+  pthread_t thread;
   int base = lua_gettop(L);
   int status, nres, i;
   const char *err;
@@ -340,9 +378,17 @@ static void test_join_busy_done_owner_stopreq(lua_State *L)
 
   lj_state_owner_rel(child, fake_owner);
   join_stopreq_child = child;
-  (void)lj_tg_flags_or_rlx(L2TG(L), TGF_STOPREQ);
+  memset(&ctx, 0, sizeof(ctx));
+  ctx.g = G(L);
+  ctx.tg = L2TG(L);
+  check(ctx.tg != NULL, "missing TG for STOPREQ publisher");
+  if (pthread_create(&thread, NULL, stopreq_publish_worker, &ctx) != 0)
+    failf("pthread_create STOPREQ publisher failed");
   lua_pushcfunction(L, join_stopreq_c);
   status = lua_pcall(L, 0, LUA_MULTRET, 0);
+  if (pthread_join(thread, NULL) != 0)
+    failf("pthread_join STOPREQ publisher failed");
+  check(load_flag(&ctx.published) == 1, "STOPREQ publisher did not run");
   check(status != LUA_OK, "luaMT_join ignored STOPREQ while child owner was busy");
   err = lua_tostring(L, -1);
   check(err && strstr(err, "thread interrupted: VM shutdown") != NULL,
@@ -362,6 +408,50 @@ static void test_join_busy_done_owner_stopreq(lua_State *L)
   check(lua_toboolean(L, -2) == 1, "luaMT_join STOPREQ recovery failed");
   check(lua_tointeger(L, -1) == 99,
 	"luaMT_join STOPREQ recovery result mismatch");
+  lua_settop(L, base);
+}
+
+static void test_mutex_lock_stopreq(lua_State *L)
+{
+  StopreqPublishCtx ctx;
+  pthread_t thread;
+  int base = lua_gettop(L);
+  int status;
+  const char *err;
+
+  check_lua(L, luaL_loadstring(L,
+    "local m = require('threading').mutex()\n"
+    "m:lock()\n"
+    "return function() return m:lock() end, m\n"),
+    "creating mutex STOPREQ fixture chunk");
+  check_lua(L, lua_pcall(L, 0, 2, 0), "creating mutex STOPREQ fixture");
+  check(lua_isfunction(L, base + 1),
+	"mutex STOPREQ fixture did not return lock function");
+  check(lua_isuserdata(L, base + 2),
+	"mutex STOPREQ fixture did not return mutex");
+
+  memset(&ctx, 0, sizeof(ctx));
+  ctx.g = G(L);
+  ctx.tg = L2TG(L);
+  check(ctx.tg != NULL, "missing TG for mutex STOPREQ publisher");
+  if (pthread_create(&thread, NULL, stopreq_publish_worker, &ctx) != 0)
+    failf("pthread_create mutex STOPREQ publisher failed");
+  lua_pushvalue(L, base + 1);
+  status = lua_pcall(L, 0, LUA_MULTRET, 0);
+  if (pthread_join(thread, NULL) != 0)
+    failf("pthread_join mutex STOPREQ publisher failed");
+  check(load_flag(&ctx.published) == 1,
+	"mutex STOPREQ publisher did not run");
+  check(status != LUA_OK, "mutex lock ignored STOPREQ while blocked");
+  err = lua_tostring(L, -1);
+  check(err && strstr(err, "thread interrupted: VM shutdown") != NULL,
+	"mutex lock STOPREQ error mismatch");
+  lua_pop(L, 1);
+  (void)lj_tg_flags_and_rlx(L2TG(L), (uint8_t)~TGF_STOPREQ);
+
+  lua_getfield(L, base + 2, "unlock");
+  lua_pushvalue(L, base + 2);
+  check_lua(L, lua_pcall(L, 1, 0, 0), "unlocking mutex after STOPREQ");
   lua_settop(L, base);
 }
 
@@ -530,12 +620,13 @@ int main(void)
   test_error_object(L);
   test_join_waits_for_busy_done_owner(L);
   test_join_busy_done_owner_stopreq(L);
+  test_mutex_lock_stopreq(L);
   test_attach_detach(L);
   luaMT_fence();
 
   lua_close(L);
   test_close_waits_for_attach();
   test_close_waits_for_entering_attach();
-  puts("t-threading-capi OK: public luaMT spawn/join/fence/attach verified");
+  puts("t-threading-capi OK: public luaMT spawn/join/fence/attach/mutex verified");
   return 0;
 }

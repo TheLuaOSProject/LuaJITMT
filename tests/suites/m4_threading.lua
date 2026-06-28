@@ -39,6 +39,7 @@ return function(add)
       description = "public C threading API behavior fixture",
       output = "lj_t-threading-capi",
       cfile = "t-threading-capi.c",
+      opts = { timeout = "20s" },
       message = "M4 public C threading API tests passed"
     }
   })

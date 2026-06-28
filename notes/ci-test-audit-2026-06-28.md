@@ -63,6 +63,20 @@
   launcher. The old helper-name and source-shape checks were blocking better
   implementation shapes without adding behavior coverage beyond the fixtures.
 
+## Follow-up Landed Later On 2026-06-28
+
+- `tools/ci/m4_threading_capi.sh` is now a thin compatibility launcher. Its
+  join-result wait, mutex wait, and attach-order source guards moved to C API
+  behavior coverage.
+- `tools/ci/m4_threading_api.sh` now runs both `m4_threading_api` and
+  `m4_threading_capi`, so the compatibility entry point still gates the old
+  contracts without pinning `src/lib_threading.c` source shape.
+- `tests/t-threading-capi.c` now covers fresh STOPREQ delivery for a join
+  blocked on a done child with a busy owner and for a blocked
+  `threading.mutex:lock()` call.
+- `m4_threading_capi` has a `20s` timeout to turn future hangs into diagnostic
+  failures.
+
 ## Next Refactors
 
 1. Convert more FFI source guards from `tools/ci/m7_ffi_*.sh` into behavior
