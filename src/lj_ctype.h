@@ -413,6 +413,20 @@ ccallback_native_had_stopreq_rel(CCallbackRuntime *cb, uint8_t had_stopreq)
   la_store8_rel(&cb->native_had_stopreq, had_stopreq);
 }
 
+static LJ_AINLINE uint8_t
+ccallback_auto_detach_acq(const CCallbackRuntime *cb)
+{
+  /* 11.5 foreign callback carrier auto-detach handoff. */
+  return cb ? la_load8_acq(&cb->auto_detach) : 0;
+}
+
+static LJ_AINLINE void
+ccallback_auto_detach_rel(CCallbackRuntime *cb, uint8_t auto_detach)
+{
+  /* 11.5 foreign callback carrier auto-detach handoff. */
+  la_store8_rel(&cb->auto_detach, auto_detach);
+}
+
 static LJ_AINLINE MSize ccallback_depth_acq(const CCallbackRuntime *cb)
 {
   /* 11.5 callback runtime depth observation for tests/diagnostics. */

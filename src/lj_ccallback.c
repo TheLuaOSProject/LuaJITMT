@@ -721,7 +721,7 @@ CCallbackRuntime * LJ_FASTCALL lj_ccallback_prepare(CTState *cts, MSize slot)
   cb = &tg->cb;
   cb->L = L;  /* Callback carrier TG from current TLS, not slot owner. */
   ccallback_slot_rel(cb, slot);
-  cb->auto_detach = auto_detach;
+  ccallback_auto_detach_rel(cb, auto_detach);
   return cb;
 }
 
@@ -739,12 +739,15 @@ void lj_ccallback_unwind(lua_State *L, TValue *cont)
   if (frame != NULL && frame->cont == cont) {
     uint8_t auto_detach = frame->auto_detach;
     callback_frame_pop(cb);
-    cb->auto_detach = 0;
+    ccallback_auto_detach_rel(cb, 0);
     if (auto_detach)
       lj_threading_detach(L, 0);
-  } else if (cb->auto_detach) {
-    cb->auto_detach = 0;
-    lj_threading_detach(L, 0);
+  } else {
+    uint8_t auto_detach = ccallback_auto_detach_acq(cb);
+    if (auto_detach) {
+      ccallback_auto_detach_rel(cb, 0);
+      lj_threading_detach(L, 0);
+    }
   }
 }
 
@@ -953,7 +956,7 @@ lua_State * LJ_FASTCALL lj_ccallback_enter(CTState *cts, void *cf,
   global_State *g = cts->g;
   TGState *tg = lj_thr_get_tg();
   uint8_t was_native;
-  uint8_t auto_detach = cb->auto_detach;
+  uint8_t auto_detach = ccallback_auto_detach_acq(cb);
   uint32_t actions = 0;
   int had_stopreq = 0;
   void *ffi_call_func;
@@ -982,7 +985,7 @@ lua_State * LJ_FASTCALL lj_ccallback_enter(CTState *cts, void *cf,
   }
   callback_conv_args(cts, L, cb);
   callback_frame_push(L, cb, L->base-1, was_native, auto_detach);
-  cb->auto_detach = 0;
+  ccallback_auto_detach_rel(cb, 0);
   if (was_native) {
     if (ccallback_fresh_stopreq(L, actions, had_stopreq)) {
       callback_frame_top(cb)->was_native = 0;
@@ -999,7 +1002,8 @@ void LJ_FASTCALL lj_ccallback_leave(CTState *cts, TValue *o,
   CCallbackFrame *frame = callback_frame_top(cb);
   lua_State *L = frame ? frame->L : cb->L;
   uint8_t was_native = frame ? frame->was_native : 0;
-  uint8_t auto_detach = frame ? frame->auto_detach : cb->auto_detach;
+  uint8_t auto_detach = frame ? frame->auto_detach :
+    ccallback_auto_detach_acq(cb);
   TGState *tg = lj_thr_get_tg();
   GCfunc *fn;
   TValue *obase;
@@ -1023,7 +1027,7 @@ void LJ_FASTCALL lj_ccallback_leave(CTState *cts, TValue *o,
   L->cframe = cframe_prev(L->cframe);
   ccallback_slot_rel(cb, 0);  /* Blacklist C function that called the callback. */
   callback_frame_pop(cb);
-  cb->auto_detach = 0;
+  ccallback_auto_detach_rel(cb, 0);
   if (was_native)
     lj_native_enter(tg);
   if (auto_detach)

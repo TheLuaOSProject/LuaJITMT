@@ -133,6 +133,25 @@ fi
     name = "m7_ffi_callback_runtime",
     description = "FFI callback runtime behavior",
     run = function(t)
+      t:run([==[
+# Source guard category: non_observable_memory_order.
+for helper in ccallback_auto_detach_acq ccallback_auto_detach_rel; do
+  if ! grep -qE "${helper}[[:space:]]*[(]" src/lj_ctype.h; then
+    printf 'callback runtime auto-detach helper missing: %s\n' "$helper" >&2
+    exit 1
+  fi
+done
+if ! grep -qF 'la_load8_acq(&cb->auto_detach)' src/lj_ctype.h ||
+   ! grep -qF 'la_store8_rel(&cb->auto_detach' src/lj_ctype.h; then
+  printf '%s\n' 'callback runtime auto_detach helpers must use acquire/release byte operations' >&2
+  exit 1
+fi
+if hits=$(grep -nE -- 'cb->[[:space:]]*auto_detach' src/lj_ccallback.c || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw callback runtime auto_detach access is forbidden; use ccallback_auto_detach_* helpers' >&2
+  exit 1
+fi
+]==], { cwd = t.root, quiet = true })
       clean_build(t)
       run_c_fixture_specs(t, {
         { output = "lj_t-ffi-callback-nested-native",
