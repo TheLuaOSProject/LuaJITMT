@@ -12,6 +12,7 @@
 #include "lj_tab.h"
 #include "lj_meta.h"
 #include "lj_ir.h"
+#include "lj_trace.h"
 #include "lj_tg.h"
 #include "lj_ctype.h"
 #include "lj_cconv.h"
@@ -28,6 +29,46 @@ typedef struct CDArith {
   CTypeID id[2];
   CTSize enumval[2];
 } CDArith;
+
+#if LJ_HASJIT
+static jit_State *carith_active_recorder(lua_State *L)
+{
+  jit_State *J = G2J(G(L));
+  return J->L == L && lj_jit_token_held(J) &&
+	 lj_trace_state_load(J) != LJ_TRACE_IDLE ? J : NULL;
+}
+#endif
+
+static int carith_ctype_info_read(lua_State *L, CTState *cts, CTypeID id,
+				  CTInfo *infop, CTSize *szp,
+				  CTypeID *ridp, CType *rawp)
+{
+  int ok = lj_ctype_info_snapshot(cts, id, infop, szp, ridp, rawp);
+  if (ok < 0) {
+#if LJ_HASJIT
+    jit_State *J = carith_active_recorder(L);
+    if (J)
+      lj_trace_err(J, LJ_TRERR_CTBUSY);
+#endif
+    ok = lj_ctype_info_wait(L, cts, id, infop, szp, ridp, rawp);
+  }
+  return ok;
+}
+
+static cTValue *carith_ctype_metatv_read(lua_State *L, CTState *cts,
+					 TValue *out, CTypeID id, MMS mm)
+{
+  int ok = lj_ctype_metatv_snapshot(cts, out, id, mm);
+  if (ok < 0) {
+#if LJ_HASJIT
+    jit_State *J = carith_active_recorder(L);
+    if (J)
+      lj_trace_err(J, LJ_TRERR_CTBUSY);
+#endif
+    return lj_ctype_metatv_wait(L, cts, out, id, mm);
+  }
+  return ok ? out : NULL;
+}
 
 static void carith_refresh_ctypes(CTState *cts, CDArith *ca)
 {
@@ -288,13 +329,11 @@ static int lj_carith_meta(lua_State *L, CTState *cts, CDArith *ca, MMS mm)
     CTypeID rid;
     CTInfo info;
     CTSize size;
-    int ok = lj_ctype_info_snapshot(cts, id, &info, &size, &rid, &snap);
-    if (ok <= 0)
-      ok = lj_ctype_info_wait(L, cts, id, &info, &size, &rid, &snap);
+    int ok = carith_ctype_info_read(L, cts, id, &info, &size, &rid, &snap);
     if (ok > 0) {
       info = ctype_info_acq(&snap);
       if (ctype_isptr(info)) id = ctype_cid(info);
-      tv = lj_ctype_metatv_wait(L, cts, &metatv, id, mm);
+      tv = carith_ctype_metatv_read(L, cts, &metatv, id, mm);
     }
   }
   if (!tv && L->base+1 < L->top && tviscdata(L->base+1)) {
@@ -303,13 +342,11 @@ static int lj_carith_meta(lua_State *L, CTState *cts, CDArith *ca, MMS mm)
     CTypeID rid;
     CTInfo info;
     CTSize size;
-    int ok = lj_ctype_info_snapshot(cts, id, &info, &size, &rid, &snap);
-    if (ok <= 0)
-      ok = lj_ctype_info_wait(L, cts, id, &info, &size, &rid, &snap);
+    int ok = carith_ctype_info_read(L, cts, id, &info, &size, &rid, &snap);
     if (ok > 0) {
       info = ctype_info_acq(&snap);
       if (ctype_isptr(info)) id = ctype_cid(info);
-      tv = lj_ctype_metatv_wait(L, cts, &metatv, id, mm);
+      tv = carith_ctype_metatv_read(L, cts, &metatv, id, mm);
     }
   }
   if (!tv) {

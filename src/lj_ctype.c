@@ -1318,8 +1318,8 @@ int lj_ctype_info_wait(lua_State *L, CTState *cts, CTypeID id,
   }
 }
 
-/* Sequence-checked ctype metamethod lookup for stable interpreter readers. */
-static int ctype_metatv_snapshot(CTState *cts, TValue *out, CTypeID id, MMS mm)
+/* Sequence-checked ctype metamethod lookup for stable ctype readers. */
+int lj_ctype_metatv_snapshot(CTState *cts, TValue *out, CTypeID id, MMS mm)
 {
   uint32_t seq0 = ctype_parse_token_acq(cts);
   CTypeTab *tabh;
@@ -1391,7 +1391,7 @@ cTValue *lj_ctype_metatv_wait(lua_State *L, CTState *cts, TValue *out,
 			      CTypeID id, MMS mm)
 {
   for (;;) {
-    int ok = ctype_metatv_snapshot(cts, out, id, mm);
+    int ok = lj_ctype_metatv_snapshot(cts, out, id, mm);
     if (ok > 0)
       return out;
     if (ok == 0)

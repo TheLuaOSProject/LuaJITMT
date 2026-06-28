@@ -10,18 +10,22 @@ The interpreter FFI paths for cdata `__index`, `__newindex`, `__call`,
 metamethods use the wait helper. Pointer-wrapper stripping in `__call`,
 `pairs`, and arithmetic dispatch is also snapshot-backed.
 
+Recorder FFI ctype metamethod lookups use `lj_ctype_metatv_snapshot()`. A
+busy parser token aborts recording with `LJ_TRERR_CTBUSY` instead of waiting
+from the recorder; normal execution then falls back to the interpreter path.
+
 While covering `__newindex`, pointer auto-deref now preserves qualifiers from
 the pointed-to struct. A write through `const struct *` therefore still fails
 before consulting table-backed `__newindex`, matching LuaJIT's stock FFI
 semantics.
-
-Recorder-side ctype metamethod lookups still use the existing non-waiting
-helper and remain a separate JIT cleanup target.
 
 Coverage:
 - `tests/t-ffi-metatv-snapshot.c` checks stable `__call`, `__add`, `__pairs`,
   and constructor `__gc` lookup do not advance `CTState.parse_token`.
 - The same fixture holds the parser token and verifies `__call`, `__add`, and
   `__pairs` wait from a native region before dispatching the metamethod.
-- The fixture is wired into `m7_ffi_metatype`; this is behavior coverage, not a
-  source-search guard.
+- `tests/t-ffi-recorder-metatv-busy.c` holds the parser token during trace
+  recording and verifies ctype `__call`, `__add`, table-backed `__index`, and
+  `ffi.new()`/`__gc` lookup abort recording rather than waiting.
+- The fixtures are wired into `m7_ffi_metatype`; this is behavior coverage,
+  not a source-search guard.

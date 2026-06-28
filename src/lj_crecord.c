@@ -794,13 +794,37 @@ static void crec_tailcall(jit_State *J, RecordFFData *rd, cTValue *tv)
   rd->nres = -1;  /* Pending tailcall. */
 }
 
+static cTValue *crec_ctype_metatv(jit_State *J, CTState *cts, TValue *out,
+				  CTypeID id, MMS mm)
+{
+  int ok = lj_ctype_metatv_snapshot(cts, out, id, mm);
+  if (ok < 0)
+    lj_trace_err(J, LJ_TRERR_CTBUSY);
+  return ok ? out : NULL;
+}
+
+static CTypeID crec_ctype_ptr_metaid(jit_State *J, CTState *cts, CTypeID id)
+{
+  CType snap;
+  CTypeID rid;
+  CTInfo info;
+  CTSize size;
+  int ok = lj_ctype_info_snapshot(cts, id, &info, &size, &rid, &snap);
+  if (ok < 0)
+    lj_trace_err(J, LJ_TRERR_CTBUSY);
+  if (!ok)
+    lj_trace_err(J, LJ_TRERR_BADTYPE);
+  info = ctype_info_acq(&snap);
+  return ctype_isptr(info) ? ctype_cid(info) : id;
+}
+
 /* Record ctype __index/__newindex metamethods. */
 static void crec_index_meta(jit_State *J, CTState *cts, CTypeID id,
 			    RecordFFData *rd)
 {
   TValue metatv;
-  cTValue *tv = lj_ctype_metatv(cts, &metatv, id,
-				rd->data ? MM_newindex : MM_index);
+  cTValue *tv = crec_ctype_metatv(J, cts, &metatv, id,
+				  rd->data ? MM_newindex : MM_index);
   if (!tv)
     lj_trace_err(J, LJ_TRERR_BADTYPE);
   if (tvisfunc(tv)) {
@@ -1253,7 +1277,7 @@ static void crec_alloc(jit_State *J, RecordFFData *rd, CTypeID id)
   }
   J->base[0] = trcd;
   /* Handle __gc metamethod. */
-  fin = lj_ctype_metatv(cts, &fintv, id, MM_gc);
+  fin = crec_ctype_metatv(J, cts, &fintv, id, MM_gc);
   if (fin)
     crec_finalizer(J, trcd, 0, fin);
 }
@@ -1497,8 +1521,6 @@ void LJ_FASTCALL recff_cdata_call(jit_State *J, RecordFFData *rd)
   CTState *cts = ctype_ctsG(J2G(J));
   GCcdata *cd = argv2cdata(J, J->base[0], &rd->argv[0]);
   CTypeID id = cd->ctypeid;
-  CType *ct;
-  CTInfo ctinfo;
   TValue metatv;
   cTValue *tv;
   MMS mm = MM_call;
@@ -1509,10 +1531,8 @@ void LJ_FASTCALL recff_cdata_call(jit_State *J, RecordFFData *rd)
     return;
   }
   /* Record ctype __call/__new metamethod. */
-  ct = ctype_raw(cts, id);
-  ctinfo = ctype_info_acq(ct);
-  tv = lj_ctype_metatv(cts, &metatv,
-		       ctype_isptr(ctinfo) ? ctype_cid(ctinfo) : id, mm);
+  tv = crec_ctype_metatv(J, cts, &metatv,
+			 crec_ctype_ptr_metaid(J, cts, id), mm);
   if (tv) {
     if (tvisfunc(tv)) {
       crec_tailcall(J, rd, tv);
@@ -1681,17 +1701,13 @@ static TRef crec_arith_meta(jit_State *J, TRef *sp, CType **s, CTState *cts,
   if (J->base[0]) {
     if (tviscdata(&rd->argv[0])) {
       CTypeID id = argv2cdata(J, J->base[0], &rd->argv[0])->ctypeid;
-      CType *ct = ctype_raw(cts, id);
-      CTInfo info = ctype_info_acq(ct);
-      if (ctype_isptr(info)) id = ctype_cid(info);
-      tv = lj_ctype_metatv(cts, &metatv, id, (MMS)rd->data);
+      id = crec_ctype_ptr_metaid(J, cts, id);
+      tv = crec_ctype_metatv(J, cts, &metatv, id, (MMS)rd->data);
     }
     if (!tv && J->base[1] && tviscdata(&rd->argv[1])) {
       CTypeID id = argv2cdata(J, J->base[1], &rd->argv[1])->ctypeid;
-      CType *ct = ctype_raw(cts, id);
-      CTInfo info = ctype_info_acq(ct);
-      if (ctype_isptr(info)) id = ctype_cid(info);
-      tv = lj_ctype_metatv(cts, &metatv, id, (MMS)rd->data);
+      id = crec_ctype_ptr_metaid(J, cts, id);
+      tv = crec_ctype_metatv(J, cts, &metatv, id, (MMS)rd->data);
     }
   }
   if (tv) {

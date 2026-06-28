@@ -490,6 +490,8 @@ print("dump cnewi ok")
                       "t-ffi-metatype-snapshot.c", { timeout = "20s" })
       build_and_run_c(t, t:tmp("lj_t-ffi-metatv-snapshot"),
                       "t-ffi-metatv-snapshot.c", { timeout = "20s" })
+      build_and_run_c(t, t:tmp("lj_t-ffi-recorder-metatv-busy"),
+                      "t-ffi-recorder-metatv-busy.c", { timeout = "20s" })
       run_luajit_script(t, "t-ffi-metatype-miscmap.lua", {
         getenv("LJ_M7_FFI_META_THREADS", "6"),
         getenv("LJ_M7_FFI_META_ITERS", "60")
