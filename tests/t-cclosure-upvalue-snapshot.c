@@ -389,6 +389,13 @@ static int udata_reader_c(lua_State *L)
 static int callmeta_reader_c(lua_State *L)
 {
   int uv = lua_upvalueindex(1);
+
+  assert(luaL_getmetafield(L, uv, "__tostring") == 1);
+  assert(lua_iscfunction(L, -1));
+  assert(lua_tocfunction(L, -1) == meta_tostring_c);
+  lua_pop(L, 1);
+
+  assert(luaL_getmetafield(L, uv, "__missing") == 0);
   assert(luaL_callmeta(L, uv, "__tostring") == 1);
   return 1;
 }

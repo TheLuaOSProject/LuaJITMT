@@ -72,6 +72,28 @@ for fn in lua_isuserdata luaL_checkany; do
   fi
 done
 
+if ! awk '
+  /^LUALIB_API int luaL_getmetafield\(/ { in_fn = 1; found = 1 }
+  in_fn && /lj_tv_load_acq\(&mtv, tv\)/ { saw_acq = 1 }
+  in_fn && /copyTV\(L, L->top-1, &mtv\)/ { saw_copy = 1 }
+  in_fn && /^}/ { in_fn = 0 }
+  END { exit(found && saw_acq && saw_copy ? 0 : 1) }
+' "$ROOT/src/lj_api.c"; then
+  printf '%s\n' 'luaL_getmetafield() must acquire-snapshot metatable slots before copying' >&2
+  exit 1
+fi
+
+if ! awk '
+  /^LUALIB_API void \*luaL_testudata\(/ { in_fn = 1; found = 1 }
+  in_fn && /lj_tv_load_acq\(&mtv, tv\)/ { saw_acq = 1 }
+  in_fn && /tabV\(&mtv\) == tabref_acq\(ud->metatable\)/ { saw_mtv = 1 }
+  in_fn && /^}/ { in_fn = 0 }
+  END { exit(found && saw_acq && saw_mtv ? 0 : 1) }
+' "$ROOT/src/lj_api.c"; then
+  printf '%s\n' 'luaL_testudata() must acquire-snapshot registry metatable slots before comparing' >&2
+  exit 1
+fi
+
 for fn in lua_rawequal lua_equal lua_lessthan; do
   if ! awk -v fn="$fn" '
     $0 ~ ("^LUA_API int " fn "\\(") { in_fn = 1; found = 1 }

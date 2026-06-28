@@ -1023,9 +1023,13 @@ LUALIB_API int luaL_getmetafield(lua_State *L, int idx, const char *field)
 {
   if (lua_getmetatable(L, idx)) {
     cTValue *tv = lj_tab_getstr(tabV(L->top-1), lj_str_newz(L, field));
-    if (tv && !tvisnil(tv)) {
-      copyTV(L, L->top-1, tv);
-      return 1;
+    if (tv) {
+      TValue mtv;
+      lj_tv_load_acq(&mtv, tv);
+      if (!tvisnil(&mtv)) {
+	copyTV(L, L->top-1, &mtv);
+	return 1;
+      }
     }
     L->top--;
   }
@@ -1120,8 +1124,12 @@ LUALIB_API void *luaL_testudata(lua_State *L, int idx, const char *tname)
   if (tvisudata(o)) {
     GCudata *ud = udataV(o);
     cTValue *tv = lj_tab_getstr(tabV(registry(L)), lj_str_newz(L, tname));
-    if (tv && tvistab(tv) && tabV(tv) == tabref_acq(ud->metatable))
-      return uddata(ud);
+    if (tv) {
+      TValue mtv;
+      lj_tv_load_acq(&mtv, tv);
+      if (tvistab(&mtv) && tabV(&mtv) == tabref_acq(ud->metatable))
+	return uddata(ud);
+    }
   }
   return NULL;  /* value is not a userdata with a metatable */
 }
