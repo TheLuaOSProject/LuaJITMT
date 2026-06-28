@@ -78,6 +78,8 @@ return function(add)
     description = "FFI callback slot install behavior",
     run = function(t)
       clean_build(t)
+      build_and_run_c(t, t:tmp("lj_t-ffi-callback-snapshot"),
+                      "t-ffi-callback-snapshot.c", { timeout = "20s" })
       run_luajit_script(t, "t-ffi-callback-install.lua", {
         getenv("LJ_M7_FFI_CBACK_THREADS", "6"),
         getenv("LJ_M7_FFI_CBACK_ITERS", "64")
