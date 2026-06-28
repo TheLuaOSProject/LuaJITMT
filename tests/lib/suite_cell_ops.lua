@@ -1,5 +1,6 @@
 local checks = require("suite_assert")
 local runtime = require("suite_runtime")
+local utils = require("suite_utils")
 local probes = require("local_cell_probes")
 
 local M = {}
@@ -18,12 +19,31 @@ local function dump_i(t, dump, code)
   luajit_dump(t, dump, "-jdump=i", code)
 end
 
+local function dump_im(t, dump, code)
+  luajit_dump(t, dump, "-jdump=im", code)
+end
+
 local function assert_dump_not_contains(t, dump, needle, label)
   local data = t:read(dump)
   label = label or dump
   if contains(data, needle) then
     error(label .. ": unexpected dump text: " .. needle, 2)
   end
+end
+
+function M.run_source_guards(t)
+  local asm = utils.read_file(t:path("src", "lj_asm_x86.h"))
+  checks.assert_text_contains("x64 closed-upvalue USTORE helper guard", asm,
+    "if (ir->o == IR_USTORE && IR(ir->op1)->o == IR_UREFC) {",
+    "all-TValue USTORE helper condition")
+  if contains(asm,
+      "IR_USTORE && irt_isgcv(ir->t) && IR(ir->op1)->o == IR_UREFC") then
+    error("x64 closed-upvalue USTORE helper must not be gated to GC values", 2)
+  end
+
+  local debugsrc = utils.read_file(t:path("src", "lj_debug.c"))
+  checks.assert_text_contains("lua_getlocal local-cell acquire guard", debugsrc,
+    "lj_tv_load_acq(L->top, o);", "local-cell acquire read")
 end
 
 function M.run_bytecode_guards(t, tmpname)
@@ -48,6 +68,10 @@ function M.run_publication_behavior_guards(t)
   }) })
   luajit(t, { "-e", probes.owner_gc({
     trace_assert = "expected traced GC-valued CSET owner loop",
+    second_run = true
+  }) })
+  luajit(t, { "-e", probes.owner_primitive({
+    trace_assert = "expected traced primitive CSET owner loop",
     second_run = true
   }) })
   luajit(t, { "-e", probes.loaded_owner_numeric({
@@ -77,6 +101,19 @@ function M.run_jit_dump_guards(t, dump)
   assert_dump_contains(t, dump, "UREFC", "owner numeric UREFC")
   assert_dump_contains(t, dump, "ULOAD", "owner numeric ULOAD")
   assert_dump_contains(t, dump, "USTORE", "owner numeric USTORE")
+
+  dump_im(t, dump, probes.owner_numeric({ flush = false, hotexit = true }))
+  assert_dump_contains(t, dump, "->lj_func_storeuv_forjit",
+		       "owner numeric USTORE helper lowering")
+
+  dump_i(t, dump, probes.owner_primitive({ flush = false, hotexit = true }))
+  assert_dump_contains(t, dump, "TRACE 1 stop -> loop", "owner primitive trace")
+  assert_dump_contains(t, dump, "UREFC", "owner primitive UREFC")
+  assert_dump_contains(t, dump, "USTORE", "owner primitive USTORE")
+
+  dump_im(t, dump, probes.owner_primitive({ flush = false, hotexit = true }))
+  assert_dump_contains(t, dump, "->lj_func_storeuv_forjit",
+		       "owner primitive USTORE helper lowering")
 
   dump_i(t, dump, probes.owner_gc({ flush = false, hotexit = true }))
   assert_dump_contains(t, dump, "TRACE 1 stop -> loop", "owner GC-valued trace")

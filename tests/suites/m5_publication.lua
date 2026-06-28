@@ -491,6 +491,7 @@ return function(add)
     run = function(t)
       t:build({ clean = true, quiet = true })
 
+      cellops.run_source_guards(t)
       cellops.run_bytecode_guards(t, "lj_m5_cell_ops_bc")
       cellops.run_publication_behavior_guards(t)
       run_stock(t, { "test.lua", "--quiet", "lang/upvalue" })

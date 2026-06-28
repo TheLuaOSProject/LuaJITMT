@@ -440,8 +440,10 @@ LUA_API const char *lua_getlocal(lua_State *L, const lua_Debug *ar, int n)
     if (name) {
       GCupval *uv;
       o = debug_localcell(o, &uv);
-      UNUSED(uv);
-      copyTV(L, L->top, o);
+      if (uv)
+	lj_tv_load_acq(L->top, o);
+      else
+	copyTV(L, L->top, o);
       incr_top(L);
     }
   } else if (tvisfunc(L->top-1) && isluafunc(funcV(L->top-1))) {

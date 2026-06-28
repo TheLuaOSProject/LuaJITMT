@@ -2115,7 +2115,7 @@ static void asm_ahustore(ASMState *as, IRIns *ir)
   if (ir->r == RID_SINK)
     return;
 #if defined(__linux__) && LJ_TARGET_X64
-  if (ir->o == IR_USTORE && irt_isgcv(ir->t) && IR(ir->op1)->o == IR_UREFC) {
+  if (ir->o == IR_USTORE && IR(ir->op1)->o == IR_UREFC) {
     asm_ustore_forjit(as, ir);
     return;
   }

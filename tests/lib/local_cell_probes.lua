@@ -107,6 +107,27 @@ assert(run(200) == pool[1])
 ]=] .. trace_assert(opts) .. second
 end
 
+function M.owner_primitive(opts)
+  opts = opts or {}
+  local second = ""
+  if opts.second_run then
+    second = [=[
+local v2, f2 = run(20)
+assert(v2 == true and f2() == true)
+]=]
+  end
+  return jit_setup(opts) .. [=[
+local function run(n)
+  local x = false
+  local function touch() return x end
+  for i = 1, n do x = true end
+  return x, touch
+end
+local v, f = run(200)
+assert(v == true and f() == true)
+]=] .. trace_assert(opts) .. second
+end
+
 function M.loaded_owner_numeric(opts)
   opts = opts or {}
   local second = ""
