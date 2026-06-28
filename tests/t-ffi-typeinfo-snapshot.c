@@ -27,6 +27,7 @@ int main(void)
     "ffi.cdef('typedef struct { int x; } lj_m7_typeinfo_snapshot_t;')\n"
     "lj_m7_typeinfo_snapshot_id = "
     "tonumber(ffi.typeof('lj_m7_typeinfo_snapshot_t'))\n"
+    "lj_m7_typeinfo_int_id = tonumber(ffi.typeof('int'))\n"
     "assert(type(lj_m7_typeinfo_snapshot_id) == 'number')\n");
 
   cts = ctype_ctsG(G(L));
@@ -48,6 +49,8 @@ int main(void)
     uint32_t release_seq = ljt_ctype_hold_parse_token(cts);
     ljt_lua_dostring(L,
       "local ffi = require('ffi')\n"
+      "local ti = ffi.typeinfo(lj_m7_typeinfo_int_id)\n"
+      "assert(ti and ti.size == 4)\n"
       "assert(ffi.typeinfo(lj_m7_typeinfo_snapshot_id) == nil)\n");
     assert((ctype_parse_token_acq(cts) & 1u) != 0);
     ljt_ctype_release_parse_token(cts, release_seq);

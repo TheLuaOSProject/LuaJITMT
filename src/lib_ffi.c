@@ -272,6 +272,18 @@ static void ffi_ctype_slot_snapshot(CTypeTab *tabh, CTypeID id, CType *out)
   setgcrefp(out->name, name);
 }
 
+static int ffi_ctype_predefined_snapshot(CTState *cts, CTypeID id, CType *out)
+{
+  CTypeTab *tabh;
+  if (!ffi_ctype_predefined_id(id))
+    return 0;
+  tabh = ctype_tabh_acq(cts);
+  if ((MSize)CTID_CTYPEID >= ctype_tab_sizetab_acq(tabh))
+    return 0;
+  ffi_ctype_slot_snapshot(tabh, id, out);
+  return !ctype_isabandoned(ctype_info_acq(out));
+}
+
 static int ffi_ctype_info_predefined(CTState *cts, CTypeID id,
 				     CTInfo *infop, CTSize *szp,
 				     CTypeID *ridp, CType *rawp)
@@ -1049,7 +1061,9 @@ LJLIB_CF(ffi_typeinfo)
   CTSize size;
   CTypeID sib;
   GCstr *name;
-  int ok = lj_ctype_snapshot(cts, id, &snap);
+  int ok = ffi_ctype_predefined_snapshot(cts, id, &snap);
+  if (!ok)
+    ok = lj_ctype_snapshot(cts, id, &snap);
   if (ok > 0) {
     GCtab *t;
     info = snap.info;

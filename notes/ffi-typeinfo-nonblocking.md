@@ -1,20 +1,25 @@
 # FFI typeinfo nonblocking snapshot
 
-`ffi.typeinfo()` is an internal read-only API. It now uses only the existing
-sequence-checked `lj_ctype_snapshot()` path and returns `nil` if the parser
-token is odd or a table/top snapshot races a mutation, instead of waiting on
-`lj_ctype_parse_lock()`.
+`ffi.typeinfo()` is an internal read-only API. It now uses a direct immutable
+predefined-ID snapshot before the existing sequence-checked
+`lj_ctype_snapshot()` path. Parser-created IDs still return `nil` if the
+parser token is odd or a table/top snapshot races a mutation, instead of
+waiting on `lj_ctype_parse_lock()`.
 
 This keeps mutable `ffi.cdef()` serialized while removing a parser-lock fallback
 from a non-mutating query. Stable completed CType IDs still return the same
 metadata table, and incomplete stable structs still return a table without a
-`size` field.
+`size` field. Predefined CType IDs are installed during VM initialization and
+are immutable, so their metadata can be returned even while an unrelated
+`ffi.cdef()` transaction is active.
 
 Coverage:
 
-- `tests/t-ffi-typeinfo-snapshot.c` manually holds `CTState.parse_token` odd and
-  verifies `ffi.typeinfo(valid_id)` returns `nil` without acquiring the parser
-  token, then verifies the same ID returns normal metadata after release.
+- `tests/t-ffi-typeinfo-snapshot.c` manually holds `CTState.parse_token` odd,
+  verifies `ffi.typeinfo(int_id)` still returns predefined metadata, verifies a
+  parser-created `ffi.typeinfo(valid_id)` returns `nil` without acquiring the
+  parser token, then verifies the same parser-created ID returns normal metadata
+  after release.
 - `tests/t-ffi-cparse-rollback-reader.lua` accepts transient `nil` during active
   parser rollback windows while preserving final incomplete-type checks.
 
