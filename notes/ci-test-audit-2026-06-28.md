@@ -103,6 +103,29 @@
   contract for sticky STOPREQ cleanup and fresh STOPREQ while parked.
 - Converted the element-size parser-lock-fallback expectation into active-token
   behavior coverage in `t-ffi-element-size-snapshot.c`.
+- Converted the cdata field parser-lock-fallback expectation into active-token
+  behavior coverage in `t-ffi-field-snapshot.c`, including direct fields,
+  pointer auto-deref, misses, metatype dispatch, and constructor constants.
+- Extended `t-ffi-cparse-rollback-reader.lua` so failed cdefs cannot leak
+  constructor constants or constructor fields.
+- Added narrow field-helper guards in `m7_ffi_typeinfo_snapshot.sh` for the
+  remaining non-observable implementation shape: ID-rooted field waits, no
+  parser-lock acquisition in `lj_cdata_index_l()`, and no sequence-free field
+  snapshot misses.
+
+## Legacy/Compat Audit Findings
+
+- Highest-priority legacy cleanup is in GC2 bridge scaffolding, not FFI pointer
+  compatibility. Exact-name guards around `legacy_*` sweep/finalizer/weak
+  helpers should become semantic behavior tests before the names are removed.
+- Duplicate legacy source guards in weak/worker CI should be collapsed; keeping
+  the same exact-name guard in multiple scripts increases churn and blocks
+  better helper boundaries.
+- Public or semantic compatibility helpers such as FFI pointer compatibility
+  checks are not removal targets unless the language/API contract changes.
+- Anti-legacy guards that merely prevent reintroducing already-removed wrapper
+  names are acceptable during transition, but should be deleted once compile and
+  behavior coverage make them redundant.
 
 Verification for the alias removal:
 

@@ -1105,24 +1105,73 @@ int lj_ctype_getfieldq_snapshot(CTState *cts, const CType *root,
   CTypeTab *tabh;
   CTypeID top, sib;
   CTInfo info;
+  CTInfo qual = qualp ? *qualp : 0;
   MSize budget;
   int ok;
   if (seq0 & 1u)
     return -1;
   info = ctype_info_acq(root);
   if (!ctype_isstruct(info))
-    return 0;
+    return ctype_snapshot_done(cts, seq0, 0);
   sib = ctype_sib_acq(root);
   top = ctype_top_acq(cts);
   tabh = ctype_tabh_acq(cts);
   budget = top ? (MSize)top * 4u : 1u;
   ok = ctype_getfieldq_snapshot_rec(tabh, top, sib, name, 0, 0, ofsp,
-				    qualp, out, &budget);
+				    qualp ? &qual : NULL, out, &budget);
   if (ok >= 0) {
     uint32_t seq1 = ctype_parse_token_acq(cts);
     ok = (seq0 == seq1 && !(seq1 & 1u)) ? ok : -1;
+    if (ok >= 0 && qualp)
+      *qualp = qual;
   }
   return ok;
+}
+
+static int ctype_getfieldq_snapshot_id(CTState *cts, CTypeID rootid,
+				       GCstr *name, CTSize *ofsp,
+				       CTInfo *qualp, CType *out)
+{
+  uint32_t seq0 = ctype_parse_token_acq(cts);
+  CTypeTab *tabh;
+  CTypeID top, sib;
+  CType root;
+  CTInfo info;
+  CTInfo qual = qualp ? *qualp : 0;
+  MSize budget;
+  int ok;
+  if (seq0 & 1u)
+    return -1;
+  top = ctype_top_acq(cts);
+  tabh = ctype_tabh_acq(cts);
+  if (!ctype_snapshot_copy(tabh, top, rootid, &root))
+    return ctype_snapshot_done(cts, seq0, 0);
+  info = ctype_info_acq(&root);
+  if (!ctype_isstruct(info))
+    return ctype_snapshot_done(cts, seq0, 0);
+  sib = ctype_sib_acq(&root);
+  budget = top ? (MSize)top * 4u : 1u;
+  ok = ctype_getfieldq_snapshot_rec(tabh, top, sib, name, 0, 0, ofsp,
+				    qualp ? &qual : NULL, out, &budget);
+  if (ok >= 0) {
+    ok = ctype_snapshot_done(cts, seq0, ok);
+    if (ok >= 0 && qualp)
+      *qualp = qual;
+  }
+  return ok;
+}
+
+int lj_ctype_getfieldq_wait(lua_State *L, CTState *cts, CTypeID rootid,
+			    GCstr *name, CTSize *ofsp, CTInfo *qualp,
+			    CType *out)
+{
+  for (;;) {
+    int ok = ctype_getfieldq_snapshot_id(cts, rootid, name, ofsp, qualp,
+					 out);
+    if (ok >= 0)
+      return ok;
+    lj_ctype_parse_wait(cts, L, ctype_parse_token_acq(cts));
+  }
 }
 
 /* Sequence-checked pointer-to-struct test for stable auto-deref readers. */
@@ -1169,6 +1218,17 @@ int lj_ctype_ptrstruct_snapshot(CTState *cts, CTypeID id, CTypeID *cidp)
     return 1;
   }
   return 0;
+}
+
+int lj_ctype_ptrstruct_wait(lua_State *L, CTState *cts, CTypeID id,
+			    CTypeID *cidp)
+{
+  for (;;) {
+    int ok = lj_ctype_ptrstruct_snapshot(cts, id, cidp);
+    if (ok >= 0)
+      return ok;
+    lj_ctype_parse_wait(cts, L, ctype_parse_token_acq(cts));
+  }
 }
 
 /* Sequence-checked type info/raw-type snapshot for stable layout readers. */
@@ -1231,6 +1291,18 @@ int lj_ctype_info_snapshot(CTState *cts, CTypeID id, CTInfo *infop,
       return (seq0 == seq1 && !(seq1 & 1u)) ? 1 : -1;
     }
     id = ctype_cid(info);
+  }
+}
+
+int lj_ctype_info_wait(lua_State *L, CTState *cts, CTypeID id,
+		       CTInfo *infop, CTSize *szp, CTypeID *ridp,
+		       CType *rawp)
+{
+  for (;;) {
+    int ok = lj_ctype_info_snapshot(cts, id, infop, szp, ridp, rawp);
+    if (ok >= 0)
+      return ok;
+    lj_ctype_parse_wait(cts, L, ctype_parse_token_acq(cts));
   }
 }
 

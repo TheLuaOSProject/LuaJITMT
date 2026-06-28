@@ -82,6 +82,17 @@ if hits=$(awk '
   printf '%s\n' 'enum constant snapshots must validate the parser sequence before returning a miss' >&2
   exit 1
 fi
+if hits=$(awk '
+  /^int lj_ctype_getfieldq_snapshot\(/ ||
+  /^static int ctype_getfieldq_snapshot_id\(/ { in_fn = 1 }
+  /^int lj_ctype_getfieldq_wait\(/ ||
+  /^int lj_ctype_ptrstruct_snapshot\(/ { in_fn = 0 }
+  in_fn && /return[[:space:]]+0[[:space:]]*;/ { print FNR ":" $0 }
+' "$ROOT/src/lj_ctype.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'field snapshots must validate the parser sequence before returning a miss' >&2
+  exit 1
+fi
 if hits=$(grep -nE -- 'enum string readers wait out parser rollback|lj_ctype_getfield[[:space:]]*[(][[:space:]]*cts,[[:space:]]*(ct|d),' \
     "$ROOT/src/lj_carith.c" \
     "$ROOT/src/lj_cconv.c" || true); [ -n "$hits" ]; then
@@ -115,6 +126,45 @@ if hits=$(grep -nE -- 'lj_ctype_size_wait[[:space:]]*[(][^)]*(const[[:space:]]+)
     "$ROOT/src/lj_ctype.h" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
   printf '%s\n' 'ctype size wait helpers must take CTypeID and refetch after native waits' >&2
+  exit 1
+fi
+if hits=$(grep -nE -- 'cdata string-key readers wait out parser rollback' \
+    "$ROOT/src/lj_cdata.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'cdata field readers must use field wait/retry instead of parser-lock fallback lookups' >&2
+  exit 1
+fi
+if hits=$(awk '
+  /^CType \*lj_cdata_index_l\(/ { in_fn = 1 }
+  in_fn && /lj_ctype_parse_(lock|unlock)[[:space:]]*[(]/ { print FNR ":" $0 }
+  in_fn && /^}/ { in_fn = 0 }
+' "$ROOT/src/lj_cdata.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'lj_cdata_index_l must not acquire the ctype parser token' >&2
+  exit 1
+fi
+if hits=$(awk '
+  /^CType \*lj_cdata_index_l\(/ { in_fn = 1 }
+  in_fn && /lj_ctype_getfieldq?[[:space:]]*[(]/ { print FNR ":" $0 }
+  in_fn && /^}/ { in_fn = 0 }
+' "$ROOT/src/lj_cdata.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'lj_cdata_index_l must use field wait/retry helpers, not direct locked field lookup' >&2
+  exit 1
+fi
+if hits=$(awk '
+  /^int lj_ctype_getfieldq_wait\(/ { in_sig = 1; sig = $0; next }
+  in_sig {
+    sig = sig " " $0
+    if ($0 ~ /\)/) {
+      if (sig !~ /CTypeID[[:space:]]+rootid/)
+	print sig
+      in_sig = 0
+    }
+  }
+' "$ROOT/src/lj_ctype.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'field wait helpers must be rooted by CTypeID and refetch after native waits' >&2
   exit 1
 fi
 if hits=$(awk '

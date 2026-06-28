@@ -2,10 +2,13 @@ local ffi = require("ffi")
 local th = require("threading")
 
 ffi.cdef("struct lj_m7_rollback_reader;")
+ffi.cdef("struct lj_m7_rollback_ctor;")
 ffi.cdef("enum lj_m7_rollback_enum;")
 
 local ct = ffi.typeof("struct lj_m7_rollback_reader")
 local ctid = tonumber(ct)
+local ctor_ct = ffi.typeof("struct lj_m7_rollback_ctor")
+local ctor_ptr_ct = ffi.typeof("struct lj_m7_rollback_ctor *")
 local enum_ct = ffi.typeof("enum lj_m7_rollback_enum")
 local backing = ffi.new("char[16]")
 local p = ffi.cast("struct lj_m7_rollback_reader *", backing)
@@ -17,6 +20,22 @@ local function bad_cdef_source(tag)
   for i = 1, 20000 do
     parts[#parts + 1] =
       ("typedef int lj_m7_rollback_reader_pad_%s_%d;\n"):format(tag, i)
+  end
+  parts[#parts + 1] = "@\n"
+  return table.concat(parts)
+end
+
+local function bad_ctor_const_cdef_source(tag)
+  local parts = {
+    "struct lj_m7_rollback_ctor {\n"
+      .. "static const int K = 55;\n"
+      .. "enum { E = 56 };\n"
+      .. "int x;\n"
+      .. "};\n"
+  }
+  for i = 1, 20000 do
+    parts[#parts + 1] =
+      ("typedef int lj_m7_rollback_ctor_pad_%s_%d;\n"):format(tag, i)
   end
   parts[#parts + 1] = "@\n"
   return table.concat(parts)
@@ -101,6 +120,17 @@ race_failed_cdef("ptrdiff", function()
 	 "cdata pointer diff observed failed cdef rollback state")
 end)
 
+race_failed_cdef("ctorconst", function()
+  assert(not pcall(function() return ctor_ct.K end),
+	 "ctype constructor observed failed cdef rollback constant")
+  assert(not pcall(function() return ctor_ptr_ct.K end),
+	 "pointer constructor observed failed cdef rollback constant")
+  assert(not pcall(function() return ctor_ct.E end),
+	 "ctype constructor observed failed cdef rollback enum constant")
+  assert(not pcall(function() return ctor_ct.x end),
+	 "ctype constructor observed failed cdef rollback field")
+end, bad_ctor_const_cdef_source)
+
 race_failed_cdef("enumcast", function()
   assert(not pcall(ffi.cast, enum_ct, "LJ_M7_ROLLBACK_ENUM_TMP"),
 	 "enum string cast observed failed cdef rollback state")
@@ -131,6 +161,14 @@ assert(not pcall(function() return p + 1 end),
        "failed cdef left cdata pointer add able to step incomplete struct")
 assert(not pcall(function() return q - p end),
        "failed cdef left cdata pointer diff able to size incomplete struct")
+assert(not pcall(function() return ctor_ct.K end),
+       "failed cdef left ctype constructor able to see rolled-back constant")
+assert(not pcall(function() return ctor_ptr_ct.K end),
+       "failed cdef left pointer constructor able to see rolled-back constant")
+assert(not pcall(function() return ctor_ct.E end),
+       "failed cdef left ctype constructor able to see rolled-back enum constant")
+assert(not pcall(function() return ctor_ct.x end),
+       "failed cdef left ctype constructor able to see rolled-back field")
 assert(not pcall(ffi.cast, enum_ct, "LJ_M7_ROLLBACK_ENUM_TMP"),
        "failed cdef left enum string cast able to see rolled-back constant")
 assert(not pcall(ffi.cast, enum_ct, 17),
@@ -138,4 +176,4 @@ assert(not pcall(ffi.cast, enum_ct, 17),
 assert(not pcall(function() return ffi.C.lj_m7_rollback_tmp_const end),
        "failed cdef left ffi.C able to see rolled-back constant")
 
-print("t-ffi-cparse-rollback-reader OK: direct ctype/typeinfo/new/field/numeric/ptrarith/namespace readers wait out rollback")
+print("t-ffi-cparse-rollback-reader OK: direct ctype/typeinfo/new/field/numeric/ptrarith/constructor/namespace readers wait out rollback")

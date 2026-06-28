@@ -1149,6 +1149,9 @@ LJ_FUNC CTypeID lj_ctype_intern_new_l(lua_State *L, CTState *cts,
 LJ_FUNC int lj_ctype_snapshot(CTState *cts, CTypeID id, CType *out);
 LJ_FUNC int lj_ctype_size_wait(lua_State *L, CTState *cts, CTypeID id,
 			       CTSize *szp);
+LJ_FUNC int lj_ctype_info_wait(lua_State *L, CTState *cts, CTypeID id,
+			       CTInfo *infop, CTSize *szp, CTypeID *ridp,
+			       CType *rawp);
 LJ_FUNC int lj_ctype_enumconst_snapshot(CTState *cts, const CType *ct,
 					GCstr *name, CTSize *valp,
 					CTypeID *cidp);
@@ -1191,8 +1194,14 @@ LJ_FUNC CType *lj_ctype_getfieldq(CTState *cts, CType *ct, GCstr *name,
 LJ_FUNC int lj_ctype_getfieldq_snapshot(CTState *cts, const CType *ct,
 					GCstr *name, CTSize *ofsp,
 					CTInfo *qualp, CType *out);
+LJ_FUNC int lj_ctype_getfieldq_wait(lua_State *L, CTState *cts,
+				    CTypeID id, GCstr *name,
+				    CTSize *ofsp, CTInfo *qualp,
+				    CType *out);
 LJ_FUNC int lj_ctype_ptrstruct_snapshot(CTState *cts, CTypeID id,
 					CTypeID *cidp);
+LJ_FUNC int lj_ctype_ptrstruct_wait(lua_State *L, CTState *cts, CTypeID id,
+				    CTypeID *cidp);
 LJ_FUNC CType *lj_ctype_rawref(CTState *cts, CTypeID id);
 LJ_FUNC CTSize lj_ctype_size(CTState *cts, CTypeID id);
 LJ_FUNC int lj_ctype_info_snapshot(CTState *cts, CTypeID id,

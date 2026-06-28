@@ -40,7 +40,6 @@ Current examples:
 
 - `src/lib_ffi.c`: string type parsing and layout fallbacks for `ffi.new`,
   `ffi.cast`, `ffi.sizeof`, `ffi.alignof`, and `ffi.offsetof`.
-- `src/lj_cdata.c`: string-key cdata field lookup fallback.
 - `src/lj_clib.c`: `ffi.C` namespace lookup fallback.
 - `src/lj_crecord.c`: recorder-side parser-token ownership for string ctype
   recording, with busy paths aborting rather than blocking.
@@ -49,17 +48,19 @@ This slice removed parser-lock fallback from interpreted numeric cdata
 element-size readers and pointer arithmetic. They now use `lj_ctype_size_wait()`
 and refetch any `CType *` state after a native wait.
 
+Follow-up in the same run removed the parser-lock fallback from interpreted
+cdata string-key field lookup. Struct fields, constructor constants, and pointer
+auto-deref now wait/retry through ID-rooted helpers and return copied field
+snapshots instead of table-owned `CType *` values acquired before a wait.
+
 ## Worth making more lockless
 
 1. Continue FFI read fallback cleanup. Best return on risk: non-mutating readers
    can use sequence-checked snapshots and wait/retry helpers, as long as callers
    only retain scalar IDs/sizes across waits and refetch `CType *` afterward.
-2. Convert cdata string-key field fallback to a wait/refetch helper. This is a
-   natural follow-up to element size and enum string constants, but it needs
-   careful returned-field `CType *` lifetime handling.
-3. Reduce remaining layout fallback locks in `lib_ffi.c` where a stable
+2. Reduce remaining layout fallback locks in `lib_ffi.c` where a stable
    snapshot can preserve normal errors and size/alignment semantics.
-4. Collapse bridge source guards into behavior tests when behavior can observe
+3. Collapse bridge source guards into behavior tests when behavior can observe
    the invariant. Keep static guards for architecture, visibility, and memory
    ordering boundaries that behavior cannot reliably prove.
 

@@ -284,16 +284,10 @@ CType *lj_cdata_index_l(lua_State *L, CTState *cts, GCcdata *cd,
   CTInfo info;
   CTSize size;
   ptrdiff_t idx;
-  int locked = 0;
 
-retry_locked:
   p = (uint8_t *)cdataptr(cd);
   id = cd->ctypeid;
   *qual = 0;
-  if (locked) {
-    /* 11.2: cdata string-key readers wait out parser rollback. */
-    lj_ctype_parse_lock(cts, L);
-  }
   ct = ctype_get(cts, id);
   info = ctype_info_acq(ct);
   size = ctype_size_acq(ct);
@@ -367,90 +361,66 @@ collect_attrib:
     GCstr *name = strV(key);
     if (ctype_isstruct(info)) {
       CTSize ofs;
-      CType *fct;
-      if (!locked) {
-	int ok = lj_ctype_getfieldq_snapshot(cts, ct, name, &ofs, qual,
-					     snap);
-	if (ok < 0) {
-	  locked = 1;
-	  goto retry_locked;
-	}
-	fct = ok ? snap : NULL;
-      } else {
-	fct = lj_ctype_getfieldq(cts, ct, name, &ofs, qual);
-      }
-      if (fct) {
+      CTInfo q = *qual;
+      int ok = lj_ctype_getfieldq_wait(L, cts, id, name, &ofs, &q, snap);
+      if (ok) {
+	*qual = q;
 	*pp = p + ofs;
-	if (locked)
-	  lj_ctype_parse_unlock(cts);  /* 11.2: cdata field reader fence. */
-	return fct;
+	return snap;
       }
+      ct = ctype_get(cts, id);
+      info = ctype_info_acq(ct);
+      size = ctype_size_acq(ct);
     } else if (ctype_iscomplex(info)) {
       if (name->len == 2) {
 	*qual |= CTF_CONST;  /* Complex fields are constant. */
 	if (strdata(name)[0] == 'r' && strdata(name)[1] == 'e') {
 	  *pp = p;
-	  if (locked)
-	    lj_ctype_parse_unlock(cts);
 	  return ct;
 	} else if (strdata(name)[0] == 'i' && strdata(name)[1] == 'm') {
 	  *pp = p + (size >> 1);
-	  if (locked)
-	    lj_ctype_parse_unlock(cts);
 	  return ct;
 	}
       }
     } else if (cd->ctypeid == CTID_CTYPEID) {
       /* Allow indexing a (pointer to) struct constructor to get constants. */
-      CTypeID sid = ctype_rawid(cts, *(CTypeID *)p);
-      CType *sct = ctype_get(cts, sid);
-      CTInfo sinfo = ctype_info_acq(sct);
+      CTypeID sid = 0;
+      CType ssnap;
+      CTInfo sinfo = 0;
+      CTSize ssize = CTSIZE_INVALID;
+      if (lj_ctype_info_wait(L, cts, *(CTypeID *)p, &sinfo, &ssize,
+			     &sid, &ssnap) <= 0)
+	goto ctypeid_done;
       if (ctype_isptr(sinfo)) {
-	sid = ctype_rawid(cts, ctype_cid(sinfo));
-	sct = ctype_get(cts, sid);
-	sinfo = ctype_info_acq(sct);
+	CTInfo rawinfo = ctype_info_acq(&ssnap);
+	if (lj_ctype_info_wait(L, cts, ctype_cid(rawinfo), &sinfo, &ssize,
+			       &sid, &ssnap) <= 0)
+	  goto ctypeid_done;
       }
       if (ctype_isstruct(sinfo)) {
 	CTSize ofs;
-	CType *fct;
-	if (!locked) {
-	  int ok = lj_ctype_getfieldq_snapshot(cts, sct, name, &ofs, NULL,
-					       snap);
-	  if (ok < 0) {
-	    locked = 1;
-	    goto retry_locked;
-	  }
-	  fct = ok ? snap : NULL;
-	} else {
-	  fct = lj_ctype_getfield(cts, sct, name, &ofs);
-	}
-	if (fct && ctype_isconstval(ctype_info_acq(fct))) {
-	  if (locked)
-	    lj_ctype_parse_unlock(cts);
-	  return fct;
-	}
+	int ok = lj_ctype_getfieldq_wait(L, cts, sid, name, &ofs, NULL, snap);
+	if (ok && ctype_isconstval(ctype_info_acq(snap)))
+	  return snap;
+	if (lj_ctype_info_wait(L, cts, sid, &sinfo, &ssize, &sid, &ssnap) <= 0)
+	  goto ctypeid_done;
       }
-      ct = sct;  /* Allow resolving metamethods for constructors, too. */
+      ct = ctype_get(cts, sid);  /* Resolve metamethods for constructors. */
       id = sid;
       info = sinfo;
-      size = ctype_size_acq(ct);
+      size = ssize;
+ctypeid_done:
+      ;
     }
   }
   if (ctype_isptr(info)) {  /* Automatically perform '->'. */
     CTypeID cid;
-    int ptrstruct;
-    int ok = locked ? 1 : lj_ctype_ptrstruct_snapshot(cts, id, &cid);
-    if (ok < 0) {
-      locked = 1;
-      goto retry_locked;
-    }
-    if (locked) {
-      cid = ctype_rawid(cts, ctype_cid(info));
-      ptrstruct = ctype_isstruct(ctype_info_acq(ctype_get(cts, cid)));
-    } else {
-      ptrstruct = ok > 0;
-    }
-    if (ptrstruct) {
+    int ok = lj_ctype_ptrstruct_wait(L, cts, id, &cid);
+    ct = ctype_get(cts, id);
+    info = ctype_info_acq(ct);
+    size = ctype_size_acq(ct);
+    if (ok > 0) {
+      lj_assertCTS(ctype_isptr(info), "cdata auto-deref type changed");
       p = (uint8_t *)cdata_getptr(p, size);
       id = cid;
       ct = ctype_get(cts, id);
@@ -461,8 +431,6 @@ collect_attrib:
   }
   if (idp) *idp = id;
   *qual |= 1;  /* Lookup failed. */
-  if (locked)
-    lj_ctype_parse_unlock(cts);
   return ct;  /* But return the resolved raw type. */
 }
 
