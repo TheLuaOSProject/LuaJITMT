@@ -403,29 +403,6 @@ print("jit-env-mutation-flush OK")
 ]=]
 end
 
-local function assert_cclosure_upvalue_trace_source_guards(t)
-  local api = utils.read_source_file(t:path("src", "lj_api.c"))
-  checks.assert_text_contains("C upvalue trace flush", api,
-    "api_trace_flush_mutation(L);", "API mutation trace flush")
-  checks.assert_text_contains("C upvalue trace flush", api,
-    "index2adr_cupvalue_store_rel(L, idx, f);",
-    "API pseudo-index C upvalue store funnel")
-  checks.assert_text_contains("C upvalue trace flush", api,
-    "lj_trace_flushall_hs(L)", "full trace flush handshake")
-
-  local ffrec = utils.read_source_file(t:path("src", "lj_ffrecord.c"))
-  checks.assert_text_contains("C upvalue recorder snapshot", ffrec,
-    "lj_tv_load_acq(&uv, &J->fn->c.upvalue[t]);",
-    "type() C upvalue acquire snapshot")
-  checks.assert_text_contains("C upvalue recorder snapshot", ffrec,
-    "lj_tv_load_acq(&uv, &J->fn->c.upvalue[0]);",
-    "pairs/ipairs C upvalue acquire snapshot")
-  if ffrec:find("strV(&J->fn->c.upvalue", 1, true) or
-     ffrec:find("funcV(&J->fn->c.upvalue", 1, true) then
-    error("fast-function recorders must not raw-read C closure upvalues", 2)
-  end
-end
-
 local function c_function_body(src, signature)
   local start = assert(src:find(signature, 1, true),
                        "missing C function " .. signature)
@@ -444,6 +421,42 @@ local function c_function_body(src, signature)
     end
   end
   error("unterminated C function " .. signature, 2)
+end
+
+local function assert_cclosure_upvalue_trace_source_guards(t)
+  local api = utils.read_source_file(t:path("src", "lj_api.c"))
+
+  local flush = c_function_body(api,
+    "static LJ_AINLINE void api_trace_flush_mutation(lua_State *L)")
+  checks.assert_text_contains("C upvalue trace flush", flush,
+    "lj_trace_flushall_hs(L)", "full trace flush handshake")
+
+  local cupvalue_store = c_function_body(api,
+    "static LJ_AINLINE void index2adr_cupvalue_store_rel(lua_State *L, int idx,")
+  checks.assert_text_contains("C upvalue trace flush", cupvalue_store,
+    "api_trace_flush_mutation(L);", "API mutation trace flush")
+  checks.assert_text_contains("C upvalue trace flush", cupvalue_store,
+    "copyTVrel(L, o, &snap);", "C upvalue release copy")
+  checks.assert_text_contains("C upvalue trace flush", cupvalue_store,
+    "lj_gc_pubobjtv(L, fn, &snap);", "C upvalue publication")
+
+  local copy_slot = c_function_body(api,
+    "static void copy_slot(lua_State *L, TValue *f, int idx)")
+  checks.assert_text_contains("C upvalue trace flush", copy_slot,
+    "index2adr_cupvalue_store_rel(L, idx, f);",
+    "API pseudo-index C upvalue store funnel")
+
+  local ffrec = utils.read_source_file(t:path("src", "lj_ffrecord.c"))
+  checks.assert_text_contains("C upvalue recorder snapshot", ffrec,
+    "lj_tv_load_acq(&uv, &J->fn->c.upvalue[t]);",
+    "type() C upvalue acquire snapshot")
+  checks.assert_text_contains("C upvalue recorder snapshot", ffrec,
+    "lj_tv_load_acq(&uv, &J->fn->c.upvalue[0]);",
+    "pairs/ipairs C upvalue acquire snapshot")
+  if ffrec:find("strV(&J->fn->c.upvalue", 1, true) or
+     ffrec:find("funcV(&J->fn->c.upvalue", 1, true) then
+    error("fast-function recorders must not raw-read C closure upvalues", 2)
+  end
 end
 
 local function assert_env_trace_source_guards(t)
