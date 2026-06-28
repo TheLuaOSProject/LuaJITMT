@@ -297,8 +297,7 @@ static GCfunc *func_newL_gc_base(lua_State *L, TValue *base, GCproto *pt,
       if (proto_celluv(pt)) {
 	uv = func_celluv(L, slot, v, parent);
       } else {
-	uv = proto_legacyuv(pt) && mt_active_acq(G(L)) ?
-	     func_snapshotuv(L, slot) : func_finduv(L, slot);
+	uv = func_finduv(L, slot);
 	func_uvmeta(uv, parent, v);
       }
     } else {

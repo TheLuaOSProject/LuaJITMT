@@ -356,23 +356,6 @@ static char *bcwrite_bytecode(BCWriteCtx *ctx, char *p, GCproto *pt)
   return p;
 }
 
-/* Check whether a prototype tree was loaded from legacy v2 bytecode. */
-static int bcwrite_has_legacyuv(GCproto *pt)
-{
-  if (proto_legacyuv(pt))
-    return 1;
-  if ((pt->flags & PROTO_CHILD)) {
-    ptrdiff_t i, n = pt->sizekgc;
-    GCRef *kr = mref(pt->k, GCRef) - 1;
-    for (i = 0; i < n; i++, kr--) {
-      GCobj *o = gcref_acq(*kr);
-      if (o->gch.gct == ~LJ_TPROTO && bcwrite_has_legacyuv(gco2pt(o)))
-	return 1;
-    }
-  }
-  return 0;
-}
-
 /* Write prototype. */
 static void bcwrite_proto(BCWriteCtx *ctx, GCproto *pt)
 {
@@ -494,8 +477,6 @@ int lj_bcwrite(lua_State *L, GCproto *pt, lua_Writer writer, void *data,
   ctx.wdata = data;
   ctx.heapsz = 0;
   ctx.hsnapsz = 0;
-  if (bcwrite_has_legacyuv(pt))
-    return 1;
   if ((bc_op(proto_bc(pt)[0]) != BC_NOT) == LJ_FR2) flags |= BCDUMP_F_FR2;
   ctx.flags = flags;
   ctx.status = 0;

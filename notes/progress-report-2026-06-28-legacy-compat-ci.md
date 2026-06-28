@@ -29,9 +29,8 @@ Time remaining forecast:
   the current lockless dump version.
 - Deleted the `proto_legacyuv` compatibility path and the writer-side legacy
   upvalue walk.
-- Renamed the old bytecode fixture from `m5_bcdump_compat` to
-  `m5_bcdump_current`; it now verifies current-format loading and malformed
-  current dump rejection.
+- Renamed the old bytecode fixture to `m5_bcdump_current`; it now verifies
+  current-format loading and malformed current dump rejection.
 - Removed public C compatibility aliases: `luaL_putchar`, `lua_strlen`,
   `lua_open`, `lua_getregistry`, `lua_getgccount`, `lua_Chunkreader`, and
   `lua_Chunkwriter`. Repo-internal callers now use canonical APIs directly.

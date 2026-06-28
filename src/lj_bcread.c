@@ -25,14 +25,8 @@
 
 /* Reuse some lexer fields for our own purposes. */
 #define bcread_flags(ls)	ls->level
-#define BCREAD_VERSION_SHIFT	24
-#define BCREAD_FLAG_MASK	((1u << BCREAD_VERSION_SHIFT)-1u)
-#define bcread_dumpflags(ls)	(bcread_flags(ls) & BCREAD_FLAG_MASK)
-#define bcread_version(ls) \
-  ((bcread_flags(ls) >> BCREAD_VERSION_SHIFT) ? \
-   (bcread_flags(ls) >> BCREAD_VERSION_SHIFT) : BCDUMP_VERSION)
-#define bcread_saveflags(ls, flags, version) \
-  (bcread_flags(ls) = (flags) | ((uint32_t)(version) << BCREAD_VERSION_SHIFT))
+#define bcread_dumpflags(ls)	bcread_flags(ls)
+#define bcread_saveflags(ls, flags)	(bcread_flags(ls) = (flags))
 #define bcread_swap(ls) \
   ((bcread_dumpflags(ls) & BCDUMP_F_BE) != LJ_BE*BCDUMP_F_BE)
 #define bcread_oldtop(L, ls)	restorestack(L, ls->lastline)
@@ -334,8 +328,6 @@ static int bcread_verify_bytecode(LexState *ls, GCproto *pt)
     BCOp op = bc_op(ins);
     if (op >= BC__MAX)
       bcread_error(ls, LJ_ERR_BCBAD);
-    if (bcread_version(ls) != BCDUMP_VERSION_LOCKLESS && op >= BC_CNEW)
-      bcread_error(ls, LJ_ERR_BCBAD);
     switch (op) {
     case BC_CNEW:
       cellops |= BCREAD_CELL_CNEW;
@@ -441,8 +433,6 @@ GCproto *lj_bcread_proto(LexState *ls)
   pt->sizeuv = (uint8_t)sizeuv;
   pt->flags = (uint8_t)flags;
   proto_initflags2(pt);
-  if (bcread_version(ls) == BCDUMP_VERSION_LEGACY)
-    proto_setlegacyuv(pt);
   pt->trace = 0;
   setgcrefrel(pt->chunkname, obj2gco(ls->chunkname));
   lj_gc_pubobjobj(ls->L, pt, ls->chunkname);
@@ -456,7 +446,7 @@ GCproto *lj_bcread_proto(LexState *ls)
   if (cellops)
     proto_setcelluv(pt);
   bcread_uv(ls, pt, sizeuv);
-  if (bcread_version(ls) == BCDUMP_VERSION_LOCKLESS && bcread_uv_haslocal(pt))
+  if (bcread_uv_haslocal(pt))
     proto_setcelluv(pt);
   /* Read constants. */
   bcread_kgc(ls, pt, sizekgc);
@@ -488,13 +478,11 @@ static int bcread_header(LexState *ls)
   if (bcread_byte(ls) != BCDUMP_HEAD2 ||
       bcread_byte(ls) != BCDUMP_HEAD3) return 0;
   version = bcread_byte(ls);
-  if (version != BCDUMP_VERSION_LEGACY &&
-      version != BCDUMP_VERSION_TRANS &&
-      version != BCDUMP_VERSION)
+  if (version != BCDUMP_VERSION)
     return 0;
   flags = bcread_uleb128(ls);
   if ((flags & ~(BCDUMP_F_KNOWN)) != 0) return 0;
-  bcread_saveflags(ls, flags, version);
+  bcread_saveflags(ls, flags);
   if ((flags & BCDUMP_F_FR2) != (uint32_t)ls->fr2*BCDUMP_F_FR2) return 0;
   if ((flags & BCDUMP_F_FFI)) {
 #if LJ_HASFFI

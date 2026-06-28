@@ -33,9 +33,7 @@
 #define BCDUMP_HEAD2		0x4c
 #define BCDUMP_HEAD3		0x4a
 
-/* Bytecode dump format versions accepted by the lockless loader. */
-#define BCDUMP_VERSION_LEGACY	2
-#define BCDUMP_VERSION_TRANS	3
+/* Current lockless bytecode dump format version. */
 #define BCDUMP_VERSION_LOCKLESS	4
 #define BCDUMP_VERSION		BCDUMP_VERSION_LOCKLESS
 
