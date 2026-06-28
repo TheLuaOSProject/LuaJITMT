@@ -393,13 +393,13 @@ Validation:
 ## 2026-06-20 shared C Lua status helper
 
 - Added `ljt_lua_assert_ok()` to `tests/lib/lua_fixture_helpers.h`.
-- Reused the helper in bytecode compatibility, NaN TValue tag, nomm cache, and
+- Reused the helper in current bytecode validation, NaN TValue tag, nomm cache, and
   lua_State owner fixtures.
 - Left expected-error and fixture-specific owner checks local.
 
 Validation:
 
-- `timeout 240s tools/ci/lua_test.sh m5_bcdump_compat m5_itype_nan m5_nomm_cache m5_state_owner`
+- `timeout 240s tools/ci/lua_test.sh m5_bcdump_current m5_itype_nan m5_nomm_cache m5_state_owner`
 - `tools/ci/lua_test.sh --list`
 - Duplicate local status-helper scan over migrated fixtures.
 - `git diff --check`

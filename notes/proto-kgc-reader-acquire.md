@@ -11,7 +11,6 @@ reader:
 Several reader loops still loaded those slots with plain `gcref()`:
 
 - `bcwrite_kgc()`
-- `bcwrite_has_legacyuv()`
 - child prototype recursion in `bcwrite_proto()`
 - `snap_useuv()`
 
@@ -22,6 +21,10 @@ pointers from release-published prototype storage.
 
 The explicit loops above now use `gcref_acq(*kr)` when reading prototype GC
 constant slots.
+
+Update: the old `bcwrite_has_legacyuv()` compatibility walk was removed with
+pre-lockless bytecode dump loading support. The remaining prototype-writer and
+JIT snapshot readers keep the acquire-load contract.
 
 ## Scope
 

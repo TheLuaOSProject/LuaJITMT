@@ -15,5 +15,5 @@ Validation:
 - `make -C src clean && make -C src -j$(getconf _NPROCESSORS_ONLN) XCFLAGS='-DLUAJIT_USE_GDBJIT -DLUAJIT_USE_PERFTOOLS'`
 - `make -C src clean && make -C src -j$(getconf _NPROCESSORS_ONLN)`
 - `tools/ci/m6_jit_flush_hs.sh`
-- `tools/ci/m5_bcdump_compat.sh`
+- `tools/ci/lua_test.sh m5_bcdump_current`
 - `tools/ci/m6_jit_mcode_publish.sh`

@@ -495,19 +495,14 @@ typedef struct GCproto {
 #define PROTO_CLC_POLY		(3*PROTO_CLCOUNT)  /* Polymorphic threshold. */
 
 /* Extended prototype flags. */
-#define PROTO2_LEGACYUV		0x00000001u  /* Loaded from v2 bytecode. */
-#define PROTO2_CELLUV		0x00000002u  /* Local upvalues are cell slots. */
+#define PROTO2_CELLUV		0x00000001u  /* Local upvalues are cell slots. */
 
 #if LJ_GC64
 #define proto_initflags2(pt)	((pt)->flags2 = 0)
-#define proto_legacyuv(pt)	(((pt)->flags2 & PROTO2_LEGACYUV) != 0)
-#define proto_setlegacyuv(pt)	((pt)->flags2 |= PROTO2_LEGACYUV)
 #define proto_celluv(pt)	(((pt)->flags2 & PROTO2_CELLUV) != 0)
 #define proto_setcelluv(pt)	((pt)->flags2 |= PROTO2_CELLUV)
 #else
 #define proto_initflags2(pt)	((void)0)
-#define proto_legacyuv(pt)	0
-#define proto_setlegacyuv(pt)	((void)0)
 #define proto_celluv(pt)	0
 #define proto_setcelluv(pt)	((void)0)
 #endif

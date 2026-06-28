@@ -1,5 +1,5 @@
 /*
-** Focused guard for lockless bytecode dump compatibility.
+** Focused guard for current lockless bytecode dump validation.
 */
 
 #include <assert.h>
@@ -151,7 +151,7 @@ static void compile_to_dump(lua_State *L, const char *src, DumpBuf *b)
 
 static int load_dump(lua_State *L, const DumpBuf *b)
 {
-  return luaL_loadbufferx(L, b->p, b->n, "=(bcdump-compat)", "b");
+  return luaL_loadbufferx(L, b->p, b->n, "=(bcdump-current)", "b");
 }
 
 static void assert_load_fails(lua_State *L, const DumpBuf *b, const char *what)
@@ -169,7 +169,6 @@ int main(void)
   lua_State *L = luaL_newstate();
   DumpBuf base = { NULL, 0, 0 };
   DumpBuf mod = { NULL, 0, 0 };
-  DumpBuf redump = { NULL, 0, 0 };
   uint32_t framesize, numbc;
   size_t bcpos;
 
@@ -184,24 +183,12 @@ int main(void)
   lua_pop(L, 1);
 
   dump_copy(&mod, &base);
-  mod.p[3] = BCDUMP_VERSION_TRANS;
-  ljt_lua_assert_ok(L, load_dump(L, &mod), "load patched v3 dump");
-  ljt_lua_assert_ok(L, lua_pcall(L, 0, 1, 0), "pcall patched v3 dump");
-  assert(lua_tointeger(L, -1) == 42);
-  lua_pop(L, 1);
-
-  dump_copy(&mod, &base);
-  mod.p[3] = BCDUMP_VERSION_LEGACY;
-  ljt_lua_assert_ok(L, load_dump(L, &mod), "load patched v2 dump");
-  dump_reset(&redump);
-  assert(lua_dump(L, dump_writer, &redump) != 0);
-  ljt_lua_assert_ok(L, lua_pcall(L, 0, 1, 0), "pcall patched v2 dump");
-  assert(lua_tointeger(L, -1) == 42);
-  lua_pop(L, 1);
-
-  dump_copy(&mod, &base);
   mod.p[3] = BCDUMP_VERSION_LOCKLESS + 1;
   assert_load_fails(L, &mod, "unknown dump version");
+
+  dump_copy(&mod, &base);
+  mod.p[3] = BCDUMP_VERSION_LOCKLESS - 1;
+  assert_load_fails(L, &mod, "old dump version");
 
   dump_copy(&mod, &base);
   mod.p[first_proto_offset(&mod)] = PROTO_NOJIT;
@@ -210,16 +197,6 @@ int main(void)
   bcpos = first_bc_offset(&base, &framesize, &numbc);
   assert(framesize > 0);
   assert(numbc >= 2);
-
-  dump_copy(&mod, &base);
-  mod.p[3] = BCDUMP_VERSION_LEGACY;
-  patch_ins(&mod, bcpos, BCINS_AD(BC_CNEW, 0, 0));
-  assert_load_fails(L, &mod, "v2 dump with lockless cell opcode");
-
-  dump_copy(&mod, &base);
-  mod.p[3] = BCDUMP_VERSION_TRANS;
-  patch_ins(&mod, bcpos, BCINS_AD(BC_CNEW, 0, 0));
-  assert_load_fails(L, &mod, "v3 dump with lockless cell opcode");
 
   dump_copy(&mod, &base);
   patch_ins(&mod, bcpos, BCINS_AD(BC_CGET, 0, framesize));
@@ -247,10 +224,9 @@ int main(void)
   assert((top_proto(L)->flags & PROTO_NOJIT) == 0);
   lua_pop(L, 1);
 
-  dump_free(&redump);
   dump_free(&mod);
   dump_free(&base);
   lua_close(L);
-  printf("t-bcdump-compat OK: v2/v3/v4 bytecode compatibility guarded\n");
+  printf("t-bcdump-current OK: current bytecode validation guarded\n");
   return 0;
 }

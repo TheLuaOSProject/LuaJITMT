@@ -47,7 +47,7 @@ Lua test-suite migration notes:
   - `tools/ci/m5_nbtab_model.sh` -> `m5_nbtab_model`
   - `tools/ci/m5_itype_nan.sh` -> `m5_itype_nan`
   - `tools/ci/m5_itype_sentinel.sh` -> `m5_itype_sentinel`
-  - `tools/ci/m5_bcdump_compat.sh` -> `m5_bcdump_compat`
+  - `tools/ci/m5_bcdump_compat.sh` -> `m5_bcdump_current`
   - `tools/ci/m5_registry_root.sh` -> `m5_registry_root`
   - `tools/ci/m5_nomm_cache.sh` -> `m5_nomm_cache`
   - `tools/ci/m5_strtab_prep.sh` -> `m5_strtab_prep`

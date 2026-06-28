@@ -26,9 +26,6 @@ if ! awk '
   in_fn && /ctype_cbblack_slot_cas[[:space:]]*[(]/ {
     saw_cas = 1
   }
-  in_fn && saw_cas && /expect[[:space:]]*==[[:space:]]*key/ {
-    reconciles_duplicate = 1
-  }
   in_fn && saw_cas && /ctype_cbblack_wait_no_l[[:space:]]*[(]/ {
     waits_after_cas = 1
   }
@@ -41,11 +38,10 @@ if ! awk '
   END {
     if (bad != "")
       print bad
-    exit(wait_sleeps && saw_cas && reconciles_duplicate &&
-         waits_after_cas && bad == "" ? 0 : 1)
+    exit(wait_sleeps && saw_cas && waits_after_cas && bad == "" ? 0 : 1)
   }
 ' "$ROOT/src/lj_ctype.c"; then
-  printf '%s\n' 'callback/blocking blacklist CAS losers must reconcile duplicate winners and yield via ctype_cbblack_wait_no_l()' >&2
+  printf '%s\n' 'callback/blocking blacklist CAS losers must yield via ctype_cbblack_wait_no_l() without spinning' >&2
   exit 1
 fi
 if ! awk '
@@ -53,16 +49,9 @@ if ! awk '
   /^#if LJ_FFI_RECORD_CALLS$/ && defoff && !seen_harderr { in_harderr = 1 }
   in_harderr && /#error .*IR_CALLXS.*native-state/ { harderr = 1 }
   in_harderr && /^#endif/ { in_harderr = 0; seen_harderr = 1 }
-  /^static int crec_call\(jit_State \*J, RecordFFData \*rd, GCcdata \*cd\)$/ {
-    in_fn = 1
-  }
-  in_fn && /#if !LJ_FFI_RECORD_CALLS/ { guarded = 1 }
-  in_fn && guarded && /lj_trace_err\(J, LJ_TRERR_BLACKL\)/ { aborts = 1 }
-  in_fn && /IR_CALLXS/ { has_callxs = 1 }
-  in_fn && /^}/ { in_fn = 0 }
-  END { exit(defoff && harderr && guarded && aborts && has_callxs ? 0 : 1) }
+  END { exit(defoff && harderr ? 0 : 1) }
 ' "$ROOT/src/lj_crecord.c"; then
-  printf '%s\n' 'FFI C-call recorder must hard-disable traced calls until IR_CALLXS has a native protocol' >&2
+  printf '%s\n' 'LJ_FFI_RECORD_CALLS must default off and hard-error until IR_CALLXS has a native protocol' >&2
   exit 1
 fi
 exec "$ROOT/tools/ci/lua_test.sh" m7_ffi_blocking

@@ -143,9 +143,6 @@ typedef struct luaL_Buffer {
   ((void)((B)->p < ((B)->buffer+LUAL_BUFFERSIZE) || luaL_prepbuffer(B)), \
    (*(B)->p++ = (char)(c)))
 
-/* compatibility only */
-#define luaL_putchar(B,c)	luaL_addchar(B,c)
-
 #define luaL_addsize(B,n)	((B)->p += (n))
 
 LUALIB_API void (luaL_buffinit) (lua_State *L, luaL_Buffer *B);

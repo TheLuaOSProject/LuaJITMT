@@ -80,6 +80,20 @@
   before interrupted `profile.stop()` unwinds.
 - Removed 76 pure shell aliases in this pass. Use
   `tools/ci/lua_test.sh <case...>` for those cases.
+- Slimmed `tools/ci/m7_ffi_blocking.sh` by removing source-shape checks for
+  duplicate blacklist reconciliation and default recorder abort behavior; those
+  contracts are covered by `t-ffi-cbblack-race`, `t-ffi-blocking.lua`, and the
+  recorder-off fixture. The remaining checks enforce non-observable CType/load
+  boundaries and the compile-time traced-FFI fence.
+- Removed old bytecode-dump compatibility support for pre-lockless dump
+  versions. The loader now accepts only the current lockless bytecode version,
+  the `proto_legacyuv` path was deleted, and the former compatibility fixture is
+  now `m5_bcdump_current`, focused on current-format validation and malformed
+  current dump rejection.
+- Removed unused/public C header compatibility aliases for `luaL_putchar`,
+  `lua_strlen`, `lua_open`, `lua_getregistry`, `lua_getgccount`,
+  `lua_Chunkreader`, and `lua_Chunkwriter`; repo-internal call sites now use
+  the canonical APIs directly.
 
 Verification for the alias removal:
 
@@ -88,6 +102,7 @@ Verification for the alias removal:
 - `tools/ci/lua_test.sh m5_profile_stop_native`
 - `tools/ci/lua_test.sh m4_threading_api m4_threading_capi`
 - `tools/ci/lua_test.sh m7_ffi_blocking m7_ffi_callback_runtime`
+- `tools/ci/lua_test.sh m5_bcdump_current`
 - `git diff --check`
 
 ## Next Refactors
