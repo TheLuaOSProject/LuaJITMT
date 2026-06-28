@@ -701,6 +701,43 @@ static int ffi_direct_ctype_string(lua_State *L, CTState *cts, GCstr *s,
   return ffi_direct_ctype_part(L, cts, s, p, len, idp);
 }
 
+static int ffi_direct_array_sizeof_string(CTState *cts, GCstr *s, CTSize *szp)
+{
+  enum { FFI_DIRECT_MAX_ARRAYS = 8 };
+  const char *p = strdata(s);
+  MSize len = s->len, baselen, narr = 0, i;
+  CTSize nelem[FFI_DIRECT_MAX_ARRAYS], esize;
+  CTInfo einfo;
+  CTypeID elemid;
+  while (len != 0 && ffi_cspace(*p)) { p++; len--; }
+  while (len != 0 && ffi_cspace(p[len-1])) len--;
+  baselen = len;
+  for (;;) {
+    CTSize n;
+    MSize nextlen = baselen;
+    if (!ffi_direct_array_suffix(p, &nextlen, &n))
+      break;
+    if (narr == FFI_DIRECT_MAX_ARRAYS)
+      return 0;
+    nelem[narr++] = n;
+    baselen = nextlen;
+  }
+  if (narr == 0 || !lj_ctype_predefined_string(p, baselen, &elemid))
+    return 0;
+  if (lj_ctype_info_predefined(cts, elemid, &einfo, &esize, NULL, NULL) <= 0 ||
+      ctype_isref(einfo) || ctype_isvltype(einfo) ||
+      esize == CTSIZE_INVALID)
+    return 0;
+  for (i = 0; i < narr; i++) {
+    uint64_t asize = (uint64_t)nelem[i] * esize;
+    if (asize >= 0x80000000u)
+      return 0;
+    esize = (CTSize)asize;
+  }
+  *szp = esize;
+  return 1;
+}
+
 /* Check first argument for a C type and returns its ID. */
 static CTypeID ffi_checkctype(lua_State *L, CTState *cts, TValue *param)
 {
@@ -808,6 +845,16 @@ static jit_State *ffi_active_recorder(lua_State *L)
 	 lj_trace_state_load(J) != LJ_TRACE_IDLE ? J : NULL;
 }
 #endif
+
+static void ffi_layout_wait_or_record_ctbusy(lua_State *L, CTState *cts)
+{
+#if LJ_HASJIT
+  jit_State *J = ffi_active_recorder(L);
+  if (J)
+    lj_trace_err(J, LJ_TRERR_CTBUSY);
+#endif
+  lj_ctype_parse_wait(cts, L, ctype_parse_token_acq(cts));
+}
 
 static int ffi_ctype_predefined_id(CTypeID id)
 {
@@ -2153,7 +2200,7 @@ static int ffi_new_layout_wait(lua_State *L, CTState *cts, CTypeID id,
 				 infop, szp, neednelem);
     if (ok >= 0)
       return ok;
-    lj_ctype_parse_wait(cts, L, ctype_parse_token_acq(cts));
+    ffi_layout_wait_or_record_ctbusy(L, cts);
   }
 }
 
@@ -2215,7 +2262,7 @@ static int ffi_layout_sizeof_wait(lua_State *L, CTState *cts, CTypeID id,
 				    neednelem);
     if (ok >= 0)
       return ok;
-    lj_ctype_parse_wait(cts, L, ctype_parse_token_acq(cts));
+    ffi_layout_wait_or_record_ctbusy(L, cts);
   }
 }
 
@@ -2261,7 +2308,7 @@ static int ffi_layout_alignof_wait(lua_State *L, CTState *cts, CTypeID id,
     ok = ffi_layout_alignof_snapshot(cts, id, alignp);
     if (ok >= 0)
       return ok;
-    lj_ctype_parse_wait(cts, L, ctype_parse_token_acq(cts));
+    ffi_layout_wait_or_record_ctbusy(L, cts);
   }
 }
 
@@ -2362,7 +2409,7 @@ static int ffi_layout_offsetof_wait(lua_State *L, CTState *cts, CTypeID id,
     ok = ffi_layout_offsetof_snapshot(cts, id, name, ofs, out);
     if (ok >= 0)
       return ok;
-    lj_ctype_parse_wait(cts, L, ctype_parse_token_acq(cts));
+    ffi_layout_wait_or_record_ctbusy(L, cts);
   }
 }
 
@@ -2376,8 +2423,14 @@ LJLIB_CF(ffi_sizeof)	LJLIB_REC(ffi_xof FF_ffi_sizeof)
   } else {
     int isstr, neednelem = 0;
     id = ffi_checkctype_noparse(L, NULL, &isstr);
-    if (isstr)
+    if (isstr) {
+#if LJ_HASJIT
+      if (ffi_active_recorder(L) &&
+	  ffi_direct_array_sizeof_string(cts, strV(L->base), &sz))
+	goto got_size;
+#endif
       id = ffi_checkctype(L, cts, NULL);
+    }
     {
       int ok = ffi_layout_sizeof_snapshot(cts, id, 0, 0, &sz, &neednelem);
       if (ok < 0)

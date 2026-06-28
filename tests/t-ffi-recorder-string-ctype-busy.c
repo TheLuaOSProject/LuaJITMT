@@ -71,6 +71,24 @@ int main(void)
     "assert(lj_m7_trace_parse_token_stop_count() >= 1)\n"
     "assert(lj_m7_trace_parse_token_ctbusy_count() == 0)\n");
 
+  assert_busy_trace_records(L, cts,
+    "local ffi = require('ffi')\n"
+    "jit.attach(lj_m7_trace_parse_token, 'trace')\n"
+    "jit.flush()\n"
+    "jit.on()\n"
+    "jit.opt.start('hotloop=1', 'hotexit=1')\n"
+    "local function run(n)\n"
+    "  local sum = 0\n"
+    "  for i = 1, n do\n"
+    "    sum = sum + ffi.sizeof('int[1]')\n"
+    "  end\n"
+    "  return sum\n"
+    "end\n"
+    "for i = 1, 30 do assert(run(40) == 160) end\n"
+    "jit.attach(lj_m7_trace_parse_token)\n"
+    "assert(lj_m7_trace_parse_token_stop_count() >= 1)\n"
+    "assert(lj_m7_trace_parse_token_ctbusy_count() == 0)\n");
+
   assert_busy_trace_releases(L, cts,
     "local ffi = require('ffi')\n"
     "jit.attach(lj_m7_trace_parse_token, 'trace')\n"
@@ -80,13 +98,11 @@ int main(void)
     "local function run(n)\n"
     "  local sum = 0\n"
     "  for i = 1, n do\n"
-    "    local a = ffi.new('int[1]')\n"
-    "    a[0] = i\n"
-    "    sum = sum + a[0]\n"
+    "    sum = sum + ffi.sizeof('struct { int x; }')\n"
     "  end\n"
     "  return sum\n"
     "end\n"
-    "for i = 1, 3 do assert(run(8) == 36) end\n"
+    "for i = 1, 3 do assert(run(8) == 32) end\n"
     "jit.attach(lj_m7_trace_parse_token)\n"
     "assert(lj_m7_trace_parse_token_abort_count() >= 1)\n");
 
@@ -108,6 +124,6 @@ int main(void)
     "assert(a[0] == 23)\n");
 
   lua_close(L);
-  printf("t-ffi-recorder-string-ctype-busy OK: recorder exact ctype strings bypass parser token and general strings abort instead of waiting\n");
+  printf("t-ffi-recorder-string-ctype-busy OK: recorder direct ctype strings bypass parser token and general strings abort instead of waiting\n");
   return 0;
 }

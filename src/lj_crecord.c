@@ -82,8 +82,90 @@ static CTypeID crec_constructor(jit_State *J, GCcdata *cd, TRef tr)
   return id;
 }
 
-static CTypeID argv2ctype(jit_State *J, TRef tr, cTValue *o)
+static int crec_cspace(char c)
 {
+  return c == ' ' || c == '\t' || c == '\n' || c == '\r' ||
+	 c == '\f' || c == '\v';
+}
+
+static int crec_direct_array_suffix(const char *p, MSize *lenp, CTSize *nelemp)
+{
+  MSize len = *lenp, i, dstart, dend;
+  uint64_t nelem = 0;
+  while (len != 0 && crec_cspace(p[len-1])) len--;
+  if (len == 0 || p[len-1] != ']')
+    return 0;
+  i = len - 1;
+  while (i != 0 && crec_cspace(p[i-1])) i--;
+  dend = i;
+  while (i != 0 && p[i-1] >= '0' && p[i-1] <= '9') i--;
+  dstart = i;
+  if (dstart == dend)
+    return 0;
+  if (dend - dstart > 1 && p[dstart] == '0')
+    return 0;
+  for (i = dstart; i < dend; i++) {
+    nelem = nelem * 10u + (uint32_t)(p[i] - '0');
+    if (nelem >= 0x80000000u)
+      return 0;
+  }
+  i = dstart;
+  while (i != 0 && crec_cspace(p[i-1])) i--;
+  if (i == 0 || p[i-1] != '[')
+    return 0;
+  i--;
+  while (i != 0 && crec_cspace(p[i-1])) i--;
+  if (i == 0)
+    return 0;
+  *lenp = i;
+  *nelemp = (CTSize)nelem;
+  return 1;
+}
+
+static int crec_direct_array_ctype_string(jit_State *J, GCstr *s, CTypeID *idp)
+{
+  enum { CREC_DIRECT_MAX_ARRAYS = 8 };
+  CTState *cts = ctype_ctsG(J2G(J));
+  const char *p = strdata(s);
+  MSize len = s->len, baselen, narr = 0, i;
+  CTSize nelem[CREC_DIRECT_MAX_ARRAYS], esize;
+  CTInfo einfo;
+  CTypeID elemid;
+  while (len != 0 && crec_cspace(*p)) { p++; len--; }
+  while (len != 0 && crec_cspace(p[len-1])) len--;
+  baselen = len;
+  for (;;) {
+    CTSize n;
+    MSize nextlen = baselen;
+    if (!crec_direct_array_suffix(p, &nextlen, &n))
+      break;
+    if (narr == CREC_DIRECT_MAX_ARRAYS)
+      return 0;
+    nelem[narr++] = n;
+    baselen = nextlen;
+  }
+  if (narr == 0 || !lj_ctype_predefined_string(p, baselen, &elemid))
+    return 0;
+  if (lj_ctype_info_predefined(cts, elemid, &einfo, &esize, NULL, NULL) <= 0 ||
+      ctype_isref(einfo) || ctype_isvltype(einfo) ||
+      esize == CTSIZE_INVALID)
+    return 0;
+  for (i = 0; i < narr; i++) {
+    uint64_t asize = (uint64_t)nelem[i] * esize;
+    if (asize >= 0x80000000u)
+      return 0;
+    einfo = CTINFO(CT_ARRAY, elemid) | (einfo & (CTF_ALIGN|CTF_QUAL));
+    esize = (CTSize)asize;
+    elemid = lj_ctype_intern_l(J->L, cts, einfo, esize);
+  }
+  *idp = elemid;
+  return 1;
+}
+
+static CTypeID argv2ctype_direct(jit_State *J, TRef tr, cTValue *o,
+				 int *directp)
+{
+  if (directp) *directp = 0;
   if (tref_isstr(tr)) {
     GCstr *s = strV(o);
     CPState cp;
@@ -91,8 +173,14 @@ static CTypeID argv2ctype(jit_State *J, TRef tr, cTValue *o)
     CTypeID id;
     /* Specialize to the string containing the C type declaration. */
     emitir(IRTG(IR_EQ, IRT_STR), tr, lj_ir_kstr(J, s));
-    if (lj_ctype_predefined_string(strdata(s), s->len, &id))
+    if (lj_ctype_predefined_string(strdata(s), s->len, &id)) {
+      if (directp) *directp = 1;
       return id;
+    }
+    if (crec_direct_array_ctype_string(J, s, &id)) {
+      if (directp) *directp = 1;
+      return id;
+    }
     cp.L = J->L;
     cp.cts = ctype_cts(J->L);
     {
@@ -115,6 +203,11 @@ static CTypeID argv2ctype(jit_State *J, TRef tr, cTValue *o)
     return cd->ctypeid == CTID_CTYPEID ? crec_constructor(J, cd, tr) :
 					cd->ctypeid;
   }
+}
+
+static CTypeID argv2ctype(jit_State *J, TRef tr, cTValue *o)
+{
+  return argv2ctype_direct(J, tr, o, NULL);
 }
 
 static CType *crec_ctype_snapshot(jit_State *J, CTState *cts, CTypeID id,
@@ -2129,12 +2222,15 @@ void LJ_FASTCALL recff_ffi_abi(jit_State *J, RecordFFData *rd)
 void LJ_FASTCALL recff_ffi_xof(jit_State *J, RecordFFData *rd)
 {
   CTState *cts = ctype_ctsG(J2G(J));
-  CTypeID id = argv2ctype(J, J->base[0], &rd->argv[0]);
+  int direct = 0;
+  CTypeID id = argv2ctype_direct(J, J->base[0], &rd->argv[0], &direct);
   if (rd->data == FF_ffi_sizeof) {
-    CType snap;
-    CType *ct = crec_ctype_rawref(J, cts, id, &snap);
-    if (ctype_isvltype(ctype_info_acq(ct)))
-      lj_trace_err(J, LJ_TRERR_BADTYPE);
+    if (!direct) {
+      CType snap;
+      CType *ct = crec_ctype_rawref(J, cts, id, &snap);
+      if (ctype_isvltype(ctype_info_acq(ct)))
+	lj_trace_err(J, LJ_TRERR_BADTYPE);
+    }
   } else if (rd->data == FF_ffi_offsetof) {  /* Specialize to the field name. */
     if (!tref_isstr(J->base[1]))
       lj_trace_err(J, LJ_TRERR_BADTYPE);

@@ -14,10 +14,17 @@ The trace recorder uses the same exact immutable-name table before trying to
 claim `CTState.parse_token`, so traced `ffi.sizeof("int")`,
 `ffi.typeof("double")`, and other exact predefined names can record while an
 unrelated parser owns the token. Recorder-side direct handling is deliberately
-limited to immutable predefined CTIDs; strings that need name snapshots,
-interned parser-compatible records, arrays, pointer construction, or normal
+limited to immutable predefined CTIDs plus fixed-size decimal array suffixes
+over those bases, such as `int[1]` or `const char[4]`. Strings that need name
+snapshots, parser-compatible numeric records, pointer construction, or normal
 parser diagnostics still abort with `CTBUSY` instead of waiting while
 recording.
+
+The interpreter half of a recording fast-function call follows the same rule:
+layout queries reached by the active recorder must abort with `CTBUSY` instead
+of parking on the parser token. `ffi.sizeof` may compute fixed-size arrays over
+predefined bases directly, so `ffi.sizeof("int[1]")` can record without waiting
+for a parser-owned token.
 
 Predefined complex primitives use the same direct path for the parser's common
 spellings: `complex`, `_Complex`, `complex double`, `double complex`,
