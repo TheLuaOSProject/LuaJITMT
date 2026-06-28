@@ -29,12 +29,14 @@ attribute ctype. The GNU spellings `__const`, `__const__`, `__volatile`, and
 them as the same qualifier tokens.
 
 Trailing pointer declarator chains over those direct bases also use this path:
-`ffi.typeof("my_typedef **")`, `ffi.typeof("struct my_tag **")`, and
-predefined scalar bases such as `ffi.typeof("int **")` resolve the base
-without the parser token and then intern each pointer ctype through the
-lock-free ctype intern table. The base-name wait still happens in native time
-when a parser is active, so the lookup does not read rollback-sensitive names
-while the parser token is held.
+`ffi.typeof("my_typedef **")`, `ffi.typeof("struct my_tag **")`,
+`ffi.typeof("int * const")`, and `ffi.typeof("int * const * volatile")`
+resolve the base without the parser token and then intern each pointer ctype
+through the lock-free ctype intern table. Direct `const`/`volatile` qualifiers
+after `*` are attached to that pointer ctype, matching the parser's
+representation. The base-name wait still happens in native time when a parser
+is active, so the lookup does not read rollback-sensitive names while the
+parser token is held.
 
 Fixed-size array suffix chains over a direct base, including a direct pointer
 chain base, also stay off the parser token: `ffi.typeof("int[4]")`,
@@ -59,10 +61,10 @@ declarations with `$` parameters, variable-length forms, and strings whose
 internal spacing or token sequence does not exactly match the predefined table,
 a single typedef identifier, a simple tag lookup, direct base qualifiers, a
 trailing pointer chain over one of those bases, or a fixed-size array suffix
-chain over one of those bases. Pointer-level qualifiers such as
-`int * const`, function pointer declarations, and parenthesized declarators
-remain parser-owned. Those can allocate or intern ctype records, observe
-rollback-sensitive names, or need normal parser diagnostics.
+chain over one of those bases. Function pointer declarations, references, and
+parenthesized declarators remain parser-owned. Those can allocate or intern
+ctype records, observe rollback-sensitive names, or need normal parser
+diagnostics.
 
 Validation target:
 

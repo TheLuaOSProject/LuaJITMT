@@ -377,20 +377,41 @@ static int ffi_direct_ctype_base_string(lua_State *L, CTState *cts, GCstr *s,
   return ffi_direct_ctype_base_unqualified(L, cts, s, p, len, idp);
 }
 
-static MSize ffi_direct_pointer_suffix(const char *p, MSize *lenp)
+static int ffi_pointer_qual_suffix(const char *p, MSize *lenp, CTInfo *qualp)
 {
   MSize len = *lenp;
-  MSize nptr = 0;
+  MSize start = len;
+  while (start != 0 && lj_char_isident((uint8_t)p[start-1])) start--;
+  if (start == len)
+    return 0;
+  if (start != 0 && !ffi_cspace(p[start-1]) && p[start-1] != '*')
+    return 0;
+  if (!ffi_qual_token(p + start, len - start, qualp))
+    return 0;
+  *lenp = start;
+  return 1;
+}
+
+static int ffi_direct_pointer_suffix(const char *p, MSize *lenp,
+				     CTInfo *qualp)
+{
+  MSize len = *lenp;
+  CTInfo qual = 0;
   for (;;) {
+    CTInfo q;
     while (len != 0 && ffi_cspace(p[len-1])) len--;
-    if (len == 0 || p[len-1] != '*')
+    if (!ffi_pointer_qual_suffix(p, &len, &q))
       break;
-    len--;
-    nptr++;
+    qual |= q;
   }
   while (len != 0 && ffi_cspace(p[len-1])) len--;
+  if (len == 0 || p[len-1] != '*')
+    return 0;
+  len--;
+  while (len != 0 && ffi_cspace(p[len-1])) len--;
   *lenp = len;
-  return nptr;
+  *qualp = qual;
+  return 1;
 }
 
 static int ffi_direct_array_suffix(const char *p, MSize *lenp, CTSize *nelemp)
@@ -449,17 +470,32 @@ static int ffi_direct_array_ctype(lua_State *L, CTState *cts, CTypeID elemid,
 static int ffi_direct_ctype_part(lua_State *L, CTState *cts, GCstr *s,
 				 const char *p, MSize len, CTypeID *idp)
 {
+  enum { FFI_DIRECT_MAX_POINTERS = 8 };
   while (len != 0 && ffi_cspace(*p)) { p++; len--; }
   while (len != 0 && ffi_cspace(p[len-1])) len--;
   {
     MSize baselen = len;
-    MSize nptr = ffi_direct_pointer_suffix(p, &baselen);
+    CTInfo pqual[FFI_DIRECT_MAX_POINTERS];
+    MSize nptr = 0;
     CTypeID baseid;
+    for (;;) {
+      CTInfo qual;
+      MSize nextlen = baselen;
+      if (!ffi_direct_pointer_suffix(p, &nextlen, &qual))
+	break;
+      if (nptr == FFI_DIRECT_MAX_POINTERS) {
+	nptr = 0;
+	break;
+      }
+      pqual[nptr++] = qual;
+      baselen = nextlen;
+    }
     if (nptr != 0 && baselen != 0 &&
 	ffi_direct_ctype_base_string(L, cts, s, p, baselen, &baseid)) {
       while (nptr-- != 0)
 	baseid = lj_ctype_intern_l(L, cts,
-				   CTINFO(CT_PTR, CTALIGN_PTR|baseid),
+				   CTINFO(CT_PTR,
+					  CTALIGN_PTR|pqual[nptr]|baseid),
 				   CTSIZE_PTR);
       *idp = baseid;
       return 1;
