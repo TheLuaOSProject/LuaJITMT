@@ -453,7 +453,7 @@ void lj_gc2_fini(global_State *g)
   }
 }
 
-static void lj_gc2_worker_wake(global_State *g)
+static void lj_gc2_worker_wake_n(global_State *g, int wake_n)
 {
   uint32_t n;
   if (!g)
@@ -463,12 +463,22 @@ static void lj_gc2_worker_wake(global_State *g)
     return;
   gc2_worker_wakes_add(g, 1);
   (void)gc2_worker_wake_add(g, 1);
-  gc2_worker_wake_futex_wake(g, (int)n);
+  gc2_worker_wake_futex_wake(g, wake_n < (int)n ? wake_n : (int)n);
+}
+
+static void lj_gc2_worker_wake(global_State *g)
+{
+  lj_gc2_worker_wake_n(g, 1);
+}
+
+static void lj_gc2_worker_wake_all(global_State *g)
+{
+  lj_gc2_worker_wake_n(g, LJ_GC2_WORKER_MAX);
 }
 
 void lj_gc2_test_worker_wake(global_State *g)
 {
-  lj_gc2_worker_wake(g);
+  lj_gc2_worker_wake_all(g);
 }
 
 static int gc2_worker_arena_internal(global_State *g)
@@ -788,7 +798,7 @@ static void gc2_worker_stop_locked_l(global_State *g, lua_State *L,
     return;
   }
   gc2_worker_stop_rel(g, 1);
-  lj_gc2_worker_wake(g);
+  lj_gc2_worker_wake_all(g);
   self = NULL;
   if (L) {
     lj_native_enter(L2TG(L));  /* Join wait can remote-ack workers. */
