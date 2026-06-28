@@ -13,10 +13,11 @@ metadata table, and incomplete stable structs still return a table without a
 are immutable, so their metadata can be returned even while an unrelated
 `ffi.cdef()` transaction is active.
 
-The shared `lj_ctype_info_wait()` helper now uses the same predefined snapshot
-before parking. This keeps fallback readers such as cdata arithmetic error and
-metamethod paths from waiting on unrelated parser work just to inspect an
-immutable scalar CType.
+The shared `lj_ctype_info_predefined()` helper now owns the immutable
+predefined metadata walk. `ffi.typeinfo()`, interpreted wait paths, and cdata
+arithmetic all reuse that helper before consulting the parser sequence. This
+keeps fallback readers from waiting or aborting recording on unrelated parser
+work just to inspect an immutable scalar CType.
 
 Coverage:
 
@@ -28,6 +29,9 @@ Coverage:
 - `tests/t-ffi-metatv-snapshot.c` holds the parser token while a predefined
   `int` cdata arithmetic miss flows through type-info and ctype-metamethod
   fallback without waiting.
+- `tests/t-ffi-recorder-metatv-busy.c` holds the parser token during trace
+  recording and verifies the predefined arithmetic miss does not report a
+  parser-busy abort.
 - `tests/t-ffi-cparse-rollback-reader.lua` accepts transient `nil` during active
   parser rollback windows while preserving final incomplete-type checks.
 

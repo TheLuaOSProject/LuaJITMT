@@ -284,73 +284,11 @@ static int ffi_ctype_predefined_snapshot(CTState *cts, CTypeID id, CType *out)
   return !ctype_isabandoned(ctype_info_acq(out));
 }
 
-static int ffi_ctype_info_predefined(CTState *cts, CTypeID id,
-				     CTInfo *infop, CTSize *szp,
-				     CTypeID *ridp, CType *rawp)
-{
-  CTypeTab *tabh;
-  MSize budget;
-  CTInfo qual = 0;
-  CType ct;
-  if (!ffi_ctype_predefined_id(id))
-    return 0;
-  tabh = ctype_tabh_acq(cts);
-  if ((MSize)CTID_CTYPEID >= ctype_tab_sizetab_acq(tabh))
-    return 0;
-  budget = (MSize)(CTID_CTYPEID + 1) * 4u;
-  if (rawp || ridp) {
-    CTypeID rid = id;
-    for (;;) {
-      CTInfo info;
-      if (!ffi_ctype_predefined_id(rid) || budget-- == 0)
-	return 0;
-      ffi_ctype_slot_snapshot(tabh, rid, &ct);
-      info = ctype_info_acq(&ct);
-      if (ctype_isabandoned(info))
-	return 0;
-      if (!ctype_isattrib(info)) {
-	if (ridp)
-	  *ridp = rid;
-	if (rawp)
-	  *rawp = ct;
-	break;
-      }
-      rid = ctype_cid(info);
-    }
-  }
-  for (;;) {
-    CTInfo info;
-    CTSize size;
-    if (!ffi_ctype_predefined_id(id) || budget-- == 0)
-      return 0;
-    ffi_ctype_slot_snapshot(tabh, id, &ct);
-    info = ctype_info_acq(&ct);
-    size = ctype_size_acq(&ct);
-    if (ctype_isabandoned(info)) {
-      return 0;
-    } else if (ctype_isenum(info)) {
-      /* Follow child. Need to look at its attributes, too. */
-    } else if (ctype_isattrib(info)) {
-      if (ctype_isxattrib(info, CTA_QUAL))
-	qual |= size;
-      else if (ctype_isxattrib(info, CTA_ALIGN) && !(qual & CTFP_ALIGNED))
-	qual |= CTFP_ALIGNED + CTALIGN(size);
-    } else {
-      if (!(qual & CTFP_ALIGNED)) qual |= (info & CTF_ALIGN);
-      qual |= (info & ~(CTF_ALIGN|CTMASK_CID));
-      *infop = qual;
-      *szp = ctype_isfunc(info) ? CTSIZE_INVALID : size;
-      return 1;
-    }
-    id = ctype_cid(info);
-  }
-}
-
 static int ffi_ctype_info_read(lua_State *L, CTState *cts, CTypeID id,
 			       CTInfo *infop, CTSize *szp, CTypeID *ridp,
 			       CType *rawp)
 {
-  int ok = ffi_ctype_info_predefined(cts, id, infop, szp, ridp, rawp);
+  int ok = lj_ctype_info_predefined(cts, id, infop, szp, ridp, rawp);
   if (ok)
     return ok;
   ok = lj_ctype_info_snapshot(cts, id, infop, szp, ridp, rawp);

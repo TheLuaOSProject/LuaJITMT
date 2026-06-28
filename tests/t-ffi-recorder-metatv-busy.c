@@ -43,6 +43,27 @@ static void assert_predefined_no_meta_trace_completes(lua_State *L,
     "assert(lj_m7_trace_parse_token_start_count() >= 1)\n"
     "assert(lj_m7_trace_parse_token_ctbusy_count() == 0)\n");
   assert((ctype_parse_token_acq(cts) & 1u) == 0);
+
+  ljt_ctype_arm_trace_abort(L, cts);
+  ljt_lua_dostring(L,
+    "jit.attach(lj_m7_trace_parse_token, 'trace')\n"
+    "jit.flush()\n"
+    "jit.on()\n"
+    "jit.opt.start('hotloop=1')\n"
+    "local function run(n)\n"
+    "  local caught = 0\n"
+    "  for i = 1, n do\n"
+    "    local v = lj_m7_rec_metatv_int_ct(i)\n"
+    "    local ok, err = pcall(function() return v + 'x' end)\n"
+    "    if not ok and tostring(err):match('arithmetic') then caught = caught + 1 end\n"
+    "  end\n"
+    "  return caught\n"
+    "end\n"
+    "for i = 1, 3 do assert(run(8) == 8) end\n"
+    "jit.attach(lj_m7_trace_parse_token)\n"
+    "assert(lj_m7_trace_parse_token_start_count() >= 1)\n"
+    "assert(lj_m7_trace_parse_token_ctbusy_count() == 0)\n");
+  assert((ctype_parse_token_acq(cts) & 1u) == 0);
 }
 
 int main(void)

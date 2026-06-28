@@ -1232,8 +1232,8 @@ int lj_ctype_ptrstruct_snapshot(CTState *cts, CTypeID id, CTypeID *cidp)
   return 0;
 }
 
-static int ctype_info_predefined(CTState *cts, CTypeID id, CTInfo *infop,
-				 CTSize *szp, CTypeID *ridp, CType *rawp);
+int lj_ctype_info_predefined(CTState *cts, CTypeID id, CTInfo *infop,
+			     CTSize *szp, CTypeID *ridp, CType *rawp);
 
 /* Sequence-checked type info/raw-type snapshot for stable layout readers. */
 int lj_ctype_info_snapshot(CTState *cts, CTypeID id, CTInfo *infop,
@@ -1302,7 +1302,7 @@ int lj_ctype_info_wait(lua_State *L, CTState *cts, CTypeID id,
 		       CTInfo *infop, CTSize *szp, CTypeID *ridp,
 		       CType *rawp)
 {
-  int ok = ctype_info_predefined(cts, id, infop, szp, ridp, rawp);
+  int ok = lj_ctype_info_predefined(cts, id, infop, szp, ridp, rawp);
   if (ok > 0)
     return ok;
   for (;;) {
@@ -1519,8 +1519,8 @@ int lj_ctype_predefined_nometa(CTState *cts, CTypeID id)
   return 1;
 }
 
-static int ctype_info_predefined(CTState *cts, CTypeID id, CTInfo *infop,
-				 CTSize *szp, CTypeID *ridp, CType *rawp)
+int lj_ctype_info_predefined(CTState *cts, CTypeID id, CTInfo *infop,
+			     CTSize *szp, CTypeID *ridp, CType *rawp)
 {
   CTypeTab *tabh;
   CTypeID top = CTID_CTYPEID + 1;

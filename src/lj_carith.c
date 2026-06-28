@@ -43,7 +43,10 @@ static int carith_ctype_info_read(lua_State *L, CTState *cts, CTypeID id,
 				  CTInfo *infop, CTSize *szp,
 				  CTypeID *ridp, CType *rawp)
 {
-  int ok = lj_ctype_info_snapshot(cts, id, infop, szp, ridp, rawp);
+  int ok = lj_ctype_info_predefined(cts, id, infop, szp, ridp, rawp);
+  if (ok > 0)
+    return ok;
+  ok = lj_ctype_info_snapshot(cts, id, infop, szp, ridp, rawp);
   if (ok < 0) {
 #if LJ_HASJIT
     jit_State *J = carith_active_recorder(L);

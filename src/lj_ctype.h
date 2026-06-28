@@ -1193,6 +1193,9 @@ LJ_FUNC CTypeID lj_ctype_intern_new_l(lua_State *L, CTState *cts,
 LJ_FUNC int lj_ctype_snapshot(CTState *cts, CTypeID id, CType *out);
 LJ_FUNC int lj_ctype_size_wait(lua_State *L, CTState *cts, CTypeID id,
 			       CTSize *szp);
+LJ_FUNC int lj_ctype_info_predefined(CTState *cts, CTypeID id,
+				     CTInfo *infop, CTSize *szp,
+				     CTypeID *ridp, CType *rawp);
 LJ_FUNC int lj_ctype_info_wait(lua_State *L, CTState *cts, CTypeID id,
 			       CTInfo *infop, CTSize *szp, CTypeID *ridp,
 			       CType *rawp);

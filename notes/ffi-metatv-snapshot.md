@@ -41,8 +41,8 @@ Coverage:
   dispatching the metamethod.
 - `tests/t-ffi-recorder-metatv-busy.c` holds the parser token during trace
   recording and verifies predefined `int` construction does not hit a
-  parser-busy abort, while ctype `__call`, `__add`, table-backed `__index`,
-  and `ffi.new()`/`__gc` lookup on parser-created metatypes still abort
-  recording rather than waiting.
+  parser-busy abort, and that predefined arithmetic fallback misses do the
+  same. Ctype `__call`, `__add`, table-backed `__index`, and `ffi.new()`/`__gc`
+  lookup on parser-created metatypes still abort recording rather than waiting.
 - The fixtures are wired into `m7_ffi_metatype`; this is behavior coverage,
   not a source-search guard.
