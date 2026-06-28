@@ -190,7 +190,7 @@ if hits=$(awk '
     print FILENAME ":" FNR ":" $0
   }
   in_fn && /^}/ { in_fn = 0 }
-' "$ROOT/src/lj_gc.c"); [ -n "$hits" ]; then
+' "$ROOT/src/lj_gc2.c"); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
   printf '%s\n' \
     'GC2 finalizer callback dispatch must defer on a busy lua_State instead of spinning' >&2
