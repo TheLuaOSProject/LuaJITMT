@@ -101,6 +101,12 @@ if ! grep -Fq 'tab_slot_absent_acq(tv)' "$TAB" ||
 fi
 
 if ! awk '
+  /^static int table_maxn_visible_acq\(cTValue \*tv\)/ {
+    in_helper = 1
+    found_helper = 1
+  }
+  in_helper && /lj_tv_load_acq\(&val, tv\)/ { saw_helper_acq = 1 }
+  in_helper && /^}/ { in_helper = 0 }
   /^LJLIB_CF\(table_maxn\)/ {
     in_fn = 1
     found = 1
@@ -116,9 +122,9 @@ if ! awk '
     if (!(saw_key_load && saw_hash_visible)) exit 1
     in_fn = 0
   }
-  END { if (!found) exit 1 }
+  END { if (!(found && found_helper && saw_helper_acq)) exit 1 }
 ' "$LIBTAB"; then
-  printf '%s\n' 'table.maxn must snapshot hash keys before visible-value checks' >&2
+  printf '%s\n' 'table.maxn must snapshot hash keys and relooked-up visible slots' >&2
   exit 1
 fi
 

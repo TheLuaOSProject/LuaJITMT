@@ -99,13 +99,22 @@ static int table_maxn_visible(cTValue *tv)
   return tv != NULL && !tvisnil(tv) && !tvistabinternal(tv);
 }
 
+static int table_maxn_visible_acq(cTValue *tv)
+{
+  TValue val;
+  if (tv == NULL)
+    return 0;
+  lj_tv_load_acq(&val, tv);
+  return table_maxn_visible(&val);
+}
+
 static int table_maxn_array_visible(GCtab *t, int32_t idx, TValue *slot)
 {
   TValue val;
   lj_tv_load_acq(&val, slot);
   if (!tvisforward(&val))
     return table_maxn_visible(&val);
-  return table_maxn_visible(lj_tab_getint(t, idx));
+  return table_maxn_visible_acq(lj_tab_getint(t, idx));
 }
 
 static int table_maxn_hash_visible(lua_State *L, GCtab *t, TValue *key,
@@ -117,7 +126,7 @@ static int table_maxn_hash_visible(lua_State *L, GCtab *t, TValue *key,
     return table_maxn_visible(&val);
   if (tviskeylock(key))
     return 0;
-  return table_maxn_visible(lj_tab_get(L, t, key));
+  return table_maxn_visible_acq(lj_tab_get(L, t, key));
 }
 
 LJLIB_CF(table_maxn)
