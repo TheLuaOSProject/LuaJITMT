@@ -20,13 +20,13 @@ static void run_hard_alloc_trace(lua_State *L, global_State *g,
 				 const char *name, const char *src)
 {
   uint64_t jit_checks0, assist_runs0;
-  uint8_t legacy_state0;
+  uint8_t classic_state0;
 
   lj_gc_threshold_store(g, LJ_MAX_MEM);
   la_store64_rel(&g->gc2.hard_bytes, 1);
   la_store32_rel(&g->gc2.assist_shift, 0);
   la_store64_rel(&g->gc2.alloc_since_trigger, 2);
-  legacy_state0 = g->gc.state;
+  classic_state0 = g->gc.state;
   jit_checks0 = gc2_jit_hard_checks_acq(g);
   assist_runs0 = gc2_assist_runs_acq(g);
 
@@ -40,9 +40,9 @@ static void run_hard_alloc_trace(lua_State *L, global_State *g,
     fprintf(stderr, "%s did not run the GC2 hard assist\n", name);
     assert(0);
   }
-  if (g->gc.state != legacy_state0) {
-    fprintf(stderr, "%s moved legacy GC state %u -> %u\n",
-	    name, (unsigned)legacy_state0, (unsigned)g->gc.state);
+  if (g->gc.state != classic_state0) {
+    fprintf(stderr, "%s moved classic GC state %u -> %u\n",
+	    name, (unsigned)classic_state0, (unsigned)g->gc.state);
     assert(0);
   }
 }

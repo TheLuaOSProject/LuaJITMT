@@ -1635,7 +1635,7 @@ static TRef rec_idx_key(jit_State *J, RecordIndex *ix, IRRef *rbref,
 	  if (!trace_local) {
 	    TRef arrayref2 = emitir(IRT(IR_FLOAD, IRT_PGC), ix->tab,
 				    IRFL_TAB_ARRAY);
-	    /* M6: legacy shared AREF guards TAB_ARRAY pair stability. */
+	    /* M6: shared AREF guards TAB_ARRAY pair stability. */
 	    emitir(IRTG(IR_EQ, IRT_PGC), arrayref2, arrayref);
 	  }
 	}
@@ -1712,7 +1712,7 @@ static TRef rec_idx_key(jit_State *J, RecordIndex *ix, IRRef *rbref,
 #endif
 	node = emitir(IRT(IR_FLOAD, IRT_PGC), ix->tab, IRFL_TAB_NODE);
 	/* M6: x64 HREFK guards the constant slot against the loaded node header,
-	** avoiding the legacy GCtab.hmask mirror as a correctness source. */
+	** avoiding the GCtab.hmask mirror as a correctness source. */
 	kslot = lj_ir_kslot(J, key, (IRRef)(hslot / sizeof(Node)));
 	return emitir(IRTG(IR_HREFK, IRT_PGC), node, kslot);
       }
@@ -1892,9 +1892,9 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
     /* M6: previous-nil in-bounds ASTORE/HSTORE uses the helper bridge. */
 #else
     if (loadop == IR_HLOAD)
-      lj_trace_err_info(J, LJ_TRERR_NYIBC);  /* M5: no legacy hash HSTORE. */
+      lj_trace_err_info(J, LJ_TRERR_NYIBC);  /* M5: no raw hash HSTORE. */
     if (loadop == IR_ALOAD)
-      lj_trace_err_info(J, LJ_TRERR_NYIBC);  /* M5: no legacy array ASTORE. */
+      lj_trace_err_info(J, LJ_TRERR_NYIBC);  /* M5: no raw array ASTORE. */
 #endif
     if (tref_ref(xref) < rbref) {  /* HREFK forwarded? */
       lj_ir_rollback(J, rbref);  /* Rollback to eliminate hmask guard. */

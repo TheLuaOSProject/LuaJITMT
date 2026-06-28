@@ -1330,12 +1330,12 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov BASE, L:RB->base
 #if LJ_52
   |  test RC, RC
-  |  jne ->vmeta_binop			// Binop call for compatibility.
+  |  jne ->vmeta_binop			// Binop metamethod call.
   |  movzx RD, PC_RD
   |  mov TAB:FCARG1, [BASE+RD*8]
   |  jmp ->BC_LEN_Z
 #else
-  |  jmp ->vmeta_binop			// Binop call for compatibility.
+  |  jmp ->vmeta_binop			// Binop metamethod call.
 #endif
   |
   |//-- Call metamethod ----------------------------------------------------
@@ -5944,4 +5944,3 @@ static void emit_asm_debug(BuildCtx *ctx)
     break;
   }
 }
-

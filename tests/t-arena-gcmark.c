@@ -1,5 +1,5 @@
 /*
-** Focused test for mirroring legacy GC marks into arena metadata.
+** Focused test for mirroring classic GC marks into arena metadata.
 */
 
 #include <assert.h>
@@ -228,6 +228,6 @@ int main(void)
 #endif
 
   lua_close(L);
-  printf("t-arena-gcmark OK: legacy marks mirrored into arena metadata\n");
+  printf("t-arena-gcmark OK: classic GC marks mirrored into arena metadata\n");
   return 0;
 }

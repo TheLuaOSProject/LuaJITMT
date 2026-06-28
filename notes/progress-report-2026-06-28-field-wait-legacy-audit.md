@@ -76,6 +76,11 @@ Overall correctness/stability progress: 70-80%.
   `lua_test.sh` processes. Default/JIT cases now force a clean rebuild after a
   previous alternate-XCFLAGS build instead of reusing stale disabled-JIT outputs.
   Added `m0_build_profile_switch` as a behavior regression test for that path.
+- Removed stale old-name CI tombstones for deleted root/trace/finalizer wrapper
+  names and renamed active test/source/tool wording to current classic-GC or
+  direct semantic terminology. Active `src`, `tests`, and `tools` no longer
+  contain standalone old-compat wording; only FFI `compatptr` conversion helper
+  symbols remain because they encode language semantics.
 
 ## Still remaining
 

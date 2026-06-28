@@ -1565,7 +1565,7 @@ static int atomic(global_State *g, lua_State *L)
   lj_gc_list_move_rel(&g->gc.gray, &g->gc.grayagain);  /* Empty 2nd chance. */
   gc_propagate_gray(g);  /* Propagate it. */
 
-  /* 05 section 5.7.1 legacy atomic fixpoint-round bridge. */
+  /* 05 section 5.7.1 classic-GC atomic fixpoint-round bridge. */
   if (!lj_gc2_mark_complete(g, L, 64, ~(uint32_t)0))
     return 0;
 
@@ -1573,7 +1573,7 @@ static int atomic(global_State *g, lua_State *L)
   udsize = lj_gc2_finreg_udata_finalize(g, 0);
   gc_mark_finalizers(g);  /* Mark them. */
   udsize += gc_propagate_gray(g);  /* And propagate the marks. */
-  /* 05 section 5.7.1 legacy atomic fixpoint-round bridge. */
+  /* 05 section 5.7.1 classic-GC atomic fixpoint-round bridge. */
   if (!lj_gc2_mark_complete(g, L, 64, ~(uint32_t)0))
     return 0;
   gc2_paranoia_check_fixpoint(g);

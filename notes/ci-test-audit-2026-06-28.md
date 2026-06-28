@@ -157,6 +157,11 @@
   JIT-disabled tail left by `m3_gc2_scaffold`, for default/JIT fixture cases.
   The new `m0_build_profile_switch` behavior test covers disabled-JIT to default
   profile recovery without relying on a source guard.
+- Removed remaining stale old-name tombstones for deleted root/trace/finalizer
+  wrapper names from CI guard scripts where behavior tests already cover the
+  publication/finalizer paths. Active `src`, `tests`, and `tools` now avoid
+  standalone old-compat wording; the remaining `compatptr` identifiers are FFI
+  type-conversion semantics and are intentionally retained.
 - Public or semantic compatibility helpers such as FFI pointer compatibility
   checks are not removal targets unless the language/API contract changes.
 - Anti-legacy guards that merely prevent reintroducing already-removed wrapper

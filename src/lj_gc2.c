@@ -3926,7 +3926,7 @@ size_t lj_gc2_finreg_cdata_finalize_pweak(lua_State *L, global_State *g,
     gc2_finreg_cdata_order_claimed_add(g, 1);
     /*
     ** 05 section 5.8: ordered FINREG identity is enough for P_WEAK
-    ** discovery without legacy root membership.
+    ** discovery without classic root membership.
     */
     if (gc2_finreg_cdata_unlink_root(g, o))
       gc2_finreg_cdata_order_unlinked_add(g, 1);
@@ -4012,7 +4012,7 @@ size_t lj_gc2_finreg_cdata_finalize_close(global_State *g)
     }
     /*
     ** 05 section 5.8: ordered FINREG identity is enough for close-time
-    ** discovery without legacy root membership.
+    ** discovery without classic root membership.
     */
     (void)gc2_finreg_cdata_unlink_root(g, o);
     lj_gc2_finalizer_mark_enqueue(g, o);
@@ -4556,7 +4556,7 @@ size_t lj_gc2_finreg_udata_finalize(global_State *g, int all)
       (void)lj_gc2_finreg_udata_set(g, o, 1);
     /*
     ** 05 section 5.8: GC2 userdata FINREG identity is enough for
-    ** discovery without legacy userdata-chain membership.
+    ** discovery without classic userdata-chain membership.
     */
     (void)gc2_finreg_udata_unlink_root(g, o);
     gc2_finreg_udata_obj_clear(node);

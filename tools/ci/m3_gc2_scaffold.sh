@@ -109,14 +109,6 @@ if ! grep -qE '^size_t lj_gc2_finreg_udata_finalize[[:space:]]*[(]' \
   printf '%s\n' 'lj_gc2_finreg_udata_finalize definition is required' >&2
   exit 1
 fi
-if hits=$(grep -nE -- '(^|[^[:alnum:]_])lj_gc_separateudata[[:space:]]*[(]' \
-    "$ROOT"/src/*.c "$ROOT"/src/*.h "$ROOT"/tests/*.c || true); \
-    [ -n "$hits" ]; then
-  printf '%s\n' "$hits" >&2
-  printf '%s\n' \
-    'legacy userdata finalizer bridge is forbidden; use lj_gc2_finreg_udata_finalize directly' >&2
-  exit 1
-fi
 if hits=$(grep -nE -- 'LJ_FUNC .*[[:space:]]lj_gc2_finreg_udata_dispatch[[:space:]]*[(]' \
     "$ROOT/src/lj_gc2.h" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2

@@ -67,12 +67,6 @@ if hits=$(grep -nE -- 'J->[[:space:]]*retired(tracev|traces)|&J->[[:space:]]*ret
   printf '%s\n' 'raw JIT retired trace head access is forbidden; use trace*_retired_head_* helpers' >&2
   exit 1
 fi
-if hits=$(grep -nE -- 'lj_gc_barriertrace[[:space:]]*[(]|LJ_FUNC .*lj_gc_barriertrace[[:space:]]*[(]' \
-    "$ROOT"/src/*.c "$ROOT/src/lj_gc.h" || true); [ -n "$hits" ]; then
-  printf '%s\n' "$hits" >&2
-  printf '%s\n' 'legacy-named trace barrier is forbidden; use lj_gc_pubtrace for trace publication' >&2
-  exit 1
-fi
 if ! grep -qE 'LJ_FUNC void lj_gc_pubtrace[[:space:]]*[(]' \
     "$ROOT/src/lj_gc.h"; then
   printf '%s\n' 'lj_gc_pubtrace declaration is required for trace publication' >&2

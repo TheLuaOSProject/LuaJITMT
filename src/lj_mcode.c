@@ -101,7 +101,7 @@ void lj_mcode_sync_core(jit_State *J)
   if (LJ_LIKELY(la_load32_acq(&g->jit_mcode_synccore) != 0)) {
     lua_State *L = mcode_native_enter(J);
     if (LJ_UNLIKELY(la_membarrier_synccore() != 0))
-      la_store32_rel(&g->jit_mcode_synccore, 0);  /* Fall back to legacy path. */
+      la_store32_rel(&g->jit_mcode_synccore, 0);  /* Fall back to serial path. */
     mcode_native_leave(L);
   }
 #else

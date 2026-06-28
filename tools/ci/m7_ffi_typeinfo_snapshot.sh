@@ -175,7 +175,7 @@ if hits=$(awk '
   in_fn && /(^|[^[:alnum:]_])(ct1|ct2|d|s)\.(info|size)([^[:alnum:]_]|$)/ { print FNR ":" $0 }
 ' "$ROOT/src/lib_ffi.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
-  printf '%s\n' 'raw local CType info/size reads are forbidden in ffi.istype snapshot compatibility checks; use ctype_info_acq() or ctype_size_acq()' >&2
+  printf '%s\n' 'raw local CType info/size reads are forbidden in ffi.istype snapshot checks; use ctype_info_acq() or ctype_size_acq()' >&2
   exit 1
 fi
 if hits=$(awk '

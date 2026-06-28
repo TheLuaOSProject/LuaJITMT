@@ -414,7 +414,7 @@ fi
 if hits=$(grep -nE -- 'lj_gc2_finalizer_(try_enter|drain_owned|dequeue_owned|leave)[[:space:]]*[(]' \
     "$ROOT/src/lj_gc.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
-  printf '%s\n' 'legacy finalizer dispatch must use lj_gc2_finalizer_dispatch_one' >&2
+  printf '%s\n' 'classic-GC finalizer dispatch must use lj_gc2_finalizer_dispatch_one' >&2
   exit 1
 fi
 if hits=$(grep -nE -- 'lj_gc2_finalizer_(enqueue|mark_enqueue|try_enter|enter|leave|drain|dequeue|drain_owned|dequeue_owned|pending|queue_pending|sweep_pending)[[:space:]]*[(]' \
@@ -474,7 +474,7 @@ fi
 if hits=$(grep -nE -- 'lj_gc2_finalizer_drain[[:space:]]*[(]' \
     "$ROOT/src/lj_gc.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
-  printf '%s\n' 'legacy close-time finalizer drain loops must use lj_gc2_finalizer_dispatch_all' >&2
+  printf '%s\n' 'classic close-time finalizer drain loops must use lj_gc2_finalizer_dispatch_all' >&2
   exit 1
 fi
 if ! grep -qE 'LJ_FUNC int lj_gc2_finalizer_phase_pending[[:space:]]*[(]' \
@@ -494,7 +494,7 @@ fi
 if hits=$(grep -nE -- 'lj_gc2_finalizer_queue_pending[[:space:]]*[(]' \
     "$ROOT/src/lj_gc.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
-  printf '%s\n' 'legacy GC must not open-code low-level finalizer queue checks' >&2
+  printf '%s\n' 'classic GC must not open-code low-level finalizer queue checks' >&2
   exit 1
 fi
 if ! grep -qE 'LJ_FUNC int lj_gc2_sweep_bridge_can_progress[[:space:]]*[(]' \
@@ -589,7 +589,7 @@ fi
 if hits=$(grep -nE -- 'lj_gc2_finalizer_sweep_pending[[:space:]]*[(]' \
     "$ROOT/src/lj_gc.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
-  printf '%s\n' 'legacy GC must not open-code finalizer sweep-blocking policy' >&2
+  printf '%s\n' 'classic GC must not open-code finalizer sweep-blocking policy' >&2
   exit 1
 fi
 if ! grep -qE 'LJ_FUNC int lj_gc2_finalizer_close_pending[[:space:]]*[(]' \
@@ -625,7 +625,7 @@ if hits=$(grep -nE -- 'lj_gc2_finalizer_enqueue[[:space:]]*[(]' \
     "$ROOT/src/lj_cdata.c" \
     "$ROOT/src/lib_ffi.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
-  printf '%s\n' 'legacy production code must publish finalizers through GC2 mark/FINREG enqueue helpers' >&2
+  printf '%s\n' 'production code must publish finalizers through GC2 mark/FINREG enqueue helpers' >&2
   exit 1
 fi
 for helper in gc2_finalizer_queued_acq \
@@ -725,7 +725,7 @@ if ! grep -qF 'lj_gc2_finalizer_dispatch_all(L)' "$ROOT/src/lj_state.c"; then
   exit 1
 fi
 if ! grep -qF 'lj_gc2_finalizer_step(L, GCFINALIZECOST,' "$ROOT/src/lj_gc.c"; then
-  printf '%s\n' 'legacy GCSfinalize step must call lj_gc2_finalizer_step' >&2
+  printf '%s\n' 'classic GCSfinalize step must call lj_gc2_finalizer_step' >&2
   exit 1
 fi
 if ! grep -qE '^static int gc2_finalizer_spawn_deferred[[:space:]]*[(]' \

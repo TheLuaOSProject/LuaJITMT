@@ -288,7 +288,7 @@ LUALIB_API int luaL_loadstring(lua_State *L, const char *s)
 LUA_API int lua_dump(lua_State *L, lua_Writer writer, void *data)
 {
   cTValue *o = L->top-1;
-  uint32_t flags = LJ_FR2*BCDUMP_F_FR2;  /* Default mode for legacy C API. */
+  uint32_t flags = LJ_FR2*BCDUMP_F_FR2;  /* Default mode for lua_dump(). */
   lj_checkapi(L->top > L->base, "top slot empty");
   if (tvisfunc(o) && isluafunc(funcV(o)))
     return lj_bcwrite(L, funcproto(funcV(o)), writer, data, flags);

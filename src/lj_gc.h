@@ -271,7 +271,7 @@ static LJ_AINLINE void lj_gc_list_move_rel(GCRef *dst, GCRef *src)
   lj_gc_list_clear_rel(src);
 }
 
-/* GC check: drive collector forward if legacy or GC2 pacing asks for work. */
+/* GC check: drive collector forward if classic GC or GC2 pacing asks for work. */
 #define lj_gc_check(L) \
   { if (LJ_UNLIKELY(lj_gc_should_step(G(L)))) \
       lj_gc_step_top(L); }
@@ -357,9 +357,9 @@ static LJ_AINLINE void lj_gc_barrierobjtv_(lua_State *L, GCobj *p,
       lj_gc_barrierf(G(L), obj2gco(p), obj2gco(o)); }
 
 /*
-** M5 publication wrappers. These preserve the current incremental-GC
-** compatibility behavior while moving runtime call sites away from the
-** legacy barrier macro names counted by the milestone guard.
+** M5 publication wrappers. These preserve current incremental-GC behavior
+** while moving runtime call sites away from raw barrier macro names counted by
+** the milestone guard.
 */
 #define lj_gc_pubtab(L, t) \
   { lj_gc2_barrier_tab((L), (t)); \

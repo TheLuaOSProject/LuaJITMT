@@ -4416,7 +4416,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov STR:RC, [KBASE+RC*8]
     |  checktab TAB:RB, ->vmeta_tsets
     |->BC_TSETS_Z:	// RB = GCtab *, RC = GCstr *
-    |  jmp ->vmeta_tsets		// M5: no legacy x64 hash-slot store.
+    |  jmp ->vmeta_tsets		// M5: no raw x64 hash-slot store.
     break;
   case BC_TSETB:
     |  ins_ABC	// RA = src, RB = table, RC = byte literal

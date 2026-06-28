@@ -1,5 +1,5 @@
 /*
-** Focused test for arena allocation color during legacy GC phases.
+** Focused test for arena allocation color during classic GC phases.
 */
 
 #include <assert.h>
@@ -57,6 +57,6 @@ int main(void)
   assert(tg->alloc.alloc_black == 0);
 
   lua_close(L);
-  printf("t-arena-gcphase OK: allocation color follows legacy GC phase\n");
+  printf("t-arena-gcphase OK: allocation color follows classic GC phase\n");
   return 0;
 }

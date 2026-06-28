@@ -107,12 +107,12 @@
 #define LUA_IDSIZE	60	/* Size of lua_Debug.short_src. */
 /*
 ** Size of lauxlib and io.* on-stack buffers. Weird workaround to avoid using
-** unreasonable amounts of stack space, but still retain ABI compatibility.
+** unreasonable amounts of stack space, but still retain ABI stability.
 ** Blame Lua for depending on BUFSIZ in the ABI, blame **** for wrecking it.
 */
 #define LUAL_BUFFERSIZE	(BUFSIZ > 16384 ? 8192 : BUFSIZ)
 
-/* The following defines are here only for compatibility with luaconf.h
+/* The following defines are here only for source portability with luaconf.h
 ** from the standard Lua distribution. They must not be changed for LuaJIT.
 */
 #define LUA_NUMBER_DOUBLE

@@ -914,11 +914,11 @@ static void build_subroutines(BuildCtx *ctx)
   |  bl extern lj_meta_len		// (lua_State *L, TValue *o)
   |  // Returns NULL (retry) or TValue * (metamethod base).
 #if LJ_52
-  |  cbnz CRET1, ->vmeta_binop		// Binop call for compatibility.
+  |  cbnz CRET1, ->vmeta_binop		// Binop metamethod call.
   |  mov TAB:CARG1, TAB:RC
   |  b ->BC_LEN_Z
 #else
-  |  b ->vmeta_binop			// Binop call for compatibility.
+  |  b ->vmeta_binop			// Binop metamethod call.
 #endif
   |
   |//-- Call metamethod ----------------------------------------------------
@@ -4331,4 +4331,3 @@ static void emit_asm_debug(BuildCtx *ctx)
     break;
   }
 }
-

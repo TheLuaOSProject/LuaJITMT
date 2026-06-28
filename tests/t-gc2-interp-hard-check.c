@@ -35,9 +35,9 @@ static void finish_gc2_mark(global_State *g)
 static void test_hard_only_helper(lua_State *L, global_State *g)
 {
   uint64_t interp_checks0, assist_runs0;
-  uint8_t legacy_state0;
+  uint8_t classic_state0;
 
-  legacy_state0 = g->gc.state;
+  classic_state0 = g->gc.state;
   arm_gc2_hard_mark(g);
   interp_checks0 = gc2_interp_hard_checks_acq(g);
   assist_runs0 = gc2_assist_runs_acq(g);
@@ -52,9 +52,9 @@ static void test_hard_only_helper(lua_State *L, global_State *g)
     fputs("hard-only helper did not run the GC2 hard assist\n", stderr);
     assert(0);
   }
-  if (g->gc.state != legacy_state0) {
-    fprintf(stderr, "hard-only helper moved legacy GC state %u -> %u\n",
-	    (unsigned)legacy_state0, (unsigned)g->gc.state);
+  if (g->gc.state != classic_state0) {
+    fprintf(stderr, "hard-only helper moved classic GC state %u -> %u\n",
+	    (unsigned)classic_state0, (unsigned)g->gc.state);
     assert(0);
   }
   finish_gc2_mark(g);
@@ -63,9 +63,9 @@ static void test_hard_only_helper(lua_State *L, global_State *g)
 static void test_hard_only_c_check(lua_State *L, global_State *g)
 {
   uint64_t interp_checks0, assist_runs0;
-  uint8_t legacy_state0;
+  uint8_t classic_state0;
 
-  legacy_state0 = g->gc.state;
+  classic_state0 = g->gc.state;
   arm_gc2_hard_mark(g);
   interp_checks0 = gc2_interp_hard_checks_acq(g);
   assist_runs0 = gc2_assist_runs_acq(g);
@@ -82,9 +82,9 @@ static void test_hard_only_c_check(lua_State *L, global_State *g)
 	  stderr);
     assert(0);
   }
-  if (g->gc.state != legacy_state0) {
-    fprintf(stderr, "hard-only C lj_gc_check moved legacy GC state %u -> %u\n",
-	    (unsigned)legacy_state0, (unsigned)g->gc.state);
+  if (g->gc.state != classic_state0) {
+    fprintf(stderr, "hard-only C lj_gc_check moved classic GC state %u -> %u\n",
+	    (unsigned)classic_state0, (unsigned)g->gc.state);
     assert(0);
   }
   finish_gc2_mark(g);
@@ -93,12 +93,12 @@ static void test_hard_only_c_check(lua_State *L, global_State *g)
 static void test_hard_only_fastfunc(lua_State *L, global_State *g)
 {
   uint64_t interp_checks0, assist_runs0;
-  uint8_t legacy_state0;
+  uint8_t classic_state0;
 
   ljt_lua_loadstring(L,
     "local x = string.char(65)\n"
     "assert(x == 'A')\n");
-  legacy_state0 = g->gc.state;
+  classic_state0 = g->gc.state;
   arm_gc2_hard_mark(g);
   interp_checks0 = gc2_interp_hard_checks_acq(g);
   assist_runs0 = gc2_assist_runs_acq(g);
@@ -115,9 +115,9 @@ static void test_hard_only_fastfunc(lua_State *L, global_State *g)
 	  stderr);
     assert(0);
   }
-  if (g->gc.state != legacy_state0) {
-    fprintf(stderr, "hard-only fast function moved legacy GC state %u -> %u\n",
-	    (unsigned)legacy_state0, (unsigned)g->gc.state);
+  if (g->gc.state != classic_state0) {
+    fprintf(stderr, "hard-only fast function moved classic GC state %u -> %u\n",
+	    (unsigned)classic_state0, (unsigned)g->gc.state);
     assert(0);
   }
   finish_gc2_mark(g);
@@ -128,7 +128,7 @@ int main(void)
   lua_State *L = luaL_newstate();
   global_State *g;
   uint64_t interp_checks0, assist_runs0;
-  uint8_t legacy_state0;
+  uint8_t classic_state0;
 
   assert(L != NULL);
   luaL_openlibs(L);
@@ -162,7 +162,7 @@ int main(void)
   ljt_lua_loadstring(L,
     "local x = {}\n"
     "assert(type(x) == 'table')\n");
-  legacy_state0 = g->gc.state;
+  classic_state0 = g->gc.state;
   arm_gc2_hard_mark(g);
   interp_checks0 = gc2_interp_hard_checks_acq(g);
   assist_runs0 = gc2_assist_runs_acq(g);
@@ -179,9 +179,9 @@ int main(void)
 	  stderr);
     assert(0);
   }
-  if (g->gc.state != legacy_state0) {
-    fprintf(stderr, "interpreted hard-only TNEW moved legacy GC state %u -> %u\n",
-	    (unsigned)legacy_state0, (unsigned)g->gc.state);
+  if (g->gc.state != classic_state0) {
+    fprintf(stderr, "interpreted hard-only TNEW moved classic GC state %u -> %u\n",
+	    (unsigned)classic_state0, (unsigned)g->gc.state);
     assert(0);
   }
   finish_gc2_mark(g);

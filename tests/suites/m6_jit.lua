@@ -383,7 +383,7 @@ assert(uv==vals[64])
         end
       end
       if not pubuv or test < 2 or cmp < 2 then
-        error("post-XPOLL OBAR must lower to legacy tests, poll+mark checks and pubuv call", 2)
+        error("post-XPOLL OBAR must lower to classic-GC tests, poll+mark checks and pubuv call", 2)
       end
       if not store_before then
         error("x64 upvalue USTORE must release-copy before OBAR publication", 2)
@@ -755,7 +755,7 @@ end
 assert(s > 0)
 ]=], { timeout = "20s" })
       assert_trace1_ir(t, colo,
-                       "colocated shared array reads must keep the legacy pair guard",
+                       "colocated shared array reads must keep the shared pair guard",
                        function(st)
         return st.array >= 4 and st.asize >= 2 and st.eq >= 2 and
                st.xload == 0 and st.aref and st.aload and st.xpoll
@@ -1014,7 +1014,7 @@ assert(x=="abc")
 
   add({
     name = "m6_jit_gcstep_guard",
-    description = "legacy JIT GC-step pacing behavior",
+    description = "classic JIT GC-step pacing behavior",
     run = function(t)
       clean_build(t)
       assert_ir_dump_probe_contains(t, "lj_t-jit-gcstep.dump", [=[

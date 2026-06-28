@@ -1273,7 +1273,7 @@ typedef struct LJThreadLive LJThreadLive;
 typedef struct GC2SSBNode GC2SSBNode;
 typedef struct GC2State {
   uint32_t phase;	/* LJ_GC2_*; authoritative scaffold phase. */
-  uint32_t cycle;	/* Monotonically increasing legacy cycle id. */
+  uint32_t cycle;	/* Monotonically increasing classic-GC cycle id. */
   uint32_t cycle_leader;  /* Nonblocking token for requested cycle leader. */
   uint64_t hs_epoch;	/* Soft-handshake generation. */
   uint32_t hs_pending;	/* Outstanding handshake acknowledgements. */
@@ -1522,7 +1522,7 @@ typedef struct global_State {
   uint32_t mt_active;	/* One-way latch: secondary Lua threads existed. */
   uint32_t mt_live;	/* Active secondary Lua threads. */
   uint32_t mt_entering;	/* Secondary entrants before mt_live claim. */
-  uint32_t mt_gc_exclusive;  /* Explicit legacy GC excludes secondary entry. */
+  uint32_t mt_gc_exclusive;  /* Explicit classic GC excludes secondary entry. */
   uint32_t mt_shutdown;	/* VM teardown is rejecting new secondary threads. */
   GCSize mt_gc_threshold;  /* Saved automatic-GC threshold. */
 } global_State;

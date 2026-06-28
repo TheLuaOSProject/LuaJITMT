@@ -62,7 +62,7 @@ static GCobj *active_ssb_last(TGState *tg)
   return gcref_acq(*(next - 1));
 }
 
-static void test_public_minor_skips_legacy_registry_roots(lua_State *L,
+static void test_public_minor_skips_classic_registry_roots(lua_State *L,
 							  global_State *g,
 							  TGState *tg)
 {
@@ -522,7 +522,7 @@ int main(void)
   active_child = tabV(L->top - 1);
   assert(root_contains(g, obj2gco(active_child)));
   lua_pop(L, 1);
-  flipwhite(obj2gco(active_child));  /* Manual GC2 sweep setup mirrors legacy atomic. */
+  flipwhite(obj2gco(active_child));  /* Manual GC2 sweep setup mirrors classic atomic. */
   lj_gc2_mark_begin(g);
   assert(la_load32_acq(&g->gc2.cycle_sweep_minor) == 1);
   lj_gc2_mark_to_weak(g);
@@ -739,7 +739,7 @@ int main(void)
   lj_gc2_cycle_to_idle(g);
   lua_settop(L, 0);
 
-  test_public_minor_skips_legacy_registry_roots(L, g, tg);
+  test_public_minor_skips_classic_registry_roots(L, g, tg);
 
   test_vm_generational_table_store_remembered(L, g, tg);
 

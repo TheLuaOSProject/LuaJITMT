@@ -60,7 +60,7 @@ LJ_NORET static void cconv_err_initov_l(lua_State *L, CTState *cts,
   lj_err_callerv(L, LJ_ERR_FFI_INITOV, dst);
 }
 
-/* -- C type compatibility checks ----------------------------------------- */
+/* -- C type conversion checks -------------------------------------------- */
 
 /* Get raw type and qualifiers for a child type. Resolves enums, too. */
 static CType *cconv_childqual(CTState *cts, CType *ct, CTInfo *qual)
@@ -111,7 +111,7 @@ int lj_cconv_compatptr(CTState *cts, CType *d, CType *s, CTInfo flags)
       if (((dinfo ^ sinfo) & (CTF_BOOL|CTF_FP)))
 	return 0;  /* Different numeric types. */
     } else if (ctype_ispointer(dinfo)) {
-      /* Check child types for compatibility. */
+      /* Check child types recursively. */
       return lj_cconv_compatptr(cts, d, s, flags|CCF_SAME);
     } else if (ctype_isstruct(dinfo)) {
       if (d != s)

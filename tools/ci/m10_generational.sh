@@ -82,7 +82,7 @@ if hits=$(grep -nE -- 'gc2_cycle_roots_minor_acq[[:space:]]*[(][[:space:]]*g[[:s
   "$ROOT/src/lj_gc.c" || true); then
   if [ -n "$hits" ]; then
     printf '%s\n' \
-      "legacy GC must not read raw GC2 minor-root cycle latch" \
+      "classic GC must not read raw GC2 minor-root cycle latch" \
       "$hits" >&2
     exit 1
   fi

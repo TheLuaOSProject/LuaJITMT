@@ -305,15 +305,6 @@ if ! grep -qE '^static int lj_gc2_finreg_cdata_dispatch[[:space:]]*[(]' \
   printf '%s\n' 'lj_gc2_finreg_cdata_dispatch must stay static inside lj_gc2.c' >&2
   exit 1
 fi
-if hits=$(grep -nE -- 'lj_gc_finalize_(cdata|cdata_disable)[[:space:]]*[(]|lj_gc_cdata_fin_pending[[:space:]]*[(]|LJ_FUNC .*[[:space:]]lj_gc_finalize_(cdata|cdata_disable)[[:space:]]*[(]|LJ_FUNC .*[[:space:]]lj_gc_cdata_fin_pending[[:space:]]*[(]' \
-    "$ROOT/src/lj_gc.c" \
-    "$ROOT/src/lj_gc.h" \
-    "$ROOT/src/lj_state.c" \
-    "$ROOT/tests/t-gc2-traverse.c" || true); [ -n "$hits" ]; then
-  printf '%s\n' "$hits" >&2
-  printf '%s\n' 'legacy cdata FINREG close wrappers are forbidden; use GC2 FINREG APIs directly' >&2
-  exit 1
-fi
 if hits=$(grep -nE -- 'fin_gen_tab_disable_rel|gc_finalize_cdata_clear|gc_finalize_cdata_claim_preclaimed|gc_finalize_cdata_slot_owned|gc_finalize_cdata_preclaimed|gc_queue_cdata_finalizers_pweak|gc_cdata_finalizer_candidate_pweak|gc_order_cdata_object|gc_unlink_root_object|gc_separate_cdata_finalizers_ordered|gc_cdata_fin_pending_ordered|gc_cdata_finalizer_candidate_close' \
     "$ROOT/src/lj_gc.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2

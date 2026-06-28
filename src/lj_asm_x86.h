@@ -3327,12 +3327,12 @@ static void asm_gc_check(ASMState *as)
 #endif
   emit_loadi(as, ra_releasetmp(as, ASMREF_TMP2), as->gcsteps);
   l_call = emit_label(as);
-  /* Jump around GC step if neither legacy nor GC2 hard threshold is reached. */
+  /* Jump around GC step if neither classic nor GC2 hard threshold is reached. */
   emit_sjcc(as, CC_BE, l_end);
   emit_opgl(as, XO_ARITH(XOg_CMP), tmp|REX_GC64, gc2.hard_bytes);
   emit_getgl(as, tmp, gc2.alloc_since_trigger);
   emit_sjcc(as, CC_AE, l_call);
-  checkmclim(as);  /* M6: split GC2-hard and legacy GC threshold tests. */
+  checkmclim(as);  /* M6: split GC2-hard and classic-GC threshold tests. */
   emit_opgl(as, XO_ARITH(XOg_CMP), tmp|REX_GC64, gc.threshold);
   emit_getgl(as, tmp, gc.total);
   as->gcsteps = 0;

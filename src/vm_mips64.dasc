@@ -1019,12 +1019,12 @@ static void build_subroutines(BuildCtx *ctx)
   |.  move CARG1, L
   |  // Returns NULL (retry) or TValue * (metamethod base).
 #if LJ_52
-  |  bnez CRET1, ->vmeta_binop		// Binop call for compatibility.
+  |  bnez CRET1, ->vmeta_binop		// Binop metamethod call.
   |.  nop
   |  b ->BC_LEN_Z
   |.  move CARG1, MULTRES
 #else
-  |  b ->vmeta_binop			// Binop call for compatibility.
+  |  b ->vmeta_binop			// Binop metamethod call.
   |.  nop
 #endif
   |
@@ -5690,4 +5690,3 @@ static void emit_asm_debug(BuildCtx *ctx)
     break;
   }
 }
-
