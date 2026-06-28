@@ -19,7 +19,23 @@ function M.build_default(t, opts)
   if quiet == nil then quiet = true end
   local jobs = opts.jobs
   if jobs == nil then jobs = false end
-  t:make(opts.args, { quiet = quiet, jobs = jobs })
+  local xcflags
+  local make_args = opts.args or {}
+  local passthrough = {}
+  for i = 1, #make_args do
+    local v = make_args[i]
+    local flags = v:match("^XCFLAGS=(.*)$")
+    if flags ~= nil then
+      xcflags = flags
+    else
+      passthrough[#passthrough + 1] = v
+    end
+  end
+  if #passthrough ~= 0 then
+    t:make(opts.args, { quiet = quiet, jobs = jobs })
+  else
+    t:build({ quiet = quiet, jobs = jobs, xcflags = xcflags })
+  end
 end
 
 function M.clean_build(t, opts)

@@ -9,9 +9,31 @@ Test.__index = Test
 local getenv = utils.getenv
 local shell_quote = utils.shell_quote
 local read_file = utils.read_file
+local write_file = utils.write_file
 local has_extension = utils.has_extension
 local file_exists = utils.file_exists
 local assert_not_source_file_content = checks.assert_not_source_file_content
+
+local function read_raw_file(path)
+  local f = io.open(path, "rb")
+  if not f then return nil end
+  local data = f:read("*a")
+  f:close()
+  return data
+end
+
+local function build_profile_signature(xcflags)
+  return "default\nXCFLAGS=" .. (xcflags or "") .. "\n"
+end
+
+local function build_signature_path(self)
+  return self:path("src", ".lj-test-build-signature")
+end
+
+local function clear_build_signature(self)
+  self.build_signature = nil
+  os.remove(build_signature_path(self))
+end
 
 local function append(parts, value)
   if value == nil or value == "" then return end
@@ -149,27 +171,34 @@ function Test:make(args, opts)
     for i = 1, #args do cmd[#cmd + 1] = args[i] end
   end
   self:run(cmd, opts)
+  if not opts.keep_build_signature then clear_build_signature(self) end
 end
 
 function Test:build(opts)
   opts = opts or {}
   local args = {}
-  local signature = opts.xcflags or ""
-  if opts.clean and self.build_signature == signature and
-     file_exists(self:path("src", "luajit")) and
+  local stamp = build_signature_path(self)
+  local signature = build_profile_signature(opts.xcflags)
+  local disk_signature = self.build_signature
+  local have_outputs = file_exists(self:path("src", "luajit")) and
+    file_exists(self:path("src", "libluajit.a"))
+  if disk_signature == nil then disk_signature = read_raw_file(stamp) end
+  if opts.clean and disk_signature == signature and have_outputs and
      not getenv("LJ_TEST_DISABLE_BUILD_CACHE", nil) then
+    self.build_signature = signature
     return
   end
-  if opts.clean then
+  if opts.clean or (have_outputs and disk_signature ~= signature) then
     self:make({ "clean" }, { quiet = opts.quiet, jobs = false })
   end
   if opts.xcflags then args[#args + 1] = "XCFLAGS=" .. opts.xcflags end
-  self:make(args, { quiet = opts.quiet })
-  if opts.clean then
-    self.build_signature = signature
-  elseif self.build_signature ~= signature then
-    self.build_signature = nil
-  end
+  self:make(args, {
+    quiet = opts.quiet,
+    jobs = opts.jobs,
+    keep_build_signature = true
+  })
+  write_file(stamp, signature)
+  self.build_signature = signature
 end
 
 function Test:cc(output, sources, opts)

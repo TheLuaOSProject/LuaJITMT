@@ -11,3 +11,4 @@
 *.swp
 .tags
 luajit-mt-report.zip
+src/.lj-test-build-signature

@@ -1,6 +1,7 @@
 local runtime = require("suite_runtime")
 local checks = require("suite_assert")
 local utils = require("suite_utils")
+local build = require("suite_build")
 
 local assert_file_contains = checks.assert_file_contains
 local write_file = utils.write_file
@@ -57,6 +58,22 @@ return function(add)
         assert(t:read(result):match("generated result marker"))
       end)
       print("M0 source guard behavior passed")
+    end
+  })
+
+  add({
+    name = "m0_build_profile_switch",
+    description = "Lua test harness rebuilds when the XCFLAGS profile changes",
+    run = function(t)
+      build.build_default(t, {
+        quiet = true,
+        jobs = false,
+        args = { "XCFLAGS=-DLUAJIT_DISABLE_JIT" }
+      })
+      t.build_signature = nil
+      build.build_default(t, { quiet = true, jobs = false })
+      runtime.luajit_code(t, "assert(jit.status())", { quiet = true })
+      print("M0 build profile switch passed")
     end
   })
 

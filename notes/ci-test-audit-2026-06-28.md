@@ -152,6 +152,11 @@
   `lj_gc2_mark_begin()`, `lj_gc2_preserve_abort_to_idle()`, and
   `lj_gc2_cycle_to_idle()`. The remaining M3 guard checks the current lower-level
   cycle-close helper name instead of the removed fork-era label.
+- Added persistent Lua-suite build-profile tracking so a new `lua_test.sh`
+  process cannot silently reuse a previous alternate-XCFLAGS build, such as the
+  JIT-disabled tail left by `m3_gc2_scaffold`, for default/JIT fixture cases.
+  The new `m0_build_profile_switch` behavior test covers disabled-JIT to default
+  profile recovery without relying on a source guard.
 - Public or semantic compatibility helpers such as FFI pointer compatibility
   checks are not removal targets unless the language/API contract changes.
 - Anti-legacy guards that merely prevent reintroducing already-removed wrapper

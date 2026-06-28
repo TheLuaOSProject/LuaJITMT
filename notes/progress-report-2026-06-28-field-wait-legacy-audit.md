@@ -72,6 +72,10 @@ Overall correctness/stability progress: 70-80%.
   `lj_gc2_preserve_abort_to_idle()`, and `lj_gc2_cycle_to_idle()`. The
   worker-scheduler guard now blocks direct classic-GC calls to the lower-level
   cycle close helper by its current name.
+- Fixed the Lua-suite build harness so build-profile signatures persist across
+  `lua_test.sh` processes. Default/JIT cases now force a clean rebuild after a
+  previous alternate-XCFLAGS build instead of reusing stale disabled-JIT outputs.
+  Added `m0_build_profile_switch` as a behavior regression test for that path.
 
 ## Still remaining
 
