@@ -97,12 +97,19 @@ static LJ_AINLINE TValue *index2adr_check_read(lua_State *L, int idx,
   return o;
 }
 
+static LJ_AINLINE void api_cupvalue_trace_flush(lua_State *L)
+{
+  if (lj_trace_flushall_hs(L))
+    lj_err_caller(L, LJ_ERR_NOGCMM);
+}
+
 static LJ_AINLINE void index2adr_cupvalue_store_rel(lua_State *L, int idx,
 						    const TValue *src)
 {
   TValue *o = index2adr(L, idx);
   if (index_iscupvalue(idx) && o != niltv(L)) {
     GCfunc *fn = curr_func(L);
+    api_cupvalue_trace_flush(L);
     copyTVrel(L, o, src);
     lj_gc_pubobjtv(L, fn, src);
   }
@@ -1325,6 +1332,8 @@ LUA_API const char *lua_setupvalue(lua_State *L, int idx, int n)
   lj_checkapi_slot(1);
   name = lj_debug_uvnamev(f, (uint32_t)(n-1), &val, &o);
   if (name) {
+    if (o->gch.gct == ~LJ_TFUNC && !isluafunc(gco2func(o)))
+      api_cupvalue_trace_flush(L);
     L->top--;
     copyTVrel(L, val, L->top);
     lj_gc_pubobjtv(L, o, L->top);

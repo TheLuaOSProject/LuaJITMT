@@ -58,6 +58,7 @@ local m6_cases = {
   "m6_jit_tmpbuf_thread_format",
   "m6_jit_perftools_native",
   "m6_jit_io_native_stopreq",
+  "m6_jit_cclosure_upvalue_flush",
   "m6_jit_buffer_method_shared_nyi"
 }
 
@@ -249,6 +250,101 @@ end
 
 print("jit-tmpbuf-thread-format-smoke OK")
 ]=]
+end
+
+local function cclosure_upvalue_flush_smoke()
+  return [=[
+local trace_count = require"jit_harness".trace_count
+
+local function assert_traced(label)
+  assert(trace_count(200) > 0, label .. " did not trace")
+end
+
+local function assert_flushed(label)
+  assert(trace_count(200) == 0, label .. " did not flush existing traces")
+end
+
+local _, orig_nil_name = debug.getupvalue(type, 1)
+local function heat_type(n)
+  local x
+  for i = 1, n do x = type(nil) end
+  return x
+end
+
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+assert(heat_type(120) == orig_nil_name)
+assert_traced("type(nil)")
+assert(debug.setupvalue(type, 1, "mutnil"))
+assert_flushed("type() C upvalue mutation")
+assert(heat_type(1) == "mutnil")
+assert(debug.setupvalue(type, 1, orig_nil_name))
+
+local _, orig_pairs_iter = debug.getupvalue(pairs, 1)
+local function heat_pairs(n, tab)
+  local k, v
+  for i = 1, n do
+    local it, state = pairs(tab)
+    k, v = it(state, nil)
+  end
+  return k, v
+end
+
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local k, v = heat_pairs(120, { a = 1 })
+assert(k == "a" and v == 1)
+assert_traced("pairs()")
+assert(debug.setupvalue(pairs, 1, function() return "mut", 42 end))
+assert_flushed("pairs() C upvalue mutation")
+k, v = heat_pairs(1, { a = 1 })
+assert(k == "mut" and v == 42)
+assert(debug.setupvalue(pairs, 1, orig_pairs_iter))
+
+local _, orig_ipairs_iter = debug.getupvalue(ipairs, 1)
+local function heat_ipairs(n, tab)
+  local k, v
+  for i = 1, n do
+    local it, state, start = ipairs(tab)
+    k, v = it(state, start)
+  end
+  return k, v
+end
+
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+k, v = heat_ipairs(120, { 17 })
+assert(k == 1 and v == 17)
+assert_traced("ipairs()")
+assert(debug.setupvalue(ipairs, 1, function() return "imut", 24 end))
+assert_flushed("ipairs() C upvalue mutation")
+k, v = heat_ipairs(1, { 17 })
+assert(k == "imut" and v == 24)
+assert(debug.setupvalue(ipairs, 1, orig_ipairs_iter))
+
+jit.flush()
+print("jit-cclosure-upvalue-flush OK")
+]=]
+end
+
+local function assert_cclosure_upvalue_trace_source_guards(t)
+  local api = utils.read_source_file(t:path("src", "lj_api.c"))
+  checks.assert_text_contains("C upvalue trace flush", api,
+    "api_cupvalue_trace_flush(L);", "API C upvalue trace flush")
+  checks.assert_text_contains("C upvalue trace flush", api,
+    "lj_trace_flushall_hs(L)", "full trace flush handshake")
+
+  local ffrec = utils.read_source_file(t:path("src", "lj_ffrecord.c"))
+  checks.assert_text_contains("C upvalue recorder snapshot", ffrec,
+    "lj_tv_load_acq(&uv, &J->fn->c.upvalue[t]);",
+    "type() C upvalue acquire snapshot")
+  checks.assert_text_contains("C upvalue recorder snapshot", ffrec,
+    "lj_tv_load_acq(&uv, &J->fn->c.upvalue[0]);",
+    "pairs/ipairs C upvalue acquire snapshot")
+  if ffrec:find("strV(&J->fn->c.upvalue", 1, true) or
+     ffrec:find("funcV(&J->fn->c.upvalue", 1, true) then
+    error("fast-function recorders must not raw-read C closure upvalues", 2)
+  end
 end
 
 return function(add)
@@ -1273,6 +1369,17 @@ assert(live >= 8, live)
       checks.assert_dump_contains(t, dump, "t-jit-io-native-stopreq OK",
                                   "JIT IO native STOPREQ probe")
       print("M6 JIT IO native-state STOPREQ behavior passed")
+    end
+  })
+
+  add({
+    name = "m6_jit_cclosure_upvalue_flush",
+    description = "JIT traces over builtin C upvalues flush on debug mutation",
+    run = function(t)
+      assert_cclosure_upvalue_trace_source_guards(t)
+      build_default(t)
+      luajit_code(t, cclosure_upvalue_flush_smoke(), { timeout = "20s" })
+      print("M6 JIT C-closure upvalue mutation flush guard passed")
     end
   })
 

@@ -216,6 +216,7 @@ static void LJ_FASTCALL recff_assert(jit_State *J, RecordFFData *rd)
 static void LJ_FASTCALL recff_type(jit_State *J, RecordFFData *rd)
 {
   /* Arguments already specialized. Result is a constant string. Neat, huh? */
+  TValue uv;
   uint32_t t;
   if (tvisnumber(&rd->argv[0]))
     t = ~LJ_TNUMX;
@@ -223,7 +224,12 @@ static void LJ_FASTCALL recff_type(jit_State *J, RecordFFData *rd)
     t = ~LJ_TLIGHTUD;
   else
     t = ~itype(&rd->argv[0]);
-  J->base[0] = lj_ir_kstr(J, strV(&J->fn->c.upvalue[t]));
+  lj_tv_load_acq(&uv, &J->fn->c.upvalue[t]);
+  if (!tvisstr(&uv)) {
+    recff_nyiu(J, rd);
+    return;
+  }
+  J->base[0] = lj_ir_kstr(J, strV(&uv));
   UNUSED(rd);
 }
 
@@ -465,7 +471,13 @@ static void LJ_FASTCALL recff_xpairs(jit_State *J, RecordFFData *rd)
   if (!((LJ_52 || (LJ_HASFFI && tref_iscdata(tr))) &&
 	recff_metacall(J, rd, MM_pairs + rd->data))) {
     if (tref_istab(tr)) {
-      J->base[0] = lj_ir_kfunc(J, funcV(&J->fn->c.upvalue[0]));
+      TValue uv;
+      lj_tv_load_acq(&uv, &J->fn->c.upvalue[0]);
+      if (!tvisfunc(&uv)) {
+	recff_nyiu(J, rd);
+	return;
+      }
+      J->base[0] = lj_ir_kfunc(J, funcV(&uv));
       J->base[1] = tr;
       J->base[2] = rd->data ? lj_ir_kint(J, 0) : TREF_NIL;
       rd->nres = 3;
