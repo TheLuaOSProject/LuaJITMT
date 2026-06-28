@@ -635,7 +635,7 @@ static LJ_AINLINE void tab_init_empty(global_State *g, GCtab *t)
 {
   Node *nilnode = &g->nilnode;
   t->gct = ~LJ_TTAB;
-  t->nomm = (uint8_t)~0;
+  lj_tab_nomm_rel(t, (uint8_t)~0);
   t->colo = 0;
   lj_tab_array_set(t, NULL);
   setgcrefnull(t->metatable);
@@ -751,7 +751,7 @@ GCtab * LJ_FASTCALL lj_tab_dup(lua_State *L, const GCtab *kt)
 	     asize == (uint32_t)tasize &&
 	     hmask == (uint32_t)thmask,
 	     "mismatched size of table and template");
-  t->nomm = 0;  /* Keys with metamethod names may be present. */
+  lj_tab_nomm_rel(t, 0);  /* Keys with metamethod names may be present. */
   if (asize > 0) {
     uint32_t i;
     for (i = 0; i < asize; i++)
@@ -1757,7 +1757,7 @@ retry_lookup:
 TValue *lj_tab_set(lua_State *L, GCtab *t, cTValue *key)
 {
   Node *n;
-  t->nomm = 0;  /* Invalidate negative metamethod cache. */
+  lj_tab_nomm_rel(t, 0);  /* Invalidate negative metamethod cache. */
   if (tvisstr(key)) {
     return lj_tab_setstr(L, t, strV(key));
   } else if (tvisint(key)) {

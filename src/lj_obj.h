@@ -677,6 +677,16 @@ typedef struct GCtab {
   uint32_t acap;	/* Allocated array capacity. */
 } GCtab;
 
+static LJ_AINLINE uint8_t lj_tab_nomm_acq(const GCtab *t)
+{
+  return la_load8_acq(&t->nomm);
+}
+
+static LJ_AINLINE void lj_tab_nomm_rel(GCtab *t, uint8_t nomm)
+{
+  la_store8_rel(&t->nomm, nomm);
+}
+
 #define sizetabcolo(n)	((n)*sizeof(TValue) + sizeof(GCtab))
 #define tabref(r)	((GCtab *)gcref((r)))
 #define tabref_acq(r)	((GCtab *)gcref_acq((r)))

@@ -293,7 +293,7 @@ static GCtab *ctype_fin_tab_new_l(lua_State *L, uint32_t hbits)
   settabV(L, L->top++, t);
   fin_gen_tab_enable_rel(t);
   ctype_storestr_str(L, t, lj_str_newlit(L, "__mode"), lj_str_newlit(L, "k"));
-  t->nomm = (uint8_t)(~(1u<<MM_mode));
+  lj_tab_nomm_rel(t, (uint8_t)(~(1u<<MM_mode)));
   lj_gc_pubtab(L, t);
   L->top = anchor;
   return t;

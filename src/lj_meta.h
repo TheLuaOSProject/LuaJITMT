@@ -21,11 +21,11 @@ LJ_FUNC int lj_meta_tailcall(lua_State *L, cTValue *tv);
 #endif
 
 #define lj_meta_fastg(g, mt, mm) \
-  ((mt) == NULL ? NULL : ((mt)->nomm & (1u<<(mm))) ? NULL : \
+  ((mt) == NULL ? NULL : (lj_tab_nomm_acq(mt) & (1u<<(mm))) ? NULL : \
    lj_meta_cache(mt, mm, mmname_str(g, mm)))
 #define lj_meta_fast(L, mt, mm)	lj_meta_fastg(G(L), mt, mm)
 #define lj_meta_fasttv(g, mt, mm, out) \
-  ((mt) == NULL ? NULL : ((mt)->nomm & (1u<<(mm))) ? NULL : \
+  ((mt) == NULL ? NULL : (lj_tab_nomm_acq(mt) & (1u<<(mm))) ? NULL : \
    lj_meta_cachetv(mt, mm, mmname_str(g, mm), (out)))
 
 /* C helpers for some instructions, called from assembler VM. */

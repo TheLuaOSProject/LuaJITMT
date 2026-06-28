@@ -30,11 +30,11 @@ static void set_non_mm_field(lua_State *L)
 
 static void check_lj_meta_cache_does_not_set_nomm(lua_State *L, GCtab *mt)
 {
-  mt->nomm = 0;
+  lj_tab_nomm_rel(mt, 0);
   assert(lj_meta_cache(mt, MM_index, mmname_str(G(L), MM_index)) == NULL);
-  assert((mt->nomm & (uint8_t)(1u << MM_index)) == 0);
+  assert((lj_tab_nomm_acq(mt) & (uint8_t)(1u << MM_index)) == 0);
   assert(lj_meta_cache(mt, MM_len, mmname_str(G(L), MM_len)) == NULL);
-  assert((mt->nomm & (uint8_t)(1u << MM_len)) == 0);
+  assert((lj_tab_nomm_acq(mt) & (uint8_t)(1u << MM_len)) == 0);
 }
 
 static void check_c_api_setmetatable_clears_nomm(lua_State *L)
@@ -43,10 +43,10 @@ static void check_c_api_setmetatable_clears_nomm(lua_State *L)
   lua_settop(L, 0);
   (void)new_table(L);
   mt = new_table(L);
-  assert(mt->nomm == (uint8_t)~0u);
+  assert(lj_tab_nomm_acq(mt) == (uint8_t)~0u);
   lua_pushvalue(L, -1);
   lua_setmetatable(L, 1);
-  assert(mt->nomm == 0);
+  assert(lj_tab_nomm_acq(mt) == 0);
   check_lj_meta_cache_does_not_set_nomm(L, mt);
 }
 
@@ -57,9 +57,9 @@ static void check_base_setmetatable_clears_nomm(lua_State *L)
   lua_getglobal(L, "setmetatable");
   (void)new_table(L);
   mt = new_table(L);
-  assert(mt->nomm == (uint8_t)~0u);
+  assert(lj_tab_nomm_acq(mt) == (uint8_t)~0u);
   lua_call(L, 2, 1);
-  assert(mt->nomm == 0);
+  assert(lj_tab_nomm_acq(mt) == 0);
   lua_pop(L, 1);
 }
 
@@ -70,13 +70,13 @@ static void check_missing_index_does_not_set_nomm(lua_State *L)
   (void)new_table(L);
   mt = new_table(L);
   set_non_mm_field(L);
-  assert(mt->nomm == 0);
+  assert(lj_tab_nomm_acq(mt) == 0);
   lua_pushvalue(L, -1);
   lua_setmetatable(L, 1);
   lua_getfield(L, 1, "missing");
   assert(lua_isnil(L, -1));
   lua_pop(L, 1);
-  assert((mt->nomm & (uint8_t)(1u << MM_index)) == 0);
+  assert((lj_tab_nomm_acq(mt) & (uint8_t)(1u << MM_index)) == 0);
 }
 
 int main(void)

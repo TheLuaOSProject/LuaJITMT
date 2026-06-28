@@ -706,7 +706,7 @@ LUALIB_API int luaopen_string(lua_State *L)
   settabV(L, L->top++, mt);
   g = G(L);
   string_storetab_str(L, mt, mmname_str(g, MM_index), strtab);
-  mt->nomm = (uint8_t)(~(1u<<MM_index));
+  lj_tab_nomm_rel(mt, (uint8_t)(~(1u<<MM_index)));
   lj_gc_pubtabobj(L, mt, strtab);
   /* NOBARRIER: basemt is a GC root. */
   setgcrefroot(basemt_it(g, LJ_TSTR), obj2gco(mt));

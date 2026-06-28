@@ -201,7 +201,7 @@ static TValue *meta_tset(lua_State *L, cTValue *o, cTValue *k, GCtab **owner)
       GCtab *t = tabV(o);
       cTValue *tv = lj_tab_get(L, t, k);
       if (LJ_LIKELY(!tvisnil(tv))) {
-	t->nomm = 0;  /* Invalidate negative metamethod cache. */
+	lj_tab_nomm_rel(t, 0);  /* Invalidate negative metamethod cache. */
 	lj_gc2_barrier_weak_key(L, t, k);
 	lj_gc_pubtab(L, t);
 	if (owner)
@@ -209,7 +209,7 @@ static TValue *meta_tset(lua_State *L, cTValue *o, cTValue *k, GCtab **owner)
 	return (TValue *)tv;
       } else if (!(mo = lj_meta_fasttv(G(L), tabref_acq(t->metatable),
 				       MM_newindex, &motv))) {
-	t->nomm = 0;  /* Invalidate negative metamethod cache. */
+	lj_tab_nomm_rel(t, 0);  /* Invalidate negative metamethod cache. */
 	if (tv != niltv(L))
 	  lj_gc2_barrier_weak_key(L, t, k);
 	lj_gc_pubtab(L, t);

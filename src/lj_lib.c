@@ -125,7 +125,7 @@ void lj_lib_register(lua_State *L, const char *libname,
 
   /* Avoid barriers further down. */
   lj_gc_pubtab(L, tab);
-  tab->nomm = 0;
+  lj_tab_nomm_rel(tab, 0);
 
   for (;;) {
     uint32_t tag = *p++;

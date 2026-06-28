@@ -1612,7 +1612,7 @@ static void test_weak_self_metatable_publish_barrier(lua_State *L,
   assert(lj_gc2_test_weak_snapshot_count(g) == 0);
 
   lj_tab_storestr(L, mode_slot, lj_str_newlit(L, "kv"));
-  t->nomm = (uint8_t)(~(1u<<MM_mode));
+  lj_tab_nomm_rel(t, (uint8_t)(~(1u<<MM_mode)));
   lj_gc_pubtab(L, t);
 
   flush_and_drain(g, tg);
