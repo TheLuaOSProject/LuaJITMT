@@ -195,6 +195,16 @@ static int checklstring_reader_c(lua_State *L)
   return 1;
 }
 
+static int option_reader_c(lua_State *L)
+{
+  static const char *const opts[] = { "alpha", "beta", "gamma", NULL };
+  int uv = lua_upvalueindex(1);
+  assert(luaL_checkoption(L, uv, NULL, opts) == 1);
+  assert(luaL_optstring(L, uv, "fallback") != NULL);
+  lua_pushboolean(L, 1);
+  return 1;
+}
+
 static int objlen_reader_c(lua_State *L)
 {
   int uv = lua_upvalueindex(1);
@@ -429,6 +439,12 @@ static void exercise_number_readers(lua_State *L)
   lua_pushcclosure(L, objlen_reader_c, 1);
   check_lua(L, lua_pcall(L, 0, 1, 0), "objlen reader");
   assert_string(L, -1, "789");
+  lua_pop(L, 1);
+
+  lua_pushliteral(L, "beta");
+  lua_pushcclosure(L, option_reader_c, 1);
+  check_lua(L, lua_pcall(L, 0, 1, 0), "option reader");
+  assert(lua_toboolean(L, -1));
   lua_pop(L, 1);
 
   lua_settop(L, base);
