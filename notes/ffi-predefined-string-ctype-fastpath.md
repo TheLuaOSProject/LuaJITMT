@@ -26,7 +26,9 @@ Scalar and void qualifiers are merged into the ctype info just like the parser;
 struct/union/enum qualifiers are represented with the normal `CTA_QUAL`
 attribute ctype. The GNU spellings `__const`, `__const__`, `__volatile`, and
 `__volatile__` are accepted for these direct forms because the parser treats
-them as the same qualifier tokens.
+them as the same qualifier tokens. The parser's no-op declaration tokens
+`restrict`, `__restrict`, `__restrict__`, and `__extension__` are stripped in
+the same direct forms.
 
 Trailing pointer declarator chains over those direct bases also use this path:
 `ffi.typeof("my_typedef **")`, `ffi.typeof("struct my_tag **")`,
@@ -34,9 +36,9 @@ Trailing pointer declarator chains over those direct bases also use this path:
 resolve the base without the parser token and then intern each pointer ctype
 through the lock-free ctype intern table. Direct `const`/`volatile` qualifiers
 after `*` are attached to that pointer ctype, matching the parser's
-representation. The base-name wait still happens in native time when a parser
-is active, so the lookup does not read rollback-sensitive names while the
-parser token is held.
+representation; `restrict` tokens after `*` are ignored like the parser. The
+base-name wait still happens in native time when a parser is active, so the
+lookup does not read rollback-sensitive names while the parser token is held.
 
 Fixed-size array suffix chains over a direct base, including a direct pointer
 chain base, also stay off the parser token: `ffi.typeof("int[4]")`,

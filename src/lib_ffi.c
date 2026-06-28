@@ -208,6 +208,22 @@ static int ffi_qual_token(const char *p, MSize len, CTInfo *qualp)
     *qualp = CTF_VOLATILE;
     return 1;
   }
+  if (len == 8 && ffi_strlit(p, len, "restrict", 8)) {
+    *qualp = 0;
+    return 1;
+  }
+  if (len == 10 && ffi_strlit(p, len, "__restrict", 10)) {
+    *qualp = 0;
+    return 1;
+  }
+  if (len == 12 && ffi_strlit(p, len, "__restrict__", 12)) {
+    *qualp = 0;
+    return 1;
+  }
+  if (len == 13 && ffi_strlit(p, len, "__extension__", 13)) {
+    *qualp = 0;
+    return 1;
+  }
   return 0;
 }
 
@@ -242,6 +258,7 @@ static int ffi_direct_qual_part(const char **pp, MSize *lenp, CTInfo *qualp)
   const char *p = *pp;
   MSize len = *lenp;
   CTInfo qual = 0;
+  int seen = 0;
   for (;;) {
     CTInfo q;
     MSize toklen;
@@ -249,6 +266,7 @@ static int ffi_direct_qual_part(const char **pp, MSize *lenp, CTInfo *qualp)
     if (!ffi_qual_prefix(p, len, &toklen, &q))
       break;
     qual |= q;
+    seen = 1;
     p += toklen;
     len -= toklen;
   }
@@ -259,6 +277,7 @@ static int ffi_direct_qual_part(const char **pp, MSize *lenp, CTInfo *qualp)
     if (!ffi_qual_suffix(p, len, &start, &q))
       break;
     qual |= q;
+    seen = 1;
     len = start;
   }
   while (len != 0 && ffi_cspace(*p)) { p++; len--; }
@@ -266,7 +285,7 @@ static int ffi_direct_qual_part(const char **pp, MSize *lenp, CTInfo *qualp)
   *pp = p;
   *lenp = len;
   *qualp = qual;
-  return qual != 0;
+  return seen;
 }
 
 static int ffi_direct_qualified_ctype(lua_State *L, CTState *cts,
@@ -280,6 +299,10 @@ static int ffi_direct_qualified_ctype(lua_State *L, CTState *cts,
   int ok = ffi_ctype_info_read(L, cts, baseid, &info, &size, &rid, &raw);
   if (ok <= 0)
     return 0;
+  if (qual == 0) {
+    *idp = baseid;
+    return 1;
+  }
   info = ctype_info_acq(&raw);
   size = ctype_size_acq(&raw);
   if (ctype_isstruct(info) || ctype_isenum(info)) {
