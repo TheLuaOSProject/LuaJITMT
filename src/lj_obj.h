@@ -721,6 +721,16 @@ static LJ_AINLINE void lj_tab_asize_rel(GCtab *t, MSize asize)
   la_store32_rel(&t->asize, (uint32_t)asize);
 }
 
+static LJ_AINLINE MSize lj_tab_acap_acq(const GCtab *t)
+{
+  return (MSize)la_load32_acq(&t->acap);
+}
+
+static LJ_AINLINE void lj_tab_acap_rel(GCtab *t, MSize acap)
+{
+  la_store32_rel(&t->acap, (uint32_t)acap);
+}
+
 static LJ_AINLINE int lj_tab_array_separated(const GCtab *t)
 {
   return LJ_MAX_COLOSIZE == 0 || t->colo <= 0;

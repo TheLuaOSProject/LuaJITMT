@@ -639,9 +639,9 @@ static LJ_AINLINE void tab_init_empty(global_State *g, GCtab *t)
   t->colo = 0;
   lj_tab_array_set(t, NULL);
   setgcrefnull(t->metatable);
-  t->asize = 0;
-  t->acap = 0;
-  t->hmask = 0;
+  lj_tab_asize_rel(t, 0);
+  lj_tab_acap_rel(t, 0);
+  lj_tab_hmask_rel(t, 0);
   lj_tab_node_set(t, nilnode);
 #if LJ_GC64
   setmref(t->freetop, nilnode);
@@ -657,7 +657,7 @@ static LJ_AINLINE void tab_publish_new(global_State *g, GCtab *t)
 static LJ_AINLINE void tab_publish_array(GCtab *t, TValue *array,
 					 uint32_t asize, uint32_t acap)
 {
-  t->acap = acap;
+  lj_tab_acap_rel(t, acap);
   lj_tab_array_rel(t, array);
   lj_tab_asize_rel(t, asize);
 }
@@ -1005,7 +1005,7 @@ restart_resize:
   if (newarray) {
     if (LJ_MAX_COLOSIZE != 0 && t->colo > 0)
       t->colo = (int8_t)(t->colo | 0x80);  /* Mark as separated (colo < 0). */
-    t->acap = newacap;
+    lj_tab_acap_rel(t, newacap);
   }
   if (asize > oldasize) {
     if (array != oldarray)
