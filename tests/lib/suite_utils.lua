@@ -40,12 +40,24 @@ function M.run_cases(cases, t, names)
   end
 end
 
-function M.read_file(path)
+local function read_raw_file(path)
   local f, err = io.open(path, "rb")
   if not f then error(path .. ": " .. err, 2) end
   local data = f:read("*a")
   f:close()
   return data
+end
+
+function M.read_file(path)
+  checks.assert_not_source_file_content(path, 2)
+  return read_raw_file(path)
+end
+
+function M.read_source_file(path)
+  if not checks.is_source_file_content_path(path) then
+    error("not a source-file path: " .. tostring(path), 2)
+  end
+  return read_raw_file(path)
 end
 
 function M.write_file(path, data, mode)

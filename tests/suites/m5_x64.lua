@@ -31,7 +31,7 @@ local function assert_count_at_least(label, data, needle, mincount)
 end
 
 local function assert_x64_vm_store_publication(t)
-  local vm = utils.read_file(t:path("src", "vm_x64.dasc"))
+  local vm = utils.read_source_file(t:path("src", "vm_x64.dasc"))
   assert_missing("x64 VM store publication", vm, "barrierback")
   assert_missing("x64 VM store publication", vm, "lj_gc_barrieruv")
 

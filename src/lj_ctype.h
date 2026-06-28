@@ -413,6 +413,12 @@ ccallback_native_had_stopreq_rel(CCallbackRuntime *cb, uint8_t had_stopreq)
   la_store8_rel(&cb->native_had_stopreq, had_stopreq);
 }
 
+static LJ_AINLINE MSize ccallback_depth_acq(const CCallbackRuntime *cb)
+{
+  /* 11.5 callback runtime depth observation for tests/diagnostics. */
+  return cb ? (MSize)la_load32_acq(&cb->depth) : 0;
+}
+
 typedef LJ_ALIGN(8) struct CCallback {
   void *mcode;			/* Machine code for callback func. pointers. */
   CTypeID1 *cbid;		/* Callback type table. */

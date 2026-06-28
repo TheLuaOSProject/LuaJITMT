@@ -60,7 +60,7 @@ static void *attached_worker(void *arg)
   tg = lj_thr_get_tg();
   ctx->tid = tg ? tg->tid : 0;
   ctx->result = saved_cb(1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
-  ctx->depth = tg ? tg->cb.depth : ~(MSize)0;
+  ctx->depth = tg ? ccallback_depth_acq(&tg->cb) : ~(MSize)0;
   luaMT_detach(ctx->L);
   ctx->status = 0;
   return NULL;

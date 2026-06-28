@@ -14,7 +14,7 @@ local run_luajit_script_jit_modes = runtime.run_luajit_script_jit_modes
 local gc2_test_cflags = "-DLJ_GC2_TEST_HELPERS"
 
 local function assert_x64_vm_static_guards(t)
-  local vm = utils.read_file(t:path("src", "vm_x64.dasc"))
+  local vm = utils.read_source_file(t:path("src", "vm_x64.dasc"))
   local safepoints = checks.count_plain(vm, "vm_safepoint")
   if safepoints < 5 then
     error("x64 VM safepoint surface regressed: saw " .. safepoints ..

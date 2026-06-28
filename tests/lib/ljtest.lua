@@ -10,6 +10,7 @@ local getenv = utils.getenv
 local shell_quote = utils.shell_quote
 local read_file = utils.read_file
 local has_extension = utils.has_extension
+local file_exists = utils.file_exists
 local assert_not_source_file_content = checks.assert_not_source_file_content
 
 local function append(parts, value)
@@ -37,7 +38,8 @@ function M.new(root)
     compiler = getenv("CC", "cc"),
     cflags = getenv("CFLAGS", "-std=gnu99 -O2 -Wall -Wextra -Werror -mcx16"),
     jobs = getenv("JOBS", getenv("MAKE_JOBS", utils.detect_jobs())),
-    tmpdir = getenv("TMPDIR", "/tmp")
+    tmpdir = getenv("TMPDIR", "/tmp"),
+    build_signature = nil
   }
   return setmetatable(self, Test)
 end
@@ -151,12 +153,23 @@ end
 
 function Test:build(opts)
   opts = opts or {}
+  local args = {}
+  local signature = opts.xcflags or ""
+  if opts.clean and self.build_signature == signature and
+     file_exists(self:path("src", "luajit")) and
+     not getenv("LJ_TEST_DISABLE_BUILD_CACHE", nil) then
+    return
+  end
   if opts.clean then
     self:make({ "clean" }, { quiet = opts.quiet, jobs = false })
   end
-  local args = {}
   if opts.xcflags then args[#args + 1] = "XCFLAGS=" .. opts.xcflags end
   self:make(args, { quiet = opts.quiet })
+  if opts.clean then
+    self.build_signature = signature
+  elseif self.build_signature ~= signature then
+    self.build_signature = nil
+  end
 end
 
 function Test:cc(output, sources, opts)

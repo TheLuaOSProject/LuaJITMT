@@ -32,7 +32,7 @@ local function assert_dump_not_contains(t, dump, needle, label)
 end
 
 function M.run_source_guards(t)
-  local asm = utils.read_file(t:path("src", "lj_asm_x86.h"))
+  local asm = utils.read_source_file(t:path("src", "lj_asm_x86.h"))
   checks.assert_text_contains("x64 closed-upvalue USTORE helper guard", asm,
     "if (ir->o == IR_USTORE && IR(ir->op1)->o == IR_UREFC) {",
     "all-TValue USTORE helper condition")
@@ -41,7 +41,7 @@ function M.run_source_guards(t)
     error("x64 closed-upvalue USTORE helper must not be gated to GC values", 2)
   end
 
-  local debugsrc = utils.read_file(t:path("src", "lj_debug.c"))
+  local debugsrc = utils.read_source_file(t:path("src", "lj_debug.c"))
   checks.assert_text_contains("lua_getlocal local-cell acquire guard", debugsrc,
     "lj_tv_load_acq(L->top, o);", "local-cell acquire read")
 end

@@ -74,6 +74,30 @@ Validation:
   result matching.
 - `tools/ci/lua_test.sh m4_threading_shutdown m6_jit_cell_ops m7_ffi_jit_cnew`
 
+## 2026-06-28 explicit source-read API
+
+- Added the same source-file rejection to `tests/lib/suite_utils.lua`
+  `read_file()` so runnable suites cannot bypass the `Test:read()` guard.
+- Added `suite_utils.read_source_file()` for deliberate static source guards.
+  Current M3/M5/M6/local-cell source guards use this explicit API.
+- Changed `add_luajit_c_fixture_cases()` to default to incremental builds;
+  cases that require a separate build profile must opt into `clean = true`.
+- `tests/lib/ljtest.lua` caches repeated same-flag clean builds within one
+  `tools/test.lua` process. Set `LJ_TEST_DISABLE_BUILD_CACHE=1` for the old
+  always-clean behavior while debugging the harness.
+- Removed source-shape guards from `m7_ffi_callback_runtime.sh` and kept the
+  public wrapper as a thin launcher. The callback runtime case now relies on
+  its C/Lua behavior fixtures for native-state restoration, stale callback
+  returns, callback blacklisting, and fresh STOPREQ behavior.
+- Removed the M3 shell wrapper's FFI C-call source guard because the same
+  native-entry STOPREQ path is now covered by the M7 callback STOPREQ fixture.
+
+Validation:
+
+- `tools/ci/lua_test.sh --list`
+- `tools/ci/lua_test.sh m7_ffi_blocking m7_ffi_callback_runtime`
+- `tools/ci/m3_safepoint_handshake.sh`
+
 ## 2026-06-20 CI wrapper parity
 
 - Added thin compatibility wrappers for Lua cases that were missing shell

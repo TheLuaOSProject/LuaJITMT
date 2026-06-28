@@ -3,14 +3,17 @@
 ## Current State
 
 - Branch: `v2.1`
-- Latest pushed commit: `f885c2c5 m5: stress table resize forwarding`
-- Current completed pushed slice: table resize-forwarding stress coverage plus
-  a narrowed hashcount wait for hidden nil-key fixture slots
+- Latest pushed commit before this CI/test-audit slice:
+  `81265e77 notes: refresh lockless opportunities`
+- Current in-progress slice: CI/test cleanup, behavior-first replacement of
+  legacy source guards, and FFI C-call native-state helper refactoring.
 - Safety priority: language semantics, memory safety, GC visibility, and stability remain higher priority than LuaJIT performance parity.
 
-The production table resize-forward slice is now landed. This follow-up adds
-stress coverage around resize forwarding and fixes one over-broad wait in the
-rehash counter. The previous audit blockers were addressed:
+The production table resize-forward slice is landed, and the follow-up x64
+closed-upvalue publication slice is also pushed. The current work is tightening
+the test harness so source guards do not block better implementation patterns
+when behavior fixtures can cover the same semantics. The previous audit
+blockers addressed in recent slices include:
 
 - Hash replacement sizing now accounts for visible hash keys even when their current value is nil, and resize publication uses a retry path with generation/flags CAS checks.
 - Legacy GC and GC2 now resolve forwarded table slots during mark traversal and weak clearing.
@@ -29,6 +32,9 @@ Unrelated local scratch files are still present and intentionally ignored:
 
 Recent completed and pushed slices:
 
+- `81265e77 notes: refresh lockless opportunities`
+- `07f35b54 m6: publish all x64 closed upvalue stores`
+- `85e4440f notes: update lockless progress report`
 - `f885c2c5 m5: stress table resize forwarding`
 - `1240fb5d m5: forward table resize generations`
 - `e86c8acb m9: own GC stats snapshots`
@@ -73,6 +79,10 @@ Tests and guards:
 - Preserved nil-slot expectations where old slots were logically absent.
 - Added an M5 source guard requiring `lj_tab_resize()` to freeze-forward array/hash slots and avoid direct snapshot copies in the guarded migration path.
 - Narrowed M8 weak source guards so they check the intended GC2 weak fields without false positives.
+- Current CI/test cleanup adds an explicit `read_source_file()` API, blocks
+  accidental source reads through generic result helpers, caches repeated
+  same-profile clean builds inside a single Lua test process, and thins the M7
+  callback-runtime wrapper to behavior coverage.
 
 ## Validation Passed
 
@@ -154,10 +164,12 @@ If safety/stability stays ahead of LuaJIT-level speed, the credible path is shor
 
 ## Immediate Next Steps
 
-1. Start the x64 closed-upvalue JIT store helper slice for all TValue types.
-2. Add the `lua_getlocal()` local-cell acquire-read follow-up.
-3. Start the traced FFI native-state protocol slice behind disabled traced calls.
-4. Run fresh pinned benchmarks after correctness work lands, then update the performance forecast with data.
+1. Finish validating and push the CI/test cleanup slice.
+2. Continue converting source guards into behavior fixtures where the semantic
+   path is observable at runtime.
+3. Add the `lua_getlocal()` local-cell acquire-read follow-up.
+4. Continue the traced FFI native-state protocol behind disabled traced calls.
+5. Run fresh pinned benchmarks after correctness work lands, then update the performance forecast with data.
 
 ## Main Risks
 

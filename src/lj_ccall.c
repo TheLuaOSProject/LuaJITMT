@@ -1267,6 +1267,50 @@ static void ccall_checkstop_fresh(lua_State *L, uint32_t actions,
     lj_safepoint_checkstop(L, actions);
 }
 
+typedef struct CCallNativeState {
+  TGState *tg;
+  CCallbackRuntime *cb;
+  void *old_ffi_call_func;
+  uint8_t old_native_had_stopreq;
+  int had_stopreq;
+} CCallNativeState;
+
+static void ccall_native_save(lua_State *L, CCallNativeState *st)
+{
+  TGState *tg = L2TG(L);
+  CCallbackRuntime *cb = &tg->cb;
+  st->tg = tg;
+  st->cb = cb;
+  st->old_ffi_call_func = lj_tg_ffi_call_func_acq(tg);
+  st->old_native_had_stopreq = ccallback_native_had_stopreq_acq(cb);
+  st->had_stopreq = 0;
+}
+
+static void ccall_native_enter(lua_State *L, CCallNativeState *st, void *func)
+{
+  TGState *tg = st->tg;
+  CCallbackRuntime *cb = st->cb;
+  int had_stopreq;
+  cb->slot = ~0u;
+  lj_tg_ffi_call_func_rel(tg, func);
+  had_stopreq = ccall_had_stopreq(L);
+  st->had_stopreq = had_stopreq;
+  ccallback_native_had_stopreq_rel(cb, (uint8_t)had_stopreq);
+  lj_native_enter(tg);
+}
+
+static uint32_t ccall_native_leave(lua_State *L, CTState *cts,
+				   CCallNativeState *st, void *func)
+{
+  uint32_t actions = lj_native_leave(L);
+  CCallbackRuntime *cb = st->cb;
+  if (cb->slot != ~0u)  /* Blacklist function that called a callback. */
+    lj_ctype_cb_blacklist(cts, func);
+  lj_tg_ffi_call_func_rel(st->tg, st->old_ffi_call_func);
+  ccallback_native_had_stopreq_rel(cb, st->old_native_had_stopreq);
+  return actions;
+}
+
 /* Call C function. */
 int lj_ccall_func(lua_State *L, GCcdata *cd)
 {
@@ -1283,26 +1327,17 @@ int lj_ccall_func(lua_State *L, GCcdata *cd)
   }
   if (ctype_isfunc(info)) {
     CCallState cc;
-    TGState *tg = L2TG(L);
-    void *old_ffi_call_func = lj_tg_ffi_call_func_acq(tg);
+    CCallNativeState native;
     uint32_t actions;
-    CCallbackRuntime *cb = &tg->cb;
-    uint8_t old_native_had_stopreq = ccallback_native_had_stopreq_acq(cb);
-    int gcsteps, ret, had_stopreq;
+    int gcsteps, ret;
+    void *func;
+    ccall_native_save(L, &native);
     cc.func = (void (*)(void))cdata_getptr(cdataptr(cd), sz);
+    func = (void *)cc.func;
     gcsteps = ccall_set_args(L, cts, ct, &cc);
-    cb->slot = ~0u;
-    lj_tg_ffi_call_func_rel(tg, (void *)cc.func);
-    had_stopreq = ccall_had_stopreq(L);
-    ccallback_native_had_stopreq_rel(cb, (uint8_t)had_stopreq);
-    lj_native_enter(tg);
+    ccall_native_enter(L, &native, func);
     lj_vm_ffi_call(&cc);
-    actions = lj_native_leave(L);
-    if (cb->slot != ~0u) {  /* Blacklist function that called a callback. */
-      lj_ctype_cb_blacklist(cts, (void *)cc.func);
-    }
-    lj_tg_ffi_call_func_rel(tg, old_ffi_call_func);
-    ccallback_native_had_stopreq_rel(cb, old_native_had_stopreq);
+    actions = ccall_native_leave(L, cts, &native, func);
     ct = ctype_get(cts, id);  /* Table may have been reallocated. */
     gcsteps += ccall_get_results(L, cts, ct, &cc, &ret);
 #if LJ_TARGET_X86 && LJ_ABI_WIN
@@ -1313,7 +1348,7 @@ int lj_ccall_func(lua_State *L, GCcdata *cd)
       lj_trace_abort(G(L));
     }
 #endif
-    ccall_checkstop_fresh(L, actions, had_stopreq);
+    ccall_checkstop_fresh(L, actions, native.had_stopreq);
     while (gcsteps-- > 0)
       lj_gc_check(L);
     return ret;

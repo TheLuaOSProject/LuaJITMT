@@ -14,6 +14,7 @@
 
 #include "lj_obj.h"
 #include "lj_atomic.h"
+#include "lj_ctype.h"
 #include "lj_gc2.h"
 #include "lj_safepoint.h"
 #include "lj_tg.h"
@@ -125,8 +126,8 @@ static int callback_assert_clean_c(lua_State *L)
   assert(lj_tg_poll_acq(test_tg) == 0);
   assert(lj_tg_reqmask_acq(test_tg) == 0);
   assert(lj_tg_in_native_acq(test_tg) == 0);
-  assert(test_tg->cb.native_had_stopreq == 0);
-  assert(test_tg->cb.depth == 0);
+  assert(ccallback_native_had_stopreq_acq(&test_tg->cb) == 0);
+  assert(ccallback_depth_acq(&test_tg->cb) == 0);
   return 0;
 }
 
@@ -201,7 +202,7 @@ int main(void)
 
   assert(!lj_tg_flags_test_acq(test_tg, TGF_STOPREQ));
   assert(lj_tg_in_native_acq(test_tg) == 0);
-  assert(test_tg->cb.depth == 0);
+  assert(ccallback_depth_acq(&test_tg->cb) == 0);
   lua_close(L);
   printf("t-ffi-callback-stopreq OK: callback native STOPREQ freshness verified\n");
   return 0;

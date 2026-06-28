@@ -46,7 +46,7 @@ static void outer_call(NestedCallback cb)
 {
   cb();
   outer_checked++;
-  outer_saw_native = test_tg != NULL && test_tg->in_native != 0;
+  outer_saw_native = test_tg != NULL && lj_tg_in_native_acq(test_tg) != 0;
 }
 
 int main(void)
@@ -92,7 +92,7 @@ int main(void)
 
   assert(outer_checked == 1);
   assert(outer_saw_native == 1);
-  assert(test_tg->cb.depth == 0);
+  assert(ccallback_depth_acq(&test_tg->cb) == 0);
 
   ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"
@@ -104,8 +104,8 @@ int main(void)
     "bad_body:free()\n"
     "assert(not ok)\n");
 
-  assert(test_tg->cb.depth == 0);
-  assert(test_tg->in_native == 0);
+  assert(ccallback_depth_acq(&test_tg->cb) == 0);
+  assert(lj_tg_in_native_acq(test_tg) == 0);
   assert(lj_ctype_cb_isblacklisted(ctype_cts(L), (void *)error_call));
 
   ljt_lua_dostring(L,
@@ -116,8 +116,8 @@ int main(void)
     "local ok = pcall(function() call_dead(dead) end)\n"
     "assert(not ok)\n");
 
-  assert(test_tg->cb.depth == 0);
-  assert(test_tg->in_native == 0);
+  assert(ccallback_depth_acq(&test_tg->cb) == 0);
+  assert(lj_tg_in_native_acq(test_tg) == 0);
   assert(lj_ctype_cb_isblacklisted(ctype_cts(L), (void *)dead_call));
 
   ljt_lua_dostring(L,
@@ -130,8 +130,8 @@ int main(void)
     "bad_result:free()\n"
     "assert(not ok)\n");
 
-  assert(test_tg->cb.depth == 0);
-  assert(test_tg->in_native == 0);
+  assert(ccallback_depth_acq(&test_tg->cb) == 0);
+  assert(lj_tg_in_native_acq(test_tg) == 0);
   assert(lj_ctype_cb_isblacklisted(ctype_cts(L), (void *)int_call));
 
   lua_close(L);
