@@ -19,6 +19,15 @@ token, the lookup waits in native time and retries; if the string is not a
 single typedef identifier or `struct`/`union`/`enum` tag lookup, the existing
 parser path handles the declaration and its diagnostics.
 
+Direct `const`/`volatile` qualifiers around one of those bases also bypass the
+parser token: `ffi.typeof("const int")`, `ffi.typeof("int const")`,
+`ffi.typeof("const struct my_tag")`, and `ffi.typeof("const my_typedef")`.
+Scalar and void qualifiers are merged into the ctype info just like the parser;
+struct/union/enum qualifiers are represented with the normal `CTA_QUAL`
+attribute ctype. The GNU spellings `__const`, `__const__`, `__volatile`, and
+`__volatile__` are accepted for these direct forms because the parser treats
+them as the same qualifier tokens.
+
 Trailing pointer declarator chains over those direct bases also use this path:
 `ffi.typeof("my_typedef **")`, `ffi.typeof("struct my_tag **")`, and
 predefined scalar bases such as `ffi.typeof("int **")` resolve the base
@@ -48,10 +57,12 @@ structs/unions/enums, function types, qualified pointer chains that are not
 exact predefined spellings,
 declarations with `$` parameters, variable-length forms, and strings whose
 internal spacing or token sequence does not exactly match the predefined table,
-a single typedef identifier, a simple tag lookup, a trailing pointer chain over
-one of those bases, or a fixed-size array suffix chain over one of those bases.
-Those can allocate or intern ctype records, observe rollback-sensitive names,
-or need normal parser diagnostics.
+a single typedef identifier, a simple tag lookup, direct base qualifiers, a
+trailing pointer chain over one of those bases, or a fixed-size array suffix
+chain over one of those bases. Pointer-level qualifiers such as
+`int * const`, function pointer declarations, and parenthesized declarators
+remain parser-owned. Those can allocate or intern ctype records, observe
+rollback-sensitive names, or need normal parser diagnostics.
 
 Validation target:
 

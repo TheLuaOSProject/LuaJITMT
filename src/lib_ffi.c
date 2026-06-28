@@ -182,9 +182,121 @@ static int ffi_ctype_info_read(lua_State *L, CTState *cts, CTypeID id,
 			       CTInfo *infop, CTSize *szp, CTypeID *ridp,
 			       CType *rawp);
 
-static int ffi_direct_ctype_base_string(lua_State *L, CTState *cts, GCstr *s,
-					const char *p, MSize len,
-					CTypeID *idp)
+static int ffi_qual_token(const char *p, MSize len, CTInfo *qualp)
+{
+  if (len == 5 && ffi_strlit(p, len, "const", 5)) {
+    *qualp = CTF_CONST;
+    return 1;
+  }
+  if (len == 8 && ffi_strlit(p, len, "volatile", 8)) {
+    *qualp = CTF_VOLATILE;
+    return 1;
+  }
+  if (len == 7 && ffi_strlit(p, len, "__const", 7)) {
+    *qualp = CTF_CONST;
+    return 1;
+  }
+  if (len == 9 && ffi_strlit(p, len, "__const__", 9)) {
+    *qualp = CTF_CONST;
+    return 1;
+  }
+  if (len == 10 && ffi_strlit(p, len, "__volatile", 10)) {
+    *qualp = CTF_VOLATILE;
+    return 1;
+  }
+  if (len == 12 && ffi_strlit(p, len, "__volatile__", 12)) {
+    *qualp = CTF_VOLATILE;
+    return 1;
+  }
+  return 0;
+}
+
+static int ffi_qual_prefix(const char *p, MSize len, MSize *toklenp,
+			   CTInfo *qualp)
+{
+  MSize i = 0;
+  while (i < len && lj_char_isident((uint8_t)p[i])) i++;
+  if (i == 0 || (i < len && !ffi_cspace(p[i])))
+    return 0;
+  if (!ffi_qual_token(p, i, qualp))
+    return 0;
+  *toklenp = i;
+  return 1;
+}
+
+static int ffi_qual_suffix(const char *p, MSize len, MSize *startp,
+			   CTInfo *qualp)
+{
+  MSize start = len;
+  while (start != 0 && lj_char_isident((uint8_t)p[start-1])) start--;
+  if (start == len || (start != 0 && !ffi_cspace(p[start-1])))
+    return 0;
+  if (!ffi_qual_token(p + start, len - start, qualp))
+    return 0;
+  *startp = start;
+  return 1;
+}
+
+static int ffi_direct_qual_part(const char **pp, MSize *lenp, CTInfo *qualp)
+{
+  const char *p = *pp;
+  MSize len = *lenp;
+  CTInfo qual = 0;
+  for (;;) {
+    CTInfo q;
+    MSize toklen;
+    while (len != 0 && ffi_cspace(*p)) { p++; len--; }
+    if (!ffi_qual_prefix(p, len, &toklen, &q))
+      break;
+    qual |= q;
+    p += toklen;
+    len -= toklen;
+  }
+  for (;;) {
+    CTInfo q;
+    MSize start;
+    while (len != 0 && ffi_cspace(p[len-1])) len--;
+    if (!ffi_qual_suffix(p, len, &start, &q))
+      break;
+    qual |= q;
+    len = start;
+  }
+  while (len != 0 && ffi_cspace(*p)) { p++; len--; }
+  while (len != 0 && ffi_cspace(p[len-1])) len--;
+  *pp = p;
+  *lenp = len;
+  *qualp = qual;
+  return qual != 0;
+}
+
+static int ffi_direct_qualified_ctype(lua_State *L, CTState *cts,
+				      CTypeID baseid, CTInfo qual,
+				      CTypeID *idp)
+{
+  CType raw;
+  CTypeID rid;
+  CTInfo info;
+  CTSize size;
+  int ok = ffi_ctype_info_read(L, cts, baseid, &info, &size, &rid, &raw);
+  if (ok <= 0)
+    return 0;
+  info = ctype_info_acq(&raw);
+  size = ctype_size_acq(&raw);
+  if (ctype_isstruct(info) || ctype_isenum(info)) {
+    *idp = lj_ctype_intern_l(L, cts,
+			     CTINFO(CT_ATTRIB, CTATTRIB(CTA_QUAL)|rid),
+			     qual);
+    return 1;
+  }
+  if (ctype_isattrib(info))
+    return 0;
+  *idp = lj_ctype_intern_l(L, cts, info|qual, size);
+  return 1;
+}
+
+static int ffi_direct_ctype_base_unqualified(lua_State *L, CTState *cts,
+					     GCstr *s, const char *p,
+					     MSize len, CTypeID *idp)
 {
   CType ct;
   CTypeID id;
@@ -244,6 +356,25 @@ static int ffi_direct_ctype_base_string(lua_State *L, CTState *cts, GCstr *s,
     }
   }
   return 0;
+}
+
+static int ffi_direct_ctype_base_string(lua_State *L, CTState *cts, GCstr *s,
+					const char *p, MSize len,
+					CTypeID *idp)
+{
+  const char *q = p;
+  MSize qlen = len;
+  CTInfo qual;
+  if (ffi_direct_qual_part(&q, &qlen, &qual)) {
+    CTypeID baseid;
+    if (qlen == 0)
+      return 0;
+    if (ffi_direct_ctype_base_unqualified(L, cts, s, q, qlen, &baseid) &&
+	ffi_direct_qualified_ctype(L, cts, baseid, qual, idp))
+      return 1;
+    return 0;
+  }
+  return ffi_direct_ctype_base_unqualified(L, cts, s, p, len, idp);
 }
 
 static MSize ffi_direct_pointer_suffix(const char *p, MSize *lenp)
