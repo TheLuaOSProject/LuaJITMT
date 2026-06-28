@@ -1,5 +1,5 @@
 #!/bin/sh
-# Run the M6 JIT dynamic HREF node-header guard.
+# Compatibility entrypoint. Source-text CI guards were removed; see notes/ci-source-search-policy.md.
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)

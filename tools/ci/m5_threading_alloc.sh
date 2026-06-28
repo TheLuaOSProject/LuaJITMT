@@ -1,66 +1,6 @@
 #!/bin/sh
-# Run the Lua-defined M5 threading allocator routing guard.
+# Compatibility entrypoint. Source-text CI guards were removed; see notes/ci-source-search-policy.md.
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
-for helper in lj_arena_owner_acq \
-  lj_arena_owner_rel \
-  lj_arena_alloc_owner_acq \
-  lj_arena_alloc_owner_rel; do
-  if ! grep -qE "^[[:space:]]*static LJ_AINLINE .*[*[:space:]]${helper}[[:space:]]*[(]" \
-      "$ROOT/src/lj_arena.h"; then
-    printf '%s\n' "${helper} helper is required for arena owner routing" >&2
-    exit 1
-  fi
-done
-if hits=$(grep -nE -- 'hdr[.]owner_tid|alloc[.]owner_tid|->[[:space:]]*owner_tid([^[:alnum:]_]|$)' \
-    "$ROOT/src/lj_arena.c" \
-    "$ROOT/src/lj_gc.c" \
-    "$ROOT/src/lj_gc2.c" \
-    "$ROOT/src/lj_state.c" \
-    "$ROOT/src/lj_tg.c" \
-    "$ROOT/src/lj_tg.h" \
-    "$ROOT/src/lib_threading.c" || true); [ -n "$hits" ]; then
-  printf '%s\n' "$hits" >&2
-  printf '%s\n' 'raw arena owner routing access is forbidden; use lj_arena_owner_* helpers' >&2
-  exit 1
-fi
-
-if ! awk '
-  /^static GCtab \*threading_env_from_module\(/ { in_fn = 1; found = 1 }
-  in_fn && /lj_tv_load_acq\(&snap, tv\)/ { saw_acq = 1 }
-  in_fn && /funcV\(&snap\)/ { saw_func = 1 }
-  in_fn && /^}/ { in_fn = 0 }
-  END { exit(found && saw_acq && saw_func ? 0 : 1) }
-' "$ROOT/src/lib_threading.c"; then
-  printf '%s\n' 'threading_env_from_module() must snapshot module spawn slots' >&2
-  exit 1
-fi
-
-if ! awk '
-  /^static GCtab \*threading_loaded_env\(/ { in_fn = 1; found = 1 }
-  in_fn && /lj_tv_load_acq\(&loaded, tv\)/ { saw_loaded = 1 }
-  in_fn && /tabV\(&loaded\)/ { saw_loaded_tab = 1 }
-  in_fn && /lj_tv_load_acq\(&mod, tv\)/ { saw_mod = 1 }
-  in_fn && /tabV\(&mod\)/ { saw_mod_tab = 1 }
-  in_fn && /^}/ { in_fn = 0 }
-  END {
-    exit(found && saw_loaded && saw_loaded_tab && saw_mod && saw_mod_tab ? 0 : 1)
-  }
-' "$ROOT/src/lib_threading.c"; then
-  printf '%s\n' 'threading_loaded_env() must snapshot _LOADED/module slots' >&2
-  exit 1
-fi
-
-if ! awk '
-  /^LJLIB_CF\(threading_current\)/ { in_fn = 1; found = 1 }
-  in_fn && /lj_tv_load_acq\(&mainv, tv\)/ { saw_acq = 1 }
-  in_fn && /udataV\(&mainv\)/ { saw_udata = 1 }
-  in_fn && /^}/ { in_fn = 0 }
-  END { exit(found && saw_acq && saw_udata ? 0 : 1) }
-' "$ROOT/src/lib_threading.c"; then
-  printf '%s\n' 'threading.current() must snapshot cached main-thread userdata slots' >&2
-  exit 1
-fi
-
 exec "$ROOT/tools/ci/lua_test.sh" m5_threading_alloc

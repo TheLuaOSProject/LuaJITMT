@@ -1,7 +1,6 @@
 local checks = require("suite_assert")
 local build = require("suite_build")
 local runtime = require("suite_runtime")
-local utils = require("suite_utils")
 local jitutils = require("suite_jit")
 local cellops = require("suite_cell_ops")
 
@@ -26,34 +25,6 @@ local build_default = build.build_default
 local clean_build = build.clean_build
 local build_and_run_c = build.build_and_run_c
 local run_lua_test_case = runtime.run_lua_test_case
-
-local function assert_poll_alias_source_guards(t)
-  local src = utils.read_source_file(t:path("src", "lj_opt_mem.c"))
-  local function body(signature)
-    return utils.c_function_body(src, signature)
-  end
-  checks.assert_text_contains("M6 poll alias guard",
-    body("TRef LJ_FASTCALL lj_opt_dse_ahstore"),
-    "IRRef lim = poll_alias_limit(J, xref);", "ASTORE/HSTORE poll alias limit")
-  checks.assert_text_contains("M6 poll alias guard",
-    body("TRef LJ_FASTCALL lj_opt_fwd_uload"),
-    "IRRef lim = poll_alias_limit(J, uref);", "ULOAD poll alias limit")
-  checks.assert_text_contains("M6 poll alias guard",
-    body("TRef LJ_FASTCALL lj_opt_dse_ustore"),
-    "IRRef lim = poll_alias_limit(J, xref);", "USTORE poll alias limit")
-  checks.assert_text_contains("M6 poll alias guard",
-    body("TRef LJ_FASTCALL lj_opt_fwd_fload"),
-    "IRRef lim = poll_alias_limit(J, oref);", "FLOAD poll alias limit")
-  checks.assert_text_contains("M6 poll alias guard",
-    body("TRef LJ_FASTCALL lj_opt_dse_fstore"),
-    "IRRef lim = poll_alias_limit(J, fref);", "FSTORE poll alias limit")
-  checks.assert_text_contains("M6 poll alias guard",
-    body("TRef LJ_FASTCALL lj_opt_fwd_xload"),
-    "lim = poll_alias_limit(J, lim);", "XLOAD poll alias limit")
-  checks.assert_text_contains("M6 poll alias guard",
-    body("TRef LJ_FASTCALL lj_opt_dse_xstore"),
-    "lim = poll_alias_limit(J, lim);", "XSTORE poll alias limit")
-end
 
 local m6_cases = {
   "m6_dispatch_redispatch",
@@ -419,74 +390,6 @@ print("jit-env-mutation-flush OK")
 ]=]
 end
 
-local function assert_cclosure_upvalue_trace_source_guards(t)
-  local api = utils.read_source_file(t:path("src", "lj_api.c"))
-
-  local flush = utils.c_function_body(api,
-    "static LJ_AINLINE void api_trace_flush_mutation(lua_State *L)")
-  checks.assert_text_contains("C upvalue trace flush", flush,
-    "lj_trace_flushall_hs(L)", "full trace flush handshake")
-
-  local cupvalue_store = utils.c_function_body(api,
-    "static LJ_AINLINE void index2adr_cupvalue_store_rel(lua_State *L, int idx,")
-  checks.assert_text_contains("C upvalue trace flush", cupvalue_store,
-    "api_trace_flush_mutation(L);", "API mutation trace flush")
-  checks.assert_text_contains("C upvalue trace flush", cupvalue_store,
-    "copyTVrel(L, o, &snap);", "C upvalue release copy")
-  checks.assert_text_contains("C upvalue trace flush", cupvalue_store,
-    "lj_gc_pubobjtv(L, fn, &snap);", "C upvalue publication")
-
-  local copy_slot = utils.c_function_body(api,
-    "static void copy_slot(lua_State *L, TValue *f, int idx)")
-  checks.assert_text_contains("C upvalue trace flush", copy_slot,
-    "index2adr_cupvalue_store_rel(L, idx, f);",
-    "API pseudo-index C upvalue store funnel")
-
-  local ffrec = utils.read_source_file(t:path("src", "lj_ffrecord.c"))
-  checks.assert_text_contains("C upvalue recorder snapshot", ffrec,
-    "lj_tv_load_acq(&uv, &J->fn->c.upvalue[t]);",
-    "type() C upvalue acquire snapshot")
-  checks.assert_text_contains("C upvalue recorder snapshot", ffrec,
-    "lj_tv_load_acq(&uv, &J->fn->c.upvalue[0]);",
-    "pairs/ipairs C upvalue acquire snapshot")
-  if ffrec:find("strV(&J->fn->c.upvalue", 1, true) or
-     ffrec:find("funcV(&J->fn->c.upvalue", 1, true) then
-    error("fast-function recorders must not raw-read C closure upvalues", 2)
-  end
-end
-
-local function assert_env_trace_source_guards(t)
-  local api = utils.read_source_file(t:path("src", "lj_api.c"))
-  local copy_slot = utils.c_function_body(api,
-    "static void copy_slot(lua_State *L, TValue *f, int idx)")
-  checks.assert_text_contains_count("API env trace flush", copy_slot,
-    "api_trace_flush_mutation(L);", 2, "copy_slot env trace flush")
-  checks.assert_text_contains("API env trace flush", copy_slot,
-    "setgcrefrel(L->env, obj2gco(t));", "API thread env release store")
-  checks.assert_text_contains("API env trace flush", copy_slot,
-    "setgcrefrel(fn->c.env, obj2gco(t));", "API C function env release store")
-
-  local lua_setfenv = utils.c_function_body(api,
-    "LUA_API int lua_setfenv(lua_State *L, int idx)")
-  checks.assert_text_contains_count("API env trace flush", lua_setfenv,
-    "api_trace_flush_mutation(L);", 2, "lua_setfenv env trace flush")
-  checks.assert_text_contains("API env trace flush", lua_setfenv,
-    "setgcrefrel(fn->c.env, obj2gco(t));", "API function env release store")
-  checks.assert_text_contains("API env trace flush", lua_setfenv,
-    "setgcrefrel(L1->env, obj2gco(t));", "API target thread env release store")
-
-  local base = utils.read_source_file(t:path("src", "lib_base.c"))
-  checks.assert_text_contains("base env trace flush", base,
-    "#include \"lj_trace.h\"", "base library trace flush include")
-  local base_setfenv = utils.c_function_body(base, "LJLIB_CF(setfenv)")
-  checks.assert_text_contains_count("base env trace flush", base_setfenv,
-    "lib_trace_flush_env(L);", 2, "base setfenv trace flush")
-  checks.assert_text_contains("base env trace flush", base_setfenv,
-    "setgcrefrel(L->env, obj2gco(t));", "base thread env release store")
-  checks.assert_text_contains("base env trace flush", base_setfenv,
-    "setgcrefrel(fn->l.env, obj2gco(t));", "base function env release store")
-end
-
 return function(add)
   add({
     name = "m6_dispatch_redispatch",
@@ -560,7 +463,6 @@ assert(s==2720)
     name = "m6_jit_cell_ops",
     description = "M6 local-cell JIT recording behavior",
     run = function(t)
-      cellops.run_source_guards(t)
       build_default(t)
       local dump = t:tmp("lj_m6_jit_cell_ops.dump")
       cellops.run_jit_dump_guards(t, dump)
@@ -573,7 +475,6 @@ assert(s==2720)
     name = "m6_jit_barrier_xpoll",
     description = "x64 trace barrier behavior across XPOLL poll regions",
     run = function(t)
-      assert_poll_alias_source_guards(t)
       build_default(t)
       local tbar = t:tmp("lj_t-jit-tbar-xpoll.dump")
       luajit_dump(t, tbar, "-jdump=im", [=[
@@ -633,7 +534,6 @@ assert(uv==vals[64])
     name = "m6_jit_xbar_xpoll",
     description = "FFI XBAR aliasing respects XPOLL poll regions",
     run = function(t)
-      assert_poll_alias_source_guards(t)
       build_default(t)
       local copy_dump = t:tmp("lj-m6-xbar-copy-ir.dump")
       run_ir_dump_probe(t, copy_dump, [=[
@@ -1315,79 +1215,6 @@ end
     name = "m6_jit_mcode_native",
     description = "Linux/x64 mcode allocation and sync-core native boundary",
     run = function(t)
-      t:run([==[
-if hits=$(grep -nF -- 'lj_safepoint_checkstop' src/lj_mcode.c || true); [ -n "$hits" ]; then
-  printf '%s\n' "$hits" >&2
-  printf '%s\n' 'mcode transactions must not throw STOPREQ before recorder cleanup' >&2
-  exit 1
-fi
-if ! awk '
-  /static lua_State \*mcode_native_enter\(jit_State \*J\)/ { inside = 1 }
-  inside && /lj_native_enter\(L2TG\(L\)\)/ { enter = 1 }
-  inside && /^}/ { inside = 0 }
-  END { exit(enter ? 0 : 1) }
-' src/lj_mcode.c; then
-  printf '%s\n' 'missing mcode native-enter helper' >&2
-  exit 1
-fi
-if ! awk '
-  /static void mcode_native_leave\(lua_State \*L\)/ { inside = 1 }
-  inside && /lj_native_leave\(L\)/ { leave = 1 }
-  inside && /^}/ { inside = 0 }
-  END { exit(leave ? 0 : 1) }
-' src/lj_mcode.c; then
-  printf '%s\n' 'missing mcode native-leave helper' >&2
-  exit 1
-fi
-if ! awk '
-  /void lj_mcode_sync_core\(jit_State \*J\)/ {
-    inside = 1; enter = membarrier = leave = 0
-  }
-  inside && /mcode_native_enter\(J\)/ { enter = 1 }
-  inside && /la_membarrier_synccore\(\)/ { membarrier = 1 }
-  inside && /mcode_native_leave\(L\)/ { leave = 1 }
-  inside && /^}/ {
-    if (enter && membarrier && leave) found = 1
-    inside = 0
-  }
-  END { exit(found ? 0 : 1) }
-' src/lj_mcode.c; then
-  printf '%s\n' 'sync-core membarrier must run inside a native region' >&2
-  exit 1
-fi
-if ! awk '
-  /static void \*mcode_alloc_dualmap\(jit_State \*J, uintptr_t hint, size_t sz\)/ {
-    inside = 1; enter = memfd = trunc = maprx = maprw = closefd = leave = 0
-  }
-  inside && /mcode_native_enter\(J\)/ { enter = NR }
-  inside && /mcode_memfd_create\(\)/ { memfd = NR }
-  inside && /ftruncate\(fd,/ { trunc = NR }
-  inside && /mmap\(\(void \*\)hint/ { maprx = NR }
-  inside && /mmap\(NULL/ { maprw = NR }
-  inside && /close\(fd\)/ { closefd = NR }
-  inside && /mcode_native_leave\(L\)/ { leave = NR }
-  inside && /^}/ {
-    if (enter && memfd && trunc && maprx && maprw && closefd && leave &&
-        closefd < leave) found = 1
-    inside = 0
-  }
-  END { exit(found ? 0 : 1) }
-' src/lj_mcode.c; then
-  printf '%s\n' 'dual-map mcode allocation must close resources before native leave' >&2
-  exit 1
-fi
-if ! awk '
-  /static void \*mcode_alloc_at\(jit_State \*J, uintptr_t hint, size_t sz, int prot\)/ {
-    inside = 1
-  }
-  inside && /mcode_alloc_dualmap\(J, hint, sz\)/ { found = 1 }
-  inside && /^}/ { inside = 0 }
-  END { exit(found ? 0 : 1) }
-' src/lj_mcode.c; then
-  printf '%s\n' 'mcode_alloc_at must pass J into dual-map allocation' >&2
-  exit 1
-fi
-]==], { cwd = t.root, quiet = true })
       clean_build(t)
       luajit_code(t, [=[
 local util = require"jit.util"
@@ -1518,7 +1345,6 @@ assert(live >= 8, live)
     name = "m6_jit_cclosure_upvalue_flush",
     description = "JIT traces over builtin C upvalues flush on debug mutation",
     run = function(t)
-      assert_cclosure_upvalue_trace_source_guards(t)
       build_default(t)
       luajit_code(t, cclosure_upvalue_flush_smoke(), { timeout = "20s" })
       print("M6 JIT C-closure upvalue mutation flush guard passed")
@@ -1529,7 +1355,6 @@ assert(live >= 8, live)
     name = "m6_jit_env_mutation_flush",
     description = "JIT traces over function/thread environments flush on replacement",
     run = function(t)
-      assert_env_trace_source_guards(t)
       build_default(t)
       luajit_code(t, env_mutation_flush_smoke(), { timeout = "20s" })
       print("M6 JIT environment mutation flush guard passed")

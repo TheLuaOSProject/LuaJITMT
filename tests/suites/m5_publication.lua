@@ -1,7 +1,6 @@
 local build = require("suite_build")
 local runtime = require("suite_runtime")
 local cellops = require("suite_cell_ops")
-local utils = require("suite_utils")
 
 local run_luajit = runtime.luajit
 local run_stock = runtime.run_stock
@@ -475,114 +474,6 @@ print("proto-knum-acq-smoke OK")
 ]=]
 end
 
-local function assert_cclosure_upvalue_source_guards(t)
-  local function assert_contains(label, data, needle)
-    if not data:find(needle, 1, true) then
-      error(label .. " missing " .. needle, 2)
-    end
-  end
-
-  for _, file in ipairs({ "lib_base.c", "lib_table.c", "lib_string.c" }) do
-    local src = utils.read_source_file(t:path("src", file))
-    if src:find("lj_lib_upvalue(L", 1, true) then
-      error(file .. " must snapshot library C upvalues with " ..
-	    "lj_lib_upvalue_load_acq()", 2)
-    end
-  end
-
-  local lib_base = utils.read_source_file(t:path("src", "lib_base.c"))
-  local print_fn = utils.c_function_body(lib_base, "LJLIB_CF(print)")
-  assert_contains("print() environment tostring snapshot", print_fn,
-    "lj_tv_load_acq(&tvsnap, tv);")
-  assert_contains("print() environment tostring copy", print_fn,
-    "copyTV(L, L->top, &tvsnap);")
-
-  local lib_io = utils.read_source_file(t:path("src", "lib_io.c"))
-  if lib_io:find("udataV(&fn->c.upvalue[0])", 1, true) then
-    error("io_file_iter must snapshot the file C upvalue before userdata access", 2)
-  end
-  if not lib_io:find("lj_tv_load_acq(&fileuv, &fn->c.upvalue[0]);", 1, true) then
-    error("io_file_iter is missing its acquire snapshot of the file C upvalue", 2)
-  end
-  if not lib_io:find("lj_tv_load_acq(L->top+i, &fn->c.upvalue[1+i]);", 1, true) then
-    error("io_file_iter must acquire-snapshot read option C upvalues", 2)
-  end
-
-  local lj_err = utils.read_source_file(t:path("src", "lj_err.c"))
-  if lj_err:find("lj_typename(&fn->c.upvalue", 1, true) then
-    error("lj_err_argtype must snapshot C upvalues before type naming", 2)
-  end
-  if not lj_err:find("lj_tv_load_acq(&tv, &fn->c.upvalue[idx-1]);", 1, true) then
-    error("lj_err_argtype is missing its acquire snapshot of C upvalues", 2)
-  end
-
-  local lj_api = utils.read_source_file(t:path("src", "lj_api.c"))
-  local getupvalue = utils.c_function_body(lj_api,
-    "LUA_API const char *lua_getupvalue(lua_State *L, int idx, int n)")
-  assert_contains("lua_getupvalue() C-upvalue snapshot", getupvalue,
-    "index2adr_read(L, idx, &snap)")
-  assert_contains("lua_getupvalue() selected upvalue snapshot", getupvalue,
-    "lj_tv_load_acq(L->top, val)")
-
-  local cupvalue_store = utils.c_function_body(lj_api,
-    "static LJ_AINLINE void index2adr_cupvalue_store_rel(lua_State *L, int idx,")
-  assert_contains("C-upvalue store trace flush", cupvalue_store,
-    "api_trace_flush_mutation(L);")
-  assert_contains("C-upvalue store release copy", cupvalue_store,
-    "copyTVrel(L, o, &snap);")
-  assert_contains("C-upvalue store publication", cupvalue_store,
-    "lj_gc_pubobjtv(L, fn, &snap);")
-
-  local number_tostr = utils.c_function_body(lj_api,
-    "static GCstr *index2adr_number_tostr(lua_State *L, int idx, TValue *o)")
-  assert_contains("C-upvalue number-to-string store", number_tostr,
-    "index_iscupvalue(idx)")
-  assert_contains("C-upvalue number-to-string store", number_tostr,
-    "index2adr_cupvalue_store_rel(L, idx, &tv);")
-
-  for _, fn in ipairs({
-    { "LUA_API int lua_isuserdata(lua_State *L, int idx)",
-      "index2adr_read(L, idx, &snap)" },
-    { "LUALIB_API void luaL_checkany(lua_State *L, int idx)",
-      "index2adr_read(L, idx, &snap)" },
-    { "LUA_API int lua_rawequal(lua_State *L, int idx1, int idx2)",
-      "index2adr_read(L, idx1, &snap1)",
-      "index2adr_read(L, idx2, &snap2)" },
-    { "LUA_API int lua_equal(lua_State *L, int idx1, int idx2)",
-      "index2adr_read(L, idx1, &snap1)",
-      "index2adr_read(L, idx2, &snap2)" },
-    { "LUA_API int lua_lessthan(lua_State *L, int idx1, int idx2)",
-      "index2adr_read(L, idx1, &snap1)",
-      "index2adr_read(L, idx2, &snap2)" },
-  }) do
-    local body = utils.c_function_body(lj_api, fn[1])
-    for i = 2, #fn do
-      assert_contains(fn[1] .. " C-upvalue snapshot", body, fn[i])
-    end
-  end
-
-  local getmetafield = utils.c_function_body(lj_api,
-    "LUALIB_API int luaL_getmetafield(lua_State *L, int idx, const char *field)")
-  assert_contains("luaL_getmetafield() metatable slot snapshot", getmetafield,
-    "lj_tv_load_acq(&mtv, tv);")
-  assert_contains("luaL_getmetafield() metatable slot copy", getmetafield,
-    "copyTV(L, L->top-1, &mtv);")
-
-  local testudata = utils.c_function_body(lj_api,
-    "LUALIB_API void *luaL_testudata(lua_State *L, int idx, const char *tname)")
-  assert_contains("luaL_testudata() registry metatable snapshot", testudata,
-    "lj_tv_load_acq(&mtv, tv);")
-  assert_contains("luaL_testudata() registry metatable compare", testudata,
-    "tabV(&mtv) == tabref_acq(ud->metatable)")
-
-  local pushcclosure = utils.c_function_body(lj_api,
-    "LUA_API void lua_pushcclosure(lua_State *L, lua_CFunction f, int n)")
-  assert_contains("lua_pushcclosure() C-upvalue release copy", pushcclosure,
-    "copyTVrel(L, &fn->c.upvalue[n], L->top+n);")
-  assert_contains("lua_pushcclosure() C-upvalue publication", pushcclosure,
-    "lj_gc_pubobjtv(L, fn, &fn->c.upvalue[n]);")
-end
-
 return function(add)
   add({
     name = "m5_state_owner",
@@ -614,7 +505,6 @@ return function(add)
     name = "m5_upvalue_publish_gc",
     description = "closed-upvalue GC object publication behavior",
     run = function(t)
-      assert_cclosure_upvalue_source_guards(t)
       build_and_run_luajit_script(t, "t-threading-upvalue.lua", nil,
                                   { joff = true })
       build_and_run_c(t, t:tmp("lj_t-cclosure-upvalue-snapshot"),

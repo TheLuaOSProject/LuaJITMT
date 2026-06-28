@@ -1,5 +1,5 @@
 #!/bin/sh
-# Run the Lua-defined M7 FFI concurrency gates.
+# Compatibility entrypoint. Source-text CI guards were removed; see notes/ci-source-search-policy.md.
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)

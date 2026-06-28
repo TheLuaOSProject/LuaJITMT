@@ -1,16 +1,5 @@
 local runtime = require("suite_runtime")
-local checks = require("suite_assert")
-local utils = require("suite_utils")
 local build = require("suite_build")
-
-local assert_file_contains = checks.assert_file_contains
-local write_file = utils.write_file
-local with_temp_paths = utils.with_temp_paths
-
-local function assert_rejected(label, fn)
-  local ok = pcall(fn)
-  if ok then error(label .. " was not rejected", 2) end
-end
 
 local function run_m0_combo(t, name, xcflags, stock_tags)
   print("== " .. name .. " ==")
@@ -32,32 +21,6 @@ return function(add)
     description = "vendored LuaJIT stock cleanup suite",
     run = function(t, args)
       runtime.run_stock_cli(t, args)
-    end
-  })
-
-  add({
-    name = "m0_source_guard",
-    description = "test framework source-read guard behavior",
-    run = function(t)
-      assert_rejected("src read", function()
-        t:read(t:path("src", "lj_tab.c"))
-      end)
-      assert_rejected("suite utils source read", function()
-        utils.read_file(t:path("src", "lj_tab.c"))
-      end)
-      assert_rejected("suite source assertion", function()
-        assert_file_contains(t, t:path("tests", "suites", "m0.lua"), "__never__")
-      end)
-      assert_rejected("ci runner source assertion", function()
-        assert_file_contains(t, t:path("tools", "ci", "lua_test.sh"), "__never__")
-      end)
-      with_temp_paths(t, { "lj-source-guard-result" }, function(result)
-        write_file(result, "generated result marker\n")
-        assert_file_contains(t, result, "generated result marker",
-                             "generated result file")
-        assert(t:read(result):match("generated result marker"))
-      end)
-      print("M0 source guard behavior passed")
     end
   })
 

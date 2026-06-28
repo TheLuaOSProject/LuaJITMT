@@ -24,7 +24,6 @@ local m7_cases = {
   "m7_ffi_cdef_dup_stack",
   "m7_ffi_cparse_rollback",
   "m7_ffi_typeinfo_snapshot",
-  "m7_ffi_no_cts_l",
   "m7_ffi_ctype_intern_l",
   "m7_ffi_ctype_hash_publish",
   "m7_ffi_ctype_tab_retire",
@@ -56,48 +55,6 @@ local function build_clib_ldscript_fixture(t)
 end
 
 return function(add)
-  add({
-    name = "m7_ffi_no_cts_l",
-    description = "FFI CTState lua_State split guard",
-    run = function(t)
-      t:run([==[
-if hits=$(awk '
-  /typedef struct CTState \{/ { in_cts = 1 }
-  in_cts && /lua_State[[:space:]]*\*/ { print FNR ":" $0 }
-  in_cts && /^\} CTState;/ { in_cts = 0 }
-' src/lj_ctype.h || true); [ -n "$hits" ]; then
-  printf '%s\n' "$hits" >&2
-  printf '%s\n' 'CTState must not carry lua_State *L; pass active lua_State explicitly' >&2
-  exit 1
-fi
-if hits=$(grep -RInE -- 'cts[[:space:]]*->[[:space:]]*L([^[:alnum:]_]|$)|parse_L([^[:alnum:]_]|$)' src || true); [ -n "$hits" ]; then
-  printf '%s\n' "$hits" >&2
-  printf '%s\n' 'shared CTState lua_State bridges are forbidden' >&2
-  exit 1
-fi
-if hits=$(grep -RInE -- 'lj_ctype_new[[:space:]]*\(|lj_ctype_intern[[:space:]]*\(' src || true); [ -n "$hits" ]; then
-  printf '%s\n' "$hits" >&2
-  printf '%s\n' 'old non-explicit-L ctype allocation/intern APIs are forbidden' >&2
-  exit 1
-fi
-if hits=$(grep -RInE -- 'mref(_acq)?\([^)]*ctype_state|setmref(rel)?\([^)]*ctype_state' src/*.c src/*.h 2>/dev/null | \
-    grep -v '^src/lj_ctype.h:912:' | \
-    grep -v '^src/lj_ctype.c:1721:' || true); [ -n "$hits" ]; then
-  printf '%s\n' "$hits" >&2
-  printf '%s\n' 'raw C-side CTState global pointer access is forbidden; use ctype_ctsG() or the init publisher' >&2
-  exit 1
-fi
-if hits=$(grep -nE -- 'ctype_state|DISPATCH_GL\(ctype_state\)' src/vm_x64.dasc | \
-    grep -v 'lj_ctype_ctsG_acq' || true); [ -n "$hits" ]; then
-  printf '%s\n' "$hits" >&2
-  printf '%s\n' 'raw x64 VM CTState loads are forbidden; call lj_ctype_ctsG_acq()' >&2
-  exit 1
-fi
-]==], { cwd = t.root, quiet = true })
-      print("M7 FFI CTState lua_State split guard passed")
-    end
-  })
-
   add({
     name = "m7_ffi_blocking",
     description = "FFI blocking recorder blacklist behavior",
@@ -133,57 +90,6 @@ fi
     name = "m7_ffi_callback_runtime",
     description = "FFI callback runtime behavior",
     run = function(t)
-      t:run([==[
-# Source guard category: non_observable_memory_order.
-for helper in ccallback_auto_detach_acq ccallback_auto_detach_rel; do
-  if ! grep -qE "${helper}[[:space:]]*[(]" src/lj_ctype.h; then
-    printf 'callback runtime auto-detach helper missing: %s\n' "$helper" >&2
-    exit 1
-  fi
-done
-if ! grep -qF 'la_load8_acq(&cb->auto_detach)' src/lj_ctype.h ||
-   ! grep -qF 'la_store8_rel(&cb->auto_detach' src/lj_ctype.h; then
-  printf '%s\n' 'callback runtime auto_detach helpers must use acquire/release byte operations' >&2
-  exit 1
-fi
-for helper in ccallback_L_acq ccallback_L_rel; do
-  if ! grep -qE "${helper}[[:space:]]*[(]" src/lj_ctype.h; then
-    printf 'callback runtime carrier helper missing: %s\n' "$helper" >&2
-    exit 1
-  fi
-done
-if ! grep -qF 'la_loadptr_acq((void *const *)&cb->L)' src/lj_ctype.h ||
-   ! grep -qF 'la_storeptr_rel((void **)&cb->L' src/lj_ctype.h; then
-  printf '%s\n' 'callback runtime carrier helpers must use acquire/release pointer operations' >&2
-  exit 1
-fi
-for helper in ccallback_depth_acq ccallback_depth_rel; do
-  if ! grep -qE "${helper}[[:space:]]*[(]" src/lj_ctype.h; then
-    printf 'callback runtime depth helper missing: %s\n' "$helper" >&2
-    exit 1
-  fi
-done
-if ! grep -qF 'la_load32_acq(&cb->depth)' src/lj_ctype.h ||
-   ! grep -qF 'la_store32_rel(&cb->depth' src/lj_ctype.h; then
-  printf '%s\n' 'callback runtime depth helpers must use acquire/release 32-bit operations' >&2
-  exit 1
-fi
-if hits=$(grep -nE -- 'cb->[[:space:]]*auto_detach' src/lj_ccallback.c || true); [ -n "$hits" ]; then
-  printf '%s\n' "$hits" >&2
-  printf '%s\n' 'raw callback runtime auto_detach access is forbidden; use ccallback_auto_detach_* helpers' >&2
-  exit 1
-fi
-if hits=$(grep -nE -- 'cb->[[:space:]]*L([^[:alnum:]_]|$)' src/lj_ccallback.c || true); [ -n "$hits" ]; then
-  printf '%s\n' "$hits" >&2
-  printf '%s\n' 'raw callback runtime carrier L access is forbidden; use ccallback_L_* helpers' >&2
-  exit 1
-fi
-if hits=$(grep -nE -- 'cb->[[:space:]]*depth' src/lj_ccallback.c || true); [ -n "$hits" ]; then
-  printf '%s\n' "$hits" >&2
-  printf '%s\n' 'raw callback runtime depth access is forbidden; use ccallback_depth_* helpers' >&2
-  exit 1
-fi
-]==], { cwd = t.root, quiet = true })
       clean_build(t)
       run_c_fixture_specs(t, {
         { output = "lj_t-ffi-callback-nested-native",

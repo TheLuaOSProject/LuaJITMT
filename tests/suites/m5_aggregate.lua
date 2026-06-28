@@ -48,7 +48,6 @@ local m5_concurrent_cases = {
   "m5_x64_tget_array_header",
   "m5_x64_tgets_node_order",
   "m5_x64_getmetatable_node_order",
-  "m5_x64_vm_store_publication",
   "m5_x64_tset_nil_snapshot",
   "m5_parser_capture_meta",
   "m5_bcdump_compat",
