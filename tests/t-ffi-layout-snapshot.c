@@ -85,7 +85,8 @@ int main(void)
   lua_State *L = ljt_lua_newstate_openlibs();
   CTState *cts;
   TGState *tg;
-  uint32_t seq0, seq1, seq2, seq3, seq4, seq5, seq6, seq7, seq8, seq9;
+  uint32_t seq0, seq1, seq2, seq3, seq4, seq5;
+  uint32_t seq6, seq7, seq8, seq9, seq10;
 
   ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"
@@ -269,6 +270,13 @@ int main(void)
     "assert(ffi.istype('int', v))\n");
   seq9 = ljt_ctype_parse_seq(cts);
   assert(seq9 == seq8 + 2u);
+
+  ljt_lua_dostring(L,
+    "local ffi = require('ffi')\n"
+    "local v = ffi.cast('int', 23.75)\n"
+    "assert(tonumber(v) == 23)\n");
+  seq10 = ljt_ctype_parse_seq(cts);
+  assert(seq10 == seq9 + 2u);
 
   lua_close(L);
   printf("t-ffi-layout-snapshot OK: stable layout queries avoid cparser sequence\n");

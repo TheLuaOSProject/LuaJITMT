@@ -120,6 +120,12 @@ race_failed_cdef("ptrdiff", function()
 	 "cdata pointer diff observed failed cdef rollback state")
 end)
 
+race_failed_cdef("cast", function()
+  assert(not pcall(function()
+    return ffi.cast("struct lj_m7_rollback_reader *", backing).x
+  end), "ffi.cast observed failed cdef rollback state")
+end)
+
 race_failed_cdef("ctorconst", function()
   assert(not pcall(function() return ctor_ct.K end),
 	 "ctype constructor observed failed cdef rollback constant")
@@ -161,6 +167,9 @@ assert(not pcall(function() return p + 1 end),
        "failed cdef left cdata pointer add able to step incomplete struct")
 assert(not pcall(function() return q - p end),
        "failed cdef left cdata pointer diff able to size incomplete struct")
+assert(not pcall(function()
+  return ffi.cast("struct lj_m7_rollback_reader *", backing).x
+end), "failed cdef left ffi.cast able to read incomplete struct field")
 assert(not pcall(function() return ctor_ct.K end),
        "failed cdef left ctype constructor able to see rolled-back constant")
 assert(not pcall(function() return ctor_ptr_ct.K end),

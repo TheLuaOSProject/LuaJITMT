@@ -716,24 +716,16 @@ LJLIB_CF(ffi_cast)	LJLIB_REC(ffi_new)
   TValue *o = lj_lib_checkany(L, 2);
   ptrdiff_t ofs = o - L->base;
   int isstr;
+  int ok;
   id = ffi_checkctype_noparse(L, NULL, &isstr);
-  if (!isstr) {
-    int ok = lj_ctype_info_snapshot(cts, id, &info, &sz, &rid, &dsnap);
-    if (ok <= 0)
-      ok = lj_ctype_info_wait(L, cts, id, &info, &sz, &rid, &dsnap);
-    if (ok > 0) {
-      d = &dsnap;
-      goto got_type;
-    } else {
-      lj_err_arg(L, 1, LJ_ERR_FFI_INVTYPE);
-    }
-  }
-  id = ffi_checkctype(L, cts, NULL);
-  rid = ctype_rawid(cts, id);
-  d = ctype_get(cts, rid);
-  info = ctype_info_acq(d);
-  sz = ctype_size_acq(d);
-got_type:
+  if (isstr)
+    id = ffi_checkctype(L, cts, NULL);
+  ok = lj_ctype_info_snapshot(cts, id, &info, &sz, &rid, &dsnap);
+  if (ok <= 0)
+    ok = lj_ctype_info_wait(L, cts, id, &info, &sz, &rid, &dsnap);
+  if (ok <= 0)
+    lj_err_arg(L, 1, LJ_ERR_FFI_INVTYPE);
+  d = &dsnap;
   L->top = o+1;  /* Make sure this is the last item on the stack. */
   lj_state_checkstack(L, 1);
   o = L->base + ofs;

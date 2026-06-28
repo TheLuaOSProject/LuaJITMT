@@ -1,8 +1,9 @@
 FFI string layout snapshot handoff
 ==================================
 
-`ffi.new`, `ffi.sizeof`, `ffi.alignof`, `ffi.offsetof`, and `ffi.istype`
-still have to parse string ctype arguments through the cparser sequence:
+`ffi.new`, `ffi.cast`, `ffi.sizeof`, `ffi.alignof`, `ffi.offsetof`, and
+`ffi.istype` still have to parse string ctype arguments through the cparser
+sequence:
 abstract ctype parsing interns CTState entries, and `ffi.cdef` remains the
 explicitly serialized mutation path.  Once a string ctype parses successfully,
 the entrypoints now release the parser token immediately and do all layout
@@ -14,7 +15,9 @@ case: after parsing `"int [?]"`, `ffi.sizeof` and `ffi.new` can read the
 runtime element count and re-snapshot the committed ctype ID instead of
 reparsing the type string.
 
-Coverage lives in `tests/t-ffi-layout-snapshot.c`.  The fixture checks exact
-ctype parse-sequence movement for string `offsetof`, `alignof`, `sizeof`,
-VLA `sizeof`, VLA `new`, and `istype`, so this is a behavior check rather
-than a source-search guard.
+Coverage lives in `tests/t-ffi-layout-snapshot.c` and
+`tests/t-ffi-cparse-rollback-reader.lua`.  The fixtures check exact ctype
+parse-sequence movement for string `offsetof`, `alignof`, `sizeof`, VLA
+`sizeof`, VLA `new`, `istype`, and `cast`, and verify that a string cast cannot
+surface fields from an abandoned failed cdef.  These are behavior checks rather
+than source-search guards.
