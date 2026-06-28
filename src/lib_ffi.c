@@ -134,6 +134,10 @@ static int ffi_new_layout_snapshot(CTState *cts, CTypeID id, CTSize nelem,
 				   CTInfo *infop, CTSize *szp,
 				   int *neednelem);
 
+static int ffi_new_layout_wait(lua_State *L, CTState *cts, CTypeID id,
+			       CTSize nelem, int hasnelem, CTypeID *ridp,
+			       CTInfo *infop, CTSize *szp, int *neednelem);
+
 /* Check argument for C data and return it. */
 static GCcdata *ffi_checkcdata(lua_State *L, int narg)
 {
@@ -688,11 +692,17 @@ LJLIB_CF(ffi_new)	LJLIB_REC(.)
   if (!isstr) {
     int ok = ffi_new_layout_snapshot(cts, id, 0, 0, &rid, &info, &sz,
 				     &neednelem);
+    if (ok < 0)
+      ok = ffi_new_layout_wait(L, cts, id, 0, 0, &rid, &info, &sz,
+			       &neednelem);
     if (ok > 0 && neednelem) {
       CTSize nelem = (CTSize)ffi_checkint(L, 2);
       ofs = 2;
       ok = ffi_new_layout_snapshot(cts, id, nelem, 1, &rid, &info, &sz,
 				   &neednelem);
+      if (ok < 0)
+	ok = ffi_new_layout_wait(L, cts, id, nelem, 1, &rid, &info, &sz,
+				 &neednelem);
     }
     if (ok > 0)
       goto got_layout;
@@ -755,19 +765,14 @@ LJLIB_CF(ffi_cast)	LJLIB_REC(ffi_new)
   id = ffi_checkctype_noparse(L, NULL, &isstr);
   if (!isstr) {
     int ok = lj_ctype_info_snapshot(cts, id, &info, &sz, &rid, &dsnap);
+    if (ok <= 0)
+      ok = lj_ctype_info_wait(L, cts, id, &info, &sz, &rid, &dsnap);
     if (ok > 0) {
       d = &dsnap;
       goto got_type;
-    } else if (ok == 0) {
+    } else {
       lj_err_arg(L, 1, LJ_ERR_FFI_INVTYPE);
     }
-    lj_ctype_parse_lock(cts, L);
-    rid = ctype_rawid(cts, id);
-    d = ctype_get(cts, rid);
-    info = ctype_info_acq(d);
-    sz = ctype_size_acq(d);
-    lj_ctype_parse_unlock(cts);
-    goto got_type;
   }
   id = ffi_checkctype(L, cts, NULL);
   rid = ctype_rawid(cts, id);
@@ -1361,6 +1366,19 @@ static int ffi_new_layout_snapshot(CTState *cts, CTypeID id, CTSize nelem,
   return ok;
 }
 
+static int ffi_new_layout_wait(lua_State *L, CTState *cts, CTypeID id,
+			       CTSize nelem, int hasnelem, CTypeID *ridp,
+			       CTInfo *infop, CTSize *szp, int *neednelem)
+{
+  for (;;) {
+    int ok = ffi_new_layout_snapshot(cts, id, nelem, hasnelem, ridp,
+				     infop, szp, neednelem);
+    if (ok >= 0)
+      return ok;
+    lj_ctype_parse_wait(cts, L, ctype_parse_token_acq(cts));
+  }
+}
+
 static int ffi_layout_sizeof_snapshot(CTState *cts, CTypeID id, CTSize nelem,
 				      int hasnelem, CTSize *szp, int *neednelem)
 {
@@ -1389,6 +1407,19 @@ static int ffi_layout_sizeof_snapshot(CTState *cts, CTypeID id, CTSize nelem,
   return ok;
 }
 
+static int ffi_layout_sizeof_wait(lua_State *L, CTState *cts, CTypeID id,
+				  CTSize nelem, int hasnelem, CTSize *szp,
+				  int *neednelem)
+{
+  for (;;) {
+    int ok = ffi_layout_sizeof_snapshot(cts, id, nelem, hasnelem, szp,
+					neednelem);
+    if (ok >= 0)
+      return ok;
+    lj_ctype_parse_wait(cts, L, ctype_parse_token_acq(cts));
+  }
+}
+
 static int ffi_layout_alignof_snapshot(CTState *cts, CTypeID id, CTSize *alignp)
 {
   FFILayoutSnap ls;
@@ -1403,6 +1434,17 @@ static int ffi_layout_alignof_snapshot(CTState *cts, CTypeID id, CTSize *alignp)
   if (ok >= 0 && ffi_layout_end(&ls) < 0)
     return -1;
   return ok;
+}
+
+static int ffi_layout_alignof_wait(lua_State *L, CTState *cts, CTypeID id,
+				   CTSize *alignp)
+{
+  for (;;) {
+    int ok = ffi_layout_alignof_snapshot(cts, id, alignp);
+    if (ok >= 0)
+      return ok;
+    lj_ctype_parse_wait(cts, L, ctype_parse_token_acq(cts));
+  }
 }
 
 static int ffi_layout_getfield(FFILayoutSnap *ls, const CType *root,
@@ -1475,6 +1517,17 @@ static int ffi_layout_offsetof_snapshot(CTState *cts, CTypeID id, GCstr *name,
   return ok;
 }
 
+static int ffi_layout_offsetof_wait(lua_State *L, CTState *cts, CTypeID id,
+				    GCstr *name, CTSize *ofs, CType *out)
+{
+  for (;;) {
+    int ok = ffi_layout_offsetof_snapshot(cts, id, name, ofs, out);
+    if (ok >= 0)
+      return ok;
+    lj_ctype_parse_wait(cts, L, ctype_parse_token_acq(cts));
+  }
+}
+
 LJLIB_CF(ffi_sizeof)	LJLIB_REC(ffi_xof FF_ffi_sizeof)
 {
   CTState *cts = ctype_cts(L);
@@ -1487,10 +1540,15 @@ LJLIB_CF(ffi_sizeof)	LJLIB_REC(ffi_xof FF_ffi_sizeof)
     id = ffi_checkctype_noparse(L, NULL, &isstr);
     if (!isstr) {
       int ok = ffi_layout_sizeof_snapshot(cts, id, 0, 0, &sz, &neednelem);
+      if (ok < 0)
+	ok = ffi_layout_sizeof_wait(L, cts, id, 0, 0, &sz, &neednelem);
       if (ok > 0 && neednelem) {
 	CTSize nelem = (CTSize)ffi_checkint(L, 2);
 	neednelem = 0;
 	ok = ffi_layout_sizeof_snapshot(cts, id, nelem, 1, &sz, &neednelem);
+	if (ok < 0)
+	  ok = ffi_layout_sizeof_wait(L, cts, id, nelem, 1, &sz,
+				      &neednelem);
       }
       if (ok > 0) {
 	if (LJ_UNLIKELY(sz == CTSIZE_INVALID)) {
@@ -1541,6 +1599,8 @@ LJLIB_CF(ffi_alignof)	LJLIB_REC(ffi_xof FF_ffi_alignof)
   id = ffi_checkctype_noparse(L, NULL, &isstr);
   if (!isstr) {
     int ok = ffi_layout_alignof_snapshot(cts, id, &align);
+    if (ok < 0)
+      ok = ffi_layout_alignof_wait(L, cts, id, &align);
     if (ok > 0) {
       setintV(L->top-1, (int32_t)align);
       return 1;
@@ -1561,7 +1621,6 @@ LJLIB_CF(ffi_offsetof)	LJLIB_REC(ffi_xof FF_ffi_offsetof)
   CTState *cts = ctype_cts(L);
   CTypeID id;
   GCstr *name;
-  CType *ct;
   CTSize ofs;
   int isstr;
   id = ffi_checkctype_noparse(L, NULL, &isstr);
@@ -1571,6 +1630,8 @@ LJLIB_CF(ffi_offsetof)	LJLIB_REC(ffi_xof FF_ffi_offsetof)
   {
     CType snap;
     int ok = ffi_layout_offsetof_snapshot(cts, id, name, &ofs, &snap);
+    if (ok < 0)
+      ok = ffi_layout_offsetof_wait(L, cts, id, name, &ofs, &snap);
     if (ok > 0) {
       setintV(L->top-1, ofs);
       if (ctype_isfield(snap.info)) {
@@ -1584,26 +1645,6 @@ LJLIB_CF(ffi_offsetof)	LJLIB_REC(ffi_xof FF_ffi_offsetof)
       return 0;
     }
   }
-  lj_ctype_parse_lock(cts, L);
-  ct = lj_ctype_rawref(cts, id);
-  if (ctype_isstruct(ctype_info_acq(ct)) &&
-      ctype_size_acq(ct) != CTSIZE_INVALID) {
-    CType *fct = lj_ctype_getfield(cts, ct, name, &ofs);
-    if (fct) {
-      CTInfo finfo = ctype_info_acq(fct);
-      setintV(L->top-1, ofs);
-      if (ctype_isfield(finfo)) {
-	lj_ctype_parse_unlock(cts);
-	return 1;
-      } else if (ctype_isbitfield(finfo)) {
-	setintV(L->top++, ctype_bitpos(finfo));
-	setintV(L->top++, ctype_bitbsz(finfo));
-	lj_ctype_parse_unlock(cts);
-	return 3;
-      }
-    }
-  }
-  lj_ctype_parse_unlock(cts);
   return 0;
 }
 
