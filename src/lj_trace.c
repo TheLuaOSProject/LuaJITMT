@@ -1259,7 +1259,18 @@ static LJ_AINLINE void trace_pendpatch(jit_State *J, int force)
 {
   if (LJ_UNLIKELY(J->patchpc)) {
     if (force || J->bcskip == 0) {
-      bc_publish(J->patchpc, J->patchins);
+      BCIns patchins = J->patchins;
+      BCOp op = bc_op(patchins);
+      if (op == BC_JFORL || op == BC_JITERL || op == BC_JLOOP ||
+	  op == BC_JFUNCF) {
+	TraceNo traceno = bc_d(patchins);
+	GCtrace *T = traceref(J, traceno);
+	if (T && trace_traceno_acq(T) == traceno &&
+	    la_load64_acq(&T->retire_epoch) != LJ_TRACE_SCOPE_FLUSHING)
+	  bc_publish(J->patchpc, patchins);
+      } else {
+	bc_publish(J->patchpc, patchins);
+      }
       J->patchpc = NULL;
     } else {
       J->bcskip = 0;
@@ -1343,6 +1354,8 @@ static TValue *trace_state(lua_State *L, lua_CFunction dummy, void *ud)
     case LJ_TRACE_ASM:
       setvmstate(J2G(J), ASM);
       lj_asm_trace(J, &J->cur);
+      if (lj_trace_state_aborted(lj_trace_state_load(J)))
+	goto retry;
       trace_stop(J);
       setvmstate(J2G(J), INTERP);
       lj_trace_state_store(J, LJ_TRACE_IDLE);
