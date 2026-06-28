@@ -70,6 +70,19 @@ static void assert_tostring_waits_without_lock(lua_State *L, CTState *cts,
   assert(ljt_ctype_parse_seq(cts) == ctx.release_seq);
 }
 
+static void assert_predefined_tostring_avoids_wait(lua_State *L, CTState *cts)
+{
+  uint32_t seq0 = ljt_ctype_parse_seq(cts);
+  uint32_t release_seq = ljt_ctype_hold_parse_token(cts);
+
+  ljt_lua_dostring(L,
+    "assert(tostring(lj_m7_tostring_i64):find('-42', 1, true))\n"
+    "assert(tostring(lj_m7_tostring_u64):find('42', 1, true))\n");
+
+  ljt_ctype_release_parse_token(cts, release_seq);
+  assert(ljt_ctype_parse_seq(cts) == seq0 + 2u);
+}
+
 int main(void)
 {
   lua_State *L = ljt_lua_newstate_openlibs();
@@ -109,8 +122,7 @@ int main(void)
   seq1 = ljt_ctype_parse_seq(cts);
   assert(seq1 == seq0);
 
-  assert_tostring_waits_without_lock(L, cts, tg,
-    "assert(tostring(lj_m7_tostring_i64):find('-42', 1, true))\n");
+  assert_predefined_tostring_avoids_wait(L, cts);
   assert_tostring_waits_without_lock(L, cts, tg,
     "assert(tostring(lj_m7_tostring_ptr) == 'snap:42')\n");
 

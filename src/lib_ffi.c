@@ -158,11 +158,93 @@ static jit_State *ffi_active_recorder(lua_State *L)
 }
 #endif
 
+static int ffi_ctype_predefined_id(CTypeID id)
+{
+  return id > CTID_NONE && id <= CTID_CTYPEID;
+}
+
+static void ffi_ctype_slot_snapshot(CTypeTab *tabh, CTypeID id, CType *out)
+{
+  CType *ct = ctype_tab_slot(tabh, id);
+  GCobj *name;
+  out->info = ctype_info_acq(ct);
+  out->size = ctype_size_acq(ct);
+  out->sib = (CTypeID1)ctype_sib_acq(ct);
+  out->next = (CTypeID1)ctype_next_acq(ct);
+  name = ctype_nameobj_acq(ct);
+  setgcrefp(out->name, name);
+}
+
+static int ffi_ctype_info_predefined(CTState *cts, CTypeID id,
+				     CTInfo *infop, CTSize *szp,
+				     CTypeID *ridp, CType *rawp)
+{
+  CTypeTab *tabh;
+  MSize budget;
+  CTInfo qual = 0;
+  CType ct;
+  if (!ffi_ctype_predefined_id(id))
+    return 0;
+  tabh = ctype_tabh_acq(cts);
+  if ((MSize)CTID_CTYPEID >= ctype_tab_sizetab_acq(tabh))
+    return 0;
+  budget = (MSize)(CTID_CTYPEID + 1) * 4u;
+  if (rawp || ridp) {
+    CTypeID rid = id;
+    for (;;) {
+      CTInfo info;
+      if (!ffi_ctype_predefined_id(rid) || budget-- == 0)
+	return 0;
+      ffi_ctype_slot_snapshot(tabh, rid, &ct);
+      info = ctype_info_acq(&ct);
+      if (ctype_isabandoned(info))
+	return 0;
+      if (!ctype_isattrib(info)) {
+	if (ridp)
+	  *ridp = rid;
+	if (rawp)
+	  *rawp = ct;
+	break;
+      }
+      rid = ctype_cid(info);
+    }
+  }
+  for (;;) {
+    CTInfo info;
+    CTSize size;
+    if (!ffi_ctype_predefined_id(id) || budget-- == 0)
+      return 0;
+    ffi_ctype_slot_snapshot(tabh, id, &ct);
+    info = ctype_info_acq(&ct);
+    size = ctype_size_acq(&ct);
+    if (ctype_isabandoned(info)) {
+      return 0;
+    } else if (ctype_isenum(info)) {
+      /* Follow child. Need to look at its attributes, too. */
+    } else if (ctype_isattrib(info)) {
+      if (ctype_isxattrib(info, CTA_QUAL))
+	qual |= size;
+      else if (ctype_isxattrib(info, CTA_ALIGN) && !(qual & CTFP_ALIGNED))
+	qual |= CTFP_ALIGNED + CTALIGN(size);
+    } else {
+      if (!(qual & CTFP_ALIGNED)) qual |= (info & CTF_ALIGN);
+      qual |= (info & ~(CTF_ALIGN|CTMASK_CID));
+      *infop = qual;
+      *szp = ctype_isfunc(info) ? CTSIZE_INVALID : size;
+      return 1;
+    }
+    id = ctype_cid(info);
+  }
+}
+
 static int ffi_ctype_info_read(lua_State *L, CTState *cts, CTypeID id,
 			       CTInfo *infop, CTSize *szp, CTypeID *ridp,
 			       CType *rawp)
 {
-  int ok = lj_ctype_info_snapshot(cts, id, infop, szp, ridp, rawp);
+  int ok = ffi_ctype_info_predefined(cts, id, infop, szp, ridp, rawp);
+  if (ok)
+    return ok;
+  ok = lj_ctype_info_snapshot(cts, id, infop, szp, ridp, rawp);
   if (ok < 0) {
 #if LJ_HASJIT
     jit_State *J = ffi_active_recorder(L);
@@ -1182,6 +1264,21 @@ static int ffi_layout_begin(CTState *cts, FFILayoutSnap *ls)
   return 1;
 }
 
+static int ffi_layout_begin_predefined(CTState *cts, CTypeID id,
+				       FFILayoutSnap *ls)
+{
+  if (!ffi_ctype_predefined_id(id))
+    return 0;
+  ls->cts = cts;
+  ls->top = CTID_CTYPEID + 1;
+  ls->tabh = ctype_tabh_acq(cts);
+  ls->seq = 0;
+  ls->budget = (MSize)ls->top * 2u;
+  if ((MSize)CTID_CTYPEID >= ctype_tab_sizetab_acq(ls->tabh))
+    return 0;
+  return 1;
+}
+
 static int ffi_layout_end(FFILayoutSnap *ls)
 {
   uint32_t seq = ctype_parse_token_acq(ls->cts);
@@ -1383,59 +1480,80 @@ static int ffi_layout_vlsize(FFILayoutSnap *ls, const CType *ct,
   return 1;
 }
 
-static int ffi_new_layout_snapshot(CTState *cts, CTypeID id, CTSize nelem,
-				   int hasnelem, CTypeID *ridp,
-				   CTInfo *infop, CTSize *szp,
-				   int *neednelem)
+static int ffi_new_layout_read(FFILayoutSnap *ls, CTypeID id, CTSize nelem,
+			       int hasnelem, CTypeID *ridp, CTInfo *infop,
+			       CTSize *szp, int *neednelem)
 {
-  FFILayoutSnap ls;
   CType raw;
-  int ok = ffi_layout_begin(cts, &ls);
-  if (ok < 0)
-    return -1;
-  ok = ffi_layout_rawid(&ls, id, ridp, &raw);
+  int ok = ffi_layout_rawid(ls, id, ridp, &raw);
   if (ok > 0) {
-    ok = ffi_layout_info(&ls, id, infop, szp);
+    ok = ffi_layout_info(ls, id, infop, szp);
     if (ok > 0) {
       if ((*infop & CTF_VLA)) {
 	if (!hasnelem) {
 	  *neednelem = 1;
 	} else {
 	  *neednelem = 0;
-	  ok = ffi_layout_vlsize(&ls, &raw, nelem, szp);
+	  ok = ffi_layout_vlsize(ls, &raw, nelem, szp);
 	}
       } else {
 	*neednelem = 0;
       }
     }
   }
+  return ok;
+}
+
+static int ffi_new_layout_snapshot(CTState *cts, CTypeID id, CTSize nelem,
+				   int hasnelem, CTypeID *ridp,
+				   CTInfo *infop, CTSize *szp,
+				   int *neednelem)
+{
+  FFILayoutSnap ls;
+  int ok = ffi_layout_begin(cts, &ls);
+  if (ok < 0)
+    return -1;
+  ok = ffi_new_layout_read(&ls, id, nelem, hasnelem, ridp, infop, szp,
+			   neednelem);
   if (ok >= 0 && ffi_layout_end(&ls) < 0)
     return -1;
   return ok;
+}
+
+static int ffi_new_layout_predefined(CTState *cts, CTypeID id, CTSize nelem,
+				     int hasnelem, CTypeID *ridp,
+				     CTInfo *infop, CTSize *szp,
+				     int *neednelem)
+{
+  FFILayoutSnap ls;
+  if (!ffi_layout_begin_predefined(cts, id, &ls))
+    return -1;
+  return ffi_new_layout_read(&ls, id, nelem, hasnelem, ridp, infop, szp,
+			     neednelem);
 }
 
 static int ffi_new_layout_wait(lua_State *L, CTState *cts, CTypeID id,
 			       CTSize nelem, int hasnelem, CTypeID *ridp,
 			       CTInfo *infop, CTSize *szp, int *neednelem)
 {
-  for (;;) {
-    int ok = ffi_new_layout_snapshot(cts, id, nelem, hasnelem, ridp,
+  int ok = ffi_new_layout_predefined(cts, id, nelem, hasnelem, ridp,
 				     infop, szp, neednelem);
+  if (ok >= 0)
+    return ok;
+  for (;;) {
+    ok = ffi_new_layout_snapshot(cts, id, nelem, hasnelem, ridp,
+				 infop, szp, neednelem);
     if (ok >= 0)
       return ok;
     lj_ctype_parse_wait(cts, L, ctype_parse_token_acq(cts));
   }
 }
 
-static int ffi_layout_sizeof_snapshot(CTState *cts, CTypeID id, CTSize nelem,
-				      int hasnelem, CTSize *szp, int *neednelem)
+static int ffi_layout_sizeof_read(FFILayoutSnap *ls, CTypeID id, CTSize nelem,
+				  int hasnelem, CTSize *szp, int *neednelem)
 {
-  FFILayoutSnap ls;
   CType ct;
-  int ok = ffi_layout_begin(cts, &ls);
-  if (ok < 0)
-    return -1;
-  ok = ffi_layout_rawref(&ls, id, &ct);
+  int ok = ffi_layout_rawref(ls, id, &ct);
   if (ok > 0) {
     CTInfo info = ctype_info_acq(&ct);
     CTSize size = ctype_size_acq(&ct);
@@ -1443,52 +1561,96 @@ static int ffi_layout_sizeof_snapshot(CTState *cts, CTypeID id, CTSize nelem,
       if (!hasnelem) {
 	*neednelem = 1;
       } else {
-	ok = ffi_layout_vlsize(&ls, &ct, nelem, szp);
+	ok = ffi_layout_vlsize(ls, &ct, nelem, szp);
       }
     } else {
       *neednelem = 0;
       *szp = ctype_hassize(info) ? size : CTSIZE_INVALID;
     }
   }
+  return ok;
+}
+
+static int ffi_layout_sizeof_snapshot(CTState *cts, CTypeID id, CTSize nelem,
+				      int hasnelem, CTSize *szp, int *neednelem)
+{
+  FFILayoutSnap ls;
+  int ok = ffi_layout_begin(cts, &ls);
+  if (ok < 0)
+    return -1;
+  ok = ffi_layout_sizeof_read(&ls, id, nelem, hasnelem, szp, neednelem);
   if (ok >= 0 && ffi_layout_end(&ls) < 0)
     return -1;
   return ok;
+}
+
+static int ffi_layout_sizeof_predefined(CTState *cts, CTypeID id,
+					CTSize nelem, int hasnelem,
+					CTSize *szp, int *neednelem)
+{
+  FFILayoutSnap ls;
+  if (!ffi_layout_begin_predefined(cts, id, &ls))
+    return -1;
+  return ffi_layout_sizeof_read(&ls, id, nelem, hasnelem, szp, neednelem);
 }
 
 static int ffi_layout_sizeof_wait(lua_State *L, CTState *cts, CTypeID id,
 				  CTSize nelem, int hasnelem, CTSize *szp,
 				  int *neednelem)
 {
-  for (;;) {
-    int ok = ffi_layout_sizeof_snapshot(cts, id, nelem, hasnelem, szp,
+  int ok = ffi_layout_sizeof_predefined(cts, id, nelem, hasnelem, szp,
 					neednelem);
+  if (ok >= 0)
+    return ok;
+  for (;;) {
+    ok = ffi_layout_sizeof_snapshot(cts, id, nelem, hasnelem, szp,
+				    neednelem);
     if (ok >= 0)
       return ok;
     lj_ctype_parse_wait(cts, L, ctype_parse_token_acq(cts));
   }
 }
 
+static int ffi_layout_alignof_read(FFILayoutSnap *ls, CTypeID id,
+				   CTSize *alignp)
+{
+  CTInfo info;
+  CTSize sz;
+  int ok = ffi_layout_info_raw(ls, id, &info, &sz);
+  if (ok > 0)
+    *alignp = (CTSize)1u << ctype_align(info);
+  return ok;
+}
+
 static int ffi_layout_alignof_snapshot(CTState *cts, CTypeID id, CTSize *alignp)
 {
   FFILayoutSnap ls;
-  CTInfo info;
-  CTSize sz;
   int ok = ffi_layout_begin(cts, &ls);
   if (ok < 0)
     return -1;
-  ok = ffi_layout_info_raw(&ls, id, &info, &sz);
-  if (ok > 0)
-    *alignp = (CTSize)1u << ctype_align(info);
+  ok = ffi_layout_alignof_read(&ls, id, alignp);
   if (ok >= 0 && ffi_layout_end(&ls) < 0)
     return -1;
   return ok;
 }
 
+static int ffi_layout_alignof_predefined(CTState *cts, CTypeID id,
+					 CTSize *alignp)
+{
+  FFILayoutSnap ls;
+  if (!ffi_layout_begin_predefined(cts, id, &ls))
+    return -1;
+  return ffi_layout_alignof_read(&ls, id, alignp);
+}
+
 static int ffi_layout_alignof_wait(lua_State *L, CTState *cts, CTypeID id,
 				   CTSize *alignp)
 {
+  int ok = ffi_layout_alignof_predefined(cts, id, alignp);
+  if (ok >= 0)
+    return ok;
   for (;;) {
-    int ok = ffi_layout_alignof_snapshot(cts, id, alignp);
+    ok = ffi_layout_alignof_snapshot(cts, id, alignp);
     if (ok >= 0)
       return ok;
     lj_ctype_parse_wait(cts, L, ctype_parse_token_acq(cts));

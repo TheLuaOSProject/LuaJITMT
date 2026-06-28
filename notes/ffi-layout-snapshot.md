@@ -23,6 +23,12 @@ layout arguments:
 - Recheck `parse_token`; any overlap with parser mutation retries under the
   existing locked path.
 
+Predefined immutable type IDs now take the same acquired field snapshot without
+waiting for an unrelated active parser token. This covers predefined
+`ffi.sizeof(ct)`, `ffi.alignof(ct)`, `ffi.new(ct, ...)`, and the shared
+metadata read used by `ffi.cast(ct, value)`. If the walk leaves the predefined
+range, it falls back to the existing sequence-checked retry path.
+
 The existing locked path remains the fallback for active parser windows,
 racing table growth, inconsistent chains, and string `sizeof`/`alignof`
 queries. The locked `ffi.sizeof()` and `ffi.offsetof()` fallbacks mirror the
@@ -38,6 +44,7 @@ string `ffi.offsetof("struct ...", field)` advances the parser sequence by one
 lock/unlock pair only, proving the read-only field walk does not reacquire the
 parser lock.
 
-`tools/ci/m7_ffi_typeinfo_snapshot.sh` also rejects raw `CType.info` and
-`CType.size` reads in the `ffi.sizeof()` and `ffi.offsetof()` layout query
-bodies.
+The fixture now also holds the parser token while running predefined
+`sizeof`, `alignof`, `new`, and `cast` operations. Those operations complete
+without parking, while user-defined struct, VLA, and field-offset queries still
+prove the native wait/retry path.

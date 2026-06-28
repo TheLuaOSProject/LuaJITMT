@@ -80,6 +80,22 @@ static void assert_layout_waits_without_lock(lua_State *L, CTState *cts,
   assert(ljt_ctype_parse_seq(cts) == ctx.release_seq);
 }
 
+static void assert_predefined_layout_avoids_wait(lua_State *L, CTState *cts)
+{
+  uint32_t seq0 = ljt_ctype_parse_seq(cts);
+  uint32_t release_seq = ljt_ctype_hold_parse_token(cts);
+
+  ljt_lua_dostring(L,
+    "local ffi = require('ffi')\n"
+    "assert(ffi.sizeof(lj_m7_layout_int_ct) == 4)\n"
+    "assert(ffi.alignof(lj_m7_layout_int_ct) == 4)\n"
+    "assert(tonumber(ffi.new(lj_m7_layout_int_ct, 33)) == 33)\n"
+    "assert(tonumber(ffi.cast(lj_m7_layout_int_ct, 23)) == 23)\n");
+
+  ljt_ctype_release_parse_token(cts, release_seq);
+  assert(ljt_ctype_parse_seq(cts) == seq0 + 2u);
+}
+
 int main(void)
 {
   lua_State *L = ljt_lua_newstate_openlibs();
@@ -146,42 +162,39 @@ int main(void)
   seq1 = ljt_ctype_parse_seq(cts);
   assert(seq1 == seq0);
 
-  assert_layout_waits_without_lock(L, cts, tg,
-    "local ffi = require('ffi')\n"
-    "assert(ffi.sizeof(lj_m7_layout_snapshot_ct) == 16)\n");
+  assert_predefined_layout_avoids_wait(L, cts);
   seq1 = ljt_ctype_parse_seq(cts);
   assert(seq1 == seq0 + 2u);
 
   assert_layout_waits_without_lock(L, cts, tg,
     "local ffi = require('ffi')\n"
-    "assert(ffi.alignof(lj_m7_layout_snapshot_ct) == 8)\n");
+    "assert(ffi.sizeof(lj_m7_layout_snapshot_ct) == 16)\n");
   seq1 = ljt_ctype_parse_seq(cts);
   assert(seq1 == seq0 + 4u);
 
   assert_layout_waits_without_lock(L, cts, tg,
     "local ffi = require('ffi')\n"
-    "assert(ffi.offsetof(lj_m7_layout_snapshot_ct, 'b') == 8)\n");
+    "assert(ffi.alignof(lj_m7_layout_snapshot_ct) == 8)\n");
   seq1 = ljt_ctype_parse_seq(cts);
   assert(seq1 == seq0 + 6u);
 
   assert_layout_waits_without_lock(L, cts, tg,
     "local ffi = require('ffi')\n"
-    "assert(ffi.sizeof(lj_m7_layout_vla_ct, 7) == 28)\n");
+    "assert(ffi.offsetof(lj_m7_layout_snapshot_ct, 'b') == 8)\n");
   seq1 = ljt_ctype_parse_seq(cts);
   assert(seq1 == seq0 + 8u);
+
+  assert_layout_waits_without_lock(L, cts, tg,
+    "local ffi = require('ffi')\n"
+    "assert(ffi.sizeof(lj_m7_layout_vla_ct, 7) == 28)\n");
+  seq1 = ljt_ctype_parse_seq(cts);
+  assert(seq1 == seq0 + 10u);
 
   assert_layout_waits_without_lock(L, cts, tg,
     "local ffi = require('ffi')\n"
     "local obj = ffi.new(lj_m7_layout_snapshot_ct)\n"
     "obj.a = 17\n"
     "assert(obj.a == 17)\n");
-  seq1 = ljt_ctype_parse_seq(cts);
-  assert(seq1 == seq0 + 10u);
-
-  assert_layout_waits_without_lock(L, cts, tg,
-    "local ffi = require('ffi')\n"
-    "local v = ffi.cast(lj_m7_layout_int_ct, 23)\n"
-    "assert(tonumber(v) == 23)\n");
   seq1 = ljt_ctype_parse_seq(cts);
   assert(seq1 == seq0 + 12u);
 
