@@ -268,6 +268,28 @@ static int table_api_reader_c(lua_State *L)
   return 1;
 }
 
+static int ref_api_reader_c(lua_State *L)
+{
+  int uv = lua_upvalueindex(1);
+  int ref;
+
+  lua_pushliteral(L, "ref-value");
+  ref = luaL_ref(L, uv);
+  assert(ref >= 1);
+
+  lua_rawgeti(L, uv, ref);
+  assert_string(L, -1, "ref-value");
+  lua_pop(L, 1);
+
+  luaL_unref(L, uv, ref);
+  lua_rawgeti(L, uv, ref);
+  assert(lua_isnil(L, -1));
+  lua_pop(L, 1);
+
+  lua_pushboolean(L, 1);
+  return 1;
+}
+
 static int metatable_api_reader_c(lua_State *L)
 {
   int uv = lua_upvalueindex(1);
@@ -434,6 +456,19 @@ static void exercise_table_apis(lua_State *L)
   lua_rawgeti(L, -1, 3);
   assert_string(L, -1, "rawi");
   lua_pop(L, 2);
+
+  lua_settop(L, base);
+}
+
+static void exercise_ref_apis(lua_State *L)
+{
+  int base = lua_gettop(L);
+
+  lua_newtable(L);
+  lua_pushcclosure(L, ref_api_reader_c, 1);
+  check_lua(L, lua_pcall(L, 0, 1, 0), "ref api reader");
+  assert(lua_toboolean(L, -1));
+  lua_pop(L, 1);
 
   lua_settop(L, base);
 }
@@ -651,6 +686,7 @@ int main(void)
   exercise_number_readers(L);
   exercise_compare_apis(L);
   exercise_table_apis(L);
+  exercise_ref_apis(L);
   exercise_metatable_apis(L);
   exercise_function_env_apis(L);
   exercise_nested_upvalue_apis(L);
