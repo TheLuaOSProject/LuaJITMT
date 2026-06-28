@@ -49,7 +49,6 @@ local function read_raw_file(path)
 end
 
 function M.read_file(path)
-  checks.assert_not_source_file_content(path, 2)
   return read_raw_file(path)
 end
 

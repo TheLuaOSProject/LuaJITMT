@@ -60,26 +60,6 @@ function M.assert_text_any_contains(label, data, needles, what)
   error(label .. ": missing any " .. what .. ": " .. table.concat(needles, ", "), 2)
 end
 
-function M.is_source_file_content_path(path)
-  local p = tostring(path)
-  local source_ext = p:match("%.lua$") or p:match("%.c$") or
-                     p:match("%.h$") or p:match("%.sh$") or
-                     p:match("%.dasc$") or p:match("%.inc$")
-  if p:match("^src/") or p:match("/src/") then return true end
-  if not source_ext then return false end
-  return p:match("^tests/") or p:match("/tests/") or
-         p:match("^tools/") or p:match("/tools/") or
-         p:match("^aux/") or p:match("/aux/") or
-         p:match("^bench/") or p:match("/bench/")
-end
-
-function M.assert_not_source_file_content(path, level)
-  if M.is_source_file_content_path(path) then
-    error("source-file content assertions are not behavior tests: " ..
-          tostring(path), (level or 1) + 1)
-  end
-end
-
 function M.assert_text_contains_count(label, data, needle, mincount, what)
   what = what or "text"
   local n = M.count_plain(data, needle)
@@ -98,30 +78,6 @@ function M.assert_text_match_count(label, data, pattern, mincount, what)
           " matches for " .. pattern .. ", saw " .. n, 2)
   end
   return n
-end
-
-function M.assert_file_contains(t, path, needle, label)
-  M.assert_not_source_file_content(path, 2)
-  label = label or path
-  M.assert_text_contains(label, t:read(path), needle, "file text")
-end
-
-function M.assert_file_match(t, path, pattern, label)
-  M.assert_not_source_file_content(path, 2)
-  label = label or path
-  M.assert_text_match(label, t:read(path), pattern, "file pattern")
-end
-
-function M.assert_file_all_contains(t, path, needles, label)
-  M.assert_not_source_file_content(path, 2)
-  label = label or path
-  M.assert_text_all_contains(label, t:read(path), needles, "file text")
-end
-
-function M.assert_file_any_contains(t, path, needles, label)
-  M.assert_not_source_file_content(path, 2)
-  label = label or path
-  return M.assert_text_any_contains(label, t:read(path), needles, "file text")
 end
 
 function M.assert_dump_contains(t, dump, needle, label)

@@ -1,5 +1,4 @@
 local utils = require("suite_utils")
-local checks = require("suite_assert")
 
 local M = {}
 
@@ -12,7 +11,6 @@ local read_file = utils.read_file
 local write_file = utils.write_file
 local has_extension = utils.has_extension
 local file_exists = utils.file_exists
-local assert_not_source_file_content = checks.assert_not_source_file_content
 
 local function read_raw_file(path)
   local f = io.open(path, "rb")
@@ -79,7 +77,6 @@ function Test:tmp(name)
 end
 
 function Test:read(path)
-  assert_not_source_file_content(path, 2)
   return read_file(path)
 end
 

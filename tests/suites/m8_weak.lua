@@ -38,10 +38,11 @@ local function run_finalizer_error_native_stdio(t, opts)
   capture_luajit(t, { "-e", finalizer_error_native_stdio_smoke() }, out, {
     stderr_to_stdout = true
   })
-  checks.assert_file_all_contains(t, out, {
+  checks.assert_text_all_contains("finalizer error native stdio output",
+                                  t:read(out), {
     "ERROR in finalizer: ",
     "finalizer native stdio smoke"
-  }, "finalizer error native stdio output")
+  }, "captured output")
 end
 
 local function run_default_matrix(t)

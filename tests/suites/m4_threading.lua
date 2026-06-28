@@ -4,8 +4,6 @@ local build = require("suite_build")
 local runtime = require("suite_runtime")
 
 local getenv = utils.getenv
-local assert_file_contains = checks.assert_file_contains
-local assert_file_match = checks.assert_file_match
 local with_temp_paths = utils.with_temp_paths
 local compile_and_run_sources = build.compile_and_run_sources
 
@@ -56,10 +54,12 @@ return function(add)
           }, { joff = true })
 
           for _, path in ipairs({ marker, spin_marker }) do
-            assert_file_match(t, path, "^false\n",
-                              "shutdown marker first line")
-            assert_file_contains(t, path, "thread interrupted: VM shutdown",
-                                 "shutdown interruption marker")
+            local data = t:read(path)
+            checks.assert_text_match("shutdown marker first line", data,
+                                     "^false\n", "marker text")
+            checks.assert_text_contains("shutdown interruption marker", data,
+                                        "thread interrupted: VM shutdown",
+                                        "marker text")
           end
         end)
     end

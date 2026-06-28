@@ -1,5 +1,20 @@
 # Lua test-suite migration
 
+## 2026-06-28 source-search guard removal
+
+- Removed the old source-file content guard API and generic `assert_file_*`
+  compatibility wrappers from the Lua test harness.
+- Kept generated dump assertions because JIT/bytecode/ASM dump text is a
+  generated behavior surface, not repository source.
+- Switched output-file checks to read the captured output and assert text
+  directly.
+- Source-search policy now lives in `notes/ci-source-search-policy.md`.
+
+Validation:
+
+- `tools/ci/lua_test.sh m3_vmevent_native_stdio m4_threading_shutdown m8_weak`
+- `git diff --check`
+
 ## 2026-06-20
 
 - Audited active `tests/suites` and `tools/ci` Lua tests for source-content
