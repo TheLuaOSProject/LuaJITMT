@@ -392,4 +392,14 @@ if hits=$(awk '
   printf '%s\n' 'raw CType info/size reads are forbidden in ffi.gc(); use ctype_info_acq() or ctype_size_acq()' >&2
   exit 1
 fi
+if ! awk '
+  /^LJLIB_CF\(ffi_gc\)/ { in_fn = 1 }
+  in_fn && /lj_ctype_info_snapshot[[:space:]]*[(]/ { snapshot = 1 }
+  in_fn && /lj_ctype_info_wait[[:space:]]*[(]/ { wait = 1 }
+  in_fn && /^}/ { in_fn = 0 }
+  END { exit(snapshot && wait ? 0 : 1) }
+' "$ROOT/src/lib_ffi.c"; then
+  printf '%s\n' 'ffi.gc() finalizer eligibility must wait/retry ctype snapshots before validation' >&2
+  exit 1
+fi
 exec "$ROOT/tools/ci/lua_test.sh" m7_ffi_finreg

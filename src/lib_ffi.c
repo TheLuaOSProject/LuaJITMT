@@ -1791,8 +1791,13 @@ LJLIB_CF(ffi_gc)	LJLIB_REC(.)
   GCcdata *cd = ffi_checkcdata(L, 1);
   TValue *fin = lj_lib_checkany(L, 2);
   CTState *cts = ctype_cts(L);
-  CType *ct = ctype_raw(cts, cd->ctypeid);
-  CTInfo info = ctype_info_acq(ct);
+  CTInfo info;
+  CTSize sz;
+  int ok = lj_ctype_info_snapshot(cts, cd->ctypeid, &info, &sz, NULL, NULL);
+  if (ok <= 0)
+    ok = lj_ctype_info_wait(L, cts, cd->ctypeid, &info, &sz, NULL, NULL);
+  if (ok <= 0)
+    lj_err_arg(L, 1, LJ_ERR_FFI_INVTYPE);
   if (!(ctype_isptr(info) || ctype_isstruct(info) || ctype_isrefarray(info)))
     lj_err_arg(L, 1, LJ_ERR_FFI_INVTYPE);
   lj_cdata_setfin(L, cd, gcval(fin), itype(fin));
@@ -1821,15 +1826,23 @@ LJLIB_CF(ffi_blocking)
 {
   GCcdata *cd = ffi_checkcdata(L, 1);
   CTState *cts = ctype_cts(L);
-  CTypeID id = ctype_rawid(cts, cd->ctypeid);
-  CType *ct = ctype_get(cts, id);
-  CTInfo info = ctype_info_acq(ct);
+  CTypeID id = cd->ctypeid;
+  CTInfo info;
   CTSize sz = CTSIZE_PTR;
+  CTSize snap_size;
+  int ok = lj_ctype_info_snapshot(cts, id, &info, &snap_size, NULL, NULL);
+  if (ok <= 0)
+    ok = lj_ctype_info_wait(L, cts, id, &info, &snap_size, NULL, NULL);
+  if (ok <= 0)
+    lj_err_arg(L, 1, LJ_ERR_FFI_INVTYPE);
   if (ctype_isptr(info)) {
-    sz = ctype_size_acq(ct);
-    id = ctype_rawid(cts, ctype_cid(info));
-    ct = ctype_get(cts, id);
-    info = ctype_info_acq(ct);
+    id = ctype_cid(info);
+    sz = snap_size;
+    ok = lj_ctype_info_snapshot(cts, id, &info, &snap_size, NULL, NULL);
+    if (ok <= 0)
+      ok = lj_ctype_info_wait(L, cts, id, &info, &snap_size, NULL, NULL);
+    if (ok <= 0)
+      lj_err_arg(L, 1, LJ_ERR_FFI_INVTYPE);
   }
   if (!ctype_isfunc(info))
     lj_err_arg(L, 1, LJ_ERR_FFI_INVTYPE);

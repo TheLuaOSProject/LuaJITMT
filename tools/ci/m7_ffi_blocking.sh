@@ -13,6 +13,16 @@ if hits=$(awk '
   exit 1
 fi
 if ! awk '
+  /^LJLIB_CF\(ffi_blocking\)/ { in_fn = 1 }
+  in_fn && /lj_ctype_info_snapshot[[:space:]]*[(]/ { snapshot++ }
+  in_fn && /lj_ctype_info_wait[[:space:]]*[(]/ { wait++ }
+  in_fn && /^}/ { in_fn = 0 }
+  END { exit(snapshot >= 2 && wait >= 2 ? 0 : 1) }
+' "$ROOT/src/lib_ffi.c"; then
+  printf '%s\n' 'ffi.blocking() must wait/retry ctype snapshots before pointer/function validation' >&2
+  exit 1
+fi
+if ! awk '
   /^static void ctype_cbblack_wait_no_l[[:space:]]*[(]void[)]/ {
     in_wait = 1
   }
