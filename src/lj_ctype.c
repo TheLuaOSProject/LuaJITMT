@@ -1493,6 +1493,36 @@ static int ctype_predefined_id(CTypeID id)
   return id > CTID_NONE && id <= CTID_CTYPEID;
 }
 
+int lj_ctype_rawref_predefined(CTState *cts, CTypeID id, CTypeID *ridp,
+			       CType *out)
+{
+  CTypeTab *tabh;
+  CTypeID top = CTID_CTYPEID + 1;
+  MSize budget = (MSize)top * 4u;
+  CType ct;
+  if (!ctype_predefined_id(id))
+    return -1;
+  tabh = ctype_tabh_acq(cts);
+  if ((MSize)CTID_CTYPEID >= ctype_tab_sizetab_acq(tabh))
+    return -1;
+  for (;;) {
+    CTInfo info;
+    if (!ctype_predefined_id(id) || budget-- == 0)
+      return -1;
+    if (!ctype_snapshot_copy(tabh, top, id, &ct))
+      return 0;
+    info = ctype_info_acq(&ct);
+    if (!(ctype_isattrib(info) || ctype_isref(info))) {
+      if (ridp)
+	*ridp = id;
+      if (out)
+	*out = ct;
+      return 1;
+    }
+    id = ctype_cid(info);
+  }
+}
+
 int lj_ctype_predefined_nometa(CTState *cts, CTypeID id)
 {
   CTypeTab *tabh;

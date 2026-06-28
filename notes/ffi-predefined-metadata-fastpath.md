@@ -11,6 +11,13 @@ predefined range. If a walk leaves that range, or the predefined table does not
 have the expected initialized slots, the code falls back to the existing
 sequence-checked snapshot and wait/retry path.
 
+Recorder-side raw-reference and child metadata reads also check the immutable
+predefined range before raising `LJ_TRERR_CTBUSY`. This lets traced
+`tonumber(int64_t)` and 64-bit `bit.*` operations on predefined scalar cdata
+record under an unrelated active parser token. Parser-created enum, struct,
+array, and field metadata still use sequence-checked snapshots and abort
+recording instead of waiting inside the recorder.
+
 User-defined records, string declarations, `ffi.offsetof()` field walks, VLA
 types created by parsing, and parser rollback visibility keep the existing
 guarded snapshot behavior.

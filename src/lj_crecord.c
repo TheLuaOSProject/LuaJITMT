@@ -128,7 +128,9 @@ static CType *crec_ctype_snapshot(jit_State *J, CTState *cts, CTypeID id,
 static CType *crec_ctype_rawref(jit_State *J, CTState *cts, CTypeID id,
 				CType *out)
 {
-  int ok = lj_ctype_rawref_snapshot(cts, id, NULL, out);
+  int ok = lj_ctype_rawref_predefined(cts, id, NULL, out);
+  if (ok < 0)
+    ok = lj_ctype_rawref_snapshot(cts, id, NULL, out);
   if (ok < 0)
     lj_trace_err(J, LJ_TRERR_CTBUSY);
   if (!ok)
@@ -142,8 +144,11 @@ static CType *crec_ctype_rawchild(jit_State *J, CTState *cts, CType *ct,
   CTInfo parent = ctype_info_acq(ct);
   CTInfo info;
   CTSize size;
-  int ok = lj_ctype_info_snapshot(cts, ctype_cid(parent), &info, &size,
-				  NULL, out);
+  int ok = lj_ctype_info_predefined(cts, ctype_cid(parent), &info, &size,
+				    NULL, out);
+  if (ok <= 0)
+    ok = lj_ctype_info_snapshot(cts, ctype_cid(parent), &info, &size,
+				NULL, out);
   UNUSED(info); UNUSED(size);
   if (ok < 0)
     lj_trace_err(J, LJ_TRERR_CTBUSY);

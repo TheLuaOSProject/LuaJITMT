@@ -24,6 +24,14 @@ static void assert_busy_trace_releases(lua_State *L, CTState *cts,
   ljt_ctype_assert_trace_abort_released(cts);
 }
 
+static void assert_trace_avoids_ctbusy(lua_State *L, CTState *cts,
+				       const char *chunk)
+{
+  ljt_ctype_arm_trace_abort(L, cts);
+  ljt_lua_dostring(L, chunk);
+  assert((ctype_parse_token_acq(cts) & 1u) == 0);
+}
+
 int main(void)
 {
   lua_State *L = ljt_lua_newstate_openlibs();
@@ -53,7 +61,7 @@ int main(void)
   cts = ctype_ctsG(G(L));
   assert(cts != NULL);
 
-  assert_busy_trace_releases(L, cts,
+  assert_trace_avoids_ctbusy(L, cts,
     "local v = lj_m7_recmeta_i64\n"
     "jit.attach(lj_m7_trace_parse_token, 'trace')\n"
     "jit.flush()\n"
@@ -66,7 +74,8 @@ int main(void)
     "end\n"
     "for i = 1, 3 do assert(run(8) == 9876536) end\n"
     "jit.attach(lj_m7_trace_parse_token)\n"
-    "assert(lj_m7_trace_parse_token_abort_count() >= 1)\n");
+    "assert(lj_m7_trace_parse_token_start_count() >= 1)\n"
+    "assert(lj_m7_trace_parse_token_ctbusy_count() == 0)\n");
 
   assert_busy_trace_releases(L, cts,
     "local v = lj_m7_recmeta_enum\n"
@@ -98,7 +107,7 @@ int main(void)
     "jit.attach(lj_m7_trace_parse_token)\n"
     "assert(lj_m7_trace_parse_token_abort_count() >= 1)\n");
 
-  assert_busy_trace_releases(L, cts,
+  assert_trace_avoids_ctbusy(L, cts,
     "local bit = require('bit')\n"
     "local ffi = require('ffi')\n"
     "local v = lj_m7_recmeta_u64\n"
@@ -114,7 +123,8 @@ int main(void)
     "end\n"
     "for i = 1, 3 do assert(run(8) == '0ULL') end\n"
     "jit.attach(lj_m7_trace_parse_token)\n"
-    "assert(lj_m7_trace_parse_token_abort_count() >= 1)\n");
+    "assert(lj_m7_trace_parse_token_start_count() >= 1)\n"
+    "assert(lj_m7_trace_parse_token_ctbusy_count() == 0)\n");
 
   assert_busy_trace_releases(L, cts,
     "local ffi = require('ffi')\n"
@@ -220,6 +230,6 @@ int main(void)
     "end\n");
 
   lua_close(L);
-  printf("t-ffi-recorder-libmeta-busy OK: recorder FFI metadata reads abort instead of waiting\n");
+  printf("t-ffi-recorder-libmeta-busy OK: recorder FFI metadata reads avoid or abort instead of waiting\n");
   return 0;
 }
