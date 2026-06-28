@@ -4,6 +4,8 @@
 
 - Removed the old source-file content guard API and generic `assert_file_*`
   compatibility wrappers from the Lua test harness.
+- Removed the old `suite_runtime` build/C-fixture compatibility exports; suites
+  now import `suite_build` directly for those helpers.
 - Kept generated dump assertions because JIT/bytecode/ASM dump text is a
   generated behavior surface, not repository source.
 - Switched output-file checks to read the captured output and assert text

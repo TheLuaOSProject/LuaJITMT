@@ -4,6 +4,8 @@
   fixture helpers.
 - Kept compatibility exports in `suite_runtime.lua` while updating direct
   suite imports to use `suite_build` for C/build helpers.
+- 2026-06-28 follow-up: removed those `suite_runtime` compatibility exports
+  after the last suite user moved to `suite_build` directly.
 - Verified with module-load coverage and a representative serial run:
   `tools/ci/lua_test.sh m2_arena_bitmap m2_arena_state
   m3_gc2_worker_scheduler m4_thr_substrate m5_nbtab_model

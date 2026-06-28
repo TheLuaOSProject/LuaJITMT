@@ -1,8 +1,9 @@
 local runtime = require("suite_runtime")
+local build = require("suite_build")
 
 local build_and_run_luajit_code = runtime.build_and_run_luajit_code
 local build_and_run_luajit_script = runtime.build_and_run_luajit_script
-local build_and_run_c = runtime.build_and_run_c
+local build_and_run_c = build.build_and_run_c
 local luajit_script = runtime.luajit_script
 
 local function ctype_name_smoke()

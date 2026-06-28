@@ -1,18 +1,9 @@
 local utils = require("suite_utils")
-local build = require("suite_build")
 local optutils = require("suite_opts")
 
 local M = {}
 
 local shell_quote = utils.shell_quote
-
-M.make_clean = build.make_clean
-M.build_default = build.build_default
-M.clean_build = build.clean_build
-M.compile_and_run_c = build.compile_and_run_c
-M.compile_and_run_sources = build.compile_and_run_sources
-M.build_and_run_c = build.build_and_run_c
-M.run_c_fixtures = build.run_c_fixtures
 
 local function luajit_bin(t, bin)
   bin = bin or t:path("src", "luajit")
