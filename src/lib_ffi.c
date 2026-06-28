@@ -396,9 +396,7 @@ LJLIB_CF(ffi_meta___tostring)
     CType snap;
     CTInfo info;
     CTSize size;
-    int ok = lj_ctype_info_snapshot(cts, id, &info, &size, &rid, &snap);
-    if (ok <= 0)
-      ok = lj_ctype_info_wait(L, cts, id, &info, &size, &rid, &snap);
+    int ok = ffi_ctype_info_read(L, cts, id, &info, &size, &rid, &snap);
     if (ok <= 0)
       lj_err_arg(L, 1, LJ_ERR_FFI_INVTYPE);
     info = ctype_info_acq(&snap);
@@ -406,9 +404,7 @@ LJLIB_CF(ffi_meta___tostring)
     if (ctype_isref(info)) {
       CTypeID refid = ctype_cid(info);
       p = *(void **)p;
-      ok = lj_ctype_info_snapshot(cts, refid, &info, &size, &rid, &snap);
-      if (ok <= 0)
-	ok = lj_ctype_info_wait(L, cts, refid, &info, &size, &rid, &snap);
+      ok = ffi_ctype_info_read(L, cts, refid, &info, &size, &rid, &snap);
       if (ok <= 0)
 	lj_err_arg(L, 1, LJ_ERR_FFI_INVTYPE);
       info = ctype_info_acq(&snap);
@@ -430,10 +426,8 @@ LJLIB_CF(ffi_meta___tostring)
       if (ctype_isptr(info)) {
 	CTypeID childid = ctype_cid(info);
 	p = cdata_getptr(p, size);
-	ok = lj_ctype_info_snapshot(cts, childid, &info, &size, &rid, &snap);
-	if (ok <= 0)
-	  ok = lj_ctype_info_wait(L, cts, childid, &info, &size, &rid,
-				  &snap);
+	ok = ffi_ctype_info_read(L, cts, childid, &info, &size, &rid,
+				 &snap);
 	if (ok <= 0)
 	  lj_err_arg(L, 1, LJ_ERR_FFI_INVTYPE);
 	info = ctype_info_acq(&snap);
@@ -1769,9 +1763,7 @@ LJLIB_CF(ffi_metatype)
   id = ffi_checkctype_noparse(L, NULL, &isstr);
   if (isstr)
     id = ffi_checkctype(L, cts, NULL);
-  ok = lj_ctype_info_snapshot(cts, id, &info, &sz, &rid, NULL);
-  if (ok <= 0)
-    ok = lj_ctype_info_wait(L, cts, id, &info, &sz, &rid, NULL);
+  ok = ffi_ctype_info_read(L, cts, id, &info, &sz, &rid, NULL);
   if (ok <= 0)
     lj_err_arg(L, 1, LJ_ERR_FFI_INVTYPE);
   if (!(ctype_isstruct(info) || ctype_iscomplex(info) || ctype_isvector(info)))
