@@ -359,6 +359,13 @@ static int carrier_c(lua_State *L)
   return 1;
 }
 
+static int carrier_pair_c(lua_State *L)
+{
+  lua_pushvalue(L, lua_upvalueindex(1));
+  lua_pushvalue(L, lua_upvalueindex(2));
+  return 2;
+}
+
 static int upvalue_api_reader_c(lua_State *L)
 {
   int uv = lua_upvalueindex(1);
@@ -375,6 +382,36 @@ static int upvalue_api_reader_c(lua_State *L)
 
   push_payload_table(L, "replaced", 77);
   name = lua_setupvalue(L, uv, 1);
+  assert(name != NULL);
+
+  lua_pushvalue(L, uv);
+  return 1;
+}
+
+static int upvalue_pair_api_reader_c(lua_State *L)
+{
+  int uv = lua_upvalueindex(1);
+  const char *name;
+  void *id1, *id2;
+
+  name = lua_getupvalue(L, uv, 1);
+  assert(name != NULL);
+  assert_payload_table(L, -1, "first", 21);
+  lua_pop(L, 1);
+
+  name = lua_getupvalue(L, uv, 2);
+  assert(name != NULL);
+  assert_payload_table(L, -1, "second", 22);
+  lua_pop(L, 1);
+
+  id1 = lua_upvalueid(L, uv, 1);
+  id2 = lua_upvalueid(L, uv, 2);
+  assert(id1 != NULL);
+  assert(id2 != NULL);
+  assert(id1 != id2);
+
+  push_payload_table(L, "second-replaced", 23);
+  name = lua_setupvalue(L, uv, 2);
   assert(name != NULL);
 
   lua_pushvalue(L, uv);
@@ -544,6 +581,16 @@ static void exercise_nested_upvalue_apis(lua_State *L)
   check_lua(L, lua_pcall(L, 0, 1, 0), "nested upvalue carrier");
   assert_payload_table(L, -1, "replaced", 77);
   lua_pop(L, 1);
+
+  push_payload_table(L, "first", 21);
+  push_payload_table(L, "second", 22);
+  lua_pushcclosure(L, carrier_pair_c, 2);
+  lua_pushcclosure(L, upvalue_pair_api_reader_c, 1);
+  check_lua(L, lua_pcall(L, 0, 1, 0), "nested pair upvalue reader");
+  check_lua(L, lua_pcall(L, 0, 2, 0), "nested pair upvalue carrier");
+  assert_payload_table(L, -2, "first", 21);
+  assert_payload_table(L, -1, "second-replaced", 23);
+  lua_pop(L, 2);
 
   lua_settop(L, base);
 }

@@ -1095,9 +1095,13 @@ LUA_API void *lua_upvalueid(lua_State *L, int idx, int n)
   TValue snap;
   GCfunc *fn = funcV(index2adr_read(L, idx, &snap));
   n--;
-  lj_checkapi((uint32_t)n < fn->l.nupvalues, "bad upvalue %d", n);
-  return isluafunc(fn) ? (void *)func_uvptr_acq(&fn->l, (uint32_t)n) :
-			 (void *)&fn->c.upvalue[n];
+  if (isluafunc(fn)) {
+    lj_checkapi((uint32_t)n < fn->l.nupvalues, "bad upvalue %d", n+1);
+    return (void *)func_uvptr_acq(&fn->l, (uint32_t)n);
+  } else {
+    lj_checkapi((uint32_t)n < fn->c.nupvalues, "bad upvalue %d", n+1);
+    return (void *)&fn->c.upvalue[n];
+  }
 }
 
 LUA_API void lua_upvaluejoin(lua_State *L, int idx1, int n1, int idx2, int n2)

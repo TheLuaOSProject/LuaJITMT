@@ -12,7 +12,6 @@ has already acquired the cell value.
 
 Validation:
 - `make -C src -j$(getconf _NPROCESSORS_ONLN)`
-- `tools/ci/m5_upvalue_publish_gc.sh` (restored as a direct static+runtime
-  guard)
+- `tools/ci/lua_test.sh m5_upvalue_publish_gc`
 - `tools/ci/m4_threading_upvalue.sh`
 - direct `debug.getupvalue()` / `debug.setupvalue()` smoke
