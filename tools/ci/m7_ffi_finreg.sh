@@ -401,8 +401,4 @@ if hits=$(awk '
   printf '%s\n' 'raw CType info/size reads are forbidden in ffi.gc(); use ctype_info_acq() or ctype_size_acq()' >&2
   exit 1
 fi
-"$ROOT/tools/ci/lua_test.sh" m7_ffi_finreg
-cc -std=gnu99 -O2 -Wall -Wextra -Werror -mcx16 -I"$ROOT/src" \
-  "$ROOT/tests/t-ffi-finreg-free-invariant.c" "$ROOT/src/libluajit.a" \
-  -lm -ldl -pthread -o /tmp/lj_t-ffi-finreg-free-invariant
-/tmp/lj_t-ffi-finreg-free-invariant
+exec "$ROOT/tools/ci/lua_test.sh" m7_ffi_finreg

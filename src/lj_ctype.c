@@ -1291,6 +1291,23 @@ int lj_ctype_size_snapshot(CTState *cts, CTypeID id, CTSize *szp)
   }
 }
 
+/* Wait/retry helper for scalar size only. Callers must refetch CType pointers
+** after this returns if they need to retain or return a CType across the wait.
+*/
+int lj_ctype_size_wait(lua_State *L, CTState *cts, CTypeID id, CTSize *szp)
+{
+  for (;;) {
+    int ok = lj_ctype_size_snapshot(cts, id, szp);
+    if (ok > 0)
+      return 1;
+    if (ok == 0) {
+      *szp = CTSIZE_INVALID;
+      return 0;
+    }
+    lj_ctype_parse_wait(cts, L, ctype_parse_token_acq(cts));
+  }
+}
+
 /* Sequence-checked enum string constant lookup for stable readers. */
 int lj_ctype_enumconst_snapshot(CTState *cts, const CType *root,
 				GCstr *name, CTSize *valp, CTypeID *cidp)

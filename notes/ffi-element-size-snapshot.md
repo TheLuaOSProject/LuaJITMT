@@ -9,7 +9,8 @@ already-published pointer element types serialize with `ffi.cdef()`.
 
 ## Change
 
-Added `lj_ctype_size_snapshot(cts, id, &sz)`.
+Added `lj_ctype_size_snapshot(cts, id, &sz)` and
+`lj_ctype_size_wait(L, cts, id, &sz)`.
 
 - Acquire-loads `CTState.parse_token` and rejects odd parser windows.
 - Snapshots the current CType table header and top.
@@ -17,7 +18,12 @@ Added `lj_ctype_size_snapshot(cts, id, &sz)`.
   `CType.size`.
 - Rechecks the same even parser sequence before accepting the size.
 - Returns `-1` for active/overlapping parser work or inconsistent table
-  snapshots so callers keep their existing locked fallback.
+  snapshots so stable readers can park in native time and retry without
+  acquiring the parser token.
+
+`lj_ctype_size_wait()` retries by `CTypeID` and only stabilizes the scalar
+size result. Callers that need a `CType *` after the wait must refetch it from
+the current table.
 
 Routed the stable path through this helper in:
 
@@ -25,6 +31,12 @@ Routed the stable path through this helper in:
 - `carith_ptr()` for interpreted pointer add/sub/diff.
 - `recff_cdata_index()` and `crec_arith_ptr()` for recorder-side cdata numeric
   indexing and pointer arithmetic specialization.
+
+Follow-up cleanup removed the parser-lock fallback from the interpreted
+numeric cdata indexing and pointer arithmetic readers. `lj_cdata_index_l()`
+refetches `ct/info/size` after any wait before returning the element type.
+`carith_ptr()` refreshes cached `CDArith` `CType *` values before falling
+through to metamethod/error handling after a wait.
 
 The helper intentionally matches `lj_ctype_size()`: it skips attributes, does
 not support VLA/VLS, and returns `CTSIZE_INVALID` for incomplete/no-size types.
@@ -34,6 +46,10 @@ not support VLA/VLS, and returns `CTSIZE_INVALID` for incomplete/no-size types.
 Added `tests/t-ffi-element-size-snapshot.c`, wired into
 `m7_ffi_typeinfo_snapshot`. It verifies stable interpreted and traced numeric
 cdata indexing plus pointer arithmetic do not advance the cparser sequence.
+Follow-up coverage now holds the parser token, runs numeric cdata indexing,
+pointer addition, and pointer difference, confirms the Lua thread parks in
+native wait, and verifies the parser sequence only advances by the helper
+release. This turns the old no-lock source-shape expectation into behavior.
 The existing rollback reader remains in the same suite and still covers
 numeric indexing and pointer arithmetic during failed parser rollback.
 
@@ -45,3 +61,5 @@ numeric indexing and pointer arithmetic during failed parser rollback.
 - `tools/ci/lua_test.sh m7_ffi_cdata_get_l`
 - `tools/ci/lua_test.sh m7_ffi_carith_l`
 - `tools/ci/lua_test.sh m7_ffi_jit_cnew`
+- `tools/ci/m7_ffi_typeinfo_snapshot.sh`
+- `tools/ci/lua_test.sh m7_ffi_carith_l m7_ffi_cdata_get_l m7_ffi_cparse_rollback`

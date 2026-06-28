@@ -29,6 +29,14 @@ typedef struct CDArith {
   CTSize enumval[2];
 } CDArith;
 
+static void carith_refresh_ctypes(CTState *cts, CDArith *ca)
+{
+  MSize i;
+  for (i = 0; i < 2; i++)
+    if (ca->id[i] != 0)
+      ca->ct[i] = ctype_get(cts, ca->id[i]);
+}
+
 /* Check arguments for arithmetic metamethods. */
 static int carith_checkarg(lua_State *L, CTState *cts, CDArith *ca)
 {
@@ -143,18 +151,13 @@ static int carith_ptr(lua_State *L, CTState *cts, CDArith *ca, MMS mm)
       if (!lj_cconv_compatptr(cts, ctp, ca->ct[1], CCF_IGNQUAL))
 	return 0;
       if (mm == MM_sub) {  /* Pointer difference. */
+	CTypeID elemid = ctype_cid(pinfo);
 	intptr_t diff;
-	int ok = lj_ctype_size_snapshot(cts, ctype_cid(pinfo), &sz);
-	if (ok < 0) {
-	  lj_ctype_parse_lock(cts, L);
-	  /* 11.2: cdata pointer arithmetic readers wait out parser rollback. */
-	  sz = lj_ctype_size(cts, ctype_cid(pinfo));  /* Element size. */
-	  lj_ctype_parse_unlock(cts);
-	} else if (ok == 0) {
-	  sz = CTSIZE_INVALID;
-	}
-	if (sz == 0 || sz == CTSIZE_INVALID)
+	(void)lj_ctype_size_wait(L, cts, elemid, &sz);
+	if (sz == 0 || sz == CTSIZE_INVALID) {
+	  carith_refresh_ctypes(cts, ca);
 	  return 0;
+	}
 	diff = ((intptr_t)pp - (intptr_t)pp2) / (int32_t)sz;
 	/* All valid pointer differences on x64 are in (-2^47, +2^47),
 	** which fits into a double without loss of precision.
@@ -187,22 +190,16 @@ static int carith_ptr(lua_State *L, CTState *cts, CDArith *ca, MMS mm)
     return 0;
   }
   {
-    int ok = lj_ctype_size_snapshot(cts, ctype_cid(pinfo), &sz);
-    if (ok < 0) {
-      lj_ctype_parse_lock(cts, L);
-      /* 11.2: cdata pointer arithmetic readers wait out parser rollback. */
-      sz = lj_ctype_size(cts, ctype_cid(pinfo));  /* Element size. */
-      lj_ctype_parse_unlock(cts);
-    } else if (ok == 0) {
-      sz = CTSIZE_INVALID;
+    CTypeID elemid = ctype_cid(pinfo);
+    (void)lj_ctype_size_wait(L, cts, elemid, &sz);
+    if (sz == CTSIZE_INVALID) {
+      carith_refresh_ctypes(cts, ca);
+      return 0;
     }
+    pp += idx*(int32_t)sz;  /* Compute pointer + index. */
+    id = lj_ctype_intern_l(L, cts, CTINFO(CT_PTR, CTALIGN_PTR|elemid),
+			   CTSIZE_PTR);
   }
-  if (sz == CTSIZE_INVALID)
-    return 0;
-  pp += idx*(int32_t)sz;  /* Compute pointer + index. */
-  id = lj_ctype_intern_l(L, cts,
-			 CTINFO(CT_PTR, CTALIGN_PTR|ctype_cid(pinfo)),
-			 CTSIZE_PTR);
   cd = lj_cdata_new_l(L, cts, id, CTSIZE_PTR);
   *(uint8_t **)cdataptr(cd) = pp;
   setcdataV(L, L->top-1, cd);

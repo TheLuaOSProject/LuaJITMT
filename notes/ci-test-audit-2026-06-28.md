@@ -2,12 +2,13 @@
 
 ## Inventory
 
-- `tools/ci` currently has 68 shell scripts.
-- 62 scripts call `tools/ci/lua_test.sh` after doing real guard or orchestration
+- `tools/ci` currently has 66 shell scripts.
+- Most scripts call `tools/ci/lua_test.sh` after doing real guard or orchestration
   work; zero pure alias wrappers remain.
-- About 62 scripts still embed local `awk`/`grep`/`sed` source guards before
+- About 60 scripts still embed local `awk`/`grep`/`sed` source guards before
   calling the Lua suite.
-- The Lua suites/helpers had at least 45 explicit clean-build calls.
+- `tools/ci/lua_test.sh --list` exposes 100+ named Lua-suite cases.
+- The Lua suites/helpers still contain many explicit clean-build calls.
 
 ## Problems Found
 
@@ -94,6 +95,14 @@
   `lua_strlen`, `lua_open`, `lua_getregistry`, `lua_getgccount`,
   `lua_Chunkreader`, and `lua_Chunkwriter`; repo-internal call sites now use
   the canonical APIs directly.
+- Moved `t-ffi-finreg-free-invariant.c` into the `m7_ffi_finreg` Lua-suite
+  case and removed the ad hoc hardcoded `/tmp` compile from
+  `tools/ci/m7_ffi_finreg.sh`.
+- Removed the exact parser-token STOPREQ helper-spelling guard from
+  `m7_ffi_cdef_token`; `t-ffi-cdef-token-stopreq.c` now owns the behavior
+  contract for sticky STOPREQ cleanup and fresh STOPREQ while parked.
+- Converted the element-size parser-lock-fallback expectation into active-token
+  behavior coverage in `t-ffi-element-size-snapshot.c`.
 
 Verification for the alias removal:
 

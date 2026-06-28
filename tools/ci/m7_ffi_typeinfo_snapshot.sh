@@ -96,6 +96,27 @@ if hits=$(grep -nE -- 'lj_ctype_enumconst_wait[[:space:]]*[(][^)]*const[[:space:
   printf '%s\n' 'enum constant wait helpers must take CTypeID and refetch after native waits' >&2
   exit 1
 fi
+if hits=$(grep -nE -- 'cdata (pointer arithmetic|numeric-key) readers wait out parser rollback' \
+    "$ROOT/src/lj_carith.c" \
+    "$ROOT/src/lj_cdata.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'cdata element-size readers must use size wait/retry instead of parser-lock fallback lookups' >&2
+  exit 1
+fi
+if hits=$(grep -nE -- 'lj_ctype_size_snapshot[[:space:]]*[(]' \
+    "$ROOT/src/lj_carith.c" \
+    "$ROOT/src/lj_cdata.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'interpreted cdata element-size readers must use lj_ctype_size_wait()' >&2
+  exit 1
+fi
+if hits=$(grep -nE -- 'lj_ctype_size_wait[[:space:]]*[(][^)]*(const[[:space:]]+)?CType[[:space:]]*[*]' \
+    "$ROOT/src/lj_ctype.c" \
+    "$ROOT/src/lj_ctype.h" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'ctype size wait helpers must take CTypeID and refetch after native waits' >&2
+  exit 1
+fi
 if hits=$(awk '
   /^static int ffi_typecmp_compatptr\(/ ||
   /^static int ffi_istype_snapshot\(/ { in_fn = 1 }

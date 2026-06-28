@@ -327,19 +327,17 @@ collect_attrib:
     idx = lj_num2int_type(numV(key), ptrdiff_t);
   integer_key:
     if (ctype_ispointer(info)) {
+      CTypeID elemid = ctype_cid(info);
       CTSize sz;
-      int ok = lj_ctype_size_snapshot(cts, ctype_cid(info), &sz);
-      if (ok < 0) {
-	lj_ctype_parse_lock(cts, L);
-	/* 11.2: cdata numeric-key readers wait out parser rollback. */
-	sz = lj_ctype_size(cts, ctype_cid(info));  /* Element size. */
-	lj_ctype_parse_unlock(cts);
-      } else if (ok == 0) {
-	sz = CTSIZE_INVALID;
-      }
+      (void)lj_ctype_size_wait(L, cts, elemid, &sz);
       if (sz == CTSIZE_INVALID) {
 	lj_err_caller(L, LJ_ERR_FFI_INVSIZE);
       }
+      ct = ctype_get(cts, id);
+      info = ctype_info_acq(ct);
+      size = ctype_size_acq(ct);
+      lj_assertCTS(ctype_ispointer(info) && ctype_cid(info) == elemid,
+		   "cdata numeric index type changed across ctype wait");
       if (ctype_isptr(info)) {
 	p = (uint8_t *)cdata_getptr(p, size);
       } else if ((info & (CTF_VECTOR|CTF_COMPLEX))) {
