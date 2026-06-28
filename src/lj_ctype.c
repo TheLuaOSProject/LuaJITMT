@@ -1318,6 +1318,88 @@ int lj_ctype_info_wait(lua_State *L, CTState *cts, CTypeID id,
   }
 }
 
+/* Sequence-checked ctype metamethod lookup for stable interpreter readers. */
+static int ctype_metatv_snapshot(CTState *cts, TValue *out, CTypeID id, MMS mm)
+{
+  uint32_t seq0 = ctype_parse_token_acq(cts);
+  CTypeTab *tabh;
+  CTypeID top;
+  CType ct;
+  CTInfo info;
+  MSize budget;
+  cTValue *tv = NULL;
+  if (seq0 & 1u)
+    return -1;
+  top = ctype_top_acq(cts);
+  tabh = ctype_tabh_acq(cts);
+  budget = top ? (MSize)top * 4u : 1u;
+  for (;;) {
+    if (budget-- == 0)
+      return -1;
+    if (!ctype_snapshot_copy(tabh, top, id, &ct))
+      return ctype_snapshot_done(cts, seq0, 0);
+    info = ctype_info_acq(&ct);
+    if (!(ctype_isattrib(info) || ctype_isref(info)))
+      break;
+    id = ctype_cid(info);
+  }
+  if (ctype_isptr(info)) {
+    CType cct;
+    CTypeID cid = ctype_cid(info);
+    if (budget-- == 0)
+      return -1;
+    if (!ctype_snapshot_copy(tabh, top, cid, &cct))
+      return ctype_snapshot_done(cts, seq0, 0);
+    if (ctype_isfunc(ctype_info_acq(&cct))) {
+      GCtab *miscmap;
+      TValue tabv;
+      if (ctype_snapshot_done(cts, seq0, 1) < 0)
+	return -1;
+      miscmap = ctype_miscmap_acq(cts);
+      tv = miscmap ? lj_tab_getstr(miscmap, &cts->g->strempty) : NULL;
+      if (tv) {
+	lj_tv_load_acq(&tabv, tv);
+	if (tvistab(&tabv)) {
+	  tv = lj_tab_getstr(tabV(&tabv), mmname_str(cts->g, mm));
+	  if (tv) {
+	    lj_tv_load_acq(out, tv);
+	    return tvisnil(out) ? 0 : 1;
+	  }
+	}
+      }
+      setnilV(out);
+      return 0;
+    }
+  }
+  if (ctype_snapshot_done(cts, seq0, 1) < 0)
+    return -1;
+  {
+    GCtab *mt = ctype_meta_tab(cts, id);
+    if (mt) {
+      tv = lj_tab_getstr(mt, mmname_str(cts->g, mm));
+      if (tv) {
+	lj_tv_load_acq(out, tv);
+	return tvisnil(out) ? 0 : 1;
+      }
+    }
+  }
+  setnilV(out);
+  return 0;
+}
+
+cTValue *lj_ctype_metatv_wait(lua_State *L, CTState *cts, TValue *out,
+			      CTypeID id, MMS mm)
+{
+  for (;;) {
+    int ok = ctype_metatv_snapshot(cts, out, id, mm);
+    if (ok > 0)
+      return out;
+    if (ok == 0)
+      return NULL;
+    lj_ctype_parse_wait(cts, L, ctype_parse_token_acq(cts));
+  }
+}
+
 /* -- C type information -------------------------------------------------- */
 
 /* Follow references and get raw type for a C type ID. */

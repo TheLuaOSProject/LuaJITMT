@@ -1264,6 +1264,8 @@ LJ_FUNC CTInfo lj_ctype_info_raw(CTState *cts, CTypeID id, CTSize *szp);
 LJ_FUNC cTValue *lj_ctype_meta(CTState *cts, CTypeID id, MMS mm);
 LJ_FUNC cTValue *lj_ctype_metatv(CTState *cts, TValue *out,
 				 CTypeID id, MMS mm);
+LJ_FUNC cTValue *lj_ctype_metatv_wait(lua_State *L, CTState *cts,
+				      TValue *out, CTypeID id, MMS mm);
 LJ_FUNC GCstr *lj_ctype_repr(lua_State *L, CTypeID id, GCstr *name);
 LJ_FUNC GCstr *lj_ctype_repr_int64(lua_State *L, uint64_t n, int isunsigned);
 LJ_FUNC GCstr *lj_ctype_repr_complex(lua_State *L, void *sp, CTSize size);

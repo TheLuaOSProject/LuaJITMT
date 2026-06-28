@@ -284,17 +284,33 @@ static int lj_carith_meta(lua_State *L, CTState *cts, CDArith *ca, MMS mm)
   cTValue *tv = NULL;
   if (tviscdata(L->base)) {
     CTypeID id = cdataV(L->base)->ctypeid;
-    CType *ct = ctype_raw(cts, id);
-    CTInfo info = ctype_info_acq(ct);
-    if (ctype_isptr(info)) id = ctype_cid(info);
-    tv = lj_ctype_metatv(cts, &metatv, id, mm);
+    CType snap;
+    CTypeID rid;
+    CTInfo info;
+    CTSize size;
+    int ok = lj_ctype_info_snapshot(cts, id, &info, &size, &rid, &snap);
+    if (ok <= 0)
+      ok = lj_ctype_info_wait(L, cts, id, &info, &size, &rid, &snap);
+    if (ok > 0) {
+      info = ctype_info_acq(&snap);
+      if (ctype_isptr(info)) id = ctype_cid(info);
+      tv = lj_ctype_metatv_wait(L, cts, &metatv, id, mm);
+    }
   }
   if (!tv && L->base+1 < L->top && tviscdata(L->base+1)) {
     CTypeID id = cdataV(L->base+1)->ctypeid;
-    CType *ct = ctype_raw(cts, id);
-    CTInfo info = ctype_info_acq(ct);
-    if (ctype_isptr(info)) id = ctype_cid(info);
-    tv = lj_ctype_metatv(cts, &metatv, id, mm);
+    CType snap;
+    CTypeID rid;
+    CTInfo info;
+    CTSize size;
+    int ok = lj_ctype_info_snapshot(cts, id, &info, &size, &rid, &snap);
+    if (ok <= 0)
+      ok = lj_ctype_info_wait(L, cts, id, &info, &size, &rid, &snap);
+    if (ok > 0) {
+      info = ctype_info_acq(&snap);
+      if (ctype_isptr(info)) id = ctype_cid(info);
+      tv = lj_ctype_metatv_wait(L, cts, &metatv, id, mm);
+    }
   }
   if (!tv) {
     const char *repr[2];

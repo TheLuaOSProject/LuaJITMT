@@ -414,14 +414,20 @@ ctypeid_done:
     }
   }
   if (ctype_isptr(info)) {  /* Automatically perform '->'. */
-    CTypeID cid;
-    int ok = lj_ctype_ptrstruct_wait(L, cts, id, &cid);
+    CTypeID cid, elemid = ctype_cid(info);
+    CType ssnap;
+    CTInfo sinfo;
+    CTSize ssize;
+    int ok = lj_ctype_info_wait(L, cts, elemid, &sinfo, &ssize, &cid,
+				&ssnap);
     ct = ctype_get(cts, id);
     info = ctype_info_acq(ct);
     size = ctype_size_acq(ct);
-    if (ok > 0) {
-      lj_assertCTS(ctype_isptr(info), "cdata auto-deref type changed");
+    if (ok > 0 && ctype_isstruct(sinfo)) {
+      lj_assertCTS(ctype_isptr(info) && ctype_cid(info) == elemid,
+		   "cdata auto-deref type changed");
       p = (uint8_t *)cdata_getptr(p, size);
+      *qual |= ((info|sinfo) & CTF_QUAL);
       id = cid;
       ct = ctype_get(cts, id);
       info = ctype_info_acq(ct);

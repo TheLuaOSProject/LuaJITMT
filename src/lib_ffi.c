@@ -153,7 +153,7 @@ static int32_t ffi_checkint(lua_State *L, int narg)
 static int ffi_index_meta(lua_State *L, CTState *cts, CTypeID id, MMS mm)
 {
   TValue metatv;
-  cTValue *tv = lj_ctype_metatv(cts, &metatv, id, mm);
+  cTValue *tv = lj_ctype_metatv_wait(L, cts, &metatv, id, mm);
   TValue *base = L->base;
   if (!tv) {
     const char *s;
@@ -273,7 +273,6 @@ LJLIB_CF(ffi_meta___call)	LJLIB_REC(cdata_call)
   CTState *cts = ctype_cts(L);
   GCcdata *cd = ffi_checkcdata(L, 1);
   CTypeID id = cd->ctypeid;
-  CType *ct;
   TValue metatv;
   cTValue *tv;
   MMS mm = MM_call;
@@ -286,12 +285,21 @@ LJLIB_CF(ffi_meta___call)	LJLIB_REC(cdata_call)
       return ret;
   }
   /* Handle ctype __call/__new metamethod. */
-  ct = ctype_raw(cts, id);
   {
-    CTInfo info = ctype_info_acq(ct);
+    CType snap;
+    CTypeID rid;
+    CTInfo info;
+    CTSize size;
+    int ok = lj_ctype_info_snapshot(cts, id, &info, &size, &rid, &snap);
+    if (ok <= 0)
+      ok = lj_ctype_info_wait(L, cts, id, &info, &size, &rid, &snap);
+    if (ok <= 0)
+      lj_err_callerv(L, LJ_ERR_FFI_BADCALL,
+		     strdata(lj_ctype_repr(L, id, NULL)));
+    info = ctype_info_acq(&snap);
     if (ctype_isptr(info)) id = ctype_cid(info);
   }
-  tv = lj_ctype_metatv(cts, &metatv, id, mm);
+  tv = lj_ctype_metatv_wait(L, cts, &metatv, id, mm);
   if (tv)
     return lj_meta_tailcall(L, tv);
   else if (mm == MM_call)
@@ -395,7 +403,8 @@ LJLIB_CF(ffi_meta___tostring)
       if (ctype_isstruct(info) || ctype_isvector(info)) {
 	/* Handle ctype __tostring metamethod. */
 	TValue metatv;
-	cTValue *tv = lj_ctype_metatv(cts, &metatv, rid, MM_tostring);
+	cTValue *tv = lj_ctype_metatv_wait(L, cts, &metatv, rid,
+					   MM_tostring);
 	if (tv)
 	  return lj_meta_tailcall(L, tv);
       }
@@ -411,14 +420,22 @@ static int ffi_pairs(lua_State *L, MMS mm)
 {
   CTState *cts = ctype_cts(L);
   CTypeID id = ffi_checkcdata(L, 1)->ctypeid;
-  CType *ct = ctype_raw(cts, id);
   TValue metatv;
   cTValue *tv;
   {
-    CTInfo info = ctype_info_acq(ct);
+    CType snap;
+    CTypeID rid;
+    CTInfo info;
+    CTSize size;
+    int ok = lj_ctype_info_snapshot(cts, id, &info, &size, &rid, &snap);
+    if (ok <= 0)
+      ok = lj_ctype_info_wait(L, cts, id, &info, &size, &rid, &snap);
+    if (ok <= 0)
+      lj_err_arg(L, 1, LJ_ERR_FFI_INVTYPE);
+    info = ctype_info_acq(&snap);
     if (ctype_isptr(info)) id = ctype_cid(info);
   }
-  tv = lj_ctype_metatv(cts, &metatv, id, mm);
+  tv = lj_ctype_metatv_wait(L, cts, &metatv, id, mm);
   if (!tv)
     lj_err_callerv(L, LJ_ERR_FFI_BADMM, strdata(lj_ctype_repr(L, id, NULL)),
 		   strdata(mmname_str(G(L), mm)));
@@ -740,7 +757,7 @@ got_layout:
   if (ctype_isstruct(ctype_info_acq(ct))) {
     /* Handle ctype __gc metamethod. Use the fast lookup here. */
     TValue gctv;
-    cTValue *tv = lj_ctype_metatv(cts, &gctv, id, MM_gc);
+    cTValue *tv = lj_ctype_metatv_wait(L, cts, &gctv, id, MM_gc);
     if (tv)
       lj_cdata_setfin(L, cd, gcV(tv), itype(tv));
   }
