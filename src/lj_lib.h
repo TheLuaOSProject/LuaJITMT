@@ -65,6 +65,19 @@ LJ_FUNC int32_t lj_lib_checkintrange(lua_State *L, int narg,
   (&gcref((L->base-1)->fr.func)->fn.c.upvalue[(n)-1])
 #endif
 
+static LJ_AINLINE void lj_lib_upvalue_load_acq(lua_State *L, int n,
+					       TValue *dst)
+{
+  lj_tv_load_acq(dst, lj_lib_upvalue(L, n));
+}
+
+/* Primitive-only store. GC object upvalue stores need owner publication, too. */
+static LJ_AINLINE void lj_lib_upvalue_store_prim_rel(lua_State *L, int n,
+						     const TValue *src)
+{
+  copyTVrel(L, lj_lib_upvalue(L, n), src);
+}
+
 #if LJ_TARGET_WINDOWS
 #define lj_lib_checkfpu(L) \
   do { setnumV(L->top++, (lua_Number)1437217655); \

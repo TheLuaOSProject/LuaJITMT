@@ -527,12 +527,19 @@ LJLIB_CF(string_match)
 
 LJLIB_NOREG LJLIB_CF(string_gmatch_aux)
 {
-  const char *p = strVdata(lj_lib_upvalue(L, 2));
-  GCstr *str = strV(lj_lib_upvalue(L, 1));
-  const char *s = strdata(str);
-  TValue *tvpos = lj_lib_upvalue(L, 3);
-  const char *src = s + tvpos->u32.lo;
+  TValue tvpat, tvstr, tvpos;
+  const char *p;
+  GCstr *str;
+  const char *s;
+  const char *src;
   MatchState ms;
+  lj_lib_upvalue_load_acq(L, 2, &tvpat);
+  lj_lib_upvalue_load_acq(L, 1, &tvstr);
+  lj_lib_upvalue_load_acq(L, 3, &tvpos);
+  p = strVdata(&tvpat);
+  str = strV(&tvstr);
+  s = strdata(str);
+  src = s + numberVint(&tvpos);
   ms.L = L;
   ms.src_init = s;
   ms.src_end = s + str->len;
@@ -542,7 +549,8 @@ LJLIB_NOREG LJLIB_CF(string_gmatch_aux)
     if ((e = match(&ms, src, p)) != NULL) {
       int32_t pos = (int32_t)(e - s);
       if (e == src) pos++;  /* Ensure progress for empty match. */
-      tvpos->u32.lo = (uint32_t)pos;
+      setintV(&tvpos, pos);
+      lj_lib_upvalue_store_prim_rel(L, 3, &tvpos);
       return push_captures(&ms, src, e);
     }
   }
@@ -554,7 +562,7 @@ LJLIB_CF(string_gmatch)
   lj_lib_checkstr(L, 1);
   lj_lib_checkstr(L, 2);
   L->top = L->base+3;
-  (L->top-1)->u64 = 0;
+  setintV(L->top-1, 0);
   lj_lib_pushcc(L, lj_cf_string_gmatch_aux, FF_string_gmatch_aux, 3);
   return 1;
 }

@@ -1,6 +1,7 @@
 local build = require("suite_build")
 local runtime = require("suite_runtime")
 local cellops = require("suite_cell_ops")
+local utils = require("suite_utils")
 
 local run_luajit = runtime.luajit
 local run_stock = runtime.run_stock
@@ -474,6 +475,16 @@ print("proto-knum-acq-smoke OK")
 ]=]
 end
 
+local function assert_cclosure_upvalue_source_guards(t)
+  local libstring = utils.read_source_file(t:path("src", "lib_string.c"))
+  if libstring:find("tvpos->u32.lo", 1, true) then
+    error("string.gmatch must update its position upvalue as a full TValue", 2)
+  end
+  if libstring:find("(L->top-1)->u64 = 0", 1, true) then
+    error("string.gmatch must initialize its position upvalue as a TValue", 2)
+  end
+end
+
 return function(add)
   add({
     name = "m5_state_owner",
@@ -506,8 +517,11 @@ return function(add)
     name = "m5_upvalue_publish_gc",
     description = "closed-upvalue GC object publication behavior",
     run = function(t)
+      assert_cclosure_upvalue_source_guards(t)
       build_and_run_luajit_script(t, "t-threading-upvalue.lua", nil,
                                   { joff = true })
+      build_and_run_c(t, t:tmp("lj_t-cclosure-upvalue-snapshot"),
+                      "t-cclosure-upvalue-snapshot.c")
       print("M5 closed-upvalue GC publication behavior passed")
     end
   })

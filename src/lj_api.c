@@ -74,6 +74,53 @@ static LJ_AINLINE TValue *index2adr_check(lua_State *L, int idx)
   return o;
 }
 
+static LJ_AINLINE int index_iscupvalue(int idx)
+{
+  return idx < LUA_GLOBALSINDEX;
+}
+
+static LJ_AINLINE TValue *index2adr_read(lua_State *L, int idx, TValue *snap)
+{
+  TValue *o = index2adr(L, idx);
+  if (index_iscupvalue(idx) && o != niltv(L)) {
+    lj_tv_load_acq(snap, o);
+    return snap;
+  }
+  return o;
+}
+
+static LJ_AINLINE TValue *index2adr_check_read(lua_State *L, int idx,
+					       TValue *snap)
+{
+  TValue *o = index2adr_read(L, idx, snap);
+  lj_checkapi(o != niltv(L), "invalid stack slot %d", idx);
+  return o;
+}
+
+static LJ_AINLINE void index2adr_cupvalue_store_rel(lua_State *L, int idx,
+						    const TValue *src)
+{
+  TValue *o = index2adr(L, idx);
+  if (index_iscupvalue(idx) && o != niltv(L)) {
+    GCfunc *fn = curr_func(L);
+    copyTVrel(L, o, src);
+    lj_gc_pubobjtv(L, fn, src);
+  }
+}
+
+static GCstr *index2adr_number_tostr(lua_State *L, int idx, TValue *o)
+{
+  GCstr *s = lj_strfmt_number(L, o);
+  if (index_iscupvalue(idx)) {
+    TValue tv;
+    setstrV(L, &tv, s);
+    index2adr_cupvalue_store_rel(L, idx, &tv);
+  } else {
+    setstrV(L, o, s);
+  }
+  return s;
+}
+
 static TValue *index2adr_stack(lua_State *L, int idx)
 {
   if (idx > 0) {
@@ -257,12 +304,14 @@ LUA_API void lua_replace(lua_State *L, int idx)
 
 LUA_API void lua_copy(lua_State *L, int fromidx, int toidx)
 {
-  copy_slot(L, index2adr(L, fromidx), toidx);
+  TValue snap;
+  copy_slot(L, index2adr_read(L, fromidx, &snap), toidx);
 }
 
 LUA_API void lua_pushvalue(lua_State *L, int idx)
 {
-  copyTV(L, L->top, index2adr(L, idx));
+  TValue snap;
+  copyTV(L, L->top, index2adr_read(L, idx, &snap));
   incr_top(L);
 }
 
@@ -270,7 +319,8 @@ LUA_API void lua_pushvalue(lua_State *L, int idx)
 
 LUA_API int lua_type(lua_State *L, int idx)
 {
-  cTValue *o = index2adr(L, idx);
+  TValue snap;
+  cTValue *o = index2adr_read(L, idx, &snap);
   if (tvisnumber(o)) {
     return LUA_TNUMBER;
 #if LJ_64 && !LJ_GC64
@@ -299,7 +349,8 @@ LUALIB_API void luaL_checktype(lua_State *L, int idx, int tt)
 
 LUALIB_API void luaL_checkany(lua_State *L, int idx)
 {
-  if (index2adr(L, idx) == niltv(L))
+  TValue snap;
+  if (index2adr_read(L, idx, &snap) == niltv(L))
     lj_err_arg(L, idx, LJ_ERR_NOVAL);
 }
 
@@ -311,40 +362,46 @@ LUA_API const char *lua_typename(lua_State *L, int t)
 
 LUA_API int lua_iscfunction(lua_State *L, int idx)
 {
-  cTValue *o = index2adr(L, idx);
+  TValue snap;
+  cTValue *o = index2adr_read(L, idx, &snap);
   return tvisfunc(o) && !isluafunc(funcV(o));
 }
 
 LUA_API int lua_isnumber(lua_State *L, int idx)
 {
-  cTValue *o = index2adr(L, idx);
+  TValue snap;
+  cTValue *o = index2adr_read(L, idx, &snap);
   TValue tmp;
   return (tvisnumber(o) || (tvisstr(o) && lj_strscan_number(strV(o), &tmp)));
 }
 
 LUA_API int lua_isstring(lua_State *L, int idx)
 {
-  cTValue *o = index2adr(L, idx);
+  TValue snap;
+  cTValue *o = index2adr_read(L, idx, &snap);
   return (tvisstr(o) || tvisnumber(o));
 }
 
 LUA_API int lua_isuserdata(lua_State *L, int idx)
 {
-  cTValue *o = index2adr(L, idx);
+  TValue snap;
+  cTValue *o = index2adr_read(L, idx, &snap);
   return (tvisudata(o) || tvislightud(o));
 }
 
 LUA_API int lua_rawequal(lua_State *L, int idx1, int idx2)
 {
-  cTValue *o1 = index2adr(L, idx1);
-  cTValue *o2 = index2adr(L, idx2);
+  TValue snap1, snap2;
+  cTValue *o1 = index2adr_read(L, idx1, &snap1);
+  cTValue *o2 = index2adr_read(L, idx2, &snap2);
   return (o1 == niltv(L) || o2 == niltv(L)) ? 0 : lj_obj_equal(o1, o2);
 }
 
 LUA_API int lua_equal(lua_State *L, int idx1, int idx2)
 {
-  cTValue *o1 = index2adr(L, idx1);
-  cTValue *o2 = index2adr(L, idx2);
+  TValue snap1, snap2;
+  cTValue *o1 = index2adr_read(L, idx1, &snap1);
+  cTValue *o2 = index2adr_read(L, idx2, &snap2);
   if (tvisint(o1) && tvisint(o2)) {
     return intV(o1) == intV(o2);
   } else if (tvisnumber(o1) && tvisnumber(o2)) {
@@ -376,8 +433,9 @@ LUA_API int lua_equal(lua_State *L, int idx1, int idx2)
 
 LUA_API int lua_lessthan(lua_State *L, int idx1, int idx2)
 {
-  cTValue *o1 = index2adr(L, idx1);
-  cTValue *o2 = index2adr(L, idx2);
+  TValue snap1, snap2;
+  cTValue *o1 = index2adr_read(L, idx1, &snap1);
+  cTValue *o2 = index2adr_read(L, idx2, &snap2);
   if (o1 == niltv(L) || o2 == niltv(L)) {
     return 0;
   } else if (tvisint(o1) && tvisint(o2)) {
@@ -399,7 +457,8 @@ LUA_API int lua_lessthan(lua_State *L, int idx1, int idx2)
 
 LUA_API lua_Number lua_tonumber(lua_State *L, int idx)
 {
-  cTValue *o = index2adr(L, idx);
+  TValue snap;
+  cTValue *o = index2adr_read(L, idx, &snap);
   TValue tmp;
   if (LJ_LIKELY(tvisnumber(o)))
     return numberVnum(o);
@@ -411,7 +470,8 @@ LUA_API lua_Number lua_tonumber(lua_State *L, int idx)
 
 LUA_API lua_Number lua_tonumberx(lua_State *L, int idx, int *ok)
 {
-  cTValue *o = index2adr(L, idx);
+  TValue snap;
+  cTValue *o = index2adr_read(L, idx, &snap);
   TValue tmp;
   if (LJ_LIKELY(tvisnumber(o))) {
     if (ok) *ok = 1;
@@ -427,7 +487,8 @@ LUA_API lua_Number lua_tonumberx(lua_State *L, int idx, int *ok)
 
 LUALIB_API lua_Number luaL_checknumber(lua_State *L, int idx)
 {
-  cTValue *o = index2adr(L, idx);
+  TValue snap;
+  cTValue *o = index2adr_read(L, idx, &snap);
   TValue tmp;
   if (LJ_LIKELY(tvisnumber(o)))
     return numberVnum(o);
@@ -438,7 +499,8 @@ LUALIB_API lua_Number luaL_checknumber(lua_State *L, int idx)
 
 LUALIB_API lua_Number luaL_optnumber(lua_State *L, int idx, lua_Number def)
 {
-  cTValue *o = index2adr(L, idx);
+  TValue snap;
+  cTValue *o = index2adr_read(L, idx, &snap);
   TValue tmp;
   if (LJ_LIKELY(tvisnumber(o)))
     return numberVnum(o);
@@ -451,7 +513,8 @@ LUALIB_API lua_Number luaL_optnumber(lua_State *L, int idx, lua_Number def)
 
 LUA_API lua_Integer lua_tointeger(lua_State *L, int idx)
 {
-  cTValue *o = index2adr(L, idx);
+  TValue snap;
+  cTValue *o = index2adr_read(L, idx, &snap);
   TValue tmp;
   lua_Number n;
   if (LJ_LIKELY(tvisint(o))) {
@@ -470,7 +533,8 @@ LUA_API lua_Integer lua_tointeger(lua_State *L, int idx)
 
 LUA_API lua_Integer lua_tointegerx(lua_State *L, int idx, int *ok)
 {
-  cTValue *o = index2adr(L, idx);
+  TValue snap;
+  cTValue *o = index2adr_read(L, idx, &snap);
   TValue tmp;
   lua_Number n;
   if (LJ_LIKELY(tvisint(o))) {
@@ -495,7 +559,8 @@ LUA_API lua_Integer lua_tointegerx(lua_State *L, int idx, int *ok)
 
 LUALIB_API lua_Integer luaL_checkinteger(lua_State *L, int idx)
 {
-  cTValue *o = index2adr(L, idx);
+  TValue snap;
+  cTValue *o = index2adr_read(L, idx, &snap);
   TValue tmp;
   lua_Number n;
   if (LJ_LIKELY(tvisint(o))) {
@@ -514,7 +579,8 @@ LUALIB_API lua_Integer luaL_checkinteger(lua_State *L, int idx)
 
 LUALIB_API lua_Integer luaL_optinteger(lua_State *L, int idx, lua_Integer def)
 {
-  cTValue *o = index2adr(L, idx);
+  TValue snap;
+  cTValue *o = index2adr_read(L, idx, &snap);
   TValue tmp;
   lua_Number n;
   if (LJ_LIKELY(tvisint(o))) {
@@ -535,21 +601,23 @@ LUALIB_API lua_Integer luaL_optinteger(lua_State *L, int idx, lua_Integer def)
 
 LUA_API int lua_toboolean(lua_State *L, int idx)
 {
-  cTValue *o = index2adr(L, idx);
+  TValue snap;
+  cTValue *o = index2adr_read(L, idx, &snap);
   return tvistruecond(o);
 }
 
 LUA_API const char *lua_tolstring(lua_State *L, int idx, size_t *len)
 {
-  TValue *o = index2adr(L, idx);
+  TValue snap;
+  TValue *o = index2adr_read(L, idx, &snap);
   GCstr *s;
   if (LJ_LIKELY(tvisstr(o))) {
     s = strV(o);
   } else if (tvisnumber(o)) {
     lj_gc_check(L);
-    o = index2adr(L, idx);  /* GC may move the stack. */
-    s = lj_strfmt_number(L, o);
-    setstrV(L, o, s);
+    o = index_iscupvalue(idx) ? &snap :
+	index2adr(L, idx);  /* GC may move the stack. */
+    s = index2adr_number_tostr(L, idx, o);
   } else {
     if (len != NULL) *len = 0;
     return NULL;
@@ -560,15 +628,16 @@ LUA_API const char *lua_tolstring(lua_State *L, int idx, size_t *len)
 
 LUALIB_API const char *luaL_checklstring(lua_State *L, int idx, size_t *len)
 {
-  TValue *o = index2adr(L, idx);
+  TValue snap;
+  TValue *o = index2adr_read(L, idx, &snap);
   GCstr *s;
   if (LJ_LIKELY(tvisstr(o))) {
     s = strV(o);
   } else if (tvisnumber(o)) {
     lj_gc_check(L);
-    o = index2adr(L, idx);  /* GC may move the stack. */
-    s = lj_strfmt_number(L, o);
-    setstrV(L, o, s);
+    o = index_iscupvalue(idx) ? &snap :
+	index2adr(L, idx);  /* GC may move the stack. */
+    s = index2adr_number_tostr(L, idx, o);
   } else {
     lj_err_argt(L, idx, LUA_TSTRING);
   }
@@ -579,7 +648,8 @@ LUALIB_API const char *luaL_checklstring(lua_State *L, int idx, size_t *len)
 LUALIB_API const char *luaL_optlstring(lua_State *L, int idx,
 				       const char *def, size_t *len)
 {
-  TValue *o = index2adr(L, idx);
+  TValue snap;
+  TValue *o = index2adr_read(L, idx, &snap);
   GCstr *s;
   if (LJ_LIKELY(tvisstr(o))) {
     s = strV(o);
@@ -588,9 +658,9 @@ LUALIB_API const char *luaL_optlstring(lua_State *L, int idx,
     return def;
   } else if (tvisnumber(o)) {
     lj_gc_check(L);
-    o = index2adr(L, idx);  /* GC may move the stack. */
-    s = lj_strfmt_number(L, o);
-    setstrV(L, o, s);
+    o = index_iscupvalue(idx) ? &snap :
+	index2adr(L, idx);  /* GC may move the stack. */
+    s = index2adr_number_tostr(L, idx, o);
   } else {
     lj_err_argt(L, idx, LUA_TSTRING);
   }
@@ -613,7 +683,8 @@ LUALIB_API int luaL_checkoption(lua_State *L, int idx, const char *def,
 
 LUA_API size_t lua_objlen(lua_State *L, int idx)
 {
-  TValue *o = index2adr(L, idx);
+  TValue snap;
+  TValue *o = index2adr_read(L, idx, &snap);
   if (tvisstr(o)) {
     return strV(o)->len;
   } else if (tvistab(o)) {
@@ -621,8 +692,7 @@ LUA_API size_t lua_objlen(lua_State *L, int idx)
   } else if (tvisudata(o)) {
     return udataV(o)->len;
   } else if (tvisnumber(o)) {
-    GCstr *s = lj_strfmt_number(L, o);
-    setstrV(L, o, s);
+    GCstr *s = index2adr_number_tostr(L, idx, o);
     return s->len;
   } else {
     return 0;
@@ -631,7 +701,8 @@ LUA_API size_t lua_objlen(lua_State *L, int idx)
 
 LUA_API lua_CFunction lua_tocfunction(lua_State *L, int idx)
 {
-  cTValue *o = index2adr(L, idx);
+  TValue snap;
+  cTValue *o = index2adr_read(L, idx, &snap);
   if (tvisfunc(o)) {
     BCOp op = bc_op(*mref(funcV(o)->c.pc, BCIns));
     if (op == BC_FUNCC || op == BC_FUNCCW)
@@ -642,7 +713,8 @@ LUA_API lua_CFunction lua_tocfunction(lua_State *L, int idx)
 
 LUA_API void *lua_touserdata(lua_State *L, int idx)
 {
-  cTValue *o = index2adr(L, idx);
+  TValue snap;
+  cTValue *o = index2adr_read(L, idx, &snap);
   if (tvisudata(o))
     return uddata(udataV(o));
   else if (tvislightud(o))
@@ -653,13 +725,15 @@ LUA_API void *lua_touserdata(lua_State *L, int idx)
 
 LUA_API lua_State *lua_tothread(lua_State *L, int idx)
 {
-  cTValue *o = index2adr(L, idx);
+  TValue snap;
+  cTValue *o = index2adr_read(L, idx, &snap);
   return (!tvisthread(o)) ? NULL : threadV(o);
 }
 
 LUA_API const void *lua_topointer(lua_State *L, int idx)
 {
-  return lj_obj_ptr(G(L), index2adr(L, idx));
+  TValue snap;
+  return lj_obj_ptr(G(L), index2adr_read(L, idx, &snap));
 }
 
 /* -- Stack setters (object creation) ------------------------------------- */
@@ -857,7 +931,8 @@ LUA_API void lua_concat(lua_State *L, int n)
 
 LUA_API void lua_gettable(lua_State *L, int idx)
 {
-  cTValue *t = index2adr_check(L, idx);
+  TValue snap;
+  cTValue *t = index2adr_check_read(L, idx, &snap);
   cTValue *v = lj_meta_tget(L, t, L->top-1);
   if (v == NULL) {
     L->top += 2;
@@ -870,7 +945,8 @@ LUA_API void lua_gettable(lua_State *L, int idx)
 
 LUA_API void lua_getfield(lua_State *L, int idx, const char *k)
 {
-  cTValue *v, *t = index2adr_check(L, idx);
+  TValue snap;
+  cTValue *v, *t = index2adr_check_read(L, idx, &snap);
   TValue key;
   setstrV(L, &key, lj_str_newz(L, k));
   v = lj_meta_tget(L, t, &key);
@@ -886,7 +962,8 @@ LUA_API void lua_getfield(lua_State *L, int idx, const char *k)
 
 LUA_API void lua_rawget(lua_State *L, int idx)
 {
-  cTValue *t = index2adr(L, idx);
+  TValue snap;
+  cTValue *t = index2adr_read(L, idx, &snap);
   TValue val;
   lj_checkapi(tvistab(t), "stack slot %d is not a table", idx);
   lj_tv_load_acq(&val, lj_tab_get(L, tabV(t), L->top-1));
@@ -895,7 +972,8 @@ LUA_API void lua_rawget(lua_State *L, int idx)
 
 LUA_API void lua_rawgeti(lua_State *L, int idx, int n)
 {
-  cTValue *v, *t = index2adr(L, idx);
+  TValue snap;
+  cTValue *v, *t = index2adr_read(L, idx, &snap);
   lj_checkapi(tvistab(t), "stack slot %d is not a table", idx);
   v = lj_tab_getint(tabV(t), n);
   if (v) {
@@ -910,7 +988,8 @@ LUA_API void lua_rawgeti(lua_State *L, int idx, int n)
 
 LUA_API int lua_getmetatable(lua_State *L, int idx)
 {
-  cTValue *o = index2adr(L, idx);
+  TValue snap;
+  cTValue *o = index2adr_read(L, idx, &snap);
   GCtab *mt = NULL;
   if (tvistab(o))
     mt = tabref_acq(tabV(o)->metatable);
@@ -940,7 +1019,8 @@ LUALIB_API int luaL_getmetafield(lua_State *L, int idx, const char *field)
 
 LUA_API void lua_getfenv(lua_State *L, int idx)
 {
-  cTValue *o = index2adr_check(L, idx);
+  TValue snap;
+  cTValue *o = index2adr_check_read(L, idx, &snap);
   if (tvisfunc(o)) {
     settabV(L, L->top, tabref_acq(funcV(o)->c.env));
   } else if (tvisudata(o)) {
@@ -962,7 +1042,8 @@ LUA_API void lua_getfenv(lua_State *L, int idx)
 
 LUA_API int lua_next(lua_State *L, int idx)
 {
-  cTValue *t = index2adr(L, idx);
+  TValue snap;
+  cTValue *t = index2adr_read(L, idx, &snap);
   int more;
   lj_checkapi(tvistab(t), "stack slot %d is not a table", idx);
   more = lj_tab_next(tabV(t), L->top-1, L->top-1);
@@ -978,9 +1059,11 @@ LUA_API int lua_next(lua_State *L, int idx)
 
 LUA_API const char *lua_getupvalue(lua_State *L, int idx, int n)
 {
+  TValue snap;
   TValue *val;
   GCobj *o;
-  const char *name = lj_debug_uvnamev(index2adr(L, idx), (uint32_t)(n-1), &val, &o);
+  const char *name = lj_debug_uvnamev(index2adr_read(L, idx, &snap),
+				      (uint32_t)(n-1), &val, &o);
   if (name) {
     lj_tv_load_acq(L->top, val);
     incr_top(L);
@@ -990,7 +1073,8 @@ LUA_API const char *lua_getupvalue(lua_State *L, int idx, int n)
 
 LUA_API void *lua_upvalueid(lua_State *L, int idx, int n)
 {
-  GCfunc *fn = funcV(index2adr(L, idx));
+  TValue snap;
+  GCfunc *fn = funcV(index2adr_read(L, idx, &snap));
   n--;
   lj_checkapi((uint32_t)n < fn->l.nupvalues, "bad upvalue %d", n);
   return isluafunc(fn) ? (void *)func_uvptr_acq(&fn->l, (uint32_t)n) :
@@ -999,8 +1083,9 @@ LUA_API void *lua_upvalueid(lua_State *L, int idx, int n)
 
 LUA_API void lua_upvaluejoin(lua_State *L, int idx1, int n1, int idx2, int n2)
 {
-  GCfunc *fn1 = funcV(index2adr(L, idx1));
-  GCfunc *fn2 = funcV(index2adr(L, idx2));
+  TValue snap1, snap2;
+  GCfunc *fn1 = funcV(index2adr_read(L, idx1, &snap1));
+  GCfunc *fn2 = funcV(index2adr_read(L, idx2, &snap2));
   n1--; n2--;
   lj_checkapi(isluafunc(fn1), "stack slot %d is not a Lua function", idx1);
   lj_checkapi(isluafunc(fn2), "stack slot %d is not a Lua function", idx2);
@@ -1015,7 +1100,8 @@ LUA_API void lua_upvaluejoin(lua_State *L, int idx1, int n1, int idx2, int n2)
 
 LUALIB_API void *luaL_testudata(lua_State *L, int idx, const char *tname)
 {
-  cTValue *o = index2adr(L, idx);
+  TValue snap;
+  cTValue *o = index2adr_read(L, idx, &snap);
   if (tvisudata(o)) {
     GCudata *ud = udataV(o);
     cTValue *tv = lj_tab_getstr(tabV(registry(L)), lj_str_newz(L, tname));
@@ -1037,7 +1123,8 @@ LUALIB_API void *luaL_checkudata(lua_State *L, int idx, const char *tname)
 LUA_API void lua_settable(lua_State *L, int idx)
 {
   TValue *o;
-  cTValue *t = index2adr_check(L, idx);
+  TValue snap;
+  cTValue *t = index2adr_check_read(L, idx, &snap);
   GCtab *owner;
   lj_checkapi_slot(2);
   for (;;) {
@@ -1067,7 +1154,8 @@ LUA_API void lua_setfield(lua_State *L, int idx, const char *k)
 {
   TValue *o;
   TValue key;
-  cTValue *t = index2adr_check(L, idx);
+  TValue snap;
+  cTValue *t = index2adr_check_read(L, idx, &snap);
   GCtab *owner;
   lj_checkapi_slot(1);
   setstrV(L, &key, lj_str_newz(L, k));
@@ -1096,7 +1184,8 @@ LUA_API void lua_setfield(lua_State *L, int idx, const char *k)
 
 LUA_API void lua_rawset(lua_State *L, int idx)
 {
-  GCtab *t = tabV(index2adr(L, idx));
+  TValue snap;
+  GCtab *t = tabV(index2adr_read(L, idx, &snap));
   TValue *dst, *key;
   lj_checkapi_slot(2);
   key = L->top-2;
@@ -1114,7 +1203,8 @@ LUA_API void lua_rawset(lua_State *L, int idx)
 
 LUA_API void lua_rawseti(lua_State *L, int idx, int n)
 {
-  GCtab *t = tabV(index2adr(L, idx));
+  TValue snap;
+  GCtab *t = tabV(index2adr_read(L, idx, &snap));
   TValue *dst, *src;
   TValue key;
   lj_checkapi_slot(1);
@@ -1136,7 +1226,8 @@ LUA_API int lua_setmetatable(lua_State *L, int idx)
 {
   global_State *g;
   GCtab *mt;
-  cTValue *o = index2adr_check(L, idx);
+  TValue snap;
+  cTValue *o = index2adr_check_read(L, idx, &snap);
   lj_checkapi_slot(1);
   if (tvisnil(L->top-1)) {
     mt = NULL;
@@ -1172,7 +1263,8 @@ LUA_API int lua_setmetatable(lua_State *L, int idx)
     /* Flush cache, since traces specialize to basemt. But not during __gc. */
     if (lj_trace_flushall_hs(L))
       lj_err_caller(L, LJ_ERR_NOGCMM);
-    o = index2adr(L, idx);  /* Stack may have been reallocated. */
+    o = index_iscupvalue(idx) ? &snap :
+	index2adr(L, idx);  /* Stack may have been reallocated. */
     if (tvisbool(o)) {
       /* NOBARRIER: basemt is a GC root. */
       setgcrefroot(basemt_it(g, LJ_TTRUE), obj2gco(mt));
@@ -1194,7 +1286,8 @@ LUALIB_API void luaL_setmetatable(lua_State *L, const char *tname)
 
 LUA_API int lua_setfenv(lua_State *L, int idx)
 {
-  cTValue *o = index2adr_check(L, idx);
+  TValue snap;
+  cTValue *o = index2adr_check_read(L, idx, &snap);
   LJStateClaim claim;
   GCtab *t;
   int claimed = 0;
@@ -1224,7 +1317,8 @@ LUA_API int lua_setfenv(lua_State *L, int idx)
 
 LUA_API const char *lua_setupvalue(lua_State *L, int idx, int n)
 {
-  cTValue *f = index2adr(L, idx);
+  TValue snap;
+  cTValue *f = index2adr_read(L, idx, &snap);
   TValue *val;
   GCobj *o;
   const char *name;
@@ -1312,9 +1406,10 @@ LUA_API int lua_cpcall(lua_State *L, lua_CFunction func, void *ud)
 LUALIB_API int luaL_callmeta(lua_State *L, int idx, const char *field)
 {
   if (luaL_getmetafield(L, idx, field)) {
+    TValue snap;
     TValue *top = L->top--;
     if (LJ_FR2) setnilV(top++);
-    copyTV(L, top++, index2adr(L, idx));
+    copyTV(L, top++, index2adr_read(L, idx, &snap));
     L->top = top;
     lj_vm_call(L, top-1, 1+1);
     return 1;
