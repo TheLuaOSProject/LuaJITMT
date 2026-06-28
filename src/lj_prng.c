@@ -199,16 +199,11 @@ static ssize_t prng_native_urandom(lua_State *L, void *buf, size_t len,
 ** BTW: This is NOT the way to get predictable table iteration,
 ** predictable trace generation, predictable bytecode generation, etc.
 */
-int LJ_FASTCALL lj_prng_seed_secure(PRNGState *rs)
-{
-  lj_prng_seed_fixed(rs);  /* The fixed seed is already conditioned. */
-  return 1;
-}
-
 int lj_prng_seed_secure_l(lua_State *L, PRNGState *rs)
 {
   UNUSED(L);
-  return lj_prng_seed_secure(rs);
+  lj_prng_seed_fixed(rs);  /* The fixed seed is already conditioned. */
+  return 1;
 }
 
 #else
@@ -334,11 +329,6 @@ ok:
   (void)lj_prng_u64(rs);
   prng_checkstop_fresh(L, actions, had_stopreq);
   return 1;  /* Success. */
-}
-
-int LJ_FASTCALL lj_prng_seed_secure(PRNGState *rs)
-{
-  return prng_seed_secure(NULL, rs);
 }
 
 int lj_prng_seed_secure_l(lua_State *L, PRNGState *rs)

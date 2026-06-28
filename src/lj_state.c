@@ -325,7 +325,7 @@ LUA_API lua_State *lua_newstate(lua_Alloc allocf, void *allocd)
   global_State *g;
   int arena_internal = 0;
   /* We need the PRNG for the memory allocator, so initialize this first. */
-  if (!lj_prng_seed_secure(&prng)) {
+  if (!lj_prng_seed_secure_l(NULL, &prng)) {
     lj_assertX(0, "secure PRNG seeding failed");
     /* Can only return NULL here, so this errors with "not enough memory". */
     return NULL;
