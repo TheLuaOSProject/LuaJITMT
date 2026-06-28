@@ -3,9 +3,9 @@
 ## Current State
 
 - Branch: `v2.1`
-- Latest pushed commit before this slice: `1240fb5d m5: forward table resize generations`
-- Current completed local slice: table resize-forwarding stress coverage plus a
-  narrowed hashcount wait for hidden nil-key fixture slots
+- Latest pushed commit: `f885c2c5 m5: stress table resize forwarding`
+- Current completed pushed slice: table resize-forwarding stress coverage plus
+  a narrowed hashcount wait for hidden nil-key fixture slots
 - Safety priority: language semantics, memory safety, GC visibility, and stability remain higher priority than LuaJIT performance parity.
 
 The production table resize-forward slice is now landed. This follow-up adds
@@ -29,9 +29,11 @@ Unrelated local scratch files are still present and intentionally ignored:
 
 Recent completed and pushed slices:
 
+- `f885c2c5 m5: stress table resize forwarding`
+- `1240fb5d m5: forward table resize generations`
+- `e86c8acb m9: own GC stats snapshots`
 - `cbbe57c6 m3: own SMR retire epoch queries`
 - `92a335f5 m7: own cdata finreg notifications`
-- `e86c8acb m9: own GC stats snapshots`
 
 The broader project already has landed ownership/facade work across tables, GC2, weak tables, traces, ctype, FFI, finalizers, hooks, native-state boundaries, and CI source guards.
 
@@ -152,11 +154,10 @@ If safety/stability stays ahead of LuaJIT-level speed, the credible path is shor
 
 ## Immediate Next Steps
 
-1. Commit and push the table resize stress/keylock follow-up slice.
-2. Start the x64 closed-upvalue JIT store helper slice for all TValue types.
-3. Add the `lua_getlocal()` local-cell acquire-read follow-up.
-4. Start the traced FFI native-state protocol slice behind disabled traced calls.
-5. Run fresh pinned benchmarks after correctness work lands, then update the performance forecast with data.
+1. Start the x64 closed-upvalue JIT store helper slice for all TValue types.
+2. Add the `lua_getlocal()` local-cell acquire-read follow-up.
+3. Start the traced FFI native-state protocol slice behind disabled traced calls.
+4. Run fresh pinned benchmarks after correctness work lands, then update the performance forecast with data.
 
 ## Main Risks
 
