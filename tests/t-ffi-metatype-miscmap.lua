@@ -7,6 +7,7 @@ local iters = harness.arg_number(2, "LJ_M7_FFI_META_ITERS", 60)
 
 ffi.cdef[[
 typedef struct { int x; } lj_m7_meta_shared_t;
+typedef struct { int x; } lj_m7_meta_ctype_object_t;
 ]]
 
 for tid = 1, nthreads do
@@ -66,6 +67,16 @@ for tid = 1, nthreads do
 end
 
 assert(shared_winners == 1, ("shared metatype winners: %d"):format(shared_winners))
+
+do
+  local objct = ffi.typeof("lj_m7_meta_ctype_object_t")
+  local ct = ffi.metatype(objct, {
+    __index = {
+      get = function(self) return self.x + 3 end,
+    },
+  })
+  assert(ct(39):get() == 42)
+end
 
 ffi.cdef[[
 typedef struct { int x; } lj_m7_meta_root_t;
