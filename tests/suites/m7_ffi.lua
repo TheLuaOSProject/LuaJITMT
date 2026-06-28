@@ -146,9 +146,25 @@ if ! grep -qF 'la_load8_acq(&cb->auto_detach)' src/lj_ctype.h ||
   printf '%s\n' 'callback runtime auto_detach helpers must use acquire/release byte operations' >&2
   exit 1
 fi
+for helper in ccallback_L_acq ccallback_L_rel; do
+  if ! grep -qE "${helper}[[:space:]]*[(]" src/lj_ctype.h; then
+    printf 'callback runtime carrier helper missing: %s\n' "$helper" >&2
+    exit 1
+  fi
+done
+if ! grep -qF 'la_loadptr_acq((void *const *)&cb->L)' src/lj_ctype.h ||
+   ! grep -qF 'la_storeptr_rel((void **)&cb->L' src/lj_ctype.h; then
+  printf '%s\n' 'callback runtime carrier helpers must use acquire/release pointer operations' >&2
+  exit 1
+fi
 if hits=$(grep -nE -- 'cb->[[:space:]]*auto_detach' src/lj_ccallback.c || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
   printf '%s\n' 'raw callback runtime auto_detach access is forbidden; use ccallback_auto_detach_* helpers' >&2
+  exit 1
+fi
+if hits=$(grep -nE -- 'cb->[[:space:]]*L([^[:alnum:]_]|$)' src/lj_ccallback.c || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'raw callback runtime carrier L access is forbidden; use ccallback_L_* helpers' >&2
   exit 1
 fi
 ]==], { cwd = t.root, quiet = true })

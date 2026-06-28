@@ -719,7 +719,7 @@ CCallbackRuntime * LJ_FASTCALL lj_ccallback_prepare(CTState *cts, MSize slot)
   }
   L = lj_tg_load_cur_L(tg);
   cb = &tg->cb;
-  cb->L = L;  /* Callback carrier TG from current TLS, not slot owner. */
+  ccallback_L_rel(cb, L);  /* Carrier TG from current TLS, not slot owner. */
   ccallback_slot_rel(cb, slot);
   ccallback_auto_detach_rel(cb, auto_detach);
   return cb;
@@ -952,7 +952,7 @@ static int ccallback_fresh_stopreq(lua_State *L, uint32_t actions,
 lua_State * LJ_FASTCALL lj_ccallback_enter(CTState *cts, void *cf,
 					   CCallbackRuntime *cb)
 {
-  lua_State *L = cb->L;
+  lua_State *L = ccallback_L_acq(cb);
   global_State *g = cts->g;
   TGState *tg = lj_thr_get_tg();
   uint8_t was_native;
@@ -1000,7 +1000,7 @@ void LJ_FASTCALL lj_ccallback_leave(CTState *cts, TValue *o,
 				    CCallbackRuntime *cb)
 {
   CCallbackFrame *frame = callback_frame_top(cb);
-  lua_State *L = frame ? frame->L : cb->L;
+  lua_State *L = frame ? frame->L : ccallback_L_acq(cb);
   uint8_t was_native = frame ? frame->was_native : 0;
   uint8_t auto_detach = frame ? frame->auto_detach :
     ccallback_auto_detach_acq(cb);

@@ -427,6 +427,18 @@ ccallback_auto_detach_rel(CCallbackRuntime *cb, uint8_t auto_detach)
   la_store8_rel(&cb->auto_detach, auto_detach);
 }
 
+static LJ_AINLINE lua_State *ccallback_L_acq(const CCallbackRuntime *cb)
+{
+  /* 11.5 callback carrier Lua state handoff. */
+  return cb ? (lua_State *)la_loadptr_acq((void *const *)&cb->L) : NULL;
+}
+
+static LJ_AINLINE void ccallback_L_rel(CCallbackRuntime *cb, lua_State *L)
+{
+  /* 11.5 callback carrier Lua state handoff. */
+  la_storeptr_rel((void **)&cb->L, (void *)L);
+}
+
 static LJ_AINLINE MSize ccallback_depth_acq(const CCallbackRuntime *cb)
 {
   /* 11.5 callback runtime depth observation for tests/diagnostics. */
