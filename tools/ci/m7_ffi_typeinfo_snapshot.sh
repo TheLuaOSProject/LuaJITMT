@@ -276,6 +276,38 @@ if hits=$(awk '
   exit 1
 fi
 if hits=$(awk '
+  /^LJLIB_CF\(ffi_offsetof\)/ {
+    in_fn = 1
+    saw_noparse = 0
+    saw_snapshot = 0
+    saw_wait = 0
+    saw_miss = 0
+    saw_isstr_gate = 0
+    saw_string_parse = 0
+  }
+  in_fn && /ffi_checkctype_noparse[[:space:]]*[(]/ { saw_noparse = 1 }
+  in_fn && /ffi_layout_offsetof_snapshot[[:space:]]*[(]/ { saw_snapshot = 1 }
+  in_fn && /ffi_layout_offsetof_wait[[:space:]]*[(]/ { saw_wait = 1 }
+  in_fn && /else[[:space:]]+if[[:space:]]*[(]ok[[:space:]]*==[[:space:]]*0[)]/ { saw_miss = 1 }
+  in_fn && /if[[:space:]]*[(]isstr[)]/ { saw_isstr_gate = 1 }
+  in_fn && /ffi_checkctype[[:space:]]*[(][[:space:]]*L,[[:space:]]*cts,[[:space:]]*NULL[[:space:]]*[)]/ {
+    if (!(saw_noparse && saw_isstr_gate))
+      print FNR ":" $0
+    saw_string_parse = 1
+  }
+  in_fn && /ffi_checkctype_layout_lock[[:space:]]*[(]/ { print FNR ":" $0 }
+  in_fn && /^}/ {
+    if (!(saw_noparse && saw_snapshot && saw_wait && saw_miss &&
+	  saw_isstr_gate && saw_string_parse))
+      print FNR ":ffi_offsetof missing stable snapshot/wait/miss before parser string path"
+    in_fn = 0
+  }
+' "$ROOT/src/lib_ffi.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'stable ffi.offsetof() ctype-object inputs must snapshot/wait and keep parser fallback string-gated' >&2
+  exit 1
+fi
+if hits=$(awk '
   /^static int ffi_layout_rawref\(/ ||
   /^static int ffi_layout_rawid\(/ ||
   /^static int ffi_layout_raw\(/ ||
