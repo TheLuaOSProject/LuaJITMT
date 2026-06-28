@@ -23,11 +23,15 @@ resize/rehash accounting treat an unpublished slot as a real entry.
   paths.
 - Extended `t-tab-keylock-lookup` with a nil-key/non-nil-value placeholder that
   must be invisible to `next()` and must not force a hash part during resize.
+- Follow-up coverage hides an integer hash key behind `KEYLOCK` while resize
+  migrates it into an array-only successor; the old hash value must be
+  forwarded and the successor array must contain the released value.
 
 ## Verification
 
 Passed:
 
+- `tools/ci/m5_tab_keylock_lookup.sh`
 - `tools/ci/lua_test.sh m5_tab_keylock_lookup`
 - `tools/ci/lua_test.sh m5_tab_forward_filter`
 - `tools/ci/lua_test.sh m5_tab_cas_store`

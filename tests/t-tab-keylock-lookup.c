@@ -174,6 +174,53 @@ static void exercise_resize_waits_for_keylock(lua_State *L)
   lua_pop(L, 1);
 }
 
+static void exercise_resize_keylock_hash_to_array(lua_State *L)
+{
+  GCtab *t;
+  Node *oldnode, *oldn, *curnode;
+  TValue *array;
+  TValue keytv, oldkey;
+  MSize oldhmask, curhmask, asize;
+  KeylockReleaseCtx ctx;
+  pthread_t thread;
+  int32_t key = 3;
+
+  lua_settop(L, 0);
+  lua_createtable(L, 0, 8);
+  t = tabV(L->top-1);
+  assert(t->asize == 0);
+  assert(t->hmask == 7);
+
+  lj_tab_storeint(L, lj_tab_setinth(L, t, key), 55);
+  oldnode = lj_tab_node_acq(t);
+  oldhmask = lj_tab_node_hmask_acq(oldnode);
+  setnumV(&keytv, (lua_Number)key);
+  oldn = tabfwd_find_num_node(oldnode, oldhmask, &keytv);
+  assert(oldn != NULL);
+  tabfwd_assert_i32(&oldn->val, 55);
+
+  ctx.node = oldn;
+  ctx.key = keytv;
+  ctx.delay_ms = 20;
+  store_keylock(oldn);
+  assert(tviskeylock(&oldn->key));
+
+  assert(pthread_create(&thread, NULL, release_keylock_after_delay, &ctx) == 0);
+  lj_tab_resize(L, t, 8, 0);
+  assert(pthread_join(thread, NULL) == 0);
+
+  asize = lj_tab_array_snapshot_acq(t, &array);
+  assert(asize == 8);
+  curnode = lj_tab_node_snapshot_acq(t, &curhmask);
+  UNUSED(curnode);
+  assert(curhmask == 0);
+  lj_tv_load_acq(&oldkey, &oldn->key);
+  assert(tvisnum(&oldkey) && oldkey.n == keytv.n);
+  tabfwd_assert_forward(&oldn->val);
+  tabfwd_assert_i32(&array[key], 55);
+  tabfwd_assert_i32(lj_tab_getint(t, key), 55);
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -228,6 +275,7 @@ int main(void)
   exercise_unpublished_nil_key_value(L);
   exercise_tombstone_anchor_insert(L);
   exercise_resize_waits_for_keylock(L);
+  exercise_resize_keylock_hash_to_array(L);
 
   lua_close(L);
   printf("t-tab-keylock-lookup OK: unpublished keys are filtered from table reads\n");
