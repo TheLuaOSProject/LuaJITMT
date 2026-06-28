@@ -17,6 +17,9 @@
 #include "lj_tab.h"
 #include "lj_tg.h"
 #include "lj_thr.h"
+#if LJ_HASFFI
+#include "lj_cdata.h"
+#endif
 
 #define LJ_TAB_MAXCHAIN		8u
 
@@ -93,6 +96,16 @@ static LJ_AINLINE int tab_key_retry_once(cTValue *key, int *retry)
 static LJ_AINLINE int tab_val_absent(cTValue *val)
 {
   return tvisnil(val) || tvisforward(val);
+}
+
+static LJ_AINLINE int tab_val_is_publish_claim(cTValue *val)
+{
+#if LJ_HASFFI
+  return lj_cdata_fin_isclaim(val);
+#else
+  UNUSED(val);
+  return 0;
+#endif
 }
 
 static LJ_AINLINE int tab_slot_absent_acq(const TValue *slot)
@@ -492,7 +505,7 @@ static uint32_t tab_rehash_hashcount(Node *oldnode, MSize oldhmask,
       }
       lj_tv_load_acq(&val, &n->val);
       if (tvisnil(&key)) {
-	if (!tab_val_absent(&val)) {
+	if (tab_val_is_publish_claim(&val)) {
 	  lj_tab_wait_no_l();
 	  goto retry_node;
 	}

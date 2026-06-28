@@ -3,11 +3,14 @@
 ## Current State
 
 - Branch: `v2.1`
-- Latest pushed commit before this slice: `e86c8acb m9: own GC stats snapshots`
-- Current completed local slice: production table resize forwarding with `LJ_TFORWARD`
+- Latest pushed commit before this slice: `1240fb5d m5: forward table resize generations`
+- Current completed local slice: table resize-forwarding stress coverage plus a
+  narrowed hashcount wait for hidden nil-key fixture slots
 - Safety priority: language semantics, memory safety, GC visibility, and stability remain higher priority than LuaJIT performance parity.
 
-The table resize-forward slice is now commit-ready after the focused validation listed below. The previous audit blockers were addressed:
+The production table resize-forward slice is now landed. This follow-up adds
+stress coverage around resize forwarding and fixes one over-broad wait in the
+rehash counter. The previous audit blockers were addressed:
 
 - Hash replacement sizing now accounts for visible hash keys even when their current value is nil, and resize publication uses a retry path with generation/flags CAS checks.
 - Legacy GC and GC2 now resolve forwarded table slots during mark traversal and weak clearing.
@@ -33,6 +36,15 @@ Recent completed and pushed slices:
 The broader project already has landed ownership/facade work across tables, GC2, weak tables, traces, ctype, FFI, finalizers, hooks, native-state boundaries, and CI source guards.
 
 ## Completed In This Slice
+
+Follow-up stress and liveness:
+
+- Added `t-tab-resize-stress.lua` for resize vs weak clear, resize vs GC
+  traversal, and resize vs traced stores.
+- Added `m5_tab_resize_stress` as a focused CI wrapper and as part of
+  `m5_concurrent_objects`.
+- Narrowed `tab_rehash_hashcount()` so nil-key/non-nil-value hidden fixture
+  slots are skipped unless the value is an active cdata finalizer publish claim.
 
 Table resize forwarding:
 
@@ -72,6 +84,9 @@ Tests and guards:
 - `tools/ci/m9_m10_gc.sh`
 - `git diff --check`
 - `tools/ci/m0_source_guard.sh`
+- `tools/ci/m5_tab_resize_stress.sh`
+- `tools/ci/lua_test.sh m5_tab_keylock_lookup`
+- `tools/ci/lua_test.sh m5_concurrent_objects`
 - `make -C src clean`
 - `make -C src -j2`
 - `make -C src clean`
@@ -137,10 +152,10 @@ If safety/stability stays ahead of LuaJIT-level speed, the credible path is shor
 
 ## Immediate Next Steps
 
-1. Commit and push the table resize-forward slice.
-2. Add stress tests specifically for resize vs weak clear, resize vs GC traversal, and resize vs JIT stores.
-3. Start the source local cell/upvalue ownership slice.
-4. Start the traced FFI native-state protocol slice.
+1. Commit and push the table resize stress/keylock follow-up slice.
+2. Start the x64 closed-upvalue JIT store helper slice for all TValue types.
+3. Add the `lua_getlocal()` local-cell acquire-read follow-up.
+4. Start the traced FFI native-state protocol slice behind disabled traced calls.
 5. Run fresh pinned benchmarks after correctness work lands, then update the performance forecast with data.
 
 ## Main Risks

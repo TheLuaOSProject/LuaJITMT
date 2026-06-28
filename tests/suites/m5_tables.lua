@@ -65,4 +65,24 @@ return function(add)
       message = "M5 table hash-vector retirement tests passed"
     }
   })
+
+  runtime.add_luajit_script_cases(add, {
+    {
+      name = "m5_tab_resize_stress",
+      description = "table resize forwarding stress across GC, weak clear, and JIT stores",
+      script = "t-tab-resize-stress.lua",
+      opts = {
+	timeout = "30s",
+	env = {
+	  LJ_M5_TAB_RESIZE_STRESS_REPS =
+	    os.getenv("LJ_M5_TAB_RESIZE_STRESS_REPS") or "768",
+	  LJ_M5_TAB_RESIZE_STRESS_THREADS =
+	    os.getenv("LJ_M5_TAB_RESIZE_STRESS_THREADS") or "3",
+	  LJ_M5_TAB_RESIZE_STRESS_JIT_REPS =
+	    os.getenv("LJ_M5_TAB_RESIZE_STRESS_JIT_REPS") or "2200"
+	}
+      },
+      message = "M5 table resize forwarding stress passed"
+    }
+  })
 end
