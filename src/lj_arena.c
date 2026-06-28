@@ -841,7 +841,7 @@ uint32_t lj_arena_alloc_transfer(TGAlloc *dst, TGAlloc *src)
     lj_arena_alloc_rebuild_free_kind(dst, k);
   }
   lj_arena_alloc_owner_rel(src, 0);
-  src->alloc_black = 0;
+  lj_arena_alloc_black_rel(src, 0);
   return n;
 }
 
@@ -888,7 +888,7 @@ void *lj_arena_alloc(TGAlloc *alloc, PRNGState *rs, size_t size,
       *pp = run->next;
       if (len > ncells)
 	arena_insert_run(alloc, a, start + ncells, len - ncells);
-      arena_set_alloc(a, start, alloc->alloc_black);
+      arena_set_alloc(a, start, lj_arena_alloc_black_acq(alloc));
       return lj_arena_cellptr(a, start);
     }
   }
@@ -898,7 +898,7 @@ void *lj_arena_alloc(TGAlloc *alloc, PRNGState *rs, size_t size,
   }
   cell = b->cell;
   b->cell += ncells;
-  arena_set_alloc(b->a, cell, alloc->alloc_black);
+  arena_set_alloc(b->a, cell, lj_arena_alloc_black_acq(alloc));
   return lj_arena_cellptr(b->a, cell);
 }
 
@@ -985,7 +985,7 @@ static uint32_t arena_allocf_hflags(LJArenaAllocD *ad, uint32_t flags)
   uint32_t hflags = 0;
   if (flags & LJ_AF_TRAVERSABLE)
     hflags |= LJ_HUGEF_TRAVERSABLE;
-  if (ad->alloc->alloc_black)
+  if (lj_arena_alloc_black_acq(ad->alloc))
     hflags |= LJ_HUGEF_MARK;
   return hflags;
 }

@@ -112,6 +112,17 @@ static LJ_AINLINE void lj_arena_alloc_owner_rel(TGAlloc *alloc,
   la_store32_rel(&alloc->owner_tid, owner_tid);  /* 04 section 4.6. */
 }
 
+static LJ_AINLINE uint8_t lj_arena_alloc_black_acq(const TGAlloc *alloc)
+{
+  return la_load8_acq(&alloc->alloc_black);  /* 05 section 5.5 alloc color. */
+}
+
+static LJ_AINLINE void lj_arena_alloc_black_rel(TGAlloc *alloc,
+						uint8_t alloc_black)
+{
+  la_store8_rel(&alloc->alloc_black, alloc_black);  /* 05 section 5.5. */
+}
+
 struct HugeTab {
   LJHugeTabHdr *h;
 };
