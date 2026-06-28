@@ -1,10 +1,5 @@
-local compat52 = table.pack
 local mt = { __len = function(o, o2)
-  if compat52 then
-    assert(o2 == o)
-  else
-    assert(o2 == nil)
-  end
+  assert(o2 == nil)
   return 42
 end }
 
@@ -18,12 +13,7 @@ do --- table
   assert(#t == 3)
 
   setmetatable(t, mt)
-  if compat52 then
-    assert(#t == 42) -- __len DOES work on tables.
-    assert(rawlen(t) == 3)
-  else
-    assert(#t == 3) -- __len does NOT work on tables.
-  end
+  assert(#t == 3) -- __len does NOT work on tables.
 end
 
 do --- userdata +lua<5.2

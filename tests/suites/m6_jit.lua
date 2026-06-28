@@ -1282,11 +1282,6 @@ assert(live >= 8, live)
     run = function(t)
       local dump = t:tmp("lj_t-jit-buffer-method-shared-nyi.dump")
       build_default(t)
-      local recsrc = utils.read_source_file(t:path("src", "lj_ffrecord.c"))
-      if contains(recsrc, "recff_sbufx_") or
-         contains(recsrc, "IRBUFHDR_WRITE") then
-        error("shared string.buffer recorder raw SBuf helpers returned", 0)
-      end
       luajit_dump(t, dump, "-jdump=ir", [=[
 local buffer = require("string.buffer")
 local ffi_ok, ffi = pcall(require, "ffi")

@@ -637,7 +637,7 @@ static int lj_cf_package_module(lua_State *L)
   lua_pushvalue(L, -1);
   setfenv(L);
   dooptions(L, lastarg);
-  return LJ_52;
+  return 0;
 }
 
 static int lj_cf_package_seeall(lua_State *L)
@@ -714,10 +714,6 @@ LUALIB_API int luaopen_package(lua_State *L)
     lj_lib_pushcf(L, package_loaders[i], 1);
     lua_rawseti(L, -2, i+1);
   }
-#if LJ_52
-  lua_pushvalue(L, -1);
-  lua_setfield(L, -3, "searchers");
-#endif
   lua_setfield(L, -2, "loaders");
   lua_getfield(L, LUA_REGISTRYINDEX, "LUA_NOENV");
   noenv = lua_toboolean(L, -1);

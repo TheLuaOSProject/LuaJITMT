@@ -8,4 +8,4 @@ pairs.lua
 pcall_jit.lua
 select.lua
 tonumber_tostring.lua
-xpcall_jit.lua +compat5.2
+xpcall_jit.lua

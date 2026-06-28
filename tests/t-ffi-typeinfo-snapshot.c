@@ -13,29 +13,8 @@
 #include "lj_atomic.h"
 #include "lj_ctype.h"
 
+#include "lib/ctype_parse_fixture_helpers.h"
 #include "lib/lua_fixture_helpers.h"
-
-static uint32_t parse_seq(CTState *cts)
-{
-  uint32_t seq = la_load32_acq(&cts->parse_token);
-  assert((seq & 1u) == 0);
-  return seq;
-}
-
-static uint32_t hold_parse_token(CTState *cts)
-{
-  uint32_t seq = parse_seq(cts);
-  ctype_parse_token_rel(cts, seq + 1u);
-  assert((ctype_parse_token_acq(cts) & 1u) != 0);
-  return seq + 2u;
-}
-
-static void release_parse_token(CTState *cts, uint32_t seq)
-{
-  ctype_parse_token_rel(cts, seq);
-  (void)ctype_parse_token_wake(cts, 1);
-  assert((ctype_parse_token_acq(cts) & 1u) == 0);
-}
 
 int main(void)
 {
@@ -52,7 +31,7 @@ int main(void)
 
   cts = ctype_ctsG(G(L));
   assert(cts != NULL);
-  seq0 = parse_seq(cts);
+  seq0 = ljt_ctype_parse_seq(cts);
 
   ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"
@@ -62,37 +41,37 @@ int main(void)
     "end\n"
     "assert(ffi.typeinfo(0) == nil)\n"
     "assert(ffi.typeinfo(1000000000) == nil)\n");
-  seq1 = parse_seq(cts);
+  seq1 = ljt_ctype_parse_seq(cts);
   assert(seq1 == seq0);
 
   {
-    uint32_t release_seq = hold_parse_token(cts);
+    uint32_t release_seq = ljt_ctype_hold_parse_token(cts);
     ljt_lua_dostring(L,
       "local ffi = require('ffi')\n"
       "assert(ffi.typeinfo(lj_m7_typeinfo_snapshot_id) == nil)\n");
     assert((ctype_parse_token_acq(cts) & 1u) != 0);
-    release_parse_token(cts, release_seq);
+    ljt_ctype_release_parse_token(cts, release_seq);
   }
 
   ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"
     "local ti = ffi.typeinfo(lj_m7_typeinfo_snapshot_id)\n"
     "assert(ti and ti.size == 4)\n");
-  assert(parse_seq(cts) == seq1 + 2u);
+  assert(ljt_ctype_parse_seq(cts) == seq1 + 2u);
 
   ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"
     "ffi.cdef('typedef int lj_m7_typeinfo_snapshot_seq_t;')\n"
     "lj_m7_typeinfo_snapshot_seq_id = "
     "tonumber(ffi.typeof('lj_m7_typeinfo_snapshot_seq_t'))\n");
-  seq2 = parse_seq(cts);
+  seq2 = ljt_ctype_parse_seq(cts);
   assert(seq2 != seq1);
 
   ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"
     "local ti = ffi.typeinfo(lj_m7_typeinfo_snapshot_seq_id)\n"
     "assert(ti and ti.info ~= nil)\n");
-  seq3 = parse_seq(cts);
+  seq3 = ljt_ctype_parse_seq(cts);
   assert(seq3 == seq2);
 
   lua_close(L);

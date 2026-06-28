@@ -677,24 +677,7 @@ static TRef crec_ct_tv(jit_State *J, CType *d, TRef dp, TRef sp, cTValue *sval)
       CTypeID ecid;
       int ok = lj_ctype_enumconst_snapshot(cts, d, str, &val, &ecid);
       if (ok < 0) {
-	CTSize ofs;
-	CType *cct;
-	lj_ctype_parse_lock(cts, J->L);
-	/* 11.2: recorder enum string reader waits out parser rollback. */
-	cct = lj_ctype_getfield(cts, d, str, &ofs);
-	if (cct) {
-	  CTInfo cctinfo = ctype_info_acq(cct);
-	  if (ctype_isconstval(cctinfo)) {
-	    val = ctype_size_acq(cct);
-	    ecid = ctype_cid(cctinfo);
-	    ok = 1;
-	  } else {
-	    ok = 0;
-	  }
-	} else {
-	  ok = 0;
-	}
-	lj_ctype_parse_unlock(cts);
+	lj_trace_err(J, LJ_TRERR_CTBUSY);
       }
       /* Specialize to the name of the enum constant. */
       emitir(IRTG(IR_EQ, IRT_STR), sp, lj_ir_kstr(J, str));
@@ -914,10 +897,7 @@ again:
       {
 	int ok = lj_ctype_size_snapshot(cts, sid, &sz);
 	if (ok < 0) {
-	  lj_ctype_parse_lock(cts, J->L);
-	  /* 11.2: cdata recorder numeric-key reader waits out parser rollback. */
-	  sz = lj_ctype_size(cts, sid);
-	  lj_ctype_parse_unlock(cts);
+	  lj_trace_err(J, LJ_TRERR_CTBUSY);
 	} else if (ok == 0) {
 	  sz = CTSIZE_INVALID;
 	}
@@ -983,17 +963,7 @@ again:
       int ok = lj_ctype_getfieldq_snapshot(cts, ct, name, &fofs, NULL,
 					   &fsnap);
       if (ok < 0) {
-	lj_ctype_parse_lock(cts, J->L);
-	/* 11.2: cdata recorder field reader waits out parser rollback. */
-	ct = ctype_get(cts, id);
-	cinfo = ctype_info_acq(ct);
-	csize = ctype_size_acq(ct);
-	if (ctype_isstruct(cinfo)) {
-	  fct = lj_ctype_getfield(cts, ct, name, &fofs);
-	} else {
-	  fct = NULL;
-	}
-	lj_ctype_parse_unlock(cts);
+	lj_trace_err(J, LJ_TRERR_CTBUSY);
       } else {
 	fct = ok ? &fsnap : NULL;
       }
@@ -1047,14 +1017,7 @@ again:
       int ptrstruct = 0;
       int ok = lj_ctype_ptrstruct_snapshot(cts, id, &cid);
       if (ok < 0) {
-	lj_ctype_parse_lock(cts, J->L);
-	ct = ctype_get(cts, id);
-	ctinfo = ctype_info_acq(ct);
-	if (ctype_isptr(ctinfo)) {  /* Automatically perform '->'. */
-	  cid = ctype_rawid(cts, ctype_cid(ctinfo));
-	  ptrstruct = ctype_isstruct(ctype_info_acq(ctype_get(cts, cid)));
-	}
-	lj_ctype_parse_unlock(cts);
+	lj_trace_err(J, LJ_TRERR_CTBUSY);
       } else {
 	ptrstruct = ok > 0;
       }
@@ -1134,12 +1097,7 @@ static void crec_alloc(jit_State *J, RecordFFData *rd, CTypeID id)
   {
     int ok = lj_ctype_info_snapshot(cts, id, &info, &sz, &rid, &dsnap);
     if (ok < 0) {
-      lj_ctype_parse_lock(cts, J->L);
-      /* 11.2: ffi.new recorder waits out parser rollback. */
-      info = lj_ctype_info(cts, id, &sz);
-      rid = ctype_rawid(cts, id);
-      d = ctype_get(cts, rid);
-      lj_ctype_parse_unlock(cts);
+      lj_trace_err(J, LJ_TRERR_CTBUSY);
     } else {
       if (!ok)
 	lj_trace_err(J, LJ_TRERR_BADTYPE);
@@ -1644,10 +1602,7 @@ static TRef crec_arith_ptr(jit_State *J, TRef *sp, CType **s, MMS mm)
 	CTypeID cid = ctype_cid(ctpinfo);
 	int ok = lj_ctype_size_snapshot(cts, cid, &sz);
 	if (ok < 0) {
-	  lj_ctype_parse_lock(cts, J->L);
-	  /* 11.2: cdata recorder pointer arithmetic waits out rollback. */
-	  sz = lj_ctype_size(cts, cid);
-	  lj_ctype_parse_unlock(cts);
+	  lj_trace_err(J, LJ_TRERR_CTBUSY);
 	} else if (ok == 0) {
 	  sz = CTSIZE_INVALID;
 	}
@@ -1685,10 +1640,7 @@ static TRef crec_arith_ptr(jit_State *J, TRef *sp, CType **s, MMS mm)
     CTypeID cid = ctype_cid(ctpinfo);
     int ok = lj_ctype_size_snapshot(cts, cid, &sz);
     if (ok < 0) {
-      lj_ctype_parse_lock(cts, J->L);
-      /* 11.2: cdata recorder pointer arithmetic waits out rollback. */
-      sz = lj_ctype_size(cts, cid);
-      lj_ctype_parse_unlock(cts);
+      lj_trace_err(J, LJ_TRERR_CTBUSY);
     } else if (ok == 0) {
       sz = CTSIZE_INVALID;
     }
@@ -1847,24 +1799,7 @@ void LJ_FASTCALL recff_cdata_arith(jit_State *J, RecordFFData *rd)
 	CTypeID ecid;
 	int ok = lj_ctype_enumconst_snapshot(cts, ct, str, &val, &ecid);
 	if (ok < 0) {
-	  CTSize ofs;
-	  CType *cct;
-	  lj_ctype_parse_lock(cts, J->L);
-	  /* 11.2: recorder enum string reader waits out parser rollback. */
-	  cct = lj_ctype_getfield(cts, ct, str, &ofs);
-	  if (cct) {
-	    CTInfo cctinfo = ctype_info_acq(cct);
-	    if (ctype_isconstval(cctinfo)) {
-	      val = ctype_size_acq(cct);
-	      ecid = ctype_cid(cctinfo);
-	      ok = 1;
-	    } else {
-	      ok = 0;
-	    }
-	  } else {
-	    ok = 0;
-	  }
-	  lj_ctype_parse_unlock(cts);
+	  lj_trace_err(J, LJ_TRERR_CTBUSY);
 	}
 	if (ok > 0) {
 	  id = ecid;
@@ -1927,10 +1862,7 @@ void LJ_FASTCALL recff_clib_index(jit_State *J, RecordFFData *rd)
     rd->nres = rd->data;
     ok = lj_ctype_getname_snapshot(cts, name, CLNS_INDEX, &id, &snap, NULL);
     if (ok < 0) {
-      lj_ctype_parse_lock(cts, J->L);
-      /* 11.2: recorder ffi.C namespace reader waits out parser rollback. */
-      id = lj_ctype_getname(cts, &ct, name, CLNS_INDEX);
-      lj_ctype_parse_unlock(cts);
+      lj_trace_err(J, LJ_TRERR_CTBUSY);
     } else if (!ok) {
       id = 0;
     }

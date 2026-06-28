@@ -57,8 +57,7 @@
 <p>
 This lockless fork is a source build for <b>x86-64 Linux with GC64</b>.
 Other operating systems, non-x64 CPUs, 32-on-64 GC mode, MSVC/MinGW batch
-builds, console builds, and Lua 5.2 compatibility builds are intentionally
-unsupported by this fork.
+builds, and console builds are intentionally unsupported by this fork.
 </p>
 
 <h2 id="req">Requirements</h2>
@@ -69,8 +68,7 @@ unsupported by this fork.
 </ul>
 <p>
 The source guard in <tt>src/lj_arch.h</tt> rejects unsupported targets so
-stale compatibility builds fail at compile time instead of producing a partial
-runtime.
+stale target builds fail at compile time instead of producing a partial runtime.
 </p>
 
 <h2>Building</h2>
@@ -87,8 +85,7 @@ For an amalgamated build:
 make amalg
 </pre>
 <p>
-Do not pass <tt>-DLUAJIT_DISABLE_GC64</tt> or
-<tt>-DLUAJIT_ENABLE_LUA52COMPAT</tt>; both are outside the supported lockless
+Do not pass non-GC64 build flags; they are outside the supported lockless
 runtime surface.
 </p>
 

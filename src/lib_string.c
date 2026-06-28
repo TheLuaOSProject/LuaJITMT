@@ -471,14 +471,8 @@ static int str_find_aux(lua_State *L, int find)
   if (start < 0) start += (int32_t)s->len; else start--;
   if (start < 0) start = 0;
   st = (MSize)start;
-  if (st > s->len) {
-#if LJ_52
-    setnilV(L->top-1);
-    return 1;
-#else
+  if (st > s->len)
     st = s->len;
-#endif
-  }
   if (find && ((L->base+3 < L->top && tvistruecond(L->base+3)) ||
 	       !lj_str_haspattern(p))) {  /* Search for fixed string. */
     const char *q = lj_str_find(strdata(s)+st, strdata(p), s->len-st, p->len);

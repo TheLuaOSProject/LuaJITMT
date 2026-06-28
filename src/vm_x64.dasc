@@ -1199,16 +1199,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  call extern lj_meta_len		// (lua_State *L, TValue *o)
   |  // NULL (retry) or TValue * (metamethod) returned in eax (RC).
   |  mov BASE, L:RB->base
-#if LJ_52
-  |  test RC, RC
-  |  jne ->vmeta_binop			// Binop call for compatibility.
-  |  movzx RDd, PC_RD
-  |  mov TAB:CARG1, [BASE+RD*8]
-  |  cleartp TAB:CARG1
-  |  jmp ->BC_LEN_Z
-#else
-  |  jmp ->vmeta_binop			// Binop call for compatibility.
-#endif
+  |  jmp ->vmeta_binop			// Binop metamethod call.
   |
   |//-- Call metamethod ----------------------------------------------------
   |
@@ -1530,9 +1521,6 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov TAB:RB, [BASE]
   |  mov TMPR, TAB:RB
   |  checktab TAB:RB, ->fff_fallback
-#if LJ_52
-  |  x64_vm_gcref_cmpzero TAB:RB->metatable, ->fff_fallback
-#endif
   |  mov CFUNC:RD, [BASE-16]
   |  cleartp CFUNC:RD
   |  mov CFUNC:RD, CFUNC:RD->upvalue[0]
@@ -1631,9 +1619,6 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov TAB:RB, [BASE]
   |  mov TMPR, TAB:RB
   |  checktab TAB:RB, ->fff_fallback
-#if LJ_52
-  |  x64_vm_gcref_cmpzero TAB:RB->metatable, ->fff_fallback
-#endif
   |  mov CFUNC:RD, [BASE-16]
   |  cleartp CFUNC:RD
   |  mov CFUNC:RD, CFUNC:RD->upvalue[0]
@@ -3642,12 +3627,6 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |2:
     |  cmp ITYPEd, LJ_TTAB; jne ->vmeta_len
     |  mov TAB:CARG1, TAB:RD
-#if LJ_52
-    |  x64_vm_gcref_acq TAB:RB, TAB:RD->metatable
-    |  cmp TAB:RB, 0
-    |  jnz >9
-    |3:
-#endif
     |->BC_LEN_Z:
     |  mov RB, BASE			// Save BASE.
     |  call extern lj_tab_len		// (GCtab *t)
@@ -3660,12 +3639,6 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov BASE, RB			// Restore BASE.
     |  movzx RAd, PC_RA
     |  jmp <1
-#if LJ_52
-    |9:  // Check for __len.
-    |  test byte TAB:RB->nomm, 1<<MM_len
-    |  jnz <3
-    |  jmp ->vmeta_len			// 'no __len' flag NOT set: check.
-#endif
     break;
 
   /* -- Binary ops -------------------------------------------------------- */

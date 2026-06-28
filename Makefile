@@ -4,7 +4,7 @@
 # Please read doc/install.html before changing any variables!
 #
 # Supported target for this lockless fork: x86-64 Linux with GC64.
-# Unsupported platform and compatibility builds are rejected by src/lj_arch.h.
+# Unsupported platform builds are rejected by src/lj_arch.h.
 #
 # Copyright (C) 2005-2026 Mike Pall. See Copyright Notice in luajit.h
 ##############################################################################
@@ -93,11 +93,7 @@ FILE_MAN= luajit.1
 FILE_PC= luajit.pc
 FILES_INC= lua.h lualib.h lauxlib.h luaconf.h lua.hpp luajit.h
 FILES_JITLIB= bc.lua bcsave.lua dump.lua p.lua v.lua zone.lua \
-	      dis_x86.lua dis_x64.lua dis_arm.lua dis_arm64.lua \
-	      dis_arm64be.lua dis_ppc.lua dis_mips.lua dis_mipsel.lua \
-	      dis_mips64.lua dis_mips64el.lua \
-	      dis_mips64r6.lua dis_mips64r6el.lua \
-	      vmdef.lua
+	      dis_x86.lua dis_x64.lua vmdef.lua
 
 ifeq (,$(findstring Windows,$(OS)))
   HOST_SYS:= $(shell uname -s)

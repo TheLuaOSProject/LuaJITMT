@@ -733,11 +733,6 @@ extern void *LJ_WIN_LOADLIBA(const char *path);
 #define LJ_UNWIND_JIT		0
 #endif
 
-#ifdef LUAJIT_ENABLE_LUA52COMPAT
-#error "lockless runtime does not support Lua 5.2 compatibility mode"
-#endif
-#define LJ_52			0
-
 /* -- VM security --------------------------------------------------------- */
 
 /* Don't make any changes here. Instead build with:

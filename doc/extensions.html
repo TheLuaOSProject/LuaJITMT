@@ -359,36 +359,8 @@ C&nbsp;functions.</li>
 <li>Command line checks <tt>__tostring</tt> for errors.</li>
 </ul>
 <p>
-The upstream <tt>-DLUAJIT_ENABLE_LUA52COMPAT</tt> compatibility mode is not a
-supported build mode for this fork. The following Lua 5.2 behavior changes are
-therefore intentionally not enabled as a compatibility surface:
-</p>
-<ul>
-<li><tt>goto</tt> is a keyword and not a valid variable name anymore.</li>
-<li><tt>break</tt> can be placed anywhere. Empty statements (<tt>;;</tt>)
-are allowed.</li>
-<li><tt>__lt</tt>, <tt>__le</tt> are invoked for mixed types.</li>
-<li><tt>__len</tt> for tables. <tt>rawlen()</tt> library function.</li>
-<li><tt>pairs()</tt> and <tt>ipairs()</tt> check for <tt>__pairs</tt> and
-<tt>__ipairs</tt>.</li>
-<li><tt>coroutine.running()</tt> returns two results.</li>
-<li><tt>table.pack()</tt> and <tt>table.unpack()</tt>
-(same as <tt>unpack()</tt>).</li>
-<li><tt>io.write()</tt> and <tt>file:write()</tt> return file handle
-instead of <tt>true</tt>.</li>
-<li><tt>os.execute()</tt> and <tt>pipe:close()</tt> return detailed
-exit status.</li>
-<li><tt>debug.setmetatable()</tt> returns object.</li>
-<li><tt>debug.getuservalue()</tt> and <tt>debug.setuservalue()</tt>.</li>
-<li>Remove <tt>math.mod()</tt>, <tt>string.gfind()</tt>.</li>
-<li><tt>package.searchers</tt>.</li>
-<li><tt>module()</tt> returns the module table.</li>
-</ul>
-<p>
-Note: this provides only partial compatibility with Lua 5.2 at the
-language and Lua library level. LuaJIT is API+ABI-compatible with
-Lua&nbsp;5.1, which prevents implementing features that would otherwise
-break the Lua/C API and ABI (e.g. <tt>_ENV</tt>).
+This fork does not provide Lua&nbsp;5.2 compatibility mode. The supported
+language surface is Lua&nbsp;5.1 plus the extensions listed above.
 </p>
 
 <h2 id="lua53">Extensions from Lua 5.3</h2>

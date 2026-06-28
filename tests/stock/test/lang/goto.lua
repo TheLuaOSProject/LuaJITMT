@@ -30,12 +30,8 @@ do --- Basic goto and label semantics.
   ::a:: do goto a; ::a:: end -- Forward jump, not an infinite loop.
 end
 
-do --- Goto is not a keyword. -compat5.2 !lex !private_G
+do --- Goto is not a keyword. !lex !private_G
   goto = 1
-end
-
-do --- Goto is a keyword. +compat5.2
-  expect("goto = 1", "<name>")
 end
 
 do --- Trailing label is considered to be out of scope.
@@ -47,19 +43,6 @@ do --- Trailing label is considered to be out of scope.
     x = y
     ::a::
     ::b::
-  end
-  assert(x == 11)
-end
-
-do --- Trailing labels and empty statements are considered to be out of scope. +compat5.2 !lex
-  local x = 11
-  do
-    goto a
-    goto a
-    local y = 22
-    x = y
-    ::a:: ;;
-    ::b:: ;;
   end
   assert(x == 11)
 end

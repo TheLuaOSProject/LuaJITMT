@@ -42,19 +42,15 @@ do --- 5.2 base +lua>=5.2
   assert(not newproxy)
 end
 
-do --- pre-5.2 base rawlen -compat5.2
+do --- base no rawlen
   assert(not rawlen)
-end
-
-do --- 5.2 base rawlen +compat5.2
-  assert(rawlen)
 end
 
 do --- math
   check(math, "abs:acos:asin:atan:atan2:ceil:cos:cosh:deg:exp:floor:fmod:frexp:huge:ldexp:log:max:min:modf:pi:pow:rad:random:randomseed:sin:sinh:sqrt:tan:tanh", "log10:mod")
 end
 
-do --- pre-5.2 math +lua<5.2 -compat5.2
+do --- pre-5.2 math +lua<5.2
   -- LuaJIT 2.1.1780076327 exposes log10, but not the legacy mod alias.
   assert(not math.mod)
   assert(math.log10)
@@ -69,7 +65,7 @@ do --- string
   check(string, "byte:char:dump:find:format:gmatch:gsub:len:lower:match:rep:reverse:sub:upper", "gfind")
 end
 
-do --- pre-5.2 string +lua<5.2 -compat5.2
+do --- pre-5.2 string +lua<5.2
   -- LuaJIT 2.1.1780076327 no longer exposes this legacy alias.
   assert(not string.gfind)
 end
@@ -82,18 +78,9 @@ do --- pre-5.2 table +lua<5.2
   check(table, "concat:foreach:foreachi:getn:insert:maxn:move:remove:sort", "pack:unpack:setn:new")
 end
 
-do --- 5.2 table +lua>=5.2
-  check(table, "concat:insert:pack:remove:sort:unpack")
-end
-
-do --- pre-5.2 table.pack -compat5.2
+do --- table no pack
   assert(not table.pack)
   assert(not table.unpack)
-end
-
-do --- 5.2 table.pack +compat5.2
-  assert(table.pack)
-  assert(table.unpack)
 end
 
 do --- io
@@ -118,16 +105,10 @@ do --- package
   check(package, "config:cpath:loaded:loadlib:path:preload", "searchpath:loaders:searchers:seeall")
 end
 
-do --- pre-5.2 package +lua<5.2
+do --- package loaders +lua<5.2
   assert(package.loaders)
   assert(not package.searchers)
   assert(package.seeall)
-end
-
-do --- 5.2 package +lua>=5.2
-  assert(not package.loaders)
-  assert(package.searchers)
-  assert(not package.seeall)
 end
 
 do --- package.loaders
