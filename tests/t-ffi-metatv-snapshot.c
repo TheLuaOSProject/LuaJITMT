@@ -79,7 +79,10 @@ static void assert_predefined_metatv_avoids_wait(lua_State *L, CTState *cts)
     "local v = lj_m7_metatv_int_ct(42)\n"
     "assert(ffi.istype(lj_m7_metatv_int_ct, v))\n"
     "local ok, err = pcall(function() return v.no_such_field end)\n"
-    "assert(not ok and tostring(err):match('no_such_field'))\n");
+    "assert(not ok and tostring(err):match('no_such_field'))\n"
+    "ok, err = pcall(function() return v + 'x' end)\n"
+    "assert(not ok and tostring(err):match('arithmetic'))\n"
+    "assert(tostring(v + 1) == '43LL')\n");
   assert((ctype_parse_token_acq(cts) & 1u) != 0);
   ljt_ctype_release_parse_token(cts, release_seq);
 }

@@ -1243,6 +1243,9 @@ int lj_ctype_ptrstruct_wait(lua_State *L, CTState *cts, CTypeID id,
   }
 }
 
+static int ctype_info_predefined(CTState *cts, CTypeID id, CTInfo *infop,
+				 CTSize *szp, CTypeID *ridp, CType *rawp);
+
 /* Sequence-checked type info/raw-type snapshot for stable layout readers. */
 int lj_ctype_info_snapshot(CTState *cts, CTypeID id, CTInfo *infop,
 			   CTSize *szp, CTypeID *ridp, CType *rawp)
@@ -1310,8 +1313,11 @@ int lj_ctype_info_wait(lua_State *L, CTState *cts, CTypeID id,
 		       CTInfo *infop, CTSize *szp, CTypeID *ridp,
 		       CType *rawp)
 {
+  int ok = ctype_info_predefined(cts, id, infop, szp, ridp, rawp);
+  if (ok > 0)
+    return ok;
   for (;;) {
-    int ok = lj_ctype_info_snapshot(cts, id, infop, szp, ridp, rawp);
+    ok = lj_ctype_info_snapshot(cts, id, infop, szp, ridp, rawp);
     if (ok >= 0)
       return ok;
     lj_ctype_parse_wait(cts, L, ctype_parse_token_acq(cts));
@@ -1390,6 +1396,10 @@ int lj_ctype_metatv_snapshot(CTState *cts, TValue *out, CTypeID id, MMS mm)
 cTValue *lj_ctype_metatv_wait(lua_State *L, CTState *cts, TValue *out,
 			      CTypeID id, MMS mm)
 {
+  if (lj_ctype_predefined_nometa(cts, id)) {
+    setnilV(out);
+    return NULL;
+  }
   for (;;) {
     int ok = lj_ctype_metatv_snapshot(cts, out, id, mm);
     if (ok > 0)
@@ -1518,6 +1528,66 @@ int lj_ctype_predefined_nometa(CTState *cts, CTypeID id)
       return 0;
   }
   return 1;
+}
+
+static int ctype_info_predefined(CTState *cts, CTypeID id, CTInfo *infop,
+				 CTSize *szp, CTypeID *ridp, CType *rawp)
+{
+  CTypeTab *tabh;
+  CTypeID top = CTID_CTYPEID + 1;
+  MSize budget = (MSize)top * 4u;
+  CType ct;
+  CTInfo qual = 0;
+  if (!ctype_predefined_id(id))
+    return 0;
+  tabh = ctype_tabh_acq(cts);
+  if ((MSize)CTID_CTYPEID >= ctype_tab_sizetab_acq(tabh))
+    return 0;
+  if (rawp || ridp) {
+    CTypeID rid = id;
+    for (;;) {
+      CTInfo info;
+      if (!ctype_predefined_id(rid) || budget-- == 0)
+	return 0;
+      if (!ctype_snapshot_copy(tabh, top, rid, &ct))
+	return 0;
+      info = ctype_info_acq(&ct);
+      if (!ctype_isattrib(info)) {
+	if (ridp)
+	  *ridp = rid;
+	if (rawp)
+	  *rawp = ct;
+	break;
+      }
+      rid = ctype_cid(info);
+    }
+  }
+  for (;;) {
+    CTInfo info;
+    CTSize size;
+    if (!ctype_predefined_id(id) || budget-- == 0)
+      return 0;
+    if (!ctype_snapshot_copy(tabh, top, id, &ct))
+      return 0;
+    info = ctype_info_acq(&ct);
+    size = ctype_size_acq(&ct);
+    if (ctype_isenum(info)) {
+      /* Follow child. Need to look at its attributes, too. */
+    } else if (ctype_isattrib(info)) {
+      if (ctype_isxattrib(info, CTA_QUAL))
+	qual |= size;
+      else if (ctype_isxattrib(info, CTA_ALIGN) && !(qual & CTFP_ALIGNED))
+	qual |= CTFP_ALIGNED + CTALIGN(size);
+    } else {
+      if (!(qual & CTFP_ALIGNED))
+	qual |= (info & CTF_ALIGN);
+      qual |= (info & ~(CTF_ALIGN|CTMASK_CID));
+      *infop = qual;
+      *szp = ctype_isfunc(info) ? CTSIZE_INVALID : size;
+      return 1;
+    }
+    id = ctype_cid(info);
+  }
 }
 
 static int ctype_size_predefined(CTState *cts, CTypeID id, CTSize *szp)

@@ -17,6 +17,10 @@ non-function-pointer predefined IDs. Predefined complex/vector types and all
 parser-created types keep the snapshot/wait path, because `ffi.metatype()` can
 attach tables to complex/vector and struct-like records.
 
+The shared `lj_ctype_metatv_wait()` helper also checks that predicate before
+parking. This covers direct callers such as cdata arithmetic fallback, not just
+the higher-level FFI ctype wrappers that already perform the fast miss check.
+
 Recorder FFI ctype metamethod lookups use the same predefined no-metatable
 predicate before `lj_ctype_metatv_snapshot()`. For parser-created and
 metatable-capable types, a busy parser token still aborts recording with
@@ -32,9 +36,9 @@ Coverage:
 - `tests/t-ffi-metatv-snapshot.c` checks stable `__call`, `__add`, `__pairs`,
   and constructor `__gc` lookup do not advance `CTState.parse_token`.
 - The same fixture holds the parser token and verifies predefined `int`
-  construction plus bad-member lookup avoid waiting, while struct `__call`,
-  `__add`, and `__pairs` wait from a native region before dispatching the
-  metamethod.
+  construction, bad-member lookup, and arithmetic fallback avoid waiting, while
+  struct `__call`, `__add`, and `__pairs` wait from a native region before
+  dispatching the metamethod.
 - `tests/t-ffi-recorder-metatv-busy.c` holds the parser token during trace
   recording and verifies predefined `int` construction does not hit a
   parser-busy abort, while ctype `__call`, `__add`, table-backed `__index`,
