@@ -31,6 +31,25 @@ static int copy_upvalue_c(lua_State *L)
   return 1;
 }
 
+static void push_payload_table(lua_State *L, const char *tag, int seq);
+
+static int replace_upvalue_store_c(lua_State *L)
+{
+  push_payload_table(L, "replace-store", 81);
+  lua_replace(L, lua_upvalueindex(1));
+  lua_pushvalue(L, lua_upvalueindex(1));
+  return 1;
+}
+
+static int copy_upvalue_store_c(lua_State *L)
+{
+  push_payload_table(L, "copy-store", 82);
+  lua_copy(L, -1, lua_upvalueindex(1));
+  lua_pop(L, 1);
+  lua_pushvalue(L, lua_upvalueindex(1));
+  return 1;
+}
+
 static int dummy_c(lua_State *L)
 {
   (void)L;
@@ -426,6 +445,25 @@ static void exercise_nested_upvalue_apis(lua_State *L)
   lua_settop(L, base);
 }
 
+static void exercise_upvalue_store_apis(lua_State *L)
+{
+  int base = lua_gettop(L);
+
+  lua_pushnil(L);
+  lua_pushcclosure(L, replace_upvalue_store_c, 1);
+  check_lua(L, lua_pcall(L, 0, 1, 0), "replace upvalue store");
+  assert_payload_table(L, -1, "replace-store", 81);
+  lua_pop(L, 1);
+
+  lua_pushnil(L);
+  lua_pushcclosure(L, copy_upvalue_store_c, 1);
+  check_lua(L, lua_pcall(L, 0, 1, 0), "copy upvalue store");
+  assert_payload_table(L, -1, "copy-store", 82);
+  lua_pop(L, 1);
+
+  lua_settop(L, base);
+}
+
 static void exercise_udata_api(lua_State *L)
 {
   int base = lua_gettop(L);
@@ -535,6 +573,7 @@ int main(void)
   exercise_metatable_apis(L);
   exercise_function_env_apis(L);
   exercise_nested_upvalue_apis(L);
+  exercise_upvalue_store_apis(L);
   exercise_udata_api(L);
   exercise_callmeta_api(L);
   exercise_thread_api(L);

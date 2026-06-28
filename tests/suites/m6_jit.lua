@@ -59,6 +59,7 @@ local m6_cases = {
   "m6_jit_perftools_native",
   "m6_jit_io_native_stopreq",
   "m6_jit_cclosure_upvalue_flush",
+  "m6_jit_env_mutation_flush",
   "m6_jit_buffer_method_shared_nyi"
 }
 
@@ -327,10 +328,88 @@ print("jit-cclosure-upvalue-flush OK")
 ]=]
 end
 
+local function env_mutation_flush_smoke()
+  return [=[
+local trace_count = require"jit_harness".trace_count
+
+local function assert_traced(label)
+  assert(trace_count(200) > 0, label .. " did not trace")
+end
+
+local function assert_flushed(label)
+  assert(trace_count(200) == 0, label .. " did not flush existing traces")
+end
+
+local env_a = { x = 1 }
+local env_b = { x = 2 }
+
+local function read_global_x(n)
+  local s = 0
+  for i = 1, n do s = s + x end
+  return s
+end
+
+setfenv(read_global_x, env_a)
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+assert(read_global_x(120) == 120)
+assert_traced("function environment global load")
+setfenv(read_global_x, env_b)
+assert_flushed("setfenv(function)")
+assert(read_global_x(2) == 4)
+
+local api_env_a = { y = 3 }
+local api_env_b = { y = 4 }
+
+local function read_global_y(n)
+  local s = 0
+  for i = 1, n do s = s + y end
+  return s
+end
+
+debug.setfenv(read_global_y, api_env_a)
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+assert(read_global_y(120) == 360)
+assert_traced("API function environment global load")
+debug.setfenv(read_global_y, api_env_b)
+assert_flushed("debug.setfenv(function)")
+assert(read_global_y(2) == 8)
+
+local oldenv = getfenv(0)
+local env_t1 = setmetatable({ marker = "A" }, { __index = oldenv })
+local env_t2 = setmetatable({ marker = "B" }, { __index = oldenv })
+
+local function read_thread_env(n)
+  local v
+  for i = 1, n do
+    v = getfenv(0).marker
+  end
+  return v
+end
+
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+setfenv(0, env_t1)
+assert(read_thread_env(120) == "A")
+assert_traced("thread environment getfenv(0)")
+setfenv(0, env_t2)
+assert_flushed("setfenv(0)")
+assert(read_thread_env(2) == "B")
+setfenv(0, oldenv)
+
+jit.flush()
+print("jit-env-mutation-flush OK")
+]=]
+end
+
 local function assert_cclosure_upvalue_trace_source_guards(t)
   local api = utils.read_source_file(t:path("src", "lj_api.c"))
   checks.assert_text_contains("C upvalue trace flush", api,
-    "api_cupvalue_trace_flush(L);", "API C upvalue trace flush")
+    "api_trace_flush_mutation(L);", "API mutation trace flush")
+  checks.assert_text_contains("C upvalue trace flush", api,
+    "index2adr_cupvalue_store_rel(L, idx, f);",
+    "API pseudo-index C upvalue store funnel")
   checks.assert_text_contains("C upvalue trace flush", api,
     "lj_trace_flushall_hs(L)", "full trace flush handshake")
 
@@ -345,6 +424,28 @@ local function assert_cclosure_upvalue_trace_source_guards(t)
      ffrec:find("funcV(&J->fn->c.upvalue", 1, true) then
     error("fast-function recorders must not raw-read C closure upvalues", 2)
   end
+end
+
+local function assert_env_trace_source_guards(t)
+  local api = utils.read_source_file(t:path("src", "lj_api.c"))
+  checks.assert_text_contains("API env trace flush", api,
+    "setgcrefrel(L->env, obj2gco(t));", "API thread env release store")
+  checks.assert_text_contains("API env trace flush", api,
+    "setgcrefrel(fn->c.env, obj2gco(t));", "API function env release store")
+  checks.assert_text_contains("API env trace flush", api,
+    "setgcrefrel(L1->env, obj2gco(t));", "API target thread env release store")
+  checks.assert_text_contains("API env trace flush", api,
+    "api_trace_flush_mutation(L);", "API env trace flush")
+
+  local base = utils.read_source_file(t:path("src", "lib_base.c"))
+  checks.assert_text_contains("base env trace flush", base,
+    "#include \"lj_trace.h\"", "base library trace flush include")
+  checks.assert_text_contains("base env trace flush", base,
+    "lib_trace_flush_env(L);", "base setfenv trace flush")
+  checks.assert_text_contains("base env trace flush", base,
+    "setgcrefrel(L->env, obj2gco(t));", "base thread env release store")
+  checks.assert_text_contains("base env trace flush", base,
+    "setgcrefrel(fn->l.env, obj2gco(t));", "base function env release store")
 end
 
 return function(add)
@@ -1380,6 +1481,17 @@ assert(live >= 8, live)
       build_default(t)
       luajit_code(t, cclosure_upvalue_flush_smoke(), { timeout = "20s" })
       print("M6 JIT C-closure upvalue mutation flush guard passed")
+    end
+  })
+
+  add({
+    name = "m6_jit_env_mutation_flush",
+    description = "JIT traces over function/thread environments flush on replacement",
+    run = function(t)
+      assert_env_trace_source_guards(t)
+      build_default(t)
+      luajit_code(t, env_mutation_flush_smoke(), { timeout = "20s" })
+      print("M6 JIT environment mutation flush guard passed")
     end
   })
 

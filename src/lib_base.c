@@ -30,6 +30,7 @@
 #include "lj_thr.h"
 #include "lj_safepoint.h"
 #include "lj_tg.h"
+#include "lj_trace.h"
 #if LJ_HASFFI
 #include "lj_ctype.h"
 #include "lj_cconv.h"
@@ -45,6 +46,12 @@
 /* -- Base library: checks ------------------------------------------------ */
 
 #define LJLIB_MODULE_base
+
+static LJ_AINLINE void lib_trace_flush_env(lua_State *L)
+{
+  if (lj_trace_flushall_hs(L))
+    lj_err_caller(L, LJ_ERR_NOGCMM);
+}
 
 LJLIB_ASM(assert)		LJLIB_REC(.)
 {
@@ -176,6 +183,7 @@ LJLIB_CF(setfenv)
   if (!(o < L->top && tvisfunc(o))) {
     int level = lj_lib_checkint(L, 1);
     if (level == 0) {
+      lib_trace_flush_env(L);
       /* NOBARRIER: A thread (i.e. L) is never black. */
       setgcrefrel(L->env, obj2gco(t));
       return 0;
@@ -190,6 +198,7 @@ LJLIB_CF(setfenv)
   fn = &gcval(o)->fn;
   if (!isluafunc(fn))
     lj_err_caller(L, LJ_ERR_SETFENV);
+  lib_trace_flush_env(L);
   setgcrefrel(fn->l.env, obj2gco(t));
   lj_gc_pubobjobj(L, obj2gco(fn), t);
   setfuncV(L, L->top++, fn);
