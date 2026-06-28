@@ -38,4 +38,18 @@ if hits=$(awk '
   exit 1
 fi
 
+if ! awk '
+  /^ptrdiff_t lj_vmevent_prepare\(lua_State \*L, VMEvent ev\)/ {
+    in_fn = 1; found = 1
+  }
+  in_fn && /if \(tv\)/ { saw_tv_guard = 1 }
+  in_fn && /lj_tv_load_acq\(&tabv, tv\)/ { saw_acq = 1 }
+  in_fn && /tabV\(&tabv\)/ { saw_tab = 1 }
+  in_fn && /^}/ { in_fn = 0 }
+  END { exit(found && saw_tv_guard && saw_acq && saw_tab ? 0 : 1) }
+' "$ROOT/src/lj_vmevent.c"; then
+  printf '%s\n' 'VM-event registry table lookup must guard and snapshot the slot' >&2
+  exit 1
+fi
+
 exec "$ROOT/tools/ci/lua_test.sh" m3_vmevent_native_stdio

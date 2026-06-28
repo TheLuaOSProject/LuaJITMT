@@ -25,9 +25,15 @@ shutdown throw; a STOPREQ acknowledged by the native stderr report still throws
 after VM-event state is restored. `tests/t-vmevent-native-stopreq.c` covers the
 sticky-only behavior and post-report recovery.
 
+Follow-up: `lj_vmevent_prepare()` now checks that the `_VMEVENTS` registry slot
+exists before acquire-snapshotting it, and uses the snapshot for the event table
+lookup. This keeps VM-event dispatch on the live-slot snapshot rule even when
+the cache bit is stale or the registry entry is missing.
+
 ## Guard
 
 `tools/ci/m3_vmevent_native_stdio.sh` rejects raw VM-event stdio outside the
 `vmevent_report_failure()` native boundary and runs the behavior smoke
 `m3_vmevent_native_stdio`, which triggers an erroring `jit.attach(..., "bc")`
-handler and verifies the reporter still fires.
+handler and verifies the reporter still fires. The same guard now also requires
+the `_VMEVENTS` registry slot to be checked before it is acquire-snapshotted.

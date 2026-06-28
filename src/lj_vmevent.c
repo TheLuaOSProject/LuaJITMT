@@ -24,18 +24,20 @@ ptrdiff_t lj_vmevent_prepare(lua_State *L, VMEvent ev)
   GCstr *s = lj_str_newlit(L, LJ_VMEVENTS_REGKEY);
   cTValue *tv = lj_tab_getstr(tabV(registry(L)), s);
   TValue tabv;
-  lj_tv_load_acq(&tabv, tv);
-  if (tvistab(&tabv)) {
-    int hash = VMEVENT_HASH(ev);
-    TValue fnv;
-    tv = lj_tab_getint(tabV(&tabv), hash);
-    if (tv)
-      lj_tv_load_acq(&fnv, tv);
-    if (tv && tvisfunc(&fnv)) {
-      lj_state_checkstack(L, LUA_MINSTACK);
-      setfuncV(L, L->top++, funcV(&fnv));
-      if (LJ_FR2) setnilV(L->top++);
-      return savestack(L, L->top);
+  if (tv) {
+    lj_tv_load_acq(&tabv, tv);
+    if (tvistab(&tabv)) {
+      int hash = VMEVENT_HASH(ev);
+      TValue fnv;
+      tv = lj_tab_getint(tabV(&tabv), hash);
+      if (tv)
+	lj_tv_load_acq(&fnv, tv);
+      if (tv && tvisfunc(&fnv)) {
+	lj_state_checkstack(L, LUA_MINSTACK);
+	setfuncV(L, L->top++, funcV(&fnv));
+	if (LJ_FR2) setnilV(L->top++);
+	return savestack(L, L->top);
+      }
     }
   }
   g->vmevmask &= ~VMEVENT_MASK(ev);  /* No handler: cache this fact. */
