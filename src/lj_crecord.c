@@ -88,8 +88,11 @@ static CTypeID argv2ctype(jit_State *J, TRef tr, cTValue *o)
     GCstr *s = strV(o);
     CPState cp;
     int errcode;
+    CTypeID id;
     /* Specialize to the string containing the C type declaration. */
     emitir(IRTG(IR_EQ, IRT_STR), tr, lj_ir_kstr(J, s));
+    if (lj_ctype_predefined_string(strdata(s), s->len, &id))
+      return id;
     cp.L = J->L;
     cp.cts = ctype_cts(J->L);
     {

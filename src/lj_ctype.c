@@ -175,6 +175,138 @@ CTKWDEF(CTKWNAMEDEF)
 #undef CTKWNAMEDEF
 ;
 
+static int ctype_cspace(char c)
+{
+  return c == ' ' || c == '\t' || c == '\n' || c == '\r' ||
+	 c == '\f' || c == '\v';
+}
+
+static int ctype_strlit(const char *p, MSize plen, const char *lit, MSize len)
+{
+  if (plen != len)
+    return 0;
+  while (len-- != 0)
+    if (*p++ != *lit++)
+      return 0;
+  return 1;
+}
+
+#define ctype_string_match(lit) \
+  ctype_strlit(p, len, "" lit, (MSize)(sizeof(lit)-1))
+
+int lj_ctype_predefined_string(const char *p, MSize len, CTypeID *idp)
+{
+  while (len != 0 && ctype_cspace(*p)) { p++; len--; }
+  while (len != 0 && ctype_cspace(p[len-1])) len--;
+  if (ctype_string_match("void")) { *idp = CTID_VOID; return 1; }
+  if (ctype_string_match("const void")) { *idp = CTID_CVOID; return 1; }
+  if (ctype_string_match("void const")) { *idp = CTID_CVOID; return 1; }
+  if (ctype_string_match("void *")) { *idp = CTID_P_VOID; return 1; }
+  if (ctype_string_match("void*")) { *idp = CTID_P_VOID; return 1; }
+  if (ctype_string_match("const void *")) { *idp = CTID_P_CVOID; return 1; }
+  if (ctype_string_match("const void*")) { *idp = CTID_P_CVOID; return 1; }
+  if (ctype_string_match("void const *")) { *idp = CTID_P_CVOID; return 1; }
+  if (ctype_string_match("void const*")) { *idp = CTID_P_CVOID; return 1; }
+  if (ctype_string_match("bool")) { *idp = CTID_BOOL; return 1; }
+  if (ctype_string_match("_Bool")) { *idp = CTID_BOOL; return 1; }
+  if (ctype_string_match("char")) { *idp = CTID_INT8; return 1; }
+  if (ctype_string_match("signed char")) { *idp = CTID_INT8; return 1; }
+  if (ctype_string_match("unsigned char")) { *idp = CTID_UINT8; return 1; }
+  if (ctype_string_match("const char")) { *idp = CTID_CCHAR; return 1; }
+  if (ctype_string_match("char const")) { *idp = CTID_CCHAR; return 1; }
+  if (ctype_string_match("const char *")) { *idp = CTID_P_CCHAR; return 1; }
+  if (ctype_string_match("const char*")) { *idp = CTID_P_CCHAR; return 1; }
+  if (ctype_string_match("char const *")) { *idp = CTID_P_CCHAR; return 1; }
+  if (ctype_string_match("char const*")) { *idp = CTID_P_CCHAR; return 1; }
+  if (ctype_string_match("unsigned char *")) {
+    *idp = CTID_P_UINT8;
+    return 1;
+  }
+  if (ctype_string_match("unsigned char*")) { *idp = CTID_P_UINT8; return 1; }
+  if (ctype_string_match("short")) { *idp = CTID_INT16; return 1; }
+  if (ctype_string_match("short int")) { *idp = CTID_INT16; return 1; }
+  if (ctype_string_match("signed short")) { *idp = CTID_INT16; return 1; }
+  if (ctype_string_match("signed short int")) { *idp = CTID_INT16; return 1; }
+  if (ctype_string_match("unsigned short")) { *idp = CTID_UINT16; return 1; }
+  if (ctype_string_match("unsigned short int")) {
+    *idp = CTID_UINT16;
+    return 1;
+  }
+  if (ctype_string_match("int")) { *idp = CTID_INT32; return 1; }
+  if (ctype_string_match("signed")) { *idp = CTID_INT32; return 1; }
+  if (ctype_string_match("signed int")) { *idp = CTID_INT32; return 1; }
+  if (ctype_string_match("unsigned")) { *idp = CTID_UINT32; return 1; }
+  if (ctype_string_match("unsigned int")) { *idp = CTID_UINT32; return 1; }
+  if (sizeof(long) == 8 &&
+      (ctype_string_match("long") || ctype_string_match("long int") ||
+       ctype_string_match("signed long") ||
+       ctype_string_match("signed long int"))) {
+    *idp = CTID_INT64;
+    return 1;
+  }
+  if (sizeof(long) == 8 &&
+      (ctype_string_match("unsigned long") ||
+       ctype_string_match("unsigned long int"))) {
+    *idp = CTID_UINT64;
+    return 1;
+  }
+  if (ctype_string_match("float")) { *idp = CTID_FLOAT; return 1; }
+  if (ctype_string_match("double")) { *idp = CTID_DOUBLE; return 1; }
+  if (ctype_string_match("complex") ||
+      ctype_string_match("_Complex") ||
+      ctype_string_match("__complex") ||
+      ctype_string_match("__complex__") ||
+      ctype_string_match("complex double") ||
+      ctype_string_match("double complex") ||
+      ctype_string_match("_Complex double") ||
+      ctype_string_match("double _Complex") ||
+      ctype_string_match("__complex double") ||
+      ctype_string_match("double __complex") ||
+      ctype_string_match("__complex__ double") ||
+      ctype_string_match("double __complex__") ||
+      ctype_string_match("complex long double") ||
+      ctype_string_match("long double complex") ||
+      ctype_string_match("_Complex long double") ||
+      ctype_string_match("long double _Complex") ||
+      ctype_string_match("__complex long double") ||
+      ctype_string_match("long double __complex") ||
+      ctype_string_match("__complex__ long double") ||
+      ctype_string_match("long double __complex__")) {
+    *idp = CTID_COMPLEX_DOUBLE;
+    return 1;
+  }
+  if (ctype_string_match("complex float") ||
+      ctype_string_match("float complex") ||
+      ctype_string_match("_Complex float") ||
+      ctype_string_match("float _Complex") ||
+      ctype_string_match("__complex float") ||
+      ctype_string_match("float __complex") ||
+      ctype_string_match("__complex__ float") ||
+      ctype_string_match("float __complex__")) {
+    *idp = CTID_COMPLEX_FLOAT;
+    return 1;
+  }
+  if (ctype_string_match("int8_t")) { *idp = CTID_INT8; return 1; }
+  if (ctype_string_match("uint8_t")) { *idp = CTID_UINT8; return 1; }
+  if (ctype_string_match("uint8_t *")) { *idp = CTID_P_UINT8; return 1; }
+  if (ctype_string_match("uint8_t*")) { *idp = CTID_P_UINT8; return 1; }
+  if (ctype_string_match("int16_t")) { *idp = CTID_INT16; return 1; }
+  if (ctype_string_match("uint16_t")) { *idp = CTID_UINT16; return 1; }
+  if (ctype_string_match("int32_t")) { *idp = CTID_INT32; return 1; }
+  if (ctype_string_match("uint32_t")) { *idp = CTID_UINT32; return 1; }
+  if (ctype_string_match("int64_t")) { *idp = CTID_INT64; return 1; }
+  if (ctype_string_match("uint64_t")) { *idp = CTID_UINT64; return 1; }
+  if (ctype_string_match("ptrdiff_t")) { *idp = CTID_INT_PSZ; return 1; }
+  if (ctype_string_match("size_t")) { *idp = CTID_UINT_PSZ; return 1; }
+  if (ctype_string_match("ssize_t")) { *idp = CTID_INT_PSZ; return 1; }
+  if (ctype_string_match("intptr_t")) { *idp = CTID_INT_PSZ; return 1; }
+  if (ctype_string_match("uintptr_t")) { *idp = CTID_UINT_PSZ; return 1; }
+  if (ctype_string_match("wchar_t")) { *idp = CTID_WCHAR; return 1; }
+  return 0;
+}
+
+#undef ctype_string_match
+
 #define CTTYPEINFO_NUM		(sizeof(lj_ctype_typeinfo)/sizeof(CTInfo)-1)
 #ifdef LUAJIT_CTYPE_CHECK_ANCHOR
 #define CTTYPETAB_MIN		CTTYPEINFO_NUM

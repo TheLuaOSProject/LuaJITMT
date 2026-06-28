@@ -10,6 +10,15 @@ spellings. The immutable predefined const bases `const void`, `void const`,
 `const char`, and `char const` are also direct matches, so pointer chains over
 those bases do not need a parser round trip.
 
+The trace recorder uses the same exact immutable-name table before trying to
+claim `CTState.parse_token`, so traced `ffi.sizeof("int")`,
+`ffi.typeof("double")`, and other exact predefined names can record while an
+unrelated parser owns the token. Recorder-side direct handling is deliberately
+limited to immutable predefined CTIDs; strings that need name snapshots,
+interned parser-compatible records, arrays, pointer construction, or normal
+parser diagnostics still abort with `CTBUSY` instead of waiting while
+recording.
+
 Predefined complex primitives use the same direct path for the parser's common
 spellings: `complex`, `_Complex`, `complex double`, `double complex`,
 `complex float`, `float complex`, and the GNU `__complex`/`__complex__`

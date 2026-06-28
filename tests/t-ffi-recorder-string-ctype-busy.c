@@ -24,6 +24,20 @@ static void assert_busy_trace_releases(lua_State *L, CTState *cts,
   ljt_ctype_assert_trace_abort_released(cts);
 }
 
+static void assert_busy_trace_records(lua_State *L, CTState *cts,
+				      const char *chunk)
+{
+  ljt_ctype_arm_trace_abort(L, cts);
+  ljt_lua_dostring(L, chunk);
+  assert(ljt_ctype_trace_start_count != 0);
+  assert(ljt_ctype_trace_stop_count != 0);
+  assert(ljt_ctype_trace_abort_count == 0);
+  assert(ljt_ctype_trace_ctbusy_count == 0);
+  assert(ljt_ctype_trace_cts == NULL);
+  assert(ljt_ctype_trace_seq == 0);
+  assert((ctype_parse_token_acq(cts) & 1u) == 0);
+}
+
 int main(void)
 {
   lua_State *L = ljt_lua_newstate_openlibs();
@@ -39,7 +53,7 @@ int main(void)
   cts = ctype_ctsG(G(L));
   assert(cts != NULL);
 
-  assert_busy_trace_releases(L, cts,
+  assert_busy_trace_records(L, cts,
     "local ffi = require('ffi')\n"
     "jit.attach(lj_m7_trace_parse_token, 'trace')\n"
     "jit.flush()\n"
@@ -52,9 +66,10 @@ int main(void)
     "  end\n"
     "  return sum\n"
     "end\n"
-    "for i = 1, 3 do assert(run(8) == 32) end\n"
+    "for i = 1, 30 do assert(run(40) == 160) end\n"
     "jit.attach(lj_m7_trace_parse_token)\n"
-    "assert(lj_m7_trace_parse_token_abort_count() >= 1)\n");
+    "assert(lj_m7_trace_parse_token_stop_count() >= 1)\n"
+    "assert(lj_m7_trace_parse_token_ctbusy_count() == 0)\n");
 
   assert_busy_trace_releases(L, cts,
     "local ffi = require('ffi')\n"
@@ -93,6 +108,6 @@ int main(void)
     "assert(a[0] == 23)\n");
 
   lua_close(L);
-  printf("t-ffi-recorder-string-ctype-busy OK: recorder string ctype parsing aborts instead of waiting\n");
+  printf("t-ffi-recorder-string-ctype-busy OK: recorder exact ctype strings bypass parser token and general strings abort instead of waiting\n");
   return 0;
 }
