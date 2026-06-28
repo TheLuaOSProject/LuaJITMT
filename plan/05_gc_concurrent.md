@@ -501,15 +501,15 @@ P_SWEEP entry handshake: {DISABLE_BARRIER, RESET_ALLOC, FLUSH_SSB(last)}.
   When all arenas have sweep_epoch==cycle (workers finish stragglers of
   threads that allocate slowly): aggregate live_estimate, compute next
   trigger (§5.11), → P_IDLE.
-Current bridge note: legacy sweep still owns the string/root sweep state
-machine and release-publishes `lj_gc2_sweep_legacy_ready()` after legacy
+Current bridge note: the old sweep state machine still owns the string/root
+sweep path and release-publishes `lj_gc2_sweep_bridge_ready()` after
 string/root sweep and boundary preparation reach the final real `P_SWEEP`
-boundary. GC2 owns the legacy boundary's traversable prepare/restore walk and
-minor-sweep latch query through `lj_gc2_sweep_prepare_legacy_boundary()` and
-`lj_gc2_sweep_minor_active()`, while legacy supplies only the root-chain
-preservation callback. Legacy publishes that string/root boundary through
-`lj_gc2_legacy_sweep_boundary_reached()` rather than setting the raw GC2
-ready latch directly. `lj_gc2_sweep_bridge_close()` owns the legacy driver's
+boundary. GC2 owns the bridge boundary's traversable prepare/restore walk and
+minor-sweep latch query through `lj_gc2_sweep_prepare_bridge_boundary()` and
+`lj_gc2_sweep_minor_active()`, while the bridge supplies only the root-chain
+preservation callback. The bridge publishes that string/root boundary through
+`lj_gc2_sweep_bridge_boundary_reached()` rather than setting the raw GC2
+ready latch directly. `lj_gc2_sweep_bridge_close()` owns the bridge driver's
 choice between
 real `SWEEP -> IDLE` closure and the preserving full-GC fast-forward close path;
 the real close path still uses `lj_gc2_sweep_to_idle()` to wait for the latch

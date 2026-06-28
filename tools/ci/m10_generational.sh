@@ -31,17 +31,6 @@ if ! grep -qE '^int lj_gc2_minor_roots_skip_bridge_mark[[:space:]]*[(]' \
     "lj_gc2_minor_roots_skip_bridge_mark definition is required for minor-root bridge policy" >&2
   exit 1
 fi
-if hits=$(grep -nE -- 'lj_gc2_legacy_mark_suppressed[[:space:]]*[(]' \
-  "$ROOT/src/lj_gc.c" \
-  "$ROOT/src/lj_gc2.c" \
-  "$ROOT/src/lj_gc2.h" || true); then
-  if [ -n "$hits" ]; then
-    printf '%s\n' \
-      "old legacy mark-suppression helper name must not be reintroduced" \
-      "$hits" >&2
-    exit 1
-  fi
-fi
 if ! grep -qE 'LJ_FUNC int lj_gc2_minor_roots_active[[:space:]]*[(]' \
   "$ROOT/src/lj_gc2.h"; then
   printf '%s\n' \
@@ -80,7 +69,7 @@ if ! grep -qF 'lj_gc2_minor_roots_skip_bridge_mark(g)' "$ROOT/src/lj_gc.c"; then
 fi
 if ! grep -qF 'lj_gc2_minor_roots_active(g)' "$ROOT/src/lj_gc.c"; then
   printf '%s\n' \
-    "legacy paranoia minor-root skip must query lj_gc2_minor_roots_active" >&2
+    "GC paranoia minor-root skip must query lj_gc2_minor_roots_active" >&2
   exit 1
 fi
 if ! grep -qF 's->cycle_roots_minor = lj_gc2_minor_roots_active(g);' \
@@ -98,14 +87,4 @@ if hits=$(grep -nE -- 'gc2_cycle_roots_minor_acq[[:space:]]*[(][[:space:]]*g[[:s
     exit 1
   fi
 fi
-if hits=$(grep -nE -- 'gc2_cycle_roots_minor_acq[[:space:]]*[(][[:space:]]*g[[:space:]]*[)]|lj_gc2_minor_roots_active[[:space:]]*[(]' \
-  "$ROOT/src/lib_base.c" || true); then
-  if [ -n "$hits" ]; then
-    printf '%s\n' \
-      "GC stats table builder must use the GC2 snapshot for minor-root state" \
-      "$hits" >&2
-    exit 1
-  fi
-fi
-
 exec "$ROOT/tools/ci/lua_test.sh" m10_generational

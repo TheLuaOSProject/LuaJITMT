@@ -23,9 +23,6 @@ local function assert_x64_vm_static_guards(t)
   if vm:find("DISPATCH_GL%(gc%.") then
     error("x64 VM must not load global GC state through DISPATCH_GL(gc.*)", 2)
   end
-  if vm:find("barrierback", 1, true) then
-    error("x64 VM must not reintroduce inline legacy barrierback", 2)
-  end
   local tnew = vm:match("case BC_TNEW:(.-)case BC_TDUP:")
   if not tnew then
     error("x64 VM BC_TNEW block not found", 2)

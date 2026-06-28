@@ -45,7 +45,7 @@ static void run_true_minor_cycle(lua_State *L, global_State *g, TGState *tg)
   assert(lj_gc2_weak_complete(g, gcref(g->gc.weak),
 			      LJ_GC2_WEAK_DRAIN_BATCH) == 1);
   lj_gc2_weak_to_sweep(g);
-  lj_gc2_sweep_legacy_ready(g);
+  lj_gc2_sweep_bridge_ready(g);
   do {
     swept = lj_gc2_test_sweep_owner_progress(g, tg, LJ_GC2_SWEEP_BATCH);
   } while (swept != 0);
@@ -73,7 +73,7 @@ static void test_minor_major_paranoia(void)
     "for i = 1, 400 do local t = {i, 'dead'..i}; t[3] = {i} end\n");
   run_true_minor_cycle(L, g, tg);
   lj_gc_fullgc(L);
-  assert(lj_gc2_test_paranoia_legacy_diff(g) == 0);
+  assert(lj_gc2_test_paranoia_root_diff(g) == 0);
   lj_gc2_set_generational(g, 0);
   lua_close(L);
 }
@@ -121,22 +121,22 @@ int main(void)
   lua_setglobal(L, "__gc2_ud");
 
   lj_gc_fullgc(L);
-  assert(lj_gc2_test_paranoia_legacy_diff(g) == 0);
+  assert(lj_gc2_test_paranoia_root_diff(g) == 0);
   assert(lj_gc2_test_ssb_empty(g));
   g->gc.stepmul = 1;
   g->gc.threshold = 0;
   while (lj_gc_step(L) <= 0)
     ;
-  assert(lj_gc2_test_paranoia_legacy_diff(g) == 0);
+  assert(lj_gc2_test_paranoia_root_diff(g) == 0);
   assert(lj_gc2_test_ssb_empty(g));
 
   lj_gc2_legacy_mark_begin(g);
   assert(lj_gc2_test_ssb_empty(g));
   stray = lj_arena_alloc(&tg->alloc, &tg->prng, 64, LJ_AF_TRAVERSABLE);
   assert(stray != NULL);
-  assert(lj_gc2_test_paranoia_legacy_diff(g) == 1);
+  assert(lj_gc2_test_paranoia_root_diff(g) == 1);
   lj_arena_free(&tg->alloc, stray, 64);
-  assert(lj_gc2_test_paranoia_legacy_diff(g) == 0);
+  assert(lj_gc2_test_paranoia_root_diff(g) == 0);
 
   lj_gc2_legacy_cycle_end(g);
 
@@ -152,9 +152,9 @@ int main(void)
   extra_stray = lj_arena_alloc(&extra_tg.alloc, &extra_tg.prng, 64,
 			       LJ_AF_TRAVERSABLE);
   assert(extra_stray != NULL);
-  assert(lj_gc2_test_paranoia_legacy_diff(g) == 1);
+  assert(lj_gc2_test_paranoia_root_diff(g) == 1);
   lj_arena_free(&extra_tg.alloc, extra_stray, 64);
-  assert(lj_gc2_test_paranoia_legacy_diff(g) == 0);
+  assert(lj_gc2_test_paranoia_root_diff(g) == 0);
   lj_gc2_legacy_cycle_end(g);
 
   lj_tg_detach(g, &extra_tg);

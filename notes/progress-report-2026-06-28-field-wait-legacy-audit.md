@@ -12,8 +12,8 @@ Overall correctness/stability progress: 70-80%.
 - FFI concurrency outside mutable `ffi.cdef`: 70-80%.
 - Interpreter-side FFI parser fallback removal: 58-68%.
 - FFI recorder read-only ctype paths: 82-90%.
-- Legacy/compat bridge removal, excluding public API semantics: 84-90%.
-- CI migration from source guards to behavior tests: 73-83%.
+- Legacy/compat bridge removal, excluding public API semantics: 85-91%.
+- CI migration from source guards to behavior tests: 74-84%.
 - Release-quality soak and benchmark readiness: 47-57%.
 - Performance parity with stock LuaJIT: 35-45%, intentionally secondary.
 
@@ -44,9 +44,20 @@ Overall correctness/stability progress: 70-80%.
   replacement, `lj_gc2_minor_roots_skip_bridge_mark()`, names the actual
   behavior without implying that legacy marking itself is disabled.
 - Removed another internal legacy helper name from the sweep-close bridge. The
-  replacement, `lj_gc2_sweep_bridge_close()`, owns the legacy driver's choice
+  replacement, `lj_gc2_sweep_bridge_close()`, owns the bridge driver's choice
   between real `SWEEP -> IDLE` closure and preserving full-GC fast-forward
   closure.
+- Renamed the GC2 sweep close-readiness latch and boundary helpers from
+  `sweep_legacy_ready` / `lj_gc2_sweep_legacy_*` names to
+  `sweep_bridge_ready` / `lj_gc2_sweep_bridge_*`. This removes another
+  fork-era legacy label while preserving the same root-sweep boundary behavior.
+- Renamed local/diagnostic legacy wording in GC pacing and GC2 paranoia tests:
+  `legacy_live` / `legacy_step` are now current-purpose local names, and the
+  paranoia reverse oracle is exposed as `lj_gc2_test_paranoia_root_diff()`.
+- Removed duplicate/tombstone-only source guards: M3 no longer duplicates M5's
+  x64 `barrierback` guard, M10 no longer duplicates M9's stats-builder guard,
+  and old removed-helper tombstones were dropped where current helper checks and
+  behavior coverage already protect the boundary.
 
 ## Still remaining
 
@@ -54,9 +65,10 @@ Overall correctness/stability progress: 70-80%.
   queries where errors, VLA/VLS size, and rollback behavior need careful
   snapshot equivalents.
 - `lj_clib.c` namespace lookup still has a parser fallback path.
-- GC2 legacy bridge names and tests remain. The highest-value cleanup is to
-  convert exact-name source guards around sweep/finalizer/weak behavior into
-  semantic tests, then rename or remove the old bridge names.
+- GC2 legacy bridge names and tests remain in mark/cycle, weak, and finalizer
+  areas. The highest-value cleanup is to convert exact-name source guards around
+  finalizer/weak behavior into semantic tests, then rename or remove the old
+  bridge names where the names are only fork-era scaffolding.
 - Aggregate CI still has many source guards. Keep guards for memory ordering,
   ABI, and generated-code boundaries; convert source-shape checks when behavior
   can observe the invariant.

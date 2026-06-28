@@ -93,7 +93,7 @@ static void test_worker_owned_sweep_direct(void)
   g->gc2.cycle++;
   sweep_cycle = g->gc2.cycle;
   g->gc2.phase = LJ_GC2_SWEEP;
-  gc2_sweep_legacy_ready_store_rlx(g, 0);
+  gc2_sweep_bridge_ready_store_rlx(g, 0);
   lj_arena_alloc_prepare_sweep_kind(&extra_tg.alloc, LJ_ARENAK_PLAIN);
   lj_arena_alloc_prepare_sweep_kind(&extra_tg.alloc, LJ_ARENAK_TRAVERSABLE);
   lj_arena_alloc_restore_sweep_kind(&extra_tg.alloc, LJ_ARENAK_PLAIN);
@@ -113,7 +113,7 @@ static void test_worker_owned_sweep_direct(void)
   assert(lj_gc2_worker_drain(g, 1) == 0);
   assert(gc2_worker_runs_acq(g) == worker_runs0);
   assert(gc2_sweep_owner_arenas_acq(g) == arenas0);
-  lj_gc2_sweep_legacy_ready(g);
+  lj_gc2_sweep_bridge_ready(g);
   assert(lj_gc2_worker_drain(g, 1) == 1u);
   assert(gc2_worker_runs_acq(g) == worker_runs0 + 1u);
   assert(gc2_sweep_owner_arenas_acq(g) == arenas0 + 1u);
@@ -179,7 +179,7 @@ static void test_minor_sweep_identity_direct(void)
   g->gc2.cycle++;
   sweep_cycle = g->gc2.cycle;
   g->gc2.phase = LJ_GC2_SWEEP;
-  gc2_sweep_legacy_ready_store_rlx(g, 0);
+  gc2_sweep_bridge_ready_store_rlx(g, 0);
   la_store32_rel(&g->gc2.cycle_minor_requested, 1);
   la_store32_rel(&g->gc2.minor_sweep_enabled, 1);
   la_store32_rel(&g->gc2.cycle_sweep_minor, 1);
@@ -188,7 +188,7 @@ static void test_minor_sweep_identity_direct(void)
   minor_arenas0 = gc2_minor_sweep_arenas_acq(g);
   assert(lj_gc2_test_sweep_owner_progress(g, &extra_tg, 1) == 0);
   assert(gc2_minor_sweep_arenas_acq(g) == minor_arenas0);
-  lj_gc2_sweep_legacy_ready(g);
+  lj_gc2_sweep_bridge_ready(g);
   assert(lj_gc2_test_sweep_owner_progress(g, &extra_tg, 1) == 1u);
   assert(gc2_minor_sweep_arenas_acq(g) == minor_arenas0 + 1u);
   assert(ptr_state(dead) == 1);

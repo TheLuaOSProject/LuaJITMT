@@ -528,7 +528,7 @@ int main(void)
   lj_gc2_mark_to_weak(g);
   lj_gc2_weak_to_sweep(g);
   assert(lj_gc2_test_sweep_owner_progress(g, tg, 64) == 0);
-  lj_gc2_sweep_legacy_ready(g);
+  lj_gc2_sweep_bridge_ready(g);
   assert(lj_gc2_test_sweep_owner_progress(g, tg, 64) > 0);
   assert(!root_contains(g, obj2gco(active_child)));
   lj_gc2_legacy_cycle_end(g);

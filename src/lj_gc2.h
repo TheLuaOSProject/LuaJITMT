@@ -13,7 +13,7 @@
 #endif
 
 typedef void (*GC2FinalizerMarkFunc)(global_State *g, GCobj *o);
-typedef void (*GC2LegacySweepPreserveFunc)(global_State *g);
+typedef void (*GC2SweepBridgePreserveFunc)(global_State *g);
 typedef void (*GC2FinRegMarkFunc)(global_State *g, cTValue *tv);
 typedef void (*GC2FinRegMarkObjFunc)(global_State *g, GCobj *o);
 typedef void (*GC2FinRegMarkMemFunc)(global_State *g, void *p);
@@ -171,13 +171,13 @@ LJ_FUNC void lj_gc2_force_major(global_State *g);
 LJ_FUNC void lj_gc2_legacy_preserve_abort(global_State *g);
 LJ_FUNC void lj_gc2_legacy_cycle_end(global_State *g);
 LJ_FUNC int lj_gc2_sweep_bridge_close(global_State *g);
-LJ_FUNC void lj_gc2_sweep_legacy_ready(global_State *g);
-LJ_FUNC void lj_gc2_legacy_sweep_boundary_reached(global_State *g);
-LJ_FUNC void lj_gc2_sweep_prepare_legacy_boundary(global_State *g,
-						  GC2LegacySweepPreserveFunc preserve);
+LJ_FUNC void lj_gc2_sweep_bridge_ready(global_State *g);
+LJ_FUNC void lj_gc2_sweep_bridge_boundary_reached(global_State *g);
+LJ_FUNC void lj_gc2_sweep_prepare_bridge_boundary(global_State *g,
+						  GC2SweepBridgePreserveFunc preserve);
 LJ_FUNC int lj_gc2_sweep_to_idle(global_State *g);
 LJ_FUNC int lj_gc2_sweep_tg_ready(TGState *tg);
-LJ_FUNC int lj_gc2_sweep_legacy_can_progress(global_State *g);
+LJ_FUNC int lj_gc2_sweep_bridge_can_progress(global_State *g);
 LJ_FUNC int lj_gc2_sweep_minor_active(global_State *g);
 LJ_FUNC int lj_gc2_sweep_needs_prepare(global_State *g);
 LJ_FUNC int lj_gc2_sweep_pending(global_State *g);
@@ -254,7 +254,7 @@ LJ_FUNC uint32_t lj_gc2_test_sweep_owner_progress(global_State *g,
 						  TGState *tg,
 						  uint32_t limit);
 #if LJ_GC2_PARANOIA
-LJ_FUNC uint32_t lj_gc2_test_paranoia_legacy_diff(global_State *g);
+LJ_FUNC uint32_t lj_gc2_test_paranoia_root_diff(global_State *g);
 #endif
 LJ_FUNC void lj_gc2_test_finreg_cdata_finalizer_enqueue(global_State *g,
 							GCobj *o);

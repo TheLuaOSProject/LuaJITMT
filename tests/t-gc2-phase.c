@@ -859,7 +859,7 @@ int main(void)
   assert(lj_gc2_test_finalizer_queue_pending(g));
   assert(lj_gc2_test_finalizer_pending(g));
   assert(lj_gc2_test_finalizer_sweep_pending(g));
-  lj_gc2_sweep_legacy_ready(g);
+  lj_gc2_sweep_bridge_ready(g);
   assert(lj_gc2_sweep_to_idle(g) == 0);
   assert(la_load32_acq(&g->gc2.phase) == LJ_GC2_SWEEP);
   assert(gc2_sweep_to_idle_acq(g) == sweep_to_idle0);
@@ -870,7 +870,7 @@ int main(void)
   assert(!lj_gc2_test_finalizer_queue_pending(g));
   assert(!lj_gc2_test_finalizer_pending(g));
   assert(!lj_gc2_test_finalizer_sweep_pending(g));
-  lj_gc2_sweep_legacy_ready(g);
+  lj_gc2_sweep_bridge_ready(g);
   assert(lj_gc2_sweep_to_idle(g) == 1);
   assert(gc2_sweep_to_idle_acq(g) == sweep_to_idle0 + 1u);
   assert(la_load64_acq(&g->gc2.sweep_live_updates) ==

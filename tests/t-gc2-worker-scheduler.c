@@ -473,7 +473,7 @@ static void test_async_sweep_and_stop(lua_State *L, global_State *g,
   lj_arena_alloc_prepare_sweep_kind(&extra_tg.alloc, LJ_ARENAK_TRAVERSABLE);
   lj_arena_alloc_restore_sweep_kind(&extra_tg.alloc, LJ_ARENAK_PLAIN);
   extra_tg.alloc.prepare_epoch = sweep_cycle;
-  lj_gc2_sweep_legacy_ready(g);
+  lj_gc2_sweep_bridge_ready(g);
   assert(extra_tg.alloc.needsweep[LJ_ARENAK_PLAIN] == NULL);
   assert(arena_list_contains(extra_tg.alloc.owned[LJ_ARENAK_PLAIN],
 			     extra_plain_a));
@@ -519,7 +519,7 @@ static void test_async_sweep_and_stop(lua_State *L, global_State *g,
   assert(!lj_gc2_sweep_pending(g));
 
   /* Keep the later close-boundary assertion synthetic and explicit. */
-  gc2_sweep_legacy_ready_rel(g, 0);
+  gc2_sweep_bridge_ready_rel(g, 0);
   lj_arena_alloc_restore_sweep_kind(&extra_tg.alloc, LJ_ARENAK_TRAVERSABLE);
   /* Synthetic boundary: main TG had no prepared work. */
   tg->alloc.prepare_epoch = sweep_cycle;
@@ -528,7 +528,7 @@ static void test_async_sweep_and_stop(lua_State *L, global_State *g,
   assert(lj_gc2_sweep_to_idle(g) == 0);
   assert(la_load32_acq(&g->gc2.phase) == LJ_GC2_SWEEP);
   async0 = gc2_worker_async_progress_acq(g);
-  lj_gc2_sweep_legacy_ready(g);
+  lj_gc2_sweep_bridge_ready(g);
   for (i = 0; i < 1000 && la_load32_acq(&g->gc2.phase) == LJ_GC2_SWEEP; i++) {
     lj_gc2_test_worker_wake(g);
     (void)lj_safepoint_poll(L);

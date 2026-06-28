@@ -504,53 +504,53 @@ if hits=$(grep -nE -- 'lj_gc2_finalizer_queue_pending[[:space:]]*[(]' \
   printf '%s\n' 'legacy GC must not open-code low-level finalizer queue checks' >&2
   exit 1
 fi
-if ! grep -qE 'LJ_FUNC int lj_gc2_sweep_legacy_can_progress[[:space:]]*[(]' \
+if ! grep -qE 'LJ_FUNC int lj_gc2_sweep_bridge_can_progress[[:space:]]*[(]' \
     "$ROOT/src/lj_gc2.h"; then
-  printf '%s\n' 'lj_gc2_sweep_legacy_can_progress declaration is required for arena sweep/finalizer ownership' >&2
+  printf '%s\n' 'lj_gc2_sweep_bridge_can_progress declaration is required for arena sweep/finalizer ownership' >&2
   exit 1
 fi
-if ! grep -qE '^int lj_gc2_sweep_legacy_can_progress[[:space:]]*[(]' \
+if ! grep -qE '^int lj_gc2_sweep_bridge_can_progress[[:space:]]*[(]' \
     "$ROOT/src/lj_gc2.c"; then
-  printf '%s\n' 'lj_gc2_sweep_legacy_can_progress definition is required for arena sweep/finalizer ownership' >&2
+  printf '%s\n' 'lj_gc2_sweep_bridge_can_progress definition is required for arena sweep/finalizer ownership' >&2
   exit 1
 fi
-if ! grep -qF 'lj_gc2_sweep_legacy_can_progress(g)' "$ROOT/src/lj_gc.c"; then
-  printf '%s\n' 'legacy arena sweep readiness must use lj_gc2_sweep_legacy_can_progress' >&2
+if ! grep -qF 'lj_gc2_sweep_bridge_can_progress(g)' "$ROOT/src/lj_gc.c"; then
+  printf '%s\n' 'arena sweep readiness must use lj_gc2_sweep_bridge_can_progress' >&2
   exit 1
 fi
-if ! grep -qE 'LJ_FUNC void lj_gc2_sweep_prepare_legacy_boundary[[:space:]]*[(]' \
+if ! grep -qE 'LJ_FUNC void lj_gc2_sweep_prepare_bridge_boundary[[:space:]]*[(]' \
     "$ROOT/src/lj_gc2.h"; then
-  printf '%s\n' 'lj_gc2_sweep_prepare_legacy_boundary declaration is required for sweep-boundary ownership' >&2
+  printf '%s\n' 'lj_gc2_sweep_prepare_bridge_boundary declaration is required for sweep-boundary ownership' >&2
   exit 1
 fi
-if ! grep -qE '^void lj_gc2_sweep_prepare_legacy_boundary[[:space:]]*[(]' \
+if ! grep -qE '^void lj_gc2_sweep_prepare_bridge_boundary[[:space:]]*[(]' \
     "$ROOT/src/lj_gc2.c"; then
-  printf '%s\n' 'lj_gc2_sweep_prepare_legacy_boundary definition is required for sweep-boundary ownership' >&2
+  printf '%s\n' 'lj_gc2_sweep_prepare_bridge_boundary definition is required for sweep-boundary ownership' >&2
   exit 1
 fi
-if ! grep -qF 'lj_gc2_sweep_prepare_legacy_boundary(g, gc_arena_preserve_root_chain)' \
+if ! grep -qF 'lj_gc2_sweep_prepare_bridge_boundary(g, gc_arena_preserve_root_chain)' \
     "$ROOT/src/lj_gc.c"; then
-  printf '%s\n' 'legacy arena sweep boundary must use lj_gc2_sweep_prepare_legacy_boundary' >&2
+  printf '%s\n' 'arena sweep boundary must use lj_gc2_sweep_prepare_bridge_boundary' >&2
   exit 1
 fi
-if ! grep -qE 'LJ_FUNC void lj_gc2_legacy_sweep_boundary_reached[[:space:]]*[(]' \
+if ! grep -qE 'LJ_FUNC void lj_gc2_sweep_bridge_boundary_reached[[:space:]]*[(]' \
     "$ROOT/src/lj_gc2.h"; then
-  printf '%s\n' 'lj_gc2_legacy_sweep_boundary_reached declaration is required for sweep-ready ownership' >&2
+  printf '%s\n' 'lj_gc2_sweep_bridge_boundary_reached declaration is required for sweep-ready ownership' >&2
   exit 1
 fi
-if ! grep -qE '^void lj_gc2_legacy_sweep_boundary_reached[[:space:]]*[(]' \
+if ! grep -qE '^void lj_gc2_sweep_bridge_boundary_reached[[:space:]]*[(]' \
     "$ROOT/src/lj_gc2.c"; then
-  printf '%s\n' 'lj_gc2_legacy_sweep_boundary_reached definition is required for sweep-ready ownership' >&2
+  printf '%s\n' 'lj_gc2_sweep_bridge_boundary_reached definition is required for sweep-ready ownership' >&2
   exit 1
 fi
-if ! grep -qF 'lj_gc2_legacy_sweep_boundary_reached(g)' "$ROOT/src/lj_gc.c"; then
-  printf '%s\n' 'legacy GC sweep boundary must publish through lj_gc2_legacy_sweep_boundary_reached' >&2
+if ! grep -qF 'lj_gc2_sweep_bridge_boundary_reached(g)' "$ROOT/src/lj_gc.c"; then
+  printf '%s\n' 'GC sweep boundary must publish through lj_gc2_sweep_bridge_boundary_reached' >&2
   exit 1
 fi
-if hits=$(grep -nE -- 'lj_gc2_sweep_legacy_ready[[:space:]]*[(][[:space:]]*g[[:space:]]*[)]' \
+if hits=$(grep -nE -- 'lj_gc2_sweep_bridge_ready[[:space:]]*[(][[:space:]]*g[[:space:]]*[)]' \
     "$ROOT/src/lj_gc.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
-  printf '%s\n' 'legacy GC must not publish the raw GC2 sweep-ready latch directly' >&2
+  printf '%s\n' 'GC sweep bridge must not publish the raw GC2 sweep-ready latch directly' >&2
   exit 1
 fi
 if ! grep -qE 'LJ_FUNC int lj_gc2_sweep_minor_active[[:space:]]*[(]' \
@@ -564,13 +564,13 @@ if ! grep -qE '^int lj_gc2_sweep_minor_active[[:space:]]*[(]' \
   exit 1
 fi
 if ! grep -qF 'lj_gc2_sweep_minor_active(g)' "$ROOT/src/lj_gc.c"; then
-  printf '%s\n' 'legacy GC minor sweep policy must query lj_gc2_sweep_minor_active' >&2
+  printf '%s\n' 'GC sweep bridge minor policy must query lj_gc2_sweep_minor_active' >&2
   exit 1
 fi
-if hits=$(grep -nE -- 'gc2_cycle_acq[[:space:]]*[(][[:space:]]*g[[:space:]]*[)]|gc2_sweep_legacy_ready_acq[[:space:]]*[(][[:space:]]*g[[:space:]]*[)]|gc2_cycle_sweep_minor_acq[[:space:]]*[(][[:space:]]*g[[:space:]]*[)]' \
+if hits=$(grep -nE -- 'gc2_cycle_acq[[:space:]]*[(][[:space:]]*g[[:space:]]*[)]|gc2_sweep_bridge_ready_acq[[:space:]]*[(][[:space:]]*g[[:space:]]*[)]|gc2_cycle_sweep_minor_acq[[:space:]]*[(][[:space:]]*g[[:space:]]*[)]' \
     "$ROOT/src/lj_gc.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
-  printf '%s\n' 'legacy GC must not read raw GC2 sweep epoch/readiness/minor latches' >&2
+  printf '%s\n' 'GC sweep bridge must not read raw GC2 sweep epoch/readiness/minor latches' >&2
   exit 1
 fi
 if ! grep -qE 'LJ_FUNC int lj_gc2_sweep_bridge_close[[:space:]]*[(]' \
@@ -583,16 +583,8 @@ if ! grep -qE '^int lj_gc2_sweep_bridge_close[[:space:]]*[(]' \
   printf '%s\n' 'lj_gc2_sweep_bridge_close definition is required for sweep-close ownership' >&2
   exit 1
 fi
-if hits=$(grep -nE -- 'lj_gc2_legacy_sweep_close[[:space:]]*[(]' \
-    "$ROOT/src/lj_gc.c" \
-    "$ROOT/src/lj_gc2.c" \
-    "$ROOT/src/lj_gc2.h" || true); [ -n "$hits" ]; then
-  printf '%s\n' "$hits" >&2
-  printf '%s\n' 'old legacy sweep-close helper name must not be reintroduced' >&2
-  exit 1
-fi
 if ! grep -qF 'lj_gc2_sweep_bridge_close(g)' "$ROOT/src/lj_gc.c"; then
-  printf '%s\n' 'legacy sweep close must use lj_gc2_sweep_bridge_close' >&2
+  printf '%s\n' 'sweep close must use lj_gc2_sweep_bridge_close' >&2
   exit 1
 fi
 if hits=$(grep -nE -- 'lj_gc2_sweep_to_idle[[:space:]]*[(]|lj_gc2_legacy_cycle_end[[:space:]]*[(]' \
@@ -892,20 +884,20 @@ if hits=$(grep -nE -- '->[[:space:]]*gc2[.]cycle([^[:alnum:]_]|$)|&[[:space:]]*[
   printf '%s\n' 'raw GC2 cycle epoch access is forbidden; use gc2_cycle_* helpers' >&2
   exit 1
 fi
-for helper in gc2_sweep_legacy_ready_acq \
-  gc2_sweep_legacy_ready_store_rlx \
-  gc2_sweep_legacy_ready_rel; do
+for helper in gc2_sweep_bridge_ready_acq \
+  gc2_sweep_bridge_ready_store_rlx \
+  gc2_sweep_bridge_ready_rel; do
   if ! grep -qE "^[[:space:]]*${helper}[[:space:]]*[(]|static LJ_AINLINE .*[*[:space:]]${helper}[[:space:]]*[(]" \
       "$ROOT/src/lj_obj.h"; then
     printf '%s\n' "${helper} helper is required for GC2 sweep close readiness" >&2
     exit 1
   fi
 done
-if hits=$(grep -nE -- '->[[:space:]]*gc2[.]sweep_legacy_ready([^[:alnum:]_]|$)|&[[:space:]]*[^)]*->[[:space:]]*gc2[.]sweep_legacy_ready([^[:alnum:]_]|$)' \
+if hits=$(grep -nE -- '->[[:space:]]*gc2[.]sweep_bridge_ready([^[:alnum:]_]|$)|&[[:space:]]*[^)]*->[[:space:]]*gc2[.]sweep_bridge_ready([^[:alnum:]_]|$)' \
     "$ROOT/src/lj_gc.c" \
     "$ROOT/src/lj_gc2.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
-  printf '%s\n' 'raw GC2 sweep close-readiness access is forbidden; use gc2_sweep_legacy_ready_* helpers' >&2
+  printf '%s\n' 'raw GC2 sweep close-readiness access is forbidden; use gc2_sweep_bridge_ready_* helpers' >&2
   exit 1
 fi
 for helper in gc2_sweep_to_idle_acq \

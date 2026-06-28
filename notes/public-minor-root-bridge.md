@@ -59,12 +59,12 @@ Follow-up cleanup:
 
 - The minor-root bridge mark predicate now lives behind
   `lj_gc2_minor_roots_skip_bridge_mark()`, and
-  `tools/ci/m10_generational.sh` guards that boundary while rejecting the old
-  helper name.
+  `tools/ci/m10_generational.sh` guards that boundary through the current helper
+  declaration, definition, and call path.
   Verification: `tools/ci/m10_generational.sh`, `tools/ci/m9_m10_gc.sh`, and
   `tools/ci/m3_gc2_paranoia.sh` passed.
 - The raw `cycle_roots_minor` predicate is now exposed to non-GC2 production
-  code only through `lj_gc2_minor_roots_active()`. The legacy paranoia oracle
-  and base GC stats use that helper for true minor-cycle state, while M10
-  rejects direct raw `gc2_cycle_roots_minor_acq(g)` reads in `src/lj_gc.c` and
-  `src/lib_base.c`.
+  code only through `lj_gc2_minor_roots_active()`. The GC2 paranoia oracle
+  and base GC stats use that helper for true minor-cycle state, while M10 rejects
+  direct raw `gc2_cycle_roots_minor_acq(g)` reads in `src/lj_gc.c` and M9 owns
+  the stats-builder snapshot routing guard for `src/lib_base.c`.

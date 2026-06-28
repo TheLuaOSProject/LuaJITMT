@@ -120,7 +120,7 @@ static void gc_arena_rebuild_free(global_State *g)
 
 static int gc_arena_sweep_ready(global_State *g)
 {
-  return lj_gc2_sweep_legacy_can_progress(g);
+  return lj_gc2_sweep_bridge_can_progress(g);
 }
 
 static int gc_arena_sweep_needs_prepare(global_State *g)
@@ -157,7 +157,7 @@ static uint32_t gc_arena_finish_sweep_boundary(global_State *g, int drain)
     gc_arena_rebuild_free(g);
     return 0;
   }
-  lj_gc2_sweep_prepare_legacy_boundary(g, gc_arena_preserve_root_chain);
+  lj_gc2_sweep_prepare_bridge_boundary(g, gc_arena_preserve_root_chain);
   do {  /* 05 section 5.6.3 worker-owned sweep bridge. */
     uint32_t swept = lj_gc2_worker_drain(g, LJ_GC2_SWEEP_BATCH);
     if (swept > ~(uint32_t)0 - total)
@@ -1679,7 +1679,7 @@ static size_t gc_onestep(lua_State *L)
       if (arena_prepare)
 	gc_arena_verify_sweep_boundary(g);
       (void)gc_arena_finish_sweep_boundary(g, 0);
-      lj_gc2_legacy_sweep_boundary_reached(g);
+      lj_gc2_sweep_bridge_boundary_reached(g);
       if (gc_arena_sweep_pending(g))
 	return GCSWEEPMAX*GCSWEEPCOST;
       if (lj_gc2_finalizer_phase_pending(g)) {  /* Need finalizations? */
@@ -1750,16 +1750,16 @@ int LJ_FASTCALL lj_gc_step(lua_State *L)
   }
 }
 
-static void gc_step_assist_top(lua_State *L, global_State *g, int legacy_step)
+static void gc_step_assist_top(lua_State *L, global_State *g, int threshold_step)
 {
   lj_gc2_check_trigger(g, L2TG(L));
-  if (!legacy_step)
-    legacy_step = lj_gc_total_load(g) >= lj_gc_threshold_load(g);
+  if (!threshold_step)
+    threshold_step = lj_gc_total_load(g) >= lj_gc_threshold_load(g);
   if (lj_gc2_hard_limit_reached(g)) {
     gc2_interp_hard_checks_add(g, 1);
     lj_gc2_assist(g, L2TG(L));  /* 05 section 5.11 interpreter assist bridge. */
   }
-  if (legacy_step)
+  if (threshold_step)
     lj_gc_step(L);
 }
 
@@ -1788,19 +1788,19 @@ void LJ_FASTCALL lj_gc_step_top(lua_State *L)
 int LJ_FASTCALL lj_gc_step_jit(global_State *g, MSize steps)
 {
   lua_State *L = lj_tg_cur_L(g);
-  int legacy_step, hard_step;
+  int threshold_step, hard_step;
   TGState *tg;
   L->base = lj_tg_jit_base(g);
   L->top = curr_topL(L);
   tg = L2TG(L);
   lj_gc2_check_trigger(g, tg);
-  legacy_step = lj_gc_total_load(g) >= lj_gc_threshold_load(g);
+  threshold_step = lj_gc_total_load(g) >= lj_gc_threshold_load(g);
   hard_step = lj_gc2_hard_limit_reached(g);
   if (hard_step) {
     gc2_jit_hard_checks_add(g, 1);
     lj_gc2_assist(g, tg);  /* 05 section 5.11 trace-side assist bridge. */
   }
-  if (legacy_step) {
+  if (threshold_step) {
     while (steps-- > 0 && lj_gc_step(L) == 0)
       ;
   }

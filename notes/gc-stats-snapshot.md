@@ -14,7 +14,7 @@ inside `lj_gc2.c`.
 
 ## Guardrail
 
-`tools/ci/m9_gc_stats.sh` requires the snapshot API and rejects direct GC2
-helper reads in the stats table builder. `tools/ci/m10_generational.sh` now
-checks that the snapshot, not `lib_base.c`, queries
-`lj_gc2_minor_roots_active()` for `cycle_roots_minor`.
+`tools/ci/m9_gc_stats.sh` is the stats-table owner: it requires the snapshot
+API and rejects direct GC2 helper reads in the stats table builder.
+`tools/ci/m10_generational.sh` still checks that the snapshot records
+`cycle_roots_minor` through `lj_gc2_minor_roots_active()`.

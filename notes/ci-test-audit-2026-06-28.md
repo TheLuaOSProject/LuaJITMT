@@ -131,11 +131,19 @@
 - The internal sweep-close bridge helper was renamed to
   `lj_gc2_sweep_bridge_close()`, keeping the behavior boundary while removing
   another exact legacy helper name from production source.
+- The GC2 sweep close-readiness latch/helper surface was renamed to
+  `sweep_bridge_ready` / `lj_gc2_sweep_bridge_*`, and the scheduler guard now
+  checks the current bridge ownership surface without carrying old-name
+  tombstones for the removed `sweep_legacy_ready` names.
+- Removed more duplicate or tombstone-only guards: M3 no longer duplicates the
+  x64 `barrierback` check owned by M5, M10 no longer duplicates the stats-table
+  checks owned by M9, and M10/M3 no longer carry old-helper-name tombstones for
+  already-removed mark/sweep bridge wrappers.
 - Public or semantic compatibility helpers such as FFI pointer compatibility
   checks are not removal targets unless the language/API contract changes.
 - Anti-legacy guards that merely prevent reintroducing already-removed wrapper
-  names are acceptable during transition, but should be deleted once compile and
-  behavior coverage make them redundant.
+  names should be deleted once compile, replacement-surface, and behavior
+  coverage make them redundant.
 
 Verification for the alias removal:
 
