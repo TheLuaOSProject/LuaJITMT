@@ -616,22 +616,6 @@ static CTSize clib_func_argsize(CTState *cts, CType *ct)
 }
 #endif
 
-/* Get redirected or mangled external symbol. */
-static GCstr *clib_extsym(CTState *cts, CType *ct, GCstr *name)
-{
-  CTypeID sib = ctype_sib_acq(ct);
-  if (sib) {
-    CType *ctf = ctype_get(cts, sib);
-    CTInfo finfo = ctype_info_acq(ctf);
-    GCstr *redir = ctype_name_acq(ctf);
-    if (ctype_isxattrib(finfo, CTA_REDIR)) {
-      lj_assertCTS(redir != NULL, "missing redirected symbol name");
-      return redir;
-    }
-  }
-  return name;
-}
-
 /* Index a C library by name. */
 TValue *lj_clib_index(lua_State *L, CLibrary *cl, GCstr *name)
 {
@@ -647,20 +631,10 @@ TValue *lj_clib_index(lua_State *L, CLibrary *cl, GCstr *name)
     CTInfo info;
     int ok = lj_ctype_getname_snapshot(cts, name, CLNS_INDEX, &id, &snap,
 				       &symname);
-    if (ok < 0) {
-      lj_ctype_parse_lock(cts, L);
-      /* 11.2: ffi.C namespace readers wait out parser rollback. */
-      id = lj_ctype_getname(cts, &ct, name, CLNS_INDEX);
-      if (!id) {
-	lj_ctype_parse_unlock(cts);
-	lj_err_callerv(L, LJ_ERR_FFI_NODECL, strdata(name));
-      }
-      if (!ctype_isconstval(ctype_info_acq(ct)))
-	symname = clib_extsym(cts, ct, name);
-      ctype_copy_rel(&snap, ct);
-      ct = &snap;
-      lj_ctype_parse_unlock(cts);
-    } else if (!ok) {
+    if (ok < 0)
+      ok = lj_ctype_getname_wait(L, cts, name, CLNS_INDEX, &id, &snap,
+				 &symname);
+    if (!ok) {
       lj_err_callerv(L, LJ_ERR_FFI_NODECL, strdata(name));
     }
     info = ctype_info_acq(ct);

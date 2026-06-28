@@ -1211,6 +1211,9 @@ LJ_FUNC int lj_ctype_size_snapshot(CTState *cts, CTypeID id, CTSize *szp);
 LJ_FUNC int lj_ctype_getname_snapshot(CTState *cts, GCstr *name,
 				      uint32_t tmask, CTypeID *idp,
 				      CType *out, GCstr **redirp);
+LJ_FUNC int lj_ctype_getname_wait(lua_State *L, CTState *cts, GCstr *name,
+				  uint32_t tmask, CTypeID *idp, CType *out,
+				  GCstr **redirp);
 LJ_FUNC CTSize lj_ctype_vlsize(CTState *cts, CType *ct, CTSize nelem);
 LJ_FUNC CTInfo lj_ctype_info(CTState *cts, CTypeID id, CTSize *szp);
 LJ_FUNC CTInfo lj_ctype_info_raw(CTState *cts, CTypeID id, CTSize *szp);

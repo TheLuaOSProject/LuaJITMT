@@ -982,6 +982,18 @@ int lj_ctype_getname_snapshot(CTState *cts, GCstr *name, uint32_t tmask,
   }
 }
 
+int lj_ctype_getname_wait(lua_State *L, CTState *cts, GCstr *name,
+			  uint32_t tmask, CTypeID *idp, CType *out,
+			  GCstr **redirp)
+{
+  for (;;) {
+    int ok = lj_ctype_getname_snapshot(cts, name, tmask, idp, out, redirp);
+    if (ok >= 0)
+      return ok;
+    lj_ctype_parse_wait(cts, L, ctype_parse_token_acq(cts));
+  }
+}
+
 /* Get a struct/union/enum/function field by name. */
 CType *lj_ctype_getfieldq(CTState *cts, CType *ct, GCstr *name, CTSize *ofs,
 			  CTInfo *qual)

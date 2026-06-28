@@ -91,13 +91,22 @@ if hits=$(awk '
 fi
 if hits=$(awk '
   /^static CTSize clib_func_argsize\(/ ||
-  /^static GCstr \*clib_extsym\(/ ||
+  /^static int clib_getname_wait\(/ ||
   /^TValue \*lj_clib_index\(/ { in_fn = 1 }
   in_fn && /->[[:space:]]*(info|size|sib)([^[:alnum:]_]|$)/ { print FNR ":" $0 }
   in_fn && /^}/ { in_fn = 0 }
 ' "$ROOT/src/lj_clib.c" || true); [ -n "$hits" ]; then
   printf '%s\n' "$hits" >&2
   printf '%s\n' 'raw CType info/size/sib reads are forbidden in FFI C library namespace resolution; use ctype_*_acq() helpers' >&2
+  exit 1
+fi
+if hits=$(awk '
+  /^TValue \*lj_clib_index\(/ { in_fn = 1 }
+  in_fn && /lj_ctype_parse_lock[[:space:]]*[(]/ { print FNR ":" $0 }
+  in_fn && /^}/ { in_fn = 0 }
+' "$ROOT/src/lj_clib.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'lj_clib_index must use namespace snapshot wait/retry instead of taking the ctype parser token' >&2
   exit 1
 fi
 
