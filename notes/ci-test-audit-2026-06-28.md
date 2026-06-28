@@ -145,6 +145,9 @@
 - Removed two tombstone-only M3 CI guards for already-deleted weak/sweep phase
   aliases and old paranoia diff aliases. Current transition/root-diff behavior
   remains covered by the C fixtures and the active helper-shape guards.
+- Removed duplicate M3 finalizer negative scans that M8 already owns through its
+  close-time finalizer, callback-stack, and finalizer-spawn behavior gates. M3
+  still keeps the positive worker-scheduler ownership checks.
 - Public or semantic compatibility helpers such as FFI pointer compatibility
   checks are not removal targets unless the language/API contract changes.
 - Anti-legacy guards that merely prevent reintroducing already-removed wrapper

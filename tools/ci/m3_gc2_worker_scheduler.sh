@@ -602,22 +602,6 @@ if ! grep -qE '^int lj_gc2_finalizer_close_pending[[:space:]]*[(]' \
   printf '%s\n' 'lj_gc2_finalizer_close_pending definition is required for lua_close fixed-point ownership' >&2
   exit 1
 fi
-if hits=$(grep -nE -- 'lj_gc2_finalizer_queue_pending[[:space:]]*[(]|lj_gc_cdata_fin_pending[[:space:]]*[(]' \
-    "$ROOT/src/lj_state.c" || true); [ -n "$hits" ]; then
-  printf '%s\n' "$hits" >&2
-  printf '%s\n' 'lua_close finalizer fixed-point checks must use lj_gc2_finalizer_close_pending' >&2
-  exit 1
-fi
-if hits=$(grep -nE -- 'lj_gc_finalize_(udata|cdata|cdata_disable)[[:space:]]*[(]|lj_gc_cdata_fin_pending[[:space:]]*[(]|lj_gc_separateudata[[:space:]]*[(]|LJ_FUNC .*[[:space:]]lj_gc_finalize_(udata|cdata|cdata_disable)[[:space:]]*[(]|LJ_FUNC .*[[:space:]]lj_gc_cdata_fin_pending[[:space:]]*[(]|LJ_FUNC .*[[:space:]]lj_gc_separateudata[[:space:]]*[(]' \
-    "$ROOT/src/lj_gc.c" \
-    "$ROOT/src/lj_gc.h" \
-    "$ROOT/src/lj_state.c" \
-    "$ROOT/tests/t-gc2-traverse.c" \
-    "$ROOT/tests/t-gc2-worker-scheduler.c" || true); [ -n "$hits" ]; then
-  printf '%s\n' "$hits" >&2
-  printf '%s\n' 'legacy close-time finalizer wrappers are forbidden; use GC2 finalizer/FINREG APIs directly' >&2
-  exit 1
-fi
 if ! grep -qE 'LJ_FUNC int lj_gc2_finalizer_step[[:space:]]*[(]' \
     "$ROOT/src/lj_gc2.h"; then
   printf '%s\n' 'lj_gc2_finalizer_step declaration is required for GCSfinalize step ownership' >&2
@@ -744,18 +728,6 @@ if ! grep -qF 'lj_gc2_finalizer_step(L, GCFINALIZECOST,' "$ROOT/src/lj_gc.c"; th
   printf '%s\n' 'legacy GCSfinalize step must call lj_gc2_finalizer_step' >&2
   exit 1
 fi
-if hits=$(grep -nE -- 'gc_call_finalizer|lj_gc2_finalizer_(pause_threshold|restore_threshold|pcall)[[:space:]]*[(]|lj_gc2_finalizer_mt_(release|reclaim)_exclusive[[:space:]]*[(]|lj_vm_pcall[[:space:]]*[(]|lj_vmevent_send[[:space:]]*[(]|hook_(save|entergc|restore)[[:space:]]*[(]|lj_state_checkstack[[:space:]]*[(]|savestack[[:space:]]*[(]|restorestack[[:space:]]*[(]' \
-    "$ROOT/src/lj_gc.c" || true); [ -n "$hits" ]; then
-  printf '%s\n' "$hits" >&2
-  printf '%s\n' 'legacy finalizer callback path must not own callback stack, event, or protected-call policy' >&2
-  exit 1
-fi
-if hits=$(grep -nE -- 'LJ_FUNC .*[[:space:]]lj_gc2_finalizer_spawn_deferred[[:space:]]*[(]' \
-    "$ROOT/src/lj_gc2.h" || true); [ -n "$hits" ]; then
-  printf '%s\n' "$hits" >&2
-  printf '%s\n' 'raw finalizer-spawn deferral predicate must stay private to lj_gc2.c' >&2
-  exit 1
-fi
 if ! grep -qE '^static int gc2_finalizer_spawn_deferred[[:space:]]*[(]' \
     "$ROOT/src/lj_gc2.c"; then
   printf '%s\n' 'private gc2_finalizer_spawn_deferred implementation is required' >&2
@@ -763,12 +735,6 @@ if ! grep -qE '^static int gc2_finalizer_spawn_deferred[[:space:]]*[(]' \
 fi
 if ! grep -qF 'lj_gc2_finalizer_fullgc_deferred(g)' "$ROOT/src/lj_gc.c"; then
   printf '%s\n' 'lj_gc_fullgc must use lj_gc2_finalizer_fullgc_deferred' >&2
-  exit 1
-fi
-if hits=$(grep -nE -- 'lj_gc2_finalizer_spawn_deferred[[:space:]]*[(]' \
-    "$ROOT/src/lj_gc.c" || true); [ -n "$hits" ]; then
-  printf '%s\n' "$hits" >&2
-  printf '%s\n' 'legacy GC must not call raw finalizer-spawn deferral predicate' >&2
   exit 1
 fi
 if hits=$(grep -nE -- 'gc2_finalizer_spawn_(deferrals|release_wakes)_add|lj_gc2_worker_wake[(]g[)]' \
