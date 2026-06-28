@@ -10,6 +10,13 @@ spellings. The immutable predefined const bases `const void`, `void const`,
 `const char`, and `char const` are also direct matches, so pointer chains over
 those bases do not need a parser round trip.
 
+Target primitive numeric spellings that the parser normally interns as plain
+ctype records also use the direct path: `long long`, signed/unsigned
+`long long` variants, and `long double`. These are not aliased to `long` or
+`int64_t`; the direct path interns the same numeric ctype shape that the parser
+would create on x86-64 Linux, so qualifiers, pointer chains, and fixed-size
+arrays over those bases keep parser-compatible IDs.
+
 Exact already-published typedef identifiers and simple tag names also bypass
 the parser token on the stable path. `ffi.typeof("my_typedef")`,
 `ffi.sizeof("struct my_tag")`, `ffi.typeof("union my_tag")`, and similar

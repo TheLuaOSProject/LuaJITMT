@@ -227,6 +227,33 @@ static int ffi_qual_token(const char *p, MSize len, CTInfo *qualp)
   return 0;
 }
 
+static int ffi_direct_numeric_ctype(lua_State *L, CTState *cts,
+				    const char *p, MSize len, CTypeID *idp)
+{
+  CTInfo info;
+  CTSize size;
+  while (len != 0 && ffi_cspace(*p)) { p++; len--; }
+  while (len != 0 && ffi_cspace(p[len-1])) len--;
+  if (ffi_ctype_match("long long") ||
+      ffi_ctype_match("long long int") ||
+      ffi_ctype_match("signed long long") ||
+      ffi_ctype_match("signed long long int")) {
+    info = CTINFO(CT_NUM, CTALIGN(3));
+    size = 8;
+  } else if (ffi_ctype_match("unsigned long long") ||
+	     ffi_ctype_match("unsigned long long int")) {
+    info = CTINFO(CT_NUM, CTF_UNSIGNED|CTALIGN(3));
+    size = 8;
+  } else if (ffi_ctype_match("long double")) {
+    size = (CTSize)sizeof(long double);
+    info = CTINFO(CT_NUM, CTF_FP|CTALIGN(lj_fls(size)));
+  } else {
+    return 0;
+  }
+  *idp = lj_ctype_intern_l(L, cts, info, size);
+  return 1;
+}
+
 static int ffi_qual_prefix(const char *p, MSize len, MSize *toklenp,
 			   CTInfo *qualp)
 {
@@ -325,6 +352,8 @@ static int ffi_direct_ctype_base_unqualified(lua_State *L, CTState *cts,
   CTypeID id;
   CTInfo info;
   if (ffi_predefined_ctype_part(p, len, idp))
+    return 1;
+  if (ffi_direct_numeric_ctype(L, cts, p, len, idp))
     return 1;
   while (len != 0 && ffi_cspace(*p)) { p++; len--; }
   while (len != 0 && ffi_cspace(p[len-1])) len--;
