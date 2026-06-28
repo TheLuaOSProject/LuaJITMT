@@ -188,6 +188,18 @@ if hits=$(awk '
   exit 1
 fi
 if hits=$(awk '
+  /^LJLIB_CF\(ffi_alignof\)/ { in_fn = 1; saw_miss = 0 }
+  in_fn && /if[[:space:]]*[(]ok[[:space:]]*==[[:space:]]*0[)]/ { saw_miss = 1 }
+  in_fn && /ffi_checkctype_layout_lock[[:space:]]*[(]/ && !saw_miss {
+    print FNR ":" $0
+  }
+  in_fn && /^}/ { in_fn = 0 }
+' "$ROOT/src/lib_ffi.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'stable ffi.alignof() misses must not fall through to the parser-lock layout path' >&2
+  exit 1
+fi
+if hits=$(awk '
   /^static int ffi_layout_rawref\(/ ||
   /^static int ffi_layout_rawid\(/ ||
   /^static int ffi_layout_raw\(/ ||

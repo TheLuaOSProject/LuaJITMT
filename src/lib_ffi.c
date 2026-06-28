@@ -1605,6 +1605,10 @@ LJLIB_CF(ffi_alignof)	LJLIB_REC(ffi_xof FF_ffi_alignof)
       setintV(L->top-1, (int32_t)align);
       return 1;
     }
+    if (ok == 0) {
+      setnilV(L->top-1);
+      return 1;
+    }
   }
   id = ffi_checkctype_layout_lock(L, cts, NULL);
   {

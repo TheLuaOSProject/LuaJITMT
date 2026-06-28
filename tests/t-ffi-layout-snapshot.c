@@ -14,6 +14,7 @@
 #include "lj_obj.h"
 #include "lj_atomic.h"
 #include "lj_ctype.h"
+#include "lj_cdata.h"
 #include "lj_tg.h"
 
 #include "lib/ctype_parse_fixture_helpers.h"
@@ -25,6 +26,15 @@ typedef struct ParseReleaseCtx {
   uint32_t release_seq;
   int saw_native;
 } ParseReleaseCtx;
+
+static void init_abandoned_ctype(CType *ct)
+{
+  ctype_info_rel(ct, CTINFO(CT_ATTRIB, CTATTRIB(CTA_BAD)));
+  ctype_size_rel(ct, 0);
+  ctype_sib_rel(ct, 0);
+  ctype_next_rel(ct, 0);
+  ctype_clearname(ct);
+}
 
 static void sleep_ns(long ns)
 {
@@ -95,6 +105,17 @@ int main(void)
   assert(tg != NULL);
   seq0 = ljt_ctype_parse_seq(cts);
 
+  {
+    CType *ct;
+    CTypeID id = lj_ctype_new_l(L, cts, &ct);
+    GCcdata *cd;
+    init_abandoned_ctype(ct);
+    cd = lj_cdata_new_(L, CTID_CTYPEID, sizeof(CTypeID));
+    *(CTypeID *)cdataptr(cd) = id;
+    setcdataV(L, L->top++, cd);
+    lua_setglobal(L, "lj_m7_layout_abandoned_ct");
+  }
+
   ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"
     "for i = 1, 100 do\n"
@@ -111,6 +132,12 @@ int main(void)
     "  arr[6] = i\n"
     "  assert(ffi.sizeof(arr) == 28 and arr[6] == i)\n"
     "end\n");
+  seq1 = ljt_ctype_parse_seq(cts);
+  assert(seq1 == seq0);
+
+  ljt_lua_dostring(L,
+    "local ffi = require('ffi')\n"
+    "assert(ffi.alignof(lj_m7_layout_abandoned_ct) == nil)\n");
   seq1 = ljt_ctype_parse_seq(cts);
   assert(seq1 == seq0);
 
