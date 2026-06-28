@@ -1579,7 +1579,7 @@ int lj_ctype_info_predefined(CTState *cts, CTypeID id, CTInfo *infop,
   }
 }
 
-static int ctype_size_predefined(CTState *cts, CTypeID id, CTSize *szp)
+int lj_ctype_size_predefined(CTState *cts, CTypeID id, CTSize *szp)
 {
   CTypeTab *tabh;
   CTypeID top = CTID_CTYPEID + 1;
@@ -1614,7 +1614,7 @@ static int ctype_size_predefined(CTState *cts, CTypeID id, CTSize *szp)
 */
 int lj_ctype_size_wait(lua_State *L, CTState *cts, CTypeID id, CTSize *szp)
 {
-  int ok = ctype_size_predefined(cts, id, szp);
+  int ok = lj_ctype_size_predefined(cts, id, szp);
   if (ok >= 0)
     return ok;
   for (;;) {

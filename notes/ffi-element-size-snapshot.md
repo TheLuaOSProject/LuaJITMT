@@ -26,10 +26,11 @@ size result. Callers that need a `CType *` after the wait must refetch it from
 the current table.
 
 Predefined immutable element types now bypass the parser wait entirely when
-the size walk stays inside the predefined range. This covers interpreter
-numeric indexing and pointer arithmetic for `int *` and similar predefined
-element types. Parser-created typedefs, structs, incomplete records, and other
-rollback-sensitive records keep the existing sequence-checked native wait path.
+the size walk stays inside the predefined range. This covers interpreter and
+recorder numeric indexing and pointer arithmetic for `int *` and similar
+predefined element types. Parser-created typedefs, structs, incomplete records,
+and other rollback-sensitive records keep the existing sequence-checked native
+wait or recorder-abort path.
 
 Routed the stable path through this helper in:
 
@@ -53,10 +54,12 @@ Added `tests/t-ffi-element-size-snapshot.c`, wired into
 `m7_ffi_typeinfo_snapshot`. It verifies stable interpreted and traced numeric
 cdata indexing plus pointer arithmetic do not advance the cparser sequence.
 Follow-up coverage now holds the parser token, runs predefined `int *` numeric
-cdata indexing, pointer addition, and pointer difference without parking, then
-runs parser-created struct pointer operations and confirms those still park in
-native wait until release. This turns the old no-lock source-shape expectation
-into behavior.
+cdata indexing, pointer addition, and pointer difference without parking. It
+also holds the token during trace recording of the same predefined operations
+and verifies no parser-busy trace abort is reported. Parser-created struct
+pointer operations still park in native wait until release or abort recording
+instead of waiting from the recorder. This turns the old no-lock source-shape
+expectation into behavior.
 The existing rollback reader remains in the same suite and still covers
 numeric indexing and pointer arithmetic during failed parser rollback.
 

@@ -152,6 +152,17 @@ static CType *crec_ctype_rawchild(jit_State *J, CTState *cts, CType *ct,
   return out;
 }
 
+static CTSize crec_ctype_size(jit_State *J, CTState *cts, CTypeID id)
+{
+  CTSize sz;
+  int ok = lj_ctype_size_predefined(cts, id, &sz);
+  if (ok < 0)
+    ok = lj_ctype_size_snapshot(cts, id, &sz);
+  if (ok < 0)
+    lj_trace_err(J, LJ_TRERR_CTBUSY);
+  return ok ? sz : CTSIZE_INVALID;
+}
+
 static IRType crec_ct2irt_snapshot(jit_State *J, CTState *cts, CType *ct)
 {
   CTInfo info = ctype_info_acq(ct);
@@ -1003,14 +1014,7 @@ again:
   integer_key:
       pinfo = ctype_info_acq(ct);
       sid = ctype_cid(pinfo);
-      {
-	int ok = lj_ctype_size_snapshot(cts, sid, &sz);
-	if (ok < 0) {
-	  lj_trace_err(J, LJ_TRERR_CTBUSY);
-	} else if (ok == 0) {
-	  sz = CTSIZE_INVALID;
-	}
-      }
+      sz = crec_ctype_size(J, cts, sid);
       if (sz == CTSIZE_INVALID)
 	lj_trace_err(J, LJ_TRERR_BADTYPE);
       if ((pinfo & CTF_COMPLEX))
@@ -1705,12 +1709,7 @@ static TRef crec_arith_ptr(jit_State *J, TRef *sp, CType **s, MMS mm)
 	TRef tr;
 	CTSize sz;
 	CTypeID cid = ctype_cid(ctpinfo);
-	int ok = lj_ctype_size_snapshot(cts, cid, &sz);
-	if (ok < 0) {
-	  lj_trace_err(J, LJ_TRERR_CTBUSY);
-	} else if (ok == 0) {
-	  sz = CTSIZE_INVALID;
-	}
+	sz = crec_ctype_size(J, cts, cid);
 	if (sz == 0 || sz == CTSIZE_INVALID || (sz & (sz-1)) != 0)
 	  return 0;  /* NYI: integer division. */
 	tr = emitir(IRT(IR_SUB, IRT_INTP), sp[0], sp[1]);
@@ -1743,12 +1742,7 @@ static TRef crec_arith_ptr(jit_State *J, TRef *sp, CType **s, MMS mm)
     CTSize sz;
     CTypeID id;
     CTypeID cid = ctype_cid(ctpinfo);
-    int ok = lj_ctype_size_snapshot(cts, cid, &sz);
-    if (ok < 0) {
-      lj_trace_err(J, LJ_TRERR_CTBUSY);
-    } else if (ok == 0) {
-      sz = CTSIZE_INVALID;
-    }
+    sz = crec_ctype_size(J, cts, cid);
     if (sz == CTSIZE_INVALID)
       return 0;
 #if LJ_64
