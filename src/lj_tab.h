@@ -341,9 +341,10 @@ static LJ_AINLINE int lj_tab_array_forward_hop(const GCtab *t, TValue **arrayp,
 static LJ_AINLINE cTValue *lj_tab_getint(GCtab *t, int32_t key)
 {
   TValue *array;
+  MSize asize;
   int forward_retry = 1;
 retry_array:
-  MSize asize = lj_tab_array_snapshot_acq(t, &array);
+  asize = lj_tab_array_snapshot_acq(t, &array);
 genarray:
   if ((MSize)key < asize) {
     TValue val;

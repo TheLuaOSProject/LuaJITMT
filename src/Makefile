@@ -3,7 +3,7 @@
 #
 # Please read doc/install.html before changing any variables!
 #
-# Supported target for this lockless fork: x86-64 Linux with GC64.
+# Supported targets for this lockless fork: x86-64 Linux or macOS with GC64.
 # Unsupported platform builds are rejected by lj_arch.h.
 #
 # Copyright (C) 2005-2026 Mike Pall. See Copyright Notice in luajit.h
@@ -34,6 +34,9 @@ CC= $(DEFAULT_CC)
 # to slow down the C part by not omitting it. Debugging, tracebacks and
 # unwinding are not affected -- the assembler part has frame unwind
 # information and GCC emits it where needed (x64) or with -g (see CCDEBUG).
+CCSTD= -std=gnu11
+# Use gnu11 by default: the fork relies on C11-compatible declarations while
+# still using GNU/Clang extensions from the upstream LuaJIT build.
 CCOPT= -O2 -fomit-frame-pointer
 # Use this if you want to generate a smaller binary (but it's slower):
 #CCOPT= -Os -fomit-frame-pointer
@@ -177,7 +180,7 @@ endif
 #   make HOST_CC="gcc -m32" CROSS=i586-mingw32msvc- TARGET_SYS=Windows
 #   make HOST_CC="gcc -m32" CROSS=powerpc-linux-gnu-
 
-ASOPTIONS= $(CCOPT) $(CCWARN) $(XCFLAGS) $(CFLAGS)
+ASOPTIONS= $(CCSTD) $(CCOPT) $(CCWARN) $(XCFLAGS) $(CFLAGS)
 CCOPTIONS= $(CCDEBUG) $(ASOPTIONS)
 LDOPTIONS= $(CCDEBUG) $(LDFLAGS)
 

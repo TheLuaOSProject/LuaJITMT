@@ -3,7 +3,7 @@
 #
 # Please read doc/install.html before changing any variables!
 #
-# Supported target for this lockless fork: x86-64 Linux with GC64.
+# Supported targets for this lockless fork: x86-64 Linux or macOS with GC64.
 # Unsupported platform builds are rejected by src/lj_arch.h.
 #
 # Copyright (C) 2005-2026 Mike Pall. See Copyright Notice in luajit.h

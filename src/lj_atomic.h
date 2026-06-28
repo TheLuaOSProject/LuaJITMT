@@ -174,6 +174,53 @@ LA_INLINE int la_membarrier_synccore(void)
 }
 #endif /* __linux__ */
 
+/* ---- futex-style waits (Darwin) -------------------------------------- */
+#if defined(__APPLE__) && defined(__MACH__)
+#include <errno.h>
+#include <limits.h>
+
+extern int __ulock_wait(uint32_t op, void *addr, uint64_t value,
+			uint32_t timeout_us);
+extern int __ulock_wake(uint32_t op, void *addr, uint64_t wake_value);
+
+#ifndef UL_COMPARE_AND_WAIT
+#define UL_COMPARE_AND_WAIT 1
+#endif
+#ifndef ULF_WAKE_ALL
+#define ULF_WAKE_ALL 0x00000100
+#endif
+
+LA_INLINE uint32_t la_timeout_ns_to_darwin_us(int64_t ns)
+{
+  uint64_t us;
+  if (ns < 0)
+    return 0;  /* Darwin ulock timeout 0 means no timeout. */
+  us = ((uint64_t)ns + 999u) / 1000u;
+  if (us == 0)
+    us = 1;
+  return us > UINT_MAX ? UINT_MAX : (uint32_t)us;
+}
+
+/* Wait while *p == val. ns<0: infinite. Returns 0 woken/changed,
+** -1 with errno on error (ETIMEDOUT/EINTR/EWOULDBLOCK are normal). */
+LA_INLINE int la_futex_wait(uint32_t *p, uint32_t val, int64_t ns)
+{
+  return __ulock_wait(UL_COMPARE_AND_WAIT, p, (uint64_t)val,
+		      la_timeout_ns_to_darwin_us(ns));
+}
+
+LA_INLINE int la_futex_wake(uint32_t *p, int n)
+{
+  uint32_t op;
+  if (n <= 0)
+    return 0;
+  op = UL_COMPARE_AND_WAIT;
+  if (n != 1)
+    op |= ULF_WAKE_ALL;
+  return __ulock_wake(op, p, 0);
+}
+#endif /* __APPLE__ && __MACH__ */
+
 /* ---- compile-time checks ------------------------------------------- */
 typedef char la_assert_ptr8[sizeof(void *) == 8 ? 1 : -1];
 /* x86-64: build with -mcx16 so la_cas128 lowers to cmpxchg16b; without it

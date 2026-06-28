@@ -123,13 +123,31 @@ function M.command_ok(cmd)
   return M.command_succeeded(cmd .. " >/dev/null 2>&1")
 end
 
+local function timeout_seconds(timeout)
+  local text = tostring(timeout)
+  local n, unit = text:match("^([0-9]+%.?[0-9]*)([smh]?)$")
+  if not n then return text end
+  n = tonumber(n)
+  if unit == "m" then n = n * 60
+  elseif unit == "h" then n = n * 3600 end
+  return tostring(n)
+end
+
+function M.timeout_prefix(timeout)
+  if M.command_ok("command -v timeout") then
+    return "timeout " .. M.shell_quote(timeout)
+  end
+  return "LC_ALL=C perl -MTime::HiRes=alarm -e " ..
+    M.shell_quote("alarm shift; exec @ARGV; die \"exec failed: $!\\n\"") ..
+    " " .. M.shell_quote(timeout_seconds(timeout))
+end
+
 function M.capture_command(cmd, opts)
   opts = opts or {}
   local full = cmd
   if opts.stderr then full = full .. " 2>&1" end
   if opts.timeout then
-    full = "timeout " .. M.shell_quote(opts.timeout) .. " sh -c " ..
-           M.shell_quote(full)
+    full = M.timeout_prefix(opts.timeout) .. " sh -c " .. M.shell_quote(full)
   end
   local p, err = io.popen(full)
   if not p then error("command failed to start: " .. tostring(err), 2) end

@@ -110,7 +110,7 @@ return function(add)
     description = "M4 C unit drivers under ThreadSanitizer",
     run = function(t)
       local cflags = getenv("CFLAGS",
-        "-std=gnu99 -O1 -g -Wall -Wextra -Wno-tsan -mcx16 " ..
+        "-std=gnu11 -O1 -g -Wall -Wextra -Wno-tsan -mcx16 " ..
         "-fsanitize=thread -fno-omit-frame-pointer")
       local target_cflags = getenv("TARGET_TSAN_CFLAGS",
         "-O1 -g -Wno-tsan -fsanitize=thread -fno-omit-frame-pointer")

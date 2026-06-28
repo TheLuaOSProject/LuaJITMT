@@ -1720,7 +1720,7 @@ static TRef rec_idx_key(jit_State *J, RecordIndex *ix, IRRef *rbref,
 		     ~(GCSize)0;
       if (hslot <= hrefk_hmask*(GCSize)sizeof(Node) &&
 	  hslot <= 65535*(GCSize)sizeof(Node)) {
-	TRef node, kslot;
+	TRef node, kslot, hm;
 	*rbref = J->cur.nins;  /* Mark possible rollback point. */
 	*rbguard = J->guardemit;
 #if !(defined(__linux__) && LJ_TARGET_X64)
