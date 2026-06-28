@@ -25,4 +25,42 @@ if hits=$(grep -nE -- 'hdr[.]owner_tid|alloc[.]owner_tid|->[[:space:]]*owner_tid
   printf '%s\n' 'raw arena owner routing access is forbidden; use lj_arena_owner_* helpers' >&2
   exit 1
 fi
+
+if ! awk '
+  /^static GCtab \*threading_env_from_module\(/ { in_fn = 1; found = 1 }
+  in_fn && /lj_tv_load_acq\(&snap, tv\)/ { saw_acq = 1 }
+  in_fn && /funcV\(&snap\)/ { saw_func = 1 }
+  in_fn && /^}/ { in_fn = 0 }
+  END { exit(found && saw_acq && saw_func ? 0 : 1) }
+' "$ROOT/src/lib_threading.c"; then
+  printf '%s\n' 'threading_env_from_module() must snapshot module spawn slots' >&2
+  exit 1
+fi
+
+if ! awk '
+  /^static GCtab \*threading_loaded_env\(/ { in_fn = 1; found = 1 }
+  in_fn && /lj_tv_load_acq\(&loaded, tv\)/ { saw_loaded = 1 }
+  in_fn && /tabV\(&loaded\)/ { saw_loaded_tab = 1 }
+  in_fn && /lj_tv_load_acq\(&mod, tv\)/ { saw_mod = 1 }
+  in_fn && /tabV\(&mod\)/ { saw_mod_tab = 1 }
+  in_fn && /^}/ { in_fn = 0 }
+  END {
+    exit(found && saw_loaded && saw_loaded_tab && saw_mod && saw_mod_tab ? 0 : 1)
+  }
+' "$ROOT/src/lib_threading.c"; then
+  printf '%s\n' 'threading_loaded_env() must snapshot _LOADED/module slots' >&2
+  exit 1
+fi
+
+if ! awk '
+  /^LJLIB_CF\(threading_current\)/ { in_fn = 1; found = 1 }
+  in_fn && /lj_tv_load_acq\(&mainv, tv\)/ { saw_acq = 1 }
+  in_fn && /udataV\(&mainv\)/ { saw_udata = 1 }
+  in_fn && /^}/ { in_fn = 0 }
+  END { exit(found && saw_acq && saw_udata ? 0 : 1) }
+' "$ROOT/src/lib_threading.c"; then
+  printf '%s\n' 'threading.current() must snapshot cached main-thread userdata slots' >&2
+  exit 1
+fi
+
 exec "$ROOT/tools/ci/lua_test.sh" m5_threading_alloc

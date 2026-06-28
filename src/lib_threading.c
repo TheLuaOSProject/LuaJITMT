@@ -151,12 +151,16 @@ static void threading_live_free_all(global_State *g)
 static GCtab *threading_env_from_module(lua_State *L, GCtab *mod)
 {
   cTValue *tv = lj_tab_getstr(mod, lj_str_newlit(L, "spawn"));
-  if (tv && tvisfunc(tv)) {
-    GCfunc *fn = funcV(tv);
-    if (!isluafunc(fn)) {
-      GCtab *env = tabref_acq(fn->c.env);
-      if (env)
-	return env;
+  if (tv) {
+    TValue snap;
+    lj_tv_load_acq(&snap, tv);
+    if (tvisfunc(&snap)) {
+      GCfunc *fn = funcV(&snap);
+      if (!isluafunc(fn)) {
+	GCtab *env = tabref_acq(fn->c.env);
+	if (env)
+	  return env;
+      }
     }
   }
   return NULL;
@@ -166,10 +170,18 @@ static GCtab *threading_loaded_env(lua_State *L)
 {
   GCtab *reg = tabV(registry(L));
   cTValue *tv = lj_tab_getstr(reg, lj_str_newlit(L, "_LOADED"));
-  if (tv && tvistab(tv)) {
-    tv = lj_tab_getstr(tabV(tv), lj_str_newlit(L, LUA_THREADINGLIBNAME));
-    if (tv && tvistab(tv))
-      return threading_env_from_module(L, tabV(tv));
+  if (tv) {
+    TValue loaded;
+    lj_tv_load_acq(&loaded, tv);
+    if (tvistab(&loaded)) {
+      tv = lj_tab_getstr(tabV(&loaded), lj_str_newlit(L, LUA_THREADINGLIBNAME));
+      if (tv) {
+	TValue mod;
+	lj_tv_load_acq(&mod, tv);
+	if (tvistab(&mod))
+	  return threading_env_from_module(L, tabV(&mod));
+      }
+    }
   }
   return NULL;
 }
@@ -970,10 +982,14 @@ LJLIB_CF(threading_current)
     cTValue *tv = lj_tab_getstr(env, key);
     if (L != mainthread_acq(G(L)))
       lj_err_callermsg(L, "attached thread is not joinable");
-    if (tv && tvisudata(tv) &&
-	lj_udata_udtype_acq(udataV(tv)) == UDTYPE_THREAD) {
-      ud = udataV(tv);
-    } else {
+    if (tv) {
+      TValue mainv;
+      lj_tv_load_acq(&mainv, tv);
+      if (tvisudata(&mainv) &&
+	  lj_udata_udtype_acq(udataV(&mainv)) == UDTYPE_THREAD)
+	ud = udataV(&mainv);
+    }
+    if (!ud) {
       LJThread *th;
       ud = threading_new_thread_ud(L, env);
       th = (LJThread *)uddata(ud);
