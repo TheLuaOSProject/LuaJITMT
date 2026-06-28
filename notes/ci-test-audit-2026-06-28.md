@@ -125,6 +125,9 @@
 - Duplicate legacy source guards in weak/worker CI should be collapsed; keeping
   the same exact-name guard in multiple scripts increases churn and blocks
   better helper boundaries.
+- The duplicate M8 sweep/finalizer source guard block was removed; the stronger
+  M3 worker-scheduler guard remains canonical for those boundaries, while M8
+  still owns weak/finalizer behavior fixtures.
 - Public or semantic compatibility helpers such as FFI pointer compatibility
   checks are not removal targets unless the language/API contract changes.
 - Anti-legacy guards that merely prevent reintroducing already-removed wrapper
