@@ -189,6 +189,29 @@ CTKWDEF(CTKWNAMEDEF)
 #define ct_hashname(name) \
   (hashrot(u32ptr(name), u32ptr(name) + HASH_BIAS) & CTHASH_MASK)
 
+void lj_ctype_parse_wait(CTState *cts, lua_State *L, uint32_t seq)
+{
+  if ((seq & 1u) == 0)
+    return;
+#if defined(__linux__)
+  {
+    uint32_t actions;
+    int had_stopreq = ctype_had_stopreq(L);
+    if (L)
+      lj_native_enter(L2TG(L));
+    (void)ctype_parse_token_wait(cts, seq, 1000000);
+    actions = L ? lj_native_leave(L) : 0;
+    ctype_checkstop_fresh(L, actions, had_stopreq);  /* 11.2: ctype wait may park. */
+  }
+#else
+  {
+    int had_stopreq = ctype_had_stopreq(L);
+    uint32_t actions = lj_thr_sleep_ns(L, 1000000);
+    ctype_checkstop_fresh(L, actions, had_stopreq);
+  }
+#endif
+}
+
 void lj_ctype_parse_lock(CTState *cts, lua_State *L)
 {
   for (;;) {
@@ -199,22 +222,7 @@ void lj_ctype_parse_lock(CTState *cts, lua_State *L)
 	return;  /* 11.2: acquire the cparse CTState mutation sequence. */
       continue;
     }
-#if defined(__linux__)
-    {
-      uint32_t actions;
-      int had_stopreq = ctype_had_stopreq(L);
-      lj_native_enter(L2TG(L));
-      (void)ctype_parse_token_wait(cts, seq, 1000000);
-      actions = lj_native_leave(L);
-      ctype_checkstop_fresh(L, actions, had_stopreq);  /* 11.2: cdef may park. */
-    }
-#else
-    {
-      int had_stopreq = ctype_had_stopreq(L);
-      uint32_t actions = lj_thr_sleep_ns(L, 1000000);
-      ctype_checkstop_fresh(L, actions, had_stopreq);
-    }
-#endif
+    lj_ctype_parse_wait(cts, L, seq);
   }
 }
 

@@ -10,9 +10,9 @@ Overall correctness/stability progress: 68-78%.
 - Runtime lockless substrate: 73-83%.
 - Legacy/compat public/runtime surface removal: 82-88%.
 - CI migration away from shell aliases and stale source guards: 68-78%.
-- FFI concurrency outside mutable `ffi.cdef`: 62-72%.
+- FFI concurrency outside mutable `ffi.cdef`: 64-74%.
 - FFI recorder read-only ctype paths: 80-88%.
-- Interpreter-side FFI parser fallback removal: 35-45%.
+- Interpreter-side FFI parser fallback removal: 42-52%.
 - Release-quality soak and benchmark readiness: 45-55%.
 
 Time remaining forecast:
@@ -36,14 +36,25 @@ Time remaining forecast:
 - Added `t-ffi-recorder-string-ctype-busy.c` to prove string `ffi.sizeof()` and
   string `ffi.new()` recorder paths abort under a busy parser token, then work
   normally after release.
+- Follow-up: moved `cp_ctype_setsib()`, `cp_ctype_setname()`, rollback restore,
+  and abandon paths toward local copy-then-publish so parser rollback mutates
+  fewer shared `CType` slots in place.
+- Follow-up: removed the `ffi.istype()` raw fallback/parser-lock path for
+  non-string comparisons. It now retries the sequence-checked snapshot path and
+  parks only while another parser owns the mutation token.
+- Follow-up: extended `t-ffi-istype-snapshot.c` so an active parser-token test
+  proves `ffi.istype()` returns the normal boolean result without taking and
+  releasing the parser token itself.
 
 ## Remaining locks outside `ffi.cdef`
 
 Good reasons to keep for now:
 
-- Interpreter FFI parser fallback waits in `lib_ffi.c`, `lj_cdata.c`,
-  `lj_carith.c`, `lj_cconv.c`, and `lj_clib.c`: these preserve normal FFI
-  semantics during parser rollback and abandoned-entry windows.
+- Interpreter FFI parser fallback waits in `lib_ffi.c` layout/string-parse
+  paths, `lj_cdata.c`, `lj_carith.c`, `lj_cconv.c`, and `lj_clib.c`: these
+  preserve normal FFI semantics during parser rollback and abandoned-entry
+  windows. `ffi.istype()` is no longer in this bucket for non-string
+  comparisons.
 - Per-state owner claims: prevent concurrent mutation of one `lua_State`.
 - Threading mutex/channel/join waits: user-visible synchronization semantics.
 - Safepoint leadership and GC2 worker lifecycle waits: shutdown and collector
@@ -72,6 +83,8 @@ Passed:
 
 - `make -C src -j`
 - `tools/ci/lua_test.sh m7_ffi_typeinfo_snapshot`
+- `tools/ci/lua_test.sh m7_ffi_cparse_rollback`
+- `tools/ci/lua_test.sh m7_ffi_cparse_rollback m7_ffi`
 - `tools/ci/lua_test.sh m5_libc_error_reentrant m5_tab_emptyhash`
 - `tools/ci/lua_test.sh run_stock_tests -- src/luajit --quiet lib/contents.lua`
 - `tools/ci/lua_test.sh run_stock_tests -- src/luajit --quiet lib/base`

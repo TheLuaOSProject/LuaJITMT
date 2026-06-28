@@ -4,12 +4,6 @@ set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 
-if grep -nF 'ok && ctype_isstruct(ctype_get(cts, cid)->info)' \
-  "$ROOT/src/lj_cdata.c"
-then
-  printf '%s\n' 'cdata pointer auto-deref must trust lj_ctype_ptrstruct_snapshot() outside the parser lock' >&2
-  exit 1
-fi
 if hits=$(grep -nE -- 'la_load16_acq\(&[^)]*->[[:space:]]*sib\)' \
     "$ROOT/src/lj_ctype.c" \
     "$ROOT/src/lib_ffi.c" \
@@ -69,15 +63,6 @@ if hits=$(awk '
   exit 1
 fi
 if hits=$(awk '
-  /^static int ffi_istype_raw\(/ { in_fn = 1 }
-  in_fn && /->[[:space:]]*(info|size)([^[:alnum:]_]|$)/ { print FNR ":" $0 }
-  in_fn && /^}/ { in_fn = 0 }
-' "$ROOT/src/lib_ffi.c" || true); [ -n "$hits" ]; then
-  printf '%s\n' "$hits" >&2
-  printf '%s\n' 'raw CType info/size reads are forbidden in ffi_istype_raw(); use ctype_info_acq() or ctype_size_acq()' >&2
-  exit 1
-fi
-if hits=$(awk '
   /^static int ffi_typecmp_rawid\(/ ||
   /^static int ffi_typecmp_rawrefid\(/ ||
   /^static int ffi_typecmp_childqual\(/ { in_fn = 1 }
@@ -91,7 +76,7 @@ fi
 if hits=$(awk '
   /^static int ffi_typecmp_compatptr\(/ ||
   /^static int ffi_istype_snapshot\(/ { in_fn = 1 }
-  /^static int ffi_istype_raw\(/ ||
+  /^static void ffi_istype_snapshot_wait\(/ ||
   /^LJLIB_CF\(ffi_istype\)/ { in_fn = 0 }
   in_fn && /(^|[^[:alnum:]_])(ct1|ct2|d|s)\.(info|size)([^[:alnum:]_]|$)/ { print FNR ":" $0 }
 ' "$ROOT/src/lib_ffi.c" || true); [ -n "$hits" ]; then

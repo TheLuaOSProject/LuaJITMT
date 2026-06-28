@@ -422,6 +422,12 @@ static CType *cp_ctype_mut(CPState *cp, CTypeID id)
   return ctype_get(cp->cts, id);
 }
 
+static void cp_ctype_snapshot_mut(CPState *cp, CTypeID id, CType *out)
+{
+  cp_rollback_log(cp, id);
+  ctype_copy_rel(out, ctype_get(cp->cts, id));
+}
+
 static CType *cp_ctype_publish(CPState *cp, CTypeID id, CType *src)
 {
   return lj_ctype_publish(cp->cts, id, src);
@@ -429,9 +435,10 @@ static CType *cp_ctype_publish(CPState *cp, CTypeID id, CType *src)
 
 static CType *cp_ctype_setsib(CPState *cp, CTypeID id, CTypeID sib)
 {
-  CType *ct = cp_ctype_mut(cp, id);
-  ctype_sib_rel(ct, sib);
-  return cp_ctype_publish(cp, id, ct);
+  CType tmp;
+  cp_ctype_snapshot_mut(cp, id, &tmp);
+  ctype_sib_rel(&tmp, sib);
+  return cp_ctype_publish(cp, id, &tmp);
 }
 
 static CTypeID cp_ctype_new(CPState *cp, CType **ctp)
@@ -463,9 +470,10 @@ static CTypeID cp_ctype_intern(CPState *cp, CTInfo info, CTSize size)
 
 static CType *cp_ctype_setname(CPState *cp, CTypeID id, GCstr *name)
 {
-  CType *ct = cp_ctype_mut(cp, id);
-  ctype_setname(ct, name);
-  return cp_ctype_publish(cp, id, ct);
+  CType tmp;
+  cp_ctype_snapshot_mut(cp, id, &tmp);
+  ctype_setname(&tmp, name);
+  return cp_ctype_publish(cp, id, &tmp);
 }
 
 static void cp_ctype_abandon(CPState *cp)
@@ -473,37 +481,36 @@ static void cp_ctype_abandon(CPState *cp)
   CPAlloc *ca;
   for (ca = cp->newct; ca != NULL; ca = ca->next) {
     CTypeID id = ca->id;
+    CType tmp;
     if (id == 0)
       continue;
-    CType *ct = ctype_get(cp->cts, id);
-    ctype_info_rel(ct, CTINFO(CT_ATTRIB, CTATTRIB(CTA_BAD)));
-    ctype_size_rel(ct, 0);
-    ctype_sib_rel(ct, 0);
-    ctype_clearname(ct);
+    ctype_copy_rel(&tmp, ctype_get(cp->cts, id));
+    ctype_info_rel(&tmp, CTINFO(CT_ATTRIB, CTATTRIB(CTA_BAD)));
+    ctype_size_rel(&tmp, 0);
+    ctype_sib_rel(&tmp, 0);
+    ctype_clearname(&tmp);
     /* Keep ct->next so hash walkers can skip through abandoned entries. */
-    cp_ctype_publish(cp, id, ct);
+    cp_ctype_publish(cp, id, &tmp);
   }
 }
 
 static void cp_ctype_abandon_id(CPState *cp, CTypeID id)
 {
-  CType *ct = ctype_get(cp->cts, id);
-  ctype_info_rel(ct, CTINFO(CT_ATTRIB, CTATTRIB(CTA_BAD)));
-  ctype_size_rel(ct, 0);
-  ctype_sib_rel(ct, 0);
-  ctype_clearname(ct);
+  CType tmp;
+  ctype_copy_rel(&tmp, ctype_get(cp->cts, id));
+  ctype_info_rel(&tmp, CTINFO(CT_ATTRIB, CTATTRIB(CTA_BAD)));
+  ctype_size_rel(&tmp, 0);
+  ctype_sib_rel(&tmp, 0);
+  ctype_clearname(&tmp);
   /* Keep ct->next so hash walkers can skip through abandoned entries. */
-  cp_ctype_publish(cp, id, ct);
+  cp_ctype_publish(cp, id, &tmp);
 }
 
 static void cp_rollback_restore(CPState *cp)
 {
   CPRollback *rb;
-  for (rb = cp->rollback; rb != NULL; rb = rb->next) {
-    CType *ct = ctype_get(cp->cts, rb->id);
-    *ct = rb->old;
-    cp_ctype_publish(cp, rb->id, ct);
-  }
+  for (rb = cp->rollback; rb != NULL; rb = rb->next)
+    cp_ctype_publish(cp, rb->id, &rb->old);
   cp_ctype_abandon(cp);
 }
 
