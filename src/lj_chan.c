@@ -69,10 +69,20 @@ void lj_chan_init(LJChan *ch, uint32_t capacity)
   }
 }
 
-static void chan_wake(LJChan *ch)
+static void chan_wake_n(LJChan *ch, int n)
 {
   la_add32_rlx(&ch->futex, 1);
-  la_futex_wake(&ch->futex, INT_MAX);
+  la_futex_wake(&ch->futex, n);
+}
+
+static void chan_wake_one(LJChan *ch)
+{
+  chan_wake_n(ch, 1);
+}
+
+static void chan_wake_all(LJChan *ch)
+{
+  chan_wake_n(ch, INT_MAX);
 }
 
 static int chan_had_stopreq(lua_State *L)
@@ -201,7 +211,10 @@ static int chan_try_send_pos(LJChan *ch, cTValue *tv, uint64_t *ppos)
 	la_store64_rel(&slot->seq, pos + 1u);
 	if (ppos)
 	  *ppos = pos;
-	chan_wake(ch);
+	if (ch->rendezvous)
+	  chan_wake_all(ch);
+	else
+	  chan_wake_one(ch);
 	return LJ_CHAN_OK;
       }
       pos = expect;
@@ -220,7 +233,7 @@ static int chan_cancel_rendezvous_send(LJChan *ch, uint64_t pos)
     LJChanSlot *slot = &ch->slot[(MSize)(pos & ch->mask)];
     chan_cleartv_rel(slot);
     la_store64_rel(&slot->seq, pos + ch->cap);
-    chan_wake(ch);
+    chan_wake_all(ch);
     return 1;
   }
   return 0;
@@ -276,7 +289,10 @@ static int chan_try_recv_pub(lua_State *L, LJChan *ch, TValue *out)
 	  lj_gc_pubroot(L, out);
 	chan_cleartv_rel(slot);
 	la_store64_rel(&slot->seq, pos + ch->cap);
-	chan_wake(ch);
+	if (ch->rendezvous)
+	  chan_wake_all(ch);
+	else
+	  chan_wake_one(ch);
 	return LJ_CHAN_OK;
       }
       pos = expect;
@@ -437,7 +453,7 @@ void lj_chan_close(LJChan *ch)
 {
   if (ch) {
     la_store32_rel(&ch->closed, 1);
-    chan_wake(ch);
+    chan_wake_all(ch);
   }
 }
 
