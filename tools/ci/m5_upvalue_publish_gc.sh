@@ -13,6 +13,17 @@ for file in "$ROOT/src/lib_base.c" "$ROOT/src/lib_table.c" \
   fi
 done
 
+if ! awk '
+  /^LJLIB_CF\(print\)/ { in_fn = 1; found = 1 }
+  in_fn && /lj_tv_load_acq\(&tvsnap, tv\)/ { saw_acq = 1 }
+  in_fn && /copyTV\(L, L->top, &tvsnap\)/ { saw_copy = 1 }
+  in_fn && /^}/ { in_fn = 0 }
+  END { exit(found && saw_acq && saw_copy ? 0 : 1) }
+' "$ROOT/src/lib_base.c"; then
+  printf '%s\n' 'print() must acquire-snapshot the environment tostring slot before copying' >&2
+  exit 1
+fi
+
 if hits=$(grep -nF 'udataV(&fn->c.upvalue[0])' "$ROOT/src/lib_io.c" || true);
 then
   if [ -n "$hits" ]; then

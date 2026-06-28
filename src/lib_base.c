@@ -808,15 +808,23 @@ LJLIB_CF(print)
 {
   ptrdiff_t i, nargs = L->top - L->base;
   TValue uv;
+  TValue tvsnap;
   GCstr *tostring_str;
   cTValue *tv;
   int shortcut;
   lj_lib_upvalue_load_acq(L, 1, &uv);
   tostring_str = strV(&uv);
   tv = lj_tab_getstr(tabref_acq(L->env), tostring_str);
-  if (tv && !tvisnil(tv)) {
-    copyTV(L, L->top++, tv);
-  } else {
+  if (tv) {
+    lj_tv_load_acq(&tvsnap, tv);
+    if (!tvisnil(&tvsnap)) {
+      copyTV(L, L->top, &tvsnap);
+      tv = L->top++;
+    } else {
+      tv = NULL;
+    }
+  }
+  if (!tv) {
     setstrV(L, L->top++, tostring_str);
     lua_gettable(L, LUA_GLOBALSINDEX);
     tv = L->top-1;
