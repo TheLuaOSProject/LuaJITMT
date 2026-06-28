@@ -1821,33 +1821,53 @@ static int ffi_layout_getfield(FFILayoutSnap *ls, const CType *root,
   return 0;
 }
 
-static int ffi_layout_offsetof_snapshot(CTState *cts, CTypeID id, GCstr *name,
-					CTSize *ofs, CType *out)
+static int ffi_layout_offsetof_read(FFILayoutSnap *ls, CTypeID id, GCstr *name,
+				    CTSize *ofs, CType *out)
 {
-  FFILayoutSnap ls;
   CType ct;
-  int ok = ffi_layout_begin(cts, &ls);
-  if (ok < 0)
-    return -1;
-  ok = ffi_layout_rawref(&ls, id, &ct);
+  int ok = ffi_layout_rawref(ls, id, &ct);
   if (ok > 0) {
     CTInfo info = ctype_info_acq(&ct);
     CTSize size = ctype_size_acq(&ct);
     if (ctype_isstruct(info) && size != CTSIZE_INVALID)
-      ok = ffi_layout_getfield(&ls, &ct, name, ofs, out);
+      ok = ffi_layout_getfield(ls, &ct, name, ofs, out);
     else
       ok = 0;
   }
+  return ok;
+}
+
+static int ffi_layout_offsetof_snapshot(CTState *cts, CTypeID id, GCstr *name,
+					CTSize *ofs, CType *out)
+{
+  FFILayoutSnap ls;
+  int ok = ffi_layout_begin(cts, &ls);
+  if (ok < 0)
+    return -1;
+  ok = ffi_layout_offsetof_read(&ls, id, name, ofs, out);
   if (ok >= 0 && ffi_layout_end(&ls) < 0)
     return -1;
   return ok;
 }
 
+static int ffi_layout_offsetof_predefined(CTState *cts, CTypeID id,
+					  GCstr *name, CTSize *ofs,
+					  CType *out)
+{
+  FFILayoutSnap ls;
+  if (!ffi_layout_begin_predefined(cts, id, &ls))
+    return -1;
+  return ffi_layout_offsetof_read(&ls, id, name, ofs, out);
+}
+
 static int ffi_layout_offsetof_wait(lua_State *L, CTState *cts, CTypeID id,
 				    GCstr *name, CTSize *ofs, CType *out)
 {
+  int ok = ffi_layout_offsetof_predefined(cts, id, name, ofs, out);
+  if (ok >= 0)
+    return ok;
   for (;;) {
-    int ok = ffi_layout_offsetof_snapshot(cts, id, name, ofs, out);
+    ok = ffi_layout_offsetof_snapshot(cts, id, name, ofs, out);
     if (ok >= 0)
       return ok;
     lj_ctype_parse_wait(cts, L, ctype_parse_token_acq(cts));

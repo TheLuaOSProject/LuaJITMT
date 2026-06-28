@@ -6,10 +6,10 @@
 ctype/cdata layout reads through the cparser token. That was safe, but it kept
 stable layout queries on the parser lock path even when no parsing was needed.
 
-String type expressions still need the parser. `ffi.sizeof()` and
-`ffi.alignof()` currently keep their locked parser/layout path for strings.
-`ffi.offsetof()` now parses the string under the parser lock, then uses the
-same sequence-checked layout snapshot for the read-only field walk.
+String type expressions still need the parser unless they resolve to one of the
+recognized immutable predefined names. `ffi.offsetof()` parses non-predefined
+strings under the parser lock, then uses the same sequence-checked layout
+snapshot for the read-only field walk.
 
 ## Change
 
@@ -25,9 +25,10 @@ layout arguments:
 
 Predefined immutable type IDs now take the same acquired field snapshot without
 waiting for an unrelated active parser token. This covers predefined
-`ffi.sizeof(ct)`, `ffi.alignof(ct)`, `ffi.new(ct, ...)`, and the shared
-metadata read used by `ffi.cast(ct, value)`. If the walk leaves the predefined
-range, it falls back to the existing sequence-checked retry path.
+`ffi.sizeof(ct)`, `ffi.alignof(ct)`, `ffi.offsetof(ct, field)` misses,
+`ffi.new(ct, ...)`, and the shared metadata read used by `ffi.cast(ct, value)`.
+If the walk leaves the predefined range, it falls back to the existing
+sequence-checked retry path.
 
 The existing locked path remains the fallback for active parser windows,
 racing table growth, inconsistent chains, and string `sizeof`/`alignof`
@@ -45,6 +46,6 @@ lock/unlock pair only, proving the read-only field walk does not reacquire the
 parser lock.
 
 The fixture now also holds the parser token while running predefined
-`sizeof`, `alignof`, `new`, and `cast` operations. Those operations complete
-without parking, while user-defined struct, VLA, and field-offset queries still
-prove the native wait/retry path.
+`sizeof`, `alignof`, `offsetof`, `new`, and `cast` operations. Those operations
+complete without parking, while user-defined struct, VLA, and field-offset
+queries still prove the native wait/retry path.
