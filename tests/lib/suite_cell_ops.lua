@@ -1,5 +1,6 @@
 local checks = require("suite_assert")
 local runtime = require("suite_runtime")
+local utils = require("suite_utils")
 local probes = require("local_cell_probes")
 
 local M = {}
@@ -13,6 +14,17 @@ local luajit = runtime.luajit
 local luajit_code = runtime.luajit_code
 local luajit_capture = runtime.capture_luajit
 local luajit_dump = runtime.luajit_dump
+
+function M.run_source_guards(t)
+  local src = utils.read_source_file(t:path("src", "lj_record.c"))
+  local body = utils.c_function_body(src, "static TRef rec_upvalue")
+  local bypass = body:find("proto_celluv(J->pt)", 1, true)
+  local shortcut = body:find("funcV(uvval(uvp)) == J->fn", 1, true)
+  if not (bypass and shortcut and bypass < shortcut) then
+    error("rec_upvalue must exclude local-cell function upvalues before " ..
+          "the immutable self shortcut", 2)
+  end
+end
 
 local function dump_i(t, dump, code)
   luajit_dump(t, dump, "-jdump=i", code)

@@ -544,6 +544,7 @@ assert(s==2720)
     name = "m6_jit_cell_ops",
     description = "M6 local-cell JIT recording behavior",
     run = function(t)
+      cellops.run_source_guards(t)
       build_default(t)
       local dump = t:tmp("lj_m6_jit_cell_ops.dump")
       cellops.run_jit_dump_guards(t, dump)
