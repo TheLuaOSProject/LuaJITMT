@@ -70,6 +70,25 @@ void lj_mcode_sync(void *start, void *end)
 #define LJ_MCODE_DUALMAP	1
 #endif
 
+#if LJ_TARGET_POSIX
+#include <sys/types.h>
+#include <sys/mman.h>
+#ifndef MAP_ANONYMOUS
+#define MAP_ANONYMOUS	MAP_ANON
+#endif
+
+/* Use stable MAP_JIT mcode on macOS 11+. */
+#if LJ_TARGET_OSX && LJ_TARGET_X64 && LUAJIT_SECURITY_MCODE != 0 && \
+    defined(MAP_JIT) && defined(__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__) && \
+    __ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__ >= 110000
+#define LJ_MCODE_MAPJIT	1
+#else
+#define LJ_MCODE_MAPJIT	0
+#endif
+#else
+#define LJ_MCODE_MAPJIT	0
+#endif
+
 void lj_mcode_init(global_State *g)
 {
 #if defined(__linux__) && LJ_TARGET_X64
@@ -109,7 +128,7 @@ void lj_mcode_sync_core(jit_State *J)
 #endif
 }
 
-#if LUAJIT_SECURITY_MCODE != 0 && !LJ_MCODE_DUALMAP
+#if LUAJIT_SECURITY_MCODE != 0 && !LJ_MCODE_DUALMAP && !LJ_MCODE_MAPJIT
 /* Protection twiddling failed. Probably due to kernel security. */
 static LJ_NORET LJ_NOINLINE void mcode_protfail(jit_State *J)
 {
@@ -154,8 +173,6 @@ static void mcode_setprot(jit_State *J, void *p, size_t sz, DWORD prot)
 
 #elif LJ_TARGET_POSIX
 
-#include <sys/types.h>
-#include <sys/mman.h>
 #if LJ_MCODE_DUALMAP
 #include <fcntl.h>
 #include <sys/syscall.h>
@@ -170,12 +187,7 @@ static void mcode_setprot(jit_State *J, void *p, size_t sz, DWORD prot)
 #endif
 #endif
 
-#ifndef MAP_ANONYMOUS
-#define MAP_ANONYMOUS	MAP_ANON
-#endif
-
-/* Check for macOS hardened runtime. */
-#if defined(LUAJIT_ENABLE_OSX_HRT) && LUAJIT_SECURITY_MCODE != 0 && defined(MAP_JIT) && __ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__ >= 110000
+#if LJ_MCODE_MAPJIT
 #include <pthread.h>
 #define MCMAP_CREATE	MAP_JIT
 #else
@@ -265,7 +277,7 @@ static void mcode_setprot(jit_State *J, void *p, size_t sz, int prot)
 #if MCMAP_CREATE
   UNUSED(J); UNUSED(p); UNUSED(sz);
   pthread_jit_write_protect_np((prot & PROT_EXEC));
-  return 0;
+  return;
 #else
   if (mprotect(p, sz, prot)) mcode_protfail(J);
 #endif
@@ -369,10 +381,12 @@ static void mcode_protect(jit_State *J, int prot)
 #define MCPROT_GEN	MCPROT_RW
 #define MCPROT_RUN	MCPROT_RX
 
-#if defined(__linux__) && LJ_TARGET_X64
+#if (defined(__linux__) && LJ_TARGET_X64) || LJ_MCODE_MAPJIT
 /* M6 bridge: keep published mcode execute-stable for peer TGs. The Linux/x64
-** path uses a memfd dual-map W^X write view, so reopening the current area
-** writes through the RW alias without changing the published RX mapping. */
+** path uses a memfd dual-map W^X write view. The macOS/x64 path uses MAP_JIT
+** to avoid toggling execute permission out from under peer threads; on Intel
+** macOS the pthread write-protect toggle may be a no-op, so this is an
+** execute-stability path, not a separated W^X map guarantee. */
 #define LJ_MCODE_EXEC_STABLE	1
 #endif
 
