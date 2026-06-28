@@ -137,7 +137,10 @@ int main(void)
 
   ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"
-    "assert(ffi.alignof(lj_m7_layout_abandoned_ct) == nil)\n");
+    "assert(ffi.sizeof(lj_m7_layout_abandoned_ct) == nil)\n"
+    "assert(ffi.alignof(lj_m7_layout_abandoned_ct) == nil)\n"
+    "local ok, err = pcall(ffi.new, lj_m7_layout_abandoned_ct)\n"
+    "assert(ok == false and tostring(err):match('size'))\n");
   seq1 = ljt_ctype_parse_seq(cts);
   assert(seq1 == seq0);
 

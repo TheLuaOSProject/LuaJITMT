@@ -91,15 +91,7 @@ static CTypeID ffi_checkctype_layout_lock(lua_State *L, CTState *cts,
   err_argtype:
     lj_err_argtype(L, 1, "C type");
   }
-  if (!tvisstr(o)) {
-    GCcdata *cd;
-    if (!tviscdata(o)) goto err_argtype;
-    if (param && param < L->top) lj_err_arg(L, 1, LJ_ERR_FFI_NUMPARAM);
-    cd = cdataV(o);
-    id = cd->ctypeid == CTID_CTYPEID ? *(CTypeID *)cdataptr(cd) : cd->ctypeid;
-    lj_ctype_parse_lock(cts, L);
-    return id;  /* 11.2: layout reader waits out parser rollback. */
-  }
+  if (!tvisstr(o)) goto err_argtype;
   lj_ctype_parse_lock(cts, L);
   id = ffi_parse_ctype_locked(L, cts, param, &errcode);
   if (errcode) {

@@ -188,6 +188,44 @@ if hits=$(awk '
   exit 1
 fi
 if hits=$(awk '
+  /^static CTypeID ffi_checkctype_layout_lock\(/ { in_fn = 1; saw_string_gate = 0 }
+  in_fn && /if[[:space:]]*\(!tvisstr\(o\)\)[[:space:]]*goto[[:space:]]+err_argtype[[:space:]]*;/ {
+    saw_string_gate = 1
+  }
+  in_fn && /lj_ctype_parse_lock[[:space:]]*[(]/ && !saw_string_gate {
+    print FNR ":" $0
+  }
+  in_fn && /^}/ { in_fn = 0 }
+' "$ROOT/src/lib_ffi.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'ffi_checkctype_layout_lock must reject non-string ctype inputs before taking the parser token' >&2
+  exit 1
+fi
+if hits=$(awk '
+  /^LJLIB_CF\(ffi_new\)/ { in_fn = 1; saw_miss = 0 }
+  in_fn && /if[[:space:]]*[(]ok[[:space:]]*==[[:space:]]*0[)]/ { saw_miss = 1 }
+  in_fn && /ffi_checkctype_layout_lock[[:space:]]*[(]/ && !saw_miss {
+    print FNR ":" $0
+  }
+  in_fn && /^}/ { in_fn = 0 }
+' "$ROOT/src/lib_ffi.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'stable ffi.new() misses must not fall through to the parser-lock layout path' >&2
+  exit 1
+fi
+if hits=$(awk '
+  /^LJLIB_CF\(ffi_sizeof\)/ { in_fn = 1; saw_miss = 0 }
+  in_fn && /if[[:space:]]*[(]ok[[:space:]]*==[[:space:]]*0[)]/ { saw_miss = 1 }
+  in_fn && /ffi_checkctype_layout_lock[[:space:]]*[(]/ && !saw_miss {
+    print FNR ":" $0
+  }
+  in_fn && /^}/ { in_fn = 0 }
+' "$ROOT/src/lib_ffi.c" || true); [ -n "$hits" ]; then
+  printf '%s\n' "$hits" >&2
+  printf '%s\n' 'stable ffi.sizeof() misses must not fall through to the parser-lock layout path' >&2
+  exit 1
+fi
+if hits=$(awk '
   /^LJLIB_CF\(ffi_alignof\)/ { in_fn = 1; saw_miss = 0 }
   in_fn && /if[[:space:]]*[(]ok[[:space:]]*==[[:space:]]*0[)]/ { saw_miss = 1 }
   in_fn && /ffi_checkctype_layout_lock[[:space:]]*[(]/ && !saw_miss {

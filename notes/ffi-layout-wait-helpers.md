@@ -10,6 +10,12 @@ Follow-up: stable `ffi.alignof(ct)` misses for abandoned/invalid CType IDs now
 terminate from the snapshot path and return `nil`, matching `ffi.sizeof(ct)`,
 instead of falling through into the parser-lock layout fallback.
 
+Follow-up: the layout-lock ctype helper now rejects non-string CType arguments
+before acquiring the parser token. Stable CType-backed `ffi.new(ct, ...)`,
+`ffi.sizeof(ct)`, and `ffi.alignof(ct)` abandoned/invalid misses are covered by
+the fixture and source guard so they cannot reacquire the parser token through
+the string-layout fallback.
+
 String declarations still use the serialized parser path because they actually
 mutate the C type graph. The new behavior is guarded by
 `tests/t-ffi-layout-snapshot.c`, which holds the parse token from a helper
