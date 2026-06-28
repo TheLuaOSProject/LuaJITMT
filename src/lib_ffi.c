@@ -1604,7 +1604,7 @@ LJLIB_CF(ffi_offsetof)	LJLIB_REC(ffi_xof FF_ffi_offsetof)
   if (isstr)
     id = ffi_checkctype(L, cts, NULL);
   name = lj_lib_checkstr(L, 2);
-  if (!isstr) {
+  {
     CType snap;
     int ok = ffi_layout_offsetof_snapshot(cts, id, name, &ofs, &snap);
     if (ok > 0) {
