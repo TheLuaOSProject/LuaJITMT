@@ -803,6 +803,28 @@ static cTValue *crec_ctype_metatv(jit_State *J, CTState *cts, TValue *out,
   return ok ? out : NULL;
 }
 
+static CType *crec_ctype_snapshot(jit_State *J, CTState *cts, CTypeID id,
+				  CType *out)
+{
+  int ok = lj_ctype_snapshot(cts, id, out);
+  if (ok < 0)
+    lj_trace_err(J, LJ_TRERR_CTBUSY);
+  if (!ok)
+    lj_trace_err(J, LJ_TRERR_BADTYPE);
+  return out;
+}
+
+static CType *crec_ctype_rawref(jit_State *J, CTState *cts, CTypeID id,
+				CType *out)
+{
+  int ok = lj_ctype_rawref_snapshot(cts, id, NULL, out);
+  if (ok < 0)
+    lj_trace_err(J, LJ_TRERR_CTBUSY);
+  if (!ok)
+    lj_trace_err(J, LJ_TRERR_BADTYPE);
+  return out;
+}
+
 static CTypeID crec_ctype_ptr_metaid(jit_State *J, CTState *cts, CTypeID id)
 {
   CType snap;
@@ -2050,13 +2072,8 @@ void LJ_FASTCALL recff_ffi_xof(jit_State *J, RecordFFData *rd)
   CTypeID id = argv2ctype(J, J->base[0], &rd->argv[0]);
   if (rd->data == FF_ffi_sizeof) {
     CType snap;
-    int ok = lj_ctype_rawref_snapshot(cts, id, NULL, &snap);
-    if (ok < 0) {
-      lj_trace_err(J, LJ_TRERR_CTBUSY);
-    } else if (!ok) {
-      lj_trace_err(J, LJ_TRERR_BADTYPE);
-    }
-    if (ctype_isvltype(ctype_info_acq(&snap)))
+    CType *ct = crec_ctype_rawref(J, cts, id, &snap);
+    if (ctype_isvltype(ctype_info_acq(ct)))
       lj_trace_err(J, LJ_TRERR_BADTYPE);
   } else if (rd->data == FF_ffi_offsetof) {  /* Specialize to the field name. */
     if (!tref_isstr(J->base[1]))
@@ -2079,13 +2096,14 @@ void LJ_FASTCALL recff_ffi_gc(jit_State *J, RecordFFData *rd)
 /* -- 64 bit bit.* library functions -------------------------------------- */
 
 /* Determine bit operation type from argument type. */
-static CTypeID crec_bit64_type(CTState *cts, cTValue *tv)
+static CTypeID crec_bit64_type(jit_State *J, CTState *cts, cTValue *tv)
 {
   if (tviscdata(tv)) {
-    CType *ct = lj_ctype_rawref(cts, cdataV(tv)->ctypeid);
+    CType snap, child;
+    CType *ct = crec_ctype_rawref(J, cts, cdataV(tv)->ctypeid, &snap);
     CTInfo info = ctype_info_acq(ct);
     if (ctype_isenum(info)) {
-      ct = ctype_child(cts, ct);
+      ct = crec_ctype_snapshot(J, cts, ctype_cid(info), &child);
       info = ctype_info_acq(ct);
     }
     if ((info & (CTMASK_NUM|CTF_BOOL|CTF_FP|CTF_UNSIGNED)) ==
@@ -2119,7 +2137,7 @@ void LJ_FASTCALL recff_bit64_tobit(jit_State *J, RecordFFData *rd)
 int LJ_FASTCALL recff_bit64_unary(jit_State *J, RecordFFData *rd)
 {
   CTState *cts = ctype_ctsG(J2G(J));
-  CTypeID id = crec_bit64_type(cts, &rd->argv[0]);
+  CTypeID id = crec_bit64_type(J, cts, &rd->argv[0]);
   if (id) {
     TRef tr = crec_bit64_arg(J, ctype_get(cts, id), J->base[0], &rd->argv[0]);
     tr = emitir(IRT(rd->data, id-CTID_INT64+IRT_I64), tr, 0);
@@ -2135,7 +2153,7 @@ int LJ_FASTCALL recff_bit64_nary(jit_State *J, RecordFFData *rd)
   CTypeID id = 0;
   MSize i;
   for (i = 0; J->base[i] != 0; i++) {
-    CTypeID aid = crec_bit64_type(cts, &rd->argv[i]);
+    CTypeID aid = crec_bit64_type(J, cts, &rd->argv[i]);
     if (id < aid) id = aid;  /* Determine highest type rank of all arguments. */
   }
   if (id) {
@@ -2164,7 +2182,7 @@ int LJ_FASTCALL recff_bit64_shift(jit_State *J, RecordFFData *rd)
       tsh = emitconv(tsh, IRT_INT, tref_type(tsh), 0);
     J->base[1] = tsh;
   }
-  id = crec_bit64_type(cts, &rd->argv[0]);
+  id = crec_bit64_type(J, cts, &rd->argv[0]);
   if (id) {
     TRef tr = crec_bit64_arg(J, ctype_get(cts, id), J->base[0], &rd->argv[0]);
     uint32_t op = rd->data;
@@ -2190,7 +2208,7 @@ int LJ_FASTCALL recff_bit64_shift(jit_State *J, RecordFFData *rd)
 TRef recff_bit64_tohex(jit_State *J, RecordFFData *rd, TRef hdr)
 {
   CTState *cts = ctype_ctsG(J2G(J));
-  CTypeID id = crec_bit64_type(cts, &rd->argv[0]);
+  CTypeID id = crec_bit64_type(J, cts, &rd->argv[0]);
   TRef tr, trsf = J->base[1];
   SFormat sf = (STRFMT_UINT|STRFMT_T_HEX);
   int32_t n;
@@ -2228,10 +2246,12 @@ TRef recff_bit64_tohex(jit_State *J, RecordFFData *rd, TRef hdr)
 void LJ_FASTCALL lj_crecord_tonumber(jit_State *J, RecordFFData *rd)
 {
   CTState *cts = ctype_ctsG(J2G(J));
-  CType *d, *ct = lj_ctype_rawref(cts, cdataV(&rd->argv[0])->ctypeid);
+  CType snap, child;
+  CType *d, *ct = crec_ctype_rawref(J, cts, cdataV(&rd->argv[0])->ctypeid,
+				    &snap);
   CTInfo info = ctype_info_acq(ct);
   if (ctype_isenum(info)) {
-    ct = ctype_child(cts, ct);
+    ct = crec_ctype_snapshot(J, cts, ctype_cid(info), &child);
     info = ctype_info_acq(ct);
   }
   if (ctype_isnum(info) || ctype_iscomplex(info)) {
