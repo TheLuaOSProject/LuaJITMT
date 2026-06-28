@@ -190,6 +190,23 @@ static void mcode_setprot(jit_State *J, void *p, size_t sz, DWORD prot)
 #if LJ_MCODE_MAPJIT
 #include <pthread.h>
 #define MCMAP_CREATE	MAP_JIT
+static uint32_t mcode_mapjit_wprotect_supported = 2u;
+
+static int mcode_mapjit_wprotect(void)
+{
+  uint32_t supported = la_load32_acq(&mcode_mapjit_wprotect_supported);
+  if (LJ_UNLIKELY(supported == 2u)) {
+    supported = pthread_jit_write_protect_supported_np() ? 1u : 0u;
+    la_store32_rel(&mcode_mapjit_wprotect_supported, supported);
+  }
+  return supported != 0;
+}
+
+static void mcode_mapjit_set_wprotect(int enabled)
+{
+  if (mcode_mapjit_wprotect())
+    pthread_jit_write_protect_np(enabled);
+}
 #else
 #define MCMAP_CREATE	0
 #endif
@@ -258,7 +275,7 @@ static void *mcode_alloc_at(jit_State *J, uintptr_t hint, size_t sz, int prot)
   mcode_native_leave(L);
   if (p == MAP_FAILED) return NULL;
 #if MCMAP_CREATE
-  pthread_jit_write_protect_np(0);
+  mcode_mapjit_set_wprotect(0);
 #endif
   return p;
 #endif
@@ -276,7 +293,7 @@ static void mcode_setprot(jit_State *J, void *p, size_t sz, int prot)
 #elif LUAJIT_SECURITY_MCODE != 0
 #if MCMAP_CREATE
   UNUSED(J); UNUSED(p); UNUSED(sz);
-  pthread_jit_write_protect_np((prot & PROT_EXEC));
+  mcode_mapjit_set_wprotect((prot & PROT_EXEC));
   return;
 #else
   if (mprotect(p, sz, prot)) mcode_protfail(J);
