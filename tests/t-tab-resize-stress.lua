@@ -446,11 +446,14 @@ local function traversal_observer(tbl, ready, start, id, rounds)
 
     if enabled_traversal_modes.next then
       local k, v = next(tbl, nil)
-      if k ~= nil then
+      local count = 0
+      while k ~= nil and count < 32 do
 	local err = check(k, "next(nil) traversal")
 	if err then return nil, err end
 	err = check(v, "next(nil) traversal")
 	if err then return nil, err end
+	k, v = next(tbl, k)
+	count = count + 1
       end
     end
 

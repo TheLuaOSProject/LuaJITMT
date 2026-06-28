@@ -138,13 +138,14 @@ if ! awk '
   in_fn && /for k, v in pairs\(tbl\)/ { pairs = 1 }
   in_fn && /for i, v in ipairs\(tbl\)/ { ipairs = 1 }
   in_fn && /next\(tbl, nil\)/ { nextnil = 1 }
+  in_fn && /next\(tbl, k\)/ { nextkey = 1 }
   in_fn && /^end$/ {
-    if (!(pairs && ipairs && nextnil))
+    if (!(pairs && ipairs && nextnil && nextkey))
       exit 1
     in_fn = 0
   }
 ' "$STRESS"; then
-  printf '%s\n' 'traversal stress must cover pairs(), ipairs(), and next(t, nil)' >&2
+  printf '%s\n' 'traversal stress must cover pairs(), ipairs(), next(t, nil), and next(t, k)' >&2
   exit 1
 fi
 
