@@ -464,13 +464,28 @@ LJLIB_CF(ffi_clib___index)	LJLIB_REC(clib_index 1)
   if (tviscdata(&tv)) {
     CTState *cts = ctype_cts(L);
     GCcdata *cd = cdataV(&tv);
-    CType *s = ctype_get(cts, cd->ctypeid);
-    CTInfo sinfo = ctype_info_acq(s);
-    if (ctype_isextern(sinfo)) {
-      CTypeID sid = ctype_cid(sinfo);
+    CType esnap;
+    CTInfo sinfo, erawinfo;
+    CTSize ssize;
+    CTypeID rid;
+    int ok = lj_ctype_info_snapshot(cts, cd->ctypeid, &sinfo, &ssize, &rid,
+				    &esnap);
+    if (ok <= 0)
+      ok = lj_ctype_info_wait(L, cts, cd->ctypeid, &sinfo, &ssize, &rid,
+			      &esnap);
+    if (ok <= 0)
+      lj_err_arg(L, 2, LJ_ERR_FFI_INVTYPE);
+    erawinfo = ctype_info_acq(&esnap);
+    if (ctype_isextern(erawinfo)) {
+      CType tsnap;
+      CTypeID sid = ctype_cid(erawinfo);
       void *sp = *(void **)cdataptr(cd);
-      CType *ct = ctype_raw(cts, sid);
-      if (lj_cconv_tv_ct_l(L, cts, ct, sid, L->top-1, sp))
+      ok = lj_ctype_info_snapshot(cts, sid, &sinfo, &ssize, &rid, &tsnap);
+      if (ok <= 0)
+	ok = lj_ctype_info_wait(L, cts, sid, &sinfo, &ssize, &rid, &tsnap);
+      if (ok <= 0)
+	lj_err_arg(L, 2, LJ_ERR_FFI_INVTYPE);
+      if (lj_cconv_tv_ct_l(L, cts, &tsnap, rid, L->top-1, sp))
 	lj_gc_check(L);
       return 1;
     }
@@ -488,19 +503,26 @@ LJLIB_CF(ffi_clib___newindex)	LJLIB_REC(clib_index 0)
     CTState *cts = ctype_cts(L);
     GCcdata *cd = cdataV(&tv);
     CTypeID did = cd->ctypeid;
-    CType *d = ctype_get(cts, did);
-    CTInfo dinfo = ctype_info_acq(d);
-    if (ctype_isextern(dinfo)) {
-      CTInfo qual = 0;
-      for (;;) {  /* Skip attributes and collect qualifiers. */
-	did = ctype_cid(dinfo);
-	d = ctype_get(cts, did);
-	dinfo = ctype_info_acq(d);
-	if (!ctype_isattrib(dinfo)) break;
-	if (ctype_attrib(dinfo) == CTA_QUAL) qual |= ctype_size_acq(d);
-      }
-      if (!((dinfo|qual) & CTF_CONST)) {
-	lj_cconv_ct_tv_l(L, cts, d, did, *(void **)cdataptr(cd), o, 0);
+    CType esnap;
+    CTInfo dinfo, erawinfo;
+    CTSize dsize;
+    CTypeID rid;
+    int ok = lj_ctype_info_snapshot(cts, did, &dinfo, &dsize, &rid, &esnap);
+    if (ok <= 0)
+      ok = lj_ctype_info_wait(L, cts, did, &dinfo, &dsize, &rid, &esnap);
+    if (ok <= 0)
+      lj_err_arg(L, 2, LJ_ERR_FFI_INVTYPE);
+    erawinfo = ctype_info_acq(&esnap);
+    if (ctype_isextern(erawinfo)) {
+      CType dsnap;
+      did = ctype_cid(erawinfo);
+      ok = lj_ctype_info_snapshot(cts, did, &dinfo, &dsize, &rid, &dsnap);
+      if (ok <= 0)
+	ok = lj_ctype_info_wait(L, cts, did, &dinfo, &dsize, &rid, &dsnap);
+      if (ok <= 0)
+	lj_err_arg(L, 2, LJ_ERR_FFI_INVTYPE);
+      if (!(dinfo & CTF_CONST)) {
+	lj_cconv_ct_tv_l(L, cts, &dsnap, rid, *(void **)cdataptr(cd), o, 0);
 	return 0;
       }
     }

@@ -384,7 +384,7 @@ void lj_cconv_ct_ct_l(lua_State *L, CTState *cts, CType *d, CTypeID did,
 
   /* Destination is a struct/union. */
   case CCX(S, S):
-    if ((flags & CCF_CAST) || (dinfo & CTF_VLA) || d != s)
+    if ((flags & CCF_CAST) || (dinfo & CTF_VLA) || did != sid)
       goto err_conv;  /* Must be exact same type. */
 copyval:  /* Copy value. */
     lj_assertCTS(dsize == ssize, "value copy with different sizes");

@@ -197,6 +197,15 @@ return function(add)
     description = "FFI C library cache miss/fill behavior",
     run = function(t)
       clean_build(t)
+      local extern_so = build_shared_library(t,
+        t:tmp("lj_t-ffi-clib-extern-snapshot.so"),
+        "t-ffi-clib-extern-snapshot-lib.c")
+      build_and_run_c(t, t:tmp("lj_t-ffi-clib-extern-snapshot"),
+                      "t-ffi-clib-extern-snapshot.c", {
+        build = false,
+        env = { LJ_M7_FFI_CLIB_EXTERN_SO = extern_so },
+        timeout = "20s"
+      })
       run_luajit_script(t, "t-ffi-clib-cache.lua", {
         getenv("LJ_M7_FFI_CLIB_THREADS", "6"),
         getenv("LJ_M7_FFI_CLIB_ITERS", "300")
