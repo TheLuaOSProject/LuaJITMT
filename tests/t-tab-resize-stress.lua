@@ -8,6 +8,8 @@ local jit_read_reps =
   harness.env_number("LJ_M5_TAB_RESIZE_STRESS_JIT_READ_REPS", jit_reps)
 local traversal_rounds =
   harness.env_number("LJ_M5_TAB_RESIZE_STRESS_TRAVERSAL_ROUNDS", 192)
+local finalizer_objects =
+  harness.env_number("LJ_M5_TAB_RESIZE_STRESS_FIN_OBJECTS", 192)
 
 local function assert_lua_value(v, label)
   local tv = type(v)
@@ -104,6 +106,65 @@ local function exercise_gc_mark_resize()
 	     "GC missed table-owned object during resize forwarding")
       assert_lua_value(obj, "strong resize")
     end
+  end
+end
+
+local function finalizer_resize_writer(tbl, ready, start, id, n)
+  assert(ready:send(true, 10) == true)
+  local _, ok = start:recv(10)
+  assert(ok == true)
+  for i = 1, n do
+    tbl["resize-fin:" .. id .. ":" .. i] = i
+    tbl[id * 1000000 + i] = i
+    if i > 32 and i % 6 == 0 then
+      tbl["resize-fin:" .. id .. ":" .. (i - 16)] = nil
+    end
+    if i % 64 == 0 then collectgarbage("step") end
+  end
+  return true
+end
+
+local function exercise_finalizer_resize()
+  local okffi, ffi = pcall(require, "ffi")
+  if not okffi then return end
+
+  ffi.cdef[[
+  typedef struct { int id; } lj_m5_tab_resize_fin_t;
+  ]]
+
+  local ctype = ffi.typeof("lj_m5_tab_resize_fin_t")
+  local strong = {}
+  local weak = setmetatable({}, { __mode = "v" })
+  local finalized = {}
+  local n = finalizer_objects
+
+  for i = 1, n do
+    local obj = ffi.gc(ctype(i), function(cd)
+      finalized[tonumber(cd.id)] = true
+    end)
+    strong["fin:" .. i] = obj
+    weak[i] = obj
+  end
+
+  local ready, start = ready_start(writers)
+  local workers = {}
+  for i = 1, writers do
+    workers[i] =
+      th.spawn(finalizer_resize_writer, strong, ready, start, i, reps)
+  end
+  harness.wait_ready(ready, writers, 10, "finalizer resize")
+  harness.release_start(start, writers, 10)
+  collect_while_working(128)
+  harness.join_all(workers, 30)
+  harness.fullgc(3)
+
+  for i = 1, n do
+    local obj = strong["fin:" .. i]
+    assert(type(obj) == "cdata", "finalizer resize lost table-held cdata")
+    assert(weak[i] == obj,
+	   "GC missed table-held finalizer cdata during resize forwarding")
+    assert(finalized[i] ~= true,
+	   "table-held finalizer cdata was finalized during resize")
   end
 end
 
@@ -283,6 +344,7 @@ end
 
 exercise_weak_clear_resize()
 exercise_gc_mark_resize()
+exercise_finalizer_resize()
 exercise_jit_store_resize()
 exercise_jit_read_resize()
 exercise_concurrent_traversal_resize()
