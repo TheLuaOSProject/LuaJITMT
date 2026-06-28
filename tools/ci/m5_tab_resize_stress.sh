@@ -12,6 +12,8 @@ for required in \
     "local function exercise_jit_read_resize()" \
     "local function object_key_resize_writer(" \
     "local function exercise_gc_key_resize()" \
+    "local function weak_key_resize_writer(" \
+    "local function exercise_weak_key_resize()" \
     "local function exercise_finalizer_resize()" \
     "local function exercise_metatable_resize()" \
     "local function traversal_observer(" \
@@ -19,6 +21,7 @@ for required in \
     "exercise_weak_clear_resize()" \
     "exercise_gc_mark_resize()" \
     "exercise_gc_key_resize()" \
+    "exercise_weak_key_resize()" \
     "exercise_finalizer_resize()" \
     "exercise_metatable_resize()" \
     "exercise_jit_store_resize()" \
@@ -52,6 +55,7 @@ for required in \
     'run_case("weak", exercise_weak_clear_resize)' \
     'run_case("gcmark", exercise_gc_mark_resize)' \
     'run_case("gckey", exercise_gc_key_resize)' \
+    'run_case("weakkey", exercise_weak_key_resize)' \
     'run_case("finalizer", exercise_finalizer_resize)' \
     'run_case("metatable", exercise_metatable_resize)' \
     'run_case("jitstore", exercise_jit_store_resize)' \
@@ -96,6 +100,26 @@ if ! awk '
   }
 ' "$STRESS"; then
   printf '%s\n' 'object-key resize stress must keep table-owned hash keys and values live across resize and GC' >&2
+  exit 1
+fi
+
+if ! awk '
+  /local function exercise_weak_key_resize\(/ { in_fn = 1 }
+  in_fn && index($0, "setmetatable({}, { __mode = \"k\" })") { weak_key = 1 }
+  in_fn && index($0, "setmetatable({}, { __mode = \"v\" })") { weak_val = 1 }
+  in_fn && /live_keys\[i\] = key/ { live_key = 1 }
+  in_fn && /weak_vals\[i\] = val/ { weak_obs = 1 }
+  in_fn && /harness\.fullgc\(4\)/ { fullgc = 1 }
+  in_fn && /weak\[key\]/ { lookup = 1 }
+  in_fn && /weak_vals\[i\] == nil/ { cleared = 1 }
+  in_fn && /^end$/ {
+    if (!(weak_key && weak_val && live_key && weak_obs && fullgc &&
+	  lookup && cleared))
+      exit 1
+    in_fn = 0
+  }
+' "$STRESS"; then
+  printf '%s\n' 'weak-key resize stress must keep rooted weak keys live and clear unrooted weak-key values after GC' >&2
   exit 1
 fi
 
