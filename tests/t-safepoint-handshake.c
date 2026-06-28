@@ -56,6 +56,16 @@ typedef struct InputStopReqCtx {
   int err;
 } InputStopReqCtx;
 
+typedef struct DispatchUpdateWaitCtx {
+  global_State *g;
+  TGState *tg;
+  pthread_t thread;
+  uint8_t release_mode;
+  uint32_t saw_native;
+  uint32_t done;
+  int err;
+} DispatchUpdateWaitCtx;
+
 static void publish_manual(global_State *g, TGState *tg, uint32_t actions)
 {
   uint64_t epoch = la_load64_rlx(&g->gc2.hs_epoch) + 1u;
@@ -272,6 +282,96 @@ static void *input_stopreq_thread(void *arg)
   if (n != (ssize_t)(sizeof(msg) - 1u))
     ctx->err = n == -1 ? errno : EIO;
   return NULL;
+}
+
+static void dispatch_test_sleep_1ms(void)
+{
+  struct timespec delay;
+  delay.tv_sec = 0;
+  delay.tv_nsec = 1000000;
+  (void)nanosleep(&delay, NULL);
+}
+
+#define DISPMODE_UPDATE_TEST 0x80
+
+static void *dispatch_update_release_thread(void *arg)
+{
+  DispatchUpdateWaitCtx *ctx = (DispatchUpdateWaitCtx *)arg;
+  int i;
+  for (i = 0; i < 1000; i++) {
+    if (la_load8_acq(&ctx->tg->in_native) != 0) {
+      la_store32_rel(&ctx->saw_native, 1);
+      break;
+    }
+    dispatch_test_sleep_1ms();
+  }
+  if (la_load32_acq(&ctx->saw_native) == 0)
+    ctx->err = ETIMEDOUT;
+  dispatchmode_store_rel(ctx->g, ctx->release_mode);
+  return NULL;
+}
+
+static void *dispatch_update_async_thread(void *arg)
+{
+  DispatchUpdateWaitCtx *ctx = (DispatchUpdateWaitCtx *)arg;
+  lj_dispatch_update(ctx->g, 2);
+  la_store32_rel(&ctx->done, 1);
+  return NULL;
+}
+
+static void test_dispatch_update_regular_wait(lua_State *L)
+{
+  global_State *g = G(L);
+  TGState *tg = G2TG(g);
+  DispatchUpdateWaitCtx ctx;
+  uint8_t mode = dispatchmode_load_acq(g);
+  int err;
+
+  assert(tg != NULL);
+  assert((mode & DISPMODE_UPDATE_TEST) == 0);
+  assert(la_load8_acq(&tg->in_native) == 0);
+  memset(&ctx, 0, sizeof(ctx));
+  ctx.g = g;
+  ctx.tg = tg;
+  ctx.release_mode = mode;
+  dispatchmode_store_rel(g, (uint8_t)(mode | DISPMODE_UPDATE_TEST));
+  err = pthread_create(&ctx.thread, NULL,
+		       dispatch_update_release_thread, &ctx);
+  assert(err == 0);
+  lj_dispatch_update(g, 0);
+  err = pthread_join(ctx.thread, NULL);
+  assert(err == 0);
+  assert(ctx.err == 0);
+  assert(la_load32_acq(&ctx.saw_native) == 1);
+  assert(la_load8_acq(&tg->in_native) == 0);
+  assert(dispatchmode_load_acq(g) == mode);
+}
+
+static void test_dispatch_update_async_return(lua_State *L)
+{
+  global_State *g = G(L);
+  DispatchUpdateWaitCtx ctx;
+  uint8_t mode = dispatchmode_load_acq(g);
+  uint32_t immediate;
+  int i, err;
+
+  assert((mode & DISPMODE_UPDATE_TEST) == 0);
+  memset(&ctx, 0, sizeof(ctx));
+  ctx.g = g;
+  ctx.release_mode = mode;
+  dispatchmode_store_rel(g, (uint8_t)(mode | DISPMODE_UPDATE_TEST));
+  err = pthread_create(&ctx.thread, NULL,
+		       dispatch_update_async_thread, &ctx);
+  assert(err == 0);
+  for (i = 0; i < 50 && la_load32_acq(&ctx.done) == 0; i++)
+    dispatch_test_sleep_1ms();
+  immediate = la_load32_acq(&ctx.done);
+  assert(dispatchmode_load_acq(g) == (uint8_t)(mode | DISPMODE_UPDATE_TEST));
+  dispatchmode_store_rel(g, mode);
+  err = pthread_join(ctx.thread, NULL);
+  assert(err == 0);
+  assert(immediate == 1);
+  assert(dispatchmode_load_acq(g) == mode);
 }
 
 static void fill_pipe_until_full(int fd)
@@ -647,6 +747,8 @@ int main(void)
   assert(g->gc2.hs_actions == actions);
   assert(tg->dispatch[BC_RET] == saved_dispatch);
   assert(tg->dispatch[BC_RET] == G2GG(g)->dispatch[BC_RET]);
+  test_dispatch_update_regular_wait(L);
+  test_dispatch_update_async_return(L);
 
   assert((tg->tg_flags & TGF_STOPREQ) == 0);
   actions = LJ_GC2_HS_STOPREQ;

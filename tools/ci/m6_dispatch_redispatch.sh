@@ -5,9 +5,12 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 
 for required in \
   'static void dispatch_update_wait_no_l(void)' \
-  '(void)lj_thr_sleep_ns(NULL, 1000000);'
+  '(void)lj_thr_sleep_ns(NULL, 1000000);' \
+  'test_dispatch_update_regular_wait(L);' \
+  'test_dispatch_update_async_return(L);'
 do
-  if ! grep -qF "$required" "$ROOT/src/lj_dispatch.c"; then
+  if ! grep -qF "$required" "$ROOT/src/lj_dispatch.c" \
+     && ! grep -qF "$required" "$ROOT/tests/t-safepoint-handshake.c"; then
     printf '%s\n' "dispatch update wait is missing: $required" >&2
     exit 1
   fi

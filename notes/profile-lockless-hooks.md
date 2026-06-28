@@ -16,6 +16,10 @@ Changes:
   requested mode before leaving the update path. Non-async dispatch updaters
   that find the token busy now wait in no-`lua_State` native sleep slices
   instead of burning CPU in a pause loop.
+- `tests/t-safepoint-handshake.c` covers both dispatch-token contention
+  branches: regular callers must mark the waiting TG native before retrying,
+  and async profiler-style callers must return while the update bit remains
+  owned by the interrupted updater.
 - Added profiler-specific hookmask helpers. The profile hook atomically claims
   `HOOK_VMEVENT`, drains samples with an exchange, invokes the callback, and
   restores the saved hook mask while preserving concurrent hook event/profile
