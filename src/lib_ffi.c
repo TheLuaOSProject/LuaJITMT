@@ -17,6 +17,7 @@
 #if LJ_HASFFI
 
 #include "lj_atomic.h"
+#include "lj_char.h"
 #include "lj_gc.h"
 #include "lj_gc2.h"
 #include "lj_err.h"
@@ -150,6 +151,33 @@ static int ffi_predefined_ctype_string(GCstr *s, CTypeID *idp)
   return 0;
 }
 
+static int ffi_simple_typedef_string(lua_State *L, CTState *cts, GCstr *s,
+				     CTypeID *idp)
+{
+  const char *p = strdata(s);
+  MSize len = s->len, i;
+  CType ct;
+  CTypeID id;
+  CTInfo info;
+  int ok;
+  if (len == 0 || lj_char_isdigit((uint8_t)p[0]))
+    return 0;
+  for (i = 0; i < len; i++)
+    if (!lj_char_isident((uint8_t)p[i]))
+      return 0;
+  ok = lj_ctype_getname_snapshot(cts, s, (1u << CT_TYPEDEF), &id, &ct, NULL);
+  if (ok < 0)
+    ok = lj_ctype_getname_wait(L, cts, s, (1u << CT_TYPEDEF), &id, &ct,
+			       NULL);
+  if (ok <= 0)
+    return 0;
+  info = ctype_info_acq(&ct);
+  if (!ctype_istypedef(info))
+    return 0;
+  *idp = ctype_cid(info);
+  return 1;
+}
+
 /* Check first argument for a C type and returns its ID. */
 static CTypeID ffi_checkctype(lua_State *L, CTState *cts, TValue *param)
 {
@@ -164,6 +192,9 @@ static CTypeID ffi_checkctype(lua_State *L, CTState *cts, TValue *param)
     CTypeID id;
     if ((!param || param >= L->top) && ffi_predefined_ctype_string(s, &id))
       return id;  /* 11.2: immutable predefined ctype names need no parser. */
+    if ((!param || param >= L->top) &&
+	ffi_simple_typedef_string(L, cts, s, &id))
+      return id;
     lj_ctype_parse_lock(cts, L);
     id = ffi_parse_ctype_locked(L, cts, param, &errcode);
     lj_ctype_parse_unlock(cts);
