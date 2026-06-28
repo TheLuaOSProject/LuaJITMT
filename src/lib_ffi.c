@@ -81,6 +81,8 @@ static int ffi_predefined_ctype_part(const char *p, MSize len, CTypeID *idp)
   while (len != 0 && ffi_cspace(*p)) { p++; len--; }
   while (len != 0 && ffi_cspace(p[len-1])) len--;
   if (ffi_ctype_match("void")) { *idp = CTID_VOID; return 1; }
+  if (ffi_ctype_match("const void")) { *idp = CTID_CVOID; return 1; }
+  if (ffi_ctype_match("void const")) { *idp = CTID_CVOID; return 1; }
   if (ffi_ctype_match("void *")) { *idp = CTID_P_VOID; return 1; }
   if (ffi_ctype_match("void*")) { *idp = CTID_P_VOID; return 1; }
   if (ffi_ctype_match("const void *")) { *idp = CTID_P_CVOID; return 1; }
@@ -92,6 +94,8 @@ static int ffi_predefined_ctype_part(const char *p, MSize len, CTypeID *idp)
   if (ffi_ctype_match("char")) { *idp = CTID_INT8; return 1; }
   if (ffi_ctype_match("signed char")) { *idp = CTID_INT8; return 1; }
   if (ffi_ctype_match("unsigned char")) { *idp = CTID_UINT8; return 1; }
+  if (ffi_ctype_match("const char")) { *idp = CTID_CCHAR; return 1; }
+  if (ffi_ctype_match("char const")) { *idp = CTID_CCHAR; return 1; }
   if (ffi_ctype_match("const char *")) { *idp = CTID_P_CCHAR; return 1; }
   if (ffi_ctype_match("const char*")) { *idp = CTID_P_CCHAR; return 1; }
   if (ffi_ctype_match("char const *")) { *idp = CTID_P_CCHAR; return 1; }
@@ -238,13 +242,20 @@ static int ffi_direct_ctype_base_string(lua_State *L, CTState *cts, GCstr *s,
   return 0;
 }
 
-static int ffi_direct_pointer_base(const char *p, MSize len)
+static MSize ffi_direct_pointer_suffix(const char *p, MSize *lenp)
 {
-  MSize i;
-  for (i = 0; i < len; i++)
-    if (p[i] == '*')
-      return 0;
-  return 1;
+  MSize len = *lenp;
+  MSize nptr = 0;
+  for (;;) {
+    while (len != 0 && ffi_cspace(p[len-1])) len--;
+    if (len == 0 || p[len-1] != '*')
+      break;
+    len--;
+    nptr++;
+  }
+  while (len != 0 && ffi_cspace(p[len-1])) len--;
+  *lenp = len;
+  return nptr;
 }
 
 static int ffi_direct_ctype_string(lua_State *L, CTState *cts, GCstr *s,
@@ -254,14 +265,17 @@ static int ffi_direct_ctype_string(lua_State *L, CTState *cts, GCstr *s,
   MSize len = s->len;
   while (len != 0 && ffi_cspace(*p)) { p++; len--; }
   while (len != 0 && ffi_cspace(p[len-1])) len--;
-  if (len != 0 && p[len-1] == '*') {
+  {
+    MSize baselen = len;
+    MSize nptr = ffi_direct_pointer_suffix(p, &baselen);
     CTypeID baseid;
-    MSize baselen = len - 1;
-    while (baselen != 0 && ffi_cspace(p[baselen-1])) baselen--;
-    if (baselen != 0 && ffi_direct_pointer_base(p, baselen) &&
+    if (nptr != 0 && baselen != 0 &&
 	ffi_direct_ctype_base_string(L, cts, s, p, baselen, &baseid)) {
-      *idp = lj_ctype_intern_l(L, cts,
-			       CTINFO(CT_PTR, CTALIGN_PTR|baseid), CTSIZE_PTR);
+      while (nptr-- != 0)
+	baseid = lj_ctype_intern_l(L, cts,
+				   CTINFO(CT_PTR, CTALIGN_PTR|baseid),
+				   CTSIZE_PTR);
+      *idp = baseid;
       return 1;
     }
   }
