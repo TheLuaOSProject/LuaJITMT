@@ -106,9 +106,11 @@ static int ffh_pairs(lua_State *L, MMS mm)
     copyTV(L, L->base-1-LJ_FR2, mo);  /* Replace callable. */
     return FFH_TAILCALL;
   } else {
+    TValue uv;
     if (!tvistab(o)) lj_err_argt(L, 1, LUA_TTABLE);
     if (LJ_FR2) { copyTV(L, o-1, o); o--; }
-    setfuncV(L, o-1, funcV(lj_lib_upvalue(L, 1)));
+    lj_lib_upvalue_load_acq(L, 1, &uv);
+    setfuncV(L, o-1, funcV(&uv));
     if (mm == MM_pairs) setnilV(o+1); else setintV(o+1, 0);
     return FFH_RES(3);
   }
@@ -805,13 +807,17 @@ static void print_native_char(lua_State *L, int c)
 LJLIB_CF(print)
 {
   ptrdiff_t i, nargs = L->top - L->base;
-  cTValue *tv = lj_tab_getstr(tabref_acq(L->env),
-			      strV(lj_lib_upvalue(L, 1)));
+  TValue uv;
+  GCstr *tostring_str;
+  cTValue *tv;
   int shortcut;
+  lj_lib_upvalue_load_acq(L, 1, &uv);
+  tostring_str = strV(&uv);
+  tv = lj_tab_getstr(tabref_acq(L->env), tostring_str);
   if (tv && !tvisnil(tv)) {
     copyTV(L, L->top++, tv);
   } else {
-    setstrV(L, L->top++, strV(lj_lib_upvalue(L, 1)));
+    setstrV(L, L->top++, tostring_str);
     lua_gettable(L, LUA_GLOBALSINDEX);
     tv = L->top-1;
   }
@@ -944,7 +950,9 @@ LJLIB_ASM(coroutine_resume)
 
 LJLIB_NOREG LJLIB_ASM(coroutine_wrap_aux)
 {
-  return ffh_resume(L, threadV(lj_lib_upvalue(L, 1)), 1);
+  TValue uv;
+  lj_lib_upvalue_load_acq(L, 1, &uv);
+  return ffh_resume(L, threadV(&uv), 1);
 }
 
 /* Inline declarations. */

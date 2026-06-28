@@ -476,6 +476,14 @@ print("proto-knum-acq-smoke OK")
 end
 
 local function assert_cclosure_upvalue_source_guards(t)
+  for _, file in ipairs({ "lib_base.c", "lib_table.c", "lib_string.c" }) do
+    local src = utils.read_source_file(t:path("src", file))
+    if src:find("lj_lib_upvalue(L", 1, true) then
+      error(file .. " must snapshot library C upvalues with " ..
+	    "lj_lib_upvalue_load_acq()", 2)
+    end
+  end
+
   local lib_io = utils.read_source_file(t:path("src", "lib_io.c"))
   if lib_io:find("udataV(&fn->c.upvalue[0])", 1, true) then
     error("io_file_iter must snapshot the file C upvalue before userdata access", 2)

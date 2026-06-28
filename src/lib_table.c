@@ -356,10 +356,12 @@ static void table_pack_storeint_str(lua_State *L, GCtab *t, GCstr *key,
 
 LJLIB_CF(table_pack)
 {
+  TValue uv;
   TValue *array, *base = L->base;
   MSize i, n = (uint32_t)(L->top - base);
   GCtab *t = lj_tab_new(L, n ? n+1 : 0, 1);
-  table_pack_storeint_str(L, t, strV(lj_lib_upvalue(L, 1)), (int32_t)n);
+  lj_lib_upvalue_load_acq(L, 1, &uv);
+  table_pack_storeint_str(L, t, strV(&uv), (int32_t)n);
   (void)lj_tab_array_snapshot_acq(t, &array);
   array++;
   for (i = 0; i < n; i++)
