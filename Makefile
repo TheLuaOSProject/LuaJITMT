@@ -3,12 +3,8 @@
 #
 # Please read doc/install.html before changing any variables!
 #
-# Suitable for POSIX platforms (Linux, *BSD, OSX etc.).
-# Note: src/Makefile has many more configurable options.
-#
-# ##### This Makefile is NOT useful for Windows! #####
-# For MSVC, please follow the instructions given in src/msvcbuild.bat.
-# For MinGW and Cygwin, cd to src and run make with the Makefile there.
+# Supported target for this lockless fork: x86-64 Linux with GC64.
+# Unsupported platform and compatibility builds are rejected by src/lj_arch.h.
 #
 # Copyright (C) 2005-2026 Mike Pall. See Copyright Notice in luajit.h
 ##############################################################################

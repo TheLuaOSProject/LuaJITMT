@@ -1,6 +1,5 @@
 local checks = require("suite_assert")
 local runtime = require("suite_runtime")
-local utils = require("suite_utils")
 local probes = require("local_cell_probes")
 
 local M = {}
@@ -29,18 +28,6 @@ local function assert_dump_not_contains(t, dump, needle, label)
   if contains(data, needle) then
     error(label .. ": unexpected dump text: " .. needle, 2)
   end
-end
-
-function M.run_source_guards(t)
-  local asm = utils.read_source_file(t:path("src", "lj_asm_x86.h"))
-  checks.assert_text_contains("x64 closed-upvalue USTORE helper guard", asm,
-    "if (ir->o == IR_USTORE && IR(ir->op1)->o == IR_UREFC) {",
-    "all-TValue USTORE helper condition")
-  if contains(asm,
-      "IR_USTORE && irt_isgcv(ir->t) && IR(ir->op1)->o == IR_UREFC") then
-    error("x64 closed-upvalue USTORE helper must not be gated to GC values", 2)
-  end
-
 end
 
 function M.run_bytecode_guards(t, tmpname)

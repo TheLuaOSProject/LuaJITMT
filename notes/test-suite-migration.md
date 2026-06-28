@@ -362,6 +362,13 @@ Lua test-suite migration notes:
 - Removed additional M5 exact source inventories for bytecode helper names, x64
   exitstub scaffolding, table-access macro definitions, and serializer call
   spelling. The suite keeps generated-result checks plus MT publication guards.
+- Removed the redundant `string.gmatch` C-closure upvalue source guard from
+  `m5_upvalue_publish_gc`; `tests/t-cclosure-upvalue-snapshot.c` now provides
+  the behavior coverage by observing and mutating the iterator position
+  upvalue through the debug API.
+- Removed the remaining local-cell x64 source guard from the shared cell-op
+  helper; bytecode, generated JIT dump, and runtime probes cover the cell
+  paths without reading `lj_asm_x86.h`.
 - Keep build-owning tests serial unless/until the Lua runner grows a shared
   build cache/lock. Existing shell gates often run `make clean`, so parallel
   migration validation can race `host/buildvm` or `libluajit.a` creation.

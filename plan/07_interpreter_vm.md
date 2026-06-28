@@ -157,7 +157,7 @@ strings intern in C, keep call). Accounting: `add qword
 The old `lj_gc_check` sites (dasc:1186–87 et al) are deleted; pacing rides
 the alloc slow path + safepoint (05 §5.11).
 
-## 7.6 New opcodes (numbering in 10 §10.2)
+## 7.6 Cell opcodes
 
 ```
 |case BC_CNEW:                         // A = dst slot
@@ -189,19 +189,16 @@ the alloc slow path + safepoint (05 §5.11).
 |  mov [RA], RC                        // single 8B store: I-1
 |  ins_next
 ```
-Legacy USETV/USETS/USETN/USETP and UGET stay for old bytecode; for the
-lockless cell model, UGET on a (now always-closed) cell is identical code;
-USETx gains the wbarrier macro in place of its current barrieruv call.
+Existing UGET/USET bytecodes stay only for current bytecode forms that still
+need them. Mutable shared upvalues use the cell path directly; old-dump
+compatibility is not a supported reason to keep alternate handlers.
 
 ## 7.7 FNEW, UCLO, hot counters, cur_L/jit_base touchpoints
 - BC_FNEW handler: unchanged dasc (calls lj_func_newL_gc); the C side
   copies cell refs per 06 §6.4.2.
-- BC_UCLO: under v4 no closing UCLO A != 0 is emitted; handler kept for legacy chunks —
-  for legacy chunks with closed-at-FNEW cells it is a no-op fallthrough-jump
-  (10 §10.4): patch handler to skip lj_func_closeuv call when the current
-  closure/proto metadata proves there are no open upvalues to close —
-  cheapest as a C check inside lj_func_closeuv itself (return immediately);
-  dasc untouched.
+- BC_UCLO: keep the current close semantics for source/current bytecode.
+  Do not preserve old-dump no-op behavior; stale dump versions are rejected at
+  load time.
 - hotloop/hotcall (dasc:332–345): untouched (TG keeps GG_DISP2HOT, 03
   §3.2-A). HotCount races across threads don't exist — counters are
   per-TG now, which also fixes today's cross-coroutine pollution.

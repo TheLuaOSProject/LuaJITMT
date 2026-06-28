@@ -4,12 +4,13 @@
 1. **Stock suite** (imported, M0): semantic ground truth for the default
    lockless build.
 2. **Conformance** tests/t-*.lua: new semantics (threading API, cells,
-   bytecode compat, weak/finalizers) — listed throughout docs 06–11.
+   current bytecode validation, weak/finalizers) — listed throughout docs
+   06–11.
 3. **Litmus** (§13.3): memory-model edges, run 100–10k reps.
 4. **Hammer/stress** (§13.4): hours-scale soak under torture.
 5. **C unit drivers** (§13.6.2): lock-free structures isolated, TSAN-clean.
 6. **Oracles**: LJ_GC2_PARANOIA STW diff (05 §5.13); string identity
-   checker; bytecode golden files.
+   checker; current bytecode validation fixtures.
 7. **Fuzzing** (§13.7).
 
 ## 13.2 Baseline numbers (reference machine)
@@ -60,7 +61,8 @@ L7 init-publish: t1 builds a 100-key table then publishes via channel; t2
 
 ## 13.4 Hammer suites (tests/stress/)
 t-tab-01..08, t-str-01..03 (12 §M5), t-gc-01..06 (M3), t-jit-01..06 (M6),
-t-ffi-01..06 (11 §11.8), t-weak-01..05 (M8), t-uv-01..07, t-bc-01..03,
+t-ffi-01..06 (11 §11.8), t-weak-01..05 (M8), t-uv-01..07,
+t-bcdump-current,
 t-api-01..10. Plus combined: stress/kitchen.lua — N threads each running a
 random mix (tables, strings, closures, channels, coroutines, ffi, GC
 pokes) from a seeded PRNG for T minutes; any error/assert/crash fails;
@@ -121,8 +123,9 @@ la_ ops so TSAN models them when called from C), thr_owner claim.
 Run litmus + t-api + t-tab suites under it weekly-equivalent cadence.
 
 ## 13.7 Fuzzing
-- luaL_loadbuffer fuzz (bcread v2/v3/v4 verifier, 10 §10.5): libFuzzer
-  harness fuzz/fuzz_bcread.c, corpus seeded with stock dumps + v4 dumps.
+- luaL_loadbuffer fuzz (current dump verifier): libFuzzer harness
+  fuzz/fuzz_bcread.c, corpus seeded with current dumps and malformed old
+  headers that must be rejected.
 - table-op sequence fuzzer: fuzz/fuzz_tabops.c drives the C table API with
   an interpreted op-string across 2–4 threads, shadow-checked against a
   per-key last-writer-wins oracle where determinable (single-writer keys).

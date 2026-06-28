@@ -2,7 +2,7 @@
 
 ## 00. READ ME FIRST — Operating Instructions for the Implementing Agent
 
-This is the entry point of a 15-document implementation specification plus
+This is the entry point of a 14-document implementation specification plus
 auxiliary code. It tells you exactly how to consume the rest, what the ground
 rules are, and how to verify your work at every step.
 
@@ -24,9 +24,9 @@ parallel against **one shared heap** (one `global_State`), with:
   (via the "cell" upvalue model, `06_concurrent_objects.md` §6.4);
 - a `threading.*` standard library (spawn/join/channels/etc.,
   `09_threading_api.md`);
-- **backwards-compatible bytecode loading** (old `BCDUMP_VERSION 2` chunks
-  still load and run; transitional version 3 chunks without cell ops load;
-  new chunks use version 4; `10_bytecode_compat.md`).
+- **current-only bytecode loading**: old `BCDUMP_VERSION 2/3` dumps are
+  rejected, current dumps use version 4, and no compatibility flag or legacy
+  chunk execution path is preserved.
 
 ### 0.2 Pinned source
 
@@ -55,7 +55,6 @@ Read in numeric order once, completely, before writing any code:
     07_interpreter_vm.md          vm_x64.dasc changes (safepoints, barriers, ops)
     08_jit_compiler.md            recorder token, trace publication, mcode, IR
     09_threading_api.md           threading.* library spec + implementation
-    10_bytecode_compat.md         BCDUMP v4, new opcodes, legacy chunk handling
     11_ffi_concurrency.md         CTState, cdata, callbacks, native regions
     12_implementation_plan.md     milestone playbook M0..M10 — YOUR TASK LIST
     13_testing_and_benchmarks.md  baselines, harness, stress/litmus tests, TSAN
@@ -138,7 +137,8 @@ executable form of the trickiest algorithms. Port them, do not reinvent them.
 - **cell** — a heap-allocated, always-closed upvalue (06 §6.4).
 - **gen** (tables) — one immutable-identity node/array vector generation of a
   table; resize installs a new gen (06 §6.2–6.3).
-- **legacy chunk** — bytecode loaded from a BCDUMP_VERSION 2 dump (10 §10.4).
+- **current dump** — bytecode using the fork's current `BCDUMP_VERSION`.
+  Earlier dump versions are rejected instead of translated.
 
 ### 0.7 Deliverable inventory you will produce
 

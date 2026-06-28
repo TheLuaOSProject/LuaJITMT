@@ -81,10 +81,9 @@ Tasks: lj_thr (pthread/futex shim), lib_threading + lj_chan per 09
 (channel C unit test chan_stress.c FIRST, 13 §13.6.2); tg attach/detach
 incl. mid-handshake attach (09 §9.3); thr_owner claims (06 §6.7, 03
 §3.7); native-state enter/leave on blocking paths; HS_STOPREQ shutdown;
-thread-activation latch (`global_State.mt_active`) + legacy-uv latch
-behavior (10 §10.4, parser not yet changed — legacy machinery is what
-exists, so the latch logic is exercisable immediately). This is runtime
-state, not an `LJ_MT`/`LUAJIT_THREADSAFE` build gate.
+thread-activation latch (`global_State.mt_active`) without a bytecode
+compatibility branch. This is runtime state, not an
+`LJ_MT`/`LUAJIT_THREADSAFE` build gate.
 Tests: t-api-01..10 (spawn/join/results/errors/timeout/close/rendezvous/
 stress 1k threads sequential), t-mt-smoke (N threads pure-compute), 13
 §13.3 litmus L1–L4 (message passing, join HB, fence SC, channel FIFO).
@@ -95,11 +94,11 @@ of the litmus set; TSAN build of C unit drivers clean.
 Tasks: tables per 06 §6.2–6.3 (port aux/nbtab_model.c; GCtab reshape;
 IRFL offset constants updated even though JIT still off for MT); string
 intern rewrite 06 §6.5 (+ sweep wave ordering); parser cell model +
-CNEW/CGET/CSET (06 §6.4, 07 §7.6, 10 §10.2–10.3); bcread/bcwrite v4 (10
-§10.1, 10.5, 10.6); long tail 06 §6.8; per-TG math.random.
+CNEW/CGET/CSET (06 §6.4, 07 §7.6); current-only bcread/bcwrite v4; long
+tail 06 §6.8; per-TG math.random.
 Tests: stock (the parser change touches *everything* — expect a long
-debug tail here; the v4-vs-v2 golden comparisons t-bc-01..03 and t-uv-01..
-07 are your instruments); t-tab-01..08 (8-thread hammer suites: insert/
+debug tail here; the current dump validation and t-uv-01..07 are your
+instruments); t-tab-01..08 (8-thread hammer suites: insert/
 lookup/delete/resize/iterate/array-grow/mixed/len), t-str-01..03 (intern
 storm, sweep-resurrect, resize race); nbtab_model + its in-tree port
 share a fuzz seed corpus.

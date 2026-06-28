@@ -3,9 +3,8 @@
 #
 # Please read doc/install.html before changing any variables!
 #
-# Suitable for POSIX platforms (Linux, *BSD, OSX etc.).
-# Also works with MinGW and Cygwin on Windows.
-# Please check msvcbuild.bat for building with MSVC on Windows.
+# Supported target for this lockless fork: x86-64 Linux with GC64.
+# Unsupported platform and compatibility builds are rejected by lj_arch.h.
 #
 # Copyright (C) 2005-2026 Mike Pall. See Copyright Notice in luajit.h
 ##############################################################################
@@ -94,23 +93,8 @@ XCFLAGS=
 # make use of it.
 #XCFLAGS+= -DLUAJIT_DISABLE_FFI
 #
-# Features from Lua 5.2 that are unlikely to break existing code are
-# enabled by default. Some other features that *might* break some existing
-# code (e.g. __pairs or os.execute() return values) can be enabled here.
-# Note: this does not provide full compatibility with Lua 5.2 at this time.
-#XCFLAGS+= -DLUAJIT_ENABLE_LUA52COMPAT
-#
 # Disable the JIT compiler, i.e. turn LuaJIT into a pure interpreter.
 #XCFLAGS+= -DLUAJIT_DISABLE_JIT
-#
-# Some architectures (e.g. PPC) can use either single-number (1) or
-# dual-number (2) mode. Uncomment one of these lines to override the
-# default mode. Please see LJ_ARCH_NUMMODE in lj_arch.h for details.
-#XCFLAGS+= -DLUAJIT_NUMMODE=1
-#XCFLAGS+= -DLUAJIT_NUMMODE=2
-#
-# Disable LJ_GC64 mode for x64.
-#XCFLAGS+= -DLUAJIT_DISABLE_GC64
 #
 ##############################################################################
 

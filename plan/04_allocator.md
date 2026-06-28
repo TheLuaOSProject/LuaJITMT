@@ -193,8 +193,8 @@ worker/owner race on orphans).
   GCHeader stays 8+1+1 bytes followed by type fields exactly as now.)
 - `marked` is renamed `gcflags`: bit0 LJ_GCF_FIXED (strempty etc.),
   bit1 LJ_GCF_FINREG (has finalizer registered), bit2 LJ_GCF_WEAKKEY,
-  bit3 LJ_GCF_WEAKVAL (tables cache their mode here as today),
-  bit4 LJ_GCF_LEGACYUV (10 §10.4). **Color is not in the object.**
+  bit3 LJ_GCF_WEAKVAL (tables cache their mode here as today).
+  **Color is not in the object.**
   All `iswhite/isblack/isgray/makewhite/...` macros (lj_gc.h:31–46) are
   retired with the legacy collector; lockless code uses
   `lj_gc2_ismarked(g,o)` = mark-bitmap test.

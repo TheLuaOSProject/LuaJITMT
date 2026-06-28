@@ -1,4 +1,4 @@
--- t-uv.lua — upvalue cell model conformance (06 §6.4, 10 §10.3; t-uv-01..07).
+-- t-uv.lua — upvalue cell model conformance (06 §6.4; t-uv-01..07).
 -- These must pass single-threaded too: cell semantics == Lua 5.1 semantics.
 local T = require("harness")
 local th = require("threading")

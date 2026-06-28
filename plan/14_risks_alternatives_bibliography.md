@@ -37,9 +37,8 @@ IPI trick or global `sys_membarrier(GLOBAL)`; document minimum kernel
 4.14 (memfd 3.17, PRIVATE_EXPEDITED_SYNC_CORE 4.16) — else interpreter-
 only MT.
 
-R6 **Legacy-uv deviation breaks a real workload** (10 §10.4). Response:
-the `strict` knob errors loudly; ultimate fix is recompiling sources (v4),
-which is always available since sources compile to cells.
+R6 **Old bytecode dumps are rejected**. Response: this is intentional for the
+lockless fork; rebuild from source so current dumps carry cell semantics.
 
 R7 **Recorder token starvation** (one thread hogs recording). Penalties
 naturally back off losers; add token fairness only if observed (ticket
@@ -52,11 +51,10 @@ vmevent after 10s.
 ## 14.2 Accepted limitations (documented, not bugs)
 L1 `next/pairs` during concurrent resize = "modified during traversal"
    semantics (06 §6.3.6). L2 collectgarbage("count") is an estimate.
-L3 hooks/profiler are universe-global (03 §3.6). L4 legacy-uv capture-at-
-   FNEW after thread activation (10 §10.4). L5 package.loaded double-load window (06
-   §6.8). L6 classic lua_CFunction modules are unsafe unless they follow
-   §6.7/§11.6 rules (requirement 4 grants this). L7 no per-op timeout on
-   cdef token. L8 nilnode freetop trick removed ⇒ tiny hash tables
+L3 hooks/profiler are universe-global (03 §3.6). L4 package.loaded
+   double-load window (06 §6.8). L5 classic lua_CFunction modules are unsafe
+   unless they follow §6.7/§11.6 rules (requirement 4 grants this). L6 no
+   per-op timeout on cdef token. L7 nilnode freetop trick removed ⇒ tiny hash tables
    allocate their NHdr eagerly on first insert.
 
 ## 14.3 Designed fallbacks (pre-approved deviations)
