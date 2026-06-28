@@ -248,6 +248,97 @@ static int ffi_qual_token(const char *p, MSize len, CTInfo *qualp)
   return 0;
 }
 
+static int ffi_sign_token(const char *p, MSize len, int *signp)
+{
+  if (len == 6 && ffi_strlit(p, len, "signed", 6)) {
+    *signp = 1;
+    return 1;
+  }
+  if (len == 8 && ffi_strlit(p, len, "__signed", 8)) {
+    *signp = 1;
+    return 1;
+  }
+  if (len == 10 && ffi_strlit(p, len, "__signed__", 10)) {
+    *signp = 1;
+    return 1;
+  }
+  if (len == 8 && ffi_strlit(p, len, "unsigned", 8)) {
+    *signp = 2;
+    return 1;
+  }
+  return 0;
+}
+
+static int ffi_int_keyword_token(const char *p, MSize len, int *bitsp)
+{
+  if (len == 6 && ffi_strlit(p, len, "__int8", 6)) {
+    *bitsp = 8;
+    return 1;
+  }
+  if (len == 7 && ffi_strlit(p, len, "__int16", 7)) {
+    *bitsp = 16;
+    return 1;
+  }
+  if (len == 7 && ffi_strlit(p, len, "__int32", 7)) {
+    *bitsp = 32;
+    return 1;
+  }
+  if (len == 7 && ffi_strlit(p, len, "__int64", 7)) {
+    *bitsp = 64;
+    return 1;
+  }
+  if (len == 8 && ffi_strlit(p, len, "__int128", 8)) {
+    *bitsp = 128;
+    return 1;
+  }
+  return 0;
+}
+
+static int ffi_direct_int_keyword_ctype(lua_State *L, CTState *cts,
+					const char *p, MSize len,
+					CTypeID *idp)
+{
+  int sign = 0, bits = 0;
+  while (len != 0 && ffi_cspace(*p)) { p++; len--; }
+  while (len != 0 && ffi_cspace(p[len-1])) len--;
+  while (len != 0) {
+    MSize toklen = 0;
+    int tok;
+    while (toklen < len && !ffi_cspace(p[toklen])) toklen++;
+    if (ffi_int_keyword_token(p, toklen, &tok)) {
+      if (bits != 0)
+	return 0;
+      bits = tok;
+    } else if (ffi_sign_token(p, toklen, &tok)) {
+      if (sign != 0)
+	return 0;
+      sign = tok;
+    } else {
+      return 0;
+    }
+    p += toklen;
+    len -= toklen;
+    while (len != 0 && ffi_cspace(*p)) { p++; len--; }
+  }
+  if (bits == 0)
+    return 0;
+  if (sign == 2) {
+    if (bits == 8) *idp = CTID_UINT8;
+    else if (bits == 16) *idp = CTID_UINT16;
+    else if (bits == 32) *idp = CTID_UINT32;
+    else if (bits == 128) *idp = CTID_UINT128;
+    else *idp = lj_ctype_intern_l(L, cts,
+				  CTINFO(CT_NUM, CTF_UNSIGNED|CTALIGN(3)), 8);
+  } else {
+    if (bits == 8) *idp = CTID_INT8;
+    else if (bits == 16) *idp = CTID_INT16;
+    else if (bits == 32) *idp = CTID_INT32;
+    else if (bits == 128) *idp = CTID_INT128;
+    else *idp = lj_ctype_intern_l(L, cts, CTINFO(CT_NUM, CTALIGN(3)), 8);
+  }
+  return 1;
+}
+
 static int ffi_direct_numeric_ctype(lua_State *L, CTState *cts,
 				    const char *p, MSize len, CTypeID *idp)
 {
@@ -373,6 +464,8 @@ static int ffi_direct_ctype_base_unqualified(lua_State *L, CTState *cts,
   CTypeID id;
   CTInfo info;
   if (ffi_predefined_ctype_part(p, len, idp))
+    return 1;
+  if (ffi_direct_int_keyword_ctype(L, cts, p, len, idp))
     return 1;
   if (ffi_direct_numeric_ctype(L, cts, p, len, idp))
     return 1;

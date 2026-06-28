@@ -24,6 +24,14 @@ ctype records also use the direct path: `long long`, signed/unsigned
 would create on x86-64 Linux, so qualifiers, pointer chains, and fixed-size
 arrays over those bases keep parser-compatible IDs.
 
+The parser's `__int8`, `__int16`, `__int32`, `__int64`, and `__int128`
+integer keyword spellings also stay off the parser token, including
+`signed`/`__signed`/`__signed__` and `unsigned` before or after the keyword.
+Small widths and 128-bit widths reuse immutable predefined IDs. `__int64`
+uses the same parser-compatible numeric ctype shape as `long long` instead of
+the x86-64 `long`/`int64_t` predefined ID, because the parser does not attach
+the `long` flag to that keyword spelling.
+
 Exact already-published typedef identifiers and simple tag names also bypass
 the parser token on the stable path. `ffi.typeof("my_typedef")`,
 `ffi.sizeof("struct my_tag")`, `ffi.typeof("union my_tag")`, and similar
