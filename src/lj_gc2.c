@@ -1875,7 +1875,7 @@ static int gc2_finalizer_mt_release_exclusive(global_State *g)
   if (!g || mt_gc_exclusive_acq(g) == 0)
     return 0;
   mt_gc_exclusive_rel(g, 0);
-#if defined(__linux__)
+#if defined(LA_HAS_FUTEX)
   mt_gc_exclusive_futex_wake(g, INT_MAX);
 #endif
   return 1;  /* 09 section 9.6: finalizer may spawn while GC is paused. */
@@ -1893,7 +1893,7 @@ static int gc2_finalizer_mt_reclaim_exclusive(global_State *g)
       if (mt_live_acq(g) == 0)
 	return 1;
       mt_gc_exclusive_rel(g, 0);
-#if defined(__linux__)
+#if defined(LA_HAS_FUTEX)
       mt_gc_exclusive_futex_wake(g, INT_MAX);
 #endif
       return 0;

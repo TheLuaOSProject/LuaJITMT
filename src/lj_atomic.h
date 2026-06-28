@@ -135,6 +135,7 @@ LA_INLINE void la_cpu_pause(void)
 
 /* ---- futex + membarrier (Linux) ------------------------------------- */
 #if defined(__linux__)
+#define LA_HAS_FUTEX 1
 #include <unistd.h>
 #include <sys/syscall.h>
 #include <linux/futex.h>
@@ -176,6 +177,7 @@ LA_INLINE int la_membarrier_synccore(void)
 
 /* ---- futex-style waits (Darwin) -------------------------------------- */
 #if defined(__APPLE__) && defined(__MACH__)
+#define LA_HAS_FUTEX 1
 #include <errno.h>
 #include <limits.h>
 

@@ -193,7 +193,7 @@ void lj_ctype_parse_wait(CTState *cts, lua_State *L, uint32_t seq)
 {
   if ((seq & 1u) == 0)
     return;
-#if defined(__linux__)
+#if defined(LA_HAS_FUTEX)
   {
     uint32_t actions;
     int had_stopreq = ctype_had_stopreq(L);
@@ -231,7 +231,7 @@ void lj_ctype_parse_unlock(CTState *cts)
   uint32_t seq = ctype_parse_token_acq(cts);
   lj_assertCTS((seq & 1u) != 0, "cparse mutation sequence not held");
   ctype_parse_token_rel(cts, seq + 1u);  /* 11.2: publish parser mutations. */
-#if defined(__linux__)
+#if defined(LA_HAS_FUTEX)
   (void)ctype_parse_token_wake(cts, 1);  /* 11.2: wake next cparse waiter. */
 #endif
 }
