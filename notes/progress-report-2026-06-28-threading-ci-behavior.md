@@ -30,9 +30,9 @@ add 1-3 weeks.
   delivery, replacing the old shell grep for bounded mutex futex waits.
 - Added a `20s` timeout to `m4_threading_capi` so a future regression fails
   diagnostically instead of hanging CI.
-- Reduced `tools/ci/m4_threading_capi.sh` to a compatibility launcher.
-- Reduced `tools/ci/m4_threading_api.sh` to a behavior launcher that runs both
-  `m4_threading_api` and `m4_threading_capi`.
+- Later cleanup removed the pure `tools/ci/m4_threading_capi.sh` and
+  `tools/ci/m4_threading_api.sh` aliases. Run these through
+  `tools/ci/lua_test.sh m4_threading_api m4_threading_capi`.
 
 The important fixture correction: setting sticky `TGF_STOPREQ` before entering
 `luaMT_join()` was not a valid test for fresh STOPREQ semantics. The runtime is

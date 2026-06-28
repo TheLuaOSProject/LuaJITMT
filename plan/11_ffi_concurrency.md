@@ -231,6 +231,5 @@ Current implementation note: the same-struct/same-name cdef race also exposed
 a spawned-thread stack ownership bug before the FFI parser or ctype table
 itself failed. `tests/t-ffi-cdef-dup-stack.lua` keeps the original t-ffi-02
 intent, but forces worker stack growth while racing duplicate `ffi.cdef()` plus
-string `sizeof`/`typeof`; `tools/ci/m7_ffi_cdef_dup_stack.sh` guards the
-worker-stack rehome that moves child stacks into their TG arena before thread
-publication.
+string `sizeof`/`typeof`; run it through
+`tools/ci/lua_test.sh m7_ffi_cdef_dup_stack`.

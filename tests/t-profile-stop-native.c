@@ -24,6 +24,7 @@
 #include "lj_tg.h"
 
 #define KEY_PROFILE_THREAD	(U64x(81000000,00000000)|'t')
+#define KEY_PROFILE_FUNC	(U64x(81000000,00000000)|'f')
 
 static void clear_stopreq(TGState *tg)
 {
@@ -52,6 +53,18 @@ static void profile_noop_cb(void *data, lua_State *L, int samples, int vmstate)
   UNUSED(L);
   UNUSED(samples);
   UNUSED(vmstate);
+}
+
+static void assert_profile_registry_clear(lua_State *L)
+{
+  TValue key;
+  cTValue *tv;
+  key.u64 = KEY_PROFILE_THREAD;
+  tv = lj_tab_get(L, tabV(registry(L)), &key);
+  assert(tv == NULL || tvisnil(tv));
+  key.u64 = KEY_PROFILE_FUNC;
+  tv = lj_tab_get(L, tabV(registry(L)), &key);
+  assert(tv == NULL || tvisnil(tv));
 }
 
 static void run_sticky_cleanup_test(lua_State *L, TGState *tg)
@@ -89,10 +102,14 @@ static void run_callback_error_test(lua_State *L)
     "while seen == 0 and clock() < deadline do\n"
     "  for i = 1, 10000 do x = x + i end\n"
     "end\n"
-    "assert(seen > 0, 'profile callback did not run')\n"
-    "profile.stop()\n"
+    "assert(seen > 0, 'profile callback did not run')\n");
+  assert_profile_registry_clear(L);
+  run_ok(L,
+    "local profile = require('jit.profile')\n"
+    "local seen = 0\n"
     "profile.start('i1', function() seen = seen + 1 end)\n"
     "profile.stop()\n");
+  assert_profile_registry_clear(L);
 }
 
 #if LJ_PROFILE_PTHREAD
@@ -166,6 +183,7 @@ static void run_native_join_test(lua_State *L, global_State *g, TGState *tg)
   assert(la_load32_acq(&ctx.stopreq_seen) != 0);
   assert(la_load8_acq(&tg->in_native) == 0);
   expect_stopreq_error(L, rc);
+  assert_profile_registry_clear(L);
 
   clear_stopreq(tg);
   assert(g->gc2.hs_pending == 0);
@@ -176,6 +194,7 @@ static void run_native_join_test(lua_State *L, global_State *g, TGState *tg)
     "local profile = require('jit.profile')\n"
     "profile.start('i1', function() end)\n"
     "profile.stop()\n");
+  assert_profile_registry_clear(L);
 }
 
 static lua_State *profile_callback_thread(lua_State *L)

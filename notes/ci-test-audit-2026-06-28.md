@@ -2,11 +2,11 @@
 
 ## Inventory
 
-- `tools/ci` currently has 144 shell scripts.
-- 138 scripts call `tools/ci/lua_test.sh`, so the Lua suite is already the real
-  runner for most milestone cases.
-- About 30 scripts still embed local `awk`/`grep` source guards before calling
-  the Lua suite.
+- `tools/ci` currently has 68 shell scripts.
+- 62 scripts call `tools/ci/lua_test.sh` after doing real guard or orchestration
+  work; zero pure alias wrappers remain.
+- About 62 scripts still embed local `awk`/`grep`/`sed` source guards before
+  calling the Lua suite.
 - The Lua suites/helpers had at least 45 explicit clean-build calls.
 
 ## Problems Found
@@ -17,10 +17,10 @@
    the chance of conflicting build artifacts when multiple CI commands run in
    the same checkout.
 
-2. Shell compatibility wrappers are now mostly historical.
-   Keeping script names is useful for milestone entry points, but the
-   implementation should keep moving into `tests/suites/*.lua` and shared
-   helpers instead of expanding shell guards.
+2. Pure shell compatibility wrappers are unwanted legacy surface.
+   Canonical execution is `tools/ci/lua_test.sh <case...>`. A `tools/ci/*.sh`
+   file should exist only when it performs real lint, orchestration, or
+   non-suite setup that has not yet moved into Lua.
 
 3. Aggregate cases can bypass wrapper-only guards.
    `m7_ffi`, `m9_m10_gc`, and similar aggregate cases call Lua case names, not
@@ -59,23 +59,36 @@
   The `m7_ffi_callback_runtime` C fixtures now cover the relevant behavior:
   native entry/leave restoration, nested callbacks, stale callback returns,
   callback blacklisting, and fresh STOPREQ delivery.
-- Reduced `tools/ci/m7_ffi_callback_runtime.sh` to a thin compatibility
-  launcher. The old helper-name and source-shape checks were blocking better
-  implementation shapes without adding behavior coverage beyond the fixtures.
+- Removed the old helper-name and source-shape checks from
+  `m7_ffi_callback_runtime`; the behavior fixture now carries that contract.
 
 ## Follow-up Landed Later On 2026-06-28
 
-- `tools/ci/m4_threading_capi.sh` is now a thin compatibility launcher. Its
-  join-result wait, mutex wait, and attach-order source guards moved to C API
-  behavior coverage.
-- `tools/ci/m4_threading_api.sh` now runs both `m4_threading_api` and
-  `m4_threading_capi`, so the compatibility entry point still gates the old
-  contracts without pinning `src/lib_threading.c` source shape.
+- The pure `m4_threading_capi` and `m4_threading_api` shell aliases were
+  removed. Their join-result wait, mutex wait, and attach-order source guards
+  moved to C API behavior coverage.
 - `tests/t-threading-capi.c` now covers fresh STOPREQ delivery for a join
   blocked on a done child with a busy owner and for a blocked
   `threading.mutex:lock()` call.
 - `m4_threading_capi` has a `20s` timeout to turn future hangs into diagnostic
   failures.
+- The pure `m5_profile_stop_native` shell alias was removed. Its old
+  profiler-stop helper-name/source-order guards moved to
+  `tests/t-profile-stop-native.c` behavior assertions for sticky STOPREQ
+  cleanup, fresh STOPREQ during native timer-thread join, callback-error
+  containment, busy callback coroutine ownership, and registry-anchor cleanup
+  before interrupted `profile.stop()` unwinds.
+- Removed 76 pure shell aliases in this pass. Use
+  `tools/ci/lua_test.sh <case...>` for those cases.
+
+Verification for the alias removal:
+
+- `tools/ci/lua_test.sh --list`
+- `tools/ci/lua_test.sh m0_source_guard`
+- `tools/ci/lua_test.sh m5_profile_stop_native`
+- `tools/ci/lua_test.sh m4_threading_api m4_threading_capi`
+- `tools/ci/lua_test.sh m7_ffi_blocking m7_ffi_callback_runtime`
+- `git diff --check`
 
 ## Next Refactors
 
@@ -83,8 +96,8 @@
    fixtures where feasible. Only keep source guards for invariants that cannot
    be observed reliably through runtime behavior, such as low-level memory-order
    helper boundaries.
-2. Replace pure compatibility shell bodies with a generated or shared launcher
-   pattern while keeping their public filenames.
+2. Do not add new pure shell aliases. If a case is fully Lua-owned, run it
+   through `tools/ci/lua_test.sh <case...>`.
 3. Split the largest GC/finalizer shell guards into suite-local helper modules
    so behavior tests and source guards live near the milestone cases they
    protect.

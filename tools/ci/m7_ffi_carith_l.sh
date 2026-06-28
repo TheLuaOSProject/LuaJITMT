@@ -1,5 +1,5 @@
 #!/bin/sh
-# Compatibility launcher for migrated Lua M7 FFI case.
+# M7 FFI guard with Lua suite coverage.
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)

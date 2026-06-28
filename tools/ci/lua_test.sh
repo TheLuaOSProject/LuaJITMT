@@ -1,5 +1,5 @@
 #!/bin/sh
-# Compatibility launcher for the Lua test suite.
+# Canonical launcher for the Lua test suite.
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)

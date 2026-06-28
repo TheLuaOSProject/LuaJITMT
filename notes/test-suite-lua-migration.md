@@ -100,9 +100,9 @@ Validation:
 
 ## 2026-06-20 CI wrapper parity
 
-- Added thin compatibility wrappers for Lua cases that were missing shell
-  launchers: `m5_upvalue_publish_gc`, `m6_jit_perftools_native`,
-  `m7_ffi_clib_ldscript`, and `m7_ffi_nested_state`.
+- Historical note: this pass added thin shell wrappers for Lua cases that were
+  missing shell launchers. A later cleanup removed pure aliases; canonical
+  execution is now `tools/ci/lua_test.sh <case...>`.
 - Simplified `tools/ci/run_stock_tests.sh` so Lua owns default-bin and stock
   argument handling.
 - Rechecked wrapper parity; all Lua test cases now have matching wrappers
@@ -310,8 +310,8 @@ Validation:
 - Added `cwd` support to the Lua test harness `Test:run()`.
 - Routed stock-suite execution through `Test:run()` argv/env/cwd fields instead
   of assembling a `cd ... && ...` command inside `suite_runtime.run_stock()`.
-- Kept shell compatibility wrappers unchanged; behavior remains owned by the Lua
-  runner.
+- Behavior remains owned by the Lua runner; pure shell aliases have since been
+  removed.
 
 Validation:
 

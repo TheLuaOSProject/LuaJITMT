@@ -4,8 +4,9 @@ Lua test-suite migration notes:
   runner/framework. The framework owns command execution, VM builds, C fixture
   compilation, and LuaJIT invocation.
 - Test definitions live under `tests/suites/*.lua`; C files remain fixtures.
-  The migration target is to make `tools/ci/*.sh` compatibility launchers only,
-  with all test logic in Lua.
+  The current target is no pure `tools/ci/*.sh` compatibility launchers. Use
+  `tools/ci/lua_test.sh <case...>` directly for Lua-owned cases; keep a shell
+  script only when it still performs real guard, orchestration, or setup work.
 - Current inventory from Parfit: active custom tests are roughly 68 C fixtures
   and 37 top-level Lua tests, with 129 `tools/ci/*.sh` entrypoints. The stock
   LuaJIT suite already has a Lua runner at `tests/stock/test/test.lua`; keep
@@ -192,9 +193,10 @@ Lua test-suite migration notes:
   keeping the aggregate as Lua orchestration over the focused cases.
 - The twenty-first batch migrates the M7 FFI wrappers and aggregate.
 - The twenty-second batch migrates the M8 weak/finalizer semantic gate.
-- The twenty-third batch migrates the remaining M0 matrix,
-  stock-suite runner, M4 TSan driver gate, and M5 aggregate wrapper. Remaining
-  shell files are compatibility launchers; test logic is owned by Lua.
+- The twenty-third batch migrated the remaining M0 matrix,
+  stock-suite runner, M4 TSan driver gate, and M5 aggregate wrapper. A later
+  cleanup removed pure shell aliases entirely; test logic is owned by Lua and
+  canonical execution is `tools/ci/lua_test.sh <case...>`.
 - Current cleanup status: runnable suite files under `tests/suites/` no longer
   directly inspect implementation text under `src/`, and the old
   source-predicate helper surface has been removed from `tests/lib/`.
@@ -370,5 +372,5 @@ Current follow-up:
   of runnable suites unless a future migration explicitly replaces them with a
   stronger runtime fixture.
 - Build-owning tests should remain serial unless the Lua runner grows a shared
-  build cache/lock. Existing compatibility gates can still run `make clean`, so
-  parallel validation can race `host/buildvm` or `libluajit.a` creation.
+  build cache/lock. Cases that clean/build can still race `host/buildvm` or
+  `libluajit.a` creation when run concurrently in one checkout.

@@ -85,8 +85,8 @@ The x64 `TSET` nil-snapshot guard also rejects pre-store `barrierback` repairs
 and requires the post-store VM value/range publication helpers, including a
 hook-driven real-bytecode `BC_TSETM` constructor case over an old forwarded
 array generation.
-`tools/ci/m9_m10_gc.sh` chains the current M9 stats/benchmark smokes with the
-M10 generational guard.
+`tools/ci/lua_test.sh m9_m10_gc` chains the current M9 stats/benchmark smokes
+with the M10 generational guard.
 These are milestone
 guardrails, not the final M9 performance matrix.
 

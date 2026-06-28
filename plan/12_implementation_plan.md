@@ -316,8 +316,8 @@ counters.
 and reports approximate owner-side poll-ack P99 latency from histogram deltas;
 synthetic leader and remote-native acknowledgements do not contribute to the
 poll-latency histogram.
-`tools/ci/m9_m10_gc.sh` now aggregates the M9 stats smoke, M9 benchmark smoke,
-and M10 generational guard, and each child guard checks that aggregate wiring.
+Run `tools/ci/lua_test.sh m9_m10_gc` to aggregate the M9 stats smoke, M9
+benchmark smoke, and M10 generational guard.
 
 ## M10 — Generational mode (≈800)
 Tasks: 05 §5.12 (minor sweep identity already in arena code from M2;
