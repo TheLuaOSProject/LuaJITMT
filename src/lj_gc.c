@@ -390,8 +390,10 @@ static void gc2_paranoia_check_rawroots(global_State *g)
 #endif
   gc2_paranoia_checkmem(g, g->tmpbuf.b, "global tmpbuf");
   {
-    TGState *tg = G2TG(g);
-    if (tg)
+    TGState *tg = gc2_tg_list_acq(g);
+    if (!tg)
+      tg = G2TG(g);
+    for (; tg != NULL; tg = lj_tg_next_acq(tg))
       gc2_paranoia_checkmem(g, tg->tmpbuf.b, "thread tmpbuf");
   }
 #if LJ_HASFFI
@@ -662,8 +664,10 @@ static void gc_mark_gcroot(global_State *g)
 #endif
   lj_gc_arena_markmem(g, g->tmpbuf.b);
   {
-    TGState *tg = G2TG(g);
-    if (tg)
+    TGState *tg = gc2_tg_list_acq(g);
+    if (!tg)
+      tg = G2TG(g);
+    for (; tg != NULL; tg = lj_tg_next_acq(tg))
       lj_gc_arena_markmem(g, tg->tmpbuf.b);
   }
 #if LJ_HASFFI
