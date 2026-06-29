@@ -51,6 +51,5 @@ Validation:
 
 - `make -C src -j$(getconf _NPROCESSORS_ONLN)`
 - `tools/ci/lua_test.sh m7_ffi_typeinfo_snapshot`
-- stock `tests/stock/test/lib/ffi/istype.lua`
-- `tools/ci/lua_test.sh m7_ffi_cparse_rollback`
-- `tools/ci/lua_test.sh m7_ffi`
+- `tools/ci/lua_test.sh m5_stock_api_surface run_stock_tests`
+- `git diff --check`
