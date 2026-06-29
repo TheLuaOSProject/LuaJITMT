@@ -21,9 +21,14 @@
 #include "lj_tg.h"
 #include "lj_thr.h"
 
-static void ctype_fin_claim_wait_no_l(void)
+static void ctype_fin_claim_wait(lua_State *L)
 {
-  (void)lj_thr_sleep_ns(NULL, 1000000);
+  /*
+  ** FINREG generation publication is a short CAS window. Wait as native time
+  ** for the current TG when possible, so safepoint handshakes can complete
+  ** while another mutator resolves a visible claim.
+  */
+  (void)lj_thr_sleep_ns(L, 1000000);
 }
 
 static int ctype_had_stopreq(lua_State *L)
@@ -568,7 +573,7 @@ int lj_ctype_fin_newgen(lua_State *L, CTState *cts, cTValue *key,
     if (headtab && !fin_gen_tab_enabled_acq(headtab))
       return 0;
     while (ctype_fin_has_claim(cts, claim))
-      ctype_fin_claim_wait_no_l();
+      ctype_fin_claim_wait(L);
     if (ctype_fin_any_key(cts, L, key))
       return -1;
     t = ctype_fin_tab_new_l(L, hbits);
@@ -582,7 +587,7 @@ int lj_ctype_fin_newgen(lua_State *L, CTState *cts, cTValue *key,
       return 1;  /* 11.4 FINREG generation CAS publish. */
     }
     lj_mem_freet(G(L), gen);
-    ctype_fin_claim_wait_no_l();
+    ctype_fin_claim_wait(L);
   }
 }
 
