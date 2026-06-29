@@ -1453,13 +1453,13 @@ void lj_threading_detach(lua_State *L, int disown_callbacks)
 
 #include "lj_libdef.h"
 
-LUALIB_API int luaopen_threading(lua_State *L)
+LJ_FUNC int luaopen_threading(lua_State *L)
 {
   GCtab *env;
   LJ_LIB_REG(L, NULL, threading_thread);
   LJ_LIB_REG(L, NULL, threading_mutex);
   LJ_LIB_REG(L, NULL, threading_channel);
-  LJ_LIB_REG(L, LUA_THREADINGLIBNAME, threading);
+  LJ_LIB_REG(L, "threading", threading);
   env = threading_env_from_module(L, tabV(L->top-1));
   if (env)
     lj_gcroot_rel(G(L), GCROOT_THREADING_ENV, obj2gco(env));

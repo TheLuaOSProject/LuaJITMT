@@ -110,6 +110,7 @@ LJ_FUNC void lj_lib_prereg(lua_State *L, const char *name, lua_CFunction f,
 			   GCtab *env);
 LJ_FUNC int lj_lib_postreg(lua_State *L, lua_CFunction cf, int id,
 			   const char *name);
+LJ_FUNC int luaopen_threading(lua_State *L);
 
 /* Library init data tags. */
 #define LIBINIT_LENMASK	0x3f

@@ -14,6 +14,7 @@
 #include "lualib.h"
 
 #include "lj_arch.h"
+#include "lj_lib.h"
 
 static const luaL_Reg lj_lib_load[] = {
   { "",			luaopen_base },
@@ -30,7 +31,7 @@ static const luaL_Reg lj_lib_load[] = {
 };
 
 static const luaL_Reg lj_lib_preload[] = {
-  { LUA_THREADINGLIBNAME, luaopen_threading },
+  { "threading",	luaopen_threading },
 #if LJ_HASFFI
   { LUA_FFILIBNAME,	luaopen_ffi },
 #endif

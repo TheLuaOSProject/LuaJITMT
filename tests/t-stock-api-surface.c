@@ -14,6 +14,10 @@
 #error LUA_GCINCREMENTAL is not part of the stock LuaJIT public C API.
 #endif
 
+#ifdef LUA_THREADINGLIBNAME
+#error LUA_THREADINGLIBNAME is not part of the stock LuaJIT public C API.
+#endif
+
 typedef struct ReaderState {
   const char *chunk;
   int done;
