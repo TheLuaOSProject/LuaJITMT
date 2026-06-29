@@ -112,6 +112,46 @@ static void run_callback_error_test(lua_State *L)
   assert_profile_registry_clear(L);
 }
 
+static void run_concurrent_lifecycle_test(lua_State *L)
+{
+  run_ok(L,
+    "local th = require('threading')\n"
+    "local profile = require('jit.profile')\n"
+    "local n = 6\n"
+    "local rounds = 20\n"
+    "local ready = th.channel(n)\n"
+    "local start = th.channel(n)\n"
+    "local threads = {}\n"
+    "for i = 1, n do\n"
+    "  threads[i] = th.spawn(function(id, ready_ch, start_ch, count)\n"
+    "    local profile = require('jit.profile')\n"
+    "    assert(ready_ch:send('ready', 10) == true)\n"
+    "    local token, ok = start_ch:recv(10)\n"
+    "    assert(ok == true and token == 'go')\n"
+    "    for round = 1, count do\n"
+    "      local seen = 0\n"
+    "      profile.start('i1', function() seen = seen + 1 end)\n"
+    "      local x = id\n"
+    "      for k = 1, 20000 do x = x + k end\n"
+    "      profile.stop()\n"
+    "      assert(x > 0)\n"
+    "    end\n"
+    "    return true\n"
+    "  end, i, ready, start, rounds)\n"
+    "end\n"
+    "for i = 1, n do\n"
+    "  local token, ok = ready:recv(10)\n"
+    "  assert(ok == true and token == 'ready')\n"
+    "end\n"
+    "for i = 1, n do assert(start:send('go', 10) == true) end\n"
+    "for i = 1, n do\n"
+    "  local ok, err = threads[i]:join(10)\n"
+    "  assert(ok == true, tostring(err))\n"
+    "end\n"
+    "profile.stop()\n");
+  assert_profile_registry_clear(L);
+}
+
 #if LJ_PROFILE_PTHREAD
 
 #include <pthread.h>
@@ -255,6 +295,7 @@ int main(void)
   run_ok(L, "assert(require('jit.profile'))");
   run_sticky_cleanup_test(L, tg);
   run_callback_error_test(L);
+  run_concurrent_lifecycle_test(L);
 #if LJ_PROFILE_PTHREAD
   run_native_join_test(L, g, tg);
   run_busy_callback_state_test(L, g);

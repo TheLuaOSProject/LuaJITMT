@@ -738,6 +738,12 @@ LJLIB_CF(jit_profile_start)
   GCfunc *func = lj_lib_checkfunc(L, 2);
   lua_State *L2 = lua_newthread(L);  /* Thread that runs profiler callback. */
   TValue key, tv;
+  luaJIT_profile_stop(L);
+  jit_profile_registry_clear(L);
+  luaJIT_profile_start(L, mode ? strdata(mode) : "",
+		       (luaJIT_profile_callback)jit_profile_callback, L2);
+  if (!lj_profile_active(L))
+    return 0;
   /* Anchor thread and function in registry. */
   key.u64 = KEY_PROFILE_THREAD;
   setthreadV(L, &tv, L2);
@@ -748,8 +754,6 @@ LJLIB_CF(jit_profile_start)
   jit_profile_registry_store(L, registry, &key, &tv);
   lj_gc2_barrier_weak_write(L, registry, &key, &tv);
   lj_gc_pubtab(L, registry);
-  luaJIT_profile_start(L, mode ? strdata(mode) : "",
-		       (luaJIT_profile_callback)jit_profile_callback, L2);
   return 0;
 }
 

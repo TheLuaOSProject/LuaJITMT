@@ -11,6 +11,7 @@
 #if LJ_HASPROFILE
 
 LJ_FUNC void LJ_FASTCALL lj_profile_interpreter(lua_State *L);
+LJ_FUNC int lj_profile_active(lua_State *L);
 LJ_FUNC uint32_t lj_profile_stop_hs(lua_State *L);
 #if !LJ_PROFILE_SIGPROF
 LJ_FUNC void LJ_FASTCALL lj_profile_hook_enter(global_State *g);

@@ -326,6 +326,8 @@ retry:
   if (rec_owner && tg)
     dispatch_setrecord(tg->dispatch, mode);
 #endif
+  if (redispatch && nolock > 1)
+    return;  /* Async profile triggers must not run an MT handshake. */
   if (redispatch)
     (void)lj_gc2_handshake(g, LJ_GC2_HS_REDISPATCH);
 }

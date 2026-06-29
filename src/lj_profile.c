@@ -26,6 +26,8 @@
 
 #include "luajit.h"
 
+#include <limits.h>
+
 static lua_State *profile_errstate(lua_State *L)
 {
   lua_State *cur = lj_tg_cur_L(G(L));
@@ -65,6 +67,9 @@ typedef struct ProfileState {
   void *data;			/* Profiler callback data. */
   SBuf sb;			/* String buffer for stack dumps. */
   int interval;			/* Sample interval in milliseconds. */
+  uint32_t state;		/* Serialized lifecycle state. */
+  uint32_t callbacks;		/* Active callbacks using callback data. */
+  uint32_t callback_tid;	/* OS thread currently in a callback. */
   uint32_t samples;		/* Number of samples for next callback. */
   int32_t vmstate;		/* VM state when profile timer triggered. */
 #if LJ_PROFILE_SIGPROF
@@ -94,6 +99,36 @@ static ProfileState profile_state;
 /* Default sample interval in milliseconds. */
 #define LJ_PROFILE_INTERVAL_DEFAULT	10
 
+#define LJ_PROFILE_IDLE		0u
+#define LJ_PROFILE_STARTING	1u
+#define LJ_PROFILE_ACTIVE	2u
+#define LJ_PROFILE_STOPPING	3u
+
+static LJ_AINLINE uint32_t profile_state_load_acq(ProfileState *ps)
+{
+  return la_load32_acq(&ps->state);
+}
+
+static LJ_AINLINE void profile_state_store_rel(ProfileState *ps, uint32_t state)
+{
+  la_store32_rel(&ps->state, state);
+  la_futex_wake(&ps->state, INT_MAX);
+}
+
+static LJ_AINLINE int profile_state_cas(ProfileState *ps, uint32_t *oldp,
+					uint32_t state)
+{
+  return la_cas32(&ps->state, oldp, state, LA_ACQ_REL, LA_ACQ);
+}
+
+static void profile_state_wait_l(lua_State *L, ProfileState *ps, uint32_t state)
+{
+  uint32_t actions = lj_thr_sleep_ns(L, 1000000);
+  if (actions)
+    lj_safepoint_checkstop(L, actions);
+  UNUSED(ps); UNUSED(state);
+}
+
 static LJ_AINLINE global_State *profile_g_load_acq(ProfileState *ps)
 {
   return (global_State *)la_loadptr_acq((void *const *)&ps->g);
@@ -102,6 +137,45 @@ static LJ_AINLINE global_State *profile_g_load_acq(ProfileState *ps)
 static LJ_AINLINE void profile_g_store_rel(ProfileState *ps, global_State *g)
 {
   la_storeptr_rel((void **)&ps->g, g);
+}
+
+static LJ_AINLINE int profile_state_active_g(ProfileState *ps, global_State *g)
+{
+  return profile_state_load_acq(ps) == LJ_PROFILE_ACTIVE &&
+	 profile_g_load_acq(ps) == g;
+}
+
+static int profile_callback_enter(ProfileState *ps, global_State *g)
+{
+  if (!profile_state_active_g(ps, g))
+    return 0;
+  la_store32_rel(&ps->callback_tid, lj_thr_current_id(g));
+  (void)la_add32_rlx(&ps->callbacks, 1);
+  if (profile_state_active_g(ps, g))
+    return 1;
+  if (la_sub32_acqrel(&ps->callbacks, 1) == 1)
+    la_futex_wake(&ps->callbacks, INT_MAX);
+  la_store32_rel(&ps->callback_tid, 0);
+  return 0;
+}
+
+static void profile_callback_leave(ProfileState *ps)
+{
+  la_store32_rel(&ps->callback_tid, 0);
+  if (la_sub32_acqrel(&ps->callbacks, 1) == 1)
+    la_futex_wake(&ps->callbacks, INT_MAX);
+}
+
+static uint32_t profile_callbacks_wait(lua_State *L, ProfileState *ps)
+{
+  uint32_t tid = lj_thr_current_id(G(L));
+  uint32_t actions = 0;
+  for (;;) {
+    uint32_t callbacks = la_load32_acq(&ps->callbacks);
+    if (callbacks == 0 || la_load32_acq(&ps->callback_tid) == tid)
+      return actions;
+    actions |= lj_thr_sleep_ns(L, 1000000);
+  }
 }
 
 static LJ_AINLINE luaJIT_profile_callback
@@ -183,14 +257,21 @@ void LJ_FASTCALL lj_profile_interpreter(lua_State *L)
   ProfileState *ps = &profile_state;
   global_State *g = G(L);
   uint8_t saved;
+  if (!profile_state_active_g(ps, g)) {
+    hookmask_update(g, HOOK_PROFILE, 0);  /* Drop stale profile hooks. */
+    lj_dispatch_update(g, 1);
+    return;
+  }
   if (hookmask_profile_enter(g, &saved)) {
     luaJIT_profile_callback cb = profile_cb_load_acq(ps);
     void *data = profile_data_load_acq(ps);
     uint32_t samples = profile_samples_xchg(ps, 0);
     int32_t vmstate = profile_vmstate_load_acq(ps);
     lj_dispatch_update(g, 1);
-    if (cb)
+    if (cb && profile_callback_enter(ps, g)) {
       cb(data, L, (int)samples, (int)vmstate);  /* Invoke user callback. */
+      profile_callback_leave(ps);
+    }
     hookmask_profile_leave(g, saved);
   }
   lj_dispatch_update(g, 1);
@@ -201,7 +282,8 @@ static void profile_trigger(ProfileState *ps)
 {
   global_State *g = profile_g_load_acq(ps);
   int st;
-  if (!g) return;
+  if (!g || !profile_state_active_g(ps, g)) return;
+  if (gc2_n_threads_acq(g) > 1) return;  /* POSIX timer lacks per-TG routing. */
   profile_samples_add(ps, 1);  /* Always increment number of samples. */
   st = profile_sample_vmstate(g);
   profile_vmstate_store_rel(ps, st);
@@ -354,7 +436,11 @@ LUA_API void luaJIT_profile_start(lua_State *L, const char *mode,
 				  luaJIT_profile_callback cb, void *data)
 {
   ProfileState *ps = &profile_state;
+  global_State *g = G(L);
   int interval = LJ_PROFILE_INTERVAL_DEFAULT;
+#if LJ_HASJIT
+  int prof_mode = 0;
+#endif
   while (*mode) {
     int m = *mode++;
     switch (m) {
@@ -366,50 +452,91 @@ LUA_API void luaJIT_profile_start(lua_State *L, const char *mode,
       break;
 #if LJ_HASJIT
     case 'l': case 'f':
-      L2J(L)->prof_mode = m;
-      (void)lj_trace_flushall_hs(L);
+      prof_mode = m;
       break;
 #endif
     default:  /* Ignore unknown mode chars. */
       break;
     }
   }
-  if (profile_g_load_acq(ps)) {
-    luaJIT_profile_stop(L);
-    if (profile_g_load_acq(ps)) return;  /* Profiler in use by another VM. */
+  for (;;) {
+    uint32_t state = profile_state_load_acq(ps);
+    global_State *owner = profile_g_load_acq(ps);
+    if (state == LJ_PROFILE_IDLE) {
+      uint32_t expect = LJ_PROFILE_IDLE;
+      if (profile_state_cas(ps, &expect, LJ_PROFILE_STARTING))
+	break;
+      continue;
+    }
+    if (state == LJ_PROFILE_ACTIVE) {
+      if (owner != g)
+	return;  /* Profiler in use by another VM. */
+      luaJIT_profile_stop(L);
+      continue;
+    }
+    profile_state_wait_l(L, ps, state);
   }
+#if LJ_HASJIT
+  if (prof_mode) {
+    L2J(L)->prof_mode = prof_mode;
+    (void)lj_trace_flushall_hs(L);
+  }
+#endif
   ps->interval = interval;
   profile_cb_store_rel(ps, cb);
   profile_data_store_rel(ps, data);
   (void)profile_samples_xchg(ps, 0);
   profile_vmstate_store_rel(ps, 'N');
   lj_buf_init(L, &ps->sb);
-  profile_g_store_rel(ps, G(L));
+  profile_g_store_rel(ps, g);
   profile_timer_start(ps);
+  profile_state_store_rel(ps, LJ_PROFILE_ACTIVE);
+}
+
+int lj_profile_active(lua_State *L)
+{
+  return profile_state_active_g(&profile_state, G(L));
 }
 
 /* Stop profiling and return pending safepoint actions. */
 uint32_t lj_profile_stop_hs(lua_State *L)
 {
   ProfileState *ps = &profile_state;
-  global_State *g = profile_g_load_acq(ps);
+  global_State *g = G(L);
   uint32_t actions = 0;
-  if (G(L) == g) {  /* Only stop profiler if started by this VM. */
-    actions = profile_timer_stop(ps, L);
-    hookmask_update(g, HOOK_PROFILE, 0);
-    lj_dispatch_update(g, 0);
+  for (;;) {
+    uint32_t state = profile_state_load_acq(ps);
+    global_State *owner = profile_g_load_acq(ps);
+    if (state == LJ_PROFILE_IDLE)
+      return 0;
+    if (state == LJ_PROFILE_ACTIVE) {
+      uint32_t expect = LJ_PROFILE_ACTIVE;
+      if (owner != g)
+	return 0;  /* Only stop profiler if started by this VM. */
+      if (profile_state_cas(ps, &expect, LJ_PROFILE_STOPPING))
+	break;
+      continue;
+    }
+    profile_state_wait_l(L, ps, state);
+  }
+  actions = profile_timer_stop(ps, L);
+  hookmask_update(g, HOOK_PROFILE, 0);
+  lj_dispatch_update(g, 0);
+  actions |= profile_callbacks_wait(L, ps);
 #if LJ_HASJIT
+  if (G2J(g)->prof_mode != 0) {
     G2J(g)->prof_mode = 0;
     (void)lj_trace_flushall_hs(L);
-#endif
-    lj_buf_free(g, &ps->sb);
-    ps->sb.w = ps->sb.e = NULL;
-    profile_cb_store_rel(ps, NULL);
-    profile_data_store_rel(ps, NULL);
-    (void)profile_samples_xchg(ps, 0);
-    profile_vmstate_store_rel(ps, 'N');
-    profile_g_store_rel(ps, NULL);
   }
+#endif
+  lj_buf_free(g, &ps->sb);
+  ps->sb.b = ps->sb.w = ps->sb.e = NULL;
+  profile_cb_store_rel(ps, NULL);
+  profile_data_store_rel(ps, NULL);
+  (void)profile_samples_xchg(ps, 0);
+  profile_vmstate_store_rel(ps, 'N');
+  profile_g_store_rel(ps, NULL);
+  profile_state_store_rel(ps, LJ_PROFILE_IDLE);
   return actions;
 }
 
