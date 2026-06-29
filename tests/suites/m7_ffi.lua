@@ -77,7 +77,15 @@ return function(add)
     name = "m7_ffi_callback_install",
     description = "FFI callback slot install behavior",
     run = function(t)
+      local pthread = getenv("PTHREAD", "-pthread")
       clean_build(t)
+      build_and_run_c(t, t:tmp("lj_t-ffi-callback-mcode-native"),
+                      "t-ffi-callback-mcode-native.c", {
+        libs = { "-lm", "-ldl", pthread,
+                 "-Wl,--wrap=mmap", "-Wl,--wrap=mmap64",
+                 "-Wl,--wrap=mprotect" },
+        timeout = "20s"
+      })
       build_and_run_c(t, t:tmp("lj_t-ffi-callback-snapshot"),
                       "t-ffi-callback-snapshot.c", { timeout = "20s" })
       run_luajit_script(t, "t-ffi-callback-install.lua", {

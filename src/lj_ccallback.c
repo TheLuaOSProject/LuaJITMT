@@ -390,21 +390,74 @@ LJ_NORET static void callback_err(lua_State *L)
   lj_err_caller(L, LJ_ERR_FFI_CBACKOV);
 }
 
+static int callback_mcode_had_stopreq(lua_State *L)
+{
+  TGState *tg = L ? L2TG(L) : NULL;
+  return tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ);
+}
+
+static int callback_mcode_fresh_stopreq(lua_State *L, uint32_t actions,
+					int had_stopreq)
+{
+  TGState *tg = L ? L2TG(L) : NULL;
+  return (actions & LJ_GC2_HS_STOPREQ) ||
+    (!had_stopreq && tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ));
+}
+
+static void callback_mcode_discard(lua_State *L, void *p, size_t sz)
+{
+  if (p == NULL)
+    return;
+#if LJ_TARGET_WINDOWS
+  VirtualFree(p, 0, MEM_RELEASE);
+  UNUSED(L); UNUSED(sz);
+#elif LJ_TARGET_POSIX
+  if (p != MAP_FAILED)
+    munmap(p, sz);
+  UNUSED(L);
+#else
+  lj_mem_free(G(L), p, sz);
+#endif
+}
+
+static void callback_mcode_checkstop(lua_State *L, uint32_t actions,
+				     int had_stopreq, void *p, size_t sz)
+{
+  if (callback_mcode_fresh_stopreq(L, actions, had_stopreq)) {
+    callback_mcode_discard(L, p, sz);
+    lj_safepoint_checkstop(L, actions);
+  }
+}
+
 static void callback_mcode_new_l(lua_State *L, CTState *cts)
 {
   size_t sz = (size_t)CALLBACK_MCODE_SIZE;
   void *p, *pe;
+  int had_stopreq = callback_mcode_had_stopreq(L);
+  uint32_t actions;
   if (CALLBACK_MAX_SLOT == 0)
     callback_err(L);
 #if LJ_TARGET_WINDOWS
+  lj_native_enter(L2TG(L));
   p = LJ_WIN_VALLOC(NULL, sz, MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
-  if (!p)
+  actions = lj_native_leave(L);
+  if (!p) {
+    if (callback_mcode_fresh_stopreq(L, actions, had_stopreq))
+      lj_safepoint_checkstop(L, actions);
     callback_err(L);
+  }
+  callback_mcode_checkstop(L, actions, had_stopreq, p, sz);
 #elif LJ_TARGET_POSIX
+  lj_native_enter(L2TG(L));
   p = mmap(NULL, sz, PROT_READ|PROT_WRITE|CCPROT_CREATE,
 	   MAP_PRIVATE|MAP_ANONYMOUS|CCMAP_CREATE, -1, 0);
-  if (p == MAP_FAILED)
+  actions = lj_native_leave(L);
+  if (p == MAP_FAILED) {
+    if (callback_mcode_fresh_stopreq(L, actions, had_stopreq))
+      lj_safepoint_checkstop(L, actions);
     callback_err(L);
+  }
+  callback_mcode_checkstop(L, actions, had_stopreq, p, sz);
 #if CCMAP_CREATE
   pthread_jit_write_protect_np(0);
 #endif
@@ -420,13 +473,19 @@ static void callback_mcode_new_l(lua_State *L, CTState *cts)
 #if LJ_TARGET_WINDOWS
   {
     DWORD oprot;
+    lj_native_enter(L2TG(L));
     LJ_WIN_VPROTECT(p, sz, PAGE_EXECUTE_READ, &oprot);
+    actions = lj_native_leave(L);
+    callback_mcode_checkstop(L, actions, had_stopreq, p, sz);
   }
 #elif LJ_TARGET_POSIX
 #if CCMAP_CREATE
   pthread_jit_write_protect_np(1);
 #else
-  mprotect(p, sz, (PROT_READ|PROT_EXEC));
+  lj_native_enter(L2TG(L));
+  (void)mprotect(p, sz, (PROT_READ|PROT_EXEC));
+  actions = lj_native_leave(L);
+  callback_mcode_checkstop(L, actions, had_stopreq, p, sz);
 #endif
 #endif
   ctype_cb_mcode_rel(cts, p);  /* 11.5 publish mcode. */
