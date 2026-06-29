@@ -1200,10 +1200,10 @@ LJLIB_CF(ffi_meta___tostring)
       size = ctype_size_acq(&snap);
     }
     if (ctype_iscomplex(info)) {
-      setstrV(L, L->top-1, lj_ctype_repr_complex(L, cdataptr(cd), size));
+      setstrV(L, L->top-1, lj_ctype_repr_complex(L, p, size));
       goto checkgc;
     } else if (size == 8 && ctype_isinteger(info)) {
-      setstrV(L, L->top-1, lj_ctype_repr_int64(L, *(uint64_t *)cdataptr(cd),
+      setstrV(L, L->top-1, lj_ctype_repr_int64(L, *(uint64_t *)p,
 					       (info & CTF_UNSIGNED)));
       goto checkgc;
     } else if (ctype_isfunc(info)) {

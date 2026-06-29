@@ -17,10 +17,11 @@ without waiting for unrelated active parser work.
 
 Coverage:
 - `tests/t-ffi-tostring-snapshot.c` checks int64, uint64, enum, struct
-  metatype, and pointer-to-metatype `tostring()` behavior without advancing
-  `CTState.parse_token`.
+  metatype, pointer-to-metatype, and direct int64/complex reference cdata
+  `tostring()` behavior without advancing `CTState.parse_token`.
 - The same fixture holds the parser token and verifies predefined int64/uint64
-  `tostring()` avoids the wait, while pointer-to-user-struct `tostring()` waits
-  from a native region until a consistent ctype snapshot is available.
+  `tostring()` avoids the wait, while pointer-to-user-struct and parser-created
+  reference cdata `tostring()` wait from a native region until a consistent
+  ctype snapshot is available.
 - The fixture is wired into `m7_ffi_typeinfo_snapshot`; this is behavior
   coverage rather than source-search coverage.
