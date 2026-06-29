@@ -83,11 +83,6 @@ LJ_FUNCA void lj_tab_wait_l(lua_State *L)
   (void)lj_thr_sleep_ns(L, 1000000);
 }
 
-static void tab_finreg_claim_wait_no_l(void)
-{
-  lj_tab_wait_no_l();
-}
-
 static LJ_AINLINE int tab_hash_key_hidden(cTValue *key)
 {
   return tvisnil(key) || tab_key_islocked(key);
@@ -1585,14 +1580,14 @@ int lj_tab_try_newkey_anchor(lua_State *L, GCtab *t, cTValue *key,
     if (lj_obj_equal(&nk, key))
       return -1;  /* A racing inserter published the key; retry lookup. */
     if (tviskeylock(&nk)) {
-      tab_finreg_claim_wait_no_l();  /* Claimed anchor is publishing key. */
+      lj_tab_wait_no_l();  /* Claimed anchor is publishing key. */
       continue;
     }
     if (!tvisnil(&nk))
       return 0;  /* Caller handles collision-chain or resize fallback. */
     lj_tv_load_acq(&nv, &n->val);
     if (!tvisnil(&nv)) {
-      tab_finreg_claim_wait_no_l();  /* Claimed anchor value is publishing. */
+      lj_tab_wait_no_l();  /* Claimed anchor value is publishing. */
       continue;
     }
     {
@@ -1633,7 +1628,7 @@ int lj_tab_try_newkey_chain(lua_State *L, GCtab *t, cTValue *key,
 	return -1;  /* Existing or racing insert for this key; retry lookup. */
       }
       if (tviskeylock(&nk) || (tvisnil(&nk) && tab_val_isclaim(&nv, claim))) {
-	tab_finreg_claim_wait_no_l();  /* Linked insert is publishing key. */
+	lj_tab_wait_no_l();  /* Linked insert is publishing key. */
 	goto retry;
       }
     }
@@ -1650,7 +1645,7 @@ int lj_tab_try_newkey_chain(lua_State *L, GCtab *t, cTValue *key,
 	if (lj_obj_equal(&nk, key))
 	  goto found_existing;
 	if (tviskeylock(&nk)) {
-	  tab_finreg_claim_wait_no_l();  /* Free-node key is publishing. */
+	  lj_tab_wait_no_l();  /* Free-node key is publishing. */
 	  goto release_retry;
 	}
 	if (!tvisnil(&nk))
@@ -1658,7 +1653,7 @@ int lj_tab_try_newkey_chain(lua_State *L, GCtab *t, cTValue *key,
 	lj_tv_load_acq(&nv, &n->val);
 	if (!tvisnil(&nv)) {
 	  if (tab_val_isclaim(&nv, claim)) {
-	    tab_finreg_claim_wait_no_l();  /* Free-node value is publishing. */
+	    lj_tab_wait_no_l();  /* Free-node value is publishing. */
 	    goto release_retry;
 	  }
 	  continue;
