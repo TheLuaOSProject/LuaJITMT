@@ -694,7 +694,7 @@ void lj_cconv_ct_tv_l(lua_State *L, CTState *cts, CType *d,
   } else if (tvislightud(o)) {
     tmpptr = lightudV(cts->g, o);
   } else if (tvisfunc(o)) {
-    void *p = lj_ccallback_new_l(L, cts, d, funcV(o));
+    void *p = lj_ccallback_new_l(L, cts, did, funcV(o));
     if (p) {
       *(void **)dp = p;
       return;

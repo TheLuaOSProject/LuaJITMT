@@ -810,6 +810,45 @@ void lj_ccallback_unwind(lua_State *L, TValue *cont)
   }
 }
 
+static int callback_ctype_snapshot_wait(lua_State *L, CTState *cts,
+					 CTypeID id, CType *out)
+{
+  for (;;) {
+    int ok = lj_ctype_snapshot(cts, id, out);
+    if (ok >= 0)
+      return ok;
+    lj_ctype_parse_wait(cts, L, ctype_parse_token_acq(cts));
+  }
+}
+
+static int callback_rawctype_wait(lua_State *L, CTState *cts, CTypeID id,
+				  CTypeID *ridp, CType *out)
+{
+  CTInfo info;
+  CTSize size;
+  return lj_ctype_info_wait(L, cts, id, &info, &size, ridp, out);
+}
+
+static void callback_frame_rid_store(lua_State *L, CTypeID rid)
+{
+#if LJ_FR2
+  (L->base-3)->u64 = ((L->base-3)->u64 & ~(uint64_t)0xffffu) |
+		     (uint16_t)rid;
+#else
+  (L->base-2)->u32.hi = ((L->base-2)->u32.hi & ~0xffffu) |
+			(uint16_t)rid;
+#endif
+}
+
+static CTypeID callback_frame_rid_load(lua_State *L)
+{
+#if LJ_FR2
+  return (CTypeID)(uint16_t)(L->base-3)->u64;
+#else
+  return (CTypeID)(uint16_t)(L->base-2)->u32.hi;
+#endif
+}
+
 /* Convert and push callback arguments to Lua stack. */
 static void callback_conv_args(CTState *cts, lua_State *L, CCallbackRuntime *cb)
 {
@@ -819,6 +858,7 @@ static void callback_conv_args(CTState *cts, lua_State *L, CCallbackRuntime *cb)
   CTypeID id = 0, rid, fid;
   CTypeID1 *cbid;
   int gcsteps = 0;
+  CType ctsnap;
   CType *ct;
   CTInfo ctinfo = 0;
   GCfunc *fn;
@@ -835,11 +875,10 @@ static void callback_conv_args(CTState *cts, lua_State *L, CCallbackRuntime *cb)
       (cbid = ctype_cb_cbid_acq(cts)) != NULL &&
       (id = callback_cbid_load(cbid, slot)) != 0) {
     TValue tv;
-    ct = ctype_get(cts, id);
-    ctinfo = ctype_info_acq(ct);
-    rid = ctype_cid(ctinfo);  /* Return type. x86: +(spadj<<16). */
     callback_func_load(cts, slot, &tv);
     if (tvisfunc(&tv)) {
+      ct = &ctsnap;
+      rid = 0;
       fn = funcV(&tv);
       fntp = LJ_TFUNC;
     } else {
@@ -871,6 +910,13 @@ static void callback_conv_args(CTState *cts, lua_State *L, CCallbackRuntime *cb)
     lj_err_caller(L, LJ_ERR_FFI_BADCBACK);
   if (isluafunc(fn))
     setcframe_pc(L->cframe, proto_bc(funcproto(fn))+1);
+  if (!callback_ctype_snapshot_wait(L, cts, id, &ctsnap))
+    lj_err_caller(L, LJ_ERR_FFI_BADCBACK);
+  ctinfo = ctype_info_acq(ct);
+  if (!ctype_isfunc(ctinfo))
+    lj_err_caller(L, LJ_ERR_FFI_BADCBACK);
+  rid = ctype_cid(ctinfo);  /* Return type. x86: +(spadj<<16). */
+  callback_frame_rid_store(L, rid);
   lj_state_checkstack(L, LUA_MINSTACK);  /* May throw. */
   o = L->base;  /* Might have been reallocated. */
 
@@ -885,10 +931,14 @@ static void callback_conv_args(CTState *cts, lua_State *L, CCallbackRuntime *cb)
 
   fid = ctype_sib_acq(ct);
   while (fid) {
-    CType *ctf = ctype_get(cts, fid);
-    CTInfo finfo = ctype_info_acq(ctf);
+    CType ctfsnap, ctasnap;
+    CType *ctf = &ctfsnap;
+    CTInfo finfo;
+    if (!callback_ctype_snapshot_wait(L, cts, fid, ctf))
+      lj_err_caller(L, LJ_ERR_FFI_BADCBACK);
+    finfo = ctype_info_acq(ctf);
     if (!ctype_isattrib(finfo)) {
-      CType *cta;
+      CType *cta = &ctasnap;
       void *sp;
       CTSize sz;
       CTSize asize;
@@ -897,8 +947,8 @@ static void callback_conv_args(CTState *cts, lua_State *L, CCallbackRuntime *cb)
       MSize n;
       CTypeID aid;
       lj_assertCTS(ctype_isfield(finfo), "field expected");
-      aid = ctype_rawid(cts, ctype_cid(finfo));
-      cta = ctype_get(cts, aid);
+      if (!callback_rawctype_wait(L, cts, ctype_cid(finfo), &aid, cta))
+	lj_err_caller(L, LJ_ERR_FFI_BADCBACK);
       ainfo = ctype_info_acq(cta);
       asize = ctype_size_acq(cta);
       isfp = ctype_isfp(ainfo);
@@ -944,15 +994,12 @@ static void callback_conv_result(CTState *cts, lua_State *L, TValue *o,
 				 CCallbackRuntime *cb)
 {
   CTypeID rid;
-  CType *ctr;
+  CType ctrsnap;
+  CType *ctr = &ctrsnap;
   CTInfo rinfo;
   CTSize rsize;
-#if LJ_FR2
-  rid = ctype_rawid(cts, (uint16_t)(L->base-3)->u64);
-#else
-  rid = ctype_rawid(cts, (uint16_t)(L->base-2)->u32.hi);
-#endif
-  ctr = ctype_get(cts, rid);
+  if (!callback_rawctype_wait(L, cts, callback_frame_rid_load(L), &rid, ctr))
+    lj_err_caller(L, LJ_ERR_FFI_BADCBACK);
 #if LJ_TARGET_X86
   cb->gpr[2] = 0;
 #endif
@@ -1182,61 +1229,79 @@ static MSize callback_slot_claim_l(lua_State *L, CTState *cts)
 }
 
 /* Check for function pointer and supported argument/result types. */
-static CType *callback_checkfunc(CTState *cts, CType *ct, CTypeID *idp)
+static int callback_checkfunc(lua_State *L, CTState *cts, CTypeID ptrid,
+			      CTypeID *idp)
 {
   int narg = 0;
-  CTInfo info = ctype_info_acq(ct);
-  CTSize size = ctype_size_acq(ct);
+  CType ptrsnap, ctsnap, ctrsnap;
+  CType *ct = &ptrsnap;
+  CTInfo info;
+  CTSize size;
+  if (!callback_ctype_snapshot_wait(L, cts, ptrid, ct))
+    return 0;
+  info = ctype_info_acq(ct);
+  size = ctype_size_acq(ct);
   if (!ctype_isptr(info) || (LJ_64 && size != CTSIZE_PTR))
-    return NULL;
-  *idp = ctype_rawid(cts, ctype_cid(info));
-  ct = ctype_get(cts, *idp);
+    return 0;
+  ct = &ctsnap;
+  if (!callback_rawctype_wait(L, cts, ctype_cid(info), idp, ct))
+    return 0;
   info = ctype_info_acq(ct);
   if (ctype_isfunc(info)) {
-    CType *ctr = ctype_rawchild(cts, ct);
+    CTypeID rid;
+    CType *ctr = &ctrsnap;
     CTypeID fid = ctype_sib_acq(ct);
-    CTInfo rinfo = ctype_info_acq(ctr);
-    CTSize rsize = ctype_size_acq(ctr);
+    CTInfo rinfo;
+    CTSize rsize;
+    if (!callback_rawctype_wait(L, cts, ctype_cid(info), &rid, ctr))
+      return 0;
+    rinfo = ctype_info_acq(ctr);
+    rsize = ctype_size_acq(ctr);
     if (!(ctype_isvoid(rinfo) || ctype_isenum(rinfo) ||
 	  ctype_isptr(rinfo) || (ctype_isnum(rinfo) && rsize <= 8)))
-      return NULL;
+      return 0;
     if ((info & CTF_VARARG))
-      return NULL;
+      return 0;
     while (fid) {
-      CType *ctf = ctype_get(cts, fid);
-      CTInfo finfo = ctype_info_acq(ctf);
+      CType ctfsnap, ctasnap;
+      CType *ctf = &ctfsnap;
+      CTInfo finfo;
+      if (!callback_ctype_snapshot_wait(L, cts, fid, ctf))
+	return 0;
+      finfo = ctype_info_acq(ctf);
       if (!ctype_isattrib(finfo)) {
-	CType *cta;
+	CType *cta = &ctasnap;
+	CTypeID aid;
 	CTInfo ainfo;
 	CTSize asize;
 	lj_assertCTS(ctype_isfield(finfo), "field expected");
-	cta = ctype_rawchild(cts, ctf);
+	if (!callback_rawctype_wait(L, cts, ctype_cid(finfo), &aid, cta))
+	  return 0;
 	ainfo = ctype_info_acq(cta);
 	asize = ctype_size_acq(cta);
 	if (!(ctype_isenum(ainfo) || ctype_isptr(ainfo) ||
 	      (ctype_isnum(ainfo) && asize <= 8)) ||
 	    ++narg >= LUA_MINSTACK-3)
-	  return NULL;
+	  return 0;
       }
       fid = ctype_sib_acq(ctf);
     }
-    return ct;
+    return 1;
   }
-  return NULL;
+  return 0;
 }
 
 /* Create a new callback and return the callback function pointer. */
-void *lj_ccallback_new_l(lua_State *L, CTState *cts, CType *ct, GCfunc *fn)
+void *lj_ccallback_new_l(lua_State *L, CTState *cts, CTypeID id, GCfunc *fn)
 {
-  CTypeID id = 0;
-  ct = callback_checkfunc(cts, ct, &id);
-  if (ct) {
+  CTypeID cbid_id = 0;
+  if (callback_checkfunc(L, cts, id, &cbid_id)) {
     MSize slot;
     CTypeID1 *cbid;
     slot = callback_slot_claim_l(L, cts);
     cbid = ctype_cb_cbid_acq(cts);
     lj_ccallback_func_store_l(L, cts, slot, fn);
-    callback_cbid_store(cbid, slot, id);
+    callback_cbid_store(cbid, slot, cbid_id);
     return callback_slot2ptr(cts, slot);
   }
   return NULL;  /* Bad conversion. */
