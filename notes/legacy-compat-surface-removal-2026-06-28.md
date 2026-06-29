@@ -8,8 +8,10 @@ LuaJIT public API, language behavior, or generally supported stock entry points.
 - Rewrote `doc/install.html` for the only supported target: x86-64 Linux with
   GC64.
 - Updated public docs and Makefiles so they no longer advertise MSVC/MinGW,
-  console, non-x64, GC32, or Lua 5.2 compatibility builds.
-- Made `-DLUAJIT_ENABLE_LUA52COMPAT` fail explicitly in `lj_arch.h`.
+  console, non-x64, or GC32 builds.
+- Kept stock `-DLUAJIT_ENABLE_LUA52COMPAT` handling in `lj_arch.h`. The
+  cleanup scope excludes stock optional language/library compatibility mode;
+  only stale fork-local/threading compatibility entry points should be removed.
 - Removed stale v2 bytecode compatibility plan/test material and replaced it
   with current-only dump validation wording.
 - Kept stock LuaJIT public API compatibility entry points and macros, including
@@ -46,8 +48,9 @@ Kept intentionally:
 
 Verification:
 
+- `tools/ci/lua_test.sh m0_lua52_compat`
 - `tools/ci/lua_test.sh m5_bcdump_current m5_upvalue_publish_gc`
 - `tools/ci/lua_test.sh m5_cell_ops m6_jit_cell_ops`
-- `make -C src XCFLAGS=-DLUAJIT_ENABLE_LUA52COMPAT` fails with the lockless
-  compatibility-mode error.
+- `make -C src XCFLAGS=-DLUAJIT_ENABLE_LUA52COMPAT` builds the optional stock
+  Lua 5.2 compatibility profile.
 - `make -C src -j`

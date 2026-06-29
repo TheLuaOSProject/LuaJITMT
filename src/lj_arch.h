@@ -733,11 +733,12 @@ extern void *LJ_WIN_LOADLIBA(const char *path);
 #define LJ_UNWIND_JIT		0
 #endif
 
-/* Lockless builds do not expose the old Lua 5.2 compatibility mode. */
+/* Compatibility with Lua 5.1 vs. 5.2. */
 #ifdef LUAJIT_ENABLE_LUA52COMPAT
-#error "LUAJIT_ENABLE_LUA52COMPAT is not supported by this lockless build"
-#endif
+#define LJ_52			1
+#else
 #define LJ_52			0
+#endif
 
 /* -- VM security --------------------------------------------------------- */
 

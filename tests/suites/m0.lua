@@ -49,4 +49,35 @@ return function(add)
       print("M0 matrix passed")
     end
   })
+
+  add({
+    name = "m0_lua52_compat",
+    description = "optional stock Lua 5.2 compatibility build profile",
+    run = function(t)
+      run_m0_combo(t, "lockless Lua 5.2 compat",
+                   "-DLUAJIT_ENABLE_LUA52COMPAT", {})
+      runtime.luajit_code(t, [[
+        assert(table.pack and table.unpack == unpack)
+        local packed = table.pack("x", nil)
+        assert(packed.n == 2 and packed[1] == "x" and packed[2] == nil)
+        assert(rawlen({ 1, 2, 3 }) == 3)
+        local _, ismain = coroutine.running()
+        assert(type(ismain) == "boolean")
+        local marker = {}
+        local iter = pairs(setmetatable({}, {
+          __pairs = function()
+            local done
+            return function()
+              if done then return nil end
+              done = true
+              return marker, 42
+            end
+          end
+        }))
+        local k, v = iter()
+        assert(k == marker and v == 42)
+      ]])
+      print("M0 Lua 5.2 compatibility build passed")
+    end
+  })
 end

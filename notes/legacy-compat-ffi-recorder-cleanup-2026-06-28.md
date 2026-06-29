@@ -2,12 +2,11 @@
 
 ## Done in this slice
 
-- Removed Lua 5.2 compatibility branches from active x86-64/Linux source:
-  base/table/debug/io/os/string libraries, parser, metamethod helpers,
-  fast-function recorder, generic recorder, package registration, x64 VM
-  template, and buildvm library marker handling.
-- Removed skipped `compat5.2` stock-test lanes and the deleted `table.pack`
-  stock fixture.
+- Audited Lua 5.2 compatibility branches in active x86-64/Linux source and kept
+  the stock `LUAJIT_ENABLE_LUA52COMPAT` path. Legacy cleanup is limited to
+  fork-local/threading compatibility shims, not stock LuaJIT behavior.
+- Kept `compat5.2` stock-test lanes and the `table.pack` stock fixture so the
+  optional compatibility profile remains behavior-covered.
 - Trimmed the install surface to x64 JIT disassembly support
   (`dis_x64.lua` plus its `dis_x86.lua` backend).
 - Replaced FFI recorder parser-lock fallbacks with nonblocking `CTBUSY` trace
@@ -21,10 +20,12 @@
 ## Kept deliberately
 
 - FFI pointer/type compatibility helpers: these are C/FFI semantics.
+- Stock Lua 5.2 compatibility mode: this is a LuaJIT build option, not a
+  fork-local threading compatibility entry point.
 - GC2 `legacy_*` bridge names and weak/sweep counters: these describe active
   safety bridges while GC2 still coordinates with the classic collector.
-- Structural raw-field/accessor CI scans where behavior tests cannot yet prove
-  ownership boundaries.
+- Structural raw-field/accessor ownership rules as documentation or behavior
+  fixtures. Do not keep CI scans that grep source for implementation spelling.
 
 ## Estimated progress
 
@@ -37,7 +38,7 @@
 - Decide whether to delete unsupported non-x64 backend files wholesale. That is
   a larger source-layout/build-plumbing change, not a small compatibility
   cleanup.
-- Convert remaining native STOPREQ/order source scans into targeted behavior
-  fixtures where practical.
+- Keep native STOPREQ/order rules covered by targeted behavior fixtures where
+  practical, or by documentation when the rule is not directly observable.
 - Continue replacing interpreter-side FFI parser-lock fallbacks only where the
   fallback can preserve normal language semantics.
