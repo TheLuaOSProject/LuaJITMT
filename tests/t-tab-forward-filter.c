@@ -403,8 +403,9 @@ int main(void)
   exercise_forward_waits_for_published_successor(L);
   exercise_forward_hops_after_later_publish(L);
 
-  lua_createtable(L, 4, 4);
+  lua_createtable(L, LJ_MAX_COLOSIZE + 16, 4);
   t = tabV(L->top-1);
+  assert(lj_tab_array_separated(t));
 
   lj_tab_storeint(L, lj_tab_setint(L, t, 1), 11);
   lj_tab_storeint(L, lj_tab_setint(L, t, 2), 22);
