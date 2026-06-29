@@ -116,6 +116,19 @@ return function(add)
       name = "m4_threading_upvalue",
       script = "t-threading-upvalue.lua",
       opts = { joff = true }
+    },
+    {
+      name = "m4_threading_require_once",
+      description = "concurrent require executes one module body and " ..
+        "preserves stock recursion behavior",
+      script = "t-threading-require-once.lua",
+      opts = {
+        joff = true,
+        env = {
+          LJ_M4_REQUIRE_WORKERS =
+            getenv("LJ_M4_REQUIRE_WORKERS", "8")
+        }
+      }
     }
   })
 

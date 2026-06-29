@@ -18,7 +18,11 @@
 #include "lj_err.h"
 #include "lj_lib.h"
 #include "lj_safepoint.h"
+#include "lj_str.h"
+#include "lj_tab.h"
 #include "lj_tg.h"
+#include "lj_thr.h"
+#include "lj_vm.h"
 
 /* ------------------------------------------------------------------------ */
 
@@ -536,20 +540,20 @@ static int lj_cf_package_loader_preload(lua_State *L)
 /* ------------------------------------------------------------------------ */
 
 #define KEY_SENTINEL	(U64x(81000000,00000000)|'s')
+#define PACKAGE_REQUIRE_CLAIMS	"_REQUIRE_INPROGRESS"
+#define PACKAGE_REQUIRE_WAIT_NS	1000000
 
-static int lj_cf_package_require(lua_State *L)
+typedef struct PackageRequireCtx {
+  const char *name;
+} PackageRequireCtx;
+
+static TValue *package_require_cp(lua_State *L, lua_CFunction dummy, void *ud)
 {
-  const char *name = luaL_checkstring(L, 1);
+  const char *name = ((PackageRequireCtx *)ud)->name;
   int i;
-  lua_settop(L, 1);  /* _LOADED table will be at index 2 */
-  lua_getfield(L, LUA_REGISTRYINDEX, "_LOADED");
-  lua_getfield(L, 2, name);
-  if (lua_toboolean(L, -1)) {  /* is it there? */
-    if ((L->top-1)->u64 == KEY_SENTINEL)  /* check loops */
-      luaL_error(L, "loop or previous error loading module " LUA_QS, name);
-    return 1;  /* package is already loaded */
-  }
-  /* else must load it; iterate over available loaders */
+  UNUSED(dummy);
+  lua_settop(L, 3);  /* name, _LOADED, private require claims. */
+  /* Else must load it; iterate over available loaders. */
   lua_getfield(L, LUA_ENVIRONINDEX, "loaders");
   if (!lua_istable(L, -1))
     luaL_error(L, LUA_QL("package.loaders") " must be a table");
@@ -568,6 +572,8 @@ static int lj_cf_package_require(lua_State *L)
     else
       lua_pop(L, 1);
   }
+  lua_remove(L, -2);  /* remove error message accumulator */
+  lua_remove(L, -2);  /* remove loaders table */
   (L->top++)->u64 = KEY_SENTINEL;
   lua_setfield(L, 2, name);  /* _LOADED[name] = sentinel */
   lua_pushstring(L, name);  /* pass name as argument to module */
@@ -575,12 +581,151 @@ static int lj_cf_package_require(lua_State *L)
   if (!lua_isnil(L, -1))  /* non-nil return? */
     lua_setfield(L, 2, name);  /* _LOADED[name] = returned value */
   lua_getfield(L, 2, name);
-  if ((L->top-1)->u64 == KEY_SENTINEL) {   /* module did not set a value? */
+  if ((L->top-1)->u64 == KEY_SENTINEL) {  /* module did not set a value? */
     lua_pushboolean(L, 1);  /* use true as result */
     lua_pushvalue(L, -1);  /* extra copy to be returned */
     lua_setfield(L, 2, name);  /* _LOADED[name] = true */
   }
   lj_lib_checkfpu(L);
+  return NULL;
+}
+
+static void package_require_push_claims(lua_State *L)
+{
+  lua_getfield(L, LUA_REGISTRYINDEX, PACKAGE_REQUIRE_CLAIMS);
+  if (!lua_istable(L, -1)) {
+    lua_pop(L, 1);
+    lua_createtable(L, 0, 16);
+    lua_pushvalue(L, -1);
+    lua_setfield(L, LUA_REGISTRYINDEX, PACKAGE_REQUIRE_CLAIMS);
+  }
+}
+
+static void package_require_claimtv(TValue *tv, uint32_t tid)
+{
+  setnumV(tv, (lua_Number)tid);
+}
+
+static int package_require_claim_is_owner(cTValue *tv, uint32_t tid)
+{
+  return tid != 0 && tvisnum(tv) && numV(tv) == (lua_Number)tid;
+}
+
+static int package_require_claim_load(GCtab *claims, GCstr *key, TValue *claim)
+{
+  cTValue *tv = lj_tab_getstr(claims, key);
+  if (tv) {
+    lj_tv_load_acq(claim, tv);
+    return !tvisnil(claim);
+  }
+  setnilV(claim);
+  return 0;
+}
+
+static int package_require_peer_claim(GCtab *claims, GCstr *key, uint32_t tid)
+{
+  TValue claim;
+  return package_require_claim_load(claims, key, &claim) &&
+	 !package_require_claim_is_owner(&claim, tid);
+}
+
+static void package_require_wait_claim(lua_State *L, GCtab *claims,
+				       GCstr *key, uint32_t tid)
+{
+  while (package_require_peer_claim(claims, key, tid)) {
+    int had_stopreq = package_had_stopreq(L);
+    uint32_t actions = lj_thr_sleep_ns(L, PACKAGE_REQUIRE_WAIT_NS);
+    package_checkstop_fresh(L, actions, had_stopreq);
+  }
+}
+
+#define PACKAGE_REQUIRE_CLAIM_PEER	0
+#define PACKAGE_REQUIRE_CLAIM_ACQUIRED	1
+#define PACKAGE_REQUIRE_CLAIM_OWNER	2
+
+static int package_require_try_claim(lua_State *L, GCtab *claims,
+				     GCstr *key, uint32_t tid)
+{
+  TValue keytv, claim, old, *dst;
+  setstrV(L, &keytv, key);
+  package_require_claimtv(&claim, tid);
+  for (;;) {
+    int rc;
+    dst = lj_tab_setstr(L, claims, key);
+    rc = lj_tab_trysetnil_cas_keyed(L, claims, dst, &keytv, &claim, &old);
+    if (rc == LJ_TAB_STORE_CAS_OK)
+      return PACKAGE_REQUIRE_CLAIM_ACQUIRED;
+    if (rc == LJ_TAB_STORE_CAS_EXISTS)
+      return package_require_claim_is_owner(&old, tid) ?
+	     PACKAGE_REQUIRE_CLAIM_OWNER : PACKAGE_REQUIRE_CLAIM_PEER;
+    lj_tab_store_wait_l(L);  /* require claim saw stale/FORWARD slot. */
+  }
+}
+
+static void package_require_clear_claim(lua_State *L, GCtab *claims,
+					GCstr *key, uint32_t tid)
+{
+  TValue keytv, nilv, old;
+  setstrV(L, &keytv, key);
+  setnilV(&nilv);
+  for (;;) {
+    cTValue *slot = lj_tab_getstr(claims, key);
+    TValue *dst;
+    int rc;
+    if (!slot)
+      return;
+    dst = (TValue *)(void *)slot;
+    rc = lj_tab_read_current_keyed(claims, dst, &keytv, &old);
+    if (rc == LJ_TAB_STORE_CAS_OK) {
+      if (!package_require_claim_is_owner(&old, tid))
+	return;
+      if (lj_tab_trystoretv_cas_keyed(L, claims, dst, &keytv, &nilv) ==
+	  LJ_TAB_STORE_CAS_OK)
+	return;
+    }
+    lj_tab_store_wait_l(L);  /* require claim clear saw stale/FORWARD slot. */
+  }
+}
+
+static int lj_cf_package_require(lua_State *L)
+{
+  GCstr *namestr = lj_lib_checkstr(L, 1);
+  const char *name = strdata(namestr);
+  GCstr *key = lj_str_newz(L, name);
+  GCtab *claims;
+  PackageRequireCtx ctx;
+  uint32_t tid = lj_thr_current_id(G(L));
+  int claim_state, clear_claim, status;
+  lua_settop(L, 1);  /* _LOADED table will be at index 2. */
+  lua_getfield(L, LUA_REGISTRYINDEX, "_LOADED");
+  package_require_push_claims(L);  /* private claim table at index 3. */
+  claims = tabV(L->top-1);
+  for (;;) {
+    lua_settop(L, 3);
+    lua_getfield(L, 2, name);
+    if (package_require_peer_claim(claims, key, tid)) {
+      lua_pop(L, 1);
+      package_require_wait_claim(L, claims, key, tid);
+      continue;
+    }
+    if (lua_toboolean(L, -1)) {  /* is it there? */
+      if ((L->top-1)->u64 == KEY_SENTINEL)  /* check loops */
+	luaL_error(L, "loop or previous error loading module " LUA_QS, name);
+      return 1;  /* package is already loaded */
+    }
+    lua_pop(L, 1);
+    claim_state = package_require_try_claim(L, claims, key, tid);
+    if (claim_state != PACKAGE_REQUIRE_CLAIM_PEER)
+      break;
+    package_require_wait_claim(L, claims, key, tid);
+  }
+  clear_claim = claim_state == PACKAGE_REQUIRE_CLAIM_ACQUIRED;
+  ctx.name = name;
+  status = lj_vm_cpcall(L, NULL, &ctx, package_require_cp);
+  if (clear_claim)
+    package_require_clear_claim(L, claims, key, tid);
+  if (status)
+    return lua_error(L);
   return 1;
 }
 
@@ -730,6 +875,8 @@ LUALIB_API int luaopen_package(lua_State *L)
   lua_setfield(L, -2, "config");
   luaL_findtable(L, LUA_REGISTRYINDEX, "_LOADED", 16);
   lua_setfield(L, -2, "loaded");
+  luaL_findtable(L, LUA_REGISTRYINDEX, PACKAGE_REQUIRE_CLAIMS, 16);
+  lua_pop(L, 1);
   luaL_findtable(L, LUA_REGISTRYINDEX, "_PRELOAD", 4);
   lua_setfield(L, -2, "preload");
   lua_pushvalue(L, LUA_GLOBALSINDEX);
