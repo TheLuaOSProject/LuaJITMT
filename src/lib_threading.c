@@ -1372,7 +1372,7 @@ LJLIB_CF(threading_channel)
   return 1;
 }
 
-int lj_threading_attach(lua_State *L)
+static int threading_attach(lua_State *L, int wait)
 {
   global_State *g;
   TGState *cur, *tg;
@@ -1389,9 +1389,14 @@ int lj_threading_attach(lua_State *L)
   if (!threading_entering_begin(g))
     return 0;
   tid = lj_thr_newid();
-  if (!lj_state_claim(L, tid)) {
-    threading_entering_leave(g);
-    return 0;
+  for (;;) {
+    if (lj_state_claim(L, tid))
+      break;
+    if (!wait || mt_shutdown_acq(g) != 0) {
+      threading_entering_leave(g);
+      return 0;
+    }
+    (void)lj_thr_sleep_ns(NULL, 1000000);
   }
   tg = (TGState *)malloc(sizeof(TGState));
   if (!tg) {
@@ -1424,6 +1429,17 @@ int lj_threading_attach(lua_State *L)
     return 0;
   }
   return 1;
+}
+
+int lj_threading_attach(lua_State *L)
+{
+  return threading_attach(L, 0);
+}
+
+/* TLS-less foreign callbacks must serialize on their owner carrier state. */
+int lj_threading_attach_wait(lua_State *L)
+{
+  return threading_attach(L, 1);
 }
 
 void lj_threading_detach(lua_State *L, int disown_callbacks)

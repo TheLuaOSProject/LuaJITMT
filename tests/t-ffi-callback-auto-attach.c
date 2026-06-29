@@ -28,6 +28,7 @@ typedef struct AutoCtx {
   int result;
   double fp_result;
   TGState *after_tg;
+  int signal_call;
 } AutoCtx;
 
 static lua_State *mainL;
@@ -40,6 +41,30 @@ static lua_State *saved_owner;
 static lua_State *saved_fp_owner;
 static lua_State *callbackL;
 static int context_checks;
+static uint32_t concurrent_hold;
+static uint32_t concurrent_release;
+static uint32_t concurrent_entered;
+static uint32_t concurrent_attempts;
+
+static void init_ctx(AutoCtx *ctx)
+{
+  ctx->status = 99;
+  ctx->result = 0;
+  ctx->fp_result = -1.0;
+  ctx->after_tg = (TGState *)1;
+  ctx->signal_call = 0;
+}
+
+static void wait_u32_at_least(uint32_t *p, uint32_t value)
+{
+  int i;
+  for (i = 0; i < 5000; i++) {
+    if (la_load32_acq(p) >= value)
+      return;
+    (void)lj_thr_sleep_ns(NULL, 1000000);
+  }
+  assert(la_load32_acq(p) >= value);
+}
 
 static lua_State *slot_owner_at(MSize slot)
 {
@@ -96,6 +121,11 @@ static int check_callback_context(lua_State *L)
 	   tg->gl == G(mainL);
   callbackL = L;
   context_checks++;
+  if (la_load32_acq(&concurrent_hold) != 0) {
+    (void)la_add32_rlx(&concurrent_entered, 1);
+    while (la_load32_acq(&concurrent_release) == 0)
+      (void)lj_thr_sleep_ns(L, 1000000);
+  }
   lua_pushboolean(L, ok);
   return 1;
 }
@@ -107,6 +137,8 @@ static void *foreign_worker(void *arg)
     ctx->status = 1;
     return NULL;
   }
+  if (ctx->signal_call)
+    (void)la_add32_rlx(&concurrent_attempts, 1);
   ctx->result = saved_cb(1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
   ctx->after_tg = lj_thr_get_tg();
   ctx->status = 0;
@@ -131,7 +163,9 @@ int main(void)
 {
   lua_State *L = luaL_newstate();
   AutoCtx ctx;
+  AutoCtx cctx[2];
   pthread_t pt;
+  pthread_t cpt[2];
   assert(L != NULL);
   luaL_openlibs(L);
   mainL = L;
@@ -178,10 +212,7 @@ int main(void)
   assert(saved_owner->tg_hint == NULL);
   assert(saved_fp_owner->tg_hint == NULL);
 
-  ctx.status = 99;
-  ctx.result = 0;
-  ctx.fp_result = -1.0;
-  ctx.after_tg = (TGState *)1;
+  init_ctx(&ctx);
   assert(pthread_create(&pt, NULL, foreign_worker, &ctx) == 0);
   assert(pthread_join(pt, NULL) == 0);
   assert(ctx.status == 0);
@@ -192,6 +223,34 @@ int main(void)
   assert(context_checks == 1);
   assert(slot_owner() == saved_owner);
 
+  la_store32_rel(&concurrent_hold, 1);
+  la_store32_rel(&concurrent_release, 0);
+  la_store32_rel(&concurrent_entered, 0);
+  la_store32_rel(&concurrent_attempts, 0);
+  init_ctx(&cctx[0]);
+  init_ctx(&cctx[1]);
+  cctx[0].signal_call = 1;
+  cctx[1].signal_call = 1;
+  assert(pthread_create(&cpt[0], NULL, foreign_worker, &cctx[0]) == 0);
+  wait_u32_at_least(&concurrent_entered, 1);
+  assert(pthread_create(&cpt[1], NULL, foreign_worker, &cctx[1]) == 0);
+  wait_u32_at_least(&concurrent_attempts, 2);
+  (void)lj_thr_sleep_ns(NULL, 10000000);
+  la_store32_rel(&concurrent_release, 1);
+  assert(pthread_join(cpt[0], NULL) == 0);
+  assert(pthread_join(cpt[1], NULL) == 0);
+  la_store32_rel(&concurrent_hold, 0);
+  assert(cctx[0].status == 0);
+  assert(cctx[1].status == 0);
+  assert(cctx[0].result == 55);
+  assert(cctx[1].result == 55);
+  assert(cctx[0].after_tg == NULL);
+  assert(cctx[1].after_tg == NULL);
+  assert(callbackL == saved_owner);
+  assert(saved_owner->tg_hint == NULL);
+  assert(context_checks == 3);
+  assert(slot_owner() == saved_owner);
+
   ljt_lua_dostring(L,
     "m7_auto_keep_cb:free()\n"
     "m7_auto_keep_cb = nil\n"
@@ -200,10 +259,8 @@ int main(void)
   assert(slot_owner() == NULL);
   assert(slot_owner_at(saved_fp_slot) == NULL);
 
-  ctx.status = 99;
+  init_ctx(&ctx);
   ctx.result = -1;
-  ctx.fp_result = -1.0;
-  ctx.after_tg = (TGState *)1;
   assert(pthread_create(&pt, NULL, stale_foreign_worker, &ctx) == 0);
   assert(pthread_join(pt, NULL) == 0);
   assert(ctx.status == 0);

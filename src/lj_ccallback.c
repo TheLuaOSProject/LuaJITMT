@@ -758,7 +758,7 @@ static int callback_auto_attach(CTState *cts, MSize slot)
   L = callback_owner_load(owner, slot);
   if (L == NULL || G(L) != cts->g)
     return 0;
-  return lj_threading_attach(L);
+  return lj_threading_attach_wait(L);
 }
 
 CCallbackRuntime * LJ_FASTCALL lj_ccallback_prepare(CTState *cts, MSize slot)
