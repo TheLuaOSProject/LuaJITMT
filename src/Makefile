@@ -707,13 +707,19 @@ lj_folddef.h: $(BUILDVM_T) lj_opt_fold.c
 
 %.o: %.c
 	$(E) "CC        $@"
-	$(Q)$(TARGET_DYNCC) $(TARGET_ACFLAGS) -c -o $(@:.o=_dyn.o) $<
 	$(Q)$(TARGET_CC) $(TARGET_ACFLAGS) -c -o $@ $<
+
+%_dyn.o: %.c %.o
+	$(E) "DYNCC     $@"
+	$(Q)$(TARGET_DYNCC) $(TARGET_ACFLAGS) -c -o $@ $<
 
 %.o: %.S
 	$(E) "ASM       $@"
-	$(Q)$(TARGET_DYNCC) $(TARGET_ASFLAGS) -c -o $(@:.o=_dyn.o) $<
 	$(Q)$(TARGET_CC) $(TARGET_ASFLAGS) -c -o $@ $<
+
+%_dyn.o: %.S %.o
+	$(E) "DYNASM    $@"
+	$(Q)$(TARGET_DYNCC) $(TARGET_ASFLAGS) -c -o $@ $<
 
 $(LUAJIT_O):
 	$(E) "CC        $@"
@@ -733,8 +739,9 @@ $(LUAJIT_A): $(LJVMCORE_O)
 	$(E) "AR        $@"
 	$(Q)$(TARGET_AR) $@ $(LJVMCORE_O)
 
-# The dependency on _O, but linking with _DYNO is intentional.
-$(LUAJIT_SO): $(LJVMCORE_O)
+# The shared library links the dynamic object set directly.  Keep these as real
+# prerequisites so partial build trees can regenerate missing _dyn.o sidecars.
+$(LUAJIT_SO): $(LJVMCORE_DYNO)
 	$(E) "DYNLINK   $@"
 	$(Q)$(TARGET_LD) $(TARGET_ASHLDFLAGS) -o $@ $(LJVMCORE_DYNO) $(TARGET_ALIBS)
 	$(Q)$(TARGET_STRIP) $@
