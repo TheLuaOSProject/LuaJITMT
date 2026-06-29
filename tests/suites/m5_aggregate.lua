@@ -10,6 +10,7 @@ local m5_concurrent_cases = {
   "m5_tab_array_publish",
   "m5_tab_slot_snapshot",
   "m5_tab_keylock_lookup",
+  "m5_tab_finreg_newkey_stale",
   "m5_tab_forward_filter",
   "m5_tab_resize_stress",
   "m5_tab_capi_resize_stress",

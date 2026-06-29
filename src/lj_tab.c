@@ -415,13 +415,6 @@ static LJ_AINLINE void tab_storekeyrel(lua_State *L, TValue *dst,
   copyTVrel(L, dst, &k);
 }
 
-static LJ_AINLINE void tab_storekeylockrel(TValue *dst)
-{
-  TValue keylock;
-  setkeylockV(&keylock);
-  tv_rawstore_rel(dst, tv_rawload(&keylock));
-}
-
 static int tab_freeze_forward(TValue *slot, TValue *oldp)
 {
   TValue forward;
@@ -1459,8 +1452,53 @@ static LJ_AINLINE int tab_hash_generation_current(GCtab *t, const Node *nodebase
   return lj_tab_node_acq(t) == nodebase && !lj_tab_node_is_retiring(nodebase);
 }
 
+#ifdef LJ_TAB_TEST_HELPERS
+static LJTabNewkeyReserveHook tab_test_newkey_anchor_after_reserve_hook;
+static LJTabNewkeyReserveHook tab_test_newkey_chain_after_reserve_hook;
+
+void lj_tab_test_set_newkey_anchor_after_reserve_hook(
+  LJTabNewkeyReserveHook hook)
+{
+  tab_test_newkey_anchor_after_reserve_hook = hook;
+}
+
+void lj_tab_test_set_newkey_chain_after_reserve_hook(
+  LJTabNewkeyReserveHook hook)
+{
+  tab_test_newkey_chain_after_reserve_hook = hook;
+}
+
+static LJ_AINLINE void tab_test_newkey_anchor_after_reserve(lua_State *L,
+							    GCtab *t,
+							    Node *nodebase)
+{
+  if (tab_test_newkey_anchor_after_reserve_hook)
+    tab_test_newkey_anchor_after_reserve_hook(L, t, nodebase);
+}
+
+static LJ_AINLINE void tab_test_newkey_chain_after_reserve(lua_State *L,
+							   GCtab *t,
+							   Node *nodebase)
+{
+  if (tab_test_newkey_chain_after_reserve_hook)
+    tab_test_newkey_chain_after_reserve_hook(L, t, nodebase);
+}
+#else
+#define tab_test_newkey_anchor_after_reserve(L, t, nodebase) \
+  ((void)(L), (void)(t), (void)(nodebase))
+#define tab_test_newkey_chain_after_reserve(L, t, nodebase) \
+  ((void)(L), (void)(t), (void)(nodebase))
+#endif
+
 static void tab_release_claimed_anchor(Node *nodebase, Node *n)
 {
+  lj_tab_storenilraw(&n->key);
+  lj_tab_node_free_release(nodebase);
+}
+
+static void tab_release_claimed_anchor_value(Node *nodebase, Node *n)
+{
+  lj_tab_storenilraw(&n->val);
   lj_tab_storenilraw(&n->key);
   lj_tab_node_free_release(nodebase);
 }
@@ -1468,8 +1506,8 @@ static void tab_release_claimed_anchor(Node *nodebase, Node *n)
 static void tab_release_claimed_free(Node *nodebase, Node *n)
 {
   lj_tab_nextnode_set(n, NULL);
-  lj_tab_storenilraw(&n->key);
   lj_tab_storenilraw(&n->val);
+  lj_tab_storenilraw(&n->key);
   lj_tab_node_free_release(nodebase);
 }
 
@@ -1673,14 +1711,38 @@ int lj_tab_try_newkey_anchor(lua_State *L, GCtab *t, cTValue *key,
       if (reserved <= 0)
 	return 0;
     }
+    tab_test_newkey_anchor_after_reserve(L, t, nodebase);
+    if (!tab_hash_generation_current(t, nodebase)) {
+      lj_tab_node_free_release(nodebase);
+      return -1;
+    }
+    {
+      int claimed = tab_try_claim_nil_key(&n->key);
+      if (claimed < 0) {
+	lj_tab_node_free_release(nodebase);
+	lj_tab_wait_no_l();
+	continue;
+      }
+      if (claimed == 0) {
+	lj_tab_node_free_release(nodebase);
+	continue;
+      }
+    }
+    if (!tab_hash_generation_current(t, nodebase)) {
+      tab_release_claimed_anchor(nodebase, n);
+      return -1;
+    }
     setnilV(&expect);
     if (lj_tv_cas(&n->val, &expect, claim)) {
-      tab_storekeylockrel(&n->key);
+      if (!tab_hash_generation_current(t, nodebase)) {
+	tab_release_claimed_anchor_value(nodebase, n);
+	return -1;
+      }
       tab_storekeyrel(L, &n->key, key);
-      *slot = &n->val;
+      *slot = lj_tab_set(L, t, key);
       return 1;
     }
-    lj_tab_node_free_release(nodebase);
+    tab_release_claimed_anchor(nodebase, n);
   }
 }
 
@@ -1714,6 +1776,11 @@ int lj_tab_try_newkey_chain(lua_State *L, GCtab *t, cTValue *key,
       int reserve = lj_tab_node_free_reserve(nodebase);
       if (reserve <= 0)
 	return 0;
+      tab_test_newkey_chain_after_reserve(L, t, nodebase);
+      if (!tab_hash_generation_current(t, nodebase)) {
+	lj_tab_node_free_release(nodebase);
+	return -1;
+      }
       for (i = 0; i <= hmask; i++) {
 	TValue nk, nv, expect;
 	n = &nodebase[i];
@@ -1736,12 +1803,29 @@ int lj_tab_try_newkey_chain(lua_State *L, GCtab *t, cTValue *key,
 	  }
 	  continue;
 	}
+	{
+	  int claimed = tab_try_claim_nil_key(&n->key);
+	  if (claimed < 0) {
+	    lj_tab_wait_no_l();  /* Free-node key is publishing. */
+	    goto release_retry;
+	  }
+	  if (claimed == 0)
+	    continue;
+	}
+	if (!tab_hash_generation_current(t, nodebase)) {
+	  tab_release_claimed_free(nodebase, n);
+	  return -1;
+	}
 	setnilV(&expect);
 	if (lj_tv_cas(&n->val, &expect, claim)) {
-	  tab_storekeylockrel(&n->key);
+	  if (!tab_hash_generation_current(t, nodebase)) {
+	    tab_release_claimed_free(nodebase, n);
+	    return -1;
+	  }
 	  reserved = n;  /* Claimed free node; not visible until CAS-prepend. */
 	  break;
 	}
+	lj_tab_storenilraw(&n->key);
       }
       if (!reserved) {
 	lj_tab_node_free_release(nodebase);
@@ -1753,11 +1837,15 @@ int lj_tab_try_newkey_chain(lua_State *L, GCtab *t, cTValue *key,
       tab_release_claimed_free(nodebase, reserved);
       return 0;
     }
+    if (!tab_hash_generation_current(t, nodebase)) {
+      tab_release_claimed_free(nodebase, reserved);
+      return -1;
+    }
     n = lj_tab_nextnode_acq(anchor);
     lj_tab_nextnode_set(reserved, n);
     if (tab_nextnode_cas(anchor, &n, reserved)) {
       tab_storekeyrel(L, &reserved->key, key);
-      *slot = &reserved->val;
+      *slot = lj_tab_set(L, t, key);
       return 1;  /* 11.4 FINREG collision insert CAS-prepend. */
     }
   retry:

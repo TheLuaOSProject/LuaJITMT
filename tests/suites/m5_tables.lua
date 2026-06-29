@@ -1,3 +1,4 @@
+local build = require("suite_build")
 local runtime = require("suite_runtime")
 
 return function(add)
@@ -72,6 +73,25 @@ return function(add)
       opts = { timeout = "20s" },
       message = "M5 public C API table resize stress passed"
     }
+  })
+
+  add({
+    name = "m5_tab_finreg_newkey_stale",
+    description = "FINREG new-key helpers abandon stale table generations",
+    run = function(t)
+      t:build({
+        clean = true,
+        jobs = false,
+        quiet = true,
+        xcflags = "-DLJ_TAB_TEST_HELPERS"
+      })
+      build.compile_and_run_c(t, t:tmp("lj_t-tab-finreg-newkey-stale"),
+                              "t-tab-finreg-newkey-stale.c", {
+        cflags = "-DLJ_TAB_TEST_HELPERS",
+        timeout = "20s"
+      })
+      print("M5 FINREG new-key stale-generation guard passed")
+    end
   })
 
   runtime.add_luajit_script_cases(add, {
