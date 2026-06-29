@@ -867,7 +867,7 @@ LUALIB_API int luaL_newmetatable(lua_State *L, const char *tname)
     TValue old;
     int rc = lj_tab_read_current_keyed(regt, tv, &keytv, &old);
     if (rc != LJ_TAB_STORE_CAS_OK) {
-      lj_tab_store_wait_no_l();  /* luaL_newmetatable saw stale/FORWARD slot. */
+      lj_tab_store_wait_l(L);  /* luaL_newmetatable saw stale/FORWARD slot. */
       continue;
     }
     if (tvisnil(&old)) {
@@ -881,7 +881,7 @@ LUALIB_API int luaL_newmetatable(lua_State *L, const char *tname)
 	return 1;
       }
       if (rc != LJ_TAB_STORE_CAS_EXISTS) {
-	lj_tab_store_wait_no_l();
+	lj_tab_store_wait_l(L);
 	continue;
       }
       copyTV(L, L->top++, &old);
@@ -1170,7 +1170,7 @@ LUA_API void lua_settable(lua_State *L, int idx)
 	L->top = key;
 	return;
       }
-      lj_tab_store_wait_no_l();  /* C API settable saw stale/FORWARD slot. */
+      lj_tab_store_wait_l(L);  /* C API settable saw stale/FORWARD slot. */
     } else {
       TValue *base = L->top;
       copyTV(L, base+2, base-3-2*LJ_FR2);
@@ -1202,7 +1202,7 @@ LUA_API void lua_setfield(lua_State *L, int idx, const char *k)
 	L->top = val;
 	return;
       }
-      lj_tab_store_wait_no_l();  /* C API setfield saw stale/FORWARD slot. */
+      lj_tab_store_wait_l(L);  /* C API setfield saw stale/FORWARD slot. */
     } else {
       TValue *base = L->top;
       copyTV(L, base+2, base-3-2*LJ_FR2);
@@ -1226,7 +1226,7 @@ LUA_API void lua_rawset(lua_State *L, int idx)
     if (lj_tab_trystoretv_cas_keyed(L, t, dst, key, key+1) ==
 	LJ_TAB_STORE_CAS_OK)
       break;
-    lj_tab_store_wait_no_l();  /* C API rawset saw stale/FORWARD slot. */
+    lj_tab_store_wait_l(L);  /* C API rawset saw stale/FORWARD slot. */
   }
   lj_gc2_barrier_weak_write(L, t, key, key+1);
   lj_gc_pubtab(L, t);
@@ -1247,7 +1247,7 @@ LUA_API void lua_rawseti(lua_State *L, int idx, int n)
     if (lj_tab_trystoretv_cas_keyed(L, t, dst, &key, src) ==
 	LJ_TAB_STORE_CAS_OK)
       break;
-    lj_tab_store_wait_no_l();  /* C API rawseti saw stale/FORWARD slot. */
+    lj_tab_store_wait_l(L);  /* C API rawseti saw stale/FORWARD slot. */
   }
   lj_gc2_barrier_weak_write(L, t, &key, src);
   lj_gc_pubtabtv(L, t, dst);

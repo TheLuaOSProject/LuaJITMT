@@ -270,7 +270,9 @@ LJ_FUNC TValue *lj_tab_setstr(lua_State *L, GCtab *t, const GCstr *key);
 LJ_FUNC TValue *lj_tab_set(lua_State *L, GCtab *t, cTValue *key);
 LJ_FUNCA TValue *lj_tab_storetv(lua_State *L, TValue *dst, cTValue *src);
 LJ_FUNCA void lj_tab_wait_no_l(void);
+LJ_FUNCA void lj_tab_wait_l(lua_State *L);
 LJ_FUNCA void lj_tab_store_wait_no_l(void);
+LJ_FUNCA void lj_tab_store_wait_l(lua_State *L);
 #define LJ_TAB_STORE_CAS_OK		0
 #define LJ_TAB_STORE_CAS_FORWARD	1
 #define LJ_TAB_STORE_CAS_STALE		2

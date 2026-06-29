@@ -73,6 +73,16 @@ LJ_FUNCA void lj_tab_wait_no_l(void)
   (void)lj_thr_sleep_ns(NULL, 1000000);
 }
 
+LJ_FUNCA void lj_tab_wait_l(lua_State *L)
+{
+  /*
+  ** L-aware table retry waits make C/API callers native and safepoint-visible
+  ** while preserving the no-state helper for VM/JIT/internal paths where only
+  ** TLS ownership is known.
+  */
+  (void)lj_thr_sleep_ns(L, 1000000);
+}
+
 static void tab_finreg_claim_wait_no_l(void)
 {
   lj_tab_wait_no_l();
@@ -1818,6 +1828,11 @@ LJ_FUNCA TValue *lj_tab_storetv(lua_State *L, TValue *dst, cTValue *src)
 LJ_FUNCA void lj_tab_store_wait_no_l(void)
 {
   lj_tab_wait_no_l();
+}
+
+LJ_FUNCA void lj_tab_store_wait_l(lua_State *L)
+{
+  lj_tab_wait_l(L);
 }
 
 LJ_FUNCA int lj_tab_trystoretv_cas(lua_State *L, TValue *dst, cTValue *src)
