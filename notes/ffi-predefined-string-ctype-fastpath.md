@@ -94,6 +94,12 @@ the normal parser/diagnostic path while allowing common generated stable forms
 with more than eight pointer or fixed-array suffixes to avoid claiming
 `CTState.parse_token`.
 
+The recorder-side fixed-array fast path over predefined bases uses the same
+16-suffix bound. Traced `ffi.sizeof("int[1]...[1]")` forms can therefore abort
+only for genuinely unsupported/general declarations while an unrelated parser
+owns the token, not because a generated fixed-array declaration has nine stable
+suffixes.
+
 Fixed-size array suffix chains over a direct base, including a direct pointer
 chain base, also stay off the parser token: `ffi.typeof("int[4]")`,
 `ffi.typeof("my_typedef[3]")`, `ffi.typeof("struct my_tag[2][3]")`, and

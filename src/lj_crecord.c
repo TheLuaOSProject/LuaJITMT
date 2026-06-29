@@ -124,7 +124,7 @@ static int crec_direct_array_suffix(const char *p, MSize *lenp, CTSize *nelemp)
 
 static int crec_direct_array_ctype_string(jit_State *J, GCstr *s, CTypeID *idp)
 {
-  enum { CREC_DIRECT_MAX_ARRAYS = 8 };
+  enum { CREC_DIRECT_MAX_ARRAYS = 16 };
   CTState *cts = ctype_ctsG(J2G(J));
   const char *p = strdata(s);
   MSize len = s->len, baselen, narr = 0, i;

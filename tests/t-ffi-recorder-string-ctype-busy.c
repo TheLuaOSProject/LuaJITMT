@@ -89,6 +89,26 @@ int main(void)
     "assert(lj_m7_trace_parse_token_stop_count() >= 1)\n"
     "assert(lj_m7_trace_parse_token_ctbusy_count() == 0)\n");
 
+  assert_busy_trace_records(L, cts,
+    "local ffi = require('ffi')\n"
+    "local deep = 'int' .. string.rep('[1]', 9)\n"
+    "assert(ffi.sizeof(deep) == 4)\n"
+    "jit.attach(lj_m7_trace_parse_token, 'trace')\n"
+    "jit.flush()\n"
+    "jit.on()\n"
+    "jit.opt.start('hotloop=1', 'hotexit=1')\n"
+    "local function run(n)\n"
+    "  local sum = 0\n"
+    "  for i = 1, n do\n"
+    "    sum = sum + ffi.sizeof(deep)\n"
+    "  end\n"
+    "  return sum\n"
+    "end\n"
+    "for i = 1, 30 do assert(run(40) == 160) end\n"
+    "jit.attach(lj_m7_trace_parse_token)\n"
+    "assert(lj_m7_trace_parse_token_stop_count() >= 1)\n"
+    "assert(lj_m7_trace_parse_token_ctbusy_count() == 0)\n");
+
   assert_busy_trace_releases(L, cts,
     "local ffi = require('ffi')\n"
     "jit.attach(lj_m7_trace_parse_token, 'trace')\n"
