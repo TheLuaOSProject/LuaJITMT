@@ -100,7 +100,9 @@ int main(void)
   retire_epoch = lj_tab_node_retired_epoch_acq(ret);
   assert(lj_tab_reclaim_retired(g, retire_epoch) == 0);
   assert(find_retired(g, oldnode) != NULL);
-  assert(lj_tab_reclaim_retired(g, retire_epoch + 1u) == 1);
+  assert(lj_tab_reclaim_retired(g, retire_epoch + 1u) == 0);
+  assert(find_retired(g, oldnode) != NULL);
+  assert(lj_tab_reclaim_retired(g, retire_epoch + LJ_TAB_RETIRE_EPOCHS) == 1);
   assert(find_retired(g, oldnode) == NULL);
   for (i = 0; i < 4; i++)
     check_pair(L, i);

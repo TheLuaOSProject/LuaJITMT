@@ -179,10 +179,9 @@ void lj_tg_detach(global_State *g, TGState *tg)
   (void)lj_gc2_flush_alloc(g, tg);  /* 04 section 4.8 detach accounting. */
   la_fence_rel();
   oldflags = lj_tg_flags_or_rlx(tg, TGF_DEAD);  /* 05 section 5.4.1. */
+  (void)lj_safepoint_retire_dead_tg(g, tg);
   if (!(oldflags & TGF_DEAD))
     (void)gc2_n_threads_sub_acqrel(g, 1);
-  lj_tg_reqmask_rel(tg, 0);
-  lj_tg_poll_rel(tg, 0);
   lj_tg_in_native_store_rlx(tg, 0);
 #if LJ_HASFFI
   lj_tg_ffi_call_func_rel(tg, NULL);

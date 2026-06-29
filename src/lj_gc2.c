@@ -142,8 +142,10 @@ static void gc2_mark_tv_worker(global_State *g, cTValue *tv);
 static int lj_gc2_ssb_push(global_State *g, GCobj *o);
 static uint32_t lj_gc2_drain_ssb(global_State *g);
 static int lj_gc2_ssb_empty(global_State *g);
+static LJ_NOINLINE uint32_t gc2_drain_published_ssb_to_grey(global_State *g,
+							    uint32_t limit);
 static int lj_gc2_finreg_cdata_preclaim(lua_State *L, global_State *g,
-					GCobj *o, cTValue *fin);
+					 GCobj *o, cTValue *fin);
 static void lj_gc2_finreg_udata_finalizer_enqueue(global_State *g, GCobj *o);
 static int gc2_call_finalizer(global_State *g, lua_State *L,
 			      cTValue *mo, GCobj *o);
@@ -2751,7 +2753,10 @@ static TValue *gc2_active_thread_top(lua_State *L, TValue *top)
 static TValue *gc2_stack_scan_top(global_State *g, lua_State *L)
 {
   TValue *frame, *bot = tvref(L->stack);
-  TValue *top = L->top, *used = L->top - 1, *max = tvref(L->maxstack);
+  TValue *top = L->top, *used, *max = tvref(L->maxstack);
+  if (gc2_thread_is_remote_current(g, L))
+    return max;  /* Remote frame chain is unstable; scan conservatively. */
+  used = L->top - 1;
   for (frame = L->base - 1; frame > bot + LJ_FR2; frame = frame_prev(frame)) {
     GCfunc *fn = frame_func(frame);
     GCproto *pt = gc2_func_proto_if_lua(fn);
@@ -2766,9 +2771,7 @@ static TValue *gc2_stack_scan_top(global_State *g, lua_State *L)
   used++;
   if (used > max)
     used = max;
-  if (gc2_thread_is_remote_current(g, L)) {
-    top = max;
-  } else if (gc2_thread_is_current(g, L) && L->base > bot + 1 + LJ_FR2) {
+  if (gc2_thread_is_current(g, L) && L->base > bot + 1 + LJ_FR2) {
     top = gc2_active_thread_top(L, top);
   } else {
     TValue *ctop = curr_top(L);
@@ -4969,6 +4972,33 @@ static void gc2_ssb_publish(global_State *g, GC2SSBNode *node)
   lj_gc2_worker_wake(g);  /* 05 section 5.6.3 parked worker scheduler. */
 }
 
+static uint32_t gc2_recycle_published_ssb_for_flush(global_State *g,
+						    TGState *tg)
+{
+  uint32_t phase, expect = 0, moved;
+  if (!g || !tg || lj_tg_ssb_free_acq(tg) != NULL)
+    return 0;
+  phase = gc2_phase_acq(g);
+  if (phase != LJ_GC2_MARK && phase != LJ_GC2_WEAK)
+    return 0;
+  if (!gc2_worker_active_cas(g, &expect, 1)) {
+    gc2_worker_busy_retries_add(g, 1);
+    return 0;
+  }
+  /*
+  ** SSB flush needs a fresh node before it can publish the active node. Convert
+  ** one published SSB node while holding the grey-deque owner gate; do not drain
+  ** arbitrary grey work from this writer-side overflow path.
+  */
+  moved = gc2_drain_published_ssb_to_grey(g, TG_GC2_SSB_SLOTS);
+  if (moved) {
+    gc2_worker_runs_add(g, 1);
+    gc2_worker_ssb_converted_add(g, moved);
+  }
+  gc2_worker_active_rel(g, 0);
+  return moved;
+}
+
 static uint32_t gc2_flush_ssb(global_State *g, TGState *tg, int allow_drain)
 {
   GC2SSBNode *node, *fresh;
@@ -4987,8 +5017,8 @@ static uint32_t gc2_flush_ssb(global_State *g, TGState *tg, int allow_drain)
   if (n == 0)
     return 0;
   fresh = lj_tg_ssb_free_pop(tg);
-  if (!fresh && allow_drain) {
-    (void)lj_gc2_drain_ssb(g);  /* Temporary scaffold until workers recycle. */
+  while (!fresh && allow_drain &&
+	 gc2_recycle_published_ssb_for_flush(g, tg) != 0) {
     fresh = lj_tg_ssb_free_pop(tg);
   }
   if (!fresh)

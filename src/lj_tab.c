@@ -136,15 +136,22 @@ static LJ_AINLINE int tab_node_forward_hop(GCtab *t, Node **nodep,
 					   MSize *hmaskp)
 {
   Node *node = *nodep;
-  Node *next = lj_tab_node_nextgen_acq(node);
+  Node *root = lj_tab_node_acq(t);
   /*
-  ** next_gen is an early resize breadcrumb. Only hop once the table root has
-  ** stopped publishing this hash generation.
+  ** The table root is the only stable publication point after a resize. Avoid
+  ** touching an old generation header once the table no longer publishes it.
   */
-  if (next && next != node && lj_tab_node_acq(t) != node) {
-    *nodep = next;
-    *hmaskp = lj_tab_node_hmask_acq(next);
+  if (root != node) {
+    *nodep = lj_tab_node_snapshot_acq(t, hmaskp);
     return 1;
+  }
+  {
+    Node *next = lj_tab_node_nextgen_acq(node);
+    if (next && next != node) {
+      *nodep = next;
+      *hmaskp = lj_tab_node_hmask_acq(next);
+      return 1;
+    }
   }
   return 0;
 }
@@ -226,7 +233,7 @@ TValue *lj_tab_forwarded_array_slot(GCtab *t, TValue *array, MSize asize,
     TValue *nextarray = array;
     MSize nextasize = asize;
     TValue *slot = NULL;
-    if (!lj_tab_array_forward_hop(t, &nextarray, &nextasize))
+    if (!lj_tab_array_forward_hop_forward(t, &nextarray, &nextasize))
       return NULL;
     if (idx < nextasize) {
       slot = &nextarray[idx];
@@ -286,7 +293,7 @@ static LJ_AINLINE int tab_array_slot_absent_acq(GCtab *t, TValue **arrayp,
     if (tvisforward(&val)) {
       MSize nextasize = *asizep;
       TValue *nextarray = array;
-      if (lj_tab_array_forward_hop(t, &nextarray, &nextasize) &&
+      if (lj_tab_array_forward_hop_forward(t, &nextarray, &nextasize) &&
 	  idx < nextasize) {
 	*arrayp = nextarray;
 	*asizep = nextasize;
@@ -610,6 +617,13 @@ static void tab_array_retire_arm(global_State *g, TabArrayRetire *ret)
 {
   lj_tab_array_retired_epoch_rel(ret, lj_gc2_retire_epoch(g));
   lj_tab_array_retired_armed_rel(ret, 1);
+}
+
+static LJ_AINLINE int tab_retire_epoch_elapsed(uint64_t completed_epoch,
+					       uint64_t retire_epoch)
+{
+  return completed_epoch >= retire_epoch &&
+	 completed_epoch - retire_epoch >= LJ_TAB_RETIRE_EPOCHS;
 }
 
 /*
@@ -1090,13 +1104,22 @@ uint32_t lj_tab_reclaim_retired(global_State *g, uint64_t completed_epoch)
   uint32_t reclaimed = 0;
   if (!g || completed_epoch == 0)
     return 0;
+  /*
+  ** Table readers can carry node/array snapshots through C-side scans. While
+  ** more than one TG is live, epoch completion only proves that safepoints
+  ** moved forward; it does not prove that no peer still holds such a snapshot.
+  ** Defer physical free until the VM is back to a single live TG.
+  */
+  if (gc2_n_threads_acq(g) > 1)
+    return 0;
   ret = lj_tab_node_retired_head_xchg_acqrel(g, NULL);
   while (ret) {
     TabNodeRetire *next = lj_tab_node_retired_next_acq(ret);
     lj_tab_node_retired_next_rel(ret, NULL);
     if (!lj_tab_node_retired_armed_acq(ret)) {
       tab_retired_push(g, ret);
-    } else if (lj_tab_node_retired_epoch_acq(ret) < completed_epoch) {
+    } else if (tab_retire_epoch_elapsed(completed_epoch,
+					lj_tab_node_retired_epoch_acq(ret))) {
       tab_node_free(g, lj_tab_node_retired_node_acq(ret),
 		    lj_tab_node_retired_hmask_acq(ret));
       lj_mem_freet(g, ret);
@@ -1112,7 +1135,8 @@ uint32_t lj_tab_reclaim_retired(global_State *g, uint64_t completed_epoch)
     lj_tab_array_retired_next_rel(aret, NULL);
     if (!lj_tab_array_retired_armed_acq(aret)) {
       tab_array_retired_push(g, aret);
-    } else if (lj_tab_array_retired_epoch_acq(aret) < completed_epoch) {
+    } else if (tab_retire_epoch_elapsed(completed_epoch,
+					lj_tab_array_retired_epoch_acq(aret))) {
       tab_array_free(g, lj_tab_array_retired_array_acq(aret),
 		     lj_tab_array_retired_acap_acq(aret));
       lj_mem_freet(g, aret);
@@ -1430,6 +1454,17 @@ static int tab_try_claim_nil_key(TValue *dst)
   return tviskeylock(&expect) ? -1 : 0;
 }
 
+static LJ_AINLINE int tab_hash_generation_current(GCtab *t, const Node *nodebase)
+{
+  return lj_tab_node_acq(t) == nodebase && !lj_tab_node_is_retiring(nodebase);
+}
+
+static void tab_release_claimed_anchor(Node *nodebase, Node *n)
+{
+  lj_tab_storenilraw(&n->key);
+  lj_tab_node_free_release(nodebase);
+}
+
 static void tab_release_claimed_free(Node *nodebase, Node *n)
 {
   lj_tab_nextnode_set(n, NULL);
@@ -1529,10 +1564,19 @@ retry_insert:
 	  goto retry_insert;
 	}
 	if (claimed == 1) {
+	  if (!tab_hash_generation_current(t, nodebase)) {
+	    tab_release_claimed_anchor(nodebase, n);
+	    lj_tab_wait_no_l();
+	    goto retry_insert;
+	  }
 	  tab_storekeyrel(L, &n->key, key);
 	  lj_gc2_barrier_weak_key(L, t, key);
 	  lj_gc_pubtab(L, t);
 	  lj_assertL(lj_tv_isnil_acq(&n->val), "new hash slot is not empty");
+	  if (!tab_hash_generation_current(t, nodebase)) {
+	    lj_tab_wait_no_l();
+	    return lj_tab_set(L, t, key);
+	  }
 	  return &n->val;
 	}
 	lj_tab_node_free_release(nodebase);
@@ -1571,13 +1615,30 @@ retry_insert:
       }
     }
     lj_assertL(freenode != &G(L)->nilnode, "store to fallback hash");
-    lj_tab_nextnode_set(freenode, lj_tab_nextnode_acq(n));
+    {
+      Node *next;
+      if (!tab_hash_generation_current(t, nodebase)) {
+	tab_release_claimed_free(nodebase, freenode);
+	lj_tab_wait_no_l();
+	goto retry_insert;
+      }
+      next = lj_tab_nextnode_acq(n);
+      lj_tab_nextnode_set(freenode, next);
+      if (!tab_nextnode_cas(n, &next, freenode)) {
+	tab_release_claimed_free(nodebase, freenode);
+	lj_tab_wait_no_l();
+	goto retry_insert;
+      }
+    }
     tab_storekeyrel(L, &freenode->key, key);
     lj_gc2_barrier_weak_key(L, t, key);
     lj_gc_pubtab(L, t);
     lj_assertL(lj_tv_isnil_acq(&freenode->val),
 	       "new hash slot is not empty");
-    lj_tab_nextnode_rel(n, freenode);
+    if (!tab_hash_generation_current(t, nodebase)) {
+      lj_tab_wait_no_l();
+      return lj_tab_set(L, t, key);
+    }
     return &freenode->val;
   }
 }
@@ -1888,7 +1949,9 @@ static int tab_current_array_slot_for_key(GCtab *parent, TValue *dst,
     MSize nextasize = asize;
     lj_tv_load_acq(&val, &array[key]);
     if ((lj_tab_array_is_retiring(parent, array) || tvisforward(&val)) &&
-	lj_tab_array_forward_hop(parent, &next, &nextasize) &&
+	(tvisforward(&val) ?
+	 lj_tab_array_forward_hop_forward(parent, &next, &nextasize) :
+	 lj_tab_array_forward_hop(parent, &next, &nextasize)) &&
 	(MSize)key < nextasize)
       return dst == &next[key] && !lj_tab_array_is_retiring(parent, next);
   }
@@ -2026,7 +2089,9 @@ static TValue *tab_forwarded_jit_array_slot(lua_State *L, GCtab *parent,
   if (!tab_ptr_index((uintptr_t)array, (uintptr_t)dst, sizeof(TValue),
 		     asize, &idx))
     return dst;
-  if (lj_tab_array_forward_hop(parent, &array, &asize)) {
+  if (tvisforward(&val) ?
+      lj_tab_array_forward_hop_forward(parent, &array, &asize) :
+      lj_tab_array_forward_hop(parent, &array, &asize)) {
     if (idx < asize)
       return &array[idx];
     return lj_tab_setinth(L, parent, (int32_t)key);
@@ -2109,7 +2174,11 @@ static TValue *tab_current_jit_array_slot(lua_State *L, GCtab *parent,
     if (lj_tab_array_is_retiring(parent, array)) {
       TValue *next = array;
       MSize nextasize = asize;
-      if (lj_tab_array_forward_hop(parent, &next, &nextasize)) {
+      TValue val;
+      lj_tv_load_acq(&val, orig);
+      if (tvisforward(&val) ?
+	  lj_tab_array_forward_hop_forward(parent, &next, &nextasize) :
+	  lj_tab_array_forward_hop(parent, &next, &nextasize)) {
 	if (idx < nextasize)
 	  return &next[idx];
 	return lj_tab_setinth(L, parent, (int32_t)key);
@@ -2300,7 +2369,15 @@ static TValue *tab_current_vm_array_key_slot(lua_State *L, GCtab *parent,
     if (lj_tab_array_is_retiring(parent, array)) {
       TValue *next = array;
       MSize nextasize = asize;
-      if (lj_tab_array_forward_hop(parent, &next, &nextasize)) {
+      TValue val;
+      int observed_forward = 0;
+      if (key < asize) {
+	lj_tv_load_acq(&val, &array[key]);
+	observed_forward = tvisforward(&val);
+      }
+      if (observed_forward ?
+	  lj_tab_array_forward_hop_forward(parent, &next, &nextasize) :
+	  lj_tab_array_forward_hop(parent, &next, &nextasize)) {
 	if (key < nextasize)
 	  return &next[key];
 	return lj_tab_setinth(L, parent, (int32_t)key);

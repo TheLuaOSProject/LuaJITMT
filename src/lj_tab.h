@@ -69,6 +69,7 @@ static LJ_AINLINE Node *hashmask(const GCtab *t, uint32_t hash)
 #endif
 
 #define hsize2hbits(s)	((s) ? ((s)==1 ? 1 : 1+lj_fls((uint32_t)((s)-1))) : 0)
+#define LJ_TAB_RETIRE_EPOCHS	2u
 
 static LJ_AINLINE TabNodeRetire *
 lj_tab_node_retired_head_acq(const global_State *g)
@@ -323,25 +324,48 @@ LJ_FUNC TValue *lj_tab_forwarded_array_slot(GCtab *t, TValue *array,
 LJ_FUNC TValue *lj_tab_forwarded_hash_slot(GCtab *t, Node *node, MSize hmask,
 					   cTValue *key, TValue *valp);
 
-static LJ_AINLINE int lj_tab_array_forward_hop(const GCtab *t, TValue **arrayp,
-					       MSize *asizep)
+static LJ_AINLINE int lj_tab_array_forward_hop_(const GCtab *t, TValue **arrayp,
+						MSize *asizep,
+						int observed_forward)
 {
   TValue *array = *arrayp;
+  TValue *root;
   TValue *next;
   if (!array || lj_tab_array_is_colocated(t, array))
     return 0;
+  root = lj_tab_array_acq(t);
+  if (root != array) {
+    *asizep = lj_tab_array_snapshot_acq(t, arrayp);
+    if (!*arrayp)
+      return 0;
+    return 1;
+  }
   next = lj_tab_array_nextgen_acq(array);
   /*
-  ** next_gen is installed before migration finishes. A forwarded old slot may
-  ** only follow it after the table root no longer publishes the old array.
+  ** next_gen is installed before migration finishes. Follow it before root
+  ** publication only after the caller has acquired a FORWARD slot, which is
+  ** the per-slot ownership handoff marker.
   */
   if (next && next != array && !lj_tab_array_is_colocated(t, next) &&
-      lj_tab_array_acq(t) != array) {
+      (lj_tab_array_acq(t) != array || observed_forward)) {
     *arrayp = next;
     *asizep = lj_tab_array_hdr_asize_acq(next);
     return 1;
   }
   return 0;
+}
+
+static LJ_AINLINE int lj_tab_array_forward_hop(const GCtab *t, TValue **arrayp,
+					       MSize *asizep)
+{
+  return lj_tab_array_forward_hop_(t, arrayp, asizep, 0);
+}
+
+static LJ_AINLINE int lj_tab_array_forward_hop_forward(const GCtab *t,
+						       TValue **arrayp,
+						       MSize *asizep)
+{
+  return lj_tab_array_forward_hop_(t, arrayp, asizep, 1);
 }
 
 static LJ_AINLINE cTValue *lj_tab_getint(GCtab *t, int32_t key)
@@ -354,7 +378,7 @@ genarray:
     TValue val;
     lj_tv_load_acq(&val, &array[key]);
     if (tvisforward(&val)) {
-      if (lj_tab_array_forward_hop(t, &array, &asize))
+      if (lj_tab_array_forward_hop_forward(t, &array, &asize))
 	goto genarray;
       if (lj_tab_array_acq(t) != array ||
 	  lj_tab_array_is_retiring(t, array)) {
@@ -379,7 +403,7 @@ retry_array:
       TValue val;
       lj_tv_load_acq(&val, &array[key]);
       if (tvisforward(&val)) {
-	if (lj_tab_array_forward_hop(t, &array, &asize))
+	if (lj_tab_array_forward_hop_forward(t, &array, &asize))
 	  goto genarray;
 	if (lj_tab_array_acq(t) != array ||
 	    lj_tab_array_is_retiring(t, array)) {

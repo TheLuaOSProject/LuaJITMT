@@ -66,6 +66,12 @@ typedef struct DispatchUpdateWaitCtx {
   int err;
 } DispatchUpdateWaitCtx;
 
+typedef struct ConsumedAckCtx {
+  TGState *tg;
+  pthread_t thread;
+  uint32_t cleared;
+} ConsumedAckCtx;
+
 static void publish_manual(global_State *g, TGState *tg, uint32_t actions)
 {
   uint64_t epoch = la_load64_rlx(&g->gc2.hs_epoch) + 1u;
@@ -156,6 +162,36 @@ static int mkfifo_test_c(lua_State *L)
     return luaL_error(L, "mkfifo failed: %s", strerror(errno));
   lua_pushboolean(L, 1);
   return 1;
+}
+
+static void *consumed_ack_clear_thread(void *arg)
+{
+  ConsumedAckCtx *ctx = (ConsumedAckCtx *)arg;
+  struct timespec delay;
+  delay.tv_sec = 0;
+  delay.tv_nsec = 20000000;
+  (void)nanosleep(&delay, NULL);
+  la_store32_rel(&ctx->cleared, 1);
+  la_store32_rel(&ctx->tg->poll, 0);
+  return NULL;
+}
+
+static void test_consumed_ack_poll_gate(lua_State *L, TGState *tg)
+{
+  ConsumedAckCtx ctx;
+  int err;
+  ctx.tg = tg;
+  ctx.cleared = 0;
+  la_store32_rel(&tg->reqmask, 0);
+  la_store32_rel(&tg->poll, 1);
+  err = pthread_create(&ctx.thread, NULL, consumed_ack_clear_thread, &ctx);
+  assert(err == 0);
+  assert(lj_safepoint_ack(L) == 0);
+  assert(la_load32_acq(&ctx.cleared) == 1);
+  err = pthread_join(ctx.thread, NULL);
+  assert(err == 0);
+  assert(tg->poll == 0);
+  assert(tg->reqmask == 0);
 }
 
 static void *native_stopreq_thread(void *arg)
@@ -888,6 +924,7 @@ int main(void)
   assert(la_load64_acq(&g->gc2.hs_ack_latency_sum_ns) >= ack_sum0);
   assert(la_load64_acq(&g->gc2.hs_ack_latency_max_ns) >= ack_max0);
   assert(lj_safepoint_poll(L) == 0);
+  test_consumed_ack_poll_gate(L, tg);
 
   lj_native_enter(tg);
   assert(tg->in_native == 1);
@@ -1368,6 +1405,27 @@ int main(void)
   assert(g->gc2.hs_epoch == epoch0 + 1u);
   assert(g->gc2.hs_pending == 0);
   assert(extra_tg.hs_epoch_ack == epoch0);
+  assert(lj_tg_reclaim_dead(g) == 1u);
+  assert(!tg_list_contains(g->gc2.tg_list, &extra_tg));
+  lj_tg_fini_thread(g, &extra_tg);
+
+  lj_tg_init_thread(g, &extra_tg, NULL, 0);
+  lj_tg_attach(g, &extra_tg);
+  assert(g->gc2.n_threads == 2);
+  epoch0 = g->gc2.hs_epoch;
+  publish_manual(g, &extra_tg, LJ_GC2_HS_ALLOC_WHITE);
+  assert(g->gc2.hs_epoch == epoch0 + 1u);
+  assert(g->gc2.hs_pending == 1);
+  assert(extra_tg.reqmask == LJ_GC2_HS_ALLOC_WHITE);
+  assert(extra_tg.poll == 1);
+  assert(extra_tg.hs_epoch_ack == epoch0);
+  lj_tg_detach(g, &extra_tg);
+  assert(g->gc2.n_threads == 1);
+  assert(g->gc2.hs_pending == 0);
+  assert(extra_tg.reqmask == 0);
+  assert(extra_tg.poll == 0);
+  assert(extra_tg.hs_epoch_ack == g->gc2.hs_epoch);
+  assert(extra_tg.tg_flags & TGF_DEAD);
   assert(lj_tg_reclaim_dead(g) == 1u);
   assert(!tg_list_contains(g->gc2.tg_list, &extra_tg));
   lj_tg_fini_thread(g, &extra_tg);
