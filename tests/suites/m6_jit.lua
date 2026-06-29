@@ -42,6 +42,7 @@ local m6_cases = {
   "m6_jit_mcode_native",
   "m6_jit_mcode_publish",
   "m6_jit_flush_hs",
+  "m6_jit_gdbjit_publish",
   "m6_jit_tmpbuf_thread_format",
   "m6_jit_perftools_native",
   "m6_jit_io_native_stopreq",
@@ -1312,6 +1313,77 @@ assert(live >= 8, live)
       t:build({ clean = true, quiet = true })
       if not ok then error(err, 0) end
       print("M6 JIT perf-map native-state STOPREQ behavior passed")
+    end
+  })
+
+  add({
+    name = "m6_jit_gdbjit_publish",
+    description = "opt-in GDBJIT trace descriptor publication behavior",
+    run = function(t)
+      local ok, err = pcall(function()
+        t:build({
+          clean = true,
+          quiet = true,
+          xcflags = "-DLUAJIT_USE_GDBJIT"
+        })
+        luajit_code(t, [=[
+local util = require("jit.util")
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+
+local function heat(seed)
+  local s = seed
+  for i = 1, 140 do
+    s = s + i
+  end
+  return s
+end
+
+for n = 1, 8 do
+  assert(heat(n) == n + 9870)
+end
+assert(util.traceinfo(1), "GDBJIT build did not publish a trace")
+
+jit.flush()
+for n = 1, 8 do
+  assert(heat(n * 3) == n * 3 + 9870)
+end
+assert(util.traceinfo(1), "GDBJIT build did not republish after flush")
+]=], { timeout = "20s" })
+        luajit_code(t, [=[
+local threading = require("threading")
+local done = threading.channel(4)
+
+local function worker(id)
+  jit.flush()
+  jit.opt.start("hotloop=1", "hotexit=1")
+  local acc = id
+  for round = 1, 6 do
+    for i = 1, 120 do
+      acc = acc + i + round
+    end
+  end
+  assert(acc > id)
+  jit.flush()
+  done:send(true)
+end
+
+local threads = {}
+for i = 1, 4 do
+  threads[i] = threading.spawn(worker, i)
+end
+for i = 1, 4 do
+  local ok = done:recv(5)
+  assert(ok == true)
+end
+for i = 1, 4 do
+  assert(({ threads[i]:join(5) })[1] == true)
+end
+]=], { timeout = "30s" })
+      end)
+      t:build({ clean = true, quiet = true })
+      if not ok then error(err, 0) end
+      print("M6 GDBJIT descriptor publication behavior passed")
     end
   })
 

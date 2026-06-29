@@ -777,19 +777,24 @@ static void gdbjit_buildobj(GDBJITctx *ctx)
 
 static uint32_t gdbjit_lock;
 
-static void gdbjit_lock_wait_no_l(void)
+static void gdbjit_lock_wait(lua_State *L)
 {
-  (void)lj_thr_sleep_ns(NULL, 1000000);
+  /*
+  ** Keep descriptor contention as native time for the owning TG. This path is
+  ** opt-in debugger metadata and must still finish trace add/delete cleanup, so
+  ** STOPREQ is acknowledged but not thrown from inside the descriptor update.
+  */
+  (void)lj_thr_sleep_ns(L, 1000000);
 }
 
-static void gdbjit_lock_acquire()
+static void gdbjit_lock_acquire(lua_State *L)
 {
   uint32_t expect;
   do {
     expect = 0;
     if (la_cas32(&gdbjit_lock, &expect, 1, LA_ACQ_REL, LA_ACQ))
       return;  /* 08 section 8.3: opt-in GDBJIT descriptor lock. */
-    gdbjit_lock_wait_no_l();
+    gdbjit_lock_wait(L);
   } while (1);
 }
 
@@ -808,7 +813,7 @@ static void gdbjit_newentry(lua_State *L, GDBJITctx *ctx)
   eo->sz = sz;
   trace_gdbjit_entry_rel(ctx->T, (void *)eo);
   /* Link new entry to chain and register it. */
-  gdbjit_lock_acquire();
+  gdbjit_lock_acquire(L);
   {
     GDBJITentry *head = gdbjit_desc_first_acq();
     gdbjit_entry_prev_rel(&eo->entry, NULL);
@@ -857,7 +862,7 @@ void lj_gdbjit_deltrace(jit_State *J, GCtrace *T)
 {
   GDBJITentryobj *eo = (GDBJITentryobj *)trace_gdbjit_entry_acq(T);
   if (eo) {
-    gdbjit_lock_acquire();
+    gdbjit_lock_acquire(J->L);
     {
       GDBJITentry *prev = gdbjit_entry_prev_acq(&eo->entry);
       GDBJITentry *next = gdbjit_entry_next_acq(&eo->entry);
