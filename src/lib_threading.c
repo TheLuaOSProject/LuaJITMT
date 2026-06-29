@@ -921,6 +921,7 @@ static lua_State *threading_spawn_core(lua_State *L, GCtab *env, TValue *base,
   lj_tg_init_thread(G(L), tg, L1, threading_arena_internal(G(L)));
   th->thr.tid = lj_thr_newid();
   lj_tg_tid_rel(tg, th->thr.tid);
+  lj_tg_derive_prng(G(L), tg, th->thr.tid);
   tg->thread_ud = ud;
   if (!lj_state_rehome_stack(L1)) {
     L1->tg_hint = L2TG(L);
@@ -1121,6 +1122,7 @@ int lj_threading_attach(lua_State *L)
   }
   lj_tg_init_thread(g, tg, L, threading_arena_internal(g));
   lj_tg_tid_rel(tg, tid);
+  lj_tg_derive_prng(g, tg, tid);
   L->tg_hint = tg;
   lj_thr_set_tg(tg);
   lj_tg_store_cur_L(tg, L);

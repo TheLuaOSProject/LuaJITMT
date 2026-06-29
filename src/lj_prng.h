@@ -11,6 +11,8 @@
 LJ_FUNC int lj_prng_seed_secure_l(lua_State *L, PRNGState *rs);
 LJ_FUNC uint64_t LJ_FASTCALL lj_prng_u64(PRNGState *rs);
 LJ_FUNC uint64_t LJ_FASTCALL lj_prng_u64d(PRNGState *rs);
+LJ_FUNC void lj_prng_derive(PRNGState *dst, const PRNGState *parent,
+			    uint64_t stream);
 
 /* This is just the precomputed result of lib_math.c:random_seed(rs, 0.0). */
 static LJ_AINLINE void lj_prng_seed_fixed(PRNGState *rs)

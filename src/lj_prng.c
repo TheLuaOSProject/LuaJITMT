@@ -71,6 +71,27 @@ static LJ_AINLINE void lj_prng_condition(PRNGState *rs)
   if (rs->u[3] < (1u << 17)) rs->u[3] += (1u << 17);
 }
 
+static uint64_t prng_splitmix64(uint64_t *x)
+{
+  uint64_t z = (*x += U64x(9e3779b9,7f4a7c15));
+  z = (z ^ (z >> 30)) * U64x(bf58476d,1ce4e5b9);
+  z = (z ^ (z >> 27)) * U64x(94d049bb,133111eb);
+  return z ^ (z >> 31);
+}
+
+void lj_prng_derive(PRNGState *dst, const PRNGState *parent, uint64_t stream)
+{
+  uint64_t x = stream ^ U64x(d1b54a32,d192ed03);
+  int i;
+  for (i = 0; i < 4; i++)
+    x ^= parent->u[i] + U64x(9e3779b9,7f4a7c15) + (x << 6) + (x >> 2);
+  for (i = 0; i < 4; i++)
+    dst->u[i] = prng_splitmix64(&x) ^ parent->u[(i + 1) & 3];
+  lj_prng_condition(dst);
+  for (i = 0; i < 10; i++)
+    (void)lj_prng_u64(dst);
+}
+
 /* -- PRNG seeding from OS ------------------------------------------------ */
 
 #if LUAJIT_SECURITY_PRNG == 0

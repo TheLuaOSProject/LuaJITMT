@@ -31,3 +31,14 @@ end)
 assert(({ reseeder:join() })[1] == true)
 math.randomseed(777)
 assert(math.random() == parent_first)
+
+local function unseeded_pair()
+  return math.random(), math.random()
+end
+
+local u1 = th.spawn(unseeded_pair)
+local u2 = th.spawn(unseeded_pair)
+local ok1, u11, u12 = u1:join()
+local ok2, u21, u22 = u2:join()
+assert(ok1 == true and ok2 == true)
+assert(u11 ~= u21 or u12 ~= u22)

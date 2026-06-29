@@ -11,6 +11,7 @@
 #include "lj_buf.h"
 #include "lj_dispatch.h"
 #include "lj_gc2.h"
+#include "lj_prng.h"
 #include "lj_safepoint.h"
 #include "lj_tg.h"
 #include "lj_thr.h"
@@ -94,6 +95,15 @@ void lj_tg_init_thread(global_State *g, TGState *tg, lua_State *L,
     lj_arena_allocd_sethugetab(&tg->allocd, &tg->huge);
   }
   tg_init_common(g, tg, L);
+}
+
+void lj_tg_derive_prng(global_State *g, TGState *tg, uint32_t tid)
+{
+  TGState *parent = lj_thr_get_tg();
+  const PRNGState *parent_prng =
+    parent && parent != tg ? &parent->prng : &g->prng;
+  if (tid != 0)
+    lj_prng_derive(&tg->prng, parent_prng, tid);
 }
 
 void lj_tg_fini_thread(global_State *g, TGState *tg)
