@@ -128,8 +128,6 @@ static int lj_gc2_finalizer_try_enter(global_State *g);
 static int gc2_finalizer_queue_pending(global_State *g);
 static int gc2_finalizer_sweep_pending(global_State *g);
 static void gc2_peer_wait_no_l(void);
-static void gc2_finalizer_wait_no_l(void);
-static void gc2_finreg_claim_wait_no_l(void);
 static void lj_gc2_finalizer_enter(global_State *g);
 static void lj_gc2_finalizer_leave(global_State *g);
 static int lj_gc2_finalizer_pending(global_State *g);
@@ -1599,7 +1597,7 @@ void lj_gc2_finalizer_dispatch_all(lua_State *L)
     if (!gc2_finalizer_queue_pending(g))
       break;
     if (!lj_gc2_finalizer_dispatch_one(L, &ctx))
-      gc2_finalizer_wait_no_l();
+      gc2_peer_wait_no_l();
   }
 }
 
@@ -1691,22 +1689,12 @@ static void gc2_peer_wait_no_l(void)
   (void)lj_thr_sleep_ns(NULL, 1000000);
 }
 
-static void gc2_finalizer_wait_no_l(void)
-{
-  gc2_peer_wait_no_l();
-}
-
-static void gc2_finreg_claim_wait_no_l(void)
-{
-  gc2_peer_wait_no_l();
-}
-
 static void lj_gc2_finalizer_enter(global_State *g)
 {
   if (!g)
     return;
   while (!lj_gc2_finalizer_try_enter(g))
-    gc2_finalizer_wait_no_l();
+    gc2_peer_wait_no_l();
 }
 
 static void lj_gc2_finalizer_leave(global_State *g)
@@ -1731,7 +1719,7 @@ static void lj_gc2_finalizer_leave(global_State *g)
       continue;
     }
     if (old == ~(uint32_t)0) {
-      gc2_finalizer_wait_no_l();
+      gc2_peer_wait_no_l();
       continue;
     }
     if (gc2_finalizer_active_cas(g, &old, old - 1))
@@ -3846,7 +3834,7 @@ static int gc2_finreg_cdata_unlink_root(global_State *g, GCobj *target)
     if (o == target) {
       if (gc2_finreg_root_splice(p, o))
 	return 1;  /* root unlink after ordered FINREG claim. */
-      gc2_finreg_claim_wait_no_l();
+      gc2_peer_wait_no_l();
       continue;
     }
     p = lj_obj_gcwref(o);
@@ -3885,7 +3873,7 @@ size_t lj_gc2_finreg_cdata_finalize_pweak(lua_State *L, global_State *g,
     }
     lj_tv_load_acq(&fin, slot);
     while (lj_cdata_fin_isclaim(&fin)) {
-      gc2_finreg_claim_wait_no_l();
+      gc2_peer_wait_no_l();
       lj_tv_load_acq(&fin, slot);
     }
     if (tvisnil(&fin)) {
@@ -3981,7 +3969,7 @@ size_t lj_gc2_finreg_cdata_finalize_close(global_State *g)
     }
     lj_tv_load_acq(&fin, slot);
     while (lj_cdata_fin_isclaim(&fin)) {
-      gc2_finreg_claim_wait_no_l();
+      gc2_peer_wait_no_l();
       lj_tv_load_acq(&fin, slot);
     }
     if (tvisnil(&fin)) {
@@ -4050,7 +4038,7 @@ int lj_gc2_finreg_cdata_pending(global_State *g)
     }
     lj_tv_load_acq(&fin, slot);
     while (lj_cdata_fin_isclaim(&fin)) {
-      gc2_finreg_claim_wait_no_l();
+      gc2_peer_wait_no_l();
       lj_tv_load_acq(&fin, slot);
     }
     if (tvisnil(&fin)) {
@@ -4473,7 +4461,7 @@ static int gc2_finreg_udata_unlink_root(global_State *g, GCobj *target)
     if (o == target) {
       if (gc2_finreg_root_splice(p, o))
 	return 1;  /* root unlink after userdata FINREG claim. */
-      gc2_finreg_claim_wait_no_l();
+      gc2_peer_wait_no_l();
       continue;
     }
     p = lj_obj_gcwref(o);
@@ -5391,7 +5379,7 @@ static int gc2_traverse_tab(global_State *g, GCtab *t)
 	  lj_tv_load_acq(&key, &n->key);
 	  key_loaded = 1;
 	  while (lj_cdata_fin_isclaim(&val) || tviskeylock(&key)) {
-	    gc2_finreg_claim_wait_no_l();
+	    gc2_peer_wait_no_l();
 	    lj_tv_load_acq(&val, &n->val);
 	    lj_tv_load_acq(&key, &n->key);
 	  }
