@@ -128,6 +128,7 @@ static int lj_gc2_finalizer_try_enter(global_State *g);
 static int gc2_finalizer_queue_pending(global_State *g);
 static int gc2_finalizer_sweep_pending(global_State *g);
 static void gc2_peer_wait_no_l(void);
+static void gc2_peer_wait_l(lua_State *L);
 static void lj_gc2_finalizer_enter(global_State *g);
 static void lj_gc2_finalizer_leave(global_State *g);
 static int lj_gc2_finalizer_pending(global_State *g);
@@ -1687,6 +1688,14 @@ static int lj_gc2_finalizer_try_enter(global_State *g)
 static void gc2_peer_wait_no_l(void)
 {
   (void)lj_thr_sleep_ns(NULL, 1000000);
+}
+
+static void gc2_peer_wait_l(lua_State *L)
+{
+  if (L)
+    (void)lj_thr_sleep_ns(L, 1000000);
+  else
+    gc2_peer_wait_no_l();
 }
 
 static void lj_gc2_finalizer_enter(global_State *g)
@@ -5908,7 +5917,7 @@ uint32_t lj_gc2_mark_complete(global_State *g, lua_State *L,
       break;
     gc2_mark_complete_peer_waits_add(g, 1);
     while (gc2_worker_active_acq(g) != 0)
-      gc2_peer_wait_no_l();  /* 05 section 5.7.1 peer drain before P_WEAK. */
+      gc2_peer_wait_l(L);  /* 05 section 5.7.1 peer drain before P_WEAK. */
   }
   if (hit)
     gc2_mark_complete_hits_add(g, 1);

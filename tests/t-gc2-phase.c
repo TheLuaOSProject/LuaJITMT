@@ -38,7 +38,9 @@ static void assert_idle(global_State *g, TGState *tg)
 
 typedef struct PeerRelease {
   global_State *g;
+  TGState *wait_tg;
   long delay_ns;
+  uint32_t saw_native;
 } PeerRelease;
 
 typedef struct FinalizerProducer {
@@ -70,7 +72,17 @@ static void sleep_ns(long ns)
 static void *release_worker_active(void *arg)
 {
   PeerRelease *rel = (PeerRelease *)arg;
-  sleep_ns(rel->delay_ns);
+  long waited = 0;
+  while (rel->wait_tg && waited < rel->delay_ns) {
+    if (lj_tg_in_native_acq(rel->wait_tg)) {
+      rel->saw_native = 1;
+      break;
+    }
+    sleep_ns(1000000L);
+    waited += 1000000L;
+  }
+  if (waited < rel->delay_ns)
+    sleep_ns(rel->delay_ns - waited);
   gc2_worker_active_rel(rel->g, 0);
   return NULL;
 }
@@ -495,13 +507,16 @@ static void test_mark_complete_waits_for_peer(lua_State *L, global_State *g,
 
   gc2_worker_active_rel(g, 1);
   rel.g = g;
+  rel.wait_tg = tg;
   rel.delay_ns = 20000000L;
+  rel.saw_native = 0;
   runs0 = gc2_mark_complete_runs_acq(g);
   hits0 = gc2_mark_complete_hits_acq(g);
   waits0 = gc2_mark_complete_peer_waits_acq(g);
   assert(pthread_create(&thread, NULL, release_worker_active, &rel) == 0);
   assert(lj_gc2_mark_complete(g, L, 2, ~(uint32_t)0) == 1);
   assert(pthread_join(thread, NULL) == 0);
+  assert(rel.saw_native == 1);
   assert(gc2_worker_active_acq(g) == 0);
   assert(gc2_mark_complete_runs_acq(g) == runs0 + 1u);
   assert(gc2_mark_complete_hits_acq(g) == hits0 + 1u);
