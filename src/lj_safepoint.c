@@ -19,14 +19,9 @@
 #include "lj_tg.h"
 #include "lj_trace.h"
 
-#include <time.h>
-
 static uint64_t safepoint_now_ns(void)
 {
-  struct timespec ts;
-  if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0)
-    return 0;
-  return (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
+  return lj_thr_now_ns();
 }
 
 static uint32_t safepoint_latency_bucket(uint64_t ns)
@@ -201,7 +196,7 @@ uint32_t lj_safepoint_ack_check(lua_State *L)
 void lj_native_enter(TGState *tg)
 {
   if (tg)
-    lj_tg_in_native_rel(tg, 1);
+    lj_tg_in_native_inc_rel(tg);
 }
 
 uint32_t lj_native_leave(lua_State *L)
@@ -212,7 +207,8 @@ uint32_t lj_native_leave(lua_State *L)
   tg = L2TG(L);
   if (!tg)
     return 0;
-  lj_tg_in_native_store_rlx(tg, 0);  /* 05 section 5.4.3 boundary. */
+  if (lj_tg_in_native_dec_rel(tg) != 0)
+    return 0;
   return lj_safepoint_poll(L);
 }
 

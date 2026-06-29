@@ -600,8 +600,12 @@
 #define LJ_GC64			0
 #endif
 
-#if !LJ_GC64 || !LJ_TARGET_X64 || !LJ_TARGET_LINUX
-#error "lockless runtime requires GC64 on x86-64 Linux"
+/* Lockless multithreaded runtime is the primary build path. */
+#define LJ_MT			1
+
+#if !LJ_GC64 || !LJ_TARGET_X64 || \
+    !(LJ_TARGET_LINUX || LJ_TARGET_OSX || LJ_TARGET_WINDOWS)
+#error "lockless runtime requires GC64 on x86-64 Linux, macOS or Windows"
 #endif
 
 /* 2-slot frame info. */

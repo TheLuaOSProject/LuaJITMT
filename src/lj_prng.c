@@ -62,6 +62,7 @@ LJ_NOINLINE uint64_t LJ_FASTCALL lj_prng_u64d(PRNGState *rs)
   return (r & U64x(000fffff,ffffffff)) | U64x(3ff00000,00000000);
 }
 
+#if LUAJIT_SECURITY_PRNG != 0
 /* Condition seed: ensure k[i] MSB of u[i] are non-zero. */
 static LJ_AINLINE void lj_prng_condition(PRNGState *rs)
 {
@@ -70,6 +71,7 @@ static LJ_AINLINE void lj_prng_condition(PRNGState *rs)
   if (rs->u[2] < (1u << 9)) rs->u[2] += (1u << 9);
   if (rs->u[3] < (1u << 17)) rs->u[3] += (1u << 17);
 }
+#endif
 
 static uint64_t prng_splitmix64(uint64_t *x)
 {

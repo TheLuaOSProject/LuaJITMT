@@ -18,8 +18,10 @@
 #include "luajit.h"
 
 #include "lj_arch.h"
+#if !LJ_TARGET_WINDOWS
 #include "lj_safepoint.h"
 #include "lj_tg.h"
+#endif
 
 #if LJ_TARGET_POSIX
 #include <unistd.h>
@@ -60,6 +62,37 @@ static char *empty_argv[2] = { NULL, NULL };
 
 /* -- Native-state stdio wrappers ---------------------------------------- */
 
+#if LJ_TARGET_WINDOWS
+static void frontend_fwrite(lua_State *L, const void *p, size_t size,
+			    size_t n, FILE *fp)
+{
+  (void)L;
+  (void)fwrite(p, size, n, fp);
+}
+
+static void frontend_fputs(lua_State *L, const char *s, FILE *fp)
+{
+  frontend_fwrite(L, s, 1, strlen(s), fp);
+}
+
+static void frontend_fputc(lua_State *L, int c, FILE *fp)
+{
+  char ch = (char)c;
+  frontend_fwrite(L, &ch, 1, 1, fp);
+}
+
+static void frontend_fflush(lua_State *L, FILE *fp)
+{
+  (void)L;
+  (void)fflush(fp);
+}
+
+static char *frontend_fgets(lua_State *L, char *buf, int size, FILE *fp)
+{
+  (void)L;
+  return fgets(buf, size, fp);
+}
+#else
 static int frontend_had_stopreq(lua_State *L)
 {
   TGState *tg = L2TG(L);
@@ -135,6 +168,7 @@ static char *frontend_fgets(lua_State *L, char *buf, int size, FILE *fp)
   frontend_checkstop_fresh(L, actions, had_stopreq);
   return p;
 }
+#endif
 
 #if !LJ_TARGET_CONSOLE
 static void lstop(lua_State *L, lua_Debug *ar)

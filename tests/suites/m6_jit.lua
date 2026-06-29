@@ -42,6 +42,7 @@ local m6_cases = {
   "m6_jit_mcode_native",
   "m6_jit_mcode_publish",
   "m6_jit_flush_hs",
+  "m6_jit_vmevent_flush",
   "m6_jit_gdbjit_publish",
   "m6_jit_tmpbuf_thread_format",
   "m6_jit_perftools_native",
@@ -1318,6 +1319,17 @@ assert(live >= 8, live)
       run_lua_test_case(t, "m3_vm_safepoint")
       luajit_file(t, t:path("tests", "stock", "test", "misc", "jit_flush.lua"))
       print("M6 JIT flush handshake guard passed")
+    end
+  })
+
+  add({
+    name = "m6_jit_vmevent_flush",
+    description = "JIT trace event hooks run with a valid TG dispatch",
+    run = function(t)
+      build_default(t)
+      luajit_file(t, t:path("tests", "t-jit-vmevent-flush.lua"),
+                  { lua_path = true, timeout = "20s" })
+      print("M6 JIT VM event flush hook guard passed")
     end
   })
 

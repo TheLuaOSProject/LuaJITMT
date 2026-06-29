@@ -121,6 +121,21 @@ v, ok = close_send:recv()
 assert(v == nil and ok == false)
 assert(({ close_send_worker:join() })[1] == true)
 
+local close_rendezvous_send = th.channel(0)
+local close_rendezvous_done = th.channel(1)
+local close_rendezvous_worker = th.spawn(function(q, done)
+  local ok_send, err_send = pcall(function() q:send("rv") end)
+  done:send({ok_send, tostring(err_send)})
+end, close_rendezvous_send, close_rendezvous_done)
+th.sleep(0.01)
+close_rendezvous_send:close()
+send_closed, send_closed_ok = close_rendezvous_done:recv(1)
+assert(send_closed_ok == true)
+assert(send_closed[1] == false and send_closed[2]:match("closed channel"))
+v, ok = close_rendezvous_send:recv()
+assert(v == nil and ok == false)
+assert(({ close_rendezvous_worker:join() })[1] == true)
+
 local made, rangeerr = pcall(function() th.channel(-1) end)
 assert(made == false and tostring(rangeerr):match("out of range"))
 
@@ -157,6 +172,11 @@ local slow = th.spawn(function()
 end)
 local timed, why = slow:join(0)
 assert(timed == nil and why == "timeout")
+local timed_start = assert(th.now())
+timed, why = slow:join(0.03)
+local timed_elapsed = assert(th.now()) - timed_start
+assert(timed == nil and why == "timeout")
+assert(timed_elapsed >= 0.015)
 local slowres = { slow:join() }
 assert(slowres[1] == true and slowres[2] == "done")
 

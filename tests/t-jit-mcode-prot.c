@@ -1,5 +1,5 @@
 /*
-** Focused guard for Linux/x64 mcode W^X dual-map protection.
+** Focused guard for mcode execute-stable protection.
 */
 
 #include <assert.h>
@@ -17,6 +17,19 @@
 #include "lj_trace.h"
 
 #include "lib/lua_fixture_helpers.h"
+
+#if LJ_TARGET_POSIX
+#include <sys/mman.h>
+#endif
+
+#if LJ_TARGET_OSX && LJ_TARGET_X64 && LUAJIT_SECURITY_MCODE != 0 && \
+    defined(MAP_JIT) && defined(__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__) && \
+    __ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__ >= 110000
+#include <pthread.h>
+#define HAS_DARWIN_MAPJIT_MCODE 1
+#else
+#define HAS_DARWIN_MAPJIT_MCODE 0
+#endif
 
 #if defined(__linux__) && LJ_TARGET_X64 && LUAJIT_SECURITY_MCODE != 0
 typedef struct MapEntry {
@@ -122,13 +135,24 @@ int main(void)
     assert(lj_mcode_patch(J, area, 1) == NULL);
     assert_split_mcode_maps(rx);
   }
+#elif HAS_DARWIN_MAPJIT_MCODE
+  {
+    jit_State *J = G2J(G(L));
+    MCode *rx = J->mcarea;
+    assert(rx != NULL);
+    assert(lj_mcode_area_rw(rx) == rx);
+    assert(((MCLink *)rx)->size != 0);
+  }
 #endif
 
   lua_close(L);
 #if defined(__linux__) && LJ_TARGET_X64 && LUAJIT_SECURITY_MCODE != 0
   printf("t-jit-mcode-prot OK: mcode mappings are W^X separated\n");
+#elif HAS_DARWIN_MAPJIT_MCODE
+  printf("t-jit-mcode-prot OK: macOS MAP_JIT mcode is execute-stable (pthread_jit_write_protect_supported_np=%d)\n",
+         pthread_jit_write_protect_supported_np());
 #else
-  printf("t-jit-mcode-prot OK: W^X map check skipped on this target\n");
+  printf("t-jit-mcode-prot OK: mcode protection check skipped on this target\n");
 #endif
   return 0;
 }

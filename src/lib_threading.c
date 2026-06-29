@@ -8,7 +8,6 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 
 #define lib_threading_c
 #define LUA_LIB
@@ -222,6 +221,25 @@ static int64_t threading_timeout_ns(lua_State *L, int narg, int has_default,
     nsec = sec * 1000000000.0;
     return nsec > (lua_Number)INT64_MAX ? INT64_MAX : (int64_t)nsec;
   }
+}
+
+static int64_t threading_now_ns(void)
+{
+  return (int64_t)lj_thr_now_ns();
+}
+
+static int64_t threading_deadline_ns(int64_t ns)
+{
+  int64_t now = threading_now_ns();
+  if (ns > INT64_MAX - now)
+    return INT64_MAX;
+  return now + ns;
+}
+
+static int64_t threading_remaining_ns(int64_t deadline)
+{
+  int64_t now = threading_now_ns();
+  return deadline > now ? deadline - now : 0;
 }
 
 static void threading_wake_thread(LJThread *th)
@@ -541,6 +559,7 @@ static int threading_join_core(lua_State *L, LJThread *th, int has_timeout,
   int remove_live = 0;
   uint32_t join_actions = 0;
   int join_had_stopreq = threading_had_stopreq(L);
+  int64_t deadline = ns > 0 ? threading_deadline_ns(ns) : 0;
   uint32_t state;
   if (threading_is_current_thread(L, th)) {
     if (has_timeout) {
@@ -556,7 +575,10 @@ static int threading_join_core(lua_State *L, LJThread *th, int has_timeout,
     state = la_load32_acq(&th->state);
     if (state == LJ_THREAD_DONE)
       break;
-    if (ns == 0) {
+    if (has_timeout) {
+      ns = threading_remaining_ns(deadline);
+    }
+    if (has_timeout && ns == 0) {
       setnilV(L->top++);
       lua_pushliteral(L, "timeout");
       return 2;
@@ -569,11 +591,6 @@ static int threading_join_core(lua_State *L, LJThread *th, int has_timeout,
       (void)la_futex_wait(&th->futex, futex, ns);
       actions = lj_native_leave(L);
       threading_checkstop_fresh(L, actions, had_stopreq);
-    }
-    if (ns > 0 && la_load32_acq(&th->state) != LJ_THREAD_DONE) {
-      setnilV(L->top++);
-      lua_pushliteral(L, "timeout");
-      return 2;
     }
   }
 
@@ -829,7 +846,7 @@ LJLIB_CF(threading_channel_peek)
   LJChan *ch = threading_tochan(L);
   int rc;
   setnilV(&out);
-  rc = lj_chan_peek(ch, &out);
+  rc = lj_chan_peek_gc(L, ch, &out);
   threading_push_recv(L, rc, &out);
   return 2;
 }
@@ -1110,13 +1127,11 @@ LJLIB_CF(threading_cpucount)
 
 LJLIB_CF(threading_now)
 {
-  struct timespec ts;
-  if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
+  uint64_t ns = lj_thr_now_ns();
+  if (ns == 0) {
     setnilV(L->top++);
   } else {
-    lua_Number sec = (lua_Number)ts.tv_sec +
-      (lua_Number)ts.tv_nsec / 1000000000.0;
-    setnumV(L->top++, sec);
+    setnumV(L->top++, (lua_Number)ns / 1000000000.0);
   }
   return 1;
 }
@@ -1462,9 +1477,9 @@ void lj_threading_detach(lua_State *L, int disown_callbacks)
   tg->thread_ud = NULL;
   L->tg_hint = NULL;
   lj_state_release(L, tid);
-  threading_gc_leave(g);
   lj_thr_set_tg(NULL);
   (void)lj_tg_reclaim_dead(g);
+  threading_gc_leave(g);
 }
 
 #include "lj_libdef.h"

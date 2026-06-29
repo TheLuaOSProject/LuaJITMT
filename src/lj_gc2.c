@@ -459,7 +459,7 @@ void lj_gc2_fini(global_State *g)
   }
 }
 
-static void lj_gc2_worker_wake(global_State *g)
+static void lj_gc2_worker_wake_n(global_State *g, int wake_n)
 {
   uint32_t n;
   if (!g)
@@ -469,12 +469,22 @@ static void lj_gc2_worker_wake(global_State *g)
     return;
   gc2_worker_wakes_add(g, 1);
   (void)gc2_worker_wake_add(g, 1);
-  gc2_worker_wake_futex_wake(g, (int)n);
+  gc2_worker_wake_futex_wake(g, wake_n < (int)n ? wake_n : (int)n);
+}
+
+static void lj_gc2_worker_wake(global_State *g)
+{
+  lj_gc2_worker_wake_n(g, 1);
+}
+
+static void lj_gc2_worker_wake_all(global_State *g)
+{
+  lj_gc2_worker_wake_n(g, LJ_GC2_WORKER_MAX);
 }
 
 void lj_gc2_test_worker_wake(global_State *g)
 {
-  lj_gc2_worker_wake(g);
+  lj_gc2_worker_wake_all(g);
 }
 
 static int gc2_worker_arena_internal(global_State *g)
@@ -596,7 +606,7 @@ static int gc2_worker_control_lock_l(global_State *g, lua_State *L,
 				     uint32_t *actionsp)
 {
   TGState *self = NULL;
-  uint8_t was_native = 0;
+  uint32_t was_native = 0;
   int had_stopreq = gc2_worker_had_stopreq_l(L);
   for (;;) {
     uint32_t expect = 0;
@@ -609,7 +619,8 @@ static int gc2_worker_control_lock_l(global_State *g, lua_State *L,
       self = lj_thr_get_tg_fallback(g);
       if (self) {
 	was_native = lj_tg_in_native_acq(self);
-	lj_tg_in_native_rel(self, 1);
+	lj_tg_in_native_rel(self, was_native == ~(uint32_t)0 ?
+			    was_native : was_native + 1);
       }
     }
     if (expect == 0)
@@ -655,7 +666,7 @@ static int gc2_worker_thr_create_l(global_State *g, lua_State *L,
 				   int *fresh_stopreqp)
 {
   TGState *self = NULL;
-  uint8_t was_native = 0;
+  uint32_t was_native = 0;
   uint32_t actions = 0;
   int rc;
   if (L) {
@@ -664,7 +675,8 @@ static int gc2_worker_thr_create_l(global_State *g, lua_State *L,
     self = lj_thr_get_tg_fallback(g);
     if (self) {
       was_native = lj_tg_in_native_acq(self);
-      lj_tg_in_native_rel(self, 1);
+      lj_tg_in_native_rel(self, was_native == ~(uint32_t)0 ?
+			  was_native : was_native + 1);
     }
   }
   rc = lj_thr_create(thr, func, arg);
@@ -842,7 +854,7 @@ static void gc2_worker_stop_locked_l(global_State *g, lua_State *L,
 {
   uint32_t i, any = 0;
   TGState *self;
-  uint8_t was_native = 0;
+  uint32_t was_native = 0;
   if (!g)
     return;
   for (i = 0; i < LJ_GC2_WORKER_MAX; i++)
@@ -853,7 +865,7 @@ static void gc2_worker_stop_locked_l(global_State *g, lua_State *L,
     return;
   }
   gc2_worker_stop_rel(g, 1);
-  lj_gc2_worker_wake(g);
+  lj_gc2_worker_wake_all(g);
   self = NULL;
   if (L) {
     lj_native_enter(L2TG(L));  /* Join wait can remote-ack workers. */
@@ -861,7 +873,9 @@ static void gc2_worker_stop_locked_l(global_State *g, lua_State *L,
     self = lj_thr_get_tg_fallback(g);
     if (self) {
       was_native = lj_tg_in_native_acq(self);
-      lj_tg_in_native_rel(self, 1);  /* Join wait can remote-ack workers. */
+      lj_tg_in_native_rel(self, was_native == ~(uint32_t)0 ?
+			  was_native : was_native + 1);
+      /* Join wait can remote-ack workers. */
     }
   }
   for (i = 0; i < LJ_GC2_WORKER_MAX; i++) {
@@ -2082,7 +2096,7 @@ static int gc2_finalizer_mt_release_exclusive(global_State *g)
   if (!g || mt_gc_exclusive_acq(g) == 0)
     return 0;
   mt_gc_exclusive_rel(g, 0);
-#if defined(__linux__)
+#if defined(LA_HAS_FUTEX)
   mt_gc_exclusive_futex_wake(g, INT_MAX);
 #endif
   return 1;  /* 09 section 9.6: finalizer may spawn while GC is paused. */
@@ -2100,7 +2114,7 @@ static int gc2_finalizer_mt_reclaim_exclusive(global_State *g)
       if (mt_live_acq(g) == 0)
 	return 1;
       mt_gc_exclusive_rel(g, 0);
-#if defined(__linux__)
+#if defined(LA_HAS_FUTEX)
       mt_gc_exclusive_futex_wake(g, INT_MAX);
 #endif
       return 0;

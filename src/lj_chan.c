@@ -11,11 +11,11 @@
 #include "lj_chan.h"
 #include "lj_gc.h"
 #include "lj_safepoint.h"
+#include "lj_thr.h"
 #include "lj_tg.h"
 
 #include <errno.h>
 #include <limits.h>
-#include <time.h>
 
 static LJ_AINLINE void chan_storetv_rel(LJChanSlot *slot, cTValue *tv)
 {
@@ -69,10 +69,20 @@ void lj_chan_init(LJChan *ch, uint32_t capacity)
   }
 }
 
-static void chan_wake(LJChan *ch)
+static void chan_wake_n(LJChan *ch, int n)
 {
   la_add32_rlx(&ch->futex, 1);
-  la_futex_wake(&ch->futex, INT_MAX);
+  la_futex_wake(&ch->futex, n);
+}
+
+static void chan_wake_one(LJChan *ch)
+{
+  chan_wake_n(ch, 1);
+}
+
+static void chan_wake_all(LJChan *ch)
+{
+  chan_wake_n(ch, INT_MAX);
 }
 
 static int chan_had_stopreq(lua_State *L)
@@ -127,10 +137,7 @@ static void chan_wait(lua_State *L, LJChan *ch)
 
 static int64_t chan_now_ns(void)
 {
-  struct timespec ts;
-  if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0)
-    return 0;
-  return (int64_t)ts.tv_sec * 1000000000ll + (int64_t)ts.tv_nsec;
+  return (int64_t)lj_thr_now_ns();
 }
 
 static int64_t chan_deadline_ns(int64_t ns)
@@ -201,7 +208,10 @@ static int chan_try_send_pos(LJChan *ch, cTValue *tv, uint64_t *ppos)
 	la_store64_rel(&slot->seq, pos + 1u);
 	if (ppos)
 	  *ppos = pos;
-	chan_wake(ch);
+	if (ch->rendezvous)
+	  chan_wake_all(ch);
+	else
+	  chan_wake_one(ch);
 	return LJ_CHAN_OK;
       }
       pos = expect;
@@ -220,23 +230,34 @@ static int chan_cancel_rendezvous_send(LJChan *ch, uint64_t pos)
     LJChanSlot *slot = &ch->slot[(MSize)(pos & ch->mask)];
     chan_cleartv_rel(slot);
     la_store64_rel(&slot->seq, pos + ch->cap);
-    chan_wake(ch);
+    chan_wake_all(ch);
     return 1;
   }
   return 0;
+}
+
+static int chan_rendezvous_send_status(LJChan *ch, uint64_t pos)
+{
+  if (la_load64_acq(&ch->deq) > pos)
+    return LJ_CHAN_OK;
+  if (la_load32_acq(&ch->closed))
+    return chan_cancel_rendezvous_send(ch, pos) ? LJ_CHAN_CLOSED :
+						  LJ_CHAN_OK;
+  return LJ_CHAN_FULL;
 }
 
 static int chan_wait_rendezvous_send(lua_State *L, LJChan *ch, uint64_t pos,
 				     int64_t deadline)
 {
   for (;;) {
+    int rc = chan_rendezvous_send_status(ch, pos);
     int64_t waitns;
-    if (la_load64_acq(&ch->deq) > pos || la_load32_acq(&ch->closed))
-      return LJ_CHAN_OK;
+    if (rc != LJ_CHAN_FULL)
+      return rc;
     waitns = chan_remaining_ns(deadline);
     if (waitns == 0)
       return chan_cancel_rendezvous_send(ch, pos) ? LJ_CHAN_TIMEOUT :
-						    LJ_CHAN_OK;
+							    LJ_CHAN_OK;
     (void)chan_wait_timeout(L, ch, waitns);
   }
 }
@@ -265,7 +286,10 @@ static int chan_try_recv_pub(lua_State *L, LJChan *ch, TValue *out)
 	  lj_gc_pubroot(L, out);
 	chan_cleartv_rel(slot);
 	la_store64_rel(&slot->seq, pos + ch->cap);
-	chan_wake(ch);
+	if (ch->rendezvous)
+	  chan_wake_all(ch);
+	else
+	  chan_wake_one(ch);
 	return LJ_CHAN_OK;
       }
       pos = expect;
@@ -296,10 +320,10 @@ int lj_chan_send(lua_State *L, LJChan *ch, cTValue *tv)
     int rc = chan_try_send_pos(ch, tv, &pos);
     if (rc == LJ_CHAN_OK) {
       if (ch->rendezvous) {
-	while (la_load64_acq(&ch->deq) <= pos && !la_load32_acq(&ch->closed))
+	while ((rc = chan_rendezvous_send_status(ch, pos)) == LJ_CHAN_FULL)
 	  chan_wait(L, ch);
       }
-      return LJ_CHAN_OK;
+      return rc;
     }
     if (rc == LJ_CHAN_CLOSED)
       return rc;
@@ -388,7 +412,7 @@ int lj_chan_recv_timeout_gc(lua_State *L, LJChan *ch, TValue *out, int64_t ns)
   }
 }
 
-int lj_chan_peek(LJChan *ch, TValue *out)
+int lj_chan_peek_gc(lua_State *L, LJChan *ch, TValue *out)
 {
   uint64_t pos;
   if (!ch || !out)
@@ -399,8 +423,19 @@ int lj_chan_peek(LJChan *ch, TValue *out)
     uint64_t seq = la_load64_acq(&slot->seq);
     int64_t dif = (int64_t)(seq - (pos + 1u));
     if (dif == 0) {
-      chan_loadtv_acq(out, slot);  /* 09 section 9.5: acquire seq publishes value. */
-      return LJ_CHAN_OK;
+      TValue snap;
+      uint64_t raw;
+      chan_loadtv_acq(&snap, slot);  /* 09 section 9.5: acquire seq publishes value. */
+      raw = tv_rawload(&snap);
+      if (L)
+	lj_gc_pubroot(L, &snap);
+      if (la_load64_acq(&ch->deq) == pos &&
+	  la_load64_acq(&slot->seq) == seq &&
+	  tv_rawload_acq(&slot->tv) == raw) {
+	tv_rawstore_rel(out, raw);
+	return LJ_CHAN_OK;
+      }
+      pos = la_load64_acq(&ch->deq);
     } else if (dif < 0) {
       if (la_load32_acq(&ch->closed) && la_load64_acq(&ch->enq) <= pos)
 	return LJ_CHAN_CLOSED;
@@ -415,7 +450,7 @@ void lj_chan_close(LJChan *ch)
 {
   if (ch) {
     la_store32_rel(&ch->closed, 1);
-    chan_wake(ch);
+    chan_wake_all(ch);
   }
 }
 

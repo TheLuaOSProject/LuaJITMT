@@ -5,6 +5,12 @@
 
 /* -- Guard handling ------------------------------------------------------ */
 
+#if LJ_TARGET_X64 && (defined(__linux__) || LJ_TARGET_OSX)
+#define LJ_HAS_X64_MT_JIT_HELPERS 1
+#else
+#define LJ_HAS_X64_MT_JIT_HELPERS 0
+#endif
+
 /* Generate an exit stub group at the bottom of the reserved MCode memory. */
 static MCode *asm_exitstub_gen(ASMState *as, ExitNo group)
 {
@@ -1903,7 +1909,7 @@ static void asm_ahstore_forjit(ASMState *as, IRIns *ir)
   asm_tvptr(as, ra_releasetmp(as, ASMREF_TMP1), ir->op2, IRTMPREF_IN1);
 }
 
-#if defined(__linux__) && LJ_TARGET_X64
+#if LJ_HAS_X64_MT_JIT_HELPERS
 static int asm_ahstore_can_inline_array_num(ASMState *as, IRIns *ir)
 {
   IRIns *xref = IR(ir->op1);
@@ -2051,7 +2057,7 @@ static void asm_ahstore_inline_hash_num(ASMState *as, IRIns *ir)
 }
 #endif
 
-#if defined(__linux__) && LJ_TARGET_X64
+#if LJ_HAS_X64_MT_JIT_HELPERS
 static int asm_bufput_const_tg_inline(ASMState *as, IRIns *ir, GCstr *s)
 {
   const CCallInfo *ci = &lj_ir_callinfo[IRCALL_lj_buf_putstr_tg];
@@ -2114,7 +2120,7 @@ static void asm_ahustore(ASMState *as, IRIns *ir)
 {
   if (ir->r == RID_SINK)
     return;
-#if defined(__linux__) && LJ_TARGET_X64
+#if LJ_HAS_X64_MT_JIT_HELPERS
   if (ir->o == IR_USTORE && IR(ir->op1)->o == IR_UREFC) {
     asm_ustore_forjit(as, ir);
     return;

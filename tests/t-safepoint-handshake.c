@@ -201,8 +201,7 @@ static void *native_stopreq_thread(void *arg)
   int i;
   delay.tv_sec = 0;
   delay.tv_nsec = 1000000;
-  for (i = 0; i < 1000 &&
-       la_load8_acq(&ctx->tg->in_native) == 0; i++)
+  for (i = 0; i < 1000 && lj_tg_in_native_acq(ctx->tg) == 0; i++)
     (void)nanosleep(&delay, NULL);
   publish_manual(ctx->g, ctx->tg, LJ_GC2_HS_STOPREQ);
   if (ctx->open_fifo) {
@@ -279,8 +278,7 @@ static void *print_stopreq_thread(void *arg)
   int i;
   delay.tv_sec = 0;
   delay.tv_nsec = 1000000;
-  for (i = 0; i < 1000 &&
-       la_load8_acq(&ctx->tg->in_native) == 0; i++)
+  for (i = 0; i < 1000 && lj_tg_in_native_acq(ctx->tg) == 0; i++)
     (void)nanosleep(&delay, NULL);
   publish_manual(ctx->g, ctx->tg, LJ_GC2_HS_STOPREQ);
   while (la_load32_acq(&ctx->done) == 0) {
@@ -310,8 +308,7 @@ static void *input_stopreq_thread(void *arg)
   int i;
   delay.tv_sec = 0;
   delay.tv_nsec = 1000000;
-  for (i = 0; i < 1000 &&
-       la_load8_acq(&ctx->tg->in_native) == 0; i++)
+  for (i = 0; i < 1000 && lj_tg_in_native_acq(ctx->tg) == 0; i++)
     (void)nanosleep(&delay, NULL);
   publish_manual(ctx->g, ctx->tg, LJ_GC2_HS_STOPREQ);
   n = write(ctx->fd, msg, sizeof(msg) - 1u);
@@ -540,7 +537,7 @@ static int assert_not_native_c(lua_State *L)
   global_State *g = G(L);
   TGState *tg = G2TG(g);
   assert(tg != NULL);
-  assert(tg->in_native == 0);
+  assert(lj_tg_in_native_acq(tg) == 0);
   return 0;
 }
 
@@ -894,15 +891,15 @@ int main(void)
   lj_gc2_mark_begin(g);
   assert(lj_gc2_ismarked(g, obj2gco(native_tab)) == 0);
   lj_native_enter(tg);
-  assert(tg->in_native == 1);
+  assert(lj_tg_in_native_acq(tg) == 1);
   epoch0 = g->gc2.hs_epoch;
   assert(lj_gc2_handshake(g, LJ_GC2_HS_SCAN_ROOTS) == 1);
   assert(g->gc2.hs_epoch == epoch0 + 1u);
   assert(g->gc2.hs_pending == 0);
-  assert(tg->in_native == 1);
+  assert(lj_tg_in_native_acq(tg) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(native_tab)) == 1);
   assert(lj_native_leave(L) == 0);
-  assert(tg->in_native == 0);
+  assert(lj_tg_in_native_acq(tg) == 0);
   assert(lj_gc2_flush_ssb(g, tg) > 0);
   assert(lj_gc2_test_ssb_drain(g) > 0);
   assert(lj_gc2_test_ssb_empty(g));
@@ -927,22 +924,22 @@ int main(void)
   test_consumed_ack_poll_gate(L, tg);
 
   lj_native_enter(tg);
-  assert(tg->in_native == 1);
+  assert(lj_tg_in_native_acq(tg) == 1);
   actions = LJ_GC2_HS_DISABLE_BARRIER|LJ_GC2_HS_ALLOC_WHITE;
   assert(lj_gc2_handshake(g, actions) == 1);
   assert(g->gc2.hs_pending == 0);
-  assert(tg->in_native == 1);
+  assert(lj_tg_in_native_acq(tg) == 1);
   assert(tg->poll == 0);
   assert(tg->reqmask == 0);
   assert(tg->mark_active == 0);
   assert(tg->alloc.alloc_black == 0);
   assert(lj_native_leave(L) == 0);
-  assert(tg->in_native == 0);
+  assert(lj_tg_in_native_acq(tg) == 0);
 
   lj_native_enter(tg);
   publish_manual(g, tg, LJ_GC2_HS_ALLOC_BLACK);
   assert(lj_native_leave(L) == LJ_GC2_HS_ALLOC_BLACK);
-  assert(tg->in_native == 0);
+  assert(lj_tg_in_native_acq(tg) == 0);
   assert(g->gc2.hs_pending == 0);
   assert(tg->alloc.alloc_black == 1);
 
@@ -1042,14 +1039,27 @@ int main(void)
     "  end)\n"
     "end\n"
     "local function expect_ldscript_sticky_ok()\n"
+    "  if jit.os == 'OSX' then return end\n"
     "  local so = os.getenv('LJ_LOADLIB_STOPREQ_SO')\n"
     "  if not so or so == '' then return end\n"
     "  local script = os.tmpname()\n"
+    "  local missing = script .. '.missing.' .. tostring({}):gsub('[^%w]', '') .. '.so'\n"
     "  local out = assert(io.open(script, 'w'))\n"
-    "  out:write('/* GNU ld script */\\nINPUT(', so, ')\\n')\n"
+    "  out:write('/* GNU ld script */\\nINPUT(', missing, ')\\n')\n"
     "  out:close()\n"
     "  local ffi = require('ffi')\n"
-    "  expect_sticky_ok(function() return ffi.load(script) end)\n"
+    "  expect_sticky_ok(function()\n"
+    "    local ok, res = pcall(function() return ffi.load(script) end)\n"
+    "    if ok then return res end\n"
+    "    local msg = tostring(res)\n"
+    "    assert(msg:find('not a mach-o file', 1, true) or\n"
+    "           msg:find('invalid ELF header', 1, true) or\n"
+    "           msg:find('file too short', 1, true) or\n"
+    "           msg:find('not a dynamic library', 1, true) or\n"
+    "           msg:find('No such file', 1, true) or\n"
+    "           msg:find('no such file', 1, true) or\n"
+    "           msg:find('no such file or directory', 1, true), msg)\n"
+    "  end)\n"
     "  os.remove(script)\n"
     "end\n"
     "local function expect_loadfile_sticky_ok()\n"
@@ -1392,13 +1402,13 @@ int main(void)
   assert(extra_tg.hs_epoch_ack == g->gc2.hs_epoch);
   assert(extra_tg.mark_active == 1);
   assert(extra_tg.alloc.alloc_black == 1);
-  assert(extra_tg.in_native == 1);
+  assert(lj_tg_in_native_acq(&extra_tg) == 1);
   assert(la_load64_acq(&g->gc2.hs_ack_latency_samples) == ack_samples0);
 
   lj_tg_detach(g, &extra_tg);
   assert(g->gc2.n_threads == 1);
   assert(extra_tg.tg_flags & TGF_DEAD);
-  assert(extra_tg.in_native == 0);
+  assert(lj_tg_in_native_acq(&extra_tg) == 0);
   epoch0 = g->gc2.hs_epoch;
   actions = LJ_GC2_HS_DISABLE_BARRIER|LJ_GC2_HS_ALLOC_WHITE;
   assert(lj_gc2_handshake(g, actions) == 1);

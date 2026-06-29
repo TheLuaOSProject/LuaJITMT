@@ -4590,7 +4590,6 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |
     |->BC_TSETR_Z:
     |.if X64WIN
-    |  mov ARG5d, TMP1d
     |  lea CARG4, [BASE+RA*8]
     |  mov CARG3, RC
     |  mov L:CARG1, SAVE_L
@@ -4652,7 +4651,11 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov CARG2, TAB:RB
     |  mov CARG3d, TMPRd
     |  mov CARG4, ITYPE
+    |.if X64WIN
+    |  mov ARG5d, RDd
+    |.else
     |  mov CARG5d, RDd
+    |.endif
     |  mov L:RB, L:CARG1
     |  mov SAVE_PC, PC
     |  call extern lj_tab_storetvn_forvm_array	// (lua_State *L, GCtab *t, uint32_t start, TValue *s, uint32_t n)

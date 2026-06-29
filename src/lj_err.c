@@ -20,6 +20,19 @@
 #include "lj_vm.h"
 #include "lj_strfmt.h"
 
+#if LJ_TARGET_WINDOWS && LJ_UNWIND_EXT
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0602
+#elif _WIN32_WINNT < 0x0602
+#undef _WIN32_WINNT
+#define _WIN32_WINNT 0x0602
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
+
 /*
 ** LuaJIT can either use internal or external frame unwinding:
 **
@@ -799,18 +812,72 @@ void lj_err_verify(void)
 
 
 #if LJ_UNWIND_EXT
-static __thread struct {
+typedef struct LJErrUEx {
   UNWIND_EXCEPTION_TYPE ex;
   global_State *g;
-} static_uex;
+} LJErrUEx;
+
+#if LJ_TARGET_WINDOWS
+static DWORD err_uex_key = FLS_OUT_OF_INDEXES;
+static INIT_ONCE err_uex_once = INIT_ONCE_STATIC_INIT;
+
+static VOID CALLBACK err_uex_free(PVOID ptr)
+{
+  if (ptr)
+    HeapFree(GetProcessHeap(), 0, ptr);
+}
+
+static BOOL CALLBACK err_uex_init(PINIT_ONCE once, PVOID param, PVOID *ctx)
+{
+  DWORD key;
+  UNUSED(once);
+  UNUSED(param);
+  UNUSED(ctx);
+  key = FlsAlloc(err_uex_free);
+  if (key == FLS_OUT_OF_INDEXES)
+    return FALSE;
+  err_uex_key = key;
+  return TRUE;
+}
+
+static LJErrUEx *err_uex_get(void)
+{
+  LJErrUEx *uex;
+  if (!InitOnceExecuteOnce(&err_uex_once, err_uex_init, NULL, NULL))
+    return NULL;
+  uex = (LJErrUEx *)FlsGetValue(err_uex_key);
+  if (!uex) {
+    uex = (LJErrUEx *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY,
+				sizeof(*uex));
+    if (!uex || !FlsSetValue(err_uex_key, uex)) {
+      if (uex)
+	HeapFree(GetProcessHeap(), 0, uex);
+      return NULL;
+    }
+  }
+  return uex;
+}
+#else
+static LJ_TLS LJErrUEx static_uex;
+#endif
 
 /* Raise external exception. */
 static void err_raise_ext(global_State *g, int errcode)
 {
+#if LJ_TARGET_WINDOWS
+  LJErrUEx *uex = err_uex_get();
+  if (!uex)
+    abort();
+  memset(uex, 0, sizeof(*uex));
+  uex->ex.exclass = LJ_UEXCLASS_MAKE(errcode);
+  uex->g = g;
+  _Unwind_RaiseException(&uex->ex);
+#else
   memset(&static_uex, 0, sizeof(static_uex));
   static_uex.ex.exclass = LJ_UEXCLASS_MAKE(errcode);
   static_uex.g = g;
   _Unwind_RaiseException(&static_uex.ex);
+#endif
 }
 
 #endif

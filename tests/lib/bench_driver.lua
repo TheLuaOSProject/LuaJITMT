@@ -1,11 +1,9 @@
 local bench_csv = require("bench_csv")
+local utils = require("suite_utils")
 
 local M = {}
 
-local function shell_quote(s)
-  s = tostring(s)
-  return "'" .. s:gsub("'", "'\\''") .. "'"
-end
+local shell_quote = utils.shell_quote
 
 local function status_ok(ok, why, code)
   if type(ok) == "number" then return ok == 0, ok end
@@ -16,7 +14,7 @@ local function argv_command(argv, opts)
   opts = opts or {}
   local parts = {}
   if opts.timeout then
-    parts[#parts + 1] = "timeout " .. shell_quote(opts.timeout)
+    parts[#parts + 1] = utils.timeout_prefix(opts.timeout)
   end
   for i = 1, #argv do
     parts[#parts + 1] = shell_quote(argv[i])

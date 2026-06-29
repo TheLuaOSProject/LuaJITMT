@@ -18,19 +18,26 @@
 
 #include "lib/tab_forward_helpers.h"
 
+#ifndef __USER_LABEL_PREFIX__
+#define __USER_LABEL_PREFIX__
+#endif
+#define LJ_XSTR_(s)	#s
+#define LJ_XSTR(s)	LJ_XSTR_(s)
+#define LJ_ASM_SYM(s)	LJ_XSTR(__USER_LABEL_PREFIX__) #s
+
 static uint32_t call_vm_next(GCtab *t, uint32_t idx, TValue *val, TValue *key)
 {
   uint64_t valu, keyu;
   uint32_t next;
   __asm__(
-    "subq $32, %%rsp\n\t"
+    "subq $40, %%rsp\n\t"
     "movq %[tab], %%rdi\n\t"
     "movl %k[start], %%esi\n\t"
-    "call lj_vm_next\n\t"
+    "call " LJ_ASM_SYM(lj_vm_next) "\n\t"
     "movq (%%rax), %[valu]\n\t"
     "movq 8(%%rax), %[keyu]\n\t"
     "movl %%edx, %[next]\n\t"
-    "addq $32, %%rsp\n\t"
+    "addq $40, %%rsp\n\t"
     : [valu] "=r"(valu), [keyu] "=r"(keyu), [next] "=r"(next)
     : [tab] "r"(t), [start] "r"(idx)
     : "rax", "rcx", "rdx", "rdi", "rsi", "r8", "r9", "r10", "r11",

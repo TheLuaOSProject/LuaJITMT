@@ -38,6 +38,12 @@
 #include "lj_vm.h"
 #include "lj_prng.h"
 
+#if LJ_TARGET_X64 && (defined(__linux__) || LJ_TARGET_OSX)
+#define LJ_HAS_X64_MT_JIT_HELPERS 1
+#else
+#define LJ_HAS_X64_MT_JIT_HELPERS 0
+#endif
+
 /* Some local macros to save typing. Undef'd at the end. */
 #define IR(ref)			(&J->cur.ir[(ref)])
 
@@ -1553,7 +1559,7 @@ static int rec_idx_tab_trace_local(jit_State *J, TRef tab)
   return ir->o == IR_TNEW || ir->o == IR_TDUP;
 }
 
-#if defined(__linux__) && LJ_TARGET_X64
+#if LJ_HAS_X64_MT_JIT_HELPERS
 static int rec_idx_tab_array_has_hdr(const GCtab *t, const TValue *array)
 {
   int8_t colo;
@@ -1636,14 +1642,14 @@ static TRef rec_idx_key(jit_State *J, RecordIndex *ix, IRRef *rbref,
       TRef asizeref;
       TValue *record_array;
       MSize asize = lj_tab_array_snapshot_acq(t, &record_array);
-#if defined(__linux__) && LJ_TARGET_X64
+#if LJ_HAS_X64_MT_JIT_HELPERS
       int trace_local = rec_idx_tab_trace_local(J, ix->tab);
 #else
       UNUSED(record_array);
 #endif
       if ((MSize)k < asize) {  /* Currently an array key? */
 	TRef arrayref;
-#if defined(__linux__) && LJ_TARGET_X64
+#if LJ_HAS_X64_MT_JIT_HELPERS
 	arrayref = emitir(IRT(IR_FLOAD, IRT_PGC), ix->tab, IRFL_TAB_ARRAY);
 	if (!trace_local && rec_idx_tab_array_has_hdr(t, record_array)) {
 	  /* M6: shared separated AREF pairs slots with TabArrayHdr.asize. */
@@ -1654,7 +1660,7 @@ static TRef rec_idx_key(jit_State *J, RecordIndex *ix, IRRef *rbref,
 #endif
 	  asizeref = emitir(IRTI(IR_FLOAD), ix->tab, IRFL_TAB_ASIZE);
 	  rec_idx_abc(J, asizeref, ikey, asize);
-#if defined(__linux__) && LJ_TARGET_X64
+#if LJ_HAS_X64_MT_JIT_HELPERS
 	  if (!trace_local) {
 	    TRef arrayref2 = emitir(IRT(IR_FLOAD, IRT_PGC), ix->tab,
 				    IRFL_TAB_ARRAY);
@@ -1667,7 +1673,7 @@ static TRef rec_idx_key(jit_State *J, RecordIndex *ix, IRRef *rbref,
 #endif
 	return emitir(IRT(IR_AREF, IRT_PGC), arrayref, ikey);
       } else {  /* Currently not in array (may be an array extension)? */
-#if defined(__linux__) && LJ_TARGET_X64
+#if LJ_HAS_X64_MT_JIT_HELPERS
 	asizeref = rec_idx_array_asize_ref(J, t, ix->tab, record_array,
 					   trace_local);
 #else
@@ -1687,7 +1693,7 @@ static TRef rec_idx_key(jit_State *J, RecordIndex *ix, IRRef *rbref,
       if (asize == 0) {  /* True sparse tables have an empty array part. */
 	/* Guard that the array part stays empty. */
 	TRef tmp;
-#if defined(__linux__) && LJ_TARGET_X64
+#if LJ_HAS_X64_MT_JIT_HELPERS
 	int trace_local = rec_idx_tab_trace_local(J, ix->tab);
 	tmp = rec_idx_array_asize_ref(J, t, ix->tab, record_array, trace_local);
 #else
@@ -1701,7 +1707,7 @@ static TRef rec_idx_key(jit_State *J, RecordIndex *ix, IRRef *rbref,
     }
   }
 
-#if defined(__linux__) && LJ_TARGET_X64
+#if LJ_HAS_X64_MT_JIT_HELPERS
   /* M6: empty-hash misses fall through to HREF so x64 uses TabNodeHdr.hmask. */
 #else
   if (hrefk_hmask == 0) {  /* Shortcut for empty hash part. */
@@ -1727,9 +1733,12 @@ static TRef rec_idx_key(jit_State *J, RecordIndex *ix, IRRef *rbref,
       if (hslot <= hrefk_hmask*(GCSize)sizeof(Node) &&
 	  hslot <= 65535*(GCSize)sizeof(Node)) {
 	TRef node, kslot;
+#if !LJ_HAS_X64_MT_JIT_HELPERS
+	TRef hm;
+#endif
 	*rbref = J->cur.nins;  /* Mark possible rollback point. */
 	*rbguard = J->guardemit;
-#if !(defined(__linux__) && LJ_TARGET_X64)
+#if !LJ_HAS_X64_MT_JIT_HELPERS
 	hm = emitir(IRTI(IR_FLOAD), ix->tab, IRFL_TAB_HMASK);
 	emitir(IRTGI(IR_EQ), hm, lj_ir_kint(J, (int32_t)hrefk_hmask));
 #endif
@@ -1915,7 +1924,7 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
   } else {  /* Indexed store. */
     GCtab *mt = lj_tab_metatable_acq(tabV(&ix->tabv));
     int keybarrier = tref_isgcv(ix->key) && !tref_isnil(ix->val);
-#if defined(__linux__) && LJ_TARGET_X64
+#if LJ_HAS_X64_MT_JIT_HELPERS
     /* M6: numeric NEWREF/HSTORE uses the generic returned-slot helper. */
     /* M6: previous-nil in-bounds ASTORE/HSTORE uses the helper bridge. */
 #else

@@ -97,11 +97,14 @@ void lj_vmevent_call(lua_State *L, ptrdiff_t argbase)
 {
   global_State *g = G(L);
   lua_State *oldL = lj_tg_cur_L(g);
+  TGState *tg = G2TG(g);
+  TGState *old_tg_hint = L->tg_hint;
   uint8_t oldmask = vmevmask_load_acq(g);
   uint8_t oldh = hook_save(g);
   uint32_t actions = 0;
   int had_stopreq = 0;
   int status;
+  L->tg_hint = tg;
   vmevmask_store_rel(g, 0);  /* Disable all events. */
   hook_vmevent(g);
   status = lj_vm_pcall(L, restorestack(L, argbase), 0+1, 0);
@@ -115,6 +118,7 @@ void lj_vmevent_call(lua_State *L, ptrdiff_t argbase)
 #if LJ_HASJIT
   G2J(g)->L = oldL;
 #endif
+  L->tg_hint = old_tg_hint;
   hook_restore(g, oldh);
   vmevmask_restore_if_cached(g, oldmask);
   if (LJ_UNLIKELY(status))

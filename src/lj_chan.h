@@ -46,7 +46,7 @@ LJ_FUNC int lj_chan_recv_timeout(lua_State *L, LJChan *ch, TValue *out,
 				 int64_t ns);
 LJ_FUNC int lj_chan_recv_timeout_gc(lua_State *L, LJChan *ch, TValue *out,
 				    int64_t ns);
-LJ_FUNC int lj_chan_peek(LJChan *ch, TValue *out);
+LJ_FUNC int lj_chan_peek_gc(lua_State *L, LJChan *ch, TValue *out);
 LJ_FUNC void lj_chan_close(LJChan *ch);
 LJ_FUNC int lj_chan_closed(LJChan *ch);
 

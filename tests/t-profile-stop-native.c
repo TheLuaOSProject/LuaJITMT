@@ -181,7 +181,7 @@ static void *stopreq_thread(void *arg)
   ProfileStopCtx *ctx = (ProfileStopCtx *)arg;
   int i;
   for (i = 0; i < 5000; i++) {
-    if (la_load8_acq(&ctx->tg->in_native)) {
+    if (lj_tg_in_native_acq(ctx->tg)) {
       la_store32_rel(&ctx->saw_native, 1);
       break;
     }
@@ -221,7 +221,7 @@ static void run_native_join_test(lua_State *L, global_State *g, TGState *tg)
   assert(la_load32_acq(&ctx.handshook) != 0);
   assert(la_load32_acq(&ctx.signaled) != 0);
   assert(la_load32_acq(&ctx.stopreq_seen) != 0);
-  assert(la_load8_acq(&tg->in_native) == 0);
+  assert(lj_tg_in_native_acq(tg) == 0);
   expect_stopreq_error(L, rc);
   assert_profile_registry_clear(L);
 

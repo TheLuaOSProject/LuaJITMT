@@ -343,7 +343,7 @@ static void test_boundary_lazy_sweep_extra_tg(void)
   assert((extra_plain_a->hdr.flags & LJ_AF_NEEDSWEEP) == 0);
   assert((extra_trav_a->hdr.flags & LJ_AF_NEEDSWEEP) == 0);
   assert(extra_trav_a->hdr.sweep_epoch == sweep_cycle);
-  assert(extra_tg.in_native == 1);
+  assert(lj_tg_in_native_acq(&extra_tg) == 1);
 
   g->gc.stepmul = oldstepmul;
   lj_tg_detach(g, &extra_tg);

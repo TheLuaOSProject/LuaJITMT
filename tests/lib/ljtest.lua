@@ -56,7 +56,7 @@ function M.new(root)
   local self = {
     root = root,
     compiler = getenv("CC", "cc"),
-    cflags = getenv("CFLAGS", "-std=gnu99 -O2 -Wall -Wextra -Werror -mcx16"),
+    cflags = getenv("CFLAGS", "-std=gnu11 -O2 -Wall -Wextra -Werror -mcx16"),
     jobs = getenv("JOBS", getenv("MAKE_JOBS", utils.detect_jobs())),
     tmpdir = getenv("TMPDIR", "/tmp"),
     build_signature = nil
@@ -125,7 +125,7 @@ function Test:run(cmd, opts)
     end
   end
   if opts.timeout then
-    append(parts, "timeout " .. shell_quote(opts.timeout))
+    append(parts, utils.timeout_prefix(opts.timeout))
   end
   if type(cmd) == "table" then
     append_argv(parts, cmd)
