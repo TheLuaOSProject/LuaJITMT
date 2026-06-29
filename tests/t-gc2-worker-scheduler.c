@@ -30,6 +30,27 @@ static void sleep_ns(long ns)
   }
 }
 
+static uint32_t worker_start_create_pause;
+static uint32_t worker_start_create_paused;
+static uint32_t worker_start_create_release;
+
+extern int __real_pthread_create(pthread_t *thread,
+				 const pthread_attr_t *attr,
+				 void *(*start_routine)(void *), void *arg);
+
+int __wrap_pthread_create(pthread_t *thread, const pthread_attr_t *attr,
+			  void *(*start_routine)(void *), void *arg)
+{
+  uint32_t expect = 1;
+  if (la_cas32(&worker_start_create_pause, &expect, 2, LA_ACQ_REL, LA_ACQ)) {
+    la_store32_rel(&worker_start_create_paused, 1);
+    while (la_load32_acq(&worker_start_create_release) == 0)
+      sleep_ns(100000L);
+    la_store32_rel(&worker_start_create_paused, 0);
+  }
+  return __real_pthread_create(thread, attr, start_routine, arg);
+}
+
 static int wait_until_marked(global_State *g, GCobj *o)
 {
   int i;
@@ -95,6 +116,13 @@ typedef struct FinalizerOwnerHold {
   uint32_t saw_native;
 } FinalizerOwnerHold;
 
+typedef struct WorkerStartStopReq {
+  global_State *g;
+  TGState *tg;
+  uint32_t saw_native;
+  uint32_t published;
+} WorkerStartStopReq;
+
 static int scheduler_udata_finalizer(lua_State *L)
 {
   int *id = (int *)lua_touserdata(L, 1);
@@ -130,6 +158,25 @@ static void *finalizer_owner_hold_thread(void *arg)
   lj_gc2_test_finalizer_leave(ctx->g);
   lj_tg_detach(ctx->g, &ctx->tg);
   lj_thr_set_tg(saved_tg);
+  return NULL;
+}
+
+static void *worker_start_stopreq_thread(void *arg)
+{
+  WorkerStartStopReq *ctx = (WorkerStartStopReq *)arg;
+  int i;
+  for (i = 0; i < 1000; i++) {
+    if (la_load32_acq(&worker_start_create_paused) &&
+	lj_tg_in_native_acq(ctx->tg)) {
+      la_store32_rel(&ctx->saw_native, 1);
+      break;
+    }
+    sleep_ns(100000L);
+  }
+  assert(la_load32_acq(&ctx->saw_native) == 1);
+  assert(lj_safepoint_handshake(ctx->g, LJ_GC2_HS_STOPREQ) >= 1u);
+  la_store32_rel(&ctx->published, 1);
+  la_store32_rel(&worker_start_create_release, 1);
   return NULL;
 }
 
@@ -453,6 +500,49 @@ static void test_worker_stop_l_delivers_stopreq(lua_State *L, global_State *g,
   assert(gc2_n_workers_acq(g) == 2);
 }
 
+static void test_worker_start_l_native_stopreq(lua_State *L, global_State *g,
+					       TGState *tg)
+{
+  WorkerStartStopReq ctx;
+  pthread_t thread;
+  uint32_t actions = 0;
+
+  assert(lj_gc2_workers_set(g, 0) == 1);
+  assert(gc2_n_workers_acq(g) == 0);
+
+  (void)lj_tg_flags_or_rlx(tg, TGF_STOPREQ);
+  assert(lj_gc2_workers_set_l(L, 1, &actions) == 1);
+  assert(actions == 0);
+  assert(gc2_n_workers_acq(g) == 1);
+  clear_stopreq(tg);
+  assert(lj_gc2_workers_set(g, 0) == 1);
+  assert(gc2_n_workers_acq(g) == 0);
+
+  ctx.g = g;
+  ctx.tg = tg;
+  ctx.saw_native = 0;
+  ctx.published = 0;
+  la_store32_rel(&worker_start_create_pause, 0);
+  la_store32_rel(&worker_start_create_paused, 0);
+  la_store32_rel(&worker_start_create_release, 0);
+
+  assert(pthread_create(&thread, NULL, worker_start_stopreq_thread,
+			&ctx) == 0);
+  la_store32_rel(&worker_start_create_pause, 1);
+  assert(lj_gc2_workers_set_l(L, 1, &actions) == 0);
+  assert(pthread_join(thread, NULL) == 0);
+  assert(la_load32_acq(&ctx.saw_native) == 1);
+  assert(la_load32_acq(&ctx.published) == 1);
+  assert(lj_tg_in_native_acq(tg) == 0);
+  assert(lj_tg_flags_test_acq(tg, TGF_STOPREQ));
+  assert(gc2_n_workers_acq(g) == 0);
+  assert(gc2_worker_thread_acq(g, 0) == NULL);
+  assert(la_load32_acq(&worker_start_create_paused) == 0);
+  clear_stopreq(tg);
+  assert(lj_gc2_workers_set(g, 2) == 1);
+  assert(gc2_n_workers_acq(g) == 2);
+}
+
 static void test_async_mark(lua_State *L, global_State *g, TGState *tg)
 {
   GCtab *parent, *child, *grandchild;
@@ -668,6 +758,7 @@ int main(void)
   test_finalizer_dispatch_all_waits_native(L, g, tg);
   test_finalizer_owner_leave_rewakes_worker(L, g);
   test_worker_stop_l_delivers_stopreq(L, g, tg);
+  test_worker_start_l_native_stopreq(L, g, tg);
   test_async_mark(L, g, tg);
   test_async_weak(L, g, tg);
   test_async_sweep_and_stop(L, g, tg);

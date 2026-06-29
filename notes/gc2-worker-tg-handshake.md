@@ -29,3 +29,11 @@ Stopping parked workers also marks the caller's TG native while joining worker
 pthreads. Without that, `threading.gcworkers(0)` could wait in
 `pthread_join()` while a worker was waiting for that same caller to acknowledge
 an idle-close handshake.
+
+Starting parked workers uses the same native-boundary rule around
+`pthread_create()`. If libc or the kernel stalls while creating a worker, a
+concurrent STOPREQ handshake can still acknowledge the caller through the native
+TG path. A fresh STOPREQ observed during startup tears down any workers that
+were already created and leaves the parked-worker count at zero; a stale sticky
+STOPREQ bit that was present before the helper began is not treated as a new
+startup failure by the lower-level GC2 helper.

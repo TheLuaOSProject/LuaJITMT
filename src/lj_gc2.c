@@ -574,11 +574,26 @@ static int gc2_worker_prepare_tg_slots(global_State *g)
   return gc2_worker_release_tg_slots(g);
 }
 
+static int gc2_worker_had_stopreq_l(lua_State *L)
+{
+  TGState *tg = L ? L2TG(L) : NULL;
+  return tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ);
+}
+
+static int gc2_worker_fresh_stopreq_l(lua_State *L, uint32_t actions,
+				      int had_stopreq)
+{
+  TGState *tg = L ? L2TG(L) : NULL;
+  return (actions & LJ_GC2_HS_STOPREQ) ||
+    (!had_stopreq && tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ));
+}
+
 static int gc2_worker_control_lock_l(global_State *g, lua_State *L,
 				     uint32_t *actionsp)
 {
   TGState *self = NULL;
   uint8_t was_native = 0;
+  int had_stopreq = gc2_worker_had_stopreq_l(L);
   for (;;) {
     uint32_t expect = 0;
     if (gc2_worker_control_cas(g, &expect, 1)) {
@@ -605,7 +620,7 @@ static int gc2_worker_control_lock_l(global_State *g, lua_State *L,
       actions = lj_native_leave(L);
       if (actionsp)
 	*actionsp |= actions;
-      if (actions & LJ_GC2_HS_STOPREQ)
+      if (gc2_worker_fresh_stopreq_l(L, actions, had_stopreq))
 	return 0;
     } else {
       if (expect != 0)
@@ -630,6 +645,37 @@ static void gc2_worker_control_unlock(global_State *g)
 static void gc2_worker_stop_locked_l(global_State *g, lua_State *L,
 				     uint32_t *actionsp);
 
+static int gc2_worker_thr_create_l(global_State *g, lua_State *L,
+				   LJThr *thr, LJThrFunc func, void *arg,
+				   int had_stopreq, uint32_t *actionsp,
+				   int *fresh_stopreqp)
+{
+  TGState *self = NULL;
+  uint8_t was_native = 0;
+  uint32_t actions = 0;
+  int rc;
+  if (L) {
+    lj_native_enter(L2TG(L));
+  } else {
+    self = lj_thr_get_tg_fallback(g);
+    if (self) {
+      was_native = lj_tg_in_native_acq(self);
+      lj_tg_in_native_rel(self, 1);
+    }
+  }
+  rc = lj_thr_create(thr, func, arg);
+  if (L) {
+    actions = lj_native_leave(L);
+    if (actionsp)
+      *actionsp |= actions;
+    if (fresh_stopreqp && gc2_worker_fresh_stopreq_l(L, actions, had_stopreq))
+      *fresh_stopreqp = 1;
+  } else if (self) {
+    lj_tg_in_native_rel(self, was_native);
+  }
+  return rc;
+}
+
 static int gc2_worker_start_count_locked_l(global_State *g, uint32_t n,
 					   lua_State *waitL,
 					   uint32_t *actionsp)
@@ -637,6 +683,7 @@ static int gc2_worker_start_count_locked_l(global_State *g, uint32_t n,
   lua_State *L;
   uint32_t i;
   int rc, wait;
+  int had_stopreq = gc2_worker_had_stopreq_l(waitL);
   if (!g || n == 0)
     return 1;
   if (n > LJ_GC2_WORKER_MAX)
@@ -661,15 +708,23 @@ static int gc2_worker_start_count_locked_l(global_State *g, uint32_t n,
     lj_tg_tid_rel(tg, thr->tid);
     gc2_worker_thread_store_rlx(g, i, thr);
     gc2_worker_tg_store_rlx(g, i, tg);
-    rc = lj_thr_create(thr, gc2_worker_main, tg);
-    if (rc != 0) {
-      gc2_worker_thread_store_rlx(g, i, NULL);
-      gc2_worker_tg_store_rlx(g, i, NULL);
-      lj_tg_fini_thread(g, tg);
-      lj_mem_free(g, tg, sizeof(TGState));
-      lj_mem_free(g, thr, sizeof(LJThr));
-      gc2_worker_stop_locked_l(g, waitL, actionsp);
-      return 0;
+    {
+      int fresh_stopreq = 0;
+      rc = gc2_worker_thr_create_l(g, waitL, thr, gc2_worker_main, tg,
+				   had_stopreq, actionsp, &fresh_stopreq);
+      if (rc != 0) {
+	gc2_worker_thread_store_rlx(g, i, NULL);
+	gc2_worker_tg_store_rlx(g, i, NULL);
+	lj_tg_fini_thread(g, tg);
+	lj_mem_free(g, tg, sizeof(TGState));
+	lj_mem_free(g, thr, sizeof(LJThr));
+	gc2_worker_stop_locked_l(g, waitL, actionsp);
+	return 0;
+      }
+      if (fresh_stopreq) {
+	gc2_worker_stop_locked_l(g, waitL, actionsp);
+	return 0;
+      }
     }
   }
   for (wait = 0; wait < 1000; wait++) {
@@ -683,7 +738,7 @@ static int gc2_worker_start_count_locked_l(global_State *g, uint32_t n,
       actions = lj_native_leave(waitL);
       if (actionsp)
 	*actionsp |= actions;
-      if (actions & LJ_GC2_HS_STOPREQ) {
+      if (gc2_worker_fresh_stopreq_l(waitL, actions, had_stopreq)) {
 	gc2_worker_stop_locked_l(g, waitL, actionsp);
 	return 0;
       }
@@ -713,6 +768,7 @@ int lj_gc2_workers_set_l(lua_State *L, uint32_t n, uint32_t *actionsp)
   uint32_t old;
   uint32_t actions = 0;
   int ok;
+  int had_stopreq = gc2_worker_had_stopreq_l(L);
   if (actionsp)
     *actionsp = 0;
   if (!g)
@@ -738,6 +794,12 @@ int lj_gc2_workers_set_l(lua_State *L, uint32_t n, uint32_t *actionsp)
     if (actionsp)
       *actionsp = actions;
     return 1;
+  }
+  if (gc2_worker_fresh_stopreq_l(L, actions, had_stopreq)) {
+    gc2_worker_control_unlock(g);
+    if (actionsp)
+      *actionsp = actions;
+    return 0;
   }
   ok = gc2_worker_start_count_locked_l(g, n, L, &actions);
   gc2_worker_control_unlock(g);

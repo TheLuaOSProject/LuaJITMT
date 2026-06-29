@@ -47,12 +47,14 @@ return function(add)
     name = "m3_gc2_worker_scheduler",
     description = "staged GC2 parked-worker scheduler guard and fixtures",
     run = function(t)
+      local pthread = os.getenv("PTHREAD") or "-pthread"
       make_clean(t)
       make_default(t, { jobs = false })
 
       compile_and_run_c(t, t:tmp("lj_t-gc2-worker-scheduler"),
                         "t-gc2-worker-scheduler.c", {
-        cflags = gc2_test_cflags
+        cflags = gc2_test_cflags,
+        libs = { "-lm", "-ldl", pthread, "-Wl,--wrap=pthread_create" }
       })
       run_luajit_script_jit_modes(t, "t-gc-workers.lua")
 
