@@ -18,6 +18,17 @@
 #include "lj_vm.h"
 #include "lj_vmevent.h"
 
+static void vmevmask_restore_if_cached(global_State *g, uint8_t oldmask)
+{
+  uint8_t mask = vmevmask_load_acq(g);
+  for (;;) {
+    if (mask == VMEVENT_NOCACHE)
+      return;
+    if (vmevmask_cas(g, &mask, oldmask))
+      return;
+  }
+}
+
 ptrdiff_t lj_vmevent_prepare(lua_State *L, VMEvent ev)
 {
   global_State *g = G(L);
@@ -40,7 +51,7 @@ ptrdiff_t lj_vmevent_prepare(lua_State *L, VMEvent ev)
       }
     }
   }
-  g->vmevmask &= ~VMEVENT_MASK(ev);  /* No handler: cache this fact. */
+  vmevmask_update(g, VMEVENT_MASK(ev), 0);  /* No handler: cache this fact. */
   return 0;
 }
 
@@ -86,12 +97,12 @@ void lj_vmevent_call(lua_State *L, ptrdiff_t argbase)
 {
   global_State *g = G(L);
   lua_State *oldL = lj_tg_cur_L(g);
-  uint8_t oldmask = g->vmevmask;
+  uint8_t oldmask = vmevmask_load_acq(g);
   uint8_t oldh = hook_save(g);
   uint32_t actions = 0;
   int had_stopreq = 0;
   int status;
-  g->vmevmask = 0;  /* Disable all events. */
+  vmevmask_store_rel(g, 0);  /* Disable all events. */
   hook_vmevent(g);
   status = lj_vm_pcall(L, restorestack(L, argbase), 0+1, 0);
   if (LJ_UNLIKELY(status)) {
@@ -105,8 +116,7 @@ void lj_vmevent_call(lua_State *L, ptrdiff_t argbase)
   G2J(g)->L = oldL;
 #endif
   hook_restore(g, oldh);
-  if (g->vmevmask != VMEVENT_NOCACHE)
-    g->vmevmask = oldmask;  /* Restore event mask, but not if not modified. */
+  vmevmask_restore_if_cached(g, oldmask);
   if (LJ_UNLIKELY(status))
     vmevent_checkstop_fresh(L, actions, had_stopreq);
 }

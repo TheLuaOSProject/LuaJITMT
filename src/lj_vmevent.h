@@ -36,7 +36,7 @@ typedef enum {
 #define lj_vmevent_send_(g, ev, args, post)	UNUSED(g)
 #else
 #define lj_vmevent_send(g, ev, args) \
-  if ((g)->vmevmask & VMEVENT_MASK(LJ_VMEVENT_##ev)) { \
+  if (vmevmask_load_acq((g)) & VMEVENT_MASK(LJ_VMEVENT_##ev)) { \
     lua_State *V = vmthread_acq(g); \
     ptrdiff_t argbase = lj_vmevent_prepare(V, LJ_VMEVENT_##ev); \
     if (argbase) { \
@@ -45,7 +45,7 @@ typedef enum {
     } \
   }
 #define lj_vmevent_send_(g, ev, args, post) \
-  if ((g)->vmevmask & VMEVENT_MASK(LJ_VMEVENT_##ev)) { \
+  if (vmevmask_load_acq((g)) & VMEVENT_MASK(LJ_VMEVENT_##ev)) { \
     lua_State *V = vmthread_acq(g); \
     ptrdiff_t argbase = lj_vmevent_prepare(V, LJ_VMEVENT_##ev); \
     if (argbase) { \

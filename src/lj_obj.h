@@ -1613,6 +1613,33 @@ static LJ_AINLINE int dispatchmode_cas(global_State *g, uint8_t *oldp,
   return la_cas8(&g->dispatchmode, oldp, mode, LA_ACQ_REL, LA_ACQ);
 }
 
+static LJ_AINLINE uint8_t vmevmask_load_acq(global_State *g)
+{
+  return la_load8_acq(&g->vmevmask);  /* VM event handler cache mask. */
+}
+
+static LJ_AINLINE void vmevmask_store_rel(global_State *g, uint8_t mask)
+{
+  la_store8_rel(&g->vmevmask, mask);  /* VM event handler cache mask. */
+}
+
+static LJ_AINLINE int vmevmask_cas(global_State *g, uint8_t *oldp,
+				   uint8_t mask)
+{
+  return la_cas8(&g->vmevmask, oldp, mask, LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE uint8_t vmevmask_update(global_State *g, uint8_t clear,
+					  uint8_t set)
+{
+  uint8_t old = vmevmask_load_acq(g);
+  for (;;) {
+    uint8_t next = (uint8_t)((old & (uint8_t)~clear) | set);
+    if (vmevmask_cas(g, &old, next))
+      return next;
+  }
+}
+
 static LJ_AINLINE uint32_t mt_active_acq(global_State *g)
 {
   return la_load32_acq(&g->mt_active);

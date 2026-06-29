@@ -152,7 +152,7 @@ LJLIB_CF(jit_attach)
     while (*p) h = h ^ (lj_rol(h, 6) + *p++);
     lua_pushvalue(L, 1);
     lua_rawseti(L, -2, VMEVENT_HASHIDX(h));
-    G(L)->vmevmask = VMEVENT_NOCACHE;  /* Invalidate cache. */
+    vmevmask_store_rel(G(L), VMEVENT_NOCACHE);  /* Invalidate cache. */
   } else {  /* Detach if no event given. */
     setnilV(L->top++);
     while (lua_next(L, -2)) {

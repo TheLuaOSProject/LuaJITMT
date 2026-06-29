@@ -1,7 +1,8 @@
 # Legacy and compatibility surface removal
 
-This cleanup removes stale compatibility entry points that conflicted with the
-current lockless policy:
+This cleanup is scoped to stale fork-local/threading compatibility entry points
+that conflicted with the current lockless policy. It must not remove stock
+LuaJIT public API, language behavior, or generally supported stock entry points.
 
 - Deleted unsupported Windows and console batch build scripts.
 - Rewrote `doc/install.html` for the only supported target: x86-64 Linux with
@@ -27,8 +28,8 @@ current lockless policy:
 Kept intentionally:
 
 - Stock LuaJIT public C API entry points and macros. The old-compat cleanup
-  target is fork-specific or unsupported platform/build surface, not the stock
-  LuaJIT API contract.
+  target is fork-specific threading/lockless compatibility surface, not the
+  stock LuaJIT API contract.
 - GC "legacy" bridge names and weak fallback counters while they describe real
   safety bridge behavior.
 - FFI C type compatibility helpers; these are language/FFI semantics, not
