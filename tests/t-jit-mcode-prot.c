@@ -69,6 +69,28 @@ static void assert_no_wx_mcode_map(uintptr_t rx, uintptr_t rw, size_t size)
   }
   fclose(fp);
 }
+
+static void assert_split_mcode_maps(MCode *rx)
+{
+  MCode *rw;
+  size_t size;
+  MapEntry rxmap, rwmap;
+
+  assert(rx != NULL);
+  size = ((MCLink *)rx)->size;
+  rw = lj_mcode_area_rw(rx);
+  assert(size != 0);
+  assert(rw != NULL);
+  assert(rw != rx);
+
+  assert(read_map_for_addr((uintptr_t)rx, &rxmap));
+  assert(read_map_for_addr((uintptr_t)rw, &rwmap));
+  assert(rxmap.perms[1] != 'w');
+  assert(rxmap.perms[2] == 'x');
+  assert(rwmap.perms[1] == 'w');
+  assert(rwmap.perms[2] != 'x');
+  assert_no_wx_mcode_map((uintptr_t)rx, (uintptr_t)rw, size);
+}
 #endif
 
 int main(void)
@@ -91,24 +113,14 @@ int main(void)
   {
     jit_State *J = G2J(G(L));
     MCode *rx = J->mcarea;
-    MCode *rw;
-    size_t size;
-    MapEntry rxmap, rwmap;
+    MCode *area;
 
-    assert(rx != NULL);
-    size = ((MCLink *)rx)->size;
-    rw = lj_mcode_area_rw(rx);
-    assert(size != 0);
-    assert(rw != NULL);
-    assert(rw != rx);
-
-    assert(read_map_for_addr((uintptr_t)rx, &rxmap));
-    assert(read_map_for_addr((uintptr_t)rw, &rwmap));
-    assert(rxmap.perms[1] != 'w');
-    assert(rxmap.perms[2] == 'x');
-    assert(rwmap.perms[1] == 'w');
-    assert(rwmap.perms[2] != 'x');
-    assert_no_wx_mcode_map((uintptr_t)rx, (uintptr_t)rw, size);
+    assert_split_mcode_maps(rx);
+    area = lj_mcode_patch(J, rx, 0);
+    assert(area == rx);
+    assert_split_mcode_maps(rx);
+    assert(lj_mcode_patch(J, area, 1) == NULL);
+    assert_split_mcode_maps(rx);
   }
 #endif
 

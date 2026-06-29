@@ -257,11 +257,10 @@ static void mcode_free(void *p, size_t sz)
   munmap(p, sz);
 }
 
+#if !LJ_MCODE_DUALMAP
 static void mcode_setprot(jit_State *J, void *p, size_t sz, int prot)
 {
-#if LJ_MCODE_DUALMAP
-  UNUSED(J); UNUSED(p); UNUSED(sz); UNUSED(prot);
-#elif LUAJIT_SECURITY_MCODE != 0
+#if LUAJIT_SECURITY_MCODE != 0
 #if MCMAP_CREATE
   UNUSED(J); UNUSED(p); UNUSED(sz);
   pthread_jit_write_protect_np((prot & PROT_EXEC));
@@ -273,6 +272,7 @@ static void mcode_setprot(jit_State *J, void *p, size_t sz, int prot)
   UNUSED(J); UNUSED(p); UNUSED(sz); UNUSED(prot);
 #endif
 }
+#endif
 
 #else
 
@@ -332,7 +332,7 @@ static void mcode_free_mapping(MCode *area, size_t sz)
   mcode_free(area, sz);
 }
 
-/* -- MCode area protection ----------------------------------------------- */
+/* -- MCode area mode/protection ------------------------------------------ */
 
 #if LUAJIT_SECURITY_MCODE == 0
 
@@ -351,9 +351,14 @@ static void mcode_free_mapping(MCode *area, size_t sz)
 #define MCPROT_GEN	MCPROT_RWX
 #define MCPROT_RUN	MCPROT_RWX
 
-static void mcode_protect(jit_State *J, int prot)
+static void mcode_set_current_mode(jit_State *J, int prot)
 {
   UNUSED(J); UNUSED(prot);
+}
+
+static void mcode_set_area_mode(jit_State *J, MCode *area, int prot)
+{
+  UNUSED(J); UNUSED(area); UNUSED(prot);
 }
 
 #else
@@ -376,12 +381,29 @@ static void mcode_protect(jit_State *J, int prot)
 #define LJ_MCODE_EXEC_STABLE	1
 #endif
 
-/* Change protection of MCode area. */
-static void mcode_protect(jit_State *J, int prot)
+/* Change generation mode for the current MCode area. */
+static void mcode_set_current_mode(jit_State *J, int prot)
 {
+#if LJ_MCODE_DUALMAP
+  J->mcprot = prot;  /* Writes use the RW alias; the RX map stays executable. */
+#else
   if (J->mcprot != prot) {
     mcode_setprot(J, J->mcarea, J->szmcarea, prot);
     J->mcprot = prot;
+  }
+#endif
+}
+
+static void mcode_set_area_mode(jit_State *J, MCode *area, int prot)
+{
+  if (J->mcarea == area) {
+    mcode_set_current_mode(J, prot);
+  } else {
+#if LJ_MCODE_DUALMAP
+    UNUSED(J); UNUSED(area); UNUSED(prot);
+#else
+    mcode_setprot(J, area, ((MCLink *)area)->size, prot);
+#endif
   }
 }
 
@@ -671,7 +693,7 @@ MCode *lj_mcode_reserve(jit_State *J, MCode **lim)
   if (!J->mcarea)
     mcode_allocarea(J, mcode_default_size(J));
   else
-    mcode_protect(J, MCPROT_GEN);
+    mcode_set_current_mode(J, MCPROT_GEN);
   *lim = J->mcbot;
   return J->mctop;
 }
@@ -680,30 +702,27 @@ MCode *lj_mcode_reserve(jit_State *J, MCode **lim)
 void lj_mcode_commit(jit_State *J, MCode *top)
 {
   J->mctop = top;
-  mcode_protect(J, MCPROT_RUN);
+  mcode_set_current_mode(J, MCPROT_RUN);
 }
 
 /* Abort the reservation. */
 void lj_mcode_abort(jit_State *J)
 {
   if (J->mcarea)
-    mcode_protect(J, MCPROT_RUN);
+    mcode_set_current_mode(J, MCPROT_RUN);
 }
 
 /* Set/reset protection to allow patching of MCode areas. */
 MCode *lj_mcode_patch(jit_State *J, MCode *ptr, int finish)
 {
   if (finish) {
-    if (J->mcarea == ptr)
-      mcode_protect(J, MCPROT_RUN);
-    else
-      mcode_setprot(J, ptr, ((MCLink *)ptr)->size, MCPROT_RUN);
+    mcode_set_area_mode(J, ptr, MCPROT_RUN);
     return NULL;
   } else {
     uintptr_t base = (uintptr_t)J->mcarea, addr = (uintptr_t)ptr;
     /* Try current area first to use the protection cache. */
     if (addr >= base && addr < base + J->szmcarea) {
-      mcode_protect(J, MCPROT_GEN);
+      mcode_set_current_mode(J, MCPROT_GEN);
       return (MCode *)base;
     }
     /* Otherwise search through the list of MCode areas. */
@@ -711,7 +730,7 @@ MCode *lj_mcode_patch(jit_State *J, MCode *ptr, int finish)
       base = (uintptr_t)mcode_area_next_acq((MCode *)base);
       lj_assertJ(base != 0, "broken MCode area chain");
       if (addr >= base && addr < base + ((MCLink *)base)->size) {
-	mcode_setprot(J, (MCode *)base, ((MCLink *)base)->size, MCPROT_GEN);
+	mcode_set_area_mode(J, (MCode *)base, MCPROT_GEN);
 	return (MCode *)base;
       }
     }
