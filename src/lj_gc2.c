@@ -3913,7 +3913,7 @@ size_t lj_gc2_finreg_cdata_finalize_pweak(lua_State *L, global_State *g,
       ord = next;
       continue;
     }
-    if (!lj_cdata_fin_claim_func(slot, &fin)) {
+    if (!lj_cdata_fin_claim_func_l(L, slot, &fin)) {
       gc2_finreg_cdata_order_tombstones_add(g, 1);
       (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
       ord = next;
@@ -4298,7 +4298,7 @@ static int gc2_finreg_cdata_dispatch_slot(lua_State *L, global_State *g,
   TValue *slot;
   TValue fin;
   slot = (TValue *)lj_ctype_fin_get(L, cts, key, &t);
-  if (slot != niltv(L) && lj_cdata_fin_claim_func(slot, &fin)) {
+  if (slot != niltv(L) && lj_cdata_fin_claim_func_l(L, slot, &fin)) {
     TValue tmp;
     copyTV(L, &tmp, &fin);
     lj_cdata_fin_storenil(L, slot);  /* Clear claimed finalizer slot. */

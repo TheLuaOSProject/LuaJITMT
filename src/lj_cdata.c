@@ -103,37 +103,42 @@ int lj_cdata_fin_isclaim(cTValue *tv)
   return tv_rawload(tv) == LJ_CDATA_FINCLAIM_U64;
 }
 
-static void cdata_fin_claim_wait_no_l(void)
+static void cdata_fin_claim_wait(lua_State *L)
 {
-  (void)lj_thr_sleep_ns(NULL, 1000000);
+  /*
+  ** FINREG claims are short publication windows. When a Lua state is available,
+  ** wait as native time for its TG so safepoint handshakes can complete while
+  ** a peer resolves the slot.
+  */
+  (void)lj_thr_sleep_ns(L, 1000000);
 }
 
-static int cdata_fin_claim(TValue *tv, TValue *old, int nonnil)
+static int cdata_fin_claim(lua_State *L, TValue *tv, TValue *old, int nonnil)
 {
   TValue claim;
   cdata_fin_setclaim(&claim);
   for (;;) {
     lj_tv_load_acq(old, tv);
     if (lj_cdata_fin_isclaim(old)) {
-      cdata_fin_claim_wait_no_l();
+      cdata_fin_claim_wait(L);
       continue;
     }
     if (nonnil && tvisnil(old))
       return 0;
     if (lj_tv_cas(tv, old, &claim))
       return 1;  /* 11.4 FINREG slot claim. */
-    cdata_fin_claim_wait_no_l();  /* CAS loser: yield before retrying. */
+    cdata_fin_claim_wait(L);  /* CAS loser: yield before retrying. */
   }
 }
 
-int lj_cdata_fin_claim_any(TValue *tv, TValue *old)
+int lj_cdata_fin_claim_any_l(lua_State *L, TValue *tv, TValue *old)
 {
-  return cdata_fin_claim(tv, old, 0);
+  return cdata_fin_claim(L, tv, old, 0);
 }
 
-int lj_cdata_fin_claim_func(TValue *tv, TValue *old)
+int lj_cdata_fin_claim_func_l(lua_State *L, TValue *tv, TValue *old)
 {
-  return cdata_fin_claim(tv, old, 1);
+  return cdata_fin_claim(L, tv, old, 1);
 }
 
 void lj_cdata_fin_storenil(lua_State *L, TValue *tv)
@@ -255,7 +260,7 @@ void lj_cdata_setfin(lua_State *L, GCcdata *cd, GCobj *obj, uint32_t it)
 	goto done;
       }
     }
-    (void)lj_cdata_fin_claim_any(tv, &old);
+    (void)lj_cdata_fin_claim_any_l(L, tv, &old);
     if (!lj_tab_metatable_acq(t)) {
       lj_cdata_fin_storenil(L, tv);
       lj_obj_cleargcflags_atomic(obj2gco(cd), LJ_GC_CDATA_FIN);

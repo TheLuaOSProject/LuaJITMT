@@ -79,8 +79,8 @@ LJ_FUNC GCcdata *lj_cdata_newx_l(lua_State *L, CTState *cts, CTypeID id,
 LJ_FUNC void LJ_FASTCALL lj_cdata_free(global_State *g, GCcdata *cd);
 LJ_FUNC void lj_cdata_setfin(lua_State *L, GCcdata *cd, GCobj *obj,
 			     uint32_t it);
-LJ_FUNC int lj_cdata_fin_claim_any(TValue *tv, TValue *old);
-LJ_FUNC int lj_cdata_fin_claim_func(TValue *tv, TValue *old);
+LJ_FUNC int lj_cdata_fin_claim_any_l(lua_State *L, TValue *tv, TValue *old);
+LJ_FUNC int lj_cdata_fin_claim_func_l(lua_State *L, TValue *tv, TValue *old);
 LJ_FUNC int lj_cdata_fin_isclaim(cTValue *tv);
 LJ_FUNC void lj_cdata_fin_storenil(lua_State *L, TValue *tv);
 
