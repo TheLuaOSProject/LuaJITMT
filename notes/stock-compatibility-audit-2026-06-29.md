@@ -1,0 +1,66 @@
+# Stock compatibility audit, 2026-06-29
+
+Scope: active `v2.1` commits through `c984b1ab`, with emphasis on source-search
+test removal, legacy/fork-local entrypoint cleanup, and stock LuaJIT API
+behavior.
+
+## Source-search tests and CI
+
+No active forbidden source-search-only tests were found under `tools/ci`,
+`tools/test.lua`, `tests/suites`, or `tests/lib`.
+
+Allowed remaining searches are over generated artifacts or runtime output:
+JIT dumps, bytecode listings, captured stdout/stderr, CSVs, and marker files.
+Those checks are permitted because the generated artifact is the behavior under
+test. Repository source checks for helper names, field accesses, function calls,
+or snippets are not permitted.
+
+The removed source-guard compatibility surface remains gone:
+
+- No `m0_source_guard` case or per-case shell wrapper exists.
+- No `suite_utils.read_source_file()` helper exists.
+- The only `tools/ci` shell entrypoint is `tools/ci/lua_test.sh`.
+
+## Public C API surface
+
+The local `upstream/v2.1` ref was compared against current headers. Public
+headers do not add or remove stock C API prototypes. `src/lua.h` is
+whitespace-only relative to upstream, and `src/luaconf.h` differs only in
+comment wording.
+
+Fork-local removals are not stock API removals:
+
+- `luaMT_spawn`, `luaMT_join`, `luaMT_fence`, `luaMT_attach`, and
+  `luaMT_detach` were fork-local threading C APIs. Their public declarations
+  were removed; internal attach/detach lives in `lj_thr.h`.
+- `luaopen_threading` and `LUA_THREADINGLIBNAME` are intentionally hidden from
+  public headers. The Lua extension remains `require("threading")`.
+- `ffi.typeinfo` was an unsupported fork helper, not stock LuaJIT FFI.
+- `LUA_GCGENERATIONAL` and `LUA_GCINCREMENTAL` are not stock LuaJIT public C
+  constants in this branch. Fork GC mode control is `threading.gcmode()`.
+
+## Stock behavior boundary
+
+Single-threaded stock behavior should remain the default compatibility target.
+Threading-only deviations are documented rather than enforced with source
+searches:
+
+- Explicit GC keeps stock behavior when no secondary Lua thread is live. With
+  live secondary Lua threads, `lua_gc(L, LUA_GCCOLLECT, ...)` uses the GC2
+  active-thread collector path, and `LUA_GCSTEP` requests/assists GC2 work
+  instead of running the legacy single-thread full-GC path.
+- `require("threading")` is a Lua-visible extension and may occupy
+  `package.preload.threading`; it must not become a public C API symbol.
+- Bytecode compatibility accepts the intended lockless v2/v3/v4 compatibility
+  surface, while current dumps remain fork-format v4 with the legacy-upvalue
+  payload flag.
+- `os.setlocale()` mutation after threading activation is rejected because
+  process-global locale changes are not safe with active VM threads.
+- `jit.profile` remains stock before threading activation; unsupported
+  non-TG-local profiler backends may drop samples while multiple VM threads are
+  live.
+
+Future legacy cleanup should remove only stale fork-local compatibility shims
+that exist for the threading/lockless migration. It should not remove stock
+LuaJIT C API symbols, stock library options, standard FFI behavior, or stock
+single-threaded behavior.

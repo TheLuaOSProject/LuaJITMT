@@ -77,6 +77,8 @@ function Test:tmp(name)
 end
 
 function Test:read(path)
+  -- Keep source-shape assertions out of the harness. Tests may inspect
+  -- generated dumps/output, but not repository source snippets.
   return read_file(path)
 end
 

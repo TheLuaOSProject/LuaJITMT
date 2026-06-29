@@ -49,6 +49,8 @@ local function read_raw_file(path)
 end
 
 function M.read_file(path)
+  -- Read generated outputs, fixtures, or captured logs. Do not use this for
+  -- CI checks that search repository source for implementation spellings.
   return read_raw_file(path)
 end
 

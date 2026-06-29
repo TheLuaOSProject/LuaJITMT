@@ -15,6 +15,13 @@ harness. Do not reintroduce generic helpers that read repository source and
 search for snippets; use behavior fixtures, generated dump assertions, or
 documentation instead.
 
+2026-06-29 audit result: active `tools/ci`, `tools/test.lua`, `tests/suites`,
+and `tests/lib` have no source-search-only gates left. The remaining string
+searches inspect generated JIT dumps, bytecode listings, captured process
+output, CSVs, or marker files. Generic file/text helpers remain available for
+those artifacts, but must not be paired with `src/*.c`, `src/*.h`,
+`src/*.dasc`, `tests/*.lua`, or `tools/*.sh` snippet checks.
+
 The only supported shell entrypoint under `tools/ci/` is
 `tools/ci/lua_test.sh`. Run focused cases as
 `tools/ci/lua_test.sh <case...>`; do not add per-case compatibility wrapper
