@@ -2084,6 +2084,43 @@ static LJ_AINLINE int tab_ptr_index(uintptr_t base, uintptr_t elem,
   return 0;
 }
 
+static LJ_AINLINE MSize tab_store_array_snapshot_acq(GCtab *parent,
+						      TValue **arrayp)
+{
+  for (;;) {
+    MSize asize = lj_tab_asize_acq(parent);
+    TValue *array = lj_tab_array_acq(parent);
+    if (array && !lj_tab_array_is_colocated(parent, array)) {
+      asize = lj_tab_array_hdr_asize_acq(array);
+    } else {
+      MSize asize2 = lj_tab_asize_acq(parent);
+      if (asize2 != asize) {
+	lj_tab_wait_no_l();
+	continue;
+      }
+    }
+    if (array == lj_tab_array_acq(parent)) {
+      *arrayp = array;
+      return asize;
+    }
+    lj_tab_wait_no_l();
+  }
+}
+
+static LJ_AINLINE MSize tab_store_node_snapshot_acq(GCtab *parent,
+						    Node **nodep)
+{
+  for (;;) {
+    Node *node = lj_tab_node_acq(parent);
+    MSize hmask = lj_tab_node_hmask_acq(node);
+    if (node == lj_tab_node_acq(parent)) {
+      *nodep = node;
+      return hmask;
+    }
+    lj_tab_wait_no_l();
+  }
+}
+
 static int tab_current_array_slot_for_key(GCtab *parent, TValue *dst,
 					  int32_t key)
 {
@@ -2091,10 +2128,7 @@ static int tab_current_array_slot_for_key(GCtab *parent, TValue *dst,
   MSize asize;
   if (key < 0)
     return 0;
-  asize = lj_tab_asize_acq(parent);
-  array = lj_tab_array_acq(parent);
-  if (array && !lj_tab_array_is_colocated(parent, array))
-    asize = lj_tab_array_hdr_asize_acq(array);
+  asize = tab_store_array_snapshot_acq(parent, &array);
   if (!array || (MSize)key >= asize)
     return 0;
   if (dst == &array[key] && !lj_tab_array_is_retiring(parent, array))
@@ -2117,8 +2151,8 @@ static int tab_current_array_slot_for_key(GCtab *parent, TValue *dst,
 static int tab_current_hash_slot_for_key(GCtab *parent, TValue *dst,
 					 cTValue *key)
 {
-  Node *node = lj_tab_node_acq(parent);
-  MSize hmask = lj_tab_node_hmask_acq(node);
+  Node *node;
+  MSize hmask = tab_store_node_snapshot_acq(parent, &node);
   MSize idx;
   TValue nk;
   if (lj_tab_node_is_retiring(node)) {
@@ -2323,10 +2357,7 @@ static TValue *tab_current_jit_array_slot(lua_State *L, GCtab *parent,
 {
   TValue *array;
   MSize asize, idx;
-  asize = lj_tab_asize_acq(parent);
-  array = lj_tab_array_acq(parent);
-  if (array && !lj_tab_array_is_colocated(parent, array))
-    asize = lj_tab_array_hdr_asize_acq(array);
+  asize = tab_store_array_snapshot_acq(parent, &array);
   if (tab_ptr_index((uintptr_t)array, (uintptr_t)orig, sizeof(TValue),
 			    asize, &idx)) {
     if (lj_tab_array_is_retiring(parent, array)) {
@@ -2353,10 +2384,7 @@ static LJ_AINLINE int tab_jit_array_current_match(GCtab *parent,
   TValue *array;
   MSize asize;
   uintptr_t base;
-  asize = lj_tab_asize_acq(parent);
-  array = lj_tab_array_acq(parent);
-  if (array && !lj_tab_array_is_colocated(parent, array))
-    asize = lj_tab_array_hdr_asize_acq(array);
+  asize = tab_store_array_snapshot_acq(parent, &array);
   base = (uintptr_t)(void *)orig - (uintptr_t)key * sizeof(TValue);
   return key < asize && array == (TValue *)(void *)base &&
 	 !lj_tab_array_is_retiring(parent, array);
@@ -2365,8 +2393,8 @@ static LJ_AINLINE int tab_jit_array_current_match(GCtab *parent,
 static LJ_AINLINE int tab_jit_hash_current_match(GCtab *parent,
 						 TValue *orig)
 {
-  Node *node = lj_tab_node_acq(parent);
-  MSize hmask = lj_tab_node_hmask_acq(node);
+  Node *node;
+  MSize hmask = tab_store_node_snapshot_acq(parent, &node);
   MSize idx;
   return tab_ptr_index((uintptr_t)node, (uintptr_t)orig, sizeof(Node),
 		       hmask + 1u, &idx) && !lj_tab_node_is_retiring(node);
@@ -2378,8 +2406,7 @@ static TValue *tab_current_jit_hash_slot(lua_State *L, GCtab *parent,
 {
   Node *node, *n;
   MSize hmask, idx;
-  node = lj_tab_node_acq(parent);
-  hmask = lj_tab_node_hmask_acq(node);
+  hmask = tab_store_node_snapshot_acq(parent, &node);
   if (tab_ptr_index((uintptr_t)node, (uintptr_t)orig, sizeof(Node),
 			    hmask + 1u, &idx)) {
     if (lj_tab_node_is_retiring(node)) {
@@ -2520,10 +2547,8 @@ static TValue *tab_current_vm_array_key_slot(lua_State *L, GCtab *parent,
 {
   TValue *array;
   MSize asize;
-  asize = lj_tab_asize_acq(parent);
-  array = lj_tab_array_acq(parent);
+  asize = tab_store_array_snapshot_acq(parent, &array);
   if (array && !lj_tab_array_is_colocated(parent, array)) {
-    asize = lj_tab_array_hdr_asize_acq(array);
     if (lj_tab_array_is_retiring(parent, array)) {
       TValue *next = array;
       MSize nextasize = asize;

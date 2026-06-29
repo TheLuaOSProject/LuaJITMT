@@ -147,6 +147,59 @@ static void exercise_keyed_cas_hash_stale(lua_State *L)
   lj_tab_hmask_rel(t, newhmask);
 }
 
+static void exercise_helper_stores_ignore_legacy_mirrors(lua_State *L)
+{
+  GCtab *t;
+  GCstr *hkey;
+  TValue *array, keytv, src;
+  Node *node, *hn;
+  MSize asize, hmask;
+  int32_t k = 5;
+
+  lua_settop(L, 0);
+  lua_createtable(L, LJ_MAX_COLOSIZE + 24, 8);
+  t = tabV(L->top-1);
+  assert(lj_tab_array_separated(t));
+  asize = lj_tab_array_snapshot_acq(t, &array);
+  assert((MSize)k < asize);
+
+  lj_tab_storeint(L, lj_tab_setint(L, t, k), 15000);
+  hkey = lj_str_newlit(L, "helper_store_legacy_mirror");
+  lj_tab_storeint(L, lj_tab_setstr(L, t, hkey), 16000);
+  node = lj_tab_node_snapshot_acq(t, &hmask);
+  assert(hmask > 0);
+  hn = tabfwd_find_str_node(node, hmask, hkey);
+  assert(hn != NULL);
+
+  lj_tab_asize_rel(t, 0);
+  lj_tab_hmask_rel(t, 0);
+
+  setintV(&keytv, k);
+  setintV(&src, 15151);
+  assert(lj_tab_trystoretv_cas_keyed(L, t, &array[k], &keytv, &src) ==
+	 LJ_TAB_STORE_CAS_OK);
+  tabfwd_assert_i32(&array[k], 15151);
+
+  setintV(&src, 15252);
+  assert(lj_tab_storetv_forjit_array_nogc(L, t, &array[k], &src,
+					  (MSize)k) == &array[k]);
+  tabfwd_assert_i32(&array[k], 15252);
+
+  setstrV(L, &keytv, hkey);
+  setintV(&src, 16161);
+  assert(lj_tab_trystoretv_cas_keyed(L, t, &hn->val, &keytv, &src) ==
+	 LJ_TAB_STORE_CAS_OK);
+  tabfwd_assert_i32(&hn->val, 16161);
+
+  setintV(&src, 16262);
+  assert(lj_tab_storetv_forjit_hash(L, t, &hn->val, &src, &keytv) ==
+	 &hn->val);
+  tabfwd_assert_i32(&hn->val, 16262);
+
+  lj_tab_asize_rel(t, asize);
+  lj_tab_hmask_rel(t, hmask);
+}
+
 static void exercise_keyed_nil_cas_hash_stale(lua_State *L)
 {
   GCtab *t;
@@ -621,6 +674,7 @@ int main(void)
   exercise_direct_cas(L);
   exercise_keyed_cas_array_stale(L);
   exercise_keyed_cas_hash_stale(L);
+  exercise_helper_stores_ignore_legacy_mirrors(L);
   exercise_keyed_nil_cas_hash_stale(L);
   exercise_meta_forward_retry(L);
   exercise_capi_rawseti_forward_retry(L);
