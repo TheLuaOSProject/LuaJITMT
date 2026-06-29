@@ -404,7 +404,7 @@ static IRRef narrow_conv_emit(jit_State *J, NarrowConv *nc)
 /* Narrow a type conversion of an arithmetic operation. */
 TRef LJ_FASTCALL lj_opt_narrow_convert(jit_State *J)
 {
-  if ((J->flags & JIT_F_OPT_NARROW)) {
+  if ((jit_flags_acq(J) & JIT_F_OPT_NARROW)) {
     NarrowConv nc;
     nc.J = J;
     nc.sp = nc.stack;
@@ -561,7 +561,7 @@ TRef lj_opt_narrow_mod(jit_State *J, TRef rb, TRef rc, TValue *vb, TValue *vc)
   TRef tmp;
   rb = conv_str_tonum(J, rb, vb);
   rc = conv_str_tonum(J, rc, vc);
-  if ((LJ_DUALNUM || (J->flags & JIT_F_OPT_NARROW)) &&
+  if ((LJ_DUALNUM || (jit_flags_acq(J) & JIT_F_OPT_NARROW)) &&
       tref_isinteger(rb) && tref_isinteger(rc) &&
       (tvisint(vc) ? intV(vc) != 0 : !tviszero(vc))) {
     emitir(IRTGI(IR_NE), rc, lj_ir_kint(J, 0));
@@ -582,7 +582,7 @@ TRef lj_opt_narrow_mod(jit_State *J, TRef rb, TRef rc, TValue *vb, TValue *vc)
 static int narrow_forl(jit_State *J, cTValue *o)
 {
   if (tvisint(o)) return 1;
-  if (LJ_DUALNUM || (J->flags & JIT_F_OPT_NARROW)) return lj_num2int_ok(numV(o));
+  if (LJ_DUALNUM || (jit_flags_acq(J) & JIT_F_OPT_NARROW)) return lj_num2int_ok(numV(o));
   return 0;
 }
 

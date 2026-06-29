@@ -63,7 +63,7 @@ static void dce_propagate(jit_State *J)
 */
 void lj_opt_dce(jit_State *J)
 {
-  if ((J->flags & JIT_F_OPT_DCE)) {
+  if ((jit_flags_acq(J) & JIT_F_OPT_DCE)) {
     dce_marksnap(J);
     dce_propagate(J);
     memset(J->bpropcache, 0, sizeof(J->bpropcache));  /* Invalidate cache. */

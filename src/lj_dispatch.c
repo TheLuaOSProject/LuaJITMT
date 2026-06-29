@@ -99,7 +99,7 @@ void lj_dispatch_init(GG_State *GG)
 /* Initialize hotcount table. */
 void lj_dispatch_init_hotcount(global_State *g)
 {
-  int32_t hotloop = G2J(g)->param[JIT_P_hotloop];
+  int32_t hotloop = jit_param_acq(G2J(g), JIT_P_hotloop);
   HotCount start = (HotCount)(hotloop*HOTCOUNT_LOOP - 1);
   HotCount *hotcount = G2GG(g)->hotcount;
   TGState *tg = G2TG(g);
@@ -183,7 +183,7 @@ static uint8_t dispatch_state_mode(global_State *g
   *tgp = G2TG(g);
   *rec_ownerp = lj_trace_state_load(J) != LJ_TRACE_IDLE &&
 		lj_jit_token_held(J);
-  mode |= (J->flags & JIT_F_ON) ? DISPMODE_JIT : 0;
+  mode |= (jit_flags_acq(J) & JIT_F_ON) ? DISPMODE_JIT : 0;
 #endif
 #if LJ_HASPROFILE
 #if !LJ_PROFILE_TGLOCAL
@@ -387,9 +387,9 @@ int luaJIT_setmode(lua_State *L, int idx, int mode)
     } else {
       int token = lj_jit_token_acquire_wait(G2J(g));
       if (!(mode & LUAJIT_MODE_ON))
-	G2J(g)->flags &= ~(uint32_t)JIT_F_ON;
+	jit_flags_setmask(G2J(g), JIT_F_ON, 0);
       else
-	G2J(g)->flags |= (uint32_t)JIT_F_ON;
+	jit_flags_setmask(G2J(g), 0, JIT_F_ON);
       lj_dispatch_update(g, 0);
       if (token)
 	lj_jit_token_release(G2J(g));
@@ -686,7 +686,8 @@ out:
   op = bc_op(pc[-1]);  /* Get FUNC* op. */
 #if LJ_HASJIT
   /* Use the non-hotcounting variants if JIT is off or while recording. */
-  if ((!(J->flags & JIT_F_ON) || lj_trace_state_load(J) != LJ_TRACE_IDLE) &&
+  if ((!(jit_flags_acq(J) & JIT_F_ON) ||
+       lj_trace_state_load(J) != LJ_TRACE_IDLE) &&
       (op == BC_FUNCF || op == BC_FUNCV))
     op = (BCOp)((int)op+(int)BC_IFUNCF-(int)BC_FUNCF);
 #endif

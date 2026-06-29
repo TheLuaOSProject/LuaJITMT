@@ -446,7 +446,7 @@ LUA_API void lua_close(lua_State *L)
   /* Separate udata which have GC metamethods. */
   lj_gc2_finreg_udata_finalize(g, 1);
 #if LJ_HASJIT
-  G2J(g)->flags &= ~JIT_F_ON;
+  jit_flags_setmask(G2J(g), JIT_F_ON, 0);
   lj_trace_state_store(G2J(g), LJ_TRACE_IDLE);
   lj_dispatch_update(g, 0);
 #endif

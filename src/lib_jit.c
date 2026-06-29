@@ -107,10 +107,11 @@ LJLIB_CF(jit_status)
 {
 #if LJ_HASJIT
   jit_State *J = L2J(L);
+  uint32_t flags = jit_flags_acq(J);
   L->top = L->base;
-  setboolV(L->top++, (J->flags & JIT_F_ON) ? 1 : 0);
-  flagbits_to_strings(L, J->flags, JIT_F_CPU, JIT_F_CPUSTRING);
-  flagbits_to_strings(L, J->flags, JIT_F_OPT, JIT_F_OPTSTRING);
+  setboolV(L->top++, (flags & JIT_F_ON) ? 1 : 0);
+  flagbits_to_strings(L, flags, JIT_F_CPU, JIT_F_CPUSTRING);
+  flagbits_to_strings(L, flags, JIT_F_OPT, JIT_F_OPTSTRING);
   return (int)(L->top - L->base);
 #else
   setboolV(L->top++, 0);
@@ -550,7 +551,7 @@ static int jitopt_level(jit_State *J, const char *str)
     else if (str[0] == '1') flags = JIT_F_OPT_1;
     else if (str[0] == '2') flags = JIT_F_OPT_2;
     else flags = JIT_F_OPT_3;
-    J->flags = (J->flags & ~JIT_F_OPT_MASK) | flags;
+    jit_flags_setmask(J, JIT_F_OPT_MASK, flags);
     return 1;  /* Ok. */
   }
   return 0;  /* No match. */
@@ -576,7 +577,10 @@ static int jitopt_flag(jit_State *J, const char *str)
     if (len == 0)
       break;
     if (strncmp(str, lst+1, len) == 0 && str[len] == '\0') {
-      if (set) J->flags |= opt; else J->flags &= ~opt;
+      if (set)
+	jit_flags_setmask(J, 0, opt);
+      else
+	jit_flags_setmask(J, opt, 0);
       return 1;  /* Ok. */
     }
     lst += 1+len;
@@ -607,7 +611,7 @@ static int jitopt_param(jit_State *J, const char *str)
 	n = (n + (LJ_PAGESIZE >> 10) - 1) & ~((LJ_PAGESIZE >> 10) - 1);
 	if (n > maxkb) n = maxkb;
       }
-      J->param[i] = (int32_t)n;
+      jit_param_rel(J, i, (int32_t)n);
       if (i == JIT_P_hotloop)
 	lj_dispatch_init_hotcount(J2G(J));
       return 1;  /* Ok. */
@@ -623,14 +627,20 @@ LJLIB_CF(jit_opt_start)
   jit_State *J = L2J(L);
   int nargs = (int)(L->top - L->base);
   if (nargs == 0) {
-    J->flags = (J->flags & ~JIT_F_OPT_MASK) | JIT_F_OPT_DEFAULT;
+    int token = lj_jit_token_acquire_wait(J);
+    jit_flags_setmask(J, JIT_F_OPT_MASK, JIT_F_OPT_DEFAULT);
+    if (token)
+      lj_jit_token_release(J);
   } else {
     int i;
     for (i = 1; i <= nargs; i++) {
       const char *str = strdata(lj_lib_checkstr(L, i));
-      if (!jitopt_level(J, str) &&
-	  !jitopt_flag(J, str) &&
-	  !jitopt_param(J, str))
+      int token = lj_jit_token_acquire_wait(J);
+      int ok = jitopt_level(J, str) || jitopt_flag(J, str) ||
+	       jitopt_param(J, str);
+      if (token)
+	lj_jit_token_release(J);
+      if (!ok)
 	lj_err_callerv(L, LJ_ERR_JITOPT, str);
     }
   }
@@ -895,7 +905,7 @@ static uint32_t jit_cpudetect(void)
 static void jit_init(lua_State *L)
 {
   jit_State *J = L2J(L);
-  J->flags = jit_cpudetect() | JIT_F_ON | JIT_F_OPT_DEFAULT;
+  jit_flags_rel(J, jit_cpudetect() | JIT_F_ON | JIT_F_OPT_DEFAULT);
   memcpy(J->param, jit_param_default, sizeof(J->param));
 #if LJ_TARGET_UNALIGNED
   L2TG(L)->tmptv.u64 = U64x(0000504d,4d500000);

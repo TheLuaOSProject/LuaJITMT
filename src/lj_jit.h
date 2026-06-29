@@ -872,6 +872,37 @@ typedef struct jit_State {
 #endif
 } jit_State;
 
+static LJ_AINLINE uint32_t jit_flags_acq(const jit_State *J)
+{
+  return la_load32_acq(&J->flags);
+}
+
+static LJ_AINLINE void jit_flags_rel(jit_State *J, uint32_t flags)
+{
+  la_store32_rel(&J->flags, flags);
+}
+
+static LJ_AINLINE void jit_flags_setmask(jit_State *J, uint32_t clear,
+					 uint32_t set)
+{
+  uint32_t old = jit_flags_acq(J);
+  for (;;) {
+    uint32_t next = (old & ~clear) | set;
+    if (la_cas32(&J->flags, &old, next, LA_ACQ_REL, LA_ACQ))
+      return;
+  }
+}
+
+static LJ_AINLINE int32_t jit_param_acq(const jit_State *J, int param)
+{
+  return (int32_t)la_load32_acq((uint32_t *)&J->param[param]);
+}
+
+static LJ_AINLINE void jit_param_rel(jit_State *J, int param, int32_t value)
+{
+  la_store32_rel((uint32_t *)&J->param[param], (uint32_t)value);
+}
+
 static LJ_AINLINE MCodeRetire *mcode_retired_head_acq(const jit_State *J)
 {
   return (MCodeRetire *)la_loadptr_acq((void *const *)&J->retiredmcode);

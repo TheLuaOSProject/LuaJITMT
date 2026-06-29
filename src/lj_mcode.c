@@ -488,7 +488,7 @@ static void *mcode_alloc(jit_State *J, size_t sz)
 
 static LJ_AINLINE size_t mcode_default_size(jit_State *J)
 {
-  return (size_t)J->param[JIT_P_sizemcode] << 10;
+  return (size_t)jit_param_acq(J, JIT_P_sizemcode) << 10;
 }
 
 static LJ_AINLINE MCode *mcode_register_area(jit_State *J, MCode *area,
@@ -724,7 +724,7 @@ void lj_mcode_limiterr(jit_State *J, size_t need)
   size_t sizemcode, maxmcode;
   lj_mcode_abort(J);
   sizemcode = mcode_default_size(J);
-  maxmcode = (size_t)J->param[JIT_P_maxmcode] << 10;
+  maxmcode = (size_t)jit_param_acq(J, JIT_P_maxmcode) << 10;
   if (need * sizeof(MCode) > sizemcode)
     lj_trace_err(J, LJ_TRERR_MCODEOV);  /* Too long for any area. */
   if (J->szallmcarea + sizemcode > maxmcode)

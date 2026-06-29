@@ -37,7 +37,7 @@
 /* Grow snapshot buffer. */
 void lj_snap_grow_buf_(jit_State *J, MSize need)
 {
-  MSize maxsnap = (MSize)J->param[JIT_P_maxsnap];
+  MSize maxsnap = (MSize)jit_param_acq(J, JIT_P_maxsnap);
   if (need > maxsnap)
     lj_trace_err(J, LJ_TRERR_SNAPOV);
   lj_mem_growvec(J->L, J->snapbuf, J->sizesnap, maxsnap, SnapShot);

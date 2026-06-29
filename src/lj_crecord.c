@@ -951,7 +951,7 @@ doconv:
 static TRef crec_reassoc_ofs(jit_State *J, TRef tr, ptrdiff_t *ofsp, MSize sz)
 {
   IRIns *ir = IR(tref_ref(tr));
-  if (LJ_LIKELY(J->flags & JIT_F_OPT_FOLD) && irref_isk(ir->op2) &&
+  if (LJ_LIKELY(jit_flags_acq(J) & JIT_F_OPT_FOLD) && irref_isk(ir->op2) &&
       (ir->o == IR_ADD || ir->o == IR_ADDOV || ir->o == IR_SUBOV)) {
     IRIns *irk = IR(ir->op2);
     ptrdiff_t k;
@@ -1123,7 +1123,7 @@ again:
       idx = crec_reassoc_ofs(J, idx, &ofs, sz);
 #if LJ_TARGET_ARM || LJ_TARGET_PPC
       /* Hoist base add to allow fusion of index/shift into operands. */
-      if (LJ_LIKELY(J->flags & JIT_F_OPT_LOOP) && ofs
+      if (LJ_LIKELY(jit_flags_acq(J) & JIT_F_OPT_LOOP) && ofs
 #if LJ_TARGET_ARM
 	  && (sz == 1 || sz == 4)
 #endif

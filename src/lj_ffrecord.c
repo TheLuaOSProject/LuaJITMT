@@ -151,7 +151,7 @@ static void recff_stitch(jit_State *J)
 /* Fallback handler for fast functions that are not recorded (yet). */
 static void LJ_FASTCALL recff_nyi(jit_State *J, RecordFFData *rd)
 {
-  if (J->cur.nins < (IRRef)J->param[JIT_P_minstitch] + REF_BASE) {
+  if (J->cur.nins < (IRRef)jit_param_acq(J, JIT_P_minstitch) + REF_BASE) {
     lj_trace_err_info(J, LJ_TRERR_TRACEUV);
   } else {
     /* Can only stitch from Lua call. */

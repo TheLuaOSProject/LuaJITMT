@@ -241,7 +241,7 @@ void lj_opt_sink(jit_State *J)
 {
   const uint32_t need = (JIT_F_OPT_SINK|JIT_F_OPT_FWD|
 			 JIT_F_OPT_DCE|JIT_F_OPT_CSE|JIT_F_OPT_FOLD);
-  if ((J->flags & need) == need &&
+  if ((jit_flags_acq(J) & need) == need &&
       (J->chain[IR_TNEW] || J->chain[IR_TDUP] ||
        (LJ_HASFFI && (J->chain[IR_CNEW] || J->chain[IR_CNEWI])))) {
     if (!J->loopref)

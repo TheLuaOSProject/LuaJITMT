@@ -83,6 +83,31 @@ static void expect_flush_waits_for_token(lua_State *L, const char *code)
   ljt_lua_dostring(L, "assert(lj_m6_token_tracecount() == 0)\n");
 }
 
+static void expect_opt_start_waits_for_token(lua_State *L)
+{
+  TokenReleaseCtx ctx;
+  pthread_t th;
+  global_State *g = G(L);
+  ctx.g = g;
+  ctx.owner = foreign_token_owner(L);
+  ctx.released = 0;
+  jit_token_rel(g, ctx.owner);
+  assert(pthread_create(&th, NULL, release_jit_token_after_delay, &ctx) == 0);
+  ljt_lua_dostring(L, "jit.opt.start('hotloop=3', 'hotexit=4', '-sink')\n");
+  assert(pthread_join(th, NULL) == 0);
+  assert(la_load32_acq(&ctx.released) == 1);
+  assert(jit_token_acq(g) == 0);
+  assert(jit_param_acq(G2J(g), JIT_P_hotloop) == 3);
+  assert(jit_param_acq(G2J(g), JIT_P_hotexit) == 4);
+  assert((jit_flags_acq(G2J(g)) & JIT_F_OPT_SINK) == 0);
+
+  ljt_lua_dostring(L,
+    "local ok = pcall(jit.opt.start, 'hotloop=5', 'not_an_option')\n"
+    "assert(not ok)\n");
+  assert(jit_token_acq(g) == 0);
+  assert(jit_param_acq(G2J(g), JIT_P_hotloop) == 5);
+}
+
 int main(void)
 {
   lua_State *L = ljt_lua_newstate_openlibs();
@@ -200,8 +225,9 @@ int main(void)
 
   expect_flush_waits_for_token(L, "jit.flush()\n");
   expect_flush_waits_for_token(L, "jit.flush(1)\n");
+  expect_opt_start_waits_for_token(L);
 
   lua_close(L);
-  printf("t-jit-token OK: recorder token accepts secondary TGs and owns flush mutation\n");
+  printf("t-jit-token OK: recorder token accepts secondary TGs and owns JIT controls\n");
   return 0;
 }

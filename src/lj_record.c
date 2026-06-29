@@ -338,7 +338,7 @@ void lj_record_stop(jit_State *J, TraceLink linktype, TraceNo lnk)
   J->cur.link = (uint16_t)lnk;
   /* Looping back at the same stack level? */
   if (lnk == J->cur.traceno && J->framedepth + J->retdepth == 0) {
-    if ((J->flags & JIT_F_OPT_LOOP))  /* Shall we try to create a loop? */
+    if ((jit_flags_acq(J) & JIT_F_OPT_LOOP))  /* Shall we try to create a loop? */
       goto nocanon;  /* Do not canonicalize or we lose the narrowing. */
     if (J->cur.root)  /* Otherwise ensure we always link to the root trace. */
       J->cur.link = J->cur.root;
@@ -937,7 +937,7 @@ static int check_downrec_unroll(jit_State *J, GCproto *pt)
 	  count++;
       if (count) {
 	if (J->pc == J->startpc) {
-	  if (count + J->tailcalled > J->param[JIT_P_recunroll])
+	if (count + J->tailcalled > jit_param_acq(J, JIT_P_recunroll))
 	    return 1;
 	} else {
 	  lj_trace_err(J, LJ_TRERR_DOWNREC);
@@ -1508,7 +1508,7 @@ static void rec_idx_bump(jit_State *J, RecordIndex *ix)
 static void rec_idx_abc(jit_State *J, TRef asizeref, TRef ikey, uint32_t asize)
 {
   /* Try to emit invariant bounds checks. */
-  if ((J->flags & (JIT_F_OPT_LOOP|JIT_F_OPT_ABC)) ==
+  if ((jit_flags_acq(J) & (JIT_F_OPT_LOOP|JIT_F_OPT_ABC)) ==
       (JIT_F_OPT_LOOP|JIT_F_OPT_ABC)) {
     IRRef ref = tref_ref(ikey);
     IRIns *ir = IR(ref);
@@ -1964,7 +1964,7 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
 	xref = emitir(IRT(IR_NEWREF, IRT_PGC), ix->tab, key);
 	keybarrier = 0;  /* NEWREF already takes care of the key barrier. */
 #ifdef LUAJIT_ENABLE_TABLE_BUMP
-	if ((J->flags & JIT_F_OPT_SINK))  /* Avoid a separate flag. */
+	if ((jit_flags_acq(J) & JIT_F_OPT_SINK))  /* Avoid a separate flag. */
 	  rec_idx_bump(J, ix);
 #endif
       }
@@ -2062,7 +2062,7 @@ static void rec_tsetm(jit_State *J, BCReg ra, BCReg rn, int32_t i)
   ix.tab = getslot(J, ra-1);
   ix.idxchain = 0;
 #ifdef LUAJIT_ENABLE_TABLE_BUMP
-  if ((J->flags & JIT_F_OPT_SINK)) {
+  if ((jit_flags_acq(J) & JIT_F_OPT_SINK)) {
     TValue *array;
     MSize asize = lj_tab_array_snapshot_acq(t, &array);
     if (asize < (MSize)(i+rn-ra))
@@ -2454,7 +2454,7 @@ static void check_call_unroll(jit_State *J, TraceNo lnk)
       count++;
   }
   if (J->pc == J->startpc) {
-    if (count + J->tailcalled > J->param[JIT_P_recunroll]) {
+    if (count + J->tailcalled > jit_param_acq(J, JIT_P_recunroll)) {
       J->pc++;
       if (J->framedepth + J->retdepth == 0)
 	lj_record_stop(J, LJ_TRLINK_TAILREC, J->cur.traceno);  /* Tail-rec. */
@@ -2462,7 +2462,7 @@ static void check_call_unroll(jit_State *J, TraceNo lnk)
 	lj_record_stop(J, LJ_TRLINK_UPREC, J->cur.traceno);  /* Up-recursion. */
     }
   } else {
-    if (count > J->param[JIT_P_callunroll]) {
+    if (count > jit_param_acq(J, JIT_P_callunroll)) {
       if (lnk) {  /* Possible tail- or up-recursion. */
 	(void)lj_trace_flushscope(J, lnk);  /* Flush return trace after HS. */
 	/* Set a small, pseudo-random hotcount for a quick retry of JFUNC*. */
@@ -3379,8 +3379,8 @@ void lj_record_ins(jit_State *J)
 #undef rcv
 
   /* Limit the number of recorded IR instructions and constants. */
-  if (J->cur.nins > REF_FIRST+(IRRef)J->param[JIT_P_maxrecord] ||
-      J->cur.nk < REF_BIAS-(IRRef)J->param[JIT_P_maxirconst])
+  if (J->cur.nins > REF_FIRST+(IRRef)jit_param_acq(J, JIT_P_maxrecord) ||
+      J->cur.nk < REF_BIAS-(IRRef)jit_param_acq(J, JIT_P_maxirconst))
     lj_trace_err(J, LJ_TRERR_TRACEOV);
 }
 
@@ -3473,8 +3473,8 @@ void lj_record_setup(jit_State *J)
   J->framedepth = 0;
   J->retdepth = 0;
 
-  J->instunroll = J->param[JIT_P_instunroll];
-  J->loopunroll = J->param[JIT_P_loopunroll];
+  J->instunroll = jit_param_acq(J, JIT_P_instunroll);
+  J->loopunroll = jit_param_acq(J, JIT_P_loopunroll);
   J->tailcalled = 0;
   J->loopref = 0;
 
@@ -3516,9 +3516,10 @@ void lj_record_setup(jit_State *J)
     lj_snap_replay(J, T);
   sidecheck:
     if ((trace_nchild_acq(traceref(J, J->cur.root)) >=
-	 J->param[JIT_P_maxside] ||
-	 snap_count_acq(&snap[J->exitno]) >= J->param[JIT_P_hotexit] +
-					 J->param[JIT_P_tryside])) {
+	 jit_param_acq(J, JIT_P_maxside) ||
+	 snap_count_acq(&snap[J->exitno]) >=
+	 (uint32_t)jit_param_acq(J, JIT_P_hotexit) +
+	 (uint32_t)jit_param_acq(J, JIT_P_tryside))) {
       if (bc_op(*J->pc) == BC_JLOOP) {
 	BCIns startins = trace_startins_acq(traceref(J, bc_d(*J->pc)));
 	if (bc_op(startins) == BC_ITERN)

@@ -333,7 +333,7 @@ static TraceNo trace_findfree(jit_State *J)
     if (traceref(J, J->freetrace) == NULL)
       return J->freetrace++;
   /* Need to grow trace array. */
-  lim = (MSize)J->param[JIT_P_maxtrace] + 1;
+  lim = (MSize)jit_param_acq(J, JIT_P_maxtrace) + 1;
   if (lim < 2) lim = 2; else if (lim > 65535) lim = 65535;
   osz = trace_sizetrace_acq(J);
   if (osz >= lim)
@@ -1280,7 +1280,7 @@ static int trace_abort(jit_State *J)
     return trace_downrec(J);
   } else if (e == LJ_TRERR_MCODEAL) {
     if (!J->mcarea) {  /* Disable JIT compiler if first mcode alloc fails. */
-      J->flags &= ~JIT_F_ON;
+      jit_flags_setmask(J, JIT_F_ON, 0);
       lj_dispatch_update(J2G(J), 0);
     }
     (void)lj_trace_flushall_hs(L);
@@ -1362,7 +1362,7 @@ static TValue *trace_state(lua_State *L, lua_CFunction dummy, void *ud)
     case LJ_TRACE_END:
       trace_pendpatch(J, 1);
       J->loopref = 0;
-      if ((J->flags & JIT_F_OPT_LOOP) &&
+      if ((jit_flags_acq(J) & JIT_F_OPT_LOOP) &&
 	  J->cur.link == J->cur.traceno && J->framedepth + J->retdepth == 0) {
 	setvmstate(J2G(J), OPT);
 	lj_opt_dce(J);
@@ -1443,7 +1443,7 @@ void LJ_FASTCALL lj_trace_hot(jit_State *J, const BCIns *pc)
   /* Note: pc is the interpreter bytecode PC here. It's offset by 1. */
   ERRNO_SAVE
   /* Reset hotcount. */
-  hotcount_setg(J2G(J), pc, J->param[JIT_P_hotloop]*HOTCOUNT_LOOP);
+  hotcount_setg(J2G(J), pc, jit_param_acq(J, JIT_P_hotloop)*HOTCOUNT_LOOP);
   /* Only start a new trace if not recording or inside __gc call or vmevent. */
   if (lj_trace_state_load(J) == LJ_TRACE_IDLE &&
       !(hookmask_load(J2G(J)) & (HOOK_GC|HOOK_VMEVENT)) &&
@@ -1468,7 +1468,7 @@ static void trace_hotside(jit_State *J, const BCIns *pc, lua_State *L,
 {
   GCtrace *parentT = traceref(J, parent);
   SnapShot *snap;
-  uint32_t hotexit = J->param[JIT_P_hotexit];
+  uint32_t hotexit = (uint32_t)jit_param_acq(J, JIT_P_hotexit);
   uint8_t count;
   if (!parentT || trace_traceno_acq(parentT) != parent ||
       la_load64_acq(&parentT->retire_epoch) != 0 ||
@@ -1714,7 +1714,7 @@ int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr)
   } else if (G(L)->gc.state == GCSatomic || G(L)->gc.state == GCSfinalize) {
     if (!(hookmask_load(G(L)) & HOOK_GC))
       lj_gc_step(L);  /* Exited because of GC: drive GC forward. */
-  } else if ((J->flags & JIT_F_ON) && !trace_poll_pending(L)) {
+  } else if ((jit_flags_acq(J) & JIT_F_ON) && !trace_poll_pending(L)) {
     trace_hotside(J, pc, L, parent, exitno);
   }
   /* Return MULTRES or 0 or -17. */

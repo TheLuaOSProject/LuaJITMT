@@ -2580,7 +2580,7 @@ void lj_asm_trace(jit_State *J, GCtrace *T)
   as->J = J;
   as->T = T;
   J->curfinal = lj_trace_alloc(J->L, T);  /* This copies the IR, too. */
-  as->flags = J->flags;
+  as->flags = jit_flags_acq(J);
   as->loopref = J->loopref;
   as->realign = NULL;
   as->loopinv = 0;
