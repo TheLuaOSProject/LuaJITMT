@@ -131,6 +131,9 @@ return function(add)
       build_and_run_c(t, t:tmp("lj_t-ffi-carith-check64-snapshot"),
                       "t-ffi-carith-check64-snapshot.c",
                       { build = false, timeout = "20s" })
+      build_and_run_c(t, t:tmp("lj_t-ffi-carith-arg-snapshot"),
+                      "t-ffi-carith-arg-snapshot.c",
+                      { build = false, timeout = "20s" })
       run_luajit_script(t, "t-ffi-carith-l.lua", nil, { joff = true })
       print("M7 FFI arithmetic/raw conversion behavior passed")
     end
