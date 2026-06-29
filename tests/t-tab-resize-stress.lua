@@ -757,6 +757,96 @@ local function exercise_next_churn_resize()
   end
 end
 
+local function tablelib_resize_writer(tbl, ready, start, id, n)
+  assert(ready:send(true, 10) == true)
+  local _, ok = start:recv(10)
+  assert(ok == true)
+  for i = 1, n do
+    local k = "tablelib-grow:" .. id .. ":" .. i
+    tbl[k] = i
+    if i > 24 and i % 5 == 0 then
+      tbl["tablelib-grow:" .. id .. ":" .. (i - 16)] = nil
+    end
+    if i % 64 == 0 then collectgarbage("step") end
+  end
+  return true
+end
+
+local function tablelib_insert_worker(tbl, ready, start, id, n)
+  local inserted = {}
+  assert(ready:send(true, 10) == true)
+  local _, ok = start:recv(10)
+  assert(ok == true)
+  for i = 1, n do
+    local marker = {
+      kind = "tablelib-insert",
+      token = "tablelib:" .. id .. ":" .. i
+    }
+    if i % 5 == 0 then
+      table.insert(tbl, marker)
+    else
+      table.insert(tbl, 1, marker)
+    end
+    inserted[#inserted + 1] = marker
+    if i % 32 == 0 then collectgarbage("step") end
+  end
+  return inserted
+end
+
+local function exercise_table_library_resize()
+  local t = {}
+  local weak_inserted = setmetatable({}, { __mode = "v" })
+  local tokens = {}
+  local insert_rounds = math.min(reps, 384)
+  local nworkers = writers + 1
+  local ready, start = ready_start(nworkers)
+  local workers = {}
+
+  for i = 1, 64 do
+    t[i] = { seed = i }
+  end
+
+  for i = 1, writers do
+    workers[#workers + 1] =
+      th.spawn(tablelib_resize_writer, t, ready, start, i, reps)
+  end
+  workers[#workers + 1] =
+    th.spawn(tablelib_insert_worker, t, ready, start, 1, insert_rounds)
+
+  harness.wait_ready(ready, nworkers, 10, "table library resize")
+  harness.release_start(start, nworkers, 10)
+  collect_while_working(128)
+  harness.join_each(workers, function(result)
+    if result == true then return end
+    assert(type(result) == "table", "unexpected tablelib worker result")
+    for i = 1, #result do
+      local marker = result[i]
+      assert(type(marker) == "table" and marker.kind == "tablelib-insert")
+      tokens[#tokens + 1] = marker.token
+      weak_inserted[marker.token] = marker
+    end
+  end, 30)
+
+  harness.fullgc(3)
+
+  local found = {}
+  for k, v in pairs(t) do
+    assert_lua_value(k, "table library resize key")
+    assert_lua_value(v, "table library resize value")
+    if type(v) == "table" and v.kind == "tablelib-insert" then
+      found[v.token] = true
+    end
+  end
+
+  assert(#tokens == insert_rounds, "table.insert worker returned short list")
+  for i = 1, #tokens do
+    local token = tokens[i]
+    assert(type(weak_inserted[token]) == "table",
+	   "table.insert marker was not kept live by the table")
+    assert(found[token], "table.insert marker missing after resize churn")
+  end
+end
+
 local ran = 0
 ran = ran + run_case("weak", exercise_weak_clear_resize)
 ran = ran + run_case("gcmark", exercise_gc_mark_resize)
@@ -769,6 +859,7 @@ ran = ran + run_case("jitstore", exercise_jit_store_resize)
 ran = ran + run_case("jitread", exercise_jit_read_resize)
 ran = ran + run_case("traversal", exercise_concurrent_traversal_resize)
 ran = ran + run_case("nextchurn", exercise_next_churn_resize)
+ran = ran + run_case("tablelib", exercise_table_library_resize)
 assert(ran > 0, "no table resize stress cases selected")
 
 print(("t-tab-resize-stress OK: %d writers, %d resize rounds"):format(
