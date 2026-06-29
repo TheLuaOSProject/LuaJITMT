@@ -22,9 +22,10 @@ pointers from release-published prototype storage.
 The explicit loops above now use `gcref_acq(*kr)` when reading prototype GC
 constant slots.
 
-Update: `bcwrite_has_legacyuv()` remains part of the bytecode compatibility
-path. It walks prototype GC constants with acquire loads so v2-loaded prototype
-trees are not silently re-emitted as current lockless bytecode.
+Update: recursive bytecode writing now preserves the v2-loaded legacy-upvalue
+marker in the current lockless dump format. Child prototype traversal still
+walks prototype GC constants with acquire loads so release-published nested
+prototypes are read coherently before their payload flags are emitted.
 
 ## Scope
 

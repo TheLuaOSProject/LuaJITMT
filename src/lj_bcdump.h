@@ -49,6 +49,9 @@
 
 #define BCDUMP_F_DETERMINISTIC	0x80000000
 
+/* Lockless v4 prototype payload flags. */
+#define BCDUMP_PF_LEGACYUV	0x08
+
 /* Type codes for the GC constants of a prototype. Plus length for strings. */
 enum {
   BCDUMP_KGC_CHILD, BCDUMP_KGC_TAB, BCDUMP_KGC_I64, BCDUMP_KGC_U64,

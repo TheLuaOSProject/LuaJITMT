@@ -88,7 +88,11 @@ static size_t first_proto_offset(const DumpBuf *b)
   uint32_t flags, plen;
   assert(b->n > 6);
   flags = read_uleb(b, &ofs);
-  assert((flags & BCDUMP_F_STRIP) != 0);
+  if ((flags & BCDUMP_F_STRIP) == 0) {
+    uint32_t namelen = read_uleb(b, &ofs);
+    assert(ofs + namelen <= b->n);
+    ofs += namelen;
+  }
   plen = read_uleb(b, &ofs);
   assert(plen != 0);
   assert(ofs + plen <= b->n);
@@ -194,7 +198,13 @@ int main(void)
   mod.p[3] = BCDUMP_VERSION_LEGACY;
   ljt_lua_assert_ok(L, load_dump(L, &mod), "load patched v2 dump");
   dump_reset(&redump);
-  assert(lua_dump(L, dump_writer, &redump) != 0);
+  assert(lua_dump(L, dump_writer, &redump) == 0);
+  assert((uint8_t)redump.p[3] == BCDUMP_VERSION_LOCKLESS);
+  assert((uint8_t)redump.p[first_proto_offset(&redump)] & BCDUMP_PF_LEGACYUV);
+  ljt_lua_assert_ok(L, load_dump(L, &redump), "load redumped v2 dump");
+  ljt_lua_assert_ok(L, lua_pcall(L, 0, 1, 0), "pcall redumped v2 dump");
+  assert(lua_tointeger(L, -1) == 42);
+  lua_pop(L, 1);
   ljt_lua_assert_ok(L, lua_pcall(L, 0, 1, 0), "pcall patched v2 dump");
   assert(lua_tointeger(L, -1) == 42);
   lua_pop(L, 1);
@@ -204,7 +214,7 @@ int main(void)
   assert_load_fails(L, &mod, "unknown dump version");
 
   dump_copy(&mod, &base);
-  mod.p[first_proto_offset(&mod)] = PROTO_NOJIT;
+  mod.p[first_proto_offset(&mod)] = PROTO_ILOOP;
   assert_load_fails(L, &mod, "dump with forbidden proto flag");
 
   bcpos = first_bc_offset(&base, &framesize, &numbc);

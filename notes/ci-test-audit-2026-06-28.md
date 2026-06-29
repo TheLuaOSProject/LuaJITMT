@@ -86,11 +86,12 @@ behavior fixtures, C fixtures, generated dump/ASM checks, and documentation.
   before interrupted `profile.stop()` unwinds.
 - Removed 76 pure shell aliases in this pass. Use
   `tools/ci/lua_test.sh <case...>` for those cases.
-- Slimmed `tools/ci/m7_ffi_blocking.sh` by removing source-shape checks for
-  duplicate blacklist reconciliation and default recorder abort behavior; those
-  contracts are covered by `t-ffi-cbblack-race`, `t-ffi-blocking.lua`, and the
-  recorder-off fixture. The remaining checks enforce non-observable CType/load
-  boundaries and the compile-time traced-FFI fence.
+- The old `m7_ffi_blocking` wrapper was folded into the Lua-owned
+  `m7_ffi_ccall_native` behavior case. Duplicate callback-blacklist
+  reconciliation, absence of the removed `ffi.blocking` public marker, default
+  recorder abort behavior, and native-state blocking progress are covered by
+  `tests/t-ffi-cbblack-race.c`, `tests/t-ffi-ccall-native.lua`, and the
+  recorder-off fixture rather than source-shape checks.
 - Follow-up stock-behavior correction: bytecode-dump compatibility support for
   stock v2 and transitional v3 dumps was restored. That path is not a
   threading-only legacy entrypoint; it affects `load`, `luaL_loadbuffer*`, and

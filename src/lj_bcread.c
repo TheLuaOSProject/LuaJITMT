@@ -396,14 +396,19 @@ GCproto *lj_bcread_proto(LexState *ls)
   GCproto *pt;
   MSize framesize, numparams, flags, sizeuv, sizekgc, sizekn, sizebc, sizept;
   MSize ofsk, ofsuv, ofsdbg;
+  uint32_t dump_proto_flags, allowed_flags;
   MSize sizedbg = 0;
   int cellops;
   BCLine firstline = 0, numline = 0;
 
   /* Read prototype header. */
-  flags = bcread_byte(ls);
-  if ((flags & ~(PROTO_CHILD|PROTO_VARARG|PROTO_FFI)) != 0)
+  dump_proto_flags = bcread_byte(ls);
+  allowed_flags = PROTO_CHILD|PROTO_VARARG|PROTO_FFI;
+  if (bcread_version(ls) == BCDUMP_VERSION_LOCKLESS)
+    allowed_flags |= BCDUMP_PF_LEGACYUV;
+  if ((dump_proto_flags & ~allowed_flags) != 0)
     bcread_error(ls, LJ_ERR_BCBAD);
+  flags = dump_proto_flags & (PROTO_CHILD|PROTO_VARARG|PROTO_FFI);
   numparams = bcread_byte(ls);
   framesize = bcread_byte(ls);
   sizeuv = bcread_byte(ls);
@@ -441,7 +446,9 @@ GCproto *lj_bcread_proto(LexState *ls)
   pt->sizeuv = (uint8_t)sizeuv;
   pt->flags = (uint8_t)flags;
   proto_initflags2(pt);
-  if (bcread_version(ls) == BCDUMP_VERSION_LEGACY)
+  if (bcread_version(ls) == BCDUMP_VERSION_LEGACY ||
+      (bcread_version(ls) == BCDUMP_VERSION_LOCKLESS &&
+       (dump_proto_flags & BCDUMP_PF_LEGACYUV)))
     proto_setlegacyuv(pt);
   pt->trace = 0;
   setgcrefrel(pt->chunkname, obj2gco(ls->chunkname));
@@ -453,10 +460,14 @@ GCproto *lj_bcread_proto(LexState *ls)
   /* Read bytecode instructions and upvalue refs. */
   bcread_bytecode(ls, pt, sizebc);
   cellops = bcread_verify_bytecode(ls, pt);
-  if (cellops)
+  if (cellops) {
+    if (proto_legacyuv(pt))
+      bcread_error(ls, LJ_ERR_BCBAD);
     proto_setcelluv(pt);
+  }
   bcread_uv(ls, pt, sizeuv);
-  if (bcread_version(ls) == BCDUMP_VERSION_LOCKLESS && bcread_uv_haslocal(pt))
+  if (bcread_version(ls) == BCDUMP_VERSION_LOCKLESS &&
+      !proto_legacyuv(pt) && bcread_uv_haslocal(pt))
     proto_setcelluv(pt);
   /* Read constants. */
   bcread_kgc(ls, pt, sizekgc);

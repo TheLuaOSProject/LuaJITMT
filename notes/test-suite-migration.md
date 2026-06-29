@@ -276,8 +276,9 @@ Lua test-suite migration notes:
   metatype/miscmap Lua regression.
 - Converted `m7_ffi_clib_cache` to behavior-only coverage through the threaded
   interpreter and JIT C-library cache regressions.
-- Converted `m7_ffi_blocking` to behavior-only coverage through its Lua
-  recorder blacklist regression.
+- Converted `m7_ffi_ccall_native` to behavior-only coverage through its Lua
+  native-state and recorder blacklist regressions plus the callback-blacklist C
+  fixture.
 - Converted `m7_ffi_carith_l` to behavior-only coverage through its Lua
   arithmetic/raw conversion regression.
 - Converted the M7 cdata allocation/read/write cases to behavior-only coverage

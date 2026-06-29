@@ -706,6 +706,8 @@ static void jit_profile_callback(lua_State *L2, lua_State *L, int samples,
   TValue cbtv;
   key.u64 = KEY_PROFILE_FUNC;
   tv = lj_tab_get(L, lj_registry_tab_acq(G(L)), &key);
+  if (!tv)
+    return;
   lj_tv_load_acq(&cbtv, tv);
   if (tvisfunc(&cbtv)) {
     char vmst = (char)vmstate;
@@ -740,10 +742,6 @@ LJLIB_CF(jit_profile_start)
   TValue key, tv;
   luaJIT_profile_stop(L);
   jit_profile_registry_clear(L);
-  luaJIT_profile_start(L, mode ? strdata(mode) : "",
-		       (luaJIT_profile_callback)jit_profile_callback, L2);
-  if (!lj_profile_active(L))
-    return 0;
   /* Anchor thread and function in registry. */
   key.u64 = KEY_PROFILE_THREAD;
   setthreadV(L, &tv, L2);
@@ -754,6 +752,10 @@ LJLIB_CF(jit_profile_start)
   jit_profile_registry_store(L, registry, &key, &tv);
   lj_gc2_barrier_weak_write(L, registry, &key, &tv);
   lj_gc_pubtab(L, registry);
+  luaJIT_profile_start(L, mode ? strdata(mode) : "",
+		       (luaJIT_profile_callback)jit_profile_callback, L2);
+  if (!lj_profile_active(L))
+    jit_profile_registry_clear(L);
   return 0;
 }
 

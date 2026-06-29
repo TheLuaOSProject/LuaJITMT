@@ -14,12 +14,14 @@ buffer. Stale profile hooks check that the active profiler still belongs to the
 current VM before loading callback state.
 
 The Lua `jit.profile.start()` wrapper first stops any old same-VM profiler
-session, clears old registry anchors, starts the C profiler while the new
-callback coroutine is stack-anchored, and publishes the hidden registry anchors
-only if this VM actually owns the profiler after start. This avoids clearing
-anchors from underneath an active callback, exposing new Lua callback anchors to
-samples from an old session, or leaving anchors behind after an other-VM no-op
-start.
+session, clears old registry anchors, anchors the new hidden callback coroutine
+and Lua function in the registry, and only then starts the C profiler. The timer
+callback can run as soon as the profiler becomes active, so the callback
+registry slots must already exist before `luaJIT_profile_start()` enables the
+timer. If the start is an other-VM no-op, the wrapper clears those fresh anchors
+again. This avoids clearing anchors from underneath an active callback, invoking
+a timer callback before its Lua function is anchored, or leaving anchors behind
+after an other-VM no-op start.
 
 On x86_64 Linux, the stock backend uses process-wide `ITIMER_PROF`. The signal
 does not identify a Lua thread group, and async dispatch updates cannot safely
