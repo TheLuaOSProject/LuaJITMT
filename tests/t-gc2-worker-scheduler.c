@@ -3,6 +3,7 @@
 */
 
 #include <assert.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <time.h>
 
@@ -18,6 +19,7 @@
 #include "lj_safepoint.h"
 #include "lj_tab.h"
 #include "lj_tg.h"
+#include "lj_thr.h"
 
 static void sleep_ns(long ns)
 {
@@ -84,6 +86,15 @@ static lua_State *finalizer_expected_L;
 static int finalizer_count;
 static int finalizer_order[3];
 
+typedef struct FinalizerOwnerHold {
+  global_State *g;
+  TGState *wait_tg;
+  TGState tg;
+  uint32_t tid;
+  uint32_t entered;
+  uint32_t saw_native;
+} FinalizerOwnerHold;
+
 static int scheduler_udata_finalizer(lua_State *L)
 {
   int *id = (int *)lua_touserdata(L, 1);
@@ -93,6 +104,33 @@ static int scheduler_udata_finalizer(lua_State *L)
   assert(finalizer_count < 3);
   finalizer_order[finalizer_count++] = *id;
   return 0;
+}
+
+static void *finalizer_owner_hold_thread(void *arg)
+{
+  FinalizerOwnerHold *ctx = (FinalizerOwnerHold *)arg;
+  TGState *saved_tg = lj_thr_get_tg();
+  int i;
+
+  lj_tg_init_thread(ctx->g, &ctx->tg, NULL, 0);
+  ctx->tg.tid = ctx->tid;
+  ctx->tg.alloc.owner_tid = ctx->tid;
+  lj_tg_derive_prng(ctx->g, &ctx->tg, ctx->tid);
+  lj_thr_set_tg(&ctx->tg);
+  lj_tg_attach(ctx->g, &ctx->tg);
+  lj_gc2_test_finalizer_enter(ctx->g);
+  la_store32_rel(&ctx->entered, 1);
+  for (i = 0; i < 10000; i++) {
+    if (lj_tg_in_native_acq(ctx->wait_tg)) {
+      la_store32_rel(&ctx->saw_native, 1);
+      break;
+    }
+    sleep_ns(100000L);
+  }
+  lj_gc2_test_finalizer_leave(ctx->g);
+  lj_tg_detach(ctx->g, &ctx->tg);
+  lj_thr_set_tg(saved_tg);
+  return NULL;
 }
 
 static int arena_list_contains(GCArena *a, GCArena *needle)
@@ -280,6 +318,69 @@ static void test_worker_real_finalizer_dispatch(lua_State *L, global_State *g)
   lj_gc2_finreg_udata_finalize(g, 1);
   lj_gc2_finalizer_dispatch_all(L);
   assert(finalizer_count == 3);
+  finalizer_expected_L = NULL;
+}
+
+static void test_finalizer_dispatch_all_waits_native(lua_State *L,
+						     global_State *g,
+						     TGState *tg)
+{
+  FinalizerOwnerHold hold;
+  pthread_t thread;
+  uint64_t queued0, drained0, dequeued0;
+  size_t separated;
+  int i;
+
+  lua_settop(L, 0);
+  finalizer_expected_L = L;
+  finalizer_count = 0;
+  finalizer_order[0] = finalizer_order[1] = finalizer_order[2] = 0;
+
+  assert(gc2_n_workers_acq(g) == 2);
+  assert(gc2_finalizer_mpsc_acq(g) == NULL);
+  assert(gc2_finalizer_tail_acq(g) == NULL);
+
+  push_scheduler_udata(L, 1);
+
+  queued0 = gc2_finalizer_queued_acq(g);
+  drained0 = gc2_finalizer_mpsc_drained_acq(g);
+  dequeued0 = gc2_finalizer_dequeued_acq(g);
+  separated = lj_gc2_finreg_udata_finalize(g, 1);
+  assert(separated >= 1u);
+  assert(gc2_finalizer_queued_acq(g) == queued0 + 1u);
+  assert(wait_gc2_counter_at_least(g, gc2_finalizer_mpsc_drained_acq,
+				   drained0 + 1u));
+  assert(gc2_finalizer_mpsc_acq(g) == NULL);
+  assert(gc2_finalizer_tail_acq(g) != NULL);
+
+  hold.g = g;
+  hold.wait_tg = tg;
+  hold.tid = lj_tg_tid_acq(tg) + 6000u;
+  if (hold.tid == 0 || hold.tid == LJ_THREAD_GCSCAN)
+    hold.tid = 6000u;
+  hold.entered = 0;
+  hold.saw_native = 0;
+
+  assert(lj_state_owner_acq(L) == lj_tg_tid_acq(tg));
+  assert(pthread_create(&thread, NULL, finalizer_owner_hold_thread,
+			&hold) == 0);
+  for (i = 0; i < 1000 && la_load32_acq(&hold.entered) == 0; i++)
+    sleep_ns(1000000L);
+  assert(la_load32_acq(&hold.entered) == 1);
+  assert(gc2_finalizer_owner_acq(g) == hold.tid);
+
+  lj_gc2_finalizer_dispatch_all(L);
+  assert(pthread_join(thread, NULL) == 0);
+  assert(la_load32_acq(&hold.saw_native) == 1);
+  assert(gc2_finalizer_dequeued_acq(g) == dequeued0 + 1u);
+  assert(gc2_finalizer_tail_acq(g) == NULL);
+  assert(finalizer_count == 1);
+  assert(finalizer_order[0] == 1);
+
+  lua_settop(L, 0);
+  lj_gc2_finreg_udata_finalize(g, 1);
+  lj_gc2_finalizer_dispatch_all(L);
+  assert(finalizer_count == 1);
   finalizer_expected_L = NULL;
 }
 
@@ -564,6 +665,7 @@ int main(void)
   test_two_worker_contention(g);
   test_worker_finalizer_mpsc_drain(L, g);
   test_worker_real_finalizer_dispatch(L, g);
+  test_finalizer_dispatch_all_waits_native(L, g, tg);
   test_finalizer_owner_leave_rewakes_worker(L, g);
   test_worker_stop_l_delivers_stopreq(L, g, tg);
   test_async_mark(L, g, tg);

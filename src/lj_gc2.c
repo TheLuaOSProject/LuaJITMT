@@ -121,6 +121,7 @@ static void gc2_finalizer_free_ring(global_State *g, GC2FinalizerNode *tail);
 static void lj_gc2_finalizer_enqueue(global_State *g, GCobj *o);
 static void lj_gc2_finalizer_mark_enqueue(global_State *g, GCobj *o);
 static void lj_gc2_finalizer_drain_owned(global_State *g);
+static void lj_gc2_finalizer_drain_l(lua_State *L, global_State *g);
 static void lj_gc2_finalizer_drain(global_State *g);
 static GCobj *lj_gc2_finalizer_dequeue_owned(global_State *g);
 static GCobj *lj_gc2_finalizer_dequeue(global_State *g);
@@ -129,6 +130,8 @@ static int gc2_finalizer_queue_pending(global_State *g);
 static int gc2_finalizer_sweep_pending(global_State *g);
 static void gc2_peer_wait_no_l(void);
 static void gc2_peer_wait_l(lua_State *L);
+static void gc2_peer_wait_owned_l(lua_State *L);
+static void lj_gc2_finalizer_enter_l(lua_State *L, global_State *g);
 static void lj_gc2_finalizer_enter(global_State *g);
 static void lj_gc2_finalizer_leave(global_State *g);
 static int lj_gc2_finalizer_pending(global_State *g);
@@ -1488,13 +1491,18 @@ static void lj_gc2_finalizer_drain_owned(global_State *g)
   gc2_finalizer_mpsc_drained_add(g, n);
 }
 
-static void lj_gc2_finalizer_drain(global_State *g)
+static void lj_gc2_finalizer_drain_l(lua_State *L, global_State *g)
 {
   if (!g)
     return;
-  lj_gc2_finalizer_enter(g);
+  lj_gc2_finalizer_enter_l(L, g);
   lj_gc2_finalizer_drain_owned(g);
   lj_gc2_finalizer_leave(g);
+}
+
+static void lj_gc2_finalizer_drain(global_State *g)
+{
+  lj_gc2_finalizer_drain_l(NULL, g);
 }
 
 static GCobj *lj_gc2_finalizer_dequeue_owned(global_State *g)
@@ -1594,11 +1602,11 @@ void lj_gc2_finalizer_dispatch_all(lua_State *L)
   ctx.dispatch = NULL;
   g = G(L);
   for (;;) {
-    lj_gc2_finalizer_drain(g);
+    lj_gc2_finalizer_drain_l(L, g);
     if (!gc2_finalizer_queue_pending(g))
       break;
     if (!lj_gc2_finalizer_dispatch_one(L, &ctx))
-      gc2_peer_wait_no_l();
+      gc2_peer_wait_owned_l(L);
   }
 }
 
@@ -1696,6 +1704,33 @@ static void gc2_peer_wait_l(lua_State *L)
     (void)lj_thr_sleep_ns(L, 1000000);
   else
     gc2_peer_wait_no_l();
+}
+
+static void gc2_peer_wait_owned_l(lua_State *L)
+{
+  TGState *tg;
+  uint32_t tid;
+  if (!L)
+    goto no_l;
+  tg = lj_thr_get_tg();
+  if (!tg || tg->gl != G(L) || L2TG(L) != tg)
+    goto no_l;
+  tid = lj_tg_tid_acq(tg);
+  if (tid != 0 && tid != LJ_THREAD_GCSCAN &&
+      lj_state_owner_acq(L) == tid) {
+    gc2_peer_wait_l(L);
+    return;
+  }
+no_l:
+  gc2_peer_wait_no_l();
+}
+
+static void lj_gc2_finalizer_enter_l(lua_State *L, global_State *g)
+{
+  if (!g)
+    return;
+  while (!lj_gc2_finalizer_try_enter(g))
+    gc2_peer_wait_owned_l(L);
 }
 
 static void lj_gc2_finalizer_enter(global_State *g)
