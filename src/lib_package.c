@@ -39,15 +39,16 @@
 #define SYMPREFIX_CF		"luaopen_%s"
 #define SYMPREFIX_BC		"luaJIT_BC_%s"
 
-#define PACKAGE_REQUIRE_CLAIMS	"_REQUIRE_INPROGRESS"
-#define PACKAGE_LOADLIB_CLAIMS	"_LOADLIB_INPROGRESS"
 #define PACKAGE_CLAIM_WAIT_NS	1000000
 
 #define PACKAGE_CLAIM_PEER	0
 #define PACKAGE_CLAIM_ACQUIRED	1
 #define PACKAGE_CLAIM_OWNER	2
 
-static void package_claim_push(lua_State *L, const char *regkey);
+static char package_require_claims_key;
+static char package_loadlib_claims_key;
+
+static void package_claim_push(lua_State *L, void *regkey);
 static int package_claim_peer(GCtab *claims, GCstr *key, uint32_t tid);
 static void package_claim_wait(lua_State *L, GCtab *claims, GCstr *key,
 			       uint32_t tid);
@@ -392,7 +393,7 @@ static int ll_loadfunc(lua_State *L, const char *path, const char *name, int r)
     return PACKAGE_ERR_LIB;
   }
   key = lj_str_newz(L, path);
-  package_claim_push(L, PACKAGE_LOADLIB_CLAIMS);
+  package_claim_push(L, &package_loadlib_claims_key);
   claims = tabV(L->top-1);
   tid = lj_thr_current_id(G(L));
   for (;;) {
@@ -651,14 +652,16 @@ static TValue *package_require_cp(lua_State *L, lua_CFunction dummy, void *ud)
   return NULL;
 }
 
-static void package_claim_push(lua_State *L, const char *regkey)
+static void package_claim_push(lua_State *L, void *regkey)
 {
-  lua_getfield(L, LUA_REGISTRYINDEX, regkey);
+  lua_pushlightuserdata(L, regkey);
+  lua_rawget(L, LUA_REGISTRYINDEX);
   if (!lua_istable(L, -1)) {
     lua_pop(L, 1);
     lua_createtable(L, 0, 16);
-    lua_pushvalue(L, -1);
-    lua_setfield(L, LUA_REGISTRYINDEX, regkey);
+    lua_pushlightuserdata(L, regkey);
+    lua_pushvalue(L, -2);
+    lua_rawset(L, LUA_REGISTRYINDEX);
   }
 }
 
@@ -755,7 +758,7 @@ static int lj_cf_package_require(lua_State *L)
   int claim_state, clear_claim, status;
   lua_settop(L, 1);  /* _LOADED table will be at index 2. */
   lua_getfield(L, LUA_REGISTRYINDEX, "_LOADED");
-  package_claim_push(L, PACKAGE_REQUIRE_CLAIMS);  /* private claims at index 3. */
+  package_claim_push(L, &package_require_claims_key);  /* claims at index 3. */
   claims = tabV(L->top-1);
   for (;;) {
     lua_settop(L, 3);
@@ -932,9 +935,9 @@ LUALIB_API int luaopen_package(lua_State *L)
   lua_setfield(L, -2, "config");
   luaL_findtable(L, LUA_REGISTRYINDEX, "_LOADED", 16);
   lua_setfield(L, -2, "loaded");
-  luaL_findtable(L, LUA_REGISTRYINDEX, PACKAGE_REQUIRE_CLAIMS, 16);
+  package_claim_push(L, &package_require_claims_key);
   lua_pop(L, 1);
-  luaL_findtable(L, LUA_REGISTRYINDEX, PACKAGE_LOADLIB_CLAIMS, 16);
+  package_claim_push(L, &package_loadlib_claims_key);
   lua_pop(L, 1);
   luaL_findtable(L, LUA_REGISTRYINDEX, "_PRELOAD", 4);
   lua_setfield(L, -2, "preload");

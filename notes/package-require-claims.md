@@ -6,15 +6,17 @@ only after a loader is found, recursive module execution sees the stock
 "loop or previous error" error, and a module that returns `nil` only publishes
 `true` if the sentinel is still present.
 
-The lockless threading fork adds a private registry table named
-`_REQUIRE_INPROGRESS` to serialize peer OS threads that require the same module.
-The claim is intentionally separate from `package.loaded`, because module code
-and custom loaders can observe or mutate `package.loaded` and stock LuaJIT uses
-that table as the public protocol. Peer threads wait while a different thread
-owns the private claim, then restart from the normal `package.loaded` check.
-Same-thread recursion is not blocked by the private claim, so custom loaders can
-still recurse before the public sentinel is published and modules can still
-exercise the stock `package.loaded[name] = false/nil` reload behavior.
+The lockless threading fork adds a private address-keyed registry table to
+serialize peer OS threads that require the same module. The claim is
+intentionally separate from `package.loaded`, because module code and custom
+loaders can observe or mutate `package.loaded` and stock LuaJIT uses that table
+as the public protocol. The claim table is not installed under a public string
+key, so `debug.getregistry()` does not expose fork-local names or collide with
+embedder string keys. Peer threads wait while a different thread owns the
+private claim, then restart from the normal `package.loaded` check. Same-thread
+recursion is not blocked by the private claim, so custom loaders can still
+recurse before the public sentinel is published and modules can still exercise
+the stock `package.loaded[name] = false/nil` reload behavior.
 
 The owner clears the private claim on every protected exit from loader search or
 module execution. If a module body errors after the public sentinel is written,
@@ -23,7 +25,7 @@ report the normal "loop or previous error loading module" error instead of
 blocking forever.
 
 `package.loadlib()` uses the same private-claim pattern with a separate
-`_LOADLIB_INPROGRESS` registry table keyed by library path. This serializes
+address-keyed registry table keyed by library path. This serializes
 `ll_register()` and the first `dlopen()` for peer OS threads so the registry's
 `LOADLIB: path` userdata remains the single cached handle owner. The public
 `package.loadlib()` API and `_LOADLIB` userdata behavior are unchanged; only

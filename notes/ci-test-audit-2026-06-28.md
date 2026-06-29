@@ -1,12 +1,18 @@
 # CI/Test Harness Audit - 2026-06-28
 
+Historical note: this audit predates the final source-search cleanup. The
+current policy is `notes/ci-source-search-policy.md`: CI and tests must not
+grep repository source for call names or implementation snippets. Keep only
+behavior fixtures, C fixtures, generated dump/ASM checks, and documentation.
+
 ## Inventory
 
 - `tools/ci` currently has 66 shell scripts.
 - Most scripts call `tools/ci/lua_test.sh` after doing real guard or orchestration
   work; zero pure alias wrappers remain.
-- About 60 scripts still embed local `awk`/`grep`/`sed` source guards before
-  calling the Lua suite.
+- At the time of this audit, about 60 scripts still embedded local
+  `awk`/`grep`/`sed` source guards before calling the Lua suite. Those source
+  guards have since been removed or replaced; do not reintroduce them.
 - `tools/ci/lua_test.sh --list` exposes 100+ named Lua-suite cases.
 - The Lua suites/helpers still contain many explicit clean-build calls.
 
@@ -29,11 +35,11 @@
    covered by the aggregate path unless it is moved into the Lua suite or into a
    separately invoked static-lint entrypoint.
 
-4. Source guards often pin exact helper names.
-   Some guards are intentional tripwires, but broad string matches can block a
-   better implementation that preserves the same safety invariant with a new
-   helper boundary. New guards should prefer local helper-shape invariants and
-   behavior tests over global textual bans.
+4. Source guards often pinned exact helper names.
+   Broad string matches blocked better implementations that preserved the same
+   safety invariant with a new helper boundary. New tests must use behavior,
+   C fixtures, generated dump/ASM checks, or documentation instead of
+   repository source searches.
 
 5. Large shell guard files are hard to review.
    `m3_gc2_worker_scheduler.sh`, `m3_safepoint_handshake.sh`, `m7_ffi_finreg.sh`,
@@ -48,11 +54,10 @@
   clean && make`.
 - Set `LJ_TEST_DISABLE_BUILD_CACHE=1` to recover the old always-clean behavior
   while debugging the harness itself.
-- `tests/lib/suite_utils.lua` now gives generic `read_file()` the same
-  source-file rejection used by `Test:read()` and result-file assertions.
-  Deliberate static guards must call `read_source_file()` explicitly.
-- Existing suite source guards in M3, M5 x64, M6 JIT, and local-cell helpers now
-  use `read_source_file()`, making accidental future source reads visible.
+- `tests/lib/suite_utils.lua` temporarily gave generic `read_file()` the same
+  source-file rejection used by `Test:read()` and result-file assertions. The
+  later cleanup removed both the deliberate source-read API and the source
+  guards themselves.
 - `add_luajit_c_fixture_cases()` now defaults to incremental builds instead of
   forced clean builds. Cases that need profile isolation can still pass
   `clean = true`.
@@ -123,11 +128,10 @@
   of `lj_gc2_minor_roots_skip_bridge_mark()`, which describes the actual
   policy: minor-root cycles skip only the arena-to-GC2 bridge mark, not legacy
   marking itself.
-- Duplicate legacy source guards in weak/worker CI should be collapsed; keeping
-  the same exact-name guard in multiple scripts increases churn and blocks
-  better helper boundaries.
-- The duplicate M8 sweep/finalizer source guard block was removed; the stronger
-  M3 worker-scheduler guard remains canonical for those boundaries, while M8
+- Duplicate legacy source guards in weak/worker CI were a temporary migration
+  problem; exact-name repository source guards should be deleted, not
+  collapsed, once behavior fixtures or documentation own the contract.
+- The duplicate M8 sweep/finalizer source guard block was removed, while M8
   still owns weak/finalizer behavior fixtures.
 - The internal sweep-close bridge helper was renamed to
   `lj_gc2_sweep_bridge_close()`, keeping the behavior boundary while removing
@@ -145,7 +149,7 @@
   weak-helper visibility checks. No old developer-stat aliases are kept.
 - Removed two tombstone-only M3 CI guards for already-deleted weak/sweep phase
   aliases and old paranoia diff aliases. Current transition/root-diff behavior
-  remains covered by the C fixtures and the active helper-shape guards.
+  remains covered by C fixtures and documentation rather than source searches.
 - Removed duplicate M3 finalizer negative scans that M8 already owns through its
   close-time finalizer, callback-stack, and finalizer-spawn behavior gates. M3
   still keeps the positive worker-scheduler ownership checks.
@@ -181,15 +185,14 @@ Verification for the alias removal:
 
 ## Next Refactors
 
-1. Convert more FFI source guards from `tools/ci/m7_ffi_*.sh` into behavior
-   fixtures where feasible. Only keep source guards for invariants that cannot
-   be observed reliably through runtime behavior, such as low-level memory-order
-   helper boundaries.
+1. Keep converting any remaining historical source-guard contracts into
+   behavior fixtures, generated dump/ASM checks, or documentation. Do not keep
+   repository source searches as tests, even for invariants that cannot be
+   observed directly.
 2. Do not add new pure shell aliases. If a case is fully Lua-owned, run it
    through `tools/ci/lua_test.sh <case...>`.
-3. Split the largest GC/finalizer shell guards into suite-local helper modules
-   so behavior tests and source guards live near the milestone cases they
-   protect.
-4. Revisit exact-name guards after each implementation slice; when a guard
-   protects semantics rather than a required ABI, rewrite it around the semantic
-   boundary before it blocks better code.
+3. Split any large remaining GC/finalizer orchestration into suite-local helper
+   modules so behavior tests live near the milestone cases they protect.
+4. Revisit exact-name historical guards after each implementation slice; when
+   a contract is semantic rather than a required ABI, rewrite it around the
+   semantic boundary or document it instead of checking source spelling.

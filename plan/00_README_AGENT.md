@@ -25,9 +25,9 @@ parallel against **one shared heap** (one `global_State`), with:
 - a `threading.*` standard library (spawn/join/channels/etc.,
   `09_threading_api.md`);
 - **current lockless bytecode loading** (`BCDUMP_VERSION 4` chunks load and
-  run; pre-lockless v2/v3 dumps are rejected at the header because their
-  open-upvalue encoding is not the supported lockless ABI; see
-  `10_bytecode_compat.md`).
+  run; stock-compatible v2/v3 dumps still load when they do not contain
+  lockless-only cell opcodes, but loaded legacy functions are not re-dumped as
+  current chunks; see `10_bytecode_compat.md`).
 
 ### 0.2 Pinned source
 
@@ -140,7 +140,9 @@ executable form of the trickiest algorithms. Port them, do not reinvent them.
 - **gen** (tables) — one immutable-identity node/array vector generation of a
   table; resize installs a new gen (06 §6.2–6.3).
 - **pre-lockless dump** — bytecode dump with an older v2/v3 format. The
-  current lockless loader rejects these at the header (10 §10.4).
+  current lockless loader accepts stock-compatible old dumps, rejects
+  lockless-only cell opcodes in old versions, and refuses to re-dump
+  legacy-loaded functions (10 §10.4).
 
 ### 0.7 Deliverable inventory you will produce
 

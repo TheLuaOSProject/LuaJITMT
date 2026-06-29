@@ -8,9 +8,10 @@ diff sizes are for sanity-checking scope, not deadlines.
 Tasks: pin the commit (00 §0.2). Add the ADR-1 x86-64/GC64 `#error`
 guardrail without creating a compatibility flag wall. CI scripts: build
 matrix {-joff,-jon}; stock test suite runner (import
-github.com/LuaJIT/LuaJIT-test-cleanup tests into tests/stock/); the greps:
-`pthread_mutex` whitelist check (00 rule 3), `volatile` ban in new files,
-`lj_gc_barrier` legacy-call detector (must hit 0 by M5 end). Run
+github.com/LuaJIT/LuaJIT-test-cleanup tests into tests/stock/). Do not add CI
+that passes or fails by grepping repository source for call names or snippets;
+source inventory is one-off engineering archaeology, not a test. Use behavior
+fixtures, generated dump/ASM checks, or design notes for guardrails. Run
 `aux/bench/bench.lua` on your machine, both -joff/-jon, 5 runs, commit CSV as
 `bench/baseline_<host>.csv`.
 Gate: default builds pass the stock suite; bench CSV committed.
@@ -20,8 +21,9 @@ Tasks: drop in `aux/lj_atomic.h` as src/lj_atomic.h (verify it compiles
 with gcc/clang on x86-64). Create lj_tg.h/.c with TGState (03
 §3.2) embedded in GG_State; `g->jitp`; move tmpbuf/tmptv/tmptv2/prng/
 cur_L/jit_base accessors through `G2TG`-style macros that resolve to the
-embedded TG (sed worklists: `grep -rn "g->tmpbuf\|G(L)->tmpbuf" src` ≈40
-sites; `grep -rn "g->cur_L\|->jit_base" src`). 02 §2.4 tv_rawstore macro
+embedded TG. Historical one-off source inventories located the original
+tmpbuf/cur_L/jit_base sites; do not encode those spelling checks as tests.
+02 §2.4 tv_rawstore macro
 layer routes final 64-bit moves through `lj_atomic`. lj_mtfields.md seeded
 (02 §2.5).
 Gate: stock tests green; zero unintended asm diffs in vm_x64.o before the
@@ -55,11 +57,10 @@ leader loop, lazy+worker sweep, defer_free epochs, pacing, torture,
 LJ_GC2_PARANOIA STW-diff oracle (05 §5.13 — build this FIRST). Barrier:
 add always-on C-side GC2 insertion hooks to the existing legacy barrier
 macros first, preserving the legacy color barriers until their oracle role is
-finished. Worklist for remaining direct/VM/JIT barrier owners:
-`grep -rn "lj_gc_barrier\|lj_gc_objbarrier\|lj_gc_anybarriert\|
-lj_gc_barrieruv\|lj_gc_barriert\b" src/*.c` (≈35 sites: lj_api.c lj_tab.c
-lj_meta.c lj_func.c lj_state.c lj_cdata.c lj_ccallback.c lj_vmevent.c
-lib_*.c) plus direct `lj_gc_barrieruv` VM/JIT call paths. dasc wbarrier_tv
+finished. Historical barrier-owner inventories covered the C API, table/meta,
+function/state, cdata/callback, vmevent, library, VM, and JIT paths; keep the
+lasting proof in behavior fixtures and generated-code checks rather than in a
+repository source grep. dasc wbarrier_tv
 macro + TSET*/USET* wiring (07 §7.4). Weak tables + finalizer queue minimal
 (full in M8). collectgarbage mapping (05 §5.10).
 Tests: stock under torture; paranoia build over the whole stock suite;

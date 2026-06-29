@@ -196,9 +196,10 @@ dump compatibility through UGET/USETx.
 ## 7.7 FNEW, UCLO, hot counters, cur_L/jit_base touchpoints
 - BC_FNEW handler: unchanged dasc (calls lj_func_newL_gc); the C side
   copies cell refs per 06 §6.4.2.
-- BC_UCLO: under v4 no closing UCLO A != 0 is emitted for source cells. The
-  current loader rejects pre-lockless v2/v3 dumps at the header, so the VM does
-  not need a legacy loaded-chunk close path.
+- BC_UCLO: under v4 no closing UCLO A != 0 is emitted for source cells.
+  Stock-compatible v2/v3 dumps still load, but old-version dumps containing
+  lockless-only cell opcodes are rejected and legacy-loaded functions are not
+  re-dumped as current chunks.
 - hotloop/hotcall (dasc:332–345): untouched (TG keeps GG_DISP2HOT, 03
   §3.2-A). HotCount races across threads don't exist — counters are
   per-TG now, which also fixes today's cross-coroutine pollution.

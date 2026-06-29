@@ -1369,6 +1369,9 @@ LUA_API const char *lua_setupvalue(lua_State *L, int idx, int n)
   if (name) {
     if (o->gch.gct == ~LJ_TFUNC && !isluafunc(gco2func(o)))
       api_trace_flush_mutation(L);
+    else if (o->gch.gct == ~LJ_TUPVAL &&
+	     tv_rawload_acq(val) != tv_rawload(L->top-1))
+      api_trace_flush_mutation(L);
     L->top--;
     copyTVrel(L, val, L->top);
     lj_gc_pubobjtv(L, o, L->top);

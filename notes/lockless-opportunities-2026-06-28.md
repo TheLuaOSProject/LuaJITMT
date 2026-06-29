@@ -18,10 +18,11 @@ safety, stability, and language behavior over LuaJIT performance parity.
 2. Table resize follow-up stress/proofs.
    Resize forwarding is now production-shaped, but it is still one of the
    riskiest shared objects because it combines replacement generation
-   publication, weak clearing, GC traversal, JIT fast paths, and VM stores. More
-   stress, table-forwarding probes, and source guards are worth it. Removing
-   the transient `KEYLOCK`/`FORWARD` waits is not the goal; bounding and proving
-   them is.
+   publication, weak clearing, GC traversal, JIT fast paths, and VM stores.
+   More stress, table-forwarding probes, generated dump/ASM checks where the
+   invariant is emitted code, and design notes are worth it. Repository
+   source-search guards are not. Removing the transient `KEYLOCK`/`FORWARD`
+   waits is not the goal; bounding and proving them is.
 
 3. C-closure upvalue and direct API mutation surfaces.
    This is worth a focused audit now that the closed Lua-upvalue path is sealed,

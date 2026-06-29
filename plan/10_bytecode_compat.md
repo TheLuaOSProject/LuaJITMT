@@ -1,18 +1,20 @@
 # 10. Bytecode: Current Lockless Dump Format
 
 Requirement: extend the bytecode for the cell upvalue model (ADR-7) while
-using a single current dump format. The lockless build does not accept
-pre-lockless v2/v3 dumps because their open-upvalue encoding cannot preserve
-owner-independent local-cell semantics without a compatibility detour on every
-closure creation path. Source compiled by the parser and `string.dump` output
-both use the current lockless format.
+using a single current writer format. Source compiled by the parser and
+`string.dump` output use the current lockless format. For stock LuaJIT
+compatibility, the loader still accepts legacy v2 and transitional v3 dumps
+when they do not contain lockless-only cell opcodes; those loaded legacy
+functions are load-only and are not re-dumped as current-format chunks.
 
 ## 10.1 Dump format versioning
 
 - `BCDUMP_VERSION` is `BCDUMP_VERSION_LOCKLESS 4`.
-- lj_bcread.c `bcread_header`: accept only version 4. Older versions fail at
-  the header instead of entering prototype/upvalue compatibility handling.
-- lj_bcwrite.c emits version 4 always.
+- lj_bcread.c `bcread_header`: accept stock legacy v2, transitional v3, and
+  current v4. v2/v3 dumps are rejected if they contain CNEW/CGET/CSET or other
+  lockless-only cell encoding that cannot exist in stock dumps.
+- lj_bcwrite.c emits version 4 for source/current chunks and refuses to dump
+  legacy-loaded proto trees instead of silently rewriting their upvalue layout.
 - No dump flag-bit changes; BCDUMP_F_KNOWN untouched (v4 implies cell ops may
   appear; that's keyed off the version and verifier, not a dump flag).
 
@@ -56,16 +58,19 @@ and mutable captures can trace once the owner slot is already promoted at trace
 entry or when the hot trace itself performs the first mutable raw-slot promotion
 with otherwise type-stable loop-carried slots.
 
-## 10.4 Old Dump Rejection
+## 10.4 Legacy Dump Loading
 
-v2/v3 bytecode used transitional/open-upvalue layouts that are not part of the
-current lockless ABI. The loader rejects them at the header, before prototype
-allocation, so runtime closure creation only needs to handle source/current
-v4 descriptors:
+v2/v3 bytecode used stock/transitional open-upvalue layouts. The loader accepts
+those dumps for stock interoperability, tags legacy-loaded proto trees, and
+rejects lockless-only cell opcodes in old dump versions. Runtime closure
+creation still keeps the current source/v4 cell path separate from the
+legacy-loaded path:
 
 - Source/current cell-capable locals use `PROTO2_CELLUV`.
 - Non-cell local captures use the ordinary owner-private `func_finduv()` path.
-- No `proto_legacyuv` metadata or writer-side legacy-upvalue walk is needed.
+- Legacy-loaded proto trees carry metadata that prevents re-dumping them as v4
+  chunks. This keeps load compatibility without pretending the old upvalue
+  layout is the current lockless bytecode ABI.
 
 ## 10.5 Verifier
 lj_bcread must scan bytecode after endian normalization. Check: (a) every
@@ -77,14 +82,15 @@ self-overwrite their cell slot. Also reject per-proto flag bits outside
 always-on load-time checks.
 
 ## 10.6 string.dump / -b round-trip
-bcwrite always writes v4. Old luajit reading new dumps rejects on version, as
-upstream intends. The lockless loader reading old dumps rejects on version for
-the same reason: carrying a second old-upvalue ABI would keep source-visible
-compatibility logic in hot closure construction paths.
+bcwrite always writes v4 for current/source functions. Old luajit reading new
+dumps rejects on version, as upstream intends. The lockless loader reading
+stock v2/v3 dumps accepts and runs compatible chunks but refuses to dump those
+legacy-loaded functions again.
 
 ## 10.7 Tests (13 §13.4)
-`tests/t-bcdump-current.c` checks v4 load/round-trip behavior and malformed
-current dump rejection, including bad version bytes, forbidden proto flags,
-cell slot bounds, self-overwriting CGET/CSET, and invalid closing UCLO with
-cell ops. t-uv-01..07: cell semantics incl. cross-thread mutation, loop-var
-capture, debug.getlocal unwrap (06 §6.4.2).
+`tests/t-bcdump-current.c` checks current v4 load/round-trip behavior, stock
+v2/v3 loading, old-version cell-op rejection, and malformed current dump
+rejection, including bad version bytes, forbidden proto flags, cell slot
+bounds, self-overwriting CGET/CSET, and invalid closing UCLO with cell ops.
+t-uv-01..07: cell semantics incl. cross-thread mutation, loop-var capture,
+debug.getlocal unwrap (06 §6.4.2).

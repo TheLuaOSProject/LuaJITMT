@@ -142,6 +142,18 @@ static void check_gc_api(lua_State *L)
   }
 }
 
+static void check_registry_surface(lua_State *L)
+{
+  lua_getregistry(L);
+  assert(lua_istable(L, -1));
+  lua_getfield(L, -1, "_REQUIRE_INPROGRESS");
+  assert(lua_isnil(L, -1));
+  lua_pop(L, 1);
+  lua_getfield(L, -1, "_LOADLIB_INPROGRESS");
+  assert(lua_isnil(L, -1));
+  lua_pop(L, 2);
+}
+
 int main(void)
 {
   lua_State *L = lua_open();
@@ -156,6 +168,7 @@ int main(void)
   lua_pop(L, 1);
   assert(lua_getgccount(L) >= 0);
 
+  check_registry_surface(L);
   check_stack_api(L);
   check_module_api(L);
   check_buffer_api(L);
