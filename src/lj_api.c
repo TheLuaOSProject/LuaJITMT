@@ -1572,6 +1572,18 @@ static void api_gc_leaveexclusive(global_State *g)
   mt_gc_exclusive_futex_wake(g, INT_MAX);
 }
 
+#define API_GC_ACTIVE_COLLECT_DRAIN_BATCHES	4u
+
+static void api_gc_active_collect_assist(global_State *g)
+{
+  uint32_t i;
+  for (i = 0; i < API_GC_ACTIVE_COLLECT_DRAIN_BATCHES; i++) {
+    uint32_t step = lj_gc2_worker_drain(g, LJ_GC2_WORKER_DRAIN_BATCH);
+    if (step == 0)
+      break;
+  }
+}
+
 LUA_API int lua_gc(lua_State *L, int what, int data)
 {
   global_State *g = G(L);
@@ -1595,7 +1607,7 @@ LUA_API int lua_gc(lua_State *L, int what, int data)
 	(void)lj_gc2_request_stopped_major(g, L2TG(L));
       else
 	(void)lj_gc2_request_major(g, L2TG(L));
-      (void)lj_gc2_worker_drain(g, LJ_GC2_WORKER_DRAIN_BATCH);
+      api_gc_active_collect_assist(g);
     }
     break;
   case LUA_GCCOUNT:

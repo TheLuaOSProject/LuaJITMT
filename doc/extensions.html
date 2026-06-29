@@ -299,7 +299,7 @@ remain available.
 When secondary Lua threads are live, this fork cannot run the stock legacy
 collector synchronously on the caller's stack. In that interval,
 <tt>collectgarbage("collect")</tt> requests a GC2 major cycle and performs
-bounded assistance before returning, and <tt>collectgarbage("step")</tt>
+bounded GC2 worker assistance before returning, and <tt>collectgarbage("step")</tt>
 requests/assists progress but may return <tt>false</tt> before a cycle is
 complete. Once secondary threads have joined or detached, the ordinary
 synchronous stock LuaJIT behavior is used again.

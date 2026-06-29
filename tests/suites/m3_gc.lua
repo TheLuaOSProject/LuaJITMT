@@ -64,10 +64,14 @@ return function(add)
 
   register({
     name = "m3_gc_active_thread_roots",
-    description = "active thread GC roots preserve standard-library globals",
+    description = "active thread GC roots and explicit GC assistance",
     run = function(t)
       make_clean(t)
       make_default(t, { jobs = false })
+      compile_and_run_c(t, t:tmp("lj_t-gc-active-collect-assist"),
+                        "t-gc-active-collect-assist.c", {
+        cflags = gc2_test_cflags
+      })
       run_luajit_script_jit_modes(t, "t-gc-active-thread-roots.lua", nil,
                                   { timeout = "10s" })
       print("M3 active thread root GC regression passed")

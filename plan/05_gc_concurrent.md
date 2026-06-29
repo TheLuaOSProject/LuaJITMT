@@ -593,7 +593,10 @@ Current bridge: while secondary Lua threads are live, explicit `collect` and
 `step` do not run the legacy collector. They request a GC2 cycle through the
 same nonblocking leader token used by allocation triggers, store the pending
 threshold in the MT threshold mirror, and perform only bounded worker-drain
-assistance before returning. Active-thread explicit `step` bypasses the
+assistance before returning. Active-thread explicit `collect` currently assists
+up to four GC2 worker batches to move pending mark/weak/sweep work forward
+without claiming stock synchronous completion. Active-thread explicit `step`
+bypasses the
 automatic-trigger stop gate, matching the legacy single-thread behavior where
 `collectgarbage("step")` restarts GC after `collectgarbage("stop")`. Active
 stopped `collect` requests a one-shot major cycle and restores the stopped

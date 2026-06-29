@@ -8,10 +8,13 @@ and store the driver threshold through `mt_gc_threshold` while `mt_live` is
 nonzero, so the request survives until the legacy bridge can safely run again.
 The automatic allocation-trigger helper stays private to `lj_gc2.c`.
 
-This is still a bridge. The active-thread path performs only bounded
-`lj_gc2_worker_drain()` assistance and `step` returns false; exact
-`collectgarbage("collect")` parking still needs a GC2 leader path that can
-close sweep without legacy collector ownership.
+This is still a bridge. The active-thread `collect` path performs up to four
+bounded `lj_gc2_worker_drain()` batches before returning, enough to make
+visible progress on an already-published major cycle without pretending that a
+full stock stop-the-world collection has completed. Active-thread `step`
+requests/assists one worker batch and returns false; exact
+`collectgarbage("collect")` parking still needs a GC2 leader path that can close
+sweep without legacy collector ownership.
 
 Follow-up: active-thread `collectgarbage("step")` now uses an explicit request
 variant that bypasses the automatic-trigger stop gate. This matches the
