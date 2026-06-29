@@ -82,7 +82,6 @@ static LJ_AINLINE void lj_clib_cache_val_rel(lua_State *L, CLibCacheEntry *e,
 /* C library namespace. */
 typedef struct CLibrary {
   void *handle;		/* Opaque handle for dynamic library loader. */
-  GCtab *cache;		/* Legacy env anchor; miss cache lives in cache_head. */
   CLibCacheEntry *cache_head;	/* 11.7 side cache, CAS-prepended. */
 } CLibrary;
 
