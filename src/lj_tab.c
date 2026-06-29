@@ -1062,19 +1062,21 @@ restart_resize:
       }
     }
   }
-  if (!oldarray_separated && hbits && asize < oldasize) {
-    /* Reinsert old colocated array tail off-table. */
+  if (!oldarray_separated && oldarray && asize < oldasize) {
+    /* Freeze and reinsert old colocated array tail off-table. */
     uint32_t i;
+    lj_assertL(hbits != 0, "missing hash part during colocated array tail rehash");
     for (i = asize; i < oldasize; i++) {
       TValue key, val;
-      lj_tv_load_acq(&val, &oldarray[i]);
-      if (!tab_val_absent(&val)) {
+      if (tab_freeze_forward_any(&oldarray[i], &val) &&
+	  !tab_val_absent(&val)) {
 	setnumV(&key, (lua_Number)i);
 	tab_migrate_store_if_absent(L, t,
 	  tab_rehash_insert(L, newnode, newhmask, &newfreetop, &key),
 	  &key, &val);
       }
     }
+    tab_test_resize_colocated_after_freeze(L, t, oldarray, oldasize);
   }
   if (newarray) {
     if (LJ_MAX_COLOSIZE != 0) {
