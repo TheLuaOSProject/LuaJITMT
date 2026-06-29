@@ -120,21 +120,28 @@ static LJ_AINLINE int tab_slot_absent_acq(const TValue *slot)
   return tab_val_absent(&val);
 }
 
-static LJ_AINLINE int tab_val_forward_retry_once(cTValue *val, int *retry)
+static LJ_AINLINE int tab_val_forward_retry(GCtab *t, cTValue *val, Node *node)
 {
-  if (tvisforward(val) && *retry) {
-    *retry = 0;
-    lj_tab_wait_no_l();
-    return 1;
+  if (tvisforward(val)) {
+    Node *root = lj_tab_node_acq(t);
+    if (root != node || lj_tab_node_is_retiring(node)) {
+      lj_tab_wait_no_l();
+      return 1;
+    }
   }
   return 0;
 }
 
-static LJ_AINLINE int tab_node_forward_hop(Node **nodep, MSize *hmaskp)
+static LJ_AINLINE int tab_node_forward_hop(GCtab *t, Node **nodep,
+					   MSize *hmaskp)
 {
   Node *node = *nodep;
   Node *next = lj_tab_node_nextgen_acq(node);
-  if (next && next != node) {
+  /*
+  ** next_gen is an early resize breadcrumb. Only hop once the table root has
+  ** stopped publishing this hash generation.
+  */
+  if (next && next != node && lj_tab_node_acq(t) != node) {
     *nodep = next;
     *hmaskp = lj_tab_node_hmask_acq(next);
     return 1;
@@ -158,7 +165,7 @@ static LJ_AINLINE int tab_forwarded_hash_value(GCtab *t, Node **nodep,
 					       TValue *valp)
 {
   Node *n;
-  if (!tab_node_forward_hop(nodep, hmaskp))
+  if (!tab_node_forward_hop(t, nodep, hmaskp))
     return 0;
   if (tvisnum(key)) {
     int64_t i64;
@@ -187,7 +194,7 @@ static TValue *tab_forwarded_setslot(GCtab *t, Node **nodep, MSize *hmaskp,
 				     cTValue *key)
 {
   Node *n;
-  if (!tab_node_forward_hop(nodep, hmaskp))
+  if (!tab_node_forward_hop(t, nodep, hmaskp))
     return NULL;
   if (tvisnum(key)) {
     int64_t i64;
@@ -272,20 +279,30 @@ TValue *lj_tab_forwarded_hash_slot(GCtab *t, Node *node, MSize hmask,
 static LJ_AINLINE int tab_array_slot_absent_acq(GCtab *t, TValue **arrayp,
 						MSize *asizep, MSize idx)
 {
-  TValue val;
-  TValue *array = *arrayp;
-  lj_tv_load_acq(&val, &array[idx]);
-  if (tvisforward(&val)) {
-    MSize nextasize = *asizep;
-    TValue *nextarray = array;
-    if (lj_tab_array_forward_hop(t, &nextarray, &nextasize) &&
-	idx < nextasize) {
-      *arrayp = nextarray;
-      *asizep = nextasize;
-      lj_tv_load_acq(&val, &nextarray[idx]);
+  for (;;) {
+    TValue val;
+    TValue *array = *arrayp;
+    lj_tv_load_acq(&val, &array[idx]);
+    if (tvisforward(&val)) {
+      MSize nextasize = *asizep;
+      TValue *nextarray = array;
+      if (lj_tab_array_forward_hop(t, &nextarray, &nextasize) &&
+	  idx < nextasize) {
+	*arrayp = nextarray;
+	*asizep = nextasize;
+	continue;
+      }
+      if (lj_tab_array_acq(t) != array) {
+	*asizep = lj_tab_array_snapshot_acq(t, arrayp);
+	continue;
+      }
+      if (lj_tab_array_is_retiring(t, array)) {
+	lj_tab_wait_no_l();
+	continue;
+      }
     }
+    return tab_val_absent(&val);
   }
-  return tab_val_absent(&val);
 }
 
 static TValue *tab_findkey_or_keylock(Node *anchor, cTValue *key, int *locked,
@@ -1280,7 +1297,7 @@ cTValue * LJ_FASTCALL lj_tab_getinth(GCtab *t, int32_t key)
   Node *node;
   MSize hmask;
   Node *n;
-  int key_retry = 1, forward_retry = 1;
+  int key_retry = 1;
   k.n = (lua_Number)key;
 retry_lookup:
   node = lj_tab_node_snapshot_acq(t, &hmask);
@@ -1294,13 +1311,13 @@ genlookup:
     if (tvisnum(&nk) && nk.n == k.n) {
       TValue val;
       lj_tv_load_acq(&val, &n->val);
-      if (tvisforward(&val) && tab_node_forward_hop(&node, &hmask)) {
+      if (tvisforward(&val) && tab_node_forward_hop(t, &node, &hmask)) {
 	cTValue *tv = tab_forwarded_int_arrayslot(t, key);
 	if (tv)
 	  return tv;
 	goto genlookup;
       }
-      if (tab_val_forward_retry_once(&val, &forward_retry))
+      if (tab_val_forward_retry(t, &val, node))
 	goto retry_lookup;
       if (tvisforward(&val))
 	return NULL;
@@ -1322,7 +1339,7 @@ cTValue *lj_tab_getstr(GCtab *t, const GCstr *key)
   Node *node;
   MSize hmask;
   Node *n;
-  int key_retry = 1, forward_retry = 1;
+  int key_retry = 1;
 retry_lookup:
   node = lj_tab_node_snapshot_acq(t, &hmask);
 genlookup:
@@ -1335,9 +1352,9 @@ genlookup:
     if (tvisstr(&nk) && strV(&nk) == key) {
       TValue val;
       lj_tv_load_acq(&val, &n->val);
-      if (tvisforward(&val) && tab_node_forward_hop(&node, &hmask))
+      if (tvisforward(&val) && tab_node_forward_hop(t, &node, &hmask))
 	goto genlookup;
-      if (tab_val_forward_retry_once(&val, &forward_retry))
+      if (tab_val_forward_retry(t, &val, node))
 	goto retry_lookup;
       if (tvisforward(&val))
 	return NULL;
@@ -1351,7 +1368,7 @@ genlookup:
 
 cTValue *lj_tab_get(lua_State *L, GCtab *t, cTValue *key)
 {
-  int key_retry = 1, forward_retry = 1;
+  int key_retry = 1;
   if (tvisstr(key)) {
     cTValue *tv = lj_tab_getstr(t, strV(key));
     if (tv)
@@ -1386,9 +1403,9 @@ cTValue *lj_tab_get(lua_State *L, GCtab *t, cTValue *key)
       if (lj_obj_equal(&nk, key)) {
 	TValue val;
 	lj_tv_load_acq(&val, &n->val);
-	if (tvisforward(&val) && tab_node_forward_hop(&node, &hmask))
+	if (tvisforward(&val) && tab_node_forward_hop(t, &node, &hmask))
 	  goto genlookup;
-	if (tab_val_forward_retry_once(&val, &forward_retry))
+	if (tab_val_forward_retry(t, &val, node))
 	  goto retry_lookup;
 	if (tvisforward(&val))
 	  return niltv(L);
@@ -1699,7 +1716,7 @@ TValue *lj_tab_setinth(lua_State *L, GCtab *t, int32_t key)
   Node *node;
   MSize hmask;
   Node *n;
-  int key_retry = 1, forward_retry = 1;
+  int key_retry = 1;
   k.n = (lua_Number)key;
 retry_lookup:
   node = lj_tab_node_snapshot_acq(t, &hmask);
@@ -1716,7 +1733,7 @@ retry_lookup:
 	TValue *slot = tab_forwarded_setslot(t, &node, &hmask, &k);
 	if (slot)
 	  return slot;
-	if (tab_val_forward_retry_once(&val, &forward_retry))
+	if (tab_val_forward_retry(t, &val, node))
 	  goto retry_lookup;
 	return tab_rehash_forwarded_key(L, t, &k);
       }
@@ -1734,7 +1751,7 @@ TValue *lj_tab_setstr(lua_State *L, GCtab *t, const GCstr *key)
   Node *node;
   MSize hmask;
   Node *n;
-  int key_retry = 1, forward_retry = 1;
+  int key_retry = 1;
   setstrV(L, &k, key);
 retry_lookup:
   node = lj_tab_node_snapshot_acq(t, &hmask);
@@ -1751,7 +1768,7 @@ retry_lookup:
 	TValue *slot = tab_forwarded_setslot(t, &node, &hmask, &k);
 	if (slot)
 	  return slot;
-	if (tab_val_forward_retry_once(&val, &forward_retry))
+	if (tab_val_forward_retry(t, &val, node))
 	  goto retry_lookup;
 	return tab_rehash_forwarded_key(L, t, &k);
       }
@@ -1785,7 +1802,7 @@ TValue *lj_tab_set(lua_State *L, GCtab *t, cTValue *key)
   {
     Node *node;
     MSize hmask;
-    int key_retry = 1, forward_retry = 1;
+    int key_retry = 1;
   retry_lookup:
     node = lj_tab_node_snapshot_acq(t, &hmask);
     if (hmask != 0) {
@@ -1800,7 +1817,7 @@ TValue *lj_tab_set(lua_State *L, GCtab *t, cTValue *key)
 	    TValue *slot = tab_forwarded_setslot(t, &node, &hmask, key);
 	    if (slot)
 	      return slot;
-	    if (tab_val_forward_retry_once(&val, &forward_retry))
+	    if (tab_val_forward_retry(t, &val, node))
 	      goto retry_lookup;
 	    return tab_rehash_forwarded_key(L, t, key);
 	  }
@@ -2482,9 +2499,12 @@ retry_all:
 /* Get the next key/value pair of a table traversal. */
 int lj_tab_next(GCtab *t, cTValue *key, TValue *o)
 {
-  uint32_t idx = lj_tab_keyindex(t, key);  /* Find successor index of key. */
+  uint32_t idx;
   TValue *array;
-  uint32_t asize = (uint32_t)lj_tab_array_snapshot_acq(t, &array);
+  uint32_t asize;
+retry_next:
+  idx = lj_tab_keyindex(t, key);  /* Find successor index of key. */
+  asize = (uint32_t)lj_tab_array_snapshot_acq(t, &array);
   /* First traverse the array part. */
   for (; idx < asize; idx++) {
     TValue val;
@@ -2502,6 +2522,10 @@ int lj_tab_next(GCtab *t, cTValue *key, TValue *o)
 	  if (tv)
 	    lj_tv_load_acq(&val, tv);
 	}
+      } else if (lj_tab_array_acq(t) != array ||
+		 lj_tab_array_is_retiring(t, array)) {
+	lj_tab_wait_no_l();
+	goto retry_next;
       }
     }
     if (LJ_LIKELY(!tab_val_absent(&val))) {
@@ -2529,6 +2553,10 @@ int lj_tab_next(GCtab *t, cTValue *key, TValue *o)
 	    o[1] = val;
 	    return 1;
 	  }
+	}
+	if (lj_tab_node_acq(t) != node || lj_tab_node_is_retiring(node)) {
+	  lj_tab_wait_no_l();
+	  goto retry_next;
 	}
 	continue;
       }

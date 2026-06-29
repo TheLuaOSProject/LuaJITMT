@@ -331,7 +331,12 @@ static LJ_AINLINE int lj_tab_array_forward_hop(const GCtab *t, TValue **arrayp,
   if (!array || lj_tab_array_is_colocated(t, array))
     return 0;
   next = lj_tab_array_nextgen_acq(array);
-  if (next && next != array && !lj_tab_array_is_colocated(t, next)) {
+  /*
+  ** next_gen is installed before migration finishes. A forwarded old slot may
+  ** only follow it after the table root no longer publishes the old array.
+  */
+  if (next && next != array && !lj_tab_array_is_colocated(t, next) &&
+      lj_tab_array_acq(t) != array) {
     *arrayp = next;
     *asizep = lj_tab_array_hdr_asize_acq(next);
     return 1;
@@ -342,7 +347,6 @@ static LJ_AINLINE int lj_tab_array_forward_hop(const GCtab *t, TValue **arrayp,
 static LJ_AINLINE cTValue *lj_tab_getint(GCtab *t, int32_t key)
 {
   TValue *array;
-  int forward_retry = 1;
 retry_array:
   MSize asize = lj_tab_array_snapshot_acq(t, &array);
 genarray:
@@ -352,8 +356,8 @@ genarray:
     if (tvisforward(&val)) {
       if (lj_tab_array_forward_hop(t, &array, &asize))
 	goto genarray;
-      if (forward_retry) {
-	forward_retry = 0;
+      if (lj_tab_array_acq(t) != array ||
+	  lj_tab_array_is_retiring(t, array)) {
 	lj_tab_wait_no_l();
 	goto retry_array;
       }
@@ -367,7 +371,6 @@ genarray:
 static LJ_AINLINE TValue *lj_tab_setint(lua_State *L, GCtab *t, int32_t key)
 {
   TValue *array;
-  int forward_retry = 1;
 retry_array:
   {
     MSize asize = lj_tab_array_snapshot_acq(t, &array);
@@ -378,8 +381,8 @@ retry_array:
       if (tvisforward(&val)) {
 	if (lj_tab_array_forward_hop(t, &array, &asize))
 	  goto genarray;
-	if (forward_retry) {
-	  forward_retry = 0;
+	if (lj_tab_array_acq(t) != array ||
+	    lj_tab_array_is_retiring(t, array)) {
 	  lj_tab_wait_no_l();
 	  goto retry_array;
 	}
