@@ -52,6 +52,7 @@ typedef int (*GC2FinalizerDispatchFunc)(lua_State *L, global_State *g,
 #define GC2_FINCLAIM_INIT	128u
 #define GC2_FINCLAIM_LIMIT \
   ((MSize)(LJ_MAX_MEM32 / (sizeof(GCRef) + sizeof(TValue))))
+#define GC2_ACTIVE_FINALIZE_COST	100
 
 typedef struct GC2FinalizerNode {
   struct GC2FinalizerNode *next;
@@ -1031,6 +1032,89 @@ int lj_gc2_request_stopped_major(global_State *g, TGState *tg)
   else if (gc2_phase_acq(g) != LJ_GC2_IDLE)
     lj_gc2_worker_wake(g);
   return requested;
+}
+
+int lj_gc2_collect_active(lua_State *L, int restore_stopped)
+{
+  global_State *g;
+  TGState *tg;
+  int need_major = 1;
+  if (!L)
+    return 0;
+  g = G(L);
+  tg = L2TG(L);
+  if (!g || !tg)
+    return 0;
+  if (restore_stopped) {
+    if (lj_gc2_request_stopped_major(g, tg)) {
+      need_major = 0;
+      lj_gc2_mark_begin(g);
+    }
+  } else {
+    if (lj_gc2_request_major(g, tg)) {
+      need_major = 0;
+      lj_gc2_mark_begin(g);
+    }
+  }
+  for (;;) {
+    uint32_t phase = gc2_phase_acq(g);
+    if (phase == LJ_GC2_IDLE) {
+      if (need_major) {
+	if (restore_stopped) {
+	  if (lj_gc2_request_stopped_major(g, tg)) {
+	    need_major = 0;
+	    lj_gc2_mark_begin(g);
+	    continue;
+	  }
+	} else if (lj_gc2_request_major(g, tg)) {
+	  need_major = 0;
+	  lj_gc2_mark_begin(g);
+	  continue;
+	}
+      }
+      lj_gc2_publish_idle_threshold(g);
+      return 1;
+    }
+    if (phase == LJ_GC2_MARK) {
+      if (lj_gc2_worker_drain(g, LJ_GC2_WORKER_DRAIN_BATCH) != 0)
+	continue;
+      if (lj_gc2_mark_complete(g, L, 64, ~(uint32_t)0)) {
+	lj_gc2_mark_to_weak(g);
+	continue;
+      }
+      gc2_peer_wait_l(L);
+      continue;
+    }
+    if (phase == LJ_GC2_WEAK) {
+      if (lj_gc2_weak_complete(g, NULL, LJ_GC2_WEAK_DRAIN_BATCH)) {
+	lj_gc2_weak_to_sweep(g);
+	continue;
+      }
+      gc2_peer_wait_l(L);
+      continue;
+    }
+    if (phase == LJ_GC2_SWEEP) {
+      GCSize cost;
+      int finstep;
+      lj_gc2_sweep_prepare_bridge_boundary(g, NULL);
+      if (lj_gc2_worker_drain(g, LJ_GC2_SWEEP_BATCH) != 0)
+	continue;
+      finstep = lj_gc2_finalizer_step(L, GC2_ACTIVE_FINALIZE_COST, &cost);
+      UNUSED(cost);
+      if (finstep != 0) {
+	if (finstep < 0)
+	  gc2_peer_wait_l(L);
+	continue;
+      }
+      if (lj_gc2_sweep_to_idle(g)) {
+	lj_gc2_publish_idle_threshold(g);
+	return 1;
+      }
+      gc2_peer_wait_l(L);
+      continue;
+    }
+    return 0;
+  }
 }
 
 void lj_gc2_check_trigger(global_State *g, TGState *tg)

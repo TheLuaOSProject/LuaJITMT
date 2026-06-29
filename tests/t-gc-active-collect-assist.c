@@ -15,9 +15,7 @@
 #include "lj_tg.h"
 
 enum {
-  ACTIVE_COLLECT_DRAIN_BATCHES = 4,
-  ACTIVE_GRAPH_CHILDREN =
-    LJ_GC2_WORKER_DRAIN_BATCH * (ACTIVE_COLLECT_DRAIN_BATCHES + 1)
+  ACTIVE_GRAPH_CHILDREN = LJ_GC2_WORKER_DRAIN_BATCH * 5
 };
 
 static void enter_synthetic_active_peer(global_State *g)
@@ -76,9 +74,9 @@ static void reset_gc2(lua_State *L, global_State *g)
   lua_settop(L, 0);
 }
 
-static void test_active_collect_assists_multiple_batches(lua_State *L,
-							 global_State *g,
-							 TGState *tg)
+static void test_active_collect_completes_active_cycle(lua_State *L,
+						       global_State *g,
+						       TGState *tg)
 {
   uint64_t runs0, grey0;
 
@@ -90,11 +88,50 @@ static void test_active_collect_assists_multiple_batches(lua_State *L,
   assert(lua_gc(L, LUA_GCCOLLECT, 0) == 0);
   leave_synthetic_active_peer(g);
 
-  assert(gc2_worker_runs_acq(g) == runs0 + ACTIVE_COLLECT_DRAIN_BATCHES);
+  assert(gc2_worker_runs_acq(g) > runs0);
   assert(gc2_worker_grey_drained_acq(g) >
 	 grey0 + LJ_GC2_WORKER_DRAIN_BATCH);
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  assert(lj_gc2_test_ssb_empty(g));
 
-  reset_gc2(L, g);
+  lua_settop(L, 0);
+}
+
+static void test_active_collect_completes_idle_cycle(lua_State *L,
+						     global_State *g)
+{
+  uint64_t starts0 = gc2_cycle_starts_acq(g);
+
+  lua_gc(L, LUA_GCRESTART, -1);
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+
+  enter_synthetic_active_peer(g);
+  assert(lua_gc(L, LUA_GCCOLLECT, 0) == 0);
+  leave_synthetic_active_peer(g);
+
+  assert(gc2_cycle_starts_acq(g) == starts0 + 1u);
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+
+  lua_settop(L, 0);
+}
+
+static void test_active_collect_restores_stopped_cycle(lua_State *L,
+						       global_State *g)
+{
+  uint64_t starts0 = gc2_cycle_starts_acq(g);
+
+  lua_gc(L, LUA_GCSTOP, 0);
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+
+  enter_synthetic_active_peer(g);
+  assert(lua_gc(L, LUA_GCCOLLECT, 0) == 0);
+  leave_synthetic_active_peer(g);
+
+  assert(gc2_cycle_starts_acq(g) == starts0 + 1u);
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  assert(lua_gc(L, LUA_GCISRUNNING, 0) == 0);
+
+  lua_gc(L, LUA_GCRESTART, -1);
 }
 
 static void test_active_step_returns_false(lua_State *L, global_State *g,
@@ -115,6 +152,24 @@ static void test_active_step_returns_false(lua_State *L, global_State *g,
   reset_gc2(L, g);
 }
 
+static void test_active_step_starts_stopped_cycle(lua_State *L,
+						  global_State *g)
+{
+  uint64_t starts0 = gc2_cycle_starts_acq(g);
+
+  lua_gc(L, LUA_GCSTOP, 0);
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+
+  enter_synthetic_active_peer(g);
+  assert(lua_gc(L, LUA_GCSTEP, 0) == 0);
+  leave_synthetic_active_peer(g);
+
+  assert(gc2_cycle_starts_acq(g) == starts0 + 1u);
+  assert(gc2_phase_acq(g) == LJ_GC2_MARK);
+
+  reset_gc2(L, g);
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -127,10 +182,13 @@ int main(void)
   tg = G2TG(g);
   assert(tg != NULL);
 
-  test_active_collect_assists_multiple_batches(L, g, tg);
+  test_active_collect_completes_active_cycle(L, g, tg);
+  test_active_collect_completes_idle_cycle(L, g);
+  test_active_collect_restores_stopped_cycle(L, g);
   test_active_step_returns_false(L, g, tg);
+  test_active_step_starts_stopped_cycle(L, g);
 
   lua_close(L);
-  printf("t-gc-active-collect-assist OK: active lua_gc assists GC2 work\n");
+  printf("t-gc-active-collect-assist OK: active lua_gc completes GC2 collect\n");
   return 0;
 }

@@ -1572,18 +1572,6 @@ static void api_gc_leaveexclusive(global_State *g)
   mt_gc_exclusive_futex_wake(g, INT_MAX);
 }
 
-#define API_GC_ACTIVE_COLLECT_DRAIN_BATCHES	4u
-
-static void api_gc_active_collect_assist(global_State *g)
-{
-  uint32_t i;
-  for (i = 0; i < API_GC_ACTIVE_COLLECT_DRAIN_BATCHES; i++) {
-    uint32_t step = lj_gc2_worker_drain(g, LJ_GC2_WORKER_DRAIN_BATCH);
-    if (step == 0)
-      break;
-  }
-}
-
 LUA_API int lua_gc(lua_State *L, int what, int data)
 {
   global_State *g = G(L);
@@ -1603,11 +1591,8 @@ LUA_API int lua_gc(lua_State *L, int what, int data)
       lj_gc_fullgc(L);
       api_gc_leaveexclusive(g);
     } else if (mt_live_acq(g) != 0) {
-      if (lj_gc_mt_threshold_load(g) == LJ_MAX_MEM)
-	(void)lj_gc2_request_stopped_major(g, L2TG(L));
-      else
-	(void)lj_gc2_request_major(g, L2TG(L));
-      api_gc_active_collect_assist(g);
+      (void)lj_gc2_collect_active(L,
+				  lj_gc_mt_threshold_load(g) == LJ_MAX_MEM);
     }
     break;
   case LUA_GCCOUNT:
@@ -1621,7 +1606,8 @@ LUA_API int lua_gc(lua_State *L, int what, int data)
     GCSize total;
     if (!api_gc_enterexclusive(g)) {
       if (mt_live_acq(g) != 0) {
-	(void)lj_gc2_request_cycle_explicit(g, L2TG(L));
+	if (lj_gc2_request_cycle_explicit(g, L2TG(L)))
+	  lj_gc2_mark_begin(g);
 	(void)lj_gc2_worker_drain(g, LJ_GC2_WORKER_DRAIN_BATCH);
       }
       break;  /* Active MT steps request/assist GC2 but don't complete it. */
