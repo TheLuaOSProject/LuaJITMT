@@ -276,7 +276,7 @@ assert(cl.lj_clib_ldscript_value() == 42)
 
   add({
     name = "m7_ffi_typeinfo_snapshot",
-    description = "FFI typeinfo ctype snapshot behavior",
+    description = "FFI ctype metadata snapshot behavior",
     run = function(t)
       clean_build(t)
       build_and_run_c(t, t:tmp("lj_t-ffi-typeinfo-snapshot"),
@@ -300,7 +300,7 @@ assert(cl.lj_clib_ldscript_value() == 42)
       build_and_run_c(t, t:tmp("lj_t-ffi-recorder-libmeta-busy"),
                       "t-ffi-recorder-libmeta-busy.c", { timeout = "20s" })
       run_luajit_script(t, "t-ffi-cparse-rollback-reader.lua", nil, { joff = true })
-      print("M7 FFI typeinfo snapshot behavior passed")
+      print("M7 FFI ctype metadata snapshot behavior passed")
     end
   })
 

@@ -1,5 +1,10 @@
 # Progress report - 2026-06-28 threading CI behavior
 
+Historical note: this report predates the final source-search cleanup. The
+current rule is `notes/ci-source-search-policy.md`: source-shape checks over
+repository files are not CI tests; keep behavior fixtures, generated dump/ASM
+checks, or documentation instead.
+
 Scope: x86_64/Linux `v2.1` lockless LuaJIT fork. Project priority remains
 safety, stability, and Lua semantics over LuaJIT performance parity when those
 goals conflict.
@@ -66,14 +71,13 @@ Removed/refactored now:
 - M4 C API attach-order source guard, now covered by the existing entering
   attach/lua_close behavior fixture.
 
-Still high-priority legacy/static guard areas:
+Historical high-priority legacy/static guard areas:
 
 - `tools/ci/m7_ffi_typeinfo_snapshot.sh`: broad raw `CType` source-shape bans;
-  mostly covered by snapshot behavior fixtures and should be slimmed to any
-  truly non-observable helper-boundary lint.
+  superseded by snapshot behavior fixtures and the source-search policy.
 - `tools/ci/m7_ffi_blocking.sh`: behavior coverage exists for callback
-  blacklist and blocking API outcomes; wrapper should become thin or keep only
-  narrow ABI/memory-order lint.
+  blacklist and blocking API outcomes; the source-search wrapper was part of
+  the old static-guard cleanup.
 - `tools/ci/m5_profile_stop_native.sh`: C fixture covers most semantics; keep
   at most a narrow cleanup-order lint.
 - `tools/ci/m5_tab_store_waits.sh`, `m5_metadata_store_waits.sh`, and

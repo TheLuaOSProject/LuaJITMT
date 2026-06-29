@@ -1,5 +1,5 @@
 /*
-** Focused guard for ffi.typeinfo() ctype snapshots.
+** Focused guard for public FFI ctype metadata snapshots.
 */
 
 #include <assert.h>
@@ -497,13 +497,7 @@ int main(void)
     "lj_m7_typeinfo_cchar_arr_id)\n"
     "  assert(tonumber(ffi.typeof('const char[2][3]')) == "
     "lj_m7_typeinfo_cchar_arr2_id)\n"
-    "end\n"
-    "for i = 1, 100 do\n"
-    "  local ti = ffi.typeinfo(lj_m7_typeinfo_snapshot_id)\n"
-    "  assert(ti and ti.size == 4)\n"
-    "end\n"
-    "assert(ffi.typeinfo(0) == nil)\n"
-    "assert(ffi.typeinfo(1000000000) == nil)\n");
+    "end\n");
   seq1 = ljt_ctype_parse_seq(cts);
   assert(seq1 == seq0);
 
@@ -515,17 +509,19 @@ int main(void)
     uint32_t release_seq = ljt_ctype_hold_parse_token(cts);
     ljt_lua_dostring(L,
       "local ffi = require('ffi')\n"
-      "local ti = ffi.typeinfo(lj_m7_typeinfo_int_id)\n"
-      "assert(ti and ti.size == 4)\n"
-      "assert(ffi.typeinfo(lj_m7_typeinfo_snapshot_id) == nil)\n");
+      "assert(tonumber(ffi.typeof('int')) == lj_m7_typeinfo_int_id)\n"
+      "assert(ffi.sizeof('int') == 4)\n"
+      "assert(ffi.alignof('int') == 4)\n");
     assert((ctype_parse_token_acq(cts) & 1u) != 0);
     ljt_ctype_release_parse_token(cts, release_seq);
   }
 
   ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"
-    "local ti = ffi.typeinfo(lj_m7_typeinfo_snapshot_id)\n"
-    "assert(ti and ti.size == 4)\n");
+    "assert(ffi.sizeof('lj_m7_typeinfo_snapshot_t') == 4)\n"
+    "assert(ffi.alignof('lj_m7_typeinfo_snapshot_t') == 4)\n"
+    "assert(tonumber(ffi.typeof('lj_m7_typeinfo_snapshot_t')) == "
+    "lj_m7_typeinfo_snapshot_id)\n");
   assert(ljt_ctype_parse_seq(cts) == seq1 + 2u);
 
   ljt_lua_dostring(L,
@@ -538,12 +534,13 @@ int main(void)
 
   ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"
-    "local ti = ffi.typeinfo(lj_m7_typeinfo_snapshot_seq_id)\n"
-    "assert(ti and ti.info ~= nil)\n");
+    "assert(ffi.sizeof('lj_m7_typeinfo_snapshot_seq_t') == 4)\n"
+    "assert(tonumber(ffi.typeof('lj_m7_typeinfo_snapshot_seq_t')) == "
+    "lj_m7_typeinfo_snapshot_seq_id)\n");
   seq3 = ljt_ctype_parse_seq(cts);
   assert(seq3 == seq2);
 
   lua_close(L);
-  printf("t-ffi-typeinfo-snapshot OK: stable typeinfo reads avoid parser locking\n");
+  printf("t-ffi-typeinfo-snapshot OK: stable public ctype metadata reads avoid parser locking\n");
   return 0;
 }

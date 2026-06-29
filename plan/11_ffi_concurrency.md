@@ -53,8 +53,9 @@ GCtab *miscmap; GCRef *metamap; CCallback cb; uint32_t hash[CTHASH_SIZE]; }`
   publish through `lj_ctype_addname_unique()`, which rechecks the name bucket
   before CAS-prepend and abandons duplicate-name losers. The parser body is
   still serialized by `parse_token`; this helper does not claim lock-free
-  struct layout/rollback publication. `ffi.typeinfo(id)` hides abandoned
-  `CTA_BAD` holes rather than exposing them as live type records.
+  struct layout/rollback publication. The former public `ffi.typeinfo(id)`
+  diagnostic was nonstock and has been removed; abandoned `CTA_BAD` holes are
+  checked through internal snapshot helpers and stock-visible FFI readers.
   Current rollback-reader bridge: direct layout readers, string-key cdata field
   lookup, numeric cdata element-size lookup, cdata pointer arithmetic, enum
   string constant resolution, and `ffi.C` namespace lookup take the parser token
@@ -62,10 +63,9 @@ GCtab *miscmap; GCRef *metamap; CCallback cb; uint32_t hash[CTHASH_SIZE]; }`
   name/hash-visible constants, including the recorder's `ffi.new`, field,
   numeric-index, pointer arithmetic, enum-string, and `ffi.C` specialization
   paths. This prevents a failed `ffi.cdef()` from leaking a transient struct
-  definition or constant to `ffi.sizeof()`, `ffi.new()`, `ffi.typeinfo()`, cdata
-  `__index`/`__newindex`, numeric indexing, pointer arithmetic, enum string
-  casts, or `ffi.C`; narrowing the hot cdata reader fences is deferred to M9
-  cleanup.
+  definition or constant to `ffi.sizeof()`, `ffi.new()`, cdata `__index`/
+  `__newindex`, numeric indexing, pointer arithmetic, enum string casts, or
+  `ffi.C`; narrowing the hot cdata reader fences is deferred to M9 cleanup.
 - `cts->L` field: delete; pass L explicitly (it's already threaded through
   most call paths; grep `cts->L` ≈ 15 sites, mechanical).
 - **cparse (ffi.cdef)** mutates parser state + tab: the original sketch

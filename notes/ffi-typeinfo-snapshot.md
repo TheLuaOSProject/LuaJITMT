@@ -1,4 +1,4 @@
-FFI typeinfo snapshot slice
+# FFI ctype metadata snapshot slice
 
 - Converted CTState.parse_token from a binary parser lock flag into an
   even/odd sequence. Odd means a cparser mutation/rollback transaction is
@@ -7,17 +7,19 @@ FFI typeinfo snapshot slice
   record only when the parser sequence is even and unchanged across the copy;
   active or overlapping parser work asks the caller to retry under the parser
   lock.
-- Routed ffi.typeinfo(id) through the snapshot helper first. Stable published
-  ctypes no longer acquire the cparser mutation sequence; active parser windows
-  retain the old locked behavior so rollback remains hidden.
+- `ffi.typeinfo(id)` was an internal, nonstock Lua entrypoint. It has been
+  removed from the public `ffi` table so the fork stays closer to stock LuaJIT.
+  Internal CType snapshot helpers remain available to implementation code and
+  C fixtures.
 - Added tests/t-ffi-typeinfo-snapshot.c and m7_ffi_typeinfo_snapshot. The C
-  fixture asserts stable ffi.typeinfo() calls do not advance parse_token while
-  ffi.cdef() still does, and the suite also runs the existing rollback-reader
-  race.
+  fixture asserts stable public readers such as `ffi.typeof()`, `ffi.sizeof()`,
+  and `ffi.alignof()` do not advance parse_token while `ffi.cdef()` still does,
+  and the suite also runs the rollback-reader race against stock-visible FFI
+  operations.
 
 Verification:
 
-- tools/ci/m7_ffi_typeinfo_snapshot.sh
+- tools/ci/lua_test.sh m7_ffi_typeinfo_snapshot
 - tools/ci/lua_test.sh m7_ffi_cdef_token
 - tools/ci/lua_test.sh m7_ffi_cparse_rollback
 - tools/ci/lua_test.sh m7_ffi_ctype_name_claim

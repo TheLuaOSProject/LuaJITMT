@@ -6,7 +6,6 @@ ffi.cdef("struct lj_m7_rollback_ctor;")
 ffi.cdef("enum lj_m7_rollback_enum;")
 
 local ct = ffi.typeof("struct lj_m7_rollback_reader")
-local ctid = tonumber(ct)
 local ctor_ct = ffi.typeof("struct lj_m7_rollback_ctor")
 local ctor_ptr_ct = ffi.typeof("struct lj_m7_rollback_ctor *")
 local enum_ct = ffi.typeof("enum lj_m7_rollback_enum")
@@ -81,16 +80,9 @@ local function race_failed_cdef(tag, check, source)
   assert(result == "err", result)
 end
 
-local function assert_incomplete_typeinfo_or_active_parser_nil(msg)
-  local ti = ffi.typeinfo(ctid)
-  assert(ti == nil or ti.size == nil, msg)
-end
-
 race_failed_cdef("direct", function()
   assert(ffi.sizeof(ct) == nil,
 	 "direct ctype reader observed failed cdef rollback state")
-  assert_incomplete_typeinfo_or_active_parser_nil(
-    "ffi.typeinfo observed failed cdef rollback state")
   assert(not pcall(ffi.new, ct, { x = 123 }),
 	 "ffi.new observed failed cdef rollback state")
 end)
@@ -153,8 +145,6 @@ race_failed_cdef("ffic", function()
 end, bad_const_cdef_source)
 
 assert(ffi.sizeof(ct) == nil, "failed cdef left incomplete struct completed")
-assert(ffi.typeinfo(ctid).size == nil,
-       "failed cdef left typeinfo for incomplete struct completed")
 assert(not pcall(ffi.new, ct, { x = 123 }),
        "failed cdef left ffi.new able to allocate incomplete struct")
 assert(not pcall(function() return p.x end),
@@ -185,4 +175,4 @@ assert(not pcall(ffi.cast, enum_ct, 17),
 assert(not pcall(function() return ffi.C.lj_m7_rollback_tmp_const end),
        "failed cdef left ffi.C able to see rolled-back constant")
 
-print("t-ffi-cparse-rollback-reader OK: direct ctype/typeinfo/new/field/numeric/ptrarith/constructor/namespace readers wait out rollback")
+print("t-ffi-cparse-rollback-reader OK: direct ctype/new/field/numeric/ptrarith/constructor/namespace readers wait out rollback")
