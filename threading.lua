@@ -5,6 +5,7 @@
 ---@alias threading.recv_status true|false|"timeout"
 ---@alias threading.peek_status true|false
 ---@alias threading.send_result true|nil
+---@alias threading.gcmode "incremental"|"generational"
 
 ---@class threading.thread: userdata
 local threading_thread = {}
@@ -120,6 +121,11 @@ local threading = {}
 ---@nodiscard
 function threading.cpucount() end
 
+---Return a monotonic wall-clock timestamp in seconds.
+---@return number|nil seconds nil if the platform clock failed.
+---@nodiscard
+function threading.now() end
+
 ---Issue a cross-thread memory fence.
 ---@return nil
 function threading.fence() end
@@ -127,6 +133,21 @@ function threading.fence() end
 ---@param seconds? number seconds to sleep; defaults to 0.
 ---@return nil
 function threading.sleep(seconds) end
+
+---Return GC2/lockless runtime telemetry used by tests and benchmarks.
+---@return table<string, number|boolean|table> stats
+---@nodiscard
+function threading.gcstats() end
+
+---Query or set the number of parked GC2 worker threads.
+---@param count? integer
+---@return integer old_count
+function threading.gcworkers(count) end
+
+---Query or set the GC2 collection mode.
+---@param mode? threading.gcmode
+---@return threading.gcmode old_mode
+function threading.gcmode(mode) end
 
 ---Spawn a new OS thread that calls `fn(...)`.
 ---@param fn threading.thread_fn

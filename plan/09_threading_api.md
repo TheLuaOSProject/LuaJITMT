@@ -16,6 +16,7 @@ thread:running() -> boolean
 threading.current() -> thread         -- the caller's thread object
 threading.sleep(seconds)              -- blocking, native-state, poll-aware
 threading.cpucount() -> integer
+threading.now() -> number|nil         -- monotonic benchmark clock
 threading.fence()                     -- seq_cst full fence (02 M-3)
 threading.gcstats() -> table          -- GC2 telemetry for tests/benchmarks
 threading.gcworkers([n]) -> old_n     -- query/set parked GC2 workers
@@ -35,9 +36,9 @@ plus a happens-before edge, never a copy.
 
 GC2 controls are deliberately owned by `threading.*`, not by the base
 `collectgarbage()` API. Stock LuaJIT options and error behavior stay intact;
-`threading.gcstats()`, `threading.gcworkers()`, and `threading.gcmode()` are
-fork-local runtime controls used by tests, benchmarks, and operators of the
-lockless runtime.
+`threading.now()`, `threading.gcstats()`, `threading.gcworkers()`, and
+`threading.gcmode()` are fork-local runtime controls used by tests,
+benchmarks, and operators of the lockless runtime.
 
 ## 9.2 thread objects
 
