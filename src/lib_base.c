@@ -704,12 +704,12 @@ LJLIB_ASM(coroutine_yield)
 static int ffh_resume(lua_State *L, lua_State *co, int wrap)
 {
   LJStateClaim claim;
-  if (!lj_state_tryclaim(co, lj_thr_current_id(G(L)), &claim))
+  if (!lj_state_resumeclaim(co, lj_thr_current_id(G(L)), &claim))
     lj_err_callermsg(L, "thread busy");
   if (co->cframe != NULL || co->status > LUA_YIELD ||
       (co->status == LUA_OK && co->top == co->base)) {
     ErrMsg em = co->cframe ? LJ_ERR_CORUN : LJ_ERR_CODEAD;
-    lj_state_dropclaim(&claim);
+    lj_state_dropresumeclaim(&claim);
     if (wrap)
       lj_err_caller(L, em);
     setboolV(L->base-1-LJ_FR2, 0);
@@ -719,10 +719,10 @@ static int ffh_resume(lua_State *L, lua_State *co, int wrap)
   if (lj_state_cpgrowstack(co, (MSize)(L->top - L->base)) != LUA_OK) {
     cTValue *msg = --co->top;
     setstrV(L, L->top++, strV(msg));
-    lj_state_dropclaim(&claim);
+    lj_state_dropresumeclaim(&claim);
     lj_err_callermsg(L, strVdata(L->top-1));
   }
-  lj_state_dropclaim(&claim);
+  lj_state_dropresumeclaim(&claim);
   return FFH_RETRY;
 }
 
@@ -753,7 +753,7 @@ lua_State *LJ_FASTCALL lj_ffh_coroutine_claim(lua_State *L, lua_State *co)
 {
   LJStateClaim claim;
   uintptr_t coflag;
-  if (!lj_state_tryclaim(co, lj_thr_current_id(G(L)), &claim))
+  if (!lj_state_resumeclaim(co, lj_thr_current_id(G(L)), &claim))
     return NULL;
   coflag = (uintptr_t)co | (uintptr_t)claim.release;
   return (lua_State *)coflag;
@@ -766,7 +766,7 @@ void LJ_FASTCALL lj_ffh_coroutine_wrap_err(lua_State *L, lua_State *co)
   co = (lua_State *)(coflag & ~(uintptr_t)1);
   co->top--; copyTV(L, L->top, co->top); L->top++;
   if (coflag & 1)
-    lj_state_release(co, lj_thr_current_id(G(L)));
+    lj_state_resume_release(co, lj_thr_current_id(G(L)));
   if (tvisstr(L->top-1))
     lj_err_callermsg(L, strVdata(L->top-1));
   else

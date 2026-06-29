@@ -14,6 +14,18 @@ return function(add)
       description = "Lua-visible threading API behavior test",
       script = "t-threading-api.lua",
       opts = { joff = true }
+    },
+    {
+      name = "m4_threading_coroutine",
+      description = "coroutine yield/resume handoff across OS threads",
+      script = "t-threading-coroutine.lua",
+      opts = { timeout = "30s" }
+    },
+    {
+      name = "m4_threading_coroutine_joff",
+      description = "coroutine yield/resume handoff across OS threads under -joff",
+      script = "t-threading-coroutine.lua",
+      opts = { joff = true, timeout = "30s" }
     }
   })
 

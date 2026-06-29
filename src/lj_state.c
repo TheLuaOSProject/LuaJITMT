@@ -479,7 +479,7 @@ lua_State *lj_state_new(lua_State *L)
   L1->stacksize = 0;
   setmref(L1->stack, NULL);
   L1->cframe = NULL;
-  L1->tg_hint = L2TG(L);
+  L1->tg_hint = NULL;
   lj_state_owner_rel(L1, 0);
   lj_state_scan_epoch_rel(L1, 0);
   lj_state_scan_dirty_epoch_rel(L1, 0);

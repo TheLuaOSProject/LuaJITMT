@@ -1818,6 +1818,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov L:TMPR, TMP1
   |  and TMPR, -2
   |  add qword [DISPATCH+DISPATCH_TG(stack_dirty_epoch)], 1
+  |  mov qword L:TMPR->tg_hint, 0
   |  mov dword L:TMPR->thr_owner, 0
   |7:
   |  mov PC, SAVE_PC
@@ -1868,6 +1869,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov L:TMPR, TMP1
   |  and TMPR, -2
   |  add qword [DISPATCH+DISPATCH_TG(stack_dirty_epoch)], 1
+  |  mov qword L:TMPR->tg_hint, 0
   |  mov dword L:TMPR->thr_owner, 0
   |->coro_claim_fallback_done_ .. resume:
   |  jmp ->fff_fallback

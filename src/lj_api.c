@@ -1516,7 +1516,7 @@ LUA_API int lua_resume(lua_State *L, int nargs)
 {
   LJStateClaim claim;
   int status;
-  if (!lj_state_tryclaim(L, lj_thr_current_id(G(L)), &claim))
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
     lj_err_callermsg(api_errstate(L), "thread busy");
   if (L->cframe == NULL && L->status <= LUA_YIELD) {
     status = lj_vm_resume(L,
@@ -1528,7 +1528,7 @@ LUA_API int lua_resume(lua_State *L, int nargs)
     incr_top(L);
     status = LUA_ERRRUN;
   }
-  lj_state_dropclaim(&claim);
+  lj_state_dropresumeclaim(&claim);
   return status;
 }
 
