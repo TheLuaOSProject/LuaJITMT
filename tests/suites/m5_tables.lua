@@ -63,6 +63,14 @@ return function(add)
       cfile = "t-tab-retire.c",
       opts = { timeout = "20s" },
       message = "M5 table hash-vector retirement tests passed"
+    },
+    {
+      name = "m5_tab_capi_resize_stress",
+      description = "public C API table setter stress across concurrent resize",
+      output = "lj_t-tab-capi-resize-stress",
+      cfile = "t-tab-capi-resize-stress.c",
+      opts = { timeout = "20s" },
+      message = "M5 public C API table resize stress passed"
     }
   })
 
