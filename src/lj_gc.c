@@ -56,13 +56,6 @@ static void gc_root_wait_no_l(void)
   (void)lj_thr_sleep_ns(NULL, 1000000);
 }
 
-#if LJ_HASFFI
-static void gc_finreg_claim_wait_no_l(void)
-{
-  gc_root_wait_no_l();
-}
-#endif
-
 /* -- Mark phase ---------------------------------------------------------- */
 
 void lj_gc_arena_markobj(global_State *g, GCobj *o)
@@ -891,7 +884,7 @@ static int gc_traverse_tab(global_State *g, GCtab *t)
 	  lj_tv_load_acq(&key, &n->key);
 	  key_loaded = 1;
 	  while (lj_cdata_fin_isclaim(&val) || tviskeylock(&key)) {
-	    gc_finreg_claim_wait_no_l();
+	    gc_root_wait_no_l();
 	    lj_tv_load_acq(&val, &n->val);
 	    lj_tv_load_acq(&key, &n->key);
 	  }
