@@ -37,6 +37,7 @@ local m7_cases = {
   "m7_ffi_metatype",
   "m7_ffi_cdata_get_l",
   "m7_ffi_cdata_set_l",
+  "m7_ffi_cdata_shared_hammer",
   "m7_ffi_carith_l",
   "m7_ffi_clib_cache",
   "m7_ffi_clib_ldscript",
@@ -168,6 +169,23 @@ return function(add)
         getenv("LJ_M7_FFI_SET_ITERS", "320")
       }, { joff = true })
       print("M7 FFI cdata write behavior passed")
+    end
+  })
+
+  add({
+    name = "m7_ffi_cdata_shared_hammer",
+    description = "shared FFI cdata field hammer behavior",
+    run = function(t)
+      clean_build(t)
+      local args = {
+        getenv("LJ_M7_FFI_SHARED_THREADS", "6"),
+        getenv("LJ_M7_FFI_SHARED_ITERS", "24000")
+      }
+      run_luajit_script(t, "t-ffi-cdata-shared-hammer.lua", args,
+			{ joff = true, timeout = "30s" })
+      run_luajit_script(t, "t-ffi-cdata-shared-hammer.lua", args,
+			{ timeout = "30s" })
+      print("M7 shared FFI cdata field hammer behavior passed")
     end
   })
 
