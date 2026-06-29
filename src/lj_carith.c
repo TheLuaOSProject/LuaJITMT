@@ -428,6 +428,36 @@ uint64_t lj_carith_shift64(uint64_t x, int32_t sh, int op)
   return x;
 }
 
+static int carith_check64_source(lua_State *L, CTState *cts, GCcdata *cd,
+				 uint8_t **spp, CTypeID *sidp, CType **spct,
+				 CTInfo *infop, CTSize *sizep)
+{
+  CType snap;
+  CTypeID sid = cd->ctypeid, rid;
+  CTInfo info, rawinfo;
+  CTSize size;
+  uint8_t *sp = (uint8_t *)cdataptr(cd);
+  int ok = carith_ctype_info_read(L, cts, sid, &info, &size, &rid, &snap);
+  if (ok <= 0)
+    return 0;
+  rawinfo = ctype_info_acq(&snap);
+  if (ctype_isref(rawinfo)) {
+    sp = *(void **)sp;
+    sid = ctype_cid(rawinfo);
+    ok = carith_ctype_info_read(L, cts, sid, &info, &size, &rid, &snap);
+    if (ok <= 0)
+      return 0;
+    rawinfo = ctype_info_acq(&snap);
+  }
+  sid = ctype_isenum(rawinfo) ? ctype_cid(rawinfo) : rid;
+  *spp = sp;
+  *sidp = sid;
+  *spct = ctype_get(cts, sid);
+  *infop = info;
+  *sizep = size;
+  return 1;
+}
+
 /* Equivalent to lj_lib_checkbit(), but handles cdata. */
 uint64_t lj_carith_check64(lua_State *L, int narg, CTypeID *id)
 {
@@ -439,25 +469,14 @@ uint64_t lj_carith_check64(lua_State *L, int narg, CTypeID *id)
     /* Handled below. */
   } else if (tviscdata(o)) {
     CTState *cts = ctype_cts(L);
-    uint8_t *sp = (uint8_t *)cdataptr(cdataV(o));
-    CTypeID sid = cdataV(o)->ctypeid;
-    CType *s = ctype_get(cts, sid);
+    uint8_t *sp;
+    CTypeID sid;
+    CType *s;
     uint64_t x;
-    CTInfo info = ctype_info_acq(s);
+    CTInfo info;
     CTSize size;
-    if (ctype_isref(info)) {
-      sp = *(void **)sp;
-      sid = ctype_cid(info);
-    }
-    sid = ctype_rawid(cts, sid);
-    s = ctype_get(cts, sid);
-    info = ctype_info_acq(s);
-    if (ctype_isenum(info)) {
-      sid = ctype_cid(info);
-      s = ctype_get(cts, sid);
-      info = ctype_info_acq(s);
-    }
-    size = ctype_size_acq(s);
+    if (!carith_check64_source(L, cts, cdataV(o), &sp, &sid, &s, &info, &size))
+      goto err;
     if ((info & (CTMASK_NUM|CTF_BOOL|CTF_FP|CTF_UNSIGNED)) ==
 	CTINFO(CT_NUM, CTF_UNSIGNED) && size == 8)
       *id = CTID_UINT64;  /* Use uint64_t, since it has the highest rank. */
