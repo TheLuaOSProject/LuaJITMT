@@ -11,6 +11,10 @@ String declarations still use the parser-backed path. User-defined or
 parser-created ctype comparisons still wait/retry if their sequence-checked
 snapshot overlaps an active parser mutation, so rollback and in-progress type
 publication remain hidden from readers.
+The runtime API keeps the stock wait/retry behavior. The trace recorder
+preflights snapshot-dependent comparisons and raises `CTBUSY` like the other FFI
+layout/type snapshot readers instead of parking behind a parser token that is
+already held.
 Exact `CTypeID` equality is handled before that snapshot path. This needs no
 ctype-table read, so `ffi.istype(ct, value)` can record under an unrelated
 parser-owned token when the ctype object and cdata value already carry the same
@@ -38,6 +42,9 @@ Coverage:
 - holds the parser token from a trace-start callback around an exact-ID
   user-defined struct comparison and requires a successful trace with no
   `CTBUSY`;
+- holds the parser token from a trace-start callback around a user-defined
+  struct-vs-pointer comparison and requires a `CTBUSY` trace abort before the
+  runtime wait path can park the recorder;
 - wired the fixture into `m7_ffi_typeinfo_snapshot`.
 
 Validation:

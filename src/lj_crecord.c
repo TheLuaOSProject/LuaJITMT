@@ -221,17 +221,23 @@ static CType *crec_ctype_snapshot(jit_State *J, CTState *cts, CTypeID id,
   return out;
 }
 
-static CType *crec_ctype_rawref(jit_State *J, CTState *cts, CTypeID id,
-				CType *out)
+static CType *crec_ctype_rawrefid(jit_State *J, CTState *cts, CTypeID id,
+				  CTypeID *ridp, CType *out)
 {
-  int ok = lj_ctype_rawref_predefined(cts, id, NULL, out);
+  int ok = lj_ctype_rawref_predefined(cts, id, ridp, out);
   if (ok < 0)
-    ok = lj_ctype_rawref_snapshot(cts, id, NULL, out);
+    ok = lj_ctype_rawref_snapshot(cts, id, ridp, out);
   if (ok < 0)
     lj_trace_err(J, LJ_TRERR_CTBUSY);
   if (!ok)
     lj_trace_err(J, LJ_TRERR_BADTYPE);
   return out;
+}
+
+static CType *crec_ctype_rawref(jit_State *J, CTState *cts, CTypeID id,
+				CType *out)
+{
+  return crec_ctype_rawrefid(J, cts, id, NULL, out);
 }
 
 static CType *crec_ctype_rawchild(jit_State *J, CTState *cts, CType *ct,
@@ -2200,11 +2206,48 @@ void LJ_FASTCALL recff_ffi_typeof(jit_State *J, RecordFFData *rd)
   }
 }
 
+static int crec_ffi_istype_predefined_ids(CTypeID id1, CTypeID id2)
+{
+  return id1 > CTID_NONE && id1 <= CTID_CTYPEID &&
+	 id2 > CTID_NONE && id2 <= CTID_CTYPEID;
+}
+
+static void crec_ffi_istype_snapshot_guard(jit_State *J, CTState *cts,
+					   CTypeID id1, CTypeID id2)
+{
+  CType ct1, ct2, child;
+  CTypeID rid1, rid2;
+  CTInfo info1, info2;
+  CTSize size1, size2;
+
+  if (id1 == id2 || crec_ffi_istype_predefined_ids(id1, id2))
+    return;
+
+  crec_ctype_rawrefid(J, cts, id1, &rid1, &ct1);
+  crec_ctype_rawrefid(J, cts, id2, &rid2, &ct2);
+  info1 = ctype_info_acq(&ct1);
+  info2 = ctype_info_acq(&ct2);
+  size1 = ctype_size_acq(&ct1);
+  size2 = ctype_size_acq(&ct2);
+
+  if (rid1 == rid2)
+    return;
+  if (ctype_type(info1) == ctype_type(info2) && size1 == size2) {
+    if (ctype_ispointer(info1)) {
+      crec_ctype_rawchild(J, cts, &ct1, &child);
+      crec_ctype_rawchild(J, cts, &ct2, &child);
+    }
+  } else if (ctype_isstruct(info1) && ctype_isptr(info2)) {
+    crec_ctype_rawchild(J, cts, &ct2, &child);
+  }
+}
+
 void LJ_FASTCALL recff_ffi_istype(jit_State *J, RecordFFData *rd)
 {
-  argv2ctype(J, J->base[0], &rd->argv[0]);
+  CTypeID id1 = argv2ctype(J, J->base[0], &rd->argv[0]);
   if (tref_iscdata(J->base[1])) {
-    argv2ctype(J, J->base[1], &rd->argv[1]);
+    CTypeID id2 = argv2ctype(J, J->base[1], &rd->argv[1]);
+    crec_ffi_istype_snapshot_guard(J, ctype_ctsG(J2G(J)), id1, id2);
     J->postproc = LJ_POST_FIXBOOL;
     J->base[0] = TREF_TRUE;
   } else {

@@ -13,6 +13,7 @@
 
 #include "lj_atomic.h"
 #include "lj_ctype.h"
+#include "lj_trace.h"
 
 static CTState *ljt_ctype_release_cts;
 static uint32_t ljt_ctype_release_seq;
@@ -106,7 +107,10 @@ static int ljt_ctype_trace_parse_token_lua(lua_State *L)
     ljt_ctype_trace_start_count++;
   } else if (strcmp(what, "abort") == 0 && ljt_ctype_trace_seq != 0) {
     int i, top = lua_gettop(L);
-    for (i = 2; i <= top; i++) {
+    if (top >= 5 && lua_isnumber(L, 5) &&
+	lua_tointeger(L, 5) == (lua_Integer)LJ_TRERR_CTBUSY)
+      ljt_ctype_trace_ctbusy_count++;
+    for (i = 5; i <= top; i++) {
       const char *s = lua_tostring(L, i);
       if (s && strstr(s, "ctype parser busy"))
 	ljt_ctype_trace_ctbusy_count++;

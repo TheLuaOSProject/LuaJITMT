@@ -124,6 +124,39 @@ static void assert_istype_trace_records_exact_id(lua_State *L, CTState *cts)
   assert((ctype_parse_token_acq(cts) & 1u) == 0);
 }
 
+static void assert_istype_trace_snapshot_ctbusy(lua_State *L, CTState *cts)
+{
+  ljt_ctype_arm_trace_abort(L, cts);
+  ljt_lua_dostring(L,
+    "local ffi = require('ffi')\n"
+    "jit.attach(lj_m7_trace_parse_token, 'trace')\n"
+    "jit.flush()\n"
+    "jit.on()\n"
+    "jit.opt.start('hotloop=1', 'hotexit=1')\n"
+    "local ct = lj_m7_istype_snapshot_ct\n"
+    "local pct = lj_m7_istype_snapshot_pct\n"
+    "local arr_t = lj_m7_istype_snapshot_arr\n"
+    "local arr = ffi.new(arr_t)\n"
+    "local ptr = ffi.cast(pct, arr)\n"
+    "local function run(n)\n"
+    "  local count = 0\n"
+    "  for i = 1, n do\n"
+    "    if ffi.istype(ct, ptr) then count = count + 1 end\n"
+    "  end\n"
+    "  return count\n"
+    "end\n"
+    "for i = 1, 3 do assert(run(8) == 8) end\n"
+    "jit.attach(lj_m7_trace_parse_token)\n"
+    "assert(lj_m7_trace_parse_token_abort_count() >= 1)\n"
+    "assert(lj_m7_trace_parse_token_ctbusy_count() >= 1)\n");
+  assert(ljt_ctype_trace_start_count != 0);
+  assert(ljt_ctype_trace_abort_count != 0);
+  assert(ljt_ctype_trace_ctbusy_count != 0);
+  assert(ljt_ctype_trace_cts == NULL);
+  assert(ljt_ctype_trace_seq == 0);
+  assert((ctype_parse_token_acq(cts) & 1u) == 0);
+}
+
 int main(void)
 {
   lua_State *L = ljt_lua_newstate_openlibs();
@@ -183,6 +216,10 @@ int main(void)
   assert_istype_trace_records_exact_id(L, cts);
   seq1 = ljt_ctype_parse_seq(cts);
   assert(seq1 == seq0 + 6u);
+
+  assert_istype_trace_snapshot_ctbusy(L, cts);
+  seq1 = ljt_ctype_parse_seq(cts);
+  assert(seq1 == seq0 + 8u);
 
   ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"
