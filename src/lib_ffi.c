@@ -2594,8 +2594,15 @@ LJLIB_CF(ffi_pin)
   lj_gc_pubobjobj(L, ud, mt);
   lj_gc2_finreg_udata_register_mt(L, G(L), ud, mt);
   copyTVrel(L, (TValue *)uddata(ud), o);
-  lj_gc_pubobjtv(L, ud, (TValue *)uddata(ud));
   lj_udata_udtype_rel(ud, UDTYPE_FFI_PIN);
+  lj_gc_pubobjtv(L, ud, (TValue *)uddata(ud));
+  if (tvisgcv(o)) {
+    global_State *g = G(L);
+    uint32_t phase = gc2_phase_acq(g);
+    if (phase == LJ_GC2_MARK || phase == LJ_GC2_WEAK ||
+	phase == LJ_GC2_SWEEP)
+      (void)lj_gc2_markobj(g, gcV(o));
+  }
   setudataV(L, L->top++, ud);
   lj_gc_check(L);
   return 1;

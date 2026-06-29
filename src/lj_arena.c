@@ -769,6 +769,30 @@ void lj_arena_alloc_sweep_kind(TGAlloc *alloc, uint32_t kind,
     ;
 }
 
+static void arena_unlink_owned_duplicate(TGAlloc *alloc, uint32_t kind,
+					 GCArena *target)
+{
+  GCArena *prev = NULL, *a;
+  if (!alloc || kind >= LJ_ARENA_NKINDS || !target)
+    return;
+  for (a = alloc->owned[kind]; a != NULL;) {
+    GCArena *next = lj_arena_next_acq(a);
+    if (a == target) {
+      if (next == a || (next && (next->hdr.flags & LJ_AF_NEEDSWEEP)))
+	next = NULL;
+      if (prev)
+	lj_arena_next_rel(prev, next);
+      else
+	alloc->owned[kind] = next;
+      return;
+    }
+    if (next == a)
+      return;
+    prev = a;
+    a = next;
+  }
+}
+
 GCArena *lj_arena_sweep_one(TGAlloc *alloc, uint32_t kind, uint32_t epoch,
 			    int minor)
 {
@@ -780,6 +804,7 @@ GCArena *lj_arena_sweep_one(TGAlloc *alloc, uint32_t kind, uint32_t epoch,
   a = alloc->needsweep[kind];
   if (!a)
     return NULL;
+  arena_unlink_owned_duplicate(alloc, kind, a);
   alloc->needsweep[kind] = lj_arena_next_acq(a);
   lj_arena_next_rel(a, NULL);
   lj_arena_sweep_words(a, minor);

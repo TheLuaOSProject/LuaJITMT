@@ -1309,7 +1309,7 @@ typedef struct GC2SSBNode GC2SSBNode;
 typedef struct GC2State {
   uint32_t phase;	/* LJ_GC2_*; authoritative scaffold phase. */
   uint32_t cycle;	/* Monotonically increasing classic-GC cycle id. */
-  uint32_t cycle_leader;  /* Nonblocking token for requested cycle leader. */
+  uint32_t cycle_leader;  /* Requested cycle leader or cycle-close gate. */
   uint64_t hs_epoch;	/* Soft-handshake generation. */
   uint32_t hs_pending;	/* Outstanding handshake acknowledgements. */
   uint32_t hs_actions;	/* Current LJ_GC2_HS_* action bits. */
@@ -1398,7 +1398,7 @@ typedef struct GC2State {
   uint32_t worker_wake;  /* Futex word for worker wakeups. */
   uint32_t worker_started;  /* Workers that have entered their loops. */
   uint32_t worker_exited;  /* Workers that have left their loops. */
-  uint32_t worker_active;  /* Temporary single drain owner token. */
+  uint32_t worker_active;  /* Single sweep/worker/close owner token. */
   uint64_t worker_runs;  /* Non-owner worker drain attempts with work. */
   uint64_t worker_grey_drained;  /* Grey objects traced by workers. */
   uint64_t worker_ssb_converted;  /* SSB entries converted by workers. */
@@ -1899,6 +1899,7 @@ struct lua_State {
   uint32_t thr_owner;	/* OS-thread owner tid or claim sentinel. */
   uint64_t scan_epoch;	/* Last stack scan epoch for GC workers. */
   uint64_t scan_dirty_epoch;  /* Owner stack-dirty stamp at last scan. */
+  uint64_t scan_handoff_epoch;  /* GC2 cycle that requested owner scan. */
 };
 
 #define G(L)			(mref(L->glref, global_State))
@@ -1948,6 +1949,17 @@ static LJ_AINLINE void lj_state_scan_dirty_epoch_rel(lua_State *L,
 						     uint64_t epoch)
 {
   la_store64_rel(&L->scan_dirty_epoch, epoch);
+}
+
+static LJ_AINLINE uint64_t lj_state_scan_handoff_epoch_acq(const lua_State *L)
+{
+  return la_load64_acq((uint64_t *)&L->scan_handoff_epoch);
+}
+
+static LJ_AINLINE void lj_state_scan_handoff_epoch_rel(lua_State *L,
+						       uint64_t epoch)
+{
+  la_store64_rel(&L->scan_handoff_epoch, epoch);
 }
 
 /* Macros to access the currently executing (Lua) function. */
@@ -2956,6 +2968,11 @@ static LJ_AINLINE void gc2_cycle_leader_store_rlx(global_State *g,
 						  uint32_t leader)
 {
   la_store32_rlx(&g->gc2.cycle_leader, leader);
+}
+
+static LJ_AINLINE uint32_t gc2_cycle_leader_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.cycle_leader);
 }
 
 static LJ_AINLINE void gc2_cycle_leader_rel(global_State *g, uint32_t leader)

@@ -151,6 +151,7 @@ static int lj_gc2_finreg_cdata_dispatch(lua_State *L, global_State *g,
 					GCobj *o);
 static int lj_gc2_finreg_udata_dispatch(lua_State *L, global_State *g,
 					GCobj *o);
+static uint32_t gc2_discard_remembered_ssb(global_State *g);
 #if LJ_HASFFI
 static void gc2_traverse_clib_retired_cache(global_State *g);
 #endif
@@ -1071,13 +1072,19 @@ int lj_gc2_collect_active(lua_State *L, int restore_stopped)
 	  lj_gc2_mark_begin(g);
 	  continue;
 	}
+	if (gc2_cycle_leader_acq(g) != 0) {
+	  gc2_peer_wait_l(L);  /* Cycle close or another leader owns IDLE. */
+	  continue;
+	}
       }
       lj_gc2_publish_idle_threshold(g);
       return 1;
     }
     if (phase == LJ_GC2_MARK) {
-      if (lj_gc2_worker_drain(g, LJ_GC2_WORKER_DRAIN_BATCH) != 0)
+      if (lj_gc2_worker_drain(g, LJ_GC2_WORKER_DRAIN_BATCH) != 0) {
+	(void)lj_safepoint_ack(L);
 	continue;
+      }
       if (lj_gc2_mark_complete(g, L, 64, ~(uint32_t)0)) {
 	lj_gc2_mark_to_weak(g);
 	continue;
@@ -1086,7 +1093,7 @@ int lj_gc2_collect_active(lua_State *L, int restore_stopped)
       continue;
     }
     if (phase == LJ_GC2_WEAK) {
-      if (lj_gc2_weak_complete(g, NULL, LJ_GC2_WEAK_DRAIN_BATCH)) {
+      if (lj_gc2_weak_complete(g, L, NULL, LJ_GC2_WEAK_DRAIN_BATCH)) {
 	lj_gc2_weak_to_sweep(g);
 	continue;
       }
@@ -1097,8 +1104,10 @@ int lj_gc2_collect_active(lua_State *L, int restore_stopped)
       GCSize cost;
       int finstep;
       lj_gc2_sweep_prepare_bridge_boundary(g, NULL);
-      if (lj_gc2_worker_drain(g, LJ_GC2_SWEEP_BATCH) != 0)
+      if (lj_gc2_worker_drain(g, LJ_GC2_SWEEP_BATCH) != 0) {
+	(void)lj_safepoint_ack(L);
 	continue;
+      }
       finstep = lj_gc2_finalizer_step(L, GC2_ACTIVE_FINALIZE_COST, &cost);
       UNUSED(cost);
       if (finstep != 0) {
@@ -1298,6 +1307,17 @@ static int gc2_mark_trace_root(global_State *g, TraceNo traceno)
 }
 #endif
 
+static int gc2_tg_list_contains(global_State *g, TGState *needle)
+{
+  TGState *tg;
+  if (!g || !needle)
+    return 0;
+  for (tg = gc2_tg_list_acq(g); tg != NULL; tg = lj_tg_next_acq(tg))
+    if (tg == needle)
+      return 1;
+  return 0;
+}
+
 void lj_gc2_mark_begin(global_State *g)
 {
   TGState *tg;
@@ -1328,18 +1348,22 @@ void lj_gc2_mark_begin(global_State *g)
   /* Publish MARK before clearing the request token, so late allocators stop. */
   gc2_phase_rel(g, LJ_GC2_MARK);
   leader = gc2_cycle_leader_xchg_acqrel(g, 0);
-  if (gc2_tg_list_acq(g) == NULL && tg != NULL)
+  if (tg != NULL && !gc2_tg_list_contains(g, tg))
     lj_tg_attach(g, tg);
   (void)gc2_cycle_inc_acqrel(g);
   if (leader)
     gc2_cycle_starts_add(g, 1);
   gc2_marks_this_round_store_rlx(g, 0);
-  if (!minor_requested)
-    (void)gc2_flush_and_drain_ssb(g);  /* Discard remembered roots for majors. */
+  if (!minor_requested) {
+    (void)gc2_discard_remembered_ssb(g);
+    gc2_grey_top_store_rlx(g, 0);
+    gc2_grey_bottom_store_rlx(g, 0);
+  } else {
+    lj_assertG(gc2_grey_empty(g), "gc2 grey deque not empty at mark begin");
+    gc2_grey_top_store_rlx(g, 0);
+    gc2_grey_bottom_store_rlx(g, 0);
+  }
   (void)lj_tg_reclaim_dead(g);
-  lj_assertG(gc2_grey_empty(g), "gc2 grey deque not empty at mark begin");
-  gc2_grey_top_store_rlx(g, 0);
-  gc2_grey_bottom_store_rlx(g, 0);
   if (gc2_grey_capacity_acq(g) == 0)
     (void)gc2_grey_grow(g);
   gc2_weak_reset(g);
@@ -1484,11 +1508,15 @@ void lj_gc2_mark_to_weak(global_State *g)
 
 void lj_gc2_weak_to_sweep(global_State *g)
 {
-  uint32_t expect = LJ_GC2_WEAK;
+  uint32_t active_expect = 0, expect = LJ_GC2_WEAK;
   if (!g)
     return;
-  if (!gc2_phase_cas(g, &expect, LJ_GC2_SWEEP))
+  if (!gc2_worker_active_cas(g, &active_expect, 1))
+    return;  /* Serialize transition handshakes with sweep prepare/close. */
+  if (!gc2_phase_cas(g, &expect, LJ_GC2_SWEEP)) {
+    gc2_worker_active_rel(g, 0);
     return;
+  }
   gc2_sweep_bridge_ready_rel(g, 0);
   gc2_weak_to_sweep_add(g, 1);
   lj_gc2_handshake(g, LJ_GC2_HS_DISABLE_BARRIER|LJ_GC2_HS_FLUSH_SSB|
@@ -1496,6 +1524,7 @@ void lj_gc2_weak_to_sweep(global_State *g)
 		    LJ_GC2_HS_ALLOC_WHITE : LJ_GC2_HS_ALLOC_BLACK));
   (void)lj_gc2_drain_ssb(g);  /* Temporary worker-consume stand-in. */
   (void)lj_tg_reclaim_dead(g);
+  gc2_worker_active_rel(g, 0);
   lj_gc2_worker_wake(g);  /* 05 section 5.6.3 parked worker scheduler. */
 }
 
@@ -2217,9 +2246,15 @@ void lj_gc2_sweep_prepare_bridge_boundary(global_State *g,
 					  GC2SweepBridgePreserveFunc preserve)
 {
   TGState *tg;
-  uint32_t cycle;
+  uint32_t cycle, expect = 0;
   if (!lj_gc2_sweep_bridge_can_progress(g))
     return;
+  if (!gc2_worker_active_cas(g, &expect, 1))
+    return;  /* Serialize list mutation with sweep batches and close. */
+  if (!lj_gc2_sweep_bridge_can_progress(g)) {
+    gc2_worker_active_rel(g, 0);
+    return;
+  }
   cycle = gc2_cycle_acq(g);
   for (tg = gc2_tg_list_acq(g);
        tg != NULL;
@@ -2236,6 +2271,7 @@ void lj_gc2_sweep_prepare_bridge_boundary(global_State *g,
       preserve(g);
     lj_gc2_sweep_bridge_ready(g);
   }
+  gc2_worker_active_rel(g, 0);
 }
 
 int lj_gc2_sweep_pending(global_State *g)
@@ -2304,9 +2340,22 @@ uint32_t lj_gc2_test_sweep_owner_progress(global_State *g, TGState *tg,
 static uint64_t gc2_sweep_live_cells(GCArena *a, uint32_t epoch)
 {
   uint64_t cells = 0;
-  for (; a != NULL; a = lj_arena_next_acq(a))
+  GCArena *slow = a, *fast = a;
+  for (; a != NULL; a = lj_arena_next_acq(a)) {
+    GCArena *next = lj_arena_next_acq(a);
     if (a->hdr.sweep_epoch == epoch)
       cells += a->hdr.live_cells;
+    if (next == a)
+      break;
+    if (slow)
+      slow = lj_arena_next_acq(slow);
+    if (fast)
+      fast = lj_arena_next_acq(fast);
+    if (fast)
+      fast = lj_arena_next_acq(fast);
+    if (slow && fast && slow == fast)
+      break;
+  }
   return cells;
 }
 
@@ -2363,7 +2412,7 @@ void lj_gc2_preserve_abort_to_idle(global_State *g)
   uint32_t phase;
   if (!g)
     return;
-  gc2_cycle_leader_rel(g, 0);
+  gc2_cycle_leader_rel(g, LJ_THREAD_GCSCAN);
   gc2_sweep_bridge_ready_rel(g, 0);
   (void)gc2_flush_and_drain_ssb(g);
   phase = gc2_phase_xchg_acqrel(g, LJ_GC2_IDLE);
@@ -2371,11 +2420,13 @@ void lj_gc2_preserve_abort_to_idle(global_State *g)
     gc2_preserve_abort_to_idle_add(g, 1);
   lj_gc2_handshake(g, gc2_idle_barrier_actions(g, 0));
   (void)lj_tg_reclaim_dead(g);
+  gc2_cycle_leader_rel(g, 0);
 }
 
 int lj_gc2_sweep_to_idle(global_State *g)
 {
   uint32_t expect = 0, phase;
+  uint64_t live;
   if (!g)
     return 0;
   if (!gc2_worker_active_cas(g, &expect, 1))
@@ -2387,19 +2438,22 @@ int lj_gc2_sweep_to_idle(global_State *g)
     gc2_worker_active_rel(g, 0);
     return 0;
   }
-  gc2_cycle_leader_rel(g, 0);
+  gc2_cycle_leader_rel(g, LJ_THREAD_GCSCAN);
   (void)gc2_flush_and_drain_ssb(g);
+  live = lj_gc2_sweep_live_aggregate(g);
+  lj_gc2_update_minor_survival_policy(g, live);
+  gc2_update_public_minor_gates(g);
   phase = gc2_phase_xchg_acqrel(g, LJ_GC2_IDLE);
   if (phase != LJ_GC2_SWEEP) {
+    gc2_cycle_leader_rel(g, 0);
     gc2_worker_active_rel(g, 0);
     return 0;
   }
   gc2_sweep_to_idle_add(g, 1);
-  lj_gc2_update_minor_survival_policy(g, lj_gc2_sweep_live_aggregate(g));
-  gc2_update_public_minor_gates(g);
   lj_gc2_handshake(g, gc2_idle_barrier_actions(g, 0));
   (void)lj_tg_reclaim_dead(g);
   lj_gc2_update_pacing(g);
+  gc2_cycle_leader_rel(g, 0);
   gc2_worker_active_rel(g, 0);
   return 1;
 }
@@ -2407,20 +2461,25 @@ int lj_gc2_sweep_to_idle(global_State *g)
 void lj_gc2_cycle_to_idle(global_State *g)
 {
   uint32_t phase;
+  uint64_t live = 0;
   if (!g)
     return;
-  gc2_cycle_leader_rel(g, 0);
+  gc2_cycle_leader_rel(g, LJ_THREAD_GCSCAN);
   (void)gc2_flush_and_drain_ssb(g);
+  if (gc2_phase_acq(g) == LJ_GC2_SWEEP) {
+    live = lj_gc2_sweep_live_aggregate(g);
+    lj_gc2_update_minor_survival_policy(g, live);
+  }
   phase = gc2_phase_xchg_acqrel(g, LJ_GC2_IDLE);
   if (phase == LJ_GC2_SWEEP) {
     gc2_sweep_to_idle_add(g, 1);
-    lj_gc2_update_minor_survival_policy(g, lj_gc2_sweep_live_aggregate(g));
   }
   gc2_sweep_bridge_ready_rel(g, 0);
   gc2_update_public_minor_gates(g);
   lj_gc2_handshake(g, gc2_idle_barrier_actions(g, 0));
   (void)lj_tg_reclaim_dead(g);
   lj_gc2_update_pacing(g);
+  gc2_cycle_leader_rel(g, 0);
 }
 
 int lj_gc2_sweep_bridge_close(global_State *g)
@@ -2622,6 +2681,36 @@ static GCproto *gc2_func_proto_if_lua(GCfunc *fn)
 	 (GCproto *)(mref(fn->l.pc, char) - sizeof(GCproto)) : NULL;
 }
 
+static int gc2_thread_is_current(global_State *g, lua_State *L)
+{
+  uint32_t owner;
+  TGState *tg;
+  if (!g || !L)
+    return 0;
+  owner = lj_state_owner_acq(L);
+  if (owner != 0 && owner != LJ_THREAD_GCSCAN) {
+    tg = lj_tg_find_owner(g, owner);
+    if (tg && !lj_tg_flags_test_acq(tg, TGF_DEAD) &&
+	lj_tg_load_cur_L(tg) == L)
+      return 1;
+  }
+  return L == lj_tg_cur_L(g);
+}
+
+static int gc2_thread_is_remote_current(global_State *g, lua_State *L)
+{
+  uint32_t owner;
+  TGState *tg;
+  if (!g || !L)
+    return 0;
+  owner = lj_state_owner_acq(L);
+  if (owner == 0 || owner == LJ_THREAD_GCSCAN)
+    return 0;
+  tg = lj_tg_find_owner(g, owner);
+  return tg && !lj_tg_flags_test_acq(tg, TGF_DEAD) &&
+	 lj_tg_load_cur_L(tg) == L && L != lj_tg_cur_L(g);
+}
+
 static TValue *gc2_active_thread_top(lua_State *L, TValue *top)
 {
   TValue *bot = tvref(L->stack);
@@ -2662,18 +2751,31 @@ static TValue *gc2_active_thread_top(lua_State *L, TValue *top)
 static TValue *gc2_stack_scan_top(global_State *g, lua_State *L)
 {
   TValue *frame, *bot = tvref(L->stack);
-  TValue *top = L->top, *max = tvref(L->maxstack);
+  TValue *top = L->top, *used = L->top - 1, *max = tvref(L->maxstack);
   for (frame = L->base - 1; frame > bot + LJ_FR2; frame = frame_prev(frame)) {
     GCfunc *fn = frame_func(frame);
+    GCproto *pt = gc2_func_proto_if_lua(fn);
+    TValue *ftop = frame;
+    if (pt)
+      ftop += pt->framesize;
+    if (ftop > used)
+      used = ftop;
     if (!LJ_FR2)
       lj_gc2_markobj(g, obj2gco(fn));
   }
-  if (L == lj_tg_cur_L(g) && L->base > bot + 1 + LJ_FR2) {
+  used++;
+  if (used > max)
+    used = max;
+  if (gc2_thread_is_remote_current(g, L)) {
+    top = max;
+  } else if (gc2_thread_is_current(g, L) && L->base > bot + 1 + LJ_FR2) {
     top = gc2_active_thread_top(L, top);
   } else {
     TValue *ctop = curr_top(L);
     if (ctop > top)
       top = ctop;
+    if (used > top)
+      top = used;
   }
   return top > max ? max : top;
 }
@@ -2687,6 +2789,7 @@ static void gc2_thread_set_needscan(global_State *g, lua_State *L)
 {
   uint8_t old = la_or8_rlx(gc2_thread_flagp(L), LJ_GC_NEEDSCAN);
   if (!(old & LJ_GC_NEEDSCAN)) {
+    lj_state_scan_handoff_epoch_rel(L, gc2_cycle_acq(g));
     gc2_thread_scan_needscan_add(g, 1);
     gc2_thread_scan_needscan_pending_inc(g);
   }
@@ -2958,6 +3061,30 @@ static void gc2_scan_current_trace_root(global_State *g)
 }
 #endif
 
+#if LJ_HASFFI
+static void gc2_mark_ffi_pin_payloads(global_State *g)
+{
+  GC2FinRegUDataNode *node;
+  for (node = gc2_finreg_udata_head_acq(g);
+       node != NULL;
+       node = gc2_finreg_udata_next_acq(node)) {
+    GCobj *o;
+    GCudata *ud;
+    TValue tv;
+    if (!gc2_finreg_udata_active_acq(node))
+      continue;
+    o = gc2_finreg_udata_obj_acq(node);
+    if (!o || o->gch.gct != ~LJ_TUDATA)
+      continue;
+    ud = gco2ud(o);
+    if (lj_udata_udtype_acq(ud) != UDTYPE_FFI_PIN)
+      continue;
+    lj_tv_load_acq(&tv, (TValue *)uddata(ud));
+    gc2_mark_tv(g, &tv);  /* ffi.pin hidden root, even during weak races. */
+  }
+}
+#endif
+
 static void gc2_scan_global_roots(global_State *g)
 {
   lua_State *mainL = mainthread_acq(g);
@@ -2986,6 +3113,7 @@ static void gc2_scan_global_roots(global_State *g)
   lj_gc2_markmem(g, g->tmpbuf.b);
   gc2_scan_tg_roots(g);
 #if LJ_HASFFI
+  gc2_mark_ffi_pin_payloads(g);
   {
     CTState *cts = ctype_ctsG(g);
     if (cts) {
@@ -3851,7 +3979,7 @@ int lj_gc2_test_weak_snapshot_covers_bridge(global_State *g,
   return lj_gc2_weak_snapshot_covers_bridge(g, bridge_head);
 }
 
-int lj_gc2_weak_complete(global_State *g, GCobj *bridge_head,
+int lj_gc2_weak_complete(global_State *g, lua_State *L, GCobj *bridge_head,
 			 uint32_t drain_limit)
 {
   uint32_t weakdrain;
@@ -3867,7 +3995,7 @@ int lj_gc2_weak_complete(global_State *g, GCobj *bridge_head,
     }
     if (gc2_worker_active_acq(g) == 0)
       break;
-    gc2_peer_wait_no_l();  /* 05 section 5.8: wait for peer drain. */
+    gc2_peer_wait_l(L);  /* 05 section 5.8: wait for peer drain. */
   }
   if (progress)
     gc2_weak_complete_progress_add(g, progress);
@@ -4968,6 +5096,72 @@ static void gc2_ssb_recycle_node(GC2SSBNode *node)
   }
 }
 
+static uint32_t gc2_discard_published_ssb(global_State *g)
+{
+  GC2SSBNode *node;
+  uint32_t nitems = 0, nnodes = 0;
+  if (!g)
+    return 0;
+  node = gc2_ssb_head_xchg_acqrel(g, NULL);
+  while (node) {
+    GC2SSBNode *next = lj_gc2_ssb_next_acq(node);
+    uint32_t count = lj_gc2_ssb_count_acq(node);
+    while (count > 0) {
+      GCRef *slot = &node->slot[count - 1u];
+      gc2_queue_slot_clear_rel(slot);
+      count--;
+      nitems++;
+    }
+    lj_gc2_ssb_count_rel(node, 0);
+    nnodes++;
+    gc2_ssb_recycle_node(node);
+    node = next;
+  }
+  if (nnodes)
+    gc2_ssb_drained_add(g, nnodes);
+  if (nitems)
+    gc2_ssb_items_drained_add(g, nitems);
+  return nitems;
+}
+
+static uint32_t gc2_discard_active_ssb(global_State *g)
+{
+  TGState *tg;
+  uint32_t nitems = 0;
+  if (!g)
+    return 0;
+  for (tg = gc2_tg_list_acq(g); tg != NULL; tg = lj_tg_next_acq(tg)) {
+    GCRef *base, *next;
+    if (lj_tg_flags_test_acq(tg, TGF_DEAD))
+      continue;
+    base = lj_tg_ssb_base_acq(tg);
+    next = lj_tg_ssb_next_acq(tg);
+    if (!base || !next)
+      continue;
+    while (next > base) {
+      GCRef *slot = next - 1;
+      gc2_queue_slot_clear_rel(slot);
+      next = slot;
+      nitems++;
+    }
+    lj_tg_ssb_next_rel(tg, base);
+  }
+  if (nitems)
+    gc2_ssb_items_drained_add(g, nitems);
+  return nitems;
+}
+
+static uint32_t gc2_discard_remembered_ssb(global_State *g)
+{
+  uint32_t n;
+  if (!g || gc2_phase_acq(g) == LJ_GC2_IDLE)
+    return 0;
+  (void)lj_gc2_handshake(g, LJ_GC2_HS_FLUSH_SSB);
+  n = gc2_discard_published_ssb(g);
+  n += gc2_discard_active_ssb(g);
+  return n;  /* Major roots are rescanned; remembered SSB entries are stale. */
+}
+
 static void gc2_ssb_publish_list(global_State *g, GC2SSBNode *head)
 {
   GC2SSBNode *tail, *next;
@@ -5360,7 +5554,12 @@ void lj_gc2_barrier_weak_value(lua_State *L, GCtab *t, cTValue *val)
   if (gc2_phase_acq(g) != LJ_GC2_WEAK)
     return;
   weak = gc2_tab_weak_barrier_mode(g, t);
-  if ((weak & LJ_GC_WEAKVAL) && lj_gc2_markobj(g, gcV(val)))
+  /*
+  ** All-weak tables still need key-side reachability to preserve a hash
+  ** entry. Marking only the new value through point-value store paths can
+  ** keep entries one cycle longer than stock weak-kv clearing.
+  */
+  if (weak == LJ_GC_WEAKVAL && lj_gc2_markobj(g, gcV(val)))
     gc2_weak_values_marked_add(g, 1);
 }
 
@@ -5756,18 +5955,31 @@ static void gc2_traverse_proto(global_State *g, GCproto *pt)
 static TValue *gc2_stack_scan_top_worker(global_State *g, lua_State *L)
 {
   TValue *frame, *bot = tvref(L->stack);
-  TValue *top = L->top, *max = tvref(L->maxstack);
+  TValue *top = L->top, *used = L->top - 1, *max = tvref(L->maxstack);
   for (frame = L->base - 1; frame > bot + LJ_FR2; frame = frame_prev(frame)) {
     GCfunc *fn = frame_func(frame);
+    GCproto *pt = gc2_func_proto_if_lua(fn);
+    TValue *ftop = frame;
+    if (pt)
+      ftop += pt->framesize;
+    if (ftop > used)
+      used = ftop;
     if (!LJ_FR2)
       gc2_markobj_worker(g, obj2gco(fn));
   }
-  if (L == lj_tg_cur_L(g) && L->base > bot + 1 + LJ_FR2) {
+  used++;
+  if (used > max)
+    used = max;
+  if (gc2_thread_is_remote_current(g, L)) {
+    top = max;
+  } else if (gc2_thread_is_current(g, L) && L->base > bot + 1 + LJ_FR2) {
     top = gc2_active_thread_top(L, top);
   } else {
     TValue *ctop = curr_top(L);
     if (ctop > top)
       top = ctop;
+    if (used > top)
+      top = used;
   }
   return top > max ? max : top;
 }
@@ -5775,7 +5987,7 @@ static TValue *gc2_stack_scan_top_worker(global_State *g, lua_State *L)
 static int gc2_thread_owner_scans(global_State *g, lua_State *th)
 {
   TGState *tg;
-  uint64_t scan_epoch, scanned_dirty, owner_dirty;
+  uint64_t scan_epoch, scanned_dirty, handoff_epoch, owner_dirty;
   uint32_t cycle;
   if (!g || !th)
     return 0;
@@ -5783,6 +5995,10 @@ static int gc2_thread_owner_scans(global_State *g, lua_State *th)
   if (!tg)
     return 0;
   cycle = gc2_cycle_acq(g);
+  /* A same-cycle scan only covers this grey item after its NEEDSCAN handoff. */
+  handoff_epoch = lj_state_scan_handoff_epoch_acq(th);
+  if (handoff_epoch != cycle || gc2_thread_needscan(th))
+    return 0;
   scan_epoch = lj_state_scan_epoch_acq(th);
   if (scan_epoch != cycle)
     return 0;
@@ -5819,7 +6035,7 @@ static void gc2_traverse_thread(global_State *g, lua_State *th)
   if (!lj_state_gcscan_claim(th, &claim)) {
     gc2_thread_scan_busy_add(g, 1);
     if (gc2_thread_owner_scans(g, th)) {
-      gc2_thread_clear_needscan(g, th);
+      lj_state_scan_handoff_epoch_rel(th, 0);
       gc2_thread_scan_owner_scans_add(g, 1);
     } else {
       int pushed = gc2_grey_push(g, obj2gco(th));
@@ -5858,6 +6074,7 @@ static void gc2_traverse_thread(global_State *g, lua_State *th)
   }
   lj_state_scan_dirty_epoch_rel(th, 0);
   lj_state_scan_epoch_rel(th, cycle);
+  lj_state_scan_handoff_epoch_rel(th, 0);
   gc2_thread_clear_needscan(g, th);
   lj_state_dropclaim(&claim);
 }
@@ -5895,6 +6112,8 @@ static uint32_t gc2_drain_grey(global_State *g, uint32_t limit)
     if (o) {
       gc2_traverse_obj(g, o);
       n++;
+      if (gc2_thread_scan_needscan_pending_acq(g) != 0)
+	break;
     }
   }
   if (n)
@@ -5993,6 +6212,8 @@ static uint32_t gc2_worker_drain_inner(global_State *g, uint32_t limit,
       if (o) {
 	gc2_traverse_obj(g, o);  /* 05 section 5.6.3 worker steal+trace. */
 	n++;
+	if (gc2_thread_scan_needscan_pending_acq(g) != 0)
+	  break;
 	continue;
       }
       work = gc2_worker_progress_add(n, converted);
@@ -6042,6 +6263,8 @@ static uint32_t gc2_worker_drain_budget(global_State *g, uint32_t limit)
   uint32_t n = 0;
   while (n < limit && !lj_gc2_ssb_empty(g)) {
     uint32_t step = lj_gc2_worker_drain(g, limit - n);
+    if (gc2_thread_scan_needscan_pending_acq(g) != 0)
+      break;  /* Owner handoff needs the root-scan handshake to make progress. */
     if (step == 0)
       break;
     if (step > limit - n)
@@ -6069,7 +6292,8 @@ uint32_t lj_gc2_fixpoint_round(global_State *g, lua_State *L, uint32_t limit)
   }
   (void)gc2_worker_drain_budget(g, limit);  /* 05 section 5.7.1 post-root drain. */
   fixpoint = gc2_marks_this_round_acq(g) == 0 &&
-	     lj_gc2_ssb_empty(g);
+	     lj_gc2_ssb_empty(g) &&
+	     gc2_thread_scan_needscan_pending_acq(g) == 0;
   gc2_fixpoint_rounds_add(g, 1);
   if (fixpoint)
     gc2_fixpoint_hits_add(g, 1);

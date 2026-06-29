@@ -321,6 +321,7 @@ static LJ_AINLINE void lj_gc_barriertv_(lua_State *L, GCtab *t, cTValue *tv)
     return;
   lj_tv_load_acq(&snap, tv);
   lj_gc2_barrier_tv_pair(L, obj2gco(t), &snap);
+  lj_gc2_barrier_weak_value(L, t, &snap);
   if (tviswhite(&snap) && isblack(obj2gco(t)))
     lj_gc_barrierback(G(L), t);
 }

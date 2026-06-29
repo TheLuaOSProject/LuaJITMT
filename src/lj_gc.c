@@ -1591,7 +1591,7 @@ static int atomic(global_State *g, lua_State *L)
 #endif
   {
     GCobj *weak = lj_gc_list_head_acq(&g->gc.weak);
-    if (!lj_gc2_weak_complete(g, weak, LJ_GC2_WEAK_DRAIN_BATCH))
+    if (!lj_gc2_weak_complete(g, L, weak, LJ_GC2_WEAK_DRAIN_BATCH))
       lj_gc_clearweak_bridge(g, weak);
   }
   lj_gc2_weak_to_sweep(g);
