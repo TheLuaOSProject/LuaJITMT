@@ -21,6 +21,7 @@
 #include "lj_safepoint.h"
 #include "lj_tg.h"
 #include "lj_lib.h"
+#include "lj_trace.h"
 
 /* ------------------------------------------------------------------------ */
 
@@ -302,8 +303,13 @@ LJLIB_CF(debug_upvaluejoin)
   }
   {
     GCobj *uv = gcref_acq(*p[1]);
-    setgcrefrel(*p[0], uv);
-    lj_gc_pubobjobj(L, fn[0], uv);
+    GCobj *old = gcref_acq(*p[0]);
+    if (old != uv) {
+      if (lj_trace_flushall_hs(L))
+	lj_err_caller(L, LJ_ERR_NOGCMM);
+      setgcrefrel(*p[0], uv);
+      lj_gc_pubobjobj(L, fn[0], uv);
+    }
   }
   return 0;
 }

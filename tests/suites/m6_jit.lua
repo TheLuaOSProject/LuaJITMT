@@ -311,6 +311,25 @@ k, v = heat_ipairs(1, { 17 })
 assert(k == "imut" and v == 24)
 assert(debug.setupvalue(ipairs, 1, orig_ipairs_iter))
 
+local function make_counter(step)
+  local x = step
+  return function(n)
+    local y = 0
+    for i = 1, n do y = y + x end
+    return y
+  end
+end
+
+local f = make_counter(1)
+local g = make_counter(7)
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+assert(f(120) == 120)
+assert_traced("Lua upvalue load")
+debug.upvaluejoin(f, 1, g, 1)
+assert_flushed("debug.upvaluejoin() Lua upvalue mutation")
+assert(f(100) == 700)
+
 jit.flush()
 print("jit-cclosure-upvalue-flush OK")
 ]=]
@@ -1415,11 +1434,17 @@ end
 
   add({
     name = "m6_jit_cclosure_upvalue_flush",
-    description = "JIT traces over builtin C upvalues flush on debug mutation",
+    description = "JIT traces over C and Lua upvalues flush on debug/API mutation",
     run = function(t)
       build_default(t)
       luajit_code(t, cclosure_upvalue_flush_smoke(), { timeout = "20s" })
-      print("M6 JIT C-closure upvalue mutation flush guard passed")
+      build_and_run_c(t, t:tmp("lj_t-lua-upvaluejoin-trace"),
+                      "t-lua-upvaluejoin-trace.c", {
+        build = false,
+        env = { LUA_PATH = runtime.lua_path(t) },
+        timeout = "20s"
+      })
+      print("M6 JIT upvalue mutation flush guard passed")
     end
   })
 

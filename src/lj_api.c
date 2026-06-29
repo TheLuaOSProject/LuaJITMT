@@ -1120,8 +1120,12 @@ LUA_API void lua_upvaluejoin(lua_State *L, int idx1, int n1, int idx2, int n2)
   lj_checkapi((uint32_t)n2 < fn2->l.nupvalues, "bad upvalue %d", n2+1);
   {
     GCobj *uv = func_uvptr_acq(&fn2->l, (uint32_t)n2);
-    setgcrefrel(fn1->l.uvptr[n1], uv);
-    lj_gc_pubobjobj(L, fn1, uv);
+    GCobj *old = func_uvptr_acq(&fn1->l, (uint32_t)n1);
+    if (old != uv) {
+      api_trace_flush_mutation(L);
+      setgcrefrel(fn1->l.uvptr[n1], uv);
+      lj_gc_pubobjobj(L, fn1, uv);
+    }
   }
 }
 
