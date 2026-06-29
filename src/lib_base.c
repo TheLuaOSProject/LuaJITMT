@@ -486,8 +486,10 @@ LJLIB_CF(dofile)
 
 /* -- Base library: GC control -------------------------------------------- */
 
-#define LUA_GCSTATS		(LUA_GCINCREMENTAL+1)
-#define LUA_GCWORKERS		(LUA_GCSTATS+1)
+#define LJ_GC2_MODE_GENERATIONAL	(LUA_GCISRUNNING+1)
+#define LJ_GC2_MODE_INCREMENTAL		(LJ_GC2_MODE_GENERATIONAL+1)
+#define LJ_GCSTATS			(LJ_GC2_MODE_INCREMENTAL+1)
+#define LJ_GCWORKERS			(LJ_GCSTATS+1)
 
 static TValue *gc_stats_storetv_str(lua_State *L, GCtab *t, const char *name,
 				    cTValue *src)
@@ -703,10 +705,10 @@ LJLIB_CF(collectgarbage)
   int32_t data = lj_lib_optint(L, 2, 0);
   if (opt == LUA_GCCOUNT) {
     setnumV(L->top, (lua_Number)lj_gc_total_load(G(L))/1024.0);
-  } else if (opt == LUA_GCSTATS) {
+  } else if (opt == LJ_GCSTATS) {
     gc_stats_push(L);
     return 1;
-  } else if (opt == LUA_GCWORKERS) {
+  } else if (opt == LJ_GCWORKERS) {
     global_State *g = G(L);
     uint32_t old = lj_gc2_workers_count(g);
     uint32_t actions = 0;
@@ -718,8 +720,11 @@ LJLIB_CF(collectgarbage)
 	lj_err_callermsg(L, "cannot start GC worker");
     }
     setintV(L->top, (int32_t)old);
-  } else if (opt == LUA_GCGENERATIONAL || opt == LUA_GCINCREMENTAL) {
-    int res = lua_gc(L, opt, data);
+  } else if (opt == LJ_GC2_MODE_GENERATIONAL ||
+	     opt == LJ_GC2_MODE_INCREMENTAL) {
+    global_State *g = G(L);
+    int res = gc2_generational_acq(g) != 0;
+    lj_gc2_set_generational(g, opt == LJ_GC2_MODE_GENERATIONAL);
     setstrV(L, L->top,
 	    lj_str_newz(L, res ? "generational" : "incremental"));
   } else {

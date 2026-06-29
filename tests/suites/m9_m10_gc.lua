@@ -266,7 +266,7 @@ return function(add)
 
   add({
     name = "m10_generational",
-    description = "public generational GC mode and accounting guard",
+    description = "fork-local generational GC mode and accounting guard",
     run = run_generational
   })
 

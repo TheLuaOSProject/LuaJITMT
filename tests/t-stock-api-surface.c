@@ -6,6 +6,14 @@
 #include "lauxlib.h"
 #include "lualib.h"
 
+#ifdef LUA_GCGENERATIONAL
+#error LUA_GCGENERATIONAL is not part of the stock LuaJIT public C API.
+#endif
+
+#ifdef LUA_GCINCREMENTAL
+#error LUA_GCINCREMENTAL is not part of the stock LuaJIT public C API.
+#endif
+
 typedef struct ReaderState {
   const char *chunk;
   int done;
@@ -120,6 +128,12 @@ static void check_chunk_api(lua_State *L)
   lua_pop(L, 1);
 }
 
+static void check_gc_api(lua_State *L)
+{
+  assert(lua_gc(L, 10, 0) == -1);
+  assert(lua_gc(L, 11, 0) == -1);
+}
+
 int main(void)
 {
   lua_State *L = lua_open();
@@ -138,6 +152,7 @@ int main(void)
   check_module_api(L);
   check_buffer_api(L);
   check_chunk_api(L);
+  check_gc_api(L);
 
   status = lua_cpcall(L, typerror_probe, NULL);
   assert(status != 0);

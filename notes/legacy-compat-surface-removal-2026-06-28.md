@@ -24,6 +24,10 @@ LuaJIT public API, language behavior, or generally supported stock entry points.
 - Removed the public `ffi.blocking()` compatibility marker after ordinary FFI
   calls were made native-state safe by default. Internal callback blacklisting
   remains for callback safety.
+- Internalized the GC2 generational/incremental mode selector values so
+  `LUA_GCGENERATIONAL`, `LUA_GCINCREMENTAL`, and matching `lua_gc()` numeric
+  modes are not exported as public C API. The stock `lua_gc()` behavior for
+  unknown modes remains `-1`.
 
 Kept intentionally:
 
