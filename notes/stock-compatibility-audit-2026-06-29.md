@@ -1,14 +1,15 @@
 # Stock compatibility audit, 2026-06-29
 
-Scope: active `v2.1` commits through `db02faa32d21`, with emphasis on
+Scope: active `v2.1` commits through `767ec6f911aa`, with emphasis on
 source-search test removal, legacy/fork-local entrypoint cleanup, and stock
 LuaJIT API behavior.
 
 Refresh note: the 2026-06-29 re-audit after removing the non-stock `ffi.pin`
-entrypoint found no active source-search-only tests and no public stock LuaJIT
-API removals. The remaining string checks in active tests are over generated
-dumps or runtime output, matching the policy exception for generated ASM/mcode
-and other generated artifacts.
+entrypoint, and again after adding shared-cdata race coverage, found no active
+source-search-only tests and no public stock LuaJIT API removals. The remaining
+string checks in active tests are over generated dumps or runtime output,
+matching the policy exception for generated ASM/mcode and other generated
+artifacts.
 
 ## Source-search tests and CI
 
@@ -78,6 +79,10 @@ searches:
 - `jit.profile` remains stock before threading activation; unsupported
   non-TG-local profiler backends may drop samples while multiple VM threads are
   live.
+
+The `m7_ffi_cdata_shared_hammer` coverage added after the pin removal is stock
+API coverage: it uses `ffi`, `require("threading")`, and ordinary cdata field
+accesses. It intentionally does not add a source-search test for helper names.
 
 Future legacy cleanup should remove only stale fork-local compatibility shims
 that exist for the threading/lockless migration. It should not remove stock
