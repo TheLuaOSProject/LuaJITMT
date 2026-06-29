@@ -39,6 +39,23 @@
 #define SYMPREFIX_CF		"luaopen_%s"
 #define SYMPREFIX_BC		"luaJIT_BC_%s"
 
+#define PACKAGE_REQUIRE_CLAIMS	"_REQUIRE_INPROGRESS"
+#define PACKAGE_LOADLIB_CLAIMS	"_LOADLIB_INPROGRESS"
+#define PACKAGE_CLAIM_WAIT_NS	1000000
+
+#define PACKAGE_CLAIM_PEER	0
+#define PACKAGE_CLAIM_ACQUIRED	1
+#define PACKAGE_CLAIM_OWNER	2
+
+static void package_claim_push(lua_State *L, const char *regkey);
+static int package_claim_peer(GCtab *claims, GCstr *key, uint32_t tid);
+static void package_claim_wait(lua_State *L, GCtab *claims, GCstr *key,
+			       uint32_t tid);
+static int package_claim_try(lua_State *L, GCtab *claims, GCstr *key,
+			     uint32_t tid);
+static void package_claim_clear(lua_State *L, GCtab *claims, GCstr *key,
+				uint32_t tid);
+
 static int package_had_stopreq(lua_State *L)
 {
   TGState *tg = L2TG(L);
@@ -317,13 +334,17 @@ static const char *mksymname(lua_State *L, const char *modname,
   return funcname;
 }
 
-static int ll_loadfunc(lua_State *L, const char *path, const char *name, int r)
+typedef struct PackageLoadFuncCtx {
+  const char *path;
+  const char *name;
+  int r;
+  int status;
+} PackageLoadFuncCtx;
+
+static int ll_loadfunc_locked(lua_State *L, const char *path,
+			      const char *name, int r)
 {
   void **reg;
-  if (strlen(path) >= 4096) {
-    lua_pushliteral(L, "path too long");
-    return PACKAGE_ERR_LIB;
-  }
   reg = ll_register(L, path);
   if (*reg == NULL) *reg = ll_load(L, path, (*name == '*'));
   if (*reg == NULL) {
@@ -349,6 +370,48 @@ static int ll_loadfunc(lua_State *L, const char *path, const char *name, int r)
     }
     return PACKAGE_ERR_FUNC;  /* Unable to find function. */
   }
+}
+
+static TValue *ll_loadfunc_cp(lua_State *L, lua_CFunction dummy, void *ud)
+{
+  PackageLoadFuncCtx *ctx = (PackageLoadFuncCtx *)ud;
+  UNUSED(dummy);
+  ctx->status = ll_loadfunc_locked(L, ctx->path, ctx->name, ctx->r);
+  return NULL;
+}
+
+static int ll_loadfunc(lua_State *L, const char *path, const char *name, int r)
+{
+  GCtab *claims;
+  GCstr *key;
+  PackageLoadFuncCtx ctx;
+  uint32_t tid;
+  int claim_state, clear_claim, status;
+  if (strlen(path) >= 4096) {
+    lua_pushliteral(L, "path too long");
+    return PACKAGE_ERR_LIB;
+  }
+  key = lj_str_newz(L, path);
+  package_claim_push(L, PACKAGE_LOADLIB_CLAIMS);
+  claims = tabV(L->top-1);
+  tid = lj_thr_current_id(G(L));
+  for (;;) {
+    claim_state = package_claim_try(L, claims, key, tid);
+    if (claim_state != PACKAGE_CLAIM_PEER)
+      break;
+    package_claim_wait(L, claims, key, tid);
+  }
+  clear_claim = claim_state == PACKAGE_CLAIM_ACQUIRED;
+  ctx.path = path;
+  ctx.name = name;
+  ctx.r = r;
+  ctx.status = PACKAGE_ERR_LIB;
+  status = lj_vm_cpcall(L, NULL, &ctx, ll_loadfunc_cp);
+  if (clear_claim)
+    package_claim_clear(L, claims, key, tid);
+  if (status)
+    return lua_error(L);
+  return ctx.status;
 }
 
 static int lj_cf_package_loadlib(lua_State *L)
@@ -540,8 +603,6 @@ static int lj_cf_package_loader_preload(lua_State *L)
 /* ------------------------------------------------------------------------ */
 
 #define KEY_SENTINEL	(U64x(81000000,00000000)|'s')
-#define PACKAGE_REQUIRE_CLAIMS	"_REQUIRE_INPROGRESS"
-#define PACKAGE_REQUIRE_WAIT_NS	1000000
 
 typedef struct PackageRequireCtx {
   const char *name;
@@ -590,28 +651,28 @@ static TValue *package_require_cp(lua_State *L, lua_CFunction dummy, void *ud)
   return NULL;
 }
 
-static void package_require_push_claims(lua_State *L)
+static void package_claim_push(lua_State *L, const char *regkey)
 {
-  lua_getfield(L, LUA_REGISTRYINDEX, PACKAGE_REQUIRE_CLAIMS);
+  lua_getfield(L, LUA_REGISTRYINDEX, regkey);
   if (!lua_istable(L, -1)) {
     lua_pop(L, 1);
     lua_createtable(L, 0, 16);
     lua_pushvalue(L, -1);
-    lua_setfield(L, LUA_REGISTRYINDEX, PACKAGE_REQUIRE_CLAIMS);
+    lua_setfield(L, LUA_REGISTRYINDEX, regkey);
   }
 }
 
-static void package_require_claimtv(TValue *tv, uint32_t tid)
+static void package_claimtv(TValue *tv, uint32_t tid)
 {
   setnumV(tv, (lua_Number)tid);
 }
 
-static int package_require_claim_is_owner(cTValue *tv, uint32_t tid)
+static int package_claim_is_owner(cTValue *tv, uint32_t tid)
 {
   return tid != 0 && tvisnum(tv) && numV(tv) == (lua_Number)tid;
 }
 
-static int package_require_claim_load(GCtab *claims, GCstr *key, TValue *claim)
+static int package_claim_load(GCtab *claims, GCstr *key, TValue *claim)
 {
   cTValue *tv = lj_tab_getstr(claims, key);
   if (tv) {
@@ -622,48 +683,44 @@ static int package_require_claim_load(GCtab *claims, GCstr *key, TValue *claim)
   return 0;
 }
 
-static int package_require_peer_claim(GCtab *claims, GCstr *key, uint32_t tid)
+static int package_claim_peer(GCtab *claims, GCstr *key, uint32_t tid)
 {
   TValue claim;
-  return package_require_claim_load(claims, key, &claim) &&
-	 !package_require_claim_is_owner(&claim, tid);
+  return package_claim_load(claims, key, &claim) &&
+	 !package_claim_is_owner(&claim, tid);
 }
 
-static void package_require_wait_claim(lua_State *L, GCtab *claims,
-				       GCstr *key, uint32_t tid)
+static void package_claim_wait(lua_State *L, GCtab *claims, GCstr *key,
+			       uint32_t tid)
 {
-  while (package_require_peer_claim(claims, key, tid)) {
+  while (package_claim_peer(claims, key, tid)) {
     int had_stopreq = package_had_stopreq(L);
-    uint32_t actions = lj_thr_sleep_ns(L, PACKAGE_REQUIRE_WAIT_NS);
+    uint32_t actions = lj_thr_sleep_ns(L, PACKAGE_CLAIM_WAIT_NS);
     package_checkstop_fresh(L, actions, had_stopreq);
   }
 }
 
-#define PACKAGE_REQUIRE_CLAIM_PEER	0
-#define PACKAGE_REQUIRE_CLAIM_ACQUIRED	1
-#define PACKAGE_REQUIRE_CLAIM_OWNER	2
-
-static int package_require_try_claim(lua_State *L, GCtab *claims,
-				     GCstr *key, uint32_t tid)
+static int package_claim_try(lua_State *L, GCtab *claims, GCstr *key,
+			     uint32_t tid)
 {
   TValue keytv, claim, old, *dst;
   setstrV(L, &keytv, key);
-  package_require_claimtv(&claim, tid);
+  package_claimtv(&claim, tid);
   for (;;) {
     int rc;
     dst = lj_tab_setstr(L, claims, key);
     rc = lj_tab_trysetnil_cas_keyed(L, claims, dst, &keytv, &claim, &old);
     if (rc == LJ_TAB_STORE_CAS_OK)
-      return PACKAGE_REQUIRE_CLAIM_ACQUIRED;
+      return PACKAGE_CLAIM_ACQUIRED;
     if (rc == LJ_TAB_STORE_CAS_EXISTS)
-      return package_require_claim_is_owner(&old, tid) ?
-	     PACKAGE_REQUIRE_CLAIM_OWNER : PACKAGE_REQUIRE_CLAIM_PEER;
-    lj_tab_store_wait_l(L);  /* require claim saw stale/FORWARD slot. */
+      return package_claim_is_owner(&old, tid) ?
+	     PACKAGE_CLAIM_OWNER : PACKAGE_CLAIM_PEER;
+    lj_tab_store_wait_l(L);  /* package claim saw stale/FORWARD slot. */
   }
 }
 
-static void package_require_clear_claim(lua_State *L, GCtab *claims,
-					GCstr *key, uint32_t tid)
+static void package_claim_clear(lua_State *L, GCtab *claims, GCstr *key,
+				uint32_t tid)
 {
   TValue keytv, nilv, old;
   setstrV(L, &keytv, key);
@@ -677,13 +734,13 @@ static void package_require_clear_claim(lua_State *L, GCtab *claims,
     dst = (TValue *)(void *)slot;
     rc = lj_tab_read_current_keyed(claims, dst, &keytv, &old);
     if (rc == LJ_TAB_STORE_CAS_OK) {
-      if (!package_require_claim_is_owner(&old, tid))
+      if (!package_claim_is_owner(&old, tid))
 	return;
       if (lj_tab_trystoretv_cas_keyed(L, claims, dst, &keytv, &nilv) ==
 	  LJ_TAB_STORE_CAS_OK)
 	return;
     }
-    lj_tab_store_wait_l(L);  /* require claim clear saw stale/FORWARD slot. */
+    lj_tab_store_wait_l(L);  /* package claim clear saw stale/FORWARD slot. */
   }
 }
 
@@ -698,14 +755,14 @@ static int lj_cf_package_require(lua_State *L)
   int claim_state, clear_claim, status;
   lua_settop(L, 1);  /* _LOADED table will be at index 2. */
   lua_getfield(L, LUA_REGISTRYINDEX, "_LOADED");
-  package_require_push_claims(L);  /* private claim table at index 3. */
+  package_claim_push(L, PACKAGE_REQUIRE_CLAIMS);  /* private claims at index 3. */
   claims = tabV(L->top-1);
   for (;;) {
     lua_settop(L, 3);
     lua_getfield(L, 2, name);
-    if (package_require_peer_claim(claims, key, tid)) {
+    if (package_claim_peer(claims, key, tid)) {
       lua_pop(L, 1);
-      package_require_wait_claim(L, claims, key, tid);
+      package_claim_wait(L, claims, key, tid);
       continue;
     }
     if (lua_toboolean(L, -1)) {  /* is it there? */
@@ -714,16 +771,16 @@ static int lj_cf_package_require(lua_State *L)
       return 1;  /* package is already loaded */
     }
     lua_pop(L, 1);
-    claim_state = package_require_try_claim(L, claims, key, tid);
-    if (claim_state != PACKAGE_REQUIRE_CLAIM_PEER)
+    claim_state = package_claim_try(L, claims, key, tid);
+    if (claim_state != PACKAGE_CLAIM_PEER)
       break;
-    package_require_wait_claim(L, claims, key, tid);
+    package_claim_wait(L, claims, key, tid);
   }
-  clear_claim = claim_state == PACKAGE_REQUIRE_CLAIM_ACQUIRED;
+  clear_claim = claim_state == PACKAGE_CLAIM_ACQUIRED;
   ctx.name = name;
   status = lj_vm_cpcall(L, NULL, &ctx, package_require_cp);
   if (clear_claim)
-    package_require_clear_claim(L, claims, key, tid);
+    package_claim_clear(L, claims, key, tid);
   if (status)
     return lua_error(L);
   return 1;
@@ -876,6 +933,8 @@ LUALIB_API int luaopen_package(lua_State *L)
   luaL_findtable(L, LUA_REGISTRYINDEX, "_LOADED", 16);
   lua_setfield(L, -2, "loaded");
   luaL_findtable(L, LUA_REGISTRYINDEX, PACKAGE_REQUIRE_CLAIMS, 16);
+  lua_pop(L, 1);
+  luaL_findtable(L, LUA_REGISTRYINDEX, PACKAGE_LOADLIB_CLAIMS, 16);
   lua_pop(L, 1);
   luaL_findtable(L, LUA_REGISTRYINDEX, "_PRELOAD", 4);
   lua_setfield(L, -2, "preload");

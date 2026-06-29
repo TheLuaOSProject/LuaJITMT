@@ -1,4 +1,4 @@
-# Package require peer claims
+# Package peer claims
 
 LuaJIT's public `package.loaded` contract is unchanged: `nil` and `false` mean
 "not loaded", a truthy non-sentinel value is returned, the sentinel is written
@@ -22,8 +22,17 @@ the sentinel remains in `package.loaded` as stock LuaJIT does; waiters wake and
 report the normal "loop or previous error loading module" error instead of
 blocking forever.
 
+`package.loadlib()` uses the same private-claim pattern with a separate
+`_LOADLIB_INPROGRESS` registry table keyed by library path. This serializes
+`ll_register()` and the first `dlopen()` for peer OS threads so the registry's
+`LOADLIB: path` userdata remains the single cached handle owner. The public
+`package.loadlib()` API and `_LOADLIB` userdata behavior are unchanged; only
+peer threads loading the same path wait and retry through the normal cache path.
+
 Behavior coverage lives in `tests/t-threading-require-once.lua` and the
 `m4_threading_require_once` suite case. It checks concurrent success, concurrent
 error cleanup, false reloads, module recursion, and loader recursion before the
-sentinel. This is intentionally a behavior fixture rather than a source-search
-guard.
+sentinel. `tests/t-loadlib-cache-race.c` and `m4_loadlib_cache_race` wrap
+`dlopen()` and assert concurrent `package.loadlib()` calls open the target
+shared object once. These are intentionally behavior fixtures rather than
+source-search guards.

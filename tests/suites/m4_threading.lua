@@ -79,6 +79,23 @@ return function(add)
     end
   })
 
+  add({
+    name = "m4_loadlib_cache_race",
+    description = "concurrent package.loadlib reuses one cached dlopen handle",
+    run = function(t)
+      local pthread = os.getenv("PTHREAD") or "-pthread"
+      local so = build.build_shared_library(t, t:tmp("lj_t-loadlib-race.so"),
+                                            "t-loadlib-stopreq-lib.c")
+      compile_and_run_sources(t, t:tmp("lj_t-loadlib-cache-race"), {
+        t:path("tests", "t-loadlib-cache-race.c")
+      }, {
+        libs = { "-lm", "-ldl", pthread, "-Wl,--wrap=dlopen" },
+        env = { LJ_LOADLIB_RACE_SO = so },
+        timeout = "20s"
+      })
+    end
+  })
+
   runtime.add_luajit_script_cases(add, {
     {
       name = "m4_threading_smoke",
