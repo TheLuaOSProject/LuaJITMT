@@ -320,6 +320,8 @@ assert(cl.lj_clib_ldscript_value() == 42)
                       "t-ffi-recorder-string-ctype-busy.c", { timeout = "20s" })
       build_and_run_c(t, t:tmp("lj_t-ffi-recorder-libmeta-busy"),
                       "t-ffi-recorder-libmeta-busy.c", { timeout = "20s" })
+      build_and_run_c(t, t:tmp("lj_t-ffi-recorder-cdata-const-busy"),
+                      "t-ffi-recorder-cdata-const-busy.c", { timeout = "20s" })
       run_luajit_script(t, "t-ffi-cparse-rollback-reader.lua", nil, { joff = true })
       print("M7 FFI ctype metadata snapshot behavior passed")
     end

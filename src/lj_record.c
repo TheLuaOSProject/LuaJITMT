@@ -2100,6 +2100,22 @@ static void rec_tsetm(jit_State *J, BCReg ra, BCReg rn, int32_t i)
 
 /* -- Upvalue access ------------------------------------------------------ */
 
+#if LJ_HASFFI
+static int rec_cdata_constify(jit_State *J, GCcdata *cd)
+{
+  CTState *cts = ctype_ctsG(J2G(J));
+  CTInfo info;
+  CTSize size;
+  int ok = lj_ctype_info_predefined(cts, cd->ctypeid, &info, &size, NULL,
+				    NULL);
+  if (ok <= 0)
+    ok = lj_ctype_info_snapshot(cts, cd->ctypeid, &info, &size, NULL, NULL);
+  if (ok < 0)
+    return 0;
+  return ok && (!ctype_hassize(info) || size <= 16);
+}
+#endif
+
 /* Check whether upvalue is immutable and ok to constify. */
 static int rec_upvalue_constify(jit_State *J, GCupval *uvp)
 {
@@ -2110,11 +2126,8 @@ static int rec_upvalue_constify(jit_State *J, GCupval *uvp)
     if (tviscdata(o)) {
       GCcdata *cd = cdataV(o);
       if (!cdataisv(cd) &&
-	  !(lj_obj_gcflags(obj2gco(cd)) & LJ_GC_CDATA_FIN)) {
-	CType *ct = ctype_raw(ctype_ctsG(J2G(J)), cd->ctypeid);
-	if (!ctype_hassize(ct->info) || ct->size <= 16)
-	  return 1;
-      }
+	  !(lj_obj_gcflags(obj2gco(cd)) & LJ_GC_CDATA_FIN))
+	return rec_cdata_constify(J, cd);
       return 0;
     }
 #else

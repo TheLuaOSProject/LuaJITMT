@@ -768,6 +768,25 @@ LJFOLDF(bufput_kfold_fmt)
 
 /* -- Constant folding of pointer arithmetic ------------------------------ */
 
+#if LJ_HASFFI
+static int kfold_cdata_rawinfo(jit_State *J, GCcdata *cd, CTInfo *infop)
+{
+  CTState *cts = ctype_ctsG(J2G(J));
+  CTInfo info;
+  CTSize size;
+  CType raw;
+  int ok = lj_ctype_info_predefined(cts, cd->ctypeid, &info, &size, NULL,
+				    &raw);
+  if (ok <= 0)
+    ok = lj_ctype_info_snapshot(cts, cd->ctypeid, &info, &size, NULL, &raw);
+  if (ok < 0)
+    return 0;
+  if (ok)
+    *infop = ctype_info_acq(&raw);
+  return ok;
+}
+#endif
+
 LJFOLD(ADD KGC KINT)
 LJFOLD(ADD KGC KINT64)
 LJFOLDF(kfold_add_kgc)
@@ -780,10 +799,11 @@ LJFOLDF(kfold_add_kgc)
 #endif
 #if LJ_HASFFI
   if (irt_iscdata(fleft->t)) {
-    CType *ct = ctype_raw(ctype_ctsG(J2G(J)), gco2cd(o)->ctypeid);
-    if (ctype_isnum(ct->info) || ctype_isenum(ct->info) ||
-	ctype_isptr(ct->info) || ctype_isfunc(ct->info) ||
-	ctype_iscomplex(ct->info) || ctype_isvector(ct->info))
+    CTInfo info;
+    if (kfold_cdata_rawinfo(J, gco2cd(o), &info) &&
+	(ctype_isnum(info) || ctype_isenum(info) ||
+	 ctype_isptr(info) || ctype_isfunc(info) ||
+	 ctype_iscomplex(info) || ctype_isvector(info)))
       return lj_ir_kkptr(J, (char *)o + ofs);
   }
 #endif
