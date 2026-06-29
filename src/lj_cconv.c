@@ -60,6 +60,49 @@ LJ_NORET static void cconv_err_initov_l(lua_State *L, CTState *cts,
   lj_err_callerv(L, LJ_ERR_FFI_INITOV, dst);
 }
 
+static int cconv_ctype_snapshot_wait(lua_State *L, CTState *cts,
+				     CTypeID id, CType *out)
+{
+  if (id <= CTID_CTYPEID) {
+    CType *ct;
+    GCobj *name;
+    if (id == 0)
+      return 0;
+    ct = ctype_get(cts, id);
+    out->info = ctype_info_acq(ct);
+    out->size = ctype_size_acq(ct);
+    out->sib = (CTypeID1)ctype_sib_acq(ct);
+    out->next = (CTypeID1)ctype_next_acq(ct);
+    name = ctype_nameobj_acq(ct);
+    setgcrefp(out->name, name);
+    return !ctype_isabandoned(ctype_info_acq(out));
+  }
+  for (;;) {
+    int ok = lj_ctype_snapshot(cts, id, out);
+    if (ok >= 0)
+      return ok;
+    lj_ctype_parse_wait(cts, L, ctype_parse_token_acq(cts));
+  }
+}
+
+static CTypeID cconv_rawid_wait(lua_State *L, CTState *cts, CTypeID id,
+				CTypeID errid, CType *out,
+				CTInfo *infop, CTSize *sizep)
+{
+  for (;;) {
+    CTInfo info;
+    if (!cconv_ctype_snapshot_wait(L, cts, id, out))
+      cconv_err_initov_l(L, cts, errid);
+    info = ctype_info_acq(out);
+    if (!ctype_isattrib(info)) {
+      if (infop) *infop = info;
+      if (sizep) *sizep = ctype_size_acq(out);
+      return id;
+    }
+    id = ctype_cid(info);
+  }
+}
+
 /* -- C type conversion checks -------------------------------------------- */
 
 /* Get raw type and qualifiers for a child type. Resolves enums, too. */
@@ -500,11 +543,20 @@ static void cconv_array_tab_l(lua_State *L, CTState *cts, CType *d,
 			      CTypeID did, uint8_t *dp, GCtab *t,
 			      CTInfo flags)
 {
+  CType dsnap, dcsnap;
   int32_t i;
-  CTInfo dinfo = ctype_info_acq(d);
-  CTypeID dcid = ctype_rawid(cts, ctype_cid(dinfo));
-  CType *dc = ctype_get(cts, dcid);  /* Array element type. */
-  CTSize size = ctype_size_acq(d), esize = ctype_size_acq(dc), ofs = 0;
+  CTInfo dinfo;
+  CTypeID dcid;
+  CType *dc;
+  CTSize size, esize, ofs = 0;
+  UNUSED(d);
+  if (!cconv_ctype_snapshot_wait(L, cts, did, &dsnap))
+    cconv_err_initov_l(L, cts, did);
+  dinfo = ctype_info_acq(&dsnap);
+  size = ctype_size_acq(&dsnap);
+  dcid = cconv_rawid_wait(L, cts, ctype_cid(dinfo), did, &dcsnap,
+			  NULL, &esize);
+  dc = ctype_get(cts, dcid);  /* Array element type. */
   for (i = 0; ; i++) {
     TValue *tv = (TValue *)lj_tab_getint(t, i);
     TValue val;
@@ -517,6 +569,7 @@ static void cconv_array_tab_l(lua_State *L, CTState *cts, CType *d,
     if (ofs >= size)
       cconv_err_initov_l(L, cts, did);
     lj_cconv_ct_tv_l(L, cts, dc, dcid, dp + ofs, &val, flags);
+    dc = ctype_get(cts, dcid);
     ofs += esize;
   }
   if (size != CTSIZE_INVALID) {  /* Only fill up arrays with known size. */
@@ -533,16 +586,25 @@ static void cconv_substruct_tab_l(lua_State *L, CTState *cts, CType *d,
 				  CTypeID did, uint8_t *dp,
 				  GCtab *t, int32_t *ip, CTInfo flags)
 {
-  CTypeID id = ctype_sib_acq(d);
-  CTInfo dinfo = ctype_info_acq(d);
-  UNUSED(did);
+  CType dsnap;
+  CTypeID id;
+  CTInfo dinfo;
+  UNUSED(d);
+  if (!cconv_ctype_snapshot_wait(L, cts, did, &dsnap))
+    cconv_err_initov_l(L, cts, did);
+  id = ctype_sib_acq(&dsnap);
+  dinfo = ctype_info_acq(&dsnap);
   while (id) {
-    CType *df = ctype_get(cts, id);
-    CTInfo dfinfo = ctype_info_acq(df);
-    CTSize dfsize = ctype_size_acq(df);
-    id = ctype_sib_acq(df);
+    CType dfsnap;
+    CTInfo dfinfo;
+    CTSize dfsize;
+    if (!cconv_ctype_snapshot_wait(L, cts, id, &dfsnap))
+      cconv_err_initov_l(L, cts, did);
+    dfinfo = ctype_info_acq(&dfsnap);
+    dfsize = ctype_size_acq(&dfsnap);
+    id = ctype_sib_acq(&dfsnap);
     if (ctype_isfield(dfinfo) || ctype_isbitfield(dfinfo)) {
-      GCstr *dfname = ctype_name_acq(df);
+      GCstr *dfname = ctype_name_acq(&dfsnap);
       TValue *tv;
       TValue val;
       int32_t i = *ip, iz = i;
@@ -566,17 +628,20 @@ static void cconv_substruct_tab_l(lua_State *L, CTState *cts, CType *d,
 	if (!tv || tvisnil(&val)) continue;
       }
       if (ctype_isfield(dfinfo)) {
-	CTypeID dfid = ctype_rawid(cts, ctype_cid(dfinfo));
-	lj_cconv_ct_tv_l(L, cts, ctype_get(cts, dfid), dfid, dp+dfsize,
-			 &val, flags);
+	CType fsnap;
+	CTypeID dfid = cconv_rawid_wait(L, cts, ctype_cid(dfinfo), did,
+					&fsnap, NULL, NULL);
+	lj_cconv_ct_tv_l(L, cts, &fsnap, dfid, dp+dfsize, &val, flags);
       } else {
-	lj_cconv_bf_tv_l(L, cts, df, dp+dfsize, &val);
+	lj_cconv_bf_tv_l(L, cts, &dfsnap, dp+dfsize, &val);
       }
       if ((dinfo & CTF_UNION)) break;
     } else if (ctype_isxattrib(dfinfo, CTA_SUBTYPE)) {
-      CTypeID dfid = ctype_rawid(cts, ctype_cid(dfinfo));
-      cconv_substruct_tab_l(L, cts, ctype_get(cts, dfid), dfid,
-			    dp+dfsize, t, ip, flags);
+      CType ssnap;
+      CTypeID dfid = cconv_rawid_wait(L, cts, ctype_cid(dfinfo), did,
+				      &ssnap, NULL, NULL);
+      cconv_substruct_tab_l(L, cts, &ssnap, dfid, dp+dfsize, t, ip,
+			    flags);
     }  /* Ignore all other entries in the chain. */
   }
 }
@@ -586,9 +651,13 @@ static void cconv_struct_tab_l(lua_State *L, CTState *cts, CType *d,
 			       CTypeID did, uint8_t *dp, GCtab *t,
 			       CTInfo flags)
 {
+  CType dsnap;
   int32_t i = 0;
-  memset(dp, 0, ctype_size_acq(d));  /* Much simpler to clear the struct first. */
-  cconv_substruct_tab_l(L, cts, d, did, dp, t, &i, flags);
+  UNUSED(d);
+  if (!cconv_ctype_snapshot_wait(L, cts, did, &dsnap))
+    cconv_err_initov_l(L, cts, did);
+  memset(dp, 0, ctype_size_acq(&dsnap));  /* Clear the struct first. */
+  cconv_substruct_tab_l(L, cts, &dsnap, did, dp, t, &i, flags);
 }
 
 /* Convert TValue to C type. Caveat: expects to get the raw CType! */
@@ -758,15 +827,25 @@ static void cconv_array_init_l(lua_State *L, CTState *cts, CType *d,
 			       CTypeID did, CTSize sz, uint8_t *dp,
 			       TValue *o, MSize len)
 {
-  CTInfo dinfo = ctype_info_acq(d);
-  CTypeID dcid = ctype_rawid(cts, ctype_cid(dinfo));
-  CType *dc = ctype_get(cts, dcid);  /* Array element type. */
-  CTSize ofs, esize = ctype_size_acq(dc);
+  CType dsnap, dcsnap;
+  CTInfo dinfo;
+  CTypeID dcid;
+  CType *dc;
+  CTSize ofs, esize;
   MSize i;
+  UNUSED(d);
+  if (!cconv_ctype_snapshot_wait(L, cts, did, &dsnap))
+    cconv_err_initov_l(L, cts, did);
+  dinfo = ctype_info_acq(&dsnap);
+  dcid = cconv_rawid_wait(L, cts, ctype_cid(dinfo), did, &dcsnap,
+			  NULL, &esize);
+  dc = ctype_get(cts, dcid);  /* Array element type. */
   if (len*esize > sz)
     cconv_err_initov_l(L, cts, did);
-  for (i = 0, ofs = 0; i < len; i++, ofs += esize)
+  for (i = 0, ofs = 0; i < len; i++, ofs += esize) {
     lj_cconv_ct_tv_l(L, cts, dc, dcid, dp + ofs, o + i, 0);
+    dc = ctype_get(cts, dcid);
+  }
   if (ofs == esize) {  /* Replicate a single element. */
     for (; ofs < sz; ofs += esize) memcpy(dp + ofs, dp, esize);
   } else {  /* Otherwise fill the remainder with zero. */
@@ -779,31 +858,43 @@ static void cconv_substruct_init_l(lua_State *L, CTState *cts, CType *d,
 				   CTypeID did, uint8_t *dp,
 				   TValue *o, MSize len, MSize *ip)
 {
-  CTypeID id = ctype_sib_acq(d);
-  CTInfo dinfo = ctype_info_acq(d);
-  UNUSED(did);
+  CType dsnap;
+  CTypeID id;
+  CTInfo dinfo;
+  UNUSED(d);
+  if (!cconv_ctype_snapshot_wait(L, cts, did, &dsnap))
+    cconv_err_initov_l(L, cts, did);
+  id = ctype_sib_acq(&dsnap);
+  dinfo = ctype_info_acq(&dsnap);
   while (id) {
-    CType *df = ctype_get(cts, id);
-    CTInfo dfinfo = ctype_info_acq(df);
-    CTSize dfsize = ctype_size_acq(df);
-    id = ctype_sib_acq(df);
+    CType dfsnap;
+    CTInfo dfinfo;
+    CTSize dfsize;
+    if (!cconv_ctype_snapshot_wait(L, cts, id, &dfsnap))
+      cconv_err_initov_l(L, cts, did);
+    dfinfo = ctype_info_acq(&dfsnap);
+    dfsize = ctype_size_acq(&dfsnap);
+    id = ctype_sib_acq(&dfsnap);
     if (ctype_isfield(dfinfo) || ctype_isbitfield(dfinfo)) {
       MSize i = *ip;
-      if (!ctype_name_acq(df)) continue;  /* Ignore unnamed fields. */
+      if (!ctype_name_acq(&dfsnap)) continue;  /* Ignore unnamed fields. */
       if (i >= len) break;
       *ip = i + 1;
       if (ctype_isfield(dfinfo)) {
-	CTypeID dfid = ctype_rawid(cts, ctype_cid(dfinfo));
-	lj_cconv_ct_tv_l(L, cts, ctype_get(cts, dfid), dfid, dp+dfsize,
-			 o + i, 0);
+	CType fsnap;
+	CTypeID dfid = cconv_rawid_wait(L, cts, ctype_cid(dfinfo), did,
+					&fsnap, NULL, NULL);
+	lj_cconv_ct_tv_l(L, cts, &fsnap, dfid, dp+dfsize, o + i, 0);
       } else {
-	lj_cconv_bf_tv_l(L, cts, df, dp+dfsize, o + i);
+	lj_cconv_bf_tv_l(L, cts, &dfsnap, dp+dfsize, o + i);
       }
       if ((dinfo & CTF_UNION)) break;
     } else if (ctype_isxattrib(dfinfo, CTA_SUBTYPE)) {
-      CTypeID dfid = ctype_rawid(cts, ctype_cid(dfinfo));
-      cconv_substruct_init_l(L, cts, ctype_get(cts, dfid), dfid,
-			     dp+dfsize, o, len, ip);
+      CType ssnap;
+      CTypeID dfid = cconv_rawid_wait(L, cts, ctype_cid(dfinfo), did,
+				      &ssnap, NULL, NULL);
+      cconv_substruct_init_l(L, cts, &ssnap, dfid, dp+dfsize, o, len,
+			     ip);
       if ((dinfo & CTF_UNION)) break;
     }  /* Ignore all other entries in the chain. */
   }
@@ -844,13 +935,17 @@ void lj_cconv_ct_init_l(lua_State *L, CTState *cts, CType *d, CTypeID did,
   if (len == 0)
     memset(dp, 0, sz);
   else {
-    CTInfo dinfo = ctype_info_acq(d);
-    if (len == 1 && !lj_cconv_multi_init(cts, did, d, o))
-      lj_cconv_ct_tv_l(L, cts, d, did, dp, o, 0);
+    CType dsnap;
+    CTInfo dinfo;
+    if (!cconv_ctype_snapshot_wait(L, cts, did, &dsnap))
+      cconv_err_initov_l(L, cts, did);
+    dinfo = ctype_info_acq(&dsnap);
+    if (len == 1 && !lj_cconv_multi_init(cts, did, &dsnap, o))
+      lj_cconv_ct_tv_l(L, cts, &dsnap, did, dp, o, 0);
     else if (ctype_isarray(dinfo))  /* Also handles valarray init with len>1. */
-      cconv_array_init_l(L, cts, d, did, sz, dp, o, len);
+      cconv_array_init_l(L, cts, &dsnap, did, sz, dp, o, len);
     else if (ctype_isstruct(dinfo))
-      cconv_struct_init_l(L, cts, d, did, sz, dp, o, len);
+      cconv_struct_init_l(L, cts, &dsnap, did, sz, dp, o, len);
     else
       cconv_err_initov_l(L, cts, did);
   }
