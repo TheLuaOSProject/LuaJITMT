@@ -36,7 +36,7 @@ static void *cbblack_worker(void *arg)
   brc = pthread_barrier_wait(&start_barrier);
   assert(brc == 0 || brc == PTHREAD_BARRIER_SERIAL_THREAD);
   for (i = 0; i < CBBLACK_ITERS; i++)
-    lj_ctype_cb_blacklist(shared_cts, (void *)cbblack_target);
+    lj_ctype_cb_blacklist(NULL, shared_cts, (void *)cbblack_target);
   return NULL;
 }
 

@@ -706,12 +706,18 @@ static LJ_AINLINE MSize ctype_cbblack_hash(uint64_t key, MSize mask)
   return (MSize)(hashrot((uint32_t)key, (uint32_t)(key >> 32)) & mask);
 }
 
-static void ctype_cbblack_wait_no_l(void)
+static void ctype_cbblack_wait(lua_State *L)
 {
-  (void)lj_thr_sleep_ns(NULL, 1000000);
+  /*
+  ** Callback-blacklist duplicate publication is a short CAS window. Runtime
+  ** FFI call/callback paths have a current Lua state; use it so their TG is
+  ** native and visible to safepoint handshakes while probing past a peer
+  ** publisher. Test and teardown-only callers may still pass NULL.
+  */
+  (void)lj_thr_sleep_ns(L, 1000000);
 }
 
-void lj_ctype_cb_blacklist(CTState *cts, void *func)
+void lj_ctype_cb_blacklist(lua_State *L, CTState *cts, void *func)
 {
   uint64_t key = ctype_cbblack_key(func);
   uint64_t *tab = ctype_cbblack_acq(cts);
@@ -733,7 +739,7 @@ void lj_ctype_cb_blacklist(CTState *cts, void *func)
 	return;  /* 11.5 callback blacklist CAS publish. */
       if (expect == key)
 	return;  /* Duplicate publisher won this slot. */
-      ctype_cbblack_wait_no_l();  /* CAS loser: yield before probing on. */
+      ctype_cbblack_wait(L);  /* CAS loser: yield before probing on. */
     }
   }
   ctype_cbblack_all_rel(cts, 1);  /* Full set: blacklist all. */

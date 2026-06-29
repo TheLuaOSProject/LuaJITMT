@@ -1298,7 +1298,7 @@ uint32_t lj_ccall_native_leave(lua_State *L, CTState *cts,
   CCallbackRuntime *cb = st->cb;
   /* Blacklist function that called a callback. */
   if (ccallback_slot_acq(cb) != ~0u)
-    lj_ctype_cb_blacklist(cts, func);
+    lj_ctype_cb_blacklist(L, cts, func);
   lj_tg_ffi_call_func_rel(st->tg, st->old_ffi_call_func);
   ccallback_native_had_stopreq_rel(cb, st->old_native_had_stopreq);
   return actions;

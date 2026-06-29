@@ -1232,7 +1232,7 @@ LJ_FUNC void lj_ctype_fin_mark(global_State *g, void (*mark)(global_State *,
 LJ_FUNC void lj_ctype_fin_freetabs(global_State *g, CTState *cts);
 LJ_FUNC CType *lj_ctype_publish(CTState *cts, CTypeID id, CType *src);
 LJ_FUNC int lj_ctype_setmeta(CTState *cts, CTypeID id, GCtab *mt);
-LJ_FUNC void lj_ctype_cb_blacklist(CTState *cts, void *func);
+LJ_FUNC void lj_ctype_cb_blacklist(lua_State *L, CTState *cts, void *func);
 LJ_FUNC int lj_ctype_cb_isblacklisted(CTState *cts, void *func);
 LJ_FUNC void lj_ctype_addname(CTState *cts, CType *ct, CTypeID id);
 LJ_FUNC CTypeID lj_ctype_addname_unique(CTState *cts, CType *ct, CTypeID id,
