@@ -57,6 +57,6 @@ TREDEF(NYICOAL,	"NYI: register coalescing too complex")
 
 #undef TREDEF
 
-/* Detecting unused error messages:
-   awk -F, '/^TREDEF/ { gsub(/TREDEF./, ""); printf "grep -q LJ_TRERR_%s *.[ch] || echo %s\n", $1, $1}' lj_traceerr.h | sh
-*/
+/* When adding/removing trace errors, keep this catalog synchronized with
+** TraceErr uses. Do not add source-search CI for this bookkeeping-only
+** invariant. */

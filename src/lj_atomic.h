@@ -75,7 +75,7 @@ LA_INLINE int la_cas128(la_u128 *p, la_u128 *exp, la_u128 des)
 #if defined(__x86_64__) && defined(__GNUC__) && !defined(__clang__)
   /* gcc ≥7 routes the 16-byte builtin through libatomic even with -mcx16
   ** (PR80878). libatomic is lock-free here, but the PLT call costs and
-  ** the CI instruction grep wants the real thing: inline it. */
+  ** the lockless fast path wants the real instruction: inline it. */
   uint8_t ok;
   __asm__ __volatile__("lock cmpxchg16b %1"
                        : "=@ccz"(ok), "+m"(*p), "+a"(exp->lo), "+d"(exp->hi)
@@ -177,7 +177,8 @@ LA_INLINE int la_membarrier_synccore(void)
 /* ---- compile-time checks ------------------------------------------- */
 typedef char la_assert_ptr8[sizeof(void *) == 8 ? 1 : -1];
 /* x86-64: build with -mcx16 so la_cas128 lowers to cmpxchg16b; without it
-** the builtin routes through libatomic, which uses a lock — CI verifies
-** by grepping the disassembly for cmpxchg16b (12 §M0). */
+** the builtin routes through libatomic, which uses a lock. Verify this
+** contract through generated disassembly or ASM artifact checks (12 §M0),
+** not by grepping repository source. */
 
 #endif /* _LJ_ATOMIC_H */
