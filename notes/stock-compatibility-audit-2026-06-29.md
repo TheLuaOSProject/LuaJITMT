@@ -35,7 +35,7 @@ The removed source-guard compatibility surface remains gone:
 ## Public C API surface
 
 The current local `upstream/v2.1` reference was checked as
-`b925b3e3fc6771171602323b45fbe9fb8fc90369`. Public headers do not add or remove
+`a2bde60819d83e6f75130ac2c93ee4b3c7615800`. Public headers do not add or remove
 stock C API prototypes. `src/lualib.h`, `src/lauxlib.h`, and
 `src/luajit_rolling.h` match upstream. `src/lua.h` differs only by one blank
 line. `src/luaconf.h` differs only in comment wording.
@@ -47,17 +47,18 @@ Fork-local removals are not stock API removals:
   were removed; internal attach/detach lives in `lj_thr.h`.
 - `luaopen_threading` and `LUA_THREADINGLIBNAME` are intentionally hidden from
   public headers. The Lua extension remains `require("threading")`.
-- `ffi.typeinfo` was an unsupported fork helper, not stock LuaJIT FFI.
 - `ffi.pin` was an unsupported fork helper, not stock LuaJIT FFI. Ordinary Lua
   references and `ffi.gc` remain the stock-visible lifetime mechanisms.
 - `LUA_GCGENERATIONAL` and `LUA_GCINCREMENTAL` are not stock LuaJIT public C
   constants in this branch. Fork GC mode control is `threading.gcmode()`.
 
 Export audit: `luaopen_threading`, `luaMT_*`, `lj_threading_*`, and
-`ffi_typeinfo` are not dynamic public exports. `ffi_pin` and its handle userdata
-type are removed. The remaining C attach/detach entry points are internal
-helpers in `lj_thr.h` for native attached-thread fixtures and runtime
-integration.
+`ffi_typeinfo` are not dynamic public exports. `ffi.typeinfo(id)` is restored as
+the stock LuaJIT 2.1 internal/unsupported Lua-visible FFI diagnostic, with
+lockless snapshot semantics so it does not expose active parser rollback state.
+`ffi_pin` and its handle userdata type are removed. The remaining C
+attach/detach entry points are internal helpers in `lj_thr.h` for native
+attached-thread fixtures and runtime integration.
 
 ## Stock behavior boundary
 

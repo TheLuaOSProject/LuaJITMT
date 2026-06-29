@@ -862,6 +862,30 @@ static int ffi_ctype_predefined_id(CTypeID id)
   return id > CTID_NONE && id <= CTID_CTYPEID;
 }
 
+static void ffi_ctype_slot_snapshot(CTypeTab *tabh, CTypeID id, CType *out)
+{
+  CType *ct = ctype_tab_slot(tabh, id);
+  GCobj *name;
+  out->info = ctype_info_acq(ct);
+  out->size = ctype_size_acq(ct);
+  out->sib = (CTypeID1)ctype_sib_acq(ct);
+  out->next = (CTypeID1)ctype_next_acq(ct);
+  name = ctype_nameobj_acq(ct);
+  setgcrefp(out->name, name);
+}
+
+static int ffi_ctype_predefined_snapshot(CTState *cts, CTypeID id, CType *out)
+{
+  CTypeTab *tabh;
+  if (!ffi_ctype_predefined_id(id))
+    return 0;
+  tabh = ctype_tabh_acq(cts);
+  if ((MSize)CTID_CTYPEID >= ctype_tab_sizetab_acq(tabh))
+    return 0;
+  ffi_ctype_slot_snapshot(tabh, id, out);
+  return !ctype_isabandoned(ctype_info_acq(out));
+}
+
 static int ffi_ctype_info_read(lua_State *L, CTState *cts, CTypeID id,
 			       CTInfo *infop, CTSize *szp, CTypeID *ridp,
 			       CType *rawp)
@@ -1495,6 +1519,69 @@ LJLIB_CF(ffi_typeof)	LJLIB_REC(.)
   setcdataV(L, L->top-1, cd);
   lj_gc_check(L);
   return 1;
+}
+
+static void ffi_typeinfo_storeint(lua_State *L, GCtab *tab, GCstr *key,
+				  int32_t val)
+{
+  TValue keytv, tv, *dst;
+  setintV(&tv, val);
+  setstrV(L, &keytv, key);
+  for (;;) {
+    dst = lj_tab_setstr(L, tab, key);
+    if (lj_tab_trystoretv_cas_keyed(L, tab, dst, &keytv, &tv) ==
+	LJ_TAB_STORE_CAS_OK)
+      return;
+    lj_tab_store_wait_l(L);  /* FFI typeinfo int store saw stale/FORWARD slot. */
+  }
+}
+
+static void ffi_typeinfo_storestr(lua_State *L, GCtab *tab, GCstr *key,
+				  GCstr *val)
+{
+  TValue keytv, tv, *dst;
+  setstrV(L, &tv, val);
+  setstrV(L, &keytv, key);
+  for (;;) {
+    dst = lj_tab_setstr(L, tab, key);
+    if (lj_tab_trystoretv_cas_keyed(L, tab, dst, &keytv, &tv) ==
+	LJ_TAB_STORE_CAS_OK)
+      return;
+    lj_tab_store_wait_l(L);  /* FFI typeinfo string store saw stale/FORWARD slot. */
+  }
+}
+
+/* Internal and unsupported API. Kept for stock LuaJIT FFI compatibility. */
+LJLIB_CF(ffi_typeinfo)
+{
+  CTState *cts = ctype_cts(L);
+  CTypeID id = (CTypeID)ffi_checkint(L, 1);
+  CType snap;
+  int ok = ffi_ctype_predefined_snapshot(cts, id, &snap);
+  if (!ok)
+    ok = lj_ctype_snapshot(cts, id, &snap);
+  if (ok > 0) {
+    CTInfo info = snap.info;
+    CTSize size = snap.size;
+    CTypeID sib = snap.sib;
+    GCstr *name = ctype_name_acq(&snap);
+    GCtab *t;
+    lua_createtable(L, 0, 4);  /* Increment hash size if fields are added. */
+    t = tabV(L->top-1);
+    ffi_typeinfo_storeint(L, t, lj_str_newlit(L, "info"), (int32_t)info);
+    if (size != CTSIZE_INVALID)
+      ffi_typeinfo_storeint(L, t, lj_str_newlit(L, "size"), (int32_t)size);
+    if (sib)
+      ffi_typeinfo_storeint(L, t, lj_str_newlit(L, "sib"), (int32_t)sib);
+    if (name) {
+      if (isdead(G(L), obj2gco(name))) flipwhite(obj2gco(name));
+      ffi_typeinfo_storestr(L, t, lj_str_newlit(L, "name"), name);
+    }
+    lj_gc_pubtab(L, t);
+    lj_gc_check(L);
+    return 1;
+  }
+  return 0;
 }
 
 typedef struct FFITypeCmpSnap {

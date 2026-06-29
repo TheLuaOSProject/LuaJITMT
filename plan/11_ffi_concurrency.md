@@ -53,9 +53,10 @@ GCtab *miscmap; GCRef *metamap; CCallback cb; uint32_t hash[CTHASH_SIZE]; }`
   publish through `lj_ctype_addname_unique()`, which rechecks the name bucket
   before CAS-prepend and abandons duplicate-name losers. The parser body is
   still serialized by `parse_token`; this helper does not claim lock-free
-  struct layout/rollback publication. The former public `ffi.typeinfo(id)`
-  diagnostic was nonstock and has been removed; abandoned `CTA_BAD` holes are
-  checked through internal snapshot helpers and stock-visible FFI readers.
+  struct layout/rollback publication. The stock LuaJIT 2.1 internal
+  `ffi.typeinfo(id)` diagnostic remains available and reads abandoned
+  `CTA_BAD` holes through the same snapshot path as internal helpers and
+  stock-visible FFI readers.
   Current rollback-reader bridge: direct layout readers, string-key cdata field
   lookup, numeric cdata element-size lookup, cdata pointer arithmetic, enum
   string constant resolution, and `ffi.C` namespace lookup take the parser token
