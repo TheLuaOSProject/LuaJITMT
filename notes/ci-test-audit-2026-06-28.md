@@ -86,11 +86,12 @@
   contracts are covered by `t-ffi-cbblack-race`, `t-ffi-blocking.lua`, and the
   recorder-off fixture. The remaining checks enforce non-observable CType/load
   boundaries and the compile-time traced-FFI fence.
-- Removed old bytecode-dump compatibility support for pre-lockless dump
-  versions. The loader now accepts only the current lockless bytecode version,
-  the `proto_legacyuv` path was deleted, and the former compatibility fixture is
-  now `m5_bcdump_current`, focused on current-format validation and malformed
-  current dump rejection.
+- Follow-up stock-behavior correction: bytecode-dump compatibility support for
+  stock v2 and transitional v3 dumps was restored. That path is not a
+  threading-only legacy entrypoint; it affects `load`, `luaL_loadbuffer*`, and
+  precompiled chunk interoperability. The active `m5_bcdump_compat` fixture
+  mutates generated dumps to verify v2/v3 loading while still rejecting
+  lockless-only cell opcodes in old dump versions.
 - Reverted the removal of stock LuaJIT C header aliases such as
   `luaL_putchar`, `lua_strlen`, `lua_open`, `lua_getregistry`,
   `lua_getgccount`, `lua_Chunkreader`, and `lua_Chunkwriter`; these are stock

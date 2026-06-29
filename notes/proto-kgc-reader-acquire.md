@@ -22,9 +22,9 @@ pointers from release-published prototype storage.
 The explicit loops above now use `gcref_acq(*kr)` when reading prototype GC
 constant slots.
 
-Update: the old `bcwrite_has_legacyuv()` compatibility walk was removed with
-pre-lockless bytecode dump loading support. The remaining prototype-writer and
-JIT snapshot readers keep the acquire-load contract.
+Update: `bcwrite_has_legacyuv()` remains part of the bytecode compatibility
+path. It walks prototype GC constants with acquire loads so v2-loaded prototype
+trees are not silently re-emitted as current lockless bytecode.
 
 ## Scope
 

@@ -31,6 +31,10 @@ Time remaining forecast:
   upvalue walk.
 - Renamed the old bytecode fixture to `m5_bcdump_current`; it now verifies
   current-format loading and malformed current dump rejection.
+- Superseded follow-up: stock LuaJIT bytecode compatibility is restored because
+  v2 chunk loading is stock behavior, not a threading-only legacy entrypoint.
+  The active suite case is again `m5_bcdump_compat`; it checks v2/v3 generated
+  dump loading and old-version rejection of lockless-only cell opcodes.
 - Reverted the removal of stock LuaJIT public C compatibility aliases such as
   `luaL_putchar`, `lua_strlen`, `lua_open`, `lua_getregistry`,
   `lua_getgccount`, `lua_Chunkreader`, and `lua_Chunkwriter`; stock LuaJIT API
