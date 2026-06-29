@@ -1315,14 +1315,16 @@ static void crec_alloc(jit_State *J, RecordFFData *rd, CTypeID id)
   cTValue *fin;
   TValue fintv;
   {
-    int ok = lj_ctype_info_snapshot(cts, id, &info, &sz, &rid, &dsnap);
-    if (ok < 0) {
-      lj_trace_err(J, LJ_TRERR_CTBUSY);
-    } else {
-      if (!ok)
+    int ok = lj_ctype_info_predefined(cts, id, &info, &sz, &rid, &dsnap);
+    if (ok <= 0) {
+      ok = lj_ctype_info_snapshot(cts, id, &info, &sz, &rid, &dsnap);
+      if (ok < 0) {
+	lj_trace_err(J, LJ_TRERR_CTBUSY);
+      } else if (!ok) {
 	lj_trace_err(J, LJ_TRERR_BADTYPE);
-      d = &dsnap;
+      }
     }
+    d = &dsnap;
   }
   if (sz == CTSIZE_INVALID)
     lj_trace_err(J, LJ_TRERR_BADTYPE);

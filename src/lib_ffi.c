@@ -701,6 +701,7 @@ static int ffi_direct_ctype_string(lua_State *L, CTState *cts, GCstr *s,
   return ffi_direct_ctype_part(L, cts, s, p, len, idp);
 }
 
+#if LJ_HASJIT
 static int ffi_direct_array_sizeof_string(CTState *cts, GCstr *s, CTSize *szp)
 {
   const char *p = strdata(s);
@@ -736,6 +737,7 @@ static int ffi_direct_array_sizeof_string(CTState *cts, GCstr *s, CTSize *szp)
   *szp = esize;
   return 1;
 }
+#endif
 
 /* Check first argument for a C type and returns its ID. */
 static CTypeID ffi_checkctype(lua_State *L, CTState *cts, TValue *param)
@@ -1366,53 +1368,6 @@ LJLIB_CF(ffi_callback_set)
   return ffi_callback_set(L, fn);
 }
 
-LJLIB_PUSH(top-1) LJLIB_SET(__index)
-
-#include "lj_libdef.h"
-
-/* -- ffi.pin() handle methods ------------------------------------------- */
-
-#define LJLIB_MODULE_ffi_pin
-
-static GCudata *ffi_pin_check(lua_State *L)
-{
-  TValue *o = L->base;
-  if (!(o < L->top && tvisudata(o) &&
-	lj_udata_udtype_acq(udataV(o)) == UDTYPE_FFI_PIN))
-    lj_err_argtype(L, 1, "ffi.pin");
-  return udataV(o);
-}
-
-static void ffi_pin_release_l(lua_State *L, GCudata *ud)
-{
-  TValue nilv;
-  setnilV(&nilv);
-  copyTVrel(L, (TValue *)uddata(ud), &nilv);
-}
-
-LJLIB_CF(ffi_pin_release)
-{
-  ffi_pin_release_l(L, ffi_pin_check(L));
-  return 0;
-}
-
-LJLIB_CF(ffi_pin___gc)
-{
-  TValue *o = L->base;
-  if (o < L->top && tvisudata(o) &&
-      lj_udata_udtype_acq(udataV(o)) == UDTYPE_FFI_PIN)
-    ffi_pin_release_l(L, udataV(o));
-  return 0;
-}
-
-LJLIB_CF(ffi_pin___tostring)
-{
-  (void)ffi_pin_check(L);
-  lua_pushliteral(L, "ffi.pin");
-  return 1;
-}
-
-LJLIB_PUSH("ffi.pin") LJLIB_SET(__metatable)
 LJLIB_PUSH(top-1) LJLIB_SET(__index)
 
 #include "lj_libdef.h"
@@ -2584,30 +2539,6 @@ LJLIB_CF(ffi_gc)	LJLIB_REC(.)
   return 1;
 }
 
-LJLIB_CF(ffi_pin)
-{
-  TValue *o = lj_lib_checkany(L, 1);
-  CTState *cts = ctype_cts(L);
-  GCtab *mt = ctype_pinmt_acq(cts);
-  GCudata *ud = lj_udata_new(L, sizeof(TValue), mt);
-  lj_udata_metatable_rel(ud, mt);
-  lj_gc_pubobjobj(L, ud, mt);
-  lj_gc2_finreg_udata_register_mt(L, G(L), ud, mt);
-  copyTVrel(L, (TValue *)uddata(ud), o);
-  lj_udata_udtype_rel(ud, UDTYPE_FFI_PIN);
-  lj_gc_pubobjtv(L, ud, (TValue *)uddata(ud));
-  if (tvisgcv(o)) {
-    global_State *g = G(L);
-    uint32_t phase = gc2_phase_acq(g);
-    if (phase == LJ_GC2_MARK || phase == LJ_GC2_WEAK ||
-	phase == LJ_GC2_SWEEP)
-      (void)lj_gc2_markobj(g, gcV(o));
-  }
-  setudataV(L, L->top++, ud);
-  lj_gc_check(L);
-  return 1;
-}
-
 LJLIB_PUSH(top-5) LJLIB_SET(!)  /* Store clib metatable in func environment. */
 
 LJLIB_CF(ffi_load)
@@ -2690,9 +2621,6 @@ LUALIB_API int luaopen_ffi(lua_State *L)
   LJ_LIB_REG(L, NULL, ffi_callback);
   ffi_miscmap_store(L, cts, &cts->g->strempty, L->top-1);
   lj_gc_pubtabobj(L, miscmap, tabV(L->top-1));
-  L->top--;
-  LJ_LIB_REG(L, NULL, ffi_pin);
-  ctype_pinmt_rel(cts, tabV(L->top-1));
   L->top--;
   lj_clib_default(L, tabV(L->top-1));  /* Create ffi.C default namespace. */
   lua_pushliteral(L, LJ_OS_NAME);

@@ -378,7 +378,6 @@ enum {
   UDTYPE_USERDATA,	/* Regular userdata. */
   UDTYPE_IO_FILE,	/* I/O library FILE. */
   UDTYPE_FFI_CLIB,	/* FFI C library namespace. */
-  UDTYPE_FFI_PIN,	/* FFI pinned Lua value. */
   UDTYPE_BUFFER,	/* String buffer. */
   UDTYPE_CHANNEL,	/* threading.channel object. */
   UDTYPE_THREAD,	/* threading.thread object. */

@@ -270,14 +270,6 @@ static void gc2_paranoia_check_udata(global_State *g, GCudata *ud)
 			     "buffer userdata data");
   }
 #if LJ_HASFFI
-  if (udtype == UDTYPE_FFI_PIN) {
-    TValue tv;
-    lj_tv_load_acq(&tv, (TValue *)uddata(ud));
-    if (tvisgcv(&tv))
-      gc2_paranoia_checkobj(g, gcV(&tv), "FFI pin value");
-  }
-#endif
-#if LJ_HASFFI
   if (udtype == UDTYPE_FFI_CLIB) {
     CLibrary *cl = (CLibrary *)uddata(ud);
     CLibCacheEntry *e;
@@ -404,11 +396,6 @@ static void gc2_paranoia_check_rawroots(global_State *g)
       gc2_paranoia_checkmem(g, ctype_tabh_acq(cts), "ctype table");
       gc2_paranoia_checkmem(g, meta, "ctype metatype side map");
       gc2_paranoia_checkmem(g, cbblack, "ctype callback blacklist");
-      {
-	GCtab *pinmt = ctype_pinmt_acq(cts);
-	if (pinmt)
-	  gc2_paranoia_checkobj(g, obj2gco(pinmt), "FFI pin metatable");
-      }
       for (ctret = ctype_retiredtab_acq(cts);
 	   ctret != NULL;
 	   ctret = ctype_tab_retired_next_acq(ctret)) {
@@ -550,11 +537,6 @@ static void gc_mark(global_State *g, GCobj *o)
       CLibrary *cl = (CLibrary *)uddata(ud);
       gc_mark_clib_cache(g, cl);
     }
-    if (udtype == UDTYPE_FFI_PIN) {
-      TValue tv;
-      lj_tv_load_acq(&tv, (TValue *)uddata(ud));
-      gc_marktv(g, &tv);  /* 11.6 ffi.pin() root. */
-    }
 #endif
     if (LJ_HASBUFFER && udtype == UDTYPE_BUFFER) {
       SBufExt *sbx = (SBufExt *)uddata(ud);
@@ -695,11 +677,6 @@ static void gc_mark_gcroot(global_State *g)
 	  if (o)
 	    gc_markobj(g, o);
 	}
-      }
-      {
-	GCtab *pinmt = ctype_pinmt_acq(cts);
-	if (pinmt)
-	  gc_markobj(g, pinmt);
       }
       gc_mark_clib_retired_cache(g);
       lj_gc2_finreg_cdata_mark_roots(g, gc_finreg_markobj,

@@ -3061,30 +3061,6 @@ static void gc2_scan_current_trace_root(global_State *g)
 }
 #endif
 
-#if LJ_HASFFI
-static void gc2_mark_ffi_pin_payloads(global_State *g)
-{
-  GC2FinRegUDataNode *node;
-  for (node = gc2_finreg_udata_head_acq(g);
-       node != NULL;
-       node = gc2_finreg_udata_next_acq(node)) {
-    GCobj *o;
-    GCudata *ud;
-    TValue tv;
-    if (!gc2_finreg_udata_active_acq(node))
-      continue;
-    o = gc2_finreg_udata_obj_acq(node);
-    if (!o || o->gch.gct != ~LJ_TUDATA)
-      continue;
-    ud = gco2ud(o);
-    if (lj_udata_udtype_acq(ud) != UDTYPE_FFI_PIN)
-      continue;
-    lj_tv_load_acq(&tv, (TValue *)uddata(ud));
-    gc2_mark_tv(g, &tv);  /* ffi.pin hidden root, even during weak races. */
-  }
-}
-#endif
-
 static void gc2_scan_global_roots(global_State *g)
 {
   lua_State *mainL = mainthread_acq(g);
@@ -3113,7 +3089,6 @@ static void gc2_scan_global_roots(global_State *g)
   lj_gc2_markmem(g, g->tmpbuf.b);
   gc2_scan_tg_roots(g);
 #if LJ_HASFFI
-  gc2_mark_ffi_pin_payloads(g);
   {
     CTState *cts = ctype_ctsG(g);
     if (cts) {
@@ -3138,11 +3113,6 @@ static void gc2_scan_global_roots(global_State *g)
 	  if (o)
 	    lj_gc2_markobj(g, o);
 	}
-      }
-      {
-	GCtab *pinmt = ctype_pinmt_acq(cts);
-	if (pinmt)
-	  lj_gc2_markobj(g, obj2gco(pinmt));
       }
       gc2_traverse_clib_retired_cache(g);
       gc2_mark_finreg_cdata_generations(g, gc2_finreg_markobj,
@@ -5851,11 +5821,6 @@ static void gc2_traverse_udata(global_State *g, GCudata *ud)
 #if LJ_HASFFI
   if (udtype == UDTYPE_FFI_CLIB)
     gc2_traverse_clib_cache(g, (CLibrary *)uddata(ud));
-  if (udtype == UDTYPE_FFI_PIN) {
-    TValue tv;
-    lj_tv_load_acq(&tv, (TValue *)uddata(ud));
-    gc2_mark_tv_worker(g, &tv);  /* 11.6 ffi.pin() root. */
-  }
 #endif
   if (LJ_HASBUFFER && udtype == UDTYPE_BUFFER) {
     SBufExt *sbx = (SBufExt *)uddata(ud);

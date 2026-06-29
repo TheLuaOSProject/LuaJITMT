@@ -34,7 +34,6 @@ local m7_cases = {
   "m7_ffi_jit_cnew",
   "m7_ffi_snap_restore_l",
   "m7_ffi_finreg",
-  "m7_ffi_pin",
   "m7_ffi_metatype",
   "m7_ffi_cdata_get_l",
   "m7_ffi_cdata_set_l",
@@ -507,19 +506,6 @@ print("dump cnewi ok")
         getenv("LJ_M7_FFI_META_ITERS", "60")
       }, { joff = true })
       print("M7 FFI metatype/miscmap behavior passed")
-    end
-  })
-
-  add({
-    name = "m7_ffi_pin",
-    description = "ffi.pin root publication and release behavior",
-    run = function(t)
-      clean_build(t)
-      run_luajit_script(t, "t-ffi-pin.lua", {
-        getenv("LJ_M7_FFI_PIN_THREADS", "4"),
-        getenv("LJ_M7_FFI_PIN_ITERS", "80")
-      }, { joff = true })
-      print("M7 ffi.pin behavior passed")
     end
   })
 
