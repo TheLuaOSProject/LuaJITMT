@@ -247,7 +247,7 @@ static TValue *cpluaopen(lua_State *L, lua_CFunction dummy, void *ud)
   lj_mcode_init(g);
   lj_trace_initstate(g);
   lj_err_verify();
-  setgcrefroot(g->vmthref, obj2gco(lj_state_new(L)));
+  vmthread_rel(g, lj_state_new(L));
   lj_gc2_update_pacing(g);
   lj_gc2_publish_idle_threshold(g);
   return NULL;
@@ -260,7 +260,7 @@ static void close_state(lua_State *L)
 		    lj_tg_flags_test_acq(g->main_tg, TGF_ARENA_INTERNAL);
   lj_func_closeuv(L, tvref(L->stack));
   lj_gc_freeall(g);
-  lj_assertG(gcref_acq(g->gc.root) == obj2gco(L),
+  lj_assertG(lj_gc_root_acq(g) == obj2gco(L),
 	     "main thread is not first GC object");
   lj_assertG(g->str.num == 0, "leaked %d strings", g->str.num);
   lj_trace_freestate(g);
@@ -381,7 +381,7 @@ LUA_API lua_State *lua_newstate(lua_Alloc allocf, void *allocd)
     lj_alloc_setprng(allocd, &g->prng);
   }
 #endif
-  setgcrefroot(g->mainthref, obj2gco(L));
+  mainthread_rel(g, L);
   lj_uv_setprev_rel(&g->uvhead, &g->uvhead);
   lj_uv_setnext_rel(&g->uvhead, &g->uvhead);
   lj_str_tabh_store_rlx(g, NULL);
@@ -403,8 +403,8 @@ LUA_API lua_State *lua_newstate(lua_Alloc allocf, void *allocd)
 #endif
   lj_buf_init(NULL, &g->tmpbuf);
   g->gc.state = GCSpause;
-  setgcrefroot(g->gc.root, obj2gco(L));
-  setmref(g->gc.sweep, &g->gc.root);
+  lj_gc_root_rel(g, obj2gco(L));
+  setmref(g->gc.sweep, lj_gc_root_ref(g));
   lj_gc_total_store(g, sizeof(GG_State));
   g->gc.pause = LUAI_GCPAUSE;
   g->gc.stepmul = LUAI_GCMUL;

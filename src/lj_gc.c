@@ -141,7 +141,7 @@ static void gc_arena_preserve_root_chain(global_State *g)
 {
   GCobj *o;
   uint32_t n = 0;
-  for (o = gcref_acq(g->gc.root); o != NULL; o = lj_obj_gcw_acq(o)) {
+  for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
     lj_gc_arena_markobj(g, o);
     if (++n == 1000000u) {
       lj_assertG(0, "root list cycle at arena sweep boundary");
@@ -190,7 +190,7 @@ static void gc_arena_verify_sweep_boundary(global_State *g)
   if (!tg || !lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL) ||
       !gc_arena_sweep_ready(g))
     return;
-  for (o = gcref_acq(g->gc.root); o != NULL; o = lj_obj_gcw_acq(o)) {
+  for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
     gc_arena_verify_marked(g, o);
     if (o->gch.gct == ~LJ_TTHREAD) {
       GCobj *uv;
@@ -349,7 +349,7 @@ static void gc2_paranoia_check_finalizer_obj(global_State *g, GCobj *o)
 static void gc2_paranoia_check_roots(global_State *g)
 {
   GCobj *o;
-  for (o = gcref_acq(g->gc.root); o != NULL; o = lj_obj_gcw_acq(o))
+  for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o))
     gc2_paranoia_checkone(g, o);
   lj_gc2_finalizer_mark_all(g, gc2_paranoia_check_finalizer_obj);
 }
@@ -752,7 +752,7 @@ static void gc_mark_start(global_State *g)
       gc_markobj(g, env);
   }
   gc_markobj(g, vmL);
-  gc_marktv(g, &g->registrytv);
+  gc_marktv(g, lj_registry_ref(g));
   gc_mark_gcroot(g);
   g->gc.state = GCSpropagate;
 }
@@ -1286,7 +1286,7 @@ static int gc2_deferred_body_pending(global_State *g, GCobj *o)
 
 static void gc2_unlink_root_obj(global_State *g, GCobj *dead)
 {
-  GCRef *p = &g->gc.root;
+  GCRef *p = lj_gc_root_ref(g);
   GCobj *o;
   while ((o = gcref_acq(*p)) != NULL) {
     if (o == dead) {
@@ -1301,7 +1301,7 @@ static void gc2_unlink_root_obj(global_State *g, GCobj *dead)
 
 uint32_t lj_gc_sweep_gc2_unmarked(global_State *g)
 {
-  GCRef *p = &g->gc.root;
+  GCRef *p = lj_gc_root_ref(g);
   GCobj *o;
   uint32_t n = 0;
   while ((o = gcref_acq(*p)) != NULL) {
@@ -1538,7 +1538,7 @@ void lj_gc_freeall(global_State *g)
   StrTabHdr *hdr;
   /* Free everything, except super-fixed objects (the main thread). */
   g->gc.currentwhite = LJ_GC_WHITES | LJ_GC_SFIXED;
-  gc_fullsweep(g, &g->gc.root);
+  gc_fullsweep(g, lj_gc_root_ref(g));
   hdr = lj_str_tabh_acq(g);
   if (hdr)
     for (i = hdr->mask; i != ~(MSize)0; i--)  /* Free all string hash chains. */
@@ -1597,7 +1597,7 @@ static int atomic(global_State *g, lua_State *L)
   /* Prepare for sweep phase. */
   g->gc.currentwhite = (uint8_t)otherwhite(g);  /* Flip current white. */
   g->strempty.marked = g->gc.currentwhite;
-  setmref(g->gc.sweep, &g->gc.root);
+  setmref(g->gc.sweep, lj_gc_root_ref(g));
   g->gc.estimate = lj_gc_total_load(g) - (GCSize)udsize;  /* Initial estimate. */
   return 1;
 }
@@ -1819,7 +1819,7 @@ void lj_gc_fullgc(lua_State *L)
   setvmstate(g, GC);
   if (g->gc.state <= GCSatomic) {  /* Caught somewhere in the middle. */
     lj_gc2_preserve_abort_to_idle(g);
-    setmref(g->gc.sweep, &g->gc.root);  /* Sweep everything (preserving it). */
+    setmref(g->gc.sweep, lj_gc_root_ref(g));  /* Sweep everything, preserving it. */
     lj_gc_list_clear_rel(&g->gc.gray);  /* Reset partial propagation lists. */
     lj_gc_list_clear_rel(&g->gc.grayagain);
     lj_gc_list_clear_rel(&g->gc.weak);
@@ -2049,19 +2049,19 @@ void lj_gc_linkobj(global_State *g, GCobj *o)
   uint64_t head;
   GCRef next;
   do {
-    head = la_load64_acq(&g->gc.root.gcptr64);  /* M7 root-list snapshot. */
+    head = la_load64_acq(&lj_gc_root_ref(g)->gcptr64);
     setgcrefp(next, (void *)(uintptr_t)head);
     lj_obj_setgcwr(o, next);
-  } while (!la_cas64(&g->gc.root.gcptr64, &head,
+  } while (!la_cas64(&lj_gc_root_ref(g)->gcptr64, &head,
 		     (uint64_t)(uintptr_t)&o->gch, LA_REL, LA_ACQ));  /* M7 publish. */
 #else
   uint32_t head;
   GCRef next;
   do {
-    head = la_load32_acq(&g->gc.root.gcptr32);  /* M7 root-list snapshot. */
+    head = la_load32_acq(&lj_gc_root_ref(g)->gcptr32);
     setgcrefp(next, (void *)(uintptr_t)head);
     lj_obj_setgcwr(o, next);
-  } while (!la_cas32(&g->gc.root.gcptr32, &head,
+  } while (!la_cas32(&lj_gc_root_ref(g)->gcptr32, &head,
 		     (uint32_t)(uintptr_t)&o->gch, LA_REL, LA_ACQ));  /* M7 publish. */
 #endif
 }

@@ -1560,8 +1560,8 @@ typedef struct global_State {
 LJ_STATIC_ASSERT(offsetof(global_State, nilnode) ==
 		 offsetof(global_State, nilnodehdr) + sizeof(TabNodeHdr));
 
-#define mainthread(g)	(&gcref(g->mainthref)->th)
-#define vmthread(g)	(&gcref(g->vmthref)->th)
+#define mainthread(g)	mainthread_acq((g))
+#define vmthread(g)	vmthread_acq((g))
 #define niltv(L) \
   check_exp(tvisnil(&G(L)->nilnode.val), &G(L)->nilnode.val)
 #define niltvg(g) \
@@ -1876,7 +1876,12 @@ LJ_FUNC TGState *lj_thr_get_tg(void);
 LJ_FUNCA TGState *lj_thr_get_tg_fallback(global_State *g);
 #define G2TG(gl)		(lj_thr_get_tg_fallback((gl)))
 #define L2TG(L)			((L)->tg_hint ? (L)->tg_hint : G2TG(G(L)))
-#define registry(L)		(&G(L)->registrytv)
+static LJ_AINLINE TValue *lj_registry_ref(global_State *g)
+{
+  return &g->registrytv;
+}
+
+#define registry(L)		(lj_registry_ref(G(L)))
 
 static LJ_AINLINE uint32_t lj_state_owner_acq(const lua_State *L)
 {
@@ -2090,16 +2095,36 @@ LJ_STATIC_ASSERT(((int)offsetof(GCupval, marked) -
 /* Macro to convert any collectable object into a GCobj pointer. */
 #define obj2gco(v)	((GCobj *)(v))
 
+static LJ_AINLINE GCRef *mainthread_ref(global_State *g)
+{
+  return &g->mainthref;
+}
+
 static LJ_AINLINE lua_State *mainthread_acq(global_State *g)
 {
-  GCobj *o = gcref_acq(g->mainthref);
+  GCobj *o = gcref_acq(*mainthread_ref(g));
   return o ? gco2th(o) : NULL;
+}
+
+static LJ_AINLINE GCRef *vmthread_ref(global_State *g)
+{
+  return &g->vmthref;
 }
 
 static LJ_AINLINE lua_State *vmthread_acq(global_State *g)
 {
-  GCobj *o = gcref_acq(g->vmthref);
+  GCobj *o = gcref_acq(*vmthread_ref(g));
   return o ? gco2th(o) : NULL;
+}
+
+static LJ_AINLINE GCRef *lj_gc_root_ref(global_State *g)
+{
+  return &g->gc.root;
+}
+
+static LJ_AINLINE GCobj *lj_gc_root_acq(global_State *g)
+{
+  return gcref_acq(*lj_gc_root_ref(g));
 }
 
 static LJ_AINLINE uint32_t gc2_phase_acq(global_State *g)
@@ -5865,6 +5890,21 @@ static LJ_AINLINE int lj_tv_cas(TValue *dst, TValue *expect,
 #else
 #define itypemap(o)	(tvisnumber(o) ? ~LJ_TNUMX : ~itype(o))
 #endif
+
+static LJ_AINLINE void mainthread_rel(global_State *g, lua_State *L)
+{
+  setgcrefroot(*mainthread_ref(g), obj2gco(L));
+}
+
+static LJ_AINLINE void vmthread_rel(global_State *g, lua_State *L)
+{
+  setgcrefroot(*vmthread_ref(g), obj2gco(L));
+}
+
+static LJ_AINLINE void lj_gc_root_rel(global_State *g, const GCobj *o)
+{
+  setgcrefroot(*lj_gc_root_ref(g), o);
+}
 
 static LJ_AINLINE GCRef *lj_gcroot_ref(global_State *g, GCRootID id)
 {

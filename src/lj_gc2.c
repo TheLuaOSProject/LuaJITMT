@@ -2601,7 +2601,7 @@ static void gc2_scan_owned_needscan(global_State *g, lua_State *owner_L)
     return;
   if (gc2_thread_scan_needscan_pending_acq(g) == 0)
     return;
-  for (o = gcref_acq(g->gc.root); o != NULL; o = lj_obj_gcw_acq(o)) {
+  for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
     lua_State *th;
     if (o->gch.gct != ~LJ_TTHREAD)
       continue;
@@ -2792,7 +2792,7 @@ static void gc2_scan_global_roots(global_State *g)
       lj_gc2_markobj(g, obj2gco(env));
   }
   lj_gc2_markobj(g, obj2gco(vmL));
-  gc2_mark_tv(g, &g->registrytv);
+  gc2_mark_tv(g, lj_registry_ref(g));
   for (i = 0; i < GCROOT_MAX; i++) {
     GCobj *o = lj_gcroot_acq(g, (GCRootID)i);
     if (o != NULL)
@@ -3840,7 +3840,7 @@ static GCobj *gc2_finreg_cdata_order_object(FinRegOrderNode *ord, GCtab *t,
 
 static int gc2_finreg_cdata_unlink_root(global_State *g, GCobj *target)
 {
-  GCRef *p = &g->gc.root;
+  GCRef *p = lj_gc_root_ref(g);
   GCobj *o;
   while ((o = gcref_acq(*p)) != NULL) {
     if (o == target) {
@@ -5964,7 +5964,7 @@ static int gc2_root_oracle_liveobj(GCobj *o)
 static int gc2_root_oracle_has_base(global_State *g, void *p)
 {
   GCobj *o;
-  for (o = gcref_acq(g->gc.root); o != NULL; o = lj_obj_gcw_acq(o)) {
+  for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
     if (gc2_root_oracle_liveobj(o) && gc2_mark_base(o) == p)
       return 1;
     if (o->gch.gct == ~LJ_TTHREAD) {
