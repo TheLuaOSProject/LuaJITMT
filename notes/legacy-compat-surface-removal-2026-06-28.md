@@ -28,6 +28,11 @@ LuaJIT public API, language behavior, or generally supported stock entry points.
   `LUA_GCGENERATIONAL`, `LUA_GCINCREMENTAL`, and matching `lua_gc()` numeric
   modes are not exported as public C API. The stock `lua_gc()` behavior for
   unknown modes remains `-1`.
+- Moved fork-local GC2 Lua controls off base `collectgarbage()` and into the
+  explicit threading extension: `threading.gcstats()`,
+  `threading.gcworkers()`, and `threading.gcmode()`. This keeps stock
+  `collectgarbage()` option parsing intact while preserving the lockless
+  runtime's diagnostics and tuning hooks.
 
 Kept intentionally:
 

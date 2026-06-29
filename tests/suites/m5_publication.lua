@@ -281,7 +281,7 @@ local function gc_total_atomic_smoke()
 local th = require"threading"
 
 local function stats_total()
-  local stats = collectgarbage("stats")
+  local stats = th.gcstats()
   assert(type(stats.total_bytes) == "number", "missing total_bytes")
   assert(type(stats.total_kbytes) == "number", "missing total_kbytes")
   assert(stats.total_bytes >= stats.total_kbytes * 1024)
@@ -297,7 +297,7 @@ for id = 1, 4 do
       keep[i] = { worker, i, tostring(i) }
     end
     collectgarbage("collect")
-    return #keep, collectgarbage("stats").total_bytes
+    return #keep, th.gcstats().total_bytes
   end, id)
 end
 
@@ -323,7 +323,7 @@ local function gc2_pacing_atomic_smoke()
 local th = require"threading"
 
 local function pacing_stats()
-  local stats = collectgarbage("stats")
+  local stats = th.gcstats()
   for _, name in ipairs({
     "alloc_since_trigger", "cycle_alloc_bytes", "trigger_bytes", "hard_bytes"
   }) do
@@ -343,7 +343,7 @@ for id = 1, 4 do
     for i = 1, 500 do
       keep[i] = { worker, i, tostring(i) }
     end
-    return #keep, collectgarbage("stats").alloc_since_trigger
+    return #keep, th.gcstats().alloc_since_trigger
   end, id)
 end
 

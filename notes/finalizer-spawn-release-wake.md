@@ -24,7 +24,7 @@ Regression:
   a release wake after the spawned worker exits and before the next full GC
   closes the cycle.
 - `tests/t-gc-stats.lua` requires
-  `collectgarbage("stats").finalizer_spawn_release_wakes`.
+  `threading.gcstats().finalizer_spawn_release_wakes`.
 
 Verification:
 - Clean `make -C src`, focused `t-gc2-traverse`, `tests/t-gc-stats.lua`,

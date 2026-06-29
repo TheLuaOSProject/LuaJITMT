@@ -16,7 +16,7 @@ Fix:
   retire nodes immediately after they queue their cdata finalizer.
 - Retired nodes remain rooted/marked and are freed at FINREG teardown, so
   readers that already loaded an old physical link remain safe.
-- `collectgarbage("stats").finreg_cdata_order_retired` exposes the retire count.
+- `threading.gcstats().finreg_cdata_order_retired` exposes the retire count.
 - Follow-up counter helper work routes ordered FINREG telemetry publication
   through `gc2_finreg_cdata_order_*()` and
   `gc2_finreg_cdata_pending_order_hits_*()` helpers. Ordered discovery,

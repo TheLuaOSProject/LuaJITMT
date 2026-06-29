@@ -6,12 +6,12 @@ Date: 2026-06-20
 
 `GC2State.weak_bridge_skipped` records cases where GC2 weak processing made the
 bridge fallback clear pass unnecessary. The counter existed and traversal/phase
-tests asserted it, but `collectgarbage("stats")` only exported the fallback and
+tests asserted it, but `threading.gcstats()` only exported the fallback and
 backfill side of the same bridge.
 
 ## Change
 
-- Exported `weak_bridge_skipped` through `collectgarbage("stats")`.
+- Exported `weak_bridge_skipped` through `threading.gcstats()`.
 - Added the key to `t-gc-stats.lua` with the same monotonicity guard as the
   adjacent weak bridge counters.
 

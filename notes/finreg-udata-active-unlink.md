@@ -15,7 +15,7 @@ Fix:
   GC2 teardown, preserving safety for any reader that already loaded the old
   active-link chain.
 - Explicit userdata finalizer clear and GC discovery both retire dead nodes.
-- `collectgarbage("stats").finreg_udata_retired_nodes` exposes the monotonic
+- `threading.gcstats().finreg_udata_retired_nodes` exposes the monotonic
   retire count.
 - Follow-up root helper work routes the active discovery-list root and retired
   retention-list root through `gc2_finreg_udata_head_*()` and

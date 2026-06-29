@@ -17,6 +17,9 @@ threading.current() -> thread         -- the caller's thread object
 threading.sleep(seconds)              -- blocking, native-state, poll-aware
 threading.cpucount() -> integer
 threading.fence()                     -- seq_cst full fence (02 M-3)
+threading.gcstats() -> table          -- GC2 telemetry for tests/benchmarks
+threading.gcworkers([n]) -> old_n     -- query/set parked GC2 workers
+threading.gcmode([mode]) -> mode      -- query/set GC2 incremental/generational
 threading.channel(capacity=0) -> ch   -- capacity 0 = rendezvous
 ch:send(v [, timeout_s]) -> true | nil,"timeout" | error "closed"
 ch:recv([timeout_s]) -> v, true | nil, false (closed&empty)
@@ -29,6 +32,12 @@ threading.mutex() -> m; m:lock(); m:unlock(); m:trylock()->bool
 Exactly one value per send (tables for tuples). Any Lua value may be sent
 or shared — the heap is shared (ADR-2); a channel transfers a *reference*
 plus a happens-before edge, never a copy.
+
+GC2 controls are deliberately owned by `threading.*`, not by the base
+`collectgarbage()` API. Stock LuaJIT options and error behavior stay intact;
+`threading.gcstats()`, `threading.gcworkers()`, and `threading.gcmode()` are
+fork-local runtime controls used by tests, benchmarks, and operators of the
+lockless runtime.
 
 ## 9.2 thread objects
 

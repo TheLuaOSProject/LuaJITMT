@@ -53,7 +53,7 @@ for _ = 1, reps do
   do
     local ch = th.channel(1)
     if _ == 1 then collectgarbage("collect") end
-    local stats0 = _ == 1 and collectgarbage("stats") or nil
+    local stats0 = _ == 1 and th.gcstats() or nil
     local t = th.spawn(function(q)
       q:recv()
     end, ch)
@@ -61,7 +61,7 @@ for _ = 1, reps do
     collectgarbage("collect")
     assert(collectgarbage("step") == false)
     if stats0 then
-      local stats1 = collectgarbage("stats")
+      local stats1 = th.gcstats()
       assert(stats1.cycle_requests >= stats0.cycle_requests + 1)
     end
     assert(collectgarbage("isrunning") == true)
@@ -74,14 +74,14 @@ for _ = 1, reps do
     local ch = th.channel(1)
     collectgarbage("collect")
     collectgarbage("stop")
-    local stats0 = collectgarbage("stats")
+    local stats0 = th.gcstats()
     local t = th.spawn(function(q)
       q:recv()
     end, ch)
     assert(collectgarbage("isrunning") == false)
     assert(collectgarbage("step") == false)
     do
-      local stats1 = collectgarbage("stats")
+      local stats1 = th.gcstats()
       assert(stats1.cycle_requests >= stats0.cycle_requests + 1)
     end
     assert(collectgarbage("isrunning") == true)
@@ -94,14 +94,14 @@ for _ = 1, reps do
     local ch = th.channel(1)
     collectgarbage("collect")
     collectgarbage("stop")
-    local stats0 = collectgarbage("stats")
+    local stats0 = th.gcstats()
     local t = th.spawn(function(q)
       q:recv()
     end, ch)
     assert(collectgarbage("isrunning") == false)
     collectgarbage("collect")
     do
-      local stats1 = collectgarbage("stats")
+      local stats1 = th.gcstats()
       assert(stats1.cycle_requests >= stats0.cycle_requests + 1)
     end
     assert(collectgarbage("isrunning") == true)

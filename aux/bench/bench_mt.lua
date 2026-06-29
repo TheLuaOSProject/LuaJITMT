@@ -59,7 +59,7 @@ local gc_stat_keys = {
 }
 
 local function snapshot_gc_stats()
-  local ok, stats = pcall(collectgarbage, "stats")
+  local ok, stats = pcall(th.gcstats)
   if ok and type(stats) == "table" then return stats end
   return nil
 end

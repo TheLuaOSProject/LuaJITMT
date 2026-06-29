@@ -15,7 +15,7 @@ field-specific helper accessors:
   policy scalars.
 
 Runtime users in `lj_gc2.c`, the legacy GC bridge, TG attach catch-up, the
-fork-local `collectgarbage()` mode controls, and `collectgarbage("stats")` now
+fork-local `threading.gcmode()` controls, and `threading.gcstats()` now
 call helper accessors instead of spelling ad hoc atomics against those
 `GC2State` words. This is a documented ownership boundary rather than a
 source-shape CI guard; behavior coverage exercises the Lua-visible transitions,

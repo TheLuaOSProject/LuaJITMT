@@ -221,12 +221,12 @@ Parked workers now attach real no-Lua-stack TGs and use TG TLS, so safepoint
 self-identification no longer falls back to the main TG. Their TG storage is
 kept alive until the lockless TG registry has reclaimed the dead node. They can
 be remotely acknowledged as native TGs with no current `lua_State`.
-`collectgarbage("workers", N)` exposes that staged lifecycle to Lua: missing
+`threading.gcworkers(N)` exposes that staged lifecycle to Lua: missing
 `N` queries the current worker count, `N <= 0` stops the parked workers, and any
 positive `N` starts the capped parked pool while reporting the previous count.
 Current lifecycle guard: parked worker start/stop/set operations are serialized
 by `GC2State.worker_control`, so racy Lua calls to
-`collectgarbage("workers", N)` cannot concurrently mutate worker thread/TG
+`threading.gcworkers(N)` cannot concurrently mutate worker thread/TG
 slots. Waiters park as native TGs while waiting for the control word. Dead
 worker TGs that are still registry-visible are moved to a retired list and
 freed only after TG reclamation unlinks them, so rapid control churn can reuse
@@ -624,9 +624,9 @@ degenerates to "if target arena is OLD and stored obj arena is YOUNG →
 SSB" — i.e., classic card-less remembered set via the same SSB. Heuristic
 switch exactly as Pall describes (survival-rate driven). This is M10
 (post-perf-gate) — land the flag and the sweep identity early, enable late.
-Current bridge: `collectgarbage("generational")` /
-`collectgarbage("incremental")` toggles `GC2State.generational` and exposes the
-mode through `collectgarbage("stats")`. Full GC publishes a one-shot major
+Current bridge: `threading.gcmode("generational")` /
+`threading.gcmode("incremental")` toggles `GC2State.generational` and exposes
+the mode through `threading.gcstats()`. Full GC publishes a one-shot major
 override. Entering generational mode also publishes a one-shot major baseline
 before later generational allocation-triggered mark begins record minor-cycle
 requests. Idle generational barriers conservatively queue remembered entries

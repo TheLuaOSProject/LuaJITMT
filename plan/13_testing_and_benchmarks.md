@@ -136,7 +136,7 @@ tab_write-sharded, alloc-MT (allocator scalability — the headline number for
 ADR-4), intern-MT with materialized strings, chan_pingpong (latency),
 chan_throughput, pmap-image-kernel (the 09 §9.11 pmap on a synthetic
 workload). Report ops/sec/thread + total; plot speedup. GC metrics are dumped
-via `collectgarbage("stats")`: current fields include cycle requests/starts,
+via `threading.gcstats()`: current fields include cycle requests/starts,
 owner-side poll-ack sample/sum/max latency plus histogram buckets for
 approximate P99,
 allocation trigger/hard-limit bytes, assist work, worker work and parked-worker

@@ -1,3 +1,5 @@
+local threading = require"threading"
+
 local function assert_number(t, k)
   assert(type(t[k]) == "number", k)
 end
@@ -52,7 +54,7 @@ local finreg_stats = {
   "finalizer_spawn_release_wakes",
 }
 
-local before = collectgarbage("stats")
+local before = threading.gcstats()
 assert(type(before) == "table")
 assert(type(collectgarbage("count")) == "number")
 assert(type(collectgarbage("isrunning")) == "boolean")
@@ -131,7 +133,7 @@ for i = 1, 2000 do
 end
 collectgarbage("collect")
 
-local after = collectgarbage("stats")
+local after = threading.gcstats()
 assert(after.total_bytes > 0)
 assert(after.total_kbytes >= 0)
 assert(after.cycle_starts >= before.cycle_starts)

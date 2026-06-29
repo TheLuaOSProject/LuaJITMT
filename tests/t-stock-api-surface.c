@@ -130,8 +130,16 @@ static void check_chunk_api(lua_State *L)
 
 static void check_gc_api(lua_State *L)
 {
+  const char *opts[] = { "stats", "workers", "generational", "incremental" };
+  size_t i;
   assert(lua_gc(L, 10, 0) == -1);
   assert(lua_gc(L, 11, 0) == -1);
+  for (i = 0; i < sizeof(opts)/sizeof(opts[0]); i++) {
+    lua_getglobal(L, "collectgarbage");
+    lua_pushstring(L, opts[i]);
+    assert(lua_pcall(L, 1, 1, 0) != 0);
+    lua_pop(L, 1);
+  }
 }
 
 int main(void)

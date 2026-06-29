@@ -13,7 +13,7 @@ This slice routes parked-worker scheduler telemetry through helper accessors:
 - `gc2_worker_async_progress_*()`
 
 Runtime producers in `lj_gc2.c` use relaxed helper stores/adds for
-initialization and worker progress publication. `collectgarbage("stats")`
+initialization and worker progress publication. `threading.gcstats()`
 reads the same counters through acquire helpers.
 
 `tools/ci/m3_gc2_worker_scheduler.sh` now requires the helper triplets and

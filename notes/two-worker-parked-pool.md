@@ -3,7 +3,7 @@ Two-worker parked pool slice
 
 Context:
 - M3 still used a single parked worker and treated every positive
-  `collectgarbage("workers", N)` request as one worker.
+  `threading.gcworkers(N)` request as one worker.
 - The actual GC drain path is still intentionally serialized by
   `gc2.worker_active`; this slice does not claim full parallel marking or
   per-worker deque ownership.
@@ -15,7 +15,7 @@ Change:
 - Internal `lj_gc2_worker_wake()` wakes the active parked worker count instead
   of one waiter; C harnesses use `lj_gc2_test_worker_wake()` for forced wake
   races.
-- `collectgarbage("workers", 2)` now results in two active parked workers.
+- `threading.gcworkers(2)` now results in two active parked workers.
 - A follow-up helper slice routes wake, park, contention, and async-progress
   telemetry through `gc2_worker_*()` counter helpers.
 

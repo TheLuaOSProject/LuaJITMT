@@ -68,7 +68,7 @@ huge objects, coroutine stacks).
 Gate: paranoia oracle reports zero diffs across the suite; torture stock
 green; bench (1 thread, GC concurrent) regression ≤10%.
 
-Current implementation note: `collectgarbage("workers", N)` exposes the staged
+Current implementation note: `threading.gcworkers(N)` exposes the staged
 capped parked GC2 worker pool: missing `N` queries the current count, `N <= 0`
 stops it, and positive `N` starts up to the current cap while returning the
 previous count. Worker lifecycle changes are serialized by
@@ -304,7 +304,7 @@ Gate: ≤10% single-thread geomean (stretch 5%); bench_mt scaling ≥6x on
 8 cores for tab_read-shared and arith-MT; GC pause P99 (owner-side,
 mutator-observed poll acknowledgements) <500µs on the churn bench.
 
-Current implementation note: `collectgarbage("stats")` now returns a
+Current implementation note: `threading.gcstats()` now returns a
 benchmark-facing table of GC2 counters for cycle starts, requested vs actual
 minor cycles, allocation pacing, poll-ack latency, assist/worker progress, owner
 sweep progress, weak clearing, weak-write marks, FINREG fallback/order counters,
@@ -321,13 +321,13 @@ benchmark smoke, and M10 generational guard.
 
 ## M10 — Generational mode (≈800)
 Tasks: 05 §5.12 (minor sweep identity already in arena code from M2;
-remembered-set SSB mode; heuristic switch; collectgarbage("generational")).
+remembered-set SSB mode; heuristic switch; `threading.gcmode("generational")`).
 Gate: alloc_tables bench ≥1.5x vs M9 full-cycle mode; paranoia (major
 after minor) zero-diff.
 
-Current implementation note: the fork-local `collectgarbage("generational")` /
-`collectgarbage("incremental")` mode toggle now drives a passive
-`GC2State.generational` bit and exposes it through `collectgarbage("stats")`.
+Current implementation note: the fork-local `threading.gcmode("generational")`
+/ `threading.gcmode("incremental")` mode toggle now drives a passive
+`GC2State.generational` bit and exposes it through `threading.gcstats()`.
 Full GC now sets a one-shot major override, and generational mark begins record
 minor-cycle requests through `minor_cycle_requests`; fully minor starts are
 counted separately by `minor_cycle_starts` once the minor sweep/root gates latch.

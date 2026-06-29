@@ -1,5 +1,7 @@
+local threading = require"threading"
+
 local function stats_mode()
-  local stats = collectgarbage("stats")
+  local stats = threading.gcstats()
   assert(type(stats) == "table")
   assert(type(stats.generational) == "number")
   assert(type(stats.cycle_minor_requested) == "number")
@@ -29,14 +31,14 @@ local function stats_mode()
   return stats.generational, stats
 end
 
-local prev = collectgarbage("incremental")
+local prev = threading.gcmode("incremental")
 assert(prev == "incremental" or prev == "generational")
 assert(stats_mode() == 0)
 
-assert(collectgarbage("generational") == "incremental")
+assert(threading.gcmode("generational") == "incremental")
 assert(stats_mode() == 1)
 
-assert(collectgarbage("generational") == "generational")
+assert(threading.gcmode("generational") == "generational")
 assert(stats_mode() == 1)
 
 local _, before_collect = stats_mode()
@@ -72,7 +74,7 @@ assert(after_remember.minor_sweep_deferred >= before_remember.minor_sweep_deferr
 assert(after_remember.minor_sweep_arenas >= before_remember.minor_sweep_arenas)
 assert(after_remember.minor_roots_deferred >= before_remember.minor_roots_deferred)
 
-assert(collectgarbage("incremental") == "generational")
+assert(threading.gcmode("incremental") == "generational")
 assert(stats_mode() == 0)
 local _, after_incremental = stats_mode()
 assert(after_incremental.minor_sweep_enabled == 0)
@@ -80,7 +82,7 @@ assert(after_incremental.minor_roots_enabled == 0)
 assert(after_incremental.minor_survival_pct == 0)
 assert(after_incremental.minor_survival_bytes == 0)
 
-assert(collectgarbage("incremental") == "incremental")
+assert(threading.gcmode("incremental") == "incremental")
 assert(stats_mode() == 0)
 
 print("t-gc-generational-mode OK")

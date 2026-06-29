@@ -6,7 +6,7 @@ Date: 2026-06-20
 
 The benchmark GC stats report prints a curated telemetry subset after scaled
 benchmark runs. After exporting `weak_bridge_skipped` through
-`collectgarbage("stats")`, the weak bridge counters had enough public coverage
+`threading.gcstats()`, the weak bridge counters had enough public coverage
 to include them in that benchmark report alongside finalizer and FINREG bridge
 counters.
 

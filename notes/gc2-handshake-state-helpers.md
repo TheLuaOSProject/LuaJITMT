@@ -12,7 +12,7 @@ field-specific helper accessors:
   telemetry, including the histogram bucket array.
 
 Runtime users in `lj_safepoint.c`, `lj_tg.c`, `lj_gc2.c`, and
-`collectgarbage("stats")` now call helper accessors instead of spelling ad hoc
+`threading.gcstats()` now call helper accessors instead of spelling ad hoc
 atomics or futex operations against those `GC2State` words. A follow-up
 TG-local mirror helper slice routes `reqmask`, `poll`, and `hs_epoch_ack`
 through `lj_tg_*` safepoint helpers.

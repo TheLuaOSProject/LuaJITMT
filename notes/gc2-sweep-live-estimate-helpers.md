@@ -6,7 +6,7 @@ accessors:
 - `gc2_live_estimate_*()` publishes and reads the byte estimate that feeds
   `lj_gc2_update_pacing()`.
 - `gc2_sweep_live_huge_bytes_*()` publishes the HugeTab contribution exposed
-  through `collectgarbage("stats")`.
+  through `threading.gcstats()`.
 - `gc2_sweep_live_updates_*()` tracks sweep-live refresh count telemetry.
 
 Ordering:
@@ -14,7 +14,7 @@ Ordering:
 - GC2's internal `lj_gc2_sweep_live_aggregate()` release-publishes the
   huge-byte contribution and combined live estimate, then relaxed-increments
   update telemetry.
-- `lj_gc2_update_pacing()` and `collectgarbage("stats")` acquire-load the
+- `lj_gc2_update_pacing()` and `threading.gcstats()` acquire-load the
   helper-backed snapshot.
 
 Guarding:

@@ -11,7 +11,7 @@ This slice routes the parked-worker lifecycle words through helper accessors:
 - `gc2_worker_exited_*()` publishes worker exit progress and wraps the exit
   futex wake word.
 
-Runtime users in `lj_gc2.c` and the public `collectgarbage("workers")` query in
+Runtime users in `lj_gc2.c` and the `threading.gcworkers()` query in
 `lib_base.c` no longer spell ad hoc atomics or futex operations against
 `GC2State.n_workers`, `worker_stop`, `worker_wake`, `worker_started`, or
 `worker_exited`. `tools/ci/m3_gc2_worker_scheduler.sh` rejects future raw

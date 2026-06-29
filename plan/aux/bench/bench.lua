@@ -131,7 +131,7 @@ end)
 local filter = arg and arg[1]
 local gc_mode = getenv("BENCH_GC_MODE")
 if gc_mode == "generational" or gc_mode == "incremental" then
-  collectgarbage(gc_mode)
+  require("threading").gcmode(gc_mode)
 end
 collectgarbage("collect")
 print(string.format("%-18s %12s %10s", "benchmark", "total_s", "ns/op"))

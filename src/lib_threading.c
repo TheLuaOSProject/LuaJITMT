@@ -840,6 +840,246 @@ LJLIB_CF(threading_channel___tostring)
 LJLIB_PUSH("threading.channel") LJLIB_SET(__metatable)
 LJLIB_PUSH(top-1) LJLIB_SET(__index)
 
+static TValue *threading_gc_stats_storetv_str(lua_State *L, GCtab *t,
+					      const char *name,
+					      cTValue *src)
+{
+  GCstr *key = lj_str_newz(L, name);
+  TValue keytv, *dst;
+  setstrV(L, &keytv, key);
+  for (;;) {
+    dst = lj_tab_setstr(L, t, key);
+    if (lj_tab_trystoretv_cas_keyed(L, t, dst, &keytv, src) ==
+	LJ_TAB_STORE_CAS_OK)
+      return dst;
+    lj_tab_store_wait_no_l();  /* GC stats string store saw stale/FORWARD slot. */
+  }
+}
+
+static TValue *threading_gc_stats_storetv_int(lua_State *L, GCtab *t,
+					      int32_t key, cTValue *src)
+{
+  TValue keytv, *dst;
+  setintV(&keytv, key);
+  for (;;) {
+    dst = lj_tab_setint(L, t, key);
+    if (lj_tab_trystoretv_cas_keyed(L, t, dst, &keytv, src) ==
+	LJ_TAB_STORE_CAS_OK)
+      return dst;
+    lj_tab_store_wait_no_l();  /* GC stats int store saw stale/FORWARD slot. */
+  }
+}
+
+static void threading_gc_stats_setnum(lua_State *L, GCtab *t,
+				      const char *name, uint64_t n)
+{
+  TValue tv;
+  setnumV(&tv, (lua_Number)n);
+  threading_gc_stats_storetv_str(L, t, name, &tv);
+}
+
+static void threading_gc_stats_setint(lua_State *L, GCtab *t,
+				      const char *name, uint32_t n)
+{
+  TValue tv;
+  setintV(&tv, (int32_t)n);
+  threading_gc_stats_storetv_str(L, t, name, &tv);
+}
+
+static void threading_gc_stats_set_latency_buckets(lua_State *L, GCtab *t,
+						   const GC2StatsSnapshot *s)
+{
+  GCtab *bt;
+  TValue tv;
+  uint32_t i;
+  lua_createtable(L, LJ_GC2_HS_LATENCY_BUCKETS, 0);
+  bt = tabV(L->top - 1);
+  for (i = 0; i < LJ_GC2_HS_LATENCY_BUCKETS; i++) {
+    setnumV(&tv, (lua_Number)s->poll_ack_latency_buckets[i]);
+    threading_gc_stats_storetv_int(L, bt, (int32_t)i + 1, &tv);
+  }
+  lj_gc_pubtab(L, bt);
+  settabV(L, &tv, bt);
+  threading_gc_stats_storetv_str(L, t, "poll_ack_latency_buckets", &tv);
+  lj_gc_pubtabobj(L, t, bt);
+  L->top--;
+}
+
+static void threading_gc_stats_push(lua_State *L)
+{
+  global_State *g = G(L);
+  GC2StatsSnapshot s;
+  GCtab *t;
+  lj_gc2_stats_snapshot(g, &s);
+  lua_createtable(L, 0, 86);
+  t = tabV(L->top - 1);
+  threading_gc_stats_setnum(L, t, "total_bytes", s.total_bytes);
+  threading_gc_stats_setnum(L, t, "total_kbytes", s.total_bytes >> 10);
+  threading_gc_stats_setint(L, t, "phase", s.phase);
+  threading_gc_stats_setint(L, t, "generational", s.generational);
+  threading_gc_stats_setint(L, t, "cycle_minor_requested",
+			    s.cycle_minor_requested);
+  threading_gc_stats_setint(L, t, "cycle_sweep_minor",
+			    s.cycle_sweep_minor);
+  threading_gc_stats_setint(L, t, "minor_sweep_enabled",
+			    s.minor_sweep_enabled);
+  threading_gc_stats_setint(L, t, "cycle_roots_minor",
+			    s.cycle_roots_minor);
+  threading_gc_stats_setint(L, t, "minor_roots_enabled",
+			    s.minor_roots_enabled);
+  threading_gc_stats_setnum(L, t, "cycle_requests", s.cycle_requests);
+  threading_gc_stats_setnum(L, t, "cycle_starts", s.cycle_starts);
+  threading_gc_stats_setnum(L, t, "major_cycle_starts",
+			    s.major_cycle_starts);
+  threading_gc_stats_setnum(L, t, "minor_cycle_requests",
+			    s.minor_cycle_requests);
+  threading_gc_stats_setnum(L, t, "minor_cycle_starts",
+			    s.minor_cycle_starts);
+  threading_gc_stats_setnum(L, t, "minor_sweep_deferred",
+			    s.minor_sweep_deferred);
+  threading_gc_stats_setnum(L, t, "minor_sweep_arenas",
+			    s.minor_sweep_arenas);
+  threading_gc_stats_setnum(L, t, "minor_roots_deferred",
+			    s.minor_roots_deferred);
+  threading_gc_stats_setnum(L, t, "major_root_scans", s.major_root_scans);
+  threading_gc_stats_setnum(L, t, "minor_root_scans", s.minor_root_scans);
+  threading_gc_stats_setnum(L, t, "minor_survival_base_live",
+			    s.minor_survival_base_live);
+  threading_gc_stats_setnum(L, t, "minor_survival_bytes",
+			    s.minor_survival_bytes);
+  threading_gc_stats_setint(L, t, "minor_survival_pct",
+			    s.minor_survival_pct);
+  threading_gc_stats_setint(L, t, "minor_survival_threshold_pct",
+			    s.minor_survival_threshold_pct);
+  threading_gc_stats_setnum(L, t, "minor_survival_major_requests",
+			    s.minor_survival_major_requests);
+  threading_gc_stats_setnum(L, t, "remembered_barriers",
+			    s.remembered_barriers);
+  threading_gc_stats_setnum(L, t, "remembered_pushed", s.remembered_pushed);
+  threading_gc_stats_setnum(L, t, "remembered_overflows",
+			    s.remembered_overflows);
+  threading_gc_stats_setnum(L, t, "remembered_filtered",
+			    s.remembered_filtered);
+  threading_gc_stats_setnum(L, t, "remembered_drained",
+			    s.remembered_drained);
+  threading_gc_stats_setnum(L, t, "poll_ack_samples", s.poll_ack_samples);
+  threading_gc_stats_setnum(L, t, "poll_ack_latency_sum_ns",
+			    s.poll_ack_latency_sum_ns);
+  threading_gc_stats_setnum(L, t, "poll_ack_latency_max_ns",
+			    s.poll_ack_latency_max_ns);
+  threading_gc_stats_set_latency_buckets(L, t, &s);
+  threading_gc_stats_setnum(L, t, "alloc_since_trigger",
+			    s.alloc_since_trigger);
+  threading_gc_stats_setnum(L, t, "cycle_alloc_bytes", s.cycle_alloc_bytes);
+  threading_gc_stats_setnum(L, t, "trigger_bytes", s.trigger_bytes);
+  threading_gc_stats_setnum(L, t, "hard_bytes", s.hard_bytes);
+  threading_gc_stats_setnum(L, t, "assist_runs", s.assist_runs);
+  threading_gc_stats_setnum(L, t, "assist_grey_drained",
+			    s.assist_grey_drained);
+  threading_gc_stats_setnum(L, t, "assist_ssb_converted",
+			    s.assist_ssb_converted);
+  threading_gc_stats_setnum(L, t, "assist_weak_drained",
+			    s.assist_weak_drained);
+  threading_gc_stats_setnum(L, t, "worker_runs", s.worker_runs);
+  threading_gc_stats_setnum(L, t, "worker_grey_drained",
+			    s.worker_grey_drained);
+  threading_gc_stats_setnum(L, t, "worker_ssb_converted",
+			    s.worker_ssb_converted);
+  threading_gc_stats_setnum(L, t, "worker_weak_drained",
+			    s.worker_weak_drained);
+  threading_gc_stats_setnum(L, t, "worker_idle_declares",
+			    s.worker_idle_declares);
+  threading_gc_stats_setnum(L, t, "worker_busy_retries",
+			    s.worker_busy_retries);
+  threading_gc_stats_setnum(L, t, "worker_wakes", s.worker_wakes);
+  threading_gc_stats_setnum(L, t, "worker_parks", s.worker_parks);
+  threading_gc_stats_setnum(L, t, "worker_async_progress",
+			    s.worker_async_progress);
+  threading_gc_stats_setnum(L, t, "sweep_owner_runs", s.sweep_owner_runs);
+  threading_gc_stats_setnum(L, t, "sweep_owner_arenas",
+			    s.sweep_owner_arenas);
+  threading_gc_stats_setnum(L, t, "sweep_owner_live_cells",
+			    s.sweep_owner_live_cells);
+  threading_gc_stats_setnum(L, t, "sweep_live_updates",
+			    s.sweep_live_updates);
+  threading_gc_stats_setnum(L, t, "sweep_live_huge_bytes",
+			    s.sweep_live_huge_bytes);
+  threading_gc_stats_setnum(L, t, "live_estimate", s.live_estimate);
+  threading_gc_stats_setnum(L, t, "weak_clear_tables", s.weak_clear_tables);
+  threading_gc_stats_setnum(L, t, "weak_clear_cleared", s.weak_clear_cleared);
+  threading_gc_stats_setnum(L, t, "weak_bridge_skipped",
+			    s.weak_bridge_skipped);
+  threading_gc_stats_setnum(L, t, "weak_bridge_fallbacks",
+			    s.weak_bridge_fallbacks);
+  threading_gc_stats_setnum(L, t, "weak_bridge_backfills",
+			    s.weak_bridge_backfills);
+  threading_gc_stats_setnum(L, t, "weak_bridge_backfill_tables",
+			    s.weak_bridge_backfill_tables);
+  threading_gc_stats_setnum(L, t, "weak_bridge_backfill_slots",
+			    s.weak_bridge_backfill_slots);
+  threading_gc_stats_setnum(L, t, "weak_bridge_backfill_cleared",
+			    s.weak_bridge_backfill_cleared);
+  threading_gc_stats_setnum(L, t, "weak_keys_marked", s.weak_keys_marked);
+  threading_gc_stats_setnum(L, t, "weak_values_marked", s.weak_values_marked);
+  threading_gc_stats_setnum(L, t, "finreg_cdata_sets", s.finreg_cdata_sets);
+  threading_gc_stats_setnum(L, t, "finreg_cdata_clears",
+			    s.finreg_cdata_clears);
+  threading_gc_stats_setnum(L, t, "finreg_cdata_queued",
+			    s.finreg_cdata_queued);
+  threading_gc_stats_setnum(L, t, "finreg_cdata_sweep_queued",
+			    s.finreg_cdata_sweep_queued);
+  threading_gc_stats_setnum(L, t, "finreg_cdata_pweak_queued",
+			    s.finreg_cdata_pweak_queued);
+  threading_gc_stats_setnum(L, t, "finreg_cdata_pweak_claimed",
+			    s.finreg_cdata_pweak_claimed);
+  threading_gc_stats_setnum(L, t, "finreg_cdata_preclaim_overflow",
+			    s.finreg_cdata_preclaim_overflow);
+  threading_gc_stats_setnum(L, t, "finreg_cdata_preclaim_dispatched",
+			    s.finreg_cdata_preclaim_dispatched);
+  threading_gc_stats_setnum(L, t, "finreg_cdata_order_seen",
+			    s.finreg_cdata_order_seen);
+  threading_gc_stats_setnum(L, t, "finreg_cdata_order_claimed",
+			    s.finreg_cdata_order_claimed);
+  threading_gc_stats_setnum(L, t, "finreg_cdata_order_unlinked",
+			    s.finreg_cdata_order_unlinked);
+  threading_gc_stats_setnum(L, t, "finreg_cdata_order_queued",
+			    s.finreg_cdata_order_queued);
+  threading_gc_stats_setnum(L, t, "finreg_cdata_order_retired",
+			    s.finreg_cdata_order_retired);
+  threading_gc_stats_setnum(L, t, "finreg_cdata_order_tombstones",
+			    s.finreg_cdata_order_tombstones);
+  threading_gc_stats_setnum(L, t, "finreg_cdata_order_fallbacks",
+			    s.finreg_cdata_order_fallbacks);
+  threading_gc_stats_setnum(L, t, "finreg_cdata_pending_order_hits",
+			    s.finreg_cdata_pending_order_hits);
+  threading_gc_stats_setnum(L, t, "finreg_udata_sets", s.finreg_udata_sets);
+  threading_gc_stats_setnum(L, t, "finreg_udata_clears",
+			    s.finreg_udata_clears);
+  threading_gc_stats_setnum(L, t, "finreg_udata_queued",
+			    s.finreg_udata_queued);
+  threading_gc_stats_setnum(L, t, "finreg_udata_registered",
+			    s.finreg_udata_registered);
+  threading_gc_stats_setnum(L, t, "finreg_udata_retired_nodes",
+			    s.finreg_udata_retired_nodes);
+  threading_gc_stats_setnum(L, t, "finreg_udata_discovered",
+			    s.finreg_udata_discovered);
+  threading_gc_stats_setnum(L, t, "finreg_udata_forgets",
+			    s.finreg_udata_forgets);
+  threading_gc_stats_setnum(L, t, "finalizer_queued", s.finalizer_queued);
+  threading_gc_stats_setnum(L, t, "finalizer_dequeued", s.finalizer_dequeued);
+  threading_gc_stats_setnum(L, t, "finalizer_mpsc_drained",
+			    s.finalizer_mpsc_drained);
+  threading_gc_stats_setnum(L, t, "finalizer_enters", s.finalizer_enters);
+  threading_gc_stats_setnum(L, t, "finalizer_leaves", s.finalizer_leaves);
+  threading_gc_stats_setnum(L, t, "finalizer_sweep_blocks",
+			    s.finalizer_sweep_blocks);
+  threading_gc_stats_setnum(L, t, "finalizer_spawn_deferrals",
+			    s.finalizer_spawn_deferrals);
+  threading_gc_stats_setnum(L, t, "finalizer_spawn_release_wakes",
+			    s.finalizer_spawn_release_wakes);
+  lj_gc_pubtab(L, t);
+}
+
 #define LJLIB_MODULE_threading
 
 LJLIB_PUSH(top-4) LJLIB_SET(!)  /* Set environment to thread methods. */
@@ -883,6 +1123,43 @@ LJLIB_CF(threading_sleep)
     threading_checkstop_fresh(L, actions, had_stopreq);
   }
   return 0;
+}
+
+LJLIB_CF(threading_gcstats)
+{
+  threading_gc_stats_push(L);
+  return 1;
+}
+
+LJLIB_CF(threading_gcworkers)
+{
+  int hasdata = L->base < L->top && !tvisnil(L->base);
+  int32_t data = lj_lib_optint(L, 1, 0);
+  global_State *g = G(L);
+  uint32_t old = lj_gc2_workers_count(g);
+  uint32_t actions = 0;
+  if (hasdata) {
+    int ok = lj_gc2_workers_set_l(L, data <= 0 ? 0u : (uint32_t)data,
+				  &actions);
+    lj_safepoint_checkstop(L, actions);
+    if (!ok)
+      lj_err_callermsg(L, "cannot start GC worker");
+  }
+  setintV(L->top++, (int32_t)old);
+  return 1;
+}
+
+LJLIB_CF(threading_gcmode)
+{
+  int hasmode = L->base < L->top && !tvisnil(L->base);
+  global_State *g = G(L);
+  int old = gc2_generational_acq(g) != 0;
+  if (hasmode) {
+    int opt = lj_lib_checkopt(L, 1, -1, "\13incremental\14generational");
+    lj_gc2_set_generational(g, opt == 1);
+  }
+  setstrV(L, L->top++, lj_str_newz(L, old ? "generational" : "incremental"));
+  return 1;
 }
 
 static lua_State *threading_spawn_core(lua_State *L, GCtab *env, TValue *base,

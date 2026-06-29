@@ -26,6 +26,6 @@ transition to `GCSpause`, but the parked worker may now publish the GC2 idle
 phase after all sweep predicates are clear.
 
 Stopping parked workers also marks the caller's TG native while joining worker
-pthreads. Without that, `collectgarbage("workers", 0)` could wait in
+pthreads. Without that, `threading.gcworkers(0)` could wait in
 `pthread_join()` while a worker was waiting for that same caller to acknowledge
 an idle-close handshake.
