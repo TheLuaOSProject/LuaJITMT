@@ -39,6 +39,20 @@ return function(add)
       cfile = "t-threading-capi.c",
       opts = { timeout = "20s" },
       message = "M4 public C threading API tests passed"
+    },
+    {
+      name = "m4_threading_spawn_native",
+      description = "threading.spawn pthread_create native STOPREQ fixture",
+      output = "lj_t-threading-spawn-native",
+      cfile = "t-threading-spawn-native.c",
+      opts = {
+        timeout = "20s",
+        libs = {
+          "-lm", "-ldl", os.getenv("PTHREAD") or "-pthread",
+          "-Wl,--wrap=pthread_create"
+        }
+      },
+      message = "M4 threading.spawn native STOPREQ tests passed"
     }
   })
 

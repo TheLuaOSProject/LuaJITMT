@@ -283,6 +283,62 @@ static void threading_wake_thread(LJThread *th)
   la_futex_wake(&th->futex, INT_MAX);
 }
 
+static int threading_start_release(LJThread *th)
+{
+  uint32_t expect = LJ_THREAD_STARTING;
+  if (la_cas32(&th->state, &expect, LJ_THREAD_RUNNING, LA_ACQ_REL, LA_ACQ)) {
+    la_futex_wake(&th->state, INT_MAX);
+    return 1;
+  }
+  return expect == LJ_THREAD_RUNNING;
+}
+
+static void threading_start_abort(LJThread *th)
+{
+  for (;;) {
+    uint32_t state = la_load32_acq(&th->state);
+    uint32_t expect = LJ_THREAD_STARTING;
+    if (state != LJ_THREAD_STARTING)
+      return;
+    if (la_cas32(&th->state, &expect, LJ_THREAD_ABORTING,
+		 LA_ACQ_REL, LA_ACQ)) {
+      la_futex_wake(&th->state, INT_MAX);
+      return;
+    }
+  }
+}
+
+static int threading_worker_wait_start(lua_State *L, LJThread *th)
+{
+  int native = 0;
+  /* Parent checks fresh STOPREQ after pthread_create before user code runs. */
+  for (;;) {
+    uint32_t state = la_load32_acq(&th->state);
+    if (state == LJ_THREAD_RUNNING || state == LJ_THREAD_ABORTING ||
+	state == LJ_THREAD_DONE) {
+      if (native)
+	(void)lj_native_leave(L);
+      if (state == LJ_THREAD_RUNNING)
+	(void)lj_safepoint_poll(L);
+      return state == LJ_THREAD_RUNNING;
+    }
+    if (!native) {
+      lj_native_enter(L2TG(L));
+      native = 1;
+    }
+    (void)la_futex_wait(&th->state, state, 1000000);
+  }
+}
+
+static int threading_worker_start_ok(lua_State *L, LJThread *th)
+{
+  if (threading_worker_wait_start(L, th)) {
+    if (!threading_had_stopreq(L))
+      return 1;
+  }
+  return 0;
+}
+
 static void threading_entering_leave(global_State *g)
 {
   if (mt_entering_sub_acqrel(g, 1) == 1)
@@ -474,7 +530,10 @@ static void *threading_worker(void *arg)
   tg->thread_ud = th->ud;
   lj_tg_attach(g, tg);
 
-  if (mt_shutdown_acq(g) != 0) {
+  if (!threading_worker_start_ok(L, th)) {
+    th->status = LUA_ERRRUN;
+    th->nresults = 0;
+  } else if (mt_shutdown_acq(g) != 0) {
     th->status = LUA_ERRRUN;
     th->nresults = 0;
   } else {
@@ -617,6 +676,36 @@ static int threading_join_core(lua_State *L, LJThread *th, int has_timeout,
   }
   threading_checkstop_fresh(L, join_actions, join_had_stopreq);
   return (int)th->nresults + 1;
+}
+
+static uint32_t threading_thr_create_l(lua_State *L, LJThread *th,
+				       int had_stopreq,
+				       int *rcp, int *fresh_stopreqp)
+{
+  uint32_t actions;
+  lj_native_enter(L2TG(L));
+  *rcp = lj_thr_create(&th->thr, threading_worker, th);
+  actions = lj_native_leave(L);
+  if (fresh_stopreqp)
+    *fresh_stopreqp = threading_fresh_stopreq(L, actions, had_stopreq);
+  return actions;
+}
+
+static void threading_join_aborted_start(lua_State *L, LJThread *th,
+					 uint32_t *actionsp)
+{
+  uint32_t expect = 0;
+  threading_start_abort(th);
+  if (la_cas32(&th->joined, &expect, 1, LA_ACQ_REL, LA_ACQ)) {
+    uint32_t actions;
+    lj_native_enter(L2TG(L));
+    (void)lj_thr_join(&th->thr, NULL);
+    actions = lj_native_leave(L);
+    if (actionsp)
+      *actionsp |= actions;
+  }
+  threading_live_remove(th);
+  (void)lj_tg_reclaim_dead(G(L));
 }
 
 #define LJLIB_MODULE_threading_thread
@@ -1193,7 +1282,7 @@ static lua_State *threading_spawn_core(lua_State *L, GCtab *env, TValue *base,
   tg = lj_mem_newt(L, sizeof(TGState), TGState);
   threading_publish_thread_state(L, ud, th, L1);
   th->tg = tg;
-  th->state = LJ_THREAD_RUNNING;
+  th->state = LJ_THREAD_STARTING;
   th->nargs = (uint32_t)nargs;
   lj_tg_init_thread(G(L), tg, L1, threading_arena_internal(G(L)));
   th->thr.tid = lj_thr_newid();
@@ -1220,20 +1309,37 @@ static lua_State *threading_spawn_core(lua_State *L, GCtab *env, TValue *base,
     lj_err_callermsg(L, "VM shutdown in progress");
   }
   threading_live_publish(G(L), th, live);
-  rc = lj_thr_create(&th->thr, threading_worker, th);
-  if (rc != 0) {
-    char errbuf[LJ_ERR_ERRNO_BUFSZ];
-    const char *emsg = lj_err_strerrno(rc, errbuf, sizeof(errbuf));
-    threading_live_remove(th);
-    threading_rehome_unstarted_stack(L, L1, tg);
-    lj_tg_fini_thread(G(L), tg);
-    lj_mem_freet(G(L), tg);
-    th->tg = NULL;
-    th->state = LJ_THREAD_DONE;
-    threading_gc_leave(G(L));
-    lj_err_callermsg(L, emsg);
+  {
+    int had_stopreq = threading_had_stopreq(L);
+    int fresh_stopreq = 0;
+    uint32_t actions = threading_thr_create_l(L, th, had_stopreq, &rc,
+					      &fresh_stopreq);
+    if (rc != 0) {
+      char errbuf[LJ_ERR_ERRNO_BUFSZ];
+      const char *emsg = lj_err_strerrno(rc, errbuf, sizeof(errbuf));
+      threading_live_remove(th);
+      threading_rehome_unstarted_stack(L, L1, tg);
+      lj_tg_fini_thread(G(L), tg);
+      lj_mem_freet(G(L), tg);
+      th->tg = NULL;
+      th->state = LJ_THREAD_DONE;
+      threading_gc_leave(G(L));
+      threading_checkstop_fresh(L, actions, had_stopreq);
+      lj_err_callermsg(L, emsg);
+    }
+    if (fresh_stopreq) {
+      threading_join_aborted_start(L, th, &actions);
+      threading_checkstop_fresh(L, actions, had_stopreq);
+      lj_err_callermsg(L, "VM shutdown in progress");
+    }
   }
 
+  if (!threading_start_release(th)) {
+    uint32_t actions = 0;
+    threading_join_aborted_start(L, th, &actions);
+    threading_checkstop_fresh(L, actions, threading_had_stopreq(L));
+    lj_err_callermsg(L, "cannot start thread");
+  }
   return L1;
 }
 

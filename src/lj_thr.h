@@ -25,8 +25,10 @@ typedef struct LJStateClaim {
   uint8_t release;
 } LJStateClaim;
 
+#define LJ_THREAD_STARTING	0u
 #define LJ_THREAD_RUNNING	1u
 #define LJ_THREAD_DONE		2u
+#define LJ_THREAD_ABORTING	3u
 #define LJ_THREAD_GCSCAN	0xffffffffu
 
 struct LJThreadLive {
