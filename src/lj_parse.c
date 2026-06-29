@@ -248,9 +248,14 @@ static BCReg const_str(FuncState *fs, ExpDesc *e)
 }
 
 /* Anchor string constant to avoid GC. */
-static LJ_AINLINE void parse_keep_wait_no_l(void)
+static LJ_AINLINE void parse_keep_wait(lua_State *L)
 {
-  (void)lj_thr_sleep_ns(NULL, 1000000);
+  /*
+  ** Parser keep-anchor stores retry after table resize forwarding or a slot
+  ** CAS loss. Source parsing runs with a current Lua state, so keep that TG
+  ** native and safepoint-visible while waiting for the table publisher.
+  */
+  (void)lj_thr_sleep_ns(L, 1000000);
 }
 
 static void parse_keep_storebool(lua_State *L, GCtab *t, cTValue *key)
@@ -264,7 +269,7 @@ static void parse_keep_storebool(lua_State *L, GCtab *t, cTValue *key)
     if (rc == LJ_TAB_STORE_CAS_OK || rc == LJ_TAB_STORE_CAS_EXISTS)
       return;
     /* Parser anchor store saw stale/FORWARD slot. */
-    parse_keep_wait_no_l();
+    parse_keep_wait(L);
   }
 }
 
