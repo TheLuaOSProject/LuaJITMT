@@ -468,9 +468,14 @@ cTValue *lj_clib_cache_get(CLibrary *cl, GCstr *name)
   return e ? (cTValue *)&e->val : NULL;
 }
 
-static void clib_cache_publish_wait_no_l(void)
+static void clib_cache_publish_wait(lua_State *L)
 {
-  (void)lj_thr_sleep_ns(NULL, 1000000);
+  /*
+  ** CLibrary cache publication is a short CAS window. Wait as native time for
+  ** the current TG, so safepoint handshakes can observe a cache-fill loser
+  ** while another mutator publishes the winning side entry.
+  */
+  (void)lj_thr_sleep_ns(L, 1000000);
 }
 
 CLibCacheEntry *lj_clib_cache_retired_head_acq(global_State *g)
@@ -581,7 +586,7 @@ static TValue *clib_cache_publish(lua_State *L, CLibrary *cl, GCstr *name,
       lj_gc_pubroot(L, &e->val);
       return &e->val;
     }
-    clib_cache_publish_wait_no_l();
+    clib_cache_publish_wait(L);
   }
 }
 
