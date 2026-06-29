@@ -29,8 +29,8 @@ Save LuaJIT bytecode: luajit -b[options] input output
   -l        Only list bytecode.
   -s        Strip debug info (default).
   -g        Keep debug info.
-  -W        Generate 32 bit (non-GC64) bytecode.
-  -X        Generate 64 bit (GC64) bytecode.
+  -W        Generate stock 32 bit/non-GC64 bytecode (not loadable here).
+  -X        Generate native x86-64 GC64 bytecode.
   -d        Generate bytecode in deterministic manner.
   -n name   Set module name (default: auto-detect from input name).
   -t type   Set output file type (default: auto-detect from output name).
@@ -634,4 +634,3 @@ end
 return {
   start = docmd -- Process -b command line option.
 }
-
