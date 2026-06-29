@@ -3184,7 +3184,11 @@ static void asm_prof(ASMState *as, IRIns *ir)
   UNUSED(ir);
   asm_guardcc(as, CC_NE);
   emit_i8(as, HOOK_PROFILE);
+#if LJ_PROFILE_TGLOCAL
+  emit_rmro(as, XO_GROUP3b, XOg_TEST, RID_DISPATCH, DISPATCH_TG(hookmask_th));
+#else
   emit_rma(as, XO_GROUP3b, XOg_TEST, &J2G(as->J)->hookmask);
+#endif
 }
 
 /* -- Stack handling ------------------------------------------------------ */

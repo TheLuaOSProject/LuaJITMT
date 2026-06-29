@@ -31,6 +31,9 @@
 #include "lj_asm.h"
 #include "lj_safepoint.h"
 #include "lj_dispatch.h"
+#if LJ_HASPROFILE
+#include "lj_profile.h"
+#endif
 #include "lj_vm.h"
 #include "lj_vmevent.h"
 #include "lj_target.h"
@@ -1686,7 +1689,9 @@ int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr)
 
   if (exitcode) copyTV(L, L->top++, &exiterr);  /* Anchor the error object. */
 
-  if (!(LJ_HASPROFILE && (hookmask_load(G(L)) & HOOK_PROFILE)))
+#if LJ_HASPROFILE
+  if (!lj_profile_pending(L))
+#endif
     lj_vmevent_send(G(L), TEXIT,
       lj_state_checkstack(V, 4+RID_NUM_GPR+RID_NUM_FPR+LUA_MINSTACK);
       setintV(V->top++, parent);
@@ -1699,8 +1704,10 @@ int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr)
   setcframe_pc(cf, pc);
   if (exitcode) {
     return -exitcode;
-  } else if (LJ_HASPROFILE && (hookmask_load(G(L)) & HOOK_PROFILE)) {
+#if LJ_HASPROFILE
+  } else if (lj_profile_pending(L)) {
     /* Just exit to interpreter. */
+#endif
   } else if (G(L)->gc.state == GCSatomic || G(L)->gc.state == GCSfinalize) {
     if (!(hookmask_load(G(L)) & HOOK_GC))
       lj_gc_step(L);  /* Exited because of GC: drive GC forward. */

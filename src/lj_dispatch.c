@@ -186,7 +186,9 @@ static uint8_t dispatch_state_mode(global_State *g
   mode |= (J->flags & JIT_F_ON) ? DISPMODE_JIT : 0;
 #endif
 #if LJ_HASPROFILE
+#if !LJ_PROFILE_TGLOCAL
   mode |= (hookmask & HOOK_PROFILE) ? (DISPMODE_PROF|DISPMODE_INS) : 0;
+#endif
 #endif
   mode |= (hookmask & (LUA_MASKLINE|LUA_MASKCOUNT)) ? DISPMODE_INS : 0;
   mode |= (hookmask & LUA_MASKCALL) ? DISPMODE_CALL : 0;

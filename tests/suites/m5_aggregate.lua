@@ -34,6 +34,7 @@ local m5_concurrent_cases = {
   "m5_hookmask_atomic",
   "m5_hook_state_atomic",
   "m5_profile_stop_native",
+  "m5_profile_blocked_tg_samples",
   "m5_gc_total_atomic",
   "m5_gc2_pacing_atomic",
   "m5_proto_kgc_acq",

@@ -27,6 +27,9 @@
 #include "lj_snap.h"
 #include "lj_asm.h"
 #include "lj_dispatch.h"
+#if LJ_HASPROFILE
+#include "lj_profile.h"
+#endif
 #include "lj_vm.h"
 #include "lj_target.h"
 #include "lj_prng.h"

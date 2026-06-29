@@ -11,10 +11,12 @@
 #include "lj_buf.h"
 #include "lj_dispatch.h"
 #include "lj_gc2.h"
+#include "lj_profile.h"
 #include "lj_prng.h"
 #include "lj_safepoint.h"
 #include "lj_tg.h"
 #include "lj_thr.h"
+#include "lj_vm.h"
 
 static void tg_init_ssb(TGState *tg)
 {
@@ -37,6 +39,7 @@ static void tg_init_common(global_State *g, TGState *tg, lua_State *L)
   lj_tg_store_cur_L(tg, L);
   lj_tg_store_thread_L(tg, L);
   tg->vmstate = ~LJ_VMST_INTERP;
+  tg->profile_vmstate = 'N';
   tg->prng = g->prng;
   tg_init_ssb(tg);
   lj_buf_init(NULL, &tg->tmpbuf);
@@ -261,10 +264,27 @@ TGState *lj_tg_find_owner(global_State *g, uint32_t owner_tid)
 	 g->main_tg : NULL;
 }
 
+#if LJ_PROFILE_TGLOCAL
+static void tg_profile_overlay(TGState *tg)
+{
+  if (lj_tg_hookmask_load(tg) & HOOK_PROFILE) {
+    uint32_t i;
+    for (i = 0; i < BC_FUNCF; i++)
+      tg->dispatch[i] = lj_vm_profhook;
+    for (i = BC_CNEW; i <= BC_CSET; i++)
+      tg->dispatch[i] = lj_vm_profhook;
+  }
+}
+#endif
+
 void lj_tg_sync_dispatch_tg(global_State *g, TGState *tg)
 {
-  if (g && tg)
+  if (g && tg) {
     memcpy(tg->dispatch, G2GG(g)->dispatch, sizeof(tg->dispatch));
+#if LJ_PROFILE_TGLOCAL
+    tg_profile_overlay(tg);
+#endif
+  }
 }
 
 void lj_tg_sync_dispatch(global_State *g)

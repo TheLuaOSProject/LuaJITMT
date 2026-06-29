@@ -23,6 +23,7 @@
 #include "lj_trace.h"
 #endif
 #include "lj_profile.h"
+#include "lj_vm.h"
 
 #include "luajit.h"
 
@@ -145,6 +146,7 @@ static LJ_AINLINE int profile_state_active_g(ProfileState *ps, global_State *g)
 	 profile_g_load_acq(ps) == g;
 }
 
+#if !LJ_PROFILE_TGLOCAL
 static int profile_callback_enter(ProfileState *ps, global_State *g)
 {
   if (!profile_state_active_g(ps, g))
@@ -158,6 +160,25 @@ static int profile_callback_enter(ProfileState *ps, global_State *g)
   la_store32_rel(&ps->callback_tid, 0);
   return 0;
 }
+#endif
+
+static void profile_callback_leave(ProfileState *ps);
+
+#if LJ_PROFILE_TGLOCAL
+static int profile_callback_tryenter(ProfileState *ps, global_State *g)
+{
+  uint32_t old = 0;
+  if (!profile_state_active_g(ps, g))
+    return 0;
+  if (!la_cas32(&ps->callbacks, &old, 1, LA_ACQ_REL, LA_ACQ))
+    return 0;
+  la_store32_rel(&ps->callback_tid, lj_thr_current_id(g));
+  if (profile_state_active_g(ps, g))
+    return 1;
+  profile_callback_leave(ps);
+  return 0;
+}
+#endif
 
 static void profile_callback_leave(ProfileState *ps)
 {
@@ -222,18 +243,22 @@ static LJ_AINLINE void profile_vmstate_store_rel(ProfileState *ps,
   la_store32_rel((uint32_t *)&ps->vmstate, (uint32_t)vmstate);
 }
 
-static int32_t profile_sample_vmstate(global_State *g)
+static int32_t profile_sample_vmstate_tg(global_State *g, TGState *tg)
 {
-  TGState *tg = G2TG(g);
   int32_t st;
-  if (tg && lj_tg_vmstate_load_acq(tg) >= 0)
-    return 'N';
-  st = vmstate_load_acq(g);
+  st = tg ? lj_tg_vmstate_load_acq(tg) : vmstate_load_acq(g);
   return st >= 0 ? 'N' :
 	 st == ~LJ_VMST_INTERP ? 'I' :
 	 st == ~LJ_VMST_C ? 'C' :
 	 st == ~LJ_VMST_GC ? 'G' : 'J';
 }
+
+#if !LJ_PROFILE_TGLOCAL
+static int32_t profile_sample_vmstate(global_State *g)
+{
+  return profile_sample_vmstate_tg(g, G2TG(g));
+}
+#endif
 
 /* -- Profiler/hook interaction ------------------------------------------- */
 
@@ -249,13 +274,82 @@ void LJ_FASTCALL lj_profile_hook_leave(global_State *g)
 }
 #endif
 
+/* -- Per-TG profile dispatch for POSIX signal timers --------------------- */
+
+#if LJ_PROFILE_TGLOCAL
+static void profile_tg_setins(TGState *tg, ASMFunction f)
+{
+  uint32_t i;
+  for (i = 0; i < BC_FUNCF; i++)
+    tg->dispatch[i] = f;
+  for (i = BC_CNEW; i <= BC_CSET; i++)
+    tg->dispatch[i] = f;
+}
+
+static void profile_tg_sethook(TGState *tg)
+{
+  profile_tg_setins(tg, lj_vm_profhook);
+}
+
+static void profile_tg_clearhook(lua_State *L, TGState *tg)
+{
+  lj_tg_hookmask_update(tg, HOOK_PROFILE, 0);
+  lj_dispatch_update(G(L), 1);
+}
+
+static void profile_tg_drop_all(global_State *g)
+{
+  TGState *tg;
+  for (tg = gc2_tg_list_acq(g); tg != NULL; tg = lj_tg_next_acq(tg)) {
+    lj_tg_hookmask_update(tg, HOOK_PROFILE, 0);
+    (void)lj_tg_profile_samples_xchg(tg, 0);
+    lj_tg_profile_vmstate_store_rel(tg, 'N');
+  }
+}
+
+static int profile_tg_eligible(global_State *g, TGState *tg)
+{
+  return tg && tg->gl == g && !lj_tg_flags_test_acq(tg, TGF_DEAD);
+}
+#endif
+
 /* -- Profile callbacks --------------------------------------------------- */
 
-/* Callback from profile hook (HOOK_PROFILE already cleared). */
+/* Callback from profile hook. */
 void LJ_FASTCALL lj_profile_interpreter(lua_State *L)
 {
   ProfileState *ps = &profile_state;
   global_State *g = G(L);
+#if LJ_PROFILE_TGLOCAL
+  TGState *tg = L2TG(L);
+  uint32_t samples;
+  int32_t vmstate;
+  uint8_t saved;
+  if (!profile_tg_eligible(g, tg) || !(lj_tg_hookmask_load(tg) & HOOK_PROFILE))
+    return;
+  if (!profile_state_active_g(ps, g)) {
+    profile_tg_clearhook(L, tg);  /* Drop stale profile hooks. */
+    (void)lj_tg_profile_samples_xchg(tg, 0);
+    lj_tg_profile_vmstate_store_rel(tg, 'N');
+    return;
+  }
+  if (!hookmask_profile_enter(g, &saved)) {
+    profile_tg_clearhook(L, tg);
+    return;
+  }
+  profile_tg_clearhook(L, tg);
+  samples = lj_tg_profile_samples_xchg(tg, 0);
+  vmstate = lj_tg_profile_vmstate_load_acq(tg);
+  if (samples != 0) {
+    luaJIT_profile_callback cb = profile_cb_load_acq(ps);
+    void *data = profile_data_load_acq(ps);
+    if (cb && profile_callback_tryenter(ps, g)) {
+      cb(data, L, (int)samples, (int)vmstate);  /* Invoke user callback. */
+      profile_callback_leave(ps);
+    }
+  }
+  hookmask_profile_leave(g, saved);
+#else
   uint8_t saved;
   if (!profile_state_active_g(ps, g)) {
     hookmask_update(g, HOOK_PROFILE, 0);  /* Drop stale profile hooks. */
@@ -275,6 +369,17 @@ void LJ_FASTCALL lj_profile_interpreter(lua_State *L)
     hookmask_profile_leave(g, saved);
   }
   lj_dispatch_update(g, 1);
+#endif
+}
+
+int lj_profile_pending(lua_State *L)
+{
+#if LJ_PROFILE_TGLOCAL
+  TGState *tg = L2TG(L);
+  return tg && (lj_tg_hookmask_load(tg) & HOOK_PROFILE);
+#else
+  return hookmask_load(G(L)) & HOOK_PROFILE;
+#endif
 }
 
 /* Trigger profile hook. Asynchronous call from OS-specific profile timer. */
@@ -283,6 +388,20 @@ static void profile_trigger(ProfileState *ps)
   global_State *g = profile_g_load_acq(ps);
   int st;
   if (!g || !profile_state_active_g(ps, g)) return;
+#if LJ_PROFILE_TGLOCAL
+  {
+    TGState *tg = lj_thr_get_tg();
+    if (!profile_tg_eligible(g, tg))
+      return;
+    lj_tg_profile_samples_add(tg, 1);
+    st = profile_sample_vmstate_tg(g, tg);
+    lj_tg_profile_vmstate_store_rel(tg, st);
+    if (hookmask_load(g) & (HOOK_VMEVENT|HOOK_GC))
+      return;
+    if (lj_tg_hookmask_set_if_clear(tg, HOOK_PROFILE, HOOK_PROFILE))
+      profile_tg_sethook(tg);
+  }
+#else
   if (gc2_n_threads_acq(g) > 1) return;  /* POSIX timer lacks per-TG routing. */
   profile_samples_add(ps, 1);  /* Always increment number of samples. */
   st = profile_sample_vmstate(g);
@@ -292,6 +411,7 @@ static void profile_trigger(ProfileState *ps)
 			    HOOK_PROFILE)) {
     lj_dispatch_update(g, 2);  /* Async timer/signal path must not spin. */
   }
+#endif
 }
 
 /* -- OS-specific profile timer handling ---------------------------------- */
@@ -487,6 +607,9 @@ LUA_API void luaJIT_profile_start(lua_State *L, const char *mode,
   profile_data_store_rel(ps, data);
   (void)profile_samples_xchg(ps, 0);
   profile_vmstate_store_rel(ps, 'N');
+#if LJ_PROFILE_TGLOCAL
+  profile_tg_drop_all(g);
+#endif
   lj_buf_init(L, &ps->sb);
   profile_g_store_rel(ps, g);
   profile_timer_start(ps);
@@ -520,6 +643,9 @@ uint32_t lj_profile_stop_hs(lua_State *L)
     profile_state_wait_l(L, ps, state);
   }
   actions = profile_timer_stop(ps, L);
+#if LJ_PROFILE_TGLOCAL
+  profile_tg_drop_all(g);
+#endif
   hookmask_update(g, HOOK_PROFILE, 0);
   lj_dispatch_update(g, 0);
   actions |= profile_callbacks_wait(L, ps);

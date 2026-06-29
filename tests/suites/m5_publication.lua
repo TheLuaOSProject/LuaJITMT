@@ -573,6 +573,18 @@ return function(add)
   })
 
   add({
+    name = "m5_profile_blocked_tg_samples",
+    description = "jit.profile sample delivery with another TG blocked",
+    run = function(t)
+      t:build({ quiet = true })
+      build_and_run_luajit_script(t, "t-profile-blocked-tg.lua", nil,
+                                  { build = false, joff = true,
+                                    timeout = "20s" })
+      print("M5 jit.profile blocked TG sample delivery passed")
+    end
+  })
+
+  add({
     name = "m5_gc_total_atomic",
     description = "GC total atomic accounting helper behavior",
     run = function(t)

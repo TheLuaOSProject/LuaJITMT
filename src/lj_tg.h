@@ -61,6 +61,8 @@ struct TGState {
   TValue *jit_base;
   int jit_exitcode;
   int32_t vmstate;
+  uint32_t profile_samples;
+  int32_t profile_vmstate;
   uint8_t in_native;
   uint8_t gc_assist;
   uint8_t hookmask_th;
@@ -126,6 +128,60 @@ static LJ_AINLINE void lj_tg_gc_assist_store_rlx(TGState *tg,
 						 uint8_t gc_assist)
 {
   la_store8_rlx(&tg->gc_assist, gc_assist);
+}
+
+static LJ_AINLINE uint8_t lj_tg_hookmask_load(const TGState *tg)
+{
+  return la_load8_acq(&tg->hookmask_th);
+}
+
+static LJ_AINLINE uint8_t lj_tg_hookmask_update(TGState *tg, uint8_t clear,
+						uint8_t set)
+{
+  uint8_t old = lj_tg_hookmask_load(tg);
+  for (;;) {
+    uint8_t next = (uint8_t)((old & (uint8_t)~clear) | set);
+    if (la_cas8(&tg->hookmask_th, &old, next, LA_ACQ_REL, LA_ACQ))
+      return next;
+  }
+}
+
+static LJ_AINLINE int lj_tg_hookmask_set_if_clear(TGState *tg,
+						  uint8_t blocked,
+						  uint8_t set)
+{
+  uint8_t old = lj_tg_hookmask_load(tg);
+  for (;;) {
+    uint8_t next;
+    if ((old & blocked))
+      return 0;
+    next = (uint8_t)(old | set);
+    if (la_cas8(&tg->hookmask_th, &old, next, LA_ACQ_REL, LA_ACQ))
+      return 1;
+  }
+}
+
+static LJ_AINLINE uint32_t lj_tg_profile_samples_xchg(TGState *tg,
+						      uint32_t samples)
+{
+  return la_xchg32_acqrel(&tg->profile_samples, samples);
+}
+
+static LJ_AINLINE void lj_tg_profile_samples_add(TGState *tg,
+						 uint32_t samples)
+{
+  (void)la_add32_rlx(&tg->profile_samples, samples);
+}
+
+static LJ_AINLINE int32_t lj_tg_profile_vmstate_load_acq(TGState *tg)
+{
+  return (int32_t)la_load32_acq((uint32_t *)&tg->profile_vmstate);
+}
+
+static LJ_AINLINE void lj_tg_profile_vmstate_store_rel(TGState *tg,
+						       int32_t vmstate)
+{
+  la_store32_rel((uint32_t *)&tg->profile_vmstate, (uint32_t)vmstate);
 }
 
 static LJ_AINLINE uint32_t lj_tg_mark_active_acq(const TGState *tg)
