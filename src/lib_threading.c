@@ -166,48 +166,6 @@ static GCtab *threading_env_from_module(lua_State *L, GCtab *mod)
   return NULL;
 }
 
-static GCtab *threading_loaded_env(lua_State *L)
-{
-  GCtab *reg = lj_registry_tab_acq(G(L));
-  cTValue *tv = lj_tab_getstr(reg, lj_str_newlit(L, "_LOADED"));
-  if (tv) {
-    TValue loaded;
-    lj_tv_load_acq(&loaded, tv);
-    if (tvistab(&loaded)) {
-      tv = lj_tab_getstr(tabV(&loaded), lj_str_newlit(L, LUA_THREADINGLIBNAME));
-      if (tv) {
-	TValue mod;
-	lj_tv_load_acq(&mod, tv);
-	if (tvistab(&mod))
-	  return threading_env_from_module(L, tabV(&mod));
-      }
-    }
-  }
-  return NULL;
-}
-
-static GCtab *threading_ensure_env(lua_State *L)
-{
-  global_State *g = G(L);
-  GCobj *o = lj_gcroot_acq(g, GCROOT_THREADING_ENV);
-  GCtab *env = o && o->gch.gct == ~LJ_TTAB ? gco2tab(o) : NULL;
-  if (!env) {
-    TValue *top = L->top;
-    env = threading_loaded_env(L);
-    if (!env) {
-      (void)luaopen_threading(L);
-      env = threading_loaded_env(L);
-      if (!env && L->top > top && tvistab(L->top-1))
-	env = threading_env_from_module(L, tabV(L->top-1));
-      L->top = top;
-    }
-    if (!env)
-      lj_err_callermsg(L, "threading library unavailable");
-    lj_gcroot_rel(g, GCROOT_THREADING_ENV, obj2gco(env));
-  }
-  return env;
-}
-
 static void threading_state_set_ud(lua_State *L, lua_State *L1, GCudata *ud)
 {
   lj_state_mt_thread_rel(L1, ud);
@@ -264,17 +222,6 @@ static int64_t threading_timeout_ns(lua_State *L, int narg, int has_default,
     nsec = sec * 1000000000.0;
     return nsec > (lua_Number)INT64_MAX ? INT64_MAX : (int64_t)nsec;
   }
-}
-
-static int64_t threading_capi_timeout_ns(lua_Number sec)
-{
-  lua_Number nsec;
-  if (sec < 0)
-    return -1;
-  if (sec == 0)
-    return 0;
-  nsec = sec * 1000000000.0;
-  return nsec > (lua_Number)INT64_MAX ? INT64_MAX : (int64_t)nsec;
 }
 
 static void threading_wake_thread(LJThread *th)
@@ -574,24 +521,6 @@ static int threading_tg_is_registered(global_State *g, TGState *target)
       return 1;
   }
   return 0;
-}
-
-static LJThread *threading_thread_from_state(lua_State *L, lua_State *child)
-{
-  GCobj *o;
-  if (!child || G(child) != G(L))
-    lj_err_callermsg(L, "bad child thread");
-  o = lj_state_mt_thread_acq(child);
-  if (o && o->gch.gct == ~LJ_TUDATA) {
-    GCudata *ud = gco2ud(o);
-    if (lj_udata_udtype_acq(ud) == UDTYPE_THREAD) {
-      LJThread *th = (LJThread *)uddata(ud);
-      if (lj_thread_state_load_acq(th) == child)
-	return th;
-    }
-  }
-  lj_err_callermsg(L, "child thread is not joinable");
-  return NULL;  /* unreachable */
 }
 
 static uint32_t threading_join_claim_results(lua_State *L, lua_State *child,
@@ -1443,39 +1372,6 @@ LJLIB_CF(threading_channel)
   return 1;
 }
 
-LUA_API lua_State *luaMT_spawn(lua_State *L, int nargs)
-{
-  ptrdiff_t baseofs;
-  TValue *base;
-  GCtab *env;
-  lua_State *L1;
-  if (nargs < 0 || L->top - L->base <= nargs)
-    lj_err_callermsg(L, "function expected");
-  baseofs = (L->top - L->base) - (ptrdiff_t)nargs - 1;
-  env = threading_ensure_env(L);
-  base = L->base + baseofs;
-  if (!tvisfunc(base))
-    lj_err_callermsg(L, "function expected");
-  L1 = threading_spawn_core(L, env, base, (ptrdiff_t)nargs);
-  base = L->base + baseofs;
-  copyTV(L, base, L->top-2);  /* Leave the child Lua thread for rooting. */
-  L->top = base + 1;
-  return L1;
-}
-
-LUA_API int luaMT_join(lua_State *L, lua_State *child, lua_Number timeout)
-{
-  LJThread *th = threading_thread_from_state(L, child);
-  int has_timeout = timeout >= 0;
-  return threading_join_core(L, th, has_timeout,
-			     threading_capi_timeout_ns(timeout));
-}
-
-LUA_API void luaMT_fence(void)
-{
-  lj_thr_fence();
-}
-
 int lj_threading_attach(lua_State *L)
 {
   global_State *g;
@@ -1530,11 +1426,6 @@ int lj_threading_attach(lua_State *L)
   return 1;
 }
 
-LUA_API int luaMT_attach(lua_State *L)
-{
-  return lj_threading_attach(L);
-}
-
 void lj_threading_detach(lua_State *L, int disown_callbacks)
 {
   global_State *g;
@@ -1558,11 +1449,6 @@ void lj_threading_detach(lua_State *L, int disown_callbacks)
   threading_gc_leave(g);
   lj_thr_set_tg(NULL);
   (void)lj_tg_reclaim_dead(g);
-}
-
-LUA_API void luaMT_detach(lua_State *L)
-{
-  lj_threading_detach(L, 1);
 }
 
 #include "lj_libdef.h"

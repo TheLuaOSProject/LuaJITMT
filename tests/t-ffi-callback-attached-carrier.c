@@ -53,7 +53,7 @@ static void *attached_worker(void *arg)
 {
   CarrierCtx *ctx = (CarrierCtx *)arg;
   TGState *tg;
-  if (!luaMT_attach(ctx->L)) {
+  if (!lj_threading_attach(ctx->L)) {
     ctx->status = 1;
     return NULL;
   }
@@ -61,7 +61,7 @@ static void *attached_worker(void *arg)
   ctx->tid = tg ? tg->tid : 0;
   ctx->result = saved_cb(1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
   ctx->depth = tg ? ccallback_depth_acq(&tg->cb) : ~(MSize)0;
-  luaMT_detach(ctx->L);
+  lj_threading_detach(ctx->L, 1);
   ctx->status = 0;
   return NULL;
 }

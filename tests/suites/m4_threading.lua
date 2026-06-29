@@ -33,14 +33,6 @@ return function(add)
       message = "M4 channel stress tests passed"
     },
     {
-      name = "m4_threading_capi",
-      description = "public C threading API behavior fixture",
-      output = "lj_t-threading-capi",
-      cfile = "t-threading-capi.c",
-      opts = { timeout = "20s" },
-      message = "M4 public C threading API tests passed"
-    },
-    {
       name = "m4_threading_spawn_native",
       description = "threading.spawn pthread_create native STOPREQ fixture",
       output = "lj_t-threading-spawn-native",

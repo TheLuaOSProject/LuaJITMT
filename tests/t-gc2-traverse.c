@@ -215,7 +215,7 @@ static void *weak_peer_write_thread(void *arg)
   WeakPeerWriteCtx *ctx = (WeakPeerWriteCtx *)arg;
   lua_State *L = ctx->L;
   grey_wait(&ctx->barrier);
-  if (!luaMT_attach(L)) {
+  if (!lj_threading_attach(L)) {
     ctx->status = 1;
     return NULL;
   }
@@ -225,11 +225,11 @@ static void *weak_peer_write_thread(void *arg)
   lua_pushvalue(L, 4);
   if (lua_pcall(L, 3, 0, 0) != LUA_OK) {
     lua_pop(L, 1);
-    luaMT_detach(L);
+    lj_threading_detach(L, 1);
     ctx->status = 2;
     return NULL;
   }
-  luaMT_detach(L);
+  lj_threading_detach(L, 1);
   ctx->status = 0;
   return NULL;
 }

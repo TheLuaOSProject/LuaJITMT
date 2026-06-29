@@ -12,6 +12,8 @@
 #include "lauxlib.h"
 #include "lualib.h"
 
+#include "lj_thr.h"
+
 #define READERS 3
 #define WRITES 512
 #define MIN_READS 256
@@ -140,7 +142,7 @@ static void *writer_main(void *arg)
   lua_State *L = ctx->L;
   int i;
 
-  if (!luaMT_attach(L)) {
+  if (!lj_threading_attach(L)) {
     ctx->status = 1;
     store_flag(ctx->done, 1);
     return NULL;
@@ -149,7 +151,7 @@ static void *writer_main(void *arg)
   if (!lua_isfunction(L, 1) || !lua_checkstack(L, 8)) {
     ctx->status = 2;
     store_flag(ctx->done, 1);
-    luaMT_detach(L);
+    lj_threading_detach(L, 1);
     return NULL;
   }
 
@@ -165,7 +167,7 @@ static void *writer_main(void *arg)
     if (name == NULL || lua_gettop(L) != 1) {
       ctx->status = 3;
       store_flag(ctx->done, 1);
-      luaMT_detach(L);
+      lj_threading_detach(L, 1);
       return NULL;
     }
 
@@ -177,7 +179,7 @@ static void *writer_main(void *arg)
 
   ctx->status = 0;
   store_flag(ctx->done, 1);
-  luaMT_detach(L);
+  lj_threading_detach(L, 1);
   return NULL;
 }
 
@@ -187,14 +189,14 @@ static void *reader_main(void *arg)
   lua_State *L = ctx->L;
   long calls = 0;
 
-  if (!luaMT_attach(L)) {
+  if (!lj_threading_attach(L)) {
     ctx->status = 1;
     return NULL;
   }
 
   if (!lua_isfunction(L, 1) || !lua_checkstack(L, 8)) {
     ctx->status = 2;
-    luaMT_detach(L);
+    lj_threading_detach(L, 1);
     return NULL;
   }
 
@@ -210,14 +212,14 @@ static void *reader_main(void *arg)
     if (status != LUA_OK) {
       fprintf(stderr, "reader %d: %s\n", ctx->id, lua_tostring(L, -1));
       ctx->status = 3;
-      luaMT_detach(L);
+      lj_threading_detach(L, 1);
       return NULL;
     }
 
     seq = (int)lua_tointeger(L, -1);
     if (seq < 0 || seq > WRITES) {
       ctx->status = 4;
-      luaMT_detach(L);
+      lj_threading_detach(L, 1);
       return NULL;
     }
     lua_pop(L, 1);
@@ -226,7 +228,7 @@ static void *reader_main(void *arg)
     if ((calls & 255) == 0) {
       if (lua_gettop(L) != 1) {
 	ctx->status = 5;
-	luaMT_detach(L);
+	lj_threading_detach(L, 1);
 	return NULL;
       }
       lua_gc(L, LUA_GCSTEP, 16);
@@ -236,7 +238,7 @@ static void *reader_main(void *arg)
 
   ctx->calls = calls;
   ctx->status = 0;
-  luaMT_detach(L);
+  lj_threading_detach(L, 1);
   return NULL;
 }
 

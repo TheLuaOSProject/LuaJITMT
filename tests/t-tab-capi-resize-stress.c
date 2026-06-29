@@ -12,6 +12,8 @@
 #include "lauxlib.h"
 #include "lualib.h"
 
+#include "lj_thr.h"
+
 #define WORKERS 4
 #define ITERS 2500
 
@@ -54,14 +56,14 @@ static void *worker_main(void *arg)
   int id = ctx->id;
   int i;
 
-  if (!luaMT_attach(L)) {
+  if (!lj_threading_attach(L)) {
     ctx->status = 1;
     return NULL;
   }
 
   if (!lua_istable(L, 1) || !lua_checkstack(L, 16)) {
     ctx->status = 2;
-    luaMT_detach(L);
+    lj_threading_detach(L, 1);
     return NULL;
   }
 
@@ -113,12 +115,12 @@ static void *worker_main(void *arg)
 
     if ((i & 255) == 0 && lua_gettop(L) != 1) {
       ctx->status = 3;
-      luaMT_detach(L);
+      lj_threading_detach(L, 1);
       return NULL;
     }
   }
 
-  luaMT_detach(L);
+  lj_threading_detach(L, 1);
   ctx->status = 0;
   return NULL;
 }
