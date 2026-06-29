@@ -486,7 +486,7 @@ static void debug_activelines_storebool(lua_State *L, GCtab *t, int32_t line)
     if (lj_tab_trystoretv_cas_keyed(L, t, dst, &key, &tv) ==
 	LJ_TAB_STORE_CAS_OK)
       return;
-    lj_tab_store_wait_no_l();  /* debug activelines store saw stale/FORWARD slot. */
+    lj_tab_store_wait_l(L);  /* debug activelines store saw stale/FORWARD slot. */
   }
 }
 

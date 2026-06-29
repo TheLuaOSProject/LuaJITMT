@@ -1576,7 +1576,7 @@ static void ffi_typeinfo_storeint(lua_State *L, GCtab *tab, GCstr *key,
     if (lj_tab_trystoretv_cas_keyed(L, tab, dst, &keytv, &tv) ==
 	LJ_TAB_STORE_CAS_OK)
       return;
-    lj_tab_store_wait_no_l();  /* FFI typeinfo int store saw stale/FORWARD slot. */
+    lj_tab_store_wait_l(L);  /* FFI typeinfo int store saw stale/FORWARD slot. */
   }
 }
 
@@ -1591,7 +1591,7 @@ static void ffi_typeinfo_storestr(lua_State *L, GCtab *tab, GCstr *key,
     if (lj_tab_trystoretv_cas_keyed(L, tab, dst, &keytv, &tv) ==
 	LJ_TAB_STORE_CAS_OK)
       return;
-    lj_tab_store_wait_no_l();  /* FFI typeinfo string store saw stale/FORWARD slot. */
+    lj_tab_store_wait_l(L);  /* FFI typeinfo string store saw stale/FORWARD slot. */
   }
 }
 
@@ -2719,7 +2719,7 @@ static TValue *ffi_loaded_store(lua_State *L, GCtab *t, GCstr *name,
     if (lj_tab_trystoretv_cas_keyed(L, t, dst, &keytv, src) ==
 	LJ_TAB_STORE_CAS_OK)
       return dst;
-    lj_tab_store_wait_no_l();  /* FFI module registry saw stale/FORWARD slot. */
+    lj_tab_store_wait_l(L);  /* FFI module registry saw stale/FORWARD slot. */
   }
 }
 
@@ -2734,7 +2734,7 @@ static TValue *ffi_miscmap_store(lua_State *L, CTState *cts, GCstr *key,
     if (lj_tab_trystoretv_cas_keyed(L, miscmap, dst, &keytv, src) ==
 	LJ_TAB_STORE_CAS_OK)
       return dst;
-    lj_tab_store_wait_no_l();  /* FFI miscmap store saw stale/FORWARD slot. */
+    lj_tab_store_wait_l(L);  /* FFI miscmap store saw stale/FORWARD slot. */
   }
 }
 

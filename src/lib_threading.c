@@ -225,7 +225,7 @@ static TValue *threading_storeudata_str(lua_State *L, GCtab *env, GCstr *key,
     if (lj_tab_trystoretv_cas_keyed(L, env, dst, &keytv, &tv) ==
 	LJ_TAB_STORE_CAS_OK)
       return dst;
-    lj_tab_store_wait_no_l();  /* threading env store saw stale/FORWARD slot. */
+    lj_tab_store_wait_l(L);  /* threading env store saw stale/FORWARD slot. */
   }
 }
 
@@ -852,7 +852,7 @@ static TValue *threading_gc_stats_storetv_str(lua_State *L, GCtab *t,
     if (lj_tab_trystoretv_cas_keyed(L, t, dst, &keytv, src) ==
 	LJ_TAB_STORE_CAS_OK)
       return dst;
-    lj_tab_store_wait_no_l();  /* GC stats string store saw stale/FORWARD slot. */
+    lj_tab_store_wait_l(L);  /* GC stats string store saw stale/FORWARD slot. */
   }
 }
 
@@ -866,7 +866,7 @@ static TValue *threading_gc_stats_storetv_int(lua_State *L, GCtab *t,
     if (lj_tab_trystoretv_cas_keyed(L, t, dst, &keytv, src) ==
 	LJ_TAB_STORE_CAS_OK)
       return dst;
-    lj_tab_store_wait_no_l();  /* GC stats int store saw stale/FORWARD slot. */
+    lj_tab_store_wait_l(L);  /* GC stats int store saw stale/FORWARD slot. */
   }
 }
 

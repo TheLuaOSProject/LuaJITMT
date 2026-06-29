@@ -805,7 +805,7 @@ static void base_storestr_str(lua_State *L, GCtab *tab, GCstr *key, GCstr *val)
     if (lj_tab_trystoretv_cas_keyed(L, tab, dst, &keytv, &tv) ==
 	LJ_TAB_STORE_CAS_OK)
       return;
-    lj_tab_store_wait_no_l();  /* Base string store saw stale/FORWARD slot. */
+    lj_tab_store_wait_l(L);  /* Base string store saw stale/FORWARD slot. */
   }
 }
 
@@ -829,7 +829,7 @@ static void base_storetab_str(lua_State *L, GCtab *tab, GCstr *key, GCtab *val)
     if (lj_tab_trystoretv_cas_keyed(L, tab, dst, &keytv, &tv) ==
 	LJ_TAB_STORE_CAS_OK)
       return;
-    lj_tab_store_wait_no_l();  /* Base table store saw stale/FORWARD slot. */
+    lj_tab_store_wait_l(L);  /* Base table store saw stale/FORWARD slot. */
   }
 }
 
