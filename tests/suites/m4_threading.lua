@@ -26,6 +26,18 @@ return function(add)
       description = "coroutine yield/resume handoff across OS threads under -joff",
       script = "t-threading-coroutine.lua",
       opts = { joff = true, timeout = "30s" }
+    },
+    {
+      name = "m4_threading_hooks",
+      description = "debug hook redispatch across live OS threads",
+      script = "t-threading-hooks.lua",
+      opts = { timeout = "30s" }
+    },
+    {
+      name = "m4_threading_hooks_joff",
+      description = "debug hook redispatch across live OS threads under -joff",
+      script = "t-threading-hooks.lua",
+      opts = { joff = true, timeout = "30s" }
     }
   })
 
