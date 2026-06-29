@@ -5,13 +5,12 @@
 	"remoteUser": "vscode",
 	"updateRemoteUserUID": true,
 	"image": "mcr.microsoft.com/devcontainers/base:trixie",
-	// "runArgs": [
-	// 	"--security-opt=seccomp=unconfined",
-	// 	"--security-opt=apparmor=unconfined",
-	// 	"--security-opt=label=disable",
-	// 	"--cap-add=PERFMON",
-	// 	"--cap-add=SYS_ADMIN"
-	// ],
+	"runArgs": [
+		"--security-opt=seccomp=unconfined",
+		"--security-opt=apparmor=unconfined",
+		"--cap-add=SYS_ADMIN",
+		"--device=/dev/fuse"
+	],
 	"features": {
 		"ghcr.io/devcontainers/features/common-utils:2": {
 			"installZsh": true,
@@ -29,6 +28,9 @@
 			"version": "22"
 		},
 		"./xmake": {},
+		"./mingw": {},
+		"./darling": {},
+		"./osxcross": {},
 		// // "ghcr.io/ebaskoro/devcontainer-features/emscripten:1": {},
 		// "devwasm.azurecr.io/dev-wasm/dev-wasm-feature/wasmtime-wasi:0": {
 		// 	"version": "24",

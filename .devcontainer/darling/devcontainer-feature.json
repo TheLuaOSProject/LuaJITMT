@@ -1,0 +1,26 @@
+{
+  "id": "darling",
+  "version": "1.0.0",
+  "name": "Darling",
+  "description": "Installs the minimal non-GUI Darling runtime used for command-line macOS smoke tests.",
+  "options": {
+    "release": {
+      "type": "string",
+      "default": "v0.1.20260608",
+      "description": "Darling GitHub release tag."
+    },
+    "debsDate": {
+      "type": "string",
+      "default": "20260608",
+      "description": "Date suffix used by the Darling debs_<date>.zip asset."
+    },
+    "debsSha256": {
+      "type": "string",
+      "default": "27469ef3932da2e91dd7fb34b70e3628a3e54b7af9fb5480051f44af35eca1fd",
+      "description": "SHA-256 checksum for the Darling deb zip."
+    }
+  },
+  "installsAfter": [
+    "ghcr.io/devcontainers/features/common-utils"
+  ]
+}

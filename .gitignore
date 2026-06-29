@@ -9,6 +9,7 @@
 *.manifest
 *.dmp
 *.swp
+*.xip
 .tags
 luajit-mt-report.zip
 src/.lj-test-build-signature

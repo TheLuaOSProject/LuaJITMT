@@ -1,0 +1,27 @@
+{
+  "id": "osxcross",
+  "version": "1.0.0",
+  "name": "osxcross",
+  "description": "Installs osxcross prerequisites, clones osxcross, and adds Xcode .xip SDK extraction/build helpers.",
+  "options": {
+    "installDir": {
+      "type": "string",
+      "default": "/opt/osxcross",
+      "description": "Directory where osxcross is cloned."
+    },
+    "repo": {
+      "type": "string",
+      "default": "https://github.com/tpoechtrager/osxcross.git",
+      "description": "osxcross repository URL."
+    },
+    "ref": {
+      "type": "string",
+      "default": "master",
+      "description": "osxcross branch, tag, or commit to checkout."
+    }
+  },
+  "installsAfter": [
+    "ghcr.io/devcontainers/features/common-utils",
+    "./llvm"
+  ]
+}
