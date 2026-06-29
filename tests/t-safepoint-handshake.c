@@ -332,7 +332,7 @@ static void *dispatch_update_release_thread(void *arg)
   DispatchUpdateWaitCtx *ctx = (DispatchUpdateWaitCtx *)arg;
   int i;
   for (i = 0; i < 1000; i++) {
-    if (la_load8_acq(&ctx->tg->in_native) != 0) {
+    if (lj_tg_in_native_acq(ctx->tg) != 0) {
       la_store32_rel(&ctx->saw_native, 1);
       break;
     }
@@ -362,7 +362,7 @@ static void test_dispatch_update_regular_wait(lua_State *L)
 
   assert(tg != NULL);
   assert((mode & DISPMODE_UPDATE_TEST) == 0);
-  assert(la_load8_acq(&tg->in_native) == 0);
+  assert(lj_tg_in_native_acq(tg) == 0);
   memset(&ctx, 0, sizeof(ctx));
   ctx.g = g;
   ctx.tg = tg;
@@ -376,7 +376,7 @@ static void test_dispatch_update_regular_wait(lua_State *L)
   assert(err == 0);
   assert(ctx.err == 0);
   assert(la_load32_acq(&ctx.saw_native) == 1);
-  assert(la_load8_acq(&tg->in_native) == 0);
+  assert(lj_tg_in_native_acq(tg) == 0);
   assert(dispatchmode_load_acq(g) == mode);
 }
 
