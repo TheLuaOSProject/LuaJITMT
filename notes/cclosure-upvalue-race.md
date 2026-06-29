@@ -13,12 +13,12 @@ the table, nested table, checksum, tag, and self-reference to agree. This keeps
 the check behavioral: the public API must only expose fully formed upvalue
 payloads after publication, without relying on repository source searches.
 
-The fixture intentionally leaves periodic explicit GC out of the attached
-worker hot loop. A temporary stress version with `lua_gc(..., LUA_GCSTEP, ...)`
-inside the writer/reader loop exposed a separate safepoint issue: an attached
-worker can start a GC2 handshake while a host thread is blocked in
-`pthread_join()` outside the runtime and therefore cannot acknowledge. That is a
-native-state/embedding follow-up, not part of the C-closure publication proof.
+The fixture keeps periodic explicit GC out of the attached worker hot loop so it
+stays focused on C-closure publication. Explicit active-thread `lua_gc()` from a
+real attached pthread is covered by `tests/t-gc-active-collect-assist.c`: the
+host thread brackets its raw `pthread_join()` with the runtime native boundary
+so a GC2 safepoint handshake can remote-ack the waiting host TG. That native
+wait contract is documented in `notes/threading-extension-surface.md`.
 
 Validation:
 

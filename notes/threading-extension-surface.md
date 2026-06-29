@@ -53,3 +53,25 @@ Legacy removals should stay limited to stale fork-local threading or diagnostic
 entry points. Do not remove or rename stock LuaJIT C API symbols, stock library
 options, standard FFI behavior, or stock single-threaded behavior to simplify
 the threading implementation.
+
+## Attached Host Native Waits
+
+`lj_threading_attach()` is an internal fork-local entry point for C fixtures and
+FFI callback carriers. It is not part of the stock public C API. Once a foreign
+OS thread attaches a child `lua_State`, that thread's `TGState` participates in
+GC2 safepoint handshakes until `lj_threading_detach()`.
+
+Raw host waits such as `pthread_join()` are invisible to the runtime. A host
+thread that remains attached, or owns the main Lua state, must either detach
+before a long host wait or bracket the wait with the internal native boundary
+(`lj_native_enter()` / `lj_native_leave()`). The native mark tells a GC2
+handshake that the thread is outside LuaJIT and can be acknowledged remotely.
+Without that mark, another attached worker can call `lua_gc(L, LUA_GCSTEP, 0)`,
+start a GC2 handshake, and wait for a host thread that cannot poll while blocked
+inside the OS.
+
+This does not add a public LuaJIT API and does not change stock behavior. The
+behavioral regression lives in `tests/t-gc-active-collect-assist.c`: an attached
+pthread runs explicit `lua_gc(LUA_GCSTEP)` while the host joins it from a native
+section. Runtime-owned waits, including `threading.thread:join()`, already use
+the same native boundary internally.
