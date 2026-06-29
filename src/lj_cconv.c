@@ -717,10 +717,12 @@ void lj_cconv_ct_tv_l(lua_State *L, CTState *cts, CType *d,
       lj_assertCTS(dsize == 4, "only 32 bit enum supported");  /* NYI */
       sp = (uint8_t *)&tmpenum;
     } else if (ctype_isrefarray(dinfo)) {  /* Copy string to array. */
-      CType *dc = ctype_rawchild(cts, d);
-      CTInfo dcinfo = ctype_info_acq(dc);
-      CTSize dcsize = ctype_size_acq(dc);
+      CType dcsnap;
+      CTInfo dcinfo;
+      CTSize dcsize;
       CTSize sz = str->len+1;
+      (void)cconv_rawid_wait(L, cts, ctype_cid(dinfo), did, &dcsnap,
+			     &dcinfo, &dcsize);
       if (!ctype_isinteger(dcinfo) || dcsize != 1)
 	goto err_conv;
       if (dsize != 0 && dsize < sz)
