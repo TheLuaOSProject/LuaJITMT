@@ -54,10 +54,29 @@ do
 
   do
     local oldenv = debug.getfenv(C)
-    local newenv = {}
+    local newenv = {
+      abs = function(x) return x + 2000 end,
+      LJ_M7_CLIB_CONST = 2000,
+    }
     debug.setfenv(C, newenv)
     assert(C.abs(-4) == 4)
-    assert(newenv.abs == C.abs)
+    assert(C.LJ_M7_CLIB_CONST == 73)
+    assert(newenv.abs(-4) == 1996)
+    assert(newenv.LJ_M7_CLIB_CONST == 2000)
+    assert(newenv.toupper == nil)
+    assert(C.toupper(97) == 65)
+    assert(newenv.toupper == nil)
+    if jit and jit.status() then
+      jit.flush()
+      jit.opt.start("hotloop=1", "hotexit=1")
+      local function run(n)
+	local sum = 0
+	for i = 1, n do sum = sum + C.abs(i) end
+	return sum
+      end
+      assert(run(80) == (80 * 81) / 2)
+      jit.flush()
+    end
     debug.setfenv(C, oldenv)
   end
 end
@@ -116,6 +135,17 @@ local function exercise_load_unload(rounds)
     env.abs = nil
     assert(cl.abs(-1) == 1)
     assert(env.abs == cl.abs)
+    do
+      local oldenv = debug.getfenv(cl)
+      local newenv = { abs = function(x) return "ignored", x end }
+      debug.setfenv(cl, newenv)
+      assert(cl.abs(-5) == 5)
+      assert(newenv.abs(-5) == "ignored")
+      assert(newenv.strlen == nil)
+      assert(tonumber(cl.strlen("stock")) == 5)
+      assert(newenv.strlen == nil)
+      debug.setfenv(cl, oldenv)
+    end
     cl = nil
   end)
   if not ok then return 0 end

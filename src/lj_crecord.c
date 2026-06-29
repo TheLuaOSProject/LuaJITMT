@@ -2049,7 +2049,7 @@ void LJ_FASTCALL recff_clib_index(jit_State *J, RecordFFData *rd)
   if (tref_isudata(J->base[0]) && tref_isstr(J->base[1]) &&
       lj_udata_udtype_acq(udataV(&rd->argv[0])) == UDTYPE_FFI_CLIB) {
     CLibrary *cl = (CLibrary *)uddata(udataV(&rd->argv[0]));
-    GCtab *env = lj_udata_env_acq(udataV(&rd->argv[0]));
+    GCtab *env = lj_clib_cache_env_acq(cl);
     GCstr *name = strV(&rd->argv[1]);
     CType snap, *ct = &snap;
     CTypeID id;

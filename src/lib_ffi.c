@@ -1213,7 +1213,7 @@ static TValue *ffi_clib_index(lua_State *L)
   {
     GCudata *ud = udataV(o);
     CLibrary *cl = (CLibrary *)uddata(ud);
-    return lj_clib_index(L, lj_udata_env_acq(ud), cl, strV(o+1));
+    return lj_clib_index(L, cl, strV(o+1));
   }
 }
 

@@ -281,6 +281,10 @@ static void gc2_paranoia_check_udata(global_State *g, GCudata *ud)
   if (udtype == UDTYPE_FFI_CLIB) {
     CLibrary *cl = (CLibrary *)uddata(ud);
     CLibCacheEntry *e;
+    GCtab *cache_env = lj_clib_cache_env_acq(cl);
+    if (cache_env)
+      gc2_paranoia_checkobj(g, obj2gco(cache_env),
+			    "FFI CLibrary cache env");
     for (e = lj_clib_cache_head_acq(cl);
 	 e != NULL;
 	 e = lj_clib_cache_next_acq(e)) {
@@ -507,7 +511,10 @@ static void gc_mark_clib_retired_cache(global_State *g)
 
 static void gc_mark_clib_cache(global_State *g, CLibrary *cl)
 {
+  GCtab *cache_env = lj_clib_cache_env_acq(cl);
   CLibCacheEntry *e;
+  if (cache_env)
+    gc_markobj(g, cache_env);
   for (e = lj_clib_cache_head_acq(cl);
        e != NULL;
        e = lj_clib_cache_next_acq(e)) {

@@ -652,14 +652,15 @@ static CTSize clib_func_argsize(CTState *cts, CType *ct)
 #endif
 
 /* Index a C library by name. */
-TValue *lj_clib_index(lua_State *L, GCtab *env, CLibrary *cl, GCstr *name)
+TValue *lj_clib_index(lua_State *L, CLibrary *cl, GCstr *name)
 {
-  cTValue *envtv = clib_env_get(env, name);
+  GCtab *cache_env = lj_clib_cache_env_acq(cl);
+  cTValue *envtv = clib_env_get(cache_env, name);
   cTValue *ctv = lj_clib_cache_get(cl, name);
   if (envtv)
     return (TValue *)(void *)envtv;
   if (LJ_LIKELY(ctv && !lj_tv_isnil_acq(ctv)))
-    return clib_env_publish(L, env, name, ctv);
+    return clib_env_publish(L, cache_env, name, ctv);
   {
     CTState *cts = ctype_cts(L);
     CType snap, *ct = &snap;
@@ -732,7 +733,7 @@ TValue *lj_clib_index(lua_State *L, GCtab *env, CLibrary *cl, GCstr *name)
     anchor = L->top++;
     copyTV(L, anchor, &tmp);  /* Root tmp while allocating/publishing entry. */
     tv = clib_cache_publish(L, cl, name, anchor);
-    tv = clib_env_publish(L, env, name, tv);
+    tv = clib_env_publish(L, cache_env, name, tv);
     L->top--;
     return tv;
   }
@@ -746,6 +747,7 @@ static CLibrary *clib_new(lua_State *L, GCtab *mt)
   GCtab *t = lj_tab_new(L, 0, 0);
   GCudata *ud = lj_udata_new(L, sizeof(CLibrary), t);
   CLibrary *cl = (CLibrary *)uddata(ud);
+  lj_clib_cache_env_rel(cl, t);
   cl->cache_head = NULL;
   lj_udata_metatable_rel(ud, mt);
   lj_gc_pubobjobj(L, ud, mt);

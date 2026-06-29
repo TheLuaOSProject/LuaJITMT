@@ -5538,7 +5538,10 @@ static void gc2_traverse_clib_retired_cache(global_State *g)
 
 static void gc2_traverse_clib_cache(global_State *g, CLibrary *cl)
 {
+  GCtab *cache_env = lj_clib_cache_env_acq(cl);
   CLibCacheEntry *e;
+  if (cache_env)
+    gc2_markobj_worker(g, obj2gco(cache_env));
   for (e = lj_clib_cache_head_acq(cl);
        e != NULL;
        e = lj_clib_cache_next_acq(e)) {

@@ -82,8 +82,19 @@ static LJ_AINLINE void lj_clib_cache_val_rel(lua_State *L, CLibCacheEntry *e,
 /* C library namespace. */
 typedef struct CLibrary {
   void *handle;		/* Opaque handle for dynamic library loader. */
+  GCRef cache_env;	/* Original cache table, stock debug env behavior. */
   CLibCacheEntry *cache_head;	/* 11.7 side cache, CAS-prepended. */
 } CLibrary;
+
+static LJ_AINLINE GCtab *lj_clib_cache_env_acq(const CLibrary *cl)
+{
+  return tabref_acq(cl->cache_env);
+}
+
+static LJ_AINLINE void lj_clib_cache_env_rel(CLibrary *cl, GCtab *env)
+{
+  setgcrefrel(cl->cache_env, obj2gco(env));
+}
 
 static LJ_AINLINE CLibCacheEntry *lj_clib_cache_head_acq(const CLibrary *cl)
 {
@@ -112,8 +123,7 @@ LJ_FUNC CLibCacheEntry *lj_clib_cache_retired_head_acq(global_State *g);
 LJ_FUNC uint32_t lj_clib_cache_reclaim_retired(global_State *g,
 					       uint64_t completed_epoch);
 LJ_FUNC void lj_clib_cache_freeretired(global_State *g);
-LJ_FUNC TValue *lj_clib_index(lua_State *L, GCtab *env, CLibrary *cl,
-			      GCstr *name);
+LJ_FUNC TValue *lj_clib_index(lua_State *L, CLibrary *cl, GCstr *name);
 LJ_FUNC void lj_clib_load(lua_State *L, GCtab *mt, GCstr *name, int global);
 LJ_FUNC void lj_clib_unload(lua_State *L, global_State *g, CLibrary *cl);
 LJ_FUNC void lj_clib_default(lua_State *L, GCtab *mt);
