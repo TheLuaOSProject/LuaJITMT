@@ -129,9 +129,15 @@ static LJ_NOINLINE StrHash hash_dense(uint64_t seed, StrHash h,
 #define LJ_STRTAB_RESIZE	((MSize)0x80000000u)
 #define LJ_STRTAB_ACTIVE_MASK	(~LJ_STRTAB_RESIZE)
 
-static void strtab_wait_no_l(void)
+static void strtab_wait(lua_State *L)
 {
-  (void)lj_thr_sleep_ns(NULL, 1000000);
+  /*
+  ** String-table claim/enter waits are reached from string interning, resize,
+  ** and secondary rehash paths with a current Lua state. Wait as native time
+  ** for that TG so safepoint handshakes can observe threads contending on the
+  ** pin-and-drain resize bit.
+  */
+  (void)lj_thr_sleep_ns(L, 1000000);
 }
 
 static LJ_AINLINE int strref_cas_rel(GCRef *r, uintptr_t *expect, uintptr_t want)
@@ -164,7 +170,7 @@ static void strtab_retire(global_State *g, StrTabHdr *hdr)
   strtab_retired_push(g, hdr);
 }
 
-static int strtab_claim(StrTabHdr *hdr)
+static int strtab_claim(lua_State *L, StrTabHdr *hdr)
 {
   for (;;) {
     MSize state = la_load32_acq(&hdr->resize);
@@ -176,7 +182,7 @@ static int strtab_claim(StrTabHdr *hdr)
       break;
   }
   while (la_load32_acq(&hdr->resize) & LJ_STRTAB_ACTIVE_MASK)
-    strtab_wait_no_l();
+    strtab_wait(L);
   return 1;
 }
 
@@ -193,7 +199,7 @@ static LJ_AINLINE void strtab_leave(StrTabHdr *hdr)
   UNUSED(old);
 }
 
-static StrTabHdr *strtab_enter(global_State *g)
+static StrTabHdr *strtab_enter(lua_State *L, global_State *g)
 {
   for (;;) {
     StrTabHdr *hdr = lj_str_tabh_acq(g);
@@ -202,11 +208,11 @@ static StrTabHdr *strtab_enter(global_State *g)
       return NULL;
     state = la_load32_acq(&hdr->resize);  /* 06 section 6.5 RCU header pin. */
     if (state & LJ_STRTAB_RESIZE) {
-      strtab_wait_no_l();
+      strtab_wait(L);
       continue;
     }
     if (state == LJ_STRTAB_ACTIVE_MASK) {
-      strtab_wait_no_l();
+      strtab_wait(L);
       continue;
     }
     expect = state;
@@ -233,7 +239,7 @@ void lj_str_resize(lua_State *L, MSize newmask)
     return;
 
   if (oldhdr) {
-    if (!strtab_claim(oldhdr))
+    if (!strtab_claim(L, oldhdr))
       return;
   }
 
@@ -333,7 +339,7 @@ static LJ_NOINLINE GCstr *lj_str_rehash_chain(lua_State *L, StrHash hashc,
   GCRef *strtab;
   MSize strmask;
   GCobj *o;
-  if (!hdr || !strtab_claim(hdr))
+  if (!hdr || !strtab_claim(L, hdr))
     return lj_str_new(L, str, len);
   if (lj_str_tabh_acq(g) != hdr) {
     strtab_release(hdr);
@@ -410,7 +416,7 @@ GCstr *lj_str_new(lua_State *L, const char *str, size_t lenx)
     GCstr *news = NULL;
     int hashalg = 0;
     for (;;) {
-      StrTabHdr *hdr = strtab_enter(g);
+      StrTabHdr *hdr = strtab_enter(L, g);
       GCRef *strtab;
       GCobj *o;
       MSize mask, coll = 0;
