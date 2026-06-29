@@ -127,9 +127,14 @@ static LJ_AINLINE char *serialize_ru124(char *r, char *w, uint32_t *pv)
   return NULL;
 }
 
-static LJ_AINLINE void serialize_dict_wait_no_l(void)
+static LJ_AINLINE void serialize_dict_wait(lua_State *L)
 {
-  (void)lj_thr_sleep_ns(NULL, 1000000);
+  /*
+  ** Serializer dictionary preparation retries after table resize forwarding or
+  ** a slot CAS loss. The constructor has a current Lua state, so wait as
+  ** native time for that TG instead of using the no-state fallback.
+  */
+  (void)lj_thr_sleep_ns(L, 1000000);
 }
 
 static void serialize_dict_storeint(lua_State *L, GCtab *dict, cTValue *key,
@@ -144,7 +149,7 @@ static void serialize_dict_storeint(lua_State *L, GCtab *dict, cTValue *key,
     if (rc == LJ_TAB_STORE_CAS_OK || rc == LJ_TAB_STORE_CAS_EXISTS)
       return;
     /* Dictionary saw stale/FORWARD slot after lookup. */
-    serialize_dict_wait_no_l();
+    serialize_dict_wait(L);
   }
 }
 
