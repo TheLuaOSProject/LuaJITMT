@@ -78,7 +78,7 @@ static void *worker_main(void *arg)
   lj_thr_set_tg(&ctx->tg);
   assert(lj_thr_get_tg() == &ctx->tg);
   assert(G2TG(ctx->g) == &ctx->tg);
-  setgcref(ctx->g->cur_L, obj2gco(mainthread(ctx->g)));
+  setgcref(ctx->g->cur_L, obj2gco(mainthread_acq(ctx->g)));
   setmref(ctx->g->jit_base, ctx->L->base);
   ctx->tg.cur_L = NULL;
   ctx->tg.jit_base = NULL;

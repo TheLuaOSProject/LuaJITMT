@@ -745,7 +745,7 @@ static void test_userdata_constructor_publish_barrier(lua_State *L,
   assert(lj_gc2_ismarked(g, obj2gco(ud)) == 1);
   assert(tabref_acq(ud->env) == env);
   assert(lj_gc2_ismarked(g, obj2gco(env)) == 1);
-  setgcrefmt(ud->metatable, obj2gco(mt));
+  setgcrefrel(ud->metatable, obj2gco(mt));
   lj_gc_pubobjobj(L, ud, mt);
   assert(tabref_acq(ud->metatable) == mt);
   assert(lj_gc2_ismarked(g, obj2gco(mt)) == 1);
@@ -1606,7 +1606,7 @@ static void test_weak_self_metatable_publish_barrier(lua_State *L,
   t = lj_tab_new(L, 0, 1);
   settabV(L, L->top++, t);
   assert(lj_gc2_ismarked(g, obj2gco(t)) == 1);
-  setgcrefmt(t->metatable, obj2gco(t));
+  setgcrefrel(t->metatable, obj2gco(t));
   mode_slot = lj_tab_setstr(L, t, lj_str_newlit(L, "__mode"));
   flush_and_drain(g, tg);
   assert(lj_gc2_test_weak_snapshot_count(g) == 0);
@@ -3300,7 +3300,7 @@ static void push_udata_finalizer_mt(lua_State *L)
 
 static int test_unlink_udata_object(global_State *g, GCobj *target)
 {
-  GCRef *p = lj_obj_gcwref(obj2gco(mainthread(g)));
+  GCRef *p = lj_obj_gcwref(obj2gco(mainthread_acq(g)));
   GCobj *o;
   while ((o = gcref(*p)) != NULL) {
     if (o == target) {

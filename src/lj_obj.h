@@ -1560,8 +1560,6 @@ typedef struct global_State {
 LJ_STATIC_ASSERT(offsetof(global_State, nilnode) ==
 		 offsetof(global_State, nilnodehdr) + sizeof(TabNodeHdr));
 
-#define mainthread(g)	mainthread_acq((g))
-#define vmthread(g)	vmthread_acq((g))
 #define niltv(L) \
   check_exp(tvisnil(&G(L)->nilnode.val), &G(L)->nilnode.val)
 #define niltvg(g) \
@@ -5253,8 +5251,6 @@ static LJ_AINLINE void setgcrefnullrel_(GCRef *r)
 #define setgcrefrel(r, gc)	setgcrefrel_(&(r), (gc))
 #define setgcrefrrel(r, v)	setgcrefrrel_(&(r), (v))
 #define setgcrefnullrel(r)	setgcrefnullrel_(&(r))
-#define setgcrefroot(r, gc)	setgcrefrel((r), (gc))
-#define setgcrefmt(r, gc)	setgcrefrel((r), (gc))
 
 static LJ_AINLINE GCtab *lj_tab_metatable_acq(const GCtab *t)
 {
@@ -5263,7 +5259,7 @@ static LJ_AINLINE GCtab *lj_tab_metatable_acq(const GCtab *t)
 
 static LJ_AINLINE void lj_tab_metatable_rel(GCtab *t, GCtab *mt)
 {
-  setgcrefmt(t->metatable, obj2gco(mt));
+  setgcrefrel(t->metatable, obj2gco(mt));
 }
 
 static LJ_AINLINE GCtab *lj_udata_metatable_acq(const GCudata *ud)
@@ -5273,7 +5269,7 @@ static LJ_AINLINE GCtab *lj_udata_metatable_acq(const GCudata *ud)
 
 static LJ_AINLINE void lj_udata_metatable_rel(GCudata *ud, GCtab *mt)
 {
-  setgcrefmt(ud->metatable, obj2gco(mt));
+  setgcrefrel(ud->metatable, obj2gco(mt));
 }
 
 static LJ_AINLINE GCtab *lj_obj_metatable_acq(const GCobj *o)
@@ -5920,17 +5916,17 @@ static LJ_AINLINE int lj_tv_cas(TValue *dst, TValue *expect,
 
 static LJ_AINLINE void mainthread_rel(global_State *g, lua_State *L)
 {
-  setgcrefroot(*mainthread_ref(g), obj2gco(L));
+  setgcrefrel(*mainthread_ref(g), obj2gco(L));
 }
 
 static LJ_AINLINE void vmthread_rel(global_State *g, lua_State *L)
 {
-  setgcrefroot(*vmthread_ref(g), obj2gco(L));
+  setgcrefrel(*vmthread_ref(g), obj2gco(L));
 }
 
 static LJ_AINLINE void lj_gc_root_rel(global_State *g, const GCobj *o)
 {
-  setgcrefroot(*lj_gc_root_ref(g), o);
+  setgcrefrel(*lj_gc_root_ref(g), o);
 }
 
 static LJ_AINLINE GCRef *lj_gcroot_ref(global_State *g, GCRootID id)
@@ -5946,7 +5942,7 @@ static LJ_AINLINE GCobj *lj_gcroot_acq(global_State *g, GCRootID id)
 static LJ_AINLINE void lj_gcroot_rel(global_State *g, GCRootID id,
 				     const GCobj *o)
 {
-  setgcrefroot(*lj_gcroot_ref(g, id), o);
+  setgcrefrel(*lj_gcroot_ref(g, id), o);
 }
 
 static LJ_AINLINE GCtab *lj_basemt_it_acq(global_State *g, int it)
