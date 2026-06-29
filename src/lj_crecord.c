@@ -2049,9 +2049,11 @@ void LJ_FASTCALL recff_clib_index(jit_State *J, RecordFFData *rd)
   if (tref_isudata(J->base[0]) && tref_isstr(J->base[1]) &&
       lj_udata_udtype_acq(udataV(&rd->argv[0])) == UDTYPE_FFI_CLIB) {
     CLibrary *cl = (CLibrary *)uddata(udataV(&rd->argv[0]));
+    GCtab *env = lj_udata_env_acq(udataV(&rd->argv[0]));
     GCstr *name = strV(&rd->argv[1]);
     CType snap, *ct = &snap;
     CTypeID id;
+    cTValue *envtv = env ? lj_tab_getstr(env, name) : NULL;
     cTValue *ctv = lj_clib_cache_get(cl, name);
     TValue tv;
     int ok;
@@ -2061,6 +2063,10 @@ void LJ_FASTCALL recff_clib_index(jit_State *J, RecordFFData *rd)
       lj_trace_err(J, LJ_TRERR_CTBUSY);
     } else if (!ok) {
       id = 0;
+    }
+    if (envtv && !lj_tv_isnil_acq(envtv)) {
+      if (!ctv || lj_tv_isnil_acq(ctv) || !lj_obj_equal(envtv, ctv))
+	lj_trace_err(J, LJ_TRERR_NOCACHE);
     }
     if (ctv)
       lj_tv_load_acq(&tv, ctv);

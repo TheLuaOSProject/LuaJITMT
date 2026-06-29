@@ -38,6 +38,20 @@ do
   assert(C.LJ_M7_CLIB_CONST == 73)
   assert(env.LJ_M7_CLIB_CONST == 73)
 
+  if jit and jit.status() then
+    env.abs = function(x) return x + 1000 end
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    local function run(n)
+      local sum = 0
+      for i = 1, n do sum = sum + C.abs(i) end
+      return sum
+    end
+    assert(run(80) == (80 * 1000) + ((80 * 81) / 2))
+    jit.flush()
+    env.abs = abs
+  end
+
   do
     local oldenv = debug.getfenv(C)
     local newenv = {}
