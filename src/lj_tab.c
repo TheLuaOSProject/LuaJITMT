@@ -1825,11 +1825,6 @@ LJ_FUNCA TValue *lj_tab_storetv(lua_State *L, TValue *dst, cTValue *src)
   return dst;
 }
 
-LJ_FUNCA void lj_tab_store_wait_no_l(void)
-{
-  lj_tab_wait_no_l();
-}
-
 LJ_FUNCA void lj_tab_store_wait_l(lua_State *L)
 {
   lj_tab_wait_l(L);
@@ -1845,7 +1840,7 @@ LJ_FUNCA int lj_tab_trystoretv_cas(lua_State *L, TValue *dst, cTValue *src)
       return LJ_TAB_STORE_CAS_FORWARD;
     if (lj_tv_cas(dst, &old, src))
       return LJ_TAB_STORE_CAS_OK;  /* 06 section 6.3.2: CAS-published store. */
-    lj_tab_store_wait_no_l();
+    lj_tab_store_wait_l(L);
   }
 }
 
@@ -2003,7 +1998,7 @@ LJ_FUNCA int lj_tab_trysetnil_cas_keyed(lua_State *L, GCtab *parent,
       return LJ_TAB_STORE_CAS_FORWARD;
     if (!tvisnil(&expect))
       return LJ_TAB_STORE_CAS_EXISTS;
-    lj_tab_store_wait_no_l();
+    lj_tab_store_wait_l(L);
   }
 }
 
@@ -2185,7 +2180,7 @@ LJ_FUNCA TValue *lj_tab_storetv_forjit_array_nogc(lua_State *L,
     if (lj_tab_trystoretv_cas_keyed(L, parent, dst, &keytv, src) ==
 	LJ_TAB_STORE_CAS_OK)
       break;
-    lj_tab_store_wait_no_l();  /* JIT array store saw stale/FORWARD slot. */
+    lj_tab_store_wait_l(L);  /* JIT array store saw stale/FORWARD slot. */
   }
   return dst;
 }
@@ -2215,7 +2210,7 @@ LJ_FUNCA TValue *lj_tab_storetv_forvm_array(lua_State *L, GCtab *parent,
 	  LJ_TAB_STORE_CAS_OK)
 	break;
     }
-    lj_tab_store_wait_no_l();  /* VM array store saw stale/FORWARD slot. */
+    lj_tab_store_wait_l(L);  /* VM array store saw stale/FORWARD slot. */
   }
   return dst;
 }
@@ -2239,7 +2234,7 @@ LJ_FUNCA TValue *lj_tab_storetv_forjit_hash(lua_State *L, GCtab *parent,
     if (lj_tab_trystoretv_cas_keyed(L, parent, dst, barrier_key, src) ==
 	LJ_TAB_STORE_CAS_OK)
       break;
-    lj_tab_store_wait_no_l();  /* JIT hash store saw stale/FORWARD slot. */
+    lj_tab_store_wait_l(L);  /* JIT hash store saw stale/FORWARD slot. */
   }
 done:
   lj_gc2_barrier_weak_write(L, parent, barrier_key, dst);  /* M8: traced weak hash write. */
@@ -2256,7 +2251,7 @@ LJ_FUNCA TValue *lj_tab_storetv_forjit_newref(lua_State *L, GCtab *parent,
     if (lj_tab_trystoretv_cas_keyed(L, parent, dst, key, src) ==
 	LJ_TAB_STORE_CAS_OK)
       break;
-    lj_tab_store_wait_no_l();  /* JIT NEWREF store saw stale/FORWARD slot. */
+    lj_tab_store_wait_l(L);  /* JIT NEWREF store saw stale/FORWARD slot. */
   }
   lj_gc2_barrier_weak_write(L, parent, key, dst);  /* M8: traced NEWREF weak write. */
   lj_gc2_barrier_tv_pair(L, obj2gco(parent), dst);  /* M10: traced parent barrier. */
@@ -2344,7 +2339,7 @@ LJ_FUNCA void lj_tab_storetvn_forvm_array(lua_State *L, GCtab *parent,
       if (lj_tab_trystoretv_cas_keyed(L, parent, dst, &key, &src[i]) ==
 	  LJ_TAB_STORE_CAS_OK)
 	break;
-      lj_tab_store_wait_no_l();  /* VM TSETM saw stale/FORWARD slot. */
+      lj_tab_store_wait_l(L);  /* VM TSETM saw stale/FORWARD slot. */
     }
   }
   if (tab_tsetm_barrier_needed(L, parent))
