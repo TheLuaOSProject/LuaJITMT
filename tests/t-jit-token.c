@@ -14,6 +14,7 @@
 #include "lj_obj.h"
 #include "lj_atomic.h"
 #include "lj_jit.h"
+#include "lj_safepoint.h"
 #include "lj_trace.h"
 #include "lj_tg.h"
 #include "lj_thr.h"
@@ -26,6 +27,15 @@ typedef struct TokenReleaseCtx {
   uint32_t owner;
   uint32_t released;
 } TokenReleaseCtx;
+
+typedef struct TokenStopReqCtx {
+  global_State *g;
+  TGState *tg;
+  uint32_t owner;
+  uint32_t saw_native;
+  uint32_t signaled;
+  uint32_t released;
+} TokenStopReqCtx;
 
 static uint32_t foreign_token_owner(lua_State *L)
 {
@@ -40,6 +50,26 @@ static void *release_jit_token_after_delay(void *arg)
   assert(jit_token_acq(ctx->g) == ctx->owner);
   la_store32_rel(&ctx->released, 1);
   jit_token_rel(ctx->g, 0);
+  return NULL;
+}
+
+static void *publish_stopreq_while_token_waits(void *arg)
+{
+  TokenStopReqCtx *ctx = (TokenStopReqCtx *)arg;
+  int i;
+  for (i = 0; i < 5000; i++) {
+    if (lj_tg_in_native_acq(ctx->tg)) {
+      la_store32_rel(&ctx->saw_native, 1);
+      break;
+    }
+    (void)lj_thr_sleep_ns(NULL, 1000000);
+  }
+  assert(la_load32_acq(&ctx->saw_native) != 0);
+  la_store32_rel(&ctx->signaled,
+		 lj_safepoint_handshake(ctx->g, LJ_GC2_HS_STOPREQ));
+  assert(jit_token_acq(ctx->g) == ctx->owner);
+  jit_token_rel(ctx->g, 0);
+  la_store32_rel(&ctx->released, 1);
   return NULL;
 }
 
@@ -106,6 +136,44 @@ static void expect_opt_start_waits_for_token(lua_State *L)
     "assert(not ok)\n");
   assert(jit_token_acq(g) == 0);
   assert(jit_param_acq(G2J(g), JIT_P_hotloop) == 5);
+}
+
+static void clear_stopreq(TGState *tg)
+{
+  (void)lj_tg_flags_and_rlx(tg, (uint8_t)~TGF_STOPREQ);
+}
+
+static void expect_token_wait_stopreq(lua_State *L, const char *code)
+{
+  TokenStopReqCtx ctx;
+  pthread_t th;
+  global_State *g = G(L);
+  int status;
+
+  memset(&ctx, 0, sizeof(ctx));
+  ctx.g = g;
+  ctx.tg = L2TG(L);
+  ctx.owner = foreign_token_owner(L);
+  clear_stopreq(ctx.tg);
+  jit_token_rel(g, ctx.owner);
+
+  assert(pthread_create(&th, NULL, publish_stopreq_while_token_waits,
+			&ctx) == 0);
+  status = luaL_dostring(L, code);
+  assert(pthread_join(th, NULL) == 0);
+  assert(la_load32_acq(&ctx.saw_native) != 0);
+  assert(la_load32_acq(&ctx.signaled) >= 1u);
+  assert(la_load32_acq(&ctx.released) != 0);
+  assert(jit_token_acq(g) == 0);
+  clear_stopreq(ctx.tg);
+
+  if (status != LUA_OK) {
+    const char *err = lua_tostring(L, -1);
+    fprintf(stderr, "unexpected token STOPREQ test error: %s\n",
+	    err ? err : "(nil)");
+  }
+  assert(status == LUA_OK);
+  lua_settop(L, 0);
 }
 
 int main(void)
@@ -226,6 +294,16 @@ int main(void)
   expect_flush_waits_for_token(L, "jit.flush()\n");
   expect_flush_waits_for_token(L, "jit.flush(1)\n");
   expect_opt_start_waits_for_token(L);
+  expect_token_wait_stopreq(L,
+    "local ok, err = pcall(jit.flush)\n"
+    "assert(not ok and tostring(err):find('VM shutdown', 1, true))\n");
+  make_token_flush_trace(L);
+  expect_token_wait_stopreq(L,
+    "local ok, err = pcall(jit.flush, 1)\n"
+    "assert(not ok and tostring(err):find('VM shutdown', 1, true))\n");
+  expect_token_wait_stopreq(L,
+    "local ok, err = pcall(jit.opt.start, 'hotloop=9')\n"
+    "assert(not ok and tostring(err):find('VM shutdown', 1, true))\n");
 
   lua_close(L);
   printf("t-jit-token OK: recorder token accepts secondary TGs and owns JIT controls\n");
