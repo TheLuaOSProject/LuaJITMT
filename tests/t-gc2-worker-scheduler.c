@@ -110,7 +110,7 @@ static int finalizer_order[3];
 typedef struct FinalizerOwnerHold {
   global_State *g;
   TGState *wait_tg;
-  TGState tg;
+  TGState *tg;
   uint32_t tid;
   uint32_t entered;
   uint32_t saw_native;
@@ -138,14 +138,14 @@ static void *finalizer_owner_hold_thread(void *arg)
 {
   FinalizerOwnerHold *ctx = (FinalizerOwnerHold *)arg;
   TGState *saved_tg = lj_thr_get_tg();
+  TGState *tg = ctx->tg;
   int i;
 
-  lj_tg_init_thread(ctx->g, &ctx->tg, NULL, 0);
-  ctx->tg.tid = ctx->tid;
-  ctx->tg.alloc.owner_tid = ctx->tid;
-  lj_tg_derive_prng(ctx->g, &ctx->tg, ctx->tid);
-  lj_thr_set_tg(&ctx->tg);
-  lj_tg_attach(ctx->g, &ctx->tg);
+  lj_tg_init_thread(ctx->g, tg, NULL, 0);
+  lj_tg_tid_rel(tg, ctx->tid);
+  lj_tg_derive_prng(ctx->g, tg, ctx->tid);
+  lj_thr_set_tg(tg);
+  lj_tg_attach(ctx->g, tg);
   lj_gc2_test_finalizer_enter(ctx->g);
   la_store32_rel(&ctx->entered, 1);
   for (i = 0; i < 10000; i++) {
@@ -156,7 +156,7 @@ static void *finalizer_owner_hold_thread(void *arg)
     sleep_ns(100000L);
   }
   lj_gc2_test_finalizer_leave(ctx->g);
-  lj_tg_detach(ctx->g, &ctx->tg);
+  lj_tg_detach(ctx->g, tg);
   lj_thr_set_tg(saved_tg);
   return NULL;
 }
@@ -187,6 +187,19 @@ static int arena_list_contains(GCArena *a, GCArena *needle)
       return 1;
     a = lj_arena_next_acq(a);
   }
+  return 0;
+}
+
+static int scheduler_tg_registered(global_State *g, TGState *target)
+{
+  TGState *tg;
+  if (!g || !target)
+    return 0;
+  for (tg = gc2_tg_list_acq(g);
+       tg != NULL;
+       tg = lj_tg_next_acq(tg))
+    if (tg == target)
+      return 1;
   return 0;
 }
 
@@ -405,6 +418,7 @@ static void test_finalizer_dispatch_all_waits_native(lua_State *L,
   hold.tid = lj_tg_tid_acq(tg) + 6000u;
   if (hold.tid == 0 || hold.tid == LJ_THREAD_GCSCAN)
     hold.tid = 6000u;
+  hold.tg = lj_mem_newt(L, sizeof(TGState), TGState);
   hold.entered = 0;
   hold.saw_native = 0;
 
@@ -429,6 +443,12 @@ static void test_finalizer_dispatch_all_waits_native(lua_State *L,
   lj_gc2_finalizer_dispatch_all(L);
   assert(finalizer_count == 1);
   finalizer_expected_L = NULL;
+
+  assert(lj_gc2_workers_set(g, 0) == 1);
+  assert(!scheduler_tg_registered(g, hold.tg));
+  lj_tg_fini_thread(g, hold.tg);
+  lj_mem_freet(g, hold.tg);
+  assert(lj_gc2_workers_set(g, 2) == 1);
 }
 
 static void test_finalizer_owner_leave_rewakes_worker(lua_State *L,
