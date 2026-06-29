@@ -16,8 +16,9 @@ search for snippets; use behavior fixtures, generated dump assertions, or
 documentation instead.
 
 2026-06-29 audit result: active `tools/ci`, `tools/test.lua`, `tests/suites`,
-and `tests/lib` have no source-search-only gates left. The remaining string
-searches inspect generated JIT dumps, bytecode listings, captured process
+`tests/lib`, top-level `tests/*.lua`, and top-level `tests/*.c` have no
+source-search-only gates left. The remaining string searches inspect generated
+JIT dumps, bytecode listings, generated mcode/ASM dumps, captured process
 output, CSVs, or marker files. Generic file/text helpers remain available for
 those artifacts, but must not be paired with `src/*.c`, `src/*.h`,
 `src/*.dasc`, `tests/*.lua`, or `tools/*.sh` snippet checks.
@@ -39,9 +40,11 @@ Use one of these instead:
   guidance that cannot be observed directly.
 
 The only allowed search-style CI checks are over generated artifacts, including
-JIT dumps, bytecode listings, objdump output, or generated assembly. Searching
-`src/*.c`, `src/*.h`, `src/*.dasc`, `tests/*.lua`, or `tools/*.sh` for a call
-name or snippet is not allowed as a test.
+JIT dumps, bytecode listings, objdump output, generated mcode dumps, or
+generated assembly. Searching `src/*.c`, `src/*.h`, `src/*.dasc`,
+`tests/*.lua`, or `tools/*.sh` for a call name or snippet is not allowed as a
+test. Repository DynASM source is source code; generated ASM/mcode output is
+the allowed exception.
 
 Examples of invariants that should be documented or tested behaviorally:
 

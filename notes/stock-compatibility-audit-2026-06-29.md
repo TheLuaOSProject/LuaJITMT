@@ -1,32 +1,37 @@
 # Stock compatibility audit, 2026-06-29
 
-Scope: active `v2.1` commits through `c984b1ab`, with emphasis on source-search
-test removal, legacy/fork-local entrypoint cleanup, and stock LuaJIT API
-behavior.
+Scope: active `v2.1` commits through `f5d558b5e0fe`, with emphasis on
+source-search test removal, legacy/fork-local entrypoint cleanup, and stock
+LuaJIT API behavior.
 
 ## Source-search tests and CI
 
 No active forbidden source-search-only tests were found under `tools/ci`,
-`tools/test.lua`, `tests/suites`, or `tests/lib`.
+`tools/test.lua`, `tests/suites`, `tests/lib`, top-level `tests/*.lua`, or
+top-level `tests/*.c`.
 
-Allowed remaining searches are over generated artifacts or runtime output:
-JIT dumps, bytecode listings, captured stdout/stderr, CSVs, and marker files.
-Those checks are permitted because the generated artifact is the behavior under
-test. Repository source checks for helper names, field accesses, function calls,
-or snippets are not permitted.
+Allowed remaining searches are over generated artifacts or runtime output: JIT
+dumps, bytecode listings, generated mcode/ASM dumps, captured stdout/stderr,
+CSVs, and marker files. Those checks are permitted because the generated
+artifact is the behavior under test. Repository source checks for helper names,
+field accesses, function calls, or snippets are not permitted.
 
 The removed source-guard compatibility surface remains gone:
 
 - No `m0_source_guard` case or per-case shell wrapper exists.
 - No `suite_utils.read_source_file()` helper exists.
 - The only `tools/ci` shell entrypoint is `tools/ci/lua_test.sh`.
+- The remaining build-time `find`/`sed`/`grep` invocations inspect generated
+  dependencies, object files, or install-metadata output, not repository source
+  snippets.
 
 ## Public C API surface
 
-The local `upstream/v2.1` ref was compared against current headers. Public
-headers do not add or remove stock C API prototypes. `src/lua.h` is
-whitespace-only relative to upstream, and `src/luaconf.h` differs only in
-comment wording.
+The current stock `LuaJIT/LuaJIT` `v2.1` head was checked as
+`a2bde60819d83e6f75130ac2c93ee4b3c7615800`. Public headers do not add or
+remove stock C API prototypes. `src/lualib.h`, `src/lauxlib.h`, and
+`src/luajit_rolling.h` match upstream. `src/lua.h` differs only by one blank
+line. `src/luaconf.h` differs only in comment wording.
 
 Fork-local removals are not stock API removals:
 
@@ -38,6 +43,11 @@ Fork-local removals are not stock API removals:
 - `ffi.typeinfo` was an unsupported fork helper, not stock LuaJIT FFI.
 - `LUA_GCGENERATIONAL` and `LUA_GCINCREMENTAL` are not stock LuaJIT public C
   constants in this branch. Fork GC mode control is `threading.gcmode()`.
+
+Export audit: `luaopen_threading`, `luaMT_*`, `lj_threading_*`, and
+`ffi_typeinfo` are not dynamic public exports. The remaining C attach/detach
+entry points are internal helpers in `lj_thr.h` for native attached-thread
+fixtures and runtime integration.
 
 ## Stock behavior boundary
 
