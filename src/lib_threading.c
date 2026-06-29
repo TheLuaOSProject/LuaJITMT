@@ -168,7 +168,7 @@ static GCtab *threading_env_from_module(lua_State *L, GCtab *mod)
 
 static GCtab *threading_loaded_env(lua_State *L)
 {
-  GCtab *reg = tabV(registry(L));
+  GCtab *reg = lj_registry_tab_acq(G(L));
   cTValue *tv = lj_tab_getstr(reg, lj_str_newlit(L, "_LOADED"));
   if (tv) {
     TValue loaded;

@@ -28,7 +28,7 @@
 
 LJLIB_CF(debug_getregistry)
 {
-  copyTV(L, L->top++, registry(L));
+  lj_registry_load_acq(G(L), L->top++);
   return 1;
 }
 

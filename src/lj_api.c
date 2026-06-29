@@ -82,7 +82,10 @@ static LJ_AINLINE int index_iscupvalue(int idx)
 static LJ_AINLINE TValue *index2adr_read(lua_State *L, int idx, TValue *snap)
 {
   TValue *o = index2adr(L, idx);
-  if (index_iscupvalue(idx) && o != niltv(L)) {
+  if (idx == LUA_REGISTRYINDEX) {
+    lj_registry_load_acq(G(L), snap);
+    return snap;
+  } else if (index_iscupvalue(idx) && o != niltv(L)) {
     lj_tv_load_acq(snap, o);
     return snap;
   }
@@ -300,7 +303,8 @@ static void copy_slot(lua_State *L, TValue *f, int idx)
     TValue *o = index2adr_check(L, idx);
     if (idx == LUA_REGISTRYINDEX) {
       lj_gc_pubroot(L, f);
-      copyTVrel(L, o, f);
+      UNUSED(o);
+      lj_registry_store_rel(L, f);
     } else if (idx < LUA_GLOBALSINDEX) {
       UNUSED(o);
       index2adr_cupvalue_store_rel(L, idx, f);
@@ -854,7 +858,7 @@ LUA_API void lua_createtable(lua_State *L, int narray, int nrec)
 
 LUALIB_API int luaL_newmetatable(lua_State *L, const char *tname)
 {
-  GCtab *regt = tabV(registry(L));
+  GCtab *regt = lj_registry_tab_acq(G(L));
   GCstr *key = lj_str_newz(L, tname);
   TValue keytv;
   setstrV(L, &keytv, key);
@@ -1127,7 +1131,8 @@ LUALIB_API void *luaL_testudata(lua_State *L, int idx, const char *tname)
   cTValue *o = index2adr_read(L, idx, &snap);
   if (tvisudata(o)) {
     GCudata *ud = udataV(o);
-    cTValue *tv = lj_tab_getstr(tabV(registry(L)), lj_str_newz(L, tname));
+    cTValue *tv = lj_tab_getstr(lj_registry_tab_acq(G(L)),
+				lj_str_newz(L, tname));
     if (tv) {
       TValue mtv;
       lj_tv_load_acq(&mtv, tv);

@@ -22,7 +22,7 @@ ptrdiff_t lj_vmevent_prepare(lua_State *L, VMEvent ev)
 {
   global_State *g = G(L);
   GCstr *s = lj_str_newlit(L, LJ_VMEVENTS_REGKEY);
-  cTValue *tv = lj_tab_getstr(tabV(registry(L)), s);
+  cTValue *tv = lj_tab_getstr(lj_registry_tab_acq(G(L)), s);
   TValue tabv;
   if (tv) {
     lj_tv_load_acq(&tabv, tv);

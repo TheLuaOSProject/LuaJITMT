@@ -2741,7 +2741,8 @@ static TValue *ffi_miscmap_store(lua_State *L, CTState *cts, GCstr *key,
 /* Register FFI module as loaded. */
 static void ffi_register_module(lua_State *L)
 {
-  cTValue *tmp = lj_tab_getstr(tabV(registry(L)), lj_str_newlit(L, "_LOADED"));
+  cTValue *tmp = lj_tab_getstr(lj_registry_tab_acq(G(L)),
+			       lj_str_newlit(L, "_LOADED"));
   if (tmp) {
     TValue loaded;
     lj_tv_load_acq(&loaded, tmp);

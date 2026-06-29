@@ -6136,6 +6136,37 @@ static LJ_AINLINE void copyTVrel(lua_State *L, TValue *o1, const TValue *o2)
   checklivetv(L, o1, "copy of dead GC object");
 }
 
+static LJ_AINLINE void lj_registry_load_acq(global_State *g, TValue *out)
+{
+  lj_tv_load_acq(out, lj_registry_ref(g));
+}
+
+static LJ_AINLINE GCtab *lj_registry_tab_acq(global_State *g)
+{
+  TValue tv;
+  lj_registry_load_acq(g, &tv);
+  return tabV(&tv);
+}
+
+static LJ_AINLINE void lj_registry_store_rel(lua_State *L, const TValue *src)
+{
+  copyTVrel(L, lj_registry_ref(G(L)), src);
+}
+
+static LJ_AINLINE void lj_registry_settab_rel(lua_State *L, GCtab *t)
+{
+  TValue tv;
+  settabV(L, &tv, t);
+  lj_registry_store_rel(L, &tv);
+}
+
+static LJ_AINLINE void lj_registry_setnil_rel(lua_State *L)
+{
+  TValue tv;
+  setnilV(&tv);
+  lj_registry_store_rel(L, &tv);
+}
+
 /* -- Number to integer conversion ---------------------------------------- */
 
 /*

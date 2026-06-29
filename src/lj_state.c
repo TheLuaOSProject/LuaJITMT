@@ -237,7 +237,7 @@ static TValue *cpluaopen(lua_State *L, lua_CFunction dummy, void *ud)
   stack_init(L, L);
   /* NOBARRIER: State initialization, all objects are white. */
   lj_state_env_rel(L, lj_tab_new(L, 0, LJ_MIN_GLOBAL));
-  settabV(L, registry(L), lj_tab_new(L, 0, LJ_MIN_REGISTRY));
+  lj_registry_settab_rel(L, lj_tab_new(L, 0, LJ_MIN_REGISTRY));
   lj_str_init(L);
   lj_meta_init(L);
   lj_lex_init(L);
@@ -389,7 +389,7 @@ LUA_API lua_State *lua_newstate(lua_Alloc allocf, void *allocd)
   g->str.mask = ~(MSize)0;
   g->tab.retired_nodes = NULL;
   g->tab.retired_arrays = NULL;
-  setnilV(registry(L));
+  lj_registry_setnil_rel(L);
   g->nilnodehdr.hmask = 0;
   g->nilnodehdr.flags = 0;
   setmref(g->nilnodehdr.next_gen, NULL);
