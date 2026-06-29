@@ -650,6 +650,25 @@ return function(add)
   })
 
   add({
+    name = "m5_tab_colocated_resize",
+    description = "colocated array resize freezes old inline slots",
+    run = function(t)
+      t:build({
+        clean = true,
+        jobs = false,
+        quiet = true,
+        xcflags = "-DLJ_TAB_TEST_HELPERS"
+      })
+      build_and_run_c(t, t:tmp("lj_t-tab-colocated-resize"),
+                      "t-tab-colocated-resize.c", {
+        cflags = "-DLJ_TAB_TEST_HELPERS",
+        timeout = "20s"
+      })
+      print("M5 colocated array resize freeze guard passed")
+    end
+  })
+
+  add({
     name = "m5_tab_cas_store",
     description = "table CAS store behavior",
     run = function(t)

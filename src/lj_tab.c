@@ -233,8 +233,17 @@ TValue *lj_tab_forwarded_array_slot(GCtab *t, TValue *array, MSize asize,
     TValue *nextarray = array;
     MSize nextasize = asize;
     TValue *slot = NULL;
-    if (!lj_tab_array_forward_hop_forward(t, &nextarray, &nextasize))
-      return NULL;
+    if (!lj_tab_array_forward_hop_forward(t, &nextarray, &nextasize)) {
+      if (lj_tab_array_is_colocated(t, array)) {
+	if (lj_tab_array_acq(t) == array) {
+	  lj_tab_wait_no_l();
+	  continue;
+	}
+	nextasize = lj_tab_array_snapshot_acq(t, &nextarray);
+      } else {
+	return NULL;
+      }
+    }
     if (idx < nextasize) {
       slot = &nextarray[idx];
     } else if (idx <= (MSize)INT32_MAX) {
@@ -303,7 +312,8 @@ static LJ_AINLINE int tab_array_slot_absent_acq(GCtab *t, TValue **arrayp,
 	*asizep = lj_tab_array_snapshot_acq(t, arrayp);
 	continue;
       }
-      if (lj_tab_array_is_retiring(t, array)) {
+      if (lj_tab_array_is_retiring(t, array) ||
+	  lj_tab_array_is_colocated(t, array)) {
 	lj_tab_wait_no_l();
 	continue;
       }
@@ -427,6 +437,20 @@ static int tab_freeze_forward(TValue *slot, TValue *oldp)
       return 0;
     if (lj_tv_cas(slot, oldp, &forward))
       return 1;  /* M5: old slot ownership moved to its next generation. */
+    lj_tab_wait_no_l();
+  }
+}
+
+static int tab_freeze_forward_any(TValue *slot, TValue *oldp)
+{
+  TValue forward;
+  setforwardV(&forward);
+  for (;;) {
+    lj_tv_load_acq(oldp, slot);
+    if (tvisforward(oldp))
+      return 0;
+    if (lj_tv_cas(slot, oldp, &forward))
+      return 1;
     lj_tab_wait_no_l();
   }
 }
@@ -848,6 +872,22 @@ void LJ_FASTCALL lj_tab_free(global_State *g, GCtab *t)
 
 /* -- Table resizing ------------------------------------------------------ */
 
+#ifdef LJ_TAB_TEST_HELPERS
+static LJTabResizeArrayHook tab_test_resize_colocated_after_freeze_hook;
+
+static LJ_AINLINE void tab_test_resize_colocated_after_freeze(lua_State *L,
+							      GCtab *t,
+							      TValue *oldarray,
+							      MSize oldasize)
+{
+  if (tab_test_resize_colocated_after_freeze_hook)
+    tab_test_resize_colocated_after_freeze_hook(L, t, oldarray, oldasize);
+}
+#else
+#define tab_test_resize_colocated_after_freeze(L, t, oldarray, oldasize) \
+  ((void)(L), (void)(t), (void)(oldarray), (void)(oldasize))
+#endif
+
 /* Resize a table to fit the new array/hash part sizes. */
 void lj_tab_resize(lua_State *L, GCtab *t, uint32_t asize, uint32_t hbits)
 {
@@ -913,16 +953,9 @@ restart_resize:
   }
   if (newarray) {
     uint32_t i;
-    uint32_t copy = oldasize < newacap ? oldasize : newacap;
     array = tab_array_new(L, asize, newacap);
     for (i = 0; i < newacap; i++)
       lj_tab_storenilraw(&array[i]);
-    if (!oldarray_separated) {
-      for (i = 0; i < copy; i++)
-	lj_tv_load_acq(&array[i], &oldarray[i]);
-      for (i = asize; i < copy; i++)
-	lj_tab_storenilraw(&array[i]);
-    }
   }
   if (asize > oldasize) {  /* Array part grows? */
     uint32_t i;
@@ -967,6 +1000,17 @@ restart_resize:
   if (oldaret) {
     lj_tab_array_hdr_flags_or_rel(oldarray, TABARRAY_FLAG_RETIRING);
     tab_array_retired_push(g, oldaret);
+  }
+  if (newarray && !oldarray_separated && oldarray) {
+    uint32_t i;
+    uint32_t copy = oldasize < newacap ? oldasize : newacap;
+    for (i = 0; i < copy; i++) {
+      TValue val;
+      if (tab_freeze_forward_any(&oldarray[i], &val) &&
+	  !tab_val_absent(&val))
+	tab_migrate_store_if_absent(L, t, &array[i], NULL, &val);
+    }
+    tab_test_resize_colocated_after_freeze(L, t, oldarray, oldasize);
   }
   if (newarray && oldarray_separated) {
     uint32_t i;
@@ -1468,6 +1512,12 @@ void lj_tab_test_set_newkey_chain_after_reserve_hook(
   tab_test_newkey_chain_after_reserve_hook = hook;
 }
 
+void lj_tab_test_set_resize_colocated_after_freeze_hook(
+  LJTabResizeArrayHook hook)
+{
+  tab_test_resize_colocated_after_freeze_hook = hook;
+}
+
 static LJ_AINLINE void tab_test_newkey_anchor_after_reserve(lua_State *L,
 							    GCtab *t,
 							    Node *nodebase)
@@ -1483,6 +1533,7 @@ static LJ_AINLINE void tab_test_newkey_chain_after_reserve(lua_State *L,
   if (tab_test_newkey_chain_after_reserve_hook)
     tab_test_newkey_chain_after_reserve_hook(L, t, nodebase);
 }
+
 #else
 #define tab_test_newkey_anchor_after_reserve(L, t, nodebase) \
   ((void)(L), (void)(t), (void)(nodebase))
@@ -2174,6 +2225,8 @@ static TValue *tab_forwarded_jit_array_slot(lua_State *L, GCtab *parent,
   lj_tv_load_acq(&val, dst);
   if (!tvisforward(&val) && !lj_tab_array_is_retiring(parent, array))
     return dst;
+  if (tvisforward(&val) && lj_tab_array_is_colocated(parent, array))
+    return lj_tab_setint(L, parent, (int32_t)key);
   if (!tab_ptr_index((uintptr_t)array, (uintptr_t)dst, sizeof(TValue),
 		     asize, &idx))
     return dst;
@@ -2688,7 +2741,8 @@ retry_next:
 	    lj_tv_load_acq(&val, tv);
 	}
       } else if (lj_tab_array_acq(t) != array ||
-		 lj_tab_array_is_retiring(t, array)) {
+		 lj_tab_array_is_retiring(t, array) ||
+		 lj_tab_array_is_colocated(t, array)) {
 	lj_tab_wait_no_l();
 	goto retry_next;
       }

@@ -8,6 +8,7 @@ local m5_concurrent_cases = {
   "m5_tab_chain_order",
   "m5_tab_node_publish",
   "m5_tab_array_publish",
+  "m5_tab_colocated_resize",
   "m5_tab_slot_snapshot",
   "m5_tab_keylock_lookup",
   "m5_tab_finreg_newkey_stale",

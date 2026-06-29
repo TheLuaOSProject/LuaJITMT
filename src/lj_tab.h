@@ -268,10 +268,14 @@ LJ_FUNC int lj_tab_try_newkey_chain(lua_State *L, GCtab *t, cTValue *key,
 #ifdef LJ_TAB_TEST_HELPERS
 typedef void (*LJTabNewkeyReserveHook)(lua_State *L, GCtab *t,
 				       Node *nodebase);
+typedef void (*LJTabResizeArrayHook)(lua_State *L, GCtab *t,
+				     TValue *oldarray, MSize oldasize);
 LJ_FUNC void lj_tab_test_set_newkey_anchor_after_reserve_hook(
   LJTabNewkeyReserveHook hook);
 LJ_FUNC void lj_tab_test_set_newkey_chain_after_reserve_hook(
   LJTabNewkeyReserveHook hook);
+LJ_FUNC void lj_tab_test_set_resize_colocated_after_freeze_hook(
+  LJTabResizeArrayHook hook);
 #endif
 LJ_FUNCA TValue *lj_tab_setinth(lua_State *L, GCtab *t, int32_t key);
 LJ_FUNC TValue *lj_tab_setint_forward(lua_State *L, GCtab *t, int32_t key);
@@ -390,7 +394,8 @@ genarray:
       if (lj_tab_array_forward_hop_forward(t, &array, &asize))
 	goto genarray;
       if (lj_tab_array_acq(t) != array ||
-	  lj_tab_array_is_retiring(t, array)) {
+	  lj_tab_array_is_retiring(t, array) ||
+	  lj_tab_array_is_colocated(t, array)) {
 	lj_tab_wait_no_l();
 	goto retry_array;
       }
@@ -415,7 +420,8 @@ retry_array:
 	if (lj_tab_array_forward_hop_forward(t, &array, &asize))
 	  goto genarray;
 	if (lj_tab_array_acq(t) != array ||
-	    lj_tab_array_is_retiring(t, array)) {
+	    lj_tab_array_is_retiring(t, array) ||
+	    lj_tab_array_is_colocated(t, array)) {
 	  lj_tab_wait_no_l();
 	  goto retry_array;
 	}
