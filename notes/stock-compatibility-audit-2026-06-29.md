@@ -1,8 +1,14 @@
 # Stock compatibility audit, 2026-06-29
 
-Scope: active `v2.1` commits through `f5d558b5e0fe`, with emphasis on
+Scope: active `v2.1` commits through `3f71abcb298a`, with emphasis on
 source-search test removal, legacy/fork-local entrypoint cleanup, and stock
 LuaJIT API behavior.
+
+Refresh note: the 2026-06-29 re-audit after the FFI `ffi.istype()` recorder
+snapshot slice found no new active source-search-only tests and no new public
+stock LuaJIT API removals. The remaining string checks in active tests are over
+generated dumps or runtime output, matching the policy exception for generated
+ASM/mcode and other generated artifacts.
 
 ## Source-search tests and CI
 
