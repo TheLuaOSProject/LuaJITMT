@@ -9,6 +9,12 @@ Lua-upvalue stores now use the same mutation boundary when the raw `TValue`
 actually changes, then publish the replacement cell with the existing release
 store and GC publication wrapper.
 
+The mutation boundary first checks for live or actively recording traces before
+requesting the global trace-flush handshake. This keeps the stock-visible
+invalidation rule intact when traces exist, while avoiding a pointless
+safepoint handshake in C API programs that have no trace state to invalidate.
+
 Validation:
 
 - `tools/ci/lua_test.sh m6_jit_cclosure_upvalue_flush`
+- `tools/ci/lua_test.sh m5_upvalue_publish_gc`

@@ -831,6 +831,20 @@ static uint32_t lj_trace_flushscope_retire(global_State *g, uint64_t epoch)
 }
 
 /* Flush all traces. */
+int lj_trace_hasany(global_State *g)
+{
+  jit_State *J = G2J(g);
+  MSize i, sizetrace = trace_sizetrace_acq(J);
+  if (lj_trace_state_load(J) != LJ_TRACE_IDLE)
+    return 1;  /* Active recorder must still be aborted by the boundary. */
+  for (i = 1; i < sizetrace; i++) {
+    GCtrace *T = traceref(J, i);
+    if (T && trace_traceno_acq(T) == i)
+      return 1;
+  }
+  return 0;
+}
+
 int lj_trace_flushall(lua_State *L)
 {
   jit_State *J = L2J(L);

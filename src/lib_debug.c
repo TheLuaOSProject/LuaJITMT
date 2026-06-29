@@ -278,7 +278,8 @@ LJLIB_CF(debug_upvalueid)
 {
   GCfunc *fn = lj_lib_checkfunc(L, 1);
   int32_t n = lj_lib_checkint(L, 2) - 1;
-  if ((uint32_t)n >= fn->l.nupvalues)
+  MSize nupvalues = isluafunc(fn) ? fn->l.nupvalues : fn->c.nupvalues;
+  if ((uint32_t)n >= nupvalues)
     lj_err_arg(L, 2, LJ_ERR_IDXRNG);
   lua_pushlightuserdata(L, isluafunc(fn) ?
 					   (void *)func_uvptr_acq(&fn->l, (uint32_t)n) :

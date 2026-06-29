@@ -102,7 +102,7 @@ static LJ_AINLINE TValue *index2adr_check_read(lua_State *L, int idx,
 
 static LJ_AINLINE void api_trace_flush_mutation(lua_State *L)
 {
-  if (lj_trace_flushall_hs(L))
+  if (lj_trace_hasany(G(L)) && lj_trace_flushall_hs(L))
     lj_err_caller(L, LJ_ERR_NOGCMM);
 }
 

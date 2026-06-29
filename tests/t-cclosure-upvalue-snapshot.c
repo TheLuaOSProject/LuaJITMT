@@ -585,6 +585,17 @@ static void exercise_nested_upvalue_apis(lua_State *L)
   push_payload_table(L, "first", 21);
   push_payload_table(L, "second", 22);
   lua_pushcclosure(L, carrier_pair_c, 2);
+  lua_pushvalue(L, -1);
+  lua_setglobal(L, "lj_m5_pair_carrier");
+  check_lua(L, luaL_dostring(L,
+    "local f = assert(lj_m5_pair_carrier)\n"
+    "local id1 = debug.upvalueid(f, 1)\n"
+    "local id2 = debug.upvalueid(f, 2)\n"
+    "assert(id1 ~= nil and id2 ~= nil and id1 ~= id2)\n"
+    "assert(not pcall(debug.upvalueid, f, 3))\n"),
+    "debug upvalueid C closure pair");
+  lua_pushnil(L);
+  lua_setglobal(L, "lj_m5_pair_carrier");
   lua_pushcclosure(L, upvalue_pair_api_reader_c, 1);
   check_lua(L, lua_pcall(L, 0, 1, 0), "nested pair upvalue reader");
   check_lua(L, lua_pcall(L, 0, 2, 0), "nested pair upvalue carrier");
