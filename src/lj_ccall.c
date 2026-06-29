@@ -1274,6 +1274,7 @@ void lj_ccall_native_save(lua_State *L, CCallNativeState *st)
   st->tg = tg;
   st->cb = cb;
   st->old_ffi_call_func = lj_tg_ffi_call_func_acq(tg);
+  st->old_callback_slot = ccallback_slot_acq(cb);
   st->old_native_had_stopreq = ccallback_native_had_stopreq_acq(cb);
   st->had_stopreq = 0;
 }
@@ -1296,9 +1297,11 @@ uint32_t lj_ccall_native_leave(lua_State *L, CTState *cts,
 {
   uint32_t actions = lj_native_leave(L);
   CCallbackRuntime *cb = st->cb;
+  MSize callback_slot = ccallback_slot_acq(cb);
   /* Blacklist function that called a callback. */
-  if (ccallback_slot_acq(cb) != ~0u)
+  if (callback_slot != (MSize)~0u)
     lj_ctype_cb_blacklist(L, cts, func);
+  ccallback_slot_rel(cb, st->old_callback_slot);
   lj_tg_ffi_call_func_rel(st->tg, st->old_ffi_call_func);
   ccallback_native_had_stopreq_rel(cb, st->old_native_had_stopreq);
   return actions;

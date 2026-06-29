@@ -193,6 +193,7 @@ typedef struct CCallNativeState {
   TGState *tg;
   CCallbackRuntime *cb;
   void *old_ffi_call_func;
+  MSize old_callback_slot;
   uint8_t old_native_had_stopreq;
   int had_stopreq;
 } CCallNativeState;

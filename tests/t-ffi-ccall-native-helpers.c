@@ -92,6 +92,7 @@ static void run_restore_state(lua_State *L, CTState *cts, TGState *tg)
 
   clear_stopreq(tg);
   lj_tg_ffi_call_func_rel(tg, old_func);
+  ccallback_slot_rel(&tg->cb, 17);
   ccallback_native_had_stopreq_rel(&tg->cb, 1);
 
   lj_ccall_native_save(L, &native);
@@ -105,9 +106,11 @@ static void run_restore_state(lua_State *L, CTState *cts, TGState *tg)
   assert(actions == 0);
   assert(lj_tg_in_native_acq(tg) == 0);
   assert(lj_tg_ffi_call_func_acq(tg) == old_func);
+  assert(ccallback_slot_acq(&tg->cb) == 17);
   assert(ccallback_native_had_stopreq_acq(&tg->cb) == 1);
 
   lj_tg_ffi_call_func_rel(tg, NULL);
+  ccallback_slot_rel(&tg->cb, 0);
   ccallback_native_had_stopreq_rel(&tg->cb, 0);
 }
 
@@ -117,6 +120,7 @@ static void run_callback_blacklist(lua_State *L, CTState *cts, TGState *tg)
   void *func = (void *)(uintptr_t)&dummy_callback_foreign;
 
   clear_stopreq(tg);
+  ccallback_slot_rel(&tg->cb, 23);
   lj_ccall_native_save(L, &native);
   lj_ccall_native_enter(L, &native, func);
   ccallback_slot_rel(&tg->cb, 0);  /* Simulate a callback trampoline reaching Lua. */
@@ -124,8 +128,10 @@ static void run_callback_blacklist(lua_State *L, CTState *cts, TGState *tg)
 
   assert(lj_tg_in_native_acq(tg) == 0);
   assert(lj_tg_ffi_call_func_acq(tg) == NULL);
+  assert(ccallback_slot_acq(&tg->cb) == 23);
   assert(ccallback_native_had_stopreq_acq(&tg->cb) == 0);
   assert(lj_ctype_cb_isblacklisted(cts, func));
+  ccallback_slot_rel(&tg->cb, 0);
 }
 
 static void run_fresh_stopreq_check(lua_State *L, CTState *cts,
@@ -152,6 +158,7 @@ static void run_fresh_stopreq_check(lua_State *L, CTState *cts,
   assert(ctx.published);
   assert(lj_tg_in_native_acq(tg) == 0);
   assert(lj_tg_ffi_call_func_acq(tg) == NULL);
+  assert(ccallback_slot_acq(&tg->cb) == 0);
   assert(lj_tg_flags_test_acq(tg, TGF_STOPREQ));
 
   pending_native = native;
