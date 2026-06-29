@@ -302,6 +302,8 @@ assert(cl.lj_clib_ldscript_value() == 42)
       clean_build(t)
       build_and_run_c(t, t:tmp("lj_t-ffi-typeinfo-snapshot"),
                       "t-ffi-typeinfo-snapshot.c", { timeout = "20s" })
+      build_and_run_c(t, t:tmp("lj_t-ffi-tonumber-snapshot"),
+                      "t-ffi-tonumber-snapshot.c", { timeout = "20s" })
       build_and_run_c(t, t:tmp("lj_t-ffi-layout-snapshot"),
                       "t-ffi-layout-snapshot.c", { timeout = "20s" })
       build_and_run_c(t, t:tmp("lj_t-ffi-field-snapshot"),

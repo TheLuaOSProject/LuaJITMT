@@ -289,6 +289,43 @@ LJLIB_CF(select)		LJLIB_REC(.)
 
 /* -- Base library: conversions ------------------------------------------- */
 
+#if LJ_HASFFI
+static int lib_base_ctype_rawref_wait(lua_State *L, CTState *cts, CTypeID id,
+				      CTypeID *ridp, CType *out)
+{
+  int ok = lj_ctype_rawref_predefined(cts, id, ridp, out);
+  if (ok >= 0)
+    return ok;
+  for (;;) {
+    ok = lj_ctype_rawref_snapshot(cts, id, ridp, out);
+    if (ok >= 0)
+      return ok;
+    lj_ctype_parse_wait(cts, L, ctype_parse_token_acq(cts));
+  }
+}
+
+static int lib_base_tonumber_cdata(lua_State *L, CTState *cts, TValue *o,
+				   CTInfo *infop, CTSize *szp)
+{
+  CType ct;
+  CTInfo info;
+  CTSize size;
+  if (!lib_base_ctype_rawref_wait(L, cts, cdataV(o)->ctypeid, NULL, &ct))
+    return 0;
+  info = ctype_info_acq(&ct);
+  size = ctype_size_acq(&ct);
+  if (ctype_isenum(info)) {
+    int ok = lj_ctype_info_wait(L, cts, ctype_cid(info), &info, &size,
+				NULL, NULL);
+    if (ok <= 0)
+      return 0;
+  }
+  *infop = info;
+  *szp = size;
+  return 1;
+}
+#endif
+
 LJLIB_ASM(tonumber)		LJLIB_REC(.)
 {
   int32_t base = lj_lib_optint(L, 2, 10);
@@ -301,11 +338,12 @@ LJLIB_ASM(tonumber)		LJLIB_REC(.)
 #if LJ_HASFFI
     if (tviscdata(o)) {
       CTState *cts = ctype_cts(L);
-      CType *ct = lj_ctype_rawref(cts, cdataV(o)->ctypeid);
-      if (ctype_isenum(ct->info)) ct = ctype_child(cts, ct);
-      if (ctype_isnum(ct->info) || ctype_iscomplex(ct->info)) {
-	if (LJ_DUALNUM && ctype_isinteger_or_bool(ct->info) &&
-	    ct->size <= 4 && !(ct->size == 4 && (ct->info & CTF_UNSIGNED))) {
+      CTInfo info;
+      CTSize size;
+      if (lib_base_tonumber_cdata(L, cts, o, &info, &size) &&
+	  (ctype_isnum(info) || ctype_iscomplex(info))) {
+	if (LJ_DUALNUM && ctype_isinteger_or_bool(info) &&
+	    size <= 4 && !(size == 4 && (info & CTF_UNSIGNED))) {
 	  int32_t i;
 	  lj_cconv_ct_tv_l(L, cts, ctype_get(cts, CTID_INT32), CTID_INT32,
 			   (uint8_t *)&i, o, 0);
