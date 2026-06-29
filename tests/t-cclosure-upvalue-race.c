@@ -1,5 +1,5 @@
 /*
-** Concurrent lua_setupvalue() publication for a shared C closure upvalue.
+** Concurrent C API publication for a shared C closure upvalue.
 */
 
 #include <assert.h>
@@ -122,7 +122,7 @@ static void assert_payload(lua_State *L, int idx)
   lua_pop(L, 1);
 }
 
-static int upvalue_reader_c(lua_State *L)
+static int push_checked_upvalue_seq(lua_State *L)
 {
   int uv = lua_upvalueindex(1);
   int seq;
@@ -134,6 +134,23 @@ static int upvalue_reader_c(lua_State *L)
   lua_pop(L, 2);
   lua_pushinteger(L, seq);
   return 1;
+}
+
+static int upvalue_actor_c(lua_State *L)
+{
+  int narg = lua_gettop(L);
+  int uv = lua_upvalueindex(1);
+  if (narg >= 2 && lua_istable(L, 1)) {
+    int mode = (int)lua_tointeger(L, 2);
+    if (mode == 1) {
+      lua_pushvalue(L, 1);
+      lua_replace(L, uv);
+    } else {
+      lua_copy(L, 1, uv);
+    }
+    lua_settop(L, 0);
+  }
+  return push_checked_upvalue_seq(L);
 }
 
 static void *writer_main(void *arg)
@@ -161,18 +178,41 @@ static void *writer_main(void *arg)
 
   for (i = 1; i <= WRITES; i++) {
     const char *name;
+    int mode = i % 3;
 
     push_payload(L, i);
-    name = lua_setupvalue(L, 1, 1);
-    if (name == NULL || lua_gettop(L) != 1) {
-      ctx->status = 3;
-      store_flag(ctx->done, 1);
-      lj_threading_detach(L, 1);
-      return NULL;
+    if (mode == 0) {
+      name = lua_setupvalue(L, 1, 1);
+      if (name == NULL || lua_gettop(L) != 1) {
+	ctx->status = 3;
+	store_flag(ctx->done, 1);
+	lj_threading_detach(L, 1);
+	return NULL;
+      }
+    } else {
+      int status, seq;
+      lua_pushvalue(L, 1);
+      lua_insert(L, -2);
+      lua_pushinteger(L, mode);
+      status = lua_pcall(L, 2, 1, 0);
+      if (status != LUA_OK) {
+	fprintf(stderr, "writer: %s\n", lua_tostring(L, -1));
+	ctx->status = 4;
+	store_flag(ctx->done, 1);
+	lj_threading_detach(L, 1);
+	return NULL;
+      }
+      seq = (int)lua_tointeger(L, -1);
+      lua_pop(L, 1);
+      if (seq != i || lua_gettop(L) != 1) {
+	ctx->status = 5;
+	store_flag(ctx->done, 1);
+	lj_threading_detach(L, 1);
+	return NULL;
+      }
     }
 
     if ((i & 127) == 0) {
-      lua_gc(L, LUA_GCSTEP, 32);
       sched_yield();
     }
   }
@@ -231,7 +271,6 @@ static void *reader_main(void *arg)
 	lj_threading_detach(L, 1);
 	return NULL;
       }
-      lua_gc(L, LUA_GCSTEP, 16);
       sched_yield();
     }
   }
@@ -276,7 +315,7 @@ int main(void)
   assert(L != NULL);
   luaL_openlibs(L);
   push_payload(L, 0);
-  lua_pushcclosure(L, upvalue_reader_c, 1);
+  lua_pushcclosure(L, upvalue_actor_c, 1);
   assert(lua_gettop(L) == 1);
 
   memset(&writer, 0, sizeof(writer));
