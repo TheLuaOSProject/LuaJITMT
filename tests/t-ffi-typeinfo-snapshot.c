@@ -79,6 +79,20 @@ static void assert_direct_name_waits_without_lock(lua_State *L, CTState *cts,
     "assert(tonumber(pptag) == lj_m7_typeinfo_tag_ptrptr_id)\n"
     "assert(ffi.sizeof('struct lj_m7_typeinfo_snapshot_tag **') == "
     "ffi.sizeof('void *'))\n"
+    "local int_ptr9 = 'int' .. string.rep(' *', 9)\n"
+    "assert(tonumber(ffi.typeof(int_ptr9)) == lj_m7_typeinfo_int_ptr9_id)\n"
+    "assert(ffi.sizeof(int_ptr9) == ffi.sizeof('void *'))\n"
+    "local tag_ptr9 = 'struct lj_m7_typeinfo_snapshot_tag' .. "
+    "string.rep(' *', 9)\n"
+    "assert(tonumber(ffi.typeof(tag_ptr9)) == lj_m7_typeinfo_tag_ptr9_id)\n"
+    "assert(ffi.sizeof(tag_ptr9) == ffi.sizeof('void *'))\n"
+    "local int_arr9 = 'int' .. string.rep('[1]', 9)\n"
+    "assert(tonumber(ffi.typeof(int_arr9)) == lj_m7_typeinfo_int_arr9_id)\n"
+    "assert(ffi.sizeof(int_arr9) == 4)\n"
+    "local tag_arr9 = 'struct lj_m7_typeinfo_snapshot_tag' .. "
+    "string.rep('[1]', 9)\n"
+    "assert(tonumber(ffi.typeof(tag_arr9)) == lj_m7_typeinfo_tag_arr9_id)\n"
+    "assert(ffi.sizeof(tag_arr9) == 4)\n"
     "local ct = ffi.typeof('lj_m7_typeinfo_snapshot_t')\n"
     "assert(tonumber(ct) == lj_m7_typeinfo_snapshot_id)\n"
     "assert(ffi.sizeof('lj_m7_typeinfo_snapshot_t') == 4)\n"
@@ -89,6 +103,41 @@ static void assert_direct_name_waits_without_lock(lua_State *L, CTState *cts,
   assert(pthread_join(thread, NULL) == 0);
   assert(ctx.saw_native);
   assert(ljt_ctype_parse_seq(cts) == ctx.release_seq);
+}
+
+static void assert_deep_suffixes_without_lock(lua_State *L, CTState *cts)
+{
+  uint32_t seq = ljt_ctype_parse_seq(cts);
+  ljt_lua_dostring(L,
+    "local ffi = require('ffi')\n"
+    "local int_ptr9 = 'int' .. string.rep(' *', 9)\n"
+    "assert(tonumber(ffi.typeof(int_ptr9)) == lj_m7_typeinfo_int_ptr9_id)\n"
+    "assert(ffi.sizeof(int_ptr9) == ffi.sizeof('void *'))\n");
+  assert(ljt_ctype_parse_seq(cts) == seq);
+
+  ljt_lua_dostring(L,
+    "local ffi = require('ffi')\n"
+    "local tag_ptr9 = 'struct lj_m7_typeinfo_snapshot_tag' .. "
+    "string.rep(' *', 9)\n"
+    "assert(tonumber(ffi.typeof(tag_ptr9)) == lj_m7_typeinfo_tag_ptr9_id)\n"
+    "assert(ffi.sizeof(tag_ptr9) == ffi.sizeof('void *'))\n");
+  assert(ljt_ctype_parse_seq(cts) == seq);
+
+  ljt_lua_dostring(L,
+    "local ffi = require('ffi')\n"
+    "local int_arr9 = 'int' .. string.rep('[1]', 9)\n"
+    "assert(tonumber(ffi.typeof(int_arr9)) == lj_m7_typeinfo_int_arr9_id)\n"
+    "assert(ffi.sizeof(int_arr9) == 4)\n"
+    "assert(ffi.alignof(int_arr9) == 4)\n");
+  assert(ljt_ctype_parse_seq(cts) == seq);
+
+  ljt_lua_dostring(L,
+    "local ffi = require('ffi')\n"
+    "local tag_arr9 = 'struct lj_m7_typeinfo_snapshot_tag' .. "
+    "string.rep('[1]', 9)\n"
+    "assert(tonumber(ffi.typeof(tag_arr9)) == lj_m7_typeinfo_tag_arr9_id)\n"
+    "assert(ffi.sizeof(tag_arr9) == 4)\n");
+  assert(ljt_ctype_parse_seq(cts) == seq);
 }
 
 int main(void)
@@ -148,10 +197,16 @@ int main(void)
     "tonumber(ffi.typeof('struct lj_m7_typeinfo_snapshot_tag * const * volatile'))\n"
     "lj_m7_typeinfo_tag_ptrptr_id = "
     "tonumber(ffi.typeof('struct lj_m7_typeinfo_snapshot_tag **'))\n"
+    "lj_m7_typeinfo_tag_ptr9_id = "
+    "tonumber(ffi.typeof('struct lj_m7_typeinfo_snapshot_tag' .. "
+    "string.rep(' *', 9)))\n"
     "lj_m7_typeinfo_tag_arr_id = "
     "tonumber(ffi.typeof('struct lj_m7_typeinfo_snapshot_tag[2]'))\n"
     "lj_m7_typeinfo_tag_arr2_id = "
     "tonumber(ffi.typeof('struct lj_m7_typeinfo_snapshot_tag[2][3]'))\n"
+    "lj_m7_typeinfo_tag_arr9_id = "
+    "tonumber(ffi.typeof('struct lj_m7_typeinfo_snapshot_tag' .. "
+    "string.rep('[1]', 9)))\n"
     "lj_m7_typeinfo_tag_const_arr2_id = "
     "tonumber(ffi.typeof('const struct lj_m7_typeinfo_snapshot_tag[2][3]'))\n"
     "lj_m7_typeinfo_union_id = "
@@ -196,8 +251,12 @@ int main(void)
     "lj_m7_typeinfo_const_int_ptr_const_id = "
     "tonumber(ffi.typeof('const int * const'))\n"
     "lj_m7_typeinfo_int_ptrptr_id = tonumber(ffi.typeof('int **'))\n"
+    "lj_m7_typeinfo_int_ptr9_id = "
+    "tonumber(ffi.typeof('int' .. string.rep(' *', 9)))\n"
     "lj_m7_typeinfo_int_arr_id = tonumber(ffi.typeof('int[4]'))\n"
     "lj_m7_typeinfo_int_arr2_id = tonumber(ffi.typeof('int[2][3]'))\n"
+    "lj_m7_typeinfo_int_arr9_id = "
+    "tonumber(ffi.typeof('int' .. string.rep('[1]', 9)))\n"
     "lj_m7_typeinfo_const_int_arr2_id = tonumber(ffi.typeof('const int[2][3]'))\n"
     "lj_m7_typeinfo_longlong_id = tonumber(ffi.typeof('long long'))\n"
     "lj_m7_typeinfo_longlong_alias_id = "
@@ -498,6 +557,10 @@ int main(void)
     "  assert(tonumber(ffi.typeof('const char[2][3]')) == "
     "lj_m7_typeinfo_cchar_arr2_id)\n"
     "end\n");
+  seq1 = ljt_ctype_parse_seq(cts);
+  assert(seq1 == seq0);
+
+  assert_deep_suffixes_without_lock(L, cts);
   seq1 = ljt_ctype_parse_seq(cts);
   assert(seq1 == seq0);
 

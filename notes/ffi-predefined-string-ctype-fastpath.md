@@ -88,6 +88,12 @@ representation; `restrict` tokens after `*` are ignored like the parser. The
 base-name wait still happens in native time when a parser is active, so the
 lookup does not read rollback-sensitive names while the parser token is held.
 
+The parser-free declaration suffix walk remains bounded, but the shared pointer
+and fixed-array suffix limit is now 16. This keeps pathological declarations on
+the normal parser/diagnostic path while allowing common generated stable forms
+with more than eight pointer or fixed-array suffixes to avoid claiming
+`CTState.parse_token`.
+
 Fixed-size array suffix chains over a direct base, including a direct pointer
 chain base, also stay off the parser token: `ffi.typeof("int[4]")`,
 `ffi.typeof("my_typedef[3]")`, `ffi.typeof("struct my_tag[2][3]")`, and

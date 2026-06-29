@@ -626,15 +626,16 @@ static int ffi_direct_array_ctype(lua_State *L, CTState *cts, CTypeID elemid,
   return 1;
 }
 
+#define FFI_DIRECT_MAX_DECL_SUFFIXES 16
+
 static int ffi_direct_ctype_part(lua_State *L, CTState *cts, GCstr *s,
 				 const char *p, MSize len, CTypeID *idp)
 {
-  enum { FFI_DIRECT_MAX_POINTERS = 8 };
   while (len != 0 && ffi_cspace(*p)) { p++; len--; }
   while (len != 0 && ffi_cspace(p[len-1])) len--;
   {
     MSize baselen = len;
-    CTInfo pqual[FFI_DIRECT_MAX_POINTERS];
+    CTInfo pqual[FFI_DIRECT_MAX_DECL_SUFFIXES];
     MSize nptr = 0;
     CTypeID baseid;
     for (;;) {
@@ -642,7 +643,7 @@ static int ffi_direct_ctype_part(lua_State *L, CTState *cts, GCstr *s,
       MSize nextlen = baselen;
       if (!ffi_direct_pointer_suffix(p, &nextlen, &qual))
 	break;
-      if (nptr == FFI_DIRECT_MAX_POINTERS) {
+      if (nptr == FFI_DIRECT_MAX_DECL_SUFFIXES) {
 	nptr = 0;
 	break;
       }
@@ -666,14 +667,13 @@ static int ffi_direct_ctype_part(lua_State *L, CTState *cts, GCstr *s,
 static int ffi_direct_ctype_string(lua_State *L, CTState *cts, GCstr *s,
 				   CTypeID *idp)
 {
-  enum { FFI_DIRECT_MAX_ARRAYS = 8 };
   const char *p = strdata(s);
   MSize len = s->len;
   while (len != 0 && ffi_cspace(*p)) { p++; len--; }
   while (len != 0 && ffi_cspace(p[len-1])) len--;
   {
     MSize baselen = len;
-    CTSize nelem[FFI_DIRECT_MAX_ARRAYS];
+    CTSize nelem[FFI_DIRECT_MAX_DECL_SUFFIXES];
     CTypeID elemid;
     MSize narr = 0;
     for (;;) {
@@ -681,7 +681,7 @@ static int ffi_direct_ctype_string(lua_State *L, CTState *cts, GCstr *s,
       MSize nextlen = baselen;
       if (!ffi_direct_array_suffix(p, &nextlen, &n))
 	break;
-      if (narr == FFI_DIRECT_MAX_ARRAYS) {
+      if (narr == FFI_DIRECT_MAX_DECL_SUFFIXES) {
 	narr = 0;
 	break;
       }
@@ -703,10 +703,9 @@ static int ffi_direct_ctype_string(lua_State *L, CTState *cts, GCstr *s,
 
 static int ffi_direct_array_sizeof_string(CTState *cts, GCstr *s, CTSize *szp)
 {
-  enum { FFI_DIRECT_MAX_ARRAYS = 8 };
   const char *p = strdata(s);
   MSize len = s->len, baselen, narr = 0, i;
-  CTSize nelem[FFI_DIRECT_MAX_ARRAYS], esize;
+  CTSize nelem[FFI_DIRECT_MAX_DECL_SUFFIXES], esize;
   CTInfo einfo;
   CTypeID elemid;
   while (len != 0 && ffi_cspace(*p)) { p++; len--; }
@@ -717,7 +716,7 @@ static int ffi_direct_array_sizeof_string(CTState *cts, GCstr *s, CTSize *szp)
     MSize nextlen = baselen;
     if (!ffi_direct_array_suffix(p, &nextlen, &n))
       break;
-    if (narr == FFI_DIRECT_MAX_ARRAYS)
+    if (narr == FFI_DIRECT_MAX_DECL_SUFFIXES)
       return 0;
     nelem[narr++] = n;
     baselen = nextlen;
