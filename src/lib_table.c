@@ -46,7 +46,7 @@ static void table_insert_shift_store(lua_State *L, GCtab *t, int32_t i)
       }
       return;
     }
-    lj_tab_store_wait_no_l();  /* table.insert shift saw stale/FORWARD slot. */
+    lj_tab_store_wait_l(L);  /* table.insert shift saw stale/FORWARD slot. */
   }
 }
 
@@ -61,7 +61,7 @@ static TValue *table_insert_value_store(lua_State *L, GCtab *t, int32_t i,
     if (lj_tab_trystoretv_cas_keyed(L, t, dst, &key, src) ==
 	LJ_TAB_STORE_CAS_OK)
       return dst;
-    lj_tab_store_wait_no_l();  /* table.insert value saw stale/FORWARD slot. */
+    lj_tab_store_wait_l(L);  /* table.insert value saw stale/FORWARD slot. */
   }
 }
 
@@ -359,7 +359,7 @@ static void table_pack_storeint_str(lua_State *L, GCtab *t, GCstr *key,
     if (lj_tab_trystoretv_cas_keyed(L, t, dst, &keytv, &tv) ==
 	LJ_TAB_STORE_CAS_OK)
       return;
-    lj_tab_store_wait_no_l();  /* table.pack "n" store saw stale/FORWARD slot. */
+    lj_tab_store_wait_l(L);  /* table.pack "n" store saw stale/FORWARD slot. */
   }
 }
 
