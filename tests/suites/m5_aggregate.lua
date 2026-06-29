@@ -52,6 +52,7 @@ local m5_concurrent_cases = {
   "m5_parser_capture_meta",
   "m5_bcdump_current",
   "m5_upvalue_publish_gc",
+  "m5_stock_api_surface",
   "m5_cell_ops"
 }
 

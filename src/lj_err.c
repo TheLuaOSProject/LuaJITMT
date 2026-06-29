@@ -1196,6 +1196,12 @@ LUALIB_API int luaL_argerror(lua_State *L, int narg, const char *msg)
   return 0;  /* unreachable */
 }
 
+LUALIB_API int luaL_typerror(lua_State *L, int narg, const char *xname)
+{
+  lj_err_argtype(L, narg, xname);
+  return 0;  /* unreachable */
+}
+
 LUALIB_API void luaL_where(lua_State *L, int level)
 {
   int size;

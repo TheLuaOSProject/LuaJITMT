@@ -514,6 +514,16 @@ return function(add)
   })
 
   add({
+    name = "m5_stock_api_surface",
+    description = "stock LuaJIT public C API surface behavior",
+    run = function(t)
+      build_and_run_c(t, t:tmp("lj_t-stock-api-surface"),
+                      "t-stock-api-surface.c")
+      print("M5 stock LuaJIT public C API surface passed")
+    end
+  })
+
+  add({
     name = "m5_jit_trace_publish",
     description = "JIT trace-slot and trace-link publication guards",
     run = function(t)

@@ -18,7 +18,6 @@
 #include "luajit.h"
 
 #include "lj_arch.h"
-#include "lj_api.h"
 #include "lj_safepoint.h"
 #include "lj_tg.h"
 
@@ -353,8 +352,7 @@ static int loadline(lua_State *L)
   if (!pushline(L, 1))
     return -1;  /* no input */
   for (;;) {  /* repeat until gets a complete line */
-    status = luaL_loadbuffer(L, lua_tostring(L, 1), lj_api_objlen(L, 1),
-			     "=stdin");
+    status = luaL_loadbuffer(L, lua_tostring(L, 1), lua_objlen(L, 1), "=stdin");
     if (!incomplete(L, status)) break;  /* cannot try to add lines? */
     if (!pushline(L, 0))  /* no more input? */
       return -1;
@@ -699,7 +697,7 @@ int main(int argc, char **argv)
   }
   smain.argc = argc;
   smain.argv = argv;
-  status = lj_api_cpcall(L, pmain, NULL);
+  status = lua_cpcall(L, pmain, NULL);
   report_raw(L, status);
   lua_close(L);
   return (status || smain.status > 0) ? EXIT_FAILURE : EXIT_SUCCESS;

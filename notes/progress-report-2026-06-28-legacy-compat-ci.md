@@ -31,9 +31,10 @@ Time remaining forecast:
   upvalue walk.
 - Renamed the old bytecode fixture to `m5_bcdump_current`; it now verifies
   current-format loading and malformed current dump rejection.
-- Removed public C compatibility aliases: `luaL_putchar`, `lua_strlen`,
-  `lua_open`, `lua_getregistry`, `lua_getgccount`, `lua_Chunkreader`, and
-  `lua_Chunkwriter`. Repo-internal callers now use canonical APIs directly.
+- Reverted the removal of stock LuaJIT public C compatibility aliases such as
+  `luaL_putchar`, `lua_strlen`, `lua_open`, `lua_getregistry`,
+  `lua_getgccount`, `lua_Chunkreader`, and `lua_Chunkwriter`; stock LuaJIT API
+  compatibility stays in scope.
 - Slimmed `tools/ci/m7_ffi_blocking.sh` so behavior-covered blacklist and
   recorder checks are no longer pinned to exact source shape.
 

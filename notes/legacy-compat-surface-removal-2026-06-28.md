@@ -11,21 +11,12 @@ current lockless policy:
 - Made `-DLUAJIT_ENABLE_LUA52COMPAT` fail explicitly in `lj_arch.h`.
 - Removed stale v2 bytecode compatibility plan/test material and replaced it
   with current-only dump validation wording.
-- Removed the public `luaL_openlib()` and `luaL_register()` compatibility
-  entry points. In-tree module registration uses explicit `luaL_pushmodule()`
-  and `luaL_setfuncs()` calls so supported module setup stays visible in the
-  caller instead of hidden behind an old wrapper API.
-- Removed the unused public `luaL_typerror()` wrapper and the integer-cast
-  auxlib macros `luaL_checkint`, `luaL_optint`, `luaL_checklong`, and
-  `luaL_optlong`. Callers should use `luaL_checkinteger()` and
-  `luaL_optinteger()` with an explicit local cast when they really need a
-  narrower C type.
-- Removed the remaining public Lua 5.1-style helper entry points
-  `lua_equal()`, `lua_lessthan()`, `lua_objlen()`, and `lua_cpcall()` from the
-  lockless runtime header/export surface. Runtime code that still needs those
-  semantics uses `lj_api_*` internal helpers, which keeps table sorting, auxlib
-  buffer sizing, the frontend protected main call, and focused C upvalue
-  fixtures from depending on old compatibility symbols.
+- Kept stock LuaJIT public API compatibility entry points and macros, including
+  `luaL_openlib()`, `luaL_register()`, `luaL_typerror()`, `luaL_checkint`,
+  `luaL_optint`, `luaL_checklong`, `luaL_optlong`, `luaL_putchar`,
+  `lua_strlen`, `lua_open`, `lua_getregistry`, `lua_getgccount`,
+  `lua_Chunkreader`, and `lua_Chunkwriter`. These are part of the stock LuaJIT
+  API surface and are not old fork-specific compatibility wrappers.
 - Removed redundant `string.gmatch` C-closure and local-cell x64 source guards;
   behavior fixtures, bytecode checks, and generated JIT dump checks cover the
   observable semantics.
@@ -35,6 +26,9 @@ current lockless policy:
 
 Kept intentionally:
 
+- Stock LuaJIT public C API entry points and macros. The old-compat cleanup
+  target is fork-specific or unsupported platform/build surface, not the stock
+  LuaJIT API contract.
 - GC "legacy" bridge names and weak fallback counters while they describe real
   safety bridge behavior.
 - FFI C type compatibility helpers; these are language/FFI semantics, not

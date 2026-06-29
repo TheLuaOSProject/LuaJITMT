@@ -91,10 +91,10 @@
   the `proto_legacyuv` path was deleted, and the former compatibility fixture is
   now `m5_bcdump_current`, focused on current-format validation and malformed
   current dump rejection.
-- Removed unused/public C header compatibility aliases for `luaL_putchar`,
-  `lua_strlen`, `lua_open`, `lua_getregistry`, `lua_getgccount`,
-  `lua_Chunkreader`, and `lua_Chunkwriter`; repo-internal call sites now use
-  the canonical APIs directly.
+- Reverted the removal of stock LuaJIT C header aliases such as
+  `luaL_putchar`, `lua_strlen`, `lua_open`, `lua_getregistry`,
+  `lua_getgccount`, `lua_Chunkreader`, and `lua_Chunkwriter`; these are stock
+  LuaJIT public API compatibility macros and should remain available.
 - Moved `t-ffi-finreg-free-invariant.c` into the `m7_ffi_finreg` Lua-suite
   case and removed the ad hoc hardcoded `/tmp` compile from
   `tools/ci/m7_ffi_finreg.sh`.

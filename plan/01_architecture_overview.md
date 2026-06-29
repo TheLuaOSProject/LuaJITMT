@@ -112,8 +112,9 @@ CNEW/CGET/CSET, no open upvalues in v4 chunks. DECIDED. Open upvalues alias
 live stack slots of one thread; sharing them across threads would force
 cross-thread stack access and pin stack reallocation. Cells keep exact Lua
 sharing semantics (closing preserves GCupval identity) while making every
-upvalue a stable heap word. Legacy (v2) chunks keep the old machinery with a
-documented capture-at-FNEW deviation under MT. Full design: 06 §6.4, 10.
+upvalue a stable heap word. Pre-lockless v2/v3 dumps are rejected at the
+bytecode header; source and current v4 dumps use the cell-capable ABI. Full
+design: 06 §6.4, 10.
 
 ### ADR-8 — JIT: single-recorder token; immutable published traces;
 side-exit indirection table instead of code patching; dual-mapped mcode for
