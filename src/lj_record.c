@@ -1394,9 +1394,14 @@ static void rec_rbchash_publish(jit_State *J, TRef tr, const BCIns *pc)
   la_store32_rel(&rbc->ref, tref_ref(tr));  /* Recorder table-bump cache. */
 }
 
-static LJ_AINLINE void rec_template_wait_no_l(void)
+static LJ_AINLINE void rec_template_wait(lua_State *L)
 {
-  (void)lj_thr_sleep_ns(NULL, 1000000);
+  /*
+  ** Optional table-bump template markers retry after table resize forwarding
+  ** or a slot CAS loss. The recorder owns a current Lua state, so keep that TG
+  ** native and safepoint-visible while waiting for the template publisher.
+  */
+  (void)lj_thr_sleep_ns(L, 1000000);
 }
 
 static void rec_template_mark_nil(jit_State *J, GCtab *tpl, cTValue *key)
@@ -1410,7 +1415,7 @@ static void rec_template_mark_nil(jit_State *J, GCtab *tpl, cTValue *key)
     if (rc == LJ_TAB_STORE_CAS_OK || rc == LJ_TAB_STORE_CAS_EXISTS)
       return;
     /* Template marker saw stale/FORWARD slot. */
-    rec_template_wait_no_l();
+    rec_template_wait(J->L);
   }
 }
 
@@ -1421,13 +1426,12 @@ static void rec_idx_bump(jit_State *J, RecordIndex *ix)
     const BCIns *pc = rec_rbchash_pc_acq(rbc);
     GCtab *tb = tabV(&ix->tabv);
     uint32_t nhbits;
-    Node *tb_node;
     MSize tb_hmask;
     IRIns *ir;
     TValue *array;
     if (!tvisnil(&ix->keyv))
       (void)lj_tab_set(J->L, tb, &ix->keyv);  /* Grow table right now. */
-    tb_node = lj_tab_node_snapshot_acq(tb, &tb_hmask);
+    (void)lj_tab_node_snapshot_acq(tb, &tb_hmask);
     nhbits = tb_hmask > 0 ? lj_fls((uint32_t)tb_hmask)+1 : 0;
     ir = IR(tref_ref(ix->tab));
     if (ir->o == IR_TNEW) {
