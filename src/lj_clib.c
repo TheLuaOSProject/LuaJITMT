@@ -590,6 +590,36 @@ static TValue *clib_cache_publish(lua_State *L, CLibrary *cl, GCstr *name,
   }
 }
 
+static cTValue *clib_env_get(GCtab *env, GCstr *name)
+{
+  cTValue *tv = env ? lj_tab_getstr(env, name) : NULL;
+  return tv && !lj_tv_isnil_acq(tv) ? tv : NULL;
+}
+
+static TValue *clib_env_publish(lua_State *L, GCtab *env, GCstr *name,
+				cTValue *val)
+{
+  TValue keytv, old, *dst;
+  if (!env)
+    return (TValue *)(void *)val;
+  setstrV(L, &keytv, name);
+  lj_gc_pubroot(L, &keytv);
+  lj_gc_pubroot(L, val);
+  for (;;) {
+    cTValue *cur = clib_env_get(env, name);
+    int rc;
+    if (cur)
+      return (TValue *)(void *)cur;
+    dst = lj_tab_setstr(L, env, name);
+    rc = lj_tab_trysetnil_cas_keyed(L, env, dst, &keytv, val, &old);
+    if (rc == LJ_TAB_STORE_CAS_OK) {
+      lj_gc_pubtab(L, env);
+      return dst;
+    }
+    lj_tab_store_wait_l(L);  /* CLibrary env mirror saw stale/FORWARD slot. */
+  }
+}
+
 static void clib_cache_free(lua_State *L, global_State *g, CLibrary *cl)
 {
   CLibCacheEntry *e = lj_clib_cache_head_xchg_acqrel(cl, NULL);
@@ -622,11 +652,14 @@ static CTSize clib_func_argsize(CTState *cts, CType *ct)
 #endif
 
 /* Index a C library by name. */
-TValue *lj_clib_index(lua_State *L, CLibrary *cl, GCstr *name)
+TValue *lj_clib_index(lua_State *L, GCtab *env, CLibrary *cl, GCstr *name)
 {
+  cTValue *envtv = clib_env_get(env, name);
   cTValue *ctv = lj_clib_cache_get(cl, name);
+  if (envtv)
+    return (TValue *)(void *)envtv;
   if (LJ_LIKELY(ctv && !lj_tv_isnil_acq(ctv)))
-    return (TValue *)ctv;
+    return clib_env_publish(L, env, name, ctv);
   {
     CTState *cts = ctype_cts(L);
     CType snap, *ct = &snap;
@@ -699,6 +732,7 @@ TValue *lj_clib_index(lua_State *L, CLibrary *cl, GCstr *name)
     anchor = L->top++;
     copyTV(L, anchor, &tmp);  /* Root tmp while allocating/publishing entry. */
     tv = clib_cache_publish(L, cl, name, anchor);
+    tv = clib_env_publish(L, env, name, tv);
     L->top--;
     return tv;
   }

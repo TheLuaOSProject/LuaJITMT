@@ -1229,14 +1229,16 @@ LJLIB_PUSH("ffi") LJLIB_SET(__metatable)
 static TValue *ffi_clib_index(lua_State *L)
 {
   TValue *o = L->base;
-  CLibrary *cl;
   if (!(o < L->top && tvisudata(o) &&
 	lj_udata_udtype_acq(udataV(o)) == UDTYPE_FFI_CLIB))
     lj_err_argt(L, 1, LUA_TUSERDATA);
-  cl = (CLibrary *)uddata(udataV(o));
   if (!(o+1 < L->top && tvisstr(o+1)))
     lj_err_argt(L, 2, LUA_TSTRING);
-  return lj_clib_index(L, cl, strV(o+1));
+  {
+    GCudata *ud = udataV(o);
+    CLibrary *cl = (CLibrary *)uddata(ud);
+    return lj_clib_index(L, lj_udata_env_acq(ud), cl, strV(o+1));
+  }
 }
 
 LJLIB_CF(ffi_clib___index)	LJLIB_REC(clib_index 1)

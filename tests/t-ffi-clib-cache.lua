@@ -20,6 +20,34 @@ enum { LJ_M7_CLIB_CONST = 73 };
 
 collectgarbage("stop")
 
+do
+  local C = ffi.C
+  local env = debug.getfenv(C)
+  local abs = C.abs
+  local strlen = C.strlen
+  local const = C.LJ_M7_CLIB_CONST
+
+  assert(env.abs == abs)
+  assert(env.strlen == strlen)
+  assert(const == 73)
+  assert(env.LJ_M7_CLIB_CONST == 73)
+
+  env.LJ_M7_CLIB_CONST = 731
+  assert(C.LJ_M7_CLIB_CONST == 731)
+  env.LJ_M7_CLIB_CONST = nil
+  assert(C.LJ_M7_CLIB_CONST == 73)
+  assert(env.LJ_M7_CLIB_CONST == 73)
+
+  do
+    local oldenv = debug.getfenv(C)
+    local newenv = {}
+    debug.setfenv(C, newenv)
+    assert(C.abs(-4) == 4)
+    assert(newenv.abs == C.abs)
+    debug.setfenv(C, oldenv)
+  end
+end
+
 local ready, start = harness.channels(nthreads)
 local workers = {}
 
@@ -65,7 +93,15 @@ assert(ffi.C.LJ_M7_CLIB_CONST == 73)
 local function exercise_load_unload(rounds)
   local ok = pcall(function()
     local cl = ffi.load("c")
+    local env = debug.getfenv(cl)
+    local abs = cl.abs
+    assert(env.abs == abs)
+    env.abs = function(x) return "override", x end
+    local tag, v = cl.abs(-5)
+    assert(tag == "override" and v == -5)
+    env.abs = nil
     assert(cl.abs(-1) == 1)
+    assert(env.abs == cl.abs)
     cl = nil
   end)
   if not ok then return 0 end
