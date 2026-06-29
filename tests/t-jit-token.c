@@ -3,6 +3,7 @@
 */
 
 #include <assert.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -19,6 +20,68 @@
 #include "lj_target.h"
 
 #include "lib/lua_fixture_helpers.h"
+
+typedef struct TokenReleaseCtx {
+  global_State *g;
+  uint32_t owner;
+  uint32_t released;
+} TokenReleaseCtx;
+
+static uint32_t foreign_token_owner(lua_State *L)
+{
+  uint32_t self = lj_tg_tid_acq(L2TG(L));
+  return self == 0x7fffffffu ? 0x7ffffffeu : 0x7fffffffu;
+}
+
+static void *release_jit_token_after_delay(void *arg)
+{
+  TokenReleaseCtx *ctx = (TokenReleaseCtx *)arg;
+  (void)lj_thr_sleep_ns(NULL, 30000000);
+  assert(jit_token_acq(ctx->g) == ctx->owner);
+  la_store32_rel(&ctx->released, 1);
+  jit_token_rel(ctx->g, 0);
+  return NULL;
+}
+
+static void make_token_flush_trace(lua_State *L)
+{
+  ljt_lua_dostring(L,
+    "local util = require'jit.util'\n"
+    "jit.flush()\n"
+    "jit.opt.start('hotloop=1', 'hotexit=1')\n"
+    "function lj_m6_token_tracecount()\n"
+    "  local n = 0\n"
+    "  for i = 1, 32 do if util.traceinfo(i) then n = n + 1 end end\n"
+    "  return n\n"
+    "end\n"
+    "jit.off(lj_m6_token_tracecount, true)\n"
+    "function lj_m6_token_flush_f(n)\n"
+    "  local s = 0\n"
+    "  for i = 1, n do s = s + i end\n"
+    "  return s\n"
+    "end\n"
+    "for _ = 1, 20 do assert(lj_m6_token_flush_f(80) == 3240) end\n"
+    "assert(util.traceinfo(1), 'expected trace 1')\n"
+    "assert(lj_m6_token_tracecount() > 0)\n");
+}
+
+static void expect_flush_waits_for_token(lua_State *L, const char *code)
+{
+  TokenReleaseCtx ctx;
+  pthread_t th;
+  global_State *g = G(L);
+  make_token_flush_trace(L);
+  ctx.g = g;
+  ctx.owner = foreign_token_owner(L);
+  ctx.released = 0;
+  jit_token_rel(g, ctx.owner);
+  assert(pthread_create(&th, NULL, release_jit_token_after_delay, &ctx) == 0);
+  ljt_lua_dostring(L, code);
+  assert(pthread_join(th, NULL) == 0);
+  assert(la_load32_acq(&ctx.released) == 1);
+  assert(jit_token_acq(g) == 0);
+  ljt_lua_dostring(L, "assert(lj_m6_token_tracecount() == 0)\n");
+}
 
 int main(void)
 {
@@ -95,24 +158,25 @@ int main(void)
     "assert(tracecount() > 0, 'expected token-owned recording')\n");
   assert(jit_token_acq(g) == 0);
 
-  ljt_lua_dostring(L, "jit.flush()");
-  jit_token_rel(g, 0x7fffffffu);
   ljt_lua_dostring(L,
     "local util = require'jit.util'\n"
+    "jit.flush()\n"
     "jit.opt.start('hotloop=1', 'hotexit=1')\n"
-    "local function tracecount()\n"
+    "function lj_m6_busy_tracecount()\n"
     "  local n = 0\n"
     "  for i = 1, 32 do if util.traceinfo(i) then n = n + 1 end end\n"
     "  return n\n"
     "end\n"
-    "jit.off(tracecount, true)\n"
-    "local function f(n)\n"
+    "jit.off(lj_m6_busy_tracecount, true)\n"
+    "function lj_m6_busy_f(n)\n"
     "  local s = 0\n"
     "  for i = 1, n do s = s + i end\n"
     "  return s\n"
-    "end\n"
-    "for _ = 1, 40 do assert(f(80) == 3240) end\n"
-    "assert(tracecount() == 0, 'busy recorder token must skip tracing')\n");
+    "end\n");
+  jit_token_rel(g, 0x7fffffffu);
+  ljt_lua_dostring(L,
+    "for _ = 1, 40 do assert(lj_m6_busy_f(80) == 3240) end\n"
+    "assert(lj_m6_busy_tracecount() == 0, 'busy recorder token must skip tracing')\n");
   assert(jit_token_acq(g) == 0x7fffffffu);
 
   jit_token_rel(g, 0);
@@ -134,7 +198,10 @@ int main(void)
     "assert(tracecount() > 0, 'recording should resume after token release')\n");
   assert(jit_token_acq(g) == 0);
 
+  expect_flush_waits_for_token(L, "jit.flush()\n");
+  expect_flush_waits_for_token(L, "jit.flush(1)\n");
+
   lua_close(L);
-  printf("t-jit-token OK: recorder token accepts secondary TGs and skips busy recording\n");
+  printf("t-jit-token OK: recorder token accepts secondary TGs and owns flush mutation\n");
   return 0;
 }

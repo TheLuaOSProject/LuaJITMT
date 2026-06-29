@@ -31,6 +31,8 @@
 #include "lj_asm.h"
 #include "lj_safepoint.h"
 #include "lj_dispatch.h"
+#include "lj_thr.h"
+#include "lj_tg.h"
 #if LJ_HASPROFILE
 #include "lj_profile.h"
 #endif
@@ -69,6 +71,20 @@ void lj_jit_token_release(jit_State *J)
   uint32_t tid = tg ? lj_tg_tid_acq(tg) : 0;
   if (tid != 0 && jit_token_acq(g) == tid)
     jit_token_rel(g, 0);
+}
+
+int lj_jit_token_acquire_wait(jit_State *J)
+{
+  TGState *tg = J2TG(J);
+  lua_State *L = tg ? lj_tg_load_cur_L(tg) : NULL;
+  if (lj_jit_token_held(J))
+    return 0;
+  for (;;) {
+    if (lj_jit_token_try(J))
+      return 1;
+    lj_trace_state_abort(J);
+    (void)lj_thr_sleep_ns(L, 1000000);
+  }
 }
 
 void lj_trace_abort(global_State *g)
@@ -797,8 +813,10 @@ int lj_trace_flushall(lua_State *L)
 {
   jit_State *J = L2J(L);
   ptrdiff_t i;
+  int token;
   if ((hookmask_load(J2G(J)) & HOOK_GC))
     return 1;
+  token = lj_jit_token_acquire_wait(J);
   for (i = (ptrdiff_t)trace_sizetrace_acq(J)-1; i > 0; i--) {
     GCtrace *T = traceref(J, i);
     if (T) {
@@ -820,32 +838,12 @@ int lj_trace_flushall(lua_State *L)
   /* Free the whole machine code and invalidate all exit stub groups. */
   lj_mcode_free(J);
   memset(J->exitstubgroup, 0, sizeof(J->exitstubgroup));
+  if (token)
+    lj_jit_token_release(J);
   lj_vmevent_send(J2G(J), TRACE,
     setstrV(V, V->top++, lj_str_newlit(V, "flush"));
   );
   return 0;
-}
-
-static int trace_has_published_traces(jit_State *J)
-{
-  MSize sizetrace = trace_sizetrace_acq(J);
-  TraceNo i;
-  for (i = 1; i < sizetrace; i++)
-    if (traceref(J, i) != NULL)
-      return 1;
-  return 0;
-}
-
-static int trace_flushall_hs_needed(lua_State *L)
-{
-  jit_State *J = L2J(L);
-  int needed;
-  if (!lj_jit_token_try(J))
-    return 1;  /* Another thread may be recording or publishing traces. */
-  needed = lj_trace_state_load(J) != LJ_TRACE_IDLE ||
-	   trace_has_published_traces(J);
-  lj_jit_token_release(J);
-  return needed;
 }
 
 /* Request a leader-owned full trace flush through the safepoint protocol. */
@@ -854,8 +852,6 @@ int lj_trace_flushall_hs(lua_State *L)
   global_State *g = G(L);
   if ((hookmask_load(g) & HOOK_GC))
     return 1;
-  if (!trace_flushall_hs_needed(L))
-    return 0;
   (void)lj_gc2_handshake(g, LJ_GC2_HS_EXIT_TRACES|LJ_GC2_HS_FLUSHJ);
   return 0;
 }
@@ -863,16 +859,23 @@ int lj_trace_flushall_hs(lua_State *L)
 void lj_trace_flushscope_hs(global_State *g, uint32_t work)
 {
   if (work != 0) {
+    jit_State *J = G2J(g);
+    int token = lj_jit_token_acquire_wait(J);
     (void)trace_flushscope_mark_deps(G2J(g));
     (void)lj_gc2_handshake(g, LJ_GC2_HS_EXIT_TRACES);  /* 08 section 8.7 scoped boundary. */
     (void)lj_trace_flushscope_retire(g, lj_gc2_retire_epoch(g));
+    if (token)
+      lj_jit_token_release(J);
   }
 }
 
 uint32_t lj_trace_flushscope(jit_State *J, TraceNo traceno)
 {
+  int token = lj_jit_token_acquire_wait(J);
   uint32_t work = lj_trace_flush(J, traceno);
   lj_trace_flushscope_hs(J2G(J), work);
+  if (token)
+    lj_jit_token_release(J);
   return work;
 }
 

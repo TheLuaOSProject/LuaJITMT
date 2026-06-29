@@ -385,11 +385,14 @@ int luaJIT_setmode(lua_State *L, int idx, int mode)
     if ((mode & LUAJIT_MODE_FLUSH)) {
       (void)lj_trace_flushall_hs(L);
     } else {
+      int token = lj_jit_token_acquire_wait(G2J(g));
       if (!(mode & LUAJIT_MODE_ON))
 	G2J(g)->flags &= ~(uint32_t)JIT_F_ON;
       else
 	G2J(g)->flags |= (uint32_t)JIT_F_ON;
       lj_dispatch_update(g, 0);
+      if (token)
+	lj_jit_token_release(G2J(g));
     }
     break;
   case LUAJIT_MODE_FUNC:
@@ -405,12 +408,17 @@ int luaJIT_setmode(lua_State *L, int idx, int mode)
       pt = protoV(tv);
     else
       return 0;  /* Failed. */
-    if (mm != LUAJIT_MODE_ALLSUBFUNC)
-      flushed += setptmode(g, pt, mode);
-    if (mm != LUAJIT_MODE_FUNC)
-      flushed += setptmode_all(g, pt, mode);
-    if (!(mode & LUAJIT_MODE_ON))
-      lj_trace_flushscope_hs(g, flushed);
+    {
+      int token = lj_jit_token_acquire_wait(G2J(g));
+      if (mm != LUAJIT_MODE_ALLSUBFUNC)
+	flushed += setptmode(g, pt, mode);
+      if (mm != LUAJIT_MODE_FUNC)
+	flushed += setptmode_all(g, pt, mode);
+      if (!(mode & LUAJIT_MODE_ON))
+	lj_trace_flushscope_hs(g, flushed);
+      if (token)
+	lj_jit_token_release(G2J(g));
+    }
     break;
     }
   case LUAJIT_MODE_TRACE:

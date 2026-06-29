@@ -36,6 +36,7 @@ LJ_FUNC int lj_trace_flushall_hs(lua_State *L);
 LJ_FUNC void lj_trace_flushscope_hs(global_State *g, uint32_t work);
 LJ_FUNC int lj_jit_token_try(jit_State *J);
 LJ_FUNC int lj_jit_token_held(jit_State *J);
+LJ_FUNC int lj_jit_token_acquire_wait(jit_State *J);
 LJ_FUNC void lj_jit_token_release(jit_State *J);
 LJ_FUNC void lj_trace_abort(global_State *g);
 LJ_FUNC void lj_trace_initstate(global_State *g);
@@ -116,6 +117,7 @@ static LJ_AINLINE void lj_trace_state_abort(jit_State *J)
 #define lj_trace_flushall_hs(L)	(UNUSED(L), 0)
 #define lj_jit_token_try(J)	(UNUSED(J), 0)
 #define lj_jit_token_held(J)	(UNUSED(J), 0)
+#define lj_jit_token_acquire_wait(J)	(UNUSED(J), 0)
 #define lj_jit_token_release(J)	UNUSED(J)
 #define lj_trace_initstate(g)	UNUSED(g)
 #define lj_trace_freestate(g)	UNUSED(g)
