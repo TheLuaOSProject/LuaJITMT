@@ -702,7 +702,7 @@ static int ffi_direct_ctype_string(lua_State *L, CTState *cts, GCstr *s,
 }
 
 #if LJ_HASJIT
-static int ffi_direct_array_sizeof_string(CTState *cts, GCstr *s, CTSize *szp)
+static int ffi_direct_sizeof_string(CTState *cts, GCstr *s, CTSize *szp)
 {
   const char *p = strdata(s);
   MSize len = s->len, baselen, narr = 0, i;
@@ -722,8 +722,6 @@ static int ffi_direct_array_sizeof_string(CTState *cts, GCstr *s, CTSize *szp)
     nelem[narr++] = n;
     baselen = nextlen;
   }
-  if (narr == 0)
-    return 0;
   {
     MSize nptr = 0;
     for (;;) {
@@ -736,6 +734,8 @@ static int ffi_direct_array_sizeof_string(CTState *cts, GCstr *s, CTSize *szp)
       nptr++;
       baselen = nextlen;
     }
+    if (narr == 0 && nptr == 0)
+      return 0;
     if (!lj_ctype_predefined_string(p, baselen, &elemid))
       return 0;
     if (nptr != 0) {
@@ -754,6 +754,40 @@ static int ffi_direct_array_sizeof_string(CTState *cts, GCstr *s, CTSize *szp)
     esize = (CTSize)asize;
   }
   *szp = esize;
+  return 1;
+}
+
+static int ffi_direct_pointer_alignof_string(GCstr *s, CTSize *alignp)
+{
+  const char *p = strdata(s);
+  MSize len = s->len, baselen, narr = 0, nptr = 0;
+  CTypeID elemid;
+  while (len != 0 && ffi_cspace(*p)) { p++; len--; }
+  while (len != 0 && ffi_cspace(p[len-1])) len--;
+  baselen = len;
+  for (;;) {
+    CTSize n;
+    MSize nextlen = baselen;
+    if (!ffi_direct_array_suffix(p, &nextlen, &n))
+      break;
+    if (narr == FFI_DIRECT_MAX_DECL_SUFFIXES)
+      return 0;
+    narr++;
+    baselen = nextlen;
+  }
+  for (;;) {
+    CTInfo qual;
+    MSize nextlen = baselen;
+    if (!ffi_direct_pointer_suffix(p, &nextlen, &qual))
+      break;
+    if (nptr == FFI_DIRECT_MAX_DECL_SUFFIXES)
+      return 0;
+    nptr++;
+    baselen = nextlen;
+  }
+  if (nptr == 0 || !lj_ctype_predefined_string(p, baselen, &elemid))
+    return 0;
+  *alignp = CTSIZE_PTR;
   return 1;
 }
 #endif
@@ -2405,7 +2439,7 @@ LJLIB_CF(ffi_sizeof)	LJLIB_REC(ffi_xof FF_ffi_sizeof)
     if (isstr) {
 #if LJ_HASJIT
       if (ffi_active_recorder(L) &&
-	  ffi_direct_array_sizeof_string(cts, strV(L->base), &sz))
+	  ffi_direct_sizeof_string(cts, strV(L->base), &sz))
 	goto got_size;
 #endif
       id = ffi_checkctype(L, cts, NULL);
@@ -2447,18 +2481,25 @@ LJLIB_CF(ffi_alignof)	LJLIB_REC(ffi_xof FF_ffi_alignof)
   CTSize align;
   int isstr;
   id = ffi_checkctype_noparse(L, NULL, &isstr);
-  if (isstr)
+  if (isstr) {
+#if LJ_HASJIT
+    if (ffi_active_recorder(L) &&
+	ffi_direct_pointer_alignof_string(strV(L->base), &align))
+      goto got_align;
+#endif
     id = ffi_checkctype(L, cts, NULL);
+  }
   {
     int ok = ffi_layout_alignof_snapshot(cts, id, &align);
     if (ok < 0)
       ok = ffi_layout_alignof_wait(L, cts, id, &align);
-    if (ok > 0) {
-      setintV(L->top-1, (int32_t)align);
-      return 1;
-    }
+    if (ok > 0)
+      goto got_align;
     setnilV(L->top-1);
+    return 1;
   }
+got_align:
+  setintV(L->top-1, (int32_t)align);
   return 1;
 }
 

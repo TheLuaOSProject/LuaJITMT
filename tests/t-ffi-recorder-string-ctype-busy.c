@@ -46,6 +46,8 @@ int main(void)
   ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"
     "assert(ffi.sizeof('int') == 4)\n"
+    "assert(ffi.sizeof('int *') == 8)\n"
+    "assert(ffi.alignof('int * const') == 8)\n"
     "assert(ffi.sizeof('int *[2]') == 16)\n"
     "assert(ffi.sizeof('const char * const [3]') == 24)\n"
     "local a = ffi.new('int[1]')\n"
@@ -69,6 +71,24 @@ int main(void)
     "  return sum\n"
     "end\n"
     "for i = 1, 30 do assert(run(40) == 160) end\n"
+    "jit.attach(lj_m7_trace_parse_token)\n"
+    "assert(lj_m7_trace_parse_token_stop_count() >= 1)\n"
+    "assert(lj_m7_trace_parse_token_ctbusy_count() == 0)\n");
+
+  assert_busy_trace_records(L, cts,
+    "local ffi = require('ffi')\n"
+    "jit.attach(lj_m7_trace_parse_token, 'trace')\n"
+    "jit.flush()\n"
+    "jit.on()\n"
+    "jit.opt.start('hotloop=1', 'hotexit=1')\n"
+    "local function run(n)\n"
+    "  local sum = 0\n"
+    "  for i = 1, n do\n"
+    "    sum = sum + ffi.sizeof('int *') + ffi.alignof('int * const')\n"
+    "  end\n"
+    "  return sum\n"
+    "end\n"
+    "for i = 1, 30 do assert(run(40) == 640) end\n"
     "jit.attach(lj_m7_trace_parse_token)\n"
     "assert(lj_m7_trace_parse_token_stop_count() >= 1)\n"
     "assert(lj_m7_trace_parse_token_ctbusy_count() == 0)\n");

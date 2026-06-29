@@ -223,7 +223,7 @@ static int crec_direct_array_suffix(const char *p, MSize *lenp, CTSize *nelemp)
   return 1;
 }
 
-static int crec_direct_array_ctype_string(jit_State *J, GCstr *s, CTypeID *idp)
+static int crec_direct_ctype_string(jit_State *J, GCstr *s, CTypeID *idp)
 {
   CTState *cts = ctype_ctsG(J2G(J));
   const char *p = strdata(s);
@@ -244,8 +244,6 @@ static int crec_direct_array_ctype_string(jit_State *J, GCstr *s, CTypeID *idp)
     nelem[narr++] = n;
     baselen = nextlen;
   }
-  if (narr == 0)
-    return 0;
   {
     CTInfo pqual[CREC_DIRECT_MAX_DECL_SUFFIXES];
     MSize nptr = 0;
@@ -259,6 +257,8 @@ static int crec_direct_array_ctype_string(jit_State *J, GCstr *s, CTypeID *idp)
       pqual[nptr++] = qual;
       baselen = nextlen;
     }
+    if (narr == 0 && nptr == 0)
+      return 0;
     if (!lj_ctype_predefined_string(p, baselen, &elemid))
       return 0;
     if (nptr != 0) {
@@ -301,7 +301,7 @@ static CTypeID argv2ctype_direct(jit_State *J, TRef tr, cTValue *o,
       if (directp) *directp = 1;
       return id;
     }
-    if (crec_direct_array_ctype_string(J, s, &id)) {
+    if (crec_direct_ctype_string(J, s, &id)) {
       if (directp) *directp = 1;
       return id;
     }
