@@ -649,7 +649,7 @@ static void gc_mark_gcroot(global_State *g)
 {
   ptrdiff_t i;
   for (i = 0; i < GCROOT_MAX; i++) {
-    GCobj *o = gcref_acq(g->gcroot[i]);
+    GCobj *o = lj_gcroot_acq(g, (GCRootID)i);
     if (o != NULL)
       gc_markobj(g, o);
   }

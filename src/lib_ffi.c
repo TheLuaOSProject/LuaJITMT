@@ -2767,7 +2767,7 @@ LUALIB_API int luaopen_ffi(lua_State *L)
   settabV(L, L->top++, miscmap);
   LJ_LIB_REG(L, NULL, ffi_meta);
   /* NOBARRIER: basemt is a GC root. */
-  setgcrefroot(basemt_it(G(L), LJ_TCDATA), obj2gco(tabV(L->top-1)));
+  lj_basemt_it_rel(G(L), LJ_TCDATA, tabV(L->top-1));
   LJ_LIB_REG(L, NULL, ffi_clib);
   LJ_LIB_REG(L, NULL, ffi_callback);
   ffi_miscmap_store(L, cts, &cts->g->strempty, L->top-1);

@@ -1011,7 +1011,7 @@ LUA_API int lua_getmetatable(lua_State *L, int idx)
   else if (tvisudata(o))
     mt = lj_udata_metatable_acq(udataV(o));
   else
-    mt = tabref_acq(basemt_obj(G(L), o));
+    mt = lj_basemt_obj_acq(G(L), o);
   if (mt == NULL)
     return 0;
   settabV(L, L->top, mt);
@@ -1294,11 +1294,11 @@ LUA_API int lua_setmetatable(lua_State *L, int idx)
 	index2adr(L, idx);  /* Stack may have been reallocated. */
     if (tvisbool(o)) {
       /* NOBARRIER: basemt is a GC root. */
-      setgcrefroot(basemt_it(g, LJ_TTRUE), obj2gco(mt));
-      setgcrefroot(basemt_it(g, LJ_TFALSE), obj2gco(mt));
+      lj_basemt_it_rel(g, LJ_TTRUE, mt);
+      lj_basemt_it_rel(g, LJ_TFALSE, mt);
     } else {
       /* NOBARRIER: basemt is a GC root. */
-      setgcrefroot(basemt_obj(g, o), obj2gco(mt));
+      lj_basemt_obj_rel(g, o, mt);
     }
   }
   L->top--;

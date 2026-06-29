@@ -1322,7 +1322,7 @@ static void LJ_FASTCALL recff_debug_getmetatable(jit_State *J, RecordFFData *rd)
     mt = lj_udata_metatable_acq(udataV(&rd->argv[0]));
     mtref = emitir(IRT(IR_FLOAD, IRT_TAB), tr, IRFL_UDATA_META);
   } else {
-    mt = tabref_acq(basemt_obj(J2G(J), &rd->argv[0]));
+    mt = lj_basemt_obj_acq(J2G(J), &rd->argv[0]);
     J->base[0] = mt ? lj_ir_ktab(J, mt) : TREF_NIL;
     return;
   }

@@ -40,7 +40,7 @@ void lj_meta_init(lua_State *L)
     for (q = p+2; *q && *q != '_'; q++) ;
     s = lj_str_new(L, p, (size_t)(q-p));
     /* NOBARRIER: g->gcroot[] is a GC root. */
-    setgcrefroot(g->gcroot[GCROOT_MMNAME+mm], obj2gco(s));
+    lj_gcroot_rel(g, (GCRootID)(GCROOT_MMNAME+mm), obj2gco(s));
   }
 }
 
@@ -74,7 +74,7 @@ cTValue *lj_meta_lookup(lua_State *L, cTValue *o, MMS mm)
   else if (tvisudata(o))
     mt = lj_udata_metatable_acq(udataV(o));
   else
-    mt = tabref_acq(basemt_obj(G(L), o));
+    mt = lj_basemt_obj_acq(G(L), o);
   if (mt) {
     cTValue *mo = lj_tab_getstr(mt, mmname_str(G(L), mm));
     if (mo)
@@ -91,7 +91,7 @@ cTValue *lj_meta_lookuptv(lua_State *L, TValue *out, cTValue *o, MMS mm)
   else if (tvisudata(o))
     mt = lj_udata_metatable_acq(udataV(o));
   else
-    mt = tabref_acq(basemt_obj(G(L), o));
+    mt = lj_basemt_obj_acq(G(L), o);
   if (mt) {
     cTValue *mo = lj_tab_getstr(mt, mmname_str(G(L), mm));
     if (mo) {

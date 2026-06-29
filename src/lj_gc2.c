@@ -632,7 +632,6 @@ static int gc2_worker_start_count_locked_l(global_State *g, uint32_t n,
 					   lua_State *waitL,
 					   uint32_t *actionsp)
 {
-  GCobj *mainobj;
   lua_State *L;
   uint32_t i;
   int rc, wait;
@@ -642,8 +641,7 @@ static int gc2_worker_start_count_locked_l(global_State *g, uint32_t n,
     n = LJ_GC2_WORKER_MAX;
   if (gc2_n_workers_acq(g) != 0)
     return 1;
-  mainobj = gcref_acq(g->mainthref);
-  L = mainobj ? &mainobj->th : NULL;
+  L = mainthread_acq(g);
   if (!L)
     return 0;
   if (!gc2_worker_prepare_tg_slots(g))
@@ -2796,7 +2794,7 @@ static void gc2_scan_global_roots(global_State *g)
   lj_gc2_markobj(g, obj2gco(vmL));
   gc2_mark_tv(g, &g->registrytv);
   for (i = 0; i < GCROOT_MAX; i++) {
-    GCobj *o = gcref_acq(g->gcroot[i]);
+    GCobj *o = lj_gcroot_acq(g, (GCRootID)i);
     if (o != NULL)
       lj_gc2_markobj(g, o);
   }
@@ -2954,9 +2952,7 @@ static int gc2_grey_grow(global_State *g)
   MSize count = bottom > top ? (MSize)(bottom - top) : 0;
   lua_State *L = lj_tg_cur_L(g);
   if (!L) {
-    GCobj *mainobj = gcref_acq(g->mainthref);
-    if (mainobj)
-      L = &mainobj->th;
+    L = mainthread_acq(g);
   }
   if (!L || oldcap >= GC2_GREY_LIMIT)
     return 0;

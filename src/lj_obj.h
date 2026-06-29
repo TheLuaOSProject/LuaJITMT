@@ -1245,9 +1245,9 @@ typedef enum {
   GCROOT_MAX
 } GCRootID;
 
-#define basemt_it(g, it)	((g)->gcroot[GCROOT_BASEMT+~(it)])
-#define basemt_obj(g, o)	((g)->gcroot[GCROOT_BASEMT+itypemap(o)])
-#define mmname_str(g, mm)	(strref_acq((g)->gcroot[GCROOT_MMNAME+(mm)]))
+#define basemt_it(g, it)	(*lj_gcroot_ref((g), GCROOT_BASEMT+~(it)))
+#define basemt_obj(g, o)	(*lj_gcroot_ref((g), GCROOT_BASEMT+itypemap(o)))
+#define mmname_str(g, mm)	lj_mmname_str_acq((g), (mm))
 
 /* Garbage collector state. */
 typedef struct GCState {
@@ -5865,6 +5865,50 @@ static LJ_AINLINE int lj_tv_cas(TValue *dst, TValue *expect,
 #else
 #define itypemap(o)	(tvisnumber(o) ? ~LJ_TNUMX : ~itype(o))
 #endif
+
+static LJ_AINLINE GCRef *lj_gcroot_ref(global_State *g, GCRootID id)
+{
+  return &g->gcroot[id];
+}
+
+static LJ_AINLINE GCobj *lj_gcroot_acq(global_State *g, GCRootID id)
+{
+  return gcref_acq(*lj_gcroot_ref(g, id));
+}
+
+static LJ_AINLINE void lj_gcroot_rel(global_State *g, GCRootID id,
+				     const GCobj *o)
+{
+  setgcrefroot(*lj_gcroot_ref(g, id), o);
+}
+
+static LJ_AINLINE GCtab *lj_basemt_it_acq(global_State *g, int it)
+{
+  GCobj *o = lj_gcroot_acq(g, (GCRootID)(GCROOT_BASEMT + ~it));
+  return o ? gco2tab(o) : NULL;
+}
+
+static LJ_AINLINE GCtab *lj_basemt_obj_acq(global_State *g, cTValue *o)
+{
+  GCobj *root = lj_gcroot_acq(g, (GCRootID)(GCROOT_BASEMT + itypemap(o)));
+  return root ? gco2tab(root) : NULL;
+}
+
+static LJ_AINLINE void lj_basemt_it_rel(global_State *g, int it, GCtab *mt)
+{
+  lj_gcroot_rel(g, (GCRootID)(GCROOT_BASEMT + ~it), obj2gco(mt));
+}
+
+static LJ_AINLINE void lj_basemt_obj_rel(global_State *g, cTValue *o,
+					 GCtab *mt)
+{
+  lj_gcroot_rel(g, (GCRootID)(GCROOT_BASEMT + itypemap(o)), obj2gco(mt));
+}
+
+static LJ_AINLINE GCstr *lj_mmname_str_acq(global_State *g, MMS mm)
+{
+  return gco2str(lj_gcroot_acq(g, (GCRootID)(GCROOT_MMNAME + mm)));
+}
 
 /* Macros to get tagged values. */
 #if LJ_GC64

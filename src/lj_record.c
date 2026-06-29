@@ -1158,7 +1158,7 @@ int lj_record_mm_lookup(jit_State *J, RecordIndex *ix, MMS mm)
     }
   } else {
     /* Specialize to base metatable. Must flush mcode in lua_setmetatable(). */
-    mt = tabref_acq(basemt_obj(J2G(J), &ix->tabv));
+    mt = lj_basemt_obj_acq(J2G(J), &ix->tabv);
     if (mt == NULL) {
       ix->mt = TREF_NIL;
       return 0;  /* No metamethod. */

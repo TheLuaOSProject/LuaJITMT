@@ -709,7 +709,7 @@ LUALIB_API int luaopen_string(lua_State *L)
   lj_tab_nomm_rel(mt, (uint8_t)(~(1u<<MM_index)));
   lj_gc_pubtabobj(L, mt, strtab);
   /* NOBARRIER: basemt is a GC root. */
-  setgcrefroot(basemt_it(g, LJ_TSTR), obj2gco(mt));
+  lj_basemt_it_rel(g, LJ_TSTR, mt);
   L->top--;
 #if LJ_HASBUFFER
   lj_lib_prereg(L, LUA_STRLIBNAME ".buffer", luaopen_string_buffer, strtab);

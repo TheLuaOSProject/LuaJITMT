@@ -189,7 +189,7 @@ static GCtab *threading_loaded_env(lua_State *L)
 static GCtab *threading_ensure_env(lua_State *L)
 {
   global_State *g = G(L);
-  GCobj *o = gcref_acq(g->gcroot[GCROOT_THREADING_ENV]);
+  GCobj *o = lj_gcroot_acq(g, GCROOT_THREADING_ENV);
   GCtab *env = o && o->gch.gct == ~LJ_TTAB ? gco2tab(o) : NULL;
   if (!env) {
     TValue *top = L->top;
@@ -203,7 +203,7 @@ static GCtab *threading_ensure_env(lua_State *L)
     }
     if (!env)
       lj_err_callermsg(L, "threading library unavailable");
-    setgcrefroot(g->gcroot[GCROOT_THREADING_ENV], obj2gco(env));
+    lj_gcroot_rel(g, GCROOT_THREADING_ENV, obj2gco(env));
   }
   return env;
 }
@@ -1191,6 +1191,6 @@ LUALIB_API int luaopen_threading(lua_State *L)
   LJ_LIB_REG(L, LUA_THREADINGLIBNAME, threading);
   env = threading_env_from_module(L, tabV(L->top-1));
   if (env)
-    setgcrefroot(G(L)->gcroot[GCROOT_THREADING_ENV], obj2gco(env));
+    lj_gcroot_rel(G(L), GCROOT_THREADING_ENV, obj2gco(env));
   return 1;
 }
