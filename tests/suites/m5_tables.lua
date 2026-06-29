@@ -94,6 +94,25 @@ return function(add)
     end
   })
 
+  add({
+    name = "m5_tab_next_snapshot",
+    description = "table next cursor scans stay generation-bound across resize",
+    run = function(t)
+      t:build({
+        clean = true,
+        jobs = false,
+        quiet = true,
+        xcflags = "-DLJ_TAB_TEST_HELPERS"
+      })
+      build.compile_and_run_c(t, t:tmp("lj_t-tab-next-snapshot"),
+                              "t-tab-next-snapshot.c", {
+        cflags = "-DLJ_TAB_TEST_HELPERS",
+        timeout = "20s"
+      })
+      print("M5 table next snapshot guard passed")
+    end
+  })
+
   runtime.add_luajit_script_cases(add, {
     {
       name = "m5_tab_resize_stress",

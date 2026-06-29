@@ -270,12 +270,15 @@ typedef void (*LJTabNewkeyReserveHook)(lua_State *L, GCtab *t,
 				       Node *nodebase);
 typedef void (*LJTabResizeArrayHook)(lua_State *L, GCtab *t,
 				     TValue *oldarray, MSize oldasize);
+typedef void (*LJTabNextAfterKeyindexHook)(GCtab *t, uint32_t idx);
 LJ_FUNC void lj_tab_test_set_newkey_anchor_after_reserve_hook(
   LJTabNewkeyReserveHook hook);
 LJ_FUNC void lj_tab_test_set_newkey_chain_after_reserve_hook(
   LJTabNewkeyReserveHook hook);
 LJ_FUNC void lj_tab_test_set_resize_colocated_after_freeze_hook(
   LJTabResizeArrayHook hook);
+LJ_FUNC void lj_tab_test_set_next_after_keyindex_hook(
+  LJTabNextAfterKeyindexHook hook);
 #endif
 LJ_FUNCA TValue *lj_tab_setinth(lua_State *L, GCtab *t, int32_t key);
 LJ_FUNC TValue *lj_tab_setint_forward(lua_State *L, GCtab *t, int32_t key);

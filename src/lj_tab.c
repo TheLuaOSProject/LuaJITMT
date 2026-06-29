@@ -1501,6 +1501,7 @@ static LJ_AINLINE int tab_hash_generation_current(GCtab *t, const Node *nodebase
 #ifdef LJ_TAB_TEST_HELPERS
 static LJTabNewkeyReserveHook tab_test_newkey_anchor_after_reserve_hook;
 static LJTabNewkeyReserveHook tab_test_newkey_chain_after_reserve_hook;
+static LJTabNextAfterKeyindexHook tab_test_next_after_keyindex_hook;
 
 void lj_tab_test_set_newkey_anchor_after_reserve_hook(
   LJTabNewkeyReserveHook hook)
@@ -1520,6 +1521,12 @@ void lj_tab_test_set_resize_colocated_after_freeze_hook(
   tab_test_resize_colocated_after_freeze_hook = hook;
 }
 
+void lj_tab_test_set_next_after_keyindex_hook(
+  LJTabNextAfterKeyindexHook hook)
+{
+  tab_test_next_after_keyindex_hook = hook;
+}
+
 static LJ_AINLINE void tab_test_newkey_anchor_after_reserve(lua_State *L,
 							    GCtab *t,
 							    Node *nodebase)
@@ -1536,11 +1543,19 @@ static LJ_AINLINE void tab_test_newkey_chain_after_reserve(lua_State *L,
     tab_test_newkey_chain_after_reserve_hook(L, t, nodebase);
 }
 
+static LJ_AINLINE void tab_test_next_after_keyindex(GCtab *t, uint32_t idx)
+{
+  if (tab_test_next_after_keyindex_hook)
+    tab_test_next_after_keyindex_hook(t, idx);
+}
+
 #else
 #define tab_test_newkey_anchor_after_reserve(L, t, nodebase) \
   ((void)(L), (void)(t), (void)(nodebase))
 #define tab_test_newkey_chain_after_reserve(L, t, nodebase) \
   ((void)(L), (void)(t), (void)(nodebase))
+#define tab_test_next_after_keyindex(t, idx) \
+  ((void)(t), (void)(idx))
 #endif
 
 static void tab_release_claimed_anchor(Node *nodebase, Node *n)
@@ -2664,50 +2679,69 @@ TValue *lj_tab_storeudata(lua_State *L, TValue *dst, GCudata *ud)
 ** Invalid key:     ~0
 */
 
-/* Get the successor traversal index of a key. */
-uint32_t LJ_FASTCALL lj_tab_keyindex(GCtab *t, cTValue *key)
-{
-  TValue tmp;
+typedef struct TabKeyIndexSnapshot {
   TValue *array;
   uint32_t asize;
+  Node *node;
+  MSize hmask;
+} TabKeyIndexSnapshot;
+
+static int tab_keyindex_snapshot_current(GCtab *t,
+					 const TabKeyIndexSnapshot *snap)
+{
+  TValue *curarray;
+  uint32_t curasize = (uint32_t)lj_tab_array_snapshot_acq(t, &curarray);
+  return curasize == snap->asize && curarray == snap->array &&
+	 lj_tab_node_acq(t) == snap->node &&
+	 !lj_tab_node_is_retiring(snap->node);
+}
+
+/* Get the successor traversal index of a key with its generation snapshot. */
+static uint32_t tab_keyindex_snapshot(GCtab *t, cTValue *origkey,
+				      TabKeyIndexSnapshot *snap)
+{
+  TValue tmp;
+  cTValue *key;
 retry_all:
-  asize = (uint32_t)lj_tab_array_snapshot_acq(t, &array);
+  key = origkey;
+  snap->asize = (uint32_t)lj_tab_array_snapshot_acq(t, &snap->array);
+  snap->node = NULL;
+  snap->hmask = 0;
   if (tvisint(key)) {
     int32_t k = intV(key);
-    if ((uint32_t)k < asize)
+    if ((uint32_t)k < snap->asize)
       return (uint32_t)k + 1;
     setnumV(&tmp, (lua_Number)k);
     key = &tmp;
   } else if (tvisnum(key)) {
     int64_t i64;
     int32_t k;
-    if (lj_num2int_cond(numV(key), i64, k, (uint32_t)i64 < asize))
+    if (lj_num2int_cond(numV(key), i64, k,
+			(uint32_t)i64 < snap->asize))
       return (uint32_t)k + 1;
   }
   if (!tvisnil(key)) {
-    Node *node;
-    MSize hmask;
     Node *n;
     int retry = 1;
   retry_lookup:
-    node = lj_tab_node_snapshot_acq(t, &hmask);
-    n = hashkey_node(node, hmask, key);
+    snap->node = lj_tab_node_snapshot_acq(t, &snap->hmask);
+    n = hashkey_node(snap->node, snap->hmask, key);
     do {
       TValue nk;
       lj_tv_load_acq(&nk, &n->key);
-      if (lj_obj_equal(&nk, key))
-	return asize + (uint32_t)((n+1) - node);
+      if (lj_obj_equal(&nk, key)) {
+	if (!tab_keyindex_snapshot_current(t, snap)) {
+	  lj_tab_wait_no_l();
+	  goto retry_all;
+	}
+	return snap->asize + (uint32_t)((n+1) - snap->node);
+      }
       if (tab_key_retry_once(&nk, &retry))
 	goto retry_lookup;
     } while ((n = lj_tab_nextnode_acq(n)));
-    {
-      TValue *curarray;
-      uint32_t curasize = (uint32_t)lj_tab_array_snapshot_acq(t, &curarray);
-      if (curasize != asize || curarray != array ||
-	  lj_tab_node_acq(t) != node || lj_tab_node_is_retiring(node)) {
-	lj_tab_wait_no_l();
-	goto retry_all;
-      }
+    if (!tab_keyindex_snapshot_current(t, snap)) {
+      lj_tab_wait_no_l();
+      goto retry_all;
     }
     if (key->u32.hi == LJ_KEYINDEX)  /* Despecialized ITERN while running. */
       return key->u32.lo;
@@ -2716,35 +2750,45 @@ retry_all:
   return 0;  /* A nil key starts the traversal. */
 }
 
+/* Get the successor traversal index of a key. */
+uint32_t LJ_FASTCALL lj_tab_keyindex(GCtab *t, cTValue *key)
+{
+  TabKeyIndexSnapshot snap;
+  return tab_keyindex_snapshot(t, key, &snap);
+}
+
 /* Get the next key/value pair of a table traversal. */
 int lj_tab_next(GCtab *t, cTValue *key, TValue *o)
 {
   uint32_t idx;
-  TValue *array;
-  uint32_t asize;
+  TabKeyIndexSnapshot snap;
 retry_next:
-  idx = lj_tab_keyindex(t, key);  /* Find successor index of key. */
-  asize = (uint32_t)lj_tab_array_snapshot_acq(t, &array);
+  idx = tab_keyindex_snapshot(t, key, &snap);  /* Find successor index of key. */
+  tab_test_next_after_keyindex(t, idx);
   /* First traverse the array part. */
-  for (; idx < asize; idx++) {
+  for (; idx < snap.asize; idx++) {
     TValue val;
-    lj_tv_load_acq(&val, &array[idx]);
+    lj_tv_load_acq(&val, &snap.array[idx]);
     if (tvisforward(&val)) {
-      MSize nextasize = asize;
-      TValue *nextarray = array;
-      if (lj_tab_array_forward_hop(t, &nextarray, &nextasize)) {
+      MSize nextasize = snap.asize;
+      TValue *nextarray = snap.array;
+      if (lj_tab_array_forward_hop_forward(t, &nextarray, &nextasize)) {
 	if (idx < nextasize) {
-	  array = nextarray;
-	  asize = (uint32_t)nextasize;
-	  lj_tv_load_acq(&val, &array[idx]);
+	  snap.array = nextarray;
+	  snap.asize = (uint32_t)nextasize;
+	  snap.node = NULL;
+	  snap.hmask = 0;
+	  lj_tv_load_acq(&val, &snap.array[idx]);
 	} else {
 	  cTValue *tv = lj_tab_getinth(t, (int32_t)idx);
+	  snap.node = NULL;
+	  snap.hmask = 0;
 	  if (tv)
 	    lj_tv_load_acq(&val, tv);
 	}
-      } else if (lj_tab_array_acq(t) != array ||
-		 lj_tab_array_is_retiring(t, array) ||
-		 lj_tab_array_is_colocated(t, array)) {
+      } else if (lj_tab_array_acq(t) != snap.array ||
+		 lj_tab_array_is_retiring(t, snap.array) ||
+		 lj_tab_array_is_colocated(t, snap.array)) {
 	lj_tab_wait_no_l();
 	goto retry_next;
       }
@@ -2755,11 +2799,11 @@ retry_next:
       return 1;
     }
   }
-  idx -= asize;
+  idx -= snap.asize;
   /* Then traverse the hash part. */
   {
-    MSize hmask;
-    Node *node = lj_tab_node_snapshot_acq(t, &hmask);
+    MSize hmask = snap.node ? snap.hmask : 0;
+    Node *node = snap.node ? snap.node : lj_tab_node_snapshot_acq(t, &hmask);
     for (; idx <= hmask; idx++) {
       Node *n = &node[idx];
       TValue key, val;
