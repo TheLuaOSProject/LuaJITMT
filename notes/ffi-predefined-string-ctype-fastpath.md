@@ -15,15 +15,20 @@ claim `CTState.parse_token`, so traced `ffi.sizeof("int")`,
 `ffi.typeof("double")`, and other exact predefined names can record while an
 unrelated parser owns the token. Recorder-side direct handling is deliberately
 limited to immutable predefined CTIDs plus fixed-size decimal array suffixes
-over those bases, such as `int[1]` or `const char[4]`. Strings that need name
-snapshots, parser-compatible numeric records, pointer construction, or normal
-parser diagnostics still abort with `CTBUSY` instead of waiting while
-recording.
+over those bases, such as `int[1]` or `const char[4]`, and fixed-size arrays of
+direct pointer chains over predefined bases, such as `int *[2]` or
+`const char * const [3]`. The interpreter fast-function path computes
+pointer-array sizes from pointer-sized elements; the recorder specializes the
+same strings with its parser-free ctype builder and the lock-free ctype intern
+path already used for direct fixed arrays. Strings that need name snapshots,
+parser-compatible numeric records, general ctype construction, or normal parser
+diagnostics still abort with `CTBUSY` instead of waiting while recording.
 
 The interpreter half of a recording fast-function call follows the same rule:
 layout queries reached by the active recorder must abort with `CTBUSY` instead
 of parking on the parser token. `ffi.sizeof` may compute fixed-size arrays over
-predefined bases directly, so `ffi.sizeof("int[1]")` can record without waiting
+predefined bases directly, including direct pointer-array bases, so
+`ffi.sizeof("int[1]")` and `ffi.sizeof("int *[2]")` can record without waiting
 for a parser-owned token.
 
 Predefined complex primitives use the same direct path for the parser's common
@@ -94,11 +99,12 @@ the normal parser/diagnostic path while allowing common generated stable forms
 with more than eight pointer or fixed-array suffixes to avoid claiming
 `CTState.parse_token`.
 
-The recorder-side fixed-array fast path over predefined bases uses the same
-16-suffix bound. Traced `ffi.sizeof("int[1]...[1]")` forms can therefore abort
-only for genuinely unsupported/general declarations while an unrelated parser
-owns the token, not because a generated fixed-array declaration has nine stable
-suffixes.
+The recorder-side fixed-array fast path over predefined bases and direct pointer
+chains uses the same 16-suffix bound for each suffix family. Traced
+`ffi.sizeof("int[1]...[1]")` and `ffi.sizeof("int *...[1]")` forms can therefore
+abort only for genuinely unsupported/general declarations while an unrelated
+parser owns the token, not because a generated fixed-array declaration has nine
+stable suffixes.
 
 Fixed-size array suffix chains over a direct base, including a direct pointer
 chain base, also stay off the parser token: `ffi.typeof("int[4]")`,

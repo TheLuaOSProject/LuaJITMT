@@ -88,6 +88,107 @@ static int crec_cspace(char c)
 	 c == '\f' || c == '\v';
 }
 
+#define CREC_DIRECT_MAX_DECL_SUFFIXES 16
+
+static int crec_isident(uint8_t c)
+{
+  return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+	 (c >= '0' && c <= '9') || c == '_';
+}
+
+static int crec_strlit(const char *p, MSize plen, const char *lit, MSize len)
+{
+  if (plen != len)
+    return 0;
+  while (len-- != 0)
+    if (*p++ != *lit++)
+      return 0;
+  return 1;
+}
+
+static int crec_qual_token(const char *p, MSize len, CTInfo *qualp)
+{
+  if (len == 5 && crec_strlit(p, len, "const", 5)) {
+    *qualp = CTF_CONST;
+    return 1;
+  }
+  if (len == 8 && crec_strlit(p, len, "volatile", 8)) {
+    *qualp = CTF_VOLATILE;
+    return 1;
+  }
+  if (len == 7 && crec_strlit(p, len, "__const", 7)) {
+    *qualp = CTF_CONST;
+    return 1;
+  }
+  if (len == 9 && crec_strlit(p, len, "__const__", 9)) {
+    *qualp = CTF_CONST;
+    return 1;
+  }
+  if (len == 10 && crec_strlit(p, len, "__volatile", 10)) {
+    *qualp = CTF_VOLATILE;
+    return 1;
+  }
+  if (len == 12 && crec_strlit(p, len, "__volatile__", 12)) {
+    *qualp = CTF_VOLATILE;
+    return 1;
+  }
+  if (len == 8 && crec_strlit(p, len, "restrict", 8)) {
+    *qualp = 0;
+    return 1;
+  }
+  if (len == 10 && crec_strlit(p, len, "__restrict", 10)) {
+    *qualp = 0;
+    return 1;
+  }
+  if (len == 12 && crec_strlit(p, len, "__restrict__", 12)) {
+    *qualp = 0;
+    return 1;
+  }
+  if (len == 13 && crec_strlit(p, len, "__extension__", 13)) {
+    *qualp = 0;
+    return 1;
+  }
+  return 0;
+}
+
+static int crec_pointer_qual_suffix(const char *p, MSize *lenp,
+				    CTInfo *qualp)
+{
+  MSize len = *lenp;
+  MSize start = len;
+  while (start != 0 && crec_isident((uint8_t)p[start-1])) start--;
+  if (start == len)
+    return 0;
+  if (start != 0 && !crec_cspace(p[start-1]) && p[start-1] != '*')
+    return 0;
+  if (!crec_qual_token(p + start, len - start, qualp))
+    return 0;
+  *lenp = start;
+  return 1;
+}
+
+static int crec_direct_pointer_suffix(const char *p, MSize *lenp,
+				      CTInfo *qualp)
+{
+  MSize len = *lenp;
+  CTInfo qual = 0;
+  for (;;) {
+    CTInfo q;
+    while (len != 0 && crec_cspace(p[len-1])) len--;
+    if (!crec_pointer_qual_suffix(p, &len, &q))
+      break;
+    qual |= q;
+  }
+  while (len != 0 && crec_cspace(p[len-1])) len--;
+  if (len == 0 || p[len-1] != '*')
+    return 0;
+  len--;
+  while (len != 0 && crec_cspace(p[len-1])) len--;
+  *lenp = len;
+  *qualp = qual;
+  return 1;
+}
+
 static int crec_direct_array_suffix(const char *p, MSize *lenp, CTSize *nelemp)
 {
   MSize len = *lenp, i, dstart, dend;
@@ -124,11 +225,10 @@ static int crec_direct_array_suffix(const char *p, MSize *lenp, CTSize *nelemp)
 
 static int crec_direct_array_ctype_string(jit_State *J, GCstr *s, CTypeID *idp)
 {
-  enum { CREC_DIRECT_MAX_ARRAYS = 16 };
   CTState *cts = ctype_ctsG(J2G(J));
   const char *p = strdata(s);
   MSize len = s->len, baselen, narr = 0, i;
-  CTSize nelem[CREC_DIRECT_MAX_ARRAYS], esize;
+  CTSize nelem[CREC_DIRECT_MAX_DECL_SUFFIXES], esize;
   CTInfo einfo;
   CTypeID elemid;
   while (len != 0 && crec_cspace(*p)) { p++; len--; }
@@ -139,17 +239,41 @@ static int crec_direct_array_ctype_string(jit_State *J, GCstr *s, CTypeID *idp)
     MSize nextlen = baselen;
     if (!crec_direct_array_suffix(p, &nextlen, &n))
       break;
-    if (narr == CREC_DIRECT_MAX_ARRAYS)
+    if (narr == CREC_DIRECT_MAX_DECL_SUFFIXES)
       return 0;
     nelem[narr++] = n;
     baselen = nextlen;
   }
-  if (narr == 0 || !lj_ctype_predefined_string(p, baselen, &elemid))
+  if (narr == 0)
     return 0;
-  if (lj_ctype_info_predefined(cts, elemid, &einfo, &esize, NULL, NULL) <= 0 ||
-      ctype_isref(einfo) || ctype_isvltype(einfo) ||
-      esize == CTSIZE_INVALID)
-    return 0;
+  {
+    CTInfo pqual[CREC_DIRECT_MAX_DECL_SUFFIXES];
+    MSize nptr = 0;
+    for (;;) {
+      CTInfo qual;
+      MSize nextlen = baselen;
+      if (!crec_direct_pointer_suffix(p, &nextlen, &qual))
+	break;
+      if (nptr == CREC_DIRECT_MAX_DECL_SUFFIXES)
+	return 0;
+      pqual[nptr++] = qual;
+      baselen = nextlen;
+    }
+    if (!lj_ctype_predefined_string(p, baselen, &elemid))
+      return 0;
+    if (nptr != 0) {
+      while (nptr-- != 0) {
+	einfo = CTINFO(CT_PTR, CTALIGN_PTR|pqual[nptr]|elemid);
+	elemid = lj_ctype_intern_l(J->L, cts, einfo, CTSIZE_PTR);
+      }
+      esize = CTSIZE_PTR;
+    } else {
+      if (lj_ctype_info_predefined(cts, elemid, &einfo, &esize, NULL, NULL) <= 0 ||
+	  ctype_isref(einfo) || ctype_isvltype(einfo) ||
+	  esize == CTSIZE_INVALID)
+	return 0;
+    }
+  }
   for (i = 0; i < narr; i++) {
     uint64_t asize = (uint64_t)nelem[i] * esize;
     if (asize >= 0x80000000u)

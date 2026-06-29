@@ -722,12 +722,31 @@ static int ffi_direct_array_sizeof_string(CTState *cts, GCstr *s, CTSize *szp)
     nelem[narr++] = n;
     baselen = nextlen;
   }
-  if (narr == 0 || !lj_ctype_predefined_string(p, baselen, &elemid))
+  if (narr == 0)
     return 0;
-  if (lj_ctype_info_predefined(cts, elemid, &einfo, &esize, NULL, NULL) <= 0 ||
-      ctype_isref(einfo) || ctype_isvltype(einfo) ||
-      esize == CTSIZE_INVALID)
-    return 0;
+  {
+    MSize nptr = 0;
+    for (;;) {
+      CTInfo qual;
+      MSize nextlen = baselen;
+      if (!ffi_direct_pointer_suffix(p, &nextlen, &qual))
+	break;
+      if (nptr == FFI_DIRECT_MAX_DECL_SUFFIXES)
+	return 0;
+      nptr++;
+      baselen = nextlen;
+    }
+    if (!lj_ctype_predefined_string(p, baselen, &elemid))
+      return 0;
+    if (nptr != 0) {
+      esize = CTSIZE_PTR;
+    } else {
+      if (lj_ctype_info_predefined(cts, elemid, &einfo, &esize, NULL, NULL) <= 0 ||
+	  ctype_isref(einfo) || ctype_isvltype(einfo) ||
+	  esize == CTSIZE_INVALID)
+	return 0;
+    }
+  }
   for (i = 0; i < narr; i++) {
     uint64_t asize = (uint64_t)nelem[i] * esize;
     if (asize >= 0x80000000u)
