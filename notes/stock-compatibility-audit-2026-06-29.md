@@ -1,14 +1,14 @@
 # Stock compatibility audit, 2026-06-29
 
-Scope: active `v2.1` commits through `3f71abcb298a`, with emphasis on
+Scope: active `v2.1` commits through `db02faa32d21`, with emphasis on
 source-search test removal, legacy/fork-local entrypoint cleanup, and stock
 LuaJIT API behavior.
 
-Refresh note: the 2026-06-29 re-audit after the FFI `ffi.istype()` recorder
-snapshot slice found no new active source-search-only tests and no new public
-stock LuaJIT API removals. The remaining string checks in active tests are over
-generated dumps or runtime output, matching the policy exception for generated
-ASM/mcode and other generated artifacts.
+Refresh note: the 2026-06-29 re-audit after removing the non-stock `ffi.pin`
+entrypoint found no active source-search-only tests and no public stock LuaJIT
+API removals. The remaining string checks in active tests are over generated
+dumps or runtime output, matching the policy exception for generated ASM/mcode
+and other generated artifacts.
 
 ## Source-search tests and CI
 
@@ -33,9 +33,9 @@ The removed source-guard compatibility surface remains gone:
 
 ## Public C API surface
 
-The current stock `LuaJIT/LuaJIT` `v2.1` head was checked as
-`a2bde60819d83e6f75130ac2c93ee4b3c7615800`. Public headers do not add or
-remove stock C API prototypes. `src/lualib.h`, `src/lauxlib.h`, and
+The current local `upstream/v2.1` reference was checked as
+`b925b3e3fc6771171602323b45fbe9fb8fc90369`. Public headers do not add or remove
+stock C API prototypes. `src/lualib.h`, `src/lauxlib.h`, and
 `src/luajit_rolling.h` match upstream. `src/lua.h` differs only by one blank
 line. `src/luaconf.h` differs only in comment wording.
 
@@ -47,13 +47,16 @@ Fork-local removals are not stock API removals:
 - `luaopen_threading` and `LUA_THREADINGLIBNAME` are intentionally hidden from
   public headers. The Lua extension remains `require("threading")`.
 - `ffi.typeinfo` was an unsupported fork helper, not stock LuaJIT FFI.
+- `ffi.pin` was an unsupported fork helper, not stock LuaJIT FFI. Ordinary Lua
+  references and `ffi.gc` remain the stock-visible lifetime mechanisms.
 - `LUA_GCGENERATIONAL` and `LUA_GCINCREMENTAL` are not stock LuaJIT public C
   constants in this branch. Fork GC mode control is `threading.gcmode()`.
 
 Export audit: `luaopen_threading`, `luaMT_*`, `lj_threading_*`, and
-`ffi_typeinfo` are not dynamic public exports. The remaining C attach/detach
-entry points are internal helpers in `lj_thr.h` for native attached-thread
-fixtures and runtime integration.
+`ffi_typeinfo` are not dynamic public exports. `ffi_pin` and its handle userdata
+type are removed. The remaining C attach/detach entry points are internal
+helpers in `lj_thr.h` for native attached-thread fixtures and runtime
+integration.
 
 ## Stock behavior boundary
 

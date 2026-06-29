@@ -17,6 +17,10 @@ Keep these active extension entry points:
   stock `collectgarbage()` and the public `lua_gc()` numeric mode surface.
 - `threading.now()` gives benchmark code the monotonic clock used for timing
   lockless behavior.
+- `threading.cpucount()`, `threading.sleep()`, and `threading.fence()` are
+  fork-local threading utilities used by tests, benchmarks, and the memory
+  model litmus cases. They are not stock LuaJIT APIs, but they are the current
+  documented `require("threading")` surface, not legacy aliases.
 
 Remove only stale fork-local compatibility shims. Stock LuaJIT compatibility
 entry points, optional Lua 5.2 compatibility, standard FFI behavior, and
