@@ -509,6 +509,8 @@ return function(add)
                                   { joff = true })
       build_and_run_c(t, t:tmp("lj_t-cclosure-upvalue-snapshot"),
                       "t-cclosure-upvalue-snapshot.c")
+      build_and_run_c(t, t:tmp("lj_t-cclosure-upvalue-race"),
+                      "t-cclosure-upvalue-race.c", { timeout = "20s" })
       print("M5 closed-upvalue GC publication behavior passed")
     end
   })

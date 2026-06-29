@@ -823,12 +823,36 @@ int lj_trace_flushall(lua_State *L)
   return 0;
 }
 
+static int trace_has_published_traces(jit_State *J)
+{
+  MSize sizetrace = trace_sizetrace_acq(J);
+  TraceNo i;
+  for (i = 1; i < sizetrace; i++)
+    if (traceref(J, i) != NULL)
+      return 1;
+  return 0;
+}
+
+static int trace_flushall_hs_needed(lua_State *L)
+{
+  jit_State *J = L2J(L);
+  int needed;
+  if (!lj_jit_token_try(J))
+    return 1;  /* Another thread may be recording or publishing traces. */
+  needed = lj_trace_state_load(J) != LJ_TRACE_IDLE ||
+	   trace_has_published_traces(J);
+  lj_jit_token_release(J);
+  return needed;
+}
+
 /* Request a leader-owned full trace flush through the safepoint protocol. */
 int lj_trace_flushall_hs(lua_State *L)
 {
   global_State *g = G(L);
   if ((hookmask_load(g) & HOOK_GC))
     return 1;
+  if (!trace_flushall_hs_needed(L))
+    return 0;
   (void)lj_gc2_handshake(g, LJ_GC2_HS_EXIT_TRACES|LJ_GC2_HS_FLUSHJ);
   return 0;
 }
