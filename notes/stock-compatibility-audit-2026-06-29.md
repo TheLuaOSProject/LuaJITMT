@@ -76,6 +76,9 @@ searches:
   payload flag.
 - `os.setlocale()` mutation after threading activation is rejected because
   process-global locale changes are not safe with active VM threads.
+- `math.random()` and `math.randomseed()` use per-thread-group PRNG state once
+  the threading extension creates separate VM thread groups. The single-main-TG
+  path keeps ordinary stock-facing library calls available.
 - `jit.profile` remains stock before threading activation; unsupported
   non-TG-local profiler backends may drop samples while multiple VM threads are
   live.
@@ -83,6 +86,11 @@ searches:
 The `m7_ffi_cdata_shared_hammer` coverage added after the pin removal is stock
 API coverage: it uses `ffi`, `require("threading")`, and ordinary cdata field
 accesses. It intentionally does not add a source-search test for helper names.
+
+Past cleanup commits temporarily removed stock compatibility symbols and the
+optional `LUAJIT_ENABLE_LUA52COMPAT` profile. Current branch state restored
+those stock surfaces; `tests/t-stock-api-surface.c` covers representative
+legacy stock C API entry points without searching implementation source text.
 
 Future legacy cleanup should remove only stale fork-local compatibility shims
 that exist for the threading/lockless migration. It should not remove stock
