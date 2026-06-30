@@ -418,7 +418,9 @@ clear predicate, advances through the published ready prefix with
 `weak_scan_cursor`, and publishes scan telemetry. `lj_gc2_weak_snapshot_clear()`
 applies the same predicate with release nil stores, advances through the
 published ready prefix with `weak_clear_cursor` without moving past
-reserved-but-unpublished slots, and now runs before the bridge weak-clearing
+reserved-but-unpublished slots, and now brackets cursor reservations with
+`weak_drain_active` so completion cannot treat a claimed-but-still-clearing
+table batch as finished. It runs before the bridge weak-clearing
 fallback. `lj_gc2_weak_drain()` is the phase-gated bounded driver used by
 `lj_gc2_weak_complete()` in `LJ_GC2_WEAK_DRAIN_BATCH` chunks while the full
 worker-owned weak drain is staged. The current bridge uses the legacy color
@@ -426,10 +428,11 @@ bits as a stop-the-world weak-clear oracle while `g->gc.state == GCSatomic`,
 so GC2 weak-key/all-weak clearing matches the legacy `gc_mayclear()` predicate
 even though GC2 stack rescans are intentionally more conservative. The helper
 skips the fallback `gc_clearweak()` after `lj_gc2_weak_snapshot_covers_bridge()`
-proves the current-cycle snapshot was fully published, fully clear-drained, and
-covers every table in the final bridge `g->gc.weak` list. When the snapshot is
-complete but misses bridge weak-list entries, the owner backfills those tables
-with the same captured-mode clear predicate before skipping fallback clearing.
+proves the current-cycle snapshot was fully published, fully clear-drained,
+has no active weak drainers, and covers every table in the final bridge
+`g->gc.weak` list. When the snapshot is complete but misses bridge weak-list
+entries, the owner backfills those tables with the same captured-mode clear
+predicate before skipping fallback clearing.
 Incomplete, overflowed, or invalid snapshots still fall back to the classic
 pass.
 String-bearing weak hash slots now follow legacy `gc_mayclear()` semantics in

@@ -1612,6 +1612,9 @@ static void test_weak_snapshot_bridge_coverage(lua_State *L, global_State *g,
   lj_gc2_mark_to_weak(g);
   assert(!lj_gc2_test_weak_snapshot_covers_bridge(g, gcref(g->gc.weak)));
   assert(lj_gc2_test_weak_drain(g, 1) == 1u);
+  gc2_weak_drain_active_rel(g, 1);
+  assert(!lj_gc2_test_weak_snapshot_covers_bridge(g, gcref(g->gc.weak)));
+  gc2_weak_drain_active_rel(g, 0);
   assert(lj_gc2_test_weak_snapshot_covers_bridge(g, gcref(g->gc.weak)));
 
   lj_obj_cleargcflags(obj2gco(weak), LJ_GC_WEAK);

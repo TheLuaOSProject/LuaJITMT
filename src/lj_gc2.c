@@ -297,6 +297,7 @@ void lj_gc2_init(global_State *g)
   gc2_weak_stack_store_rlx(g, NULL);
   gc2_weak_ready_store_rlx(g, NULL);
   gc2_weak_capacity_store_rlx(g, 0);
+  gc2_weak_drain_active_store_rlx(g, 0);
   gc2_weak_count_store_rlx(g, 0);
   gc2_weak_tables_seen_store_rlx(g, 0);
   gc2_weak_tables_weakkey_store_rlx(g, 0);
@@ -3384,6 +3385,7 @@ static void gc2_weak_reset(global_State *g)
     for (i = 0; i < cap; i++)
       la_store8_rlx(&ready[i], 0);
   gc2_weak_count_store_rlx(g, 0);  /* 05 section 5.8 side vector. */
+  gc2_weak_drain_active_store_rlx(g, 0);
   gc2_weak_scan_cursor_store_rlx(g, 0);
   gc2_weak_clear_cursor_store_rlx(g, 0);
 }
@@ -3749,11 +3751,16 @@ static uint32_t lj_gc2_weak_snapshot_clear(global_State *g, uint32_t limit)
   uint64_t slots = 0, cleared = 0;
   if (!g || limit == 0)
     return 0;
+  gc2_weak_drain_active_add(g, 1);
   n = lj_gc2_weak_snapshot_count(g);
   do {
     start = gc2_weak_clear_cursor_acq(g);
-    if (start >= (uint64_t)n)
+    if (start >= (uint64_t)n) {
+      uint32_t old = gc2_weak_drain_active_sub(g, 1);
+      lj_assertG(old != 0, "gc2 weak drain active underflow");
+      UNUSED(old);
       return 0;
+    }
     end = start + limit;
     if (end < start || end > (uint64_t)n)
       end = (uint64_t)n;
@@ -3772,6 +3779,11 @@ static uint32_t lj_gc2_weak_snapshot_clear(global_State *g, uint32_t limit)
     gc2_weak_clear_slots_add(g, slots);
     gc2_weak_clear_cleared_add(g, cleared);
   }
+  {
+    uint32_t old = gc2_weak_drain_active_sub(g, 1);
+    lj_assertG(old != 0, "gc2 weak drain active underflow");
+    UNUSED(old);
+  }
   return scanned;
 }
 
@@ -3784,7 +3796,10 @@ static uint32_t lj_gc2_weak_drain(global_State *g, uint32_t limit)
 
 static int gc2_phase_peer_active(global_State *g)
 {
-  return g && (gc2_worker_active_acq(g) != 0 || gc2_assist_active_acq(g) != 0);
+  return g && (gc2_worker_active_acq(g) != 0 ||
+	       gc2_assist_active_acq(g) != 0 ||
+	       (gc2_phase_acq(g) == LJ_GC2_WEAK &&
+		gc2_weak_drain_active_acq(g) != 0));
 }
 
 static int gc2_weak_snapshot_complete(global_State *g, uint32_t *pn)
@@ -3815,6 +3830,8 @@ static int gc2_weak_snapshot_complete(global_State *g, uint32_t *pn)
   cleared = gc2_weak_clear_cursor_acq(g);
   if (cleared < (uint64_t)n)
     return 0;  /* The bounded GC2 clear cursor has not drained the prefix. */
+  if (gc2_weak_drain_active_acq(g) != 0)
+    return 0;  /* Cursor reservation alone is not completed weak clearing. */
   if (pn)
     *pn = n;
   return 1;

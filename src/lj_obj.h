@@ -1427,6 +1427,7 @@ typedef struct GC2State {
   GCRef *weak_stack;	/* GC2-owned weak-table discovery vector. */
   uint8_t *weak_ready;	/* Published weak discovery slots. */
   MSize weak_capacity;	/* Allocated weak discovery slots. */
+  uint32_t weak_drain_active;  /* Cursor-reserved weak clears in flight. */
   uint64_t weak_count;	/* Weak discovery slots reserved this cycle. */
   uint64_t weak_tables_seen;  /* Weak table traversals found by GC2. */
   uint64_t weak_tables_weakkey;  /* Weak-key table traversals. */
@@ -2559,6 +2560,35 @@ static LJ_AINLINE void gc2_weak_capacity_store_rlx(global_State *g,
 static LJ_AINLINE void gc2_weak_capacity_rel(global_State *g, MSize cap)
 {
   la_store32_rel(&g->gc2.weak_capacity, (uint32_t)cap);
+}
+
+static LJ_AINLINE uint32_t gc2_weak_drain_active_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.weak_drain_active);
+}
+
+static LJ_AINLINE void gc2_weak_drain_active_store_rlx(global_State *g,
+						       uint32_t active)
+{
+  la_store32_rlx(&g->gc2.weak_drain_active, active);
+}
+
+static LJ_AINLINE void gc2_weak_drain_active_rel(global_State *g,
+						 uint32_t active)
+{
+  la_store32_rel(&g->gc2.weak_drain_active, active);
+}
+
+static LJ_AINLINE uint32_t gc2_weak_drain_active_add(global_State *g,
+						     uint32_t n)
+{
+  return la_add32_rlx(&g->gc2.weak_drain_active, n);
+}
+
+static LJ_AINLINE uint32_t gc2_weak_drain_active_sub(global_State *g,
+						     uint32_t n)
+{
+  return la_sub32_acqrel(&g->gc2.weak_drain_active, n);
 }
 
 static LJ_AINLINE uint64_t gc2_weak_tables_seen_acq(global_State *g)
