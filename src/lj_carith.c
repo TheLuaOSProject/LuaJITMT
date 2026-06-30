@@ -73,6 +73,33 @@ static int carith_predefined_child(CTInfo info)
   return cid > CTID_NONE && cid <= CTID_CTYPEID;
 }
 
+static void carith_ctype_copy(CType *out, CType *ct)
+{
+  GCobj *name;
+  out->info = ctype_info_acq(ct);
+  out->size = ctype_size_acq(ct);
+  out->sib = (CTypeID1)ctype_sib_acq(ct);
+  out->next = (CTypeID1)ctype_next_acq(ct);
+  name = ctype_nameobj_acq(ct);
+  setgcrefp(out->name, name);
+}
+
+static void carith_set_operand_snapshot(CDArith *ca, MSize i, CTypeID id,
+					const CType *snap)
+{
+  ca->snap[i] = *snap;
+  ca->ct[i] = &ca->snap[i];
+  ca->id[i] = id;
+}
+
+static void carith_set_operand_id(CTState *cts, CDArith *ca, MSize i,
+				  CTypeID id)
+{
+  carith_ctype_copy(&ca->snap[i], ctype_get(cts, id));
+  ca->ct[i] = &ca->snap[i];
+  ca->id[i] = id;
+}
+
 static int carith_ctype_shallow_predef_ptr(CTState *cts, CTypeID id,
 					   CTypeID *ridp, CType *rawp,
 					   CTInfo *rawinfop,
@@ -119,22 +146,6 @@ static cTValue *carith_ctype_metatv_read(lua_State *L, CTState *cts,
   return ok ? out : NULL;
 }
 
-static void carith_refresh_ctypes(CTState *cts, CDArith *ca)
-{
-  MSize i;
-  for (i = 0; i < 2; i++)
-    if (ca->id[i] != 0)
-      ca->ct[i] = ctype_get(cts, ca->id[i]);
-}
-
-static void carith_refresh_prior_ctypes(CTState *cts, CDArith *ca, MSize n)
-{
-  MSize i;
-  for (i = 0; i < n; i++)
-    if (ca->id[i] != 0)
-      ca->ct[i] = ctype_get(cts, ca->id[i]);
-}
-
 static int carith_ctype_raw_read(lua_State *L, CTState *cts, CTypeID id,
 				 CTypeID *ridp, CType *rawp,
 				 CTInfo *rawinfop, CTSize *rawszp)
@@ -175,21 +186,17 @@ static int carith_checkarg_cdata(lua_State *L, CTState *cts, CDArith *ca,
   uint8_t *p = (uint8_t *)cdataptr(cd);
   int ok = carith_ctype_shallow_predef_ptr(cts, id, &cid, &snap, &info,
 					   &size);
-  int use_snap = ok > 0;
-  if (!use_snap) {
+  if (ok <= 0) {
     ok = carith_ctype_raw_snapshot_read(cts, id, &cid, &snap, &info,
 					&size);
   }
   if (ok < 0) {
     ok = carith_ctype_shallow_predef_ptr(cts, id, &cid, &snap, &info, &size);
-    use_snap = ok > 0;
     if (ok <= 0)
       ok = carith_ctype_raw_read(L, cts, id, &cid, &snap, &info, &size);
   }
   if (ok <= 0)
     return 0;
-  if (i)
-    carith_refresh_prior_ctypes(cts, ca, i);
   if (ctype_isptr(info)) {
     p = (uint8_t *)cdata_getptr(p, size);
     if (ctype_isref(info)) {
@@ -197,29 +204,21 @@ static int carith_checkarg_cdata(lua_State *L, CTState *cts, CDArith *ca,
 				 &info, &size);
       if (ok <= 0)
 	return 0;
-      if (i)
-	carith_refresh_prior_ctypes(cts, ca, i);
     }
   } else if (ctype_isfunc(info)) {
     p = (uint8_t *)*(void **)p;
     cid = lj_ctype_intern_l(L, cts, CTINFO(CT_PTR, CTALIGN_PTR|id),
 			    CTSIZE_PTR);
-    if (i)
-      carith_refresh_prior_ctypes(cts, ca, i);
-    ca->ct[i] = ctype_get(cts, cid);
-    ca->id[i] = cid;
+    carith_set_operand_id(cts, ca, i, cid);
     ca->p[i] = p;
     return 1;
   }
-  if (ctype_isenum(info))
+  if (ctype_isenum(info)) {
     cid = ctype_cid(info);
-  if (use_snap) {
-    ca->snap[i] = snap;
-    ca->ct[i] = &ca->snap[i];
+    carith_set_operand_id(cts, ca, i, cid);
   } else {
-    ca->ct[i] = ctype_get(cts, cid);
+    carith_set_operand_snapshot(ca, i, cid, &snap);
   }
-  ca->id[i] = cid;
   ca->p[i] = p;
   return 1;
 }
@@ -241,16 +240,13 @@ static int carith_checkarg(lua_State *L, CTState *cts, CDArith *ca)
 	ok = 0;
       }
     } else if (tvisint(o)) {
-      ca->ct[i] = ctype_get(cts, CTID_INT32);
-      ca->id[i] = CTID_INT32;
+      carith_set_operand_id(cts, ca, i, CTID_INT32);
       ca->p[i] = (uint8_t *)&o->i;
     } else if (tvisnum(o)) {
-      ca->ct[i] = ctype_get(cts, CTID_DOUBLE);
-      ca->id[i] = CTID_DOUBLE;
+      carith_set_operand_id(cts, ca, i, CTID_DOUBLE);
       ca->p[i] = (uint8_t *)&o->n;
     } else if (tvisnil(o)) {
-      ca->ct[i] = ctype_get(cts, CTID_P_VOID);
-      ca->id[i] = CTID_P_VOID;
+      carith_set_operand_id(cts, ca, i, CTID_P_VOID);
       ca->p[i] = (uint8_t *)0;
     } else if (tvisstr(o)) {
       TValue *o2 = i == 0 ? o+1 : o-1;
@@ -265,26 +261,20 @@ static int carith_checkarg(lua_State *L, CTState *cts, CDArith *ca)
 	CTSize size;
 	int snapok = carith_ctype_raw_read(L, cts, cdataV(o2)->ctypeid,
 					   &cid, &snap, &info, &size);
-	if (i)
-	  carith_refresh_prior_ctypes(cts, ca, i);
 	if (snapok > 0 && ctype_isenum(info)) {
 	  CTSize val;
 	  CTypeID ecid;
 	  CTypeID enumid = cid;
 	  int snap = lj_ctype_enumconst_wait(L, cts, enumid, strV(o),
 					     &val, &ecid);
-	  if (i)
-	    carith_refresh_prior_ctypes(cts, ca, i);
 	  if (snap > 0) {
 	    cid = ecid;
 	    ca->enumval[i] = val;
-	    ca->ct[i] = ctype_get(cts, cid);
-	    ca->id[i] = cid;
+	    carith_set_operand_id(cts, ca, i, cid);
 	    ca->p[i] = (uint8_t *)&ca->enumval[i];
 	    ok = 1;
 	  } else {
-	    ca->ct[1-i] = ctype_get(cts, enumid);  /* Improve error msg. */
-	    ca->id[1-i] = enumid;
+	    carith_set_operand_id(cts, ca, 1-i, enumid);  /* Improve error msg. */
 	    ca->p[1-i] = NULL;
 	    break;
 	  }
@@ -327,7 +317,6 @@ static int carith_ptr(lua_State *L, CTState *cts, CDArith *ca, MMS mm)
 	intptr_t diff;
 	(void)lj_ctype_size_wait(L, cts, elemid, &sz);
 	if (sz == 0 || sz == CTSIZE_INVALID) {
-	  carith_refresh_ctypes(cts, ca);
 	  return 0;
 	}
 	diff = ((intptr_t)pp - (intptr_t)pp2) / (int32_t)sz;
@@ -347,17 +336,23 @@ static int carith_ptr(lua_State *L, CTState *cts, CDArith *ca, MMS mm)
     }
     if (!((mm == MM_add || mm == MM_sub) && ctype_isnum(info1)))
       return 0;
-    lj_cconv_ct_ct_l(L, cts, ctype_get(cts, CTID_INT_PSZ), CTID_INT_PSZ,
-		     ca->ct[1], ca->id[1],
-		     (uint8_t *)&idx, ca->p[1], 0);
+    {
+      CType idxsnap;
+      carith_ctype_copy(&idxsnap, ctype_get(cts, CTID_INT_PSZ));
+      lj_cconv_ct_ct_l(L, cts, &idxsnap, CTID_INT_PSZ, ca->ct[1],
+		       ca->id[1], (uint8_t *)&idx, ca->p[1], 0);
+    }
     if (mm == MM_sub) idx = (ptrdiff_t)(~(uintptr_t)idx+1u);
   } else if (mm == MM_add && ctype_isnum(pinfo) &&
       (ctype_isptr(info1) || ctype_isrefarray(info1))) {
     /* Swap pointer and index. */
     ctp = ca->ct[1]; pp = ca->p[1]; pinfo = info1;
-    lj_cconv_ct_ct_l(L, cts, ctype_get(cts, CTID_INT_PSZ), CTID_INT_PSZ,
-		     ca->ct[0], ca->id[0],
-		     (uint8_t *)&idx, ca->p[0], 0);
+    {
+      CType idxsnap;
+      carith_ctype_copy(&idxsnap, ctype_get(cts, CTID_INT_PSZ));
+      lj_cconv_ct_ct_l(L, cts, &idxsnap, CTID_INT_PSZ, ca->ct[0],
+		       ca->id[0], (uint8_t *)&idx, ca->p[0], 0);
+    }
   } else {
     return 0;
   }
@@ -365,7 +360,6 @@ static int carith_ptr(lua_State *L, CTState *cts, CDArith *ca, MMS mm)
     CTypeID elemid = ctype_cid(pinfo);
     (void)lj_ctype_size_wait(L, cts, elemid, &sz);
     if (sz == CTSIZE_INVALID) {
-      carith_refresh_ctypes(cts, ca);
       return 0;
     }
     pp += idx*(int32_t)sz;  /* Compute pointer + index. */
@@ -391,13 +385,14 @@ static int carith_int64(lua_State *L, CTState *cts, CDArith *ca, MMS mm)
     CTypeID id = (((info0 & CTF_UNSIGNED) && size0 == 8) ||
 		  ((info1 & CTF_UNSIGNED) && size1 == 8)) ?
 		 CTID_UINT64 : CTID_INT64;
-    CType *ct = ctype_get(cts, id);
+    CType ctsnap;
     GCcdata *cd;
     uint64_t u0, u1, *up;
-    lj_cconv_ct_ct_l(L, cts, ct, id, ca->ct[0], ca->id[0],
+    carith_ctype_copy(&ctsnap, ctype_get(cts, id));
+    lj_cconv_ct_ct_l(L, cts, &ctsnap, id, ca->ct[0], ca->id[0],
 		     (uint8_t *)&u0, ca->p[0], 0);
     if (mm != MM_unm)
-      lj_cconv_ct_ct_l(L, cts, ct, id, ca->ct[1], ca->id[1],
+      lj_cconv_ct_ct_l(L, cts, &ctsnap, id, ca->ct[1], ca->id[1],
 		       (uint8_t *)&u1, ca->p[1], 0);
     switch (mm) {
     case MM_eq:
@@ -557,7 +552,7 @@ uint64_t lj_carith_shift64(uint64_t x, int32_t sh, int op)
 }
 
 static int carith_check64_source(lua_State *L, CTState *cts, GCcdata *cd,
-				 uint8_t **spp, CTypeID *sidp, CType **spct,
+				 uint8_t **spp, CTypeID *sidp, CType *spct,
 				 CTInfo *infop, CTSize *sizep)
 {
   CType snap;
@@ -580,7 +575,10 @@ static int carith_check64_source(lua_State *L, CTState *cts, GCcdata *cd,
   sid = ctype_isenum(rawinfo) ? ctype_cid(rawinfo) : rid;
   *spp = sp;
   *sidp = sid;
-  *spct = ctype_get(cts, sid);
+  if (ctype_isenum(rawinfo))
+    carith_ctype_copy(spct, ctype_get(cts, sid));
+  else
+    *spct = snap;
   *infop = info;
   *sizep = size;
   return 1;
@@ -599,18 +597,20 @@ uint64_t lj_carith_check64(lua_State *L, int narg, CTypeID *id)
     CTState *cts = ctype_cts(L);
     uint8_t *sp;
     CTypeID sid;
-    CType *s;
+    CType ssnap, dsnap;
     uint64_t x;
     CTInfo info;
     CTSize size;
-    if (!carith_check64_source(L, cts, cdataV(o), &sp, &sid, &s, &info, &size))
+    if (!carith_check64_source(L, cts, cdataV(o), &sp, &sid, &ssnap,
+			       &info, &size))
       goto err;
     if ((info & (CTMASK_NUM|CTF_BOOL|CTF_FP|CTF_UNSIGNED)) ==
 	CTINFO(CT_NUM, CTF_UNSIGNED) && size == 8)
       *id = CTID_UINT64;  /* Use uint64_t, since it has the highest rank. */
     else if (!*id)
       *id = CTID_INT64;  /* Use int64_t, unless already set. */
-    lj_cconv_ct_ct_l(L, cts, ctype_get(cts, *id), *id, s, sid,
+    carith_ctype_copy(&dsnap, ctype_get(cts, *id));
+    lj_cconv_ct_ct_l(L, cts, &dsnap, *id, &ssnap, sid,
 		     (uint8_t *)&x, sp, CCF_ARG(narg));
     return x;
   } else if (!(tvisstr(o) && lj_strscan_number(strV(o), o))) {

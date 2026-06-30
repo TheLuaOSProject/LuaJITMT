@@ -140,6 +140,31 @@ die "raw C-to-C operand snapshots are after a wait-capable ctype lookup\n"
                         { stderr = true })
 end
 
+local function assert_carith_operands_use_snapshots(t)
+  local script = [[
+my $path = shift @ARGV;
+open my $fh, "<", $path or die "$path: $!\n";
+local $/;
+my $src = <$fh>;
+die "arithmetic ctype refresh helpers remain\n"
+  if $src =~ /carith_refresh_(?:prior_)?ctypes/;
+die "missing arithmetic operand snapshot helper\n"
+  unless $src =~ /static void carith_set_operand_snapshot/;
+die "missing arithmetic operand ID snapshot helper\n"
+  unless $src =~ /static void carith_set_operand_id/;
+die "lj_carith_check64 source still returns a live CType pointer\n"
+  if $src =~ /CType\s+\*\*spct/;
+while ($src =~ /^([^\n]*ctype_get\(cts[^\n]*)$/mg) {
+  my $line = $1;
+  next if $line =~ /carith_ctype_copy\s*\(/;
+  die "raw ctype_get in lj_carith.c outside local copy: $line\n";
+}
+]]
+  utils.capture_command("perl -e " .. shell_quote(script) .. " " ..
+                        shell_quote(t:path("src", "lj_carith.c")),
+                        { stderr = true })
+end
+
 return function(add)
   add({
     name = "m7_ffi_ccall_native",
@@ -225,6 +250,7 @@ return function(add)
     description = "FFI arithmetic/raw conversion behavior",
     run = function(t)
       clean_build(t)
+      assert_carith_operands_use_snapshots(t)
       build_and_run_c(t, t:tmp("lj_t-ffi-carith-check64-snapshot"),
                       "t-ffi-carith-check64-snapshot.c",
                       { build = false, timeout = "20s" })

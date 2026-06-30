@@ -9,15 +9,18 @@ FFI arithmetic helper loads
 - Routed `carith_int64()`, `lj_carith_meta()`, and `lj_carith_check64()`
   through helper-backed payload reads for numeric rank selection, metamethod
   lookup/error classification, and bit-library cdata operands.
+- Follow-up operand lifetime cleanup stores arithmetic operands in `CDArith`
+  stack snapshots, confines `ctype_get(cts, ...)` to immediate local copies,
+  removes the wait-afterward refresh helpers, and returns `lj_carith_check64()`
+  source ctypes through caller-owned snapshots instead of live ctype-table
+  pointers.
 - Extended `tools/ci/m7_ffi_carith_l.sh` to reject raw `CType.info` and
   `CType.size` reads in `src/lj_carith.c`.
+- Extended `tests/suites/m7_ffi.lua` to reject raw arithmetic `ctype_get(cts,
+  ...)` live-pointer reuse outside immediate local CType copies.
 
 Verification:
 
-- tools/ci/m7_ffi_carith_l.sh
-- tools/ci/m7_ffi_typeinfo_snapshot.sh
-- tools/ci/m7_ffi_cdata_get_l.sh
-- tools/ci/m7_ffi_cdata_set_l.sh
-- tools/ci/m7_ffi_cparse_rollback.sh
-- tools/ci/m0_source_guard.sh
+- LJ_TEST_DISABLE_BUILD_CACHE=1 tools/ci/lua_test.sh m7_ffi_carith_l
+- LJ_TEST_DISABLE_BUILD_CACHE=1 tools/ci/lua_test.sh m7_ffi_typeinfo_snapshot m7_ffi_cparse_rollback
 - git diff --check
