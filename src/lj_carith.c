@@ -319,7 +319,8 @@ static int carith_ptr(lua_State *L, CTState *cts, CDArith *ca, MMS mm)
 	setboolV(L->top-1, (pp == pp2));
 	return 1;
       }
-      if (!lj_cconv_compatptr(cts, ctp, ca->ct[1], CCF_IGNQUAL))
+      if (!lj_cconv_compatptr_l(L, cts, ca->id[0], ctp,
+				ca->id[1], ca->ct[1], CCF_IGNQUAL))
 	return 0;
       if (mm == MM_sub) {  /* Pointer difference. */
 	CTypeID elemid = ctype_cid(pinfo);

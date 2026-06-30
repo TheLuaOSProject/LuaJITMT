@@ -106,39 +106,49 @@ static CTypeID cconv_rawid_wait(lua_State *L, CTState *cts, CTypeID id,
 /* -- C type conversion checks -------------------------------------------- */
 
 /* Get raw type and qualifiers for a child type. Resolves enums, too. */
-static CType *cconv_childqual(CTState *cts, CType *ct, CTInfo *qual)
+static int cconv_childqual_l(lua_State *L, CTState *cts, CTypeID *idp,
+			     CType *ct, CType *out, CTInfo *qual)
 {
-  ct = ctype_child(cts, ct);
+  CTypeID id = ctype_cid(ctype_info_acq(ct));
+  if (!cconv_ctype_snapshot_wait(L, cts, id, out))
+    return 0;
   for (;;) {
-    CTInfo info = ctype_info_acq(ct);
+    CTInfo info = ctype_info_acq(out);
     if (ctype_isattrib(info)) {
-      if (ctype_attrib(info) == CTA_QUAL) *qual |= ctype_size_acq(ct);
+      if (ctype_attrib(info) == CTA_QUAL) *qual |= ctype_size_acq(out);
     } else if (!ctype_isenum(info)) {
       *qual |= (info & CTF_QUAL);
       break;
     }
-    ct = ctype_child(cts, ct);
+    id = ctype_cid(info);
+    if (!cconv_ctype_snapshot_wait(L, cts, id, out))
+      return 0;
   }
-  return ct;
+  *idp = id;
+  return 1;
 }
 
 /* Check for compatible types when converting to a pointer.
 ** Note: these checks are more relaxed than what C99 mandates.
 */
-int lj_cconv_compatptr(CTState *cts, CType *d, CType *s, CTInfo flags)
+int lj_cconv_compatptr_l(lua_State *L, CTState *cts, CTypeID did,
+			 CType *d0, CTypeID sid, CType *s0, CTInfo flags)
 {
-  if (!((flags & CCF_CAST) || d == s)) {
+  CType d = *d0, s = *s0;
+  if (!((flags & CCF_CAST) || did == sid)) {
     CTInfo dqual = 0, squal = 0;
     CTInfo dinfo, sinfo;
     CTSize dsize, ssize;
-    d = cconv_childqual(cts, d, &dqual);
-    sinfo = ctype_info_acq(s);
-    if (!ctype_isstruct(sinfo))
-      s = cconv_childqual(cts, s, &squal);
-    dinfo = ctype_info_acq(d);
-    sinfo = ctype_info_acq(s);
-    dsize = ctype_size_acq(d);
-    ssize = ctype_size_acq(s);
+    if (!cconv_childqual_l(L, cts, &did, &d, &d, &dqual))
+      return 0;
+    sinfo = ctype_info_acq(&s);
+    if (!ctype_isstruct(sinfo) &&
+	!cconv_childqual_l(L, cts, &sid, &s, &s, &squal))
+      return 0;
+    dinfo = ctype_info_acq(&d);
+    sinfo = ctype_info_acq(&s);
+    dsize = ctype_size_acq(&d);
+    ssize = ctype_size_acq(&s);
     if ((flags & CCF_SAME)) {
       if (dqual != squal)
 	return 0;  /* Different qualifiers. */
@@ -155,9 +165,10 @@ int lj_cconv_compatptr(CTState *cts, CType *d, CType *s, CTInfo flags)
 	return 0;  /* Different numeric types. */
     } else if (ctype_ispointer(dinfo)) {
       /* Check child types recursively. */
-      return lj_cconv_compatptr(cts, d, s, flags|CCF_SAME);
+      return lj_cconv_compatptr_l(L, cts, did, &d, sid, &s,
+				  flags|CCF_SAME);
     } else if (ctype_isstruct(dinfo)) {
-      if (d != s)
+      if (did != sid)
 	return 0;  /* Must be exact same type for struct/union. */
     } else if (ctype_isfunc(dinfo)) {
       /* NYI: structural equality of functions. */
@@ -404,20 +415,21 @@ void lj_cconv_ct_ct_l(lua_State *L, CTState *cts, CType *d, CTypeID did,
     goto conv_I_F;
 
   case CCX(P, P):
-    if (!lj_cconv_compatptr(cts, d, s, flags)) goto err_conv;
+    if (!lj_cconv_compatptr_l(L, cts, did, d, sid, s, flags)) goto err_conv;
     cdata_setptr(dp, dsize, cdata_getptr(sp, ssize));
     break;
 
   case CCX(P, A):
   case CCX(P, S):
-    if (!lj_cconv_compatptr(cts, d, s, flags)) goto err_conv;
+    if (!lj_cconv_compatptr_l(L, cts, did, d, sid, s, flags)) goto err_conv;
     cdata_setptr(dp, dsize, sp);
     break;
 
   /* Destination is an array. */
   case CCX(A, A):
     if ((flags & CCF_CAST) || (dinfo & CTF_VLA) || dsize != ssize ||
-	dsize == CTSIZE_INVALID || !lj_cconv_compatptr(cts, d, s, flags))
+	dsize == CTSIZE_INVALID ||
+	!lj_cconv_compatptr_l(L, cts, did, d, sid, s, flags))
       goto err_conv;
     goto copyval;
 

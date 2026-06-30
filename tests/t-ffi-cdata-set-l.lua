@@ -13,6 +13,10 @@ typedef struct {
   _Bool bf:1;
   unsigned int nibble:3;
 } lj_m7_set_outer_t;
+typedef struct lj_m7_set_node_t {
+  struct lj_m7_set_node_t *next;
+  int v;
+} lj_m7_set_node_t;
 int abs(int);
 int snprintf(char *str, size_t size, const char *format, ...);
 ]]
@@ -58,6 +62,19 @@ for tid = 1, nthreads do
       assert(tonumber(ffi.new("int", seed)) == seed)
       assert(tonumber(ffi.cast("int", seed + 6)) == seed + 6)
       assert(ffi.C.abs(-seed) == seed)
+
+      local n1 = ffi.new("lj_m7_set_node_t")
+      local n2 = ffi.new("lj_m7_set_node_t")
+      n1.v = seed
+      n2.v = seed + 1
+      n1.next = n2
+      n2.next = n1
+      assert(n1.next.v == seed + 1)
+      assert(n2.next.v == seed)
+
+      local n3 = ffi.new("lj_m7_set_node_t", n1, seed + 2)
+      assert(n3.next.v == seed)
+      assert(n3.v == seed + 2)
 
       local bytes = ffi.new("uint8_t[4]", 65, 66, 67, 0)
       assert(ffi.string(bytes, 3) == "ABC")
