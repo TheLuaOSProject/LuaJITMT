@@ -2287,16 +2287,19 @@ void LJ_FASTCALL recff_clib_index(jit_State *J, RecordFFData *rd)
       emitir(IRTG(IR_EQ, IRT_STR), J->base[1], lj_ir_kstr(J, name));
       if (ctype_isconstval(info)) {
 	CTSize size = ctype_size_acq(ct);
+	CType childsnap;
+	CType *cct = crec_ctype_rawchild(J, cts, ct, &childsnap);
 	if (size >= 0x80000000u &&
-	    (ctype_info_acq(ctype_child(cts, ct)) & CTF_UNSIGNED))
+	    (ctype_info_acq(cct) & CTF_UNSIGNED))
 	  J->base[0] = lj_ir_knum(J, (lua_Number)(uint32_t)size);
 	else
 	  J->base[0] = lj_ir_kint(J, (int32_t)size);
       } else if (ctype_isextern(info)) {
 	CTypeID sid = ctype_cid(info);
+	CType ctsnap;
 	void *sp = *(void **)cdataptr(cdataV(&tv));
 	TRef ptr;
-	ct = ctype_raw(cts, sid);
+	ct = crec_ctype_rawid(J, cts, sid, NULL, &ctsnap);
 	if (LJ_64 && !checkptr32(sp))
 	  ptr = lj_ir_kintp(J, (uintptr_t)sp);
 	else

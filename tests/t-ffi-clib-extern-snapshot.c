@@ -168,6 +168,18 @@ int main(void)
     "jit.attach(lj_m7_trace_parse_token)\n"
     "assert(lj_m7_trace_parse_token_abort_count() >= 1)\n");
 
+  ljt_lua_dostring(L,
+    "local cl = lj_m7_clib_extern_cl\n"
+    "jit.flush()\n"
+    "jit.on()\n"
+    "jit.opt.start('hotloop=1', 'hotexit=1')\n"
+    "local function run(n)\n"
+    "  local sum = 0\n"
+    "  for i = 1, n do sum = sum + cl.lj_m7_clib_snapshot_struct.x end\n"
+    "  return sum\n"
+    "end\n"
+    "for i = 1, 30 do assert(run(8) == 448) end\n");
+
   lua_close(L);
   printf("t-ffi-clib-extern-snapshot OK: extern variables wait on ctype snapshots\n");
   return 0;

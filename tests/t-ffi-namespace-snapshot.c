@@ -84,6 +84,7 @@ int main(void)
     "int abs(int);\n"
     "unsigned long lj_m7_ns_strlen(const char *) asm(\"strlen\");\n"
     "enum { LJ_M7_NS_CONST = 91 };\n"
+    "enum { LJ_M7_NS_BIG_UNSIGNED = 0xffffffffu };\n"
     "int getpid(void);\n"
     "unsigned long lj_m7_ns_wait_strlen(const char *) asm(\"strlen\");\n"
     "enum { LJ_M7_NS_WAIT_CONST = 123 };\n"
@@ -99,6 +100,7 @@ int main(void)
   ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"
     "assert(ffi.C.LJ_M7_NS_CONST == 91)\n"
+    "assert(ffi.C.LJ_M7_NS_BIG_UNSIGNED == 4294967295)\n"
     "assert(ffi.C.abs(-44) == 44)\n"
     "assert(tonumber(ffi.C.lj_m7_ns_strlen('abcd')) == 4)\n");
   seq1 = ljt_ctype_parse_seq(cts);
@@ -159,7 +161,15 @@ int main(void)
     "  end\n"
     "  return sum\n"
     "end\n"
-    "for i = 1, 30 do assert(run(40) == 4460) end\n");
+    "for i = 1, 30 do assert(run(40) == 4460) end\n"
+    "local function run_big(n)\n"
+    "  local sum = 0\n"
+    "  for i = 1, n do\n"
+    "    sum = sum + C.LJ_M7_NS_BIG_UNSIGNED\n"
+    "  end\n"
+    "  return sum\n"
+    "end\n"
+    "for i = 1, 30 do assert(run_big(4) == 17179869180) end\n");
   seq3 = ljt_ctype_parse_seq(cts);
   assert(seq3 == seq2);
 
