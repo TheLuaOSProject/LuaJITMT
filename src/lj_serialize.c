@@ -348,11 +348,20 @@ static char *serialize_put(char *w, SBufExt *sbx, cTValue *o)
     sbx->depth++;
 #if LJ_HASFFI
   } else if (tviscdata(o)) {
-    CTState *cts = ctype_cts(sbufL(sbx));
-    CType *s = ctype_raw(cts, cdataV(o)->ctypeid);
-    CTInfo sinfo = ctype_info_acq(s);
-    CTSize ssize = ctype_size_acq(s);
+    lua_State *L = sbufL(sbx);
+    CTState *cts = ctype_cts(L);
+    CType snap;
+    CTInfo info, sinfo;
+    CTSize size, ssize;
+    int ok = lj_ctype_info_wait(L, cts, cdataV(o)->ctypeid, &info, &size,
+				NULL, &snap);
     uint8_t *sp = cdataptr(cdataV(o));
+    UNUSED(info);
+    UNUSED(size);
+    if (ok <= 0)
+      goto badenc;
+    sinfo = ctype_info_acq(&snap);
+    ssize = ctype_size_acq(&snap);
     if (ctype_isinteger(sinfo) && ssize == 8) {
       w = serialize_more(w, sbx, 1+8);
       *w++ = (sinfo & CTF_UNSIGNED) ? SER_TAG_UINT64 : SER_TAG_INT64;

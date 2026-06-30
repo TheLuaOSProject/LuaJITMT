@@ -128,12 +128,14 @@ int main(void)
     "ffi.cdef[[\n"
     "typedef enum { LJ_M7_TONUMBER_NEG = -12, "
     "LJ_M7_TONUMBER_POS = 17 } lj_m7_tonumber_e;\n"
+    "typedef const int64_t lj_m7_serialize_i64_t;\n"
     "]]\n"
     "lj_m7_tonumber_enum_ct = ffi.typeof('lj_m7_tonumber_e')\n"
     "lj_m7_tonumber_enum_neg = "
     "ffi.cast(lj_m7_tonumber_enum_ct, 'LJ_M7_TONUMBER_NEG')\n"
     "lj_m7_tonumber_enum_pos = "
     "ffi.cast(lj_m7_tonumber_enum_ct, 'LJ_M7_TONUMBER_POS')\n"
+    "lj_m7_serialize_i64 = ffi.new('lj_m7_serialize_i64_t', -99)\n"
     "jit.off()\n");
 
   cts = ctype_ctsG(G(L));
@@ -152,9 +154,19 @@ int main(void)
   seq1 = ljt_ctype_parse_seq(cts);
   assert(seq1 == seq0 + 4u);
 
+  assert_tonumber_waits_without_lock(L, cts, tg,
+    "local buffer = require('string.buffer')\n"
+    "local out = buffer.decode(buffer.encode(lj_m7_serialize_i64))\n"
+    "assert(out == lj_m7_serialize_i64)\n");
+  seq1 = ljt_ctype_parse_seq(cts);
+  assert(seq1 == seq0 + 6u);
+
   ljt_lua_dostring(L,
     "assert(tonumber(lj_m7_tonumber_enum_neg) == -12)\n"
-    "assert(tonumber(lj_m7_tonumber_enum_pos) == 17)\n");
+    "assert(tonumber(lj_m7_tonumber_enum_pos) == 17)\n"
+    "local buffer = require('string.buffer')\n"
+    "assert(buffer.decode(buffer.encode(lj_m7_serialize_i64)) == "
+    "lj_m7_serialize_i64)\n");
   seq2 = ljt_ctype_parse_seq(cts);
   assert(seq2 == seq1);
 
