@@ -3782,6 +3782,11 @@ static uint32_t lj_gc2_weak_drain(global_State *g, uint32_t limit)
   return lj_gc2_weak_snapshot_clear(g, limit);
 }
 
+static int gc2_phase_peer_active(global_State *g)
+{
+  return g && (gc2_worker_active_acq(g) != 0 || gc2_assist_active_acq(g) != 0);
+}
+
 static int gc2_weak_snapshot_complete(global_State *g, uint32_t *pn)
 {
   uint64_t reserved, cleared;
@@ -3980,9 +3985,9 @@ int lj_gc2_weak_complete(global_State *g, lua_State *L, GCobj *bridge_head,
       progress += (uint64_t)weakdrain;
       continue;
     }
-    if (gc2_worker_active_acq(g) == 0)
+    if (!gc2_phase_peer_active(g))
       break;
-    gc2_peer_wait_l(L);  /* 05 section 5.8: wait for peer drain. */
+    gc2_peer_wait_l(L);  /* 05 section 5.8: wait for peer drain/assist. */
   }
   if (progress)
     gc2_weak_complete_progress_add(g, progress);
@@ -6330,10 +6335,10 @@ uint32_t lj_gc2_mark_complete(global_State *g, lua_State *L,
   gc2_mark_complete_runs_add(g, 1);
   for (;;) {
     hit = lj_gc2_fixpoint_run(g, L, max_rounds, limit);
-    if (hit || gc2_worker_active_acq(g) == 0)
+    if (!gc2_phase_peer_active(g))
       break;
     gc2_mark_complete_peer_waits_add(g, 1);
-    while (gc2_worker_active_acq(g) != 0)
+    while (gc2_phase_peer_active(g))
       gc2_peer_wait_l(L);  /* 05 section 5.7.1 peer drain before P_WEAK. */
   }
   if (hit)

@@ -4957,6 +4957,11 @@ static LJ_AINLINE void gc2_assist_active_store_rlx(global_State *g,
   la_store32_rlx(&g->gc2.assist_active, active);
 }
 
+static LJ_AINLINE uint32_t gc2_assist_active_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.assist_active);
+}
+
 static LJ_AINLINE void gc2_assist_active_rel(global_State *g, uint32_t active)
 {
   la_store32_rel(&g->gc2.assist_active, active);

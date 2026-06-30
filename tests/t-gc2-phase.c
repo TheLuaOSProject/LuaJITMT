@@ -89,6 +89,24 @@ static void *release_worker_active(void *arg)
   return NULL;
 }
 
+static void *release_assist_active(void *arg)
+{
+  PeerRelease *rel = (PeerRelease *)arg;
+  long waited = 0;
+  while (rel->wait_tg && waited < rel->delay_ns) {
+    if (lj_tg_in_native_acq(rel->wait_tg)) {
+      rel->saw_native = 1;
+      break;
+    }
+    sleep_ns(1000000L);
+    waited += 1000000L;
+  }
+  if (waited < rel->delay_ns)
+    sleep_ns(rel->delay_ns - waited);
+  gc2_assist_active_rel(rel->g, 0);
+  return NULL;
+}
+
 static void *finalizer_enqueue_worker(void *arg)
 {
   FinalizerProducer *fp = (FinalizerProducer *)arg;
@@ -159,6 +177,30 @@ static void relink_root_object(global_State *g, GCobj *o)
 {
   lj_obj_setgcwr(o, g->gc.root);
   setgcref(g->gc.root, o);
+}
+
+static void phase_flush_and_drain(global_State *g, TGState *tg)
+{
+  (void)lj_gc2_flush_ssb(g, tg);
+  (void)lj_gc2_test_ssb_drain(g);
+  assert(lj_gc2_test_ssb_empty(g));
+}
+
+static GCtab *make_weak_value_table(lua_State *L)
+{
+  lua_newtable(L);
+  lua_newtable(L);
+  lua_pushliteral(L, "__mode");
+  lua_pushliteral(L, "v");
+  lua_settable(L, -3);
+  lua_setmetatable(L, -2);
+  lua_newtable(L);
+  lua_newtable(L);
+  lua_pushvalue(L, -2);
+  lua_pushvalue(L, -2);
+  lua_settable(L, -5);
+  lua_pop(L, 2);  /* Keep only the weak table rooted. */
+  return tabV(L->top - 1);
 }
 
 static void test_finalizer_consumer_ring(lua_State *L, global_State *g)
@@ -531,6 +573,94 @@ static void test_mark_complete_waits_for_peer(lua_State *L, global_State *g,
   lua_pop(L, 1);
 }
 
+static void test_mark_complete_waits_for_assist(lua_State *L, global_State *g,
+						TGState *tg)
+{
+  GCtab *parent, *child;
+  PeerRelease rel;
+  pthread_t thread;
+  uint64_t runs0, hits0, waits0;
+
+  lua_settop(L, 0);
+  lua_newtable(L);
+  parent = tabV(L->top - 1);
+  lua_newtable(L);
+  child = tabV(L->top - 1);
+  lua_pushvalue(L, -1);
+  lua_rawseti(L, -3, 1);
+  lua_pop(L, 1);
+
+  lj_gc2_mark_begin(g);
+  setgcrefnull(g->gc.gray);
+  setgcrefnull(g->gc.grayagain);
+  setgcrefnull(g->gc.weak);
+  g->gc.state = GCSpropagate;
+  assert(lj_gc2_markobj(g, obj2gco(parent)) == 1);
+  phase_flush_and_drain(g, tg);
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
+
+  gc2_assist_active_rel(g, 1);
+  rel.g = g;
+  rel.wait_tg = tg;
+  rel.delay_ns = 20000000L;
+  rel.saw_native = 0;
+  runs0 = gc2_mark_complete_runs_acq(g);
+  hits0 = gc2_mark_complete_hits_acq(g);
+  waits0 = gc2_mark_complete_peer_waits_acq(g);
+  assert(pthread_create(&thread, NULL, release_assist_active, &rel) == 0);
+  assert(lj_gc2_mark_complete(g, L, 4, ~(uint32_t)0) == 1);
+  assert(pthread_join(thread, NULL) == 0);
+  assert(rel.saw_native == 1);
+  assert(gc2_assist_active_acq(g) == 0);
+  assert(gc2_mark_complete_runs_acq(g) == runs0 + 1u);
+  assert(gc2_mark_complete_hits_acq(g) == hits0 + 1u);
+  assert(gc2_mark_complete_peer_waits_acq(g) > waits0);
+
+  g->gc.state = GCSpause;
+  lj_gc2_cycle_to_idle(g);
+  lua_pop(L, 1);
+}
+
+static void test_weak_complete_waits_for_assist(lua_State *L, global_State *g,
+						TGState *tg)
+{
+  GCtab *weak;
+  PeerRelease rel;
+  pthread_t thread;
+  uint64_t runs0, progress0;
+
+  lua_settop(L, 0);
+  weak = make_weak_value_table(L);
+  lj_gc2_mark_begin(g);
+  setgcrefnull(g->gc.gray);
+  setgcrefnull(g->gc.grayagain);
+  setgcrefnull(g->gc.weak);
+  g->gc.state = GCSpropagate;
+  assert(lj_gc2_markobj(g, obj2gco(weak)) == 1);
+  phase_flush_and_drain(g, tg);
+  assert(lj_gc2_test_weak_snapshot_count(g) == 1u);
+  lj_gc2_mark_to_weak(g);
+
+  gc2_assist_active_rel(g, 1);
+  rel.g = g;
+  rel.wait_tg = tg;
+  rel.delay_ns = 20000000L;
+  rel.saw_native = 0;
+  runs0 = gc2_weak_complete_runs_acq(g);
+  progress0 = gc2_weak_complete_progress_acq(g);
+  assert(pthread_create(&thread, NULL, release_assist_active, &rel) == 0);
+  assert(lj_gc2_weak_complete(g, L, NULL, LJ_GC2_WEAK_DRAIN_BATCH) == 1);
+  assert(pthread_join(thread, NULL) == 0);
+  assert(rel.saw_native == 1);
+  assert(gc2_assist_active_acq(g) == 0);
+  assert(gc2_weak_complete_runs_acq(g) == runs0 + 1u);
+  assert(gc2_weak_complete_progress_acq(g) > progress0);
+
+  g->gc.state = GCSpause;
+  lj_gc2_cycle_to_idle(g);
+  lua_pop(L, 1);
+}
+
 static void test_incremental_worker_step(lua_State *L, global_State *g,
 					 TGState *tg)
 {
@@ -763,6 +893,8 @@ int main(void)
   test_incremental_worker_step(L, g, tg);
   test_incremental_fixpoint_round(L, g);
   test_mark_complete_waits_for_peer(L, g, tg);
+  test_mark_complete_waits_for_assist(L, g, tg);
+  test_weak_complete_waits_for_assist(L, g, tg);
 
   lua_newtable(L);
   phase_tab = tabV(L->top - 1);
