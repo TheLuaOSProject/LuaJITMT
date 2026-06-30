@@ -20,11 +20,20 @@ jobs:
     runs-on: ubuntu-24.04
     env:
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+      SOURCE_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
       LUA: lua5.4
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout release automation
+        uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+          ref: ${{ github.sha }}
+          path: automation
+          fetch-depth: 0
+      - name: Checkout release source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_REF }}
+          path: source
           fetch-depth: 0
       - name: Install build tools
         run: |
@@ -33,34 +42,53 @@ jobs:
             build-essential lua5.4 xz-utils
       - name: Build, install, and test Linux binary
         run: |
-          tools/release/build_artifact.sh linux-x86_64 "$RELEASE_TAG" "release-artifacts/$RELEASE_TAG"
+          LJ_RELEASE_ROOT="$PWD/source" \
+            automation/tools/release/build_artifact.sh \
+            linux-x86_64 "$RELEASE_TAG" "$PWD/source/release-artifacts/$RELEASE_TAG"
       - uses: actions/upload-artifact@v4
         with:
           name: rolling-release-linux
           path: |
-            release-artifacts/${{ env.RELEASE_TAG }}/LuaJITMT-*
-            release-artifacts/${{ env.RELEASE_TAG }}/*.sha256
+            source/release-artifacts/${{ env.RELEASE_TAG }}/LuaJITMT-*
+            source/release-artifacts/${{ env.RELEASE_TAG }}/*.sha256
 
   macos:
     name: macOS x86_64 artifact
     runs-on: macos-13
     env:
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+      SOURCE_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+      LUA: ${{ github.workspace }}/source/src/luajit
       MACOSX_DEPLOYMENT_TARGET: "13.0"
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout release automation
+        uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+          ref: ${{ github.sha }}
+          path: automation
           fetch-depth: 0
+      - name: Checkout release source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_REF }}
+          path: source
+          fetch-depth: 0
+      - name: Install packaging tools
+        run: |
+          if ! command -v xz >/dev/null 2>&1; then
+            brew install xz
+          fi
       - name: Build, install, and test macOS binary
         run: |
-          tools/release/build_artifact.sh macos-x86_64 "$RELEASE_TAG" "release-artifacts/$RELEASE_TAG"
+          LJ_RELEASE_ROOT="$PWD/source" \
+            automation/tools/release/build_artifact.sh \
+            macos-x86_64 "$RELEASE_TAG" "$PWD/source/release-artifacts/$RELEASE_TAG"
       - uses: actions/upload-artifact@v4
         with:
           name: rolling-release-macos
           path: |
-            release-artifacts/${{ env.RELEASE_TAG }}/LuaJITMT-*
-            release-artifacts/${{ env.RELEASE_TAG }}/*.sha256
+            source/release-artifacts/${{ env.RELEASE_TAG }}/LuaJITMT-*
+            source/release-artifacts/${{ env.RELEASE_TAG }}/*.sha256
 
   windows-ucrt:
     name: Windows x86_64 UCRT artifact
@@ -68,6 +96,7 @@ jobs:
     container: debian:trixie
     env:
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+      SOURCE_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
       LUA: lua5.1
     steps:
       - name: Install build tools
@@ -77,19 +106,29 @@ jobs:
             build-essential ca-certificates file git lua5.1 make unzip xz-utils zip \
             binutils-mingw-w64-ucrt64 gcc-mingw-w64-ucrt64 mingw-w64 \
             wine wine64
-      - uses: actions/checkout@v4
+      - name: Checkout release automation
+        uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+          ref: ${{ github.sha }}
+          path: automation
           fetch-depth: 0
-      - name: Build, install-style stage, and test Windows UCRT binary
+      - name: Checkout release source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_REF }}
+          path: source
+          fetch-depth: 0
+      - name: Build, install, and test Windows UCRT binary
         run: |
-          tools/release/build_artifact.sh windows-x86_64-ucrt "$RELEASE_TAG" "release-artifacts/$RELEASE_TAG"
+          LJ_RELEASE_ROOT="$PWD/source" \
+            automation/tools/release/build_artifact.sh \
+            windows-x86_64-ucrt "$RELEASE_TAG" "$PWD/source/release-artifacts/$RELEASE_TAG"
       - uses: actions/upload-artifact@v4
         with:
           name: rolling-release-windows-ucrt
           path: |
-            release-artifacts/${{ env.RELEASE_TAG }}/LuaJITMT-*
-            release-artifacts/${{ env.RELEASE_TAG }}/*.sha256
+            source/release-artifacts/${{ env.RELEASE_TAG }}/LuaJITMT-*
+            source/release-artifacts/${{ env.RELEASE_TAG }}/*.sha256
 
   publish:
     name: Publish GitHub release
@@ -101,10 +140,19 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+      SOURCE_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout release automation
+        uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+          ref: ${{ github.sha }}
+          path: automation
+          fetch-depth: 0
+      - name: Checkout release source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_REF }}
+          path: source
           fetch-depth: 0
       - uses: actions/download-artifact@v4
         with:
@@ -115,7 +163,8 @@ jobs:
           find dist -maxdepth 1 -type f -name '*.sha256' -delete
           (cd dist && find . -maxdepth 1 -type f -name 'LuaJITMT-*' -print0 |
             sort -z | xargs -0 sha256sum > SHA256SUMS)
-          tools/release/release_notes.sh "$RELEASE_TAG" > RELEASE_NOTES.md
+          LJ_RELEASE_ROOT="$PWD/source" \
+            automation/tools/release/release_notes.sh "$RELEASE_TAG" > RELEASE_NOTES.md
           test -s RELEASE_NOTES.md || printf -- '- Rolling release %s\n' "$RELEASE_TAG" > RELEASE_NOTES.md
       - name: Create or update release
         run: |

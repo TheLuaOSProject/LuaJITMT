@@ -13,6 +13,7 @@
 MAJVER=  2
 MINVER=  1
 ABIVER=  5.1
+NODOTABIVER= 51
 
 # LuaJIT uses rolling releases. The release version is based on the time of
 # the latest git commit. The 'git' command must be available during the build.
@@ -80,6 +81,10 @@ INSTALL_X= install -m 0755
 INSTALL_F= install -m 0644
 UNINSTALL= $(RM)
 LDCONFIG= ldconfig -n 2>/dev/null
+INSTALL_DYNLINK= $(SYMLINK) $(INSTALL_SONAME) $(INSTALL_SHORT1) && \
+  $(SYMLINK) $(INSTALL_SONAME) $(INSTALL_SHORT2)
+INSTALL_TSYMLINK= test "$(INSTALL_TNAME)" = "$(INSTALL_TSYMNAME)" || \
+  $(SYMLINK) $(INSTALL_TNAME) $(INSTALL_TSYM)
 SED_PC= sed -e "s|^prefix=.*|prefix=$(PREFIX)|" \
 	    -e "s|^multilib=.*|multilib=$(MULTILIB)|" \
 	    -e "s|^relver=.*|relver=$(RELVER)|"
@@ -114,6 +119,18 @@ ifneq (,$(filter $(TARGET_SYS),Darwin iOS))
   LDCONFIG= :
   SED_PC+= -e "s| -Wl,-E||"
 endif
+ifeq (Windows,$(TARGET_SYS))
+  INSTALL_TNAME= luajit.exe
+  INSTALL_TSYMNAME= luajit.exe
+  INSTALL_ANAME= libluajit-$(ABIVER).dll.a
+  INSTALL_SONAME= lua$(NODOTABIVER).dll
+  INSTALL_DYN= $(INSTALL_BIN)/$(INSTALL_SONAME)
+  FILE_T= luajit.exe
+  FILE_A= libluajit-$(ABIVER).dll.a
+  FILE_SO= lua$(NODOTABIVER).dll
+  LDCONFIG= :
+  INSTALL_DYNLINK= :
+endif
 
 ##############################################################################
 
@@ -133,15 +150,14 @@ install: $(INSTALL_DEP)
 	cd src && test -f $(FILE_SO) && \
 	  $(INSTALL_X) $(FILE_SO) $(INSTALL_DYN) && \
 	  ( $(LDCONFIG) $(INSTALL_LIB) || : ) && \
-	  $(SYMLINK) $(INSTALL_SONAME) $(INSTALL_SHORT1) && \
-	  $(SYMLINK) $(INSTALL_SONAME) $(INSTALL_SHORT2) || :
+	  $(INSTALL_DYNLINK) || :
 	cd etc && $(INSTALL_F) $(FILE_MAN) $(INSTALL_MAN)
 	cd etc && $(SED_PC) $(FILE_PC) > $(FILE_PC).tmp && \
 	  $(INSTALL_F) $(FILE_PC).tmp $(INSTALL_PC) && \
 	  $(RM) $(FILE_PC).tmp
 	cd src && $(INSTALL_F) $(FILES_INC) $(INSTALL_INC)
 	cd src/jit && $(INSTALL_F) $(FILES_JITLIB) $(INSTALL_JITLIB)
-	$(SYMLINK) $(INSTALL_TNAME) $(INSTALL_TSYM)
+	$(INSTALL_TSYMLINK)
 	@echo "==== Successfully installed LuaJIT $(VERSION) to $(PREFIX) ===="
 
 uninstall:

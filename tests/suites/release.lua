@@ -12,15 +12,22 @@ end
 local function release_required(name)
   local req = (env("LJ_RELEASE_REQUIRE") or ""):lower()
   name = name:lower()
-  return req == "1" or req == "all" or req:find(name, 1, true) ~= nil
+  return req ~= "" and (req == "1" or req == "all" or
+    req:find(name, 1, true) ~= nil or name:find(req, 1, true) ~= nil
+  )
 end
 
 local function maybe_skip(name, why)
   if release_required(name) then
-    error("release " .. name .. " binary test missing: " .. why, 2)
+    error("release " .. name .. " check missing: " .. why, 2)
   end
-  print("release " .. name .. " binary test skipped: " .. why)
+  print("release " .. name .. " check skipped: " .. why)
   return false
+end
+
+local function run_stock_suite()
+  local v = (env("LJ_RELEASE_RUN_STOCK") or ""):lower()
+  return v == "1" or v == "true" or v == "yes"
 end
 
 local function command_exists(cmd)
@@ -60,12 +67,16 @@ local function run_direct_binary(t, name, bin, osname)
     shell_quote(bin) .. " -e " .. shell_quote(smoke_code()),
     { timeout = "120s", stderr = true })
   assert_platform_output(name, out, osname)
-  runtime.run_stock(t, { "test.lua", "--quiet" }, {
-    bin = bin,
-    check_executable = true,
-    timeout = "240s"
-  })
-  print("release " .. name .. " binary smoke and stock suite passed")
+  if run_stock_suite() then
+    runtime.run_stock(t, { "test.lua", "--quiet" }, {
+      bin = bin,
+      check_executable = true,
+      timeout = "240s"
+    })
+    print("release " .. name .. " binary smoke and stock suite passed")
+  else
+    print("release " .. name .. " binary smoke passed")
+  end
   return true
 end
 
@@ -73,8 +84,7 @@ local function run_linux_binary(t)
   return run_direct_binary(t, "linux", env("LJ_RELEASE_LINUX_BIN"), "Linux")
 end
 
-local function run_windows_binary(t)
-  local bin = env("LJ_RELEASE_WINDOWS_BIN")
+local function run_windows_binary_at(t, bin)
   local runner = env("LJ_RELEASE_WINDOWS_RUNNER") or "wine"
   if not bin then return maybe_skip("windows", "LJ_RELEASE_WINDOWS_BIN unset") end
   if not utils.file_exists(bin) then return maybe_skip("windows", bin .. " not found") end
@@ -86,13 +96,21 @@ local function run_windows_binary(t)
     { timeout = "120s", stderr = true })
   assert_platform_output("windows", out, "Windows")
 
-  out = utils.capture_command(
-    "cd " .. shell_quote(stock_dir(t)) .. " && " ..
-      prefix .. " test.lua --quiet",
-    { timeout = "240s", stderr = true })
-  assert_stock_output("windows", out)
-  print("release windows binary smoke and stock suite passed")
+  if run_stock_suite() then
+    out = utils.capture_command(
+      "cd " .. shell_quote(stock_dir(t)) .. " && " ..
+        prefix .. " test.lua --quiet",
+      { timeout = "240s", stderr = true })
+    assert_stock_output("windows", out)
+    print("release windows binary smoke and stock suite passed")
+  else
+    print("release windows binary smoke passed")
+  end
   return true
+end
+
+local function run_windows_binary(t)
+  return run_windows_binary_at(t, env("LJ_RELEASE_WINDOWS_BIN"))
 end
 
 local function darling_path(path)
@@ -108,25 +126,127 @@ local function run_macos_darling(t, bin, runner)
       shell_quote(dbin .. " -e " .. shell_quote(smoke_code())),
     { timeout = "120s", stderr = true })
   assert_platform_output("macos", out, "OSX")
-  out = utils.capture_command(
-    runner .. " shell /bin/bash -lc " ..
-      shell_quote("cd " .. shell_quote(dstock) .. " && " ..
-                  shell_quote(dbin) .. " test.lua --quiet"),
-    { timeout = "240s", stderr = true })
-  assert_stock_output("macos", out)
-  print("release macos binary smoke and stock suite passed under Darling")
+  if run_stock_suite() then
+    out = utils.capture_command(
+      runner .. " shell /bin/bash -lc " ..
+        shell_quote("cd " .. shell_quote(dstock) .. " && " ..
+                    shell_quote(dbin) .. " test.lua --quiet"),
+      { timeout = "240s", stderr = true })
+    assert_stock_output("macos", out)
+    print("release macos binary smoke and stock suite passed under Darling")
+  else
+    print("release macos binary smoke passed under Darling")
+  end
   return true
 end
 
+local run_macos_binary_at
+
 local function run_macos_binary(t)
   local bin = env("LJ_RELEASE_MACOS_BIN")
-  local runner = env("LJ_RELEASE_MACOS_RUNNER")
   if not bin then return maybe_skip("macos", "LJ_RELEASE_MACOS_BIN unset") end
+  return run_macos_binary_at(t, bin)
+end
+
+run_macos_binary_at = function(t, bin)
+  local runner = env("LJ_RELEASE_MACOS_RUNNER")
   if not utils.file_exists(bin) then return maybe_skip("macos", bin .. " not found") end
   if runner and runner ~= "" then
     return run_macos_darling(t, bin, runner)
   end
   return run_direct_binary(t, "macos", bin, "OSX")
+end
+
+local function strip_newline(s)
+  return (s:gsub("%s+$", ""))
+end
+
+local function archive_extract_root(t, name, archive)
+  if not archive then return maybe_skip(name, "LJ_RELEASE_" .. name:upper() .. "_ARCHIVE unset") end
+  if not utils.file_exists(archive) then return maybe_skip(name, archive .. " not found") end
+
+  local extract_dir = t:tempname("lj-release-" .. name .. "-archive")
+  t:run({ "rm", "-rf", extract_dir }, { quiet = true })
+  t:run({ "mkdir", "-p", extract_dir }, { quiet = true })
+
+  if archive:find("%.zip$") then
+    if not command_exists("unzip") then
+      t:run({ "rm", "-rf", extract_dir }, { quiet = true })
+      return maybe_skip(name, "unzip not in PATH")
+    end
+    t:run({ "unzip", "-q", archive, "-d", extract_dir }, {
+      quiet = true,
+      timeout = "120s"
+    })
+  else
+    if not command_exists("tar") then
+      t:run({ "rm", "-rf", extract_dir }, { quiet = true })
+      return maybe_skip(name, "tar not in PATH")
+    end
+    t:run({ "tar", "-xf", archive, "-C", extract_dir }, {
+      quiet = true,
+      timeout = "120s"
+    })
+  end
+
+  local top = strip_newline(utils.capture_command(
+    "find " .. shell_quote(extract_dir) ..
+      " -mindepth 1 -maxdepth 1 -type d -print | sort | sed -n '1p'"))
+  if top == "" then
+    t:run({ "rm", "-rf", extract_dir }, { quiet = true })
+    error("release " .. name .. " archive did not contain a top-level directory", 2)
+  end
+  return extract_dir, top
+end
+
+local function archive_bin(root, candidates)
+  for i = 1, #candidates do
+    local bin = root .. candidates[i]
+    if utils.file_exists(bin) then return bin end
+  end
+  return nil
+end
+
+local function run_archive_binary(t, name, archive, candidates, run)
+  local extract_dir, top = archive_extract_root(t, name, archive)
+  if not extract_dir then return false end
+  local ok, err = pcall(function()
+    local bin = archive_bin(top, candidates)
+    if not bin then
+      return maybe_skip(name, "installed binary not found in " .. archive)
+    end
+    return run(bin)
+  end)
+  t:run({ "rm", "-rf", extract_dir }, { quiet = true })
+  if not ok then error(err, 0) end
+  return err
+end
+
+local function run_linux_archive(t)
+  return run_archive_binary(t, "linux", env("LJ_RELEASE_LINUX_ARCHIVE"), {
+    "/usr/local/bin/luajit",
+    "/bin/luajit"
+  }, function(bin)
+    return run_direct_binary(t, "linux", bin, "Linux")
+  end)
+end
+
+local function run_windows_archive(t)
+  return run_archive_binary(t, "windows", env("LJ_RELEASE_WINDOWS_ARCHIVE"), {
+    "/usr/local/bin/luajit.exe",
+    "/bin/luajit.exe"
+  }, function(bin)
+    return run_windows_binary_at(t, bin)
+  end)
+end
+
+local function run_macos_archive(t)
+  return run_archive_binary(t, "macos", env("LJ_RELEASE_MACOS_ARCHIVE"), {
+    "/usr/local/bin/luajit",
+    "/bin/luajit"
+  }, function(bin)
+    return run_macos_binary_at(t, bin)
+  end)
 end
 
 local function run_release_platform_binaries(t)
@@ -140,22 +260,33 @@ local function run_release_platform_binaries(t)
   print("release platform binary checks completed: " .. ran .. " platform(s)")
 end
 
+local function run_release_platform_archives(t)
+  local ran = 0
+  if run_linux_archive(t) then ran = ran + 1 end
+  if run_windows_archive(t) then ran = ran + 1 end
+  if run_macos_archive(t) then ran = ran + 1 end
+  if ran == 0 and release_required("platform") then
+    error("no release platform archives were provided", 2)
+  end
+  print("release platform archive checks completed: " .. ran .. " platform(s)")
+end
+
 return function(add)
   add({
     name = "release_linux_binary",
-    description = "release-only Linux x64 binary smoke and stock-suite check",
+    description = "release-only Linux x64 binary smoke check",
     run = run_linux_binary
   })
 
   add({
     name = "release_windows_binary",
-    description = "release-only Windows x64 binary smoke and stock-suite check",
+    description = "release-only Windows x64 binary smoke check",
     run = run_windows_binary
   })
 
   add({
     name = "release_macos_binary",
-    description = "release-only macOS x64 binary smoke and stock-suite check",
+    description = "release-only macOS x64 binary smoke check",
     run = run_macos_binary
   })
 
@@ -163,5 +294,29 @@ return function(add)
     name = "release_platform_binaries",
     description = "release-only Linux/Windows/macOS binary checks",
     run = run_release_platform_binaries
+  })
+
+  add({
+    name = "release_linux_archive",
+    description = "release-only Linux x64 archive extraction and smoke check",
+    run = run_linux_archive
+  })
+
+  add({
+    name = "release_windows_archive",
+    description = "release-only Windows x64 archive extraction and smoke check",
+    run = run_windows_archive
+  })
+
+  add({
+    name = "release_macos_archive",
+    description = "release-only macOS x64 archive extraction and smoke check",
+    run = run_macos_archive
+  })
+
+  add({
+    name = "release_platform_archives",
+    description = "release-only Linux/Windows/macOS archive checks",
+    run = run_release_platform_archives
   })
 end

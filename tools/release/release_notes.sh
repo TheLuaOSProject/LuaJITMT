@@ -2,7 +2,9 @@
 set -euo pipefail
 
 tag=${1:?usage: tools/release/release_notes.sh <tag>}
-root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+script_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+root=${LJ_RELEASE_ROOT:-$script_root}
+root=$(CDPATH= cd -- "$root" && pwd)
 
 git -C "$root" fetch --tags --force >/dev/null 2>&1 || true
 

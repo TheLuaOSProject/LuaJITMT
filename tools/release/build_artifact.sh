@@ -11,8 +11,9 @@ platform:
   windows-x86_64-ucrt
 
 The script builds a clean release artifact, stages an install-style tree,
-runs the release binary test unless LJ_RELEASE_RUN_TESTS=0, and writes the
-archive plus per-artifact checksum into out-dir.
+runs release smoke/archive checks unless LJ_RELEASE_RUN_TESTS=0, and writes
+the archive plus per-artifact checksum into out-dir. Set
+LJ_RELEASE_RUN_STOCK=1 to include the full stock LuaJIT test suite.
 USAGE
   exit 2
 }
@@ -22,7 +23,11 @@ if [ "$#" -lt 2 ] || [ "$#" -gt 3 ]; then usage; fi
 platform=$1
 tag=$2
 out_dir=${3:-release-artifacts/${tag}}
-root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+script_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+root=${LJ_RELEASE_ROOT:-$script_root}
+root=$(CDPATH= cd -- "$root" && pwd)
+test_root=${LJ_RELEASE_TEST_ROOT:-$script_root}
+test_root=$(CDPATH= cd -- "$test_root" && pwd)
 jobs=${JOBS:-${MAKE_JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)}}
 prefix=${PREFIX:-/usr/local}
 commit=$(git -C "$root" rev-parse HEAD)
@@ -109,18 +114,42 @@ run_release_test() {
     linux-x86_64)
       LJ_RELEASE_REQUIRE=linux \
       LJ_RELEASE_LINUX_BIN="${stage}${prefix}/bin/luajit" \
-        "$root/tools/ci/lua_test.sh" release_linux_binary
+        "$test_root/tools/ci/lua_test.sh" release_linux_binary
       ;;
     macos-x86_64)
       LJ_RELEASE_REQUIRE=macos \
       LJ_RELEASE_MACOS_BIN="${stage}${prefix}/bin/luajit" \
-        "$root/tools/ci/lua_test.sh" release_macos_binary
+        "$test_root/tools/ci/lua_test.sh" release_macos_binary
       ;;
     windows-x86_64-ucrt)
       LJ_RELEASE_REQUIRE=windows \
-      LJ_RELEASE_WINDOWS_BIN="${stage}/bin/luajit.exe" \
+      LJ_RELEASE_WINDOWS_BIN="${stage}${prefix}/bin/luajit.exe" \
       LJ_RELEASE_WINDOWS_RUNNER="${LJ_RELEASE_WINDOWS_RUNNER:-wine}" \
-        "$root/tools/ci/lua_test.sh" release_windows_binary
+        "$test_root/tools/ci/lua_test.sh" release_windows_binary
+      ;;
+  esac
+}
+
+run_release_archive_test() {
+  if [ "$run_tests" = "0" ]; then return; fi
+  local archive=$1
+  case "$platform" in
+    linux-x86_64)
+      LJ_RELEASE_REQUIRE=linux \
+      LJ_RELEASE_LINUX_ARCHIVE="$archive" \
+        "$test_root/tools/ci/lua_test.sh" release_linux_archive
+      ;;
+    macos-x86_64)
+      LJ_RELEASE_REQUIRE=macos \
+      LJ_RELEASE_MACOS_ARCHIVE="$archive" \
+      LJ_RELEASE_MACOS_RUNNER="${LJ_RELEASE_MACOS_RUNNER:-}" \
+        "$test_root/tools/ci/lua_test.sh" release_macos_archive
+      ;;
+    windows-x86_64-ucrt)
+      LJ_RELEASE_REQUIRE=windows \
+      LJ_RELEASE_WINDOWS_ARCHIVE="$archive" \
+      LJ_RELEASE_WINDOWS_RUNNER="${LJ_RELEASE_WINDOWS_RUNNER:-wine}" \
+        "$test_root/tools/ci/lua_test.sh" release_windows_archive
       ;;
   esac
 }
@@ -132,42 +161,44 @@ case "$platform" in
     make -C "$root" install DESTDIR="$stage" PREFIX="$prefix"
     install_doc "${stage}${prefix}/share/doc/luajitmt" "make install DESTDIR prefix tree"
     run_release_test
-    archive_stage
+    archive=$(archive_stage)
+    run_release_archive_test "$archive"
     ;;
   macos-x86_64)
     export MACOSX_DEPLOYMENT_TARGET=${MACOSX_DEPLOYMENT_TARGET:-13.0}
+    macos_make_args=(TARGET_SYS=Darwin)
+    if [ -n "${LJ_RELEASE_MACOS_CC:-}" ]; then
+      macos_make_args+=(CC="$LJ_RELEASE_MACOS_CC")
+    fi
+    if [ -n "${LJ_RELEASE_MACOS_HOST_CC:-${HOST_CC:-}}" ]; then
+      macos_make_args+=(HOST_CC="${LJ_RELEASE_MACOS_HOST_CC:-${HOST_CC:-}}")
+    fi
+    if [ -n "${LJ_RELEASE_MACOS_CROSS:-}" ]; then
+      macos_make_args+=(CROSS="$LJ_RELEASE_MACOS_CROSS")
+    fi
     make_clean
-    build_make TARGET_SYS=Darwin
-    make -C "$root" install DESTDIR="$stage" PREFIX="$prefix" TARGET_SYS=Darwin
+    build_make "${macos_make_args[@]}"
+    make -C "$root" install DESTDIR="$stage" PREFIX="$prefix" \
+      "${macos_make_args[@]}"
     install_doc "${stage}${prefix}/share/doc/luajitmt" "make install DESTDIR prefix tree"
     run_release_test
-    archive_stage
+    archive=$(archive_stage)
+    run_release_archive_test "$archive"
     ;;
   windows-x86_64-ucrt)
     cross=${LJ_RELEASE_WINDOWS_CROSS:-x86_64-w64-mingw32ucrt-}
     cc=${LJ_RELEASE_WINDOWS_CC:-gcc}
     make_clean
     build_make HOST_CC="${HOST_CC:-gcc}" CROSS="$cross" CC="$cc" TARGET_SYS=Windows
-    mkdir -p "$stage/bin" "$stage/lib" "$stage/include/luajit-2.1" \
-      "$stage/share/luajit-2.1/jit" "$stage/share/doc/luajitmt"
-    install -m 0755 "$root/src/luajit.exe" "$stage/bin/luajit.exe"
-    install -m 0755 "$root/src/lua51.dll" "$stage/bin/lua51.dll"
-    install -m 0644 "$root/src/libluajit-5.1.dll.a" "$stage/lib/libluajit-5.1.dll.a"
-    for f in lua.h lualib.h lauxlib.h luaconf.h lua.hpp luajit.h; do
-      install -m 0644 "$root/src/$f" "$stage/include/luajit-2.1/$f"
-    done
-    for f in bc.lua bcsave.lua dump.lua p.lua v.lua zone.lua \
-      dis_x86.lua dis_x64.lua dis_arm.lua dis_arm64.lua dis_arm64be.lua \
-      dis_ppc.lua dis_mips.lua dis_mipsel.lua dis_mips64.lua \
-      dis_mips64el.lua dis_mips64r6.lua dis_mips64r6el.lua vmdef.lua; do
-      install -m 0644 "$root/src/jit/$f" "$stage/share/luajit-2.1/jit/$f"
-    done
-    install_doc "$stage/share/doc/luajitmt" "Windows install-style prefix tree"
+    make -C "$root" install DESTDIR="$stage" PREFIX="$prefix" \
+      HOST_CC="${HOST_CC:-gcc}" CROSS="$cross" CC="$cc" TARGET_SYS=Windows
+    install_doc "${stage}${prefix}/share/doc/luajitmt" "make install DESTDIR prefix tree"
     {
       printf 'toolchain: %s%s\n' "$cross" "$cc"
       printf 'runtime: UCRT\n'
-    } >> "$stage/share/doc/luajitmt/BUILDINFO"
+    } >> "${stage}${prefix}/share/doc/luajitmt/BUILDINFO"
     run_release_test
-    archive_zip_stage
+    archive=$(archive_zip_stage)
+    run_release_archive_test "$archive"
     ;;
 esac
