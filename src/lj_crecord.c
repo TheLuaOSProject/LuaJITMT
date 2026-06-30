@@ -982,6 +982,7 @@ static TRef crec_ct_tv(jit_State *J, CType *d, TRef dp, TRef sp, cTValue *sval)
 {
   CTState *cts = ctype_ctsG(J2G(J));
   CTInfo dinfo = ctype_info_acq(d);
+  CType scopy, dcopy;
   CTypeID sid = CTID_P_VOID;
   void *svisnz = 0;
   CType *s;
@@ -1020,7 +1021,8 @@ static TRef crec_ct_tv(jit_State *J, CType *d, TRef dp, TRef sp, cTValue *sval)
       emitir(IRTG(IR_EQ, IRT_STR), sp, lj_ir_kstr(J, str));
       if (ok > 0) {
 	sid = ecid;
-	lj_assertJ(ctype_size_acq(ctype_get(cts, sid)) == 4,
+	s = crec_ctype_snapshot(J, cts, sid, &scopy);
+	lj_assertJ(ctype_size_acq(s) == 4,
 		   "only 32 bit const supported");  /* NYI */
 	svisnz = (void *)(intptr_t)(val != 0);
 	sp = lj_ir_kint(J, (int32_t)val);
@@ -1040,29 +1042,29 @@ static TRef crec_ct_tv(jit_State *J, CType *d, TRef dp, TRef sp, cTValue *sval)
     IRType t;
     CTInfo sinfo;
     sid = argv2cdata(J, sp, sval)->ctypeid;
-    s = ctype_raw(cts, sid);
+    s = crec_ctype_rawrefid(J, cts, sid, &sid, &scopy);
     sinfo = ctype_info_acq(s);
     svisnz = cdataptr(cdataV(sval));
     if (ctype_isfunc(sinfo)) {
       sid = lj_ctype_intern_l(J->L, cts, CTINFO(CT_PTR, CTALIGN_PTR|sid),
 			      CTSIZE_PTR);
-      s = ctype_get(cts, sid);
+      s = crec_ctype_snapshot(J, cts, sid, &scopy);
       sinfo = ctype_info_acq(s);
       t = IRT_PTR;
     } else {
-      t = crec_ct2irt(cts, s);
+      t = crec_ct2irt_snapshot(J, cts, s);
     }
     if (ctype_isptr(sinfo)) {
       sp = emitir(IRT(IR_FLOAD, t), sp, IRFL_CDATA_PTR);
       if (ctype_isref(sinfo)) {
 	svisnz = *(void **)svisnz;
-	s = ctype_rawchild(cts, s);
+	s = crec_ctype_rawchild(J, cts, s, &scopy);
 	sinfo = ctype_info_acq(s);
 	if (ctype_isenum(sinfo)) {
-	  s = ctype_child(cts, s);
+	  s = crec_ctype_snapshot(J, cts, ctype_cid(sinfo), &scopy);
 	  sinfo = ctype_info_acq(s);
 	}
-	t = crec_ct2irt(cts, s);
+	t = crec_ct2irt_snapshot(J, cts, s);
       } else {
 	goto doconv;
       }
@@ -1072,7 +1074,7 @@ static TRef crec_ct_tv(jit_State *J, CType *d, TRef dp, TRef sp, cTValue *sval)
       goto doconv;
     } else if (t == IRT_INT || t == IRT_U32) {
       if (ctype_isenum(sinfo)) {
-	s = ctype_child(cts, s);
+	s = crec_ctype_snapshot(J, cts, ctype_cid(sinfo), &scopy);
 	sinfo = ctype_info_acq(s);
       }
       sp = emitir(IRT(IR_FLOAD, t), sp, IRFL_CDATA_INT);
@@ -1084,9 +1086,10 @@ static TRef crec_ct_tv(jit_State *J, CType *d, TRef dp, TRef sp, cTValue *sval)
       sp = emitir(IRT(IR_XLOAD, t), sp, 0);  /* Load number value. */
     goto doconv;
   }
-  s = ctype_get(cts, sid);
+  s = crec_ctype_snapshot(J, cts, sid, &scopy);
 doconv:
-  if (ctype_isenum(dinfo)) d = ctype_child(cts, d);
+  if (ctype_isenum(dinfo))
+    d = crec_ctype_snapshot(J, cts, ctype_cid(dinfo), &dcopy);
   return crec_ct_ct(J, d, s, dp, sp, svisnz);
 }
 
