@@ -9,6 +9,10 @@ CData core helper loads
   after element-size waits, constructor-constant lookups, and pointer auto-deref
   waits instead of refetching live ctype-table slots by ID. Cdata integer keys
   now use the same ID-rooted typeinfo wait before numeric index conversion.
+- Follow-up conversion cleanup extends that caller-owned snapshot boundary into
+  `cdata_getconst()`, `lj_cdata_get_l()`, and `lj_cdata_set_l()`. Child, ref,
+  and attribute resolution now copies into the caller's `CType` snapshot before
+  cconv helpers can wait on parser-owned source/destination metadata.
 - Routed `cdata_getconst()`, `lj_cdata_get_l()`, and `lj_cdata_set_l()` through
   helper-backed info/size loads for const/bitfield, child, ref, attribute, and
   write-const checks.
@@ -20,6 +24,7 @@ Verification:
 - tools/ci/m7_ffi_cdata_get_l.sh
 - tools/ci/m7_ffi_cdata_set_l.sh
 - tools/ci/m7_ffi_typeinfo_snapshot.sh
+- direct `tests/t-ffi-cdata-conv-snapshot.c`
 - tools/ci/m7_ffi_carith_l.sh
 - tools/ci/m7_ffi_cparse_rollback.sh
 - tools/ci/m0_source_guard.sh

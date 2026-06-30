@@ -318,6 +318,8 @@ assert(cl.lj_clib_ldscript_value() == 42)
                       "t-ffi-element-size-snapshot.c", { timeout = "20s" })
       build_and_run_c(t, t:tmp("lj_t-ffi-cconv-init-snapshot"),
                       "t-ffi-cconv-init-snapshot.c", { timeout = "20s" })
+      build_and_run_c(t, t:tmp("lj_t-ffi-cdata-conv-snapshot"),
+                      "t-ffi-cdata-conv-snapshot.c", { timeout = "20s" })
       build_and_run_c(t, t:tmp("lj_t-ffi-enum-snapshot"),
                       "t-ffi-enum-snapshot.c", { timeout = "20s" })
       build_and_run_c(t, t:tmp("lj_t-ffi-namespace-snapshot"),

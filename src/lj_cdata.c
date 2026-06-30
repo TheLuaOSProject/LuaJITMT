@@ -499,11 +499,15 @@ ctypeid_done:
 /* -- C data getters ------------------------------------------------------ */
 
 /* Get constant value and convert to TValue. */
-static void cdata_getconst(CTState *cts, TValue *o, CType *ct)
+static void cdata_getconst(lua_State *L, CTState *cts, TValue *o, CType *ct)
 {
-  CType *ctt = ctype_child(cts, ct);
-  CTInfo tinfo = ctype_info_acq(ctt);
+  CType cttsnap, *ctt = &cttsnap;
+  CTInfo info = ctype_info_acq(ct);
+  CTInfo tinfo;
   CTSize size = ctype_size_acq(ct);
+  if (!cdata_ctype_snapshot_wait(L, cts, ctype_cid(info), ctt))
+    lj_err_caller(L, LJ_ERR_FFI_INVSIZE);
+  tinfo = ctype_info_acq(ctt);
   lj_assertCTS(ctype_isinteger(tinfo) && ctype_size_acq(ctt) <= 4,
 	       "only 32 bit const supported");  /* NYI */
   /* Constants are already zero-extended/sign-extended to 32 bits. */
@@ -519,9 +523,10 @@ int lj_cdata_get_l(lua_State *L, CTState *cts, CType *s, TValue *o,
 {
   CTypeID sid;
   CTInfo info = ctype_info_acq(s);
+  CTSize size;
 
   if (ctype_isconstval(info)) {
-    cdata_getconst(cts, o, s);
+    cdata_getconst(L, cts, o, s);
     return 0;  /* No GC step needed. */
   } else if (ctype_isbitfield(info)) {
     return lj_cconv_tv_bf_l(L, cts, s, o, sp);
@@ -531,22 +536,23 @@ int lj_cdata_get_l(lua_State *L, CTState *cts, CType *s, TValue *o,
   lj_assertCTS(ctype_ispointer(info) || ctype_isfield(info),
 	       "pointer or field expected");
   sid = ctype_cid(info);
-  s = ctype_get(cts, sid);
-  info = ctype_info_acq(s);
+  if (!cdata_ctype_refresh(L, cts, sid, s, &info, &size))
+    lj_err_caller(L, LJ_ERR_FFI_INVSIZE);
 
   /* Resolve reference for field. */
   if (ctype_isref(info)) {
-    lj_assertCTS(ctype_size_acq(s) == CTSIZE_PTR, "ref is not pointer-sized");
+    lj_assertCTS(size == CTSIZE_PTR, "ref is not pointer-sized");
     sp = *(uint8_t **)sp;
     sid = ctype_cid(info);
-    s = ctype_get(cts, sid);
-    info = ctype_info_acq(s);
+    if (!cdata_ctype_refresh(L, cts, sid, s, &info, &size))
+      lj_err_caller(L, LJ_ERR_FFI_INVSIZE);
   }
 
   /* Skip attributes. */
   while (ctype_isattrib(info)) {
-    s = ctype_child(cts, s);
-    info = ctype_info_acq(s);
+    sid = ctype_cid(info);
+    if (!cdata_ctype_refresh(L, cts, sid, s, &info, &size))
+      lj_err_caller(L, LJ_ERR_FFI_INVSIZE);
   }
 
   return lj_cconv_tv_ct_l(L, cts, s, sid, o, sp);
@@ -572,18 +578,16 @@ void lj_cdata_set_l(lua_State *L, CTState *cts, CType *d, CTypeID did,
   lj_assertCTS(ctype_ispointer(info) || ctype_isfield(info),
 	       "pointer or field expected");
   did = ctype_cid(info);
-  d = ctype_get(cts, did);
-  info = ctype_info_acq(d);
-  size = ctype_size_acq(d);
+  if (!cdata_ctype_refresh(L, cts, did, d, &info, &size))
+    lj_err_caller(L, LJ_ERR_FFI_INVSIZE);
 
   /* Resolve reference for field. */
   if (ctype_isref(info)) {
     lj_assertCTS(size == CTSIZE_PTR, "ref is not pointer-sized");
     dp = *(uint8_t **)dp;
     did = ctype_cid(info);
-    d = ctype_get(cts, did);
-    info = ctype_info_acq(d);
-    size = ctype_size_acq(d);
+    if (!cdata_ctype_refresh(L, cts, did, d, &info, &size))
+      lj_err_caller(L, LJ_ERR_FFI_INVSIZE);
   }
 
   /* Skip attributes and collect qualifiers. */
@@ -594,9 +598,8 @@ void lj_cdata_set_l(lua_State *L, CTState *cts, CType *d, CTypeID did,
       break;
     }
     did = ctype_cid(info);
-    d = ctype_get(cts, did);
-    info = ctype_info_acq(d);
-    size = ctype_size_acq(d);
+    if (!cdata_ctype_refresh(L, cts, did, d, &info, &size))
+      lj_err_caller(L, LJ_ERR_FFI_INVSIZE);
   }
 
   lj_assertCTS(ctype_hassize(info), "store to ctype without size");
