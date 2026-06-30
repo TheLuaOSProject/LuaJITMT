@@ -127,6 +127,9 @@ jobs:
       - name: Build, install, and test Windows UCRT binary
         run: |
           git config --global --add safe.directory "$PWD/source"
+          mkdir -p "$PWD/.ci-home" "$PWD/.wine"
+          export HOME="$PWD/.ci-home"
+          export WINEPREFIX="$PWD/.wine"
           LJ_RELEASE_ROOT="$PWD/source" \
             automation/tools/release/build_artifact.sh \
             windows-x86_64-ucrt "$RELEASE_TAG" "$PWD/source/release-artifacts/$RELEASE_TAG"

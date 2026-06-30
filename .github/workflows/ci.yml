@@ -95,6 +95,9 @@ jobs:
       - name: Build, install, run, and archive
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          mkdir -p "$PWD/.ci-home" "$PWD/.wine"
+          export HOME="$PWD/.ci-home"
+          export WINEPREFIX="$PWD/.wine"
           tools/release/build_artifact.sh \
             windows-x86_64-ucrt "$CI_ARTIFACT_TAG" "$PWD/release-artifacts/$CI_ARTIFACT_TAG"
       - uses: actions/upload-artifact@v4
