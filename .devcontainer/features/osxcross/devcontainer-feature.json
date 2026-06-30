@@ -22,6 +22,6 @@
   },
   "installsAfter": [
     "ghcr.io/devcontainers/features/common-utils",
-    "./llvm"
+    "./features/llvm"
   ]
 }

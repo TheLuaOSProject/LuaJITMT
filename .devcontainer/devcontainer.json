@@ -6,11 +6,21 @@
 	"updateRemoteUserUID": true,
 	"image": "mcr.microsoft.com/devcontainers/base:trixie",
 	"runArgs": [
+		"--privileged",
 		"--security-opt=seccomp=unconfined",
 		"--security-opt=apparmor=unconfined",
 		"--cap-add=SYS_ADMIN",
-		"--device=/dev/fuse"
+		"--cap-add=SYS_PTRACE",
+		"--cap-add=SYS_RESOURCE",
+		"--ulimit=nofile=1048576:1048576",
+		"--device=/dev/fuse",
+		"--mount=type=volume,source=lj-lockless-darling,target=/darling"
 	],
+	"remoteEnv": {
+		"DPREFIX": "/darling/prefix",
+		"OSXCROSS_DIR": "${containerWorkspaceFolder}/.devcontainer/osxcross",
+		"PATH": "${containerWorkspaceFolder}/.devcontainer/osxcross/target/bin:${containerEnv:PATH}"
+	},
 	"features": {
 		"ghcr.io/devcontainers/features/common-utils:2": {
 			"installZsh": true,
@@ -24,13 +34,15 @@
 			"userUid": "automatic",
 			"userGid": "automatic"
 		},
-		"./llvm": {
+		"./features/llvm": {
 			"version": "22"
 		},
-		"./xmake": {},
-		"./mingw": {},
-		"./darling": {},
-		"./osxcross": {},
+		"./features/xmake": {},
+		"./features/mingw": {},
+		"./features/darling": {},
+		"./features/osxcross": {
+			"installDir": "${containerWorkspaceFolder}/.devcontainer/osxcross"
+		},
 		// // "ghcr.io/ebaskoro/devcontainer-features/emscripten:1": {},
 		// "devwasm.azurecr.io/dev-wasm/dev-wasm-feature/wasmtime-wasi:0": {
 		// 	"version": "24",
@@ -40,6 +52,7 @@
 		// 	"location": "/usr/local"
 		// }
 	},
+	"postCreateCommand": "bash .devcontainer/post-create.sh",
 	"customizations": {
 		"vscode": {
 			"extensions": [

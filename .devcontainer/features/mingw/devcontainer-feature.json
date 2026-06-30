@@ -5,6 +5,6 @@
   "description": "Installs x86_64 MinGW-w64 MSVCRT/UCRT cross compilers and Wine for Windows smoke tests.",
   "installsAfter": [
     "ghcr.io/devcontainers/features/common-utils",
-    "./llvm"
+    "./features/llvm"
   ]
 }

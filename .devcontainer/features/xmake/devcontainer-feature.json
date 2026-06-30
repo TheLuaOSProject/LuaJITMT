@@ -15,7 +15,7 @@
         }
     },
     "installsAfter": [
-        "./llvm-latest",
-        "./llvm"
+        "./features/llvm-latest",
+        "./features/llvm"
     ]
 }
