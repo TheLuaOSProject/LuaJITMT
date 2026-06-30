@@ -14,10 +14,15 @@ FFI arithmetic helper loads
   removes the wait-afterward refresh helpers, and returns `lj_carith_check64()`
   source ctypes through caller-owned snapshots instead of live ctype-table
   pointers.
+- Follow-up bit-library cleanup snapshots the selected 64-bit result CType for
+  `bit.band`/`bit.bor`/`bit.bxor` before converting each TValue operand,
+  avoiding a live `ctype_get(cts, id)` table pointer in the n-ary cdata bit-op
+  loop.
 - Extended `tools/ci/m7_ffi_carith_l.sh` to reject raw `CType.info` and
   `CType.size` reads in `src/lj_carith.c`.
 - Extended `tests/suites/m7_ffi.lua` to reject raw arithmetic `ctype_get(cts,
-  ...)` live-pointer reuse outside immediate local CType copies.
+  ...)` live-pointer reuse outside immediate local CType copies in
+  `src/lj_carith.c` and `src/lib_bit.c`.
 
 Verification:
 

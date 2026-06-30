@@ -6,8 +6,9 @@
 
 The bit-library cdata conversion path now snapshots or waits through the local
 `carith_ctype_info_read()` helper, carries only stable source IDs and scalar
-metadata across parser waits, and refetches the final source `CType *` by ID
-before calling `lj_cconv_ct_ct_l()`.
+metadata across parser waits, and passes caller-owned `CType` snapshots into
+conversion helpers. N-ary cdata bit operations also snapshot their selected
+64-bit destination CType before converting each operand.
 
 Coverage lives in `tests/t-ffi-carith-check64-snapshot.c`, wired into
 `m7_ffi_carith_l`. The fixture holds the parser token while exercising

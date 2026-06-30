@@ -142,8 +142,8 @@ end
 
 local function assert_carith_operands_use_snapshots(t)
   local script = [[
-my $path = shift @ARGV;
-open my $fh, "<", $path or die "$path: $!\n";
+my ($carith, $bit) = @ARGV;
+open my $fh, "<", $carith or die "$carith: $!\n";
 local $/;
 my $src = <$fh>;
 die "arithmetic ctype refresh helpers remain\n"
@@ -159,9 +159,19 @@ while ($src =~ /^([^\n]*ctype_get\(cts[^\n]*)$/mg) {
   next if $line =~ /carith_ctype_copy\s*\(/;
   die "raw ctype_get in lj_carith.c outside local copy: $line\n";
 }
+open my $bfh, "<", $bit or die "$bit: $!\n";
+$src = <$bfh>;
+die "missing bit library CType copy helper\n"
+  unless $src =~ /static void bit_ctype_copy/;
+while ($src =~ /^([^\n]*ctype_get\(cts[^\n]*)$/mg) {
+  my $line = $1;
+  next if $line =~ /bit_ctype_copy\s*\(/;
+  die "raw ctype_get in lib_bit.c outside local copy: $line\n";
+}
 ]]
   utils.capture_command("perl -e " .. shell_quote(script) .. " " ..
-                        shell_quote(t:path("src", "lj_carith.c")),
+                        shell_quote(t:path("src", "lj_carith.c")) .. " " ..
+                        shell_quote(t:path("src", "lib_bit.c")),
                         { stderr = true })
 end
 

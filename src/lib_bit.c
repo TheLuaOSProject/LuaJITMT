@@ -29,6 +29,17 @@
 #define LJLIB_MODULE_bit
 
 #if LJ_HASFFI
+static void bit_ctype_copy(CType *out, CType *ct)
+{
+  GCobj *name;
+  out->info = ctype_info_acq(ct);
+  out->size = ctype_size_acq(ct);
+  out->sib = (CTypeID1)ctype_sib_acq(ct);
+  out->next = (CTypeID1)ctype_next_acq(ct);
+  name = ctype_nameobj_acq(ct);
+  setgcrefp(out->name, name);
+}
+
 static int bit_result64(lua_State *L, CTypeID id, uint64_t x)
 {
   GCcdata *cd = lj_cdata_new_(L, id, 8);
@@ -120,12 +131,13 @@ LJLIB_ASM(bit_band)		LJLIB_REC(bit_nary IR_BAND)
   do { lj_carith_check64(L, ++i, &id); } while (++o < top);
   if (id) {
     CTState *cts = ctype_cts(L);
-    CType *ct = ctype_get(cts, id);
+    CType ctsnap;
     int op = curr_func(L)->c.ffid - (int)FF_bit_bor;
     uint64_t x, y = op >= 0 ? 0 : ~(uint64_t)0;
+    bit_ctype_copy(&ctsnap, ctype_get(cts, id));
     o = L->base;
     do {
-      lj_cconv_ct_tv_l(L, cts, ct, id, (uint8_t *)&x, o, 0);
+      lj_cconv_ct_tv_l(L, cts, &ctsnap, id, (uint8_t *)&x, o, 0);
       if (op < 0) y &= x; else if (op == 0) y |= x; else y ^= x;
     } while (++o < top);
     return bit_result64(L, id, y);
