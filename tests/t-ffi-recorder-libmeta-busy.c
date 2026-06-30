@@ -47,6 +47,7 @@ int main(void)
     "typedef int lj_m7_recmeta_copy_a4[4];\n"
     "typedef struct { int a; double b; } lj_m7_recmeta_cnew_s;\n"
     "typedef int lj_m7_recmeta_cnew_a4[4];\n"
+    "int abs(int);\n"
     "]]\n"
     "lj_m7_recmeta_i64 = ffi.new('int64_t', 1234567)\n"
     "lj_m7_recmeta_enum = ffi.new('lj_m7_recmeta_e', 'LJ_M7_RECMETA_A')\n"
@@ -62,7 +63,8 @@ int main(void)
     "lj_m7_recmeta_cnew_struct_t = ffi.typeof('lj_m7_recmeta_cnew_s')\n"
     "lj_m7_recmeta_cnew_array_t = ffi.typeof('lj_m7_recmeta_cnew_a4')\n"
     "lj_m7_recmeta_cnew_struct_src = ffi.new('lj_m7_recmeta_cnew_s')\n"
-    "lj_m7_recmeta_cnew_array_src = ffi.new('lj_m7_recmeta_cnew_a4')\n");
+    "lj_m7_recmeta_cnew_array_src = ffi.new('lj_m7_recmeta_cnew_a4')\n"
+    "lj_m7_recmeta_abs = ffi.C.abs\n");
 
   cts = ctype_ctsG(G(L));
   assert(cts != NULL);
@@ -279,6 +281,21 @@ int main(void)
     "jit.attach(lj_m7_trace_parse_token)\n"
     "assert(lj_m7_trace_parse_token_abort_count() >= 1)\n");
 
+  assert_busy_trace_releases(L, cts,
+    "local abs = lj_m7_recmeta_abs\n"
+    "jit.attach(lj_m7_trace_parse_token, 'trace')\n"
+    "jit.flush()\n"
+    "jit.on()\n"
+    "jit.opt.start('hotloop=1', 'hotexit=1')\n"
+    "local function run(n)\n"
+    "  local sum = 0\n"
+    "  for i = 1, n do sum = sum + abs(-i) end\n"
+    "  return sum\n"
+    "end\n"
+    "for i = 1, 3 do assert(run(8) == 36) end\n"
+    "jit.attach(lj_m7_trace_parse_token)\n"
+    "assert(lj_m7_trace_parse_token_abort_count() >= 1)\n");
+
   ljt_lua_dostring(L,
     "local bit = require('bit')\n"
     "local ffi = require('ffi')\n"
@@ -300,6 +317,7 @@ int main(void)
     "local array_t = lj_m7_recmeta_cnew_array_t\n"
     "local struct_src = lj_m7_recmeta_cnew_struct_src\n"
     "local array_src = lj_m7_recmeta_cnew_array_src\n"
+    "local abs = lj_m7_recmeta_abs\n"
     "local function run(n)\n"
     "  local sum, last = 0, 0\n"
     "  local x = ffi.new('uint64_t', 0)\n"
@@ -323,14 +341,14 @@ int main(void)
     "    local clone = struct_t(struct_src)\n"
     "    local arrclone = array_t(array_src)\n"
     "    sum = sum + cdst[0].a + adst[0][k] + obj.a + arr[0] + arr[3] + "
-    "clone.a + arrclone[0] + arrclone[3]\n"
+    "clone.a + arrclone[0] + arrclone[3] + abs(-i)\n"
     "    last = obj.b\n"
     "  end\n"
     "  return sum, tostring(x), tonumber(buf[0]), last\n"
     "end\n"
     "for i = 1, 30 do\n"
     "  local sum, x, b, last = run(40)\n"
-    "  assert(sum == 49389840 and x == '0ULL' and b == "
+    "  assert(sum == 49390660 and x == '0ULL' and b == "
     "0x2828282828282828 and last == 40.5)\n"
     "end\n");
 

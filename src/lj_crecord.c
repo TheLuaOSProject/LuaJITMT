@@ -1625,6 +1625,7 @@ static TRef crec_call_args(jit_State *J, RecordFFData *rd,
 			   CTState *cts, CType *ct)
 {
   TRef args[CCI_NARGS_MAX];
+  CType ctfcopy, dcopy;
   CTypeID fid;
   CTInfo info = ctype_info_acq(ct);  /* lj_ccall_ctid_vararg may invalidate ct pointer. */
   MSize i, n;
@@ -1646,7 +1647,7 @@ static TRef crec_call_args(jit_State *J, RecordFFData *rd,
   /* Skip initial attributes. */
   fid = ctype_sib_acq(ct);
   while (fid) {
-    CType *ctf = ctype_get(cts, fid);
+    CType *ctf = crec_ctype_snapshot(J, cts, fid, &ctfcopy);
     CTInfo ctfinfo = ctype_info_acq(ctf);
     if (!ctype_isattrib(ctfinfo)) break;
     fid = ctype_sib_acq(ctf);
@@ -1662,7 +1663,7 @@ static TRef crec_call_args(jit_State *J, RecordFFData *rd,
       lj_trace_err(J, LJ_TRERR_NYICALL);
 
     if (fid) {  /* Get argument type from field. */
-      CType *ctf = ctype_get(cts, fid);
+      CType *ctf = crec_ctype_snapshot(J, cts, fid, &ctfcopy);
       CTInfo ctfinfo = ctype_info_acq(ctf);
       fid = ctype_sib_acq(ctf);
       lj_assertJ(ctype_isfield(ctfinfo), "field expected");
@@ -1680,7 +1681,7 @@ static TRef crec_call_args(jit_State *J, RecordFFData *rd,
 #endif
       did = lj_ccall_ctid_vararg(J->L, cts, o);  /* Infer vararg type. */
     }
-    d = ctype_raw(cts, did);
+    d = crec_ctype_rawrefid(J, cts, did, &did, &dcopy);
     dinfo = ctype_info_acq(d);
     dsize = ctype_size_acq(d);
     if (!(ctype_isnum(dinfo) || ctype_isptr(dinfo) ||
@@ -1774,8 +1775,9 @@ static void crec_snap_caller(jit_State *J)
 static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
 {
   CTState *cts = ctype_ctsG(J2G(J));
-  CTypeID id = ctype_rawid(cts, cd->ctypeid);
-  CType *ct = ctype_get(cts, id);
+  CType ctsnap;
+  CTypeID id;
+  CType *ct = crec_ctype_rawrefid(J, cts, cd->ctypeid, &id, &ctsnap);
   CTInfo info = ctype_info_acq(ct);
 #if LJ_FFI_RECORD_CALLS
   IRType tp = IRT_PTR;
@@ -1784,8 +1786,7 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
 #if LJ_FFI_RECORD_CALLS
     tp = (LJ_64 && ctype_size_acq(ct) == 8) ? IRT_P64 : IRT_P32;
 #endif
-    id = ctype_rawid(cts, ctype_cid(info));
-    ct = ctype_get(cts, id);
+    ct = crec_ctype_rawrefid(J, cts, ctype_cid(info), &id, &ctsnap);
     info = ctype_info_acq(ct);  /* crec_call_args may invalidate ct pointer. */
   }
   if (ctype_isfunc(info)) {
@@ -1793,7 +1794,8 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
     lj_trace_err(J, LJ_TRERR_BLACKL);
 #else
     TRef func = emitir(IRT(IR_FLOAD, tp), J->base[0], IRFL_CDATA_PTR);
-    CType *ctr = ctype_rawchild(cts, ct);
+    CType ctrsnap;
+    CType *ctr = crec_ctype_rawchild(J, cts, ct, &ctrsnap);
     CTInfo ctr_info = ctype_info_acq(ctr);  /* crec_call_args may invalidate ctr. */
     IRType t = crec_ct2irt(cts, ctr);
     TRef tr;
