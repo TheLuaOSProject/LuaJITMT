@@ -2132,27 +2132,26 @@ void LJ_FASTCALL recff_cdata_arith(jit_State *J, RecordFFData *rd)
   MMS mm = (MMS)rd->data;
   TRef sp[2];
   CType *s[2];
-  CTypeID sid[2];
+  CType ctsnap[2];
   MSize i;
   for (i = 0; i < 2; i++) {
     TRef tr = J->base[i];
     CTypeID id = CTID_DOUBLE;
-    CType *ct = ctype_get(cts, id);
+    CType *ct = crec_ctype_rawid(J, cts, id, NULL, &ctsnap[i]);
     if (!tr) {
       lj_trace_err(J, LJ_TRERR_BADTYPE);
     } else if (tref_iscdata(tr)) {
       IRType t;
       CTInfo info;
-      id = ctype_rawid(cts, argv2cdata(J, tr, &rd->argv[i])->ctypeid);
-      ct = ctype_get(cts, id);
-      t = crec_ct2irt(cts, ct);
+      id = argv2cdata(J, tr, &rd->argv[i])->ctypeid;
+      ct = crec_ctype_rawid(J, cts, id, &id, &ctsnap[i]);
+      t = crec_ct2irt_snapshot(J, cts, ct);
       info = ctype_info_acq(ct);
       if (ctype_isptr(info)) {  /* Resolve pointer or reference. */
 	tr = emitir(IRT(IR_FLOAD, t), tr, IRFL_CDATA_PTR);
 	if (ctype_isref(info)) {
-	  id = ctype_rawid(cts, ctype_cid(info));
-	  ct = ctype_get(cts, id);
-	  t = crec_ct2irt(cts, ct);
+	  ct = crec_ctype_rawchildid(J, cts, ct, &id, &ctsnap[i]);
+	  t = crec_ct2irt_snapshot(J, cts, ct);
 	  info = ctype_info_acq(ct);
 	}
       } else if (t == IRT_I64 || t == IRT_U64) {
@@ -2162,27 +2161,21 @@ void LJ_FASTCALL recff_cdata_arith(jit_State *J, RecordFFData *rd)
       } else if (t == IRT_INT || t == IRT_U32) {
 	tr = emitir(IRT(IR_FLOAD, t), tr, IRFL_CDATA_INT);
 	if (ctype_isenum(info)) {
-	  id = ctype_cid(info);
-	  ct = ctype_get(cts, id);
+	  ct = crec_ctype_rawchildid(J, cts, ct, &id, &ctsnap[i]);
 	  info = ctype_info_acq(ct);
 	}
 	goto ok;
       } else if (ctype_isfunc(info)) {
-	CTypeID id0 = i ? sid[0] : 0;
 	tr = emitir(IRT(IR_FLOAD, IRT_PTR), tr, IRFL_CDATA_PTR);
 	id = lj_ctype_intern_l(J->L, cts, CTINFO(CT_PTR, CTALIGN_PTR|id),
 			       CTSIZE_PTR);
-	ct = ctype_get(cts, id);
-	if (i) {
-	  s[0] = ctype_get(cts, id0);  /* C type table may have been reallocated. */
-	}
+	ct = crec_ctype_rawid(J, cts, id, &id, &ctsnap[i]);
 	goto ok;
       } else {
 	tr = emitir(IRT(IR_ADD, IRT_PTR), tr, lj_ir_kintp(J, sizeof(GCcdata)));
       }
       if (ctype_isenum(info)) {
-	id = ctype_cid(info);
-	ct = ctype_get(cts, id);
+	ct = crec_ctype_rawchildid(J, cts, ct, &id, &ctsnap[i]);
 	info = ctype_info_acq(ct);
       }
       if (ctype_isnum(info)) {
@@ -2198,15 +2191,15 @@ void LJ_FASTCALL recff_cdata_arith(jit_State *J, RecordFFData *rd)
 	lj_trace_err(J, LJ_TRERR_BADTYPE);
       tr = lj_ir_kptr(J, NULL);
       id = CTID_P_VOID;
-      ct = ctype_get(cts, CTID_P_VOID);
+      ct = crec_ctype_rawid(J, cts, id, NULL, &ctsnap[i]);
     } else if (tref_isinteger(tr)) {
       id = CTID_INT32;
-      ct = ctype_get(cts, CTID_INT32);
+      ct = crec_ctype_rawid(J, cts, id, NULL, &ctsnap[i]);
     } else if (tref_isstr(tr)) {
       TRef tr2 = J->base[1-i];
       CTInfo info;
-      id = ctype_rawid(cts, argv2cdata(J, tr2, &rd->argv[1-i])->ctypeid);
-      ct = ctype_get(cts, id);
+      id = argv2cdata(J, tr2, &rd->argv[1-i])->ctypeid;
+      ct = crec_ctype_rawid(J, cts, id, &id, &ctsnap[i]);
       info = ctype_info_acq(ct);
       if (ctype_isenum(info)) {  /* Match string against enum constant. */
 	GCstr *str = strV(&rd->argv[i]);
@@ -2220,7 +2213,7 @@ void LJ_FASTCALL recff_cdata_arith(jit_State *J, RecordFFData *rd)
 	  id = ecid;
 	  /* Specialize to the name of the enum constant. */
 	  emitir(IRTG(IR_EQ, IRT_STR), tr, lj_ir_kstr(J, str));
-	  ct = ctype_get(cts, id);
+	  ct = crec_ctype_rawid(J, cts, id, NULL, &ctsnap[i]);
 	  tr = lj_ir_kint(J, (int32_t)val);
 	} else {  /* Interpreter will throw or return false. */
 	  lj_trace_err(J, LJ_TRERR_BADTYPE);
@@ -2233,11 +2226,10 @@ void LJ_FASTCALL recff_cdata_arith(jit_State *J, RecordFFData *rd)
     } else if (!tref_isnum(tr)) {
       tr = 0;
       id = CTID_P_VOID;
-      ct = ctype_get(cts, CTID_P_VOID);
+      ct = crec_ctype_rawid(J, cts, id, NULL, &ctsnap[i]);
     }
   ok:
     s[i] = ct;
-    sid[i] = id;
     sp[i] = tr;
   }
   {

@@ -1,23 +1,34 @@
 # Recorded Cdata Arithmetic Helper Loads
 
-`recff_cdata_arith()` now snapshots operand ctype metadata through
-`ctype_info_acq()` / `ctype_size_acq()` while normalizing operands before
-dispatching to the int64, pointer, or metamethod recorder helpers.
+`recff_cdata_arith()` now keeps operand ctype metadata in recorder-local
+`CType` snapshots while normalizing operands before dispatching to the int64,
+pointer, or metamethod recorder helpers.
 
-The helper-backed snapshots cover cdata pointer/reference resolution, enum child
-resolution, function cdata normalization to pointers, numeric payload loads,
-string-to-enum lookup fallback, and string-to-pointer decay. The locked enum
-fallback now reads matched constant metadata with helper loads as well.
+The helper-backed snapshots cover cdata raw type resolution, pointer/reference
+resolution, enum child resolution, function cdata normalization to pointers,
+numeric payload loads, string-to-enum lookup fallback, and string-to-pointer
+decay. Function-pointer interning no longer refreshes prior operands through
+live ctype table pointers; previously normalized operands remain stack copies.
+The matched enum-constant type is also copied through the same helper path
+before recording the string guard.
+
+Coverage:
+
+- `tests/t-ffi-recorder-libmeta-busy.c` records parser-created enum arithmetic,
+  enum-string comparison, and parser-created struct pointer arithmetic while
+  the parser token is held, and verifies the recorder aborts instead of waiting.
+- The same fixture keeps a hot-loop path after abort for enum arithmetic,
+  enum-string equality, and pointer add/diff.
 
 Guardrail:
 
-- `tools/ci/m7_ffi_carith_l.sh` rejects raw `->info` / `->size` reads in
-  `recff_cdata_arith()`.
+- `tools/ci/lua_test.sh m7_ffi_carith_l` covers arithmetic behavior and the
+  interpreter-side ctype snapshot fixtures.
 
 Validation:
 
-- `tools/ci/m7_ffi_carith_l.sh`
-- `tools/ci/m7_ffi_typeinfo_snapshot.sh`
-- `tools/ci/m7_ffi_jit_cnew.sh`
-- `tools/ci/m0_source_guard.sh`
+- `make -C src -j2`
+- `LJ_TEST_DISABLE_BUILD_CACHE=1 tools/ci/lua_test.sh m7_ffi_carith_l`
+- `LJ_TEST_DISABLE_BUILD_CACHE=1 tools/ci/lua_test.sh m7_ffi_typeinfo_snapshot`
+- `LJ_TEST_DISABLE_BUILD_CACHE=1 tools/ci/lua_test.sh m7_ffi_jit_cnew`
 - `git diff --check`
