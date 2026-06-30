@@ -1474,7 +1474,6 @@ LJLIB_CF(ffi_new)	LJLIB_REC(.)
 {
   CTState *cts = ctype_cts(L);
   CTypeID id, rid;
-  CType *ct;
   CTSize sz = CTSIZE_INVALID;
   CTInfo info = 0;
   MSize ofs = 1;
@@ -1512,10 +1511,9 @@ got_layout:
   o = L->base + ofs;
   cd = lj_cdata_newx_l(L, cts, id, sz, info);
   setcdataV(L, o-1, cd);  /* Anchor the uninitialized cdata. */
-  ct = ctype_get(cts, rid);  /* Table may have been reallocated. */
-  lj_cconv_ct_init_l(L, cts, ct, rid, sz, cdataptr(cd),
+  lj_cconv_ct_init_l(L, cts, NULL, rid, sz, cdataptr(cd),
 		     o, (MSize)(L->top - o));  /* Initialize cdata. */
-  if (ctype_isstruct(ctype_info_acq(ct))) {
+  if (ctype_isstruct(info)) {
     /* Handle ctype __gc metamethod. Use the fast lookup here. */
     TValue gctv;
     cTValue *tv = ffi_ctype_metatv_read(L, cts, &gctv, id, MM_gc);
