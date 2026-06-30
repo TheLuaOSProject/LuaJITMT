@@ -1,0 +1,133 @@
+name: Rolling release
+
+on:
+  push:
+    tags:
+      - "b*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing b<major>.<minor>.<patch> tag to package"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  linux:
+    name: Linux x86_64 artifact
+    runs-on: ubuntu-24.04
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+      LUA: lua5.4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+          fetch-depth: 0
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential lua5.4 xz-utils
+      - name: Build, install, and test Linux binary
+        run: |
+          tools/release/build_artifact.sh linux-x86_64 "$RELEASE_TAG" "release-artifacts/$RELEASE_TAG"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rolling-release-linux
+          path: |
+            release-artifacts/${{ env.RELEASE_TAG }}/LuaJITMT-*
+            release-artifacts/${{ env.RELEASE_TAG }}/*.sha256
+
+  macos:
+    name: macOS x86_64 artifact
+    runs-on: macos-13
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+      MACOSX_DEPLOYMENT_TARGET: "13.0"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+          fetch-depth: 0
+      - name: Build, install, and test macOS binary
+        run: |
+          tools/release/build_artifact.sh macos-x86_64 "$RELEASE_TAG" "release-artifacts/$RELEASE_TAG"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rolling-release-macos
+          path: |
+            release-artifacts/${{ env.RELEASE_TAG }}/LuaJITMT-*
+            release-artifacts/${{ env.RELEASE_TAG }}/*.sha256
+
+  windows-ucrt:
+    name: Windows x86_64 UCRT artifact
+    runs-on: ubuntu-24.04
+    container: debian:trixie
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+      LUA: lua5.1
+    steps:
+      - name: Install build tools
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            build-essential ca-certificates file git lua5.1 make unzip xz-utils zip \
+            binutils-mingw-w64-ucrt64 gcc-mingw-w64-ucrt64 mingw-w64 \
+            wine wine64
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+          fetch-depth: 0
+      - name: Build, install-style stage, and test Windows UCRT binary
+        run: |
+          tools/release/build_artifact.sh windows-x86_64-ucrt "$RELEASE_TAG" "release-artifacts/$RELEASE_TAG"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rolling-release-windows-ucrt
+          path: |
+            release-artifacts/${{ env.RELEASE_TAG }}/LuaJITMT-*
+            release-artifacts/${{ env.RELEASE_TAG }}/*.sha256
+
+  publish:
+    name: Publish GitHub release
+    runs-on: ubuntu-24.04
+    needs:
+      - linux
+      - macos
+      - windows-ucrt
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Generate release notes and checksums
+        run: |
+          find dist -maxdepth 1 -type f -name '*.sha256' -delete
+          (cd dist && find . -maxdepth 1 -type f -name 'LuaJITMT-*' -print0 |
+            sort -z | xargs -0 sha256sum > SHA256SUMS)
+          tools/release/release_notes.sh "$RELEASE_TAG" > RELEASE_NOTES.md
+          test -s RELEASE_NOTES.md || printf -- '- Rolling release %s\n' "$RELEASE_TAG" > RELEASE_NOTES.md
+      - name: Create or update release
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release edit "$RELEASE_TAG" \
+              --title "$RELEASE_TAG" \
+              --notes-file RELEASE_NOTES.md \
+              --prerelease
+          else
+            gh release create "$RELEASE_TAG" \
+              --title "$RELEASE_TAG" \
+              --notes-file RELEASE_NOTES.md \
+              --prerelease
+          fi
+          gh release upload "$RELEASE_TAG" dist/* --clobber

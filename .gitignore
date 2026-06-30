@@ -13,3 +13,9 @@
 .tags
 luajit-mt-report.zip
 src/.lj-test-build-signature
+.darling-*
+.ns-test/
+.devcontainer/osxcross/
+.devcontainer/features/darling/prefix/
+.devcontainer/features/darling/prefix.workdir/
+release-artifacts/

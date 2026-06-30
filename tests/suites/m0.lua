@@ -1,5 +1,135 @@
 local runtime = require("suite_runtime")
 local build = require("suite_build")
+local utils = require("suite_utils")
+
+local shell_quote = utils.shell_quote
+
+local function env_or_empty(name)
+  return os.getenv(name) or ""
+end
+
+local function command_exists(name)
+  return utils.command_ok("command -v " .. shell_quote(name))
+end
+
+local function platform_required(name)
+  local req = env_or_empty("LJ_M0_PLATFORM_REQUIRE"):lower()
+  return req == "1" or req == "all" or
+         req:find(name:lower(), 1, true) ~= nil
+end
+
+local function maybe_skip_platform(name, missing)
+  if platform_required(name) then
+    error("M0 " .. name .. " platform smoke missing: " .. missing, 2)
+  end
+  print("M0 " .. name .. " platform smoke skipped: " .. missing)
+  return true
+end
+
+local function smoke_code()
+  return table.concat({
+    "print(jit.os, jit.arch)",
+    "local threading = require('threading')",
+    "assert(type(threading.spawn) == 'function')",
+    "assert(type(threading.gcstats) == 'function')"
+  }, "; ")
+end
+
+local function assert_platform_output(label, out, osname)
+  if not out:find(osname .. "%s+x64") then
+    error(label .. " smoke did not report " .. osname .. " x64:\n" .. out, 2)
+  end
+end
+
+local function run_windows_smoke(t)
+  local cross = utils.getenv("LJ_M0_WINDOWS_CROSS", "x86_64-w64-mingw32-")
+  local cc = utils.getenv("LJ_M0_WINDOWS_CC", "gcc")
+  local compiler = cross .. cc
+
+  if not command_exists(compiler) then
+    return maybe_skip_platform("Windows", compiler .. " not in PATH")
+  end
+  if not command_exists("wine") then
+    return maybe_skip_platform("Windows", "wine not in PATH")
+  end
+
+  t:make({ "clean" }, { quiet = true, jobs = false })
+  t:make({
+    "HOST_CC=gcc",
+    "CROSS=" .. cross,
+    "CC=" .. cc,
+    "TARGET_SYS=Windows"
+  }, { quiet = true })
+
+  local out = utils.capture_command(
+    "wine " .. shell_quote(t:path("src", "luajit.exe")) ..
+      " -e " .. shell_quote(smoke_code()),
+    { timeout = "120s", stderr = true })
+  assert_platform_output("Windows", out, "Windows")
+  print("M0 Windows platform smoke passed")
+end
+
+local function darwin_host_path(path)
+  return "/Volumes/SystemRoot" .. path
+end
+
+local function run_darwin_smoke(t)
+  local cross = utils.getenv("LJ_M0_DARWIN_CROSS",
+                            "x86_64-apple-darwin23.2-")
+  local cc = utils.getenv("LJ_M0_DARWIN_CC", "cc")
+  local deploy = utils.getenv("MACOSX_DEPLOYMENT_TARGET", "13.0")
+  local osxcross_dir = utils.getenv("OSXCROSS_DIR",
+                                    t:path(".devcontainer", "osxcross"))
+  local osxcross_bin = utils.getenv("LJ_M0_OSXCROSS_BIN",
+                                    osxcross_dir .. "/target/bin")
+  local compiler = cross .. cc
+  local have_compiler = command_exists(compiler) or
+                        utils.file_exists(osxcross_bin .. "/" .. compiler)
+
+  if not have_compiler then
+    return maybe_skip_platform("Darwin", compiler .. " not in PATH")
+  end
+  if not command_exists("darling") then
+    return maybe_skip_platform("Darwin", "darling not in PATH")
+  end
+
+  t:make({ "clean" }, {
+    quiet = true,
+    jobs = false,
+    env = { PATH = osxcross_bin .. ":" .. env_or_empty("PATH") }
+  })
+  t:make({
+    "HOST_CC=gcc",
+    "CROSS=" .. cross,
+    "CC=" .. cc,
+    "TARGET_SYS=Darwin"
+  }, {
+    quiet = true,
+    env = {
+      PATH = osxcross_bin .. ":" .. env_or_empty("PATH"),
+      MACOSX_DEPLOYMENT_TARGET = deploy
+    }
+  })
+
+  local inner = "cd " .. shell_quote(darwin_host_path(t:path("src"))) ..
+    " && ./luajit -e " .. shell_quote(smoke_code())
+  local out = utils.capture_command(
+    "darling shell /bin/bash -lc " .. shell_quote(inner),
+    { timeout = "120s", stderr = true })
+  assert_platform_output("Darwin", out, "OSX")
+  print("M0 Darwin platform smoke passed")
+end
+
+local function run_platform_smoke(t)
+  local ok, err = xpcall(function()
+    run_windows_smoke(t)
+    run_darwin_smoke(t)
+  end, debug.traceback)
+
+  t:build({ clean = true, quiet = true })
+  if not ok then error(err, 0) end
+  print("M0 platform cross smoke passed")
+end
 
 local function run_m0_combo(t, name, xcflags, stock_tags)
   print("== " .. name .. " ==")
@@ -79,5 +209,11 @@ return function(add)
       ]])
       print("M0 Lua 5.2 compatibility build passed")
     end
+  })
+
+  add({
+    name = "m0_platform_cross_smoke",
+    description = "optional Windows/macOS cross-build and runtime smoke",
+    run = run_platform_smoke
   })
 end

@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+tag=${1:?usage: tools/release/release_notes.sh <tag>}
+root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+
+git -C "$root" fetch --tags --force >/dev/null 2>&1 || true
+
+tag_commit=$(git -C "$root" rev-parse "${tag}^{}")
+prev=""
+while IFS= read -r candidate; do
+  [ "$candidate" != "$tag" ] || continue
+  candidate_commit=$(git -C "$root" rev-parse "${candidate}^{}")
+  [ "$candidate_commit" != "$tag_commit" ] || continue
+  prev=$candidate
+  break
+done <<EOF
+$(git -C "$root" tag --list 'b*' --sort=-version:refname)
+EOF
+
+if [ -n "$prev" ]; then
+  git -C "$root" log --format='- %s' "${prev}..${tag}"
+else
+  git -C "$root" log -1 --format='- %s' "$tag"
+fi
