@@ -179,6 +179,7 @@ void lj_cconv_ct_ct_l(lua_State *L, CTState *cts, CType *d, CTypeID did,
 {
   CTSize dsize = ctype_size_acq(d), ssize = ctype_size_acq(s);
   CTInfo dinfo = ctype_info_acq(d), sinfo = ctype_info_acq(s);
+  CType dsnap, ssnap, dcsnap, scsnap;
   void *tmpptr;
 
   lj_assertCTS(!ctype_isenum(dinfo) && !ctype_isenum(sinfo),
@@ -271,10 +272,9 @@ void lj_cconv_ct_ct_l(lua_State *L, CTState *cts, CType *d, CTypeID did,
     break;
     }
   case CCX(I, C):
-    sid = ctype_cid(sinfo);
-    s = ctype_get(cts, sid);
-    sinfo = ctype_info_acq(s);
-    ssize = ctype_size_acq(s);
+    sid = cconv_rawid_wait(L, cts, ctype_cid(sinfo), sid, &ssnap,
+			   &sinfo, &ssize);
+    s = &ssnap;
     goto conv_I_F;  /* Just convert re. */
   case CCX(I, P):
     if (!(flags & CCF_CAST)) goto err_conv;
@@ -336,38 +336,34 @@ void lj_cconv_ct_ct_l(lua_State *L, CTState *cts, CType *d, CTypeID did,
     break;
     }
   case CCX(F, C):
-    sid = ctype_cid(sinfo);
-    s = ctype_get(cts, sid);
-    sinfo = ctype_info_acq(s);
-    ssize = ctype_size_acq(s);
+    sid = cconv_rawid_wait(L, cts, ctype_cid(sinfo), sid, &ssnap,
+			   &sinfo, &ssize);
+    s = &ssnap;
     goto conv_F_F;  /* Ignore im, and convert from re. */
 
   /* Destination is a complex number. */
   case CCX(C, I):
-    did = ctype_cid(dinfo);
-    d = ctype_get(cts, did);
-    dinfo = ctype_info_acq(d);
-    dsize = ctype_size_acq(d);
+    did = cconv_rawid_wait(L, cts, ctype_cid(dinfo), did, &dsnap,
+			   &dinfo, &dsize);
+    d = &dsnap;
     memset(dp + dsize, 0, dsize);  /* Clear im. */
     goto conv_F_I;  /* Convert to re. */
   case CCX(C, F):
-    did = ctype_cid(dinfo);
-    d = ctype_get(cts, did);
-    dinfo = ctype_info_acq(d);
-    dsize = ctype_size_acq(d);
+    did = cconv_rawid_wait(L, cts, ctype_cid(dinfo), did, &dsnap,
+			   &dinfo, &dsize);
+    d = &dsnap;
     memset(dp + dsize, 0, dsize);  /* Clear im. */
     goto conv_F_F;  /* Convert to re. */
 
   case CCX(C, C):
     if (dsize != ssize) {  /* Different types: convert re/im separately. */
-      CTypeID dcid = ctype_cid(dinfo);
-      CTypeID scid = ctype_cid(sinfo);
-      CType *dc = ctype_get(cts, dcid);
-      CType *sc = ctype_get(cts, scid);
-      CTSize dcsize = ctype_size_acq(dc);
-      CTSize scsize = ctype_size_acq(sc);
-      lj_cconv_ct_ct_l(L, cts, dc, dcid, sc, scid, dp, sp, flags);
-      lj_cconv_ct_ct_l(L, cts, dc, dcid, sc, scid,
+      CTSize dcsize, scsize;
+      CTypeID dcid = cconv_rawid_wait(L, cts, ctype_cid(dinfo), did,
+				      &dcsnap, NULL, &dcsize);
+      CTypeID scid = cconv_rawid_wait(L, cts, ctype_cid(sinfo), sid,
+				      &scsnap, NULL, &scsize);
+      lj_cconv_ct_ct_l(L, cts, &dcsnap, dcid, &scsnap, scid, dp, sp, flags);
+      lj_cconv_ct_ct_l(L, cts, &dcsnap, dcid, &scsnap, scid,
 		       dp + dcsize, sp + scsize, flags);
       return;
     }
@@ -377,13 +373,13 @@ void lj_cconv_ct_ct_l(lua_State *L, CTState *cts, CType *d, CTypeID did,
   case CCX(V, I):
   case CCX(V, F):
   case CCX(V, C): {
-    CTypeID dcid = ctype_cid(dinfo);
-    CType *dc = ctype_get(cts, dcid);
     CTSize esize;
+    CTypeID dcid = cconv_rawid_wait(L, cts, ctype_cid(dinfo), did,
+				    &dcsnap, NULL, &esize);
     /* First convert the scalar to the first element. */
-    lj_cconv_ct_ct_l(L, cts, dc, dcid, s, sid, dp, sp, flags);
+    lj_cconv_ct_ct_l(L, cts, &dcsnap, dcid, s, sid, dp, sp, flags);
     /* Then replicate it to the other elements (splat). */
-    for (sp = dp, esize = ctype_size_acq(dc); dsize > esize; dsize -= esize) {
+    for (sp = dp; dsize > esize; dsize -= esize) {
       dp += esize;
       memcpy(dp, sp, esize);
     }
@@ -553,7 +549,6 @@ static void cconv_array_tab_l(lua_State *L, CTState *cts, CType *d,
   int32_t i;
   CTInfo dinfo;
   CTypeID dcid;
-  CType *dc;
   CTSize size, esize, ofs = 0;
   UNUSED(d);
   if (!cconv_ctype_snapshot_wait(L, cts, did, &dsnap))
@@ -562,7 +557,6 @@ static void cconv_array_tab_l(lua_State *L, CTState *cts, CType *d,
   size = ctype_size_acq(&dsnap);
   dcid = cconv_rawid_wait(L, cts, ctype_cid(dinfo), did, &dcsnap,
 			  NULL, &esize);
-  dc = ctype_get(cts, dcid);  /* Array element type. */
   for (i = 0; ; i++) {
     TValue *tv = (TValue *)lj_tab_getint(t, i);
     TValue val;
@@ -574,8 +568,7 @@ static void cconv_array_tab_l(lua_State *L, CTState *cts, CType *d,
     }
     if (ofs >= size)
       cconv_err_initov_l(L, cts, did);
-    lj_cconv_ct_tv_l(L, cts, dc, dcid, dp + ofs, &val, flags);
-    dc = ctype_get(cts, dcid);
+    lj_cconv_ct_tv_l(L, cts, &dcsnap, dcid, dp + ofs, &val, flags);
     ofs += esize;
   }
   if (size != CTSIZE_INVALID) {  /* Only fill up arrays with known size. */
@@ -672,6 +665,7 @@ void lj_cconv_ct_tv_l(lua_State *L, CTState *cts, CType *d,
 {
   CTypeID sid = CTID_P_VOID;
   CType *s;
+  CType dsnap, ssnap;
   CTInfo dinfo = ctype_info_acq(d);
   CTSize dsize = ctype_size_acq(d);
   void *tmpptr;
@@ -688,7 +682,9 @@ void lj_cconv_ct_tv_l(lua_State *L, CTState *cts, CType *d,
   } else if (tviscdata(o)) {
     sp = cdataptr(cdataV(o));
     sid = cdataV(o)->ctypeid;
-    s = ctype_get(cts, sid);
+    if (!cconv_ctype_snapshot_wait(L, cts, sid, &ssnap))
+      goto err_conv;
+    s = &ssnap;
     {
       CTInfo sinfo = ctype_info_acq(s);
       if (ctype_isref(sinfo)) {  /* Resolve reference for value. */
@@ -697,19 +693,23 @@ void lj_cconv_ct_tv_l(lua_State *L, CTState *cts, CType *d,
 	sid = ctype_cid(sinfo);
       }
     }
-    s = ctype_raw(cts, sid);
+    sid = cconv_rawid_wait(L, cts, sid, did, &ssnap, NULL, NULL);
+    s = &ssnap;
     {
       CTInfo sinfo = ctype_info_acq(s);
       if (ctype_isfunc(sinfo)) {
 	sid = lj_ctype_intern_l(L, cts, CTINFO(CT_PTR, CTALIGN_PTR|sid),
 				CTSIZE_PTR);
-	d = ctype_get(cts, did);  /* C type table may have been reallocated. */
+	if (!cconv_ctype_snapshot_wait(L, cts, did, &dsnap))
+	  cconv_err_initov_l(L, cts, did);
+	d = &dsnap;  /* C type table may have been reallocated. */
 	dinfo = ctype_info_acq(d);
 	dsize = ctype_size_acq(d);
       } else {
 	if (ctype_isenum(sinfo)) {
-	  sid = ctype_cid(sinfo);
-	  s = ctype_get(cts, sid);
+	  sid = cconv_rawid_wait(L, cts, ctype_cid(sinfo), did, &ssnap,
+				 NULL, NULL);
+	  s = &ssnap;
 	}
 	goto doconv;
       }
@@ -781,11 +781,13 @@ void lj_cconv_ct_tv_l(lua_State *L, CTState *cts, CType *d,
   err_conv:
     cconv_err_convtv_l(L, cts, did, o, flags);
   }
-  s = ctype_get(cts, sid);
+  sid = cconv_rawid_wait(L, cts, sid, did, &ssnap, NULL, NULL);
+  s = &ssnap;
 doconv:
   if (ctype_isenum(dinfo)) {
-    did = ctype_cid(dinfo);
-    d = ctype_get(cts, did);
+    did = cconv_rawid_wait(L, cts, ctype_cid(dinfo), did, &dsnap,
+			   &dinfo, &dsize);
+    d = &dsnap;
   }
   lj_cconv_ct_ct_l(L, cts, d, did, s, sid, dp, sp, flags);
 }
@@ -845,7 +847,6 @@ static void cconv_array_init_l(lua_State *L, CTState *cts, CType *d,
   CType dsnap, dcsnap;
   CTInfo dinfo;
   CTypeID dcid;
-  CType *dc;
   CTSize ofs, esize;
   MSize i;
   UNUSED(d);
@@ -854,12 +855,10 @@ static void cconv_array_init_l(lua_State *L, CTState *cts, CType *d,
   dinfo = ctype_info_acq(&dsnap);
   dcid = cconv_rawid_wait(L, cts, ctype_cid(dinfo), did, &dcsnap,
 			  NULL, &esize);
-  dc = ctype_get(cts, dcid);  /* Array element type. */
   if (len*esize > sz)
     cconv_err_initov_l(L, cts, did);
   for (i = 0, ofs = 0; i < len; i++, ofs += esize) {
-    lj_cconv_ct_tv_l(L, cts, dc, dcid, dp + ofs, o + i, 0);
-    dc = ctype_get(cts, dcid);
+    lj_cconv_ct_tv_l(L, cts, &dcsnap, dcid, dp + ofs, o + i, 0);
   }
   if (ofs == esize) {  /* Replicate a single element. */
     for (; ofs < sz; ofs += esize) memcpy(dp + ofs, dp, esize);

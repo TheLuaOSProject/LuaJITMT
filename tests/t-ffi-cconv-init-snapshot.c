@@ -75,16 +75,32 @@ static void assert_cconv_init_waits_without_lock(lua_State *L, CTState *cts,
 
 static void assert_predefined_init_avoids_wait(lua_State *L, CTState *cts)
 {
+  CType complex_snap, complex_float_snap;
+  float complex_src[2] = { 1.25f, -2.5f };
+  double complex_dst[2] = { 0.0, 0.0 };
   uint32_t seq0 = ljt_ctype_parse_seq(cts);
-  uint32_t release_seq = ljt_ctype_hold_parse_token(cts);
+  uint32_t release_seq;
+
+  assert(lj_ctype_snapshot(cts, CTID_COMPLEX_DOUBLE, &complex_snap) > 0);
+  assert(lj_ctype_snapshot(cts, CTID_COMPLEX_FLOAT, &complex_float_snap) > 0);
+
+  release_seq = ljt_ctype_hold_parse_token(cts);
 
   ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"
-    "assert(tonumber(ffi.new(lj_m7_cconv_init_int_ct, 33)) == 33)\n"
+    "assert(tonumber(ffi.new(lj_m7_cconv_init_int_ct, 33)) == 33)\n");
+  ljt_lua_dostring(L,
+    "local ffi = require('ffi')\n"
     "assert(tonumber(ffi.new(lj_m7_cconv_init_double_ct, 1.5)) == 1.5)\n");
+
+  lj_cconv_ct_ct_l(L, cts, &complex_snap, CTID_COMPLEX_DOUBLE,
+		   &complex_float_snap, CTID_COMPLEX_FLOAT,
+		   (uint8_t *)complex_dst, (uint8_t *)complex_src, 0);
 
   ljt_ctype_release_parse_token(cts, release_seq);
   assert(ljt_ctype_parse_seq(cts) == seq0 + 2u);
+  assert(complex_dst[0] == 1.25);
+  assert(complex_dst[1] == -2.5);
 }
 
 static CTypeID ctype_id_from_global(lua_State *L, const char *name)
@@ -131,7 +147,7 @@ int main(void)
   TGState *tg;
   CType predef_str_arr_snap, parser_str_arr_snap;
   CTypeID predef_str_arr_id, parser_str_arr_id;
-  uint32_t seq0, seq1, seq2, seq3, seq4, seq5, seq6, seq7;
+  uint32_t seq0, seq1, seq2, seq3, seq4, seq5, seq6, seq7, seq8;
 
   ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"
@@ -146,8 +162,11 @@ int main(void)
     "]]\n"
     "lj_m7_cconv_init_arr_ct = ffi.typeof('lj_m7_cconv_init_e[3]')\n"
     "lj_m7_cconv_init_pair_ct = ffi.typeof('lj_m7_cconv_init_pair_t')\n"
+    "lj_m7_cconv_init_enum_ct = ffi.typeof('lj_m7_cconv_init_e')\n"
     "lj_m7_cconv_init_int_ct = ffi.typeof('int')\n"
     "lj_m7_cconv_init_double_ct = ffi.typeof('double')\n"
+    "lj_m7_cconv_init_vector_ct = "
+    "ffi.typeof('double __attribute__((vector_size(16)))')\n"
     "lj_m7_cconv_init_char_arr_ct = ffi.typeof('char[8]')\n"
     "lj_m7_cconv_init_str_arr_ct = ffi.typeof('lj_m7_cconv_init_str_arr_t')\n"
     "jit.off()\n");
@@ -177,6 +196,15 @@ int main(void)
   assert(seq3 == seq2 + 2u);
 
   assert_cconv_init_waits_without_lock(L, cts, tg,
+    "local e = lj_m7_cconv_init_enum_ct('LJ_M7_CCONV_INIT_B')\n"
+    "local i = lj_m7_cconv_init_int_ct(e)\n"
+    "local v = lj_m7_cconv_init_vector_ct(1.5)\n"
+    "assert(tonumber(i) == 13)\n"
+    "assert(v[0] == 1.5 and v[1] == 1.5)\n");
+  seq4 = ljt_ctype_parse_seq(cts);
+  assert(seq4 == seq3 + 2u);
+
+  assert_cconv_init_waits_without_lock(L, cts, tg,
     "local ffi = require('ffi')\n"
     "local a = ffi.new(lj_m7_cconv_init_arr_ct, {\n"
     "  'LJ_M7_CCONV_INIT_A', 'LJ_M7_CCONV_INIT_B',\n"
@@ -184,8 +212,8 @@ int main(void)
     "assert(tonumber(a[0]) == 11)\n"
     "assert(tonumber(a[1]) == 13)\n"
     "assert(tonumber(a[2]) == 17)\n");
-  seq4 = ljt_ctype_parse_seq(cts);
-  assert(seq4 == seq3 + 2u);
+  seq5 = ljt_ctype_parse_seq(cts);
+  assert(seq5 == seq4 + 2u);
 
   assert_cconv_init_waits_without_lock(L, cts, tg,
     "local ffi = require('ffi')\n"
@@ -193,8 +221,8 @@ int main(void)
     "  a = 'LJ_M7_CCONV_INIT_A', b = 'LJ_M7_CCONV_INIT_B' })\n"
     "assert(tonumber(p.a) == 11)\n"
     "assert(tonumber(p.b) == 13)\n");
-  seq5 = ljt_ctype_parse_seq(cts);
-  assert(seq5 == seq4 + 2u);
+  seq6 = ljt_ctype_parse_seq(cts);
+  assert(seq6 == seq5 + 2u);
 
   assert_cconv_init_waits_without_lock(L, cts, tg,
     "local ffi = require('ffi')\n"
@@ -204,8 +232,8 @@ int main(void)
     "assert(tonumber(a[0]) == 11)\n"
     "assert(tonumber(a[1]) == 13)\n"
     "assert(tonumber(a[2]) == 17)\n");
-  seq6 = ljt_ctype_parse_seq(cts);
-  assert(seq6 == seq5 + 2u);
+  seq7 = ljt_ctype_parse_seq(cts);
+  assert(seq7 == seq6 + 2u);
 
   assert_cconv_init_waits_without_lock(L, cts, tg,
     "local ffi = require('ffi')\n"
@@ -213,8 +241,8 @@ int main(void)
     "  'LJ_M7_CCONV_INIT_A', 'LJ_M7_CCONV_INIT_B')\n"
     "assert(tonumber(p.a) == 11)\n"
     "assert(tonumber(p.b) == 13)\n");
-  seq7 = ljt_ctype_parse_seq(cts);
-  assert(seq7 == seq6 + 2u);
+  seq8 = ljt_ctype_parse_seq(cts);
+  assert(seq8 == seq7 + 2u);
 
   ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"
@@ -227,7 +255,7 @@ int main(void)
     "assert(tonumber(a[2]) == 17)\n"
     "assert(tonumber(p.b) == 13)\n"
     "assert(ffi.string(s) == 'done')\n");
-  assert(ljt_ctype_parse_seq(cts) == seq7);
+  assert(ljt_ctype_parse_seq(cts) == seq8);
 
   lua_close(L);
   printf("t-ffi-cconv-init-snapshot OK: aggregate init waits on ctype snapshots\n");
