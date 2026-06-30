@@ -11,6 +11,9 @@ Changes:
 - Converted trace-exit snapshot restore and unsink paths to acquired
   IR/snapshot/map metadata, including frame-link map reads and cdata/table
   unsinking.
+- JIT cdata unsinking now resolves restored `CNEW`/`CNEWI` layout through
+  `lj_ctype_info_wait(L, ...)`, so parser-owned ctype metadata waits in native
+  time instead of being raw-read during an active cparser mutation.
 
 Validation:
 - `make -C src -j$(getconf _NPROCESSORS_ONLN)`

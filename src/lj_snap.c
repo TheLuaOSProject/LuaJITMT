@@ -10,6 +10,7 @@
 
 #if LJ_HASJIT
 
+#include "lj_err.h"
 #include "lj_gc.h"
 #include "lj_tab.h"
 #include "lj_state.h"
@@ -863,7 +864,9 @@ static void snap_unsink(lua_State *L, jit_State *J, GCtrace *T, ExitState *ex,
     CTState *cts = ctype_cts(L);
     CTypeID id = (CTypeID)irbase[ir->op1].i;
     CTSize sz;
-    CTInfo info = lj_ctype_info(cts, id, &sz);
+    CTInfo info;
+    if (lj_ctype_info_wait(L, cts, id, &info, &sz, NULL, NULL) <= 0)
+      lj_err_callerv(L, LJ_ERR_FFI_INVSIZE);
     GCcdata *cd = lj_cdata_newx_l(L, cts, id, sz, info);
     setcdataV(L, o, cd);
     if (ir->o == IR_CNEWI) {
