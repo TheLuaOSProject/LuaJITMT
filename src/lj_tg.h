@@ -436,6 +436,17 @@ static LJ_AINLINE void lj_tg_poll_rel(TGState *tg, uint32_t poll)
   la_store32_rel(&tg->poll, poll);
 }
 
+static LJ_AINLINE void lj_tg_poll_futex_wait(TGState *tg, uint32_t poll,
+					     int timeout_ns)
+{
+  la_futex_wait(&tg->poll, poll, timeout_ns);
+}
+
+static LJ_AINLINE void lj_tg_poll_futex_wake(TGState *tg, int n)
+{
+  la_futex_wake(&tg->poll, n);
+}
+
 static LJ_AINLINE uint32_t lj_tg_reqmask_acq(const TGState *tg)
 {
   return la_load32_acq(&tg->reqmask);

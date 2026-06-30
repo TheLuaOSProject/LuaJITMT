@@ -58,11 +58,18 @@ static void safepoint_note_ack_latency(global_State *g)
 
 static void safepoint_wait_consumed_ack(TGState *tg)
 {
+  uint32_t poll;
   /* A native-ack leader clears poll only after it finishes applying actions.
   ** If this thread races with that consumed request, it must not resume the VM
   ** while the leader may still be scanning its Lua stack. */
-  while (lj_tg_poll_acq(tg) != 0)
-    la_cpu_pause();
+  while ((poll = lj_tg_poll_acq(tg)) != 0)
+    lj_tg_poll_futex_wait(tg, poll, -1);
+}
+
+static void safepoint_clear_poll(TGState *tg)
+{
+  lj_tg_poll_rel(tg, 0);
+  lj_tg_poll_futex_wake(tg, 1);
 }
 
 static int safepoint_claim_epoch(TGState *tg, uint64_t epoch)
@@ -131,7 +138,7 @@ retry:
   lj_safepoint_apply_tg(g, tg, actions);
   if (note_latency)
     safepoint_note_ack_latency(g);  /* 13.8: mutator-observed poll latency. */
-  lj_tg_poll_rel(tg, 0);
+  safepoint_clear_poll(tg);
   oldpending = gc2_hs_pending_sub_acqrel(g, 1);  /* 05 section 5.4.2. */
   if (oldpending == 1)
     gc2_hs_pending_futex_wake(g, 1);
@@ -147,7 +154,7 @@ uint32_t lj_safepoint_retire_dead_tg(global_State *g, TGState *tg)
   pending = lj_tg_reqmask_xchg_acqrel(tg, 0);
   if (lj_tg_poll_acq(tg) != 0)
     pending = 1;
-  lj_tg_poll_rel(tg, 0);
+  safepoint_clear_poll(tg);
   if (!pending)
     return 0;
   epoch = gc2_hs_epoch_acq(g);

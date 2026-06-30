@@ -8,9 +8,12 @@ while the leader is still scanning its stack.
 
 The poll word is therefore also the completion gate for the consumed-request
 case: if `lj_safepoint_ack()` finds `reqmask == 0` while `poll != 0`, it waits
-until the poll word is cleared before returning. This is fork-local threading
-behavior only. It does not add a public API and does not change stock LuaJIT
-single-threaded semantics.
+until the poll word is cleared before returning. The wait parks on the poll
+word's futex-style address, and every safepoint poll-clear path wakes that
+address after publishing the release-store to zero. This avoids burning CPU
+inside a consumed native ack while keeping the same completion gate. It is
+fork-local threading behavior only. It does not add a public API and does not
+change stock LuaJIT single-threaded semantics.
 
 The root scanner also treats a remote current thread specially before it walks
 any frame links. Remote frame chains are unstable around VM safepoints and JIT
@@ -25,5 +28,6 @@ request by claiming the current epoch and decrementing the pending count once.
 
 `tests/t-safepoint-handshake.c` exercises the contract directly by setting the
 consumed-request state and clearing the poll word from another pthread after a
-short delay, and by detaching an extra TG with an outstanding request. This is
-intentionally runtime synchronization coverage, not a source-search guard.
+short delay, waking the poll futex address, and by detaching an extra TG with an
+outstanding request. This is intentionally runtime synchronization coverage, not
+a source-search guard.

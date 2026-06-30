@@ -172,7 +172,8 @@ static void *consumed_ack_clear_thread(void *arg)
   delay.tv_nsec = 20000000;
   (void)nanosleep(&delay, NULL);
   la_store32_rel(&ctx->cleared, 1);
-  la_store32_rel(&ctx->tg->poll, 0);
+  lj_tg_poll_rel(ctx->tg, 0);
+  lj_tg_poll_futex_wake(ctx->tg, 1);
   return NULL;
 }
 
@@ -1013,14 +1014,26 @@ int main(void)
     "  end\n"
     "  assert(false, 'expected STOPREQ case ' .. stopreq_case)\n"
     "end\n"
-    "local function expect_sticky_ok(fn, cleanup)\n"
+    "local function expect_sticky_ok(fn, cleanup, label)\n"
     "  stopreq_case = stopreq_case + 1\n"
     "  mark_sticky_stopreq()\n"
     "  local ok, res = pcall(fn)\n"
     "  clear_stopreq()\n"
     "  if ok and cleanup then cleanup(res) end\n"
     "  assert_no_stopreq()\n"
-    "  assert(ok, 'unexpected sticky STOPREQ interruption case ' .. stopreq_case .. ': ' .. tostring(res))\n"
+    "  assert(ok, 'unexpected sticky STOPREQ interruption case ' .. stopreq_case .. case_label(label) .. ': ' .. tostring(res))\n"
+    "end\n"
+    "local function expect_sticky_error(fn, check, label)\n"
+    "  stopreq_case = stopreq_case + 1\n"
+    "  mark_sticky_stopreq()\n"
+    "  local ok, res = pcall(fn)\n"
+    "  clear_stopreq()\n"
+    "  assert_no_stopreq()\n"
+    "  assert(not ok, 'expected sticky error case ' .. stopreq_case .. case_label(label))\n"
+    "  local msg = tostring(res)\n"
+    "  assert(not msg:find('thread interrupted: VM shutdown', 1, true),\n"
+    "         'unexpected sticky STOPREQ interruption case ' .. stopreq_case .. case_label(label) .. ': ' .. msg)\n"
+    "  check(msg)\n"
     "end\n"
     "local function expect_loadlib_stopreq()\n"
     "  local so = os.getenv('LJ_LOADLIB_STOPREQ_SO')\n"
@@ -1036,7 +1049,7 @@ int main(void)
     "  if not so or so == '' then return end\n"
     "  expect_sticky_ok(function()\n"
     "    return assert(package.loadlib(so, 'luaopen_lj_loadlib_stopreq'))\n"
-    "  end)\n"
+    "  end, nil, 'package.loadlib sticky')\n"
     "end\n"
     "local function expect_ldscript_sticky_ok()\n"
     "  if jit.os == 'OSX' then return end\n"
@@ -1048,10 +1061,9 @@ int main(void)
     "  out:write('/* GNU ld script */\\nINPUT(', missing, ')\\n')\n"
     "  out:close()\n"
     "  local ffi = require('ffi')\n"
-    "  expect_sticky_ok(function()\n"
-    "    local ok, res = pcall(function() return ffi.load(script) end)\n"
-    "    if ok then return res end\n"
-    "    local msg = tostring(res)\n"
+    "  expect_sticky_error(function()\n"
+    "    return ffi.load(script)\n"
+    "  end, function(msg)\n"
     "    assert(msg:find('not a mach-o file', 1, true) or\n"
     "           msg:find('invalid ELF header', 1, true) or\n"
     "           msg:find('file too short', 1, true) or\n"
@@ -1059,7 +1071,7 @@ int main(void)
     "           msg:find('No such file', 1, true) or\n"
     "           msg:find('no such file', 1, true) or\n"
     "           msg:find('no such file or directory', 1, true), msg)\n"
-    "  end)\n"
+    "  end, 'ldscript ffi.load sticky')\n"
     "  os.remove(script)\n"
     "end\n"
     "local function expect_loadfile_sticky_ok()\n"
