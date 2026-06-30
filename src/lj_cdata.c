@@ -278,6 +278,56 @@ done:
 
 /* -- C data indexing ----------------------------------------------------- */
 
+static int cdata_ctype_snapshot_shallow(CTState *cts, CTypeID id, CType *out)
+{
+  CTypeID top;
+  CTypeTab *tabh;
+  CType *ct;
+  CTInfo info;
+  GCobj *name;
+  if (id == 0)
+    return 0;
+  top = ctype_top_acq(cts);
+  if (id >= top)
+    return 0;
+  tabh = ctype_tabh_acq(cts);
+  if ((MSize)id >= ctype_tab_sizetab_acq(tabh))
+    return -1;  /* Table/top raced a grow; retry through the wait path. */
+  ct = ctype_tab_slot(tabh, id);
+  info = ctype_info_acq(ct);
+  out->info = info;
+  out->size = ctype_size_acq(ct);
+  out->sib = (CTypeID1)ctype_sib_acq(ct);
+  out->next = (CTypeID1)ctype_next_acq(ct);
+  name = ctype_nameobj_acq(ct);
+  setgcrefp(out->name, name);
+  return !ctype_isabandoned(info);
+}
+
+static int cdata_ctype_snapshot_wait(lua_State *L, CTState *cts,
+				     CTypeID id, CType *out)
+{
+  int ok = cdata_ctype_snapshot_shallow(cts, id, out);
+  if (ok >= 0)
+    return ok;
+  for (;;) {
+    ok = lj_ctype_snapshot(cts, id, out);
+    if (ok >= 0)
+      return ok;
+    lj_ctype_parse_wait(cts, L, ctype_parse_token_acq(cts));
+  }
+}
+
+static int cdata_ctype_refresh(lua_State *L, CTState *cts, CTypeID id,
+			       CType *snap, CTInfo *infop, CTSize *sizep)
+{
+  if (!cdata_ctype_snapshot_wait(L, cts, id, snap))
+    return 0;
+  *infop = ctype_info_acq(snap);
+  *sizep = ctype_size_acq(snap);
+  return 1;
+}
+
 /* Index C data by a TValue. Return CType, pointer and resolved container ID. */
 CType *lj_cdata_index_l(lua_State *L, CTState *cts, GCcdata *cd,
 			cTValue *key, uint8_t **pp, CTInfo *qual,
@@ -293,18 +343,17 @@ CType *lj_cdata_index_l(lua_State *L, CTState *cts, GCcdata *cd,
   p = (uint8_t *)cdataptr(cd);
   id = cd->ctypeid;
   *qual = 0;
-  ct = ctype_get(cts, id);
-  info = ctype_info_acq(ct);
-  size = ctype_size_acq(ct);
+  ct = snap;
+  if (!cdata_ctype_refresh(L, cts, id, snap, &info, &size))
+    lj_err_caller(L, LJ_ERR_FFI_INVSIZE);
 
   /* Resolve reference for cdata object. */
   if (ctype_isref(info)) {
     lj_assertCTS(size == CTSIZE_PTR, "ref is not pointer-sized");
     p = *(uint8_t **)p;
     id = ctype_cid(info);
-    ct = ctype_get(cts, id);
-    info = ctype_info_acq(ct);
-    size = ctype_size_acq(ct);
+    if (!cdata_ctype_refresh(L, cts, id, snap, &info, &size))
+      lj_err_caller(L, LJ_ERR_FFI_INVSIZE);
   }
 
 collect_attrib:
@@ -312,9 +361,8 @@ collect_attrib:
   while (ctype_isattrib(info)) {
     if (ctype_attrib(info) == CTA_QUAL) *qual |= size;
     id = ctype_cid(info);
-    ct = ctype_get(cts, id);
-    info = ctype_info_acq(ct);
-    size = ctype_size_acq(ct);
+    if (!cdata_ctype_refresh(L, cts, id, snap, &info, &size))
+      lj_err_caller(L, LJ_ERR_FFI_INVSIZE);
   }
   /* Interning rejects refs to refs. */
   lj_assertCTS(!ctype_isref(info), "bad ref of ref");
@@ -332,9 +380,6 @@ collect_attrib:
       if (sz == CTSIZE_INVALID) {
 	lj_err_caller(L, LJ_ERR_FFI_INVSIZE);
       }
-      ct = ctype_get(cts, id);
-      info = ctype_info_acq(ct);
-      size = ctype_size_acq(ct);
       lj_assertCTS(ctype_ispointer(info) && ctype_cid(info) == elemid,
 		   "cdata numeric index type changed across ctype wait");
       if (ctype_isptr(info)) {
@@ -348,20 +393,28 @@ collect_attrib:
     }
   } else if (tviscdata(key)) {  /* Integer cdata key. */
     GCcdata *cdk = cdataV(key);
-    CTypeID kid = ctype_rawid(cts, cdk->ctypeid);
-    CType *ctk = ctype_get(cts, kid);
-    CTInfo kinfo = ctype_info_acq(ctk);
-    if (ctype_isenum(kinfo)) {
-      kid = ctype_cid(kinfo);
-      ctk = ctype_get(cts, kid);
-      kinfo = ctype_info_acq(ctk);
+    CTypeID kid = 0;
+    CType ksnap, intsnap;
+    CTInfo kinfo = 0;
+    CTSize ksize = CTSIZE_INVALID;
+    if (lj_ctype_info_wait(L, cts, cdk->ctypeid, &kinfo, &ksize,
+			   &kid, &ksnap) <= 0)
+      goto cdata_key_done;
+    if (ctype_isenum(ctype_info_acq(&ksnap))) {
+      kid = ctype_cid(ctype_info_acq(&ksnap));
+      if (!cdata_ctype_snapshot_wait(L, cts, kid, &ksnap))
+	goto cdata_key_done;
+      kinfo = ctype_info_acq(&ksnap);
     }
     if (ctype_isinteger(kinfo)) {
-      lj_cconv_ct_ct_l(L, cts, ctype_get(cts, CTID_INT_PSZ), CTID_INT_PSZ,
-		       ctk, kid,
+      if (!cdata_ctype_snapshot_wait(L, cts, CTID_INT_PSZ, &intsnap))
+	lj_err_caller(L, LJ_ERR_FFI_INVSIZE);
+      lj_cconv_ct_ct_l(L, cts, &intsnap, CTID_INT_PSZ, &ksnap, kid,
 		       (uint8_t *)&idx, cdataptr(cdk), 0);
       goto integer_key;
     }
+  cdata_key_done:
+    ;
   } else if (tvisstr(key)) {  /* String key. */
     GCstr *name = strV(key);
     if (ctype_isstruct(info)) {
@@ -373,9 +426,8 @@ collect_attrib:
 	*pp = p + ofs;
 	return snap;
       }
-      ct = ctype_get(cts, id);
-      info = ctype_info_acq(ct);
-      size = ctype_size_acq(ct);
+      if (!cdata_ctype_refresh(L, cts, id, snap, &info, &size))
+	lj_err_caller(L, LJ_ERR_FFI_INVSIZE);
     } else if (ctype_iscomplex(info)) {
       if (name->len == 2) {
 	*qual |= CTF_CONST;  /* Complex fields are constant. */
@@ -410,7 +462,7 @@ collect_attrib:
 	if (lj_ctype_info_wait(L, cts, sid, &sinfo, &ssize, &sid, &ssnap) <= 0)
 	  goto ctypeid_done;
       }
-      ct = ctype_get(cts, sid);  /* Resolve metamethods for constructors. */
+      *snap = ssnap;  /* Resolve metamethods for constructors. */
       id = sid;
       info = sinfo;
       size = ssize;
@@ -425,18 +477,17 @@ ctypeid_done:
     CTSize ssize;
     int ok = lj_ctype_info_wait(L, cts, elemid, &sinfo, &ssize, &cid,
 				&ssnap);
-    ct = ctype_get(cts, id);
-    info = ctype_info_acq(ct);
-    size = ctype_size_acq(ct);
+    if (!cdata_ctype_refresh(L, cts, id, snap, &info, &size))
+      lj_err_caller(L, LJ_ERR_FFI_INVSIZE);
     if (ok > 0 && ctype_isstruct(sinfo)) {
       lj_assertCTS(ctype_isptr(info) && ctype_cid(info) == elemid,
 		   "cdata auto-deref type changed");
       p = (uint8_t *)cdata_getptr(p, size);
       *qual |= ((info|sinfo) & CTF_QUAL);
       id = cid;
-      ct = ctype_get(cts, id);
-      info = ctype_info_acq(ct);
-      size = ctype_size_acq(ct);
+      *snap = ssnap;
+      info = sinfo;
+      size = ssize;
       goto collect_attrib;
     }
   }

@@ -41,9 +41,12 @@ Routed the stable path through this helper in:
 
 Follow-up cleanup removed the parser-lock fallback from the interpreted
 numeric cdata indexing and pointer arithmetic readers. `lj_cdata_index_l()`
-refetches `ct/info/size` after any wait before returning the element type.
-`carith_ptr()` refreshes cached `CDArith` `CType *` values before falling
-through to metamethod/error handling after a wait.
+uses a shallow acquire snapshot for the current cdata container, so
+already-published `int *`-style records keep the predefined no-wait path even
+while the parser token is held. Deep child walks still go through the
+sequence-checked field/typeinfo/size helpers, and `carith_ptr()` refreshes
+cached `CDArith` `CType *` values before falling through to
+metamethod/error handling after a wait.
 
 The helper intentionally matches `lj_ctype_size()`: it skips attributes, does
 not support VLA/VLS, and returns `CTSIZE_INVALID` for incomplete/no-size types.

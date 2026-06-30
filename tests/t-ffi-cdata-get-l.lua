@@ -56,6 +56,12 @@ for tid = 1, nthreads do
       local arr = obj.arr
       assert(arr[0] == seed + 1)
       assert(arr[1] == seed + 2)
+      assert(arr[ffi.new("int", 1)] == seed + 2)
+
+      local pobj = ffi.new("lj_m7_get_outer_t[1]")
+      pobj[0].inner.x = seed + 3
+      local ptr = ffi.cast("lj_m7_get_outer_t *", pobj)
+      assert(ptr.inner.x == seed + 3)
 
       assert(obj.b == ((i % 2) == 0))
       assert(obj.bf == ((i % 2) == 1))
