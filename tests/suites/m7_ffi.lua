@@ -77,6 +77,33 @@ die "ccall_struct_arg reads d ctype info after wait-capable conversion\n"
                         { stderr = true })
 end
 
+local function assert_cconv_ct_tv_snapshots_destination(t)
+  local script = [[
+my $path = shift @ARGV;
+open my $fh, "<", $path or die "$path: $!\n";
+local $/;
+my $src = <$fh>;
+$src =~ /(void lj_cconv_ct_tv_l\(.*?\n})/s
+  or die "missing lj_cconv_ct_tv_l body\n";
+my $body = $1;
+my $copy = index($body, "cconv_ctype_copy(&dsnap, d);");
+my $assign = index($body, "d = &dsnap;");
+die "missing destination snapshot copy in lj_cconv_ct_tv_l\n"
+  if $copy < 0 || $assign < 0 || $copy > $assign;
+my $first_wait = length($body);
+for my $needle ("cconv_ctype_snapshot_wait", "cconv_rawid_wait",
+                "lj_ctype_enumconst_wait") {
+  my $idx = index($body, $needle);
+  $first_wait = $idx if $idx >= 0 && $idx < $first_wait;
+}
+die "destination snapshot is after a wait-capable ctype lookup\n"
+  if $assign > $first_wait;
+]]
+  utils.capture_command("perl -e " .. shell_quote(script) .. " " ..
+                        shell_quote(t:path("src", "lj_cconv.c")),
+                        { stderr = true })
+end
+
 return function(add)
   add({
     name = "m7_ffi_ccall_native",
@@ -340,6 +367,7 @@ assert(cl.lj_clib_ldscript_value() == 42)
     description = "FFI ctype metadata snapshot behavior",
     run = function(t)
       clean_build(t)
+      assert_cconv_ct_tv_snapshots_destination(t)
       build_and_run_c(t, t:tmp("lj_t-ffi-typeinfo-snapshot"),
                       "t-ffi-typeinfo-snapshot.c", { timeout = "20s" })
       build_and_run_c(t, t:tmp("lj_t-ffi-tonumber-snapshot"),

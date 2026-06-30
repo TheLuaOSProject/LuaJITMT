@@ -60,21 +60,24 @@ LJ_NORET static void cconv_err_initov_l(lua_State *L, CTState *cts,
   lj_err_callerv(L, LJ_ERR_FFI_INITOV, dst);
 }
 
+static void cconv_ctype_copy(CType *out, CType *ct)
+{
+  GCobj *name;
+  out->info = ctype_info_acq(ct);
+  out->size = ctype_size_acq(ct);
+  out->sib = (CTypeID1)ctype_sib_acq(ct);
+  out->next = (CTypeID1)ctype_next_acq(ct);
+  name = ctype_nameobj_acq(ct);
+  setgcrefp(out->name, name);
+}
+
 static int cconv_ctype_snapshot_wait(lua_State *L, CTState *cts,
 				     CTypeID id, CType *out)
 {
   if (id <= CTID_CTYPEID) {
-    CType *ct;
-    GCobj *name;
     if (id == 0)
       return 0;
-    ct = ctype_get(cts, id);
-    out->info = ctype_info_acq(ct);
-    out->size = ctype_size_acq(ct);
-    out->sib = (CTypeID1)ctype_sib_acq(ct);
-    out->next = (CTypeID1)ctype_next_acq(ct);
-    name = ctype_nameobj_acq(ct);
-    setgcrefp(out->name, name);
+    cconv_ctype_copy(out, ctype_get(cts, id));
     return !ctype_isabandoned(ctype_info_acq(out));
   }
   for (;;) {
@@ -678,11 +681,15 @@ void lj_cconv_ct_tv_l(lua_State *L, CTState *cts, CType *d,
   CTypeID sid = CTID_P_VOID;
   CType *s;
   CType dsnap, ssnap;
-  CTInfo dinfo = ctype_info_acq(d);
-  CTSize dsize = ctype_size_acq(d);
+  CTInfo dinfo;
+  CTSize dsize;
   void *tmpptr;
   CTSize tmpenum;
   uint8_t tmpbool, *sp = (uint8_t *)&tmpptr;
+  cconv_ctype_copy(&dsnap, d);
+  d = &dsnap;
+  dinfo = ctype_info_acq(d);
+  dsize = ctype_size_acq(d);
   if (LJ_LIKELY(tvisint(o))) {
     sp = (uint8_t *)&o->i;
     sid = CTID_INT32;
