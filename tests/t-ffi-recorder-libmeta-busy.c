@@ -76,7 +76,11 @@ int main(void)
     "{ 3, 6, 9, 12 })\n"
     "lj_m7_recmeta_arith_ptr = ffi.cast('lj_m7_recmeta_arith_i *', "
     "lj_m7_recmeta_arith_arr)\n"
-    "lj_m7_recmeta_abs = ffi.C.abs\n");
+    "lj_m7_recmeta_abs = ffi.C.abs\n"
+    "lj_m7_recmeta_bytes = ffi.new('uint8_t[64]')\n"
+    "lj_m7_recmeta_pvoid = ffi.cast('void *', lj_m7_recmeta_bytes)\n"
+    "lj_m7_recmeta_pcvoid = ffi.cast('const void *', lj_m7_recmeta_bytes)\n"
+    "lj_m7_recmeta_pcchar = ffi.cast('const char *', lj_m7_recmeta_bytes)\n");
 
   cts = ctype_ctsG(G(L));
   assert(cts != NULL);
@@ -142,6 +146,49 @@ int main(void)
     "  return tostring(x)\n"
     "end\n"
     "for i = 1, 3 do assert(run(8) == '0ULL') end\n"
+    "jit.attach(lj_m7_trace_parse_token)\n"
+    "assert(lj_m7_trace_parse_token_start_count() >= 1)\n"
+    "assert(lj_m7_trace_parse_token_ctbusy_count() == 0)\n");
+
+  assert_trace_avoids_ctbusy(L, cts,
+    "local ffi = require('ffi')\n"
+    "local dst = lj_m7_recmeta_pvoid\n"
+    "local pcvoid = lj_m7_recmeta_pcvoid\n"
+    "local pcchar = lj_m7_recmeta_pcchar\n"
+    "jit.attach(lj_m7_trace_parse_token, 'trace')\n"
+    "jit.flush()\n"
+    "jit.on()\n"
+    "jit.opt.start('hotloop=1', 'hotexit=1')\n"
+    "local function run(n)\n"
+    "  local sum = 0\n"
+    "  for i = 1, n do\n"
+    "    ffi.copy(dst, 'abcd', 5)\n"
+    "    sum = sum + #ffi.string(pcvoid, 4) + #ffi.string(pcchar)\n"
+    "  end\n"
+    "  return sum\n"
+    "end\n"
+    "for i = 1, 3 do assert(run(8) == 64) end\n"
+    "jit.attach(lj_m7_trace_parse_token)\n"
+    "assert(lj_m7_trace_parse_token_start_count() >= 1)\n"
+    "assert(lj_m7_trace_parse_token_ctbusy_count() == 0)\n");
+
+  assert_trace_avoids_ctbusy(L, cts,
+    "local ffi = require('ffi')\n"
+    "local dst = lj_m7_recmeta_pvoid\n"
+    "local pcvoid = lj_m7_recmeta_pcvoid\n"
+    "jit.attach(lj_m7_trace_parse_token, 'trace')\n"
+    "jit.flush()\n"
+    "jit.on()\n"
+    "jit.opt.start('hotloop=1', 'hotexit=1')\n"
+    "local function run(n)\n"
+    "  local sum = 0\n"
+    "  for i = 1, n do\n"
+    "    ffi.fill(dst, 16, i)\n"
+    "    sum = sum + ffi.string(pcvoid, 1):byte()\n"
+    "  end\n"
+    "  return sum\n"
+    "end\n"
+    "for i = 1, 3 do assert(run(8) == 36) end\n"
     "jit.attach(lj_m7_trace_parse_token)\n"
     "assert(lj_m7_trace_parse_token_start_count() >= 1)\n"
     "assert(lj_m7_trace_parse_token_ctbusy_count() == 0)\n");

@@ -1146,11 +1146,19 @@ static TRef crec_ct_tv(jit_State *J, CType *d, TRef dp, TRef sp, cTValue *sval)
       sp = emitir(IRT(IR_XLOAD, t), sp, 0);  /* Load number value. */
     goto doconv;
   }
-  s = crec_ctype_snapshot(J, cts, sid, &scopy);
+  s = crec_ctype_rawid(J, cts, sid, NULL, &scopy);
 doconv:
   if (ctype_isenum(dinfo))
     d = crec_ctype_snapshot(J, cts, ctype_cid(dinfo), &dcopy);
   return crec_ct_ct(J, d, s, dp, sp, svisnz);
+}
+
+static TRef crec_ct_tv_id(jit_State *J, CTState *cts, CTypeID did,
+			  TRef dp, TRef sp, cTValue *sval)
+{
+  CType snap;
+  CType *d = crec_ctype_rawid(J, cts, did, NULL, &snap);
+  return crec_ct_tv(J, d, dp, sp, sval);
 }
 
 /* -- C data metamethods -------------------------------------------------- */
@@ -1551,8 +1559,8 @@ static void crec_alloc(jit_State *J, RecordFFData *rd, CTypeID id)
       CTSize sz0, sz1;
       if (!J->base[1] || J->base[2])
 	lj_trace_err(J, LJ_TRERR_NYICONV);  /* NYI: init VLA/VLS. */
-      trsz = crec_ct_tv(J, ctype_get(cts, CTID_INT32), 0,
-			J->base[1], &rd->argv[1]);
+      trsz = crec_ct_tv_id(J, cts, CTID_INT32, 0, J->base[1],
+			   &rd->argv[1]);
       sz0 = lj_ctype_vlsize(cts, d, 0);
       sz1 = lj_ctype_vlsize(cts, d, 1);
       trsz = emitir(IRTGI(IR_MULOV), trsz, lj_ir_kint(J, (int32_t)(sz1-sz0)));
@@ -2323,7 +2331,7 @@ void LJ_FASTCALL recff_clib_index(jit_State *J, RecordFFData *rd)
 
 static TRef crec_toint(jit_State *J, CTState *cts, TRef sp, TValue *sval)
 {
-  return crec_ct_tv(J, ctype_get(cts, CTID_INT32), 0, sp, sval);
+  return crec_ct_tv_id(J, cts, CTID_INT32, 0, sp, sval);
 }
 
 void LJ_FASTCALL recff_ffi_new(jit_State *J, RecordFFData *rd)
@@ -2347,9 +2355,9 @@ void LJ_FASTCALL recff_ffi_string(jit_State *J, RecordFFData *rd)
     TRef trlen = J->base[1];
     if (!tref_isnil(trlen)) {
       trlen = crec_toint(J, cts, trlen, &rd->argv[1]);
-      tr = crec_ct_tv(J, ctype_get(cts, CTID_P_CVOID), 0, tr, &rd->argv[0]);
+      tr = crec_ct_tv_id(J, cts, CTID_P_CVOID, 0, tr, &rd->argv[0]);
     } else {
-      tr = crec_ct_tv(J, ctype_get(cts, CTID_P_CCHAR), 0, tr, &rd->argv[0]);
+      tr = crec_ct_tv_id(J, cts, CTID_P_CCHAR, 0, tr, &rd->argv[0]);
       trlen = lj_ir_call(J, IRCALL_strlen, tr);
     }
     J->base[0] = emitir(IRT(IR_XSNEW, IRT_STR), tr, trlen);
@@ -2361,8 +2369,8 @@ void LJ_FASTCALL recff_ffi_copy(jit_State *J, RecordFFData *rd)
   CTState *cts = ctype_ctsG(J2G(J));
   TRef trdst = J->base[0], trsrc = J->base[1], trlen = J->base[2];
   if (trdst && trsrc && (trlen || tref_isstr(trsrc))) {
-    trdst = crec_ct_tv(J, ctype_get(cts, CTID_P_VOID), 0, trdst, &rd->argv[0]);
-    trsrc = crec_ct_tv(J, ctype_get(cts, CTID_P_CVOID), 0, trsrc, &rd->argv[1]);
+    trdst = crec_ct_tv_id(J, cts, CTID_P_VOID, 0, trdst, &rd->argv[0]);
+    trsrc = crec_ct_tv_id(J, cts, CTID_P_CVOID, 0, trsrc, &rd->argv[1]);
     if (trlen) {
       trlen = crec_toint(J, cts, trlen, &rd->argv[2]);
     } else {
@@ -2391,7 +2399,7 @@ void LJ_FASTCALL recff_ffi_fill(jit_State *J, RecordFFData *rd)
       }
       step = (1u << ctype_align(info));
     }
-    trdst = crec_ct_tv(J, ctype_get(cts, CTID_P_VOID), 0, trdst, &rd->argv[0]);
+    trdst = crec_ct_tv_id(J, cts, CTID_P_VOID, 0, trdst, &rd->argv[0]);
     trlen = crec_toint(J, cts, trlen, &rd->argv[1]);
     if (trfill)
       trfill = crec_toint(J, cts, trfill, &rd->argv[2]);
@@ -2537,11 +2545,18 @@ static TRef crec_bit64_arg(jit_State *J, CType *d, TRef sp, TValue *sval)
   return crec_ct_tv(J, d, 0, sp, sval);
 }
 
+static TRef crec_bit64_argid(jit_State *J, CTState *cts, CTypeID did,
+			     TRef sp, TValue *sval)
+{
+  CType snap;
+  CType *d = crec_ctype_rawid(J, cts, did, NULL, &snap);
+  return crec_bit64_arg(J, d, sp, sval);
+}
+
 void LJ_FASTCALL recff_bit64_tobit(jit_State *J, RecordFFData *rd)
 {
   CTState *cts = ctype_ctsG(J2G(J));
-  TRef tr = crec_bit64_arg(J, ctype_get(cts, CTID_INT64),
-			   J->base[0], &rd->argv[0]);
+  TRef tr = crec_bit64_argid(J, cts, CTID_INT64, J->base[0], &rd->argv[0]);
   if (!tref_isinteger(tr))
     tr = emitconv(tr, IRT_INT, tref_type(tr), 0);
   J->base[0] = tr;
@@ -2552,7 +2567,7 @@ int LJ_FASTCALL recff_bit64_unary(jit_State *J, RecordFFData *rd)
   CTState *cts = ctype_ctsG(J2G(J));
   CTypeID id = crec_bit64_type(J, cts, &rd->argv[0]);
   if (id) {
-    TRef tr = crec_bit64_arg(J, ctype_get(cts, id), J->base[0], &rd->argv[0]);
+    TRef tr = crec_bit64_argid(J, cts, id, J->base[0], &rd->argv[0]);
     tr = emitir(IRT(rd->data, id-CTID_INT64+IRT_I64), tr, 0);
     J->base[0] = emitir(IRTG(IR_CNEWI, IRT_CDATA), lj_ir_kint(J, id), tr);
     return 1;
@@ -2570,7 +2585,7 @@ int LJ_FASTCALL recff_bit64_nary(jit_State *J, RecordFFData *rd)
     if (id < aid) id = aid;  /* Determine highest type rank of all arguments. */
   }
   if (id) {
-    CType *ct = ctype_get(cts, id);
+    CType snap, *ct = crec_ctype_rawid(J, cts, id, NULL, &snap);
     uint32_t ot = IRT(rd->data, id-CTID_INT64+IRT_I64);
     TRef tr = crec_bit64_arg(J, ct, J->base[0], &rd->argv[0]);
     for (i = 1; J->base[i] != 0; i++) {
@@ -2589,15 +2604,14 @@ int LJ_FASTCALL recff_bit64_shift(jit_State *J, RecordFFData *rd)
   CTypeID id;
   TRef tsh = 0;
   if (J->base[0] && tref_iscdata(J->base[1])) {
-    tsh = crec_bit64_arg(J, ctype_get(cts, CTID_INT64),
-			 J->base[1], &rd->argv[1]);
+    tsh = crec_bit64_argid(J, cts, CTID_INT64, J->base[1], &rd->argv[1]);
     if (LJ_32 && !tref_isinteger(tsh))
       tsh = emitconv(tsh, IRT_INT, tref_type(tsh), 0);
     J->base[1] = tsh;
   }
   id = crec_bit64_type(J, cts, &rd->argv[0]);
   if (id) {
-    TRef tr = crec_bit64_arg(J, ctype_get(cts, id), J->base[0], &rd->argv[0]);
+    TRef tr = crec_bit64_argid(J, cts, id, J->base[0], &rd->argv[0]);
     uint32_t op = rd->data;
     IRType t;
     if (!tsh) tsh = lj_opt_narrow_tobit(J, J->base[1]);
@@ -2629,7 +2643,7 @@ TRef recff_bit64_tohex(jit_State *J, RecordFFData *rd, TRef hdr)
     CTypeID id2 = 0;
     n = (int32_t)lj_carith_check64(J->L, 2, &id2);
     if (id2)
-      trsf = crec_bit64_arg(J, ctype_get(cts, CTID_INT32), trsf, &rd->argv[1]);
+      trsf = crec_bit64_argid(J, cts, CTID_INT32, trsf, &rd->argv[1]);
     else
       trsf = lj_opt_narrow_tobit(J, trsf);
     emitir(IRTGI(IR_EQ), trsf, lj_ir_kint(J, n));  /* Specialize to n. */
@@ -2640,7 +2654,7 @@ TRef recff_bit64_tohex(jit_State *J, RecordFFData *rd, TRef hdr)
   if ((uint32_t)n > 254) n = 254;
   sf |= ((SFormat)((n+1)&255) << STRFMT_SH_PREC);
   if (id) {
-    tr = crec_bit64_arg(J, ctype_get(cts, id), J->base[0], &rd->argv[0]);
+    tr = crec_bit64_argid(J, cts, id, J->base[0], &rd->argv[0]);
     if (n < 16)
       tr = emitir(IRT(IR_BAND, IRT_U64), tr,
 		  lj_ir_kint64(J, ((uint64_t)1 << 4*n)-1));
@@ -2660,8 +2674,8 @@ void LJ_FASTCALL lj_crecord_tonumber(jit_State *J, RecordFFData *rd)
 {
   CTState *cts = ctype_ctsG(J2G(J));
   CType snap, child;
-  CType *d, *ct = crec_ctype_rawref(J, cts, cdataV(&rd->argv[0])->ctypeid,
-				    &snap);
+  CType *ct = crec_ctype_rawref(J, cts, cdataV(&rd->argv[0])->ctypeid,
+				&snap);
   CTInfo info = ctype_info_acq(ct);
   if (ctype_isenum(info)) {
     ct = crec_ctype_snapshot(J, cts, ctype_cid(info), &child);
@@ -2669,12 +2683,13 @@ void LJ_FASTCALL lj_crecord_tonumber(jit_State *J, RecordFFData *rd)
   }
   if (ctype_isnum(info) || ctype_iscomplex(info)) {
     CTSize size = ctype_size_acq(ct);
+    CTypeID did;
     if (ctype_isinteger_or_bool(info) && size <= 4 &&
 	!(size == 4 && (info & CTF_UNSIGNED)))
-      d = ctype_get(cts, CTID_INT32);
+      did = CTID_INT32;
     else
-      d = ctype_get(cts, CTID_DOUBLE);
-    J->base[0] = crec_ct_tv(J, d, 0, J->base[0], &rd->argv[0]);
+      did = CTID_DOUBLE;
+    J->base[0] = crec_ct_tv_id(J, cts, did, 0, J->base[0], &rd->argv[0]);
   } else {
     /* Specialize to the ctype that couldn't be converted. */
     argv2cdata(J, J->base[0], &rd->argv[0]);
@@ -2697,7 +2712,7 @@ TRef lj_crecord_topcvoid(jit_State *J, TRef tr, cTValue *o)
 {
   CTState *cts = ctype_ctsG(J2G(J));
   if (!tref_iscdata(tr)) lj_trace_err(J, LJ_TRERR_BADTYPE);
-  return crec_ct_tv(J, ctype_get(cts, CTID_P_CVOID), 0, tr, o);
+  return crec_ct_tv_id(J, cts, CTID_P_CVOID, 0, tr, o);
 }
 
 TRef lj_crecord_topuint8(jit_State *J, TRef tr)
