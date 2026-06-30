@@ -73,13 +73,44 @@ static void assert_tonumber_waits_without_lock(lua_State *L, CTState *cts,
 
 static void assert_predefined_tonumber_avoids_wait(lua_State *L, CTState *cts)
 {
-  uint32_t seq0 = ljt_ctype_parse_seq(cts);
-  uint32_t release_seq = ljt_ctype_hold_parse_token(cts);
+  uint32_t seq0;
+  uint32_t release_seq;
+
+  ljt_lua_dostring(L,
+    "local ffi = require('ffi')\n"
+    "local buffer = require('string.buffer')\n"
+    "lj_m7_tonumber_predef_bytes = ffi.new('uint8_t[64]')\n"
+    "lj_m7_tonumber_predef_pvoid = "
+    "ffi.cast('void *', lj_m7_tonumber_predef_bytes)\n"
+    "lj_m7_tonumber_predef_pcvoid = "
+    "ffi.cast('const void *', lj_m7_tonumber_predef_bytes)\n"
+    "lj_m7_tonumber_predef_pcchar = "
+    "ffi.cast('const char *', lj_m7_tonumber_predef_bytes)\n"
+    "lj_m7_tonumber_predef_buffer = buffer.new()\n");
+
+  seq0 = ljt_ctype_parse_seq(cts);
+  release_seq = ljt_ctype_hold_parse_token(cts);
 
   ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"
     "assert(tonumber(ffi.new('int', 33)) == 33)\n"
-    "assert(tonumber(ffi.cast('int', 23.75)) == 23)\n");
+    "assert(tonumber(ffi.cast('int', 23.75)) == 23)\n"
+    "local pvoid = lj_m7_tonumber_predef_pvoid\n"
+    "local pcvoid = lj_m7_tonumber_predef_pcvoid\n"
+    "local pcchar = lj_m7_tonumber_predef_pcchar\n"
+    "ffi.copy(pvoid, 'abcd', 5)\n"
+    "assert(ffi.string(pcvoid, 4) == 'abcd')\n"
+    "assert(ffi.string(pcchar) == 'abcd')\n"
+    "ffi.fill(pvoid, 4, 65)\n"
+    "assert(ffi.string(pcvoid, 4) == 'AAAA')\n"
+    "local b = lj_m7_tonumber_predef_buffer\n"
+    "b:reset()\n"
+    "b:set(pvoid, 4)\n"
+    "assert(tostring(b) == 'AAAA')\n"
+    "ffi.copy(pvoid, 'WXYZ', 5)\n"
+    "b:reset()\n"
+    "b:putcdata(pvoid, 4)\n"
+    "assert(tostring(b) == 'WXYZ')\n");
 
   ljt_ctype_release_parse_token(cts, release_seq);
   assert(ljt_ctype_parse_seq(cts) == seq0 + 2u);

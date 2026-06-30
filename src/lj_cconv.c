@@ -440,6 +440,15 @@ copyval:  /* Copy value. */
   }
 }
 
+static void cconv_ct_ct_id_l(lua_State *L, CTState *cts, CTypeID did,
+			     CType *s, CTypeID sid, uint8_t *dp,
+			     uint8_t *sp, CTInfo flags)
+{
+  CType dsnap;
+  CTypeID rid = cconv_rawid_wait(L, cts, did, did, &dsnap, NULL, NULL);
+  lj_cconv_ct_ct_l(L, cts, &dsnap, rid, s, sid, dp, sp, flags);
+}
+
 /* -- C type to TValue conversion ----------------------------------------- */
 
 /* Convert C type to TValue. Caveat: expects to get the raw CType! */
@@ -453,17 +462,14 @@ int lj_cconv_tv_ct_l(lua_State *L, CTState *cts, CType *s, CTypeID sid,
       if (ctype_isinteger(sinfo) && ssize > 4) goto copyval;
       if (LJ_DUALNUM && ctype_isinteger(sinfo)) {
 	int32_t i;
-	lj_cconv_ct_ct_l(L, cts, ctype_get(cts, CTID_INT32), CTID_INT32,
-			 s, sid,
-			 (uint8_t *)&i, sp, 0);
+	cconv_ct_ct_id_l(L, cts, CTID_INT32, s, sid, (uint8_t *)&i, sp, 0);
 	if ((sinfo & CTF_UNSIGNED) && i < 0)
 	  setnumV(o, (lua_Number)(uint32_t)i);
 	else
 	  setintV(o, i);
       } else {
-	lj_cconv_ct_ct_l(L, cts, ctype_get(cts, CTID_DOUBLE), CTID_DOUBLE,
-			 s, sid,
-			 (uint8_t *)&o->n, sp, 0);
+	cconv_ct_ct_id_l(L, cts, CTID_DOUBLE, s, sid, (uint8_t *)&o->n,
+			 sp, 0);
 	/* Numbers are NOT canonicalized here! Beware of uninitialized data. */
 	lj_assertCTS(tvisnum(o), "non-canonical NaN passed");
       }
@@ -784,6 +790,14 @@ doconv:
   lj_cconv_ct_ct_l(L, cts, d, did, s, sid, dp, sp, flags);
 }
 
+void lj_cconv_ct_tv_id_l(lua_State *L, CTState *cts, CTypeID did,
+			 uint8_t *dp, TValue *o, CTInfo flags)
+{
+  CType dsnap;
+  CTypeID rid = cconv_rawid_wait(L, cts, did, did, &dsnap, NULL, NULL);
+  lj_cconv_ct_tv_l(L, cts, &dsnap, rid, dp, o, flags);
+}
+
 /* Convert TValue to bitfield. */
 void lj_cconv_bf_tv_l(lua_State *L, CTState *cts, CType *d, uint8_t *dp,
 		      TValue *o)
@@ -795,12 +809,11 @@ void lj_cconv_bf_tv_l(lua_State *L, CTState *cts, CType *d, uint8_t *dp,
   if ((info & CTF_BOOL)) {
     uint8_t tmpbool;
     lj_assertCTS(ctype_bitbsz(info) == 1, "bad bool bitfield size");
-    lj_cconv_ct_tv_l(L, cts, ctype_get(cts, CTID_BOOL), CTID_BOOL,
-		     &tmpbool, o, 0);
+    lj_cconv_ct_tv_id_l(L, cts, CTID_BOOL, &tmpbool, o, 0);
     val = tmpbool;
   } else {
     CTypeID did = (info & CTF_UNSIGNED) ? CTID_UINT32 : CTID_INT32;
-    lj_cconv_ct_tv_l(L, cts, ctype_get(cts, did), did, (uint8_t *)&val, o, 0);
+    lj_cconv_ct_tv_id_l(L, cts, did, (uint8_t *)&val, o, 0);
   }
   pos = ctype_bitpos(info);
   bsz = ctype_bitbsz(info);
