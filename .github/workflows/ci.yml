@@ -94,6 +94,7 @@ jobs:
           fetch-depth: 0
       - name: Build, install, run, and archive
         run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           tools/release/build_artifact.sh \
             windows-x86_64-ucrt "$CI_ARTIFACT_TAG" "$PWD/release-artifacts/$CI_ARTIFACT_TAG"
       - uses: actions/upload-artifact@v4
