@@ -13,9 +13,21 @@ artifacts.
 
 ## Source-search tests and CI
 
-No active forbidden source-search-only tests were found under `tools/ci`,
-`tools/test.lua`, `tests/suites`, `tests/lib`, top-level `tests/*.lua`, or
-top-level `tests/*.c`.
+2026-06-30 CI update: stock Lua/LuaJIT semantics are now a normal GitHub
+Actions gate, not only a local or release-time convention. `.github/workflows/ci.yml`
+runs the vendored stock LuaJIT suite in the default and no-JIT profiles via
+`m0_matrix`, then runs the public C API, bytecode dump compatibility, and
+stock-upvalue sentinel cases (`m5_stock_api_surface`, `m5_bcdump_compat`, and
+`m5_cell_ops`) on push, pull request, and manual dispatch. Rolling release jobs
+also set `LJ_RELEASE_RUN_STOCK=1`, so Linux, macOS, and Windows release
+binaries run stock-suite checks during release packaging.
+
+At the time of the original 2026-06-29 audit, no active forbidden
+source-search-only tests were found under `tools/ci`, `tools/test.lua`,
+`tests/suites`, `tests/lib`, top-level `tests/*.lua`, or top-level `tests/*.c`.
+Later narrow source-text checks must not be treated as stock compatibility
+coverage; stock parity is enforced by runtime behavior tests, vendored stock
+tests, C fixtures, bytecode/generator output checks, and release binary checks.
 
 Allowed remaining searches are over generated artifacts or runtime output: JIT
 dumps, bytecode listings, generated mcode/ASM dumps, captured stdout/stderr,
