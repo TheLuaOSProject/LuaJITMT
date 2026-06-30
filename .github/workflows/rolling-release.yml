@@ -24,7 +24,7 @@ jobs:
     env:
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
       SOURCE_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
-      LUA: lua5.4
+      LUA: luajit
     steps:
       - name: Checkout release automation
         uses: actions/checkout@v4
@@ -42,7 +42,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            build-essential lua5.4 xz-utils
+            build-essential luajit xz-utils
       - name: Build, install, and test Linux binary
         run: |
           LJ_RELEASE_ROOT="$PWD/source" \
@@ -61,7 +61,7 @@ jobs:
     env:
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
       SOURCE_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
-      LUA: ${{ github.workspace }}/source/src/luajit
+      LUA: luajit
       MACOSX_DEPLOYMENT_TARGET: "13.0"
     steps:
       - name: Checkout release automation
@@ -78,6 +78,9 @@ jobs:
           fetch-depth: 0
       - name: Install packaging tools
         run: |
+          if ! command -v luajit >/dev/null 2>&1; then
+            brew install luajit
+          fi
           if ! command -v xz >/dev/null 2>&1; then
             brew install xz
           fi
@@ -100,13 +103,13 @@ jobs:
     env:
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
       SOURCE_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
-      LUA: lua5.1
+      LUA: luajit
     steps:
       - name: Install build tools
         run: |
           apt-get update
           apt-get install -y --no-install-recommends \
-            build-essential ca-certificates file git lua5.1 make unzip xz-utils zip \
+            build-essential ca-certificates file git luajit make unzip xz-utils zip \
             binutils-mingw-w64-ucrt64 gcc-mingw-w64-ucrt64 mingw-w64 \
             wine wine64
       - name: Checkout release automation

@@ -15,12 +15,14 @@ artifacts.
 
 2026-06-30 CI update: stock Lua/LuaJIT semantics are now a normal GitHub
 Actions gate, not only a local or release-time convention. `.github/workflows/ci.yml`
-runs the vendored stock LuaJIT suite in the default and no-JIT profiles via
-`m0_matrix`, then runs the public C API, bytecode dump compatibility, and
-stock-upvalue sentinel cases (`m5_stock_api_surface`, `m5_bcdump_compat`, and
-`m5_cell_ops`) on push, pull request, and manual dispatch. Rolling release jobs
-also set `LJ_RELEASE_RUN_STOCK=1`, so Linux, macOS, and Windows release
-binaries run stock-suite checks during release packaging.
+runs under an installed stock LuaJIT harness and executes the vendored stock
+LuaJIT suite in the default and no-JIT profiles via `m0_matrix`, then runs the
+public C API, bytecode dump compatibility, and stock-upvalue sentinel cases
+(`m5_stock_api_surface`, `m5_bcdump_compat`, and `m5_cell_ops`) on push, pull
+request, and manual dispatch. Rolling release jobs also set
+`LJ_RELEASE_RUN_STOCK=1` and install stock LuaJIT as the harness, so Linux,
+macOS, and Windows release binaries run stock-suite checks during release
+packaging.
 
 At the time of the original 2026-06-29 audit, no active forbidden
 source-search-only tests were found under `tools/ci`, `tools/test.lua`,

@@ -1,19 +1,24 @@
+local function suite(name)
+  local mod = require(name)
+  return mod
+end
+
 local suites = {
-  require("m0"),
-  require("m2_arena"),
-  require("m3_gc"),
-  require("m4_threading"),
-  require("m5_fixtures"),
-  require("m5_aggregate"),
-  require("m5_publication"),
-  require("m5_tables"),
-  require("m5_runtime"),
-  require("m5_x64"),
-  require("m6_jit"),
-  require("m7_ffi"),
-  require("m8_weak"),
-  require("m9_m10_gc"),
-  require("release")
+  suite("m0"),
+  suite("m2_arena"),
+  suite("m3_gc"),
+  suite("m4_threading"),
+  suite("m5_fixtures"),
+  suite("m5_aggregate"),
+  suite("m5_publication"),
+  suite("m5_tables"),
+  suite("m5_runtime"),
+  suite("m5_x64"),
+  suite("m6_jit"),
+  suite("m7_ffi"),
+  suite("m8_weak"),
+  suite("m9_m10_gc"),
+  suite("release")
 }
 
 local tests = {}

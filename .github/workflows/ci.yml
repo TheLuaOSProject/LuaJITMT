@@ -19,14 +19,14 @@ jobs:
     name: Stock Lua/LuaJIT semantics
     runs-on: ubuntu-24.04
     env:
-      LUA: lua5.4
+      LUA: luajit
     steps:
       - uses: actions/checkout@v4
       - name: Install build tools
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            build-essential lua5.4
+            build-essential luajit
       - name: Run stock suite matrix
         run: |
           LJ_TEST_DISABLE_BUILD_CACHE=1 \
