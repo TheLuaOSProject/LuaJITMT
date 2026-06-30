@@ -15,7 +15,7 @@ permissions:
   contents: write
 
 env:
-  LJ_RELEASE_RUN_STOCK: "1"
+  LJ_RELEASE_RUN_STOCK: "0"
 
 jobs:
   linux:
