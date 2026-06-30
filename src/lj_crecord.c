@@ -364,6 +364,24 @@ static CType *crec_ctype_rawref(jit_State *J, CTState *cts, CTypeID id,
   return crec_ctype_rawrefid(J, cts, id, NULL, out);
 }
 
+static int crec_cconv_multi_init(jit_State *J, CTState *cts, CTypeID did,
+				 CType *d, TValue *o)
+{
+  CTInfo dinfo = ctype_info_acq(d);
+  if (!(ctype_isrefarray(dinfo) || ctype_isstruct(dinfo)))
+    return 0;  /* Destination is not an aggregate. */
+  if (tvistab(o) || (tvisstr(o) && !ctype_isstruct(dinfo)))
+    return 0;  /* Initializer is not a value. */
+  if (tviscdata(o)) {
+    CType snap;
+    CTypeID sid;
+    crec_ctype_rawrefid(J, cts, cdataV(o)->ctypeid, &sid, &snap);
+    if (sid == did)
+      return 0;  /* Source and destination are identical aggregates. */
+  }
+  return 1;  /* Otherwise the initializer is a value. */
+}
+
 static CType *crec_ctype_rawchild(jit_State *J, CTState *cts, CType *ct,
 				  CType *out)
 {
@@ -1489,10 +1507,10 @@ static void crec_alloc(jit_State *J, RecordFFData *rd, CTypeID id)
       if (align < CT_MEMALIGN) align = CT_MEMALIGN;
       crec_fill(J, dp, trsz, lj_ir_kint(J, 0), (1u << align));
     } else if (J->base[1] && !J->base[2] &&
-		!lj_cconv_multi_init(cts, rid, d, &rd->argv[1])) {
+	       !crec_cconv_multi_init(J, cts, rid, d, &rd->argv[1])) {
       goto single_init;
     } else if (ctype_isarray(info)) {
-      CType *dc = ctype_rawchild(cts, d);  /* Array element type. */
+      CType dcsnap, *dc = crec_ctype_rawchild(J, cts, d, &dcsnap);
       CTInfo dcinfo = ctype_info_acq(dc);
       CTSize ofs, esize = ctype_size_acq(dc);
       TRef sp = 0;
@@ -1521,14 +1539,14 @@ static void crec_alloc(jit_State *J, RecordFFData *rd, CTypeID id)
       if (!J->base[1]) {  /* Handle zero-fill of struct-of-NYI. */
 	fid = ctype_sib_acq(d);
 	while (fid) {
-	  CType *df = ctype_get(cts, fid);
+	  CType dfsnap, dcsnap, *df = crec_ctype_snapshot(J, cts, fid, &dfsnap);
 	  CTInfo dfinfo = ctype_info_acq(df);
 	  fid = ctype_sib_acq(df);
 	  if (ctype_isfield(dfinfo)) {
 	    CType *dc;
 	    CTInfo dcinfo;
 	    if (!ctype_name_acq(df)) continue;  /* Ignore unnamed fields. */
-	    dc = ctype_rawchild(cts, df);  /* Field type. */
+	    dc = crec_ctype_rawchild(J, cts, df, &dcsnap);
 	    dcinfo = ctype_info_acq(dc);
 	    if (!(ctype_isnum(dcinfo) || ctype_isptr(dcinfo) ||
 		  ctype_isenum(dcinfo)))
@@ -1540,7 +1558,7 @@ static void crec_alloc(jit_State *J, RecordFFData *rd, CTypeID id)
       }
       fid = ctype_sib_acq(d);
       while (fid) {
-	CType *df = ctype_get(cts, fid);
+	CType dfsnap, dcsnap, *df = crec_ctype_snapshot(J, cts, fid, &dfsnap);
 	CTInfo dfinfo = ctype_info_acq(df);
 	fid = ctype_sib_acq(df);
 	if (ctype_isfield(dfinfo)) {
@@ -1552,7 +1570,7 @@ static void crec_alloc(jit_State *J, RecordFFData *rd, CTypeID id)
 	  TValue *sval = &tv;
 	  setintV(&tv, 0);
 	  if (!ctype_name_acq(df)) continue;  /* Ignore unnamed fields. */
-	  dc = ctype_rawchild(cts, df);  /* Field type. */
+	  dc = crec_ctype_rawchild(J, cts, df, &dcsnap);
 	  dcinfo = ctype_info_acq(dc);
 	  dcsize = ctype_size_acq(dc);
 	  dfsize = ctype_size_acq(df);
