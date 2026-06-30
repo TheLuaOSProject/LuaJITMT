@@ -104,6 +104,42 @@ die "destination snapshot is after a wait-capable ctype lookup\n"
                         { stderr = true })
 end
 
+local function assert_cconv_ct_ct_snapshots_operands(t)
+  local script = [[
+my $path = shift @ARGV;
+open my $fh, "<", $path or die "$path: $!\n";
+local $/;
+my $src = <$fh>;
+$src =~ /(void lj_cconv_ct_ct_l\(.*?\n})/s
+  or die "missing lj_cconv_ct_ct_l body\n";
+my $body = $1;
+my @required = (
+  "cconv_ctype_copy(&dsnap, d);",
+  "cconv_ctype_copy(&ssnap, s);",
+  "d = &dsnap;",
+  "s = &ssnap;"
+);
+my $last = -1;
+for my $needle (@required) {
+  my $idx = index($body, $needle);
+  die "missing raw C-to-C operand snapshot step: $needle\n" if $idx < 0;
+  die "raw C-to-C operand snapshot steps are out of order\n" if $idx < $last;
+  $last = $idx;
+}
+my $first_wait = length($body);
+for my $needle ("cconv_ctype_snapshot_wait", "cconv_rawid_wait",
+                "lj_ctype_enumconst_wait") {
+  my $idx = index($body, $needle);
+  $first_wait = $idx if $idx >= 0 && $idx < $first_wait;
+}
+die "raw C-to-C operand snapshots are after a wait-capable ctype lookup\n"
+  if $last > $first_wait;
+]]
+  utils.capture_command("perl -e " .. shell_quote(script) .. " " ..
+                        shell_quote(t:path("src", "lj_cconv.c")),
+                        { stderr = true })
+end
+
 return function(add)
   add({
     name = "m7_ffi_ccall_native",
@@ -367,6 +403,7 @@ assert(cl.lj_clib_ldscript_value() == 42)
     description = "FFI ctype metadata snapshot behavior",
     run = function(t)
       clean_build(t)
+      assert_cconv_ct_ct_snapshots_operands(t)
       assert_cconv_ct_tv_snapshots_destination(t)
       build_and_run_c(t, t:tmp("lj_t-ffi-typeinfo-snapshot"),
                       "t-ffi-typeinfo-snapshot.c", { timeout = "20s" })

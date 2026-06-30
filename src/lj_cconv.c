@@ -191,10 +191,18 @@ void lj_cconv_ct_ct_l(lua_State *L, CTState *cts, CType *d, CTypeID did,
 		      CType *s, CTypeID sid, uint8_t *dp, uint8_t *sp,
 		      CTInfo flags)
 {
-  CTSize dsize = ctype_size_acq(d), ssize = ctype_size_acq(s);
-  CTInfo dinfo = ctype_info_acq(d), sinfo = ctype_info_acq(s);
   CType dsnap, ssnap, dcsnap, scsnap;
+  CTSize dsize, ssize;
+  CTInfo dinfo, sinfo;
   void *tmpptr;
+  cconv_ctype_copy(&dsnap, d);
+  cconv_ctype_copy(&ssnap, s);
+  d = &dsnap;
+  s = &ssnap;
+  dsize = ctype_size_acq(d);
+  ssize = ctype_size_acq(s);
+  dinfo = ctype_info_acq(d);
+  sinfo = ctype_info_acq(s);
 
   lj_assertCTS(!ctype_isenum(dinfo) && !ctype_isenum(sinfo),
 	       "unresolved enum");
