@@ -18,6 +18,7 @@ local luajit_file = runtime.luajit_file
 local run_luajit_script = runtime.luajit_script
 local run_stock = runtime.run_stock
 local run_ir_dump_probe = jitutils.run_ir_dump_probe
+local shell_quote = utils.shell_quote
 
 local m7_cases = {
   "m7_ffi_cdef_token",
@@ -54,17 +55,50 @@ local function build_clib_ldscript_fixture(t)
   return write_ld_script(script, so)
 end
 
+local function assert_ccall_struct_arg_uses_cached_align(t)
+  local script = [[
+my $path = shift @ARGV;
+open my $fh, "<", $path or die "$path: $!\n";
+local $/;
+my $src = <$fh>;
+$src =~ /(static int ccall_struct_arg.*?\n})/s
+  or die "missing ccall_struct_arg body\n";
+my $body = $1;
+my $conv = index($body, "lj_cconv_ct_tv_l");
+die "missing ccall_struct_arg conversion call\n" if $conv < 0;
+die "missing cached stack alignment before conversion\n"
+  unless $body =~ /MSize\s+align\s*=\s*\(1u\s*<<\s*ctype_align\(ctype_info_acq\(d\)\)\)\s*-\s*1;/;
+my $tail = substr($body, $conv);
+die "ccall_struct_arg reads d ctype info after wait-capable conversion\n"
+  if $tail =~ /ctype_info_acq\s*\(\s*d\s*\)/;
+]]
+  utils.capture_command("perl -e " .. shell_quote(script) .. " " ..
+                        shell_quote(t:path("src", "lj_ccall.c")),
+                        { stderr = true })
+end
+
 return function(add)
   add({
     name = "m7_ffi_ccall_native",
     description = "FFI native blocking-call behavior",
     run = function(t)
+      local struct_so
       clean_build(t)
+      assert_ccall_struct_arg_uses_cached_align(t)
+      struct_so = build_shared_library(t,
+        t:tmp("lj_t-ffi-ccall-struct-overflow.so"),
+        "t-ffi-ccall-struct-overflow-lib.c")
       run_c_fixture_specs(t, {
         { output = "lj_t-ffi-cbblack-race",
           cfile = "t-ffi-cbblack-race.c" },
         { output = "lj_t-ffi-ccall-native-helpers",
           cfile = "t-ffi-ccall-native-helpers.c" },
+        { output = "lj_t-ffi-ccall-struct-overflow",
+          cfile = "t-ffi-ccall-struct-overflow.c",
+          opts = {
+            env = { LJ_M7_FFI_CCALL_STRUCT_SO = struct_so },
+            timeout = "20s"
+          } },
         { output = "lj_t-ffi-ccall-stopreq",
           cfile = "t-ffi-ccall-stopreq.c" }
       })

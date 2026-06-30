@@ -705,13 +705,13 @@ static int ccall_struct_arg(CCallState *cc, lua_State *L, CTState *cts,
 			    int narg)
 {
   GPRArg dp[2];
+  MSize align = (1u << ctype_align(ctype_info_acq(d))) - 1;
   dp[0] = dp[1] = 0;
   /* Convert to temp. struct. */
   lj_cconv_ct_tv_l(L, cts, d, did, (uint8_t *)dp, o, CCF_ARG(narg));
   if (ccall_struct_reg(cc, cts, dp, rcl)) {
     /* Register overflow? Pass on stack. */
     MSize nsp = cc->nsp, sz = rcl[1] ? 2*CTSIZE_PTR : CTSIZE_PTR;
-    MSize align = (1u << ctype_align(ctype_info_acq(d))) - 1;
     if (nsp + sz > CCALL_SIZE_STACK)
       return 1;  /* Too many arguments. */
     if (CCALL_ALIGN_STACKARG && align > CTSIZE_PTR-1)
