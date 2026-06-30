@@ -345,6 +345,60 @@ static CType *crec_ctype_snapshot(jit_State *J, CTState *cts, CTypeID id,
   return out;
 }
 
+static int crec_ctype_predefined_child(CTInfo info)
+{
+  CTypeID cid = ctype_cid(info);
+  return cid > CTID_NONE && cid <= CTID_CTYPEID;
+}
+
+static int crec_ctype_shallow_predef_ptr(CTState *cts, CTypeID id,
+					 CTypeID *ridp, CType *out)
+{
+  CTypeTab *tabh;
+  CType *ct;
+  CTInfo info;
+  CTSize size;
+  if (id == 0 || out == NULL)
+    return 0;
+  tabh = ctype_tabh_acq(cts);
+  if (id >= ctype_top_acq(cts) || (MSize)id >= ctype_tab_sizetab_acq(tabh))
+    return 0;
+  ct = ctype_tab_slot(tabh, id);
+  info = ctype_info_acq(ct);
+  size = ctype_size_acq(ct);
+  if (!ctype_isptr(info) || !crec_ctype_predefined_child(info) ||
+      ctype_isabandoned(info))
+    return 0;
+  ctype_info_rel(out, info);
+  ctype_size_rel(out, size);
+  ctype_sib_rel(out, 0);
+  ctype_next_rel(out, 0);
+  ctype_clearname(out);
+  if (ridp)
+    *ridp = id;
+  return 1;
+}
+
+static CType *crec_ctype_rawid(jit_State *J, CTState *cts, CTypeID id,
+			       CTypeID *ridp, CType *out)
+{
+  CTInfo info;
+  CTSize size;
+  int ok = lj_ctype_info_predefined(cts, id, &info, &size, ridp, out);
+  if (ok <= 0)
+    ok = crec_ctype_shallow_predef_ptr(cts, id, ridp, out);
+  if (ok <= 0)
+    ok = lj_ctype_info_snapshot(cts, id, &info, &size, ridp, out);
+  if (ok < 0)
+    ok = crec_ctype_shallow_predef_ptr(cts, id, ridp, out);
+  UNUSED(info); UNUSED(size);
+  if (ok < 0)
+    lj_trace_err(J, LJ_TRERR_CTBUSY);
+  if (!ok)
+    lj_trace_err(J, LJ_TRERR_BADTYPE);
+  return out;
+}
+
 static CType *crec_ctype_rawrefid(jit_State *J, CTState *cts, CTypeID id,
 				  CTypeID *ridp, CType *out)
 {
@@ -382,23 +436,29 @@ static int crec_cconv_multi_init(jit_State *J, CTState *cts, CTypeID did,
   return 1;  /* Otherwise the initializer is a value. */
 }
 
-static CType *crec_ctype_rawchild(jit_State *J, CTState *cts, CType *ct,
-				  CType *out)
+static CType *crec_ctype_rawchildid(jit_State *J, CTState *cts, CType *ct,
+				    CTypeID *ridp, CType *out)
 {
   CTInfo parent = ctype_info_acq(ct);
   CTInfo info;
   CTSize size;
   int ok = lj_ctype_info_predefined(cts, ctype_cid(parent), &info, &size,
-				    NULL, out);
+				    ridp, out);
   if (ok <= 0)
     ok = lj_ctype_info_snapshot(cts, ctype_cid(parent), &info, &size,
-				NULL, out);
+				ridp, out);
   UNUSED(info); UNUSED(size);
   if (ok < 0)
     lj_trace_err(J, LJ_TRERR_CTBUSY);
   if (!ok)
     lj_trace_err(J, LJ_TRERR_BADTYPE);
   return out;
+}
+
+static CType *crec_ctype_rawchild(jit_State *J, CTState *cts, CType *ct,
+				  CType *out)
+{
+  return crec_ctype_rawchildid(J, cts, ct, NULL, out);
 }
 
 static CTSize crec_ctype_size(jit_State *J, CTState *cts, CTypeID id)
@@ -1214,9 +1274,10 @@ static void crec_index_bf(jit_State *J, RecordFFData *rd, TRef ptr, CTInfo info)
     J->base[0] = tr;
   } else {  /* __newindex metamethod. */
     CTState *cts = ctype_ctsG(J2G(J));
-    CType *ct = ctype_get(cts,
+    CType ctsnap, *ct = crec_ctype_rawid(J, cts,
 			  (info & CTF_BOOL) ? CTID_BOOL :
-			  (info & CTF_UNSIGNED) ? CTID_UINT32 : CTID_INT32);
+			  (info & CTF_UNSIGNED) ? CTID_UINT32 : CTID_INT32,
+			  NULL, &ctsnap);
     int32_t mask = (int32_t)(((1u << bsz)-1) << pos);
     TRef sp = crec_ct_tv(J, ct, 0, J->base[2], &rd->argv[2]);
     sp = emitir(IRTI(IR_BSHL), sp, lj_ir_kint(J, pos));
@@ -1236,8 +1297,9 @@ void LJ_FASTCALL recff_cdata_index(jit_State *J, RecordFFData *rd)
   ptrdiff_t ofs = sizeof(GCcdata);
   GCcdata *cd = argv2cdata(J, ptr, &rd->argv[0]);
   CTState *cts = ctype_ctsG(J2G(J));
-  CTypeID id = ctype_rawid(cts, cd->ctypeid);
-  CType *ct = ctype_get(cts, id);
+  CType ctsnap, childsnap;
+  CTypeID id = cd->ctypeid;
+  CType *ct = crec_ctype_rawid(J, cts, id, &id, &ctsnap);
   CTInfo ctinfo = ctype_info_acq(ct);
   CTSize ctsize = ctype_size_acq(ct);
   CTypeID sid = 0;
@@ -1246,8 +1308,7 @@ void LJ_FASTCALL recff_cdata_index(jit_State *J, RecordFFData *rd)
   if (ctype_isptr(ctinfo)) {
     IRType t = (LJ_64 && ctsize == 8) ? IRT_P64 : IRT_P32;
     if (ctype_isref(ctinfo)) {
-      id = ctype_rawid(cts, ctype_cid(ctinfo));
-      ct = ctype_get(cts, id);
+      ct = crec_ctype_rawchildid(J, cts, ct, &id, &ctsnap);
       ctinfo = ctype_info_acq(ct);
       ctsize = ctype_size_acq(ct);
     }
@@ -1288,8 +1349,9 @@ again:
     }
   } else if (tref_iscdata(idx)) {
     GCcdata *cdk = cdataV(&rd->argv[1]);
-    CType *ctk = ctype_raw(cts, cdk->ctypeid);
-    IRType t = crec_ct2irt(cts, ctk);
+    CType cksnap, *ctk = crec_ctype_rawid(J, cts, cdk->ctypeid,
+					  NULL, &cksnap);
+    IRType t = crec_ct2irt_snapshot(J, cts, ctk);
     CTInfo ctkinfo = ctype_info_acq(ctk);
     CTSize ctksize = ctype_size_acq(ctk);
     if (ctype_ispointer(ctype_info_acq(ct)) && t >= IRT_I8 && t <= IRT_U64) {
@@ -1318,9 +1380,9 @@ again:
     int found = 0;
     CType fsnap;
     if (cd && cd->ctypeid == CTID_CTYPEID) {
-      id = ctype_rawid(cts, crec_constructor(J, cd, ptr));
+      id = crec_constructor(J, cd, ptr);
     }
-    ct = ctype_get(cts, id);
+    ct = crec_ctype_rawid(J, cts, id, &id, &ctsnap);
     cinfo = ctype_info_acq(ct);
     csize = ctype_size_acq(ct);
     if (ctype_isstruct(cinfo)) {
@@ -1337,8 +1399,11 @@ again:
 	finfo = ctype_info_acq(fct);
 	fsize = ctype_size_acq(fct);
 	fid = ctype_cid(finfo);
-	if (ctype_isconstval(finfo))
-	  childinfo = ctype_info_acq(ctype_child(cts, fct));
+	if (ctype_isconstval(finfo)) {
+	  CType fchild;
+	  childinfo = ctype_info_acq(crec_ctype_rawid(J, cts, fid, NULL,
+						      &fchild));
+	}
       }
     }
     if (ctype_isstruct(cinfo)) {
@@ -1392,8 +1457,8 @@ again:
 	goto again;
       }
     } else if (ctype_isptr(ctype_info_acq(ct))) {  /* Automatically perform '->'. */
-      CTypeID cid = ctype_rawid(cts, ctype_cid(ctype_info_acq(ct)));
-      CType *cct = ctype_get(cts, cid);
+      CTypeID cid = 0;
+      CType *cct = crec_ctype_rawchildid(J, cts, ct, &cid, &childsnap);
       if (ctype_isstruct(ctype_info_acq(cct))) {
 	ct = cct;
 	id = cid;
@@ -1407,18 +1472,17 @@ again:
     ptr = emitir(IRT(IR_ADD, IRT_PTR), ptr, lj_ir_kintp(J, ofs));
 
   /* Resolve reference for field. */
-  ct = ctype_get(cts, sid);
+  ct = crec_ctype_rawid(J, cts, sid, &sid, &ctsnap);
   ctinfo = ctype_info_acq(ct);
   if (ctype_isref(ctinfo)) {
     ptr = emitir(IRT(IR_XLOAD, IRT_PTR), ptr, 0);
-    sid = ctype_cid(ctinfo);
-    ct = ctype_get(cts, sid);
+    ct = crec_ctype_rawchildid(J, cts, ct, &sid, &ctsnap);
     ctinfo = ctype_info_acq(ct);
   }
 
   while (ctype_isattrib(ctinfo)) {
     sid = ctype_cid(ctinfo);
-    ct = ctype_get(cts, sid);  /* Skip attributes. */
+    ct = crec_ctype_snapshot(J, cts, sid, &ctsnap);  /* Skip attributes. */
     ctinfo = ctype_info_acq(ct);
   }
 
