@@ -109,7 +109,7 @@
 ---@field finalizer_spawn_deferrals number
 ---@field finalizer_spawn_release_wakes number
 
----@class threading.thread: userdata
+---@class threading.thread<R>: userdata
 local threading_thread = {}
 
 ---Wait for this thread to finish.
@@ -117,11 +117,11 @@ local threading_thread = {}
 ---Returns `true, ...` when the child function returns, `false, err` when the
 ---child function errors, or `nil, "timeout"` when a timeout is supplied and the
 ---thread is still running.
----@overload fun(self: threading.thread): true, ...
----@overload fun(self: threading.thread): false, any
----@overload fun(self: threading.thread, timeout: number): true, ...
----@overload fun(self: threading.thread, timeout: number): false, any
----@overload fun(self: threading.thread, timeout: number): nil, threading.timeout_error
+---@overload fun<R>(self: threading.thread<R>): true, R, ...
+---@overload fun<R>(self: threading.thread<R>): false, any
+---@overload fun<R>(self: threading.thread<R>, timeout: number): true, R, ...
+---@overload fun<R>(self: threading.thread<R>, timeout: number): false, any
+---@overload fun<R>(self: threading.thread<R>, timeout: number): nil, threading.timeout_error
 ---@param timeout? number seconds to wait; omit to block indefinitely.
 ---@return threading.join_status ok true for child success, false for child error, nil on timeout.
 ---@return ... child results, an error object, or the timeout reason.
@@ -143,6 +143,7 @@ function threading_thread:__tostring() end
 local threading_mutex = {}
 
 ---Block until the mutex is acquired.
+---@return nil
 function threading_mutex:lock() end
 
 ---@return boolean locked
@@ -152,6 +153,7 @@ function threading_mutex:trylock() end
 ---Release the mutex.
 ---
 ---Errors if the mutex is not currently locked.
+---@return nil
 function threading_mutex:unlock() end
 
 ---@return "threading.mutex"
@@ -205,6 +207,7 @@ function threading_channel:recv(timeout) end
 function threading_channel:peek() end
 
 ---Close the channel.
+---@return nil
 function threading_channel:close() end
 
 ---@return "threading.channel"
@@ -224,10 +227,12 @@ function threading.cpucount() end
 function threading.now() end
 
 ---Issue a cross-thread memory fence.
+---@return nil
 function threading.fence() end
 
----@overload fun()
+---@overload fun(): nil
 ---@param seconds? number seconds to sleep; omit to sleep for 0 seconds.
+---@return nil
 function threading.sleep(seconds) end
 
 ---Return GC2/lockless runtime telemetry used by tests and benchmarks.
@@ -246,12 +251,13 @@ function threading.gcworkers(count) end
 function threading.gcmode(mode) end
 
 ---Spawn a new OS thread that calls `fn(...)`.
----@param fn threading.thread_fn
+---@generic R
+---@param fn fun(...: any): R, ...
 ---@param ... any
----@return threading.thread thread
+---@return threading.thread<R> thread
 function threading.spawn(fn, ...) end
 
----@return threading.thread thread
+---@return threading.thread<any> thread
 ---@nodiscard
 function threading.current() end
 
