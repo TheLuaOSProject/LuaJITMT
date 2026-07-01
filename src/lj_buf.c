@@ -126,6 +126,11 @@ void lj_bufx_set(SBufExt *sbx, const char *p, MSize len, GCobj *ref)
   lj_gc_pubobjobj(L, (GCudata *)sbx - 1, ref);
 }
 
+int32_t LJ_FASTCALL lj_bufx_len_forjit(SBufExt *sbx)
+{
+  return (int32_t)sbufxlen(sbx);
+}
+
 #if LJ_HASFFI
 MSize LJ_FASTCALL lj_bufx_more(SBufExt *sbx, MSize sz)
 {

@@ -1606,7 +1606,9 @@ end)
 heat("buffer.method.len", function()
   local b = buffer.new()
   b:set("abcd")
-  assert(#b == 4)
+  local n = 0
+  for _ = 1, 4 do n = n + #b end
+  assert(n == 16)
 end)
 
 heat("buffer.method.encode.decode", function(i)
@@ -1643,6 +1645,8 @@ print("t-jit-buffer-method-shared-nyi OK")
       end
       checks.assert_dump_contains(t, dump, "buffer.method.put",
                                   "JIT buffer method NYI probe")
+      checks.assert_dump_contains(t, dump, "lj_bufx_len_forjit",
+                                  "JIT buffer method len helper")
       checks.assert_dump_contains(t, dump, "buffer.method.encode.decode",
                                   "JIT buffer method NYI probe")
       checks.assert_dump_contains(t, dump, "t-jit-buffer-method-shared-nyi OK",
