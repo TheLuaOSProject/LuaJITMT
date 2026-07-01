@@ -3,15 +3,14 @@
 The first traced ordinary FFI C-call slice now records exact void, signed
 32-bit integer, pointer-returning, zero-argument narrow integer, zero-argument
 unsigned 32-bit/signed 64-bit/unsigned 64-bit integer, and FP-returning
-function cdata on x64. The narrow GPR subset accepts 0, 1, or 2 signed 32-bit
-integer/pointer arguments, plus exact zero-argument signed/unsigned 8-bit,
-signed/unsigned 16-bit, unsigned 32-bit, signed 64-bit, and unsigned 64-bit
-integer returns. Narrow integer returns, unsigned 32-bit returns, and
-signed/unsigned 64-bit integer returns may also use the same signed 32-bit
-integer/pointer GPR argument subset. The first unsigned-argument slices accept
-exact `uint32_t(uint32_t)` / `unsigned int(unsigned int)` and
-`uint64_t(uint64_t)` calls; the signed 64-bit argument slice accepts exact
-`int64_t(int64_t)` calls. The FPR subset accepts 0, 1, or 2 same-kind exact
+function cdata on x64. The narrow GPR subset accepts 0, 1, or 2 signed 32-bit,
+unsigned 32-bit, or pointer arguments, plus exact zero-argument signed/unsigned
+8-bit, signed/unsigned 16-bit, unsigned 32-bit, signed 64-bit, and unsigned
+64-bit integer returns. Narrow integer returns, unsigned 32-bit returns, and
+signed/unsigned 64-bit integer returns may also use the same signed
+32-bit/unsigned 32-bit/pointer GPR argument subset. The exact 64-bit
+cdata-result slices accept one or two same-signed `int64_t` or `uint64_t`
+arguments. The FPR subset accepts 0, 1, or 2 same-kind exact
 float or double arguments. The first mixed one-argument subset
 accepts exact `double(int32_t)`, `double(pointer)`, `double(float)`,
 `int32_t(double)`, `int32_t(float)`, `int32_t(int8_t)`, `pointer(double)`,
@@ -25,8 +24,8 @@ code for the GPR argument shape, `lj_ccall_jit_u32_0()` /
 `lj_ccall_jit_u32_u32()` for the exact unsigned 32-bit argument/result shape,
 `lj_ccall_jit_i64_gpr()` / `lj_ccall_jit_i64_ret_gpr()` for boxed int64
 results, `lj_ccall_jit_u64_0()` / `lj_ccall_jit_u64_gpr()` /
-`lj_ccall_jit_u64_u64()` for boxed uint64
-results, `lj_ccall_jit_narrow_0()` / `lj_ccall_jit_narrow_gpr()` for narrow
+`lj_ccall_jit_u64_u64()` for boxed uint64 results,
+`lj_ccall_jit_narrow_0()` / `lj_ccall_jit_narrow_gpr()` for narrow
 integer results, `lj_ccall_jit_num_i32()`, `lj_ccall_jit_num_ptr()`,
 `lj_ccall_jit_num_flt()`, `lj_ccall_jit_i32_num()`,
 `lj_ccall_jit_i32_flt()`, `lj_ccall_jit_i32_i8()`,
@@ -48,23 +47,25 @@ The scope is deliberately narrow:
 - fixed arguments only;
 - exactly 0, 1, or 2 Lua arguments except for the audited
   `int32_t(void *, unsigned long, int32_t)` shape;
-- exact signed 32-bit integer or pointer argument types;
+- exact signed 32-bit integer, unsigned 32-bit integer, or pointer argument
+  types in the shared GPR helper matrix;
 - void, exact signed 32-bit integer, or pointer return types;
 - zero-argument exact signed/unsigned 8-bit or 16-bit integer returns;
-- exact signed/unsigned 8-bit or 16-bit integer returns with signed 32-bit
-  integer/pointer arguments;
+- exact signed/unsigned 8-bit or 16-bit integer returns with signed 32-bit,
+  unsigned 32-bit, or pointer arguments;
 - zero-argument exact unsigned 32-bit integer returns as Lua numbers;
-- exact unsigned 32-bit integer returns with signed 32-bit integer/pointer
-  arguments;
+- exact unsigned 32-bit integer returns with signed 32-bit, unsigned 32-bit, or
+  pointer arguments;
 - exact one-argument `uint32_t(uint32_t)` / `unsigned int(unsigned int)` calls;
 - exact `int32_t(void *, unsigned long, int32_t)` calls, with the
   `unsigned long` argument converted before the helper casts to the host ABI
   width;
 - zero-argument exact signed 64-bit integer returns;
 - zero-argument exact unsigned 64-bit integer returns;
-- exact signed/unsigned 64-bit integer returns with signed 32-bit
-  integer/pointer arguments;
-- exact one-argument `int64_t(int64_t)` and `uint64_t(uint64_t)` calls;
+- exact signed/unsigned 64-bit integer returns with signed 32-bit, unsigned
+  32-bit, or pointer arguments;
+- exact one- or two-argument `int64_t`/`uint64_t` calls where argument and
+  result signedness match;
 - same-kind exact float/double arguments and exact float/double returns;
 - exact one-argument `double(int32_t)`, `double(pointer)`, `double(float)`,
   `int32_t(double)`, `int32_t(float)`, `int32_t(int8_t)`,
@@ -78,12 +79,13 @@ The scope is deliberately narrow:
 This gives hot `ffi.C.getpid()`, `ffi.C.abs(i)`, small
 `int add(int,int)`-style loops, simple pointer-return/pointer-argument loops,
 side-effecting `void f(...)` loops, zero-argument high-bit uint32 result loops,
-signed-int/pointer to high-bit uint32 result loops, high-bit
+signed-int/unsigned-int/pointer to high-bit uint32 result loops, high-bit
 uint32-argument/result loops, zero-argument narrow integer result loops,
-signed-int/pointer to narrow integer result loops, exact int8-to-int loops,
-signed-int/pointer to int64/uint64 cdata-result loops, zero-argument signed
-int64 and unsigned uint64 cdata-result loops, exact int64/uint64
-argument/result loops, traced `poll(nil, 0, 0)`-style loops, FP-only numeric
+signed-int/unsigned-int/pointer to narrow integer result loops, exact
+int8-to-int loops, signed-int/unsigned-int/pointer to int64/uint64 cdata-result
+loops, zero-argument signed int64 and unsigned uint64 cdata-result loops, exact
+one- and two-argument int64/uint64 argument/result loops, traced
+`poll(nil, 0, 0)`-style loops, FP-only numeric
 call loops, signed-narrow-to-`unsigned long` conversion probes, and
 mixed float/double one-argument calls a traced, nonblocking native-state path,
 without risking the direct backend `IR_CALLXS` register/result ordering. The

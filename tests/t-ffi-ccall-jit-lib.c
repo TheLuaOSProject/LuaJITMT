@@ -55,6 +55,11 @@ int64_t lj_m7_ccall_jit_i64_i64(int64_t a)
   return a + 1;
 }
 
+int64_t lj_m7_ccall_jit_i64_i64_i64(int64_t a, int64_t b)
+{
+  return a + b + 3;
+}
+
 int8_t lj_m7_ccall_jit_i8_0(void)
 {
   return -7;
@@ -243,6 +248,11 @@ uint32_t lj_m7_ccall_jit_u32_0(void)
 uint64_t lj_m7_ccall_jit_u64(uint64_t a)
 {
   return a + 1;
+}
+
+uint64_t lj_m7_ccall_jit_u64_u64_u64(uint64_t a, uint64_t b)
+{
+  return a + b + 5;
 }
 
 uint64_t lj_m7_ccall_jit_u64_i32(int32_t a)
