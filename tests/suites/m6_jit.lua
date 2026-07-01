@@ -115,6 +115,36 @@ assert(util.traceinfo(1), "weak-value existing table store did not trace")
 
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
+local hits = 0
+local mh = setmetatable({ stable = 0 }, {
+  __newindex = function()
+    hits = hits + 1
+  end
+})
+for i = 1, 200 do
+  mh.stable = i
+end
+assert(mh.stable == 200 and hits == 0)
+assert(util.traceinfo(1),
+       "metatable existing hash table store did not trace")
+
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local array_hits = 0
+local ma = setmetatable({ 0 }, {
+  __newindex = function()
+    array_hits = array_hits + 1
+  end
+})
+for i = 1, 200 do
+  ma[1] = i
+end
+assert(ma[1] == 200 and array_hits == 0)
+assert(util.traceinfo(1),
+       "metatable existing array table store did not trace")
+
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
 local function hash_insert(n)
   local out = { stable = 0 }
   for i = 1, n do

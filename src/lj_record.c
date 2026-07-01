@@ -1568,6 +1568,7 @@ static int rec_idx_mt_shared_tabop(jit_State *J, RecordIndex *ix)
   return !rec_idx_tab_trace_local(J, ix->tab) && mt_active_acq(g);
 }
 
+static TRef rec_tmpref_mode(jit_State *J, TRef tr, int mode);
 static TRef rec_tmpref(jit_State *J, TRef tr);
 
 static TRef rec_idx_mt_shared_load(jit_State *J, RecordIndex *ix, IRType t)
@@ -1967,12 +1968,33 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
     GCtab *mt = lj_tab_metatable_acq(tabV(&ix->tabv));
     int keybarrier = tref_isgcv(ix->key) && !tref_isnil(ix->val);
     if (mt_shared_store && ix->idxchain && mt) {
-      /*
-      ** Metatable-bearing stores still use inline raw-value guards to decide
-      ** whether __newindex applies. Keep them interpreted under active MT
-      ** until those guards use the same helper snapshot path as shared loads.
-      */
-      lj_trace_err_info(J, LJ_TRERR_NYIBC);
+      if (tvisnil(oldtv)) {
+	/*
+	** Nil/absent raw slots may need __newindex or new-key insertion.
+	** Keep that dispatch on the interpreter path until it is fully
+	** helper-backed.
+	*/
+	lj_trace_err_info(J, LJ_TRERR_NYIBC);
+      } else {
+	TRef key = rec_tmpref_mode(J, ix->key, IRTMPREF_IN1|IRTMPREF_IN2);
+	TRef src;
+	TRef ok;
+	if (!LJ_DUALNUM && tref_isinteger(ix->val))
+	  ix->val = emitir(IRTN(IR_CONV), ix->val, IRCONV_NUM_INT);
+	src = rec_tmpref(J, ix->val);
+	ok = lj_ir_call(J, IRCALL_lj_tab_storetv_existing_forjit,
+			ix->tab, key, src);
+	emitir(IRTGI(IR_NE), ok, lj_ir_kint(J, 0));
+	if (keybarrier || tref_isgcv(ix->val))
+	  emitir(IRT(IR_TBAR, IRT_NIL), ix->tab, 0);
+	if (!nommstr(J, ix->key)) {
+	  TRef fref = emitir(IRT(IR_FREF, IRT_PGC), ix->tab,
+			     IRFL_TAB_NOMM);
+	  emitir(IRT(IR_FSTORE, IRT_U8), fref, lj_ir_kint(J, 0));
+	}
+	J->needsnap = 1;
+	return 0;
+      }
     }
 #if LJ_HAS_X64_MT_JIT_HELPERS
     /* M6: numeric NEWREF/HSTORE uses the generic returned-slot helper. */
@@ -2297,11 +2319,16 @@ static TRef rec_celluv_cnewref(jit_State *J, BCReg slotno)
 }
 
 /* Emit TMPREF for a value helper argument. */
-static TRef rec_tmpref(jit_State *J, TRef tr)
+static TRef rec_tmpref_mode(jit_State *J, TRef tr, int mode)
 {
   if (!LJ_DUALNUM && tref_isinteger(tr))
     tr = emitir(IRTN(IR_CONV), tr, IRCONV_NUM_INT);
-  return emitir(IRT(IR_TMPREF, IRT_PGC), tr, IRTMPREF_IN1);
+  return emitir(IRT(IR_TMPREF, IRT_PGC), tr, mode);
+}
+
+static TRef rec_tmpref(jit_State *J, TRef tr)
+{
+  return rec_tmpref_mode(J, tr, IRTMPREF_IN1);
 }
 
 /* Look ahead in the current loop body for FNEW promotion of a mutable slot. */

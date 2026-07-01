@@ -109,6 +109,31 @@ local worker = th.spawn(function()
   jit.flush()
   jit.opt.start("hotloop=1", "hotexit=1", "-sink")
 
+  local meta_hits = 0
+  local shared_meta_write = setmetatable({ stable = 0, 0 }, {
+    __newindex = function()
+      meta_hits = meta_hits + 1
+    end
+  })
+
+  local function table_meta_write(n)
+    for i = 1, n do
+      shared_meta_write.stable = i
+      shared_meta_write[1] = i + 1
+    end
+    return shared_meta_write.stable + shared_meta_write[1]
+  end
+
+  for _ = 1, 20 do
+    assert(table_meta_write(80) == 161)
+    assert(meta_hits == 0)
+  end
+  local meta_write_traces = trace_count(32)
+  assert(meta_write_traces > 0)
+
+  jit.flush()
+  jit.opt.start("hotloop=1", "hotexit=1", "-sink")
+
   local shared_ipairs = { 2, 4, 6, nil, 100 }
 
   local function table_ipairs(n)
@@ -184,13 +209,13 @@ local worker = th.spawn(function()
   assert(shared_next_traces == 0)
 
   return root_traces, side_traces, table_traces, read_traces, index_traces,
-	 write_traces, ipairs_traces, next_traces, shared_next_traces,
-	 th.current():id()
+	 write_traces, meta_write_traces, ipairs_traces, next_traces,
+	 shared_next_traces, th.current():id()
 end)
 
 local ok, root_traces, side_traces, table_traces, read_traces, index_traces,
-      write_traces, ipairs_traces, next_traces, shared_next_traces,
-      tid = worker:join()
+      write_traces, meta_write_traces, ipairs_traces, next_traces,
+      shared_next_traces, tid = worker:join()
 assert(ok == true, tostring(root_traces))
 assert(type(root_traces) == "number" and root_traces > 0)
 assert(type(side_traces) == "number" and side_traces > root_traces)
@@ -198,9 +223,10 @@ assert(type(table_traces) == "number" and table_traces > 0)
 assert(type(read_traces) == "number" and read_traces > 0)
 assert(type(index_traces) == "number" and index_traces > 0)
 assert(type(write_traces) == "number" and write_traces > 0)
+assert(type(meta_write_traces) == "number" and meta_write_traces > 0)
 assert(type(ipairs_traces) == "number" and ipairs_traces > 0)
 assert(type(next_traces) == "number" and next_traces > 0)
 assert(type(shared_next_traces) == "number" and shared_next_traces == 0)
 assert(tid == worker:id())
 
-print("t-jit-secondary OK: secondary TG records, enters, side-traces, allocates tables, reads/writes shared tables, records shared ipairs() and trace-local next(), keeps shared next() interpreted, and preserves __index reads in x64 mcode")
+print("t-jit-secondary OK: secondary TG records, enters, side-traces, allocates tables, reads/writes shared tables, traces existing metatable stores, records shared ipairs() and trace-local next(), keeps shared next() interpreted, and preserves __index reads in x64 mcode")

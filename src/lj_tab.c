@@ -2322,6 +2322,60 @@ LJ_FUNCA int lj_tab_trysetnil_cas_keyed(lua_State *L, GCtab *parent,
   }
 }
 
+LJ_FUNCA int32_t lj_tab_storetv_existing_forjit(lua_State *L, GCtab *parent,
+						cTValue *key, cTValue *src)
+{
+  for (;;) {
+    TValue *dst = (TValue *)lj_tab_get(L, parent, key);
+    TValue old, expect;
+    int weakwr;
+    lj_tv_load_acq(&old, dst);
+    if (tvisforward(&old)) {
+      lj_tab_store_wait_l(L);
+      continue;
+    }
+    if (tvisnil(&old))
+      return 0;  /* Let the interpreter resolve __newindex/new-key semantics. */
+    if (!tab_current_slot_for_key(parent, dst, key)) {
+      lj_tab_store_wait_l(L);
+      continue;
+    }
+    weakwr = lj_gc2_weak_write_begin(L, parent);
+    if (weakwr) {
+      lj_gc2_barrier_weak_write(L, parent, key, src);
+      lj_gc2_barrier_tv_pair(L, obj2gco(parent), src);
+    }
+    expect = old;
+    if (lj_tv_cas(dst, &expect, src)) {
+      if (tab_current_slot_for_key(parent, dst, key)) {
+	if (weakwr) {
+	  lj_gc2_barrier_weak_write(L, parent, key, src);
+	  lj_gc2_barrier_tv_pair(L, obj2gco(parent), src);
+	  lj_gc2_weak_write_end(L, weakwr);
+	} else {
+	  lj_gc2_barrier_weak_write(L, parent, key, dst);
+	  lj_gc2_barrier_tv_pair(L, obj2gco(parent), dst);
+	}
+	return 1;
+      }
+      lj_gc_pubtabtv(L, parent, dst);
+      if (weakwr)
+	lj_gc2_weak_write_end(L, weakwr);
+      lj_tab_store_wait_l(L);
+      continue;
+    }
+    if (weakwr)
+      lj_gc2_weak_write_end(L, weakwr);
+    if (tvisforward(&expect)) {
+      lj_tab_store_wait_l(L);
+      continue;
+    }
+    if (tvisnil(&expect))
+      return 0;
+    lj_tab_store_wait_l(L);
+  }
+}
+
 static TValue *tab_forwarded_jit_array_slot(lua_State *L, GCtab *parent,
 					    TValue *array, MSize asize,
 					    TValue *dst, MSize key)
