@@ -92,6 +92,12 @@ int32_t lj_m7_ccall_jit_i32_i32_ptr_u32(int32_t bias, int *p, uint32_t n)
   return bias + p[n & 3u] + (int32_t)(n & 1023u);
 }
 
+uint32_t lj_m7_ccall_jit_u32_i32_ptr_u32(int32_t bias, int *p, uint32_t n)
+{
+  return UINT32_C(0x80000000) + (uint32_t)bias + (uint32_t)p[n & 3u] +
+	 (n & 1023u);
+}
+
 int32_t lj_m7_ccall_jit_i32_ptr_ptr_u64(int *a, int *b, uint64_t n)
 {
   return a[n & 3u] + b[(n + UINT64_C(1)) & 3u] +
