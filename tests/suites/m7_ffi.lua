@@ -48,6 +48,39 @@ local m7_cases = {
   "m7_ffi_ccall_native"
 }
 
+local function capture_expected_failure(cmd, opts)
+  opts = opts or {}
+  local marker = "__LJ_EXPECTED_FAILURE_STATUS__"
+  local full = cmd .. " 2>&1; printf '\\n" .. marker .. "%s\\n' \"$?\""
+  if opts.timeout then
+    full = utils.timeout_prefix(opts.timeout) .. " sh -c " .. shell_quote(full)
+  end
+  local p, err = io.popen(full)
+  if not p then error("command failed to start: " .. tostring(err), 2) end
+  local out = p:read("*a")
+  p:close()
+  local status = tonumber(out:match("\n" .. marker .. "([0-9]+)\n?$"))
+  out = out:gsub("\n" .. marker .. "[0-9]+\n?$", "")
+  if status == nil then
+    error("command did not report exit status: " .. full .. "\n" .. out, 2)
+  end
+  if status == 0 then
+    error("command unexpectedly succeeded: " .. full .. "\n" .. out, 2)
+  end
+  return out, status
+end
+
+local function assert_recorded_ffi_calls_gate_fails(t)
+  local make_src = "make -C " .. shell_quote(t:path("src"))
+  local out = capture_expected_failure(
+    make_src .. " clean >/dev/null && " ..
+    make_src .. " -j1 XCFLAGS=-DLJ_FFI_RECORD_CALLS=1",
+    { timeout = "120s" })
+  checks.assert_text_contains("LJ_FFI_RECORD_CALLS opt-in build", out,
+    "LJ_FFI_RECORD_CALLS requires an IR_CALLXS native-state protocol",
+    "build output")
+end
+
 local function build_clib_ldscript_fixture(t)
   local script = t:tmp("lj_t-ffi-clib-ldscript.so")
   local so = build_shared_library(t, t:tmp("lj_t-ffi-clib-ldscript-real.so"),
@@ -181,6 +214,7 @@ return function(add)
     description = "FFI native blocking-call behavior",
     run = function(t)
       local struct_so
+      assert_recorded_ffi_calls_gate_fails(t)
       clean_build(t)
       assert_ccall_struct_arg_uses_cached_align(t)
       struct_so = build_shared_library(t,

@@ -155,7 +155,9 @@ FINREG/finqueue dispatch lands.
   Callback entry applies the same freshness rule: pre-existing sticky
   `TGF_STOPREQ` is tolerated, but a STOPREQ newly acknowledged while the
   carrier was native interrupts before the Lua callback body runs.
-  Traced C-call throughput stays deferred behind the native-state protocol.
+  Traced C-call throughput stays deferred behind the native-state protocol, and
+  `m7_ffi_ccall_native` now asserts the opt-in `LJ_FFI_RECORD_CALLS` build gate
+  still fails until that bridge exists.
 - **FFI library C spans**: `ffi.copy()`, `ffi.fill()`, and the unbounded
   `strlen()` scan behind `ffi.string(ptr)` enter native state for the raw C
   library work, then apply the same fresh-STOPREQ rule as interpreted C calls.
