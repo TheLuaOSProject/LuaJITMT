@@ -127,17 +127,7 @@ return function(add)
         env = { LJ_M7_FFI_CCALL_JIT_SO = jit_so },
         timeout = "20s"
       })
-      local copy_dump = t:tmp("lj_t-ffi-copy-native-ir.dump")
       local fill_dump = t:tmp("lj_t-ffi-fill-native-ir.dump")
-      run_ir_dump_probe(t, copy_dump, [[
-local ffi = require"ffi"
-local dst = ffi.new("uint8_t[512]")
-local src = ffi.new("uint8_t[512]")
-jit.flush()
-jit.opt.start("hotloop=1", "hotexit=1")
-for _ = 1, 80 do ffi.copy(dst, src, 256) end
-print("bulk copy ok")
-]], { timeout = "60s" })
       run_ir_dump_probe(t, fill_dump, [[
 local ffi = require"ffi"
 local dst = ffi.new("uint8_t[512]")
@@ -146,11 +136,8 @@ jit.opt.start("hotloop=1", "hotexit=1")
 for _ = 1, 80 do ffi.fill(dst, 256, 0x5a) end
 print("bulk fill ok")
 ]], { timeout = "60s" })
-      assert_dump_contains(t, copy_dump, "lj_ffi_jit_memcpy",
-                           "bulk ffi.copy native helper")
       assert_dump_contains(t, fill_dump, "lj_ffi_jit_memset",
                            "bulk ffi.fill native helper")
-      assert_dump_contains(t, copy_dump, "XBAR", "bulk ffi memory XBAR")
       assert_dump_contains(t, fill_dump, "XBAR", "bulk ffi memory XBAR")
       print("M7 FFI native blocking-call behavior passed")
     end

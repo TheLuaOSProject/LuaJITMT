@@ -256,6 +256,7 @@ LJ_FUNC void *lj_ffi_jit_memcpy(lua_State *L, void *dp, const void *sp,
 				CTSize len);
 LJ_FUNC void *lj_ffi_jit_memset(lua_State *L, void *dp, int32_t fill,
 				CTSize len);
+LJ_FUNC size_t lj_ffi_jit_strlen(lua_State *L, const char *p);
 LJ_FUNC double lj_ccall_jit_num_i32(lua_State *L, void *func, int32_t a);
 LJ_FUNC double lj_ccall_jit_num_ptr(lua_State *L, void *func, void *a);
 LJ_FUNC double lj_ccall_jit_num_flt(lua_State *L, void *func, float a);

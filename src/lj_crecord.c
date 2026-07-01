@@ -4502,7 +4502,8 @@ void LJ_FASTCALL recff_ffi_string(jit_State *J, RecordFFData *rd)
 	lj_trace_err(J, LJ_TRERR_NYICALL);
       tr = crec_ct_tv_id(J, cts, CTID_P_CVOID, 0, tr, &rd->argv[0]);
     } else {
-      lj_trace_err(J, LJ_TRERR_NYICALL);
+      tr = crec_ct_tv_id(J, cts, CTID_P_CCHAR, 0, tr, &rd->argv[0]);
+      trlen = lj_ir_call(J, IRCALL_lj_ffi_jit_strlen, tr);
     }
     J->base[0] = emitir(IRT(IR_XSNEW, IRT_STR), tr, trlen);
   }  /* else: interpreter will throw. */

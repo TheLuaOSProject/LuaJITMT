@@ -1766,6 +1766,18 @@ void *lj_ffi_jit_memset(lua_State *L, void *dp, int32_t fill, CTSize len)
   return dp;
 }
 
+size_t lj_ffi_jit_strlen(lua_State *L, const char *p)
+{
+  uint32_t actions;
+  int had_stopreq = ccall_had_stopreq(L);
+  size_t len;
+  lj_native_enter(L2TG(L));
+  len = strlen(p);
+  actions = lj_native_leave(L);
+  ccall_checkstop_fresh(L, actions, had_stopreq);
+  return len;
+}
+
 double lj_ccall_jit_num_i32(lua_State *L, void *func, int32_t a)
 {
   CTState *cts = ctype_cts(L);

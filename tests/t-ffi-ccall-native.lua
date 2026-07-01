@@ -152,7 +152,7 @@ do
     assert(dst[0] == n % 256)
   end)
 
-  expect_no_trace("unbounded ffi.string", function(n)
+  expect_trace("unbounded ffi.string", function(n)
     local total = 0
     for _ = 1, n do
       total = total + #ffi.string(cstr)
