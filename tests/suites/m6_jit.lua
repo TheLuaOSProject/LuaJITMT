@@ -603,7 +603,7 @@ jit.opt.start("hotloop=1", "hotexit=1")
 for i = 1, 80 do ffi.copy(dst, src, 512) end
 ]=])
       assert_loop_after_xpoll(t, copy_dump, "FFI copy XBAR loop",
-                              { "CALLS  memcpy", "XBAR" })
+                              { "CALLS  lj_ffi_jit_memcpy", "XBAR" })
 
       local load_dump = t:tmp("lj-m6-xbar-xload-ir.dump")
       run_ir_dump_probe(t, load_dump, [=[

@@ -1129,8 +1129,8 @@ static void crec_copy(jit_State *J, TRef trdst, TRef trsrc, TRef trlen,
 fallback:
   if (!allow_memcall)
     lj_trace_err(J, LJ_TRERR_NYICALL);
-  /* Call memcpy. Always needs a barrier to disable alias analysis. */
-  lj_ir_call(J, IRCALL_memcpy, trdst, trsrc, trlen);
+  /* Call memcpy through the native-state bridge. */
+  lj_ir_call(J, IRCALL_lj_ffi_jit_memcpy, trdst, trsrc, trlen);
   emitir(IRT(IR_XBAR, IRT_NIL), 0, 0);
 }
 
@@ -1201,8 +1201,8 @@ static void crec_fill(jit_State *J, TRef trdst, TRef trlen, TRef trfill,
 fallback:
     if (!allow_memcall)
       lj_trace_err(J, LJ_TRERR_NYICALL);
-    /* Call memset. Always needs a barrier to disable alias analysis. */
-    lj_ir_call(J, IRCALL_memset, trdst, trfill, trlen);  /* Note: arg order! */
+    /* Call memset through the native-state bridge. */
+    lj_ir_call(J, IRCALL_lj_ffi_jit_memset, trdst, trfill, trlen);
   }
   emitir(IRT(IR_XBAR, IRT_NIL), 0, 0);
 }
@@ -2546,6 +2546,67 @@ static int crec_call_jit_num_ptr(jit_State *J, RecordFFData *rd, CTState *cts,
   return 1;
 }
 
+static int crec_call_jit_num_flt(jit_State *J, RecordFFData *rd, CTState *cts,
+				 CType *ct, CTInfo info, GCcdata *cd,
+				 IRType tp, CTSize fsz)
+{
+  CType ctrsnap, ctfcopy, dcopy;
+  CType *ctr, *ctf, *d;
+  CTypeID fid, did;
+  CTInfo ctr_info, ctfinfo, dinfo;
+  TRef func, arg;
+  MSize narg = 0;
+
+  if ((info & CTF_VARARG))
+    return 0;
+  while (J->base[1+narg]) {
+    if (narg >= 2)
+      return 0;
+    narg++;
+  }
+  if (narg != 1)
+    return 0;
+
+  ctr = crec_ctype_rawchild(J, cts, ct, &ctrsnap);
+  ctr_info = ctype_info_acq(ctr);
+  if (!ctype_isfp(ctr_info) || ctype_size_acq(ctr) != sizeof(double))
+    return 0;
+
+  fid = ctype_sib_acq(ct);
+  while (fid) {
+    ctf = crec_ctype_snapshot(J, cts, fid, &ctfcopy);
+    ctfinfo = ctype_info_acq(ctf);
+    if (!ctype_isattrib(ctfinfo)) break;
+    fid = ctype_sib_acq(ctf);
+  }
+  if (!fid)
+    return 0;
+  ctf = crec_ctype_snapshot(J, cts, fid, &ctfcopy);
+  ctfinfo = ctype_info_acq(ctf);
+  if (!ctype_isfield(ctfinfo))
+    return 0;
+  fid = ctype_sib_acq(ctf);
+  did = ctype_cid(ctfinfo);
+  d = crec_ctype_rawrefid(J, cts, did, &did, &dcopy);
+  dinfo = ctype_info_acq(d);
+  if (!ctype_isfp(dinfo) || ctype_size_acq(d) != sizeof(float))
+    return 0;
+  if (fid)
+    return 0;
+
+  arg = crec_ct_tv(J, d, 0, J->base[1], &rd->argv[1]);
+  if (!tref_istype(arg, IRT_FLOAT))
+    lj_trace_err(J, LJ_TRERR_NYICALL);
+
+  if (lj_ctype_cb_isblacklisted(cts, cdata_getptr(cdataptr(cd), fsz)))
+    lj_trace_err(J, LJ_TRERR_BLACKL);
+
+  func = emitir(IRT(IR_FLOAD, tp), J->base[0], IRFL_CDATA_PTR);
+  J->base[0] = lj_ir_call(J, IRCALL_lj_ccall_jit_num_flt, func, arg);
+  J->needsnap = 1;
+  return 1;
+}
+
 static int crec_call_jit_i32_num(jit_State *J, RecordFFData *rd, CTState *cts,
 				 CType *ct, CTInfo info, GCcdata *cd,
 				 IRType tp, CTSize fsz)
@@ -2604,6 +2665,68 @@ static int crec_call_jit_i32_num(jit_State *J, RecordFFData *rd, CTState *cts,
 
   func = emitir(IRT(IR_FLOAD, tp), J->base[0], IRFL_CDATA_PTR);
   J->base[0] = lj_ir_call(J, IRCALL_lj_ccall_jit_i32_num, func, arg);
+  J->needsnap = 1;
+  return 1;
+}
+
+static int crec_call_jit_i32_flt(jit_State *J, RecordFFData *rd, CTState *cts,
+				 CType *ct, CTInfo info, GCcdata *cd,
+				 IRType tp, CTSize fsz)
+{
+  CType ctrsnap, ctfcopy, dcopy;
+  CType *ctr, *ctf, *d;
+  CTypeID fid, did;
+  CTInfo ctr_info, ctfinfo, dinfo;
+  TRef func, arg;
+  MSize narg = 0;
+
+  if ((info & CTF_VARARG))
+    return 0;
+  while (J->base[1+narg]) {
+    if (narg >= 2)
+      return 0;
+    narg++;
+  }
+  if (narg != 1)
+    return 0;
+
+  ctr = crec_ctype_rawchild(J, cts, ct, &ctrsnap);
+  ctr_info = ctype_info_acq(ctr);
+  if (!ctype_isinteger(ctr_info) || ctype_size_acq(ctr) != 4 ||
+      (ctr_info & CTF_UNSIGNED))
+    return 0;
+
+  fid = ctype_sib_acq(ct);
+  while (fid) {
+    ctf = crec_ctype_snapshot(J, cts, fid, &ctfcopy);
+    ctfinfo = ctype_info_acq(ctf);
+    if (!ctype_isattrib(ctfinfo)) break;
+    fid = ctype_sib_acq(ctf);
+  }
+  if (!fid)
+    return 0;
+  ctf = crec_ctype_snapshot(J, cts, fid, &ctfcopy);
+  ctfinfo = ctype_info_acq(ctf);
+  if (!ctype_isfield(ctfinfo))
+    return 0;
+  fid = ctype_sib_acq(ctf);
+  did = ctype_cid(ctfinfo);
+  d = crec_ctype_rawrefid(J, cts, did, &did, &dcopy);
+  dinfo = ctype_info_acq(d);
+  if (!ctype_isfp(dinfo) || ctype_size_acq(d) != sizeof(float))
+    return 0;
+  if (fid)
+    return 0;
+
+  arg = crec_ct_tv(J, d, 0, J->base[1], &rd->argv[1]);
+  if (!tref_istype(arg, IRT_FLOAT))
+    lj_trace_err(J, LJ_TRERR_NYICALL);
+
+  if (lj_ctype_cb_isblacklisted(cts, cdata_getptr(cdataptr(cd), fsz)))
+    lj_trace_err(J, LJ_TRERR_BLACKL);
+
+  func = emitir(IRT(IR_FLOAD, tp), J->base[0], IRFL_CDATA_PTR);
+  J->base[0] = lj_ir_call(J, IRCALL_lj_ccall_jit_i32_flt, func, arg);
   J->needsnap = 1;
   return 1;
 }
@@ -2729,6 +2852,130 @@ static int crec_call_jit_void_num(jit_State *J, RecordFFData *rd, CTState *cts,
   func = emitir(IRT(IR_FLOAD, tp), J->base[0], IRFL_CDATA_PTR);
   lj_ir_call(J, IRCALL_lj_ccall_jit_void_num, func, arg);
   rd->nres = 0;
+  J->needsnap = 1;
+  return 1;
+}
+
+static int crec_call_jit_void_flt(jit_State *J, RecordFFData *rd,
+				  CTState *cts, CType *ct, CTInfo info,
+				  GCcdata *cd, IRType tp, CTSize fsz)
+{
+  CType ctrsnap, ctfcopy, dcopy;
+  CType *ctr, *ctf, *d;
+  CTypeID fid, did;
+  CTInfo ctr_info, ctfinfo, dinfo;
+  TRef func, arg;
+  MSize narg = 0;
+
+  if ((info & CTF_VARARG))
+    return 0;
+  while (J->base[1+narg]) {
+    if (narg >= 2)
+      return 0;
+    narg++;
+  }
+  if (narg != 1)
+    return 0;
+
+  ctr = crec_ctype_rawchild(J, cts, ct, &ctrsnap);
+  ctr_info = ctype_info_acq(ctr);
+  if (!ctype_isvoid(ctr_info))
+    return 0;
+
+  fid = ctype_sib_acq(ct);
+  while (fid) {
+    ctf = crec_ctype_snapshot(J, cts, fid, &ctfcopy);
+    ctfinfo = ctype_info_acq(ctf);
+    if (!ctype_isattrib(ctfinfo)) break;
+    fid = ctype_sib_acq(ctf);
+  }
+  if (!fid)
+    return 0;
+  ctf = crec_ctype_snapshot(J, cts, fid, &ctfcopy);
+  ctfinfo = ctype_info_acq(ctf);
+  if (!ctype_isfield(ctfinfo))
+    return 0;
+  fid = ctype_sib_acq(ctf);
+  did = ctype_cid(ctfinfo);
+  d = crec_ctype_rawrefid(J, cts, did, &did, &dcopy);
+  dinfo = ctype_info_acq(d);
+  if (!ctype_isfp(dinfo) || ctype_size_acq(d) != sizeof(float))
+    return 0;
+  if (fid)
+    return 0;
+
+  arg = crec_ct_tv(J, d, 0, J->base[1], &rd->argv[1]);
+  if (!tref_istype(arg, IRT_FLOAT))
+    lj_trace_err(J, LJ_TRERR_NYICALL);
+
+  if (lj_ctype_cb_isblacklisted(cts, cdata_getptr(cdataptr(cd), fsz)))
+    lj_trace_err(J, LJ_TRERR_BLACKL);
+
+  func = emitir(IRT(IR_FLOAD, tp), J->base[0], IRFL_CDATA_PTR);
+  lj_ir_call(J, IRCALL_lj_ccall_jit_void_flt, func, arg);
+  rd->nres = 0;
+  J->needsnap = 1;
+  return 1;
+}
+
+static int crec_call_jit_flt_num(jit_State *J, RecordFFData *rd, CTState *cts,
+				 CType *ct, CTInfo info, GCcdata *cd,
+				 IRType tp, CTSize fsz)
+{
+  CType ctrsnap, ctfcopy, dcopy;
+  CType *ctr, *ctf, *d;
+  CTypeID fid, did;
+  CTInfo ctr_info, ctfinfo, dinfo;
+  TRef func, arg;
+  MSize narg = 0;
+
+  if ((info & CTF_VARARG))
+    return 0;
+  while (J->base[1+narg]) {
+    if (narg >= 2)
+      return 0;
+    narg++;
+  }
+  if (narg != 1)
+    return 0;
+
+  ctr = crec_ctype_rawchild(J, cts, ct, &ctrsnap);
+  ctr_info = ctype_info_acq(ctr);
+  if (!ctype_isfp(ctr_info) || ctype_size_acq(ctr) != sizeof(float))
+    return 0;
+
+  fid = ctype_sib_acq(ct);
+  while (fid) {
+    ctf = crec_ctype_snapshot(J, cts, fid, &ctfcopy);
+    ctfinfo = ctype_info_acq(ctf);
+    if (!ctype_isattrib(ctfinfo)) break;
+    fid = ctype_sib_acq(ctf);
+  }
+  if (!fid)
+    return 0;
+  ctf = crec_ctype_snapshot(J, cts, fid, &ctfcopy);
+  ctfinfo = ctype_info_acq(ctf);
+  if (!ctype_isfield(ctfinfo))
+    return 0;
+  fid = ctype_sib_acq(ctf);
+  did = ctype_cid(ctfinfo);
+  d = crec_ctype_rawrefid(J, cts, did, &did, &dcopy);
+  dinfo = ctype_info_acq(d);
+  if (!ctype_isfp(dinfo) || ctype_size_acq(d) != sizeof(double))
+    return 0;
+  if (fid)
+    return 0;
+
+  arg = crec_ct_tv(J, d, 0, J->base[1], &rd->argv[1]);
+  if (!tref_isnum(arg))
+    lj_trace_err(J, LJ_TRERR_NYICALL);
+
+  if (lj_ctype_cb_isblacklisted(cts, cdata_getptr(cdataptr(cd), fsz)))
+    lj_trace_err(J, LJ_TRERR_BLACKL);
+
+  func = emitir(IRT(IR_FLOAD, tp), J->base[0], IRFL_CDATA_PTR);
+  J->base[0] = lj_ir_call(J, IRCALL_lj_ccall_jit_flt_num, func, arg);
+  J->base[0] = emitconv(J->base[0], IRT_NUM, IRT_FLOAT, 0);
   J->needsnap = 1;
   return 1;
 }
@@ -3309,11 +3556,19 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
       return 1;
     if (crec_call_jit_num_ptr(J, rd, cts, ct, info, cd, tp, fsz))
       return 1;
+    if (crec_call_jit_num_flt(J, rd, cts, ct, info, cd, tp, fsz))
+      return 1;
     if (crec_call_jit_i32_num(J, rd, cts, ct, info, cd, tp, fsz))
+      return 1;
+    if (crec_call_jit_i32_flt(J, rd, cts, ct, info, cd, tp, fsz))
       return 1;
     if (crec_call_jit_ptr_num(J, rd, cts, ct, info, cd, tp, fsz))
       return 1;
     if (crec_call_jit_void_num(J, rd, cts, ct, info, cd, tp, fsz))
+      return 1;
+    if (crec_call_jit_void_flt(J, rd, cts, ct, info, cd, tp, fsz))
+      return 1;
+    if (crec_call_jit_flt_num(J, rd, cts, ct, info, cd, tp, fsz))
       return 1;
     if (crec_call_jit_narrow_0(J, rd, cts, ct, info, cd, tp, fsz))
       return 1;
@@ -3874,7 +4129,7 @@ void LJ_FASTCALL recff_ffi_fill(jit_State *J, RecordFFData *rd)
     else
       trfill = lj_ir_kint(J, 0);
     rd->nres = 0;
-    crec_fill(J, trdst, trlen, trfill, step, 0);
+    crec_fill(J, trdst, trlen, trfill, step, crec_const_len(J, trlen));
   }  /* else: interpreter will throw. */
 }
 

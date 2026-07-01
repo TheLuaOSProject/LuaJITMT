@@ -127,6 +127,31 @@ return function(add)
         env = { LJ_M7_FFI_CCALL_JIT_SO = jit_so },
         timeout = "20s"
       })
+      local copy_dump = t:tmp("lj_t-ffi-copy-native-ir.dump")
+      local fill_dump = t:tmp("lj_t-ffi-fill-native-ir.dump")
+      run_ir_dump_probe(t, copy_dump, [[
+local ffi = require"ffi"
+local dst = ffi.new("uint8_t[512]")
+local src = ffi.new("uint8_t[512]")
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+for _ = 1, 80 do ffi.copy(dst, src, 256) end
+print("bulk copy ok")
+]])
+      run_ir_dump_probe(t, fill_dump, [[
+local ffi = require"ffi"
+local dst = ffi.new("uint8_t[512]")
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+for _ = 1, 80 do ffi.fill(dst, 256, 0x5a) end
+print("bulk fill ok")
+]])
+      assert_dump_contains(t, copy_dump, "lj_ffi_jit_memcpy",
+                           "bulk ffi.copy native helper")
+      assert_dump_contains(t, fill_dump, "lj_ffi_jit_memset",
+                           "bulk ffi.fill native helper")
+      assert_dump_contains(t, copy_dump, "XBAR", "bulk ffi memory XBAR")
+      assert_dump_contains(t, fill_dump, "XBAR", "bulk ffi memory XBAR")
       print("M7 FFI native blocking-call behavior passed")
     end
   })
@@ -536,6 +561,7 @@ assert(cl.lj_clib_ldscript_value() == 42)
 
       local dump = t:tmp("lj_t-ffi-jit-cnew.dump")
       local dumpi = t:tmp("lj_t-ffi-jit-cnewi.dump")
+      local dumpbig = t:tmp("lj_t-ffi-jit-cnew-big.dump")
       run_ir_dump_probe(t, dump, [[
 local ffi = require"ffi"
 ffi.cdef"typedef struct { int x; double y; } lj_m7_jit_dump_t;"
@@ -568,10 +594,31 @@ end
 for _ = 1, 30 do assert(tonumber(make(80)) == 80) end
 print("dump cnewi ok")
 ]])
+      run_ir_dump_probe(t, dumpbig, [[
+local ffi = require"ffi"
+ffi.cdef"typedef struct { uint8_t x[1024]; } lj_m7_jit_dump_big_t;"
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local big_t = ffi.typeof("lj_m7_jit_dump_big_t")
+local sink
+local function make(n)
+  for i = 1, n do
+    local obj = big_t()
+    obj.x[0] = i
+    sink = obj
+  end
+  return sink.x[0]
+end
+for _ = 1, 30 do assert(make(80) == 80) end
+print("dump big cnew ok")
+]])
       assert_dump_contains(t, dump, "CNEW", "CNEW trace")
       assert_dump_contains(t, dumpi, "CNEWI", "CNEWI trace")
+      assert_dump_contains(t, dumpbig, "lj_ffi_jit_memset",
+                           "large CNEW zero-fill native helper")
       assert_dump_contains(t, dump, "dump cnew ok", "CNEW probe")
       assert_dump_contains(t, dumpi, "dump cnewi ok", "CNEWI probe")
+      assert_dump_contains(t, dumpbig, "dump big cnew ok", "large CNEW probe")
 
       clean_build(t, { xcflags = "-DLUA_USE_ASSERT -DLJ_GC2_PARANOIA=1" })
       run_stock(t, { "test.lua", "--quiet", "lib/ffi/jit_struct.lua" }, {

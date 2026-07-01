@@ -115,6 +115,11 @@ double lj_m7_ccall_jit_num_ptr(int *p)
   return (double)*p + 0.25;
 }
 
+double lj_m7_ccall_jit_num_flt(float a)
+{
+  return (double)a + 0.125;
+}
+
 double lj_m7_ccall_jit_num1(double a)
 {
   return a + 0.5;
@@ -150,6 +155,11 @@ int32_t lj_m7_ccall_jit_i32_num(double a)
   return (int32_t)a + 3;
 }
 
+int32_t lj_m7_ccall_jit_i32_flt(float a)
+{
+  return (int32_t)a + 4;
+}
+
 void lj_m7_ccall_jit_void0(void)
 {
   lj_m7_ccall_jit_void_count++;
@@ -158,6 +168,16 @@ void lj_m7_ccall_jit_void0(void)
 void lj_m7_ccall_jit_void_num(double a)
 {
   lj_m7_ccall_jit_void_count += (int)a;
+}
+
+void lj_m7_ccall_jit_void_flt(float a)
+{
+  lj_m7_ccall_jit_void_count += (int)a;
+}
+
+float lj_m7_ccall_jit_flt_num(double a)
+{
+  return (float)(a + 0.5);
 }
 
 void lj_m7_ccall_jit_store_i32(int *p, int v)

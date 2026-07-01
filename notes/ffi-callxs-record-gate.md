@@ -39,10 +39,13 @@ The separate `lj_ccall_jit_{num,flt}_fpr()` helpers trace exact double or float
 returns with 0, 1, or 2 same-kind exact FP arguments through the same
 native-state bridge.
 `lj_ccall_jit_num_i32()`, `lj_ccall_jit_num_ptr()`,
-`lj_ccall_jit_i32_num()`, `lj_ccall_jit_ptr_num()`, and
-`lj_ccall_jit_void_num()` trace the first mixed one-argument slice: exact
-`double(int32_t)`, `double(pointer)`, `int32_t(double)`, `pointer(double)`, and
-`void(double)`, while other mixed shapes remain
+`lj_ccall_jit_num_flt()`, `lj_ccall_jit_i32_num()`,
+`lj_ccall_jit_i32_flt()`, `lj_ccall_jit_ptr_num()`,
+`lj_ccall_jit_void_num()`, `lj_ccall_jit_void_flt()`, and
+`lj_ccall_jit_flt_num()` trace the first mixed one-argument slice: exact
+`double(int32_t)`, `double(pointer)`, `double(float)`, `int32_t(double)`,
+`int32_t(float)`, `pointer(double)`, `void(double)`, `void(float)`, and
+`float(double)`, while other mixed shapes remain
 interpreted.
 
 Validation:

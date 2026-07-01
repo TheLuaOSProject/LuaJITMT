@@ -46,9 +46,12 @@ cdata results; `lj_ccall_jit_u64_gpr()` does the same for exact signed 32-bit
 integer or pointer arguments. The sibling
 `lj_ccall_jit_{num,flt}_fpr()` helpers trace exact double or float returns with
 0, 1, or 2 same-kind exact FP arguments. `lj_ccall_jit_num_i32()`,
-`lj_ccall_jit_num_ptr()`, `lj_ccall_jit_i32_num()`, and
-`lj_ccall_jit_ptr_num()` and `lj_ccall_jit_void_num()` cover the first exact
-mixed one-argument calls. Broad traced ordinary FFI C calls remain disabled by
+`lj_ccall_jit_num_ptr()`, `lj_ccall_jit_num_flt()`,
+`lj_ccall_jit_i32_num()`, `lj_ccall_jit_i32_flt()`,
+`lj_ccall_jit_ptr_num()`, `lj_ccall_jit_void_num()`,
+`lj_ccall_jit_void_flt()`, and `lj_ccall_jit_flt_num()` cover the first exact
+mixed one-argument calls, including float/double crossings. Broad traced
+ordinary FFI C calls remain disabled by
 `LJ_FFI_RECORD_CALLS=0` because x64 `IR_CALLXS` lowering still needs explicit
 result preservation and carefully ordered native entry relative to ABI argument
 setup before direct mcode calls are safe.

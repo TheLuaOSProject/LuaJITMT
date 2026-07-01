@@ -25,6 +25,7 @@ int lj_m7_ccall_jit_i8_arg_i32(int8_t);
 double lj_m7_ccall_jit_num0(void);
 double lj_m7_ccall_jit_num_i32(int32_t);
 double lj_m7_ccall_jit_num_ptr(int *);
+double lj_m7_ccall_jit_num_flt(float);
 double lj_m7_ccall_jit_num1(double);
 double lj_m7_ccall_jit_num2(double, double);
 float lj_m7_ccall_jit_flt0(void);
@@ -32,8 +33,11 @@ float lj_m7_ccall_jit_flt1(float);
 float lj_m7_ccall_jit_flt2(float, float);
 int lj_m7_ccall_jit_void_count_i32(void);
 int32_t lj_m7_ccall_jit_i32_num(double);
+int32_t lj_m7_ccall_jit_i32_flt(float);
 void lj_m7_ccall_jit_void0(void);
 void lj_m7_ccall_jit_void_num(double);
+void lj_m7_ccall_jit_void_flt(float);
+float lj_m7_ccall_jit_flt_num(double);
 void lj_m7_ccall_jit_store_i32(int *, int);
 unsigned int lj_m7_ccall_jit_u32(unsigned int);
 uint32_t lj_m7_ccall_jit_u32_i32(int32_t);
@@ -184,6 +188,7 @@ do
     local num0 = lib.lj_m7_ccall_jit_num0
     local num_i32 = lib.lj_m7_ccall_jit_num_i32
     local num_ptr = lib.lj_m7_ccall_jit_num_ptr
+    local num_flt = lib.lj_m7_ccall_jit_num_flt
     local num1 = lib.lj_m7_ccall_jit_num1
     local num2 = lib.lj_m7_ccall_jit_num2
     local flt0 = lib.lj_m7_ccall_jit_flt0
@@ -191,8 +196,11 @@ do
     local flt2 = lib.lj_m7_ccall_jit_flt2
     local void_count_i32 = lib.lj_m7_ccall_jit_void_count_i32
     local i32_num = lib.lj_m7_ccall_jit_i32_num
+    local i32_flt = lib.lj_m7_ccall_jit_i32_flt
     local void0 = lib.lj_m7_ccall_jit_void0
     local void_num = lib.lj_m7_ccall_jit_void_num
+    local void_flt = lib.lj_m7_ccall_jit_void_flt
+    local flt_num = lib.lj_m7_ccall_jit_flt_num
     local store_i32 = lib.lj_m7_ccall_jit_store_i32
     local u32 = lib.lj_m7_ccall_jit_u32
     local u32_i32 = lib.lj_m7_ccall_jit_u32_i32
@@ -342,6 +350,13 @@ do
       end
       return r
     end
+    local function run_num_flt(n)
+      local r = 0
+      for i = 1, n do
+	r = r + num_flt(i + 0.25)
+      end
+      return r
+    end
     local function run_num1(n)
       local r = 0
       for i = 1, n do
@@ -384,6 +399,13 @@ do
       end
       return r
     end
+    local function run_i32_flt(n)
+      local r = 0
+      for i = 1, n do
+	r = r + i32_flt(i + 0.75)
+      end
+      return r
+    end
     local function run_void0(n)
       local before = void_count_i32()
       for _ = 1, n do
@@ -397,6 +419,20 @@ do
 	assert(void_num(i + 0.25) == nil)
       end
       return void_count_i32() - before
+    end
+    local function run_void_flt(n)
+      local before = void_count_i32()
+      for i = 1, n do
+	assert(void_flt(i + 0.25) == nil)
+      end
+      return void_count_i32() - before
+    end
+    local function run_flt_num(n)
+      local r = 0
+      for i = 1, n do
+	r = r + flt_num(i + 0.25)
+      end
+      return r
     end
     local function run_void_store(n)
       local p = ffi.new("int[1]")
@@ -630,6 +666,11 @@ do
 
     jit.flush()
     jit.opt.start("hotloop=1", "hotexit=1")
+    assert(run_num_flt(80) == (80 * 81) / 2 + 30)
+    assert(trace_count() > 0, "shared float->double FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
     assert(run_num1(80) == (80 * 81) / 2 + 40)
     assert(trace_count() > 0, "shared double->double FFI call loop should trace")
 
@@ -660,6 +701,11 @@ do
 
     jit.flush()
     jit.opt.start("hotloop=1", "hotexit=1")
+    assert(run_i32_flt(80) == (80 * 81) / 2 + 320)
+    assert(trace_count() > 0, "shared float->int FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
     assert(run_void0(80) == 80)
     assert(trace_count() > 0, "shared void->void FFI call loop should trace")
 
@@ -667,6 +713,16 @@ do
     jit.opt.start("hotloop=1", "hotexit=1")
     assert(run_void_num(80) == (80 * 81) / 2)
     assert(trace_count() > 0, "shared double->void FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    assert(run_void_flt(80) == (80 * 81) / 2)
+    assert(trace_count() > 0, "shared float->void FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    assert(run_flt_num(80) == (80 * 81) / 2 + 60)
+    assert(trace_count() > 0, "shared double->float FFI call loop should trace")
 
     jit.flush()
     jit.opt.start("hotloop=1", "hotexit=1")

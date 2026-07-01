@@ -266,6 +266,8 @@ typedef struct CCallInfo {
   _(FFI,	strlen,			1,   L, INTP, 0) \
   _(FFI,	memcpy,			3,   S, PTR, 0) \
   _(FFI,	memset,			3,   S, PTR, 0) \
+  _(FFI,	lj_ffi_jit_memcpy,	4,   S, PTR, CCI_L|CCI_T) \
+  _(FFI,	lj_ffi_jit_memset,	4,   S, PTR, CCI_L|CCI_T) \
   _(FFI,	lj_vm_errno,		0,   S, INT, CCI_NOFPRCLOBBER) \
   _(FFI,	lj_ccall_jit_void_gpr,	5,   S, NIL, CCI_L|CCI_T) \
   _(FFI,	lj_ccall_jit_i32_gpr,	5,   S, INT, CCI_L|CCI_T) \
@@ -280,9 +282,13 @@ typedef struct CCallInfo {
   _(FFI,	lj_ccall_jit_ptr_gpr,	5,   S, PTR, CCI_L|CCI_T) \
   _(FFI,	lj_ccall_jit_num_i32,	3,   S, NUM, CCI_L|CCI_T) \
   _(FFI,	lj_ccall_jit_num_ptr,	3,   S, NUM, CCI_L|CCI_T) \
+  _(FFI,	lj_ccall_jit_num_flt,	3,   S, NUM, CCI_L|CCI_T) \
   _(FFI,	lj_ccall_jit_i32_num,	3,   S, INT, CCI_L|CCI_T) \
+  _(FFI,	lj_ccall_jit_i32_flt,	3,   S, INT, CCI_L|CCI_T) \
   _(FFI,	lj_ccall_jit_ptr_num,	3,   S, PTR, CCI_L|CCI_T) \
   _(FFI,	lj_ccall_jit_void_num,	3,   S, NIL, CCI_L|CCI_T) \
+  _(FFI,	lj_ccall_jit_void_flt,	3,   S, NIL, CCI_L|CCI_T) \
+  _(FFI,	lj_ccall_jit_flt_num,	3,   S, FLOAT, CCI_L|CCI_T) \
   _(FFI,	lj_ccall_jit_num_fpr,	5,   S, NUM, CCI_L|CCI_T) \
   _(FFI,	lj_ccall_jit_flt_fpr,	5,   S, FLOAT, CCI_L|CCI_T) \
   _(FFI32,	lj_carith_mul64,	2,   N, I64, XA2_64|CCI_NOFPRCLOBBER) \
