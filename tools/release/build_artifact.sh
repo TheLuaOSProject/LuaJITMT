@@ -112,16 +112,19 @@ run_release_test() {
   if [ "$run_tests" = "0" ]; then return; fi
   case "$platform" in
     linux-x86_64)
+      LJ_RELEASE_PREFIX="$prefix" \
       LJ_RELEASE_REQUIRE=linux \
       LJ_RELEASE_LINUX_BIN="${stage}${prefix}/bin/luajit" \
         "$test_root/tools/ci/lua_test.sh" release_linux_binary
       ;;
     macos-x86_64)
+      LJ_RELEASE_PREFIX="$prefix" \
       LJ_RELEASE_REQUIRE=macos \
       LJ_RELEASE_MACOS_BIN="${stage}${prefix}/bin/luajit" \
         "$test_root/tools/ci/lua_test.sh" release_macos_binary
       ;;
     windows-x86_64-ucrt)
+      LJ_RELEASE_PREFIX="$prefix" \
       LJ_RELEASE_REQUIRE=windows \
       LJ_RELEASE_WINDOWS_BIN="${stage}${prefix}/bin/luajit.exe" \
       LJ_RELEASE_WINDOWS_RUNNER="${LJ_RELEASE_WINDOWS_RUNNER:-wine}" \
@@ -135,17 +138,20 @@ run_release_archive_test() {
   local archive=$1
   case "$platform" in
     linux-x86_64)
+      LJ_RELEASE_PREFIX="$prefix" \
       LJ_RELEASE_REQUIRE=linux \
       LJ_RELEASE_LINUX_ARCHIVE="$archive" \
         "$test_root/tools/ci/lua_test.sh" release_linux_archive
       ;;
     macos-x86_64)
+      LJ_RELEASE_PREFIX="$prefix" \
       LJ_RELEASE_REQUIRE=macos \
       LJ_RELEASE_MACOS_ARCHIVE="$archive" \
       LJ_RELEASE_MACOS_RUNNER="${LJ_RELEASE_MACOS_RUNNER:-}" \
         "$test_root/tools/ci/lua_test.sh" release_macos_archive
       ;;
     windows-x86_64-ucrt)
+      LJ_RELEASE_PREFIX="$prefix" \
       LJ_RELEASE_REQUIRE=windows \
       LJ_RELEASE_WINDOWS_ARCHIVE="$archive" \
       LJ_RELEASE_WINDOWS_RUNNER="${LJ_RELEASE_WINDOWS_RUNNER:-wine}" \
@@ -188,10 +194,30 @@ case "$platform" in
   windows-x86_64-ucrt)
     cross=${LJ_RELEASE_WINDOWS_CROSS:-x86_64-w64-mingw32ucrt-}
     cc=${LJ_RELEASE_WINDOWS_CC:-gcc}
+    windows_make_args=(
+      HOST_CC="${HOST_CC:-gcc}"
+      CROSS="$cross"
+      CC="$cc"
+      TARGET_SYS=Windows
+    )
+    windows_install_args=(
+      "${windows_make_args[@]}"
+      INSTALL_DEP=src/luajit.exe
+      INSTALL_TNAME=luajit.exe
+      INSTALL_TSYMNAME=luajit.exe
+      INSTALL_ANAME=libluajit-5.1.dll.a
+      INSTALL_SONAME=lua51.dll
+      'INSTALL_DYN=$(INSTALL_BIN)/lua51.dll'
+      FILE_T=luajit.exe
+      FILE_A=libluajit-5.1.dll.a
+      FILE_SO=lua51.dll
+      LDCONFIG=:
+      SYMLINK=:
+    )
     make_clean
-    build_make HOST_CC="${HOST_CC:-gcc}" CROSS="$cross" CC="$cc" TARGET_SYS=Windows
+    build_make "${windows_make_args[@]}"
     make -C "$root" install DESTDIR="$stage" PREFIX="$prefix" \
-      HOST_CC="${HOST_CC:-gcc}" CROSS="$cross" CC="$cc" TARGET_SYS=Windows
+      "${windows_install_args[@]}"
     install_doc "${stage}${prefix}/share/doc/luajitmt" "make install DESTDIR prefix tree"
     {
       printf 'toolchain: %s%s\n' "$cross" "$cc"
