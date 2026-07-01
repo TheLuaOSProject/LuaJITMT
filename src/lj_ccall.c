@@ -1570,6 +1570,20 @@ uint64_t lj_ccall_jit_u64_0(lua_State *L, void *func)
   return ret;
 }
 
+uint64_t lj_ccall_jit_u64_u64(lua_State *L, void *func, uint64_t a)
+{
+  CTState *cts = ctype_cts(L);
+  CCallNativeState native;
+  uint32_t actions;
+  uint64_t ret;
+  lj_ccall_native_save(L, &native);
+  lj_ccall_native_enter(L, &native, func);
+  ret = ((uint64_t (*)(uint64_t))(uintptr_t)func)(a);
+  actions = lj_ccall_native_leave(L, cts, &native, func);
+  lj_ccall_native_checkstop(L, actions, &native);
+  return ret;
+}
+
 int64_t lj_ccall_jit_i64_gpr(lua_State *L, void *func, int64_t a,
 			     int64_t b, uint32_t sig)
 {

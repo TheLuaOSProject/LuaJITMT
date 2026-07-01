@@ -8,10 +8,11 @@ integer/pointer arguments, plus exact zero-argument signed/unsigned 8-bit,
 signed/unsigned 16-bit, unsigned 32-bit, signed 64-bit, and unsigned 64-bit
 integer returns. Narrow integer returns, unsigned 32-bit returns, and
 signed/unsigned 64-bit integer returns may also use the same signed 32-bit
-integer/pointer GPR argument subset. The first unsigned-argument slice accepts
-exact `uint32_t(uint32_t)` / `unsigned int(unsigned int)` calls. The FPR subset
-accepts 0, 1, or 2 same-kind exact float or double arguments. The first mixed
-one-argument subset
+integer/pointer GPR argument subset. The first unsigned-argument slices accept
+exact `uint32_t(uint32_t)` / `unsigned int(unsigned int)` and
+`uint64_t(uint64_t)` calls; the signed 64-bit argument slice accepts exact
+`int64_t(int64_t)` calls. The FPR subset accepts 0, 1, or 2 same-kind exact
+float or double arguments. The first mixed one-argument subset
 accepts exact `double(int32_t)`, `double(pointer)`, `double(float)`,
 `int32_t(double)`, `int32_t(float)`, `int32_t(int8_t)`, `pointer(double)`,
 `void(double)`, `void(float)`, and `float(double)`. The recorder emits
@@ -21,7 +22,8 @@ code for the GPR argument shape, `lj_ccall_jit_u32_0()` /
 `lj_ccall_jit_u32_gpr()` for high-bit-safe unsigned 32-bit results,
 `lj_ccall_jit_u32_u32()` for the exact unsigned 32-bit argument/result shape,
 `lj_ccall_jit_i64_gpr()` / `lj_ccall_jit_i64_ret_gpr()` for boxed int64
-results, `lj_ccall_jit_u64_0()` / `lj_ccall_jit_u64_gpr()` for boxed uint64
+results, `lj_ccall_jit_u64_0()` / `lj_ccall_jit_u64_gpr()` /
+`lj_ccall_jit_u64_u64()` for boxed uint64
 results, `lj_ccall_jit_narrow_0()` / `lj_ccall_jit_narrow_gpr()` for narrow
 integer results, `lj_ccall_jit_num_i32()`, `lj_ccall_jit_num_ptr()`,
 `lj_ccall_jit_num_flt()`, `lj_ccall_jit_i32_num()`,
@@ -54,6 +56,7 @@ The scope is deliberately narrow:
 - zero-argument exact unsigned 64-bit integer returns;
 - exact signed/unsigned 64-bit integer returns with signed 32-bit
   integer/pointer arguments;
+- exact one-argument `int64_t(int64_t)` and `uint64_t(uint64_t)` calls;
 - same-kind exact float/double arguments and exact float/double returns;
 - exact one-argument `double(int32_t)`, `double(pointer)`, `double(float)`,
   `int32_t(double)`, `int32_t(float)`, `int32_t(int8_t)`,
@@ -71,7 +74,8 @@ signed-int/pointer to high-bit uint32 result loops, high-bit
 uint32-argument/result loops, zero-argument narrow integer result loops,
 signed-int/pointer to narrow integer result loops, exact int8-to-int loops,
 signed-int/pointer to int64/uint64 cdata-result loops, zero-argument signed
-int64 and unsigned uint64 cdata-result loops, FP-only numeric call loops, and
+int64 and unsigned uint64 cdata-result loops, exact int64/uint64
+argument/result loops, FP-only numeric call loops, and
 mixed float/double one-argument calls a traced, nonblocking native-state path,
 without risking the direct backend `IR_CALLXS` register/result ordering. The
 full direct bridge still needs x64 lowering that brackets the foreign ABI call

@@ -30,7 +30,8 @@ This remains infrastructure for a future direct `IR_CALLXS` bridge. The narrow
 signed 32-bit integer, and pointer-returning calls with 0, 1, or 2
 integer/pointer arguments through `IRCALL` helpers using this same native-state
 protocol. `lj_ccall_jit_i64_gpr()` handles exact zero-argument signed 64-bit
-integer returns and preserves boxed int64 cdata results.
+integer returns and exact `int64_t(int64_t)` calls, preserving boxed int64 cdata
+results.
 `lj_ccall_jit_i64_ret_gpr()` extends boxed int64 returns to exact signed 32-bit
 integer or pointer arguments.
 `lj_ccall_jit_narrow_0()` handles exact zero-argument signed/unsigned 8-bit and
@@ -46,7 +47,8 @@ the same native-state protocol and high-bit-safe Lua number result conversion.
 `lj_ccall_jit_u64_0()` handles
 exact zero-argument unsigned 64-bit integer returns and preserves boxed uint64
 cdata results; `lj_ccall_jit_u64_gpr()` does the same for exact signed 32-bit
-integer or pointer arguments. The sibling
+integer or pointer arguments. `lj_ccall_jit_u64_u64()` handles exact
+`uint64_t(uint64_t)` calls. The sibling
 `lj_ccall_jit_{num,flt}_fpr()` helpers trace exact double or float returns with
 0, 1, or 2 same-kind exact FP arguments. `lj_ccall_jit_num_i32()`,
 `lj_ccall_jit_num_ptr()`, `lj_ccall_jit_num_flt()`,

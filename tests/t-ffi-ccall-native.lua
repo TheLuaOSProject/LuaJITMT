@@ -618,7 +618,7 @@ do
     jit.flush()
     jit.opt.start("hotloop=1", "hotexit=1")
     assert(run_i64_i64(80) == 640)
-    assert(trace_count() == 0, "int64_t FFI call arguments must stay off trace")
+    assert(trace_count() > 0, "shared int64_t->int64_t FFI call loop should trace")
 
     jit.flush()
     jit.opt.start("hotloop=1", "hotexit=1")
@@ -783,7 +783,7 @@ do
     jit.flush()
     jit.opt.start("hotloop=1", "hotexit=1")
     assert(run_u64(80))
-    assert(trace_count() == 0, "uint64_t FFI calls with arguments must stay off trace")
+    assert(trace_count() > 0, "shared uint64_t->uint64_t FFI call loop should trace")
 
     jit.flush()
     jit.opt.start("hotloop=1", "hotexit=1")
