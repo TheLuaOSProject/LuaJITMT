@@ -38,9 +38,11 @@ Unsigned 64-bit argument conversion remains interpreted.
 The separate `lj_ccall_jit_{num,flt}_fpr()` helpers trace exact double or float
 returns with 0, 1, or 2 same-kind exact FP arguments through the same
 native-state bridge.
-`lj_ccall_jit_num_i32()` and `lj_ccall_jit_i32_num()` trace the first mixed
-one-argument slice, exact `double(int32_t)` and `int32_t(double)`, while mixed
-multi-argument and pointer/FP combinations remain interpreted.
+`lj_ccall_jit_num_i32()`, `lj_ccall_jit_num_ptr()`,
+`lj_ccall_jit_i32_num()`, and `lj_ccall_jit_void_num()` trace the first mixed
+one-argument slice: exact `double(int32_t)`, `double(pointer)`,
+`int32_t(double)`, and `void(double)`, while other mixed shapes remain
+interpreted.
 
 Validation:
 

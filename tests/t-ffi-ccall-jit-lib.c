@@ -110,6 +110,11 @@ double lj_m7_ccall_jit_num_i32(int32_t a)
   return (double)a + 0.75;
 }
 
+double lj_m7_ccall_jit_num_ptr(int *p)
+{
+  return (double)*p + 0.25;
+}
+
 double lj_m7_ccall_jit_num1(double a)
 {
   return a + 0.5;
@@ -148,6 +153,11 @@ int32_t lj_m7_ccall_jit_i32_num(double a)
 void lj_m7_ccall_jit_void0(void)
 {
   lj_m7_ccall_jit_void_count++;
+}
+
+void lj_m7_ccall_jit_void_num(double a)
+{
+  lj_m7_ccall_jit_void_count += (int)a;
 }
 
 void lj_m7_ccall_jit_store_i32(int *p, int v)
