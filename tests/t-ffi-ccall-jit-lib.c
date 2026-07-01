@@ -2,6 +2,7 @@
 ** Shared library for traced FFI C-call native-state probes.
 */
 
+#include <stdint.h>
 #include <time.h>
 
 static int lj_m7_ccall_jit_values[4] = { 11, 22, 33, 44 };
@@ -27,6 +28,11 @@ int lj_m7_ccall_jit_sleep_i32(int ms)
 int lj_m7_ccall_jit_add2_i32(int a, int b)
 {
   return a + b + 3;
+}
+
+int64_t lj_m7_ccall_jit_i64_0(void)
+{
+  return 17;
 }
 
 double lj_m7_ccall_jit_num0(void)

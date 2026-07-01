@@ -29,9 +29,10 @@ This remains infrastructure for a future direct `IR_CALLXS` bridge. The narrow
 `lj_ccall_jit_{void,i32,ptr}_gpr()` trampoline family now traces exact void,
 signed 32-bit integer, and pointer-returning calls with 0, 1, or 2
 integer/pointer arguments through `IRCALL` helpers using this same native-state
-protocol. The sibling `lj_ccall_jit_{num,flt}_fpr()` helpers trace exact double
-or float returns with 0, 1, or 2 same-kind exact FP arguments. Broad traced
-ordinary FFI C calls remain disabled by `LJ_FFI_RECORD_CALLS=0` because x64
-`IR_CALLXS` lowering still needs explicit result preservation and carefully
-ordered native entry relative to ABI argument setup before direct mcode calls
-are safe.
+protocol. `lj_ccall_jit_i64_gpr()` handles exact zero-argument signed 64-bit
+integer returns and preserves boxed int64 cdata results. The sibling
+`lj_ccall_jit_{num,flt}_fpr()` helpers trace exact double or float returns with
+0, 1, or 2 same-kind exact FP arguments. Broad traced ordinary FFI C calls
+remain disabled by `LJ_FFI_RECORD_CALLS=0` because x64 `IR_CALLXS` lowering
+still needs explicit result preservation and carefully ordered native entry
+relative to ABI argument setup before direct mcode calls are safe.

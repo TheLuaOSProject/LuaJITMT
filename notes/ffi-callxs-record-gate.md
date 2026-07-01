@@ -15,6 +15,10 @@ The narrow integer/pointer GPR trampoline family in
 or 2 exact signed 32-bit integer and pointer arguments, with zero-result void,
 signed 32-bit integer, or pointer returns. It traces through `IRCALL`, not
 `IR_CALLXS`, and keeps the compile-time `LJ_FFI_RECORD_CALLS` gate intact.
+The sibling `lj_ccall_jit_i64_gpr()` helper traces exact zero-argument signed
+64-bit integer returns, preserving stock boxed int64 cdata results. Signed
+64-bit argument conversion remains interpreted until the recorder can produce
+the exact ABI value without widening the semantics.
 The separate `lj_ccall_jit_{num,flt}_fpr()` helpers trace exact double or float
 returns with 0, 1, or 2 same-kind exact FP arguments through the same
 native-state bridge.

@@ -1392,6 +1392,34 @@ int32_t lj_ccall_jit_i32_gpr(lua_State *L, void *func, uintptr_t a,
   return ret;
 }
 
+int64_t lj_ccall_jit_i64_gpr(lua_State *L, void *func, int64_t a,
+			     int64_t b, uint32_t sig)
+{
+  CTState *cts = ctype_cts(L);
+  CCallNativeState native;
+  uint32_t actions;
+  int64_t ret;
+  lj_ccall_native_save(L, &native);
+  lj_ccall_native_enter(L, &native, func);
+  switch (sig) {
+  case LJ_CCALL_JIT_NUM_SIG0:
+    ret = ((int64_t (*)(void))(uintptr_t)func)();
+    break;
+  case LJ_CCALL_JIT_NUM_SIG_NUM:
+    ret = ((int64_t (*)(int64_t))(uintptr_t)func)(a);
+    break;
+  case LJ_CCALL_JIT_NUM_SIG_NUM_NUM:
+    ret = ((int64_t (*)(int64_t, int64_t))(uintptr_t)func)(a, b);
+    break;
+  default:
+    ret = 0;
+    break;
+  }
+  actions = lj_ccall_native_leave(L, cts, &native, func);
+  lj_ccall_native_checkstop(L, actions, &native);
+  return ret;
+}
+
 void *lj_ccall_jit_ptr_gpr(lua_State *L, void *func, uintptr_t a,
 			   uintptr_t b, uint32_t sig)
 {

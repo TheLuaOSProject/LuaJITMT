@@ -8,6 +8,7 @@ int getpid(void);
 int poll(void *fds, unsigned long nfds, int timeout);
 int lj_m7_ccall_jit_sleep_i32(int);
 int lj_m7_ccall_jit_add2_i32(int, int);
+int64_t lj_m7_ccall_jit_i64_0(void);
 double lj_m7_ccall_jit_num0(void);
 double lj_m7_ccall_jit_num1(double);
 double lj_m7_ccall_jit_num2(double, double);
@@ -139,6 +140,7 @@ do
     local lib = ffi.load(so)
     local sleep_i32 = lib.lj_m7_ccall_jit_sleep_i32
     local add2_i32 = lib.lj_m7_ccall_jit_add2_i32
+    local i64_0 = lib.lj_m7_ccall_jit_i64_0
     local num0 = lib.lj_m7_ccall_jit_num0
     local num1 = lib.lj_m7_ccall_jit_num1
     local num2 = lib.lj_m7_ccall_jit_num2
@@ -158,6 +160,13 @@ do
       local r = 0
       for i = 1, n do
 	r = r + add2_i32(i, 2)
+      end
+      return r
+    end
+    local function run_i64_0(n)
+      local r = 0
+      for _ = 1, n do
+	r = r + tonumber(i64_0())
       end
       return r
     end
@@ -277,6 +286,11 @@ do
     jit.opt.start("hotloop=1", "hotexit=1")
     assert(run_add2(80) == (80 * 81) / 2 + 80 * 5)
     assert(trace_count() > 0, "shared int,int->int FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    assert(run_i64_0(80) == 80 * 17)
+    assert(trace_count() > 0, "shared void->int64_t FFI call loop should trace")
 
     jit.flush()
     jit.opt.start("hotloop=1", "hotexit=1")

@@ -2432,6 +2432,62 @@ static int crec_call_jit_gpr_retkind(CTInfo info, CTSize size)
   return crec_call_jit_gpr_kind(info, size);
 }
 
+static int crec_call_jit_i64_kind(CTInfo info, CTSize size)
+{
+  return ctype_isinteger(info) && size == 8 && !(info & CTF_UNSIGNED);
+}
+
+static int crec_call_jit_i64_gpr(jit_State *J, RecordFFData *rd, CTState *cts,
+				 CType *ct, CTInfo info, GCcdata *cd,
+				 IRType tp, CTSize fsz)
+{
+  CType ctrsnap, ctfcopy;
+  CType *ctr, *ctf;
+  CTypeID fid;
+  CTInfo ctr_info, ctfinfo;
+  TRef func, args[2], tr;
+  MSize narg = 0;
+
+  if ((info & CTF_VARARG))
+    return 0;
+  while (J->base[1+narg]) {
+    if (narg >= 2)
+      return 0;
+    narg++;
+  }
+  if (narg != 0)
+    return 0;
+
+  ctr = crec_ctype_rawchild(J, cts, ct, &ctrsnap);
+  ctr_info = ctype_info_acq(ctr);
+  if (!crec_call_jit_i64_kind(ctr_info, ctype_size_acq(ctr)))
+    return 0;
+
+  fid = ctype_sib_acq(ct);
+  while (fid) {
+    ctf = crec_ctype_snapshot(J, cts, fid, &ctfcopy);
+    ctfinfo = ctype_info_acq(ctf);
+    if (!ctype_isattrib(ctfinfo)) break;
+    fid = ctype_sib_acq(ctf);
+  }
+  if (fid)
+    return 0;
+
+  if (lj_ctype_cb_isblacklisted(cts, cdata_getptr(cdataptr(cd), fsz)))
+    lj_trace_err(J, LJ_TRERR_BLACKL);
+
+  func = emitir(IRT(IR_FLOAD, tp), J->base[0], IRFL_CDATA_PTR);
+  args[0] = lj_ir_kint64(J, 0);
+  args[1] = lj_ir_kint64(J, 0);
+  tr = lj_ir_call(J, IRCALL_lj_ccall_jit_i64_gpr, func, args[0],
+		  args[1], lj_ir_kint(J, (int32_t)crec_call_jit_num_sig(narg)));
+  J->base[0] = emitir(IRTG(IR_CNEWI, IRT_CDATA), lj_ir_kint(J, ctype_cid(info)),
+		      tr);
+  lj_needsplit(J);
+  J->needsnap = 1;
+  return 1;
+}
+
 static uint32_t crec_call_jit_sig(MSize narg, const int *kind)
 {
   if (narg == 0)
@@ -2554,6 +2610,8 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
     if (crec_call_jit_num_fpr(J, rd, cts, ct, info, cd, tp, fsz))
       return 1;
     if (crec_call_jit_flt_fpr(J, rd, cts, ct, info, cd, tp, fsz))
+      return 1;
+    if (crec_call_jit_i64_gpr(J, rd, cts, ct, info, cd, tp, fsz))
       return 1;
     if (crec_call_jit_gpr(J, rd, cts, ct, info, cd, tp, fsz))
       return 1;
