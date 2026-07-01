@@ -1524,6 +1524,18 @@ cTValue *lj_tab_get(lua_State *L, GCtab *t, cTValue *key)
   return niltv(L);
 }
 
+LJ_FUNCA TValue *lj_tab_gettv_forjit(lua_State *L, GCtab *t, cTValue *key,
+				     TValue *out)
+{
+  for (;;) {
+    cTValue *src = lj_tab_get(L, t, key);
+    lj_tv_load_acq(out, src);
+    if (!tvisforward(out))
+      return out;
+    lj_tab_wait_l(L);
+  }
+}
+
 /* -- Table setters ------------------------------------------------------- */
 
 static int tab_try_claim_nil_key(TValue *dst)

@@ -1568,6 +1568,16 @@ static int rec_idx_mt_shared_tabop(jit_State *J, RecordIndex *ix)
   return !rec_idx_tab_trace_local(J, ix->tab) && mt_active_acq(g);
 }
 
+static TRef rec_tmpref(jit_State *J, TRef tr);
+
+static TRef rec_idx_mt_shared_load(jit_State *J, RecordIndex *ix, IRType t)
+{
+  TRef key = rec_tmpref(J, ix->key);
+  TRef out = emitir(IRT(IR_TMPREF, IRT_PGC), TREF_NIL, IRTMPREF_OUT1);
+  TRef res = lj_ir_call(J, IRCALL_lj_tab_gettv_forjit, ix->tab, key, out);
+  return lj_record_vload(J, res, 0, t);
+}
+
 #if LJ_HAS_X64_MT_JIT_HELPERS
 static int rec_idx_tab_array_has_hdr(const GCtab *t, const TValue *array)
 {
@@ -1904,14 +1914,17 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
     TRef res = rec_idx_fwd_latest_store(J, ix);
     if (res)
       return res;
-    /*
-    ** Shared table loads can execute from mcode while another TG retires the
-    ** observed array/hash generation. Keep trace-local tables and same-trace
-    ** store forwarding enabled; leave shared loads to the interpreter until
-    ** load-side generation-following exits cover the full HREF/AREF surface.
-    */
-    if (rec_idx_mt_shared_tabop(J, ix))
-      lj_trace_err_info(J, LJ_TRERR_NYIBC);
+    if (rec_idx_mt_shared_tabop(J, ix)) {
+      TValue oldsnap;
+      ix->oldv = lj_tab_get(J->L, tabV(&ix->tabv), &ix->keyv);
+      lj_tv_load_acq(&oldsnap, ix->oldv);
+      if (tvisforward(&oldsnap))
+	lj_trace_err_info(J, LJ_TRERR_NYIBC);
+      if (tvisnil(&oldsnap) && ix->idxchain &&
+	  lj_record_mm_lookup(J, ix, MM_index))
+	goto handlemm;
+      return rec_idx_mt_shared_load(J, ix, itype2irt(&oldsnap));
+    }
   } else if (rec_idx_mt_shared_tabop(J, ix)) {
     /*
     ** Store helpers resolve forwarded slots, but shared table write traces can

@@ -49,14 +49,56 @@ local worker = th.spawn(function()
   local table_traces = trace_count(32)
   assert(table_traces > 0)
 
-  return root_traces, side_traces, table_traces, th.current():id()
+  jit.flush()
+  jit.opt.start("hotloop=1", "hotexit=1", "-sink")
+
+  local shared = { stable = 7, [3] = 11 }
+
+  local function table_read(n)
+    local s = 0
+    for _ = 1, n do
+      s = s + shared.stable + shared[3]
+    end
+    return s
+  end
+
+  for _ = 1, 20 do
+    assert(table_read(80) == 1440)
+  end
+  local read_traces = trace_count(32)
+  assert(read_traces > 0)
+
+  jit.flush()
+  jit.opt.start("hotloop=1", "hotexit=1", "-sink")
+
+  local with_index = setmetatable({}, { __index = { fallback = 13 } })
+
+  local function table_index_read(n)
+    local s = 0
+    for _ = 1, n do
+      s = s + with_index.fallback
+    end
+    return s
+  end
+
+  for _ = 1, 20 do
+    assert(table_index_read(80) == 1040)
+  end
+  local index_traces = trace_count(32)
+  assert(index_traces > 0)
+
+  return root_traces, side_traces, table_traces, read_traces, index_traces,
+	 th.current():id()
 end)
 
-local ok, root_traces, side_traces, table_traces, tid = worker:join()
+local ok, root_traces, side_traces, table_traces, read_traces, index_traces,
+      tid = worker:join()
 assert(ok == true)
 assert(type(root_traces) == "number" and root_traces > 0)
 assert(type(side_traces) == "number" and side_traces > root_traces)
 assert(type(table_traces) == "number" and table_traces > 0)
+assert(type(read_traces) == "number" and read_traces > 0)
+assert(type(index_traces) == "number" and index_traces > 0)
 assert(tid == worker:id())
 
-print("t-jit-secondary OK: secondary TG records, enters, side-traces, and allocates tables in x64 mcode")
+print("t-jit-secondary OK: secondary TG records, enters, side-traces, allocates tables, reads shared tables, and preserves __index reads in x64 mcode")

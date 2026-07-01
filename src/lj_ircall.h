@@ -194,6 +194,7 @@ typedef struct CCallInfo {
   _(ANY,	lj_tab_dup,		2,  FA, TAB, CCI_L|CCI_T) \
   _(ANY,	lj_tab_clear,		1,  FS, NIL, 0) \
   _(ANY,	lj_tab_newkey,		3,   S, PGC, CCI_L|CCI_T) \
+  _(ANY,	lj_tab_gettv_forjit,	4,   S, PGC, CCI_L) \
   _(ANY,	lj_tab_storetv_forjit_array_nogc, 5, S, PGC, CCI_L) \
   _(ANY,	lj_tab_storetv_forjit_array, 5, S, PGC, CCI_L) \
   _(ANY,	lj_tab_storetv_forjit_hash, 5, S, PGC, CCI_L) \
