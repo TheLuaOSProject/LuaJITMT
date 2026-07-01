@@ -25,7 +25,10 @@ function is blacklisted without losing the prior callback slot, and a fresh
 `LJ_GC2_HS_STOPREQ` published while the TG is native is reported only by the
 delayed helper check.
 
-This is still infrastructure for a future `IR_CALLXS` bridge. Traced ordinary
-FFI C calls remain disabled by `LJ_FFI_RECORD_CALLS=0` because the x64 lowering
-still needs explicit result preservation and carefully ordered native entry
-relative to ABI argument setup before direct mcode calls are safe.
+This remains infrastructure for a future direct `IR_CALLXS` bridge. The narrow
+`lj_ccall_jit_i32_i32()` trampoline now traces exact `int f(int)` calls through
+an `IRCALL` helper using this same native-state protocol, but broad traced
+ordinary FFI C calls remain disabled by `LJ_FFI_RECORD_CALLS=0` because x64
+`IR_CALLXS` lowering still needs explicit result preservation and carefully
+ordered native entry relative to ABI argument setup before direct mcode calls
+are safe.

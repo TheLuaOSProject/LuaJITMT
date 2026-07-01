@@ -1311,6 +1311,21 @@ void lj_ccall_native_checkstop(lua_State *L, uint32_t actions,
   ccall_checkstop_fresh(L, actions, st->had_stopreq);
 }
 
+int32_t lj_ccall_jit_i32_i32(lua_State *L, void *func, int32_t a)
+{
+  typedef int32_t (*CCallJitI32I32)(int32_t);
+  CTState *cts = ctype_cts(L);
+  CCallNativeState native;
+  uint32_t actions;
+  int32_t ret;
+  lj_ccall_native_save(L, &native);
+  lj_ccall_native_enter(L, &native, func);
+  ret = ((CCallJitI32I32)(uintptr_t)func)(a);
+  actions = lj_ccall_native_leave(L, cts, &native, func);
+  lj_ccall_native_checkstop(L, actions, &native);
+  return ret;
+}
+
 /* Call C function. */
 int lj_ccall_func(lua_State *L, GCcdata *cd)
 {

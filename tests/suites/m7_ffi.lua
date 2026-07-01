@@ -93,9 +93,12 @@ return function(add)
     name = "m7_ffi_ccall_native",
     description = "FFI native blocking-call behavior",
     run = function(t)
-      local struct_so
+      local struct_so, jit_so
       assert_recorded_ffi_calls_gate_fails(t)
       clean_build(t)
+      jit_so = build_shared_library(t,
+        t:tmp("lj_t-ffi-ccall-jit-lib.so"),
+        "t-ffi-ccall-jit-lib.c")
       struct_so = build_shared_library(t,
         t:tmp("lj_t-ffi-ccall-struct-overflow.so"),
         "t-ffi-ccall-struct-overflow-lib.c")
@@ -116,7 +119,10 @@ return function(add)
         { output = "lj_t-ffi-ccall-stopreq",
           cfile = "t-ffi-ccall-stopreq.c" }
       })
-      run_luajit_script(t, "t-ffi-ccall-native.lua")
+      run_luajit_script(t, "t-ffi-ccall-native.lua", nil, {
+        env = { LJ_M7_FFI_CCALL_JIT_SO = jit_so },
+        timeout = "20s"
+      })
       print("M7 FFI native blocking-call behavior passed")
     end
   })

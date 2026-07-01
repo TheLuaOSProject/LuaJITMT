@@ -211,6 +211,7 @@ LJ_FUNC uint32_t lj_ccall_native_leave(lua_State *L, CTState *cts,
 				       CCallNativeState *st, void *func);
 LJ_FUNC void lj_ccall_native_checkstop(lua_State *L, uint32_t actions,
 				       const CCallNativeState *st);
+LJ_FUNC int32_t lj_ccall_jit_i32_i32(lua_State *L, void *func, int32_t a);
 LJ_FUNC int lj_ccall_func(lua_State *L, GCcdata *cd);
 
 #endif

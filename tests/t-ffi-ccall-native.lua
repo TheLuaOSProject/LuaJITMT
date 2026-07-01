@@ -6,6 +6,7 @@ ffi.cdef[[
 int abs(int);
 int getpid(void);
 int poll(void *fds, unsigned long nfds, int timeout);
+int lj_m7_ccall_jit_sleep_i32(int);
 ]]
 
 local abs = ffi.C.abs
@@ -24,11 +25,24 @@ end
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
 assert(run_abs(100) == 5050)
-assert(trace_count() == 0, "ordinary FFI call loop must stay off trace")
+assert(trace_count() > 0, "supported int->int FFI call loop should trace")
 
 assert(ffi.blocking == nil)
 local getpid = ffi.C.getpid
 assert(getpid() > 0)
+
+do
+  local poll = ffi.C.poll
+  local function run_poll0(n)
+    for _ = 1, n do
+      assert(poll(nil, 0, 0) == 0)
+    end
+  end
+  jit.flush()
+  jit.opt.start("hotloop=1", "hotexit=1")
+  run_poll0(100)
+  assert(trace_count() == 0, "unsupported multi-arg FFI call must stay off trace")
+end
 
 do
   local src = ffi.new("uint8_t[128]")
@@ -87,6 +101,68 @@ do
     end
     assert(total > n)
   end)
+end
+
+do
+  local so = os.getenv("LJ_M7_FFI_CCALL_JIT_SO")
+  if so then
+    local lib = ffi.load(so)
+    local sleep_i32 = lib.lj_m7_ccall_jit_sleep_i32
+    local function run_sleep(n, ms)
+      local r = 0
+      for _ = 1, n do
+	r = sleep_i32(ms)
+      end
+      return r
+    end
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    assert(run_sleep(80, 0) == 7)
+    assert(trace_count() > 0, "shared int->int FFI call loop should trace")
+
+    local ready = th.channel(1)
+    local done = th.channel(1)
+    local sleep_ms = 350
+    local worker = th.spawn(function(ready_ch, done_ch, so_path, timeout_ms)
+      local ffi = require"ffi"
+      ffi.cdef"int lj_m7_ccall_jit_sleep_i32(int);"
+      local sleep_i32 = ffi.load(so_path).lj_m7_ccall_jit_sleep_i32
+      local function run_sleep(n, ms)
+	local r = 0
+	for _ = 1, n do
+	  r = sleep_i32(ms)
+	end
+	return r
+      end
+      jit.flush()
+      jit.opt.start("hotloop=1", "hotexit=1")
+      assert(run_sleep(80, 0) == 7)
+      ready_ch:send("sleeping")
+      assert(run_sleep(2, timeout_ms) == timeout_ms + 7)
+      done_ch:send("done")
+      return true
+    end, ready, done, so, sleep_ms)
+
+    local token, ok = ready:recv(10)
+    assert(ok == true and token == "sleeping")
+    th.sleep(0.05)
+    local early, why = done:recv(0)
+    assert(early == nil and why == "timeout",
+	   "traced FFI worker finished before GC probe")
+
+    local t0 = now()
+    collectgarbage("collect")
+    local elapsed = now() - t0
+    assert(elapsed < 0.5,
+	   ("collectgarbage blocked on traced FFI native call for %.3fs"):
+	   format(elapsed))
+
+    local msg, done_ok = done:recv(2)
+    assert(done_ok == true and msg == "done")
+    local joined, result = worker:join(2)
+    assert(joined == true and result == true)
+  end
 end
 
 do

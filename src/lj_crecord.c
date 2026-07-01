@@ -2276,6 +2276,57 @@ static void crec_snap_caller(jit_State *J)
 }
 #endif
 
+#if LJ_TARGET_X64
+static int crec_call_jit_i32_i32(jit_State *J, RecordFFData *rd,
+				 CTState *cts, CType *ct, CTInfo info,
+				 GCcdata *cd, IRType tp, CTSize fsz)
+{
+  CType ctrsnap, ctfcopy, dcopy;
+  CType *ctr, *ctf, *d;
+  CTypeID fid, did;
+  CTInfo ctr_info, ctfinfo, dinfo;
+  TRef func, arg;
+
+  if ((info & CTF_VARARG) || !J->base[1] || J->base[2])
+    return 0;
+
+  ctr = crec_ctype_rawchild(J, cts, ct, &ctrsnap);
+  ctr_info = ctype_info_acq(ctr);
+  if (!ctype_isinteger(ctr_info) || ctype_size_acq(ctr) != 4)
+    return 0;
+
+  fid = ctype_sib_acq(ct);
+  while (fid) {
+    ctf = crec_ctype_snapshot(J, cts, fid, &ctfcopy);
+    ctfinfo = ctype_info_acq(ctf);
+    if (!ctype_isattrib(ctfinfo)) break;
+    fid = ctype_sib_acq(ctf);
+  }
+  if (!fid)
+    return 0;
+  ctf = crec_ctype_snapshot(J, cts, fid, &ctfcopy);
+  ctfinfo = ctype_info_acq(ctf);
+  if (!ctype_isfield(ctfinfo) || ctype_sib_acq(ctf) != 0)
+    return 0;
+  did = ctype_cid(ctfinfo);
+  d = crec_ctype_rawrefid(J, cts, did, &did, &dcopy);
+  dinfo = ctype_info_acq(d);
+  if (!ctype_isinteger(dinfo) || ctype_size_acq(d) != 4)
+    return 0;
+
+  if (lj_ctype_cb_isblacklisted(cts, cdata_getptr(cdataptr(cd), fsz)))
+    lj_trace_err(J, LJ_TRERR_BLACKL);
+
+  arg = crec_ct_tv(J, d, 0, J->base[1], &rd->argv[1]);
+  if (!tref_isint(arg))
+    lj_trace_err(J, LJ_TRERR_NYICALL);
+  func = emitir(IRT(IR_FLOAD, tp), J->base[0], IRFL_CDATA_PTR);
+  J->base[0] = lj_ir_call(J, IRCALL_lj_ccall_jit_i32_i32, func, arg);
+  J->needsnap = 1;
+  return 1;
+}
+#endif
+
 /* Record function call. */
 static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
 {
@@ -2284,17 +2335,23 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
   CTypeID id;
   CType *ct = crec_ctype_rawrefid(J, cts, cd->ctypeid, &id, &ctsnap);
   CTInfo info = ctype_info_acq(ct);
-#if LJ_FFI_RECORD_CALLS
+#if LJ_TARGET_X64 || LJ_FFI_RECORD_CALLS
   IRType tp = IRT_PTR;
+  CTSize fsz = CTSIZE_PTR;
 #endif
   if (ctype_isptr(info)) {
-#if LJ_FFI_RECORD_CALLS
-    tp = (LJ_64 && ctype_size_acq(ct) == 8) ? IRT_P64 : IRT_P32;
+#if LJ_TARGET_X64 || LJ_FFI_RECORD_CALLS
+    fsz = ctype_size_acq(ct);
+    tp = (LJ_64 && fsz == 8) ? IRT_P64 : IRT_P32;
 #endif
     ct = crec_ctype_rawrefid(J, cts, ctype_cid(info), &id, &ctsnap);
     info = ctype_info_acq(ct);  /* crec_call_args may invalidate ct pointer. */
   }
   if (ctype_isfunc(info)) {
+#if LJ_TARGET_X64
+    if (crec_call_jit_i32_i32(J, rd, cts, ct, info, cd, tp, fsz))
+      return 1;
+#endif
 #if !LJ_FFI_RECORD_CALLS
     lj_trace_err(J, LJ_TRERR_BLACKL);
 #else

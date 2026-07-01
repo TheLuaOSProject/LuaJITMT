@@ -28,6 +28,7 @@
 #include "lj_ctype.h"
 #include "lj_cdata.h"
 #include "lj_carith.h"
+#include "lj_ccall.h"
 #endif
 #include "lj_vm.h"
 #include "lj_strscan.h"
