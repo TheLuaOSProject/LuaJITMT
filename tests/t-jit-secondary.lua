@@ -206,16 +206,40 @@ local worker = th.spawn(function()
     assert(shared_table_next(80) == 1200)
   end
   local shared_next_traces = trace_count(32)
-  assert(shared_next_traces == 0)
+  assert(shared_next_traces > 0)
+
+  jit.flush()
+  jit.opt.start("hotloop=1", "hotexit=1", "-sink")
+
+  local function shared_table_pairs(n)
+    local s = 0
+    for _ = 1, n do
+      local count = 0
+      local subtotal = 0
+      for _, value in pairs(shared_next) do
+	count = count + 1
+	subtotal = subtotal + value
+      end
+      assert(count == 3)
+      s = s + subtotal
+    end
+    return s
+  end
+
+  for _ = 1, 20 do
+    assert(shared_table_pairs(80) == 1200)
+  end
+  local shared_pairs_traces = trace_count(32)
+  assert(shared_pairs_traces > 0)
 
   return root_traces, side_traces, table_traces, read_traces, index_traces,
 	 write_traces, meta_write_traces, ipairs_traces, next_traces,
-	 shared_next_traces, th.current():id()
+	 shared_next_traces, shared_pairs_traces, th.current():id()
 end)
 
 local ok, root_traces, side_traces, table_traces, read_traces, index_traces,
       write_traces, meta_write_traces, ipairs_traces, next_traces,
-      shared_next_traces, tid = worker:join()
+      shared_next_traces, shared_pairs_traces, tid = worker:join()
 assert(ok == true, tostring(root_traces))
 assert(type(root_traces) == "number" and root_traces > 0)
 assert(type(side_traces) == "number" and side_traces > root_traces)
@@ -226,7 +250,8 @@ assert(type(write_traces) == "number" and write_traces > 0)
 assert(type(meta_write_traces) == "number" and meta_write_traces > 0)
 assert(type(ipairs_traces) == "number" and ipairs_traces > 0)
 assert(type(next_traces) == "number" and next_traces > 0)
-assert(type(shared_next_traces) == "number" and shared_next_traces == 0)
+assert(type(shared_next_traces) == "number" and shared_next_traces > 0)
+assert(type(shared_pairs_traces) == "number" and shared_pairs_traces > 0)
 assert(tid == worker:id())
 
-print("t-jit-secondary OK: secondary TG records, enters, side-traces, allocates tables, reads/writes shared tables, traces existing metatable stores, records shared ipairs() and trace-local next(), keeps shared next() interpreted, and preserves __index reads in x64 mcode")
+print("t-jit-secondary OK: secondary TG records, enters, side-traces, allocates tables, reads/writes shared tables, traces existing metatable stores, records shared ipairs(), trace-local next(), and helper-backed shared next()/pairs(), and preserves __index reads in x64 mcode")
