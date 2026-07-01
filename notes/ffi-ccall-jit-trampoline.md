@@ -1,12 +1,13 @@
 # FFI C-Call JIT Trampoline
 
 The first traced ordinary FFI C-call slice now records exact void, signed
-32-bit integer, pointer-returning, and double-returning function cdata on x64.
-The GPR subset accepts 0, 1, or 2 signed 32-bit integer/pointer arguments. The
-FPR subset accepts 0, 1, or 2 exact double arguments. The recorder emits
-`lj_ccall_jit_void_gpr()`, `lj_ccall_jit_i32_gpr()`, or
+32-bit integer, pointer-returning, and FP-returning function cdata on x64. The
+GPR subset accepts 0, 1, or 2 signed 32-bit integer/pointer arguments. The FPR
+subset accepts 0, 1, or 2 same-kind exact float or double arguments. The
+recorder emits `lj_ccall_jit_void_gpr()`, `lj_ccall_jit_i32_gpr()`, or
 `lj_ccall_jit_ptr_gpr()` plus a tiny signature code for the GPR argument shape,
-or `lj_ccall_jit_num_fpr()` for the double-only FPR shape.
+or `lj_ccall_jit_num_fpr()` / `lj_ccall_jit_flt_fpr()` for the FP-only FPR
+shapes.
 
 This does not enable the old direct `IR_CALLXS` path. Each helper is emitted as
 a side-effecting `IRCALL` with an implicit `lua_State *`; the recorder converts
@@ -20,7 +21,7 @@ The scope is deliberately narrow:
 - exactly 0, 1, or 2 Lua arguments;
 - exact signed 32-bit integer or pointer argument types;
 - void, exact signed 32-bit integer, or pointer return types;
-- exact double arguments and exact double returns;
+- same-kind exact float/double arguments and exact float/double returns;
 - x64 only;
 - callback-blacklisted functions still abort recording;
 - all other ordinary FFI calls continue to fall back to the interpreted native
@@ -28,7 +29,7 @@ The scope is deliberately narrow:
 
 This gives hot `ffi.C.getpid()`, `ffi.C.abs(i)`, small
 `int add(int,int)`-style loops, simple pointer-return/pointer-argument loops,
-side-effecting `void f(...)` loops, and double-only numeric call loops a traced,
+side-effecting `void f(...)` loops, and FP-only numeric call loops a traced,
 nonblocking native-state path without risking the direct backend `IR_CALLXS`
 register/result ordering. The full direct bridge still needs x64 lowering that
 brackets the foreign ABI call without clobbering argument or result registers.

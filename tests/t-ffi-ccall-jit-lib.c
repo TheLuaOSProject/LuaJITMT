@@ -44,6 +44,21 @@ double lj_m7_ccall_jit_num2(double a, double b)
   return a + b + 0.25;
 }
 
+float lj_m7_ccall_jit_flt0(void)
+{
+  return 1.5f;
+}
+
+float lj_m7_ccall_jit_flt1(float a)
+{
+  return a + 0.5f;
+}
+
+float lj_m7_ccall_jit_flt2(float a, float b)
+{
+  return a + b + 0.25f;
+}
+
 int lj_m7_ccall_jit_void_count_i32(void)
 {
   return lj_m7_ccall_jit_void_count;

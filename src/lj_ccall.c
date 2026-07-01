@@ -1464,6 +1464,34 @@ double lj_ccall_jit_num_fpr(lua_State *L, void *func, double a,
   return ret;
 }
 
+float lj_ccall_jit_flt_fpr(lua_State *L, void *func, float a,
+			   float b, uint32_t sig)
+{
+  CTState *cts = ctype_cts(L);
+  CCallNativeState native;
+  uint32_t actions;
+  float ret;
+  lj_ccall_native_save(L, &native);
+  lj_ccall_native_enter(L, &native, func);
+  switch (sig) {
+  case LJ_CCALL_JIT_NUM_SIG0:
+    ret = ((float (*)(void))(uintptr_t)func)();
+    break;
+  case LJ_CCALL_JIT_NUM_SIG_NUM:
+    ret = ((float (*)(float))(uintptr_t)func)(a);
+    break;
+  case LJ_CCALL_JIT_NUM_SIG_NUM_NUM:
+    ret = ((float (*)(float, float))(uintptr_t)func)(a, b);
+    break;
+  default:
+    ret = 0;
+    break;
+  }
+  actions = lj_ccall_native_leave(L, cts, &native, func);
+  lj_ccall_native_checkstop(L, actions, &native);
+  return ret;
+}
+
 /* Call C function. */
 int lj_ccall_func(lua_State *L, GCcdata *cd)
 {

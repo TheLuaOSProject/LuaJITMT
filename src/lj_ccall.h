@@ -231,6 +231,8 @@ LJ_FUNC void *lj_ccall_jit_ptr_gpr(lua_State *L, void *func,
 				   uintptr_t a, uintptr_t b, uint32_t sig);
 LJ_FUNC double lj_ccall_jit_num_fpr(lua_State *L, void *func,
 				    double a, double b, uint32_t sig);
+LJ_FUNC float lj_ccall_jit_flt_fpr(lua_State *L, void *func,
+				   float a, float b, uint32_t sig);
 LJ_FUNC int lj_ccall_func(lua_State *L, GCcdata *cd);
 
 #endif

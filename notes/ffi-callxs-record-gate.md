@@ -15,8 +15,9 @@ The narrow integer/pointer GPR trampoline family in
 or 2 exact signed 32-bit integer and pointer arguments, with zero-result void,
 signed 32-bit integer, or pointer returns. It traces through `IRCALL`, not
 `IR_CALLXS`, and keeps the compile-time `LJ_FFI_RECORD_CALLS` gate intact.
-The separate `lj_ccall_jit_num_fpr()` helper traces exact double returns with
-0, 1, or 2 exact double arguments through the same native-state bridge.
+The separate `lj_ccall_jit_{num,flt}_fpr()` helpers trace exact double or float
+returns with 0, 1, or 2 same-kind exact FP arguments through the same
+native-state bridge.
 
 Validation:
 
