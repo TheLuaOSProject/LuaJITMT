@@ -122,7 +122,7 @@ local threading_thread = {}
 ---@overload fun<R>(self: threading.thread<R>, timeout: number): true, R, ...
 ---@overload fun<R>(self: threading.thread<R>, timeout: number): false, any
 ---@overload fun<R>(self: threading.thread<R>, timeout: number): nil, threading.timeout_error
----@param timeout? number seconds to wait; omit to block indefinitely.
+---@param timeout number seconds to wait when supplied.
 ---@return threading.join_status ok true for child success, false for child error, nil on timeout.
 ---@return ... child results, an error object, or the timeout reason.
 function threading_thread:join(timeout) end
@@ -173,8 +173,8 @@ local threading_channel = {}
 ---@overload fun(self: threading.channel<T>, value: T, timeout: number): nil, threading.timeout_error
 ---@param self threading.channel<T>
 ---@param value T
----@param timeout? number seconds to wait; omit to block indefinitely.
----@return true|nil ok true on success, nil on timeout.
+---@param timeout number seconds to wait when supplied.
+---@return threading.send_result ok true on success, nil on timeout.
 ---@return threading.timeout_error? err timeout reason when `ok` is nil.
 function threading_channel:send(value, timeout) end
 
@@ -189,7 +189,7 @@ function threading_channel:send(value, timeout) end
 ---@overload fun(self: threading.channel<T>, timeout: number): nil, false
 ---@overload fun(self: threading.channel<T>, timeout: number): nil, threading.timeout_error
 ---@param self threading.channel<T>
----@param timeout? number seconds to wait; omit to block indefinitely.
+---@param timeout number seconds to wait when supplied.
 ---@return T|nil value
 ---@return threading.recv_status status
 function threading_channel:recv(timeout) end
@@ -231,7 +231,8 @@ function threading.now() end
 function threading.fence() end
 
 ---@overload fun(): nil
----@param seconds? number seconds to sleep; omit to sleep for 0 seconds.
+---@overload fun(seconds: number): nil
+---@param seconds number seconds to sleep when supplied.
 ---@return nil
 function threading.sleep(seconds) end
 
@@ -241,11 +242,17 @@ function threading.sleep(seconds) end
 function threading.gcstats() end
 
 ---Query or set the number of parked GC2 worker threads.
+---@overload fun(): integer
+---@overload fun(count: nil): integer
+---@overload fun(count: integer): integer
 ---@param count? integer|nil nil queries without changing the worker count.
 ---@return integer old_count
 function threading.gcworkers(count) end
 
 ---Query or set the GC2 collection mode.
+---@overload fun(): threading.gcmode
+---@overload fun(mode: nil): threading.gcmode
+---@overload fun(mode: threading.gcmode): threading.gcmode
 ---@param mode? threading.gcmode|nil nil queries without changing the mode.
 ---@return threading.gcmode old_mode
 function threading.gcmode(mode) end
@@ -271,7 +278,7 @@ function threading.mutex() end
 ---requested capacity.
 ---@overload fun(): threading.channel<any>
 ---@overload fun(capacity: integer): threading.channel<any>
----@param capacity? integer buffered slot count; omit for a rendezvous channel.
+---@param capacity integer buffered slot count when supplied.
 ---@return threading.channel<any> channel
 function threading.channel(capacity) end
 
