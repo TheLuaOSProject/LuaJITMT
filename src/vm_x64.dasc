@@ -371,43 +371,6 @@
 |.macro x64_vm_tab_node_hmask_acq, dst, node
 |  mov dst, dword [node+TABNODE_HMASK_OFS]	// x64_vm_tab_node_hmask_acq: TSO acquire load.
 |.endmacro
-|.macro x64_vm_tab_array_cas_fast, fallback
-|  mov r9, RC			// Save TValue *slot for helper fallback.
-|  mov RC, r8			// cmpxchg expected value must be in RAX.
-|  test byte TAB:RB->marked, LJ_GC_WEAK
-|  jnz >9
-|  x64_vm_tab_array_acq r8, TAB:RB
-|  cmp r8, TMPR
-|  jne >9
-|  lea ITYPE, [RB+TAB_COLO_SLOTS]
-|  cmp TMPR, ITYPE
-|  je >7
-|  x64_vm_tab_array_flags_acq ITYPEd, TMPR
-|  test ITYPEd, TABARRAY_FLAG_RETIRING
-|  jnz >9
-|7:
-|  mov ITYPE, [BASE+RA*8]
-|  lock; cmpxchg aword [r9], ITYPE
-|  jne >9
-|  test byte TAB:RB->marked, LJ_GC_WEAK
-|  jnz >9
-|  x64_vm_tab_array_acq r8, TAB:RB
-|  cmp r8, TMPR
-|  jne >9
-|  lea ITYPE, [RB+TAB_COLO_SLOTS]
-|  cmp TMPR, ITYPE
-|  je >7
-|  x64_vm_tab_array_flags_acq ITYPEd, TMPR
-|  test ITYPEd, TABARRAY_FLAG_RETIRING
-|  jnz >9
-|7:
-|  mov RC, r9
-|  jmp >7
-|9:
-|  mov RC, r9
-|  jmp fallback
-|7:
-|.endmacro
 |.macro x64_vm_node_next_acq, dst, node
 |  mov dst, node->next		// x64_vm_node_next_acq: TSO acquire load.
 |.endmacro
@@ -4522,24 +4485,13 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  shl RCd, 3
     |  add RC, TMPR
     |  mov r8, [RC]
-    |  mov64 ITYPE, LJ_TFORWARD_BITS
-    |  cmp r8, ITYPE
+    |  mov64 r10, LJ_TFORWARD_BITS
+    |  cmp r8, r10
     |  je ->vmeta_tsetb
     |  cmp r8, LJ_TNIL
     |  je >3				// Previous value is nil?
     |1:
     |2:	 // Set array slot.
-    |  x64_vm_tab_array_cas_fast >6
-    |  cmp TGMARK, 0
-    |  jnz ->vm_gc2_barriertv_tab
-    |  test byte TAB:RB->marked, LJ_GC_BLACK	// isblack(table)
-    |  jz >8
-    |  jmp ->vm_gc2_barriertv_tab
-    |8:
-    |  ins_next
-    |
-    |6:
-    |  movzx r9d, PC_RC
     |.if X64WIN
     |  mov ARG5d, r9d
     |  lea CARG4, [BASE+RA*8]
