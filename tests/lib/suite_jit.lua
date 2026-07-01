@@ -11,6 +11,7 @@ function M.trace1_ir_state(t, dump)
     array = 0,
     hdradd = 0,
     xload = 0,
+    alen = 0,
     asize = 0,
     eq = 0,
     aref = false,
@@ -39,6 +40,7 @@ function M.trace1_ir_state(t, dump)
         st.hdradd = st.hdradd + 1
       end
       if contains(line, " XLOAD ") then st.xload = st.xload + 1 end
+      if contains(line, " ALEN ") then st.alen = st.alen + 1 end
       if line:match("FLOAD .*tab[.]asize") then st.asize = st.asize + 1 end
       if contains(line, " p64 EQ ") then st.eq = st.eq + 1 end
       if contains(line, " ULE ") then st.ule = true end

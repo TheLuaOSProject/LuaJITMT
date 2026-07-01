@@ -425,7 +425,7 @@ doemit:
 TRef LJ_FASTCALL lj_opt_fwd_alen(jit_State *J)
 {
   IRRef tab = fins->op1;  /* Table reference. */
-  IRRef lim = tab;  /* Search limit. */
+  IRRef lim = poll_alias_limit(J, tab);  /* Search limit. */
   IRRef ref;
 
   /* Search for conflicting HSTORE with numeric key. */

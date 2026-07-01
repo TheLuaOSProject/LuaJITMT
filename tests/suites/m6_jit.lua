@@ -625,6 +625,17 @@ for i = 1, 120 do a[i % 128] = i end
 assert(a[119 % 128] == 119)
 ]=])
       assert_loop_after_xpoll(t, store_dump, "FFI XSTORE loop", { "XSTORE" })
+
+      local alen_dump = t:tmp("lj-m6-alen-xpoll-ir.dump")
+      run_ir_dump_probe(t, alen_dump, [=[
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local t = { 1, 2, 3 }
+local s = 0
+for _ = 1, 80 do s = s + #t end
+assert(s == 240)
+]=])
+      assert_loop_after_xpoll(t, alen_dump, "table ALEN loop", { "ALEN" })
       run_lua_test_case(t, "m5_jit_hash_store_nyi")
       print("M6 JIT XBAR/XPOLL alias guard passed")
     end
