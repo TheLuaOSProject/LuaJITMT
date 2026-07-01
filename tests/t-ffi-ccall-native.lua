@@ -55,6 +55,7 @@ int lj_m7_ccall_jit_ptr_sum_i32(int *, int *);
 int lj_m7_ccall_jit_i32_ptr_read_i32(int, int *);
 int *lj_m7_ccall_jit_ptr_add_i32(int *, int);
 int *lj_m7_ccall_jit_ptr_num(double);
+int lj_m7_ccall_jit_i32_ptr_ulong_i32(int *, unsigned long, int);
 ]]
 
 local abs = ffi.C.abs
@@ -103,7 +104,7 @@ do
   jit.flush()
   jit.opt.start("hotloop=1", "hotexit=1")
   run_poll0(100)
-  assert(trace_count() == 0, "unsupported multi-arg FFI call must stay off trace")
+  assert(trace_count() > 0, "ptr,unsigned long,int->int FFI call loop should trace")
 end
 
 do
@@ -218,6 +219,7 @@ do
     local i32_ptr_read_i32 = lib.lj_m7_ccall_jit_i32_ptr_read_i32
     local ptr_add_i32 = lib.lj_m7_ccall_jit_ptr_add_i32
     local ptr_num = lib.lj_m7_ccall_jit_ptr_num
+    local i32_ptr_ulong_i32 = lib.lj_m7_ccall_jit_i32_ptr_ulong_i32
     local function run_add2(n)
       local r = 0
       for i = 1, n do
@@ -582,6 +584,15 @@ do
       end
       return r
     end
+    local function run_ptr_ulong_i32(n)
+      local p = ptr0()
+      local count = ffi.new("int8_t", -1)
+      local r = 0
+      for i = 1, n do
+	r = r + i32_ptr_ulong_i32(p, count, i % 4)
+      end
+      return r
+    end
     local function run_sleep(n, ms)
       local r = 0
       for _ = 1, n do
@@ -834,6 +845,11 @@ do
     jit.opt.start("hotloop=1", "hotexit=1")
     assert(run_ptr_num(80) == 80 * 27 + 40)
     assert(trace_count() > 0, "shared double->ptr FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    assert(run_ptr_ulong_i32(80) == 80 * 1023 + 80 * 27 + 40)
+    assert(trace_count() > 0, "shared ptr,unsigned long,int->int FFI call loop should trace")
 
     jit.flush()
     jit.opt.start("hotloop=1", "hotexit=1")

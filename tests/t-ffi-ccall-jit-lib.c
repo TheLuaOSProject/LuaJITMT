@@ -264,3 +264,8 @@ int *lj_m7_ccall_jit_ptr_num(double a)
 {
   return lj_m7_ccall_jit_values + ((int)a & 3);
 }
+
+int lj_m7_ccall_jit_i32_ptr_ulong_i32(int *p, unsigned long n, int offset)
+{
+  return p[offset] + (int)(n & 1023UL);
+}

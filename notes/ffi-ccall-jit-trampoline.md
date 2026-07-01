@@ -15,7 +15,9 @@ exact `uint32_t(uint32_t)` / `unsigned int(unsigned int)` and
 float or double arguments. The first mixed one-argument subset
 accepts exact `double(int32_t)`, `double(pointer)`, `double(float)`,
 `int32_t(double)`, `int32_t(float)`, `int32_t(int8_t)`, `pointer(double)`,
-`void(double)`, `void(float)`, and `float(double)`. The recorder emits
+`void(double)`, `void(float)`, and `float(double)`. The first exact
+three-argument subset accepts `int32_t(void *, unsigned long, int32_t)` calls,
+including the common `poll(nil, 0, 0)` shape. The recorder emits
 `lj_ccall_jit_void_gpr()`, `lj_ccall_jit_i32_gpr()`,
 `lj_ccall_jit_i64_gpr()`, or `lj_ccall_jit_ptr_gpr()` plus a tiny signature
 code for the GPR argument shape, `lj_ccall_jit_u32_0()` /
@@ -30,7 +32,9 @@ integer results, `lj_ccall_jit_num_i32()`, `lj_ccall_jit_num_ptr()`,
 `lj_ccall_jit_i32_flt()`, `lj_ccall_jit_i32_i8()`,
 `lj_ccall_jit_ptr_num()`,
 `lj_ccall_jit_void_num()`, `lj_ccall_jit_void_flt()`, and
-`lj_ccall_jit_flt_num()` for the mixed one-argument shapes, or
+`lj_ccall_jit_flt_num()` for the mixed one-argument shapes,
+`lj_ccall_jit_i32_ptr_ulong_i32()` for the exact pointer/unsigned-long/int
+shape, or
 `lj_ccall_jit_num_fpr()` / `lj_ccall_jit_flt_fpr()` for the FP-only FPR shapes.
 
 This does not enable the old direct `IR_CALLXS` path. Each helper is emitted as
@@ -42,7 +46,8 @@ save/enter/leave/checkstop protocol as the interpreted `lj_ccall_func()` path.
 The scope is deliberately narrow:
 
 - fixed arguments only;
-- exactly 0, 1, or 2 Lua arguments;
+- exactly 0, 1, or 2 Lua arguments except for the audited
+  `int32_t(void *, unsigned long, int32_t)` shape;
 - exact signed 32-bit integer or pointer argument types;
 - void, exact signed 32-bit integer, or pointer return types;
 - zero-argument exact signed/unsigned 8-bit or 16-bit integer returns;
@@ -52,6 +57,9 @@ The scope is deliberately narrow:
 - exact unsigned 32-bit integer returns with signed 32-bit integer/pointer
   arguments;
 - exact one-argument `uint32_t(uint32_t)` / `unsigned int(unsigned int)` calls;
+- exact `int32_t(void *, unsigned long, int32_t)` calls, with the
+  `unsigned long` argument converted before the helper casts to the host ABI
+  width;
 - zero-argument exact signed 64-bit integer returns;
 - zero-argument exact unsigned 64-bit integer returns;
 - exact signed/unsigned 64-bit integer returns with signed 32-bit
@@ -75,7 +83,8 @@ uint32-argument/result loops, zero-argument narrow integer result loops,
 signed-int/pointer to narrow integer result loops, exact int8-to-int loops,
 signed-int/pointer to int64/uint64 cdata-result loops, zero-argument signed
 int64 and unsigned uint64 cdata-result loops, exact int64/uint64
-argument/result loops, FP-only numeric call loops, and
+argument/result loops, traced `poll(nil, 0, 0)`-style loops, FP-only numeric
+call loops, signed-narrow-to-`unsigned long` conversion probes, and
 mixed float/double one-argument calls a traced, nonblocking native-state path,
 without risking the direct backend `IR_CALLXS` register/result ordering. The
 full direct bridge still needs x64 lowering that brackets the foreign ABI call

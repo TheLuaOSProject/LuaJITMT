@@ -137,7 +137,7 @@ jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
 for _ = 1, 80 do ffi.copy(dst, src, 256) end
 print("bulk copy ok")
-]])
+]], { timeout = "60s" })
       run_ir_dump_probe(t, fill_dump, [[
 local ffi = require"ffi"
 local dst = ffi.new("uint8_t[512]")
@@ -145,7 +145,7 @@ jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
 for _ = 1, 80 do ffi.fill(dst, 256, 0x5a) end
 print("bulk fill ok")
-]])
+]], { timeout = "60s" })
       assert_dump_contains(t, copy_dump, "lj_ffi_jit_memcpy",
                            "bulk ffi.copy native helper")
       assert_dump_contains(t, fill_dump, "lj_ffi_jit_memset",

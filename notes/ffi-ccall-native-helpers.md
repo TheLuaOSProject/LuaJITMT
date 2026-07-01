@@ -57,7 +57,12 @@ integer or pointer arguments. `lj_ccall_jit_u64_u64()` handles exact
 `lj_ccall_jit_void_num()`,
 `lj_ccall_jit_void_flt()`, and `lj_ccall_jit_flt_num()` cover the first exact
 mixed one-argument calls, including float/double crossings and the first exact
-signed narrow argument conversion. Broad traced
+signed narrow argument conversion.
+`lj_ccall_jit_i32_ptr_ulong_i32()` covers the first exact three-argument
+pointer/size/int shape, including `ffi.C.poll(nil, 0, 0)`, while preserving the
+host ABI's `unsigned long` width at the final C call; the shared-library test
+also passes a signed narrow cdata value through the regular unsigned-long
+conversion path. Broad traced
 ordinary FFI C calls remain disabled by
 `LJ_FFI_RECORD_CALLS=0` because x64 `IR_CALLXS` lowering still needs explicit
 result preservation and carefully ordered native entry relative to ABI argument

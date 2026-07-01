@@ -55,6 +55,12 @@ native-state bridge.
 `int32_t(float)`, `int32_t(int8_t)`, `pointer(double)`, `void(double)`,
 `void(float)`, and `float(double)`, while other mixed shapes remain
 interpreted.
+`lj_ccall_jit_i32_ptr_ulong_i32()` traces the exact poll-shaped
+`int32_t(void *, unsigned long, int32_t)` family and normalizes the
+`unsigned long` argument through the regular FFI conversion rules before the
+helper casts to the host ABI's actual `unsigned long` width. The focused test
+checks both `poll(nil, 0, 0)` and a shared-library signed-narrow-to-unsigned
+conversion probe. Other multi-argument pointer/size shapes remain interpreted.
 
 Validation:
 
