@@ -2514,6 +2514,20 @@ double lj_ccall_jit_num_ptr(lua_State *L, void *func, void *a)
   return ret;
 }
 
+double lj_ccall_jit_num_ptr_ptr(lua_State *L, void *func, void *a, void *b)
+{
+  CTState *cts = ctype_cts(L);
+  CCallNativeState native;
+  uint32_t actions;
+  double ret;
+  lj_ccall_native_save(L, &native);
+  lj_ccall_native_enter(L, &native, func);
+  ret = ((double (*)(void *, void *))(uintptr_t)func)(a, b);
+  actions = lj_ccall_native_leave(L, cts, &native, func);
+  lj_ccall_native_checkstop(L, actions, &native);
+  return ret;
+}
+
 double lj_ccall_jit_num_flt(lua_State *L, void *func, float a)
 {
   CTState *cts = ctype_cts(L);

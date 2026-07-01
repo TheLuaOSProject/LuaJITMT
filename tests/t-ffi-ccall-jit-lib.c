@@ -794,6 +794,13 @@ double lj_m7_ccall_jit_num_ptr(int *p)
   return (double)*p + 0.25;
 }
 
+double lj_m7_ccall_jit_num_ptr_ptr(const char *p, char **endp)
+{
+  if (endp)
+    *endp = (char *)p + 2;
+  return (double)(unsigned char)p[0] + (double)(unsigned char)p[1] + 2.0;
+}
+
 double lj_m7_ccall_jit_num_flt(float a)
 {
   return (double)a + 0.125;
