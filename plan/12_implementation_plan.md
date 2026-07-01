@@ -295,6 +295,12 @@ gate also runs a reduced `t-ffi-gc-finreg.lua` smoke so worker-created FINREG
 finalizers must fire exactly once under interpreter and default-JIT modes. The
 broader planned async finalizer dispatch path remains M8 work, not an M9
 performance cleanup.
+New-object allocation now avoids direct global root-list CAS on the common
+path. Fresh objects publish to a TG-local pending stack through
+`lj_gc_linkobj_new()`, and legacy root-list consumers drain those stacks before
+sweep/unlink/verification. Existing-object root requeues stay immediate. This
+is an interim bridge; the remaining target is still arena bitmap identity and
+bitmap-only sweep instead of legacy root-chain sweep.
 
 ## M9 — Performance closing (open-ended; budget ≈2000)
 Menu (in expected-value order; measure each): per-arena grey stacks +

@@ -275,6 +275,7 @@ static void close_state_reanchor_root(global_State *g, GCobj *target)
   uint32_t n = 0;
   if (!g || !target)
     return;
+  (void)lj_gc_flush_root_pending(g);
   for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
     if (o == target)
       return;
@@ -292,6 +293,7 @@ static int close_state_unlink_root(global_State *g, GCobj *target)
   uint32_t n = 0;
   if (!g || !target)
     return 0;
+  (void)lj_gc_flush_root_pending(g);
   p = lj_gc_root_ref(g);
   while ((o = gcref_acq(*p)) != NULL) {
     if (o == target) {
@@ -394,6 +396,7 @@ static void close_state(lua_State *L)
   close_state_free_registered_states(g, L);
   lj_thr_fence();
   (void)lj_tg_reclaim_dead(g);
+  (void)lj_gc_flush_root_pending(g);
   for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
     if (o->gch.gct == ~LJ_TUDATA &&
 	lj_udata_udtype_acq(gco2ud(o)) == UDTYPE_THREAD) {
@@ -407,6 +410,7 @@ static void close_state(lua_State *L)
   }
   n = 0;
   lj_gc_freeall(g);
+  (void)lj_gc_flush_root_pending(g);
   for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
     if (o == obj2gco(L))
       break;

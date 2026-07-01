@@ -79,6 +79,7 @@ struct TGState {
   GC2SSBNode ssb_node[2];
   GC2SSBNode *ssb_active, *ssb_free;
   GCRef *ssb_next, *ssb_end, *ssb_base;
+  GCobj *gcroot_pending;
   SBuf tmpbuf;
   TValue tmptv, tmptv2;
   PRNGState prng;
@@ -424,6 +425,30 @@ static LJ_AINLINE GCRef *lj_tg_ssb_end_acq(const TGState *tg)
 static LJ_AINLINE void lj_tg_ssb_end_rel(TGState *tg, GCRef *end)
 {
   la_storeptr_rel((void **)&tg->ssb_end, end);  /* 05 section 5.6.2. */
+}
+
+static LJ_AINLINE GCobj *lj_tg_gcroot_pending_acq(const TGState *tg)
+{
+  return (GCobj *)la_loadptr_acq((void *const *)&tg->gcroot_pending);
+}
+
+static LJ_AINLINE void lj_tg_gcroot_pending_store_rlx(TGState *tg,
+						      GCobj *head)
+{
+  la_storeptr_rlx((void **)&tg->gcroot_pending, head);
+}
+
+static LJ_AINLINE int lj_tg_gcroot_pending_cas(TGState *tg, GCobj **oldp,
+					       GCobj *head)
+{
+  return la_casptr((void **)&tg->gcroot_pending, (void **)oldp, head,
+		   LA_ACQ_REL, LA_ACQ);  /* Pending root stack publication. */
+}
+
+static LJ_AINLINE GCobj *lj_tg_gcroot_pending_xchg_acqrel(TGState *tg,
+							  GCobj *head)
+{
+  return (GCobj *)la_xchgptr_acqrel((void **)&tg->gcroot_pending, head);
 }
 
 static LJ_AINLINE uint32_t lj_tg_tid_acq(const TGState *tg)

@@ -2916,6 +2916,7 @@ static void gc2_scan_owned_needscan(global_State *g, lua_State *owner_L)
     return;
   if (gc2_thread_scan_needscan_pending_acq(g) == 0)
     return;
+  (void)lj_gc_flush_root_pending(g);
   for (o = lj_gc_root_acq(g); o != NULL;) {
     GCobj *next = lj_obj_gcw_acq(o);
     lua_State *th;
@@ -4211,6 +4212,7 @@ static int gc2_finreg_cdata_unlink_root(global_State *g, GCobj *target)
 {
   GCRef *p = lj_gc_root_ref(g);
   GCobj *o;
+  (void)lj_gc_flush_root_pending(g);
   while ((o = gcref_acq(*p)) != NULL) {
     if (o == target) {
       if (gc2_finreg_root_splice(p, o))
@@ -6552,6 +6554,7 @@ static int gc2_root_oracle_liveobj(GCobj *o)
 static int gc2_root_oracle_has_base(global_State *g, void *p)
 {
   GCobj *o;
+  (void)lj_gc_flush_root_pending(g);
   for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
     if (gc2_root_oracle_liveobj(o) && gc2_mark_base(o) == p)
       return 1;

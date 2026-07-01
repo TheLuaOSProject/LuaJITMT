@@ -47,6 +47,7 @@ static void assert_late_attach_color(global_State *g, TGState *tg,
 static int root_contains(global_State *g, GCobj *target)
 {
   GCobj *o;
+  (void)lj_gc_flush_root_pending(g);
   for (o = gcref_acq(g->gc.root); o != NULL; o = lj_obj_gcw_acq(o))
     if (o == target)
       return 1;

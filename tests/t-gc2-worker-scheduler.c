@@ -219,6 +219,7 @@ static void mark_worker_tgs_sweep_ready(global_State *g, uint32_t sweep_cycle)
 static int unlink_root_object(global_State *g, GCobj *needle)
 {
   GCRef *p = &g->gc.root;
+  (void)lj_gc_flush_root_pending(g);
   while (gcref(*p)) {
     GCobj *o = gcref(*p);
     if (o == needle) {

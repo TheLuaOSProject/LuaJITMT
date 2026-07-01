@@ -134,6 +134,7 @@ static void gc_arena_preserve_root_chain(global_State *g)
 {
   GCobj *o;
   uint32_t n = 0;
+  (void)lj_gc_flush_root_pending(g);
   for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
     lj_gc_arena_markobj(g, o);
     if (++n == 1000000u) {
@@ -183,6 +184,7 @@ static void gc_arena_verify_sweep_boundary(global_State *g)
   if (!tg || !lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL) ||
       !gc_arena_sweep_ready(g))
     return;
+  (void)lj_gc_flush_root_pending(g);
   for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
     gc_arena_verify_marked(g, o);
     if (o->gch.gct == ~LJ_TTHREAD) {
@@ -338,6 +340,7 @@ static void gc2_paranoia_check_finalizer_obj(global_State *g, GCobj *o)
 static void gc2_paranoia_check_roots(global_State *g)
 {
   GCobj *o;
+  (void)lj_gc_flush_root_pending(g);
   for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o))
     gc2_paranoia_checkone(g, o);
   lj_gc2_finalizer_mark_all(g, gc2_paranoia_check_finalizer_obj);
@@ -761,6 +764,7 @@ static void gc_mark_start(global_State *g)
 {
   lua_State *mainL = mainthread_acq(g);
   lua_State *vmL = vmthread_acq(g);
+  (void)lj_gc_flush_root_pending(g);
   lj_gc2_mark_begin(g);
   lj_gc_list_clear_rel(&g->gc.gray);
   lj_gc_list_clear_rel(&g->gc.grayagain);
@@ -1339,6 +1343,7 @@ static void gc2_unlink_root_obj(global_State *g, GCobj *dead)
 {
   GCRef *p = lj_gc_root_ref(g);
   GCobj *o;
+  (void)lj_gc_flush_root_pending(g);
   while ((o = gcref_acq(*p)) != NULL) {
     if (o == dead) {
       if (gc_chain_splice(p, o))
@@ -1355,6 +1360,7 @@ uint32_t lj_gc_sweep_gc2_unmarked(global_State *g)
   GCRef *p = lj_gc_root_ref(g);
   GCobj *o;
   uint32_t n = 0;
+  (void)lj_gc_flush_root_pending(g);
   while ((o = gcref_acq(*p)) != NULL) {
     int marked = lj_gc2_ismarked(g, o);
     if (marked == 0) {
@@ -1442,6 +1448,8 @@ static GCRef *gc_sweep(global_State *g, GCRef *p, uint32_t lim)
   /* Mask with other white and LJ_GC_FIXED. Or LJ_GC_SFIXED on shutdown. */
   int ow = otherwhite(g);
   GCobj *o;
+  if (p == lj_gc_root_ref(g))
+    (void)lj_gc_flush_root_pending(g);
   while ((o = gcref_acq(*p)) != NULL && lim-- > 0) {
     if (LJ_UNLIKELY(o->gch.gct == 0)) {
       if (!gc_chain_splice(p, o)) {
@@ -1587,6 +1595,7 @@ void lj_gc_freeall(global_State *g)
 {
   MSize i;
   StrTabHdr *hdr;
+  (void)lj_gc_flush_root_pending(g);
   /* Free everything, except super-fixed objects (the main thread). */
   g->gc.currentwhite = LJ_GC_WHITES | LJ_GC_SFIXED;
   gc_fullsweep(g, lj_gc_root_ref(g));
@@ -1646,6 +1655,7 @@ static int atomic(global_State *g, lua_State *L)
   lj_buf_shrink(L, &G2TG(g)->tmpbuf);  /* Shrink temp buffer. */
 
   /* Prepare for sweep phase. */
+  (void)lj_gc_flush_root_pending(g);
   g->gc.currentwhite = (uint8_t)otherwhite(g);  /* Flip current white. */
   g->strempty.marked = g->gc.currentwhite;
   setmref(g->gc.sweep, lj_gc_root_ref(g));
@@ -1868,6 +1878,7 @@ void lj_gc_fullgc(lua_State *L)
   global_State *g = G(L);
   int32_t ostate = vmstate_load_acq(g);
   setvmstate(g, GC);
+  (void)lj_gc_flush_root_pending(g);
   if (g->gc.state <= GCSatomic) {  /* Caught somewhere in the middle. */
     lj_gc2_preserve_abort_to_idle(g);
     setmref(g->gc.sweep, lj_gc_root_ref(g));  /* Sweep everything, preserving it. */
@@ -2130,6 +2141,93 @@ void lj_gc_linkobj(global_State *g, GCobj *o)
 #endif
 }
 
+static uint32_t gc_root_prepend_chain(global_State *g, GCobj *head)
+{
+  GCobj *tail, *next;
+  uint32_t n = 0;
+  if (!head)
+    return 0;
+  tail = head;
+  do {
+    if (n != ~(uint32_t)0)
+      n++;
+    next = lj_obj_gcw_acq(tail);
+    if (!next)
+      break;
+    tail = next;
+  } while (1);
+#if LJ_GC64
+  {
+    uint64_t oldhead;
+    GCRef nextref;
+    do {
+      oldhead = la_load64_acq(&lj_gc_root_ref(g)->gcptr64);
+      setgcrefp(nextref, (void *)(uintptr_t)oldhead);
+      lj_obj_setgcwrrel(tail, nextref);
+    } while (!la_cas64(&lj_gc_root_ref(g)->gcptr64, &oldhead,
+		       (uint64_t)(uintptr_t)&head->gch, LA_REL, LA_ACQ));
+  }
+#else
+  {
+    uint32_t oldhead;
+    GCRef nextref;
+    do {
+      oldhead = la_load32_acq(&lj_gc_root_ref(g)->gcptr32);
+      setgcrefp(nextref, (void *)(uintptr_t)oldhead);
+      lj_obj_setgcwrrel(tail, nextref);
+    } while (!la_cas32(&lj_gc_root_ref(g)->gcptr32, &oldhead,
+		       (uint32_t)(uintptr_t)&head->gch, LA_REL, LA_ACQ));
+  }
+#endif
+  return n;
+}
+
+static uint32_t gc_flush_root_pending_tg(global_State *g, TGState *tg)
+{
+  GCobj *head;
+  if (!g || !tg || tg->gl != g)
+    return 0;
+  head = lj_tg_gcroot_pending_xchg_acqrel(tg, NULL);
+  return gc_root_prepend_chain(g, head);
+}
+
+uint32_t lj_gc_flush_root_pending(global_State *g)
+{
+  TGState *tg, *main_tg, *self;
+  uint32_t n = 0, saw_main = 0;
+  if (!g)
+    return 0;
+  main_tg = g->main_tg;
+  for (tg = gc2_tg_list_acq(g); tg != NULL; tg = lj_tg_next_acq(tg)) {
+    if (tg == main_tg)
+      saw_main = 1;
+    n += gc_flush_root_pending_tg(g, tg);
+  }
+  if (main_tg && !saw_main)
+    n += gc_flush_root_pending_tg(g, main_tg);
+  self = lj_thr_get_tg();
+  if (self && self != main_tg)
+    n += gc_flush_root_pending_tg(g, self);
+  return n;
+}
+
+void lj_gc_linkobj_new(global_State *g, GCobj *o)
+{
+  TGState *tg = lj_thr_get_tg();
+  GCobj *head;
+  if (!tg || tg->gl != g || lj_tg_flags_test_acq(tg, TGF_DEAD)) {
+    lj_gc_linkobj(g, o);
+    return;
+  }
+  head = lj_tg_gcroot_pending_acq(tg);
+  do {
+    if (head)
+      lj_obj_setgcwrel(o, head);
+    else
+      lj_obj_setgcwnullrel(o);
+  } while (!lj_tg_gcroot_pending_cas(tg, &head, o));
+}
+
 void lj_gc_linkobj_after(GCobj *anchor, GCobj *o)
 {
   GCRef *p;
@@ -2174,7 +2272,7 @@ void * LJ_FASTCALL lj_mem_newgco(lua_State *L, GCSize size)
   global_State *g = G(L);
   GCobj *o = (GCobj *)lj_mem_newgco_raw(L, size, LJ_AF_TRAVERSABLE);
   newwhite(g, o);
-  lj_gc_linkobj(g, o);
+  lj_gc_linkobj_new(g, o);
   return o;
 }
 

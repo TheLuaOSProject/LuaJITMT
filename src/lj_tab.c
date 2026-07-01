@@ -742,7 +742,7 @@ static LJ_AINLINE void tab_init_empty(global_State *g, GCtab *t)
 static LJ_AINLINE void tab_publish_new(global_State *g, GCtab *t)
 {
   newwhite(g, t);
-  lj_gc_linkobj(g, obj2gco(t));  /* CAS-publish table after body init. */
+  lj_gc_linkobj_new(g, obj2gco(t));  /* Publish table after body init. */
 }
 
 static LJ_AINLINE void tab_publish_array(GCtab *t, TValue *array,

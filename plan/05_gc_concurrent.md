@@ -568,6 +568,13 @@ FINREG root-unlink retry losers now wait through no-`lua_State` native sleep
 helpers instead of raw CPU pauses; GC2 worker-control CAS fallthrough and
 debug/paranoia finalizer/preclaim pause gates use the same peer wait helper, so
 preempted peers cannot turn these required retry windows into CPU spins.
+Fresh object publication now uses a TG-local pending root stack as an interim
+contention bridge. `lj_gc_linkobj_new()` queues initialized new objects on the
+current `TGState`, and `lj_gc_flush_root_pending()` drains all pending stacks
+before legacy root-list consumers sweep, unlink, verify, or shut down. Existing
+object relinks stay immediate. This removes the global root-list CAS from the
+normal allocation path while the legacy root chain remains authoritative until
+arena bitmap-only sweep replaces it.
 
 ## 5.9 Deferred reclamation (grace periods) — the GC as universal SMR
 

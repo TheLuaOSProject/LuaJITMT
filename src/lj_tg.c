@@ -12,6 +12,7 @@
 #include "lj_atomic.h"
 #include "lj_buf.h"
 #include "lj_dispatch.h"
+#include "lj_gc.h"
 #include "lj_gc2.h"
 #include "lj_profile.h"
 #include "lj_prng.h"
@@ -69,6 +70,7 @@ static void tg_init_common(global_State *g, TGState *tg, lua_State *L)
   tg->prng = g->prng;
   tg->strtab_active_hdr = NULL;
   tg->strtab_active_depth = 0;
+  lj_tg_gcroot_pending_store_rlx(tg, NULL);
   tg_init_ssb(tg);
   lj_buf_init(NULL, &tg->tmpbuf);
 #if LJ_HASJIT
@@ -205,6 +207,7 @@ void lj_tg_detach(global_State *g, TGState *tg)
   if (thread_L &&
       (lj_tg_reqmask_acq(tg) != 0 || lj_tg_poll_acq(tg) != 0))
     (void)lj_safepoint_ack(thread_L);  /* Leaving TG owns its ack. */
+  (void)lj_gc_flush_root_pending(g);
   (void)lj_gc2_flush_ssb(g, tg);  /* 09 section 9.3 detach publishes SSB. */
   (void)lj_gc2_flush_alloc(g, tg);  /* 04 section 4.8 detach accounting. */
   la_fence_rel();
@@ -249,6 +252,7 @@ uint32_t lj_tg_reclaim_dead(global_State *g)
   if (!g || gc2_n_threads_acq(g) != 1 ||
       gc2_hs_pending_acq(g) != 0)
     return 0;
+  (void)lj_gc_flush_root_pending(g);
 restart:
   prev = NULL;
   tg = gc2_tg_list_acq(g);

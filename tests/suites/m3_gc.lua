@@ -19,6 +19,7 @@ local function build_loadlib_stopreq_so(t)
 end
 
 local m3_scaffold_deps = {
+  "m3_gc_root_pending",
   "m3_gc2_worker_scheduler",
   "m3_gc_active_thread_roots",
   "m3_safepoint_handshake",
@@ -42,6 +43,18 @@ end
 
 return function(add)
   local cases, register = utils.case_registry(add)
+
+  register({
+    name = "m3_gc_root_pending",
+    description = "per-TG pending GC root publication fixture",
+    run = function(t)
+      make_clean(t)
+      make_default(t, { jobs = false })
+      compile_and_run_c(t, t:tmp("lj_t-gc-root-pending"),
+                        "t-gc-root-pending.c")
+      print("M3 pending GC root publication test passed")
+    end
+  })
 
   register({
     name = "m3_gc2_worker_scheduler",

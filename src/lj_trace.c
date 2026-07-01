@@ -529,7 +529,7 @@ static void trace_save(jit_State *J, GCtrace *T)
   J->cur.exittab = NULL;
   J->cur.exitstub = NULL;
   J->curfinal = NULL;
-  lj_gc_linkobj(g, obj2gco(T));  /* CAS-publish root after body init. */
+  lj_gc_linkobj_new(g, obj2gco(T));  /* Publish root after body init. */
   traceslot_publish(J, T->traceno, T);
   lj_gc_pubtrace(g, T->traceno);
   lj_gdbjit_addtrace(J, T);

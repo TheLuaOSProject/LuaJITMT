@@ -51,7 +51,7 @@ static LJ_AINLINE GCcdata *lj_cdata_new_l(lua_State *L, CTState *cts,
   cd->ctypeid = checked;
   cdata_flags_rel(cd, 0);
   newwhite(g, obj2gco(cd));
-  lj_gc_linkobj(g, obj2gco(cd));
+  lj_gc_linkobj_new(g, obj2gco(cd));
   return cd;
 }
 
@@ -64,7 +64,7 @@ static LJ_AINLINE GCcdata *lj_cdata_new_(lua_State *L, CTypeID id, CTSize sz)
   cd->ctypeid = id;
   cdata_flags_rel(cd, 0);
   newwhite(g, obj2gco(cd));
-  lj_gc_linkobj(g, obj2gco(cd));
+  lj_gc_linkobj_new(g, obj2gco(cd));
   return cd;
 }
 

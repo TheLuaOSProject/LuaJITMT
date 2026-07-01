@@ -162,6 +162,7 @@ static int unlink_root_object(global_State *g, GCobj *target)
 {
   GCRef *p = &g->gc.root;
   GCobj *o;
+  (void)lj_gc_flush_root_pending(g);
   while ((o = gcref(*p)) != NULL) {
     if (o == target) {
       setgcrefr(*p, *lj_obj_gcwref(o));

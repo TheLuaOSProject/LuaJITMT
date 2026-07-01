@@ -247,7 +247,7 @@ GCfunc *lj_func_newC(lua_State *L, MSize nelems, GCtab *env)
   for (i = 0; i < nelems; i++)
     setnilV(&fn->c.upvalue[i]);
   newwhite(g, obj2gco(fn));
-  lj_gc_linkobj(g, obj2gco(fn));
+  lj_gc_linkobj_new(g, obj2gco(fn));
   lj_gc_pubobjobj(L, fn, env);
   return fn;
 }
@@ -264,7 +264,7 @@ static GCfunc *func_newL(lua_State *L, GCproto *pt, GCtab *env)
   setmref(fn->l.pc, proto_bc(pt));
   lj_func_env_rel(fn, env);
   newwhite(g, obj2gco(fn));
-  lj_gc_linkobj(g, obj2gco(fn));
+  lj_gc_linkobj_new(g, obj2gco(fn));
   lj_gc_pubobjobj(L, fn, pt);
   lj_gc_pubobjobj(L, fn, env);
   /* Saturating 3 bit counter (0..7) for created closures. */

@@ -36,9 +36,11 @@ Read-only subagent audits confirmed the major reports:
 
 Follow-up order:
 
-1. Replace per-allocation root CAS with a TG-local pending-publication batch
-   drained before legacy root-list consumers. This keeps stock sweep/finalizer
-   semantics while reducing allocation-path contention.
+1. Done as an interim bridge: new-object publication uses a TG-local
+   pending-publication stack drained before legacy root-list consumers. This
+   keeps stock sweep/finalizer semantics while removing the global root-list
+   cache line from normal allocations; bitmap-only sweep and zero-atomic bump
+   allocation remain separate follow-up work.
 2. Reintroduce guarded x64 interpreter store fast paths for existing stable
    array/hash slots, leaving new-key/metatable/weak/forwarded cases on helpers.
 3. Restore JIT no-helper ASTORE/HSTORE for stable primitive-value stores before
