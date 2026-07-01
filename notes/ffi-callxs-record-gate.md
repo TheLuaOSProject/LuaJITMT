@@ -22,6 +22,9 @@ the exact ABI value without widening the semantics.
 `lj_ccall_jit_u32_0()` traces exact zero-argument unsigned 32-bit returns as
 Lua numbers, preserving high-bit values without signed truncation. Unsigned
 integer argument conversion remains interpreted.
+`lj_ccall_jit_u64_0()` traces exact zero-argument unsigned 64-bit returns,
+preserving stock boxed uint64 cdata results. Unsigned 64-bit argument
+conversion remains interpreted.
 The separate `lj_ccall_jit_{num,flt}_fpr()` helpers trace exact double or float
 returns with 0, 1, or 2 same-kind exact FP arguments through the same
 native-state bridge.

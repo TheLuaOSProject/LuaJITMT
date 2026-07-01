@@ -90,6 +90,16 @@ uint32_t lj_m7_ccall_jit_u32_0(void)
   return 0xf0000001u;
 }
 
+uint64_t lj_m7_ccall_jit_u64(uint64_t a)
+{
+  return a + 1;
+}
+
+uint64_t lj_m7_ccall_jit_u64_0(void)
+{
+  return ~(uint64_t)0;
+}
+
 int *lj_m7_ccall_jit_ptr0(void)
 {
   return lj_m7_ccall_jit_values;

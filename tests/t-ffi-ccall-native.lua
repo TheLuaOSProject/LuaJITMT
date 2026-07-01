@@ -20,6 +20,8 @@ void lj_m7_ccall_jit_void0(void);
 void lj_m7_ccall_jit_store_i32(int *, int);
 unsigned int lj_m7_ccall_jit_u32(unsigned int);
 uint32_t lj_m7_ccall_jit_u32_0(void);
+uint64_t lj_m7_ccall_jit_u64(uint64_t);
+uint64_t lj_m7_ccall_jit_u64_0(void);
 int *lj_m7_ccall_jit_ptr0(void);
 int lj_m7_ccall_jit_ptr_read_i32(int *);
 int lj_m7_ccall_jit_ptr_sum_i32(int *, int *);
@@ -153,6 +155,8 @@ do
     local store_i32 = lib.lj_m7_ccall_jit_store_i32
     local u32 = lib.lj_m7_ccall_jit_u32
     local u32_0 = lib.lj_m7_ccall_jit_u32_0
+    local u64 = lib.lj_m7_ccall_jit_u64
+    local u64_0 = lib.lj_m7_ccall_jit_u64_0
     local ptr0 = lib.lj_m7_ccall_jit_ptr0
     local ptr_read_i32 = lib.lj_m7_ccall_jit_ptr_read_i32
     local ptr_sum_i32 = lib.lj_m7_ccall_jit_ptr_sum_i32
@@ -241,6 +245,23 @@ do
       local r = 0
       for _ = 1, n do
 	r = r + u32_0()
+      end
+      return r
+    end
+    local function run_u64(n)
+      local arg = ffi.new("uint64_t", 7)
+      local expected = ffi.new("uint64_t", 8)
+      for _ = 1, n do
+	assert(u64(arg) == expected)
+      end
+      return true
+    end
+    local function run_u64_0(n)
+      local expected = ffi.new("uint64_t", -1)
+      local r
+      for _ = 1, n do
+	r = u64_0()
+	assert(r == expected)
       end
       return r
     end
@@ -350,6 +371,16 @@ do
     jit.opt.start("hotloop=1", "hotexit=1")
     assert(run_u32_0(80) == 80 * 0xf0000001)
     assert(trace_count() > 0, "shared void->uint32_t FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    assert(run_u64(80))
+    assert(trace_count() == 0, "uint64_t FFI calls with arguments must stay off trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    assert(run_u64_0(80) == ffi.new("uint64_t", -1))
+    assert(trace_count() > 0, "shared void->uint64_t FFI call loop should trace")
 
     jit.flush()
     jit.opt.start("hotloop=1", "hotexit=1")
