@@ -609,7 +609,10 @@ by caller (typical pattern: parent moves args into a not-yet-started L).
 - `os`, `io`: untouched (user-level objects; FILE* sharing is user's
   problem per requirement 4 analog); `os.date` now uses caller-owned
   broken-down time buffers on the supported POSIX and Windows targets
-  (`localtime_r`/`gmtime_r` or `localtime_s`/`gmtime_s`).
+  (`localtime_r`/`gmtime_r` or `localtime_s`/`gmtime_s`). Mutating
+  `os.setlocale()` is serialized with secondary-thread entry before the
+  activation latch is set; queries remain stock, mutation remains stock before
+  threading activation, and mutation is rejected after activation.
 - `math.random`: per-TG prng; `math.randomseed` seeds calling thread only
   (doc note 09 §9.8).
 - package.loaded / require: ordinary shared tables now safe; the *loader*

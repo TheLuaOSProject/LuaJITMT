@@ -90,7 +90,9 @@ searches:
   surface, while current dumps remain fork-format v4 with the legacy-upvalue
   payload flag.
 - `os.setlocale()` mutation after threading activation is rejected because
-  process-global locale changes are not safe with active VM threads.
+  process-global locale changes are not safe with active VM threads. The
+  pre-activation mutation path is still stock-facing, but it now serializes the
+  C library update with secondary-thread entry.
 - `math.random()` and `math.randomseed()` use per-thread-group PRNG state once
   the threading extension creates separate VM thread groups. The single-main-TG
   path keeps ordinary stock-facing library calls available.

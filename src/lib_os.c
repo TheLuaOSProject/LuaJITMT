@@ -7,6 +7,7 @@
 */
 
 #include <errno.h>
+#include <limits.h>
 #include <stdio.h>
 #include <time.h>
 
@@ -377,13 +378,42 @@ LJLIB_CF(os_difftime)
 
 /* ------------------------------------------------------------------------ */
 
+#if !LJ_TARGET_PSVITA
+/* Reuse the runtime exclusive gate for process-global locale mutation. */
+static void os_setlocale_leaveexclusive(global_State *g)
+{
+  mt_gc_exclusive_rel(g, 0);
+  mt_gc_exclusive_futex_wake(g, INT_MAX);
+}
+
+static int os_setlocale_enterexclusive(lua_State *L)
+{
+  global_State *g = G(L);
+  for (;;) {
+    uint32_t expect = 0;
+    if (mt_active_acq(g) != 0 || mt_live_acq(g) != 0)
+      return 0;
+    if (mt_gc_exclusive_cas(g, &expect, 1)) {
+      if (mt_active_acq(g) == 0 && mt_live_acq(g) == 0)
+	return 1;
+      os_setlocale_leaveexclusive(g);
+      return 0;
+    }
+    if (expect != 0)
+      mt_gc_exclusive_futex_wait(g, expect, 1000000);
+  }
+}
+#endif
+
 LJLIB_CF(os_setlocale)
 {
 #if LJ_TARGET_PSVITA
   lua_pushliteral(L, "C");
 #else
+  global_State *g = G(L);
   GCstr *s = lj_lib_optstr(L, 1);
   const char *str = s ? strdata(s) : NULL;
+  const char *res;
   int opt = lj_lib_checkopt(L, 2, 6,
     "\5ctype\7numeric\4time\7collate\10monetary\1\377\3all");
   if (opt == 0) opt = LC_CTYPE;
@@ -392,9 +422,12 @@ LJLIB_CF(os_setlocale)
   else if (opt == 3) opt = LC_COLLATE;
   else if (opt == 4) opt = LC_MONETARY;
   else if (opt == 6) opt = LC_ALL;
-  if (str && mt_active_acq(G(L)) != 0)
+  if (str && !os_setlocale_enterexclusive(L))
     lj_err_callermsg(L, "os.setlocale mutation disabled after threading activation");
-  lua_pushstring(L, setlocale(opt, str));
+  res = setlocale(opt, str);
+  if (str)
+    os_setlocale_leaveexclusive(g);
+  lua_pushstring(L, res);
 #endif
   return 1;
 }

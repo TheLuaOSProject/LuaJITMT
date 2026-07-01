@@ -49,7 +49,9 @@ The visible deviations that remain are tied to the threading experiment:
   single-threaded legacy full-GC collector.
 - `os.setlocale()` queries remain stock, but locale mutation is rejected after
   threading activation because process-global locale mutation is not safe across
-  active VM threads.
+  active VM threads. Before activation, mutating calls claim the same
+  `mt_gc_exclusive` gate used by legacy explicit GC so spawn/attach entrants
+  cannot run Lua across the process-global locale update.
 - `jit.profile` keeps stock behavior before threading activation; fallback
   profiler backends may drop samples while more than one VM thread is live.
 
