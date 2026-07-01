@@ -9,6 +9,11 @@ int poll(void *fds, unsigned long nfds, int timeout);
 int lj_m7_ccall_jit_sleep_i32(int);
 int lj_m7_ccall_jit_add2_i32(int, int);
 int64_t lj_m7_ccall_jit_i64_0(void);
+int8_t lj_m7_ccall_jit_i8_0(void);
+uint8_t lj_m7_ccall_jit_u8_0(void);
+int16_t lj_m7_ccall_jit_i16_0(void);
+uint16_t lj_m7_ccall_jit_u16_0(void);
+int lj_m7_ccall_jit_i8_arg_i32(int8_t);
 double lj_m7_ccall_jit_num0(void);
 double lj_m7_ccall_jit_num1(double);
 double lj_m7_ccall_jit_num2(double, double);
@@ -144,6 +149,11 @@ do
     local sleep_i32 = lib.lj_m7_ccall_jit_sleep_i32
     local add2_i32 = lib.lj_m7_ccall_jit_add2_i32
     local i64_0 = lib.lj_m7_ccall_jit_i64_0
+    local i8_0 = lib.lj_m7_ccall_jit_i8_0
+    local u8_0 = lib.lj_m7_ccall_jit_u8_0
+    local i16_0 = lib.lj_m7_ccall_jit_i16_0
+    local u16_0 = lib.lj_m7_ccall_jit_u16_0
+    local i8_arg_i32 = lib.lj_m7_ccall_jit_i8_arg_i32
     local num0 = lib.lj_m7_ccall_jit_num0
     local num1 = lib.lj_m7_ccall_jit_num1
     local num2 = lib.lj_m7_ccall_jit_num2
@@ -173,6 +183,41 @@ do
       local r = 0
       for _ = 1, n do
 	r = r + tonumber(i64_0())
+      end
+      return r
+    end
+    local function run_i8_0(n)
+      local r = 0
+      for _ = 1, n do
+	r = r + i8_0()
+      end
+      return r
+    end
+    local function run_u8_0(n)
+      local r = 0
+      for _ = 1, n do
+	r = r + u8_0()
+      end
+      return r
+    end
+    local function run_i16_0(n)
+      local r = 0
+      for _ = 1, n do
+	r = r + i16_0()
+      end
+      return r
+    end
+    local function run_u16_0(n)
+      local r = 0
+      for _ = 1, n do
+	r = r + u16_0()
+      end
+      return r
+    end
+    local function run_i8_arg(n)
+      local r = 0
+      for _ = 1, n do
+	r = r + i8_arg_i32(7)
       end
       return r
     end
@@ -321,6 +366,31 @@ do
     jit.opt.start("hotloop=1", "hotexit=1")
     assert(run_i64_0(80) == 80 * 17)
     assert(trace_count() > 0, "shared void->int64_t FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    assert(run_i8_0(80) == -560)
+    assert(trace_count() > 0, "shared void->int8_t FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    assert(run_u8_0(80) == 20000)
+    assert(trace_count() > 0, "shared void->uint8_t FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    assert(run_i16_0(80) == -98720)
+    assert(trace_count() > 0, "shared void->int16_t FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    assert(run_u16_0(80) == 4800000)
+    assert(trace_count() > 0, "shared void->uint16_t FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    assert(run_i8_arg(80) == 960)
+    assert(trace_count() == 0, "narrow integer FFI call arguments must stay off trace")
 
     jit.flush()
     jit.opt.start("hotloop=1", "hotexit=1")

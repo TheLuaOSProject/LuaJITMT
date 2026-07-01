@@ -1,16 +1,18 @@
 # FFI C-Call JIT Trampoline
 
 The first traced ordinary FFI C-call slice now records exact void, signed
-32-bit integer, pointer-returning, zero-argument unsigned 32-bit/signed
-64-bit/unsigned 64-bit integer, and FP-returning function cdata on x64. The
-narrow GPR subset accepts 0, 1, or 2 signed 32-bit integer/pointer arguments,
-plus exact zero-argument unsigned 32-bit, signed 64-bit, and unsigned 64-bit
+32-bit integer, pointer-returning, zero-argument narrow integer, zero-argument
+unsigned 32-bit/signed 64-bit/unsigned 64-bit integer, and FP-returning
+function cdata on x64. The narrow GPR subset accepts 0, 1, or 2 signed 32-bit
+integer/pointer arguments, plus exact zero-argument signed/unsigned 8-bit,
+signed/unsigned 16-bit, unsigned 32-bit, signed 64-bit, and unsigned 64-bit
 integer returns. The FPR subset accepts 0, 1, or 2 same-kind exact float or
 double arguments. The recorder emits
 `lj_ccall_jit_void_gpr()`, `lj_ccall_jit_i32_gpr()`,
 `lj_ccall_jit_i64_gpr()`, or `lj_ccall_jit_ptr_gpr()` plus a tiny signature
 code for the GPR argument shape, `lj_ccall_jit_u32_0()` for high-bit-safe
-unsigned 32-bit results, `lj_ccall_jit_u64_0()` for boxed uint64 results, or
+unsigned 32-bit results, `lj_ccall_jit_u64_0()` for boxed uint64 results,
+`lj_ccall_jit_narrow_0()` for narrow integer results, or
 `lj_ccall_jit_num_fpr()` / `lj_ccall_jit_flt_fpr()` for the FP-only FPR shapes.
 
 This does not enable the old direct `IR_CALLXS` path. Each helper is emitted as
@@ -25,6 +27,7 @@ The scope is deliberately narrow:
 - exactly 0, 1, or 2 Lua arguments;
 - exact signed 32-bit integer or pointer argument types;
 - void, exact signed 32-bit integer, or pointer return types;
+- zero-argument exact signed/unsigned 8-bit or 16-bit integer returns;
 - zero-argument exact unsigned 32-bit integer returns as Lua numbers;
 - zero-argument exact signed 64-bit integer returns;
 - zero-argument exact unsigned 64-bit integer returns;
@@ -37,11 +40,11 @@ The scope is deliberately narrow:
 This gives hot `ffi.C.getpid()`, `ffi.C.abs(i)`, small
 `int add(int,int)`-style loops, simple pointer-return/pointer-argument loops,
 side-effecting `void f(...)` loops, zero-argument high-bit uint32 result loops,
-zero-argument signed int64 and unsigned uint64 cdata-result loops, and FP-only
-numeric call loops a traced, nonblocking native-state path without risking the
-direct backend `IR_CALLXS` register/result ordering. The full direct bridge
-still needs x64 lowering that brackets the foreign ABI call without clobbering
-argument or result registers.
+zero-argument narrow integer result loops, zero-argument signed int64 and
+unsigned uint64 cdata-result loops, and FP-only numeric call loops a traced,
+nonblocking native-state path without risking the direct backend `IR_CALLXS`
+register/result ordering. The full direct bridge still needs x64 lowering that
+brackets the foreign ABI call without clobbering argument or result registers.
 
 `tests/t-ffi-ccall-stopreq.c` also heats the shared `sleep_i32` trampoline until
 a trace exists, starts the STOPREQ publisher only after that warmup, and catches

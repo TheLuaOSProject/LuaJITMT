@@ -35,6 +35,31 @@ int64_t lj_m7_ccall_jit_i64_0(void)
   return 17;
 }
 
+int8_t lj_m7_ccall_jit_i8_0(void)
+{
+  return -7;
+}
+
+uint8_t lj_m7_ccall_jit_u8_0(void)
+{
+  return 250;
+}
+
+int16_t lj_m7_ccall_jit_i16_0(void)
+{
+  return -1234;
+}
+
+uint16_t lj_m7_ccall_jit_u16_0(void)
+{
+  return 60000;
+}
+
+int lj_m7_ccall_jit_i8_arg_i32(int8_t a)
+{
+  return (int)a + 5;
+}
+
 double lj_m7_ccall_jit_num0(void)
 {
   return 1.5;

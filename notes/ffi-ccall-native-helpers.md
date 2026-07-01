@@ -31,6 +31,9 @@ signed 32-bit integer, and pointer-returning calls with 0, 1, or 2
 integer/pointer arguments through `IRCALL` helpers using this same native-state
 protocol. `lj_ccall_jit_i64_gpr()` handles exact zero-argument signed 64-bit
 integer returns and preserves boxed int64 cdata results.
+`lj_ccall_jit_narrow_0()` handles exact zero-argument signed/unsigned 8-bit and
+16-bit integer returns as Lua numbers, after calling through the exact C return
+type.
 `lj_ccall_jit_u32_0()` handles exact zero-argument unsigned 32-bit integer
 returns as Lua numbers without high-bit truncation. `lj_ccall_jit_u64_0()`
 handles exact zero-argument unsigned 64-bit integer returns and preserves boxed
