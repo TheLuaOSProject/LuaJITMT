@@ -3264,13 +3264,9 @@ void lj_record_ins(jit_State *J)
     break;
 
   case BC_TNEW:
-    if (mt_active_acq(J2G(J)))
-      lj_trace_err_info(J, LJ_TRERR_NYIBC);
     rc = rec_tnew(J, rc);
     break;
   case BC_TDUP:
-    if (mt_active_acq(J2G(J)))
-      lj_trace_err_info(J, LJ_TRERR_NYIBC);
     rc = emitir(IRTG(IR_TDUP, IRT_TAB),
 		lj_ir_ktab(J, gco2tab(proto_kgc(J->pt, ~(ptrdiff_t)rc))), 0);
 #ifdef LUAJIT_ENABLE_TABLE_BUMP
