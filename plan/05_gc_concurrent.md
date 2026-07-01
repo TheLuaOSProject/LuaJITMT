@@ -486,7 +486,12 @@ weak-value array insertion both keep late `P_WEAK` keys/values alive through
 the same bridge. During weak clearing, a current-cycle GC2 mark produced by one
 of these late writes wins over stale legacy white while `GCSatomic` remains
 open, so queued weak snapshots cannot clear a value that was just rescued by the
-P_WEAK bridge.
+P_WEAK bridge. Mutator stores into weak tables also hold
+`GC2State.weak_write_active` from the pre-publication weak barrier until the
+post-publication weak/parent barrier is complete. Bounded weak clearing checks
+that counter before and after reserving a clear cursor batch, and snapshot
+completion/bridge coverage require it to reach zero, so a weak clear cannot race
+past a just-published but not-yet-post-barriered weak entry.
 `weak_keys_marked` and `weak_values_marked` expose first-time marks from these
 bridges for follow-up tests. x64 VM single-value fast table stores now route
 their GC2 barrier through `lj_gc2_barrier_tv_pair_g()` with the destination
@@ -550,8 +555,12 @@ instead of waiting forever for `mt_live == 0`, and explicit
 `collectgarbage("step", ...)` keeps `GCSfinalize` open instead of reporting a
 completed cycle while that worker is still live. User finalizer callbacks now
 run on the owner-claimed collector caller `lua_State` instead of the shared
-`vmthread(g)` stack. Pending finalizer objects are retained through dedicated
-GC2 queue nodes and marked through `lj_gc2_finalizer_mark_all()`, whose GC2
+`vmthread(g)` stack. The dispatch claim uses the same resume-style TG attachment
+as coroutine resume, so suspended coroutine callback stacks have a valid
+`tg_hint` while the VM enters the `__gc` function and are detached again when
+the finalizer dispatch claim is released. Pending finalizer objects are retained
+through dedicated GC2 queue nodes and marked through
+`lj_gc2_finalizer_mark_all()`, whose GC2
 side owns the owner-drained queue scanner, but full
 scheduler-owned string/root/finalizer sweep driving and FINREG/finqueue
 execution remain follow-up work. Legacy root-chain splice retry losers and GC2

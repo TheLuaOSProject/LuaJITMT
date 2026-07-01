@@ -259,12 +259,27 @@ TValue *lj_meta_tsettv_pair(lua_State *L, cTValue *o, cTValue *k, cTValue *v)
   for (;;) {
     GCtab *owner = NULL;
     TValue *dst = meta_tset(L, o, k, &owner);
+    int weakwr;
+    int rc;
     if (!dst)
       return NULL;
-    if (lj_tab_trystoretv_cas_keyed(L, owner, dst, k, v) ==
-	LJ_TAB_STORE_CAS_OK) {
+    weakwr = lj_gc2_weak_write_begin(L, owner);
+    if (weakwr) {
+      lj_gc2_barrier_weak_key(L, owner, k);
+      lj_gc2_barrier_weak_value(L, owner, v);
+    }
+    rc = lj_tab_trystoretv_cas_keyed(L, owner, dst, k, v);
+    if (weakwr) {
+      lj_gc2_barrier_weak_key(L, owner, k);
       lj_gc2_barrier_weak_value(L, owner, v);
       lj_gc2_barrier_tv_pair(L, owner ? obj2gco(owner) : NULL, v);
+      lj_gc2_weak_write_end(L, weakwr);
+    }
+    if (rc == LJ_TAB_STORE_CAS_OK) {
+      if (!weakwr) {
+	lj_gc2_barrier_weak_value(L, owner, v);
+	lj_gc2_barrier_tv_pair(L, owner ? obj2gco(owner) : NULL, v);
+      }
       return dst;
     }
     lj_tab_store_wait_l(L);  /* Slot became stale/FORWARD; re-resolve. */

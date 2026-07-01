@@ -95,6 +95,7 @@ LA_INLINE int la_cas128(la_u128 *p, la_u128 *exp, la_u128 des)
 
 /* ---- fetch ops ------------------------------------------------------ */
 LA_INLINE uint32_t la_add32_rlx(uint32_t *p,uint32_t v){return __atomic_fetch_add(p,v,__ATOMIC_RELAXED);}
+LA_INLINE uint32_t la_add32_acqrel(uint32_t *p,uint32_t v){return __atomic_fetch_add(p,v,__ATOMIC_ACQ_REL);}
 LA_INLINE uint64_t la_add64_rlx(uint64_t *p,uint64_t v){return __atomic_fetch_add(p,v,__ATOMIC_RELAXED);}
 LA_INLINE uint32_t la_sub32_rlx(uint32_t *p,uint32_t v){return __atomic_fetch_sub(p,v,__ATOMIC_RELAXED);}
 LA_INLINE uint64_t la_sub64_rlx(uint64_t *p,uint64_t v){return __atomic_fetch_sub(p,v,__ATOMIC_RELAXED);}

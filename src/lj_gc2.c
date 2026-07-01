@@ -136,7 +136,8 @@ static void lj_gc2_finalizer_enter_l(lua_State *L, global_State *g);
 static void lj_gc2_finalizer_enter(global_State *g);
 static void lj_gc2_finalizer_leave(global_State *g);
 static int lj_gc2_finalizer_pending(global_State *g);
-static int gc2_tab_weak_mode(global_State *g, GCtab *t, GCtab *mt);
+static int gc2_tab_weak_mode(global_State *g, GCtab *t, GCtab *mt,
+			     int mark_mode);
 static void *gc2_worker_main(void *arg);
 static void gc2_mark_tv_worker(global_State *g, cTValue *tv);
 static int lj_gc2_ssb_push(global_State *g, GCobj *o);
@@ -298,6 +299,7 @@ void lj_gc2_init(global_State *g)
   gc2_weak_ready_store_rlx(g, NULL);
   gc2_weak_capacity_store_rlx(g, 0);
   gc2_weak_drain_active_store_rlx(g, 0);
+  gc2_weak_write_active_store_rlx(g, 0);
   gc2_weak_count_store_rlx(g, 0);
   gc2_weak_tables_seen_store_rlx(g, 0);
   gc2_weak_tables_weakkey_store_rlx(g, 0);
@@ -1766,22 +1768,22 @@ static int lj_gc2_finalizer_dispatch_one(lua_State *L,
     return 0;
   g = G(L);
   lj_assertG(lj_tg_jit_base(g) == NULL, "finalizer called on trace");
-  if (!lj_state_tryclaim(L, lj_thr_current_id(g), &claim))
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(g), &claim))
     return 0;  /* 05 section 5.8: callback stack busy; leave queue intact. */
   if (!lj_gc2_finalizer_try_enter(g)) {
-    lj_state_dropclaim(&claim);
+    lj_state_dropresumeclaim(&claim);
     return 0;
   }
   lj_gc2_finalizer_drain_owned(g);
   o = lj_gc2_finalizer_dequeue_owned(g);
   if (o == NULL) {
     lj_gc2_finalizer_leave(g);
-    lj_state_dropclaim(&claim);
+    lj_state_dropresumeclaim(&claim);
     return 0;
   }
   rc = gc2_finalizer_dispatch_obj(L, g, o, ctx);
   lj_gc2_finalizer_leave(g);
-  lj_state_dropclaim(&claim);
+  lj_state_dropresumeclaim(&claim);
   return rc < 0 ? -1 : 1;
 }
 
@@ -3386,6 +3388,7 @@ static void gc2_weak_reset(global_State *g)
       la_store8_rlx(&ready[i], 0);
   gc2_weak_count_store_rlx(g, 0);  /* 05 section 5.8 side vector. */
   gc2_weak_drain_active_store_rlx(g, 0);
+  gc2_weak_write_active_store_rlx(g, 0);
   gc2_weak_scan_cursor_store_rlx(g, 0);
   gc2_weak_clear_cursor_store_rlx(g, 0);
 }
@@ -3751,7 +3754,15 @@ static uint32_t lj_gc2_weak_snapshot_clear(global_State *g, uint32_t limit)
   uint64_t slots = 0, cleared = 0;
   if (!g || limit == 0)
     return 0;
+  if (gc2_weak_write_active_acq(g) != 0)
+    return 0;
   gc2_weak_drain_active_add(g, 1);
+  if (gc2_weak_write_active_acq(g) != 0) {
+    uint32_t old = gc2_weak_drain_active_sub(g, 1);
+    lj_assertG(old != 0, "gc2 weak drain active underflow");
+    UNUSED(old);
+    return 0;
+  }
   n = lj_gc2_weak_snapshot_count(g);
   do {
     start = gc2_weak_clear_cursor_acq(g);
@@ -3799,7 +3810,8 @@ static int gc2_phase_peer_active(global_State *g)
   return g && (gc2_worker_active_acq(g) != 0 ||
 	       gc2_assist_active_acq(g) != 0 ||
 	       (gc2_phase_acq(g) == LJ_GC2_WEAK &&
-		gc2_weak_drain_active_acq(g) != 0));
+		(gc2_weak_drain_active_acq(g) != 0 ||
+		 gc2_weak_write_active_acq(g) != 0)));
 }
 
 static int gc2_weak_snapshot_complete(global_State *g, uint32_t *pn)
@@ -3832,6 +3844,8 @@ static int gc2_weak_snapshot_complete(global_State *g, uint32_t *pn)
     return 0;  /* The bounded GC2 clear cursor has not drained the prefix. */
   if (gc2_weak_drain_active_acq(g) != 0)
     return 0;  /* Cursor reservation alone is not completed weak clearing. */
+  if (gc2_weak_write_active_acq(g) != 0)
+    return 0;  /* Mutator stores can still publish a protected weak entry. */
   if (pn)
     *pn = n;
   return 1;
@@ -5434,7 +5448,8 @@ static void gc2_remember_pair(global_State *g, GCobj *parent, GCobj *child)
   gc2_remember_obj(g, root);
 }
 
-static int gc2_tab_weak_mode(global_State *g, GCtab *t, GCtab *mt)
+static int gc2_tab_weak_mode(global_State *g, GCtab *t, GCtab *mt,
+			     int mark_mode)
 {
   int weak = 0;
   TValue modev;
@@ -5442,7 +5457,8 @@ static int gc2_tab_weak_mode(global_State *g, GCtab *t, GCtab *mt)
   if (mode && tvisstr(mode)) {
     const char *modestr = strVdata(mode);
     int c;
-    (void)lj_gc2_markobj(g, gcV(mode));  /* Weak mode metadata is strong. */
+    if (mark_mode)
+      (void)lj_gc2_markobj(g, gcV(mode));  /* Weak mode metadata is strong. */
     while ((c = *modestr++)) {
       if (c == 'k') weak |= LJ_GC_WEAKKEY;
       else if (c == 'v') weak |= LJ_GC_WEAKVAL;
@@ -5460,7 +5476,42 @@ static int gc2_tab_weak_barrier_mode(global_State *g, GCtab *t)
   int weak = lj_obj_gcflags(obj2gco(t)) & LJ_GC_WEAK;
   if (weak)
     return weak;  /* 05 section 5.8: use captured P_WEAK mode. */
-  return gc2_tab_weak_mode(g, t, lj_tab_metatable_acq(t));
+  return gc2_tab_weak_mode(g, t, lj_tab_metatable_acq(t), 1);
+}
+
+static int gc2_tab_weak_write_candidate(global_State *g, GCtab *t)
+{
+  int weak;
+  if (!g || !t)
+    return 0;
+  weak = lj_obj_gcflags(obj2gco(t)) & LJ_GC_WEAK;
+  if (weak)
+    return weak;
+  return gc2_tab_weak_mode(g, t, lj_tab_metatable_acq(t), 0);
+}
+
+int lj_gc2_weak_write_begin(lua_State *L, GCtab *t)
+{
+  global_State *g;
+  if (!L || !t)
+    return 0;
+  g = G(L);
+  if (!gc2_tab_weak_write_candidate(g, t))
+    return 0;
+  (void)gc2_weak_write_active_add(g, 1);
+  return 1;
+}
+
+void lj_gc2_weak_write_end(lua_State *L, int active)
+{
+  global_State *g;
+  uint32_t old;
+  if (!active || !L)
+    return;
+  g = G(L);
+  old = gc2_weak_write_active_sub(g, 1);
+  lj_assertG(old != 0, "gc2 weak write active underflow");
+  UNUSED(old);
 }
 
 void lj_gc2_barrier_tv_g(global_State *g, cTValue *tv)
@@ -5761,7 +5812,7 @@ static void gc2_marktrace_worker(global_State *g, TraceNo traceno)
 static int gc2_traverse_tab(global_State *g, GCtab *t)
 {
   GCtab *mt = lj_tab_metatable_acq(t);
-  int weak = gc2_tab_weak_mode(g, t, mt);
+  int weak = gc2_tab_weak_mode(g, t, mt, 1);
   int ffi_fin = gc2_tab_is_ffi_fin(g, t);
   void *arraymem;
   gc2_note_weak_table(g, t, weak);  /* 05 section 5.8 discovery scaffold. */

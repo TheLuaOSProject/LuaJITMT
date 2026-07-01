@@ -1977,12 +1977,20 @@ static void test_weak_pre_clear_late_write_survives_drain(lua_State *L,
   assert(lj_gc2_ismarked(g, obj2gco(late_val)) == 0);
 
   lj_gc2_mark_to_weak(g);
+  gc2_weak_write_active_add(g, 1);
+  assert(lj_gc2_test_weak_drain(g, 1) == 0);
+  assert(gc2_weak_clear_cursor_acq(g) == 0);
+  assert(!weak_entry_is_nil(L, weak, key));
   oldstate = g->gc.state;
   g->gc.state = GCSatomic;
   lua_pushvalue(L, 2);
   lua_pushvalue(L, 4);
   lua_settable(L, 1);  /* P_WEAK late write before weak drain. */
   assert(lj_gc2_ismarked(g, obj2gco(late_val)) == 1);
+  {
+    uint32_t old = gc2_weak_write_active_sub(g, 1);
+    assert(old != 0);
+  }
   assert(lj_gc2_test_weak_drain(g, 1) == 1u);
   g->gc.state = oldstate;
 

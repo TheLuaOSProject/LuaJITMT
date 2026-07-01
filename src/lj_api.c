@@ -1167,10 +1167,21 @@ LUA_API void lua_settable(lua_State *L, int idx)
     o = lj_meta_tset_owner(L, t, L->top-2, &owner);
     if (o) {
       TValue *key = L->top-2, *val = L->top-1;
-      if (lj_tab_trystoretv_cas_keyed(L, owner, o, key, val) ==
-	  LJ_TAB_STORE_CAS_OK) {
+      int weakwr = lj_gc2_weak_write_begin(L, owner);
+      int rc;
+      if (weakwr)
 	lj_gc2_barrier_weak_write(L, owner, key, val);
-	lj_gc2_barrier_tv_pair(L, obj2gco(owner), o);
+      rc = lj_tab_trystoretv_cas_keyed(L, owner, o, key, val);
+      if (weakwr) {
+	lj_gc2_barrier_weak_write(L, owner, key, val);
+	lj_gc2_barrier_tv_pair(L, obj2gco(owner), val);
+	lj_gc2_weak_write_end(L, weakwr);
+      }
+      if (rc == LJ_TAB_STORE_CAS_OK) {
+	if (!weakwr) {
+	  lj_gc2_barrier_weak_write(L, owner, key, val);
+	  lj_gc2_barrier_tv_pair(L, obj2gco(owner), o);
+	}
 	L->top = key;
 	return;
       }
@@ -1199,10 +1210,21 @@ LUA_API void lua_setfield(lua_State *L, int idx, const char *k)
     o = lj_meta_tset_owner(L, t, &key, &owner);
     if (o) {
       TValue *val = L->top-1;
-      if (lj_tab_trystoretv_cas_keyed(L, owner, o, &key, val) ==
-	  LJ_TAB_STORE_CAS_OK) {
+      int weakwr = lj_gc2_weak_write_begin(L, owner);
+      int rc;
+      if (weakwr)
 	lj_gc2_barrier_weak_write(L, owner, &key, val);
-	lj_gc2_barrier_tv_pair(L, obj2gco(owner), o);
+      rc = lj_tab_trystoretv_cas_keyed(L, owner, o, &key, val);
+      if (weakwr) {
+	lj_gc2_barrier_weak_write(L, owner, &key, val);
+	lj_gc2_barrier_tv_pair(L, obj2gco(owner), val);
+	lj_gc2_weak_write_end(L, weakwr);
+      }
+      if (rc == LJ_TAB_STORE_CAS_OK) {
+	if (!weakwr) {
+	  lj_gc2_barrier_weak_write(L, owner, &key, val);
+	  lj_gc2_barrier_tv_pair(L, obj2gco(owner), o);
+	}
 	L->top = val;
 	return;
       }
@@ -1223,17 +1245,32 @@ LUA_API void lua_rawset(lua_State *L, int idx)
   TValue snap;
   GCtab *t = tabV(index2adr_read(L, idx, &snap));
   TValue *dst, *key;
+  int barrier_done = 0;
   lj_checkapi_slot(2);
   key = L->top-2;
   for (;;) {
+    int weakwr, rc;
     dst = lj_tab_set(L, t, key);
-    if (lj_tab_trystoretv_cas_keyed(L, t, dst, key, key+1) ==
-	LJ_TAB_STORE_CAS_OK)
+    weakwr = lj_gc2_weak_write_begin(L, t);
+    if (weakwr)
+      lj_gc2_barrier_weak_write(L, t, key, key+1);
+    rc = lj_tab_trystoretv_cas_keyed(L, t, dst, key, key+1);
+    if (weakwr) {
+      lj_gc2_barrier_weak_write(L, t, key, key+1);
+      lj_gc2_barrier_tv_pair(L, obj2gco(t), key+1);
+      lj_gc_pubtab(L, t);
+      lj_gc2_weak_write_end(L, weakwr);
+      if (rc == LJ_TAB_STORE_CAS_OK)
+	barrier_done = 1;
+    }
+    if (rc == LJ_TAB_STORE_CAS_OK)
       break;
     lj_tab_store_wait_l(L);  /* C API rawset saw stale/FORWARD slot. */
   }
-  lj_gc2_barrier_weak_write(L, t, key, key+1);
-  lj_gc_pubtab(L, t);
+  if (!barrier_done) {
+    lj_gc2_barrier_weak_write(L, t, key, key+1);
+    lj_gc_pubtab(L, t);
+  }
   L->top = key;
 }
 
@@ -1243,18 +1280,33 @@ LUA_API void lua_rawseti(lua_State *L, int idx, int n)
   GCtab *t = tabV(index2adr_read(L, idx, &snap));
   TValue *dst, *src;
   TValue key;
+  int barrier_done = 0;
   lj_checkapi_slot(1);
   src = L->top-1;
   setintV(&key, n);
   for (;;) {
+    int weakwr, rc;
     dst = lj_tab_setint(L, t, n);
-    if (lj_tab_trystoretv_cas_keyed(L, t, dst, &key, src) ==
-	LJ_TAB_STORE_CAS_OK)
+    weakwr = lj_gc2_weak_write_begin(L, t);
+    if (weakwr)
+      lj_gc2_barrier_weak_write(L, t, &key, src);
+    rc = lj_tab_trystoretv_cas_keyed(L, t, dst, &key, src);
+    if (weakwr) {
+      lj_gc2_barrier_weak_write(L, t, &key, src);
+      lj_gc2_barrier_tv_pair(L, obj2gco(t), src);
+      lj_gc_pubtabtv(L, t, dst);
+      lj_gc2_weak_write_end(L, weakwr);
+      if (rc == LJ_TAB_STORE_CAS_OK)
+	barrier_done = 1;
+    }
+    if (rc == LJ_TAB_STORE_CAS_OK)
       break;
     lj_tab_store_wait_l(L);  /* C API rawseti saw stale/FORWARD slot. */
   }
-  lj_gc2_barrier_weak_write(L, t, &key, src);
-  lj_gc_pubtabtv(L, t, dst);
+  if (!barrier_done) {
+    lj_gc2_barrier_weak_write(L, t, &key, src);
+    lj_gc_pubtabtv(L, t, dst);
+  }
   L->top = src;
 }
 

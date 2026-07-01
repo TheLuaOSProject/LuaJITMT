@@ -300,6 +300,8 @@ LJ_FUNC void lj_gc2_barrier_weak_key(lua_State *L, GCtab *t, cTValue *key);
 LJ_FUNC void lj_gc2_barrier_weak_value(lua_State *L, GCtab *t, cTValue *val);
 LJ_FUNC void lj_gc2_barrier_weak_write(lua_State *L, GCtab *t, cTValue *key,
 				       cTValue *val);
+LJ_FUNC int lj_gc2_weak_write_begin(lua_State *L, GCtab *t);
+LJ_FUNC void lj_gc2_weak_write_end(lua_State *L, int active);
 LJ_FUNCA void lj_gc_barrierback_tab_g(global_State *g, GCtab *t);
 
 /* Move the GC propagation frontier back for tables (make it gray again). */

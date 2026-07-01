@@ -2455,9 +2455,22 @@ LJ_FUNCA TValue *lj_tab_storetv_forjit_array(lua_State *L, GCtab *parent,
 					     TValue *dst, cTValue *src,
 					     MSize key)
 {
+  int weakwr = lj_gc2_weak_write_begin(L, parent);
+  TValue keytv;
+  if (weakwr) {
+    setintV(&keytv, (int32_t)key);
+    lj_gc2_barrier_weak_write(L, parent, &keytv, src);
+    lj_gc2_barrier_tv_pair(L, obj2gco(parent), src);
+  }
   dst = lj_tab_storetv_forjit_array_nogc(L, parent, dst, src, key);
-  lj_gc2_barrier_weak_write(L, parent, NULL, dst);  /* M8: traced weak-value array write. */
-  lj_gc2_barrier_tv_pair(L, obj2gco(parent), dst);  /* M10: traced parent barrier. */
+  if (weakwr) {
+    lj_gc2_barrier_weak_write(L, parent, &keytv, src);
+    lj_gc2_barrier_tv_pair(L, obj2gco(parent), src);
+    lj_gc2_weak_write_end(L, weakwr);
+  } else {
+    lj_gc2_barrier_weak_write(L, parent, NULL, dst);  /* M8: traced weak-value array write. */
+    lj_gc2_barrier_tv_pair(L, obj2gco(parent), dst);  /* M10: traced parent barrier. */
+  }
   return dst;
 }
 
@@ -2466,17 +2479,25 @@ LJ_FUNCA TValue *lj_tab_storetv_forvm_array(lua_State *L, GCtab *parent,
 					    MSize key)
 {
   TValue *orig = dst;
+  TValue keytv;
+  int weakwr = lj_gc2_weak_write_begin(L, parent);
   /* The x64 VM runs its existing table barrier sequence after this helper. */
+  setintV(&keytv, (int32_t)key);
+  if (weakwr) {
+    lj_gc2_barrier_weak_write(L, parent, &keytv, src);
+    lj_gc2_barrier_tv_pair(L, obj2gco(parent), src);
+  }
   for (;;) {
     dst = tab_current_jit_array_slot(L, parent, orig, key);
-    {
-      TValue keytv;
-      setintV(&keytv, (int32_t)key);
-      if (lj_tab_trystoretv_cas_keyed(L, parent, dst, &keytv, src) ==
-	  LJ_TAB_STORE_CAS_OK)
-	break;
-    }
+    if (lj_tab_trystoretv_cas_keyed(L, parent, dst, &keytv, src) ==
+	LJ_TAB_STORE_CAS_OK)
+      break;
     lj_tab_store_wait_l(L);  /* VM array store saw stale/FORWARD slot. */
+  }
+  if (weakwr) {
+    lj_gc2_barrier_weak_write(L, parent, &keytv, src);
+    lj_gc2_barrier_tv_pair(L, obj2gco(parent), src);
+    lj_gc2_weak_write_end(L, weakwr);
   }
   return dst;
 }
@@ -2488,6 +2509,11 @@ LJ_FUNCA TValue *lj_tab_storetv_forjit_hash(lua_State *L, GCtab *parent,
   TValue keycopy;
   TValue *orig = dst;
   cTValue *barrier_key = key;
+  int weakwr = lj_gc2_weak_write_begin(L, parent);
+  if (weakwr) {
+    lj_gc2_barrier_weak_write(L, parent, key, src);
+    lj_gc2_barrier_tv_pair(L, obj2gco(parent), src);
+  }
   if (tab_jit_hash_current_match(parent, orig) &&
       lj_tab_trystoretv_cas_keyed(L, parent, orig, key, src) ==
       LJ_TAB_STORE_CAS_OK) {
@@ -2503,8 +2529,14 @@ LJ_FUNCA TValue *lj_tab_storetv_forjit_hash(lua_State *L, GCtab *parent,
     lj_tab_store_wait_l(L);  /* JIT hash store saw stale/FORWARD slot. */
   }
 done:
-  lj_gc2_barrier_weak_write(L, parent, barrier_key, dst);  /* M8: traced weak hash write. */
-  lj_gc2_barrier_tv_pair(L, obj2gco(parent), dst);  /* M10: traced parent barrier. */
+  if (weakwr) {
+    lj_gc2_barrier_weak_write(L, parent, barrier_key, src);
+    lj_gc2_barrier_tv_pair(L, obj2gco(parent), src);
+    lj_gc2_weak_write_end(L, weakwr);
+  } else {
+    lj_gc2_barrier_weak_write(L, parent, barrier_key, dst);  /* M8: traced weak hash write. */
+    lj_gc2_barrier_tv_pair(L, obj2gco(parent), dst);  /* M10: traced parent barrier. */
+  }
   return dst;
 }
 
@@ -2512,6 +2544,11 @@ LJ_FUNCA TValue *lj_tab_storetv_forjit_newref(lua_State *L, GCtab *parent,
 					      TValue *dst, cTValue *src,
 					      cTValue *key)
 {
+  int weakwr = lj_gc2_weak_write_begin(L, parent);
+  if (weakwr) {
+    lj_gc2_barrier_weak_write(L, parent, key, src);
+    lj_gc2_barrier_tv_pair(L, obj2gco(parent), src);
+  }
   for (;;) {
     dst = lj_tab_set(L, parent, key);
     if (lj_tab_trystoretv_cas_keyed(L, parent, dst, key, src) ==
@@ -2519,8 +2556,14 @@ LJ_FUNCA TValue *lj_tab_storetv_forjit_newref(lua_State *L, GCtab *parent,
       break;
     lj_tab_store_wait_l(L);  /* JIT NEWREF store saw stale/FORWARD slot. */
   }
-  lj_gc2_barrier_weak_write(L, parent, key, dst);  /* M8: traced NEWREF weak write. */
-  lj_gc2_barrier_tv_pair(L, obj2gco(parent), dst);  /* M10: traced parent barrier. */
+  if (weakwr) {
+    lj_gc2_barrier_weak_write(L, parent, key, src);
+    lj_gc2_barrier_tv_pair(L, obj2gco(parent), src);
+    lj_gc2_weak_write_end(L, weakwr);
+  } else {
+    lj_gc2_barrier_weak_write(L, parent, key, dst);  /* M8: traced NEWREF weak write. */
+    lj_gc2_barrier_tv_pair(L, obj2gco(parent), dst);  /* M10: traced parent barrier. */
+  }
   return dst;
 }
 
@@ -2600,12 +2643,18 @@ LJ_FUNCA void lj_tab_storetvn_forvm_array(lua_State *L, GCtab *parent,
 					  uint32_t n)
 {
   uint32_t i;
+  int weakwr;
   if (!L || !parent || !src || n == 0)
     return;
+  weakwr = lj_gc2_weak_write_begin(L, parent);
   for (i = 0; i < n; i++) {
     TValue *dst;
     TValue key;
     setintV(&key, (int32_t)(start + i));
+    if (weakwr) {
+      lj_gc2_barrier_weak_write(L, parent, &key, &src[i]);
+      lj_gc2_barrier_tv_pair(L, obj2gco(parent), &src[i]);
+    }
     for (;;) {
       dst = tab_current_vm_array_key_slot(L, parent, (MSize)(start + i));
       if (lj_tab_trystoretv_cas_keyed(L, parent, dst, &key, &src[i]) ==
@@ -2614,8 +2663,9 @@ LJ_FUNCA void lj_tab_storetvn_forvm_array(lua_State *L, GCtab *parent,
       lj_tab_store_wait_l(L);  /* VM TSETM saw stale/FORWARD slot. */
     }
   }
-  if (tab_tsetm_barrier_needed(L, parent))
+  if (weakwr || tab_tsetm_barrier_needed(L, parent))
     tab_tsetm_barrier_range(L, parent, start, n);
+  lj_gc2_weak_write_end(L, weakwr);
 }
 
 TValue *lj_tab_storenilraw(TValue *dst)

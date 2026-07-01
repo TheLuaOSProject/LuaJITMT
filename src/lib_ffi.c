@@ -1007,9 +1007,22 @@ static int ffi_index_meta(lua_State *L, CTState *cts, CTypeID id, MMS mm)
       GCtab *owner;
       TValue *o = lj_meta_tset_owner(L, tv, base+1, &owner);
       if (o) {
+	int weakwr = lj_gc2_weak_write_begin(L, owner);
+	if (weakwr) {
+	  lj_gc2_barrier_weak_key(L, owner, base+1);
+	  lj_gc2_barrier_weak_value(L, owner, base+2);
+	  lj_gc2_barrier_tv_pair(L, obj2gco(owner), base+2);
+	}
 	copyTVrel(L, o, base+2);
-	lj_gc2_barrier_weak_write(L, owner, base+1, base+2);
-	lj_gc2_barrier_tv_pair(L, obj2gco(owner), o);
+	if (weakwr) {
+	  lj_gc2_barrier_weak_key(L, owner, base+1);
+	  lj_gc2_barrier_weak_value(L, owner, base+2);
+	  lj_gc2_barrier_tv_pair(L, obj2gco(owner), base+2);
+	  lj_gc2_weak_write_end(L, weakwr);
+	} else {
+	  lj_gc2_barrier_weak_write(L, owner, base+1, base+2);
+	  lj_gc2_barrier_tv_pair(L, obj2gco(owner), o);
+	}
 	return 0;
       }
     }

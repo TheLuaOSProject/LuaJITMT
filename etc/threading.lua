@@ -1,7 +1,7 @@
 ---@meta threading
 
 ---@alias threading.timeout_error "timeout"
----@alias threading.thread_fn fun(...):...
+---@alias threading.thread_fn fun(...: any): ...
 ---@alias threading.recv_status true|false|"timeout"
 ---@alias threading.peek_status true|false
 ---@alias threading.send_result true|nil
@@ -159,9 +159,8 @@ function threading_mutex:unlock() end
 ---@nodiscard
 function threading_mutex:__tostring() end
 
----@generic T
 ---@class threading.channel<T>: userdata
----@field send fun(self: threading.channel<T>, value: T, timeout?: number): threading.send_result, threading.timeout_error|nil
+---@field send fun(self: threading.channel<T>, value: T, timeout?: number): threading.send_result, threading.timeout_error?
 ---@field recv fun(self: threading.channel<T>, timeout?: number): T|nil, threading.recv_status
 ---@field peek fun(self: threading.channel<T>): T|nil, threading.peek_status
 ---@field close fun(self: threading.channel<T>): nil
@@ -171,7 +170,6 @@ local threading_channel = {}
 ---
 ---Errors if the channel is closed. If this is a rendezvous channel, success
 ---means a receiver has taken the value.
----@generic T
 ---@overload fun(self: threading.channel<T>, value: T): true
 ---@overload fun(self: threading.channel<T>, value: T, timeout: number): true
 ---@overload fun(self: threading.channel<T>, value: T, timeout: number): nil, threading.timeout_error
@@ -185,7 +183,6 @@ function threading_channel:send(value, timeout) end
 ---
 ---Returns `value, true` on success, `nil, false` when the channel is closed, or
 ---`nil, "timeout"` when a timeout is supplied and no value is available.
----@generic T
 ---@overload fun(self: threading.channel<T>): T, true
 ---@overload fun(self: threading.channel<T>): nil, false
 ---@overload fun(self: threading.channel<T>, timeout: number): T, true
@@ -200,7 +197,6 @@ function threading_channel:recv(timeout) end
 ---
 ---Returns `value, true` on success, or `nil, false` when the channel is empty
 ---or closed.
----@generic T
 ---@overload fun(self: threading.channel<T>): T, true
 ---@overload fun(self: threading.channel<T>): nil, false
 ---@return T|nil value
@@ -215,7 +211,7 @@ function threading_channel:close() end
 ---@nodiscard
 function threading_channel:__tostring() end
 
----@class threadinglib
+---@class threading
 local threading = {}
 
 ---@return integer count
@@ -254,7 +250,6 @@ function threading.gcmode(mode) end
 ---@param fn threading.thread_fn
 ---@param ... any
 ---@return threading.thread thread
----@nodiscard
 function threading.spawn(fn, ...) end
 
 ---@return threading.thread thread
@@ -269,10 +264,8 @@ function threading.mutex() end
 ---
 ---Capacity 0 creates a rendezvous channel. Buffered channels have at least the
 ---requested capacity.
----@generic T
 ---@param capacity? integer buffered slot count; defaults to 0.
----@return threading.channel<T> channel
----@nodiscard
+---@return threading.channel<any> channel
 function threading.channel(capacity) end
 
 return threading
