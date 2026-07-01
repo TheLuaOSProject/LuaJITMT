@@ -547,6 +547,92 @@ local function exercise_jit_read_resize()
   harness.fullgc(2)
 end
 
+local function len_resize_writer(tbl, ready, start, id, n)
+  assert(ready:send(true, 10) == true)
+  local _, ok = start:recv(10)
+  assert(ok == true)
+  for i = 1, n do
+    local slot = 128 + ((i + id * 17) % 512) + 1
+    tbl[slot] = slot
+    tbl[id * 1000000 + i] = i
+    tbl["len-grow:" .. id .. ":" .. i] = i
+    if i > 32 and i % 5 == 0 then
+      tbl[160 + ((i + id * 7) % 480)] = nil
+    end
+    if i > 64 and i % 7 == 0 then
+      tbl["len-grow:" .. id .. ":" .. (i - 32)] = nil
+    end
+    if i % 64 == 0 then collectgarbage("step") end
+  end
+  return true
+end
+
+local function len_observer(tbl, ready, start, id, rounds)
+  local function check_len(n, label)
+    if type(n) ~= "number" then
+      return label .. " returned non-number length"
+    end
+    if n ~= math.floor(n) then
+      return label .. " returned non-integer length"
+    end
+    if n < 128 then
+      return label .. " crossed below stable prefix"
+    end
+    return nil
+  end
+
+  assert(ready:send(true, 10) == true)
+  local _, ok = start:recv(10)
+  assert(ok == true)
+  for round = 1, rounds do
+    local err = check_len(#tbl, "# resize")
+    if err then return nil, err end
+    if rawlen then
+      err = check_len(rawlen(tbl), "rawlen resize")
+      if err then return nil, err end
+    end
+    if round % 8 == 0 then
+      local ok_concat, s = pcall(table.concat, tbl, "", 1, 16)
+      if not ok_concat or type(s) ~= "string" then
+	return nil, "table.concat stable-prefix probe failed"
+      end
+    end
+    if round % 16 == 0 then
+      collectgarbage("step")
+      if id == 1 then th.sleep(0.001) end
+    end
+  end
+  return true
+end
+
+local function exercise_len_resize()
+  local t = {}
+  local observers = 2
+  local nworkers = writers + observers
+  local ready, start = ready_start(nworkers)
+  local workers = {}
+
+  for i = 1, 128 do t[i] = i end
+  for i = 1, writers do
+    workers[#workers + 1] =
+      th.spawn(len_resize_writer, t, ready, start, i, reps)
+  end
+  for i = 1, observers do
+    workers[#workers + 1] =
+      th.spawn(len_observer, t, ready, start, i, traversal_rounds)
+  end
+  harness.wait_ready(ready, nworkers, 10, "length resize")
+  harness.release_start(start, nworkers, 10)
+  collect_while_working(96)
+  harness.join_each(workers, function(result, _, msg)
+    assert(result == true, tostring(msg or result))
+  end, 30)
+  for i = 1, 128 do
+    assert(t[i] == i, "length resize changed stable prefix")
+  end
+  harness.fullgc(2)
+end
+
 local function traversal_resize_writer(tbl, ready, start, id, n)
   assert(ready:send(true, 10) == true)
   local _, ok = start:recv(10)
@@ -857,6 +943,7 @@ ran = ran + run_case("finalizer", exercise_finalizer_resize)
 ran = ran + run_case("metatable", exercise_metatable_resize)
 ran = ran + run_case("jitstore", exercise_jit_store_resize)
 ran = ran + run_case("jitread", exercise_jit_read_resize)
+ran = ran + run_case("len", exercise_len_resize)
 ran = ran + run_case("traversal", exercise_concurrent_traversal_resize)
 ran = ran + run_case("nextchurn", exercise_next_churn_resize)
 ran = ran + run_case("tablelib", exercise_table_library_resize)
