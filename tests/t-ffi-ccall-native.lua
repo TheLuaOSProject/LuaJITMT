@@ -137,16 +137,19 @@ do
     assert(total == n * 3)
   end)
 
-  expect_no_trace("dynamic-length ffi.copy", function(n)
+  expect_trace("dynamic-length ffi.copy", function(n)
+    ffi.fill(dst, 128, 0)
     for i = 1, n do
       ffi.copy(dst, src, (i % 64) + 1)
     end
+    assert(dst[0] == 0)
   end)
 
-  expect_no_trace("dynamic-length ffi.fill", function(n)
+  expect_trace("dynamic-length ffi.fill", function(n)
     for i = 1, n do
       ffi.fill(dst, (i % 64) + 1, i)
     end
+    assert(dst[0] == n % 256)
   end)
 
   expect_no_trace("unbounded ffi.string", function(n)

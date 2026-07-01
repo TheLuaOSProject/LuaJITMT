@@ -157,9 +157,11 @@ end
 
 function M.run_ir_dump_probe(t, dump, script, opts)
   opts = opts or {}
+  local stderr = opts.stderr
+  if stderr == nil then stderr = false end
   runtime.luajit_dump(t, dump, opts.dumpopt or "-jdump=ir", script, {
     timeout = opts.timeout or "20s",
-    stderr = opts.stderr == nil and false or opts.stderr,
+    stderr = stderr,
     quiet = opts.quiet
   })
   return dump
