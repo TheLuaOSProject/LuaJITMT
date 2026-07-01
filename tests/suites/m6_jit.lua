@@ -1582,6 +1582,34 @@ heat("buffer.method.skip", function()
   assert(tostring(b) == "cdef")
 end)
 
+print("buffer.method.reset.traced")
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+do
+  local b = buffer.new()
+  b:set("abcdef")
+  local n = 0
+  for _ = 1, 80 do
+    if b:reset() == b then n = n + 1 end
+  end
+  assert(n == 80)
+  assert(#b == 0)
+end
+
+print("buffer.method.skip.traced")
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+do
+  local b = buffer.new()
+  b:set(string.rep("a", 96))
+  local n = 0
+  for _ = 1, 80 do
+    if b:skip(1) == b then n = n + 1 end
+  end
+  assert(n == 80)
+  assert(#b == 16)
+end
+
 heat("buffer.method.set", function(i)
   local b = buffer.new()
   local s = "x" .. i
@@ -1673,6 +1701,10 @@ print("t-jit-buffer-method-shared-nyi OK")
       end
       checks.assert_dump_contains(t, dump, "buffer.method.put",
                                   "JIT buffer method NYI probe")
+      checks.assert_dump_contains(t, dump, "lj_bufx_reset_forjit",
+                                  "JIT buffer method reset helper")
+      checks.assert_dump_contains(t, dump, "lj_bufx_skip_forjit",
+                                  "JIT buffer method skip helper")
       checks.assert_dump_contains(t, dump, "lj_bufx_len_forjit",
                                   "JIT buffer method len helper")
       checks.assert_dump_contains(t, dump, "lj_bufx_tostr_forjit",

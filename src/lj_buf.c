@@ -126,6 +126,26 @@ void lj_bufx_set(SBufExt *sbx, const char *p, MSize len, GCobj *ref)
   lj_gc_pubobjobj(L, (GCudata *)sbx - 1, ref);
 }
 
+void LJ_FASTCALL lj_bufx_reset_forjit(SBufExt *sbx)
+{
+  lj_bufx_reset(sbx);
+}
+
+void LJ_FASTCALL lj_bufx_skip_forjit(SBufExt *sbx, int32_t narg)
+{
+  MSize n = (MSize)narg;
+  MSize len = sbufxlen(sbx);
+  if (n < len) {
+    lj_buf_rptr_rel(sbx, lj_buf_rptr_acq(sbx) + n);
+  } else if (sbufiscow(sbx)) {
+    lj_buf_rptr_rel(sbx, lj_buf_wptr_acq((SBuf *)sbx));
+  } else {
+    char *b = lj_buf_bptr_acq((SBuf *)sbx);
+    lj_buf_rptr_rel(sbx, b);
+    lj_buf_wptr_rel((SBuf *)sbx, b);
+  }
+}
+
 int32_t LJ_FASTCALL lj_bufx_len_forjit(SBufExt *sbx)
 {
   return (int32_t)sbufxlen(sbx);

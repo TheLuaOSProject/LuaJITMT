@@ -1126,14 +1126,29 @@ static void LJ_NOINLINE recff_buffer_method_shared_nyi(jit_State *J,
 
 #define recff_buffer_method_nyi(J, rd)	recff_buffer_method_shared_nyi((J), (rd))
 
+static TRef recff_buffer_method_sbx(jit_State *J, RecordFFData *rd);
+
 static void LJ_FASTCALL recff_buffer_method_reset(jit_State *J, RecordFFData *rd)
 {
-  recff_buffer_method_nyi(J, rd);
+  lj_ir_call(J, IRCALL_lj_bufx_reset_forjit,
+	     recff_buffer_method_sbx(J, rd));
+  UNUSED(rd);
 }
 
 static void LJ_FASTCALL recff_buffer_method_skip(jit_State *J, RecordFFData *rd)
 {
-  recff_buffer_method_nyi(J, rd);
+  int32_t n;
+  TRef trn;
+  if (!J->base[1])
+    recff_buffer_method_nyi(J, rd);
+  n = argv2int(J, &rd->argv[1]);
+  if (n < 0 || n > LJ_MAX_BUF)
+    recff_buffer_method_nyi(J, rd);
+  trn = lj_opt_narrow_toint(J, J->base[1]);
+  emitir(IRTGI(IR_GE), trn, lj_ir_kint(J, 0));
+  emitir(IRTGI(IR_LE), trn, lj_ir_kint(J, LJ_MAX_BUF));
+  lj_ir_call(J, IRCALL_lj_bufx_skip_forjit,
+	     recff_buffer_method_sbx(J, rd), trn);
 }
 
 static void LJ_FASTCALL recff_buffer_method_set(jit_State *J, RecordFFData *rd)
@@ -1150,8 +1165,6 @@ static void LJ_FASTCALL recff_buffer_method_putf(jit_State *J, RecordFFData *rd)
 {
   recff_buffer_method_nyi(J, rd);
 }
-
-static TRef recff_buffer_method_sbx(jit_State *J, RecordFFData *rd);
 
 static void LJ_FASTCALL recff_buffer_method_get(jit_State *J, RecordFFData *rd)
 {
