@@ -282,29 +282,31 @@ static int getfield(lua_State *L, const char *key, int d)
   return res;
 }
 
+static struct tm *os_date_tm(time_t *t, int utc, struct tm *rtm)
+{
+#if LJ_TARGET_POSIX
+  return utc ? gmtime_r(t, rtm) : localtime_r(t, rtm);
+#elif LJ_TARGET_WINDOWS
+  return (utc ? gmtime_s(rtm, t) : localtime_s(rtm, t)) == 0 ? rtm : NULL;
+#else
+  UNUSED(rtm);
+  return utc ? gmtime(t) : localtime(t);
+#endif
+}
+
 LJLIB_CF(os_date)
 {
   const char *s = luaL_optstring(L, 1, "%c");
   time_t t = lua_isnoneornil(L, 2) ? time(NULL) :
 	     lj_num2int_type(luaL_checknumber(L, 2), time_t);
   struct tm *stm;
-#if LJ_TARGET_POSIX
   struct tm rtm;
-#endif
+  int utc = 0;
   if (*s == '!') {  /* UTC? */
     s++;  /* Skip '!' */
-#if LJ_TARGET_POSIX
-    stm = gmtime_r(&t, &rtm);
-#else
-    stm = gmtime(&t);
-#endif
-  } else {
-#if LJ_TARGET_POSIX
-    stm = localtime_r(&t, &rtm);
-#else
-    stm = localtime(&t);
-#endif
+    utc = 1;
   }
+  stm = os_date_tm(&t, utc, &rtm);
   if (stm == NULL) {  /* Invalid date? */
     setnilV(L->top++);
   } else if (strcmp(s, "*t") == 0) {

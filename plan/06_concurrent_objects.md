@@ -607,7 +607,9 @@ by caller (typical pattern: parent moves args into a not-yet-started L).
 - `lua_concat`/lj_meta paths: use tg tmpbuf; barrier on results stored.
 - rawequal/rawget/rawset: thin wrappers over §6.3 ops (already are).
 - `os`, `io`: untouched (user-level objects; FILE* sharing is user's
-  problem per requirement 4 analog); `os.date` → localtime_r etc. audit.
+  problem per requirement 4 analog); `os.date` now uses caller-owned
+  broken-down time buffers on the supported POSIX and Windows targets
+  (`localtime_r`/`gmtime_r` or `localtime_s`/`gmtime_s`).
 - `math.random`: per-TG prng; `math.randomseed` seeds calling thread only
   (doc note 09 §9.8).
 - package.loaded / require: ordinary shared tables now safe; the *loader*

@@ -261,7 +261,7 @@ return function(add)
 
   add({
     name = "m5_os_reentrant",
-    description = "POSIX os.date/tmpname reentrancy and setlocale behavior",
+    description = "os.date/tmpname reentrancy and setlocale behavior",
     run = function(t)
       build_and_run_luajit_script(t, "t-os-reentrant.lua", nil, {
         joff = true,
