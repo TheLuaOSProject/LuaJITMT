@@ -3259,7 +3259,9 @@ static int crec_call_jit_flt_num(jit_State *J, RecordFFData *rd, CTState *cts,
 #define CREC_CALL_JIT_KIND_I32 0
 #define CREC_CALL_JIT_KIND_U32 1
 #define CREC_CALL_JIT_KIND_PTR 2
-#define CREC_CALL_JIT_RETKIND_VOID 3
+#define CREC_CALL_JIT_KIND_I64 3
+#define CREC_CALL_JIT_KIND_U64 4
+#define CREC_CALL_JIT_RETKIND_VOID 5
 
 static int crec_call_jit_gpr_kind(CTInfo info, CTSize size)
 {
@@ -3269,6 +3271,10 @@ static int crec_call_jit_gpr_kind(CTInfo info, CTSize size)
     return CREC_CALL_JIT_KIND_U32;
   if (ctype_isptr(info) && size == CTSIZE_PTR)
     return CREC_CALL_JIT_KIND_PTR;
+  if (ctype_isinteger(info) && size == 8 && !(info & CTF_UNSIGNED))
+    return CREC_CALL_JIT_KIND_I64;
+  if (ctype_isinteger(info) && size == 8 && (info & CTF_UNSIGNED))
+    return CREC_CALL_JIT_KIND_U64;
   return -1;
 }
 
@@ -3308,8 +3314,11 @@ static TRef crec_call_jit_gpr_arg(jit_State *J, int kind, TRef arg)
       lj_trace_err(J, LJ_TRERR_NYICALL);
   } else if (kind == CREC_CALL_JIT_KIND_U32) {
     arg = crec_call_jit_u32_arg(J, arg);
-  } else {
+  } else if (kind == CREC_CALL_JIT_KIND_PTR) {
     if (!tref_istype(arg, IRT_PTR))
+      lj_trace_err(J, LJ_TRERR_NYICALL);
+  } else {
+    if (!tref_istype(arg, kind == CREC_CALL_JIT_KIND_I64 ? IRT_I64 : IRT_U64))
       lj_trace_err(J, LJ_TRERR_NYICALL);
   }
   return arg;
@@ -3668,8 +3677,14 @@ static uint32_t crec_call_jit_sig(MSize narg, const int *kind)
 {
   if (narg == 0)
     return LJ_CCALL_JIT_SIG0;
-  if (narg == 1)
-    return LJ_CCALL_JIT_SIG_I32 + (uint32_t)kind[0];
+  if (narg == 1) {
+    if (kind[0] <= CREC_CALL_JIT_KIND_PTR)
+      return LJ_CCALL_JIT_SIG_I32 + (uint32_t)kind[0];
+    return kind[0] == CREC_CALL_JIT_KIND_I64 ? LJ_CCALL_JIT_SIG_I64 :
+					       LJ_CCALL_JIT_SIG_U64;
+  }
+  if (kind[0] > CREC_CALL_JIT_KIND_PTR || kind[1] > CREC_CALL_JIT_KIND_PTR)
+    return UINT32_MAX;
   return LJ_CCALL_JIT_SIG_I32_I32 +
 	 (uint32_t)(kind[0] * 3 + kind[1]);
 }
@@ -3729,12 +3744,14 @@ static int crec_call_jit_u32_gpr(jit_State *J, RecordFFData *rd,
   }
   if (fid)
     return 0;
+  sig = crec_call_jit_sig(narg, kind);
+  if (sig == UINT32_MAX)
+    return 0;
 
   if (lj_ctype_cb_isblacklisted(cts, cdata_getptr(cdataptr(cd), fsz)))
     lj_trace_err(J, LJ_TRERR_BLACKL);
 
   func = emitir(IRT(IR_FLOAD, tp), J->base[0], IRFL_CDATA_PTR);
-  sig = crec_call_jit_sig(narg, kind);
   if (narg < 1) args[0] = noarg;
   if (narg < 2) args[1] = noarg;
   J->base[0] = lj_ir_call(J, IRCALL_lj_ccall_jit_u32_gpr, func, args[0],
@@ -3860,12 +3877,15 @@ static int crec_call_jit_narrow_gpr(jit_State *J, RecordFFData *rd,
   }
   if (fid)
     return 0;
+  sig = crec_call_jit_sig(narg, kind);
+  if (sig == UINT32_MAX)
+    return 0;
 
   if (lj_ctype_cb_isblacklisted(cts, cdata_getptr(cdataptr(cd), fsz)))
     lj_trace_err(J, LJ_TRERR_BLACKL);
 
   func = emitir(IRT(IR_FLOAD, tp), J->base[0], IRFL_CDATA_PTR);
-  sig = crec_call_jit_sig(narg, kind) | ((uint32_t)retsig << 8);
+  sig |= (uint32_t)retsig << 8;
   if (narg < 1) args[0] = noarg;
   if (narg < 2) args[1] = noarg;
   J->base[0] = lj_ir_call(J, IRCALL_lj_ccall_jit_narrow_gpr, func, args[0],
@@ -3929,12 +3949,14 @@ static int crec_call_jit_64ret_gpr(jit_State *J, RecordFFData *rd,
   }
   if (fid)
     return 0;
+  sig = crec_call_jit_sig(narg, kind);
+  if (sig == UINT32_MAX)
+    return 0;
 
   if (lj_ctype_cb_isblacklisted(cts, cdata_getptr(cdataptr(cd), fsz)))
     lj_trace_err(J, LJ_TRERR_BLACKL);
 
   func = emitir(IRT(IR_FLOAD, tp), J->base[0], IRFL_CDATA_PTR);
-  sig = crec_call_jit_sig(narg, kind);
   if (narg < 1) args[0] = noarg;
   if (narg < 2) args[1] = noarg;
   tr = uns ? lj_ir_call(J, IRCALL_lj_ccall_jit_u64_gpr, func, args[0],
@@ -4001,12 +4023,14 @@ static int crec_call_jit_gpr(jit_State *J, RecordFFData *rd, CTState *cts,
   }
   if (fid)
     return 0;
+  sig = crec_call_jit_sig(narg, kind);
+  if (sig == UINT32_MAX)
+    return 0;
 
   if (lj_ctype_cb_isblacklisted(cts, cdata_getptr(cdataptr(cd), fsz)))
     lj_trace_err(J, LJ_TRERR_BLACKL);
 
   func = emitir(IRT(IR_FLOAD, tp), J->base[0], IRFL_CDATA_PTR);
-  sig = crec_call_jit_sig(narg, kind);
   if (narg < 1) args[0] = noarg;
   if (narg < 2) args[1] = noarg;
   if (retkind == CREC_CALL_JIT_RETKIND_VOID) {

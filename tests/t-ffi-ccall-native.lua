@@ -28,10 +28,17 @@ uint16_t lj_m7_ccall_jit_u16_i32(int32_t);
 int lj_m7_ccall_jit_i8_arg_i32(int8_t);
 int32_t lj_m7_ccall_jit_i32_u32(uint32_t);
 int32_t lj_m7_ccall_jit_i32_u32_ptr(uint32_t, int *);
+int32_t lj_m7_ccall_jit_i32_i64arg(int64_t);
+int32_t lj_m7_ccall_jit_i32_u64arg(uint64_t);
 uint8_t lj_m7_ccall_jit_u8_u32(uint32_t);
+uint8_t lj_m7_ccall_jit_u8_i64arg(int64_t);
 void lj_m7_ccall_jit_void_u32(uint32_t);
+void lj_m7_ccall_jit_void_i64arg(int64_t);
+void lj_m7_ccall_jit_void_u64arg(uint64_t);
 uint64_t lj_m7_ccall_jit_u64_u32arg(uint32_t);
+uint32_t lj_m7_ccall_jit_u32_u64arg(uint64_t);
 int *lj_m7_ccall_jit_ptr_u32(uint32_t);
+int *lj_m7_ccall_jit_ptr_u64arg(uint64_t);
 double lj_m7_ccall_jit_num0(void);
 double lj_m7_ccall_jit_num_i32(int32_t);
 double lj_m7_ccall_jit_num_ptr(int *);
@@ -209,10 +216,17 @@ do
     local i8_arg_i32 = lib.lj_m7_ccall_jit_i8_arg_i32
     local i32_u32 = lib.lj_m7_ccall_jit_i32_u32
     local i32_u32_ptr = lib.lj_m7_ccall_jit_i32_u32_ptr
+    local i32_i64arg = lib.lj_m7_ccall_jit_i32_i64arg
+    local i32_u64arg = lib.lj_m7_ccall_jit_i32_u64arg
     local u8_u32 = lib.lj_m7_ccall_jit_u8_u32
+    local u8_i64arg = lib.lj_m7_ccall_jit_u8_i64arg
     local void_u32 = lib.lj_m7_ccall_jit_void_u32
+    local void_i64arg = lib.lj_m7_ccall_jit_void_i64arg
+    local void_u64arg = lib.lj_m7_ccall_jit_void_u64arg
     local u64_u32arg = lib.lj_m7_ccall_jit_u64_u32arg
+    local u32_u64arg = lib.lj_m7_ccall_jit_u32_u64arg
     local ptr_u32 = lib.lj_m7_ccall_jit_ptr_u32
+    local ptr_u64arg = lib.lj_m7_ccall_jit_ptr_u64arg
     local num0 = lib.lj_m7_ccall_jit_num0
     local num_i32 = lib.lj_m7_ccall_jit_num_i32
     local num_ptr = lib.lj_m7_ccall_jit_num_ptr
@@ -428,6 +442,22 @@ do
       end
       return r
     end
+    local function run_i32_i64arg(n)
+      local arg = ffi.new("int64_t", 0x100000123)
+      local r = 0
+      for _ = 1, n do
+	r = r + i32_i64arg(arg)
+      end
+      return r
+    end
+    local function run_i32_u64arg(n)
+      local arg = ffi.new("uint64_t", -16)
+      local r = 0
+      for _ = 1, n do
+	r = r + i32_u64arg(arg)
+      end
+      return r
+    end
     local function run_u8_u32_high(n)
       local arg = ffi.new("uint32_t", 0xfffffffe)
       local r = 0
@@ -436,10 +466,34 @@ do
       end
       return r
     end
+    local function run_u8_i64arg(n)
+      local arg = ffi.new("int64_t", -4)
+      local r = 0
+      for _ = 1, n do
+	r = r + u8_i64arg(arg)
+      end
+      return r
+    end
     local function run_void_u32(n)
       local before = void_count_i32()
       for i = 1, n do
 	assert(void_u32(i) == nil)
+      end
+      return void_count_i32() - before
+    end
+    local function run_void_i64arg(n)
+      local arg = ffi.new("int64_t", 0x10000001f)
+      local before = void_count_i32()
+      for _ = 1, n do
+	assert(void_i64arg(arg) == nil)
+      end
+      return void_count_i32() - before
+    end
+    local function run_void_u64arg(n)
+      local arg = ffi.new("uint64_t", -2)
+      local before = void_count_i32()
+      for _ = 1, n do
+	assert(void_u64arg(arg) == nil)
       end
       return void_count_i32() - before
     end
@@ -451,10 +505,26 @@ do
       end
       return r
     end
+    local function run_u32_u64arg(n)
+      local arg = ffi.new("uint64_t", 0x1f)
+      local r = 0
+      for _ = 1, n do
+	r = r + u32_u64arg(arg)
+      end
+      return r
+    end
     local function run_ptr_u32(n)
       local r = 0
       for i = 1, n do
 	r = r + ptr_u32(i)[0]
+      end
+      return r
+    end
+    local function run_ptr_u64arg(n)
+      local arg = ffi.new("uint64_t", -15)
+      local r = 0
+      for _ = 1, n do
+	r = r + ptr_u64arg(arg)[0]
       end
       return r
     end
@@ -873,8 +943,23 @@ do
 
     jit.flush()
     jit.opt.start("hotloop=1", "hotexit=1")
+    assert(run_i32_i64arg(80) == 80 * 284)
+    assert(trace_count() > 0, "shared int64_t->int FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    assert(run_i32_u64arg(80) == 80 * 1017)
+    assert(trace_count() > 0, "shared uint64_t->int FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
     assert(run_u8_u32_high(80) == 80)
     assert(trace_count() > 0, "shared high-bit uint32_t->uint8_t FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    assert(run_u8_i64arg(80) == 80)
+    assert(trace_count() > 0, "shared int64_t->uint8_t FFI call loop should trace")
 
     jit.flush()
     jit.opt.start("hotloop=1", "hotexit=1")
@@ -883,13 +968,33 @@ do
 
     jit.flush()
     jit.opt.start("hotloop=1", "hotexit=1")
+    assert(run_void_i64arg(80) == 80 * 31)
+    assert(trace_count() > 0, "shared int64_t->void FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    assert(run_void_u64arg(80) == 80 * 30)
+    assert(trace_count() > 0, "shared uint64_t->void FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
     assert(run_u64_u32arg_high(80) == 80 * (4294967296 + 0xfffffff0))
     assert(trace_count() > 0, "shared high-bit uint32_t->uint64_t FFI call loop should trace")
 
     jit.flush()
     jit.opt.start("hotloop=1", "hotexit=1")
+    assert(run_u32_u64arg(80) == 80 * (0xf0000000 + 0x1f))
+    assert(trace_count() > 0, "shared uint64_t->uint32_t FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
     assert(run_ptr_u32(80) == 2200)
     assert(trace_count() > 0, "shared uint32_t->ptr FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    assert(run_ptr_u64arg(80) == 80 * 22)
+    assert(trace_count() > 0, "shared uint64_t->ptr FFI call loop should trace")
 
     jit.flush()
     jit.opt.start("hotloop=1", "hotexit=1")
