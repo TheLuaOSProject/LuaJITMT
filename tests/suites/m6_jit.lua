@@ -1611,11 +1611,25 @@ do
 end
 
 heat("buffer.method.set", function(i)
+  local _ = i
   local b = buffer.new()
-  local s = "x" .. i
-  b:set(s)
-  assert(tostring(b) == s)
+  b:set("setter")
+  assert(tostring(b) == "setter")
 end)
+
+print("buffer.method.set.traced")
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+do
+  local b = buffer.new()
+  local vals = { "left", "right" }
+  local n = 0
+  for i = 1, 80 do
+    local s = vals[(i % 2) + 1]
+    if b:set(s) == b and tostring(b) == s then n = n + 1 end
+  end
+  assert(n == 80)
+end
 
 heat("buffer.method.put", function(i)
   local b = buffer.new()
@@ -1701,6 +1715,8 @@ print("t-jit-buffer-method-shared-nyi OK")
       end
       checks.assert_dump_contains(t, dump, "buffer.method.put",
                                   "JIT buffer method NYI probe")
+      checks.assert_dump_contains(t, dump, "lj_bufx_set",
+                                  "JIT buffer method set helper")
       checks.assert_dump_contains(t, dump, "lj_bufx_reset_forjit",
                                   "JIT buffer method reset helper")
       checks.assert_dump_contains(t, dump, "lj_bufx_skip_forjit",

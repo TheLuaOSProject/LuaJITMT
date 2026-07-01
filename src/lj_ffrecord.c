@@ -1153,7 +1153,13 @@ static void LJ_FASTCALL recff_buffer_method_skip(jit_State *J, RecordFFData *rd)
 
 static void LJ_FASTCALL recff_buffer_method_set(jit_State *J, RecordFFData *rd)
 {
-  recff_buffer_method_nyi(J, rd);
+  TRef str = J->base[1], ptr, len;
+  if (!str || !tref_isstr(str) || !tvisstr(&rd->argv[1]))
+    recff_buffer_method_nyi(J, rd);
+  ptr = emitir(IRT(IR_STRREF, IRT_PGC), str, lj_ir_kint(J, 0));
+  len = emitir(IRTI(IR_FLOAD), str, IRFL_STR_LEN);
+  lj_ir_call(J, IRCALL_lj_bufx_set, recff_buffer_method_sbx(J, rd),
+	     ptr, len, str);
 }
 
 static void LJ_FASTCALL recff_buffer_method_put(jit_State *J, RecordFFData *rd)
