@@ -13,25 +13,51 @@
 #include "lj_gc2.h"
 #include "lj_obj.h"
 #include "lj_str.h"
+#include "lj_tg.h"
+#include "lj_thr.h"
 
 #define TEST_STRTAB_RESIZE	((MSize)0x80000000u)
+
+typedef struct ActiveReleaseCtx {
+  TGState *tg;
+  StrTabHdr *hdr;
+} ActiveReleaseCtx;
+
+static void *release_active_after_claim(void *arg)
+{
+  ActiveReleaseCtx *ctx = (ActiveReleaseCtx *)arg;
+  while ((la_load32_acq(&ctx->hdr->resize) & TEST_STRTAB_RESIZE) == 0)
+    (void)lj_thr_sleep_ns(NULL, 100000);
+  assert(lj_tg_strtab_active_hdr_acq(ctx->tg) == ctx->hdr);
+  assert(lj_tg_strtab_active_depth_acq(ctx->tg) == 1u);
+  (void)lj_tg_strtab_active_depth_xchg(ctx->tg, 0);
+  lj_tg_strtab_active_hdr_rel(ctx->tg, NULL);
+  return NULL;
+}
 
 int main(void)
 {
   lua_State *L = luaL_newstate();
   global_State *g;
   StrTabHdr *hdr;
+  TGState *tg;
   MSize oldmask, wantmask;
   uint64_t retire_epoch;
   uint64_t smr_runs0, smr_reclaimed0;
   GCstr *s1, *s2;
+  ActiveReleaseCtx ctx;
+  LJThr release_thr;
   int i;
 
   assert(L != NULL);
   g = G(L);
+  tg = L2TG(L);
+  assert(tg != NULL);
   hdr = lj_str_tabh_acq(g);
   assert(hdr != NULL);
   assert(hdr->resize == 0);
+  assert(lj_tg_strtab_active_hdr_acq(tg) == NULL);
+  assert(lj_tg_strtab_active_depth_acq(tg) == 0);
 
   s1 = lj_str_new(L, "m5-strtab-cas-same", strlen("m5-strtab-cas-same"));
   s2 = lj_str_new(L, "m5-strtab-cas-same", strlen("m5-strtab-cas-same"));
@@ -40,17 +66,16 @@ int main(void)
   oldmask = g->str.mask;
   wantmask = (oldmask << 1) + 1u;
 
-  /* Simulate the last active interner leaving a resize-claimed header. */
-  la_store32_rel(&hdr->resize, TEST_STRTAB_RESIZE | 1u);
-  {
-    MSize old = la_sub32_acqrel(&hdr->resize, 1);
-    assert((old & TEST_STRTAB_RESIZE) != 0);
-    assert((old & ~TEST_STRTAB_RESIZE) == 1u);
-    assert(hdr->resize == TEST_STRTAB_RESIZE);
-  }
-  la_store32_rel(&hdr->resize, 0);
-
+  /* Simulate the last active interner leaving after resize claims the header. */
+  lj_tg_strtab_active_hdr_rel(tg, hdr);
+  (void)lj_tg_strtab_active_depth_xchg(tg, 1);
+  ctx.tg = tg;
+  ctx.hdr = hdr;
+  assert(lj_thr_create(&release_thr, release_active_after_claim, &ctx) == 0);
   lj_str_resize(L, wantmask);
+  assert(lj_thr_join(&release_thr, NULL) == 0);
+  assert(lj_tg_strtab_active_hdr_acq(tg) == NULL);
+  assert(lj_tg_strtab_active_depth_acq(tg) == 0);
   assert(lj_str_tabh_acq(g) != hdr);
   assert(g->str.mask == wantmask);
   assert(lj_str_tabh_acq(g)->resize == 0);

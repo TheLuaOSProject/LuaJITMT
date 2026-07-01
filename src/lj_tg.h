@@ -66,6 +66,8 @@ struct TGState {
   uint32_t profile_samples;
   int32_t profile_vmstate;
   uint32_t in_native;
+  StrTabHdr *strtab_active_hdr;
+  uint32_t strtab_active_depth;
   uint8_t gc_assist;
   uint8_t hookmask_th;
   uint8_t tg_flags;
@@ -119,6 +121,28 @@ static LJ_AINLINE void lj_tg_in_native_store_rlx(TGState *tg,
 						 uint32_t in_native)
 {
   la_store32_rlx(&tg->in_native, in_native);
+}
+
+static LJ_AINLINE StrTabHdr *lj_tg_strtab_active_hdr_acq(const TGState *tg)
+{
+  return (StrTabHdr *)la_loadptr_acq((void *const *)&tg->strtab_active_hdr);
+}
+
+static LJ_AINLINE void lj_tg_strtab_active_hdr_rel(TGState *tg,
+						   StrTabHdr *hdr)
+{
+  la_storeptr_rel((void **)&tg->strtab_active_hdr, hdr);
+}
+
+static LJ_AINLINE uint32_t lj_tg_strtab_active_depth_acq(const TGState *tg)
+{
+  return la_load32_acq(&tg->strtab_active_depth);
+}
+
+static LJ_AINLINE uint32_t lj_tg_strtab_active_depth_xchg(TGState *tg,
+							  uint32_t depth)
+{
+  return la_xchg32_acqrel(&tg->strtab_active_depth, depth);
 }
 
 static LJ_AINLINE uint32_t lj_tg_in_native_inc_rel(TGState *tg)

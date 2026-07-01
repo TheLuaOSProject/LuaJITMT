@@ -33,14 +33,28 @@ Subagent audit of three reported warm-path bottlenecks:
 
 ## string interning reader pin
 
-- Verdict: partially accurate. Normal string interning currently enters/leaves
-  the string-table header by CAS-adjusting `StrTabHdr.resize`, so successful
-  lookup pays a shared-header RMW pair.
+- Verdict: accurate for the pre-follow-up bridge; narrowed by the follow-up
+  slice below. Normal string interning used to enter/leave the string-table
+  header by CAS-adjusting `StrTabHdr.resize`, so successful lookup paid a
+  shared-header RMW pair. Current HEAD moves that active marker to the owning
+  `TGState`, so ordinary interning no longer mutates the shared header on every
+  lookup/insert.
 - The "pure per-bucket CAS" claim is overstated: the plan's linearization point
   is per-bucket CAS, but the same tracked design includes resize state and a
-  helper-copy protocol. Current active-user pins are documented as a bridge.
+  helper-copy protocol. Current active-user markers are documented as a bridge.
 - Classification: temporary/changeable, currently required by incomplete
   resize/sweep migration. Remove it only with the full string-table migration:
   bounded helper-copy resize, old/new dedupe during resize, SMR header lifetime
   without per-intern active counts, and Harris-style string sweep/unlink with
   grace-epoch reclamation.
+
+Follow-up slice:
+
+- `TGState.strtab_active_hdr/depth` now carry the active lookup/insert marker.
+  `strtab_enter()` publishes the TG-local marker and rechecks the current header
+  plus resize bit. Depth transitions use a TG-local acquire/release exchange,
+  so the resizer has a stable ordering point without putting an RMW on the
+  shared string-table header. `strtab_claim()` still sets `StrTabHdr.resize`
+  but waits by scanning live TG markers for the claimed header. This preserves
+  the current destructive resize/secondary-rehash exclusion rule while removing
+  the shared-header RMW pair from the normal intern path.

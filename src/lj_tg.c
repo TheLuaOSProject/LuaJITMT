@@ -67,6 +67,8 @@ static void tg_init_common(global_State *g, TGState *tg, lua_State *L)
   tg->vmstate = ~LJ_VMST_INTERP;
   tg->profile_vmstate = 'N';
   tg->prng = g->prng;
+  tg->strtab_active_hdr = NULL;
+  tg->strtab_active_depth = 0;
   tg_init_ssb(tg);
   lj_buf_init(NULL, &tg->tmpbuf);
 #if LJ_HASJIT

@@ -572,10 +572,12 @@ resize trigger: num > mask (la_add32 num on success): claim via
   Helping is bounded (cursor); still lock-free (initiator stall ⇒ helpers
   finish). This serializes intern-vs-resize without a lock.)
 Current implementation status: bucket publication now uses release CAS under
-an active-user pin on `StrTabHdr.resize`. Resize claims the high bit even when
-active interners are present, then drains the active count before copying and
-publishing the replacement header; new entrants spin on the claimed bit. The
-old header is retained on a raw retired-header list and freed after a later
+a TG-local active-user marker. Resize claims the high bit in
+`StrTabHdr.resize`, then drains live TG markers that point at the claimed header
+before copying and publishing the replacement header; new entrants spin on the
+claimed bit. This keeps the current destructive resize exclusion rule but
+removes the shared-header active-count RMW pair from ordinary string interning.
+The old header is retained on a raw retired-header list and freed after a later
 completed safepoint handshake epoch, avoiding immediate RCU use-after-free for
 threads that loaded the old header before pinning it. The string count is
 updated and read with atomic helpers (`la_add32_rlx`, `la_sub32_acqrel`,
@@ -583,7 +585,7 @@ updated and read with atomic helpers (`la_add32_rlx`, `la_sub32_acqrel`,
 accesses against concurrent interns. `GCstr.sid` allocation uses
 `la_add32_rlx(&g->str.id, 1)`; the old allocation-time `idreseed`/global-PRNG
 mutation is deferred until it can be reintroduced without racing allocation
-outside the active table pin. Secondary-chain rehash now reuses the same
+outside the active table marker. Secondary-chain rehash now reuses the same
 claim/drain bit on the current header, verifies the header is still current
 after the claim, rechains in place while new entrants spin, and releases the
 bit before retrying the pending insert. The original full helping protocol

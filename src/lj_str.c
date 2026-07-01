@@ -14,6 +14,7 @@
 #include "lj_char.h"
 #include "lj_prng.h"
 #include "lj_thr.h"
+#include "lj_tg.h"
 
 /* -- String helpers ------------------------------------------------------ */
 
@@ -127,7 +128,6 @@ static LJ_NOINLINE StrHash hash_dense(uint64_t seed, StrHash h,
 
 #define LJ_STR_MAXCOLL		32
 #define LJ_STRTAB_RESIZE	((MSize)0x80000000u)
-#define LJ_STRTAB_ACTIVE_MASK	(~LJ_STRTAB_RESIZE)
 
 static void strtab_wait(lua_State *L)
 {
@@ -170,18 +170,70 @@ static void strtab_retire(global_State *g, StrTabHdr *hdr)
   strtab_retired_push(g, hdr);
 }
 
+static LJ_AINLINE MSize strtab_resize_acq(StrTabHdr *hdr)
+{
+  return la_load32_acq(&hdr->resize);
+}
+
+static LJ_AINLINE int strtab_resizing(StrTabHdr *hdr)
+{
+  return (strtab_resize_acq(hdr) & LJ_STRTAB_RESIZE) != 0;
+}
+
+static void strtab_active_enter(TGState *tg, StrTabHdr *hdr)
+{
+  uint32_t depth = lj_tg_strtab_active_depth_acq(tg);
+  if (depth == 0) {
+    lj_tg_strtab_active_hdr_rel(tg, hdr);
+  } else {
+    lj_assertX(lj_tg_strtab_active_hdr_acq(tg) == hdr,
+	       "nested string-table enter changed header");
+  }
+  (void)lj_tg_strtab_active_depth_xchg(tg, depth + 1u);
+}
+
+static void strtab_active_leave(TGState *tg, StrTabHdr *hdr)
+{
+  uint32_t depth = lj_tg_strtab_active_depth_acq(tg);
+  lj_assertX(depth != 0, "bad string table active depth");
+  lj_assertX(lj_tg_strtab_active_hdr_acq(tg) == hdr,
+	     "string table active header mismatch");
+  depth--;
+  (void)lj_tg_strtab_active_depth_xchg(tg, depth);
+  if (depth == 0)
+    lj_tg_strtab_active_hdr_rel(tg, NULL);
+}
+
+static int strtab_active_on_hdr(global_State *g, StrTabHdr *hdr)
+{
+  TGState *tg;
+  for (tg = gc2_tg_list_acq(g);
+       tg != NULL;
+       tg = lj_tg_next_acq(tg)) {
+    if (lj_tg_strtab_active_depth_acq(tg) != 0 &&
+	lj_tg_strtab_active_hdr_acq(tg) == hdr)
+      return 1;
+  }
+  return 0;
+}
+
 static int strtab_claim(lua_State *L, StrTabHdr *hdr)
 {
+  global_State *g = G(L);
   for (;;) {
-    MSize state = la_load32_acq(&hdr->resize);
+    MSize state = strtab_resize_acq(hdr);
     MSize expect = state;
     if (state & LJ_STRTAB_RESIZE)
       return 0;
-    if (la_cas32(&hdr->resize, &expect, state | LJ_STRTAB_RESIZE,
+    if (state != 0) {
+      strtab_wait(L);
+      continue;
+    }
+    if (la_cas32(&hdr->resize, &expect, LJ_STRTAB_RESIZE,
 		 LA_ACQ_REL, LA_ACQ))
       break;
   }
-  while (la_load32_acq(&hdr->resize) & LJ_STRTAB_ACTIVE_MASK)
+  while (strtab_active_on_hdr(g, hdr))
     strtab_wait(L);
   return 1;
 }
@@ -191,36 +243,31 @@ static void strtab_release(StrTabHdr *hdr)
   la_store32_rel(&hdr->resize, 0);
 }
 
-static LJ_AINLINE void strtab_leave(StrTabHdr *hdr)
+static LJ_AINLINE void strtab_leave(lua_State *L, StrTabHdr *hdr)
 {
-  MSize old = la_sub32_acqrel(&hdr->resize, 1);
-  lj_assertX((old & LJ_STRTAB_ACTIVE_MASK) != 0,
-	     "bad string table active count");
-  UNUSED(old);
+  strtab_active_leave(L2TG(L), hdr);
 }
 
 static StrTabHdr *strtab_enter(lua_State *L, global_State *g)
 {
+  TGState *tg = L2TG(L);
   for (;;) {
     StrTabHdr *hdr = lj_str_tabh_acq(g);
-    MSize state, expect;
     if (hdr == NULL)
       return NULL;
-    state = la_load32_acq(&hdr->resize);  /* 06 section 6.5 RCU header pin. */
-    if (state & LJ_STRTAB_RESIZE) {
+    if (lj_tg_strtab_active_depth_acq(tg) != 0 &&
+	lj_tg_strtab_active_hdr_acq(tg) == hdr) {
+      strtab_active_enter(tg, hdr);
+      return hdr;
+    }
+    if (strtab_resizing(hdr)) {
       strtab_wait(L);
       continue;
     }
-    if (state == LJ_STRTAB_ACTIVE_MASK) {
-      strtab_wait(L);
-      continue;
-    }
-    expect = state;
-    if (la_cas32(&hdr->resize, &expect, state + 1u, LA_ACQ_REL, LA_ACQ)) {
-      if (LJ_LIKELY(lj_str_tabh_acq(g) == hdr))
-	return hdr;
-      strtab_leave(hdr);
-    }
+    strtab_active_enter(tg, hdr);  /* 06 section 6.5 RCU header pin. */
+    if (LJ_LIKELY(lj_str_tabh_acq(g) == hdr && !strtab_resizing(hdr)))
+      return hdr;
+    strtab_active_leave(tg, hdr);
   }
 }
 
@@ -450,7 +497,7 @@ GCstr *lj_str_new(lua_State *L, const char *str, size_t lenx)
 	      flipwhite(o);
 	      lj_gc_arena_markobj(g, o);
 	    }
-	    strtab_leave(hdr);
+	    strtab_leave(L, hdr);
 	    if (news)
 	      lj_mem_free(g, news, lj_str_size(news->len));
 	    return sx;  /* Return existing string. */
@@ -463,14 +510,14 @@ GCstr *lj_str_new(lua_State *L, const char *str, size_t lenx)
 #if LUAJIT_SECURITY_STRHASH
       /* Rehash chain if there are too many collisions. */
       if (LJ_UNLIKELY(coll > LJ_STR_MAXCOLL) && !hashalg) {
-	strtab_leave(hdr);
+	strtab_leave(L, hdr);
 	if (news)
 	  lj_mem_free(g, news, lj_str_size(news->len));
 	return lj_str_rehash_chain(L, hash, str, len);
       }
 #endif
       if (news == NULL) {
-	strtab_leave(hdr);
+	strtab_leave(L, hdr);
 	news = lj_str_alloc(L, str, len, hash, hashalg);
 	continue;
       }
@@ -490,7 +537,7 @@ GCstr *lj_str_new(lua_State *L, const char *str, size_t lenx)
 	      flipwhite(o);
 	      lj_gc_arena_markobj(g, o);
 	    }
-	    strtab_leave(hdr);
+	    strtab_leave(L, hdr);
 	    lj_mem_free(g, news, lj_str_size(news->len));
 	    return sx;
 	  }
@@ -504,7 +551,7 @@ GCstr *lj_str_new(lua_State *L, const char *str, size_t lenx)
 	  break;
 	}
       }
-      strtab_leave(hdr);
+      strtab_leave(L, hdr);
       if (grow)
 	lj_str_resize(L, (mask << 1) + 1u);  /* Grow string table. */
       return news;  /* Return newly interned string. */
