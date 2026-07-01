@@ -20,6 +20,7 @@ int64_t lj_m7_ccall_jit_i64_u64_i64(uint64_t, int64_t);
 int64_t lj_m7_ccall_jit_i64_i32_ptr_u64(int32_t, int *, uint64_t);
 int64_t lj_m7_ccall_jit_i64_i32_i64_i32(int32_t, int64_t, int32_t);
 int32_t lj_m7_ccall_jit_i32_i32_ptr_u32(int32_t, int *, uint32_t);
+int32_t lj_m7_ccall_jit_i32_ptr_ptr_u64(int *, int *, uint64_t);
 int8_t lj_m7_ccall_jit_i8_0(void);
 int8_t lj_m7_ccall_jit_i8_i32(int32_t);
 uint8_t lj_m7_ccall_jit_u8_0(void);
@@ -1164,6 +1165,19 @@ do
     jit.opt.start("hotloop=1", "hotexit=1")
     assert(run_i32_i32_ptr_u32(80) == 80 * 1043 + (80 * 81) / 2)
     assert(trace_count() > 0, "shared int,ptr,uint32_t->int FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    assert((function(n)
+      local p = ptr0()
+      local count = ffi.new("uint64_t", -14)
+      local r = 0
+      for _ = 1, n do
+	r = r + lib.lj_m7_ccall_jit_i32_ptr_ptr_u64(p, p, count)
+      end
+      return r
+    end)(80) == 80 * 1087)
+    assert(trace_count() > 0, "shared ptr,ptr,uint64_t->int FFI call loop should trace")
 
     jit.flush()
     jit.opt.start("hotloop=1", "hotexit=1")
