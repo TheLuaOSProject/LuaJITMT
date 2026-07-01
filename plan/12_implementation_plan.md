@@ -141,6 +141,12 @@ The x64 VM `TSETV`/`TSETB`/`TSETR`/`TSETM` fast array/range stores now use
 post-store publication helpers instead of pre-store black-table repair retry
 branches, preserving the `TSETM` table barrier while the stored value snapshot
 drives GC2 and legacy repair.
+Active-MT recording no longer disables all new traces: secondary TGs can still
+record numeric/non-table root and side traces under the recorder token. The
+current temporary table boundary is narrower and recorder-local: after
+`mt_active`, non-trace-local table loads/stores, `next()` traversal, and
+`TNEW`/`TDUP` allocation recording stay interpreted until the table
+generation-following guards cover those trace shapes.
 The original generation-aware table write protocol and broader
 AHdr/NHdr table-generation port remain pending.
 Linux/x64 HREFK recording now avoids the legacy `GCtab.hmask` mirror

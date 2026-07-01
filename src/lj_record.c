@@ -1428,6 +1428,9 @@ static void rec_template_mark_nil(jit_State *J, GCtab *tpl, cTValue *key)
 static void rec_idx_bump(jit_State *J, RecordIndex *ix)
 {
   RBCHashEntry *rbc = &J->rbchash[(ix->tab & (RBCHASH_SLOTS-1))];
+  global_State *g = J2G(J);
+  if (mt_active_acq(g))
+    return;
   if (tref_ref(ix->tab) == rec_rbchash_ref_acq(rbc)) {
     const BCIns *pc = rec_rbchash_pc_acq(rbc);
     GCtab *tb = tabV(&ix->tabv);
@@ -1557,6 +1560,12 @@ static int rec_idx_tab_trace_local(jit_State *J, TRef tab)
     return 0;
   ir = IR(tref_ref(tab));
   return ir->o == IR_TNEW || ir->o == IR_TDUP;
+}
+
+static int rec_idx_mt_shared_tabop(jit_State *J, RecordIndex *ix)
+{
+  global_State *g = J2G(J);
+  return !rec_idx_tab_trace_local(J, ix->tab) && mt_active_acq(g);
 }
 
 #if LJ_HAS_X64_MT_JIT_HELPERS
@@ -1895,6 +1904,23 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
     TRef res = rec_idx_fwd_latest_store(J, ix);
     if (res)
       return res;
+    /*
+    ** Shared table loads can execute from mcode while another TG retires the
+    ** observed array/hash generation. Keep trace-local tables and same-trace
+    ** store forwarding enabled; leave shared loads to the interpreter until
+    ** load-side generation-following exits cover the full HREF/AREF surface.
+    */
+    if (rec_idx_mt_shared_tabop(J, ix))
+      lj_trace_err_info(J, LJ_TRERR_NYIBC);
+  } else if (rec_idx_mt_shared_tabop(J, ix)) {
+    /*
+    ** Store helpers resolve forwarded slots, but shared table write traces can
+    ** still carry old generation pointers through inline fast paths and
+    ** optimizer forwarding. Keep non-trace-local table writes interpreted under
+    ** active MT until the whole HREF/AREF/HSTORE/ASTORE chain side-exits on
+    ** generation changes.
+    */
+    lj_trace_err_info(J, LJ_TRERR_NYIBC);
   }
 
   /* Record the key lookup. */
@@ -2047,10 +2073,11 @@ int lj_record_next(jit_State *J, RecordIndex *ix)
   ** lj_vm_next returns a key/value pair plus the next traversal index, while
   ** the recorder predicts result types from the current table generation.
   ** Another TG can resize the table between those two observations. Keep
-  ** stock single-threaded traversal recording, but leave multi-TG traversal to
-  ** the interpreter until the traversal index/type contract is generation-safe.
+  ** stock single-threaded traversal recording, but after MT activation leave
+  ** traversal to the interpreter until the index/type contract is
+  ** generation-safe.
   */
-  if (gc2_n_threads_acq(J2G(J)) > 1)
+  if (mt_active_acq(J2G(J)))
     lj_trace_err(J, LJ_TRERR_NYIBC);
   t = rec_next_types(tabV(&ix->tabv), ix->keyv.u32.lo);
   tkey = (t & 0xff); tval = (t >> 8);
@@ -3237,9 +3264,13 @@ void lj_record_ins(jit_State *J)
     break;
 
   case BC_TNEW:
+    if (mt_active_acq(J2G(J)))
+      lj_trace_err_info(J, LJ_TRERR_NYIBC);
     rc = rec_tnew(J, rc);
     break;
   case BC_TDUP:
+    if (mt_active_acq(J2G(J)))
+      lj_trace_err_info(J, LJ_TRERR_NYIBC);
     rc = emitir(IRTG(IR_TDUP, IRT_TAB),
 		lj_ir_ktab(J, gco2tab(proto_kgc(J->pt, ~(ptrdiff_t)rc))), 0);
 #ifdef LUAJIT_ENABLE_TABLE_BUMP

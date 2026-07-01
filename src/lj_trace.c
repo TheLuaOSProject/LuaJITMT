@@ -1461,21 +1461,10 @@ static TValue *trace_state(lua_State *L, lua_CFunction dummy, void *ud)
 
 /* -- Event handling ------------------------------------------------------ */
 
-static int trace_mt_record_disabled(jit_State *J)
-{
-  global_State *g = J2G(J);
-  return mt_active_acq(g) && gc2_n_threads_acq(g) > 1;
-}
-
 /* A bytecode instruction is about to be executed. Record it. */
 void lj_trace_ins(jit_State *J, const BCIns *pc)
 {
   /* Note: J->L must already be set. pc is the true bytecode PC here. */
-  if (trace_mt_record_disabled(J)) {
-    lj_trace_state_store(J, LJ_TRACE_IDLE);
-    lj_jit_token_release(J);
-    return;
-  }
   J->pc = pc;
   J->fn = curr_func(J->L);
   J->pt = isluafunc(J->fn) ? funcproto(J->fn) : NULL;
@@ -1495,8 +1484,7 @@ void LJ_FASTCALL lj_trace_hot(jit_State *J, const BCIns *pc)
   /* Reset hotcount. */
   hotcount_setg(J2G(J), pc, jit_param_acq(J, JIT_P_hotloop)*HOTCOUNT_LOOP);
   /* Only start a new trace if not recording or inside __gc call or vmevent. */
-  if (!trace_mt_record_disabled(J) &&
-      lj_trace_state_load(J) == LJ_TRACE_IDLE &&
+  if (lj_trace_state_load(J) == LJ_TRACE_IDLE &&
       !(hookmask_load(J2G(J)) & (HOOK_GC|HOOK_VMEVENT)) &&
       lj_jit_token_try(J)) {
 #if LJ_TARGET_X64
@@ -1537,7 +1525,7 @@ static void trace_hotside(jit_State *J, const BCIns *pc, lua_State *L,
       if (snap_count_cas_acqrel(snap, &count, count + 1u))
 	return;
     }
-    if (trace_mt_record_disabled(J) || lj_trace_state_load(J) != LJ_TRACE_IDLE)
+    if (lj_trace_state_load(J) != LJ_TRACE_IDLE)
       return;
     if (!lj_jit_token_try(J))
       return;
@@ -1586,8 +1574,7 @@ void LJ_FASTCALL lj_trace_stitch(jit_State *J, const BCIns *pc)
 #endif
 {
   /* Only start a new trace if not recording or inside __gc call or vmevent. */
-  if (!trace_mt_record_disabled(J) &&
-      lj_trace_state_load(J) == LJ_TRACE_IDLE &&
+  if (lj_trace_state_load(J) == LJ_TRACE_IDLE &&
       !(hookmask_load(J2G(J)) & (HOOK_GC|HOOK_VMEVENT)) &&
       lj_jit_token_try(J)) {
 #if LJ_TARGET_X64
