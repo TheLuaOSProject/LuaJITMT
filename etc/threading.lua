@@ -259,6 +259,7 @@ function threading.gcmode(mode) end
 
 ---Spawn a new OS thread that calls `fn(...)`.
 ---@generic R
+---@overload fun(fn: fun(...: any), ...: any): threading.thread<nil>
 ---@param fn fun(...: any): R, ...
 ---@param ... any
 ---@return threading.thread<R> thread

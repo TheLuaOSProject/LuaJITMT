@@ -17,8 +17,19 @@ if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then usage; fi
 tag=$1
 dist=${2:-dist}
 
+release_tag_error() {
+  local bad=$1
+  if [ "$bad" = "b1.1" ]; then
+    printf 'release b1.1 was renamed to b1.0.1; use b1.0.1\n' >&2
+  elif [[ "$bad" =~ ^b[0-9]+[.][0-9]+$ ]]; then
+    printf 'rolling release tags must be b<major>.<minor>.<patch>; got stale two-component tag %s\n' "$bad" >&2
+  else
+    printf 'release tag must be b<major>.<minor>.<patch>; got %s\n' "$bad" >&2
+  fi
+}
+
 if [[ ! "$tag" =~ ^b[0-9]+[.][0-9]+[.][0-9]+$ ]]; then
-  printf 'release tag must be b<major>.<minor>.<patch>; got %s\n' "$tag" >&2
+  release_tag_error "$tag"
   exit 2
 fi
 

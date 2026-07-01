@@ -18,6 +18,13 @@ local function platform_required(name)
          req:find(name:lower(), 1, true) ~= nil
 end
 
+local function platform_enabled()
+  local enabled = env_or_empty("LJ_M0_PLATFORM_ENABLE"):lower()
+  local req = env_or_empty("LJ_M0_PLATFORM_REQUIRE"):lower()
+  return enabled == "1" or enabled == "true" or enabled == "yes" or
+         (req ~= "" and req ~= "0" and req ~= "false" and req ~= "no")
+end
+
 local function maybe_skip_platform(name, missing)
   if platform_required(name) then
     error("M0 " .. name .. " platform smoke missing: " .. missing, 2)
@@ -42,15 +49,17 @@ local function assert_platform_output(label, out, osname)
 end
 
 local function run_windows_smoke(t)
-  local cross = utils.getenv("LJ_M0_WINDOWS_CROSS", "x86_64-w64-mingw32-")
+  local cross = utils.getenv("LJ_M0_WINDOWS_CROSS",
+                             "x86_64-w64-mingw32ucrt-")
   local cc = utils.getenv("LJ_M0_WINDOWS_CC", "gcc")
+  local runner = utils.getenv("LJ_M0_WINDOWS_RUNNER", "wine")
   local compiler = cross .. cc
 
   if not command_exists(compiler) then
-    return maybe_skip_platform("Windows", compiler .. " not in PATH")
+    return maybe_skip_platform("Windows UCRT", compiler .. " not in PATH")
   end
-  if not command_exists("wine") then
-    return maybe_skip_platform("Windows", "wine not in PATH")
+  if not command_exists(runner) then
+    return maybe_skip_platform("Windows UCRT", runner .. " not in PATH")
   end
 
   t:make({ "clean" }, { quiet = true, jobs = false })
@@ -62,11 +71,12 @@ local function run_windows_smoke(t)
   }, { quiet = true })
 
   local out = utils.capture_command(
-    "wine " .. shell_quote(t:path("src", "luajit.exe")) ..
+    "WINEDEBUG=-all " .. runner .. " " ..
+      shell_quote(t:path("src", "luajit.exe")) ..
       " -e " .. shell_quote(smoke_code()),
     { timeout = "120s", stderr = true })
-  assert_platform_output("Windows", out, "Windows")
-  print("M0 Windows platform smoke passed")
+  assert_platform_output("Windows UCRT", out, "Windows")
+  print("M0 Windows UCRT platform smoke passed")
 end
 
 local function darwin_host_path(path)
@@ -78,6 +88,8 @@ local function run_darwin_smoke(t)
                             "x86_64-apple-darwin23.2-")
   local cc = utils.getenv("LJ_M0_DARWIN_CC", "cc")
   local deploy = utils.getenv("MACOSX_DEPLOYMENT_TARGET", "13.0")
+  local target_flags = utils.getenv("LJ_M0_DARWIN_TARGET_FLAGS",
+                                    "-arch x86_64")
   local osxcross_dir = utils.getenv("OSXCROSS_DIR",
                                     t:path(".devcontainer", "osxcross"))
   local osxcross_bin = utils.getenv("LJ_M0_OSXCROSS_BIN",
@@ -102,6 +114,7 @@ local function run_darwin_smoke(t)
     "HOST_CC=gcc",
     "CROSS=" .. cross,
     "CC=" .. cc,
+    "TARGET_FLAGS=" .. target_flags,
     "TARGET_SYS=Darwin"
   }, {
     quiet = true,
@@ -117,10 +130,15 @@ local function run_darwin_smoke(t)
     "darling shell /bin/bash -lc " .. shell_quote(inner),
     { timeout = "120s", stderr = true })
   assert_platform_output("Darwin", out, "OSX")
-  print("M0 Darwin platform smoke passed")
+  print("M0 macOS x86_64 target " .. deploy .. " platform smoke passed")
 end
 
 local function run_platform_smoke(t)
+  if not platform_enabled() then
+    print("M0 platform cross smoke skipped: set LJ_M0_PLATFORM_ENABLE=1 to run")
+    return
+  end
+
   local ok, err = xpcall(function()
     run_windows_smoke(t)
     run_darwin_smoke(t)
@@ -213,7 +231,7 @@ return function(add)
 
   add({
     name = "m0_platform_cross_smoke",
-    description = "optional Windows/macOS cross-build and runtime smoke",
+    description = "optional Windows UCRT/macOS x86_64 cross-build and runtime smoke",
     run = run_platform_smoke
   })
 end
