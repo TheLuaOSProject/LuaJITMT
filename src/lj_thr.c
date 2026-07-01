@@ -216,6 +216,7 @@ int lj_state_tryclaim(lua_State *L, uint32_t tid, LJStateClaim *claim)
   uint32_t owner;
   if (claim) {
     claim->L = NULL;
+    claim->tg_hint = NULL;
     claim->tid = 0;
     claim->release = 0;
   }
@@ -235,6 +236,7 @@ int lj_state_tryclaim(lua_State *L, uint32_t tid, LJStateClaim *claim)
       if (lj_state_owner_cas(L, &expect, tid)) {
 	if (claim) {
 	  claim->L = L;
+	  claim->tg_hint = NULL;
 	  claim->tid = tid;
 	  claim->release = 1;
 	}
@@ -256,11 +258,14 @@ int lj_state_resumeclaim(lua_State *L, uint32_t tid, LJStateClaim *claim)
     return 0;
   /*
   ** Suspended coroutines are TG-neutral. A resume claim makes the coroutine
-  ** temporarily run on the resumer's TG, and the matching resume release clears
-  ** this again before publishing the stack as unowned.
+  ** temporarily run on the resumer's TG, then restores the previous hint
+  ** before publishing the stack as unowned. The previous hint is usually NULL,
+  ** but VM-event/callback states may already be attached while ownerless.
   */
-  if (claim && claim->release)
+  if (claim && claim->release) {
+    claim->tg_hint = L->tg_hint;
     L->tg_hint = lj_thr_get_tg_fallback(G(L));
+  }
   return 1;
 }
 
@@ -269,6 +274,7 @@ int lj_state_gcscan_claim(lua_State *L, LJStateClaim *claim)
   uint32_t owner;
   if (claim) {
     claim->L = NULL;
+    claim->tg_hint = NULL;
     claim->tid = 0;
     claim->release = 0;
   }
@@ -281,6 +287,7 @@ int lj_state_gcscan_claim(lua_State *L, LJStateClaim *claim)
       if (lj_state_owner_cas(L, &expect, LJ_THREAD_GCSCAN)) {
 	if (claim) {
 	  claim->L = L;
+	  claim->tg_hint = NULL;
 	  claim->tid = LJ_THREAD_GCSCAN;
 	  claim->release = 1;
 	}
@@ -325,7 +332,8 @@ void lj_state_resume_release(lua_State *L, uint32_t tid)
 void lj_state_dropresumeclaim(LJStateClaim *claim)
 {
   if (claim && claim->release) {
-    lj_state_resume_release(claim->L, claim->tid);
+    claim->L->tg_hint = claim->tg_hint;
+    lj_state_release(claim->L, claim->tid);
     claim->release = 0;
   }
 }

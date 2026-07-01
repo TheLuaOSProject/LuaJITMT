@@ -1049,6 +1049,13 @@ static int crec_small_const_len(jit_State *J, TRef trlen, CTSize maxlen)
   return len >= 0 && (CTSize)len <= maxlen;
 }
 
+static int crec_const_len(jit_State *J, TRef trlen)
+{
+  if (!tref_isk(trlen))
+    return 0;
+  return IR(tref_ref(trlen))->i >= 0;
+}
+
 /*
 ** Emit copy list with windowed loads/stores.
 ** LJ_TARGET_UNALIGNED: may emit unaligned loads/stores (not marked as such).
@@ -3839,7 +3846,7 @@ void LJ_FASTCALL recff_ffi_copy(jit_State *J, RecordFFData *rd)
       trlen = emitir(IRTI(IR_ADD), trlen, lj_ir_kint(J, 1));
     }
     rd->nres = 0;
-    crec_copy(J, trdst, trsrc, trlen, NULL, 0);
+    crec_copy(J, trdst, trsrc, trlen, NULL, crec_const_len(J, trlen));
   }  /* else: interpreter will throw. */
 }
 

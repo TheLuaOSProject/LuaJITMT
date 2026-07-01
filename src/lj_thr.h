@@ -37,6 +37,7 @@ typedef struct LJThr {
 
 typedef struct LJStateClaim {
   lua_State *L;
+  TGState *tg_hint;
   uint32_t tid;
   uint8_t release;
 } LJStateClaim;

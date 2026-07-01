@@ -1926,17 +1926,57 @@ static void asm_ahstore_forjit(ASMState *as, IRIns *ir)
 }
 
 #if LJ_HAS_X64_MT_JIT_HELPERS
-static int asm_ahstore_can_inline_array_num(ASMState *as, IRIns *ir)
+static int asm_ahstore_can_inline_tvalue(IRType1 t)
+{
+  return irt_isnum(t) || (LJ_DUALNUM && irt_isint(t));
+}
+
+static uint64_t asm_ahstore_int_tvalue_tag(void)
+{
+#if LJ_GC64
+  return (uint64_t)(uint32_t)(LJ_TISNUM << 15) << 32;
+#else
+  return (uint64_t)(uint32_t)LJ_TISNUM << 32;
+#endif
+}
+
+static void asm_ahstore_emit_src_raw(ASMState *as, IRIns *ir, Reg src,
+				     RegSet allow)
+{
+  if (irt_isnum(ir->t)) {
+    Reg fsrc = ra_alloc1(as, ir->op2, RSET_FPR);
+    emit_rr(as, XO_MOVDto, fsrc|REX_64, src);  /* Really MOVQ r64, xmm. */
+  } else {
+    Reg isrc = RID_NONE;
+    Reg tag;
+    lj_assertA(LJ_DUALNUM && irt_isint(ir->t),
+	       "expected number or DUALNUM integer table store");
+    if (!irref_isk(ir->op2)) {
+      isrc = ra_alloc1(as, ir->op2, allow);
+      rset_clear(allow, isrc);
+    }
+    tag = ra_scratch(as, allow);
+    emit_rr(as, XO_ARITH(XOg_OR), src|REX_64, tag|REX_64);
+    emit_loadu64(as, tag, asm_ahstore_int_tvalue_tag());
+    if (ra_hasreg(isrc))
+      emit_rr(as, XO_MOV, src, isrc);
+    else
+      emit_loadi(as, src, IR(ir->op2)->i);
+  }
+}
+
+static int asm_ahstore_can_inline_array_tvalue(ASMState *as, IRIns *ir)
 {
   IRIns *xref = IR(ir->op1);
-  return ir->o == IR_ASTORE && irt_isnum(ir->t) && xref->o == IR_AREF &&
+  return ir->o == IR_ASTORE && asm_ahstore_can_inline_tvalue(ir->t) &&
+	 xref->o == IR_AREF &&
 	 irt_isinteger(IR(xref->op2)->t);
 }
 
-static int asm_ahstore_can_inline_hash_num(ASMState *as, IRIns *ir)
+static int asm_ahstore_can_inline_hash_tvalue(ASMState *as, IRIns *ir)
 {
   IRIns *xref = IR(ir->op1);
-  return ir->o == IR_HSTORE && irt_isnum(ir->t) &&
+  return ir->o == IR_HSTORE && asm_ahstore_can_inline_tvalue(ir->t) &&
 	 (xref->o == IR_HREF || xref->o == IR_HREFK);
 }
 
@@ -1948,7 +1988,7 @@ static IRRef asm_ahstore_hash_tabref(ASMState *as, IRIns *xref)
   return xref->op1;
 }
 
-static void asm_ahstore_inline_array_num(ASMState *as, IRIns *ir)
+static void asm_ahstore_inline_array_tvalue(ASMState *as, IRIns *ir)
 {
   const CCallInfo *ci =
     &lj_ir_callinfo[IRCALL_lj_tab_storetv_forjit_array_nogc];
@@ -1957,7 +1997,7 @@ static void asm_ahstore_inline_array_num(ASMState *as, IRIns *ir)
   IRRef tabref = IR(xref->op1)->op1;
   IRRef keyref = xref->op2;
   MCLabel l_done, l_fallback;
-  Reg slot, tab, array, coloc, src, fsrc;
+  Reg slot, tab, array, coloc, src;
   RegSet allow;
 
   ra_evictset(as, RSET_SCRATCH);
@@ -1985,12 +2025,12 @@ static void asm_ahstore_inline_array_num(ASMState *as, IRIns *ir)
   coloc = ra_scratch(as, allow);
   rset_clear(allow, coloc);
   src = ra_scratch(as, allow);
-  fsrc = ra_alloc1(as, ir->op2, RSET_FPR);
+  rset_clear(allow, src);
   ra_scratch(as, RID2RSET(RID_EAX));
 
   emit_rmro(as, XO_CMPXCHG, src|REX_64, slot, 0);
   emit_i8(as, 0xf0);  /* LOCK prefix: release-publish and intercore CAS. */
-  emit_rr(as, XO_MOVDto, fsrc|REX_64, src);  /* Really MOVQ r64, xmm. */
+  asm_ahstore_emit_src_raw(as, ir, src, allow);
   emit_rmro(as, XO_MOV, RID_EAX|REX_64, slot, 0);
   checkmclim(as);  /* Split inline array CAS from generation validation. */
 
@@ -2004,7 +2044,7 @@ static void asm_ahstore_inline_array_num(ASMState *as, IRIns *ir)
   emit_rmro(as, XO_LEA, coloc|REX_GC64, tab, sizeof(GCtab));
 }
 
-static void asm_ahstore_inline_hash_num(ASMState *as, IRIns *ir)
+static void asm_ahstore_inline_hash_tvalue(ASMState *as, IRIns *ir)
 {
   const CCallInfo *ci = &lj_ir_callinfo[IRCALL_lj_tab_storetv_forjit_hash];
   IRRef args[5];
@@ -2012,7 +2052,7 @@ static void asm_ahstore_inline_hash_num(ASMState *as, IRIns *ir)
   IRRef tabref = asm_ahstore_hash_tabref(as, xref);
   IRRef keyref = xref->o == IR_HREFK ? IR(xref->op2)->op1 : xref->op2;
   MCLabel l_done, l_fallback;
-  Reg slot, tab, node, top, src, fsrc;
+  Reg slot, tab, node, top, src;
   RegSet allow;
 
   ra_evictset(as, RSET_SCRATCH);
@@ -2047,12 +2087,12 @@ static void asm_ahstore_inline_hash_num(ASMState *as, IRIns *ir)
   top = ra_scratch(as, allow);
   rset_clear(allow, top);
   src = ra_scratch(as, allow);
-  fsrc = ra_alloc1(as, ir->op2, RSET_FPR);
+  rset_clear(allow, src);
   ra_scratch(as, RID2RSET(RID_EAX));
 
   emit_rmro(as, XO_CMPXCHG, src|REX_64, slot, 0);
   emit_i8(as, 0xf0);  /* LOCK prefix: release-publish and intercore CAS. */
-  emit_rr(as, XO_MOVDto, fsrc|REX_64, src);  /* Really MOVQ r64, xmm. */
+  asm_ahstore_emit_src_raw(as, ir, src, allow);
   emit_rmro(as, XO_MOV, RID_EAX|REX_64, slot, 0);
   checkmclim(as);  /* Split inline hash CAS from node-generation checks. */
 
@@ -2146,12 +2186,12 @@ static void asm_ahustore(ASMState *as, IRIns *ir)
     asm_ustore_forjit(as, ir);
     return;
   }
-  if (asm_ahstore_can_inline_array_num(as, ir)) {
-    asm_ahstore_inline_array_num(as, ir);
+  if (asm_ahstore_can_inline_array_tvalue(as, ir)) {
+    asm_ahstore_inline_array_tvalue(as, ir);
     return;
   }
-  if (asm_ahstore_can_inline_hash_num(as, ir)) {
-    asm_ahstore_inline_hash_num(as, ir);
+  if (asm_ahstore_can_inline_hash_tvalue(as, ir)) {
+    asm_ahstore_inline_hash_tvalue(as, ir);
     return;
   }
   if (ir->o == IR_ASTORE || ir->o == IR_HSTORE) {

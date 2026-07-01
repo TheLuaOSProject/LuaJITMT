@@ -855,7 +855,7 @@ for i = 1, 80 do
 end
 assert(h.stable == 80.5)
 assert(util.traceinfo(1), "numeric hash store did not trace")
-]=])
+]=], { timeout = "20s" })
       assert_dump_contains(t, route_dump,
                            "lj_tab_storetv_forjit_array_nogc",
                            "numeric ASTORE no-GC helper")
@@ -877,13 +877,44 @@ for i = 1, 80 do
 end
 assert(h.stable == 80.5)
 assert(util.traceinfo(1), "numeric hash store did not trace")
-]=])
+]=], { timeout = "20s" })
       assert_dump_contains(t, hash_route_dump,
                            "lock cmpxchg",
                            "numeric HSTORE inline CAS fallback gate")
       assert_dump_contains(t, hash_route_dump,
                            "lj_tab_storetv_forjit_hash",
                            "numeric HSTORE helper fallback")
+
+      local int_route_dump = t:tmp("lj-m6-int-store-inline-cas.dump")
+      luajit_dump(t, int_route_dump, "-jdump=im", [=[
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local util = require("jit.util")
+local a = { 0 }
+for i = 1, 80 do
+  a[1] = i
+end
+assert(a[1] == 80)
+assert(util.traceinfo(1), "integer array store did not trace")
+
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local h = { stable = 0 }
+for i = 1, 80 do
+  h.stable = i
+end
+assert(h.stable == 80)
+assert(util.traceinfo(1), "integer hash store did not trace")
+]=], { timeout = "20s" })
+      assert_dump_contains(t, int_route_dump,
+                           "lock cmpxchg",
+                           "integer table-store inline CAS fallback gate")
+      assert_dump_contains(t, int_route_dump,
+                           "lj_tab_storetv_forjit_array_nogc",
+                           "integer ASTORE helper fallback")
+      assert_dump_contains(t, int_route_dump,
+                           "lj_tab_storetv_forjit_hash",
+                           "integer HSTORE helper fallback")
       print("M6 JIT table-store helper behavior passed")
     end
   })

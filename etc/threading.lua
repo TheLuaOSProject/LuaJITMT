@@ -1,7 +1,8 @@
 ---@meta threading
 
 ---@alias threading.timeout_error "timeout"
----@alias threading.thread_fn fun(...):...
+---@alias threading.thread_fn fun(...: any): ...
+---@alias threading.join_status true|false|nil
 ---@alias threading.recv_status true|false|threading.timeout_error
 ---@alias threading.peek_status true|false
 ---@alias threading.send_result true|nil
@@ -117,12 +118,12 @@ local threading_thread = {}
 ---child function errors, or `nil, "timeout"` when a timeout is supplied and the
 ---thread is still running.
 ---@overload fun(self: threading.thread): true, ...
----@overload fun(self: threading.thread): false, ...
+---@overload fun(self: threading.thread): false, any
 ---@overload fun(self: threading.thread, timeout: number): true, ...
----@overload fun(self: threading.thread, timeout: number): false, ...
+---@overload fun(self: threading.thread, timeout: number): false, any
 ---@overload fun(self: threading.thread, timeout: number): nil, threading.timeout_error
 ---@param timeout? number seconds to wait; omit to block indefinitely.
----@return true|false|nil ok true for child success, false for child error, nil on timeout.
+---@return threading.join_status ok true for child success, false for child error, nil on timeout.
 ---@return ... child results, an error object, or the timeout reason.
 function threading_thread:join(timeout) end
 
@@ -142,7 +143,6 @@ function threading_thread:__tostring() end
 local threading_mutex = {}
 
 ---Block until the mutex is acquired.
----@return nil
 function threading_mutex:lock() end
 
 ---@return boolean locked
@@ -152,7 +152,6 @@ function threading_mutex:trylock() end
 ---Release the mutex.
 ---
 ---Errors if the mutex is not currently locked.
----@return nil
 function threading_mutex:unlock() end
 
 ---@return "threading.mutex"
@@ -166,24 +165,28 @@ local threading_channel = {}
 ---
 ---Errors if the channel is closed. If this is a rendezvous channel, success
 ---means a receiver has taken the value.
+---@generic T
 ---@overload fun(self: threading.channel<T>, value: T): true
 ---@overload fun(self: threading.channel<T>, value: T, timeout: number): true
 ---@overload fun(self: threading.channel<T>, value: T, timeout: number): nil, threading.timeout_error
+---@param self threading.channel<T>
 ---@param value T
 ---@param timeout? number seconds to wait; omit to block indefinitely.
----@return threading.send_result ok
----@return threading.timeout_error? err
+---@return true|nil ok true on success, nil on timeout.
+---@return threading.timeout_error? err timeout reason when `ok` is nil.
 function threading_channel:send(value, timeout) end
 
 ---Receive a value from the channel.
 ---
 ---Returns `value, true` on success, `nil, false` when the channel is closed, or
 ---`nil, "timeout"` when a timeout is supplied and no value is available.
+---@generic T
 ---@overload fun(self: threading.channel<T>): T, true
 ---@overload fun(self: threading.channel<T>): nil, false
 ---@overload fun(self: threading.channel<T>, timeout: number): T, true
 ---@overload fun(self: threading.channel<T>, timeout: number): nil, false
 ---@overload fun(self: threading.channel<T>, timeout: number): nil, threading.timeout_error
+---@param self threading.channel<T>
 ---@param timeout? number seconds to wait; omit to block indefinitely.
 ---@return T|nil value
 ---@return threading.recv_status status
@@ -193,14 +196,15 @@ function threading_channel:recv(timeout) end
 ---
 ---Returns `value, true` on success, or `nil, false` when the channel is empty
 ---or closed.
+---@generic T
 ---@overload fun(self: threading.channel<T>): T, true
 ---@overload fun(self: threading.channel<T>): nil, false
+---@param self threading.channel<T>
 ---@return T|nil value
 ---@return threading.peek_status status
 function threading_channel:peek() end
 
 ---Close the channel.
----@return nil
 function threading_channel:close() end
 
 ---@return "threading.channel"
@@ -220,12 +224,10 @@ function threading.cpucount() end
 function threading.now() end
 
 ---Issue a cross-thread memory fence.
----@return nil
 function threading.fence() end
 
 ---@overload fun()
 ---@param seconds? number seconds to sleep; omit to sleep for 0 seconds.
----@return nil
 function threading.sleep(seconds) end
 
 ---Return GC2/lockless runtime telemetry used by tests and benchmarks.
@@ -234,12 +236,12 @@ function threading.sleep(seconds) end
 function threading.gcstats() end
 
 ---Query or set the number of parked GC2 worker threads.
----@param count? integer
+---@param count? integer|nil nil queries without changing the worker count.
 ---@return integer old_count
 function threading.gcworkers(count) end
 
 ---Query or set the GC2 collection mode.
----@param mode? threading.gcmode
+---@param mode? threading.gcmode|nil nil queries without changing the mode.
 ---@return threading.gcmode old_mode
 function threading.gcmode(mode) end
 
