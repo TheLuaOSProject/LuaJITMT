@@ -38,6 +38,15 @@ static void assert_busy_trace_records(lua_State *L, CTState *cts,
   assert((ctype_parse_token_acq(cts) & 1u) == 0);
 }
 
+static void assert_trace_records_without_parse(lua_State *L, CTState *cts,
+					       const char *chunk)
+{
+  uint32_t seq = ctype_parse_token_acq(cts);
+  assert((seq & 1u) == 0);
+  ljt_lua_dostring(L, chunk);
+  assert(ctype_parse_token_acq(cts) == seq);
+}
+
 int main(void)
 {
   lua_State *L = ljt_lua_newstate_openlibs();
@@ -45,11 +54,23 @@ int main(void)
 
   ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"
+    "ffi.cdef[[\n"
+    "typedef int lj_m7_rec_named_int_t;\n"
+    "typedef struct { int x; } lj_m7_rec_named_struct_t;\n"
+    "struct lj_m7_rec_tagged { int x; };\n"
+    "union lj_m7_rec_union { int x; double y; };\n"
+    "enum lj_m7_rec_enum { LJ_M7_REC_ENUM_A = 7 };\n"
+    "]]\n"
     "assert(ffi.sizeof('int') == 4)\n"
     "assert(ffi.sizeof('int *') == 8)\n"
     "assert(ffi.alignof('int * const') == 8)\n"
     "assert(ffi.sizeof('int *[2]') == 16)\n"
     "assert(ffi.sizeof('const char * const [3]') == 24)\n"
+    "assert(ffi.sizeof('lj_m7_rec_named_int_t') == 4)\n"
+    "assert(ffi.sizeof('const lj_m7_rec_named_struct_t *') == 8)\n"
+    "assert(ffi.alignof('struct lj_m7_rec_tagged * const') == 8)\n"
+    "assert(ffi.sizeof('union lj_m7_rec_union') == 8)\n"
+    "assert(ffi.sizeof('enum lj_m7_rec_enum[2]') == 8)\n"
     "local a = ffi.new('int[1]')\n"
     "a[0] = 17\n"
     "assert(a[0] == 17)\n");
@@ -149,6 +170,43 @@ int main(void)
     "assert(lj_m7_trace_parse_token_stop_count() >= 1)\n"
     "assert(lj_m7_trace_parse_token_ctbusy_count() == 0)\n");
 
+  assert_trace_records_without_parse(L, cts,
+    "local ffi = require('ffi')\n"
+    "jit.flush()\n"
+    "jit.on()\n"
+    "jit.opt.start('hotloop=1', 'hotexit=1')\n"
+    "local named = 'lj_m7_rec_named_int_t'\n"
+    "local namedp = 'const lj_m7_rec_named_struct_t *'\n"
+    "local tagp = 'struct lj_m7_rec_tagged * const'\n"
+    "local enumarr = 'enum lj_m7_rec_enum[2]'\n"
+    "local uni = 'union lj_m7_rec_union'\n"
+    "local function run(n)\n"
+    "  local sum = 0\n"
+    "  for i = 1, n do\n"
+    "    local v = ffi.new(named, i)\n"
+    "    sum = sum + tonumber(v) + ffi.sizeof(namedp)\n"
+    "    sum = sum + ffi.alignof(tagp) + ffi.sizeof(enumarr)\n"
+    "    sum = sum + ffi.sizeof(uni)\n"
+    "  end\n"
+    "  return sum\n"
+    "end\n"
+    "for i = 1, 30 do assert(run(40) == 2100) end\n");
+
+  assert_busy_trace_releases(L, cts,
+    "local ffi = require('ffi')\n"
+    "jit.attach(lj_m7_trace_parse_token, 'trace')\n"
+    "jit.flush()\n"
+    "jit.on()\n"
+    "jit.opt.start('hotloop=1', 'hotexit=1')\n"
+    "local function run(n)\n"
+    "  local sum = 0\n"
+    "  for i = 1, n do sum = sum + ffi.sizeof('lj_m7_rec_named_int_t') end\n"
+    "  return sum\n"
+    "end\n"
+    "for i = 1, 3 do assert(run(8) == 32) end\n"
+    "jit.attach(lj_m7_trace_parse_token)\n"
+    "assert(lj_m7_trace_parse_token_ctbusy_count() >= 1)\n");
+
   assert_busy_trace_releases(L, cts,
     "local ffi = require('ffi')\n"
     "jit.attach(lj_m7_trace_parse_token, 'trace')\n"
@@ -184,6 +242,6 @@ int main(void)
     "assert(a[0] == 23)\n");
 
   lua_close(L);
-  printf("t-ffi-recorder-string-ctype-busy OK: recorder direct ctype strings bypass parser token and general strings abort instead of waiting\n");
+  printf("t-ffi-recorder-string-ctype-busy OK: recorder direct ctype strings bypass parser token when stable and abort instead of waiting when busy\n");
   return 0;
 }

@@ -67,6 +67,12 @@ GCtab *miscmap; GCRef *metamap; CCallback cb; uint32_t hash[CTHASH_SIZE]; }`
   definition or constant to `ffi.sizeof()`, `ffi.new()`, cdata `__index`/
   `__newindex`, numeric indexing, pointer arithmetic, enum string casts, or
   `ffi.C`; narrowing the hot cdata reader fences is deferred to M9 cleanup.
+  Current recorder string-ctype bridge: stable named typedef/tag/qualified/
+  pointer/fixed-array strings in `ffi.sizeof()`, `ffi.alignof()`, and
+  `ffi.new()` now use recorder-side snapshot/direct construction instead of
+  entering the parser-token path. If the parser token is busy, recording aborts
+  with CTBUSY; anonymous declarations, functions, VLA, and other full C
+  grammar still fall back to the parser path to preserve stock semantics.
 - `cts->L` field: delete; pass L explicitly (it's already threaded through
   most call paths; grep `cts->L` ≈ 15 sites, mechanical).
 - **cparse (ffi.cdef)** mutates parser state + tab: the original sketch

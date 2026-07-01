@@ -31,6 +31,7 @@
 #include "lj_snap.h"
 #include "lj_crecord.h"
 #include "lj_dispatch.h"
+#include "lj_str.h"
 #include "lj_strfmt.h"
 #include "lj_strscan.h"
 
@@ -151,6 +152,421 @@ static int crec_qual_token(const char *p, MSize len, CTInfo *qualp)
   return 0;
 }
 
+static int crec_ident_string(const char *p, MSize len)
+{
+  MSize i;
+  if (len == 0 || (p[0] >= '0' && p[0] <= '9'))
+    return 0;
+  for (i = 0; i < len; i++)
+    if (!crec_isident((uint8_t)p[i]))
+      return 0;
+  return 1;
+}
+
+static int crec_sign_token(const char *p, MSize len, int *signp)
+{
+  if (len == 6 && crec_strlit(p, len, "signed", 6)) {
+    *signp = 1;
+    return 1;
+  }
+  if (len == 8 && crec_strlit(p, len, "__signed", 8)) {
+    *signp = 1;
+    return 1;
+  }
+  if (len == 10 && crec_strlit(p, len, "__signed__", 10)) {
+    *signp = 1;
+    return 1;
+  }
+  if (len == 8 && crec_strlit(p, len, "unsigned", 8)) {
+    *signp = 2;
+    return 1;
+  }
+  return 0;
+}
+
+static int crec_int_keyword_token(const char *p, MSize len, int *bitsp)
+{
+  if (len == 6 && crec_strlit(p, len, "__int8", 6)) {
+    *bitsp = 8;
+    return 1;
+  }
+  if (len == 7 && crec_strlit(p, len, "__int16", 7)) {
+    *bitsp = 16;
+    return 1;
+  }
+  if (len == 7 && crec_strlit(p, len, "__int32", 7)) {
+    *bitsp = 32;
+    return 1;
+  }
+  if (len == 7 && crec_strlit(p, len, "__int64", 7)) {
+    *bitsp = 64;
+    return 1;
+  }
+  if (len == 8 && crec_strlit(p, len, "__int128", 8)) {
+    *bitsp = 128;
+    return 1;
+  }
+  return 0;
+}
+
+static int crec_integer_spec_token(const char *p, MSize len, int *tokp)
+{
+  if (len == 4 && crec_strlit(p, len, "char", 4)) {
+    *tokp = 1;
+    return 1;
+  }
+  if (len == 5 && crec_strlit(p, len, "short", 5)) {
+    *tokp = 2;
+    return 1;
+  }
+  if (len == 3 && crec_strlit(p, len, "int", 3)) {
+    *tokp = 3;
+    return 1;
+  }
+  if (len == 4 && crec_strlit(p, len, "long", 4)) {
+    *tokp = 4;
+    return 1;
+  }
+  return 0;
+}
+
+static int crec_direct_int_keyword_ctype(jit_State *J, CTState *cts,
+					 const char *p, MSize len,
+					 CTypeID *idp)
+{
+  int sign = 0, bits = 0;
+  while (len != 0 && crec_cspace(*p)) { p++; len--; }
+  while (len != 0 && crec_cspace(p[len-1])) len--;
+  while (len != 0) {
+    MSize toklen = 0;
+    int tok;
+    while (toklen < len && !crec_cspace(p[toklen])) toklen++;
+    if (crec_int_keyword_token(p, toklen, &tok)) {
+      if (bits != 0)
+	return 0;
+      bits = tok;
+    } else if (crec_sign_token(p, toklen, &tok)) {
+      if (sign != 0)
+	return 0;
+      sign = tok;
+    } else {
+      return 0;
+    }
+    p += toklen;
+    len -= toklen;
+    while (len != 0 && crec_cspace(*p)) { p++; len--; }
+  }
+  if (bits == 0)
+    return 0;
+  if (sign == 2) {
+    if (bits == 8) *idp = CTID_UINT8;
+    else if (bits == 16) *idp = CTID_UINT16;
+    else if (bits == 32) *idp = CTID_UINT32;
+    else if (bits == 128) *idp = CTID_UINT128;
+    else *idp = lj_ctype_intern_l(J->L, cts,
+				  CTINFO(CT_NUM, CTF_UNSIGNED|CTALIGN(3)), 8);
+  } else {
+    if (bits == 8) *idp = CTID_INT8;
+    else if (bits == 16) *idp = CTID_INT16;
+    else if (bits == 32) *idp = CTID_INT32;
+    else if (bits == 128) *idp = CTID_INT128;
+    else *idp = lj_ctype_intern_l(J->L, cts, CTINFO(CT_NUM, CTALIGN(3)), 8);
+  }
+  return 1;
+}
+
+static int crec_direct_integer_spec_ctype(jit_State *J, CTState *cts,
+					  const char *p, MSize len,
+					  CTypeID *idp)
+{
+  int sign = 0, seen_char = 0, seen_short = 0, seen_int = 0, nlong = 0;
+  int seen = 0;
+  while (len != 0 && crec_cspace(*p)) { p++; len--; }
+  while (len != 0 && crec_cspace(p[len-1])) len--;
+  while (len != 0) {
+    MSize toklen = 0;
+    int tok;
+    while (toklen < len && !crec_cspace(p[toklen])) toklen++;
+    if (crec_sign_token(p, toklen, &tok)) {
+      if (sign != 0)
+	return 0;
+      sign = tok;
+    } else if (crec_integer_spec_token(p, toklen, &tok)) {
+      if (tok == 1) {
+	if (seen_char || seen_short || seen_int || nlong)
+	  return 0;
+	seen_char = 1;
+      } else if (tok == 2) {
+	if (seen_char || seen_short || nlong)
+	  return 0;
+	seen_short = 1;
+      } else if (tok == 3) {
+	if (seen_char || seen_int)
+	  return 0;
+	seen_int = 1;
+      } else {
+	if (seen_char || seen_short || nlong == 2)
+	  return 0;
+	nlong++;
+      }
+    } else {
+      return 0;
+    }
+    seen = 1;
+    p += toklen;
+    len -= toklen;
+    while (len != 0 && crec_cspace(*p)) { p++; len--; }
+  }
+  if (!seen)
+    return 0;
+  if (seen_char) {
+    *idp = sign == 2 ? CTID_UINT8 : CTID_INT8;
+  } else if (seen_short) {
+    *idp = sign == 2 ? CTID_UINT16 : CTID_INT16;
+  } else if (nlong == 2) {
+    *idp = lj_ctype_intern_l(J->L, cts,
+			     CTINFO(CT_NUM,
+				    (sign == 2 ? CTF_UNSIGNED : 0)|CTALIGN(3)),
+			     8);
+  } else if (nlong == 1) {
+    if (sizeof(long) != 8)
+      return 0;
+    *idp = sign == 2 ? CTID_UINT64 : CTID_INT64;
+  } else {
+    *idp = sign == 2 ? CTID_UINT32 : CTID_INT32;
+  }
+  return 1;
+}
+
+static int crec_direct_numeric_ctype(jit_State *J, CTState *cts,
+				     const char *p, MSize len, CTypeID *idp)
+{
+  CTInfo info;
+  CTSize size;
+  while (len != 0 && crec_cspace(*p)) { p++; len--; }
+  while (len != 0 && crec_cspace(p[len-1])) len--;
+  if (crec_strlit(p, len, "long long", 9) ||
+      crec_strlit(p, len, "long long int", 13) ||
+      crec_strlit(p, len, "signed long long", 16) ||
+      crec_strlit(p, len, "signed long long int", 20)) {
+    info = CTINFO(CT_NUM, CTALIGN(3));
+    size = 8;
+  } else if (crec_strlit(p, len, "unsigned long long", 18) ||
+	     crec_strlit(p, len, "unsigned long long int", 22)) {
+    info = CTINFO(CT_NUM, CTF_UNSIGNED|CTALIGN(3));
+    size = 8;
+  } else if (crec_strlit(p, len, "long double", 11)) {
+    size = (CTSize)sizeof(long double);
+    info = CTINFO(CT_NUM, CTF_FP|CTALIGN(lj_fls(size)));
+  } else {
+    return 0;
+  }
+  *idp = lj_ctype_intern_l(J->L, cts, info, size);
+  return 1;
+}
+
+static int crec_qual_prefix(const char *p, MSize len, MSize *toklenp,
+			    CTInfo *qualp)
+{
+  MSize i = 0;
+  while (i < len && crec_isident((uint8_t)p[i])) i++;
+  if (i == 0 || (i < len && !crec_cspace(p[i])))
+    return 0;
+  if (!crec_qual_token(p, i, qualp))
+    return 0;
+  *toklenp = i;
+  return 1;
+}
+
+static int crec_qual_suffix(const char *p, MSize len, MSize *startp,
+			    CTInfo *qualp)
+{
+  MSize start = len;
+  while (start != 0 && crec_isident((uint8_t)p[start-1])) start--;
+  if (start == len || (start != 0 && !crec_cspace(p[start-1])))
+    return 0;
+  if (!crec_qual_token(p + start, len - start, qualp))
+    return 0;
+  *startp = start;
+  return 1;
+}
+
+static int crec_direct_qual_part(const char **pp, MSize *lenp,
+				 CTInfo *qualp)
+{
+  const char *p = *pp;
+  MSize len = *lenp;
+  CTInfo qual = 0;
+  int seen = 0;
+  for (;;) {
+    CTInfo q;
+    MSize toklen;
+    while (len != 0 && crec_cspace(*p)) { p++; len--; }
+    if (!crec_qual_prefix(p, len, &toklen, &q))
+      break;
+    qual |= q;
+    seen = 1;
+    p += toklen;
+    len -= toklen;
+  }
+  for (;;) {
+    CTInfo q;
+    MSize start;
+    while (len != 0 && crec_cspace(p[len-1])) len--;
+    if (!crec_qual_suffix(p, len, &start, &q))
+      break;
+    qual |= q;
+    seen = 1;
+    len = start;
+  }
+  while (len != 0 && crec_cspace(*p)) { p++; len--; }
+  while (len != 0 && crec_cspace(p[len-1])) len--;
+  *pp = p;
+  *lenp = len;
+  *qualp = qual;
+  return seen;
+}
+
+static int crec_lookup_named_ctype(jit_State *J, CTState *cts, GCstr *name,
+				   uint32_t tmask, CTypeID *idp, CType *out)
+{
+  int ok = lj_ctype_getname_snapshot(cts, name, tmask, idp, out, NULL);
+  if (ok < 0)
+    lj_trace_err(J, LJ_TRERR_CTBUSY);
+  return ok;
+}
+
+static int crec_direct_ctype_info(jit_State *J, CTState *cts, CTypeID id,
+				  CTInfo *infop, CTSize *szp,
+				  CTypeID *ridp, CType *rawp)
+{
+  int ok = lj_ctype_info_predefined(cts, id, infop, szp, ridp, rawp);
+  if (ok)
+    return ok;
+  ok = lj_ctype_info_snapshot(cts, id, infop, szp, ridp, rawp);
+  if (ok < 0)
+    lj_trace_err(J, LJ_TRERR_CTBUSY);
+  return ok;
+}
+
+static int crec_direct_qualified_ctype(jit_State *J, CTState *cts,
+				       CTypeID baseid, CTInfo qual,
+				       CTypeID *idp)
+{
+  CType raw;
+  CTypeID rid;
+  CTInfo info;
+  CTSize size;
+  int ok = crec_direct_ctype_info(J, cts, baseid, &info, &size, &rid, &raw);
+  if (ok <= 0)
+    return 0;
+  if (qual == 0) {
+    *idp = baseid;
+    return 1;
+  }
+  info = ctype_info_acq(&raw);
+  size = ctype_size_acq(&raw);
+  if (ctype_isstruct(info) || ctype_isenum(info)) {
+    *idp = lj_ctype_intern_l(J->L, cts,
+			     CTINFO(CT_ATTRIB, CTATTRIB(CTA_QUAL)|rid),
+			     qual);
+    return 1;
+  }
+  if (ctype_isattrib(info))
+    return 0;
+  *idp = lj_ctype_intern_l(J->L, cts, info|qual, size);
+  return 1;
+}
+
+static int crec_direct_ctype_base_unqualified(jit_State *J, CTState *cts,
+					      GCstr *s, const char *p,
+					      MSize len, CTypeID *idp)
+{
+  CType ct;
+  CTypeID id;
+  CTInfo info;
+  if (lj_ctype_predefined_string(p, len, idp))
+    return 1;
+  if (crec_direct_int_keyword_ctype(J, cts, p, len, idp))
+    return 1;
+  if (crec_direct_integer_spec_ctype(J, cts, p, len, idp))
+    return 1;
+  if (crec_direct_numeric_ctype(J, cts, p, len, idp))
+    return 1;
+  while (len != 0 && crec_cspace(*p)) { p++; len--; }
+  while (len != 0 && crec_cspace(p[len-1])) len--;
+  if (crec_ident_string(p, len)) {
+    GCstr *name = (p == strdata(s) && len == s->len) ? s :
+		  lj_str_new(J->L, p, len);
+    int ok = crec_lookup_named_ctype(J, cts, name, (1u << CT_TYPEDEF),
+				     &id, &ct);
+    if (ok > 0) {
+      info = ctype_info_acq(&ct);
+      if (ctype_istypedef(info)) {
+	*idp = ctype_cid(info);
+	return 1;
+      }
+    }
+  } else {
+    uint32_t tmask;
+    int wantunion = 0, wantenum = 0;
+    MSize kwlen;
+    if (len >= 6 && crec_strlit(p, 6, "struct", 6)) {
+      kwlen = 6;
+      tmask = (1u << CT_STRUCT);
+    } else if (len >= 5 && crec_strlit(p, 5, "union", 5)) {
+      kwlen = 5;
+      tmask = (1u << CT_STRUCT);
+      wantunion = 1;
+    } else if (len >= 4 && crec_strlit(p, 4, "enum", 4)) {
+      kwlen = 4;
+      tmask = (1u << CT_ENUM);
+      wantenum = 1;
+    } else {
+      return 0;
+    }
+    if (len == kwlen || !crec_cspace(p[kwlen]))
+      return 0;
+    p += kwlen + 1;
+    len -= kwlen + 1;
+    while (len != 0 && crec_cspace(*p)) { p++; len--; }
+    if (!crec_ident_string(p, len))
+      return 0;
+    {
+      GCstr *name = lj_str_new(J->L, p, len);
+      int ok = crec_lookup_named_ctype(J, cts, name, tmask, &id, &ct);
+      if (ok > 0) {
+	info = ctype_info_acq(&ct);
+	if (wantenum ? ctype_isenum(info) :
+	    ctype_isstruct(info) && (((info & CTF_UNION) != 0) == wantunion)) {
+	  *idp = id;
+	  return 1;
+	}
+      }
+    }
+  }
+  return 0;
+}
+
+static int crec_direct_ctype_base_string(jit_State *J, CTState *cts,
+					 GCstr *s, const char *p,
+					 MSize len, CTypeID *idp)
+{
+  const char *q = p;
+  MSize qlen = len;
+  CTInfo qual;
+  if (crec_direct_qual_part(&q, &qlen, &qual)) {
+    CTypeID baseid;
+    if (qlen == 0)
+      return 0;
+    if (crec_direct_ctype_base_unqualified(J, cts, s, q, qlen, &baseid) &&
+	crec_direct_qualified_ctype(J, cts, baseid, qual, idp))
+      return 1;
+    return 0;
+  }
+  return crec_direct_ctype_base_unqualified(J, cts, s, p, len, idp);
+}
+
 static int crec_pointer_qual_suffix(const char *p, MSize *lenp,
 				    CTInfo *qualp)
 {
@@ -227,7 +643,8 @@ static int crec_direct_ctype_string(jit_State *J, GCstr *s, CTypeID *idp)
 {
   CTState *cts = ctype_ctsG(J2G(J));
   const char *p = strdata(s);
-  MSize len = s->len, baselen, narr = 0, i;
+  MSize len = s->len;
+  MSize baselen, narr = 0, i;
   CTSize nelem[CREC_DIRECT_MAX_DECL_SUFFIXES], esize;
   CTInfo einfo;
   CTypeID elemid;
@@ -258,8 +675,8 @@ static int crec_direct_ctype_string(jit_State *J, GCstr *s, CTypeID *idp)
       baselen = nextlen;
     }
     if (narr == 0 && nptr == 0)
-      return 0;
-    if (!lj_ctype_predefined_string(p, baselen, &elemid))
+      return crec_direct_ctype_base_string(J, cts, s, p, len, idp);
+    if (!crec_direct_ctype_base_string(J, cts, s, p, baselen, &elemid))
       return 0;
     if (nptr != 0) {
       while (nptr-- != 0) {
@@ -268,7 +685,7 @@ static int crec_direct_ctype_string(jit_State *J, GCstr *s, CTypeID *idp)
       }
       esize = CTSIZE_PTR;
     } else {
-      if (lj_ctype_info_predefined(cts, elemid, &einfo, &esize, NULL, NULL) <= 0 ||
+      if (crec_direct_ctype_info(J, cts, elemid, &einfo, &esize, NULL, NULL) <= 0 ||
 	  ctype_isref(einfo) || ctype_isvltype(einfo) ||
 	  esize == CTSIZE_INVALID)
 	return 0;
