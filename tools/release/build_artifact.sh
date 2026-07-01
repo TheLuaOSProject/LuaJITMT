@@ -40,6 +40,9 @@ case "$platform" in
   *) usage ;;
 esac
 
+mkdir -p "$out_dir"
+out_dir=$(CDPATH= cd -- "$out_dir" && pwd)
+
 pkg="LuaJITMT-${tag}-${platform}"
 stage="${stage_parent}/${pkg}"
 
@@ -52,7 +55,6 @@ cleanup() {
 }
 trap cleanup EXIT
 
-mkdir -p "$out_dir"
 rm -rf "$stage"
 
 make_clean() {
@@ -172,7 +174,10 @@ case "$platform" in
     ;;
   macos-x86_64)
     export MACOSX_DEPLOYMENT_TARGET=${MACOSX_DEPLOYMENT_TARGET:-13.0}
-    macos_make_args=(TARGET_SYS=Darwin)
+    macos_make_args=(
+      TARGET_SYS=Darwin
+      TARGET_FLAGS="${LJ_RELEASE_MACOS_TARGET_FLAGS:--arch x86_64}"
+    )
     if [ -n "${LJ_RELEASE_MACOS_CC:-}" ]; then
       macos_make_args+=(CC="$LJ_RELEASE_MACOS_CC")
     fi
@@ -187,6 +192,8 @@ case "$platform" in
     make -C "$root" install DESTDIR="$stage" PREFIX="$prefix" \
       "${macos_make_args[@]}"
     install_doc "${stage}${prefix}/share/doc/luajitmt" "make install DESTDIR prefix tree"
+    printf 'macos_deployment_target: %s\n' "$MACOSX_DEPLOYMENT_TARGET" \
+      >> "${stage}${prefix}/share/doc/luajitmt/BUILDINFO"
     run_release_test
     archive=$(archive_stage)
     run_release_archive_test "$archive"

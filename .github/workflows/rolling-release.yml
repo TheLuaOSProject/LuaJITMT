@@ -18,9 +18,23 @@ env:
   LJ_RELEASE_RUN_STOCK: "0"
 
 jobs:
+  validate:
+    name: Validate rolling tag
+    runs-on: ubuntu-24.04
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+    steps:
+      - name: Validate bX.Y.Z tag
+        run: |
+          if [[ ! "$RELEASE_TAG" =~ ^b[0-9]+[.][0-9]+[.][0-9]+$ ]]; then
+            echo "::error::rolling releases must use b<major>.<minor>.<patch> tags, got '$RELEASE_TAG'"
+            exit 1
+          fi
+
   linux:
     name: Linux x86_64 artifact
     runs-on: ubuntu-24.04
+    needs: validate
     env:
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
       SOURCE_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
@@ -58,6 +72,7 @@ jobs:
   macos:
     name: macOS x86_64 artifact
     runs-on: macos-13
+    needs: validate
     env:
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
       SOURCE_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
@@ -100,6 +115,7 @@ jobs:
     name: Windows x86_64 UCRT artifact
     runs-on: ubuntu-24.04
     container: debian:trixie
+    needs: validate
     env:
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
       SOURCE_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
