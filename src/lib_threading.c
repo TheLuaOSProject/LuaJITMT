@@ -231,6 +231,18 @@ static void threading_start_roots_init(lua_State *L, GCudata *ud, LJThread *th,
   lj_gc2_remember_root(G(L), obj2gco(ud));
 }
 
+static void threading_start_roots_clear(lua_State *L, LJThread *th)
+{
+  TValue *roots = lj_thread_start_roots_acq(th);
+  uint32_t i, n = lj_thread_start_root_count_acq(th);
+  TValue nilv;
+  if (!roots)
+    return;
+  setnilV(&nilv);
+  for (i = 0; i < n; i++)
+    copyTVrel(L, &roots[i], &nilv);
+}
+
 static void threading_spawn_gc_handoff(lua_State *L, GCudata *ud)
 {
   global_State *g = G(L);
@@ -659,6 +671,7 @@ static int threading_join_core(lua_State *L, LJThread *th, int has_timeout,
       copyTV(L, L->top++, child->base + i);
     lj_state_release(child, tid);
   }
+  threading_start_roots_clear(L, th);
   if (remove_live) {
     threading_live_remove(th);
     (void)lj_tg_reclaim_dead(G(L));
