@@ -50,6 +50,7 @@ int lj_m7_ccall_jit_ptr_read_i32(int *);
 int lj_m7_ccall_jit_ptr_sum_i32(int *, int *);
 int lj_m7_ccall_jit_i32_ptr_read_i32(int, int *);
 int *lj_m7_ccall_jit_ptr_add_i32(int *, int);
+int *lj_m7_ccall_jit_ptr_num(double);
 ]]
 
 local abs = ffi.C.abs
@@ -208,6 +209,7 @@ do
     local ptr_sum_i32 = lib.lj_m7_ccall_jit_ptr_sum_i32
     local i32_ptr_read_i32 = lib.lj_m7_ccall_jit_i32_ptr_read_i32
     local ptr_add_i32 = lib.lj_m7_ccall_jit_ptr_add_i32
+    local ptr_num = lib.lj_m7_ccall_jit_ptr_num
     local function run_add2(n)
       local r = 0
       for i = 1, n do
@@ -521,6 +523,13 @@ do
       end
       return r
     end
+    local function run_ptr_num(n)
+      local r = 0
+      for i = 1, n do
+	r = r + ptr_num(i + 0.25)[0]
+      end
+      return r
+    end
     local function run_sleep(n, ms)
       local r = 0
       for _ = 1, n do
@@ -738,6 +747,11 @@ do
     jit.opt.start("hotloop=1", "hotexit=1")
     assert(run_ptr_add(80) == 80 * 27 + 40)
     assert(trace_count() > 0, "shared ptr,int->ptr FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    assert(run_ptr_num(80) == 80 * 27 + 40)
+    assert(trace_count() > 0, "shared double->ptr FFI call loop should trace")
 
     jit.flush()
     jit.opt.start("hotloop=1", "hotexit=1")

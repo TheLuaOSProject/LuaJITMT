@@ -239,3 +239,8 @@ int *lj_m7_ccall_jit_ptr_add_i32(int *p, int offset)
 {
   return p + offset;
 }
+
+int *lj_m7_ccall_jit_ptr_num(double a)
+{
+  return lj_m7_ccall_jit_values + ((int)a & 3);
+}
