@@ -1,7 +1,7 @@
 ---@meta threading
 
 ---@alias threading.timeout_error "timeout"
----@alias threading.thread_fn fun(...: any): ...
+---@alias threading.thread_fn fun(...: any): any, ...
 ---@alias threading.recv_status true|false|threading.timeout_error
 ---@alias threading.peek_status true|false
 ---@alias threading.send_result true|nil
@@ -108,7 +108,7 @@
 ---@field finalizer_spawn_deferrals number
 ---@field finalizer_spawn_release_wakes number
 
----@class threading.thread: userdata
+---@class threading.thread<R>: userdata
 local threading_thread = {}
 
 ---Wait for this thread to finish.
@@ -116,11 +116,11 @@ local threading_thread = {}
 ---Returns `true, ...` when the child function returns, `false, err` when the
 ---child function errors, or `nil, "timeout"` when a timeout is supplied and the
 ---thread is still running.
----@overload fun(self: threading.thread): true, ...
----@overload fun(self: threading.thread): false, any
----@overload fun(self: threading.thread, timeout: number): true, ...
----@overload fun(self: threading.thread, timeout: number): false, any
----@overload fun(self: threading.thread, timeout: number): nil, threading.timeout_error
+---@overload fun<R>(self: threading.thread<R>): true, R, ...
+---@overload fun<R>(self: threading.thread<R>): false, any
+---@overload fun<R>(self: threading.thread<R>, timeout: number): true, R, ...
+---@overload fun<R>(self: threading.thread<R>, timeout: number): false, any
+---@overload fun<R>(self: threading.thread<R>, timeout: number): nil, threading.timeout_error
 ---@param timeout number seconds to wait; omit to block indefinitely.
 ---@return true|false|nil ok true for child success, false for child error, nil on timeout.
 ---@return any ... child results, an error object, or the timeout reason.
@@ -244,12 +244,13 @@ function threading.gcworkers(count) end
 function threading.gcmode(mode) end
 
 ---Spawn a new OS thread that calls `fn(...)`.
----@param fn threading.thread_fn
+---@generic R
+---@param fn fun(...: any): R, ...
 ---@param ... any
----@return threading.thread thread
+---@return threading.thread<R> thread
 function threading.spawn(fn, ...) end
 
----@return threading.thread thread
+---@return threading.thread<any> thread
 ---@nodiscard
 function threading.current() end
 
