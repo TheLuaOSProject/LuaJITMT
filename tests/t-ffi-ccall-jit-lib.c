@@ -117,6 +117,15 @@ int32_t lj_m7_ccall_jit_i32_ptr_ptr_i32(int *a, int *b, int32_t n)
   return a[u & 3u] + b[(u + 1u) & 3u] + n;
 }
 
+int64_t lj_m7_ccall_jit_i64_ptr_ptr_i32(const char *p, char **endp,
+					int32_t base)
+{
+  if (endp)
+    *endp = (char *)p + 1;
+  return INT64_C(0x100000000) + (int64_t)(unsigned char)p[0] +
+	 (int64_t)base + 1;
+}
+
 int64_t lj_m7_ccall_jit_i64_ptr_ptr_u64(int *a, int *b, uint64_t n)
 {
   return INT64_C(0x100000000) + (int64_t)a[n & 3u] +

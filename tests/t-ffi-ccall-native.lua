@@ -24,6 +24,7 @@ uint32_t lj_m7_ccall_jit_u32_i32_ptr_u32(int32_t, int *, uint32_t);
 int32_t lj_m7_ccall_jit_i32_ptr_ptr_u64(int *, int *, uint64_t);
 uint32_t lj_m7_ccall_jit_u32_ptr_ptr_u64(int *, int *, uint64_t);
 int32_t lj_m7_ccall_jit_i32_ptr_ptr_i32(int *, int *, int32_t);
+int64_t lj_m7_ccall_jit_i64_ptr_ptr_i32(const char *, char **, int32_t);
 int64_t lj_m7_ccall_jit_i64_ptr_ptr_u64(int *, int *, uint64_t);
 uint64_t lj_m7_ccall_jit_u64_ptr_ptr_u64(int *, int *, uint64_t);
 int *lj_m7_ccall_jit_ptr_ptr_ptr_u64(int *, int *, uint64_t);
@@ -1226,6 +1227,20 @@ do
       return r
     end)(80) == 80 * (33 + 44 - 14))
     assert(trace_count() > 0, "shared ptr,ptr,int32_t->int FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    assert((function(n)
+      local str = ffi.new("char[4]", "AZ")
+      local endp = ffi.new("char *[1]")
+      local r = 0
+      for _ = 1, n do
+	r = r + tonumber(lib.lj_m7_ccall_jit_i64_ptr_ptr_i32(str, endp, 7))
+      end
+      assert(endp[0] == ffi.cast("char *", str) + 1)
+      return r
+    end)(80) == 80 * (4294967296 + 65 + 7 + 1))
+    assert(trace_count() > 0, "shared ptr,ptr,int32_t->int64_t FFI call loop should trace")
 
     jit.flush()
     jit.opt.start("hotloop=1", "hotexit=1")
