@@ -110,6 +110,21 @@ unsigned int lj_m7_ccall_jit_u32(unsigned int a)
   return a + 1u;
 }
 
+uint32_t lj_m7_ccall_jit_u32_i32(int32_t a)
+{
+  return 0xf0000000u + (uint32_t)a;
+}
+
+uint32_t lj_m7_ccall_jit_u32_ptr(int *p)
+{
+  return 0xf0000000u + (uint32_t)*p;
+}
+
+uint32_t lj_m7_ccall_jit_u32_i32_ptr(int32_t offset, int *p)
+{
+  return 0xf0000000u + (uint32_t)p[offset];
+}
+
 uint32_t lj_m7_ccall_jit_u32_0(void)
 {
   return 0xf0000001u;

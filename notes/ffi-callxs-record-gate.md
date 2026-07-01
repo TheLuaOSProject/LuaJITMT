@@ -24,7 +24,9 @@ the exact ABI value without widening the semantics.
 Narrow integer argument conversion remains interpreted.
 `lj_ccall_jit_u32_0()` traces exact zero-argument unsigned 32-bit returns as
 Lua numbers, preserving high-bit values without signed truncation. Unsigned
-integer argument conversion remains interpreted.
+integer returns with exact signed 32-bit integer or pointer arguments trace
+through `lj_ccall_jit_u32_gpr()` and use the same high-bit-safe Lua number
+result conversion. Unsigned integer argument conversion remains interpreted.
 `lj_ccall_jit_u64_0()` traces exact zero-argument unsigned 64-bit returns,
 preserving stock boxed uint64 cdata results. Unsigned 64-bit argument
 conversion remains interpreted.

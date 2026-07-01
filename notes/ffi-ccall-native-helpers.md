@@ -35,9 +35,11 @@ integer returns and preserves boxed int64 cdata results.
 16-bit integer returns as Lua numbers, after calling through the exact C return
 type.
 `lj_ccall_jit_u32_0()` handles exact zero-argument unsigned 32-bit integer
-returns as Lua numbers without high-bit truncation. `lj_ccall_jit_u64_0()`
-handles exact zero-argument unsigned 64-bit integer returns and preserves boxed
-uint64 cdata results. The sibling
+returns as Lua numbers without high-bit truncation. `lj_ccall_jit_u32_gpr()`
+extends that high-bit-safe result conversion to unsigned 32-bit returns with
+exact signed 32-bit integer or pointer arguments. `lj_ccall_jit_u64_0()` handles
+exact zero-argument unsigned 64-bit integer returns and preserves boxed uint64
+cdata results. The sibling
 `lj_ccall_jit_{num,flt}_fpr()` helpers trace exact double or float returns with
 0, 1, or 2 same-kind exact FP arguments. Broad traced ordinary FFI C calls
 remain disabled by `LJ_FFI_RECORD_CALLS=0` because x64 `IR_CALLXS` lowering
