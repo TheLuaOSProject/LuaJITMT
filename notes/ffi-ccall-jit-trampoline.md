@@ -56,6 +56,8 @@ shape,
 argument shape,
 `lj_ccall_jit_i32_ptr_ptr_u64()` for the exact pointer/pointer/size argument
 shape,
+`lj_ccall_jit_ptr_ptr_ptr_u64()` for the exact pointer-returning
+pointer/pointer/size argument shape,
 `lj_ccall_jit_i32_ptr_ulong_i32()` for the exact pointer/unsigned-long/int
 shape, or
 `lj_ccall_jit_num_fpr()` / `lj_ccall_jit_flt_fpr()` for the FP-only FPR shapes.
@@ -92,6 +94,9 @@ The scope is deliberately narrow:
   32-bit count arguments preserved before the helper casts to the exact
   unsigned 32-bit ABI width;
 - exact `int32_t(pointer, pointer, uint64_t)` calls, with the final size
+  argument preserved before the helper casts to the exact unsigned 64-bit ABI
+  width;
+- exact `pointer(pointer, pointer, uint64_t)` calls, with the final size
   argument preserved before the helper casts to the exact unsigned 64-bit ABI
   width;
 - zero-argument exact signed 64-bit integer returns;
