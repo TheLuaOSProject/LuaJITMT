@@ -36,9 +36,11 @@ typedef uint16_t HotCount;
 #define TGF_HUGETAB		0x02u
 #define TGF_DEAD		0x04u
 #define TGF_STOPREQ		0x08u
+#define TGF_STOPREQ_FRESH	0x10u
 #define TG_HUGETAB_BITS		16u
-#define TG_GC2_SSB_BYTES	1024u
+#define TG_GC2_SSB_BYTES	8192u
 #define TG_GC2_SSB_SLOTS	(TG_GC2_SSB_BYTES / sizeof(GCRef))
+#define TG_GC2_SSB_DYNAMIC	0x01u
 
 typedef struct GG_State GG_State;
 typedef struct ExitTrampolines ExitTrampolines;
@@ -596,6 +598,7 @@ LJ_FUNC void lj_tg_fini(global_State *g);
 LJ_FUNC void lj_tg_init_thread(global_State *g, TGState *tg, lua_State *L,
 			       int arena_internal);
 LJ_FUNC void lj_tg_derive_prng(global_State *g, TGState *tg, uint32_t tid);
+LJ_FUNC void lj_tg_fini_ssb(TGState *tg);
 LJ_FUNC void lj_tg_fini_thread(global_State *g, TGState *tg);
 LJ_FUNC void lj_tg_attach(global_State *g, TGState *tg);
 LJ_FUNC void lj_tg_detach(global_State *g, TGState *tg);

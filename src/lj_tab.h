@@ -285,6 +285,8 @@ LJ_FUNC TValue *lj_tab_setint_forward(lua_State *L, GCtab *t, int32_t key);
 LJ_FUNC TValue *lj_tab_setstr(lua_State *L, GCtab *t, const GCstr *key);
 LJ_FUNC TValue *lj_tab_set(lua_State *L, GCtab *t, cTValue *key);
 LJ_FUNCA TValue *lj_tab_storetv(lua_State *L, TValue *dst, cTValue *src);
+LJ_FUNC int lj_tab_struct_enter(lua_State *L);
+LJ_FUNC void lj_tab_struct_leave(lua_State *L, int acquired);
 LJ_FUNCA void lj_tab_wait_no_l(void);
 LJ_FUNCA void lj_tab_wait_l(lua_State *L);
 LJ_FUNCA void lj_tab_store_wait_l(lua_State *L);
@@ -394,8 +396,18 @@ genarray:
     TValue val;
     lj_tv_load_acq(&val, &array[key]);
     if (tvisforward(&val)) {
-      if (lj_tab_array_forward_hop_forward(t, &array, &asize))
+      TValue *oldarray = array;
+      if (lj_tab_array_forward_hop_forward(t, &array, &asize)) {
+	if ((MSize)key < asize) {
+	  TValue nextval;
+	  lj_tv_load_acq(&nextval, &array[key]);
+	  if (tvisnil(&nextval) && lj_tab_array_acq(t) == oldarray) {
+	    lj_tab_wait_no_l();
+	    goto retry_array;
+	  }
+	}
 	goto genarray;
+      }
       if (lj_tab_array_acq(t) != array ||
 	  lj_tab_array_is_retiring(t, array) ||
 	  lj_tab_array_is_colocated(t, array)) {

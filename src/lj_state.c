@@ -273,10 +273,12 @@ static void close_state(lua_State *L)
   lj_gc2_fini(g);
   if (lj_thr_get_tg() == g->main_tg)
     lj_thr_set_tg(NULL);
-  if (arena_alloc && g->main_tg)
+  if (arena_alloc && g->main_tg) {
+    lj_tg_fini_ssb(g->main_tg);
     lj_buf_free(g, &g->main_tg->tmpbuf);
-  else
+  } else {
     lj_tg_fini(g);
+  }
   lj_buf_free(g, &g->tmpbuf);
   lj_mem_freevec(g, tvref(L->stack), L->stacksize, TValue);
 #if LJ_64

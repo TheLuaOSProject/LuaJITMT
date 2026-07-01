@@ -93,7 +93,7 @@ static lua_State *new_open_state(void)
 static void clear_stopreq(TGState *tg)
 {
   assert(lj_tg_flags_test_acq(tg, TGF_STOPREQ));
-  (void)lj_tg_flags_and_rlx(tg, (uint8_t)~TGF_STOPREQ);
+  (void)lj_tg_flags_and_rlx(tg, (uint8_t)~(TGF_STOPREQ|TGF_STOPREQ_FRESH));
 }
 
 static int child_marker(lua_State *L)

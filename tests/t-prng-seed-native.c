@@ -21,7 +21,7 @@ static void set_stopreq(TGState *tg)
 static void clear_stopreq(TGState *tg)
 {
   uint8_t flags = lj_tg_flags_acq(tg);
-  lj_tg_flags_store_rlx(tg, (uint8_t)(flags & ~TGF_STOPREQ));
+  lj_tg_flags_store_rlx(tg, (uint8_t)(flags & ~(TGF_STOPREQ|TGF_STOPREQ_FRESH)));
 }
 
 static void run_ok(lua_State *L, const char *chunk)

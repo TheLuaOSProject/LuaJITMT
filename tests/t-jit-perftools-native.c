@@ -114,7 +114,7 @@ int main(void)
   assert(err && strstr(err, "thread interrupted: VM shutdown"));
   lua_pop(L, 1);
 
-  tg->tg_flags &= (uint8_t)~TGF_STOPREQ;
+  tg->tg_flags &= (uint8_t)~(TGF_STOPREQ|TGF_STOPREQ_FRESH);
   lua_close(L);
   unlink(ctx.path);
   printf("t-jit-perftools-native OK: perf map writer acks STOPREQ as native\n");

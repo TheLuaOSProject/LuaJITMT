@@ -57,10 +57,8 @@ static int os_had_pending_stopreq(lua_State *L)
 static int os_fresh_stopreq(lua_State *L, uint32_t actions, int had_stopreq,
 			    int had_pending_stopreq)
 {
-  TGState *tg = L2TG(L);
   UNUSED(had_pending_stopreq);
-  return (actions & LJ_GC2_HS_STOPREQ) ||
-    (!had_stopreq && tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ));
+  return lj_safepoint_fresh_stopreq(L, actions, had_stopreq);
 }
 
 static void os_checkstop_fresh(lua_State *L, uint32_t actions, int had_stopreq,

@@ -584,6 +584,8 @@ static uint32_t arena_bin(uint32_t ncells)
   return ncells < LJ_ALLOC_NBINS ? ncells - 1u : LJ_ALLOC_NBINS - 1u;
 }
 
+#define LJ_ARENA_BIN_WALK_LIMIT 8192u
+
 static void arena_set_alloc(GCArena *a, uint32_t cell, int black)
 {
   lj_arena_bm_set(a->block, cell);
@@ -609,11 +611,33 @@ static void arena_set_free_run(GCArena *a, uint32_t start, uint32_t len)
 }
 
 static void arena_insert_run(TGAlloc *alloc, GCArena *a, uint32_t start,
-			     uint32_t len)
+				     uint32_t len)
 {
   uint32_t k = arena_kind(a->hdr.flags);
   uint32_t b = arena_bin(len);
   LJArenaFreeRun *run = (LJArenaFreeRun *)lj_arena_cellptr(a, start);
+  LJArenaFreeRun **pp = &alloc->bins[k][b];
+  uint32_t steps = 0;
+  while (*pp) {
+    LJArenaFreeRun *cur = *pp;
+    LJArenaFreeRun *next;
+    uintptr_t addr = (uintptr_t)cur;
+    if (!checkptrGC(cur) || (addr & (LJ_CELL_SIZE-1u)) != 0 ||
+	(addr & LJ_ARENA_MASK) < ((uintptr_t)LJ_AFIRST_CELL << LJ_CELL_SHIFT)) {
+      *pp = NULL;
+      break;
+    }
+    next = cur->next;
+    if (cur == run) {
+      *pp = next == cur ? NULL : next;
+      continue;
+    }
+    if (next == cur || ++steps > LJ_ARENA_BIN_WALK_LIMIT) {
+      *pp = NULL;
+      break;
+    }
+    pp = &cur->next;
+  }
   arena_set_free_run(a, start, len);
   run->start = start;
   run->len = len;
@@ -627,11 +651,22 @@ static LJArenaFreeRun **arena_find_run(TGAlloc *alloc, uint32_t k,
   uint32_t b;
   for (b = arena_bin(ncells); b < LJ_ALLOC_NBINS; b++) {
     LJArenaFreeRun **pp = &alloc->bins[k][b];
+    uint32_t steps = 0;
     while (*pp) {
       LJArenaFreeRun *run = *pp;
+      LJArenaFreeRun *next;
       uintptr_t addr = (uintptr_t)run;
+      if (++steps > LJ_ARENA_BIN_WALK_LIMIT) {
+	alloc->bins[k][b] = NULL;
+	break;
+      }
       if (!checkptrGC(run) || (addr & (LJ_CELL_SIZE-1u)) != 0 ||
 	  (addr & LJ_ARENA_MASK) < ((uintptr_t)LJ_AFIRST_CELL << LJ_CELL_SHIFT)) {
+	*pp = NULL;
+	break;
+      }
+      next = run->next;
+      if (next == run) {
 	*pp = NULL;
 	break;
       }
@@ -643,7 +678,7 @@ static LJArenaFreeRun **arena_find_run(TGAlloc *alloc, uint32_t k,
 	    len > LJ_ARENA_CELLS - start ||
 	    lj_arena_cellptr(a, start) != (void *)run ||
 	    lj_arena_state(a, start) != 1) {
-	  *pp = run->next;
+	  *pp = next;
 	  continue;
 	}
 	if (len >= ncells)
@@ -805,6 +840,8 @@ void lj_arena_alloc_prepare_sweep_kind(TGAlloc *alloc, uint32_t k)
   arena_clear_bins(alloc, k);
   while (a) {
     GCArena *next = lj_arena_next_acq(a);
+    if (next == a || (next && (next->hdr.flags & LJ_AF_NEEDSWEEP)))
+      next = NULL;
     a->hdr.flags |= LJ_AF_NEEDSWEEP;
     lj_arena_next_rel(a, alloc->needsweep[k]);
     alloc->needsweep[k] = a;
@@ -828,6 +865,8 @@ void lj_arena_alloc_restore_sweep_kind(TGAlloc *alloc, uint32_t k)
   alloc->needsweep[k] = NULL;
   while (a) {
     GCArena *next = lj_arena_next_acq(a);
+    if (next == a || (next && !(next->hdr.flags & LJ_AF_NEEDSWEEP)))
+      next = NULL;
     a->hdr.flags &= ~LJ_AF_NEEDSWEEP;
     lj_arena_next_rel(a, alloc->owned[k]);
     alloc->owned[k] = a;
@@ -879,7 +918,12 @@ GCArena *lj_arena_sweep_one(TGAlloc *alloc, uint32_t kind, uint32_t epoch,
   if (!a)
     return NULL;
   arena_unlink_owned_duplicate(alloc, kind, a);
-  alloc->needsweep[kind] = lj_arena_next_acq(a);
+  {
+    GCArena *next = lj_arena_next_acq(a);
+    if (next == a || (next && !(next->hdr.flags & LJ_AF_NEEDSWEEP)))
+      next = NULL;
+    alloc->needsweep[kind] = next;
+  }
   lj_arena_next_rel(a, NULL);
   lj_arena_sweep_words(a, minor);
   lj_arena_scan_free_runs(a, arena_find_largest_run, &lr);
@@ -979,7 +1023,7 @@ void *lj_arena_alloc(TGAlloc *alloc, PRNGState *rs, size_t size,
     return NULL;
   {
     LJArenaFreeRun **pp = arena_find_run(alloc, k, ncells);
-    if (pp) {
+    if (pp && *pp) {
       LJArenaFreeRun *run = *pp;
       GCArena *a = lj_arena_of(run);
       uint32_t start = run->start;

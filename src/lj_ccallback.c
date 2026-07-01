@@ -399,9 +399,7 @@ static int callback_mcode_had_stopreq(lua_State *L)
 static int callback_mcode_fresh_stopreq(lua_State *L, uint32_t actions,
 					int had_stopreq)
 {
-  TGState *tg = L ? L2TG(L) : NULL;
-  return (actions & LJ_GC2_HS_STOPREQ) ||
-    (!had_stopreq && tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ));
+  return lj_safepoint_fresh_stopreq(L, actions, had_stopreq);
 }
 
 static void callback_mcode_discard(lua_State *L, void *p, size_t sz)
@@ -1049,9 +1047,7 @@ static int ccallback_had_stopreq(CCallbackRuntime *cb)
 static int ccallback_fresh_stopreq(lua_State *L, uint32_t actions,
 				   int had_stopreq)
 {
-  TGState *tg = L ? L2TG(L) : NULL;
-  return (actions & LJ_GC2_HS_STOPREQ) ||
-    (!had_stopreq && tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ));
+  return lj_safepoint_fresh_stopreq(L, actions, had_stopreq);
 }
 
 /* Enter callback. */

@@ -89,9 +89,7 @@ static uint32_t io_poll_pending_stopreq(lua_State *L, uint32_t actions)
 
 static int io_fresh_stopreq(lua_State *L, uint32_t actions, int had_stopreq)
 {
-  TGState *tg = L2TG(L);
-  return (actions & LJ_GC2_HS_STOPREQ) ||
-    (!had_stopreq && tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ));
+  return lj_safepoint_fresh_stopreq(L, actions, had_stopreq);
 }
 
 static void io_checkstop_fresh(lua_State *L, uint32_t actions, int had_stopreq)
@@ -168,6 +166,8 @@ static int io_native_fscanf_num(lua_State *L, FILE *fp, lua_Number *dp)
   uint32_t actions;
   int had_stopreq = io_had_stopreq(L);
   int ok;
+  io_checkstop_fresh(L, 0, had_stopreq);
+  had_stopreq = io_had_stopreq(L);
   lj_native_enter(L2TG(L));
   ok = fscanf(fp, LUA_NUMBER_SCAN, dp);
   actions = lj_native_leave(L);
@@ -180,6 +180,8 @@ static char *io_native_fgets(lua_State *L, char *buf, int size, FILE *fp)
   uint32_t actions;
   int had_stopreq = io_had_stopreq(L);
   char *p;
+  io_checkstop_fresh(L, 0, had_stopreq);
+  had_stopreq = io_had_stopreq(L);
   lj_native_enter(L2TG(L));
   p = fgets(buf, size, fp);
   actions = lj_native_leave(L);
@@ -193,6 +195,8 @@ static size_t io_native_fread(lua_State *L, void *buf, size_t size,
   uint32_t actions;
   int had_stopreq = io_had_stopreq(L);
   size_t nr;
+  io_checkstop_fresh(L, 0, had_stopreq);
+  had_stopreq = io_had_stopreq(L);
   lj_native_enter(L2TG(L));
   nr = fread(buf, size, n, fp);
   actions = lj_native_leave(L);
@@ -214,7 +218,9 @@ static int io_native_ungetc(lua_State *L, int c, FILE *fp)
 
 static int io_native_getc(lua_State *L, FILE *fp, uint32_t *actionsp)
 {
+  int had_stopreq = io_had_stopreq(L);
   int c;
+  io_checkstop_fresh(L, 0, had_stopreq);
   lj_native_enter(L2TG(L));
   c = getc(fp);
   *actionsp = lj_native_leave(L);
@@ -224,7 +230,9 @@ static int io_native_getc(lua_State *L, FILE *fp, uint32_t *actionsp)
 static size_t io_native_fwrite(lua_State *L, const void *buf, size_t size,
 			       size_t n, FILE *fp, uint32_t *actionsp)
 {
+  int had_stopreq = io_had_stopreq(L);
   size_t nw;
+  io_checkstop_fresh(L, 0, had_stopreq);
   lj_native_enter(L2TG(L));
   nw = fwrite(buf, size, n, fp);
   *actionsp = lj_native_leave(L);

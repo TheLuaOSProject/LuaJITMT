@@ -1112,6 +1112,134 @@ local function exercise_table_library_shift_resize()
   end
 end
 
+local function metadispatch_resize_writer(tbl, ready, start, id, n)
+  assert(ready:send(true, 10) == true)
+  local _, ok = start:recv(10)
+  assert(ok == true)
+  for i = 1, n do
+    local ak = 256 + id * 1000000 + i
+    local hk = "metadispatch-grow:" .. id .. ":" .. i
+    tbl[ak] = { owner = id, round = i }
+    tbl[hk] = i
+    if i > 32 and i % 5 == 0 then
+      tbl[ak - 16] = nil
+      tbl["metadispatch-grow:" .. id .. ":" .. (i - 24)] = nil
+    end
+    if i % 64 == 0 then collectgarbage("step") end
+  end
+  return true
+end
+
+local function metadispatch_observer(tbl, ready, start, id, rounds)
+  local inserted = {}
+  assert(ready:send(true, 10) == true)
+  local _, ok = start:recv(10)
+  assert(ok == true)
+  for round = 1, rounds do
+    local probe = tbl.resize_meta_dispatch_probe
+    if type(probe) ~= "table" or probe.tag ~= "resize-metadispatch" then
+      return nil, "__index dispatch changed during resize"
+    end
+    assert_lua_value(probe, "__index dispatch resize")
+
+    local key = "metadispatch-new:" .. id .. ":" .. round
+    local marker = { kind = "metadispatch-new", owner = id, round = round }
+    tbl[key] = marker
+    if rawget(tbl, key) ~= marker then
+      return nil, "__newindex dispatch failed to publish unique key"
+    end
+    inserted[#inserted + 1] = marker
+
+    if round % 12 == 0 then
+      local count = 0
+      for k, v in pairs(tbl) do
+	assert_lua_value(k, "metadispatch traversal key")
+	assert_lua_value(v, "metadispatch traversal value")
+	count = count + 1
+	if count >= 96 then break end
+      end
+    end
+    if round % 16 == 0 then
+      collectgarbage("step")
+      if id == 1 then th.sleep(0.001) end
+    end
+  end
+  return inserted
+end
+
+local function exercise_metamethod_dispatch_resize()
+  local t = {}
+  local probe = { tag = "resize-metadispatch" }
+  local fallback = { resize_meta_dispatch_probe = probe }
+  local mt = {
+    __index = fallback,
+    __newindex = function(self, key, value)
+      rawset(self, key, value)
+    end
+  }
+  local weak = setmetatable({}, { __mode = "v" })
+  local weak_inserted = setmetatable({}, { __mode = "v" })
+  local tokens = {}
+  local observers = 2
+  local nworkers = writers + observers
+  local ready, start = ready_start(nworkers)
+  local workers = {}
+
+  weak[1] = mt
+  weak[2] = fallback
+  weak[3] = probe
+  setmetatable(t, mt)
+  mt = nil
+  fallback = nil
+  probe = nil
+
+  for i = 1, 96 do t[i] = { kind = "metadispatch-prefix", slot = i } end
+  for i = 1, writers do
+    workers[#workers + 1] =
+      th.spawn(metadispatch_resize_writer, t, ready, start, i, reps)
+  end
+  for i = 1, observers do
+    workers[#workers + 1] =
+      th.spawn(metadispatch_observer, t, ready, start, i, traversal_rounds)
+  end
+
+  harness.wait_ready(ready, nworkers, 10, "metamethod dispatch resize")
+  harness.release_start(start, nworkers, 10)
+  collect_while_working(128)
+  harness.join_each(workers, function(result, _, msg)
+    if result == true then return end
+    assert(type(result) == "table", tostring(msg or result))
+    for i = 1, #result do
+      local marker = result[i]
+      local token = marker.owner .. ":" .. marker.round
+      tokens[#tokens + 1] = token
+      weak_inserted[token] = marker
+    end
+  end, 30)
+
+  harness.fullgc(3)
+
+  assert(type(weak[1]) == "table",
+	 "GC missed metatable during metamethod resize dispatch")
+  assert(type(weak[2]) == "table",
+	 "GC missed __index table during metamethod resize dispatch")
+  assert(type(weak[3]) == "table",
+	 "GC missed __index value during metamethod resize dispatch")
+  assert(t.resize_meta_dispatch_probe == weak[3],
+	 "__index dispatch changed after resize")
+  for i = 1, #tokens do
+    local token = tokens[i]
+    assert(type(weak_inserted[token]) == "table",
+	   "__newindex marker was not kept live by resized table")
+  end
+  for i = 1, 64 do
+    local v = t[i]
+    assert(type(v) == "table",
+	   "metamethod dispatch resize changed stable prefix")
+    assert_lua_value(v, "metamethod dispatch resize prefix")
+  end
+end
+
 local ran = 0
 ran = ran + run_case("weak", exercise_weak_clear_resize)
 ran = ran + run_case("gcmark", exercise_gc_mark_resize)
@@ -1128,6 +1256,7 @@ ran = ran + run_case("traversal", exercise_concurrent_traversal_resize)
 ran = ran + run_case("nextchurn", exercise_next_churn_resize)
 ran = ran + run_case("tablelib", exercise_table_library_resize)
 ran = ran + run_case("tablelibshift", exercise_table_library_shift_resize)
+ran = ran + run_case("metadispatch", exercise_metamethod_dispatch_resize)
 assert(ran > 0, "no table resize stress cases selected")
 
 print(("t-tab-resize-stress OK: %d writers, %d resize rounds"):format(

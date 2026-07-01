@@ -83,6 +83,36 @@ LJ_FUNCA void lj_tab_wait_l(lua_State *L)
   (void)lj_thr_sleep_ns(L, 1000000);
 }
 
+static uint32_t tab_struct_tid(lua_State *L)
+{
+  TGState *tg = L ? L2TG(L) : lj_thr_get_tg();
+  uint32_t tid = tg ? lj_tg_tid_acq(tg) : 0;
+  return tid != 0 ? tid : ~(uint32_t)0;
+}
+
+int lj_tab_struct_enter(lua_State *L)
+{
+  global_State *g = G(L);
+  uint32_t tid = tab_struct_tid(L);
+  for (;;) {
+    uint32_t owner = gc2_tab_struct_owner_acq(g);
+    if (owner == tid)
+      return 0;
+    if (owner == 0) {
+      uint32_t expect = 0;
+      if (gc2_tab_struct_owner_cas(g, &expect, tid))
+	return 1;
+    }
+    lj_tab_wait_no_l();
+  }
+}
+
+void lj_tab_struct_leave(lua_State *L, int acquired)
+{
+  if (acquired)
+    gc2_tab_struct_owner_rel(G(L), 0);
+}
+
 static LJ_AINLINE int tab_hash_key_hidden(cTValue *key)
 {
   return tvisnil(key) || tab_key_islocked(key);
@@ -300,13 +330,21 @@ static LJ_AINLINE int tab_array_slot_absent_acq(GCtab *t, TValue **arrayp,
     TValue *array = *arrayp;
     lj_tv_load_acq(&val, &array[idx]);
     if (tvisforward(&val)) {
+      TValue *oldarray = array;
       MSize nextasize = *asizep;
       TValue *nextarray = array;
-      if (lj_tab_array_forward_hop_forward(t, &nextarray, &nextasize) &&
-	  idx < nextasize) {
-	*arrayp = nextarray;
-	*asizep = nextasize;
-	continue;
+      if (lj_tab_array_forward_hop_forward(t, &nextarray, &nextasize)) {
+	if (idx < nextasize) {
+	  TValue nextval;
+	  lj_tv_load_acq(&nextval, &nextarray[idx]);
+	  if (tvisnil(&nextval) && lj_tab_array_acq(t) == oldarray) {
+	    lj_tab_wait_no_l();
+	    continue;
+	  }
+	  *arrayp = nextarray;
+	  *asizep = nextasize;
+	  continue;
+	}
       }
       if (lj_tab_array_acq(t) != array) {
 	*asizep = lj_tab_array_snapshot_acq(t, arrayp);
@@ -910,6 +948,7 @@ void lj_tab_resize(lua_State *L, GCtab *t, uint32_t asize, uint32_t hbits)
   TabNodeRetire *oldret;
   TabArrayRetire *oldaret;
   int array_next_claimed;
+  int struct_acq;
   Node *node_succ;
 
 restart_resize:
@@ -928,6 +967,7 @@ restart_resize:
   oldret = NULL;
   oldaret = NULL;
   array_next_claimed = 0;
+  struct_acq = 0;
   node_succ = NULL;
   hash_flags0 = oldhmask > 0 ? lj_tab_node_hdr_flags_word_acq(oldnode) : 0;
   if (oldhmask > 0 && (hash_flags0 & (uint32_t)TABNODE_FLAG_RETIRING)) {
@@ -970,6 +1010,7 @@ restart_resize:
     oldret = tab_retire_reserve(L, oldnode, oldhmask);
   if (newarray && oldarray_separated && oldacap > 0)
     oldaret = tab_array_retire_reserve(L, oldarray, oldacap);
+  struct_acq = lj_tab_struct_enter(L);
   {
     TValue *curarray;
     MSize curasize = lj_tab_array_snapshot_acq(t, &curarray);
@@ -1119,6 +1160,7 @@ restart_resize:
   if (oldhmask > 0)
     lj_assertL(oldret && la_load32_acq(&oldret->armed),
 	       "retired table nodes not armed");
+  lj_tab_struct_leave(L, struct_acq);
   return;
 
 retry_resize:
@@ -1132,6 +1174,7 @@ retry_resize:
     tab_array_free(g, array, newacap);
   tab_retire_discard(g, oldret);
   tab_array_retire_discard(g, oldaret);
+  lj_tab_struct_leave(L, struct_acq);
   lj_tab_wait_no_l();
   goto restart_resize;
 }

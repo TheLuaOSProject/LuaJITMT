@@ -140,7 +140,7 @@ static void expect_opt_start_waits_for_token(lua_State *L)
 
 static void clear_stopreq(TGState *tg)
 {
-  (void)lj_tg_flags_and_rlx(tg, (uint8_t)~TGF_STOPREQ);
+  (void)lj_tg_flags_and_rlx(tg, (uint8_t)~(TGF_STOPREQ|TGF_STOPREQ_FRESH));
 }
 
 static void expect_token_wait_stopreq(lua_State *L, const char *code)

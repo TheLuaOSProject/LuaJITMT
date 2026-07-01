@@ -62,7 +62,6 @@ LJ_NOINLINE uint64_t LJ_FASTCALL lj_prng_u64d(PRNGState *rs)
   return (r & U64x(000fffff,ffffffff)) | U64x(3ff00000,00000000);
 }
 
-#if LUAJIT_SECURITY_PRNG != 0
 /* Condition seed: ensure k[i] MSB of u[i] are non-zero. */
 static LJ_AINLINE void lj_prng_condition(PRNGState *rs)
 {
@@ -71,7 +70,6 @@ static LJ_AINLINE void lj_prng_condition(PRNGState *rs)
   if (rs->u[2] < (1u << 9)) rs->u[2] += (1u << 9);
   if (rs->u[3] < (1u << 17)) rs->u[3] += (1u << 17);
 }
-#endif
 
 static uint64_t prng_splitmix64(uint64_t *x)
 {
@@ -243,12 +241,9 @@ static int prng_had_stopreq(lua_State *L)
 static int prng_fresh_stopreq(lua_State *L, uint32_t actions,
 			      int had_stopreq)
 {
-  TGState *tg;
   if (!L)
     return 0;
-  tg = L2TG(L);
-  return (actions & LJ_GC2_HS_STOPREQ) ||
-    (!had_stopreq && tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ));
+  return lj_safepoint_fresh_stopreq(L, actions, had_stopreq);
 }
 
 static void prng_checkstop_fresh(lua_State *L, uint32_t actions,

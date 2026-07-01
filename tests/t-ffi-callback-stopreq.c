@@ -114,7 +114,7 @@ static int callback_clear_stopreq_c(lua_State *L)
   assert(lj_tg_flags_test_acq(test_tg, TGF_STOPREQ));
   assert(lj_tg_poll_acq(test_tg) == 0);
   assert(lj_tg_reqmask_acq(test_tg) == 0);
-  lj_tg_flags_and_rlx(test_tg, (uint8_t)~TGF_STOPREQ);
+  lj_tg_flags_and_rlx(test_tg, (uint8_t)~(TGF_STOPREQ|TGF_STOPREQ_FRESH));
   return 0;
 }
 

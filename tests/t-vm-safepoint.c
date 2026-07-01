@@ -667,7 +667,7 @@ int main(void)
     assert_acked(g, tg, epoch0);
     assert((la_load8_acq(&tg->tg_flags) & TGF_STOPREQ) != 0);
     la_store8_rel(&tg->tg_flags,
-		  (uint8_t)(la_load8_acq(&tg->tg_flags) & ~TGF_STOPREQ));
+		  (uint8_t)(la_load8_acq(&tg->tg_flags) & ~(TGF_STOPREQ|TGF_STOPREQ_FRESH)));
   }
 #endif
 

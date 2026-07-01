@@ -56,14 +56,20 @@ static void safepoint_note_ack_latency(global_State *g)
   }
 }
 
-static void safepoint_wait_consumed_ack(TGState *tg)
+static int safepoint_wait_consumed_ack(TGState *tg)
 {
   uint32_t poll;
   /* A native-ack leader clears poll only after it finishes applying actions.
   ** If this thread races with that consumed request, it must not resume the VM
-  ** while the leader may still be scanning its Lua stack. */
-  while ((poll = lj_tg_poll_acq(tg)) != 0)
-    lj_tg_poll_futex_wait(tg, poll, -1);
+  ** while the leader may still be scanning its Lua stack. A late reqmask store
+  ** can become visible after the poll check without waking the poll futex, so
+  ** use a short timed wait and let the caller retry when work appears. */
+  while ((poll = lj_tg_poll_acq(tg)) != 0) {
+    if (lj_tg_reqmask_acq(tg) != 0)
+      return 1;
+    lj_tg_poll_futex_wait(tg, poll, 1000000);
+  }
+  return 0;
 }
 
 static void safepoint_clear_poll(TGState *tg)
@@ -112,7 +118,7 @@ void lj_safepoint_apply_tg(global_State *g, TGState *tg, uint32_t actions)
   if (actions & LJ_GC2_HS_EXIT_TRACES)
     lj_trace_abort(g);  /* 08 section 8.7: no active recorder past ack. */
   if (actions & LJ_GC2_HS_STOPREQ)
-    lj_tg_flags_or_rlx(tg, TGF_STOPREQ);  /* 09 section 9.6 shutdown. */
+    lj_tg_flags_or_rlx(tg, TGF_STOPREQ|TGF_STOPREQ_FRESH);
 }
 
 static uint32_t safepoint_ack_tg(global_State *g, TGState *tg,
@@ -128,13 +134,22 @@ retry:
     if (lj_tg_poll_acq(tg) != 0) {
       if (lj_tg_reqmask_acq(tg) != 0)
 	goto retry;
-      safepoint_wait_consumed_ack(tg);
+      if (safepoint_wait_consumed_ack(tg))
+	goto retry;
     }
     return 0;
   }
   epoch = gc2_hs_epoch_acq(g);  /* 05 section 5.4.2 epoch. */
-  if (!safepoint_claim_epoch(tg, epoch))
-    return 0;
+  if (!safepoint_claim_epoch(tg, epoch)) {
+    lj_safepoint_apply_tg(g, tg, actions);
+    if (note_latency)
+      safepoint_note_ack_latency(g);
+    safepoint_clear_poll(tg);
+    oldpending = gc2_hs_pending_sub_acqrel(g, 1);
+    if (oldpending == 1)
+      gc2_hs_pending_futex_wake(g, 1);
+    return actions;
+  }
   lj_safepoint_apply_tg(g, tg, actions);
   if (note_latency)
     safepoint_note_ack_latency(g);  /* 13.8: mutator-observed poll latency. */
@@ -158,8 +173,12 @@ uint32_t lj_safepoint_retire_dead_tg(global_State *g, TGState *tg)
   if (!pending)
     return 0;
   epoch = gc2_hs_epoch_acq(g);
-  if (!safepoint_claim_epoch(tg, epoch))
+  if (!safepoint_claim_epoch(tg, epoch)) {
+    oldpending = gc2_hs_pending_sub_acqrel(g, 1);
+    if (oldpending == 1)
+      gc2_hs_pending_futex_wake(g, 1);
     return 0;
+  }
   oldpending = gc2_hs_pending_sub_acqrel(g, 1);
   if (oldpending == 1)
     gc2_hs_pending_futex_wake(g, 1);

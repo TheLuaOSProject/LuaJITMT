@@ -400,6 +400,17 @@ JIT-compiled `pairs`, `ipairs`, direct `next`, and stable table reads while
 sibling threads grow and prune array/hash generations, asserting crash freedom,
 no exposed internal sentinels, and intact stable anchors under ordinary racy
 Lua table mutation.
+The same resize stress now includes a `metadispatch` slice for Lua-visible
+metamethod dispatch: inherited `__index` reads, unique-key `__newindex` writes,
+bounded traversal, GC liveness of the metatable/fallback, and sentinel filtering
+while sibling threads force array/hash generation churn.
+Current M5 hardening adds a short active-MT structural token for resize
+publication and compound table-library shifts, plus a forwarded-array retry so
+readers do not treat an in-flight migration slot as a real nil. New trace
+recording is temporarily disabled while multiple TGs are active; stock
+single-threaded JIT behavior is unchanged, and the remaining M5/M6 work is to
+teach the recorder/JIT store helpers generation-following guards so traced
+table mutation can be re-enabled under MT.
 ### 6.3.6 next/pairs (lj_tab_next)
 Iterate the *gen snapshot* captured at first call: store the NH pointer in
 the iterator control slot? Lua's `next(t,k)` is stateless — DECIDED:

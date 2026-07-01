@@ -6,6 +6,8 @@
 #define lj_tg_c
 #define LUA_CORE
 
+#include <stdlib.h>
+
 #include "lj_obj.h"
 #include "lj_atomic.h"
 #include "lj_buf.h"
@@ -20,9 +22,11 @@
 
 static void tg_init_ssb(TGState *tg)
 {
+  tg->ssb_node[0].pad = 0;
   lj_gc2_ssb_owner_rel(&tg->ssb_node[0], tg);
   lj_gc2_ssb_next_rel(&tg->ssb_node[0], NULL);
   lj_gc2_ssb_count_rel(&tg->ssb_node[0], 0);
+  tg->ssb_node[1].pad = 0;
   lj_gc2_ssb_owner_rel(&tg->ssb_node[1], tg);
   lj_gc2_ssb_next_rel(&tg->ssb_node[1], NULL);
   lj_gc2_ssb_count_rel(&tg->ssb_node[1], 0);
@@ -31,6 +35,28 @@ static void tg_init_ssb(TGState *tg)
   lj_tg_ssb_base_rel(tg, tg->ssb_node[0].slot);
   lj_tg_ssb_next_rel(tg, tg->ssb_node[0].slot);
   lj_tg_ssb_end_rel(tg, tg->ssb_node[0].slot + TG_GC2_SSB_SLOTS);
+}
+
+void lj_tg_fini_ssb(TGState *tg)
+{
+  GC2SSBNode *node, *next;
+  if (!tg)
+    return;
+  node = lj_tg_ssb_active_acq(tg);
+  if (node && (node->pad & TG_GC2_SSB_DYNAMIC))
+    free(node);
+  lj_tg_ssb_active_rel(tg, NULL);
+  lj_tg_ssb_base_rel(tg, NULL);
+  lj_tg_ssb_next_rel(tg, NULL);
+  lj_tg_ssb_end_rel(tg, NULL);
+  node = lj_tg_ssb_free_acq(tg);
+  lj_tg_ssb_free_store_rlx(tg, NULL);
+  while (node) {
+    next = lj_gc2_ssb_next_acq(node);
+    if (node->pad & TG_GC2_SSB_DYNAMIC)
+      free(node);
+    node = next;
+  }
 }
 
 static void tg_init_common(global_State *g, TGState *tg, lua_State *L)
@@ -76,6 +102,7 @@ void lj_tg_init(GG_State *GG, int alloc_ready)
 void lj_tg_fini(global_State *g)
 {
   if (g->main_tg) {
+    lj_tg_fini_ssb(g->main_tg);
     lj_buf_free(g, &g->main_tg->tmpbuf);
     if (lj_tg_flags_test_acq(g->main_tg, TGF_HUGETAB))
       lj_arena_hugetab_fini(&g->main_tg->huge);
@@ -113,6 +140,7 @@ void lj_tg_fini_thread(global_State *g, TGState *tg)
 {
   if (!tg)
     return;
+  lj_tg_fini_ssb(tg);
   lj_buf_free(g, &tg->tmpbuf);
   if (lj_tg_flags_test_acq(tg, TGF_HUGETAB))
     lj_arena_hugetab_fini(&tg->huge);

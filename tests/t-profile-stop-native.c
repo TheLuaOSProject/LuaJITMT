@@ -29,7 +29,7 @@
 static void clear_stopreq(TGState *tg)
 {
   uint8_t flags = la_load8_acq(&tg->tg_flags);
-  la_store8_rel(&tg->tg_flags, (uint8_t)(flags & ~TGF_STOPREQ));
+  la_store8_rel(&tg->tg_flags, (uint8_t)(flags & ~(TGF_STOPREQ|TGF_STOPREQ_FRESH)));
 }
 
 static void set_stopreq(TGState *tg)

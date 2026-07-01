@@ -1424,6 +1424,7 @@ typedef struct GC2State {
   uint64_t sweep_live_updates;  /* Sweep-closure live estimate refreshes. */
   uint64_t sweep_live_huge_bytes;  /* Marked traversable huge bytes observed. */
   uint64_t live_estimate;  /* GC2 live bytes from swept traversable memory. */
+  uint32_t tab_struct_owner;  /* Table resize/compound array op owner tid. */
   GCRef *weak_stack;	/* GC2-owned weak-table discovery vector. */
   uint8_t *weak_ready;	/* Published weak discovery slots. */
   MSize weak_capacity;	/* Allocated weak discovery slots. */
@@ -4006,6 +4007,30 @@ static LJ_AINLINE void gc2_live_estimate_store_rlx(global_State *g,
 static LJ_AINLINE void gc2_live_estimate_rel(global_State *g, uint64_t bytes)
 {
   la_store64_rel(&g->gc2.live_estimate, bytes);
+}
+
+static LJ_AINLINE uint32_t gc2_tab_struct_owner_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.tab_struct_owner);
+}
+
+static LJ_AINLINE void gc2_tab_struct_owner_store_rlx(global_State *g,
+						      uint32_t owner)
+{
+  la_store32_rlx(&g->gc2.tab_struct_owner, owner);
+}
+
+static LJ_AINLINE void gc2_tab_struct_owner_rel(global_State *g,
+						uint32_t owner)
+{
+  la_store32_rel(&g->gc2.tab_struct_owner, owner);
+}
+
+static LJ_AINLINE int gc2_tab_struct_owner_cas(global_State *g,
+					       uint32_t *oldp,
+					       uint32_t owner)
+{
+  return la_cas32(&g->gc2.tab_struct_owner, oldp, owner, LA_ACQ_REL, LA_ACQ);
 }
 
 static LJ_AINLINE uint32_t gc2_n_workers_acq(global_State *g)

@@ -286,6 +286,12 @@ static void LJ_FASTCALL recff_rawget(jit_State *J, RecordFFData *rd)
 static void LJ_FASTCALL recff_rawset(jit_State *J, RecordFFData *rd)
 {
   RecordIndex ix;
+  /*
+  ** M5/M6: explicit rawset() can install new array/hash slots while bypassing
+  ** metamethod guards. Keep it in the VM until traced helper stores can side
+  ** exit after following a resized table generation without stale slot users.
+  */
+  lj_trace_err(J, LJ_TRERR_NYIFFU);
   ix.tab = J->base[0]; ix.key = J->base[1]; ix.val = J->base[2];
   if (tref_istab(ix.tab) && ix.key && ix.val) {
     ix.idxchain = 0;

@@ -50,7 +50,12 @@ static int threading_had_stopreq(lua_State *L)
 static int threading_pending_stopreq(lua_State *L)
 {
   TGState *tg = L2TG(L);
-  return tg && (lj_tg_reqmask_acq(tg) & LJ_GC2_HS_STOPREQ);
+  if (!tg)
+    return 0;
+  if (lj_tg_reqmask_acq(tg) & LJ_GC2_HS_STOPREQ)
+    return 1;
+  return lj_tg_poll_acq(tg) != 0 &&
+    (gc2_hs_actions_acq(G(L)) & LJ_GC2_HS_STOPREQ);
 }
 
 static uint32_t threading_poll_pending_stopreq(lua_State *L, uint32_t actions)
@@ -63,9 +68,7 @@ static uint32_t threading_poll_pending_stopreq(lua_State *L, uint32_t actions)
 static int threading_fresh_stopreq(lua_State *L, uint32_t actions,
 				   int had_stopreq)
 {
-  TGState *tg = L2TG(L);
-  return (actions & LJ_GC2_HS_STOPREQ) ||
-    (!had_stopreq && tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ));
+  return lj_safepoint_fresh_stopreq(L, actions, had_stopreq);
 }
 
 static void threading_checkstop_fresh(lua_State *L, uint32_t actions,
@@ -561,6 +564,9 @@ static int threading_join_core(lua_State *L, LJThread *th, int has_timeout,
   int join_had_stopreq = threading_had_stopreq(L);
   int64_t deadline = ns > 0 ? threading_deadline_ns(ns) : 0;
   uint32_t state;
+  join_actions = threading_poll_pending_stopreq(L, join_actions);
+  threading_checkstop_fresh(L, join_actions, join_had_stopreq);
+  join_had_stopreq = threading_had_stopreq(L);
   if (threading_is_current_thread(L, th)) {
     if (has_timeout) {
       setnilV(L->top++);

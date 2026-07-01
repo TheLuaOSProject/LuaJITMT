@@ -151,7 +151,8 @@ static int clear_stopreq_c(lua_State *L)
   assert(tg->hs_epoch_ack == g->gc2.hs_epoch);
   flags = la_load8_acq(&tg->tg_flags);
   assert((flags & TGF_STOPREQ) != 0);
-  la_store8_rel(&tg->tg_flags, (uint8_t)(flags & ~TGF_STOPREQ));
+  la_store8_rel(&tg->tg_flags,
+		(uint8_t)(flags & ~(TGF_STOPREQ|TGF_STOPREQ_FRESH)));
   return 0;
 }
 
@@ -550,7 +551,8 @@ static int assert_no_stopreq_c(lua_State *L)
   assert(g->gc2.hs_pending == 0);
   assert(tg->poll == 0);
   assert(tg->reqmask == 0);
-  assert((la_load8_acq(&tg->tg_flags) & TGF_STOPREQ) == 0);
+  assert((la_load8_acq(&tg->tg_flags) &
+	  (TGF_STOPREQ|TGF_STOPREQ_FRESH)) == 0);
   return 0;
 }
 
@@ -791,7 +793,7 @@ int main(void)
   assert(g->gc2.hs_pending == 0);
   assert(g->gc2.hs_actions == actions);
   assert((tg->tg_flags & TGF_STOPREQ) != 0);
-  tg->tg_flags &= (uint8_t)~TGF_STOPREQ;
+  tg->tg_flags &= (uint8_t)~(TGF_STOPREQ|TGF_STOPREQ_FRESH);
 
 #if LJ_HASJIT
   assert(luaL_dostring(L,

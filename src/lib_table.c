@@ -65,6 +65,33 @@ static TValue *table_insert_value_store(lua_State *L, GCtab *t, int32_t i,
   }
 }
 
+static MSize table_insert_len(lua_State *L, GCtab *t)
+{
+  if (!mt_active_acq(G(L)))
+    return lj_tab_len(t);
+  for (;;) {
+    TValue *array0, *array1;
+    Node *node0, *node1;
+    MSize asize0, asize1, hmask0, hmask1, n;
+    asize0 = lj_tab_array_snapshot_acq(t, &array0);
+    node0 = lj_tab_node_snapshot_acq(t, &hmask0);
+    if ((array0 && lj_tab_array_is_retiring(t, array0)) ||
+	(hmask0 > 0 && lj_tab_node_is_retiring(node0))) {
+      lj_tab_wait_no_l();
+      continue;
+    }
+    n = lj_tab_len(t);
+    asize1 = lj_tab_array_snapshot_acq(t, &array1);
+    node1 = lj_tab_node_snapshot_acq(t, &hmask1);
+    if (array0 == array1 && asize0 == asize1 &&
+	node0 == node1 && hmask0 == hmask1 &&
+	(!array1 || !lj_tab_array_is_retiring(t, array1)) &&
+	(hmask1 == 0 || !lj_tab_node_is_retiring(node1)))
+      return n;
+    lj_tab_wait_no_l();
+  }
+}
+
 LJLIB_LUA(table_foreachi) /*
   function(t, f)
     CHECK_tab(t)
@@ -160,15 +187,24 @@ LJLIB_CF(table_maxn)
 LJLIB_CF(table_insert)		LJLIB_REC(.)
 {
   GCtab *t = lj_lib_checktab(L, 1);
-  int32_t n, i = (int32_t)lj_tab_len(t) + 1;
+  int32_t n, i = (int32_t)table_insert_len(L, t) + 1;
   int nargs = (int)((char *)L->top - (char *)L->base);
+  int guard = 0;
   if (nargs != 2*sizeof(TValue)) {
     if (nargs != 3*sizeof(TValue))
       lj_err_caller(L, LJ_ERR_TABINS);
+    n = lj_lib_checkint(L, 2);
+    if (mt_active_acq(G(L))) {
+      (void)lj_tab_setint(L, t, n > i ? n : i);
+      guard = lj_tab_struct_enter(L);
+    }
     /* Shifted weak-table writes still need the P_WEAK bridge. */
-    for (n = lj_lib_checkint(L, 2); i > n; i--)
+    for (; i > n; i--)
       table_insert_shift_store(L, t, i);
     i = n;
+  } else if (mt_active_acq(G(L))) {
+    (void)lj_tab_setint(L, t, i);
+    guard = lj_tab_struct_enter(L);
   }
   {
     TValue *dst = table_insert_value_store(L, t, i, L->top-1);
@@ -177,6 +213,7 @@ LJLIB_CF(table_insert)		LJLIB_REC(.)
     lj_gc2_barrier_weak_write(L, t, &key, L->top-1);
     lj_gc_pubtabtv(L, t, dst);
   }
+  lj_tab_struct_leave(L, guard);
   return 0;
 }
 
