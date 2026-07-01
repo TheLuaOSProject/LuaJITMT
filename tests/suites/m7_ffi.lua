@@ -117,7 +117,11 @@ return function(add)
           cfile = "t-ffi-lib-native-stopreq.c",
           opts = { timeout = "20s" } },
         { output = "lj_t-ffi-ccall-stopreq",
-          cfile = "t-ffi-ccall-stopreq.c" }
+          cfile = "t-ffi-ccall-stopreq.c",
+          opts = {
+            env = { LJ_M7_FFI_CCALL_JIT_SO = jit_so },
+            timeout = "20s"
+          } }
       })
       run_luajit_script(t, "t-ffi-ccall-native.lua", nil, {
         env = { LJ_M7_FFI_CCALL_JIT_SO = jit_so },

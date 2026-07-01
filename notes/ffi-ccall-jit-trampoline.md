@@ -27,6 +27,11 @@ risking the direct backend `IR_CALLXS` register/result ordering. The full
 direct bridge still needs x64 lowering that brackets the foreign ABI call
 without clobbering argument or result registers.
 
+`tests/t-ffi-ccall-stopreq.c` also heats the shared `sleep_i32` trampoline until
+a trace exists, starts the STOPREQ publisher only after that warmup, and catches
+the shutdown error from a traced native sleep through `pcall()`. This pins the
+`CCI_T`/snapshot side of the helper-call bridge.
+
 Validation:
 
 - `make -C src -j$(getconf _NPROCESSORS_ONLN)`
