@@ -19,7 +19,9 @@ accepts exact `double(int32_t)`, `double(pointer)`, `double(float)`,
 `int32_t(double)`, `int32_t(float)`, `int32_t(int8_t)`, `pointer(double)`,
 `void(double)`, `void(float)`, and `float(double)`. The first exact
 three-argument subset accepts `int32_t(void *, unsigned long, int32_t)` calls,
-including the common `poll(nil, 0, 0)` shape. The recorder emits
+including the common `poll(nil, 0, 0)` shape, plus the POSIX-shaped
+`int64_t(int32_t, pointer, uint64_t)` class used by calls such as
+`ssize_t write(int, void *, size_t)`. The recorder emits
 `lj_ccall_jit_void_gpr()`, `lj_ccall_jit_i32_gpr()`,
 `lj_ccall_jit_i64_gpr()`, or `lj_ccall_jit_ptr_gpr()` plus a tiny signature
 code for the GPR argument shape, `lj_ccall_jit_u32_0()` /
@@ -35,6 +37,8 @@ integer results, `lj_ccall_jit_num_i32()`, `lj_ccall_jit_num_ptr()`,
 `lj_ccall_jit_ptr_num()`,
 `lj_ccall_jit_void_num()`, `lj_ccall_jit_void_flt()`, and
 `lj_ccall_jit_flt_num()` for the mixed one-argument shapes,
+`lj_ccall_jit_i64_i32_ptr_u64()` for the exact int/pointer/size argument
+shape,
 `lj_ccall_jit_i32_ptr_ulong_i32()` for the exact pointer/unsigned-long/int
 shape, or
 `lj_ccall_jit_num_fpr()` / `lj_ccall_jit_flt_fpr()` for the FP-only FPR shapes.
@@ -63,6 +67,8 @@ The scope is deliberately narrow:
 - exact `int32_t(void *, unsigned long, int32_t)` calls, with the
   `unsigned long` argument converted before the helper casts to the host ABI
   width;
+- exact `int64_t(int32_t, pointer, uint64_t)` calls, with the final argument
+  converted before the helper casts to the unsigned 64-bit ABI width;
 - zero-argument exact signed 64-bit integer returns;
 - zero-argument exact unsigned 64-bit integer returns;
 - exact signed/unsigned 64-bit integer returns with signed 32-bit, unsigned
@@ -91,7 +97,8 @@ int8-to-int loops, signed-int/unsigned-int/pointer to int64/uint64 cdata-result
 loops, zero-argument signed int64 and unsigned uint64 cdata-result loops, exact
 one- and two-argument int64/uint64 mixed-signedness argument/result loops, traced
 single-argument int64/uint64 calls returning void, int32, uint32, narrow
-integers, or pointers, traced `poll(nil, 0, 0)`-style loops, FP-only numeric
+integers, or pointers, traced `poll(nil, 0, 0)`-style loops,
+`write`-shaped int/pointer/size loops, FP-only numeric
 call loops, signed-narrow-to-`unsigned long` conversion probes, and
 mixed float/double one-argument calls a traced, nonblocking native-state path,
 without risking the direct backend `IR_CALLXS` register/result ordering. The
