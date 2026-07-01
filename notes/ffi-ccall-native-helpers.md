@@ -28,26 +28,31 @@ delayed helper check.
 This remains infrastructure for a future direct `IR_CALLXS` bridge. The narrow
 `lj_ccall_jit_{void,i32,ptr}_gpr()` trampoline family now traces exact void,
 signed 32-bit integer, and pointer-returning calls with 0, 1, or 2
-integer/pointer arguments through `IRCALL` helpers using this same native-state
+integer/pointer arguments, plus exact `pointer,int64_t` and `pointer,uint64_t`
+argument pairs, through `IRCALL` helpers using this same native-state
 protocol. `lj_ccall_jit_i64_gpr()` handles exact zero-argument signed 64-bit
 integer returns and exact `int64_t(int64_t)` calls, preserving boxed int64 cdata
 results.
 `lj_ccall_jit_i64_ret_gpr()` extends boxed int64 returns to exact signed 32-bit
-integer or pointer arguments.
+integer or pointer arguments, plus exact `pointer,int64_t` and
+`pointer,uint64_t` pairs.
 `lj_ccall_jit_narrow_0()` handles exact zero-argument signed/unsigned 8-bit and
 16-bit integer returns as Lua numbers, after calling through the exact C return
 type. `lj_ccall_jit_narrow_gpr()` extends those exact narrow returns to signed
-32-bit integer or pointer arguments.
+32-bit integer or pointer arguments, plus exact `pointer,int64_t` and
+`pointer,uint64_t` pairs.
 `lj_ccall_jit_u32_0()` handles exact zero-argument unsigned 32-bit integer
 returns as Lua numbers without high-bit truncation. `lj_ccall_jit_u32_gpr()`
 extends that high-bit-safe result conversion to unsigned 32-bit returns with
-exact signed 32-bit integer or pointer arguments. `lj_ccall_jit_u32_u32()`
+exact signed 32-bit integer or pointer arguments, plus exact
+`pointer,int64_t` and `pointer,uint64_t` pairs. `lj_ccall_jit_u32_u32()`
 handles exact `uint32_t(uint32_t)` / `unsigned int(unsigned int)` calls with
 the same native-state protocol and high-bit-safe Lua number result conversion.
 `lj_ccall_jit_u64_0()` handles
 exact zero-argument unsigned 64-bit integer returns and preserves boxed uint64
 cdata results; `lj_ccall_jit_u64_gpr()` does the same for exact signed 32-bit
-integer or pointer arguments. `lj_ccall_jit_u64_u64()` handles exact
+integer or pointer arguments, plus exact `pointer,int64_t` and
+`pointer,uint64_t` pairs. `lj_ccall_jit_u64_u64()` handles exact
 `uint64_t(uint64_t)` calls. The sibling
 `lj_ccall_jit_{num,flt}_fpr()` helpers trace exact double or float returns with
 0, 1, or 2 same-kind exact FP arguments. `lj_ccall_jit_num_i32()`,
@@ -62,7 +67,9 @@ signed narrow argument conversion.
 pointer/size/int shape, including `ffi.C.poll(nil, 0, 0)`, while preserving the
 host ABI's `unsigned long` width at the final C call; the shared-library test
 also passes a signed narrow cdata value through the regular unsigned-long
-conversion path. Broad traced
+conversion path. Exact two-argument `pointer,int64_t` and `pointer,uint64_t`
+span-style shapes are covered by the shared GPR helper matrix, while broader
+pointer/size families still fall back. Broad traced
 ordinary FFI C calls remain disabled by
 `LJ_FFI_RECORD_CALLS=0` because x64 `IR_CALLXS` lowering still needs explicit
 result preservation and carefully ordered native entry relative to ABI argument

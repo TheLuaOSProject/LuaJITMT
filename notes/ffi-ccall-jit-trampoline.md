@@ -13,7 +13,9 @@ cdata-result slices accept one or two `int64_t` and/or `uint64_t` arguments,
 with the helper signature preserving signedness for each argument. The first
 64-bit GPR argument slice also accepts exact one-argument `int64_t` or
 `uint64_t` calls for void, signed 32-bit, unsigned 32-bit, narrow integer, and
-pointer returns. The FPR subset accepts 0, 1, or 2 same-kind exact
+pointer returns, plus exact two-argument `pointer,int64_t` and
+`pointer,uint64_t` span-style calls for those same return families. The FPR
+subset accepts 0, 1, or 2 same-kind exact
 float or double arguments. The first mixed one-argument subset
 accepts exact `double(int32_t)`, `double(pointer)`, `double(float)`,
 `int32_t(double)`, `int32_t(float)`, `int32_t(int8_t)`, `pointer(double)`,
@@ -84,6 +86,9 @@ The scope is deliberately narrow:
   signedness preserved;
 - exact one-argument `int64_t` or `uint64_t` calls for void, signed 32-bit,
   unsigned 32-bit, narrow integer, and pointer return families;
+- exact two-argument `pointer,int64_t` and `pointer,uint64_t` calls for void,
+  signed 32-bit, unsigned 32-bit, narrow integer, signed/unsigned 64-bit cdata,
+  and pointer return families;
 - same-kind exact float/double arguments and exact float/double returns;
 - exact one-argument `double(int32_t)`, `double(pointer)`, `double(float)`,
   `int32_t(double)`, `int32_t(float)`, `int32_t(int8_t)`,
@@ -104,7 +109,8 @@ int8-to-int loops, signed-int/unsigned-int/pointer to int64/uint64 cdata-result
 loops, zero-argument signed int64 and unsigned uint64 cdata-result loops, exact
 one- and two-argument int64/uint64 mixed-signedness argument/result loops, traced
 single-argument int64/uint64 calls returning void, int32, uint32, narrow
-integers, or pointers, traced `poll(nil, 0, 0)`-style loops,
+integers, or pointers, traced pointer/64-bit span loops for the same return
+families, traced `poll(nil, 0, 0)`-style loops,
 POSIX `write`-shaped int/pointer/size loops, UCRT `_write`-shaped
 int/pointer/unsigned-int loops, FP-only numeric
 call loops, signed-narrow-to-`unsigned long` conversion probes, and
