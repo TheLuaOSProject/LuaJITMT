@@ -300,11 +300,13 @@ static void asm_fuseahuref(ASMState *as, IRRef ref, RegSet allow)
       break;
     case IR_TMPREF:
 #if LJ_GC64
-      as->mrm.ofs = DISPATCH_TG(tmptv);
+      as->mrm.ofs = (ir->op2 & (IRTMPREF_IN2|IRTMPREF_OUT2)) ?
+	DISPATCH_TG(tmptv2) : DISPATCH_TG(tmptv);
       as->mrm.base = RID_DISPATCH;
       as->mrm.idx = RID_NONE;
 #else
-      as->mrm.ofs = igcptr(&J2TG(as->J)->tmptv);
+      as->mrm.ofs = (ir->op2 & (IRTMPREF_IN2|IRTMPREF_OUT2)) ?
+	igcptr(&J2TG(as->J)->tmptv2) : igcptr(&J2TG(as->J)->tmptv);
       as->mrm.base = as->mrm.idx = RID_NONE;
 #endif
       return;

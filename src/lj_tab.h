@@ -259,6 +259,8 @@ LJ_FUNCA int32_t LJ_FASTCALL lj_tab_itern_forward(GCtab *t, uint32_t idx,
 						  TValue *ctrl);
 LJ_FUNCA int32_t LJ_FASTCALL lj_tab_vmnext_forward(GCtab *t, uint32_t idx,
 						   TValue *out);
+LJ_FUNCA int32_t lj_tab_vmnext_forjit(lua_State *L, GCtab *t, uint32_t idx,
+				      TValue *outv, TValue *outk);
 
 /* Caveat: all setters require a write barrier for the stored value. */
 

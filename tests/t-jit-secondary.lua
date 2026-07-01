@@ -126,12 +126,42 @@ local worker = th.spawn(function()
   local next_traces = trace_count(32)
   assert(next_traces > 0)
 
+  jit.flush()
+  jit.opt.start("hotloop=1", "hotexit=1", "-sink")
+
+  local shared_next = { alpha = 3, beta = 5, gamma = 7 }
+
+  local function shared_table_next(n)
+    local s = 0
+    for _ = 1, n do
+      local count = 0
+      local subtotal = 0
+      local key = nil
+      while true do
+	local value
+	key, value = next(shared_next, key)
+	if key == nil then break end
+	count = count + 1
+	subtotal = subtotal + value
+      end
+      assert(count == 3)
+      s = s + subtotal
+    end
+    return s
+  end
+
+  for _ = 1, 20 do
+    assert(shared_table_next(80) == 1200)
+  end
+  local shared_next_traces = trace_count(32)
+  assert(shared_next_traces > 0)
+
   return root_traces, side_traces, table_traces, read_traces, index_traces,
-	 write_traces, next_traces, th.current():id()
+	 write_traces, next_traces, shared_next_traces, th.current():id()
 end)
 
 local ok, root_traces, side_traces, table_traces, read_traces, index_traces,
-      write_traces, next_traces, tid = worker:join()
+      write_traces, next_traces, shared_next_traces, tid = worker:join()
 assert(ok == true, tostring(root_traces))
 assert(type(root_traces) == "number" and root_traces > 0)
 assert(type(side_traces) == "number" and side_traces > root_traces)
@@ -140,6 +170,7 @@ assert(type(read_traces) == "number" and read_traces > 0)
 assert(type(index_traces) == "number" and index_traces > 0)
 assert(type(write_traces) == "number" and write_traces > 0)
 assert(type(next_traces) == "number" and next_traces > 0)
+assert(type(shared_next_traces) == "number" and shared_next_traces > 0)
 assert(tid == worker:id())
 
-print("t-jit-secondary OK: secondary TG records, enters, side-traces, allocates tables, reads/writes shared tables, records trace-local next(), and preserves __index reads in x64 mcode")
+print("t-jit-secondary OK: secondary TG records, enters, side-traces, allocates tables, reads/writes shared tables, records trace-local/shared next(), and preserves __index reads in x64 mcode")
