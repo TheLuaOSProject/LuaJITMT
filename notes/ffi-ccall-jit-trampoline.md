@@ -56,6 +56,8 @@ shape,
 argument shape,
 `lj_ccall_jit_i32_ptr_ptr_u64()` for the exact pointer/pointer/size argument
 shape,
+`lj_ccall_jit_void_ptr_ptr_u64()` for the exact void-returning
+pointer/pointer/size argument shape,
 `lj_ccall_jit_ptr_ptr_ptr_u64()` for the exact pointer-returning
 pointer/pointer/size argument shape,
 `lj_ccall_jit_i32_ptr_ulong_i32()` for the exact pointer/unsigned-long/int
@@ -96,6 +98,8 @@ The scope is deliberately narrow:
 - exact `int32_t(pointer, pointer, uint64_t)` calls, with the final size
   argument preserved before the helper casts to the exact unsigned 64-bit ABI
   width;
+- exact `void(pointer, pointer, uint64_t)` calls, with the final size argument
+  preserved before the helper casts to the exact unsigned 64-bit ABI width;
 - exact `pointer(pointer, pointer, uint64_t)` calls, with the final size
   argument preserved before the helper casts to the exact unsigned 64-bit ABI
   width;
@@ -149,7 +153,7 @@ families, traced int/signed-offset and int/unsigned-size loops for the same
 return families, traced `poll(nil, 0, 0)`-style loops,
 POSIX `write`-shaped int/pointer/size loops, UCRT `_write`-shaped
 int/pointer/unsigned-int loops, `lseek`/`_lseeki64`-shaped int/signed-offset/int
-loops, FP-only numeric
+loops, void-returning pointer/pointer/size loops, FP-only numeric
 call loops, signed-narrow-to-`unsigned long` conversion probes, and
 mixed float/double one-argument calls a traced, nonblocking native-state path,
 without risking the direct backend `IR_CALLXS` register/result ordering. The
