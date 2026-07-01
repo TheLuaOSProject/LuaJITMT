@@ -170,6 +170,7 @@ LJ_FUNC int lj_gc2_minor_roots_active(global_State *g);
 LJ_FUNC int lj_gc2_minor_roots_skip_bridge_mark(global_State *g);
 LJ_FUNC void lj_gc2_force_major(global_State *g);
 LJ_FUNC void lj_gc2_preserve_abort_to_idle(global_State *g);
+LJ_FUNC void lj_gc2_preserve_root(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc2_cycle_to_idle(global_State *g);
 LJ_FUNC int lj_gc2_sweep_bridge_close(global_State *g);
 LJ_FUNC void lj_gc2_sweep_bridge_ready(global_State *g);

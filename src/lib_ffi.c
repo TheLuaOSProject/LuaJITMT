@@ -1495,6 +1495,7 @@ LJLIB_CF(ffi_new)	LJLIB_REC(.)
   TValue *o;
   GCcdata *cd;
   int isstr, neednelem = 0;
+  lj_state_stack_pubrange(L, L);
   id = ffi_checkctype_noparse(L, NULL, &isstr);
   if (isstr)
     id = ffi_checkctype(L, cts, NULL);
@@ -1577,6 +1578,7 @@ LJLIB_CF(ffi_cast)	LJLIB_REC(ffi_new)
 LJLIB_CF(ffi_typeof)	LJLIB_REC(.)
 {
   CTState *cts = ctype_cts(L);
+  lj_state_stack_pubrange(L, L);
   CTypeID id = ffi_checkctype(L, cts, L->base+1);
   GCcdata *cd = lj_cdata_new_(L, CTID_CTYPEID, 4);
   *(CTypeID *)cdataptr(cd) = id;
@@ -2442,6 +2444,7 @@ LJLIB_CF(ffi_sizeof)	LJLIB_REC(ffi_xof FF_ffi_sizeof)
   CTState *cts = ctype_cts(L);
   CTypeID id;
   CTSize sz;
+  lj_state_stack_pubrange(L, L);
   if (LJ_UNLIKELY(tviscdata(L->base) && cdataisv(cdataV(L->base)))) {
     sz = cdatavlen(cdataV(L->base));
   } else {

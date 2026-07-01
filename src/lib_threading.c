@@ -231,6 +231,14 @@ static void threading_start_roots_init(lua_State *L, GCudata *ud, LJThread *th,
   lj_gc2_remember_root(G(L), obj2gco(ud));
 }
 
+static void threading_spawn_gc_handoff(lua_State *L, GCudata *ud)
+{
+  global_State *g = G(L);
+  if (g->gc.state != GCSpause)
+    lj_gc_fullgc(L);
+  lj_gc2_preserve_root(g, obj2gco(ud));
+}
+
 static int64_t threading_timeout_ns(lua_State *L, int narg, int has_default,
 				    int64_t def)
 {
@@ -402,7 +410,7 @@ void lj_threading_shutdown(lua_State *L)
 
 static void threading_gc_leave(global_State *g);
 
-static int threading_gc_enter_counted(lua_State *L)
+static int threading_gc_enter_counted(lua_State *L, GCudata *rootud)
 {
   global_State *g = G(L);
   for (;;) {
@@ -421,9 +429,10 @@ static int threading_gc_enter_counted(lua_State *L)
     }
     expect = 0;
     (void)mt_active_cas(g, &expect, 1);
+    if (rootud)
+      threading_spawn_gc_handoff(L, rootud);
     if (mt_live_add_rlx(g, 1) == 0) {
       GCSize threshold = lj_gc_threshold_load(g);
-      lj_gc_fullgc(L);
       if (threshold == LJ_MAX_MEM && g->gc.state == GCSfinalize)
 	threshold = lj_gc_mt_threshold_load(g);
       lj_gc_mt_threshold_store(g, threshold);
@@ -442,12 +451,12 @@ static int threading_gc_enter_counted(lua_State *L)
   }
 }
 
-static int threading_gc_enter(lua_State *L)
+static int threading_gc_enter(lua_State *L, GCudata *rootud)
 {
   global_State *g = G(L);
   if (!threading_entering_begin(g))
     return 0;
-  return threading_gc_enter_counted(L);
+  return threading_gc_enter_counted(L, rootud);
 }
 
 static void threading_gc_leave(global_State *g)
@@ -1282,7 +1291,7 @@ static lua_State *threading_spawn_core(lua_State *L, GCtab *env, TValue *base,
     th->state = LJ_THREAD_DONE;
     lj_err_mem(L);
   }
-  if (!threading_gc_enter(L)) {
+  if (!threading_gc_enter(L, ud)) {
     threading_live_remove(th);
     threading_rehome_unstarted_stack(L, L1, tg);
     lj_tg_fini_thread(G(L), tg);
@@ -1491,7 +1500,7 @@ static int threading_attach(lua_State *L, int wait)
   if (o && o->gch.gct == ~LJ_TUDATA &&
       lj_udata_udtype_acq(gco2ud(o)) == UDTYPE_THREAD)
     tg->thread_ud = gco2ud(o);
-  if (!threading_gc_enter_counted(L)) {
+  if (!threading_gc_enter_counted(L, NULL)) {
     L->tg_hint = NULL;
     lj_thr_set_tg(NULL);
     lj_state_release(L, tid);

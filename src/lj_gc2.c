@@ -2441,6 +2441,15 @@ void lj_gc2_preserve_abort_to_idle(global_State *g)
   gc2_cycle_leader_rel(g, 0);
 }
 
+void lj_gc2_preserve_root(global_State *g, GCobj *o)
+{
+  if (!g || !o)
+    return;
+  if (gc2_phase_acq(g) != LJ_GC2_IDLE)
+    lj_gc2_preserve_abort_to_idle(g);
+  lj_gc2_remember_root(g, o);
+}
+
 int lj_gc2_sweep_to_idle(global_State *g)
 {
   uint32_t expect = 0, phase;
@@ -2781,8 +2790,7 @@ static TValue *gc2_stack_scan_top(global_State *g, lua_State *L)
       ftop += pt->framesize;
     if (ftop > used)
       used = ftop;
-    if (!LJ_FR2)
-      lj_gc2_markobj(g, obj2gco(fn));
+    lj_gc2_markobj(g, obj2gco(fn));
   }
   used++;
   if (used > max)
@@ -6156,8 +6164,7 @@ static TValue *gc2_stack_scan_top_worker(global_State *g, lua_State *L)
       ftop += pt->framesize;
     if (ftop > used)
       used = ftop;
-    if (!LJ_FR2)
-      gc2_markobj_worker(g, obj2gco(fn));
+    gc2_markobj_worker(g, obj2gco(fn));
   }
   used++;
   if (used > max)

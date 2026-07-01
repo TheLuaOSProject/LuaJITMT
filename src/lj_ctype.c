@@ -14,6 +14,7 @@
 #include "lj_str.h"
 #include "lj_tab.h"
 #include "lj_strfmt.h"
+#include "lj_state.h"
 #include "lj_ctype.h"
 #include "lj_ccallback.h"
 #include "lj_buf.h"
@@ -331,8 +332,10 @@ void lj_ctype_parse_wait(CTState *cts, lua_State *L, uint32_t seq)
   {
     uint32_t actions;
     int had_stopreq = ctype_had_stopreq(L);
-    if (L)
+    if (L) {
+      lj_state_stack_pubrange(L, L);
       lj_native_enter(L2TG(L));
+    }
     (void)ctype_parse_token_wait(cts, seq, 1000000);
     actions = L ? lj_native_leave(L) : 0;
     ctype_checkstop_fresh(L, actions, had_stopreq);  /* 11.2: ctype wait may park. */

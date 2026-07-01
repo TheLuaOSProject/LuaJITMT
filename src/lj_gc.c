@@ -1022,6 +1022,20 @@ static GCproto *gc_func_proto_if_lua(GCfunc *fn)
 	 (GCproto *)(mref(fn->l.pc, char) - sizeof(GCproto)) : NULL;
 }
 
+static int gc_thread_is_remote_current(global_State *g, lua_State *th)
+{
+  uint32_t owner;
+  TGState *tg;
+  if (!g || !th)
+    return 0;
+  owner = lj_state_owner_acq(th);
+  if (owner == 0 || owner == LJ_THREAD_GCSCAN)
+    return 0;
+  tg = lj_tg_find_owner(g, owner);
+  return tg && !lj_tg_flags_test_acq(tg, TGF_DEAD) &&
+	 lj_tg_load_cur_L(tg) == th && th != lj_tg_cur_L(g);
+}
+
 /* Traverse the frame structure of a stack. */
 static MSize gc_traverse_frames(global_State *g, lua_State *th)
 {
@@ -1033,7 +1047,7 @@ static MSize gc_traverse_frames(global_State *g, lua_State *th)
     TValue *ftop = frame;
     if (pt) ftop += pt->framesize;
     if (ftop > top) top = ftop;
-    if (!LJ_FR2) gc_markobj(g, fn);  /* Need to mark hidden function (or L). */
+    gc_markobj(g, fn);  /* Preserve frame function under concurrent scans. */
   }
   top++;  /* Correct bias of -1 (frame == base-1). */
   if (top > tvref(th->maxstack)) top = tvref(th->maxstack);
@@ -1134,9 +1148,17 @@ static void gc_traverse_thread(global_State *g, lua_State *th)
   TValue *o, *top = th->top;
   TValue tv;
   MSize used;
+  int remote_current;
   lj_gc_arena_markmem(g, tvref(th->stack));
-  used = gc_traverse_frames(g, th);
-  if (th == lj_tg_cur_L(g) && th->base > tvref(th->stack) + 1 + LJ_FR2) {
+  remote_current = gc_thread_is_remote_current(g, th);
+  if (remote_current) {
+    top = tvref(th->maxstack);
+    used = (MSize)(top - tvref(th->stack));
+  } else {
+    used = gc_traverse_frames(g, th);
+  }
+  if (!remote_current && th == lj_tg_cur_L(g) &&
+      th->base > tvref(th->stack) + 1 + LJ_FR2) {
     top = gc_active_thread_top(th, top);
   } else if (tvref(th->stack) + used > top) {
     top = tvref(th->stack) + used;
@@ -1145,7 +1167,7 @@ static void gc_traverse_thread(global_State *g, lua_State *th)
     lj_tv_load_acq(&tv, o);
     gc_mark_thread_root_tv(g, &tv);
   }
-  if (g->gc.state == GCSatomic) {
+  if (!remote_current && g->gc.state == GCSatomic) {
     top = tvref(th->stack) + th->stacksize;
     for (; o < top; o++)  /* Clear unmarked slots. */
       setnilV(o);
@@ -1862,9 +1884,13 @@ void lj_gc_pubroot(lua_State *L, cTValue *tv)
   lj_tv_load_acq(&snap, tv);
   if (tvisgcv(&snap)) {
     GCobj *o = gcV(&snap);
-    if (isdead(g, o))
-      flipwhite(o);
     (void)lj_gc2_markobj(g, o);
+    if (isdead(g, o)) {
+      makewhite(g, o);
+      gc_mark(g, o);
+      (void)gc_propagate_gray(g);
+      return;
+    }
   }
   if (tviswhite(&snap) && (g->gc.state == GCSpropagate ||
 			   g->gc.state == GCSatomic))

@@ -10,6 +10,7 @@
 #include "lj_atomic.h"
 #include "lj_chan.h"
 #include "lj_gc.h"
+#include "lj_state.h"
 #include "lj_safepoint.h"
 #include "lj_thr.h"
 #include "lj_tg.h"
@@ -165,6 +166,8 @@ static int chan_wait_timeout(lua_State *L, LJChan *ch, int64_t ns)
     ns = 1000000;
   f = la_load32_acq(&ch->futex);
   tg = L ? L2TG(L) : NULL;
+  if (L)
+    lj_state_stack_pubrange(L, L);
   if (tg)
     lj_native_enter(tg);  /* 09 section 9.5: timed channel park. */
   rc = la_futex_wait(&ch->futex, f, ns);
