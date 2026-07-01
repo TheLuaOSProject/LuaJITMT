@@ -1405,6 +1405,12 @@ void lj_ccall_jit_void_gpr(lua_State *L, void *func, uintptr_t a,
     ((void (*)(uint64_t, uint32_t))(uintptr_t)func)
       ((uint64_t)a, (uint32_t)b);
     break;
+  case LJ_CCALL_JIT_SIG_I64_PTR:
+    ((void (*)(int64_t, void *))(uintptr_t)func)((int64_t)a, (void *)b);
+    break;
+  case LJ_CCALL_JIT_SIG_U64_PTR:
+    ((void (*)(uint64_t, void *))(uintptr_t)func)((uint64_t)a, (void *)b);
+    break;
   default:
     break;
   }
@@ -1515,6 +1521,14 @@ int32_t lj_ccall_jit_i32_gpr(lua_State *L, void *func, uintptr_t a,
   case LJ_CCALL_JIT_SIG_U64_U32:
     ret = ((int32_t (*)(uint64_t, uint32_t))(uintptr_t)func)
 	    ((uint64_t)a, (uint32_t)b);
+    break;
+  case LJ_CCALL_JIT_SIG_I64_PTR:
+    ret = ((int32_t (*)(int64_t, void *))(uintptr_t)func)
+	    ((int64_t)a, (void *)b);
+    break;
+  case LJ_CCALL_JIT_SIG_U64_PTR:
+    ret = ((int32_t (*)(uint64_t, void *))(uintptr_t)func)
+	    ((uint64_t)a, (void *)b);
     break;
   default:
     ret = 0;
@@ -1672,6 +1686,14 @@ int32_t lj_ccall_jit_narrow_gpr(lua_State *L, void *func, uintptr_t a,
     ret = (int32_t)((T (*)(uint64_t, uint32_t))(uintptr_t)func) \
 	    ((uint64_t)a, (uint32_t)b); \
     break; \
+  case LJ_CCALL_JIT_SIG_I64_PTR: \
+    ret = (int32_t)((T (*)(int64_t, void *))(uintptr_t)func) \
+	    ((int64_t)a, (void *)b); \
+    break; \
+  case LJ_CCALL_JIT_SIG_U64_PTR: \
+    ret = (int32_t)((T (*)(uint64_t, void *))(uintptr_t)func) \
+	    ((uint64_t)a, (void *)b); \
+    break; \
   default: \
     ret = 0; \
     break; \
@@ -1803,6 +1825,14 @@ double lj_ccall_jit_u32_gpr(lua_State *L, void *func, uintptr_t a,
   case LJ_CCALL_JIT_SIG_U64_U32:
     ret = ((uint32_t (*)(uint64_t, uint32_t))(uintptr_t)func)
 	    ((uint64_t)a, (uint32_t)b);
+    break;
+  case LJ_CCALL_JIT_SIG_I64_PTR:
+    ret = ((uint32_t (*)(int64_t, void *))(uintptr_t)func)
+	    ((int64_t)a, (void *)b);
+    break;
+  case LJ_CCALL_JIT_SIG_U64_PTR:
+    ret = ((uint32_t (*)(uint64_t, void *))(uintptr_t)func)
+	    ((uint64_t)a, (void *)b);
     break;
   default:
     ret = 0;
@@ -2040,6 +2070,14 @@ int64_t lj_ccall_jit_i64_ret_gpr(lua_State *L, void *func, uintptr_t a,
     ret = ((int64_t (*)(uint64_t, uint32_t))(uintptr_t)func)
 	    ((uint64_t)a, (uint32_t)b);
     break;
+  case LJ_CCALL_JIT_SIG_I64_PTR:
+    ret = ((int64_t (*)(int64_t, void *))(uintptr_t)func)
+	    ((int64_t)a, (void *)b);
+    break;
+  case LJ_CCALL_JIT_SIG_U64_PTR:
+    ret = ((int64_t (*)(uint64_t, void *))(uintptr_t)func)
+	    ((uint64_t)a, (void *)b);
+    break;
   default:
     ret = 0;
     break;
@@ -2153,6 +2191,14 @@ uint64_t lj_ccall_jit_u64_gpr(lua_State *L, void *func, uintptr_t a,
     ret = ((uint64_t (*)(uint64_t, uint32_t))(uintptr_t)func)
 	    ((uint64_t)a, (uint32_t)b);
     break;
+  case LJ_CCALL_JIT_SIG_I64_PTR:
+    ret = ((uint64_t (*)(int64_t, void *))(uintptr_t)func)
+	    ((int64_t)a, (void *)b);
+    break;
+  case LJ_CCALL_JIT_SIG_U64_PTR:
+    ret = ((uint64_t (*)(uint64_t, void *))(uintptr_t)func)
+	    ((uint64_t)a, (void *)b);
+    break;
   default:
     ret = 0;
     break;
@@ -2265,6 +2311,14 @@ void *lj_ccall_jit_ptr_gpr(lua_State *L, void *func, uintptr_t a,
   case LJ_CCALL_JIT_SIG_U64_U32:
     ret = ((void *(*)(uint64_t, uint32_t))(uintptr_t)func)
 	    ((uint64_t)a, (uint32_t)b);
+    break;
+  case LJ_CCALL_JIT_SIG_I64_PTR:
+    ret = ((void *(*)(int64_t, void *))(uintptr_t)func)
+	    ((int64_t)a, (void *)b);
+    break;
+  case LJ_CCALL_JIT_SIG_U64_PTR:
+    ret = ((void *(*)(uint64_t, void *))(uintptr_t)func)
+	    ((uint64_t)a, (void *)b);
     break;
   default:
     ret = NULL;
