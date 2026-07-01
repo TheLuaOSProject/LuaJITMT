@@ -7,6 +7,7 @@ int abs(int);
 int getpid(void);
 int poll(void *fds, unsigned long nfds, int timeout);
 int lj_m7_ccall_jit_sleep_i32(int);
+int lj_m7_ccall_jit_add2_i32(int, int);
 ]]
 
 local abs = ffi.C.abs
@@ -30,6 +31,20 @@ assert(trace_count() > 0, "supported int->int FFI call loop should trace")
 assert(ffi.blocking == nil)
 local getpid = ffi.C.getpid
 assert(getpid() > 0)
+
+do
+  local function run_getpid(n)
+    local pid = 0
+    for _ = 1, n do
+      pid = getpid()
+    end
+    return pid
+  end
+  jit.flush()
+  jit.opt.start("hotloop=1", "hotexit=1")
+  assert(run_getpid(100) > 0)
+  assert(trace_count() > 0, "supported void->int FFI call loop should trace")
+end
 
 do
   local poll = ffi.C.poll
@@ -108,6 +123,14 @@ do
   if so then
     local lib = ffi.load(so)
     local sleep_i32 = lib.lj_m7_ccall_jit_sleep_i32
+    local add2_i32 = lib.lj_m7_ccall_jit_add2_i32
+    local function run_add2(n)
+      local r = 0
+      for i = 1, n do
+	r = r + add2_i32(i, 2)
+      end
+      return r
+    end
     local function run_sleep(n, ms)
       local r = 0
       for _ = 1, n do
@@ -115,6 +138,11 @@ do
       end
       return r
     end
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    assert(run_add2(80) == (80 * 81) / 2 + 80 * 5)
+    assert(trace_count() > 0, "shared int,int->int FFI call loop should trace")
 
     jit.flush()
     jit.opt.start("hotloop=1", "hotexit=1")

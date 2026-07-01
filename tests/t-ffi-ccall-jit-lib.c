@@ -20,3 +20,8 @@ int lj_m7_ccall_jit_sleep_i32(int ms)
   sleep_ms(ms);
   return ms + 7;
 }
+
+int lj_m7_ccall_jit_add2_i32(int a, int b)
+{
+  return a + b + 3;
+}

@@ -267,7 +267,9 @@ typedef struct CCallInfo {
   _(FFI,	memcpy,			3,   S, PTR, 0) \
   _(FFI,	memset,			3,   S, PTR, 0) \
   _(FFI,	lj_vm_errno,		0,   S, INT, CCI_NOFPRCLOBBER) \
+  _(FFI,	lj_ccall_jit_i32_v,	2,   S, INT, CCI_L|CCI_T) \
   _(FFI,	lj_ccall_jit_i32_i32,	3,   S, INT, CCI_L|CCI_T) \
+  _(FFI,	lj_ccall_jit_i32_i32_i32, 4, S, INT, CCI_L|CCI_T) \
   _(FFI32,	lj_carith_mul64,	2,   N, I64, XA2_64|CCI_NOFPRCLOBBER) \
   _(FFI32,	lj_carith_shl64,	2,   N, U64, XA_64|CCI_NOFPRCLOBBER) \
   _(FFI32,	lj_carith_shr64,	2,   N, U64, XA_64|CCI_NOFPRCLOBBER) \
