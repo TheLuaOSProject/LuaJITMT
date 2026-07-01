@@ -4000,6 +4000,12 @@ static uint32_t crec_call_jit_sig(MSize narg, const int *kind)
   if (kind[0] == CREC_CALL_JIT_KIND_U32 &&
       kind[1] == CREC_CALL_JIT_KIND_U64)
     return LJ_CCALL_JIT_SIG_U32_U64;
+  if (kind[0] == CREC_CALL_JIT_KIND_I64 &&
+      kind[1] == CREC_CALL_JIT_KIND_I32)
+    return LJ_CCALL_JIT_SIG_I64_I32;
+  if (kind[0] == CREC_CALL_JIT_KIND_I64 &&
+      kind[1] == CREC_CALL_JIT_KIND_U32)
+    return LJ_CCALL_JIT_SIG_I64_U32;
   if (kind[0] > CREC_CALL_JIT_KIND_PTR || kind[1] > CREC_CALL_JIT_KIND_PTR)
     return UINT32_MAX;
   return LJ_CCALL_JIT_SIG_I32_I32 +

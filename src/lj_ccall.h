@@ -219,6 +219,8 @@ typedef struct CCallNativeState {
 #define LJ_CCALL_JIT_SIG_I32_U64	18u
 #define LJ_CCALL_JIT_SIG_U32_I64	19u
 #define LJ_CCALL_JIT_SIG_U32_U64	20u
+#define LJ_CCALL_JIT_SIG_I64_I32	21u
+#define LJ_CCALL_JIT_SIG_I64_U32	22u
 
 #define LJ_CCALL_JIT_NUM_SIG0		0u
 #define LJ_CCALL_JIT_NUM_SIG_NUM	1u
