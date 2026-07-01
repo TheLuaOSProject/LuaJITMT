@@ -116,7 +116,7 @@ return function(add)
   runtime.add_luajit_script_cases(add, {
     {
       name = "m5_tab_resize_stress",
-      description = "table resize forwarding stress across GC, traversal, length, weak clear, metatables, table-library shifts, and JIT stores",
+      description = "table resize forwarding stress across GC, traversal, length, weak clear, metatables, table-library shifts, and JIT reads/stores/iterators",
       script = "t-tab-resize-stress.lua",
       opts = {
 	timeout = "30s",

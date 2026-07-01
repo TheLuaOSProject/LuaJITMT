@@ -395,6 +395,11 @@ This is a safety bridge, not the final cooperative RETIRING/FORWARD/CAS writer.
 Publication barriers that receive a `TValue *` snapshot the value before GC2
 marking and legacy `tviswhite()` / `gcV()` checks, so the current release-store
 bridge does not reread a shared destination slot after publication.
+`tests/t-tab-resize-stress.lua` now includes a `jititer` slice that heats
+JIT-compiled `pairs`, `ipairs`, direct `next`, and stable table reads while
+sibling threads grow and prune array/hash generations, asserting crash freedom,
+no exposed internal sentinels, and intact stable anchors under ordinary racy
+Lua table mutation.
 ### 6.3.6 next/pairs (lj_tab_next)
 Iterate the *gen snapshot* captured at first call: store the NH pointer in
 the iterator control slot? Lua's `next(t,k)` is stateless — DECIDED:

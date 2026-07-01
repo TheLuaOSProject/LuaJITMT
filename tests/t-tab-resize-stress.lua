@@ -17,6 +17,7 @@ local selected_traversal_modes =
   os.getenv("LJ_M5_TAB_RESIZE_TRAVERSAL_MODES")
 
 local function assert_lua_value(v, label)
+  label = label or "Lua value"
   local tv = type(v)
   assert(tv ~= "userdata", label .. " exposed an internal userdata sentinel")
   assert(tv ~= "cdata", label .. " exposed an internal cdata sentinel")
@@ -547,6 +548,110 @@ local function exercise_jit_read_resize()
   harness.fullgc(2)
 end
 
+local function jit_iter_resize_writer(tbl, ready, start, id, n)
+  assert(ready:send(true, 10) == true)
+  local _, ok = start:recv(10)
+  assert(ok == true)
+  for i = 1, n do
+    local ak = 512 + id * 1000000 + i
+    local hk = "jit-iter-grow:" .. id .. ":" .. i
+    tbl[ak] = { owner = id, round = i }
+    tbl[hk] = i
+    if i > 32 and i % 5 == 0 then
+      tbl[ak - 16] = nil
+      tbl["jit-iter-grow:" .. id .. ":" .. (i - 24)] = nil
+    end
+    if i % 64 == 0 then collectgarbage("step") end
+  end
+  return true
+end
+
+local function jit_iter_observer(tbl, ready, start, id, rounds)
+  local okjit, jitmod = pcall(require, "jit")
+  if okjit and jitmod.status() then
+    jitmod.flush()
+    jitmod.opt.start("hotloop=1", "hotexit=1")
+  end
+
+  assert(ready:send(true, 10) == true)
+  local _, ok = start:recv(10)
+  assert(ok == true)
+  for round = 1, rounds do
+    local anchor = tbl.anchor
+    if type(anchor) ~= "table" or anchor.tag ~= "jit-iter-anchor" then
+      return false, "JIT iterator resize lost stable hash anchor"
+    end
+
+    local count = 0
+    for k, v in pairs(tbl) do
+      assert_lua_value(k, "JIT pairs resize key")
+      assert_lua_value(v, "JIT pairs resize value")
+      count = count + 1
+      if count >= 192 then break end
+    end
+
+    count = 0
+    for i, v in ipairs(tbl) do
+      if type(i) ~= "number" then
+	return false, "JIT ipairs resize returned non-number index"
+      end
+      assert_lua_value(v, "JIT ipairs resize value")
+      count = count + 1
+      if count >= 96 then break end
+    end
+    if count < 64 then
+      return false, "JIT ipairs resize crossed stable prefix"
+    end
+
+    local k, v = next(tbl, nil)
+    if k ~= nil then
+      assert_lua_value(k, "JIT next resize key")
+      assert_lua_value(v, "JIT next resize value")
+    end
+
+    if round % 16 == 0 then
+      collectgarbage("step")
+      if id == 1 then th.sleep(0.001) end
+    end
+  end
+  return true
+end
+
+local function exercise_jit_iterator_resize()
+  local t = { anchor = { tag = "jit-iter-anchor" } }
+  local observers = 2
+  local nworkers = writers + observers
+  local ready, start = ready_start(nworkers)
+  local workers = {}
+
+  for i = 1, 128 do t[i] = { kind = "jit-iter-prefix", slot = i } end
+  for i = 1, writers do
+    workers[#workers + 1] =
+      th.spawn(jit_iter_resize_writer, t, ready, start, i, reps)
+  end
+  for i = 1, observers do
+    workers[#workers + 1] =
+      th.spawn(jit_iter_observer, t, ready, start, i, traversal_rounds)
+  end
+
+  harness.wait_ready(ready, nworkers, 10, "JIT iterator resize")
+  harness.release_start(start, nworkers, 10)
+  collect_while_working(128)
+  harness.join_each(workers, function(result, _, msg)
+    assert(result == true, tostring(msg or result))
+  end, 30)
+
+  harness.fullgc(3)
+  assert(type(t.anchor) == "table" and t.anchor.tag == "jit-iter-anchor",
+	 "JIT iterator resize changed stable hash anchor")
+  for i = 1, 64 do
+    local v = t[i]
+    assert(type(v) == "table",
+	   "JIT iterator resize changed stable array prefix")
+    assert_lua_value(v, "JIT iterator resize prefix")
+  end
+end
+
 local function len_resize_writer(tbl, ready, start, id, n)
   assert(ready:send(true, 10) == true)
   local _, ok = start:recv(10)
@@ -1017,6 +1122,7 @@ ran = ran + run_case("finalizer", exercise_finalizer_resize)
 ran = ran + run_case("metatable", exercise_metatable_resize)
 ran = ran + run_case("jitstore", exercise_jit_store_resize)
 ran = ran + run_case("jitread", exercise_jit_read_resize)
+ran = ran + run_case("jititer", exercise_jit_iterator_resize)
 ran = ran + run_case("len", exercise_len_resize)
 ran = ran + run_case("traversal", exercise_concurrent_traversal_resize)
 ran = ran + run_case("nextchurn", exercise_next_churn_resize)
