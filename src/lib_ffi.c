@@ -37,6 +37,7 @@
 #include "lj_strfmt.h"
 #include "lj_ff.h"
 #include "lj_trace.h"
+#include "lj_safepoint.h"
 #include "lj_tg.h"
 #include "lj_lib.h"
 
@@ -2553,6 +2554,59 @@ LJLIB_CF(ffi_errno)	LJLIB_REC(.)
   return 1;
 }
 
+static int ffi_lib_had_stopreq(lua_State *L)
+{
+  TGState *tg = L2TG(L);
+  return tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ);
+}
+
+static int ffi_lib_fresh_stopreq(lua_State *L, uint32_t actions,
+				 int had_stopreq)
+{
+  TGState *tg = L2TG(L);
+  return (actions & LJ_GC2_HS_STOPREQ) ||
+    (!had_stopreq && tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ));
+}
+
+static void ffi_lib_checkstop_fresh(lua_State *L, uint32_t actions,
+				    int had_stopreq)
+{
+  if (ffi_lib_fresh_stopreq(L, actions, had_stopreq))
+    lj_safepoint_checkstop(L, actions);
+}
+
+static size_t ffi_lib_strlen(lua_State *L, const char *p)
+{
+  uint32_t actions;
+  int had_stopreq = ffi_lib_had_stopreq(L);
+  size_t len;
+  lj_native_enter(L2TG(L));
+  len = strlen(p);
+  actions = lj_native_leave(L);
+  ffi_lib_checkstop_fresh(L, actions, had_stopreq);
+  return len;
+}
+
+static void ffi_lib_memcpy(lua_State *L, void *dp, const void *sp, CTSize len)
+{
+  uint32_t actions;
+  int had_stopreq = ffi_lib_had_stopreq(L);
+  lj_native_enter(L2TG(L));
+  memcpy(dp, sp, (size_t)len);
+  actions = lj_native_leave(L);
+  ffi_lib_checkstop_fresh(L, actions, had_stopreq);
+}
+
+static void ffi_lib_memset(lua_State *L, void *dp, int32_t fill, CTSize len)
+{
+  uint32_t actions;
+  int had_stopreq = ffi_lib_had_stopreq(L);
+  lj_native_enter(L2TG(L));
+  memset(dp, fill, (size_t)len);
+  actions = lj_native_leave(L);
+  ffi_lib_checkstop_fresh(L, actions, had_stopreq);
+}
+
 LJLIB_CF(ffi_string)	LJLIB_REC(.)
 {
   CTState *cts = ctype_cts(L);
@@ -2564,7 +2618,7 @@ LJLIB_CF(ffi_string)	LJLIB_REC(.)
     lj_cconv_ct_tv_id_l(L, cts, CTID_P_CVOID, (uint8_t *)&p, o, CCF_ARG(1));
   } else {
     lj_cconv_ct_tv_id_l(L, cts, CTID_P_CCHAR, (uint8_t *)&p, o, CCF_ARG(1));
-    len = strlen(p);
+    len = ffi_lib_strlen(L, p);
   }
   L->top = o+1;  /* Make sure this is the last item on the stack. */
   setstrV(L, o, lj_str_new(L, p, len));
@@ -2582,7 +2636,7 @@ LJLIB_CF(ffi_copy)	LJLIB_REC(.)
     len = strV(o)->len+1;  /* Copy Lua string including trailing '\0'. */
   else
     len = (CTSize)ffi_checkint(L, 3);
-  memcpy(dp, sp, len);
+  ffi_lib_memcpy(L, dp, sp, len);
   return 0;
 }
 
@@ -2592,7 +2646,7 @@ LJLIB_CF(ffi_fill)	LJLIB_REC(.)
   CTSize len = (CTSize)ffi_checkint(L, 2);
   int32_t fill = 0;
   if (L->base+2 < L->top && !tvisnil(L->base+2)) fill = ffi_checkint(L, 3);
-  memset(dp, fill, len);
+  ffi_lib_memset(L, dp, fill, len);
   return 0;
 }
 

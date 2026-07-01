@@ -31,6 +31,65 @@ local getpid = ffi.C.getpid
 assert(getpid() > 0)
 
 do
+  local src = ffi.new("uint8_t[128]")
+  local dst = ffi.new("uint8_t[128]")
+  local cstr = ffi.new("char[16]", "abcdef")
+
+  local function heat(fn)
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    fn(120)
+    return trace_count()
+  end
+
+  local function expect_trace(label, fn)
+    assert(heat(fn) > 0, label .. " should keep tracing")
+  end
+
+  local function expect_no_trace(label, fn)
+    assert(heat(fn) == 0, label .. " must use the native interpreter path")
+  end
+
+  expect_trace("small constant ffi.copy/fill/string", function(n)
+    local total = 0
+    for i = 1, n do
+      ffi.copy(dst, src, 8)
+      ffi.fill(dst, 8, i)
+      total = total + #ffi.string(cstr, 3)
+    end
+    assert(total == n * 3)
+  end)
+
+  expect_no_trace("dynamic-length ffi.copy", function(n)
+    for i = 1, n do
+      ffi.copy(dst, src, (i % 64) + 1)
+    end
+  end)
+
+  expect_no_trace("dynamic-length ffi.fill", function(n)
+    for i = 1, n do
+      ffi.fill(dst, (i % 64) + 1, i)
+    end
+  end)
+
+  expect_no_trace("unbounded ffi.string", function(n)
+    local total = 0
+    for _ = 1, n do
+      total = total + #ffi.string(cstr)
+    end
+    assert(total == n * 6)
+  end)
+
+  expect_no_trace("dynamic-length ffi.string", function(n)
+    local total = 0
+    for i = 1, n do
+      total = total + #ffi.string(cstr, (i % 6) + 1)
+    end
+    assert(total > n)
+  end)
+end
+
+do
   local ready = th.channel(1)
   local done = th.channel(1)
   local sleep_ms = 800

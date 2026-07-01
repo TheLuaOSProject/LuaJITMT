@@ -623,6 +623,15 @@ static MSize crec_copy_unroll(CRecMemList *ml, CTSize len, CTSize step,
   return mlp;
 }
 
+static int crec_small_const_len(jit_State *J, TRef trlen, CTSize maxlen)
+{
+  int32_t len;
+  if (!tref_isk(trlen))
+    return 0;
+  len = IR(tref_ref(trlen))->i;
+  return len >= 0 && (CTSize)len <= maxlen;
+}
+
 /*
 ** Emit copy list with windowed loads/stores.
 ** LJ_TARGET_UNALIGNED: may emit unaligned loads/stores (not marked as such).
@@ -650,7 +659,7 @@ static void crec_copy_emit(jit_State *J, CRecMemList *ml, MSize mlp,
 
 /* Optimized memory copy. */
 static void crec_copy(jit_State *J, TRef trdst, TRef trsrc, TRef trlen,
-		      CType *ct)
+		      CType *ct, int allow_memcall)
 {
   if (tref_isk(trlen)) {  /* Length must be constant. */
     CRecMemList ml[CREC_COPY_MAXUNROLL];
@@ -694,6 +703,8 @@ static void crec_copy(jit_State *J, TRef trdst, TRef trsrc, TRef trlen,
     }
   }
 fallback:
+  if (!allow_memcall)
+    lj_trace_err(J, LJ_TRERR_NYICALL);
   /* Call memcpy. Always needs a barrier to disable alias analysis. */
   lj_ir_call(J, IRCALL_memcpy, trdst, trsrc, trlen);
   emitir(IRT(IR_XBAR, IRT_NIL), 0, 0);
@@ -736,7 +747,7 @@ static void crec_fill_emit(jit_State *J, CRecMemList *ml, MSize mlp,
 
 /* Optimized memory fill. */
 static void crec_fill(jit_State *J, TRef trdst, TRef trlen, TRef trfill,
-		      CTSize step)
+		      CTSize step, int allow_memcall)
 {
   if (tref_isk(trlen)) {  /* Length must be constant. */
     CRecMemList ml[CREC_FILL_MAXUNROLL];
@@ -764,6 +775,8 @@ static void crec_fill(jit_State *J, TRef trdst, TRef trlen, TRef trfill,
     crec_fill_emit(J, ml, mlp, trdst, trfill);
   } else {
 fallback:
+    if (!allow_memcall)
+      lj_trace_err(J, LJ_TRERR_NYICALL);
     /* Call memset. Always needs a barrier to disable alias analysis. */
     lj_ir_call(J, IRCALL_memset, trdst, trfill, trlen);  /* Note: arg order! */
   }
@@ -973,7 +986,7 @@ static TRef crec_ct_ct(jit_State *J, CType *d, CType *s, TRef dp, TRef sp,
   /* Destination is a struct/union. */
   case CCX(S, S):
     if (dp == 0) goto err_conv;
-    crec_copy(J, dp, sp, lj_ir_kint(J, dsize), d);
+    crec_copy(J, dp, sp, lj_ir_kint(J, dsize), d, 1);
     break;
 
   default:
@@ -1580,7 +1593,7 @@ static void crec_alloc(jit_State *J, RecordFFData *rd, CTypeID id)
       if (trsz == TREF_NIL) trsz = lj_ir_kint(J, sz);
       align = ctype_align(info);
       if (align < CT_MEMALIGN) align = CT_MEMALIGN;
-      crec_fill(J, dp, trsz, lj_ir_kint(J, 0), (1u << align));
+      crec_fill(J, dp, trsz, lj_ir_kint(J, 0), (1u << align), 1);
     } else if (J->base[1] && !J->base[2] &&
 	       !crec_cconv_multi_init(J, cts, rid, d, &rd->argv[1])) {
       goto single_init;
@@ -2355,10 +2368,11 @@ void LJ_FASTCALL recff_ffi_string(jit_State *J, RecordFFData *rd)
     TRef trlen = J->base[1];
     if (!tref_isnil(trlen)) {
       trlen = crec_toint(J, cts, trlen, &rd->argv[1]);
+      if (!crec_small_const_len(J, trlen, CREC_COPY_MAXLEN))
+	lj_trace_err(J, LJ_TRERR_NYICALL);
       tr = crec_ct_tv_id(J, cts, CTID_P_CVOID, 0, tr, &rd->argv[0]);
     } else {
-      tr = crec_ct_tv_id(J, cts, CTID_P_CCHAR, 0, tr, &rd->argv[0]);
-      trlen = lj_ir_call(J, IRCALL_strlen, tr);
+      lj_trace_err(J, LJ_TRERR_NYICALL);
     }
     J->base[0] = emitir(IRT(IR_XSNEW, IRT_STR), tr, trlen);
   }  /* else: interpreter will throw. */
@@ -2378,7 +2392,7 @@ void LJ_FASTCALL recff_ffi_copy(jit_State *J, RecordFFData *rd)
       trlen = emitir(IRTI(IR_ADD), trlen, lj_ir_kint(J, 1));
     }
     rd->nres = 0;
-    crec_copy(J, trdst, trsrc, trlen, NULL);
+    crec_copy(J, trdst, trsrc, trlen, NULL, 0);
   }  /* else: interpreter will throw. */
 }
 
@@ -2406,7 +2420,7 @@ void LJ_FASTCALL recff_ffi_fill(jit_State *J, RecordFFData *rd)
     else
       trfill = lj_ir_kint(J, 0);
     rd->nres = 0;
-    crec_fill(J, trdst, trlen, trfill, step);
+    crec_fill(J, trdst, trlen, trfill, step, 0);
   }  /* else: interpreter will throw. */
 }
 

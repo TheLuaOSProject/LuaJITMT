@@ -150,6 +150,15 @@ FINREG/finqueue dispatch lands.
   `TGF_STOPREQ` is tolerated, but a STOPREQ newly acknowledged while the
   carrier was native interrupts before the Lua callback body runs.
   Traced C-call throughput stays deferred behind the native-state protocol.
+- **FFI library C spans**: `ffi.copy()`, `ffi.fill()`, and the unbounded
+  `strlen()` scan behind `ffi.string(ptr)` enter native state for the raw C
+  library work, then apply the same fresh-STOPREQ rule as interpreted C calls.
+  Argument conversion, C type lookup, Lua string allocation, and GC checks stay
+  in VM state to preserve the normal LuaJIT object/allocator invariants.
+  Recorder support keeps small constant `ffi.copy`/`ffi.fill` operations as
+  bounded inline loads/stores, but aborts recording before emitting raw
+  `memcpy`/`memset`/`strlen` calls; those forms fall back to the interpreter
+  native-state path until a JIT native-call bridge exists.
 - **Callbacks (C→Lua)**: callback entry (lj_ccallback.c enter) runs
   `lj_native_leave` on the carrier thread; if the OS thread is foreign
   (created by C, never attached), auto-attach a TG (luaMT_attach path, 09

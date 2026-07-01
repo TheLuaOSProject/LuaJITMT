@@ -197,6 +197,9 @@ return function(add)
             env = { LJ_M7_FFI_CCALL_STRUCT_SO = struct_so },
             timeout = "20s"
           } },
+        { output = "lj_t-ffi-lib-native-stopreq",
+          cfile = "t-ffi-lib-native-stopreq.c",
+          opts = { timeout = "20s" } },
         { output = "lj_t-ffi-ccall-stopreq",
           cfile = "t-ffi-ccall-stopreq.c" }
       })

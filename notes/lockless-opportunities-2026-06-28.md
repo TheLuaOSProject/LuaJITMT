@@ -44,6 +44,10 @@ safety, stability, and language behavior over LuaJIT performance parity.
   through `lj_func_storeuv_forjit()`, including numeric and primitive values.
 - `lua_getlocal()` now acquire-loads closed local-cell upvalues, matching the
   existing `lua_getupvalue()` publication discipline.
+- FFI library memory helpers now treat raw `ffi.copy()`/`ffi.fill()` C-library
+  work and the unbounded `ffi.string(ptr)` length scan as native time, with
+  fresh STOPREQ handling pinned by `tests/t-ffi-lib-native-stopreq.c`; recorder
+  paths keep only bounded inline copy/fill/string cases on trace.
 
 ## Usually Not Worth Making More Lockless
 
