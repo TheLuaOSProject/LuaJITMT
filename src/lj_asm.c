@@ -458,6 +458,8 @@ static Reg ra_releasetmp(ASMState *as, IRRef ref)
 {
   IRIns *ir = IR(ref);
   Reg r = ir->r;
+  if (LJ_UNLIKELY(!ra_hasreg(r) || ra_hasspill(ir->s)))
+    lj_trace_err_info(as->J, LJ_TRERR_NYIIR);
   lj_assertA(ra_hasreg(r), "release of TMP%d has no reg", ref-ASMREF_TMP1+1);
   lj_assertA(!ra_hasspill(ir->s),
 	     "release of TMP%d has spill slot [%x]", ref-ASMREF_TMP1+1, ir->s);

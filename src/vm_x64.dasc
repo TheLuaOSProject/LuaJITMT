@@ -3012,6 +3012,14 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov64 r11, LJ_TFORWARD_BITS
   |  cmp NEXT_TMP, r11; je >3
   |  cmp NEXT_TMP, LJ_TNIL; je >7
+  |  mov r11, NODE:NEXT_PTR->key
+  |  cmp r11, LJ_TNIL; je >7
+  |  mov64 r10, LJ_TKEYLOCK_BITS
+  |  cmp r11, r10; je >3
+  |  lea r10, NEXT_RES_PTR
+  |  mov qword [r10], NEXT_TMP
+  |  mov qword [r10+qword*1], r11
+  |  lea NEXT_PTR, NEXT_RES_PTR
   |  NEXT_RES_IDXL NEXT_ASIZE+1
   |  ret
   |7:  // Skip holes in hash part.
@@ -4854,9 +4862,12 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov64 r9, LJ_TFORWARD_BITS
     |  cmp r8, r9; je >9
     |  cmp r8, LJ_TNIL; je >7
-    |  lea TMPRd, [RCd+TMPRd+1]
     |  // Copy key and value from hash slot.
     |  mov r9, NODE:ITYPE->key
+    |  cmp r9, LJ_TNIL; je >7
+    |  mov64 ITYPE, LJ_TKEYLOCK_BITS
+    |  cmp r9, ITYPE; je >9
+    |  lea TMPRd, [RCd+TMPRd+1]
     |  mov [BASE+RA*8], r9
     |  mov [BASE+RA*8+8], r8
     |  mov [BASE+RA*8-8], TMPRd

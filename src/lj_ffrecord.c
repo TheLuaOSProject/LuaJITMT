@@ -454,11 +454,27 @@ static void LJ_FASTCALL recff_tostring(jit_State *J, RecordFFData *rd)
   }
 }
 
+static int recff_tab_trace_local(jit_State *J, TRef tab)
+{
+  IRIns *ir;
+  if (tref_ref(tab) < REF_FIRST)
+    return 0;
+  ir = IR(tref_ref(tab));
+  return ir->o == IR_TNEW || ir->o == IR_TDUP;
+}
+
 static void LJ_FASTCALL recff_ipairs_aux(jit_State *J, RecordFFData *rd)
 {
   RecordIndex ix;
   ix.tab = J->base[0];
   if (tref_istab(ix.tab)) {
+    if (mt_active_acq(J2G(J)) && !recff_tab_trace_local(J, ix.tab)) {
+      /*
+      ** Shared ipairs() traces need an array-version guard before they can
+      ** survive concurrent mutation/resizing. Keep them interpreted for now.
+      */
+      lj_trace_err_info(J, LJ_TRERR_NYIBC);
+    }
     if (!tvisnumber(&rd->argv[1]))  /* No support for string coercion. */
       lj_trace_err(J, LJ_TRERR_BADTYPE);
     setintV(&ix.keyv, numberVint(&rd->argv[1])+1);

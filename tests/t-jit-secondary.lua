@@ -154,7 +154,7 @@ local worker = th.spawn(function()
     assert(shared_table_next(80) == 1200)
   end
   local shared_next_traces = trace_count(32)
-  assert(shared_next_traces > 0)
+  assert(shared_next_traces == 0)
 
   return root_traces, side_traces, table_traces, read_traces, index_traces,
 	 write_traces, next_traces, shared_next_traces, th.current():id()
@@ -170,7 +170,7 @@ assert(type(read_traces) == "number" and read_traces > 0)
 assert(type(index_traces) == "number" and index_traces > 0)
 assert(type(write_traces) == "number" and write_traces > 0)
 assert(type(next_traces) == "number" and next_traces > 0)
-assert(type(shared_next_traces) == "number" and shared_next_traces > 0)
+assert(type(shared_next_traces) == "number" and shared_next_traces == 0)
 assert(tid == worker:id())
 
-print("t-jit-secondary OK: secondary TG records, enters, side-traces, allocates tables, reads/writes shared tables, records trace-local/shared next(), and preserves __index reads in x64 mcode")
+print("t-jit-secondary OK: secondary TG records, enters, side-traces, allocates tables, reads/writes shared tables, records trace-local next(), keeps shared next() interpreted, and preserves __index reads in x64 mcode")

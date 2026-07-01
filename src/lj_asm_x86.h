@@ -1200,7 +1200,8 @@ static void asm_strto(ASMState *as, IRIns *ir)
 /* -- Memory references --------------------------------------------------- */
 
 /* Get pointer to TValue. */
-static void asm_tvptr(ASMState *as, Reg dest, IRRef ref, MSize mode)
+static void asm_tvptr_protected(ASMState *as, Reg dest, IRRef ref, MSize mode,
+				RegSet protect)
 {
   if ((mode & (IRTMPREF_IN1|IRTMPREF_IN2))) {
     IRIns *ir = IR(ref);
@@ -1220,7 +1221,8 @@ static void asm_tvptr(ASMState *as, Reg dest, IRRef ref, MSize mode)
 	emit_movmroi(as, dest, 0, k.u32.lo);
       } else {
 	/* TODO: 64 bit store + 32 bit load-modify-store is suboptimal. */
-	Reg src = ra_alloc1(as, ref, rset_exclude(RSET_GPR, dest));
+	Reg src = ra_alloc1(as, ref,
+			     rset_exclude(RSET_GPR & ~protect, dest));
 	if (irt_is64(ir->t)) {
 	  emit_u32(as, irt_toitype(ir->t) << 15);
 	  emit_rmro(as, XO_ARITHi, XOg_OR, dest, 4);
@@ -1231,7 +1233,8 @@ static void asm_tvptr(ASMState *as, Reg dest, IRRef ref, MSize mode)
       }
 #else
       if (!irref_isk(ref)) {
-	Reg src = ra_alloc1(as, ref, rset_exclude(RSET_GPR, dest));
+	Reg src = ra_alloc1(as, ref,
+			     rset_exclude(RSET_GPR & ~protect, dest));
 	emit_movtomro(as, REX_64IR(ir, src), dest, 0);
       } else if (!irt_ispri(ir->t)) {
 	emit_movmroi(as, dest, 0, ir->i);
@@ -1245,6 +1248,11 @@ static void asm_tvptr(ASMState *as, Reg dest, IRRef ref, MSize mode)
     emit_leatg(as, dest, tmptv2);
   else
     emit_leatg(as, dest, tmptv);
+}
+
+static void asm_tvptr(ASMState *as, Reg dest, IRRef ref, MSize mode)
+{
+  asm_tvptr_protected(as, dest, ref, mode, RSET_EMPTY);
 }
 
 static void asm_aref(ASMState *as, IRIns *ir)
@@ -1905,10 +1913,16 @@ static void asm_ahstore_forjit(ASMState *as, IRIns *ir)
   args[3] = ASMREF_TMP1;  /* cTValue *src */
   args[4] = keyistv ? ASMREF_TMP2 : keyref;  /* cTValue *key or MSize index */
   asm_gencall(as, ci, args);
-  if (keyistv)
-    asm_tvptr(as, ra_releasetmp(as, ASMREF_TMP2), keyref,
-	      IRTMPREF_IN1|IRTMPREF_IN2);
-  asm_tvptr(as, ra_releasetmp(as, ASMREF_TMP1), ir->op2, IRTMPREF_IN1);
+  if (keyistv) {
+    Reg keytmp = ra_releasetmp(as, ASMREF_TMP2);
+    Reg srctmp = ra_releasetmp(as, ASMREF_TMP1);
+    asm_tvptr_protected(as, keytmp, keyref, IRTMPREF_IN1|IRTMPREF_IN2,
+			RID2RSET(srctmp));
+    asm_tvptr_protected(as, srctmp, ir->op2, IRTMPREF_IN1,
+			RID2RSET(keytmp));
+  } else {
+    asm_tvptr(as, ra_releasetmp(as, ASMREF_TMP1), ir->op2, IRTMPREF_IN1);
+  }
 }
 
 #if LJ_HAS_X64_MT_JIT_HELPERS
@@ -2010,9 +2024,14 @@ static void asm_ahstore_inline_hash_num(ASMState *as, IRIns *ir)
 
   l_done = emit_label(as);
   asm_gencall(as, ci, args);
-  asm_tvptr(as, ra_releasetmp(as, ASMREF_TMP2), keyref,
-	    IRTMPREF_IN1|IRTMPREF_IN2);
-  asm_tvptr(as, ra_releasetmp(as, ASMREF_TMP1), ir->op2, IRTMPREF_IN1);
+  {
+    Reg keytmp = ra_releasetmp(as, ASMREF_TMP2);
+    Reg srctmp = ra_releasetmp(as, ASMREF_TMP1);
+    asm_tvptr_protected(as, keytmp, keyref, IRTMPREF_IN1|IRTMPREF_IN2,
+			RID2RSET(srctmp));
+    asm_tvptr_protected(as, srctmp, ir->op2, IRTMPREF_IN1,
+			RID2RSET(keytmp));
+  }
   l_fallback = emit_label(as);
   checkmclim(as);  /* Split helper fallback setup from inline hash CAS. */
 

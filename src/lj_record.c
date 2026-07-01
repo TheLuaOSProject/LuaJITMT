@@ -2088,36 +2088,17 @@ static IRType rec_next_types(GCtab *t, uint32_t idx)
   return IRT_NIL + (IRT_NIL << 8);
 }
 
-static IRType rec_next_types_forjit(jit_State *J, GCtab *t, uint32_t idx)
-{
-  TValue kv[2];
-  (void)lj_tab_vmnext_forjit(J->L, t, idx, kv);
-  return itype2irt(&kv[1]) + (itype2irt(&kv[0]) << 8);
-}
-
 /* Record a table traversal step aka next(). */
 int lj_record_next(jit_State *J, RecordIndex *ix)
 {
   IRType t, tkey, tval;
   TRef trvk;
   if (mt_active_acq(J2G(J)) && !rec_idx_tab_trace_local(J, ix->tab)) {
-    TRef out;
-    t = rec_next_types_forjit(J, tabV(&ix->tabv), ix->keyv.u32.lo);
-    tkey = (t & 0xff); tval = (t >> 8);
-    out = emitir(IRT(IR_TMPREF, IRT_PGC), TREF_NIL, IRTMPREF_OUT1);
-    trvk = lj_ir_call(J, IRCALL_lj_tab_vmnext_forjit, ix->tab, ix->key, out);
-    if (ix->mobj || tkey == IRT_NIL) {
-      /* Always check for invalid key from next() for nil result. */
-      if (!ix->mobj) emitir(IRTGI(IR_NE), trvk, lj_ir_kint(J, -1));
-      ix->mobj = trvk;
-    }
-    ix->key = lj_record_vload(J, out, 1, tkey);
-    if (tkey == IRT_NIL || ix->idxchain) {
-      ix->val = TREF_NIL;
-      return 1;
-    }
-    ix->val = lj_record_vload(J, out, 0, tval);
-    return 2;
+    /*
+    ** Shared-table traversal traces need a table-version guard before they can
+    ** survive concurrent mutation. Keep this path interpreted under active MT.
+    */
+    lj_trace_err_info(J, LJ_TRERR_NYIBC);
   }
   t = rec_next_types(tabV(&ix->tabv), ix->keyv.u32.lo);
   tkey = (t & 0xff); tval = (t >> 8);

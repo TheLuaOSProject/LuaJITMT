@@ -3000,6 +3000,7 @@ int32_t LJ_FASTCALL lj_tab_vmnext_forward(GCtab *t, uint32_t idx, TValue *out)
     out[1] = kv[0];
     return (int32_t)lj_tab_keyindex(t, &kv[0]);
   }
+  setnilV(out);
   setnilV(out+1);
   return ok < 0 ? -1 : 0;
 }
