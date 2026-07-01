@@ -60,9 +60,19 @@ int8_t lj_m7_ccall_jit_i8_0(void)
   return -7;
 }
 
+int8_t lj_m7_ccall_jit_i8_i32(int32_t a)
+{
+  return (int8_t)(a - 8);
+}
+
 uint8_t lj_m7_ccall_jit_u8_0(void)
 {
   return 250;
+}
+
+uint8_t lj_m7_ccall_jit_u8_ptr(int *p)
+{
+  return (uint8_t)(*p + 200);
 }
 
 int16_t lj_m7_ccall_jit_i16_0(void)
@@ -70,9 +80,19 @@ int16_t lj_m7_ccall_jit_i16_0(void)
   return -1234;
 }
 
+int16_t lj_m7_ccall_jit_i16_i32_ptr(int32_t offset, int *p)
+{
+  return (int16_t)(p[offset] - 2000);
+}
+
 uint16_t lj_m7_ccall_jit_u16_0(void)
 {
   return 60000;
+}
+
+uint16_t lj_m7_ccall_jit_u16_i32(int32_t a)
+{
+  return (uint16_t)(60000 + a);
 }
 
 int lj_m7_ccall_jit_i8_arg_i32(int8_t a)

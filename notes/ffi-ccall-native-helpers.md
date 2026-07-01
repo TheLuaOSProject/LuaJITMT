@@ -35,7 +35,8 @@ integer returns and preserves boxed int64 cdata results.
 integer or pointer arguments.
 `lj_ccall_jit_narrow_0()` handles exact zero-argument signed/unsigned 8-bit and
 16-bit integer returns as Lua numbers, after calling through the exact C return
-type.
+type. `lj_ccall_jit_narrow_gpr()` extends those exact narrow returns to signed
+32-bit integer or pointer arguments.
 `lj_ccall_jit_u32_0()` handles exact zero-argument unsigned 32-bit integer
 returns as Lua numbers without high-bit truncation. `lj_ccall_jit_u32_gpr()`
 extends that high-bit-safe result conversion to unsigned 32-bit returns with

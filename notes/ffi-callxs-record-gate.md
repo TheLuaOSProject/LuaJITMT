@@ -23,7 +23,9 @@ result. Signed 64-bit argument conversion remains interpreted until the
 recorder can produce the exact ABI value without widening the semantics.
 `lj_ccall_jit_narrow_0()` traces exact zero-argument signed/unsigned 8-bit and
 16-bit integer returns as Lua numbers, after calling the exact C return type.
-Narrow integer argument conversion remains interpreted.
+`lj_ccall_jit_narrow_gpr()` extends those exact narrow returns to signed
+32-bit integer or pointer arguments. Narrow integer argument conversion remains
+interpreted.
 `lj_ccall_jit_u32_0()` traces exact zero-argument unsigned 32-bit returns as
 Lua numbers, preserving high-bit values without signed truncation. Unsigned
 integer returns with exact signed 32-bit integer or pointer arguments trace

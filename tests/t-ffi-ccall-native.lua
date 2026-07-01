@@ -14,9 +14,13 @@ int64_t lj_m7_ccall_jit_i64_ptr(int *);
 int64_t lj_m7_ccall_jit_i64_i32_ptr(int32_t, int *);
 int64_t lj_m7_ccall_jit_i64_i64(int64_t);
 int8_t lj_m7_ccall_jit_i8_0(void);
+int8_t lj_m7_ccall_jit_i8_i32(int32_t);
 uint8_t lj_m7_ccall_jit_u8_0(void);
+uint8_t lj_m7_ccall_jit_u8_ptr(int *);
 int16_t lj_m7_ccall_jit_i16_0(void);
+int16_t lj_m7_ccall_jit_i16_i32_ptr(int32_t, int *);
 uint16_t lj_m7_ccall_jit_u16_0(void);
+uint16_t lj_m7_ccall_jit_u16_i32(int32_t);
 int lj_m7_ccall_jit_i8_arg_i32(int8_t);
 double lj_m7_ccall_jit_num0(void);
 double lj_m7_ccall_jit_num1(double);
@@ -164,9 +168,13 @@ do
     local i64_i32_ptr = lib.lj_m7_ccall_jit_i64_i32_ptr
     local i64_i64 = lib.lj_m7_ccall_jit_i64_i64
     local i8_0 = lib.lj_m7_ccall_jit_i8_0
+    local i8_i32 = lib.lj_m7_ccall_jit_i8_i32
     local u8_0 = lib.lj_m7_ccall_jit_u8_0
+    local u8_ptr = lib.lj_m7_ccall_jit_u8_ptr
     local i16_0 = lib.lj_m7_ccall_jit_i16_0
+    local i16_i32_ptr = lib.lj_m7_ccall_jit_i16_i32_ptr
     local u16_0 = lib.lj_m7_ccall_jit_u16_0
+    local u16_i32 = lib.lj_m7_ccall_jit_u16_i32
     local i8_arg_i32 = lib.lj_m7_ccall_jit_i8_arg_i32
     local num0 = lib.lj_m7_ccall_jit_num0
     local num1 = lib.lj_m7_ccall_jit_num1
@@ -244,10 +252,25 @@ do
       end
       return r
     end
+    local function run_i8_i32(n)
+      local r = 0
+      for i = 1, n do
+	r = r + i8_i32(i)
+      end
+      return r
+    end
     local function run_u8_0(n)
       local r = 0
       for _ = 1, n do
 	r = r + u8_0()
+      end
+      return r
+    end
+    local function run_u8_ptr(n)
+      local p = ptr0()
+      local r = 0
+      for _ = 1, n do
+	r = r + u8_ptr(p)
       end
       return r
     end
@@ -258,10 +281,25 @@ do
       end
       return r
     end
+    local function run_i16_i32_ptr(n)
+      local p = ptr0()
+      local r = 0
+      for i = 1, n do
+	r = r + i16_i32_ptr(i % 4, p)
+      end
+      return r
+    end
     local function run_u16_0(n)
       local r = 0
       for _ = 1, n do
 	r = r + u16_0()
+      end
+      return r
+    end
+    local function run_u16_i32(n)
+      local r = 0
+      for i = 1, n do
+	r = r + u16_i32(i)
       end
       return r
     end
@@ -491,8 +529,18 @@ do
 
     jit.flush()
     jit.opt.start("hotloop=1", "hotexit=1")
+    assert(run_i8_i32(80) == 2600)
+    assert(trace_count() > 0, "shared int->int8_t FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
     assert(run_u8_0(80) == 20000)
     assert(trace_count() > 0, "shared void->uint8_t FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    assert(run_u8_ptr(80) == 16880)
+    assert(trace_count() > 0, "shared ptr->uint8_t FFI call loop should trace")
 
     jit.flush()
     jit.opt.start("hotloop=1", "hotexit=1")
@@ -501,8 +549,18 @@ do
 
     jit.flush()
     jit.opt.start("hotloop=1", "hotexit=1")
+    assert(run_i16_i32_ptr(80) == -157800)
+    assert(trace_count() > 0, "shared int,ptr->int16_t FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
     assert(run_u16_0(80) == 4800000)
     assert(trace_count() > 0, "shared void->uint16_t FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    assert(run_u16_i32(80) == 4803240)
+    assert(trace_count() > 0, "shared int->uint16_t FFI call loop should trace")
 
     jit.flush()
     jit.opt.start("hotloop=1", "hotexit=1")
