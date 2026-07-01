@@ -21,7 +21,9 @@ accepts exact `double(int32_t)`, `double(pointer)`, `double(float)`,
 three-argument subset accepts `int32_t(void *, unsigned long, int32_t)` calls,
 including the common `poll(nil, 0, 0)` shape, plus the POSIX-shaped
 `int64_t(int32_t, pointer, uint64_t)` class used by calls such as
-`ssize_t write(int, void *, size_t)`. The recorder emits
+`ssize_t write(int, void *, size_t)`, and the UCRT-shaped
+`int32_t(int32_t, pointer, uint32_t)` class used by calls such as
+`int _write(int, void *, unsigned int)`. The recorder emits
 `lj_ccall_jit_void_gpr()`, `lj_ccall_jit_i32_gpr()`,
 `lj_ccall_jit_i64_gpr()`, or `lj_ccall_jit_ptr_gpr()` plus a tiny signature
 code for the GPR argument shape, `lj_ccall_jit_u32_0()` /
@@ -39,6 +41,8 @@ integer results, `lj_ccall_jit_num_i32()`, `lj_ccall_jit_num_ptr()`,
 `lj_ccall_jit_flt_num()` for the mixed one-argument shapes,
 `lj_ccall_jit_i64_i32_ptr_u64()` for the exact int/pointer/size argument
 shape,
+`lj_ccall_jit_i32_i32_ptr_u32()` for the exact int/pointer/unsigned-int
+argument shape,
 `lj_ccall_jit_i32_ptr_ulong_i32()` for the exact pointer/unsigned-long/int
 shape, or
 `lj_ccall_jit_num_fpr()` / `lj_ccall_jit_flt_fpr()` for the FP-only FPR shapes.
@@ -69,6 +73,9 @@ The scope is deliberately narrow:
   width;
 - exact `int64_t(int32_t, pointer, uint64_t)` calls, with the final argument
   converted before the helper casts to the unsigned 64-bit ABI width;
+- exact `int32_t(int32_t, pointer, uint32_t)` calls, with high-bit unsigned
+  32-bit count arguments preserved before the helper casts to the exact
+  unsigned 32-bit ABI width;
 - zero-argument exact signed 64-bit integer returns;
 - zero-argument exact unsigned 64-bit integer returns;
 - exact signed/unsigned 64-bit integer returns with signed 32-bit, unsigned
@@ -98,7 +105,8 @@ loops, zero-argument signed int64 and unsigned uint64 cdata-result loops, exact
 one- and two-argument int64/uint64 mixed-signedness argument/result loops, traced
 single-argument int64/uint64 calls returning void, int32, uint32, narrow
 integers, or pointers, traced `poll(nil, 0, 0)`-style loops,
-`write`-shaped int/pointer/size loops, FP-only numeric
+POSIX `write`-shaped int/pointer/size loops, UCRT `_write`-shaped
+int/pointer/unsigned-int loops, FP-only numeric
 call loops, signed-narrow-to-`unsigned long` conversion probes, and
 mixed float/double one-argument calls a traced, nonblocking native-state path,
 without risking the direct backend `IR_CALLXS` register/result ordering. The
