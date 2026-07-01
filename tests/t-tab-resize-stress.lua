@@ -933,6 +933,80 @@ local function exercise_table_library_resize()
   end
 end
 
+local function tablelib_shift_worker(tbl, ready, start, id, n)
+  local moves = 0
+  assert(ready:send(true, 10) == true)
+  local _, ok = start:recv(10)
+  assert(ok == true)
+  for i = 1, n do
+    local pos = 32 + ((i + id * 11) % 64)
+    local value = table.remove(tbl, pos)
+    if value == nil then
+      return nil, "table.remove returned nil inside dense resize table"
+    end
+    assert_lua_value(value, "table.remove resize value")
+    table.insert(tbl, pos, value)
+    if table.move and i % 3 == 0 then
+      local from = 1 + ((i + id * 7) % 24)
+      local to = from + 15
+      local dest = 96 + ((i + id * 5) % 24)
+      table.move(tbl, from, to, dest, tbl)
+      moves = moves + 1
+    end
+    if i % 32 == 0 then collectgarbage("step") end
+  end
+  return true, moves
+end
+
+local function exercise_table_library_shift_resize()
+  local t = {}
+  local nworkers = writers + 1
+  local ready, start = ready_start(nworkers)
+  local workers = {}
+  local shift_rounds = math.min(reps, 384)
+
+  for i = 1, 192 do
+    t[i] = { kind = "tablelib-shift", slot = i }
+  end
+
+  for i = 1, writers do
+    workers[#workers + 1] =
+      th.spawn(tablelib_resize_writer, t, ready, start, i, reps)
+  end
+  workers[#workers + 1] =
+    th.spawn(tablelib_shift_worker, t, ready, start, 1, shift_rounds)
+
+  harness.wait_ready(ready, nworkers, 10, "table library shift resize")
+  harness.release_start(start, nworkers, 10)
+  collect_while_working(128)
+  harness.join_each(workers, function(result, moves, msg)
+    if result == true then
+      if moves ~= nil then
+	assert(type(moves) == "number" and moves > 0,
+	       "table.move did not run during table-library shift stress")
+      end
+      return
+    end
+    assert(false, tostring(msg or result))
+  end, 30)
+
+  harness.fullgc(3)
+
+  for i = 1, 128 do
+    local v = t[i]
+    assert(type(v) == "table",
+	   "table-library shift resize left sparse or non-table prefix")
+    assert_lua_value(v, "table-library shift resize prefix")
+  end
+  local seen = 0
+  for k, v in pairs(t) do
+    assert_lua_value(k, "table-library shift resize key")
+    assert_lua_value(v, "table-library shift resize value")
+    seen = seen + 1
+    if seen >= 256 then break end
+  end
+end
+
 local ran = 0
 ran = ran + run_case("weak", exercise_weak_clear_resize)
 ran = ran + run_case("gcmark", exercise_gc_mark_resize)
@@ -947,6 +1021,7 @@ ran = ran + run_case("len", exercise_len_resize)
 ran = ran + run_case("traversal", exercise_concurrent_traversal_resize)
 ran = ran + run_case("nextchurn", exercise_next_churn_resize)
 ran = ran + run_case("tablelib", exercise_table_library_resize)
+ran = ran + run_case("tablelibshift", exercise_table_library_shift_resize)
 assert(ran > 0, "no table resize stress cases selected")
 
 print(("t-tab-resize-stress OK: %d writers, %d resize rounds"):format(
