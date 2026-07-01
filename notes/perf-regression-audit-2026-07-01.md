@@ -18,12 +18,13 @@ Read-only subagent audits confirmed the major reports:
   without retiring the slot. `m6_jit_recursive_call_unroll` covers this, and
   `t-vm-safepoint` now asserts this recorder path does not perform a scoped
   handshake or scoped slot retirement; public `jit.flush(1)` still does.
-- x64 interpreter table stores remain helper-heavy: `TSETS` goes straight to
-  `vmeta_tsets`, and `TSETV`/`TSETB`/`TSETR` array stores route through
-  `lj_tab_storetv_forvm_array()` plus barrier checks. This is real but is a
-  separate VM/JIT store-fast-path project, because the safe inline cases must
-  preserve `__newindex`, weak-table, forwarding/retiring-slot, keyed-CAS, and
-  parent-aware barrier behavior.
+- x64 interpreter table stores remain helper-heavy overall: `TSETS` goes
+  straight to `vmeta_tsets`, and `TSETV`/`TSETR` array stores route through
+  `lj_tab_storetv_forvm_array()` plus barrier checks. The first narrow
+  exception is `TSETB` for stable current-generation array slots: it now emits
+  an inline `lock; cmpxchg` through DynASM's x86 frontend and falls back to the
+  helper for weak tables, moved/retiring arrays, CAS races, nil/metatable
+  decisions, and forwarding sentinels.
 - x64 `BC_TNEW` has no inline bump allocation. The current safe prerequisite is
   still exact object layout/bitmap/accounting/root-publication support; first
   slice should be empty-table only and fall back to the current helper when any
@@ -41,8 +42,10 @@ Follow-up order:
    keeps stock sweep/finalizer semantics while removing the global root-list
    cache line from normal allocations; bitmap-only sweep and zero-atomic bump
    allocation remain separate follow-up work.
-2. Reintroduce guarded x64 interpreter store fast paths for existing stable
-   array/hash slots, leaving new-key/metatable/weak/forwarded cases on helpers.
+2. Partially done: `BC_TSETB` has a guarded x64 inline CAS fast path for
+   stable current-generation array slots. Remaining work is `TSETV`/`TSETR`,
+   stable hash slots, and any collectable-value fast barrier path; new-key,
+   metatable, weak, moved/retiring, and forwarded cases stay on helpers.
 3. Restore JIT no-helper ASTORE/HSTORE for stable primitive-value stores before
    collectable-value barrier fast paths.
 4. Add empty-table x64 `BC_TNEW` inline bump allocation behind strict arena,

@@ -229,11 +229,13 @@ reports `386 passed`.
 
 Current store-publication guard: `m5_x64_vm_store_publication` asserts the x64
 VM cannot reintroduce legacy inline `barrierback`/`lj_gc_barrieruv` paths,
-keeps `TSETV`/`TSETB`/`TSETR` array stores on
-`lj_tab_storetv_forvm_array()`, keeps `TSETM` range stores on
-`lj_tab_storetvn_forvm_array()`, keeps `TSETS` on the C fallback instead of a
-direct hash-slot store, and keeps closed `CSET`/`USETx` paths on
-`lj_func_storeuv_*_pub()` release-copy helpers.
+keeps `TSETV`/`TSETR` array stores on `lj_tab_storetv_forvm_array()`, keeps
+`TSETM` range stores on `lj_tab_storetvn_forvm_array()`, keeps `TSETS` on the
+C fallback instead of a direct hash-slot store, and keeps closed `CSET`/`USETx`
+paths on `lj_func_storeuv_*_pub()` release-copy helpers. `TSETB` has a narrow
+x64 inline `lock; cmpxchg` fast path for stable current-generation array slots
+and falls back to `lj_tab_storetv_forvm_array()` for weak tables, moved or
+retiring arrays, CAS races, nil/metatable decisions, and forwarding sentinels.
 
 Current x64 bridge note: the base-library `setmetatable` fast path now
 publishes the table -> metatable edge through `lj_gc2_barrier_obj_pair()` before
@@ -245,7 +247,9 @@ original inline `wbarrier_tv` sketch in favor of a more conservative,
 C-auditable safety surface; x64 closed `USETx`/`CSET` stores release-copy through
 `lj_func_storeuv_*_pub()` helpers, and raw/open cell stores remain stack-local
 writes. The old x64 `vm_gc2_barriertab` helper
-label has no remaining VM branch users and is retired; the JIT C-call
+label has no remaining VM branch users and is retired; the `TSETB` inline CAS
+uses DynASM's x86 `cmpxchg` frontend entry rather than literal byte emission;
+the JIT C-call
 `lj_gc2_barrier_tab_g` path remains separate. The interpreter allocation slow
 path now also runs the GC2 hard-threshold assist from `lj_gc_step_fixtop()` once
 the current legacy VM threshold check branches there, with
