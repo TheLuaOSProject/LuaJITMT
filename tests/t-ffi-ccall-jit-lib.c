@@ -4,6 +4,8 @@
 
 #include <time.h>
 
+static int lj_m7_ccall_jit_values[4] = { 11, 22, 33, 44 };
+
 static void sleep_ms(int ms)
 {
   struct timespec ts;
@@ -24,4 +26,34 @@ int lj_m7_ccall_jit_sleep_i32(int ms)
 int lj_m7_ccall_jit_add2_i32(int a, int b)
 {
   return a + b + 3;
+}
+
+unsigned int lj_m7_ccall_jit_u32(unsigned int a)
+{
+  return a + 1u;
+}
+
+int *lj_m7_ccall_jit_ptr0(void)
+{
+  return lj_m7_ccall_jit_values;
+}
+
+int lj_m7_ccall_jit_ptr_read_i32(int *p)
+{
+  return *p;
+}
+
+int lj_m7_ccall_jit_ptr_sum_i32(int *a, int *b)
+{
+  return *a + *b;
+}
+
+int lj_m7_ccall_jit_i32_ptr_read_i32(int offset, int *p)
+{
+  return p[offset];
+}
+
+int *lj_m7_ccall_jit_ptr_add_i32(int *p, int offset)
+{
+  return p + offset;
 }

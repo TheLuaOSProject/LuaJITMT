@@ -198,6 +198,14 @@ typedef struct CCallNativeState {
   int had_stopreq;
 } CCallNativeState;
 
+#define LJ_CCALL_JIT_SIG0		0u
+#define LJ_CCALL_JIT_SIG_I32		1u
+#define LJ_CCALL_JIT_SIG_PTR		2u
+#define LJ_CCALL_JIT_SIG_I32_I32	3u
+#define LJ_CCALL_JIT_SIG_I32_PTR	4u
+#define LJ_CCALL_JIT_SIG_PTR_I32	5u
+#define LJ_CCALL_JIT_SIG_PTR_PTR	6u
+
 /* -- C call handling ----------------------------------------------------- */
 
 /* Really belongs to lj_vm.h. */
@@ -211,10 +219,10 @@ LJ_FUNC uint32_t lj_ccall_native_leave(lua_State *L, CTState *cts,
 				       CCallNativeState *st, void *func);
 LJ_FUNC void lj_ccall_native_checkstop(lua_State *L, uint32_t actions,
 				       const CCallNativeState *st);
-LJ_FUNC int32_t lj_ccall_jit_i32_v(lua_State *L, void *func);
-LJ_FUNC int32_t lj_ccall_jit_i32_i32(lua_State *L, void *func, int32_t a);
-LJ_FUNC int32_t lj_ccall_jit_i32_i32_i32(lua_State *L, void *func,
-					 int32_t a, int32_t b);
+LJ_FUNC int32_t lj_ccall_jit_i32_gpr(lua_State *L, void *func,
+				     uintptr_t a, uintptr_t b, uint32_t sig);
+LJ_FUNC void *lj_ccall_jit_ptr_gpr(lua_State *L, void *func,
+				   uintptr_t a, uintptr_t b, uint32_t sig);
 LJ_FUNC int lj_ccall_func(lua_State *L, GCcdata *cd);
 
 #endif

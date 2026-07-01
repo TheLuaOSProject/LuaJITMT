@@ -2277,7 +2277,31 @@ static void crec_snap_caller(jit_State *J)
 #endif
 
 #if LJ_TARGET_X64
-static int crec_call_jit_i32(jit_State *J, RecordFFData *rd, CTState *cts,
+static int crec_call_jit_gpr_kind(CTInfo info, CTSize size)
+{
+  if (ctype_isinteger(info) && size == 4 && !(info & CTF_UNSIGNED))
+    return 0;
+  if (ctype_isptr(info) && size == CTSIZE_PTR)
+    return 1;
+  return -1;
+}
+
+static uint32_t crec_call_jit_sig(MSize narg, const int *kind)
+{
+  if (narg == 0)
+    return LJ_CCALL_JIT_SIG0;
+  if (narg == 1)
+    return kind[0] ? LJ_CCALL_JIT_SIG_PTR : LJ_CCALL_JIT_SIG_I32;
+  if (!kind[0] && !kind[1])
+    return LJ_CCALL_JIT_SIG_I32_I32;
+  if (!kind[0] && kind[1])
+    return LJ_CCALL_JIT_SIG_I32_PTR;
+  if (kind[0] && !kind[1])
+    return LJ_CCALL_JIT_SIG_PTR_I32;
+  return LJ_CCALL_JIT_SIG_PTR_PTR;
+}
+
+static int crec_call_jit_gpr(jit_State *J, RecordFFData *rd, CTState *cts,
 			     CType *ct, CTInfo info, GCcdata *cd,
 			     IRType tp, CTSize fsz)
 {
@@ -2285,7 +2309,9 @@ static int crec_call_jit_i32(jit_State *J, RecordFFData *rd, CTState *cts,
   CType *ctr, *ctf, *d;
   CTypeID fid, did;
   CTInfo ctr_info, ctfinfo, dinfo;
-  TRef func, args[2];
+  TRef func, args[2], noarg = lj_ir_kptr(J, NULL), tr;
+  int retkind, kind[2];
+  uint32_t sig;
   MSize i, narg = 0;
 
   if ((info & CTF_VARARG))
@@ -2298,7 +2324,8 @@ static int crec_call_jit_i32(jit_State *J, RecordFFData *rd, CTState *cts,
 
   ctr = crec_ctype_rawchild(J, cts, ct, &ctrsnap);
   ctr_info = ctype_info_acq(ctr);
-  if (!ctype_isinteger(ctr_info) || ctype_size_acq(ctr) != 4)
+  retkind = crec_call_jit_gpr_kind(ctr_info, ctype_size_acq(ctr));
+  if (retkind < 0)
     return 0;
 
   fid = ctype_sib_acq(ct);
@@ -2319,10 +2346,13 @@ static int crec_call_jit_i32(jit_State *J, RecordFFData *rd, CTState *cts,
     did = ctype_cid(ctfinfo);
     d = crec_ctype_rawrefid(J, cts, did, &did, &dcopy);
     dinfo = ctype_info_acq(d);
-    if (!ctype_isinteger(dinfo) || ctype_size_acq(d) != 4)
+    kind[i] = crec_call_jit_gpr_kind(dinfo, ctype_size_acq(d));
+    if (kind[i] < 0)
       return 0;
     args[i] = crec_ct_tv(J, d, 0, J->base[1+i], &rd->argv[1+i]);
-    if (!tref_isint(args[i]))
+    if (!kind[i] && !tref_isint(args[i]))
+      lj_trace_err(J, LJ_TRERR_NYICALL);
+    if (kind[i] && !tref_istype(args[i], IRT_PTR))
       lj_trace_err(J, LJ_TRERR_NYICALL);
   }
   if (fid)
@@ -2332,13 +2362,18 @@ static int crec_call_jit_i32(jit_State *J, RecordFFData *rd, CTState *cts,
     lj_trace_err(J, LJ_TRERR_BLACKL);
 
   func = emitir(IRT(IR_FLOAD, tp), J->base[0], IRFL_CDATA_PTR);
-  if (narg == 0)
-    J->base[0] = lj_ir_call(J, IRCALL_lj_ccall_jit_i32_v, func);
-  else if (narg == 1)
-    J->base[0] = lj_ir_call(J, IRCALL_lj_ccall_jit_i32_i32, func, args[0]);
-  else
-    J->base[0] = lj_ir_call(J, IRCALL_lj_ccall_jit_i32_i32_i32,
-			    func, args[0], args[1]);
+  sig = crec_call_jit_sig(narg, kind);
+  if (narg < 1) args[0] = noarg;
+  if (narg < 2) args[1] = noarg;
+  if (retkind) {
+    TRef trid = lj_ir_kint(J, ctype_cid(info));
+    tr = lj_ir_call(J, IRCALL_lj_ccall_jit_ptr_gpr, func, args[0],
+		    args[1], lj_ir_kint(J, (int32_t)sig));
+    J->base[0] = emitir(IRTG(IR_CNEWI, IRT_CDATA), trid, tr);
+  } else {
+    J->base[0] = lj_ir_call(J, IRCALL_lj_ccall_jit_i32_gpr, func, args[0],
+			    args[1], lj_ir_kint(J, (int32_t)sig));
+  }
   J->needsnap = 1;
   return 1;
 }
@@ -2366,7 +2401,7 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
   }
   if (ctype_isfunc(info)) {
 #if LJ_TARGET_X64
-    if (crec_call_jit_i32(J, rd, cts, ct, info, cd, tp, fsz))
+    if (crec_call_jit_gpr(J, rd, cts, ct, info, cd, tp, fsz))
       return 1;
 #endif
 #if !LJ_FFI_RECORD_CALLS

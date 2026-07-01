@@ -1311,47 +1311,89 @@ void lj_ccall_native_checkstop(lua_State *L, uint32_t actions,
   ccall_checkstop_fresh(L, actions, st->had_stopreq);
 }
 
-int32_t lj_ccall_jit_i32_v(lua_State *L, void *func)
+int32_t lj_ccall_jit_i32_gpr(lua_State *L, void *func, uintptr_t a,
+			     uintptr_t b, uint32_t sig)
 {
-  typedef int32_t (*CCallJitI32V)(void);
   CTState *cts = ctype_cts(L);
   CCallNativeState native;
   uint32_t actions;
   int32_t ret;
   lj_ccall_native_save(L, &native);
   lj_ccall_native_enter(L, &native, func);
-  ret = ((CCallJitI32V)(uintptr_t)func)();
+  switch (sig) {
+  case LJ_CCALL_JIT_SIG0:
+    ret = ((int32_t (*)(void))(uintptr_t)func)();
+    break;
+  case LJ_CCALL_JIT_SIG_I32:
+    ret = ((int32_t (*)(int32_t))(uintptr_t)func)((int32_t)a);
+    break;
+  case LJ_CCALL_JIT_SIG_PTR:
+    ret = ((int32_t (*)(void *))(uintptr_t)func)((void *)a);
+    break;
+  case LJ_CCALL_JIT_SIG_I32_I32:
+    ret = ((int32_t (*)(int32_t, int32_t))(uintptr_t)func)
+	    ((int32_t)a, (int32_t)b);
+    break;
+  case LJ_CCALL_JIT_SIG_I32_PTR:
+    ret = ((int32_t (*)(int32_t, void *))(uintptr_t)func)
+	    ((int32_t)a, (void *)b);
+    break;
+  case LJ_CCALL_JIT_SIG_PTR_I32:
+    ret = ((int32_t (*)(void *, int32_t))(uintptr_t)func)
+	    ((void *)a, (int32_t)b);
+    break;
+  case LJ_CCALL_JIT_SIG_PTR_PTR:
+    ret = ((int32_t (*)(void *, void *))(uintptr_t)func)
+	    ((void *)a, (void *)b);
+    break;
+  default:
+    ret = 0;
+    break;
+  }
   actions = lj_ccall_native_leave(L, cts, &native, func);
   lj_ccall_native_checkstop(L, actions, &native);
   return ret;
 }
 
-int32_t lj_ccall_jit_i32_i32(lua_State *L, void *func, int32_t a)
+void *lj_ccall_jit_ptr_gpr(lua_State *L, void *func, uintptr_t a,
+			   uintptr_t b, uint32_t sig)
 {
-  typedef int32_t (*CCallJitI32I32)(int32_t);
   CTState *cts = ctype_cts(L);
   CCallNativeState native;
   uint32_t actions;
-  int32_t ret;
+  void *ret;
   lj_ccall_native_save(L, &native);
   lj_ccall_native_enter(L, &native, func);
-  ret = ((CCallJitI32I32)(uintptr_t)func)(a);
-  actions = lj_ccall_native_leave(L, cts, &native, func);
-  lj_ccall_native_checkstop(L, actions, &native);
-  return ret;
-}
-
-int32_t lj_ccall_jit_i32_i32_i32(lua_State *L, void *func,
-				 int32_t a, int32_t b)
-{
-  typedef int32_t (*CCallJitI32I32I32)(int32_t, int32_t);
-  CTState *cts = ctype_cts(L);
-  CCallNativeState native;
-  uint32_t actions;
-  int32_t ret;
-  lj_ccall_native_save(L, &native);
-  lj_ccall_native_enter(L, &native, func);
-  ret = ((CCallJitI32I32I32)(uintptr_t)func)(a, b);
+  switch (sig) {
+  case LJ_CCALL_JIT_SIG0:
+    ret = ((void *(*)(void))(uintptr_t)func)();
+    break;
+  case LJ_CCALL_JIT_SIG_I32:
+    ret = ((void *(*)(int32_t))(uintptr_t)func)((int32_t)a);
+    break;
+  case LJ_CCALL_JIT_SIG_PTR:
+    ret = ((void *(*)(void *))(uintptr_t)func)((void *)a);
+    break;
+  case LJ_CCALL_JIT_SIG_I32_I32:
+    ret = ((void *(*)(int32_t, int32_t))(uintptr_t)func)
+	    ((int32_t)a, (int32_t)b);
+    break;
+  case LJ_CCALL_JIT_SIG_I32_PTR:
+    ret = ((void *(*)(int32_t, void *))(uintptr_t)func)
+	    ((int32_t)a, (void *)b);
+    break;
+  case LJ_CCALL_JIT_SIG_PTR_I32:
+    ret = ((void *(*)(void *, int32_t))(uintptr_t)func)
+	    ((void *)a, (int32_t)b);
+    break;
+  case LJ_CCALL_JIT_SIG_PTR_PTR:
+    ret = ((void *(*)(void *, void *))(uintptr_t)func)
+	    ((void *)a, (void *)b);
+    break;
+  default:
+    ret = NULL;
+    break;
+  }
   actions = lj_ccall_native_leave(L, cts, &native, func);
   lj_ccall_native_checkstop(L, actions, &native);
   return ret;

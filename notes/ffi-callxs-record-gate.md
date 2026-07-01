@@ -10,10 +10,11 @@ native state around `lj_vm_ffi_call()` and performs fresh STOPREQ handling,
 until x64 `IR_CALLXS` lowering can preserve ABI results and run the same native
 enter/leave protocol.
 
-The narrow signed 32-bit integer trampoline family in `lj_ccall_jit_i32_*()` is
-a separate helper-call bridge for 0, 1, or 2 integer arguments. It traces
-through `IRCALL`, not `IR_CALLXS`, and keeps the compile-time
-`LJ_FFI_RECORD_CALLS` gate intact.
+The narrow integer/pointer GPR trampoline family in
+`lj_ccall_jit_{i32,ptr}_gpr()` is a separate helper-call bridge for 0, 1, or 2
+exact signed 32-bit integer and pointer arguments, with signed 32-bit integer
+or pointer returns. It traces through `IRCALL`, not `IR_CALLXS`, and keeps the
+compile-time `LJ_FFI_RECORD_CALLS` gate intact.
 
 Validation:
 

@@ -8,6 +8,12 @@ int getpid(void);
 int poll(void *fds, unsigned long nfds, int timeout);
 int lj_m7_ccall_jit_sleep_i32(int);
 int lj_m7_ccall_jit_add2_i32(int, int);
+unsigned int lj_m7_ccall_jit_u32(unsigned int);
+int *lj_m7_ccall_jit_ptr0(void);
+int lj_m7_ccall_jit_ptr_read_i32(int *);
+int lj_m7_ccall_jit_ptr_sum_i32(int *, int *);
+int lj_m7_ccall_jit_i32_ptr_read_i32(int, int *);
+int *lj_m7_ccall_jit_ptr_add_i32(int *, int);
 ]]
 
 local abs = ffi.C.abs
@@ -124,10 +130,62 @@ do
     local lib = ffi.load(so)
     local sleep_i32 = lib.lj_m7_ccall_jit_sleep_i32
     local add2_i32 = lib.lj_m7_ccall_jit_add2_i32
+    local u32 = lib.lj_m7_ccall_jit_u32
+    local ptr0 = lib.lj_m7_ccall_jit_ptr0
+    local ptr_read_i32 = lib.lj_m7_ccall_jit_ptr_read_i32
+    local ptr_sum_i32 = lib.lj_m7_ccall_jit_ptr_sum_i32
+    local i32_ptr_read_i32 = lib.lj_m7_ccall_jit_i32_ptr_read_i32
+    local ptr_add_i32 = lib.lj_m7_ccall_jit_ptr_add_i32
     local function run_add2(n)
       local r = 0
       for i = 1, n do
 	r = r + add2_i32(i, 2)
+      end
+      return r
+    end
+    local function run_u32(n)
+      local r = 0
+      for _ = 1, n do
+	r = r + u32(7)
+      end
+      return r
+    end
+    local function run_ptr0(n)
+      local p
+      for _ = 1, n do
+	p = ptr0()
+      end
+      return p[2]
+    end
+    local function run_ptr_read(n)
+      local p = ptr0()
+      local r = 0
+      for i = 1, n do
+	r = r + ptr_read_i32(p + (i % 4))
+      end
+      return r
+    end
+    local function run_ptr_sum(n)
+      local p = ptr0()
+      local r = 0
+      for _ = 1, n do
+	r = r + ptr_sum_i32(p, p + 1)
+      end
+      return r
+    end
+    local function run_i32_ptr_read(n)
+      local p = ptr0()
+      local r = 0
+      for i = 1, n do
+	r = r + i32_ptr_read_i32(i % 4, p)
+      end
+      return r
+    end
+    local function run_ptr_add(n)
+      local p = ptr0()
+      local r = 0
+      for i = 1, n do
+	r = r + ptr_add_i32(p, i % 4)[0]
       end
       return r
     end
@@ -143,6 +201,36 @@ do
     jit.opt.start("hotloop=1", "hotexit=1")
     assert(run_add2(80) == (80 * 81) / 2 + 80 * 5)
     assert(trace_count() > 0, "shared int,int->int FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    assert(run_u32(80) == 80 * 8)
+    assert(trace_count() == 0, "unsigned int FFI calls must keep stock semantics off trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    assert(run_ptr0(80) == 33)
+    assert(trace_count() > 0, "shared void->ptr FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    assert(run_ptr_read(80) == 80 * 27 + 40)
+    assert(trace_count() > 0, "shared ptr->int FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    assert(run_ptr_sum(80) == 80 * 33)
+    assert(trace_count() > 0, "shared ptr,ptr->int FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    assert(run_i32_ptr_read(80) == 80 * 27 + 40)
+    assert(trace_count() > 0, "shared int,ptr->int FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    assert(run_ptr_add(80) == 80 * 27 + 40)
+    assert(trace_count() > 0, "shared ptr,int->ptr FFI call loop should trace")
 
     jit.flush()
     jit.opt.start("hotloop=1", "hotexit=1")
