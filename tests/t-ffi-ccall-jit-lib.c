@@ -85,6 +85,11 @@ unsigned int lj_m7_ccall_jit_u32(unsigned int a)
   return a + 1u;
 }
 
+uint32_t lj_m7_ccall_jit_u32_0(void)
+{
+  return 0xf0000001u;
+}
+
 int *lj_m7_ccall_jit_ptr0(void)
 {
   return lj_m7_ccall_jit_values;

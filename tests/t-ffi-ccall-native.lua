@@ -19,6 +19,7 @@ int lj_m7_ccall_jit_void_count_i32(void);
 void lj_m7_ccall_jit_void0(void);
 void lj_m7_ccall_jit_store_i32(int *, int);
 unsigned int lj_m7_ccall_jit_u32(unsigned int);
+uint32_t lj_m7_ccall_jit_u32_0(void);
 int *lj_m7_ccall_jit_ptr0(void);
 int lj_m7_ccall_jit_ptr_read_i32(int *);
 int lj_m7_ccall_jit_ptr_sum_i32(int *, int *);
@@ -151,6 +152,7 @@ do
     local void0 = lib.lj_m7_ccall_jit_void0
     local store_i32 = lib.lj_m7_ccall_jit_store_i32
     local u32 = lib.lj_m7_ccall_jit_u32
+    local u32_0 = lib.lj_m7_ccall_jit_u32_0
     local ptr0 = lib.lj_m7_ccall_jit_ptr0
     local ptr_read_i32 = lib.lj_m7_ccall_jit_ptr_read_i32
     local ptr_sum_i32 = lib.lj_m7_ccall_jit_ptr_sum_i32
@@ -232,6 +234,13 @@ do
       local r = 0
       for _ = 1, n do
 	r = r + u32(7)
+      end
+      return r
+    end
+    local function run_u32_0(n)
+      local r = 0
+      for _ = 1, n do
+	r = r + u32_0()
       end
       return r
     end
@@ -336,6 +345,11 @@ do
     jit.opt.start("hotloop=1", "hotexit=1")
     assert(run_u32(80) == 80 * 8)
     assert(trace_count() == 0, "unsigned int FFI calls must keep stock semantics off trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    assert(run_u32_0(80) == 80 * 0xf0000001)
+    assert(trace_count() > 0, "shared void->uint32_t FFI call loop should trace")
 
     jit.flush()
     jit.opt.start("hotloop=1", "hotexit=1")

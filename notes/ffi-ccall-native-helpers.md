@@ -30,7 +30,9 @@ This remains infrastructure for a future direct `IR_CALLXS` bridge. The narrow
 signed 32-bit integer, and pointer-returning calls with 0, 1, or 2
 integer/pointer arguments through `IRCALL` helpers using this same native-state
 protocol. `lj_ccall_jit_i64_gpr()` handles exact zero-argument signed 64-bit
-integer returns and preserves boxed int64 cdata results. The sibling
+integer returns and preserves boxed int64 cdata results.
+`lj_ccall_jit_u32_0()` handles exact zero-argument unsigned 32-bit integer
+returns as Lua numbers without high-bit truncation. The sibling
 `lj_ccall_jit_{num,flt}_fpr()` helpers trace exact double or float returns with
 0, 1, or 2 same-kind exact FP arguments. Broad traced ordinary FFI C calls
 remain disabled by `LJ_FFI_RECORD_CALLS=0` because x64 `IR_CALLXS` lowering
