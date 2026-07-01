@@ -953,10 +953,19 @@ static void gc_traverse_func(global_State *g, GCfunc *fn)
 }
 
 #if LJ_HASJIT
+static GCtrace *gc_traceref_safe(global_State *g, TraceNo traceno)
+{
+  jit_State *J = G2J(g);
+  TraceVec *tv = tracevec_acq(J);
+  if (traceno == 0 || tv == NULL || (MSize)traceno >= tv->sizetrace)
+    return NULL;
+  return traceref_fromgco(gcref_acq(tv->slot[traceno]));
+}
+
 /* Mark a trace. */
 static void gc_marktrace(global_State *g, TraceNo traceno)
 {
-  GCtrace *T = traceref(G2J(g), traceno);
+  GCtrace *T = gc_traceref_safe(g, traceno);
   GCobj *o;
   if (!T)
     return;

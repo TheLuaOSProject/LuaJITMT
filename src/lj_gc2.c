@@ -1316,13 +1316,19 @@ static void gc2_mark_tab_retired_mem(global_State *g)
 }
 
 #if LJ_HASJIT
+static GCtrace *gc2_traceref_safe(global_State *g, TraceNo traceno)
+{
+  jit_State *J = G2J(g);
+  TraceVec *tv = tracevec_acq(J);
+  if (traceno == 0 || tv == NULL || (MSize)traceno >= tv->sizetrace)
+    return NULL;
+  return traceref_fromgco(gcref_acq(tv->slot[traceno]));
+}
+
 static void gc2_traverse_trace(global_State *g, GCtrace *T);
 static int gc2_mark_trace_root(global_State *g, TraceNo traceno)
 {
-  GCtrace *T;
-  if (traceno == 0)
-    return 0;
-  T = traceref(G2J(g), traceno);
+  GCtrace *T = gc2_traceref_safe(g, traceno);
   if (!T)
     return 0;
   lj_gc2_markobj(g, obj2gco(T));
@@ -2134,10 +2140,13 @@ static int gc2_finalizer_mt_reclaim_exclusive(global_State *g)
 static int gc2_finalizer_pcall(global_State *g, lua_State *L,
 			       TValue *top, int *continue_gc)
 {
+  uint8_t oldstate = g->gc.state;
   int had_mt_exclusive = gc2_finalizer_mt_release_exclusive(g);
   int errcode = lj_vm_pcall(L, top, 1+0, -1);  /* Stack: |mo|o| -> | */
   int keep_gc = had_mt_exclusive ?
-		gc2_finalizer_mt_reclaim_exclusive(g) : 1;
+			gc2_finalizer_mt_reclaim_exclusive(g) : 1;
+  if (!keep_gc && oldstate == GCSfinalize)
+    g->gc.state = GCSfinalize;
   if (continue_gc)
     *continue_gc = keep_gc;
   return errcode;
@@ -5909,11 +5918,9 @@ static void gc2_note_weak_table(global_State *g, GCtab *t, int weak)
 #if LJ_HASJIT
 static void gc2_marktrace_worker(global_State *g, TraceNo traceno)
 {
-  if (traceno) {
-    GCtrace *T = traceref(G2J(g), traceno);
-    if (T)
-      gc2_markobj_worker(g, obj2gco(T));
-  }
+  GCtrace *T = gc2_traceref_safe(g, traceno);
+  if (T)
+    gc2_markobj_worker(g, obj2gco(T));
 }
 #endif
 
