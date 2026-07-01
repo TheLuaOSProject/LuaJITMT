@@ -1686,11 +1686,26 @@ uint64_t lj_ccall_jit_u64_u64(lua_State *L, void *func, uint64_t a,
   lj_ccall_native_save(L, &native);
   lj_ccall_native_enter(L, &native, func);
   switch (sig) {
-  case LJ_CCALL_JIT_NUM_SIG_NUM:
+  case LJ_CCALL_JIT_64_SIG_U64:
     ret = ((uint64_t (*)(uint64_t))(uintptr_t)func)(a);
     break;
-  case LJ_CCALL_JIT_NUM_SIG_NUM_NUM:
+  case LJ_CCALL_JIT_64_SIG_I64:
+    ret = ((uint64_t (*)(int64_t))(uintptr_t)func)((int64_t)a);
+    break;
+  case LJ_CCALL_JIT_64_SIG_U64_U64:
     ret = ((uint64_t (*)(uint64_t, uint64_t))(uintptr_t)func)(a, b);
+    break;
+  case LJ_CCALL_JIT_64_SIG_I64_I64:
+    ret = ((uint64_t (*)(int64_t, int64_t))(uintptr_t)func)
+	    ((int64_t)a, (int64_t)b);
+    break;
+  case LJ_CCALL_JIT_64_SIG_I64_U64:
+    ret = ((uint64_t (*)(int64_t, uint64_t))(uintptr_t)func)
+	    ((int64_t)a, b);
+    break;
+  case LJ_CCALL_JIT_64_SIG_U64_I64:
+    ret = ((uint64_t (*)(uint64_t, int64_t))(uintptr_t)func)
+	    (a, (int64_t)b);
     break;
   default:
     ret = 0;
@@ -1711,14 +1726,29 @@ int64_t lj_ccall_jit_i64_gpr(lua_State *L, void *func, int64_t a,
   lj_ccall_native_save(L, &native);
   lj_ccall_native_enter(L, &native, func);
   switch (sig) {
-  case LJ_CCALL_JIT_NUM_SIG0:
+  case LJ_CCALL_JIT_64_SIG0:
     ret = ((int64_t (*)(void))(uintptr_t)func)();
     break;
-  case LJ_CCALL_JIT_NUM_SIG_NUM:
+  case LJ_CCALL_JIT_64_SIG_I64:
     ret = ((int64_t (*)(int64_t))(uintptr_t)func)(a);
     break;
-  case LJ_CCALL_JIT_NUM_SIG_NUM_NUM:
+  case LJ_CCALL_JIT_64_SIG_U64:
+    ret = ((int64_t (*)(uint64_t))(uintptr_t)func)((uint64_t)a);
+    break;
+  case LJ_CCALL_JIT_64_SIG_I64_I64:
     ret = ((int64_t (*)(int64_t, int64_t))(uintptr_t)func)(a, b);
+    break;
+  case LJ_CCALL_JIT_64_SIG_I64_U64:
+    ret = ((int64_t (*)(int64_t, uint64_t))(uintptr_t)func)
+	    (a, (uint64_t)b);
+    break;
+  case LJ_CCALL_JIT_64_SIG_U64_I64:
+    ret = ((int64_t (*)(uint64_t, int64_t))(uintptr_t)func)
+	    ((uint64_t)a, b);
+    break;
+  case LJ_CCALL_JIT_64_SIG_U64_U64:
+    ret = ((int64_t (*)(uint64_t, uint64_t))(uintptr_t)func)
+	    ((uint64_t)a, (uint64_t)b);
     break;
   default:
     ret = 0;

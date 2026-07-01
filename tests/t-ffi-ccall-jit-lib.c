@@ -60,6 +60,21 @@ int64_t lj_m7_ccall_jit_i64_i64_i64(int64_t a, int64_t b)
   return a + b + 3;
 }
 
+int64_t lj_m7_ccall_jit_i64_u64(uint64_t a)
+{
+  return a > UINT64_MAX - UINT64_C(16) ? -12 : (int64_t)a;
+}
+
+int64_t lj_m7_ccall_jit_i64_i64_u64(int64_t a, uint64_t b)
+{
+  return a + (int64_t)(b & UINT64_C(255)) + 5;
+}
+
+int64_t lj_m7_ccall_jit_i64_u64_i64(uint64_t a, int64_t b)
+{
+  return (int64_t)(a & UINT64_C(255)) + b + 3;
+}
+
 int8_t lj_m7_ccall_jit_i8_0(void)
 {
   return -7;
@@ -253,6 +268,21 @@ uint64_t lj_m7_ccall_jit_u64(uint64_t a)
 uint64_t lj_m7_ccall_jit_u64_u64_u64(uint64_t a, uint64_t b)
 {
   return a + b + 5;
+}
+
+uint64_t lj_m7_ccall_jit_u64_i64(int64_t a)
+{
+  return (uint64_t)(a - 5);
+}
+
+uint64_t lj_m7_ccall_jit_u64_i64_u64(int64_t a, uint64_t b)
+{
+  return (uint64_t)a + b + UINT64_C(11);
+}
+
+uint64_t lj_m7_ccall_jit_u64_u64_i64(uint64_t a, int64_t b)
+{
+  return a + (uint64_t)b + UINT64_C(13);
 }
 
 uint64_t lj_m7_ccall_jit_u64_i32(int32_t a)

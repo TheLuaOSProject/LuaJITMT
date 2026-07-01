@@ -9,8 +9,9 @@ unsigned 32-bit, or pointer arguments, plus exact zero-argument signed/unsigned
 64-bit integer returns. Narrow integer returns, unsigned 32-bit returns, and
 signed/unsigned 64-bit integer returns may also use the same signed
 32-bit/unsigned 32-bit/pointer GPR argument subset. The exact 64-bit
-cdata-result slices accept one or two same-signed `int64_t` or `uint64_t`
-arguments. The FPR subset accepts 0, 1, or 2 same-kind exact
+cdata-result slices accept one or two `int64_t` and/or `uint64_t` arguments,
+with the helper signature preserving signedness for each argument. The FPR
+subset accepts 0, 1, or 2 same-kind exact
 float or double arguments. The first mixed one-argument subset
 accepts exact `double(int32_t)`, `double(pointer)`, `double(float)`,
 `int32_t(double)`, `int32_t(float)`, `int32_t(int8_t)`, `pointer(double)`,
@@ -64,8 +65,8 @@ The scope is deliberately narrow:
 - zero-argument exact unsigned 64-bit integer returns;
 - exact signed/unsigned 64-bit integer returns with signed 32-bit, unsigned
   32-bit, or pointer arguments;
-- exact one- or two-argument `int64_t`/`uint64_t` calls where argument and
-  result signedness match;
+- exact one- or two-argument `int64_t`/`uint64_t` calls with per-argument
+  signedness preserved;
 - same-kind exact float/double arguments and exact float/double returns;
 - exact one-argument `double(int32_t)`, `double(pointer)`, `double(float)`,
   `int32_t(double)`, `int32_t(float)`, `int32_t(int8_t)`,
@@ -84,7 +85,7 @@ uint32-argument/result loops, zero-argument narrow integer result loops,
 signed-int/unsigned-int/pointer to narrow integer result loops, exact
 int8-to-int loops, signed-int/unsigned-int/pointer to int64/uint64 cdata-result
 loops, zero-argument signed int64 and unsigned uint64 cdata-result loops, exact
-one- and two-argument int64/uint64 argument/result loops, traced
+one- and two-argument int64/uint64 mixed-signedness argument/result loops, traced
 `poll(nil, 0, 0)`-style loops, FP-only numeric
 call loops, signed-narrow-to-`unsigned long` conversion probes, and
 mixed float/double one-argument calls a traced, nonblocking native-state path,
