@@ -3209,7 +3209,7 @@ static int crec_call_jit_i32_i32_ptr_u32(jit_State *J, RecordFFData *rd,
   return 1;
 }
 
-static int crec_call_jit_i32_ptr_ptr_u64(jit_State *J, RecordFFData *rd,
+static int crec_call_jit_32_ptr_ptr_u64(jit_State *J, RecordFFData *rd,
 					 CTState *cts, CType *ct,
 					 CTInfo info, GCcdata *cd,
 					 IRType tp, CTSize fsz)
@@ -3219,6 +3219,7 @@ static int crec_call_jit_i32_ptr_ptr_u64(jit_State *J, RecordFFData *rd,
   CTypeID fid, did;
   CTInfo ctr_info, ctfinfo, dinfo;
   TRef func, arg0, arg1, arg2;
+  int retuns;
   MSize narg = 0;
 
   if ((info & CTF_VARARG))
@@ -3233,9 +3234,9 @@ static int crec_call_jit_i32_ptr_ptr_u64(jit_State *J, RecordFFData *rd,
 
   ctr = crec_ctype_rawchild(J, cts, ct, &ctrsnap);
   ctr_info = ctype_info_acq(ctr);
-  if (!ctype_isinteger(ctr_info) || ctype_size_acq(ctr) != 4 ||
-      (ctr_info & CTF_UNSIGNED))
+  if (!ctype_isinteger(ctr_info) || ctype_size_acq(ctr) != 4)
     return 0;
+  retuns = (ctr_info & CTF_UNSIGNED) != 0;
 
   fid = ctype_sib_acq(ct);
   while (fid) {
@@ -3299,8 +3300,12 @@ static int crec_call_jit_i32_ptr_ptr_u64(jit_State *J, RecordFFData *rd,
     lj_trace_err(J, LJ_TRERR_BLACKL);
 
   func = emitir(IRT(IR_FLOAD, tp), J->base[0], IRFL_CDATA_PTR);
-  J->base[0] = lj_ir_call(J, IRCALL_lj_ccall_jit_i32_ptr_ptr_u64,
-			  func, arg0, arg1, arg2);
+  if (retuns)
+    J->base[0] = lj_ir_call(J, IRCALL_lj_ccall_jit_u32_ptr_ptr_u64,
+			    func, arg0, arg1, arg2);
+  else
+    J->base[0] = lj_ir_call(J, IRCALL_lj_ccall_jit_i32_ptr_ptr_u64,
+			    func, arg0, arg1, arg2);
   J->needsnap = 1;
   return 1;
 }
@@ -4837,7 +4842,7 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
       return 1;
     if (crec_call_jit_i32_i32_ptr_u32(J, rd, cts, ct, info, cd, tp, fsz))
       return 1;
-    if (crec_call_jit_i32_ptr_ptr_u64(J, rd, cts, ct, info, cd, tp, fsz))
+    if (crec_call_jit_32_ptr_ptr_u64(J, rd, cts, ct, info, cd, tp, fsz))
       return 1;
     if (crec_call_jit_void_ptr_ptr_u64(J, rd, cts, ct, info, cd, tp, fsz))
       return 1;
