@@ -3005,22 +3005,10 @@ int32_t LJ_FASTCALL lj_tab_vmnext_forward(GCtab *t, uint32_t idx, TValue *out)
 }
 
 int32_t lj_tab_vmnext_forjit(lua_State *L, GCtab *t, uint32_t idx,
-			     TValue *outv, TValue *outk)
+			     TValue *out)
 {
-  TValue key, kv[2];
-  int ok;
   UNUSED(L);
-  key.u32.lo = idx;
-  key.u32.hi = LJ_KEYINDEX;
-  ok = lj_tab_next(t, &key, kv);
-  if (ok == 1) {
-    outv[0] = kv[1];
-    outk[0] = kv[0];
-    return (int32_t)lj_tab_keyindex(t, &kv[0]);
-  }
-  setnilV(outv);
-  setnilV(outk);
-  return ok < 0 ? -1 : 0;
+  return lj_tab_vmnext_forward(t, idx, out);
 }
 
 /* -- Table length calculation -------------------------------------------- */
