@@ -2,8 +2,8 @@
 
 ---@alias threading.timeout_error "timeout"
 ---@alias threading.thread_fn fun(...: any): ...
----@alias threading.recv_status boolean|threading.timeout_error
----@alias threading.peek_status boolean
+---@alias threading.recv_status true|false|threading.timeout_error
+---@alias threading.peek_status true|false
 ---@alias threading.send_result true|nil
 ---@alias threading.gcmode "incremental"|"generational"
 ---@alias threading.gcstats_latency_buckets table<integer, number>
@@ -142,6 +142,7 @@ function threading_thread:__tostring() end
 local threading_mutex = {}
 
 ---Block until the mutex is acquired.
+---@return nil
 function threading_mutex:lock() end
 
 ---@return boolean locked
@@ -151,6 +152,7 @@ function threading_mutex:trylock() end
 ---Release the mutex.
 ---
 ---Errors if the mutex is not currently locked.
+---@return nil
 function threading_mutex:unlock() end
 
 ---@return "threading.mutex"
@@ -198,6 +200,7 @@ function threading_channel:recv(timeout) end
 function threading_channel:peek() end
 
 ---Close the channel.
+---@return nil
 function threading_channel:close() end
 
 ---@return "threading.channel"
@@ -217,10 +220,12 @@ function threading.cpucount() end
 function threading.now() end
 
 ---Issue a cross-thread memory fence.
+---@return nil
 function threading.fence() end
 
 ---@overload fun()
 ---@param seconds number seconds to sleep; omitted defaults to 0.
+---@return nil
 function threading.sleep(seconds) end
 
 ---Return GC2/lockless runtime telemetry used by tests and benchmarks.
@@ -258,6 +263,7 @@ function threading.mutex() end
 ---requested capacity.
 ---@generic T
 ---@overload fun<T>(): threading.channel<T>
+---@overload fun<T>(capacity: integer): threading.channel<T>
 ---@param capacity integer buffered slot count; omitted defaults to 0.
 ---@return threading.channel<T> channel
 function threading.channel(capacity) end
