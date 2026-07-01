@@ -328,6 +328,14 @@ do
       end
       return r
     end
+    local function run_i8_arg_wrap(n)
+      local arg = ffi.new("uint8_t", 255)
+      local r = 0
+      for _ = 1, n do
+	r = r + i8_arg_i32(arg)
+      end
+      return r
+    end
     local function run_num0(n)
       local r = 0
       for _ = 1, n do
@@ -655,7 +663,12 @@ do
     jit.flush()
     jit.opt.start("hotloop=1", "hotexit=1")
     assert(run_i8_arg(80) == 960)
-    assert(trace_count() == 0, "narrow integer FFI call arguments must stay off trace")
+    assert(trace_count() > 0, "shared int8_t->int FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    assert(run_i8_arg_wrap(80) == 320)
+    assert(trace_count() > 0, "shared wrapped uint8_t->int8_t->int FFI call loop should trace")
 
     jit.flush()
     jit.opt.start("hotloop=1", "hotexit=1")

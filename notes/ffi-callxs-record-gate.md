@@ -25,7 +25,8 @@ recorder can produce the exact ABI value without widening the semantics.
 16-bit integer returns as Lua numbers, after calling the exact C return type.
 `lj_ccall_jit_narrow_gpr()` extends those exact narrow returns to signed
 32-bit integer or pointer arguments. Narrow integer argument conversion remains
-interpreted.
+interpreted except for the exact `int32_t(int8_t)` slice traced through
+`lj_ccall_jit_i32_i8()`.
 `lj_ccall_jit_u32_0()` traces exact zero-argument unsigned 32-bit returns as
 Lua numbers, preserving high-bit values without signed truncation. Unsigned
 integer returns with exact signed 32-bit integer or pointer arguments trace
@@ -43,12 +44,12 @@ returns with 0, 1, or 2 same-kind exact FP arguments through the same
 native-state bridge.
 `lj_ccall_jit_num_i32()`, `lj_ccall_jit_num_ptr()`,
 `lj_ccall_jit_num_flt()`, `lj_ccall_jit_i32_num()`,
-`lj_ccall_jit_i32_flt()`, `lj_ccall_jit_ptr_num()`,
+`lj_ccall_jit_i32_flt()`, `lj_ccall_jit_i32_i8()`, `lj_ccall_jit_ptr_num()`,
 `lj_ccall_jit_void_num()`, `lj_ccall_jit_void_flt()`, and
 `lj_ccall_jit_flt_num()` trace the first mixed one-argument slice: exact
 `double(int32_t)`, `double(pointer)`, `double(float)`, `int32_t(double)`,
-`int32_t(float)`, `pointer(double)`, `void(double)`, `void(float)`, and
-`float(double)`, while other mixed shapes remain
+`int32_t(float)`, `int32_t(int8_t)`, `pointer(double)`, `void(double)`,
+`void(float)`, and `float(double)`, while other mixed shapes remain
 interpreted.
 
 Validation:

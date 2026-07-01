@@ -51,9 +51,11 @@ integer or pointer arguments. The sibling
 0, 1, or 2 same-kind exact FP arguments. `lj_ccall_jit_num_i32()`,
 `lj_ccall_jit_num_ptr()`, `lj_ccall_jit_num_flt()`,
 `lj_ccall_jit_i32_num()`, `lj_ccall_jit_i32_flt()`,
-`lj_ccall_jit_ptr_num()`, `lj_ccall_jit_void_num()`,
+`lj_ccall_jit_i32_i8()`, `lj_ccall_jit_ptr_num()`,
+`lj_ccall_jit_void_num()`,
 `lj_ccall_jit_void_flt()`, and `lj_ccall_jit_flt_num()` cover the first exact
-mixed one-argument calls, including float/double crossings. Broad traced
+mixed one-argument calls, including float/double crossings and the first exact
+signed narrow argument conversion. Broad traced
 ordinary FFI C calls remain disabled by
 `LJ_FFI_RECORD_CALLS=0` because x64 `IR_CALLXS` lowering still needs explicit
 result preservation and carefully ordered native entry relative to ABI argument
