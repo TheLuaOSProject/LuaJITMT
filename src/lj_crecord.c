@@ -5897,10 +5897,8 @@ void LJ_FASTCALL recff_ffi_xof(jit_State *J, RecordFFData *rd)
 
 void LJ_FASTCALL recff_ffi_gc(jit_State *J, RecordFFData *rd)
 {
-  argv2cdata(J, J->base[0], &rd->argv[0]);
-  if (!J->base[1])
-    lj_trace_err(J, LJ_TRERR_BADTYPE);
-  crec_finalizer(J, J->base[0], J->base[1], &rd->argv[1]);
+  UNUSED(rd);
+  lj_trace_err(J, LJ_TRERR_NYICONV);
 }
 
 /* -- 64 bit bit.* library functions -------------------------------------- */

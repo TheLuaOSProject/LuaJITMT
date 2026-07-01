@@ -50,6 +50,7 @@ typedef int (*GC2FinalizerDispatchFunc)(lua_State *L, global_State *g,
 #define GC2_WEAK_INIT	128u
 #define GC2_WEAK_LIMIT	((MSize)(LJ_MAX_MEM32 / sizeof(GCRef)))
 #define GC2_FINCLAIM_INIT	128u
+#define GC2_FINCLAIM_FIXED	4096u
 #define GC2_FINCLAIM_LIMIT \
   ((MSize)(LJ_MAX_MEM32 / (sizeof(GCRef) + sizeof(TValue))))
 #define GC2_ACTIVE_FINALIZE_COST	100
@@ -3076,6 +3077,21 @@ static void gc2_scan_pending_roots(global_State *g)
 #endif
 }
 
+static void gc2_scan_threading_states(global_State *g)
+{
+  lua_State *th;
+  uint32_t n = 0;
+  if (!g)
+    return;
+  for (th = (lua_State *)la_loadptr_acq((void *const *)&g->threading_states);
+       th != NULL;
+       th = (lua_State *)la_loadptr_acq((void *const *)&th->thread_next)) {
+    lj_gc2_markobj(g, obj2gco(th));
+    if (++n >= GC2_ROOT_SCAN_LIMIT)
+      break;
+  }
+}
+
 static void gc2_scan_tg_roots(global_State *g)
 {
   TGState *tg;
@@ -3156,6 +3172,7 @@ static void gc2_scan_global_roots(global_State *g)
       lj_gc2_markobj(g, o);
   }
   gc2_scan_pending_roots(g);
+  gc2_scan_threading_states(g);
   gc2_mark_fixedstr(g);
   gc2_mark_strtab_mem(g);
   gc2_mark_tab_retired_mem(g);
@@ -3449,23 +3466,6 @@ static void gc2_weak_reset(global_State *g)
   gc2_weak_clear_cursor_store_rlx(g, 0);
 }
 
-static MSize gc2_finclaim_next_capacity(MSize cap, MSize need)
-{
-  MSize n = cap ? cap : GC2_FINCLAIM_INIT;
-  if (n < GC2_FINCLAIM_INIT)
-    n = GC2_FINCLAIM_INIT;
-  if (need > GC2_FINCLAIM_LIMIT)
-    need = GC2_FINCLAIM_LIMIT;
-  while (n < need && n < GC2_FINCLAIM_LIMIT) {
-    if (n > (GC2_FINCLAIM_LIMIT >> 1)) {
-      n = GC2_FINCLAIM_LIMIT;
-      break;
-    }
-    n <<= 1;
-  }
-  return n;
-}
-
 static void gc2_finclaim_publish(lua_State *L, global_State *g, MSize idx,
 				 GCobj *o, cTValue *fin)
 {
@@ -3565,7 +3565,7 @@ static void gc2_finclaim_reset(global_State *g)
   count = gc2_finreg_cdata_preclaim_count_acq(g);
   pending = count > head ? count - head : 0;
   if (!obj || !fin || cap == 0) {
-    (void)gc2_finclaim_resize(g, GC2_FINCLAIM_INIT);
+    (void)gc2_finclaim_resize(g, GC2_FINCLAIM_FIXED);
     return;
   }
   if (head != 0 && pending != 0) {
@@ -3574,11 +3574,6 @@ static void gc2_finclaim_reset(global_State *g)
   }
   gc2_finreg_cdata_preclaim_head_rel(g, 0);
   gc2_finreg_cdata_preclaim_count_rel(g, pending);
-  if (pending >= cap && cap < GC2_FINCLAIM_LIMIT) {
-    MSize ncap = gc2_finclaim_next_capacity(cap, pending + 1u);
-    if (ncap > cap)
-      (void)gc2_finclaim_resize(g, ncap);
-  }
 }
 
 static void gc2_weak_record(global_State *g, GCtab *t)
@@ -4535,16 +4530,7 @@ static int lj_gc2_finreg_cdata_preclaim(lua_State *L, global_State *g,
   count = gc2_finreg_cdata_preclaim_count_acq(g);
   cap = gc2_finreg_cdata_preclaim_capacity_acq(g);
   if (!gc2_finreg_cdata_preclaim_ready(g)) {
-    if (!gc2_finclaim_resize(g, GC2_FINCLAIM_INIT)) {
-      gc2_finreg_cdata_preclaim_overflow_add(g, 1);
-      return 0;
-    }
-    count = gc2_finreg_cdata_preclaim_count_acq(g);
-    cap = gc2_finreg_cdata_preclaim_capacity_acq(g);
-  }
-  if (count >= cap) {
-    MSize ncap = gc2_finclaim_next_capacity(cap, count + 1u);
-    if (ncap <= cap || !gc2_finclaim_resize(g, ncap)) {
+    if (!gc2_finclaim_resize(g, GC2_FINCLAIM_FIXED)) {
       gc2_finreg_cdata_preclaim_overflow_add(g, 1);
       return 0;
     }

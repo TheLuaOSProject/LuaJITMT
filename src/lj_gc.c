@@ -654,6 +654,19 @@ static void gc_mark_threading_live(global_State *g)
   }
 }
 
+static void gc_mark_threading_states(global_State *g)
+{
+  lua_State *th;
+  uint32_t n = 0;
+  for (th = (lua_State *)la_loadptr_acq((void *const *)&g->threading_states);
+       th != NULL;
+       th = (lua_State *)la_loadptr_acq((void *const *)&th->thread_next)) {
+    gc_markobj(g, th);
+    if (++n >= 1000000u)
+      break;
+  }
+}
+
 static void gc_mark_gcroot(global_State *g)
 {
   ptrdiff_t i;
@@ -663,6 +676,7 @@ static void gc_mark_gcroot(global_State *g)
       gc_markobj(g, o);
   }
   gc_mark_threading_live(g);
+  gc_mark_threading_states(g);
   gc_mark_fixedstr(g);
   gc_mark_strtab_mem(g);
   gc_mark_tab_retired_mem(g);

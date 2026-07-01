@@ -1287,6 +1287,7 @@ static lua_State *threading_spawn_core(lua_State *L, GCtab *env, TValue *base,
   threading_live_publish(L, th, live);
   tg = lj_mem_newt(L, sizeof(TGState), TGState);
   threading_publish_thread_state(L, ud, th, L1);
+  lj_state_thread_registry_publish(G(L), L1);
   th->tg = tg;
   th->state = LJ_THREAD_STARTING;
   th->nargs = (uint32_t)nargs;

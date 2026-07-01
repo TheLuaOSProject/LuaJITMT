@@ -1555,6 +1555,7 @@ typedef struct global_State {
 #endif
   TGState *main_tg;	/* Main per-OS-thread state block. */
   LJThreadLive *threading_live;  /* Lockless threading.thread root list. */
+  lua_State *threading_states;  /* All non-main lua_State objects. */
   GC2State gc2;		/* Concurrent GC scaffold state. */
   uint32_t mt_active;	/* One-way latch: secondary Lua threads existed. */
   uint32_t mt_live;	/* Active secondary Lua threads. */
@@ -1895,6 +1896,7 @@ struct lua_State {
   GCRef openupval;	/* List of open upvalues in the stack. */
   GCRef env;		/* Thread environment (table of globals). */
   GCRef mt_thread;	/* threading.thread userdata for this state. */
+  lua_State *thread_next;  /* Lockless shutdown registry link. */
   void *cframe;		/* End of C stack frame chain. */
   MSize stacksize;	/* True stack size (incl. LJ_STACK_EXTRA). */
   TGState *tg_hint;	/* Owning/running TG block, if attached. */

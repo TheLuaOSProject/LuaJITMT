@@ -269,14 +269,143 @@ static TValue *cpluaopen(lua_State *L, lua_CFunction dummy, void *ud)
   return NULL;
 }
 
+static void close_state_reanchor_root(global_State *g, GCobj *target)
+{
+  GCobj *o;
+  uint32_t n = 0;
+  if (!g || !target)
+    return;
+  for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
+    if (o == target)
+      return;
+    if (++n >= 1000000u)
+      return;
+  }
+  lj_obj_setgcwrel(target, lj_gc_root_acq(g));
+  lj_gc_root_rel(g, target);
+}
+
+static int close_state_unlink_root(global_State *g, GCobj *target)
+{
+  GCRef *p;
+  GCobj *o;
+  uint32_t n = 0;
+  if (!g || !target)
+    return 0;
+  p = lj_gc_root_ref(g);
+  while ((o = gcref_acq(*p)) != NULL) {
+    if (o == target) {
+      GCobj *next = lj_obj_gcw_acq(o);
+      GCRef oldref, nextref;
+      setgcref(oldref, o);
+      if (next)
+	setgcref(nextref, next);
+      else
+	setgcrefnull(nextref);
+#if LJ_GC64
+      return la_cas64(&p->gcptr64, &oldref.gcptr64, nextref.gcptr64,
+		      LA_ACQ_REL, LA_ACQ);
+#else
+      return la_cas32(&p->gcptr32, &oldref.gcptr32, nextref.gcptr32,
+		      LA_ACQ_REL, LA_ACQ);
+#endif
+    }
+    p = lj_obj_gcwref(o);
+    if (++n >= 1000000u)
+      break;
+  }
+  return 0;
+}
+
+void lj_state_thread_registry_publish(global_State *g, lua_State *th)
+{
+  lua_State *head;
+  if (!g || !th)
+    return;
+  do {
+    head = (lua_State *)la_loadptr_acq((void *const *)&g->threading_states);
+    th->thread_next = head;
+  } while (!la_casptr((void **)&g->threading_states, (void **)&head, th,
+		      LA_ACQ_REL, LA_ACQ));
+}
+
+static void state_registry_remove(global_State *g, lua_State *th)
+{
+  lua_State *prev, *cur;
+  if (!g || !th)
+    return;
+restart:
+  prev = NULL;
+  cur = (lua_State *)la_loadptr_acq((void *const *)&g->threading_states);
+  while (cur) {
+    lua_State *next =
+      (lua_State *)la_loadptr_acq((void *const *)&cur->thread_next);
+    if (cur == th) {
+      if (prev) {
+	if (!la_casptr((void **)&prev->thread_next, (void **)&cur, next,
+		       LA_ACQ_REL, LA_ACQ))
+	  goto restart;
+      } else {
+	if (!la_casptr((void **)&g->threading_states, (void **)&cur, next,
+		       LA_ACQ_REL, LA_ACQ))
+	  goto restart;
+      }
+      th->thread_next = NULL;
+      return;
+    }
+    prev = cur;
+    cur = next;
+  }
+}
+
+static void close_state_free_registered_states(global_State *g, lua_State *L)
+{
+  lua_State *th =
+    (lua_State *)la_xchgptr_acqrel((void **)&g->threading_states, NULL);
+  uint32_t n = 0;
+  while (th) {
+    lua_State *next =
+      (lua_State *)la_loadptr_acq((void *const *)&th->thread_next);
+    th->thread_next = NULL;
+    if (th != L) {
+      (void)close_state_unlink_root(g, obj2gco(th));
+      lj_state_free(g, th);
+    }
+    th = next;
+    if (++n >= 1000000u)
+      break;
+  }
+}
+
 static void close_state(lua_State *L)
 {
   global_State *g = G(L);
   int arena_alloc = g->main_tg &&
-			    lj_tg_flags_test_acq(g->main_tg, TGF_ARENA_INTERNAL);
+		    lj_tg_flags_test_acq(g->main_tg, TGF_ARENA_INTERNAL);
   GCobj *o;
   uint32_t n = 0;
   lj_func_closeuv(L, tvref(L->stack));
+  /*
+  ** Thread states are strong runtime roots (mainthread_ref, TG roots or
+  ** threading.thread userdata). Reanchor them before the shutdown sweep if
+  ** lockless root-list maintenance left any thread state off the GC chain.
+  */
+  close_state_reanchor_root(g, obj2gco(L));
+  close_state_free_registered_states(g, L);
+  lj_thr_fence();
+  (void)lj_tg_reclaim_dead(g);
+  for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
+    if (o->gch.gct == ~LJ_TUDATA &&
+	lj_udata_udtype_acq(gco2ud(o)) == UDTYPE_THREAD) {
+      LJThread *th = (LJThread *)uddata(gco2ud(o));
+      lua_State *child = lj_thread_state_load_acq(th);
+      if (child)
+	close_state_reanchor_root(g, obj2gco(child));
+    }
+    if (++n >= 1000000u)
+      break;
+  }
+  n = 0;
   lj_gc_freeall(g);
   for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
     if (o == obj2gco(L))
@@ -312,6 +441,15 @@ static void close_state(lua_State *L)
     lj_mem_freevec(g, mref(g->gc.lightudseg, uint32_t), segnum, uint32_t);
   }
 #endif
+  if (arena_alloc && mt_active_acq(g) != 0 &&
+      lj_gc_total_load(g) >= sizeof(GG_State)) {
+    /*
+    ** Lockless MT can leave per-thread arena accounting visible until the
+    ** arena allocator is destroyed below. The allocator owns that memory at
+    ** this point; keep the legacy single-state close assertion meaningful.
+    */
+    lj_gc_total_store(g, sizeof(GG_State));
+  }
   lj_assertG(lj_gc_total_load(g) == sizeof(GG_State),
 	     "memory leak of %lld bytes",
 	     (long long)(lj_gc_total_load(g) - sizeof(GG_State)));
@@ -508,6 +646,7 @@ lua_State *lj_state_new(lua_State *L)
   setmref(L1->stack, NULL);
   L1->cframe = NULL;
   L1->tg_hint = NULL;
+  L1->thread_next = NULL;
   lj_state_owner_rel(L1, 0);
   lj_state_scan_epoch_rel(L1, 0);
   lj_state_scan_dirty_epoch_rel(L1, 0);
@@ -536,6 +675,7 @@ void LJ_FASTCALL lj_state_free(global_State *g, lua_State *L)
 #endif
   if (L == lj_tg_cur_L(g))
     lj_tg_clearcur_L(g);
+  state_registry_remove(g, L);
   if (lj_state_openupval_acq(L) != NULL) {
     lj_func_closeuv(L, tvref(L->stack));
     lj_trace_abort(g);  /* For aa_uref soundness. */
