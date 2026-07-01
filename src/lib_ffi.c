@@ -801,6 +801,7 @@ static CTypeID ffi_checkctype(lua_State *L, CTState *cts, TValue *param)
   err_argtype:
     lj_err_argtype(L, 1, "C type");
   }
+  lj_gc_pubroot(L, o);
   if (tvisstr(o)) {  /* Parse an abstract C type declaration. */
     GCstr *s = strV(o);
     int errcode;

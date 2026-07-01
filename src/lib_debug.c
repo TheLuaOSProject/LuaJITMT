@@ -17,6 +17,7 @@
 #include "lj_gc.h"
 #include "lj_err.h"
 #include "lj_debug.h"
+#include "lj_state.h"
 #include "lj_thr.h"
 #include "lj_safepoint.h"
 #include "lj_tg.h"
@@ -142,7 +143,9 @@ LJLIB_CF(debug_getinfo)
   } else if (L->base+arg < L->top && tvisfunc(L->base+arg)) {
     options = lua_pushfstring(L, ">%s", options);
     debug_claimthread(L, L1, &claim);
-    setfuncV(L1, L1->top++, funcV(L->base+arg));
+    setfuncV(L1, L1->top, funcV(L->base+arg));
+    lj_state_stack_pubtv(L, L1, L1->top);
+    L1->top++;
   } else {
     lj_err_arg(L, arg+1, LJ_ERR_NOFUNCL);
   }
@@ -240,7 +243,9 @@ LJLIB_CF(debug_setlocal)
     lj_state_dropclaim(&claim);
     lj_err_arg(L, arg+1, LJ_ERR_LVLRNG);
   }
-  copyTV(L1, L1->top++, tv);
+  copyTV(L1, L1->top, tv);
+  lj_state_stack_pubtv(L, L1, L1->top);
+  L1->top++;
   name = lua_setlocal(L1, &ar, slot);
   lj_state_dropclaim(&claim);
   lua_pushstring(L, name);

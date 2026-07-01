@@ -726,7 +726,9 @@ LJLIB_CF(coroutine_create)
   if (!(L->base < L->top && tvisfunc(L->base)))
     lj_err_argt(L, 1, LUA_TFUNCTION);
   L1 = lua_newthread(L);
-  setfuncV(L, L1->top++, funcV(L->base));
+  setfuncV(L, L1->top, funcV(L->base));
+  lj_state_stack_pubtv(L, L1, L1->top);
+  L1->top++;
   return 1;
 }
 

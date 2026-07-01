@@ -115,14 +115,15 @@ int lj_state_rehome_stack(lua_State *L)
   memcpy(st, oldst, sz);
   lj_gc_total_add(g, (GCSize)sz);
   lj_gc2_account_alloc(g, tg, (GCSize)sz);  /* 04 section 4.8 worker stack. */
-  setmref(L->stack, st);
+  setmrefrel(L->stack, st);
   delta = (char *)st - (char *)oldst;
-  setmref(L->maxstack, (TValue *)((char *)tvref(L->maxstack) + delta));
+  setmrefrel(L->maxstack, (TValue *)((char *)tvref(L->maxstack) + delta));
   L->base = (TValue *)((char *)L->base + delta);
   L->top = (TValue *)((char *)L->top + delta);
   for (up = lj_state_openupval_acq(L); up != NULL;
        up = lj_obj_gcw_acq(up))
     setmref(gco2uv(up)->v, (TValue *)((char *)uvval(gco2uv(up)) + delta));
+  lj_state_stack_pubrange(L, L);
   lj_mem_freevec(g, oldst, stacksize, TValue);
   return 1;
 }
@@ -226,6 +227,21 @@ static void stack_init(lua_State *L1, lua_State *L)
     setnilV(st++);
 }
 
+void lj_state_stack_pubtv(lua_State *L, lua_State *target, cTValue *tv)
+{
+  UNUSED(target);
+  tv_rawstore_rel((TValue *)tv, tv_rawload(tv));
+  lj_gc_pubroot(L, tv);
+}
+
+void lj_state_stack_pubrange(lua_State *L, lua_State *target)
+{
+  TValue *o = tvref(target->stack) + 1 + LJ_FR2;
+  TValue *top = target->top;
+  while (o < top)
+    lj_state_stack_pubtv(L, target, o++);
+}
+
 /* -- State handling ------------------------------------------------------ */
 
 /* Open parts that may cause memory-allocation errors. */
@@ -257,11 +273,20 @@ static void close_state(lua_State *L)
 {
   global_State *g = G(L);
   int arena_alloc = g->main_tg &&
-		    lj_tg_flags_test_acq(g->main_tg, TGF_ARENA_INTERNAL);
+			    lj_tg_flags_test_acq(g->main_tg, TGF_ARENA_INTERNAL);
+  GCobj *o;
+  uint32_t n = 0;
   lj_func_closeuv(L, tvref(L->stack));
   lj_gc_freeall(g);
-  lj_assertG(lj_gc_root_acq(g) == obj2gco(L),
-	     "main thread is not first GC object");
+  for (o = lj_gc_root_acq(g); o != NULL; o = lj_obj_gcw_acq(o)) {
+    if (o == obj2gco(L))
+      break;
+    if (++n >= 1000000u) {
+      lj_assertG(0, "root list cycle after freeall");
+      break;
+    }
+  }
+  lj_assertG(o == obj2gco(L), "main thread missing after freeall");
   lj_assertG(g->str.num == 0, "leaked %d strings", g->str.num);
   lj_trace_freestate(g);
 #if LJ_HASFFI
@@ -474,7 +499,8 @@ LUA_API void lua_close(lua_State *L)
 
 lua_State *lj_state_new(lua_State *L)
 {
-  lua_State *L1 = lj_mem_newobj(L, lua_State);
+  global_State *g = G(L);
+  lua_State *L1 = (lua_State *)lj_mem_newgco_unlinked(L, sizeof(lua_State));
   L1->gct = ~LJ_TTHREAD;
   L1->dummy_ffid = FF_C;
   L1->status = LUA_OK;
@@ -490,12 +516,14 @@ lua_State *lj_state_new(lua_State *L)
   lj_state_mt_thread_clear_rel(L1);
   setmrefr(L1->glref, L->glref);
   lj_state_env_copy_rel(L1, L);
+  newwhite(g, obj2gco(L1));
+  stack_init(L1, L);  /* init stack */
+  lj_gc_linkobj_after(obj2gco(mainthread_acq(g)), obj2gco(L1));
   {
     GCtab *env = lj_state_env_acq(L1);
     if (env)
       lj_gc_pubobjobj(L, L1, env);
   }
-  stack_init(L1, L);  /* init stack */
   lj_assertL(iswhite(obj2gco(L1)), "new thread object is not white");
   return L1;
 }

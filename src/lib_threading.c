@@ -109,23 +109,24 @@ static LJThreadLive *threading_live_new(lua_State *L, GCudata *ud)
   return node;
 }
 
-static void threading_live_publish(global_State *g, LJThread *th,
+static void threading_live_publish(lua_State *L, LJThread *th,
 				   LJThreadLive *node)
 {
+  global_State *g = G(L);
   LJThreadLive *head;
   do {
     head = lj_thread_live_head_acq(g);
     lj_thread_live_next_rel(node, head);
   } while (!lj_thread_live_head_cas(g, &head, node));
-  lj_thread_live_node_rel(th, node);
-}
-
-static void threading_live_free_node(global_State *g, LJThreadLive *node)
-{
-  if (node) {
-    setgcrefrel(node->ud, NULL);
-    lj_mem_freet(g, node);
+  {
+    GCudata *ud = threading_live_ud(node);
+    if (ud) {
+      TValue tv;
+      setudataV(L, &tv, ud);
+      lj_gc_pubroot(L, &tv);  /* Publish against cycles started after new. */
+    }
   }
+  lj_thread_live_node_rel(th, node);
 }
 
 static void threading_live_remove(LJThread *th)
@@ -198,6 +199,7 @@ static GCudata *threading_new_thread_ud(lua_State *L, GCtab *env)
   lj_udata_metatable_rel(ud, env);
   lj_gc_pubobjobj(L, ud, env);
   th->ud = ud;
+  lj_udata_udtype_rel(ud, UDTYPE_THREAD);
   lj_gc2_finreg_udata_register_mt(L, g, ud, env);
   setudataV(L, L->top++, ud);
   return ud;
@@ -206,9 +208,27 @@ static GCudata *threading_new_thread_ud(lua_State *L, GCtab *env)
 static void threading_publish_thread_state(lua_State *L, GCudata *ud,
 					   LJThread *th, lua_State *L1)
 {
+  lj_udata_udtype_rel(ud, UDTYPE_THREAD);
   lj_thread_state_store_rel(th, L1);
   lj_gc_pubobjobj(L, ud, L1);
-  lj_udata_udtype_rel(ud, UDTYPE_THREAD);
+}
+
+static void threading_start_roots_init(lua_State *L, GCudata *ud, LJThread *th,
+				       TValue *base, uint32_t n)
+{
+  TValue *roots;
+  uint32_t i;
+  if (n == 0)
+    return;
+  roots = lj_mem_newvec(L, n, TValue);
+  for (i = 0; i < n; i++) {
+    copyTVrel(L, &roots[i], base + i);
+    lj_gc_pubroot(L, &roots[i]);
+    lj_gc_pubobjtv(L, ud, &roots[i]);
+  }
+  lj_thread_start_roots_rel(th, roots);
+  lj_thread_start_root_count_rel(th, n);
+  lj_gc2_remember_root(G(L), obj2gco(ud));
 }
 
 static int64_t threading_timeout_ns(lua_State *L, int narg, int has_default,
@@ -403,6 +423,7 @@ static int threading_gc_enter_counted(lua_State *L)
     (void)mt_active_cas(g, &expect, 1);
     if (mt_live_add_rlx(g, 1) == 0) {
       GCSize threshold = lj_gc_threshold_load(g);
+      lj_gc_fullgc(L);
       if (threshold == LJ_MAX_MEM && g->gc.state == GCSfinalize)
 	threshold = lj_gc_mt_threshold_load(g);
       lj_gc_mt_threshold_store(g, threshold);
@@ -460,14 +481,15 @@ static void threading_rehome_unstarted_stack(lua_State *L, lua_State *L1,
   sz = (size_t)stacksize * sizeof(TValue);
   st = (TValue *)lj_mem_realloc(L, NULL, 0, (GCSize)sz);
   memcpy(st, oldst, sz);
-  setmref(L1->stack, st);
+  setmrefrel(L1->stack, st);
   delta = (char *)st - (char *)oldst;
-  setmref(L1->maxstack, (TValue *)((char *)tvref(L1->maxstack) + delta));
+  setmrefrel(L1->maxstack, (TValue *)((char *)tvref(L1->maxstack) + delta));
   L1->base = (TValue *)((char *)L1->base + delta);
   L1->top = (TValue *)((char *)L1->top + delta);
   for (up = lj_state_openupval_acq(L1); up != NULL;
        up = lj_obj_gcw_acq(up))
     setmref(gco2uv(up)->v, (TValue *)((char *)uvval(gco2uv(up)) + delta));
+  lj_state_stack_pubrange(L, L1);
   lj_gc_total_sub(g, (GCSize)sz);
   (void)lj_arena_allocf(&tg->allocd, oldst, sz, 0);
 }
@@ -497,6 +519,9 @@ static void *threading_worker(void *arg)
   lj_tg_store_thread_L(tg, L);
   tg->thread_ud = th->ud;
   lj_tg_attach(g, tg);
+  lj_state_stack_pubrange(L, L);
+  la_store32_rel(&th->start_ready, 1);
+  threading_wake_thread(th);
 
   if (!threading_worker_start_ok(L, th)) {
     th->status = LUA_ERRRUN;
@@ -505,6 +530,9 @@ static void *threading_worker(void *arg)
     th->status = LUA_ERRRUN;
     th->nresults = 0;
   } else {
+    lj_state_stack_pubrange(L, L);
+    la_store32_rel(&th->start_ready, 2);
+    threading_wake_thread(th);
     status = lua_pcall(L, (int)th->nargs, LUA_MULTRET, 0);
     th->status = (uint32_t)status;
     th->nresults = (uint32_t)(L->top - L->base);
@@ -1222,13 +1250,19 @@ static lua_State *threading_spawn_core(lua_State *L, GCtab *env, TValue *base,
   if (!lj_state_claim(L1, tid))
     lj_err_callermsg(L, "thread busy");
   lj_state_checkstack(L1, (MSize)(nargs + 1));
-  for (i = 0; i <= nargs; i++)
-    copyTV(L1, L1->top++, base + i);
+  for (i = 0; i <= nargs; i++) {
+    TValue *dst = L1->top++;
+    copyTV(L1, dst, base + i);
+    lj_state_stack_pubtv(L, L1, dst);
+  }
   lj_state_release(L1, tid);
 
   ud = threading_new_thread_ud(L, env);
   threading_state_set_ud(L, L1, ud);
   th = (LJThread *)uddata(ud);
+  threading_start_roots_init(L, ud, th, base, (uint32_t)(nargs + 1));
+  live = threading_live_new(L, ud);
+  threading_live_publish(L, th, live);
   tg = lj_mem_newt(L, sizeof(TGState), TGState);
   threading_publish_thread_state(L, ud, th, L1);
   th->tg = tg;
@@ -1240,6 +1274,7 @@ static lua_State *threading_spawn_core(lua_State *L, GCtab *env, TValue *base,
   lj_tg_derive_prng(G(L), tg, th->thr.tid);
   tg->thread_ud = ud;
   if (!lj_state_rehome_stack(L1)) {
+    threading_live_remove(th);
     L1->tg_hint = L2TG(L);
     lj_tg_fini_thread(G(L), tg);
     lj_mem_freet(G(L), tg);
@@ -1247,10 +1282,8 @@ static lua_State *threading_spawn_core(lua_State *L, GCtab *env, TValue *base,
     th->state = LJ_THREAD_DONE;
     lj_err_mem(L);
   }
-  live = threading_live_new(L, ud);
-
   if (!threading_gc_enter(L)) {
-    threading_live_free_node(G(L), live);
+    threading_live_remove(th);
     threading_rehome_unstarted_stack(L, L1, tg);
     lj_tg_fini_thread(G(L), tg);
     lj_mem_freet(G(L), tg);
@@ -1258,7 +1291,6 @@ static lua_State *threading_spawn_core(lua_State *L, GCtab *env, TValue *base,
     th->state = LJ_THREAD_DONE;
     lj_err_callermsg(L, "VM shutdown in progress");
   }
-  threading_live_publish(G(L), th, live);
   {
     int had_stopreq = threading_had_stopreq(L);
     int fresh_stopreq = 0;
@@ -1282,13 +1314,36 @@ static lua_State *threading_spawn_core(lua_State *L, GCtab *env, TValue *base,
       threading_checkstop_fresh(L, actions, had_stopreq);
       lj_err_callermsg(L, "VM shutdown in progress");
     }
+    while (la_load32_acq(&th->start_ready) == 0 &&
+	   la_load32_acq(&th->state) == LJ_THREAD_STARTING) {
+      uint32_t futex = la_load32_acq(&th->futex);
+      lj_native_enter(L2TG(L));
+      (void)la_futex_wait(&th->futex, futex, 1000000);
+      actions |= lj_native_leave(L);
+      if (threading_fresh_stopreq(L, actions, had_stopreq)) {
+	threading_join_aborted_start(L, th, &actions);
+	threading_checkstop_fresh(L, actions, had_stopreq);
+	lj_err_callermsg(L, "VM shutdown in progress");
+      }
+    }
   }
 
+  lj_state_stack_pubrange(L, L1);
   if (!threading_start_release(th)) {
     uint32_t actions = 0;
     threading_join_aborted_start(L, th, &actions);
     threading_checkstop_fresh(L, actions, threading_had_stopreq(L));
     lj_err_callermsg(L, "cannot start thread");
+  }
+  while (la_load32_acq(&th->start_ready) < 2 &&
+	 la_load32_acq(&th->state) == LJ_THREAD_RUNNING) {
+    uint32_t futex = la_load32_acq(&th->futex);
+    uint32_t actions;
+    int had_stopreq = threading_had_stopreq(L);
+    lj_native_enter(L2TG(L));
+    (void)la_futex_wait(&th->futex, futex, 1000000);
+    actions = lj_native_leave(L);
+    threading_checkstop_fresh(L, actions, had_stopreq);
   }
   return L1;
 }

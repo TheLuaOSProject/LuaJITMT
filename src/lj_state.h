@@ -20,6 +20,9 @@ LJ_FUNCA void LJ_FASTCALL lj_state_growstack(lua_State *L, MSize need);
 LJ_FUNC void LJ_FASTCALL lj_state_growstack1(lua_State *L);
 LJ_FUNC int LJ_FASTCALL lj_state_cpgrowstack(lua_State *L, MSize need);
 LJ_FUNC int lj_state_rehome_stack(lua_State *L);
+LJ_FUNC void lj_state_stack_pubtv(lua_State *L, lua_State *target,
+				  cTValue *tv);
+LJ_FUNC void lj_state_stack_pubrange(lua_State *L, lua_State *target);
 
 static LJ_AINLINE void lj_state_checkstack(lua_State *L, MSize need)
 {

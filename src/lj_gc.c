@@ -520,8 +520,11 @@ static void gc_mark_clib_cache(global_State *g, CLibrary *cl)
 static void gc_mark(global_State *g, GCobj *o)
 {
   int gct = o->gch.gct;
+  if (LJ_UNLIKELY(gct == 0))
+    return;  /* Body destructor already ran via GC2 arena sweep. */
   lj_assertG(iswhite(o), "mark of non-white object");
-  lj_assertG(!isdead(g, o), "mark of dead object");
+  if (isdead(g, o))
+    flipwhite(o);
   lj_gc_arena_markobj(g, o);
   white2gray(o);
   if (LJ_UNLIKELY(gct == ~LJ_TUDATA)) {
@@ -564,7 +567,17 @@ static void gc_mark(global_State *g, GCobj *o)
     }
     if (udtype == UDTYPE_THREAD) {
       LJThread *th = (LJThread *)uddata(ud);
+      TValue *roots = lj_thread_start_roots_acq(th);
+      uint32_t i, n = lj_thread_start_root_count_acq(th);
       lua_State *child = lj_thread_state_load_acq(th);
+      lj_gc_arena_markmem(g, roots);
+      if (roots) {
+	for (i = 0; i < n; i++) {
+	  TValue tv;
+	  lj_tv_load_acq(&tv, &roots[i]);
+	  gc_marktv(g, &tv);
+	}
+      }
       if (child)
 	gc_markobj(g, obj2gco(child));  /* 09 section 9.2 child stack. */
     }
@@ -624,8 +637,20 @@ static void gc_mark_threading_live(global_State *g)
        node = lj_thread_live_next_acq(node)) {
     GCobj *o = gcref_acq(node->ud);
     if (o && o->gch.gct == ~LJ_TUDATA &&
-	lj_udata_udtype_acq(gco2ud(o)) == UDTYPE_THREAD)
+	lj_udata_udtype_acq(gco2ud(o)) == UDTYPE_THREAD) {
+      LJThread *th = (LJThread *)uddata(gco2ud(o));
+      TValue *roots = lj_thread_start_roots_acq(th);
+      uint32_t i, n = lj_thread_start_root_count_acq(th);
       gc_markobj(g, o);
+      lj_gc_arena_markmem(g, roots);
+      if (roots) {
+	for (i = 0; i < n; i++) {
+	  TValue tv;
+	  lj_tv_load_acq(&tv, &roots[i]);
+	  gc_marktv(g, &tv);
+	}
+      }
+    }
   }
 }
 
@@ -1831,10 +1856,19 @@ void lj_gc_fullgc(lua_State *L)
 void lj_gc_pubroot(lua_State *L, cTValue *tv)
 {
   global_State *g = G(L);
-  lj_gc2_barrier_tv_g(g, tv);
-  if (tviswhite(tv) && (g->gc.state == GCSpropagate ||
-			g->gc.state == GCSatomic))
-    gc_mark(g, gcV(tv));
+  TValue snap;
+  if (!tv)
+    return;
+  lj_tv_load_acq(&snap, tv);
+  if (tvisgcv(&snap)) {
+    GCobj *o = gcV(&snap);
+    if (isdead(g, o))
+      flipwhite(o);
+    (void)lj_gc2_markobj(g, o);
+  }
+  if (tviswhite(&snap) && (g->gc.state == GCSpropagate ||
+			   g->gc.state == GCSatomic))
+    gc_mark(g, gcV(&snap));
 }
 
 /* Move the GC propagation frontier forward. */

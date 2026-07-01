@@ -3030,8 +3030,20 @@ static void gc2_scan_threading_live_roots(global_State *g)
        node = lj_thread_live_next_acq(node)) {
     GCobj *o = gcref_acq(node->ud);
     if (o && o->gch.gct == ~LJ_TUDATA &&
-	lj_udata_udtype_acq(gco2ud(o)) == UDTYPE_THREAD)
+	lj_udata_udtype_acq(gco2ud(o)) == UDTYPE_THREAD) {
+      LJThread *th = (LJThread *)uddata(gco2ud(o));
+      TValue *roots = lj_thread_start_roots_acq(th);
+      uint32_t i, n = lj_thread_start_root_count_acq(th);
       lj_gc2_markobj(g, o);
+      lj_gc2_markmem(g, roots);
+      if (roots) {
+	for (i = 0; i < n; i++) {
+	  TValue tv;
+	  lj_tv_load_acq(&tv, &roots[i]);
+	  gc2_mark_tv(g, &tv);
+	}
+      }
+    }
   }
 }
 
@@ -5528,6 +5540,14 @@ static void gc2_remember_pair(global_State *g, GCobj *parent, GCobj *child)
   gc2_remember_obj(g, root);
 }
 
+void lj_gc2_remember_root(global_State *g, GCobj *o)
+{
+  if (!g || !o || gc2_phase_acq(g) != LJ_GC2_IDLE ||
+      gc2_generational_acq(g) == 0)
+    return;
+  gc2_remember_obj(g, o);
+}
+
 static int gc2_tab_weak_mode(global_State *g, GCtab *t, GCtab *mt,
 			     int mark_mode)
 {
@@ -6045,7 +6065,17 @@ static void gc2_traverse_udata(global_State *g, GCudata *ud)
   }
   if (udtype == UDTYPE_THREAD) {
     LJThread *th = (LJThread *)uddata(ud);
+    TValue *roots = lj_thread_start_roots_acq(th);
+    uint32_t i, n = lj_thread_start_root_count_acq(th);
     lua_State *child = lj_thread_state_load_acq(th);
+    lj_gc2_markmem(g, roots);
+    if (roots) {
+      for (i = 0; i < n; i++) {
+	TValue tv;
+	lj_tv_load_acq(&tv, &roots[i]);
+	gc2_mark_tv_worker(g, &tv);
+      }
+    }
     if (child)
       gc2_markobj_worker(g, obj2gco(child));  /* 09 section 9.2. */
   }
@@ -6244,7 +6274,9 @@ static void gc2_traverse_thread(global_State *g, lua_State *th)
 static void gc2_traverse_obj(global_State *g, GCobj *o)
 {
   int gct = o->gch.gct;
-  if (LJ_LIKELY(gct == ~LJ_TTAB)) {
+  if (LJ_UNLIKELY(gct == 0)) {
+    return;  /* Body destructor already ran via GC2 arena sweep. */
+  } else if (LJ_LIKELY(gct == ~LJ_TTAB)) {
     (void)gc2_traverse_tab(g, gco2tab(o));
   } else if (LJ_LIKELY(gct == ~LJ_TFUNC)) {
     gc2_traverse_func(g, gco2func(o));

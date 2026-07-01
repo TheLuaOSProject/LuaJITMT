@@ -91,12 +91,15 @@ typedef struct LJThread {
   GCudata *ud;
   TGState *tg;
   LJThreadLive *live_node;
+  TValue *start_roots;
   uint32_t state;
   uint32_t joined;
   uint32_t futex;
   uint32_t status;
   uint32_t nargs;
   uint32_t nresults;
+  uint32_t start_root_count;
+  uint32_t start_ready;
   uint32_t main_thread;
 } LJThread;
 
@@ -120,6 +123,27 @@ static LJ_AINLINE lua_State *lj_thread_state_load_acq(const LJThread *th)
 static LJ_AINLINE void lj_thread_state_store_rel(LJThread *th, lua_State *L)
 {
   la_storeptr_rel((void **)&th->L, (void *)L);
+}
+
+static LJ_AINLINE TValue *lj_thread_start_roots_acq(const LJThread *th)
+{
+  return (TValue *)la_loadptr_acq((void *const *)&th->start_roots);
+}
+
+static LJ_AINLINE void lj_thread_start_roots_rel(LJThread *th, TValue *roots)
+{
+  la_storeptr_rel((void **)&th->start_roots, roots);
+}
+
+static LJ_AINLINE uint32_t lj_thread_start_root_count_acq(const LJThread *th)
+{
+  return la_load32_acq(&th->start_root_count);
+}
+
+static LJ_AINLINE void lj_thread_start_root_count_rel(LJThread *th,
+						      uint32_t count)
+{
+  la_store32_rel(&th->start_root_count, count);
 }
 
 LJ_FUNC int lj_thr_create(LJThr *thr, LJThrFunc func, void *arg);

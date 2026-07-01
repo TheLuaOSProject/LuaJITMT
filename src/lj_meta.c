@@ -544,6 +544,8 @@ void lj_meta_call(lua_State *L, TValue *func, TValue *top)
   TValue motv;
   cTValue *mo = lj_meta_lookuptv(L, &motv, func, MM_call);
   TValue *p;
+  lj_gc_pubroot(L, func);
+  lj_gc_pubroot(L, mo);
   if (!tvisfunc(mo))
     lj_err_optype_call(L, func);
   for (p = top; p > func+2*LJ_FR2; p--) copyTV(L, p, p-1);

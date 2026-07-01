@@ -235,26 +235,37 @@ void LJ_FASTCALL lj_func_freeuv(global_State *g, GCupval *uv)
 
 GCfunc *lj_func_newC(lua_State *L, MSize nelems, GCtab *env)
 {
-  GCfunc *fn = (GCfunc *)lj_mem_newgco(L, sizeCfunc(nelems));
+  global_State *g = G(L);
+  GCfunc *fn = (GCfunc *)lj_mem_newgco_unlinked(L, sizeCfunc(nelems));
+  MSize i;
   fn->c.gct = ~LJ_TFUNC;
   fn->c.ffid = FF_C;
   fn->c.nupvalues = (uint8_t)nelems;
   setmref(fn->c.pc, &G(L)->bc_cfunc_ext);
   lj_func_env_rel(fn, env);
+  fn->c.f = NULL;
+  for (i = 0; i < nelems; i++)
+    setnilV(&fn->c.upvalue[i]);
+  newwhite(g, obj2gco(fn));
+  lj_gc_linkobj(g, obj2gco(fn));
   lj_gc_pubobjobj(L, fn, env);
   return fn;
 }
 
 static GCfunc *func_newL(lua_State *L, GCproto *pt, GCtab *env)
 {
+  global_State *g = G(L);
   uint32_t count;
-  GCfunc *fn = (GCfunc *)lj_mem_newgco(L, sizeLfunc((MSize)pt->sizeuv));
+  GCfunc *fn = (GCfunc *)lj_mem_newgco_unlinked(L,
+						sizeLfunc((MSize)pt->sizeuv));
   fn->l.gct = ~LJ_TFUNC;
   fn->l.ffid = FF_LUA;
   fn->l.nupvalues = 0;  /* Set to zero until upvalues are initialized. */
   setmref(fn->l.pc, proto_bc(pt));
-  lj_gc_pubobjobj(L, fn, pt);
   lj_func_env_rel(fn, env);
+  newwhite(g, obj2gco(fn));
+  lj_gc_linkobj(g, obj2gco(fn));
+  lj_gc_pubobjobj(L, fn, pt);
   lj_gc_pubobjobj(L, fn, env);
   /* Saturating 3 bit counter (0..7) for created closures. */
   count = (uint32_t)pt->flags + PROTO_CLCOUNT;

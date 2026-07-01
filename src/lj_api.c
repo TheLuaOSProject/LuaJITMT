@@ -229,7 +229,10 @@ LUA_API void lua_xmove(lua_State *L, lua_State *to, int n)
   }
   f = L->top;
   t = to->top = to->top + n;
-  while (--n >= 0) copyTV(to, --t, --f);
+  while (--n >= 0) {
+    copyTV(to, --t, --f);
+    lj_state_stack_pubtv(L, to, t);
+  }
   L->top = f;
   lj_state_dropclaim(&fromclaim);
   lj_state_dropclaim(&toclaim);
