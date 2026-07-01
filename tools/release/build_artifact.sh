@@ -90,19 +90,22 @@ install_doc() {
 
 archive_stage() {
   local archive
-  if command -v xz >/dev/null 2>&1; then
-    archive="${out_dir}/${pkg}.tar.xz"
-    (cd "$stage_parent" && tar -cJf "$archive" "$pkg")
-  else
-    archive="${out_dir}/${pkg}.tar.gz"
-    (cd "$stage_parent" && tar -czf "$archive" "$pkg")
+  if ! command -v xz >/dev/null 2>&1; then
+    printf 'xz is required for stable .tar.xz release artifacts\n' >&2
+    exit 1
   fi
+  archive="${out_dir}/${pkg}.tar.xz"
+  (cd "$stage_parent" && tar -cJf "$archive" "$pkg")
   (cd "$out_dir" && checksum "$(basename "$archive")" > "$(basename "$archive").sha256")
   echo "$archive"
 }
 
 archive_zip_stage() {
   local archive="${out_dir}/${pkg}.zip"
+  if ! command -v zip >/dev/null 2>&1; then
+    printf 'zip is required for Windows release artifacts\n' >&2
+    exit 1
+  fi
   (cd "$stage_parent" && zip -qr "$archive" "$pkg")
   (cd "$out_dir" && checksum "$(basename "$archive")" > "$(basename "$archive").sha256")
   echo "$archive"

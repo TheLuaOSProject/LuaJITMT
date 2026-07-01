@@ -12,6 +12,10 @@
 - The publish job verifies the exact three expected archives before uploading:
   `linux-x86_64.tar.xz`, `macos-x86_64.tar.xz`, and
   `windows-x86_64-ucrt.zip`, all named with the same release tag.
+- Artifact verification now checks `SHA256SUMS` when present, requires every
+  archive to be checksummed either there or by a per-artifact `.sha256`, and
+  inspects each archive for the `make install DESTDIR` layout plus BUILDINFO
+  tag/platform/layout fields before publishing.
 - Normal GitHub CI now uses `tools/ci/platform_build.sh` for each platform and
   only builds plus runs a direct platform smoke (`jit.os`, `jit.arch`, and the
   threading module). It does not run the release archive harness or stock
