@@ -34,6 +34,8 @@ local workers = {}
 
 for tid = 1, nthreads do
   workers[tid] = th.spawn(function(ready_ch, start_ch, id, count)
+    local ffi = require"ffi"
+
     ready_ch:send(id)
     local token, ok = start_ch:recv(10)
     assert(ok == true and token == "go")
