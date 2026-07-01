@@ -3246,20 +3246,31 @@ static int crec_call_jit_flt_num(jit_State *J, RecordFFData *rd, CTState *cts,
   return 1;
 }
 
+#define CREC_CALL_JIT_KIND_I32 0
+#define CREC_CALL_JIT_KIND_U32 1
+#define CREC_CALL_JIT_KIND_PTR 2
+#define CREC_CALL_JIT_RETKIND_VOID 3
+
 static int crec_call_jit_gpr_kind(CTInfo info, CTSize size)
 {
   if (ctype_isinteger(info) && size == 4 && !(info & CTF_UNSIGNED))
-    return 0;
+    return CREC_CALL_JIT_KIND_I32;
+  if (ctype_isinteger(info) && size == 4 && (info & CTF_UNSIGNED))
+    return CREC_CALL_JIT_KIND_U32;
   if (ctype_isptr(info) && size == CTSIZE_PTR)
-    return 1;
+    return CREC_CALL_JIT_KIND_PTR;
   return -1;
 }
 
 static int crec_call_jit_gpr_retkind(CTInfo info, CTSize size)
 {
   if (ctype_isvoid(info))
-    return 2;
-  return crec_call_jit_gpr_kind(info, size);
+    return CREC_CALL_JIT_RETKIND_VOID;
+  if (ctype_isinteger(info) && size == 4 && !(info & CTF_UNSIGNED))
+    return CREC_CALL_JIT_KIND_I32;
+  if (ctype_isptr(info) && size == CTSIZE_PTR)
+    return CREC_CALL_JIT_KIND_PTR;
+  return -1;
 }
 
 static int crec_call_jit_i64_kind(CTInfo info, CTSize size)
@@ -3278,6 +3289,20 @@ static TRef crec_call_jit_u32_arg(jit_State *J, TRef arg)
     return emitconv(arg, IRT_INT, t, 0);
   lj_trace_err(J, LJ_TRERR_NYICALL);
   return 0;
+}
+
+static TRef crec_call_jit_gpr_arg(jit_State *J, int kind, TRef arg)
+{
+  if (kind == CREC_CALL_JIT_KIND_I32) {
+    if (!tref_isint(arg))
+      lj_trace_err(J, LJ_TRERR_NYICALL);
+  } else if (kind == CREC_CALL_JIT_KIND_U32) {
+    arg = crec_call_jit_u32_arg(J, arg);
+  } else {
+    if (!tref_istype(arg, IRT_PTR))
+      lj_trace_err(J, LJ_TRERR_NYICALL);
+  }
+  return arg;
 }
 
 static int crec_call_jit_narrow_sig(CTInfo info, CTSize size)
@@ -3626,14 +3651,9 @@ static uint32_t crec_call_jit_sig(MSize narg, const int *kind)
   if (narg == 0)
     return LJ_CCALL_JIT_SIG0;
   if (narg == 1)
-    return kind[0] ? LJ_CCALL_JIT_SIG_PTR : LJ_CCALL_JIT_SIG_I32;
-  if (!kind[0] && !kind[1])
-    return LJ_CCALL_JIT_SIG_I32_I32;
-  if (!kind[0] && kind[1])
-    return LJ_CCALL_JIT_SIG_I32_PTR;
-  if (kind[0] && !kind[1])
-    return LJ_CCALL_JIT_SIG_PTR_I32;
-  return LJ_CCALL_JIT_SIG_PTR_PTR;
+    return LJ_CCALL_JIT_SIG_I32 + (uint32_t)kind[0];
+  return LJ_CCALL_JIT_SIG_I32_I32 +
+	 (uint32_t)(kind[0] * 3 + kind[1]);
 }
 
 static int crec_call_jit_u32_gpr(jit_State *J, RecordFFData *rd,
@@ -3687,10 +3707,7 @@ static int crec_call_jit_u32_gpr(jit_State *J, RecordFFData *rd,
     if (kind[i] < 0)
       return 0;
     args[i] = crec_ct_tv(J, d, 0, J->base[1+i], &rd->argv[1+i]);
-    if (!kind[i] && !tref_isint(args[i]))
-      lj_trace_err(J, LJ_TRERR_NYICALL);
-    if (kind[i] && !tref_istype(args[i], IRT_PTR))
-      lj_trace_err(J, LJ_TRERR_NYICALL);
+    args[i] = crec_call_jit_gpr_arg(J, kind[i], args[i]);
   }
   if (fid)
     return 0;
@@ -3821,10 +3838,7 @@ static int crec_call_jit_narrow_gpr(jit_State *J, RecordFFData *rd,
     if (kind[i] < 0)
       return 0;
     args[i] = crec_ct_tv(J, d, 0, J->base[1+i], &rd->argv[1+i]);
-    if (!kind[i] && !tref_isint(args[i]))
-      lj_trace_err(J, LJ_TRERR_NYICALL);
-    if (kind[i] && !tref_istype(args[i], IRT_PTR))
-      lj_trace_err(J, LJ_TRERR_NYICALL);
+    args[i] = crec_call_jit_gpr_arg(J, kind[i], args[i]);
   }
   if (fid)
     return 0;
@@ -3893,10 +3907,7 @@ static int crec_call_jit_64ret_gpr(jit_State *J, RecordFFData *rd,
     if (kind[i] < 0)
       return 0;
     args[i] = crec_ct_tv(J, d, 0, J->base[1+i], &rd->argv[1+i]);
-    if (!kind[i] && !tref_isint(args[i]))
-      lj_trace_err(J, LJ_TRERR_NYICALL);
-    if (kind[i] && !tref_istype(args[i], IRT_PTR))
-      lj_trace_err(J, LJ_TRERR_NYICALL);
+    args[i] = crec_call_jit_gpr_arg(J, kind[i], args[i]);
   }
   if (fid)
     return 0;
@@ -3968,10 +3979,7 @@ static int crec_call_jit_gpr(jit_State *J, RecordFFData *rd, CTState *cts,
     if (kind[i] < 0)
       return 0;
     args[i] = crec_ct_tv(J, d, 0, J->base[1+i], &rd->argv[1+i]);
-    if (!kind[i] && !tref_isint(args[i]))
-      lj_trace_err(J, LJ_TRERR_NYICALL);
-    if (kind[i] && !tref_istype(args[i], IRT_PTR))
-      lj_trace_err(J, LJ_TRERR_NYICALL);
+    args[i] = crec_call_jit_gpr_arg(J, kind[i], args[i]);
   }
   if (fid)
     return 0;
@@ -3983,11 +3991,11 @@ static int crec_call_jit_gpr(jit_State *J, RecordFFData *rd, CTState *cts,
   sig = crec_call_jit_sig(narg, kind);
   if (narg < 1) args[0] = noarg;
   if (narg < 2) args[1] = noarg;
-  if (retkind == 2) {
+  if (retkind == CREC_CALL_JIT_RETKIND_VOID) {
     lj_ir_call(J, IRCALL_lj_ccall_jit_void_gpr, func, args[0],
 	       args[1], lj_ir_kint(J, (int32_t)sig));
     rd->nres = 0;
-  } else if (retkind) {
+  } else if (retkind == CREC_CALL_JIT_KIND_PTR) {
     TRef trid = lj_ir_kint(J, ctype_cid(info));
     tr = lj_ir_call(J, IRCALL_lj_ccall_jit_ptr_gpr, func, args[0],
 		    args[1], lj_ir_kint(J, (int32_t)sig));

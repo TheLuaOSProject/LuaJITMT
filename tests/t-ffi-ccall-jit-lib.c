@@ -105,6 +105,31 @@ int32_t lj_m7_ccall_jit_i32_u32(uint32_t a)
   return (int32_t)(a + 5u);
 }
 
+int32_t lj_m7_ccall_jit_i32_u32_ptr(uint32_t offset, int *p)
+{
+  return p[offset & 3u] + (int32_t)(offset & 1023u);
+}
+
+uint8_t lj_m7_ccall_jit_u8_u32(uint32_t a)
+{
+  return (uint8_t)(a + 3u);
+}
+
+void lj_m7_ccall_jit_void_u32(uint32_t a)
+{
+  lj_m7_ccall_jit_void_count += (int)(a & 15u);
+}
+
+uint64_t lj_m7_ccall_jit_u64_u32arg(uint32_t a)
+{
+  return UINT64_C(0x100000000) + (uint64_t)a;
+}
+
+int *lj_m7_ccall_jit_ptr_u32(uint32_t a)
+{
+  return lj_m7_ccall_jit_values + (a & 3u);
+}
+
 double lj_m7_ccall_jit_num0(void)
 {
   return 1.5;
