@@ -15,8 +15,9 @@ with the helper signature preserving signedness for each argument. The first
 `uint64_t` calls for void, signed 32-bit, unsigned 32-bit, narrow integer, and
 pointer returns, plus exact two-argument `pointer,int64_t` and
 `pointer,uint64_t` span-style calls and exact `int32_t,int64_t` calls for
-those same return families. The FPR subset accepts 0, 1, or 2 same-kind exact
-float or double arguments. The first mixed one-argument subset
+those same return families. Exact `int32_t,uint64_t` pairs are covered too.
+The FPR subset accepts 0, 1, or 2 same-kind exact float or double arguments.
+The first mixed one-argument subset
 accepts exact `double(int32_t)`, `double(pointer)`, `double(float)`,
 `int32_t(double)`, `int32_t(float)`, `int32_t(int8_t)`, `pointer(double)`,
 `void(double)`, `void(float)`, and `float(double)`. The first exact
@@ -98,6 +99,7 @@ The scope is deliberately narrow:
 - exact two-argument `int32_t,int64_t` calls for void, signed 32-bit,
   unsigned 32-bit, narrow integer, signed/unsigned 64-bit cdata, and pointer
   return families;
+- exact two-argument `int32_t,uint64_t` calls for the same return families;
 - same-kind exact float/double arguments and exact float/double returns;
 - exact one-argument `double(int32_t)`, `double(pointer)`, `double(float)`,
   `int32_t(double)`, `int32_t(float)`, `int32_t(int8_t)`,
@@ -119,8 +121,8 @@ loops, zero-argument signed int64 and unsigned uint64 cdata-result loops, exact
 one- and two-argument int64/uint64 mixed-signedness argument/result loops, traced
 single-argument int64/uint64 calls returning void, int32, uint32, narrow
 integers, or pointers, traced pointer/64-bit span loops for the same return
-families, traced int/signed-offset loops for the same return families, traced
-`poll(nil, 0, 0)`-style loops,
+families, traced int/signed-offset and int/unsigned-size loops for the same
+return families, traced `poll(nil, 0, 0)`-style loops,
 POSIX `write`-shaped int/pointer/size loops, UCRT `_write`-shaped
 int/pointer/unsigned-int loops, `lseek`/`_lseeki64`-shaped int/signed-offset/int
 loops, FP-only numeric

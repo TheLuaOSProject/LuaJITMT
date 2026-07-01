@@ -38,25 +38,30 @@ uint8_t lj_m7_ccall_jit_u8_i64arg(int64_t);
 uint8_t lj_m7_ccall_jit_u8_ptr_u64(int *, uint64_t);
 uint8_t lj_m7_ccall_jit_u8_ptr_i64(int *, int64_t);
 uint8_t lj_m7_ccall_jit_u8_i32_i64(int32_t, int64_t);
+uint8_t lj_m7_ccall_jit_u8_i32_u64(int32_t, uint64_t);
 void lj_m7_ccall_jit_void_u32(uint32_t);
 void lj_m7_ccall_jit_void_i64arg(int64_t);
 void lj_m7_ccall_jit_void_u64arg(uint64_t);
 void lj_m7_ccall_jit_void_ptr_u64(int *, uint64_t);
 void lj_m7_ccall_jit_void_ptr_i64(int *, int64_t);
 void lj_m7_ccall_jit_void_i32_i64(int32_t, int64_t);
+void lj_m7_ccall_jit_void_i32_u64(int32_t, uint64_t);
 uint64_t lj_m7_ccall_jit_u64_u32arg(uint32_t);
 uint32_t lj_m7_ccall_jit_u32_u64arg(uint64_t);
 int32_t lj_m7_ccall_jit_i32_ptr_u64(int *, uint64_t);
 int32_t lj_m7_ccall_jit_i32_ptr_i64(int *, int64_t);
 int32_t lj_m7_ccall_jit_i32_i32_i64(int32_t, int64_t);
+int32_t lj_m7_ccall_jit_i32_i32_u64(int32_t, uint64_t);
 uint32_t lj_m7_ccall_jit_u32_ptr_u64(int *, uint64_t);
 uint32_t lj_m7_ccall_jit_u32_ptr_i64(int *, int64_t);
 uint32_t lj_m7_ccall_jit_u32_i32_i64(int32_t, int64_t);
+uint32_t lj_m7_ccall_jit_u32_i32_u64(int32_t, uint64_t);
 int *lj_m7_ccall_jit_ptr_u32(uint32_t);
 int *lj_m7_ccall_jit_ptr_u64arg(uint64_t);
 int *lj_m7_ccall_jit_ptr_ptr_u64(int *, uint64_t);
 int *lj_m7_ccall_jit_ptr_ptr_i64(int *, int64_t);
 int *lj_m7_ccall_jit_ptr_i32_i64(int32_t, int64_t);
+int *lj_m7_ccall_jit_ptr_i32_u64(int32_t, uint64_t);
 double lj_m7_ccall_jit_num0(void);
 double lj_m7_ccall_jit_num_i32(int32_t);
 double lj_m7_ccall_jit_num_ptr(int *);
@@ -93,6 +98,8 @@ int64_t lj_m7_ccall_jit_i64_ptr_i64(int *, int64_t);
 uint64_t lj_m7_ccall_jit_u64_ptr_i64(int *, int64_t);
 int64_t lj_m7_ccall_jit_i64_i32_i64(int32_t, int64_t);
 uint64_t lj_m7_ccall_jit_u64_i32_i64(int32_t, int64_t);
+int64_t lj_m7_ccall_jit_i64_i32_u64(int32_t, uint64_t);
+uint64_t lj_m7_ccall_jit_u64_i32_u64(int32_t, uint64_t);
 uint64_t lj_m7_ccall_jit_u64_0(void);
 int *lj_m7_ccall_jit_ptr0(void);
 int lj_m7_ccall_jit_ptr_read_i32(int *);
@@ -1191,6 +1198,18 @@ do
 
     jit.flush()
     jit.opt.start("hotloop=1", "hotexit=1")
+    assert((function(n)
+      local arg = ffi.new("uint64_t", -14)
+      local r = 0
+      for _ = 1, n do
+	r = r + lib.lj_m7_ccall_jit_u8_i32_u64(7, arg)
+      end
+      return r
+    end)(80) == 80 * 249)
+    assert(trace_count() > 0, "shared int,uint64_t->uint8_t FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
     assert(run_void_u32(80) == 600)
     assert(trace_count() > 0, "shared uint32_t->void FFI call loop should trace")
 
@@ -1228,6 +1247,18 @@ do
 
     jit.flush()
     jit.opt.start("hotloop=1", "hotexit=1")
+    assert((function(n)
+      local arg = ffi.new("uint64_t", -14)
+      local before = void_count_i32()
+      for _ = 1, n do
+	assert(lib.lj_m7_ccall_jit_void_i32_u64(7, arg) == nil)
+      end
+      return void_count_i32() - before
+    end)(80) == 80 * 9)
+    assert(trace_count() > 0, "shared int,uint64_t->void FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
     assert(run_u64_u32arg_high(80) == 80 * (4294967296 + 0xfffffff0))
     assert(trace_count() > 0, "shared high-bit uint32_t->uint64_t FFI call loop should trace")
 
@@ -1260,6 +1291,18 @@ do
 
     jit.flush()
     jit.opt.start("hotloop=1", "hotexit=1")
+    assert((function(n)
+      local arg = ffi.new("uint64_t", -14)
+      local r = 0
+      for _ = 1, n do
+	r = r + lib.lj_m7_ccall_jit_i32_i32_u64(7, arg)
+      end
+      return r
+    end)(80) == 80 * 1017)
+    assert(trace_count() > 0, "shared int,uint64_t->int FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
     assert(run_u32_ptr_u64(80) == 80 * (0xf0000000 + 1043))
     assert(trace_count() > 0, "shared ptr,uint64_t->uint32_t FFI call loop should trace")
 
@@ -1279,6 +1322,18 @@ do
       return r
     end)(80) == 80 * (0xf0000000 + 1017))
     assert(trace_count() > 0, "shared int,int64_t->uint32_t FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    assert((function(n)
+      local arg = ffi.new("uint64_t", -14)
+      local r = 0
+      for _ = 1, n do
+	r = r + lib.lj_m7_ccall_jit_u32_i32_u64(7, arg)
+      end
+      return r
+    end)(80) == 80 * (0xf0000000 + 1017))
+    assert(trace_count() > 0, "shared int,uint64_t->uint32_t FFI call loop should trace")
 
     jit.flush()
     jit.opt.start("hotloop=1", "hotexit=1")
@@ -1311,6 +1366,18 @@ do
       return r
     end)(80) == 80 * 22)
     assert(trace_count() > 0, "shared int,int64_t->ptr FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    assert((function(n)
+      local arg = ffi.new("uint64_t", -14)
+      local r = 0
+      for _ = 1, n do
+	r = r + lib.lj_m7_ccall_jit_ptr_i32_u64(7, arg)[0]
+      end
+      return r
+    end)(80) == 80 * 22)
+    assert(trace_count() > 0, "shared int,uint64_t->ptr FFI call loop should trace")
 
     jit.flush()
     jit.opt.start("hotloop=1", "hotexit=1")
@@ -1505,6 +1572,30 @@ do
       return r
     end)(80) == 80 * (4294967296 + 1017))
     assert(trace_count() > 0, "shared int,int64_t->uint64_t FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    assert((function(n)
+      local arg = ffi.new("uint64_t", -14)
+      local r = 0
+      for _ = 1, n do
+	r = r + tonumber(lib.lj_m7_ccall_jit_i64_i32_u64(7, arg))
+      end
+      return r
+    end)(80) == 80 * (4294967296 + 1017))
+    assert(trace_count() > 0, "shared int,uint64_t->int64_t FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    assert((function(n)
+      local arg = ffi.new("uint64_t", -14)
+      local r = 0
+      for _ = 1, n do
+	r = r + tonumber(lib.lj_m7_ccall_jit_u64_i32_u64(7, arg))
+      end
+      return r
+    end)(80) == 80 * (4294967296 + 1017))
+    assert(trace_count() > 0, "shared int,uint64_t->uint64_t FFI call loop should trace")
 
     jit.flush()
     jit.opt.start("hotloop=1", "hotexit=1")
