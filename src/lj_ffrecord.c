@@ -1164,7 +1164,11 @@ static void LJ_FASTCALL recff_buffer_method_set(jit_State *J, RecordFFData *rd)
 
 static void LJ_FASTCALL recff_buffer_method_put(jit_State *J, RecordFFData *rd)
 {
-  recff_buffer_method_nyi(J, rd);
+  TRef str = J->base[1];
+  if (!str || J->base[2] || !tref_isstr(str) || !tvisstr(&rd->argv[1]))
+    recff_buffer_method_nyi(J, rd);
+  lj_ir_call(J, IRCALL_lj_bufx_putstr_forjit,
+	     recff_buffer_method_sbx(J, rd), str);
 }
 
 static void LJ_FASTCALL recff_buffer_method_putf(jit_State *J, RecordFFData *rd)

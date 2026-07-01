@@ -146,6 +146,13 @@ void LJ_FASTCALL lj_bufx_skip_forjit(SBufExt *sbx, int32_t narg)
   }
 }
 
+void LJ_FASTCALL lj_bufx_putstr_forjit(lua_State *L, SBufExt *sbx, GCstr *str)
+{
+  setsbufXL_(sbx, L);
+  lj_buf_putstr((SBuf *)sbx, str);
+  lj_gc_check(L);
+}
+
 int32_t LJ_FASTCALL lj_bufx_len_forjit(SBufExt *sbx)
 {
   return (int32_t)sbufxlen(sbx);

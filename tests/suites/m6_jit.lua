@@ -1637,6 +1637,19 @@ heat("buffer.method.put", function(i)
   assert(tostring(b) == "x" .. i)
 end)
 
+print("buffer.method.put-string.traced")
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+do
+  local b = buffer.new()
+  local n = 0
+  for _ = 1, 80 do
+    if b:put("a") == b then n = n + 1 end
+  end
+  assert(n == 80)
+  assert(#b == 80)
+end
+
 heat("buffer.method.putf", function(i)
   local b = buffer.new()
   b:putf("%d:%s", i, "q")
@@ -1721,6 +1734,8 @@ print("t-jit-buffer-method-shared-nyi OK")
                                   "JIT buffer method reset helper")
       checks.assert_dump_contains(t, dump, "lj_bufx_skip_forjit",
                                   "JIT buffer method skip helper")
+      checks.assert_dump_contains(t, dump, "lj_bufx_putstr_forjit",
+                                  "JIT buffer method put string helper")
       checks.assert_dump_contains(t, dump, "lj_bufx_len_forjit",
                                   "JIT buffer method len helper")
       checks.assert_dump_contains(t, dump, "lj_bufx_tostr_forjit",
