@@ -87,18 +87,38 @@ local worker = th.spawn(function()
   local index_traces = trace_count(32)
   assert(index_traces > 0)
 
+  jit.flush()
+  jit.opt.start("hotloop=1", "hotexit=1", "-sink")
+
+  local shared_write = { stable = 0, 0 }
+
+  local function table_write(n)
+    for i = 1, n do
+      shared_write.stable = i
+      shared_write[1] = i + 1
+    end
+    return shared_write.stable + shared_write[1]
+  end
+
+  for _ = 1, 20 do
+    assert(table_write(80) == 161)
+  end
+  local write_traces = trace_count(32)
+  assert(write_traces > 0)
+
   return root_traces, side_traces, table_traces, read_traces, index_traces,
-	 th.current():id()
+	 write_traces, th.current():id()
 end)
 
 local ok, root_traces, side_traces, table_traces, read_traces, index_traces,
-      tid = worker:join()
+      write_traces, tid = worker:join()
 assert(ok == true)
 assert(type(root_traces) == "number" and root_traces > 0)
 assert(type(side_traces) == "number" and side_traces > root_traces)
 assert(type(table_traces) == "number" and table_traces > 0)
 assert(type(read_traces) == "number" and read_traces > 0)
 assert(type(index_traces) == "number" and index_traces > 0)
+assert(type(write_traces) == "number" and write_traces > 0)
 assert(tid == worker:id())
 
-print("t-jit-secondary OK: secondary TG records, enters, side-traces, allocates tables, reads shared tables, and preserves __index reads in x64 mcode")
+print("t-jit-secondary OK: secondary TG records, enters, side-traces, allocates tables, reads/writes shared tables, and preserves __index reads in x64 mcode")

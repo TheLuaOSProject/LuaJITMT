@@ -1851,6 +1851,9 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
   IRRef rbref;
   IRType1 rbguard;
   cTValue *oldv;
+  cTValue *oldtv;
+  TValue oldsnap;
+  int mt_shared_store = 0;
 
   while (!tref_istab(ix->tab)) { /* Handle non-table lookup. */
     /* Never call raw lj_record_idx() on non-table. */
@@ -1925,15 +1928,8 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
 	goto handlemm;
       return rec_idx_mt_shared_load(J, ix, itype2irt(&oldsnap));
     }
-  } else if (rec_idx_mt_shared_tabop(J, ix)) {
-    /*
-    ** Store helpers resolve forwarded slots, but shared table write traces can
-    ** still carry old generation pointers through inline fast paths and
-    ** optimizer forwarding. Keep non-trace-local table writes interpreted under
-    ** active MT until the whole HREF/AREF/HSTORE/ASTORE chain side-exits on
-    ** generation changes.
-    */
-    lj_trace_err_info(J, LJ_TRERR_NYIBC);
+  } else {
+    mt_shared_store = rec_idx_mt_shared_tabop(J, ix);
   }
 
   /* Record the key lookup. */
@@ -1942,6 +1938,13 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
   loadop = xrefop == IR_AREF ? IR_ALOAD : IR_HLOAD;
   /* The lj_meta_tset() inconsistency is gone, but better play safe. */
   oldv = xrefop == IR_KKPTR ? (cTValue *)ir_kptr(IR(tref_ref(xref))) : ix->oldv;
+  oldtv = oldv;
+  if (mt_shared_store) {
+    lj_tv_load_acq(&oldsnap, oldv);
+    if (tvisforward(&oldsnap))
+      lj_trace_err_info(J, LJ_TRERR_NYIBC);
+    oldtv = &oldsnap;
+  }
 
   if (ix->val == 0) {  /* Indexed load */
     IRType t = itype2irt(oldv);
@@ -1963,6 +1966,14 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
   } else {  /* Indexed store. */
     GCtab *mt = lj_tab_metatable_acq(tabV(&ix->tabv));
     int keybarrier = tref_isgcv(ix->key) && !tref_isnil(ix->val);
+    if (mt_shared_store && ix->idxchain && mt) {
+      /*
+      ** Metatable-bearing stores still use inline raw-value guards to decide
+      ** whether __newindex applies. Keep them interpreted under active MT
+      ** until those guards use the same helper snapshot path as shared loads.
+      */
+      lj_trace_err_info(J, LJ_TRERR_NYIBC);
+    }
 #if LJ_HAS_X64_MT_JIT_HELPERS
     /* M6: numeric NEWREF/HSTORE uses the generic returned-slot helper. */
     /* M6: previous-nil in-bounds ASTORE/HSTORE uses the helper bridge. */
@@ -1976,7 +1987,7 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
       lj_ir_rollback(J, rbref);  /* Rollback to eliminate hmask guard. */
       J->guardemit = rbguard;
     }
-    if (tvisnil(oldv)) {  /* Previous value was nil? */
+    if (tvisnil(oldtv)) {  /* Previous value was nil? */
       /* Need to duplicate the hasmm check for the early guards. */
       int hasmm = 0;
       if (ix->idxchain && mt) {
@@ -2026,7 +2037,7 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
 	  TRef mtref = emitir(IRT(IR_FLOAD, IRT_TAB), ix->tab, IRFL_TAB_META);
 	  emitir(IRTG(IR_EQ, IRT_TAB), mtref, lj_ir_knull(J, IRT_TAB));
 	} else {
-	  IRType t = itype2irt(oldv);
+	  IRType t = itype2irt(oldtv);
 	  emitir(IRTG(loadop, t), xref, 0);  /* Guard for non-nil value. */
 	}
       }
