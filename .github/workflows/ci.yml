@@ -14,16 +14,12 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  LJ_RELEASE_RUN_STOCK: "0"
-
 jobs:
   linux:
-    name: Linux x86_64 build/run/archive
+    name: Linux x86_64 build/run
     runs-on: ubuntu-24.04
     env:
       LUA: luajit
-      CI_ARTIFACT_TAG: ci-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -32,24 +28,16 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            build-essential luajit xz-utils
-      - name: Build, install, run, and archive
+            build-essential luajit
+      - name: Build and run Linux platform checks
         run: |
-          tools/release/build_artifact.sh \
-            linux-x86_64 "$CI_ARTIFACT_TAG" "$PWD/release-artifacts/$CI_ARTIFACT_TAG"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ci-linux-x86_64
-          path: |
-            release-artifacts/${{ env.CI_ARTIFACT_TAG }}/LuaJITMT-*
-            release-artifacts/${{ env.CI_ARTIFACT_TAG }}/*.sha256
+          tools/ci/platform_build.sh linux-x86_64
 
   macos:
-    name: macOS x86_64 build/run/archive
+    name: macOS x86_64 build/run
     runs-on: macos-13
     env:
       LUA: luajit
-      CI_ARTIFACT_TAG: ci-${{ github.run_id }}-${{ github.run_attempt }}
       MACOSX_DEPLOYMENT_TARGET: "13.0"
     steps:
       - uses: actions/checkout@v4
@@ -60,49 +48,31 @@ jobs:
           if ! command -v luajit >/dev/null 2>&1; then
             brew install luajit
           fi
-          if ! command -v xz >/dev/null 2>&1; then
-            brew install xz
-          fi
-      - name: Build, install, run, and archive
+      - name: Build and run macOS platform checks
         run: |
-          tools/release/build_artifact.sh \
-            macos-x86_64 "$CI_ARTIFACT_TAG" "$PWD/release-artifacts/$CI_ARTIFACT_TAG"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ci-macos-x86_64
-          path: |
-            release-artifacts/${{ env.CI_ARTIFACT_TAG }}/LuaJITMT-*
-            release-artifacts/${{ env.CI_ARTIFACT_TAG }}/*.sha256
+          tools/ci/platform_build.sh macos-x86_64
 
   windows-ucrt:
-    name: Windows x86_64 UCRT build/run/archive
+    name: Windows x86_64 UCRT build/run
     runs-on: ubuntu-24.04
     container: debian:trixie
     env:
       LUA: luajit
-      CI_ARTIFACT_TAG: ci-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - name: Install build tools
         run: |
           apt-get update
           apt-get install -y --no-install-recommends \
-            build-essential ca-certificates file git luajit make unzip xz-utils zip \
+            build-essential ca-certificates git luajit make \
             binutils-mingw-w64-ucrt64 gcc-mingw-w64-ucrt64 mingw-w64 \
             wine wine64
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Build, install, run, and archive
+      - name: Build and run Windows UCRT platform checks
         run: |
           mkdir -p "$PWD/.ci-home" "$PWD/.wine"
           export HOME="$PWD/.ci-home"
           export WINEPREFIX="$PWD/.wine"
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          tools/release/build_artifact.sh \
-            windows-x86_64-ucrt "$CI_ARTIFACT_TAG" "$PWD/release-artifacts/$CI_ARTIFACT_TAG"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ci-windows-x86_64-ucrt
-          path: |
-            release-artifacts/${{ env.CI_ARTIFACT_TAG }}/LuaJITMT-*
-            release-artifacts/${{ env.CI_ARTIFACT_TAG }}/*.sha256
+          tools/ci/platform_build.sh windows-x86_64-ucrt

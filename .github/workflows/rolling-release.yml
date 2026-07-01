@@ -43,7 +43,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             build-essential luajit xz-utils
-      - name: Build, install, and test Linux binary
+      - name: Build, install, test, and archive Linux binary
         run: |
           LJ_RELEASE_ROOT="$PWD/source" \
             automation/tools/release/build_artifact.sh \
@@ -84,7 +84,7 @@ jobs:
           if ! command -v xz >/dev/null 2>&1; then
             brew install xz
           fi
-      - name: Build, install, and test macOS binary
+      - name: Build, install, test, and archive macOS binary
         run: |
           LJ_RELEASE_ROOT="$PWD/source" \
             automation/tools/release/build_artifact.sh \
@@ -124,7 +124,7 @@ jobs:
           ref: ${{ env.SOURCE_REF }}
           path: source
           fetch-depth: 0
-      - name: Build, install, and test Windows UCRT binary
+      - name: Build, install, test, and archive Windows UCRT binary
         run: |
           mkdir -p "$PWD/.ci-home" "$PWD/.wine"
           export HOME="$PWD/.ci-home"
@@ -171,6 +171,9 @@ jobs:
       - name: Generate release notes and checksums
         run: |
           find dist -maxdepth 1 -type f -name '*.sha256' -delete
+          test -f "dist/LuaJITMT-${RELEASE_TAG}-linux-x86_64.tar.xz"
+          test -f "dist/LuaJITMT-${RELEASE_TAG}-macos-x86_64.tar.xz"
+          test -f "dist/LuaJITMT-${RELEASE_TAG}-windows-x86_64-ucrt.zip"
           (cd dist && find . -maxdepth 1 -type f -name 'LuaJITMT-*' -print0 |
             sort -z | xargs -0 sha256sum > SHA256SUMS)
           LJ_RELEASE_ROOT="$PWD/source" \
