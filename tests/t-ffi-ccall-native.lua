@@ -450,6 +450,14 @@ do
       end
       return r
     end
+    local function run_u32_high(n)
+      local arg = ffi.new("uint32_t", 0xf0000000)
+      local r = 0
+      for _ = 1, n do
+	r = r + u32(arg)
+      end
+      return r
+    end
     local function run_u32_i32(n)
       local r = 0
       for i = 1, n do
@@ -732,7 +740,12 @@ do
     jit.flush()
     jit.opt.start("hotloop=1", "hotexit=1")
     assert(run_u32(80) == 80 * 8)
-    assert(trace_count() == 0, "unsigned int FFI calls must keep stock semantics off trace")
+    assert(trace_count() > 0, "shared uint32_t->uint32_t FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    assert(run_u32_high(80) == 80 * 0xf0000001)
+    assert(trace_count() > 0, "shared high-bit uint32_t->uint32_t FFI call loop should trace")
 
     jit.flush()
     jit.opt.start("hotloop=1", "hotexit=1")

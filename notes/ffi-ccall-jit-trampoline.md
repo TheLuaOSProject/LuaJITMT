@@ -8,8 +8,10 @@ integer/pointer arguments, plus exact zero-argument signed/unsigned 8-bit,
 signed/unsigned 16-bit, unsigned 32-bit, signed 64-bit, and unsigned 64-bit
 integer returns. Narrow integer returns, unsigned 32-bit returns, and
 signed/unsigned 64-bit integer returns may also use the same signed 32-bit
-integer/pointer GPR argument subset. The FPR subset accepts 0, 1, or 2
-same-kind exact float or double arguments. The first mixed one-argument subset
+integer/pointer GPR argument subset. The first unsigned-argument slice accepts
+exact `uint32_t(uint32_t)` / `unsigned int(unsigned int)` calls. The FPR subset
+accepts 0, 1, or 2 same-kind exact float or double arguments. The first mixed
+one-argument subset
 accepts exact `double(int32_t)`, `double(pointer)`, `double(float)`,
 `int32_t(double)`, `int32_t(float)`, `pointer(double)`, `void(double)`,
 `void(float)`, and `float(double)`. The recorder emits
@@ -17,6 +19,7 @@ accepts exact `double(int32_t)`, `double(pointer)`, `double(float)`,
 `lj_ccall_jit_i64_gpr()`, or `lj_ccall_jit_ptr_gpr()` plus a tiny signature
 code for the GPR argument shape, `lj_ccall_jit_u32_0()` /
 `lj_ccall_jit_u32_gpr()` for high-bit-safe unsigned 32-bit results,
+`lj_ccall_jit_u32_u32()` for the exact unsigned 32-bit argument/result shape,
 `lj_ccall_jit_i64_gpr()` / `lj_ccall_jit_i64_ret_gpr()` for boxed int64
 results, `lj_ccall_jit_u64_0()` / `lj_ccall_jit_u64_gpr()` for boxed uint64
 results, `lj_ccall_jit_narrow_0()` / `lj_ccall_jit_narrow_gpr()` for narrow
@@ -45,6 +48,7 @@ The scope is deliberately narrow:
 - zero-argument exact unsigned 32-bit integer returns as Lua numbers;
 - exact unsigned 32-bit integer returns with signed 32-bit integer/pointer
   arguments;
+- exact one-argument `uint32_t(uint32_t)` / `unsigned int(unsigned int)` calls;
 - zero-argument exact signed 64-bit integer returns;
 - zero-argument exact unsigned 64-bit integer returns;
 - exact signed/unsigned 64-bit integer returns with signed 32-bit
@@ -61,8 +65,9 @@ The scope is deliberately narrow:
 This gives hot `ffi.C.getpid()`, `ffi.C.abs(i)`, small
 `int add(int,int)`-style loops, simple pointer-return/pointer-argument loops,
 side-effecting `void f(...)` loops, zero-argument high-bit uint32 result loops,
-signed-int/pointer to high-bit uint32 result loops, zero-argument narrow integer
-result loops, signed-int/pointer to narrow integer result loops,
+signed-int/pointer to high-bit uint32 result loops, high-bit
+uint32-argument/result loops, zero-argument narrow integer result loops,
+signed-int/pointer to narrow integer result loops,
 signed-int/pointer to int64/uint64 cdata-result loops, zero-argument signed
 int64 and unsigned uint64 cdata-result loops, FP-only numeric call loops, and
 mixed float/double one-argument calls a traced, nonblocking native-state path,

@@ -30,7 +30,10 @@ interpreted.
 Lua numbers, preserving high-bit values without signed truncation. Unsigned
 integer returns with exact signed 32-bit integer or pointer arguments trace
 through `lj_ccall_jit_u32_gpr()` and use the same high-bit-safe Lua number
-result conversion. Unsigned integer argument conversion remains interpreted.
+result conversion. `lj_ccall_jit_u32_u32()` traces the exact
+`uint32_t(uint32_t)`/`unsigned int(unsigned int)` shape, including high-bit
+argument values. Broader unsigned integer argument combinations remain
+interpreted.
 `lj_ccall_jit_u64_0()` traces exact zero-argument unsigned 64-bit returns,
 preserving stock boxed uint64 cdata results. Unsigned 64-bit returns with exact
 signed 32-bit integer or pointer arguments trace through `lj_ccall_jit_u64_gpr()`.

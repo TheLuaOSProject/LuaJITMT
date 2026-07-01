@@ -40,7 +40,10 @@ type. `lj_ccall_jit_narrow_gpr()` extends those exact narrow returns to signed
 `lj_ccall_jit_u32_0()` handles exact zero-argument unsigned 32-bit integer
 returns as Lua numbers without high-bit truncation. `lj_ccall_jit_u32_gpr()`
 extends that high-bit-safe result conversion to unsigned 32-bit returns with
-exact signed 32-bit integer or pointer arguments. `lj_ccall_jit_u64_0()` handles
+exact signed 32-bit integer or pointer arguments. `lj_ccall_jit_u32_u32()`
+handles exact `uint32_t(uint32_t)` / `unsigned int(unsigned int)` calls with
+the same native-state protocol and high-bit-safe Lua number result conversion.
+`lj_ccall_jit_u64_0()` handles
 exact zero-argument unsigned 64-bit integer returns and preserves boxed uint64
 cdata results; `lj_ccall_jit_u64_gpr()` does the same for exact signed 32-bit
 integer or pointer arguments. The sibling
