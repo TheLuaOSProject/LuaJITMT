@@ -23,6 +23,13 @@ output, CSVs, or marker files. Generic file/text helpers remain available for
 those artifacts, but must not be paired with `src/*.c`, `src/*.h`,
 `src/*.dasc`, `tests/*.lua`, or `tools/*.sh` snippet checks.
 
+2026-07-01 follow-up: removed the stale M7 Perl guards that read
+`src/lj_ccall.c`, `src/lj_cconv.c`, `src/lj_carith.c`, and `src/lib_bit.c`.
+Their useful signal now lives in the existing parser-token behavior fixtures:
+`t-ffi-ccall-struct-overflow.c`, `t-ffi-cconv-init-snapshot.c`,
+`t-ffi-cdata-conv-snapshot.c`, `t-ffi-carith-check64-snapshot.c`, and
+`t-ffi-carith-arg-snapshot.c`.
+
 The only supported shell entrypoint under `tools/ci/` is
 `tools/ci/lua_test.sh`. Run focused cases as
 `tools/ci/lua_test.sh <case...>`; do not add per-case compatibility wrapper
