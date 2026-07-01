@@ -632,12 +632,14 @@ int main(void)
   assert_acked(g, tg, epoch0);
 
   load_recorder_call_unroll_flush(L);
+  epoch0 = g->gc2.hs_epoch;
+  scoped_slots0 = gc2_jit_scoped_slots_retired_acq(g);
   assert(lua_pcall(L, 0, 1, 0) == LUA_OK);
   assert(lua_toboolean(L, -1) == 1);
   lua_pop(L, 1);
-  assert(g->gc2.hs_epoch > epoch0);
+  assert(g->gc2.hs_epoch == epoch0);
   assert(tg->hs_epoch_ack == g->gc2.hs_epoch);
-  assert(gc2_jit_scoped_slots_retired_acq(g) > scoped_slots0);
+  assert(gc2_jit_scoped_slots_retired_acq(g) == scoped_slots0);
   assert(count_scope_flushing_traces(G2J(g)) == 0);
 
   load_trace_stopreq_loop(L);

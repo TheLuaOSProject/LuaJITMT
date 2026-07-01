@@ -29,6 +29,7 @@ local run_lua_test_case = runtime.run_lua_test_case
 local m6_cases = {
   "m6_dispatch_redispatch",
   "m6_jit_token",
+  "m6_jit_recursive_call_unroll",
   "m6_jit_cell_ops",
   "m6_jit_barrier_xpoll",
   "m6_jit_xbar_xpoll",
@@ -527,6 +528,39 @@ assert(s==2720)
       cellops.run_jit_dump_guards(t, dump)
       cellops.run_jit_runtime_guards(t)
       print("M6 JIT local-cell behavior passed")
+    end
+  })
+
+  add({
+    name = "m6_jit_recursive_call_unroll",
+    description = "recursive trace call-unroll keeps return trace blacklist state",
+    run = function(t)
+      build_default(t)
+      luajit_code(t, [=[
+local util = require("jit.util")
+jit.flush()
+jit.opt.start("hotloop=56", "hotexit=10")
+local function fib(n)
+  if n < 2 then return n end
+  return fib(n-1) + fib(n-2)
+end
+assert(fib(30) == 832040)
+local t1 = assert(util.traceinfo(1), "fib did not record trace 1")
+assert(t1.linktype == "return",
+       "call-unroll abort retired/reused return trace 1 as " ..
+       tostring(t1.linktype))
+local uprec
+for i = 2, 20 do
+  local ti = util.traceinfo(i)
+  if ti and ti.linktype == "up-recursion" then
+    uprec = i
+    break
+  end
+end
+assert(uprec, "fib did not record an up-recursion trace after return traces")
+print("jit-recursive-call-unroll OK")
+]=], { timeout = "20s" })
+      print("M6 JIT recursive call-unroll guard passed")
     end
   })
 

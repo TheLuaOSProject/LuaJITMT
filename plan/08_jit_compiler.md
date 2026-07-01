@@ -252,6 +252,12 @@ handler — sized LJ_MAX_EXITSTUBGR-compatible; see lj_vmstruct notes.
   The M9 cleanup/perf pass removed the temporary fresh-area allocation bridge;
   the publication guard now rejects those symbols and verifies low-`maxmcode`
   trace reuse under the dual-map write view.
+  Recorder aborts that hit the recursive call-unroll limit now use an
+  unlink-only trace flush for the compiled return trace, matching stock
+  LuaJIT's behavior: the trace is removed from the proto chain and unpatched,
+  but its trace slot remains live long enough for `trace_abort()` to self-link
+  it as the blacklist entry. Public `jit.flush()`/proto flush paths still use
+  the scoped `HS_EXIT_TRACES` retirement path.
 
 ## 8.6 GC interaction of running traces
 

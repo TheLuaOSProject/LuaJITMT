@@ -741,6 +741,23 @@ uint32_t lj_trace_flush(jit_State *J, TraceNo traceno)
   return 0;
 }
 
+/* Unlink a trace without retiring its slot. Recorder aborts need this for the
+** stock recursive-call path: trace_abort() must still see the return trace and
+** self-link it as a blacklist entry.
+*/
+uint32_t lj_trace_flush_unlink(jit_State *J, TraceNo traceno)
+{
+  if (traceno > 0 && traceno < trace_sizetrace_acq(J)) {
+    GCtrace *T = traceref(J, traceno);
+    if (T && trace_traceno_acq(T) == traceno) {
+      if (trace_root_acq(T) == 0)
+	return trace_flushroot(J, T, 0);
+      return trace_flushside(J, T, 0);
+    }
+  }
+  return 0;
+}
+
 /* Flush all traces associated with a prototype. */
 uint32_t lj_trace_flushproto(global_State *g, GCproto *pt)
 {

@@ -1,0 +1,47 @@
+## 2026-07-01 performance regression audit
+
+Read-only subagent audits confirmed the major reports:
+
+- Normal GC object allocation still CAS-prepends most objects to the global
+  `g->gc.root` list. Legacy sweep remains authoritative for normal-object
+  lifetime, so deleting root membership is not safe yet. A local rootless
+  closure experiment crashed during module loading by losing reachable
+  function/proto/template-table state; it was discarded.
+- No-upvalue closure allocation was directly starting legacy GC work through
+  `func_newL_interp_softgc()`. That amplified root-list sweep cost in closure
+  churn. The helper was removed; `lj_gc_check_fixtop()` still handles regular
+  legacy threshold and GC2 hard-limit assists.
+- Recursive `fib30` behavior was a JIT trace-retention bug. The call-unroll
+  abort path used scoped trace retirement and cleared the return trace slot
+  before `trace_abort()` could self-link it as the stock blacklist entry.
+  The recorder path now uses `lj_trace_flush_unlink()`, which unlinks/unpatches
+  without retiring the slot. `m6_jit_recursive_call_unroll` covers this, and
+  `t-vm-safepoint` now asserts this recorder path does not perform a scoped
+  handshake or scoped slot retirement; public `jit.flush(1)` still does.
+- x64 interpreter table stores remain helper-heavy: `TSETS` goes straight to
+  `vmeta_tsets`, and `TSETV`/`TSETB`/`TSETR` array stores route through
+  `lj_tab_storetv_forvm_array()` plus barrier checks. This is real but is a
+  separate VM/JIT store-fast-path project, because the safe inline cases must
+  preserve `__newindex`, weak-table, forwarding/retiring-slot, keyed-CAS, and
+  parent-aware barrier behavior.
+- x64 `BC_TNEW` has no inline bump allocation. The current safe prerequisite is
+  still exact object layout/bitmap/accounting/root-publication support; first
+  slice should be empty-table only and fall back to the current helper when any
+  condition is not statically safe.
+- The benchmark regression guard was accounting-only. `m9_bench_stock_compare`
+  now compares selected filters against an installed stock LuaJIT when
+  `LJ_BENCH_STOCK_BIN` is set, and Linux CI runs it with a wide threshold to
+  catch catastrophic gaps without making normal platform CI dependent on tight
+  timing.
+
+Follow-up order:
+
+1. Replace per-allocation root CAS with a TG-local pending-publication batch
+   drained before legacy root-list consumers. This keeps stock sweep/finalizer
+   semantics while reducing allocation-path contention.
+2. Reintroduce guarded x64 interpreter store fast paths for existing stable
+   array/hash slots, leaving new-key/metatable/weak/forwarded cases on helpers.
+3. Restore JIT no-helper ASTORE/HSTORE for stable primitive-value stores before
+   collectable-value barrier fast paths.
+4. Add empty-table x64 `BC_TNEW` inline bump allocation behind strict arena,
+   color, bitmap, accounting, and root-publication guards.

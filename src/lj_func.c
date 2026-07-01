@@ -322,30 +322,9 @@ static GCfunc *func_newL_gc_base(lua_State *L, TValue *base, GCproto *pt,
   return fn;
 }
 
-static void func_newL_interp_softgc(lua_State *L)
-{
-  global_State *g = G(L);
-  GCSize total;
-  uint64_t soft, max;
-  if (lj_gc_threshold_load(g) == LJ_MAX_MEM ||
-      g->gc.state != GCSpause || gc2_phase_acq(g) != LJ_GC2_IDLE)
-    return;
-  total = lj_gc_total_load(g);
-  soft = lj_gc2_helper_soft_limit_load(g);
-  if ((uint64_t)total < soft)
-    return;
-  max = ~(uint64_t)0;
-  lj_gc2_helper_soft_limit_store(g, max);
-  if (curr_funcisL(L))
-    L->top = curr_topL(L);
-  (void)lj_gc_step(L);
-}
-
 GCfunc *lj_func_newL_gc(lua_State *L, GCproto *pt, GCfuncL *parent)
 {
   lj_gc_check_fixtop(L);
-  if (pt->sizeuv == 0)
-    func_newL_interp_softgc(L);
   return func_newL_gc_base(L, NULL, pt, parent);
 }
 

@@ -87,6 +87,12 @@ hook-driven real-bytecode `BC_TSETM` constructor case over an old forwarded
 array generation.
 `tools/ci/lua_test.sh m9_m10_gc` chains the current M9 stats/benchmark smokes
 with the M10 generational guard.
+The CSV/geomean accounting guard remains a harness self-test. A separate
+`m9_bench_stock_compare` case compares selected benchmark filters against an
+installed stock LuaJIT when `LJ_BENCH_STOCK_BIN` is set; Linux CI wires this to
+`/usr/bin/luajit` with a deliberately broad catastrophic-regression threshold,
+while local/release runs can tighten `LJ_BENCH_STOCK_MAX` and
+`LJ_BENCH_STOCK_FILTERS`.
 These are milestone
 guardrails, not the final M9 performance matrix.
 

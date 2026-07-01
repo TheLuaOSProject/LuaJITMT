@@ -230,6 +230,40 @@ local function run_bench_regression(t)
   print("M9 benchmark regression accounting guard passed")
 end
 
+local function run_bench_stock_compare(t)
+  local stock = os.getenv("LJ_BENCH_STOCK_BIN")
+  if not stock or stock == "" then
+    print("M9 stock benchmark guard skipped; LJ_BENCH_STOCK_BIN not set")
+    return
+  end
+
+  t:build({ clean = true, quiet = true })
+
+  local bench_lua = t:path("aux", "bench", "bench.lua")
+  local current = t:path("src", "luajit")
+  local filters = os.getenv("LJ_BENCH_STOCK_FILTERS") or
+    "arith_loop fib30 tab_hash_write alloc_tables closures_upval"
+  local max = tonumber(os.getenv("LJ_BENCH_STOCK_MAX") or
+                       os.getenv("BENCH_GEOMEAN_MAX") or "100")
+  local timeout = os.getenv("LJ_BENCH_STOCK_TIMEOUT") or "30s"
+
+  for filter in filters:gmatch("%S+") do
+    local result = bench_driver.compare_bins(stock, current, bench_lua, {
+      filter = filter,
+      max = max,
+      timeout = timeout,
+      stderr = true
+    })
+    if not result.ok then
+      error("stock benchmark regression for " .. filter .. ":\n" ..
+            bench_csv.format_compare(result), 2)
+    end
+    io.write("stock benchmark ", filter, " geomean ",
+             ("%.6f"):format(result.geomean or 0), "\n")
+  end
+  print("M9 stock benchmark guard passed")
+end
+
 local function run_generational(t)
   t:build({ clean = true, quiet = true })
 
@@ -242,6 +276,7 @@ local m9_m10_deps = {
   "m9_gc_stats",
   "m9_bench_smoke",
   "m9_bench_regression",
+  "m9_bench_stock_compare",
   "m10_generational"
 }
 
@@ -262,6 +297,12 @@ return function(add)
     name = "m9_bench_regression",
     description = "benchmark CSV/geomean accounting guard",
     run = run_bench_regression
+  })
+
+  add({
+    name = "m9_bench_stock_compare",
+    description = "optional stock LuaJIT performance guard",
+    run = run_bench_stock_compare
   })
 
   add({

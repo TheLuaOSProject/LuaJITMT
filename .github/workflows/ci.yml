@@ -32,6 +32,15 @@ jobs:
       - name: Build, run, and test Linux platform
         run: |
           tools/ci/platform_build.sh linux-x86_64
+      - name: Compare selected benchmarks against stock LuaJIT
+        env:
+          LJ_BENCH_STOCK_BIN: /usr/bin/luajit
+          LJ_BENCH_STOCK_FILTERS: arith_loop fib30 tab_hash_write alloc_tables closures_upval
+          LJ_BENCH_STOCK_MAX: "100"
+          LJ_BENCH_STOCK_TIMEOUT: 60s
+          BENCH_SCALE: "0.0001"
+        run: |
+          tools/ci/lua_test.sh m9_bench_stock_compare
 
   macos:
     name: macOS x86_64 build/run
