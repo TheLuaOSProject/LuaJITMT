@@ -82,6 +82,7 @@ int *lj_m7_ccall_jit_ptr_u32_i64(uint32_t, int64_t);
 int *lj_m7_ccall_jit_ptr_u32_u64(uint32_t, uint64_t);
 double lj_m7_ccall_jit_num0(void);
 double lj_m7_ccall_jit_num_i32(int32_t);
+double lj_m7_ccall_jit_num_num_i32(double, int32_t);
 double lj_m7_ccall_jit_num_ptr(int *);
 double lj_m7_ccall_jit_num_flt(float);
 double lj_m7_ccall_jit_num1(double);
@@ -1709,6 +1710,17 @@ do
     jit.opt.start("hotloop=1", "hotexit=1")
     assert(run_num_i32(80) == (80 * 81) / 2 + 60)
     assert(trace_count() > 0, "shared int->double FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    assert((function(n)
+      local r = 0
+      for i = 1, n do
+	r = r + lib.lj_m7_ccall_jit_num_num_i32(i + 0.25, 7)
+      end
+      return r
+    end)(80) == (80 * 81) / 2 + 80 * (7 + 0.25 + 0.375))
+    assert(trace_count() > 0, "shared double,int->double FFI call loop should trace")
 
     jit.flush()
     jit.opt.start("hotloop=1", "hotexit=1")
