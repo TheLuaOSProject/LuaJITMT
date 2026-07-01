@@ -44,7 +44,7 @@ jobs:
 
   macos:
     name: macOS x86_64 build/run
-    runs-on: macos-13
+    runs-on: macos-26-intel
     env:
       LUA: luajit
       MACOSX_DEPLOYMENT_TARGET: "13.0"

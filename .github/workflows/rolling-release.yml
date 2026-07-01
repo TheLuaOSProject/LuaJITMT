@@ -78,7 +78,7 @@ jobs:
 
   macos:
     name: macOS x86_64 artifact
-    runs-on: macos-13
+    runs-on: macos-26-intel
     needs: validate
     env:
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}

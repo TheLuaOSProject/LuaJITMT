@@ -23,6 +23,9 @@
   build, run the binary directly, and dispatch the matching platform binary
   harness check (`jit.os`, `jit.arch`, and the threading module). It does not
   run release archive extraction checks or stock semantics suites.
+- GitHub-hosted `macos-13` was retired; CI and rolling-release macOS jobs use
+  the current x64-hosted `macos-26-intel` runner while keeping
+  `MACOSX_DEPLOYMENT_TARGET=13.0` for produced binaries.
 - The opt-in M0 cross-platform smoke defaults now match the release platforms:
   Windows x86_64 UCRT and macOS x86_64 with deployment target 13.0. It only
   runs cross-platform work when `LJ_M0_PLATFORM_ENABLE` or
