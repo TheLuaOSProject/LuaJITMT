@@ -1,7 +1,7 @@
 ---@meta threading
 
 ---@alias threading.timeout_error "timeout"
----@alias threading.thread_fn fun(...: any): any, ...
+---@alias threading.thread_fn fun(...):...
 ---@alias threading.recv_status true|false|threading.timeout_error
 ---@alias threading.peek_status true|false
 ---@alias threading.send_result true|nil
@@ -108,7 +108,7 @@
 ---@field finalizer_spawn_deferrals number
 ---@field finalizer_spawn_release_wakes number
 
----@class threading.thread<R>: userdata
+---@class threading.thread: userdata
 local threading_thread = {}
 
 ---Wait for this thread to finish.
@@ -116,14 +116,14 @@ local threading_thread = {}
 ---Returns `true, ...` when the child function returns, `false, err` when the
 ---child function errors, or `nil, "timeout"` when a timeout is supplied and the
 ---thread is still running.
----@overload fun<R>(self: threading.thread<R>): true, R, ...
----@overload fun<R>(self: threading.thread<R>): false, any
----@overload fun<R>(self: threading.thread<R>, timeout: number): true, R, ...
----@overload fun<R>(self: threading.thread<R>, timeout: number): false, any
----@overload fun<R>(self: threading.thread<R>, timeout: number): nil, threading.timeout_error
----@param timeout number seconds to wait; omit to block indefinitely.
+---@overload fun(self: threading.thread): true, ...
+---@overload fun(self: threading.thread): false, ...
+---@overload fun(self: threading.thread, timeout: number): true, ...
+---@overload fun(self: threading.thread, timeout: number): false, ...
+---@overload fun(self: threading.thread, timeout: number): nil, threading.timeout_error
+---@param timeout? number seconds to wait; omit to block indefinitely.
 ---@return true|false|nil ok true for child success, false for child error, nil on timeout.
----@return any ... child results, an error object, or the timeout reason.
+---@return ... child results, an error object, or the timeout reason.
 function threading_thread:join(timeout) end
 
 ---@return integer id
@@ -170,7 +170,7 @@ local threading_channel = {}
 ---@overload fun(self: threading.channel<T>, value: T, timeout: number): true
 ---@overload fun(self: threading.channel<T>, value: T, timeout: number): nil, threading.timeout_error
 ---@param value T
----@param timeout number seconds to wait; omit to block indefinitely.
+---@param timeout? number seconds to wait; omit to block indefinitely.
 ---@return threading.send_result ok
 ---@return threading.timeout_error? err
 function threading_channel:send(value, timeout) end
@@ -184,7 +184,7 @@ function threading_channel:send(value, timeout) end
 ---@overload fun(self: threading.channel<T>, timeout: number): T, true
 ---@overload fun(self: threading.channel<T>, timeout: number): nil, false
 ---@overload fun(self: threading.channel<T>, timeout: number): nil, threading.timeout_error
----@param timeout number seconds to wait; omit to block indefinitely.
+---@param timeout? number seconds to wait; omit to block indefinitely.
 ---@return T|nil value
 ---@return threading.recv_status status
 function threading_channel:recv(timeout) end
@@ -207,7 +207,7 @@ function threading_channel:close() end
 ---@nodiscard
 function threading_channel:__tostring() end
 
----@class threading
+---@class threadinglib
 local threading = {}
 
 ---@return integer count
@@ -224,7 +224,7 @@ function threading.now() end
 function threading.fence() end
 
 ---@overload fun()
----@param seconds number seconds to sleep; omit to sleep for 0 seconds.
+---@param seconds? number seconds to sleep; omit to sleep for 0 seconds.
 ---@return nil
 function threading.sleep(seconds) end
 
@@ -244,13 +244,12 @@ function threading.gcworkers(count) end
 function threading.gcmode(mode) end
 
 ---Spawn a new OS thread that calls `fn(...)`.
----@generic R
----@param fn fun(...: any): R, ...
+---@param fn threading.thread_fn
 ---@param ... any
----@return threading.thread<R> thread
+---@return threading.thread thread
 function threading.spawn(fn, ...) end
 
----@return threading.thread<any> thread
+---@return threading.thread thread
 ---@nodiscard
 function threading.current() end
 
@@ -262,11 +261,10 @@ function threading.mutex() end
 ---
 ---Capacity 0 creates a rendezvous channel. Buffered channels have at least the
 ---requested capacity.
----@generic T
----@overload fun<T>(): threading.channel<T>
----@overload fun<T>(capacity: integer): threading.channel<T>
----@param capacity integer buffered slot count; omit for a rendezvous channel.
----@return threading.channel<T> channel
+---@overload fun(): threading.channel<any>
+---@overload fun(capacity: integer): threading.channel<any>
+---@param capacity? integer buffered slot count; omit for a rendezvous channel.
+---@return threading.channel<any> channel
 function threading.channel(capacity) end
 
 return threading
