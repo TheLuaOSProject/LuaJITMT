@@ -406,13 +406,16 @@ bounded traversal, GC liveness of the metatable/fallback, and sentinel filtering
 while sibling threads force array/hash generation churn.
 Current M5 hardening adds a short active-MT structural token for resize
 publication and compound table-library shifts, plus a forwarded-array retry so
-readers do not treat an in-flight migration slot as a real nil. New trace
-recording is enabled for non-table code and fresh table allocation under
-secondary TGs, but non-trace-local table loads/stores and `next()` traversal
-still fall back to the interpreter after MT activation; stock single-threaded
-JIT behavior is unchanged. The remaining M5/M6 work is to teach the recorder/JIT
-shared table load/store/traversal helpers generation-following guards so traced
-shared-table mutation can be re-enabled under MT.
+readers do not treat an in-flight migration slot as a real nil. The token
+remains a temporary safety bridge until cooperative per-generation resize
+ownership/helper-copy replaces it; the fixed sleep retry remains a pending
+bridge gap. New trace recording is enabled for non-table code and fresh table
+allocation under secondary TGs, but non-trace-local table loads/stores and
+`next()` traversal still fall back to the interpreter after MT activation;
+stock single-threaded JIT behavior is unchanged. The remaining M5/M6 work is to
+teach the recorder/JIT shared table load/store/traversal helpers
+generation-following guards so traced shared-table mutation can be re-enabled
+under MT.
 ### 6.3.6 next/pairs (lj_tab_next)
 Iterate the *gen snapshot* captured at first call: store the NH pointer in
 the iterator control slot? Lua's `next(t,k)` is stateless — DECIDED:
