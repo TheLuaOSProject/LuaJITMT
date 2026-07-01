@@ -619,6 +619,10 @@ driver ownership.
 ## 5.11 Pacing & assists
 Trigger when `alloc_since_trigger > trigger_bytes` where trigger_bytes =
 live_estimate * gcpause_pct/100 (default 100% ⇒ 2x heap growth, Lua-like).
+Current bridge: `trigger_bytes` keeps only a 256 KiB minimum floor
+(`8 * LJ_GC2_ACCT_FLUSH`). This preserves stock single-thread pacing for
+short bursts such as aligned `ffi.new()` loops while still batching GC2
+allocation-trigger accounting above the per-TG flush quantum.
 Hard limit `hard_bytes = trigger*2`: an allocating thread past it runs a
 bounded **mark assist** in alloc_slow: pop ≤2^assist_shift objects from the
 SSB-stack/steal and trace them (mutator tracing reuses worker code with

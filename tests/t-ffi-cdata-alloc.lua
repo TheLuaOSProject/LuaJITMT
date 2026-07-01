@@ -1,5 +1,6 @@
 local th = require"threading"
 local ffi = require"ffi"
+local bit = require"bit"
 local harness = require"thread_harness"
 
 local nthreads = harness.arg_number(1, "LJ_M7_FFI_CDATA_THREADS", 6)
@@ -10,6 +11,24 @@ typedef struct { int x; double y; } lj_m7_cdata_alloc_t;
 ]]
 
 assert(ffi.sizeof("lj_m7_cdata_alloc_t") == 16)
+
+do
+  local oc = collectgarbage("count")
+  for al = 0, 15 do
+    local align = 2 ^ al
+    local ct = ffi.typeof("struct { char __attribute__((aligned("..
+                          align.."))) a; }")
+    for _ = 1, 100 do
+      local cd = ct()
+      local addr = tonumber(ffi.cast("intptr_t", ffi.cast("void *", cd)))
+      assert(bit.band(addr, align - 1) == 0)
+    end
+  end
+  local nc = collectgarbage("count")
+  assert(nc < oc + 3000, "GC step missing for ffi.new")
+  collectgarbage("collect")
+end
+
 local ready, start = harness.channels(nthreads)
 local workers = {}
 
