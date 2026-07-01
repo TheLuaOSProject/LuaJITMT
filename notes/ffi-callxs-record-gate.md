@@ -17,8 +17,10 @@ signed 32-bit integer, or pointer returns. It traces through `IRCALL`, not
 `IR_CALLXS`, and keeps the compile-time `LJ_FFI_RECORD_CALLS` gate intact.
 The sibling `lj_ccall_jit_i64_gpr()` helper traces exact zero-argument signed
 64-bit integer returns, preserving stock boxed int64 cdata results. Signed
-64-bit argument conversion remains interpreted until the recorder can produce
-the exact ABI value without widening the semantics.
+64-bit returns with exact signed 32-bit integer or pointer arguments trace
+through `lj_ccall_jit_i64_ret_gpr()` and keep the same boxed int64 cdata
+result. Signed 64-bit argument conversion remains interpreted until the
+recorder can produce the exact ABI value without widening the semantics.
 `lj_ccall_jit_narrow_0()` traces exact zero-argument signed/unsigned 8-bit and
 16-bit integer returns as Lua numbers, after calling the exact C return type.
 Narrow integer argument conversion remains interpreted.
@@ -28,8 +30,9 @@ integer returns with exact signed 32-bit integer or pointer arguments trace
 through `lj_ccall_jit_u32_gpr()` and use the same high-bit-safe Lua number
 result conversion. Unsigned integer argument conversion remains interpreted.
 `lj_ccall_jit_u64_0()` traces exact zero-argument unsigned 64-bit returns,
-preserving stock boxed uint64 cdata results. Unsigned 64-bit argument
-conversion remains interpreted.
+preserving stock boxed uint64 cdata results. Unsigned 64-bit returns with exact
+signed 32-bit integer or pointer arguments trace through `lj_ccall_jit_u64_gpr()`.
+Unsigned 64-bit argument conversion remains interpreted.
 The separate `lj_ccall_jit_{num,flt}_fpr()` helpers trace exact double or float
 returns with 0, 1, or 2 same-kind exact FP arguments through the same
 native-state bridge.

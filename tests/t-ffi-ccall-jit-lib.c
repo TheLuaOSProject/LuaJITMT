@@ -35,6 +35,26 @@ int64_t lj_m7_ccall_jit_i64_0(void)
   return 17;
 }
 
+int64_t lj_m7_ccall_jit_i64_i32(int32_t a)
+{
+  return INT64_C(0x100000000) + (int64_t)a;
+}
+
+int64_t lj_m7_ccall_jit_i64_ptr(int *p)
+{
+  return INT64_C(0x100000000) + (int64_t)*p;
+}
+
+int64_t lj_m7_ccall_jit_i64_i32_ptr(int32_t offset, int *p)
+{
+  return INT64_C(0x100000000) + (int64_t)p[offset];
+}
+
+int64_t lj_m7_ccall_jit_i64_i64(int64_t a)
+{
+  return a + 1;
+}
+
 int8_t lj_m7_ccall_jit_i8_0(void)
 {
   return -7;
@@ -133,6 +153,21 @@ uint32_t lj_m7_ccall_jit_u32_0(void)
 uint64_t lj_m7_ccall_jit_u64(uint64_t a)
 {
   return a + 1;
+}
+
+uint64_t lj_m7_ccall_jit_u64_i32(int32_t a)
+{
+  return UINT64_C(0x100000000) + (uint64_t)(uint32_t)a;
+}
+
+uint64_t lj_m7_ccall_jit_u64_ptr(int *p)
+{
+  return UINT64_C(0x100000000) + (uint64_t)(uint32_t)*p;
+}
+
+uint64_t lj_m7_ccall_jit_u64_i32_ptr(int32_t offset, int *p)
+{
+  return UINT64_C(0x100000000) + (uint64_t)(uint32_t)p[offset];
 }
 
 uint64_t lj_m7_ccall_jit_u64_0(void)
