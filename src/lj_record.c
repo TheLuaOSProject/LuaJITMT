@@ -2093,16 +2093,8 @@ int lj_record_next(jit_State *J, RecordIndex *ix)
 {
   IRType t, tkey, tval;
   TRef trvk;
-  /*
-  ** lj_vm_next returns a key/value pair plus the next traversal index, while
-  ** the recorder predicts result types from the current table generation.
-  ** Another TG can resize the table between those two observations. Keep
-  ** stock single-threaded traversal recording, but after MT activation leave
-  ** traversal to the interpreter until the index/type contract is
-  ** generation-safe.
-  */
-  if (mt_active_acq(J2G(J)))
-    lj_trace_err(J, LJ_TRERR_NYIBC);
+  if (mt_active_acq(J2G(J)) && !rec_idx_tab_trace_local(J, ix->tab))
+    lj_trace_err_info(J, LJ_TRERR_NYIBC);
   t = rec_next_types(tabV(&ix->tabv), ix->keyv.u32.lo);
   tkey = (t & 0xff); tval = (t >> 8);
   trvk = lj_ir_call(J, IRCALL_lj_vm_next, ix->tab, ix->key);

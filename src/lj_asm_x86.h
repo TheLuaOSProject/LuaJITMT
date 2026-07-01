@@ -1239,7 +1239,7 @@ static void asm_tvptr(ASMState *as, Reg dest, IRRef ref, MSize mode)
 #endif
     }
   }
-  if (mode & IRTMPREF_IN2)
+  if (mode & (IRTMPREF_IN2|IRTMPREF_OUT2))
     emit_leatg(as, dest, tmptv2);
   else
     emit_leatg(as, dest, tmptv);
