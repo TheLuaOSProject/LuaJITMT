@@ -1040,15 +1040,6 @@ static MSize crec_copy_unroll(CRecMemList *ml, CTSize len, CTSize step,
   return mlp;
 }
 
-static int crec_small_const_len(jit_State *J, TRef trlen, CTSize maxlen)
-{
-  int32_t len;
-  if (!tref_isk(trlen))
-    return 0;
-  len = IR(tref_ref(trlen))->i;
-  return len >= 0 && (CTSize)len <= maxlen;
-}
-
 static int crec_const_len(jit_State *J, TRef trlen)
 {
   if (!tref_isk(trlen))
@@ -1056,7 +1047,7 @@ static int crec_const_len(jit_State *J, TRef trlen)
   return IR(tref_ref(trlen))->i >= 0;
 }
 
-static int crec_memcall_len(jit_State *J, TRef trlen)
+static int crec_nonneg_const_or_dynamic_len(jit_State *J, TRef trlen)
 {
   return !tref_isk(trlen) || crec_const_len(J, trlen);
 }
@@ -4507,7 +4498,7 @@ void LJ_FASTCALL recff_ffi_string(jit_State *J, RecordFFData *rd)
     TRef trlen = J->base[1];
     if (!tref_isnil(trlen)) {
       trlen = crec_toint(J, cts, trlen, &rd->argv[1]);
-      if (!crec_small_const_len(J, trlen, CREC_COPY_MAXLEN))
+      if (!crec_nonneg_const_or_dynamic_len(J, trlen))
 	lj_trace_err(J, LJ_TRERR_NYICALL);
       tr = crec_ct_tv_id(J, cts, CTID_P_CVOID, 0, tr, &rd->argv[0]);
     } else {
@@ -4531,7 +4522,8 @@ void LJ_FASTCALL recff_ffi_copy(jit_State *J, RecordFFData *rd)
       trlen = emitir(IRTI(IR_ADD), trlen, lj_ir_kint(J, 1));
     }
     rd->nres = 0;
-    crec_copy(J, trdst, trsrc, trlen, NULL, crec_memcall_len(J, trlen));
+    crec_copy(J, trdst, trsrc, trlen, NULL,
+	      crec_nonneg_const_or_dynamic_len(J, trlen));
   }  /* else: interpreter will throw. */
 }
 
@@ -4559,7 +4551,8 @@ void LJ_FASTCALL recff_ffi_fill(jit_State *J, RecordFFData *rd)
     else
       trfill = lj_ir_kint(J, 0);
     rd->nres = 0;
-    crec_fill(J, trdst, trlen, trfill, step, crec_memcall_len(J, trlen));
+    crec_fill(J, trdst, trlen, trfill, step,
+	      crec_nonneg_const_or_dynamic_len(J, trlen));
   }  /* else: interpreter will throw. */
 }
 

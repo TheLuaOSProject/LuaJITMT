@@ -160,12 +160,12 @@ do
     assert(total == n * 6)
   end)
 
-  expect_no_trace("dynamic-length ffi.string", function(n)
+  expect_trace("dynamic-length ffi.string", function(n)
     local total = 0
     for i = 1, n do
       total = total + #ffi.string(cstr, (i % 6) + 1)
     end
-    assert(total > n)
+    assert(total == n * 7 / 2)
   end)
 end
 
