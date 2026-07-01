@@ -138,6 +138,23 @@ GCstr *LJ_FASTCALL lj_bufx_tostr_forjit(lua_State *L, SBufExt *sbx)
   return lj_str_new(L, p, len);
 }
 
+GCstr *LJ_FASTCALL lj_bufx_get_forjit(lua_State *L, SBufExt *sbx, int32_t narg)
+{
+  MSize len, n = narg < 0 ? LJ_MAX_BUF : (MSize)narg;
+  const char *p = lj_bufx_data_acq(sbx, &len);
+  GCstr *s;
+  if (n > len) n = len;
+  s = lj_str_new(L, p, n);
+  lj_buf_rptr_rel(sbx, (char *)p + n);
+  if (lj_buf_rptr_acq(sbx) == lj_buf_wptr_acq((SBuf *)sbx) &&
+      !sbufiscow(sbx)) {
+    char *b = lj_buf_bptr_acq((SBuf *)sbx);
+    lj_buf_rptr_rel(sbx, b);
+    lj_buf_wptr_rel((SBuf *)sbx, b);
+  }
+  return s;
+}
+
 #if LJ_HASFFI
 MSize LJ_FASTCALL lj_bufx_more(SBufExt *sbx, MSize sz)
 {
