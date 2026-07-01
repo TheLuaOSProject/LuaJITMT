@@ -8,6 +8,9 @@ int getpid(void);
 int poll(void *fds, unsigned long nfds, int timeout);
 int lj_m7_ccall_jit_sleep_i32(int);
 int lj_m7_ccall_jit_add2_i32(int, int);
+double lj_m7_ccall_jit_num0(void);
+double lj_m7_ccall_jit_num1(double);
+double lj_m7_ccall_jit_num2(double, double);
 int lj_m7_ccall_jit_void_count_i32(void);
 void lj_m7_ccall_jit_void0(void);
 void lj_m7_ccall_jit_store_i32(int *, int);
@@ -133,6 +136,9 @@ do
     local lib = ffi.load(so)
     local sleep_i32 = lib.lj_m7_ccall_jit_sleep_i32
     local add2_i32 = lib.lj_m7_ccall_jit_add2_i32
+    local num0 = lib.lj_m7_ccall_jit_num0
+    local num1 = lib.lj_m7_ccall_jit_num1
+    local num2 = lib.lj_m7_ccall_jit_num2
     local void_count_i32 = lib.lj_m7_ccall_jit_void_count_i32
     local void0 = lib.lj_m7_ccall_jit_void0
     local store_i32 = lib.lj_m7_ccall_jit_store_i32
@@ -146,6 +152,27 @@ do
       local r = 0
       for i = 1, n do
 	r = r + add2_i32(i, 2)
+      end
+      return r
+    end
+    local function run_num0(n)
+      local r = 0
+      for _ = 1, n do
+	r = r + num0()
+      end
+      return r
+    end
+    local function run_num1(n)
+      local r = 0
+      for i = 1, n do
+	r = r + num1(i)
+      end
+      return r
+    end
+    local function run_num2(n)
+      local r = 0
+      for i = 1, n do
+	r = r + num2(i, 0.25)
       end
       return r
     end
@@ -223,6 +250,21 @@ do
     jit.opt.start("hotloop=1", "hotexit=1")
     assert(run_add2(80) == (80 * 81) / 2 + 80 * 5)
     assert(trace_count() > 0, "shared int,int->int FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    assert(run_num0(80) == 120)
+    assert(trace_count() > 0, "shared void->double FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    assert(run_num1(80) == (80 * 81) / 2 + 40)
+    assert(trace_count() > 0, "shared double->double FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    assert(run_num2(80) == (80 * 81) / 2 + 40)
+    assert(trace_count() > 0, "shared double,double->double FFI call loop should trace")
 
     jit.flush()
     jit.opt.start("hotloop=1", "hotexit=1")

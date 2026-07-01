@@ -29,6 +29,21 @@ int lj_m7_ccall_jit_add2_i32(int a, int b)
   return a + b + 3;
 }
 
+double lj_m7_ccall_jit_num0(void)
+{
+  return 1.5;
+}
+
+double lj_m7_ccall_jit_num1(double a)
+{
+  return a + 0.5;
+}
+
+double lj_m7_ccall_jit_num2(double a, double b)
+{
+  return a + b + 0.25;
+}
+
 int lj_m7_ccall_jit_void_count_i32(void)
 {
   return lj_m7_ccall_jit_void_count;

@@ -206,6 +206,10 @@ typedef struct CCallNativeState {
 #define LJ_CCALL_JIT_SIG_PTR_I32	5u
 #define LJ_CCALL_JIT_SIG_PTR_PTR	6u
 
+#define LJ_CCALL_JIT_NUM_SIG0		0u
+#define LJ_CCALL_JIT_NUM_SIG_NUM	1u
+#define LJ_CCALL_JIT_NUM_SIG_NUM_NUM	2u
+
 /* -- C call handling ----------------------------------------------------- */
 
 /* Really belongs to lj_vm.h. */
@@ -225,6 +229,8 @@ LJ_FUNC int32_t lj_ccall_jit_i32_gpr(lua_State *L, void *func,
 				     uintptr_t a, uintptr_t b, uint32_t sig);
 LJ_FUNC void *lj_ccall_jit_ptr_gpr(lua_State *L, void *func,
 				   uintptr_t a, uintptr_t b, uint32_t sig);
+LJ_FUNC double lj_ccall_jit_num_fpr(lua_State *L, void *func,
+				    double a, double b, uint32_t sig);
 LJ_FUNC int lj_ccall_func(lua_State *L, GCcdata *cd);
 
 #endif
