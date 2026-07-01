@@ -172,6 +172,7 @@ jobs:
       - windows-ucrt
     env:
       GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
       SOURCE_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
     steps:

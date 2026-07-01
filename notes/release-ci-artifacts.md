@@ -15,6 +15,9 @@
 - The publish job verifies the exact three expected archives before uploading:
   `linux-x86_64.tar.xz`, `macos-x86_64.tar.xz`, and
   `windows-x86_64-ucrt.zip`, all named with the same release tag.
+- The publish job passes `GH_REPO` explicitly so GitHub CLI release creation
+  works even though the workflow checks out automation and source trees into
+  subdirectories rather than using the workspace root as a git checkout.
 - Artifact verification now checks `SHA256SUMS` when present, requires every
   archive to be checksummed either there or by a per-artifact `.sha256`, and
   inspects each archive for the `make install DESTDIR` layout plus BUILDINFO
