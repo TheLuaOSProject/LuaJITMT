@@ -26,10 +26,10 @@ function is blacklisted without losing the prior callback slot, and a fresh
 delayed helper check.
 
 This remains infrastructure for a future direct `IR_CALLXS` bridge. The narrow
-`lj_ccall_jit_{i32,ptr}_gpr()` trampoline family now traces exact signed 32-bit
-integer and pointer-returning calls with 0, 1, or 2 integer/pointer arguments
-through `IRCALL` helpers using this same native-state protocol, but broad traced
-ordinary FFI C calls remain disabled by `LJ_FFI_RECORD_CALLS=0` because x64
-`IR_CALLXS` lowering still needs explicit result preservation and carefully
-ordered native entry relative to ABI argument setup before direct mcode calls
-are safe.
+`lj_ccall_jit_{void,i32,ptr}_gpr()` trampoline family now traces exact void,
+signed 32-bit integer, and pointer-returning calls with 0, 1, or 2
+integer/pointer arguments through `IRCALL` helpers using this same native-state
+protocol, but broad traced ordinary FFI C calls remain disabled by
+`LJ_FFI_RECORD_CALLS=0` because x64 `IR_CALLXS` lowering still needs explicit
+result preservation and carefully ordered native entry relative to ABI argument
+setup before direct mcode calls are safe.

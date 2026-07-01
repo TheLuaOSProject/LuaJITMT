@@ -8,6 +8,9 @@ int getpid(void);
 int poll(void *fds, unsigned long nfds, int timeout);
 int lj_m7_ccall_jit_sleep_i32(int);
 int lj_m7_ccall_jit_add2_i32(int, int);
+int lj_m7_ccall_jit_void_count_i32(void);
+void lj_m7_ccall_jit_void0(void);
+void lj_m7_ccall_jit_store_i32(int *, int);
 unsigned int lj_m7_ccall_jit_u32(unsigned int);
 int *lj_m7_ccall_jit_ptr0(void);
 int lj_m7_ccall_jit_ptr_read_i32(int *);
@@ -130,6 +133,9 @@ do
     local lib = ffi.load(so)
     local sleep_i32 = lib.lj_m7_ccall_jit_sleep_i32
     local add2_i32 = lib.lj_m7_ccall_jit_add2_i32
+    local void_count_i32 = lib.lj_m7_ccall_jit_void_count_i32
+    local void0 = lib.lj_m7_ccall_jit_void0
+    local store_i32 = lib.lj_m7_ccall_jit_store_i32
     local u32 = lib.lj_m7_ccall_jit_u32
     local ptr0 = lib.lj_m7_ccall_jit_ptr0
     local ptr_read_i32 = lib.lj_m7_ccall_jit_ptr_read_i32
@@ -142,6 +148,22 @@ do
 	r = r + add2_i32(i, 2)
       end
       return r
+    end
+    local function run_void0(n)
+      local before = void_count_i32()
+      for _ = 1, n do
+	assert(void0() == nil)
+      end
+      return void_count_i32() - before
+    end
+    local function run_void_store(n)
+      local p = ffi.new("int[1]")
+      local last
+      for i = 1, n do
+	last = store_i32(p, i)
+	assert(last == nil)
+      end
+      return p[0]
     end
     local function run_u32(n)
       local r = 0
@@ -201,6 +223,16 @@ do
     jit.opt.start("hotloop=1", "hotexit=1")
     assert(run_add2(80) == (80 * 81) / 2 + 80 * 5)
     assert(trace_count() > 0, "shared int,int->int FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    assert(run_void0(80) == 80)
+    assert(trace_count() > 0, "shared void->void FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    assert(run_void_store(80) == 89)
+    assert(trace_count() > 0, "shared ptr,int->void FFI call loop should trace")
 
     jit.flush()
     jit.opt.start("hotloop=1", "hotexit=1")

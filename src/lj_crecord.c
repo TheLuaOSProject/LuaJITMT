@@ -2286,6 +2286,13 @@ static int crec_call_jit_gpr_kind(CTInfo info, CTSize size)
   return -1;
 }
 
+static int crec_call_jit_gpr_retkind(CTInfo info, CTSize size)
+{
+  if (ctype_isvoid(info))
+    return 2;
+  return crec_call_jit_gpr_kind(info, size);
+}
+
 static uint32_t crec_call_jit_sig(MSize narg, const int *kind)
 {
   if (narg == 0)
@@ -2324,7 +2331,7 @@ static int crec_call_jit_gpr(jit_State *J, RecordFFData *rd, CTState *cts,
 
   ctr = crec_ctype_rawchild(J, cts, ct, &ctrsnap);
   ctr_info = ctype_info_acq(ctr);
-  retkind = crec_call_jit_gpr_kind(ctr_info, ctype_size_acq(ctr));
+  retkind = crec_call_jit_gpr_retkind(ctr_info, ctype_size_acq(ctr));
   if (retkind < 0)
     return 0;
 
@@ -2365,7 +2372,11 @@ static int crec_call_jit_gpr(jit_State *J, RecordFFData *rd, CTState *cts,
   sig = crec_call_jit_sig(narg, kind);
   if (narg < 1) args[0] = noarg;
   if (narg < 2) args[1] = noarg;
-  if (retkind) {
+  if (retkind == 2) {
+    lj_ir_call(J, IRCALL_lj_ccall_jit_void_gpr, func, args[0],
+	       args[1], lj_ir_kint(J, (int32_t)sig));
+    rd->nres = 0;
+  } else if (retkind) {
     TRef trid = lj_ir_kint(J, ctype_cid(info));
     tr = lj_ir_call(J, IRCALL_lj_ccall_jit_ptr_gpr, func, args[0],
 		    args[1], lj_ir_kint(J, (int32_t)sig));

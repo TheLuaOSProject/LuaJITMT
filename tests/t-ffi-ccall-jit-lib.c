@@ -5,6 +5,7 @@
 #include <time.h>
 
 static int lj_m7_ccall_jit_values[4] = { 11, 22, 33, 44 };
+static int lj_m7_ccall_jit_void_count;
 
 static void sleep_ms(int ms)
 {
@@ -26,6 +27,21 @@ int lj_m7_ccall_jit_sleep_i32(int ms)
 int lj_m7_ccall_jit_add2_i32(int a, int b)
 {
   return a + b + 3;
+}
+
+int lj_m7_ccall_jit_void_count_i32(void)
+{
+  return lj_m7_ccall_jit_void_count;
+}
+
+void lj_m7_ccall_jit_void0(void)
+{
+  lj_m7_ccall_jit_void_count++;
+}
+
+void lj_m7_ccall_jit_store_i32(int *p, int v)
+{
+  *p = v + 9;
 }
 
 unsigned int lj_m7_ccall_jit_u32(unsigned int a)
