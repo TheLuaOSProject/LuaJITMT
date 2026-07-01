@@ -131,6 +131,13 @@ int32_t LJ_FASTCALL lj_bufx_len_forjit(SBufExt *sbx)
   return (int32_t)sbufxlen(sbx);
 }
 
+GCstr *LJ_FASTCALL lj_bufx_tostr_forjit(lua_State *L, SBufExt *sbx)
+{
+  MSize len;
+  const char *p = lj_bufx_data_acq(sbx, &len);
+  return lj_str_new(L, p, len);
+}
+
 #if LJ_HASFFI
 MSize LJ_FASTCALL lj_bufx_more(SBufExt *sbx, MSize sz)
 {

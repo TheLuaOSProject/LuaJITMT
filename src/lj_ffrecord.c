@@ -1156,20 +1156,26 @@ static void LJ_FASTCALL recff_buffer_method_get(jit_State *J, RecordFFData *rd)
   recff_buffer_method_nyi(J, rd);
 }
 
-static void LJ_FASTCALL recff_buffer_method___tostring(jit_State *J, RecordFFData *rd)
+static TRef recff_buffer_method_sbx(jit_State *J, RecordFFData *rd)
 {
-  recff_buffer_method_nyi(J, rd);
-}
-
-static void LJ_FASTCALL recff_buffer_method___len(jit_State *J, RecordFFData *rd)
-{
-  TRef tr = J->base[0], udtype, sbx;
+  TRef tr = J->base[0], udtype;
   if (!tr || !tref_isudata(tr) || !tvisbuf(&rd->argv[0]))
     recff_buffer_method_nyi(J, rd);
   udtype = emitir(IRT(IR_FLOAD, IRT_U8), tr, IRFL_UDATA_UDTYPE);
   emitir(IRTGI(IR_EQ), udtype, lj_ir_kint(J, UDTYPE_BUFFER));
-  sbx = emitir(IRT(IR_ADD, IRT_PTR), tr, lj_ir_kintp(J, sizeof(GCudata)));
-  J->base[0] = lj_ir_call(J, IRCALL_lj_bufx_len_forjit, sbx);
+  return emitir(IRT(IR_ADD, IRT_PTR), tr, lj_ir_kintp(J, sizeof(GCudata)));
+}
+
+static void LJ_FASTCALL recff_buffer_method___tostring(jit_State *J, RecordFFData *rd)
+{
+  J->base[0] = lj_ir_call(J, IRCALL_lj_bufx_tostr_forjit,
+			  recff_buffer_method_sbx(J, rd));
+}
+
+static void LJ_FASTCALL recff_buffer_method___len(jit_State *J, RecordFFData *rd)
+{
+  J->base[0] = lj_ir_call(J, IRCALL_lj_bufx_len_forjit,
+			  recff_buffer_method_sbx(J, rd));
 }
 
 #if LJ_HASFFI

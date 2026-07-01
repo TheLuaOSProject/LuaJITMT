@@ -341,6 +341,7 @@ static LJ_AINLINE void lj_bufx_free(lua_State *L, SBufExt *sbx)
 #if LJ_HASBUFFER && LJ_HASJIT
 LJ_FUNC void lj_bufx_set(SBufExt *sbx, const char *p, MSize len, GCobj *o);
 LJ_FUNC int32_t LJ_FASTCALL lj_bufx_len_forjit(SBufExt *sbx);
+LJ_FUNC GCstr *LJ_FASTCALL lj_bufx_tostr_forjit(lua_State *L, SBufExt *sbx);
 #if LJ_HASFFI
 LJ_FUNC MSize LJ_FASTCALL lj_bufx_more(SBufExt *sbx, MSize sz);
 #endif

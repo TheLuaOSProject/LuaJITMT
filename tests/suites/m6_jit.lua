@@ -1598,9 +1598,12 @@ heat("buffer.method.get", function()
 end)
 
 heat("buffer.method.tostring", function(i)
+  local _ = i
   local b = buffer.new()
-  b:set("t" .. i)
-  assert(tostring(b) == "t" .. i)
+  b:set("traced-buffer")
+  local s = ""
+  for _ = 1, 4 do s = tostring(b) end
+  assert(s == "traced-buffer")
 end)
 
 heat("buffer.method.len", function()
@@ -1647,6 +1650,8 @@ print("t-jit-buffer-method-shared-nyi OK")
                                   "JIT buffer method NYI probe")
       checks.assert_dump_contains(t, dump, "lj_bufx_len_forjit",
                                   "JIT buffer method len helper")
+      checks.assert_dump_contains(t, dump, "lj_bufx_tostr_forjit",
+                                  "JIT buffer method tostring helper")
       checks.assert_dump_contains(t, dump, "buffer.method.encode.decode",
                                   "JIT buffer method NYI probe")
       checks.assert_dump_contains(t, dump, "t-jit-buffer-method-shared-nyi OK",
