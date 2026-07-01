@@ -23,6 +23,12 @@ if [ "$#" -lt 2 ] || [ "$#" -gt 3 ]; then usage; fi
 platform=$1
 tag=$2
 out_dir=${3:-release-artifacts/${tag}}
+
+if [[ ! "$tag" =~ ^b[0-9]+[.][0-9]+[.][0-9]+$ ]]; then
+  printf 'release tag must be b<major>.<minor>.<patch>; got %s\n' "$tag" >&2
+  exit 2
+fi
+
 script_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 root=${LJ_RELEASE_ROOT:-$script_root}
 root=$(CDPATH= cd -- "$root" && pwd)

@@ -12,6 +12,10 @@ end
 local function release_required(name)
   local req = (env("LJ_RELEASE_REQUIRE") or ""):lower()
   name = name:lower()
+  if req == "platform" or req == "platforms" then
+    return name == "platform" or name == "linux" or
+      name == "macos" or name == "windows"
+  end
   return req ~= "" and (req == "1" or req == "all" or
     req:find(name, 1, true) ~= nil or name:find(req, 1, true) ~= nil
   )

@@ -66,8 +66,8 @@ jobs:
         with:
           name: rolling-release-linux
           path: |
-            source/release-artifacts/${{ env.RELEASE_TAG }}/LuaJITMT-*
-            source/release-artifacts/${{ env.RELEASE_TAG }}/*.sha256
+            source/release-artifacts/${{ env.RELEASE_TAG }}/LuaJITMT-${{ env.RELEASE_TAG }}-linux-x86_64.tar.xz
+            source/release-artifacts/${{ env.RELEASE_TAG }}/LuaJITMT-${{ env.RELEASE_TAG }}-linux-x86_64.tar.xz.sha256
 
   macos:
     name: macOS x86_64 artifact
@@ -108,8 +108,8 @@ jobs:
         with:
           name: rolling-release-macos
           path: |
-            source/release-artifacts/${{ env.RELEASE_TAG }}/LuaJITMT-*
-            source/release-artifacts/${{ env.RELEASE_TAG }}/*.sha256
+            source/release-artifacts/${{ env.RELEASE_TAG }}/LuaJITMT-${{ env.RELEASE_TAG }}-macos-x86_64.tar.xz
+            source/release-artifacts/${{ env.RELEASE_TAG }}/LuaJITMT-${{ env.RELEASE_TAG }}-macos-x86_64.tar.xz.sha256
 
   windows-ucrt:
     name: Windows x86_64 UCRT artifact
@@ -153,8 +153,8 @@ jobs:
         with:
           name: rolling-release-windows-ucrt
           path: |
-            source/release-artifacts/${{ env.RELEASE_TAG }}/LuaJITMT-*
-            source/release-artifacts/${{ env.RELEASE_TAG }}/*.sha256
+            source/release-artifacts/${{ env.RELEASE_TAG }}/LuaJITMT-${{ env.RELEASE_TAG }}-windows-x86_64-ucrt.zip
+            source/release-artifacts/${{ env.RELEASE_TAG }}/LuaJITMT-${{ env.RELEASE_TAG }}-windows-x86_64-ucrt.zip.sha256
 
   publish:
     name: Publish GitHub release
@@ -186,10 +186,8 @@ jobs:
           merge-multiple: true
       - name: Generate release notes and checksums
         run: |
+          automation/tools/release/verify_artifacts.sh "$RELEASE_TAG" dist
           find dist -maxdepth 1 -type f -name '*.sha256' -delete
-          test -f "dist/LuaJITMT-${RELEASE_TAG}-linux-x86_64.tar.xz"
-          test -f "dist/LuaJITMT-${RELEASE_TAG}-macos-x86_64.tar.xz"
-          test -f "dist/LuaJITMT-${RELEASE_TAG}-windows-x86_64-ucrt.zip"
           (cd dist && find . -maxdepth 1 -type f -name 'LuaJITMT-*' -print0 |
             sort -z | xargs -0 sha256sum > SHA256SUMS)
           LJ_RELEASE_ROOT="$PWD/source" \
