@@ -324,25 +324,25 @@ end
 return function(add)
   add({
     name = "release_linux_binary",
-    description = "release-only Linux x64 binary smoke check",
+    description = "Linux x64 binary smoke check for CI/release",
     run = run_linux_binary
   })
 
   add({
     name = "release_windows_binary",
-    description = "release-only Windows x64 binary smoke check",
+    description = "Windows x64 binary smoke check for CI/release",
     run = run_windows_binary
   })
 
   add({
     name = "release_macos_binary",
-    description = "release-only macOS x64 binary smoke check",
+    description = "macOS x64 binary smoke check for CI/release",
     run = run_macos_binary
   })
 
   add({
     name = "release_platform_binaries",
-    description = "release-only Linux/Windows/macOS binary checks",
+    description = "Linux/Windows/macOS binary checks for CI/release",
     run = run_release_platform_binaries
   })
 

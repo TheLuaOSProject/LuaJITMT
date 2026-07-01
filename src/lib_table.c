@@ -430,7 +430,7 @@ LJLIB_NOREG LJLIB_CF(table_new)		LJLIB_REC(.)
 
 LJLIB_NOREG LJLIB_CF(table_clear)	LJLIB_REC(.)
 {
-  lj_tab_clear(lj_lib_checktab(L, 1));
+  lj_tab_clear(L, lj_lib_checktab(L, 1));
   return 0;
 }
 

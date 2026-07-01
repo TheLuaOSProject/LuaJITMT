@@ -10,8 +10,9 @@ platform:
   macos-x86_64
   windows-x86_64-ucrt
 
-Builds the requested platform target and runs its platform smoke check.
-Release install-tree archive checks live in tools/release/build_artifact.sh.
+Builds the requested platform target, runs it directly, and executes the
+matching platform binary smoke test. Release install-tree archive checks live
+in tools/release/build_artifact.sh.
 USAGE
   exit 2
 }
@@ -89,11 +90,29 @@ run_windows_smoke() {
   printf 'CI Windows binary smoke passed\n'
 }
 
+run_platform_test() {
+  local case_name=$1
+  local require=$2
+  local bin_var=$3
+  local bin=$4
+  shift 4
+
+  env \
+    LJ_RELEASE_PREFIX="${PREFIX:-/usr/local}" \
+    LJ_RELEASE_REQUIRE="$require" \
+    LJ_RELEASE_RUN_STOCK=0 \
+    "$bin_var=$bin" \
+    "$@" \
+    "$root/tools/ci/lua_test.sh" "$case_name"
+}
+
 case "$platform" in
   linux-x86_64)
     make_clean
     build_make
     run_direct_smoke "Linux" "$root/src/luajit" "Linux"
+    run_platform_test \
+      release_linux_binary linux LJ_RELEASE_LINUX_BIN "$root/src/luajit"
     ;;
   macos-x86_64)
     export MACOSX_DEPLOYMENT_TARGET=${MACOSX_DEPLOYMENT_TARGET:-13.0}
@@ -113,10 +132,13 @@ case "$platform" in
     make_clean
     build_make "${macos_make_args[@]}"
     run_direct_smoke "macOS" "$root/src/luajit" "OSX"
+    run_platform_test \
+      release_macos_binary macos LJ_RELEASE_MACOS_BIN "$root/src/luajit"
     ;;
   windows-x86_64-ucrt)
     cross=${LJ_CI_WINDOWS_CROSS:-${LJ_RELEASE_WINDOWS_CROSS:-x86_64-w64-mingw32ucrt-}}
     cc=${LJ_CI_WINDOWS_CC:-${LJ_RELEASE_WINDOWS_CC:-gcc}}
+    runner=${LJ_CI_WINDOWS_RUNNER:-${LJ_RELEASE_WINDOWS_RUNNER:-wine}}
     windows_make_args=(
       HOST_CC="${HOST_CC:-gcc}"
       CROSS="$cross"
@@ -126,5 +148,8 @@ case "$platform" in
     make_clean
     build_make "${windows_make_args[@]}"
     run_windows_smoke "$root/src/luajit.exe"
+    run_platform_test \
+      release_windows_binary windows LJ_RELEASE_WINDOWS_BIN "$root/src/luajit.exe" \
+      LJ_RELEASE_WINDOWS_RUNNER="$runner"
     ;;
 esac

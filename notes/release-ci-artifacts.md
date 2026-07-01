@@ -19,10 +19,10 @@
   archive to be checksummed either there or by a per-artifact `.sha256`, and
   inspects each archive for the `make install DESTDIR` layout plus BUILDINFO
   tag/platform/layout fields before publishing.
-- Normal GitHub CI now uses `tools/ci/platform_build.sh` for each platform and
-  only builds plus runs a direct platform smoke (`jit.os`, `jit.arch`, and the
-  threading module). It does not run the release archive harness or stock
-  semantics suites.
+- Normal GitHub CI now uses `tools/ci/platform_build.sh` for each platform to
+  build, run the binary directly, and dispatch the matching platform binary
+  harness check (`jit.os`, `jit.arch`, and the threading module). It does not
+  run release archive extraction checks or stock semantics suites.
 - The opt-in M0 cross-platform smoke defaults now match the release platforms:
   Windows x86_64 UCRT and macOS x86_64 with deployment target 13.0. It only
   runs cross-platform work when `LJ_M0_PLATFORM_ENABLE` or
@@ -32,7 +32,7 @@
 - Local verification:
   - `bash -n tools/release/build_artifact.sh tools/ci/platform_build.sh`;
   - `bash -n tools/release/release_notes.sh tools/release/verify_artifacts.sh`;
-  - `tools/ci/platform_build.sh linux-x86_64`;
+  - `LUA=luajit tools/ci/platform_build.sh linux-x86_64`;
   - `tools/release/build_artifact.sh linux-x86_64 b0.0.0 /tmp/lj-lockless-release-smoke`;
   - `LUA=luajit tools/ci/lua_test.sh --list` shows all release binary/archive
     cases.

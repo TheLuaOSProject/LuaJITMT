@@ -876,8 +876,8 @@ GCtab * LJ_FASTCALL lj_tab_dup(lua_State *L, const GCtab *kt)
   return t;
 }
 
-/* Clear a table. */
-void LJ_FASTCALL lj_tab_clear(GCtab *t)
+/* Clear a private table. */
+static void tab_clear_raw(GCtab *t)
 {
   Node *node;
   MSize hmask;
@@ -2320,6 +2320,97 @@ LJ_FUNCA int lj_tab_trysetnil_cas_keyed(lua_State *L, GCtab *parent,
       return LJ_TAB_STORE_CAS_EXISTS;
     lj_tab_store_wait_l(L);
   }
+}
+
+static int tab_clear_try_nil_keyed(lua_State *L, GCtab *parent, TValue *dst,
+				   cTValue *key)
+{
+  TValue old, expect, nilv;
+  setnilV(&nilv);
+  for (;;) {
+    int rc = lj_tab_read_current_keyed(parent, dst, key, &old);
+    if (rc != LJ_TAB_STORE_CAS_OK)
+      return 0;
+    if (tvisnil(&old))
+      return 1;
+    if (tab_val_is_publish_claim(&old)) {
+      lj_tab_wait_l(L);
+      continue;
+    }
+    expect = old;
+    if (lj_tv_cas(dst, &expect, &nilv))
+      return tab_current_slot_for_key(parent, dst, key);
+    if (tvisforward(&expect))
+      return 0;
+    if (tab_val_is_publish_claim(&expect)) {
+      lj_tab_wait_l(L);
+      continue;
+    }
+    lj_tab_store_wait_l(L);
+  }
+}
+
+static void tab_clear_array_shared(lua_State *L, GCtab *t, TValue *array,
+				   MSize asize)
+{
+  MSize i;
+  for (i = 0; i < asize; i++) {
+    TValue key;
+    if (i > (MSize)INT32_MAX)
+      break;
+    setintV(&key, (int32_t)i);
+    while (!tab_clear_try_nil_keyed(L, t, &array[i], &key))
+      lj_tab_store_wait_l(L);
+  }
+}
+
+static void tab_clear_hash_slot_shared(lua_State *L, GCtab *t, Node *n)
+{
+  for (;;) {
+    TValue key, val;
+    lj_tv_load_acq(&val, &n->val);
+    if (tab_val_is_publish_claim(&val)) {
+      lj_tab_wait_l(L);
+      continue;
+    }
+    if (tab_val_absent(&val))
+      return;
+    lj_tv_load_acq(&key, &n->key);
+    if (tab_key_islocked(&key)) {
+      lj_tab_wait_l(L);
+      continue;
+    }
+    if (tab_hash_key_hidden(&key))
+      return;
+    (void)tab_clear_try_nil_keyed(L, t, &n->val, &key);
+    return;
+  }
+}
+
+static void tab_clear_shared(lua_State *L, GCtab *t)
+{
+  TValue *array;
+  Node *node;
+  MSize asize, hmask, i;
+  int guard = lj_tab_struct_enter(L);
+  asize = lj_tab_array_snapshot_acq(t, &array);
+  if (array)
+    tab_clear_array_shared(L, t, array, asize);
+  node = lj_tab_node_snapshot_acq(t, &hmask);
+  if (hmask > 0) {
+    for (i = 0; i <= hmask; i++)
+      tab_clear_hash_slot_shared(L, t, &node[i]);
+  }
+  lj_tab_struct_leave(L, guard);
+}
+
+/* Clear a table. */
+void LJ_FASTCALL lj_tab_clear(lua_State *L, GCtab *t)
+{
+  if (mt_active_acq(G(L)))
+    tab_clear_shared(L, t);
+  else
+    tab_clear_raw(t);
 }
 
 LJ_FUNCA int32_t lj_tab_storetv_existing_forjit(lua_State *L, GCtab *parent,

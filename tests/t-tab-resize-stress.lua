@@ -963,6 +963,77 @@ local function tablelib_resize_writer(tbl, ready, start, id, n)
   return true
 end
 
+local function tablelib_clear_worker(tbl, ready, start, n)
+  local table_clear = table.clear or require"table.clear"
+  assert(ready:send(true, 10) == true)
+  local _, ok = start:recv(10)
+  assert(ok == true)
+  for i = 1, n do
+    table_clear(tbl)
+    tbl["tableclear-round"] = i
+    for j = 1, 6 do
+      tbl["tableclear-grow:" .. i .. ":" .. j] = { round = i, slot = j }
+    end
+    if i % 16 == 0 then collectgarbage("step") end
+  end
+  local final = { kind = "tablelib-clear-final", rounds = n }
+  tbl["tableclear-final"] = final
+  return final
+end
+
+local function exercise_table_clear_resize()
+  local t = {}
+  local weak_final = setmetatable({}, { __mode = "v" })
+  local observers = 2
+  local clear_rounds = math.min(reps, 192)
+  local nworkers = writers + observers + 1
+  local ready, start = ready_start(nworkers)
+  local workers = {}
+  local final_marker
+
+  for i = 1, 128 do
+    t[i] = { kind = "tableclear-seed", slot = i }
+    t["tableclear-seed:" .. i] = i
+  end
+
+  for i = 1, writers do
+    workers[#workers + 1] =
+      th.spawn(tablelib_resize_writer, t, ready, start, i, reps)
+  end
+  for i = 1, observers do
+    workers[#workers + 1] =
+      th.spawn(next_churn_observer, t, ready, start, i, traversal_rounds)
+  end
+  workers[#workers + 1] =
+    th.spawn(tablelib_clear_worker, t, ready, start, clear_rounds)
+
+  harness.wait_ready(ready, nworkers, 10, "table.clear resize")
+  harness.release_start(start, nworkers, 10)
+  collect_while_working(128)
+  harness.join_each(workers, function(result, _, msg)
+    if result == true then return end
+    assert(type(result) == "table" and
+	   result.kind == "tablelib-clear-final", tostring(msg or result))
+    final_marker = result
+    weak_final[1] = result
+  end, 30)
+
+  assert(type(final_marker) == "table", "table.clear worker returned no marker")
+  final_marker = nil
+  harness.fullgc(3)
+  assert(type(t["tableclear-final"]) == "table",
+	 "table.clear post-clear marker was lost across resize")
+  assert(weak_final[1] == t["tableclear-final"],
+	 "GC missed table.clear post-clear marker after resize")
+  local seen = 0
+  for k, v in pairs(t) do
+    assert_lua_value(k, "table.clear resize key")
+    assert_lua_value(v, "table.clear resize value")
+    seen = seen + 1
+    if seen >= 256 then break end
+  end
+end
+
 local function tablelib_insert_worker(tbl, ready, start, id, n)
   local inserted = {}
   assert(ready:send(true, 10) == true)
@@ -1254,6 +1325,7 @@ ran = ran + run_case("jititer", exercise_jit_iterator_resize)
 ran = ran + run_case("len", exercise_len_resize)
 ran = ran + run_case("traversal", exercise_concurrent_traversal_resize)
 ran = ran + run_case("nextchurn", exercise_next_churn_resize)
+ran = ran + run_case("tableclear", exercise_table_clear_resize)
 ran = ran + run_case("tablelib", exercise_table_library_resize)
 ran = ran + run_case("tablelibshift", exercise_table_library_shift_resize)
 ran = ran + run_case("metadispatch", exercise_metamethod_dispatch_resize)
