@@ -18,8 +18,9 @@ pointer returns, plus exact two-argument `pointer,int64_t` and
 `int32_t,uint64_t` calls for those same return families. Exact
 `uint32_t,int64_t`, `uint32_t,uint64_t`, `int64_t,int32_t`,
 `int64_t,uint32_t`, `uint64_t,int32_t`, `uint64_t,uint32_t`, `int64_t,pointer`,
-and `uint64_t,pointer` pairs are covered too. The FPR subset accepts 0, 1, or
-2 same-kind exact float or double arguments. The first
+`uint64_t,pointer`, and all `int64_t`/`uint64_t` two-argument pairs are
+covered too. The FPR subset accepts 0, 1, or 2 same-kind exact float or double
+arguments. The first
 mixed one-argument subset
 accepts exact `double(int32_t)`, `double(pointer)`, `double(float)`,
 `int32_t(double)`, `int32_t(float)`, `int32_t(int8_t)`, `pointer(double)`,
@@ -111,6 +112,8 @@ The scope is deliberately narrow:
   same return families;
 - exact two-argument `int64_t,pointer` and `uint64_t,pointer` calls for the
   same return families;
+- exact two-argument `int64_t`/`uint64_t` all-64 pairs for void, signed
+  32-bit, unsigned 32-bit, narrow integer, and pointer return families;
 - same-kind exact float/double arguments and exact float/double returns;
 - exact one-argument `double(int32_t)`, `double(pointer)`, `double(float)`,
   `int32_t(double)`, `int32_t(float)`, `int32_t(int8_t)`,

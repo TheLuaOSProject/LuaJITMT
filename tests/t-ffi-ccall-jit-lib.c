@@ -560,6 +560,128 @@ uint64_t lj_m7_ccall_jit_u64_u64_ptr(uint64_t a, int *p)
 	 (uint64_t)(uint32_t)*p;
 }
 
+uint8_t lj_m7_ccall_jit_u8_i64_i64(int64_t a, int64_t b)
+{
+  return (uint8_t)(((uint64_t)a & UINT64_C(255)) +
+		   ((uint64_t)b & UINT64_C(255)));
+}
+
+uint8_t lj_m7_ccall_jit_u8_i64_u64(int64_t a, uint64_t b)
+{
+  return (uint8_t)(((uint64_t)a & UINT64_C(255)) + (b & UINT64_C(255)));
+}
+
+uint8_t lj_m7_ccall_jit_u8_u64_i64(uint64_t a, int64_t b)
+{
+  return (uint8_t)((a & UINT64_C(255)) +
+		   ((uint64_t)b & UINT64_C(255)));
+}
+
+uint8_t lj_m7_ccall_jit_u8_u64_u64(uint64_t a, uint64_t b)
+{
+  return (uint8_t)((a & UINT64_C(255)) + (b & UINT64_C(255)));
+}
+
+void lj_m7_ccall_jit_void_i64_i64(int64_t a, int64_t b)
+{
+  lj_m7_ccall_jit_void_count += (int)((uint64_t)a & UINT64_C(15)) +
+				(int)((uint64_t)b & UINT64_C(15));
+}
+
+void lj_m7_ccall_jit_void_i64_u64(int64_t a, uint64_t b)
+{
+  lj_m7_ccall_jit_void_count += (int)((uint64_t)a & UINT64_C(15)) +
+				(int)(b & UINT64_C(15));
+}
+
+void lj_m7_ccall_jit_void_u64_i64(uint64_t a, int64_t b)
+{
+  lj_m7_ccall_jit_void_count += (int)(a & UINT64_C(15)) +
+				(int)((uint64_t)b & UINT64_C(15));
+}
+
+void lj_m7_ccall_jit_void_u64_u64(uint64_t a, uint64_t b)
+{
+  lj_m7_ccall_jit_void_count += (int)(a & UINT64_C(15)) +
+				(int)(b & UINT64_C(15));
+}
+
+int32_t lj_m7_ccall_jit_i32_i64_i64(int64_t a, int64_t b)
+{
+  return (int32_t)(((uint64_t)a & UINT64_C(1023)) +
+		   ((uint64_t)b & UINT64_C(1023)));
+}
+
+int32_t lj_m7_ccall_jit_i32_i64_u64(int64_t a, uint64_t b)
+{
+  return (int32_t)(((uint64_t)a & UINT64_C(1023)) + (b & UINT64_C(1023)));
+}
+
+int32_t lj_m7_ccall_jit_i32_u64_i64(uint64_t a, int64_t b)
+{
+  return (int32_t)((a & UINT64_C(1023)) +
+		   ((uint64_t)b & UINT64_C(1023)));
+}
+
+int32_t lj_m7_ccall_jit_i32_u64_u64(uint64_t a, uint64_t b)
+{
+  return (int32_t)((a & UINT64_C(1023)) + (b & UINT64_C(1023)));
+}
+
+uint32_t lj_m7_ccall_jit_u32_i64_i64(int64_t a, int64_t b)
+{
+  return UINT32_C(0xf0000000) +
+	 (uint32_t)((uint64_t)a & UINT64_C(1023)) +
+	 (uint32_t)((uint64_t)b & UINT64_C(1023));
+}
+
+uint32_t lj_m7_ccall_jit_u32_i64_u64(int64_t a, uint64_t b)
+{
+  return UINT32_C(0xf0000000) +
+	 (uint32_t)((uint64_t)a & UINT64_C(1023)) +
+	 (uint32_t)(b & UINT64_C(1023));
+}
+
+uint32_t lj_m7_ccall_jit_u32_u64_i64(uint64_t a, int64_t b)
+{
+  return UINT32_C(0xf0000000) + (uint32_t)(a & UINT64_C(1023)) +
+	 (uint32_t)((uint64_t)b & UINT64_C(1023));
+}
+
+uint32_t lj_m7_ccall_jit_u32_u64_u64(uint64_t a, uint64_t b)
+{
+  return UINT32_C(0xf0000000) + (uint32_t)(a & UINT64_C(1023)) +
+	 (uint32_t)(b & UINT64_C(1023));
+}
+
+int *lj_m7_ccall_jit_ptr_i64_i64(int64_t a, int64_t b)
+{
+  return lj_m7_ccall_jit_values +
+	 (((uint32_t)((uint64_t)a & UINT64_C(3)) +
+	   (uint32_t)((uint64_t)b & UINT64_C(3))) % 4u);
+}
+
+int *lj_m7_ccall_jit_ptr_i64_u64(int64_t a, uint64_t b)
+{
+  return lj_m7_ccall_jit_values +
+	 (((uint32_t)((uint64_t)a & UINT64_C(3)) +
+	   (uint32_t)(b & UINT64_C(3))) % 4u);
+}
+
+int *lj_m7_ccall_jit_ptr_u64_i64(uint64_t a, int64_t b)
+{
+  return lj_m7_ccall_jit_values +
+	 (((uint32_t)(a & UINT64_C(3)) +
+	   (uint32_t)((uint64_t)b & UINT64_C(3))) % 4u);
+}
+
+int *lj_m7_ccall_jit_ptr_u64_u64(uint64_t a, uint64_t b)
+{
+  return lj_m7_ccall_jit_values +
+	 (((uint32_t)(a & UINT64_C(3)) +
+	   (uint32_t)(b & UINT64_C(3))) % 4u);
+}
+
 int *lj_m7_ccall_jit_ptr_u32(uint32_t a)
 {
   return lj_m7_ccall_jit_values + (a & 3u);
