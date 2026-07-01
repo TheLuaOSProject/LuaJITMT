@@ -250,6 +250,8 @@ LJ_FUNC uint64_t lj_ccall_jit_u64_gpr(lua_State *L, void *func,
 				      uintptr_t a, uintptr_t b, uint32_t sig);
 LJ_FUNC void *lj_ccall_jit_ptr_gpr(lua_State *L, void *func,
 				   uintptr_t a, uintptr_t b, uint32_t sig);
+LJ_FUNC double lj_ccall_jit_num_i32(lua_State *L, void *func, int32_t a);
+LJ_FUNC int32_t lj_ccall_jit_i32_num(lua_State *L, void *func, double a);
 LJ_FUNC double lj_ccall_jit_num_fpr(lua_State *L, void *func,
 				    double a, double b, uint32_t sig);
 LJ_FUNC float lj_ccall_jit_flt_fpr(lua_State *L, void *func,

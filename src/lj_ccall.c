@@ -1715,6 +1715,34 @@ void *lj_ccall_jit_ptr_gpr(lua_State *L, void *func, uintptr_t a,
   return ret;
 }
 
+double lj_ccall_jit_num_i32(lua_State *L, void *func, int32_t a)
+{
+  CTState *cts = ctype_cts(L);
+  CCallNativeState native;
+  uint32_t actions;
+  double ret;
+  lj_ccall_native_save(L, &native);
+  lj_ccall_native_enter(L, &native, func);
+  ret = ((double (*)(int32_t))(uintptr_t)func)(a);
+  actions = lj_ccall_native_leave(L, cts, &native, func);
+  lj_ccall_native_checkstop(L, actions, &native);
+  return ret;
+}
+
+int32_t lj_ccall_jit_i32_num(lua_State *L, void *func, double a)
+{
+  CTState *cts = ctype_cts(L);
+  CCallNativeState native;
+  uint32_t actions;
+  int32_t ret;
+  lj_ccall_native_save(L, &native);
+  lj_ccall_native_enter(L, &native, func);
+  ret = ((int32_t (*)(double))(uintptr_t)func)(a);
+  actions = lj_ccall_native_leave(L, cts, &native, func);
+  lj_ccall_native_checkstop(L, actions, &native);
+  return ret;
+}
+
 double lj_ccall_jit_num_fpr(lua_State *L, void *func, double a,
 			    double b, uint32_t sig)
 {

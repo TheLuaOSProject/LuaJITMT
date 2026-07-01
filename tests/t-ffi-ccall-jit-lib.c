@@ -105,6 +105,11 @@ double lj_m7_ccall_jit_num0(void)
   return 1.5;
 }
 
+double lj_m7_ccall_jit_num_i32(int32_t a)
+{
+  return (double)a + 0.75;
+}
+
 double lj_m7_ccall_jit_num1(double a)
 {
   return a + 0.5;
@@ -133,6 +138,11 @@ float lj_m7_ccall_jit_flt2(float a, float b)
 int lj_m7_ccall_jit_void_count_i32(void)
 {
   return lj_m7_ccall_jit_void_count;
+}
+
+int32_t lj_m7_ccall_jit_i32_num(double a)
+{
+  return (int32_t)a + 3;
 }
 
 void lj_m7_ccall_jit_void0(void)
