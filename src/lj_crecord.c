@@ -2737,6 +2737,8 @@ static TRef crec_call_jit_i8_arg(jit_State *J, TRef arg)
   return emitconv(arg, IRT_INT, IRT_I8, IRCONV_SEXT);
 }
 
+static TRef crec_call_jit_u32_arg(jit_State *J, TRef arg);
+
 static int crec_call_jit_i32_i8(jit_State *J, RecordFFData *rd, CTState *cts,
 				CType *ct, CTInfo info, GCcdata *cd,
 				IRType tp, CTSize fsz)
@@ -2795,6 +2797,68 @@ static int crec_call_jit_i32_i8(jit_State *J, RecordFFData *rd, CTState *cts,
 
   func = emitir(IRT(IR_FLOAD, tp), J->base[0], IRFL_CDATA_PTR);
   J->base[0] = lj_ir_call(J, IRCALL_lj_ccall_jit_i32_i8, func, arg);
+  J->needsnap = 1;
+  return 1;
+}
+
+static int crec_call_jit_i32_u32(jit_State *J, RecordFFData *rd, CTState *cts,
+				 CType *ct, CTInfo info, GCcdata *cd,
+				 IRType tp, CTSize fsz)
+{
+  CType ctrsnap, ctfcopy, dcopy;
+  CType *ctr, *ctf, *d;
+  CTypeID fid, did;
+  CTInfo ctr_info, ctfinfo, dinfo;
+  TRef func, arg;
+  MSize narg = 0;
+
+  if ((info & CTF_VARARG))
+    return 0;
+  while (J->base[1+narg]) {
+    if (narg >= 2)
+      return 0;
+    narg++;
+  }
+  if (narg != 1)
+    return 0;
+
+  ctr = crec_ctype_rawchild(J, cts, ct, &ctrsnap);
+  ctr_info = ctype_info_acq(ctr);
+  if (!ctype_isinteger(ctr_info) || ctype_size_acq(ctr) != 4 ||
+      (ctr_info & CTF_UNSIGNED))
+    return 0;
+
+  fid = ctype_sib_acq(ct);
+  while (fid) {
+    ctf = crec_ctype_snapshot(J, cts, fid, &ctfcopy);
+    ctfinfo = ctype_info_acq(ctf);
+    if (!ctype_isattrib(ctfinfo)) break;
+    fid = ctype_sib_acq(ctf);
+  }
+  if (!fid)
+    return 0;
+  ctf = crec_ctype_snapshot(J, cts, fid, &ctfcopy);
+  ctfinfo = ctype_info_acq(ctf);
+  if (!ctype_isfield(ctfinfo))
+    return 0;
+  fid = ctype_sib_acq(ctf);
+  if (fid)
+    return 0;
+  did = ctype_cid(ctfinfo);
+  d = crec_ctype_rawrefid(J, cts, did, &did, &dcopy);
+  dinfo = ctype_info_acq(d);
+  if (!ctype_isinteger(dinfo) || ctype_size_acq(d) != 4 ||
+      !(dinfo & CTF_UNSIGNED))
+    return 0;
+
+  arg = crec_ct_tv(J, d, 0, J->base[1], &rd->argv[1]);
+  arg = crec_call_jit_u32_arg(J, arg);
+
+  if (lj_ctype_cb_isblacklisted(cts, cdata_getptr(cdataptr(cd), fsz)))
+    lj_trace_err(J, LJ_TRERR_BLACKL);
+
+  func = emitir(IRT(IR_FLOAD, tp), J->base[0], IRFL_CDATA_PTR);
+  J->base[0] = lj_ir_call(J, IRCALL_lj_ccall_jit_i32_u32, func, arg);
   J->needsnap = 1;
   return 1;
 }
@@ -3974,6 +4038,8 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
     if (crec_call_jit_i32_flt(J, rd, cts, ct, info, cd, tp, fsz))
       return 1;
     if (crec_call_jit_i32_i8(J, rd, cts, ct, info, cd, tp, fsz))
+      return 1;
+    if (crec_call_jit_i32_u32(J, rd, cts, ct, info, cd, tp, fsz))
       return 1;
     if (crec_call_jit_i32_ptr_ulong_i32(J, rd, cts, ct, info, cd, tp, fsz))
       return 1;

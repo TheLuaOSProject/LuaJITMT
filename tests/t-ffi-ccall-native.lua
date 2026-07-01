@@ -22,6 +22,7 @@ int16_t lj_m7_ccall_jit_i16_i32_ptr(int32_t, int *);
 uint16_t lj_m7_ccall_jit_u16_0(void);
 uint16_t lj_m7_ccall_jit_u16_i32(int32_t);
 int lj_m7_ccall_jit_i8_arg_i32(int8_t);
+int32_t lj_m7_ccall_jit_i32_u32(uint32_t);
 double lj_m7_ccall_jit_num0(void);
 double lj_m7_ccall_jit_num_i32(int32_t);
 double lj_m7_ccall_jit_num_ptr(int *);
@@ -189,6 +190,7 @@ do
     local u16_0 = lib.lj_m7_ccall_jit_u16_0
     local u16_i32 = lib.lj_m7_ccall_jit_u16_i32
     local i8_arg_i32 = lib.lj_m7_ccall_jit_i8_arg_i32
+    local i32_u32 = lib.lj_m7_ccall_jit_i32_u32
     local num0 = lib.lj_m7_ccall_jit_num0
     local num_i32 = lib.lj_m7_ccall_jit_num_i32
     local num_ptr = lib.lj_m7_ccall_jit_num_ptr
@@ -338,6 +340,21 @@ do
       local r = 0
       for _ = 1, n do
 	r = r + i8_arg_i32(arg)
+      end
+      return r
+    end
+    local function run_i32_u32(n)
+      local r = 0
+      for i = 1, n do
+	r = r + i32_u32(i)
+      end
+      return r
+    end
+    local function run_i32_u32_high(n)
+      local arg = ffi.new("uint32_t", 0xfffffff0)
+      local r = 0
+      for _ = 1, n do
+	r = r + i32_u32(arg)
       end
       return r
     end
@@ -683,6 +700,16 @@ do
     jit.opt.start("hotloop=1", "hotexit=1")
     assert(run_i8_arg_wrap(80) == 320)
     assert(trace_count() > 0, "shared wrapped uint8_t->int8_t->int FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    assert(run_i32_u32(80) == (80 * 81) / 2 + 80 * 5)
+    assert(trace_count() > 0, "shared uint32_t->int FFI call loop should trace")
+
+    jit.flush()
+    jit.opt.start("hotloop=1", "hotexit=1")
+    assert(run_i32_u32_high(80) == -880)
+    assert(trace_count() > 0, "shared high-bit uint32_t->int FFI call loop should trace")
 
     jit.flush()
     jit.opt.start("hotloop=1", "hotexit=1")

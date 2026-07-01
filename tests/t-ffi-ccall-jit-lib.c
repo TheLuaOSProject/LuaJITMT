@@ -100,6 +100,11 @@ int lj_m7_ccall_jit_i8_arg_i32(int8_t a)
   return (int)a + 5;
 }
 
+int32_t lj_m7_ccall_jit_i32_u32(uint32_t a)
+{
+  return (int32_t)(a + 5u);
+}
+
 double lj_m7_ccall_jit_num0(void)
 {
   return 1.5;
