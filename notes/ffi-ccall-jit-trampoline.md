@@ -14,10 +14,11 @@ with the helper signature preserving signedness for each argument. The first
 64-bit GPR argument slice also accepts exact one-argument `int64_t` or
 `uint64_t` calls for void, signed 32-bit, unsigned 32-bit, narrow integer, and
 pointer returns, plus exact two-argument `pointer,int64_t` and
-`pointer,uint64_t` span-style calls and exact `int32_t,int64_t` calls for
-those same return families. Exact `int32_t,uint64_t` pairs are covered too.
-The FPR subset accepts 0, 1, or 2 same-kind exact float or double arguments.
-The first mixed one-argument subset
+`pointer,uint64_t` span-style calls and exact `int32_t,int64_t` /
+`int32_t,uint64_t` calls for those same return families. Exact
+`uint32_t,int64_t` and `uint32_t,uint64_t` pairs are covered too. The FPR
+subset accepts 0, 1, or 2 same-kind exact float or double arguments. The first
+mixed one-argument subset
 accepts exact `double(int32_t)`, `double(pointer)`, `double(float)`,
 `int32_t(double)`, `int32_t(float)`, `int32_t(int8_t)`, `pointer(double)`,
 `void(double)`, `void(float)`, and `float(double)`. The first exact
@@ -63,8 +64,8 @@ save/enter/leave/checkstop protocol as the interpreted `lj_ccall_func()` path.
 The scope is deliberately narrow:
 
 - fixed arguments only;
-- exactly 0, 1, or 2 Lua arguments except for the audited
-  `int32_t(void *, unsigned long, int32_t)` shape;
+- exactly 0, 1, or 2 Lua arguments except for audited three-argument shapes
+  listed below;
 - exact signed 32-bit integer, unsigned 32-bit integer, or pointer argument
   types in the shared GPR helper matrix;
 - void, exact signed 32-bit integer, or pointer return types;
@@ -100,6 +101,8 @@ The scope is deliberately narrow:
   unsigned 32-bit, narrow integer, signed/unsigned 64-bit cdata, and pointer
   return families;
 - exact two-argument `int32_t,uint64_t` calls for the same return families;
+- exact two-argument `uint32_t,int64_t` and `uint32_t,uint64_t` calls for the
+  same return families;
 - same-kind exact float/double arguments and exact float/double returns;
 - exact one-argument `double(int32_t)`, `double(pointer)`, `double(float)`,
   `int32_t(double)`, `int32_t(float)`, `int32_t(int8_t)`,

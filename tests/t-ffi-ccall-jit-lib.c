@@ -188,6 +188,16 @@ uint8_t lj_m7_ccall_jit_u8_i32_u64(int32_t a, uint64_t b)
   return (uint8_t)(a + (int32_t)(b & UINT64_C(255)));
 }
 
+uint8_t lj_m7_ccall_jit_u8_u32_i64(uint32_t a, int64_t b)
+{
+  return (uint8_t)((a & 255u) + (uint32_t)((uint64_t)b & UINT64_C(255)));
+}
+
+uint8_t lj_m7_ccall_jit_u8_u32_u64(uint32_t a, uint64_t b)
+{
+  return (uint8_t)((a & 255u) + (uint32_t)(b & UINT64_C(255)));
+}
+
 void lj_m7_ccall_jit_void_u32(uint32_t a)
 {
   lj_m7_ccall_jit_void_count += (int)(a & 15u);
@@ -224,6 +234,17 @@ void lj_m7_ccall_jit_void_i32_u64(int32_t a, uint64_t b)
   lj_m7_ccall_jit_void_count += a + (int32_t)(b & UINT64_C(15));
 }
 
+void lj_m7_ccall_jit_void_u32_i64(uint32_t a, int64_t b)
+{
+  lj_m7_ccall_jit_void_count += (int)(a & 15u) +
+				(int)((uint64_t)b & UINT64_C(15));
+}
+
+void lj_m7_ccall_jit_void_u32_u64(uint32_t a, uint64_t b)
+{
+  lj_m7_ccall_jit_void_count += (int)(a & 15u) + (int)(b & UINT64_C(15));
+}
+
 uint64_t lj_m7_ccall_jit_u64_u32arg(uint32_t a)
 {
   return UINT64_C(0x100000000) + (uint64_t)a;
@@ -255,6 +276,17 @@ int32_t lj_m7_ccall_jit_i32_i32_u64(int32_t a, uint64_t b)
   return a + (int32_t)(b & UINT64_C(1023));
 }
 
+int32_t lj_m7_ccall_jit_i32_u32_i64(uint32_t a, int64_t b)
+{
+  return (int32_t)((a & 1023u) +
+		   (uint32_t)((uint64_t)b & UINT64_C(1023)));
+}
+
+int32_t lj_m7_ccall_jit_i32_u32_u64(uint32_t a, uint64_t b)
+{
+  return (int32_t)((a & 1023u) + (uint32_t)(b & UINT64_C(1023)));
+}
+
 uint32_t lj_m7_ccall_jit_u32_ptr_u64(int *p, uint64_t n)
 {
   return UINT32_C(0xf0000000) + (uint32_t)p[n & 3u] +
@@ -277,6 +309,18 @@ uint32_t lj_m7_ccall_jit_u32_i32_i64(int32_t a, int64_t b)
 uint32_t lj_m7_ccall_jit_u32_i32_u64(int32_t a, uint64_t b)
 {
   return UINT32_C(0xf0000000) + (uint32_t)a +
+	 (uint32_t)(b & UINT64_C(1023));
+}
+
+uint32_t lj_m7_ccall_jit_u32_u32_i64(uint32_t a, int64_t b)
+{
+  return UINT32_C(0xf0000000) + (a & 1023u) +
+	 (uint32_t)((uint64_t)b & UINT64_C(1023));
+}
+
+uint32_t lj_m7_ccall_jit_u32_u32_u64(uint32_t a, uint64_t b)
+{
+  return UINT32_C(0xf0000000) + (a & 1023u) +
 	 (uint32_t)(b & UINT64_C(1023));
 }
 
@@ -308,6 +352,16 @@ int *lj_m7_ccall_jit_ptr_i32_i64(int32_t a, int64_t b)
 int *lj_m7_ccall_jit_ptr_i32_u64(int32_t a, uint64_t b)
 {
   return lj_m7_ccall_jit_values + ((uint32_t)a + (b & 3u)) % 4u;
+}
+
+int *lj_m7_ccall_jit_ptr_u32_i64(uint32_t a, int64_t b)
+{
+  return lj_m7_ccall_jit_values + ((a & 3u) + ((uint64_t)b & 3u)) % 4u;
+}
+
+int *lj_m7_ccall_jit_ptr_u32_u64(uint32_t a, uint64_t b)
+{
+  return lj_m7_ccall_jit_values + ((a & 3u) + (b & 3u)) % 4u;
 }
 
 double lj_m7_ccall_jit_num0(void)
@@ -485,6 +539,18 @@ int64_t lj_m7_ccall_jit_i64_i32_u64(int32_t a, uint64_t b)
 	 (int64_t)(b & UINT64_C(1023));
 }
 
+int64_t lj_m7_ccall_jit_i64_u32_i64(uint32_t a, int64_t b)
+{
+  return INT64_C(0x100000000) + (int64_t)(a & 1023u) +
+	 (int64_t)((uint64_t)b & UINT64_C(1023));
+}
+
+int64_t lj_m7_ccall_jit_i64_u32_u64(uint32_t a, uint64_t b)
+{
+  return INT64_C(0x100000000) + (int64_t)(a & 1023u) +
+	 (int64_t)(b & UINT64_C(1023));
+}
+
 uint64_t lj_m7_ccall_jit_u64_ptr_u64(int *p, uint64_t n)
 {
   return UINT64_C(0x100000000) + (uint64_t)(uint32_t)p[n & 3u] +
@@ -507,6 +573,18 @@ uint64_t lj_m7_ccall_jit_u64_i32_i64(int32_t a, int64_t b)
 uint64_t lj_m7_ccall_jit_u64_i32_u64(int32_t a, uint64_t b)
 {
   return UINT64_C(0x100000000) + (uint64_t)(uint32_t)a +
+	 (b & UINT64_C(1023));
+}
+
+uint64_t lj_m7_ccall_jit_u64_u32_i64(uint32_t a, int64_t b)
+{
+  return UINT64_C(0x100000000) + (uint64_t)(a & 1023u) +
+	 ((uint64_t)b & UINT64_C(1023));
+}
+
+uint64_t lj_m7_ccall_jit_u64_u32_u64(uint32_t a, uint64_t b)
+{
+  return UINT64_C(0x100000000) + (uint64_t)(a & 1023u) +
 	 (b & UINT64_C(1023));
 }
 
