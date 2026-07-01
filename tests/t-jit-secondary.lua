@@ -134,6 +134,69 @@ local worker = th.spawn(function()
   jit.flush()
   jit.opt.start("hotloop=1", "hotexit=1", "-sink")
 
+  local shared_meta_nil_hash = setmetatable({ stable = 0 }, {})
+  shared_meta_nil_hash.stable = nil
+
+  local function table_meta_nil_hash_write(n)
+    for i = 1, n do
+      shared_meta_nil_hash.stable = i
+      shared_meta_nil_hash.stable = nil
+    end
+    return shared_meta_nil_hash.stable
+  end
+
+  for _ = 1, 20 do
+    assert(table_meta_nil_hash_write(80) == nil)
+  end
+  local meta_nil_hash_traces = trace_count(32)
+  assert(meta_nil_hash_traces > 0)
+
+  jit.flush()
+  jit.opt.start("hotloop=1", "hotexit=1", "-sink")
+
+  local shared_meta_nil_array = setmetatable({ 0, nil, 0 }, {})
+
+  local function table_meta_nil_array_write(n)
+    for i = 1, n do
+      shared_meta_nil_array[2] = i
+      shared_meta_nil_array[2] = nil
+    end
+    return shared_meta_nil_array[2]
+  end
+
+  for _ = 1, 20 do
+    assert(table_meta_nil_array_write(80) == nil)
+  end
+  local meta_nil_array_traces = trace_count(32)
+  assert(meta_nil_array_traces > 0)
+
+  jit.flush()
+  jit.opt.start("hotloop=1", "hotexit=1", "-sink")
+
+  local insert_hits = 0
+  local shared_meta_insert = setmetatable({}, {
+    __newindex = function(_, _, v)
+      insert_hits = insert_hits + v
+    end
+  })
+
+  local function table_meta_insert_newindex(n)
+    local before = insert_hits
+    for i = 1, n do
+      shared_meta_insert.missing = i
+    end
+    return insert_hits - before, rawget(shared_meta_insert, "missing")
+  end
+
+  for _ = 1, 20 do
+    local hits, raw = table_meta_insert_newindex(80)
+    assert(hits == 3240)
+    assert(raw == nil)
+  end
+
+  jit.flush()
+  jit.opt.start("hotloop=1", "hotexit=1", "-sink")
+
   local shared_ipairs = { 2, 4, 6, nil, 100 }
 
   local function table_ipairs(n)
@@ -233,13 +296,15 @@ local worker = th.spawn(function()
   assert(shared_pairs_traces > 0)
 
   return root_traces, side_traces, table_traces, read_traces, index_traces,
-	 write_traces, meta_write_traces, ipairs_traces, next_traces,
-	 shared_next_traces, shared_pairs_traces, th.current():id()
+	 write_traces, meta_write_traces, meta_nil_hash_traces,
+	 meta_nil_array_traces, ipairs_traces, next_traces, shared_next_traces,
+	 shared_pairs_traces, th.current():id()
 end)
 
 local ok, root_traces, side_traces, table_traces, read_traces, index_traces,
-      write_traces, meta_write_traces, ipairs_traces, next_traces,
-      shared_next_traces, shared_pairs_traces, tid = worker:join()
+      write_traces, meta_write_traces, meta_nil_hash_traces,
+      meta_nil_array_traces, ipairs_traces, next_traces, shared_next_traces,
+      shared_pairs_traces, tid = worker:join()
 assert(ok == true, tostring(root_traces))
 assert(type(root_traces) == "number" and root_traces > 0)
 assert(type(side_traces) == "number" and side_traces > root_traces)
@@ -248,10 +313,12 @@ assert(type(read_traces) == "number" and read_traces > 0)
 assert(type(index_traces) == "number" and index_traces > 0)
 assert(type(write_traces) == "number" and write_traces > 0)
 assert(type(meta_write_traces) == "number" and meta_write_traces > 0)
+assert(type(meta_nil_hash_traces) == "number" and meta_nil_hash_traces > 0)
+assert(type(meta_nil_array_traces) == "number" and meta_nil_array_traces > 0)
 assert(type(ipairs_traces) == "number" and ipairs_traces > 0)
 assert(type(next_traces) == "number" and next_traces > 0)
 assert(type(shared_next_traces) == "number" and shared_next_traces > 0)
 assert(type(shared_pairs_traces) == "number" and shared_pairs_traces > 0)
 assert(tid == worker:id())
 
-print("t-jit-secondary OK: secondary TG records, enters, side-traces, allocates tables, reads/writes shared tables, traces existing metatable stores, records shared ipairs(), trace-local next(), and helper-backed shared next()/pairs(), and preserves __index reads in x64 mcode")
+print("t-jit-secondary OK: secondary TG records, enters, side-traces, allocates tables, reads/writes shared tables, traces existing and previous-nil metatable stores, records shared ipairs(), trace-local next(), and helper-backed shared next()/pairs(), and preserves __index/__newindex semantics in x64 mcode")

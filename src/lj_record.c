@@ -1969,12 +1969,13 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
     int keybarrier = tref_isgcv(ix->key) && !tref_isnil(ix->val);
     if (mt_shared_store && ix->idxchain && mt) {
       if (tvisnil(oldtv)) {
-	/*
-	** Nil/absent raw slots may need __newindex or new-key insertion.
-	** Keep that dispatch on the interpreter path until it is fully
-	** helper-backed.
-	*/
-	lj_trace_err_info(J, LJ_TRERR_NYIBC);
+	TValue motv;
+	cTValue *mo = lj_tab_getstr(mt, mmname_str(J2G(J), MM_newindex));
+	if (mo) {
+	  lj_tv_load_acq(&motv, mo);
+	  if (!tvisnil(&motv))
+	    lj_trace_err_info(J, LJ_TRERR_NYIBC);
+	}
       } else {
 	TRef key = rec_tmpref_mode(J, ix->key, IRTMPREF_IN1|IRTMPREF_IN2);
 	TRef src;
@@ -2026,10 +2027,12 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
 	emitir(IRTG(oldv == niltvg(J2G(J)) ? IR_EQ : IR_NE, IRT_PGC),
 	       xref, lj_ir_kkptr(J, niltvg(J2G(J))));
       if (ix->idxchain && lj_record_mm_lookup(J, ix, MM_newindex)) {
-	lj_assertJ(hasmm, "inconsistent metamethod handling");
+	if (!hasmm)
+	  lj_trace_err_info(J, LJ_TRERR_NYIBC);
 	goto handlemm;
       }
-      lj_assertJ(!hasmm, "inconsistent metamethod handling");
+      if (hasmm)
+	lj_trace_err_info(J, LJ_TRERR_NYIBC);
       if (oldv == niltvg(J2G(J))) {  /* Need to insert a new key. */
 	TRef key = ix->key;
 	if (tref_isinteger(key)) {  /* NEWREF needs a TValue as a key. */
