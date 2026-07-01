@@ -3761,7 +3761,8 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
   uint64_t overflow2;
   uint64_t sweepqueued0;
   int finalized0;
-  const int bulk_n = 160;
+  const MSize finclaim_fixed_n = 4096u;
+  const int bulk_n = (int)finclaim_fixed_n;
 
   lua_settop(L, 0);
   assert(luaL_dostring(L,
@@ -4277,7 +4278,7 @@ static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
 	 claimed2 + (uint64_t)bulk_n);
   assert(gc2_finreg_cdata_preclaim_overflow_acq(g) ==
 	 overflow2);
-  assert(gc2_finreg_cdata_preclaim_capacity_acq(g) >= (MSize)bulk_n);
+  assert(gc2_finreg_cdata_preclaim_capacity_acq(g) == finclaim_fixed_n);
   assert(gc2_finalizer_queued_acq(g) ==
 	 finalizerq2 + (uint64_t)bulk_n);
   assert(gc2_finalizer_dequeued_acq(g) ==

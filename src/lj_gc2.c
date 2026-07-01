@@ -49,10 +49,7 @@ typedef int (*GC2FinalizerDispatchFunc)(lua_State *L, global_State *g,
 #define GC2_GREY_LIMIT	((MSize)(LJ_MAX_MEM32 / sizeof(GCRef)))
 #define GC2_WEAK_INIT	128u
 #define GC2_WEAK_LIMIT	((MSize)(LJ_MAX_MEM32 / sizeof(GCRef)))
-#define GC2_FINCLAIM_INIT	128u
 #define GC2_FINCLAIM_FIXED	4096u
-#define GC2_FINCLAIM_LIMIT \
-  ((MSize)(LJ_MAX_MEM32 / (sizeof(GCRef) + sizeof(TValue))))
 #define GC2_ACTIVE_FINALIZE_COST	100
 #define GC2_ROOT_SCAN_LIMIT	1000000u
 
@@ -117,7 +114,7 @@ static int gc2_grey_grow(global_State *g);
 static int gc2_grey_empty(global_State *g);
 static int gc2_weak_resize(global_State *g, MSize cap);
 static void gc2_weak_reset(global_State *g);
-static int gc2_finclaim_resize(global_State *g, MSize cap);
+static int gc2_finclaim_ensure(global_State *g);
 static void gc2_finclaim_reset(global_State *g);
 static void gc2_finalizer_free_stack(global_State *g, GC2FinalizerNode *node);
 static void gc2_finalizer_free_ring(global_State *g, GC2FinalizerNode *tail);
@@ -3512,39 +3509,31 @@ static void gc2_finclaim_copy_slot(lua_State *L, GCRef *newobj, TValue *newfin,
   }
 }
 
-static int gc2_finclaim_resize(global_State *g, MSize cap)
+static int gc2_finclaim_ensure(global_State *g)
 {
   lua_State *L;
-  GCRef *oldobj, *newobj;
-  TValue *oldfin, *newfin;
-  MSize oldcap, head, count, pending, i;
-  if (!g || cap == 0)
+  GCRef *obj;
+  TValue *fin;
+  MSize cap;
+  if (!g)
+    return 0;
+  cap = gc2_finreg_cdata_preclaim_capacity_acq(g);
+  if (gc2_finreg_cdata_preclaim_ready(g))
+    return cap == GC2_FINCLAIM_FIXED;
+  if (gc2_finreg_cdata_preclaim_objvec_acq(g) ||
+      gc2_finreg_cdata_preclaim_finvec_acq(g) || cap != 0)
     return 0;
   L = mainthread_acq(g);
   if (!L)
     return 0;
-  oldobj = gc2_finreg_cdata_preclaim_objvec_acq(g);
-  oldfin = gc2_finreg_cdata_preclaim_finvec_acq(g);
-  oldcap = gc2_finreg_cdata_preclaim_capacity_acq(g);
-  head = gc2_finreg_cdata_preclaim_head_acq(g);
-  count = gc2_finreg_cdata_preclaim_count_acq(g);
-  pending = count > head ? count - head : 0;
-  if (cap < pending)
-    return 0;
-  newobj = lj_mem_newvec(L, cap, GCRef);
-  newfin = lj_mem_newvec(L, cap, TValue);
-  for (i = 0; i < pending; i++)
-    gc2_finclaim_copy_slot(L, newobj, newfin, i, oldobj, oldfin, head + i);
-  gc2_finreg_cdata_preclaim_objvec_rel(g, newobj);
-  gc2_finreg_cdata_preclaim_finvec_rel(g, newfin);
-  gc2_finreg_cdata_preclaim_capacity_rel(g, cap);
+  obj = lj_mem_newvec(L, GC2_FINCLAIM_FIXED, GCRef);
+  fin = lj_mem_newvec(L, GC2_FINCLAIM_FIXED, TValue);
+  gc2_finreg_cdata_preclaim_objvec_rel(g, obj);
+  gc2_finreg_cdata_preclaim_finvec_rel(g, fin);
+  gc2_finreg_cdata_preclaim_capacity_rel(g, GC2_FINCLAIM_FIXED);
   gc2_finreg_cdata_preclaim_head_rel(g, 0);
-  gc2_finreg_cdata_preclaim_count_rel(g, pending);
-  if (oldobj)
-    lj_mem_freevec(g, oldobj, oldcap, GCRef);
-  if (oldfin)
-    lj_mem_freevec(g, oldfin, oldcap, TValue);
-  return 1;
+  gc2_finreg_cdata_preclaim_count_rel(g, 0);
+  return 1;  /* Fixed preclaim vector: no active-GC migration/free. */
 }
 
 static void gc2_finclaim_reset(global_State *g)
@@ -3565,7 +3554,7 @@ static void gc2_finclaim_reset(global_State *g)
   count = gc2_finreg_cdata_preclaim_count_acq(g);
   pending = count > head ? count - head : 0;
   if (!obj || !fin || cap == 0) {
-    (void)gc2_finclaim_resize(g, GC2_FINCLAIM_FIXED);
+    (void)gc2_finclaim_ensure(g);
     return;
   }
   if (head != 0 && pending != 0) {
@@ -4530,7 +4519,7 @@ static int lj_gc2_finreg_cdata_preclaim(lua_State *L, global_State *g,
   count = gc2_finreg_cdata_preclaim_count_acq(g);
   cap = gc2_finreg_cdata_preclaim_capacity_acq(g);
   if (!gc2_finreg_cdata_preclaim_ready(g)) {
-    if (!gc2_finclaim_resize(g, GC2_FINCLAIM_FIXED)) {
+    if (!gc2_finclaim_ensure(g)) {
       gc2_finreg_cdata_preclaim_overflow_add(g, 1);
       return 0;
     }
