@@ -1200,6 +1200,10 @@ static void asm_gcstep(ASMState *as, IRIns *ir)
 /* -- Buffer operations --------------------------------------------------- */
 
 static void asm_tvptr(ASMState *as, Reg dest, IRRef ref, MSize mode);
+#if LJ_TARGET_X86ORX64
+static int asm_tmpref_skip_x86(ASMState *as, IRIns *ir);
+static int asm_call_inline_x86(ASMState *as, IRIns *ir);
+#endif
 #if LJ_HASBUFFER
 static void asm_bufhdr_write(ASMState *as, Reg sb);
 #endif
@@ -1455,6 +1459,10 @@ static void asm_newref(ASMState *as, IRIns *ir)
 
 static void asm_tmpref(ASMState *as, IRIns *ir)
 {
+#if LJ_TARGET_X86ORX64
+  if (asm_tmpref_skip_x86(as, ir))
+    return;
+#endif
   Reg r = ra_dest(as, ir, RSET_GPR);
   asm_tvptr(as, r, ir->op1, ir->op2);
 }
@@ -1989,7 +1997,13 @@ static void asm_ir(ASMState *as, IRIns *ir)
   case IR_CALLA:
     as->gcsteps++;
     /* fallthrough */
-  case IR_CALLN: case IR_CALLL: case IR_CALLS: asm_call(as, ir); break;
+  case IR_CALLN: case IR_CALLL: case IR_CALLS:
+#if LJ_TARGET_X86ORX64
+    if (asm_call_inline_x86(as, ir))
+      break;
+#endif
+    asm_call(as, ir);
+    break;
   case IR_CALLXS: asm_callx(as, ir); break;
   case IR_CARG: break;
 

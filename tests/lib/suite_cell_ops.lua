@@ -185,6 +185,13 @@ function M.run_jit_dump_guards(t, dump)
   assert_dump_match(t, dump, "CALLA.*lj_func_newL_gc_forjit", "assigned-before-FNEW FNEW helper")
   assert_dump_not_contains(t, dump, "lj_func_promoteuv_forjit",
 			   "assigned-before-FNEW discarded promotion")
+
+  dump_im(t, dump, probes.assigned_before_fnew({
+    hotexit = true,
+    trace_assert = "assigned-before-FNEW creation should trace"
+  }))
+  assert_dump_not_contains(t, dump, "->lj_func_syncslot_forjit",
+			   "assigned-before-FNEW numeric sync lowering")
 end
 
 function M.run_jit_runtime_guards(t)

@@ -886,6 +886,97 @@ static void asm_callx(ASMState *as, IRIns *ir)
   asm_gencall(as, &ci, args);
 }
 
+static int asm_syncslot_numeric_args(ASMState *as, IRIns *ir, IRRef *valrefp,
+				     int32_t *slotp, IRRef *tmprefp)
+{
+  IRRef args[CCI_NARGS_MAX];
+  IRIns *slotir, *tmpir, *valir;
+  if (ir->o != IR_CALLS || ir->op2 != IRCALL_lj_func_syncslot_forjit)
+    return 0;
+  asm_collectargs(as, ir,
+		  &lj_ir_callinfo[IRCALL_lj_func_syncslot_forjit], args);
+  if (args[1] != REF_BASE || !irref_isk(args[2]))
+    return 0;
+  slotir = IR(args[2]);
+  if (slotir->o != IR_KINT || slotir->i < 0)
+    return 0;
+  tmpir = IR(args[3]);
+  if (tmpir->o != IR_TMPREF || tmpir->op2 != IRTMPREF_IN1)
+    return 0;
+  valir = IR(tmpir->op1);
+  if (!irt_isnum(valir->t))
+    return 0;
+  *valrefp = tmpir->op1;
+  *slotp = slotir->i;
+  *tmprefp = args[3];
+  return 1;
+}
+
+/* Inline the traced FNEW slot-sync helper for plain numeric values. */
+static int asm_call_inline_x86(ASMState *as, IRIns *ir)
+{
+  IRRef valref, tmpref;
+  int32_t slot;
+  Reg base, src;
+  if (!asm_syncslot_numeric_args(as, ir, &valref, &slot, &tmpref))
+    return 0;
+  UNUSED(tmpref);
+  src = ra_alloc1(as, valref, RSET_FPR);
+  base = ra_alloc1(as, REF_BASE, RSET_GPR);
+  emit_rmro(as, XO_MOVSDto, src, base, 8 * slot);
+  return 1;
+}
+
+static int asm_arg_chain_uses(ASMState *as, IRIns *ir, IRRef needle)
+{
+  IRRef ref = ir->op1;
+  while (ref >= REF_FIRST) {
+    IRIns *arg = IR(ref);
+    if (ref == needle)
+      return 1;
+    if (arg->o != IR_CARG)
+      return 0;
+    ref = arg->op1;
+  }
+  return 0;
+}
+
+/* Skip numeric TMPREF materialization when only an inlined syncslot uses it. */
+static int asm_tmpref_skip_x86(ASMState *as, IRIns *ir)
+{
+  IRRef tmpref = (IRRef)(ir - as->ir);
+  IRRef ref, cargref = 0;
+  int nuse = 0;
+  if (ir->o != IR_TMPREF || ir->op2 != IRTMPREF_IN1 ||
+      !irt_isnum(IR(ir->op1)->t))
+    return 0;
+  for (ref = REF_FIRST; ref < as->orignins; ref++) {
+    IRIns *u = IR(ref);
+    if (u->o == IR_NOP)
+      continue;
+    if (u->op1 == tmpref || u->op2 == tmpref) {
+      if (!(u->o == IR_CARG && u->op2 == tmpref))
+	return 0;
+      cargref = ref;
+      nuse++;
+    }
+  }
+  if (nuse != 1)
+    return 0;
+  for (ref = REF_FIRST; ref < as->orignins; ref++) {
+    IRIns *call = IR(ref);
+    IRRef valref, calltmp;
+    int32_t slot;
+    if (call->o == IR_CALLS &&
+	call->op2 == IRCALL_lj_func_syncslot_forjit &&
+	asm_arg_chain_uses(as, call, cargref) &&
+	asm_syncslot_numeric_args(as, call, &valref, &slot, &calltmp) &&
+	calltmp == tmpref)
+      return 1;
+  }
+  return 0;
+}
+
 /* -- Returns ------------------------------------------------------------- */
 
 /* Return to lower frame. Guard that it goes to the right spot. */
