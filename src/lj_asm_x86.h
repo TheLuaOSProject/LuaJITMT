@@ -2043,6 +2043,56 @@ static void asm_ahstore_forjit(ASMState *as, IRIns *ir)
 }
 
 #if LJ_HAS_X64_MT_JIT_HELPERS
+static IRRef asm_ahstore_tabref(ASMState *as, IRIns *xref, int *isnewref)
+{
+  *isnewref = 0;
+  if (xref->o == IR_AREF)
+    return IR(xref->op1)->op1;
+  if (xref->o == IR_HREFK)
+    return IR(xref->op1)->op1;
+  if (xref->o == IR_HREF)
+    return xref->op1;
+  lj_assertA(xref->o == IR_NEWREF, "expected table store ref");
+  *isnewref = 1;
+  return xref->op1;
+}
+
+static int asm_ahstore_publishes_ref(IROp op)
+{
+  return op == IR_ASTORE || op == IR_HSTORE || op == IR_USTORE ||
+	 op == IR_FSTORE || op == IR_XSTORE;
+}
+
+static int asm_ahstore_trace_local_direct_ok(ASMState *as, IRIns *ir)
+{
+  IRIns *xref = IR(ir->op1);
+  IRRef storeref = (IRRef)(ir - as->ir);
+  IRRef tabref, ref;
+  IRIns *tab;
+  int isnewref;
+
+  if (ir->o != IR_ASTORE && ir->o != IR_HSTORE)
+    return 0;
+  tabref = asm_ahstore_tabref(as, xref, &isnewref);
+  if (isnewref || tabref < REF_FIRST)
+    return 0;  /* NEWREF may grow/rehash and must keep helper revalidation. */
+  tab = IR(tabref);
+  if (tab->o != IR_TNEW && tab->o != IR_TDUP)
+    return 0;
+
+  for (ref = tabref + 1; ref < storeref; ref++) {
+    IRIns *x = IR(ref);
+    IROp op = x->o;
+    if (op == IR_XPOLL || op == IR_XBAR || (op >= IR_CALLN && op <= IR_CALLXS))
+      return 0;
+    if (op == IR_NEWREF && x->op1 == tabref)
+      return 0;
+    if (asm_ahstore_publishes_ref(op) && x->op2 == tabref)
+      return 0;
+  }
+  return 1;
+}
+
 static int asm_ahstore_can_inline_tvalue(IRType1 t)
 {
   return irt_isnum(t) || irt_ispri(t) || (LJ_DUALNUM && irt_isint(t));
@@ -2321,15 +2371,17 @@ static void asm_ahustore(ASMState *as, IRIns *ir)
     return;
   }
   if (mt_active_acq(J2G(as->J)) != 0) {
-    if (asm_ahstore_can_inline_array_tvalue(as, ir)) {
+    if (asm_ahstore_trace_local_direct_ok(as, ir)) {
+      /* The table has not escaped the trace yet, so stock direct lowering
+      ** cannot race another TG. Shared/NEWREF/published cases stay below.
+      */
+    } else if (asm_ahstore_can_inline_array_tvalue(as, ir)) {
       asm_ahstore_inline_array_tvalue(as, ir);
       return;
-    }
-    if (asm_ahstore_can_inline_hash_tvalue(as, ir)) {
+    } else if (asm_ahstore_can_inline_hash_tvalue(as, ir)) {
       asm_ahstore_inline_hash_tvalue(as, ir);
       return;
-    }
-    if (ir->o == IR_ASTORE || ir->o == IR_HSTORE) {
+    } else if (ir->o == IR_ASTORE || ir->o == IR_HSTORE) {
       asm_ahstore_forjit(as, ir);
       return;
     }

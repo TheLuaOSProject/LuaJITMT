@@ -1041,6 +1041,55 @@ assert(util.traceinfo(1), "numeric hash store did not trace")
         end
       end
 
+      local trace_local_direct_dump =
+        t:tmp("lj-m6-table-store-trace-local-direct.dump")
+      luajit_dump(t, trace_local_direct_dump, "-jdump=im", [=[
+local threading = require("threading")
+assert(({ threading.spawn(function() return true end):join(5) })[1] == true)
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local util = require("jit.util")
+local function hash(n)
+  local out = { stable = 0 }
+  for i = 1, n do
+    local t = { stable = 0 }
+    t.stable = i + 0.5
+    out = t
+  end
+  return out
+end
+local h = hash(80)
+assert(h.stable == 80.5)
+assert(util.traceinfo(1), "trace-local hash store did not trace")
+
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local function array(n)
+  local out = { 0 }
+  for i = 1, n do
+    local t = { 0 }
+    t[1] = i + 0.5
+    out = t
+  end
+  return out
+end
+local a = array(80)
+assert(a[1] == 80.5)
+assert(util.traceinfo(1), "trace-local array store did not trace")
+]=], { timeout = "20s" })
+      do
+        local data = t:read(trace_local_direct_dump)
+        if not (contains(data, " HSTORE ") and contains(data, " ASTORE ")) then
+          error("trace-local active-MT store dump missed table stores:\n" ..
+                data, 0)
+        end
+        if contains(data, "lock cmpxchg") or
+           contains(data, "lj_tab_storetv_forjit") then
+          error("trace-local active-MT stores used helper/CAS route:\n" ..
+                data, 0)
+        end
+      end
+
       local route_dump = t:tmp("lj-m6-table-store-helper-routes.dump")
       luajit_dump(t, route_dump, "-jdump=im", [=[
 local threading = require("threading")
@@ -1105,6 +1154,35 @@ assert(util.traceinfo(1), "numeric hash store did not trace")
       assert_dump_contains(t, hash_route_dump,
                            "lj_tab_storetv_forjit_hash",
                            "numeric HSTORE helper fallback")
+
+      local escaped_route_dump = t:tmp("lj-m6-escaped-local-helper.dump")
+      luajit_dump(t, escaped_route_dump, "-jdump=im", [=[
+local threading = require("threading")
+assert(({ threading.spawn(function() return true end):join(5) })[1] == true)
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local util = require("jit.util")
+local function make_escaped_store()
+  local sink
+  return function(n)
+    for i = 1, n do
+      local t = { stable = 0 }
+      sink = t
+      t.stable = i + 0.5
+    end
+    return sink.stable
+  end
+end
+local escaped_store = make_escaped_store()
+assert(escaped_store(80) == 80.5)
+assert(util.traceinfo(1), "escaped trace-local store did not trace")
+]=], { timeout = "20s" })
+      assert_dump_contains(t, escaped_route_dump,
+                           "lock cmpxchg",
+                           "escaped table store inline CAS fallback gate")
+      assert_dump_contains(t, escaped_route_dump,
+                           "lj_tab_storetv_forjit_hash",
+                           "escaped table store helper fallback")
 
       local int_route_dump = t:tmp("lj-m6-int-store-inline-cas.dump")
       luajit_dump(t, int_route_dump, "-jdump=im", [=[
