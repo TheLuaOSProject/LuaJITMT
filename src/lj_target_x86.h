@@ -229,6 +229,7 @@ typedef enum {
   XI_TESTb =	0x84,
   XI_TEST =	0x85,
   XI_INT3 =	0xcc,
+  XI_LOCK =	0xf0,
   XI_MOVmi =	0xc7,
   XI_GROUP5 =	0xff,
 

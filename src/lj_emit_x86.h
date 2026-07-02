@@ -219,6 +219,13 @@ static void emit_rmro(ASMState *as, x86Op xo, Reg rr, Reg rb, int32_t ofs)
   as->mcp = emit_opm(as, xo, mode, rr, rb, p, 0);
 }
 
+/* lock op r, [base+ofs] */
+static void emit_lockrmro(ASMState *as, x86Op xo, Reg rr, Reg rb, int32_t ofs)
+{
+  emit_rmro(as, xo, rr, rb, ofs);
+  emit_i8(as, XI_LOCK);
+}
+
 /* op r, [base+idx*scale+ofs] */
 static void emit_rmrxo(ASMState *as, x86Op xo, Reg rr, Reg rb, Reg rx,
 		       x86Mode scale, int32_t ofs)

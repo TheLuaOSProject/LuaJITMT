@@ -2028,8 +2028,7 @@ static void asm_ahstore_inline_array_tvalue(ASMState *as, IRIns *ir)
   rset_clear(allow, src);
   ra_scratch(as, RID2RSET(RID_EAX));
 
-  emit_rmro(as, XO_CMPXCHG, src|REX_64, slot, 0);
-  emit_i8(as, 0xf0);  /* LOCK prefix: release-publish and intercore CAS. */
+  emit_lockrmro(as, XO_CMPXCHG, src|REX_64, slot, 0);
   asm_ahstore_emit_src_raw(as, ir, src, allow);
   emit_rmro(as, XO_MOV, RID_EAX|REX_64, slot, 0);
   checkmclim(as);  /* Split inline array CAS from generation validation. */
@@ -2090,8 +2089,7 @@ static void asm_ahstore_inline_hash_tvalue(ASMState *as, IRIns *ir)
   rset_clear(allow, src);
   ra_scratch(as, RID2RSET(RID_EAX));
 
-  emit_rmro(as, XO_CMPXCHG, src|REX_64, slot, 0);
-  emit_i8(as, 0xf0);  /* LOCK prefix: release-publish and intercore CAS. */
+  emit_lockrmro(as, XO_CMPXCHG, src|REX_64, slot, 0);
   asm_ahstore_emit_src_raw(as, ir, src, allow);
   emit_rmro(as, XO_MOV, RID_EAX|REX_64, slot, 0);
   checkmclim(as);  /* Split inline hash CAS from node-generation checks. */
