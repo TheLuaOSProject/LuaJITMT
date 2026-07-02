@@ -2141,12 +2141,14 @@ void lj_gc_linkobj(global_State *g, GCobj *o)
 #endif
 }
 
-static uint32_t gc_root_prepend_chain(global_State *g, GCobj *head)
+static uint32_t gc_root_chain_tail(GCobj *head, GCobj **tailp)
 {
   GCobj *tail, *next;
   uint32_t n = 0;
-  if (!head)
+  if (!head) {
+    *tailp = NULL;
     return 0;
+  }
   tail = head;
   do {
     if (n != ~(uint32_t)0)
@@ -2156,6 +2158,16 @@ static uint32_t gc_root_prepend_chain(global_State *g, GCobj *head)
       break;
     tail = next;
   } while (1);
+  *tailp = tail;
+  return n;
+}
+
+static uint32_t gc_root_prepend_chain(global_State *g, GCobj *head)
+{
+  GCobj *tail;
+  uint32_t n = gc_root_chain_tail(head, &tail);
+  if (!n)
+    return 0;
 #if LJ_GC64
   {
     uint64_t oldhead;
@@ -2182,13 +2194,57 @@ static uint32_t gc_root_prepend_chain(global_State *g, GCobj *head)
   return n;
 }
 
+static uint32_t gc_root_prepend_chain_after(GCobj *anchor, GCobj *head)
+{
+  GCRef *p;
+  GCobj *tail, *oldhead;
+  uint32_t n = gc_root_chain_tail(head, &tail);
+  if (!anchor || !n)
+    return 0;
+  p = lj_obj_gcwref(anchor);
+#if LJ_GC64
+  {
+    uint64_t expect;
+    do {
+      oldhead = gcref_acq(*p);
+      if (oldhead)
+	lj_obj_setgcwrel(tail, oldhead);
+      else
+	lj_obj_setgcwnullrel(tail);
+      expect = oldhead ? (uint64_t)(uintptr_t)&oldhead->gch : 0;
+    } while (!la_cas64(&p->gcptr64, &expect,
+		       (uint64_t)(uintptr_t)&head->gch,
+		       LA_REL, LA_ACQ));
+  }
+#else
+  {
+    uint32_t expect;
+    do {
+      oldhead = gcref_acq(*p);
+      if (oldhead)
+	lj_obj_setgcwrel(tail, oldhead);
+      else
+	lj_obj_setgcwnullrel(tail);
+      expect = oldhead ? (uint32_t)(uintptr_t)&oldhead->gch : 0;
+    } while (!la_cas32(&p->gcptr32, &expect,
+		       (uint32_t)(uintptr_t)&head->gch,
+		       LA_REL, LA_ACQ));
+  }
+#endif
+  return n;
+}
+
 static uint32_t gc_flush_root_pending_tg(global_State *g, TGState *tg)
 {
   GCobj *head;
+  uint32_t n;
   if (!g || !tg || tg->gl != g)
     return 0;
   head = lj_tg_gcroot_pending_xchg_acqrel(tg, NULL);
-  return gc_root_prepend_chain(g, head);
+  n = gc_root_prepend_chain(g, head);
+  head = lj_tg_gcroot_pending_after_main_xchg_acqrel(tg, NULL);
+  n += gc_root_prepend_chain_after(obj2gco(mainthread_acq(g)), head);
+  return n;
 }
 
 uint32_t lj_gc_flush_root_pending(global_State *g)
@@ -2219,6 +2275,22 @@ void lj_gc_linkobj_new(global_State *g, GCobj *o)
     lj_gc_linkobj(g, o);
     return;
   }
+  if (LJ_LIKELY(tg == g->main_tg && mt_active_acq(g) == 0 &&
+		gc2_n_workers_acq(g) == 0)) {
+    /*
+    ** Before secondary Lua threads or GC workers exist, the main TG is the
+    ** only pending-root producer and flusher. Avoid the CAS/RMW allocation
+    ** tax, but keep release publication so a later activation sees a complete
+    ** pending chain.
+    */
+    head = lj_tg_gcroot_pending_acq(tg);
+    if (head)
+      lj_obj_setgcwrel(o, head);
+    else
+      lj_obj_setgcwnullrel(o);
+    lj_tg_gcroot_pending_store_rel(tg, o);
+    return;
+  }
   head = lj_tg_gcroot_pending_acq(tg);
   do {
     if (head)
@@ -2226,6 +2298,33 @@ void lj_gc_linkobj_new(global_State *g, GCobj *o)
     else
       lj_obj_setgcwnullrel(o);
   } while (!lj_tg_gcroot_pending_cas(tg, &head, o));
+}
+
+void lj_gc_linkobj_new_after_main(global_State *g, GCobj *o)
+{
+  TGState *tg = lj_thr_get_tg();
+  GCobj *head;
+  if (!tg || tg->gl != g || lj_tg_flags_test_acq(tg, TGF_DEAD)) {
+    lj_gc_linkobj_after(obj2gco(mainthread_acq(g)), o);
+    return;
+  }
+  if (LJ_LIKELY(tg == g->main_tg && mt_active_acq(g) == 0 &&
+		gc2_n_workers_acq(g) == 0)) {
+    head = lj_tg_gcroot_pending_after_main_acq(tg);
+    if (head)
+      lj_obj_setgcwrel(o, head);
+    else
+      lj_obj_setgcwnullrel(o);
+    lj_tg_gcroot_pending_after_main_store_rel(tg, o);
+    return;
+  }
+  head = lj_tg_gcroot_pending_after_main_acq(tg);
+  do {
+    if (head)
+      lj_obj_setgcwrel(o, head);
+    else
+      lj_obj_setgcwnullrel(o);
+  } while (!lj_tg_gcroot_pending_after_main_cas(tg, &head, o));
 }
 
 void lj_gc_linkobj_after(GCobj *anchor, GCobj *o)

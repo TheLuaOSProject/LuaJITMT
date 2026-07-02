@@ -80,6 +80,7 @@ struct TGState {
   GC2SSBNode *ssb_active, *ssb_free;
   GCRef *ssb_next, *ssb_end, *ssb_base;
   GCobj *gcroot_pending;
+  GCobj *gcroot_pending_after_main;
   SBuf tmpbuf;
   TValue tmptv, tmptv2;
   PRNGState prng;
@@ -438,6 +439,12 @@ static LJ_AINLINE void lj_tg_gcroot_pending_store_rlx(TGState *tg,
   la_storeptr_rlx((void **)&tg->gcroot_pending, head);
 }
 
+static LJ_AINLINE void lj_tg_gcroot_pending_store_rel(TGState *tg,
+						      GCobj *head)
+{
+  la_storeptr_rel((void **)&tg->gcroot_pending, head);
+}
+
 static LJ_AINLINE int lj_tg_gcroot_pending_cas(TGState *tg, GCobj **oldp,
 					       GCobj *head)
 {
@@ -449,6 +456,40 @@ static LJ_AINLINE GCobj *lj_tg_gcroot_pending_xchg_acqrel(TGState *tg,
 							  GCobj *head)
 {
   return (GCobj *)la_xchgptr_acqrel((void **)&tg->gcroot_pending, head);
+}
+
+static LJ_AINLINE GCobj *lj_tg_gcroot_pending_after_main_acq(
+  const TGState *tg)
+{
+  return (GCobj *)la_loadptr_acq(
+    (void *const *)&tg->gcroot_pending_after_main);
+}
+
+static LJ_AINLINE void lj_tg_gcroot_pending_after_main_store_rlx(
+  TGState *tg, GCobj *head)
+{
+  la_storeptr_rlx((void **)&tg->gcroot_pending_after_main, head);
+}
+
+static LJ_AINLINE void lj_tg_gcroot_pending_after_main_store_rel(
+  TGState *tg, GCobj *head)
+{
+  la_storeptr_rel((void **)&tg->gcroot_pending_after_main, head);
+}
+
+static LJ_AINLINE int lj_tg_gcroot_pending_after_main_cas(TGState *tg,
+							  GCobj **oldp,
+							  GCobj *head)
+{
+  return la_casptr((void **)&tg->gcroot_pending_after_main, (void **)oldp,
+		   head, LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE GCobj *lj_tg_gcroot_pending_after_main_xchg_acqrel(
+  TGState *tg, GCobj *head)
+{
+  return (GCobj *)la_xchgptr_acqrel(
+    (void **)&tg->gcroot_pending_after_main, head);
 }
 
 static LJ_AINLINE uint32_t lj_tg_tid_acq(const TGState *tg)

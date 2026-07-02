@@ -10,19 +10,34 @@
   list. This keeps legacy sweep/finalizer visibility while removing the global
   root-list cache-line from normal new-object allocation.
 - Existing-object relinks stay immediate through `lj_gc_linkobj()` or
-  `lj_gc_linkobj_after()`: closed-upvalue relinks, userdata/thread anchoring,
-  and finalizer requeues do not use the pending stack because those paths may
-  already be using `nextgc` for another chain or need immediate root placement.
+  `lj_gc_linkobj_after()`: closed-upvalue relinks and finalizer requeues do not
+  use the pending stack because those paths may already be using `nextgc` for
+  another chain or need immediate root placement. Regular userdata allocation
+  also stays immediate for now because FINREG discovery still unlinks userdata
+  from the `mainthread->nextgc` chain before finalizer dispatch.
 - Converted new-object sites include `lj_mem_newgco()`, C/Lua closures, tables,
-  cdata, and saved traces. Open upvalues remain on the open-upvalue list until
-  closed, as before.
+  cdata, saved traces, and child lua_State objects. Open upvalues remain on the
+  open-upvalue list until closed, as before.
 - Flush points cover GC cycle start, sweep setup, root-chain sweep/unlink,
   GC2 arena sweep preservation/verification, FINREG cdata root unlink,
   root-oracle checks, TG detach/reclaim, and close-state/freeall scans.
 - `m3_gc_root_pending` verifies explicit flush and full-GC flush of a
-  stack-rooted pending table.
+  stack-rooted pending table. It also verifies that child lua_State objects
+  flush through the after-main queue, preserving the legacy
+  `mainthread->nextgc` topology.
+- The main-thread pre-MT fast path now links fresh objects onto
+  `TGState.gcroot_pending` with a release store instead of a CAS loop while no
+  secondary Lua thread has existed and no GC2 worker is running. Once
+  `mt_active` is latched or GC workers are enabled, allocation uses the CAS
+  pending stack again. This removes a single-thread allocation RMW without
+  changing the active-MT publication protocol.
+- Fresh child lua_State objects now use `TGState.gcroot_pending_after_main` and
+  `lj_gc_linkobj_new_after_main()`. This removes the direct
+  `mainthread->nextgc` CAS from coroutine/thread-state allocation without
+  moving those objects ahead of `mainthread`. Moving regular userdata onto this
+  queue remains a follow-up for the FINREG/root-unlink migration.
 
 This is a contention bridge, not the final ADR-4/plan bitmap-only object list:
 legacy sweep still walks `g->gc.root` after publication, and every new object
-still takes a per-TG atomic stack push until inline bump allocation and
-arena-owned object discovery replace this bridge.
+after MT activation still takes a per-TG atomic stack push until inline bump
+allocation and arena-owned object discovery replace this bridge.

@@ -661,7 +661,7 @@ lua_State *lj_state_new(lua_State *L)
   lj_state_env_copy_rel(L1, L);
   newwhite(g, obj2gco(L1));
   stack_init(L1, L);  /* init stack */
-  lj_gc_linkobj_after(obj2gco(mainthread_acq(g)), obj2gco(L1));
+  lj_gc_linkobj_new_after_main(g, obj2gco(L1));
   {
     GCtab *env = lj_state_env_acq(L1);
     if (env)

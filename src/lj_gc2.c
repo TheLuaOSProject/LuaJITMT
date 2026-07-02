@@ -4849,6 +4849,13 @@ size_t lj_gc2_finreg_udata_finalize(global_State *g, int all)
   size_t m = 0;
   if (!g)
     return 0;
+  /*
+  ** Fresh userdata may still be in the after-main pending-root queue. FINREG
+  ** discovery unlinks finalized userdata from the mainthread chain and later
+  ** requeues it; flush first so the pending queue cannot publish the same
+  ** object again after discovery.
+  */
+  (void)lj_gc_flush_root_pending(g);
   prev = NULL;
   node = gc2_finreg_udata_head_acq(g);
   while (node) {

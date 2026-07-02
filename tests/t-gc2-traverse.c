@@ -3474,6 +3474,7 @@ static void test_finreg_userdata_telemetry(lua_State *L, global_State *g)
   assert(gc2_finreg_udata_sets_acq(g) == sets0 + 5u);
   assert(gc2_finreg_udata_registered_acq(g) ==
 	 registered0 + 5u);
+  assert(lj_gc_flush_root_pending(g) >= 1u);
   assert(test_unlink_udata_object(g, obj2gco(udataV(L->top - 1))));
   lua_pop(L, 1);
   lua_gc(L, LUA_GCCOLLECT, 0);

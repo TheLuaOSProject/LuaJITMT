@@ -68,6 +68,7 @@ LJ_FUNC void lj_gc_arena_markobj(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc_arena_markmem(global_State *g, void *p);
 LJ_FUNC void lj_gc_linkobj(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc_linkobj_new(global_State *g, GCobj *o);
+LJ_FUNC void lj_gc_linkobj_new_after_main(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc_linkobj_after(GCobj *anchor, GCobj *o);
 LJ_FUNC uint32_t lj_gc_flush_root_pending(global_State *g);
 LJ_FUNC void *lj_mem_newgco_unlinked(lua_State *L, GCSize size);
