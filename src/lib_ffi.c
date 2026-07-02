@@ -1617,15 +1617,34 @@ static void ffi_typeinfo_storestr(lua_State *L, GCtab *tab, GCstr *key,
   }
 }
 
+static int ffi_typeinfo_snapshot_read(CTState *cts, CTypeID id, CType *out)
+{
+  int ok = ffi_ctype_predefined_snapshot(cts, id, out);
+  if (!ok)
+    ok = lj_ctype_snapshot(cts, id, out);
+  return ok;
+}
+
+static int ffi_typeinfo_snapshot_wait(lua_State *L, CTState *cts,
+				      CTypeID id, CType *out)
+{
+  for (;;) {
+    int ok = ffi_typeinfo_snapshot_read(cts, id, out);
+    if (ok >= 0)
+      return ok;
+    ffi_ctype_wait_or_record_ctbusy(L, cts);
+  }
+}
+
 /* Internal and unsupported API. Kept for stock LuaJIT FFI compatibility. */
 LJLIB_CF(ffi_typeinfo)
 {
   CTState *cts = ctype_cts(L);
   CTypeID id = (CTypeID)ffi_checkint(L, 1);
   CType snap;
-  int ok = ffi_ctype_predefined_snapshot(cts, id, &snap);
-  if (!ok)
-    ok = lj_ctype_snapshot(cts, id, &snap);
+  int ok = ffi_typeinfo_snapshot_read(cts, id, &snap);
+  if (ok < 0)
+    ok = ffi_typeinfo_snapshot_wait(L, cts, id, &snap);
   if (ok > 0) {
     CTInfo info = snap.info;
     CTSize size = snap.size;

@@ -140,6 +140,29 @@ static void assert_deep_suffixes_without_lock(lua_State *L, CTState *cts)
   assert(ljt_ctype_parse_seq(cts) == seq);
 }
 
+static void assert_typeinfo_waits_without_lock(lua_State *L, CTState *cts,
+					       TGState *tg)
+{
+  ParseReleaseCtx ctx;
+  pthread_t thread;
+  uint32_t seq0 = ljt_ctype_parse_seq(cts);
+
+  ctx.cts = cts;
+  ctx.tg = tg;
+  ctx.release_seq = ljt_ctype_hold_parse_token(cts);
+  ctx.saw_native = 0;
+  assert(ctx.release_seq == seq0 + 2u);
+
+  assert(pthread_create(&thread, NULL, release_parse_token, &ctx) == 0);
+  ljt_lua_dostring(L,
+    "local ffi = require('ffi')\n"
+    "local ti = ffi.typeinfo(lj_m7_typeinfo_snapshot_id)\n"
+    "assert(ti and ti.size == 4 and ti.info ~= nil)\n");
+  assert(pthread_join(thread, NULL) == 0);
+  assert(ctx.saw_native);
+  assert(ljt_ctype_parse_seq(cts) == ctx.release_seq);
+}
+
 int main(void)
 {
   lua_State *L = ljt_lua_newstate_openlibs();
@@ -578,22 +601,15 @@ int main(void)
   seq1 = ljt_ctype_parse_seq(cts);
   assert(seq1 == seq0 + 2u);
 
-  {
-    uint32_t release_seq = ljt_ctype_hold_parse_token(cts);
-    ljt_lua_dostring(L,
-      "local ffi = require('ffi')\n"
-      "local ti = ffi.typeinfo(lj_m7_typeinfo_int_id)\n"
-      "assert(ti and ti.size == 4)\n"
-      "assert(ffi.typeinfo(lj_m7_typeinfo_snapshot_id) == nil)\n");
-    assert((ctype_parse_token_acq(cts) & 1u) != 0);
-    ljt_ctype_release_parse_token(cts, release_seq);
-  }
+  assert_typeinfo_waits_without_lock(L, cts, tg);
+  seq1 = ljt_ctype_parse_seq(cts);
+  assert(seq1 == seq0 + 4u);
 
   ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"
     "local ti = ffi.typeinfo(lj_m7_typeinfo_snapshot_id)\n"
     "assert(ti and ti.size == 4)\n");
-  assert(ljt_ctype_parse_seq(cts) == seq1 + 2u);
+  assert(ljt_ctype_parse_seq(cts) == seq1);
 
   ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"
