@@ -52,7 +52,8 @@ local function smoke_code()
     "print(jit.os, jit.arch)",
     "local threading = require('threading')",
     "assert(type(threading.spawn) == 'function')",
-    "assert(type(threading.gcstats) == 'function')"
+    "assert(type(threading.gcstats) == 'function')",
+    "if jit.os == 'Windows' then local ffi = require('ffi'); ffi.cdef('unsigned long GetCurrentProcessId(void);'); local k = ffi.load('kernel32'); assert(k.GetCurrentProcessId() ~= 0) end"
   }, "; ")
 end
 

@@ -338,11 +338,42 @@ static const char *clib_extname(lua_State *L, const char *name)
   return name;
 }
 
+static void *clib_native_loadlib(lua_State *L, const char *name,
+				 DWORD *errp, uint32_t *actionsp)
+{
+  void *h;
+  lj_native_enter(L2TG(L));
+  h = LJ_WIN_LOADLIBA(name);
+  *errp = h ? 0 : GetLastError();
+  *actionsp = lj_native_leave(L);
+  return h;
+}
+
+static uint32_t clib_native_freelib(lua_State *L, void *handle)
+{
+  uint32_t actions = 0;
+  if (L) lj_native_enter(L2TG(L));
+  FreeLibrary((HINSTANCE)handle);
+  if (L) actions = lj_native_leave(L);
+  return actions;
+}
+
 static void *clib_loadlib(lua_State *L, const char *name, int global)
 {
-  DWORD oldwerr = GetLastError();
-  void *h = LJ_WIN_LOADLIBA(clib_extname(L, name));
-  if (!h) clib_error(L, "cannot load module " LUA_QS ": %s", name);
+  uint32_t actions;
+  int had_stopreq = clib_had_stopreq(L);
+  DWORD oldwerr = GetLastError(), err = 0;
+  void *h;
+  name = clib_extname(L, name);
+  h = clib_native_loadlib(L, name, &err, &actions);
+  if (!h) {
+    clib_checkstop_fresh(L, actions, had_stopreq);
+    SetLastError(err);
+    clib_error(L, "cannot load module " LUA_QS ": %s", name);
+  } else if (clib_fresh_stopreq(L, actions, had_stopreq)) {
+    uint32_t close_actions = clib_native_freelib(L, h);
+    lj_safepoint_checkstop(L, actions | close_actions);
+  }
   SetLastError(oldwerr);
   UNUSED(global);
   return h;
@@ -358,16 +389,12 @@ static uint32_t clib_unloadlib(lua_State *L, CLibrary *cl)
       void *h = clib_def_handle[i];
       if (h) {
 	clib_def_handle[i] = NULL;
-	if (L) lj_native_enter(L2TG(L));
-	FreeLibrary((HINSTANCE)h);
-	if (L) actions |= lj_native_leave(L);
+	actions |= clib_native_freelib(L, h);
       }
     }
 #endif
   } else if (cl->handle) {
-    if (L) lj_native_enter(L2TG(L));
-    FreeLibrary((HINSTANCE)cl->handle);
-    if (L) actions |= lj_native_leave(L);
+    actions |= clib_native_freelib(L, cl->handle);
   }
   return actions;
 }
@@ -376,10 +403,9 @@ static uint32_t clib_unloadlib(lua_State *L, CLibrary *cl)
 EXTERN_C IMAGE_DOS_HEADER __ImageBase;
 #endif
 
-static void *clib_getsym(lua_State *L, CLibrary *cl, const char *name)
+static void *clib_getsym_raw(CLibrary *cl, const char *name)
 {
   void *p = NULL;
-  UNUSED(L);
   if (cl->handle == CLIB_DEFHANDLE) {  /* Search default libraries. */
     MSize i;
     for (i = 0; i < CLIB_HANDLE_MAX; i++) {
@@ -412,6 +438,21 @@ static void *clib_getsym(lua_State *L, CLibrary *cl, const char *name)
   } else {
     p = (void *)GetProcAddress((HINSTANCE)cl->handle, name);
   }
+  return p;
+}
+
+static void *clib_getsym(lua_State *L, CLibrary *cl, const char *name)
+{
+  uint32_t actions;
+  int had_stopreq = clib_had_stopreq(L);
+  DWORD err = 0;
+  void *p;
+  lj_native_enter(L2TG(L));
+  p = clib_getsym_raw(cl, name);
+  if (!p) err = GetLastError();
+  actions = lj_native_leave(L);
+  clib_checkstop_fresh(L, actions, had_stopreq);
+  if (!p) SetLastError(err);
   return p;
 }
 
