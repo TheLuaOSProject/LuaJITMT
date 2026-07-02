@@ -757,6 +757,14 @@ static void LJ_FASTCALL recff_math_random(jit_State *J, RecordFFData *rd)
   UNUSED(rd);
 }
 
+/* -- Threading library fast functions ------------------------------------ */
+
+static void LJ_FASTCALL recff_threading_cpucount(jit_State *J, RecordFFData *rd)
+{
+  J->base[0] = lj_ir_call(J, IRCALL_lj_thr_cpucount);
+  UNUSED(rd);
+}
+
 /* -- Bit library fast functions ------------------------------------------ */
 
 /* Record bit.tobit. */

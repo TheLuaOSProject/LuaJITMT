@@ -215,6 +215,7 @@ typedef struct CCallInfo {
   _(ANY,	lj_gc_pubuv,		2,  FS, NIL, 0) \
   _(ANY,	lj_gc2_barrier_tab_g,	2,   S, NIL, 0) \
   _(ANY,	lj_mem_newgco,		2,  FA, PGC, CCI_L|CCI_T) \
+  _(ANY,	lj_thr_cpucount,	0,   S, INT, 0) \
   _(ANY,	lj_prng_u64d,		1,  FS, NUM, CCI_CASTU64) \
   _(ANY,	lj_vm_modi,		2,  FN, INT, 0) \
   _(ANY,	log10,			1,   N, NUM, XA_FP) \

@@ -30,6 +30,7 @@
 #include "lj_carith.h"
 #include "lj_ccall.h"
 #endif
+#include "lj_thr.h"
 #include "lj_vm.h"
 #include "lj_strscan.h"
 #include "lj_serialize.h"

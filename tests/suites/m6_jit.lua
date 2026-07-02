@@ -1994,6 +1994,10 @@ assert(util.traceinfo(1), "threading.now/cpucount loop did not trace")
         error("read-only threading fastfuncs hit the hard NYI stop:\n" ..
               data, 0)
       end
+      if not contains(data, "CALLS  lj_thr_cpucount") then
+        error("threading.cpucount() did not record as a runtime helper call:\n" ..
+              data, 0)
+      end
       checks.assert_dump_contains(t, dump, "TRACE 1",
                                   "threading NYI boundary trace")
       print("M6 JIT threading NYI boundary behavior passed")

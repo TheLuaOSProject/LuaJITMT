@@ -1436,7 +1436,7 @@ static void threading_gc_stats_push(lua_State *L)
 
 LJLIB_PUSH(top-4) LJLIB_SET(!)  /* Set environment to thread methods. */
 
-LJLIB_CF(threading_cpucount)
+LJLIB_CF(threading_cpucount)		LJLIB_REC(.)
 {
   setintV(L->top++, (int32_t)lj_thr_cpucount());
   return 1;
