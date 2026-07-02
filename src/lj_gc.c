@@ -46,6 +46,20 @@
 #define GCSWEEPCOST	10
 #define GCFINALIZECOST	100
 
+static GCSize gc_step_debt_quantum(global_State *g)
+{
+  UNUSED(g);
+  return (GCSize)LJ_GC2_HELPER_IDLE_STEP;
+}
+
+static int gc_hard_assist_due(global_State *g, TGState *tg)
+{
+  if (!lj_gc2_hard_limit_reached(g))
+    return 0;
+  return !tg || lj_gc2_hard_load(g) < LJ_GC2_ACCT_FLUSH ||
+	 lj_tg_local_total_acq(tg) >= LJ_GC2_ACCT_FLUSH;
+}
+
 /* Macros to set GCobj colors and flags. */
 #define white2gray(x)		(lj_obj_cleargcflags((x), LJ_GC_WHITES))
 #define gray2black(x)		(lj_obj_addgcflags((x), LJ_GC_BLACK))
@@ -1800,13 +1814,15 @@ int LJ_FASTCALL lj_gc_step(lua_State *L)
       return 1;  /* Finished a GC cycle. */
     }
   } while (sizeof(lim) == 8 ? ((int64_t)lim > 0) : ((int32_t)lim > 0));
-  if (g->gc.debt < GCSTEPSIZE) {
-    lj_gc_threshold_store(g, lj_gc_total_load(g) + GCSTEPSIZE);
-    vmstate_store_rel(g, ostate);
-    return -1;
-  } else {
-    g->gc.debt -= GCSTEPSIZE;
-    lj_gc_threshold_store(g, lj_gc_total_load(g));
+  {
+    GCSize quantum = gc_step_debt_quantum(g);
+    if (g->gc.debt < quantum) {
+      lj_gc_threshold_store(g, lj_gc_total_load(g) + quantum);
+      vmstate_store_rel(g, ostate);
+      return -1;
+    }
+    g->gc.debt -= quantum;
+    lj_gc_threshold_store(g, lj_gc_total_load(g) + quantum);
     vmstate_store_rel(g, ostate);
     return 0;
   }
@@ -1814,12 +1830,13 @@ int LJ_FASTCALL lj_gc_step(lua_State *L)
 
 static void gc_step_assist_top(lua_State *L, global_State *g, int threshold_step)
 {
+  TGState *tg = L2TG(L);
   lj_gc2_check_trigger(g, L2TG(L));
   if (!threshold_step)
     threshold_step = lj_gc_total_load(g) >= lj_gc_threshold_load(g);
-  if (lj_gc2_hard_limit_reached(g)) {
+  if (gc_hard_assist_due(g, tg)) {
     gc2_interp_hard_checks_add(g, 1);
-    lj_gc2_assist(g, L2TG(L));  /* 05 section 5.11 interpreter assist bridge. */
+    lj_gc2_assist(g, tg);  /* 05 section 5.11 interpreter assist bridge. */
   }
   if (threshold_step)
     lj_gc_step(L);
@@ -1852,7 +1869,7 @@ int LJ_FASTCALL lj_gc_step_jit(global_State *g, MSize steps)
   tg = L2TG(L);
   lj_gc2_check_trigger(g, tg);
   threshold_step = lj_gc_total_load(g) >= lj_gc_threshold_load(g);
-  hard_step = lj_gc2_hard_limit_reached(g);
+  hard_step = gc_hard_assist_due(g, tg);
   if (hard_step) {
     gc2_jit_hard_checks_add(g, 1);
     lj_gc2_assist(g, tg);  /* 05 section 5.11 trace-side assist bridge. */

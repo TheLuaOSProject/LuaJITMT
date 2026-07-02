@@ -1158,12 +1158,18 @@ void lj_gc2_check_trigger(global_State *g, TGState *tg)
 
 void lj_gc2_account_alloc(global_State *g, TGState *tg, GCSize bytes)
 {
-  uint64_t old;
+  uint64_t old, total;
+  int flushed = 0;
   if (!g || !tg || bytes == 0)
     return;
   old = lj_tg_local_total_add_rlx(tg, (uint64_t)bytes);
-  if (old + (uint64_t)bytes < old || old + (uint64_t)bytes >= LJ_GC2_ACCT_FLUSH)
+  total = old + (uint64_t)bytes;
+  if (total < old || total >= LJ_GC2_ACCT_FLUSH) {
     (void)lj_gc2_flush_alloc(g, tg);
+    flushed = 1;
+  }
+  if (!flushed)
+    return;
   lj_gc2_check_trigger(g, tg);
   if (lj_gc2_hard_limit_reached(g))  /* 05 section 5.11 hard limit. */
     (void)lj_gc2_assist(g, tg);

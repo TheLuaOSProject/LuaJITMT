@@ -768,6 +768,21 @@ int main(void)
   assert(la_load64_acq(&g->gc2.alloc_since_trigger) == 0);
   lj_gc2_cycle_to_idle(g);
 
+  lj_gc2_mark_begin(g);
+  la_store64_rel(&tg->local_total, 0);
+  la_store64_rel(&g->gc2.hard_bytes, 2u * LJ_GC2_ACCT_FLUSH);
+  la_store32_rel(&g->gc2.assist_shift, 0);
+  la_store64_rel(&g->gc2.alloc_since_trigger, 2u * LJ_GC2_ACCT_FLUSH + 1u);
+  lj_gc_threshold_store(g, LJ_MAX_MEM);
+  assist_runs0 = gc2_assist_runs_acq(g);
+  lj_gc_step_fixtop(L);
+  assert(gc2_assist_runs_acq(g) == assist_runs0);
+  lj_gc2_account_alloc(g, tg, LJ_GC2_ACCT_FLUSH - 1u);
+  assert(gc2_assist_runs_acq(g) == assist_runs0);
+  lj_gc2_account_alloc(g, tg, 1u);
+  assert(gc2_assist_runs_acq(g) == assist_runs0 + 1u);
+  lj_gc2_cycle_to_idle(g);
+
   lua_settop(L, 0);
   lua_newtable(L);
   parent = tabV(L->top - 1);

@@ -588,6 +588,11 @@ static LJ_AINLINE uint64_t lj_tg_local_total_xchg_acqrel(TGState *tg,
   return la_xchg64_acqrel(&tg->local_total, bytes);  /* 04 section 4.8. */
 }
 
+static LJ_AINLINE uint64_t lj_tg_local_total_acq(TGState *tg)
+{
+  return la_load64_acq(&tg->local_total);  /* 04 section 4.8. */
+}
+
 static LJ_AINLINE uint64_t lj_tg_local_total_add_rlx(TGState *tg,
 						     uint64_t bytes)
 {
