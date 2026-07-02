@@ -1819,11 +1819,16 @@ LUA_API void lua_setfield(lua_State *L, int idx, const char *k)
 
 LUA_API void lua_rawset(lua_State *L, int idx)
 {
+  LJStateClaim claim;
+  lua_State *errL = api_errstate(L);
   TValue snap;
-  GCtab *t = tabV(index2adr_read(L, idx, &snap));
+  GCtab *t;
   TValue *dst, *key;
   int barrier_done = 0;
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(errL, "thread busy");
   lj_checkapi_slot(2);
+  t = tabV(index2adr_read(L, idx, &snap));
   key = L->top-2;
   for (;;) {
     int weakwr, rc;
@@ -1849,16 +1854,22 @@ LUA_API void lua_rawset(lua_State *L, int idx)
     lj_gc_pubtab(L, t);
   }
   L->top = key;
+  lj_state_dropresumeclaim(&claim);
 }
 
 LUA_API void lua_rawseti(lua_State *L, int idx, int n)
 {
+  LJStateClaim claim;
+  lua_State *errL = api_errstate(L);
   TValue snap;
-  GCtab *t = tabV(index2adr_read(L, idx, &snap));
+  GCtab *t;
   TValue *dst, *src;
   TValue key;
   int barrier_done = 0;
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(errL, "thread busy");
   lj_checkapi_slot(1);
+  t = tabV(index2adr_read(L, idx, &snap));
   src = L->top-1;
   setintV(&key, n);
   for (;;) {
@@ -1885,6 +1896,7 @@ LUA_API void lua_rawseti(lua_State *L, int idx, int n)
     lj_gc_pubtabtv(L, t, dst);
   }
   L->top = src;
+  lj_state_dropresumeclaim(&claim);
 }
 
 LUA_API int lua_setmetatable(lua_State *L, int idx)

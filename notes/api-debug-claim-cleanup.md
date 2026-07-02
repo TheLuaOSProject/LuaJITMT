@@ -76,6 +76,10 @@ Permanent shape:
   before dropping ownerless claims. Push-style raw getters use protected
   one-slot growth through `api_checkstack1_claimed()`, which drops the resume
   claim before reporting stack allocation errors.
+- Raw object setter APIs (`lua_rawset` and `lua_rawseti`) resume-claim the
+  target state before reading table/key/value stack slots, keep the claim
+  through CAS publication and write barriers, then pop consumed stack slots
+  before dropping the claim.
 - Upvalue introspection APIs (`lua_getupvalue` and `lua_upvalueid`) claim the
   target state before reading the function slot. `lua_getupvalue` uses the
   protected one-slot growth helper and release-publishes the copied upvalue

@@ -1036,6 +1036,56 @@ END {
 
   awk([=[
 function reset(name) {
+  fun = name; started = 0; depth = 0
+  claim = 0; slot = 0; table = 0; top = 0; store = 0; barrier = 0
+  pop = 0; drop = 0
+}
+function finish() {
+  if (fun) {
+    if (!claim || !slot || !table || !top || !store || !barrier ||
+	!pop || !drop || claim > slot || slot > table || table > top ||
+	top > store || store > barrier || barrier > pop || pop > drop) {
+      print fun " raw setter owner-claim boundary missing"
+      exit 1
+    }
+    seen++
+  }
+  fun = ""
+}
+function count_char(text, ch,    n, i) {
+  n = 0
+  for (i = 1; i <= length(text); i++)
+    if (substr(text, i, 1) == ch) n++
+  return n
+}
+BEGIN { fun = ""; seen = 0 }
+/^LUA_API void lua_rawset\(lua_State \*L,/ { finish(); reset("lua_rawset"); next }
+/^LUA_API void lua_rawseti\(lua_State \*L,/ { finish(); reset("lua_rawseti"); next }
+fun {
+  if (index($0, "{")) started = 1
+  depth += count_char($0, "{")
+  depth -= count_char($0, "}")
+  if (/lj_state_resumeclaim/) claim = NR
+  if (/lj_checkapi_slot/) slot = NR
+  if (/index2adr_read/) table = NR
+  if (/L->top-/) top = NR
+  if (/lj_tab_trystoretv_cas_keyed/) store = NR
+  if (/lj_gc_pubtab/) barrier = NR
+  if (/L->top =/) pop = NR
+  if (/lj_state_dropresumeclaim/) drop = NR
+  if (started && depth == 0) finish()
+}
+END {
+  finish()
+  if (seen != 2) {
+    print "missing raw setter owner-claim guard coverage"
+    exit 1
+  }
+}
+]=], "src/lj_api.c")
+
+  awk([=[
+function reset(name) {
   fun = name; started = 0; depth = 0; claim = 0; call = 0; drop = 0
 }
 function finish() {
