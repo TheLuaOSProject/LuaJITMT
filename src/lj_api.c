@@ -164,6 +164,24 @@ static lua_State *api_errstate(lua_State *L)
   return cur && G(cur) == G(L) ? cur : L;
 }
 
+static void api_vm_call_claimed(lua_State *L, TValue *base, int nres1,
+				LJStateClaim *claim)
+{
+  if (claim && claim->release) {
+    global_State *g = G(L);
+    uint8_t oldh = hook_save(g);
+    int status = lj_vm_pcall(L, base, nres1, 0);
+    if (status)
+      hook_restore(g, oldh);
+    if (status) {
+      lj_state_dropresumeclaim(claim);
+      lj_err_throw(L, status);
+    }
+  } else {
+    lj_vm_call(L, base, nres1);
+  }
+}
+
 /* -- Miscellaneous API functions ----------------------------------------- */
 
 LUA_API int lua_status(lua_State *L)
@@ -421,58 +439,92 @@ LUA_API int lua_rawequal(lua_State *L, int idx1, int idx2)
 
 LUA_API int lua_equal(lua_State *L, int idx1, int idx2)
 {
+  LJStateClaim claim;
   TValue snap1, snap2;
-  cTValue *o1 = index2adr_read(L, idx1, &snap1);
-  cTValue *o2 = index2adr_read(L, idx2, &snap2);
+  cTValue *o1, *o2;
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(api_errstate(L), "thread busy");
+  o1 = index2adr_read(L, idx1, &snap1);
+  o2 = index2adr_read(L, idx2, &snap2);
   if (tvisint(o1) && tvisint(o2)) {
-    return intV(o1) == intV(o2);
+    int ok = intV(o1) == intV(o2);
+    lj_state_dropresumeclaim(&claim);
+    return ok;
   } else if (tvisnumber(o1) && tvisnumber(o2)) {
-    return numberVnum(o1) == numberVnum(o2);
+    int ok = numberVnum(o1) == numberVnum(o2);
+    lj_state_dropresumeclaim(&claim);
+    return ok;
   } else if (itype(o1) != itype(o2)) {
+    lj_state_dropresumeclaim(&claim);
     return 0;
   } else if (tvispri(o1)) {
-    return o1 != niltv(L) && o2 != niltv(L);
+    int ok = o1 != niltv(L) && o2 != niltv(L);
+    lj_state_dropresumeclaim(&claim);
+    return ok;
 #if LJ_64 && !LJ_GC64
   } else if (tvislightud(o1)) {
-    return o1->u64 == o2->u64;
+    int ok = o1->u64 == o2->u64;
+    lj_state_dropresumeclaim(&claim);
+    return ok;
 #endif
   } else if (gcrefeq(o1->gcr, o2->gcr)) {
+    lj_state_dropresumeclaim(&claim);
     return 1;
   } else if (!tvistabud(o1)) {
+    lj_state_dropresumeclaim(&claim);
     return 0;
   } else {
     TValue *base = lj_meta_equal(L, gcV(o1), gcV(o2), 0);
     if ((uintptr_t)base <= 1) {
-      return (int)(uintptr_t)base;
+      int ok = (int)(uintptr_t)base;
+      lj_state_dropresumeclaim(&claim);
+      return ok;
     } else {
+      int ok;
       L->top = base+2;
-      lj_vm_call(L, base, 1+1);
+      api_vm_call_claimed(L, base, 1+1, &claim);
       L->top -= 2+LJ_FR2;
-      return tvistruecond(L->top+1+LJ_FR2);
+      ok = tvistruecond(L->top+1+LJ_FR2);
+      lj_state_dropresumeclaim(&claim);
+      return ok;
     }
   }
 }
 
 LUA_API int lua_lessthan(lua_State *L, int idx1, int idx2)
 {
+  LJStateClaim claim;
   TValue snap1, snap2;
-  cTValue *o1 = index2adr_read(L, idx1, &snap1);
-  cTValue *o2 = index2adr_read(L, idx2, &snap2);
+  cTValue *o1, *o2;
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(api_errstate(L), "thread busy");
+  o1 = index2adr_read(L, idx1, &snap1);
+  o2 = index2adr_read(L, idx2, &snap2);
   if (o1 == niltv(L) || o2 == niltv(L)) {
+    lj_state_dropresumeclaim(&claim);
     return 0;
   } else if (tvisint(o1) && tvisint(o2)) {
-    return intV(o1) < intV(o2);
+    int ok = intV(o1) < intV(o2);
+    lj_state_dropresumeclaim(&claim);
+    return ok;
   } else if (tvisnumber(o1) && tvisnumber(o2)) {
-    return numberVnum(o1) < numberVnum(o2);
+    int ok = numberVnum(o1) < numberVnum(o2);
+    lj_state_dropresumeclaim(&claim);
+    return ok;
   } else {
     TValue *base = lj_meta_comp(L, o1, o2, 0);
     if ((uintptr_t)base <= 1) {
-      return (int)(uintptr_t)base;
+      int ok = (int)(uintptr_t)base;
+      lj_state_dropresumeclaim(&claim);
+      return ok;
     } else {
+      int ok;
       L->top = base+2;
-      lj_vm_call(L, base, 1+1);
+      api_vm_call_claimed(L, base, 1+1, &claim);
       L->top -= 2+LJ_FR2;
-      return tvistruecond(L->top+1+LJ_FR2);
+      ok = tvistruecond(L->top+1+LJ_FR2);
+      lj_state_dropresumeclaim(&claim);
+      return ok;
     }
   }
 }
@@ -927,7 +979,10 @@ LUA_API void *lua_newuserdata(lua_State *L, size_t size)
 
 LUA_API void lua_concat(lua_State *L, int n)
 {
+  LJStateClaim claim;
   lj_checkapi_slot(n);
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(api_errstate(L), "thread busy");
   if (n >= 2) {
     n--;
     do {
@@ -938,7 +993,7 @@ LUA_API void lua_concat(lua_State *L, int n)
       }
       n -= (int)(L->top - (top - 2*LJ_FR2));
       L->top = top+2;
-      lj_vm_call(L, top, 1+1);
+      api_vm_call_claimed(L, top, 1+1, &claim);
       L->top -= 1+LJ_FR2;
       copyTV(L, L->top-1, L->top+LJ_FR2);
     } while (--n > 0);
@@ -947,39 +1002,50 @@ LUA_API void lua_concat(lua_State *L, int n)
     incr_top(L);
   }
   /* else n == 1: nothing to do. */
+  lj_state_dropresumeclaim(&claim);
 }
 
 /* -- Object getters ------------------------------------------------------ */
 
 LUA_API void lua_gettable(lua_State *L, int idx)
 {
+  LJStateClaim claim;
   TValue snap;
-  cTValue *t = index2adr_check_read(L, idx, &snap);
-  cTValue *v = lj_meta_tget(L, t, L->top-1);
+  cTValue *t, *v;
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(api_errstate(L), "thread busy");
+  t = index2adr_check_read(L, idx, &snap);
+  v = lj_meta_tget(L, t, L->top-1);
   if (v == NULL) {
     L->top += 2;
-    lj_vm_call(L, L->top-2, 1+1);
+    api_vm_call_claimed(L, L->top-2, 1+1, &claim);
     L->top -= 2+LJ_FR2;
     v = L->top+1+LJ_FR2;
   }
   copyTV(L, L->top-1, v);
+  lj_state_dropresumeclaim(&claim);
 }
 
 LUA_API void lua_getfield(lua_State *L, int idx, const char *k)
 {
+  LJStateClaim claim;
   TValue snap;
-  cTValue *v, *t = index2adr_check_read(L, idx, &snap);
+  cTValue *v, *t;
   TValue key;
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(api_errstate(L), "thread busy");
+  t = index2adr_check_read(L, idx, &snap);
   setstrV(L, &key, lj_str_newz(L, k));
   v = lj_meta_tget(L, t, &key);
   if (v == NULL) {
     L->top += 2;
-    lj_vm_call(L, L->top-2, 1+1);
+    api_vm_call_claimed(L, L->top-2, 1+1, &claim);
     L->top -= 2+LJ_FR2;
     v = L->top+1+LJ_FR2;
   }
   copyTV(L, L->top, v);
   incr_top(L);
+  lj_state_dropresumeclaim(&claim);
 }
 
 LUA_API void lua_rawget(lua_State *L, int idx)
@@ -1161,11 +1227,15 @@ LUALIB_API void *luaL_checkudata(lua_State *L, int idx, const char *tname)
 
 LUA_API void lua_settable(lua_State *L, int idx)
 {
+  LJStateClaim claim;
   TValue *o;
   TValue snap;
-  cTValue *t = index2adr_check_read(L, idx, &snap);
+  cTValue *t;
   GCtab *owner;
   lj_checkapi_slot(2);
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(api_errstate(L), "thread busy");
+  t = index2adr_check_read(L, idx, &snap);
   for (;;) {
     o = lj_meta_tset_owner(L, t, L->top-2, &owner);
     if (o) {
@@ -1186,6 +1256,7 @@ LUA_API void lua_settable(lua_State *L, int idx)
 	  lj_gc2_barrier_tv_pair(L, obj2gco(owner), o);
 	}
 	L->top = key;
+	lj_state_dropresumeclaim(&claim);
 	return;
       }
       lj_tab_store_wait_l(L);  /* C API settable saw stale/FORWARD slot. */
@@ -1193,8 +1264,9 @@ LUA_API void lua_settable(lua_State *L, int idx)
       TValue *base = L->top;
       copyTV(L, base+2, base-3-2*LJ_FR2);
       L->top = base+3;
-      lj_vm_call(L, base, 0+1);
+      api_vm_call_claimed(L, base, 0+1, &claim);
       L->top -= 3+LJ_FR2;
+      lj_state_dropresumeclaim(&claim);
       return;
     }
   }
@@ -1202,12 +1274,16 @@ LUA_API void lua_settable(lua_State *L, int idx)
 
 LUA_API void lua_setfield(lua_State *L, int idx, const char *k)
 {
+  LJStateClaim claim;
   TValue *o;
   TValue key;
   TValue snap;
-  cTValue *t = index2adr_check_read(L, idx, &snap);
+  cTValue *t;
   GCtab *owner;
   lj_checkapi_slot(1);
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(api_errstate(L), "thread busy");
+  t = index2adr_check_read(L, idx, &snap);
   setstrV(L, &key, lj_str_newz(L, k));
   for (;;) {
     o = lj_meta_tset_owner(L, t, &key, &owner);
@@ -1229,6 +1305,7 @@ LUA_API void lua_setfield(lua_State *L, int idx, const char *k)
 	  lj_gc2_barrier_tv_pair(L, obj2gco(owner), o);
 	}
 	L->top = val;
+	lj_state_dropresumeclaim(&claim);
 	return;
       }
       lj_tab_store_wait_l(L);  /* C API setfield saw stale/FORWARD slot. */
@@ -1236,8 +1313,9 @@ LUA_API void lua_setfield(lua_State *L, int idx, const char *k)
       TValue *base = L->top;
       copyTV(L, base+2, base-3-2*LJ_FR2);
       L->top = base+3;
-      lj_vm_call(L, base, 0+1);
+      api_vm_call_claimed(L, base, 0+1, &claim);
       L->top -= 2+LJ_FR2;
+      lj_state_dropresumeclaim(&claim);
       return;
     }
   }
@@ -1527,15 +1605,20 @@ LUA_API int lua_cpcall(lua_State *L, lua_CFunction func, void *ud)
 
 LUALIB_API int luaL_callmeta(lua_State *L, int idx, const char *field)
 {
+  LJStateClaim claim;
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(api_errstate(L), "thread busy");
   if (luaL_getmetafield(L, idx, field)) {
     TValue snap;
     TValue *top = L->top--;
     if (LJ_FR2) setnilV(top++);
     copyTV(L, top++, index2adr_read(L, idx, &snap));
     L->top = top;
-    lj_vm_call(L, top-1, 1+1);
+    api_vm_call_claimed(L, top-1, 1+1, &claim);
+    lj_state_dropresumeclaim(&claim);
     return 1;
   }
+  lj_state_dropresumeclaim(&claim);
   return 0;
 }
 

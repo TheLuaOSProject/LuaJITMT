@@ -195,6 +195,76 @@ END {
 ]=], "src/lj_api.c")
 
   awk([=[
+BEGIN { infn = 0; pcall = 0; drop = 0; rethrow = 0; rawcall = 0 }
+/^static void api_vm_call_claimed\(lua_State \*L,/ { infn = 1; next }
+infn && /^}/ { infn = 0; next }
+infn && /lj_vm_pcall/ { pcall = NR }
+infn && /lj_vm_call/ { rawcall = NR }
+infn && /lj_state_dropresumeclaim/ { drop = NR }
+infn && /lj_err_throw/ {
+  rethrow = NR
+  if (!drop || drop > NR) {
+    print "api_vm_call_claimed rethrows before dropping resume claim"
+    exit 1
+  }
+}
+END {
+  if (!pcall || !rawcall || !drop || !rethrow || pcall > drop ||
+      drop > rethrow) {
+    print "api_vm_call_claimed cleanup boundary missing"
+    exit 1
+  }
+}
+]=], "src/lj_api.c")
+
+  awk([=[
+function reset(name) {
+  fun = name; started = 0; depth = 0; claim = 0; call = 0; drop = 0
+}
+function finish() {
+  if (fun) {
+    if (!claim || !call || !drop || claim > call || call > drop) {
+      print fun " must claim state around public metamethod VM entry"
+      exit 1
+    }
+    seen++
+  }
+  fun = ""
+}
+function count_char(text, ch,    n, i) {
+  n = 0
+  for (i = 1; i <= length(text); i++)
+    if (substr(text, i, 1) == ch) n++
+  return n
+}
+BEGIN { fun = ""; seen = 0 }
+/^LUA_API int lua_equal\(lua_State \*L,/ { finish(); reset("lua_equal"); next }
+/^LUA_API int lua_lessthan\(lua_State \*L,/ { finish(); reset("lua_lessthan"); next }
+/^LUA_API void lua_concat\(lua_State \*L,/ { finish(); reset("lua_concat"); next }
+/^LUA_API void lua_gettable\(lua_State \*L,/ { finish(); reset("lua_gettable"); next }
+/^LUA_API void lua_getfield\(lua_State \*L,/ { finish(); reset("lua_getfield"); next }
+/^LUA_API void lua_settable\(lua_State \*L,/ { finish(); reset("lua_settable"); next }
+/^LUA_API void lua_setfield\(lua_State \*L,/ { finish(); reset("lua_setfield"); next }
+/^LUALIB_API int luaL_callmeta\(lua_State \*L,/ { finish(); reset("luaL_callmeta"); next }
+fun {
+  if (index($0, "{")) started = 1
+  depth += count_char($0, "{")
+  depth -= count_char($0, "}")
+  if (/lj_state_resumeclaim/) claim = NR
+  if (/api_vm_call_claimed/) call = NR
+  if (/lj_state_dropresumeclaim/) drop = NR
+  if (started && depth == 0) finish()
+}
+END {
+  finish()
+  if (seen != 8) {
+    print "missing public metamethod VM entry guard coverage"
+    exit 1
+  }
+}
+]=], "src/lj_api.c")
+
+  awk([=[
 BEGIN { infn = 0; cpcall = 0; drop = 0; rethrow = 0 }
 /^LUA_API int lua_resume\(lua_State \*L,/ { infn = 1; next }
 infn && /^}/ { infn = 0; next }

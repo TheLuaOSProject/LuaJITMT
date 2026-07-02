@@ -126,6 +126,77 @@ static void check_call_entry_unowned(lua_State *L)
   lua_settop(L, 0);
 }
 
+static lua_State *load_ownerless_results(lua_State *L, const char *src,
+					 int nres)
+{
+  lua_State *co = lua_newthread(L);
+  assert(luaL_loadstring(co, src) == 0);
+  lua_call(co, 0, nres);
+  assert(lj_state_owner_acq(co) == 0);
+  return co;
+}
+
+static void check_metamethod_api_unowned(lua_State *L)
+{
+  lua_State *co;
+  lua_settop(L, 0);
+
+  co = load_ownerless_results(L,
+    "local mt={__eq=function(a,b)return true end};"
+    "return setmetatable({},mt), setmetatable({},mt)", 2);
+  assert(lua_equal(co, -1, -2) == 1);
+  assert(lj_state_owner_acq(co) == 0);
+
+  co = load_ownerless_results(L,
+    "local mt={__lt=function(a,b)return true end};"
+    "return setmetatable({},mt), setmetatable({},mt)", 2);
+  assert(lua_lessthan(co, -2, -1) == 1);
+  assert(lj_state_owner_acq(co) == 0);
+
+  co = load_ownerless_results(L,
+    "local mt={__concat=function(a,b)return 'joined' end};"
+    "return setmetatable({},mt), setmetatable({},mt)", 2);
+  lua_concat(co, 2);
+  assert(strcmp(lua_tostring(co, -1), "joined") == 0);
+  assert(lj_state_owner_acq(co) == 0);
+
+  co = load_ownerless_results(L,
+    "return setmetatable({}, {__index=function(t,k)return 42 end}), 'x'", 2);
+  lua_gettable(co, -2);
+  assert(lua_tointeger(co, -1) == 42);
+  assert(lj_state_owner_acq(co) == 0);
+
+  co = load_ownerless_results(L,
+    "return setmetatable({}, {__index=function(t,k)return 43 end})", 1);
+  lua_getfield(co, -1, "x");
+  assert(lua_tointeger(co, -1) == 43);
+  assert(lj_state_owner_acq(co) == 0);
+
+  co = load_ownerless_results(L,
+    "return setmetatable({}, {__newindex=function(t,k,v) rawset(t,k,v+1) end}),"
+    "'x', 41", 3);
+  lua_settable(co, -3);
+  lua_getfield(co, -1, "x");
+  assert(lua_tointeger(co, -1) == 42);
+  assert(lj_state_owner_acq(co) == 0);
+
+  co = load_ownerless_results(L,
+    "return setmetatable({}, {__newindex=function(t,k,v) rawset(t,k,v+1) end}),"
+    "41", 2);
+  lua_setfield(co, -2, "x");
+  lua_getfield(co, -1, "x");
+  assert(lua_tointeger(co, -1) == 42);
+  assert(lj_state_owner_acq(co) == 0);
+
+  co = load_ownerless_results(L,
+    "return setmetatable({}, {__call=function() return 55 end})", 1);
+  assert(luaL_callmeta(co, -1, "__call") == 1);
+  assert(lua_tointeger(co, -1) == 55);
+  assert(lj_state_owner_acq(co) == 0);
+
+  lua_settop(L, 0);
+}
+
 static void check_resume_unowned(lua_State *L)
 {
   uint32_t tid = lj_thr_current_id(G(L));
@@ -495,6 +566,7 @@ int main(void)
   check_xmove_unowned_source(L);
   check_thread_env_unowned(L);
   check_call_entry_unowned(L);
+  check_metamethod_api_unowned(L);
   check_resume_unowned(L);
   check_lua_load_unowned(L);
   check_lua_getinfo_unowned(L);
