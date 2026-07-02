@@ -2599,21 +2599,34 @@ static void asm_cnew(ASMState *as, IRIns *ir)
 
 static void asm_tbar(ASMState *as, IRIns *ir)
 {
-  const CCallInfo *ci = &lj_ir_callinfo[IRCALL_lj_gc2_barrier_tab_g];
-  IRRef args[2];
+  int keybarrier = ir->op2 != 0;
+  const CCallInfo *ci = keybarrier ?
+    &lj_ir_callinfo[IRCALL_lj_gc2_barrier_key_g] :
+    &lj_ir_callinfo[IRCALL_lj_gc2_barrier_tab_g];
+  IRRef args[3];
   Reg tab, tmp;
-  MCLabel l_end;
+  MCLabel l_end, l_gate;
   ra_evictset(as, RSET_SCRATCH);
   args[0] = ASMREF_TMP1;  /* global_State *g */
   args[1] = ir->op1;      /* GCtab *t       */
+  args[2] = ASMREF_TMP2;  /* cTValue *key   */
   l_end = emit_label(as);
   asm_gencall(as, ci, args);
   checkmclim(as);  /* M6: split long TBAR sequence for assert red zone. */
-  emit_loada(as, ra_releasetmp(as, ASMREF_TMP1), J2G(as->J));
+  if (keybarrier) {
+    Reg keytmp = ra_releasetmp(as, ASMREF_TMP2);
+    Reg gtmp = ra_releasetmp(as, ASMREF_TMP1);
+    asm_tvptr_protected(as, keytmp, ir->op2, IRTMPREF_IN1|IRTMPREF_IN2,
+			RID2RSET(gtmp));
+    emit_loada(as, gtmp, J2G(as->J));
+  } else {
+    emit_loada(as, ra_releasetmp(as, ASMREF_TMP1), J2G(as->J));
+  }
   emit_sjcc(as, CC_Z, l_end);
   emit_gmroi(as, XG_ARITHi(XOg_CMP), RID_DISPATCH,
 	     DISPATCH_TG(mark_active), 0);
   checkmclim(as);  /* M6: split long TBAR sequence for assert red zone. */
+  l_gate = emit_label(as);
   tab = ra_alloc1(as, ir->op1, RSET_GPR);
   tmp = ra_scratch(as, rset_exclude(RSET_GPR, tab));
   emit_movtomro(as, tmp|REX_GC64, tab, offsetof(GCtab, gclist));
@@ -2621,7 +2634,7 @@ static void asm_tbar(ASMState *as, IRIns *ir)
   emit_getgl(as, tmp, gc.grayagain);
   emit_i8(as, ~LJ_GC_BLACK);
   emit_rmro(as, XO_ARITHib, XOg_AND, tab, offsetof(GCtab, marked));
-  emit_sjcc(as, CC_Z, l_end);
+  emit_sjcc(as, CC_Z, l_gate);
   emit_i8(as, LJ_GC_BLACK);
   emit_rmro(as, XO_GROUP3b, XOg_TEST, tab, offsetof(GCtab, marked));
 }

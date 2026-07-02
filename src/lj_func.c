@@ -80,16 +80,24 @@ static GCupval *func_finduv(lua_State *L, TValue *slot)
   return uv;
 }
 
+static void func_publishuv(global_State *g, GCupval *uv)
+{
+  newwhite(g, uv);
+  lj_gc_linkobj_new(g, obj2gco(uv));
+}
+
 /* Create an empty and closed upvalue. */
 static GCupval *func_newuvclosed(lua_State *L)
 {
-  GCupval *uv = (GCupval *)lj_mem_newgco(L, sizeof(GCupval));
+  global_State *g = G(L);
+  GCupval *uv = (GCupval *)lj_mem_newgco_unlinked(L, sizeof(GCupval));
   uv->gct = ~LJ_TUPVAL;
   uv->closed = 1;
   setnilV(&uv->tv);
   setmref(uv->v, &uv->tv);
   uv->immutable = 0;
   uv->dhash = 0;
+  func_publishuv(g, uv);
   return uv;
 }
 
@@ -165,14 +173,17 @@ GCupval *lj_func_newuvcell_forjit(lua_State *L, TValue *base, int32_t slot)
 /* Create a closed upvalue initialized from a stack slot. */
 static GCupval *func_snapshotuv(lua_State *L, const TValue *slot)
 {
-  GCupval *uv = (GCupval *)lj_mem_newgco(L, sizeof(GCupval));
+  global_State *g = G(L);
+  GCupval *uv = (GCupval *)lj_mem_newgco_unlinked(L, sizeof(GCupval));
   uv->gct = ~LJ_TUPVAL;
   uv->closed = 1;
   copyTVrel(L, &uv->tv, slot);
-  lj_gc_pubobjtv(L, uv, &uv->tv);
   setmref(uv->v, &uv->tv);
   uv->immutable = 0;
   uv->dhash = 0;
+  newwhite(g, uv);
+  lj_gc_pubobjtv(L, uv, &uv->tv);
+  lj_gc_linkobj_new(g, obj2gco(uv));
   return uv;
 }
 

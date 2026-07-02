@@ -81,6 +81,59 @@ END {
                         " src/lj_func.c")
 end
 
+local function assert_tbar_gc2_gate_not_hidden_by_black_bit(t)
+  local awk = [=[
+BEGIN {
+  infn = 0; decl = 0; label = 0; jump_gate = 0; mark_gate = 0
+  key_call = 0; key_tmp = 0; key_tvptr = 0
+}
+/^static void asm_tbar\(ASMState \*as, IRIns \*ir\)/ { infn = 1; next }
+infn && /^}/ {
+  if (!decl || !label || !jump_gate || !mark_gate ||
+      !key_call || !key_tmp || !key_tvptr) {
+    print "asm_tbar must split key-only GC2 barriers from table-rescan barriers"
+    exit 1
+  }
+  infn = 0
+}
+infn && /MCLabel .*l_gate/ { decl = NR }
+infn && /l_gate = emit_label\(as\)/ { label = NR }
+infn && /emit_sjcc\(as, CC_Z, l_gate\)/ { jump_gate = NR }
+infn && /DISPATCH_TG\(mark_active\)/ { mark_gate = NR }
+infn && /IRCALL_lj_gc2_barrier_key_g/ { key_call = NR }
+infn && /ASMREF_TMP2/ { key_tmp = NR }
+infn && /asm_tvptr_protected/ { key_tvptr = NR }
+END {
+  if (infn || !decl || !label || !jump_gate || !mark_gate ||
+      !key_call || !key_tmp || !key_tvptr) {
+    print "asm_tbar GC2 gate shape missing"
+    exit 1
+  }
+}
+]=]
+  utils.capture_command("cd " .. utils.shell_quote(t.root) ..
+                        " && awk " .. utils.shell_quote(awk) ..
+                        " src/lj_asm_x86.h")
+
+  awk = [=[
+BEGIN { key_emit = 0 }
+/else if \(keybarrier\)/ {
+  getline
+  if ($0 ~ /IR_TBAR/ && $0 ~ /ix->tab/ && $0 ~ /ix->key/)
+    key_emit++
+}
+END {
+  if (key_emit < 2) {
+    print "key-only table stores must carry the key in IR_TBAR op2"
+    exit 1
+  }
+}
+]=]
+  utils.capture_command("cd " .. utils.shell_quote(t.root) ..
+                        " && awk " .. utils.shell_quote(awk) ..
+                        " src/lj_record.c")
+end
+
 local function assert_mt_activation_jit_token_boundary(t)
   local awk = [=[
 BEGIN {
@@ -383,6 +436,76 @@ for id = 1, 4 do
 end
 
 print("jit-tmpbuf-thread-format-smoke OK")
+]=]
+end
+
+local function assert_tg_tmpbuf_tostr_keeps_append_state(t)
+  local awk = [=[
+BEGIN { infn = 0; sawnew = 0 }
+/^GCstr \* LJ_FASTCALL lj_buf_tostr_tg\(SBuf \*sb\)/ {
+  infn = 1
+  next
+}
+infn && /^}/ {
+  infn = 0
+  next
+}
+infn && /lj_str_new/ { sawnew = 1 }
+infn && /lj_buf_wptr_tg/ {
+  print "lj_buf_tostr_tg must not reset the TG tmpbuf write pointer"
+  exit 1
+}
+END {
+  if (!sawnew) {
+    print "lj_buf_tostr_tg did not materialize a string"
+    exit 1
+  }
+}
+]=]
+  utils.capture_command("cd " .. utils.shell_quote(t.root) ..
+                        " && awk " .. utils.shell_quote(awk) ..
+                        " src/lj_buf.c")
+end
+
+local function jit_tmpbuf_concat_append_smoke()
+  return [=[
+local util = require("jit.util")
+
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+
+local function loop(n)
+  local out = ""
+  for i = 1, n do
+    out = out .. "/" .. i
+  end
+  return out
+end
+
+for k = 1, 20 do
+  local got = loop(3)
+  assert(got == "/1/2/3", "JIT tmpbuf concat loop lost prefix: " .. got)
+end
+assert(util.traceinfo(1), "tmpbuf concat loop did not trace")
+
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+
+local function path(root, ...)
+  local out = root
+  for i = 1, select("#", ...) do
+    out = out .. "/" .. select(i, ...)
+  end
+  return out
+end
+
+for k = 1, 20 do
+  local got = path("", "a", "b", "c")
+  assert(got == "/a/b/c", "JIT vararg concat loop lost prefix: " .. got)
+end
+local shorter = path("", "x", "y")
+assert(shorter == "/x/y", "JIT vararg concat arity change failed: " .. shorter)
+assert(util.traceinfo(1), "tmpbuf vararg concat loop did not trace")
 ]=]
 end
 
@@ -1377,6 +1500,7 @@ assert(#keep == 120 and keep[120][80] == "value-120-80")
     description = "M6 JIT numeric table barriers do not flood GC2 grey work",
     run = function(t)
       build_default(t)
+      assert_tbar_gc2_gate_not_hidden_by_black_bit(t)
       luajit_code(t, [=[
 local th = require("threading")
 collectgarbage("collect")
@@ -1406,6 +1530,7 @@ assert(after.worker_grey_drained - grey0 < 10000,
     description = "M6 JIT uses the running TG tmpbuf for threaded string.format traces",
     run = function(t)
       build_default(t)
+      assert_tg_tmpbuf_tostr_keeps_append_state(t)
       local dump = t:tmp("lj-m6-tmpbuf-format-ir.dump")
       luajit_dump(t, dump, "-jdump=im", [=[
 jit.flush()
@@ -1450,6 +1575,37 @@ assert(s > 0)
           error("tmpbuf format trace still calls generic buffer-finalize helper", 2)
         end
       end
+      local concat_dump = t:tmp("lj-m6-tmpbuf-concat-ir.dump")
+      luajit_dump(t, concat_dump, "-jdump=im", [=[
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local function loop(n)
+  local out = ""
+  for i = 1, n do
+    out = out .. "/" .. i
+  end
+  return out
+end
+for k = 1, 3 do
+  assert(loop(3) == "/1/2/3")
+end
+]=])
+      do
+        local data = t:read(concat_dump)
+        if not (contains(data, "LREF") and data:match("BUFHDR%s+%d+%s+RESET")) then
+          error("tmpbuf concat trace did not use runtime LREF BUFHDR reset", 2)
+        end
+        if not data:match("BUFHDR%s+%d+%s+APPEND") then
+          error("tmpbuf concat trace did not append to the active buffer", 2)
+        end
+        if not contains(data, "->lj_buf_tostr_tg") then
+          error("tmpbuf concat trace did not use TG buffer-finalize helper", 2)
+        end
+        if data:match("%->lj_buf_tostr[^_%w]") then
+          error("tmpbuf concat trace still calls generic buffer-finalize helper", 2)
+        end
+      end
+      luajit_code(t, jit_tmpbuf_concat_append_smoke())
       luajit_code(t, jit_tmpbuf_thread_format_smoke(), { timeout = "30s" })
       build_and_run_c(t, t:tmp("lj_t-jit-tg-tmpbuf-reset"),
                       "t-jit-tg-tmpbuf-reset.c", { build = false })

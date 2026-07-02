@@ -2020,8 +2020,10 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
 	ok = lj_ir_call(J, IRCALL_lj_tab_storetv_existing_forjit,
 			ix->tab, key, src);
 	emitir(IRTGI(IR_NE), ok, lj_ir_kint(J, 0));
-	if (keybarrier || tref_isgcv(ix->val))
+	if (tref_isgcv(ix->val))
 	  emitir(IRT(IR_TBAR, IRT_NIL), ix->tab, 0);
+	else if (keybarrier)
+	  emitir(IRT(IR_TBAR, IRT_NIL), ix->tab, ix->key);
 	if (!nommstr(J, ix->key)) {
 	  TRef fref = emitir(IRT(IR_FREF, IRT_PGC), ix->tab,
 			     IRFL_TAB_NOMM);
@@ -2107,8 +2109,10 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
     if (!LJ_DUALNUM && tref_isinteger(ix->val))
       ix->val = emitir(IRTN(IR_CONV), ix->val, IRCONV_NUM_INT);
     emitir(IRT(loadop+IRDELTA_L2S, tref_type(ix->val)), xref, ix->val);
-    if (keybarrier || tref_isgcv(ix->val))
+    if (tref_isgcv(ix->val))
       emitir(IRT(IR_TBAR, IRT_NIL), ix->tab, 0);
+    else if (keybarrier)
+      emitir(IRT(IR_TBAR, IRT_NIL), ix->tab, ix->key);
     /* Invalidate neg. metamethod cache for stores with certain string keys. */
     if (!nommstr(J, ix->key)) {
       TRef fref = emitir(IRT(IR_FREF, IRT_PGC), ix->tab, IRFL_TAB_NOMM);

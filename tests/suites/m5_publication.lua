@@ -2213,6 +2213,91 @@ END {
                         " src/lj_dispatch.c")
 end
 
+local function assert_closed_upvalue_publish_order(t)
+  local raw_guard = [=[
+/lj_mem_newgco\(L, sizeof\(GCupval\)\)/ {
+  print "closed upvalues must not use immediate-link lj_mem_newgco"
+  exit 1
+}
+]=]
+  local publish_guard = [=[
+BEGIN { infn = 0; white = 0; link = 0 }
+/^static void func_publishuv\(global_State \*g, GCupval \*uv\)/ {
+  infn = 1
+  next
+}
+infn && /^}/ { infn = 0; next }
+infn && /newwhite\(g, uv\)/ { white = NR }
+infn && /lj_gc_linkobj_new\(g, obj2gco\(uv\)\)/ { link = NR }
+END {
+  if (!white || !link || white > link) {
+    print "func_publishuv must mark white before root publication"
+    exit 1
+  }
+}
+]=]
+  local closed_guard = [=[
+BEGIN { infn = 0; alloc = 0; gct = 0; closed = 0; tv = 0; v = 0; meta = 0; publish = 0 }
+/^static GCupval \*func_newuvclosed\(lua_State \*L\)/ {
+  infn = 1
+  next
+}
+infn && /^}/ { infn = 0; next }
+infn && /lj_mem_newgco_unlinked\(L, sizeof\(GCupval\)\)/ { alloc = NR }
+infn && /uv->gct = ~LJ_TUPVAL/ { gct = NR }
+infn && /uv->closed = 1/ { closed = NR }
+infn && /setnilV\(&uv->tv\)/ { tv = NR }
+infn && /setmref\(uv->v, &uv->tv\)/ { v = NR }
+infn && /uv->dhash = 0/ { meta = NR }
+infn && /func_publishuv\(g, uv\)/ { publish = NR }
+END {
+  if (!alloc || !gct || !closed || !tv || !v || !meta || !publish ||
+      alloc > gct || gct > closed || closed > tv || tv > v ||
+      v > meta || meta > publish) {
+    print "func_newuvclosed must initialize closed upvalue before root publication"
+    exit 1
+  }
+}
+]=]
+  local snap_guard = [=[
+BEGIN { infn = 0; alloc = 0; gct = 0; closed = 0; copy = 0; v = 0; meta = 0; white = 0; pub = 0; link = 0 }
+/^static GCupval \*func_snapshotuv\(lua_State \*L, const TValue \*slot\)/ {
+  infn = 1
+  next
+}
+infn && /^}/ { infn = 0; next }
+infn && /lj_mem_newgco_unlinked\(L, sizeof\(GCupval\)\)/ { alloc = NR }
+infn && /uv->gct = ~LJ_TUPVAL/ { gct = NR }
+infn && /uv->closed = 1/ { closed = NR }
+infn && /copyTVrel\(L, &uv->tv, slot\)/ { copy = NR }
+infn && /setmref\(uv->v, &uv->tv\)/ { v = NR }
+infn && /uv->dhash = 0/ { meta = NR }
+infn && /newwhite\(g, uv\)/ { white = NR }
+infn && /lj_gc_pubobjtv\(L, uv, &uv->tv\)/ { pub = NR }
+infn && /lj_gc_linkobj_new\(g, obj2gco\(uv\)\)/ { link = NR }
+END {
+  if (!alloc || !gct || !closed || !copy || !v || !meta || !white || !pub || !link ||
+      alloc > gct || gct > closed || closed > copy || copy > v ||
+      v > meta || meta > white || white > pub || pub > link) {
+    print "func_snapshotuv must initialize/barrier closed upvalue before root publication"
+    exit 1
+  }
+}
+]=]
+  utils.capture_command("cd " .. shell_quote(t.root) ..
+                        " && awk " .. shell_quote(raw_guard) ..
+                        " src/lj_func.c")
+  utils.capture_command("cd " .. shell_quote(t.root) ..
+                        " && awk " .. shell_quote(publish_guard) ..
+                        " src/lj_func.c")
+  utils.capture_command("cd " .. shell_quote(t.root) ..
+                        " && awk " .. shell_quote(closed_guard) ..
+                        " src/lj_func.c")
+  utils.capture_command("cd " .. shell_quote(t.root) ..
+                        " && awk " .. shell_quote(snap_guard) ..
+                        " src/lj_func.c")
+end
+
 local function gc_total_atomic_smoke()
   return [=[
 local th = require"threading"
@@ -2509,6 +2594,7 @@ return function(add)
     name = "m5_upvalue_publish_gc",
     description = "closed-upvalue GC object publication behavior",
     run = function(t)
+      assert_closed_upvalue_publish_order(t)
       build_and_run_luajit_script(t, "t-threading-upvalue.lua", nil,
                                   { joff = true })
       build_and_run_c(t, t:tmp("lj_t-cclosure-upvalue-snapshot"),

@@ -5765,6 +5765,18 @@ void lj_gc2_barrier_tab_g(global_State *g, GCtab *t)
     gc2_remember_pair(g, obj2gco(t), NULL);
 }
 
+void lj_gc2_barrier_key_g(global_State *g, GCtab *t, cTValue *key)
+{
+  GCobj *child;
+  if (!t || !key || !tvisgcv(key))
+    return;
+  child = gcV(key);
+  if (gc2_barrier_active_g(g))
+    (void)lj_gc2_markobj(g, child);
+  else
+    gc2_remember_pair(g, obj2gco(t), child);
+}
+
 void lj_gc2_barrier_tab(lua_State *L, GCtab *t)
 {
   global_State *g;
