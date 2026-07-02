@@ -41,6 +41,18 @@ LJ_FUNC void lj_debug_addloc(lua_State *L, const char *msg,
 LJ_FUNC void lj_debug_pushloc(lua_State *L, GCproto *pt, BCPos pc);
 LJ_FUNC int lj_debug_getinfo(lua_State *L, const char *what, lj_Debug *ar,
 			     int ext);
+LJ_FUNC int lj_debug_getstack_claimed(lua_State *L, int level, lj_Debug *ar);
+LJ_FUNC int lj_debug_getinfo_claimed(lua_State *L, const char *what,
+				     lj_Debug *ar, int ext, GCfunc *fnarg,
+				     GCfunc **fnout, GCfunc **linesout);
+LJ_FUNC const char *lj_debug_getlocal_claimed(lua_State *L,
+					      const lj_Debug *ar, int n,
+					      TValue *tv, GCfunc **fnout);
+LJ_FUNC const char *lj_debug_setlocal_claimed(lua_State *L,
+					      const lj_Debug *ar, int n,
+					      cTValue *tv, TValue **pubuv,
+					      GCfunc **fnout);
+LJ_FUNC void lj_debug_pushactivelines(lua_State *L, GCfunc *fn);
 #if LJ_HASPROFILE
 LJ_FUNC void lj_debug_dumpstack(lua_State *L, SBuf *sb, const char *fmt,
 				int depth);

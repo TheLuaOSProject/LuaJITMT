@@ -19,6 +19,7 @@
 #include "lj_frame.h"
 #include "lj_bc.h"
 #include "lj_strfmt.h"
+#include "lj_vm.h"
 #if LJ_HASJIT
 #include "lj_jit.h"
 #endif
@@ -429,16 +430,98 @@ static TValue *debug_localcell(TValue *o, GCupval **uvp)
   return o;
 }
 
+static GCfunc *debug_func_from_ar(lua_State *L, const lj_Debug *ar,
+				  TValue **framep, TValue **nextframep)
+{
+  uint32_t offset = (uint32_t)ar->i_ci & 0xffff;
+  uint32_t size = (uint32_t)ar->i_ci >> 16;
+  TValue *frame = tvref(L->stack) + offset;
+  TValue *nextframe = size ? frame + size : NULL;
+  GCfunc *fn;
+  lj_assertL(offset != 0, "bad frame offset");
+  lj_assertL(frame <= tvref(L->maxstack) &&
+	     (!nextframe || nextframe <= tvref(L->maxstack)),
+	     "broken frame chain");
+  fn = frame_func(frame);
+  lj_assertL(fn->c.gct == ~LJ_TFUNC, "bad frame function");
+  if (framep) *framep = frame;
+  if (nextframep) *nextframep = nextframe;
+  return fn;
+}
+
+int lj_debug_getstack_claimed(lua_State *L, int level, lj_Debug *ar)
+{
+  int size;
+  cTValue *frame = lj_debug_frame(L, level, &size);
+  if (frame) {
+    ar->i_ci = (size << 16) + (int)(frame - tvref(L->stack));
+    return 1;
+  } else {
+    ar->i_ci = level - size;
+    return 0;
+  }
+}
+
+const char *lj_debug_getlocal_claimed(lua_State *L, const lj_Debug *ar, int n,
+				      TValue *tv, GCfunc **fnout)
+{
+  const char *name = NULL;
+  TValue *o = debug_localname(L, (const lua_Debug *)ar, &name, (BCReg)n);
+  if (fnout) *fnout = NULL;
+  if (name) {
+    GCupval *uv;
+    if (fnout) *fnout = debug_func_from_ar(L, ar, NULL, NULL);
+    o = debug_localcell(o, &uv);
+    if (uv)
+      lj_tv_load_acq(tv, o);
+    else
+      copyTV(L, tv, o);
+  }
+  return name;
+}
+
+const char *lj_debug_setlocal_claimed(lua_State *L, const lj_Debug *ar, int n,
+				      cTValue *tv, TValue **pubuv,
+				      GCfunc **fnout)
+{
+  const char *name = NULL;
+  TValue *o = debug_localname(L, (const lua_Debug *)ar, &name, (BCReg)n);
+  if (pubuv) *pubuv = NULL;
+  if (fnout) *fnout = NULL;
+  if (name) {
+    GCupval *uv;
+    if (fnout) *fnout = debug_func_from_ar(L, ar, NULL, NULL);
+    o = debug_localcell(o, &uv);
+    if (uv) {
+      copyTVrel(L, o, tv);
+      if (pubuv) *pubuv = o;
+    } else {
+      copyTV(L, o, tv);
+    }
+  }
+  return name;
+}
+
 LUA_API const char *lua_getlocal(lua_State *L, const lua_Debug *ar, int n)
 {
   LJStateClaim claim;
   const char *name = NULL;
-  if (!lj_state_tryclaim(L, lj_thr_current_id(G(L)), &claim))
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
     lj_err_callermsg(debug_errstate(L), "thread busy");
   if (ar) {
     TValue *o = debug_localname(L, ar, &name, (BCReg)n);
     if (name) {
       GCupval *uv;
+      if ((mref(L->maxstack, char) - (char *)L->top) <=
+	  (ptrdiff_t)sizeof(TValue)) {
+	int status = lj_state_cpgrowstack(L, 1);
+	if (status != LUA_OK) {
+	  if (L->top > L->base) L->top--;
+	  lj_state_dropclaim(&claim);
+	  lj_err_callermsg(debug_errstate(L), status == LUA_ERRMEM ?
+			   "not enough memory" : "stack overflow");
+	}
+      }
       o = debug_localcell(o, &uv);
       if (uv)
 	lj_tv_load_acq(L->top, o);
@@ -458,6 +541,7 @@ LUA_API const char *lua_setlocal(lua_State *L, const lua_Debug *ar, int n)
   LJStateClaim claim;
   const char *name = NULL;
   TValue *o;
+  int pubuv = 0;
   if (!lj_state_tryclaim(L, lj_thr_current_id(G(L)), &claim))
     lj_err_callermsg(debug_errstate(L), "thread busy");
   o = debug_localname(L, ar, &name, (BCReg)n);
@@ -466,14 +550,30 @@ LUA_API const char *lua_setlocal(lua_State *L, const lua_Debug *ar, int n)
     o = debug_localcell(o, &uv);
     if (uv) {
       copyTVrel(L, o, L->top-1);
-      lj_gc_pubuv(G(L), o);
+      pubuv = 1;
     } else {
       copyTV(L, o, L->top-1);
     }
   }
   L->top--;
   lj_state_dropclaim(&claim);
+  if (pubuv)
+    lj_gc_pubuv(G(L), o);
   return name;
+}
+
+typedef struct DebugGetInfoCtx {
+  const char *what;
+  lua_Debug *ar;
+  int ok;
+} DebugGetInfoCtx;
+
+static TValue *debug_getinfo_cp(lua_State *L, lua_CFunction dummy, void *ud)
+{
+  DebugGetInfoCtx *ctx = (DebugGetInfoCtx *)ud;
+  UNUSED(dummy);
+  ctx->ok = lj_debug_getinfo(L, ctx->what, (lj_Debug *)ctx->ar, 0);
+  return NULL;
 }
 
 static void debug_activelines_storebool(lua_State *L, GCtab *t, int32_t line)
@@ -488,6 +588,100 @@ static void debug_activelines_storebool(lua_State *L, GCtab *t, int32_t line)
       return;
     lj_tab_store_wait_l(L);  /* debug activelines store saw stale/FORWARD slot. */
   }
+}
+
+void lj_debug_pushactivelines(lua_State *L, GCfunc *fn)
+{
+  if (isluafunc(fn)) {
+    GCtab *t = lj_tab_new(L, 0, 0);
+    GCproto *pt = funcproto(fn);
+    const void *lineinfo = proto_lineinfo(pt);
+    settabV(L, L->top, t);
+    incr_top(L);
+    if (lineinfo) {
+      BCLine first = pt->firstline;
+      int sz = pt->numline < 256 ? 1 : pt->numline < 65536 ? 2 : 4;
+      MSize i, szl = pt->sizebc-1;
+      for (i = 0; i < szl; i++) {
+	BCLine line = first +
+	  (sz == 1 ? (BCLine)((const uint8_t *)lineinfo)[i] :
+	   sz == 2 ? (BCLine)((const uint16_t *)lineinfo)[i] :
+	   (BCLine)((const uint32_t *)lineinfo)[i]);
+	debug_activelines_storebool(L, t, line);
+      }
+    }
+    lj_gc_pubtab(L, t);
+  } else {
+    setnilV(L->top);
+    incr_top(L);
+  }
+}
+
+int lj_debug_getinfo_claimed(lua_State *L, const char *what, lj_Debug *ar,
+			     int ext, GCfunc *fnarg, GCfunc **fnout,
+			     GCfunc **linesout)
+{
+  TValue *frame = NULL;
+  TValue *nextframe = NULL;
+  GCfunc *fn;
+  if (fnout) *fnout = NULL;
+  if (linesout) *linesout = NULL;
+  if (fnarg) {
+    fn = fnarg;
+    if (*what == '>') what++;
+  } else {
+    fn = debug_func_from_ar(L, ar, &frame, &nextframe);
+  }
+  for (; *what; what++) {
+    if (*what == 'S') {
+      if (isluafunc(fn)) {
+	GCproto *pt = funcproto(fn);
+	BCLine firstline = pt->firstline;
+	GCstr *name = proto_chunkname_acq(pt);
+	ar->source = strdata(name);
+	lj_debug_shortname(ar->short_src, name, pt->firstline);
+	ar->linedefined = (int)firstline;
+	ar->lastlinedefined = (int)(firstline + pt->numline);
+	ar->what = (firstline || !pt->numline) ? "Lua" : "main";
+      } else {
+	ar->source = "=[C]";
+	ar->short_src[0] = '[';
+	ar->short_src[1] = 'C';
+	ar->short_src[2] = ']';
+	ar->short_src[3] = '\0';
+	ar->linedefined = -1;
+	ar->lastlinedefined = -1;
+	ar->what = "C";
+      }
+    } else if (*what == 'l') {
+      ar->currentline = frame ? debug_frameline(L, fn, nextframe) : -1;
+    } else if (*what == 'u') {
+      ar->nups = fn->c.nupvalues;
+      if (ext) {
+	if (isluafunc(fn)) {
+	  GCproto *pt = funcproto(fn);
+	  ar->nparams = pt->numparams;
+	  ar->isvararg = !!(pt->flags & PROTO_VARARG);
+	} else {
+	  ar->nparams = 0;
+	  ar->isvararg = 1;
+	}
+      }
+    } else if (*what == 'n') {
+      ar->namewhat = frame ? lj_debug_funcname(L, frame, &ar->name) : NULL;
+      if (ar->namewhat == NULL) {
+	ar->namewhat = "";
+	ar->name = NULL;
+      }
+    } else if (*what == 'f') {
+      if (fnout) *fnout = fn;
+    } else if (*what == 'L') {
+      if (linesout) *linesout = fn;
+    } else {
+      return 0;  /* Bad option. */
+    }
+  }
+  return 1;
 }
 
 int lj_debug_getinfo(lua_State *L, const char *what, lj_Debug *ar, int ext)
@@ -598,31 +792,59 @@ int lj_debug_getinfo(lua_State *L, const char *what, lj_Debug *ar, int ext)
 LUA_API int lua_getinfo(lua_State *L, const char *what, lua_Debug *ar)
 {
   LJStateClaim claim;
-  int ok;
+  DebugGetInfoCtx ctx;
+  GCfunc *fn = NULL, *linesfn = NULL;
+  ptrdiff_t oldtop;
+  const char *p;
+  int errcode;
+  int opt_f = 0, opt_L = 0;
   if (!lj_state_tryclaim(L, lj_thr_current_id(G(L)), &claim))
     lj_err_callermsg(debug_errstate(L), "thread busy");
-  ok = lj_debug_getinfo(L, what, (lj_Debug *)ar, 0);
-  lj_state_dropclaim(&claim);
-  return ok;
+  for (p = what + (*what == '>'); *p; p++) {
+    opt_f |= *p == 'f';
+    opt_L |= *p == 'L';
+  }
+  if (claim.release && *what != '>') {
+    int ok = lj_debug_getinfo_claimed(L, what, (lj_Debug *)ar, 0, NULL,
+				      opt_f ? &fn : NULL,
+				      opt_L ? &linesfn : NULL);
+    if (ok && opt_f) {
+      if ((mref(L->maxstack, char) - (char *)L->top) <=
+	  (ptrdiff_t)sizeof(TValue)) {
+	lj_state_dropresumeclaim(&claim);
+	lj_err_callermsg(debug_errstate(L), "stack overflow");
+      }
+      setfuncV(L, L->top, fn);
+      lj_state_stack_pubtv(L, L, L->top);
+      L->top++;
+    }
+    if (ok && opt_L)
+      lj_debug_pushactivelines(L, linesfn);
+    lj_state_dropresumeclaim(&claim);
+    return ok;
+  }
+  ctx.what = what;
+  ctx.ar = ar;
+  ctx.ok = 0;
+  oldtop = savestack(L, L->top);
+  errcode = lj_vm_cpcall(L, NULL, &ctx, debug_getinfo_cp);
+  if (LJ_UNLIKELY(errcode))
+    L->top = restorestack(L, oldtop);
+  lj_state_dropresumeclaim(&claim);
+  if (LJ_UNLIKELY(errcode))
+    lj_err_throw(L, errcode);
+  return ctx.ok;
 }
 
 LUA_API int lua_getstack(lua_State *L, int level, lua_Debug *ar)
 {
   LJStateClaim claim;
-  int size;
-  cTValue *frame;
+  int ok;
   if (!lj_state_tryclaim(L, lj_thr_current_id(G(L)), &claim))
     lj_err_callermsg(debug_errstate(L), "thread busy");
-  frame = lj_debug_frame(L, level, &size);
-  if (frame) {
-    ar->i_ci = (size << 16) + (int)(frame - tvref(L->stack));
-    lj_state_dropclaim(&claim);
-    return 1;
-  } else {
-    ar->i_ci = level - size;
-    lj_state_dropclaim(&claim);
-    return 0;
-  }
+  ok = lj_debug_getstack_claimed(L, level, (lj_Debug *)ar);
+  lj_state_dropclaim(&claim);
+  return ok;
 }
 
 #if LJ_HASPROFILE
@@ -739,7 +961,7 @@ LUALIB_API void luaL_traceback (lua_State *L, lua_State *L1, const char *msg,
 {
   int top = (int)(L->top - L->base);
   int lim = TRACEBACK_LEVELS1;
-  lua_Debug ar;
+  lj_Debug ar;
   if (msg) lua_pushfstring(L, "%s\n", msg);
   lua_pushliteral(L, "stack traceback:");
   for (;;) {
@@ -747,19 +969,20 @@ LUALIB_API void luaL_traceback (lua_State *L, lua_State *L1, const char *msg,
     GCfunc *fn;
     if (L != L1 && !lj_state_tryclaim(L1, lj_thr_current_id(G(L)), &claim))
       lj_err_callermsg(L, "thread busy");
-    if (!lua_getstack(L1, level++, &ar)) {
+    if (!lj_debug_getstack_claimed(L1, level++, &ar)) {
       if (L != L1) lj_state_dropclaim(&claim);
       break;
     }
     if (level > lim) {
       int has_tail;
-      has_tail = lua_getstack(L1, level + TRACEBACK_LEVELS2, &ar);
+      has_tail = lj_debug_getstack_claimed(L1, level + TRACEBACK_LEVELS2,
+					   &ar);
       if (!has_tail) {
 	level--;
 	if (L != L1) lj_state_dropclaim(&claim);
       } else {
 	int tail_ci;
-	lua_getstack(L1, -10, &ar);
+	lj_debug_getstack_claimed(L1, -10, &ar);
 	tail_ci = ar.i_ci;
 	if (L != L1) lj_state_dropclaim(&claim);
 	lua_pushliteral(L, "\n\t...");
@@ -768,8 +991,10 @@ LUALIB_API void luaL_traceback (lua_State *L, lua_State *L1, const char *msg,
       lim = 2147483647;
       continue;
     }
-    lua_getinfo(L1, "Snlf", &ar);
-    fn = funcV(L1->top-1); L1->top--;
+    if (!lj_debug_getinfo_claimed(L1, "Snlf", &ar, 0, NULL, &fn, NULL)) {
+      if (L != L1) lj_state_dropclaim(&claim);
+      lj_err_callermsg(L, "invalid traceback option");
+    }
     if (L != L1) lj_state_dropclaim(&claim);
     if (isffunc(fn) && !*ar.namewhat)
       lua_pushfstring(L, "\n\t[builtin#%d]:", fn->c.ffid);

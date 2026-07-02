@@ -116,6 +116,29 @@ static void check_resume_unowned(lua_State *L)
   lua_pop(L, 1);
 }
 
+static void check_lua_getinfo_unowned(lua_State *L)
+{
+  lua_State *co;
+  lua_Debug ar;
+  lua_settop(L, 0);
+  co = lua_newthread(L);
+  assert(luaL_loadstring(L, "local x = 1; coroutine.yield(); return x") == 0);
+  lua_xmove(L, co, 1);
+  assert(lua_resume(co, 0) == LUA_YIELD);
+  assert(lj_state_owner_acq(co) == 0);
+  memset(&ar, 0, sizeof(ar));
+  assert(lua_getstack(co, 1, &ar) == 1);
+  assert(lua_getinfo(co, "Slf", &ar) == 1);
+  assert(lua_isfunction(co, -1));
+  lua_pop(co, 1);
+  assert(lj_state_owner_acq(co) == 0);
+  assert(lua_getinfo(co, "L", &ar) == 1);
+  assert(lua_istable(co, -1));
+  lua_pop(co, 1);
+  assert(lj_state_owner_acq(co) == 0);
+  lua_settop(L, 0);
+}
+
 static void check_coroutine_resume_unowned(lua_State *L)
 {
   uint32_t tid = lj_thr_current_id(G(L));
@@ -388,6 +411,7 @@ int main(void)
   check_xmove_unowned_source(L);
   check_thread_env_unowned(L);
   check_resume_unowned(L);
+  check_lua_getinfo_unowned(L);
   check_coroutine_resume_unowned(L);
   check_coroutine_wrap_unowned(L);
   ljt_lua_assert_ok(L, luaL_dostring(L,

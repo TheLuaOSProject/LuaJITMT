@@ -705,6 +705,32 @@ static void jit_profile_registry_clear(lua_State *L)
   lj_gc_pubtab(L, registry);
 }
 
+typedef struct JitProfileCallbackCtx {
+  lua_State *caller;
+  GCfunc *fn;
+  int samples;
+  int vmstate;
+} JitProfileCallbackCtx;
+
+static TValue *jit_profile_callback_setup_cp(lua_State *L,
+					     lua_CFunction dummy, void *ud)
+{
+  JitProfileCallbackCtx *ctx = (JitProfileCallbackCtx *)ud;
+  char vmst = (char)ctx->vmstate;
+  UNUSED(dummy);
+  setfuncV(L, L->top, ctx->fn);
+  lj_state_stack_pubtv(L, L, L->top);
+  L->top++;
+  setthreadV(L, L->top, ctx->caller);
+  lj_state_stack_pubtv(L, L, L->top);
+  L->top++;
+  setintV(L->top++, ctx->samples);
+  setstrV(L, L->top, lj_str_new(L, &vmst, 1));
+  lj_state_stack_pubtv(L, L, L->top);
+  L->top++;
+  return NULL;
+}
+
 static void jit_profile_callback(lua_State *L2, lua_State *L, int samples,
 				 int vmstate)
 {
@@ -718,20 +744,23 @@ static void jit_profile_callback(lua_State *L2, lua_State *L, int samples,
     return;
   lj_tv_load_acq(&cbtv, tv);
   if (tvisfunc(&cbtv)) {
-    char vmst = (char)vmstate;
+    JitProfileCallbackCtx ctx;
+    ptrdiff_t oldtop;
+    int errcode;
     int status;
     if (!lj_state_resumeclaim(L2, lj_thr_current_id(G(L)), &claim))
       return;  /* Drop samples while the hidden callback coroutine is busy. */
-    setfuncV(L2, L2->top, funcV(&cbtv));
-    lj_state_stack_pubtv(L, L2, L2->top);
-    L2->top++;
-    setthreadV(L2, L2->top, L);
-    lj_state_stack_pubtv(L, L2, L2->top);
-    L2->top++;
-    setintV(L2->top++, samples);
-    setstrV(L2, L2->top, lj_str_new(L2, &vmst, 1));
-    lj_state_stack_pubtv(L, L2, L2->top);
-    L2->top++;
+    ctx.caller = L;
+    ctx.fn = funcV(&cbtv);
+    ctx.samples = samples;
+    ctx.vmstate = vmstate;
+    oldtop = savestack(L2, L2->top);
+    errcode = lj_vm_cpcall(L2, NULL, &ctx, jit_profile_callback_setup_cp);
+    if (LJ_UNLIKELY(errcode)) {
+      L2->top = restorestack(L2, oldtop);
+      lj_state_dropresumeclaim(&claim);
+      lj_err_throw(L, errcode);
+    }
     status = lua_pcall(L2, 3, 0, 0);  /* callback(thread, samples, vmstate) */
     if (status) {
       L2->top = L2->base;

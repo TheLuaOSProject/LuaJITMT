@@ -61,6 +61,316 @@ END {
                         " src/lj_profile.c")
 end
 
+local function assert_api_debug_claim_cleanup(t)
+  local function awk(script, path)
+    utils.capture_command("cd " .. shell_quote(t.root) ..
+                          " && awk " .. shell_quote(script) ..
+                          " " .. shell_quote(path))
+  end
+
+  awk([=[
+BEGIN { infn = 0; cpcall = 0; copy = 0; pub = 0; drop_from = 0; drop_to = 0 }
+/^LUA_API void lua_xmove\(lua_State \*L,/ { infn = 1; next }
+infn && /^}/ { infn = 0; next }
+infn && /lj_vm_cpcall/ { cpcall = NR }
+infn && /copyTV/ { copy = NR }
+infn && /lj_state_stack_pubtv/ { pub = NR }
+infn && /lj_state_dropclaim\(&fromclaim\)/ { drop_from = NR }
+infn && /lj_state_dropclaim\(&toclaim\)/ { drop_to = NR }
+END {
+  if (cpcall || !copy || !pub || !drop_from || !drop_to ||
+      copy > pub || pub > drop_from || pub > drop_to) {
+    print "lua_xmove must directly copy/publish before dropping claims"
+    exit 1
+  }
+}
+]=], "src/lj_api.c")
+
+  awk([=[
+BEGIN { infn = 0; rel = 0; drop = 0; pub = 0 }
+/^LUA_API int lua_setfenv\(lua_State \*L,/ { infn = 1; next }
+infn && /^}/ { infn = 0; next }
+infn && /lj_state_env_rel/ { rel = NR }
+infn && rel && /lj_state_dropclaim\(&claim\)/ && !drop { drop = NR }
+infn && /lj_gc_pubobjobj\(L, obj2gco\(L1\), t\)/ { pub = NR }
+END {
+  if (!rel || !drop || !pub || !(rel < drop && drop < pub)) {
+    print "lua_setfenv thread-env publication must happen after claim drop"
+    exit 1
+  }
+}
+]=], "src/lj_api.c")
+
+  awk([=[
+BEGIN { infn = 0; errstr = 0; inc = 0 }
+/^static TValue \*api_resume_invalid_cp\(lua_State \*L,/ { infn = 1; next }
+infn && /^}/ { infn = 0; next }
+infn && /lj_err_str/ { errstr = NR }
+infn && /incr_top/ { inc = NR }
+END {
+  if (!errstr || !inc || errstr > inc) {
+    print "api_resume_invalid_cp no longer builds invalid-resume error"
+    exit 1
+  }
+}
+]=], "src/lj_api.c")
+
+  awk([=[
+BEGIN { infn = 0; cpcall = 0; drop = 0; rethrow = 0 }
+/^LUA_API int lua_resume\(lua_State \*L,/ { infn = 1; next }
+infn && /^}/ { infn = 0; next }
+infn && /api_resume_invalid_cp/ && /lj_vm_cpcall/ { cpcall = NR }
+infn && /lj_state_dropresumeclaim\(&claim\)/ { drop = NR }
+infn && /lj_err_throw/ {
+  rethrow = NR
+  if (!drop || drop > NR) {
+    print "lua_resume invalid-resume error rethrows before dropping claim"
+    exit 1
+  }
+}
+END {
+  if (!cpcall || !drop || !rethrow || cpcall > drop) {
+    print "lua_resume invalid-resume protected boundary missing"
+    exit 1
+  }
+}
+]=], "src/lj_api.c")
+
+  awk([=[
+BEGIN { infn = 0; grow = 0; drop = 0; err = 0 }
+/^LUA_API const char \*lua_getlocal\(lua_State \*L,/ { infn = 1; next }
+infn && /^}/ { infn = 0; next }
+infn && /lj_state_cpgrowstack/ { grow = NR }
+infn && grow && /lj_state_dropclaim\(&claim\)/ { drop = NR }
+infn && grow && /lj_err_callermsg/ {
+  err = NR
+  if (!drop || drop > NR) {
+    print "lua_getlocal stack-growth error reports before dropping claim"
+    exit 1
+  }
+}
+END {
+  if (!grow || !drop || !err || grow > drop || drop > err) {
+    print "lua_getlocal protected stack-growth cleanup missing"
+    exit 1
+  }
+}
+]=], "src/lj_debug.c")
+
+  awk([=[
+BEGIN { infn = 0; drop = 0; pub = 0 }
+/^LUA_API const char \*lua_setlocal\(lua_State \*L,/ { infn = 1; next }
+infn && /^}/ { infn = 0; next }
+infn && /lj_state_dropclaim\(&claim\)/ { drop = NR }
+infn && /lj_gc_pubuv/ { pub = NR }
+END {
+  if (!drop || !pub || drop > pub) {
+    print "lua_setlocal must publish upvalue after dropping state claim"
+    exit 1
+  }
+}
+]=], "src/lj_debug.c")
+
+  awk([=[
+BEGIN { infn = 0; claim = 0; claimed = 0; active = 0; cpcall = 0; drop = 0; rethrow = 0 }
+/^LUA_API int lua_getinfo\(lua_State \*L,/ { infn = 1; next }
+infn && /^}/ { infn = 0; next }
+infn && /lj_state_resumeclaim/ { claim = NR }
+infn && /lj_debug_getinfo_claimed/ { claimed = NR }
+infn && /lj_debug_pushactivelines/ { active = NR }
+infn && /lj_vm_cpcall/ { cpcall = NR }
+infn && /lj_state_dropresumeclaim\(&claim\)/ { drop = NR }
+infn && /lj_err_throw/ {
+  rethrow = NR
+  if (!drop || drop > NR) {
+    print "lua_getinfo rethrows before dropping resume claim"
+    exit 1
+  }
+}
+END {
+  if (!claim || !claimed || !active || !cpcall || !drop || !rethrow ||
+      claim > claimed || claim > cpcall || cpcall > drop) {
+    print "lua_getinfo resume-claim cleanup boundary missing"
+    exit 1
+  }
+}
+]=], "src/lj_debug.c")
+
+  awk([=[
+BEGIN { infn = 0; stack = 0; info = 0; drop = 0; badcp = 0 }
+/^LUALIB_API void luaL_traceback \(lua_State \*L,/ { infn = 1; next }
+infn && /^}/ { infn = 0; next }
+infn && /lj_vm_cpcall/ { badcp = NR }
+infn && /lj_debug_getstack_claimed/ { stack = NR }
+infn && /lj_debug_getinfo_claimed/ { info = NR }
+infn && info && /lj_state_dropclaim\(&claim\)/ { drop = NR }
+END {
+  if (badcp || !stack || !info || !drop || stack > info || info > drop) {
+    print "luaL_traceback must use claimed debug helpers without foreign cpcall"
+    exit 1
+  }
+}
+]=], "src/lj_debug.c")
+
+  awk([=[
+BEGIN { infn = 0; pub = 0 }
+/^static void debug_pushfunc_root\(lua_State \*L,/ { infn = 1; next }
+infn && /^}/ { infn = 0; next }
+infn && /lj_state_stack_pubtv/ { pub = NR }
+END {
+  if (!pub) {
+    print "debug_pushfunc_root must release-publish caller stack roots"
+    exit 1
+  }
+}
+]=], "src/lib_debug.c")
+
+  awk([=[
+BEGIN {
+  infn = 0; stack = 0; info = 0; root = 0; active = 0; drop = 0; table = 0; bad = 0
+}
+/^LJLIB_CF\(debug_getinfo\)/ { infn = 1; next }
+infn && /^}/ { infn = 0; next }
+infn && /lj_vm_cpcall|lua_xmove|lua_getstack|lua_getinfo/ { bad = NR }
+infn && /lj_debug_getstack_claimed/ { stack = NR }
+infn && /lj_debug_getinfo_claimed/ { info = NR }
+infn && /debug_pushfunc_root/ { root = NR }
+infn && /lj_debug_pushactivelines/ { active = NR }
+infn && /lj_state_dropclaim\(&claim\)/ { drop = NR }
+infn && /lua_createtable/ { table = NR }
+END {
+  if (bad || !info || !root || !active || !drop || !table ||
+      (stack && stack > info) || info > root || root > drop || drop > active ||
+      active > table) {
+    print "debug.getinfo must root claimed-state results before claim drop"
+    exit 1
+  }
+}
+]=], "src/lib_debug.c")
+
+  awk([=[
+BEGIN { infn = 0; stack = 0; local = 0; root = 0; drop = 0; push = 0; bad = 0 }
+/^LJLIB_CF\(debug_getlocal\)/ { infn = 1; next }
+infn && /^}/ { infn = 0; next }
+infn && /lj_vm_cpcall|lua_xmove/ { bad = NR }
+infn && /lj_debug_getstack_claimed/ { stack = NR }
+infn && /lj_debug_getlocal_claimed/ { local = NR }
+infn && /debug_pushfunc_root/ { root = NR }
+infn && /lj_state_dropclaim\(&claim\)/ { drop = NR }
+infn && /lua_pushstring/ { push = NR }
+END {
+  if (bad || !stack || !local || !root || !drop || !push ||
+      stack > local || local > root || root > drop || drop > push) {
+    print "debug.getlocal must copy/root claimed-state local before claim drop"
+    exit 1
+  }
+}
+]=], "src/lib_debug.c")
+
+  awk([=[
+BEGIN { infn = 0; local = 0; root = 0; drop = 0; pub = 0; push = 0; bad = 0 }
+/^LJLIB_CF\(debug_setlocal\)/ { infn = 1; next }
+infn && /^}/ { infn = 0; next }
+infn && /lj_vm_cpcall|lua_setlocal|restorestack/ { bad = NR }
+infn && /lj_debug_setlocal_claimed/ { local = NR }
+infn && /debug_pushfunc_root/ { root = NR }
+infn && /lj_state_dropclaim\(&claim\)/ { drop = NR }
+infn && /lj_gc_pubuv/ { pub = NR }
+infn && /lua_pushstring/ { push = NR }
+END {
+  if (bad || !local || !drop || !push || local > drop || drop > push ||
+      (root && (local > root || root > drop)) ||
+      (pub && (drop > pub || pub > push))) {
+    print "debug.setlocal must update claimed-state local before claim drop"
+    exit 1
+  }
+}
+]=], "src/lib_debug.c")
+
+  awk([=[
+BEGIN { infn = 0; str = 0; pub = 0 }
+/^static TValue \*jit_profile_callback_setup_cp\(lua_State \*L,/ { infn = 1; next }
+infn && /^}/ { infn = 0; next }
+infn && /lj_str_new/ { str = NR }
+infn && /lj_state_stack_pubtv/ { pub = NR }
+END {
+  if (!str || !pub) {
+    print "jit_profile_callback_setup_cp no longer protects callback setup"
+    exit 1
+  }
+}
+]=], "src/lib_jit.c")
+
+  awk([=[
+BEGIN { infn = 0; claim = 0; cpcall = 0; drop = 0; rethrow = 0 }
+/^static void jit_profile_callback\(lua_State \*L2,/ { infn = 1; next }
+infn && /^}/ { infn = 0; next }
+infn && /lj_state_resumeclaim/ { claim = NR }
+infn && /jit_profile_callback_setup_cp/ && /lj_vm_cpcall/ { cpcall = NR }
+infn && /lj_state_dropresumeclaim\(&claim\)/ { drop = NR }
+infn && /lj_err_throw/ {
+  rethrow = NR
+  if (!drop || drop > NR) {
+    print "jit_profile_callback rethrows before dropping resume claim"
+    exit 1
+  }
+}
+END {
+  if (!claim || !cpcall || !drop || !rethrow || claim > cpcall ||
+      cpcall > drop) {
+    print "jit_profile_callback protected setup boundary missing"
+    exit 1
+  }
+}
+]=], "src/lib_jit.c")
+end
+
+local function api_debug_claim_cleanup_smoke()
+  return [=[
+local co = coroutine.create(function()
+  local target = "before"
+  coroutine.yield("ready")
+  return target
+end)
+
+local ok, msg = coroutine.resume(co)
+assert(ok and msg == "ready")
+
+local info = debug.getinfo(co, 1, "flnSuL")
+assert(type(info) == "table")
+assert(type(info.func) == "function")
+assert(type(info.activelines) == "table")
+
+local slot
+for i = 1, 20 do
+  local name, value = debug.getlocal(co, 1, i)
+  if not name then break end
+  if name == "target" then
+    assert(value == "before")
+    slot = i
+    break
+  end
+end
+assert(slot, "suspended coroutine local not found")
+
+local name = debug.setlocal(co, 1, slot, "after")
+assert(name == "target")
+
+ok, msg = coroutine.resume(co)
+assert(ok and msg == "after")
+assert(coroutine.status(co) == "dead")
+
+local function self_info()
+  return debug.getinfo(1, "flnSuL")
+end
+info = self_info()
+assert(type(info) == "table" and type(info.func) == "function")
+assert(type(info.activelines) == "table")
+
+print("api-debug-claim-cleanup-smoke OK")
+]=]
+end
+
 local function table_value_smoke()
   return [=[
 local util = require("jit.util")
@@ -613,6 +923,17 @@ return function(add)
       t:build({ quiet = true })
       run_luajit(t, { "-e", hook_state_atomic_smoke() })
       print("M5 hook function/count atomic helper behavior passed")
+    end
+  })
+
+  add({
+    name = "m5_api_debug_claim_cleanup",
+    description = "API/debug/JIT state-claim cleanup boundaries",
+    run = function(t)
+      assert_api_debug_claim_cleanup(t)
+      t:build({ quiet = true })
+      run_luajit(t, { "-e", api_debug_claim_cleanup_smoke() })
+      print("M5 API/debug/JIT claim cleanup boundaries passed")
     end
   })
 

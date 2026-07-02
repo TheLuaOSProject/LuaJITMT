@@ -1381,7 +1381,6 @@ LUA_API int lua_setfenv(lua_State *L, int idx)
   cTValue *o = index2adr_check_read(L, idx, &snap);
   LJStateClaim claim;
   GCtab *t;
-  int claimed = 0;
   lj_checkapi_slot(1);
   lj_checkapi(tvistab(L->top-1), "top stack slot is not a table");
   t = tabV(L->top-1);
@@ -1400,14 +1399,12 @@ LUA_API int lua_setfenv(lua_State *L, int idx)
     if (!lj_state_tryclaim(L1, lj_thr_current_id(G(L)), &claim))
       lj_err_callermsg(api_errstate(L), "thread busy");
     lj_state_env_rel(L1, t);
-    claimed = 1;
+    lj_state_dropclaim(&claim);
     lj_gc_pubobjobj(L, obj2gco(L1), t);
   } else {
     L->top--;
     return 0;
   }
-  if (claimed)
-    lj_state_dropclaim(&claim);
   L->top--;
   return 1;
 }
@@ -1567,6 +1564,16 @@ LUA_API int lua_yield(lua_State *L, int nresults)
   return 0;  /* unreachable */
 }
 
+static TValue *api_resume_invalid_cp(lua_State *L, lua_CFunction dummy,
+				     void *ud)
+{
+  UNUSED(dummy); UNUSED(ud);
+  L->top = L->base;
+  setstrV(L, L->top, lj_err_str(L, LJ_ERR_COSUSP));
+  incr_top(L);
+  return NULL;
+}
+
 LUA_API int lua_resume(lua_State *L, int nargs)
 {
   LJStateClaim claim;
@@ -1578,9 +1585,13 @@ LUA_API int lua_resume(lua_State *L, int nargs)
       L->status == LUA_OK ? api_call_base(L, nargs) : L->top - nargs,
       0, 0);
   } else {
-    L->top = L->base;
-    setstrV(L, L->top, lj_err_str(L, LJ_ERR_COSUSP));
-    incr_top(L);
+    ptrdiff_t oldtop = savestack(L, L->top);
+    int errcode = lj_vm_cpcall(L, NULL, NULL, api_resume_invalid_cp);
+    if (LJ_UNLIKELY(errcode)) {
+      L->top = restorestack(L, oldtop);
+      lj_state_dropresumeclaim(&claim);
+      lj_err_throw(L, errcode);
+    }
     status = LUA_ERRRUN;
   }
   lj_state_dropresumeclaim(&claim);
