@@ -1171,8 +1171,15 @@ void lj_gc2_account_alloc(global_State *g, TGState *tg, GCSize bytes)
   if (!flushed)
     return;
   lj_gc2_check_trigger(g, tg);
-  if (lj_gc2_hard_limit_reached(g))  /* 05 section 5.11 hard limit. */
-    (void)lj_gc2_assist(g, tg);
+  if (lj_gc2_hard_limit_reached(g)) {  /* 05 section 5.11 hard limit. */
+    uint64_t since = lj_gc2_alloc_since_load(g);
+    if (lj_tg_jit_base(g) == NULL ||
+	lj_gc2_hard_load(g) < LJ_GC2_ACCT_FLUSH ||
+	since >= lj_gc2_hard_check_load(g)) {
+      (void)lj_gc2_assist(g, tg);
+      lj_gc2_hard_check_advance(g, since);
+    }
+  }
 }
 
 uint32_t lj_gc2_assist_shift_from_stepmul(uint32_t stepmul)
@@ -1191,6 +1198,34 @@ static uint64_t gc2_helper_soft_next(GCSize total)
   uint64_t max = ~(uint64_t)0;
   return (uint64_t)total > max - LJ_GC2_HELPER_IDLE_STEP ?
 	 max : (uint64_t)total + LJ_GC2_HELPER_IDLE_STEP;
+}
+
+static uint64_t gc2_hard_check_next(global_State *g, uint64_t since)
+{
+  uint64_t hard, max = ~(uint64_t)0;
+  if (!g)
+    return 0;
+  hard = lj_gc2_hard_load(g);
+  if (hard < LJ_GC2_ACCT_FLUSH || since <= hard)
+    return hard;
+  return since > max - LJ_GC2_TRACE_HARD_CHECK_BATCH ?
+	 max : since + LJ_GC2_TRACE_HARD_CHECK_BATCH;
+}
+
+void lj_gc2_hard_check_advance(global_State *g, uint64_t since)
+{
+  uint64_t old, next;
+  if (!g)
+    return;
+  next = gc2_hard_check_next(g, since);
+  old = lj_gc2_hard_check_load(g);
+  while (old < next) {
+    uint64_t expect = old;
+    if (la_cas64(&g->gc2.hard_check_bytes, &expect, next,
+		 LA_ACQ_REL, LA_ACQ))
+      return;
+    old = expect;
+  }
 }
 
 void lj_gc2_update_pacing(global_State *g)
@@ -1251,6 +1286,7 @@ static void gc2_reset_alloc_trigger(global_State *g)
        tg = lj_tg_next_acq(tg))
     (void)lj_gc2_flush_alloc(g, tg);
   lj_gc2_cycle_alloc_store(g, lj_gc2_alloc_since_xchg(g, 0));
+  lj_gc2_hard_check_store(g, lj_gc2_hard_load(g));
   lj_gc2_helper_soft_limit_store(g, ~(uint64_t)0);
 }
 

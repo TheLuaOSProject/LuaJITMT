@@ -145,6 +145,7 @@ enum {
 #define LJ_GC2_ACCT_FLUSH		32768u
 #define LJ_GC2_TRIGGER_MIN		(LJ_GC2_ACCT_FLUSH * 8u)
 #define LJ_GC2_HELPER_IDLE_STEP		(LJ_GC2_ACCT_FLUSH * 4u)
+#define LJ_GC2_TRACE_HARD_CHECK_BATCH	(LJ_GC2_ACCT_FLUSH * 16u)
 #define LJ_GC2_WORKER_DRAIN_BATCH	64u
 #define LJ_GC2_WEAK_DRAIN_BATCH		64u
 #define LJ_GC2_SWEEP_BATCH		64u
@@ -161,6 +162,7 @@ LJ_FUNC int lj_gc2_collect_active(lua_State *L, int restore_stopped);
 LJ_FUNC void lj_gc2_check_trigger(global_State *g, TGState *tg);
 LJ_FUNC void lj_gc2_update_pacing(global_State *g);
 LJ_FUNC void lj_gc2_publish_idle_threshold(global_State *g);
+LJ_FUNC void lj_gc2_hard_check_advance(global_State *g, uint64_t since);
 LJ_FUNC uint32_t lj_gc2_assist_shift_from_stepmul(uint32_t stepmul);
 LJ_FUNC uint32_t lj_gc2_assist(global_State *g, TGState *tg);
 LJ_FUNC void lj_gc2_set_generational(global_State *g, int enabled);

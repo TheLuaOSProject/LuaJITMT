@@ -62,6 +62,46 @@ local function run_gc_stats(t)
   print("M9 GC stats guard passed")
 end
 
+local function run_trace_hard_assist_cadence(t)
+  t:build({ clean = true, quiet = true })
+
+  with_temp_paths(t, { "lj-gc2-hard-cadence.lua" }, function(script)
+    local luajit = shell_quote(t:path("src", "luajit"))
+    local lua_path = "LUA_PATH=" .. shell_quote(runtime.lua_path(t))
+    write_file(script, table.concat({
+      'local th = require"threading"',
+      'assert(jit and jit.status())',
+      'jit.opt.start("hotloop=1", "hotexit=1", "-sink")',
+      'local function run(n)',
+      '  local s = 0',
+      '  for i = 1, n do',
+      '    local x = i',
+      '    local f = function() x = x + 1; return x end',
+      '    s = s + f()',
+      '  end',
+      '  return s',
+      'end',
+      'run(1000)',
+      'collectgarbage("collect")',
+      'local before = th.gcstats()',
+      'local result = run(100000)',
+      'local after = th.gcstats()',
+      'assert(result == 5000150000)',
+      'local allocated = after.alloc_since_trigger - before.alloc_since_trigger',
+      'local assists = after.assist_runs - before.assist_runs',
+      'assert(allocated > 4 * 1024 * 1024, allocated)',
+      'assert(assists <= 64, assists)',
+      'print("assist_delta=" .. assists .. " allocated=" .. allocated)',
+      ""
+    }, "\n"))
+    assert_command_output_contains(
+      lua_path .. " " .. luajit .. " " .. shell_quote(script),
+      "assist_delta=",
+      { timeout = "20s", stderr = true })
+  end)
+  print("M9 trace hard-assist cadence guard passed")
+end
+
 local function run_bench_smoke(t)
   t:build({ clean = true, quiet = true })
 
@@ -274,6 +314,7 @@ end
 
 local m9_m10_deps = {
   "m9_gc_stats",
+  "m9_trace_hard_assist_cadence",
   "m9_bench_smoke",
   "m9_bench_regression",
   "m9_bench_stock_compare",
@@ -285,6 +326,12 @@ return function(add)
     name = "m9_gc_stats",
     description = "GC stats telemetry table and smoke test",
     run = run_gc_stats
+  })
+
+  add({
+    name = "m9_trace_hard_assist_cadence",
+    description = "trace allocation hard-assist cadence guard",
+    run = run_trace_hard_assist_cadence
   })
 
   add({

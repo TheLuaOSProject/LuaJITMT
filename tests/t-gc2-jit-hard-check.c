@@ -24,6 +24,7 @@ static void run_hard_alloc_trace(lua_State *L, global_State *g,
 
   lj_gc_threshold_store(g, LJ_MAX_MEM);
   la_store64_rel(&g->gc2.hard_bytes, 1);
+  lj_gc2_hard_check_store(g, 1);
   la_store32_rel(&g->gc2.assist_shift, 0);
   la_store64_rel(&g->gc2.alloc_since_trigger, 2);
   classic_state0 = g->gc.state;

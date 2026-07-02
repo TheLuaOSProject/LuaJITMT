@@ -3497,7 +3497,7 @@ static void asm_gc_check(ASMState *as)
   l_call = emit_label(as);
   /* Jump around GC step if neither classic nor GC2 hard threshold is reached. */
   emit_sjcc(as, CC_BE, l_end);
-  emit_opgl(as, XO_ARITH(XOg_CMP), tmp|REX_GC64, gc2.hard_bytes);
+  emit_opgl(as, XO_ARITH(XOg_CMP), tmp|REX_GC64, gc2.hard_check_bytes);
   emit_getgl(as, tmp, gc2.alloc_since_trigger);
   emit_sjcc(as, CC_AE, l_call);
   checkmclim(as);  /* M6: split GC2-hard and classic-GC threshold tests. */

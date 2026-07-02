@@ -210,6 +210,18 @@ static LJ_AINLINE uint64_t lj_gc2_hard_load(global_State *g)
 static LJ_AINLINE void lj_gc2_hard_store(global_State *g, uint64_t bytes)
 {
   la_store64_rel(&g->gc2.hard_bytes, bytes);
+  la_store64_rel(&g->gc2.hard_check_bytes, bytes);
+}
+
+static LJ_AINLINE uint64_t lj_gc2_hard_check_load(global_State *g)
+{
+  return la_load64_acq(&g->gc2.hard_check_bytes);
+}
+
+static LJ_AINLINE void lj_gc2_hard_check_store(global_State *g,
+					       uint64_t bytes)
+{
+  la_store64_rel(&g->gc2.hard_check_bytes, bytes);
 }
 
 static LJ_AINLINE uint64_t lj_gc2_helper_soft_limit_load(global_State *g)

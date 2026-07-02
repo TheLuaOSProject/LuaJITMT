@@ -52,13 +52,27 @@ static GCSize gc_step_debt_quantum(global_State *g)
   return (GCSize)LJ_GC2_HELPER_IDLE_STEP;
 }
 
-static int gc_hard_assist_due(global_State *g, TGState *tg)
+static int gc_hard_assist_due_interp(global_State *g, TGState *tg)
 {
   if (!lj_gc2_hard_limit_reached(g))
     return 0;
   return !tg || lj_gc2_hard_load(g) < LJ_GC2_ACCT_FLUSH ||
 	 lj_tg_local_total_acq(tg) >= LJ_GC2_ACCT_FLUSH;
 }
+
+#if LJ_HASJIT
+static int gc_hard_assist_due_jit(global_State *g)
+{
+  uint64_t hard, since;
+  if (!lj_gc2_hard_limit_reached(g))
+    return 0;
+  hard = lj_gc2_hard_load(g);
+  if (hard < LJ_GC2_ACCT_FLUSH)
+    return 1;
+  since = lj_gc2_alloc_since_load(g);
+  return since >= lj_gc2_hard_check_load(g);
+}
+#endif
 
 /* Macros to set GCobj colors and flags. */
 #define white2gray(x)		(lj_obj_cleargcflags((x), LJ_GC_WHITES))
@@ -1834,7 +1848,7 @@ static void gc_step_assist_top(lua_State *L, global_State *g, int threshold_step
   lj_gc2_check_trigger(g, L2TG(L));
   if (!threshold_step)
     threshold_step = lj_gc_total_load(g) >= lj_gc_threshold_load(g);
-  if (gc_hard_assist_due(g, tg)) {
+  if (gc_hard_assist_due_interp(g, tg)) {
     gc2_interp_hard_checks_add(g, 1);
     lj_gc2_assist(g, tg);  /* 05 section 5.11 interpreter assist bridge. */
   }
@@ -1869,10 +1883,11 @@ int LJ_FASTCALL lj_gc_step_jit(global_State *g, MSize steps)
   tg = L2TG(L);
   lj_gc2_check_trigger(g, tg);
   threshold_step = lj_gc_total_load(g) >= lj_gc_threshold_load(g);
-  hard_step = gc_hard_assist_due(g, tg);
+  hard_step = gc_hard_assist_due_jit(g);
   if (hard_step) {
     gc2_jit_hard_checks_add(g, 1);
     lj_gc2_assist(g, tg);  /* 05 section 5.11 trace-side assist bridge. */
+    lj_gc2_hard_check_advance(g, lj_gc2_alloc_since_load(g));
   }
   if (threshold_step) {
     while (steps-- > 0 && lj_gc_step(L) == 0)
