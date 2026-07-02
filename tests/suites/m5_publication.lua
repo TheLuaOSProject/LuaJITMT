@@ -87,6 +87,64 @@ END {
 ]=], "src/lj_api.c")
 
   awk([=[
+function reset(name, resume, grow, pub) {
+  fun = name; want_resume = resume; want_grow = grow; want_pub = pub
+  started = 0; depth = 0; claim = 0; access = 0; cpgrow = 0; pubrange = 0
+  pubtv = 0; drop = 0; claim_kind = ""
+}
+function finish() {
+  if (fun) {
+    if (!claim || !access || !drop || claim > access || access > drop ||
+	(want_resume && claim_kind != "resume") ||
+	(!want_resume && claim_kind != "try") ||
+	(want_grow && (!cpgrow || claim > cpgrow || cpgrow > drop)) ||
+	(want_pub == "range" && (!pubrange || pubrange > drop)) ||
+	(want_pub == "tv" && (!pubtv || pubtv > drop))) {
+      print fun " stack owner-claim boundary missing"
+      exit 1
+    }
+    seen++
+  }
+  fun = ""
+}
+function count_char(text, ch,    n, i) {
+  n = 0
+  for (i = 1; i <= length(text); i++)
+    if (substr(text, i, 1) == ch) n++
+  return n
+}
+BEGIN { fun = ""; seen = 0; claim_kind = "" }
+/^LUA_API int lua_gettop\(lua_State \*L\)/ { finish(); reset("lua_gettop", 0, 0, "none"); next }
+/^LUA_API int lua_checkstack\(lua_State \*L,/ { finish(); reset("lua_checkstack", 1, 1, "none"); next }
+/^LUA_API void lua_settop\(lua_State \*L,/ { finish(); reset("lua_settop", 1, 1, "range"); next }
+/^LUA_API void lua_remove\(lua_State \*L,/ { finish(); reset("lua_remove", 0, 0, "range"); next }
+/^LUA_API void lua_insert\(lua_State \*L,/ { finish(); reset("lua_insert", 0, 0, "range"); next }
+/^LUA_API void lua_pushvalue\(lua_State \*L,/ { finish(); reset("lua_pushvalue", 1, 1, "tv"); next }
+fun {
+  if (index($0, "{")) started = 1
+  depth += count_char($0, "{")
+  depth -= count_char($0, "}")
+  if (/lj_state_resumeclaim/) { claim = NR; claim_kind = "resume" }
+  if (/lj_state_tryclaim/) { claim = NR; claim_kind = "try" }
+  if (/L->top|L->base|index2adr|copyTV/) {
+    if (!access) access = NR
+  }
+  if (/lj_state_cpgrowstack/) cpgrow = NR
+  if (/lj_state_stack_pubrange/) pubrange = NR
+  if (/lj_state_stack_pubtv/) pubtv = NR
+  if (/lj_state_dropresumeclaim|lj_state_dropclaim/) drop = NR
+  if (started && depth == 0) finish()
+}
+END {
+  finish()
+  if (seen != 6) {
+    print "missing public stack API owner-claim guard coverage"
+    exit 1
+  }
+}
+]=], "src/lj_api.c")
+
+  awk([=[
 BEGIN { infn = 0; rel = 0; drop = 0; pub = 0 }
 /^LUA_API int lua_setfenv\(lua_State \*L,/ { infn = 1; next }
 infn && /^}/ { infn = 0; next }

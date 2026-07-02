@@ -198,16 +198,22 @@ LUA_API int lua_status(lua_State *L)
 
 LUA_API int lua_checkstack(lua_State *L, int size)
 {
+  LJStateClaim claim;
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(api_errstate(L), "thread busy");
   if (size > LUAI_MAXCSTACK || (L->top - L->base + size) > LUAI_MAXCSTACK) {
+    lj_state_dropresumeclaim(&claim);
     return 0;  /* Stack overflow. */
   } else if (size > 0) {
     int avail = (int)(mref(L->maxstack, TValue) - L->top);
     if (size > avail &&
 	lj_state_cpgrowstack(L, (MSize)(size - avail)) != LUA_OK) {
       L->top--;
+      lj_state_dropresumeclaim(&claim);
       return 0;  /* Out of memory. */
     }
   }
+  lj_state_dropresumeclaim(&claim);
   return 1;
 }
 
@@ -267,16 +273,34 @@ LUA_API const lua_Number *lua_version(lua_State *L)
 
 LUA_API int lua_gettop(lua_State *L)
 {
-  return (int)(L->top - L->base);
+  LJStateClaim claim;
+  int top;
+  if (!lj_state_tryclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(api_errstate(L), "thread busy");
+  top = (int)(L->top - L->base);
+  lj_state_dropclaim(&claim);
+  return top;
 }
 
 LUA_API void lua_settop(lua_State *L, int idx)
 {
+  LJStateClaim claim;
+  lua_State *errL = api_errstate(L);
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(errL, "thread busy");
   if (idx >= 0) {
     lj_checkapi(idx <= tvref(L->maxstack) - L->base, "bad stack slot %d", idx);
     if (L->base + idx > L->top) {
-      if (L->base + idx >= tvref(L->maxstack))
-	lj_state_growstack(L, (MSize)idx - (MSize)(L->top - L->base));
+      if (L->base + idx >= tvref(L->maxstack)) {
+	int status = lj_state_cpgrowstack(L,
+		      (MSize)idx - (MSize)(L->top - L->base));
+	if (status != LUA_OK) {
+	  if (L->top > L->base) L->top--;
+	  lj_state_dropresumeclaim(&claim);
+	  lj_err_callermsg(errL, status == LUA_ERRMEM ?
+			   "not enough memory" : "stack overflow");
+	}
+      }
       do { setnilV(L->top++); } while (L->top < L->base + idx);
     } else {
       L->top = L->base + idx;
@@ -285,20 +309,34 @@ LUA_API void lua_settop(lua_State *L, int idx)
     lj_checkapi(-(idx+1) <= (L->top - L->base), "bad stack slot %d", idx);
     L->top += idx+1;  /* Shrinks top (idx < 0). */
   }
+  lj_state_stack_pubrange(L, L);
+  lj_state_dropresumeclaim(&claim);
 }
 
 LUA_API void lua_remove(lua_State *L, int idx)
 {
-  TValue *p = index2adr_stack(L, idx);
+  LJStateClaim claim;
+  TValue *p;
+  if (!lj_state_tryclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(api_errstate(L), "thread busy");
+  p = index2adr_stack(L, idx);
   while (++p < L->top) copyTV(L, p-1, p);
   L->top--;
+  lj_state_stack_pubrange(L, L);
+  lj_state_dropclaim(&claim);
 }
 
 LUA_API void lua_insert(lua_State *L, int idx)
 {
-  TValue *q, *p = index2adr_stack(L, idx);
+  LJStateClaim claim;
+  TValue *q, *p;
+  if (!lj_state_tryclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(api_errstate(L), "thread busy");
+  p = index2adr_stack(L, idx);
   for (q = L->top; q > p; q--) copyTV(L, q, q-1);
   copyTV(L, p, L->top);
+  lj_state_stack_pubrange(L, L);
+  lj_state_dropclaim(&claim);
 }
 
 static void copy_slot(lua_State *L, TValue *f, int idx)
@@ -350,9 +388,24 @@ LUA_API void lua_copy(lua_State *L, int fromidx, int toidx)
 
 LUA_API void lua_pushvalue(lua_State *L, int idx)
 {
+  LJStateClaim claim;
+  lua_State *errL = api_errstate(L);
   TValue snap;
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(errL, "thread busy");
+  if (L->top >= tvref(L->maxstack)) {
+    int status = lj_state_cpgrowstack(L, 1);
+    if (status != LUA_OK) {
+      if (L->top > L->base) L->top--;
+      lj_state_dropresumeclaim(&claim);
+      lj_err_callermsg(errL, status == LUA_ERRMEM ?
+		       "not enough memory" : "stack overflow");
+    }
+  }
   copyTV(L, L->top, index2adr_read(L, idx, &snap));
-  incr_top(L);
+  lj_state_stack_pubtv(L, L, L->top);
+  L->top++;
+  lj_state_dropresumeclaim(&claim);
 }
 
 /* -- Stack getters ------------------------------------------------------- */
