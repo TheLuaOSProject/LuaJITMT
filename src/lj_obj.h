@@ -1552,6 +1552,7 @@ typedef struct jit_State jit_State;
 typedef struct global_State {
   lua_Alloc allocf;	/* Memory allocator. */
   void *allocd;		/* Memory allocator data. */
+  uint32_t allocf_arena;  /* Active allocator is the internal arena shim. */
   GCState gc;		/* Garbage collector. */
   GCstr strempty;	/* Empty string. */
   uint8_t stremptyz;	/* Zero terminator of empty string. */

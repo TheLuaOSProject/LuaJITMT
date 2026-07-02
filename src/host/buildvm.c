@@ -16,7 +16,9 @@
 
 #include "buildvm.h"
 #include "lj_obj.h"
+#include "lj_arena.h"
 #include "lj_gc.h"
+#include "lj_gc2.h"
 #include "lj_bc.h"
 #if LJ_HASJIT
 #include "lj_ir.h"
@@ -526,4 +528,3 @@ int main(int argc, char **argv)
 
   return 0;
 }
-

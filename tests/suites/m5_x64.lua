@@ -93,6 +93,16 @@ end
 
 return function(add)
   add({
+    name = "m5_x64_tnew_empty_inline",
+    description = "x64 interpreter empty TNEW inline arena bump behavior",
+    run = function(t)
+      compile_and_run_c(t, t:tmp("lj_t-x64-tnew-empty-inline"),
+                        "t-x64-tnew-empty-inline.c")
+      print("M5 x64 empty TNEW inline arena bump behavior passed")
+    end
+  })
+
+  add({
     name = "m5_x64_getmetatable_node_order",
     description = "x64 getmetatable behavior",
     run = function(t)

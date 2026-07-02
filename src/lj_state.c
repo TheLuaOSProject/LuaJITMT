@@ -561,6 +561,7 @@ LUA_API lua_State *lua_newstate(lua_Alloc allocf, void *allocd)
   g->strempty.gct = ~LJ_TSTR;
   g->allocf = allocf;
   g->allocd = allocd;
+  g->allocf_arena = (allocf == lj_arena_allocf);
   g->prng = prng;
 #if LJ_HASJIT
   g->jitp = &GG->J;

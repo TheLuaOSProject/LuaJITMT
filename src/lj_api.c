@@ -18,6 +18,7 @@
 #include "lj_err.h"
 #include "lj_debug.h"
 #include "lj_str.h"
+#include "lj_arena.h"
 #include "lj_tab.h"
 #include "lj_func.h"
 #include "lj_udata.h"
@@ -2409,6 +2410,11 @@ LUA_API lua_Alloc lua_getallocf(lua_State *L, void **ud)
 LUA_API void lua_setallocf(lua_State *L, lua_Alloc f, void *ud)
 {
   global_State *g = G(L);
+  uint32_t arena = (f == lj_arena_allocf);
+  if (!arena)
+    la_store32_rel(&g->allocf_arena, 0);
   g->allocd = ud;
   g->allocf = f;
+  if (arena)
+    la_store32_rel(&g->allocf_arena, 1);
 }

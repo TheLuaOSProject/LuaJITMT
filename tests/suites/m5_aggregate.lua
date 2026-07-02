@@ -49,6 +49,7 @@ local m5_concurrent_cases = {
   "m5_jit_hash_store_nyi",
   "m5_jit_href_node_order",
   "m5_jit_hrefk_record_snapshot",
+  "m5_x64_tnew_empty_inline",
   "m5_x64_table_next_snapshot",
   "m5_x64_itern_snapshot",
   "m5_x64_ipairs_snapshot",

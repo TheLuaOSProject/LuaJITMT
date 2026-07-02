@@ -781,6 +781,8 @@ static LJ_AINLINE void tab_publish_array(GCtab *t, TValue *array,
   lj_tab_asize_rel(t, asize);
 }
 
+LJ_STATIC_ASSERT(((sizeof(GCtab) + LJ_CELL_SIZE-1u) >> LJ_CELL_SHIFT) == 5u);
+
 /* Create a new table with slots initialized to nil. */
 static GCtab *newtab(lua_State *L, uint32_t asize, uint32_t hbits)
 {
