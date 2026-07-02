@@ -24,9 +24,16 @@
 #include "lj_lex.h"
 #include "lj_bcdump.h"
 #include "lj_parse.h"
+#include "lj_thr.h"
 #include "lj_tg.h"
 
 /* -- Load Lua source code and bytecode ----------------------------------- */
+
+static lua_State *load_errstate(lua_State *L)
+{
+  lua_State *cur = lj_tg_cur_L(G(L));
+  return cur && G(cur) == G(L) ? cur : L;
+}
 
 static TValue *cpparser(lua_State *L, lua_CFunction dummy, void *ud)
 {
@@ -65,8 +72,11 @@ static TValue *cpparser(lua_State *L, lua_CFunction dummy, void *ud)
 LUA_API int lua_loadx(lua_State *L, lua_Reader reader, void *data,
 		      const char *chunkname, const char *mode)
 {
+  LJStateClaim claim;
   LexState ls;
   int status;
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(load_errstate(L), "thread busy");
   ls.rfunc = reader;
   ls.rdata = data;
   ls.chunkarg = chunkname ? chunkname : "?";
@@ -75,6 +85,7 @@ LUA_API int lua_loadx(lua_State *L, lua_Reader reader, void *data,
   status = lj_vm_cpcall(L, NULL, &ls, cpparser);
   lj_lex_cleanup(L, &ls);
   lj_gc_check(L);
+  lj_state_dropresumeclaim(&claim);
   return status;
 }
 

@@ -96,6 +96,36 @@ static int resume_return(lua_State *L)
   return 1;
 }
 
+static void check_call_entry_unowned(lua_State *L)
+{
+  lua_State *co;
+  lua_settop(L, 0);
+
+  co = lua_newthread(L);
+  assert(luaL_loadstring(L, "return 95") == 0);
+  lua_xmove(L, co, 1);
+  assert(lj_state_owner_acq(co) == 0);
+  lua_call(co, 0, 1);
+  assert(lua_tointeger(co, -1) == 95);
+  assert(lj_state_owner_acq(co) == 0);
+  lua_pop(co, 1);
+
+  co = lua_newthread(L);
+  assert(luaL_loadstring(L, "return 96") == 0);
+  lua_xmove(L, co, 1);
+  assert(lj_state_owner_acq(co) == 0);
+  assert(lua_pcall(co, 0, 1, 0) == 0);
+  assert(lua_tointeger(co, -1) == 96);
+  assert(lj_state_owner_acq(co) == 0);
+  lua_pop(co, 1);
+
+  co = lua_newthread(L);
+  assert(lj_state_owner_acq(co) == 0);
+  assert(lua_cpcall(co, resume_return, NULL) == 0);
+  assert(lj_state_owner_acq(co) == 0);
+  lua_settop(L, 0);
+}
+
 static void check_resume_unowned(lua_State *L)
 {
   uint32_t tid = lj_thr_current_id(G(L));
@@ -113,6 +143,20 @@ static void check_resume_unowned(lua_State *L)
   assert(lua_tointeger(co, -1) == 91);
   lua_pop(co, 1);
   lj_state_release(co, tid);
+  lua_pop(L, 1);
+}
+
+static void check_lua_load_unowned(lua_State *L)
+{
+  lua_State *co;
+  lua_settop(L, 0);
+  co = lua_newthread(L);
+  assert(lj_state_owner_acq(co) == 0);
+  assert(luaL_loadstring(co, "return 94") == 0);
+  assert(lj_state_owner_acq(co) == 0);
+  assert(lua_resume(co, 0) == LUA_OK);
+  assert(lua_tointeger(co, -1) == 94);
+  lua_pop(co, 1);
   lua_pop(L, 1);
 }
 
@@ -232,6 +276,46 @@ static int busy_lua_resume(lua_State *L)
   lua_State *co = lua_newthread(L);
   lj_state_owner_rel(co, foreign_tid(L));
   (void)lua_resume(co, 0);
+  return 0;
+}
+
+static int busy_lua_call(lua_State *L)
+{
+  uint32_t tid = lj_thr_current_id(G(L));
+  lua_State *co = lua_newthread(L);
+  assert(lj_state_claim(co, tid));
+  lua_pushcfunction(co, resume_return);
+  lj_state_release(co, tid);
+  lj_state_owner_rel(co, foreign_tid(L));
+  lua_call(co, 0, 0);
+  return 0;
+}
+
+static int busy_lua_pcall(lua_State *L)
+{
+  uint32_t tid = lj_thr_current_id(G(L));
+  lua_State *co = lua_newthread(L);
+  assert(lj_state_claim(co, tid));
+  lua_pushcfunction(co, resume_return);
+  lj_state_release(co, tid);
+  lj_state_owner_rel(co, foreign_tid(L));
+  (void)lua_pcall(co, 0, 0, 0);
+  return 0;
+}
+
+static int busy_lua_cpcall(lua_State *L)
+{
+  lua_State *co = lua_newthread(L);
+  lj_state_owner_rel(co, foreign_tid(L));
+  (void)lua_cpcall(co, resume_return, NULL);
+  return 0;
+}
+
+static int busy_lua_load(lua_State *L)
+{
+  lua_State *co = lua_newthread(L);
+  lj_state_owner_rel(co, foreign_tid(L));
+  (void)luaL_loadstring(co, "return 1");
   return 0;
 }
 
@@ -410,7 +494,9 @@ int main(void)
   check_xmove_unowned_target(L);
   check_xmove_unowned_source(L);
   check_thread_env_unowned(L);
+  check_call_entry_unowned(L);
   check_resume_unowned(L);
+  check_lua_load_unowned(L);
   check_lua_getinfo_unowned(L);
   check_coroutine_resume_unowned(L);
   check_coroutine_wrap_unowned(L);
@@ -444,7 +530,11 @@ int main(void)
   expect_thread_busy(L, busy_lua_status, "busy lua_status");
   expect_thread_busy(L, busy_getfenv_thread, "busy thread getfenv");
   expect_thread_busy(L, busy_setfenv_thread, "busy thread setfenv");
+  expect_thread_busy(L, busy_lua_call, "busy lua_call");
+  expect_thread_busy(L, busy_lua_pcall, "busy lua_pcall");
+  expect_thread_busy(L, busy_lua_cpcall, "busy lua_cpcall");
   expect_thread_busy(L, busy_lua_resume, "busy lua_resume");
+  expect_thread_busy(L, busy_lua_load, "busy lua_load");
   expect_thread_busy(L, busy_coroutine_resume, "busy coroutine.resume");
   expect_thread_busy(L, busy_coroutine_wrap, "busy coroutine.wrap");
   expect_thread_busy(L, busy_lua_getstack, "busy lua_getstack");

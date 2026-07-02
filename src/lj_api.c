@@ -1448,21 +1448,39 @@ static TValue *api_call_base(lua_State *L, int nargs)
 
 LUA_API void lua_call(lua_State *L, int nargs, int nresults)
 {
+  LJStateClaim claim;
   lj_checkapi(L->status == LUA_OK || L->status == LUA_ERRERR,
 	      "thread called in wrong state %d", L->status);
   lj_checkapi_slot(nargs+1);
-  lj_vm_call(L, api_call_base(L, nargs), nresults+1);
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(api_errstate(L), "thread busy");
+  if (claim.release) {
+    global_State *g = G(L);
+    uint8_t oldh = hook_save(g);
+    int status = lj_vm_pcall(L, api_call_base(L, nargs), nresults+1, 0);
+    if (status)
+      hook_restore(g, oldh);
+    lj_state_dropresumeclaim(&claim);
+    if (status)
+      lj_err_throw(L, status);
+  } else {
+    lj_vm_call(L, api_call_base(L, nargs), nresults+1);
+    lj_state_dropresumeclaim(&claim);
+  }
 }
 
 LUA_API int lua_pcall(lua_State *L, int nargs, int nresults, int errfunc)
 {
   global_State *g = G(L);
   uint8_t oldh = hook_save(g);
+  LJStateClaim claim;
   ptrdiff_t ef;
   int status;
   lj_checkapi(L->status == LUA_OK || L->status == LUA_ERRERR,
 	      "thread called in wrong state %d", L->status);
   lj_checkapi_slot(nargs+1);
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(g), &claim))
+    lj_err_callermsg(api_errstate(L), "thread busy");
   if (errfunc == 0) {
     ef = 0;
   } else {
@@ -1471,6 +1489,7 @@ LUA_API int lua_pcall(lua_State *L, int nargs, int nresults, int errfunc)
   }
   status = lj_vm_pcall(L, api_call_base(L, nargs), nresults+1, ef);
   if (status) hook_restore(g, oldh);
+  lj_state_dropresumeclaim(&claim);
   return status;
 }
 
@@ -1494,11 +1513,15 @@ LUA_API int lua_cpcall(lua_State *L, lua_CFunction func, void *ud)
 {
   global_State *g = G(L);
   uint8_t oldh = hook_save(g);
+  LJStateClaim claim;
   int status;
   lj_checkapi(L->status == LUA_OK || L->status == LUA_ERRERR,
 	      "thread called in wrong state %d", L->status);
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(g), &claim))
+    lj_err_callermsg(api_errstate(L), "thread busy");
   status = lj_vm_cpcall(L, func, ud, cpcall);
   if (status) hook_restore(g, oldh);
+  lj_state_dropresumeclaim(&claim);
   return status;
 }
 

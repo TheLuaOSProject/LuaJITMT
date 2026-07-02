@@ -116,6 +116,85 @@ END {
 ]=], "src/lj_api.c")
 
   awk([=[
+BEGIN { infn = 0; claim = 0; cpcall = 0; cleanup = 0; gccheck = 0; drop = 0 }
+/^LUA_API int lua_loadx\(lua_State \*L,/ { infn = 1; next }
+infn && /^}/ { infn = 0; next }
+infn && /lj_state_resumeclaim/ { claim = NR }
+infn && /lj_vm_cpcall/ { cpcall = NR }
+infn && /lj_lex_cleanup/ { cleanup = NR }
+infn && /lj_gc_check/ { gccheck = NR }
+infn && /lj_state_dropresumeclaim/ { drop = NR }
+END {
+  if (!claim || !cpcall || !cleanup || !gccheck || !drop ||
+      claim > cpcall || cpcall > cleanup || cleanup > gccheck ||
+      gccheck > drop) {
+    print "lua_loadx must hold a resume claim across parser cpcall cleanup"
+    exit 1
+  }
+}
+]=], "src/lj_load.c")
+
+  awk([=[
+BEGIN {
+  infn = 0; claim = 0; pcall = 0; call = 0; drop_err = 0; drop_call = 0; rethrow = 0
+}
+/^LUA_API void lua_call\(lua_State \*L,/ { infn = 1; next }
+infn && /^}/ { infn = 0; next }
+infn && /lj_state_resumeclaim/ { claim = NR }
+infn && /lj_vm_pcall/ { pcall = NR }
+infn && /lj_vm_call/ { call = NR }
+infn && /lj_state_dropresumeclaim/ {
+  if (call) drop_call = NR
+  else drop_err = NR
+}
+infn && /lj_err_throw/ {
+  rethrow = NR
+  if (!drop_err || drop_err > NR) {
+    print "lua_call ownerless error rethrows before dropping resume claim"
+    exit 1
+  }
+}
+END {
+  if (!claim || !pcall || !call || !drop_err || !drop_call || !rethrow ||
+      claim > pcall || claim > call || pcall > drop_err ||
+      drop_err > rethrow || call > drop_call) {
+    print "lua_call resume-claim VM entry boundary missing"
+    exit 1
+  }
+}
+]=], "src/lj_api.c")
+
+  awk([=[
+BEGIN { infn = 0; claim = 0; pcall = 0; drop = 0 }
+/^LUA_API int lua_pcall\(lua_State \*L,/ { infn = 1; next }
+infn && /^}/ { infn = 0; next }
+infn && /lj_state_resumeclaim/ { claim = NR }
+infn && /lj_vm_pcall/ { pcall = NR }
+infn && /lj_state_dropresumeclaim/ { drop = NR }
+END {
+  if (!claim || !pcall || !drop || claim > pcall || pcall > drop) {
+    print "lua_pcall must hold a resume claim across VM pcall"
+    exit 1
+  }
+}
+]=], "src/lj_api.c")
+
+  awk([=[
+BEGIN { infn = 0; claim = 0; cpcall = 0; drop = 0 }
+/^LUA_API int lua_cpcall\(lua_State \*L,/ { infn = 1; next }
+infn && /^}/ { infn = 0; next }
+infn && /lj_state_resumeclaim/ { claim = NR }
+infn && /lj_vm_cpcall/ { cpcall = NR }
+infn && /lj_state_dropresumeclaim/ { drop = NR }
+END {
+  if (!claim || !cpcall || !drop || claim > cpcall || cpcall > drop) {
+    print "lua_cpcall must hold a resume claim across VM cpcall"
+    exit 1
+  }
+}
+]=], "src/lj_api.c")
+
+  awk([=[
 BEGIN { infn = 0; cpcall = 0; drop = 0; rethrow = 0 }
 /^LUA_API int lua_resume\(lua_State \*L,/ { infn = 1; next }
 infn && /^}/ { infn = 0; next }

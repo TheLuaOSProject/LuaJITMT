@@ -18,6 +18,11 @@ Permanent shape:
 - Public `lua_getinfo()` uses a resume claim. Ownerless foreign-state metadata,
   `f`, and `L` requests use the claimed helper path instead of a foreign
   protected call.
+- Public load/call entry points that can enter VM protected frames
+  (`lua_loadx`, `lua_call`, `lua_pcall`, `lua_cpcall`) hold resume claims for
+  ownerless coroutine states. `lua_call` uses a protected VM call only for a
+  claim it must release before rethrowing; already-owned current-state calls
+  keep the direct VM call path.
 - `lua_xmove()` directly copies and release-publishes stack slots while both
   states are claimed; the copy path itself does not allocate and must not be
   wrapped in `lj_vm_cpcall()` on the source coroutine.
@@ -25,6 +30,7 @@ Permanent shape:
 Regression coverage:
 
 - `m5_api_debug_claim_cleanup` source guards enforce the helper/root/drop
-  ordering.
+  ordering and the load/call resume-claim boundaries.
 - `m5_state_owner` covers public C API `lua_getinfo()` on an unowned yielded
-  coroutine, including `S`, `f`, and `L`.
+  coroutine, including `S`, `f`, and `L`, plus unowned `lua_loadx`,
+  `lua_call`, `lua_pcall`, and `lua_cpcall`.
