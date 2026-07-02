@@ -410,6 +410,13 @@ static int threading_stack_publish_protected(lua_State *L, lua_State *target)
   return lj_vm_cpcall(L, NULL, &ctx, threading_stack_publish_cp);
 }
 
+static void threading_state_set_env(lua_State *L, lua_State *child, GCtab *env)
+{
+  lj_state_env_rel(child, env);
+  if (env)
+    lj_gc_pubobjobj(L, child, env);
+}
+
 static void threading_entering_leave(global_State *g)
 {
   if (mt_entering_sub_acqrel(g, 1) == 1)
@@ -1506,13 +1513,16 @@ static lua_State *threading_spawn_core(lua_State *L, GCtab *env, TValue *base,
   lua_State *L1;
   uint32_t tid = lj_thr_current_id(G(L));
   ptrdiff_t baseofs = base - L->base;
+  GCtab *startenv;
   int rc;
 
   if (mt_shutdown_acq(G(L)) != 0)
     lj_err_callermsg(L, "VM shutdown in progress");
   lj_state_checkstack(L, 2);
   base = L->base + baseofs;
+  startenv = lj_state_env_acq(L);
   L1 = lua_newthread(L);
+  threading_state_set_env(L, L1, startenv);
   lj_state_checkstack(L1, (MSize)(nargs + 1));
   threading_stack_copy_claimed_l(L, L1, base, nargs, tid);
 

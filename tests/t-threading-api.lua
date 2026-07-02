@@ -157,6 +157,34 @@ local wok, sum, hole, tag = worker:join()
 assert(wok == true and sum == 42 and hole == nil and tag == "x")
 assert(worker:running() == false)
 
+package.loaded.threading_spawn_env_probe = nil
+local reqenv = th.spawn(function()
+  local probe = require("threading_spawn_env_probe")
+  return probe.require_type, probe.package_type, probe.current_type
+end)
+local reqok, require_type, package_type, current_type = reqenv:join()
+package.loaded.threading_spawn_env_probe = nil
+assert(reqok == true)
+assert(require_type == "function" and package_type == "table")
+assert(current_type == "function")
+
+local old_thread_env = getfenv(0)
+local parent_env = setmetatable({ thread_marker = "parent-thread" },
+                                { __index = old_thread_env })
+local function_env = setmetatable({ function_marker = "function-env" },
+                                  { __index = old_thread_env })
+local function env_probe()
+  return getfenv(0).thread_marker, function_marker
+end
+setfenv(env_probe, function_env)
+setfenv(0, parent_env)
+local env_worker = th.spawn(env_probe)
+setfenv(0, old_thread_env)
+local envok, thread_marker, function_marker = env_worker:join()
+assert(envok == true)
+assert(thread_marker == "parent-thread")
+assert(function_marker == "function-env")
+
 local idem = th.spawn(function() return 7 end)
 local a = { idem:join() }
 local b = { idem:join() }
