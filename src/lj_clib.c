@@ -473,7 +473,7 @@ static void clib_cache_publish_wait(lua_State *L)
   ** the current TG, so safepoint handshakes can observe a cache-fill loser
   ** while another mutator publishes the winning side entry.
   */
-  (void)lj_thr_sleep_ns(L, 1000000);
+  (void)lj_thr_retry_yield(L);
 }
 
 CLibCacheEntry *lj_clib_cache_retired_head_acq(global_State *g)

@@ -29,7 +29,7 @@ static void ctype_fin_claim_wait(lua_State *L)
   ** for the current TG when possible, so safepoint handshakes can complete
   ** while another mutator resolves a visible claim.
   */
-  (void)lj_thr_sleep_ns(L, 1000000);
+  (void)lj_thr_retry_yield(L);
 }
 
 static int ctype_had_stopreq(lua_State *L)
@@ -714,7 +714,7 @@ static void ctype_cbblack_wait(lua_State *L)
   ** native and visible to safepoint handshakes while probing past a peer
   ** publisher. Test and teardown-only callers may still pass NULL.
   */
-  (void)lj_thr_sleep_ns(L, 1000000);
+  (void)lj_thr_retry_yield(L);
 }
 
 void lj_ctype_cb_blacklist(lua_State *L, CTState *cts, void *func)

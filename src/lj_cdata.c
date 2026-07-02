@@ -110,7 +110,7 @@ static void cdata_fin_claim_wait(lua_State *L)
   ** wait as native time for its TG so safepoint handshakes can complete while
   ** a peer resolves the slot.
   */
-  (void)lj_thr_sleep_ns(L, 1000000);
+  (void)lj_thr_retry_yield(L);
 }
 
 static int cdata_fin_claim(lua_State *L, TValue *tv, TValue *old, int nonnil)

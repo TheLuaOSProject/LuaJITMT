@@ -390,6 +390,14 @@ uint32_t lj_thr_yield(lua_State *L)
   return actions;
 }
 
+uint32_t lj_thr_retry_yield(lua_State *L)
+{
+  uint32_t i;
+  for (i = 0; i < 64; i++)
+    la_cpu_pause();
+  return lj_thr_yield(L);
+}
+
 uint32_t lj_thr_sleep_ns(lua_State *L, int64_t ns)
 {
   TGState *tg = L ? L2TG(L) : lj_thr_tls_get();
