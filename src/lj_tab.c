@@ -95,15 +95,8 @@ static uint32_t tab_struct_tid(lua_State *L)
 
 static void tab_struct_owner_wait(lua_State *L, GCtab *t, uint32_t owner)
 {
-  TGState *tg = L ? L2TG(L) : lj_thr_get_tg();
-  if (tg)
-    lj_native_enter(tg);  /* 06 section 6.2 bridge: same-table resize park. */
-  lj_tab_struct_owner_futex_wait(t, owner, 1000000);
-  if (L) {
-    (void)lj_native_leave(L);
-  } else if (tg) {
-    (void)lj_tg_in_native_dec_rel(tg);
-  }
+  UNUSED(t); UNUSED(owner);
+  (void)lj_thr_retry_yield(L);  /* Same-table resize owner retry. */
 }
 
 static LJ_AINLINE int tab_mt_concurrent(void)
