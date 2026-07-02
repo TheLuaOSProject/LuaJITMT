@@ -564,6 +564,14 @@ static void LJ_FASTCALL recff_next(jit_State *J, RecordFFData *rd)
   if (tref_istab(tab)) {
     RecordIndex ix;
     cTValue *keyv;
+    if (lj_record_mt_shared_tab(J, tab)) {
+      /*
+      ** Keep the shared active-MT traversal fence ahead of lj_tab_keyindex():
+      ** key-index lookup can wait on table publication state before the later
+      ** lj_record_next() fence would abort the trace.
+      */
+      lj_trace_err_info(J, LJ_TRERR_NYIBC);
+    }
     ix.tab = tab;
     if (tref_isnil(J->base[1])) {  /* Shortcut for start of traversal. */
       ix.key = lj_ir_kint(J, 0);

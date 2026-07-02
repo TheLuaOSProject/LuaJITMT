@@ -1562,10 +1562,14 @@ static int rec_idx_tab_trace_local(jit_State *J, TRef tab)
   return ir->o == IR_TNEW || ir->o == IR_TDUP;
 }
 
+int lj_record_mt_shared_tab(jit_State *J, TRef tab)
+{
+  return mt_active_acq(J2G(J)) && !rec_idx_tab_trace_local(J, tab);
+}
+
 static int rec_idx_mt_shared_tabop(jit_State *J, RecordIndex *ix)
 {
-  global_State *g = J2G(J);
-  return !rec_idx_tab_trace_local(J, ix->tab) && mt_active_acq(g);
+  return lj_record_mt_shared_tab(J, ix->tab);
 }
 
 static TRef rec_tmpref_mode(jit_State *J, TRef tr, int mode);
@@ -2118,7 +2122,7 @@ int lj_record_next(jit_State *J, RecordIndex *ix)
 {
   IRType t, tkey, tval;
   TRef trvk;
-  int mt_shared = mt_active_acq(J2G(J)) && !rec_idx_tab_trace_local(J, ix->tab);
+  int mt_shared = lj_record_mt_shared_tab(J, ix->tab);
   if (mt_shared) {
     /*
     ** Active-MT shared traversal traces are not stable yet: concurrent resize

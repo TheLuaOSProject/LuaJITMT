@@ -3,6 +3,7 @@ local build = require("suite_build")
 local runtime = require("suite_runtime")
 local jitutils = require("suite_jit")
 local cellops = require("suite_cell_ops")
+local utils = require("suite_utils")
 
 local contains = checks.contains
 local lines = checks.iter_lines
@@ -25,6 +26,34 @@ local build_default = build.build_default
 local clean_build = build.clean_build
 local build_and_run_c = build.build_and_run_c
 local run_lua_test_case = runtime.run_lua_test_case
+
+local function assert_shared_next_fence_precedes_keyindex(t)
+  local awk = [=[
+BEGIN { infn = 0; sawguard = 0 }
+/static void LJ_FASTCALL recff_next/ { infn = 1; next }
+infn && /^}/ {
+  if (!sawguard) {
+    print "recff_next missing lj_record_mt_shared_tab guard"
+    exit 1
+  }
+  exit 0
+}
+infn && /lj_record_mt_shared_tab/ { sawguard = 1 }
+infn && /lj_tab_keyindex/ && !sawguard {
+  print "recff_next calls lj_tab_keyindex before active-MT shared traversal guard"
+  exit 1
+}
+END {
+  if (!infn) {
+    print "recff_next not found"
+    exit 1
+  }
+}
+]=]
+  utils.capture_command("cd " .. utils.shell_quote(t.root) ..
+                        " && awk " .. utils.shell_quote(awk) ..
+                        " src/lj_ffrecord.c")
+end
 
 local m6_cases = {
   "m6_dispatch_redispatch",
@@ -470,6 +499,7 @@ return function(add)
     name = "m6_jit_token",
     description = "M6 JIT recorder token and x64 XPOLL behavior",
     run = function(t)
+      assert_shared_next_fence_precedes_keyindex(t)
       build_default(t)
       build_and_run_c(t, t:tmp("lj_t-jit-token"), "t-jit-token.c",
                       { build = false, timeout = "20s" })
