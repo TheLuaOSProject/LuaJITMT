@@ -132,6 +132,32 @@ END {
   utils.capture_command("cd " .. utils.shell_quote(t.root) ..
                         " && awk " .. utils.shell_quote(awk) ..
                         " src/lj_record.c")
+
+  awk = [=[
+BEGIN { infn = 0; weak = 0; child = 0 }
+/^void lj_gc2_barrier_key_g\(global_State \*g, GCtab \*t, cTValue \*key\)/ {
+  infn = 1
+  next
+}
+infn && /^}/ {
+  if (!weak || !child || weak > child) {
+    print "GC2 key-only TBAR must not strongly mark weak-table keys"
+    exit 1
+  }
+  infn = 0
+}
+infn && /LJ_GC_WEAKKEY/ { weak = NR }
+infn && /child = gcV\(key\)/ { child = NR }
+END {
+  if (infn || !weak || !child || weak > child) {
+    print "lj_gc2_barrier_key_g weak-key guard missing"
+    exit 1
+  }
+}
+]=]
+  utils.capture_command("cd " .. utils.shell_quote(t.root) ..
+                        " && awk " .. utils.shell_quote(awk) ..
+                        " src/lj_gc2.c")
 end
 
 local function assert_mt_activation_jit_token_boundary(t)
@@ -1520,6 +1546,19 @@ collectgarbage("step", 0)
 local after = th.gcstats()
 assert(after.worker_grey_drained - grey0 < 10000,
        "mark completion revisited numeric hash-store table per iteration")
+
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local weak = setmetatable({}, { __mode = "k" })
+do
+  local key = { tag = "weak-key-tbar" }
+  weak[key] = 1
+  for i = 1, 80 do
+    weak[key] = nil
+  end
+end
+collectgarbage("collect")
+assert(next(weak) == nil, "key-only TBAR kept a weak key alive")
 ]=], { timeout = "20s" })
       print("M6 JIT GC2 TBAR black gate behavior passed")
     end

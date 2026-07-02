@@ -22,4 +22,10 @@ barriers carry the key TRef in `IR_TBAR.op2` and lower to
 `TG.mark_active` without requeueing the whole table. The legacy black-table
 repair remains inline and black-bit gated for both forms.
 
+Follow-up stability fix: `lj_gc2_barrier_key_g()` now exits for weak-key
+tables. Key-only TBAR is a strong-key edge repair; weak-key tables use the
+existing weak-write path when the store helper has to preserve entries during
+P_WEAK. The JIT barrier must not turn a weak key into a strong edge merely
+because the traced value store was numeric or nil.
+
 The regression guard is `tools/ci/lua_test.sh m6_jit_tbar_gc2_black_gate`.

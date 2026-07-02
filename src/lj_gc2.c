@@ -5770,6 +5770,8 @@ void lj_gc2_barrier_key_g(global_State *g, GCtab *t, cTValue *key)
   GCobj *child;
   if (!t || !key || !tvisgcv(key))
     return;
+  if ((lj_obj_gcflags(obj2gco(t)) & LJ_GC_WEAKKEY))
+    return;
   child = gcV(key);
   if (gc2_barrier_active_g(g))
     (void)lj_gc2_markobj(g, child);
