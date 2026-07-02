@@ -1162,8 +1162,14 @@ static void asm_tnew(ASMState *as, IRIns *ir)
   IRRef args[2];
   asm_snap_prep(as);
   args[0] = ASMREF_L;     /* lua_State *L    */
-  args[1] = ASMREF_TMP1;  /* uint32_t ahsize */
   as->gcsteps++;
+  if (ir->op1 == 0 && ir->op2 == 0) {
+    ci = &lj_ir_callinfo[IRCALL_lj_tab_new0];
+    asm_setupresult(as, ir, ci);  /* GCtab * */
+    asm_gencall(as, ci, args);
+    return;
+  }
+  args[1] = ASMREF_TMP1;  /* uint32_t ahsize */
   asm_setupresult(as, ir, ci);  /* GCtab * */
   asm_gencall(as, ci, args);
   ra_allockreg(as, ir->op1 | (ir->op2 << 24), ra_releasetmp(as, ASMREF_TMP1));

@@ -196,6 +196,7 @@ typedef struct CCallInfo {
   _(ANY,	lj_buf_tostr,		1,  FL, STR, CCI_T) \
   _(ANY,	lj_buf_tostr_tg,	1,  FL, STR, CCI_T) \
   _(ANY,	lj_tab_new_ah,		3,   A, TAB, CCI_L|CCI_T) \
+  _(ANY,	lj_tab_new0,		1,  FA, TAB, CCI_L|CCI_T) \
   _(ANY,	lj_tab_new1,		2,  FA, TAB, CCI_L|CCI_T) \
   _(ANY,	lj_tab_dup,		2,  FA, TAB, CCI_L|CCI_T) \
   _(ANY,	lj_tab_clear,		2,  FS, NIL, CCI_L) \

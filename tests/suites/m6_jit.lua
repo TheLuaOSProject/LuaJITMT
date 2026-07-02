@@ -1440,6 +1440,44 @@ for i=1,100 do x={} end
 assert(type(x)=="table")
 ]=], { "TNEW", "XPOLL", "GCSTEP" }, "TNEW readiness")
 
+      local empty_tnew_route = t:tmp("lj_t-jit-empty-tnew-route.dump")
+      luajit_dump(t, empty_tnew_route, "-jdump=im", [=[
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1", "-sink")
+local util = require("jit.util")
+local keep = {}
+for i = 1, 80 do
+  keep[i] = {}
+end
+assert(type(keep[80]) == "table")
+assert(util.traceinfo(1), "empty-table TNEW did not trace")
+]=], { timeout = "20s" })
+      assert_dump_contains(t, empty_tnew_route,
+                           "lj_tab_new0",
+                           "empty TNEW helper route")
+      do
+        local data = t:read(empty_tnew_route)
+        if contains(data, "lj_tab_new1") then
+          error("empty TNEW route used packed-size helper:\n" .. data, 0)
+        end
+      end
+
+      local nonempty_tnew_route = t:tmp("lj_t-jit-nonempty-tnew-route.dump")
+      luajit_dump(t, nonempty_tnew_route, "-jdump=im", [=[
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1", "-sink")
+local util = require("jit.util")
+local keep = {}
+for i = 1, 80 do
+  keep[i] = { i }
+end
+assert(keep[80][1] == 80)
+assert(util.traceinfo(1), "non-empty TNEW did not trace")
+]=], { timeout = "20s" })
+      assert_dump_contains(t, nonempty_tnew_route,
+                           "lj_tab_new1",
+                           "non-empty TNEW packed-size helper route")
+
       assert_ir_dump_probe_all_contains(t, "lj_t-jit-gc2-readiness-cnew.dump", [=[
 local ffi=require("ffi")
 ffi.cdef("typedef struct { int x; } lj_gc2_dump_cnew_t;")
