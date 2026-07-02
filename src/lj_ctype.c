@@ -369,7 +369,12 @@ void lj_ctype_parse_unlock(CTState *cts)
   lj_assertCTS((seq & 1u) != 0, "cparse mutation sequence not held");
   ctype_parse_token_rel(cts, seq + 1u);  /* 11.2: publish parser mutations. */
 #if defined(LA_HAS_FUTEX)
-  (void)ctype_parse_token_wake(cts, 1);  /* 11.2: wake next cparse waiter. */
+  /*
+  ** Both token acquirers and sequence readers park on parse_token. After the
+  ** parser publishes an even sequence, all waiters can re-check immediately;
+  ** waking one reader would leave the rest parked until their STOPREQ timeout.
+  */
+  (void)ctype_parse_token_wake(cts, 0x7fffffff);
 #endif
 }
 

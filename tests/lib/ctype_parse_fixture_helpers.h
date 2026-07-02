@@ -43,7 +43,7 @@ static inline uint32_t ljt_ctype_hold_parse_token(CTState *cts)
 static inline void ljt_ctype_release_parse_token(CTState *cts, uint32_t seq)
 {
   ctype_parse_token_rel(cts, seq);
-  (void)ctype_parse_token_wake(cts, 1);
+  (void)ctype_parse_token_wake(cts, 0x7fffffff);
   assert((ctype_parse_token_acq(cts) & 1u) == 0);
 }
 

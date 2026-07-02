@@ -13,8 +13,11 @@
 #include "lualib.h"
 
 #include "lj_obj.h"
+#include "lj_atomic.h"
 #include "lj_ctype.h"
 #include "lj_tg.h"
+
+#define PARSE_BROADCAST_WAITERS 4
 
 typedef struct ParseReleaseCtx {
   CTState *cts;
@@ -58,7 +61,23 @@ static void *release_parse_token(void *arg)
   if (ctx->set_stopreq)
     set_stopreq(ctx->tg);
   ctype_parse_token_rel(ctx->cts, ctx->release_seq);
-  (void)ctype_parse_token_wake(ctx->cts, 1);
+  (void)ctype_parse_token_wake(ctx->cts, 0x7fffffff);
+  return NULL;
+}
+
+typedef struct ParseBroadcastCtx {
+  CTState *cts;
+  uint32_t seq;
+  uint32_t *ready;
+  uint32_t *done;
+} ParseBroadcastCtx;
+
+static void *parse_broadcast_waiter(void *arg)
+{
+  ParseBroadcastCtx *ctx = (ParseBroadcastCtx *)arg;
+  la_add32_rlx(ctx->ready, 1);
+  (void)ctype_parse_token_wait(ctx->cts, ctx->seq, 1000000000);
+  la_add32_rlx(ctx->done, 1);
   return NULL;
 }
 
@@ -120,6 +139,43 @@ static void run_cdef_wait(lua_State *L, CTState *cts, TGState *tg,
   }
 }
 
+static void run_parse_unlock_broadcast(lua_State *L, CTState *cts)
+{
+  ParseBroadcastCtx ctx[PARSE_BROADCAST_WAITERS];
+  pthread_t thread[PARSE_BROADCAST_WAITERS];
+  uint32_t ready = 0, done = 0;
+  uint32_t seq;
+  int i;
+
+  lj_ctype_parse_lock(cts, L);
+  seq = ctype_parse_token_acq(cts);
+  assert((seq & 1u) != 0);
+
+  for (i = 0; i < PARSE_BROADCAST_WAITERS; i++) {
+    ctx[i].cts = cts;
+    ctx[i].seq = seq;
+    ctx[i].ready = &ready;
+    ctx[i].done = &done;
+    assert(pthread_create(&thread[i], NULL, parse_broadcast_waiter,
+			  &ctx[i]) == 0);
+  }
+
+  for (i = 0; i < 1000 && la_load32_acq(&ready) < PARSE_BROADCAST_WAITERS; i++)
+    sleep_ns(1000000);
+  assert(la_load32_acq(&ready) == PARSE_BROADCAST_WAITERS);
+  sleep_ns(2000000);
+
+  lj_ctype_parse_unlock(cts);
+
+  for (i = 0; i < 50 && la_load32_acq(&done) < PARSE_BROADCAST_WAITERS; i++)
+    sleep_ns(1000000);
+  assert(la_load32_acq(&done) == PARSE_BROADCAST_WAITERS);
+
+  for (i = 0; i < PARSE_BROADCAST_WAITERS; i++)
+    assert(pthread_join(thread[i], NULL) == 0);
+  assert((ctype_parse_token_acq(cts) & 1u) == 0);
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -139,6 +195,8 @@ int main(void)
   tg = G2TG(g);
   assert(cts != NULL);
   assert(tg != NULL);
+
+  run_parse_unlock_broadcast(L, cts);
 
   set_stopreq(tg);
   run_cdef_wait(L, cts, tg,
