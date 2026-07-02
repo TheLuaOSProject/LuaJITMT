@@ -220,6 +220,52 @@ function count_char(text, ch,    n, i) {
 }
 BEGIN {
   infn = 0; started = 0; depth = 0
+  pre = 0; slot1 = 0; env = 0; pre_drop = 0; alloc = 0; claim = 0
+  slot2 = 0; zerogrow = 0; grow = 0; copy = 0; store = 0
+  publish = 0; drop = 0
+}
+/^LUA_API void lua_pushcclosure\(lua_State \*L,/ { infn = 1; next }
+infn {
+  if (index($0, "{")) started = 1
+  depth += count_char($0, "{")
+  depth -= count_char($0, "}")
+  if (/api_checkclaim\(L, &preclaim\)/) pre = NR
+  if (/lj_checkapi_slot\(n\)/) slot1 = NR
+  if (/getcurrenv/) env = NR
+  if (/lj_state_dropclaim\(&preclaim\)/) pre_drop = NR
+  if (/lj_func_newC/) alloc = NR
+  if (/lj_state_resumeclaim/) claim = NR
+  if (/lj_checkapi_slot\(nup\)/) slot2 = NR
+  if (/nup == 0/) zerogrow = NR
+  if (/api_checkstack1_claimed/) grow = NR
+  if (/copyTVrel\(L, &fn->c.upvalue/) copy = NR
+  if (/setfuncV/) store = NR
+  if (/lj_state_stack_pubtv/) publish = NR
+  if (/lj_state_dropresumeclaim/) drop = NR
+  if (started && depth == 0) infn = 0
+}
+END {
+  if (!pre || !slot1 || !env || !pre_drop || !alloc || !claim || !slot2 ||
+      !zerogrow || !grow || !copy || !store || !publish || !drop ||
+      pre > slot1 || slot1 > env || env > pre_drop || pre_drop > alloc ||
+      alloc > claim || claim > slot2 || slot2 > zerogrow ||
+      zerogrow > grow || grow > copy || copy > store || store > publish ||
+      publish > drop) {
+    print "lua_pushcclosure must snapshot env, allocate unclaimed, and publish claimed"
+    exit 1
+  }
+}
+]=], "src/lj_api.c")
+
+  awk([=[
+function count_char(text, ch,    n, i) {
+  n = 0
+  for (i = 1; i <= length(text); i++)
+    if (substr(text, i, 1) == ch) n++
+  return n
+}
+BEGIN {
+  infn = 0; started = 0; depth = 0
   pre = 0; env = 0; pre_drop = 0; alloc = 0; claim = 0; grow = 0
   store = 0; publish = 0; drop = 0
 }

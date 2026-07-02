@@ -44,6 +44,12 @@ Permanent shape:
   allocation, then resume-claim to publish the stack slot. `lua_newuserdata()`
   and `lua_newthread()` snapshot the target current environment before dropping
   the preclaim.
+- `lua_pushcclosure()` prechecks the target stack and snapshots the current
+  environment under a target-state claim, drops that preclaim for closure
+  allocation, then resume-claims to revalidate the stack, copy upvalues, and
+  publish the closure result. Zero-upvalue closures use protected one-slot
+  growth; closures with upvalues replace existing stack slots without requiring
+  extra stack capacity.
 - Public read-only stack getter/conversion APIs (`lua_type`,
   `lua_iscfunction`, `lua_isnumber`, `lua_isstring`, `lua_isuserdata`,
   `lua_rawequal`, `lua_tonumber`, `lua_tonumberx`, `lua_tointeger`,

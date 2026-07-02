@@ -1190,19 +1190,33 @@ LUA_API const char *lua_pushfstring(lua_State *L, const char *fmt, ...)
 
 LUA_API void lua_pushcclosure(lua_State *L, lua_CFunction f, int n)
 {
+  LJStateClaim preclaim, claim;
+  lua_State *errL;
+  GCtab *env;
   GCfunc *fn;
-  lj_gc_check(L);
+  int nup = n;
+  api_checkclaim(L, &preclaim);
   lj_checkapi_slot(n);
-  fn = lj_func_newC(L, (MSize)n, getcurrenv(L));
+  env = getcurrenv(L);
+  lj_state_dropclaim(&preclaim);
+  errL = api_errstate(L);
+  fn = lj_func_newC(errL, (MSize)n, env);
   fn->c.f = f;
-  L->top -= n;
-  while (n--) {
-    copyTVrel(L, &fn->c.upvalue[n], L->top+n);
-    lj_gc_pubobjtv(L, fn, &fn->c.upvalue[n]);
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(errL, "thread busy");
+  lj_checkapi_slot(nup);
+  if (nup == 0)
+    api_checkstack1_claimed(L, errL, &claim);
+  L->top -= nup;
+  while (nup--) {
+    copyTVrel(L, &fn->c.upvalue[nup], L->top+nup);
+    lj_gc_pubobjtv(L, fn, &fn->c.upvalue[nup]);
   }
   setfuncV(L, L->top, fn);
+  lj_state_stack_pubtv(L, L, L->top);
   lj_assertL(iswhite(obj2gco(fn)), "new GC object is not white");
-  incr_top(L);
+  L->top++;
+  lj_state_dropresumeclaim(&claim);
 }
 
 LUA_API void lua_pushboolean(lua_State *L, int b)
