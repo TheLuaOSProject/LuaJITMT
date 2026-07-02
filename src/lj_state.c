@@ -93,6 +93,26 @@ static void resizestack(lua_State *L, MSize n)
     setmref(gco2uv(up)->v, (TValue *)((char *)uvval(gco2uv(up)) + delta));
 }
 
+int lj_vm_cpcall(lua_State *L, lua_CFunction func, void *ud, lua_CPFunction cp)
+{
+  TGState *oldtg;
+  uint32_t owner;
+  int status;
+  if (LJ_UNLIKELY(L == NULL))
+    return LUA_ERRRUN;
+  if (LJ_UNLIKELY(mref(L->glref, global_State) == NULL && L->tg_hint != NULL &&
+		  L->tg_hint->gl != NULL))
+    setmref(L->glref, L->tg_hint->gl);
+  oldtg = L->tg_hint;
+  owner = lj_state_owner_acq(L);
+  if (LJ_UNLIKELY(oldtg == NULL))
+    L->tg_hint = lj_thr_get_tg_fallback(G(L));
+  status = lj_vm_cpcall_asm(L, func, ud, cp);
+  if (LJ_UNLIKELY(oldtg == NULL && owner == 0 && lj_state_owner_acq(L) == 0))
+    L->tg_hint = NULL;  /* Ownerless coroutine states stay TG-neutral. */
+  return status;
+}
+
 int lj_state_rehome_stack(lua_State *L)
 {
   global_State *g = G(L);

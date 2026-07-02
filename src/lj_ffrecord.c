@@ -26,6 +26,7 @@
 #include "lj_ffrecord.h"
 #include "lj_crecord.h"
 #include "lj_dispatch.h"
+#include "lj_state.h"
 #include "lj_vm.h"
 #include "lj_strscan.h"
 #include "lj_strfmt.h"
@@ -102,10 +103,13 @@ static void recff_stitch(jit_State *J)
   ASMFunction cont = lj_cont_stitch;
   lua_State *L = J->L;
   TValue *base = L->base;
+  ptrdiff_t baseofs = savestack(L, base);
+  ptrdiff_t topofs = savestack(L, L->top);
   BCReg nslot = J->maxslot + 1 + LJ_FR2;
   TValue *nframe = base + 1 + LJ_FR2;
   const BCIns *pc = frame_pc(base-1);
   TValue *pframe = frame_prevl(base-1);
+  ptrdiff_t stitch_slots = 2 + LJ_FR2;
   int errcode;
 
   /* Move func + args up in Lua stack and insert continuation. */
@@ -134,10 +138,13 @@ static void recff_stitch(jit_State *J)
   errcode = lj_vm_cpcall(L, NULL, J, rec_stop_stitch_cp);
 
   /* Undo Lua stack changes. */
+  base = restorestack(L, baseofs);
+  L->base = base + stitch_slots;
+  L->top = restorestack(L, topofs) + stitch_slots;
   memmove(&base[-1-LJ_FR2], &base[1], sizeof(TValue)*nslot);
   setframe_pc(base-1, pc);
-  L->base -= 2 + LJ_FR2;
-  L->top -= 2 + LJ_FR2;
+  L->base = base;
+  L->top = restorestack(L, topofs);
 
   if (errcode) {
     if (errcode == LUA_ERRRUN)
@@ -151,6 +158,38 @@ static void recff_stitch(jit_State *J)
 /* Fallback handler for fast functions that are not recorded (yet). */
 static void LJ_FASTCALL recff_nyi(jit_State *J, RecordFFData *rd)
 {
+  switch (J->fn->c.ffid) {
+  case FF_threading_thread_join:
+  case FF_threading_thread_id:
+  case FF_threading_thread_running:
+  case FF_threading_thread___tostring:
+  case FF_threading_thread___gc:
+  case FF_threading_mutex_lock:
+  case FF_threading_mutex_trylock:
+  case FF_threading_mutex_unlock:
+  case FF_threading_mutex___tostring:
+  case FF_threading_channel_send:
+  case FF_threading_channel_recv:
+  case FF_threading_channel_peek:
+  case FF_threading_channel_close:
+  case FF_threading_channel___gc:
+  case FF_threading_channel___tostring:
+  case FF_threading_cpucount:
+  case FF_threading_now:
+  case FF_threading_fence:
+  case FF_threading_sleep:
+  case FF_threading_gcstats:
+  case FF_threading_gcworkers:
+  case FF_threading_gcmode:
+  case FF_threading_spawn:
+  case FF_threading_current:
+  case FF_threading_mutex:
+  case FF_threading_channel:
+    lj_trace_err_info(J, LJ_TRERR_NYIFFU);
+    break;
+  default:
+    break;
+  }
   if (J->cur.nins < (IRRef)jit_param_acq(J, JIT_P_minstitch) + REF_BASE) {
     lj_trace_err_info(J, LJ_TRERR_TRACEUV);
   } else {

@@ -122,13 +122,16 @@ static void chan_wait(lua_State *L, LJChan *ch)
 {
   uint32_t f = la_load32_acq(&ch->futex);
   TGState *tg = L ? L2TG(L) : NULL;
+  LJNativeFrame frame;
   uint32_t actions = 0;
   int had_stopreq = chan_had_stopreq(L);
-  if (tg)
-    lj_native_enter(tg);  /* 09 section 9.5: channel park is native. */
+  if (L)
+    lj_native_enter_l(L, &frame);  /* 09 section 9.5: channel park is native. */
+  else if (tg)
+    lj_native_enter(tg);
   (void)la_futex_wait(&ch->futex, f, 1000000);
   if (L)
-    actions = lj_native_leave(L);
+    actions = lj_native_leave_l(L, &frame);
   else if (tg)
     lj_tg_in_native_store_rlx(tg, 0);
   chan_checkstop_fresh(L, actions, had_stopreq);
@@ -157,6 +160,7 @@ static int chan_wait_timeout(lua_State *L, LJChan *ch, int64_t ns)
 {
   uint32_t f;
   TGState *tg;
+  LJNativeFrame frame;
   uint32_t actions = 0;
   int had_stopreq = chan_had_stopreq(L);
   int rc;
@@ -168,11 +172,13 @@ static int chan_wait_timeout(lua_State *L, LJChan *ch, int64_t ns)
   tg = L ? L2TG(L) : NULL;
   if (L)
     lj_state_stack_pubrange(L, L);
-  if (tg)
-    lj_native_enter(tg);  /* 09 section 9.5: timed channel park. */
+  if (L)
+    lj_native_enter_l(L, &frame);  /* 09 section 9.5: timed channel park. */
+  else if (tg)
+    lj_native_enter(tg);
   rc = la_futex_wait(&ch->futex, f, ns);
   if (L)
-    actions = lj_native_leave(L);
+    actions = lj_native_leave_l(L, &frame);
   else if (tg)
     lj_tg_in_native_store_rlx(tg, 0);
   chan_checkstop_fresh(L, actions, had_stopreq);
@@ -222,6 +228,11 @@ static int chan_try_send_pos(LJChan *ch, cTValue *tv, uint64_t *ppos)
       pos = la_load64_acq(&ch->enq);
     }
   }
+}
+
+static int chan_tv_on_stack(lua_State *L, cTValue *tv)
+{
+  return L && tv && tv >= tvref(L->stack) && tv < tvref(L->maxstack);
 }
 
 static int chan_cancel_rendezvous_send(LJChan *ch, uint64_t pos)
@@ -316,9 +327,12 @@ int lj_chan_try_recv_gc(lua_State *L, LJChan *ch, TValue *out)
 
 int lj_chan_send(lua_State *L, LJChan *ch, cTValue *tv)
 {
+  int stack_tv = chan_tv_on_stack(L, tv);
+  ptrdiff_t tvofs = stack_tv ? savestack(L, tv) : 0;
   for (;;) {
     uint64_t pos = 0;
-    int rc = chan_try_send_pos(ch, tv, &pos);
+    cTValue *curtv = stack_tv ? restorestack(L, tvofs) : tv;
+    int rc = chan_try_send_pos(ch, curtv, &pos);
     if (rc == LJ_CHAN_OK) {
       if (ch->rendezvous) {
 	while ((rc = chan_rendezvous_send_status(ch, pos)) == LJ_CHAN_FULL)
@@ -355,6 +369,8 @@ int lj_chan_recv_gc(lua_State *L, LJChan *ch, TValue *out)
 int lj_chan_send_timeout(lua_State *L, LJChan *ch, cTValue *tv, int64_t ns)
 {
   int64_t deadline;
+  int stack_tv = chan_tv_on_stack(L, tv);
+  ptrdiff_t tvofs = stack_tv ? savestack(L, tv) : 0;
   if (ns < 0)
     return lj_chan_send(L, ch, tv);
   deadline = chan_deadline_ns(ns);
@@ -362,7 +378,8 @@ int lj_chan_send_timeout(lua_State *L, LJChan *ch, cTValue *tv, int64_t ns)
     uint64_t pos = 0;
     int64_t waitns;
     int rc;
-    rc = chan_try_send_pos(ch, tv, &pos);
+    cTValue *curtv = stack_tv ? restorestack(L, tvofs) : tv;
+    rc = chan_try_send_pos(ch, curtv, &pos);
     if (rc == LJ_CHAN_OK) {
       if (ch->rendezvous)
 	return chan_wait_rendezvous_send(L, ch, pos, deadline);

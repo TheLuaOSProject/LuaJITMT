@@ -18,8 +18,15 @@ LJ_FUNC uint32_t lj_safepoint_handshake(global_State *g, uint32_t actions);
 LJ_FUNC void lj_safepoint_apply_tg(global_State *g, TGState *tg,
 				   uint32_t actions);
 LJ_FUNC uint32_t lj_safepoint_retire_dead_tg(global_State *g, TGState *tg);
+typedef struct LJNativeFrame {
+  ptrdiff_t base;
+  ptrdiff_t top;
+  uint8_t active;
+} LJNativeFrame;
 LJ_FUNCA void lj_native_enter(TGState *tg);
 LJ_FUNCA uint32_t lj_native_leave(lua_State *L);
+LJ_FUNCA void lj_native_enter_l(lua_State *L, LJNativeFrame *frame);
+LJ_FUNCA uint32_t lj_native_leave_l(lua_State *L, LJNativeFrame *frame);
 
 static LJ_AINLINE int lj_safepoint_fresh_stopreq(lua_State *L,
 						 uint32_t actions,

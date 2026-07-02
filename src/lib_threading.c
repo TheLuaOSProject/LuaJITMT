@@ -216,13 +216,15 @@ static void threading_publish_thread_state(lua_State *L, GCudata *ud,
 }
 
 static void threading_start_roots_init(lua_State *L, GCudata *ud, LJThread *th,
-				       TValue *base, uint32_t n)
+				       ptrdiff_t baseofs, uint32_t n)
 {
+  TValue *base;
   TValue *roots;
   uint32_t i;
   if (n == 0)
     return;
   roots = lj_mem_newvec(L, n, TValue);
+  base = restorestack(L, baseofs);
   for (i = 0; i < n; i++) {
     copyTVrel(L, &roots[i], base + i);
     lj_gc_pubroot(L, &roots[i]);
@@ -351,7 +353,7 @@ static int threading_worker_start_ok(lua_State *L, LJThread *th)
 
 typedef struct ThreadingStackCopyCtx {
   lua_State *child;
-  TValue *base;
+  ptrdiff_t baseofs;
   ptrdiff_t nargs;
 } ThreadingStackCopyCtx;
 
@@ -359,18 +361,19 @@ static TValue *threading_stack_copy_cp(lua_State *L, lua_CFunction dummy,
 				       void *ud)
 {
   ThreadingStackCopyCtx *ctx = (ThreadingStackCopyCtx *)ud;
+  TValue *base = restorestack(L, ctx->baseofs);
   ptrdiff_t i;
   UNUSED(dummy);
   for (i = 0; i <= ctx->nargs; i++) {
     TValue *dst = ctx->child->top++;
-    copyTV(ctx->child, dst, ctx->base + i);
+    copyTV(ctx->child, dst, base + i);
     lj_state_stack_pubtv(L, ctx->child, dst);
   }
   return NULL;
 }
 
 static void threading_stack_copy_claimed_l(lua_State *L, lua_State *child,
-					   TValue *base, ptrdiff_t nargs,
+					   ptrdiff_t baseofs, ptrdiff_t nargs,
 					   uint32_t tid)
 {
   ThreadingStackCopyCtx ctx;
@@ -379,7 +382,7 @@ static void threading_stack_copy_claimed_l(lua_State *L, lua_State *child,
   if (!lj_state_claim(child, tid))
     lj_err_callermsg(L, "thread busy");
   ctx.child = child;
-  ctx.base = base;
+  ctx.baseofs = baseofs;
   ctx.nargs = nargs;
   errcode = lj_vm_cpcall(L, NULL, &ctx, threading_stack_copy_cp);
   if (LJ_UNLIKELY(errcode)) {
@@ -650,6 +653,7 @@ static TValue *threading_worker_cp(lua_State *L, lua_CFunction dummy,
   lj_thr_set_tg(tg);
   ctx->tls_set = 1;
   lj_tg_tid_rel(tg, ctx->tid);
+  setmref(L->glref, g);
   L->tg_hint = tg;
   if (!lj_state_claim(L, ctx->tid)) {
     th->status = LUA_ERRRUN;
@@ -1119,12 +1123,14 @@ LJLIB_CF(threading_channel_send)
 {
   GCudata *ud;
   LJChan *ch = threading_tochan(L);
+  ptrdiff_t base = savestack(L, L->base);
   cTValue *tv = lj_lib_checkany(L, 2);
   int64_t ns = threading_timeout_ns(L, 3, 1, -1);
   int rc;
   ud = udataV(L->base);
   lj_gc_pubobjtv(L, ud, tv);  /* 09 section 9.5: publish Lua refs to channel. */
   rc = lj_chan_send_timeout(L, ch, tv, ns);
+  L->base = restorestack(L, base);
   if (rc == LJ_CHAN_CLOSED)
     lj_err_callermsg(L, "closed channel");
   if (rc == LJ_CHAN_TIMEOUT) {
@@ -1140,11 +1146,14 @@ LJLIB_CF(threading_channel_recv)
 {
   TValue out;
   LJChan *ch = threading_tochan(L);
+  ptrdiff_t base = savestack(L, L->base);
   int rc;
   int64_t ns = threading_timeout_ns(L, 2, 1, -1);
   setnilV(&out);
   rc = lj_chan_recv_timeout_gc(L, ch, &out, ns);
+  L->base = restorestack(L, base);
   threading_push_recv(L, rc, &out);
+  L->base = restorestack(L, base);
   return 2;
 }
 
@@ -1512,24 +1521,23 @@ static lua_State *threading_spawn_core(lua_State *L, GCtab *env, TValue *base,
   TGState *tg;
   lua_State *L1;
   uint32_t tid = lj_thr_current_id(G(L));
-  ptrdiff_t baseofs = base - L->base;
+  ptrdiff_t baseofs = savestack(L, base);
   GCtab *startenv;
   int rc;
 
   if (mt_shutdown_acq(G(L)) != 0)
     lj_err_callermsg(L, "VM shutdown in progress");
   lj_state_checkstack(L, 2);
-  base = L->base + baseofs;
   startenv = lj_state_env_acq(L);
   L1 = lua_newthread(L);
   threading_state_set_env(L, L1, startenv);
   lj_state_checkstack(L1, (MSize)(nargs + 1));
-  threading_stack_copy_claimed_l(L, L1, base, nargs, tid);
+  threading_stack_copy_claimed_l(L, L1, baseofs, nargs, tid);
 
   ud = threading_new_thread_ud(L, env);
   threading_state_set_ud(L, L1, ud);
   th = (LJThread *)uddata(ud);
-  threading_start_roots_init(L, ud, th, base, (uint32_t)(nargs + 1));
+  threading_start_roots_init(L, ud, th, baseofs, (uint32_t)(nargs + 1));
   live = threading_live_new(L, ud);
   threading_live_publish(L, th, live);
   tg = lj_mem_newt(L, sizeof(TGState), TGState);

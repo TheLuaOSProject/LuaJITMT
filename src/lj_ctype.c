@@ -505,6 +505,29 @@ int lj_ctype_fin_order_retire(CTState *cts, FinRegOrderNode *prev,
   return 1;  /* 11.4 ordered FINREG logical retire plus best-effort splice. */
 }
 
+size_t lj_ctype_fin_order_retire_obj(CTState *cts, GCobj *target)
+{
+  FinRegOrderNode *prev, *ord;
+  size_t n = 0;
+  if (!cts || !target)
+    return 0;
+  prev = NULL;
+  ord = fin_order_head_acq(cts);
+  while (ord) {
+    FinRegOrderNode *next = fin_order_next_acq(ord);
+    uint32_t active = fin_order_active_acq(ord);
+    if (active == 1 && fin_order_obj_acq(ord) == target) {
+      n += (size_t)lj_ctype_fin_order_retire(cts, prev, ord, next);
+      ord = next;
+      continue;
+    }
+    if (active == 1)
+      prev = ord;
+    ord = next;
+  }
+  return n;
+}
+
 GCtab *lj_ctype_fin_head(CTState *cts)
 {
   FinRegGen *gen = fin_gen_head_acq(cts);

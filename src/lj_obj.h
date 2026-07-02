@@ -1558,6 +1558,7 @@ typedef struct global_State {
   uint8_t hookmask;	/* Hook mask. */
   uint8_t dispatchmode;	/* Dispatch mode. */
   uint8_t vmevmask;	/* VM event mask. */
+  uint32_t hookactive;	/* Active debug hook callbacks. */
   StrInternState str;	/* String interning. */
   TabState tab;		/* Table raw storage retirement. */
   int32_t vmstate;  /* VM state or current JIT code trace number. */
@@ -1843,6 +1844,8 @@ static LJ_AINLINE void hookmask_profile_leave(global_State *g, uint8_t saved)
   for (;;) {
     uint8_t next = (uint8_t)((saved & (uint8_t)~HOOK_EVENTMASK) |
 			     (old & (HOOK_EVENTMASK|HOOK_PROFILE)));
+    if (la_load32_acq(&g->hookactive) != 0)
+      next |= HOOK_ACTIVE;
     if (la_cas8(&g->hookmask, &old, next, LA_ACQ_REL, LA_ACQ))
       return;  /* Preserve hook changes and a retriggered profile bit. */
   }
@@ -1859,6 +1862,8 @@ static LJ_AINLINE uint8_t hookmask_restore_(global_State *g, uint8_t h)
   h &= (uint8_t)~HOOK_EVENTMASK;
   for (;;) {
     uint8_t next = (uint8_t)((old & HOOK_EVENTMASK) | h);
+    if (la_load32_acq(&g->hookactive) != 0)
+      next |= HOOK_ACTIVE;
     if (la_cas8(&g->hookmask, &old, next, LA_ACQ_REL, LA_ACQ))
       return next;  /* 03 section 3.6 global hooks. */
   }
@@ -1874,6 +1879,32 @@ static LJ_AINLINE uint8_t hookmask_restore_(global_State *g, uint8_t h)
 #define hook_save(g)		(hookmask_load((g)) & (uint8_t)~HOOK_EVENTMASK)
 #define hook_restore(g, h) \
   ((void)hookmask_restore_((g), (h)))
+
+static LJ_AINLINE void hook_call_enter(global_State *g)
+{
+  uint32_t old = la_load32_acq(&g->hookactive);
+  for (;;) {
+    if (la_cas32(&g->hookactive, &old, old + 1u, LA_ACQ_REL, LA_ACQ))
+      break;  /* 03 section 3.6: concurrent hooks share active bit. */
+  }
+  (void)hookmask_update(g, 0, HOOK_ACTIVE);
+}
+
+static LJ_AINLINE void hook_call_leave(global_State *g)
+{
+  uint32_t old = la_load32_acq(&g->hookactive);
+  for (;;) {
+    if (old == 0)
+      return;
+    if (la_cas32(&g->hookactive, &old, old - 1u, LA_ACQ_REL, LA_ACQ))
+      break;
+  }
+  if (old == 1u) {
+    (void)hookmask_update(g, HOOK_ACTIVE, 0);
+    if (la_load32_acq(&g->hookactive) != 0)
+      (void)hookmask_update(g, 0, HOOK_ACTIVE);
+  }
+}
 
 static LJ_AINLINE lua_Hook hookf_load(global_State *g)
 {

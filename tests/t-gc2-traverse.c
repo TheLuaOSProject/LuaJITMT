@@ -3740,17 +3740,19 @@ static void test_finreg_cdata_order_active_retire(lua_State *L, global_State *g)
   assert(gc2_finreg_cdata_order_retired_acq(g) >= retired0 + 1u);
 
   lua_settop(L, 0);
+  retired0 = gc2_finreg_cdata_order_retired_acq(g);
   assert(luaL_dostring(L,
     "local ffi = require('ffi')\n"
     "local cd = ffi.gc(ffi.new('char[?]', 8), gc2_cdata_counting_finalizer)\n"
     "ffi.gc(cd, nil)\n"
     "return cd\n") == LUA_OK);
   cleared = obj2gco(cdataV(L->top - 1));
-  assert(finreg_cdata_order_active_refs(g, cleared) == 1u);
+  assert(finreg_cdata_order_active_refs(g, cleared) == 0);
+  assert(gc2_finreg_cdata_order_retired_acq(g) >= retired0 + 1u);
   retired0 = gc2_finreg_cdata_order_retired_acq(g);
   assert(!lj_gc2_finreg_cdata_pending(g));
   assert(finreg_cdata_order_active_refs(g, cleared) == 0);
-  assert(gc2_finreg_cdata_order_retired_acq(g) >= retired0 + 1u);
+  assert(gc2_finreg_cdata_order_retired_acq(g) == retired0);
   lua_settop(L, 0);
 }
 

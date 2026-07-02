@@ -274,12 +274,12 @@ static int32_t profile_sample_vmstate(global_State *g)
 #if !LJ_PROFILE_SIGPROF
 void LJ_FASTCALL lj_profile_hook_enter(global_State *g)
 {
-  hook_enter(g);
+  hook_call_enter(g);
 }
 
 void LJ_FASTCALL lj_profile_hook_leave(global_State *g)
 {
-  hook_leave(g);
+  hook_call_leave(g);
 }
 #endif
 

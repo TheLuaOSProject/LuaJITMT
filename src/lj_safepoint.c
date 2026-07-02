@@ -13,6 +13,7 @@
 #include "lj_gc2.h"
 #include "lj_mcode.h"
 #include "lj_safepoint.h"
+#include "lj_state.h"
 #include "lj_str.h"
 #include "lj_tab.h"
 #include "lj_thr.h"
@@ -189,7 +190,18 @@ uint32_t lj_safepoint_retire_dead_tg(global_State *g, TGState *tg)
 
 uint32_t lj_safepoint_ack(lua_State *L)
 {
-  return L ? safepoint_ack_tg(G(L), L2TG(L), 1, 1) : 0;
+  ptrdiff_t oldbase, oldtop;
+  uint32_t actions;
+  if (!L)
+    return 0;
+  if (L->base == NULL || tvref(L->stack) == NULL)
+    return safepoint_ack_tg(G(L), L2TG(L), 1, 1);
+  oldbase = savestack(L, L->base);
+  oldtop = savestack(L, L->top);
+  actions = safepoint_ack_tg(G(L), L2TG(L), 1, 1);
+  L->base = restorestack(L, oldbase);
+  L->top = restorestack(L, oldtop);
+  return actions;  /* Safepoints must preserve the interrupted VM/C frame. */
 }
 
 uint32_t lj_safepoint_poll(lua_State *L)
@@ -230,6 +242,22 @@ void lj_native_enter(TGState *tg)
     lj_tg_in_native_inc_rel(tg);
 }
 
+void lj_native_enter_l(lua_State *L, LJNativeFrame *frame)
+{
+  TGState *tg = L ? L2TG(L) : NULL;
+  if (frame) {
+    frame->base = 0;
+    frame->top = 0;
+    frame->active = 0;
+    if (L && L->base != NULL && tvref(L->stack) != NULL) {
+      frame->base = savestack(L, L->base);
+      frame->top = savestack(L, L->top);
+      frame->active = 1;
+    }
+  }
+  lj_native_enter(tg);
+}
+
 uint32_t lj_native_leave(lua_State *L)
 {
   TGState *tg;
@@ -248,6 +276,17 @@ uint32_t lj_native_leave(lua_State *L)
   if (lj_tg_in_native_dec_rel(tg) != 0)
     return 0;
   return lj_safepoint_poll(L);
+}
+
+uint32_t lj_native_leave_l(lua_State *L, LJNativeFrame *frame)
+{
+  uint32_t actions = lj_native_leave(L);
+  if (frame && frame->active && L && tvref(L->stack) != NULL) {
+    L->base = restorestack(L, frame->base);
+    L->top = restorestack(L, frame->top);
+    frame->active = 0;
+  }
+  return actions;
 }
 
 static uint32_t safepoint_signal_late(global_State *g, uint32_t actions,

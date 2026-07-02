@@ -2737,6 +2737,8 @@ LJLIB_CF(ffi_gc)	LJLIB_REC(.)
   GCcdata *cd = ffi_checkcdata(L, 1);
   TValue *fin = lj_lib_checkany(L, 2);
   CTState *cts = ctype_cts(L);
+  ptrdiff_t base = savestack(L, L->base);
+  ptrdiff_t finofs = savestack(L, fin);
   CTInfo info;
   CTSize sz;
   int ok = ffi_ctype_info_read(L, cts, cd->ctypeid, &info, &sz, NULL, NULL);
@@ -2744,7 +2746,9 @@ LJLIB_CF(ffi_gc)	LJLIB_REC(.)
     lj_err_arg(L, 1, LJ_ERR_FFI_INVTYPE);
   if (!(ctype_isptr(info) || ctype_isstruct(info) || ctype_isrefarray(info)))
     lj_err_arg(L, 1, LJ_ERR_FFI_INVTYPE);
+  fin = restorestack(L, finofs);
   lj_cdata_setfin(L, cd, gcval(fin), itype(fin));
+  L->base = restorestack(L, base);
   L->top = L->base+1;  /* Pass through the cdata object. */
   return 1;
 }

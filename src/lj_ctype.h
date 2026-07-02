@@ -240,8 +240,8 @@ typedef struct FinRegGen {
 
 typedef struct FinRegOrderNode {
   GCRef obj;			/* Cdata object for this registration. */
-  GCtab *tab;			/* FINREG generation containing this slot. */
-  TValue *slot;			/* FINREG value slot for this registration. */
+  GCtab *tab;			/* Original FINREG generation; scans re-resolve. */
+  TValue *slot;			/* Original value slot; not stable across resize. */
   struct FinRegOrderNode *next;	/* Older registration, newest-first list. */
   struct FinRegOrderNode *retired_next;
   uint32_t active;		/* 1 active, 2 retiring, 0 retired. */
@@ -1210,6 +1210,7 @@ LJ_FUNC void lj_ctype_fin_order_publish(CTState *cts, FinRegOrderNode *ord,
 LJ_FUNC int lj_ctype_fin_order_retire(CTState *cts, FinRegOrderNode *prev,
 				      FinRegOrderNode *ord,
 				      FinRegOrderNode *next);
+LJ_FUNC size_t lj_ctype_fin_order_retire_obj(CTState *cts, GCobj *target);
 LJ_FUNC cTValue *lj_ctype_fin_get(lua_State *L, CTState *cts, cTValue *key,
 				  GCtab **tabp);
 LJ_FUNC int lj_ctype_fin_newgen(lua_State *L, CTState *cts, cTValue *key,

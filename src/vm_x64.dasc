@@ -794,7 +794,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  ins_call
   |  // BASE = new base, RB = func, RD = nargs+1, PC = caller PC
   |
-  |->vm_cpcall:				// Setup protected C frame, call C.
+  |->vm_cpcall_asm:			// Setup protected C frame, call C.
   |  // (lua_State *L, lua_CFunction func, void *ud, lua_CPFunction cp)
   |  saveregs
   |  mov L:RB, CARG1			// Caveat: CARG1 may be RA.

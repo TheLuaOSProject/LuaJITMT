@@ -207,7 +207,7 @@ static void *err_unwind(lua_State *L, void *stopcf, int errcode)
     case FRAME_CP:  /* Protected C frame. */
       if (cframe_canyield(cf)) {  /* Resume? */
 	if (errcode) {
-	  hook_leave(G(L));  /* Assumes nobody uses coroutines inside hooks. */
+	  hook_call_leave(G(L));  /* Assumes nobody uses coroutines inside hooks. */
 	  L->cframe = NULL;
 	  L->status = (uint8_t)errcode;
 	}
@@ -242,7 +242,7 @@ static void *err_unwind(lua_State *L, void *stopcf, int errcode)
 	g = G(L);
 	lj_tg_setcur_L(g, L);
 	if (frame_typep(frame) == FRAME_PCALL)
-	  hook_leave(g);
+	  hook_call_leave(g);
 	L->base = frame_prevd(frame) + 1;
 	L->cframe = cf;
 	unwindstack(L, L->base);

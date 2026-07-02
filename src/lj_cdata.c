@@ -10,6 +10,7 @@
 #include "lj_gc.h"
 #include "lj_gc2.h"
 #include "lj_err.h"
+#include "lj_state.h"
 #include "lj_tab.h"
 #include "lj_ctype.h"
 #include "lj_cconv.h"
@@ -203,6 +204,7 @@ static void cdata_fin_store(lua_State *L, global_State *g, CTState *cts,
     lj_gc2_finreg_cdata_set(g, obj2gco(cd), 1);
     copyTVrel(L, tv, val);
   } else {
+    (void)lj_ctype_fin_order_retire_obj(cts, obj2gco(cd));
     lj_cdata_fin_storenil(L, tv);
     lj_obj_cleargcflags_atomic(obj2gco(cd), LJ_GC_CDATA_FIN);
     lj_gc2_finreg_cdata_set(g, obj2gco(cd), 0);
@@ -214,26 +216,34 @@ void lj_cdata_setfin(lua_State *L, GCcdata *cd, GCobj *obj, uint32_t it)
 {
   global_State *g = G(L);
   CTState *cts = ctype_ctsG(g);
-  TValue *anchor = L->top;
+  ptrdiff_t anchor;
   GCtab *t;
   TValue *tv, key, val, old;
   FinRegOrderNode *ord = NULL;
   int enabled = (it != LJ_TNIL);
   if (LJ_UNLIKELY(cts == NULL))
     return;
+  lj_state_checkstack(L, enabled ? 2u : 1u);
+  anchor = savestack(L, L->top);
   setcdataV(L, &key, cd);
+  if (!enabled)
+    (void)lj_ctype_fin_order_retire_obj(cts, obj2gco(cd));
   if (enabled) {
+    TValue *top = restorestack(L, anchor);
     setgcV(L, &val, obj, it);
-    if (LJ_LIKELY(anchor + 2 < tvref(L->maxstack))) {
-      copyTVrel(L, anchor, &key);
-      copyTVrel(L, anchor + 1, &val);
-      L->top = anchor + 2;
+    if (LJ_LIKELY(top + 2 < tvref(L->maxstack))) {
+      copyTVrel(L, top, &key);
+      copyTVrel(L, top + 1, &val);
+      L->top = top + 2;
     }
     lj_gc_pubroot(L, &val);
     ord = lj_ctype_fin_order_new(L);
-  } else if (LJ_LIKELY(anchor + 1 < tvref(L->maxstack))) {
-    copyTVrel(L, anchor, &key);
-    L->top = anchor + 1;
+  } else {
+    TValue *top = restorestack(L, anchor);
+    if (LJ_LIKELY(top + 1 < tvref(L->maxstack))) {
+      copyTVrel(L, top, &key);
+      L->top = top + 1;
+    }
   }
   lj_gc_pubroot(L, &key);
   for (;;) {
@@ -307,7 +317,7 @@ void lj_cdata_setfin(lua_State *L, GCcdata *cd, GCobj *obj, uint32_t it)
 done:
   if (ord)
     lj_ctype_fin_order_free(g, ord);
-  L->top = anchor;
+  L->top = restorestack(L, anchor);
 }
 
 /* -- C data indexing ----------------------------------------------------- */

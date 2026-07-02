@@ -119,8 +119,10 @@ void lj_tg_init_thread(global_State *g, TGState *tg, lua_State *L,
 		       int arena_internal)
 {
   memset(tg, 0, sizeof(*tg));
-  if (L)
+  if (L) {
     L->tg_hint = tg;
+    setmref(L->glref, g);
+  }
   lj_arena_alloc_init(&tg->alloc);
   if (arena_internal)
     lj_tg_flags_or_rlx(tg, TGF_ARENA_INTERNAL);

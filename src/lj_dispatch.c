@@ -546,7 +546,7 @@ static void callhook(lua_State *L, int event, BCLine line)
 #if LJ_HASPROFILE && !LJ_PROFILE_SIGPROF
     lj_profile_hook_enter(g);
 #else
-    hook_enter(g);
+    hook_call_enter(g);
 #endif
     hookf(L, &ar);
     lj_assertG(hook_active(g), "active hook flag removed");
@@ -554,7 +554,7 @@ static void callhook(lua_State *L, int event, BCLine line)
 #if LJ_HASPROFILE && !LJ_PROFILE_SIGPROF
     lj_profile_hook_leave(g);
 #else
-    hook_leave(g);
+    hook_call_leave(g);
 #endif
   }
 }

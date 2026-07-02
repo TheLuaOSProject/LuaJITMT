@@ -1203,16 +1203,22 @@ static void gc_traverse_thread(global_State *g, lua_State *th)
   TValue *o, *top = th->top;
   TValue tv;
   MSize used;
+  uint32_t owner;
+  int owned;
   int remote_current;
+  lua_State *cur_L;
   lj_gc_arena_markmem(g, tvref(th->stack));
+  cur_L = lj_tg_cur_L(g);
+  owner = lj_state_owner_acq(th);
+  owned = owner != 0 && owner != LJ_THREAD_GCSCAN && th != cur_L;
   remote_current = gc_thread_is_remote_current(g, th);
-  if (remote_current) {
+  if (owned || remote_current) {
     top = tvref(th->maxstack);
     used = (MSize)(top - tvref(th->stack));
   } else {
     used = gc_traverse_frames(g, th);
   }
-  if (!remote_current && th == lj_tg_cur_L(g) &&
+  if (!remote_current && th == cur_L &&
       th->base > tvref(th->stack) + 1 + LJ_FR2) {
     top = gc_active_thread_top(th, top);
   } else if (tvref(th->stack) + used > top) {
@@ -1222,7 +1228,7 @@ static void gc_traverse_thread(global_State *g, lua_State *th)
     lj_tv_load_acq(&tv, o);
     gc_mark_thread_root_tv(g, &tv);
   }
-  if (!remote_current && g->gc.state == GCSatomic) {
+  if (!owned && !remote_current && g->gc.state == GCSatomic) {
     top = tvref(th->stack) + th->stacksize;
     for (; o < top; o++)  /* Clear unmarked slots. */
       setnilV(o);
@@ -1239,7 +1245,7 @@ static void gc_traverse_thread(global_State *g, lua_State *th)
   mt = lj_state_mt_thread_acq(th);
   if (mt != NULL)
     gc_markobj(g, mt);
-  if (th != lj_tg_cur_L(g))
+  if (!owned && th != cur_L)
     lj_state_shrinkstack(th, used);
 }
 
@@ -1886,9 +1892,12 @@ void LJ_FASTCALL lj_gc_step_top(lua_State *L)
 int LJ_FASTCALL lj_gc_step_jit(global_State *g, MSize steps)
 {
   lua_State *L = lj_tg_cur_L(g);
+  TValue *jbase = lj_tg_jit_base(g);
   int threshold_step, hard_step;
   TGState *tg;
-  L->base = lj_tg_jit_base(g);
+  if (!L || !jbase)
+    return 1;
+  L->base = jbase;
   L->top = curr_topL(L);
   tg = L2TG(L);
   lj_gc2_check_trigger(g, tg);
@@ -1948,9 +1957,16 @@ void lj_gc_fullgc(lua_State *L)
 /* Barrier for a store to a global root slot. */
 void lj_gc_pubroot(lua_State *L, cTValue *tv)
 {
-  global_State *g = G(L);
+  global_State *g;
   TValue snap;
-  if (!tv)
+  if (!L || !tv)
+    return;
+  g = G(L);
+  if (LJ_UNLIKELY(g == NULL && L->tg_hint != NULL && L->tg_hint->gl != NULL)) {
+    g = L->tg_hint->gl;
+    setmref(L->glref, g);
+  }
+  if (LJ_UNLIKELY(g == NULL))
     return;
   lj_tv_load_acq(&snap, tv);
   if (tvisgcv(&snap)) {

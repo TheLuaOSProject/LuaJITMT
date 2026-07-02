@@ -2198,6 +2198,7 @@ static int gc2_call_finalizer(global_State *g, lua_State *L,
   GCSize oldt;
   int continue_gc = 1;
   int errcode;
+  ptrdiff_t oldbase;
   ptrdiff_t oldtop;
   TValue *top;
   if (!g || !cbL || !mo || !o)
@@ -2215,6 +2216,7 @@ static int gc2_call_finalizer(global_State *g, lua_State *L,
   lj_trace_abort(g);
   hook_entergc(g);  /* Disable hooks and new traces during __gc. */
   if (LJ_HASPROFILE && (oldh & HOOK_PROFILE)) lj_dispatch_update(g, 0);
+  oldbase = savestack(cbL, cbL->base);
   oldtop = savestack(cbL, cbL->top);
   top = cbL->top;
   copyTV(cbL, top++, mo);
@@ -2232,12 +2234,14 @@ static int gc2_call_finalizer(global_State *g, lua_State *L,
   if (errcode) {
     TValue tmp;
     copyTV(cbL, &tmp, cbL->top-1);
+    cbL->base = restorestack(cbL, oldbase);
     cbL->top = restorestack(cbL, oldtop);
     lj_state_dropclaim(&claim);
     lj_vmevent_send(g, ERRFIN,
       copyTV(V, V->top++, &tmp);
     );
   } else {
+    cbL->base = restorestack(cbL, oldbase);
     cbL->top = restorestack(cbL, oldtop);
     lj_state_dropclaim(&claim);
   }
@@ -4252,20 +4256,24 @@ static int gc2_finreg_cdata_candidate_close(GCobj *o)
 	 !(lj_obj_gcflags(o) & LJ_GC_FINALIZED);
 }
 
-static GCobj *gc2_finreg_cdata_order_object(FinRegOrderNode *ord, GCtab *t,
-					    TValue *slot)
+static GCobj *gc2_finreg_cdata_order_resolve(lua_State *L, CTState *cts,
+					     FinRegOrderNode *ord,
+					     TValue **slotp)
 {
-  Node *node = (Node *)slot;
   TValue key;
   GCobj *o;
-  if (!ord || !t || !slot)
+  GCtab *t;
+  cTValue *slot;
+  if (!L || !cts || !ord || !slotp)
     return NULL;
   o = fin_order_obj_acq(ord);
   if (!o || o->gch.gct != ~LJ_TCDATA)
     return NULL;
-  lj_tv_load_acq(&key, &node->key);
-  if (!tviscdata(&key) || gcV(&key) != o)
+  setcdataV(L, &key, gco2cd(o));
+  slot = lj_ctype_fin_get(L, cts, &key, &t);
+  if (slot == niltv(L) || !t || !fin_gen_tab_enabled_acq(t))
     return NULL;
+  *slotp = (TValue *)slot;
   return o;  /* 05 section 5.8: ordered FINREG node owns cdata identity. */
 }
 
@@ -4300,8 +4308,7 @@ size_t lj_gc2_finreg_cdata_finalize_pweak(lua_State *L, global_State *g,
   ord = fin_order_head_acq(cts);
   while (ord != NULL) {
     FinRegOrderNode *next = fin_order_next_acq(ord);
-    GCtab *t = fin_order_tab_acq(ord);
-    TValue *slot = fin_order_slot_acq(ord);
+    TValue *slot;
     TValue fin;
     GCobj *o;
     int preclaim_ready;
@@ -4310,7 +4317,8 @@ size_t lj_gc2_finreg_cdata_finalize_pweak(lua_State *L, global_State *g,
       continue;
     }
     gc2_finreg_cdata_order_seen_add(g, 1);
-    if (!t || !slot || !fin_gen_tab_enabled_acq(t)) {
+    o = gc2_finreg_cdata_order_resolve(L, cts, ord, &slot);
+    if (!o) {
       gc2_finreg_cdata_order_tombstones_add(g, 1);
       (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
       ord = next;
@@ -4322,13 +4330,6 @@ size_t lj_gc2_finreg_cdata_finalize_pweak(lua_State *L, global_State *g,
       lj_tv_load_acq(&fin, slot);
     }
     if (tvisnil(&fin)) {
-      gc2_finreg_cdata_order_tombstones_add(g, 1);
-      (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
-      ord = next;
-      continue;
-    }
-    o = gc2_finreg_cdata_order_object(ord, t, slot);
-    if (!o) {
       gc2_finreg_cdata_order_tombstones_add(g, 1);
       (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
       ord = next;
@@ -4397,22 +4398,24 @@ size_t lj_gc2_finreg_cdata_finalize_close(global_State *g)
 #if LJ_HASFFI
   CTState *cts = ctype_ctsG(g);
   FinRegOrderNode *prev, *ord;
+  lua_State *L;
   size_t queued = 0;
   if (cts == NULL)
     return 0;
+  L = mainthread_acq(g);
   prev = NULL;
   ord = fin_order_head_acq(cts);
   while (ord != NULL) {
     FinRegOrderNode *next = fin_order_next_acq(ord);
-    GCtab *t = fin_order_tab_acq(ord);
-    TValue *slot = fin_order_slot_acq(ord);
+    TValue *slot;
     TValue fin;
     GCobj *o;
     if (fin_order_active_acq(ord) != 1) {
       ord = next;
       continue;
     }
-    if (!t || !slot || !fin_gen_tab_enabled_acq(t)) {
+    o = gc2_finreg_cdata_order_resolve(L, cts, ord, &slot);
+    if (!o) {
       (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
       ord = next;
       continue;
@@ -4423,12 +4426,6 @@ size_t lj_gc2_finreg_cdata_finalize_close(global_State *g)
       lj_tv_load_acq(&fin, slot);
     }
     if (tvisnil(&fin)) {
-      (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
-      ord = next;
-      continue;
-    }
-    o = gc2_finreg_cdata_order_object(ord, t, slot);
-    if (!o) {
       (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
       ord = next;
       continue;
@@ -4467,21 +4464,23 @@ int lj_gc2_finreg_cdata_pending(global_State *g)
 #if LJ_HASFFI
   CTState *cts = ctype_ctsG(g);
   FinRegOrderNode *prev, *ord;
+  lua_State *L;
   if (cts == NULL)
     return 0;
+  L = mainthread_acq(g);
   prev = NULL;
   ord = fin_order_head_acq(cts);
   while (ord != NULL) {
     FinRegOrderNode *next = fin_order_next_acq(ord);
-    GCtab *t = fin_order_tab_acq(ord);
-    TValue *slot = fin_order_slot_acq(ord);
+    TValue *slot;
     TValue fin;
     GCobj *o;
     if (fin_order_active_acq(ord) != 1) {
       ord = next;
       continue;
     }
-    if (!t || !slot || !fin_gen_tab_enabled_acq(t)) {
+    o = gc2_finreg_cdata_order_resolve(L, cts, ord, &slot);
+    if (!o) {
       (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
       ord = next;
       continue;
@@ -4492,12 +4491,6 @@ int lj_gc2_finreg_cdata_pending(global_State *g)
       lj_tv_load_acq(&fin, slot);
     }
     if (tvisnil(&fin)) {
-      (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
-      ord = next;
-      continue;
-    }
-    o = gc2_finreg_cdata_order_object(ord, t, slot);
-    if (!o) {
       (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
       ord = next;
       continue;
