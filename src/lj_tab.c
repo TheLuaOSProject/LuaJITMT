@@ -93,6 +93,27 @@ static uint32_t tab_struct_tid(lua_State *L)
   return tid != 0 ? tid : ~(uint32_t)0;
 }
 
+#ifdef LJ_TAB_TEST_HELPERS
+static uint32_t tab_test_struct_owner_no_l_futex_waits;
+
+static LJ_AINLINE void tab_test_struct_owner_no_l_futex_wait(void)
+{
+  (void)la_add32_acqrel(&tab_test_struct_owner_no_l_futex_waits, 1);
+}
+
+uint32_t lj_tab_test_struct_owner_no_l_futex_waits(void)
+{
+  return la_load32_acq(&tab_test_struct_owner_no_l_futex_waits);
+}
+
+void lj_tab_test_reset_struct_owner_no_l_futex_waits(void)
+{
+  la_store32_rel(&tab_test_struct_owner_no_l_futex_waits, 0);
+}
+#else
+#define tab_test_struct_owner_no_l_futex_wait()		((void)0)
+#endif
+
 static void tab_struct_owner_wait(lua_State *L, GCtab *t, uint32_t owner)
 {
   if (L) {
@@ -102,7 +123,13 @@ static void tab_struct_owner_wait(lua_State *L, GCtab *t, uint32_t owner)
     actions = lj_native_leave(L);
     lj_safepoint_checkstop(L, actions);
   } else {
-    (void)lj_thr_retry_yield(NULL);  /* No Lua stack is available to poll. */
+    TGState *tg = lj_thr_get_tg();
+    if (tg)
+      lj_native_enter(tg);
+    tab_test_struct_owner_no_l_futex_wait();
+    lj_tab_struct_owner_futex_wait(t, owner, 1000000);
+    if (tg)
+      (void)lj_tg_in_native_dec_rel(tg);  /* No Lua stack is available to poll. */
   }
 }
 

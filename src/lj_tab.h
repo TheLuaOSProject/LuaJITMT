@@ -281,6 +281,8 @@ LJ_FUNC void lj_tab_test_set_resize_colocated_after_freeze_hook(
   LJTabResizeArrayHook hook);
 LJ_FUNC void lj_tab_test_set_next_after_keyindex_hook(
   LJTabNextAfterKeyindexHook hook);
+LJ_FUNC uint32_t lj_tab_test_struct_owner_no_l_futex_waits(void);
+LJ_FUNC void lj_tab_test_reset_struct_owner_no_l_futex_waits(void);
 #endif
 LJ_FUNCA TValue *lj_tab_setinth(lua_State *L, GCtab *t, int32_t key);
 LJ_FUNC TValue *lj_tab_setint_forward(lua_State *L, GCtab *t, int32_t key);
