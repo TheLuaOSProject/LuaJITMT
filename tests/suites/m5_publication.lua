@@ -518,6 +518,21 @@ END {
 ]=], "src/lj_api.c")
 
   awk([=[
+BEGIN { infn = 0; claim = 0; read = 0; drop = 0 }
+/^LUA_API int lua_isyieldable\(lua_State \*L\)/ { infn = 1; next }
+infn && /^}/ { infn = 0; next }
+infn && /lj_state_tryclaim/ { claim = NR }
+infn && /cframe_canyield\(L->cframe\)/ { read = NR }
+infn && /lj_state_dropclaim\(&claim\)/ { drop = NR }
+END {
+  if (!claim || !read || !drop || claim > read || read > drop) {
+    print "lua_isyieldable owner-claim boundary missing"
+    exit 1
+  }
+}
+]=], "src/lj_api.c")
+
+  awk([=[
 function reset(name) {
   fun = name; started = 0; depth = 0; claim = 0; access = 0; drop = 0
 }

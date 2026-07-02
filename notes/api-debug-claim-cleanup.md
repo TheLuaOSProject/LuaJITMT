@@ -53,6 +53,8 @@ Permanent shape:
   allocation, then resume-claim to publish the stack slot. `lua_newuserdata()`
   and `lua_newthread()` snapshot the target current environment before dropping
   the preclaim.
+- `lua_isyieldable()` now follows the same read-only claim shape as
+  `lua_status()`/`lua_gettop()` before reading `L->cframe`.
 - `lua_pushvfstring()` prechecks target ownership, drops the preclaim while
   formatting/interning through the current error state, then resume-claims the
   target for one-slot growth and string publication. `lua_pushfstring()`

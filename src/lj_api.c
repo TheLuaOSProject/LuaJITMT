@@ -2198,7 +2198,13 @@ LUALIB_API int luaL_callmeta(lua_State *L, int idx, const char *field)
 
 LUA_API int lua_isyieldable(lua_State *L)
 {
-  return cframe_canyield(L->cframe);
+  LJStateClaim claim;
+  int ok;
+  if (!lj_state_tryclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(api_errstate(L), "thread busy");
+  ok = cframe_canyield(L->cframe);
+  lj_state_dropclaim(&claim);
+  return ok;
 }
 
 LUA_API int lua_yield(lua_State *L, int nresults)
