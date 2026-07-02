@@ -315,6 +315,58 @@ END {
 ]=], "src/lj_api.c")
 
   awk([=[
+function reset(name, resume, grow, pub) {
+  fun = name; want_resume = resume; want_grow = grow; want_pub = pub
+  started = 0; depth = 0; claim = 0; access = 0; growcall = 0
+  pubtv = 0; drop = 0; claim_kind = ""
+}
+function finish() {
+  if (fun) {
+    if (!claim || !access || !drop || claim > access || access > drop ||
+	(want_resume && claim_kind != "resume") ||
+	(!want_resume && claim_kind != "try") ||
+	(want_grow && (!growcall || access > growcall || growcall > drop)) ||
+	(want_pub && (!pubtv || growcall > pubtv || pubtv > drop))) {
+      print fun " upvalue owner-claim boundary missing"
+      exit 1
+    }
+    seen++
+  }
+  fun = ""
+}
+function count_char(text, ch,    n, i) {
+  n = 0
+  for (i = 1; i <= length(text); i++)
+    if (substr(text, i, 1) == ch) n++
+  return n
+}
+BEGIN { fun = ""; seen = 0; claim_kind = "" }
+/^LUA_API const char \*lua_getupvalue\(lua_State \*L,/ { finish(); reset("lua_getupvalue", 1, 1, 1); next }
+/^LUA_API void \*lua_upvalueid\(lua_State \*L,/ { finish(); reset("lua_upvalueid", 0, 0, 0); next }
+fun {
+  if (index($0, "{")) started = 1
+  depth += count_char($0, "{")
+  depth -= count_char($0, "}")
+  if (!claim && /lj_state_resumeclaim/) { claim = NR; claim_kind = "resume" }
+  if (!claim && /api_checkclaim/) { claim = NR; claim_kind = "try" }
+  if (/index2adr_read/) {
+    if (!access) access = NR
+  }
+  if (/api_checkstack1_claimed/) growcall = NR
+  if (/lj_state_stack_pubtv/) pubtv = NR
+  if (/lj_state_dropresumeclaim\(&claim\)|lj_state_dropclaim\(&claim\)/) drop = NR
+  if (started && depth == 0) finish()
+}
+END {
+  finish()
+  if (seen != 2) {
+    print "missing public upvalue API owner-claim guard coverage"
+    exit 1
+  }
+}
+]=], "src/lj_api.c")
+
+  awk([=[
 BEGIN { infn = 0; rel = 0; drop = 0; pub = 0 }
 /^LUA_API int lua_setfenv\(lua_State \*L,/ { infn = 1; next }
 infn && /^}/ { infn = 0; next }

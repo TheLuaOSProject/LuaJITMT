@@ -18,6 +18,7 @@
 #include "lib/lua_fixture_helpers.h"
 
 static int resume_return(lua_State *L);
+static int c_upvalue_return(lua_State *L);
 
 static void expect_thread_busy(lua_State *L, lua_CFunction fn,
 			       const char *what)
@@ -173,6 +174,12 @@ static int resume_return(lua_State *L)
   return 1;
 }
 
+static int c_upvalue_return(lua_State *L)
+{
+  lua_pushvalue(L, lua_upvalueindex(1));
+  return 1;
+}
+
 static void check_call_entry_unowned(lua_State *L)
 {
   lua_State *co;
@@ -243,6 +250,38 @@ static void check_raw_object_api_unowned(lua_State *L)
   co = load_ownerless_results(L, "return {a=67}, nil", 2);
   assert(lua_next(co, 1) == 1);
   assert(lua_tointeger(co, -1) == 67);
+  assert(lj_state_owner_acq(co) == 0);
+
+  lua_settop(L, 0);
+}
+
+static void check_upvalue_api_unowned(lua_State *L)
+{
+  lua_State *co;
+  const char *name;
+  void *id;
+  lua_settop(L, 0);
+
+  co = load_ownerless_results(L,
+    "local x=68; return function() return x end", 1);
+  name = lua_getupvalue(co, 1, 1);
+  assert(name != NULL && strcmp(name, "x") == 0);
+  assert(lua_tointeger(co, -1) == 68);
+  id = lua_upvalueid(co, 1, 1);
+  assert(id != NULL);
+  assert(lj_state_owner_acq(co) == 0);
+
+  lua_settop(L, 0);
+  co = lua_newthread(L);
+  lua_pushinteger(L, 69);
+  lua_pushcclosure(L, c_upvalue_return, 1);
+  lua_xmove(L, co, 1);
+  assert(lj_state_owner_acq(co) == 0);
+  name = lua_getupvalue(co, 1, 1);
+  assert(name != NULL && strcmp(name, "") == 0);
+  assert(lua_tointeger(co, -1) == 69);
+  id = lua_upvalueid(co, 1, 1);
+  assert(id != NULL);
   assert(lj_state_owner_acq(co) == 0);
 
   lua_settop(L, 0);
@@ -721,6 +760,31 @@ static int busy_lua_next(lua_State *L)
   return 0;
 }
 
+static lua_State *busy_upvalue_prepare(lua_State *L)
+{
+  lua_State *co = lua_newthread(L);
+  assert(luaL_loadstring(L,
+    "local x=68; return function() return x end") == 0);
+  lua_call(L, 0, 1);
+  lua_xmove(L, co, 1);
+  lj_state_owner_rel(co, foreign_tid(L));
+  return co;
+}
+
+static int busy_lua_getupvalue(lua_State *L)
+{
+  lua_State *co = busy_upvalue_prepare(L);
+  (void)lua_getupvalue(co, 1, 1);
+  return 0;
+}
+
+static int busy_lua_upvalueid(lua_State *L)
+{
+  lua_State *co = busy_upvalue_prepare(L);
+  (void)lua_upvalueid(co, 1, 1);
+  return 0;
+}
+
 static int busy_getfenv_thread(lua_State *L)
 {
   lua_State *co = lua_newthread(L);
@@ -965,6 +1029,7 @@ int main(void)
   check_thread_env_unowned(L);
   check_call_entry_unowned(L);
   check_raw_object_api_unowned(L);
+  check_upvalue_api_unowned(L);
   check_metamethod_api_unowned(L);
   check_resume_unowned(L);
   check_lua_load_unowned(L);
@@ -1029,6 +1094,8 @@ int main(void)
   expect_thread_busy(L, busy_lua_getmetatable, "busy lua_getmetatable");
   expect_thread_busy(L, busy_lua_getfenv, "busy lua_getfenv");
   expect_thread_busy(L, busy_lua_next, "busy lua_next");
+  expect_thread_busy(L, busy_lua_getupvalue, "busy lua_getupvalue");
+  expect_thread_busy(L, busy_lua_upvalueid, "busy lua_upvalueid");
   expect_thread_busy(L, busy_getfenv_thread, "busy thread getfenv");
   expect_thread_busy(L, busy_setfenv_thread, "busy thread setfenv");
   expect_thread_busy(L, busy_lua_call, "busy lua_call");

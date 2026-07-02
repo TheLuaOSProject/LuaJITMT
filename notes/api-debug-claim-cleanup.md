@@ -49,6 +49,10 @@ Permanent shape:
   before dropping ownerless claims. Push-style raw getters use protected
   one-slot growth through `api_checkstack1_claimed()`, which drops the resume
   claim before reporting stack allocation errors.
+- Upvalue introspection APIs (`lua_getupvalue` and `lua_upvalueid`) claim the
+  target state before reading the function slot. `lua_getupvalue` uses the
+  protected one-slot growth helper and release-publishes the copied upvalue
+  result before dropping ownerless claims; `lua_upvalueid` stays read-only.
 - `lua_xmove()` directly copies and release-publishes stack slots while both
   states are claimed; the copy path itself does not allocate and must not be
   wrapped in `lj_vm_cpcall()` on the source coroutine.
@@ -62,4 +66,4 @@ Regression coverage:
   `lua_call`, `lua_pcall`, `lua_cpcall`, public metamethod APIs, the first
   stack-manipulation group, the read-only stack getter/conversion group, and
   the read-only auxiliary check/conversion group, and the raw object getter
-  group.
+  group and upvalue introspection group.

@@ -1410,30 +1410,44 @@ LUA_API int lua_next(lua_State *L, int idx)
 
 LUA_API const char *lua_getupvalue(lua_State *L, int idx, int n)
 {
+  LJStateClaim claim;
+  lua_State *errL = api_errstate(L);
   TValue snap;
   TValue *val;
   GCobj *o;
-  const char *name = lj_debug_uvnamev(index2adr_read(L, idx, &snap),
-				      (uint32_t)(n-1), &val, &o);
+  const char *name;
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(errL, "thread busy");
+  name = lj_debug_uvnamev(index2adr_read(L, idx, &snap),
+			  (uint32_t)(n-1), &val, &o);
   if (name) {
+    api_checkstack1_claimed(L, errL, &claim);
     lj_tv_load_acq(L->top, val);
+    lj_state_stack_pubtv(L, L, L->top);
     incr_top(L);
   }
+  lj_state_dropresumeclaim(&claim);
   return name;
 }
 
 LUA_API void *lua_upvalueid(lua_State *L, int idx, int n)
 {
+  LJStateClaim claim;
   TValue snap;
-  GCfunc *fn = funcV(index2adr_read(L, idx, &snap));
+  GCfunc *fn;
+  void *id;
+  api_checkclaim(L, &claim);
+  fn = funcV(index2adr_read(L, idx, &snap));
   n--;
   if (isluafunc(fn)) {
     lj_checkapi((uint32_t)n < fn->l.nupvalues, "bad upvalue %d", n+1);
-    return (void *)func_uvptr_acq(&fn->l, (uint32_t)n);
+    id = (void *)func_uvptr_acq(&fn->l, (uint32_t)n);
   } else {
     lj_checkapi((uint32_t)n < fn->c.nupvalues, "bad upvalue %d", n+1);
-    return (void *)&fn->c.upvalue[n];
+    id = (void *)&fn->c.upvalue[n];
   }
+  lj_state_dropclaim(&claim);
+  return id;
 }
 
 LUA_API void lua_upvaluejoin(lua_State *L, int idx1, int n1, int idx2, int n2)
