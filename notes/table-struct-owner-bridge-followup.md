@@ -1,18 +1,25 @@
 # table structural owner bridge follow-up
 
-- A direct table-local owner conversion was prototyped but not kept: individual
-  resize stress cases passed, while cumulative `m5_tab_resize_stress` exposed a
-  timing-sensitive crash outside gdb/Valgrind. That indicates the current
-  global token is still hiding at least one shared resize/GC/JIT bridge that
-  must be separated before unrelated table resizes can safely run in parallel.
-- No wait-path code change is kept here: both L-aware structural waits and a
-  shorter retry interval exposed the same cumulative resize stress instability.
-  The fixed 1 ms sleep remains a pending bridge gap.
-- A future table-local owner patch should carry a dedicated unrelated-table
-  resize stress, but that stress should land with the actual correctness fix so
-  the default resize suite remains stable.
+- `global_State.gc2.tab_struct_owner` has been replaced by
+  `GCtab.struct_owner`. `lj_tab_struct_enter(L, t)` now CAS-claims only the
+  table being structurally mutated, so unrelated table resize/clear/table.insert
+  structural shifts no longer serialize on one global owner word.
+- Same-table structural mutation is still serialized by the per-table owner.
+  This preserves the current resize/copy safety bridge while narrowing the
+  bottleneck to the table being changed.
+- The earlier direct table-local prototype failed because active-MT shared
+  `next()`/optimized `pairs()` tracing was still unsafe under concurrent
+  resize/value churn. Current HEAD keeps those shared traversal paths
+  interpreted under active MT; with that recorder fence restored, the per-table
+  owner stress is stable.
+- The fixed 1 ms wait helper remains a pending bridge gap for transient
+  `KEYLOCK`/same-table structural waits. The final design still needs
+  per-generation resize ownership, bounded copy cursors, writer helping, and
+  reader hop/retry.
 
 Verification:
 
-- `make clean && make -j$(nproc)`
-- `LJ_TEST_DISABLE_BUILD_CACHE=1 tools/ci/lua_test.sh m5_tab_resize_stress`
+- `tools/ci/lua_test.sh m5_tab_struct_owner`
+- `tools/ci/lua_test.sh m6_jit_token m6_jit_cell_ops m5_tab_next_snapshot m5_x64_table_next_snapshot`
+- `LJ_M5_TAB_RESIZE_TRAVERSAL_MODES=pairs LJ_M5_TAB_RESIZE_STRESS_CASES=traversal,nextchurn tools/ci/lua_test.sh m5_tab_resize_stress`, 20/20 runs
+- `tools/ci/lua_test.sh m5_tab_keylock_lookup m5_tab_next_snapshot m5_tab_colocated_resize m5_tab_capi_resize_stress m5_tab_resize_stress m5_tab_struct_owner`

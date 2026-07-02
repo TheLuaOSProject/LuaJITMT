@@ -196,7 +196,7 @@ LJLIB_CF(table_insert)		LJLIB_REC(.)
     n = lj_lib_checkint(L, 2);
     if (mt_active_acq(G(L))) {
       (void)lj_tab_setint(L, t, n > i ? n : i);
-      guard = lj_tab_struct_enter(L);
+      guard = lj_tab_struct_enter(L, t);
     }
     /* Shifted weak-table writes still need the P_WEAK bridge. */
     for (; i > n; i--)
@@ -204,7 +204,7 @@ LJLIB_CF(table_insert)		LJLIB_REC(.)
     i = n;
   } else if (mt_active_acq(G(L))) {
     (void)lj_tab_setint(L, t, i);
-    guard = lj_tab_struct_enter(L);
+    guard = lj_tab_struct_enter(L, t);
   }
   {
     TValue *dst = table_insert_value_store(L, t, i, L->top-1);
@@ -213,7 +213,7 @@ LJLIB_CF(table_insert)		LJLIB_REC(.)
     lj_gc2_barrier_weak_write(L, t, &key, L->top-1);
     lj_gc_pubtabtv(L, t, dst);
   }
-  lj_tab_struct_leave(L, guard);
+  lj_tab_struct_leave(t, guard);
   return 0;
 }
 

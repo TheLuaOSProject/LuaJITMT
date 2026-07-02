@@ -296,7 +296,6 @@ void lj_gc2_init(global_State *g)
   gc2_sweep_live_updates_store_rlx(g, 0);
   gc2_sweep_live_huge_bytes_store_rlx(g, 0);
   gc2_live_estimate_store_rlx(g, 0);
-  gc2_tab_struct_owner_store_rlx(g, 0);
   gc2_weak_stack_store_rlx(g, NULL);
   gc2_weak_ready_store_rlx(g, NULL);
   gc2_weak_capacity_store_rlx(g, 0);

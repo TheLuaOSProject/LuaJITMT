@@ -269,7 +269,7 @@ local worker = th.spawn(function()
     assert(shared_table_next(80) == 1200)
   end
   local shared_next_traces = trace_count(32)
-  assert(shared_next_traces > 0)
+  assert(shared_next_traces == 0)
 
   jit.flush()
   jit.opt.start("hotloop=1", "hotexit=1", "-sink")
@@ -293,7 +293,7 @@ local worker = th.spawn(function()
     assert(shared_table_pairs(80) == 1200)
   end
   local shared_pairs_traces = trace_count(32)
-  assert(shared_pairs_traces > 0)
+  assert(shared_pairs_traces == 0)
 
   return root_traces, side_traces, table_traces, read_traces, index_traces,
 	 write_traces, meta_write_traces, meta_nil_hash_traces,
@@ -317,8 +317,8 @@ assert(type(meta_nil_hash_traces) == "number" and meta_nil_hash_traces > 0)
 assert(type(meta_nil_array_traces) == "number" and meta_nil_array_traces > 0)
 assert(type(ipairs_traces) == "number" and ipairs_traces > 0)
 assert(type(next_traces) == "number" and next_traces > 0)
-assert(type(shared_next_traces) == "number" and shared_next_traces > 0)
-assert(type(shared_pairs_traces) == "number" and shared_pairs_traces > 0)
+assert(type(shared_next_traces) == "number" and shared_next_traces == 0)
+assert(type(shared_pairs_traces) == "number" and shared_pairs_traces == 0)
 assert(tid == worker:id())
 
-print("t-jit-secondary OK: secondary TG records, enters, side-traces, allocates tables, reads/writes shared tables, traces existing and previous-nil metatable stores, records shared ipairs(), trace-local next(), and helper-backed shared next()/pairs(), and preserves __index/__newindex semantics in x64 mcode")
+print("t-jit-secondary OK: secondary TG records, enters, side-traces, allocates tables, reads/writes shared tables, traces existing and previous-nil metatable stores, records shared ipairs(), traces trace-local next(), keeps active-MT shared next()/pairs() interpreted, and preserves __index/__newindex semantics in x64 mcode")

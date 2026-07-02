@@ -2119,34 +2119,17 @@ int lj_record_next(jit_State *J, RecordIndex *ix)
   IRType t, tkey, tval;
   TRef trvk;
   int mt_shared = mt_active_acq(J2G(J)) && !rec_idx_tab_trace_local(J, ix->tab);
-  t = rec_next_types(tabV(&ix->tabv), ix->keyv.u32.lo);
-  tkey = (t & 0xff); tval = (t >> 8);
   if (mt_shared) {
-#if LJ_HAS_X64_MT_JIT_HELPERS
-    TRef out = emitir(IRT(IR_TMPREF, IRT_PGC), TREF_NIL, IRTMPREF_OUT1);
-    TRef idx = lj_ir_call(J, IRCALL_lj_tab_vmnext_forjit, ix->tab, ix->key,
-			  out);
-    if (ix->mobj || tkey == IRT_NIL) {
-      if (!ix->mobj) emitir(IRTGI(IR_NE), idx, lj_ir_kint(J, -1));
-      ix->mobj = idx;
-    }
-    ix->key = lj_record_vload(J, out, 1, tkey);
-    if (tkey == IRT_NIL || ix->idxchain) {
-      ix->val = TREF_NIL;
-      return 1;
-    } else {
-      ix->val = lj_record_vload(J, out, 0, tval);
-      return 2;
-    }
-#else
     /*
-    ** Shared-table traversal traces need helper-backed value/key copies before
-    ** they can survive concurrent mutation. Keep non-x64 helpers interpreted
-    ** under active MT until their TMPREF output contract is audited.
+    ** Active-MT shared traversal traces are not stable yet: concurrent resize
+    ** and value churn can invalidate the recorder's predicted key/value result
+    ** slots across helper exits. Keep non-trace-local shared next()/pairs()
+    ** interpreted until traversal recording has a generic or versioned contract.
     */
     lj_trace_err_info(J, LJ_TRERR_NYIBC);
-#endif
   }
+  t = rec_next_types(tabV(&ix->tabv), ix->keyv.u32.lo);
+  tkey = (t & 0xff); tval = (t >> 8);
   trvk = lj_ir_call(J, IRCALL_lj_vm_next, ix->tab, ix->key);
   if (ix->mobj || tkey == IRT_NIL) {
     TRef idx = emitir(IRTI(IR_HIOP), trvk, trvk);

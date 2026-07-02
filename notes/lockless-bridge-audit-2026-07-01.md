@@ -20,16 +20,27 @@ Subagent audit of three reported warm-path bottlenecks:
 
 ## `tab_struct_owner` and `KEYLOCK` waits
 
-- Verdict: mostly accurate. The implementation uses a global GC2 table
-  structural owner token, not a pthread mutex, but it serializes structural
-  table operations across unrelated tables and waits with a 1 ms native sleep.
+- Verdict: mostly accurate for the pre-follow-up bridge. The implementation
+  used a global GC2 table structural owner token, not a pthread mutex, but it
+  serialized structural table operations across unrelated tables and waited
+  with a 1 ms native sleep.
 - Readers that observe transient `KEYLOCK` can also park/retry through the
   table wait helper. That is a real gap against the lockless warm-path rule and
   the final cooperative table-resize design.
-- Classification: temporary/changeable safety bridge. Do not remove it as a
-  small patch. The planned replacement is per-table/per-generation resize
-  ownership with `next_gen` publication, bounded copy cursors, writer helping,
-  reader hop/retry, and epoch retirement.
+- Classification: temporary/changeable safety bridge. Current follow-up moves
+  the structural owner token into `GCtab`, so unrelated tables resize/clear/
+  compound-shift independently while same-table structural mutations remain
+  serialized. Remaining work is per-generation resize ownership with bounded
+  copy cursors, writer helping, reader hop/retry, and removal of the 1 ms
+  `KEYLOCK` wait path.
+
+Follow-up slice:
+
+- `GCtab.struct_owner` now replaces `global_State.gc2.tab_struct_owner`.
+  `lj_tab_struct_enter(L, t)` CAS-claims only the table being structurally
+  mutated, and `m5_tab_struct_owner` verifies that one thread holding table A's
+  structural owner does not block another thread from entering table B while a
+  same-table entrant still waits for release.
 
 ## string interning reader pin
 

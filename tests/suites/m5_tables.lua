@@ -66,6 +66,19 @@ return function(add)
       message = "M5 table hash-vector retirement tests passed"
     },
     {
+      name = "m5_tab_struct_owner",
+      description = "table structural ownership is per-table",
+      output = "lj_t-tab-struct-owner",
+      cfile = "t-tab-struct-owner.c",
+      opts = {
+        clean = true,
+        cflags = "-DLJ_TAB_TEST_HELPERS",
+        timeout = "20s",
+        xcflags = "-DLJ_TAB_TEST_HELPERS"
+      },
+      message = "M5 per-table structural owner tests passed"
+    },
+    {
       name = "m5_tab_capi_resize_stress",
       description = "public C API table setter stress across concurrent resize",
       output = "lj_t-tab-capi-resize-stress",

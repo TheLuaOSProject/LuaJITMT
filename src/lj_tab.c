@@ -90,27 +90,26 @@ static uint32_t tab_struct_tid(lua_State *L)
   return tid != 0 ? tid : ~(uint32_t)0;
 }
 
-int lj_tab_struct_enter(lua_State *L)
+int lj_tab_struct_enter(lua_State *L, GCtab *t)
 {
-  global_State *g = G(L);
   uint32_t tid = tab_struct_tid(L);
   for (;;) {
-    uint32_t owner = gc2_tab_struct_owner_acq(g);
+    uint32_t owner = lj_tab_struct_owner_acq(t);
     if (owner == tid)
       return 0;
     if (owner == 0) {
       uint32_t expect = 0;
-      if (gc2_tab_struct_owner_cas(g, &expect, tid))
+      if (lj_tab_struct_owner_cas(t, &expect, tid))
 	return 1;
     }
     lj_tab_wait_no_l();
   }
 }
 
-void lj_tab_struct_leave(lua_State *L, int acquired)
+void lj_tab_struct_leave(GCtab *t, int acquired)
 {
   if (acquired)
-    gc2_tab_struct_owner_rel(G(L), 0);
+    lj_tab_struct_owner_rel(t, 0);
 }
 
 static LJ_AINLINE int tab_hash_key_hidden(cTValue *key)
@@ -734,6 +733,7 @@ static LJ_AINLINE void tab_init_empty(global_State *g, GCtab *t)
   lj_tab_acap_rel(t, 0);
   lj_tab_hmask_rel(t, 0);
   lj_tab_node_set(t, nilnode);
+  lj_tab_struct_owner_store_rlx(t, 0);
 #if LJ_GC64
   setmref(t->freetop, nilnode);
 #endif
@@ -1010,7 +1010,7 @@ restart_resize:
     oldret = tab_retire_reserve(L, oldnode, oldhmask);
   if (newarray && oldarray_separated && oldacap > 0)
     oldaret = tab_array_retire_reserve(L, oldarray, oldacap);
-  struct_acq = lj_tab_struct_enter(L);
+  struct_acq = lj_tab_struct_enter(L, t);
   {
     TValue *curarray;
     MSize curasize = lj_tab_array_snapshot_acq(t, &curarray);
@@ -1160,7 +1160,7 @@ restart_resize:
   if (oldhmask > 0)
     lj_assertL(oldret && la_load32_acq(&oldret->armed),
 	       "retired table nodes not armed");
-  lj_tab_struct_leave(L, struct_acq);
+  lj_tab_struct_leave(t, struct_acq);
   return;
 
 retry_resize:
@@ -1174,7 +1174,7 @@ retry_resize:
     tab_array_free(g, array, newacap);
   tab_retire_discard(g, oldret);
   tab_array_retire_discard(g, oldaret);
-  lj_tab_struct_leave(L, struct_acq);
+  lj_tab_struct_leave(t, struct_acq);
   lj_tab_wait_no_l();
   goto restart_resize;
 }
@@ -2392,7 +2392,7 @@ static void tab_clear_shared(lua_State *L, GCtab *t)
   TValue *array;
   Node *node;
   MSize asize, hmask, i;
-  int guard = lj_tab_struct_enter(L);
+  int guard = lj_tab_struct_enter(L, t);
   asize = lj_tab_array_snapshot_acq(t, &array);
   if (array)
     tab_clear_array_shared(L, t, array, asize);
@@ -2401,7 +2401,7 @@ static void tab_clear_shared(lua_State *L, GCtab *t)
     for (i = 0; i <= hmask; i++)
       tab_clear_hash_slot_shared(L, t, &node[i]);
   }
-  lj_tab_struct_leave(L, guard);
+  lj_tab_struct_leave(t, guard);
 }
 
 /* Clear a table. */
@@ -3148,13 +3148,6 @@ int32_t LJ_FASTCALL lj_tab_vmnext_forward(GCtab *t, uint32_t idx, TValue *out)
   setnilV(out);
   setnilV(out+1);
   return ok < 0 ? -1 : 0;
-}
-
-int32_t lj_tab_vmnext_forjit(lua_State *L, GCtab *t, uint32_t idx,
-			     TValue *out)
-{
-  UNUSED(L);
-  return lj_tab_vmnext_forward(t, idx, out);
 }
 
 /* -- Table length calculation -------------------------------------------- */
