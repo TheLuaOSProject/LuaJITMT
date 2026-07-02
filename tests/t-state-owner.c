@@ -125,6 +125,8 @@ static void check_stack_api_unowned(lua_State *L)
   assert(lua_gettop(co) == 11 && lua_isnil(co, 11));
   lua_pushlightuserdata(co, &marker);
   assert(lua_gettop(co) == 12 && lua_touserdata(co, 12) == &marker);
+  lua_createtable(co, 2, 1);
+  assert(lua_gettop(co) == 13 && lua_type(co, 13) == LUA_TTABLE);
   lua_settop(co, 3);
   lua_settop(co, 5);
   assert(lua_gettop(co) == 5);
@@ -707,6 +709,14 @@ static int busy_lua_pushlightuserdata(lua_State *L)
   int marker = 0;
   busy_stack_prepare(L, co);
   lua_pushlightuserdata(co, &marker);
+  return 0;
+}
+
+static int busy_lua_createtable(lua_State *L)
+{
+  lua_State *co = lua_newthread(L);
+  busy_stack_prepare(L, co);
+  lua_createtable(co, 2, 1);
   return 0;
 }
 
@@ -1344,6 +1354,7 @@ int main(void)
   expect_thread_busy(L, busy_lua_pushstring_null, "busy lua_pushstring NULL");
   expect_thread_busy(L, busy_lua_pushlightuserdata,
 		     "busy lua_pushlightuserdata");
+  expect_thread_busy(L, busy_lua_createtable, "busy lua_createtable");
   expect_thread_busy(L, busy_lua_type, "busy lua_type");
   expect_thread_busy(L, busy_lua_isnumber, "busy lua_isnumber");
   expect_thread_busy(L, busy_lua_isstring, "busy lua_isstring");

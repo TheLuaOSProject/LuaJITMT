@@ -1239,9 +1239,20 @@ LUA_API void lua_pushlightuserdata(lua_State *L, void *p)
 
 LUA_API void lua_createtable(lua_State *L, int narray, int nrec)
 {
-  lj_gc_check(L);
-  settabV(L, L->top, lj_tab_new_ah(L, (uint32_t)narray, (uint32_t)nrec));
-  incr_top(L);
+  LJStateClaim preclaim, claim;
+  lua_State *errL;
+  GCtab *t;
+  api_checkclaim(L, &preclaim);
+  lj_state_dropclaim(&preclaim);
+  errL = api_errstate(L);
+  t = lj_tab_new_ah(errL, (uint32_t)narray, (uint32_t)nrec);
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(errL, "thread busy");
+  api_checkstack1_claimed(L, errL, &claim);
+  settabV(L, L->top, t);
+  lj_state_stack_pubtv(L, L, L->top);
+  L->top++;
+  lj_state_dropresumeclaim(&claim);
 }
 
 LUALIB_API int luaL_newmetatable(lua_State *L, const char *tname)
