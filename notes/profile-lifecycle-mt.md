@@ -23,6 +23,13 @@ again. This avoids clearing anchors from underneath an active callback, invoking
 a timer callback before its Lua function is anchored, or leaving anchors behind
 after an other-VM no-op start.
 
+The hidden callback coroutine is ownerless between samples, but the x64 VM
+loads its dispatch table directly from `L->tg_hint` on protected calls. The Lua
+callback path therefore uses `lj_state_resumeclaim()` rather than a plain state
+claim while it calls the hidden coroutine, temporarily binding it to the current
+thread group and restoring the previous hint on both normal return and callback
+error cleanup.
+
 On x86_64 Linux, the stock backend uses process-wide `ITIMER_PROF`. The signal
 does not identify a Lua thread group, and async dispatch updates cannot safely
 perform the multi-thread redispatch handshake. While more than one Lua thread is

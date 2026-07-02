@@ -720,7 +720,7 @@ static void jit_profile_callback(lua_State *L2, lua_State *L, int samples,
   if (tvisfunc(&cbtv)) {
     char vmst = (char)vmstate;
     int status;
-    if (!lj_state_tryclaim(L2, lj_thr_current_id(G(L)), &claim))
+    if (!lj_state_resumeclaim(L2, lj_thr_current_id(G(L)), &claim))
       return;  /* Drop samples while the hidden callback coroutine is busy. */
     setfuncV(L2, L2->top, funcV(&cbtv));
     lj_state_stack_pubtv(L, L2, L2->top);
@@ -735,13 +735,13 @@ static void jit_profile_callback(lua_State *L2, lua_State *L, int samples,
     status = lua_pcall(L2, 3, 0, 0);  /* callback(thread, samples, vmstate) */
     if (status) {
       L2->top = L2->base;
-      lj_state_dropclaim(&claim);
+      lj_state_dropresumeclaim(&claim);
       (void)lj_profile_stop_hs(L);
       jit_profile_registry_clear(L);
       lj_trace_abort(G(L));
       return;
     }
-    lj_state_dropclaim(&claim);
+    lj_state_dropresumeclaim(&claim);
     lj_trace_abort(G(L2));
   }
 }
