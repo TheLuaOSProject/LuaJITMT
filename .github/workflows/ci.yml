@@ -38,7 +38,7 @@ jobs:
           LJ_BENCH_STOCK_FILTERS: arith_loop fib30 tab_hash_write alloc_tables closures_upval
           LJ_BENCH_STOCK_MAX: "100"
           LJ_BENCH_STOCK_TIMEOUT: 60s
-          BENCH_SCALE: "0.0001"
+          BENCH_SCALE: "0.001"
         run: |
           tools/ci/lua_test.sh m9_bench_stock_compare
 
