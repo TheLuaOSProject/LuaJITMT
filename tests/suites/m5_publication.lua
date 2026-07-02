@@ -1089,6 +1089,43 @@ END {
 
   awk([=[
 BEGIN {
+  infn = 0; claim = 0; loc = 0; drop = 0; pushf = 0; pushlit = 0
+}
+/^LUALIB_API void luaL_where\(lua_State \*L,/ { infn = 1; next }
+infn && /^}/ { infn = 0; next }
+infn && /lj_state_resumeclaim/ { claim = NR }
+infn && /lj_debug_getloc_claimed/ { loc = NR }
+infn && /lj_state_dropresumeclaim/ { drop = NR }
+infn && /lua_pushfstring/ { pushf = NR }
+infn && /lua_pushliteral/ { pushlit = NR }
+END {
+  if (!claim || !loc || !drop || !pushf || !pushlit ||
+      claim > loc || loc > drop || drop > pushf || drop > pushlit) {
+    print "luaL_where owner-claim boundary missing"
+    exit 1
+  }
+}
+]=], "src/lj_err.c")
+
+  awk([=[
+BEGIN {
+  infn = 0; frame = 0; line = 0; shortname = 0
+}
+/^int lj_debug_getloc_claimed\(lua_State \*L,/ { infn = 1; next }
+infn && /^}/ { infn = 0; next }
+infn && /lj_debug_frame/ { frame = NR }
+infn && /debug_frameline/ { line = NR }
+infn && /lj_debug_shortname/ { shortname = NR }
+END {
+  if (!frame || !line || !shortname || frame > line || line > shortname) {
+    print "lj_debug_getloc_claimed helper missing"
+    exit 1
+  }
+}
+]=], "src/lj_debug.c")
+
+  awk([=[
+BEGIN {
   infn = 0; claim = 0; pcall = 0; call = 0; drop_err = 0; drop_call = 0; rethrow = 0
 }
 /^LUA_API void lua_call\(lua_State \*L,/ { infn = 1; next }

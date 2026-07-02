@@ -16,6 +16,7 @@
 #include "lj_ff.h"
 #include "lj_trace.h"
 #include "lj_tg.h"
+#include "lj_thr.h"
 #include "lj_ccallback.h"
 #include "lj_vm.h"
 #include "lj_strfmt.h"
@@ -1251,6 +1252,12 @@ LUA_API lua_CFunction lua_atpanic(lua_State *L, lua_CFunction panicf)
 }
 
 /* Forwarders for the public API (C calling convention and no LJ_NORET). */
+static lua_State *err_errstate(lua_State *L)
+{
+  lua_State *cur = lj_tg_cur_L(G(L));
+  return cur && G(cur) == G(L) ? cur : L;
+}
+
 LUA_API int lua_error(lua_State *L)
 {
   lj_err_run(L);
@@ -1271,9 +1278,18 @@ LUALIB_API int luaL_typerror(lua_State *L, int narg, const char *xname)
 
 LUALIB_API void luaL_where(lua_State *L, int level)
 {
-  int size;
-  cTValue *frame = lj_debug_frame(L, level, &size);
-  lj_debug_addloc(L, "", frame, size ? frame+size : NULL);
+  LJStateClaim claim;
+  char loc[LUA_IDSIZE];
+  int line;
+  int have_loc;
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(err_errstate(L), "thread busy");
+  have_loc = lj_debug_getloc_claimed(L, level, loc, &line);
+  lj_state_dropresumeclaim(&claim);
+  if (have_loc)
+    lua_pushfstring(L, "%s:%d: ", loc, line);
+  else
+    lua_pushliteral(L, "");
 }
 
 LUALIB_API int luaL_error(lua_State *L, const char *fmt, ...)

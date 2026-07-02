@@ -382,6 +382,27 @@ void lj_debug_addloc(lua_State *L, const char *msg,
   lj_strfmt_pushf(L, "%s", msg);
 }
 
+int lj_debug_getloc_claimed(lua_State *L, int level, char *out, int *linep)
+{
+  int size;
+  cTValue *frame = lj_debug_frame(L, level, &size);
+  if (frame) {
+    GCfunc *fn = frame_func(frame);
+    if (isluafunc(fn)) {
+      BCLine line = debug_frameline(L, fn, size ? frame+size : NULL);
+      if (line >= 0) {
+	GCproto *pt = funcproto(fn);
+	lj_debug_shortname(out, proto_chunkname_acq(pt), pt->firstline);
+	*linep = (int)line;
+	return 1;
+      }
+    }
+  }
+  out[0] = '\0';
+  *linep = -1;
+  return 0;
+}
+
 /* Push location string for a bytecode position to Lua stack. */
 void lj_debug_pushloc(lua_State *L, GCproto *pt, BCPos pc)
 {

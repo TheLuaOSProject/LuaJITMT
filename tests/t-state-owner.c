@@ -679,6 +679,7 @@ static void check_lua_getinfo_unowned(lua_State *L)
 {
   lua_State *co;
   lua_Debug ar;
+  const char *where;
   lua_settop(L, 0);
   co = lua_newthread(L);
   assert(luaL_loadstring(L, "local x = 1; coroutine.yield(); return x") == 0);
@@ -694,6 +695,17 @@ static void check_lua_getinfo_unowned(lua_State *L)
   assert(lua_getinfo(co, "L", &ar) == 1);
   assert(lua_istable(co, -1));
   lua_pop(co, 1);
+  assert(lj_state_owner_acq(co) == 0);
+  lua_settop(L, 0);
+
+  co = lua_newthread(L);
+  assert(luaL_loadstring(L, "coroutine.yield(); return 1") == 0);
+  lua_xmove(L, co, 1);
+  assert(lua_resume(co, 0) == LUA_YIELD);
+  assert(lj_state_owner_acq(co) == 0);
+  luaL_where(co, 0);
+  where = lua_tostring(co, -1);
+  assert(where != NULL);
   assert(lj_state_owner_acq(co) == 0);
   lua_settop(L, 0);
 }
@@ -1612,6 +1624,14 @@ static int busy_luaL_traceback(lua_State *L)
   return 0;
 }
 
+static int busy_luaL_where(lua_State *L)
+{
+  lua_State *co = lua_newthread(L);
+  lj_state_owner_rel(co, foreign_tid(L));
+  luaL_where(co, 0);
+  return 0;
+}
+
 #if LJ_HASPROFILE
 static int busy_luaJIT_profile_dumpstack(lua_State *L)
 {
@@ -1788,6 +1808,7 @@ int main(void)
   expect_thread_busy(L, busy_debug_setlocal, "busy debug.setlocal");
   expect_thread_busy(L, busy_debug_traceback, "busy debug.traceback");
   expect_thread_busy(L, busy_luaL_traceback, "busy luaL_traceback");
+  expect_thread_busy(L, busy_luaL_where, "busy luaL_where");
 #if LJ_HASPROFILE
   expect_thread_busy(L, busy_luaJIT_profile_dumpstack,
 		     "busy luaJIT_profile_dumpstack");

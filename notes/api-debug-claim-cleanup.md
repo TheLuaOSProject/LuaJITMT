@@ -29,6 +29,9 @@ Permanent shape:
   slot and keeps the claim through bytecode dump traversal.
 - `luaL_fileresult()` and `luaL_execresult()` build their public result tuples
   with owner-claiming public stack push APIs instead of raw target-stack writes.
+- `luaL_where()` snapshots debug-frame location data under a resume claim, drops
+  that claim before formatting, then publishes the result through owner-claiming
+  public string push APIs.
 - Public metamethod-facing APIs (`lua_equal`, `lua_lessthan`, `lua_concat`,
   `lua_gettable`, `lua_getfield`, `lua_settable`, `lua_setfield`, and
   `luaL_callmeta`) hold resume claims around stack inspection/mutation and route
