@@ -109,6 +109,16 @@ static LJ_AINLINE void api_trace_flush_mutation(lua_State *L)
     lj_err_caller(L, LJ_ERR_NOGCMM);
 }
 
+static LJ_AINLINE void api_trace_flush_mutation_claimed(lua_State *L,
+							lua_State *errL,
+							LJStateClaim *claim)
+{
+  if (lj_trace_hasany(G(L)) && lj_trace_flushall_hs(L)) {
+    lj_state_dropresumeclaim(claim);
+    lj_err_caller(errL, LJ_ERR_NOGCMM);
+  }
+}
+
 static LJ_AINLINE void index2adr_cupvalue_store_rel(lua_State *L, int idx,
 						    const TValue *src)
 {
@@ -1901,10 +1911,15 @@ LUA_API void lua_rawseti(lua_State *L, int idx, int n)
 
 LUA_API int lua_setmetatable(lua_State *L, int idx)
 {
+  LJStateClaim claim;
+  lua_State *errL = api_errstate(L);
   global_State *g;
   GCtab *mt;
   TValue snap;
-  cTValue *o = index2adr_check_read(L, idx, &snap);
+  cTValue *o;
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(errL, "thread busy");
+  o = index2adr_check_read(L, idx, &snap);
   lj_checkapi_slot(1);
   if (tvisnil(L->top-1)) {
     mt = NULL;
@@ -1938,8 +1953,7 @@ LUA_API int lua_setmetatable(lua_State *L, int idx)
     }
   } else {
     /* Flush cache, since traces specialize to basemt. But not during __gc. */
-    if (lj_trace_flushall_hs(L))
-      lj_err_caller(L, LJ_ERR_NOGCMM);
+    api_trace_flush_mutation_claimed(L, errL, &claim);
     o = index_iscupvalue(idx) ? &snap :
 	index2adr(L, idx);  /* Stack may have been reallocated. */
     if (tvisbool(o)) {
@@ -1952,6 +1966,7 @@ LUA_API int lua_setmetatable(lua_State *L, int idx)
     }
   }
   L->top--;
+  lj_state_dropresumeclaim(&claim);
   return 1;
 }
 
@@ -1963,16 +1978,20 @@ LUALIB_API void luaL_setmetatable(lua_State *L, const char *tname)
 
 LUA_API int lua_setfenv(lua_State *L, int idx)
 {
-  TValue snap;
-  cTValue *o = index2adr_check_read(L, idx, &snap);
   LJStateClaim claim;
+  lua_State *errL = api_errstate(L);
+  TValue snap;
+  cTValue *o;
   GCtab *t;
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(errL, "thread busy");
+  o = index2adr_check_read(L, idx, &snap);
   lj_checkapi_slot(1);
   lj_checkapi(tvistab(L->top-1), "top stack slot is not a table");
   t = tabV(L->top-1);
   if (tvisfunc(o)) {
     GCfunc *fn = funcV(o);
-    api_trace_flush_mutation(L);
+    api_trace_flush_mutation_claimed(L, errL, &claim);
     lj_func_env_rel(fn, t);
     lj_gc_pubobjobj(L, fn, t);
   } else if (tvisudata(o)) {
@@ -1981,39 +2000,50 @@ LUA_API int lua_setfenv(lua_State *L, int idx)
     lj_gc_pubobjobj(L, ud, t);
   } else if (tvisthread(o)) {
     lua_State *L1 = threadV(o);
-    api_trace_flush_mutation(L);
-    if (!lj_state_tryclaim(L1, lj_thr_current_id(G(L)), &claim))
-      lj_err_callermsg(api_errstate(L), "thread busy");
+    LJStateClaim thclaim;
+    api_trace_flush_mutation_claimed(L, errL, &claim);
+    if (!lj_state_tryclaim(L1, lj_thr_current_id(G(L)), &thclaim)) {
+      lj_state_dropresumeclaim(&claim);
+      lj_err_callermsg(errL, "thread busy");
+    }
     lj_state_env_rel(L1, t);
-    lj_state_dropclaim(&claim);
+    lj_state_dropclaim(&thclaim);
     lj_gc_pubobjobj(L, obj2gco(L1), t);
   } else {
     L->top--;
+    lj_state_dropresumeclaim(&claim);
     return 0;
   }
   L->top--;
+  lj_state_dropresumeclaim(&claim);
   return 1;
 }
 
 LUA_API const char *lua_setupvalue(lua_State *L, int idx, int n)
 {
+  LJStateClaim claim;
+  lua_State *errL = api_errstate(L);
   TValue snap;
-  cTValue *f = index2adr_read(L, idx, &snap);
+  cTValue *f;
   TValue *val;
   GCobj *o;
   const char *name;
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(errL, "thread busy");
+  f = index2adr_read(L, idx, &snap);
   lj_checkapi_slot(1);
   name = lj_debug_uvnamev(f, (uint32_t)(n-1), &val, &o);
   if (name) {
     if (o->gch.gct == ~LJ_TFUNC && !isluafunc(gco2func(o)))
-      api_trace_flush_mutation(L);
+      api_trace_flush_mutation_claimed(L, errL, &claim);
     else if (o->gch.gct == ~LJ_TUPVAL &&
 	     tv_rawload_acq(val) != tv_rawload(L->top-1))
-      api_trace_flush_mutation(L);
+      api_trace_flush_mutation_claimed(L, errL, &claim);
     L->top--;
     copyTVrel(L, val, L->top);
     lj_gc_pubobjtv(L, o, L->top);
   }
+  lj_state_dropresumeclaim(&claim);
   return name;
 }
 

@@ -80,6 +80,11 @@ Permanent shape:
   target state before reading table/key/value stack slots, keep the claim
   through CAS publication and write barriers, then pop consumed stack slots
   before dropping the claim.
+- Object mutation APIs (`lua_setmetatable`, `lua_setfenv`, and
+  `lua_setupvalue`) resume-claim the target state before reading target stack
+  slots or value slots, keep the claim through GC-owned field/upvalue
+  publication, and drop it only after the API's consumed stack slots are
+  removed. `lua_setfenv` uses a separate nested claim for the thread value case.
 - Upvalue introspection APIs (`lua_getupvalue` and `lua_upvalueid`) claim the
   target state before reading the function slot. `lua_getupvalue` uses the
   protected one-slot growth helper and release-publishes the copied upvalue

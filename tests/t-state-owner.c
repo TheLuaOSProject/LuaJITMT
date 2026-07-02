@@ -20,6 +20,8 @@
 
 static int resume_return(lua_State *L);
 static int c_upvalue_return(lua_State *L);
+static lua_State *load_ownerless_results(lua_State *L, const char *src,
+					 int nres);
 
 static const char *push_vfstring(lua_State *L, const char *fmt, ...)
 {
@@ -218,7 +220,8 @@ static void check_getter_api_unowned(lua_State *L)
 static void check_thread_env_unowned(lua_State *L)
 {
   lua_State *co;
-  GCtab *env;
+  GCtab *env, *udenv;
+  void *ud;
   lua_settop(L, 0);
   co = lua_newthread(L);
   assert(lj_state_owner_acq(co) == 0);
@@ -230,6 +233,33 @@ static void check_thread_env_unowned(lua_State *L)
   assert(tabV(L->top-1) == env);
   assert(lj_state_owner_acq(co) == 0);
   lua_pop(L, 2);
+
+  co = load_ownerless_results(L, "return function() end, {mark=74}", 2);
+  assert(lua_setfenv(co, 1) == 1);
+  assert(lua_gettop(co) == 1);
+  lua_getfenv(co, 1);
+  lua_getfield(co, -1, "mark");
+  assert(lua_tointeger(co, -1) == 74);
+  assert(lj_state_owner_acq(co) == 0);
+
+  lua_settop(L, 0);
+  co = lua_newthread(L);
+  ud = lua_newuserdata(L, 4);
+  lua_newtable(L);
+  udenv = tabV(L->top-1);
+  lua_pushinteger(L, 75);
+  lua_setfield(L, -2, "mark");
+  lua_xmove(L, co, 2);
+  assert(lj_state_owner_acq(co) == 0);
+  assert(lua_setfenv(co, 1) == 1);
+  assert(lua_gettop(co) == 1);
+  lua_getfenv(co, 1);
+  assert(tabV(co->top-1) == udenv);
+  lua_getfield(co, -1, "mark");
+  assert(lua_tointeger(co, -1) == 75);
+  assert(lua_touserdata(co, 1) == ud);
+  assert(lj_state_owner_acq(co) == 0);
+  lua_settop(L, 0);
 }
 
 static int resume_return(lua_State *L)
@@ -361,6 +391,14 @@ static void check_raw_object_api_unowned(lua_State *L)
   assert(lua_tointeger(co, -1) == 72);
   assert(lj_state_owner_acq(co) == 0);
 
+  co = load_ownerless_results(L, "return {}, {tag=73}", 2);
+  assert(lua_setmetatable(co, 1) == 1);
+  assert(lua_gettop(co) == 1);
+  assert(lua_getmetatable(co, 1) == 1);
+  lua_getfield(co, -1, "tag");
+  assert(lua_tointeger(co, -1) == 73);
+  assert(lj_state_owner_acq(co) == 0);
+
   lua_settop(L, 0);
 }
 
@@ -381,6 +419,16 @@ static void check_upvalue_api_unowned(lua_State *L)
   assert(lj_state_owner_acq(co) == 0);
 
   lua_settop(L, 0);
+  co = load_ownerless_results(L,
+    "local x=68; return function() return x end, 79", 2);
+  name = lua_setupvalue(co, 1, 1);
+  assert(name != NULL && strcmp(name, "x") == 0);
+  assert(lua_gettop(co) == 1);
+  lua_call(co, 0, 1);
+  assert(lua_tointeger(co, -1) == 79);
+  assert(lj_state_owner_acq(co) == 0);
+
+  lua_settop(L, 0);
   co = lua_newthread(L);
   lua_pushinteger(L, 69);
   lua_pushcclosure(L, c_upvalue_return, 1);
@@ -391,6 +439,20 @@ static void check_upvalue_api_unowned(lua_State *L)
   assert(lua_tointeger(co, -1) == 69);
   id = lua_upvalueid(co, 1, 1);
   assert(id != NULL);
+  assert(lj_state_owner_acq(co) == 0);
+
+  lua_settop(L, 0);
+  co = lua_newthread(L);
+  lua_pushinteger(L, 69);
+  lua_pushcclosure(L, c_upvalue_return, 1);
+  lua_pushinteger(L, 80);
+  lua_xmove(L, co, 2);
+  assert(lj_state_owner_acq(co) == 0);
+  name = lua_setupvalue(co, 1, 1);
+  assert(name != NULL && strcmp(name, "") == 0);
+  assert(lua_gettop(co) == 1);
+  lua_call(co, 0, 1);
+  assert(lua_tointeger(co, -1) == 80);
   assert(lj_state_owner_acq(co) == 0);
 
   lua_settop(L, 0);
@@ -1057,6 +1119,17 @@ static int busy_lua_rawseti(lua_State *L)
   return 0;
 }
 
+static int busy_lua_setmetatable(lua_State *L)
+{
+  lua_State *co = lua_newthread(L);
+  lua_newtable(L);
+  lua_newtable(L);
+  lua_xmove(L, co, 2);
+  lj_state_owner_rel(co, foreign_tid(L));
+  (void)lua_setmetatable(co, 1);
+  return 0;
+}
+
 static int busy_lua_getmetatable(lua_State *L)
 {
   lua_State *co = busy_metatable_prepare(L);
@@ -1100,6 +1173,19 @@ static int busy_lua_upvalueid(lua_State *L)
 {
   lua_State *co = busy_upvalue_prepare(L);
   (void)lua_upvalueid(co, 1, 1);
+  return 0;
+}
+
+static int busy_lua_setupvalue(lua_State *L)
+{
+  lua_State *co = lua_newthread(L);
+  assert(luaL_loadstring(L,
+    "local x=68; return function() return x end") == 0);
+  lua_call(L, 0, 1);
+  lua_pushinteger(L, 81);
+  lua_xmove(L, co, 2);
+  lj_state_owner_rel(co, foreign_tid(L));
+  (void)lua_setupvalue(co, 1, 1);
   return 0;
 }
 
@@ -1170,6 +1256,28 @@ static int busy_setfenv_thread(lua_State *L)
   lj_state_owner_rel(co, foreign_tid(L));
   lua_newtable(L);
   (void)lua_setfenv(L, -2);
+  return 0;
+}
+
+static int busy_lua_setfenv_function(lua_State *L)
+{
+  lua_State *co = lua_newthread(L);
+  lua_pushcfunction(L, resume_return);
+  lua_newtable(L);
+  lua_xmove(L, co, 2);
+  lj_state_owner_rel(co, foreign_tid(L));
+  (void)lua_setfenv(co, 1);
+  return 0;
+}
+
+static int busy_lua_setfenv_udata(lua_State *L)
+{
+  lua_State *co = lua_newthread(L);
+  lua_newuserdata(L, 4);
+  lua_newtable(L);
+  lua_xmove(L, co, 2);
+  lj_state_owner_rel(co, foreign_tid(L));
+  (void)lua_setfenv(co, 1);
   return 0;
 }
 
@@ -1487,17 +1595,22 @@ int main(void)
   expect_thread_busy(L, busy_lua_rawgeti, "busy lua_rawgeti");
   expect_thread_busy(L, busy_lua_rawset, "busy lua_rawset");
   expect_thread_busy(L, busy_lua_rawseti, "busy lua_rawseti");
+  expect_thread_busy(L, busy_lua_setmetatable, "busy lua_setmetatable");
   expect_thread_busy(L, busy_lua_getmetatable, "busy lua_getmetatable");
   expect_thread_busy(L, busy_lua_getfenv, "busy lua_getfenv");
   expect_thread_busy(L, busy_lua_next, "busy lua_next");
   expect_thread_busy(L, busy_lua_getupvalue, "busy lua_getupvalue");
   expect_thread_busy(L, busy_lua_upvalueid, "busy lua_upvalueid");
+  expect_thread_busy(L, busy_lua_setupvalue, "busy lua_setupvalue");
   expect_thread_busy(L, busy_luaL_testudata, "busy luaL_testudata");
   expect_thread_busy(L, busy_luaL_checkudata, "busy luaL_checkudata");
   expect_thread_busy(L, busy_luaL_getmetafield, "busy luaL_getmetafield");
   expect_thread_busy(L, busy_luaL_callmeta, "busy luaL_callmeta");
   expect_thread_busy(L, busy_getfenv_thread, "busy thread getfenv");
   expect_thread_busy(L, busy_setfenv_thread, "busy thread setfenv");
+  expect_thread_busy(L, busy_lua_setfenv_function,
+		     "busy lua_setfenv function");
+  expect_thread_busy(L, busy_lua_setfenv_udata, "busy lua_setfenv udata");
   expect_thread_busy(L, busy_lua_call, "busy lua_call");
   expect_thread_busy(L, busy_lua_pcall, "busy lua_pcall");
   expect_thread_busy(L, busy_lua_cpcall, "busy lua_cpcall");

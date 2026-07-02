@@ -908,7 +908,7 @@ BEGIN { infn = 0; rel = 0; drop = 0; pub = 0 }
 /^LUA_API int lua_setfenv\(lua_State \*L,/ { infn = 1; next }
 infn && /^}/ { infn = 0; next }
 infn && /lj_state_env_rel/ { rel = NR }
-infn && rel && /lj_state_dropclaim\(&claim\)/ && !drop { drop = NR }
+infn && rel && /lj_state_dropclaim\(&thclaim\)/ && !drop { drop = NR }
 infn && /lj_gc_pubobjobj\(L, obj2gco\(L1\), t\)/ { pub = NR }
 END {
   if (!rel || !drop || !pub || !(rel < drop && drop < pub)) {
@@ -1079,6 +1079,82 @@ END {
   finish()
   if (seen != 2) {
     print "missing raw setter owner-claim guard coverage"
+    exit 1
+  }
+}
+]=], "src/lj_api.c")
+
+  awk([=[
+function reset(name) {
+  fun = name; started = 0; depth = 0
+  claim = 0; access = 0; top = 0; mutate = 0; pop = 0; drop = 0
+}
+function finish() {
+  if (fun) {
+    if (!claim || !access || !top || !mutate || !pop || !drop ||
+	claim > access || access > top || top > mutate ||
+	mutate > pop || pop > drop) {
+      print fun " object setter owner-claim boundary missing"
+      exit 1
+    }
+    seen++
+  }
+  fun = ""
+}
+function count_char(text, ch,    n, i) {
+  n = 0
+  for (i = 1; i <= length(text); i++)
+    if (substr(text, i, 1) == ch) n++
+  return n
+}
+BEGIN { fun = ""; seen = 0 }
+/^LUA_API int lua_setmetatable\(lua_State \*L,/ {
+  finish(); reset("lua_setmetatable"); next
+}
+/^LUA_API int lua_setfenv\(lua_State \*L,/ {
+  finish(); reset("lua_setfenv"); next
+}
+fun {
+  if (index($0, "{")) started = 1
+  depth += count_char($0, "{")
+  depth -= count_char($0, "}")
+  if (/lj_state_resumeclaim/) claim = NR
+  if (/index2adr_check_read/) access = NR
+  if (/L->top-1/) top = NR
+  if (/lj_tab_metatable_rel|lj_udata_metatable_rel|lj_basemt_|lj_func_env_rel|lj_udata_env_rel|lj_state_env_rel/)
+    mutate = NR
+  if (/L->top--/) pop = NR
+  if (/lj_state_dropresumeclaim/) drop = NR
+  if (started && depth == 0) finish()
+}
+END {
+  finish()
+  if (seen != 2) {
+    print "missing object setter owner-claim guard coverage"
+    exit 1
+  }
+}
+]=], "src/lj_api.c")
+
+  awk([=[
+BEGIN {
+  infn = 0; claim = 0; access = 0; top = 0; uvname = 0
+  pop = 0; copy = 0; drop = 0
+}
+/^LUA_API const char \*lua_setupvalue\(lua_State \*L,/ { infn = 1; next }
+infn && /^}/ { infn = 0; next }
+infn && /lj_state_resumeclaim/ { claim = NR }
+infn && /index2adr_read/ { access = NR }
+infn && /L->top-1/ { top = NR }
+infn && /lj_debug_uvnamev/ { uvname = NR }
+infn && /L->top--/ { pop = NR }
+infn && /copyTVrel/ { copy = NR }
+infn && /lj_state_dropresumeclaim/ { drop = NR }
+END {
+  if (!claim || !access || !top || !uvname || !pop || !copy || !drop ||
+      claim > access || access > top || top > uvname || uvname > pop ||
+      pop > copy || copy > drop) {
+    print "lua_setupvalue owner-claim boundary missing"
     exit 1
   }
 }
