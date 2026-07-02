@@ -37,6 +37,7 @@ local m5_concurrent_cases = {
   "m5_hookmask_atomic",
   "m5_hook_state_atomic",
   "m5_panic_callback_atomic",
+  "m5_wrapcf_func_publish",
   "m5_profile_stop_native",
   "m5_profile_blocked_tg_samples",
   "m5_gc_total_atomic",

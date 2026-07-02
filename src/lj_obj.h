@@ -1885,6 +1885,11 @@ static LJ_AINLINE void hookf_store(global_State *g, lua_Hook hookf)
   la_storefunc_rel(&g->hookf, hookf);  /* 03 section 3.6 global hooks. */
 }
 
+static LJ_AINLINE void wrapf_store(global_State *g, lua_CFunction wrapf)
+{
+  la_storefunc_rel(&g->wrapf, wrapf);  /* Wrapper callback before BC_FUNCCW. */
+}
+
 static LJ_AINLINE lua_CFunction panicf_load(global_State *g)
 {
   return la_loadfunc_acq(&g->panic);  /* Universe-global panic callback. */

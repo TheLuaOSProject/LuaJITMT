@@ -2092,6 +2092,61 @@ END {
                         " src/lj_err.c")
 end
 
+local function assert_wrapcf_func_atomic_publication(t)
+  local obj_guard = [=[
+BEGIN { store = 0; impl = 0 }
+/wrapf_store\(global_State \*g, lua_CFunction wrapf\)/ { store = 1 }
+/la_storefunc_rel\(&g->wrapf, wrapf\)/ { impl = 1 }
+END {
+  if (!store || !impl) {
+    print "wrapf release-store accessor missing"
+    exit 1
+  }
+}
+]=]
+  local raw_guard = [=[
+{
+  if ($0 !~ /la_storefunc_rel\(&g->wrapf, wrapf\)/) {
+    print "raw C wrapper callback access: " $0
+    bad = 1
+  }
+}
+END { exit bad }
+]=]
+  local mode_guard = [=[
+BEGIN { infn = 0; store = 0; publish = 0 }
+/^int luaJIT_setmode\(lua_State \*L, int idx, int mode\)/ {
+  infn = 1
+  next
+}
+infn && /wrapf_store\(g, \(lua_CFunction\)lightudV\(g, tv\)\)/ { store = NR }
+infn && /bc_publish_op\(&g->bc_cfunc_ext, BC_FUNCCW\)/ { publish = NR }
+infn && /^}/ {
+  if (!store || !publish || store > publish) {
+    print "WRAPCFUNC must publish wrapper before BC_FUNCCW"
+    exit 1
+  }
+  infn = 0
+}
+END {
+  if (!store || !publish) {
+    print "WRAPCFUNC publication guard did not find store and bytecode publish"
+    exit 1
+  }
+}
+]=]
+  utils.capture_command("cd " .. shell_quote(t.root) ..
+                        " && awk " .. shell_quote(obj_guard) ..
+                        " src/lj_obj.h")
+  utils.capture_command("cd " .. shell_quote(t.root) ..
+                        " && rg -n -- " .. shell_quote("->wrapf") ..
+                        " src/*.c src/*.h | awk " ..
+                        shell_quote(raw_guard))
+  utils.capture_command("cd " .. shell_quote(t.root) ..
+                        " && awk " .. shell_quote(mode_guard) ..
+                        " src/lj_dispatch.c")
+end
+
 local function gc_total_atomic_smoke()
   return [=[
 local th = require"threading"
@@ -2388,6 +2443,16 @@ return function(add)
       build_and_run_c(t, t:tmp("lj_t-panic-callback-atomic"),
                       "t-panic-callback-atomic.c", { timeout = "20s" })
       print("M5 panic callback atomic exchange behavior passed")
+    end
+  })
+
+  add({
+    name = "m5_wrapcf_func_publish",
+    description = "C wrapper callback release-publication guard",
+    run = function(t)
+      assert_wrapcf_func_atomic_publication(t)
+      t:build({ quiet = true })
+      print("M5 C wrapper callback publication guard passed")
     end
   })
 
