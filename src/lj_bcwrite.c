@@ -10,6 +10,7 @@
 #include "lj_gc.h"
 #include "lj_buf.h"
 #include "lj_bc.h"
+#include "lj_err.h"
 #if LJ_HASFFI
 #include "lj_ctype.h"
 #endif
@@ -324,6 +325,29 @@ static void bcwrite_knum(BCWriteCtx *ctx, GCproto *pt)
 }
 
 /* Write bytecode instructions. */
+#if LJ_HASJIT
+static int bcwrite_unpatch_jitins(jit_State *J, BCIns ins, BCIns *out)
+{
+  BCOp op = bc_op(ins);
+  if (op == BC_IFORL || op == BC_IITERL || op == BC_ILOOP ||
+      op == BC_JFORI) {
+    setbc_op(&ins, (BCOp)((int)op - (int)BC_IFORL + (int)BC_FORL));
+    *out = ins;
+    return 1;
+  } else if (op == BC_JFORL || op == BC_JITERL || op == BC_JLOOP) {
+    TraceNo traceno = bc_d(ins);
+    GCtrace *T = traceref(J, traceno);
+    if (T && trace_traceno_acq(T) == traceno) {
+      *out = trace_startins_acq(T);
+      return 1;
+    }
+    return 0;
+  }
+  *out = ins;
+  return 1;
+}
+#endif
+
 static char *bcwrite_bytecode(BCWriteCtx *ctx, char *p, GCproto *pt)
 {
   MSize nbc = pt->sizebc-1;  /* Omit the [JI]FUNC* header. */
@@ -338,17 +362,25 @@ static char *bcwrite_bytecode(BCWriteCtx *ctx, char *p, GCproto *pt)
     jit_State *J = L2J(sbufL(&ctx->sb));
     MSize i;
     for (i = 0; i < nbc; i++, q += sizeof(BCIns)) {
-      BCOp op = (BCOp)q[LJ_ENDIAN_SELECT(0, 3)];
+      BCIns ins, out;
+      BCOp op;
+      memcpy(&ins, q, sizeof(ins));
+      op = bc_op(ins);
       if (op == BC_IFORL || op == BC_IITERL || op == BC_ILOOP ||
-	  op == BC_JFORI) {
-	q[LJ_ENDIAN_SELECT(0, 3)] = (uint8_t)(op-BC_IFORL+BC_FORL);
-      } else if (op == BC_JFORL || op == BC_JITERL || op == BC_JLOOP) {
-	BCReg rd = q[LJ_ENDIAN_SELECT(2, 1)] + (q[LJ_ENDIAN_SELECT(3, 0)] << 8);
-	GCtrace *T = traceref(J, rd);
-	if (T) {
-	  BCIns startins = trace_startins_acq(T);
-	  memcpy(q, &startins, 4);
+	  op == BC_JFORI || op == BC_JFORL || op == BC_JITERL ||
+	  op == BC_JLOOP) {
+	int retry;
+	if (!bcwrite_unpatch_jitins(J, ins, &out)) {
+	  for (retry = 0; retry < 8; retry++) {
+	    BCIns live = (BCIns)la_load32_acq((uint32_t *)&proto_bc(pt)[1+i]);
+	    if (bcwrite_unpatch_jitins(J, live, &out))
+	      break;
+	  }
+	  if (retry == 8)
+	    lj_err_callermsg(sbufL(&ctx->sb),
+			     "cannot dump bytecode during trace flush");
 	}
+	memcpy(q, &out, sizeof(out));
       }
     }
   }

@@ -640,6 +640,20 @@ local function assert_c_jit_stale_slot_guards(t)
      contains(asmc, "as->parent = J->parent ? traceref") then
     error("assembler reintroduced unchecked trace-slot dereference")
   end
+
+  local bcwritec = t:read(t:path("src", "lj_bcwrite.c"))
+  checks.assert_text_all_contains("bytecode writer stale-slot guard", bcwritec, {
+    "static int bcwrite_unpatch_jitins(jit_State *J, BCIns ins, BCIns *out)",
+    "trace_traceno_acq(T) == traceno",
+    "*out = trace_startins_acq(T);",
+    "memcpy(&ins, q, sizeof(ins));",
+    "la_load32_acq((uint32_t *)&proto_bc(pt)[1+i])",
+    "cannot dump bytecode during trace flush"
+  }, "bytecode writer trace-slot guard")
+  if contains(bcwritec, "q[LJ_ENDIAN_SELECT") or
+     contains(bcwritec, "GCtrace *T = traceref(J, rd);") then
+    error("bytecode writer reintroduced unchecked/raw trace unpatching")
+  end
 end
 
 local function jit_tmpbuf_concat_append_smoke()

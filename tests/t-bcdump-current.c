@@ -10,6 +10,7 @@
 
 #include "lua.h"
 #include "lauxlib.h"
+#include "lualib.h"
 
 #include "lj_obj.h"
 #include "lj_bc.h"
@@ -22,6 +23,8 @@ typedef struct DumpBuf {
   size_t n;
   size_t cap;
 } DumpBuf;
+
+static int load_dump(lua_State *L, const DumpBuf *b);
 
 static int dump_writer(lua_State *L, const void *p, size_t sz, void *ud)
 {
@@ -109,7 +112,11 @@ static size_t first_bc_offset(const DumpBuf *b, uint32_t *framesize,
   assert((uint8_t)b->p[1] == BCDUMP_HEAD2);
   assert((uint8_t)b->p[2] == BCDUMP_HEAD3);
   flags = read_uleb(b, &ofs);
-  assert((flags & BCDUMP_F_STRIP) != 0);
+  if ((flags & BCDUMP_F_STRIP) == 0) {
+    uint32_t namelen = read_uleb(b, &ofs);
+    assert(ofs + namelen <= b->n);
+    ofs += namelen;
+  }
   plen = read_uleb(b, &ofs);
   assert(plen != 0);
   pstart = ofs;
@@ -134,6 +141,26 @@ static void patch_ins(DumpBuf *b, size_t ofs, BCIns ins)
   memcpy(b->p + ofs, &ins, sizeof(ins));
 }
 
+static int is_internal_jit_bc(BCOp op)
+{
+  return op == BC_IFORL || op == BC_IITERL || op == BC_ILOOP ||
+	 op == BC_JFORI || op == BC_JFORL || op == BC_JITERL ||
+	 op == BC_JLOOP;
+}
+
+static void assert_no_internal_jit_bc(const DumpBuf *b)
+{
+  uint32_t framesize, numbc;
+  size_t pos = first_bc_offset(b, &framesize, &numbc);
+  uint32_t i;
+  UNUSED(framesize);
+  for (i = 0; i < numbc; i++, pos += sizeof(BCIns)) {
+    BCIns ins;
+    memcpy(&ins, b->p + pos, sizeof(ins));
+    assert(!is_internal_jit_bc(bc_op(ins)));
+  }
+}
+
 static GCproto *top_proto(lua_State *L)
 {
   GCfunc *fn;
@@ -151,6 +178,34 @@ static void compile_to_dump(lua_State *L, const char *src, DumpBuf *b)
   assert(b->n > 5);
   assert((uint8_t)b->p[3] == BCDUMP_VERSION_LOCKLESS);
   lua_pop(L, 1);
+}
+
+static void assert_jit_patched_dump_unpatches(lua_State *L)
+{
+  DumpBuf dump = { NULL, 0, 0 };
+  const char *src =
+    "return function(n) local s=0 for i=1,n do s=s+i end return s end";
+  int i;
+  ljt_lua_assert_ok(L, luaL_dostring(L,
+    "jit.flush(); jit.opt.start('hotloop=1','hotexit=1')"),
+    "enable hot JIT");
+  ljt_lua_assert_ok(L, luaL_loadstring(L, src), "load JIT dump function");
+  ljt_lua_assert_ok(L, lua_pcall(L, 0, 1, 0), "create JIT dump function");
+  for (i = 0; i < 40; i++) {
+    lua_pushvalue(L, -1);
+    lua_pushinteger(L, 100);
+    ljt_lua_assert_ok(L, lua_pcall(L, 1, 1, 0), "run JIT dump function");
+    assert(lua_tointeger(L, -1) == 5050);
+    lua_pop(L, 1);
+  }
+  assert(lua_dump(L, dump_writer, &dump) == 0);
+  assert_no_internal_jit_bc(&dump);
+  ljt_lua_assert_ok(L, load_dump(L, &dump), "load dumped JIT function");
+  lua_pushinteger(L, 100);
+  ljt_lua_assert_ok(L, lua_pcall(L, 1, 1, 0), "run dumped JIT function");
+  assert(lua_tointeger(L, -1) == 5050);
+  lua_pop(L, 2);
+  dump_free(&dump);
 }
 
 static int load_dump(lua_State *L, const DumpBuf *b)
@@ -178,6 +233,7 @@ int main(void)
   size_t bcpos;
 
   assert(L != NULL);
+  luaL_openlibs(L);
 
   compile_to_dump(L, "return 42", &base);
   assert((uint8_t)base.p[3] == BCDUMP_VERSION_LOCKLESS);
@@ -256,6 +312,8 @@ int main(void)
   ljt_lua_assert_ok(L, load_dump(L, &base), "load v4 CNEW dump");
   assert((top_proto(L)->flags & PROTO_NOJIT) == 0);
   lua_pop(L, 1);
+
+  assert_jit_patched_dump_unpatches(L);
 
   dump_free(&redump);
   dump_free(&mod);
