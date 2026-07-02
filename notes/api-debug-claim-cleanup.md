@@ -39,6 +39,10 @@ Permanent shape:
   `lua_tothread`, and `lua_topointer`) acquire state claims before reading stack
   slots. The claimed region is read-only and preserves stock conversion results;
   a genuinely busy foreign state reports `thread busy`.
+- Auxiliary check/conversion APIs that only inspect existing stack values
+  (`luaL_checkany`, `luaL_checknumber`, `luaL_optnumber`,
+  `luaL_checkinteger`, and `luaL_optinteger`) use the same read-only claim
+  shape and drop the claim before raising argument errors.
 - `lua_xmove()` directly copies and release-publishes stack slots while both
   states are claimed; the copy path itself does not allocate and must not be
   wrapped in `lj_vm_cpcall()` on the source coroutine.
@@ -50,4 +54,5 @@ Regression coverage:
 - `m5_state_owner` covers public C API `lua_getinfo()` on an unowned yielded
   coroutine, including `S`, `f`, and `L`, plus unowned `lua_loadx`,
   `lua_call`, `lua_pcall`, `lua_cpcall`, public metamethod APIs, the first
-  stack-manipulation group, and the read-only stack getter/conversion group.
+  stack-manipulation group, the read-only stack getter/conversion group, and
+  the read-only auxiliary check/conversion group.

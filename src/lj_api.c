@@ -453,8 +453,13 @@ LUALIB_API void luaL_checktype(lua_State *L, int idx, int tt)
 
 LUALIB_API void luaL_checkany(lua_State *L, int idx)
 {
+  LJStateClaim claim;
   TValue snap;
-  if (index2adr_read(L, idx, &snap) == niltv(L))
+  cTValue *o;
+  api_checkclaim(L, &claim);
+  o = index2adr_read(L, idx, &snap);
+  lj_state_dropclaim(&claim);
+  if (o == niltv(L))
     lj_err_arg(L, idx, LJ_ERR_NOVAL);
 }
 
@@ -669,28 +674,55 @@ LUA_API lua_Number lua_tonumberx(lua_State *L, int idx, int *ok)
 
 LUALIB_API lua_Number luaL_checknumber(lua_State *L, int idx)
 {
+  LJStateClaim claim;
   TValue snap;
-  cTValue *o = index2adr_read(L, idx, &snap);
+  cTValue *o;
   TValue tmp;
-  if (LJ_LIKELY(tvisnumber(o)))
-    return numberVnum(o);
-  else if (!(tvisstr(o) && lj_strscan_num(strV(o), &tmp)))
+  lua_Number n = 0;
+  int ok;
+  api_checkclaim(L, &claim);
+  o = index2adr_read(L, idx, &snap);
+  if (LJ_LIKELY(tvisnumber(o))) {
+    ok = 1;
+    n = numberVnum(o);
+  } else if (tvisstr(o) && lj_strscan_num(strV(o), &tmp)) {
+    ok = 1;
+    n = numV(&tmp);
+  } else {
+    ok = 0;
+  }
+  lj_state_dropclaim(&claim);
+  if (!ok)
     lj_err_argt(L, idx, LUA_TNUMBER);
-  return numV(&tmp);
+  return n;
 }
 
 LUALIB_API lua_Number luaL_optnumber(lua_State *L, int idx, lua_Number def)
 {
+  LJStateClaim claim;
   TValue snap;
-  cTValue *o = index2adr_read(L, idx, &snap);
+  cTValue *o;
   TValue tmp;
-  if (LJ_LIKELY(tvisnumber(o)))
-    return numberVnum(o);
-  else if (tvisnil(o))
-    return def;
-  else if (!(tvisstr(o) && lj_strscan_num(strV(o), &tmp)))
+  lua_Number n = 0;
+  int ok;
+  api_checkclaim(L, &claim);
+  o = index2adr_read(L, idx, &snap);
+  if (LJ_LIKELY(tvisnumber(o))) {
+    ok = 1;
+    n = numberVnum(o);
+  } else if (tvisnil(o)) {
+    ok = 1;
+    n = def;
+  } else if (tvisstr(o) && lj_strscan_num(strV(o), &tmp)) {
+    ok = 1;
+    n = numV(&tmp);
+  } else {
+    ok = 0;
+  }
+  lj_state_dropclaim(&claim);
+  if (!ok)
     lj_err_argt(L, idx, LUA_TNUMBER);
-  return numV(&tmp);
+  return n;
 }
 
 LUA_API lua_Integer lua_tointeger(lua_State *L, int idx)
@@ -758,44 +790,68 @@ LUA_API lua_Integer lua_tointegerx(lua_State *L, int idx, int *ok)
 
 LUALIB_API lua_Integer luaL_checkinteger(lua_State *L, int idx)
 {
+  LJStateClaim claim;
   TValue snap;
-  cTValue *o = index2adr_read(L, idx, &snap);
+  cTValue *o;
   TValue tmp;
   lua_Number n;
+  lua_Integer i = 0;
+  int ok = 1;
+  api_checkclaim(L, &claim);
+  o = index2adr_read(L, idx, &snap);
   if (LJ_LIKELY(tvisint(o))) {
-    return intV(o);
+    i = intV(o);
   } else if (LJ_LIKELY(tvisnum(o))) {
     n = numV(o);
+    i = lj_num2int_type(n, lua_Integer);
   } else {
-    if (!(tvisstr(o) && lj_strscan_number(strV(o), &tmp)))
-      lj_err_argt(L, idx, LUA_TNUMBER);
-    if (tvisint(&tmp))
-      return (lua_Integer)intV(&tmp);
-    n = numV(&tmp);
+    if (!(tvisstr(o) && lj_strscan_number(strV(o), &tmp))) {
+      ok = 0;
+    } else if (tvisint(&tmp)) {
+      i = (lua_Integer)intV(&tmp);
+    } else {
+      n = numV(&tmp);
+      i = lj_num2int_type(n, lua_Integer);
+    }
   }
-  return lj_num2int_type(n, lua_Integer);
+  lj_state_dropclaim(&claim);
+  if (!ok)
+    lj_err_argt(L, idx, LUA_TNUMBER);
+  return i;
 }
 
 LUALIB_API lua_Integer luaL_optinteger(lua_State *L, int idx, lua_Integer def)
 {
+  LJStateClaim claim;
   TValue snap;
-  cTValue *o = index2adr_read(L, idx, &snap);
+  cTValue *o;
   TValue tmp;
   lua_Number n;
+  lua_Integer i = 0;
+  int ok = 1;
+  api_checkclaim(L, &claim);
+  o = index2adr_read(L, idx, &snap);
   if (LJ_LIKELY(tvisint(o))) {
-    return intV(o);
+    i = intV(o);
   } else if (LJ_LIKELY(tvisnum(o))) {
     n = numV(o);
+    i = lj_num2int_type(n, lua_Integer);
   } else if (tvisnil(o)) {
-    return def;
+    i = def;
   } else {
-    if (!(tvisstr(o) && lj_strscan_number(strV(o), &tmp)))
-      lj_err_argt(L, idx, LUA_TNUMBER);
-    if (tvisint(&tmp))
-      return (lua_Integer)intV(&tmp);
-    n = numV(&tmp);
+    if (!(tvisstr(o) && lj_strscan_number(strV(o), &tmp))) {
+      ok = 0;
+    } else if (tvisint(&tmp)) {
+      i = (lua_Integer)intV(&tmp);
+    } else {
+      n = numV(&tmp);
+      i = lj_num2int_type(n, lua_Integer);
+    }
   }
-  return lj_num2int_type(n, lua_Integer);
+  lj_state_dropclaim(&claim);
+  if (!ok)
+    lj_err_argt(L, idx, LUA_TNUMBER);
+  return i;
 }
 
 LUA_API int lua_toboolean(lua_State *L, int idx)

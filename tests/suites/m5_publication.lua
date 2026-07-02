@@ -199,6 +199,52 @@ END {
 ]=], "src/lj_api.c")
 
   awk([=[
+function reset(name) {
+  fun = name; started = 0; depth = 0; claim = 0; access = 0; drop = 0; err = 0
+}
+function finish() {
+  if (fun) {
+    if (!claim || !access || !drop || !err ||
+	claim > access || access > drop || drop > err) {
+      print fun " aux owner-claim/error boundary missing"
+      exit 1
+    }
+    seen++
+  }
+  fun = ""
+}
+function count_char(text, ch,    n, i) {
+  n = 0
+  for (i = 1; i <= length(text); i++)
+    if (substr(text, i, 1) == ch) n++
+  return n
+}
+BEGIN { fun = ""; seen = 0 }
+/^LUALIB_API void luaL_checkany\(lua_State \*L,/ { finish(); reset("luaL_checkany"); next }
+/^LUALIB_API lua_Number luaL_checknumber\(lua_State \*L,/ { finish(); reset("luaL_checknumber"); next }
+/^LUALIB_API lua_Number luaL_optnumber\(lua_State \*L,/ { finish(); reset("luaL_optnumber"); next }
+/^LUALIB_API lua_Integer luaL_checkinteger\(lua_State \*L,/ { finish(); reset("luaL_checkinteger"); next }
+/^LUALIB_API lua_Integer luaL_optinteger\(lua_State \*L,/ { finish(); reset("luaL_optinteger"); next }
+fun {
+  if (index($0, "{")) started = 1
+  depth += count_char($0, "{")
+  depth -= count_char($0, "}")
+  if (/api_checkclaim/) claim = NR
+  if (/index2adr_read/ && !access) access = NR
+  if (/lj_state_dropclaim\(&claim\)/) drop = NR
+  if (/lj_err_arg/) err = NR
+  if (started && depth == 0) finish()
+}
+END {
+  finish()
+  if (seen != 5) {
+    print "missing public aux API owner-claim guard coverage"
+    exit 1
+  }
+}
+]=], "src/lj_api.c")
+
+  awk([=[
 BEGIN { infn = 0; rel = 0; drop = 0; pub = 0 }
 /^LUA_API int lua_setfenv\(lua_State \*L,/ { infn = 1; next }
 infn && /^}/ { infn = 0; next }

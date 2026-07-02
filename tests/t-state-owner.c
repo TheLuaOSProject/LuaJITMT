@@ -135,6 +135,11 @@ static void check_getter_api_unowned(lua_State *L)
   assert(lua_tointegerx(co, 1, &ok) == 123 && ok);
   assert(lua_tonumber(co, 1) == 123);
   assert(lua_tointeger(co, 2) == 45);
+  luaL_checkany(co, 1);
+  assert(luaL_checknumber(co, 2) == 45);
+  assert(luaL_optnumber(co, 10, 78) == 78);
+  assert(luaL_checkinteger(co, 1) == 123);
+  assert(luaL_optinteger(co, 10, 79) == 79);
   assert(lua_toboolean(co, 3));
   assert(lua_tocfunction(co, 6) == resume_return);
   assert(lua_touserdata(co, 7) == &marker);
@@ -538,6 +543,41 @@ static int busy_lua_tointegerx(lua_State *L)
   return 0;
 }
 
+static int busy_luaL_checkany(lua_State *L)
+{
+  lua_State *co = busy_getter_prepare(L);
+  luaL_checkany(co, 1);
+  return 0;
+}
+
+static int busy_luaL_checknumber(lua_State *L)
+{
+  lua_State *co = busy_getter_prepare(L);
+  (void)luaL_checknumber(co, 2);
+  return 0;
+}
+
+static int busy_luaL_optnumber(lua_State *L)
+{
+  lua_State *co = busy_getter_prepare(L);
+  (void)luaL_optnumber(co, 2, 0);
+  return 0;
+}
+
+static int busy_luaL_checkinteger(lua_State *L)
+{
+  lua_State *co = busy_getter_prepare(L);
+  (void)luaL_checkinteger(co, 2);
+  return 0;
+}
+
+static int busy_luaL_optinteger(lua_State *L)
+{
+  lua_State *co = busy_getter_prepare(L);
+  (void)luaL_optinteger(co, 2, 0);
+  return 0;
+}
+
 static int busy_lua_toboolean(lua_State *L)
 {
   lua_State *co = busy_getter_prepare(L);
@@ -865,6 +905,11 @@ int main(void)
   expect_thread_busy(L, busy_lua_tonumberx, "busy lua_tonumberx");
   expect_thread_busy(L, busy_lua_tointeger, "busy lua_tointeger");
   expect_thread_busy(L, busy_lua_tointegerx, "busy lua_tointegerx");
+  expect_thread_busy(L, busy_luaL_checkany, "busy luaL_checkany");
+  expect_thread_busy(L, busy_luaL_checknumber, "busy luaL_checknumber");
+  expect_thread_busy(L, busy_luaL_optnumber, "busy luaL_optnumber");
+  expect_thread_busy(L, busy_luaL_checkinteger, "busy luaL_checkinteger");
+  expect_thread_busy(L, busy_luaL_optinteger, "busy luaL_optinteger");
   expect_thread_busy(L, busy_lua_toboolean, "busy lua_toboolean");
   expect_thread_busy(L, busy_lua_tocfunction, "busy lua_tocfunction");
   expect_thread_busy(L, busy_lua_touserdata, "busy lua_touserdata");
