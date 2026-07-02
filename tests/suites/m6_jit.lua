@@ -144,6 +144,7 @@ local m6_cases = {
   "m6_jit_barrier_xpoll",
   "m6_jit_xbar_xpoll",
   "m6_jit_table_store_helper",
+  "m6_jit_tbar_gc2_black_gate",
   "m6_jit_aref_pair_guard",
   "m6_jit_hrefk_nodehdr",
   "m6_jit_href_nodehdr",
@@ -1372,6 +1373,35 @@ assert(#keep == 120 and keep[120][80] == "value-120-80")
   })
 
   add({
+    name = "m6_jit_tbar_gc2_black_gate",
+    description = "M6 JIT numeric table barriers do not flood GC2 grey work",
+    run = function(t)
+      build_default(t)
+      luajit_code(t, [=[
+local th = require("threading")
+collectgarbage("collect")
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local t = {}
+for i = 1, 200000 do
+  t["k" .. (i % 8192)] = i
+end
+assert(t.k1 == 196609)
+local before = th.gcstats()
+assert(before.phase == 1, "JIT table-store probe did not enter GC2 mark phase")
+assert(before.worker_ssb_converted < 10000,
+       "TBAR queued one GC2 SSB entry per numeric hash store")
+local grey0 = before.worker_grey_drained
+collectgarbage("step", 0)
+local after = th.gcstats()
+assert(after.worker_grey_drained - grey0 < 10000,
+       "mark completion revisited numeric hash-store table per iteration")
+]=], { timeout = "20s" })
+      print("M6 JIT GC2 TBAR black gate behavior passed")
+    end
+  })
+
+  add({
     name = "m6_jit_tmpbuf_thread_format",
     description = "M6 JIT uses the running TG tmpbuf for threaded string.format traces",
     run = function(t)
@@ -1421,6 +1451,8 @@ assert(s > 0)
         end
       end
       luajit_code(t, jit_tmpbuf_thread_format_smoke(), { timeout = "30s" })
+      build_and_run_c(t, t:tmp("lj_t-jit-tg-tmpbuf-reset"),
+                      "t-jit-tg-tmpbuf-reset.c", { build = false })
       print("M6 JIT threaded string.format tmpbuf smoke passed")
     end
   })

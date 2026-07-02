@@ -386,7 +386,9 @@ int32_t LJ_FASTCALL lj_buf_len_tg_forjit(SBuf *sb)
 GCstr * LJ_FASTCALL lj_buf_tostr_tg(SBuf *sb)
 {
   MSize len = lj_buf_len_tg(sb);
-  return lj_str_new(sbufL(sb), len ? sb->b : "", len);
+  GCstr *s = lj_str_new(sbufL(sb), len ? sb->b : "", len);
+  lj_buf_wptr_tg(sb, sb->b);
+  return s;
 }
 #endif
 
