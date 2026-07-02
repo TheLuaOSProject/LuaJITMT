@@ -145,6 +145,60 @@ END {
 ]=], "src/lj_api.c")
 
   awk([=[
+function reset(name) {
+  fun = name; started = 0; depth = 0; claim = 0; access = 0; drop = 0
+}
+function finish() {
+  if (fun) {
+    if (!claim || !access || !drop || claim > access || access > drop) {
+      print fun " getter owner-claim boundary missing"
+      exit 1
+    }
+    seen++
+  }
+  fun = ""
+}
+function count_char(text, ch,    n, i) {
+  n = 0
+  for (i = 1; i <= length(text); i++)
+    if (substr(text, i, 1) == ch) n++
+  return n
+}
+BEGIN { fun = ""; seen = 0 }
+/^LUA_API int lua_type\(lua_State \*L,/ { finish(); reset("lua_type"); next }
+/^LUA_API int lua_iscfunction\(lua_State \*L,/ { finish(); reset("lua_iscfunction"); next }
+/^LUA_API int lua_isnumber\(lua_State \*L,/ { finish(); reset("lua_isnumber"); next }
+/^LUA_API int lua_isstring\(lua_State \*L,/ { finish(); reset("lua_isstring"); next }
+/^LUA_API int lua_isuserdata\(lua_State \*L,/ { finish(); reset("lua_isuserdata"); next }
+/^LUA_API int lua_rawequal\(lua_State \*L,/ { finish(); reset("lua_rawequal"); next }
+/^LUA_API lua_Number lua_tonumber\(lua_State \*L,/ { finish(); reset("lua_tonumber"); next }
+/^LUA_API lua_Number lua_tonumberx\(lua_State \*L,/ { finish(); reset("lua_tonumberx"); next }
+/^LUA_API lua_Integer lua_tointeger\(lua_State \*L,/ { finish(); reset("lua_tointeger"); next }
+/^LUA_API lua_Integer lua_tointegerx\(lua_State \*L,/ { finish(); reset("lua_tointegerx"); next }
+/^LUA_API int lua_toboolean\(lua_State \*L,/ { finish(); reset("lua_toboolean"); next }
+/^LUA_API lua_CFunction lua_tocfunction\(lua_State \*L,/ { finish(); reset("lua_tocfunction"); next }
+/^LUA_API void \*lua_touserdata\(lua_State \*L,/ { finish(); reset("lua_touserdata"); next }
+/^LUA_API lua_State \*lua_tothread\(lua_State \*L,/ { finish(); reset("lua_tothread"); next }
+/^LUA_API const void \*lua_topointer\(lua_State \*L,/ { finish(); reset("lua_topointer"); next }
+fun {
+  if (index($0, "{")) started = 1
+  depth += count_char($0, "{")
+  depth -= count_char($0, "}")
+  if (/api_checkclaim/) claim = NR
+  if (/index2adr_read/ && !access) access = NR
+  if (/lj_state_dropclaim\(&claim\)/) drop = NR
+  if (started && depth == 0) finish()
+}
+END {
+  finish()
+  if (seen != 15) {
+    print "missing public getter API owner-claim guard coverage"
+    exit 1
+  }
+}
+]=], "src/lj_api.c")
+
+  awk([=[
 BEGIN { infn = 0; rel = 0; drop = 0; pub = 0 }
 /^LUA_API int lua_setfenv\(lua_State \*L,/ { infn = 1; next }
 infn && /^}/ { infn = 0; next }

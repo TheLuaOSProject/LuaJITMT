@@ -17,6 +17,8 @@
 
 #include "lib/lua_fixture_helpers.h"
 
+static int resume_return(lua_State *L);
+
 static void expect_thread_busy(lua_State *L, lua_CFunction fn,
 			       const char *what)
 {
@@ -100,6 +102,47 @@ static void check_stack_api_unowned(lua_State *L)
   assert(lua_gettop(co) == 4);
   assert(lj_state_owner_acq(co) == 0);
   lua_pop(L, 1);
+}
+
+static void check_getter_api_unowned(lua_State *L)
+{
+  lua_State *co, *child;
+  int ok = 0;
+  int marker = 0;
+  void *ud;
+  lua_settop(L, 0);
+  co = lua_newthread(L);
+  assert(luaL_loadstring(co,
+    "return 123, '45', true, {}, function() end") == 0);
+  lua_call(co, 0, 5);
+  lua_pushcfunction(L, resume_return);
+  lua_xmove(L, co, 1);
+  lua_pushlightuserdata(L, &marker);
+  lua_xmove(L, co, 1);
+  ud = lua_newuserdata(L, 4);
+  lua_xmove(L, co, 1);
+  child = lua_newthread(L);
+  lua_xmove(L, co, 1);
+
+  assert(lj_state_owner_acq(co) == 0);
+  assert(lua_type(co, 1) == LUA_TNUMBER);
+  assert(lua_iscfunction(co, 6));
+  assert(lua_isnumber(co, 2));
+  assert(lua_isstring(co, 1));
+  assert(lua_isuserdata(co, 7) && lua_isuserdata(co, 8));
+  assert(lua_rawequal(co, 1, 1));
+  assert(lua_tonumberx(co, 2, &ok) == 45 && ok);
+  assert(lua_tointegerx(co, 1, &ok) == 123 && ok);
+  assert(lua_tonumber(co, 1) == 123);
+  assert(lua_tointeger(co, 2) == 45);
+  assert(lua_toboolean(co, 3));
+  assert(lua_tocfunction(co, 6) == resume_return);
+  assert(lua_touserdata(co, 7) == &marker);
+  assert(lua_touserdata(co, 8) == ud);
+  assert(lua_tothread(co, 9) == child);
+  assert(lua_topointer(co, 4) != NULL);
+  assert(lj_state_owner_acq(co) == 0);
+  lua_settop(L, 0);
 }
 
 static void check_thread_env_unowned(lua_State *L)
@@ -412,6 +455,124 @@ static int busy_lua_pushvalue(lua_State *L)
   return 0;
 }
 
+static lua_State *busy_getter_prepare(lua_State *L)
+{
+  lua_State *co = lua_newthread(L);
+  int marker = 0;
+  lua_pushinteger(L, 11);
+  lua_xmove(L, co, 1);
+  lua_pushliteral(L, "12");
+  lua_xmove(L, co, 1);
+  lua_pushcfunction(L, resume_return);
+  lua_xmove(L, co, 1);
+  lua_pushlightuserdata(L, &marker);
+  lua_xmove(L, co, 1);
+  lua_newthread(L);
+  lua_xmove(L, co, 1);
+  lj_state_owner_rel(co, foreign_tid(L));
+  return co;
+}
+
+static int busy_lua_type(lua_State *L)
+{
+  lua_State *co = busy_getter_prepare(L);
+  (void)lua_type(co, 1);
+  return 0;
+}
+
+static int busy_lua_isnumber(lua_State *L)
+{
+  lua_State *co = busy_getter_prepare(L);
+  (void)lua_isnumber(co, 1);
+  return 0;
+}
+
+static int busy_lua_isstring(lua_State *L)
+{
+  lua_State *co = busy_getter_prepare(L);
+  (void)lua_isstring(co, 1);
+  return 0;
+}
+
+static int busy_lua_isuserdata(lua_State *L)
+{
+  lua_State *co = busy_getter_prepare(L);
+  (void)lua_isuserdata(co, 4);
+  return 0;
+}
+
+static int busy_lua_rawequal(lua_State *L)
+{
+  lua_State *co = busy_getter_prepare(L);
+  (void)lua_rawequal(co, 1, 1);
+  return 0;
+}
+
+static int busy_lua_tonumber(lua_State *L)
+{
+  lua_State *co = busy_getter_prepare(L);
+  (void)lua_tonumber(co, 2);
+  return 0;
+}
+
+static int busy_lua_tonumberx(lua_State *L)
+{
+  lua_State *co = busy_getter_prepare(L);
+  int ok = 0;
+  (void)lua_tonumberx(co, 2, &ok);
+  return 0;
+}
+
+static int busy_lua_tointeger(lua_State *L)
+{
+  lua_State *co = busy_getter_prepare(L);
+  (void)lua_tointeger(co, 2);
+  return 0;
+}
+
+static int busy_lua_tointegerx(lua_State *L)
+{
+  lua_State *co = busy_getter_prepare(L);
+  int ok = 0;
+  (void)lua_tointegerx(co, 2, &ok);
+  return 0;
+}
+
+static int busy_lua_toboolean(lua_State *L)
+{
+  lua_State *co = busy_getter_prepare(L);
+  (void)lua_toboolean(co, 1);
+  return 0;
+}
+
+static int busy_lua_tocfunction(lua_State *L)
+{
+  lua_State *co = busy_getter_prepare(L);
+  (void)lua_tocfunction(co, 3);
+  return 0;
+}
+
+static int busy_lua_touserdata(lua_State *L)
+{
+  lua_State *co = busy_getter_prepare(L);
+  (void)lua_touserdata(co, 4);
+  return 0;
+}
+
+static int busy_lua_tothread(lua_State *L)
+{
+  lua_State *co = busy_getter_prepare(L);
+  (void)lua_tothread(co, 5);
+  return 0;
+}
+
+static int busy_lua_topointer(lua_State *L)
+{
+  lua_State *co = busy_getter_prepare(L);
+  (void)lua_topointer(co, 1);
+  return 0;
+}
+
 static int busy_getfenv_thread(lua_State *L)
 {
   lua_State *co = lua_newthread(L);
@@ -652,6 +813,7 @@ int main(void)
   check_xmove_unowned_target(L);
   check_xmove_unowned_source(L);
   check_stack_api_unowned(L);
+  check_getter_api_unowned(L);
   check_thread_env_unowned(L);
   check_call_entry_unowned(L);
   check_metamethod_api_unowned(L);
@@ -694,6 +856,20 @@ int main(void)
   expect_thread_busy(L, busy_lua_remove, "busy lua_remove");
   expect_thread_busy(L, busy_lua_insert, "busy lua_insert");
   expect_thread_busy(L, busy_lua_pushvalue, "busy lua_pushvalue");
+  expect_thread_busy(L, busy_lua_type, "busy lua_type");
+  expect_thread_busy(L, busy_lua_isnumber, "busy lua_isnumber");
+  expect_thread_busy(L, busy_lua_isstring, "busy lua_isstring");
+  expect_thread_busy(L, busy_lua_isuserdata, "busy lua_isuserdata");
+  expect_thread_busy(L, busy_lua_rawequal, "busy lua_rawequal");
+  expect_thread_busy(L, busy_lua_tonumber, "busy lua_tonumber");
+  expect_thread_busy(L, busy_lua_tonumberx, "busy lua_tonumberx");
+  expect_thread_busy(L, busy_lua_tointeger, "busy lua_tointeger");
+  expect_thread_busy(L, busy_lua_tointegerx, "busy lua_tointegerx");
+  expect_thread_busy(L, busy_lua_toboolean, "busy lua_toboolean");
+  expect_thread_busy(L, busy_lua_tocfunction, "busy lua_tocfunction");
+  expect_thread_busy(L, busy_lua_touserdata, "busy lua_touserdata");
+  expect_thread_busy(L, busy_lua_tothread, "busy lua_tothread");
+  expect_thread_busy(L, busy_lua_topointer, "busy lua_topointer");
   expect_thread_busy(L, busy_getfenv_thread, "busy thread getfenv");
   expect_thread_busy(L, busy_setfenv_thread, "busy thread setfenv");
   expect_thread_busy(L, busy_lua_call, "busy lua_call");

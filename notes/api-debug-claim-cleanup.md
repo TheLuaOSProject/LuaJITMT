@@ -32,6 +32,13 @@ Permanent shape:
   acquire state claims before stack access. Stack-growth paths use resume claims
   and protected growth; stack mutation paths release-publish adjusted slots
   before dropping ownerless claims.
+- Public read-only stack getter/conversion APIs (`lua_type`,
+  `lua_iscfunction`, `lua_isnumber`, `lua_isstring`, `lua_isuserdata`,
+  `lua_rawequal`, `lua_tonumber`, `lua_tonumberx`, `lua_tointeger`,
+  `lua_tointegerx`, `lua_toboolean`, `lua_tocfunction`, `lua_touserdata`,
+  `lua_tothread`, and `lua_topointer`) acquire state claims before reading stack
+  slots. The claimed region is read-only and preserves stock conversion results;
+  a genuinely busy foreign state reports `thread busy`.
 - `lua_xmove()` directly copies and release-publishes stack slots while both
   states are claimed; the copy path itself does not allocate and must not be
   wrapped in `lj_vm_cpcall()` on the source coroutine.
@@ -39,8 +46,8 @@ Permanent shape:
 Regression coverage:
 
 - `m5_api_debug_claim_cleanup` source guards enforce the helper/root/drop
-  ordering and the stack/load/call/metamethod resume-claim boundaries.
+  ordering and the stack/getter/load/call/metamethod resume-claim boundaries.
 - `m5_state_owner` covers public C API `lua_getinfo()` on an unowned yielded
   coroutine, including `S`, `f`, and `L`, plus unowned `lua_loadx`,
-  `lua_call`, `lua_pcall`, `lua_cpcall`, public metamethod APIs, and the
-  first stack-manipulation group.
+  `lua_call`, `lua_pcall`, `lua_cpcall`, public metamethod APIs, the first
+  stack-manipulation group, and the read-only stack getter/conversion group.

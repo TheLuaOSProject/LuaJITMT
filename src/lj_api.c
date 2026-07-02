@@ -164,6 +164,12 @@ static lua_State *api_errstate(lua_State *L)
   return cur && G(cur) == G(L) ? cur : L;
 }
 
+static void api_checkclaim(lua_State *L, LJStateClaim *claim)
+{
+  if (!lj_state_tryclaim(L, lj_thr_current_id(G(L)), claim))
+    lj_err_callermsg(api_errstate(L), "thread busy");
+}
+
 static void api_vm_call_claimed(lua_State *L, TValue *base, int nres1,
 				LJStateClaim *claim)
 {
@@ -412,26 +418,31 @@ LUA_API void lua_pushvalue(lua_State *L, int idx)
 
 LUA_API int lua_type(lua_State *L, int idx)
 {
+  LJStateClaim claim;
   TValue snap;
-  cTValue *o = index2adr_read(L, idx, &snap);
+  cTValue *o;
+  int tt;
+  api_checkclaim(L, &claim);
+  o = index2adr_read(L, idx, &snap);
   if (tvisnumber(o)) {
-    return LUA_TNUMBER;
+    tt = LUA_TNUMBER;
 #if LJ_64 && !LJ_GC64
   } else if (tvislightud(o)) {
-    return LUA_TLIGHTUSERDATA;
+    tt = LUA_TLIGHTUSERDATA;
 #endif
   } else if (o == niltv(L)) {
-    return LUA_TNONE;
+    tt = LUA_TNONE;
   } else {  /* Magic internal/external tag conversion. ORDER LJ_T */
     uint32_t t = ~itype(o);
 #if LJ_64
-    int tt = (int)((U64x(75a06,98042110) >> 4*t) & 15u);
+    tt = (int)((U64x(75a06,98042110) >> 4*t) & 15u);
 #else
-    int tt = (int)(((t < 8 ? 0x98042110u : 0x75a06u) >> 4*(t&7)) & 15u);
+    tt = (int)(((t < 8 ? 0x98042110u : 0x75a06u) >> 4*(t&7)) & 15u);
 #endif
     lj_assertL(tt != LUA_TNIL || tvisnil(o), "bad tag conversion");
-    return tt;
   }
+  lj_state_dropclaim(&claim);
+  return tt;
 }
 
 LUALIB_API void luaL_checktype(lua_State *L, int idx, int tt)
@@ -455,39 +466,69 @@ LUA_API const char *lua_typename(lua_State *L, int t)
 
 LUA_API int lua_iscfunction(lua_State *L, int idx)
 {
+  LJStateClaim claim;
   TValue snap;
-  cTValue *o = index2adr_read(L, idx, &snap);
-  return tvisfunc(o) && !isluafunc(funcV(o));
+  cTValue *o;
+  int ok;
+  api_checkclaim(L, &claim);
+  o = index2adr_read(L, idx, &snap);
+  ok = tvisfunc(o) && !isluafunc(funcV(o));
+  lj_state_dropclaim(&claim);
+  return ok;
 }
 
 LUA_API int lua_isnumber(lua_State *L, int idx)
 {
+  LJStateClaim claim;
   TValue snap;
-  cTValue *o = index2adr_read(L, idx, &snap);
+  cTValue *o;
   TValue tmp;
-  return (tvisnumber(o) || (tvisstr(o) && lj_strscan_number(strV(o), &tmp)));
+  int ok;
+  api_checkclaim(L, &claim);
+  o = index2adr_read(L, idx, &snap);
+  ok = (tvisnumber(o) || (tvisstr(o) && lj_strscan_number(strV(o), &tmp)));
+  lj_state_dropclaim(&claim);
+  return ok;
 }
 
 LUA_API int lua_isstring(lua_State *L, int idx)
 {
+  LJStateClaim claim;
   TValue snap;
-  cTValue *o = index2adr_read(L, idx, &snap);
-  return (tvisstr(o) || tvisnumber(o));
+  cTValue *o;
+  int ok;
+  api_checkclaim(L, &claim);
+  o = index2adr_read(L, idx, &snap);
+  ok = (tvisstr(o) || tvisnumber(o));
+  lj_state_dropclaim(&claim);
+  return ok;
 }
 
 LUA_API int lua_isuserdata(lua_State *L, int idx)
 {
+  LJStateClaim claim;
   TValue snap;
-  cTValue *o = index2adr_read(L, idx, &snap);
-  return (tvisudata(o) || tvislightud(o));
+  cTValue *o;
+  int ok;
+  api_checkclaim(L, &claim);
+  o = index2adr_read(L, idx, &snap);
+  ok = (tvisudata(o) || tvislightud(o));
+  lj_state_dropclaim(&claim);
+  return ok;
 }
 
 LUA_API int lua_rawequal(lua_State *L, int idx1, int idx2)
 {
+  LJStateClaim claim;
   TValue snap1, snap2;
-  cTValue *o1 = index2adr_read(L, idx1, &snap1);
-  cTValue *o2 = index2adr_read(L, idx2, &snap2);
-  return (o1 == niltv(L) || o2 == niltv(L)) ? 0 : lj_obj_equal(o1, o2);
+  cTValue *o1, *o2;
+  int ok;
+  api_checkclaim(L, &claim);
+  o1 = index2adr_read(L, idx1, &snap1);
+  o2 = index2adr_read(L, idx2, &snap2);
+  ok = (o1 == niltv(L) || o2 == niltv(L)) ? 0 : lj_obj_equal(o1, o2);
+  lj_state_dropclaim(&claim);
+  return ok;
 }
 
 LUA_API int lua_equal(lua_State *L, int idx1, int idx2)
@@ -584,32 +625,46 @@ LUA_API int lua_lessthan(lua_State *L, int idx1, int idx2)
 
 LUA_API lua_Number lua_tonumber(lua_State *L, int idx)
 {
+  LJStateClaim claim;
   TValue snap;
-  cTValue *o = index2adr_read(L, idx, &snap);
+  cTValue *o;
   TValue tmp;
+  lua_Number n;
+  api_checkclaim(L, &claim);
+  o = index2adr_read(L, idx, &snap);
   if (LJ_LIKELY(tvisnumber(o)))
-    return numberVnum(o);
+    n = numberVnum(o);
   else if (tvisstr(o) && lj_strscan_num(strV(o), &tmp))
-    return numV(&tmp);
+    n = numV(&tmp);
   else
-    return 0;
+    n = 0;
+  lj_state_dropclaim(&claim);
+  return n;
 }
 
 LUA_API lua_Number lua_tonumberx(lua_State *L, int idx, int *ok)
 {
+  LJStateClaim claim;
   TValue snap;
-  cTValue *o = index2adr_read(L, idx, &snap);
+  cTValue *o;
   TValue tmp;
+  lua_Number n;
+  int isnum;
+  api_checkclaim(L, &claim);
+  o = index2adr_read(L, idx, &snap);
   if (LJ_LIKELY(tvisnumber(o))) {
-    if (ok) *ok = 1;
-    return numberVnum(o);
+    isnum = 1;
+    n = numberVnum(o);
   } else if (tvisstr(o) && lj_strscan_num(strV(o), &tmp)) {
-    if (ok) *ok = 1;
-    return numV(&tmp);
+    isnum = 1;
+    n = numV(&tmp);
   } else {
-    if (ok) *ok = 0;
-    return 0;
+    isnum = 0;
+    n = 0;
   }
+  lj_state_dropclaim(&claim);
+  if (ok) *ok = isnum;
+  return n;
 }
 
 LUALIB_API lua_Number luaL_checknumber(lua_State *L, int idx)
@@ -640,48 +695,65 @@ LUALIB_API lua_Number luaL_optnumber(lua_State *L, int idx, lua_Number def)
 
 LUA_API lua_Integer lua_tointeger(lua_State *L, int idx)
 {
+  LJStateClaim claim;
   TValue snap;
-  cTValue *o = index2adr_read(L, idx, &snap);
+  cTValue *o;
   TValue tmp;
   lua_Number n;
+  lua_Integer i;
+  api_checkclaim(L, &claim);
+  o = index2adr_read(L, idx, &snap);
   if (LJ_LIKELY(tvisint(o))) {
-    return intV(o);
+    i = intV(o);
   } else if (LJ_LIKELY(tvisnum(o))) {
     n = numV(o);
+    i = lj_num2int_type(n, lua_Integer);
   } else {
-    if (!(tvisstr(o) && lj_strscan_number(strV(o), &tmp)))
+    if (!(tvisstr(o) && lj_strscan_number(strV(o), &tmp))) {
+      lj_state_dropclaim(&claim);
       return 0;
+    }
     if (tvisint(&tmp))
-      return intV(&tmp);
-    n = numV(&tmp);
+      i = intV(&tmp);
+    else {
+      n = numV(&tmp);
+      i = lj_num2int_type(n, lua_Integer);
+    }
   }
-  return lj_num2int_type(n, lua_Integer);
+  lj_state_dropclaim(&claim);
+  return i;
 }
 
 LUA_API lua_Integer lua_tointegerx(lua_State *L, int idx, int *ok)
 {
+  LJStateClaim claim;
   TValue snap;
-  cTValue *o = index2adr_read(L, idx, &snap);
+  cTValue *o;
   TValue tmp;
   lua_Number n;
+  lua_Integer i;
+  int isnum = 1;
+  api_checkclaim(L, &claim);
+  o = index2adr_read(L, idx, &snap);
   if (LJ_LIKELY(tvisint(o))) {
-    if (ok) *ok = 1;
-    return intV(o);
+    i = intV(o);
   } else if (LJ_LIKELY(tvisnum(o))) {
     n = numV(o);
+    i = lj_num2int_type(n, lua_Integer);
   } else {
     if (!(tvisstr(o) && lj_strscan_number(strV(o), &tmp))) {
-      if (ok) *ok = 0;
-      return 0;
+      isnum = 0;
+      i = 0;
+    } else if (tvisint(&tmp)) {
+      i = intV(&tmp);
+    } else {
+      n = numV(&tmp);
+      i = lj_num2int_type(n, lua_Integer);
     }
-    if (tvisint(&tmp)) {
-      if (ok) *ok = 1;
-      return intV(&tmp);
-    }
-    n = numV(&tmp);
   }
-  if (ok) *ok = 1;
-  return lj_num2int_type(n, lua_Integer);
+  lj_state_dropclaim(&claim);
+  if (ok) *ok = isnum;
+  return i;
 }
 
 LUALIB_API lua_Integer luaL_checkinteger(lua_State *L, int idx)
@@ -728,9 +800,15 @@ LUALIB_API lua_Integer luaL_optinteger(lua_State *L, int idx, lua_Integer def)
 
 LUA_API int lua_toboolean(lua_State *L, int idx)
 {
+  LJStateClaim claim;
   TValue snap;
-  cTValue *o = index2adr_read(L, idx, &snap);
-  return tvistruecond(o);
+  cTValue *o;
+  int ok;
+  api_checkclaim(L, &claim);
+  o = index2adr_read(L, idx, &snap);
+  ok = tvistruecond(o);
+  lj_state_dropclaim(&claim);
+  return ok;
 }
 
 LUA_API const char *lua_tolstring(lua_State *L, int idx, size_t *len)
@@ -828,39 +906,61 @@ LUA_API size_t lua_objlen(lua_State *L, int idx)
 
 LUA_API lua_CFunction lua_tocfunction(lua_State *L, int idx)
 {
+  LJStateClaim claim;
   TValue snap;
-  cTValue *o = index2adr_read(L, idx, &snap);
+  cTValue *o;
+  lua_CFunction f = NULL;
+  api_checkclaim(L, &claim);
+  o = index2adr_read(L, idx, &snap);
   if (tvisfunc(o)) {
     BCOp op = bc_op(*mref(funcV(o)->c.pc, BCIns));
     if (op == BC_FUNCC || op == BC_FUNCCW)
-      return funcV(o)->c.f;
+      f = funcV(o)->c.f;
   }
-  return NULL;
+  lj_state_dropclaim(&claim);
+  return f;
 }
 
 LUA_API void *lua_touserdata(lua_State *L, int idx)
 {
+  LJStateClaim claim;
   TValue snap;
-  cTValue *o = index2adr_read(L, idx, &snap);
+  cTValue *o;
+  void *p;
+  api_checkclaim(L, &claim);
+  o = index2adr_read(L, idx, &snap);
   if (tvisudata(o))
-    return uddata(udataV(o));
+    p = uddata(udataV(o));
   else if (tvislightud(o))
-    return lightudV(G(L), o);
+    p = lightudV(G(L), o);
   else
-    return NULL;
+    p = NULL;
+  lj_state_dropclaim(&claim);
+  return p;
 }
 
 LUA_API lua_State *lua_tothread(lua_State *L, int idx)
 {
+  LJStateClaim claim;
   TValue snap;
-  cTValue *o = index2adr_read(L, idx, &snap);
-  return (!tvisthread(o)) ? NULL : threadV(o);
+  cTValue *o;
+  lua_State *th;
+  api_checkclaim(L, &claim);
+  o = index2adr_read(L, idx, &snap);
+  th = (!tvisthread(o)) ? NULL : threadV(o);
+  lj_state_dropclaim(&claim);
+  return th;
 }
 
 LUA_API const void *lua_topointer(lua_State *L, int idx)
 {
+  LJStateClaim claim;
   TValue snap;
-  return lj_obj_ptr(G(L), index2adr_read(L, idx, &snap));
+  const void *p;
+  api_checkclaim(L, &claim);
+  p = lj_obj_ptr(G(L), index2adr_read(L, idx, &snap));
+  lj_state_dropclaim(&claim);
+  return p;
 }
 
 /* -- Stack setters (object creation) ------------------------------------- */
