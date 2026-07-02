@@ -1254,6 +1254,24 @@ static int ccall_had_stopreq(lua_State *L)
   return tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ);
 }
 
+static int ccall_pending_stopreq(lua_State *L)
+{
+  TGState *tg = L2TG(L);
+  if (!tg)
+    return 0;
+  if (lj_tg_reqmask_acq(tg) & LJ_GC2_HS_STOPREQ)
+    return 1;
+  return lj_tg_poll_acq(tg) != 0 &&
+    (gc2_hs_actions_acq(G(L)) & LJ_GC2_HS_STOPREQ);
+}
+
+static uint32_t ccall_poll_pending_stopreq(lua_State *L, uint32_t actions)
+{
+  if (!(actions & LJ_GC2_HS_STOPREQ) && ccall_pending_stopreq(L))
+    actions |= lj_safepoint_poll(L);
+  return actions;
+}
+
 static int ccall_fresh_stopreq(lua_State *L, uint32_t actions,
 			       int had_stopreq)
 {
@@ -1263,6 +1281,7 @@ static int ccall_fresh_stopreq(lua_State *L, uint32_t actions,
 static void ccall_checkstop_fresh(lua_State *L, uint32_t actions,
 				  int had_stopreq)
 {
+  actions = ccall_poll_pending_stopreq(L, actions);
   if (ccall_fresh_stopreq(L, actions, had_stopreq))
     lj_safepoint_checkstop(L, actions);
 }

@@ -15,6 +15,7 @@
 #include "lj_obj.h"
 #include "lj_ccall.h"
 #include "lj_ctype.h"
+#include "lj_gc2.h"
 #include "lj_safepoint.h"
 #include "lj_tg.h"
 
@@ -26,6 +27,8 @@ typedef struct NativeHelperStopReqCtx {
 } NativeHelperStopReqCtx;
 
 static CCallNativeState pending_native;
+static global_State *pending_g;
+static TGState *pending_tg;
 static uint32_t pending_actions;
 
 static void dummy_foreign(void)
@@ -48,6 +51,18 @@ static void sleep_ns(long ns)
 static void clear_stopreq(TGState *tg)
 {
   (void)lj_tg_flags_and_rlx(tg, (uint8_t)~(TGF_STOPREQ|TGF_STOPREQ_FRESH));
+}
+
+static void queue_stopreq_request(global_State *g, TGState *tg)
+{
+  assert(lj_tg_reqmask_acq(tg) == 0);
+  assert(lj_tg_poll_acq(tg) == 0);
+  assert(gc2_hs_pending_acq(g) == 0);
+  gc2_hs_actions_rel(g, LJ_GC2_HS_STOPREQ);
+  gc2_hs_pending_rel(g, 1);
+  gc2_hs_epoch_rel(g, gc2_hs_epoch_rlx(g) + 1u);
+  lj_tg_reqmask_rel(tg, LJ_GC2_HS_STOPREQ);
+  lj_tg_poll_rel(tg, 1);
 }
 
 static void *publish_stopreq_while_native(void *arg)
@@ -79,6 +94,13 @@ static void run_lua_ok(lua_State *L, const char *chunk)
 
 static int checkstop_from_lua(lua_State *L)
 {
+  lj_ccall_native_checkstop(L, pending_actions, &pending_native);
+  return 0;
+}
+
+static int queue_then_checkstop_from_lua(lua_State *L)
+{
+  queue_stopreq_request(pending_g, pending_tg);
   lj_ccall_native_checkstop(L, pending_actions, &pending_native);
   return 0;
 }
@@ -172,6 +194,36 @@ static void run_fresh_stopreq_check(lua_State *L, CTState *cts,
   clear_stopreq(tg);
 }
 
+static void run_post_leave_stopreq_check(lua_State *L, CTState *cts,
+					 global_State *g, TGState *tg)
+{
+  CCallNativeState native;
+  void *func = (void *)(uintptr_t)&dummy_foreign;
+
+  clear_stopreq(tg);
+  lj_ccall_native_save(L, &native);
+  lj_ccall_native_enter(L, &native, func);
+  pending_actions = lj_ccall_native_leave(L, cts, &native, func);
+  assert(pending_actions == 0);
+  assert(!lj_tg_flags_test_acq(tg, TGF_STOPREQ));
+
+  pending_native = native;
+  pending_g = g;
+  pending_tg = tg;
+  lua_pushcfunction(L, queue_then_checkstop_from_lua);
+  lua_setglobal(L, "ccall_post_leave_checkstop_probe");
+  run_lua_ok(L,
+    "local ok, err = pcall(ccall_post_leave_checkstop_probe)\n"
+    "assert(ok == false, 'post-leave STOPREQ helper check did not poll')\n"
+    "assert(tostring(err):find('thread interrupted: VM shutdown', 1, true),\n"
+    "       tostring(err))\n");
+  assert(lj_tg_reqmask_acq(tg) == 0);
+  assert(lj_tg_poll_acq(tg) == 0);
+  assert(gc2_hs_pending_acq(g) == 0);
+  assert(lj_tg_flags_test_acq(tg, TGF_STOPREQ));
+  clear_stopreq(tg);
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -197,6 +249,7 @@ int main(void)
   run_restore_state(L, cts, tg);
   run_callback_blacklist(L, cts, tg);
   run_fresh_stopreq_check(L, cts, g, tg);
+  run_post_leave_stopreq_check(L, cts, g, tg);
 
   assert(lj_tg_in_native_acq(tg) == 0);
   assert(lj_tg_ffi_call_func_acq(tg) == NULL);
