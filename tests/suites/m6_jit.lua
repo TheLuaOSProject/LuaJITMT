@@ -161,6 +161,7 @@ local m6_cases = {
   "m6_jit_io_native_stopreq",
   "m6_jit_cclosure_upvalue_flush",
   "m6_jit_env_mutation_flush",
+  "m6_jit_threading_nyi_boundary",
   "m6_jit_buffer_method_shared_nyi"
 }
 
@@ -1940,6 +1941,62 @@ end
       build_default(t)
       luajit_code(t, env_mutation_flush_smoke(), { timeout = "20s" })
       print("M6 JIT environment mutation flush guard passed")
+    end
+  })
+
+  add({
+    name = "m6_jit_threading_nyi_boundary",
+    description = "simple threading fast functions use generic JIT NYI boundaries",
+    run = function(t)
+      build_default(t)
+      local dump = t:tmp("lj-m6-threading-nyi-boundary.dump")
+      luajit_dump(t, dump, "-jdump=tir", [=[
+local threading = require("threading")
+local util = require("jit.util")
+
+local current = threading.current()
+local current_id = current:id()
+local mutex = threading.mutex()
+local channel = threading.channel(1)
+
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1", "minstitch=1")
+
+local seen_now = 0
+local seen_status = 0
+local seen_names = 0
+local cpu = 0
+local acc = 0
+for i = 1, 80 do
+  acc = acc + i
+  local now = threading.now()
+  if now then seen_now = seen_now + 1 end
+  cpu = threading.cpucount()
+  if current:id() == current_id and current:running() then
+    seen_status = seen_status + 1
+  end
+  if tostring(current) == "threading.thread" and
+     tostring(mutex) == "threading.mutex" and
+     tostring(channel) == "threading.channel" then
+    seen_names = seen_names + 1
+  end
+end
+
+assert(seen_now == 80, "threading.now() lost successful clock reads")
+assert(seen_status == 80, "thread status fastfuncs changed behavior")
+assert(seen_names == 80, "threading __tostring fastfuncs changed behavior")
+assert(cpu >= 1, "threading.cpucount() returned an invalid CPU count")
+assert(acc == 3240, "loop body changed while tracing threading fastfuncs")
+assert(util.traceinfo(1), "threading.now/cpucount loop did not trace")
+]=], { timeout = "20s" })
+      local data = t:read(dump)
+      if contains(data, "unsupported variant of FastFunc") then
+        error("read-only threading fastfuncs hit the hard NYI stop:\n" ..
+              data, 0)
+      end
+      checks.assert_dump_contains(t, dump, "TRACE 1",
+                                  "threading NYI boundary trace")
+      print("M6 JIT threading NYI boundary behavior passed")
     end
   })
 

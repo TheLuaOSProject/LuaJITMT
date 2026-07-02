@@ -58,13 +58,15 @@ then restored the frame using raw stack pointers. In this fork, protected calls
 can safepoint and relocate the stack, so the stitch undo now restores via saved
 stack offsets.
 
-Threading fast functions are now treated as non-recordable by the generic NYI
-recorder. These calls can block, publish stack roots, poll safepoints, and
-change thread ownership; compiling a trace boundary immediately before or
-across them caused intermittent JIT-only corruption in
-`tests/t-ffi-gc-finreg.lua`. This preserves JIT for surrounding Lua code while
-keeping synchronization primitives on the interpreter path until dedicated
-recorders exist.
+Threading fast functions that can block, wake other threads, publish stack
+roots, poll safepoints, change thread ownership, allocate threading userdata, or
+carry memory-order semantics are now treated as non-recordable by the generic
+NYI recorder. Compiling a trace boundary immediately before or across those
+operations caused intermittent JIT-only corruption in
+`tests/t-ffi-gc-finreg.lua`. Simple read-only/status calls such as
+`threading.now()`, `threading.cpucount()`, `thread:id()`, `thread:running()`,
+and threading `__tostring` methods are left on the normal NYI trace boundary so
+hot surrounding Lua loops can still trace until dedicated recorders exist.
 
 ## Current-stack weak semantics
 

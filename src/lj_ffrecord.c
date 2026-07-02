@@ -160,22 +160,15 @@ static void LJ_FASTCALL recff_nyi(jit_State *J, RecordFFData *rd)
 {
   switch (J->fn->c.ffid) {
   case FF_threading_thread_join:
-  case FF_threading_thread_id:
-  case FF_threading_thread_running:
-  case FF_threading_thread___tostring:
   case FF_threading_thread___gc:
   case FF_threading_mutex_lock:
   case FF_threading_mutex_trylock:
   case FF_threading_mutex_unlock:
-  case FF_threading_mutex___tostring:
   case FF_threading_channel_send:
   case FF_threading_channel_recv:
   case FF_threading_channel_peek:
   case FF_threading_channel_close:
   case FF_threading_channel___gc:
-  case FF_threading_channel___tostring:
-  case FF_threading_cpucount:
-  case FF_threading_now:
   case FF_threading_fence:
   case FF_threading_sleep:
   case FF_threading_gcstats:
