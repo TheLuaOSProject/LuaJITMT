@@ -605,6 +605,43 @@ local function assert_x64_jloop_stale_slot_guards(t)
   }, "C trace-exit guard")
 end
 
+local function assert_c_jit_stale_slot_guards(t)
+  local recordc = t:read(t:path("src", "lj_record.c"))
+  checks.assert_text_all_contains("recorder stale-slot guard", recordc, {
+    "static GCtrace *rec_traceref_live(jit_State *J, TraceNo traceno)",
+    "trace_traceno_acq(T) != traceno",
+    "la_load64_acq(&T->retire_epoch) != 0",
+    "lj_trace_err(J, LJ_TRERR_RETRY);",
+    "T = rec_traceref_live(J, lnk);",
+    "TraceNo lnk = bc_d(pc[(ptrdiff_t)rc-BCBIAS_J]);",
+    "GCtrace *T = rec_traceref_live(J, rc);",
+    "trace_nchild_acq(rec_traceref_live(J, J->cur.root))",
+    "GCtrace *T = rec_traceref_live(J, bc_d(*J->pc));"
+  }, "recorder trace-slot guard")
+  if contains(recordc, "trace_startins_acq(traceref") or
+     contains(recordc, "trace_nchild_acq(traceref") or
+     contains(recordc, "traceref(J, J->parent)") or
+     contains(recordc, "traceref(J, J->cur.root)") then
+    error("recorder reintroduced unchecked trace-slot dereference")
+  end
+
+  local asmc = t:read(t:path("src", "lj_asm.c"))
+  checks.assert_text_all_contains("assembler stale-slot guard", asmc, {
+    "static GCtrace *asm_traceref_live(ASMState *as, TraceNo traceno)",
+    "trace_traceno_acq(T) != traceno",
+    "la_load64_acq(&T->retire_epoch) != 0",
+    "lj_trace_err(as->J, LJ_TRERR_RETRY);",
+    "GCtrace *target = traceref(as->J, bc_d(*pc));",
+    "target && trace_traceno_acq(target) == bc_d(*pc)",
+    "la_load64_acq(&target->retire_epoch) == 0",
+    "as->parent = J->parent ? asm_traceref_live(as, J->parent) : NULL;"
+  }, "assembler trace-slot guard")
+  if contains(asmc, "&traceref(as->J") or
+     contains(asmc, "as->parent = J->parent ? traceref") then
+    error("assembler reintroduced unchecked trace-slot dereference")
+  end
+end
+
 local function jit_tmpbuf_concat_append_smoke()
   return [=[
 local util = require("jit.util")
@@ -2094,6 +2131,7 @@ assert(live >= 8, live)
     run = function(t)
       build_default(t)
       assert_x64_jloop_stale_slot_guards(t)
+      assert_c_jit_stale_slot_guards(t)
       run_lua_test_case(t, "m5_jit_trace_publish")
       run_lua_test_case(t, "m3_vm_safepoint")
       luajit_file(t, t:path("tests", "stock", "test", "misc", "jit_flush.lua"))

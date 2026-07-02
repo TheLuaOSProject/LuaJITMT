@@ -2234,6 +2234,15 @@ static BCReg asm_baseslot(ASMState *as, SnapShot *snap, int *gotframe)
   return 0;
 }
 
+static GCtrace *asm_traceref_live(ASMState *as, TraceNo traceno)
+{
+  GCtrace *T = traceref(as->J, traceno);
+  if (LJ_UNLIKELY(T == NULL || trace_traceno_acq(T) != traceno ||
+		  la_load64_acq(&T->retire_epoch) != 0))
+    lj_trace_err(as->J, LJ_TRERR_RETRY);
+  return T;
+}
+
 /* Link to another trace. */
 static void asm_tail_link(ASMState *as)
 {
@@ -2251,9 +2260,13 @@ static void asm_tail_link(ASMState *as)
     const BCIns *pc = snap_pc(&as->T->snapmap[snap->mapofs + snap->nent]);
     int32_t mres;
     if (bc_op(*pc) == BC_JLOOP) {  /* NYI: find a better way to do this. */
-      BCIns *retpc = &traceref(as->J, bc_d(*pc))->startins;
-      if (bc_isret(bc_op(*retpc)))
-	pc = retpc;
+      GCtrace *target = traceref(as->J, bc_d(*pc));
+      if (target && trace_traceno_acq(target) == bc_d(*pc) &&
+	  la_load64_acq(&target->retire_epoch) == 0) {
+	BCIns *retpc = &target->startins;
+	if (bc_isret(bc_op(*retpc)))
+	  pc = retpc;
+      }
     }
 #if LJ_GC64
     emit_loadu64(as, RID_LPC, u64ptr(pc));
@@ -2606,7 +2619,7 @@ void lj_asm_trace(jit_State *J, GCtrace *T)
   as->loopref = J->loopref;
   as->realign = NULL;
   as->loopinv = 0;
-  as->parent = J->parent ? traceref(J, J->parent) : NULL;
+  as->parent = J->parent ? asm_traceref_live(as, J->parent) : NULL;
 #ifdef LUAJIT_RANDOM_RA
   (void)lj_prng_u64(&J2TG(J)->prng);  /* Ensure PRNG step between traces. */
 #endif

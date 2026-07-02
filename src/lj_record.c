@@ -662,6 +662,15 @@ static int innerloopleft(jit_State *J, const BCIns *pc)
   return 0;
 }
 
+static GCtrace *rec_traceref_live(jit_State *J, TraceNo traceno)
+{
+  GCtrace *T = traceref(J, traceno);
+  if (LJ_UNLIKELY(T == NULL || trace_traceno_acq(T) != traceno ||
+		  la_load64_acq(&T->retire_epoch) != 0))
+    lj_trace_err(J, LJ_TRERR_RETRY);
+  return T;
+}
+
 /* Handle the case when an interpreted loop op is hit. */
 static void rec_loop_interp(jit_State *J, const BCIns *pc, LoopEvent ev)
 {
@@ -703,8 +712,10 @@ static void rec_loop_jit(jit_State *J, TraceNo lnk, LoopEvent ev)
     J->instunroll = 0;  /* Cannot continue across a compiled loop op. */
     if (J->pc == J->startpc && J->framedepth + J->retdepth == 0)
       lj_record_stop(J, LJ_TRLINK_LOOP, J->cur.traceno);  /* Form extra loop. */
-    else
+    else {
+      (void)rec_traceref_live(J, lnk);
       lj_record_stop(J, LJ_TRLINK_ROOT, lnk);  /* Link to the loop. */
+    }
   }  /* Side trace continues across a loop that's left or not entered. */
 }
 
@@ -2724,7 +2735,7 @@ static void rec_func_jit(jit_State *J, TraceNo lnk)
   GCtrace *T;
   TraceLink linktype;
   rec_func_setup(J);
-  T = traceref(J, lnk);
+  T = rec_traceref_live(J, lnk);
   linktype = trace_linktype_acq(T);
   if (linktype == LJ_TRLINK_RETURN) {  /* Trace returns to interpreter? */
     BCIns startins = trace_startins_acq(T);
@@ -3455,8 +3466,11 @@ void lj_record_ins(jit_State *J)
   case BC_JFORI:
     lj_assertJ(bc_op(pc[(ptrdiff_t)rc-BCBIAS_J]) == BC_JFORL,
 	       "JFORI does not point to JFORL");
-    if (rec_for(J, pc, 0) != LOOPEV_LEAVE)  /* Link to existing loop. */
-      lj_record_stop(J, LJ_TRLINK_ROOT, bc_d(pc[(ptrdiff_t)rc-BCBIAS_J]));
+    if (rec_for(J, pc, 0) != LOOPEV_LEAVE) {  /* Link to existing loop. */
+      TraceNo lnk = bc_d(pc[(ptrdiff_t)rc-BCBIAS_J]);
+      (void)rec_traceref_live(J, lnk);
+      lj_record_stop(J, LJ_TRLINK_ROOT, lnk);
+    }
     /* Continue tracing if the loop is not entered. */
     break;
 
@@ -3475,19 +3489,22 @@ void lj_record_ins(jit_State *J)
 
   case BC_JFORL:
     {
-      BCIns startins = trace_startins_acq(traceref(J, rc));
+      GCtrace *T = rec_traceref_live(J, rc);
+      BCIns startins = trace_startins_acq(T);
       rec_loop_jit(J, rc, rec_for(J, pc+bc_j(startins), 1));
     }
     break;
   case BC_JITERL:
     {
-      BCIns startins = trace_startins_acq(traceref(J, rc));
+      GCtrace *T = rec_traceref_live(J, rc);
+      BCIns startins = trace_startins_acq(T);
       rec_loop_jit(J, rc, rec_iterl(J, startins));
     }
     break;
   case BC_JLOOP:
     {
-      BCIns startins = trace_startins_acq(traceref(J, rc));
+      GCtrace *T = rec_traceref_live(J, rc);
+      BCIns startins = trace_startins_acq(T);
       rec_loop_jit(J, rc, rec_loop(J, ra,
 				   !bc_isret(bc_op(startins)) &&
 				   bc_op(startins) != BC_ITERN));
@@ -3678,7 +3695,7 @@ void lj_record_setup(jit_State *J)
   J->startpc = J->pc;
   setmref(J->cur.startpc, J->pc);
   if (J->parent) {  /* Side trace. */
-    GCtrace *T = traceref(J, J->parent);
+    GCtrace *T = rec_traceref_live(J, J->parent);
     SnapShot *snap = trace_snap_acq(T);
     TraceNo root = trace_root_acq(T);
     root = root ? root : J->parent;
@@ -3698,13 +3715,14 @@ void lj_record_setup(jit_State *J)
     }
     lj_snap_replay(J, T);
   sidecheck:
-    if ((trace_nchild_acq(traceref(J, J->cur.root)) >=
+    if ((trace_nchild_acq(rec_traceref_live(J, J->cur.root)) >=
 	 jit_param_acq(J, JIT_P_maxside) ||
 	 snap_count_acq(&snap[J->exitno]) >=
 	 (uint32_t)jit_param_acq(J, JIT_P_hotexit) +
 	 (uint32_t)jit_param_acq(J, JIT_P_tryside))) {
       if (bc_op(*J->pc) == BC_JLOOP) {
-	BCIns startins = trace_startins_acq(traceref(J, bc_d(*J->pc)));
+	GCtrace *T = rec_traceref_live(J, bc_d(*J->pc));
+	BCIns startins = trace_startins_acq(T);
 	if (bc_op(startins) == BC_ITERN)
 	  rec_itern(J, bc_a(startins), bc_b(startins));
       }
