@@ -122,7 +122,7 @@ void lj_safepoint_apply_tg(global_State *g, TGState *tg, uint32_t actions)
 }
 
 static uint32_t safepoint_ack_tg(global_State *g, TGState *tg,
-				 int note_latency)
+				 int note_latency, int wait_consumed)
 {
   uint64_t epoch;
   uint32_t actions, oldpending;
@@ -134,7 +134,9 @@ retry:
     if (lj_tg_poll_acq(tg) != 0) {
       if (lj_tg_reqmask_acq(tg) != 0)
 	goto retry;
-      if (safepoint_wait_consumed_ack(tg))
+      /* Remote leader acks do not resume this TG's VM, so they must not
+      ** block behind another leader's already-consumed poll bit. */
+      if (wait_consumed && safepoint_wait_consumed_ack(tg))
 	goto retry;
     }
     return 0;
@@ -187,7 +189,7 @@ uint32_t lj_safepoint_retire_dead_tg(global_State *g, TGState *tg)
 
 uint32_t lj_safepoint_ack(lua_State *L)
 {
-  return L ? safepoint_ack_tg(G(L), L2TG(L), 1) : 0;
+  return L ? safepoint_ack_tg(G(L), L2TG(L), 1, 1) : 0;
 }
 
 uint32_t lj_safepoint_poll(lua_State *L)
@@ -208,8 +210,11 @@ void lj_safepoint_checkstop(lua_State *L, uint32_t actions)
     return;
   tg = L2TG(L);
   if ((actions & LJ_GC2_HS_STOPREQ) ||
-      (tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ)))
+      (tg && lj_tg_flags_test_acq(tg, TGF_STOPREQ))) {
+    if (tg)
+      (void)lj_tg_flags_and_rlx(tg, (uint8_t)~TGF_STOPREQ_FRESH);
     lj_err_callermsg(L, "thread interrupted: VM shutdown");
+  }
 }
 
 uint32_t lj_safepoint_ack_check(lua_State *L)
@@ -280,9 +285,9 @@ static void safepoint_ack_native(global_State *g)
     if (lj_tg_flags_test_acq(tg, TGF_DEAD))  /* 05 section 5.4.1. */
       continue;
     if (tg == self)
-      safepoint_ack_tg(g, tg, 0);  /* Leader owns this synthetic ack. */
+      safepoint_ack_tg(g, tg, 0, 0);  /* Leader owns this synthetic ack. */
     else if (lj_tg_in_native_acq(tg))
-      safepoint_ack_tg(g, tg, 0);  /* 05 section 5.4.3 remote native ack. */
+      safepoint_ack_tg(g, tg, 0, 0);  /* 05 section 5.4.3 remote native ack. */
   }
 }
 

@@ -1607,6 +1607,12 @@ static void api_gc_setlogical(global_State *g, GCSize threshold)
   }
 }
 
+static GCSize api_gc_restart_threshold(global_State *g)
+{
+  GCSize total = lj_gc_total_load(g);
+  return (total/100) * g->gc.pause;
+}
+
 static int api_gc_enterexclusive(global_State *g)
 {
   uint32_t expect = 0;
@@ -1637,17 +1643,18 @@ LUA_API int lua_gc(lua_State *L, int what, int data)
     break;
   case LUA_GCRESTART:
     {
-      GCSize total = lj_gc_total_load(g);
-      api_gc_setlogical(g, data == -1 ? (total/100)*g->gc.pause : total);
+      api_gc_setlogical(g, data == -1 ? api_gc_restart_threshold(g) :
+			lj_gc_total_load(g));
     }
     break;
   case LUA_GCCOLLECT:
     if (api_gc_enterexclusive(g)) {
       lj_gc_fullgc(L);
+      api_gc_setlogical(g, api_gc_restart_threshold(g));
       api_gc_leaveexclusive(g);
     } else if (mt_live_acq(g) != 0) {
-      (void)lj_gc2_collect_active(L,
-				  lj_gc_mt_threshold_load(g) == LJ_MAX_MEM);
+      (void)lj_gc2_collect_active(L);
+      api_gc_setlogical(g, api_gc_restart_threshold(g));
     }
     break;
   case LUA_GCCOUNT:

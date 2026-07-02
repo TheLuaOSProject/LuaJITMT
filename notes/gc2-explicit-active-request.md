@@ -2,11 +2,11 @@ Active-thread explicit GC requests no longer disappear silently.
 
 When `lua_gc(LUA_GCCOLLECT)` or `lua_gc(LUA_GCSTEP)` cannot claim
 `mt_gc_exclusive` because secondary Lua threads are live, it now routes through
-`lj_gc2_request_major()` / `lj_gc2_request_cycle_explicit()`. Those public
-request helpers use the same GC2 leader token as allocation-triggered cycles
-and store the driver threshold through `mt_gc_threshold` while `mt_live` is
-nonzero, so the request survives until a GC2 owner can drive it.
-The automatic allocation-trigger helper stays private to `lj_gc2.c`.
+the explicit GC2 request path. These helpers use the same GC2 leader token as
+allocation-triggered cycles and store the driver threshold through
+`mt_gc_threshold` while `mt_live` is nonzero, so the request survives until a
+GC2 owner can drive it. The automatic allocation-trigger helper stays private
+to `lj_gc2.c`.
 
 This is still a bridge. The active-thread `collect` path cannot call
 `lj_gc_fullgc()` while secondary Lua threads are live; that reproduces the M4
@@ -25,7 +25,7 @@ variant that bypasses the automatic-trigger stop gate. This matches the
 single-thread legacy path where `collectgarbage("step")` restarts GC after
 `collectgarbage("stop")`.
 
-Stopped full `collect` records a one-shot restore bit when its request is
-accepted. Because the active call now waits for GC2 IDLE,
-`lj_gc2_publish_idle_threshold()` restores both the live threshold and
-`mt_gc_threshold` to `LJ_MAX_MEM` before the call returns.
+Follow-up: active-thread `collectgarbage("collect")` now also bypasses the
+automatic-trigger stop gate and restarts the logical GC threshold before
+returning. This matches stock LuaJIT: `collectgarbage("collect")` after
+`collectgarbage("stop")` leaves `collectgarbage("isrunning") == true`.

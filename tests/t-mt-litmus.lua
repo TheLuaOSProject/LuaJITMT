@@ -2,6 +2,13 @@ local th = require"threading"
 local harness = require"thread_harness"
 
 local reps = harness.env_number("LJ_M4_LITMUS_REPS", 100)
+local progress = os.getenv("LJ_M4_LITMUS_PROGRESS") == "1"
+
+local function note(rep, label)
+  if progress then
+    io.stderr:write(("litmus rep=%d %s\n"):format(rep, label))
+  end
+end
 
 for _ = 1, reps do
   do
@@ -15,6 +22,7 @@ for _ = 1, reps do
     x.v = 42
     ch:send(true)
     assert(({ t:join() })[1] == true)
+    note(_, "handoff")
   end
 
   do
@@ -30,6 +38,7 @@ for _ = 1, reps do
     for i = 1, 128 do
       assert(u[i] == i)
     end
+    note(_, "join-table")
   end
 
   do
@@ -48,6 +57,7 @@ for _ = 1, reps do
     local ok2, rb = t2:join()
     assert(ok1 == true and ok2 == true)
     assert(not (ra == 0 and rb == 0))
+    note(_, "fence")
   end
 
   do
@@ -68,6 +78,7 @@ for _ = 1, reps do
     ch:send(true)
     assert(({ t:join() })[1] == true)
     if stats0 then collectgarbage("collect") end
+    note(_, "active-collect")
   end
 
   if _ == 1 then
@@ -88,6 +99,7 @@ for _ = 1, reps do
     ch:send(true)
     assert(({ t:join() })[1] == true)
     collectgarbage("collect")
+    note(_, "active-step-stopped")
   end
 
   if _ == 1 then
@@ -108,8 +120,9 @@ for _ = 1, reps do
     ch:send(true)
     assert(({ t:join() })[1] == true)
     collectgarbage("collect")
-    assert(collectgarbage("isrunning") == false)
+    assert(collectgarbage("isrunning") == true)
     collectgarbage("restart")
+    note(_, "active-collect-stopped")
   end
 
   do
@@ -128,6 +141,7 @@ for _ = 1, reps do
     local v, ok = ch:recv()
     assert(v == nil and ok == false)
     assert(({ t:join() })[1] == true)
+    note(_, "fifo-close")
   end
 
   do
@@ -162,6 +176,7 @@ for _ = 1, reps do
     assert(last1 == n and last2 == n)
     assert(({ p1:join() })[1] == true)
     assert(({ p2:join() })[1] == true)
+    note(_, "two-producer")
   end
 
   do
@@ -180,6 +195,7 @@ for _ = 1, reps do
     v, ok = ch:recv()
     assert(v == true and ok == true)
     assert(({ t:join() })[1] == true)
+    note(_, "mutex")
   end
 end
 

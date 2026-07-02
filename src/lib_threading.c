@@ -408,6 +408,8 @@ void lj_threading_shutdown(lua_State *L)
       continue;
     while (la_load32_acq(&th->state) != LJ_THREAD_DONE) {
       uint32_t futex = la_load32_acq(&th->futex);
+      if (la_load32_acq(&th->state) == LJ_THREAD_DONE)
+	break;
       (void)la_futex_wait(&th->futex, futex, 1000000);
     }
     if (la_load32_acq(&th->joined) == 0) {
@@ -667,8 +669,11 @@ static int threading_join_core(lua_State *L, LJThread *th, int has_timeout,
       uint32_t futex = la_load32_acq(&th->futex);
       uint32_t actions;
       int had_stopreq = threading_had_stopreq(L);
+      if (la_load32_acq(&th->state) == LJ_THREAD_DONE)
+	continue;
       lj_native_enter(L2TG(L));
-      (void)la_futex_wait(&th->futex, futex, ns);
+      if (la_load32_acq(&th->state) != LJ_THREAD_DONE)
+	(void)la_futex_wait(&th->futex, futex, ns);
       actions = lj_native_leave(L);
       threading_checkstop_fresh(L, actions, had_stopreq);
     }
@@ -1365,8 +1370,13 @@ static lua_State *threading_spawn_core(lua_State *L, GCtab *env, TValue *base,
     while (la_load32_acq(&th->start_ready) == 0 &&
 	   la_load32_acq(&th->state) == LJ_THREAD_STARTING) {
       uint32_t futex = la_load32_acq(&th->futex);
+      if (la_load32_acq(&th->start_ready) != 0 ||
+	  la_load32_acq(&th->state) != LJ_THREAD_STARTING)
+	break;
       lj_native_enter(L2TG(L));
-      (void)la_futex_wait(&th->futex, futex, 1000000);
+      if (la_load32_acq(&th->start_ready) == 0 &&
+	  la_load32_acq(&th->state) == LJ_THREAD_STARTING)
+	(void)la_futex_wait(&th->futex, futex, 1000000);
       actions |= lj_native_leave(L);
       if (threading_fresh_stopreq(L, actions, had_stopreq)) {
 	threading_join_aborted_start(L, th, &actions);
@@ -1388,8 +1398,13 @@ static lua_State *threading_spawn_core(lua_State *L, GCtab *env, TValue *base,
     uint32_t futex = la_load32_acq(&th->futex);
     uint32_t actions;
     int had_stopreq = threading_had_stopreq(L);
+    if (la_load32_acq(&th->start_ready) >= 2 ||
+	la_load32_acq(&th->state) != LJ_THREAD_RUNNING)
+      break;
     lj_native_enter(L2TG(L));
-    (void)la_futex_wait(&th->futex, futex, 1000000);
+    if (la_load32_acq(&th->start_ready) < 2 &&
+	la_load32_acq(&th->state) == LJ_THREAD_RUNNING)
+      (void)la_futex_wait(&th->futex, futex, 1000000);
     actions = lj_native_leave(L);
     threading_checkstop_fresh(L, actions, had_stopreq);
   }

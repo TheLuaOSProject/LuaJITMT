@@ -290,30 +290,33 @@ local function stats_total()
 end
 
 local before = stats_total()
-local workers = {}
-for id = 1, 4 do
-  workers[id] = th.spawn(function(worker)
-    local keep = {}
-    for i = 1, 1500 do
-      keep[i] = { worker, i, tostring(i) }
-    end
-    collectgarbage("collect")
-    return #keep, th.gcstats().total_bytes
-  end, id)
-end
+for round = 1, 4 do
+  local workers = {}
+  for id = 1, 4 do
+    workers[id] = th.spawn(function(worker)
+      local keep = {}
+      for i = 1, 1500 do
+	keep[i] = { worker, i, tostring(i) }
+      end
+      collectgarbage("collect")
+      return #keep, th.gcstats().total_bytes
+    end, id)
+  end
 
-local total = 0
-for id = 1, 4 do
-  local ok, n, worker_total = workers[id]:join(30)
-  assert(ok == true, "worker failed")
-  assert(n == 1500, "worker allocation count mismatch")
-  assert(type(worker_total) == "number" and worker_total > 0)
-  total = total + n
+  local total = 0
+  for id = 1, 4 do
+    local ok, n, worker_total = workers[id]:join(30)
+    assert(ok == true, "worker failed")
+    assert(n == 1500, "worker allocation count mismatch")
+    assert(type(worker_total) == "number" and worker_total > 0)
+    total = total + n
+  end
+  assert(total == 6000, "worker total mismatch")
 end
 
 collectgarbage("collect")
 local after = stats_total()
-assert(total == 6000 and before > 0 and after > 0)
+assert(before > 0 and after > 0)
 
 print("gc-total-atomic-smoke OK")
 ]=]

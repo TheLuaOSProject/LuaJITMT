@@ -213,7 +213,6 @@ void lj_gc2_init(global_State *g)
     g, LJ_GC2_MINOR_SURVIVAL_MAJOR_PCT);
   gc2_minor_survival_major_requests_store_rlx(g, 0);
   gc2_force_major_store_rlx(g, 0);
-  gc2_restore_stopped_store_rlx(g, 0);
   gc2_remembered_barriers_store_rlx(g, 0);
   gc2_remembered_pushed_store_rlx(g, 0);
   gc2_remembered_overflows_store_rlx(g, 0);
@@ -1040,21 +1039,15 @@ int lj_gc2_request_major(global_State *g, TGState *tg)
   return lj_gc2_request_cycle(g, tg);
 }
 
-int lj_gc2_request_stopped_major(global_State *g, TGState *tg)
+static int gc2_request_major_explicit(global_State *g, TGState *tg)
 {
-  int requested;
   if (!g)
     return 0;
   lj_gc2_force_major(g);
-  requested = gc2_request_cycle_start(g, tg, 0);
-  if (requested)
-    gc2_restore_stopped_rel(g, 1);
-  else if (gc2_phase_acq(g) != LJ_GC2_IDLE)
-    lj_gc2_worker_wake(g);
-  return requested;
+  return gc2_request_cycle_start(g, tg, 0);
 }
 
-int lj_gc2_collect_active(lua_State *L, int restore_stopped)
+int lj_gc2_collect_active(lua_State *L)
 {
   global_State *g;
   TGState *tg;
@@ -1065,28 +1058,15 @@ int lj_gc2_collect_active(lua_State *L, int restore_stopped)
   tg = L2TG(L);
   if (!g || !tg)
     return 0;
-  if (restore_stopped) {
-    if (lj_gc2_request_stopped_major(g, tg)) {
-      need_major = 0;
-      lj_gc2_mark_begin(g);
-    }
-  } else {
-    if (lj_gc2_request_major(g, tg)) {
-      need_major = 0;
-      lj_gc2_mark_begin(g);
-    }
+  if (gc2_request_major_explicit(g, tg)) {
+    need_major = 0;
+    lj_gc2_mark_begin(g);
   }
   for (;;) {
     uint32_t phase = gc2_phase_acq(g);
     if (phase == LJ_GC2_IDLE) {
       if (need_major) {
-	if (restore_stopped) {
-	  if (lj_gc2_request_stopped_major(g, tg)) {
-	    need_major = 0;
-	    lj_gc2_mark_begin(g);
-	    continue;
-	  }
-	} else if (lj_gc2_request_major(g, tg)) {
+	if (gc2_request_major_explicit(g, tg)) {
 	  need_major = 0;
 	  lj_gc2_mark_begin(g);
 	  continue;
@@ -1258,12 +1238,6 @@ void lj_gc2_publish_idle_threshold(global_State *g)
     return;
   if (g->gc.state != GCSpause || gc2_phase_acq(g) != LJ_GC2_IDLE)
     return;
-  if (gc2_restore_stopped_xchg_acqrel(g, 0)) {
-    lj_gc2_helper_soft_limit_store(g, ~(uint64_t)0);
-    lj_gc_mt_threshold_store(g, LJ_MAX_MEM);
-    lj_gc_threshold_store(g, LJ_MAX_MEM);
-    return;  /* Preserve collectgarbage("stop") after requested full GC. */
-  }
   if (lj_gc_threshold_load(g) == LJ_MAX_MEM)
     return;  /* Honor collectgarbage("stop") and MT stop-the-world gates. */
   trigger = lj_gc2_trigger_load(g);

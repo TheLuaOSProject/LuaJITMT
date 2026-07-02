@@ -182,7 +182,7 @@ static void test_active_collect_completes_idle_cycle(lua_State *L,
   lua_settop(L, 0);
 }
 
-static void test_active_collect_restores_stopped_cycle(lua_State *L,
+static void test_active_collect_restarts_stopped_cycle(lua_State *L,
 						       global_State *g)
 {
   uint64_t starts0 = gc2_cycle_starts_acq(g);
@@ -196,7 +196,7 @@ static void test_active_collect_restores_stopped_cycle(lua_State *L,
 
   assert(gc2_cycle_starts_acq(g) == starts0 + 1u);
   assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
-  assert(lua_gc(L, LUA_GCISRUNNING, 0) == 0);
+  assert(lua_gc(L, LUA_GCISRUNNING, 0) == 1);
 
   lua_gc(L, LUA_GCRESTART, -1);
 }
@@ -289,7 +289,7 @@ int main(void)
 
   test_active_collect_completes_active_cycle(L, g, tg);
   test_active_collect_completes_idle_cycle(L, g);
-  test_active_collect_restores_stopped_cycle(L, g);
+  test_active_collect_restarts_stopped_cycle(L, g);
   test_active_step_returns_false(L, g, tg);
   test_active_step_starts_stopped_cycle(L, g);
   test_attached_step_while_host_native_join(L, g);
