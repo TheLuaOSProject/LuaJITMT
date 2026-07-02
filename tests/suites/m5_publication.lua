@@ -1860,6 +1860,11 @@ a[1] = 10
 local k = 2
 a[k] = 20
 assert(a[1] == 10 and a[2] == 20)
+local b = { 1, nil, 3 }
+b[2] = 22
+local bk = 2
+b[bk] = 23
+assert(b[1] == 1 and b[2] == 23 and b[3] == 3)
 local function many() return 1, 2, 3 end
 local m = { many() }
 assert(m[1] == 1 and m[2] == 2 and m[3] == 3)

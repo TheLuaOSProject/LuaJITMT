@@ -18,12 +18,13 @@ Read-only subagent audits confirmed the major reports:
   without retiring the slot. `m6_jit_recursive_call_unroll` covers this, and
   `t-vm-safepoint` now asserts this recorder path does not perform a scoped
   handshake or scoped slot retirement; public `jit.flush(1)` still does.
-- x64 interpreter table stores remain helper-heavy: `TSETS` goes straight to
-  `vmeta_tsets`, and `TSETV`/`TSETB`/`TSETR` array stores route through
-  `lj_tab_storetv_forvm_array()` plus barrier checks. A narrow `TSETB`
-  inline-CAS experiment was rolled back after a clean rebuild exposed a default
-  `luajit -e 'print(1)'` crash; the remaining fast-path work must first prove
-  the VM barrier/base/PC contract for direct inline stores.
+- x64 interpreter table stores remain helper-heavy once MT or GC2 marking is
+  active, but the warm single-thread path now has bounded direct stores for
+  existing stable array slots and existing string-key hash slots. Previous-nil
+  in-bounds array slots without a metatable also route through that direct-store
+  gate. The helper path is still required for active MT, weak tables,
+  metatables, retiring generations, forwarded slots, marking barriers and slot
+  growth.
 - x64 `BC_TNEW` has no inline bump allocation. The current safe prerequisite is
   still exact object layout/bitmap/accounting/root-publication support; first
   slice should be empty-table only and fall back to the current helper when any
@@ -41,10 +42,10 @@ Follow-up order:
    keeps stock sweep/finalizer semantics while removing the global root-list
    cache line from normal allocations; bitmap-only sweep and zero-atomic bump
    allocation remain separate follow-up work.
-2. Reintroduce guarded x64 interpreter store fast paths for existing stable
-   array/hash slots only after the direct-store barrier bridge preserves the
-   same `lua_State` base, saved-PC, weak-write, forwarding, and parent-barrier
-   contracts as `lj_tab_storetv_forvm_array()`.
+2. Continue reducing x64 interpreter store helper use only where the existing
+   direct-store gate proves no metatable, weak-write, forwarding, active-MT or
+   marking contract is involved. Active-MT paths must keep the CAS/revalidation
+   helpers until an equivalent no-tear publication protocol is proved inline.
 3. Restore JIT no-helper ASTORE/HSTORE for stable primitive-value stores before
    collectable-value barrier fast paths.
 4. Add empty-table x64 `BC_TNEW` inline bump allocation behind strict arena,

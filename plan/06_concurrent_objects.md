@@ -301,9 +301,12 @@ Those x64 array fast paths now take the legacy `GCtab.asize` snapshot before
 loading `GCtab.array`, matching the writer-side publication order that stores
 the array pointer before the size mirror. Separated arrays still replace the
 legacy bound with `TabArrayHdr.asize` after the pointer snapshot.
-`BC_TSETS_Z` string-key stores are currently demoted to
-`vmeta_tsets`, removing the x64 VM's direct string-key hash-chain store. The
-generic x64 `vmeta_tset` continuation release-stores returned slots through
+`BC_TSETS_Z` string-key stores now keep a bounded existing-slot x64 fast path:
+the VM probes the current hash generation with acquire loads, rejects retired
+nodes, `LJ_TFORWARD`, nil slots, misses, metatables, weak tables, active MT and
+active marking, then raw-stores only on that single-thread direct path. Fallback
+stores use `lj_tab_storetv_forvm_strhash()` or the generic x64 `vmeta_tset`
+continuation, which release-stores returned slots through
 `lj_meta_tsettv_pair()` with resolved parent context. That helper now
 CAS-publishes the resolved slot and retries `meta_tset()` if the slot became
 `LJ_TFORWARD` after lookup but before publication, so the VM/meta slow store

@@ -4463,10 +4463,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ins_next
     |
     |3:  // Check for __newindex if previous value is nil.
-    |  x64_vm_gcref_acq TAB:TMPR, TAB:RB->metatable
-    |  test TAB:TMPR, TAB:TMPR
-    |  jz <7
-    |  test byte TAB:TMPR->nomm, 1<<MM_newindex
+    |  x64_vm_gcref_acq r8, TAB:RB->metatable
+    |  test r8, r8
+    |  jz <1				// No metatable: no __newindex possible.
+    |  test byte TAB:r8->nomm, 1<<MM_newindex
     |  jz ->vmeta_tsetv			// 'no __newindex' flag NOT set: check.
     |  jmp <7
     |
@@ -4630,10 +4630,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ins_next
     |
     |3:  // Check for __newindex if previous value is nil.
-    |  x64_vm_gcref_acq TAB:TMPR, TAB:RB->metatable
-    |  test TAB:TMPR, TAB:TMPR
-    |  jz <7
-    |  test byte TAB:TMPR->nomm, 1<<MM_newindex
+    |  x64_vm_gcref_acq r8, TAB:RB->metatable
+    |  test r8, r8
+    |  jz <1				// No metatable: no __newindex possible.
+    |  test byte TAB:r8->nomm, 1<<MM_newindex
     |  jz ->vmeta_tsetb			// 'no __newindex' flag NOT set: check.
     |  jmp <7
     |
