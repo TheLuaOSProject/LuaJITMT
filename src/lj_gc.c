@@ -1955,7 +1955,7 @@ void lj_gc_pubroot(lua_State *L, cTValue *tv)
   lj_tv_load_acq(&snap, tv);
   if (tvisgcv(&snap)) {
     GCobj *o = gcV(&snap);
-    (void)lj_gc2_markobj(g, o);
+    lj_gc2_barrier_tv_g(g, &snap);
     if (isdead(g, o)) {
       makewhite(g, o);
       gc_mark(g, o);
