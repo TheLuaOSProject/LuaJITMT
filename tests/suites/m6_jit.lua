@@ -55,6 +55,31 @@ END {
                         " src/lj_ffrecord.c")
 end
 
+local function assert_fnew_gc_check_boundary(t)
+  local awk = [=[
+BEGIN { in_interp = 0; in_jit = 0; interp_check = 0; jit_check = 0 }
+/^GCfunc \*lj_func_newL_gc\(lua_State \*L/ { in_interp = 1; next }
+in_interp && /^}/ { in_interp = 0; next }
+in_interp && /lj_gc_check_fixtop/ { interp_check = 1 }
+/^GCfunc \*lj_func_newL_gc_forjit\(lua_State \*L/ { in_jit = 1; next }
+in_jit && /^}/ { in_jit = 0; next }
+in_jit && /lj_gc_check_fixtop/ { jit_check = 1 }
+END {
+  if (!interp_check) {
+    print "interpreter FNEW helper lost lj_gc_check_fixtop"
+    exit 1
+  }
+  if (jit_check) {
+    print "JIT FNEW helper reintroduced duplicate lj_gc_check_fixtop"
+    exit 1
+  }
+}
+]=]
+  utils.capture_command("cd " .. utils.shell_quote(t.root) ..
+                        " && awk " .. utils.shell_quote(awk) ..
+                        " src/lj_func.c")
+end
+
 local m6_cases = {
   "m6_dispatch_redispatch",
   "m6_jit_token",
@@ -1408,6 +1433,7 @@ assert(x=="abc")
     description = "classic JIT GC-step pacing behavior",
     run = function(t)
       clean_build(t)
+      assert_fnew_gc_check_boundary(t)
       assert_ir_dump_probe_contains(t, "lj_t-jit-gcstep.dump", [=[
 jit.opt.start("hotloop=1","hotexit=1")
 local x

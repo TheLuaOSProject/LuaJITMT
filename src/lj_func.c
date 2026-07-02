@@ -331,7 +331,7 @@ GCfunc *lj_func_newL_gc(lua_State *L, GCproto *pt, GCfuncL *parent)
 GCfunc *lj_func_newL_gc_forjit(lua_State *L, TValue *base, GCproto *pt,
 			       GCfuncL *parent)
 {
-  lj_gc_check_fixtop(L);
+  /* Trace assembly emits the allocation GC check before CALLA helpers. */
   return func_newL_gc_base(L, base, pt, parent);
 }
 
