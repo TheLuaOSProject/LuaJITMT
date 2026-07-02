@@ -14,12 +14,15 @@
 #include "lj_gc.h"
 #include "lj_gc2.h"
 #include "lj_err.h"
+#include "lj_safepoint.h"
 #include "lj_tab.h"
 #include "lj_tg.h"
 #include "lj_thr.h"
 #if LJ_HASFFI
 #include "lj_cdata.h"
 #endif
+
+#include <limits.h>
 
 #define LJ_TAB_MAXCHAIN		8u
 
@@ -90,6 +93,26 @@ static uint32_t tab_struct_tid(lua_State *L)
   return tid != 0 ? tid : ~(uint32_t)0;
 }
 
+static void tab_struct_owner_wait(lua_State *L, GCtab *t, uint32_t owner)
+{
+  TGState *tg = L ? L2TG(L) : lj_thr_get_tg();
+  if (tg)
+    lj_native_enter(tg);  /* 06 section 6.2 bridge: same-table resize park. */
+  lj_tab_struct_owner_futex_wait(t, owner, 1000000);
+  if (L) {
+    (void)lj_native_leave(L);
+  } else if (tg) {
+    (void)lj_tg_in_native_dec_rel(tg);
+  }
+}
+
+static LJ_AINLINE int tab_mt_concurrent(void)
+{
+  TGState *tg = lj_thr_get_tg();
+  global_State *g = tg ? tg->gl : NULL;
+  return g && (mt_live_acq(g) != 0 || mt_entering_acq(g) != 0);
+}
+
 int lj_tab_struct_enter(lua_State *L, GCtab *t)
 {
   uint32_t tid = tab_struct_tid(L);
@@ -101,15 +124,18 @@ int lj_tab_struct_enter(lua_State *L, GCtab *t)
       uint32_t expect = 0;
       if (lj_tab_struct_owner_cas(t, &expect, tid))
 	return 1;
+      owner = expect;
     }
-    lj_tab_wait_no_l();
+    tab_struct_owner_wait(L, t, owner);
   }
 }
 
 void lj_tab_struct_leave(GCtab *t, int acquired)
 {
-  if (acquired)
+  if (acquired) {
     lj_tab_struct_owner_rel(t, 0);
+    lj_tab_struct_owner_futex_wake(t, INT_MAX);
+  }
 }
 
 static LJ_AINLINE int tab_hash_key_hidden(cTValue *key)
@@ -3040,6 +3066,8 @@ int lj_tab_next(GCtab *t, cTValue *key, TValue *o)
 retry_next:
   idx = tab_keyindex_snapshot(t, key, &snap);  /* Find successor index of key. */
   tab_test_next_after_keyindex(t, idx);
+  if (idx == ~0u && tab_mt_concurrent())
+    return 0;
   /* First traverse the array part. */
   for (; idx < snap.asize; idx++) {
     TValue val;

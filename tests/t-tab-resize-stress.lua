@@ -948,6 +948,36 @@ local function exercise_next_churn_resize()
   end
 end
 
+local function next_invalid_cursor_worker(ready, release)
+  assert(ready:send(true, 10) == true)
+  local _, ok = release:recv(10)
+  assert(ok == true)
+  return true
+end
+
+local function exercise_next_invalid_cursor_boundary()
+  local ready, release = ready_start(1)
+  local worker = th.spawn(next_invalid_cursor_worker, ready, release)
+  local key = { kind = "next-invalid-cursor" }
+  local t = { live = true }
+
+  harness.wait_ready(ready, 1, 10, "next invalid cursor")
+
+  local ok, k, v = pcall(next, t, key)
+  assert(ok == true, tostring(k))
+  assert(k == nil and v == nil,
+	 "live MT invalid-cursor next() should terminate traversal")
+
+  assert(release:send("go", 10) == true)
+  harness.join_each({ worker }, function(result)
+    assert(result == true)
+  end, 10)
+
+  ok, k = pcall(next, t, key)
+  assert(ok == false and tostring(k):match("invalid key"),
+	 "single-thread invalid-cursor next() must keep stock error semantics")
+end
+
 local function tablelib_resize_writer(tbl, ready, start, id, n)
   assert(ready:send(true, 10) == true)
   local _, ok = start:recv(10)
@@ -1325,6 +1355,7 @@ ran = ran + run_case("jititer", exercise_jit_iterator_resize)
 ran = ran + run_case("len", exercise_len_resize)
 ran = ran + run_case("traversal", exercise_concurrent_traversal_resize)
 ran = ran + run_case("nextchurn", exercise_next_churn_resize)
+ran = ran + run_case("nextinvalid", exercise_next_invalid_cursor_boundary)
 ran = ran + run_case("tableclear", exercise_table_clear_resize)
 ran = ran + run_case("tablelib", exercise_table_library_resize)
 ran = ran + run_case("tablelibshift", exercise_table_library_shift_resize)

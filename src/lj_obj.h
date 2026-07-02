@@ -767,6 +767,18 @@ static LJ_AINLINE int lj_tab_struct_owner_cas(GCtab *t, uint32_t *oldp,
   return la_cas32(&t->struct_owner, oldp, owner, LA_ACQ_REL, LA_ACQ);
 }
 
+static LJ_AINLINE void lj_tab_struct_owner_futex_wait(GCtab *t,
+						      uint32_t owner,
+						      int64_t timeout_ns)
+{
+  la_futex_wait(&t->struct_owner, owner, timeout_ns);
+}
+
+static LJ_AINLINE void lj_tab_struct_owner_futex_wake(GCtab *t, int n)
+{
+  la_futex_wake(&t->struct_owner, n);
+}
+
 static LJ_AINLINE int lj_tab_array_separated(const GCtab *t)
 {
   return LJ_MAX_COLOSIZE == 0 || lj_tab_colo_acq(t) <= 0;
