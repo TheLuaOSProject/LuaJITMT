@@ -1,5 +1,42 @@
 local build = require("suite_build")
 local runtime = require("suite_runtime")
+local utils = require("suite_utils")
+
+local shell_quote = utils.shell_quote
+
+local function assert_tab_struct_owner_wait_uses_futex(t)
+  local awk = [=[
+BEGIN { infn = 0; futex = 0; native = 0; stop = 0 }
+/^static void tab_struct_owner_wait\(lua_State \*L, GCtab \*t, uint32_t owner\)/ {
+  infn = 1
+  next
+}
+infn && /^}/ {
+  if (!futex || !native || !stop) {
+    print "tab_struct_owner_wait must park on GCtab.struct_owner and poll STOPREQ"
+    exit 1
+  }
+  infn = 0
+  exit 0
+}
+infn && /lj_tab_struct_owner_futex_wait\(t, owner,/ { futex = NR }
+infn && /lj_native_enter\(L2TG\(L\)\)/ { native = NR }
+infn && /lj_safepoint_checkstop\(L, actions\)/ { stop = NR }
+infn && /lj_thr_retry_yield\(L\)/ {
+  print "same-table structural owner wait regressed to generic retry-yield"
+  exit 1
+}
+END {
+  if (infn || !futex || !native || !stop) {
+    print "tab_struct_owner_wait source shape not found"
+    exit 1
+  }
+}
+]=]
+  utils.capture_command("cd " .. shell_quote(t.root) ..
+                        " && awk " .. shell_quote(awk) ..
+                        " src/lj_tab.c")
+end
 
 return function(add)
   runtime.add_luajit_c_fixture_cases(add, {
@@ -66,19 +103,6 @@ return function(add)
       message = "M5 table hash-vector retirement tests passed"
     },
     {
-      name = "m5_tab_struct_owner",
-      description = "table structural ownership is per-table",
-      output = "lj_t-tab-struct-owner",
-      cfile = "t-tab-struct-owner.c",
-      opts = {
-        clean = true,
-        cflags = "-DLJ_TAB_TEST_HELPERS",
-        timeout = "20s",
-        xcflags = "-DLJ_TAB_TEST_HELPERS"
-      },
-      message = "M5 per-table structural owner tests passed"
-    },
-    {
       name = "m5_tab_capi_resize_stress",
       description = "public C API table setter stress across concurrent resize",
       output = "lj_t-tab-capi-resize-stress",
@@ -86,6 +110,22 @@ return function(add)
       opts = { timeout = "20s" },
       message = "M5 public C API table resize stress passed"
     }
+  })
+
+  add({
+    name = "m5_tab_struct_owner",
+    description = "table structural ownership is per-table",
+    run = function(t)
+      assert_tab_struct_owner_wait_uses_futex(t)
+      build.build_and_run_c(t, t:tmp("lj_t-tab-struct-owner"),
+                            "t-tab-struct-owner.c", {
+        clean = true,
+        cflags = "-DLJ_TAB_TEST_HELPERS",
+        timeout = "20s",
+        xcflags = "-DLJ_TAB_TEST_HELPERS"
+      })
+      print("M5 per-table structural owner tests passed")
+    end
   })
 
   add({
