@@ -27,8 +27,8 @@ GCudata *lj_udata_new(lua_State *L, MSize sz, GCtab *env)
   if (env)
     lj_gc_pubobjobj(L, ud, env);
   lj_udata_udtype_rel(ud, UDTYPE_USERDATA);
-  /* Chain to userdata list (after main thread). */
-  lj_gc_linkobj_after(obj2gco(mainthread_acq(g)), obj2gco(ud));
+  /* Chain to userdata list after the main thread on the pending-root flush. */
+  lj_gc_linkobj_new_after_main(g, obj2gco(ud));
   return ud;
 }
 

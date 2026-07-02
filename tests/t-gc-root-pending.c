@@ -93,6 +93,7 @@ static void test_after_main_flush(lua_State *L)
   global_State *g = G(L);
   TGState *tg = L2TG(L);
   lua_State *L1, *L2;
+  GCudata *ud;
   assert(tg != NULL);
   (void)lj_gc_flush_root_pending(g);
   assert(lj_tg_gcroot_pending_acq(tg) == NULL);
@@ -106,11 +107,17 @@ static void test_after_main_flush(lua_State *L)
   assert(!after_main_contains(g, obj2gco(L1)));
   assert(!after_main_contains(g, obj2gco(L2)));
 
-  assert(lj_gc_flush_root_pending(g) >= 2u);
+  lua_newuserdata(L, 16);
+  ud = udataV(L->top - 1);
+  assert(pending_after_main_contains(tg, obj2gco(ud)));
+  assert(!after_main_contains(g, obj2gco(ud)));
+
+  assert(lj_gc_flush_root_pending(g) >= 3u);
   assert(lj_tg_gcroot_pending_after_main_acq(tg) == NULL);
   assert(after_main_contains(g, obj2gco(L1)));
   assert(after_main_contains(g, obj2gco(L2)));
-  lua_pop(L, 2);
+  assert(after_main_contains(g, obj2gco(ud)));
+  lua_pop(L, 3);
 }
 
 static void test_fullgc_flush(lua_State *L)
