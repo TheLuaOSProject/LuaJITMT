@@ -9,8 +9,11 @@ local getenv = utils.getenv
 local shell_quote = utils.shell_quote
 local read_file = utils.read_file
 local write_file = utils.write_file
-local has_extension = utils.has_extension
 local file_exists = utils.file_exists
+
+local repository_source_roots = {
+  "src", "dynasm", "tests", "tools", ".github", "plan", "notes"
+}
 
 local function read_raw_file(path)
   local f = io.open(path, "rb")
@@ -52,6 +55,19 @@ local function append_flags(parts, flags)
   end
 end
 
+local function is_repository_source_path(self, path)
+  local root = self.root .. "/"
+  if path:sub(1, #root) ~= root then return false end
+  local rest = path:sub(#root + 1)
+  for i = 1, #repository_source_roots do
+    local dir = repository_source_roots[i]
+    if rest == dir or rest:sub(1, #dir + 1) == dir .. "/" then
+      return true
+    end
+  end
+  return false
+end
+
 function M.new(root)
   local self = {
     root = root,
@@ -77,30 +93,16 @@ function Test:tmp(name)
 end
 
 function Test:read(path)
-  -- Keep source-shape assertions out of the harness. Tests may inspect
-  -- generated dumps/output, but not repository source snippets.
+  if is_repository_source_path(self, path) then
+    error("tests must not read repository source as a pass/fail oracle: " ..
+          path, 2)
+  end
   return read_file(path)
 end
 
 function Test:files(dir, opts)
-  opts = opts or {}
-  local cmd = "find " .. shell_quote(dir)
-  if opts.recursive == false then cmd = cmd .. " -maxdepth 1" end
-  cmd = cmd .. " -type f -print"
-  local p, err = io.popen(cmd)
-  if not p then error("find failed: " .. tostring(err), 2) end
-  local files = {}
-  for path in p:lines() do
-    if has_extension(path, opts.extensions) then
-      files[#files + 1] = path
-    end
-  end
-  local ok, why, code = p:close()
-  if not ok then
-    error("find failed (" .. tostring(code or why or ok) .. "): " .. cmd, 2)
-  end
-  table.sort(files)
-  return files
+  error("repository file enumeration is not a supported test oracle; use " ..
+        "behavior fixtures or generated artifacts", 2)
 end
 
 function Test:remove(path)

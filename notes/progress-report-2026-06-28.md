@@ -41,7 +41,10 @@ Recent completed and pushed slices:
 - `cbbe57c6 m3: own SMR retire epoch queries`
 - `92a335f5 m7: own cdata finreg notifications`
 
-The broader project already has landed ownership/facade work across tables, GC2, weak tables, traces, ctype, FFI, finalizers, hooks, native-state boundaries, and CI source guards.
+The broader project already has landed ownership/facade work across tables,
+GC2, weak tables, traces, ctype, FFI, finalizers, hooks, and native-state
+boundaries. Earlier CI source guards are now obsolete under the no-source-guards
+policy.
 
 ## Completed In This Slice
 
@@ -73,15 +76,18 @@ GC and weak-table correctness:
 - GC2 mark traversal and weak processing now do the same.
 - GC2 marks retired separated-array memory in addition to retired hash-node memory.
 
-Tests and guards:
+Tests and documentation:
 
 - Updated C fixtures for production-forwarded old slots.
 - Preserved nil-slot expectations where old slots were logically absent.
-- Added an M5 source guard requiring `lj_tab_resize()` to freeze-forward array/hash slots and avoid direct snapshot copies in the guarded migration path.
-- Narrowed M8 weak source guards so they check the intended GC2 weak fields without false positives.
-- Current CI/test cleanup adds an explicit `read_source_file()` API, blocks
-  accidental source reads through generic result helpers, caches repeated
-  same-profile clean builds inside a single Lua test process, and thins the M7
+- Documented that `lj_tab_resize()` must freeze-forward array/hash slots and
+  avoid direct snapshot copies in the migration path. Behavior fixtures own the
+  observable forwarding contract.
+- Documented the intended GC2 weak fields; M8 weak behavior fixtures own the
+  observable weak-table/finalizer contract.
+- Current CI/test cleanup blocks repository source reads through aggregate
+  result helpers, caches repeated same-profile clean builds inside a single Lua
+  test process, and thins the M7
   callback-runtime wrapper to behavior coverage.
 
 ## Validation Passed

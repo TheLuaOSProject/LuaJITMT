@@ -93,9 +93,9 @@ Overall correctness/stability progress: 70-80%.
   cleanup is to convert exact-name source guards around finalizer behavior into
   semantic tests, then rename or remove old bridge names where the names are
   only fork-era scaffolding.
-- Aggregate CI still has many source guards. Keep guards for memory ordering,
-  ABI, and generated-code boundaries; convert source-shape checks when behavior
-  can observe the invariant.
+- Aggregate CI must not contain source guards. Keep memory ordering, ABI, and
+  generated-code boundary rules as comments/notes, and use behavior or
+  generated-artifact checks when the invariant is observable.
 - Release confidence still needs long stress/soak, sanitizer-style runs where
   practical, and benchmark review after semantic closure.
 

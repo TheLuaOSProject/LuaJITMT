@@ -21,5 +21,6 @@
   debugger continuation; a STOPREQ published while `fputs`/`fgets` is in native
   state is still delivered.
 - Added a sticky `debug.debug()` regression to `t-safepoint-handshake.c`.
-- Added an M3 CI source guard so future edits keep the debugger native I/O path
-  on the fresh STOPREQ helper.
+- Documented that the debugger native I/O path must use fresh STOPREQ helper
+  semantics. The old CI source guard for helper spelling is obsolete; behavior
+  coverage owns the sticky/fresh STOPREQ distinction.

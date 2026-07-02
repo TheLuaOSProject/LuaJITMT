@@ -80,18 +80,18 @@ Historical high-priority legacy/static guard areas:
   the old static-guard cleanup.
 - `tools/ci/m5_profile_stop_native.sh`: C fixture covers most semantics; keep
   at most a narrow cleanup-order lint.
-- `tools/ci/m5_tab_store_waits.sh`, `m5_metadata_store_waits.sh`, and
-  `m5_gc_waits.sh`: partial behavior coverage exists, but exact helper-name
-  checks should be reduced only after more contention behavior tests are added.
-- M6 mcode/native STOPREQ and JIT IO wrappers still pin helper names where
-  behavior fixtures should become primary.
-- Large GC/finalizer wrappers (`m3_gc2_worker_scheduler.sh`, `m8_weak.sh`)
-  should be consolidated into suite-local source-lint helpers and behavior
-  cases should own observable outcomes.
+- Historical `tools/ci/m5_tab_store_waits.sh`, `m5_metadata_store_waits.sh`,
+  and `m5_gc_waits.sh` helper-name checks are obsolete; keep expanding
+  contention behavior tests for the same risks.
+- M6 mcode/native STOPREQ and JIT IO wrappers that once pinned helper names
+  have been superseded by behavior and generated-output checks.
+- Large GC/finalizer wrapper behavior belongs in suite cases and C fixtures,
+  not source-text lint helpers.
 
-Going-forward rule: source guards should be allowed only when they protect a
-non-observable memory-order invariant, an ABI boundary, or a temporary contract
-that has an explicit behavior-fixture TODO.
+Current rule: source guards are not allowed. Non-observable memory-order, ABI,
+or temporary migration contracts must be documented near the helper or in notes
+and reviewed there; observable failures need behavior, stress, or generated
+artifact coverage.
 
 ## Locks outside `ffi.cdef`
 

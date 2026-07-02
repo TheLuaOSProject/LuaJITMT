@@ -49,8 +49,9 @@ local function read_raw_file(path)
 end
 
 function M.read_file(path)
-  -- Read generated outputs, fixtures, or captured logs. Do not use this for
-  -- CI checks that search repository source for implementation spellings.
+  -- Read generated outputs, fixtures, or captured logs. The root-aware
+  -- Test:read() wrapper rejects repository source paths so implementation
+  -- spelling cannot become a test oracle again.
   return read_raw_file(path)
 end
 
@@ -128,18 +129,6 @@ function M.with_temp_paths(t, prefixes, fn)
   for i = 1, #paths do t:remove(paths[i]) end
   if not results[1] then error(results[2], 0) end
   return unpack(results, 2)
-end
-
-function M.has_extension(path, extensions)
-  if not extensions then return true end
-  if type(extensions) == "string" then
-    return path:sub(-#extensions) == extensions
-  end
-  for i = 1, #extensions do
-    local ext = extensions[i]
-    if path:sub(-#ext) == ext then return true end
-  end
-  return false
 end
 
 function M.detect_jobs()

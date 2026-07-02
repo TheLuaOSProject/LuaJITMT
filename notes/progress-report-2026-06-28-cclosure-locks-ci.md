@@ -116,28 +116,17 @@ Refactored now:
 - `m5_upvalue_publish_gc` no longer pins C helper names for C-closure upvalue
   handling. The behavior fixture carries the real contract.
 
-Still legacy/blocking:
-- Several `tools/ci/*.sh` wrappers contain broad `awk`/`grep` source bans while
-  milestone aggregates call Lua suite cases directly. Static checks in wrappers
-  can be bypassed by aggregate execution.
-- M7 FFI wrappers still carry shell-only static guards that should move into
-  aggregate-included Lua suite cases or be deleted when behavior fixtures cover
-  them.
-- M6 native/STOPREQ wrappers still pin helper names in places where behavior
-  and dump checks should be primary.
-- Local-cell/JIT source guards in `tests/lib/suite_cell_ops.lua` duplicate
-  runtime and dump behavior coverage. Keep only non-observable memory-order
-  tripwires.
-- `read_source_file()` remains an escape hatch despite the harness warning that
-  source-file assertions are not behavior tests. Add a required reason/category
-  for every deliberate source guard: `non_observable_memory_order`,
-  `ABI_boundary`, or `temporary_until_fixture`.
-- `m4_threading_capi` needs a timeout and a narrower diagnostic split because
-  it hangs on baseline and can otherwise block CI indefinitely.
+Resolved by the current source-search policy:
+- Per-case shell wrappers and `m0_source_guard` are gone; `tools/ci/lua_test.sh`
+  is the supported CI entrypoint.
+- M4/M5/M6/M7/M8 source-shape checks were removed from aggregate suites.
+- The Lua harness no longer exposes a source-file guard API, rejects
+  repository-source `t:read()` paths, and does not support repository file
+  enumeration as a test oracle.
 
-Preferred rule going forward: every source guard should either be converted to
-a behavior/dump/stress test, or explicitly marked as guarding a non-observable
-memory-order or ABI invariant.
+Remaining CI work must use behavior, dump, mcode, stress, or stock-semantics
+fixtures. Non-observable memory-order and ABI constraints should be documented
+near the helper or in notes, then reviewed as engineering/design contracts.
 
 ## Remaining work and time prediction
 
@@ -145,8 +134,8 @@ Short term, 1-3 days:
 - Finish C API/upvalue audit follow-ups and land more behavior tests for any
   remaining C-closure pseudo-index edge cases.
 - Add a bounded timeout/split for `m4_threading_capi`.
-- Start moving shell-only static guards into Lua suite cases where they still
-  matter.
+- Replace any newly discovered source-shape assertion with behavior coverage or
+  documentation; do not move source guards into Lua suite cases.
 
 Medium term, 1-2 weeks:
 - Reduce FFI snapshot fallback locks and add stronger rollback/abandoned-entry

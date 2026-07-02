@@ -60,9 +60,9 @@ macros first, preserving the legacy color barriers until their oracle role is
 finished. Historical barrier-owner inventories covered the C API, table/meta,
 function/state, cdata/callback, vmevent, library, VM, and JIT paths; keep the
 lasting proof in behavior fixtures and generated-code checks rather than in a
-repository source grep. dasc wbarrier_tv
-macro + TSET*/USET* wiring (07 §7.4). Weak tables + finalizer queue minimal
-(full in M8). collectgarbage mapping (05 §5.10).
+repository source grep. Add the dasc `wbarrier_tv` macro plus TSET*/USET*
+wiring (07 §7.4). Weak tables + finalizer queue minimal (full in M8).
+collectgarbage mapping (05 §5.10).
 Tests: stock under torture; paranoia build over the whole stock suite;
 t-gc-01..06 (cycles under churn, weak basic, finalizer basic, resurrect,
 huge objects, coroutine stacks).
@@ -360,7 +360,8 @@ parent table before the next minor cycle marks the young child.
 new: lj_atomic.h lj_tg.{h,c} lj_arena.{h,c} lj_gc2.{h,c} lj_gc2_barrier.h
 lj_safepoint.{h,c} lj_thr.{h,c} lj_chan.{h,c} lib_threading.c
 lj_exittab.{h,c} tsan.supp tests/* bench/*
-modified (grep-verify each against its spec doc): lj_obj.h(02,03,04,06)
+modified (review each against its spec doc; local search is an engineering aid,
+not a committed source-shape test): lj_obj.h(02,03,04,06)
 lj_arch.h(01) lj_def.h lj_gc.{h,c}(05: retired/replaced by lj_gc2) lj_alloc.{h,c}(04)
 lj_tab.{h,c}(06) lj_str.{h,c}(06) lj_buf.{h,c}(06) lj_func.{h,c}(06,10)
 lj_state.c(03,09) lj_api.c(05,06,09) lj_meta.c lj_debug.c(06)

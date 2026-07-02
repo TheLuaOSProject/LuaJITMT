@@ -9,9 +9,7 @@
 - Added `asm_href_tab_node_flags_test_acq()` plus
   `asm_href_tab_node_hmask_{load,and,cmpi}_acq()` so x64 HREF/HREFK
   node-header flag and mask reads are named at the backend helper boundary.
-- Extended `tools/ci/m5_jit_href_node_order.sh` with a static source guard
-  rejecting open-coded `offsetof(Node, next)` and `offsetof(GCtab, node)`
-  HREF table-link loads plus raw `TABNODE_*_OFS` header loads outside the
-  helper bodies.
-- Validation: `tools/ci/m5_jit_href_node_order.sh` and
+- Documented that HREF table-link and node-header reads should go through the
+  named acquire helpers. The old static source guard for open-coded offsets is
+  obsolete; generated/backend behavior is covered by
   `tools/ci/lua_test.sh m6_jit_href_nodehdr m6_jit_hrefk_nodehdr`.

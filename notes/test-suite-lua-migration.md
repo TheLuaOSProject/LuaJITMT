@@ -98,10 +98,10 @@ Validation:
 ## 2026-06-28 explicit source-read API
 
 - Historical state: this pass added source-file rejection to
-  `tests/lib/suite_utils.lua` `read_file()` and introduced
-  `suite_utils.read_source_file()` for deliberate static source guards.
-  Both the explicit source-read API and those source-search tests were removed
-  in the later 2026-06-28 source-search guard removal.
+  `tests/lib/suite_utils.lua` `read_file()` and introduced a temporary
+  `suite_utils.read_source_file()` escape hatch. Both the explicit source-read
+  API and those source-search tests were removed in the later 2026-06-28
+  source-search guard removal.
 - Changed `add_luajit_c_fixture_cases()` to default to incremental builds;
   cases that require a separate build profile must opt into `clean = true`.
 - `tests/lib/ljtest.lua` caches repeated same-flag clean builds within one

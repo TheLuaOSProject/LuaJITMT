@@ -61,8 +61,9 @@ snapshots instead of table-owned `CType *` values acquired before a wait.
 2. Reduce remaining layout fallback locks in `lib_ffi.c` where a stable
    snapshot can preserve normal errors and size/alignment semantics.
 3. Collapse bridge source guards into behavior tests when behavior can observe
-   the invariant. Keep static guards for architecture, visibility, and memory
-   ordering boundaries that behavior cannot reliably prove.
+   the invariant. Architecture, visibility, and memory-ordering boundaries that
+   behavior cannot reliably prove belong in comments or notes, not CI source
+   predicates.
 
 ## Not worth forcing now
 

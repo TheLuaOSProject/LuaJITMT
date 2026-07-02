@@ -19,8 +19,8 @@ edge.
   abort; normal tests assert it is unchanged. Follow-up notification helper
   work now updates this telemetry through
   `lj_gc2_finreg_cdata_note_sweep_queued()`.
-- Extended `tools/ci/m7_ffi_finreg.sh` with a static guard rejecting
-  `lj_cdata_free()` rescue calls that mark or queue `obj2gco(cd)`.
+- Documented the `lj_cdata_free()` fail-closed invariant; the old static guard
+  for rescue calls is obsolete under the no-source-guards policy.
 - Added `tests/t-ffi-finreg-free-invariant.c`, which forks a child, sets
   `LJ_GC_CDATA_FIN` on a cdata object, calls `lj_cdata_free()`, and verifies
   the child exits by `SIGABRT`.

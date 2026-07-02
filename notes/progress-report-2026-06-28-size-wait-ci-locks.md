@@ -46,9 +46,9 @@ Overall correctness/stability progress: 69-79%.
   where string types or mutable layout errors are involved.
 - GC2 still has real legacy bridge surfaces: weak clearing, finalizer ordering,
   pacing/threshold bridge behavior, and explicit legacy-GC exclusion.
-- Many CI scripts still contain source guards. Keep guards for unobservable
-  memory ordering/static ownership; convert source-shape checks into behavior
-  tests when failures can be observed.
+- CI scripts must not contain source guards. Keep unobservable memory ordering
+  and static ownership rules in comments/notes; convert observable failures
+  into behavior or generated-artifact tests.
 - Release confidence still needs long stress/soak, TSan-style runs where
   possible, and benchmark review after semantic closure.
 

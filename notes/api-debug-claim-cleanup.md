@@ -117,9 +117,11 @@ Permanent shape:
 
 Regression coverage:
 
-- `m5_api_debug_claim_cleanup` source guards enforce the helper/root/drop
-  ordering, the stack/getter/load/call/metamethod resume-claim boundaries, and
-  the allocation-free claimed metafield and string-conversion helper shapes.
+- `m5_api_debug_claim_cleanup` documents the helper/root/drop ordering, the
+  stack/getter/load/call/metamethod resume-claim boundaries, and the
+  allocation-free claimed metafield and string-conversion helper shapes. Runtime
+  C fixtures cover the observable claim and API behavior; source-shape checks
+  are obsolete.
 - `m5_state_owner` covers public C API `lua_getinfo()` on an unowned yielded
   coroutine, including `S`, `f`, and `L`, plus unowned `lua_loadx`,
   `lua_call`, `lua_pcall`, `lua_cpcall`, public metamethod APIs, the first

@@ -93,8 +93,9 @@ executable form of the trickiest algorithms. Port them, do not reinvent them.
    thread parking (futex wait inside channel recv / join / GC worker idle),
    one-time library initialization, and the panic path. A held lock may never
    cover any allocation, table operation, string interning, barrier, or any
-   code reachable from the interpreter dispatch loop. CI greps for
-   `pthread_mutex` outside the whitelisted files (see 12 §M0).
+   code reachable from the interpreter dispatch loop. Document any permitted
+   blocking boundary in the code that owns it and cover observable behavior
+   with fixtures; do not encode this rule as repository-source grep CI.
 4. **Every shared-memory access goes through `lj_atomic.h`.** No raw
    `volatile`, no bare loads/stores of shared fields. This both defines the
    semantics and makes ThreadSanitizer meaningful.

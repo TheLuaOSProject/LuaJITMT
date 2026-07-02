@@ -67,11 +67,12 @@ Not worth removing now:
 
 ## Test and CI audit
 
-Keep source guards only for non-observable memory-order contracts, ABI fences,
-or temporary contracts with a behavior-test TODO. Best near-term cleanup:
+Current policy keeps no source guards. Memory-order contracts, ABI fences, and
+temporary migration rules must be comments or notes, with behavior/generated
+artifact coverage where the failure is observable. Best near-term cleanup:
 
-- Move/delete pure source-shape checks in M5 x64, M7 FFI, and M6 JIT where
-  generated output or runtime behavior already proves the contract.
+- Delete any newly discovered source-shape checks in M5 x64, M7 FFI, and M6 JIT
+  where generated output or runtime behavior already proves the contract.
 - Split `t-gc2-traverse.c` or add selectors; it is still a monolithic mixed
   fixture used by M3 and M8.
 - Deduplicate overlapping finalizer ownership lints between M3 and M8 shell
