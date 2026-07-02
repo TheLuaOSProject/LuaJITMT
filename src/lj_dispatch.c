@@ -370,6 +370,30 @@ static uint32_t setptmode_all(global_State *g, GCproto *pt, int mode)
 }
 #endif
 
+static lua_State *setmode_errstate(lua_State *L)
+{
+  lua_State *cur = lj_tg_cur_L(G(L));
+  return cur && G(cur) == G(L) ? cur : L;
+}
+
+static void setmode_checkclaim(lua_State *L, LJStateClaim *claim)
+{
+  if (!lj_state_tryclaim(L, lj_thr_current_id(G(L)), claim))
+    lj_err_callermsg(setmode_errstate(L), "thread busy");
+}
+
+static cTValue *setmode_stack_slot(lua_State *L, int idx)
+{
+  if (idx > 0) {
+    cTValue *o = L->base + (idx - 1);
+    return o < L->top ? o : niltv(L);
+  } else if (idx > LUA_REGISTRYINDEX && idx != 0 &&
+	     -idx <= L->top - L->base) {
+    return L->top + idx;
+  }
+  return niltv(L);
+}
+
 /* Public API function: control the JIT engine. */
 int luaJIT_setmode(lua_State *L, int idx, int mode)
 {
@@ -439,11 +463,17 @@ int luaJIT_setmode(lua_State *L, int idx, int mode)
   case LUAJIT_MODE_WRAPCFUNC:
     if ((mode & LUAJIT_MODE_ON)) {
       if (idx != 0) {
-	cTValue *tv = idx > 0 ? L->base + (idx-1) : L->top + idx;
-	if (tvislightud(tv))
+	LJStateClaim claim;
+	cTValue *tv;
+	setmode_checkclaim(L, &claim);
+	tv = setmode_stack_slot(L, idx);
+	if (tvislightud(tv)) {
 	  wrapf_store(g, (lua_CFunction)lightudV(g, tv));
-	else
+	  lj_state_dropclaim(&claim);
+	} else {
+	  lj_state_dropclaim(&claim);
 	  return 0;  /* Failed. */
+	}
       } else {
 	return 0;  /* Failed. */
       }

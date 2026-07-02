@@ -2114,23 +2114,29 @@ END {
 END { exit bad }
 ]=]
   local mode_guard = [=[
-BEGIN { infn = 0; store = 0; publish = 0 }
+BEGIN { infn = 0; claim = 0; slot = 0; store = 0; drop = 0; publish = 0 }
 /^int luaJIT_setmode\(lua_State \*L, int idx, int mode\)/ {
   infn = 1
   next
 }
+infn && /setmode_checkclaim\(L, &claim\)/ { claim = NR }
+infn && /setmode_stack_slot\(L, idx\)/ { slot = NR }
 infn && /wrapf_store\(g, \(lua_CFunction\)lightudV\(g, tv\)\)/ { store = NR }
+infn && /lj_state_dropclaim\(&claim\)/ {
+  if (store && !drop) drop = NR
+}
 infn && /bc_publish_op\(&g->bc_cfunc_ext, BC_FUNCCW\)/ { publish = NR }
 infn && /^}/ {
-  if (!store || !publish || store > publish) {
-    print "WRAPCFUNC must publish wrapper before BC_FUNCCW"
+  if (!claim || !slot || !store || !drop || !publish ||
+      claim > slot || slot > store || store > drop || drop > publish) {
+    print "WRAPCFUNC must claim stack slot before wrapper/BC publication"
     exit 1
   }
   infn = 0
 }
 END {
-  if (!store || !publish) {
-    print "WRAPCFUNC publication guard did not find store and bytecode publish"
+  if (!claim || !slot || !store || !drop || !publish) {
+    print "WRAPCFUNC publication guard did not find full claimed path"
     exit 1
   }
 }
