@@ -1181,6 +1181,7 @@ local map_op = {
   bswap_1 =	"rqd:0FC8r",
   bsf_2 =	"rmqdw:0FBCrM",
   bsr_2 =	"rmqdw:0FBDrM",
+  cmpxchg_2 =	"mrb:0FB0Rm|mrqdw:0FB1Rm",
   bt_2 =	"mrqdw:0FA3Rm|miqdw:0FBA4mU",
   btc_2 =	"mrqdw:0FBBRm|miqdw:0FBA7mU",
   btr_2 =	"mrqdw:0FB3Rm|miqdw:0FBA6mU",
