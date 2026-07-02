@@ -24,6 +24,7 @@
 #include "lj_lex.h"
 #include "lj_bcdump.h"
 #include "lj_parse.h"
+#include "lj_state.h"
 #include "lj_thr.h"
 #include "lj_tg.h"
 
@@ -121,6 +122,35 @@ static void load_checkstop_fresh(lua_State *L, uint32_t actions,
     lj_safepoint_checkstop(L, actions);
 }
 
+static void load_pop1_claimed(lua_State *L)
+{
+  LJStateClaim claim;
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(load_errstate(L), "thread busy");
+  if (!(L->top > L->base)) {
+    lj_state_dropresumeclaim(&claim);
+    lj_checkapi(0, "top slot empty");
+  }
+  L->top--;
+  lj_state_stack_pubrange(L, L);
+  lj_state_dropresumeclaim(&claim);
+}
+
+static void load_remove_chunkname_claimed(lua_State *L)
+{
+  LJStateClaim claim;
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(load_errstate(L), "thread busy");
+  if (!(L->top - L->base >= 2)) {
+    lj_state_dropresumeclaim(&claim);
+    lj_checkapi(0, "missing loadfile result slot");
+  }
+  copyTV(L, L->top-2, L->top-1);
+  L->top--;
+  lj_state_stack_pubrange(L, L);
+  lj_state_dropresumeclaim(&claim);
+}
+
 static FILE *load_native_fopen(lua_State *L, const char *filename,
 			       uint32_t *actionsp)
 {
@@ -212,7 +242,7 @@ LUALIB_API int luaL_loadfilex(lua_State *L, const char *filename,
       {
 	char errbuf[LJ_ERR_ERRNO_BUFSZ];
 	const char *emsg = lj_err_strerrno(err, errbuf, sizeof(errbuf));
-	L->top--;
+	load_pop1_claimed(L);
 	load_checkstop_fresh(L, actions, ctx.had_stopreq);
 	lua_pushfstring(L, "cannot open %s: %s", filename, emsg);
       }
@@ -237,15 +267,14 @@ LUALIB_API int luaL_loadfilex(lua_State *L, const char *filename,
     uint32_t actions;
     (void)load_native_fclose(L, ctx.fp, &actions);
     ctx.actions |= actions;
-    L->top--;
-    copyTV(L, L->top-1, L->top);
+    load_remove_chunkname_claimed(L);
   }
   load_checkstop_fresh(L, ctx.actions, ctx.had_stopreq);
   if (err) {
     const char *fname = filename ? filename : "stdin";
     char errbuf[LJ_ERR_ERRNO_BUFSZ];
     const char *emsg = lj_err_strerrno(err, errbuf, sizeof(errbuf));
-    L->top--;
+    load_pop1_claimed(L);
     lua_pushfstring(L, "cannot read %s: %s", fname, emsg);
     return LUA_ERRFILE;
   }
@@ -296,11 +325,19 @@ LUALIB_API int luaL_loadstring(lua_State *L, const char *s)
 
 LUA_API int lua_dump(lua_State *L, lua_Writer writer, void *data)
 {
-  cTValue *o = L->top-1;
+  LJStateClaim claim;
+  cTValue *o;
   uint32_t flags = LJ_FR2*BCDUMP_F_FR2;  /* Default mode for lua_dump(). */
-  lj_checkapi(L->top > L->base, "top slot empty");
+  int status = 1;
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(load_errstate(L), "thread busy");
+  if (!(L->top > L->base)) {
+    lj_state_dropresumeclaim(&claim);
+    lj_checkapi(0, "top slot empty");
+  }
+  o = L->top-1;
   if (tvisfunc(o) && isluafunc(funcV(o)))
-    return lj_bcwrite(L, funcproto(funcV(o)), writer, data, flags);
-  else
-    return 1;
+    status = lj_bcwrite(L, funcproto(funcV(o)), writer, data, flags);
+  lj_state_dropresumeclaim(&claim);
+  return status;
 }

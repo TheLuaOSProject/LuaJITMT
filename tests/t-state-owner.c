@@ -62,6 +62,15 @@ static uint32_t foreign_tid(lua_State *L)
   return tid;
 }
 
+static int count_dump_writer(lua_State *L, const void *p, size_t sz, void *ud)
+{
+  size_t *total = (size_t *)ud;
+  (void)L;
+  (void)p;
+  *total += sz;
+  return 0;
+}
+
 static void check_xmove_unowned_target(lua_State *L)
 {
   lua_State *co;
@@ -605,6 +614,7 @@ static void check_resume_unowned(lua_State *L)
 static void check_lua_load_unowned(lua_State *L)
 {
   lua_State *co;
+  size_t dumpsz = 0;
   lua_settop(L, 0);
   co = lua_newthread(L);
   assert(lj_state_owner_acq(co) == 0);
@@ -614,6 +624,25 @@ static void check_lua_load_unowned(lua_State *L)
   assert(lua_tointeger(co, -1) == 94);
   lua_pop(co, 1);
   lua_pop(L, 1);
+
+  co = lua_newthread(L);
+  assert(lj_state_owner_acq(co) == 0);
+  assert(luaL_loadfilex(co, "tests/stock/test/lang/assignment.lua", NULL) == 0);
+  assert(lua_isfunction(co, -1));
+  assert(lj_state_owner_acq(co) == 0);
+  lua_pop(co, 1);
+
+  assert(luaL_loadfilex(co, "tests/no-such-state-owner-file.lua", NULL) ==
+	 LUA_ERRFILE);
+  assert(lua_isstring(co, -1));
+  assert(lj_state_owner_acq(co) == 0);
+  lua_pop(co, 1);
+
+  co = load_ownerless_results(L, "return function() return 97 end", 1);
+  assert(lua_dump(co, count_dump_writer, &dumpsz) == 0);
+  assert(dumpsz > 0);
+  assert(lj_state_owner_acq(co) == 0);
+  lua_settop(L, 0);
 }
 
 static void check_lua_getinfo_unowned(lua_State *L)
@@ -1387,6 +1416,25 @@ static int busy_lua_load(lua_State *L)
   return 0;
 }
 
+static int busy_luaL_loadfile(lua_State *L)
+{
+  lua_State *co = lua_newthread(L);
+  lj_state_owner_rel(co, foreign_tid(L));
+  (void)luaL_loadfilex(co, "tests/stock/test/lang/assignment.lua", NULL);
+  return 0;
+}
+
+static int busy_lua_dump(lua_State *L)
+{
+  lua_State *co = lua_newthread(L);
+  size_t dumpsz = 0;
+  assert(luaL_loadstring(L, "return 1") == 0);
+  lua_xmove(L, co, 1);
+  lj_state_owner_rel(co, foreign_tid(L));
+  (void)lua_dump(co, count_dump_writer, &dumpsz);
+  return 0;
+}
+
 static int busy_coroutine_resume(lua_State *L)
 {
   uint32_t tid = lj_thr_current_id(G(L));
@@ -1677,6 +1725,8 @@ int main(void)
   expect_thread_busy(L, busy_lua_cpcall, "busy lua_cpcall");
   expect_thread_busy(L, busy_lua_resume, "busy lua_resume");
   expect_thread_busy(L, busy_lua_load, "busy lua_load");
+  expect_thread_busy(L, busy_luaL_loadfile, "busy luaL_loadfile");
+  expect_thread_busy(L, busy_lua_dump, "busy lua_dump");
   expect_thread_busy(L, busy_coroutine_resume, "busy coroutine.resume");
   expect_thread_busy(L, busy_coroutine_wrap, "busy coroutine.wrap");
   expect_thread_busy(L, busy_lua_getstack, "busy lua_getstack");

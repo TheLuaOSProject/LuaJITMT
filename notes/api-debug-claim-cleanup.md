@@ -23,6 +23,10 @@ Permanent shape:
   ownerless coroutine states. `lua_call` uses a protected VM call only for a
   claim it must release before rethrowing; already-owned current-state calls
   keep the direct VM call path.
+- `luaL_loadfilex()` uses owner-claiming stack helpers for all public stack
+  adjustment after native file I/O, avoiding raw target-state `L->top` edits.
+- `lua_dump()` resume-claims the target state before reading the function stack
+  slot and keeps the claim through bytecode dump traversal.
 - Public metamethod-facing APIs (`lua_equal`, `lua_lessthan`, `lua_concat`,
   `lua_gettable`, `lua_getfield`, `lua_settable`, `lua_setfield`, and
   `luaL_callmeta`) hold resume claims around stack inspection/mutation and route

@@ -984,6 +984,62 @@ END {
 ]=], "src/lj_load.c")
 
   awk([=[
+function count_char(text, ch,    n, i) {
+  n = 0
+  for (i = 1; i <= length(text); i++)
+    if (substr(text, i, 1) == ch) n++
+  return n
+}
+BEGIN { infn = 0; depth = 0; pop = 0; remove = 0; rawtop = 0 }
+/^LUALIB_API int luaL_loadfilex\(lua_State \*L,/ { infn = 1; depth = 1; next }
+infn {
+  depth += count_char($0, "{")
+  depth -= count_char($0, "}")
+  if (/load_pop1_claimed\(L\)/) pop++
+  if (/load_remove_chunkname_claimed\(L\)/) remove = NR
+  if (/L->top/) rawtop = NR
+  if (depth == 0) infn = 0
+}
+END {
+  if (rawtop || pop < 2 || !remove) {
+    print "luaL_loadfilex must use internal claimed stack helpers"
+    exit 1
+  }
+}
+]=], "src/lj_load.c")
+
+  awk([=[
+function count_char(text, ch,    n, i) {
+  n = 0
+  for (i = 1; i <= length(text); i++)
+    if (substr(text, i, 1) == ch) n++
+  return n
+}
+BEGIN {
+  infn = 0; depth = 0
+  claim = 0; check = 0; read = 0; dump = 0; drop = 0
+}
+/^LUA_API int lua_dump\(lua_State \*L,/ { infn = 1; depth = 1; next }
+infn {
+  depth += count_char($0, "{")
+  depth -= count_char($0, "}")
+  if (/lj_state_resumeclaim/) claim = NR
+  if (/lj_checkapi/) check = NR
+  if (/L->top-1/) read = NR
+  if (/lj_bcwrite/) dump = NR
+  if (/lj_state_dropresumeclaim/) drop = NR
+  if (depth == 0) infn = 0
+}
+END {
+  if (!claim || !check || !read || !dump || !drop ||
+      claim > check || check > read || read > dump || dump > drop) {
+    print "lua_dump owner-claim boundary missing"
+    exit 1
+  }
+}
+]=], "src/lj_load.c")
+
+  awk([=[
 BEGIN {
   infn = 0; claim = 0; pcall = 0; call = 0; drop_err = 0; drop_call = 0; rethrow = 0
 }
