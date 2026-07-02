@@ -146,23 +146,23 @@ static LJ_AINLINE int profile_state_active_g(ProfileState *ps, global_State *g)
 	 profile_g_load_acq(ps) == g;
 }
 
+static void profile_callback_leave(ProfileState *ps);
+
 #if !LJ_PROFILE_TGLOCAL
 static int profile_callback_enter(ProfileState *ps, global_State *g)
 {
+  uint32_t old = 0;
   if (!profile_state_active_g(ps, g))
     return 0;
+  if (!la_cas32(&ps->callbacks, &old, 1, LA_ACQ_REL, LA_ACQ))
+    return 0;
   la_store32_rel(&ps->callback_tid, lj_thr_current_id(g));
-  (void)la_add32_rlx(&ps->callbacks, 1);
   if (profile_state_active_g(ps, g))
     return 1;
-  if (la_sub32_acqrel(&ps->callbacks, 1) == 1)
-    la_futex_wake(&ps->callbacks, INT_MAX);
-  la_store32_rel(&ps->callback_tid, 0);
+  profile_callback_leave(ps);
   return 0;
 }
 #endif
-
-static void profile_callback_leave(ProfileState *ps);
 
 #if LJ_PROFILE_TGLOCAL
 static int profile_callback_tryenter(ProfileState *ps, global_State *g)

@@ -13,6 +13,11 @@ active callback to leave, then clears callback data and the shared stack-dump
 buffer. Stale profile hooks check that the active profiler still belongs to the
 current VM before loading callback state.
 
+Callback delivery is single-entry across both profiler backends. The TG-local
+signal path and the non-TG-local timer-thread path CAS the callback count from
+zero to one before invoking user code; nested or concurrent samples are dropped
+instead of recursively entering callback state.
+
 The Lua `jit.profile.start()` wrapper first stops any old same-VM profiler
 session, clears old registry anchors, anchors the new hidden callback coroutine
 and Lua function in the registry, and only then starts the C profiler. The timer
