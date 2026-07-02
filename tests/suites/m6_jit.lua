@@ -599,8 +599,9 @@ local function assert_x64_jloop_stale_slot_guards(t)
   local tracec = t:read(t:path("src", "lj_trace.c"))
   checks.assert_text_all_contains("lj_trace_exit JLOOP stale-slot guard",
                                   tracec, {
-    "GCtrace *target = traceref(J, bc_d(*pc));",
-    "if (!target)\n      return 0;",
+    "TraceNo targetno = bc_d(*pc);",
+    "GCtrace *target = traceref(J, targetno);",
+    "if (!target || trace_traceno_acq(target) != targetno)\n      return 0;",
     "startins = trace_startins_acq(target);"
   }, "C trace-exit guard")
 end

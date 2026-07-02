@@ -1798,9 +1798,10 @@ int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr)
   case BC_TSETM:
     return (int)((BCReg)(L->top - L->base) + 1 - bc_a(*pc));
   case BC_JLOOP: {
-    GCtrace *target = traceref(J, bc_d(*pc));
+    TraceNo targetno = bc_d(*pc);
+    GCtrace *target = traceref(J, targetno);
     BCIns startins;
-    if (!target)
+    if (!target || trace_traceno_acq(target) != targetno)
       return 0;  /* Stale JLOOP after a concurrent flush: redispatch it. */
     startins = trace_startins_acq(target);
     if (bc_isret(bc_op(startins)) || bc_op(startins) == BC_ITERN) {
