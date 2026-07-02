@@ -1421,6 +1421,17 @@ static void assert_weak_mode_marked(global_State *g, GCtab *t)
   assert(lj_gc2_ismarked(g, gcV(mode)) == 1);
 }
 
+static void clear_weak_mode_raw(lua_State *L, global_State *g, GCtab *t)
+{
+  GCtab *mt = tabref_acq(t->metatable);
+  TValue *slot;
+  assert(mt != NULL);
+  /* Avoid public stack publication while testing first-mark weak state. */
+  slot = lj_tab_setstr(L, mt, mmname_str(g, MM_mode));
+  assert(tvisstr(slot));
+  lj_tab_storenilraw(slot);
+}
+
 static int weak_entry_is_nil(lua_State *L, GCtab *weak, GCtab *key)
 {
   TValue k;
@@ -1477,13 +1488,11 @@ static void make_weak_table_batch(lua_State *L, MSize n)
 static void mark_weak_table_batch(lua_State *L, global_State *g, MSize n)
 {
   MSize i;
+  assert((MSize)(L->top - L->base) >= n * 3u);
   for (i = 0; i < n; i++) {
-    TValue *tv;
-    lua_pushvalue(L, (int)(i * 3u + 1u));
-    tv = L->top - 1;
+    TValue *tv = L->base + i * 3u;
     assert(tvistab(tv));
     assert(lj_gc2_markobj(g, obj2gco(tabV(tv))) == 1);
-    lua_pop(L, 1);
   }
 }
 
@@ -1934,26 +1943,26 @@ static void test_weak_drain_uses_captured_mode(lua_State *L, global_State *g,
 
   lua_settop(L, 0);
   make_weak_table(L, "v", &weak, &key, &val);
+  lua_pop(L, 1);
 
   lj_gc2_mark_begin(g);
   assert(lj_gc2_markobj(g, obj2gco(weak)) == 1);
   flush_and_drain(g, tg);
   assert(lj_gc2_test_weak_snapshot_count(g) == 1u);
+  assert((lj_obj_gcflags(obj2gco(weak)) & LJ_GC_WEAK) == LJ_GC_WEAKVAL);
   assert(lj_gc2_ismarked(g, obj2gco(key)) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(val)) == 0);
 
-  assert(lua_getmetatable(L, 1) == 1);
-  lua_pushliteral(L, "__mode");
-  lua_pushnil(L);
-  lua_settable(L, -3);
-  lua_pop(L, 1);
+  clear_weak_mode_raw(L, g, weak);
+  assert((lj_obj_gcflags(obj2gco(weak)) & LJ_GC_WEAK) == LJ_GC_WEAKVAL);
+  assert(lj_gc2_ismarked(g, obj2gco(val)) == 0);
 
   lj_gc2_mark_to_weak(g);
   assert(lj_gc2_test_weak_drain(g, 1) == 1u);
   assert(weak_entry_is_nil(L, weak, key));
   assert(lj_gc2_test_weak_drain(g, 1) == 0);
   lj_gc2_cycle_to_idle(g);
-  lua_pop(L, 3);
+  lua_pop(L, 2);
 }
 
 static void test_weak_pre_clear_late_write_survives_drain(lua_State *L,
@@ -2026,11 +2035,7 @@ static void test_weak_post_clear_resurrection_write(lua_State *L,
   assert(lj_gc2_ismarked(g, obj2gco(late_key)) == 0);
   assert(lj_gc2_ismarked(g, obj2gco(late_val)) == 0);
 
-  assert(lua_getmetatable(L, 1) == 1);
-  lua_pushliteral(L, "__mode");
-  lua_pushnil(L);
-  lua_settable(L, -3);
-  lua_pop(L, 1);
+  clear_weak_mode_raw(L, g, weak);
 
   lj_gc2_mark_to_weak(g);
   assert(lj_gc2_test_weak_drain(g, 1) == 1u);
