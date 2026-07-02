@@ -20,9 +20,8 @@ Coverage:
 
 - `tests/t-ffi-typeinfo-snapshot.c` manually holds `CTState.parse_token` odd,
   verifies predefined `int` metadata stays readable through `ffi.typeinfo()`
-  and stock operations, then verifies parser-created metadata reads return
-  `nil` while the parser is active and succeed after release without advancing
-  the parser sequence.
+  and stock operations, then verifies parser-created metadata reads wait in
+  native time, succeed after release, and do not advance the parser sequence.
 - `tests/t-ffi-metatv-snapshot.c` holds the parser token while a predefined
   `int` cdata arithmetic miss flows through type-info and ctype-metamethod
   fallback without waiting.
@@ -32,7 +31,8 @@ Coverage:
 - `tests/t-ffi-cparse-rollback-reader.lua` verifies failed `ffi.cdef()`
   rollback remains hidden from FFI readers such as `ffi.typeinfo()`,
   `ffi.sizeof()`, `ffi.new()`, cdata field/numeric access, pointer arithmetic,
-  enum casts, and `ffi.C`.
+  enum casts, and `ffi.C`; the `ffi.typeinfo()` path now rejects transient
+  active-parser `nil` results for an existing stable ctype ID.
 
 Verification:
 

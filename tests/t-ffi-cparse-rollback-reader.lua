@@ -81,15 +81,15 @@ local function race_failed_cdef(tag, check, source)
   assert(result == "err", result)
 end
 
-local function assert_incomplete_typeinfo_or_active_parser_nil(msg)
+local function assert_incomplete_typeinfo(msg)
   local ti = ffi.typeinfo(ctid)
-  assert(ti == nil or ti.size == nil, msg)
+  assert(ti ~= nil and ti.size == nil, msg)
 end
 
 race_failed_cdef("direct", function()
   assert(ffi.sizeof(ct) == nil,
 	 "direct ctype reader observed failed cdef rollback state")
-  assert_incomplete_typeinfo_or_active_parser_nil(
+  assert_incomplete_typeinfo(
     "ffi.typeinfo observed failed cdef rollback state")
   assert(not pcall(ffi.new, ct, { x = 123 }),
 	 "ffi.new observed failed cdef rollback state")
