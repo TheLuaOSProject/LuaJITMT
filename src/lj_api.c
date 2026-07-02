@@ -170,6 +170,21 @@ static void api_checkclaim(lua_State *L, LJStateClaim *claim)
     lj_err_callermsg(api_errstate(L), "thread busy");
 }
 
+static void api_checkstack1_claimed(lua_State *L, lua_State *errL,
+				    LJStateClaim *claim)
+{
+  if ((mref(L->maxstack, char) - (char *)L->top) <=
+      (ptrdiff_t)sizeof(TValue)) {
+    int status = lj_state_cpgrowstack(L, 1);
+    if (status != LUA_OK) {
+      if (L->top > L->base) L->top--;
+      lj_state_dropresumeclaim(claim);
+      lj_err_callermsg(errL, status == LUA_ERRMEM ?
+		       "not enough memory" : "stack overflow");
+    }
+  }
+}
+
 static void api_vm_call_claimed(lua_State *L, TValue *base, int nres1,
 				LJStateClaim *claim)
 {
@@ -399,15 +414,7 @@ LUA_API void lua_pushvalue(lua_State *L, int idx)
   TValue snap;
   if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
     lj_err_callermsg(errL, "thread busy");
-  if (L->top >= tvref(L->maxstack)) {
-    int status = lj_state_cpgrowstack(L, 1);
-    if (status != LUA_OK) {
-      if (L->top > L->base) L->top--;
-      lj_state_dropresumeclaim(&claim);
-      lj_err_callermsg(errL, status == LUA_ERRMEM ?
-		       "not enough memory" : "stack overflow");
-    }
-  }
+  api_checkstack1_claimed(L, errL, &claim);
   copyTV(L, L->top, index2adr_read(L, idx, &snap));
   lj_state_stack_pubtv(L, L, L->top);
   L->top++;
@@ -1259,18 +1266,29 @@ LUA_API void lua_getfield(lua_State *L, int idx, const char *k)
 
 LUA_API void lua_rawget(lua_State *L, int idx)
 {
+  LJStateClaim claim;
   TValue snap;
-  cTValue *t = index2adr_read(L, idx, &snap);
+  cTValue *t;
   TValue val;
+  api_checkclaim(L, &claim);
+  t = index2adr_read(L, idx, &snap);
   lj_checkapi(tvistab(t), "stack slot %d is not a table", idx);
   lj_tv_load_acq(&val, lj_tab_get(L, tabV(t), L->top-1));
   copyTV(L, L->top-1, &val);
+  lj_state_stack_pubtv(L, L, L->top-1);
+  lj_state_dropclaim(&claim);
 }
 
 LUA_API void lua_rawgeti(lua_State *L, int idx, int n)
 {
+  LJStateClaim claim;
+  lua_State *errL = api_errstate(L);
   TValue snap;
-  cTValue *v, *t = index2adr_read(L, idx, &snap);
+  cTValue *v, *t;
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(errL, "thread busy");
+  api_checkstack1_claimed(L, errL, &claim);
+  t = index2adr_read(L, idx, &snap);
   lj_checkapi(tvistab(t), "stack slot %d is not a table", idx);
   v = lj_tab_getint(tabV(t), n);
   if (v) {
@@ -1280,24 +1298,36 @@ LUA_API void lua_rawgeti(lua_State *L, int idx, int n)
   } else {
     setnilV(L->top);
   }
+  lj_state_stack_pubtv(L, L, L->top);
   incr_top(L);
+  lj_state_dropresumeclaim(&claim);
 }
 
 LUA_API int lua_getmetatable(lua_State *L, int idx)
 {
+  LJStateClaim claim;
+  lua_State *errL = api_errstate(L);
   TValue snap;
-  cTValue *o = index2adr_read(L, idx, &snap);
+  cTValue *o;
   GCtab *mt = NULL;
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(errL, "thread busy");
+  o = index2adr_read(L, idx, &snap);
   if (tvistab(o))
     mt = lj_tab_metatable_acq(tabV(o));
   else if (tvisudata(o))
     mt = lj_udata_metatable_acq(udataV(o));
   else
     mt = lj_basemt_obj_acq(G(L), o);
-  if (mt == NULL)
+  if (mt == NULL) {
+    lj_state_dropresumeclaim(&claim);
     return 0;
+  }
+  api_checkstack1_claimed(L, errL, &claim);
   settabV(L, L->top, mt);
+  lj_state_stack_pubtv(L, L, L->top);
   incr_top(L);
+  lj_state_dropresumeclaim(&claim);
   return 1;
 }
 
@@ -1320,41 +1350,61 @@ LUALIB_API int luaL_getmetafield(lua_State *L, int idx, const char *field)
 
 LUA_API void lua_getfenv(lua_State *L, int idx)
 {
+  LJStateClaim claim;
+  lua_State *errL = api_errstate(L);
   TValue snap;
-  cTValue *o = index2adr_check_read(L, idx, &snap);
+  cTValue *o;
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(errL, "thread busy");
+  api_checkstack1_claimed(L, errL, &claim);
+  o = index2adr_check_read(L, idx, &snap);
   if (tvisfunc(o)) {
     settabV(L, L->top, lj_func_env_acq(funcV(o)));
   } else if (tvisudata(o)) {
     settabV(L, L->top, lj_udata_env_acq(udataV(o)));
   } else if (tvisthread(o)) {
-    LJStateClaim claim;
+    LJStateClaim thclaim;
     lua_State *L1 = threadV(o);
     GCtab *env;
-    if (!lj_state_tryclaim(L1, lj_thr_current_id(G(L)), &claim))
-      lj_err_callermsg(api_errstate(L), "thread busy");
+    if (!lj_state_tryclaim(L1, lj_thr_current_id(G(L)), &thclaim)) {
+      lj_state_dropresumeclaim(&claim);
+      lj_err_callermsg(errL, "thread busy");
+    }
     env = lj_state_env_acq(L1);
-    lj_state_dropclaim(&claim);
+    lj_state_dropclaim(&thclaim);
     settabV(L, L->top, env);
   } else {
     setnilV(L->top);
   }
+  lj_state_stack_pubtv(L, L, L->top);
   incr_top(L);
+  lj_state_dropresumeclaim(&claim);
 }
 
 LUA_API int lua_next(lua_State *L, int idx)
 {
+  LJStateClaim claim;
+  lua_State *errL = api_errstate(L);
   TValue snap;
-  cTValue *t = index2adr_read(L, idx, &snap);
+  cTValue *t;
   int more;
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(errL, "thread busy");
+  api_checkstack1_claimed(L, errL, &claim);
+  t = index2adr_read(L, idx, &snap);
   lj_checkapi(tvistab(t), "stack slot %d is not a table", idx);
   more = lj_tab_next(tabV(t), L->top-1, L->top-1);
   if (more > 0) {
+    lj_state_stack_pubtv(L, L, L->top-1);
+    lj_state_stack_pubtv(L, L, L->top);
     incr_top(L);  /* Return new key and value slot. */
   } else if (!more) {  /* End of traversal. */
     L->top--;  /* Remove key slot. */
   } else {
+    lj_state_dropresumeclaim(&claim);
     lj_err_msg(L, LJ_ERR_NEXTIDX);
   }
+  lj_state_dropresumeclaim(&claim);
   return more;
 }
 

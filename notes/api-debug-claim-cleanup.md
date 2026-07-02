@@ -43,6 +43,12 @@ Permanent shape:
   (`luaL_checkany`, `luaL_checknumber`, `luaL_optnumber`,
   `luaL_checkinteger`, and `luaL_optinteger`) use the same read-only claim
   shape and drop the claim before raising argument errors.
+- Raw object getter APIs that read and/or publish result slots (`lua_rawget`,
+  `lua_rawgeti`, `lua_getmetatable`, `lua_getfenv`, and `lua_next`) claim the
+  target state before stack access and release-publish produced stack slots
+  before dropping ownerless claims. Push-style raw getters use protected
+  one-slot growth through `api_checkstack1_claimed()`, which drops the resume
+  claim before reporting stack allocation errors.
 - `lua_xmove()` directly copies and release-publishes stack slots while both
   states are claimed; the copy path itself does not allocate and must not be
   wrapped in `lj_vm_cpcall()` on the source coroutine.
@@ -55,4 +61,5 @@ Regression coverage:
   coroutine, including `S`, `f`, and `L`, plus unowned `lua_loadx`,
   `lua_call`, `lua_pcall`, `lua_cpcall`, public metamethod APIs, the first
   stack-manipulation group, the read-only stack getter/conversion group, and
-  the read-only auxiliary check/conversion group.
+  the read-only auxiliary check/conversion group, and the raw object getter
+  group.

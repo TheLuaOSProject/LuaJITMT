@@ -213,6 +213,41 @@ static lua_State *load_ownerless_results(lua_State *L, const char *src,
   return co;
 }
 
+static void check_raw_object_api_unowned(lua_State *L)
+{
+  lua_State *co;
+  lua_settop(L, 0);
+
+  co = load_ownerless_results(L, "return {x=64}, 'x'", 2);
+  lua_rawget(co, 1);
+  assert(lua_tointeger(co, -1) == 64);
+  assert(lj_state_owner_acq(co) == 0);
+
+  co = load_ownerless_results(L, "return {[4]=65}", 1);
+  lua_rawgeti(co, 1, 4);
+  assert(lua_tointeger(co, -1) == 65);
+  assert(lj_state_owner_acq(co) == 0);
+
+  co = load_ownerless_results(L,
+    "local mt={tag=66}; return setmetatable({}, mt)", 1);
+  assert(lua_getmetatable(co, 1) == 1);
+  lua_getfield(co, -1, "tag");
+  assert(lua_tointeger(co, -1) == 66);
+  assert(lj_state_owner_acq(co) == 0);
+
+  co = load_ownerless_results(L, "return function() end", 1);
+  lua_getfenv(co, 1);
+  assert(lua_istable(co, -1));
+  assert(lj_state_owner_acq(co) == 0);
+
+  co = load_ownerless_results(L, "return {a=67}, nil", 2);
+  assert(lua_next(co, 1) == 1);
+  assert(lua_tointeger(co, -1) == 67);
+  assert(lj_state_owner_acq(co) == 0);
+
+  lua_settop(L, 0);
+}
+
 static void check_metamethod_api_unowned(lua_State *L)
 {
   lua_State *co;
@@ -613,6 +648,79 @@ static int busy_lua_topointer(lua_State *L)
   return 0;
 }
 
+static lua_State *busy_table_prepare(lua_State *L, int push_key)
+{
+  lua_State *co = lua_newthread(L);
+  lua_newtable(L);
+  lua_pushliteral(L, "x");
+  lua_pushinteger(L, 64);
+  lua_settable(L, -3);
+  lua_pushinteger(L, 65);
+  lua_rawseti(L, -2, 4);
+  if (push_key)
+    lua_pushliteral(L, "x");
+  else
+    lua_pushnil(L);
+  lua_xmove(L, co, 2);
+  lj_state_owner_rel(co, foreign_tid(L));
+  return co;
+}
+
+static lua_State *busy_metatable_prepare(lua_State *L)
+{
+  lua_State *co = lua_newthread(L);
+  lua_newtable(L);
+  lua_newtable(L);
+  lua_setmetatable(L, -2);
+  lua_xmove(L, co, 1);
+  lj_state_owner_rel(co, foreign_tid(L));
+  return co;
+}
+
+static lua_State *busy_function_prepare(lua_State *L)
+{
+  lua_State *co = lua_newthread(L);
+  lua_pushcfunction(L, resume_return);
+  lua_xmove(L, co, 1);
+  lj_state_owner_rel(co, foreign_tid(L));
+  return co;
+}
+
+static int busy_lua_rawget(lua_State *L)
+{
+  lua_State *co = busy_table_prepare(L, 1);
+  lua_rawget(co, 1);
+  return 0;
+}
+
+static int busy_lua_rawgeti(lua_State *L)
+{
+  lua_State *co = busy_table_prepare(L, 0);
+  lua_rawgeti(co, 1, 4);
+  return 0;
+}
+
+static int busy_lua_getmetatable(lua_State *L)
+{
+  lua_State *co = busy_metatable_prepare(L);
+  (void)lua_getmetatable(co, 1);
+  return 0;
+}
+
+static int busy_lua_getfenv(lua_State *L)
+{
+  lua_State *co = busy_function_prepare(L);
+  lua_getfenv(co, 1);
+  return 0;
+}
+
+static int busy_lua_next(lua_State *L)
+{
+  lua_State *co = busy_table_prepare(L, 0);
+  (void)lua_next(co, 1);
+  return 0;
+}
+
 static int busy_getfenv_thread(lua_State *L)
 {
   lua_State *co = lua_newthread(L);
@@ -856,6 +964,7 @@ int main(void)
   check_getter_api_unowned(L);
   check_thread_env_unowned(L);
   check_call_entry_unowned(L);
+  check_raw_object_api_unowned(L);
   check_metamethod_api_unowned(L);
   check_resume_unowned(L);
   check_lua_load_unowned(L);
@@ -915,6 +1024,11 @@ int main(void)
   expect_thread_busy(L, busy_lua_touserdata, "busy lua_touserdata");
   expect_thread_busy(L, busy_lua_tothread, "busy lua_tothread");
   expect_thread_busy(L, busy_lua_topointer, "busy lua_topointer");
+  expect_thread_busy(L, busy_lua_rawget, "busy lua_rawget");
+  expect_thread_busy(L, busy_lua_rawgeti, "busy lua_rawgeti");
+  expect_thread_busy(L, busy_lua_getmetatable, "busy lua_getmetatable");
+  expect_thread_busy(L, busy_lua_getfenv, "busy lua_getfenv");
+  expect_thread_busy(L, busy_lua_next, "busy lua_next");
   expect_thread_busy(L, busy_getfenv_thread, "busy thread getfenv");
   expect_thread_busy(L, busy_setfenv_thread, "busy thread setfenv");
   expect_thread_busy(L, busy_lua_call, "busy lua_call");

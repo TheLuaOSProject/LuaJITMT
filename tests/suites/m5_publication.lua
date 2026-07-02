@@ -87,6 +87,21 @@ END {
 ]=], "src/lj_api.c")
 
   awk([=[
+BEGIN { infn = 0; grow = 0; drop = 0; err = 0 }
+/^static void api_checkstack1_claimed\(lua_State \*L,/ { infn = 1; next }
+infn && /^}/ { infn = 0; next }
+infn && /lj_state_cpgrowstack/ { grow = NR }
+infn && /lj_state_dropresumeclaim\(claim\)/ { drop = NR }
+infn && /lj_err_callermsg/ { err = NR }
+END {
+  if (!grow || !drop || !err || grow > drop || drop > err) {
+    print "api_checkstack1_claimed must drop resume claim before stack error"
+    exit 1
+  }
+}
+]=], "src/lj_api.c")
+
+  awk([=[
 function reset(name, resume, grow, pub) {
   fun = name; want_resume = resume; want_grow = grow; want_pub = pub
   started = 0; depth = 0; claim = 0; access = 0; cpgrow = 0; pubrange = 0
@@ -129,7 +144,7 @@ fun {
   if (/L->top|L->base|index2adr|copyTV/) {
     if (!access) access = NR
   }
-  if (/lj_state_cpgrowstack/) cpgrow = NR
+  if (/lj_state_cpgrowstack|api_checkstack1_claimed/) cpgrow = NR
   if (/lj_state_stack_pubrange/) pubrange = NR
   if (/lj_state_stack_pubtv/) pubtv = NR
   if (/lj_state_dropresumeclaim|lj_state_dropclaim/) drop = NR
@@ -239,6 +254,61 @@ END {
   finish()
   if (seen != 5) {
     print "missing public aux API owner-claim guard coverage"
+    exit 1
+  }
+}
+]=], "src/lj_api.c")
+
+  awk([=[
+function reset(name, resume, grow) {
+  fun = name; want_resume = resume; want_grow = grow
+  started = 0; depth = 0; claim = 0; access = 0; growcall = 0
+  pub = 0; drop = 0; claim_kind = ""
+}
+function finish() {
+  if (fun) {
+    if (!claim || !access || !pub || !drop ||
+	claim > access || access > pub || pub > drop ||
+	(want_resume && claim_kind != "resume") ||
+	(!want_resume && claim_kind != "try") ||
+	(want_grow && (!growcall || claim > growcall || growcall > drop))) {
+      print fun " raw object getter owner-claim boundary missing"
+      exit 1
+    }
+    seen++
+  }
+  fun = ""
+}
+function count_char(text, ch,    n, i) {
+  n = 0
+  for (i = 1; i <= length(text); i++)
+    if (substr(text, i, 1) == ch) n++
+  return n
+}
+BEGIN { fun = ""; seen = 0; claim_kind = "" }
+/^LUA_API void lua_rawget\(lua_State \*L,/ { finish(); reset("lua_rawget", 0, 0); next }
+/^LUA_API void lua_rawgeti\(lua_State \*L,/ { finish(); reset("lua_rawgeti", 1, 1); next }
+/^LUA_API int lua_getmetatable\(lua_State \*L,/ { finish(); reset("lua_getmetatable", 1, 1); next }
+/^LUA_API void lua_getfenv\(lua_State \*L,/ { finish(); reset("lua_getfenv", 1, 1); next }
+/^LUA_API int lua_next\(lua_State \*L,/ { finish(); reset("lua_next", 1, 1); next }
+fun {
+  if (index($0, "{")) started = 1
+  depth += count_char($0, "{")
+  depth -= count_char($0, "}")
+  if (!claim && /lj_state_resumeclaim/) { claim = NR; claim_kind = "resume" }
+  if (!claim && /api_checkclaim/) { claim = NR; claim_kind = "try" }
+  if (/index2adr_read|index2adr_check_read/) {
+    if (!access) access = NR
+  }
+  if (/api_checkstack1_claimed/) growcall = NR
+  if (/lj_state_stack_pubtv/) pub = NR
+  if (/lj_state_dropresumeclaim\(&claim\)|lj_state_dropclaim\(&claim\)/) drop = NR
+  if (started && depth == 0) finish()
+}
+END {
+  finish()
+  if (seen != 5) {
+    print "missing public raw object getter owner-claim guard coverage"
     exit 1
   }
 }
