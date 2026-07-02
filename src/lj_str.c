@@ -134,8 +134,9 @@ static void strtab_wait(lua_State *L)
   /*
   ** String-table claim/enter waits are reached from string interning, resize,
   ** and secondary rehash paths with a current Lua state. Keep the wait native
-  ** and safepoint-visible, but avoid millisecond parking for transient resize
-  ** claim or active-reader drain windows.
+  ** so handshakes can observe/ack this TG, but do not raise STOPREQ here:
+  ** callers may already own a resize claim or hold an unpublished GCstr/
+  ** StrTabHdr that must be cleaned up by the surrounding control flow.
   */
   (void)lj_thr_retry_yield(L);
 }
