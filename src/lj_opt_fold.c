@@ -2469,7 +2469,7 @@ LJFOLDF(fold_base)
 /* Write barriers are amenable to CSE, but not across any incremental
 ** GC steps.
 */
-LJFOLD(TBAR any)
+LJFOLD(TBAR any any)
 LJFOLD(OBAR any any)
 LJFOLDF(barrier_tab)
 {
@@ -2479,8 +2479,8 @@ LJFOLDF(barrier_tab)
   return tr;
 }
 
-LJFOLD(TBAR TNEW)
-LJFOLD(TBAR TDUP)
+LJFOLD(TBAR TNEW any)
+LJFOLD(TBAR TDUP any)
 LJFOLDF(barrier_tnew_tdup)
 {
   /* New tables are always white and never need a barrier. */

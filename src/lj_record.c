@@ -2032,7 +2032,7 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
 			ix->tab, key, src);
 	emitir(IRTGI(IR_NE), ok, lj_ir_kint(J, 0));
 	if (tref_isgcv(ix->val))
-	  emitir(IRT(IR_TBAR, IRT_NIL), ix->tab, 0);
+	  emitir(IRT(IR_TBAR, IRT_NIL), ix->tab, REF_NIL);
 	else if (keybarrier)
 	  emitir(IRT(IR_TBAR, IRT_NIL), ix->tab, ix->key);
 	if (!nommstr(J, ix->key)) {
@@ -2121,7 +2121,7 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
       ix->val = emitir(IRTN(IR_CONV), ix->val, IRCONV_NUM_INT);
     emitir(IRT(loadop+IRDELTA_L2S, tref_type(ix->val)), xref, ix->val);
     if (tref_isgcv(ix->val))
-      emitir(IRT(IR_TBAR, IRT_NIL), ix->tab, 0);
+      emitir(IRT(IR_TBAR, IRT_NIL), ix->tab, REF_NIL);
     else if (keybarrier)
       emitir(IRT(IR_TBAR, IRT_NIL), ix->tab, ix->key);
     /* Invalidate neg. metamethod cache for stores with certain string keys. */

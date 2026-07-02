@@ -83,14 +83,31 @@ end
 
 local function assert_tbar_gc2_gate_not_hidden_by_black_bit(t)
   local awk = [=[
+BEGIN { tbar = 0 }
+/\_\(TBAR,[[:space:]]*S[[:space:]]*,[[:space:]]*ref,[[:space:]]*ref\)/ {
+  tbar = NR
+}
+END {
+  if (!tbar) {
+    print "IR_TBAR must declare its optional key operand as a ref"
+    exit 1
+  }
+}
+]=]
+  utils.capture_command("cd " .. utils.shell_quote(t.root) ..
+                        " && awk " .. utils.shell_quote(awk) ..
+                        " src/lj_ir.h")
+
+  local awk = [=[
 BEGIN {
   infn = 0; decl = 0; label = 0; jump_gate = 0; mark_gate = 0
   key_call = 0; key_tmp = 0; key_tvptr = 0
+  key_refnil = 0
 }
 /^static void asm_tbar\(ASMState \*as, IRIns \*ir\)/ { infn = 1; next }
 infn && /^}/ {
   if (!decl || !label || !jump_gate || !mark_gate ||
-      !key_call || !key_tmp || !key_tvptr) {
+      !key_call || !key_tmp || !key_tvptr || !key_refnil) {
     print "asm_tbar must split key-only GC2 barriers from table-rescan barriers"
     exit 1
   }
@@ -103,9 +120,10 @@ infn && /DISPATCH_TG\(mark_active\)/ { mark_gate = NR }
 infn && /IRCALL_lj_gc2_barrier_key_g/ { key_call = NR }
 infn && /ASMREF_TMP2/ { key_tmp = NR }
 infn && /asm_tvptr_protected/ { key_tvptr = NR }
+infn && /ir->op2 != REF_NIL/ { key_refnil = NR }
 END {
   if (infn || !decl || !label || !jump_gate || !mark_gate ||
-      !key_call || !key_tmp || !key_tvptr) {
+      !key_call || !key_tmp || !key_tvptr || !key_refnil) {
     print "asm_tbar GC2 gate shape missing"
     exit 1
   }
@@ -132,6 +150,20 @@ END {
   utils.capture_command("cd " .. utils.shell_quote(t.root) ..
                         " && awk " .. utils.shell_quote(awk) ..
                         " src/lj_record.c")
+
+  awk = [=[
+BEGIN { refnil = 0 }
+/IR_TBAR/ && /REF_NIL/ { refnil++ }
+END {
+  if (refnil < 3) {
+    print "unkeyed IR_TBAR emissions must use REF_NIL sentinel"
+    exit 1
+  }
+}
+]=]
+  utils.capture_command("cd " .. utils.shell_quote(t.root) ..
+                        " && awk " .. utils.shell_quote(awk) ..
+                        " src/lj_record.c src/lj_ffrecord.c")
 
   awk = [=[
 BEGIN { infn = 0; weak = 0; child = 0 }
@@ -1833,6 +1865,24 @@ end
 collectgarbage("collect")
 assert(next(weak) == nil, "key-only TBAR kept a weak key alive")
 ]=], { timeout = "20s" })
+      build.with_default_build_restore(t, function()
+        build.make_clean(t)
+        build_default(t, {
+          args = { "XCFLAGS=-DLUA_USE_ASSERT -DLJ_GC2_PARANOIA=1" }
+        })
+        luajit_code(t, [=[
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local count = 0
+local t = setmetatable({ foo = nil },
+  { __newindex = function() count = count + 1 end })
+for j = 1, 2 do
+  for i = 1, 100 do t.foo = 1 end
+  rawset(t, "foo", 1)
+end
+assert(count == 100)
+]=], { timeout = "20s" })
+      end)
       print("M6 JIT GC2 TBAR black gate behavior passed")
     end
   })

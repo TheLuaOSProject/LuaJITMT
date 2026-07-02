@@ -2599,7 +2599,7 @@ static void asm_cnew(ASMState *as, IRIns *ir)
 
 static void asm_tbar(ASMState *as, IRIns *ir)
 {
-  int keybarrier = ir->op2 != 0;
+  int keybarrier = ir->op2 != REF_NIL;
   const CCallInfo *ci = keybarrier ?
     &lj_ir_callinfo[IRCALL_lj_gc2_barrier_key_g] :
     &lj_ir_callinfo[IRCALL_lj_gc2_barrier_tab_g];

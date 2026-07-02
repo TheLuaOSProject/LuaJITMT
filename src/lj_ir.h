@@ -130,7 +130,7 @@
   _(BUFSTR,	AW, ref, ref) \
   \
   /* Barriers. */ \
-  _(TBAR,	S , ref, ___) \
+  _(TBAR,	S , ref, ref) \
   _(OBAR,	S , ref, ref) \
   _(XBAR,	S , ___, ___) \
   \
