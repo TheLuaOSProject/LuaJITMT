@@ -598,8 +598,12 @@ static uint32_t threading_join_claim_results(lua_State *L, lua_State *child,
 {
   uint32_t actions = 0;
   while (!lj_state_claim(child, tid)) {
+    uint32_t owner = lj_state_owner_acq(child);
     int had_stopreq = threading_had_stopreq(L);
-    actions |= lj_thr_sleep_ns(L, 1000000);
+    if (owner != 0)
+      actions |= lj_state_owner_wait(L, child, owner, 1000000);
+    else
+      actions |= lj_thr_retry_yield(L);
     threading_checkstop_fresh(L, actions, had_stopreq);
   }
   return actions;
@@ -1495,7 +1499,13 @@ static int threading_attach(lua_State *L, int wait)
       threading_entering_leave(g);
       return 0;
     }
-    (void)lj_thr_sleep_ns(NULL, 1000000);
+    {
+      uint32_t owner = lj_state_owner_acq(L);
+      if (owner != 0)
+	(void)lj_state_owner_wait(NULL, L, owner, 1000000);
+      else
+	(void)lj_thr_retry_yield(NULL);
+    }
   }
   tg = (TGState *)malloc(sizeof(TGState));
   if (!tg) {

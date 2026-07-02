@@ -1967,6 +1967,18 @@ static LJ_AINLINE int lj_state_owner_cas(lua_State *L, uint32_t *oldp,
   return la_cas32(&L->thr_owner, oldp, owner, LA_ACQ_REL, LA_ACQ);
 }
 
+static LJ_AINLINE void lj_state_owner_futex_wait(lua_State *L,
+						 uint32_t owner,
+						 int64_t timeout_ns)
+{
+  (void)la_futex_wait(&L->thr_owner, owner, timeout_ns);
+}
+
+static LJ_AINLINE void lj_state_owner_futex_wake(lua_State *L, int n)
+{
+  la_futex_wake(&L->thr_owner, n);
+}
+
 static LJ_AINLINE uint64_t lj_state_scan_epoch_acq(const lua_State *L)
 {
   return la_load64_acq((uint64_t *)&L->scan_epoch);

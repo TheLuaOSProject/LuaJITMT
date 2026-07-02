@@ -339,6 +339,24 @@ void lj_state_dropresumeclaim(LJStateClaim *claim)
   }
 }
 
+uint32_t lj_state_owner_wait(lua_State *L, lua_State *target, uint32_t owner,
+			     int64_t ns)
+{
+  TGState *tg = L ? L2TG(L) : lj_thr_tls_get();
+  uint32_t actions = 0;
+  if (!target || owner == 0)
+    return 0;
+  if (tg)
+    lj_native_enter(tg);
+  lj_state_owner_futex_wait(target, owner, ns);
+  if (L) {
+    actions = lj_native_leave(L);
+  } else if (tg) {
+    (void)lj_tg_in_native_dec_rel(tg);
+  }
+  return actions;
+}
+
 void lj_state_release(lua_State *L, uint32_t tid)
 {
   if (L && tid != 0) {
@@ -347,6 +365,7 @@ void lj_state_release(lua_State *L, uint32_t tid)
     UNUSED(owner);
     state_stack_dirty(L, tid);
     lj_state_owner_rel(L, 0);
+    lj_state_owner_futex_wake(L, 0x7fffffff);
   }
 }
 

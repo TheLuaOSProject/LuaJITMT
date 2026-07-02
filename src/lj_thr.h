@@ -166,6 +166,8 @@ LJ_FUNC int lj_state_gcscan_claim(lua_State *L, LJStateClaim *claim);
 LJ_FUNC void lj_state_dropclaim(LJStateClaim *claim);
 LJ_FUNC void lj_state_dropresumeclaim(LJStateClaim *claim);
 LJ_FUNC void lj_state_resume_release(lua_State *L, uint32_t tid);
+LJ_FUNC uint32_t lj_state_owner_wait(lua_State *L, lua_State *target,
+				     uint32_t owner, int64_t ns);
 LJ_FUNC void lj_state_release(lua_State *L, uint32_t tid);
 LJ_FUNC uint32_t lj_thr_cpucount(void);
 LJ_FUNC void lj_thr_fence(void);
