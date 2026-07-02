@@ -422,27 +422,33 @@ int luaJIT_setmode(lua_State *L, int idx, int mode)
   case LUAJIT_MODE_FUNC:
   case LUAJIT_MODE_ALLFUNC:
   case LUAJIT_MODE_ALLSUBFUNC: {
+    LJStateClaim claim;
     uint32_t flushed = 0;
-    cTValue *tv = idx == 0 ? frame_prev(L->base-1)-LJ_FR2 :
-		  idx > 0 ? L->base + (idx-1) : L->top + idx;
+    int token = lj_jit_token_acquire_wait(G2J(g));
+    cTValue *tv;
     GCproto *pt;
+    setmode_checkclaim(L, &claim);
+    tv = idx == 0 ? frame_prev(L->base-1)-LJ_FR2 :
+		    setmode_stack_slot(L, idx);
     if ((idx == 0 || tvisfunc(tv)) && isluafunc(&gcval(tv)->fn))
       pt = funcproto(&gcval(tv)->fn);  /* Cannot use funcV() for frame slot. */
     else if (tvisproto(tv))
       pt = protoV(tv);
-    else
-      return 0;  /* Failed. */
-    {
-      int token = lj_jit_token_acquire_wait(G2J(g));
-      if (mm != LUAJIT_MODE_ALLSUBFUNC)
-	flushed += setptmode(g, pt, mode);
-      if (mm != LUAJIT_MODE_FUNC)
-	flushed += setptmode_all(g, pt, mode);
-      if (!(mode & LUAJIT_MODE_ON))
-	lj_trace_flushscope_hs(g, flushed);
+    else {
+      lj_state_dropclaim(&claim);
       if (token)
 	lj_jit_token_release(G2J(g));
+      return 0;  /* Failed. */
     }
+    if (mm != LUAJIT_MODE_ALLSUBFUNC)
+      flushed += setptmode(g, pt, mode);
+    if (mm != LUAJIT_MODE_FUNC)
+      flushed += setptmode_all(g, pt, mode);
+    lj_state_dropclaim(&claim);
+    if (!(mode & LUAJIT_MODE_ON))
+      lj_trace_flushscope_hs(g, flushed);
+    if (token)
+      lj_jit_token_release(G2J(g));
     break;
     }
   case LUAJIT_MODE_TRACE:

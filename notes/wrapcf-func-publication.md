@@ -22,3 +22,10 @@ Validation:
 - `tools/ci/lua_test.sh m5_wrapcf_func_publish m5_panic_callback_atomic m5_hook_state_atomic`
 - `tools/ci/lua_test.sh run_stock_tests -- --quiet`
 - `git diff --check`
+
+Follow-up:
+
+- `luaJIT_setmode()` FUNC/ALLFUNC/ALLSUBFUNC modes now acquire the JIT token,
+  claim the target state while resolving the function/prototype slot and
+  mutating prototype JIT flags, drop the claim, and only then publish the trace
+  flush boundary.

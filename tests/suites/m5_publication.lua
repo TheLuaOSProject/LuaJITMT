@@ -2166,6 +2166,46 @@ END {
   utils.capture_command("cd " .. shell_quote(t.root) ..
                         " && awk " .. shell_quote(mode_guard) ..
                         " src/lj_dispatch.c")
+  local func_guard = [=[
+BEGIN {
+  infn = 0; inmode = 0; token = 0; claim = 0; slot = 0
+  mutate = 0; drop = 0; flush = 0; release = 0
+}
+/^int luaJIT_setmode\(lua_State \*L, int idx, int mode\)/ {
+  infn = 1
+  next
+}
+infn && /case LUAJIT_MODE_FUNC:/ { inmode = 1 }
+infn && inmode && /lj_jit_token_acquire_wait\(G2J\(g\)\)/ { token = NR }
+infn && inmode && /setmode_checkclaim\(L, &claim\)/ { claim = NR }
+infn && inmode && /setmode_stack_slot\(L, idx\)/ { slot = NR }
+infn && inmode && /setptmode\(g, pt, mode\)/ { mutate = NR }
+infn && inmode && /lj_state_dropclaim\(&claim\)/ {
+  if (mutate && !drop) drop = NR
+}
+infn && inmode && /lj_trace_flushscope_hs\(g, flushed\)/ { flush = NR }
+infn && inmode && /lj_jit_token_release\(G2J\(g\)\)/ {
+  if (drop && !release) release = NR
+}
+infn && inmode && /case LUAJIT_MODE_TRACE:/ {
+  if (!token || !claim || !slot || !mutate || !drop || !flush || !release ||
+      token > claim || claim > slot || slot > mutate || mutate > drop ||
+      drop > flush || flush > release) {
+    print "FUNC setmode must claim stack/prototype mutation before trace flush"
+    exit 1
+  }
+  inmode = 0
+}
+END {
+  if (inmode || !release) {
+    print "FUNC setmode guard did not find full claimed path"
+    exit 1
+  }
+}
+]=]
+  utils.capture_command("cd " .. shell_quote(t.root) ..
+                        " && awk " .. shell_quote(func_guard) ..
+                        " src/lj_dispatch.c")
 end
 
 local function gc_total_atomic_smoke()
