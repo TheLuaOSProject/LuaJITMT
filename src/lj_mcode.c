@@ -132,7 +132,7 @@ void lj_mcode_sync_core(jit_State *J)
 /* Protection twiddling failed. Probably due to kernel security. */
 static LJ_NORET LJ_NOINLINE void mcode_protfail(jit_State *J)
 {
-  lua_CFunction panic = J2G(J)->panic;
+  lua_CFunction panic = panicf_load(J2G(J));
   if (panic) {
     lua_State *L = J->L;
     setstrV(L, L->top++, lj_err_str(L, LJ_ERR_JITPROT));

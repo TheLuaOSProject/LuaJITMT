@@ -1885,6 +1885,22 @@ static LJ_AINLINE void hookf_store(global_State *g, lua_Hook hookf)
   la_storefunc_rel(&g->hookf, hookf);  /* 03 section 3.6 global hooks. */
 }
 
+static LJ_AINLINE lua_CFunction panicf_load(global_State *g)
+{
+  return la_loadfunc_acq(&g->panic);  /* Universe-global panic callback. */
+}
+
+static LJ_AINLINE void panicf_store(global_State *g, lua_CFunction panicf)
+{
+  la_storefunc_rel(&g->panic, panicf);  /* Universe-global panic callback. */
+}
+
+static LJ_AINLINE lua_CFunction panicf_xchg(global_State *g,
+					    lua_CFunction panicf)
+{
+  return la_xchgfunc_acqrel(&g->panic, panicf);  /* lua_atpanic(). */
+}
+
 static LJ_AINLINE int32_t hookcount_load(global_State *g)
 {
   /* 03 section 3.6 global hooks. */

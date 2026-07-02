@@ -363,7 +363,7 @@ LUALIB_API lua_State *luaL_newstate(void)
 {
   lua_State *L = lua_newstate(mem_alloc, NULL);
   if (L) {
-    G(L)->panic = panic;
+    panicf_store(G(L), panic);
 #ifndef LUAJIT_DISABLE_VMEVENT
     luaL_findtable(L, LUA_REGISTRYINDEX, LJ_VMEVENTS_REGKEY, LJ_VMEVENTS_HSIZE);
     lua_pushcfunction(L, error_finalizer);
@@ -386,7 +386,7 @@ LUALIB_API lua_State *luaL_newstate(void)
   L = lua_newstate(LJ_ALLOCF_INTERNAL, NULL);
 #endif
   if (L) {
-    G(L)->panic = panic;
+    panicf_store(G(L), panic);
 #ifndef LUAJIT_DISABLE_VMEVENT
     luaL_findtable(L, LUA_REGISTRYINDEX, LJ_VMEVENTS_REGKEY, LJ_VMEVENTS_HSIZE);
     lua_pushcfunction(L, error_finalizer);

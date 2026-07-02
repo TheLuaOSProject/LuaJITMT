@@ -2029,6 +2029,69 @@ print("hook-state-atomic-smoke OK")
 ]=]
 end
 
+local function assert_panic_callback_atomic_accessors(t)
+  local obj_guard = [=[
+BEGIN {
+  load = 0; store = 0; xchg = 0
+  loadimpl = 0; storeimpl = 0; xchgimpl = 0
+}
+/panicf_load\(global_State \*g\)/ { load = 1 }
+/panicf_store\(global_State \*g, lua_CFunction panicf\)/ { store = 1 }
+/panicf_xchg\(global_State \*g,/ { xchg = 1 }
+/la_loadfunc_acq\(&g->panic\)/ { loadimpl = 1 }
+/la_storefunc_rel\(&g->panic, panicf\)/ { storeimpl = 1 }
+/la_xchgfunc_acqrel\(&g->panic, panicf\)/ { xchgimpl = 1 }
+END {
+  if (!load || !store || !xchg || !loadimpl || !storeimpl || !xchgimpl) {
+    print "panic callback atomic accessor definitions missing"
+    exit 1
+  }
+}
+]=]
+  local raw_guard = [=[
+{
+  if ($0 !~ /la_loadfunc_acq\(&g->panic\)/ &&
+      $0 !~ /la_storefunc_rel\(&g->panic, panicf\)/ &&
+      $0 !~ /la_xchgfunc_acqrel\(&g->panic, panicf\)/) {
+    print "raw panic callback access: " $0
+    bad = 1
+  }
+}
+END { exit bad }
+]=]
+  local atpanic_guard = [=[
+BEGIN { infn = 0; xchg = 0 }
+/^LUA_API lua_CFunction lua_atpanic\(lua_State \*L, lua_CFunction panicf\)/ {
+  infn = 1
+  next
+}
+infn && /panicf_xchg\(G\(L\), panicf\)/ { xchg = 1 }
+infn && /^}/ {
+  if (!xchg) {
+    print "lua_atpanic must atomically exchange panic callback"
+    exit 1
+  }
+  infn = 0
+}
+END {
+  if (!xchg) {
+    print "lua_atpanic guard did not find atomic exchange"
+    exit 1
+  }
+}
+]=]
+  utils.capture_command("cd " .. shell_quote(t.root) ..
+                        " && awk " .. shell_quote(obj_guard) ..
+                        " src/lj_obj.h")
+  utils.capture_command("cd " .. shell_quote(t.root) ..
+                        " && rg -n -- " .. shell_quote("->panic") ..
+                        " src/*.c src/*.h | awk " ..
+                        shell_quote(raw_guard))
+  utils.capture_command("cd " .. shell_quote(t.root) ..
+                        " && awk " .. shell_quote(atpanic_guard) ..
+                        " src/lj_err.c")
+end
+
 local function gc_total_atomic_smoke()
   return [=[
 local th = require"threading"
@@ -2313,6 +2376,18 @@ return function(add)
       t:build({ quiet = true })
       run_luajit(t, { "-e", hook_state_atomic_smoke() })
       print("M5 hook function/count atomic helper behavior passed")
+    end
+  })
+
+  add({
+    name = "m5_panic_callback_atomic",
+    description = "global panic callback atomic exchange behavior",
+    run = function(t)
+      assert_panic_callback_atomic_accessors(t)
+      t:build({ quiet = true })
+      build_and_run_c(t, t:tmp("lj_t-panic-callback-atomic"),
+                      "t-panic-callback-atomic.c", { timeout = "20s" })
+      print("M5 panic callback atomic exchange behavior passed")
     end
   })
 

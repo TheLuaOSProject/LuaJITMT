@@ -252,11 +252,13 @@ static void *err_unwind(lua_State *L, void *stopcf, int errcode)
   }
   /* No C frame. */
   if (errcode) {
+    lua_CFunction panic;
     L->base = tvref(L->stack)+1+LJ_FR2;
     L->cframe = NULL;
     unwindstack(L, L->base);
-    if (G(L)->panic)
-      G(L)->panic(L);
+    panic = panicf_load(G(L));
+    if (panic)
+      panic(L);
     exit(EXIT_FAILURE);
   }
   return L;  /* Anything non-NULL will do. */
@@ -903,8 +905,11 @@ LJ_NOINLINE void LJ_FASTCALL lj_err_throw(lua_State *L, int errcode)
   ** This may happen if you've manually enabled LUAJIT_UNWIND_EXTERNAL
   ** and forgot to recompile *every* non-C++ file with -funwind-tables.
   */
-  if (G(L)->panic)
-    G(L)->panic(L);
+  {
+    lua_CFunction panic = panicf_load(g);
+    if (panic)
+      panic(L);
+  }
 #else
 #if LJ_HASJIT
   lj_tg_setjit_base(g, NULL);
@@ -1246,9 +1251,7 @@ LJ_NOINLINE void lj_err_argt(lua_State *L, int narg, int tt)
 
 LUA_API lua_CFunction lua_atpanic(lua_State *L, lua_CFunction panicf)
 {
-  lua_CFunction old = G(L)->panic;
-  G(L)->panic = panicf;
-  return old;
+  return panicf_xchg(G(L), panicf);
 }
 
 /* Forwarders for the public API (C calling convention and no LJ_NORET). */

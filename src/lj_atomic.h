@@ -107,6 +107,7 @@ LA_INLINE uint64_t la_and64_rlx(uint64_t *p,uint64_t v){return __atomic_fetch_an
 LA_INLINE uint32_t la_xchg32_acqrel(uint32_t *p,uint32_t v){return __atomic_exchange_n(p,v,__ATOMIC_ACQ_REL);}
 LA_INLINE uint64_t la_xchg64_acqrel(uint64_t *p,uint64_t v){return __atomic_exchange_n(p,v,__ATOMIC_ACQ_REL);}
 LA_INLINE void    *la_xchgptr_acqrel(void **p,void *v){return __atomic_exchange_n(p,v,__ATOMIC_ACQ_REL);}
+#define la_xchgfunc_acqrel(p,v) __atomic_exchange_n((p),(v),__ATOMIC_ACQ_REL)
 
 /* Test-and-set one bit in a 64-bit word; returns previous bit value.
 ** The mark-bitmap primitive (05 §5.6.1): relaxed is sufficient because

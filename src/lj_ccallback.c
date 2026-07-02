@@ -1147,8 +1147,10 @@ lua_State * LJ_FASTCALL lj_ccallback_enter(CTState *cts, void *cf,
 		  L == NULL || lj_tg_load_cur_L(tg) != L || L2TG(L) != tg))
     abort();
   if (lj_tg_jit_base(g)) {
+    lua_CFunction panic;
     setstrV(L, L->top++, lj_err_str(L, LJ_ERR_FFI_BADCBACK));
-    if (g->panic) g->panic(L);
+    panic = panicf_load(g);
+    if (panic) panic(L);
     exit(EXIT_FAILURE);
   }
   lj_trace_abort(g);  /* Never record across callback. */
