@@ -14,6 +14,8 @@ The script builds a clean release artifact, stages an install-style tree,
 runs release smoke/archive checks unless LJ_RELEASE_RUN_TESTS=0, and writes
 the archive plus per-artifact checksum into out-dir. Set
 LJ_RELEASE_RUN_STOCK=1 to include the full stock LuaJIT test suite.
+Cross-target release checks need a host LuaJIT harness runner; set
+LJ_RELEASE_HOST_LUA or LUA when host luajit is not in PATH.
 USAGE
   exit 2
 }
@@ -51,6 +53,7 @@ commit=$(git -C "$root" rev-parse HEAD)
 stage_parent=${LJ_RELEASE_STAGE_PARENT:-$(mktemp -d)}
 keep_stage=${LJ_RELEASE_KEEP_STAGE:-0}
 run_tests=${LJ_RELEASE_RUN_TESTS:-1}
+release_host_lua_bin=
 
 case "$platform" in
   linux-x86_64|macos-x86_64|windows-x86_64-ucrt) ;;
@@ -130,6 +133,27 @@ checksum() {
   fi
 }
 
+release_host_lua() {
+  if [ -n "$release_host_lua_bin" ]; then return; fi
+  if [ -n "${LJ_RELEASE_HOST_LUA:-}" ]; then
+    release_host_lua_bin=$LJ_RELEASE_HOST_LUA
+  elif [ -n "${LUA:-}" ]; then
+    release_host_lua_bin=$LUA
+  elif command -v luajit >/dev/null 2>&1; then
+    release_host_lua_bin=$(command -v luajit)
+  elif [ "$platform" = "linux-x86_64" ] && [ -x "$root/src/luajit" ]; then
+    release_host_lua_bin="$root/src/luajit"
+  else
+    printf 'release tests need a host LuaJIT runner; set LJ_RELEASE_HOST_LUA or LUA\n' >&2
+    exit 1
+  fi
+}
+
+lua_test_release() {
+  release_host_lua
+  LUA="$release_host_lua_bin" "$test_root/tools/ci/lua_test.sh" "$@"
+}
+
 run_release_test() {
   if [ "$run_tests" = "0" ]; then return; fi
   case "$platform" in
@@ -137,20 +161,20 @@ run_release_test() {
       LJ_RELEASE_PREFIX="$prefix" \
       LJ_RELEASE_REQUIRE=linux \
       LJ_RELEASE_LINUX_BIN="${stage}${prefix}/bin/luajit" \
-        "$test_root/tools/ci/lua_test.sh" release_linux_binary
+        lua_test_release release_linux_binary
       ;;
     macos-x86_64)
       LJ_RELEASE_PREFIX="$prefix" \
       LJ_RELEASE_REQUIRE=macos \
       LJ_RELEASE_MACOS_BIN="${stage}${prefix}/bin/luajit" \
-        "$test_root/tools/ci/lua_test.sh" release_macos_binary
+        lua_test_release release_macos_binary
       ;;
     windows-x86_64-ucrt)
       LJ_RELEASE_PREFIX="$prefix" \
       LJ_RELEASE_REQUIRE=windows \
       LJ_RELEASE_WINDOWS_BIN="${stage}${prefix}/bin/luajit.exe" \
       LJ_RELEASE_WINDOWS_RUNNER="${LJ_RELEASE_WINDOWS_RUNNER:-wine}" \
-        "$test_root/tools/ci/lua_test.sh" release_windows_binary
+        lua_test_release release_windows_binary
       ;;
   esac
 }
@@ -163,21 +187,21 @@ run_release_archive_test() {
       LJ_RELEASE_PREFIX="$prefix" \
       LJ_RELEASE_REQUIRE=linux \
       LJ_RELEASE_LINUX_ARCHIVE="$archive" \
-        "$test_root/tools/ci/lua_test.sh" release_linux_archive
+        lua_test_release release_linux_archive
       ;;
     macos-x86_64)
       LJ_RELEASE_PREFIX="$prefix" \
       LJ_RELEASE_REQUIRE=macos \
       LJ_RELEASE_MACOS_ARCHIVE="$archive" \
       LJ_RELEASE_MACOS_RUNNER="${LJ_RELEASE_MACOS_RUNNER:-}" \
-        "$test_root/tools/ci/lua_test.sh" release_macos_archive
+        lua_test_release release_macos_archive
       ;;
     windows-x86_64-ucrt)
       LJ_RELEASE_PREFIX="$prefix" \
       LJ_RELEASE_REQUIRE=windows \
       LJ_RELEASE_WINDOWS_ARCHIVE="$archive" \
       LJ_RELEASE_WINDOWS_RUNNER="${LJ_RELEASE_WINDOWS_RUNNER:-wine}" \
-        "$test_root/tools/ci/lua_test.sh" release_windows_archive
+        lua_test_release release_windows_archive
       ;;
   esac
 }

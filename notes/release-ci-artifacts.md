@@ -35,6 +35,10 @@
   `LJ_M0_PLATFORM_REQUIRE` is set; rolling-release jobs use the release suite.
 - CI and release jobs install/use stock `luajit` for the Lua test harness. The
   local host currently has `/usr/bin/luajit` from the Debian package.
+- Local cross-target release packaging now pins the release Lua test harness to
+  a host LuaJIT via `LJ_RELEASE_HOST_LUA`, `LUA`, or `command -v luajit`.
+  This avoids executing the freshly built Darwin/Windows target binary as the
+  test runner after `src/luajit` has been replaced by a foreign executable.
 - Local verification:
   - `bash -n tools/release/build_artifact.sh tools/ci/platform_build.sh`;
   - `bash -n tools/release/release_notes.sh tools/release/verify_artifacts.sh`;
