@@ -127,7 +127,7 @@ local threading_thread = {}
 ---@overload fun(self: threading.thread, timeout: number): nil, threading.timeout_error
 ---@param timeout? number seconds to wait; omit to block indefinitely.
 ---@return threading.join_status ok true for child success, false for child error, nil on timeout.
----@return ... child results, an error object, or the timeout reason.
+---@return any ... child results, an error object, or the timeout reason.
 function threading_thread:join(timeout) end
 
 ---@return integer id
@@ -143,13 +143,12 @@ function threading_thread:running() end
 function threading_thread:__tostring() end
 
 ---@class threading.mutex: userdata
----@field lock fun(self: threading.mutex): nil
+---@field lock fun(self: threading.mutex)
 ---@field trylock fun(self: threading.mutex): boolean
----@field unlock fun(self: threading.mutex): nil
+---@field unlock fun(self: threading.mutex)
 local threading_mutex = {}
 
 ---Block until the mutex is acquired.
----@return nil
 function threading_mutex:lock() end
 
 ---@return boolean locked
@@ -159,7 +158,6 @@ function threading_mutex:trylock() end
 ---Release the mutex.
 ---
 ---Errors if the mutex is not currently locked.
----@return nil
 function threading_mutex:unlock() end
 
 ---@return "threading.mutex"
@@ -171,7 +169,7 @@ function threading_mutex:__tostring() end
 ---@field send fun(self: threading.channel<T>, value: T, timeout?: number): threading.send_result, threading.timeout_error?
 ---@field recv fun(self: threading.channel<T>, timeout?: number): T|nil, threading.recv_status
 ---@field peek fun(self: threading.channel<T>): T|nil, threading.peek_status
----@field close fun(self: threading.channel<T>): nil
+---@field close fun(self: threading.channel<T>)
 local threading_channel = {}
 
 ---Send a value to the channel.
@@ -218,7 +216,6 @@ function threading_channel:recv(timeout) end
 function threading_channel:peek() end
 
 ---Close the channel.
----@return nil
 function threading_channel:close() end
 
 ---@return "threading.channel"
@@ -238,13 +235,11 @@ function threading.cpucount() end
 function threading.now() end
 
 ---Issue a cross-thread memory fence.
----@return nil
 function threading.fence() end
 
----@overload fun(): nil
----@overload fun(seconds: number): nil
+---@overload fun()
+---@overload fun(seconds: number)
 ---@param seconds? number seconds to sleep; omit to sleep for 0 seconds.
----@return nil
 function threading.sleep(seconds) end
 
 ---Return GC2/lockless runtime telemetry used by tests and benchmarks.
@@ -286,9 +281,9 @@ function threading.mutex() end
 ---
 ---Capacity 0 creates a rendezvous channel. Buffered channels have at least the
 ---requested capacity.
----@overload fun(): threading.channel
----@overload fun(capacity: integer): threading.channel
 ---@generic T
+---@overload fun(): threading.channel<T>
+---@overload fun(capacity: integer): threading.channel<T>
 ---@param capacity? integer buffered slot count; omit or pass 0 for rendezvous.
 ---@return threading.channel<T> channel
 function threading.channel(capacity) end
