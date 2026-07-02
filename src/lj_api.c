@@ -1310,11 +1310,22 @@ LUA_API int lua_pushthread(lua_State *L)
 
 LUA_API lua_State *lua_newthread(lua_State *L)
 {
+  LJStateClaim preclaim, claim;
+  lua_State *errL;
+  GCtab *env;
   lua_State *L1;
-  lj_gc_check(L);
-  L1 = lj_state_new(L);
+  api_checkclaim(L, &preclaim);
+  env = getcurrenv(L);
+  lj_state_dropclaim(&preclaim);
+  errL = api_errstate(L);
+  L1 = lj_state_new_withenv(errL, env);
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(errL, "thread busy");
+  api_checkstack1_claimed(L, errL, &claim);
   setthreadV(L, L->top, L1);
-  incr_top(L);
+  lj_state_stack_pubtv(L, L, L->top);
+  L->top++;
+  lj_state_dropresumeclaim(&claim);
   return L1;
 }
 

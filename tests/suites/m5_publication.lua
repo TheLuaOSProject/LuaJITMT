@@ -147,6 +147,7 @@ BEGIN { fun = ""; seen = 0; claim_kind = "" }
 /^LUA_API void lua_pushlightuserdata\(lua_State \*L,/ { finish(); reset("lua_pushlightuserdata", 1, 1, "tv"); next }
 /^LUA_API void lua_createtable\(lua_State \*L,/ { finish(); reset("lua_createtable", 1, 1, "tv"); next }
 /^LUA_API void \*lua_newuserdata\(lua_State \*L,/ { finish(); reset("lua_newuserdata", 1, 1, "tv"); next }
+/^LUA_API lua_State \*lua_newthread\(lua_State \*L\)/ { finish(); reset("lua_newthread", 1, 1, "tv"); next }
 fun {
   if (index($0, "{")) started = 1
   depth += count_char($0, "{")
@@ -164,8 +165,47 @@ fun {
 }
 END {
   finish()
-  if (seen != 18) {
+  if (seen != 19) {
     print "missing public stack API owner-claim guard coverage"
+    exit 1
+  }
+}
+]=], "src/lj_api.c")
+
+  awk([=[
+function count_char(text, ch,    n, i) {
+  n = 0
+  for (i = 1; i <= length(text); i++)
+    if (substr(text, i, 1) == ch) n++
+  return n
+}
+BEGIN {
+  infn = 0; started = 0; depth = 0
+  pre = 0; env = 0; pre_drop = 0; alloc = 0; claim = 0; grow = 0
+  store = 0; publish = 0; drop = 0
+}
+/^LUA_API lua_State \*lua_newthread\(lua_State \*L\)/ { infn = 1; next }
+infn {
+  if (index($0, "{")) started = 1
+  depth += count_char($0, "{")
+  depth -= count_char($0, "}")
+  if (/api_checkclaim\(L, &preclaim\)/) pre = NR
+  if (/getcurrenv/) env = NR
+  if (/lj_state_dropclaim\(&preclaim\)/) pre_drop = NR
+  if (/lj_state_new_withenv/) alloc = NR
+  if (/lj_state_resumeclaim/) claim = NR
+  if (/api_checkstack1_claimed/) grow = NR
+  if (/setthreadV/) store = NR
+  if (/lj_state_stack_pubtv/) publish = NR
+  if (/lj_state_dropresumeclaim/) drop = NR
+  if (started && depth == 0) infn = 0
+}
+END {
+  if (!pre || !env || !pre_drop || !alloc || !claim || !grow || !store ||
+      !publish || !drop || pre > env || env > pre_drop || pre_drop > alloc ||
+      alloc > claim || claim > grow || grow > store || store > publish ||
+      publish > drop) {
+    print "lua_newthread must snapshot env and allocate before claimed publication"
     exit 1
   }
 }

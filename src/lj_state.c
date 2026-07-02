@@ -638,7 +638,7 @@ LUA_API void lua_close(lua_State *L)
   close_state(L);
 }
 
-lua_State *lj_state_new(lua_State *L)
+lua_State *lj_state_new_withenv(lua_State *L, GCtab *env)
 {
   global_State *g = G(L);
   lua_State *L1 = (lua_State *)lj_mem_newgco_unlinked(L, sizeof(lua_State));
@@ -657,17 +657,19 @@ lua_State *lj_state_new(lua_State *L)
   lj_state_openupval_clear_rel(L1);
   lj_state_mt_thread_clear_rel(L1);
   setmrefr(L1->glref, L->glref);
-  lj_state_env_copy_rel(L1, L);
+  lj_state_env_rel(L1, env);
   newwhite(g, obj2gco(L1));
   stack_init(L1, L);  /* init stack */
   lj_gc_linkobj_new_after_main(g, obj2gco(L1));
-  {
-    GCtab *env = lj_state_env_acq(L1);
-    if (env)
-      lj_gc_pubobjobj(L, L1, env);
-  }
+  if (env)
+    lj_gc_pubobjobj(L, L1, env);
   lj_assertL(iswhite(obj2gco(L1)), "new thread object is not white");
   return L1;
+}
+
+lua_State *lj_state_new(lua_State *L)
+{
+  return lj_state_new_withenv(L, lj_state_env_acq(L));
 }
 
 void LJ_FASTCALL lj_state_free(global_State *g, lua_State *L)

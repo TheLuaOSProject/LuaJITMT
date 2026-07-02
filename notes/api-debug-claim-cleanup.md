@@ -35,14 +35,15 @@ Permanent shape:
   `lua_checkstack`, `lua_settop`, `lua_remove`, `lua_insert`, `lua_pushvalue`,
   `lua_replace`, `lua_copy`, `lua_pushnil`, `lua_pushnumber`,
   `lua_pushinteger`, `lua_pushboolean`, `lua_pushthread`, `lua_pushlstring`,
-  `lua_pushstring`, `lua_pushlightuserdata`, `lua_createtable`, and
-  `lua_newuserdata`) acquire state claims before stack access. Stack-growth
-  paths use resume claims and protected growth; stack mutation paths
-  release-publish adjusted slots before dropping ownerless claims. Non-null
-  string pushes, x64 lightuserdata pushes, table creation, and userdata
-  creation precheck ownership, drop the preclaim for interning or allocation,
-  then resume-claim to publish the stack slot. `lua_newuserdata()` snapshots the
-  target current environment before dropping the preclaim.
+  `lua_pushstring`, `lua_pushlightuserdata`, `lua_createtable`,
+  `lua_newuserdata`, and `lua_newthread`) acquire state claims before stack
+  access. Stack-growth paths use resume claims and protected growth; stack
+  mutation paths release-publish adjusted slots before dropping ownerless
+  claims. Non-null string pushes, x64 lightuserdata pushes, table creation, and
+  userdata creation precheck ownership, drop the preclaim for interning or
+  allocation, then resume-claim to publish the stack slot. `lua_newuserdata()`
+  and `lua_newthread()` snapshot the target current environment before dropping
+  the preclaim.
 - Public read-only stack getter/conversion APIs (`lua_type`,
   `lua_iscfunction`, `lua_isnumber`, `lua_isstring`, `lua_isuserdata`,
   `lua_rawequal`, `lua_tonumber`, `lua_tonumberx`, `lua_tointeger`,
