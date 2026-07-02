@@ -142,6 +142,8 @@ BEGIN { fun = ""; seen = 0; claim_kind = "" }
 /^LUA_API void lua_pushinteger\(lua_State \*L,/ { finish(); reset("lua_pushinteger", 1, 1, "tv"); next }
 /^LUA_API void lua_pushboolean\(lua_State \*L,/ { finish(); reset("lua_pushboolean", 1, 1, "tv"); next }
 /^LUA_API int lua_pushthread\(lua_State \*L\)/ { finish(); reset("lua_pushthread", 1, 1, "tv"); next }
+/^LUA_API void lua_pushlstring\(lua_State \*L,/ { finish(); reset("lua_pushlstring", 1, 1, "tv"); next }
+/^LUA_API void lua_pushstring\(lua_State \*L,/ { finish(); reset("lua_pushstring", 1, 1, "tv"); next }
 fun {
   if (index($0, "{")) started = 1
   depth += count_char($0, "{")
@@ -159,8 +161,57 @@ fun {
 }
 END {
   finish()
-  if (seen != 13) {
+  if (seen != 15) {
     print "missing public stack API owner-claim guard coverage"
+    exit 1
+  }
+}
+]=], "src/lj_api.c")
+
+  awk([=[
+function reset(name, ctor) {
+  fun = name; want_ctor = ctor
+  started = 0; depth = 0; pre = 0; pre_drop = 0; ctorline = 0
+  claim = 0; grow = 0; publish = 0; drop = 0
+}
+function finish() {
+  if (fun) {
+    if (!pre || !pre_drop || !ctorline || !claim || !grow || !publish ||
+	!drop || pre > pre_drop || pre_drop > ctorline ||
+	ctorline > claim || claim > grow || grow > publish || publish > drop) {
+      print fun " must allocate string before claimed stack publication"
+      exit 1
+    }
+    seen++
+  }
+  fun = ""
+}
+function count_char(text, ch,    n, i) {
+  n = 0
+  for (i = 1; i <= length(text); i++)
+    if (substr(text, i, 1) == ch) n++
+  return n
+}
+BEGIN { fun = ""; seen = 0 }
+/^LUA_API void lua_pushlstring\(lua_State \*L,/ { finish(); reset("lua_pushlstring", "lj_str_new\\("); next }
+/^LUA_API void lua_pushstring\(lua_State \*L,/ { finish(); reset("lua_pushstring", "lj_str_newz"); next }
+fun {
+  if (index($0, "{")) started = 1
+  depth += count_char($0, "{")
+  depth -= count_char($0, "}")
+  if (/api_checkclaim\(L, &preclaim\)/) pre = NR
+  if (/lj_state_dropclaim\(&preclaim\)/) pre_drop = NR
+  if ($0 ~ want_ctor) ctorline = NR
+  if (/lj_state_resumeclaim/) claim = NR
+  if (/api_checkstack1_claimed/) grow = NR
+  if (/lj_state_stack_pubtv/) publish = NR
+  if (/lj_state_dropresumeclaim/) drop = NR
+  if (started && depth == 0) finish()
+}
+END {
+  finish()
+  if (seen != 2) {
+    print "missing public string push allocation guard coverage"
     exit 1
   }
 }

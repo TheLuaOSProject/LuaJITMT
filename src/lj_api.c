@@ -1129,24 +1129,45 @@ LUA_API void lua_pushinteger(lua_State *L, lua_Integer n)
 
 LUA_API void lua_pushlstring(lua_State *L, const char *str, size_t len)
 {
+  LJStateClaim preclaim, claim;
+  lua_State *errL;
   GCstr *s;
-  lj_gc_check(L);
-  s = lj_str_new(L, str, len);
+  api_checkclaim(L, &preclaim);
+  lj_state_dropclaim(&preclaim);
+  errL = api_errstate(L);
+  s = lj_str_new(errL, str, len);
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(errL, "thread busy");
+  api_checkstack1_claimed(L, errL, &claim);
   setstrV(L, L->top, s);
-  incr_top(L);
+  lj_state_stack_pubtv(L, L, L->top);
+  L->top++;
+  lj_state_dropresumeclaim(&claim);
 }
 
 LUA_API void lua_pushstring(lua_State *L, const char *str)
 {
+  LJStateClaim preclaim, claim;
+  lua_State *errL;
+  GCstr *s = NULL;
   if (str == NULL) {
-    setnilV(L->top);
+    errL = api_errstate(L);
   } else {
-    GCstr *s;
-    lj_gc_check(L);
-    s = lj_str_newz(L, str);
-    setstrV(L, L->top, s);
+    api_checkclaim(L, &preclaim);
+    lj_state_dropclaim(&preclaim);
+    errL = api_errstate(L);
+    s = lj_str_newz(errL, str);
   }
-  incr_top(L);
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
+    lj_err_callermsg(errL, "thread busy");
+  api_checkstack1_claimed(L, errL, &claim);
+  if (str == NULL)
+    setnilV(L->top);
+  else
+    setstrV(L, L->top, s);
+  lj_state_stack_pubtv(L, L, L->top);
+  L->top++;
+  lj_state_dropresumeclaim(&claim);
 }
 
 LUA_API const char *lua_pushvfstring(lua_State *L, const char *fmt,

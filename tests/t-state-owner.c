@@ -113,6 +113,15 @@ static void check_stack_api_unowned(lua_State *L)
   assert(lua_gettop(co) == 7 && lua_toboolean(co, 7));
   assert(lua_pushthread(co) == 0);
   assert(lua_gettop(co) == 8 && lua_tothread(co, 8) == co);
+  lua_pushlstring(co, "hi\0x", 4);
+  assert(lua_gettop(co) == 9);
+  assert(lua_objlen(co, 9) == 4);
+  assert(memcmp(lua_tolstring(co, 9, NULL), "hi\0x", 4) == 0);
+  lua_pushstring(co, "ownerless");
+  assert(lua_gettop(co) == 10);
+  assert(strcmp(lua_tostring(co, 10), "ownerless") == 0);
+  lua_pushstring(co, NULL);
+  assert(lua_gettop(co) == 11 && lua_isnil(co, 11));
   lua_settop(co, 3);
   lua_settop(co, 5);
   assert(lua_gettop(co) == 5);
@@ -662,6 +671,30 @@ static int busy_lua_pushthread(lua_State *L)
   lua_State *co = lua_newthread(L);
   busy_stack_prepare(L, co);
   (void)lua_pushthread(co);
+  return 0;
+}
+
+static int busy_lua_pushlstring(lua_State *L)
+{
+  lua_State *co = lua_newthread(L);
+  busy_stack_prepare(L, co);
+  lua_pushlstring(co, "busy", 4);
+  return 0;
+}
+
+static int busy_lua_pushstring(lua_State *L)
+{
+  lua_State *co = lua_newthread(L);
+  busy_stack_prepare(L, co);
+  lua_pushstring(co, "busy");
+  return 0;
+}
+
+static int busy_lua_pushstring_null(lua_State *L)
+{
+  lua_State *co = lua_newthread(L);
+  busy_stack_prepare(L, co);
+  lua_pushstring(co, NULL);
   return 0;
 }
 
@@ -1294,6 +1327,9 @@ int main(void)
   expect_thread_busy(L, busy_lua_pushinteger, "busy lua_pushinteger");
   expect_thread_busy(L, busy_lua_pushboolean, "busy lua_pushboolean");
   expect_thread_busy(L, busy_lua_pushthread, "busy lua_pushthread");
+  expect_thread_busy(L, busy_lua_pushlstring, "busy lua_pushlstring");
+  expect_thread_busy(L, busy_lua_pushstring, "busy lua_pushstring");
+  expect_thread_busy(L, busy_lua_pushstring_null, "busy lua_pushstring NULL");
   expect_thread_busy(L, busy_lua_type, "busy lua_type");
   expect_thread_busy(L, busy_lua_isnumber, "busy lua_isnumber");
   expect_thread_busy(L, busy_lua_isstring, "busy lua_isstring");
