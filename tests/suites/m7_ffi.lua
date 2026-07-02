@@ -81,6 +81,56 @@ local function assert_recorded_ffi_calls_gate_fails(t)
     "build output")
 end
 
+local function assert_finreg_claim_cleanup_boundaries(t)
+  local awk_cdata = [=[
+BEGIN { instore = 0; sawbarrier = 0; saworder = 0 }
+/^static void cdata_fin_store\(lua_State \*L/ { instore = 1; next }
+instore && /^}/ { instore = 0; next }
+instore && /cdata_fin_weak_key_barrier_claimed/ { sawbarrier = NR }
+instore && /lj_ctype_fin_order_publish/ {
+  saworder = NR
+  if (!sawbarrier || sawbarrier > NR) {
+    print "cdata FINREG publishes order before protected weak-key barrier"
+    exit 1
+  }
+}
+END {
+  if (!sawbarrier || !saworder) {
+    print "cdata FINREG store missing protected barrier/order boundary"
+    exit 1
+  }
+}
+]=]
+  local awk_gc2 = [=[
+BEGIN { infn = 0; prepare = 0; claim = 0 }
+/^size_t lj_gc2_finreg_cdata_finalize_pweak\(lua_State \*L, global_State \*g,/ {
+  infn = 1
+  next
+}
+infn && /^}/ { infn = 0; next }
+infn && /gc2_finclaim_prepare/ { prepare = NR }
+infn && /lj_cdata_fin_claim_func_l/ {
+  claim = NR
+  if (!prepare || prepare > NR) {
+    print "GC2 FINREG claims slot before preparing preclaim storage"
+    exit 1
+  }
+}
+END {
+  if (!prepare || !claim) {
+    print "GC2 FINREG missing preclaim prepare/claim boundary"
+    exit 1
+  }
+}
+]=]
+  utils.capture_command("cd " .. shell_quote(t.root) ..
+                        " && awk " .. shell_quote(awk_cdata) ..
+                        " src/lj_cdata.c")
+  utils.capture_command("cd " .. shell_quote(t.root) ..
+                        " && awk " .. shell_quote(awk_gc2) ..
+                        " src/lj_gc2.c")
+end
+
 local function build_clib_ldscript_fixture(t)
   local script = t:tmp("lj_t-ffi-clib-ldscript.so")
   local so = build_shared_library(t, t:tmp("lj_t-ffi-clib-ldscript-real.so"),
@@ -511,6 +561,7 @@ assert(cl.lj_clib_ldscript_value() == 42)
     description = "FFI cdata finalizer registry behavior",
     run = function(t)
       clean_build(t)
+      assert_finreg_claim_cleanup_boundaries(t)
       run_luajit_script(t, "t-ffi-gc-finreg.lua", {
         getenv("LJ_M7_FFI_FIN_THREADS", "6"),
         getenv("LJ_M7_FFI_FIN_ITERS", "240")

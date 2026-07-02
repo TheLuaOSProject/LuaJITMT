@@ -3570,6 +3570,11 @@ static int gc2_finclaim_ensure(global_State *g)
   return 1;  /* Fixed preclaim vector: no active-GC migration/free. */
 }
 
+static int gc2_finclaim_prepare(global_State *g)
+{
+  return gc2_finreg_cdata_preclaim_ready(g) || gc2_finclaim_ensure(g);
+}
+
 static void gc2_finclaim_reset(global_State *g)
 {
   lua_State *L;
@@ -4276,6 +4281,7 @@ size_t lj_gc2_finreg_cdata_finalize_pweak(lua_State *L, global_State *g,
     TValue *slot = fin_order_slot_acq(ord);
     TValue fin;
     GCobj *o;
+    int preclaim_ready;
     if (fin_order_active_acq(ord) != 1) {
       ord = next;
       continue;
@@ -4317,6 +4323,7 @@ size_t lj_gc2_finreg_cdata_finalize_pweak(lua_State *L, global_State *g,
       ord = next;
       continue;
     }
+    preclaim_ready = gc2_finclaim_prepare(g);
     if (!lj_cdata_fin_claim_func_l(L, slot, &fin)) {
       gc2_finreg_cdata_order_tombstones_add(g, 1);
       (void)lj_ctype_fin_order_retire(cts, prev, ord, next);
@@ -4330,7 +4337,11 @@ size_t lj_gc2_finreg_cdata_finalize_pweak(lua_State *L, global_State *g,
     */
     if (gc2_finreg_cdata_unlink_root(g, o))
       gc2_finreg_cdata_order_unlinked_add(g, 1);
-    if (!lj_gc2_finreg_cdata_preclaim(L, g, o, &fin)) {
+    if (!preclaim_ready) {
+      gc2_finreg_cdata_preclaim_overflow_add(g, 1);
+    }
+    if (!preclaim_ready ||
+	!lj_gc2_finreg_cdata_preclaim(L, g, o, &fin)) {
       copyTVrel(L, slot, &fin);
       mark(g, &fin);
       lj_gc2_finreg_cdata_finalizer_enqueue(g, o);
