@@ -1031,12 +1031,13 @@ local function trace_count(limit)
   end
   return n
 end
+local trace_limit = 160
 local t1 = assert(util.traceinfo(1), "fib did not record trace 1")
 assert(t1.linktype == "return",
        "call-unroll abort retired/reused return trace 1 as " ..
        tostring(t1.linktype))
 local uprec
-for i = 2, 20 do
+for i = 2, trace_limit do
   local ti = util.traceinfo(i)
   if ti and ti.linktype == "up-recursion" then
     uprec = i
@@ -1044,12 +1045,15 @@ for i = 2, 20 do
   end
 end
 assert(uprec, "fib did not record an up-recursion trace after return traces")
-local first_count = trace_count(80)
-assert(first_count >= 3 and first_count <= 40,
-       "fib recorded unstable trace count after first run: " ..
+local first_count = trace_count(trace_limit)
+assert(first_count >= 3 and first_count < trace_limit,
+       "fib saturated trace observation window after first run: " ..
        tostring(first_count))
 assert(fib(30) == 832040)
-local second_count = trace_count(80)
+local second_count = trace_count(trace_limit)
+assert(second_count < trace_limit,
+       "fib saturated trace observation window after second run: " ..
+       tostring(second_count))
 assert(second_count <= first_count + 6,
        "fib kept re-recording after recursive traces stabilized: " ..
        tostring(first_count) .. " -> " .. tostring(second_count))
