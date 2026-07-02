@@ -2175,12 +2175,18 @@ static void asm_ustore_forjit(ASMState *as, IRIns *ir)
   asm_tvptr(as, ra_releasetmp(as, ASMREF_TMP1), ir->op2, IRTMPREF_IN1);
 }
 
+static int asm_ustore_cell_needs_helper(ASMState *as, IRIns *ir)
+{
+  return ir->o == IR_USTORE && IR(ir->op1)->o == IR_UREFC &&
+	 !irt_isnum(ir->t);
+}
+
 static void asm_ahustore(ASMState *as, IRIns *ir)
 {
   if (ir->r == RID_SINK)
     return;
 #if LJ_HAS_X64_MT_JIT_HELPERS
-  if (ir->o == IR_USTORE && IR(ir->op1)->o == IR_UREFC) {
+  if (asm_ustore_cell_needs_helper(as, ir)) {
     asm_ustore_forjit(as, ir);
     return;
   }

@@ -1,11 +1,18 @@
 # X64 Closed-Upvalue Store Helper For All TValue Types
 
+2026-07-02 follow-up: numeric closed-upvalue stores no longer use this
+all-helper bridge. They lower to one aligned 64-bit x64 store, which preserves
+the no-tear slot invariant without paying a C call. Primitive/integer stores
+still use the helper until they have a dedicated single-word TValue encoding
+path, and GC-valued stores still use the helper before `lj_gc_pubuv`.
+
 ## Summary
 
-Linux/x64 JIT lowering now routes every `IR_USTORE` into `IR_UREFC` through
-`lj_func_storeuv_forjit()`, not only GC-valued stores. The helper performs a
-release copy of the full `TValue`, which is the right publication primitive for
-closed upvalue/local-cell storage.
+This note originally documented routing every Linux/x64 `IR_USTORE` into
+`IR_UREFC` through `lj_func_storeuv_forjit()`, not only GC-valued stores. The
+helper performs a release copy of the full `TValue`, which remains the right
+publication primitive for primitive/integer stores until they have a dedicated
+single-word encoding path, and for GC-valued stores before `lj_gc_pubuv`.
 
 ## Why
 

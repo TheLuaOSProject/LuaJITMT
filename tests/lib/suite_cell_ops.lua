@@ -88,8 +88,8 @@ function M.run_jit_dump_guards(t, dump)
   assert_dump_contains(t, dump, "USTORE", "owner numeric USTORE")
 
   dump_im(t, dump, probes.owner_numeric({ flush = false, hotexit = true }))
-  assert_dump_contains(t, dump, "->lj_func_storeuv_forjit",
-		       "owner numeric USTORE helper lowering")
+  assert_dump_not_contains(t, dump, "->lj_func_storeuv_forjit",
+			   "owner numeric USTORE helper lowering")
 
   dump_i(t, dump, probes.owner_primitive({ flush = false, hotexit = true }))
   assert_dump_contains(t, dump, "TRACE 1 stop -> loop", "owner primitive trace")
