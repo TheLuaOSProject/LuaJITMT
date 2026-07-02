@@ -287,6 +287,26 @@ static void check_upvalue_api_unowned(lua_State *L)
   lua_settop(L, 0);
 }
 
+static void check_userdata_api_unowned(lua_State *L)
+{
+  lua_State *co;
+  void *ud;
+  lua_settop(L, 0);
+  (void)luaL_newmetatable(L, "state_owner_udata");
+  lua_pop(L, 1);
+  co = lua_newthread(L);
+  ud = lua_newuserdata(L, 4);
+  luaL_getmetatable(L, "state_owner_udata");
+  assert(lua_setmetatable(L, -2) == 1);
+  lua_xmove(L, co, 1);
+  assert(lj_state_owner_acq(co) == 0);
+  assert(luaL_testudata(co, 1, "state_owner_udata") == ud);
+  assert(luaL_checkudata(co, 1, "state_owner_udata") == ud);
+  assert(luaL_testudata(co, 1, "state_owner_other_udata") == NULL);
+  assert(lj_state_owner_acq(co) == 0);
+  lua_settop(L, 0);
+}
+
 static void check_metamethod_api_unowned(lua_State *L)
 {
   lua_State *co;
@@ -785,6 +805,34 @@ static int busy_lua_upvalueid(lua_State *L)
   return 0;
 }
 
+static lua_State *busy_udata_prepare(lua_State *L)
+{
+  lua_State *co;
+  (void)luaL_newmetatable(L, "state_owner_busy_udata");
+  lua_pop(L, 1);
+  co = lua_newthread(L);
+  lua_newuserdata(L, 4);
+  luaL_getmetatable(L, "state_owner_busy_udata");
+  assert(lua_setmetatable(L, -2) == 1);
+  lua_xmove(L, co, 1);
+  lj_state_owner_rel(co, foreign_tid(L));
+  return co;
+}
+
+static int busy_luaL_testudata(lua_State *L)
+{
+  lua_State *co = busy_udata_prepare(L);
+  (void)luaL_testudata(co, 1, "state_owner_busy_udata");
+  return 0;
+}
+
+static int busy_luaL_checkudata(lua_State *L)
+{
+  lua_State *co = busy_udata_prepare(L);
+  (void)luaL_checkudata(co, 1, "state_owner_busy_udata");
+  return 0;
+}
+
 static int busy_getfenv_thread(lua_State *L)
 {
   lua_State *co = lua_newthread(L);
@@ -1030,6 +1078,7 @@ int main(void)
   check_call_entry_unowned(L);
   check_raw_object_api_unowned(L);
   check_upvalue_api_unowned(L);
+  check_userdata_api_unowned(L);
   check_metamethod_api_unowned(L);
   check_resume_unowned(L);
   check_lua_load_unowned(L);
@@ -1096,6 +1145,8 @@ int main(void)
   expect_thread_busy(L, busy_lua_next, "busy lua_next");
   expect_thread_busy(L, busy_lua_getupvalue, "busy lua_getupvalue");
   expect_thread_busy(L, busy_lua_upvalueid, "busy lua_upvalueid");
+  expect_thread_busy(L, busy_luaL_testudata, "busy luaL_testudata");
+  expect_thread_busy(L, busy_luaL_checkudata, "busy luaL_checkudata");
   expect_thread_busy(L, busy_getfenv_thread, "busy thread getfenv");
   expect_thread_busy(L, busy_setfenv_thread, "busy thread setfenv");
   expect_thread_busy(L, busy_lua_call, "busy lua_call");

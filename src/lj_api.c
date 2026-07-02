@@ -1473,20 +1473,33 @@ LUA_API void lua_upvaluejoin(lua_State *L, int idx1, int n1, int idx2, int n2)
 
 LUALIB_API void *luaL_testudata(lua_State *L, int idx, const char *tname)
 {
+  LJStateClaim claim;
   TValue snap;
-  cTValue *o = index2adr_read(L, idx, &snap);
+  cTValue *o;
+  GCstr *key;
+  void *p = NULL;
+  api_checkclaim(L, &claim);
+  o = index2adr_read(L, idx, &snap);
+  if (!tvisudata(o)) {
+    lj_state_dropclaim(&claim);
+    return NULL;
+  }
+  lj_state_dropclaim(&claim);
+  key = lj_str_newz(api_errstate(L), tname);
+  api_checkclaim(L, &claim);
+  o = index2adr_read(L, idx, &snap);
   if (tvisudata(o)) {
     GCudata *ud = udataV(o);
-    cTValue *tv = lj_tab_getstr(lj_registry_tab_acq(G(L)),
-				lj_str_newz(L, tname));
+    cTValue *tv = lj_tab_getstr(lj_registry_tab_acq(G(L)), key);
     if (tv) {
       TValue mtv;
       lj_tv_load_acq(&mtv, tv);
       if (tvistab(&mtv) && tabV(&mtv) == lj_udata_metatable_acq(ud))
-	return uddata(ud);
+	p = uddata(ud);
     }
   }
-  return NULL;  /* value is not a userdata with a metatable */
+  lj_state_dropclaim(&claim);
+  return p;  /* NULL if value is not a userdata with a matching metatable. */
 }
 
 LUALIB_API void *luaL_checkudata(lua_State *L, int idx, const char *tname)

@@ -367,6 +367,51 @@ END {
 ]=], "src/lj_api.c")
 
   awk([=[
+BEGIN {
+  infn = 0; claim1 = 0; access1 = 0; drop1 = 0; key = 0
+  claim2 = 0; access2 = 0; drop2 = 0
+}
+/^LUALIB_API void \*luaL_testudata\(lua_State \*L,/ { infn = 1; next }
+infn && /^}/ { infn = 0; next }
+infn && /api_checkclaim/ {
+  if (!claim1) claim1 = NR
+  else if (!claim2) claim2 = NR
+}
+infn && /index2adr_read/ {
+  if (!access1) access1 = NR
+  else if (!access2) access2 = NR
+}
+infn && /lj_state_dropclaim\(&claim\)/ {
+  if (!drop1) drop1 = NR
+  else if (!drop2) drop2 = NR
+}
+infn && /lj_str_newz/ { key = NR }
+END {
+  if (!claim1 || !access1 || !drop1 || !key ||
+      !claim2 || !access2 || !drop2 ||
+      !(claim1 < access1 && access1 < drop1 && drop1 < key &&
+	key < claim2 && claim2 < access2 && access2 < drop2)) {
+    print "luaL_testudata two-claim owner boundary missing"
+    exit 1
+  }
+}
+]=], "src/lj_api.c")
+
+  awk([=[
+BEGIN { infn = 0; test = 0; err = 0 }
+/^LUALIB_API void \*luaL_checkudata\(lua_State \*L,/ { infn = 1; next }
+infn && /^}/ { infn = 0; next }
+infn && /luaL_testudata/ { test = NR }
+infn && /lj_err_argtype/ { err = NR }
+END {
+  if (!test || !err || test > err) {
+    print "luaL_checkudata must delegate to luaL_testudata before errors"
+    exit 1
+  }
+}
+]=], "src/lj_api.c")
+
+  awk([=[
 BEGIN { infn = 0; rel = 0; drop = 0; pub = 0 }
 /^LUA_API int lua_setfenv\(lua_State \*L,/ { infn = 1; next }
 infn && /^}/ { infn = 0; next }

@@ -53,6 +53,10 @@ Permanent shape:
   target state before reading the function slot. `lua_getupvalue` uses the
   protected one-slot growth helper and release-publishes the copied upvalue
   result before dropping ownerless claims; `lua_upvalueid` stays read-only.
+- Userdata metatable check APIs (`luaL_testudata` and `luaL_checkudata`) claim
+  before reading the target stack slot. `luaL_testudata` drops the first claim
+  before interning the registry key, then reclaims and re-reads the slot before
+  comparing metatables; this avoids holding owner claims across allocation.
 - `lua_xmove()` directly copies and release-publishes stack slots while both
   states are claimed; the copy path itself does not allocate and must not be
   wrapped in `lj_vm_cpcall()` on the source coroutine.
@@ -66,4 +70,4 @@ Regression coverage:
   `lua_call`, `lua_pcall`, `lua_cpcall`, public metamethod APIs, the first
   stack-manipulation group, the read-only stack getter/conversion group, and
   the read-only auxiliary check/conversion group, and the raw object getter
-  group and upvalue introspection group.
+  group, upvalue introspection group, and userdata metatable check group.
