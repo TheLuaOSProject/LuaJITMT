@@ -10,9 +10,9 @@ fallback only checked for a missing slot before reading the target trace
 ## Change
 
 The fallback now validates that the trace slot still names the requested trace
-number before reading `startins`. A missing or reused slot returns `0` and lets
-the interpreter redispatch the current bytecode, matching the existing stale
-flush behavior.
+number and is not retired or scoped-flushing before reading `startins`. A
+missing, reused, or retiring slot returns `0` and lets the interpreter
+redispatch the current bytecode, matching the existing stale flush behavior.
 
 This does not add a lock or wait. Trace body lifetime is still provided by the
 exit-trace handshake; this check only documents and enforces slot identity.

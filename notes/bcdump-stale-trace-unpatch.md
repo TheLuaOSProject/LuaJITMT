@@ -12,7 +12,8 @@ instruction for `JFORL`, `JITERL`, and `JLOOP`.
 - The bytecode writer now decodes copied instructions as `BCIns` instead of
   editing endian-selected bytes.
 - Trace-backed unpatching validates that the trace slot still names the
-  requested trace number before reading immutable `startins`.
+  requested trace number and is not retired or scoped-flushing before reading
+  immutable `startins`.
 - If the copied instruction names a trace that has already been cleared by a
   concurrent flush, the writer retries from the live prototype bytecode. A
   cleared trace slot is only valid after root bytecode has been unpatched.

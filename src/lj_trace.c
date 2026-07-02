@@ -1801,7 +1801,8 @@ int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr)
     TraceNo targetno = bc_d(*pc);
     GCtrace *target = traceref(J, targetno);
     BCIns startins;
-    if (!target || trace_traceno_acq(target) != targetno)
+    if (!target || trace_traceno_acq(target) != targetno ||
+	la_load64_acq(&target->retire_epoch) != 0)
       return 0;  /* Stale JLOOP after a concurrent flush: redispatch it. */
     startins = trace_startins_acq(target);
     if (bc_isret(bc_op(startins)) || bc_op(startins) == BC_ITERN) {

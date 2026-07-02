@@ -602,7 +602,7 @@ local function assert_x64_jloop_stale_slot_guards(t)
                                   tracec, {
     "TraceNo targetno = bc_d(*pc);",
     "GCtrace *target = traceref(J, targetno);",
-    "if (!target || trace_traceno_acq(target) != targetno)\n      return 0;",
+    "if (!target || trace_traceno_acq(target) != targetno ||\n\tla_load64_acq(&target->retire_epoch) != 0)\n      return 0;",
     "startins = trace_startins_acq(target);"
   }, "C trace-exit guard")
 end
@@ -659,6 +659,7 @@ local function assert_c_jit_stale_slot_guards(t)
   checks.assert_text_all_contains("bytecode writer stale-slot guard", bcwritec, {
     "static int bcwrite_unpatch_jitins(jit_State *J, BCIns ins, BCIns *out)",
     "trace_traceno_acq(T) == traceno",
+    "la_load64_acq(&T->retire_epoch) == 0",
     "*out = trace_startins_acq(T);",
     "memcpy(&ins, q, sizeof(ins));",
     "la_load32_acq((uint32_t *)&proto_bc(pt)[1+i])",
