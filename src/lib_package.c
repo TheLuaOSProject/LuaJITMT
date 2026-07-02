@@ -47,15 +47,17 @@
 
 static char package_require_claims_key;
 static char package_loadlib_claims_key;
+static uint32_t package_require_claims_epoch;
+static uint32_t package_loadlib_claims_epoch;
 
 static void package_claim_push(lua_State *L, void *regkey);
 static int package_claim_peer(GCtab *claims, GCstr *key, uint32_t tid);
 static void package_claim_wait(lua_State *L, GCtab *claims, GCstr *key,
-			       uint32_t tid);
+			       uint32_t tid, uint32_t *epochp);
 static int package_claim_try(lua_State *L, GCtab *claims, GCstr *key,
 			     uint32_t tid);
 static void package_claim_clear(lua_State *L, GCtab *claims, GCstr *key,
-				uint32_t tid);
+				uint32_t tid, uint32_t *epochp);
 
 static int package_had_stopreq(lua_State *L)
 {
@@ -398,7 +400,7 @@ static int ll_loadfunc(lua_State *L, const char *path, const char *name, int r)
     claim_state = package_claim_try(L, claims, key, tid);
     if (claim_state != PACKAGE_CLAIM_PEER)
       break;
-    package_claim_wait(L, claims, key, tid);
+    package_claim_wait(L, claims, key, tid, &package_loadlib_claims_epoch);
   }
   clear_claim = claim_state == PACKAGE_CLAIM_ACQUIRED;
   ctx.path = path;
@@ -407,7 +409,7 @@ static int ll_loadfunc(lua_State *L, const char *path, const char *name, int r)
   ctx.status = PACKAGE_ERR_LIB;
   status = lj_vm_cpcall(L, NULL, &ctx, ll_loadfunc_cp);
   if (clear_claim)
-    package_claim_clear(L, claims, key, tid);
+    package_claim_clear(L, claims, key, tid, &package_loadlib_claims_epoch);
   if (status)
     return lua_error(L);
   return ctx.status;
@@ -691,12 +693,23 @@ static int package_claim_peer(GCtab *claims, GCstr *key, uint32_t tid)
 	 !package_claim_is_owner(&claim, tid);
 }
 
+static uint32_t package_claim_epoch_wait(lua_State *L, uint32_t *epochp,
+					 uint32_t epoch)
+{
+  uint32_t actions;
+  lj_native_enter(L2TG(L));
+  (void)la_futex_wait(epochp, epoch, PACKAGE_CLAIM_WAIT_NS);
+  actions = lj_native_leave(L);
+  return actions;
+}
+
 static void package_claim_wait(lua_State *L, GCtab *claims, GCstr *key,
-			       uint32_t tid)
+			       uint32_t tid, uint32_t *epochp)
 {
   while (package_claim_peer(claims, key, tid)) {
+    uint32_t epoch = la_load32_acq(epochp);
     int had_stopreq = package_had_stopreq(L);
-    uint32_t actions = lj_thr_sleep_ns(L, PACKAGE_CLAIM_WAIT_NS);
+    uint32_t actions = package_claim_epoch_wait(L, epochp, epoch);
     package_checkstop_fresh(L, actions, had_stopreq);
   }
 }
@@ -721,7 +734,7 @@ static int package_claim_try(lua_State *L, GCtab *claims, GCstr *key,
 }
 
 static void package_claim_clear(lua_State *L, GCtab *claims, GCstr *key,
-				uint32_t tid)
+				uint32_t tid, uint32_t *epochp)
 {
   TValue keytv, nilv, old;
   setstrV(L, &keytv, key);
@@ -738,8 +751,11 @@ static void package_claim_clear(lua_State *L, GCtab *claims, GCstr *key,
       if (!package_claim_is_owner(&old, tid))
 	return;
       if (lj_tab_trystoretv_cas_keyed(L, claims, dst, &keytv, &nilv) ==
-	  LJ_TAB_STORE_CAS_OK)
+	  LJ_TAB_STORE_CAS_OK) {
+	(void)la_add32_acqrel(epochp, 1);
+	la_futex_wake(epochp, 0x7fffffff);
 	return;
+      }
     }
     lj_tab_store_wait_l(L);  /* package claim clear saw stale/FORWARD slot. */
   }
@@ -763,7 +779,7 @@ static int lj_cf_package_require(lua_State *L)
     lua_getfield(L, 2, name);
     if (package_claim_peer(claims, key, tid)) {
       lua_pop(L, 1);
-      package_claim_wait(L, claims, key, tid);
+      package_claim_wait(L, claims, key, tid, &package_require_claims_epoch);
       continue;
     }
     if (lua_toboolean(L, -1)) {  /* is it there? */
@@ -775,13 +791,13 @@ static int lj_cf_package_require(lua_State *L)
     claim_state = package_claim_try(L, claims, key, tid);
     if (claim_state != PACKAGE_CLAIM_PEER)
       break;
-    package_claim_wait(L, claims, key, tid);
+    package_claim_wait(L, claims, key, tid, &package_require_claims_epoch);
   }
   clear_claim = claim_state == PACKAGE_CLAIM_ACQUIRED;
   ctx.name = name;
   status = lj_vm_cpcall(L, NULL, &ctx, package_require_cp);
   if (clear_claim)
-    package_claim_clear(L, claims, key, tid);
+    package_claim_clear(L, claims, key, tid, &package_require_claims_epoch);
   if (status)
     return lua_error(L);
   return 1;
