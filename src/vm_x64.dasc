@@ -4378,6 +4378,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  lea r8, [RB+TAB_COLO_SLOTS]
     |  cmp TMPR, r8; je >3
     |  x64_vm_tab_array_asize_acq ITYPEd, TMPR
+    |  x64_vm_tab_array_flags_acq r9d, TMPR
+    |  test r9d, TABARRAY_FLAG_RETIRING
+    |  jnz ->vmeta_tgetv
     |3:
     |  cmp RCd, ITYPEd			// Takes care of unordered, too.
     |  jae ->vmeta_tgetv		// Not in array part? Use fallback.
@@ -4462,6 +4465,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  lea r8, [RB+TAB_COLO_SLOTS]
     |  cmp TMPR, r8; je >3
     |  x64_vm_tab_array_asize_acq ITYPEd, TMPR
+    |  x64_vm_tab_array_flags_acq r9d, TMPR
+    |  test r9d, TABARRAY_FLAG_RETIRING
+    |  jnz ->vmeta_tgetb
     |3:
     |  cmp RCd, ITYPEd
     |  jae ->vmeta_tgetb
@@ -4501,6 +4507,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  lea r8, [RB+TAB_COLO_SLOTS]
     |  cmp TMPR, r8; je >3
     |  x64_vm_tab_array_asize_acq ITYPEd, TMPR
+    |  x64_vm_tab_array_flags_acq r9d, TMPR
+    |  test r9d, TABARRAY_FLAG_RETIRING
+    |  jnz ->vmeta_tgetr
     |3:
     |  cmp RCd, ITYPEd
     |  jae ->vmeta_tgetr		// Not in array part? Use fallback.

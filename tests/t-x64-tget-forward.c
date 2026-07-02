@@ -3,7 +3,9 @@
 */
 
 #include <assert.h>
+#include <pthread.h>
 #include <stdio.h>
+#include <time.h>
 
 #include "lua.h"
 #include "lauxlib.h"
@@ -18,10 +20,86 @@ static const char tget_forward_src[] =
   "local t = tget_forward_t\n"
   "local k = tget_forward_key\n"
   "local want = tget_forward_value\n"
+  "if tget_forward_arm_release then tget_forward_arm_release() end\n"
   "local function getv(a, key) return a[key] end\n"
   "assert(t[3] == want, type(t[3]))\n"
   "assert(t[k] == want, type(t[k]))\n"
-  "assert(getv(t, k) == want, type(getv(t, k)))\n";
+  "assert(getv(t, k) == want, type(getv(t, k)))\n"
+  "for i = k, k do assert(t[i] == want, type(t[i])) end\n";
+
+typedef struct TGetArrayReleaseCtx {
+  GCtab *t;
+  TValue *array;
+  MSize asize;
+  pthread_t thread;
+  int armed;
+} TGetArrayReleaseCtx;
+
+static TGetArrayReleaseCtx *tget_release_ctx;
+
+static void tget_sleep_ns(long ns)
+{
+  struct timespec ts;
+  ts.tv_sec = ns / 1000000000L;
+  ts.tv_nsec = ns % 1000000000L;
+  while (nanosleep(&ts, &ts) != 0)
+    ;
+}
+
+static void *tget_publish_array_after_delay(void *arg)
+{
+  TGetArrayReleaseCtx *ctx = (TGetArrayReleaseCtx *)arg;
+  tget_sleep_ns(5000000L);
+  lj_tab_array_rel(ctx->t, ctx->array);
+  lj_tab_asize_rel(ctx->t, ctx->asize);
+  return NULL;
+}
+
+static int tget_arm_release(lua_State *L)
+{
+  TGetArrayReleaseCtx *ctx = tget_release_ctx;
+  UNUSED(L);
+  assert(ctx != NULL);
+  assert(!ctx->armed);
+  ctx->armed = 1;
+  assert(pthread_create(&ctx->thread, NULL,
+			tget_publish_array_after_delay, ctx) == 0);
+  return 0;
+}
+
+static void tget_run_with_retiring_current_root(lua_State *L, GCtab *t,
+						TValue *oldarray,
+						TValue *newarray,
+						MSize oldasize,
+						MSize newasize,
+						int32_t target)
+{
+  TGetArrayReleaseCtx ctx;
+  int32_t stale = target + 9000;
+  int32_t want = target + 3000;
+  lj_tab_storeint(L, &oldarray[target], stale);
+  lj_tab_storeint(L, &newarray[target], want);
+  lj_tab_array_hdr_flags_or_rel(oldarray, TABARRAY_FLAG_RETIRING);
+  lj_tab_asize_rel(t, oldasize);
+  lj_tab_array_rel(t, oldarray);
+  lua_pushinteger(L, want);
+  lua_setglobal(L, "tget_forward_value");
+  ctx.t = t;
+  ctx.array = newarray;
+  ctx.asize = newasize;
+  ctx.armed = 0;
+  tget_release_ctx = &ctx;
+  lua_pushcfunction(L, tget_arm_release);
+  lua_setglobal(L, "tget_forward_arm_release");
+  tabfwd_load_lua(L, tget_forward_src);
+  tabfwd_run_loaded(L);
+  assert(ctx.armed);
+  assert(pthread_join(ctx.thread, NULL) == 0);
+  tget_release_ctx = NULL;
+  lua_pushnil(L);
+  lua_setglobal(L, "tget_forward_arm_release");
+  assert(tabfwd_get_i32(t, target) == want);
+}
 
 int main(void)
 {
@@ -70,6 +148,9 @@ int main(void)
   lj_tab_array_rel(t, oldarray);
   assert(tabfwd_get_i32(t, target) == target + 3000);
   tabfwd_run_loaded(L);
+
+  tget_run_with_retiring_current_root(L, t, oldarray, newarray, oldasize,
+				      newasize, target);
 
   lj_tab_array_rel(t, newarray);
   lj_tab_asize_rel(t, newasize);
