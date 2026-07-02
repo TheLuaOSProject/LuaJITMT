@@ -233,6 +233,7 @@ local m6_cases = {
   "m6_jit_mcode_native",
   "m6_jit_mcode_publish",
   "m6_jit_flush_hs",
+  "m6_jit_util_flush_race",
   "m6_jit_mt_activation_flush",
   "m6_jit_vmevent_flush",
   "m6_jit_gdbjit_publish",
@@ -654,6 +655,19 @@ local function assert_c_jit_stale_slot_guards(t)
   if contains(bcwritec, "q[LJ_ENDIAN_SELECT") or
      contains(bcwritec, "GCtrace *T = traceref(J, rd);") then
     error("bytecode writer reintroduced unchecked/raw trace unpatching")
+  end
+
+  local libjitc = t:read(t:path("src", "lib_jit.c"))
+  checks.assert_text_all_contains("jit.util trace-slot guard", libjitc, {
+    "static GCtrace *jit_checktrace(lua_State *L)",
+    "TraceVec *tv = tracevec_acq(J);",
+    "(MSize)tr < tv->sizetrace",
+    "GCtrace *T = traceref_fromgco(gcref_acq(tv->slot[tr]));",
+    "trace_traceno_acq(T) == tr",
+    "la_load64_acq(&T->retire_epoch) == 0"
+  }, "jit.util trace-slot guard")
+  if contains(libjitc, "return traceref(J, tr);") then
+    error("jit.util reintroduced unchecked trace-slot dereference")
   end
 end
 
@@ -2151,6 +2165,17 @@ assert(live >= 8, live)
       run_lua_test_case(t, "m3_vm_safepoint")
       luajit_file(t, t:path("tests", "stock", "test", "misc", "jit_flush.lua"))
       print("M6 JIT flush handshake guard passed")
+    end
+  })
+
+  add({
+    name = "m6_jit_util_flush_race",
+    description = "jit.util trace readers tolerate concurrent trace flushes",
+    run = function(t)
+      build_default(t)
+      luajit_file(t, t:path("tests", "t-jit-util-flush-race.lua"),
+                  { lua_path = true, timeout = "30s" })
+      print("M6 jit.util concurrent flush reader guard passed")
     end
   })
 

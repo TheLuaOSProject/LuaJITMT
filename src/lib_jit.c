@@ -338,8 +338,13 @@ static GCtrace *jit_checktrace(lua_State *L)
 {
   TraceNo tr = (TraceNo)lj_lib_checkint(L, 1);
   jit_State *J = L2J(L);
-  if (tr > 0 && tr < trace_sizetrace_acq(J))
-    return traceref(J, tr);
+  TraceVec *tv = tracevec_acq(J);
+  if (tr > 0 && tv && (MSize)tr < tv->sizetrace) {
+    GCtrace *T = traceref_fromgco(gcref_acq(tv->slot[tr]));
+    if (T && trace_traceno_acq(T) == tr &&
+	la_load64_acq(&T->retire_epoch) == 0)
+      return T;
+  }
   return NULL;
 }
 
