@@ -50,6 +50,52 @@ local function write_mini_benchmark(t, path)
   }, "\n"))
 end
 
+local function trim(s)
+  return (s or ""):gsub("^%s+", ""):gsub("%s+$", "")
+end
+
+local function command_first_line(cmd)
+  local p = io.popen(cmd)
+  if not p then return nil end
+  local line = p:read("*l")
+  local ok = p:close()
+  if not ok then return nil end
+  line = trim(line)
+  if line == "" then return nil end
+  return line
+end
+
+local function is_executable(path)
+  return path and path ~= "" and
+    utils.command_succeeded("test -x " .. shell_quote(path) .. " 2>/dev/null")
+end
+
+local function same_file(a, b)
+  if not is_executable(a) or not is_executable(b) then return false end
+  return utils.command_succeeded("test " .. shell_quote(a) .. " -ef " ..
+                                 shell_quote(b) .. " 2>/dev/null")
+end
+
+local function find_stock_luajit(current)
+  local explicit = os.getenv("LJ_BENCH_STOCK_BIN")
+  if explicit and explicit ~= "" then return explicit, true end
+
+  local candidates = {
+    "/usr/bin/luajit",
+    "/usr/local/bin/luajit",
+    "/opt/homebrew/bin/luajit",
+    command_first_line("command -v luajit 2>/dev/null")
+  }
+
+  for i = 1, #candidates do
+    local candidate = candidates[i]
+    if is_executable(candidate) and not same_file(candidate, current) then
+      return candidate, false
+    end
+  end
+  return nil, false
+end
+
 local function build_and_run_alloc_account(t)
   compile_and_run_c(t, t:tmp("lj_t-gc2-alloc-account-m10"),
                     "t-gc2-alloc-account.c", { timeout = "20s" })
@@ -271,16 +317,16 @@ local function run_bench_regression(t)
 end
 
 local function run_bench_stock_compare(t)
-  local stock = os.getenv("LJ_BENCH_STOCK_BIN")
-  if not stock or stock == "" then
-    print("M9 stock benchmark guard skipped; LJ_BENCH_STOCK_BIN not set")
+  local current = t:path("src", "luajit")
+  local stock, explicit = find_stock_luajit(current)
+  if not stock then
+    print("M9 stock benchmark guard skipped; no stock luajit found")
     return
   end
 
   t:build({ clean = true, quiet = true })
 
   local bench_lua = t:path("aux", "bench", "bench.lua")
-  local current = t:path("src", "luajit")
   local filters = os.getenv("LJ_BENCH_STOCK_FILTERS") or
     "arith_loop fib30 tab_hash_write alloc_tables closures_upval"
   local max = tonumber(os.getenv("LJ_BENCH_STOCK_MAX") or
@@ -301,7 +347,8 @@ local function run_bench_stock_compare(t)
     io.write("stock benchmark ", filter, " geomean ",
              ("%.6f"):format(result.geomean or 0), "\n")
   end
-  print("M9 stock benchmark guard passed")
+  print("M9 stock benchmark guard passed with " .. stock ..
+        (explicit and "" or " (autodetected)"))
 end
 
 local function run_generational(t)
