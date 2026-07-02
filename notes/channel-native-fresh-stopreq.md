@@ -9,5 +9,5 @@
 - Added sticky timeout regressions for `channel:recv(timeout)` and
   `channel:send(value, timeout)`, so a stale shutdown flag does not turn normal
   channel timeout semantics into an interruption.
-- Added an M3 source guard rejecting raw channel wait STOPREQ checks outside the
-  fresh helper.
+- Helper comments document why channel waits must use the fresh STOPREQ helper.
+  The old source guard rejecting raw checks is obsolete.

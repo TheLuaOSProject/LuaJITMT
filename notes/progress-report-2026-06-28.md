@@ -171,8 +171,8 @@ If safety/stability stays ahead of LuaJIT-level speed, the credible path is shor
 ## Immediate Next Steps
 
 1. Finish validating and push the CI/test cleanup slice.
-2. Continue converting source guards into behavior fixtures where the semantic
-   path is observable at runtime.
+2. Keep source guards retired; add behavior fixtures where the semantic path is
+   observable at runtime.
 3. Add the `lua_getlocal()` local-cell acquire-read follow-up.
 4. Continue the traced FFI native-state protocol behind disabled traced calls.
 5. Run fresh pinned benchmarks after correctness work lands, then update the performance forecast with data.

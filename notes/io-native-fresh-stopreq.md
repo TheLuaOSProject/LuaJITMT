@@ -14,5 +14,5 @@
   `flush`, `seek`, `setvbuf`, `close`) plus `io.open()` and `io.popen()`.
 - Replaced pre-published regular-file read probes with blocking `io.popen()`
   read probes, so fresh STOPREQ is published while the read is in native state.
-- Added an M3 source guard rejecting raw `lj_native_leave()` STOPREQ checks in
-  `lib_io.c` outside the fresh helper.
+- Helper comments document why `lib_io.c` native leaves must use the fresh
+  STOPREQ helper. The old source guard rejecting raw checks is obsolete.

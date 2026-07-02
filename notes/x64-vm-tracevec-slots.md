@@ -8,8 +8,10 @@ Changes:
   `J->tracev->slot[traceno]` instead of the cached `J->trace` mirror.
 - x64 static fallback/unpatch paths that recover `startins` for a `BC_JLOOP`
   also load the trace body from `J->tracev->slot[traceno]`.
-- `tools/ci/m5_jit_trace_publish.sh` now rejects `J_OFS(trace)` in
-  `vm_x64.dasc`, next to the existing raw `->trace[` source guard.
+- The trace publication docs now treat direct `J->trace`/`J_OFS(trace)` VM
+  access as an obsolete pattern. The old source-search rejection was removed
+  with the CI source-search cleanup; behavior and generated VM output checks own
+  the observable contract.
 
 Reasoning:
 - `TraceVec` is the RCU-published vector. C `traceref()` already acquires

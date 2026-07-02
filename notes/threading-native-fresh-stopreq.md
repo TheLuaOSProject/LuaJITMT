@@ -8,5 +8,5 @@
   successful join.
 - Added sticky regressions for `threading.sleep()`, delayed `mutex:lock()`, and
   `thread:join()`.
-- Added an M3 source guard rejecting raw threading wait STOPREQ checks outside
-  the fresh helper.
+- Helper comments document why threading waits must use the fresh STOPREQ
+  helper. The old source guard rejecting raw checks is obsolete.
