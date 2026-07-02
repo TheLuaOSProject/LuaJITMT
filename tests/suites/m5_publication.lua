@@ -1,6 +1,7 @@
 local build = require("suite_build")
 local runtime = require("suite_runtime")
 local cellops = require("suite_cell_ops")
+local checks = require("suite_assert")
 
 local run_luajit = runtime.luajit
 local run_stock = runtime.run_stock
@@ -696,6 +697,11 @@ return function(add)
     description = "x64 TSET previous-value nil behavior",
     run = function(t)
       t:build({ clean = true, quiet = true })
+      checks.assert_text_contains(
+        "x64 TSETS existing string-key VM helper",
+        t:read(t:path("src", "lj_vm.S")),
+        "lj_tab_storetv_forvm_strhash",
+        "generated VM")
       run_luajit(t, { "-joff", "-e", tset_nil_smoke() })
       build_and_run_c(t, t:tmp("lj_t-x64-tset-forward"),
                       "t-x64-tset-forward.c")

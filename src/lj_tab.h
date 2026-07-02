@@ -315,6 +315,9 @@ LJ_FUNCA TValue *lj_tab_storetv_forjit_array_nogc(lua_State *L,
 LJ_FUNCA TValue *lj_tab_storetv_forvm_array(lua_State *L, GCtab *parent,
 					    TValue *dst, cTValue *src,
 					    MSize key);
+LJ_FUNCA TValue *lj_tab_storetv_forvm_strhash(lua_State *L, GCtab *parent,
+					      TValue *dst, cTValue *src,
+					      GCstr *key);
 LJ_FUNCA TValue *lj_tab_storetv_forjit_hash(lua_State *L, GCtab *parent,
 					    TValue *dst, cTValue *src,
 					    cTValue *key);

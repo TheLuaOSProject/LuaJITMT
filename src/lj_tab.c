@@ -2728,6 +2728,45 @@ LJ_FUNCA TValue *lj_tab_storetv_forvm_array(lua_State *L, GCtab *parent,
   return dst;
 }
 
+LJ_FUNCA TValue *lj_tab_storetv_forvm_strhash(lua_State *L, GCtab *parent,
+					      TValue *dst, cTValue *src,
+					      GCstr *key)
+{
+  TValue keytv, keycopy;
+  TValue *orig = dst;
+  cTValue *barrier_key;
+  int weakwr;
+  setstrV(L, &keytv, key);
+  barrier_key = &keytv;
+  weakwr = lj_gc2_weak_write_begin(L, parent);
+  /* The x64 VM runs its existing table barrier sequence after this helper. */
+  if (weakwr) {
+    lj_gc2_barrier_weak_write(L, parent, &keytv, src);
+    lj_gc2_barrier_tv_pair(L, obj2gco(parent), src);
+  }
+  if (tab_jit_hash_current_match(parent, orig) &&
+      lj_tab_trystoretv_cas_keyed(L, parent, orig, &keytv, src) ==
+      LJ_TAB_STORE_CAS_OK) {
+    dst = orig;
+    goto done;
+  }
+  for (;;) {
+    dst = tab_current_jit_hash_slot(L, parent, orig, &keytv, &keycopy,
+				    &barrier_key);
+    if (lj_tab_trystoretv_cas_keyed(L, parent, dst, barrier_key, src) ==
+	LJ_TAB_STORE_CAS_OK)
+      break;
+    lj_tab_store_wait_l(L);  /* VM hash store saw stale/FORWARD slot. */
+  }
+done:
+  if (weakwr) {
+    lj_gc2_barrier_weak_write(L, parent, barrier_key, src);
+    lj_gc2_barrier_tv_pair(L, obj2gco(parent), src);
+    lj_gc2_weak_write_end(L, weakwr);
+  }
+  return dst;
+}
+
 LJ_FUNCA TValue *lj_tab_storetv_forjit_hash(lua_State *L, GCtab *parent,
 					    TValue *dst, cTValue *src,
 					    cTValue *key)

@@ -4465,7 +4465,68 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov STR:RC, [KBASE+RC*8]
     |  checktab TAB:RB, ->vmeta_tsets
     |->BC_TSETS_Z:	// RB = GCtab *, RC = GCstr *
-    |  jmp ->vmeta_tsets		// M5: no legacy x64 hash-slot store.
+    |  x64_vm_tab_node_acq r8, TAB:RB
+    |  x64_vm_tab_node_flags_acq r9d, r8
+    |  test r9d, TABNODE_FLAG_RETIRING
+    |  jnz ->vmeta_tsets
+    |  x64_vm_tab_node_hmask_acq TMPRd, r8
+    |  and TMPRd, STR:RC->sid
+    |  imul TMPRd, #NODE
+    |  add NODE:TMPR, r8
+    |  settp ITYPE, STR:RC, LJ_TSTR
+    |1:
+    |  cmp NODE:TMPR->key, ITYPE
+    |  jne >4
+    |  mov r8, NODE:TMPR->val
+    |  mov64 r9, LJ_TFORWARD_BITS
+    |  cmp r8, r9
+    |  je ->vmeta_tsets
+    |  cmp r8, LJ_TNIL
+    |  je ->vmeta_tsets
+    |.if X64WIN
+    |  mov ARG5, STR:RC
+    |  lea CARG4, [BASE+RA*8]
+    |  mov CARG3, TMPR
+    |  mov L:CARG1, SAVE_L
+    |  mov L:CARG1->base, BASE
+    |  mov CARG2, TAB:RB
+    |  mov L:RB, L:CARG1
+    |.else
+    |  mov L:CARG1, SAVE_L
+    |  mov L:CARG1->base, BASE
+    |  mov CARG2, TAB:RB
+    |  mov CARG5, STR:RC
+    |  lea CARG4, [BASE+RA*8]
+    |  mov CARG3, TMPR
+    |  mov L:RB, L:CARG1
+    |.endif
+    |  mov SAVE_PC, PC
+    |  call extern lj_tab_storetv_forvm_strhash  // (lua_State *L, GCtab *t, TValue *d, TValue *s, GCstr *key)
+    |  mov BASE, L:RB->base
+    |  mov RC, rax
+    |  cmp PC_OP, BC_GSET
+    |  je >7
+    |  movzx RBd, PC_RB
+    |  mov TAB:RB, [BASE+RB*8]
+    |  cleartp TAB:RB
+    |  jmp >9
+    |7:
+    |  mov LFUNC:RB, [BASE-16]
+    |  cleartp LFUNC:RB
+    |  x64_vm_gcref_acq TAB:RB, LFUNC:RB->env
+    |9:
+    |  cmp TGMARK, 0
+    |  jnz ->vm_gc2_barriertv_tab
+    |  test byte TAB:RB->marked, LJ_GC_BLACK	// isblack(table)
+    |  jz >8
+    |  jmp ->vm_gc2_barriertv_tab
+    |8:
+    |  ins_next
+    |4:
+    |  x64_vm_node_next_acq NODE:TMPR, NODE:TMPR
+    |  test NODE:TMPR, NODE:TMPR
+    |  jnz <1
+    |  jmp ->vmeta_tsets
     break;
   case BC_TSETB:
     |  ins_ABC	// RA = src, RB = table, RC = byte literal
