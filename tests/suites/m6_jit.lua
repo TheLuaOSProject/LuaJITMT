@@ -493,6 +493,38 @@ END {
                         " src/lj_buf.c")
 end
 
+local function assert_recursive_call_unroll_keeps_abort_slot(t)
+  local awk = [=[
+BEGIN { infn = 0; sawunlink = 0 }
+/^static void check_call_unroll\(jit_State \*J, TraceNo lnk\)/ {
+  infn = 1
+  next
+}
+infn && /^}/ {
+  if (!sawunlink) {
+    print "check_call_unroll must unlink return traces without retiring their slot"
+    exit 1
+  }
+  infn = 0
+  exit 0
+}
+infn && /lj_trace_flushscope/ {
+  print "check_call_unroll must not retire recursive return trace slots"
+  exit 1
+}
+infn && /lj_trace_flush_unlink\(J, lnk\)/ { sawunlink = 1 }
+END {
+  if (infn || !sawunlink) {
+    print "check_call_unroll source shape not found"
+    exit 1
+  }
+}
+]=]
+  utils.capture_command("cd " .. utils.shell_quote(t.root) ..
+                        " && awk " .. utils.shell_quote(awk) ..
+                        " src/lj_record.c")
+end
+
 local function jit_tmpbuf_concat_append_smoke()
   return [=[
 local util = require("jit.util")
@@ -799,6 +831,7 @@ assert(s==2720)
     description = "recursive trace call-unroll keeps return trace blacklist state",
     run = function(t)
       build_default(t)
+      assert_recursive_call_unroll_keeps_abort_slot(t)
       luajit_code(t, [=[
 local util = require("jit.util")
 jit.flush()
