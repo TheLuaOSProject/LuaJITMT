@@ -3681,8 +3681,17 @@ static void asm_tail_fixup(ASMState *as, TraceNo lnk)
   if (lnk) {
     if (lnk == as->T->traceno)
       target = as->T->mcode;
-    else
-      target = trace_mcode_acq(traceref(as->J, lnk));
+    else {
+      GCtrace *targetT = traceref(as->J, lnk);
+      if (LJ_LIKELY(targetT != NULL && trace_traceno_acq(targetT) == lnk &&
+		    la_load64_acq(&targetT->retire_epoch) == 0 &&
+		    (target = trace_mcode_acq(targetT)) != NULL)) {
+	/* Link to a live published trace. */
+      } else {
+	lnk = 0;
+	target = (MCode *)(void *)lj_vm_exit_interp;
+      }
+    }
   } else {
     target = (MCode *)(void *)lj_vm_exit_interp;
   }

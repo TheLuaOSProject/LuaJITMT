@@ -679,6 +679,18 @@ local function assert_c_jit_stale_slot_guards(t)
     error("assembler reintroduced unchecked trace-slot dereference")
   end
 
+  local asmx86h = t:read(t:path("src", "lj_asm_x86.h"))
+  checks.assert_text_all_contains("x86 assembler tail-link guard", asmx86h, {
+    "GCtrace *targetT = traceref(as->J, lnk);",
+    "trace_traceno_acq(targetT) == lnk",
+    "la_load64_acq(&targetT->retire_epoch) == 0",
+    "(target = trace_mcode_acq(targetT)) != NULL",
+    "target = (MCode *)(void *)lj_vm_exit_interp;"
+  }, "x86 assembler tail-link guard")
+  if contains(asmx86h, "trace_mcode_acq(traceref") then
+    error("x86 assembler reintroduced unchecked linked-trace mcode read")
+  end
+
   local bcwritec = t:read(t:path("src", "lj_bcwrite.c"))
   checks.assert_text_all_contains("bytecode writer stale-slot guard", bcwritec, {
     "static int bcwrite_unpatch_jitins(jit_State *J, BCIns ins, BCIns *out)",
